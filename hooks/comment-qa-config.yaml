@@ -1,0 +1,95 @@
+# Comment QA Hook 配置檔
+# 版本: v3.0
+# 說明: 多語言註解品質檢查配置
+
+version: "3.0"
+
+# 全域設定
+global:
+  enabled: true
+  strict_mode: false  # true = 發現問題立即失敗，false = 只提供建議
+  report_file: ".claude/hook-logs/comment-qa-reports/report-{timestamp}.md"
+
+# 語言特定配置
+languages:
+  dart:
+    enabled: true
+    check_functions: true
+    check_classes: true
+    check_widgets: true
+    min_comment_length: 10
+    # Dart 特定規則
+    exempt_patterns:
+      - "^_is"      # _isValid, _isReady
+      - "^_format"  # _formatTitle
+      - "^_prepare" # _prepareData
+      - "^_convert" # _convertToJson
+      - "^_validate" # _validateInput
+      - "^_transform" # _transformData
+      - "^_parse"   # _parseResponse
+      - "^_extract" # _extractFields
+      - "^_check"   # _checkPermission
+      - "^_build"   # _buildWidget
+
+  javascript:
+    enabled: true
+    check_functions: true
+    check_classes: true
+    min_comment_length: 10
+    check_jsdoc: true  # 檢查 JSDoc 格式完整性
+    # JavaScript 特定規則
+    exempt_patterns:
+      - "^_"  # 所有私有函式（_開頭）
+
+  typescript:
+    enabled: true
+    check_functions: true
+    check_classes: true
+    min_comment_length: 10
+    check_jsdoc: true
+    # TypeScript 使用與 JavaScript 相同的規則
+    exempt_patterns:
+      - "^_"
+
+  php:
+    enabled: false  # 預設停用，可選啟用
+    check_functions: true
+    check_classes: true
+    min_comment_length: 10
+
+  go:
+    enabled: false  # 預設停用，可選啟用
+    check_functions: true
+    min_comment_length: 10
+
+# 排除規則
+exclude:
+  # 排除模式（支援萬用字元）
+  patterns:
+    - "**/test/**"
+    - "**/tests/**"
+    - "**/*_test.dart"
+    - "**/*_test.js"
+    - "**/*_test.ts"
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - "**/generated/**"
+
+  # 排除特定檔案
+  files:
+    - "main.dart"
+    - "app.js"
+    - "index.ts"
+
+# 優先檢查目錄（針對 Dart 專案）
+priority_dirs:
+  - "lib/domains/"
+  - "lib/presentation/"
+  - "lib/use_cases/"
+  - "lib/application/"
+
+# 報告設定
+report:
+  max_suggestions: 10  # 每個類別最多顯示的建議數量
+  include_good_practices: true  # 是否顯示良好實踐範例
+  output_format: "markdown"  # markdown, json, text

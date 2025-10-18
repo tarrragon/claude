@@ -1,0 +1,10 @@
+{
+  "agent_dispatch_check": {
+    "mode": "strict",
+    "description": "代理人分派檢查 Hook 運作模式",
+    "options": {
+      "strict": "嚴格模式 - 偵測到錯誤時阻擋執行（預設）",
+      "warning": "警告模式 - 偵測到錯誤時記錄警告但允許執行"
+    }
+  }
+}
