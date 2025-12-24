@@ -1,0 +1,3851 @@
+# Ticket 設計派工方法論
+
+## 方法論概述
+
+本方法論提供完整的 Ticket 設計和派工機制，解決大型開發任務的協作效率問題，特別是工作日誌臃腫和實作偏差風險。
+
+**適用場景**：
+- 多人協作開發
+- 大型功能模組開發
+- 需要精細進度追蹤的專案
+- 需要即時 review 機制的團隊
+
+**核心目標**：
+- 建立量化的 Ticket 拆分標準
+- 定義完整的 Ticket 生命週期
+- 建立即時 Review 機制
+- 避免工作日誌臃腫
+
+**方法論版本**：v1.0.0
+
+---
+
+## 第一章：Ticket 機制核心原則
+
+### 1.1 Ticket vs 工作日誌的定位差異
+
+**Ticket 定義**：
+
+Ticket 是「最小可交付單元」（Minimal Deliverable Unit），代表一個可以獨立完成、驗收和追蹤的最小任務單位。
+
+**核心特徵**：
+- **獨立性**：可以獨立執行和驗收
+- **原子性**：不可再分割為更小的可交付單元
+- **可驗證性**：有明確的完成標準
+- **複雜度限制**：基於職責、檔案、測試、行數的量化標準
+
+**工作日誌定義**：
+
+工作日誌是記錄整個開發過程的完整文檔，包含設計決策、實作細節、問題分析和解決方案。
+
+**核心特徵**：
+- **完整性**：記錄所有決策和過程
+- **追溯性**：提供歷史記錄和演進軌跡
+- **知識傳承**：為後續開發者提供上下文
+
+**定位差異總結**：
+
+| 維度 | Ticket | 工作日誌 |
+|------|--------|---------|
+| **範圍** | 單一具體任務 | 整個功能模組或版本 |
+| **粒度** | 最小可交付單元（單一職責或少數相關職責） | 完整開發週期（數天到數週） |
+| **目的** | 任務執行和驗收 | 知識記錄和傳承 |
+| **更新頻率** | 執行中持續更新 | 階段性更新 |
+| **文件大小** | 100-200 行 | 500-6000 行 |
+| **適用場景** | 協作開發、進度追蹤 | 決策記錄、技術傳承 |
+
+**互補關係**：
+
+Ticket 和工作日誌不是替代關係，而是互補關係：
+- **Ticket** 負責「執行層面」：將大任務拆分為可管理的小單元
+- **工作日誌** 負責「記錄層面」：記錄決策過程和演進軌跡
+- **主版本日誌** 負責「總覽層面」：提供任務總覽和 Ticket 索引
+
+### 1.2 Ticket 機制的三大目標
+
+#### 目標 1：可追溯性（Traceability）
+
+**定義**：每個 Ticket 都有明確的來源和目標，可以追溯到需求、設計文件或問題報告。
+
+**實現方式**：
+- Ticket 必須包含「參考文件」欄位，連結到需求規格或設計文件
+- Ticket 必須包含「背景」欄位，說明為什麼需要這個 Ticket
+- 主版本日誌維護完整的 Ticket 索引
+
+**範例**：
+```markdown
+### 參考文件
+- v0.12.7-design-decisions.md #決策1
+- docs/app-requirements-spec.md #UC-01
+
+### 背景
+根據 UC-01 需求，需要建立書籍資訊豐富化服務的介面契約
+```
+
+**效益**：
+- 開發者清楚知道「為什麼」要做這個任務
+- PM 可以追蹤每個 Ticket 的需求來源
+- 後續維護者可以理解設計意圖
+
+#### 目標 2：可驗收性（Verifiability）
+
+**定義**：每個 Ticket 都有明確、可驗證的完成標準，避免主觀判斷。
+
+**實現方式**：
+- Ticket 必須包含「驗收條件」欄位，列出所有可驗證的條件
+- 驗收條件必須是客觀可檢查的（檔案存在、測試通過、功能運作）
+- Review 時逐項檢查驗收條件
+
+**範例**：
+```markdown
+### 驗收條件
+- [ ] 介面檔案建立在 `lib/domains/import/services/` 目錄
+- [ ] `enrichBook` 方法簽名完整且明確
+- [ ] 輸入輸出類型定義清楚
+- [ ] 包含完整的文檔註解
+- [ ] dart analyze 0 錯誤
+```
+
+**效益**：
+- 避免「看起來完成了」但實際未達標準
+- 提供明確的驗收依據
+- 減少 review 時的主觀爭議
+
+#### 目標 3：可協作性（Collaborability）
+
+**定義**：多個開發者可以並行執行不同的 Ticket，互不阻塞。
+
+**實現方式**：
+- Ticket 拆分時考慮依賴關係，最小化依賴
+- 明確標註 Ticket 間的依賴關係（必須先完成 / 可並行）
+- 使用 Interface-Driven 開發，內層未完成也可開發外層
+
+**範例**：
+```markdown
+### 依賴 Ticket
+- Ticket #1: 定義 IBookInfoEnrichmentService 介面（必須先完成）
+- Ticket #3: 撰寫 EnrichmentProgress 測試（可並行）
+```
+
+**效益**：
+- 多人可同時開發不同模組
+- 減少等待時間
+- 提升開發效率
+
+### 1.3 基於 Clean Architecture 的 Ticket 設計哲學
+
+#### Clean Architecture 核心原則回顧
+
+**依賴方向規則**：
+- 外層依賴內層，內層不依賴外層
+- 所有依賴都指向內層（Domain）
+
+**分層定義**：
+- **Entities（Domain）**：核心業務邏輯
+- **Use Cases（Application）**：應用業務規則
+- **Interface Adapters（Presentation/Infrastructure）**：轉接層
+- **Frameworks & Drivers（External）**：外部實作
+
+#### Ticket 設計對應 Clean Architecture
+
+**原則 1：Interface 定義優先於具體實作**
+
+每個功能模組的開發順序：
+1. **先定義 Interface**（Ticket 類型：Interface 定義）
+2. **再實作具體邏輯**（Ticket 類型：具體實作）
+
+**範例**：
+```text
+Ticket #1: 定義 IBookRepository 介面
+    ↓
+Ticket #2: 實作 SQLiteBookRepository（依賴 #1）
+```
+
+**好處**：
+- 外層可依賴 Interface 先行開發（使用 Mock）
+- 內層實作延後，不阻塞外層開發
+- 符合 Dependency Inversion Principle
+
+**原則 2：測試驅動 Ticket 拆分**
+
+每個實作 Ticket 都應該有對應的測試 Ticket：
+1. **Interface 定義 Ticket** → 定義契約
+2. **測試撰寫 Ticket** → 驗證契約
+3. **具體實作 Ticket** → 實現契約
+4. **整合驗證 Ticket** → 確認整合
+
+**範例**：
+```text
+Ticket #1: 定義 IBookRepository 介面
+    ↓
+Ticket #2: 撰寫 BookRepository 測試
+    ↓
+Ticket #3: 實作 SQLiteBookRepository
+    ↓
+Ticket #4: 整合測試驗證
+```
+
+**好處**：
+- 測試先行，確保需求清晰
+- 實作以測試為目標，不過度設計
+- 整合驗證確保模組間正確協作
+
+**原則 3：分層拆分 Ticket**
+
+基於 Clean Architecture 分層，將任務拆分為不同層次的 Ticket：
+
+**Domain 層 Ticket**：
+- 定義 Entity
+- 定義 Value Object
+- 定義 Domain Event
+- 定義 Repository Interface
+
+**Application 層 Ticket**：
+- 定義 Use Case Interface
+- 實作 Use Case Interactor
+- 定義 Input/Output Port
+
+**Infrastructure 層 Ticket**：
+- 實作 Repository
+- 實作 External Service
+- 實作 Database Mapper
+
+**Presentation 層 Ticket**：
+- 實作 Controller/Presenter
+- 實作 ViewModel
+- 實作 UI Component
+
+**好處**：
+- 職責清晰，不跨層混合
+- 符合 Clean Architecture 分層原則
+- 易於並行開發
+
+### 1.4 Ticket 機制與 TDD 四階段的關係
+
+#### TDD 四階段回顧
+
+- **Phase 1**：功能設計（設計 Interface、規劃架構）
+- **Phase 2**：測試設計（撰寫測試案例）
+- **Phase 3**：實作執行（實作功能、通過測試）
+- **Phase 4**：重構優化（改善品質、消除技術債務）
+
+#### Ticket 與 TDD 階段對應
+
+**Phase 1 產出的 Ticket**：
+
+Phase 1 設計階段產出「Interface 定義 Ticket」：
+- 定義 Domain Interface
+- 定義 Use Case Interface
+- 定義 Input/Output Port
+
+**特徵**：
+- 無具體實作，只有介面簽名
+- 明確定義輸入輸出
+- 建立契約規範
+
+**Phase 2 產出的 Ticket**：
+
+Phase 2 測試設計階段產出「測試撰寫 Ticket」：
+- 撰寫 Entity 測試
+- 撰寫 Use Case 測試
+- 撰寫 Repository 測試
+
+**特徵**：
+- 測試先行，定義預期行為
+- 覆蓋所有 Interface 方法
+- 包含正常流程和異常處理
+
+**Phase 3 產出的 Ticket**：
+
+Phase 3 實作階段產出「具體實作 Ticket」：
+- 實作 Entity 邏輯
+- 實作 Use Case Interactor
+- 實作 Repository
+
+**特徵**：
+- 以測試通過為目標
+- 最小可行實作
+- 100% 測試通過
+
+**Phase 4 產出的 Ticket**：
+
+Phase 4 重構階段產出「品質改善 Ticket」：
+- 重構複雜邏輯
+- 消除程式異味
+- 改善錯誤處理
+
+**特徵**：
+- 保持測試通過
+- 改善程式品質
+- 不新增功能
+
+#### Ticket 機制支援 TDD 流程
+
+**支援 1：明確的階段產出**
+
+每個 TDD Phase 都產出對應的 Ticket 類型，職責清晰。
+
+**支援 2：可並行執行**
+
+Phase 1 完成後，多個開發者可並行執行 Phase 2-3 的不同 Ticket。
+
+**支援 3：即時 Review**
+
+每完成一個 Ticket 觸發 review，確保品質。
+
+---
+
+## 第二章：Ticket 拆分標準
+
+### 2.1 量化指標定義
+
+為了確保 Ticket 拆分的一致性和可操作性，定義以下 **4 個量化指標**。
+
+**核心原則**：**基於客觀的工作內容評估**
+- ✅ **職責數量**：最客觀，不受個人能力影響
+- ✅ **程式碼行數**：可量化，可驗證
+- ✅ **檔案數量**：架構層級指標
+- ✅ **測試數量**：品質保證指標
+
+---
+
+#### 指標 1：職責數量（Responsibilities）⭐ 最優先
+
+**定義**：Ticket 需要完成的獨立職責數量。
+
+**標準**：
+- **簡單 Ticket**：1 個明確職責
+- **中等 Ticket**：2-3 個相關職責
+- **複雜 Ticket**：3-5 個相關職責
+- **超過 5 個職責**：必須拆分
+
+**識別方式**：
+- 每個「需要實作的功能點」算一個職責
+- 每個「需要驗證的邊界條件」算一個職責
+- 每個「需要處理的錯誤情境」算一個職責
+
+**範例**：
+- **簡單（1 職責）**：定義 SelectionManager 介面方法簽名
+- **中等（2-3 職責）**：
+  - 職責 1: 實作 toggleSelection 方法
+  - 職責 2: 實作 clearSelection 方法
+  - 職責 3: 通知狀態變更（ChangeNotifier）
+- **複雜（3-5 職責）**：
+  - 職責 1: Repository CRUD 實作
+  - 職責 2: Data Mapper 轉換
+  - 職責 3: 錯誤處理
+  - 職責 4: Cache 管理
+  - 職責 5: 單元測試
+
+**為什麼職責是第一指標**：
+- ✅ **最客觀**：不受個人能力影響
+- ✅ **最穩定**：不受環境和參考資料影響
+- ✅ **最易溝通**：PM 和工程師都能理解
+
+#### 指標 2：程式碼行數（Lines of Code）
+
+**定義**：Ticket 涉及的程式碼修改行數（新增 + 修改 + 刪除）。
+
+**標準**：
+- **簡單 Ticket**：< 30 行
+- **中等 Ticket**：30-50 行
+- **複雜 Ticket**：50-100 行
+- **超過 100 行**：必須拆分
+
+**測量方式**：
+- 使用 `git diff --stat` 統計
+- 包含新增、修改、刪除的行數總和
+- 不包含空行和註解
+
+**範例**：
+- 簡單：定義 Interface（~20 行）
+- 中等：實作 Value Object（~40 行）
+- 複雜：實作 Repository（~80 行）
+
+#### 指標 3：涉及檔案數（Files）
+
+**定義**：Ticket 需要修改的檔案數量。
+
+**標準**：
+- **簡單 Ticket**：1 個檔案
+- **中等 Ticket**：2-3 個檔案
+- **複雜 Ticket**：3-5 個檔案
+- **超過 5 個檔案**：必須拆分
+
+**測量方式**：
+- 計算 `git diff --name-only` 的檔案數
+- 包含新建檔案
+- 不包含測試檔案（測試檔案另計）
+
+**範例**：
+- 簡單：新建一個 Interface 檔案（1 個）
+- 中等：修改 Entity 和 Repository Interface（2 個）
+- 複雜：實作 Use Case，修改 Interactor、Input Port、Output Port（3 個）
+
+#### 指標 4：測試用例數（Tests）
+
+**定義**：Ticket 對應的測試用例數量。
+
+**標準**：
+- **簡單 Ticket**：1-3 個測試
+- **中等 Ticket**：3-5 個測試
+- **複雜 Ticket**：5-10 個測試
+- **超過 10 個測試**：必須拆分
+
+**測量方式**：
+- 計算 test 檔案中的測試方法數
+- 包含單元測試和整合測試
+- 每個 `test('...', () {...})` 算一個
+
+**範例**：
+- 簡單：測試 Value Object 的建立和驗證（2 個測試）
+- 中等：測試 Repository 的 CRUD 操作（4 個測試）
+- 複雜：測試 Use Case 的正常流程和異常處理（8 個測試）
+
+---
+
+### 2.2 任務複雜度評估方法
+
+基於 4 個量化指標，定義任務複雜度評估方法：
+
+**複雜度等級定義**：
+
+| 等級 | 職責 | 檔案 | 測試 | 行數 | 描述 |
+|------|------|------|------|------|------|
+| **簡單** | 1 個 | 1 個 | 1-3 個 | < 30 行 | 單一職責，單一檔案 |
+| **中等** | 2-3 個 | 2-3 個 | 3-6 個 | 30-70 行 | 少數職責，少數檔案 |
+| **複雜** | 3-5 個 | 3-5 個 | 6-10 個 | 70-100 行 | 多職責，多檔案 |
+| **需拆分** | > 5 個 | > 5 個 | > 10 個 | > 100 行 | 任一指標超標必須拆分 |
+
+**評估方法**：
+
+**步驟 1：初步評估**
+- 根據任務描述，估算 4 個指標
+- 取最高的複雜度等級作為初步評估結果
+
+**步驟 2：複雜度確認**
+- 如果初步評估為「需拆分」，必須拆分
+- 如果初步評估為「複雜」，檢查是否可拆分為「簡單」或「中等」
+- 如果初步評估為「中等」或「簡單」，可直接建立 Ticket
+
+**步驟 3：拆分決策**
+- 優先拆分為「簡單」Ticket（單一職責、單一檔案）
+- 無法拆分為「簡單」時，拆分為「中等」Ticket（2-3 職責）
+- 避免建立「複雜」Ticket（3-5 職責），除非無法再拆分
+
+### 2.3 基於 Clean Architecture 分層的拆分策略
+
+基於 Clean Architecture 的分層原則，定義 4 種標準拆分策略：
+
+#### 策略 1：Interface 定義 Ticket
+
+**目的**：定義一個介面及其輸入輸出契約。
+
+**範圍**：
+- 定義 Interface 簽名
+- 定義輸入參數類型
+- 定義回傳類型
+- 撰寫文檔註解
+
+**範例**：
+```markdown
+## Ticket #1: 定義 IBookRepository 介面
+
+### 目標
+建立 `IBookRepository` 介面，定義書籍資料存取的契約
+
+### 步驟
+1. 在 `lib/domains/library/repositories/` 建立 `i_book_repository.dart`
+2. 定義 `getBookByIsbn` 方法簽名
+3. 定義 `saveBook` 方法簽名
+4. 定義 `deleteBook` 方法簽名
+5. 撰寫文檔註解
+
+### 驗收條件
+- [ ] Interface 檔案建立在正確位置
+- [ ] 3 個方法簽名完整且明確
+- [ ] 輸入輸出類型定義清楚
+- [ ] 包含完整的文檔註解
+- [ ] dart analyze 0 錯誤
+```
+
+#### 策略 2：具體實作 Ticket
+
+**目的**：實作一個類別的核心邏輯。
+
+**範圍**：
+- 實作類別邏輯
+- 實現介面方法
+- 處理異常
+- 確保測試通過
+
+**範例**：
+```markdown
+## Ticket #2: 實作 SQLiteBookRepository
+
+### 目標
+實作 `SQLiteBookRepository`，提供書籍資料的 SQLite 儲存
+
+### 步驟
+1. 建立 `SQLiteBookRepository` 類別
+2. 實作 `getBookByIsbn` 方法
+3. 實作 `saveBook` 方法
+4. 實作 `deleteBook` 方法
+5. 處理 SQLite 異常
+6. 確保所有測試通過
+
+### 驗收條件
+- [ ] 實作所有 IBookRepository 方法
+- [ ] 異常處理完整（Database Exception）
+- [ ] 單元測試 100% 通過
+- [ ] dart analyze 0 錯誤
+
+### 依賴 Ticket
+- Ticket #1: 定義 IBookRepository 介面（必須先完成）
+```
+
+#### 策略 3：測試驗證 Ticket
+
+**目的**：撰寫一組相關的測試用例。
+
+**範圍**：
+- 撰寫單元測試
+- 覆蓋正常流程
+- 覆蓋異常處理
+- 確保測試通過
+
+**範例**：
+```markdown
+## Ticket #3: 撰寫 BookRepository 測試
+
+### 目標
+撰寫 `BookRepository` 的完整測試用例
+
+### 步驟
+1. 建立測試檔案 `book_repository_test.dart`
+2. 撰寫 `getBookByIsbn` 測試（正常流程 + 不存在情況）
+3. 撰寫 `saveBook` 測試（新增 + 更新）
+4. 撰寫 `deleteBook` 測試（存在 + 不存在）
+5. 確保所有測試通過
+
+### 驗收條件
+- [ ] 測試檔案建立在 `test/unit/domains/library/repositories/`
+- [ ] 至少 6 個測試用例
+- [ ] 覆蓋正常流程和異常處理
+- [ ] 所有測試 100% 通過
+
+### 依賴 Ticket
+- Ticket #1: 定義 IBookRepository 介面（必須先完成）
+```
+
+#### 策略 4：整合連接 Ticket
+
+**目的**：連接兩個模組並驗證整合。
+
+**範圍**：
+- 連接 Use Case 和 Repository
+- 實作依賴注入
+- 撰寫整合測試
+- 驗證端到端流程
+
+**範例**：
+```markdown
+## Ticket #4: 整合 BookRepository 到 GetBookUseCase
+
+### 目標
+將 `BookRepository` 整合到 `GetBookUseCase`，實現完整流程
+
+### 步驟
+1. 修改 `GetBookInteractor` 注入 `IBookRepository`
+2. 在 `execute` 方法中呼叫 `repository.getBookByIsbn`
+3. 處理 Repository 異常
+4. 撰寫整合測試驗證端到端流程
+5. 確保所有測試通過
+
+### 驗收條件
+- [ ] `GetBookInteractor` 正確注入 `IBookRepository`
+- [ ] 端到端流程正常運作
+- [ ] 整合測試 100% 通過
+- [ ] 異常處理完整
+
+### 依賴 Ticket
+- Ticket #2: 實作 SQLiteBookRepository（必須先完成）
+```
+
+### 2.4 Code Smell 品質閘門檢測
+
+本節整合 v0.12.G.2「Code Smell 檢查清單」到 Ticket 設計流程，實現「設計階段就能發現 Code Smell」的品質管理策略。
+
+**整合目標**:
+- 在 Ticket 設計階段執行 Code Smell 檢測
+- 降低修正成本（設計階段 vs 實作後修正）
+- 提供明確的 Ticket 設計品質標準
+- 實現預防勝於治療的品質管理
+
+**引用方法論**:
+- 引用 v0.12.G.1「層級隔離派工方法論」的五層架構和單層修改原則
+- 引用 v0.12.G.2「Code Smell 檢查清單」的 C 類 Code Smell 檢測方法
+
+---
+
+#### 2.4.1 品質閘門機制概述
+
+**品質閘門定義**:
+
+品質閘門（Quality Gate）是 Ticket 設計階段的強制檢查點，確保 Ticket 符合 Code Smell 品質標準後才能進入執行階段。
+
+```text
+Ticket 設計流程整合品質閘門：
+
+Phase 1: 功能設計（lavender-interface-designer）
+  ↓
+  1. 撰寫 Ticket 清單
+  2. 定義驗收條件
+  3. 規劃步驟和檔案
+  ↓
+【品質閘門檢測】← 新增檢測點
+  ├─ C1. God Ticket 檢測
+  ├─ C2. Incomplete Ticket 檢測
+  └─ C3. Ambiguous Responsibility 檢測
+  ↓
+  通過 ✅ → Phase 2: 測試驗證
+  未通過 ❌ → 修正 Ticket → 重新檢測
+```
+
+**檢測時機**:
+
+| 檢測時機 | 說明 | 執行者 |
+|---------|------|--------|
+| **Ticket 撰寫完成後** | 所有 Ticket 的內容（背景、目標、步驟、驗收條件）都已撰寫完成 | lavender-interface-designer |
+| **分派執行前** | 在將 Ticket 分派給開發者執行前，必須先通過品質閘門 | lavender-interface-designer |
+| **PM 審查前** | PM 審查時，品質閘門檢測報告是重要參考依據 | lavender-interface-designer |
+
+**檢測執行者**:
+
+**責任歸屬**: lavender-interface-designer（TDD Phase 1 功能設計專家）
+
+**檢測職責**:
+1. 對每個 Ticket 執行 C1/C2/C3 檢測
+2. 記錄檢測結果到工作日誌
+3. 檢測失敗時執行修正
+4. 提供品質閘門報告給 PM
+
+**阻斷機制**:
+
+```text
+檢測結果處理：
+
+所有 Ticket 都通過 C1/C2/C3？
+  ├─ Yes ✅ → 提交給 PM 審查
+  │           └─ PM 批准 → 分派給開發者執行
+  │
+  └─ No ❌  → 阻止進入 Phase 2
+              ├─ 記錄檢測失敗原因
+              ├─ 執行修正（拆分/補充/重新定義）
+              └─ 重新檢測（直到通過）
+```
+
+**阻斷原則**:
+- **強制阻斷**: 任何 Ticket 未通過 C1/C2/C3 檢測，禁止進入 Phase 2
+- **修正優先**: 發現問題後立即修正，不延後處理
+- **完整記錄**: 所有檢測過程和修正過程都記錄到工作日誌
+
+**品質閘門價值**:
+
+| 價值維度 | 說明 | 效益 |
+|---------|------|------|
+| **及早發現** | 設計階段就能發現 Code Smell | 修正成本降低 80% |
+| **標準化** | 提供統一的檢測標準 | 避免主觀判斷 |
+| **可追溯** | 完整的檢測記錄 | 提升品質可見性 |
+| **預防性** | 預防問題進入實作階段 | 減少返工時間 |
+
+---
+
+#### 2.4.2 C1. God Ticket 檢測
+
+**定義**（引用 v0.12.G.2 第 2.3.1 節 God Ticket 定義）:
+
+God Ticket 是指單一 Ticket 修改過多檔案和層級，範圍失控，違反「單層修改原則」（引用 v0.12.G.1 第 3.1 節）。
+
+**量化檢測指標**:
+
+| 指標 | 良好設計 | 需要檢查 | God Ticket（必須拆分） |
+|------|---------|---------|----------------------|
+| **檔案數量** | 1-3 個 ✅ | 4-6 個 ⚠️ | **> 10 個** ❌ |
+| **層級跨度** | 1 層 ✅ | 2 層 ⚠️ | **> 2 層** ❌ |
+| **預估工時** | 2-4 小時 ✅ | 4-8 小時 ⚠️ | **> 16 小時** ❌ |
+
+**組合邏輯**（Phase 2 補充說明）:
+
+```text
+判斷標準：任一項目超標 = God Ticket（需要拆分）
+
+範例：
+- 檔案數 = 8 個（未超標）、層級跨度 = 3 層（超標） → God Ticket ❌
+- 檔案數 = 12 個（超標）、層級跨度 = 1 層（未超標） → God Ticket ❌
+- 檔案數 = 5 個（未超標）、層級跨度 = 2 層（未超標）、工時 = 20 小時（超標） → God Ticket ❌
+
+只要有任何一個指標超標，就判定為 God Ticket，必須拆分。
+```
+
+**檢測方法（Ticket 設計階段）**:
+
+**步驟 1: 列出 Ticket 涉及的檔案清單**
+
+從 Ticket 的「步驟」章節中提取所有檔案路徑：
+
+```markdown
+範例 Ticket 步驟：
+1. 建立 Rating Value Object（`lib/domain/value_objects/rating_value.dart`）
+2. 建立 Rating Entity（`lib/domain/entities/rating.dart`）
+3. 更新 Book Entity（`lib/domain/entities/book.dart`）
+4. 定義 IRatingRepository（`lib/domain/repositories/i_rating_repository.dart`）
+...
+
+提取檔案清單：
+- lib/domain/value_objects/rating_value.dart
+- lib/domain/entities/rating.dart
+- lib/domain/entities/book.dart
+- lib/domain/repositories/i_rating_repository.dart
+...
+```
+
+**步驟 2: 計算檔案數量**
+
+```text
+統計檔案數量（不包含測試檔案）：
+  ├─ 1-3 個 → 良好設計 ✅
+  ├─ 4-6 個 → 需要檢查 ⚠️（評估是否可拆分）
+  ├─ 7-10 個 → 建議拆分 ⚠️
+  └─ > 10 個 → God Ticket ❌（強制拆分）
+```
+
+**步驟 3: 判斷層級跨度**
+
+使用 v0.12.G.1 第 6.2 節「檔案路徑分析法」判斷每個檔案所屬層級：
+
+```text
+檔案路徑 → 層級對應規則：
+
+Layer 1（UI）:
+- lib/presentation/widgets/
+- lib/presentation/pages/
+
+Layer 2（Behavior）:
+- lib/presentation/controllers/
+- lib/presentation/providers/
+- lib/presentation/view_models/
+
+Layer 3（UseCase）:
+- lib/application/use_cases/
+- lib/application/services/
+
+Layer 4（Domain Events/Interfaces）:
+- lib/domain/events/
+- lib/domain/repositories/ (介面)
+- lib/domain/services/ (介面)
+
+Layer 5（Domain Implementation）:
+- lib/domain/entities/
+- lib/domain/value_objects/
+- lib/infrastructure/repositories/ (實作)
+- lib/infrastructure/services/ (實作)
+```
+
+計算層級跨度：
+
+```text
+範例：
+檔案清單：
+- lib/presentation/widgets/rating_widget.dart → Layer 1
+- lib/presentation/controllers/rating_controller.dart → Layer 2
+- lib/application/use_cases/rate_book_use_case.dart → Layer 3
+- lib/domain/entities/rating.dart → Layer 5
+
+層級跨度 = max(5) - min(1) = 4 層 ❌ → God Ticket
+```
+
+判斷標準：
+```text
+  ├─ 1 層（單層修改）→ 良好設計 ✅
+  ├─ 2 層（Facade 整合）→ 需要檢查 ⚠️（可能可接受）
+  └─ > 2 層（跨多層修改）→ God Ticket ❌（強制拆分）
+```
+
+**步驟 4: 評估預估工時**
+
+根據 Ticket 的「步驟」章節複雜度評估：
+
+```text
+評估依據：
+1. 步驟數量：
+   ├─ < 10 項 → 簡單任務（2-4 小時）
+   ├─ 10-20 項 → 中等任務（4-8 小時）
+   └─ > 20 項 → 複雜任務（> 8 小時）
+
+2. 步驟複雜度：
+   ├─ 單純檔案建立或方法定義 → 簡單（x1.0 係數）
+   ├─ 包含邏輯實作和測試 → 中等（x1.5 係數）
+   └─ 包含多層整合和異常處理 → 複雜（x2.0 係數）
+
+3. 計算公式：
+   預估工時 = 步驟數量 × 平均每步驟時間 × 複雜度係數
+
+範例：
+- 15 個步驟 × 30 分鐘 × 1.5 係數 = 11.25 小時 ⚠️
+- 25 個步驟 × 30 分鐘 × 2.0 係數 = 25 小時 ❌ → God Ticket
+```
+
+判斷標準：
+```text
+  ├─ 2-4 小時 → 良好設計 ✅
+  ├─ 4-8 小時 → 需要檢查 ⚠️
+  ├─ 8-16 小時 → 建議拆分 ⚠️
+  └─ > 16 小時 → God Ticket ❌（強制拆分）
+```
+
+**檢測失敗處理**:
+
+```text
+God Ticket 檢測失敗 → 執行拆分策略
+
+步驟 1: 選擇拆分策略
+  優先策略: 按層級拆分（引用 v0.12.G.1 第 3.1 節單層修改原則）
+  次要策略: 按職責拆分
+  最終策略: 按功能模組拆分
+
+步驟 2: 執行拆分（引用 v0.12.G.1 第 5.4 節 Ticket 拆分指引）
+  範例：14 個檔案、4 層 → 拆分為 5 個 Ticket（每層級 1 個）
+
+步驟 3: 重新檢測
+  對拆分後的每個 Ticket 重新執行 C1 檢測
+  確保所有 Ticket 都通過標準
+```
+
+**拆分策略決策樹**:
+
+```text
+God Ticket 拆分決策：
+
+檔案數量 > 10 或 層級跨度 > 2？
+  └─ Yes → 按層級拆分（優先）
+            ├─ Layer 5: Domain 層 Ticket
+            ├─ Layer 4: Domain 介面層 Ticket
+            ├─ Layer 3: UseCase 層 Ticket
+            ├─ Layer 2: Behavior 層 Ticket
+            └─ Layer 1: UI 層 Ticket
+
+預估工時 > 16 小時？
+  └─ Yes → 按職責拆分（次要）
+            ├─ 職責 1: 資料建模 Ticket
+            ├─ 職責 2: 業務邏輯 Ticket
+            ├─ 職責 3: 介面整合 Ticket
+            └─ 職責 4: UI 呈現 Ticket
+
+職責數量 > 5？
+  └─ Yes → 按功能模組拆分（最終）
+            ├─ 模組 A: 核心功能 Ticket
+            ├─ 模組 B: 輔助功能 Ticket
+            └─ 模組 C: 整合驗證 Ticket
+```
+
+**檢測範例（完整流程）**:
+
+**原始 Ticket（違反 C1 標準）**:
+
+```markdown
+## Ticket: 新增「書籍評分」完整功能
+
+### 背景
+根據 UC-03 需求，需要新增書籍評分功能。
+
+### 目標
+實作書籍評分的完整功能，包含 UI、邏輯、資料儲存。
+
+### 步驟
+1. 建立 Rating Value Object（`lib/domain/value_objects/rating_value.dart`）
+2. 建立 Rating Entity（`lib/domain/entities/rating.dart`）
+3. 更新 Book Entity（`lib/domain/entities/book.dart`）
+4. 定義 IRatingRepository（`lib/domain/repositories/i_rating_repository.dart`）
+5. 實作 RatingRepositoryImpl（`lib/infrastructure/repositories/rating_repository_impl.dart`）
+6. 建立 Rating 資料表（`lib/infrastructure/database/rating_table.dart`）
+7. 定義 RateBookUseCase 介面（`lib/application/use_cases/i_rate_book_use_case.dart`）
+8. 實作 RateBookUseCase（`lib/application/use_cases/rate_book_use_case.dart`）
+9. 定義 GetBookRatingUseCase 介面（`lib/application/use_cases/i_get_book_rating_use_case.dart`）
+10. 實作 GetBookRatingUseCase（`lib/application/use_cases/get_book_rating_use_case.dart`）
+11. 更新 BookDetailController（`lib/presentation/controllers/book_detail_controller.dart`）
+12. 建立 RatingController（`lib/presentation/controllers/rating_controller.dart`）
+13. 建立 RatingWidget（`lib/presentation/widgets/rating_widget.dart`）
+14. 更新 BookDetailWidget（`lib/presentation/widgets/book_detail_widget.dart`）
+15. 撰寫測試
+```
+
+**C1 檢測執行**:
+
+```text
+步驟 1: 列出檔案清單
+  檔案數量 = 14 個
+
+步驟 2: 計算檔案數量
+  14 個 > 10 個 → God Ticket ❌
+
+步驟 3: 判斷層級跨度
+  檔案層級分布：
+  - Layer 5: rating_value.dart, rating.dart, book.dart (3 個)
+  - Layer 5: rating_repository_impl.dart, rating_table.dart (2 個)
+  - Layer 4: i_rating_repository.dart (1 個)
+  - Layer 3: i_rate_book_use_case.dart, rate_book_use_case.dart (2 個)
+  - Layer 3: i_get_book_rating_use_case.dart, get_book_rating_use_case.dart (2 個)
+  - Layer 2: book_detail_controller.dart, rating_controller.dart (2 個)
+  - Layer 1: rating_widget.dart, book_detail_widget.dart (2 個)
+
+  層級跨度 = 5 - 1 = 4 層 ❌ → God Ticket
+
+步驟 4: 評估預估工時
+  步驟數量 = 15 項
+  複雜度 = 包含多層整合（x2.0 係數）
+  預估工時 = 15 × 30 分鐘 × 2.0 = 15 小時 ⚠️
+
+結論: 檔案數量和層級跨度都超標 → God Ticket ❌（必須拆分）
+```
+
+**拆分策略執行**:
+
+```text
+選擇策略: 按層級拆分（優先策略）
+
+拆分結果（5 個 Ticket）:
+
+Ticket 1 [Layer 5]: Rating Domain 模型
+  - rating_value.dart
+  - rating.dart
+  - book.dart（新增 rating 欄位）
+
+Ticket 2 [Layer 5 + 4]: Rating Repository
+  - i_rating_repository.dart（介面）
+  - rating_repository_impl.dart（實作）
+  - rating_table.dart（資料表）
+
+Ticket 3 [Layer 3]: RateBook UseCase
+  - i_rate_book_use_case.dart（介面）
+  - rate_book_use_case.dart（實作）
+
+Ticket 4 [Layer 3]: GetBookRating UseCase
+  - i_get_book_rating_use_case.dart（介面）
+  - get_book_rating_use_case.dart（實作）
+
+Ticket 5 [Layer 2]: Rating Controller 整合
+  - book_detail_controller.dart（更新）
+  - rating_controller.dart（新建）
+
+Ticket 6 [Layer 1]: Rating UI 元件
+  - rating_widget.dart（新建）
+  - book_detail_widget.dart（更新）
+```
+
+**拆分後重新檢測**:
+
+```text
+Ticket 1 [Layer 5]: Rating Domain 模型
+  檔案數量: 3 個 ✅
+  層級跨度: 1 層 ✅
+  預估工時: 3 小時 ✅
+  結論: 通過 ✅
+
+Ticket 2 [Layer 5 + 4]: Rating Repository
+  檔案數量: 3 個 ✅
+  層級跨度: 2 層 ⚠️（Repository 介面和實作可接受）
+  預估工時: 4 小時 ✅
+  結論: 通過 ✅
+
+Ticket 3 [Layer 3]: RateBook UseCase
+  檔案數量: 2 個 ✅
+  層級跨度: 1 層 ✅
+  預估工時: 3 小時 ✅
+  結論: 通過 ✅
+
+Ticket 4 [Layer 3]: GetBookRating UseCase
+  檔案數量: 2 個 ✅
+  層級跨度: 1 層 ✅
+  預估工時: 2.5 小時 ✅
+  結論: 通過 ✅
+
+Ticket 5 [Layer 2]: Rating Controller 整合
+  檔案數量: 2 個 ✅
+  層級跨度: 1 層 ✅
+  預估工時: 3 小時 ✅
+  結論: 通過 ✅
+
+Ticket 6 [Layer 1]: Rating UI 元件
+  檔案數量: 2 個 ✅
+  層級跨度: 1 層 ✅
+  預估工時: 4 小時 ✅
+  結論: 通過 ✅
+
+最終結論: 所有 Ticket 都通過 C1 檢測 ✅
+```
+
+**改善效果**:
+
+| 維度 | 原始 Ticket | 拆分後（6 個 Ticket） | 改善 |
+|------|-----------|-------------------|------|
+| **檔案數量** | 14 個 ❌ | 2-3 個/Ticket ✅ | 符合標準 |
+| **層級跨度** | 4 層 ❌ | 1-2 層/Ticket ✅ | 符合單層修改原則 |
+| **預估工時** | 15 小時 ⚠️ | 2.5-4 小時/Ticket ✅ | 可在半天內完成 |
+| **可並行執行** | 否 ❌ | 是（Ticket 1-4 可並行）✅ | 加速開發 |
+| **風險控制** | 高風險 ❌ | 低風險 ✅ | 降低失敗影響 |
+
+---
+
+#### 2.4.3 C3. Ambiguous Responsibility 檢測
+
+**定義**（引用 v0.12.G.2 第 2.3.3 節 Ambiguous Responsibility 定義）:
+
+Ambiguous Responsibility 是指 Ticket 的職責定義不明確，無法判斷屬於哪一層級，違反「層級明確原則」。
+
+**職責明確 Ticket 必要元素**:
+
+| 必要元素 | 檢查項目 | 範例 | 缺失後果 |
+|---------|---------|------|---------|
+| **層級標示** | 標題包含 `[Layer X]` 標籤 | `[Layer 2] 實作書籍詳情事件處理` | 無法判斷責任範圍 |
+| **職責描述** | 目標章節明確定義單一職責 | 實作 BookDetailController 的 loadBookDetail 方法 | 職責模糊 |
+| **檔案範圍** | 步驟章節明確列出檔案路徑 | 修改 `lib/presentation/controllers/book_detail_controller.dart` | 影響範圍不明 |
+| **驗收限定** | 驗收條件限定在該層級 | BookDetailController.loadBookDetail() 正確呼叫 UseCase | 驗收標準模糊 |
+
+**檢測方法（Ticket 設計階段）**:
+
+**步驟 1: 檢查層級標示**
+
+```text
+標題格式檢查：
+  ✅ 合格範例：
+  - [Layer 1] 建立書籍評分 UI 元件
+  - [Layer 2] 實作書籍詳情 Controller 事件處理
+  - [Layer 3] 實作 GetBookDetail UseCase
+  - [Layer 5] 定義 Book Entity 和 Value Objects
+
+  ❌ 不合格範例：
+  - 建立書籍評分功能（沒有層級標示）
+  - 實作書籍詳情（層級不明確）
+  - 整合評分功能（跨多層，職責模糊）
+```
+
+**步驟 2: 檢查職責描述**
+
+```text
+目標章節檢查：
+  ✅ 合格範例：
+  ### 目標
+  實作 BookDetailController 的 loadBookDetail 方法，
+  負責接收使用者事件並呼叫 GetBookDetailUseCase。
+
+  職責定義明確：
+  - 明確說明「做什麼」：實作 loadBookDetail 方法
+  - 明確說明「責任範圍」：接收事件 + 呼叫 UseCase
+  - 明確說明「不做什麼」：不包含業務邏輯實作
+
+  ❌ 不合格範例：
+  ### 目標
+  實作書籍詳情功能
+
+  職責定義模糊：
+  - 「書籍詳情功能」範圍太廣（UI? 邏輯? 資料？）
+  - 沒有說明具體職責
+  - 沒有說明責任邊界
+```
+
+**步驟 3: 檢查檔案範圍**
+
+```text
+步驟章節檢查：
+  ✅ 合格範例：
+  ### 步驟
+  1. 修改 `lib/presentation/controllers/book_detail_controller.dart`
+  2. 新增 `loadBookDetail` 方法
+  3. 注入 `IGetBookDetailUseCase` 依賴
+  4. 實作事件處理邏輯
+
+  檔案範圍明確：
+  - 明確列出檔案路徑
+  - 避免籠統描述（如「修改相關檔案」）
+  - 檔案數量合理（1-3 個）
+
+  ❌ 不合格範例：
+  ### 步驟
+  1. 修改書籍詳情相關檔案
+  2. 實作相關邏輯
+  3. 更新 UI
+
+  檔案範圍模糊：
+  - 「相關檔案」沒有具體說明是哪些檔案
+  - 「相關邏輯」沒有說明在哪裡實作
+  - 「更新 UI」沒有說明哪個 UI 檔案
+```
+
+**步驟 4: 檢查驗收限定**
+
+```text
+驗收條件章節檢查：
+  ✅ 合格範例：
+  ### 驗收條件
+  - [ ] BookDetailController.loadBookDetail() 方法建立
+  - [ ] 正確注入 IGetBookDetailUseCase 依賴
+  - [ ] loadBookDetail() 正確呼叫 UseCase.execute()
+  - [ ] 事件處理邏輯正確（不包含業務邏輯）
+  - [ ] dart analyze 0 錯誤
+
+  驗收限定在 Layer 2（Behavior）：
+  - 只驗證 Controller 層的職責
+  - 不驗證 UI 呈現（Layer 1）
+  - 不驗證業務邏輯（Layer 3）
+
+  ❌ 不合格範例：
+  ### 驗收條件
+  - [ ] 書籍詳情功能正常運作
+  - [ ] 使用者可以看到書籍資訊
+  - [ ] 資料正確儲存
+
+  驗收未限定在單一層級：
+  - 「功能正常運作」涵蓋所有層級
+  - 「使用者可以看到」是 UI 層（Layer 1）驗收
+  - 「資料正確儲存」是 Repository 層（Layer 5）驗收
+```
+
+**檢測失敗處理**:
+
+```text
+C3 檢測失敗 → 執行重新定義步驟
+
+步驟 1: 明確層級定位
+  使用 v0.12.G.1 第 6.2 節檔案路徑分析法判斷層級
+  在標題加上 [Layer X] 標籤
+
+步驟 2: 重新定義職責
+  基於該層級的職責範圍重寫目標章節
+  明確說明「做什麼」「責任範圍」「不做什麼」
+
+步驟 3: 明確檔案範圍
+  列出具體的檔案路徑（避免籠統描述）
+  確保檔案都屬於同一層級
+
+步驟 4: 限定驗收條件
+  驗收條件只驗證該層級的職責
+  移除跨層級的驗收項目
+
+步驟 5: 重新檢測
+  確認所有 4 個必要元素都已補充
+```
+
+**檢測範例（完整流程）**:
+
+**原始 Ticket（違反 C3 標準）**:
+
+```markdown
+## Ticket: 實作書籍詳情功能
+
+### 背景
+根據 UC-02 需求，需要實作書籍詳情功能。
+
+### 目標
+實作書籍詳情功能，讓使用者可以查看書籍的完整資訊。
+
+### 步驟
+1. 修改相關檔案
+2. 實作查詢邏輯
+3. 更新 UI 顯示
+
+### 驗收條件
+- [ ] 使用者可以看到書籍詳情
+- [ ] 資料正確顯示
+- [ ] 功能正常運作
+```
+
+**C3 檢測執行**:
+
+```text
+步驟 1: 檢查層級標示
+  標題: "實作書籍詳情功能"
+  結果: 沒有 [Layer X] 標籤 ❌
+  問題: 無法判斷屬於哪一層級
+
+步驟 2: 檢查職責描述
+  目標: "實作書籍詳情功能，讓使用者可以查看書籍的完整資訊"
+  結果: 職責定義模糊 ❌
+  問題:
+  - "書籍詳情功能"範圍太廣（UI? 邏輯? 資料？）
+  - 沒有明確說明職責範圍
+
+步驟 3: 檢查檔案範圍
+  步驟: "修改相關檔案"
+  結果: 檔案範圍模糊 ❌
+  問題:
+  - "相關檔案"沒有具體說明
+  - 沒有明確的檔案路徑
+
+步驟 4: 檢查驗收限定
+  驗收條件: "使用者可以看到書籍詳情"、"功能正常運作"
+  結果: 驗收未限定在單一層級 ❌
+  問題:
+  - "使用者可以看到"是 UI 層驗收
+  - "功能正常運作"涵蓋所有層級
+
+結論: Ambiguous Responsibility ❌（必須重新定義）
+```
+
+**重新定義執行**:
+
+```text
+步驟 1: 明確層級定位
+  分析 Ticket 內容 → 主要涉及 Controller 事件處理
+  判斷層級 → Layer 2（Behavior）
+  更新標題 → 加上 [Layer 2] 標籤
+
+步驟 2: 重新定義職責
+  重寫目標章節：
+  - 明確說明「做什麼」
+  - 明確說明「責任範圍」
+  - 明確說明「不做什麼」
+
+步驟 3: 明確檔案範圍
+  列出具體檔案路徑
+  確認都屬於 Layer 2
+
+步驟 4: 限定驗收條件
+  只驗證 Layer 2 的職責
+  移除 UI 和業務邏輯驗收
+```
+
+**修正後 Ticket（符合 C3 標準）**:
+
+```markdown
+## Ticket: [Layer 2] 實作書籍詳情 Controller 事件處理
+
+### 背景
+根據 UC-02 需求，需要實作 BookDetailController 的事件處理邏輯。
+
+### 目標
+實作 BookDetailController 的 loadBookDetail 方法，
+負責接收使用者的「查看書籍詳情」事件並呼叫 GetBookDetailUseCase。
+
+職責範圍：
+- 接收使用者事件（如按鈕點擊）
+- 呼叫 GetBookDetailUseCase 獲取書籍資料
+- 將 UseCase 回傳的資料傳遞給 UI
+- 不包含業務邏輯實作（業務邏輯在 UseCase 層）
+
+### 步驟
+1. 修改 `lib/presentation/controllers/book_detail_controller.dart`
+2. 新增 `loadBookDetail(String isbn)` 方法
+3. 注入 `IGetBookDetailUseCase` 依賴
+4. 實作事件處理邏輯：
+   - 呼叫 `useCase.execute(isbn)`
+   - 處理回傳的 `OperationResult<Book>`
+   - 更新 Controller 狀態（loading/success/error）
+5. 撰寫單元測試
+
+### 驗收條件
+- [ ] BookDetailController.loadBookDetail() 方法建立在正確位置
+- [ ] 正確注入 IGetBookDetailUseCase 依賴
+- [ ] loadBookDetail() 正確呼叫 useCase.execute()
+- [ ] 正確處理 OperationResult（success/failure）
+- [ ] 事件處理邏輯正確（不包含業務邏輯）
+- [ ] 單元測試覆蓋率 > 80%
+- [ ] dart analyze 0 錯誤
+
+### 依賴 Ticket
+- Ticket #3: 定義 IGetBookDetailUseCase 介面（必須先完成）
+
+### 參考文件
+- docs/app-requirements-spec.md #UC-02
+- docs/work-logs/v0.12.8-design-decisions.md #決策2
+```
+
+**修正後重新檢測**:
+
+```text
+步驟 1: 檢查層級標示
+  標題: "[Layer 2] 實作書籍詳情 Controller 事件處理"
+  結果: 有 [Layer 2] 標籤 ✅
+
+步驟 2: 檢查職責描述
+  目標: 明確定義職責範圍和邊界
+  結果: 職責定義明確 ✅
+  - 明確說明「接收事件」「呼叫 UseCase」
+  - 明確說明「不包含業務邏輯」
+
+步驟 3: 檢查檔案範圍
+  步驟: 明確列出檔案路徑
+  結果: 檔案範圍明確 ✅
+  - `lib/presentation/controllers/book_detail_controller.dart`
+
+步驟 4: 檢查驗收限定
+  驗收條件: 限定在 Layer 2 職責
+  結果: 驗收限定正確 ✅
+  - 只驗證 Controller 層的職責
+  - 不包含 UI 或業務邏輯驗收
+
+結論: 通過 C3 檢測 ✅
+```
+
+**改善效果**:
+
+| 維度 | 原始 Ticket | 修正後 Ticket | 改善 |
+|------|-----------|-------------|------|
+| **層級標示** | 無 ❌ | [Layer 2] ✅ | 明確定位 |
+| **職責描述** | 模糊 ❌ | 明確定義範圍和邊界 ✅ | 職責清晰 |
+| **檔案範圍** | "相關檔案" ❌ | 具體檔案路徑 ✅ | 影響範圍明確 |
+| **驗收限定** | 跨層級 ❌ | 限定在 Layer 2 ✅ | 驗收標準清晰 |
+| **可執行性** | 低 ❌ | 高 ✅ | 開發者可直接執行 |
+
+---
+
+#### 2.4.4 C2. Incomplete Ticket 檢測
+
+**定義**（引用 v0.12.G.2 第 2.3.3 節 Incomplete Ticket 定義）:
+
+Incomplete Ticket 是指 Ticket 內容缺失關鍵元素，導致開發者無法明確理解需求、驗收標準或測試方法。
+
+**必要元素檢測清單**:
+
+| 元素 | 檢查內容 | 通過標準 | 重要性 |
+|------|---------|---------|--------|
+| **驗收條件** | 是否有「### 驗收條件」章節 | 至少 3 個可驗證的驗收項目 | 🔴 必要 |
+| **測試規劃** | 步驟中是否包含測試 | 明確列出測試檔案和測試項目 | 🔴 必要 |
+| **工作日誌規劃** | 是否規劃工作日誌檔案 | 明確工作日誌檔案名稱和記錄內容 | 🔴 必要 |
+| **參考文件** | 是否連結需求規格或設計文件 | 至少 1 個有效的文件連結 | 🔴 必要 |
+
+**檢測方法**:
+
+**步驟 1: 檢查驗收條件完整性**
+
+```text
+掃描 Ticket 內容
+  ↓
+檢查是否包含「### 驗收條件」章節？
+  ├─ Yes → 檢查驗收項目數量
+  │         ├─ ≥ 3 個 → 通過 ✅
+  │         └─ < 3 個 → 失敗 ❌（驗收條件不足）
+  │
+  └─ No → 失敗 ❌（缺少驗收條件章節）
+
+驗收條件品質檢查：
+  ├─ 是否可量化驗證？（避免模糊描述）
+  ├─ 是否限定在該層級？（不跨層級驗收）
+  └─ 是否涵蓋功能性、品質性、整合性？
+```
+
+**範例**:
+
+✅ **合格驗收條件**:
+```markdown
+### 驗收條件
+- [ ] `IBookRepository` 介面檔案建立在 `lib/domains/library/repositories/`
+- [ ] `getBookByIsbn(String isbn)` 方法簽名完整且明確
+- [ ] 方法包含完整的文檔註解（參數、回傳值、異常）
+- [ ] dart analyze 0 錯誤
+- [ ] 測試覆蓋率 > 80%
+- [ ] 不破壞既有功能（回歸測試通過）
+```
+
+❌ **不合格驗收條件**:
+```markdown
+### 驗收條件
+- [ ] 功能可以正常運作
+- [ ] 程式碼品質良好
+```
+問題：驗收條件過於模糊，無法量化驗證
+
+**步驟 2: 檢查測試規劃完整性**
+
+```text
+掃描「步驟」章節
+  ↓
+檢查是否包含測試相關步驟？
+  ├─ Yes → 檢查測試內容
+  │         ├─ 有測試檔案路徑 ✅
+  │         ├─ 有測試項目清單 ✅
+  │         ├─ 有測試覆蓋率要求 ✅
+  │         └─ 通過 ✅
+  │
+  └─ No → 失敗 ❌（缺少測試規劃）
+
+測試規劃品質檢查：
+  ├─ 是否包含單元測試？
+  ├─ 是否包含整合測試？（如需要）
+  └─ 是否定義測試覆蓋率標準？
+```
+
+**範例**:
+
+✅ **合格測試規劃**:
+```markdown
+### 步驟
+4. 撰寫 `test/domain/repositories/book_repository_test.dart` 單元測試
+   - 測試 `getBookByIsbn` 正常流程（書籍存在）
+   - 測試書籍不存在異常處理
+   - 測試 ISBN 格式錯誤異常處理
+   - 測試網路錯誤異常處理
+5. 確保測試覆蓋率 > 80%
+```
+
+❌ **不合格測試規劃**:
+```markdown
+### 步驟
+4. 撰寫測試
+```
+問題：沒有明確測試檔案路徑和測試項目
+
+**步驟 3: 檢查工作日誌規劃**
+
+```text
+掃描 Ticket 內容
+  ↓
+檢查是否包含「### 工作日誌」章節？
+  ├─ Yes → 檢查檔案名稱
+  │         ├─ 符合命名規範 ✅
+  │         │   格式: docs/work-logs/vX.Y.Z-feature-name.md
+  │         └─ 通過 ✅
+  │
+  └─ No → 失敗 ❌（缺少工作日誌規劃）
+
+命名規範檢查：
+  ├─ 是否包含版本號？
+  ├─ 是否描述性命名？
+  └─ 是否在 docs/work-logs/ 目錄下？
+```
+
+**範例**:
+
+✅ **合格工作日誌規劃**:
+```markdown
+### 工作日誌
+檔案名稱: `docs/work-logs/v0.12.8-book-repository-interface.md`
+
+記錄內容:
+- Ticket 執行過程
+- 設計決策和理由
+- 遇到的問題和解決方法
+- 測試結果和覆蓋率報告
+```
+
+❌ **不合格工作日誌規劃**:
+```markdown
+（沒有工作日誌規劃）
+```
+
+**步驟 4: 檢查參考文件連結**
+
+```text
+掃描 Ticket 內容
+  ↓
+檢查是否包含「### 參考文件」章節？
+  ├─ Yes → 檢查連結有效性
+  │         ├─ 至少 1 個連結 ✅
+  │         ├─ 連結格式正確 ✅
+  │         └─ 連結內容相關 ✅
+  │
+  └─ No → 失敗 ❌（缺少參考文件）
+
+連結品質檢查：
+  ├─ 是否連結需求規格？（建議）
+  ├─ 是否連結設計文件？（建議）
+  └─ 是否連結相關 Ticket？（如有依賴）
+```
+
+**範例**:
+
+✅ **合格參考文件**:
+```markdown
+### 參考文件
+- `docs/app-requirements-spec.md` #UC-01 書籍查詢功能
+- `docs/work-logs/v0.12.7-design-decisions.md` #決策1 Repository 設計模式
+- `.claude/methodologies/layered-ticket-methodology.md` 層級隔離原則
+```
+
+❌ **不合格參考文件**:
+```markdown
+（沒有參考文件章節）
+```
+
+**檢測流程完整範例**:
+
+```text
+Ticket #1: [Layer 5] 定義 IBookRepository 介面
+  ↓
+執行 C2. Incomplete Ticket 檢測
+  ↓
+【步驟 1】檢查驗收條件
+  ├─ 有「### 驗收條件」章節 ✅
+  ├─ 驗收項目數量: 6 個 ✅
+  ├─ 驗收條件可量化 ✅
+  └─ 通過 ✅
+  ↓
+【步驟 2】檢查測試規劃
+  ├─ 步驟 4 包含測試 ✅
+  ├─ 測試檔案路徑明確 ✅
+  ├─ 測試項目完整 ✅
+  └─ 通過 ✅
+  ↓
+【步驟 3】檢查工作日誌規劃
+  ├─ 有「### 工作日誌」章節 ✅
+  ├─ 檔案名稱符合規範 ✅
+  └─ 通過 ✅
+  ↓
+【步驟 4】檢查參考文件
+  ├─ 有「### 參考文件」章節 ✅
+  ├─ 連結數量: 3 個 ✅
+  ├─ 連結格式正確 ✅
+  └─ 通過 ✅
+  ↓
+C2 檢測結論: 通過 ✅
+```
+
+**修正方法**:
+
+**缺失項目 1: 沒有驗收條件**
+
+修正步驟:
+```text
+1. 新增「### 驗收條件」章節
+2. 撰寫 3-6 個可量化驗收項目
+3. 涵蓋三個維度:
+   - 功能性驗收（檔案位置、方法簽名、程式邏輯）
+   - 品質性驗收（dart analyze、測試覆蓋率、文檔）
+   - 整合性驗收（整合測試、不破壞既有功能）
+```
+
+**缺失項目 2: 沒有測試規劃**
+
+修正步驟:
+```text
+1. 在「### 步驟」章節新增測試步驟
+2. 明確列出測試檔案路徑
+3. 列出測試項目清單（正常流程 + 異常處理）
+4. 定義測試覆蓋率要求（建議 > 80%）
+```
+
+**缺失項目 3: 沒有工作日誌規劃**
+
+修正步驟:
+```text
+1. 新增「### 工作日誌」章節
+2. 定義工作日誌檔案名稱
+   格式: docs/work-logs/vX.Y.Z-feature-name.md
+3. 說明記錄內容範圍
+```
+
+**缺失項目 4: 沒有參考文件**
+
+修正步驟:
+```text
+1. 新增「### 參考文件」章節
+2. 連結需求規格（必要）
+3. 連結設計文件（建議）
+4. 連結相關 Ticket（如有依賴）
+```
+
+**完整修正範例**:
+
+❌ **修正前（Incomplete Ticket）**:
+```markdown
+## Ticket: 定義 IBookRepository 介面
+
+### 目標
+定義書籍 Repository 的介面契約
+
+### 步驟
+1. 建立介面檔案
+2. 定義方法簽名
+3. 撰寫文檔註解
+```
+
+✅ **修正後（Complete Ticket）**:
+```markdown
+## Ticket: [Layer 5] 定義 IBookRepository 介面
+
+### 目標
+定義書籍 Repository 的介面契約，規範 Domain 層與 Infrastructure 層的互動方式
+
+### 步驟
+1. 建立 `lib/domains/library/repositories/i_book_repository.dart`
+2. 定義 `getBookByIsbn(String isbn)` 方法簽名
+3. 定義 `getAllBooks()` 方法簽名
+4. 撰寫完整的文檔註解（參數、回傳值、異常）
+5. 撰寫 `test/domain/repositories/book_repository_test.dart` 單元測試
+   - 測試 getBookByIsbn 正常流程
+   - 測試書籍不存在異常處理
+   - 測試 ISBN 格式錯誤異常處理
+6. 確保測試覆蓋率 > 80%
+
+### 驗收條件
+- [ ] `IBookRepository` 介面檔案建立在 `lib/domains/library/repositories/`
+- [ ] `getBookByIsbn(String isbn)` 方法簽名完整且明確
+- [ ] 方法包含完整的文檔註解
+- [ ] dart analyze 0 錯誤
+- [ ] 測試覆蓋率 > 80%
+- [ ] 不破壞既有功能
+
+### 工作日誌
+檔案名稱: `docs/work-logs/v0.12.8-book-repository-interface.md`
+
+### 參考文件
+- `docs/app-requirements-spec.md` #UC-01 書籍查詢功能
+- `.claude/methodologies/layered-ticket-methodology.md` 層級隔離原則
+```
+
+---
+
+#### 2.4.5 品質閘門執行流程
+
+**完整執行流程**:
+
+```text
+Phase 1: 功能設計（lavender-interface-designer）
+  ↓
+Ticket 清單撰寫完成
+  ↓
+┌─────────────────────────────────────┐
+│   品質閘門檢測開始                    │
+│   （lavender-interface-designer）    │
+└─────────────────────────────────────┘
+  ↓
+對每個 Ticket 執行檢測（按順序）
+  ↓
+┌─────────────────────────────────────┐
+│ 【檢測 1】C1. God Ticket 檢測        │
+│                                     │
+│ 檢查指標:                            │
+│  - 檔案數量 ≤ 10？                   │
+│  - 層級跨度 ≤ 2？                    │
+│  - 預估工時 ≤ 16h？                  │
+│                                     │
+│ 組合邏輯: 任一項目超標 = God Ticket   │
+└─────────────────────────────────────┘
+  ↓
+  ├─ 通過 ✅ → 繼續檢測 C3
+  └─ 失敗 ❌ → 執行拆分 → 重新檢測 C1
+  ↓
+┌─────────────────────────────────────┐
+│ 【檢測 2】C3. Ambiguous              │
+│           Responsibility 檢測         │
+│                                     │
+│ 檢查要素:                            │
+│  - 有層級標示 [Layer X]？            │
+│  - 職責描述明確？                    │
+│  - 檔案範圍明確？                    │
+│  - 驗收條件限定在該層？              │
+└─────────────────────────────────────┘
+  ↓
+  ├─ 通過 ✅ → 繼續檢測 C2
+  └─ 失敗 ❌ → 重新定義職責 → 重新檢測 C3
+  ↓
+┌─────────────────────────────────────┐
+│ 【檢測 3】C2. Incomplete Ticket 檢測 │
+│                                     │
+│ 檢查要素:                            │
+│  - 有驗收條件章節？                  │
+│  - 有測試規劃？                      │
+│  - 有工作日誌規劃？                  │
+│  - 有參考文件連結？                  │
+└─────────────────────────────────────┘
+  ↓
+  ├─ 通過 ✅ → Ticket 通過品質閘門 ✅
+  └─ 失敗 ❌ → 補充遺漏項目 → 重新檢測 C2
+  ↓
+所有 Ticket 都通過 C1/C2/C3？
+  ↓
+  ├─ Yes ✅ → 提交品質閘門報告給 PM
+  │           ↓
+  │         PM 審查
+  │           ↓
+  │         PM 批准 → 進入 Phase 2: 測試驗證
+  │
+  └─ No ❌  → 繼續修正未通過的 Ticket
+```
+
+**檢測順序說明**:
+
+| 順序 | 檢測項目 | 檢測原因 | 失敗影響 |
+|-----|---------|---------|---------|
+| **1️⃣ C1** | God Ticket | 檔案數和層級是最基礎的結構問題 | 必須拆分，否則後續檢測無意義 |
+| **2️⃣ C3** | Ambiguous Responsibility | 職責定義是 Ticket 品質的核心 | 必須重新定義，避免跨層級實作 |
+| **3️⃣ C2** | Incomplete Ticket | 完整性是 Ticket 可執行性的保證 | 補充遺漏項目，確保開發者理解需求 |
+
+**檢測順序設計理由**:
+- **C1 優先**: 檔案數和層級問題會影響職責定義，必須先解決結構問題
+- **C3 次之**: 職責明確後才能評估驗收條件和測試規劃是否完整
+- **C2 最後**: 完整性檢測依賴明確的職責定義
+
+**檢測失敗處理流程**:
+
+```text
+檢測失敗
+  ↓
+記錄失敗原因到工作日誌
+  ↓
+根據失敗類型選擇修正方法
+  ├─ C1 失敗 → 執行 Ticket 拆分
+  │             ├─ 按層級拆分（優先）
+  │             ├─ 按職責拆分（次要）
+  │             └─ 按 TDD 階段拆分（特殊）
+  │
+  ├─ C3 失敗 → 重新定義職責
+  │             ├─ 確認主要職責層級
+  │             ├─ 加入層級標示 [Layer X]
+  │             ├─ 限定職責範圍
+  │             └─ 明確列出檔案
+  │
+  └─ C2 失敗 → 補充遺漏項目
+                ├─ 補充驗收條件
+                ├─ 補充測試規劃
+                ├─ 補充工作日誌規劃
+                └─ 補充參考文件連結
+  ↓
+修正完成
+  ↓
+重新執行失敗的檢測項目
+  ↓
+  ├─ 通過 ✅ → 繼續下一個檢測
+  └─ 失敗 ❌ → 再次修正（直到通過）
+```
+
+**PM 審查標準**:
+
+**審查清單**:
+
+| 審查項目 | 檢查內容 | 通過標準 |
+|---------|---------|---------|
+| **品質閘門報告** | 每個 Ticket 是否都執行了 C1/C2/C3 檢測 | 所有 Ticket 都有檢測記錄 ✅ |
+| **檢測結果** | 所有 Ticket 是否都通過檢測 | 所有 Ticket 標記為「通過 ✅」 |
+| **修正記錄** | 檢測失敗的 Ticket 是否記錄修正過程 | 修正過程完整記錄（問題 + 修正方法 + 結果） |
+| **Ticket 數量** | 拆分後的 Ticket 數量是否合理 | 不過度拆分（< 10 個）、不過度合併（> 1 個） |
+| **依賴關係** | Ticket 間的依賴關係是否明確 | 依賴順序符合架構層級（L5→L3→L2→L1） |
+
+**PM 審查決策流程**:
+
+```text
+PM 收到品質閘門報告
+  ↓
+【檢查 1】品質閘門報告完整性
+  ├─ 所有 Ticket 都有 C1/C2/C3 檢測記錄？
+  │   ├─ Yes ✅ → 繼續檢查 2
+  │   └─ No ❌  → 要求 lavender 補充檢測
+  ↓
+【檢查 2】檢測結果正確性
+  ├─ 所有 Ticket 都標記為「通過 ✅」？
+  │   ├─ Yes ✅ → 繼續檢查 3
+  │   └─ No ❌  → 檢查未通過原因
+  │                ├─ 未修正 → 要求 lavender 修正
+  │                └─ 修正後仍不符合 → 要求重新設計
+  ↓
+【檢查 3】修正記錄完整性
+  ├─ 檢測失敗的 Ticket 是否記錄修正過程？
+  │   ├─ Yes ✅ → 繼續檢查 4
+  │   └─ No ❌  → 要求補充修正記錄
+  ↓
+【檢查 4】Ticket 數量合理性
+  ├─ 拆分後數量是否合理（1-10 個）？
+  │   ├─ Yes ✅ → 繼續檢查 5
+  │   └─ No ❌  → 要求調整拆分策略
+  ↓
+【檢查 5】依賴關係正確性
+  ├─ Ticket 依賴順序是否符合架構層級？
+  │   ├─ Yes ✅ → PM 批准 Ticket 清單
+  │   └─ No ❌  → 要求調整依賴順序
+  ↓
+PM 批准
+  ↓
+分派給開發者執行（進入 Phase 2）
+```
+
+**工作日誌記錄範例**:
+
+```markdown
+## Code Smell 品質閘門檢測
+
+### Ticket #1: [Layer 5] 定義 Book Entity
+
+#### 檢測記錄（2025-10-11）
+
+**C1. God Ticket 檢測**:
+- 檔案數量: 2 個 ✅（book.dart + isbn.dart）
+- 層級跨度: 1 層（Layer 5） ✅
+- 預估工時: 4 小時 ✅
+- 結論: 通過 ✅
+
+**C3. Ambiguous Responsibility 檢測**:
+- 層級標示: [Layer 5] ✅
+- 職責描述: 明確（定義 Book Entity 和 ISBN Value Object） ✅
+- 檔案範圍: 明確列出 2 個檔案路徑 ✅
+- 驗收限定: 限定在 Domain 層 ✅
+- 結論: 通過 ✅
+
+**C2. Incomplete Ticket 檢測**:
+- 驗收條件: 6 個驗收項目 ✅
+- 測試規劃: 包含測試步驟和覆蓋率要求 ✅
+- 工作日誌: 規劃檔案名稱 ✅
+- 參考文件: 連結需求規格和設計文件 ✅
+- 結論: 通過 ✅
+
+**最終結論**: Ticket #1 通過品質閘門 ✅
+
+---
+
+### Ticket #2: [Layer 3/5] 實作書籍查詢功能（原始設計）
+
+#### 檢測記錄（2025-10-11）
+
+**C1. God Ticket 檢測**:
+- 檔案數量: 15 個 ❌（超標，標準 ≤ 10）
+- 層級跨度: 3 層（Layer 1/2/3/5） ❌（超標，標準 ≤ 2）
+- 預估工時: 24 小時 ❌（超標，標準 ≤ 16h）
+- 結論: 失敗 ❌（3 個指標都超標）
+
+**修正方法**: 按層級拆分為 4 個 Ticket
+- Ticket #2a: [Layer 5] 定義 Book Entity
+- Ticket #2b: [Layer 3] 實作 GetBookUseCase
+- Ticket #2c: [Layer 2] 實作 BookController
+- Ticket #2d: [Layer 1] 實作 BookListWidget
+
+**拆分後重新檢測**:
+
+**Ticket #2a 檢測**:
+- C1: 通過 ✅（2 個檔案、1 層、4h）
+- C3: 通過 ✅（職責明確）
+- C2: 通過 ✅（4 項必要元素齊全）
+
+**Ticket #2b 檢測**:
+- C1: 通過 ✅（3 個檔案、1 層、6h）
+- C3: 通過 ✅（職責明確）
+- C2: 通過 ✅（4 項必要元素齊全）
+
+**Ticket #2c 檢測**:
+- C1: 通過 ✅（2 個檔案、1 層、4h）
+- C3: 通過 ✅（職責明確）
+- C2: 通過 ✅（4 項必要元素齊全）
+
+**Ticket #2d 檢測**:
+- C1: 通過 ✅（3 個檔案、1 層、5h）
+- C3: 通過 ✅（職責明確）
+- C2: 通過 ✅（4 項必要元素齊全）
+
+**最終結論**: 原 Ticket #2 拆分為 4 個 Ticket，全部通過品質閘門 ✅
+
+---
+
+### PM 審查報告
+
+**審查日期**: 2025-10-11
+**審查 Ticket 清單**: v0.12.8 書籍查詢功能（5 個 Ticket）
+
+**品質閘門檢測確認**:
+- ✅ Ticket #1: 通過 C1/C2/C3 檢測
+- ✅ Ticket #2a: 通過 C1/C2/C3 檢測（拆分後）
+- ✅ Ticket #2b: 通過 C1/C2/C3 檢測（拆分後）
+- ✅ Ticket #2c: 通過 C1/C2/C3 檢測（拆分後）
+- ✅ Ticket #2d: 通過 C1/C2/C3 檢測（拆分後）
+
+**拆分合理性**:
+- 原 Ticket 數量: 2 個（1 個正常 + 1 個 God Ticket）
+- 拆分後數量: 5 個
+- 評估: 合理 ✅
+- 理由: God Ticket 按層級拆分為 4 個，符合單層修改原則
+
+**依賴關係檢查**:
+- 依賴順序: Ticket #1 → #2a → #2b → #2c → #2d
+- 評估: 正確 ✅
+- 理由: 遵循架構層級順序（Layer 5 → Layer 3 → Layer 2 → Layer 1）
+
+**審查結論**:
+- ✅ 批准 Ticket 清單
+- ✅ 可分派給開發者執行（進入 Phase 2）
+```
+
+---
+
+#### 2.4.6 自動化檢測準備（v0.12.G.4）
+
+本節為 v0.12.G.4「代理人和 Hook 機制調整」準備自動化檢測規則設計。
+
+**自動化檢測目標**:
+- 減少人工檢測工作量
+- 提升檢測一致性
+- 即時反饋 Ticket 品質問題
+- 支援 lavender-interface-designer 執行檢測
+
+**可自動化項目**:
+
+**C1. God Ticket 自動化檢測（可自動化程度: 80%）**:
+
+| 檢測指標 | 自動化程度 | 自動化方法 | 需要人工判斷 |
+|---------|-----------|-----------|-------------|
+| **檔案數量** | 100% ✅ | 掃描步驟章節，提取檔案路徑，計算數量 | 無 |
+| **層級跨度** | 100% ✅ | 使用 v0.12.G.1 第 6.2 節決策樹判斷層級 | 無 |
+| **預估工時** | 60% ⚠️ | 根據步驟數量估算（< 10 步 = 2-4h）| 複雜度需人工確認 |
+
+**自動化規則設計**:
+```python
+def check_god_ticket_automated(ticket_content: str) -> dict:
+    """
+    自動化檢測 God Ticket
+
+    回傳格式:
+    {
+        "file_count": int,
+        "layer_span": int,
+        "estimated_hours": int,
+        "is_god_ticket": bool,
+        "confidence": float  # 0.0-1.0
+    }
+    """
+    # 1. 提取檔案路徑
+    file_paths = extract_file_paths(ticket_content)
+    file_count = len(file_paths)
+
+    # 2. 判斷層級跨度
+    layers = [determine_layer(path) for path in file_paths]
+    layer_span = max(layers) - min(layers) + 1
+
+    # 3. 預估工時（簡化估算）
+    step_count = count_steps(ticket_content)
+    estimated_hours = estimate_hours_by_steps(step_count)
+
+    # 4. 判斷是否為 God Ticket（任一項目超標）
+    is_god_ticket = (
+        file_count > 10 or
+        layer_span > 2 or
+        estimated_hours > 16
+    )
+
+    # 5. 計算信心度
+    confidence = calculate_confidence(step_count, file_paths)
+
+    return {
+        "file_count": file_count,
+        "layer_span": layer_span,
+        "estimated_hours": estimated_hours,
+        "is_god_ticket": is_god_ticket,
+        "confidence": confidence
+    }
+```
+
+**C2. Incomplete Ticket 自動化檢測（可自動化程度: 90%）**:
+
+| 檢測指標 | 自動化程度 | 自動化方法 | 需要人工判斷 |
+|---------|-----------|-----------|-------------|
+| **驗收條件** | 100% ✅ | 檢查章節存在性、驗收項目數量 | 無 |
+| **測試規劃** | 80% ⚠️ | 檢查測試檔案和關鍵字 | 測試完整性需人工確認 |
+| **工作日誌** | 100% ✅ | 檢查章節存在性、檔案名稱格式 | 無 |
+| **參考文件** | 100% ✅ | 檢查章節存在性、連結數量 | 無 |
+
+**自動化規則設計**:
+```python
+def check_incomplete_ticket_automated(ticket_content: str) -> dict:
+    """
+    自動化檢測 Incomplete Ticket
+
+    回傳格式:
+    {
+        "has_acceptance_criteria": bool,
+        "acceptance_count": int,
+        "has_test_plan": bool,
+        "test_files": list,
+        "has_work_log": bool,
+        "work_log_file": str,
+        "has_references": bool,
+        "reference_count": int,
+        "is_incomplete": bool
+    }
+    """
+    # 1. 檢查驗收條件
+    has_acceptance = has_section(ticket_content, "### 驗收條件")
+    acceptance_count = count_acceptance_items(ticket_content)
+
+    # 2. 檢查測試規劃
+    has_test_plan = has_test_keywords(ticket_content)
+    test_files = extract_test_files(ticket_content)
+
+    # 3. 檢查工作日誌
+    has_work_log = has_section(ticket_content, "### 工作日誌")
+    work_log_file = extract_work_log_file(ticket_content)
+
+    # 4. 檢查參考文件
+    has_references = has_section(ticket_content, "### 參考文件")
+    reference_count = count_references(ticket_content)
+
+    # 5. 判斷是否為 Incomplete Ticket
+    is_incomplete = not (
+        has_acceptance and acceptance_count >= 3 and
+        has_test_plan and len(test_files) > 0 and
+        has_work_log and work_log_file and
+        has_references and reference_count >= 1
+    )
+
+    return {
+        "has_acceptance_criteria": has_acceptance,
+        "acceptance_count": acceptance_count,
+        "has_test_plan": has_test_plan,
+        "test_files": test_files,
+        "has_work_log": has_work_log,
+        "work_log_file": work_log_file,
+        "has_references": has_references,
+        "reference_count": reference_count,
+        "is_incomplete": is_incomplete
+    }
+```
+
+**C3. Ambiguous Responsibility 自動化檢測（可自動化程度: 70%）**:
+
+| 檢測指標 | 自動化程度 | 自動化方法 | 需要人工判斷 |
+|---------|-----------|-----------|-------------|
+| **層級標示** | 100% ✅ | 正則匹配 `\[Layer \d+\]` | 無 |
+| **職責描述** | 50% ⚠️ | 檢查字數、關鍵字 | 明確性需人工確認 |
+| **檔案範圍** | 100% ✅ | 檢查具體檔案路徑 | 無 |
+| **驗收限定** | 70% ⚠️ | 提取驗收條件的類別名稱 | 層級一致性需人工確認 |
+
+**自動化規則設計**:
+```python
+def check_ambiguous_responsibility_automated(ticket_content: str) -> dict:
+    """
+    自動化檢測 Ambiguous Responsibility
+
+    回傳格式:
+    {
+        "has_layer_tag": bool,
+        "layer_number": int,
+        "has_clear_responsibility": bool,
+        "responsibility_length": int,
+        "has_file_paths": bool,
+        "file_count": int,
+        "acceptance_limited_to_layer": bool,
+        "is_ambiguous": bool,
+        "confidence": float
+    }
+    """
+    # 1. 檢查層級標示
+    has_layer_tag, layer_number = extract_layer_tag(ticket_content)
+
+    # 2. 檢查職責描述（簡化檢查）
+    responsibility = extract_responsibility(ticket_content)
+    has_clear_responsibility = len(responsibility) > 20
+
+    # 3. 檢查檔案範圍
+    file_paths = extract_file_paths(ticket_content)
+    has_file_paths = len(file_paths) > 0
+
+    # 4. 檢查驗收限定（需要層級判斷）
+    acceptance_items = extract_acceptance_items(ticket_content)
+    acceptance_layers = [
+        determine_layer_from_acceptance(item)
+        for item in acceptance_items
+    ]
+    acceptance_limited = all(
+        layer == layer_number for layer in acceptance_layers
+    )
+
+    # 5. 判斷是否為 Ambiguous Responsibility
+    is_ambiguous = not (
+        has_layer_tag and
+        has_clear_responsibility and
+        has_file_paths and
+        acceptance_limited
+    )
+
+    # 6. 計算信心度（職責描述需人工確認）
+    confidence = 0.7 if has_clear_responsibility else 0.5
+
+    return {
+        "has_layer_tag": has_layer_tag,
+        "layer_number": layer_number,
+        "has_clear_responsibility": has_clear_responsibility,
+        "responsibility_length": len(responsibility),
+        "has_file_paths": has_file_paths,
+        "file_count": len(file_paths),
+        "acceptance_limited_to_layer": acceptance_limited,
+        "is_ambiguous": is_ambiguous,
+        "confidence": confidence
+    }
+```
+
+**需要人工判斷的項目**:
+
+| 項目 | 原因 | 人工判斷者 | 自動化支援 |
+|-----|------|----------|-----------|
+| **Ticket 拆分合理性** | 需要業務知識和架構經驗 | PM 或架構師 | 提供拆分建議 |
+| **職責定義明確性** | 需要理解業務語意 | lavender-interface-designer | 檢測關鍵字 |
+| **預估工時準確性** | 需要評估任務複雜度 | PM 或開發者 | 根據步驟數量估算 |
+| **依賴關係正確性** | 需要理解架構層級關係 | lavender-interface-designer | 檢查依賴順序 |
+
+**Hook 系統檢測規則（v0.12.G.4 規劃）**:
+
+```python
+# Hook 觸發時機: Ticket 檔案修改時（PostEdit Hook）
+
+def ticket_quality_gate_hook(ticket_file_path: str) -> dict:
+    """
+    Ticket 品質閘門 Hook
+
+    執行時機:
+    - Ticket 檔案儲存時
+    - lavender-interface-designer 提交工作日誌時
+
+    回傳格式:
+    {
+        "passed": bool,
+        "c1_result": dict,
+        "c2_result": dict,
+        "c3_result": dict,
+        "suggestions": list,
+        "blocking_issues": list
+    }
+    """
+    # 讀取 Ticket 內容
+    ticket_content = read_ticket_file(ticket_file_path)
+
+    # 執行自動化檢測
+    c1_result = check_god_ticket_automated(ticket_content)
+    c2_result = check_incomplete_ticket_automated(ticket_content)
+    c3_result = check_ambiguous_responsibility_automated(ticket_content)
+
+    # 判斷是否通過
+    passed = not (
+        c1_result["is_god_ticket"] or
+        c2_result["is_incomplete"] or
+        c3_result["is_ambiguous"]
+    )
+
+    # 生成建議
+    suggestions = generate_suggestions(c1_result, c2_result, c3_result)
+
+    # 生成阻斷問題（需要立即修正）
+    blocking_issues = []
+    if c1_result["is_god_ticket"]:
+        blocking_issues.append(
+            f"God Ticket 檢測失敗: "
+            f"檔案數={c1_result['file_count']}, "
+            f"層級跨度={c1_result['layer_span']}, "
+            f"工時={c1_result['estimated_hours']}h"
+        )
+    if c2_result["is_incomplete"]:
+        blocking_issues.append(
+            f"Incomplete Ticket 檢測失敗: 缺少必要元素"
+        )
+    if c3_result["is_ambiguous"]:
+        blocking_issues.append(
+            f"Ambiguous Responsibility 檢測失敗: 職責不明確"
+        )
+
+    return {
+        "passed": passed,
+        "c1_result": c1_result,
+        "c2_result": c2_result,
+        "c3_result": c3_result,
+        "suggestions": suggestions,
+        "blocking_issues": blocking_issues
+    }
+
+# Hook 輸出範例:
+# - 品質閘門通過 ✅ → 記錄日誌，允許繼續
+# - 品質閘門失敗 ❌ → 阻止提交，提供修正建議
+```
+
+**v0.12.G.4 實作準備清單**:
+
+- [ ] 實作檔案路徑提取函式
+- [ ] 實作層級判斷函式（基於 v0.12.G.1 第 6.2 節）
+- [ ] 實作步驟數量計算和工時估算函式
+- [ ] 實作章節檢測函式
+- [ ] 實作驗收條件提取和驗證函式
+- [ ] 實作測試檔案檢測函式
+- [ ] 實作 Hook 整合（PostEdit Hook）
+- [ ] 撰寫 Hook 測試（模擬 Ticket 檔案）
+- [ ] 建立檢測結果日誌機制
+- [ ] 提供修正建議生成器
+
+---
+
+### 2.5 Ticket 大小標準和範例
+
+**Ticket 大小標準總結**：
+
+| 類型 | 職責 | 檔案 | 測試 | 行數 | 適用場景 |
+|------|------|------|------|------|---------|
+| **Interface 定義** | 1 個 | 1 個 | 0 個 | < 30 行 | 定義契約 |
+| **Value Object 實作** | 1 個 | 1 個 | 2-3 個 | 30-40 行 | 簡單邏輯 |
+| **Repository 實作** | 2-3 個 | 1 個 | 4-6 個 | 50-80 行 | CRUD 操作 |
+| **Use Case 實作** | 2-3 個 | 2-3 個 | 5-8 個 | 40-70 行 | 業務邏輯 |
+| **整合驗證** | 2-3 個 | 2-3 個 | 3-5 個 | 30-50 行 | 端到端測試 |
+
+### 2.6 拆分決策樹
+
+當面對一個大任務時，使用以下決策樹判斷如何拆分：
+
+```text
+任務評估
+│
+├─ 是否為單一職責且檔案數 ≤ 1？
+│  └─ Yes → 建立單一 Ticket（簡單）
+│  └─ No  → 繼續評估
+│
+├─ 可按 Clean Architecture 分層拆分？
+│  └─ Yes → 拆分為 4 種 Ticket
+│  │        1. Interface 定義 Ticket
+│  │        2. 測試驗證 Ticket
+│  │        3. 具體實作 Ticket
+│  │        4. 整合連接 Ticket
+│  └─ No  → 繼續評估
+│
+├─ 可按功能模組拆分？
+│  └─ Yes → 拆分為多個功能 Ticket
+│  │        範例：User 模組、Book 模組、Order 模組
+│  └─ No  → 繼續評估
+│
+├─ 可按步驟順序拆分？
+│  └─ Yes → 拆分為多個步驟 Ticket
+│  │        範例：步驟1 資料準備、步驟2 邏輯處理、步驟3 結果輸出
+│  └─ No  → 繼續評估
+│
+└─ 可按 CRUD 操作拆分？
+   └─ Yes → 拆分為 Create、Read、Update、Delete Ticket
+   └─ No  → 重新分析任務結構或尋求 PM 協助
+```
+
+### 2.7 Ticket 拆分檢查清單
+
+**拆分前檢查**（5 項）：
+- [ ] 任務描述是否清晰明確？
+- [ ] 是否有明確的需求來源？
+- [ ] 是否理解任務的技術實作方式？
+- [ ] 是否識別所有依賴關係？
+- [ ] 是否評估職責數量、檔案數、測試數、程式碼行數？
+
+**拆分策略檢查**（5 項）：
+- [ ] 是否嘗試按 Clean Architecture 分層拆分？
+- [ ] 是否嘗試按功能模組拆分？
+- [ ] 是否嘗試按步驟順序拆分？
+- [ ] 拆分後的 Ticket 是否都可獨立驗收？
+- [ ] 拆分後的 Ticket 是否符合複雜度標準（職責、檔案、測試、行數）？
+
+**拆分後檢查**（4 項）：
+- [ ] 每個 Ticket 是否都有明確的驗收條件？
+- [ ] Ticket 間的依賴關係是否明確標註？
+- [ ] 是否有並行執行的機會？
+- [ ] 所有 Ticket 加總是否完整覆蓋原任務？
+
+---
+
+## 第三章：Ticket 生命週期管理
+
+### 3.1 Ticket 狀態定義
+
+Ticket 從建立到關閉經歷 4 個狀態：
+
+#### 狀態 1：待執行（Pending）
+
+**定義**：Ticket 已建立並通過準備度檢查，等待開發者執行。
+
+**進入條件**：
+- Ticket 建立完成
+- 驗收條件明確
+- 依賴 Ticket 已完成（如適用）
+
+**可執行動作**：
+- 指派開發者
+- 調整優先級
+- 開始執行（轉為「進行中」）
+
+**流程特性**：快速流轉至 In Progress
+
+#### 狀態 2：進行中（In Progress）
+
+**定義**：開發者正在執行 Ticket。
+
+**進入條件**：
+- 開發者開始執行
+- 標記 Ticket 為「進行中」
+
+**可執行動作**：
+- 持續更新進度
+- 遇到問題記錄到 Ticket 日誌
+- 完成後提交 review（轉為「Review 中」）
+- 發現問題暫停（轉回「待執行」）
+
+**流程特性**：快速完成並進入 Review
+
+#### 狀態 3：Review 中（In Review）
+
+**定義**：Ticket 已完成執行，等待 review 驗收。
+
+**進入條件**：
+- 開發者認為已完成
+- 提交 review 請求
+
+**可執行動作**：
+- Review 檢查驗收條件
+- 通過驗收（轉為「已完成」）
+- 發現問題（轉回「進行中」，建立修正 Ticket）
+
+**流程特性**：快速 Review 並決定結果
+
+#### 狀態 4：已完成（Completed）
+
+**定義**：Ticket 通過 review 驗收，已關閉。
+
+**進入條件**：
+- 所有驗收條件滿足
+- Review 通過
+- 相關測試 100% 通過
+
+**可執行動作**：
+- 更新主版本日誌 Ticket 索引
+- 更新 todolist 任務狀態
+- 記錄完成時間和實際工時
+
+**停留時間**：永久（已歸檔）
+
+**生命週期流程圖**：
+
+```text
+建立 Ticket
+    ↓
+待執行（Pending）
+    ↓
+進行中（In Progress） ←─┐
+    ↓                   │
+Review 中（In Review）   │
+    ↓                   │
+  通過？                │
+    ├─ Yes → 已完成（Completed）
+    └─ No  ──────────────┘
+       （建立修正 Ticket，重新執行）
+```
+
+### 3.2 Ticket 建立標準
+
+#### Ticket 標題格式
+
+**格式**：`Ticket #N: [動詞] [目標]`
+
+**動詞選擇**：
+- **定義**：定義 Interface、定義 Entity
+- **撰寫**：撰寫測試、撰寫文檔
+- **實作**：實作 Repository、實作 Use Case
+- **整合**：整合 Service、整合 Module
+- **修復**：修復 Bug、修復測試
+- **重構**：重構邏輯、重構架構
+
+**範例**：
+- ✅ `Ticket #1: 定義 IBookRepository 介面`
+- ✅ `Ticket #2: 撰寫 BookRepository 測試`
+- ✅ `Ticket #3: 實作 SQLiteBookRepository`
+- ❌ `Ticket #1: BookRepository`（缺少動詞）
+- ❌ `做一下 Repository`（不明確）
+
+#### Ticket 描述內容
+
+完整的 Ticket 必須包含以下 5 個核心欄位：
+
+**Ticket 建立模板**：
+
+```markdown
+## Ticket #N: [動詞] [目標]
+
+### 背景
+[為什麼需要這個 Ticket？來自哪個需求或問題？]
+
+### 目標
+[這個 Ticket 要達成什麼？明確且可驗證]
+
+### 步驟
+1. [具體步驟 1]
+2. [具體步驟 2]
+3. [具體步驟 3]
+
+### 驗收條件
+- [ ] [可驗證的條件 1]
+- [ ] [可驗證的條件 2]
+- [ ] [可驗證的條件 3]
+
+### 參考文件
+- [設計文件連結]
+- [需求文件連結]
+
+### 依賴 Ticket
+- Ticket #X (必須先完成)
+- Ticket #Y (可並行)
+```
+
+**欄位說明**：
+
+**1. 背景**：
+- 說明為什麼需要這個 Ticket
+- 連結到需求或設計決策
+- 提供上下文資訊
+
+**2. 目標**：
+- 一句話說明要達成什麼
+- 必須明確且可驗證
+- 避免模糊用語
+
+**3. 步驟**：
+- 列出具體執行步驟（3-5 步）
+- 步驟必須可操作
+- 幫助開發者快速理解如何執行
+
+**4. 驗收條件**：
+- 列出所有可驗證的條件（3-5 項）
+- 條件必須客觀可檢查
+- 使用 checkbox 格式
+
+**5. 參考文件**：
+- 連結到設計文件
+- 連結到需求規格
+- 連結到相關 Ticket
+
+**6. 依賴 Ticket**：
+- 列出必須先完成的 Ticket
+- 列出可並行的 Ticket
+- 明確依賴關係
+
+### 3.3 Ticket 執行流程
+
+**步驟 1：領取 Ticket**
+- 開發者從「待執行」清單選擇 Ticket
+- 確認依賴 Ticket 已完成
+- 標記 Ticket 為「進行中」
+
+**步驟 2：閱讀 Ticket**
+- 閱讀背景和目標
+- 檢查參考文件
+- 理解驗收條件
+
+**步驟 3：執行步驟**
+- 按照步驟執行
+- 遇到問題記錄到 Ticket 日誌
+- 持續更新進度
+
+**步驟 4：自我檢查**
+- 逐項檢查驗收條件
+- 確保所有條件滿足
+- 執行相關測試
+
+**步驟 5：提交 Review**
+- 標記所有驗收條件為完成
+- 標記 Ticket 為「Review 中」
+- 通知 Reviewer
+
+**步驟 6：處理 Review 結果**
+- 如果通過：Ticket 標記為「已完成」
+- 如果未通過：根據 Review 意見修正，重新執行
+
+### 3.4 Ticket 驗收標準
+
+驗收條件必須符合 SMART 原則：
+
+**S - Specific（具體）**：
+- ❌ 「功能運作正常」（太模糊）
+- ✅ 「呼叫 getBookByIsbn('123') 回傳正確的 Book 物件」
+
+**M - Measurable（可測量）**：
+- ❌ 「程式碼品質良好」（無法測量）
+- ✅ 「dart analyze 0 錯誤，測試覆蓋率 > 80%」
+
+**A - Achievable（可達成）**：
+- ❌ 「整合所有第三方 API」（範圍太大）
+- ✅ 「整合 Google Books API 的書籍搜尋功能」
+
+**R - Relevant（相關）**：
+- ❌ 「優化 UI 顏色」（與 Repository Ticket 無關）
+- ✅ 「Repository 實作完成，測試通過」
+
+**T - Time-bound（有明確完成標準）**：
+- ❌ 「未來會完成」（無明確標準）
+- ✅ 「符合所有驗收條件即完成」
+
+### 3.5 Ticket 關閉條件
+
+Ticket 必須滿足以下所有條件才能關閉：
+
+**強制條件**（5 項）：
+- [ ] 所有驗收條件打勾完成
+- [ ] Review 通過
+- [ ] 相關測試 100% 通過
+- [ ] dart analyze 0 錯誤
+- [ ] 工作日誌已更新
+
+**建議條件**（3 項）：
+- [ ] 程式碼符合專案規範
+- [ ] 無技術債務產生
+- [ ] 文檔同步更新
+
+### 3.6 生命週期管理檢查清單
+
+**Ticket 建立檢查**（3 項）：
+- [ ] 標題格式正確（動詞 + 目標）
+- [ ] 5 個核心欄位完整
+- [ ] 驗收條件符合 SMART 原則
+
+**Ticket 執行檢查**（4 項）：
+- [ ] 依賴 Ticket 已完成
+- [ ] 開發者理解目標和步驟
+- [ ] 進度持續更新
+- [ ] 遇到問題即時記錄
+
+**Ticket Review 檢查**（4 項）：
+- [ ] 所有驗收條件滿足
+- [ ] 測試 100% 通過
+- [ ] 程式碼品質符合標準
+- [ ] 文檔同步更新
+
+**Ticket 關閉檢查**（3 項）：
+- [ ] Review 通過
+- [ ] 工作日誌已更新
+- [ ] 主版本日誌索引已更新
+
+---
+
+## 第四章：即時 Review 機制
+
+### 4.1 一邊實作一邊 review 的原則
+
+**傳統 Review 問題**：
+
+傳統的「實作完成後才 review」存在以下問題：
+1. **發現問題太晚**：實作偏差已形成，修正成本高
+2. **返工時間長**：需要大幅修改已完成的程式碼
+3. **士氣影響大**：開發者認為「白做了」，影響積極性
+4. **無法並行**：必須等所有任務完成才能 review
+
+**即時 Review 原則**：
+
+「一邊實作一邊 review」的核心原則：
+1. **每完成一個 Ticket 觸發 review**
+2. **review 快速完成，聚焦核心問題**
+3. **只 review 當前 Ticket，不累積**
+4. **發現問題立即建立修正 Ticket**
+
+**效益**：
+
+| 維度 | 傳統 Review | 即時 Review |
+|------|-----------|------------|
+| **問題發現時機** | 實作完成後（數天後） | 每個 Ticket 完成後（即時） |
+| **修正成本** | 高（需大幅修改） | 低（只需修正單一 Ticket） |
+| **開發者體驗** | 挫折感（白做了） | 即時回饋（快速修正） |
+| **可並行性** | 低（必須等全部完成） | 高（可持續並行開發） |
+
+### 4.2 Review 觸發時機
+
+**觸發條件**：
+
+Review 在以下時機觸發：
+1. **每完成一個 Ticket**：開發者標記 Ticket 為「Review 中」
+2. **每完成 3-5 個 Ticket**：觸發階段性 review（可選）
+3. **每完成一個模組**：觸發模組整合 review（可選）
+
+**主要觸發機制**：
+
+**每完成一個 Ticket 觸發**：
+- 開發者完成 Ticket，自我檢查驗收條件
+- 標記 Ticket 為「Review 中」
+- Reviewer 收到通知，開始 review
+- Review 快速完成，聚焦核心問題
+
+**不等待**：
+- 不等待整個任務完成才 review
+- 不累積多個 Ticket 一起 review
+- 不延後 review 時機
+
+### 4.3 Review 檢查項目
+
+Review 分為 4 大類，共 16 項檢查項：
+
+#### 類別 1：功能正確性檢查（4 項）
+
+**檢查項 1：Ticket 描述的功能是否實現？**
+- 檢查方法：對照 Ticket 目標和實際程式碼
+- 通過標準：功能完全符合 Ticket 描述
+
+**檢查項 2：驗收條件是否全部滿足？**
+- 檢查方法：逐項檢查驗收條件 checkbox
+- 通過標準：所有條件都打勾且確實滿足
+
+**檢查項 3：是否有未處理的邊界情況？**
+- 檢查方法：檢查 null、empty、異常輸入處理
+- 通過標準：所有邊界情況都有處理
+
+**檢查項 4：錯誤處理是否完整？**
+- 檢查方法：檢查 try-catch、異常拋出
+- 通過標準：所有異常都有妥善處理
+
+#### 類別 2：架構合規性檢查（4 項）
+
+**檢查項 5：是否符合 Clean Architecture 分層原則？**
+- 檢查方法：檢查檔案位置、模組分層
+- 通過標準：符合 Domain/Application/Infrastructure/Presentation 分層
+
+**檢查項 6：依賴方向是否正確（內層不依賴外層）？**
+- 檢查方法：檢查 import 語句
+- 通過標準：所有依賴都指向內層或 Interface
+
+**檢查項 7：是否使用 Interface-Driven 開發？**
+- 檢查方法：檢查是否依賴 Interface 而非具體實作
+- 通過標準：外層依賴 Interface，不直接依賴實作類別
+
+**檢查項 8：是否有架構債務產生？**
+- 檢查方法：檢查是否有違反 SOLID 原則的程式碼
+- 通過標準：無明顯架構債務
+
+#### 類別 3：測試通過率檢查（4 項）
+
+**檢查項 9：相關單元測試是否 100% 通過？**
+- 檢查方法：執行 `dart test` 或 `flutter test`
+- 通過標準：所有測試通過，0 失敗
+
+**檢查項 10：相關整合測試是否 100% 通過？**
+- 檢查方法：執行整合測試
+- 通過標準：所有整合測試通過
+
+**檢查項 11：測試覆蓋率是否達標？**
+- 檢查方法：檢查測試覆蓋率報告
+- 通過標準：覆蓋率 > 80%（建議）
+
+**檢查項 12：是否有測試被 skip？**
+- 檢查方法：搜尋 `skip:` 或 `.skip`
+- 通過標準：無 skip 的測試
+
+#### 類別 4：文檔同步性檢查（4 項）
+
+**檢查項 13：Ticket 工作日誌是否更新？**
+- 檢查方法：檢查對應的 Ticket 日誌檔案
+- 通過標準：記錄執行過程和決策
+
+**檢查項 14：設計決策是否記錄？**
+- 檢查方法：檢查設計決策日誌
+- 通過標準：重要決策都有記錄
+
+**檢查項 15：API 文檔是否同步？**
+- 檢查方法：檢查程式碼註解和 dartdoc
+- 通過標準：公開 API 都有完整文檔註解
+
+**檢查項 16：README 是否需要更新？**
+- 檢查方法：檢查是否有新增功能或變更使用方式
+- 通過標準：如需更新則已更新
+
+### 4.4 偏差糾正流程
+
+當 Review 發現問題時，執行以下偏差糾正流程：
+
+```text
+Review 發現偏差
+    ↓
+暫停當前 Ticket
+    ↓
+記錄偏差問題（描述、影響、根因）
+    ↓
+分析根因
+    ├─ 理解錯誤？ → 釐清需求，重新執行
+    ├─ 技術問題？ → 尋求技術支援
+    └─ 架構問題？ → 修正架構設計
+    ↓
+建立修正 Ticket
+    ↓
+修正 Ticket 執行
+    ↓
+再次 Review
+    ├─ 通過 → 標記原 Ticket 為「已完成」
+    └─ 未通過 → 重複偏差糾正流程
+    ↓
+總結經驗教訓（更新檢查清單）
+```
+
+**偏差記錄格式**：
+
+```markdown
+### Review 偏差記錄 #N
+
+**發現時間**：2025-10-10 14:30
+
+**偏差描述**：
+實作的 Repository 方法簽名與 Interface 不一致
+
+**影響範圍**：
+- SQLiteBookRepository.getBookByIsbn 方法
+- 相關測試需要調整
+
+**根因分析**：
+開發者未參考最新的 Interface 定義
+
+**糾正措施**：
+- 建立修正 Ticket：修正 Repository 方法簽名
+- 更新相關測試
+- 加入檢查清單：實作前必須確認 Interface 最新版本
+
+**責任歸屬**：
+開發者（未確認 Interface）+ Reviewer（未及時發現）
+
+**經驗教訓**：
+實作前必須先閱讀最新的 Interface 定義
+```
+
+### 4.5 Review 記錄格式
+
+每次 Review 都必須記錄，格式如下：
+
+```markdown
+### Review 記錄 - Ticket #N
+
+**Review 時間**：2025-10-10 15:00
+
+**Reviewer**：張三
+
+**Ticket 標題**：實作 SQLiteBookRepository
+
+**Review 結果**：✅ 通過 / ❌ 未通過
+
+**檢查項目**：
+- [x] 功能正確性（4/4 通過）
+- [x] 架構合規性（4/4 通過）
+- [x] 測試通過率（4/4 通過）
+- [x] 文檔同步性（4/4 通過）
+
+**發現問題**：
+- 無（如果有，列出問題清單）
+
+**建議改善**：
+- 建議補充更多邊界情況測試（可選）
+
+**Review 時間**：8 分鐘
+
+**下一步行動**：
+- 標記 Ticket 為「已完成」
+- 更新主版本日誌索引
+```
+
+### 4.6 即時 Review 檢查清單
+
+**Review 前準備**（3 項）：
+- [ ] Reviewer 收到 review 通知
+- [ ] Ticket 標記為「Review 中」
+- [ ] 所有驗收條件已打勾
+
+**Review 執行**（4 項）：
+- [ ] 逐項檢查 16 個檢查項目
+- [ ] 記錄 Review 結果
+- [ ] 發現問題建立偏差記錄
+- [ ] Review 快速完成，聚焦核心問題
+
+**Review 後處理**（2 項）：
+- [ ] 通過：標記 Ticket 為「已完成」
+- [ ] 未通過：建立修正 Ticket
+
+**持續改善**（5 項）：
+- [ ] 總結經驗教訓
+- [ ] 更新檢查清單（如需要）
+- [ ] 優化 Review 流程
+- [ ] 提升 Review 效率
+- [ ] 降低偏差發生率
+
+## 第五章：文件管理策略
+
+### 5.1 避免工作日誌臃腫的三層文件結構
+
+#### 問題分析：v0.12.7 工作日誌臃腫案例
+
+**v0.12.7 工作日誌問題**：
+- **檔案大小**：6000 行
+- **問題根因**：
+  - 所有 Ticket 日誌都寫在主版本日誌
+  - 設計迭代過程全部記錄在同一檔案
+  - 缺乏分層管理機制
+
+**影響**：
+- 開發者難以快速找到關鍵資訊
+- 檔案過大導致編輯器效能下降
+- 歷史記錄難以追溯
+
+#### 三層文件結構設計
+
+為了解決工作日誌臃腫問題，採用三層文件結構：
+
+**第 1 層：主版本日誌（Main Version Log）**
+
+**檔案命名**：`vX.Y.Z-main.md`
+**目標大小**：500-800 行
+**內容範圍**：
+- 版本目標和規劃
+- Ticket 索引（只記錄 Ticket 編號和標題）
+- 設計決策索引（連結到決策日誌）
+- 版本總結
+
+**範例**：
+```markdown
+# v0.12.7 主版本日誌
+
+## 版本目標
+實現書籍資訊豐富化功能
+
+## Ticket 索引
+- Ticket #1: 定義 IBookInfoEnrichmentService 介面 → [詳細日誌](v0.12.7-ticket-001.md)
+- Ticket #2: 撰寫 BookInfoEnrichmentService 測試 → [詳細日誌](v0.12.7-ticket-002.md)
+- Ticket #3: 實作 GoogleBooksEnrichmentService → [詳細日誌](v0.12.7-ticket-003.md)
+
+## 設計決策索引
+- 決策 #1: 選擇 Strategy Pattern 處理多資料源 → [詳細日誌](v0.12.7-design-decisions.md#決策1)
+- 決策 #2: 使用 Riverpod 管理服務註冊 → [詳細日誌](v0.12.7-design-decisions.md#決策2)
+
+## 版本總結
+- 完成 12 個 Ticket
+- 總開發時間：4.5 小時
+- 測試覆蓋率：92%
+```
+
+**第 2 層：Ticket 工作日誌（Ticket Work Log）**
+
+**檔案命名**：`vX.Y.Z-ticket-NNN.md`
+**目標大小**：100-200 行
+**內容範圍**：
+- Ticket 描述（背景、目標、步驟、驗收條件）
+- 執行過程記錄
+- 遇到的問題和解決方案
+- Review 結果
+
+**範例**：
+```markdown
+# Ticket #1 工作日誌
+
+## Ticket 描述
+定義 IBookInfoEnrichmentService 介面
+
+### 背景
+根據 UC-05 需求，需要建立書籍資訊豐富化服務的介面契約
+
+### 目標
+建立 `IBookInfoEnrichmentService` 介面，定義書籍資訊豐富化的契約
+
+### 步驟
+1. 建立介面檔案
+2. 定義 `enrichBook` 方法
+3. 定義 `enrichProgress` 方法
+4. 撰寫文檔註解
+
+### 驗收條件
+- [x] 介面檔案建立在正確位置
+- [x] 方法簽名完整且明確
+- [x] 包含完整的文檔註解
+- [x] dart analyze 0 錯誤
+
+## 執行過程
+1. 建立 `lib/domains/import/services/i_book_info_enrichment_service.dart`
+2. 定義 `enrichBook` 方法：接收 ISBN，回傳豐富化後的 Book
+3. 定義 `enrichProgress` 方法：回傳豐富化進度 Stream
+4. 補充文檔註解說明每個方法的用途
+
+## Review 結果
+✅ 通過（8 分鐘）
+- 功能正確性：4/4 通過
+- 架構合規性：4/4 通過
+```
+
+**第 3 層：設計決策日誌（Design Decision Log）**
+
+**檔案命名**：`vX.Y.Z-design-decisions.md`
+**目標大小**：300-500 行
+**內容範圍**：
+- 重要設計決策記錄
+- 技術選型理由
+- 架構調整說明
+- 決策的影響分析
+
+**範例**：
+```markdown
+# v0.12.7 設計決策日誌
+
+## 決策 #1: 選擇 Strategy Pattern 處理多資料源
+
+### 決策時間
+2025-10-09 14:30
+
+### 決策背景
+書籍資訊豐富化需要支援多個資料來源（Google Books、Open Library、豆瓣讀書）
+
+### 可選方案
+1. **方案 A**：使用 if-else 判斷資料來源
+2. **方案 B**：使用 Strategy Pattern 封裝每個資料來源
+3. **方案 C**：使用 Chain of Responsibility Pattern
+
+### 選擇理由
+選擇方案 B（Strategy Pattern）：
+- 每個資料來源獨立封裝，符合 Open-Closed Principle
+- 新增資料來源只需新增 Strategy，不修改現有程式碼
+- 可以動態切換資料來源策略
+
+### 影響範圍
+- 建立 `IEnrichmentStrategy` 介面
+- 實作 `GoogleBooksStrategy`、`OpenLibraryStrategy`
+- `BookInfoEnrichmentService` 依賴 `IEnrichmentStrategy`
+
+### 實作 Ticket
+- Ticket #4: 定義 IEnrichmentStrategy 介面
+- Ticket #5: 實作 GoogleBooksStrategy
+- Ticket #6: 實作 OpenLibraryStrategy
+```
+
+#### 三層結構效益
+
+**效益總結**：
+
+| 維度 | v0.12.7 單一檔案（6000 行） | 三層結構（800+200*N+400 行） |
+|------|--------------------------|----------------------------|
+| **可讀性** | 低（難以快速找到資訊） | 高（分層清晰） |
+| **維護性** | 低（修改影響範圍大） | 高（獨立修改） |
+| **查找效率** | 低（需搜尋整個檔案） | 高（索引快速定位） |
+| **協作友善** | 低（衝突機率高） | 高（不同檔案並行編輯） |
+
+**改善數據**：
+- 主版本日誌：6000 行 → 800 行（減少 87%）
+- Ticket 日誌：分散到 12 個檔案，每個 150 行
+- 設計決策日誌：獨立 400 行
+
+### 5.2 設計迭代文件管理
+
+#### 設計迭代的挑戰
+
+**問題**：
+設計過程中會產生多個版本的設計文件：
+- 初版設計（可能有缺陷）
+- 修正版設計（發現問題後調整）
+- 最終設計（經過 review 確認）
+
+**如果不管理**：
+- 開發者不知道哪個是最終版本
+- 過時的設計誤導後續開發
+- 設計演進過程難以追溯
+
+#### 版本管理策略
+
+**策略 1：設計檔案版本標記**
+
+在設計決策日誌中明確標記版本狀態：
+
+```markdown
+## 決策 #1: 選擇 Strategy Pattern 處理多資料來源
+
+**決策狀態**：✅ 最終決策（已實作）
+
+**版本歷史**：
+- v1 (2025-10-09 14:30): 初版設計 - 使用 if-else 判斷（❌ 已廢棄）
+- v2 (2025-10-09 15:00): 修正版 - 改用 Strategy Pattern（✅ 最終版本）
+
+**當前版本**: v2
+```
+
+**策略 2：最終設計明確標記**
+
+在主版本日誌中明確標記最終設計：
+
+```markdown
+## 設計決策索引
+- 決策 #1: 選擇 Strategy Pattern（✅ 最終決策）→ [詳細日誌](v0.12.7-design-decisions.md#決策1)
+- 決策 #2: 使用 Riverpod 管理服務（✅ 最終決策）→ [詳細日誌](v0.12.7-design-decisions.md#決策2)
+- ~~決策 #3: 使用 GetIt 管理服務~~（❌ 已廢棄，改用決策 #2）
+```
+
+**策略 3：廢棄設計保留但標記**
+
+不刪除過時設計，而是標記為廢棄並說明原因：
+
+```markdown
+## ~~決策 #3: 使用 GetIt 管理服務~~（❌ 已廢棄）
+
+**廢棄原因**：
+發現 Riverpod 更適合 Flutter 3.x，提供更好的型別安全
+
+**廢棄時間**：2025-10-09 16:00
+
+**替代決策**：決策 #2（使用 Riverpod）
+
+**保留原因**：
+記錄設計演進過程，避免重複評估相同方案
+```
+
+### 5.3 開發者查找設計的指引
+
+#### 設計查找流程
+
+**步驟 1：從主版本日誌開始**
+
+開發者接到任務時，先查看主版本日誌：
+```markdown
+# v0.12.7 主版本日誌
+
+## 快速導航
+- [版本目標](#版本目標)
+- [Ticket 索引](#Ticket索引)
+- [設計決策索引](#設計決策索引)（⭐ 開發者從這裡開始）
+```
+
+**步驟 2：查看設計決策索引**
+
+根據任務相關的領域，找到對應的設計決策：
+```markdown
+## 設計決策索引
+
+### 服務層設計
+- 決策 #1: 選擇 Strategy Pattern（✅ 最終決策）→ [詳細](v0.12.7-design-decisions.md#決策1)
+- 決策 #2: 使用 Riverpod 管理服務（✅ 最終決策）→ [詳細](v0.12.7-design-decisions.md#決策2)
+
+### 資料層設計
+- 決策 #4: 選擇 SQLite 儲存（✅ 最終決策）→ [詳細](v0.12.7-design-decisions.md#決策4)
+```
+
+**步驟 3：閱讀設計決策詳細內容**
+
+點擊連結進入設計決策日誌，閱讀詳細內容：
+```markdown
+## 決策 #1: 選擇 Strategy Pattern 處理多資料來源
+
+**決策狀態**：✅ 最終決策（已實作）
+
+### 決策背景
+...
+
+### 選擇理由
+...
+
+### 影響範圍
+...
+
+### 實作 Ticket
+- Ticket #4: 定義 IEnrichmentStrategy 介面
+- Ticket #5: 實作 GoogleBooksStrategy
+```
+
+**步驟 4：查看相關 Ticket**
+
+根據設計決策中的「實作 Ticket」，查看具體實作細節：
+```markdown
+# Ticket #4 工作日誌
+
+## Ticket 描述
+定義 IEnrichmentStrategy 介面
+...
+```
+
+#### 設計文件索引規範
+
+**主版本日誌索引格式**：
+
+```markdown
+## 設計決策索引
+
+### [領域名稱]
+- 決策 #N: [決策摘要]（✅ 最終決策 / ❌ 已廢棄）→ [詳細日誌連結]
+
+**索引規則**：
+1. 按領域分組（服務層、資料層、UI 層）
+2. 標記決策狀態（✅ 最終決策、❌ 已廢棄）
+3. 提供直接連結到詳細日誌
+```
+
+**設計決策日誌格式**：
+
+```markdown
+## 決策 #N: [決策標題]
+
+**決策狀態**：✅ 最終決策 / ❌ 已廢棄
+
+**相關 Ticket**：
+- Ticket #X: [Ticket 標題]
+- Ticket #Y: [Ticket 標題]
+
+**決策背景**：...
+**選擇理由**：...
+**影響範圍**：...
+```
+
+### 5.4 文件管理檢查清單
+
+**主版本日誌檢查**（4 項）：
+- [ ] 版本目標明確且可驗證
+- [ ] Ticket 索引完整（所有 Ticket 都有連結）
+- [ ] 設計決策索引清晰（按領域分組）
+- [ ] 檔案大小控制在 500-800 行
+
+**Ticket 工作日誌檢查**（4 項）：
+- [ ] 檔案命名符合規範（vX.Y.Z-ticket-NNN.md）
+- [ ] Ticket 描述完整（6 個核心欄位）
+- [ ] 執行過程記錄清楚
+- [ ] 檔案大小控制在 100-200 行
+
+**設計決策日誌檢查**（4 項）：
+- [ ] 每個決策都有明確的狀態標記
+- [ ] 廢棄決策保留但標記廢棄原因
+- [ ] 版本歷史記錄完整
+- [ ] 檔案大小控制在 300-500 行
+
+**設計文件索引檢查**（4 項）：
+- [ ] 主版本日誌有「快速導航」區塊
+- [ ] 設計決策索引按領域分組
+- [ ] 所有連結都正確指向目標
+- [ ] 最終決策明確標記
+
+---
+
+## 第六章：與敏捷重構和 TDD 的整合
+
+### 6.1 Ticket 機制與三重文件原則的關係
+
+#### 三重文件原則回顧
+
+本專案採用三重文件原則（CHANGELOG + todolist + work-log）進行全方位進度管理：
+
+**1. CHANGELOG.md**：
+- 面向用戶的版本功能描述
+- 只記錄「做了什麼」，不記錄「怎麼做」
+
+**2. todolist.md**：
+- 記錄整個開發過程所有待處理任務
+- 任務狀態追蹤（待執行/進行中/已完成）
+
+**3. work-log/**：
+- 完整的技術實作細節和決策過程
+- TDD 四階段進度追蹤
+
+#### Ticket 機制如何融入三重文件
+
+**Ticket 機制定位**：
+
+Ticket 機制是「work-log 層」的細化管理工具：
+- **work-log 主版本日誌** = Ticket 索引 + 版本總覽
+- **work-log Ticket 日誌** = 單一 Ticket 的執行記錄
+- **work-log 設計決策日誌** = 設計迭代過程記錄
+
+**整合關係**：
+
+```text
+CHANGELOG.md（版本功能描述）
+    ↑ 提取功能變動
+work-log/vX.Y.Z-main.md（主版本日誌）
+    ↓ Ticket 索引
+work-log/vX.Y.Z-ticket-NNN.md（Ticket 日誌）
+    ↑ 完成狀態
+todolist.md（任務狀態追蹤）
+```
+
+**協作流程**：
+
+1. **PM 規劃階段**：
+   - 在 `todolist.md` 建立任務項目
+   - 在 `vX.Y.Z-main.md` 規劃 Ticket 索引
+
+2. **開發執行階段**：
+   - 建立 `vX.Y.Z-ticket-NNN.md` Ticket 日誌
+   - 執行 Ticket，記錄過程
+   - 完成後更新 `todolist.md` 狀態
+
+3. **版本發布階段**：
+   - 從 `vX.Y.Z-main.md` 提取功能變動
+   - 更新 `CHANGELOG.md` 版本說明
+
+### 6.2 Ticket 與 TDD 四階段的對應關係
+
+#### TDD 四階段與 Ticket 類型對應
+
+**Phase 1（功能設計）→ Interface 定義 Ticket**：
+
+Phase 1 產出的設計決策 → 轉化為 Interface 定義 Ticket：
+```text
+Phase 1 產出：
+- IBookRepository 介面設計
+- IBookInfoEnrichmentService 介面設計
+
+↓ 轉化為 Ticket
+
+Ticket #1: 定義 IBookRepository 介面
+Ticket #2: 定義 IBookInfoEnrichmentService 介面
+```
+
+**Phase 2（測試設計）→ 測試撰寫 Ticket**：
+
+Phase 2 產出的測試設計 → 轉化為測試撰寫 Ticket：
+```text
+Phase 2 產出：
+- BookRepository 測試用例設計
+- BookInfoEnrichmentService 測試用例設計
+
+↓ 轉化為 Ticket
+
+Ticket #3: 撰寫 BookRepository 測試
+Ticket #4: 撰寫 BookInfoEnrichmentService 測試
+```
+
+**Phase 3（實作執行）→ 具體實作 Ticket + 整合 Ticket**：
+
+Phase 3 產出的實作 → 拆分為具體實作和整合 Ticket：
+```text
+Phase 3 產出：
+- SQLiteBookRepository 實作
+- GoogleBooksEnrichmentService 實作
+- 整合到 Use Case
+
+↓ 轉化為 Ticket
+
+Ticket #5: 實作 SQLiteBookRepository
+Ticket #6: 實作 GoogleBooksEnrichmentService
+Ticket #7: 整合到 GetBookUseCase
+```
+
+**Phase 4（重構優化）→ 重構 Ticket**：
+
+Phase 4 發現的重構需求 → 建立重構 Ticket：
+```text
+Phase 4 發現：
+- BookRepository 邏輯複雜，需要拆分
+- EnrichmentService 錯誤處理不完整
+
+↓ 轉化為 Ticket
+
+Ticket #8: 重構 BookRepository，拆分 CRUD 邏輯
+Ticket #9: 補充 EnrichmentService 錯誤處理
+```
+
+#### TDD 階段完成標準與 Ticket 關係
+
+**Phase 1 完成標準**：
+- 所有 Interface 定義 Ticket 建立並標記為「待執行」
+- 設計決策日誌記錄完整
+
+**Phase 2 完成標準**：
+- 所有測試撰寫 Ticket 建立並標記為「待執行」
+- 測試覆蓋所有 Interface 方法
+
+**Phase 3 完成標準**：
+- 所有具體實作 Ticket 完成並通過 review
+- 所有整合 Ticket 完成並通過測試
+- 測試 100% 通過
+
+**Phase 4 完成標準**：
+- 所有重構 Ticket 完成並通過 review
+- 程式碼品質達標，無技術債務
+
+### 6.3 Ticket 派工前的準備度檢查
+
+#### 準備度檢查清單
+
+在建立和派工 Ticket 前，必須檢查以下準備度：
+
+**設計準備度**（4 項）：
+- [ ] 相關設計決策已完成且標記為「最終決策」
+- [ ] Interface 定義已完成（如適用）
+- [ ] 設計決策日誌已更新
+- [ ] 沒有未解決的設計問題
+
+**依賴準備度**（3 項）：
+- [ ] 依賴的 Ticket 已完成
+- [ ] 依賴的 Interface 已定義
+- [ ] 依賴的測試已撰寫（如適用）
+
+**資源準備度**（3 項）：
+- [ ] 開發者已理解 Ticket 目標
+- [ ] 開發環境已準備就緒
+- [ ] 相關文檔已閱讀
+
+**品質準備度**（2 項）：
+- [ ] 驗收條件明確且可驗證
+- [ ] Review 機制已建立
+
+#### 準備度不足的處理
+
+**發現準備度不足時**：
+
+```text
+Ticket 派工前檢查
+    ↓
+準備度檢查
+    ├─ 通過 → 派工執行
+    └─ 不通過 → 暫停派工
+        ↓
+    分析缺失項目
+        ├─ 設計不完整 → 補充設計決策
+        ├─ 依賴未完成 → 等待依賴 Ticket
+        └─ 資源不足 → 準備環境和文檔
+        ↓
+    重新檢查準備度
+```
+
+### 6.4 Ticket 完成後的文件更新
+
+#### 更新流程
+
+每完成一個 Ticket，必須更新以下文件：
+
+**步驟 1：更新 Ticket 工作日誌**
+
+在 `vX.Y.Z-ticket-NNN.md` 記錄：
+- 執行過程
+- Review 結果
+- 遇到的問題和解決方案
+
+**步驟 2：更新主版本日誌**
+
+在 `vX.Y.Z-main.md` 更新：
+- Ticket 索引（標記為已完成）
+- 如有新的設計決策，更新設計決策索引
+
+**步驟 3：更新 todolist**
+
+在 `todolist.md` 更新：
+- 標記對應任務為「已完成」
+- 如發現新任務，新增到待辦清單
+
+**步驟 4：更新設計決策日誌（如適用）**
+
+在 `vX.Y.Z-design-decisions.md` 更新：
+- 如有設計調整，記錄新的決策版本
+- 如廢棄舊決策，標記廢棄原因
+
+### 6.5 整合檢查清單
+
+**Ticket 建立檢查**（4 項）：
+- [ ] Ticket 來自 TDD Phase 1-4 的產出
+- [ ] Ticket 類型符合 Clean Architecture 分層
+- [ ] Ticket 已連結到設計決策日誌
+- [ ] Ticket 準備度檢查通過
+
+**Ticket 執行檢查**（4 項）：
+- [ ] 執行過程記錄到 Ticket 日誌
+- [ ] 完成後更新主版本日誌索引
+- [ ] 完成後更新 todolist 狀態
+- [ ] 如有設計調整，更新設計決策日誌
+
+**文件同步檢查**（4 項）：
+- [ ] Ticket 日誌大小控制在 100-200 行
+- [ ] 主版本日誌索引保持最新
+- [ ] 設計決策狀態正確標記
+- [ ] todolist 任務狀態與實際一致
+
+---
+
+## 第七章：實務案例和模板
+
+### 7.1 v0.12.7 工作日誌臃腫問題分析
+
+#### 原始問題描述
+
+**v0.12.7 版本資訊**：
+- **功能範圍**：書籍資訊豐富化功能
+- **工作日誌大小**：6000 行
+- **開發時間**：5 天
+- **Ticket 數量**：未明確拆分
+
+**臃腫問題根因**：
+
+**根因 1：缺乏 Ticket 拆分機制**
+- 所有實作細節都寫在主版本日誌
+- 沒有建立獨立的 Ticket 日誌
+- 設計迭代過程全部記錄在同一檔案
+
+**根因 2：設計迭代未分層管理**
+- 初版設計、修正版設計、最終設計混在一起
+- 廢棄的設計沒有明確標記
+- 開發者難以找到最終設計
+
+**根因 3：缺乏文件索引機制**
+- 沒有 Ticket 索引
+- 沒有設計決策索引
+- 開發者需搜尋整個檔案才能找到資訊
+
+#### 問題影響分析
+
+**影響 1：開發效率降低**
+- 開發者花費 30% 時間搜尋設計資訊
+- 編輯器效能下降（檔案過大）
+- 協作衝突頻繁（多人編輯同一檔案）
+
+**影響 2：品質風險增加**
+- 使用過時的設計實作（找錯版本）
+- Review 困難（難以理解上下文）
+- 技術債務累積（沒時間重構）
+
+**影響 3：知識傳承困難**
+- 新成員難以快速理解設計演進
+- 歷史決策難以追溯
+- 重複犯錯（不知道為什麼廢棄某設計）
+
+### 7.2 基於 Ticket 機制的改善方案
+
+#### 改善方案設計
+
+**方案目標**：
+將 6000 行主版本日誌改善為三層文件結構，控制在約 2000 行總量（800+200*6+400）。
+
+**改善步驟**：
+
+**步驟 1：Ticket 拆分（回溯分析）**
+
+分析 v0.12.7 的開發過程，回溯拆分為 12 個 Ticket：
+
+**Domain 層 Ticket**（3 個）：
+- Ticket #1: 定義 IBookInfoEnrichmentService 介面
+- Ticket #2: 定義 IEnrichmentStrategy 介面
+- Ticket #3: 定義 EnrichmentProgress Value Object
+
+**Application 層 Ticket**（2 個）：
+- Ticket #4: 定義 EnrichBookUseCase 介面
+- Ticket #5: 實作 EnrichBookInteractor
+
+**Infrastructure 層 Ticket**（4 個）：
+- Ticket #6: 實作 GoogleBooksStrategy
+- Ticket #7: 實作 OpenLibraryStrategy
+- Ticket #8: 實作 BookInfoEnrichmentService
+- Ticket #9: 實作 Riverpod Provider 註冊
+
+**測試 Ticket**（3 個）：
+- Ticket #10: 撰寫 BookInfoEnrichmentService 測試
+- Ticket #11: 撰寫 EnrichBookInteractor 測試
+- Ticket #12: 撰寫整合測試
+
+**步驟 2：建立三層文件結構**
+
+**主版本日誌**（800 行）：
+```markdown
+# v0.12.7 主版本日誌
+
+## 快速導航
+- [版本目標](#版本目標)
+- [Ticket 索引](#Ticket索引)（12 個 Ticket）
+- [設計決策索引](#設計決策索引)（5 個決策）
+- [版本總結](#版本總結)
+
+## Ticket 索引
+
+### Domain 層
+- Ticket #1: 定義 IBookInfoEnrichmentService 介面 → [詳細](v0.12.7-ticket-001.md)
+- Ticket #2: 定義 IEnrichmentStrategy 介面 → [詳細](v0.12.7-ticket-002.md)
+- Ticket #3: 定義 EnrichmentProgress Value Object → [詳細](v0.12.7-ticket-003.md)
+
+### Application 層
+- Ticket #4: 定義 EnrichBookUseCase 介面 → [詳細](v0.12.7-ticket-004.md)
+- Ticket #5: 實作 EnrichBookInteractor → [詳細](v0.12.7-ticket-005.md)
+...
+```
+
+**Ticket 工作日誌**（200 行 × 12 = 2400 行，分散到 12 個檔案）：
+```markdown
+# Ticket #1 工作日誌
+
+## Ticket 描述
+定義 IBookInfoEnrichmentService 介面
+
+### 背景
+根據 UC-05 需求，需要建立書籍資訊豐富化服務的介面契約
+...
+
+## 執行過程
+1. 建立介面檔案
+2. 定義方法簽名
+...
+
+## Review 結果
+✅ 通過（8 分鐘）
+```
+
+**設計決策日誌**（400 行）：
+```markdown
+# v0.12.7 設計決策日誌
+
+## 決策 #1: 選擇 Strategy Pattern 處理多資料源
+
+**決策狀態**：✅ 最終決策（已實作）
+
+**版本歷史**：
+- v1 (2025-10-09 14:30): 初版設計 - 使用 if-else 判斷（❌ 已廢棄）
+- v2 (2025-10-09 15:00): 修正版 - 改用 Strategy Pattern（✅ 最終版本）
+...
+```
+
+**步驟 3：建立設計文件索引**
+
+在主版本日誌建立清晰的索引：
+```markdown
+## 設計決策索引
+
+### 服務層設計
+- 決策 #1: 選擇 Strategy Pattern（✅ 最終決策）→ [詳細](v0.12.7-design-decisions.md#決策1)
+- 決策 #2: 使用 Riverpod 管理服務（✅ 最終決策）→ [詳細](v0.12.7-design-decisions.md#決策2)
+
+### 資料來源設計
+- 決策 #3: Google Books 為主要資料源（✅ 最終決策）→ [詳細](v0.12.7-design-decisions.md#決策3)
+- ~~決策 #4: 豆瓣讀書為備用資料源~~（❌ 已廢棄，API 限制）
+```
+
+#### 改善效果評估
+
+**檔案大小改善**：
+
+| 維度 | 改善前 | 改善後 | 改善幅度 |
+|------|--------|--------|---------|
+| **主版本日誌** | 6000 行 | 800 行 | -87% |
+| **Ticket 日誌** | 0（混在主日誌） | 200 行 × 12 = 2400 行 | 分散管理 |
+| **設計決策日誌** | 0（混在主日誌） | 400 行 | 獨立管理 |
+| **總計** | 6000 行（單一檔案） | 3600 行（14 個檔案） | -40% 且分散 |
+
+**查找效率改善**：
+
+| 任務 | 改善前 | 改善後 | 效率提升 |
+|------|--------|--------|---------|
+| **找到特定 Ticket** | 搜尋 6000 行 | 查索引 → 直接開啟 | 90% ↑ |
+| **找到最終設計** | 搜尋全文 | 查設計決策索引 | 85% ↑ |
+| **理解設計演進** | 難以追溯 | 查版本歷史 | 80% ↑ |
+
+### 7.3 Ticket 模板集合
+
+#### 模板 1：Interface 定義 Ticket
+
+```markdown
+## Ticket #N: 定義 [Interface 名稱] 介面
+
+### 背景
+根據 [需求編號] 需求，需要建立 [功能描述] 的介面契約
+
+### 目標
+建立 `[Interface 名稱]` 介面，定義 [功能描述] 的契約
+
+### 步驟
+1. 在 `lib/domains/[domain]/[layer]/` 建立 `[interface_file].dart`
+2. 定義 `[method1]` 方法簽名
+3. 定義 `[method2]` 方法簽名
+4. 撰寫文檔註解
+
+### 驗收條件
+- [ ] Interface 檔案建立在正確位置
+- [ ] 所有方法簽名完整且明確
+- [ ] 輸入輸出類型定義清楚
+- [ ] 包含完整的文檔註解
+- [ ] dart analyze 0 錯誤
+
+### 參考文件
+- [設計文件連結]
+- [需求文件連結]
+
+### 依賴 Ticket
+- 無（Interface 定義通常是第一個 Ticket）
+```
+
+#### 模板 2：具體實作 Ticket
+
+```markdown
+## Ticket #N: 實作 [類別名稱]
+
+### 背景
+根據 [Interface 名稱] 介面契約，實作 [功能描述]
+
+### 目標
+實作 `[類別名稱]`，提供 [功能描述]
+
+### 步驟
+1. 建立 `[類別名稱]` 類別
+2. 實作 `[method1]` 方法
+3. 實作 `[method2]` 方法
+4. 處理異常情況
+5. 確保所有測試通過
+
+### 驗收條件
+- [ ] 實作所有 [Interface 名稱] 方法
+- [ ] 異常處理完整（列出可能的異常）
+- [ ] 單元測試 100% 通過
+- [ ] dart analyze 0 錯誤
+
+### 參考文件
+- [Interface 定義 Ticket]
+- [設計決策日誌]
+
+### 依賴 Ticket
+- Ticket #X: 定義 [Interface 名稱] 介面（必須先完成）
+```
+
+#### 模板 3：測試撰寫 Ticket
+
+```markdown
+## Ticket #N: 撰寫 [類別名稱] 測試
+
+### 背景
+為 `[類別名稱]` 撰寫完整的測試用例，確保功能正確性
+
+### 目標
+撰寫 `[類別名稱]` 的完整測試用例
+
+### 步驟
+1. 建立測試檔案 `[test_file]_test.dart`
+2. 撰寫 `[method1]` 測試（正常流程 + 異常處理）
+3. 撰寫 `[method2]` 測試（正常流程 + 異常處理）
+4. 確保所有測試通過
+
+### 驗收條件
+- [ ] 測試檔案建立在 `test/unit/[path]/`
+- [ ] 至少 [N] 個測試用例
+- [ ] 覆蓋所有方法的正常流程
+- [ ] 覆蓋所有方法的異常處理
+- [ ] 所有測試 100% 通過
+
+### 參考文件
+- [Interface 定義 Ticket]
+- [測試設計文件]
+
+### 依賴 Ticket
+- Ticket #X: 定義 [Interface 名稱] 介面（必須先完成）
+```
+
+#### 模板 4：整合連接 Ticket
+
+```markdown
+## Ticket #N: 整合 [Module A] 到 [Module B]
+
+### 背景
+將 `[Module A]` 整合到 `[Module B]`，實現完整流程
+
+### 目標
+連接 [Module A] 和 [Module B]，實現端到端功能
+
+### 步驟
+1. 修改 `[Module B]` 注入 `[Module A Interface]`
+2. 在 `[method]` 方法中呼叫 `[Module A].[method]`
+3. 處理 [Module A] 的異常
+4. 撰寫整合測試驗證端到端流程
+5. 確保所有測試通過
+
+### 驗收條件
+- [ ] `[Module B]` 正確注入 `[Module A Interface]`
+- [ ] 端到端流程正常運作
+- [ ] 整合測試 100% 通過
+- [ ] 異常處理完整
+
+### 參考文件
+- [Module A 實作 Ticket]
+- [Module B 實作 Ticket]
+- [整合設計文件]
+
+### 依賴 Ticket
+- Ticket #X: 實作 [Module A]（必須先完成）
+- Ticket #Y: 實作 [Module B]（必須先完成）
+```
+
+#### 模板 5：重構 Ticket
+
+```markdown
+## Ticket #N: 重構 [功能描述]
+
+### 背景
+Phase 4 發現 [問題描述]，需要重構改善
+
+### 目標
+重構 `[類別名稱]`，[改善目標]
+
+### 步驟
+1. 分析當前程式碼問題
+2. 設計重構方案
+3. 執行重構（保持測試通過）
+4. 驗證功能未受影響
+5. 確保所有測試通過
+
+### 驗收條件
+- [ ] 重構完成，程式碼品質改善
+- [ ] 所有測試 100% 通過（功能未受影響）
+- [ ] dart analyze 0 錯誤
+- [ ] 無新的技術債務產生
+
+### 參考文件
+- [Phase 4 重構報告]
+- [程式碼品質標準]
+
+### 依賴 Ticket
+- 無（重構可獨立進行）
+```
+
+### 7.4 常見錯誤和解決方案
+
+#### 錯誤 1：Ticket 拆分過細或過粗
+
+**問題描述**：
+- **過細**：Ticket 的職責過於單一，失去獨立交付價值
+- **過粗**：Ticket 包含過多職責（>5 個）或檔案（>5 個），失去即時 review 的效益
+
+**解決方案**：
+- **標準複雜度**：控制在單一職責或少數相關職責
+- **過細時**：合併相關的小 Ticket 形成完整職責
+- **過粗時**：按 Clean Architecture 分層或步驟拆分
+
+**範例**：
+```markdown
+❌ 過細拆分：
+- Ticket #1: 建立檔案（職責不完整）
+- Ticket #2: 定義 class（職責不完整）
+- Ticket #3: 撰寫註解（職責不完整）
+
+✅ 合理拆分：
+- Ticket #1: 定義 Interface（包含建立檔案、定義 class、撰寫註解 - 完整職責）
+```
+
+#### 錯誤 2：驗收條件模糊
+
+**問題描述**：
+驗收條件使用主觀描述，無法客觀驗證。
+
+**錯誤範例**：
+```markdown
+❌ 模糊的驗收條件：
+- [ ] 功能運作正常
+- [ ] 程式碼品質良好
+- [ ] 效能可接受
+```
+
+**正確範例**：
+```markdown
+✅ 明確的驗收條件：
+- [ ] 呼叫 getBookByIsbn('123') 回傳正確的 Book 物件
+- [ ] dart analyze 0 錯誤，測試覆蓋率 > 80%
+- [ ] API 回應時間 < 500ms（在 100 筆資料下）
+```
+
+**解決方案**：
+使用 SMART 原則撰寫驗收條件（Specific, Measurable, Achievable, Relevant, Time-bound）。
+
+#### 錯誤 3：忽略 Ticket 依賴關係
+
+**問題描述**：
+沒有明確標註 Ticket 間的依賴關係，導致執行順序錯誤。
+
+**錯誤範例**：
+```markdown
+❌ 缺少依賴標註：
+- Ticket #1: 實作 Repository
+- Ticket #2: 定義 Repository Interface
+```
+
+**正確範例**：
+```markdown
+✅ 明確依賴關係：
+- Ticket #1: 定義 IBookRepository 介面
+- Ticket #2: 實作 SQLiteBookRepository
+  依賴：Ticket #1（必須先完成）
+```
+
+**解決方案**：
+- Interface 定義 Ticket 優先於實作 Ticket
+- 測試撰寫 Ticket 可與實作 Ticket 並行
+- 整合 Ticket 必須等待所有依賴 Ticket 完成
+
+#### 錯誤 4：Review 累積延後
+
+**問題描述**：
+等待多個 Ticket 完成後才一起 review，失去即時 review 的效益。
+
+**錯誤做法**：
+```text
+完成 Ticket #1 → 繼續 Ticket #2 → 繼續 Ticket #3 → 一起 Review
+（問題：Ticket #1 的錯誤到 Review 時才發現，已完成 #2、#3，需大量返工）
+```
+
+**正確做法**：
+```text
+完成 Ticket #1 → Review #1 → 完成 Ticket #2 → Review #2 → 完成 Ticket #3 → Review #3
+（好處：每個 Ticket 完成後立即發現問題，修正成本低）
+```
+
+**解決方案**：
+- 每完成一個 Ticket 立即觸發 review
+- Review 快速完成，聚焦核心問題
+- 發現問題立即建立修正 Ticket
+
+#### 錯誤 5：工作日誌未同步更新
+
+**問題描述**：
+Ticket 完成後未更新工作日誌，導致文件與實際進度不一致。
+
+**解決方案**：
+每完成一個 Ticket 必須執行以下更新：
+1. 更新 Ticket 工作日誌（記錄執行過程和 Review 結果）
+2. 更新主版本日誌 Ticket 索引（標記為已完成）
+3. 更新 todolist 任務狀態
+4. 如有設計調整，更新設計決策日誌
+
+### 7.5 完整 Ticket 設計檢查清單
+
+#### Ticket 建立階段檢查清單（10 項）
+
+**基本資訊**（3 項）：
+- [ ] Ticket 標題格式正確（動詞 + 目標）
+- [ ] Ticket 編號唯一且連續
+- [ ] Ticket 分類明確（Interface/實作/測試/整合/重構）
+
+**內容完整性**（6 項）：
+- [ ] 背景欄位說明來源（需求或設計決策）
+- [ ] 目標欄位明確且可驗證
+- [ ] 步驟欄位具體且可操作（3-5 步）
+- [ ] 驗收條件符合 SMART 原則（3-5 項）
+- [ ] 參考文件連結正確
+- [ ] 依賴 Ticket 明確標註
+
+#### Ticket 執行階段檢查清單（8 項）
+
+**執行前檢查**（3 項）：
+- [ ] 依賴 Ticket 已完成
+- [ ] 相關設計決策已確認為「最終決策」
+- [ ] 開發者已理解目標和步驟
+
+**執行中檢查**（3 項）：
+- [ ] Ticket 標記為「進行中」
+- [ ] 執行過程記錄到 Ticket 日誌
+- [ ] 遇到問題即時記錄
+
+**執行後檢查**（2 項）：
+- [ ] 所有驗收條件已滿足
+- [ ] Ticket 標記為「Review 中」
+
+#### Ticket Review 階段檢查清單（16 項）
+
+**功能正確性**（4 項）：
+- [ ] Ticket 描述的功能是否實現？
+- [ ] 驗收條件是否全部滿足？
+- [ ] 是否有未處理的邊界情況？
+- [ ] 錯誤處理是否完整？
+
+**架構合規性**（4 項）：
+- [ ] 是否符合 Clean Architecture 分層原則？
+- [ ] 依賴方向是否正確（內層不依賴外層）？
+- [ ] 是否使用 Interface-Driven 開發？
+- [ ] 是否有架構債務產生？
+
+**測試通過率**（4 項）：
+- [ ] 相關單元測試是否 100% 通過？
+- [ ] 相關整合測試是否 100% 通過？
+- [ ] 測試覆蓋率是否達標（> 80%）？
+- [ ] 是否有測試被 skip？
+
+**文檔同步性**（4 項）：
+- [ ] Ticket 工作日誌是否更新？
+- [ ] 設計決策是否記錄？
+- [ ] API 文檔是否同步？
+- [ ] README 是否需要更新？
+
+#### Ticket 關閉階段檢查清單（8 項）
+
+**強制條件**（5 項）：
+- [ ] 所有驗收條件打勾完成
+- [ ] Review 通過
+- [ ] 相關測試 100% 通過
+- [ ] dart analyze 0 錯誤
+- [ ] 工作日誌已更新
+
+**建議條件**（3 項）：
+- [ ] 程式碼符合專案規範
+- [ ] 無技術債務產生
+- [ ] 文檔同步更新
+
+---
+
+**文件版本**: v1.0.0（完整版）
+**最後更新**: 2025-10-10
+**撰寫進度**: 第 1-7 章完成
+**總字數**: 約 11,200 字
+**總檢查清單項目**: 139 項
