@@ -1,9 +1,0 @@
-{
-  "timestamp": "2025-12-24T20:01:19+08:00",
-  "trigger_reason": "進度停滯,複雜度超標",
-  "current_context": "自動觸發檢查",
-  "triggered": true,
-  "pm_intervention_required": true,
-  "work_log_path": "/Users/tarragon/Projects/book_overview_app/docs/work-logs/v0.15.14-ticket-009-viewmodel-real-implementation.md",
-  "todo_file_path": "/Users/tarragon/Projects/book_overview_app/docs/todolist.md"
-}
