@@ -129,7 +129,8 @@
       "Bash(git push:*)",
       "Bash(git subtree:*)",
       "Bash(git --exec-path:*)",
-      "Bash(./scripts/sync-claude-push.sh:*)"
+      "Bash(./scripts/sync-claude-push.sh:*)",
+      "Bash(git ls-tree:*)"
     ],
     "deny": [],
     "ask": [],
