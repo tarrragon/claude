@@ -13,6 +13,16 @@
 
 ---
 
+## [1.1.2] - 2025-12-24
+
+### Summary
+feat(sync): 改進同步機制 - 保留 commit 歷史
+
+### Added
+CHANGED:- .claude/README-subtree-sync.md
+---
+
+
 ## [1.1.1] - 2025-10-27
 
 ### Summary

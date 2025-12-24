@@ -1,6 +1,6 @@
 {
-  "timestamp": "2025-12-20T17:49:47+08:00",
-  "trigger_reason": "複雜度超標",
+  "timestamp": "2025-12-24T20:01:19+08:00",
+  "trigger_reason": "進度停滯,複雜度超標",
   "current_context": "自動觸發檢查",
   "triggered": true,
   "pm_intervention_required": true,

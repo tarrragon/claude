@@ -126,7 +126,10 @@
       "Bash(./scripts/sync-claude-push.sh \"測試 CHANGELOG 自動更新機制（方案 B）\n\n- 驗證 sync-push 時自動更新版本號\n- 驗證 CHANGELOG 自動記錄變更\n- 驗證版本號正確遞增\")",
       "Bash(git fetch claude-shared)",
       "Bash(timeout 240 flutter test:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git subtree:*)",
+      "Bash(git --exec-path:*)",
+      "Bash(./scripts/sync-claude-push.sh:*)"
     ],
     "deny": [],
     "ask": [],
