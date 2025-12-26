@@ -1,0 +1,15 @@
+# Atomic Ticket CSV 追蹤範本（精簡版）
+# 版本: v2.0.0
+# 說明: CSV 只追蹤狀態，5W1H 資訊存放在 YAML 定義檔
+# YAML 位置: docs/work-logs/v{VERSION}/tickets/{TICKET_ID}.yaml
+#
+# 欄位說明:
+# - ticket_id: 唯一識別碼 (格式: {VERSION}-W{WAVE}-{SEQ})
+# - version: 所屬版本號
+# - status: pending | in_progress | completed
+# - started_at: 開始時間 (ISO 8601)
+# - completed_at: 完成時間 (ISO 8601)
+# - agent: 執行代理人
+#
+ticket_id,version,status,started_at,completed_at,agent
+0.0.0-W1-001,0.0.0,pending,,,parsley-flutter-developer

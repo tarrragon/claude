@@ -20,10 +20,13 @@
 
 **重要說明**：本檔案為主方法論的精簡版本，提供核心概念和整體框架。詳細的標準、流程、檢查清單和實務範例請參考以下獨立方法論文件：
 
+- **🎯 [Atomic Ticket 方法論](./atomic-ticket-methodology.md)** - **單一職責原則**、四大評估方式、拆分範例（**核心參考**）
 - **📋 [Ticket 拆分標準方法論](./ticket-splitting-standards-methodology.md)** - 量化指標、拆分原則、完整範例
 - **♻️ [Ticket 生命週期管理方法論](./ticket-lifecycle-management-methodology.md)** - 生命週期、狀態轉換、工作流程
 - **✅ [即時 Review 機制方法論](./instant-review-mechanism-methodology.md)** - Review 觸發、檢查清單、偏差糾正
 - **📝 [Code Smell 品質閘門檢測方法論](./code-smell-quality-gate-methodology.md)** - 品質標準、檢測機制、問題分類
+
+> **⚠️ 重要提醒**：Ticket 設計必須遵循 **Atomic Ticket 方法論** 的單一職責原則。禁止使用時間、行數、檔案數等量化指標判斷拆分，只用「單一職責四大檢查」評估。
 
 ---
 

@@ -1,0 +1,56 @@
+# Atomic Ticket 定義範本
+# 版本: v1.0.0
+# 使用方式: /ticket-create 會自動使用此範本建立 Ticket YAML
+
+ticket:
+  # 唯一識別碼 - 格式: {Version}-W{Wave}-{Seq}
+  id: "{VERSION}-W{WAVE}-{SEQ}"
+
+  # 版本資訊
+  version: "{VERSION}"
+  wave: {WAVE}
+
+  # 單一職責定義（核心）
+  action: "{ACTION}"      # 動詞：實作、修復、新增、重構、移除
+  target: "{TARGET}"      # 單一目標：具體的方法、類別、功能
+
+  # 執行資訊
+  agent: "{AGENT}"        # 執行代理人
+
+  # 5W1H 設計資訊（唯一事實源）
+  who: "{AGENT}"
+  what: "{ACTION} {TARGET}"
+  when: "{TRIGGER_CONDITION}"
+  where: "{FILE_PATH}"
+  why: "{REASON}"
+  how: "{IMPLEMENTATION_STRATEGY}"
+
+  # 驗收條件（都應指向同一目標）
+  acceptance:
+    - "{CRITERIA_1}"
+    - "{CRITERIA_2}"
+    # 驗收條件應該：
+    # 1. 都指向 {TARGET}
+    # 2. 可客觀驗證
+    # 3. 不超過 3-5 個
+
+  # 相關檔案
+  files:
+    - "{SOURCE_FILE}"
+    - "{TEST_FILE}"
+
+  # 依賴關係
+  dependencies: []
+  # 格式: ["{VERSION}-W{WAVE}-{SEQ}", ...]
+  # W1 的 Ticket 通常沒有依賴
+  # W2+ 的 Ticket 依賴前一 Wave 的特定 Ticket
+
+  # 參考文件
+  references: []
+  # 格式: ["path/to/doc.md", "path/to/spec.md"]
+
+# 單一職責檢查（建立時自動驗證）
+# [ ] 語義檢查：能用「{ACTION} {TARGET}」表達
+# [ ] 修改原因：只有一個原因會導致修改
+# [ ] 驗收一致性：所有驗收條件指向 {TARGET}
+# [ ] 依賴獨立性：拆分後不會產生循環依賴
