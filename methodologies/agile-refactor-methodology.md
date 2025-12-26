@@ -11,78 +11,47 @@
 - 依照工作日誌規劃分派任務給相應的子代理人
 - 維持敏捷開發的節奏和品質標準
 
-### 2. 任務原子化拆分（整合 Ticket 機制）
+### 2. 任務原子化拆分（Atomic Ticket 原則）
 
-**原有原則**：
-- 每個小版本任務必須在 1-2 小時內完成
-- 任務影響檔案數量控制在 5 個以下
-- 每個任務都有明確的完成標準和驗收條件
+**核心原則**：Atomic Ticket = 一個 Action + 一個 Target（單一職責原則）
 
-**Ticket 量化拆分標準**（新增）：
+> **⚠️ 重要**：Ticket 拆分必須遵循 **[Atomic Ticket 方法論](./atomic-ticket-methodology.md)** 的單一職責原則。
+> **禁止使用時間、行數、檔案數、測試數等量化指標判斷是否需要拆分。**
 
-小版本任務可進一步拆分為 Ticket，每個 Ticket 必須符合以下量化標準：
+**單一職責四大檢查**：
 
-| 維度 | Simple Ticket | Medium Ticket | Complex Ticket |
-|------|--------------|---------------|----------------|
-| **完成時間** | 5-10 分鐘 | 10-20 分鐘 | 20-30 分鐘 |
-| **程式碼行數** | < 30 行 | 30-70 行 | 70-100 行 |
-| **影響檔案** | 1-2 個 | 2-3 個 | 3-5 個 |
-| **測試案例** | 1-3 個 | 3-6 個 | 6-10 個 |
+1. **語義檢查**：能用「動詞 + 單一目標」表達嗎？
+2. **修改原因檢查**：只有一個原因會導致修改嗎？
+3. **驗收一致性**：所有驗收條件指向同一目標嗎？
+4. **依賴獨立性**：拆分後不會產生循環依賴嗎？
 
-**強制規則**：
-- ⚠️ **超過 30 分鐘 = 必須拆分**
-- ⚠️ **超過 100 行程式碼 = 必須拆分**
-- ⚠️ **超過 5 個檔案 = 必須拆分**
-- ⚠️ **超過 10 個測試案例 = 必須拆分**
-
-**基於 Clean Architecture 的拆分策略**（新增）：
+**基於 Clean Architecture 的拆分策略**：
 
 根據 Clean Architecture 分層原則，任務可拆分為以下 Ticket 類型：
 
 1. **Interface 定義 Ticket**
    - 定義內層介面（Ports）
-   - 時間：5-10 分鐘（Simple）
    - 產出：介面簽名、輸入輸出定義、註解文檔
    - 範例：定義 IBookRepository 介面
 
 2. **具體實作 Ticket**
    - 實作具體類別（Interactors）
-   - 時間：10-20 分鐘（Medium）
    - 產出：業務邏輯實作、錯誤處理
    - 範例：實作 BookQueryService 類別
 
 3. **測試驗證 Ticket**
    - 撰寫單元測試
-   - 時間：10-20 分鐘（Medium）
    - 產出：測試案例和驗證、Mock 設置
    - 範例：撰寫 BookQueryService 測試
 
 4. **整合連接 Ticket**
    - 依賴注入和組裝
-   - 時間：5-10 分鐘（Simple）
    - 產出：組裝程式碼、依賴注入配置
    - 範例：在 Composition Root 連接 Repository
 
-**Ticket 複雜度評估方法**：
-
-評估 4 個維度，每個維度 1-10 分：
-- **技術複雜度**：使用新技術、複雜演算法、效能優化
-- **業務複雜度**：複雜業務規則、多條件判斷、狀態管理
-- **整合複雜度**：多模組整合、外部 API、資料庫操作
-- **測試複雜度**：需要 Mock 的依賴數量、測試案例覆蓋範圍
-
-**複雜度公式**：
-```text
-Ticket 複雜度 = (技術 + 業務 + 整合 + 測試) / 4
-
-Simple:   < 3 分
-Medium:   3-6 分
-Complex:  > 6 分
-```
-
-**參考文件**：
-- [Ticket 設計派工方法論 - 第 2 章]($CLAUDE_PROJECT_DIR/.claude/methodologies/ticket-design-dispatch-methodology.md)
-- [Clean Architecture 實作方法論 - 第 3 章]($CLAUDE_PROJECT_DIR/.claude/methodologies/clean-architecture-implementation-methodology.md)
+**相關方法論**：
+- [🎯 Atomic Ticket 方法論](./atomic-ticket-methodology.md) - 單一職責設計原則（核心）
+- [📊 CSV Ticket 追蹤方法論](./csv-ticket-tracking-methodology.md) - 狀態追蹤機制
 
 ### 3. 品質門檻強制執行
 - 每個任務完成後必須通過測試檢查

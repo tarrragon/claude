@@ -361,7 +361,7 @@ git log --oneline -5
 
 **核心檢查項目**：
 - [ ] 派工理由已完整記錄
-- [ ] Ticket 設計完整性（5 個核心欄位）
+- [ ] Ticket 符合單一職責原則（參考 Atomic Ticket 方法論）
 - [ ] 依賴和參考文件檢查
 - [ ] 執行可行性檢查
 - [ ] 品質保證檢查
@@ -424,28 +424,19 @@ git log --oneline -5
 - **thyme-documentation-integrator**: 工作日誌 → 方法論轉化、方法論 → 核心文件整合、文件衝突檢測與解決
 - **memory-network-builder**: 版本發布時從 `work-log` 提取功能變動到 `CHANGELOG.md`
 
-### 📐 Ticket 設計標準
+### 📐 Ticket 系統
 
-**Ticket 定義**：Ticket 是「最小可交付單元」（Minimal Deliverable Unit），代表一個可以獨立完成、驗收和追蹤的最小任務單位。
+**核心原則**：Atomic Ticket = 一個 Action + 一個 Target（單一職責原則）
 
-**Ticket 五大核心欄位（強制）**：
-1. **背景 (Background)**：說明為什麼需要這個 Ticket
-2. **目標 (Objective)**：明確要達成什麼
-3. **驗收條件 (Acceptance Criteria)**：SMART 原則，客觀可檢查
-4. **依賴 Ticket (Dependencies)**：前置 Ticket 和可並行 Ticket
-5. **執行步驟 (Steps)**：具體可操作的步驟清單
+**可用指令**：
+- `/ticket-create` - 建立符合單一職責的 Atomic Ticket
+- `/ticket-track` - 查詢和更新 Ticket 狀態
 
-**量化拆分標準**：
-- ⚠️ **超過 30 分鐘** = 必須拆分
-- ⚠️ **超過 100 行程式碼** = 必須拆分
-- ⚠️ **超過 5 個檔案** = 必須拆分
-- ⚠️ **超過 10 個測試案例** = 必須拆分
-
-**完整的敏捷重構開發流程請參考**：
-- [🚀 敏捷重構方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/agile-refactor-methodology.md) - Agent 分工協作模式和三重文件原則
-- [📋 Ticket 設計派工方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/ticket-design-dispatch-methodology.md) - Ticket 設計標準和 SMART 驗收條件
-- [♻️ Ticket 生命週期管理方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/ticket-lifecycle-management-methodology.md) - 生命週期狀態和工作流程
-- [✅ 即時 Review 機制方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/instant-review-mechanism-methodology.md) - Review 觸發和檢查清單
+**相關方法論**：
+- [🎯 Atomic Ticket 方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/atomic-ticket-methodology.md) - 單一職責設計原則
+- [📊 CSV Ticket 追蹤方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/csv-ticket-tracking-methodology.md) - 狀態追蹤機制
+- [📋 Ticket 設計派工方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/ticket-design-dispatch-methodology.md) - 5W1H 設計標準
+- [♻️ Ticket 生命週期管理方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/ticket-lifecycle-management-methodology.md) - 生命週期狀態
 
 ---
 

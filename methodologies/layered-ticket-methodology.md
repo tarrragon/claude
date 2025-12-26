@@ -12,6 +12,14 @@
 
 **目的**: 定義 Clean Architecture 五層劃分標準和單層修改原則，指導 Ticket 拆分和實作順序
 
+> **⚠️ 與 Atomic Ticket 方法論的關係**：
+>
+> 本方法論專注於**層級隔離**原則（單層修改），與 [🎯 Atomic Ticket 方法論](./atomic-ticket-methodology.md) 的**單一職責**原則互補使用：
+> - **Atomic Ticket**：一個 Action + 一個 Target（職責維度）
+> - **層級隔離**：一個 Ticket 只修改一個架構層級（層級維度）
+>
+> **本文件中的量化指標（檔案數、行數等）僅供參考**，Ticket 拆分的核心依據仍是單一職責原則。
+
 **適用對象**:
 - 專案經理（PM）- 規劃和拆分 Ticket
 - 開發人員 - 執行單層修改

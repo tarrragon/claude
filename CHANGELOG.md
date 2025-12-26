@@ -16,7 +16,7 @@
 ## [1.1.4] - 2025-12-26
 
 ### Summary
-chore: 移除 .skill 打包檔案
+refactor: 統一 Ticket 方法論為單一職責原則
 
 ---
 
