@@ -1,31 +1,57 @@
 ---
 name: ticket-track
-description: "CSV-based Ticket tracking system. Provides two core capabilities: (1) READ operations for querying ticket info without loading full files - use query/list/summary commands, (2) UPDATE operations for agents to track progress without reporting back - use claim/complete/release commands. Eliminates need for agents to report progress to main thread."
+description: "Frontmatter-based Ticket tracking system. Provides two core capabilities: (1) READ operations for querying ticket info without loading full files - use query/list/summary commands, (2) UPDATE operations for agents to track progress without reporting back - use claim/complete/release commands. Eliminates need for agents to report progress to main thread."
 ---
 
 # Ticket Track
 
-CSV-based Ticket status tracking - eliminates the need to read full files or ask agents for progress.
+Frontmatter-based Ticket status tracking - eliminates the need to read full files or ask agents for progress.
 
 ## Core Design
 
 ```text
-Main Thread              CSV File                    Agent
-    │                       │                          │
-    │  READ (query/list)    │                          │
-    ├──────────────────────►│                          │
-    │◄──────────────────────┤                          │
-    │  (direct read)        │                          │
-    │                       │                          │
-    │                       │  UPDATE (claim/complete) │
-    │                       │◄─────────────────────────┤
-    │                       │  (direct write)          │
+Main Thread              Ticket Frontmatter           Agent
+    |                           |                        |
+    |  READ (query/list)        |                        |
+    |-------------------------->|                        |
+    |<--------------------------|                        |
+    |  (direct read)            |                        |
+    |                           |                        |
+    |                           |  UPDATE (claim/complete)
+    |                           |<-----------------------|
+    |                           |  (direct write)        |
 ```
 
 **Key Benefits**:
 - No need to read full ticket files for status
 - No need to ask agents for progress
 - Minimal context consumption
+- Single file architecture (status in frontmatter)
+
+---
+
+## Frontmatter Status Fields
+
+Status is tracked directly in each Ticket's YAML frontmatter:
+
+```yaml
+---
+# ... other fields ...
+
+# === Status Tracking ===
+status: "pending"        # pending | in_progress | completed
+assigned: false          # true if someone claimed
+started_at: null         # ISO 8601 timestamp
+completed_at: null       # ISO 8601 timestamp
+---
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | string | "pending", "in_progress", "completed" |
+| `assigned` | boolean | Whether someone has claimed the ticket |
+| `started_at` | datetime | When work started (ISO 8601, e.g., 2025-12-27T10:30:00) |
+| `completed_at` | datetime | When work completed (ISO 8601) |
 
 ---
 
@@ -36,39 +62,40 @@ Query ticket info without loading full files.
 ### Query Single Ticket
 
 ```bash
-uv run scripts/ticket-tracker.py query 0.15.16-W1-001 --version v0.15.16
+uv run .claude/hooks/ticket-tracker.py query 0.16.0-W1-001 --version v0.16.0
 ```
 
-Output: Status, agent, action+target from CSV.
+Output: Status, agent, action+target, 5W1H from frontmatter.
 
 ### List Tickets by Status
 
 ```bash
 # All tickets
-uv run scripts/ticket-tracker.py list
+uv run .claude/hooks/ticket-tracker.py list --version v0.16.0
 
 # Filter by status
-uv run scripts/ticket-tracker.py list --in-progress
-uv run scripts/ticket-tracker.py list --pending
-uv run scripts/ticket-tracker.py list --completed
+uv run .claude/hooks/ticket-tracker.py list --in-progress --version v0.16.0
+uv run .claude/hooks/ticket-tracker.py list --pending --version v0.16.0
+uv run .claude/hooks/ticket-tracker.py list --completed --version v0.16.0
 ```
 
 ### Quick Summary
 
 ```bash
 # Auto-detect version
-uv run scripts/ticket-tracker.py summary
+uv run .claude/hooks/ticket-tracker.py summary
 
 # Specify version
-uv run scripts/ticket-tracker.py summary --version v0.15.16
+uv run .claude/hooks/ticket-tracker.py summary --version v0.16.0
 ```
 
 **Output Example**:
 ```text
-📊 Ticket Summary v0.15.16 (2/34 completed)
-0.15.16-W1-001 | ✅ | parsley | Fix ISBNValidator.validate() 格式驗證
-0.15.16-W1-002 | 🔄 | parsley | Implement ISBNScannerService.startScan()/stopScan() (1h30m)
-0.15.16-W1-003 | ⏸️ | parsley | Implement ISBNScannerService 掃描結果處理
+📊 Ticket Summary v0.16.0 (2/34 completed) [markdown]
+----------------------------------------------------------------------------------------------------
+0.16.0-W1-001 | ✅ | parsley         | Fix ISBNValidator.validate() format validation
+0.16.0-W1-002 | 🔄 | parsley         | Implement ISBNScannerService.startScan() (1h30m)
+0.16.0-W1-003 | ⏸️ | parsley         | Implement ISBNScannerService result handling
 ```
 
 ---
@@ -80,68 +107,50 @@ Update status without reporting back to main thread.
 ### Claim Ticket (Before Starting)
 
 ```bash
-uv run scripts/ticket-tracker.py claim 0.15.16-W1-001 --version v0.15.16
+uv run .claude/hooks/ticket-tracker.py claim 0.16.0-W1-001 --version v0.16.0
 ```
 
-Records: `assigned=true`, `started_at=now`
+Updates frontmatter:
+- `assigned: true`
+- `started_at: [current ISO timestamp]`
+- `status: "in_progress"`
+
+**Output**:
+```text
+✅ Claimed 0.16.0-W1-001
+   Start Time: 2025-12-27T10:30:00
+```
 
 ### Complete Ticket (After Finishing)
 
 ```bash
-uv run scripts/ticket-tracker.py complete 0.15.16-W1-001 --version v0.15.16
+uv run .claude/hooks/ticket-tracker.py complete 0.16.0-W1-001 --version v0.16.0
 ```
 
-Records: `completed=true`
+Updates frontmatter:
+- `status: "completed"`
+- `completed_at: [current ISO timestamp]`
+
+**Output**:
+```text
+✅ Completed 0.16.0-W1-001 (1h30m)
+```
 
 ### Release Ticket (If Unable to Continue)
 
 ```bash
-uv run scripts/ticket-tracker.py release 0.15.16-W1-001 --version v0.15.16
+uv run .claude/hooks/ticket-tracker.py release 0.16.0-W1-001 --version v0.16.0
 ```
 
-Records: `assigned=false`, clears `started_at`
+Updates frontmatter:
+- `assigned: false`
+- `started_at: null`
+- `status: "pending"`
 
----
-
-## Admin Operations (Main Thread)
-
-### Initialize Version
-
-```bash
-uv run scripts/ticket-tracker.py init v0.15.16
+**Output**:
+```text
+✅ Released 0.16.0-W1-001
 ```
-
-Creates version folder and empty `tickets.csv`.
-
-### Add Ticket
-
-```bash
-uv run scripts/ticket-tracker.py add --id 0.15.16-W1-001 --version v0.15.16
-```
-
-Adds ticket to CSV tracking (typically use `/ticket-create` instead).
-
----
-
-## CSV Format (Atomic Ticket v3.0)
-
-```csv
-ticket_id,action,target,agent,wave,dependencies,assigned,started_at,completed
-0.15.16-W1-001,Fix,ISBNValidator.validate(),parsley,1,,false,,false
-0.15.16-W2-001,Implement,Book AggregateRoot,parsley,2,W1-006;W1-007,false,,false
-```
-
-| Column | Description |
-|--------|-------------|
-| ticket_id | Format: `{Version}-W{Wave}-{Seq}` |
-| action | Fix, Implement, Add, Refactor, Remove |
-| target | Single responsibility target |
-| agent | Executing agent name |
-| wave | Dependency layer (1, 2, 3) |
-| dependencies | Semicolon-separated dependency IDs |
-| assigned | true/false |
-| started_at | ISO timestamp |
-| completed | true/false |
 
 ---
 
@@ -149,23 +158,83 @@ ticket_id,action,target,agent,wave,dependencies,assigned,started_at,completed
 
 | Icon | Status | Condition |
 |------|--------|-----------|
-| ⏸️ | Pending | `assigned=false` |
-| 🔄 | In Progress | `assigned=true`, `completed=false` |
-| ✅ | Completed | `completed=true` |
+| ⏸️ | Pending | `status: "pending"` |
+| 🔄 | In Progress | `status: "in_progress"` |
+| ✅ | Completed | `status: "completed"` |
+
+---
+
+## Backward Compatibility (v0.15.x CSV Format)
+
+The tracker supports **read-only** access to old CSV-format tickets for historical reference.
+
+### How It Works
+
+When querying older versions (v0.15.x), the system:
+
+1. **Auto-detects format**: Checks for `tickets/` directory (Markdown) or `tickets.csv` (CSV)
+2. **Falls back to CSV**: If Markdown tickets not found, reads from CSV
+3. **Display warning**: Shows read-only notice for CSV format
+
+### Example
+
+```bash
+uv run .claude/hooks/ticket-tracker.py summary --version v0.15.16
+```
+
+**Output**:
+```text
+⚠️  v0.15.16 uses old CSV format (read-only mode)
+   Status update commands (claim/complete/release) not supported in v0.15.x
+   Please upgrade to v0.16.0+ for new Markdown Ticket system
+
+📊 Ticket Summary v0.15.16 (15/34 completed) [csv]
+----------------------------------------------------------------------------------------------------
+...
+```
+
+### Limitations
+
+| Operation | v0.16.0+ (Markdown) | v0.15.x (CSV) |
+|-----------|---------------------|---------------|
+| `summary` | ✅ Full support | ✅ Read-only |
+| `list` | ✅ Full support | ✅ Read-only |
+| `query` | ✅ Full support | ⚠️ Limited |
+| `claim` | ✅ Full support | ❌ Not supported |
+| `complete` | ✅ Full support | ❌ Not supported |
+| `release` | ✅ Full support | ❌ Not supported |
 
 ---
 
 ## Best Practices
 
 ### Main Thread
+
 - **DON'T** ask agents for progress → Use `summary` command
 - **DON'T** read ticket files for status → Use `query` command
 - **DO** run `summary` regularly for overview
 
 ### Agents
+
 - **DON'T** report progress to main thread → Use `complete` command
 - **DO** run `claim` before starting
 - **DO** run `complete` after finishing
+
+---
+
+## File Structure
+
+```text
+docs/work-logs/
+├── v0.16.0/                     # New version (Markdown format)
+│   └── tickets/
+│       ├── 0.16.0-W1-001.md     # Ticket with frontmatter
+│       ├── 0.16.0-W1-002.md
+│       └── ...
+├── v0.15.16/                    # Old version (CSV format, read-only)
+│   ├── tickets.csv              # Legacy CSV tracking
+│   └── ...
+```
 
 ---
 
@@ -175,8 +244,10 @@ ticket_id,action,target,agent,wave,dependencies,assigned,started_at,completed
 
 ## Resources
 
-### scripts/
-- `ticket-tracker.py` - Main tracking script
+### Scripts
+- `.claude/hooks/ticket-tracker.py` - Main tracking script
+- `.claude/hooks/frontmatter_parser.py` - Frontmatter parsing module
 
-### references/
-- `csv-ticket-tracking-methodology.md` - Full methodology
+### References
+- `.claude/methodologies/frontmatter-ticket-tracking-methodology.md` - Full methodology
+- `.claude/methodologies/csv-ticket-tracking-methodology.md` - Legacy CSV methodology (deprecated)

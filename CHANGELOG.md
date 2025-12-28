@@ -13,10 +13,10 @@
 
 ---
 
-## [1.1.4] - 2025-12-26
+## [1.1.4] - 2025-12-28
 
 ### Summary
-refactor: 統一 Ticket 方法論為單一職責原則
+feat: Ticket 系統遷移 + test-async-guardian
 
 ---
 

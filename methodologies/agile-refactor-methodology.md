@@ -51,7 +51,7 @@
 
 **相關方法論**：
 - [🎯 Atomic Ticket 方法論](./atomic-ticket-methodology.md) - 單一職責設計原則（核心）
-- [📊 CSV Ticket 追蹤方法論](./csv-ticket-tracking-methodology.md) - 狀態追蹤機制
+- [📊 Frontmatter Ticket 追蹤方法論](./frontmatter-ticket-tracking-methodology.md) - 狀態追蹤機制
 
 ### 3. 品質門檻強制執行
 - 每個任務完成後必須通過測試檢查

@@ -137,7 +137,7 @@ T-003 | ⏸️ | pepper | 整合測試規劃
 
 ## 相關文件
 
-- **方法論**: `.claude/methodologies/csv-ticket-tracking-methodology.md`
+- **方法論**: `.claude/methodologies/frontmatter-ticket-tracking-methodology.md`
 - **CSV 範本**: `.claude/templates/tickets.csv.template`
 - **腳本**: `.claude/hooks/ticket-tracker.py`
 

@@ -1,0 +1,71 @@
+---
+# === 識別資訊 ===
+ticket_id: "${ticket_id}"
+version: "${version}"
+wave: ${wave}
+
+# === 單一職責定義 ===
+action: "${action}"
+target: "${target}"
+
+# === 執行資訊 ===
+agent: "${agent}"
+
+# === 5W1H 設計 ===
+who: "${who}"
+what: "${what}"
+when: "${when}"
+where: "${where}"
+why: "${why}"
+how: "${how}"
+
+# === 驗收條件 ===
+acceptance:
+${acceptance}
+
+# === 相關檔案 ===
+files:
+${files}
+
+# === 依賴 ===
+dependencies:
+${dependencies}
+
+# === 狀態追蹤 ===
+status: "pending"
+assigned: false
+started_at: null
+completed_at: null
+---
+
+# 執行日誌
+
+## 任務摘要
+
+${task_summary}
+
+---
+
+## 問題分析
+
+<!-- 待執行代理人填寫 -->
+
+---
+
+## 解決方案
+
+<!-- 待執行代理人填寫 -->
+
+---
+
+## 測試結果
+
+<!-- 待執行代理人填寫 -->
+
+---
+
+## 完成資訊
+
+**完成時間**: (待定)
+**執行代理人**: ${agent}
+**Review 狀態**: 待定

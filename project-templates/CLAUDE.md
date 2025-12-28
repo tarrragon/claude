@@ -434,7 +434,7 @@ git log --oneline -5
 
 **相關方法論**：
 - [🎯 Atomic Ticket 方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/atomic-ticket-methodology.md) - 單一職責設計原則
-- [📊 CSV Ticket 追蹤方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/csv-ticket-tracking-methodology.md) - 狀態追蹤機制
+- [📊 Frontmatter Ticket 追蹤方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/frontmatter-ticket-tracking-methodology.md) - 狀態追蹤機制
 - [📋 Ticket 設計派工方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/ticket-design-dispatch-methodology.md) - 5W1H 設計標準
 - [♻️ Ticket 生命週期管理方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/ticket-lifecycle-management-methodology.md) - 生命週期狀態
 

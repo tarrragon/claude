@@ -226,9 +226,9 @@ Ticket C: 實作 save() 方法驗證
 
 **Atomic Ticket 方法論**是 Ticket 設計的核心原則，ticket-design-dispatch-methodology.md 應引用本方法論作為拆分標準。
 
-### 與 csv-ticket-tracking-methodology.md 的關係
+### 與 frontmatter-ticket-tracking-methodology.md 的關係
 
-**Atomic Ticket** 產生的 YAML 定義檔是唯一事實源，CSV 只追蹤狀態。
+**Atomic Ticket** 產生的 YAML Frontmatter 定義是唯一事實源，Frontmatter 內建在 Ticket 檔案中追蹤狀態。
 
 ### 與 ticket-lifecycle-management-methodology.md 的關係
 
@@ -260,7 +260,7 @@ Ticket C: 實作 save() 方法驗證
 
 - [Ticket 設計派工方法論](./ticket-design-dispatch-methodology.md)
 - [Ticket 生命週期管理方法論](./ticket-lifecycle-management-methodology.md)
-- [CSV Ticket 追蹤方法論](./csv-ticket-tracking-methodology.md)
+- [Frontmatter Ticket 追蹤方法論](./frontmatter-ticket-tracking-methodology.md)
 
 ---
 
