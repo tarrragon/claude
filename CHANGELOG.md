@@ -13,10 +13,10 @@
 
 ---
 
-## [1.1.4] - 2025-12-28
+## [1.1.4] - 2025-12-29
 
 ### Summary
-feat: Ticket 系統遷移 + test-async-guardian
+docs: TDD-Ticket 整合方案 - Phase 3a 強制單一職責評估
 
 ---
 

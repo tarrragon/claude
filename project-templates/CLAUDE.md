@@ -74,6 +74,32 @@
 - [ ] Phase 3 完成後是否立即分派 Phase 4？不是則違反 TDD 鐵律
 - [ ] Phase 4 完成後是否立即提交？不是則違反版本存檔原則
 
+### 📐 Phase 3a 強制單一職責評估
+
+**Phase 3a 是 TDD 流程中唯一的 Ticket 設計決策點**
+
+在 Phase 3a（語言無關策略規劃）階段，pepper-test-implementer 必須對 Ticket 進行單一職責評估。這是確保 Ticket 符合 Atomic Ticket 原則的唯一正式檢查點。
+
+**禁止使用量化指標判斷 Ticket 拆分**：
+- 禁止使用「測試數量」作為拆分依據
+- 禁止使用「預估時間」作為拆分依據
+- 禁止使用「程式碼行數」作為拆分依據
+
+**單一職責四大檢查**：
+
+| 檢查項目 | 問題 | 通過標準 |
+|---------|------|---------|
+| 語義檢查 | 能用「動詞 + 單一目標」表達？ | 只有一個目標 |
+| 修改原因檢查 | 只有一個修改原因？ | 只有一個原因 |
+| 驗收一致性 | 所有驗收條件指向同一目標？ | 全部指向同一目標 |
+| 依賴獨立性 | 無循環依賴？ | 無循環依賴 |
+
+**相關指令**：
+- `/ticket-create` - 建立符合單一職責的 Atomic Ticket
+- `/ticket-track` - 查詢和更新 Ticket 狀態
+
+**完整的 TDD 與 Ticket 整合方法論請參考**：[🔗 TDD 與 Ticket 整合方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/tdd-ticket-integration-methodology.md)
+
 ---
 
 ## 🔍 問題覺察與評估原則（決策前強制思考）
