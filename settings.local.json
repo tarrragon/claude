@@ -6,7 +6,68 @@
       "Bash(do echo \"Running $test_file...\" flutter test \"$test_file\")",
       "Bash(cat:*)",
       "Bash(wc:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "mcp__dart__run_tests",
+      "Bash(flutter test:*)",
+      "Skill(test-async-guardian)",
+      "Bash(timeout 60 flutter test:*)",
+      "Bash(brew list:*)",
+      "Bash(uv run:*)",
+      "Bash(/Users/mac-eric/project/book_overview_app/.claude/hooks/test-summary.sh)",
+      "Bash(tee:*)",
+      "Bash(grep:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(__NEW_LINE__ echo \"=== 修復摘要 ===\")",
+      "Bash(pkill:*)",
+      "Bash(chmod:*)",
+      "Bash(./.claude/hooks/test-timeout-pre.py:*)",
+      "Bash(./.claude/hooks/test-timeout-post.py:*)",
+      "mcp__serena__list_dir",
+      "mcp__serena__find_file",
+      "mcp__serena__search_for_pattern",
+      "WebSearch",
+      "mcp__context7__resolve-library-id",
+      "WebFetch(domain:blog.flutter.dev)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:dart.dev)",
+      "WebFetch(domain:pub.dev)",
+      "WebFetch(domain:www.freecodecamp.org)",
+      "Bash(dart mcp-server:*)",
+      "Bash(dart --version:*)",
+      "Bash(flutter --version:*)",
+      "Bash(flutter run:*)",
+      "mcp__dart__list_running_apps",
+      "Bash(dart run:*)",
+      "mcp__serena__find_symbol",
+      "Bash(find:*)",
+      "Bash(flutter analyze:*)",
+      "mcp__serena__check_onboarding_performed",
+      "Skill(ticket-create)",
+      "mcp__plugin_serena_serena__activate_project",
+      "mcp__serena__get_symbols_overview",
+      "mcp__plugin_serena_serena__read_file",
+      "mcp__plugin_serena_serena__replace_content",
+      "mcp__dart__analyze_files",
+      "Bash(dart analyze:*)",
+      "Bash(./scripts/sync-claude-push.sh:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "dart"
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__dart__run_tests",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/mcp-run-tests-validator.py"
+          }
+        ]
+      }
     ]
   }
 }

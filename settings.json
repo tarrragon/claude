@@ -1,0 +1,33 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": ".claude/hooks/test-timeout-pre.py"}
+        ]
+      },
+      {
+        "matcher": "mcp__dart__run_tests",
+        "hooks": [
+          {"type": "command", "command": ".claude/hooks/mcp-run-tests-validator.py"},
+          {"type": "command", "command": ".claude/hooks/test-timeout-pre.py"}
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": ".claude/hooks/test-timeout-post.py"}
+        ]
+      },
+      {
+        "matcher": "mcp__dart__run_tests",
+        "hooks": [
+          {"type": "command", "command": ".claude/hooks/test-timeout-post.py"}
+        ]
+      }
+    ]
+  }
+}

@@ -237,6 +237,143 @@ tearDown(() {
 
 ---
 
+## 案例 5：網路斷線導致測試卡住（真實案例 2024/12）
+
+**問題**：網路斷線時 flutter test 卡在 "Resolving dependencies..."，等待 pub.dev DNS 解析超時。
+
+### 問題現象
+
+```bash
+$ flutter test
+
+┌─────────────────────────────────────────────────────────┐
+│ A new version of Flutter is available!                  │
+│                                                         │
+│ To update to the latest version, run "flutter upgrade". │
+└─────────────────────────────────────────────────────────┘
+Resolving dependencies...
+Downloading packages...
+=== Done ===
+ClientException with SocketException: Failed host lookup: 'pub.dev' (OS Error: nodename nor servname provided, or not known, errno = 8), uri=https://pub.dev/api/packages/dio/advisories
+Failed to update packages.
+
+# 測試卡住不動...
+```
+
+### 根本原因
+
+- 網路斷線或 DNS 解析失敗
+- `flutter test` 需要連接 pub.dev 確認套件更新
+- DNS 查詢失敗後，測試程序無法正常進行
+
+### 診斷方式
+
+```bash
+# 檢查網路連線
+ping -c 1 pub.dev
+
+# 如果失敗，會看到類似：
+# ping: cannot resolve pub.dev: Unknown host
+```
+
+### 修復方案
+
+1. 確認網路連線正常
+2. 重新執行測試
+3. 考慮使用 `--offline` 模式（如果套件已在本地快取）：
+   ```bash
+   flutter test --offline
+   ```
+
+**教訓**：
+- 測試卡住時，先檢查網路連線
+- 這類問題無法透過程式碼修復，是環境問題
+
+---
+
+## 案例 6：testWidgets 中 Future.delayed 永不完成（真實案例 2024/12）
+
+**問題**：事件測試使用 `testWidgets` 但實際上不需要 Widget 環境，導致 `Future.delayed` 永遠不會完成。
+
+### 錯誤的實作
+
+```dart
+// ❌ 錯誤：使用 testWidgets 但不需要 Widget 環境
+// 來源：search_to_library_events_test.dart
+
+testWidgets('進行中搜尋應自動取消後重新搜尋', (tester) async {
+  // 模擬搜尋耗時
+  mockSearchBookUseCase.setDelay(const Duration(milliseconds: 200));
+
+  // 發起搜尋
+  await presenter.search('test');
+
+  // 等待事件
+  await Future.delayed(const Duration(milliseconds: 50));  // ⚠️ 永遠不會完成！
+
+  // 驗證事件序列
+  expect(events.length, 3);
+});
+```
+
+### 問題分析
+
+1. **testWidgets 使用虛擬時鐘**：Flutter 的 widget 測試框架使用虛擬時間
+2. **Future.delayed 需要 pump**：在虛擬時間環境中，`Future.delayed` 需要 `tester.pump()` 來推進時間
+3. **不需要 Widget 環境**：這個測試只驗證事件邏輯，不需要 Widget 樹
+
+### 正確的實作
+
+```dart
+// ✅ 正確：改用 test()，因為不需要 Widget 環境
+
+test('進行中搜尋應自動取消後重新搜尋', () async {
+  // 模擬搜尋耗時
+  mockSearchBookUseCase.setDelay(const Duration(milliseconds: 200));
+
+  // 發起搜尋
+  await presenter.search('test');
+
+  // 等待事件 - 在真實時間環境中正常工作
+  await Future.delayed(const Duration(milliseconds: 50));
+
+  // 驗證事件序列
+  expect(events.length, 3);
+});
+```
+
+### 替代方案（如果需要 Widget 環境）
+
+```dart
+// ✅ 替代方案：使用 testWidgets + pump
+
+testWidgets('進行中搜尋應自動取消後重新搜尋', (tester) async {
+  mockSearchBookUseCase.setDelay(const Duration(milliseconds: 200));
+
+  await presenter.search('test');
+
+  // 使用 pump 推進虛擬時間
+  await tester.pump(const Duration(milliseconds: 50));
+
+  expect(events.length, 3);
+});
+```
+
+### 判斷標準
+
+| 情境 | 使用方式 |
+|-----|---------|
+| 純邏輯測試（事件、狀態） | 使用 `test()` |
+| 需要 Widget 樹 | 使用 `testWidgets()` + `pump()` |
+| 需要渲染驗證 | 使用 `testWidgets()` + `pumpAndSettle()` |
+
+**教訓**：
+- 選擇正確的測試類型很重要
+- `testWidgets` 不是 `test` 的升級版，它有特殊的時間行為
+- 純邏輯測試應該使用 `test()`
+
+---
+
 ## 最佳實踐總結
 
 ### 1. 始終添加 tearDown

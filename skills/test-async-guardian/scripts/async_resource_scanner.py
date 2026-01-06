@@ -11,6 +11,7 @@ Async Resource Scanner - 掃描 Dart/Flutter 測試中的異步資源問題
 2. Timer.periodic 沒有 cancel()
 3. StreamController 沒有 close()
 4. 缺少 tearDown
+5. testWidgets 中使用 Future.delayed 但沒有 tester.pump()
 
 使用方式：
     # 掃描單個檔案（嚴格模式，預設）
@@ -55,6 +56,7 @@ class ScanResult:
     long_delays: list[tuple[int, int]] = field(default_factory=list)  # (line, seconds)
     timer_periodics: list[int] = field(default_factory=list)  # line numbers
     stream_controllers: list[int] = field(default_factory=list)  # line numbers
+    testwidgets_no_pump: list[int] = field(default_factory=list)  # line numbers
     has_cancel: bool = False
     has_close: bool = False
 
@@ -101,10 +103,41 @@ def scan_file(file_path: Path) -> ScanResult:
         if 'StreamController' in line and 'broadcast()' in line:
             result.stream_controllers.append(line_num)
 
+    # 檢測 testWidgets 中使用 Future.delayed 但沒有 pump
+    _check_testwidgets_no_pump(content, result)
+
     # 生成問題報告
     _generate_issues(result)
 
     return result
+
+
+def _check_testwidgets_no_pump(content: str, result: ScanResult) -> None:
+    """檢測 testWidgets 中是否有 Future.delayed 但缺少 pump"""
+    # 找到所有 testWidgets 區塊（簡化版，足以處理大多數情況）
+    # 使用簡單的括號匹配策略
+    testwidgets_pattern = r'testWidgets\s*\([^,]+,\s*\([^)]*\)\s*async\s*\{'
+
+    for match in re.finditer(testwidgets_pattern, content):
+        start_pos = match.end() - 1  # 開始的 { 位置
+
+        # 簡單找到對應的閉合區塊（尋找下一個 testWidgets 或 test 或檔案結尾）
+        next_test = re.search(r'\n\s*(testWidgets|test|group)\s*\(', content[match.end():])
+        if next_test:
+            end_pos = match.end() + next_test.start()
+        else:
+            end_pos = len(content)
+
+        block = content[match.start():end_pos]
+
+        # 檢查區塊內是否有 Future.delayed 但沒有 pump
+        has_future_delayed = 'Future.delayed' in block
+        has_pump = 'pump' in block or 'pumpAndSettle' in block
+
+        if has_future_delayed and not has_pump:
+            # 計算行號
+            line_number = content[:match.start()].count('\n') + 1
+            result.testwidgets_no_pump.append(line_number)
 
 
 def _generate_issues(result: ScanResult) -> None:
@@ -143,6 +176,16 @@ def _generate_issues(result: ScanResult) -> None:
                 description="使用 StreamController.broadcast() 但沒有對應的 close()",
                 suggestion="在 dispose 方法中調用 controller.close()"
             ))
+
+    # testWidgets 無 pump 問題
+    for line_num in result.testwidgets_no_pump:
+        result.issues.append(Issue(
+            file_path=file_path,
+            line_number=line_num,
+            issue_type="testwidgets_no_pump",
+            description="testWidgets 中使用 Future.delayed 但沒有 tester.pump()",
+            suggestion="添加 tester.pump() 推進時間，或改用 test() 如果不需要 Widget 環境"
+        ))
 
 
 def scan_directory(dir_path: Path, recursive: bool = False) -> list[ScanResult]:
@@ -195,6 +238,7 @@ def print_report(results: list[ScanResult], strict: bool = True) -> bool:
     print("2. 將長延遲（>= 5秒）縮短為 100-500ms（足夠測試邏輯但不阻塞）")
     print("3. 確保 Timer.periodic 有對應的 cancel()")
     print("4. 確保 StreamController 有對應的 close()")
+    print("5. testWidgets 中使用 Future.delayed 需添加 pump()，或改用 test() 純邏輯測試")
 
     return True
 

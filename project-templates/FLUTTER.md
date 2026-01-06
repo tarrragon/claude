@@ -69,6 +69,37 @@ npx jest test/
 node test/
 ```
 
+### 🚨 MCP run_tests 使用限制（重要）
+
+**問題描述**: `mcp__dart__run_tests` 在執行全部測試時會卡住超過 20 分鐘，但 `flutter test` 直接執行約 85 秒完成。
+
+**根本原因**: MCP run_tests 在處理大量測試輸出時存在效能問題（實驗性功能）。
+
+**強制規範**:
+```bash
+# ❌ 嚴格禁止 - 會卡住超過 20 分鐘
+mcp__dart__run_tests (不指定 paths)
+
+# ✅ 正確 - 指定測試子目錄，限制輸出量
+mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/domains/"]}])
+mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/unit/core/"]}])
+
+# ✅ 推薦 - 使用 Bash 執行全量測試（最穩定）
+flutter test --reporter compact
+./.claude/hooks/test-summary.sh
+```
+
+**MCP run_tests 適用場景**:
+| 場景 | 是否適用 | 說明 |
+|------|---------|------|
+| 單一測試檔案 | ✅ 適用 | 輸出量小，可正常完成 |
+| 單一測試目錄 (paths) | ✅ 適用 | 如 `test/domains/`、`test/unit/core/` |
+| 全部測試（無 paths）| ❌ 禁止 | 會卡住，改用 `flutter test` |
+
+**相關文件**:
+- [Dart MCP Server 官方文檔](https://docs.flutter.dev/ai/mcp-server)
+- MCP 是實驗性功能，可能存在未知問題
+
 ### 🚨 全量測試執行規範（Context 保護機制）
 
 **問題背景**: `flutter test` 完整輸出超過 4.6MB (33,000+ 行)，會耗盡對話 context，導致無法確認測試結果。

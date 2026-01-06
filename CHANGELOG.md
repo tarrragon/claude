@@ -13,10 +13,10 @@
 
 ---
 
-## [1.1.4] - 2025-12-29
+## [1.1.4] - 2026-01-06
 
 ### Summary
-docs: TDD-Ticket 整合方案 - Phase 3a 強制單一職責評估
+feat: 新增 version-release 和 tech-debt-capture Skills
 
 ---
 

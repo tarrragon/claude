@@ -109,11 +109,16 @@ List<ProcessedBook> processBooks(List<Book> books) {
 
 #### 開發循環工具
 ```bash
-# 執行測試（優先使用此工具而非 bash）
+# 執行測試
 mcp__dart__run_tests
   - 執行 Dart/Flutter 測試
   - 提供 agent 友善的輸出格式
   - 自動整合測試結果
+
+  🚨 重要限制：
+  - ❌ 禁止不指定 paths 執行全部測試（會卡住 20+ 分鐘）
+  - ✅ 必須指定 paths 參數限制測試範圍
+  - ✅ 全量測試請改用 flutter test 或 test-summary.sh
 
 # Hot Reload（快速驗證變更）
 mcp__dart__hot_reload
@@ -295,9 +300,24 @@ bool validateBook(Book book) {
 - ✅ 錯誤處理規範
 
 #### 3.4 測試驅動開發循環
+
+🚨 **MCP run_tests 使用限制**：
 ```bash
-# 1. 執行測試（優先使用 Dart MCP）
-mcp__dart__run_tests
+# ❌ 嚴格禁止 - 會卡住超過 20 分鐘
+mcp__dart__run_tests (不指定 paths)
+
+# ✅ 正確 - 必須指定 paths 參數
+mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/domains/"]}])
+
+# ✅ 推薦 - 全量測試使用 Bash
+flutter test --reporter compact
+./.claude/hooks/test-summary.sh
+```
+
+**測試執行流程**：
+```bash
+# 1. 執行單一目錄測試（使用 MCP + paths）
+mcp__dart__run_tests(paths: ["test/unit/core/"])
 
 # 2. 查看測試失敗原因
 # 分析測試輸出，理解失敗原因
@@ -311,7 +331,10 @@ mcp__dart__hot_reload
 # 5. 檢查 Runtime Errors
 mcp__dart__get_runtime_errors --clearRuntimeErrors=true
 
-# 6. 重複循環直到所有測試通過
+# 6. 全量測試驗證（使用 Bash）
+flutter test --reporter compact
+
+# 7. 重複循環直到所有測試通過
 ```
 
 ### Step 4: 品質驗證

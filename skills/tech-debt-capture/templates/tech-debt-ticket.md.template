@@ -1,0 +1,70 @@
+---
+# === Identification ===
+ticket_id: "{TICKET_ID}"
+ticket_type: "tech-debt"
+version: "{TARGET_VERSION}"
+
+# === Technical Debt Specific ===
+source_version: "{SOURCE_VERSION}"
+source_uc: "{SOURCE_UC}"
+risk_level: "{RISK_LEVEL}"
+original_id: "{ORIGINAL_ID}"
+
+# === Single Responsibility ===
+action: "{ACTION}"
+target: "{TARGET}"
+
+# === Execution ===
+agent: "{AGENT}"
+
+# === 5W1H Design ===
+who: "{AGENT} (執行者) | rosemary-project-manager (分派者)"
+what: "{ACTION} {TARGET}"
+when: "v{TARGET_VERSION} 開發期間"
+where: "{LOCATION}"
+why: "{DESCRIPTION}"
+how: "[Task Type: Implementation] {SUGGESTED_TIMING}"
+
+# === Acceptance Criteria ===
+acceptance:
+  - 技術債務修復完成
+  - 相關測試通過
+  - 驗證修復有效性
+
+# === Related Files ===
+files:
+  - {RELATED_FILES}
+
+# === Dependencies ===
+dependencies: []
+
+# === Status Tracking ===
+status: "pending"
+assigned: false
+started_at: null
+completed_at: null
+---
+
+# Execution Log
+
+## Task Summary
+
+{ACTION} {TARGET}
+
+## Problem Analysis
+
+<!-- To be filled by executing agent -->
+
+## Solution
+
+<!-- To be filled by executing agent -->
+
+## Test Results
+
+<!-- To be filled by executing agent -->
+
+## Completion Info
+
+**Completion Time**: (pending)
+**Executing Agent**: {AGENT}
+**Review Status**: pending

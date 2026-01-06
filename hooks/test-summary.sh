@@ -24,7 +24,7 @@ LOG_FILE="$LOG_DIR/execution-$(date +%Y%m%d-%H%M%S).log"
 {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] 測試摘要執行開始"
   echo "  專案根目錄: $PROJECT_ROOT"
-  echo "  測試路徑: ${1:-.}"
+  echo "  測試路徑: ${1:-test/}"
   echo "  臨時檔案: $TEMP_JSON"
 } >> "$LOG_FILE"
 
@@ -52,7 +52,7 @@ cd "$PROJECT_ROOT"
 # 執行測試並捕獲輸出
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] 執行 flutter test 命令" >> "$LOG_FILE"
 
-if ! flutter test --reporter json ${1:-.} > "$TEMP_JSON" 2>&1; then
+if ! flutter test --reporter json ${1:-test/} > "$TEMP_JSON" 2>&1; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] flutter test 命令執行失敗 (exit code: $?)" >> "$LOG_FILE"
   # 即使測試失敗也繼續處理，因為我們需要分析失敗的測試
 fi
