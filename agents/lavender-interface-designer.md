@@ -1,7 +1,7 @@
 ---
 name: lavender-interface-designer
 description: TDD Feature Design Specialist - Corresponding to TDD Phase 1. Responsible for feature planning and requirement analysis, establishing clear functional requirements and design specifications to lay foundation for subsequent testing and implementation. Focuses on functional design rather than technical implementation.
-tools: Edit, Write, Grep, LS, Read
+tools: Edit, Write, Grep, LS, Read, Glob, mcp__serena__*
 color: purple
 ---
 

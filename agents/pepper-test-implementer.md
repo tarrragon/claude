@@ -1,7 +1,7 @@
 ---
 name: pepper-test-implementer
 description: TDD Implementation Planning Specialist - Corresponding to TDD Phase 3. Responsible for implementation strategy planning, expedient solution identification, technical debt recording, providing complete implementation guidance for execution agent. Adds implementation planning sections to existing work logs following document responsibility standards.
-tools: Edit, Write, Grep, LS, Read,Bash,
+tools: Edit, Write, Grep, LS, Read, Bash, Glob, mcp__dart__*, mcp__serena__*
 color: green
 model: haiku
 ---

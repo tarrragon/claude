@@ -200,6 +200,110 @@ def check_worklog_completed(version: str) -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
+def check_technical_debt_status(version: str) -> Dict:
+    """
+    檢查目標版本的技術債務處理狀態
+
+    Args:
+        version: 版本號 (例如 "0.20.5")
+
+    Returns:
+        {
+            "passed": bool,
+            "pending_count": int,
+            "pending_tds": list[dict],  # 包含 ticket_id, target, status
+            "message": str
+        }
+    """
+    root = get_project_root()
+    major_minor = ".".join(version.split(".")[:2])  # 0.20
+    version_series = f"v{major_minor}"  # v0.20
+
+    # 掃描版本系列的票目錄
+    worklog_dir = root / "docs" / "work-logs"
+    tickets_dir = worklog_dir / f"v{major_minor}.0" / "tickets"
+
+    result = {
+        "passed": True,
+        "pending_count": 0,
+        "pending_tds": [],
+        "message": "",
+    }
+
+    if not tickets_dir.exists():
+        result["message"] = f"找不到票目錄: {tickets_dir}"
+        return result
+
+    # 掃描所有 TD 檔案
+    td_files = list(tickets_dir.glob("*-TD-*.md"))
+
+    if not td_files:
+        result["message"] = f"找不到任何技術債務票 (v{major_minor}.x)"
+        return result
+
+    for td_file in sorted(td_files):
+        try:
+            with open(td_file, encoding="utf-8") as f:
+                content = f.read()
+
+            # 解析 frontmatter
+            match = re.search(r"^---\n(.*?)\n---", content, re.DOTALL)
+            if not match:
+                continue
+
+            frontmatter = match.group(1)
+
+            # 提取關鍵欄位
+            ticket_id_match = re.search(r"ticket_id:\s+(.+)", frontmatter)
+            status_match = re.search(r"status:\s+(.+)", frontmatter)
+            version_match = re.search(r"version:\s+(.+)", frontmatter)
+            deferred_match = re.search(r"deferred_from:\s+(.+)", frontmatter)
+            target_match = re.search(r"target:\s+(.+)", frontmatter)
+
+            ticket_id = ticket_id_match.group(1).strip() if ticket_id_match else ""
+            status = status_match.group(1).strip() if status_match else "unknown"
+            target_version = (
+                version_match.group(1).strip() if version_match else "unknown"
+            )
+            deferred_from = (
+                deferred_match.group(1).strip() if deferred_match else None
+            )
+            target_desc = target_match.group(1).strip() if target_match else ""
+
+            # 檢查是否為當前版本系列的待處理 TD
+            is_current_version = (
+                target_version == major_minor or target_version == f"0.{major_minor}"
+            )
+            is_pending = status == "pending"
+
+            if is_current_version and is_pending:
+                result["pending_count"] += 1
+                result["pending_tds"].append(
+                    {
+                        "ticket_id": ticket_id,
+                        "target": target_desc,
+                        "status": status,
+                        "file": td_file.name,
+                    }
+                )
+
+        except Exception as e:
+            # 忽略解析錯誤，繼續掃描
+            pass
+
+    # 設定檢查結果
+    if result["pending_count"] > 0:
+        result["passed"] = False
+        result["message"] = (
+            f"發現 {result['pending_count']} 個待處理技術債務（目標版本 v{major_minor}.x）"
+        )
+    else:
+        result["passed"] = True
+        result["message"] = f"技術債務已處理或延遲完畢"
+
+    return result
+
+
 def check_technical_debt(version: str) -> Tuple[bool, List[str]]:
     """檢查技術債務狀態"""
     root = get_project_root()
@@ -327,18 +431,44 @@ def preflight_check(version: str) -> Tuple[bool, Dict[str, Tuple[bool, List[str]
         for error in wl_errors:
             print_error(error)
 
-    # 1.2 檢查技術債務
-    print_info("✓ 檢查技術債務狀態...")
+    # 1.2 檢查技術債務狀態（新增：詳細掃描）
+    print_info("✓ 檢查技術債務處理狀態...")
+    td_status = check_technical_debt_status(version)
+    results["tech_debt_status"] = td_status
+
+    if td_status["passed"]:
+        print_success(td_status["message"])
+    else:
+        print_error(td_status["message"])
+
+        # 顯示待處理的 TD 詳情
+        if td_status["pending_tds"]:
+            print_info("\n待處理技術債務:", 1)
+            for td in td_status["pending_tds"]:
+                print_info(
+                    f"  - {td['ticket_id']}: {td['target']} ({td['status']})", 2
+                )
+
+            # 提供修復建議
+            print_info("\n解決方式:", 1)
+            print_info("  1. 處理這些技術債務後再發布", 2)
+            major_minor = ".".join(version.split(".")[:2])
+            next_version = f"{int(major_minor.split('.')[1]) + 1}"
+            next_major_minor = f"{major_minor.split('.')[0]}.{next_version}"
+            print_info(
+                f"  2. 使用 --defer-td {next_major_minor} 明確延後到下一版本", 2
+            )
+
+    # 1.3 檢查舊的技術債務檢查（保留相容性）
+    print_info("✓ 驗證技術債務分類...")
     td_ok, td_errors = check_technical_debt(version)
     results["tech_debt"] = (td_ok, td_errors)
 
-    if td_ok:
-        print_success("技術債務已處理")
-    else:
+    if not td_ok:
         for error in td_errors:
             print_error(error)
 
-    # 1.3 檢查版本同步
+    # 1.4 檢查版本同步
     print_info("✓ 檢查版本同步...")
     vs_ok, vs_errors = check_version_sync(version)
     results["version_sync"] = (vs_ok, vs_errors)
@@ -349,7 +479,7 @@ def preflight_check(version: str) -> Tuple[bool, Dict[str, Tuple[bool, List[str]
         for error in vs_errors:
             print_error(error)
 
-    all_ok = wl_ok and td_ok and vs_ok
+    all_ok = wl_ok and td_status["passed"] and td_ok and vs_ok
     return all_ok, results
 
 
@@ -441,6 +571,136 @@ def update_changelog(version: str, dry_run: bool = False) -> bool:
     except Exception as e:
         print_error(f"更新 CHANGELOG.md 失敗: {e}")
         return False
+
+
+def defer_technical_debts(version: str, defer_to_version: str, dry_run: bool = False) -> bool:
+    """
+    將待處理的技術債務延後到下一版本
+
+    Args:
+        version: 當前版本 (例如 "0.20.5")
+        defer_to_version: 延後到的版本 (例如 "0.21.0")
+        dry_run: 預覽模式
+
+    Returns:
+        True 如果成功，False 如果失敗
+    """
+    root = get_project_root()
+    major_minor = ".".join(version.split(".")[:2])
+
+    # 掃描版本系列的票目錄
+    worklog_dir = root / "docs" / "work-logs"
+    tickets_dir = worklog_dir / f"v{major_minor}.0" / "tickets"
+
+    if not tickets_dir.exists():
+        print_warning(f"找不到票目錄: {tickets_dir}")
+        return True
+
+    # 掃描所有 TD 檔案
+    td_files = list(tickets_dir.glob("*-TD-*.md"))
+    deferred_count = 0
+
+    for td_file in sorted(td_files):
+        try:
+            with open(td_file, encoding="utf-8") as f:
+                content = f.read()
+
+            # 解析 frontmatter
+            match = re.search(r"^---\n(.*?)\n---", content, re.DOTALL)
+            if not match:
+                continue
+
+            frontmatter = match.group(1)
+
+            # 提取關鍵欄位
+            status_match = re.search(r"status:\s+(.+)", frontmatter)
+            version_match = re.search(r"version:\s+(.+)", frontmatter)
+
+            status = status_match.group(1).strip() if status_match else "unknown"
+            target_version = (
+                version_match.group(1).strip() if version_match else "unknown"
+            )
+
+            # 只延後當前版本系列的待處理 TD
+            is_current_version = (
+                target_version == major_minor or target_version == f"0.{major_minor}"
+            )
+            is_pending = status == "pending"
+
+            if is_current_version and is_pending:
+                # 更新 frontmatter
+                new_frontmatter = frontmatter
+
+                # 更新 version 欄位
+                new_frontmatter = re.sub(
+                    r"version:\s+(.+)",
+                    f"version: {defer_to_version}",
+                    new_frontmatter,
+                )
+
+                # 更新或新增 deferred_from 欄位
+                if "deferred_from:" in new_frontmatter:
+                    new_frontmatter = re.sub(
+                        r"deferred_from:\s+(.+)",
+                        f"deferred_from: {major_minor}",
+                        new_frontmatter,
+                    )
+                else:
+                    # 在 version 欄位後新增 deferred_from
+                    new_frontmatter = re.sub(
+                        r"(version:\s+.+\n)",
+                        f"\\1deferred_from: {major_minor}\n",
+                        new_frontmatter,
+                    )
+
+                # 更新或新增 defer_reason 欄位
+                reason = f"版本 {version} 發布前延後至 {defer_to_version}"
+                if "defer_reason:" in new_frontmatter:
+                    new_frontmatter = re.sub(
+                        r'defer_reason:\s+(.+)',
+                        f'defer_reason: "{reason}"',
+                        new_frontmatter,
+                    )
+                else:
+                    # 在 deferred_from 欄位後新增 defer_reason
+                    new_frontmatter = re.sub(
+                        r"(deferred_from:\s+.+\n)",
+                        f'\\1defer_reason: "{reason}"\n',
+                        new_frontmatter,
+                    )
+
+                # 建立新的檔案內容
+                new_content = re.sub(
+                    r"^---\n(.*?)\n---",
+                    f"---\n{new_frontmatter}\n---",
+                    content,
+                    count=1,
+                    flags=re.DOTALL,
+                )
+
+                if not dry_run:
+                    with open(td_file, "w", encoding="utf-8") as f:
+                        f.write(new_content)
+
+                ticket_id_match = re.search(r"ticket_id:\s+(.+)", frontmatter)
+                ticket_id = (
+                    ticket_id_match.group(1).strip() if ticket_id_match else "unknown"
+                )
+
+                print_success(
+                    f"已延後 {ticket_id} 到版本 {defer_to_version}"
+                )
+                deferred_count += 1
+
+        except Exception as e:
+            print_warning(f"處理 {td_file.name} 時出錯: {e}")
+
+    if deferred_count > 0:
+        print_success(f"\n共延後 {deferred_count} 個技術債務")
+        return True
+    else:
+        print_info("沒有找到待延後的技術債務")
+        return True
 
 
 def update_todolist(version: str, dry_run: bool = False) -> bool:
@@ -779,14 +1039,32 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="版本發布整合工具",
+        description="版本發布整合工具 - 包含技術債務檢查和延後機制",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-範例:
-  uv run version_release.py release              # 自動偵測版本並發布
-  uv run version_release.py release --version 0.19.8  # 指定版本
-  uv run version_release.py check                # 只執行檢查
-  uv run version_release.py update-docs --dry-run  # 預覽文件更新
+常用範例:
+  # 檢查版本是否準備好發布
+  uv run version_release.py check --version 0.20
+
+  # 預覽發布流程
+  uv run version_release.py release --dry-run
+
+  # 標準發布流程
+  uv run version_release.py release --version 0.20.5
+
+  # 延後待處理 TD 後發布
+  uv run version_release.py release --version 0.20.5 --defer-td 0.21.0
+
+  # 預覽 TD 延後結果
+  uv run version_release.py release --version 0.20.5 --defer-td 0.21.0 --dry-run
+
+技術債務管理:
+  • 自動掃描待處理 TD (status: pending)
+  • 顯示詳細的 TD 清單和修復建議
+  • 支援 --defer-td 選項延後 TD 到下一版本
+  • 自動更新 version、deferred_from、defer_reason 欄位
+
+詳細文檔: 參考 README.md 和 TECH_DEBT_GUIDE.md
         """,
     )
 
@@ -797,6 +1075,7 @@ def main():
     release_parser.add_argument("--version", help="版本號 (X.Y 或 X.Y.Z)")
     release_parser.add_argument("--dry-run", action="store_true", help="預覽模式")
     release_parser.add_argument("--force", action="store_true", help="強制執行")
+    release_parser.add_argument("--defer-td", help="將待處理 TD 延後到指定版本 (例如 0.21.0)")
 
     # check 子命令
     check_parser = subparsers.add_parser("check", help="只執行檢查")
@@ -853,6 +1132,7 @@ def main():
 
         elif args.command == "release":
             dry_run = args.dry_run if hasattr(args, "dry_run") else False
+            defer_td = args.defer_td if hasattr(args, "defer_td") else None
 
             header = f"Version Release Tool - {version}"
             if dry_run:
@@ -862,6 +1142,16 @@ def main():
 
             if dry_run:
                 print_warning("預覽模式：不會執行實際的 git 操作\n")
+
+            # 如果指定了 --defer-td，先延後 TD
+            if defer_td:
+                print_section("Step 0: Defer Technical Debts")
+                print_info(f"📋 將待處理 TD 延後到版本 {defer_td}...")
+                defer_result = defer_technical_debts(version, defer_td, dry_run)
+
+                if not defer_result:
+                    print_error("\n技術債務延後失敗，發布已中止")
+                    return 1
 
             # 執行 Pre-flight 檢查
             ok, results = preflight_check(version)

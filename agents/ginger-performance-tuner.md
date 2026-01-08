@@ -1,7 +1,7 @@
 ---
 name: ginger-performance-tuner
 description: 效能優化規劃專家. MUST BE ACTIVELY USED for 效能分析策略設計, 記憶體優化方法規劃, and 載入速度改善策略設計. 設計並規劃 Chrome Extensions 和 web applications 的效能優化策略，為執行代理人提供完整的實作指引.
-tools: Grep, LS, Read
+tools: Grep, LS, Read, Glob, mcp__dart__hover
 color: orange
 model: haiku
 ---

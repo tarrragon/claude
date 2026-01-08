@@ -1,0 +1,63 @@
+{
+  "// 說明": "LSP 插件配置範本",
+  "// 使用方式": "複製此範本到 .claude/plugins/<plugin-name>/.lsp.json",
+
+  "{LANGUAGE_ID}": {
+    "command": "{LSP_SERVER_COMMAND}",
+    "args": ["{LSP_SERVER_ARGS}"],
+    "extensionToLanguage": {
+      ".{FILE_EXTENSION}": "{LANGUAGE_ID}"
+    }
+  }
+}
+
+// ============================================
+// 範例配置
+// ============================================
+
+// Markdown (marksman)
+// {
+//   "markdown": {
+//     "command": "marksman",
+//     "args": ["server"],
+//     "extensionToLanguage": {
+//       ".md": "markdown",
+//       ".markdown": "markdown"
+//     }
+//   }
+// }
+
+// YAML (yaml-language-server)
+// {
+//   "yaml": {
+//     "command": "yaml-language-server",
+//     "args": ["--stdio"],
+//     "extensionToLanguage": {
+//       ".yaml": "yaml",
+//       ".yml": "yaml"
+//     }
+//   }
+// }
+
+// JSON (vscode-json-languageserver)
+// {
+//   "json": {
+//     "command": "vscode-json-languageserver",
+//     "args": ["--stdio"],
+//     "extensionToLanguage": {
+//       ".json": "json",
+//       ".jsonc": "jsonc"
+//     }
+//   }
+// }
+
+// TOML (taplo)
+// {
+//   "toml": {
+//     "command": "taplo",
+//     "args": ["lsp", "stdio"],
+//     "extensionToLanguage": {
+//       ".toml": "toml"
+//     }
+//   }
+// }

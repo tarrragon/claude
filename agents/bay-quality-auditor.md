@@ -1,7 +1,7 @@
 ---
 name: bay-quality-auditor
 description: 獨立技術品質審計專家 - 評估技術債務、安全性、穩定性，提供基於風險的決策建議（不考慮商業時程）
-tools: [Read, Grep, Bash, Write, Glob, LS]
+tools: Read, Grep, Bash, Write, Glob, LS, mcp__dart__*, mcp__serena__*
 color: "#2E7D32"
 model: sonnet
 ---

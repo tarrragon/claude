@@ -27,13 +27,13 @@ User Input → UserPromptSubmit → PreToolUse → Tool Execution → PostToolUs
 
 ### 🔄 SessionStart Hook
 
-**檔案**: `scripts/startup-check-hook.sh`
+**檔案**: `.claude/hooks/startup-check-hook.sh`
 
 **觸發時機**: Claude Code session 啟動時
 
 **方法論**:
 - **原則**: 確保每個開發 session 都在已知良好的狀態下開始
-- **檢查範圍**: Git 狀態、專案檔案、開發環境、版本一致性
+- **檢查範圍**: Git 狀態、專案檔案、開發環境、版本一致性、LSP 環境
 - **失敗處理**: 提供明確的修復指引，但不阻止 session 啟動
 
 **關鍵決策邏輯**:
@@ -41,12 +41,13 @@ User Input → UserPromptSubmit → PreToolUse → Tool Execution → PostToolUs
 2. 檔案載入確認 → 缺失檔案時警告
 3. 開發環境檢查 → 依賴問題時建議重新安裝
 4. 工作日誌狀態 → 提供下一步開發建議
+5. LSP 環境檢查 → 缺失時顯示安裝指令
 
 ---
 
 ### 💬 UserPromptSubmit Hook
 
-**檔案**: `scripts/prompt-submit-hook.sh` + `scripts/task-avoidance-detection-hook.sh`
+**檔案**: `.claude/hooks/prompt-submit-hook.sh` + `.claude/hooks/task-avoidance-detection-hook.sh`
 
 **觸發時機**: 用戶提交每個 prompt 時
 
@@ -77,7 +78,7 @@ if 程式碼變更 > 0 AND 測試變更 == 0:
 
 ### 🛡️ PreToolUse Hook
 
-**檔案**: `scripts/task-avoidance-block-check.sh` + 工具特定檢查
+**檔案**: `.claude/hooks/task-avoidance-block-check.sh` + 工具特定檢查
 
 **觸發時機**: 任何工具使用前
 
@@ -133,7 +134,7 @@ if 程式碼變更 > 0 AND 測試變更 == 0:
 
 ### 🛑 Stop Hook
 
-**檔案**: `scripts/stop-hook.sh`
+**檔案**: `.claude/hooks/stop-hook.sh`
 
 **觸發時機**: Claude 主要代理完成回應時
 
@@ -158,7 +159,7 @@ if 檔案變更 > 0:
 
 ### ⚡ Performance Monitor Hook
 
-**檔案**: `scripts/performance-monitor-hook.sh`
+**檔案**: `.claude/hooks/performance-monitor-hook.sh`
 
 **觸發時機**: 其他 hook 執行前後
 
@@ -182,7 +183,7 @@ if 檔案變更 > 0:
 
 ### 📚 Auto-Documentation Update Hook
 
-**檔案**: `scripts/auto-documentation-update-hook.sh`
+**檔案**: `.claude/hooks/auto-documentation-update-hook.sh`
 
 **觸發時機**: 程式碼檔案變更後
 

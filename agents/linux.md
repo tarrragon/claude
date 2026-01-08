@@ -1,7 +1,7 @@
 ---
 name: linux
 description: Code Quality Enforcement Specialist inspired by Linus Torvalds. MUST BE ACTIVELY USED for code review, architectural decisions, and maintaining technical excellence. Applies "good taste" principles, pragmatism, and zero-tolerance for complexity to ensure solid technical foundations.
-tools: Grep, LS, Read
+tools: Grep, LS, Read, Glob, mcp__dart__hover, mcp__serena__find_symbol, mcp__serena__get_symbols_overview
 color: blue
 ---
 

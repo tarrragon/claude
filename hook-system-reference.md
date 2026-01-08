@@ -263,16 +263,19 @@ ls -t .claude/hook-logs/smell-reports/ | head -1
 ### 手動執行關鍵檢查
 ```bash
 # 手動執行逃避偵測
-./scripts/task-avoidance-detection-hook.sh
+./.claude/hooks/task-avoidance-detection-hook.sh
 
 # 手動執行程式異味檢查
-./scripts/code-smell-detection-hook.sh
+./.claude/hooks/code-smell-detection-hook.sh
 
 # 手動執行效能分析
-./scripts/performance-monitor-hook.sh
+./.claude/hooks/performance-monitor-hook.sh
 
 # 手動執行 PM 觸發檢查
-./scripts/pm-trigger-hook.sh
+./.claude/hooks/pm-trigger-hook.sh
+
+# 手動執行 LSP 環境檢查
+./.claude/hooks/lsp-environment-check.py
 ```
 
 ## 🎯 最佳實踐

@@ -256,6 +256,29 @@ log "💡 提醒: Phase 3 分為兩階段執行"
 log "   - Phase 3a (pepper): 語言無關策略規劃"
 log "   - Phase 3b ($PHASE_3B_AGENT): $PROJECT_TYPE 特定實作"
 
+# 6.6 LSP 環境檢查
+log "🔍 LSP 環境檢查"
+if [ -x "$SCRIPT_DIR/lsp-environment-check.py" ]; then
+    # 檢查 UV 是否可用
+    if command -v uv &> /dev/null; then
+        "$SCRIPT_DIR/lsp-environment-check.py" 2>&1 | while read -r line; do
+            log "$line"
+        done
+        LSP_EXIT_CODE=${PIPESTATUS[0]}
+
+        if [ $LSP_EXIT_CODE -eq 0 ]; then
+            log "✅ LSP 環境檢查完成"
+        else
+            log "⚠️  LSP 環境檢查發現問題，請查看詳細記錄"
+        fi
+    else
+        log "⚠️  UV 未安裝，跳過 LSP 環境檢查"
+        log "💡 安裝 UV: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    fi
+else
+    log "⚠️  LSP 環境檢查腳本不存在: $SCRIPT_DIR/lsp-environment-check.py"
+fi
+
 # 7. 5W1H 強制執行機制初始化
 log "🎯 初始化 5W1H 強制執行機制"
 

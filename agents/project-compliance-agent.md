@@ -1,7 +1,7 @@
 ---
 name: project-compliance-agent
 description: Special-Case Compliance Specialist. Handles complex compliance scenarios that cannot be automated by the Hook system. Focuses on cross-document consistency, regulatory requirements, and manual backup procedures when Hook automation fails.
-tools: Edit, Write, Read, Bash, Grep, LS
+tools: Edit, Write, Read, Bash, Grep, LS, Glob, mcp__serena__*
 color: yellow
 model: haiku
 ---

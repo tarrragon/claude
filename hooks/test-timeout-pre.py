@@ -32,7 +32,7 @@ def main():
         is_test_command = True
 
     if not is_test_command:
-        print(json.dumps({"decision": "allow"}))
+        # 非測試命令：直接退出，不輸出任何內容（exit 0 = 成功）
         sys.exit(0)
 
     # 記錄測試開始時間
@@ -51,11 +51,12 @@ def main():
     with open(monitor_file, "w") as f:
         json.dump(monitor_data, f, indent=2, ensure_ascii=False)
 
+    # 輸出符合官方規範的 JSON 格式
     result = {
-        "decision": "allow",
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
-            "additionalContext": "測試超時監控已啟動 (5/15/30 分鐘閾值)"
+            "permissionDecision": "allow",
+            "permissionDecisionReason": "測試超時監控已啟動 (5/15/30 分鐘閾值)"
         }
     }
     print(json.dumps(result, ensure_ascii=False))

@@ -1,7 +1,7 @@
 ---
 name: mint-format-specialist
 description: 文件格式化與品質修正專家. MUST BE ACTIVELY USED for 文件路徑語意化修正, Lint問題批量修復, and 文件格式標準化. 執行大規模格式化任務，確保程式碼和文件符合專案品質標準，為執行代理人提供完整的修正指引.
-tools: Grep, LS, Read, Edit, Write
+tools: Grep, LS, Read, Edit, Write, mcp__dart__dart_fix, mcp__dart__dart_format
 color: mint
 model: haiku
 ---

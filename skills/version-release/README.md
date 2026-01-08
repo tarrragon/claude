@@ -38,7 +38,8 @@ version-release/
 
 ### Step 1: Pre-flight 檢查
 - ✅ 驗證工作日誌完成度（Phase 0-4）
-- ✅ 檢查技術債務分類狀態
+- ✅ 檢查技術債務處理狀態（詳細掃描 pending TD）
+- ✅ 驗證技術債務分類
 - ✅ 驗證版本號同步（pubspec.yaml、git、工作日誌）
 - ✅ 檢查 git 分支和工作目錄狀態
 
@@ -67,6 +68,7 @@ Options:
   --version TEXT    版本號 (X.Y 或 X.Y.Z)
   --dry-run        預覽模式，不執行實際 git 操作
   --force          強制執行，跳過某些檢查
+  --defer-td TEXT  將待處理 TD 延後到指定版本 (例如 0.21.0)
 ```
 
 **範例**:
@@ -79,6 +81,12 @@ uv run .claude/skills/version-release/scripts/version_release.py release --dry-r
 
 # 指定版本並發布
 uv run .claude/skills/version-release/scripts/version_release.py release --version 0.19.8
+
+# 延後待處理 TD 並發布
+uv run .claude/skills/version-release/scripts/version_release.py release --version 0.20.5 --defer-td 0.21.0
+
+# 預覽 TD 延後結果
+uv run .claude/skills/version-release/scripts/version_release.py release --version 0.20.5 --defer-td 0.21.0 --dry-run
 ```
 
 ### `check` - 只執行檢查
@@ -116,9 +124,60 @@ Options:
 
 - 完成 Phase 4 重構評估
 - 所有工作日誌已記錄
-- 技術債務已分類
+- 技術債務已分類和標記版本
 - 在 `feature/v{VERSION}` 分支上
 - 所有變更已提交
+
+## 技術債務檢查機制
+
+### 自動掃描流程
+
+發布時，工具會自動掃描版本目錄下的所有技術債務票（`*-TD-*.md` 檔案），檢查：
+
+1. **待處理狀態**: `status: pending` 且 `version` 欄位等於當前版本系列
+2. **詳細報告**: 列出所有待處理 TD 的 ticket_id、目標描述和狀態
+3. **修復建議**: 提供兩種解決方式
+
+### 兩種解決方式
+
+#### 方式 1: 立即處理 TD
+```bash
+# 1. 處理所有待處理的技術債務
+#    根據提示在 TD 票中填充實作日誌
+
+# 2. 執行發布
+uv run .claude/skills/version-release/scripts/version_release.py release --version 0.20.5
+```
+
+#### 方式 2: 延後 TD 到下一版本
+```bash
+# 使用 --defer-td 選項明確延後 TD
+uv run .claude/skills/version-release/scripts/version_release.py release --version 0.20.5 --defer-td 0.21.0
+
+# 此命令會：
+# 1. 更新所有 pending TD 的 version 欄位為 0.21.0
+# 2. 設定 deferred_from 欄位為 0.20.0
+# 3. 記錄 defer_reason（延後原因）
+# 4. 繼續完整發布流程
+```
+
+### 技術債務檔案結構
+
+```yaml
+---
+ticket_id: 0.20.0-TD-001
+version: 0.21.0              # 目標版本
+deferred_from: 0.20.0        # 延後自哪個版本
+defer_reason: "說明延後原因"   # 延後原因
+status: pending              # pending / in-progress / completed
+---
+```
+
+### 最佳實踐
+
+1. **優先處理**: 盡量在發布前處理待處理的 TD
+2. **必要延後**: 若無法在當前版本處理，使用 `--defer-td` 明確標記
+3. **定期追蹤**: 利用 defer_reason 記錄延後原因，定期檢查已延後的 TD
 
 ## 使用流程
 

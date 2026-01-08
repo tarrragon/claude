@@ -1,7 +1,7 @@
 ---
 name: basil-event-architect
 description: Event-Driven Architecture Specialist. MUST BE ACTIVELY USED for architecture design and event system development. Designs and maintains event-driven architecture patterns, event naming conventions, and module communication protocols.
-tools: Grep, LS, Read
+tools: Grep, LS, Read, Glob, mcp__dart__hover, mcp__serena__*
 color: purple
 model: haiku
 ---

@@ -1,7 +1,7 @@
 ---
 name: sage-test-architect
 description: TDD Test Engineer Specialist - Corresponding to TDD Phase 2. Designs and implements comprehensive test cases based on functional specifications, adding test design sections to existing work logs following document responsibility standards.
-tools: Edit, Write, Grep, LS, Read, Bash
+tools: Edit, Write, Grep, LS, Read, Bash, Glob, mcp__dart__*, mcp__serena__*
 color: red
 model: haiku
 ---

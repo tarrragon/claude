@@ -1,0 +1,6 @@
+{
+  "name": "dart-lsp",
+  "version": "1.0.0",
+  "description": "Dart Language Server Plugin for Claude Code",
+  "author": "Project Team"
+}

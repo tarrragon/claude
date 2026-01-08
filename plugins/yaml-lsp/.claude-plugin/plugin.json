@@ -1,0 +1,6 @@
+{
+  "name": "yaml-lsp",
+  "version": "1.0.0",
+  "description": "YAML Language Server for Claude Code - ticket frontmatter support",
+  "author": "Book Overview App Team"
+}

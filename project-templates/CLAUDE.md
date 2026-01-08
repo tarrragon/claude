@@ -505,6 +505,7 @@ git log --oneline -5
    ├─ Hook 開發 → basil-hook-architect ✅
    ├─ 文件整合 → thyme-documentation-integrator ✅
    ├─ 程式碼格式化 → mint-format-specialist ✅
+   ├─ MCP 工具任務 → general-purpose ✅ (避免 MCP 佔用主線程 context)
    ├─ 應用程式開發 → 進入步驟 2
    └─ 其他專業任務 → 對應專業代理人
 
@@ -522,6 +523,7 @@ git log --oneline -5
 | **整合工作日誌到方法論** | parsley-flutter-developer | **thyme-documentation-integrator** | 文件整合是專業任務 |
 | **格式化 Dart 程式碼** | 主線程 | **mint-format-specialist** | 格式化是專業任務 |
 | **開發 Flutter Widget** | basil-hook-architect | **parsley-flutter-developer** | Flutter 應用程式開發 |
+| **使用 MCP 工具分析程式碼** | 主線程直接調用 | **general-purpose** | 避免 MCP 佔用主線程 context |
 
 ### 🔧 Startup Hook 自動分派（僅供參考）
 
@@ -561,6 +563,9 @@ git log --oneline -5
 - **cinnamon-refactor-owl**: TDD Phase 4 重構執行
 - **bay-quality-auditor**: 獨立技術品質審計專家（不考慮商業時程）
 - **memory-network-builder**: 記憶網路建構
+
+**MCP 工具代理人**（內建代理人）：
+- **general-purpose**: MCP 工具任務委派（可訪問所有 MCP 工具，用於避免 MCP 輸出佔用主線程 context）
 
 **語言特定代理人**（應用程式開發）：
 - **parsley-flutter-developer**: Flutter/Dart 應用程式開發
@@ -668,6 +673,58 @@ python .claude/hooks/agent_dispatch_recovery.py stats
 
 ## 🔧 開發工具和指令
 
+### 🚀 LSP 優先策略（強制）
+
+**核心原則**：LSP 能解決的問題必須優先使用 LSP
+
+**優先使用 LSP 的理由**：
+1. **效能優勢**：~50ms vs ~45 秒（900x 加速）
+2. **Token 效率**：LSP 返回結構化資料，佔用 Token 遠低於 MCP 工具的完整輸出
+3. **語意精準**：基於語言伺服器的語意分析，而非文字比對
+
+**適用範圍**（不限於 Flutter，跨語言通用）：
+
+| 語言 | LSP 伺服器 | 安裝方式 |
+|------|-----------|---------|
+| Dart/Flutter | dart-analyzer | `/plugin install dart-analyzer@claude-code-lsps` |
+| TypeScript/JavaScript | vtsls | `/plugin install vtsls@claude-code-lsps` |
+| Python | pyright | `/plugin install pyright@claude-code-lsps` |
+| Go | gopls | `/plugin install gopls@claude-code-lsps` |
+| Rust | rust-analyzer | `/plugin install rust-analyzer@claude-code-lsps` |
+| Markdown | marksman | 自建插件（見 `.claude/plugins/marksman-lsp/`） |
+| YAML | yaml-language-server | 自建插件（見 `.claude/plugins/yaml-lsp/`） |
+
+**LSP 9 種操作**：
+
+| 操作 | 用途 | 使用場景 |
+|------|------|---------|
+| `goToDefinition` | 跳轉定義 | 追蹤符號來源 |
+| `findReferences` | 查找引用 | 重構影響分析 |
+| `hover` | 懸停資訊 | 查看型別和文件 |
+| `documentSymbol` | 文件符號 | 理解檔案結構 |
+| `workspaceSymbol` | 工作區搜尋 | 跨檔案符號查找 |
+| `goToImplementation` | 實作查找 | 找出介面實作 |
+| `prepareCallHierarchy` | 呼叫層級 | 準備呼叫分析 |
+| `incomingCalls` | 呼叫來源 | 誰呼叫這個函式 |
+| `outgoingCalls` | 呼叫目標 | 這個函式呼叫誰 |
+
+**工具優先順序**：
+1. ✅ **最優先**：LSP 工具（goToDefinition, findReferences, callHierarchy, hover）
+2. 🎯 **次優先**：Skill（`/lsp-first` 等封裝好的工作流）
+3. ⚠️ **補充**：語言 MCP（測試執行、Hot Reload 等 LSP 無法提供的功能）
+4. 📦 **委派**：Serena MCP（大規模分析時委派給 `general-purpose`，避免佔用 context）
+
+**強制要求**：
+- 符號查找 → 使用 LSP `goToDefinition`
+- 引用追蹤 → 使用 LSP `findReferences`
+- 呼叫分析 → 使用 LSP `callHierarchy`（`incomingCalls` / `outgoingCalls`）
+- Hover 資訊 → 使用 LSP `hover`
+- 大規模 MCP 分析 → 委派給 `general-purpose` 代理人
+
+**相關 Skill**：`/lsp-first` - LSP 使用方法論和配置指南
+
+---
+
 ### 🤖 Serena MCP - 智慧程式碼檢索與編輯工具
 
 **Serena 是強大的程式碼代理工具包，提供類似 IDE 的語意程式碼檢索和編輯功能**
@@ -692,6 +749,46 @@ python .claude/hooks/agent_dispatch_recovery.py stats
 - API 更新檢查 - 確保使用最新的 Flutter/Dart API
 - 第三方套件升級 - 查詢套件最新版本的用法變更
 - 最佳實踐確認 - 驗證當前實作是否符合最新標準
+
+### 🎯 MCP 委派最佳實踐
+
+**⚠️ 重要：LSP 優先於 MCP**
+
+在使用 MCP 之前，必須先確認 LSP 無法滿足需求：
+
+| 工具類型 | 優先級 | 適用場景 |
+|---------|-------|---------|
+| **LSP 工具** | 1️⃣ 最優先 | 符號查找、引用追蹤、hover、呼叫層級 |
+| **Skill** | 2️⃣ 次優先 | `/lsp-first` 等封裝好的工作流 |
+| **MCP 委派** | 3️⃣ 補充使用 | LSP 無法滿足時的大規模分析、批量操作 |
+
+**MCP 委派適用場景**（LSP 無法完成時）：
+- 跨多檔案的大規模符號分析
+- 需要 Serena 的符號編輯功能（`replace_symbol_body`）
+- 專案整體架構分析
+- Context7 文件查詢
+
+**當確定需要 MCP 時，委派給 `general-purpose` 代理人處理**，避免 MCP 輸出佔用主線程 context。
+
+**使用方式**：
+```python
+Task(
+    subagent_type="general-purpose",
+    description="MCP 程式碼分析",
+    prompt="""
+    使用 mcp__serena__find_symbol 查找 XXX 符號，
+    分析其引用關係，回報以下資訊：
+    1. 符號位置
+    2. 引用數量
+    3. 主要使用場景
+    """
+)
+```
+
+**優點**：
+- ✅ MCP 輸出在代理人 context 中處理，不佔用主線程
+- ✅ 代理人返回精簡報告，主線程只需讀取結果
+- ✅ 適合大規模程式碼分析和批量符號查找
 
 **語言特定工具鏈指令（測試、建置、品質檢查）請參考**：[`FLUTTER.md`](./FLUTTER.md)
 

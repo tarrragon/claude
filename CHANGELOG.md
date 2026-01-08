@@ -13,10 +13,10 @@
 
 ---
 
-## [1.1.4] - 2026-01-06
+## [1.1.4] - 2026-01-09
 
 ### Summary
-feat: 新增 version-release 和 tech-debt-capture Skills
+feat: MCP 委派最佳實踐與工具優先順序更新
 
 ---
 

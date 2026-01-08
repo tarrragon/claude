@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.1.0",
+
+  "basic_lsp": {
+    "marksman": {
+      "name": "Marksman",
+      "command": "marksman",
+      "install": {
+        "macos": "brew install marksman",
+        "linux": "brew install marksman",
+        "windows": "scoop install marksman"
+      }
+    },
+    "yaml-language-server": {
+      "name": "YAML Language Server",
+      "command": "yaml-language-server",
+      "install": {
+        "macos": "npm install -g yaml-language-server",
+        "linux": "npm install -g yaml-language-server",
+        "windows": "npm install -g yaml-language-server"
+      }
+    }
+  },
+
+  "language_specific_lsp": {
+    "dart": {
+      "name": "Dart Analysis Server",
+      "command": "dart",
+      "project_indicators": ["pubspec.yaml"],
+      "install": {
+        "macos": "brew install dart-sdk",
+        "linux": "sudo apt install dart",
+        "windows": "choco install dart-sdk"
+      }
+    },
+    "vtsls": {
+      "name": "VtsLS",
+      "command": "vtsls",
+      "project_indicators": ["tsconfig.json", "jsconfig.json", "package.json"],
+      "install": {
+        "macos": "npm install -g @vtsls/language-server",
+        "linux": "npm install -g @vtsls/language-server",
+        "windows": "npm install -g @vtsls/language-server"
+      }
+    },
+    "pyright": {
+      "name": "Pyright",
+      "command": "pyright",
+      "project_indicators": ["requirements.txt", "pyproject.toml", "setup.py"],
+      "install": {
+        "macos": "npm install -g pyright",
+        "linux": "npm install -g pyright",
+        "windows": "npm install -g pyright"
+      }
+    },
+    "gopls": {
+      "name": "gopls",
+      "command": "gopls",
+      "project_indicators": ["go.mod"],
+      "install": {
+        "macos": "go install golang.org/x/tools/gopls@latest",
+        "linux": "go install golang.org/x/tools/gopls@latest",
+        "windows": "go install golang.org/x/tools/gopls@latest"
+      }
+    },
+    "rust-analyzer": {
+      "name": "rust-analyzer",
+      "command": "rust-analyzer",
+      "project_indicators": ["Cargo.toml"],
+      "install": {
+        "macos": "brew install rust-analyzer",
+        "linux": "rustup component add rust-analyzer",
+        "windows": "rustup component add rust-analyzer"
+      }
+    }
+  },
+
+  "project_type_detection": {
+    "flutter": {
+      "indicators": ["pubspec.yaml"],
+      "required_lsp": ["dart"],
+      "display_name": "Flutter/Dart"
+    },
+    "typescript": {
+      "indicators": ["tsconfig.json"],
+      "required_lsp": ["vtsls"],
+      "display_name": "TypeScript"
+    },
+    "javascript": {
+      "indicators": ["package.json"],
+      "required_lsp": ["vtsls"],
+      "display_name": "JavaScript"
+    },
+    "python": {
+      "indicators": ["requirements.txt", "pyproject.toml"],
+      "required_lsp": ["pyright"],
+      "display_name": "Python"
+    },
+    "go": {
+      "indicators": ["go.mod"],
+      "required_lsp": ["gopls"],
+      "display_name": "Go"
+    },
+    "rust": {
+      "indicators": ["Cargo.toml"],
+      "required_lsp": ["rust-analyzer"],
+      "display_name": "Rust"
+    }
+  },
+
+  "settings": {
+    "auto_install": false,
+    "show_install_commands": true
+  }
+}
