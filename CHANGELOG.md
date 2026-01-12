@@ -16,7 +16,7 @@
 ## [1.1.4] - 2026-01-13
 
 ### Summary
-feat(doc-flow): 建立五重文件管理系統
+sync: 加強 5W1H 格式要求，移除 TodoWrite Hook 檢查
 
 ---
 

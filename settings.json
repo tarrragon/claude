@@ -15,12 +15,6 @@
         ]
       },
       {
-        "matcher": "TodoWrite",
-        "hooks": [
-          {"type": "command", "command": ".claude/hooks/5w1h-compliance-check-hook.py"}
-        ]
-      },
-      {
         "matcher": "Edit",
         "hooks": [
           {"type": "command", "command": ".claude/hooks/branch-verify-hook.py"}
