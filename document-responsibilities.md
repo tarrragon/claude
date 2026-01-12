@@ -1,6 +1,17 @@
-# 📚 專案文件責任明確區分
+# 專案文件責任明確區分
 
-## 三大核心文件的不同用途與寫作風格
+> **DEPRECATED (已棄用)**
+>
+> 本文件描述的是舊版「三重文件系統」，已被「五重文件系統」取代。
+>
+> **請改用新版本**：[五重文件系統方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/five-document-system-methodology.md)
+>
+> 棄用日期：2026-01-13
+> 取代者：five-document-system-methodology.md
+
+---
+
+## [已棄用] 三大核心文件的不同用途與寫作風格
 
 **文件責任分工的重要性**: 每種文件都有明確且不同的目標讀者和用途，絕不可混淆責任或寫作風格
 

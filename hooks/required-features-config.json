@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "description": "Session 啟動必要功能檢查清單 - 確保所有關鍵功能在啟動時正常運作",
+
+  "features": [
+    {
+      "id": "lsp-environment",
+      "name": "LSP Environment",
+      "description": "Language Server Protocol 環境檢查",
+      "category": "development-tools",
+      "check_type": "script",
+      "check_script": ".claude/hooks/lsp-environment-check.py",
+      "required": true,
+      "priority": 1,
+      "failure_action": "warn",
+      "remediation": "執行 LSP 安裝指令或檢查 PATH 設定"
+    },
+    {
+      "id": "5w1h-pretooluse-hook",
+      "name": "5W1H PreToolUse Hook",
+      "description": "5W1H 決策框架 - TodoWrite 合規檢查",
+      "category": "quality-assurance",
+      "check_type": "settings_hook",
+      "hook_event": "PreToolUse",
+      "hook_matcher": "TodoWrite",
+      "hook_command": ".claude/hooks/5w1h-compliance-check-hook.py",
+      "required": true,
+      "priority": 2,
+      "failure_action": "block",
+      "remediation": "將 5w1h-compliance-check-hook.py 註冊到 settings.json PreToolUse/TodoWrite"
+    },
+    {
+      "id": "5w1h-userprompt-hook",
+      "name": "5W1H UserPromptSubmit Hook",
+      "description": "5W1H 決策框架 - 對話合規性提醒",
+      "category": "quality-assurance",
+      "check_type": "settings_hook",
+      "hook_event": "UserPromptSubmit",
+      "hook_matcher": null,
+      "hook_command": ".claude/hooks/prompt-submit-hook.sh",
+      "required": true,
+      "priority": 3,
+      "failure_action": "warn",
+      "remediation": "將 prompt-submit-hook.sh 註冊到 settings.json UserPromptSubmit"
+    },
+    {
+      "id": "5w1h-token-generator",
+      "name": "5W1H Token Generator",
+      "description": "5W1H Session Token 生成腳本",
+      "category": "quality-assurance",
+      "check_type": "script_exists",
+      "script_path": ".claude/hooks/5w1h-token-generator.sh",
+      "required": true,
+      "priority": 4,
+      "failure_action": "warn",
+      "remediation": "確認 5w1h-token-generator.sh 存在且有執行權限"
+    },
+    {
+      "id": "style-guardian-hook",
+      "name": "Style Guardian Hook",
+      "description": "統一設計系統強制檢查",
+      "category": "quality-assurance",
+      "check_type": "settings_hook",
+      "hook_event": "PostToolUse",
+      "hook_matcher": "Edit",
+      "hook_command": ".claude/hooks/style-guardian-hook.py",
+      "required": false,
+      "priority": 5,
+      "failure_action": "warn",
+      "remediation": "將 style-guardian-hook.py 註冊到 settings.json PostToolUse/Edit"
+    },
+    {
+      "id": "test-timeout-hook",
+      "name": "Test Timeout Hook",
+      "description": "測試執行逾時保護",
+      "category": "development-tools",
+      "check_type": "settings_hook",
+      "hook_event": "PreToolUse",
+      "hook_matcher": "Bash",
+      "hook_command": ".claude/hooks/test-timeout-pre.py",
+      "required": false,
+      "priority": 6,
+      "failure_action": "warn",
+      "remediation": "將 test-timeout-pre.py 註冊到 settings.json PreToolUse/Bash"
+    },
+    {
+      "id": "branch-verify-hook",
+      "name": "Branch Verify Hook",
+      "description": "分支驗證檢查 - 預防在保護分支上直接編輯",
+      "category": "quality-assurance",
+      "check_type": "settings_hook",
+      "hook_event": "PreToolUse",
+      "hook_matcher": "Edit",
+      "hook_command": ".claude/hooks/branch-verify-hook.py",
+      "required": true,
+      "priority": 7,
+      "failure_action": "warn",
+      "remediation": "將 branch-verify-hook.py 註冊到 settings.json PreToolUse/Edit 和 PreToolUse/Write"
+    },
+    {
+      "id": "branch-status-reminder",
+      "name": "Branch Status Reminder",
+      "description": "Session 啟動分支狀態提醒",
+      "category": "quality-assurance",
+      "check_type": "settings_hook",
+      "hook_event": "SessionStart",
+      "hook_matcher": null,
+      "hook_command": ".claude/hooks/branch-status-reminder.py",
+      "required": true,
+      "priority": 8,
+      "failure_action": "warn",
+      "remediation": "將 branch-status-reminder.py 註冊到 settings.json SessionStart"
+    }
+  ],
+
+  "categories": {
+    "quality-assurance": {
+      "name": "品質保證",
+      "description": "確保程式碼和決策品質的功能",
+      "icon": "🎯"
+    },
+    "development-tools": {
+      "name": "開發工具",
+      "description": "輔助開發的工具和環境",
+      "icon": "🔧"
+    },
+    "documentation": {
+      "name": "文件管理",
+      "description": "文件同步和管理功能",
+      "icon": "📚"
+    }
+  },
+
+  "settings": {
+    "settings_file": ".claude/settings.json",
+    "log_directory": ".claude/hook-logs",
+    "fail_on_required_missing": true,
+    "show_remediation": true
+  }
+}

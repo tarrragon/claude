@@ -279,6 +279,34 @@ else
     log "⚠️  LSP 環境檢查腳本不存在: $SCRIPT_DIR/lsp-environment-check.py"
 fi
 
+# 6.7 必要功能檢查（統一檢查所有關鍵功能）
+log "🔍 必要功能檢查"
+if [ -x "$SCRIPT_DIR/required-features-check.py" ]; then
+    if command -v uv &> /dev/null; then
+        log "📋 執行必要功能驗證..."
+        REQUIRED_FEATURES_OUTPUT=$("$SCRIPT_DIR/required-features-check.py" 2>&1)
+        REQUIRED_FEATURES_EXIT_CODE=$?
+
+        # 輸出檢查結果到日誌
+        echo "$REQUIRED_FEATURES_OUTPUT" | while read -r line; do
+            log "$line"
+        done
+
+        if [ $REQUIRED_FEATURES_EXIT_CODE -eq 0 ]; then
+            log "✅ 必要功能檢查完成 - 所有必要功能正常"
+        else
+            log "🚨 必要功能檢查發現問題！"
+            log "⚠️  部分必要功能未正確配置，品質控制機制可能失效"
+            log "💡 請依照上方修復方式進行修正，或執行:"
+            log "   uv run $SCRIPT_DIR/required-features-check.py --verbose"
+        fi
+    else
+        log "⚠️  UV 未安裝，跳過必要功能檢查"
+    fi
+else
+    log "⚠️  必要功能檢查腳本不存在: $SCRIPT_DIR/required-features-check.py"
+fi
+
 # 7. 5W1H 強制執行機制初始化
 log "🎯 初始化 5W1H 強制執行機制"
 

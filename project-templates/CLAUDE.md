@@ -378,7 +378,7 @@ git log --oneline -5
 - [ ] Git 狀態確認
 - [ ] 工作日誌存在且可讀取
 - [ ] 思考過程記錄完整
-- [ ] 三重文件一致性
+- [ ] 五重文件一致性（CHANGELOG、todo.md、worklog、ticket、error-patterns）
 - [ ] 明確本次 Session 目標任務
 
 ### 2️⃣ 任務執行檢查清單（派工前強制檢查）
@@ -403,7 +403,7 @@ git log --oneline -5
 - [ ] TDD 四階段完整性檢查
 - [ ] 測試通過率 100%
 - [ ] 工作日誌已更新
-- [ ] 三重文件一致性確認
+- [ ] 五重文件一致性確認
 
 **完整的檢查清單設計和使用模式請參考**：
 - [🚀 敏捷重構方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/agile-refactor-methodology.md) - 包含協作檢查點、驗收暫停點設計
@@ -412,7 +412,7 @@ git log --oneline -5
 
 ## 🚀 敏捷重構開發流程（標準運作方式）
 
-本專案採用敏捷重構方法論，結合 TDD 四階段流程、三重文件協作原則和 Ticket 機制，建立完整的 Agent 分工協作模式。
+本專案採用敏捷重構方法論，結合 TDD 四階段流程、五重文件協作原則和 Ticket 機制，建立完整的 Agent 分工協作模式。
 
 ### 📋 核心原則
 
@@ -421,7 +421,7 @@ git log --oneline -5
 **主線程 (rosemary-project-manager) 職責**：
 - 📋 依照主版本工作日誌分派任務給相應的子代理人
 - 🎯 維持敏捷開發節奏和品質標準
-- 📊 監控整體進度和三重文件一致性
+- 監控整體進度和五重文件一致性
 - 🚨 處理升級請求和任務重新分派
 
 **主線程禁止行為**：
@@ -429,13 +429,24 @@ git log --oneline -5
 - ❌ 禁止執行具體的重構或實作工作
 - ❌ 禁止繞過子代理人直接操作
 
-#### 2. 三重文件協作原則
+#### 2. 五重文件協作原則
 
-本專案採用三重文件機制（CHANGELOG + todolist + work-log）進行全方位進度管理和代理人協調：
+本專案採用五重文件機制進行全方位進度管理和代理人協調：
 
-**1️⃣ CHANGELOG.md** - 版本功能變動記錄（面向用戶）
-**2️⃣ todolist.md** - 開發任務全景圖（任務狀態追蹤）
-**3️⃣ work-log/** - 詳細實作記錄（技術細節和決策過程）
+| 文件 | 核心問題 | 職責定位 |
+|------|---------|---------|
+| **CHANGELOG.md** | "這個版本做了什麼改變？" | 版本推進變化（給工程師看） |
+| **todo.md** | "還有哪些問題需要處理？" | 已知待處理問題（尚未排程，已解決即移除） |
+| **worklog** | "這個版本要達成什麼目標？" | 版本企劃（大方向 + 策略，不含執行細節） |
+| **ticket** | "這個任務的執行細節是什麼？" | 任務執行歷程（5W1H、進度、結果） |
+| **error-patterns** | "之前遇過類似問題嗎？" | 經驗學習（執行前後查詢/更新） |
+
+**核心原則**：
+- **職責單一化**：每個文件只回答一個核心問題
+- **細節下沉**：執行細節 → ticket，大方向 → worklog
+- **禁用 emoji**：所有五重文件禁止使用 emoji（CLI 相容性）
+
+**完整規範請參考**：[五重文件系統方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/five-document-system-methodology.md)
 
 #### 3. 代理人協作機制
 
@@ -489,6 +500,24 @@ git log --oneline -5
 - 架構演進計畫
 
 詳細規範請參考：[📚 文件管理規範]($CLAUDE_PROJECT_DIR/.claude/document-responsibilities.md)
+
+### 📝 工作日誌撰寫規範
+
+工作日誌必須遵循「[工作日誌撰寫方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/worklog-writing-methodology.md)」：
+
+**表格內狀態標記**（純文字）：
+| 狀態 | 標準寫法 | 禁用 |
+|------|---------|------|
+| 待處理 | `待處理` | emoji |
+| 進行中 | `進行中` | emoji |
+| 已完成 | `已完成` | - |
+
+**核心規則**：
+- **表格內**：使用純文字狀態標記，禁止使用 emoji
+- **表格外**：段落中可使用 emoji 進行說明
+- **自動驗證**：`worklog-format-check.py` Hook 自動檢測問題格式
+
+**背景**：Claude Code CLI 在處理 markdown 表格中的 emoji 時可能發生 Rust panic（byte boundary 問題）。
 
 ---
 
@@ -1049,9 +1078,9 @@ throw AppException(
 ### 核心規範文件
 
 - [🤝 TDD 協作開發流程]($CLAUDE_PROJECT_DIR/.claude/tdd-collaboration-flow.md) - 四階段開發流程
-- [📚 專案文件責任明確區分]($CLAUDE_PROJECT_DIR/.claude/document-responsibilities.md) - 文件寫作規範
-- [🤖 Agent 協作規範]($CLAUDE_PROJECT_DIR/.claude/agent-collaboration.md) - Sub-agent 使用指南
-- [🚀 敏捷重構方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/agile-refactor-methodology.md) - Agent 分工協作模式和三重文件原則
+- [五重文件系統方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/five-document-system-methodology.md) - 五重文件協作原則
+- [Agent 協作規範]($CLAUDE_PROJECT_DIR/.claude/agent-collaboration.md) - Sub-agent 使用指南
+- [敏捷重構方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/agile-refactor-methodology.md) - Agent 分工協作模式
 - [🔧 錯誤修復和重構方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/error-fix-refactor-methodology.md) - 物件導向和測試驅動的修復標準
 - [🔧 系統化除錯方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/systematic-debugging-methodology.md) - 基於v0.8.19實戰的unused警告修復標準流程
 

@@ -248,30 +248,56 @@ project-root/
 - **Stateful Widget**: `BookDetailPage` + `_BookDetailPageState`
 - **自訂 Widget**: 清楚描述用途（如 `EnrichmentProgressWidget`）
 
-### State 管理模式
+### State 管理模式（MVVM ViewModel）
 
-本專案採用 **Provider + ViewModel** 模式：
+本專案採用 **MVVM + Riverpod** 模式。
+
+#### ViewModel 職責
+
+| 職責 | 說明 |
+|-----|------|
+| Domain → UI 轉換 | 將 Domain 模型轉為 UI 格式 |
+| UI 狀態管理 | 管理 Widget 狀態和互動邏輯 |
+| Provider 定義 | 定義 Riverpod Provider |
+| UI 專用計算 | 顏色、圖標、格式化文字 |
+
+#### ViewModel 命名規範
+
+- **格式**：`[Feature]ViewModel`
+- **位置**：`lib/presentation/[feature]/[feature]_viewmodel.dart`
+- **範例**：`EnrichmentProgressViewModel`, `LibraryDisplayViewModel`
+
+#### ViewModel 結構範本
 
 ```dart
-// ViewModel 定義
-class BookListViewModel extends ChangeNotifier {
-  // State 和業務邏輯
-  List<Book> _books = [];
+class EnrichmentProgressViewModel {
+  // Domain 來源
+  final EnrichmentProgress domainProgress;
 
-  List<Book> get books => _books;
-
-  Future<void> loadBooks() async {
-    _books = await bookRepository.getAll();
-    notifyListeners();
-  }
+  // UI 專用計算屬性
+  String get displayStatus => _mapStatus();
+  Color get progressColor => _mapColor();
+  bool get canRetry => domainProgress.isComplete && failedBooks.isNotEmpty;
 }
 
-// Provider 註冊
-ChangeNotifierProvider(
-  create: (_) => BookListViewModel(),
-  child: BookListPage(),
-)
+// Provider 定義
+final enrichmentProgressViewModelProvider =
+  StreamProvider.family<EnrichmentProgressViewModel, String>((ref, id) {...});
 ```
+
+#### ViewModel 禁止事項
+
+- ❌ Widget 程式碼（放在 Extension）
+- ❌ 直接依賴 BuildContext
+- ❌ 業務邏輯（放在 Domain Service）
+
+#### ViewModel 檢查清單
+
+- [ ] 檔案位置正確（`lib/presentation/[feature]/`）
+- [ ] 命名符合 `[Feature]ViewModel` 格式
+- [ ] 只包含 Domain→UI 轉換，無業務邏輯
+- [ ] Provider 已定義
+- [ ] Widget 程式碼在 Extension 中
 
 ### Flutter 測試最佳實踐
 

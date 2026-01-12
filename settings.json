@@ -13,19 +13,67 @@
           {"type": "command", "command": ".claude/hooks/mcp-run-tests-validator.py"},
           {"type": "command", "command": ".claude/hooks/test-timeout-pre.py"}
         ]
+      },
+      {
+        "matcher": "TodoWrite",
+        "hooks": [
+          {"type": "command", "command": ".claude/hooks/5w1h-compliance-check-hook.py"}
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {"type": "command", "command": ".claude/hooks/branch-verify-hook.py"}
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {"type": "command", "command": ".claude/hooks/branch-verify-hook.py"}
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {"type": "command", "command": ".claude/hooks/branch-status-reminder.py"}
+        ]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Bash",
         "hooks": [
-          {"type": "command", "command": ".claude/hooks/test-timeout-post.py"}
+          {"type": "command", "command": ".claude/hooks/test-timeout-post.py"},
+          {"type": "command", "command": ".claude/hooks/pre-fix-evaluation-hook.py", "timeout": 10000}
         ]
       },
       {
         "matcher": "mcp__dart__run_tests",
         "hooks": [
-          {"type": "command", "command": ".claude/hooks/test-timeout-post.py"}
+          {"type": "command", "command": ".claude/hooks/test-timeout-post.py"},
+          {"type": "command", "command": ".claude/hooks/pre-fix-evaluation-hook.py", "timeout": 10000}
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {"type": "command", "command": ".claude/hooks/style-guardian-hook.py \"$CLAUDE_FILE_PATH\""},
+          {"type": "command", "command": ".claude/hooks/worklog-format-check.py"}
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {"type": "command", "command": ".claude/hooks/style-guardian-hook.py \"$CLAUDE_FILE_PATH\""},
+          {"type": "command", "command": ".claude/hooks/worklog-format-check.py"}
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {"type": "command", "command": ".claude/hooks/prompt-submit-hook.sh"}
         ]
       }
     ]

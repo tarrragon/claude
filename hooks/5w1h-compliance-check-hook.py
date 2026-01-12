@@ -527,28 +527,37 @@ def check_compliance(executor: str, task_type: str) -> Dict[str, Any]:
 # 核心函式 6: make_decision()
 # ============================================================================
 
-def make_decision(tool_input: Dict[str, Any]) -> Dict[str, Any]:
+def make_decision(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
     """
     整合 3 層檢查並輸出最終決策
 
     Args:
-        tool_input: TodoWrite 工具的輸入 JSON
+        tool_name: 工具名稱
+        tool_input: 工具的輸入 JSON
 
     Returns:
         { "decision": "allow" | "block", "reason": str, "details": dict (optional), "suggestions": list (optional) }
     """
     try:
-        # 步驟 1: 提取 content
+        # 步驟 1: 檢查 tool_input 是否有頂層 content 欄位
+        if "content" not in tool_input:
+            logging.debug(f"工具 {tool_name} 沒有頂層 content 欄位，跳過 5W1H 檢查")
+            return {
+                "decision": "allow",
+                "reason": f"工具 {tool_name} 結構無須 5W1H 檢查"
+            }
+
+        # 步驟 2: 提取 content
         content = tool_input.get("content", "")
 
-        # 步驟 2: 提取 Who 和 How 欄位
+        # 步驟 3: 提取 Who 和 How 欄位
         who_field = extract_field(content, "Who")
         how_field = extract_field(content, "How")
 
         logging.debug(f"提取到 Who 欄位: {who_field}")
         logging.debug(f"提取到 How 欄位: {how_field}")
 
-        # 步驟 3: 第一層檢查 - Who 欄位格式驗證
+        # 步驟 4: 第一層檢查 - Who 欄位格式驗證
         who_result = parse_who_field(who_field)
         if "error" in who_result:
             logging.warning(f"Who 欄位格式錯誤: {who_result['error']}")
@@ -563,7 +572,7 @@ def make_decision(tool_input: Dict[str, Any]) -> Dict[str, Any]:
         dispatcher = who_result["dispatcher"]
         logging.debug(f"解析結果 - 執行者: {executor}, 分派者: {dispatcher}")
 
-        # 步驟 4: 第二層檢查 - How 欄位格式驗證
+        # 步驟 5: 第二層檢查 - How 欄位格式驗證
         how_result = parse_how_field(how_field)
         if "error" in how_result:
             logging.warning(f"How 欄位格式錯誤: {how_result['error']}")
@@ -578,7 +587,7 @@ def make_decision(tool_input: Dict[str, Any]) -> Dict[str, Any]:
         strategy = how_result["strategy"]
         logging.debug(f"解析結果 - 任務類型: {task_type}, 策略: {strategy}")
 
-        # 步驟 5: 第三層檢查 - 合規性檢查
+        # 步驟 6: 第三層檢查 - 合規性檢查
         compliance_result = check_compliance(executor, task_type)
         if not compliance_result.get("compliant", False):
             logging.warning(f"合規性違反: {compliance_result['error']}")
@@ -589,7 +598,7 @@ def make_decision(tool_input: Dict[str, Any]) -> Dict[str, Any]:
                 "suggestions": compliance_result["suggestions"]
             }
 
-        # 步驟 6: 所有檢查通過 → Allow
+        # 步驟 7: 所有檢查通過 → Allow
         logging.info("5W1H 格式檢查通過，符合敏捷重構原則")
         return {
             "decision": "allow",
@@ -623,13 +632,8 @@ def main() -> None:
         tool_name = input_data.get("tool_name")
         tool_input = input_data.get("tool_input", {})
 
-        # 只檢查 TodoWrite 工具
-        if tool_name != "TodoWrite":
-            logging.info(f"非 TodoWrite 工具（{tool_name}），允許執行")
-            result = {"decision": "allow", "reason": "非 TodoWrite 工具"}
-        else:
-            # 執行決策邏輯
-            result = make_decision(tool_input)
+        # 執行決策邏輯
+        result = make_decision(tool_name, tool_input)
 
         # 輸出結果
         print(json.dumps(result, ensure_ascii=False, indent=2))
