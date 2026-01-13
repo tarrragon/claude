@@ -136,7 +136,9 @@
       "Bash(xargs git log --oneline -1)",
       "Bash(xargs:*)",
       "Bash(git push:*)",
-      "Bash(./scripts/sync-claude-push.sh:*)"
+      "Bash(./scripts/sync-claude-push.sh:*)",
+      "Bash(dart compile kernel:*)",
+      "Bash(for f in /Users/tarragon/Projects/book_overview_app/docs/work-logs/v0.25.1/tickets/*.md)"
     ]
   },
   "enableAllProjectMcpServers": true,
