@@ -134,11 +134,14 @@
       "Bash(xargs cat:*)",
       "Bash(git merge-base:*)",
       "Bash(xargs git log --oneline -1)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(git push:*)",
+      "Bash(./scripts/sync-claude-push.sh:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "dart"
-  ]
+  ],
+  "outputStyle": "5W1H Structured Response"
 }

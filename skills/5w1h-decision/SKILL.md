@@ -21,6 +21,7 @@ description: "5W1H Decision Framework Tool. Use for: (1) Systematic decision-mak
 
 | File | Purpose |
 |------|---------|
+| `.claude/output-styles/5w1h-format.md` | **System-level format enforcement** |
 | `.claude/methodologies/5w1h-self-awareness-methodology.md` | Complete methodology |
 | `.claude/methodologies/agile-refactor-methodology.md` | Agent collaboration rules |
 | `.claude/methodologies/claude-self-check-methodology.md` | Avoidance language detection |
@@ -296,6 +297,30 @@ The 5W1H checker is integrated into PreToolUse Hook:
 - Validates all 6 W/H sections present
 - Detects avoidance language
 - Validates agile refactor compliance
+
+### Output Style Integration (System-Level Enforcement)
+
+**Since v0.25.1**, 5W1H format is enforced at the system level via Output Style:
+
+**File Location**: `.claude/output-styles/5w1h-format.md`
+
+**Enforcement Mechanism**:
+- Output Style is injected into Claude's system prompt
+- Every response MUST follow the 5W1H format structure
+- No manual activation required - always active
+
+**Relationship with Other Mechanisms**:
+
+| Mechanism | Level | Purpose | Enforcement |
+|-----------|-------|---------|-------------|
+| **Output Style** | System | Response format structure | Automatic (system prompt) |
+| **PreToolUse Hook** | Tool | Todo creation validation | Before TodoWrite |
+| **UserPromptSubmit Hook** | Session | Token generation + reminder | Each user input |
+| **SKILL** | Reference | Documentation + scripts | On-demand |
+
+**Key Advantage**:
+- Output Style provides **consistent format enforcement** without relying on Hook execution
+- Even if Hooks fail, Claude still follows the format due to system-level injection
 
 ---
 

@@ -8,6 +8,21 @@ Ensure systematic decision-making before creating todos by requiring:
 - Task Type matching
 - Avoidance language detection
 
+## Enforcement Mechanisms
+
+**Three-Layer Enforcement Architecture**:
+
+| Layer | File | When Active |
+|-------|------|-------------|
+| **Output Style** | `.claude/output-styles/5w1h-format.md` | Always (system prompt) |
+| **Hook** | UserPromptSubmit + PreToolUse | Each interaction |
+| **SKILL** | This document | On-demand reference |
+
+**Output Style** (v0.25.1+):
+- System-level format enforcement
+- Injected into Claude's system prompt automatically
+- Ensures consistent 5W1H response structure
+
 ## Quick Start
 
 ### Required Format
@@ -99,3 +114,11 @@ How: [Task Type: Implementation] Build classes
 ## Full Documentation
 
 See [SKILL.md](./SKILL.md) for complete reference.
+
+### Related Files
+
+| File | Purpose |
+|------|---------|
+| [Output Style](../../../.claude/output-styles/5w1h-format.md) | System-level format enforcement |
+| [SKILL.md](./SKILL.md) | Complete 5W1H reference |
+| [5W1H Methodology](../../../.claude/methodologies/5w1h-self-awareness-methodology.md) | Full methodology |

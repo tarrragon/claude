@@ -30,7 +30,8 @@
     "SessionStart": [
       {
         "hooks": [
-          {"type": "command", "command": ".claude/hooks/branch-status-reminder.py"}
+          {"type": "command", "command": ".claude/hooks/branch-status-reminder.py"},
+          {"type": "command", "command": ".claude/hooks/output-style-check.py"}
         ]
       }
     ],

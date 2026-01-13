@@ -329,6 +329,22 @@ Task(
 | **程式邏輯錯誤** | ❌ 失敗 | ✅ 已實作 | ✅ 必須 | 評估 → 開 Ticket → 修正邏輯 |
 | **測試過時** | ❌ 失敗 | ✅ 正確 | ✅ 必須 | 評估 → 開 Ticket → 驗證文件 → 更新測試 |
 | **設計變更** | ❌ 失敗 | ❌ 無實作 | ✅ 必須 | 評估 → PM 審核 → 開 Ticket → 實作 → 測試 |
+| **功能未實作** | ❌ 失敗 | ⚠️ 接口存在但未實作 | ✅ 必須 | 評估 → **查文件** → 開技術債 Ticket 或刪除測試 |
+
+### 功能未實作的特殊處理規則
+
+**此情況禁止以下行為**：
+- ❌ 直接刪除測試而不查文件
+- ❌ 直接標記測試為 `skip` 而不開 Ticket
+- ❌ 假設功能不需要而跳過
+
+**必須按以下順序處理**：
+1. 查詢 `docs/app-requirements-spec.md` 確認功能定義
+2. 查詢 `docs/usecase-flowcharts-review-report.md` 確認優先級
+3. 根據優先級決定：
+   - **高優先級** → 開實作 Ticket
+   - **中/低優先級** → 開技術債 Ticket (TD-XXX)
+   - **已放棄/被替代** → 刪除測試並記錄原因
 
 ## 常見情況處理指南
 
@@ -426,7 +442,74 @@ Stage 3: 文件查詢
 → Agent: pepper-test-implementer
 ```
 
-### 情況5: 編譯錯誤 - 設計變更
+### 情況5: 測試失敗 - 功能未實作
+
+**識別**: Test expects behavior that is not implemented (parameter accepted but not used, method exists but empty)
+
+**流程**:
+1. ✅ 進行 BDD 分析確認測試驗證的功能
+2. ✅ **必須查詢設計文件確認功能需求狀態**
+3. ✅ 根據文件查詢結果決定處理方式
+4. ✅ 開 Ticket 或刪除測試（禁止直接跳過）
+
+**文件查詢決策樹**:
+
+```
+測試驗證的功能在文件中的狀態？
+    │
+    ├─ 高優先級（必須實作）
+    │   └─ 開實作 Ticket → 分派 parsley-flutter-developer
+    │
+    ├─ 中優先級（建議實作）
+    │   └─ 開技術債 Ticket (TD-XXX) → 目標版本設為未來版本
+    │
+    ├─ 低優先級（可選實作）
+    │   └─ 開技術債 Ticket → 標記為「延後」
+    │
+    └─ 已放棄/被替代
+        └─ 刪除測試 → 記錄刪除原因到工作日誌
+```
+
+**禁止行為**:
+- ❌ **禁止直接刪除測試而不查文件**
+- ❌ **禁止直接標記測試為 `skip` 而不開 Ticket**
+- ❌ **禁止假設功能不需要而跳過**
+
+**必須執行的步驟**:
+1. 查詢 `docs/app-requirements-spec.md` 確認功能定義
+2. 查詢 `docs/app-use-cases.md` 確認用例狀態
+3. 查詢 `docs/usecase-flowcharts-review-report.md` 確認優先級
+4. 根據文件結果建立對應 Ticket 或刪除測試
+
+**例子**:
+```
+Test: test_import_progress_tracking()
+Expected: onProgress callback 被呼叫並報告進度
+Actual: onProgress 參數接受但未實作
+
+Stage 3: 文件查詢
+→ docs/usecase-flowcharts-review-report.md:
+  UC-01 進度回饋: 中優先級（建議調整）
+  工作量: 2 小時
+
+Stage 4: 根因定位
+→ 根因: onProgress 回調功能尚未實作
+→ 原因類別: 功能未完成（中優先級）
+
+決策: 開技術債 Ticket
+→ Ticket: 0.25.1-TD-001 - Implement onProgress callback
+→ 目標版本: v0.26.x
+→ 測試處理: 修改測試驗證基本功能，不依賴 onProgress
+```
+
+**後續行動檢查清單**:
+- [ ] 文件查詢完成，優先級已確認
+- [ ] 對應 Ticket 已建立（實作 Ticket 或技術債 Ticket）
+- [ ] Ticket 已加入 todolist.md 技術債務追蹤表
+- [ ] 測試已調整（驗證現有功能，不依賴未實作功能）
+- [ ] 工作日誌已記錄處理決策
+
+### 情況6: 編譯錯誤 - 設計變更
 
 **識別**: Type mismatch, method signature changes
 

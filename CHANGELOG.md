@@ -1,17 +1,10 @@
-# Changelog
+## [1.1.5] - 2026-01-13
 
-本檔案記錄 `.claude` 配置的所有重要變更。
-
-格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)，
-版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。
-
-## 版本號規則
-
-- **Major (X.0.0)**：CLAUDE.md 或 FLUTTER.md 變更（重大更新）
-- **Minor (X.Y.0)**：新增檔案（功能新增）
-- **Patch (X.Y.Z)**：修改既有檔案（改進和修復）
+### Summary
+feat: output-style + sync-push 修復
 
 ---
+
 
 ## [1.1.4] - 2026-01-13
 
