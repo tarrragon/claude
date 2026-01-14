@@ -80,6 +80,33 @@
 - [ ] 無相對路徑 import
 - [ ] 檔案位置符合 Clean Architecture
 
+## 技術債務處理責任分工
+
+### Phase 4 技術債務處理流程
+
+| 步驟 | 責任代理人 | 產出 |
+|------|-----------|------|
+| 識別技術債務 | cinnamon-refactor-owl | 技術債務清單（工作日誌） |
+| 記錄標準表格 | cinnamon-refactor-owl | 標準格式表格 |
+| 執行 `/tech-debt-capture` | cinnamon-refactor-owl | Ticket 檔案 |
+| 驗證 Ticket 建立 | rosemary-project-manager | 確認 todolist 更新 |
+| 排程處理 | rosemary-project-manager | 目標版本分配 |
+
+### cinnamon-refactor-owl 的技術債務責任
+
+1. **識別責任**：在重構評估過程中識別所有技術債務
+2. **記錄責任**：使用標準表格格式記錄到工作日誌
+3. **開票責任**：執行 `/tech-debt-capture` 建立 Ticket
+4. **確認責任**：確認 Ticket 成功建立後才能完成 Phase 4
+
+### 技術債務遺漏的補救流程
+
+如果在版本提交後發現遺漏的技術債務：
+
+1. 立即建立 Ticket（使用 `/ticket-create`）
+2. 在 Ticket 中標註「補救」來源
+3. 通知 PM 代理人進行排程
+
 ## Reference
 
 ### 相關方法論

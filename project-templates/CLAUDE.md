@@ -242,11 +242,22 @@ uv run .claude/skills/version-release/scripts/version_release.py release
 
 **深入學習**：`/version-release` | `/commit-as-prompt`
 
-### 技術債務
+### 技術債務處理
 
-**捕獲已知但暫不處理的改進機會**
+**Phase 4 發現技術債務的標準流程**：
 
-**深入學習**：`/tech-debt-capture`
+```text
+發現技術債務 → 記錄到工作日誌 → /tech-debt-capture → 建立 Ticket → 提交
+```
+
+**工作日誌記錄格式**：
+```markdown
+| ID | 描述 | 風險等級 | 建議處理時機 |
+|----|------|---------|------------|
+| TD-001 | [描述] | 高/中/低 | [時機] |
+```
+
+**深入學習**：`/tech-debt-capture` | [TDD 協作流程 - Phase 4 技術債務規範]($CLAUDE_PROJECT_DIR/.claude/tdd-collaboration-flow.md)
 
 ---
 
@@ -294,6 +305,23 @@ throw CommonErrors.networkTimeout;
 ```
 
 **深入學習**：[錯誤修復和重構方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/error-fix-refactor-methodology.md)
+
+### 使用者訊息規範
+
+**分層責任**：
+
+| 層級 | 責任 | 禁止 |
+|------|------|------|
+| **Domain/Service** | 使用 ErrorCode，拋出技術異常 | 使用 i18n |
+| **ViewModel** | 將 ErrorCode 轉換為 i18n 訊息 | 硬編碼字串 |
+| **UI** | 顯示 ViewModel 提供的訊息 | 自行組裝訊息 |
+
+**ViewModel 合法訊息來源**：
+- i18n 系統：`context.l10n!.errorMessage`
+- ErrorHandler：`ErrorHandler.getUserMessage(exception)`
+- 系統異常：`e.toString()`（僅限未知異常）
+
+**深入學習**：[`FLUTTER.md` - ViewModel 層使用者訊息規範](./FLUTTER.md)
 
 ---
 

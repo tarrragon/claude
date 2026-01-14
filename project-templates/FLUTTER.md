@@ -299,6 +299,60 @@ final enrichmentProgressViewModelProvider =
 - [ ] Provider 已定義
 - [ ] Widget 程式碼在 Extension 中
 
+### ViewModel 層使用者訊息規範
+
+**核心原則**：ViewModel 不可硬編碼使用者訊息字串。
+
+#### 使用者訊息的三個合法來源
+
+| 來源 | 用途 | 範例 |
+|------|------|------|
+| **i18n 系統** | 靜態訊息，多語言支援 | `context.l10n!.invalidFileFormat` |
+| **ErrorHandler 轉換** | 動態錯誤碼對應 | `ErrorHandler.getUserMessage(exception)` |
+| **Exception.message** | 僅限系統異常透傳 | `catch (e) => e.toString()` |
+
+#### 正確做法
+
+```dart
+// 使用 i18n 系統
+state = state.copyWith(errorMessage: context.l10n!.invalidFileFormat);
+
+// 使用 ErrorHandler 轉換 ErrorCode
+state = state.copyWith(
+  errorMessage: ErrorHandler.getUserMessage(exception),
+);
+
+// 系統異常透傳（僅限未知異常）
+catch (e) {
+  state = state.copyWith(errorMessage: e.toString());
+}
+```
+
+#### 錯誤做法
+
+```dart
+// 硬編碼使用者訊息
+state = state.copyWith(errorMessage: 'Invalid file format');  // i18n 違規
+state = state.copyWith(errorMessage: '網路連線失敗');          // i18n 違規
+state = state.copyWith(errorMessage: 'Error: ${error.code}'); // 應使用 ErrorHandler
+```
+
+#### 分層責任
+
+| 層級 | 責任 | 訊息格式 |
+|------|------|----------|
+| **Domain/Service** | 拋出 Exception + ErrorCode | 技術錯誤碼 |
+| **ViewModel** | 將 ErrorCode 轉換為 i18n 訊息 | 使用者友善訊息 |
+| **UI** | 顯示 ViewModel 提供的訊息 | 直接使用 |
+
+#### 檢查清單
+
+- [ ] ViewModel 無硬編碼使用者訊息字串
+- [ ] 錯誤訊息使用 i18n 或 ErrorHandler
+- [ ] 只有未知異常使用 `e.toString()`
+
+**相關規範**：[Style Guardian SKILL](./.claude/skills/style-guardian/SKILL.md)
+
 ### Flutter 測試最佳實踐
 
 詳細指南請參考：[`test/TESTING_GUIDELINES.md`](./test/TESTING_GUIDELINES.md)

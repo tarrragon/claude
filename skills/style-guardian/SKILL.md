@@ -244,6 +244,29 @@ Text(context.l10n!.libraryTitle)
 AppBar(title: Text(context.l10n!.settingsTitle))
 ```
 
+### Violation 6: ViewModel Hardcoded User Messages
+
+**Scope**: `lib/presentation/**/viewmodel.dart`, `lib/presentation/**_viewmodel.dart`
+
+**Detection Pattern**: String literals assigned to error/message state properties
+
+```dart
+// Violation - Hardcoded user messages in ViewModel
+state = state.copyWith(errorMessage: 'Invalid file format');
+state = state.copyWith(errorMessage: '網路連線失敗');
+_errorMessage = 'Something went wrong';
+
+// Fix - Use i18n or ErrorHandler
+state = state.copyWith(errorMessage: context.l10n!.invalidFileFormat);
+state = state.copyWith(errorMessage: ErrorHandler.getUserMessage(exception));
+```
+
+**Allowed Exceptions**:
+- `e.toString()` for unknown system exceptions
+- String interpolation with i18n: `context.l10n!.errorWithCode(code)`
+
+**Related**: [FLUTTER.md - ViewModel 層使用者訊息規範](../../../FLUTTER.md)
+
 ---
 
 ## Detection Script Usage
