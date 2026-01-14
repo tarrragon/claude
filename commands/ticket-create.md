@@ -47,6 +47,27 @@ Claude: 請描述你想完成的任務：
 
 等待用戶輸入需求描述。
 
+#### Step 1.5: Ticket 類型選擇
+
+> 理論依據：Will Guidara《Unreasonable Hospitality》- Ticket 不只是解決問題的工具
+
+```text
+Claude: 請選擇 Ticket 類型：
+
+| 類型 | 代碼 | 用途 | 適用場景 |
+|------|------|------|---------|
+| Research | RES | 探索未知領域 | 調查新技術、評估可行性 |
+| Analysis | ANA | 理解現狀和問題 | 分析測試失敗、問題診斷 |
+| Evaluation | EVA | 比較方案和風險 | 技術選型、重構方案評估 |
+| Implementation | IMP | 執行具體任務 | 新功能開發、修復錯誤 |
+| Investigation | INV | 深入追蹤問題根因 | 效能瓶頸追蹤、記憶體洩漏調查 |
+| Documentation | DOC | 記錄和傳承經驗 | 方法論整合、經驗文件化 |
+
+選擇類型 [RES/ANA/EVA/IMP/INV/DOC] (預設: IMP):
+```
+
+根據類型調整後續驗收條件和代理人建議。
+
 #### Step 2: 職責分析
 
 分析用戶需求，識別其中的獨立職責：
@@ -110,6 +131,7 @@ ticket:
   id: "{VERSION}-W1-001"
   version: "{VERSION}"
   wave: 1
+  type: "IMP"  # RES/ANA/EVA/IMP/INV/DOC
   action: "實作"
   target: "startScan() 方法"
   agent: "parsley-flutter-developer"

@@ -88,8 +88,17 @@ Ticket 是否已從主版本任務拆分？
 ## Ticket 資訊
 
 **Ticket 編號**: #N ❗必填
-**Ticket 類型**: [定義/撰寫/實作/整合/修復/重構] ❗必填
+**Ticket 類型**: [RES/ANA/EVA/IMP/INV/DOC] ❗必填
 **建立日期**: YYYY-MM-DD ❗必填
+
+> **Ticket 類型說明**：
+> - **RES** (Research): 探索未知領域
+> - **ANA** (Analysis): 理解現狀和問題
+> - **EVA** (Evaluation): 比較方案和風險
+> - **IMP** (Implementation): 執行具體任務
+> - **INV** (Investigation): 深入追蹤問題根因
+> - **DOC** (Documentation): 記錄和傳承經驗
+
 **狀態**: [參照下方「Ticket 狀態判定」] ❗必填
 **完成日期**: YYYY-MM-DD HH:MM（未完成則標記「N/A」） ❗必填
 
@@ -470,7 +479,20 @@ Ticket 是否已從主版本任務拆分？
 
 ---
 
-## 💡 執行心得（選填）
+## 💡 學習收穫（強制）
+
+> 理論依據：Will Guidara《Unreasonable Hospitality》- "Excellence is the culmination of thousands of details executed perfectly."
+
+### 經驗傳承檢查 ❗必填
+
+完成每個 Ticket 時，必須回答以下問題：
+
+| 問題 | 回答 |
+|------|------|
+| 這個任務我們學到了什麼？ | [填寫] |
+| 有沒有可以改進流程的地方？ | [填寫] |
+| 這個經驗可以應用在哪裡？ | [填寫] |
+| 是否需要建立 error-pattern？ | [是/否，如是請說明] |
 
 ### 做得好的地方
 - [記錄執行順利的部分和原因]
@@ -483,6 +505,8 @@ Ticket 是否已從主版本任務拆分？
 
 ### 知識沉澱
 - [記錄可重用的知識和技巧]
+- [是否需要更新 error-patterns？]
+- [是否需要派發 DOC 類型 Ticket？]
 
 ---
 

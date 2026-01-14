@@ -327,6 +327,35 @@ Phase 3b 程式碼實作
 - [ ] 執行跨 Ticket 重構評估
 - [ ] 不產生新的 Tickets（除非發現新功能需求）
 
+### 4.4 Phase 4 經驗捕獲（強制）
+
+> 理論依據：Will Guidara《Unreasonable Hospitality》- 持續改進文化
+
+**完成每個版本時，必須回答以下問題**：
+
+| 問題 | 目的 | 記錄位置 |
+|------|------|---------|
+| 這個版本我們學到了什麼？ | 知識累積 | 工作日誌 |
+| 有哪些流程可以改進？ | 持續改進 | 方法論更新提案 |
+| 有哪些經驗應該傳承？ | 經驗傳承 | error-patterns |
+| 有沒有重複的錯誤模式？ | 防止重複 | error-patterns |
+
+**執行 `/tech-debt-capture` 工具捕獲技術債務並建立後續 Tickets**。
+
+### 4.5 子 Ticket 派發時機
+
+**在 Phase 3a/3b 執行中，以下情況應積極派發子 Ticket**：
+
+| 情況 | 處理方式 | 新 Ticket 類型 |
+|------|---------|---------------|
+| 發現新問題 | 記錄並派發 | INV (Investigation) |
+| 範圍超出預期 | 拆分並派發 | IMP (Implementation) |
+| 需要先調查 | 暫停並派發 | RES (Research) |
+| 需要決策 | 提請並派發 | EVA (Evaluation) |
+| 發現學習機會 | 記錄並派發 | DOC (Documentation) |
+
+**原則**：不追求在單一 Ticket 完成所有任務，積極派發保持可追溯性。
+
 ---
 
 ## 第五章：常見問題

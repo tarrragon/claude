@@ -62,6 +62,28 @@ uv run .claude/hooks/ticket-tracker.py claim T-001
 uv run .claude/hooks/ticket-tracker.py complete T-001
 ```
 
+### 記錄學習收穫（完成時強制）
+
+> 理論依據：Will Guidara《Unreasonable Hospitality》- 經驗傳承
+
+完成 Ticket 時，必須記錄學習收穫：
+
+```bash
+uv run .claude/hooks/ticket-tracker.py complete T-001 \
+  --learning "發現了 API 的隱藏限制，已更新 error-patterns"
+```
+
+如果未提供 `--learning` 參數，系統會提示：
+
+```text
+⚠️ 請提供學習收穫記錄（--learning 參數）
+提示問題：
+  - 這個任務我們學到了什麼？
+  - 有沒有可以改進流程的地方？
+  - 這個經驗可以應用在哪裡？
+  - 是否需要建立 error-pattern？
+```
+
 ### 放棄 Ticket（代理人使用）
 
 代理人無法繼續執行時放棄：
