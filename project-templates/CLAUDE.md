@@ -306,23 +306,6 @@ throw CommonErrors.networkTimeout;
 
 **深入學習**：[錯誤修復和重構方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/error-fix-refactor-methodology.md)
 
-### 使用者訊息規範
-
-**分層責任**：
-
-| 層級 | 責任 | 禁止 |
-|------|------|------|
-| **Domain/Service** | 使用 ErrorCode，拋出技術異常 | 使用 i18n |
-| **ViewModel** | 將 ErrorCode 轉換為 i18n 訊息 | 硬編碼字串 |
-| **UI** | 顯示 ViewModel 提供的訊息 | 自行組裝訊息 |
-
-**ViewModel 合法訊息來源**：
-- i18n 系統：`context.l10n!.errorMessage`
-- ErrorHandler：`ErrorHandler.getUserMessage(exception)`
-- 系統異常：`e.toString()`（僅限未知異常）
-
-**深入學習**：[`FLUTTER.md` - ViewModel 層使用者訊息規範](./FLUTTER.md)
-
 ---
 
 ## 8. 重要文件索引
