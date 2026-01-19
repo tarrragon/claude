@@ -74,4 +74,3 @@
 ## Reference
 
 - [agent-collaboration.md](../agent-collaboration.md) - 代理人協作流程
-- [程式碼品質範例彙編](../code-quality-examples.md) - 完整程式碼範例

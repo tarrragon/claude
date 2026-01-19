@@ -86,7 +86,10 @@
       "Bash(flutter clean:*)",
       "Skill(ticket-track)",
       "Bash($CLAUDE_PROJECT_DIR/.claude/hooks/l10n-sync-verification-hook.py:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(python -m unittest:*)",
+      "Bash(CLAUDE_PROJECT_DIR=/Users/mac-eric/project/book_overview_app python3:*)"
     ],
     "ask": [
       "Bash(git push:*)"

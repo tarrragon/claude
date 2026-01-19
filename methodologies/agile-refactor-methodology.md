@@ -55,7 +55,7 @@
 - 細節下沉：執行細節 → ticket，大方向 → worklog
 - 禁用 emoji：所有五重文件禁止使用 emoji
 
-**完整規範**：[五重文件系統方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/five-document-system-methodology.md)
+**完整規範**：[五重文件系統方法論](./five-document-system-methodology.md)
 
 ## 檢查清單
 
@@ -114,8 +114,3 @@
 - [Atomic Ticket 方法論](./atomic-ticket-methodology.md) - 單一職責設計
 - [Ticket 生命週期管理](./ticket-lifecycle-management-methodology.md) - 狀態流轉
 - [TDD 協作流程](../tdd-collaboration-flow.md) - 四階段詳細說明
-
-### 衛星文件
-
-- [任務分派準備度檢查清單](./agile-refactor-readiness-checklist.md) - 完整檢查項目
-- [代理人回報流程](./agile-refactor-reporting-guide.md) - 回報格式和處理流程

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 
 """
@@ -15,6 +15,11 @@ Ticket Quality Gate Hook
 
 環境變數:
     HOOK_DEBUG: 啟用詳細日誌（true/false）
+
+重構紀錄 (v0.28.0):
+- 使用 .claude/lib/hook_io 共用模組
+- 使用 .claude/config/quality_rules.yaml 配置檔案
+- 優化觸發條件配置載入
 """
 
 import sys
@@ -27,6 +32,8 @@ from typing import Dict, Any, Optional
 
 # 導入模組（相對導入）
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
+
 from ticket_quality.detectors import (
     check_god_ticket_automated,
     check_incomplete_ticket_automated,
@@ -36,6 +43,8 @@ from ticket_quality.reporters import (
     generate_markdown_report,
     generate_json_report
 )
+from hook_io import read_hook_input, write_hook_output
+from config_loader import load_quality_rules
 
 # 全域常數
 EXIT_SUCCESS = 0
@@ -44,18 +53,36 @@ EXIT_BLOCK = 2
 
 # 全域快取（記憶體）
 _check_cache: Dict[str, Dict[str, Any]] = {}
-_cache_ttl = timedelta(minutes=5)  # 5 分鐘快取
+_quality_config: Optional[Dict[str, Any]] = None
 
-# 快取統計預設值
-DEFAULT_CACHE_STATS = {
-    "total_checks": 0,
-    "cache_hits": 0,
-    "cache_misses": 0,
-    "avg_execution_time_with_cache": 0.0,
-    "avg_execution_time_without_cache": 0.0,
-    "last_updated": "",
-    "version": "v0.12.G.4"
-}
+
+def get_quality_config() -> Dict[str, Any]:
+    """取得品質規則配置（快取）"""
+    global _quality_config
+    if _quality_config is None:
+        _quality_config = load_quality_rules()
+    return _quality_config
+
+
+def get_cache_ttl() -> timedelta:
+    """從配置取得快取 TTL"""
+    config = get_quality_config()
+    ttl_minutes = config.get("cache", {}).get("ttl_minutes", 5)
+    return timedelta(minutes=ttl_minutes)
+
+
+def get_default_cache_stats() -> Dict[str, Any]:
+    """從配置取得預設快取統計"""
+    config = get_quality_config()
+    return config.get("cache", {}).get("default_stats", {
+        "total_checks": 0,
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "avg_execution_time_with_cache": 0.0,
+        "avg_execution_time_without_cache": 0.0,
+        "last_updated": "",
+        "version": "v0.28.0"
+    })
 
 
 def setup_logging() -> None:
@@ -127,7 +154,7 @@ def validate_input(input_data: Dict[str, Any]) -> bool:
 
 def should_trigger_check(input_data: Dict[str, Any]) -> bool:
     """
-    判斷是否應觸發檢測
+    判斷是否應觸發檢測（使用配置檔案）
 
     條件:
     1. 工具類型為 Write/Edit/MultiEdit
@@ -141,37 +168,43 @@ def should_trigger_check(input_data: Dict[str, Any]) -> bool:
     Returns:
         bool - 是否應觸發檢測
     """
+    # 從配置載入觸發條件
+    config = get_quality_config()
+    trigger_config = config.get("trigger_conditions", {})
+
     # 條件 1: 工具類型檢查
     tool_name = input_data.get("tool_name", "")
-    if tool_name not in ["Write", "Edit", "MultiEdit"]:
+    allowed_tools = trigger_config.get("allowed_tools", ["Write", "Edit", "MultiEdit"])
+    if tool_name not in allowed_tools:
         logging.info(f"工具類型不符: {tool_name}")
         return False
 
     # 條件 2: 檔案類型檢查
     file_path = input_data["tool_input"]["file_path"]
-    if not file_path.endswith(".md"):
+    file_extension = trigger_config.get("file_extension", ".md")
+    if not file_path.endswith(file_extension):
         logging.info(f"檔案類型不符: {file_path}")
         return False
 
     # 條件 3: 檔案路徑關鍵字檢查
-    ticket_path_keywords = [
+    ticket_path_keywords = trigger_config.get("ticket_path_keywords", [
         "docs/work-logs/",
         "docs/tickets/",
         "-ticket-",
         "-task-"
-    ]
+    ])
     if not any(keyword in file_path for keyword in ticket_path_keywords):
         logging.info(f"檔案路徑不符合 Ticket 格式: {file_path}")
         return False
 
     # 條件 4: 檔案內容結構檢查
     content = input_data["tool_input"]["content"]
-    ticket_structure_markers = [
-        "## 📋 實作步驟",
-        "## ✅ 驗收條件",
-        "## 🔗 參考文件",
+    ticket_structure_markers = trigger_config.get("ticket_structure_markers", [
+        "## 實作步驟",
+        "## 驗收條件",
+        "## 參考文件",
         "Layer 1", "Layer 2", "Layer 3", "Layer 4", "Layer 5"
-    ]
+    ])
     if not any(marker in content for marker in ticket_structure_markers):
         logging.info("檔案內容不符合 Ticket 結構")
         return False
@@ -195,11 +228,11 @@ def calculate_file_hash(content: str) -> str:
 
 def should_skip_check_due_to_cache(file_path: str, file_hash: str) -> bool:
     """
-    檢查是否應跳過檢測（基於快取）
+    檢查是否應跳過檢測（基於快取，使用配置的 TTL）
 
     快取命中條件:
     1. 快取中存在該檔案
-    2. 時間未過期（< 5 分鐘）
+    2. 時間未過期（從配置讀取）
     3. 檔案 hash 未變更
 
     Args:
@@ -218,8 +251,11 @@ def should_skip_check_due_to_cache(file_path: str, file_hash: str) -> bool:
     cached_time = cached_entry["time"]
     cached_hash = cached_entry["hash"]
 
+    # 從配置取得 TTL
+    cache_ttl = get_cache_ttl()
+
     # 檢查 1: 時間是否過期
-    if datetime.now() - cached_time > _cache_ttl:
+    if datetime.now() - cached_time > cache_ttl:
         logging.debug(f"快取過期: {file_path}")
         del _check_cache[file_path]
         return False
@@ -253,11 +289,12 @@ def update_check_cache(file_path: str, file_hash: str, check_results: Dict[str, 
 
 
 def cleanup_expired_cache() -> None:
-    """清理過期快取（避免記憶體洩漏）"""
+    """清理過期快取（避免記憶體洩漏，使用配置的 TTL）"""
     current_time = datetime.now()
+    cache_ttl = get_cache_ttl()
     expired_keys = [
         file_path for file_path, cached_entry in _check_cache.items()
-        if current_time - cached_entry["time"] > _cache_ttl
+        if current_time - cached_entry["time"] > cache_ttl
     ]
 
     for key in expired_keys:
@@ -284,7 +321,7 @@ def get_cache_stats_dir() -> Path:
 
 def load_cache_stats() -> Dict[str, Any]:
     """
-    載入快取統計資料
+    載入快取統計資料（使用配置的預設值）
 
     Returns:
         dict - 快取統計資料
@@ -293,7 +330,7 @@ def load_cache_stats() -> Dict[str, Any]:
     stats_file = cache_dir / "cache_stats.json"
 
     if not stats_file.exists():
-        return DEFAULT_CACHE_STATS.copy()
+        return get_default_cache_stats()
 
     try:
         with open(stats_file, 'r', encoding='utf-8') as f:
@@ -302,7 +339,7 @@ def load_cache_stats() -> Dict[str, Any]:
         return stats
     except Exception as e:
         logging.warning(f"快取統計資料載入失敗，使用預設值: {e}")
-        return DEFAULT_CACHE_STATS.copy()
+        return get_default_cache_stats()
 
 
 def save_cache_stats(stats: Dict[str, Any]) -> None:

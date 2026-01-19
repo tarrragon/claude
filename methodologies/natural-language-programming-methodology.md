@@ -70,5 +70,4 @@ validateData() → handleSuccess() / handleFailure()
 
 ## Reference
 
-- [Widget 獨立性與註解標準](../FLUTTER.md#widget-註解標準) - Flutter 特定規範
-- [程式碼品質範例彙編](../code-quality-examples.md) - 具體範例
+- [Widget 獨立性與註解標準](../../FLUTTER.md#widget-註解標準) - Flutter 特定規範

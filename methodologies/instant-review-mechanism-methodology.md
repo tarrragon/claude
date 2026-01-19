@@ -86,5 +86,5 @@
 ## Reference
 
 - [Ticket 生命週期管理方法論](./ticket-lifecycle-management-methodology.md) - Review 中狀態流轉
-- [Ticket 拆分標準方法論](./ticket-splitting-methodology.md) - Ticket 大小影響 Review 時間
+- [Atomic Ticket 方法論](./atomic-ticket-methodology.md) - Ticket 大小控制與單一職責
 - [Code Smell 品質閘門檢測方法論](./code-smell-quality-gate-methodology.md) - 持續品質監控

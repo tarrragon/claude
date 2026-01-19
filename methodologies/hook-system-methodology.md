@@ -260,4 +260,93 @@ if 檔案變更 > 0:
 4. 驗證改善效果
 5. 更新效能基準
 
+## 模組化開發規範
+
+### 共用模組架構（v0.28.0+）
+
+v0.28.0 重構引入了共用模組系統，所有 Hook 腳本應優先使用這些模組：
+
+```text
+.claude/lib/
+├── config_loader.py    # 配置載入（含快取）
+├── git_utils.py        # Git 操作工具
+├── hook_io.py          # I/O 標準化
+├── hook_logging.py     # 日誌系統
+└── tests/              # 單元測試
+```
+
+### 標準 Hook 腳本結構
+
+```python
+#!/usr/bin/env python3
+"""
+Hook 名稱說明
+
+觸發時機: PreToolUse/PostToolUse/...
+主要功能: 簡要說明
+"""
+
+import sys
+from pathlib import Path
+
+# 標準化導入共用模組
+lib_path = Path(__file__).parent.parent / "lib"
+if str(lib_path) not in sys.path:
+    sys.path.insert(0, str(lib_path))
+
+from hook_io import read_hook_input, write_hook_output, create_pretooluse_output
+from hook_logging import setup_hook_logging
+from config_loader import load_agents_config
+
+def main():
+    logger = setup_hook_logging("hook-name")
+    input_data = read_hook_input()
+
+    # ... 處理邏輯 ...
+
+    output = create_pretooluse_output("allow", "檢查通過")
+    write_hook_output(output)
+
+if __name__ == "__main__":
+    main()
+```
+
+### 模組使用規範
+
+| 需求 | 使用模組 | 函式 |
+|------|---------|------|
+| 讀取 Hook 輸入 | hook_io | `read_hook_input()` |
+| 輸出決策結果 | hook_io | `write_hook_output()` |
+| PreToolUse 輸出 | hook_io | `create_pretooluse_output()` |
+| PostToolUse 輸出 | hook_io | `create_posttooluse_output()` |
+| 日誌記錄 | hook_logging | `setup_hook_logging()` |
+| 載入配置 | config_loader | `load_config()` |
+| 代理人配置 | config_loader | `load_agents_config()` |
+| Git 操作 | git_utils | `run_git_command()` |
+| 分支檢查 | git_utils | `is_protected_branch()` |
+
+### 測試要求
+
+每個 Hook 腳本必須有對應的單元測試：
+
+```text
+.claude/hooks/my-hook.py  ->  .claude/lib/tests/test_my_hook.py
+```
+
+測試執行：
+```bash
+uv run pytest .claude/lib/tests/ -v
+```
+
+### 配置外部化
+
+可配置參數應放入 `.claude/config/` 目錄：
+
+- `agents.yaml` - 代理人分派規則
+- `quality_rules.yaml` - 品質檢測規則
+
+詳細 API 參考請見：[共用模組 README](../lib/README.md)
+
+---
+
 這個 Hook 系統是專案品質保證的核心基礎設施，確保每個開發決策都符合專案的高品質標準。

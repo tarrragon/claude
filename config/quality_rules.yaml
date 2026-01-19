@@ -1,0 +1,108 @@
+# Ticket 品質檢測規則配置
+# 從 ticket-quality-gate-hook.py 抽取
+# 版本: 0.28.0
+
+# ===== 觸發條件配置 =====
+trigger_conditions:
+  # 允許的工具類型
+  allowed_tools:
+    - Write
+    - Edit
+    - MultiEdit
+
+  # 檔案副檔名
+  file_extension: ".md"
+
+  # Ticket 路徑關鍵字
+  ticket_path_keywords:
+    - "docs/work-logs/"
+    - "docs/tickets/"
+    - "-ticket-"
+    - "-task-"
+
+  # Ticket 結構標記
+  ticket_structure_markers:
+    - "## 實作步驟"
+    - "## 驗收條件"
+    - "## 參考文件"
+    - "Layer 1"
+    - "Layer 2"
+    - "Layer 3"
+    - "Layer 4"
+    - "Layer 5"
+
+# ===== 快取配置 =====
+cache:
+  # 快取有效時間（分鐘）
+  ttl_minutes: 5
+
+  # 預設統計資料
+  default_stats:
+    total_checks: 0
+    cache_hits: 0
+    cache_misses: 0
+    avg_execution_time_with_cache: 0.0
+    avg_execution_time_without_cache: 0.0
+    last_updated: ""
+    version: "v0.28.0"
+
+# ===== Code Smell 檢測規則 =====
+code_smell_rules:
+  # C1: God Ticket 檢測
+  c1_god_ticket:
+    enabled: true
+    description: "檢測是否為過大的 Ticket（包含太多職責）"
+    thresholds:
+      max_steps: 10
+      max_acceptance_criteria: 8
+      max_layers: 5
+
+  # C2: Incomplete Ticket 檢測
+  c2_incomplete_ticket:
+    enabled: true
+    description: "檢測 Ticket 是否缺少必要欄位"
+    required_sections:
+      - "實作步驟"
+      - "驗收條件"
+      - "參考文件"
+
+  # C3: Ambiguous Responsibility 檢測
+  c3_ambiguous_responsibility:
+    enabled: true
+    description: "檢測 Ticket 職責是否模糊不清"
+    ambiguous_keywords:
+      - "等等"
+      - "其他"
+      - "可能"
+      - "也許"
+      - "或者"
+
+# ===== 輸出配置 =====
+output:
+  # 日誌目錄
+  log_subdir: "ticket-quality-gate"
+
+  # 報告格式
+  report_formats:
+    - markdown
+    - json
+
+  # 效能評級閾值
+  performance_rating:
+    excellent: 70  # 命中率 >= 70%
+    good: 50       # 命中率 >= 50%
+    needs_improvement: 0  # 命中率 < 50%
+
+# ===== 決策規則 =====
+decision_rules:
+  # 任何 failed 狀態 → block
+  failed_action: block
+
+  # 只有 warning 狀態 → allow + 警告
+  warning_action: allow
+
+  # 全部 passed → allow
+  passed_action: allow
+
+  # 錯誤 → allow（非阻塞原則）
+  error_action: allow

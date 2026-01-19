@@ -488,7 +488,7 @@ def check_agile_refactor_compliance(who, how):
 
 ### 逃避行為識別
 
-**逃避語言檢測基於「[Claude 自檢與逃避預防方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/claude-self-check-methodology.md)」的完整違規詞彙表**
+**逃避語言檢測基於「[Claude 自檢與逃避預防方法論](./claude-self-check-methodology.md)」的完整違規詞彙表**
 
 #### 🚨 品質妥協和逃避責任類
 - 「太複雜」「先將就」「暫時性修正」「症狀緩解」

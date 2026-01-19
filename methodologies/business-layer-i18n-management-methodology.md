@@ -345,7 +345,7 @@ class BookRepository {
 
 ### 專案規範
 
-- [FLUTTER.md - ViewModel 層使用者訊息規範](../FLUTTER.md#viewmodel-層使用者訊息規範) - ViewModel 禁止事項和檢查清單
+- [FLUTTER.md - ViewModel 層使用者訊息規範](../../FLUTTER.md#viewmodel-層使用者訊息規範) - ViewModel 禁止事項和檢查清單
 - [錯誤修復和重構方法論](./error-fix-refactor-methodology.md) - 錯誤處理原則
 
 ### 相關方法論

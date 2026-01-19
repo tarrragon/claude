@@ -4,7 +4,8 @@
       {
         "matcher": "Bash",
         "hooks": [
-          {"type": "command", "command": ".claude/hooks/test-timeout-pre.py"}
+          {"type": "command", "command": ".claude/hooks/test-timeout-pre.py"},
+          {"type": "command", "command": ".claude/hooks/version-release-guard-hook.py"}
         ]
       },
       {

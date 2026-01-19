@@ -136,7 +136,7 @@ Day 5：整合測試完成
 
 ### 專案方法論
 
-- [TDD 四階段流程](./../tdd-collaboration-flow.md)
+- [TDD 四階段流程](../tdd-collaboration-flow.md)
 - [敏捷重構方法論](./agile-refactor-methodology.md)
 - [5W1H 決策方法論](./5w1h-self-awareness-methodology.md)
 

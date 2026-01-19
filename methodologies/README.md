@@ -501,10 +501,9 @@ Step 3: 查看對應章節
 
 ### 相關專案文件
 
-- [🤝 TDD 協作開發流程]($CLAUDE_PROJECT_DIR/.claude/tdd-collaboration-flow.md) - TDD四階段流程
-- [🏗 Clean Architecture實作方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/clean-architecture-implementation-methodology.md) - 架構分層原則
-- [📋 Ticket設計派工方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/ticket-design-dispatch-methodology.md) - 任務拆分和設計
-- [🧭 程式碼品質範例彙編]($CLAUDE_PROJECT_DIR/.claude/code-quality-examples.md) - 具體程式碼範例
+- [TDD 協作開發流程](../tdd-collaboration-flow.md) - TDD四階段流程
+- [Clean Architecture實作方法論](./clean-architecture-implementation-methodology.md) - 架構分層原則
+- [Ticket設計派工方法論](./ticket-design-dispatch-methodology.md) - 任務拆分和設計
 
 ---
 

@@ -1,0 +1,323 @@
+# 代理人分派配置
+# 從 task-dispatch-readiness-check.py 抽取
+# 版本: 0.28.0
+
+# ===== 已知代理人清單 =====
+known_agents:
+  - basil-hook-architect
+  - thyme-documentation-integrator
+  - mint-format-specialist
+  - lavender-interface-designer
+  - sage-test-architect
+  - pepper-test-implementer
+  - cinnamon-refactor-owl
+  - parsley-flutter-developer
+  - memory-network-builder
+  - rosemary-project-manager
+
+# ===== 任務類型對應代理人規則 =====
+agent_dispatch_rules:
+  "Hook 開發": basil-hook-architect
+  "文件整合": thyme-documentation-integrator
+  "程式碼格式化": mint-format-specialist
+  "Phase 1 設計": lavender-interface-designer
+  "Phase 2 測試設計": sage-test-architect
+  "Phase 3a 策略規劃": pepper-test-implementer
+  "Phase 3b 實作": parsley-flutter-developer
+  "Phase 4 重構": cinnamon-refactor-owl
+  "記憶網路建構": memory-network-builder
+
+# ===== 代理人反向映射（代理人 → 任務類型）=====
+agent_to_task_map:
+  basil-hook-architect: "Hook 開發"
+  thyme-documentation-integrator: "文件整合"
+  mint-format-specialist: "程式碼格式化"
+  lavender-interface-designer: "Phase 1 設計"
+  sage-test-architect: "Phase 2 測試設計"
+  pepper-test-implementer: "Phase 3a 策略規劃"
+  parsley-flutter-developer: "Phase 3b 實作"
+  cinnamon-refactor-owl: "Phase 4 重構"
+  memory-network-builder: "記憶網路建構"
+  rosemary-project-manager: "專案管理"
+
+# ===== 權重定義 =====
+weight_map:
+  high: 3
+  medium: 2
+  low: 1
+
+# ===== 任務類型優先級和關鍵字 =====
+# 優先級順序：TDD Phase 1-4 > 專業任務 > 應用程式開發
+task_type_priorities:
+  # TDD 四階段（最高優先級）
+  - type: "Phase 1 設計"
+    keywords:
+      high:
+        - "Phase 1"
+        - "功能設計"
+        - "需求規格"
+      medium:
+        - "設計階段"
+        - "功能規劃"
+      low:
+        - "設計文件"
+    weight_threshold: 3
+
+  - type: "Phase 2 測試設計"
+    keywords:
+      high:
+        - "Phase 2"
+        - "測試設計"
+        - "測試案例設計"
+      medium:
+        - "測試計畫"
+        - "測試規劃"
+      low:
+        - "測試文件"
+    weight_threshold: 3
+
+  - type: "Phase 3a 策略規劃"
+    keywords:
+      high:
+        - "Phase 3a"
+        - "語言無關策略"
+        - "虛擬碼設計"
+      medium:
+        - "策略規劃"
+        - "虛擬碼"
+        - "實作策略規劃"
+      low:
+        - "實作計畫"
+    weight_threshold: 3
+
+  - type: "Phase 3b 實作"
+    keywords:
+      high:
+        - "Phase 3b"
+        - "[Phase 3b 實作]"
+        - "Flutter/Dart 實作"
+        - "將虛擬碼轉換"
+      medium:
+        - "Dart 實作"
+        - "Flutter 實作"
+        - "parsley-flutter-developer"
+        - "實作測試"
+        - "撰寫測試程式碼"
+      low:
+        - "實作程式碼"
+        - "撰寫程式"
+        - "建立測試檔案"
+        - "test/unit/"
+        - "flutter test"
+    weight_threshold: 3
+
+  - type: "Phase 4 重構"
+    keywords:
+      high:
+        - "Phase 4"
+        - "重構評估"
+        - "程式碼品質評估"
+        - "cinnamon-refactor-owl"
+      medium:
+        - "重構建議"
+        - "品質改善"
+        - "重構執行"
+        - "重構決策"
+      low:
+        - "程式碼檢視"
+        - "測試通過率"
+        - "執行測試"
+        - "測試驗證"
+        - "重構後驗證"
+    weight_threshold: 3
+
+  # 專業任務（次優先級）
+  - type: "Hook 開發"
+    keywords:
+      high:
+        - "開發 Hook"
+        - "Hook 系統"
+        - "撰寫 Hook"
+        - "實作 Hook"
+        - "建立 Hook"
+        - "Hook 開發"
+      medium:
+        - ".claude/hooks/"
+        - "PreToolUse"
+        - "PostToolUse"
+        - "Hook 整合"
+        - "擴展 Hook"
+        - "修改 Hook"
+      low:
+        - "Hook 配置"
+        - "Hook 測試"
+    weight_threshold: 3
+
+  - type: "文件整合"
+    keywords:
+      high:
+        - "文件整合"
+        - "方法論轉化"
+        - "work-log → 方法論"
+      medium:
+        - "整合文件"
+        - "方法論整合"
+        - "文件合併"
+      low:
+        - "文件更新"
+        - "文件同步"
+    weight_threshold: 3
+
+  - type: "程式碼格式化"
+    keywords:
+      high:
+        - "格式化"
+        - "Lint 修復"
+        - "程式碼品質修正"
+      medium:
+        - "dart format"
+        - "修復格式"
+        - "整理程式碼"
+      low:
+        - "程式碼風格"
+        - "縮排調整"
+    weight_threshold: 3
+
+  # 應用程式開發（最低優先級）
+  - type: "應用程式開發"
+    keywords:
+      high:
+        - "實作 Widget"
+        - "開發應用程式"
+        - "Flutter 開發"
+      medium:
+        - "撰寫程式碼"
+        - "實作功能"
+      low:
+        - "程式開發"
+    weight_threshold: 3
+
+  - type: "記憶網路建構"
+    keywords:
+      high:
+        - "建立記憶網路"
+        - "知識圖譜"
+        - "決策記錄"
+      medium:
+        - "記憶建構"
+        - "知識管理"
+      low:
+        - "記錄決策"
+    weight_threshold: 3
+
+# ===== 排除關鍵字配置 =====
+# 用於處理「Phase X 完成」等負面語境，每次匹配扣 5 分
+exclude_keywords:
+  "Phase 1 設計":
+    - "Phase 1 完成"
+    - "Phase 1 產出"
+    - "Phase 1 已完成"
+    - "基於 Phase 1"
+    - "參考 Phase 1"
+    - "Phase 1 交付物"
+    - "Phase 1 設計完成"
+    - "依據 Phase 1"
+
+  "Phase 2 測試設計":
+    - "Phase 2 完成"
+    - "Phase 2 產出"
+    - "Phase 2 已完成"
+    - "基於 Phase 2"
+    - "參考 Phase 2"
+    - "Phase 2 交付物"
+    - "Phase 2 測試完成"
+    - "依據 Phase 2"
+
+  "Phase 3a 策略規劃":
+    - "Phase 3a 完成"
+    - "Phase 3a 產出"
+    - "Phase 3a 已完成"
+    - "基於 Phase 3a"
+    - "參考 Phase 3a"
+    - "Phase 3a 交付物"
+    - "Phase 3a 虛擬碼"
+    - "依據 Phase 3a"
+
+  "Phase 3b 實作":
+    - "Phase 3b 完成"
+    - "Phase 3b 產出"
+    - "Phase 3b 已完成"
+    - "基於 Phase 3b"
+    - "參考 Phase 3b"
+    - "Phase 3b 交付物"
+
+  "Phase 4 重構":
+    - "Phase 4 完成"
+    - "Phase 4 產出"
+    - "Phase 4 已完成"
+    - "基於 Phase 4"
+    - "參考 Phase 4"
+    - "Phase 4 交付物"
+
+# ===== 分派錯誤原因說明 =====
+dispatch_error_reasons:
+  "Hook 開發": "Hook 開發是專業任務，應優先判斷任務類型而非專案類型。basil-hook-architect 是 Hook 系統的專業代理人。"
+  "文件整合": "文件整合是專業任務，需要使用 Serena 和 Context7 MCP 工具。thyme-documentation-integrator 是文件整合的專業代理人。"
+  "程式碼格式化": "程式碼格式化是專業任務，需要批量處理多個檔案。mint-format-specialist 是格式化的專業代理人。"
+  "Phase 1 設計": "Phase 1 功能設計階段應由 lavender-interface-designer 負責，專注於需求分析和功能規格設計。"
+  "Phase 2 測試設計": "Phase 2 測試設計階段應由 sage-test-architect 負責，專注於測試案例設計和測試策略規劃。"
+  "Phase 3a 策略規劃": "Phase 3a 實作策略階段應由 pepper-test-implementer 負責，提供語言無關的實作策略（虛擬碼）。"
+  "Phase 3b 實作": "Phase 3b 語言特定實作階段應由 parsley-flutter-developer 負責，將 Phase 3a 虛擬碼轉換為 Flutter/Dart 程式碼。"
+  "Phase 4 重構": "Phase 4 重構評估階段應由 cinnamon-refactor-owl 負責，評估程式碼品質並提供重構建議。"
+  "應用程式開發": "應用程式開發應由對應的語言代理人負責（Flutter → parsley-flutter-developer）。"
+  "記憶網路建構": "記憶網路建構應由 memory-network-builder 負責，專注於知識圖譜和決策記錄。"
+
+# ===== 任務檢測關鍵字 =====
+task_detection:
+  # 基礎設施任務關鍵字
+  infrastructure_keywords:
+    - "Hook 系統"
+    - "Hook 開發"
+    - "基礎設施"
+    - "Infrastructure"
+    - "方法論"
+    - "Methodology"
+    - "文件更新"
+    - "架構改善"
+
+  # 文件編寫任務關鍵字
+  documentation_keywords:
+    - "\\.md"
+    - "文件編寫"
+    - "文件撰寫"
+    - "方法論設計"
+    - "方法論驗證"
+    - "測試驗證"
+    - "Phase \\d+ - 測試驗證"
+    - "Phase \\d+ - 功能設計"
+    - "Phase \\d+ - 重構優化"
+    - "設計文件"
+    - "驗證文件"
+    - "審查文件"
+    - "評估文件"
+    - "文件品質"
+    - "README"
+    - "CHANGELOG"
+    - "文檔"
+    - "Documentation"
+
+  # 架構規範引用模式
+  architecture_patterns:
+    - "Clean Architecture"
+    - "Domain 層"
+    - "Application 層"
+    - "Presentation 層"
+    - "Infrastructure 層"
+
+  # 依賴類別說明模式
+  dependency_patterns:
+    - "Repository"
+    - "Service"
+    - "Entity"
+    - "ValueObject"
+    - "UseCase"

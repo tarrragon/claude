@@ -86,8 +86,8 @@
 
 ### 相關方法論
 - [Ticket 設計派工方法論](./ticket-design-dispatch-methodology.md) - 主方法論（本方法論為 2.4 節提煉）
-- [Ticket 拆分標準方法論](./ticket-split-methodology.md) - C1 失敗時的拆分策略
 - [層級隔離派工方法論](./layered-ticket-methodology.md) - 五層架構和檔案路徑分析法
+- [Atomic Ticket 方法論](./atomic-ticket-methodology.md) - 單一職責原則與拆分策略
 
 ### 詳細實作
-- [品質閘門自動化檢測 SKILL](../skills/quality-gate-automation/SKILL.md) - Python 腳本、Hook 整合、完整案例
+- 品質閘門自動化檢測 SKILL（規劃中）- Python 腳本、Hook 整合、完整案例
