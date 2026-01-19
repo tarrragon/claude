@@ -370,6 +370,27 @@ throw CommonErrors.networkTimeout;
 
 **參考**：[專案用語規範字典]($CLAUDE_PROJECT_DIR/.claude/terminology-dictionary.md)
 
+### 交接文件格式規範
+
+**交接文件定義**：計畫文件、工作日誌、Ticket、error-patterns、README
+
+**禁止使用 emoji**：所有交接文件禁止使用 emoji 符號
+
+| 規則 | 說明 |
+|------|------|
+| 禁用 emoji | 確保跨平台相容性和專業性 |
+| 使用純文字標記 | 狀態使用 [x]、[ ]、pending、completed |
+| 優先級標記 | 使用「高/中/低」而非表情符號 |
+
+**適用範圍**：
+- `.claude/plans/` - 計畫文件
+- `docs/work-logs/` - 工作日誌
+- `.claude/tickets/` - Ticket 文件
+- `.claude/error-patterns/` - 錯誤模式記錄
+- 所有 README.md 文件
+
+**深入學習**：[Error Patterns 系統]($CLAUDE_PROJECT_DIR/.claude/error-patterns/README.md)
+
 ---
 
 ## 10. 任務追蹤

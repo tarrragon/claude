@@ -185,8 +185,9 @@ def read_ticket(file_path: Path) -> TicketData:
         raise ValueError(f"Ticket {file_path.name} frontmatter 解析失敗: {e}")
 
     # 提取必需欄位（有預設值的除外）
+    # 注意: wave 為可選欄位，預設 0 表示「無 Wave 分組」
     required_fields = [
-        'ticket_id', 'version', 'wave', 'action', 'target', 'agent',
+        'ticket_id', 'version', 'action', 'target', 'agent',
         'who', 'what', 'when', 'where', 'why', 'how'
     ]
 
@@ -216,7 +217,7 @@ def read_ticket(file_path: Path) -> TicketData:
     ticket_data = TicketData(
         ticket_id=frontmatter['ticket_id'],
         version=frontmatter['version'],
-        wave=int(frontmatter['wave']),
+        wave=int(frontmatter.get('wave', 0)),
         action=frontmatter['action'],
         target=frontmatter['target'],
         agent=frontmatter['agent'],

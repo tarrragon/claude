@@ -1,3 +1,11 @@
+## [1.1.10] - 2026-01-19
+
+### Summary
+feat(hooks): ticket-track complete 自動同步 todolist + wave 欄位改為可選
+
+---
+
+
 ## [1.1.9] - 2026-01-14
 
 ### Summary

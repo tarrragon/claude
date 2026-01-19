@@ -329,6 +329,31 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 - ✅ **工作日誌更新**: 執行過程記錄到工作日誌，完成時更新進度
 - ✅ **升級機制**: 遇到超出能力範圍的問題時，向主線程升級請求任務重新分派
 
+### 工具使用強制規範
+
+#### 檔案編輯必須使用結構化工具
+
+| 操作類型 | 必須使用 | 禁止使用 |
+|---------|---------|---------|
+| 修改檔案 | Edit Tool | Bash sed/awk |
+| 建立檔案 | Write Tool | Bash echo > |
+| 批量替換 | Edit Tool (多次) | Bash sed -i |
+| 搜尋取代 | Edit Tool (replace_all) | Bash sed/perl |
+
+#### 為什麼禁止 Bash 編輯？
+
+1. **權限問題**: Bash 命令不受 "accept edits on" 設定影響，導致每次操作都需要手動確認
+2. **無法追蹤**: 繞過 Hook 系統的監管，無法執行 Style Guardian 等品質檢查
+3. **難以回滾**: 批量操作失敗難以恢復，特別是正則表達式錯誤
+4. **破壞風險**: 正則表達式錯誤可能同時影響多個檔案
+
+#### 唯一例外
+
+以下命令已列入 `permissions.allow` 清單，可以使用 Bash：
+- 系統管理命令: `git`, `flutter pub`, `dart analyze` 等
+- 測試執行: `flutter test`, `dart test` 等
+- 建置工具: `flutter build`, `dart compile` 等
+
 ## 🌐 語言代理人自動分派機制
 
 **本專案採用通用規範與語言特定實作分離的架構設計**，CLAUDE.md 定義語言無關的開發規範，語言配置檔案（如 FLUTTER.md）定義語言特定的工具鏈和實作細節。

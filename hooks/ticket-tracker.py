@@ -169,6 +169,9 @@ def get_elapsed_time(started_at: str) -> str:
 
     try:
         start = datetime.fromisoformat(started_at)
+        # 處理時區不一致問題：統一移除時區資訊進行比較
+        if start.tzinfo is not None:
+            start = start.replace(tzinfo=None)
         elapsed = datetime.now() - start
 
         hours = int(elapsed.total_seconds() // 3600)
@@ -178,8 +181,42 @@ def get_elapsed_time(started_at: str) -> str:
             return f"(已 {hours}h{minutes}m)"
         else:
             return f"(已 {minutes}m)"
-    except ValueError:
+    except (ValueError, TypeError):
         return ""
+
+
+def sync_todolist_removal(ticket_id: str, project_root: Path) -> bool:
+    """
+    從 todolist.md 移除已完成的 ticket
+
+    Args:
+        ticket_id: 要移除的 Ticket ID
+        project_root: 專案根目錄
+
+    Returns:
+        bool: True=成功移除, False=找不到或已移除
+    """
+    todolist_path = project_root / "docs" / "todolist.md"
+
+    if not todolist_path.exists():
+        return False
+
+    content = todolist_path.read_text(encoding='utf-8')
+    lines = content.split('\n')
+
+    # 找到並移除包含 ticket_id 的表格行
+    new_lines = []
+    removed = False
+    for line in lines:
+        if ticket_id in line and '|' in line:
+            removed = True
+            continue
+        new_lines.append(line)
+
+    if removed:
+        todolist_path.write_text('\n'.join(new_lines), encoding='utf-8')
+
+    return removed
 
 
 # ============ 命令實作 ============
@@ -302,6 +339,14 @@ def cmd_complete(args: argparse.Namespace) -> int:
         ticket.started_at.isoformat() if ticket.started_at else ""
     )
     print(f"✅ 已完成 {args.ticket_id} {elapsed}")
+
+    # 同步 todolist.md - 移除已完成的 ticket
+    if not getattr(args, 'skip_todolist', False):
+        if sync_todolist_removal(args.ticket_id, root):
+            print(f"   已從 todolist.md 移除 {args.ticket_id}")
+        else:
+            print(f"   注意: todolist.md 中未找到 {args.ticket_id}")
+
     return 0
 
 
@@ -607,6 +652,11 @@ def main() -> int:
     p_complete = subparsers.add_parser("complete", help="標記完成")
     p_complete.add_argument("ticket_id", help="票號")
     p_complete.add_argument("--version", help="版本號（自動偵測）")
+    p_complete.add_argument(
+        "--skip-todolist",
+        action="store_true",
+        help="跳過 todolist.md 同步（用於批量操作或測試）"
+    )
 
     # release
     p_release = subparsers.add_parser("release", help="放棄 Ticket")
