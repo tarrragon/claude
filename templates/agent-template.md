@@ -311,12 +311,12 @@ You are a {role description in English}. Your core mission is {mission statement
 
 | 文件 | 說明 | 位置 |
 |------|------|------|
-| 觸發條件規則 | 詳細的觸發規則 | `.claude/rules/agent-triggers/` |
-| 職責矩陣 | 更新職責邊界 | `.claude/rules/boundaries/agent-responsibility-matrix.md` |
+| 代理人規則 | 詳細的代理人定義 | `.claude/rules/agents/` |
+| 職責矩陣 | 更新職責邊界 | `.claude/rules/agents/overview.md` |
 | CLAUDE.md | 更新代理人列表 | `CLAUDE.md` |
-| 決策流程 | 更新派發規則 | `.claude/rules/decision-tree/main-thread-decision-flow.md` |
+| 決策流程 | 更新派發規則 | `.claude/rules/core/decision-tree.md` |
 
 ---
 
-**Last Updated**: 2025-01-23
-**Version**: 1.0.0
+**Last Updated**: 2026-01-28
+**Version**: 1.1.0

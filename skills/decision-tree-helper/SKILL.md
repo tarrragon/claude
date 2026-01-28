@@ -51,25 +51,39 @@ description: "決策樹助手工具。快速評估任務複雜度，提供派發
 
 ---
 
-## 派發決策樹
+## 派發決策樹（二元結構）
+
+> 對應主線程決策樹 v3.0.0 的二元化結構
 
 ```
 任務進入
     |
-    +-- 包含錯誤關鍵字?
-    |   +-- 是 --> [強制] incident-responder
+    v
+包含錯誤關鍵字? ─是→ [強制] incident-responder
     |
-    +-- 涉及安全相關?（認證/授權/API/敏感資料）
-    |   +-- 是 --> [強制] clove-security-reviewer
-    |
-    +-- 是新功能/架構變更?
-    |   +-- 是 --> saffron-system-analyst (SA 前置審查)
-    |
-    +-- 複雜度評估
-        +-- 低 --> 直接派發對應代理人
-        +-- 中 --> 考慮拆分，或派發資深代理人
-        +-- 高 --> 必須拆分
+    └─否→ 包含不確定性詞彙? ─是→ [確認機制] 向用戶確認
+              |
+              └─否→ 複雜需求（觸發 3+ 代理人）? ─是→ [確認機制]
+                        |
+                        └─否→ 是問題? ─是→ 是查詢類? ─是→ 執行查詢命令
+                                    |           |
+                                    |           └─否→ 派發諮詢代理人
+                                    |
+                                    └─否→ 是開發命令? ─是→ [驗證 Ticket]
+                                              |              └→ TDD 階段派發
+                                              |
+                                              └─否→ 是除錯命令? ─是→ incident-responder
+                                                        |
+                                                        └─否→ 其他處理
 ```
+
+### 二元判斷順序（第零層）
+
+| 順序 | 判斷問題 | 是 | 否 |
+|------|---------|----|----|
+| 1 | 包含錯誤關鍵字？ | → 事件回應流程 | → 下一判斷 |
+| 2 | 包含不確定性詞彙？ | → 確認機制 | → 下一判斷 |
+| 3 | 複雜需求（3+ 代理人）？ | → 確認機制 | → 進入第一層 |
 
 ---
 
@@ -238,11 +252,11 @@ description: "決策樹助手工具。快速評估任務複雜度，提供派發
 ## 相關文件
 
 - [認知負擔量化標準]($CLAUDE_PROJECT_DIR/.claude/skills/cognitive-load-assessment/thresholds.md)
-- [主線程決策流程]($CLAUDE_PROJECT_DIR/.claude/rules/decision-tree/main-thread-decision-flow.md)
-- [代理人職責矩陣]($CLAUDE_PROJECT_DIR/.claude/rules/boundaries/agent-responsibility-matrix.md)
-- [任務拆分指南]($CLAUDE_PROJECT_DIR/.claude/rules/workflows/task-splitting-guide.md)
+- [主線程決策樹]($CLAUDE_PROJECT_DIR/.claude/rules/core/decision-tree.md)
+- [代理人職責矩陣]($CLAUDE_PROJECT_DIR/.claude/rules/agents/overview.md)
+- [任務拆分指南]($CLAUDE_PROJECT_DIR/.claude/rules/guides/task-splitting.md)
 
 ---
 
-**Last Updated**: 2026-01-23
-**Version**: 1.0.0
+**Last Updated**: 2026-01-28
+**Version**: 1.1.0

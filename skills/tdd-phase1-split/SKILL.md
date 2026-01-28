@@ -379,7 +379,7 @@ uv run .claude/skills/ticket-track/scripts/ticket-tracker.py version 0.29.0
 
 ## 相關文件
 
-- [TDD 協作開發流程]($CLAUDE_PROJECT_DIR/.claude/tdd-collaboration-flow.md)
+- [TDD 流程]($CLAUDE_PROJECT_DIR/.claude/rules/flows/tdd-flow.md)
 - [Atomic Ticket 方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/atomic-ticket-methodology.md)
-- [主線程決策流程]($CLAUDE_PROJECT_DIR/.claude/rules/decision-tree/main-thread-decision-flow.md)
-- [任務拆分指南]($CLAUDE_PROJECT_DIR/.claude/rules/workflows/task-splitting-guide.md)
+- [主線程決策樹]($CLAUDE_PROJECT_DIR/.claude/rules/core/decision-tree.md)
+- [任務拆分指南]($CLAUDE_PROJECT_DIR/.claude/rules/guides/task-splitting.md)

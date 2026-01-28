@@ -371,13 +371,16 @@ Ticket 是 pending? ─是→ 執行 /ticket-track claim {id}
 有技術債務記錄? ─是→ 執行 /tech-debt-capture
              |     └→ 建立技術債務 Ticket
              |
-             └─否→ 需記錄學習經驗? ─是→ [派發] memory-network-builder
-                                 |
-                                 └─否→ 有後續階段? ─是→ 更新 worklog 進入下一個 Ticket
-                                              |
-                                              └─否→ 版本所有 Ticket 完成? ─是→ /version-release check
-                                                                      |
-                                                                      └─否→ 等待其他 Ticket 完成
+             └─否→ 涉及規則變更? ─是→ 檢查 SKILL/方法論同步
+                              |     └→ 更新相關引用和內容
+                              |
+                              └─否→ 需記錄學習經驗? ─是→ [派發] memory-network-builder
+                                                  |
+                                                  └─否→ 有後續階段? ─是→ 更新 worklog 進入下一個 Ticket
+                                                               |
+                                                               └─否→ 版本所有 Ticket 完成? ─是→ /version-release check
+                                                                                       |
+                                                                                       └─否→ 等待其他 Ticket 完成
 ```
 
 ### 完成判斷規則
@@ -385,10 +388,29 @@ Ticket 是 pending? ─是→ 執行 /ticket-track claim {id}
 | 判斷項目 | 條件 | 動作 |
 |---------|------|------|
 | 技術債務 | 發現可優化項目 | `/tech-debt-capture` 建立 Ticket |
+| 規則變更同步 | 修改了 `.claude/rules/` 下的檔案 | 檢查 SKILL 和方法論是否需要同步 |
 | 學習經驗 | 重要決策或經驗 | 派發 memory-network-builder 記錄 |
 | 後續階段 | 有對應下一階段 | 更新 worklog 進入下一個 Ticket |
 | 版本完成 | 所有 Ticket 完成 | `/version-release check` 準備發布 |
 | 等待中 | 其他 Ticket 未完成 | 繼續等待其他 Ticket
+
+### 規則變更同步檢查
+
+當修改了 `.claude/rules/` 下的規則檔案時，必須檢查以下相關文件是否需要同步更新：
+
+| 檢查項目 | 檔案位置 | 說明 |
+|---------|---------|------|
+| 相關 SKILL | `.claude/skills/` | 檢查是否有 SKILL 引用了變更的規則 |
+| 方法論 | `.claude/methodologies/` | 檢查是否有方法論引用了變更的規則 |
+| 代理人定義 | `.claude/agents/` | 檢查代理人定義是否需要更新 |
+| 範本 | `.claude/templates/` | 檢查範本是否需要同步 |
+
+**同步檢查命令**：
+
+```bash
+# 搜尋引用了特定規則檔案的文件
+grep -r "rules/{changed-file}" .claude/
+```
 
 ---
 
@@ -581,9 +603,13 @@ decision_tree_path:
 ---
 
 **Last Updated**: 2026-01-28
-**Version**: 3.0.0
+**Version**: 3.1.0
 
 **Change Log**:
+- v3.1.0 (2026-01-28): 新增規則變更同步檢查
+  - 第七層新增「規則變更同步」判斷節點
+  - 當修改 `.claude/rules/` 時，強制檢查 SKILL 和方法論是否需要同步
+  - 更新 Mermaid 圖表反映新判斷節點
 - v3.0.0 (2026-01-28): 完整二元化決策樹結構
   - 將所有決策節點改為嚴格的二元樹結構（只有是/否兩個分支）
   - 重構第零層：3 個連續是/否判斷（錯誤關鍵字→不確定性詞彙→複雜需求）
@@ -660,7 +686,10 @@ flowchart TD
     TDD --> L7[第七層:完成判斷]
     L7 --> L7_TD{技術債務?}
     L7_TD -->|是| TECHDEBT["tech-debt-capture"]
-    L7_TD -->|否| L7_LEARN{學習經驗?}
+    L7_TD -->|否| L7_RULE{規則變更?}
+    L7_RULE -->|是| SYNC[檢查SKILL/方法論同步]
+    L7_RULE -->|否| L7_LEARN{學習經驗?}
+    SYNC --> L7_LEARN
     L7_LEARN -->|是| MNB[memory-network-builder]
     L7_LEARN -->|否| L7_NEXT{後續階段?}
     L7_NEXT -->|是| NEXT[下一個Ticket]

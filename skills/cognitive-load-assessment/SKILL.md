@@ -191,10 +191,10 @@ description: "認知負擔評估工具。作為決策樹、代理人、Code Revi
 - [認知負擔量化標準](./thresholds.md) - 詳細閾值參考
 - [認知負擔設計方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/cognitive-load-design-methodology.md) - 完整理論基礎
 - [自然語言程式設計方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/natural-language-programming-methodology.md) - 命名最佳實踐
-- [代理人升級規則]($CLAUDE_PROJECT_DIR/.claude/rules/boundaries/agent-escalation-rules.md) - 升級判斷標準
-- [任務拆分指南]($CLAUDE_PROJECT_DIR/.claude/rules/workflows/task-splitting-guide.md) - 拆分方法
+- [代理人職責矩陣]($CLAUDE_PROJECT_DIR/.claude/rules/agents/overview.md) - 升級判斷標準
+- [任務拆分指南]($CLAUDE_PROJECT_DIR/.claude/rules/guides/task-splitting.md) - 拆分方法
 
 ---
 
-**Last Updated**: 2026-01-23
-**Version**: 1.0.0
+**Last Updated**: 2026-01-28
+**Version**: 1.1.0

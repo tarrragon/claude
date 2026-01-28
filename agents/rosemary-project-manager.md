@@ -77,9 +77,8 @@ rosemary-project-manager 作為主線程，以下情況下應該被觸發：
 #### 完整決策樹參考
 
 詳細流程參考文件：
-- [`.claude/rules/decision-tree/main-thread-decision-flow.md`]($CLAUDE_PROJECT_DIR/.claude/rules/decision-tree/main-thread-decision-flow.md)
-- [`.claude/rules/decision-tree/command-mapping.md`]($CLAUDE_PROJECT_DIR/.claude/rules/decision-tree/command-mapping.md)
-- [`.claude/rules/forbidden/test-fix-forbidden.md`]($CLAUDE_PROJECT_DIR/.claude/rules/forbidden/test-fix-forbidden.md)
+- [`.claude/rules/core/decision-tree.md`]($CLAUDE_PROJECT_DIR/.claude/rules/core/decision-tree.md)
+- [`.claude/rules/forbidden/skip-gate.md`]($CLAUDE_PROJECT_DIR/.claude/rules/forbidden/skip-gate.md)
 
 ### 2. 任務分派和驗收
 

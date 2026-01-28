@@ -411,10 +411,10 @@ void recordUserAccess(int id) {
 - [認知負擔量化標準]($CLAUDE_PROJECT_DIR/.claude/skills/cognitive-load-assessment/thresholds.md)
 - [自然語言程式設計方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/natural-language-programming-methodology.md)
 - [程式碼品質門檻方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/code-smell-quality-gate-methodology.md)
-- [代理人升級規則]($CLAUDE_PROJECT_DIR/.claude/rules/boundaries/agent-escalation-rules.md)
-- [任務拆分指南]($CLAUDE_PROJECT_DIR/.claude/rules/workflows/task-splitting-guide.md)
+- [代理人職責矩陣]($CLAUDE_PROJECT_DIR/.claude/rules/agents/overview.md)
+- [任務拆分指南]($CLAUDE_PROJECT_DIR/.claude/rules/guides/task-splitting.md)
 
 ---
 
-**Last Updated**: 2026-01-23
-**Version**: 1.0.0
+**Last Updated**: 2026-01-28
+**Version**: 1.1.0
