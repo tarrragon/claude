@@ -49,6 +49,37 @@ ticket:
   references: []
   # 格式: ["path/to/doc.md", "path/to/spec.md"]
 
+  # 決策樹決策過程（記錄此 Ticket 如何通過決策樹得出）
+  decision_tree_path:
+    entry_point: "{ENTRY_LAYER}"
+    # 進入決策樹的層級（第零層~第七層）
+    # 例：第一層：訊息類型判斷
+    #    第三層：命令處理流程
+    #    第五層：TDD 階段判斷
+
+    decision_nodes: []
+    # 經過的決策節點清單，記錄決策過程
+    # 格式範例：
+    # - layer: "1"
+    #   question: "訊息類型是什麼？"
+    #   answer: "開發/修改命令"
+    #   next_action: "進入第三層：命令處理流程"
+    # - layer: "3"
+    #   question: "涉及安全相關嗎？"
+    #   answer: "否"
+    #   next_action: "進入第四層：Ticket 執行流程"
+
+    final_decision: "{FINAL_AGENT_OR_ACTION}"
+    # 最終決策結果
+    # 例：派發給 parsley-flutter-developer
+    #    執行 /ticket-create
+    #    派發給 system-analyst（需 SA 前置審查）
+
+    rationale: "{DECISION_RATIONALE}"
+    # 決策理由（簡述為何做出此決策）
+    # 例：「新功能需求，涉及多個架構層，需要 SA 審查確保系統一致性」
+    #    「測試失敗，需要派發 incident-responder 進行分析」
+
 # 單一職責檢查（建立時自動驗證）
 # [ ] 語義檢查：能用「{ACTION} {TARGET}」表達
 # [ ] 修改原因：只有一個原因會導致修改

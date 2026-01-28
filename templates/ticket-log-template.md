@@ -61,13 +61,57 @@ Ticket 是否已從主版本任務拆分？
 | **Ticket 索引** | 包含 Ticket 索引表 | 不包含 |
 | **5 個核心欄位** | 選擇性包含 | 必須包含 |
 
-### Ticket 設計 5 個核心欄位
+### 5W1H 驅動的 Ticket 欄位
 
-**基於 ticket-design-dispatch-methodology.md**：
+**基於 5W1H 方法論和版本驅動任務管理**：
 
-1. **背景（Background）** - 為什麼需要這個 Ticket
-2. **目標（Objective）** - 要達成什麼，成功標準
-3. **執行步驟（Steps）** - 具體執行步驟清單
+| 5W1H | 對應欄位 | 說明 |
+|------|---------|------|
+| **Who** | `who.current` + `who.history` | 當前負責代理人 + Phase 歷史 |
+| **What** | `what` | 任務目標（動詞 + 單一目標） |
+| **When** | `when` | 觸發時機 |
+| **Where** | `where.layer` + `where.files` | 架構層級 + 影響檔案 |
+| **Why** | `why` | 需求依據 |
+| **How** | `how.task_type` + `how.strategy` | Task Type + 實作策略 |
+
+### Ticket YAML Frontmatter 格式
+
+```yaml
+---
+id: 0.29.0-W1-001
+title: "[動詞] [目標]"
+type: IMP
+status: pending
+version: 0.29.1
+priority: P1
+parent_id: null
+children: []
+blockedBy: []
+who:
+  current: parsley-flutter-developer
+  history:
+    phase1: lavender-interface-designer
+    phase2: sage-test-architect
+what: "任務描述"
+when: "觸發時機"
+where:
+  layer: Domain
+  files:
+    - lib/path/to/file.dart
+why: "需求依據"
+how:
+  task_type: Implementation
+  strategy: "TDD 循環"
+created: 2026-01-23
+updated: 2026-01-23
+---
+```
+
+### 傳統 5 欄位（向後相容）
+
+1. **背景（Background）** = Why - 為什麼需要這個 Ticket
+2. **目標（Objective）** = What - 要達成什麼，成功標準
+3. **執行步驟（Steps）** = How - 具體執行步驟清單
 4. **驗收條件（Acceptance Criteria）** - SMART 原則驗收條件
 5. **參考文件（References）** - 需求規格、設計文件、技術文檔
 

@@ -1,0 +1,93 @@
+{
+  "version": "1.0.0",
+  "description": "Hook configuration registry - defines all hooks that should be registered in settings.json",
+  "last_updated": "2025-01-23",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "commands": [
+          ".claude/hooks/test-timeout-pre.py",
+          ".claude/hooks/version-release-guard-hook.py"
+        ]
+      },
+      {
+        "matcher": "mcp__dart__run_tests",
+        "commands": [
+          ".claude/hooks/mcp-run-tests-validator.py",
+          ".claude/hooks/test-timeout-pre.py"
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "commands": [
+          ".claude/hooks/branch-verify-hook.py",
+          ".claude/skills/strategic-compact/suggest-compact.sh"
+        ]
+      },
+      {
+        "matcher": "Write",
+        "commands": [
+          ".claude/hooks/branch-verify-hook.py",
+          ".claude/skills/strategic-compact/suggest-compact.sh"
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": null,
+        "commands": [
+          ".claude/hooks/hook-completeness-check.py",
+          ".claude/hooks/branch-status-reminder.py",
+          ".claude/hooks/output-style-check.py"
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "commands": [
+          ".claude/hooks/test-timeout-post.py",
+          ".claude/hooks/pre-fix-evaluation-hook.py"
+        ]
+      },
+      {
+        "matcher": "mcp__dart__run_tests",
+        "commands": [
+          ".claude/hooks/test-timeout-post.py",
+          ".claude/hooks/pre-fix-evaluation-hook.py"
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "commands": [
+          ".claude/hooks/style-guardian-hook.py",
+          ".claude/hooks/worklog-format-check.py"
+        ]
+      },
+      {
+        "matcher": "Write",
+        "commands": [
+          ".claude/hooks/style-guardian-hook.py",
+          ".claude/hooks/worklog-format-check.py"
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": null,
+        "commands": [
+          ".claude/hooks/prompt-submit-hook.sh"
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": null,
+        "commands": [
+          ".claude/skills/continuous-learning/evaluate-session.sh"
+        ]
+      }
+    ]
+  }
+}

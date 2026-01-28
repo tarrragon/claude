@@ -4,19 +4,20 @@
 # dependencies = ["pyyaml"]
 # ///
 """
-Atomic Ticket Creator - 建立符合單一職責原則的 Ticket
+Atomic Ticket Creator v2.0 - 5W1H 引導式建立與版本驅動管理
+
+支援功能:
+- create: 建立新的 Atomic Ticket（完整 5W1H 欄位）
+- create-child: 建立子 Ticket 並自動關聯父 Ticket
+- init: 初始化版本目錄
+- list: 列出所有 Tickets
+- show: 顯示 Ticket 詳細資訊
 
 使用方式:
-  uv run .claude/hooks/ticket-creator.py create --version 0.15.16 --wave 1 --seq 1 \\
-    --action "實作" --target "startScan() 方法" --agent "parsley-flutter-developer"
-
-  uv run .claude/hooks/ticket-creator.py add-to-csv --id 0.15.16-W1-001
-
-  uv run .claude/hooks/ticket-creator.py list --version 0.15.16
+    uv run .claude/skills/ticket-create/scripts/ticket-creator.py <command> [options]
 """
 
 import argparse
-import csv
 import os
 import sys
 from datetime import datetime
@@ -25,41 +26,25 @@ from typing import Optional
 
 import yaml
 
-# 專案根目錄
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+# 專案根目錄 (.claude/skills/ticket-create/scripts/ -> 需要 5 層)
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 
 # 工作日誌目錄
 WORK_LOGS_DIR = PROJECT_ROOT / "docs" / "work-logs"
 
-# CSV 欄位定義（精簡版 - 只追蹤狀態）
-CSV_HEADERS = [
-    "ticket_id",
-    "version",
-    "status",
-    "started_at",
-    "completed_at",
-    "agent",
-]
-
 # 狀態定義
 STATUS_PENDING = "pending"
-STATUS_IN_PROGRESS = "in_progress"
-STATUS_COMPLETED = "completed"
 
 
 def get_version_dir(version: str) -> Path:
     """取得版本目錄路徑"""
-    return WORK_LOGS_DIR / f"v{version}"
+    v = version if version.startswith("v") else f"v{version}"
+    return WORK_LOGS_DIR / v
 
 
 def get_tickets_dir(version: str) -> Path:
-    """取得 Tickets YAML 目錄路徑"""
+    """取得 Tickets 目錄路徑"""
     return get_version_dir(version) / "tickets"
-
-
-def get_csv_path(version: str) -> Path:
-    """取得 CSV 路徑"""
-    return get_version_dir(version) / "tickets.csv"
 
 
 def ensure_directories(version: str) -> None:
@@ -70,120 +55,235 @@ def ensure_directories(version: str) -> None:
 
 def format_ticket_id(version: str, wave: int, seq: int) -> str:
     """格式化 Ticket ID"""
-    return f"{version}-W{wave}-{seq:03d}"
+    # 移除 v 前綴
+    v = version[1:] if version.startswith("v") else version
+    return f"{v}-W{wave}-{seq:03d}"
 
 
-def create_ticket_yaml(
+def get_next_seq(version: str, wave: int) -> int:
+    """取得下一個序號"""
+    tickets_dir = get_tickets_dir(version)
+    if not tickets_dir.exists():
+        return 1
+
+    pattern = f"*-W{wave}-*.md"
+    existing = list(tickets_dir.glob(pattern))
+
+    if not existing:
+        return 1
+
+    max_seq = 0
+    for f in existing:
+        try:
+            # 格式：{version}-W{wave}-{seq}.md
+            parts = f.stem.split("-W")
+            if len(parts) == 2:
+                wave_seq = parts[1].split("-")
+                if len(wave_seq) == 2:
+                    seq = int(wave_seq[1])
+                    max_seq = max(max_seq, seq)
+        except (ValueError, IndexError):
+            continue
+
+    return max_seq + 1
+
+
+def create_ticket_content(
+    ticket_id: str,
     version: str,
     wave: int,
-    seq: int,
-    action: str,
-    target: str,
-    agent: str,
-    when: str = "",
-    where: str = "",
-    why: str = "",
-    how: str = "",
+    title: str,
+    ticket_type: str,
+    priority: str,
+    # 5W1H 欄位
+    who: str,
+    what: str,
+    when: str,
+    where_layer: str,
+    where_files: list,
+    why: str,
+    how_task_type: str,
+    how_strategy: str,
+    # 關係欄位
+    parent_id: Optional[str] = None,
+    blocked_by: Optional[list] = None,
+    # 驗收條件
     acceptance: Optional[list] = None,
-    files: Optional[list] = None,
-    dependencies: Optional[list] = None,
-    references: Optional[list] = None,
-) -> dict:
-    """建立 Ticket YAML 資料結構"""
-    ticket_id = format_ticket_id(version, wave, seq)
-
-    return {
-        "ticket": {
-            "id": ticket_id,
-            "version": version,
-            "wave": wave,
-            "action": action,
-            "target": target,
-            "agent": agent,
-            "who": agent,
-            "what": f"{action} {target}",
-            "when": when or "待定義",
-            "where": where or "待定義",
-            "why": why or "待定義",
-            "how": how or "待定義",
-            "acceptance": acceptance or [
-                f"{target} 實作完成",
-                "相關測試通過",
-                "dart analyze 無警告",
-            ],
-            "files": files or [],
-            "dependencies": dependencies or [],
-            "references": references or [],
-        }
-    }
-
-
-def save_ticket_yaml(version: str, ticket_data: dict) -> Path:
-    """儲存 Ticket YAML 檔案"""
-    ensure_directories(version)
-    ticket_id = ticket_data["ticket"]["id"]
-    yaml_path = get_tickets_dir(version) / f"{ticket_id}.yaml"
-
-    with open(yaml_path, "w", encoding="utf-8") as f:
-        yaml.dump(ticket_data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-
-    return yaml_path
-
-
-def read_csv(csv_path: Path) -> list:
-    """讀取 CSV 檔案"""
-    if not csv_path.exists():
-        return []
-
-    with open(csv_path, "r", encoding="utf-8", newline="") as f:
-        reader = csv.DictReader(f)
-        return list(reader)
-
-
-def write_csv(csv_path: Path, tickets: list) -> None:
-    """寫入 CSV 檔案"""
-    csv_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with open(csv_path, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_HEADERS)
-        writer.writeheader()
-        writer.writerows(tickets)
-
-
-def add_to_csv(version: str, ticket_id: str, agent: str) -> None:
-    """新增 Ticket 到 CSV 追蹤"""
-    csv_path = get_csv_path(version)
-    tickets = read_csv(csv_path)
-
-    # 檢查是否已存在
-    for ticket in tickets:
-        if ticket.get("ticket_id") == ticket_id:
-            print(f"⚠️  {ticket_id} 已存在於 CSV")
-            return
-
-    # 新增 Ticket
-    new_ticket = {
-        "ticket_id": ticket_id,
-        "version": version,
+) -> str:
+    """建立 Ticket Markdown 內容"""
+    frontmatter = {
+        # 識別欄位
+        "id": ticket_id,
+        "title": title,
+        "type": ticket_type,
         "status": STATUS_PENDING,
-        "started_at": "",
-        "completed_at": "",
-        "agent": agent,
+        # 版本欄位
+        "version": version,
+        "wave": wave,
+        "priority": priority,
+        # 關係欄位
+        "parent_id": parent_id,
+        "children": [],
+        "blockedBy": blocked_by or [],
+        # 5W1H 欄位
+        "who": {
+            "current": who,
+            "history": {}
+        },
+        "what": what,
+        "when": when,
+        "where": {
+            "layer": where_layer,
+            "files": where_files
+        },
+        "why": why,
+        "how": {
+            "task_type": how_task_type,
+            "strategy": how_strategy
+        },
+        # 驗收條件
+        "acceptance": acceptance or [
+            "任務實作完成",
+            "相關測試通過",
+            "無程式碼品質警告"
+        ],
+        # 狀態追蹤
+        "assigned": False,
+        "started_at": None,
+        "completed_at": None,
+        # 元資料
+        "created": datetime.now().strftime("%Y-%m-%d"),
+        "updated": datetime.now().strftime("%Y-%m-%d"),
     }
-    tickets.append(new_ticket)
 
-    write_csv(csv_path, tickets)
-    print(f"✅ 已新增 {ticket_id} 到 CSV 追蹤")
+    frontmatter_yaml = yaml.dump(
+        frontmatter,
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False
+    )
+
+    body = f"""# Execution Log
+
+## Task Summary
+
+{what}
+
+---
+
+## Problem Analysis
+
+<!-- To be filled by executing agent -->
+
+---
+
+## Solution
+
+<!-- To be filled by executing agent -->
+
+---
+
+## Test Results
+
+<!-- To be filled by executing agent -->
+
+---
+
+## Completion Info
+
+**Completion Time**: (pending)
+**Executing Agent**: {who}
+**Review Status**: pending
+"""
+
+    return f"---\n{frontmatter_yaml}---\n\n{body}"
 
 
-def load_ticket_yaml(version: str, ticket_id: str) -> Optional[dict]:
-    """讀取 Ticket YAML"""
-    yaml_path = get_tickets_dir(version) / f"{ticket_id}.yaml"
-    if not yaml_path.exists():
-        return None
+def save_ticket(version: str, ticket_id: str, content: str) -> Path:
+    """儲存 Ticket 檔案"""
+    ensure_directories(version)
+    ticket_path = get_tickets_dir(version) / f"{ticket_id}.md"
 
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    with open(ticket_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    return ticket_path
+
+
+def load_ticket(version: str, ticket_id: str) -> Optional[dict]:
+    """讀取 Ticket 資料"""
+    ticket_path = get_tickets_dir(version) / f"{ticket_id}.md"
+
+    if not ticket_path.exists():
+        # 嘗試 yaml 格式
+        ticket_path = get_tickets_dir(version) / f"{ticket_id}.yaml"
+        if not ticket_path.exists():
+            return None
+
+    with open(ticket_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    if ticket_path.suffix == ".md":
+        # 解析 frontmatter
+        if not content.startswith("---"):
+            return None
+        parts = content.split("---", 2)
+        if len(parts) < 3:
+            return None
+        try:
+            data = yaml.safe_load(parts[1])
+            data["_path"] = str(ticket_path)
+            return data
+        except yaml.YAMLError:
+            return None
+    else:
+        data = yaml.safe_load(content)
+        if data and "ticket" in data:
+            data = data["ticket"]
+        data["_path"] = str(ticket_path)
+        return data
+
+
+def update_parent_children(version: str, parent_id: str, child_id: str) -> bool:
+    """更新父 Ticket 的 children 欄位"""
+    parent = load_ticket(version, parent_id)
+    if not parent:
+        return False
+
+    children = parent.get("children", [])
+    if child_id not in children:
+        children.append(child_id)
+
+    # 讀取原始檔案
+    parent_path = Path(parent.get("_path"))
+    with open(parent_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # 更新 children
+    parts = content.split("---", 2)
+    if len(parts) < 3:
+        return False
+
+    try:
+        frontmatter = yaml.safe_load(parts[1])
+        frontmatter["children"] = children
+        frontmatter["updated"] = datetime.now().strftime("%Y-%m-%d")
+
+        new_frontmatter = yaml.dump(
+            frontmatter,
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=False
+        )
+
+        new_content = f"---\n{new_frontmatter}---\n{parts[2]}"
+
+        with open(parent_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+
+        return True
+    except yaml.YAMLError:
+        return False
 
 
 def list_tickets(version: str) -> list:
@@ -193,11 +293,10 @@ def list_tickets(version: str) -> list:
         return []
 
     tickets = []
-    for yaml_file in sorted(tickets_dir.glob("*.yaml")):
-        with open(yaml_file, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-            if data and "ticket" in data:
-                tickets.append(data["ticket"])
+    for ticket_file in sorted(tickets_dir.glob("*.md")):
+        ticket = load_ticket(version, ticket_file.stem)
+        if ticket:
+            tickets.append(ticket)
 
     return tickets
 
@@ -209,146 +308,248 @@ def list_tickets(version: str) -> list:
 
 def cmd_create(args: argparse.Namespace) -> int:
     """建立新的 Atomic Ticket"""
-    ticket_data = create_ticket_yaml(
-        version=args.version,
+    version = args.version
+
+    # 自動取得下一個序號
+    if args.seq is None:
+        seq = get_next_seq(version, args.wave)
+    else:
+        seq = args.seq
+
+    ticket_id = format_ticket_id(version, args.wave, seq)
+
+    # 處理 where_files
+    where_files = []
+    if args.where_files:
+        where_files = [f.strip() for f in args.where_files.split(",")]
+
+    # 處理 blocked_by
+    blocked_by = []
+    if args.blocked_by:
+        blocked_by = [b.strip() for b in args.blocked_by.split(",")]
+
+    # 處理 acceptance
+    acceptance = None
+    if args.acceptance:
+        acceptance = [a.strip() for a in args.acceptance.split("|")]
+
+    content = create_ticket_content(
+        ticket_id=ticket_id,
+        version=version,
         wave=args.wave,
-        seq=args.seq,
-        action=args.action,
-        target=args.target,
-        agent=args.agent,
-        when=args.when or "",
-        where=args.where or "",
-        why=args.why or "",
-        how=args.how or "",
+        title=args.title or f"{args.action} {args.target}",
+        ticket_type=args.type or "IMP",
+        priority=args.priority or "P2",
+        # 5W1H
+        who=args.who or "pending",
+        what=args.what or f"{args.action} {args.target}",
+        when=args.when or "待定義",
+        where_layer=args.where_layer or "待定義",
+        where_files=where_files,
+        why=args.why or "待定義",
+        how_task_type=args.how_type or "Implementation",
+        how_strategy=args.how_strategy or "待定義",
+        # 關係
+        parent_id=args.parent,
+        blocked_by=blocked_by,
+        # 驗收
+        acceptance=acceptance,
     )
 
-    yaml_path = save_ticket_yaml(args.version, ticket_data)
-    ticket_id = ticket_data["ticket"]["id"]
+    ticket_path = save_ticket(version, ticket_id, content)
 
-    print(f"✅ 已建立 Ticket: {ticket_id}")
-    print(f"   YAML: {yaml_path}")
+    print(f"[OK] 已建立 Ticket: {ticket_id}")
+    print(f"   Location: {ticket_path}")
 
-    # 連動 CSV（除非指定 --no-track）
-    if not args.no_track:
-        add_to_csv(args.version, ticket_id, args.agent)
-        csv_path = get_csv_path(args.version)
-        print(f"   CSV: {csv_path}")
-    else:
-        print("   CSV: (跳過連動)")
+    # 如果有 parent，更新 parent 的 children
+    if args.parent:
+        if update_parent_children(version, args.parent, ticket_id):
+            print(f"   Parent: {args.parent} (已更新 children)")
+        else:
+            print(f"   [Warning] 無法更新 Parent {args.parent} 的 children")
 
     return 0
 
 
-def cmd_add_to_csv(args: argparse.Namespace) -> int:
-    """將 Ticket 新增到 CSV 追蹤"""
-    # 解析 ticket_id 取得 version
-    parts = args.id.split("-W")
+def cmd_create_child(args: argparse.Namespace) -> int:
+    """建立子 Ticket"""
+    # 從 parent_id 解析 version
+    parts = args.parent_id.split("-W")
     if len(parts) != 2:
-        print(f"❌ 無效的 Ticket ID 格式: {args.id}")
-        print("   正確格式: {VERSION}-W{WAVE}-{SEQ}, 例如: 0.15.16-W1-001")
+        print(f"[Error] 無效的 Parent ID 格式: {args.parent_id}")
         return 1
 
     version = parts[0]
 
-    # 讀取 YAML 取得 agent
-    ticket_data = load_ticket_yaml(version, args.id)
-    if not ticket_data:
-        print(f"❌ 找不到 Ticket YAML: {args.id}")
+    # 確認 parent 存在
+    parent = load_ticket(version, args.parent_id)
+    if not parent:
+        print(f"[Error] 找不到 Parent Ticket: {args.parent_id}")
         return 1
 
-    agent = ticket_data.get("agent", "unknown")
-    add_to_csv(version, args.id, agent)
+    # 自動取得下一個序號
+    seq = get_next_seq(version, args.wave)
+    ticket_id = format_ticket_id(version, args.wave, seq)
 
-    return 0
+    # 處理 where_files
+    where_files = []
+    if args.where_files:
+        where_files = [f.strip() for f in args.where_files.split(",")]
 
+    content = create_ticket_content(
+        ticket_id=ticket_id,
+        version=version,
+        wave=args.wave,
+        title=args.title or f"{args.action} {args.target}",
+        ticket_type=args.type or "IMP",
+        priority=args.priority or parent.get("priority", "P2"),
+        # 5W1H
+        who=args.who or "pending",
+        what=args.what or f"{args.action} {args.target}",
+        when=args.when or "待定義",
+        where_layer=args.where_layer or parent.get("where", {}).get("layer", "待定義"),
+        where_files=where_files,
+        why=args.why or parent.get("why", "待定義"),
+        how_task_type=args.how_type or "Implementation",
+        how_strategy=args.how_strategy or "待定義",
+        # 關係
+        parent_id=args.parent_id,
+        blocked_by=None,
+        # 驗收
+        acceptance=None,
+    )
 
-def cmd_list(args: argparse.Namespace) -> int:
-    """列出所有 Tickets"""
-    tickets = list_tickets(args.version)
+    ticket_path = save_ticket(version, ticket_id, content)
 
-    if not tickets:
-        print(f"📋 v{args.version} 沒有 Tickets")
-        return 0
+    print(f"[OK] 已建立子 Ticket: {ticket_id}")
+    print(f"   Location: {ticket_path}")
+    print(f"   Parent: {args.parent_id}")
 
-    print(f"📋 v{args.version} Tickets ({len(tickets)} 個)")
-    print("-" * 60)
-
-    for ticket in tickets:
-        ticket_id = ticket.get("id", "?")
-        action = ticket.get("action", "?")
-        target = ticket.get("target", "?")
-        agent = ticket.get("agent", "?")[:10]
-
-        print(f"{ticket_id} | {action} {target} | {agent}")
-
-    return 0
-
-
-def cmd_show(args: argparse.Namespace) -> int:
-    """顯示 Ticket 詳細資訊"""
-    # 解析 ticket_id 取得 version
-    parts = args.id.split("-W")
-    if len(parts) != 2:
-        print(f"❌ 無效的 Ticket ID 格式: {args.id}")
-        return 1
-
-    version = parts[0]
-    ticket_data = load_ticket_yaml(version, args.id)
-
-    if not ticket_data:
-        print(f"❌ 找不到 Ticket: {args.id}")
-        return 1
-
-    ticket = ticket_data["ticket"] if "ticket" in ticket_data else ticket_data
-
-    print(f"📋 Ticket: {ticket.get('id', '?')}")
-    print("-" * 40)
-    print(f"Action: {ticket.get('action', '?')}")
-    print(f"Target: {ticket.get('target', '?')}")
-    print(f"Agent: {ticket.get('agent', '?')}")
-    print(f"Wave: {ticket.get('wave', '?')}")
-    print()
-    print("5W1H:")
-    print(f"  Who: {ticket.get('who', '?')}")
-    print(f"  What: {ticket.get('what', '?')}")
-    print(f"  When: {ticket.get('when', '?')}")
-    print(f"  Where: {ticket.get('where', '?')}")
-    print(f"  Why: {ticket.get('why', '?')}")
-    print(f"  How: {ticket.get('how', '?')}")
-    print()
-    print("Acceptance:")
-    for ac in ticket.get("acceptance", []):
-        print(f"  - {ac}")
-    print()
-    print("Files:")
-    for f in ticket.get("files", []):
-        print(f"  - {f}")
-    print()
-    print("Dependencies:")
-    deps = ticket.get("dependencies", [])
-    if deps:
-        for d in deps:
-            print(f"  - {d}")
+    # 更新 parent 的 children
+    if update_parent_children(version, args.parent_id, ticket_id):
+        print(f"   (已更新 parent 的 children)")
     else:
-        print("  (無)")
+        print(f"   [Warning] 無法更新 Parent 的 children")
 
     return 0
 
 
 def cmd_init(args: argparse.Namespace) -> int:
     """初始化版本目錄"""
-    ensure_directories(args.version)
+    version = args.version
+    ensure_directories(version)
 
-    # 建立空的 CSV
-    csv_path = get_csv_path(args.version)
-    if not csv_path.exists():
-        write_csv(csv_path, [])
-        print(f"✅ 已初始化 v{args.version}")
-        print(f"   目錄: {get_version_dir(args.version)}")
-        print(f"   Tickets: {get_tickets_dir(args.version)}")
-        print(f"   CSV: {csv_path}")
+    version_dir = get_version_dir(version)
+    tickets_dir = get_tickets_dir(version)
+
+    print(f"[OK] 已初始化 v{version}")
+    print(f"   目錄: {version_dir}")
+    print(f"   Tickets: {tickets_dir}")
+
+    return 0
+
+
+def cmd_list(args: argparse.Namespace) -> int:
+    """列出所有 Tickets"""
+    version = args.version
+    tickets = list_tickets(version)
+
+    if not tickets:
+        print(f"[Info] v{version} 沒有 Tickets")
+        return 0
+
+    print(f"[List] v{version} Tickets ({len(tickets)} 個)")
+    print("-" * 70)
+
+    for ticket in tickets:
+        ticket_id = ticket.get("id", "?")
+        status = ticket.get("status", "pending")
+        what = ticket.get("what", "?")
+        who = ticket.get("who", {})
+        if isinstance(who, dict):
+            who = who.get("current", "?")
+        priority = ticket.get("priority", "P2")
+
+        status_icon = {
+            "pending": "[待處理]",
+            "in_progress": "[進行中]",
+            "completed": "[已完成]",
+            "blocked": "[被阻塞]",
+        }.get(status, "[?]")
+
+        print(f"{ticket_id} | {status_icon} | {priority} | {who[:10]:10} | {what}")
+
+    return 0
+
+
+def cmd_show(args: argparse.Namespace) -> int:
+    """顯示 Ticket 詳細資訊"""
+    # 從 ticket_id 解析 version
+    parts = args.id.split("-W")
+    if len(parts) != 2:
+        print(f"[Error] 無效的 Ticket ID 格式: {args.id}")
+        return 1
+
+    version = parts[0]
+    ticket = load_ticket(version, args.id)
+
+    if not ticket:
+        print(f"[Error] 找不到 Ticket: {args.id}")
+        return 1
+
+    print(f"[Ticket] {ticket.get('id', '?')}")
+    print("=" * 50)
+    print(f"Title: {ticket.get('title', '?')}")
+    print(f"Type: {ticket.get('type', '?')}")
+    print(f"Status: {ticket.get('status', '?')}")
+    print(f"Version: {ticket.get('version', '?')}")
+    print(f"Wave: {ticket.get('wave', '?')}")
+    print(f"Priority: {ticket.get('priority', '?')}")
+    print()
+
+    print("5W1H:")
+    who = ticket.get("who", {})
+    if isinstance(who, dict):
+        print(f"  Who (current): {who.get('current', '?')}")
+        history = who.get("history", {})
+        if history:
+            print(f"  Who (history): {history}")
     else:
-        print(f"⚠️  v{args.version} 已存在")
+        print(f"  Who: {who}")
+
+    print(f"  What: {ticket.get('what', '?')}")
+    print(f"  When: {ticket.get('when', '?')}")
+
+    where = ticket.get("where", {})
+    if isinstance(where, dict):
+        print(f"  Where (layer): {where.get('layer', '?')}")
+        files = where.get("files", [])
+        if files:
+            print(f"  Where (files):")
+            for f in files:
+                print(f"    - {f}")
+    else:
+        print(f"  Where: {where}")
+
+    print(f"  Why: {ticket.get('why', '?')}")
+
+    how = ticket.get("how", {})
+    if isinstance(how, dict):
+        print(f"  How (task_type): {how.get('task_type', '?')}")
+        print(f"  How (strategy): {how.get('strategy', '?')}")
+    else:
+        print(f"  How: {how}")
+
+    print()
+    print("Relations:")
+    print(f"  Parent: {ticket.get('parent_id', '(none)')}")
+    print(f"  Children: {ticket.get('children', [])}")
+    print(f"  Blocked by: {ticket.get('blockedBy', [])}")
+
+    print()
+    print("Acceptance:")
+    for ac in ticket.get("acceptance", []):
+        print(f"  - {ac}")
 
     return 0
 
@@ -360,31 +561,56 @@ def cmd_init(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Atomic Ticket Creator - 建立符合單一職責原則的 Ticket"
+        description="Atomic Ticket Creator v2.0 - 5W1H 引導式建立與版本驅動管理"
     )
     subparsers = parser.add_subparsers(dest="command", help="可用命令")
 
     # init 命令
     init_parser = subparsers.add_parser("init", help="初始化版本目錄")
-    init_parser.add_argument("version", help="版本號 (例如: 0.15.16)")
+    init_parser.add_argument("version", help="版本號 (例如: 0.29.0)")
 
     # create 命令
     create_parser = subparsers.add_parser("create", help="建立新的 Atomic Ticket")
     create_parser.add_argument("--version", required=True, help="版本號")
     create_parser.add_argument("--wave", type=int, required=True, help="Wave 編號")
-    create_parser.add_argument("--seq", type=int, required=True, help="序號")
-    create_parser.add_argument("--action", required=True, help="動詞 (實作/修復/新增/重構)")
-    create_parser.add_argument("--target", required=True, help="單一目標")
-    create_parser.add_argument("--agent", required=True, help="執行代理人")
+    create_parser.add_argument("--seq", type=int, help="序號（自動產生）")
+    create_parser.add_argument("--action", required=True, help="動詞")
+    create_parser.add_argument("--target", required=True, help="目標")
+    create_parser.add_argument("--title", help="標題（預設: action + target）")
+    create_parser.add_argument("--type", help="類型: IMP, RES, ANA, INV, DOC（預設: IMP）")
+    create_parser.add_argument("--priority", help="優先級: P0, P1, P2, P3（預設: P2）")
+    # 5W1H
+    create_parser.add_argument("--who", help="執行代理人")
+    create_parser.add_argument("--what", help="任務描述（預設: action + target）")
     create_parser.add_argument("--when", help="觸發時機")
-    create_parser.add_argument("--where", help="檔案位置")
-    create_parser.add_argument("--why", help="原因")
-    create_parser.add_argument("--how", help="實作策略")
-    create_parser.add_argument("--no-track", action="store_true", help="不連動 CSV")
+    create_parser.add_argument("--where-layer", help="架構層級: Domain, Application, Infrastructure, Presentation")
+    create_parser.add_argument("--where-files", help="影響檔案（逗號分隔）")
+    create_parser.add_argument("--why", help="需求依據")
+    create_parser.add_argument("--how-type", help="Task Type: Implementation, Analysis, etc.")
+    create_parser.add_argument("--how-strategy", help="實作策略")
+    # 關係
+    create_parser.add_argument("--parent", help="父 Ticket ID")
+    create_parser.add_argument("--blocked-by", help="依賴的 Ticket IDs（逗號分隔）")
+    # 驗收
+    create_parser.add_argument("--acceptance", help="驗收條件（| 分隔）")
 
-    # add-to-csv 命令
-    add_csv_parser = subparsers.add_parser("add-to-csv", help="將 Ticket 新增到 CSV")
-    add_csv_parser.add_argument("--id", required=True, help="Ticket ID")
+    # create-child 命令
+    child_parser = subparsers.add_parser("create-child", help="建立子 Ticket")
+    child_parser.add_argument("--parent-id", required=True, help="父 Ticket ID")
+    child_parser.add_argument("--wave", type=int, required=True, help="Wave 編號")
+    child_parser.add_argument("--action", required=True, help="動詞")
+    child_parser.add_argument("--target", required=True, help="目標")
+    child_parser.add_argument("--title", help="標題")
+    child_parser.add_argument("--type", help="類型")
+    child_parser.add_argument("--priority", help="優先級")
+    child_parser.add_argument("--who", help="執行代理人")
+    child_parser.add_argument("--what", help="任務描述")
+    child_parser.add_argument("--when", help="觸發時機")
+    child_parser.add_argument("--where-layer", help="架構層級")
+    child_parser.add_argument("--where-files", help="影響檔案")
+    child_parser.add_argument("--why", help="需求依據")
+    child_parser.add_argument("--how-type", help="Task Type")
+    child_parser.add_argument("--how-strategy", help="實作策略")
 
     # list 命令
     list_parser = subparsers.add_parser("list", help="列出所有 Tickets")
@@ -403,7 +629,7 @@ def main() -> int:
     commands = {
         "init": cmd_init,
         "create": cmd_create,
-        "add-to-csv": cmd_add_to_csv,
+        "create-child": cmd_create_child,
         "list": cmd_list,
         "show": cmd_show,
     }

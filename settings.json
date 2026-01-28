@@ -4,35 +4,105 @@
       {
         "matcher": "Bash",
         "hooks": [
-          {"type": "command", "command": ".claude/hooks/test-timeout-pre.py"},
-          {"type": "command", "command": ".claude/hooks/version-release-guard-hook.py"}
+          {
+            "type": "command",
+            "command": ".claude/hooks/test-timeout-pre.py"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/version-release-guard-hook.py"
+          }
         ]
       },
       {
         "matcher": "mcp__dart__run_tests",
         "hooks": [
-          {"type": "command", "command": ".claude/hooks/mcp-run-tests-validator.py"},
-          {"type": "command", "command": ".claude/hooks/test-timeout-pre.py"}
+          {
+            "type": "command",
+            "command": ".claude/hooks/mcp-run-tests-validator.py"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/test-timeout-pre.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/ticket-file-access-guard-hook.py"
+          }
         ]
       },
       {
         "matcher": "Edit",
         "hooks": [
-          {"type": "command", "command": ".claude/hooks/branch-verify-hook.py"}
+          {
+            "type": "command",
+            "command": ".claude/hooks/ticket-file-access-guard-hook.py"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/main-thread-edit-restriction-hook.py"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/branch-verify-hook.py"
+          },
+          {
+            "type": "command",
+            "command": ".claude/skills/strategic-compact/suggest-compact.py"
+          }
         ]
       },
       {
         "matcher": "Write",
         "hooks": [
-          {"type": "command", "command": ".claude/hooks/branch-verify-hook.py"}
+          {
+            "type": "command",
+            "command": ".claude/hooks/ticket-file-access-guard-hook.py"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/main-thread-edit-restriction-hook.py"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/branch-verify-hook.py"
+          },
+          {
+            "type": "command",
+            "command": ".claude/skills/strategic-compact/suggest-compact.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/agent-ticket-validation-hook.py"
+          }
         ]
       }
     ],
     "SessionStart": [
       {
         "hooks": [
-          {"type": "command", "command": ".claude/hooks/branch-status-reminder.py"},
-          {"type": "command", "command": ".claude/hooks/output-style-check.py"}
+          {
+            "type": "command",
+            "command": ".claude/hooks/hook-completeness-check.py"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/branch-status-reminder.py"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/output-style-check.py"
+          }
         ]
       }
     ],
@@ -40,36 +110,75 @@
       {
         "matcher": "Bash",
         "hooks": [
-          {"type": "command", "command": ".claude/hooks/test-timeout-post.py"},
-          {"type": "command", "command": ".claude/hooks/pre-fix-evaluation-hook.py", "timeout": 10000}
+          {
+            "type": "command",
+            "command": ".claude/hooks/test-timeout-post.py"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-fix-evaluation-hook.py",
+            "timeout": 10000
+          }
         ]
       },
       {
         "matcher": "mcp__dart__run_tests",
         "hooks": [
-          {"type": "command", "command": ".claude/hooks/test-timeout-post.py"},
-          {"type": "command", "command": ".claude/hooks/pre-fix-evaluation-hook.py", "timeout": 10000}
+          {
+            "type": "command",
+            "command": ".claude/hooks/test-timeout-post.py"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-fix-evaluation-hook.py",
+            "timeout": 10000
+          }
         ]
       },
       {
         "matcher": "Edit",
         "hooks": [
-          {"type": "command", "command": ".claude/hooks/style-guardian-hook.py \"$CLAUDE_FILE_PATH\""},
-          {"type": "command", "command": ".claude/hooks/worklog-format-check.py"}
+          {
+            "type": "command",
+            "command": ".claude/hooks/style-guardian-hook.py \"$CLAUDE_FILE_PATH\""
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/worklog-format-check.py"
+          }
         ]
       },
       {
         "matcher": "Write",
         "hooks": [
-          {"type": "command", "command": ".claude/hooks/style-guardian-hook.py \"$CLAUDE_FILE_PATH\""},
-          {"type": "command", "command": ".claude/hooks/worklog-format-check.py"}
+          {
+            "type": "command",
+            "command": ".claude/hooks/style-guardian-hook.py \"$CLAUDE_FILE_PATH\""
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/worklog-format-check.py"
+          }
         ]
       }
     ],
     "UserPromptSubmit": [
       {
         "hooks": [
-          {"type": "command", "command": ".claude/hooks/prompt-submit-hook.sh"}
+          {
+            "type": "command",
+            "command": ".claude/hooks/prompt-submit-hook.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/skills/continuous-learning/evaluate-session.py"
+          }
         ]
       }
     ]

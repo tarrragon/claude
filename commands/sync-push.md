@@ -8,19 +8,23 @@ description: 推送 .claude 配置和專案模板到獨立 repo (https://github.
 
 ## 推送內容
 
-- ✅ `.claude/` 目錄所有檔案（Hook、Agent、方法論）
-- ✅ `CLAUDE.md` 通用開發規範
-- ✅ `FLUTTER.md` Flutter 特定規範
+- `.claude/` 目錄所有檔案（Hook、Agent、方法論、規則）
+- `FLUTTER.md` Flutter 特定規範
+- `.claude/templates/CLAUDE-template.md` CLAUDE.md 範本
+
+## 不推送內容
+
+- 根目錄 `CLAUDE.md`（專案特定，不同步）
 
 ## 檢查清單
 
 1. **確認變更已提交到主專案**
-   - 檢查 `.claude`、`CLAUDE.md`、`FLUTTER.md` 是否已提交
+   - 檢查 `.claude`、`FLUTTER.md` 是否已提交
    - 確保提交訊息清楚描述變更內容
 
 2. **詢問用戶提交訊息**
    - 如果尚未提交，先詢問用戶提交訊息
-   - 使用 `git add .claude CLAUDE.md FLUTTER.md` 和 `git commit -m "訊息"` 提交
+   - 使用 `git add .claude FLUTTER.md` 和 `git commit -m "訊息"` 提交
 
 3. **執行推送腳本**
    - 使用用戶提供的提交訊息執行：
@@ -46,6 +50,7 @@ fix: 修正 AAA 問題
 
 ## 注意事項
 
-- ⚠️ 推送會使用 force push 覆蓋遠端歷史
-- ✅ 確保變更已在本專案充分測試
-- 📝 提交訊息要清楚說明變更內容
+- 推送會使用 force push 覆蓋遠端歷史
+- 確保變更已在本專案充分測試
+- 提交訊息要清楚說明變更內容
+- 根目錄 CLAUDE.md 不會被推送（專案特定配置）

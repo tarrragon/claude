@@ -89,7 +89,10 @@
       "Bash(test:*)",
       "Bash(python -m pytest:*)",
       "Bash(python -m unittest:*)",
-      "Bash(CLAUDE_PROJECT_DIR=/Users/mac-eric/project/book_overview_app python3:*)"
+      "Bash(CLAUDE_PROJECT_DIR=/Users/mac-eric/project/book_overview_app python3:*)",
+      "Bash(python:*)",
+      "Bash(git show:*)",
+      "mcp__plugin_serena_serena__list_dir"
     ],
     "ask": [
       "Bash(git push:*)"

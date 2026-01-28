@@ -505,6 +505,11 @@ Step 3: 查看對應章節
 - [Clean Architecture實作方法論](./clean-architecture-implementation-methodology.md) - 架構分層原則
 - [Ticket設計派工方法論](./ticket-design-dispatch-methodology.md) - 任務拆分和設計
 
+### 設計哲學文件
+
+- [認知負擔設計方法論](./cognitive-load-design-methodology.md) - 程式碼設計的核心哲學：所有設計原則的終極目標是降低閱讀者的認知負擔
+- [自然語言程式設計方法論](./natural-language-programming-methodology.md) - 讓程式碼像閱讀文章一樣自然
+
 ---
 
 ## 🆘 需要幫助？

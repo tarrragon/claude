@@ -1,7 +1,8 @@
 # Atomic Ticket 方法論
 
-**版本**: v1.0.0
+**版本**: v2.0.0
 **建立日期**: 2025-12-25
+**更新日期**: 2026-01-23
 **核心原則**: 單一職責原則 (Single Responsibility Principle)
 
 ---
@@ -221,6 +222,91 @@ Ticket B: 實作掃描狀態管理
 - **W2**: 依賴 W1 的部分 Ticket
 - **W3**: 依賴 W2 的部分 Ticket
 - ...以此類推
+
+---
+
+## 5W1H 驅動的 Ticket 欄位
+
+每個 Ticket 的 YAML 欄位對應 5W1H 問題：
+
+| 5W1H | 欄位 | 說明 |
+|------|------|------|
+| Who | `who.current` + `who.history` | 當前負責代理人 + Phase 歷史 |
+| What | `what` | 任務目標（動詞 + 單一目標） |
+| When | `when` | 觸發時機 |
+| Where | `where.layer` + `where.files` | 架構層級 + 影響檔案 |
+| Why | `why` | 需求依據 |
+| How | `how.task_type` + `how.strategy` | Task Type + 實作策略 |
+
+### Ticket YAML 格式
+
+```yaml
+---
+id: 0.29.0-W1-001
+title: "實作 SearchQuery 值物件"
+type: IMP
+status: pending
+
+version: 0.29.1
+priority: P1
+
+parent_id: null
+children: []
+blockedBy: []
+
+who:
+  current: parsley-flutter-developer
+  history:
+    phase1: lavender-interface-designer
+    phase2: sage-test-architect
+what: "實作 SearchQuery 值物件"
+when: "Phase 3b 開始時"
+where:
+  layer: Domain
+  files:
+    - lib/features/book/domain/entities/search_query.dart
+why: "支援書籍搜尋功能"
+how:
+  task_type: Implementation
+  strategy: "TDD 循環"
+
+created: 2026-01-23
+updated: 2026-01-23
+---
+```
+
+---
+
+## 版本驅動任務管理
+
+### 版本號分配原則
+
+| 情況 | 版本分配 | 執行方式 |
+|------|---------|---------|
+| 無依賴任務 | 同小版本 | 可並行執行 |
+| 有依賴任務 | 不同小版本 | 序列執行 |
+| 技術債務 | 專用小版本或下個中版本 | 視優先級 |
+
+### 版本號層級
+
+```text
+v1.0.0（大版本）
+├── v0.29.0（中版本）- Feature 級別
+│   ├── v0.29.1（小版本）- 無依賴 Tickets
+│   ├── v0.29.2（小版本）- 依賴 v0.29.1
+│   └── v0.29.3（小版本）- 技術債務
+└── ...
+```
+
+### 拆分工具
+
+使用 `/tdd-phase1-split` 在 Phase 1 進行 SOLID 原則驅動的拆分：
+
+```bash
+uv run .claude/skills/tdd-phase1-split/scripts/tdd-phase1-split.py suggest \
+  --description "實作書籍搜尋功能" \
+  --version 0.29.0
+```
 
 ---
 

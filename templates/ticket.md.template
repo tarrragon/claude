@@ -38,6 +38,24 @@ started_at: null
 completed_at: null
 ---
 
+## 決策樹路徑
+
+### 進入點
+- **層級**: ${entry_layer}
+- **觸發條件**: ${trigger_condition}
+
+### 決策節點
+
+| 層級 | 決策問題 | 答案 | 下一步 |
+|------|---------|------|--------|
+${decision_nodes_table}
+
+### 最終決策
+- **決策結果**: ${final_decision}
+- **決策理由**: ${rationale}
+
+---
+
 # 執行日誌
 
 ## 任務摘要
