@@ -2,9 +2,9 @@
   "packages": {
     "ticket-system": {
       "path": ".claude/skills/ticket",
-      "content_hash": "1ff159b61ae5829ec1b99841d94377938487e4a15d3e7c765ea946395cd031f1",
+      "content_hash": "955c3bc07d36b651aeabc19158db06ee4578e18ca9130f276904860ff0a675df",
       "version": "1.0.0",
-      "last_synced": "2026-03-03T01:28:39.185853+00:00"
+      "last_synced": "2026-03-03T19:04:02.325939+00:00"
     },
     "mermaid-ascii": {
       "path": ".claude/skills/mermaid-ascii",

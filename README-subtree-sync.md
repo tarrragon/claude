@@ -2,6 +2,8 @@
 
 ## 概述
 
+本文件是同步機制技術文件，說明 `.claude` 資料夾的同步設計原理、操作方式和衝突處理。新專案首次設置請參考 [README.md](./README.md)。
+
 本專案使用同步腳本管理 `.claude` 資料夾，實現跨專案配置共享。
 
 - **本地管理**: `.claude` 是實體目錄，納入主專案 Git 版本控制
@@ -57,31 +59,7 @@ git commit -m "feat: 更新 .claude 配置"
 
 ## 其他專案如何使用
 
-### 方案 A: 首次設置（新專案）
-
-```bash
-# 1. 進入專案目錄
-cd your-project
-
-# 2. Clone .claude 配置
-git clone https://github.com/tarrragon/claude.git .claude-temp
-cp -r .claude-temp/* .claude/
-rm -rf .claude-temp
-
-# 3. 複製腳本
-mkdir -p scripts
-cp /path/to/source/scripts/sync-claude-*.sh scripts/
-
-# 4. 根據專案需求調整 settings.local.json
-vim .claude/settings.local.json
-```
-
-### 方案 B: 定期更新配置
-
-```bash
-# 拉取最新配置
-./scripts/sync-claude-pull.sh
-```
+新專案的首次設置和定期更新配置，請參考 [README.md](./README.md) 的「其他專案如何使用」章節。
 
 ## 目錄結構
 
@@ -125,3 +103,8 @@ project/
 2. **測試驗證** - 同步後測試 Hook 系統是否正常
 3. **文件更新** - 同步配置變更時更新此 README
 4. **版本管理** - 獨立 repo 使用語意化版本號（自動遞增）
+
+---
+
+**Last Updated**: 2026-03-04
+**Version**: 2.0.0 - 定位為同步機制技術文件，首次設置引導移至 README.md

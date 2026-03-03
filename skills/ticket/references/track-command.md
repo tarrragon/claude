@@ -57,8 +57,13 @@
 # 添加子 Ticket
 /ticket track add-child <parent-id> <child-id>
 
-# 設定 5W1H 欄位
-/ticket track set-who|set-what|set-when|set-where|set-why|set-how <id> <value>
+# 設定 5W1H 欄位（僅以下 6 個 set-* 命令）
+/ticket track set-who <id> <value>
+/ticket track set-what <id> <value>
+/ticket track set-when <id> <value>
+/ticket track set-where <id> <value>
+/ticket track set-why <id> <value>
+/ticket track set-how <id> <value>
 
 # 追加執行日誌
 /ticket track append-log <id> --section "Problem Analysis" "內容"
@@ -76,6 +81,33 @@
 /ticket track batch-claim "id1,id2,id3"
 /ticket track batch-complete "id1,id2,id3"
 ```
+
+## CLI 可修改欄位 vs 手動編輯欄位
+
+並非所有 frontmatter 欄位都有對應的 CLI 命令。修改欄位前請查閱此表：
+
+| 欄位 | CLI 命令 | 備註 |
+|------|---------|------|
+| who/what/when/where/why/how | `set-who` ~ `set-how` | 僅此 6 個 set-* 命令 |
+| status | `claim` / `complete` / `release` | 由生命週期命令管理，禁止手動編輯 |
+| tdd_phase | `phase <id> <phase> <agent>` | Phase 進度更新 |
+| children | `add-child <parent> <child>` | 父子關係 |
+| acceptance | `check-acceptance <id> <index>` | 勾選驗收條件 |
+| blockedBy | 無 CLI 命令 | 建立時用 `--blocked-by`；之後手動編輯 frontmatter |
+| relatedTo | 無 CLI 命令 | 建立時用 `--related-to`；之後手動編輯 frontmatter |
+| priority | 無 CLI 命令 | 手動編輯 frontmatter |
+| dispatch_reason | 無 CLI 命令 | 手動編輯 frontmatter |
+
+**不存在的操作**（禁止嘗試）：
+
+| 錯誤呼叫 | 正確做法 |
+|---------|---------|
+| `set-blocked-by` / `set-blockedBy` | 手動編輯 frontmatter `blockedBy` 欄位 |
+| `set-status` | 使用 `claim` / `complete` / `release` |
+| `set-priority` | 手動編輯 frontmatter `priority` 欄位 |
+| `set-related-to` | 手動編輯 frontmatter `relatedTo` 欄位 |
+
+---
 
 ## track board 子命令
 

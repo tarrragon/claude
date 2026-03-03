@@ -75,6 +75,8 @@ from .track_relations import (
     execute_add_child,
     execute_phase,
     execute_agent,
+    execute_set_blocked_by,
+    execute_set_related_to,
 )
 # 導入驗收審核模組
 from .track_audit import (
@@ -141,6 +143,8 @@ def _create_command_handlers() -> dict:
         "append-log": execute_append_log,
         "accept-creation": execute_accept_creation,
         "add-child": execute_add_child,
+        "set-blocked-by": execute_set_blocked_by,
+        "set-related-to": execute_set_related_to,
         "audit": execute_audit,
         "board": execute_board,
     }
@@ -339,7 +343,7 @@ def _register_batch_commands(
 def _register_relation_commands(
     subparsers: argparse._SubParsersAction,
 ) -> None:
-    """註冊關係和狀態管理子命令：agent, phase, add-child"""
+    """註冊關係和狀態管理子命令：agent, phase, add-child, set-blocked-by, set-related-to"""
     # agent 操作
     p_agent = subparsers.add_parser("agent", help=TrackMessages.HELP_AGENT)
     p_agent.add_argument("agent_name", help=TrackMessages.ARG_AGENT_NAME)
@@ -360,6 +364,28 @@ def _register_relation_commands(
     p_add_child.add_argument("parent_id", help=TrackMessages.ARG_PARENT_ID)
     p_add_child.add_argument("child_id", help=TrackMessages.ARG_CHILD_ID)
     p_add_child.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # set-blocked-by 操作
+    p_set_blocked_by = subparsers.add_parser(
+        "set-blocked-by",
+        help="設定 Ticket 的 blockedBy 欄位（阻塞依賴）"
+    )
+    p_set_blocked_by.add_argument("ticket_id", help="目標 Ticket ID")
+    p_set_blocked_by.add_argument("value", help="被引用的 Ticket ID（空格分隔）")
+    p_set_blocked_by.add_argument("--add", action="store_true", help="追加模式（去重）")
+    p_set_blocked_by.add_argument("--remove", action="store_true", help="移除模式")
+    p_set_blocked_by.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # set-related-to 操作
+    p_set_related_to = subparsers.add_parser(
+        "set-related-to",
+        help="設定 Ticket 的 relatedTo 欄位（相關任務）"
+    )
+    p_set_related_to.add_argument("ticket_id", help="目標 Ticket ID")
+    p_set_related_to.add_argument("value", help="相關的 Ticket ID（空格分隔）")
+    p_set_related_to.add_argument("--add", action="store_true", help="追加模式（去重）")
+    p_set_related_to.add_argument("--remove", action="store_true", help="移除模式")
+    p_set_related_to.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
 
 def _register_acceptance_commands(

@@ -56,6 +56,20 @@ description: 從獨立 repo 拉取最新 .claude 配置 (https://github.com/tarr
    - 提醒用戶測試 Hook 系統是否正常運作
    - 建議重啟 Claude Code Session 驗證
 
+6. **Post-pull 框架定制引導**
+   - 提示用戶執行 `project-init onboard` 完成框架定制：
+     ```
+     拉取完成。建議執行以下步驟完成框架定制：
+
+     1. 執行 `project-init onboard` — 偵測專案語言、建議停用不適用的 Hook、檢查配置完整性
+     2. 如果是全新專案且根目錄無 CLAUDE.md：
+        - 複製 `.claude/templates/CLAUDE-template.md` 到專案根目錄
+        - 重命名為 `CLAUDE.md`
+        - 填入專案特定資訊
+     3. 執行 `project-init check` 驗證環境
+     ```
+   - 如果偵測到根目錄無 CLAUDE.md，額外提醒從模板建立
+
 ## 新專案初始化
 
 如果是新專案，需要手動建立 CLAUDE.md：
@@ -79,5 +93,6 @@ cp -r /tmp/備份目錄/.claude .
 - 自動備份當前 .claude 配置到臨時目錄
 - 拉取會完全替換本地 .claude 檔案
 - 不會覆蓋根目錄 CLAUDE.md（專案特定配置）
+- 拉取後建議執行 `project-init onboard` 完成框架定制
 - 拉取後建議檢查 settings.local.json 是否需要調整
 - 拉取後建議重啟 Claude Code Session

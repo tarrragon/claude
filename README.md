@@ -1,90 +1,64 @@
 # Claude AI 開發規範配置標準庫
 
-> **跨專案共享的 Claude Code 開發規範配置**
-> 包含 Hook 系統、Agent 配置、方法論文件，支援 TDD 四階段開發流程
+> 跨專案共享的 Claude Code 開發規範配置。
+> 包含 Hook 系統、代理人配置、方法論文件，支援 TDD 四階段開發流程。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Claude Code](https://img.shields.io/badge/Claude-Code-blue.svg)](https://claude.com/claude-code)
 
 ---
 
-## 📋 目錄
+## 目錄
 
-- [關於本 Repo](#關於本-repo)
+- [關於本專案](#關於本專案)
 - [快速開始](#快速開始)
 - [新專案配置指南](#新專案配置指南)
 - [目錄結構](#目錄結構)
 - [同步機制](#同步機制)
-- [配置說明](#配置說明)
+- [代理人職責說明](#代理人職責說明)
 - [核心文件索引](#核心文件索引)
-- [貢獻指南](#貢獻指南)
+- [授權](#授權)
 
 ---
 
-## 🎯 關於本專案
+## 關於本專案
 
-這個專案是為了維護一套開發流程，先設計方法論，然後基於方法論轉換成實際執行的 agent ，並且用 hook 機制確保執行的結果符合我們方法論的要求
-
-### 核心內容
+本專案維護一套完整的 Claude Code 開發流程：先設計方法論，再基於方法論轉換成實際執行的代理人，並用 Hook 機制確保執行結果符合方法論的要求。
 
 | 內容 | 說明 |
-|-----|------|
-| **TDD 驅動** | 完整的 TDD 四階段流程支援 |
-| **Agent 協作** | 代理人自動分工 |
-| **Hook 自動化** | Hook 腳本持續品質監控 |
-| **方法論完整** | 方法論文件 |
+|------|------|
+| TDD 驅動 | 完整的 SA 前置審查 + TDD 四階段流程 |
+| 代理人協作 | 28 個專業代理人自動分工 |
+| Hook 自動化 | 49 個 Python Hook 持續品質監控 |
+| 方法論完整 | 40+ 份方法論文件 |
+| Skill 工具 | 33 個 Skill 指令 |
 
 ---
 
-## 🚀 快速開始
+## 快速開始
 
-### 方案 A：新專案首次設置
+將本框架配置到新專案的標準流程：
 
 ```bash
-# 1. 確認環境前置需求
-python3 --version  # 需要 Python 3.9+
-
-# 2. Clone 本 repo 到專案的 .claude 目錄
+# 1. Clone 框架到專案的 .claude 目錄
 cd your-project
 git clone https://github.com/tarrragon/claude.git .claude
 
-# 3. 移除框架的 .git 目錄（避免 submodule 衝突）
+# 2. 移除框架的 .git 目錄（避免 submodule 衝突）
 rm -rf .claude/.git
 
-# 4. 設定 hook 執行權限
-chmod +x .claude/hooks/*.py .claude/hooks/*.sh
+# 3. 設定 Hook 執行權限
+chmod +x .claude/hooks/*.py
 
-# 5. 更新 settings.local.json（詳見「新專案配置指南」章節）
-#    - 搜尋並替換硬編碼路徑
-#    - 移除不適用的語言特定 permission
-#    - 調整 MCP server 配置
+# 4. 執行 project-init onboard（互動式配置）
+#    會引導你更新 settings.local.json、調整語言特定配置
+/project-init onboard
 
-# 6. 建立 CLAUDE.md（詳見「新專案配置指南 > 建立 CLAUDE.md」）
-#    - 填入專案類型、語言、框架版本
-#    - 指定實作代理人（如 parsley-flutter-developer）
-#    - 引用語言特定規範檔案（如 FLUTTER.md）
+# 5. 建立 CLAUDE.md（詳見「新專案配置指南 > 建立 CLAUDE.md」）
+#    填入專案類型、語言、框架版本、實作代理人
 
-# 7. 提交到專案 Git
+# 6. 提交到專案 Git
 git add .claude CLAUDE.md
 git commit -m "feat: 添加 Claude AI 開發規範配置"
-```
-
-### 方案 B：從現有專案推送變更
-
-如果你在某個專案中修改了 `.claude` 配置，想推送到本 repo：
-
-```bash
-# 使用推送腳本
-./scripts/sync-claude-push.sh "描述你的變更"
-```
-
-### 方案 C：拉取最新配置
-
-從本 repo 拉取最新配置到你的專案：
-
-```bash
-# 使用拉取腳本（自動備份）
-./scripts/sync-claude-pull.sh
 ```
 
 ---
@@ -95,23 +69,22 @@ git commit -m "feat: 添加 Claude AI 開發規範配置"
 
 ### settings.local.json 更新指南
 
-`settings.local.json` 包含 permission 和 hook 配置。依照以下分類逐項處理：
+`settings.local.json` 包含 permission 和 Hook 配置。依照以下分類逐項處理：
 
 | 分類 | 項目 | 操作 |
 |------|------|------|
-| **必須更新** | 含硬編碼路徑的 permission（如 `/Users/xxx/project/xxx`） | 搜尋替換為新專案路徑，或改用相對路徑（如 `./.claude/hooks/...`） |
+| 必須更新 | 含硬編碼路徑的 permission（如 `/Users/xxx/project/xxx`） | 搜尋替換為新專案路徑，或改用相對路徑 |
 | 按需調整 | `enabledMcpjsonServers`（如 `["dart"]`） | 非 Flutter 專案移除或替換為對應語言的 MCP server |
 | 按需調整 | Flutter/Dart 特定 permission（`flutter test`、`dart analyze` 等） | 非 Flutter 專案移除，替換為對應語言的工具指令 |
-| 按需調整 | `WebFetch` domain 白名單 | 根據需要增減（如移除 `blog.flutter.dev`、新增專案相關 domain） |
+| 按需調整 | `WebFetch` domain 白名單 | 根據需要增減 |
 | 安全保留 | 使用 `$CLAUDE_PROJECT_DIR` 的 hooks 配置 | 運行時自動解析路徑，無需修改 |
 | 安全保留 | 通用工具 permission（`git`、`python3`、`uv run`、`chmod` 等） | 跨專案通用 |
 | 安全保留 | Skill permission（`Skill(ticket)`、`Skill(tech-debt-capture)` 等） | 框架內建功能 |
-| 建議移除 | 舊專案特定的 shell 迴圈 permission（`while read`、`do wc -l` 等） | 一次性操作產生的殘留，新專案不需要 |
+| 建議移除 | 舊專案特定的 shell 迴圈 permission | 一次性操作產生的殘留，新專案不需要 |
 
-**快速搜尋硬編碼路徑**：
+快速搜尋硬編碼路徑：
 
 ```bash
-# 找出所有包含絕對路徑的行
 grep -n '/Users/' .claude/settings.local.json
 ```
 
@@ -124,9 +97,9 @@ grep -n '/Users/' .claude/settings.local.json
 python3 --version
 
 # 2. Hook 執行權限
-chmod +x .claude/hooks/*.py .claude/hooks/*.sh
+chmod +x .claude/hooks/*.py
 
-# 3. 驗證 Hook 可編譯（挑選一個核心 hook 測試）
+# 3. 驗證 Hook 可編譯（挑選一個核心 Hook 測試）
 python3 -m py_compile .claude/hooks/prompt-submit-hook.py
 
 # 4. 驗證 settings.local.json 格式正確
@@ -141,9 +114,9 @@ grep -c '/Users/' .claude/settings.local.json
 
 | 問題 | 原因 | 解法 |
 |------|------|------|
-| Hook 執行失敗 `Permission denied` | 缺少執行權限 | `chmod +x .claude/hooks/*.py .claude/hooks/*.sh` |
-| Hook 報錯 `SyntaxError` | Python 版本低於 3.9 | 升級 Python 或安裝 3.9+，確認 `python3 --version` |
-| `settings.local.json` 解析錯誤 | JSON 格式損壞（多餘逗號等） | `python3 -c "import json; json.load(open('.claude/settings.local.json'))"` 定位錯誤行 |
+| Hook 執行失敗 `Permission denied` | 缺少執行權限 | `chmod +x .claude/hooks/*.py` |
+| Hook 報錯 `SyntaxError` | Python 版本低於 3.9 | 升級 Python 或安裝 3.9+ |
+| `settings.local.json` 解析錯誤 | JSON 格式損壞 | `python3 -c "import json; json.load(open('.claude/settings.local.json'))"` 定位錯誤行 |
 | Session 啟動時大量 Hook 失敗 | 硬編碼路徑指向不存在的目錄 | `grep '/Users/' .claude/settings.local.json` 找出並修正 |
 | MCP server 連線失敗 | `enabledMcpjsonServers` 配置了未安裝的 server | 移除不適用的 server 或安裝對應工具 |
 | `.claude` 出現 Git 衝突 | 未移除框架的 `.git` 目錄 | `rm -rf .claude/.git` |
@@ -164,7 +137,7 @@ grep -c '/Users/' .claude/settings.local.json
 
 **建立步驟**：
 
-1. 從模板複製或手動建立 `CLAUDE.md`
+1. 從模板複製（`.claude/templates/CLAUDE-template.md`）或手動建立 `CLAUDE.md`
 2. 填入專案基本資訊（類型、語言、框架版本）
 3. 指定實作代理人（決定 Phase 3b 由誰執行）
 4. 如有語言特定規範檔案（如 `FLUTTER.md`），在 CLAUDE.md 中引用
@@ -174,7 +147,7 @@ grep -c '/Users/' .claude/settings.local.json
 | 語言/框架 | 實作代理人 | 語言規範檔 |
 |-----------|-----------|-----------|
 | Flutter/Dart | parsley-flutter-developer | `.claude/project-templates/FLUTTER.md` |
-| Python | thyme-python-developer | （依專案建立） |
+| Python | thyme-python-developer | 依專案建立 |
 
 > 其餘 TDD 階段代理人（Phase 1/2/3a/4）為語言無關，跨專案通用，不需調整。
 
@@ -196,187 +169,236 @@ grep -c '/Users/' .claude/settings.local.json
 
 ---
 
-## 代理人目錄職責說明
-
-代理人定義檔案統一存放於 `.claude/agents/` 目錄：
-
-| 目錄 | 用途 | 格式 |
-|------|------|------|
-| `.claude/agents/` | 代理人定義和派發規則 | 完整指令 + YAML frontmatter |
-
----
-
-## 📁 目錄結構
+## 目錄結構
 
 ```text
 .claude/
 ├── README.md                          # 本文件
 ├── README-subtree-sync.md             # 同步機制詳細說明
 ├── settings.local.json                # Claude Code 權限配置
+├── installed-packages.json            # 已安裝套件記錄
 │
 ├── project-templates/                 # 專案模板檔案
-│   ├── CLAUDE.md                      # 通用開發規範模板
-│   └── FLUTTER.md                     # Flutter 特定規範模板
+│   └── FLUTTER.md                     # Flutter 特定規範
 │
-├── hooks/                             # Hook 系統腳本
-│   ├── startup-check-hook.sh         # Session 啟動檢查
-│   ├── prompt-submit-hook.sh         # 用戶輸入檢查
-│   ├── post-edit-hook.sh             # 程式碼變更後檢查
-│   ├── tdd-phase-check-hook.sh       # TDD 階段完整性檢查
-│   ├── task-avoidance-detection-hook.sh  # 任務逃避偵測
-│   └── ...                            # 其他 Hook 腳本
+├── templates/                         # 通用模板
+│   ├── CLAUDE-template.md             # CLAUDE.md 模板
+│   ├── work-log-template.md           # 工作日誌模板
+│   ├── ticket-log-template.md         # Ticket 模板
+│   ├── ticket.md.template             # Ticket Markdown 模板
+│   ├── ticket.yaml.template           # Ticket YAML 模板
+│   ├── agent-template.md              # 代理人模板
+│   └── ...                            # 其他模板
 │
-├── agents/                            # Agent 配置
-│   ├── rosemary-project-manager.md   # 主線程 PM
-│   ├── lavender-interface-designer.md # Phase 1 設計師
-│   ├── sage-test-architect.md        # Phase 2 測試架構師
-│   ├── pepper-test-implementer.md    # Phase 3a 策略規劃
-│   ├── parsley-flutter-developer.md  # Phase 3b Flutter 開發
-│   ├── cinnamon-refactor-owl.md      # Phase 4 重構專家
+├── config/                            # 配置檔案
+│   ├── agents.yaml                    # 代理人配置
+│   └── quality_rules.yaml             # 品質規則配置
+│
+├── hooks/                             # Hook 系統（49 個 Python 檔案）
+│   ├── hook_utils.py                  # 共用工具模組
+│   ├── command-entrance-gate-hook.py  # 命令入口驗證
+│   ├── prompt-submit-hook.py          # 用戶輸入檢查
+│   ├── phase-completion-gate-hook.py  # 階段完成驗證
+│   ├── acceptance-gate-hook.py        # 驗收閘門
+│   ├── process-skip-guard-hook.py     # 流程省略防護
+│   ├── commit-handoff-hook.py         # Commit 後 Handoff
+│   └── ...                            # 其他 Hook
+│
+├── agents/                            # 代理人定義（28 個）
+│   ├── AGENT_PRELOAD.md               # 代理人預載設定
+│   ├── rosemary-project-manager.md    # 主線程 PM
+│   ├── lavender-interface-designer.md # Phase 1 功能設計
+│   ├── sage-test-architect.md         # Phase 2 測試設計
+│   ├── pepper-test-implementer.md     # Phase 3a 策略規劃
+│   ├── parsley-flutter-developer.md   # Phase 3b Flutter 實作
+│   ├── cinnamon-refactor-owl.md       # Phase 4 重構評估
+│   ├── saffron-system-analyst.md      # SA 前置審查
+│   ├── incident-responder.md          # 事件回應
+│   ├── thyme-documentation-integrator.md  # 文件整合
 │   └── ...                            # 其他專業代理人
 │
-├── methodologies/                     # 方法論文件
-│   ├── agile-refactor-methodology.md # 敏捷重構流程
-│   ├── 5w1h-self-awareness-methodology.md  # 決策框架
-│   ├── behavior-first-tdd-methodology.md   # 行為優先 TDD
-│   ├── hook-system-methodology.md    # Hook 系統設計
-│   └── ...                            # 25+ 方法論文件
+├── rules/                             # 規則系統
+│   ├── core/                          # 核心決策 + 基本約束
+│   │   ├── decision-tree.md           # 主線程決策樹
+│   │   ├── askuserquestion-rules.md   # AskUserQuestion 規則
+│   │   ├── quality-baseline.md        # 品質基線
+│   │   ├── implementation-quality.md  # 實作品質標準
+│   │   └── ...                        # 其他核心規則
+│   ├── flows/                         # 執行流程
+│   │   ├── tdd-flow.md                # TDD 流程
+│   │   ├── incident-response.md       # 事件回應流程
+│   │   ├── ticket-lifecycle.md        # Ticket 生命週期
+│   │   └── ...                        # 其他流程
+│   ├── guides/                        # 操作指南
+│   │   ├── parallel-dispatch.md       # 並行派發指南
+│   │   ├── methodology-index.md       # 方法論索引
+│   │   ├── skill-index.md             # Skill 指令索引
+│   │   └── ...                        # 其他指南
+│   └── forbidden/                     # 禁止行為
+│       └── skip-gate.md               # Skip-gate 防護
 │
-├── commands/                          # Claude Code Slash 命令
-│   ├── startup-check.md              # /startup-check 命令
-│   ├── commit-as-prompt.md           # /commit-as-prompt 命令
+├── skills/                            # Skill 工具（33 個）
+│   ├── ticket/                        # Ticket 系統
+│   ├── project-init/                  # 專案初始化
+│   ├── pre-fix-eval/                  # 修復前評估
+│   ├── version-release/               # 版本發布
+│   ├── tech-debt-capture/             # 技術債務捕獲
+│   ├── parallel-evaluation/           # 並行評估
+│   └── ...                            # 其他 Skill
+│
+├── methodologies/                     # 方法論文件（40+ 份）
+│   ├── README.md                      # 方法論索引
+│   ├── agile-refactor-methodology.md
+│   ├── 5w1h-self-awareness-methodology.md
+│   ├── behavior-first-tdd-methodology.md
+│   ├── hook-system-methodology.md
+│   └── ...                            # 其他方法論
+│
+├── references/                        # 參考文件（22 份）
+│   ├── decision-tree-diagrams.md
+│   ├── ticket-lifecycle-phases.md
+│   └── ...                            # 其他參考
+│
+├── error-patterns/                    # 錯誤模式知識庫
+│   ├── README.md
+│   ├── architecture/                  # 架構類錯誤（ARCH-xxx）
+│   ├── implementation/                # 實作類錯誤（IMP-xxx）
+│   ├── test/                          # 測試類錯誤（TEST-xxx）
+│   └── documentation/                 # 文件類錯誤（DOC-xxx）
+│
+├── commands/                          # Slash 命令定義
+│   ├── commit-as-prompt.md
+│   ├── sync-push.md
+│   ├── sync-pull.md
 │   └── ...                            # 其他命令
 │
-├── docs/                              # 文件整合專家支援文件
-│   ├── thyme-documentation-integrator-usage-guide.md
-│   ├── thyme-mcp-integration-guide.md
-│   └── thyme-troubleshooting-guide.md
+├── scripts/                           # 工具腳本（Python）
+│   ├── cleanup-hook-logs.py
+│   ├── pm-status-check.py
+│   └── ...                            # 其他腳本
 │
-├── scripts/                           # 工具腳本
-│   ├── cleanup-hook-logs.sh         # 清理 Hook 日誌
-│   ├── pm-status-check.sh            # PM 狀態檢查
-│   └── ...                            # 其他工具
-│
-├── templates/                         # 模板文件
-│   ├── work-log-template.md         # 工作日誌模板
-│   └── ticket-log-template.md       # Ticket 模板
-│
-└── hook-logs/                        # Hook 執行日誌（自動生成）
-    ├── startup-*.log
-    ├── prompt-submit-*.log
+└── hook-logs/                         # Hook 執行日誌（自動生成）
+    ├── acceptance-gate/
+    ├── agent-dispatch-check/
     └── ...
 ```
 
 ---
 
-## 🔄 同步機制
+## 同步機制
 
-### 方式 A：使用 Slash Commands（推薦）
+本框架支援跨專案同步，使用雙向同步腳本管理 `.claude` 資料夾。
 
-**在 Claude Code 中直接使用 Slash Commands 進行同步**：
+| 操作 | Slash 命令 | Shell 腳本 |
+|------|-----------|-----------|
+| 推送變更到獨立 Repo | `/sync-push` | `scripts/sync-claude-push.sh` |
+| 拉取最新配置 | `/sync-pull` | `scripts/sync-claude-pull.sh` |
 
-#### `/sync-push` - 推送配置到獨立 Repo
+**獨立 Repo**：https://github.com/tarrragon/claude.git
 
-在專案中改進了 `.claude` 配置後，可以直接推送到本 repo：
-
-```bash
-# 在 Claude Code 中執行
-/sync-push
-```
-
-**執行流程**：
-
-1. 自動檢查 `.claude` 相關變更是否已提交
-2. 詢問提交訊息（或提供預設選項）
-3. 執行推送腳本將變更推送到本 repo
-4. 驗證推送結果並顯示確認訊息
-
-**使用時機**：
-
-- 新增或修改 Hook 腳本
-- 更新方法論文件
-- 改進 Agent 配置
-- 任何值得跨專案共享的配置改進
-
-#### `/sync-pull` - 拉取最新配置
-
-從本 repo 拉取最新配置到你的專案：
-
-```bash
-# 在 Claude Code 中執行
-/sync-pull
-```
-
-**執行流程**：
-
-1. 自動備份當前 `.claude` 配置
-2. 從本 repo 拉取最新配置
-3. 驗證拉取結果
-4. 提供衝突解決指引（如有需要）
-
-**使用時機**：
-
-- 啟動新專案，想使用最新配置
-- 定期同步其他專案的改進
-- 修復配置問題時回到已知良好狀態
-
-### 方式 B：使用同步腳本
-
-**適合需要更多控制的場景**：
-
-#### 推送變更到本 Repo
-
-當你在專案中改進了 `.claude` 配置或專案模板，可以推送回本 repo 供其他專案使用：
-
-```bash
-# 1. 確保變更已提交到專案 Git
-git add .claude CLAUDE.md FLUTTER.md
-git commit -m "feat: 改進 Hook 系統配置"
-
-# 2. 推送到本 repo
-./scripts/sync-claude-push.sh "feat: 改進 Hook 系統配置"
-```
-
-**推送內容**：
-
-- `.claude/` 目錄所有檔案（Hook、Agent、方法論）
-- `CLAUDE.md` 通用開發規範
-- `FLUTTER.md` Flutter 特定規範
-
-**推送機制說明**：
-
-- 使用臨時 repo + force push 避免複雜的 Git 歷史
-- 會覆蓋遠端歷史（單一來源原則）
-- 推送前請確保配置已在專案中測試通過
-
-#### 拉取最新配置
-
-從本 repo 拉取最新配置和專案模板到你的專案：
-
-```bash
-# 拉取並自動備份
-./scripts/sync-claude-pull.sh
-```
-
-**拉取內容**：
-
-- `.claude/` 目錄所有檔案（Hook、Agent、方法論）
-- `CLAUDE.md` 通用開發規範（更新到專案根目錄）
-- `FLUTTER.md` Flutter 特定規範（更新到專案根目錄）
-
-**拉取機制說明**：
-
-- 自動備份當前配置和專案模板到臨時目錄
-- Clone 本 repo 並替換專案的 `.claude` 和模板檔案
-- 拉取失敗可使用備份還原
-
-### 詳細同步說明
-
-完整的同步機制說明請參考：[README-subtree-sync.md](./README-subtree-sync.md)
+> 完整的同步機制說明（設計原理、方案比較、衝突處理、最佳實踐）請參考 [README-subtree-sync.md](./README-subtree-sync.md)。
 
 ---
 
-## ⚙️ 配置說明
+## 代理人職責說明
+
+代理人定義檔案統一存放於 `.claude/agents/` 目錄。
+
+### TDD 四階段代理人
+
+| 階段 | 代理人 | 職責 |
+|------|-------|------|
+| Phase 0 | [saffron-system-analyst.md](./agents/saffron-system-analyst.md) | SA 前置審查 |
+| Phase 1 | [lavender-interface-designer.md](./agents/lavender-interface-designer.md) | 功能設計、API 介面定義 |
+| Phase 2 | [sage-test-architect.md](./agents/sage-test-architect.md) | 測試案例設計 |
+| Phase 3a | [pepper-test-implementer.md](./agents/pepper-test-implementer.md) | 策略規劃、虛擬碼設計 |
+| Phase 3b | [parsley-flutter-developer.md](./agents/parsley-flutter-developer.md) | 語言特定實作（Flutter） |
+| Phase 4 | [cinnamon-refactor-owl.md](./agents/cinnamon-refactor-owl.md) | 重構評估、技術債務識別 |
+
+### 專案管理與品質
+
+| 代理人 | 職責 |
+|-------|------|
+| [rosemary-project-manager.md](./agents/rosemary-project-manager.md) | 主線程 PM、任務派發、決策 |
+| [acceptance-auditor.md](./agents/acceptance-auditor.md) | 驗收審查 |
+| [bay-quality-auditor.md](./agents/bay-quality-auditor.md) | 品質稽核 |
+| [incident-responder.md](./agents/incident-responder.md) | 事件回應、錯誤分析 |
+
+### 專業領域
+
+| 代理人 | 職責 |
+|-------|------|
+| [thyme-documentation-integrator.md](./agents/thyme-documentation-integrator.md) | 文件整合、方法論轉化 |
+| [thyme-python-developer.md](./agents/thyme-python-developer.md) | Python 實作（Hook、腳本） |
+| [basil-hook-architect.md](./agents/basil-hook-architect.md) | Hook 系統架構設計 |
+| [sumac-system-engineer.md](./agents/sumac-system-engineer.md) | 環境配置、系統工程 |
+| [clove-security-reviewer.md](./agents/clove-security-reviewer.md) | 安全審查 |
+| [ginger-performance-tuner.md](./agents/ginger-performance-tuner.md) | 效能調優 |
+| [oregano-data-miner.md](./agents/oregano-data-miner.md) | 外部資源研究 |
+| [star-anise-system-designer.md](./agents/star-anise-system-designer.md) | 系統設計 |
+
+> 完整代理人清單共 28 個，詳見 `.claude/agents/` 目錄。
+
+---
+
+## 核心文件索引
+
+### 規則系統（建議閱讀順序）
+
+| 文件 | 說明 |
+|------|------|
+| [rules/core/decision-tree.md](./rules/core/decision-tree.md) | 主線程決策樹（核心入口） |
+| [rules/core/quality-baseline.md](./rules/core/quality-baseline.md) | 品質基線（不可協商） |
+| [rules/core/implementation-quality.md](./rules/core/implementation-quality.md) | 實作品質標準 |
+| [rules/flows/tdd-flow.md](./rules/flows/tdd-flow.md) | TDD 含 SA 前置審查流程 |
+| [rules/flows/ticket-lifecycle.md](./rules/flows/ticket-lifecycle.md) | Ticket 生命週期 |
+| [rules/forbidden/skip-gate.md](./rules/forbidden/skip-gate.md) | Skip-gate 防護機制 |
+
+> 完整規則索引：[rules/README.md](./rules/README.md)
+
+### 方法論文件（核心）
+
+| 文件 | 說明 |
+|------|------|
+| [agile-refactor-methodology.md](./methodologies/agile-refactor-methodology.md) | 敏捷重構方法論 |
+| [5w1h-self-awareness-methodology.md](./methodologies/5w1h-self-awareness-methodology.md) | 5W1H 決策框架 |
+| [hook-system-methodology.md](./methodologies/hook-system-methodology.md) | Hook 系統設計 |
+| [behavior-first-tdd-methodology.md](./methodologies/behavior-first-tdd-methodology.md) | 行為優先 TDD |
+| [natural-language-programming-methodology.md](./methodologies/natural-language-programming-methodology.md) | 命名方法論 |
+| [comment-writing-methodology.md](./methodologies/comment-writing-methodology.md) | 註解撰寫規範 |
+
+> 完整方法論索引：[methodologies/README.md](./methodologies/README.md) 或 [rules/guides/methodology-index.md](./rules/guides/methodology-index.md)
+
+### Hook 系統
+
+所有 Hook 以 Python 實作，透過 `settings.local.json` 配置觸發時機。
+
+| 觸發事件 | 代表性 Hook | 功能 |
+|---------|------------|------|
+| UserPromptSubmit | `prompt-submit-hook.py` | 用戶輸入檢查、5W1H 合規 |
+| UserPromptSubmit | `command-entrance-gate-hook.py` | 開發命令 Ticket 驗證 |
+| PreToolUse | `file-type-permission-hook.py` | 檔案編輯權限檢查 |
+| PreToolUse | `main-thread-edit-restriction-hook.py` | 主線程編輯限制 |
+| PostToolUse | `phase-completion-gate-hook.py` | 階段完成驗證 |
+| PostToolUse | `commit-handoff-hook.py` | Commit 後 Handoff 引導 |
+
+> Hook 設計方法論：[methodologies/hook-system-methodology.md](./methodologies/hook-system-methodology.md)
+
+### Skill 指令
+
+| 指令 | 用途 |
+|------|------|
+| `/ticket` | Ticket 系統（create/track/handoff/resume） |
+| `/pre-fix-eval` | 修復前評估（錯誤發生時強制） |
+| `/version-release` | 版本發布流程 |
+| `/tech-debt-capture` | 技術債務捕獲 |
+| `/project-init` | 新專案初始化 |
+
+> 完整 Skill 索引：[rules/guides/skill-index.md](./rules/guides/skill-index.md)
+
+---
+
+## 配置說明
 
 ### settings.local.json
 
@@ -384,101 +406,22 @@ Claude Code 的權限與 Hook 配置文件，包含以下區塊：
 
 | 區塊 | 用途 | 新專案是否需調整 |
 |------|------|----------------|
-| `permissions.allow` | 自動允許的工具和指令 | 是 — 移除不適用的語言特定 permission，修正硬編碼路徑 |
+| `permissions.allow` | 自動允許的工具和指令 | 是 -- 移除不適用的語言特定 permission，修正硬編碼路徑 |
 | `permissions.ask` | 需確認才執行的指令（如 `git push`） | 通常保留 |
-| `enabledMcpjsonServers` | 啟用的 MCP server | 是 — 根據專案語言調整 |
+| `enabledMcpjsonServers` | 啟用的 MCP server | 是 -- 根據專案語言調整 |
 | `hooks` | Hook 觸發配置 | 通常保留（使用 `$CLAUDE_PROJECT_DIR` 自動解析） |
 | `outputStyle` | 回應格式 | 可保留 |
 
-詳細的新專案配置步驟請參考 [新專案配置指南](#新專案配置指南)。
-
-### Hook 系統配置
-
-Hook 系統會自動執行品質檢查，主要包括：
-
-| Hook | 觸發時機 | 功能 |
-|------|---------|------|
-| **SessionStart** | Session 啟動 | 環境檢查、文件同步確認 |
-| **UserPromptSubmit** | 用戶輸入 | 5W1H 合規、TDD 階段檢查 |
-| **PostEdit** | 程式碼變更 | 程式異味偵測、文件更新提醒 |
-| **TaskAvoidance** | 持續監控 | 偵測任務逃避行為 |
-
-詳細說明請參考：[hook-system-methodology.md](./methodologies/hook-system-methodology.md)
+詳細的新專案配置步驟請參考[新專案配置指南](#新專案配置指南)。
 
 ---
 
-## 核心文件索引
-
-### 必讀文件（建議閱讀順序）
-
-1. **[tdd-collaboration-flow.md](./tdd-collaboration-flow.md)** - TDD 四階段開發流程
-2. **[document-responsibilities.md](./document-responsibilities.md)** - 文件寫作規範
-3. **[agent-collaboration.md](./agent-collaboration.md)** - Agent 協作模式
-4. **[code-quality-examples.md](./code-quality-examples.md)** - 程式碼品質範例
-
-### 方法論文件
-
-**核心流程**：
-
-- [agile-refactor-methodology.md](./methodologies/agile-refactor-methodology.md) - 敏捷重構方法論
-- [5w1h-self-awareness-methodology.md](./methodologies/5w1h-self-awareness-methodology.md) - 5W1H 決策框架
-- [hook-system-methodology.md](./methodologies/hook-system-methodology.md) - Hook 系統設計
-
-**測試策略**：
-
-- [behavior-first-tdd-methodology.md](./methodologies/behavior-first-tdd-methodology.md) - 行為優先 TDD
-- [bdd-testing-methodology.md](./methodologies/bdd-testing-methodology.md) - BDD 測試
-- [hybrid-testing-strategy-methodology.md](./methodologies/hybrid-testing-strategy-methodology.md) - 混合測試策略
-
-**程式碼品質**：
-
-- [natural-language-programming-methodology.md](./methodologies/natural-language-programming-methodology.md) - 自然語言化撰寫
-- [comment-writing-methodology.md](./methodologies/comment-writing-methodology.md) - 註解撰寫規範
-- [package-import-methodology.md](./methodologies/package-import-methodology.md) - 導入路徑語意化
-
-**完整列表**：[methodologies/README.md](./methodologies/README.md)
-
-### Agent 配置
-
-**TDD 四階段專業代理人**：
-
-- **Phase 1**: [lavender-interface-designer.md](./agents/lavender-interface-designer.md) - 功能設計
-- **Phase 2**: [sage-test-architect.md](./agents/sage-test-architect.md) - 測試設計
-- **Phase 3a**: [pepper-test-implementer.md](./agents/pepper-test-implementer.md) - 虛擬碼以及 模擬流程圖
-- **Phase 3b**: [parsley-flutter-developer.md](./agents/parsley-flutter-developer.md) -  針對不同語言設計的實作代理人，比如flutter代理人會要求透過 dart mcp 去輔助開發 
-- **Phase 4**: [cinnamon-refactor-owl.md](./agents/cinnamon-refactor-owl.md) - 重構執行
-
-**專案管理**：
-
-- [rosemary-project-manager.md](./agents/rosemary-project-manager.md) - 主線程 PM
-
-**文件整合**：
-
-- [thyme-documentation-integrator.md](./agents/thyme-documentation-integrator.md) - 文件整合專家
-
-**完整列表**：20+ 專業代理人配置
-
----
-
-## 📖 延伸閱讀
-
-### 官方文件
-
-- [Claude Code 官方文件](https://docs.claude.com/claude-code)
-- [Hook 系統開發指南](./docs/hooks/README.md)
-
-### 相關專案
-
-- 本配置基於實戰專案 [book_overview_app](https://github.com/tarrragon/book_overview_V1) 開發和驗證
-
----
-
-## 📄 授權
+## 授權
 
 本專案採用 MIT 授權條款。
 
 ---
 
-**最後更新**: 2025-10-17
+**最後更新**: 2026-03-04
+**版本**: 2.0.0 - 全面重寫：更新目錄結構、移除 Emoji、統一快速開始流程、修正死連結
 **維護者**: [@tarrragon](https://github.com/tarrragon)
-**問題回報**: 在使用本配置的專案中建立 Issue

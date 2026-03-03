@@ -1,4 +1,10 @@
 {
+  "permissions": {
+    "allowedTools": [
+      "Edit",
+      "Write"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

@@ -1,0 +1,126 @@
+{
+  "_README": "settings.local.json 模板 - 新專案請依標記調整",
+  "_INSTRUCTIONS": [
+    "1. 複製此檔案為 .claude/settings.local.json",
+    "2. 移除所有 _README, _INSTRUCTIONS, _COMMENT 開頭的 key",
+    "3. 依 [FLUTTER] 和 [語言特定] 標記調整或移除不適用的項目",
+    "4. 將 {PROJECT_PATH} 替換為實際專案路徑",
+    "5. 驗證 JSON 格式: python3 -c \"import json; json.load(open('.claude/settings.local.json'))\""
+  ],
+
+  "permissions": {
+    "allow": [
+      "_COMMENT_UNIVERSAL_START: === 通用權限（所有專案保留） ===",
+
+      "Bash(./.claude/hooks/test-summary.sh:*)",
+      "Bash(./.claude/hooks/test-summary.sh)",
+      "Bash(cat:*)",
+      "Bash(wc:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(echo:*)",
+      "Bash(tee:*)",
+      "Bash(xargs:*)",
+      "Bash(test:*)",
+      "Bash(chmod:*)",
+      "Bash(env)",
+
+      "_COMMENT_GIT: --- Git 操作 ---",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git show:*)",
+      "Bash(git checkout:*)",
+      "Bash(git worktree:*)",
+      "Bash(git clone:*)",
+
+      "_COMMENT_PYTHON: --- Python/UV 工具 ---",
+      "Bash(uv run:*)",
+      "Bash(python3:*)",
+      "Bash(python3 -m py_compile:*)",
+      "Bash(CLAUDE_PROJECT_DIR=$PWD python3:*)",
+
+      "_COMMENT_SKILL: --- Skill 權限 ---",
+      "Skill(ticket)",
+      "Skill(tech-debt-capture)",
+      "Skill(test-async-guardian)",
+
+      "_COMMENT_SYNC: --- 同步腳本 ---",
+      "Bash(./scripts/sync-claude-push.sh:*)",
+
+      "_COMMENT_SEARCH: --- 搜尋工具 ---",
+      "WebSearch",
+
+      "_COMMENT_MCP_UNIVERSAL: --- 通用 MCP 工具 ---",
+      "mcp__serena__list_dir",
+      "mcp__serena__find_file",
+      "mcp__serena__search_for_pattern",
+      "mcp__serena__find_symbol",
+      "mcp__serena__find_referencing_symbols",
+      "mcp__serena__get_symbols_overview",
+      "mcp__plugin_serena_serena__activate_project",
+      "mcp__plugin_serena_serena__read_file",
+      "mcp__plugin_serena_serena__replace_content",
+      "mcp__plugin_serena_serena__create_text_file",
+      "mcp__plugin_serena_serena__list_dir",
+      "mcp__plugin_serena_serena__get_symbols_overview",
+      "mcp__serena__check_onboarding_performed",
+
+      "_COMMENT_FLUTTER_START: === [FLUTTER] 以下為 Flutter/Dart 特定權限，非 Flutter 專案請移除 ===",
+      "Bash(flutter test:*)",
+      "Bash(timeout 60 flutter test:*)",
+      "Bash(timeout 120 flutter test:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(flutter pub get:*)",
+      "Bash(flutter clean:*)",
+      "Bash(flutter doctor:*)",
+      "Bash(flutter --version:*)",
+      "Bash(flutter run:*)",
+      "Bash(flutter pub run build_runner build:*)",
+      "Bash(flutter compile kernel:*)",
+      "Bash(dart analyze:*)",
+      "Bash(dart --version:*)",
+      "Bash(dart run:*)",
+      "Bash(dart fix:*)",
+      "Bash(dart help:*)",
+      "Bash(dart mcp-server:*)",
+      "Bash(./.claude/hooks/test-timeout-pre.py:*)",
+      "Bash(./.claude/hooks/test-timeout-post.py:*)",
+      "Bash($CLAUDE_PROJECT_DIR/.claude/hooks/l10n-sync-verification-hook.py:*)",
+      "mcp__dart__run_tests",
+      "mcp__dart__analyze_files",
+      "mcp__dart__hover",
+      "mcp__dart__resolve_workspace_symbol",
+      "mcp__dart__dart_fix",
+      "mcp__dart__list_running_apps",
+      "_COMMENT_FLUTTER_END: === [FLUTTER] Flutter 特定權限結束 ===",
+
+      "_COMMENT_WEBFETCH_START: === [可選] WebFetch domain 白名單，根據需要增減 ===",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "_COMMENT_FLUTTER_DOMAINS: [FLUTTER] 以下為 Flutter 相關 domain",
+      "WebFetch(domain:blog.flutter.dev)",
+      "WebFetch(domain:dart.dev)",
+      "WebFetch(domain:pub.dev)",
+      "_COMMENT_WEBFETCH_END: === WebFetch domain 結束 ==="
+    ],
+    "ask": [
+      "Bash(git push:*)"
+    ]
+  },
+
+  "enableAllProjectMcpServers": true,
+
+  "_COMMENT_MCP_SERVERS": "[語言特定] 根據專案語言調整 MCP server 列表",
+  "enabledMcpjsonServers": [
+    "_FLUTTER: dart"
+  ],
+
+  "hooks": {
+    "_COMMENT_HOOKS": "Hook 配置使用 $CLAUDE_PROJECT_DIR 自動解析路徑，通常不需修改。參考 .claude/config/hook-language-classification.yaml 了解哪些 Hook 可停用。"
+  },
+
+  "outputStyle": "5W1H Structured Response",
+  "spinnerTipsEnabled": false
+}

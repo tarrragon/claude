@@ -59,6 +59,11 @@ TICKET_PATHS: List[str] = [
     f"{WORK_LOGS_DIR}/v{{version}}/{TICKETS_DIR}/",
 ]
 
+# Handoff 交接檔案目錄
+HANDOFF_DIR: str = ".claude/handoff"
+HANDOFF_PENDING_SUBDIR: str = "pending"
+HANDOFF_ARCHIVE_SUBDIR: str = "archive"
+
 # ============================================================
 # Ticket 類型
 # ============================================================

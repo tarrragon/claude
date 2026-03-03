@@ -16,6 +16,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, List
 
+from ticket_system.lib.constants import (
+    HANDOFF_DIR,
+    HANDOFF_PENDING_SUBDIR,
+    HANDOFF_ARCHIVE_SUBDIR,
+)
 from ticket_system.lib.ticket_loader import resolve_version, load_ticket, get_project_root
 from ticket_system.lib.messages import (
     ErrorMessages,
@@ -32,7 +37,7 @@ from ticket_system.lib.command_lifecycle_messages import (
 )
 
 
-def _get_handoff_dir(subdir: str = "pending") -> Path:
+def _get_handoff_dir(subdir: str = HANDOFF_PENDING_SUBDIR) -> Path:
     """
     取得 handoff 目錄
 
@@ -43,11 +48,11 @@ def _get_handoff_dir(subdir: str = "pending") -> Path:
         Path: handoff 目錄路徑
     """
     root = get_project_root()
-    handoff_dir = root / ".claude" / "handoff" / subdir
+    handoff_dir = root / HANDOFF_DIR / subdir
     return handoff_dir
 
 
-def _find_handoff_file(ticket_id: str, subdir: str = "pending") -> Optional[tuple[Path, str]]:
+def _find_handoff_file(ticket_id: str, subdir: str = HANDOFF_PENDING_SUBDIR) -> Optional[tuple[Path, str]]:
     """
     尋找 handoff 檔案，返回 (路徑, 格式)
 
@@ -80,7 +85,7 @@ def list_pending_handoffs() -> List[Dict[str, Any]]:
     Returns:
         List[Dict]: handoff 資料列表
     """
-    pending_dir = _get_handoff_dir("pending")
+    pending_dir = _get_handoff_dir(HANDOFF_PENDING_SUBDIR)
 
     if not pending_dir.exists():
         return []
@@ -120,7 +125,7 @@ def load_handoff_file(ticket_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         Optional[Dict]: handoff 資料，或 None 如果不存在
     """
-    file_info = _find_handoff_file(ticket_id, "pending")
+    file_info = _find_handoff_file(ticket_id, HANDOFF_PENDING_SUBDIR)
     if not file_info:
         return None
 
@@ -154,7 +159,7 @@ def mark_handoff_as_resumed(ticket_id: str) -> bool:
     Returns:
         bool: 成功返回 True，失敗返回 False
     """
-    file_info = _find_handoff_file(ticket_id, "pending")
+    file_info = _find_handoff_file(ticket_id, HANDOFF_PENDING_SUBDIR)
     if not file_info:
         return False
 
@@ -188,12 +193,12 @@ def archive_handoff_file(ticket_id: str) -> bool:
     Returns:
         bool: 成功返回 True，失敗返回 False
     """
-    file_info = _find_handoff_file(ticket_id, "pending")
+    file_info = _find_handoff_file(ticket_id, HANDOFF_PENDING_SUBDIR)
     if not file_info:
         return False
 
     file_path, _ = file_info
-    archive_dir = _get_handoff_dir("archive")
+    archive_dir = _get_handoff_dir(HANDOFF_ARCHIVE_SUBDIR)
     archive_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -217,7 +222,12 @@ def _print_basic_info(handoff: Dict[str, Any]) -> None:
         print(f"  前狀態: {handoff.get('from_status', '?')}")
 
     if "direction" in handoff:
-        print(f"  交接方向: {handoff.get('direction', 'auto')}")
+        direction = handoff.get("direction", "auto")
+        print(f"  交接方向: {direction}")
+
+        # Context refresh 額外說明
+        if direction == "context-refresh":
+            print(f"    （Context 刷新：在新 session 中以乾淨環境繼續此任務）")
 
     if "timestamp" in handoff:
         print(f"  交接時間: {handoff.get('timestamp')}")

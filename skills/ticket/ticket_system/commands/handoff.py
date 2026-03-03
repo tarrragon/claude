@@ -17,7 +17,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from ticket_system.lib.constants import STATUS_IN_PROGRESS, STATUS_COMPLETED, STATUS_PENDING, STATUS_BLOCKED
+from ticket_system.lib.constants import (
+    STATUS_IN_PROGRESS,
+    STATUS_COMPLETED,
+    STATUS_PENDING,
+    STATUS_BLOCKED,
+    HANDOFF_DIR,
+    HANDOFF_PENDING_SUBDIR,
+    HANDOFF_ARCHIVE_SUBDIR,
+)
 from ticket_system.lib.ticket_loader import (
     get_project_root,
     load_ticket,
@@ -65,17 +73,24 @@ def _check_yaml_error(ticket: Optional[Dict[str, Any]], ticket_id: str) -> bool:
     return False
 
 
-def _verify_handoff_status(ticket: Dict[str, Any], ticket_id: str) -> bool:
+def _verify_handoff_status(
+    ticket: Dict[str, Any],
+    ticket_id: str,
+    context_refresh: bool = False,
+) -> bool:
     """
     驗證 Ticket 是否可進行 handoff。
 
     允許的狀態：
-    - 獨立任務（無 children）：必須為 completed
+    - 獨立任務（無 children）：
+      - context_refresh=False：必須為 completed
+      - context_refresh=True：允許 in_progress
     - 有 children 的父任務：允許 in_progress 或 completed
 
     Args:
         ticket: Ticket 資料
         ticket_id: Ticket ID（用於錯誤訊息）
+        context_refresh: 是否為 context refresh handoff
 
     Returns:
         bool: True 表示可以 handoff，False 表示不可以
@@ -88,9 +103,13 @@ def _verify_handoff_status(ticket: Dict[str, Any], ticket_id: str) -> bool:
     if has_children:
         if status in (STATUS_IN_PROGRESS, STATUS_COMPLETED):
             return True
-    # 獨立任務（無 children），必須為 completed
+    # 獨立任務（無 children）
     else:
-        if status == STATUS_COMPLETED:
+        # context-refresh 允許 in_progress 狀態
+        if context_refresh and status == STATUS_IN_PROGRESS:
+            return True
+        # 傳統 handoff 要求 completed 狀態
+        if not context_refresh and status == STATUS_COMPLETED:
             return True
 
     # 狀態檢查失敗，輸出錯誤訊息
@@ -99,13 +118,22 @@ def _verify_handoff_status(ticket: Dict[str, Any], ticket_id: str) -> bool:
     ))
     print()
     print(f"當前狀態：{status}")
-    print(f"需要狀態：{STATUS_COMPLETED if not has_children else f'{STATUS_IN_PROGRESS} 或 {STATUS_COMPLETED}'}")
+    if has_children:
+        print(f"需要狀態：{STATUS_IN_PROGRESS} 或 {STATUS_COMPLETED}")
+    else:
+        if context_refresh:
+            print(f"需要狀態（context-refresh）：{STATUS_IN_PROGRESS}")
+        else:
+            print(f"需要狀態：{STATUS_COMPLETED}")
     print()
     print("說明：")
     if has_children:
         print("  有 children 的父任務允許在 in_progress 或 completed 時進行 handoff")
+    elif context_refresh:
+        print("  context-refresh 允許在 in_progress 時進行 handoff")
     else:
         print("  只有狀態為 'completed' 的獨立任務才能進行 handoff")
+        print("  如要在 in_progress 時 handoff，使用 --context-refresh 旗標")
     print(f"  請先將此 Ticket 標記為適當的狀態")
     return False
 
@@ -207,13 +235,13 @@ def _create_handoff_file_internal(ticket: Dict[str, Any], direction: str) -> int
 
     Args:
         ticket: Ticket 資料
-        direction: 交接方向 (to-parent, to-child, to-sibling)
+        direction: 交接方向 (to-parent, to-child, to-sibling, context-refresh)
 
     Returns:
         int: exit code (0 成功, 1 失敗)
     """
     root = get_project_root()
-    handoff_dir = root / ".claude" / "handoff" / "pending"
+    handoff_dir = root / HANDOFF_DIR / HANDOFF_PENDING_SUBDIR
     handoff_dir.mkdir(parents=True, exist_ok=True)
 
     ticket_id = ticket.get("id")
@@ -260,7 +288,7 @@ def _create_handoff_file(ticket: Dict[str, Any], direction: str) -> int:
     # 輸出成功訊息
     root = get_project_root()
     ticket_id = ticket.get("id")
-    handoff_file = root / ".claude" / "handoff" / "pending" / f"{ticket_id}.json"
+    handoff_file = root / HANDOFF_DIR / HANDOFF_PENDING_SUBDIR / f"{ticket_id}.json"
     print(format_info(InfoMessages.HANDOFF_FILE_CREATED, path=str(handoff_file.relative_to(root))))
     print()
     print("=" * 60)
@@ -277,9 +305,10 @@ def _execute_handoff(args: argparse.Namespace) -> int:
     1. 驗證 Ticket ID 格式
     2. 解析版本
     3. 驗證 Ticket 存在（exit code 2 如果不存在）
-    4. 驗證 Ticket 狀態為 completed
-    5. 驗證 blockedBy 依賴都已完成
-    6. 根據方向建立交接檔案
+    4. 驗證互斥旗標（context-refresh 與方向旗標）
+    5. 驗證 Ticket 狀態
+    6. 驗證 blockedBy 依賴都已完成（除非 context-refresh）
+    7. 根據方向建立交接檔案
     """
     ticket_id = args.ticket_id
 
@@ -304,18 +333,36 @@ def _execute_handoff(args: argparse.Namespace) -> int:
     if _check_yaml_error(ticket, ticket_id):
         return 2
 
-    # 步驟 4：驗證 Ticket 狀態必須為 completed
-    if not _verify_handoff_status(ticket, ticket_id):
+    # 步驟 4：驗證互斥旗標
+    context_refresh = getattr(args, "context_refresh", False)
+    direction_specified = (
+        getattr(args, "to_parent", False)
+        or getattr(args, "to_child", None)
+        or getattr(args, "to_sibling", None)
+    )
+
+    if context_refresh and direction_specified:
+        print(format_error(
+            "錯誤：--context-refresh 與方向旗標（--to-parent, --to-child, --to-sibling）互斥"
+        ))
         return 1
 
-    # 步驟 5：驗證 blockedBy 依賴都已完成
-    if not _verify_handoff_dependencies(ticket, ticket_id, version):
+    # 步驟 5：驗證 Ticket 狀態
+    if not _verify_handoff_status(ticket, ticket_id, context_refresh=context_refresh):
         return 1
 
-    # 步驟 6：根據方向建立交接檔案
-    direction = _resolve_direction_from_args(args)
-    if direction == "auto":
-        direction = ChainAnalyzer.determine_direction(ticket, version)
+    # 步驟 6：驗證 blockedBy 依賴都已完成（除非 context-refresh）
+    if not context_refresh:
+        if not _verify_handoff_dependencies(ticket, ticket_id, version):
+            return 1
+
+    # 步驟 7：根據方向建立交接檔案
+    if context_refresh:
+        direction = "context-refresh"
+    else:
+        direction = _resolve_direction_from_args(args)
+        if direction == "auto":
+            direction = ChainAnalyzer.determine_direction(ticket, version)
 
     return _create_handoff_file(ticket, direction)
 
@@ -703,6 +750,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--to-sibling",
         metavar="ID",
         help=HandoffMessages.ARG_TO_SIBLING_HELP
+    )
+    parser.add_argument(
+        "--context-refresh",
+        action="store_true",
+        help="Context 刷新交接：允許 in_progress 獨立任務進行 handoff，跳過依賴檢查"
     )
     parser.add_argument(
         "--status",

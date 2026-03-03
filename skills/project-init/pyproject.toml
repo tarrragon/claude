@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "project-init"
-version = "1.0.0"
+version = "1.1.0"
 description = "Environment initialization tool - 環境初始化工具，檢查和設定開發環境"
 readme = "SKILL.md"
 requires-python = ">=3.11"

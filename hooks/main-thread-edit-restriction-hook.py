@@ -7,13 +7,13 @@
 r"""
 Main Thread Edit Restriction Hook - PreToolUse Hook
 
-功能: 限制主線程的 Edit/Write 工具使用，防止直接編輯程式碼
+功能: 限制主線程的 Edit/Write 工具使用，防止直接編輯程式碼（預設拒絕安全策略）
 - 允許編輯：.claude/plans/*, .claude/rules/*, .claude/methodologies/*,
            .claude/hooks/*, .claude/skills/*, .claude/agents/*,
            .claude/references/*, .claude/error-patterns/*, .claude/handoff/*,
-           docs/work-logs/*, docs/todolist.yaml
-- 拒絕編輯：lib/*, test/*, *.dart（除 .claude/ 中的）
-- 拒絕時返回 exit code 2 和錯誤訊息
+           docs/work-logs/**（含 tickets/）, docs/todolist.yaml, CLAUDE.md
+- 拒絕編輯：lib/*, test/*, *.dart（除 .claude/ 中的）, backend/*, *.go, go.mod, go.sum
+- 拒絕時返回 exit code 2 和錯誤訊息，提示允許的路徑範圍
 
 觸發時機: 執行 Edit/Write 工具時
 
@@ -27,23 +27,30 @@ Main Thread Edit Restriction Hook - PreToolUse Hook
   ^\.claude/references/.*         # 參考檔案
   ^\.claude/error-patterns/.*     # 錯誤模式
   ^\.claude/handoff/.*            # 交接檔案
-  ^docs/work-logs/(?!.*/tickets/).*   # worklog 資料夾（排除 tickets）
+  ^docs/work-logs/.*              # worklog 資料夾（含 tickets/）
   ^docs/todolist\.yaml$           # todolist 檔案
+  ^CLAUDE\.md$                    # 專案入口文件
 
 禁止的檔案路徑:
   ^lib/.*                         # 應用程式碼
   ^test/.*                        # 測試程式碼
   .*\.dart$                       # Dart 檔案（除 .claude/ 中的）
+  ^backend/.*                     # Go backend 程式碼
+  .*\.go$                         # Go 檔案
+  ^go\.mod$                       # Go 依賴管理
+  ^go\.sum$                       # Go 依賴鎖檔
 
-兜底規則:
-  - .claude/ 內非白名單路徑 → 拒絕（禁止建立未預定義的子目錄）
-  - 其他路徑 → 允許（預設允許）
+安全策略（預設拒絕）:
+  - 白名單中的檔案 → 允許編輯
+  - 禁止清單中的檔案 → 拒絕編輯
+  - .claude/ 內非白名單路徑 → 拒絕編輯（防止建立未預定義的子目錄）
+  - 其他所有檔案 → 拒絕編輯（預設拒絕）
 
 行為:
   - 允許的檔案: 允許編輯，返回 exit code 0
   - 禁止的檔案: 拒絕編輯，返回 exit code 2，輸出錯誤訊息
   - .claude/ 非白名單: 拒絕編輯，返回 exit code 2，輸出錯誤訊息
-  - 其他檔案: 允許編輯，返回 exit code 0
+  - 其他檔案: 拒絕編輯，返回 exit code 2，輸出錯誤訊息
 """
 
 import json
@@ -82,8 +89,9 @@ ALLOWED_PATTERNS = [
     r"^\.claude/references/.*",         # 參考檔案
     r"^\.claude/error-patterns/.*",     # 錯誤模式
     r"^\.claude/handoff/.*",            # 交接檔案
-    r"^docs/work-logs/(?!.*/tickets/).*",  # worklog 資料夾（排除 tickets）
+    r"^docs/work-logs/.*",              # worklog 資料夾（含 tickets/）
     r"^docs/todolist\.yaml$",           # todolist 檔案
+    r"^CLAUDE\.md$",                    # 專案入口文件
 ]
 
 # 禁止的檔案路徑模式（正則）
@@ -93,6 +101,10 @@ BLOCKED_PATTERNS = [
     r".*\.dart$",                       # Dart 檔案（除 .claude/ 中的）
     r"^\.claude/skills/.*\.py$",        # Skills 中的 Python 檔案
     r"^\.claude/lib/.*\.py$",           # lib 中的 Python 檔案
+    r"^backend/.*",                     # Go backend 程式碼
+    r".*\.go$",                         # Go 檔案
+    r"^go\.mod$",                       # Go 依賴管理
+    r"^go\.sum$",                       # Go 依賴鎖檔
 ]
 
 # 例外：允許編輯的特定檔案路徑（優先於禁止清單）
@@ -243,9 +255,17 @@ def check_file_permission(file_path: str, logger) -> Tuple[bool, str]:
         logger.warning(f"拒絕編輯非白名單 .claude/ 路徑: {normalized_path}")
         return False, reason
 
-    # 預設允許其他檔案
-    logger.debug(f"預設允許編輯檔案: {normalized_path}")
-    return True, "檔案不在禁止清單中，預設允許"
+    # 預設拒絕所有其他檔案（安全策略）
+    reason = (
+        "主線程禁止編輯此路徑（預設拒絕）。允許的範圍：\n"
+        "  .claude/ 系統檔案（plans/rules/methodologies/hooks/skills/agents/references/error-patterns/handoff/）\n"
+        "  docs/work-logs/**（含 tickets/）\n"
+        "  docs/todolist.yaml\n"
+        "  CLAUDE.md\n"
+        "其他檔案請建立 Ticket 派發給對應代理人。"
+    )
+    logger.warning(f"拒絕編輯非白名單路徑（預設拒絕）: {normalized_path}")
+    return False, reason
 
 
 # ============================================================================

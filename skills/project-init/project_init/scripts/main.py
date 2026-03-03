@@ -11,9 +11,10 @@ import sys
 from pathlib import Path
 
 from project_init.commands.check import run_check
+from project_init.commands.onboard import run_onboard
 from project_init.commands.setup import run_setup
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 
 def main() -> int:
@@ -37,6 +38,9 @@ def main() -> int:
     try:
         if args.command == "check":
             result = run_check(project_root)
+            return 0 if result.all_ok else 1
+        elif args.command == "onboard":
+            result = run_onboard(project_root)
             return 0 if result.all_ok else 1
         elif args.command == "setup":
             result = run_setup(project_root)
@@ -64,6 +68,7 @@ def _create_parser() -> argparse.ArgumentParser:
 範例：
   project-init --version          輸出版本號
   project-init check              掃描環境狀態
+  project-init onboard            框架定制引導
   project-init setup              完整安裝/更新環境
         """.strip(),
     )
@@ -85,6 +90,12 @@ def _create_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "check",
         help="掃描環境狀態（唯讀檢查，不修改任何東西）",
+    )
+
+    # onboard 子指令
+    subparsers.add_parser(
+        "onboard",
+        help="框架定制引導（偵測專案語言並建議需要的設定）",
     )
 
     # setup 子指令

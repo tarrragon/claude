@@ -34,6 +34,7 @@ from .hook_verifier import (
 from .messages import (
     CheckMessages,
     HookSystemMessages,
+    OnboardMessages,
     OSMessages,
     PackageMessages,
     PythonMessages,
@@ -41,6 +42,16 @@ from .messages import (
     RipgrepMessages,
     SetupMessages,
     UVMessages,
+)
+from .onboard_checker import (
+    FrameworkFileInfo,
+    HookClassificationInfo,
+    ProjectLanguageInfo,
+    check_claude_md,
+    check_language_template,
+    check_settings_local_json,
+    detect_project_language,
+    parse_hook_classification,
 )
 from .package_manager import (
     InstalledInfo,
@@ -80,6 +91,7 @@ __all__ = [
     "PackageMessages",
     "SetupMessages",
     "CheckMessages",
+    "OnboardMessages",
     "RemediationGuidance",
     "ToolStatus",
     "HookSystemStatus",
@@ -95,4 +107,12 @@ __all__ = [
     "compare_versions",
     "InstallInstructions",
     "get_install_instructions",
+    "ProjectLanguageInfo",
+    "HookClassificationInfo",
+    "FrameworkFileInfo",
+    "detect_project_language",
+    "parse_hook_classification",
+    "check_claude_md",
+    "check_language_template",
+    "check_settings_local_json",
 ]

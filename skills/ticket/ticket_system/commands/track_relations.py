@@ -51,6 +51,168 @@ from ticket_system.lib.command_tracking_messages import (
 )
 
 
+def _normalize_ticket_id_list(value: str | list) -> list[str]:
+    """
+    標準化 Ticket ID 清單為列表
+
+    將字符串或列表轉換為統一的列表格式。
+
+    Args:
+        value: Ticket ID 清單（字符串或列表）
+               - 字符串：逗號或空格分隔
+               - 列表：直接使用
+
+    Returns:
+        list[str]: 標準化的 ID 列表
+    """
+    if isinstance(value, str):
+        # 支援逗號或空格分隔
+        return [id_str.strip() for id_str in value.split(",") if id_str.strip()]
+    elif isinstance(value, list):
+        return value
+    else:
+        return []
+
+
+def _execute_set_relation_field_replace(
+    referenced_ids: list[str],
+) -> list[str]:
+    """替換模式：直接替換欄位值"""
+    return referenced_ids
+
+
+def _execute_set_relation_field_add(
+    current_list: list[str],
+    referenced_ids: list[str],
+) -> list[str]:
+    """追加模式：將 ID 加入列表（去重）"""
+    new_value = current_list.copy()
+    for ref_id in referenced_ids:
+        if ref_id not in new_value:
+            new_value.append(ref_id)
+    return new_value
+
+
+def _execute_set_relation_field_remove(
+    current_list: list[str],
+    referenced_ids: list[str],
+) -> list[str]:
+    """移除模式：從列表中移除指定的 ID"""
+    return [id_str for id_str in current_list if id_str not in referenced_ids]
+
+
+def _execute_set_relation_field(
+    args: argparse.Namespace,
+    version: str,
+    field_name: str,
+) -> int:
+    """
+    通用關係欄位設定函式
+
+    支援 blockedBy 和 relatedTo 欄位的設定，包含三種模式：
+    - replace（預設）：替換欄位值
+    - --add：追加到欄位，去重
+    - --remove：從欄位移除
+
+    Args:
+        args: 命令列參數
+            - ticket_id: 目標 Ticket ID
+            - value: 被引用的 Ticket ID（空格分隔或單個）
+            - --add: 追加模式旗標
+            - --remove: 移除模式旗標
+        version: 版本號
+        field_name: 欄位名稱 ("blockedBy" 或 "relatedTo")
+
+    Returns:
+        int: 0 表示成功，1 表示失敗
+    """
+    target_id = args.ticket_id
+
+    # Step 1：載入目標 Ticket
+    target_ticket = load_ticket(version, target_id)
+    if not target_ticket:
+        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=target_id))
+        return 1
+
+    # 解析被引用的 Ticket ID 清單
+    value_str = args.value if hasattr(args, "value") else ""
+    referenced_ids = [id_str.strip() for id_str in value_str.split() if id_str.strip()]
+
+    # Step 2：驗證被引用 Ticket 存在（--remove 除外）
+    is_remove_mode = getattr(args, "remove", False)
+    if not is_remove_mode:
+        for ref_id in referenced_ids:
+            ref_ticket = load_ticket(version, ref_id)
+            if not ref_ticket:
+                print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=ref_id))
+                return 1
+
+    # Step 3：取得並標準化目前欄位值
+    current_value = target_ticket.get(field_name, [])
+    current_list = _normalize_ticket_id_list(current_value)
+
+    # Step 4：根據模式更新欄位值
+    is_add_mode = getattr(args, "add", False)
+
+    if is_remove_mode:
+        new_value = _execute_set_relation_field_remove(current_list, referenced_ids)
+    elif is_add_mode:
+        new_value = _execute_set_relation_field_add(current_list, referenced_ids)
+    else:
+        new_value = _execute_set_relation_field_replace(referenced_ids)
+
+    # Step 5：更新 Ticket 並保存
+    target_ticket[field_name] = new_value
+
+    ticket_path = Path(target_ticket.get("_path", get_ticket_path(version, target_id)))
+    save_ticket(target_ticket, ticket_path)
+
+    # Step 6：輸出成功訊息
+    print(format_info(
+        InfoMessages.FIELD_UPDATED,
+        ticket_id=target_id,
+        field_name=field_name,
+    ))
+    if new_value:
+        print(f"  新值：{', '.join(new_value)}")
+    else:
+        print(f"  新值：（空）")
+
+    return 0
+
+
+def execute_set_blocked_by(args: argparse.Namespace, version: str) -> int:
+    """
+    設定 Ticket 的 blockedBy 欄位
+
+    命令格式：ticket track set-blocked-by <ticket-id> <blocking-ids> [--add|--remove]
+
+    Args:
+        args: 命令列參數
+        version: 版本號
+
+    Returns:
+        int: exit code
+    """
+    return _execute_set_relation_field(args, version, "blockedBy")
+
+
+def execute_set_related_to(args: argparse.Namespace, version: str) -> int:
+    """
+    設定 Ticket 的 relatedTo 欄位
+
+    命令格式：ticket track set-related-to <ticket-id> <related-ids> [--add|--remove]
+
+    Args:
+        args: 命令列參數
+        version: 版本號
+
+    Returns:
+        int: exit code
+    """
+    return _execute_set_relation_field(args, version, "relatedTo")
+
+
 def execute_add_child(args: argparse.Namespace, version: str) -> int:
     """
     建立 Ticket 父子關係

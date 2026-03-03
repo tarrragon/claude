@@ -185,7 +185,9 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 0.31.0-W28-
 
 ### track - 追蹤和更新 Ticket 狀態
 
-包含 READ 操作（summary/query/version/tree/chain/full/log/list/board/agent/5W1H）和 UPDATE 操作（claim/complete/release/set-*/phase/check-acceptance/append-log/add-child/batch-*/audit/accept-creation）。`list` 支援 `--wave`、`--status`、`--format` 篩選參數，詳見 `references/track-command.md`。
+包含 READ 操作（summary/query/version/tree/chain/full/log/list/board/agent/5W1H）和 UPDATE 操作（claim/complete/release/set-who/set-what/set-when/set-where/set-why/set-how/phase/check-acceptance/append-log/add-child/batch-claim/batch-complete/audit/accept-creation）。`list` 支援 `--wave`、`--status`、`--format` 篩選參數。
+
+> **注意**：僅有 6 個 `set-*` 命令（對應 5W1H 欄位）。`blockedBy`、`relatedTo`、`priority` 等欄位無 CLI 命令，需手動編輯 frontmatter。完整對照表見 `references/track-command.md`。
 
 > 決策樹：Read `references/workflow-execute.md` 和 `references/workflow-query.md`
 > 詳細用法：Read `references/track-command.md`

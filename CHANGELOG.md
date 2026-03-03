@@ -1,3 +1,11 @@
+## [1.1.18] - 2026-03-04
+
+### Summary
+feat: v0.2.0 onboarding framework - onboard 子指令 + Hook 分類 + settings 模板 + 文件泛化
+
+---
+
+
 ## [1.1.17] - 2026-03-03
 
 ### Summary

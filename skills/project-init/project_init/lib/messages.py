@@ -92,6 +92,34 @@ class CheckMessages:
     SUMMARY_FORMAT = "{ok}/{total} 項目正常"
 
 
+# ========== Onboard 訊息 ==========
+class OnboardMessages:
+    """Onboard 命令相關訊息."""
+
+    HEADER = "project-init onboard — 框架定制引導"
+    LANGUAGE_SECTION = "專案語言偵測"
+    LANGUAGE_DETECTED = "偵測結果: {language}"
+    LANGUAGE_IDENTIFIER = "識別依據: {identifier}"
+    LANGUAGE_UNKNOWN = "未偵測到已知語言"
+    HOOK_CLASSIFICATION_SECTION = "Hook 語言分類"
+    FLUTTER_HOOKS_LABEL = "Flutter 特定 Hook（保留）:"
+    PROJECT_SPECIFIC_HOOKS_LABEL = "專案特定 Hook（需檢查）:"
+    CLAUDE_MD_SECTION = "CLAUDE.md"
+    CLAUDE_MD_OK = "狀態: [OK] 已存在"
+    CLAUDE_MD_TODO = "狀態: [TODO] 不存在"
+    CLAUDE_MD_COPY_HINT = "建議: 請從 .claude/templates/CLAUDE-template.md 複製"
+    LANGUAGE_TEMPLATE_SECTION = "語言模板"
+    TEMPLATE_OK = "{language} 模板: [OK] .claude/project-templates/{template_file}"
+    TEMPLATE_TODO = "{language} 模板: [TODO] 尚無模板"
+    SETTINGS_LOCAL_SECTION = "settings.local.json"
+    SETTINGS_LOCAL_OK = "狀態: [OK] 已存在"
+    SETTINGS_LOCAL_TODO = "狀態: [TODO] 不存在"
+    SETTINGS_LOCAL_HINT = "建議: 檢查 [{language}] 標記的權限是否適用"
+    TODOLIST_HEADER = "待辦清單"
+    TODOLIST_COUNT = "{count} 項需處理"
+    TODOLIST_NONE = "0 項需處理"
+
+
 # ========== 錯誤修復指導 ==========
 class RemediationGuidance:
     """各類問題的修復步驟指導."""
