@@ -21,6 +21,7 @@
 │   ├── implementation-quality.md # 實作品質標準（跨語言）
 │   ├── language-constraints.md   # 語言約束
 │   ├── python-execution.md       # Python 執行規則
+│   ├── bash-tool-usage-rules.md  # Bash 工具使用規則（cd 污染 / TaskOutput）
 │   ├── quality-baseline.md       # 流程品質基線
 │   └── verification-framework.md # 驗證責任分配框架
 │
