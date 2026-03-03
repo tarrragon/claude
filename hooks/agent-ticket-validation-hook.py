@@ -521,6 +521,8 @@ def main() -> int:
             return EXIT_SUCCESS
         else:
             logger.warning("Agent Ticket Validation Hook 拒絕派發")
+            # 輸出到 stderr 確保 PM 可見（品質基線規則 4）
+            print(f"[Agent Ticket Validation] 派發被拒絕: {error_message}", file=sys.stderr)
             return EXIT_BLOCK
 
     except Exception as e:

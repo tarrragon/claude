@@ -58,21 +58,37 @@ Hook 系統中的錯誤以 "hook error" 統一顯示，無法從 UI 區分具體
 3. 安裝 plugin 前應檢查其 hooks.json 的 timeout 和 matcher 配置
 4. 不使用的 plugin 應及時移除，避免產生無意義的 hook 執行和 error
 
+### 案例 D：有意阻止路徑遺漏 stderr 輸出（agent-ticket-validation-hook）
+
+**症狀**：PM 派發 Agent 被攔截時，Claude Code 顯示 `"No stderr output"`，無法得知被攔截的具體原因
+
+**根因**：`main()` 的 exit code 2 返回路徑只將錯誤原因放在 stdout JSON 的 `permissionDecisionReason` 欄位，未寫入 stderr。同檔案的 `_log_exception()`（未預期異常路徑）已正確寫入 stderr，但有意阻止路徑遺漏了。
+
+**位置**：`agent-ticket-validation-hook.py` 第 522-524 行
+
+**特徵**：Hook 有兩條錯誤路徑 — (1) 未預期異常（exception）已有 stderr 輸出，(2) 有意阻止（業務邏輯拒絕）無 stderr 輸出。開發者只覆蓋了第一條路徑。
+
+**修復**：在 exit code 2 路徑新增 `print(f"[Agent Ticket Validation] 派發被拒絕: {error_message}", file=sys.stderr)`。
+
+**教訓**：Hook 的「有意阻止」和「未預期異常」是兩條獨立的錯誤路徑，兩者都需要 stderr 輸出。品質基線規則 4（Hook 失敗必須可見）適用於所有非成功路徑，不僅限於 exception。
+
 ## 共通模式
 
-三個案例的共通點：
+四個案例的共通點：
 
 | 共通點 | 說明 |
 |-------|------|
 | UI 無差異化 | "hook error" 訊息不區分根因類型 |
 | 多源疊加 | 多個不同 hook 的 error 同時出現，容易誤判 |
 | 靜默降級 | hook error 不阻止操作，但也不告訴你哪個 hook 出了問題 |
+| 路徑遺漏 | 多條錯誤路徑中只覆蓋部分（如只覆蓋 exception，遺漏業務拒絕） |
 
 ## 防護措施
 
 ### 開發 Hook 時
 - [ ] 同一函式的所有 call site 參數完整性檢查（案例 A）
 - [ ] Hook 關鍵字分類與決策樹語義一致性驗證（案例 B）
+- [ ] 所有非成功路徑（exception + 業務拒絕）都有 stderr 輸出（案例 D）
 - [ ] 新 Hook 加入後執行 3 種場景手動測試
 
 ### 安裝 Plugin 時
@@ -94,3 +110,4 @@ Hook 系統中的錯誤以 "hook error" 統一顯示，無法從 UI 區分具體
 - `.claude/hooks/command-entrance-gate-hook.py` - 案例 B 修復位置
 - `.claude/hooks/creation-acceptance-gate-hook.py` - 案例 A 修復位置
 - `~/.claude/plugins/cache/claude-plugins-official/hookify/` - 案例 C 來源（已移除）
+- `.claude/hooks/agent-ticket-validation-hook.py` - 案例 D 修復位置

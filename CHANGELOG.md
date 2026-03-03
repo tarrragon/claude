@@ -1,3 +1,11 @@
+## [1.1.16] - 2026-03-03
+
+### Summary
+fix: agent-ticket-validation-hook stderr 輸出優化 + IMP-006 案例 D
+
+---
+
+
 ## [1.1.15] - 2026-03-03
 
 ### Summary
