@@ -31,6 +31,17 @@ ${files}
 dependencies:
 ${dependencies}
 
+# === 任務鏈追蹤 ===
+chain:
+  root: "${chain_root}"
+  parent: ${chain_parent}
+  depth: ${chain_depth}
+  sequence: [${chain_sequence}]
+
+# === 關聯追蹤 ===
+spawned_tickets: []
+source_ticket: null
+
 # === 狀態追蹤 ===
 status: "pending"
 assigned: false

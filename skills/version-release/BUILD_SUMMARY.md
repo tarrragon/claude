@@ -16,14 +16,14 @@
 
 #### 核心檔案
 
-| 檔案 | 行數 | 大小 | 用途 |
-|-----|------|------|------|
-| `scripts/version_release.py` | 650+ | 28K | 主要執行腳本 |
-| `SKILL.md` | 650+ | 17K | 完整功能文件 |
-| `README.md` | 300+ | 6K | 快速參考指南 |
-| `INDEX.md` | 200+ | 7K | 檔案索引 |
-| `templates/release-checklist.md` | 200+ | 6K | 檢查清單範本 |
-| `tests/test_version_release.md` | 200+ | 5K | 測試文件 |
+| 檔案                             | 行數 | 大小 | 用途         |
+| -------------------------------- | ---- | ---- | ------------ |
+| `scripts/version_release.py`     | 650+ | 28K  | 主要執行腳本 |
+| `SKILL.md`                       | 650+ | 17K  | 完整功能文件 |
+| `README.md`                      | 300+ | 6K   | 快速參考指南 |
+| `INDEX.md`                       | 200+ | 7K   | 檔案索引     |
+| `templates/release-checklist.md` | 200+ | 6K   | 檢查清單範本 |
+| `tests/test_version_release.md`  | 200+ | 5K   | 測試文件     |
 
 **總計**: 2,398 行代碼文件 | 80KB
 
@@ -50,6 +50,7 @@
 ### ✅ 已完成的功能
 
 #### 1. 三步驟發布流程
+
 - ✅ **Step 1: Pre-flight 檢查**
   - 工作日誌完成度檢查
   - 技術債務狀態檢查
@@ -57,7 +58,7 @@
 
 - ✅ **Step 2: 文件更新**
   - CHANGELOG.md 自動更新
-  - todolist.md 自動清理
+  - todolist.yaml 自動清理
   - pubspec.yaml 版本驗證
 
 - ✅ **Step 3: Git 操作**
@@ -67,6 +68,7 @@
   - 分支清理
 
 #### 2. CLI 介面
+
 - ✅ `release` 子命令 - 完整發布流程
 - ✅ `check` 子命令 - 只執行檢查
 - ✅ `update-docs` 子命令 - 只更新文件
@@ -76,6 +78,7 @@
 - ✅ `--help` 選項 - 幫助系統
 
 #### 3. 版本偵測
+
 - ✅ 命令行參數優先
 - ✅ Git 分支名稱偵測
 - ✅ pubspec.yaml 版本偵測
@@ -83,6 +86,7 @@
 - ✅ 版本格式規範化 (X.Y → X.Y.0)
 
 #### 4. 輸出和報告
+
 - ✅ 彩色化輸出 (成功/錯誤/警告/資訊)
 - ✅ 結構化進度指示
 - ✅ 詳細的檢查結果
@@ -90,6 +94,7 @@
 - ✅ 恢復指引
 
 #### 5. 錯誤處理
+
 - ✅ 版本偵測失敗
 - ✅ Worklog 檢查失敗
 - ✅ 技術債務分類缺失
@@ -97,6 +102,7 @@
 - ✅ Git 操作失敗
 
 #### 6. 預覽模式
+
 - ✅ --dry-run 完整支援
 - ✅ 顯示將執行的 git 指令
 - ✅ 預覽文件更新
@@ -107,6 +113,7 @@
 ## 技術實現亮點
 
 ### 1. UV Single-File 模式
+
 ```python
 #!/usr/bin/env python3
 # /// script
@@ -114,11 +121,13 @@
 # dependencies = ["pyyaml"]
 # ///
 ```
+
 - ✅ 依賴隔離（自動安裝 pyyaml）
 - ✅ 零配置（無需 requirements.txt）
 - ✅ 可移植性高
 
 ### 2. 智慧版本偵測
+
 ```python
 detect_version() → 4 層備用機制
 1. --version 參數
@@ -128,6 +137,7 @@ detect_version() → 4 層備用機制
 ```
 
 ### 3. 彩色化輸出系統
+
 ```python
 Colors 類別 + print_* 函式
 - ✅ 標題/章節/成功/錯誤/警告/資訊
@@ -136,6 +146,7 @@ Colors 類別 + print_* 函式
 ```
 
 ### 4. 多層次檢查系統
+
 ```
 Pre-flight Check
 ├─ check_worklog_completed()
@@ -173,13 +184,13 @@ Pre-flight Check
 
 ### ✅ 基本功能驗證
 
-| 功能 | 狀態 | 驗證方法 |
-|-----|------|---------|
-| 命令行解析 | ✅ | `--help` 輸出 |
-| 版本偵測 | ✅ | `check --version 0.19` |
-| Pre-flight 檢查 | ✅ | `check` 命令 |
-| 彩色輸出 | ✅ | 視覺檢查 ANSI 代碼 |
-| 預覽模式 | ✅ | `release --dry-run` |
+| 功能            | 狀態 | 驗證方法               |
+| --------------- | ---- | ---------------------- |
+| 命令行解析      | ✅   | `--help` 輸出          |
+| 版本偵測        | ✅   | `check --version 0.19` |
+| Pre-flight 檢查 | ✅   | `check` 命令           |
+| 彩色輸出        | ✅   | 視覺檢查 ANSI 代碼     |
+| 預覽模式        | ✅   | `release --dry-run`    |
 
 ### ✅ 輸出範例驗證
 
@@ -201,14 +212,14 @@ Pre-flight Check
 
 ### 文件品質指標
 
-| 文件 | 內容完整度 | 清晰度 | 例子 | 狀態 |
-|-----|-----------|--------|------|------|
-| README.md | 95% | 優 | 4+ | ✅ |
-| SKILL.md | 100% | 優 | 8+ | ✅ |
-| INDEX.md | 100% | 優 | 2+ | ✅ |
-| version_release.py | 100% | 優 | N/A | ✅ |
-| release-checklist.md | 100% | 優 | 1+ | ✅ |
-| test_version_release.md | 100% | 優 | 7+ | ✅ |
+| 文件                    | 內容完整度 | 清晰度 | 例子 | 狀態 |
+| ----------------------- | ---------- | ------ | ---- | ---- |
+| README.md               | 95%        | 優     | 4+   | ✅   |
+| SKILL.md                | 100%       | 優     | 8+   | ✅   |
+| INDEX.md                | 100%       | 優     | 2+   | ✅   |
+| version_release.py      | 100%       | 優     | N/A  | ✅   |
+| release-checklist.md    | 100%       | 優     | 1+   | ✅   |
+| test_version_release.md | 100%       | 優     | 7+   | ✅   |
 
 ### 文件導航
 
@@ -256,31 +267,34 @@ uv run .claude/skills/version-release/scripts/version_release.py release
 
 ### 文件查詢指南
 
-| 我想要... | 查看... |
-|---------|--------|
-| 快速上手 | README.md |
-| 完整說明 | SKILL.md |
-| 找檔案 | INDEX.md |
-| 檢查清單 | templates/release-checklist.md |
-| 測試用例 | tests/test_version_release.md |
+| 我想要... | 查看...                        |
+| --------- | ------------------------------ |
+| 快速上手  | README.md                      |
+| 完整說明  | SKILL.md                       |
+| 找檔案    | INDEX.md                       |
+| 檢查清單  | templates/release-checklist.md |
+| 測試用例  | tests/test_version_release.md  |
 
 ---
 
 ## 代理人協作指引
 
 ### basil-hook-architect (執行者)
+
 - ✅ 設計三步驟流程
 - ✅ 實現 Python 腳本
 - ✅ 建立 SKILL.md 完整文件
 - ✅ 驗證功能正確性
 
 ### rosemary-project-manager (分派者)
+
 - 使用 `check` 驗證版本準備度
 - 使用 `release --dry-run` 預覽流程
 - 複製 release-checklist.md 進行人工檢查
 - 執行 `release` 完成版本發布
 
 ### 其他相關代理人
+
 - **pepper-test-implementer**: 執行測試用例
 - **thyme-documentation-integrator**: 整合文件到方法論
 - **memory-network-builder**: 版本發布時使用

@@ -42,7 +42,7 @@
 |------|------|
 | 程式碼識別符 | `BookRepository`, `useCase`, `Widget` |
 | 技術專有名詞 | Flutter, Dart, LSP, MCP, TDD |
-| 指令和命令 | `/ticket-create`, `git commit` |
+| 指令和命令 | `/ticket create`, `git commit` |
 | 檔案名稱 | `CLAUDE.md`, `pubspec.yaml` |
 | API 和協定名稱 | REST API, WebSocket, JSON |
 
@@ -70,7 +70,7 @@ Hook 系統會在以下時機進行語言檢查：
 
 ## 參考資源
 
-- [專案用語規範字典]($CLAUDE_PROJECT_DIR/.claude/terminology-dictionary.md)
+- @.claude/terminology-dictionary.md - 專案用語規範字典
 
 ---
 

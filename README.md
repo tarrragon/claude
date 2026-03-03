@@ -82,6 +82,16 @@ git commit -m "feat: 添加 Claude AI 開發規範配置"
 
 ---
 
+## 代理人目錄職責說明
+
+代理人定義檔案統一存放於 `.claude/agents/` 目錄：
+
+| 目錄 | 用途 | 格式 |
+|------|------|------|
+| `.claude/agents/` | 代理人定義和派發規則 | 完整指令 + YAML frontmatter |
+
+---
+
 ## 📁 目錄結構
 
 ```text

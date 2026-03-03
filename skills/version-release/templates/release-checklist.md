@@ -33,7 +33,7 @@
 
 - [ ] 所有技術債務已分類
 - [ ] TD 都有指定目標版本
-- [ ] `docs/todolist.md` 的「技術債務追蹤」區塊已更新
+- [ ] `docs/todolist.yaml` 的「技術債務追蹤」區塊已更新
 - [ ] 沒有遺留的未分類 TD
 
 **技術債務狀態**:
@@ -56,7 +56,7 @@ uv run .claude/skills/version-release/scripts/version_release.py check --version
 
 ### 文件完整性驗證
 
-- [ ] `docs/todolist.md` 存在且格式正確
+- [ ] `docs/todolist.yaml` 存在且格式正確
 - [ ] `CHANGELOG.md` 存在且格式正確
 - [ ] `pubspec.yaml` 存在且版本號正確
 - [ ] 所有主要工作日誌檔案存在
@@ -129,7 +129,7 @@ uv run .claude/skills/version-release/scripts/version_release.py check --version
 
 1. ✅ 提交檔案變更
    ```bash
-   git add docs/todolist.md CHANGELOG.md
+   git add docs/todolist.yaml CHANGELOG.md
    git commit -m "docs: 版本 0.XX.X 發布準備"
    ```
 

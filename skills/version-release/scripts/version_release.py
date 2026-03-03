@@ -307,45 +307,37 @@ def check_technical_debt_status(version: str) -> Dict:
 def check_technical_debt(version: str) -> Tuple[bool, List[str]]:
     """檢查技術債務狀態"""
     root = get_project_root()
-    todolist_path = root / "docs" / "todolist.md"
+    todolist_path = root / "docs" / "todolist.yaml"
     errors = []
 
     if not todolist_path.exists():
-        errors.append("找不到 docs/todolist.md")
+        errors.append("找不到 docs/todolist.yaml")
         return False, errors
 
     try:
+        import yaml
         with open(todolist_path, encoding="utf-8") as f:
-            content = f.read()
+            data = yaml.safe_load(f) or {}
 
-        # 查找「技術債務追蹤」區塊
-        td_section = re.search(
-            r"## 技術債務追蹤.*?(?=\n##|\Z)", content, re.DOTALL
-        )
-        if not td_section:
-            # 沒有技術債務區塊是可以的（可能沒有 TD）
-            return True, []
-
-        # 提取所有 TD 項目
-        td_content = td_section.group(0)
-
-        # 檢查是否有 pending 狀態的 TD
-        pending_items = re.findall(r"\|\s+0\.\d+\.\d+-TD-\d+.*?\|\s*pending", td_content)
-        if pending_items:
-            # 檢查是否都有目標版本
-            for item in pending_items:
-                # 提取目標版本
-                if "v0." not in item:
-                    errors.append(f"技術債務缺少目標版本: {item}")
-
-        # 檢查當前版本的 TD 是否都已處理或延遲
+        # 檢查 tickets 清單中的 pending 狀態 TD
+        tickets = data.get('tickets', [])
         major_minor = ".".join(version.split(".")[:2])
-        # 這裡的檢查邏輯較寬鬆，只要求 TD 有分類即可
 
-        return len(errors) == 0, errors
+        pending_tds = []
+        for ticket in tickets:
+            if ticket.get('status') == 'pending' and '-TD-' in str(ticket.get('id', '')):
+                target_version = ticket.get('target_version')
+                if not target_version or target_version == major_minor:
+                    pending_tds.append(ticket.get('id'))
+
+        if pending_tds:
+            # 有待處理的 TD
+            return True, []  # 允許發布，由 check_technical_debt_status 處理
+
+        return True, []
 
     except Exception as e:
-        errors.append(f"讀取 todolist.md 失敗: {e}")
+        errors.append(f"讀取 todolist.yaml 失敗: {e}")
         return False, errors
 
 
@@ -549,6 +541,11 @@ def update_changelog(version: str, dry_run: bool = False) -> bool:
 
 """
 
+        # 幂等性檢查：若版本已存在則跳過
+        if f"## [{version}]" in changelog_content:
+            print_warning(f"CHANGELOG.md 已包含 v{version} 條目，跳過插入")
+            return True
+
         # 插入到 "## [" 之前（在 "格式基於" 之後）
         insert_pos = changelog_content.find("## [")
         if insert_pos > 0:
@@ -704,9 +701,13 @@ def defer_technical_debts(version: str, defer_to_version: str, dry_run: bool = F
 
 
 def update_todolist(version: str, dry_run: bool = False) -> bool:
-    """更新 todolist.md"""
+    """更新 todolist.yaml - 使用字串替換保留格式和注釋
+
+    支援版本格式：「0.31.0」（完整）和「0.31」（major.minor）。
+    使用字串替換而非 yaml.dump，避免破壞注釋和原始格式。
+    """
     root = get_project_root()
-    todolist_path = root / "docs" / "todolist.md"
+    todolist_path = root / "docs" / "todolist.yaml"
 
     if not todolist_path.exists():
         print_error(f"找不到 {todolist_path}")
@@ -718,27 +719,68 @@ def update_todolist(version: str, dry_run: bool = False) -> bool:
 
         major_minor = ".".join(version.split(".")[:2])
 
-        # 查找版本行並更新狀態
-        pattern = rf"(\| \*\*v{re.escape(major_minor)}\.x\*\*.*?\|.*?\|) ✅ Phase.*?\|"
-        updated_content = re.sub(
-            pattern,
-            rf"\1 ✅ 已完成 |",
-            content,
-            flags=re.DOTALL,
-        )
+        # 同時支援「0.31.0」和「0.31」兩種版本格式
+        version_candidates = [version, major_minor]
+        matched_ver = None
+        new_content = content
 
-        if updated_content != content:
-            if not dry_run:
-                with open(todolist_path, "w", encoding="utf-8") as f:
-                    f.write(updated_content)
-            print_success(f"todolist.md 已標記 v{major_minor}.x 為已完成")
-            return True
-        else:
-            print_warning("todolist.md 沒有找到對應的版本行")
+        for ver_str in version_candidates:
+            version_marker = f'version: "{ver_str}"'
+            if version_marker not in new_content:
+                continue
+
+            # 找到版本條目的起始位置（考慮不同縮排）
+            start = new_content.find(f'  - {version_marker}')
+            if start == -1:
+                start = new_content.find(f'- {version_marker}')
+            if start == -1:
+                continue
+
+            # 找到下一個條目作為邊界
+            next_entry = new_content.find('\n  - version:', start + 1)
+            if next_entry == -1:
+                next_entry = new_content.find('\n- version:', start + 1)
+
+            # 取出版本區塊
+            if next_entry != -1:
+                block = new_content[start:next_entry]
+            else:
+                # 最後一個版本條目，找到下一個頂層區塊
+                next_section = new_content.find('\n\n#', start)
+                block = new_content[start:next_section] if next_section != -1 else new_content[start:]
+
+            # 在區塊內替換 status
+            if 'status: "active"' in block:
+                new_block = block.replace('status: "active"', 'status: "completed"', 1)
+                new_content = new_content[:start] + new_block + new_content[start + len(block):]
+                matched_ver = ver_str
+                break
+            elif 'status: "completed"' in block:
+                print_warning(f"todolist.yaml v{ver_str} 已是 completed 狀態，跳過")
+                return True
+
+        if not matched_ver:
+            print_warning("todolist.yaml 沒有找到對應的 active 版本（可能版本格式不符或已完成）")
             return True  # 不是致命錯誤
 
+        # 更新 meta.last_updated
+        today = datetime.now().strftime("%Y-%m-%d")
+        new_content = re.sub(
+            r'(last_updated: ")[^"]*(")',
+            rf'\g<1>{today}\2',
+            new_content,
+            count=1,
+        )
+
+        if not dry_run:
+            with open(todolist_path, "w", encoding="utf-8") as f:
+                f.write(new_content)
+
+        print_success(f"todolist.yaml 已標記 v{matched_ver} 為已完成")
+        return True
+
     except Exception as e:
-        print_error(f"更新 todolist.md 失敗: {e}")
+        print_error(f"更新 todolist.yaml 失敗: {e}")
         return False
 
 
@@ -779,7 +821,7 @@ def update_documents(version: str, dry_run: bool = False) -> bool:
     all_ok = True
 
     # 2.1 清理 todolist
-    print_info("📝 更新 docs/todolist.md")
+    print_info("📝 更新 docs/todolist.yaml")
     if not update_todolist(version, dry_run):
         all_ok = False
 
@@ -820,7 +862,7 @@ def commit_changes(version: str, dry_run: bool = False) -> bool:
             else:
                 # 加入檔案
                 subprocess.run(
-                    ["git", "add", "docs/todolist.md", "CHANGELOG.md"],
+                    ["git", "add", "docs/todolist.yaml", "CHANGELOG.md"],
                     cwd=root,
                     timeout=10,
                 )

@@ -11,7 +11,7 @@ Doc-Flow 五重文件同步檢查 Hook
 
 檢查項目:
 1. 當前版本的 worklog 是否存在
-2. todo.md 中是否有應該移除的已完成項目
+2. todolist.yaml 中是否有應該移除的已完成項目
 3. error-patterns 最後更新時間
 4. ticket 與 worklog 的一致性
 
@@ -23,6 +23,11 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
+
+sys.path.insert(0, str(Path(__file__).parent))
+from hook_utils import setup_hook_logging, run_hook_safely
+from lib.hook_messages import ValidationMessages
 
 
 def get_project_root() -> Path:
@@ -30,7 +35,7 @@ def get_project_root() -> Path:
     return Path(os.environ.get("CLAUDE_PROJECT_DIR", ".")).resolve()
 
 
-def get_latest_version() -> str | None:
+def get_latest_version() -> Optional[str]:
     """從 work-logs 目錄取得最新版本號"""
     project_root = get_project_root()
     work_logs = project_root / "docs" / "work-logs"
@@ -80,14 +85,14 @@ def check_worklog_exists(version: str) -> dict:
 
 
 def check_todolist() -> dict:
-    """檢查 todo.md 狀態"""
+    """檢查 todolist.yaml 狀態"""
     project_root = get_project_root()
-    todolist = project_root / "docs" / "todolist.md"
+    todolist = project_root / "docs" / "todolist.yaml"
 
     result = {
         "exists": False,
-        "has_completed_items": False,
-        "completed_count": 0
+        "has_pending_items": False,
+        "pending_count": 0
     }
 
     if not todolist.exists():
@@ -96,14 +101,17 @@ def check_todolist() -> dict:
     result["exists"] = True
 
     try:
-        content = todolist.read_text(encoding="utf-8")
+        import yaml
+        with open(todolist, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
 
-        # 簡單檢查是否有「已完成」標記但還在清單中的項目
-        completed_markers = ["✅ 已完成", "[x]", "已完成"]
-        for marker in completed_markers:
-            if marker.lower() in content.lower():
-                result["has_completed_items"] = True
-                result["completed_count"] += content.lower().count(marker.lower())
+        # 檢查是否有 pending 或 active 狀態的項目
+        tickets = data.get('tickets', [])
+        for ticket in tickets:
+            status = ticket.get('status')
+            if status in ['pending', 'active']:
+                result["has_pending_items"] = True
+                result["pending_count"] += 1
     except Exception:
         pass
 
@@ -146,69 +154,70 @@ def check_error_patterns() -> dict:
 def generate_reminder(checks: dict) -> str:
     """生成提醒訊息"""
     lines = []
-    lines.append("=" * 60)
-    lines.append("[Doc-Flow] 五重文件系統狀態檢查")
-    lines.append("=" * 60)
+    lines.append(ValidationMessages.DOC_SYNC_HEADER_FORMAT)
+    lines.append(ValidationMessages.DOC_SYNC_TITLE)
+    lines.append(ValidationMessages.DOC_SYNC_HEADER_FORMAT)
     lines.append("")
 
     # Worklog 狀態
     worklog = checks.get("worklog", {})
     if worklog.get("exists"):
-        lines.append(f"[worklog] (v{checks.get('version', '?')}): OK - 存在")
+        lines.append(ValidationMessages.DOC_SYNC_WORKLOG_EXISTS.format(version=checks.get('version', '?')))
         if worklog.get("has_main"):
-            lines.append(f"   主工作日誌: OK")
+            lines.append(ValidationMessages.DOC_SYNC_WORKLOG_MAIN_OK)
         else:
-            lines.append(f"   主工作日誌: WARN - 未找到")
+            lines.append(ValidationMessages.DOC_SYNC_WORKLOG_MAIN_WARN)
         if worklog.get("has_tickets"):
-            lines.append(f"   Tickets: {worklog.get('ticket_count', 0)} 個")
+            lines.append(ValidationMessages.DOC_SYNC_WORKLOG_TICKETS.format(count=worklog.get('ticket_count', 0)))
     else:
-        lines.append(f"[worklog] (v{checks.get('version', '?')}): WARN - 目錄不存在")
+        lines.append(ValidationMessages.DOC_SYNC_WORKLOG_NOT_EXISTS.format(version=checks.get('version', '?')))
 
     lines.append("")
 
-    # Todo 狀態
+    # Todolist 狀態
     todo = checks.get("todo", {})
     if todo.get("exists"):
-        if todo.get("has_completed_items"):
-            lines.append(f"[todo.md]: WARN - 發現已完成項目 (建議移除)")
+        if todo.get("has_pending_items"):
+            lines.append(ValidationMessages.DOC_SYNC_TODOLIST_EXISTS_PENDING.format(count=todo.get('pending_count', 0)))
         else:
-            lines.append(f"[todo.md]: OK - 正常")
+            lines.append(ValidationMessages.DOC_SYNC_TODOLIST_EXISTS_NONE)
     else:
-        lines.append(f"[todo.md]: WARN - 不存在")
+        lines.append(ValidationMessages.DOC_SYNC_TODOLIST_NOT_EXISTS)
 
     lines.append("")
 
     # Error Patterns 狀態
     error_patterns = checks.get("error_patterns", {})
     if error_patterns.get("exists"):
-        lines.append(f"[error-patterns]: OK - {error_patterns.get('category_count', 0)} 個分類")
+        lines.append(ValidationMessages.DOC_SYNC_ERROR_PATTERNS_EXISTS.format(count=error_patterns.get('category_count', 0)))
         if error_patterns.get("last_modified"):
-            lines.append(f"   最後更新: {error_patterns.get('last_modified')}")
+            lines.append(ValidationMessages.DOC_SYNC_ERROR_PATTERNS_MODIFIED.format(time=error_patterns.get('last_modified')))
     else:
-        lines.append(f"[error-patterns]: WARN - 不存在")
+        lines.append(ValidationMessages.DOC_SYNC_ERROR_PATTERNS_NOT_EXISTS)
 
     lines.append("")
 
     # 提醒事項
     reminders = []
     if not worklog.get("exists"):
-        reminders.append("建議執行 /doc-flow worklog init 初始化版本日誌")
-    if todo.get("has_completed_items"):
-        reminders.append("建議執行 /doc-flow todo resolve 移除已完成項目")
+        reminders.append(ValidationMessages.DOC_SYNC_INIT_WORKLOG)
+    if not todo.get("exists"):
+        reminders.append(ValidationMessages.DOC_SYNC_CHECK_TODOLIST)
 
     if reminders:
-        lines.append("[建議操作]:")
+        lines.append(ValidationMessages.DOC_SYNC_SUGGESTIONS_HEADER)
         for r in reminders:
             lines.append(f"   - {r}")
         lines.append("")
 
-    lines.append("=" * 60)
+    lines.append(ValidationMessages.DOC_SYNC_HEADER_FORMAT)
 
     return "\n".join(lines)
 
 
 def main():
     """主函數"""
+    logger = setup_hook_logging("doc-sync-check-hook")
     # 讀取 hook 輸入
     try:
         hook_input = json.loads(sys.stdin.read())
@@ -229,14 +238,11 @@ def main():
     # 生成提醒訊息
     reminder = generate_reminder(checks)
 
-    # 輸出結果（提醒模式，永遠 allow）
-    result = {
-        "decision": "allow",
-        "reason": reminder
-    }
-
-    print(json.dumps(result, ensure_ascii=False))
+    # 輸出結果（SessionStart 格式：純文字提醒）
+    print(reminder)
+    logger.info("Doc-Flow 檢查完成")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(run_hook_safely(main, "doc-sync-check-hook"))

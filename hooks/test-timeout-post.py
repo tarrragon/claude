@@ -22,6 +22,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from hook_utils import setup_hook_logging, run_hook_safely
+
 # 閾值設定（秒）
 WARNING_THRESHOLD = 300    # 5 分鐘
 CRITICAL_THRESHOLD = 900   # 15 分鐘
@@ -29,6 +32,7 @@ AUTO_KILL_THRESHOLD = 1800  # 30 分鐘
 
 
 def main():
+    logger = setup_hook_logging("test-timeout-post")
     input_data = json.load(sys.stdin)
     tool_name = input_data.get("tool_name", "")
 
@@ -41,24 +45,24 @@ def main():
         is_test_command = True
 
     if not is_test_command:
-        sys.exit(0)
+        return 0
 
     # 讀取監控檔案
     project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
     monitor_file = project_dir / ".claude" / "hook-logs" / "test-monitor.json"
 
     if not monitor_file.exists():
-        sys.exit(0)
+        return 0
 
     try:
         with open(monitor_file) as f:
             monitor_data = json.load(f)
     except (json.JSONDecodeError, OSError):
-        sys.exit(0)
+        return 0
 
     start_timestamp = monitor_data.get("start_timestamp", 0)
     if start_timestamp == 0:
-        sys.exit(0)
+        return 0
 
     duration = datetime.now().timestamp() - start_timestamp
     duration_minutes = duration / 60
@@ -94,10 +98,10 @@ def main():
     with open(history_file, "a") as f:
         f.write(json.dumps(monitor_data, ensure_ascii=False) + "\n")
 
-    # 輸出訊息到 stderr（會顯示給用戶）
-    print(message, file=sys.stderr)
-    sys.exit(0)
+    # 輸出訊息到 stdout（會顯示給用戶）
+    print(message)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(run_hook_safely(main, "test-timeout-post"))

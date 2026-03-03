@@ -18,38 +18,10 @@ MCP run_tests 使用規範驗證 Hook (PreToolUse)
 """
 
 import json
-import os
 import sys
-from datetime import datetime
 from pathlib import Path
-
-
-def get_project_root() -> Path:
-    """取得專案根目錄"""
-    return Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
-
-
-def setup_log_directory() -> Path:
-    """建立日誌目錄"""
-    project_root = get_project_root()
-    log_dir = project_root / ".claude" / "hook-logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    return log_dir
-
-
-def log_violation(log_dir: Path, violation_type: str, details: dict) -> None:
-    """記錄違規事件"""
-    log_file = log_dir / "mcp-run-tests-violations.log"
-    timestamp = datetime.now().isoformat()
-
-    log_entry = {
-        "timestamp": timestamp,
-        "violation_type": violation_type,
-        "details": details
-    }
-
-    with open(log_file, "a") as f:
-        f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+from hook_utils import setup_hook_logging, run_hook_safely
+from lib.hook_messages import ValidationMessages
 
 
 def validate_roots_parameter(roots: list) -> tuple[bool, list]:
@@ -89,13 +61,12 @@ def validate_roots_parameter(roots: list) -> tuple[bool, list]:
 def format_error_message(invalid_roots: list) -> str:
     """格式化錯誤訊息"""
     message_parts = [
-        "❌ MCP run_tests 使用規範違規",
+        ValidationMessages.MCP_TESTS_ERROR_TITLE,
         "",
-        "問題描述:",
-        "mcp__dart__run_tests 在無 paths 參數時會執行全量測試，",
-        "導致卡住超過 20 分鐘。必須指定 paths 限制測試範圍。",
+        ValidationMessages.MCP_TESTS_PROBLEM_HEADER,
+        ValidationMessages.MCP_TESTS_PROBLEM_DESC,
         "",
-        "違規詳情:",
+        ValidationMessages.MCP_TESTS_VIOLATION_HEADER,
     ]
 
     for invalid in invalid_roots:
@@ -103,29 +74,31 @@ def format_error_message(invalid_roots: list) -> str:
 
     message_parts.extend([
         "",
-        "✅ 正確用法示例:",
+        ValidationMessages.MCP_TESTS_CORRECT_HEADER,
         "",
-        "1. 指定單一測試目錄:",
-        '   mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/domains/"]}])',
+        ValidationMessages.MCP_TESTS_EXAMPLE_1,
+        ValidationMessages.MCP_TESTS_EXAMPLE_1_CODE,
         "",
-        "2. 指定多個測試目錄:",
-        '   mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/unit/core/", "test/unit/models/"]}])',
+        ValidationMessages.MCP_TESTS_EXAMPLE_2,
+        ValidationMessages.MCP_TESTS_EXAMPLE_2_CODE,
         "",
-        "3. 指定單一測試檔案:",
-        '   mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/domains/import/events_test.dart"]}])',
+        ValidationMessages.MCP_TESTS_EXAMPLE_3,
+        ValidationMessages.MCP_TESTS_EXAMPLE_3_CODE,
         "",
-        "📋 推薦方案:",
-        "  • 使用 ./.claude/hooks/test-summary.sh 執行全量測試",
-        "  • 或使用 flutter test --reporter compact 直接執行",
+        ValidationMessages.MCP_TESTS_RECOMMENDED_HEADER,
+        ValidationMessages.MCP_TESTS_RECOMMENDED_1,
+        ValidationMessages.MCP_TESTS_RECOMMENDED_2,
         "",
-        "📚 相關規範: FLUTTER.md 第 72-101 行",
+        ValidationMessages.MCP_TESTS_REFERENCE_HEADER,
     ])
 
     return "\n".join(message_parts)
 
 
-def main():
+def main() -> int:
     """主程式邏輯"""
+    logger = setup_hook_logging("mcp-run-tests-validator")
+
     try:
         # 讀取 stdin 輸入
         input_data = json.load(sys.stdin)
@@ -135,6 +108,7 @@ def main():
         # 只處理 mcp__dart__run_tests 工具
         if tool_name != "mcp__dart__run_tests":
             # 其他工具直接允許
+            logger.debug("非 mcp__dart__run_tests 工具，直接允許: %s", tool_name)
             result = {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
@@ -142,7 +116,7 @@ def main():
                 }
             }
             print(json.dumps(result, ensure_ascii=False))
-            sys.exit(0)
+            return 0
 
         # 提取 roots 參數
         roots = tool_input.get("roots", [])
@@ -152,22 +126,19 @@ def main():
 
         if is_valid:
             # 有效用法，允許執行
+            logger.info("mcp__dart__run_tests 使用規範檢查通過")
             result = {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "allow",
-                    "permissionDecisionReason": "✅ mcp__dart__run_tests 使用規範檢查通過"
+                    "permissionDecisionReason": ValidationMessages.MCP_TESTS_VALIDATION_PASSED
                 }
             }
             print(json.dumps(result, ensure_ascii=False))
-            sys.exit(0)
+            return 0
 
         # 無效用法，阻止執行
-        log_dir = setup_log_directory()
-        log_violation(log_dir, "mcp_run_tests_no_paths", {
-            "roots": roots,
-            "invalid_roots": invalid_roots
-        })
+        logger.error("mcp_run_tests_no_paths: roots=%s, invalid_roots=%s", roots, invalid_roots)
 
         error_message = format_error_message(invalid_roots)
 
@@ -180,13 +151,14 @@ def main():
         }
 
         # 輸出錯誤訊息到 stderr 供調試
-        print(error_message, file=sys.stderr)
+        print(error_message)
         print(json.dumps(result, ensure_ascii=False))
-        sys.exit(2)  # 阻塊錯誤 exit code
+        return 2
 
     except json.JSONDecodeError as e:
-        error_msg = f"❌ Hook 錯誤: 無效的 JSON 輸入: {e}"
-        print(error_msg, file=sys.stderr)
+        logger.error("JSON 解析錯誤: %s", e)
+        error_msg = f"Hook 錯誤: 無效的 JSON 輸入: {e}"
+        print(error_msg)
         result = {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
@@ -195,11 +167,12 @@ def main():
             }
         }
         print(json.dumps(result, ensure_ascii=False))
-        sys.exit(2)
+        return 2
 
     except Exception as e:
-        error_msg = f"❌ Hook 執行失敗: {type(e).__name__}: {str(e)}"
-        print(error_msg, file=sys.stderr)
+        logger.error("執行錯誤: %s: %s", type(e).__name__, str(e))
+        error_msg = f"Hook 執行失敗: {type(e).__name__}: {str(e)}"
+        print(error_msg)
         # 發生未預期的錯誤時，允許工具執行以防 Hook 故障
         result = {
             "hookSpecificOutput": {
@@ -209,8 +182,9 @@ def main():
             }
         }
         print(json.dumps(result, ensure_ascii=False))
-        sys.exit(0)
+        return 0
 
 
 if __name__ == "__main__":
-    main()
+    exit_code = run_hook_safely(main, "mcp-run-tests-validator")
+    sys.exit(exit_code)

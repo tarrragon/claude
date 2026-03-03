@@ -1,6 +1,6 @@
 ---
-name: decision-helper
-description: "決策樹助手工具。快速評估任務複雜度，提供派發建議。用於: (1) 任務複雜度快速評估, (2) 派發代理人建議, (3) 拆分策略建議, (4) 並行可行性評估"
+name: decision-tree-helper
+description: "決策樹助手工具。快速評估任務複雜度，提供派發建議。Use when: (1) 任務複雜度快速評估, (2) 派發代理人建議, (3) 拆分策略建議, (4) 並行可行性評估"
 ---
 
 # 決策樹助手工具
@@ -15,16 +15,12 @@ description: "決策樹助手工具。快速評估任務複雜度，提供派發
 
 ### Step 1：任務識別
 
-```markdown
-## 任務類型識別
-
 | 類型 | 識別關鍵字 | 下一步 |
 |------|-----------|--------|
 | 錯誤/失敗 | "failed", "error", "bug" | 強制派發 incident-responder |
 | 新功能 | "實作", "建立", "新增" | SA 前置審查 |
 | 修改 | "修改", "更新", "調整" | 複雜度評估 |
 | 查詢 | "查詢", "進度", "狀態" | 直接回應 |
-```
 
 ### Step 2：複雜度快速評估
 
@@ -47,43 +43,21 @@ description: "決策樹助手工具。快速評估任務複雜度，提供派發
 
 ### Step 3：派發建議
 
-根據任務類型和複雜度，提供派發建議。
+根據任務類型和複雜度，提供派發建議。詳細派發決策樹見 `references/dispatch-decision-tree.md`。
 
 ---
 
-## 派發決策樹（二元結構）
+## 派發決策（第零層明確性檢查）
 
-> 對應主線程決策樹 v3.0.0 的二元化結構
-
-```
-任務進入
-    |
-    v
-包含錯誤關鍵字? ─是→ [強制] incident-responder
-    |
-    └─否→ 包含不確定性詞彙? ─是→ [確認機制] 向用戶確認
-              |
-              └─否→ 複雜需求（觸發 3+ 代理人）? ─是→ [確認機制]
-                        |
-                        └─否→ 是問題? ─是→ 是查詢類? ─是→ 執行查詢命令
-                                    |           |
-                                    |           └─否→ 派發諮詢代理人
-                                    |
-                                    └─否→ 是開發命令? ─是→ [驗證 Ticket]
-                                              |              └→ TDD 階段派發
-                                              |
-                                              └─否→ 是除錯命令? ─是→ incident-responder
-                                                        |
-                                                        └─否→ 其他處理
-```
-
-### 二元判斷順序（第零層）
+二元判斷順序：
 
 | 順序 | 判斷問題 | 是 | 否 |
 |------|---------|----|----|
 | 1 | 包含錯誤關鍵字？ | → 事件回應流程 | → 下一判斷 |
 | 2 | 包含不確定性詞彙？ | → 確認機制 | → 下一判斷 |
 | 3 | 複雜需求（3+ 代理人）？ | → 確認機制 | → 進入第一層 |
+
+注意：決策樹最高優先為「Skill 匹配層」（已註冊 Skill 觸發條件匹配），其次為「第負一層」並行化評估，再進入第零層明確性檢查。完整派發決策樹見 `.claude/rules/core/decision-tree.md`（v7.0.0，含第八層 Commit-Evaluate-Handoff 循環）。
 
 ---
 
@@ -94,11 +68,10 @@ description: "決策樹助手工具。快速評估任務複雜度，提供派發
 | 代理人 | 觸發條件 | 優先級 |
 |--------|---------|--------|
 | incident-responder | 錯誤/失敗 | 最高 |
-| clove-security-reviewer | 安全相關 | 高 |
-| saffron-system-analyst | 新功能/架構變更 | 高 |
-| star-anise-system-designer | UI 規範需求 | 中 |
-| sumac-system-engineer | 環境/編譯問題 | 中 |
-| sassafras-data-administrator | 資料設計需求 | 中 |
+| system-analyst | 新功能/架構變更 | 高 |
+| security-reviewer | 安全相關 | 高 |
+| system-designer | UI 規範需求 | 中 |
+| system-engineer | 環境/編譯問題 | 中 |
 
 ### TDD 階段代理人
 
@@ -114,39 +87,13 @@ description: "決策樹助手工具。快速評估任務複雜度，提供派發
 
 ## 拆分策略指南
 
-### 按架構層拆分
+本工具提供快速評估；詳細拆分策略見 `references/splitting-strategies.md`。
 
-```
-任務跨越多層
-    |
-    +-- UI 層修改 --> Ticket A (parsley)
-    +-- Controller 層修改 --> Ticket B (parsley)
-    +-- Domain 層修改 --> Ticket C (parsley)
+### 快速決策
 
-執行順序：C --> B --> A（由底層向上）
-```
-
-### 按功能模組拆分
-
-```
-任務涉及多模組
-    |
-    +-- 模組 A 修改 --> Ticket A (可並行)
-    +-- 模組 B 修改 --> Ticket B (可並行)
-    +-- 共用模組修改 --> Ticket C (先執行)
-
-執行順序：C 先完成，A/B 可並行
-```
-
-### 按操作類型拆分
-
-```
-任務包含多種操作
-    |
-    +-- 重命名操作 --> Ticket A (可大量並行)
-    +-- 格式化操作 --> Ticket B (可大量並行)
-    +-- 邏輯修改 --> Ticket C (需謹慎序列)
-```
+- **按架構層**：跨多層時，由底層向上拆分
+- **按功能模組**：涉及多模組時，共用模組先完成，獨立可並行
+- **按操作類型**：混合重命名/邏輯修改時，機械操作可並行，邏輯需序列
 
 ---
 
@@ -158,6 +105,7 @@ description: "決策樹助手工具。快速評估任務複雜度，提供派發
 - [ ] 任務間無邏輯依賴
 - [ ] 任務在同一架構層級
 - [ ] 操作類型為機械性（重命名/格式化）
+- [ ] 並行派發後執行 `git diff --stat` 驗證實際變更
 
 ### 並行適用情境
 
@@ -183,80 +131,41 @@ description: "決策樹助手工具。快速評估任務複雜度，提供派發
 
 ### 任務評估
 
-```bash
-/decision-helper assess "{任務描述}"
-```
+通過 `/decision-tree-helper assess "{任務描述}"` 快速評估：
 
-輸出：
-- 任務類型
-- 複雜度評估
-- 派發建議
-- 拆分建議（如需要）
+1. 任務類型識別
+2. 複雜度評估
+3. 派發建議
+4. 拆分建議（如需要）
 
 ### 派發確認
 
-```bash
-/decision-helper confirm {代理人} "{任務描述}"
-```
+通過 `/decision-tree-helper confirm {代理人} "{任務描述}"` 確認派發：
 
-輸出：
-- 派發是否合適
-- 潛在問題
-- 替代建議（如有）
+1. 派發是否合適
+2. 潛在問題
+3. 替代建議（如有）
 
 ### 並行檢查
 
-```bash
-/decision-helper check-parallel {Ticket1} {Ticket2} ...
-```
+通過 `/decision-tree-helper check-parallel {Ticket1} {Ticket2}` 檢查並行可行性：
 
-輸出：
-- 並行安全性
-- 潛在衝突
-- 建議執行順序
-
----
-
-## 決策記錄格式
-
-### 標準格式
-
-```markdown
-## 決策記錄
-
-### 任務資訊
-- **任務描述**: {描述}
-- **任務類型**: {類型}
-
-### 複雜度評估
-| 指標 | 數值 | 等級 |
-|------|------|------|
-| 修改檔案數 | {數} | {等級} |
-| 架構層級數 | {數} | {等級} |
-| 依賴模組數 | {數} | {等級} |
-| 狀態追蹤數 | {數} | {等級} |
-| **總分** | {分} | **{等級}** |
-
-### 派發決策
-- **建議代理人**: {代理人}
-- **決策理由**: {理由}
-
-### 拆分建議（如需要）
-| 子任務 | 目標 | 代理人 | 順序 |
-|--------|------|--------|------|
-| 1 | {目標} | {代理人} | {順序} |
-```
+1. 並行安全性
+2. 潛在衝突
+3. 建議執行順序
 
 ---
 
 ## 相關文件
 
-- [認知負擔量化標準]($CLAUDE_PROJECT_DIR/.claude/skills/cognitive-load-assessment/thresholds.md)
-- [主線程決策樹]($CLAUDE_PROJECT_DIR/.claude/rules/core/decision-tree.md)
-- [代理人職責矩陣]($CLAUDE_PROJECT_DIR/.claude/rules/agents/overview.md)
-- [任務拆分指南]($CLAUDE_PROJECT_DIR/.claude/rules/guides/task-splitting.md)
+- [決策樹助手決策記錄格式](references/decision-record-template.md)
+- [拆分策略詳細指南](references/splitting-strategies.md)
+- [派發決策樹完整版](references/dispatch-decision-tree.md)
+- [認知負擔量化標準](.claude/skills/cognitive-load-assessment/thresholds.md)
+- [主線程決策樹](.claude/rules/core/decision-tree.md)
+- [任務拆分指南](.claude/rules/guides/task-splitting.md)
 
 ---
 
-**Last Updated**: 2026-01-28
-**Version**: 1.1.0
+**Last Updated**: 2026-03-02
+**Version**: 2.0.0

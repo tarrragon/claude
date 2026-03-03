@@ -1,0 +1,23 @@
+{
+  "version": "1.1.0",
+  "description": "Hook 排除清單 - 標記不需要在 settings.json 註冊的檔案",
+  "last_updated": "2026-02-11",
+  "exclude": [
+    "common_functions.py",
+    "frontmatter_parser.py",
+    "markdown_formatter.py",
+    "parse-test-json.py"
+  ],
+  "exclude_patterns": [
+    "*-backup.py",
+    "archived/*"
+  ],
+  "notes": {
+    "common_functions.py": "輔助函式庫 - 被其他 Hook 引入",
+    "frontmatter_parser.py": "輔助函式庫 - 被其他 Hook 引入",
+    "markdown_formatter.py": "輔助函式庫 - 被其他 Hook 引入",
+    "parse-test-json.py": "輔助函式庫 - 被其他 Hook 引入",
+    "*-backup.py": "備份檔案模式",
+    "archived/*": "廢棄腳本存檔目錄 (2026-02-11 v0.31.0-W18-001.2)"
+  }
+}

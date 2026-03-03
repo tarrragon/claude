@@ -1,0 +1,16 @@
+{
+  "packages": {
+    "ticket-system": {
+      "path": ".claude/skills/ticket",
+      "content_hash": "1ff159b61ae5829ec1b99841d94377938487e4a15d3e7c765ea946395cd031f1",
+      "version": "1.0.0",
+      "last_synced": "2026-03-03T01:28:39.185853+00:00"
+    },
+    "mermaid-ascii": {
+      "path": ".claude/skills/mermaid-ascii",
+      "content_hash": "3d22b1dd4fcd1cd058ba9eeec91df84e471bbdddfe36b0fd22feec6dee7dc795",
+      "version": "1.0.0",
+      "last_synced": "2026-02-06T09:20:29.657657+00:00"
+    }
+  }
+}

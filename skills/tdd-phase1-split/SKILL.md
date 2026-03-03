@@ -203,14 +203,7 @@ lavender 收到功能需求
 
 ### Step 5: Ticket 建立
 
-```text
-為每個獨立職責建立 Ticket
-    |
-    +-- 父 Ticket（功能總覽）
-    +-- 子 Tickets（各自 TDD 循環）
-    +-- 設定 blockedBy 關係
-    +-- 設定版本號
-```
+使用 `/ticket create` 建立 Tickets（詳見 ticket Skill）。
 
 ---
 
@@ -345,41 +338,9 @@ v0.29.3：W3-006（序列）
 
 ---
 
-## 與其他 SKILL 的整合
+## 相關資源
 
-### 與 ticket-create 整合
-
-拆分完成後，使用 `/ticket-create` 建立 Tickets：
-
-```bash
-# 建立父 Ticket
-uv run .claude/skills/ticket-create/scripts/ticket-creator.py create \
-  --version 0.29.0 --wave 3 \
-  --action "實作" --target "書籍搜尋功能"
-
-# 建立子 Tickets
-uv run .claude/skills/ticket-create/scripts/ticket-creator.py create-child \
-  --parent-id 0.29.0-W3-001 --wave 3 \
-  --action "建立" --target "SearchQuery 值物件"
-```
-
-### 與 ticket-track 整合
-
-追蹤拆分後的 Tickets：
-
-```bash
-# 查詢拆分樹狀結構
-uv run .claude/skills/ticket-track/scripts/ticket-tracker.py tree 0.29.0-W3-001
-
-# 查詢版本進度
-uv run .claude/skills/ticket-track/scripts/ticket-tracker.py version 0.29.0
-```
-
----
-
-## 相關文件
-
-- [TDD 流程]($CLAUDE_PROJECT_DIR/.claude/rules/flows/tdd-flow.md)
-- [Atomic Ticket 方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/atomic-ticket-methodology.md)
-- [主線程決策樹]($CLAUDE_PROJECT_DIR/.claude/rules/core/decision-tree.md)
-- [任務拆分指南]($CLAUDE_PROJECT_DIR/.claude/rules/guides/task-splitting.md)
+- TDD 流程：`.claude/rules/flows/tdd-flow.md`
+- 任務拆分指南：`.claude/rules/guides/task-splitting.md`
+- Atomic Ticket 方法論：`.claude/methodologies/atomic-ticket-methodology.md`
+- Ticket Skill：`.claude/skills/ticket/SKILL.md`

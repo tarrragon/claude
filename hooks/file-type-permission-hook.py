@@ -28,31 +28,10 @@ File Type Permission Hook - PreToolUse Hook
 """
 
 import json
-import os
 import sys
-from datetime import datetime
 from pathlib import Path
-
-
-def setup_logging():
-    """初始化日誌系統"""
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
-    log_dir = project_dir / ".claude" / "hook-logs" / "file-type-permission"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    log_file = log_dir / f"file-type-permission-{datetime.now().strftime('%Y%m%d')}.log"
-    return log_file
-
-
-def log_message(log_file: Path, message: str):
-    """記錄訊息到日誌檔案"""
-    try:
-        with open(log_file, "a", encoding="utf-8") as f:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            f.write(f"[{timestamp}] {message}\n")
-    except Exception:
-        # 日誌失敗不應該影響 Hook 執行
-        pass
+from hook_utils import setup_hook_logging, run_hook_safely
+from lib.hook_messages import QualityMessages, format_message
 
 
 def get_file_category(file_path: str) -> str:
@@ -86,7 +65,7 @@ def get_file_category(file_path: str) -> str:
     return "other"
 
 
-def print_permission_prompt(file_path: str, category: str):
+def _print_permission_prompt(file_path: str, category: str) -> None:
     """
     輸出人工確認提示訊息到 stderr
 
@@ -101,12 +80,12 @@ def print_permission_prompt(file_path: str, category: str):
 說明: 此類檔案的修改需要人工審查確認
 
 """
-    print(prompt, file=sys.stderr)
+    print(prompt)
 
 
-def main():
+def main() -> int:
     """主入口點"""
-    log_file = setup_logging()
+    logger = setup_hook_logging("file-type-permission")
 
     try:
         # 讀取 JSON 輸入
@@ -117,15 +96,15 @@ def main():
         # 檢查是否為 Edit 工具
         if tool_name != "Edit":
             # 非 Edit 工具：直接允許
-            log_message(log_file, f"跳過: 工具類型 {tool_name} 不是 Edit")
-            sys.exit(0)
+            logger.info("跳過: 工具類型 %s 不是 Edit", tool_name)
+            return 0
 
         # 取得檔案路徑
         file_path = tool_input.get("file_path", "")
 
         if not file_path:
-            log_message(log_file, f"警告: 無法取得 file_path")
-            sys.exit(0)
+            logger.warning("警告: 無法取得 file_path")
+            return 0
 
         # 判斷檔案類別
         category = get_file_category(file_path)
@@ -133,33 +112,35 @@ def main():
         # 根據檔案類別決定行為
         if category in ("ticket", "worklog"):
             # Ticket/Worklog 檔案：輸出提示訊息
-            log_message(log_file, f"提示: {category.upper()} 檔案 - {file_path}")
-            print_permission_prompt(file_path, category)
+            logger.info("提示: %s 檔案 - %s", category.upper(), file_path)
+            _print_permission_prompt(file_path, category)
 
             # 允許執行（提示已發送）
+            category_name = "Ticket" if category == "ticket" else "Worklog"
             result = {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "allow",
-                    "permissionDecisionReason": f"{category.upper()} 檔案編輯提示已發送，請確認後繼續",
+                    "permissionDecisionReason": format_message(QualityMessages.FILE_EDIT_WARNING, category=category_name),
                 }
             }
             print(json.dumps(result, ensure_ascii=False))
-            sys.exit(0)
+            return 0
 
         # 程式碼檔案或其他檔案：靜默通過
-        log_message(log_file, f"允許: {category} 檔案 - {file_path}")
-        sys.exit(0)
+        logger.info("允許: %s 檔案 - %s", category, file_path)
+        return 0
 
     except json.JSONDecodeError as e:
-        log_message(log_file, f"JSON 解析錯誤: {e}")
+        logger.error("JSON 解析錯誤: %s", e)
         # JSON 解析失敗：直接允許執行，不阻塊
-        sys.exit(0)
+        return 0
     except Exception as e:
-        log_message(log_file, f"執行錯誤: {e}")
-        # 任何錯誤都不阻塊（非阻塞原則）
-        sys.exit(0)
+        logger.error("執行錯誤: %s", e)
+        # 任何錯誤都不阻塊（非阻塊原則）
+        return 0
 
 
 if __name__ == "__main__":
-    main()
+    exit_code = run_hook_safely(main, "file-type-permission")
+    sys.exit(exit_code)

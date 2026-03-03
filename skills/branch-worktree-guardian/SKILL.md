@@ -1,6 +1,6 @@
 ---
 name: branch-worktree-guardian
-description: "Branch Worktree Guardian - Git 分支和 Worktree 管理工具. Use for: (1) 新開發需求時建立隔離分支, (2) 使用 worktree 機制避免分支衝突, (3) 驗證當前工作分支正確性, (4) 預防在錯誤分支上開發"
+description: "Branch Worktree Guardian - Git 分支和 Worktree 管理工具。Use for: (1) 新開發需求時建立隔離分支, (2) 使用 worktree 機制避免分支衝突, (3) 驗證當前工作分支正確性, (4) 預防在錯誤分支上開發"
 ---
 
 # Branch Worktree Guardian
@@ -151,78 +151,25 @@ Session 啟動時提醒：
 
 ## 常見情境處理
 
-### 情境 1：發現在錯誤分支上
+常見的分支管理和 worktree 操作場景包括：
 
-```bash
-# 1. 暫存當前變更
-git stash
+1. **發現在錯誤分支上** - 快速切換到正確分支並恢復變更
+2. **多個 AI 同時開發** - 使用獨立 worktree 避免衝突
+3. **緊急修復** - 在保護分支上操作的風險和步驟
+4. **worktree 清理** - 正確移除已完成的 worktree
+5. **分支狀態混亂** - 診斷和恢復清潔環境
 
-# 2. 創建正確的分支和 worktree
-git checkout main
-git checkout -b feat/correct-branch
-git worktree add ../project-correct-branch feat/correct-branch
-
-# 3. 切換到新 worktree
-cd ../project-correct-branch
-
-# 4. 恢復變更
-git stash pop
-```
-
-### 情境 2：多個 AI 同時開發
-
-每個 AI 應該：
-1. 使用獨立的 worktree 目錄
-2. 使用不同的分支名稱
-3. 在 Session 開始時確認分支
-
-### 情境 3：緊急修復需要在 main 上操作
-
-Hook 會詢問是否繼續。選擇「繼續」時：
-1. 明確知道風險
-2. 完成後立即 commit
-3. 考慮是否需要 cherry-pick 到其他分支
+詳見：[常見情境處理 (common-scenarios.md)](references/common-scenarios.md)
 
 ---
 
 ## 配置說明
 
-### settings.json 配置
+### settings.json 配置和保護分支自訂
 
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Edit",
-        "hooks": [
-          {"type": "command", "command": ".claude/hooks/branch-verify-hook.py"}
-        ]
-      },
-      {
-        "matcher": "Write",
-        "hooks": [
-          {"type": "command", "command": ".claude/hooks/branch-verify-hook.py"}
-        ]
-      }
-    ]
-  }
-}
-```
+Hook 整合和分支保護規則的配置說明：
 
-### 保護分支自訂
-
-修改 `branch-verify-hook.py` 中的 `PROTECTED_BRANCHES` 列表：
-
-```python
-PROTECTED_BRANCHES = [
-    "main",
-    "master",
-    "develop",
-    "release/*",
-    # 添加更多保護分支...
-]
-```
+詳見：[配置說明 (configuration.md)](references/configuration.md)
 
 ---
 

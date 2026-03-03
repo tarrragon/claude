@@ -196,8 +196,8 @@ uv run version_release.py release \
 ### 3. 定期追蹤已延後的 TD
 
 ```bash
-# 在下一版本的 todolist.md 中查看已延後的 TD
-cat docs/todolist.md | grep -A 5 "已延後 TD"
+# 在下一版本的 todolist.yaml 中查看已延後的 TD
+cat docs/todolist.yaml | grep -A 5 "已延後 TD"
 
 # 在新版本的發布流程中優先處理
 uv run version_release.py check --version 0.21

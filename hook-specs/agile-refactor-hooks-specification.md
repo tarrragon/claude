@@ -11,6 +11,7 @@
 ## 🎯 Hook 系統目標
 
 ### 核心目標
+
 1. **防止主線程違規** - 主線程禁止親自修改程式碼，只能分派任務
 2. **強制準備度檢查** - 任務分派前必須通過完整準備度檢查清單
 3. **確保文件一致性** - 三重文件（CHANGELOG/todolist/work-log）保持同步
@@ -18,6 +19,7 @@
 5. **追蹤問題閉環** - 代理人回報的問題必須追蹤到解決完成
 
 ### 自動化範圍
+
 - ✅ **自動檢測** - Hook 系統自動檢測違規行為
 - ✅ **自動提醒** - 發現問題立即提醒並提供修復指引
 - ✅ **自動記錄** - 所有檢查結果記錄到日誌檔案
@@ -28,15 +30,18 @@
 ## 🔧 Hook 1: 主線程職責檢查 (Main Thread Responsibility Check)
 
 ### 目的
+
 防止主線程親自修改程式碼，確保主從分工原則執行。
 
 ### 觸發時機
+
 - **PostEdit Hook** - 任何程式碼檔案修改後
 - **UserPromptSubmit Hook** - 使用者提交指令時
 
 ### 檢查邏輯
 
 #### 違規行為定義
+
 ```bash
 # 主線程違規行為偵測
 1. 直接修改 lib/ 目錄下的 .dart 檔案
@@ -136,6 +141,7 @@ main "$@"
 ```
 
 ### 整合點
+
 - 整合到 **PostEdit Hook** - 檔案修改後立即檢查
 - 整合到 **UserPromptSubmit Hook** - 使用者提交指令時檢查操作類型
 
@@ -144,9 +150,11 @@ main "$@"
 ## 🔧 Hook 2: 任務分派準備度檢查 (Task Dispatch Readiness Check)
 
 ### 目的
+
 確保任務分派前已完成完整準備度檢查清單，包含參考文件和影響範圍。
 
 ### 觸發時機
+
 - **Pre-Task-Dispatch Hook** - 使用 Task 工具分派任務前
 - **UserPromptSubmit Hook** - 偵測到分派任務關鍵字時
 
@@ -158,26 +166,31 @@ main "$@"
 ## 準備度檢查問題
 
 ### 1. 明確的文件規劃
+
 - [ ] API 規格是否完整？
 - [ ] 設計文件是否具體？
 - [ ] 架構圖是否清晰？
 
 ### 2. 測試先行策略
+
 - [ ] 測試規格是否存在？
 - [ ] TDD 流程是否明確？
 - [ ] 效能標準是否定義？
 
 ### 3. 實作目標明確性
+
 - [ ] 完成標準是否可測量？
 - [ ] 使用範例是否充足？
 - [ ] 移轉策略是否清楚？
 
 ### 4. 風險評估與應對
+
 - [ ] 潛在問題是否識別？
 - [ ] 回滾計畫是否準備？
 - [ ] 依賴關係是否梳理？
 
 ### 5. 參考文件和影響範圍完整性（強制）⚠️
+
 - [ ] UseCase 參考是否明確？
 - [ ] 流程圖 Event 是否具體？
 - [ ] 架構規範是否引用？
@@ -187,6 +200,7 @@ main "$@"
 - [ ] 影響範圍是否評估？
 
 ### 6. 設計面效能考量（強制）⚠️
+
 - [ ] 效能瓶頸是否識別？
 - [ ] 優化策略是否規劃？
 - [ ] 資源使用是否評估？
@@ -306,6 +320,7 @@ main "$@"
 ```
 
 ### 整合點
+
 - 新建 **Pre-Task-Dispatch Hook** - Task 工具使用前觸發
 - 整合到 **UserPromptSubmit Hook** - 偵測分派任務關鍵字
 
@@ -314,9 +329,11 @@ main "$@"
 ## 🔧 Hook 3: 三重文件一致性檢查 (Triple Document Consistency Check)
 
 ### 目的
-確保 CHANGELOG.md、todolist.md、work-logs/ 三重文件保持一致性。
+
+確保 CHANGELOG.md、todolist.yaml、work-logs/ 三重文件保持一致性。
 
 ### 觸發時機
+
 - **PostEdit Hook** - 任何三重文件修改後
 - **Version Check Hook** - 版本推進檢查時
 - **定期檢查** - 每日執行一次完整檢查
@@ -329,14 +346,17 @@ main "$@"
 ## 強制檢查項目
 
 ### 版本號一致性
+
 - CHANGELOG 版本號 = work-log 主版本號
 - todolist 版本系列 = work-log 版本系列
 
 ### 任務狀態一致性
+
 - todolist 標記完成 ⇒ work-log 必須有對應完成記錄
 - work-log 標記完成 ⇒ todolist 必須同步更新
 
 ### 功能描述一致性
+
 - CHANGELOG 功能描述 ⇒ 必須對應 work-log 實作內容
 - 不可在 CHANGELOG 記錄未實作的功能
 ```
@@ -392,7 +412,7 @@ check_task_status_consistency() {
     echo "🔍 檢查任務狀態一致性" | tee -a "$LOG_FILE"
 
     # 提取 todolist 已完成任務
-    local completed_tasks=$(grep -E "^\s*- \[x\] v[0-9]+\.[0-9]+\.[0-9]+" "$CLAUDE_PROJECT_DIR/docs/todolist.md" | sed -E 's/.*\[x\] (v[0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+    local completed_tasks=$(grep -E "^\s*- \[x\] v[0-9]+\.[0-9]+\.[0-9]+" "$CLAUDE_PROJECT_DIR/docs/todolist.yaml" | sed -E 's/.*\[x\] (v[0-9]+\.[0-9]+\.[0-9]+).*/\1/')
 
     # 檢查每個已完成任務是否有對應 work-log
     local missing_worklogs=()
@@ -476,6 +496,7 @@ main "$@"
 ```
 
 ### 整合點
+
 - 整合到 **PostEdit Hook** - 三重文件修改後觸發
 - 整合到 **Version Check Hook** - 版本推進時檢查
 - **定期執行** - Cron job 每日執行
@@ -485,9 +506,11 @@ main "$@"
 ## 🔧 Hook 4: 階段完成驗證 (Stage Completion Validation)
 
 ### 目的
+
 確保每個開發階段完成時通過完整驗證檢查清單。
 
 ### 觸發時機
+
 - **Phase Completion Hook** - TDD 階段完成時
 - **Version Check Hook** - 版本推進檢查時
 
@@ -499,26 +522,31 @@ main "$@"
 ## 階段完成檢查清單 (Stage Completion Checklist)
 
 ### 1️⃣ 編譯完整性檢查 (Compilation Integrity)
+
 - [ ] flutter analyze lib/ 無 error
 - [ ] dart analyze lib/ 無 error
 - [ ] 無「Target of URI doesn't exist」錯誤
 
 ### 2️⃣ 依賴路徑一致性檢查 (Dependency Path Consistency)
+
 - [ ] 無「Target of URI doesn't exist」錯誤
 - [ ] 100% 使用 package 導入格式，0% 相對路徑
 - [ ] 所有路徑指向正確的檔案位置
 
 ### 3️⃣ 測試通過率檢查 (Test Pass Rate)
+
 - [ ] dart test 100% 通過
 - [ ] flutter test 100% 通過
 - [ ] 測試覆蓋率不下降
 
 ### 4️⃣ 重複實作檢查 (Duplicate Implementation Check)
+
 - [ ] 無功能重複的服務實作
 - [ ] 類別命名符合單一職責原則
 - [ ] 無廢棄或未使用的實作
 
 ### 5️⃣ 架構一致性檢查 (Architecture Consistency)
+
 - [ ] 檔案位置符合 Clean Architecture 分層
 - [ ] 無跨層直接依賴違規
 - [ ] 依賴方向正確 (外層依賴內層)
@@ -707,6 +735,7 @@ main "$@"
 ```
 
 ### 整合點
+
 - 新建 **Phase Completion Hook** - TDD 階段完成時觸發
 - 整合到 **Version Check Hook** - 版本推進時強制執行
 
@@ -715,9 +744,11 @@ main "$@"
 ## 🔧 Hook 5: 代理人回報追蹤 (Agent Report Tracking)
 
 ### 目的
+
 追蹤代理人回報的問題，確保問題解決閉環。
 
 ### 觸發時機
+
 - **Agent Report Hook** - 偵測到代理人回報時
 - **定期檢查** - 每日檢查未解決的回報
 
@@ -729,17 +760,20 @@ main "$@"
 ## 回報追蹤檢查
 
 ### 回報記錄
+
 - [ ] 回報時間
 - [ ] 回報代理人
 - [ ] 回報類型 (🔴 阻塞 / 🟡 重要 / 🟢 資訊性)
 - [ ] 問題描述
 
 ### 響應追蹤
+
 - [ ] 主線程響應時間
 - [ ] 決策記錄
 - [ ] 執行計畫
 
 ### 解決閉環
+
 - [ ] 問題解決時間
 - [ ] 解決方案
 - [ ] 驗證確認
@@ -859,6 +893,7 @@ main "$@"
 ```
 
 ### 整合點
+
 - 新建 **Agent Report Hook** - 偵測回報關鍵字時觸發
 - **定期執行** - Cron job 每日檢查
 
@@ -932,16 +967,20 @@ graph TD
 ## 🎯 實作優先序
 
 ### Phase 1: 核心檢查 Hook（立即實作）
+
 1. ✅ **主線程職責檢查** - 防止最嚴重的違規行為
 2. ✅ **階段完成驗證** - 確保品質門檻強制執行
 
 ### Phase 2: 準備度檢查 Hook（優先實作）
+
 3. ✅ **任務分派準備度檢查** - 確保任務規劃完整
 
 ### Phase 3: 一致性檢查 Hook（重要實作）
+
 4. ✅ **三重文件一致性檢查** - 確保文件同步
 
 ### Phase 4: 追蹤管理 Hook（輔助實作）
+
 5. ✅ **代理人回報追蹤** - 確保問題閉環
 
 ---
@@ -951,6 +990,7 @@ graph TD
 ### 立即執行任務
 
 1. **建立 Hook 腳本目錄結構**
+
    ```bash
    mkdir -p .claude/hooks
    mkdir -p .claude/hook-logs

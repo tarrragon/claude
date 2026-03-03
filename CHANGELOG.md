@@ -1,3 +1,11 @@
+## [1.1.14] - 2026-03-03
+
+### Summary
+feat: sync-pull 加入 AskUserQuestion 覆蓋確認保護機制
+
+---
+
+
 ## [1.1.13] - 2026-01-28
 
 ### Summary

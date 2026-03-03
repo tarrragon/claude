@@ -1,3 +1,8 @@
+---
+name: error-pattern
+description: "錯誤模式知識庫管理工具。Use for: (1) 查詢既有錯誤經驗和防護措施 (query), (2) 記錄新發現的錯誤模式和教訓 (add), (3) Ticket 開始前查詢歷史問題避免再犯, (4) 系統化管理錯誤學習經驗。Use when: user mentions error pattern, 錯誤模式, 教訓, 經驗記錄, 學習經驗, 防護措施, 錯誤紀錄, or needs to avoid recurring issues."
+---
+
 # error-pattern SKILL
 
 錯誤模式知識庫管理工具。查詢既有錯誤經驗，記錄新發現的錯誤模式。
@@ -42,7 +47,8 @@
    - async-resource: 異步資源相關
    - type-mismatch: 類型不匹配
    - hook-schema: Hook Schema 相關
-   - null-safety: 空安全相關
+   - code-quality: 程式碼品質相關
+   - process-compliance: 流程合規相關
    - other: 其他（需要新建分類）
 
 2. **輸入症狀描述**
@@ -99,7 +105,8 @@ Widget Finder (2)
 | 異步資源 | AR | AR-001 |
 | 類型不匹配 | TM | TM-001 |
 | Hook Schema | HS | HS-001 |
-| 空安全 | NS | NS-001 |
+| 程式碼品質 | CQ | CQ-001 |
+| 流程合規 | PC | PC-001 |
 
 ---
 
@@ -132,4 +139,3 @@ Widget Finder (2)
 |------|------|
 | `docs/error-patterns/README.md` | 知識庫索引 |
 | `docs/error-patterns/categories/*.md` | 錯誤分類檔案 |
-| `docs/error-patterns/patterns/*.md` | 行為模式總結 |

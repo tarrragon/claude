@@ -3103,7 +3103,7 @@ Review 發現偏差
 - 面向用戶的版本功能描述
 - 只記錄「做了什麼」，不記錄「怎麼做」
 
-**2. todolist.md**：
+**2. todolist.yaml**：
 - 記錄整個開發過程所有待處理任務
 - 任務狀態追蹤（待執行/進行中/已完成）
 
@@ -3129,19 +3129,19 @@ work-log/vX.Y.Z-main.md（主版本日誌）
     ↓ Ticket 索引
 work-log/vX.Y.Z-ticket-NNN.md（Ticket 日誌）
     ↑ 完成狀態
-todolist.md（任務狀態追蹤）
+todolist.yaml（任務狀態追蹤）
 ```
 
 **協作流程**：
 
 1. **PM 規劃階段**：
-   - 在 `todolist.md` 建立任務項目
+   - 在 `todolist.yaml` 建立任務項目
    - 在 `vX.Y.Z-main.md` 規劃 Ticket 索引
 
 2. **開發執行階段**：
    - 建立 `vX.Y.Z-ticket-NNN.md` Ticket 日誌
    - 執行 Ticket，記錄過程
-   - 完成後更新 `todolist.md` 狀態
+   - 完成後更新 `todolist.yaml` 狀態
 
 3. **版本發布階段**：
    - 從 `vX.Y.Z-main.md` 提取功能變動
@@ -3294,7 +3294,7 @@ Ticket 派工前檢查
 
 **步驟 3：更新 todolist**
 
-在 `todolist.md` 更新：
+在 `todolist.yaml` 更新：
 - 標記對應任務為「已完成」
 - 如發現新任務，新增到待辦清單
 

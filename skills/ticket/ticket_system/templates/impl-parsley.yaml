@@ -1,0 +1,9 @@
+name: impl-parsley
+description: "parsley-flutter-developer 實作 Ticket 模板"
+defaults:
+  type: IMP
+  priority: P2
+  who: parsley-flutter-developer
+  how_task_type: Implementation
+  how_strategy: TDD Phase 3b 實作
+  when: Phase 3b 開始時

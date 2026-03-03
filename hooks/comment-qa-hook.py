@@ -56,11 +56,14 @@ from datetime import datetime
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Tuple
 
+sys.path.insert(0, str(Path(__file__).parent))
+from hook_utils import setup_hook_logging, run_hook_safely
+from lib.hook_messages import QualityMessages, CoreMessages, format_message
+
 # 專案根目錄
 PROJECT_ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", "."))
 LOG_DIR = PROJECT_ROOT / ".claude/hook-logs"
 REPORT_DIR = LOG_DIR / "comment-qa-reports"
-LOG_FILE = LOG_DIR / f"comment-qa-execution-{datetime.now():%Y%m%d}.log"
 
 # 確保目錄存在
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -69,11 +72,12 @@ REPORT_DIR.mkdir(parents=True, exist_ok=True)
 # 動態載入 Parser 模組
 try:
     sys.path.insert(0, str(PROJECT_ROOT / ".claude/hooks"))
-    from parsers.base import Language, ParserFactory, Function
+    from lib.parsers.base import Language, ParserFactory, Function
     PARSER_AVAILABLE = True
 except ImportError as e:
     PARSER_AVAILABLE = False
-    print(f"警告: 無法載入 Parser 模組 - {e}", file=sys.stderr)
+    logger_temp = setup_hook_logging("comment-qa-hook")
+    logger_temp.warning(f"無法載入 Parser 模組 - {e}")
 
 
 @dataclass
@@ -100,17 +104,12 @@ class WidgetInfo:
     existing_comment: Optional[str] = None
 
 
-def log_message(message: str):
+def log_message(logger, message: str):
     """記錄訊息到日誌"""
-    try:
-        with open(LOG_FILE, "a", encoding="utf-8") as f:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            f.write(f"[{timestamp}] {message}\n")
-    except Exception as e:
-        print(f"日誌記錄失敗: {e}", file=sys.stderr)
+    logger.info(message)
 
 
-def load_config() -> dict:
+def load_config(logger) -> dict:
     """
     載入配置檔
 
@@ -124,10 +123,10 @@ def load_config() -> dict:
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f)
-                log_message(f"載入配置檔: {config_path.name}")
+                log_message(logger, f"載入配置檔: {config_path.name}")
                 return config
         except Exception as e:
-            log_message(f"警告: 配置檔載入失敗，使用預設配置 - {e}")
+            log_message(logger, f"警告: 配置檔載入失敗，使用預設配置 - {e}")
 
     # 預設配置（向後相容）
     return {
@@ -657,11 +656,12 @@ def save_report(report_content: str) -> Path:
 
 def main():
     """主要邏輯"""
+    logger = setup_hook_logging("comment-qa-hook")
     try:
-        log_message("Comment QA Hook v3.0: 開始執行（多語言支援）")
+        log_message(logger, QualityMessages.COMMENT_QA_CHECK)
 
         # 1. 載入配置
-        config = load_config()
+        config = load_config(logger)
 
         # 2. 讀取 JSON 輸入
         input_data = json.load(sys.stdin)
@@ -673,18 +673,18 @@ def main():
 
         # 4. 檢查工具是否成功執行
         if not tool_response.get("success", False):
-            log_message(f"工具 {tool_name} 執行失敗，跳過檢查")
-            sys.exit(0)
+            log_message(logger, f"工具 {tool_name} 執行失敗，跳過檢查")
+            return 0
 
         # 5. 檢查檔案是否需要處理（包含語言檢測）
         file_path = tool_input.get("file_path", "")
         should_process, language = should_process_file(file_path, config)
 
         if not should_process:
-            log_message(f"檔案 {file_path} 不需要處理")
-            sys.exit(0)
+            log_message(logger, f"檔案 {file_path} 不需要處理")
+            return 0
 
-        log_message(f"處理檔案: {file_path} (語言: {language.value if language else 'dart'})")
+        log_message(logger, f"處理檔案: {file_path} (語言: {language.value if language else 'dart'})")
 
         # 6. 提取函式和 Widget
         file_path_obj = Path(file_path)
@@ -701,7 +701,7 @@ def main():
         if language == Language.DART or not PARSER_AVAILABLE:
             widgets = extract_dart_widgets(file_path_obj)
 
-        log_message(f"發現 {len(functions)} 個函式, {len(widgets)} 個 Widget")
+        log_message(logger, f"發現 {len(functions)} 個函式, {len(widgets)} 個 Widget")
 
         # 7. 分類檢查
         event_handlers = []
@@ -732,10 +732,10 @@ def main():
         total_issues = len(event_handlers) + len(regular_funcs) + len(independent_widgets)
 
         if total_issues == 0:
-            log_message("所有核心項目都有完整註解，無需建議")
-            sys.exit(0)
+            log_message(logger, "所有核心項目都有完整註解，無需建議")
+            return 0
 
-        log_message(f"發現 {total_issues} 個項目缺少完整註解")
+        log_message(logger, f"發現 {total_issues} 個項目缺少完整註解")
 
         # 8. 查找工作日誌
         work_log_path = find_related_work_log()
@@ -750,50 +750,50 @@ def main():
         report_path = save_report(report_content)
 
         # 12. 輸出建議（友善格式）
-        print("\n📝 註解品質檢查報告 (v3.0)\n")
-        print(f"檔案: {file_path}")
-        print(f"語言: {language.value if language else 'dart'}\n")
+        output = "\n📝 註解品質檢查報告 (v3.0)\n\n"
+        output += f"檔案: {file_path}\n"
+        output += f"語言: {language.value if language else 'dart'}\n\n"
 
         if event_handlers:
-            print(f"⚠️  {len(event_handlers)} 個事件處理函式缺少註解：")
+            output += f"⚠️  {len(event_handlers)} 個事件處理函式缺少註解：\n"
             for func in event_handlers[:2]:
-                print(f"   - {func.name} (行 {func.line_number})")
-            print()
+                output += f"   - {func.name} (行 {func.line_number})\n"
+            output += "\n"
 
         if independent_widgets:
-            print(f"⚠️  {len(independent_widgets)} 個獨立 Widget 缺少註解：")
+            output += f"⚠️  {len(independent_widgets)} 個獨立 Widget 缺少註解：\n"
             for widget in independent_widgets[:2]:
-                print(f"   - {widget.name} (行 {widget.line_number})")
-            print()
+                output += f"   - {widget.name} (行 {widget.line_number})\n"
+            output += "\n"
 
         if regular_funcs:
-            print(f"⚠️  {len(regular_funcs)} 個一般函式缺少註解：")
+            output += f"⚠️  {len(regular_funcs)} 個一般函式缺少註解：\n"
             for func in regular_funcs[:2]:
-                print(f"   - {func.name} (行 {func.line_number})")
-            print()
+                output += f"   - {func.name} (行 {func.line_number})\n"
+            output += "\n"
 
         if auxiliary_funcs or dependent_widgets:
-            print(f"✅ {len(auxiliary_funcs)} 個輔助函式和 {len(dependent_widgets)} 個依賴型 Widget 已正確豁免")
-            print()
+            output += f"✅ {len(auxiliary_funcs)} 個輔助函式和 {len(dependent_widgets)} 個依賴型 Widget 已正確豁免\n\n"
 
-        print(f"詳細報告已儲存: {report_path.relative_to(PROJECT_ROOT)}\n")
-        print("📚 註解規範: .claude/methodologies/comment-writing-methodology.md\n")
+        output += f"詳細報告已儲存: {report_path.relative_to(PROJECT_ROOT)}\n\n"
+        output += "📚 註解規範: .claude/methodologies/comment-writing-methodology.md\n"
 
-        log_message("Comment QA Hook v3.0: 執行完成")
-        sys.exit(0)
+        print(output)
+        log_message(logger, "Comment QA Hook v3.0: 執行完成")
+        return 0
 
     except json.JSONDecodeError as e:
-        log_message(f"錯誤: JSON 解析失敗 - {e}")
-        print(f"Comment QA Hook 錯誤: JSON 輸入格式錯誤", file=sys.stderr)
-        sys.exit(1)
+        log_message(logger, format_message(QualityMessages.COMMENT_QA_ERROR, error=f"JSON 解析失敗 - {e}"))
+        print(f"Comment QA Hook 錯誤: JSON 輸入格式錯誤")
+        return 1
 
     except Exception as e:
-        log_message(f"錯誤: Hook 執行失敗 - {e}")
+        log_message(logger, format_message(QualityMessages.COMMENT_QA_ERROR, error=f"Hook 執行失敗 - {e}"))
         import traceback
-        log_message(f"Traceback: {traceback.format_exc()}")
-        print(f"Comment QA Hook 錯誤: {e}", file=sys.stderr)
-        sys.exit(1)
+        log_message(logger, f"Traceback: {traceback.format_exc()}")
+        print(f"Comment QA Hook 錯誤: {e}")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(run_hook_safely(main, "comment-qa-hook"))

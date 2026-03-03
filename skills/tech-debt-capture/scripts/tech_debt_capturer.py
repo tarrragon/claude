@@ -32,7 +32,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 WORK_LOGS_DIR = PROJECT_ROOT / "docs" / "work-logs"
-TODOLIST_PATH = PROJECT_ROOT / "docs" / "todolist.md"
+TODOLIST_PATH = PROJECT_ROOT / "docs" / "todolist.yaml"
 
 RISK_LEVELS = {
     "高": ("high", 1),
@@ -426,7 +426,7 @@ class TicketGenerator:
 # ============================================================================
 
 class TodoListUpdater:
-    """更新 todolist.md 的技術債務追蹤區塊"""
+    """更新 todolist.yaml 的技術債務追蹤區塊"""
 
     def __init__(self, dry_run: bool = False):
         self.dry_run = dry_run
@@ -544,7 +544,7 @@ def cmd_capture(args) -> int:
         print(f"  ✅ {path.relative_to(PROJECT_ROOT)}")
 
     # 更新 todolist
-    print("\n📝 更新 todolist.md")
+    print("\n📝 更新 todolist.yaml")
     updater = TodoListUpdater(dry_run=False)
     updater.update(created_tickets)
     print("  ✅ 技術債務追蹤區塊已更新")

@@ -32,44 +32,28 @@
 
 import sys
 import json
-import logging
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
+# 加入 hook_utils 路徑（相同目錄）
+sys.path.insert(0, str(Path(__file__).parent))
+
+from hook_utils import setup_hook_logging, run_hook_safely
+
 try:
     import yaml
 except ImportError:
-    print("Error: pyyaml is required. Install with: uv run --upgrade pyyaml", file=sys.stderr)
-    sys.exit(1)
+    # Graceful degradation: 依賴不可用時靜默跳過，避免 SessionStart error
+    print(json.dumps({"suppressOutput": True}))
+    sys.exit(0)
 
 # 全域常數
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 
 
-def setup_logging() -> None:
-    """初始化日誌系統"""
-    import os
-
-    log_level = logging.DEBUG if os.getenv("HOOK_DEBUG") == "true" else logging.INFO
-
-    # 建立日誌目錄
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
-    log_dir = project_dir / ".claude" / "hook-logs" / "tech-debt-reminder"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    log_file = log_dir / "tech-debt-reminder.log"
-
-    logging.basicConfig(
-        level=log_level,
-        format="[%(asctime)s] %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stderr)
-        ]
-    )
 
 
 def get_project_root() -> Path:
@@ -98,7 +82,7 @@ def get_project_root() -> Path:
         return Path.cwd()
 
 
-def read_json_from_stdin() -> Dict[str, Any]:
+def read_json_from_stdin(logger) -> Dict[str, Any]:
     """
     從 stdin 讀取 JSON 輸入
 
@@ -110,14 +94,14 @@ def read_json_from_stdin() -> Dict[str, Any]:
     """
     try:
         input_data = json.load(sys.stdin)
-        logging.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
+        logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
         return input_data
     except json.JSONDecodeError as e:
-        logging.error(f"JSON 解析錯誤: {e}")
+        logger.error(f"JSON 解析錯誤: {e}")
         raise ValueError(f"Invalid JSON input: {e}")
 
 
-def read_pubspec_yaml(project_root: Path) -> Optional[Dict[str, Any]]:
+def read_pubspec_yaml(project_root: Path, logger) -> Optional[Dict[str, Any]]:
     """
     讀取 pubspec.yaml 並解析版本
 
@@ -130,20 +114,20 @@ def read_pubspec_yaml(project_root: Path) -> Optional[Dict[str, Any]]:
     pubspec_file = project_root / "pubspec.yaml"
 
     if not pubspec_file.exists():
-        logging.warning(f"pubspec.yaml 不存在: {pubspec_file}")
+        logger.warning(f"pubspec.yaml 不存在: {pubspec_file}")
         return None
 
     try:
         with open(pubspec_file, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
-        logging.info(f"成功讀取 pubspec.yaml")
+        logger.info(f"成功讀取 pubspec.yaml")
         return data
     except Exception as e:
-        logging.error(f"讀取 pubspec.yaml 失敗: {e}")
+        logger.error(f"讀取 pubspec.yaml 失敗: {e}")
         return None
 
 
-def extract_version(pubspec_data: Dict[str, Any]) -> Optional[str]:
+def extract_version(pubspec_data: Dict[str, Any], logger) -> Optional[str]:
     """
     從 pubspec.yaml 提取版本號
 
@@ -155,14 +139,14 @@ def extract_version(pubspec_data: Dict[str, Any]) -> Optional[str]:
     """
     version = pubspec_data.get("version")
     if not version:
-        logging.warning("pubspec.yaml 中找不到 version 欄位")
+        logger.warning("pubspec.yaml 中找不到 version 欄位")
         return None
 
-    logging.info(f"當前版本: {version}")
+    logger.info(f"當前版本: {version}")
     return str(version)
 
 
-def parse_version_series(version: str) -> Optional[Tuple[int, int]]:
+def parse_version_series(version: str, logger) -> Optional[Tuple[int, int]]:
     """
     解析版本系列 (v{major}.{minor}.x)
 
@@ -176,23 +160,24 @@ def parse_version_series(version: str) -> Optional[Tuple[int, int]]:
         # 解析格式: "major.minor.patch"
         parts = version.split('.')
         if len(parts) < 2:
-            logging.warning(f"無法解析版本號: {version}")
+            logger.warning(f"無法解析版本號: {version}")
             return None
 
         major = int(parts[0])
         minor = int(parts[1])
 
-        logging.info(f"版本系列: v{major}.{minor}.x")
+        logger.info(f"版本系列: v{major}.{minor}.x")
         return (major, minor)
     except (ValueError, IndexError) as e:
-        logging.error(f"版本號解析失敗: {e}")
+        logger.error(f"版本號解析失敗: {e}")
         return None
 
 
 def find_tickets_directory(
     project_root: Path,
     major: int,
-    minor: int
+    minor: int,
+    logger
 ) -> Optional[Path]:
     """
     尋找版本系列的 tickets 目錄
@@ -212,7 +197,7 @@ def find_tickets_directory(
     work_logs_dir = project_root / "docs" / "work-logs"
 
     if not work_logs_dir.exists():
-        logging.info(f"work-logs 目錄不存在: {work_logs_dir}")
+        logger.info(f"work-logs 目錄不存在: {work_logs_dir}")
         return None
 
     # 構建版本系列目錄名稱
@@ -220,14 +205,14 @@ def find_tickets_directory(
     tickets_dir = version_dir / "tickets"
 
     if tickets_dir.exists() and tickets_dir.is_dir():
-        logging.info(f"找到 tickets 目錄: {tickets_dir}")
+        logger.info(f"找到 tickets 目錄: {tickets_dir}")
         return tickets_dir
 
-    logging.info(f"tickets 目錄不存在: {tickets_dir}")
+    logger.info(f"tickets 目錄不存在: {tickets_dir}")
     return None
 
 
-def extract_frontmatter(file_path: Path) -> Optional[Dict[str, Any]]:
+def extract_frontmatter(file_path: Path, logger) -> Optional[Dict[str, Any]]:
     """
     從 Markdown 檔案提取 frontmatter
 
@@ -252,7 +237,7 @@ def extract_frontmatter(file_path: Path) -> Optional[Dict[str, Any]]:
         # 提取 frontmatter (--- ... ---)
         match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
         if not match:
-            logging.debug(f"檔案不包含 frontmatter: {file_path.name}")
+            logger.debug(f"檔案不包含 frontmatter: {file_path.name}")
             return None
 
         frontmatter_text = match.group(1)
@@ -262,11 +247,11 @@ def extract_frontmatter(file_path: Path) -> Optional[Dict[str, Any]]:
         return frontmatter
 
     except Exception as e:
-        logging.warning(f"提取 frontmatter 失敗 ({file_path.name}): {e}")
+        logger.warning(f"提取 frontmatter 失敗 ({file_path.name}): {e}")
         return None
 
 
-def scan_tech_debt_tickets(tickets_dir: Path) -> List[Dict[str, Any]]:
+def scan_tech_debt_tickets(tickets_dir: Path, logger) -> List[Dict[str, Any]]:
     """
     掃描目錄中的所有 Tech Debt Ticket
 
@@ -285,7 +270,7 @@ def scan_tech_debt_tickets(tickets_dir: Path) -> List[Dict[str, Any]]:
     pending_tickets = []
 
     if not tickets_dir.exists():
-        logging.info(f"tickets 目錄不存在: {tickets_dir}")
+        logger.info(f"tickets 目錄不存在: {tickets_dir}")
         return pending_tickets
 
     # 掃描所有 .md 檔案
@@ -295,7 +280,7 @@ def scan_tech_debt_tickets(tickets_dir: Path) -> List[Dict[str, Any]]:
             continue
 
         # 提取 frontmatter
-        frontmatter = extract_frontmatter(file_path)
+        frontmatter = extract_frontmatter(file_path, logger)
         if not frontmatter:
             continue
 
@@ -314,9 +299,9 @@ def scan_tech_debt_tickets(tickets_dir: Path) -> List[Dict[str, Any]]:
                 "version": frontmatter.get("version", "unknown")
             })
 
-            logging.debug(f"找到 pending TD Ticket: {ticket_id}")
+            logger.debug(f"找到 pending TD Ticket: {ticket_id}")
 
-    logging.info(f"掃描完成，找到 {len(pending_tickets)} 個 pending TD Ticket")
+    logger.info(f"掃描完成，找到 {len(pending_tickets)} 個 pending TD Ticket")
     return pending_tickets
 
 
@@ -354,7 +339,7 @@ def generate_warning_message(pending_tickets: List[Dict[str, Any]], version: str
     message += f"""
 建議：
   1. 在開始新功能開發前處理這些技術債務
-  2. 或使用 /ticket-track 將目標版本延後
+  2. 或使用 /ticket track 將目標版本延後
   3. 查看詳細 Ticket: docs/work-logs/v*/tickets/
 
 ---
@@ -367,7 +352,8 @@ _此提醒由 tech-debt-reminder Hook 自動生成_
 
 def generate_hook_output(
     pending_tickets: List[Dict[str, Any]],
-    version: str
+    version: str,
+    logger
 ) -> Dict[str, Any]:
     """
     生成 Hook 輸出格式
@@ -375,13 +361,14 @@ def generate_hook_output(
     Args:
         pending_tickets: 待處理 TD Ticket 列表
         version: 當前版本
+        logger: 日誌物件
 
     Returns:
         dict - Hook 輸出 JSON
     """
     # 若無 pending tickets，靜默跳過（不輸出任何訊息）
     if not pending_tickets:
-        logging.info("無 pending 技術債務，不產生輸出")
+        logger.info("無 pending 技術債務，不產生輸出")
         return {
             "suppressOutput": True
         }
@@ -416,63 +403,63 @@ def main() -> int:
     Returns:
         int - Exit code (0 = 成功)
     """
+    logger = setup_hook_logging("tech-debt-reminder")
     try:
         # 步驟 1: 初始化日誌
-        setup_logging()
-        logging.info("技術債務提醒 Hook 啟動")
+        logger.info("技術債務提醒 Hook 啟動")
 
         # 步驟 2: 讀取 JSON 輸入
         try:
-            input_data = read_json_from_stdin()
+            input_data = read_json_from_stdin(logger)
         except ValueError:
             # SessionStart 可能沒有 stdin，靜默跳過
-            logging.info("無 stdin 輸入，靜默跳過")
+            logger.info("無 stdin 輸入，靜默跳過")
             return EXIT_SUCCESS
 
         # 步驟 3: 取得專案根目錄
         project_root = get_project_root()
-        logging.info(f"專案根目錄: {project_root}")
+        logger.info(f"專案根目錄: {project_root}")
 
         # 步驟 4: 讀取 pubspec.yaml
-        pubspec_data = read_pubspec_yaml(project_root)
+        pubspec_data = read_pubspec_yaml(project_root, logger)
         if not pubspec_data:
-            logging.info("無法讀取 pubspec.yaml，靜默跳過")
+            logger.info("無法讀取 pubspec.yaml，靜默跳過")
             return EXIT_SUCCESS
 
         # 步驟 5: 提取版本號
-        version = extract_version(pubspec_data)
+        version = extract_version(pubspec_data, logger)
         if not version:
-            logging.info("無法提取版本號，靜默跳過")
+            logger.info("無法提取版本號，靜默跳過")
             return EXIT_SUCCESS
 
         # 步驟 6: 解析版本系列
-        version_tuple = parse_version_series(version)
+        version_tuple = parse_version_series(version, logger)
         if not version_tuple:
-            logging.info("無法解析版本系列，靜默跳過")
+            logger.info("無法解析版本系列，靜默跳過")
             return EXIT_SUCCESS
 
         major, minor = version_tuple
 
         # 步驟 7: 尋找 tickets 目錄
-        tickets_dir = find_tickets_directory(project_root, major, minor)
+        tickets_dir = find_tickets_directory(project_root, major, minor, logger)
         if not tickets_dir:
-            logging.info(f"tickets 目錄不存在，靜默跳過")
+            logger.info(f"tickets 目錄不存在，靜默跳過")
             return EXIT_SUCCESS
 
         # 步驟 8: 掃描 pending TD Ticket
-        pending_tickets = scan_tech_debt_tickets(tickets_dir)
+        pending_tickets = scan_tech_debt_tickets(tickets_dir, logger)
 
         # 步驟 9: 產生 Hook 輸出
-        hook_output = generate_hook_output(pending_tickets, version)
+        hook_output = generate_hook_output(pending_tickets, version, logger)
 
         # 步驟 10: 輸出 JSON 結果
         print(json.dumps(hook_output, ensure_ascii=False, indent=2))
 
-        logging.info("Hook 執行完成")
+        logger.info("Hook 執行完成")
         return EXIT_SUCCESS
 
     except Exception as e:
-        logging.critical(f"Hook 執行錯誤: {e}", exc_info=True)
+        logger.critical(f"Hook 執行錯誤: {e}", exc_info=True)
         # 錯誤時也靜默跳過（非阻塊）
         print(json.dumps({
             "suppressOutput": True
@@ -481,4 +468,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run_hook_safely(main, "tech-debt-reminder"))

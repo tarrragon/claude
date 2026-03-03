@@ -7,12 +7,12 @@
 r"""
 Ticket File Access Guard Hook - PreToolUse Hook
 
-功能: 阻止直接 Read/Edit ticket 檔案，引導使用 /ticket-track 指令
-- 阻止 Read 整個 ticket 檔案 -> 引導使用 /ticket-track query 或 full
-- 阻止 Edit frontmatter 欄位 -> 引導使用 /ticket-track set-* 或 claim/complete
+功能: 阻止直接 Read/Edit/Write ticket 檔案，引導使用 /ticket 指令
+- 阻止 Read 整個 ticket 檔案 -> 引導使用 /ticket track query 或 full
+- 阻止 Edit frontmatter 欄位 -> 引導使用 /ticket track set-* 或 claim/complete
+- 阻止 Write 建立/覆寫 ticket -> 引導使用 /ticket create
 - 允許 ticket-tracker.py / ticket-creator.py 內部呼叫
 - 允許 Edit 執行日誌區段 (## Problem Analysis, ## Solution 等 body 部分)
-- 允許 Write 新建 ticket (/ticket-create 流程)
 
 觸發時機: 執行 Read/Edit/Write 工具時
 
@@ -24,17 +24,27 @@ Ticket File Access Guard Hook - PreToolUse Hook
   - Read ticket 檔案: 阻止，返回 exit code 2
   - Edit frontmatter: 阻止，返回 exit code 2
   - Edit body 區段: 允許，返回 exit code 0
-  - Write 新檔案: 允許，返回 exit code 0
+  - Write ticket 檔案: 阻止，返回 exit code 2（強制使用 /ticket create）
   - 內部呼叫: 允許，返回 exit code 0
+
+設計理由:
+  - ticket SKILL 使用 Python 直接 I/O 寫檔，不觸發 Claude Hook
+  - 主線程直接使用 Write 工具會觸發 Hook，應被阻止
+  - 這確保所有 Ticket 都透過 /ticket create 建立，編號正確
 """
 
 import json
 import os
 import sys
 import re
-import logging
-from datetime import datetime
 from pathlib import Path
+
+# 加入 hook_utils 路徑（相同目錄）
+sys.path.insert(0, str(Path(__file__).parent))
+
+from hook_utils import setup_hook_logging, run_hook_safely
+
+from datetime import datetime
 from typing import Dict, Any, Tuple
 
 # ============================================================================
@@ -72,41 +82,6 @@ FRONTMATTER_FIELD_PATTERN = r"^(id|title|type|status|version|priority|parent_id|
 
 
 # ============================================================================
-# 日誌設置
-# ============================================================================
-
-def setup_logging() -> Path:
-    """初始化日誌系統"""
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
-    log_dir = project_dir / ".claude" / "hook-logs" / "ticket-file-access-guard"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    log_file = log_dir / f"ticket-file-access-guard-{datetime.now().strftime('%Y%m%d')}.log"
-
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="[%(asctime)s] %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file, encoding="utf-8"),
-        ]
-    )
-
-    return log_file
-
-
-def log_message(message: str, level: str = "INFO") -> None:
-    """記錄訊息"""
-    if level == "DEBUG":
-        logging.debug(message)
-    elif level == "INFO":
-        logging.info(message)
-    elif level == "WARNING":
-        logging.warning(message)
-    elif level == "ERROR":
-        logging.error(message)
-
-
-# ============================================================================
 # 路徑和內容檢查
 # ============================================================================
 
@@ -134,7 +109,27 @@ def is_internal_call() -> bool:
     return os.getenv("TICKET_TRACKER_INTERNAL") == "1"
 
 
-def is_body_section_edit(old_string: str) -> bool:
+def is_handoff_recovery_mode(logger) -> bool:
+    """
+    檢查是否處於 Handoff 恢復模式
+
+    Handoff 恢復時，Claude 自動讀取 Ticket 和派發代理人，
+    這些操作應被豁免，允許恢復流程正常進行。
+    """
+    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+    handoff_pending_dir = project_dir / ".claude" / "handoff" / "pending"
+
+    # 檢查是否存在 pending Handoff 任務
+    if handoff_pending_dir.exists() and handoff_pending_dir.is_dir():
+        # 檢查是否有任何 pending JSON 檔案
+        if any(handoff_pending_dir.glob("*.json")):
+            logger.debug("檢測到 Handoff 恢復模式")
+            return True
+
+    return False
+
+
+def is_body_section_edit(old_string: str, logger) -> bool:
     """
     檢查 Edit 操作是否為 body 區段編輯
 
@@ -150,13 +145,13 @@ def is_body_section_edit(old_string: str) -> bool:
 
     # 如果編輯的是 frontmatter 欄位
     if re.match(FRONTMATTER_FIELD_PATTERN, stripped):
-        log_message(f"偵測到 frontmatter 欄位編輯: {stripped[:50]}", "DEBUG")
+        logger.debug(f"偵測到 frontmatter 欄位編輯: {stripped[:50]}")
         return False
 
     # 如果編輯的內容包含 body 區段標題，允許
     for section in ALLOWED_BODY_SECTIONS:
         if section in old_string:
-            log_message(f"偵測到 body 區段編輯: {section}", "DEBUG")
+            logger.debug(f"偵測到 body 區段編輯: {section}")
             return True
 
     # 如果是非 frontmatter 的一般內容，也允許（但記錄警告）
@@ -185,26 +180,30 @@ def is_new_file_write(file_path: str) -> bool:
 # 權限檢查
 # ============================================================================
 
-def check_read_permission(file_path: str) -> Tuple[bool, str]:
+def check_read_permission(file_path: str, logger) -> Tuple[bool, str]:
     """檢查 Read 操作權限"""
     if is_internal_call():
         return True, "內部呼叫允許"
+
+    if is_handoff_recovery_mode(logger):
+        logger.debug(f"Handoff 恢復模式: 允許讀取 {file_path}")
+        return True, "Handoff 恢復模式允許"
 
     if is_ticket_file(file_path):
         reason = (
             "禁止直接讀取 ticket 檔案。\n"
             "請使用以下指令：\n"
-            "  - /ticket-track query {id}  - 查詢 ticket 資訊\n"
-            "  - /ticket-track full {id}   - 輸出完整 ticket 內容\n"
-            "  - /ticket-track log {id}    - 輸出執行日誌"
+            "  - /ticket track query {id}  - 查詢 ticket 資訊\n"
+            "  - /ticket track full {id}   - 輸出完整 ticket 內容\n"
+            "  - /ticket track log {id}    - 輸出執行日誌"
         )
-        log_message(f"阻止讀取 ticket 檔案: {file_path}", "WARNING")
+        logger.warning(f"阻止讀取 ticket 檔案: {file_path}")
         return False, reason
 
     return True, "非 ticket 檔案，允許讀取"
 
 
-def check_edit_permission(file_path: str, old_string: str) -> Tuple[bool, str]:
+def check_edit_permission(file_path: str, old_string: str, logger) -> Tuple[bool, str]:
     """檢查 Edit 操作權限"""
     if is_internal_call():
         return True, "內部呼叫允許"
@@ -213,26 +212,26 @@ def check_edit_permission(file_path: str, old_string: str) -> Tuple[bool, str]:
         return True, "非 ticket 檔案，允許編輯"
 
     # 檢查是否為 body 區段編輯
-    if is_body_section_edit(old_string):
-        log_message(f"允許編輯 ticket body 區段: {file_path}", "INFO")
+    if is_body_section_edit(old_string, logger):
+        logger.info(f"允許編輯 ticket body 區段: {file_path}")
         return True, "body 區段編輯允許"
 
     # 阻止 frontmatter 欄位編輯
     reason = (
         "禁止直接編輯 ticket frontmatter 欄位。\n"
         "請使用以下指令：\n"
-        "  - /ticket-track claim {id}       - 認領 ticket\n"
-        "  - /ticket-track complete {id}    - 完成 ticket\n"
-        "  - /ticket-track set-who {id} {value}   - 更新 who 欄位\n"
-        "  - /ticket-track set-what {id} {value}  - 更新 what 欄位\n"
-        "  - /ticket-track set-priority {id} {value} - 更新優先級\n"
-        "  - /ticket-track append-log {id} --section {section} {content} - 追加執行日誌"
+        "  - /ticket track claim {id}       - 認領 ticket\n"
+        "  - /ticket track complete {id}    - 完成 ticket\n"
+        "  - /ticket track set-who {id} {value}   - 更新 who 欄位\n"
+        "  - /ticket track set-what {id} {value}  - 更新 what 欄位\n"
+        "  - /ticket track set-priority {id} {value} - 更新優先級\n"
+        "  - /ticket track append-log {id} --section {section} {content} - 追加執行日誌"
     )
-    log_message(f"阻止編輯 ticket frontmatter: {file_path}", "WARNING")
+    logger.warning(f"阻止編輯 ticket frontmatter: {file_path}")
     return False, reason
 
 
-def check_write_permission(file_path: str) -> Tuple[bool, str]:
+def check_write_permission(file_path: str, logger) -> Tuple[bool, str]:
     """檢查 Write 操作權限"""
     if is_internal_call():
         return True, "內部呼叫允許"
@@ -240,17 +239,19 @@ def check_write_permission(file_path: str) -> Tuple[bool, str]:
     if not is_ticket_file(file_path):
         return True, "非 ticket 檔案，允許寫入"
 
-    # 允許新建 ticket（/ticket-create 流程）
-    if is_new_file_write(file_path):
-        log_message(f"允許新建 ticket 檔案: {file_path}", "INFO")
-        return True, "新建 ticket 允許"
-
-    # 阻止覆寫現有 ticket
+    # 完全阻止直接建立/覆寫 ticket
+    # ticket 使用 Python 直接 I/O，不受此 Hook 影響
+    # 這裡阻止的是主線程直接使用 Write 工具建立 ticket
     reason = (
-        "禁止直接覆寫 ticket 檔案。\n"
-        "請使用 /ticket-track 指令進行欄位更新。"
+        "禁止直接建立或覆寫 ticket 檔案。\n"
+        "請使用以下指令建立新 Ticket：\n"
+        "  ticket create --version X --wave Y --action \"動詞\" --target \"目標\"\n"
+        "或使用 SKILL：\n"
+        "  /ticket create ...\n"
+        "\n"
+        "這將確保編號正確且符合規範。"
     )
-    log_message(f"阻止覆寫 ticket 檔案: {file_path}", "WARNING")
+    logger.warning(f"阻止直接 Write ticket 檔案: {file_path}")
     return False, reason
 
 
@@ -282,7 +283,8 @@ def save_check_log(
     tool_name: str,
     file_path: str,
     is_allowed: bool,
-    reason: str
+    reason: str,
+    logger
 ) -> None:
     """儲存檢查日誌"""
     try:
@@ -302,7 +304,7 @@ def save_check_log(
         with open(report_file, "a", encoding="utf-8") as f:
             f.write(log_entry)
     except Exception as e:
-        log_message(f"儲存檢查日誌失敗: {e}", "ERROR")
+        logger.error(f"儲存檢查日誌失敗: {e}")
 
 
 # ============================================================================
@@ -311,65 +313,80 @@ def save_check_log(
 
 def main() -> int:
     """主入口點"""
+    logger = setup_hook_logging("ticket-file-access-guard")
     try:
-        setup_logging()
-        log_message("Ticket File Access Guard Hook 啟動", "INFO")
+        logger.info("Ticket File Access Guard Hook 啟動")
 
-        input_data = json.load(sys.stdin)
-        log_message(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False)[:200]}...", "DEBUG")
+        # 防禦性編程：處理空輸入或無效 JSON
+        input_text = sys.stdin.read().strip()
+        if not input_text:
+            logger.warning("輸入為空，返回預設允許")
+            error_output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                    "permissionDecisionReason": "輸入為空，預設允許"
+                }
+            }
+            print(json.dumps(error_output, ensure_ascii=False))
+            return EXIT_ALLOW
+
+        try:
+            input_data = json.loads(input_text)
+        except json.JSONDecodeError as parse_error:
+            logger.error(f"JSON 解析錯誤: {parse_error}，輸入內容: {input_text[:100]}")
+            error_output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                    "permissionDecisionReason": f"JSON 解析錯誤，預設允許: {str(parse_error)}"
+                }
+            }
+            print(json.dumps(error_output, ensure_ascii=False))
+            return EXIT_ALLOW
+
+        logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False)[:200]}...")
 
         tool_name = input_data.get("tool_name", "")
         tool_input = input_data.get("tool_input", {})
 
         # 只檢查 Read, Edit, Write 工具
         if tool_name not in ["Read", "Edit", "Write"]:
-            log_message(f"跳過: 工具類型 {tool_name} 不在檢查範圍內", "DEBUG")
+            logger.debug(f"跳過: 工具類型 {tool_name} 不在檢查範圍內")
             result = generate_hook_output(True, f"工具 {tool_name} 不在檢查範圍")
             print(json.dumps(result, ensure_ascii=False))
             return EXIT_ALLOW
 
         file_path = tool_input.get("file_path", "")
-        log_message(f"檢查工具: {tool_name}, 檔案: {file_path}", "INFO")
+        logger.info(f"檢查工具: {tool_name}, 檔案: {file_path}")
 
         # 根據工具類型檢查權限
         if tool_name == "Read":
-            is_allowed, reason = check_read_permission(file_path)
+            is_allowed, reason = check_read_permission(file_path, logger)
         elif tool_name == "Edit":
             old_string = tool_input.get("old_string", "")
-            is_allowed, reason = check_edit_permission(file_path, old_string)
+            is_allowed, reason = check_edit_permission(file_path, old_string, logger)
         elif tool_name == "Write":
-            is_allowed, reason = check_write_permission(file_path)
+            is_allowed, reason = check_write_permission(file_path, logger)
         else:
             is_allowed, reason = True, "未知工具類型，預設允許"
 
         hook_output = generate_hook_output(is_allowed, reason)
         print(json.dumps(hook_output, ensure_ascii=False))
 
-        save_check_log(tool_name, file_path, is_allowed, reason)
+        save_check_log(tool_name, file_path, is_allowed, reason, logger)
 
         exit_code = EXIT_ALLOW if is_allowed else EXIT_BLOCK
-        log_message(f"Hook 檢查完成，exit code: {exit_code}", "INFO")
+        logger.info(f"Hook 檢查完成，exit code: {exit_code}")
         return exit_code
 
-    except json.JSONDecodeError as e:
-        log_message(f"JSON 解析錯誤: {e}", "ERROR")
-        error_output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "allow",
-                "permissionDecisionReason": "JSON 解析錯誤，預設允許"
-            }
-        }
-        print(json.dumps(error_output, ensure_ascii=False))
-        return EXIT_ALLOW
-
     except Exception as e:
-        log_message(f"Hook 執行錯誤: {e}", "ERROR")
+        logger.error(f"Hook 執行錯誤: {type(e).__name__}: {e}")
         error_output = {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "allow",
-                "permissionDecisionReason": f"Hook 執行錯誤：{str(e)}"
+                "permissionDecisionReason": f"Hook 執行錯誤，預設允許: {str(e)}"
             }
         }
         print(json.dumps(error_output, ensure_ascii=False))
@@ -377,4 +394,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run_hook_safely(main, "ticket-file-access-guard"))

@@ -18,6 +18,9 @@ import os
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from hook_utils import setup_hook_logging, run_hook_safely
+
 
 # Output Style 配置
 OUTPUT_STYLES_DIR = ".claude/output-styles"
@@ -69,14 +72,13 @@ def check_output_style_file(style_config: dict, base_path: Path) -> tuple[bool, 
 
 
 def main():
+    logger = setup_hook_logging("output-style-check")
     # 獲取專案根目錄
     base_path = Path(os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd()))
 
-    print()
-    print("=" * 60)
-    print("📋 Output Style Check - 系統級格式強制驗證")
-    print("=" * 60)
-    print()
+    output = "\n" + "=" * 60 + "\n📋 Output Style Check - 系統級格式強制驗證\n" + "=" * 60 + "\n\n"
+    print(output, end="")
+    logger.info("Output Style Check 開始")
 
     all_passed = True
     total_styles = len(REQUIRED_STYLES)
@@ -87,32 +89,48 @@ def main():
 
         if passed:
             passed_styles += 1
-            print(f"✅ {style['file']}: 驗證通過")
+            msg = f"✅ {style['file']}: 驗證通過"
+            print(msg)
+            logger.info(msg)
         else:
             all_passed = False
-            print(f"❌ {style['file']}: 驗證失敗")
+            msg = f"❌ {style['file']}: 驗證失敗"
+            print(msg)
+            logger.info(msg)
             for error in errors:
                 print(f"   - {error}")
+                logger.warning(error)
         print()
 
     # 摘要
     if all_passed:
-        print(f"✅ Output Style 檢查通過 ({passed_styles}/{total_styles})")
-        print("   5W1H 回應格式已在系統級別啟用")
+        msg = f"✅ Output Style 檢查通過 ({passed_styles}/{total_styles})"
+        print(msg)
+        logger.info(msg)
+        msg = "   5W1H 回應格式已在系統級別啟用"
+        print(msg)
+        logger.info(msg)
     else:
-        print(f"⚠️  Output Style 檢查部分失敗 ({passed_styles}/{total_styles})")
+        msg = f"⚠️  Output Style 檢查部分失敗 ({passed_styles}/{total_styles})"
+        print(msg)
+        logger.warning(msg)
         print()
         print("修復建議:")
+        logger.warning("修復建議:")
         print("  1. 確認 .claude/output-styles/ 目錄存在")
+        logger.warning("  1. 確認 .claude/output-styles/ 目錄存在")
         print("  2. 確認必要的 output-style 文件已正確配置")
+        logger.warning("  2. 確認必要的 output-style 文件已正確配置")
         print("  3. 檢查 frontmatter 格式是否正確")
+        logger.warning("  3. 檢查 frontmatter 格式是否正確")
 
     print()
     print("=" * 60)
     print()
 
+    logger.info("Output Style Check 完成")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run_hook_safely(main, "output-style-check"))

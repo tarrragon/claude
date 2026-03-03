@@ -96,7 +96,7 @@ cp .claude/skills/pre-fix-eval/templates/fix-ticket.template /tmp/my-ticket.md
 ```
 
 **何時使用**:
-- 使用 `/ticket-create` 建立修復 Ticket
+- 使用 `/ticket create` 建立修復 Ticket
 - 參考 Ticket 應該包含的章節和內容
 
 ### 參考檔案
@@ -183,7 +183,7 @@ Hook 腳本 (.claude/hooks/pre-fix-evaluation-hook.py)
     六階段評估流程
     參考: SKILL.md 各章節 + decision-matrix.md
          ↓
-    開 Ticket (/ticket-create)
+    開 Ticket (/ticket create)
     模板: fix-ticket.template
          ↓
     分派執行

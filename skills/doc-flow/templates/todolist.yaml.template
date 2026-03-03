@@ -1,0 +1,76 @@
+# Book Overview App - TodoList
+# 結構化版本管理與任務追蹤
+#
+# 此檔案是版本索引的 Source of Truth。
+# get_current_version() 優先解析此檔案中 status=active 的版本。
+# 版本細節（Wave 進度、品質指標等）請參閱各版本的 worklog。
+
+meta:
+  project: "Book Overview App"
+  architecture: "{ARCHITECTURE_DESCRIPTION}"
+  last_updated: "{DATE}"
+  maintainer: "rosemary-project-manager"
+
+# ============================================================
+# 版本對應表
+# 狀態值: active | planned | completed | paused
+# ============================================================
+versions:
+  - version: "{CURRENT_VERSION}"
+    codename: "{CODENAME}"
+    description: "{DESCRIPTION}"
+    status: "active"
+    worklog: "docs/work-logs/v{CURRENT_VERSION}/"
+    notes: |
+      {VERSION_NOTES}
+
+# ============================================================
+# UC-Oriented 開發計畫
+# 狀態值: completed | active | planned
+# ============================================================
+use_cases: []
+
+# ============================================================
+# 開發核心原則
+# ============================================================
+principles:
+  - "每個 Use Case = 一個中版本系列"
+  - "TDD 四階段流程: Phase 1 -> Phase 2 -> Phase 3 -> Phase 4"
+  - "測試驅動修正: 透過測試失敗識別問題"
+  - "架構規範優先: 確保符合事件驅動架構和分層設計"
+
+# ============================================================
+# 技術債務追蹤
+# ============================================================
+tech_debt: []
+
+# ============================================================
+# 品質標準
+# ============================================================
+quality_standards:
+  functionality:
+    - "所有設計規格中的功能已實作完成"
+    - "符合事件驅動架構和分層設計原則"
+    - "錯誤處理機制完整"
+  testing:
+    - "Unit Test: 100% 通過"
+    - "Widget Test: 100% 通過（如適用）"
+    - "Integration Test: 90%+ 通過"
+  code_quality:
+    - "Package 導入路徑語意化"
+    - "函式自然語言化（5-10 行原則）"
+    - "無 Lint 警告"
+
+# ============================================================
+# 參考文件
+# ============================================================
+references:
+  development:
+    - path: "CLAUDE.md"
+      description: "專案開發指導規範"
+  architecture:
+    - path: "docs/event-driven-architecture-design.md"
+      description: "事件驅動架構設計"
+  testing:
+    - path: "docs/test-pyramid-design.md"
+      description: "測試金字塔設計"

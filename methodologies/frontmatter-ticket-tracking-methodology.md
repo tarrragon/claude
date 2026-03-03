@@ -5,6 +5,7 @@
 本方法論定義基於 Markdown + YAML Frontmatter 的 Ticket 狀態追蹤系統，解決主線程與代理人之間的進度追蹤效率問題。
 
 **核心目標**：
+
 - 減少 context 佔用：透過直接讀取 frontmatter 取得狀態，避免代理人回報佔用主線程 context
 - 單一文件架構：每個 Ticket 的設計、執行日誌、狀態追蹤都在同一個檔案中
 - 獨立操作：主線程和代理人可以獨立查詢和更新狀態
@@ -12,6 +13,7 @@
 **方法論版本**：v3.0.0（Frontmatter 版 - 單一文件架構）
 
 **與其他方法論的關係**：
+
 - 本方法論是「[Ticket 設計派工方法論](./ticket-design-dispatch-methodology.md)」的補充
 - 取代舊版「[CSV 式 Ticket 追蹤方法論](./csv-ticket-tracking-methodology.md)」（v2.0.0）
 - 與「[Atomic Ticket 方法論](./atomic-ticket-methodology.md)」配合使用
@@ -24,10 +26,10 @@
 
 **從 CSV 到 Frontmatter 的演進**：
 
-| 版本 | 架構 | 問題 |
-|------|------|------|
-| v1.0 | 獨立 YAML + 獨立 MD | 檔案過多，維護困難 |
-| v2.0 | CSV 追蹤 + MD 日誌 | 狀態分散在兩處，同步困難 |
+| 版本     | 架構                       | 問題                     |
+| -------- | -------------------------- | ------------------------ |
+| v1.0     | 獨立 YAML + 獨立 MD        | 檔案過多，維護困難       |
+| v2.0     | CSV 追蹤 + MD 日誌         | 狀態分散在兩處，同步困難 |
 | **v3.0** | **Markdown + Frontmatter** | **單一文件，一致性保證** |
 
 **v3.0 的核心改進**：
@@ -149,52 +151,52 @@ completed_at: null
 
 #### 識別欄位
 
-| 欄位 | 類型 | 必填 | 說明 |
-|------|------|------|------|
-| `ticket_id` | string | 是 | 票號（格式：`{VERSION}-W{WAVE}-{SEQ}`） |
-| `version` | string | 是 | 版本號（例如：`0.16.0`） |
-| `wave` | int | 是 | Wave 編號（1, 2, 3...） |
+| 欄位        | 類型   | 必填 | 說明                                    |
+| ----------- | ------ | ---- | --------------------------------------- |
+| `ticket_id` | string | 是   | 票號（格式：`{VERSION}-W{WAVE}-{SEQ}`） |
+| `version`   | string | 是   | 版本號（例如：`0.16.0`）                |
+| `wave`      | int    | 是   | Wave 編號（1, 2, 3...）                 |
 
 #### 單一職責欄位
 
-| 欄位 | 類型 | 必填 | 說明 |
-|------|------|------|------|
-| `action` | string | 是 | 動詞（Implement, Fix, Add, Refactor, Remove, Update） |
-| `target` | string | 是 | 單一目標（方法、類別、測試、檔案等） |
+| 欄位     | 類型   | 必填 | 說明                                                  |
+| -------- | ------ | ---- | ----------------------------------------------------- |
+| `action` | string | 是   | 動詞（Implement, Fix, Add, Refactor, Remove, Update） |
+| `target` | string | 是   | 單一目標（方法、類別、測試、檔案等）                  |
 
 #### 執行資訊
 
-| 欄位 | 類型 | 必填 | 說明 |
-|------|------|------|------|
-| `agent` | string | 是 | 執行代理人（例如：`parsley-flutter-developer`） |
+| 欄位    | 類型   | 必填 | 說明                                            |
+| ------- | ------ | ---- | ----------------------------------------------- |
+| `agent` | string | 是   | 執行代理人（例如：`parsley-flutter-developer`） |
 
 #### 5W1H 設計
 
-| 欄位 | 類型 | 必填 | 說明 |
-|------|------|------|------|
-| `who` | string | 是 | 執行者 |
-| `what` | string | 是 | 任務內容 |
-| `when` | string | 是 | 觸發時機 |
-| `where` | string | 是 | 執行位置 |
-| `why` | string | 是 | 需求依據 |
-| `how` | string | 是 | 實作策略 |
+| 欄位    | 類型   | 必填 | 說明     |
+| ------- | ------ | ---- | -------- |
+| `who`   | string | 是   | 執行者   |
+| `what`  | string | 是   | 任務內容 |
+| `when`  | string | 是   | 觸發時機 |
+| `where` | string | 是   | 執行位置 |
+| `why`   | string | 是   | 需求依據 |
+| `how`   | string | 是   | 實作策略 |
 
 #### 驗收與依賴
 
-| 欄位 | 類型 | 必填 | 說明 |
-|------|------|------|------|
-| `acceptance` | list | 否 | 驗收條件清單 |
-| `files` | list | 否 | 相關檔案清單 |
-| `dependencies` | list | 否 | 依賴的 Ticket ID 清單 |
+| 欄位           | 類型 | 必填 | 說明                  |
+| -------------- | ---- | ---- | --------------------- |
+| `acceptance`   | list | 否   | 驗收條件清單          |
+| `files`        | list | 否   | 相關檔案清單          |
+| `dependencies` | list | 否   | 依賴的 Ticket ID 清單 |
 
 #### 狀態追蹤
 
-| 欄位 | 類型 | 必填 | 說明 |
-|------|------|------|------|
-| `status` | string | 是 | 狀態（pending, in_progress, completed） |
-| `assigned` | boolean | 是 | 是否有人接手 |
-| `started_at` | datetime | 否 | 開始時間（ISO 8601） |
-| `completed_at` | datetime | 否 | 完成時間（ISO 8601） |
+| 欄位           | 類型     | 必填 | 說明                                    |
+| -------------- | -------- | ---- | --------------------------------------- |
+| `status`       | string   | 是   | 狀態（pending, in_progress, completed） |
+| `assigned`     | boolean  | 是   | 是否有人接手                            |
+| `started_at`   | datetime | 否   | 開始時間（ISO 8601）                    |
+| `completed_at` | datetime | 否   | 完成時間（ISO 8601）                    |
 
 ---
 
@@ -207,16 +209,16 @@ completed_at: null
 **使用腳本**：
 
 ```bash
-uv run .claude/hooks/ticket-creator.py create \
+uv run ticket create \
   --version "0.16.0" \
   --wave 1 \
-  --seq 1 \
   --action "Implement" \
   --target "startScan() method" \
-  --agent "parsley-flutter-developer"
+  --who "parsley-flutter-developer"
 ```
 
 **結果**：
+
 - 建立 `docs/work-logs/v0.16.0/tickets/0.16.0-W1-001.md`
 - frontmatter 包含 5W1H 設計和初始狀態
 - body 包含執行日誌模板
@@ -228,10 +230,11 @@ uv run .claude/hooks/ticket-creator.py create \
 **使用腳本**：
 
 ```bash
-uv run .claude/hooks/ticket-tracker.py claim 0.16.0-W1-001
+uv run ticket track claim 0.16.0-W1-001
 ```
 
 **Frontmatter 更新**：
+
 - `assigned: true`
 - `started_at: [當前時間]`
 - `status: "in_progress"`
@@ -243,10 +246,11 @@ uv run .claude/hooks/ticket-tracker.py claim 0.16.0-W1-001
 **使用腳本**：
 
 ```bash
-uv run .claude/hooks/ticket-tracker.py complete 0.16.0-W1-001
+uv run ticket track complete 0.16.0-W1-001
 ```
 
 **Frontmatter 更新**：
+
 - `status: "completed"`
 - `completed_at: [當前時間]`
 
@@ -257,10 +261,11 @@ uv run .claude/hooks/ticket-tracker.py complete 0.16.0-W1-001
 **使用腳本**：
 
 ```bash
-uv run .claude/hooks/ticket-tracker.py release 0.16.0-W1-001
+uv run ticket track release 0.16.0-W1-001
 ```
 
 **Frontmatter 更新**：
+
 - `assigned: false`
 - `started_at: null`
 - `status: "pending"`
@@ -270,26 +275,26 @@ uv run .claude/hooks/ticket-tracker.py release 0.16.0-W1-001
 **單一 Ticket**：
 
 ```bash
-uv run .claude/hooks/ticket-tracker.py query 0.16.0-W1-001
+uv run ticket track query 0.16.0-W1-001
 ```
 
 **列出所有**：
 
 ```bash
 # 進行中的 Tickets
-uv run .claude/hooks/ticket-tracker.py list --in-progress
+uv run ticket track list --in-progress
 
 # 未接手的 Tickets
-uv run .claude/hooks/ticket-tracker.py list --pending
+uv run ticket track list --pending
 
 # 已完成的 Tickets
-uv run .claude/hooks/ticket-tracker.py list --completed
+uv run ticket track list --completed
 ```
 
 **快速摘要**：
 
 ```bash
-uv run .claude/hooks/ticket-tracker.py summary
+uv run ticket track summary
 ```
 
 **輸出範例**：
@@ -329,19 +334,19 @@ uv run .claude/hooks/ticket-tracker.py summary
 
 **唯讀模式限制**：
 
-| 操作 | v0.16.0+ (Markdown) | v0.15.x (CSV) |
-|------|---------------------|---------------|
-| `summary` | ✅ 完整支援 | ✅ 唯讀 |
-| `list` | ✅ 完整支援 | ✅ 唯讀 |
-| `query` | ✅ 完整支援 | ⚠️ 有限 |
-| `claim` | ✅ 完整支援 | ❌ 不支援 |
-| `complete` | ✅ 完整支援 | ❌ 不支援 |
-| `release` | ✅ 完整支援 | ❌ 不支援 |
+| 操作       | v0.16.0+ (Markdown) | v0.15.x (CSV) |
+| ---------- | ------------------- | ------------- |
+| `summary`  | ✅ 完整支援         | ✅ 唯讀       |
+| `list`     | ✅ 完整支援         | ✅ 唯讀       |
+| `query`    | ✅ 完整支援         | ⚠️ 有限       |
+| `claim`    | ✅ 完整支援         | ❌ 不支援     |
+| `complete` | ✅ 完整支援         | ❌ 不支援     |
+| `release`  | ✅ 完整支援         | ❌ 不支援     |
 
 ### 4.2 舊版本查詢範例
 
 ```bash
-uv run .claude/hooks/ticket-tracker.py summary --version v0.15.16
+uv run ticket track summary --version v0.15.16
 ```
 
 **輸出**：
@@ -367,7 +372,7 @@ uv run .claude/hooks/ticket-tracker.py summary --version v0.15.16
 ```text
 CHANGELOG.md         ← 版本發布時提取功能變動
     ↑
-todolist.md          ← 任務狀態追蹤（粗粒度）
+todolist.yaml          ← 任務狀態追蹤（粗粒度）
     ↑
 tickets/*.md         ← Ticket 狀態追蹤（細粒度） ★ 本方法論
     ↑
@@ -379,24 +384,24 @@ work-log/*.md        ← 詳細實作記錄
 **Frontmatter 完整涵蓋 5W1H**：
 
 ```yaml
-who: "parsley-flutter-developer"     # 誰執行
+who: "parsley-flutter-developer" # 誰執行
 what: "Implement startScan() method" # 做什麼
-when: "Phase 3 start"                # 什麼時候
-where: "lib/infrastructure/"         # 在哪裡
-why: "Enable barcode scanning"       # 為什麼
-how: "Use mobile_scanner package"    # 怎麼做
+when: "Phase 3 start" # 什麼時候
+where: "lib/infrastructure/" # 在哪裡
+why: "Enable barcode scanning" # 為什麼
+how: "Use mobile_scanner package" # 怎麼做
 ```
 
 ### 5.3 生命週期狀態對應
 
-| Ticket 生命週期 | Frontmatter 狀態 |
-|----------------|-----------------|
-| Draft | 未建立檔案 |
-| Ready | `status: "pending"`, `assigned: false` |
-| In Progress | `status: "in_progress"`, `assigned: true` |
-| Review | `status: "in_progress"`（日誌標記 Review） |
-| Closed | `status: "completed"` |
-| Blocked | `status: "in_progress"`（日誌標記 Blocked） |
+| Ticket 生命週期 | Frontmatter 狀態                            |
+| --------------- | ------------------------------------------- |
+| Draft           | 未建立檔案                                  |
+| Ready           | `status: "pending"`, `assigned: false`      |
+| In Progress     | `status: "in_progress"`, `assigned: true`   |
+| Review          | `status: "in_progress"`（日誌標記 Review）  |
+| Closed          | `status: "completed"`                       |
+| Blocked         | `status: "in_progress"`（日誌標記 Blocked） |
 
 ---
 
@@ -408,10 +413,11 @@ how: "Use mobile_scanner package"    # 怎麼做
 
 ```bash
 # 每次需要了解進度時執行
-uv run .claude/hooks/ticket-tracker.py summary
+uv run ticket track summary
 ```
 
 **不要詢問代理人進度**：
+
 - ❌ 錯誤：「代理人，0.16.0-W1-001 完成了嗎？」
 - ✅ 正確：直接執行 `summary` 或 `query` 命令
 
@@ -421,17 +427,18 @@ uv run .claude/hooks/ticket-tracker.py summary
 
 ```bash
 # 開始執行任務前先接手
-uv run .claude/hooks/ticket-tracker.py claim 0.16.0-W1-001
+uv run ticket track claim 0.16.0-W1-001
 ```
 
 **完成後標記**：
 
 ```bash
 # 完成後立即標記
-uv run .claude/hooks/ticket-tracker.py complete 0.16.0-W1-001
+uv run ticket track complete 0.16.0-W1-001
 ```
 
 **不要回報進度給主線程**：
+
 - ❌ 錯誤：「我已經完成 0.16.0-W1-001，以下是詳細報告...」
 - ✅ 正確：標記完成，詳細記錄到 Ticket 的執行日誌區段
 
@@ -485,35 +492,35 @@ Implement startScan() method for barcode scanning feature.
 
 ### 7.1 腳本命令速查
 
-| 命令 | 用途 | 使用者 |
-|------|------|--------|
-| `create` | 建立新 Ticket | 主線程 |
-| `list` | 列出所有 Tickets | 主線程 |
-| `show` | 顯示 Ticket 詳細資訊 | 主線程 |
-| `claim <ticket_id>` | 接手 Ticket | 代理人 |
-| `complete <ticket_id>` | 標記完成 | 代理人 |
-| `release <ticket_id>` | 放棄 Ticket | 代理人 |
-| `query <ticket_id>` | 查詢單一 Ticket | 主線程 |
-| `summary` | 快速摘要 | 主線程 |
+| 命令                   | 用途                 | 使用者 |
+| ---------------------- | -------------------- | ------ |
+| `create`               | 建立新 Ticket        | 主線程 |
+| `list`                 | 列出所有 Tickets     | 主線程 |
+| `show`                 | 顯示 Ticket 詳細資訊 | 主線程 |
+| `claim <ticket_id>`    | 接手 Ticket          | 代理人 |
+| `complete <ticket_id>` | 標記完成             | 代理人 |
+| `release <ticket_id>`  | 放棄 Ticket          | 代理人 |
+| `query <ticket_id>`    | 查詢單一 Ticket      | 主線程 |
+| `summary`              | 快速摘要             | 主線程 |
 
 ### 7.2 狀態圖示說明
 
-| 圖示 | 狀態 | 說明 |
-|------|------|------|
-| ⏸️ | Pending | `status: "pending"` |
-| 🔄 | In Progress | `status: "in_progress"` |
-| ✅ | Completed | `status: "completed"` |
+| 圖示 | 狀態        | 說明                    |
+| ---- | ----------- | ----------------------- |
+| ⏸️   | Pending     | `status: "pending"`     |
+| 🔄   | In Progress | `status: "in_progress"` |
+| ✅   | Completed   | `status: "completed"`   |
 
 ### 7.3 相關檔案
 
-| 檔案 | 用途 |
-|------|------|
-| `.claude/hooks/ticket-creator.py` | Ticket 建立腳本 |
-| `.claude/hooks/ticket-tracker.py` | 狀態追蹤腳本 |
-| `.claude/hooks/frontmatter_parser.py` | Frontmatter 解析模組 |
-| `.claude/templates/ticket.md.template` | Ticket 檔案模板 |
-| `.claude/skills/ticket-create/SKILL.md` | Skill 定義 |
-| `.claude/skills/ticket-track/SKILL.md` | Skill 定義 |
+| 檔案                                    | 用途                 |
+| --------------------------------------- | -------------------- |
+| `.claude/hooks/ticket-creator.py`       | Ticket 建立腳本      |
+| `.claude/hooks/ticket tracker.py`       | 狀態追蹤腳本         |
+| `.claude/hooks/frontmatter_parser.py`   | Frontmatter 解析模組 |
+| `.claude/templates/ticket.md.template`  | Ticket 檔案模板      |
+| `.claude/skills/ticket create/SKILL.md` | Skill 定義           |
+| `.claude/skills/ticket track/SKILL.md`  | Skill 定義           |
 
 ---
 
@@ -538,10 +545,10 @@ Implement startScan() method for barcode scanning feature.
 
 ### 版本演進
 
-| 版本 | 架構 | 狀態 |
-|------|------|------|
-| v1.0 | YAML + MD 分離 | 已棄用 |
-| v2.0 | CSV + MD 分離 | 已棄用（v0.15.x） |
+| 版本     | 架構                       | 狀態                     |
+| -------- | -------------------------- | ------------------------ |
+| v1.0     | YAML + MD 分離             | 已棄用                   |
+| v2.0     | CSV + MD 分離              | 已棄用（v0.15.x）        |
 | **v3.0** | **Markdown + Frontmatter** | **當前版本（v0.16.0+）** |
 
 ---

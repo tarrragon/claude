@@ -36,7 +36,7 @@ Stage 6: 分派執行
 根據根因分派，執行修復：
 
 ```
-/ticket-create → Ticket 建立
+/ticket create → Ticket 建立
       ↓
 代理人分派 (parsley 或 mint)
       ↓
@@ -140,7 +140,7 @@ Then: {預期}
 
 執行以下步驟：
 1️⃣ 完成六階段評估 (使用 /pre-fix-eval)
-2️⃣ 使用 /ticket-create 建立修復 Ticket
+2️⃣ 使用 /ticket create 建立修復 Ticket
 3️⃣ Ticket 建立後分派給專業代理人執行
 ```
 

@@ -1,139 +1,135 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+
 """
-pre-test-hook.py
-PreToolUse Hook: 測試執行前環境檢查
+測試前環境檢查 Hook (PreToolUse)
+
+功能:
+  在執行 flutter test 前檢查開發環境就緒狀態:
+  1. Flutter SDK 可用性
+  2. pubspec.lock 存在（依賴已安裝）
+  3. .dart_tool/package_config.json 存在（pub get 已執行）
+
+觸發時機: PreToolUse (Bash: flutter test, mcp__dart__run_tests)
+
+輸出:
+  環境就緒: allow，附帶確認訊息
+  環境異常: allow + stderr 警告（不阻止，但提醒問題）
+
+HOOK_METADATA (JSON):
+{
+  "event_type": "PreToolUse",
+  "matcher": "Bash",
+  "description": "測試前環境檢查 - 確保 Flutter SDK 和依賴完整",
+  "dependencies": [],
+  "version": "1.0.0"
+}
 """
 
+import json
 import os
-import sys
 import subprocess
-import shutil
-from datetime import datetime
+import sys
 from pathlib import Path
 
-def get_script_dir():
-    return str(Path(__file__).parent.absolute())
+sys.path.insert(0, str(Path(__file__).parent))
+from hook_utils import setup_hook_logging, run_hook_safely
+from lib.hook_messages import ValidationMessages
 
-def get_project_root():
-    script_dir = get_script_dir()
-    return str(Path(script_dir).parent.parent)
 
-def setup_logging():
-    project_root = get_project_root()
-    log_dir = Path(project_root) / ".claude" / "hook-logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = log_dir / f"pre-test-{timestamp}.log"
-    return str(log_file), project_root
+def is_test_command(tool_name: str, tool_input: dict) -> bool:
+    """判斷是否為測試命令。"""
+    if tool_name == "Bash":
+        command = tool_input.get("command", "")
+        return "flutter test" in command or "dart test" in command
+    return tool_name == "mcp__dart__run_tests"
 
-def log_message(message, log_file):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_entry = f"[{timestamp}] {message}"
-    print(log_entry)
-    with open(log_file, 'a', encoding='utf-8') as f:
-        f.write(log_entry + "\n")
+
+def check_flutter_sdk() -> tuple[bool, str]:
+    """檢查 Flutter SDK 可用性。"""
+    try:
+        result = subprocess.run(
+            ["flutter", "--version", "--machine"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            return True, ValidationMessages.PRE_TEST_SDK_OK
+        return False, ValidationMessages.PRE_TEST_SDK_ERROR
+    except FileNotFoundError:
+        return False, ValidationMessages.PRE_TEST_SDK_NOT_FOUND
+    except subprocess.TimeoutExpired:
+        return False, ValidationMessages.PRE_TEST_SDK_TIMEOUT
+
+
+def check_dependencies(project_dir: Path) -> list[str]:
+    """檢查依賴是否已安裝。"""
+    warnings = []
+
+    pubspec_lock = project_dir / "pubspec.lock"
+    if not pubspec_lock.exists():
+        warnings.append(ValidationMessages.PRE_TEST_PUBSPEC_LOCK_MISSING)
+        return warnings
+
+    package_config = project_dir / ".dart_tool" / "package_config.json"
+    if not package_config.exists():
+        warnings.append(ValidationMessages.PRE_TEST_PACKAGE_CONFIG_MISSING)
+        return warnings
+
+    # 檢查 pubspec.yaml 是否比 pubspec.lock 更新
+    pubspec_yaml = project_dir / "pubspec.yaml"
+    if pubspec_yaml.exists() and pubspec_lock.exists():
+        yaml_mtime = pubspec_yaml.stat().st_mtime
+        lock_mtime = pubspec_lock.stat().st_mtime
+        if yaml_mtime > lock_mtime:
+            warnings.append(ValidationMessages.PRE_TEST_PUBSPEC_OUTDATED)
+
+    return warnings
+
 
 def main():
-    log_file, project_root = setup_logging()
-    os.chdir(project_root)
+    logger = setup_hook_logging("pre-test-hook")
+    input_data = json.load(sys.stdin)
+    tool_name = input_data.get("tool_name", "")
+    tool_input = input_data.get("tool_input", {})
 
-    log_message("[START] PreToolUse Hook (Test): 開始執行測試前環境檢查", log_file)
+    if not is_test_command(tool_name, tool_input):
+        return 0
 
-    # 1. 檢查測試環境準備
-    log_message("[CHECK] 檢查測試環境準備", log_file)
+    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+    issues = []
 
-    pubspec_lock = Path(project_root) / "pubspec.lock"
-    if pubspec_lock.exists():
-        log_message("[OK] pubspec.lock 存在，依賴項已解析", log_file)
-    else:
-        log_message("[ERROR] pubspec.lock 不存在，測試可能失敗", log_file)
-        log_message("[INFO] 建議執行: flutter pub get", log_file)
+    # 1. 檢查 Flutter SDK
+    sdk_ok, sdk_msg = check_flutter_sdk()
+    if not sdk_ok:
+        issues.append(f"[ERROR] {sdk_msg}")
 
-    pubspec_yaml = Path(project_root) / "pubspec.yaml"
-    dart_tool = Path(project_root) / ".dart_tool"
-    if pubspec_yaml.exists() and dart_tool.exists():
-        log_message("[OK] Flutter 測試環境已準備", log_file)
-    else:
-        log_message("[WARNING] Flutter 測試環境未完全準備", log_file)
+    # 2. 檢查依賴
+    dep_warnings = check_dependencies(project_dir)
+    for warning in dep_warnings:
+        issues.append(f"[WARNING] {warning}")
 
-    # 2. 檢查測試檔案狀態
-    log_message("[INFO] 檢查測試檔案狀態", log_file)
+    # 輸出結果
+    if issues:
+        warning_text = "\n".join(issues)
+        print(f"{ValidationMessages.PRE_TEST_CHECK_HEADER}\n{warning_text}")
 
-    test_dir = Path(project_root) / "test"
-    unit_test_count = 0
-    integration_test_count = 0
-
-    if test_dir.exists():
-        unit_test_count = len(list(test_dir.glob("*/*_test.dart")))
-        integration_dir = test_dir / "integration"
-        if integration_dir.exists():
-            integration_test_count = len(list(integration_dir.glob("*_test.dart")))
-
-    log_message(f"[STAT] 單元測試檔案: {unit_test_count} 個", log_file)
-    log_message(f"[STAT] 整合測試檔案: {integration_test_count} 個", log_file)
-
-    if unit_test_count == 0 and integration_test_count == 0:
-        log_message("[WARNING] 未找到測試檔案", log_file)
-
-    # 3. 檢查是否有未提交的測試變更
-    log_message("[INFO] 檢查未提交的測試變更", log_file)
-
-    result = subprocess.run(
-        ["git", "status", "--porcelain"],
-        capture_output=True,
-        text=True,
-        cwd=project_root
-    )
-
-    test_changes = 0
-    if result.stdout:
-        test_changes = len([line for line in result.stdout.split('\n') if '_test.dart' in line])
-
-    if test_changes > 0:
-        log_message(f"[WARNING] 發現 {test_changes} 個未提交的測試檔案變更", log_file)
-
-    # 4. 檢查上次測試結果
-    log_message("[INFO] 檢查上次測試結果", log_file)
-
-    coverage_private = Path(project_root) / "coverage-private"
-    status_file = coverage_private / "test-status.txt"
-    if status_file.exists():
-        last_status = status_file.read_text().strip()
-        log_message(f"[STAT] 上次測試狀態: {last_status}", log_file)
-        if last_status != "pass":
-            log_message("[WARNING] 上次測試未通過，本次測試需要特別關注", log_file)
-    else:
-        log_message("[INFO] 未找到上次測試狀態記錄", log_file)
-
-    # 5. 建立測試狀態追蹤
-    log_message("[INFO] 建立測試狀態追蹤", log_file)
-
-    coverage_private.mkdir(parents=True, exist_ok=True)
-    with open(coverage_private / "test-start-time.txt", 'w') as f:
-        f.write(str(int(datetime.now().timestamp())))
-    with open(coverage_private / "test-status.txt", 'w') as f:
-        f.write("starting")
-
-    # 6. 檢查系統資源
-    log_message("[INFO] 檢查系統資源", log_file)
-
-    # 7. 環境變數檢查
-    log_message("[INFO] 環境變數檢查", log_file)
-
-    node_path = shutil.which("node")
-    if node_path:
-        result = subprocess.run(["node", "--version"], capture_output=True, text=True)
-        log_message(f"[INFO] Node.js 版本: {result.stdout.strip()}", log_file)
-    else:
-        log_message("[ERROR] Node.js 未安裝", log_file)
-
-    npm_path = shutil.which("npm")
-    if npm_path:
-        result = subprocess.run(["npm", "--version"], capture_output=True, text=True)
-        log_message(f"[INFO] npm 版本: {result.stdout.strip()}", log_file)
-
-    log_message("[OK] PreToolUse Hook (Test) 環境檢查完成", log_file)
+    result = {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "allow",
+            "permissionDecisionReason": (
+                f"{ValidationMessages.PRE_TEST_ENV_CHECK_PREFIX}{len(issues)}{ValidationMessages.PRE_TEST_ENV_CHECK_SUFFIX}" if issues else ValidationMessages.PRE_TEST_ENV_READY
+            ),
+        }
+    }
+    print(json.dumps(result, ensure_ascii=False))
     return 0
 
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run_hook_safely(main, "pre-test-hook"))

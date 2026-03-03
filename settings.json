@@ -6,11 +6,41 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/test-timeout-pre.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/test-timeout-pre.py"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/version-release-guard-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/version-release-guard-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/acceptance-gate-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/bash-edit-guard-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pre-test-hook.py"
+          }
+        ]
+      },
+      {
+        "matcher": "WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/external-query-guide-hook.py"
+          }
+        ]
+      },
+      {
+        "matcher": "WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/external-query-guide-hook.py"
           }
         ]
       },
@@ -19,11 +49,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/mcp-run-tests-validator.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/mcp-run-tests-validator.py"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/test-timeout-pre.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/test-timeout-pre.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pre-test-hook.py"
           }
         ]
       },
@@ -32,7 +66,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/ticket-file-access-guard-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-file-access-guard-hook.py"
           }
         ]
       },
@@ -41,19 +75,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/ticket-file-access-guard-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-path-guard-hook.py"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/main-thread-edit-restriction-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-file-access-guard-hook.py"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/branch-verify-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/main-thread-edit-restriction-hook.py"
           },
           {
             "type": "command",
-            "command": ".claude/skills/strategic-compact/suggest-compact.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/branch-verify-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/strategic-compact/suggest-compact.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/file-type-permission-hook.py"
           }
         ]
       },
@@ -62,19 +104,23 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/ticket-file-access-guard-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-path-guard-hook.py"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/main-thread-edit-restriction-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-file-access-guard-hook.py"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/branch-verify-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/main-thread-edit-restriction-hook.py"
           },
           {
             "type": "command",
-            "command": ".claude/skills/strategic-compact/suggest-compact.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/branch-verify-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/strategic-compact/suggest-compact.py"
           }
         ]
       },
@@ -83,7 +129,24 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/agent-ticket-validation-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/agent-ticket-validation-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/task-dispatch-readiness-check.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/askuserquestion-reminder-hook.py"
+          }
+        ]
+      },
+      {
+        "matcher": "TodoWrite",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/5w1h-compliance-check-hook.py"
           }
         ]
       }
@@ -93,15 +156,55 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/hook-completeness-check.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/cli-dependency-check.py"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/branch-status-reminder.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-reinstall-hook.py"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/output-style-check.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/package-version-sync-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-completeness-check.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-health-monitor.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill-registration-check-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/branch-status-reminder.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/output-style-check.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/handoff-reminder-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/doc-sync-check-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/lsp-environment-check.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/tech-debt-reminder.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/project-init-env-check-hook.py"
           }
         ]
       }
@@ -112,12 +215,26 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/test-timeout-post.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/test-timeout-post.py"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/pre-fix-evaluation-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pre-fix-evaluation-hook.py",
             "timeout": 10000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/handoff-cleanup-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/changelog-update-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/commit-handoff-hook.py",
+            "timeout": 5000
           }
         ]
       },
@@ -126,11 +243,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/test-timeout-post.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/test-timeout-post.py"
           },
           {
             "type": "command",
-            "command": ".claude/hooks/pre-fix-evaluation-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pre-fix-evaluation-hook.py",
             "timeout": 10000
           }
         ]
@@ -140,11 +257,23 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/style-guardian-hook.py \"$CLAUDE_FILE_PATH\""
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/style-guardian-hook.py \"$CLAUDE_FILE_PATH\""
           },
           {
             "type": "command",
-            "command": ".claude/hooks/worklog-format-check.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/worklog-format-check.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/phase-completion-gate-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/comment-qa-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/l10n-sync-verification-hook.py"
           }
         ]
       },
@@ -153,11 +282,31 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/style-guardian-hook.py \"$CLAUDE_FILE_PATH\""
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/style-guardian-hook.py \"$CLAUDE_FILE_PATH\""
           },
           {
             "type": "command",
-            "command": ".claude/hooks/worklog-format-check.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/worklog-format-check.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-id-validator-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/phase-completion-gate-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/comment-qa-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/l10n-sync-verification-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-quality-gate-hook.py"
           }
         ]
       }
@@ -167,7 +316,32 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/prompt-submit-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/command-entrance-gate-hook.py",
+            "timeout": 10000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/creation-acceptance-gate-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/prompt-submit-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/handoff-prompt-reminder-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/parallel-suggestion-hook.py",
+            "timeout": 10000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/process-skip-guard-hook.py",
+            "timeout": 5000
           }
         ]
       }
@@ -177,7 +351,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/skills/continuous-learning/evaluate-session.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/continuous-learning/evaluate-session.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/handoff-auto-resume-stop-hook.py"
           }
         ]
       }

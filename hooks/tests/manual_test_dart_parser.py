@@ -13,7 +13,7 @@ from pathlib import Path
 hooks_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(hooks_dir))
 
-from parsers.dart_parser import DartParser, DART_KEYWORDS
+from ..lib.parsers.dart_parser import DartParser, DART_KEYWORDS
 
 
 def test_keyword_filtering():

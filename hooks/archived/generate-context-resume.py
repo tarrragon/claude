@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+"""
+generate-context-resume.py
+🔄 上下文恢復提示詞生成器
+"""
+
+import os
+import sys
+import subprocess
+from datetime import datetime
+from pathlib import Path
+
+def get_script_dir():
+    return str(Path(__file__).parent.absolute())
+
+def get_project_root():
+    script_dir = get_script_dir()
+    return str(Path(script_dir).parent.parent)
+
+def setup_logging():
+    project_root = get_project_root()
+    log_dir = Path(project_root) / ".claude" / "hook-logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"generate-context-resume-{timestamp}.log"
+    return str(log_file), project_root
+
+def log_message(message, log_file):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_entry = f"[{timestamp}] {message}"
+    print(log_entry)
+    with open(log_file, 'a', encoding='utf-8') as f:
+        f.write(log_entry + "\n")
+
+def run_git_command(cmd, log_file):
+    """執行 Git 命令，失敗時返回降級訊息"""
+    try:
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+        else:
+            log_message(f"[WARNING] Git 命令失敗: {cmd}", log_file)
+            return "（無法取得）"
+    except Exception as e:
+        log_message(f"[ERROR] Git 命令執行錯誤: {e}", log_file)
+        return "（無法取得）"
+
+def read_todolist_summary(project_root, log_file):
+    """讀取 todolist.yaml 前 30 行"""
+    todolist_path = Path(project_root) / "docs" / "todolist.yaml"
+
+    if not todolist_path.exists():
+        log_message("[INFO] todolist.yaml 不存在，跳過", log_file)
+        return "（todolist.yaml 不存在）"
+
+    try:
+        with open(todolist_path, 'r', encoding='utf-8') as f:
+            lines = [f.readline() for _ in range(30)]
+            return "".join(lines).rstrip()
+    except Exception as e:
+        log_message(f"[ERROR] 讀取 todolist.yaml 失敗: {e}", log_file)
+        return "（讀取失敗）"
+
+def get_active_version(project_root, log_file):
+    """從 todolist.yaml 提取活躍版本"""
+    todolist_path = Path(project_root) / "docs" / "todolist.yaml"
+
+    if not todolist_path.exists():
+        return "（未知）"
+
+    try:
+        with open(todolist_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            lines = content.split('\n')
+
+            # 找到 status: "active" 或 status: active 的行
+            for i, line in enumerate(lines):
+                if 'status:' in line and 'active' in line:
+                    # 往前找版本號（格式如 - version: "0.31.0" 或 version: "0.31.0"）
+                    for j in range(max(0, i-10), i):
+                        if 'version:' in lines[j]:
+                            # 提取版本號（可能有引號）
+                            version_line = lines[j]
+                            if '"' in version_line:
+                                version = version_line.split('"')[1]
+                            else:
+                                version = version_line.split(':')[1].strip()
+                            return version
+        return "（未找到活躍版本）"
+    except Exception as e:
+        log_message(f"[ERROR] 解析活躍版本失敗: {e}", log_file)
+        return "（解析失敗）"
+
+def get_recently_modified_files(project_root, log_file):
+    """取得最近修改的檔案（排除 .claude/hook-logs/）"""
+    raw_output = run_git_command("git diff --name-only HEAD~5", log_file)
+
+    if raw_output == "（無法取得）":
+        return raw_output
+
+    files = [f for f in raw_output.split('\n') if f and not f.startswith('.claude/hook-logs/')]
+
+    if not files:
+        return "（無最近修改檔案）"
+
+    return '\n'.join(f"- {f}" for f in files)
+
+def generate_markdown(project_root, log_file):
+    """生成上下文恢復 Markdown 內容"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # 收集資訊
+    active_version = get_active_version(project_root, log_file)
+    current_branch = run_git_command("git branch --show-current", log_file)
+    git_status = run_git_command("git status --short", log_file)
+    git_log = run_git_command("git log --oneline -5", log_file)
+    todolist_summary = read_todolist_summary(project_root, log_file)
+    recent_files = get_recently_modified_files(project_root, log_file)
+
+    # 生成 Markdown
+    markdown = f"""# Context Resume - {timestamp}
+
+## 工作狀態摘要
+- 活躍版本: {active_version}
+- 當前分支: {current_branch}
+- 工作目錄: {project_root}
+
+## TodoList 狀態
+```yaml
+{todolist_summary}
+```
+
+## Git 狀態
+### 當前分支
+```
+{current_branch}
+```
+
+### 未提交變更
+```
+{git_status if git_status else '（無未提交變更）'}
+```
+
+### 最近提交
+```
+{git_log}
+```
+
+## 核心規範文件
+- CLAUDE.md
+- FLUTTER.md
+- .claude/rules/core/decision-tree.md
+- .claude/rules/core/quality-baseline.md
+- .claude/rules/core/verification-framework.md
+- .claude/rules/forbidden/skip-gate.md
+
+## 最近修改檔案
+{recent_files}
+
+## 恢復指引
+1. 閱讀 CLAUDE.md 了解專案規範
+2. 檢查 docs/todolist.yaml 了解當前進度
+3. 查看 docs/work-logs/ 了解最近工作
+4. 繼續未完成的任務
+
+---
+Generated by generate-context-resume.py
+"""
+
+    return markdown
+
+def main():
+    log_file, project_root = setup_logging()
+    os.chdir(project_root)
+
+    log_message("[START] generate-context-resume: 開始執行", log_file)
+
+    # 生成 Markdown 內容
+    log_message("[INFO] 生成上下文恢復 Markdown", log_file)
+    markdown_content = generate_markdown(project_root, log_file)
+
+    # 儲存檔案
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = Path(project_root) / ".claude" / "hook-logs"
+    output_file = output_dir / f"context-resume-{timestamp}.md"
+
+    try:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(markdown_content)
+        log_message(f"[OK] 上下文恢復檔案已生成: {output_file}", log_file)
+    except Exception as e:
+        log_message(f"[ERROR] 寫入檔案失敗: {e}", log_file)
+        return 1
+
+    log_message("[OK] generate-context-resume: 執行完成", log_file)
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())

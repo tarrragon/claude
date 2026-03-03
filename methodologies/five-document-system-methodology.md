@@ -35,14 +35,14 @@
 | 文件 | 原設計 | 實際問題 |
 |------|--------|---------|
 | CHANGELOG | 用戶導向 | 職責模糊，有時過度技術化 |
-| todolist.md | 開發追蹤 | 混合已排程/未排程的任務 |
+| todolist.yaml | 開發追蹤 | 混合已排程/未排程的任務 |
 | worklog | 詳細記錄 | 包含太多執行細節，難以快速理解大方向 |
 
 ### 核心問題
 
 1. **職責重疊**：worklog 和 ticket 的邊界不清
 2. **資訊過載**：worklog 包含太多細節，難以快速還原 context
-3. **狀態混淆**：todo.md 混合了「待處理」和「執行中」的項目
+3. **狀態混淆**：todolist.yaml 混合了「待處理」和「執行中」的項目
 
 ---
 
@@ -70,7 +70,7 @@
 - 過度詳細的實作細節
 - 內部變更（用戶不關心）
 
-### 2. todo.md - 待處理問題清單
+### 2. todolist.yaml - 結構化版本索引
 
 **核心問題**：還有哪些問題需要處理？
 
@@ -148,7 +148,7 @@ worklog 的 Phase 4 章節必須包含技術債務評估表格：
 | 目標讀者 | 執行者、Review 者 |
 | 寫作風格 | 詳細、完整 |
 | 更新時機 | 執行過程中 |
-| 更新方式 | `/ticket-create`, `/ticket-track` |
+| 更新方式 | `/ticket create`, `/ticket track` |
 
 **內容範圍**：
 - 任務來源和目標
@@ -194,7 +194,7 @@ worklog 的 Phase 4 章節必須包含技術債務評估表格：
 文件            核心問題
 ─────────────────────────────────────────
 CHANGELOG     → "這個版本做了什麼改變？"
-todo.md       → "還有哪些問題需要處理？"
+todolist.yaml → "還有哪些問題需要處理？"
 worklog       → "這個版本要達成什麼目標？"
 ticket        → "這個任務的執行細節是什麼？"
 error-patterns → "之前遇過類似問題嗎？"
@@ -243,8 +243,8 @@ ticket       執行細節、分析、結果
            ┌───────────────────┼───────────────────┐
            │                   │                   │
     ┌──────┴──────┐     ┌──────┴──────┐     ┌──────┴──────┐
-    │   ticket    │     │  todo.md    │     │error-patterns│
-    │ (執行細節)   │     │(待處理問題)  │     │ (經驗學習)   │
+    │   ticket    │     │todolist.yaml│     │error-patterns│
+    │ (執行細節)   │     │ (版本索引)   │     │ (經驗學習)   │
     └─────────────┘     └─────────────┘     └─────────────┘
 ```
 
@@ -255,11 +255,11 @@ ticket       執行細節、分析、結果
 ### 開始新版本
 
 ```
-1. 從 todo.md 識別要處理的問題
+1. 從 todolist.yaml 識別要處理的問題
 2. /doc-flow worklog init v{VERSION}
    - 定義版本目標
    - 規劃執行策略
-3. /ticket-create
+3. /ticket create
    - 建立具體 tickets
 4. worklog 自動索引 tickets
 ```
@@ -269,12 +269,12 @@ ticket       執行細節、分析、結果
 ```
 1. /error-pattern query <關鍵字>
    - 查詢既有經驗
-2. /ticket-track claim <ticket-id>
+2. /ticket track claim <ticket-id>
    - 開始執行
 3. 執行過程更新 ticket
 4. /error-pattern add
    - 記錄新發現模式
-5. /ticket-track complete <ticket-id>
+5. /ticket track complete <ticket-id>
    - 完成任務
 ```
 
@@ -298,7 +298,7 @@ ticket       執行細節、分析、結果
 |------|--------------|--------------|
 | worklog 職責 | 詳細記錄所有內容 | 只記錄大方向和策略 |
 | 執行細節 | 混在 worklog 中 | 獨立到 ticket |
-| todo.md | 混合所有狀態 | 只保留未排程的問題 |
+| todolist.yaml | 混合所有狀態 | 只保留未排程的問題 |
 | 錯誤經驗 | 零散記錄 | 系統化的 error-patterns |
 | Context 還原 | 需要讀大量文件 | 只讀 worklog 即可 |
 
@@ -318,8 +318,8 @@ ticket       執行細節、分析、結果
 | SKILL | 用途 |
 |-------|------|
 | `/doc-flow` | 五重文件系統管理 |
-| `/ticket-create` | 建立 Atomic Ticket |
-| `/ticket-track` | 追蹤 Ticket 狀態 |
+| `/ticket create` | 建立 Atomic Ticket |
+| `/ticket track` | 追蹤 Ticket 狀態 |
 | `/error-pattern` | 錯誤模式查詢/新增 |
 | `/version-release` | 版本發布流程 |
 | `/tech-debt-capture` | 技術債務捕獲 |

@@ -1,15 +1,13 @@
 ---
 name: scope-confirmation
 description: "功能範圍確認工具. Use for: (1) 測試/實作/需求不一致時的範圍確認, (2) 功能邊界不清時的澄清, (3) 防止範圍蔓延"
-type: confirmation
-category: planning
 ---
 
 # 功能範圍確認 (Scope Confirmation) SKILL
 
-**版本**: v1.0
-**建立日期**: 2025-01-23
-**狀態**: 新建
+**版本**: v1.1
+**建立日期**: 2026-01-23
+**狀態**: 穩定
 
 ## 概述
 
@@ -280,7 +278,7 @@ category: planning
 | Skill | 關係 |
 |-------|------|
 | `/pre-fix-eval` | 如果差異導致測試失敗，使用 pre-fix-eval 分析 |
-| `/ticket-create` | 對齊行動應建立對應 Ticket |
+| `/ticket create` | 對齊行動應建立對應 Ticket |
 | `/5w1h-decision` | 範圍確認決策應符合 5W1H 格式 |
 
 ## 預防措施
@@ -303,5 +301,5 @@ category: planning
 
 ---
 
-**Last Updated**: 2025-01-23
-**Version**: 1.0.0
+**Last Updated**: 2026-03-02
+**Version**: 1.1.0

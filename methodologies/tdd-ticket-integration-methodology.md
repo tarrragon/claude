@@ -90,7 +90,7 @@ Phase 3a 開始
     |
     +-- 全部通過 -> 繼續策略規劃
     |
-    +-- 任一未通過 -> 執行 /ticket-create
+    +-- 任一未通過 -> 執行 /ticket create
 ```
 
 ### 2.2 四大檢查執行細節
@@ -186,7 +186,7 @@ Ticket B: 實作掃描狀態管理
 ### 2.3 Ticket 拆分後的執行流程
 
 ```text
-/ticket-create（建立所有 Tickets）
+/ticket create（建立所有 Tickets）
     |
     v
 PM 審核 Tickets（確認單一職責）
@@ -197,11 +197,11 @@ PM 審核 Tickets（確認單一職責）
     v
 每個 Ticket:
     |
-    +-- /ticket-track claim
+    +-- /ticket track claim
     |
     +-- 實作
     |
-    +-- /ticket-track complete
+    +-- /ticket track complete
     |
     +-- 即時 Review（cinnamon-refactor-owl）
 ```
@@ -287,8 +287,8 @@ Phase 3b 程式碼實作
 | 本方法論階段 | Frontmatter 狀態 |
 |------------|-----------------|
 | Ticket 建立後 | `status: "pending"` |
-| `/ticket-track claim` 後 | `status: "in_progress"` |
-| `/ticket-track complete` 後 | `status: "completed"` |
+| `/ticket track claim` 後 | `status: "in_progress"` |
+| `/ticket track complete` 後 | `status: "completed"` |
 
 ### 3.4 與 Ticket 設計派工的關係
 
@@ -310,15 +310,15 @@ Phase 3b 程式碼實作
 - [ ] 定義任務描述（動詞 + 目標）
 - [ ] 執行四大檢查並記錄結果
 - [ ] 輸出評估結論到工作日誌
-- [ ] 如果任一檢查未通過，執行 /ticket-create
+- [ ] 如果任一檢查未通過，執行 /ticket create
 
 ### 4.2 Ticket 拆分後執行時
 
 - [ ] PM 審核所有 Tickets（確認單一職責）
 - [ ] 建立 Ticket 索引到主版本日誌
 - [ ] 按 Wave 順序執行 Tickets
-- [ ] 每個 Ticket 開始前執行 /ticket-track claim
-- [ ] 每個 Ticket 完成後執行 /ticket-track complete
+- [ ] 每個 Ticket 開始前執行 /ticket track claim
+- [ ] 每個 Ticket 完成後執行 /ticket track complete
 - [ ] 每個 Ticket 完成後觸發即時 Review
 
 ### 4.3 Phase 4 評估時

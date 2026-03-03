@@ -11,32 +11,39 @@
 **核心原則**: **v0.10.x前期的所有測試是為了找出現在既有的問題，提供給後面的任務排程修復。發現問題後不急於修復，而是要系統性記錄和規劃後續修復策略。**
 
 #### 🔍 問題發現優先於修復的工作模式
+
 - **發現問題時**：記錄 → 分析 → 歸類 → 對應版本規劃 → 制定修復策略
 - **絕不立即修復**：避免症狀性修復，要理解問題背後的系統性原因
 - **系統性思考**：unused imports可能代表整個功能模組的實作缺失
 - **版本對應**：每個發現的問題都要對應到v0.10.x的具體修復階段
 
 #### 📊 v0.10.2檢測驗證成果 (重要背景資訊)
+
 - **技術債務低於預期**：從聲稱672個問題實際縮減至95個 (86%改善)
 - **問題分類準確**：68%搜尋功能缺失、26%書庫展示缺失、6%ISBN掃描缺失
 - **版本規劃驗證**：實際問題分佈與既定v0.10.x階段規劃高度吻合
 - **只有2個CRITICAL問題**：DatabaseService.clearAllData方法缺失、Flutter測試框架環境問題
 
 #### 🤖 代理人任務分派要求
+
 **所有代理人在接收任務時都必須**：
+
 1. **確認理解問題發現機制**：先發現記錄，不急於修復
 2. **識別問題背後的系統性原因**：單一問題對應的功能模組缺失
 3. **對應版本規劃**：將發現問題對應到正確的v0.10.x修復階段
 4. **記錄到Memory系統**：重要發現必須建立Memory記錄供後續參考
 
 ### 📝 Memory Network Builder 特殊要求
+
 **在v0.10.x階段，memory-network-builder必須特別關注**：
+
 - **問題發現模式記錄**：每次檢測發現的問題分類和對應版本
 - **架構債務識別**：unused imports背後的功能實作缺口分析
 - **修復策略連結**：建立問題發現與修復策略的知識連結
 - **方法論驗證**：記錄問題發現機制的實戰效果和改進建議
 
 **Memory建立要求**：
+
 - 標題必須結論導向：如「v0.10.2檢測發現技術債務低於預期86%」
 - 內容包含具體數據：問題數量、分類比例、對應版本
 - 建立明確連結：與v0.10.x階段規劃和修復策略的連結關係
@@ -140,11 +147,13 @@
 #### 🎯 正確的執行流程
 
 **Step 1: 確認 Phase 3 完成**
+
 - 檢查 pepper-test-implementer 的交接標準是否達成
 - 確認實作策略完整規劃
 - 驗證開發過程記錄完整
 
 **Step 2: 立即分派 Phase 4（無條件）**
+
 ```markdown
 分派給: cinnamon-refactor-owl
 任務: 執行 v[版本號] Phase 4 完整重構評估
@@ -152,6 +161,7 @@
 ```
 
 **Step 3: 等待重構評估結果**
+
 - 由 cinnamon-refactor-owl 判斷是否需要重構
 - 即使判斷「無需重構」，也要完成評估報告
 - 評估報告必須包含完整的品質分析
@@ -159,11 +169,13 @@
 #### 🚨 違規處理
 
 **如果 PM 建議跳過或簡化 Phase 4**:
+
 1. **Hook 系統應該檢測並阻止**
 2. **用戶應該質疑並要求遵循流程**
 3. **記錄為流程偏差，納入改進機制**
 
 **正確的補救措施**:
+
 - 立即承認錯誤
 - 分派 cinnamon-refactor-owl 執行完整 Phase 4
 - 更新流程理解，避免再次發生
@@ -286,7 +298,7 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 ### 📚 文件責任違規行為
 
 - ❌ **違反文件責任區分**: 不得產出使用者導向CHANGELOG內容
-- ❌ **混淆文件用途**: 不得將技術分析寫成TODO.md格式
+- ❌ **混淆文件用途**: 不得將技術分析寫成todolist.yaml格式
 - ❌ **使用抽象描述**: 禁止"提升穩定性"、"強化品質"等無法驗證的描述
 - ❌ **跳過工作日誌要求**: 所有規劃必須符合工作日誌品質標準
 
@@ -333,11 +345,11 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 
 #### 檔案編輯必須使用結構化工具
 
-| 操作類型 | 必須使用 | 禁止使用 |
-|---------|---------|---------|
-| 修改檔案 | Edit Tool | Bash sed/awk |
-| 建立檔案 | Write Tool | Bash echo > |
-| 批量替換 | Edit Tool (多次) | Bash sed -i |
+| 操作類型 | 必須使用                | 禁止使用      |
+| -------- | ----------------------- | ------------- |
+| 修改檔案 | Edit Tool               | Bash sed/awk  |
+| 建立檔案 | Write Tool              | Bash echo >   |
+| 批量替換 | Edit Tool (多次)        | Bash sed -i   |
 | 搜尋取代 | Edit Tool (replace_all) | Bash sed/perl |
 
 #### 為什麼禁止 Bash 編輯？
@@ -350,6 +362,7 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 #### 唯一例外
 
 以下命令已列入 `permissions.allow` 清單，可以使用 Bash：
+
 - 系統管理命令: `git`, `flutter pub`, `dart analyze` 等
 - 測試執行: `flutter test`, `dart test` 等
 - 建置工具: `flutter build`, `dart compile` 等
@@ -362,12 +375,12 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 
 **Startup Hook 自動檢測專案類型並載入對應配置**：
 
-| 專案類型 | 識別特徵 | 語言配置檔案 | Phase 3b 代理人 |
-|---------|---------|------------|----------------|
-| **Flutter** | `pubspec.yaml` | `FLUTTER.md` | parsley-flutter-developer |
-| **React** | `package.json` + React | `REACT.md`（未來） | react-developer（未來） |
-| **Python** | `requirements.txt` | `PYTHON.md`（未來） | python-developer（未來） |
-| **Vue** | `package.json` + Vue | `VUE.md`（未來） | vue-developer（未來） |
+| 專案類型    | 識別特徵               | 語言配置檔案        | Phase 3b 代理人           |
+| ----------- | ---------------------- | ------------------- | ------------------------- |
+| **Flutter** | `pubspec.yaml`         | `FLUTTER.md`        | parsley-flutter-developer |
+| **React**   | `package.json` + React | `REACT.md`（未來）  | react-developer（未來）   |
+| **Python**  | `requirements.txt`     | `PYTHON.md`（未來） | python-developer（未來）  |
+| **Vue**     | `package.json` + Vue   | `VUE.md`（未來）    | vue-developer（未來）     |
 
 ### 🔧 Phase 3 兩階段執行模式
 
@@ -378,18 +391,21 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 **執行代理人**: pepper-test-implementer（TDD 實作規劃師）
 
 **核心職責**:
+
 - 設計語言無關的實作策略（虛擬碼、流程圖、架構決策）
 - 識別關鍵演算法和資料流程
 - 規劃錯誤處理策略和邊界條件
 - 記錄技術債務和權宜方案
 
 **產出內容**:
+
 - 虛擬碼（Pseudocode）描述核心邏輯
 - 資料流程圖和架構圖
 - 關鍵決策記錄和技術選型理由
 - 語言無關的實作指引
 
 **交接標準**:
+
 - ✅ 實作策略完整且語言無關
 - ✅ 關鍵邏輯已用虛擬碼描述
 - ✅ 資料流程和架構決策清楚
@@ -398,23 +414,27 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 #### Phase 3b: 語言特定程式碼實作
 
 **執行代理人**: 根據專案類型自動分派
+
 - **Flutter 專案** → parsley-flutter-developer
 - **React 專案** → react-developer（未來）
 - **Python 專案** → python-developer（未來）
 - **Vue 專案** → vue-developer（未來）
 
 **核心職責**:
+
 - 將 Phase 3a 虛擬碼轉換為實際程式碼
 - 遵循語言特定配置檔案的規範（如 FLUTTER.md）
 - 執行測試確保 100% 通過率
 - 處理語言特定問題（如 Widget 生命週期、狀態管理）
 
 **輸入來源**:
+
 - Phase 3a 實作策略（虛擬碼、流程圖、架構決策）
 - 語言配置檔案（FLUTTER.md / REACT.md / etc.）
 - Phase 2 測試規格
 
 **交接標準**:
+
 - ✅ 所有 Phase 2 測試案例 100% 通過
 - ✅ 程式碼符合語言特定品質標準
 - ✅ 實作完整記錄到工作日誌
@@ -432,6 +452,7 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 **角色定位**: Flutter/Dart 專案的 Phase 3b 程式碼實作執行者
 
 **核心職責**:
+
 - ✅ 接收 pepper 的實作策略（虛擬碼、流程圖）
 - ✅ 將策略轉換為 Flutter/Dart 程式碼
 - ✅ 遵循 FLUTTER.md 的語言特定規範
@@ -439,6 +460,7 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 - ✅ 處理 Flutter/Dart 特定問題
 
 **技能專精**:
+
 - Flutter Widget 開發（Stateless/Stateful Widget、自訂 Widget）
 - Dart 語言特性（async/await、Stream、Future、Extension）
 - Flutter 測試框架（WidgetTester、Mockito、Integration Test）
@@ -446,6 +468,7 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 - 狀態管理（Provider、ChangeNotifier、ViewModel 模式）
 
 **與 pepper 的協作關係**:
+
 - pepper（Phase 3a）產生語言無關的實作策略
 - parsley（Phase 3b）將策略轉換為 Flutter/Dart 程式碼
 - parsley 遇到策略問題時升級給 pepper 重新規劃
@@ -475,12 +498,15 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 ### 錯誤分類和Agent觸發機制
 
 #### 第一層：程式實作錯誤 (Agent直接處理)
+
 **錯誤特徵**: 測試需求明確且未變更的實作問題
 **觸發Agent**: 不需要特殊Agent介入，由開發過程直接修正
 
 #### 第二層：架構變更需求 (需要Agent協作)
+
 **錯誤特徵**: 需求文件已更新但與現有測試不符的架構層面問題
 **觸發順序**:
+
 1. **lavender-interface-designer** → 從設計角度分析問題根因
 2. **rosemary-project-manager** → 評估變更範圍和影響
 3. **cinnamon-refactor-owl** → 規劃測試和程式修改策略
@@ -488,33 +514,43 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 ### Agent協作執行順序
 
 #### 階段1：問題識別與分類
+
 **所有Agent共同責任**：
+
 - 區分程式實作錯誤 vs 架構變更需求
 - 確認問題的根本性質和影響範圍
 
 #### 階段2：專業分析階段
+
 **lavender-interface-designer 主導**：
+
 - 設計缺陷根因分析
 - 需求理解偏差識別
 - 功能邊界重新定義
 - 設計層面的問題診斷
 
 #### 階段3：策略規劃階段
+
 **rosemary-project-manager 主導**：
+
 - 需求規格書驗證和變更範圍評估
 - 影響模組數量分析 (超過3個模組需PM介入)
 - 業務流程重新設計的策略指導
 - 風險評估和緩解策略制定
 
 #### 階段4：執行規劃階段
+
 **cinnamon-refactor-owl 主導**：
+
 - 測試規格調整檢視
 - 架構調整具體規劃
 - 測試修改與文件需求一致性確保
 - 重構執行的詳細策略
 
 #### 階段5：驗證與完成
+
 **所有Agent協作驗證**：
+
 - 確認修復達到預期要求
 - 驗證沒有引入新的技術債務
 - 記錄修復經驗和方法論改進
@@ -522,12 +558,14 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 ### 協作品質標準
 
 #### 必須遵循的協作原則
+
 - ✅ **程式服務於測試**：程式修改必須符合測試需求，不可修改測試遷就程式
 - ✅ **測試服務於需求**：測試修改必須基於更新的需求規格書
 - ✅ **需求反映於文件**：所有變更必須先在設計文件中體現
 - ✅ **文件優先執行**：修復執行前必須完成文件檢查和更新
 
 #### Agent協作驗證檢查點
+
 - [ ] **PM確認**: 需求規格書已更新且變更範圍已評估
 - [ ] **設計師確認**: 設計問題已分析且修正方案已規劃
 - [ ] **重構師確認**: 測試修改方案與文件需求完全一致
@@ -536,15 +574,19 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 ### 特殊協作情況處理
 
 #### 複雜問題升級機制
+
 **觸發條件**: 單一Agent無法在3次嘗試內解決問題
 **協作流程**:
+
 1. 問題Agent停止嘗試，詳細記錄失敗原因
 2. PM Agent評估問題複雜度並重新分解任務
 3. 多Agent協作制定解決策略
 4. 確保每個子任務都在Agent能力範圍內
 
 #### 跨階段影響處理
+
 **當修復影響多個TDD階段時**:
+
 - Phase 1設計變更 → 通知後續所有階段Agent
 - Phase 2測試變更 → 確保與Phase 1設計一致
 - Phase 3實作變更 → 驗證不違反測試和設計要求
@@ -746,6 +788,7 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 ---
 
 **🔗 相關文件連結**:
+
 - [返回主指導文件](../../CLAUDE.md)
 - [TDD 協作開發流程](tdd-collaboration-flow.md)
 - [錯誤修復和重構方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/error-fix-refactor-methodology.md)

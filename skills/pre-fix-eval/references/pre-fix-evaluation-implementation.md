@@ -34,7 +34,7 @@ Stage 3: 設計文件查詢 (用戶或 Skill 協助)
     ↓
 Stage 4: 根因定位 (用戶分析)
     ↓
-Stage 5: 開 Ticket 記錄 (強制, /ticket-create)
+Stage 5: 開 Ticket 記錄 (強制, /ticket create)
     ↓
 Stage 6: 分派執行 (根據根因分派代理人)
 ```

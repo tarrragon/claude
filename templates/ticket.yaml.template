@@ -1,6 +1,6 @@
 # Atomic Ticket 定義範本
 # 版本: v1.0.0
-# 使用方式: /ticket-create 會自動使用此範本建立 Ticket YAML
+# 使用方式: /ticket create 會自動使用此範本建立 Ticket YAML
 
 ticket:
   # 唯一識別碼 - 格式: {Version}-W{Wave}-{Seq}
@@ -45,6 +45,15 @@ ticket:
   # W1 的 Ticket 通常沒有依賴
   # W2+ 的 Ticket 依賴前一 Wave 的特定 Ticket
 
+  # Ticket 關聯追蹤（新增）
+  source_ticket: null          # 觸發此 Ticket 的來源 Ticket ID
+  spawned_tickets: []          # 此 Ticket 衍生的後續 Ticket IDs
+  dispatch_reason: ""          # 派發原因/交接理由
+  # 關聯追蹤用於：
+  # - 開發 (IMP) → 測試 (TST) → 調整 (ADJ) 的鏈式追蹤
+  # - 記錄 Ticket 之間的因果關係和交接理由
+  # - 支援「/ticket track chain」命令查詢完整關聯鏈
+
   # 參考文件
   references: []
   # 格式: ["path/to/doc.md", "path/to/spec.md"]
@@ -72,7 +81,7 @@ ticket:
     final_decision: "{FINAL_AGENT_OR_ACTION}"
     # 最終決策結果
     # 例：派發給 parsley-flutter-developer
-    #    執行 /ticket-create
+    #    執行 /ticket create
     #    派發給 system-analyst（需 SA 前置審查）
 
     rationale: "{DECISION_RATIONALE}"

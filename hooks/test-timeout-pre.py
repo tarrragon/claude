@@ -17,8 +17,12 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from hook_utils import setup_hook_logging, run_hook_safely
+
 
 def main():
+    logger = setup_hook_logging("test-timeout-pre")
     input_data = json.load(sys.stdin)
     tool_name = input_data.get("tool_name", "")
     tool_input = input_data.get("tool_input", {})
@@ -33,7 +37,7 @@ def main():
 
     if not is_test_command:
         # 非測試命令：直接退出，不輸出任何內容（exit 0 = 成功）
-        sys.exit(0)
+        return 0
 
     # 記錄測試開始時間
     project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
@@ -60,8 +64,8 @@ def main():
         }
     }
     print(json.dumps(result, ensure_ascii=False))
-    sys.exit(0)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(run_hook_safely(main, "test-timeout-pre"))

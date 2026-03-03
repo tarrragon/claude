@@ -14,39 +14,35 @@
 │
 ├── core/                         # 核心決策 + 基本約束
 │   ├── decision-tree.md          # 主線程二元決策樹（核心）
+│   ├── askuserquestion-rules.md  # AskUserQuestion 強制使用規則
 │   ├── cognitive-load.md         # 認知負擔設計原則
+│   ├── document-format-rules.md  # 文件格式
 │   ├── document-system.md        # 五重文件系統規則
-│   ├── quality-baseline.md       # 品質基線
+│   ├── implementation-quality.md # 實作品質標準（跨語言）
 │   ├── language-constraints.md   # 語言約束
-│   └── document-format-rules.md  # 文件格式
-│
-├── agents/                       # 代理人系統
-│   ├── overview.md               # 職責矩陣 + 升級規則
-│   ├── incident-responder.md     # 錯誤回應（Level 1）
-│   ├── security-reviewer.md      # 安全審查（Level 3）
-│   ├── system-analyst.md         # 系統分析（Level 2）
-│   ├── system-designer.md        # UI/UX 設計
-│   ├── system-engineer.md        # 環境問題
-│   ├── data-administrator.md     # 資料設計
-│   ├── memory-network-builder.md # 知識記憶
-│   ├── lavender-interface-designer.md   # TDD Phase 1
-│   ├── sage-test-architect.md           # TDD Phase 2
-│   ├── pepper-test-implementer.md       # TDD Phase 3a
-│   ├── parsley-flutter-developer.md     # TDD Phase 3b
-│   └── cinnamon-refactor-owl.md         # TDD Phase 4
+│   ├── python-execution.md       # Python 執行規則
+│   ├── quality-baseline.md       # 流程品質基線
+│   └── verification-framework.md # 驗證責任分配框架
 │
 ├── flows/                        # 執行流程
 │   ├── tdd-flow.md               # TDD 流程
 │   ├── incident-response.md      # 事件回應流程
+│   ├── plan-to-ticket-flow.md    # Plan-to-Ticket 轉換流程
+│   ├── tech-debt.md              # 技術債務流程
 │   ├── ticket-lifecycle.md       # Ticket 生命週期
-│   └── tech-debt.md              # 技術債務流程
+│   └── version-progression.md    # 版本推進決策規則
 │
 ├── guides/                       # 操作指南
-│   ├── task-splitting.md         # 任務拆分指南
-│   └── parallel-dispatch.md      # 並行派發指南
+│   ├── methodology-index.md      # 方法論索引
+│   ├── parallel-dispatch.md      # 並行派發指南
+│   ├── query-vs-research.md      # 查詢 vs 研究決策指南
+│   ├── skill-index.md            # Skill 指令索引
+│   └── task-splitting.md         # 任務拆分指南
 │
 └── forbidden/                    # 禁止行為
     └── skip-gate.md              # Skip-gate 防護
+
+代理人定義位於：.claude/agents/（按需載入，不常駐）
 ```
 
 ---
@@ -60,10 +56,10 @@
                                │
         ┌──────────────────────┼──────────────────────┐
         ▼                      ▼                      ▼
-┌───────────────┐    ┌─────────────────┐    ┌───────────────┐
-│    agents/    │    │     flows/      │    │   forbidden/  │
-│  代理人定義   │    │    執行流程     │    │   禁止行為    │
-└───────────────┘    └─────────────────┘    └───────────────┘
+┌───────────────────┐    ┌─────────────────┐    ┌───────────────┐
+│  .claude/agents/  │    │     flows/      │    │   forbidden/  │
+│  代理人定義(按需) │    │    執行流程     │    │   禁止行為    │
+└───────────────────┘    └─────────────────┘    └───────────────┘
         │
         ▼
 ┌───────────────┐
@@ -83,12 +79,12 @@
 
 | 需求 | 文件 |
 |------|------|
-| 決策入口 | [core/decision-tree](core/decision-tree.md) |
-| 代理人總覽 | [agents/overview](agents/overview.md) |
-| TDD 流程 | [flows/tdd-flow](flows/tdd-flow.md) |
-| 錯誤處理 | [flows/incident-response](flows/incident-response.md) |
-| 任務拆分 | [guides/task-splitting](guides/task-splitting.md) |
-| 品質要求 | [core/quality-baseline](core/quality-baseline.md) |
+| 決策入口 | @.claude/rules/core/decision-tree.md |
+| 代理人定義 | @.claude/agents/ |
+| TDD 流程 | @.claude/rules/flows/tdd-flow.md |
+| 錯誤處理 | .claude/rules/flows/incident-response.md |
+| 任務拆分 | .claude/rules/guides/task-splitting.md |
+| 品質要求 | @.claude/rules/core/quality-baseline.md |
 
 ---
 
@@ -97,25 +93,12 @@
 | 目錄 | 讀取時機 |
 |------|---------|
 | `core/` | 每次對話開始、決策時 |
-| `agents/` | 派發決策時 |
+| `.claude/agents/` | 派發決策時（按需載入） |
 | `flows/` | 進入特定流程時 |
 | `guides/` | 需要操作指導時 |
 | `forbidden/` | 持續監控 |
 
 ---
 
-## 舊目錄遷移說明
-
-以下舊目錄已合併到新結構中，將在後續版本移除：
-
-| 舊目錄 | 新位置 |
-|-------|-------|
-| `decision-tree/` | `core/decision-tree.md` |
-| `boundaries/` | `agents/overview.md` |
-| `agent-triggers/` | `agents/*.md` |
-| `workflows/` | `flows/` + `guides/` |
-
----
-
-**Last Updated**: 2026-01-23
-**Version**: 2.0.0
+**Last Updated**: 2026-03-03
+**Version**: 3.1.0 - 補齊所有實際存在的 rules 檔案（core +3, flows +2, guides +3）

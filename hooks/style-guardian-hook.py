@@ -40,6 +40,10 @@ import json
 import re
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from hook_utils import setup_hook_logging, run_hook_safely
+from lib.hook_messages import QualityMessages
+
 
 def is_presentation_file(file_path: str) -> bool:
     """Check if file is in the presentation layer."""
@@ -114,10 +118,12 @@ def check_file_for_violations(file_path: Path) -> list[dict]:
 
 def main() -> int:
     """Main hook entry point."""
+    logger = setup_hook_logging("style-guardian-hook")
     # Get file paths from argument
     if len(sys.argv) < 2:
         # No files to check
         print(json.dumps({"continue": True}))
+        logger.info("No files to check")
         return 0
 
     file_paths_str = sys.argv[1]
@@ -157,7 +163,7 @@ def main() -> int:
     # Format output message
     total = sum(len(v) for v in all_violations.values())
     message_lines = [
-        f"Style Guardian: {total} potential violations detected",
+        QualityMessages.STYLE_CHECK_WARNING.format(issue=f"{total} potential violations detected"),
         "",
         "Consider using unified configuration:",
     ]
@@ -184,4 +190,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run_hook_safely(main, "style-guardian-hook"))

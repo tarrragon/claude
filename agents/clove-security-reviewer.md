@@ -1,10 +1,13 @@
 ---
 name: clove-security-reviewer
 description: 安全漏洞偵測與修復專家。主動審查涉及用戶輸入、認證授權、API 端點或敏感資料的程式碼。偵測 OWASP Top 10 漏洞、硬編碼機密、注入攻擊等安全問題，提供修復建議和安全最佳實踐指導。
-tools: Read, Grep, Glob, Bash
-color: crimson
+allowed-tools: Read, Grep, Glob, Bash
+metadata:
+  color: crimson
 model: opus
 ---
+
+@.claude/agents/AGENT_PRELOAD.md
 
 # 安全審查專家 (Security Reviewer)
 
@@ -171,6 +174,35 @@ clove-security-reviewer 在以下情況下**應該被觸發**：
 
 ---
 
+## 與 security-review Skill 的分工
+
+clove-security-reviewer（本 Agent）與 `security-review` Skill 的定位不同，兩者互補但不可互相取代。
+
+| 維度 | clove-security-reviewer (Agent) | security-review (Skill) |
+|------|-------------------------------|------------------------|
+| **定位** | 互動式安全審查執行者 | 靜態安全清單與決策框架 |
+| **能力** | 讀取程式碼、執行掃描工具、分析結果 | 提供檢查項目清單和安全模式範例 |
+| **產出** | 安全審查報告（含具體漏洞位置和修復建議） | 安全檢查清單（供開發者自行對照） |
+| **觸發時機** | PM 派發（深度審查、安全事件、版本發布前） | 開發者自行啟動（實作過程中自查） |
+| **互動性** | 需要上下文分析和判斷 | 無狀態、無互動 |
+
+### 何時用 Agent，何時用 Skill
+
+| 場景 | 使用 | 理由 |
+|------|------|------|
+| Phase 3b 完成後安全審查 | Agent | 需要讀取實作程式碼、執行掃描、產出報告 |
+| 版本發布前安全檢查 | Agent | 需要全面掃描和風險評估 |
+| incident-responder 發現安全問題 | Agent | 需要深入分析漏洞成因 |
+| 開發者實作認證功能時自查 | Skill | 開發者對照清單確認最佳實踐 |
+| Code Review 時快速安全檢查 | Skill | 檢查清單即可覆蓋 |
+| 新增 API 端點時確認安全要求 | Skill | 對照清單確認必要防護 |
+
+### 引用關係
+
+Agent 執行安全審查時，**應引用** `security-review` Skill 中的安全清單作為檢查基準，避免重複維護。具體漏洞類型清單請參考：`.claude/skills/security-review/SKILL.md`
+
+---
+
 ## 與其他代理人的邊界
 
 | 代理人 | clove-security-reviewer 負責 | 其他代理人負責 |
@@ -248,20 +280,7 @@ Phase 4 (重構) / 版本發布
 
 ## 常見漏洞檢查清單
 
-### OWASP Top 10
-
-| 漏洞類型 | 檢查項目 |
-|---------|---------|
-| 注入攻擊 | SQL、NoSQL、Command Injection |
-| 認證失效 | 弱密碼、Session 固定 |
-| 敏感資料暴露 | 未加密傳輸、日誌洩漏 |
-| XSS | 反射型、儲存型、DOM 型 |
-| 存取控制失效 | 權限繞過、IDOR |
-| 安全配置錯誤 | 預設配置、錯誤訊息 |
-| SSRF | 伺服器端請求偽造 |
-| 不安全的反序列化 | 物件注入 |
-| 使用有漏洞的元件 | 過時依賴 |
-| 日誌和監控不足 | 缺乏追蹤 |
+完整的安全檢查清單（OWASP Top 10、輸入驗證、認證授權、XSS、CSRF 等）請參考 `security-review` Skill：`.claude/skills/security-review/SKILL.md`
 
 ### Flutter/Dart 特定檢查
 
@@ -314,6 +333,8 @@ grep -rn "request\.body\|request\.query" --include="*.dart"
 
 ---
 
-**Last Updated**: 2025-01-23
-**Version**: 1.0.0
+**Last Updated**: 2026-03-02
+**Version**: 1.1.0 - 澄清與 security-review Skill 的分工邊界（W28-026）
 **Specialization**: Security Vulnerability Detection
+
+

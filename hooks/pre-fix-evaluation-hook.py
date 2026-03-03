@@ -24,45 +24,37 @@
 
 環境變數:
   HOOK_DEBUG: 啟用詳細日誌 (true/false)
+
+HOOK_METADATA (JSON):
+{
+  "event_type": "PostToolUse",
+  "matcher": "Bash",
+  "timeout": 10000,
+  "description": "修復前強制評估 - 自動偵測錯誤並進行分類",
+  "dependencies": [],
+  "version": "1.0.0"
+}
 """
 
 import json
 import sys
 import os
 import re
-import logging
 from pathlib import Path
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Tuple, Optional
 
+# 加入 hook_utils 路徑（相同目錄）
+sys.path.insert(0, str(Path(__file__).parent))
 
-# ============================================================================
-# 日誌設置
-# ============================================================================
-
-def setup_logging() -> None:
-    """初始化日誌系統"""
-    log_level = logging.DEBUG if os.getenv("HOOK_DEBUG") == "true" else logging.INFO
-
-    # 建立日誌目錄
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
-    log_dir = project_dir / ".claude" / "hook-logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    log_file = log_dir / "pre-fix-evaluation-hook.log"
-
-    logging.basicConfig(
-        level=log_level,
-        format="[%(asctime)s] %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stderr)
-        ]
-    )
-
-
-logger = logging.getLogger(__name__)
+try:
+    from hook_utils import setup_hook_logging
+    from lib.common_functions import hook_output, read_hook_input
+    from lib.hook_messages import WorkflowMessages, format_message
+except ImportError as e:
+    print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
+    sys.exit(1)
 
 
 # ============================================================================
@@ -123,12 +115,13 @@ ANALYZER_WARNING_PATTERNS = [
 # 錯誤分類函式
 # ============================================================================
 
-def classify_errors(output: str) -> Tuple[ErrorType, List[Dict[str, str]]]:
+def classify_errors(output: str, logger) -> Tuple[ErrorType, List[Dict[str, str]]]:
     """
     分類錯誤類型
 
     Args:
         output: 工具輸出文本
+        logger: 日誌物件
 
     Returns:
         (錯誤類型, 錯誤詳情列表)
@@ -201,14 +194,14 @@ def classify_errors(output: str) -> Tuple[ErrorType, List[Dict[str, str]]]:
     return error_type, errors
 
 
-def get_project_root() -> Path:
+def get_project_root(logger) -> Path:
     """取得專案根目錄"""
     return Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
 
 
-def log_evaluation(error_type: ErrorType, errors: List[Dict[str, str]]) -> None:
+def log_evaluation(error_type: ErrorType, errors: List[Dict[str, str]], logger) -> None:
     """記錄評估結果到日誌"""
-    project_root = get_project_root()
+    project_root = get_project_root(logger)
     log_dir = project_root / ".claude" / "hook-logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -232,7 +225,7 @@ def log_evaluation(error_type: ErrorType, errors: List[Dict[str, str]]) -> None:
 # 輸出生成函式
 # ============================================================================
 
-def generate_syntax_error_output(errors: List[Dict[str, str]]) -> Dict:
+def generate_syntax_error_output(errors: List[Dict[str, str]], logger) -> Dict:
     """生成語法錯誤輸出 (簡化流程)"""
     message = f"""
 🔧 語法錯誤 - 簡化修復流程
@@ -263,8 +256,12 @@ def generate_syntax_error_output(errors: List[Dict[str, str]]) -> Dict:
     }
 
 
-def generate_non_syntax_error_output(error_type: ErrorType, errors: List[Dict[str, str]]) -> Dict:
+def generate_non_syntax_error_output(error_type: ErrorType, errors: List[Dict[str, str]], logger) -> Dict:
     """生成非語法錯誤輸出 (必須開 Ticket)"""
+    message = format_message(
+        WorkflowMessages.PRE_FIX_EVAL_REQUIRED
+    )
+
     message = f"""
 🚨 修復前強制評估 - {error_type.value.upper().replace('_', ' ')}
 
@@ -286,7 +283,7 @@ def generate_non_syntax_error_output(error_type: ErrorType, errors: List[Dict[st
    - Stage 5: 開 Ticket 記錄
    - Stage 6: 分派執行
 
-2️⃣ 使用 /ticket-create 建立修復 Ticket
+2️⃣ 使用 /ticket create 建立修復 Ticket
    - 標題: Fix {error_type.value}: [簡短描述]
    - 描述: 包含以上六階段分析結果
    - Agent: 根據錯誤類型分派
@@ -312,12 +309,15 @@ def generate_non_syntax_error_output(error_type: ErrorType, errors: List[Dict[st
 
 def main():
     """主程式進入點"""
-    setup_logging()
+    logger = setup_hook_logging("pre-fix-evaluation-hook")
     logger.info("=== 修復前強制評估 Hook 開始 ===")
 
     try:
         # 從 stdin 讀取 JSON 輸入
-        input_data = json.load(sys.stdin)
+        input_data = read_hook_input()
+        if not input_data:
+            logger.info("沒有輸入資料，跳過評估")
+            sys.exit(0)
         logger.debug(f"輸入資料: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
 
         # 提取工具回應
@@ -335,7 +335,7 @@ def main():
             sys.exit(0)
 
         # 分類錯誤
-        error_type, errors = classify_errors(output_str)
+        error_type, errors = classify_errors(output_str, logger)
 
         if not errors:
             logger.info("沒有偵測到錯誤")
@@ -344,14 +344,14 @@ def main():
         logger.info(f"偵測到 {len(errors)} 個 {error_type.value} 錯誤")
 
         # 記錄評估結果
-        log_evaluation(error_type, errors)
+        log_evaluation(error_type, errors, logger)
 
         # 生成輸出
         if error_type == ErrorType.SYNTAX_ERROR:
-            output = generate_syntax_error_output(errors)
+            output = generate_syntax_error_output(errors, logger)
             exit_code = 0
         else:
-            output = generate_non_syntax_error_output(error_type, errors)
+            output = generate_non_syntax_error_output(error_type, errors, logger)
             exit_code = 2  # 阻塊錯誤
 
         # 輸出結果
@@ -359,17 +359,6 @@ def main():
         logger.info("=== 修復前強制評估 Hook 完成 ===")
         sys.exit(exit_code)
 
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON 解析失敗: {e}")
-        print(json.dumps({
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "decision": "allow"
-            },
-            "systemMessage": f"Hook 內部錯誤: JSON 解析失敗 - {e}",
-            "suppressOutput": False
-        }))
-        sys.exit(0)
     except Exception as e:
         logger.exception(f"未預期的錯誤: {e}")
         print(json.dumps({

@@ -23,125 +23,15 @@
 
 import sys
 import json
-import logging
 import re
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
-# ============================================================================
-# 日誌設置
-# ============================================================================
+# 加入 hook_utils 路徑（相同目錄）
+sys.path.insert(0, str(Path(__file__).parent))
 
-def setup_logging() -> None:
-    """初始化日誌系統"""
-    import os
+from hook_utils import setup_hook_logging, run_hook_safely
 
-    log_level = logging.DEBUG if os.getenv("HOOK_DEBUG") == "true" else logging.INFO
-
-    # 建立日誌目錄
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
-    log_dir = project_dir / ".claude" / "hook-logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    log_file = log_dir / "5w1h-compliance-hook.log"
-
-    logging.basicConfig(
-        level=log_level,
-        format="[%(asctime)s] %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stderr)
-        ]
-    )
-
-
-# ============================================================================
-# 正則表達式定義（基於 Phase 3a 設計）
-# ============================================================================
-
-# Who 欄位正則表達式 - 格式 1: 代理人執行（不含 "Who:" 前綴）
-WHO_PATTERN_DELEGATE = r'^\s*([a-z-]+)\s*\(執行者\)\s*\|\s*([a-z-]+)\s*\(分派者\)\s*$'
-
-# Who 欄位正則表達式 - 格式 2: 主線程自行執行（不含 "Who:" 前綴）
-WHO_PATTERN_SELF = r'^\s*rosemary-project-manager\s*\(自行執行\s*-\s*分派/驗收\)\s*$'
-
-# How 欄位正則表達式（不含 "How:" 前綴，case-insensitive）
-HOW_PATTERN = r'^\s*\[Task Type:\s*(implementation|dispatch|review|documentation|analysis|planning)\]\s*(.+)\s*$'
-
-
-# ============================================================================
-# 允許的代理人和任務類型清單
-# ============================================================================
-
-ALLOWED_AGENTS = [
-    "lavender-interface-designer",
-    "sage-test-architect",
-    "pepper-test-implementer",
-    "parsley-flutter-developer",
-    "cinnamon-refactor-owl",
-    "mint-format-specialist",
-    "thyme-documentation-integrator",
-    "memory-network-builder",
-    "rosemary-project-manager"
-]
-
-ALLOWED_TASK_TYPES = [
-    "implementation",
-    "dispatch",
-    "review",
-    "documentation",
-    "analysis",
-    "planning"
-]
-
-
-# ============================================================================
-# 違反組合矩陣（6 種禁止組合）
-# ============================================================================
-
-VIOLATION_MATRIX = [
-    {
-        "executor": "rosemary-project-manager",
-        "task_type": "implementation",
-        "reason": "主線程不應執行 Implementation 任務",
-        "suggestion": "將此任務分派給 parsley-flutter-developer 執行"
-    },
-    {
-        "executor": "lavender-interface-designer",
-        "task_type": "implementation",
-        "reason": "設計代理人不應執行 Implementation 任務",
-        "suggestion": "lavender-interface-designer 負責 TDD Phase 1 功能設計，不執行程式碼實作"
-    },
-    {
-        "executor": "sage-test-architect",
-        "task_type": "implementation",
-        "reason": "測試設計代理人不應執行 Implementation 任務",
-        "suggestion": "sage-test-architect 負責 TDD Phase 2 測試設計，不執行程式碼實作"
-    },
-    {
-        "executor": "parsley-flutter-developer",
-        "task_type": "dispatch",
-        "reason": "執行代理人不應分派任務",
-        "suggestion": "任務分派是主線程的職責"
-    },
-    {
-        "executor": "cinnamon-refactor-owl",
-        "task_type": "dispatch",
-        "reason": "重構代理人不應分派任務",
-        "suggestion": "任務分派是主線程的職責"
-    },
-    {
-        "executor": "thyme-documentation-integrator",
-        "task_type": "implementation",
-        "reason": "文件代理人不應執行 Implementation 任務",
-        "suggestion": "thyme-documentation-integrator 負責文件整合，不執行程式碼實作"
-    }
-]
-
-
-# ============================================================================
-# 核心函式 1: extract_field()
-# ============================================================================
 
 def extract_field(content: str, field_name: str) -> Optional[str]:
     """
@@ -527,13 +417,14 @@ def check_compliance(executor: str, task_type: str) -> Dict[str, Any]:
 # 核心函式 6: make_decision()
 # ============================================================================
 
-def make_decision(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
+def make_decision(tool_name: str, tool_input: Dict[str, Any], logger) -> Dict[str, Any]:
     """
     整合 3 層檢查並輸出最終決策
 
     Args:
         tool_name: 工具名稱
         tool_input: 工具的輸入 JSON
+        logger: 日誌物件
 
     Returns:
         { "decision": "allow" | "block", "reason": str, "details": dict (optional), "suggestions": list (optional) }
@@ -541,7 +432,7 @@ def make_decision(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
     try:
         # 步驟 1: 檢查 tool_input 是否有頂層 content 欄位
         if "content" not in tool_input:
-            logging.debug(f"工具 {tool_name} 沒有頂層 content 欄位，跳過 5W1H 檢查")
+            logger.debug(f"工具 {tool_name} 沒有頂層 content 欄位，跳過 5W1H 檢查")
             return {
                 "decision": "allow",
                 "reason": f"工具 {tool_name} 結構無須 5W1H 檢查"
@@ -554,13 +445,13 @@ def make_decision(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
         who_field = extract_field(content, "Who")
         how_field = extract_field(content, "How")
 
-        logging.debug(f"提取到 Who 欄位: {who_field}")
-        logging.debug(f"提取到 How 欄位: {how_field}")
+        logger.debug(f"提取到 Who 欄位: {who_field}")
+        logger.debug(f"提取到 How 欄位: {how_field}")
 
         # 步驟 4: 第一層檢查 - Who 欄位格式驗證
         who_result = parse_who_field(who_field)
         if "error" in who_result:
-            logging.warning(f"Who 欄位格式錯誤: {who_result['error']}")
+            logger.warning(f"Who 欄位格式錯誤: {who_result['error']}")
             return {
                 "decision": "block",
                 "reason": who_result["error"],
@@ -570,12 +461,12 @@ def make_decision(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
 
         executor = who_result["executor"]
         dispatcher = who_result["dispatcher"]
-        logging.debug(f"解析結果 - 執行者: {executor}, 分派者: {dispatcher}")
+        logger.debug(f"解析結果 - 執行者: {executor}, 分派者: {dispatcher}")
 
         # 步驟 5: 第二層檢查 - How 欄位格式驗證
         how_result = parse_how_field(how_field)
         if "error" in how_result:
-            logging.warning(f"How 欄位格式錯誤: {how_result['error']}")
+            logger.warning(f"How 欄位格式錯誤: {how_result['error']}")
             return {
                 "decision": "block",
                 "reason": how_result["error"],
@@ -585,12 +476,12 @@ def make_decision(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
 
         task_type = how_result["task_type"]
         strategy = how_result["strategy"]
-        logging.debug(f"解析結果 - 任務類型: {task_type}, 策略: {strategy}")
+        logger.debug(f"解析結果 - 任務類型: {task_type}, 策略: {strategy}")
 
         # 步驟 6: 第三層檢查 - 合規性檢查
         compliance_result = check_compliance(executor, task_type)
         if not compliance_result.get("compliant", False):
-            logging.warning(f"合規性違反: {compliance_result['error']}")
+            logger.warning(f"合規性違反: {compliance_result['error']}")
             return {
                 "decision": "block",
                 "reason": compliance_result["error"],
@@ -599,7 +490,7 @@ def make_decision(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
             }
 
         # 步驟 7: 所有檢查通過 → Allow
-        logging.info("5W1H 格式檢查通過，符合敏捷重構原則")
+        logger.info("5W1H 格式檢查通過，符合敏捷重構原則")
         return {
             "decision": "allow",
             "reason": "5W1H 格式檢查通過，符合敏捷重構原則"
@@ -607,8 +498,8 @@ def make_decision(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
 
     except Exception as e:
         # 優雅降級：Hook 執行錯誤時預設 allow
-        logging.error(f"Hook 執行錯誤：{str(e)}")
-        logging.debug(f"錯誤堆疊：", exc_info=True)
+        logger.error(f"Hook 執行錯誤：{str(e)}")
+        logger.debug(f"錯誤堆疊：", exc_info=True)
         return {
             "decision": "allow",
             "reason": "Hook 執行錯誤，預設允許執行"
@@ -619,45 +510,44 @@ def make_decision(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
 # 主程式入口
 # ============================================================================
 
-def main() -> None:
+def main() -> int:
     """主程式入口"""
-    setup_logging()
-
+    logger = setup_hook_logging("5w1h-compliance-check")
     try:
         # 讀取 stdin 輸入
         input_data = json.load(sys.stdin)
-        logging.debug(f"接收到 Hook 輸入: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
+        logger.debug(f"接收到 Hook 輸入: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
 
         # 提取工具資訊
         tool_name = input_data.get("tool_name")
         tool_input = input_data.get("tool_input", {})
 
         # 執行決策邏輯
-        result = make_decision(tool_name, tool_input)
+        result = make_decision(tool_name, tool_input, logger)
 
         # 輸出結果
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        logging.info(f"Hook 決策: {result['decision']}")
+        logger.info(f"Hook 決策: {result['decision']}")
 
         # 設置正確的退出碼
         if result["decision"] == "block":
-            sys.exit(1)
+            return 1
         else:
-            sys.exit(0)
+            return 0
 
     except json.JSONDecodeError as e:
-        logging.error(f"JSON 解析錯誤: {e}")
+        logger.error(f"JSON 解析錯誤: {e}")
         result = {"decision": "allow", "reason": "Hook 執行錯誤，預設允許執行"}
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        sys.exit(0)
+        return 0
 
     except Exception as e:
-        logging.error(f"未預期的錯誤: {e}")
-        logging.debug("錯誤堆疊：", exc_info=True)
+        logger.error(f"未預期的錯誤: {e}")
+        logger.debug("錯誤堆疊：", exc_info=True)
         result = {"decision": "allow", "reason": "Hook 執行錯誤，預設允許執行"}
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        sys.exit(0)
+        return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(run_hook_safely(main, "5w1h-compliance-check"))

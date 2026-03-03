@@ -1,9 +1,9 @@
 ---
-name: cognitive-load
-description: "認知負擔評估工具。作為決策樹、代理人、Code Review 的基本參考標準。用於: (1) 任務複雜度評估, (2) 代理人升級判斷, (3) 任務拆分建議, (4) 程式碼品質評估"
+name: cognitive-load-assessment
+description: "認知負擔評估與審查工具。作為決策樹、代理人、Code Review 的基本參考標準。用於: (1) 任務複雜度評估, (2) 代理人升級判斷, (3) 任務拆分建議, (4) 程式碼品質審查與熱點識別"
 ---
 
-# 認知負擔評估工具
+# 認知負擔評估與審查工具
 
 ## 核心理念
 
@@ -139,10 +139,57 @@ description: "認知負擔評估工具。作為決策樹、代理人、Code Revi
 
 ### Code Review 時
 
+- [ ] 函式長度 <= 20 行
+- [ ] 參數數量 <= 3
+- [ ] 巢狀深度 <= 3
+- [ ] 區域變數數 < 5
+- [ ] 函式名稱是動詞片語，函式只做一件事
+- [ ] 類別方法數 <= 12，公開方法數 <= 5
+- [ ] 命名無縮寫或僅使用業界通用縮寫
+- [ ] 布林變數是 is/has/can 開頭
+- [ ] 不使用 data/info/value 等模糊詞
 - [ ] 新程式碼是否增加了模組的複雜度？
 - [ ] 有沒有更簡單的方式達成同樣目的？
-- [ ] 命名是否清晰自說明？
-- [ ] 是否需要額外註解才能理解？（應該不需要）
+
+---
+
+## Code Review 模式
+
+Code Review 的目標不只是找出錯誤，更重要的是確保程式碼對未來的閱讀者友善。
+
+### 審查維度
+
+| 維度 | 檢查問題 |
+|------|---------|
+| 變數狀態追蹤 | 這段程式碼需要閱讀者同時記住幾個變數的狀態？ |
+| 呼叫層級追蹤 | 理解這段程式碼需要追蹤幾層呼叫？ |
+| 命名品質 | 不看實作，能從名稱理解意圖嗎？ |
+| 條件分支 | 需要考慮幾條執行路徑？ |
+| 函式長度 | 這個函式做了幾件事？ |
+| 參數數量 | 呼叫者需要記住幾個參數的順序和意義？ |
+
+### 熱點識別
+
+| 熱點類型 | 識別方法 | 影響 |
+|---------|---------|------|
+| 長函式 | > 20 行 | 難以一次理解 |
+| 深巢狀 | > 3 層縮排 | 上下文難追蹤 |
+| 多參數 | > 3 個參數 | 呼叫時容易出錯 |
+| 副作用 | 修改外部狀態 | 行為不可預測 |
+| 隱藏依賴 | 內部 new 物件 | 難以測試和理解 |
+
+### 使用方式
+
+```bash
+# 審查單一檔案
+/cognitive-load-assessment review {檔案路徑}
+
+# 快速掃描目錄
+/cognitive-load-assessment scan {目錄}
+```
+
+詳細報告模板：`references/review-report-template.md`
+常見問題模式：`references/common-review-patterns.md`
 
 ---
 
@@ -162,26 +209,13 @@ description: "認知負擔評估工具。作為決策樹、代理人、Code Revi
 ### 評估任務複雜度
 
 ```bash
-# 在開始任務前，快速評估
-# 回答以下問題：
-
-1. 這個任務需要修改幾個檔案？
-2. 需要追蹤幾個變數狀態？
-3. 跨越幾個架構層級？
-4. 依賴幾個其他模組？
-
-# 如果任一項超過閾值，考慮拆分任務
+/cognitive-load-assessment assess-task "{任務描述}"
 ```
 
 ### 程式碼品質評估
 
 ```bash
-# 在 Code Review 時，檢查：
-
-1. 函式長度（應 5-15 行）
-2. 參數數量（應 <= 3）
-3. 巢狀深度（應 <= 3）
-4. 變數數量（應 < 5）
+/cognitive-load-assessment assess-code {檔案路徑}
 ```
 
 ---
@@ -189,12 +223,13 @@ description: "認知負擔評估工具。作為決策樹、代理人、Code Revi
 ## 相關文件
 
 - [認知負擔量化標準](./thresholds.md) - 詳細閾值參考
-- [認知負擔設計方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/cognitive-load-design-methodology.md) - 完整理論基礎
-- [自然語言程式設計方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/natural-language-programming-methodology.md) - 命名最佳實踐
-- [代理人職責矩陣]($CLAUDE_PROJECT_DIR/.claude/rules/agents/overview.md) - 升級判斷標準
-- [任務拆分指南]($CLAUDE_PROJECT_DIR/.claude/rules/guides/task-splitting.md) - 拆分方法
+- [Code Review 報告模板](./references/review-report-template.md) - 完整審查報告格式
+- [常見 Review 問題模式](./references/common-review-patterns.md) - 熱點識別和改善方法
+- [認知負擔設計方法論](.claude/methodologies/cognitive-load-design-methodology.md) - 完整理論基礎
+- [自然語言程式設計方法論](.claude/methodologies/natural-language-programming-methodology.md) - 命名最佳實踐
+- [任務拆分指南](.claude/rules/guides/task-splitting.md) - 拆分方法
 
 ---
 
-**Last Updated**: 2026-01-28
-**Version**: 1.1.0
+**Last Updated**: 2026-03-02
+**Version**: 2.0.0 - 合併 cognitive-load-review，新增 Code Review 模式和 references/

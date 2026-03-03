@@ -24,43 +24,12 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from hook_utils import setup_hook_logging, run_hook_safely
 
 
 def get_project_root() -> Path:
     """取得專案根目錄"""
     return Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
-
-
-def setup_log_directory() -> Path:
-    """建立日誌目錄"""
-    project_root = get_project_root()
-    log_dir = project_root / ".claude" / "hook-logs" / "l10n-sync"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    return log_dir
-
-
-def read_stdin_json() -> dict:
-    """從 stdin 讀取 JSON 輸入"""
-    try:
-        return json.load(sys.stdin)
-    except json.JSONDecodeError as e:
-        print(f"Error: Invalid JSON input: {e}", file=sys.stderr)
-        sys.exit(1)
-
-
-def log_event(log_dir: Path, event_type: str, details: dict) -> None:
-    """記錄事件到日誌"""
-    log_file = log_dir / f"verification-{datetime.now().strftime('%Y%m%d')}.log"
-    timestamp = datetime.now().isoformat()
-
-    log_entry = {
-        "timestamp": timestamp,
-        "event_type": event_type,
-        "details": details
-    }
-
-    with open(log_file, "a") as f:
-        f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
 
 
 def is_arb_file(file_path: str) -> bool:
@@ -104,7 +73,7 @@ def get_generated_dart_file(arb_file: Path) -> Path:
     return dart_file
 
 
-def check_l10n_sync(project_root: Path, log_dir: Path) -> tuple[bool, str, dict]:
+def check_l10n_sync(project_root: Path, logger) -> tuple[bool, str, dict]:
     """
     檢查 L10n 同步狀態
 
@@ -168,7 +137,7 @@ def check_l10n_sync(project_root: Path, log_dir: Path) -> tuple[bool, str, dict]
     return True, "allow", details
 
 
-def run_flutter_gen_l10n(project_root: Path, log_dir: Path) -> tuple[bool, str]:
+def run_flutter_gen_l10n(project_root: Path, logger) -> tuple[bool, str]:
     """
     自動執行 flutter gen-l10n 生成 L10n 檔案
 
@@ -183,11 +152,10 @@ def run_flutter_gen_l10n(project_root: Path, log_dir: Path) -> tuple[bool, str]:
             timeout=60
         )
 
-        log_event(log_dir, "auto_gen_l10n", {
-            "return_code": result.returncode,
-            "stdout": result.stdout[:500] if result.stdout else "",
-            "stderr": result.stderr[:500] if result.stderr else ""
-        })
+        logger.info("auto_gen_l10n: return_code=%d, stdout=%s, stderr=%s",
+                    result.returncode,
+                    result.stdout[:500] if result.stdout else "",
+                    result.stderr[:500] if result.stderr else "")
 
         if result.returncode == 0:
             return True, "✅ 自動執行 flutter gen-l10n 成功"
@@ -233,77 +201,84 @@ def generate_error_message(details: dict) -> str:
     return message
 
 
-def main() -> None:
+def main() -> int:
     """主程式"""
+    logger = setup_hook_logging("l10n-sync-verification")
     project_root = get_project_root()
-    log_dir = setup_log_directory()
 
-    # 讀取 stdin JSON (Hook 輸入)
-    input_data = read_stdin_json()
+    try:
+        # 讀取 stdin JSON (Hook 輸入)
+        input_data = json.load(sys.stdin)
 
-    # 檢查編輯的檔案是否為 ARB 檔案
-    tool_input = input_data.get("tool_input", {})
-    file_path = tool_input.get("file_path", "")
+        # 檢查編輯的檔案是否為 ARB 檔案
+        tool_input = input_data.get("tool_input", {})
+        file_path = tool_input.get("file_path", "")
 
-    # 只在編輯 ARB 檔案時執行檢查
-    if not is_arb_file(file_path):
-        # 非 ARB 檔案，不需要檢查
-        sys.exit(0)
+        # 只在編輯 ARB 檔案時執行檢查
+        if not is_arb_file(file_path):
+            # 非 ARB 檔案，不需要檢查
+            logger.debug("非 ARB 檔案，跳過檢查: %s", file_path)
+            return 0
 
-    # 執行 L10n 同步檢查
-    is_synced, decision, details = check_l10n_sync(project_root, log_dir)
+        # 執行 L10n 同步檢查
+        is_synced, decision, details = check_l10n_sync(project_root, logger)
 
-    # 記錄檢查結果
-    log_event(log_dir, "l10n_check", {
-        "file_edited": file_path,
-        "is_synced": is_synced,
-        "decision": decision,
-        "details": details
-    })
+        # 記錄檢查結果
+        logger.info("l10n_check: file_edited=%s, is_synced=%s, decision=%s",
+                    file_path, is_synced, decision)
 
-    # 輸出結果
-    if is_synced:
-        # L10n 已同步，允許繼續
-        output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "decision": "allow"
-            }
-        }
-        print(json.dumps(output, ensure_ascii=False))
-        sys.exit(0)
-    else:
-        # ARB 不同步或生成檔案缺失，自動執行 flutter gen-l10n
-        print("🔄 偵測到 L10n 不同步，自動執行 flutter gen-l10n...", file=sys.stderr)
-
-        gen_success, gen_message = run_flutter_gen_l10n(project_root, log_dir)
-        print(gen_message, file=sys.stderr)
-
-        if gen_success:
-            # 自動生成成功，允許繼續
+        # 輸出結果
+        if is_synced:
+            # L10n 已同步，允許繼續
             output = {
                 "hookSpecificOutput": {
                     "hookEventName": "PostToolUse",
-                    "decision": "allow",
-                    "reason": "ARB 檔案已修改，已自動執行 flutter gen-l10n 更新生成檔案"
+                    "decision": "allow"
                 }
             }
             print(json.dumps(output, ensure_ascii=False))
-            sys.exit(0)
+            return 0
         else:
-            # 自動生成失敗，顯示手動修復步驟
-            error_msg = generate_error_message(details)
-            print(error_msg, file=sys.stderr)
+            # ARB 不同步或生成檔案缺失，自動執行 flutter gen-l10n
+            print("偵測到 L10n 不同步，自動執行 flutter gen-l10n...")
 
-            output = {
-                "hookSpecificOutput": {
-                    "hookEventName": "PostToolUse",
-                    "decision": "block"
+            gen_success, gen_message = run_flutter_gen_l10n(project_root, logger)
+            print(gen_message)
+
+            if gen_success:
+                # 自動生成成功，允許繼續
+                output = {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PostToolUse",
+                        "decision": "allow",
+                        "reason": "ARB 檔案已修改，已自動執行 flutter gen-l10n 更新生成檔案"
+                    }
                 }
-            }
-            print(json.dumps(output, ensure_ascii=False))
-            sys.exit(2)
+                print(json.dumps(output, ensure_ascii=False))
+                return 0
+            else:
+                # 自動生成失敗，顯示手動修復步驟
+                error_msg = generate_error_message(details)
+                print(error_msg)
+
+                output = {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PostToolUse",
+                        "decision": "block"
+                    }
+                }
+                print(json.dumps(output, ensure_ascii=False))
+                return 2
+
+    except json.JSONDecodeError as e:
+        logger.error("JSON 解析錯誤: %s", e)
+        print(f"Error: Invalid JSON input: {e}")
+        return 1
+    except Exception as e:
+        logger.error("執行錯誤: %s", e)
+        raise
 
 
 if __name__ == "__main__":
-    main()
+    exit_code = run_hook_safely(main, "l10n-sync-verification")
+    sys.exit(exit_code)

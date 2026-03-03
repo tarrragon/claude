@@ -1,0 +1,11 @@
+# Handoff 交付檔案目錄
+# 這些檔案是暫時性的，不需要版本控制
+
+# 忽略所有待處理的交付檔案
+pending/
+
+# Stop hook 暫時檔案
+.stop-blocked
+
+# 但保留目錄結構
+!pending/.gitkeep

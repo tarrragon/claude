@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mermaid-ascii"
+version = "1.0.0"
+description = "Mermaid ASCII Renderer - 純 Python 實現 Mermaid 圖表的 ASCII 渲染"
+readme = "SKILL.md"
+requires-python = ">=3.10"
+dependencies = []
+authors = [
+    {name = "Claude Code", email = "claude@anthropic.com"}
+]
+license = {text = "MIT"}
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+
+[project.scripts]
+mermaid-ascii = "mermaid_ascii.scripts.render:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mermaid_ascii"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "mermaid_ascii/**/*.py",
+    "pyproject.toml",
+    "SKILL.md",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "--verbose"

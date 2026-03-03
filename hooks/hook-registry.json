@@ -85,7 +85,7 @@
       {
         "matcher": null,
         "commands": [
-          ".claude/skills/continuous-learning/evaluate-session.sh"
+          "$CLAUDE_PROJECT_DIR/.claude/skills/continuous-learning/evaluate-session.py"
         ]
       }
     ]

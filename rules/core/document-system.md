@@ -11,7 +11,7 @@
 | 文件 | 核心問題 | 位置 |
 |------|---------|------|
 | CHANGELOG | 這個版本做了什麼改變？ | `CHANGELOG.md` |
-| todolist | 還有哪些問題需要處理？ | `docs/todolist.md` |
+| todolist | 還有哪些問題需要處理？ | `docs/todolist.yaml` |
 | worklog | 這個版本要達成什麼目標？ | `docs/work-logs/` |
 | ticket | 這個任務的完整執行歷程？ | `.claude/tickets/` |
 | error-patterns | 之前遇過類似問題嗎？ | `.claude/error-patterns/` |
@@ -35,7 +35,7 @@
 
 **禁止內容**：開發過程的嘗試錯誤、過度詳細的實作細節
 
-### 2. todolist.md - 待處理問題清單
+### 2. todolist.yaml - 結構化版本索引
 
 | 項目 | 說明 |
 |------|------|
@@ -77,7 +77,7 @@
 | 目標讀者 | 執行者、Review 者 |
 | 寫作風格 | 詳細、完整 |
 | 更新時機 | 執行過程中 |
-| 更新方式 | `/ticket-create`, `/ticket-track` |
+| 更新方式 | `/ticket create`, `/ticket track` |
 
 **內容範圍**：任務來源和目標、5W1H 設計、問題分析、解決方案、測試結果、執行進度
 
@@ -112,8 +112,8 @@
            ┌───────────────────┼───────────────────┐
            │                   │                   │
     ┌──────┴──────┐     ┌──────┴──────┐     ┌──────┴──────┐
-    │   ticket    │     │  todo.md    │     │error-patterns│
-    │ (執行細節)   │     │(待處理問題)  │     │ (經驗學習)   │
+    │   ticket    │     │todolist.yaml│     │error-patterns│
+    │ (執行細節)   │     │ (版本索引)   │     │ (經驗學習)   │
     └─────────────┘     └─────────────┘     └─────────────┘
 ```
 
@@ -139,7 +139,7 @@ ticket       執行細節、分析、結果
 
 ### 開始新版本
 
-1. 從 todo.md 識別要處理的問題
+1. 從 todolist.yaml 識別要處理的問題
 2. 建立版本 worklog，定義目標和策略
 3. 建立具體 tickets
 4. worklog 自動索引 tickets
@@ -147,15 +147,15 @@ ticket       執行細節、分析、結果
 ### 執行任務
 
 1. `/error-pattern query` - 查詢既有經驗
-2. `/ticket-track claim` - 開始執行
+2. `/ticket track claim` - 開始執行
 3. 執行過程更新 ticket
 4. `/error-pattern add` - 記錄新發現模式
-5. `/ticket-track complete` - 完成任務
+5. `/ticket track complete` - 完成任務
 
 ### 完成版本
 
 1. 更新版本狀態
-2. 從 todo.md 移除已解決項目
+2. 從 todolist.yaml 移除已解決項目
 3. `/version-release` - 發布版本，自動更新 CHANGELOG
 
 ---
@@ -172,14 +172,40 @@ ticket       執行細節、分析、結果
 | 相容性 | emoji 在某些環境可能顯示不正確 |
 | 穩定性 | CLI 處理 markdown 表格中的 emoji 可能導致問題 |
 
+### 代理人產出物路徑規則
+
+**所有代理人的非程式碼產出物（分析報告、研究報告、設計文件等）必須放在 Ticket 目錄下。**
+
+| 規則 | 說明 |
+|------|------|
+| 產出物位置 | `docs/work-logs/v{version}/tickets/` 目錄下 |
+| 命名格式 | `{ticket-id}-{描述}.md`（如 `0.31.0-W14-001-analysis.md`） |
+| 禁止行為 | 禁止在 `.claude/` 下建立非預定義的子目錄（如 `.claude/analysis/`） |
+
+**已預定義的 `.claude/` 子目錄**（僅限以下）：
+
+| 子目錄 | 用途 |
+|--------|------|
+| `plans/` | 計畫檔案 |
+| `rules/` | 規則和流程 |
+| `methodologies/` | 方法論 |
+| `hooks/` | Hook 系統 |
+| `skills/` | Skill 工具 |
+| `agents/` | 代理人定義 |
+| `references/` | 參考檔案 |
+| `error-patterns/` | 錯誤模式 |
+| `handoff/` | 交接檔案 |
+
+**違反時**：Write Hook 會攔截非白名單路徑的寫入操作。
+
 ---
 
 ## 相關 SKILL
 
 | SKILL | 用途 |
 |-------|------|
-| `/ticket-create` | 建立 Atomic Ticket |
-| `/ticket-track` | 追蹤 Ticket 狀態 |
+| `/ticket create` | 建立 Atomic Ticket |
+| `/ticket track` | 追蹤 Ticket 狀態 |
 | `/error-pattern` | 錯誤模式查詢/新增 |
 | `/version-release` | 版本發布流程 |
 | `/tech-debt-capture` | 技術債務捕獲 |
@@ -188,10 +214,10 @@ ticket       執行細節、分析、結果
 
 ## 相關文件
 
-- [document-format-rules](document-format-rules.md) - 文件格式規則
-- [五重文件系統方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/five-document-system-methodology.md) - 完整方法論
+- @.claude/rules/core/document-format-rules.md - 文件格式規則
+- @.claude/methodologies/five-document-system-methodology.md - 完整方法論
 
 ---
 
-**Last Updated**: 2026-01-23
-**Version**: 1.0.0
+**Last Updated**: 2026-02-10
+**Version**: 1.1.0 - 新增代理人產出物路徑規則（W14-010.2）

@@ -1,0 +1,98 @@
+"""project-init 核心庫模組.
+
+提供環境偵測、安裝指令、套件管理、Hook 驗證等功能。
+"""
+
+from .env_detector import (
+    OsInfo,
+    PythonInfo,
+    RipgrepInfo,
+    UvInfo,
+    detect_os,
+    detect_python,
+    detect_ripgrep,
+    detect_uv,
+)
+from .exceptions import (
+    ConfigurationError,
+    DiskSpaceError,
+    EnvironmentSetupError,
+    ExecutionError,
+    NetworkError,
+    PermissionDeniedError,
+    ToolNotFoundError,
+    VersionTooOldError,
+)
+from .hook_verifier import (
+    HookSystemStatus,
+    ToolStatus,
+    verify_hooks_system,
+    verify_pep723_execution,
+    verify_ripgrep_available,
+    verify_uv_available,
+)
+from .messages import (
+    CheckMessages,
+    HookSystemMessages,
+    OSMessages,
+    PackageMessages,
+    PythonMessages,
+    RemediationGuidance,
+    RipgrepMessages,
+    SetupMessages,
+    UVMessages,
+)
+from .package_manager import (
+    InstalledInfo,
+    PackageInfo,
+    VersionCompareResult,
+    check_installed_version,
+    compare_versions,
+    scan_custom_packages,
+)
+from .python_installer import (
+    InstallInstructions,
+    get_install_instructions,
+)
+
+__all__ = [
+    "OsInfo",
+    "PythonInfo",
+    "RipgrepInfo",
+    "UvInfo",
+    "detect_os",
+    "detect_python",
+    "detect_ripgrep",
+    "detect_uv",
+    "EnvironmentSetupError",
+    "ToolNotFoundError",
+    "VersionTooOldError",
+    "PermissionDeniedError",
+    "NetworkError",
+    "DiskSpaceError",
+    "ConfigurationError",
+    "ExecutionError",
+    "OSMessages",
+    "PythonMessages",
+    "UVMessages",
+    "RipgrepMessages",
+    "HookSystemMessages",
+    "PackageMessages",
+    "SetupMessages",
+    "CheckMessages",
+    "RemediationGuidance",
+    "ToolStatus",
+    "HookSystemStatus",
+    "verify_uv_available",
+    "verify_ripgrep_available",
+    "verify_pep723_execution",
+    "verify_hooks_system",
+    "PackageInfo",
+    "InstalledInfo",
+    "VersionCompareResult",
+    "scan_custom_packages",
+    "check_installed_version",
+    "compare_versions",
+    "InstallInstructions",
+    "get_install_instructions",
+]

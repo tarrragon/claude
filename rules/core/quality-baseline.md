@@ -8,7 +8,15 @@
 
 > 理論依據：Will Guidara《Unreasonable Hospitality》
 
-**品質承諾**：100% 測試通過是我們對品質的承諾。每一個綠燈都是團隊的驕傲。
+**品質承諾** - 100% 測試通過是我們對品質的承諾。每一個綠燈都是團隊的驕傲。
+
+**成長心態** - 每個挑戰都是成長的機會。
+
+**架構優先** - 優秀的架構是長期成功的基石。
+
+**完整體驗** - TDD 四階段是完整的開發體驗。
+
+**學習導向** - 測試失敗是發現問題的珍貴時刻。
 
 ---
 
@@ -63,6 +71,20 @@
 | 依賴方向錯誤 | 停止開發，先修正架構 |
 | 測試設計問題 | 建立 Ticket，本版本修復 |
 
+### 規則 4：Hook 失敗必須可見
+
+**Hook 失敗不可靜默吞掉，必須對用戶可見**
+
+> **來源**：IMP-003 — 7 個 hooks 靜默失敗至少 2 個 session，因 `run_hook_safely` 僅將錯誤寫入檔案日誌。
+
+| 要求 | 說明 |
+|------|------|
+| stderr 輸出 | Hook 異常時必須寫入 stderr，確保用戶端可見 |
+| 日誌記錄 | 同時寫入檔案日誌，保留完整 traceback |
+| 禁止靜默失敗 | 禁止只記錄到日誌檔而不通知用戶 |
+
+**實作**：`hook_utils.py` 的 `_log_exception` 在記錄檔案日誌後，額外輸出到 stderr。
+
 ---
 
 ## 品質檢查清單
@@ -84,16 +106,25 @@
 | 測試通過率 100% | 所有測試必須通過 | 否 |
 | Phase 4 必須執行 | 不可跳過重構評估 | 否 |
 | 設計問題立即修正 | 不可延後處理 | 否 |
+| Hook 失敗必須可見 | 禁止靜默失敗 | 否 |
+
+---
+
+## 重要提醒
+
+本專案所有品質控制、流程檢查、問題追蹤都由 Hook 系統執行。
+
+請信任並配合 Hook 系統的運作，專注於解決技術問題而非繞過檢查機制。
 
 ---
 
 ## 相關規則
 
-- [測試修復禁止行為規則]($CLAUDE_PROJECT_DIR/.claude/rules/forbidden/test-fix-forbidden.md)
-- [TDD 含 SA 前置審查工作流程]($CLAUDE_PROJECT_DIR/.claude/rules/workflows/tdd-with-sa-pre-review.md)
-- [事件回應工作流程]($CLAUDE_PROJECT_DIR/.claude/rules/workflows/incident-response-workflow.md)
+- .claude/rules/forbidden/skip-gate.md - Skip-gate 防護機制
+- .claude/rules/flows/tdd-flow.md - TDD 含 SA 前置審查流程
+- .claude/rules/flows/incident-response.md - 事件回應流程
 
 ---
 
-**Last Updated**: 2026-01-23
-**Version**: 1.0.0
+**Last Updated**: 2026-03-03
+**Version**: 1.2.0 - 補入 4 個核心價值觀和重要提醒段落（W29-001.0）

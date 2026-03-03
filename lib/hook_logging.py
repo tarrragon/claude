@@ -2,11 +2,17 @@
 """
 Hook 日誌系統
 
+[DEPRECATED] v0.31.0
+- 已遷移至 .claude/hooks/hook_utils.py
+- 使用 hook_utils.setup_hook_logging 代替
+
 提供統一的 Hook 日誌設定功能。
 消除 task-dispatch-readiness-check.py, ticket-quality-gate-hook.py 等檔案中的重複程式碼。
 
 主要功能:
-- setup_hook_logging: 設定 Hook 日誌
+- setup_hook_logging: 設定 Hook 日誌（已遷移）
+
+參考：.claude/hooks/hook_utils.py（新日誌系統）
 """
 
 import logging

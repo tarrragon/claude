@@ -18,6 +18,10 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from hook_utils import setup_hook_logging, run_hook_safely
+from lib.hook_messages import ValidationMessages, format_message
+
 
 # 問題 emoji 模式清單（使用 Unicode 碼點避免直接使用 emoji）
 # 這些 emoji 在 markdown 表格單元格中會導致 Claude Code CLI crash
@@ -78,13 +82,13 @@ def format_warning(file_path: str, issues: list[dict]) -> str:
     lines = [
         "",
         "=" * 60,
-        "worklog-format-check: Warning",
+        ValidationMessages.WORKLOG_FORMAT_WARNING_HEADER,
         "=" * 60,
         f"File: {file_path}",
         f"Issues: {len(issues)}",
         "",
-        "Detected emoji in markdown table cells.",
-        "Please use plain text status markers instead.",
+        ValidationMessages.WORKLOG_EMOJI_DETECTED_MSG,
+        ValidationMessages.WORKLOG_PLAIN_TEXT_ADVICE,
         "",
         "Details:",
         "-" * 40,
@@ -106,6 +110,7 @@ def format_warning(file_path: str, issues: list[dict]) -> str:
 
 
 def main():
+    logger = setup_hook_logging("worklog-format-check")
     """主函式"""
     # 讀取 stdin 獲取 Hook 輸入
     try:
@@ -130,11 +135,11 @@ def main():
     if issues:
         # 輸出警告到 stderr（非阻擋）
         warning = format_warning(file_path, issues)
-        print(warning, file=sys.stderr)
+        print(warning)
 
     # 總是返回成功（非阻擋式 Hook）
     return 0
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    sys.exit(run_hook_safely(main, "worklog-format-check"))

@@ -61,7 +61,7 @@
 | 需補充 | 完成補充後重新審查 |
 | 不建議 | 升級到 PM 決定 |
 
-> 詳細規格：[system-analyst](../agents/system-analyst.md)
+> 詳細規格：@.claude/agents/system-analyst.md
 
 ---
 
@@ -69,31 +69,31 @@
 
 ### Phase 1：功能設計
 
-**代理人**：[lavender-interface-designer](../agents/lavender-interface-designer.md)
+**代理人**：@.claude/agents/lavender-interface-designer.md
 
 **產出**：功能規格文件、API 介面定義、驗收標準
 
 ### Phase 2：測試設計
 
-**代理人**：[sage-test-architect](../agents/sage-test-architect.md)
+**代理人**：@.claude/agents/sage-test-architect.md
 
 **產出**：測試案例清單、Given-When-Then 規格、測試檔案結構
 
 ### Phase 3a：策略規劃
 
-**代理人**：[pepper-test-implementer](../agents/pepper-test-implementer.md)
+**代理人**：@.claude/agents/pepper-test-implementer.md
 
 **產出**：實作策略文件、虛擬碼設計、技術債務評估
 
 ### Phase 3b：實作執行
 
-**代理人**：[parsley-flutter-developer](../agents/parsley-flutter-developer.md)
+**代理人**：@.claude/agents/parsley-flutter-developer.md
 
 **產出**：可執行程式碼、通過的測試、程式碼品質報告
 
 ### Phase 4：重構優化
 
-**代理人**：[cinnamon-refactor-owl](../agents/cinnamon-refactor-owl.md)
+**代理人**：@.claude/agents/cinnamon-refactor-owl.md
 
 **產出**：重構後程式碼、品質改善報告、技術債務記錄
 
@@ -116,7 +116,7 @@
 
 每次階段轉換時：
 
-1. 執行 `/ticket-track complete {id}`
+1. 執行 `/ticket track complete {id}`
 2. 更新工作日誌
 3. 派發下一階段代理人
 
@@ -139,7 +139,7 @@ Phase 3b 測試失敗
 根據分析派發對應代理人
 ```
 
-> 詳細流程：[incident-response](incident-response.md)
+> 詳細流程：@.claude/rules/flows/incident-response.md
 
 ### 情況 2：SA 審查發現問題
 
@@ -172,9 +172,8 @@ Phase 3b 測試失敗
 
 ## 相關文件
 
-- [decision-tree](../core/decision-tree.md) - 主線程決策樹
-- [agents/overview](../agents/overview.md) - 代理人總覽
-- [quality-baseline](../core/quality-baseline.md) - 品質基線（Phase 4 不可跳過）
+- @.claude/rules/core/decision-tree.md - 主線程決策樹
+- @.claude/rules/core/quality-baseline.md - 品質基線（Phase 4 不可跳過）
 
 ---
 

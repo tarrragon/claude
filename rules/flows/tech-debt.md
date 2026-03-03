@@ -119,7 +119,7 @@ original_version: {發現版本}
 | 指令 | 用途 |
 |------|------|
 | `/tech-debt-capture` | 自動捕獲並建立 Ticket |
-| `/ticket-track summary` | 查看所有 Ticket 包含 TD |
+| `/ticket track summary` | 查看所有 Ticket 包含 TD |
 | `/version-release check` | 檢查是否有未處理的高風險 TD |
 
 ---
@@ -136,9 +136,9 @@ original_version: {發現版本}
 
 ## 相關文件
 
-- [cinnamon-refactor-owl](../agents/cinnamon-refactor-owl.md) - Phase 4 代理人
-- [quality-baseline](../core/quality-baseline.md) - 品質基線
-- [ticket-lifecycle](ticket-lifecycle.md) - Ticket 生命週期
+- @.claude/agents/cinnamon-refactor-owl.md - Phase 4 代理人
+- @.claude/rules/core/quality-baseline.md - 品質基線
+- @.claude/rules/flows/ticket-lifecycle.md - Ticket 生命週期
 
 ---
 

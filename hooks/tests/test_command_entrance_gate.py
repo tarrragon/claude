@@ -27,6 +27,7 @@ exec(hook_code, hook_namespace)
 
 # 提取需要的函式
 is_development_command = hook_namespace['is_development_command']
+is_management_operation = hook_namespace['is_management_operation']
 validate_ticket_has_decision_tree = hook_namespace['validate_ticket_has_decision_tree']
 extract_ticket_status = hook_namespace['extract_ticket_status']
 check_ticket_status = hook_namespace['check_ticket_status']
@@ -48,6 +49,46 @@ def test_is_development_command():
     assert is_development_command(None) is False
 
     print("[PASS] test_is_development_command")
+
+
+def test_is_management_operation_dispatch_patterns():
+    """測試管理操作識別 - 調度類詞彙"""
+    # 調度類詞彙應返回 True
+    assert is_management_operation("並行處理") is True
+    assert is_management_operation("派發代理人") is True
+    assert is_management_operation("繼續 W21") is True
+    assert is_management_operation("序列派發") is True
+    assert is_management_operation("開始處理") is True
+    assert is_management_operation("恢復任務") is True
+    assert is_management_operation("接手任務") is True
+
+    print("[PASS] test_is_management_operation_dispatch_patterns")
+
+
+def test_is_management_operation_short_answers():
+    """測試管理操作識別 - 短回答白名單"""
+    # 短回答應返回 True
+    assert is_management_operation("是") is True
+    assert is_management_operation("好") is True
+    assert is_management_operation("確認") is True
+    assert is_management_operation("同意") is True
+    assert is_management_operation("ok") is True
+    assert is_management_operation("yes") is True
+    assert is_management_operation("y") is True
+    assert is_management_operation("1") is True
+    assert is_management_operation("2") is True
+    assert is_management_operation("3") is True
+    assert is_management_operation("對") is True
+    assert is_management_operation("沒錯") is True
+
+    # 含空白的短回答也應返回 True
+    assert is_management_operation("  是  ") is True
+    assert is_management_operation("  確認  ") is True
+
+    # 較長的短回答應返回 False（長度 > 10）
+    assert is_management_operation("是的沒錯確認同意") is False
+
+    print("[PASS] test_is_management_operation_short_answers")
 
 
 def test_validate_ticket_has_decision_tree():
@@ -194,14 +235,14 @@ def test_blocking_error_messages():
 
             mock_getenv.side_effect = getenv_side_effect
 
-            # 未找到 Ticket 的情況
-            is_valid, error_msg, ticket_id = check_ticket_status()
+            # 未找到 Ticket 的情況（check_ticket_status 返回 4 個值）
+            is_valid, error_msg, ticket_id, relevance_warning = check_ticket_status()
 
             assert is_valid is False
             assert ticket_id is None
             assert error_msg is not None
             assert "未找到待處理的 Ticket" in error_msg
-            assert "/ticket-create" in error_msg
+            assert "/ticket create" in error_msg
             assert "詳見" in error_msg
 
     print("[PASS] test_blocking_error_messages")
@@ -212,6 +253,8 @@ def run_all_tests():
     print("開始執行 command-entrance-gate-hook 測試...\n")
 
     test_is_development_command()
+    test_is_management_operation_dispatch_patterns()
+    test_is_management_operation_short_answers()
     test_validate_ticket_has_decision_tree()
     test_extract_ticket_status()
     test_generate_hook_output_blocking()

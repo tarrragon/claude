@@ -139,51 +139,9 @@ TextStyle(fontSize: 14.sp)  // Manual scaling
 
 ## Internationalization (i18n)
 
-### Correct Usage
+i18n 硬編碼檢測、ARB 工作流程、支援語言清單詳見 `/i18n-checker`。
 
-```dart
-// Correct - use l10n
-Text(context.l10n!.libraryTitle)
-Text(context.l10n!.selectedCount(count, total))
-Text(context.l10n!.errorMessage)
-
-// Incorrect - hardcoded strings
-Text('My Library')
-Text('$count items selected')
-Text('An error occurred')
-```
-
-### Adding New Translation Keys
-
-1. Edit `lib/l10n/app_en.arb`:
-   ```json
-   {
-     "newKey": "New text value",
-     "@newKey": {
-       "description": "Description of the text"
-     }
-   }
-   ```
-
-2. Run `flutter gen-l10n`
-
-3. Use in code:
-   ```dart
-   Text(context.l10n!.newKey)
-   ```
-
-### Supported Languages
-
-- en (English)
-- en_US (English - US)
-- zh_TW (Traditional Chinese)
-- zh_CN (Simplified Chinese)
-- zh (Chinese)
-- es (Spanish)
-- fr (French)
-- hi (Hindi)
-- ja (Japanese)
-- ko (Korean)
+**快速參考**：所有使用者可見文字必須使用 `context.l10n!.keyName`，禁止硬編碼字串。
 
 ---
 
@@ -234,15 +192,7 @@ BorderRadius.circular(UIBorderRadius.sm)
 
 ### Violation 5: Hardcoded Text
 
-```dart
-// Violation
-Text('My Library')
-AppBar(title: Text('Settings'))
-
-// Fix
-Text(context.l10n!.libraryTitle)
-AppBar(title: Text(context.l10n!.settingsTitle))
-```
+硬編碼文字檢測和修正詳見 `/i18n-checker`。
 
 ### Violation 6: ViewModel Hardcoded User Messages
 
@@ -306,7 +256,9 @@ The style checker is integrated into PostEdit Hook:
 - [Color System Reference](./references/color-system.md)
 - [Spacing System Reference](./references/spacing-system.md)
 - [Typography System Reference](./references/typography-system.md)
-- [i18n Guidelines Reference](./references/i18n-guidelines.md)
+
+### Related Skills
+- `/i18n-checker` - i18n 硬編碼全量掃描和修正工作流程
 
 ### External Resources
 - [Flat Design Explained - MasterClass](https://www.masterclass.com/articles/flat-design-explained)

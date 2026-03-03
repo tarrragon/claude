@@ -325,6 +325,38 @@ if __name__ == "__main__":
 | Git 操作 | git_utils | `run_git_command()` |
 | 分支檢查 | git_utils | `is_protected_branch()` |
 
+### 輸出規範（stderr 禁止規則）
+
+> **背景**：Claude Code 將 hook 的任何 stderr 輸出視為 "hook error"。此問題在 W4-035、W18-004.3、W18-004.7 中反覆出現，最終在 W19-001 系統性修復。
+
+**強制規則**：所有 hook 禁止寫入 stderr。
+
+| 禁止模式 | 正確替代 |
+|---------|---------|
+| `logging.StreamHandler(sys.stderr)` | `logging.StreamHandler(sys.stdout)` |
+| `print(..., file=sys.stderr)` | `print(...)` |
+| `sys.stderr.write(...)` | `sys.stdout.write(...)` 或 `print(...)` |
+
+**日誌配置標準模板**：
+
+```python
+# 正確：使用 stdout
+logging.basicConfig(
+    level=log_level,
+    format="[%(asctime)s] %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler(sys.stdout)  # 必須用 stdout
+    ]
+)
+```
+
+**檢查方式**：
+```bash
+# 驗證無 stderr 使用（應返回空結果）
+grep -r "sys\.stderr" .claude/hooks/ --include="*.py"
+```
+
 ### 測試要求
 
 每個 Hook 腳本必須有對應的單元測試：

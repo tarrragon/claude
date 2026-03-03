@@ -18,29 +18,37 @@ version-release/
 ## 快速導覽
 
 ### 我是新使用者，想快速上手
+
 → 閱讀 [`README.md`](./README.md) 的「快速開始」章節
 
 ### 我需要完整的功能說明
+
 → 詳讀 [`SKILL.md`](./SKILL.md)
 
 ### 我想了解三步驟發布流程
+
 → 查看 [`SKILL.md` 的「三步驟發布流程」](./SKILL.md#三步驟發布流程)
 
 ### 我需要實際執行發布
+
 → 按照 [`README.md` 的「使用流程」](./README.md#使用流程)
 
 ### 我需要發布檢查清單
+
 → 複製 [`templates/release-checklist.md`](./templates/release-checklist.md)
 
 ### 我想了解技術細節
+
 → 閱讀 [`scripts/version_release.py`](./scripts/version_release.py) 的原始碼
 
 ### 我想測試工具
+
 → 參考 [`tests/test_version_release.md`](./tests/test_version_release.md)
 
 ## 檔案詳細說明
 
 ### README.md (快速參考)
+
 - **用途**: 快速參考指南
 - **內容**: 快速開始、核心功能、子命令、使用流程
 - **適合**: 已了解基本概念，想快速查詢用法的使用者
@@ -48,6 +56,7 @@ version-release/
 - **更新頻率**: 低
 
 ### SKILL.md (完整文件)
+
 - **用途**: 完整的功能和技術文件
 - **內容**: 核心功能、三步驟流程、CLI 設計、版本偵測、輸出範例、錯誤處理、相關工具
 - **適合**: 需要完全理解工具功能的開發者
@@ -56,6 +65,7 @@ version-release/
 - **對應 Frontmatter**: name, description 等元資料
 
 ### version_release.py (主要腳本)
+
 - **用途**: 版本發布自動化工具的核心實現
 - **語言**: Python 3.10+
 - **模式**: UV Single-File (PEP 723)
@@ -69,6 +79,7 @@ version-release/
 - **依賴**: pyyaml
 
 ### release-checklist.md (檢查清單範本)
+
 - **用途**: 版本發布前的人工檢查清單
 - **內容**: Phase 驗證、技術債務檢查、版本號同步、Git 操作、後續操作
 - **使用方式**: 複製並填入版本號，按照清單逐項檢查
@@ -76,6 +87,7 @@ version-release/
 - **更新頻率**: 版本變更時
 
 ### test_version_release.md (測試文件)
+
 - **用途**: 測試用例和驗證指南
 - **內容**: 7 個主要測試案例、檢查清單、測試環境要求、測試結果記錄
 - **大小**: ~200 行
@@ -117,6 +129,7 @@ uv run scripts/version_release.py check --help
 ### 查詢三步驟流程
 
 查看 `SKILL.md` 的以下章節：
+
 - 「Step 1: Pre-flight 檢查」
 - 「Step 2: 文件更新」
 - 「Step 3: Git 操作」
@@ -124,6 +137,7 @@ uv run scripts/version_release.py check --help
 ### 查詢輸出範例
 
 查看 `SKILL.md` 的「輸出範例」章節：
+
 - 完整發布流程（release）
 - 預覽模式（--dry-run）
 - 只檢查（check）
@@ -139,28 +153,30 @@ uv run scripts/version_release.py check --help
 
 ## 檔案維護職責
 
-| 檔案 | 維護者 | 更新時機 |
-|-----|--------|---------|
-| README.md | basil-hook-architect | 功能變更時 |
-| SKILL.md | basil-hook-architect | 功能或規格變更時 |
-| version_release.py | basil-hook-architect | 功能實現或 bug 修復時 |
-| release-checklist.md | rosemary-project-manager | 發布流程變更時 |
-| test_version_release.md | pepper-test-implementer | 新增測試用例時 |
+| 檔案                    | 維護者                   | 更新時機              |
+| ----------------------- | ------------------------ | --------------------- |
+| README.md               | basil-hook-architect     | 功能變更時            |
+| SKILL.md                | basil-hook-architect     | 功能或規格變更時      |
+| version_release.py      | basil-hook-architect     | 功能實現或 bug 修復時 |
+| release-checklist.md    | rosemary-project-manager | 發布流程變更時        |
+| test_version_release.md | pepper-test-implementer  | 新增測試用例時        |
 
 ## 版本歷史
 
-| 版本 | 日期 | 主要變更 |
-|------|------|---------|
+| 版本 | 日期       | 主要變更 |
+| ---- | ---------- | -------- |
 | v1.0 | 2026-01-06 | 初始發布 |
 
 ## 相關文件
 
 ### 內部參考
+
 - `.claude/skills/tech-debt-capture/SKILL.md` - 技術債務捕捉工具
-- `.claude/skills/ticket-create/` - Ticket 建立工具
+- `.claude/skills/ticket create/` - Ticket 建立工具
 
 ### 外部參考
-- `docs/todolist.md` - 版本狀態和技術債務追蹤
+
+- `docs/todolist.yaml` - 版本狀態和技術債務追蹤
 - `CHANGELOG.md` - 版本變動記錄
 - `pubspec.yaml` - 應用程式版本號
 - `docs/work-logs/` - 所有 Phase 工作日誌

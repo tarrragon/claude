@@ -4,16 +4,15 @@
 # dependencies = ["pyyaml"]
 # ///
 """
-任務分派準備度檢查 Hook
-PreToolUse Hook: 在使用 Task 工具前檢查是否包含必要參考文件和代理人分派正確性
+代理人分派正確性檢查 Hook
+PreToolUse Hook: 在使用 Task 工具前檢查代理人分派是否正確
 
-符合敏捷重構方法論的任務分派原則，確保所有任務都有完整的需求依據和正確的代理人分派
+確保任務類型與代理人匹配（例如 Hook 開發 → basil-hook-architect）。
+任務需求完整性檢查已由 Ticket 系統（command-entrance-gate-hook）負責。
 
-重構紀錄 (v0.28.0):
-- 使用 .claude/lib/hook_logging 共用模組
-- 使用 .claude/lib/hook_io 共用模組
-- 使用 .claude/config/agents.yaml 配置檔案
-- 從 858 行精簡至約 300 行
+重構紀錄:
+- v0.31.0: 移除 check_task_requirements（已被 Ticket 檢查機制取代）
+- v0.28.0: 使用共用模組和配置檔案
 """
 
 import json
@@ -24,15 +23,32 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# 添加 lib 目錄到路徑
+# 加入共用模組路徑
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
+sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_logging import setup_hook_logging
+
+def is_handoff_recovery_mode() -> bool:
+    """
+    檢查是否處於 Handoff 恢復模式
+
+    Handoff 恢復時，Claude 自動讀取 Ticket 和派發代理人，
+    這些操作應被豁免，允許恢復流程正常進行。
+    """
+    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+    handoff_pending_dir = project_dir / ".claude" / "handoff" / "pending"
+
+    # 檢查是否存在 pending Handoff 任務
+    if handoff_pending_dir.exists() and handoff_pending_dir.is_dir():
+        # 檢查是否有任何 pending JSON 檔案
+        if any(handoff_pending_dir.glob("*.json")):
+            return True
+
+    return False
+
+from hook_utils import setup_hook_logging
 from hook_io import read_hook_input, write_hook_output, create_pretooluse_output
 from config_loader import load_agents_config
-
-# 設定日誌
-logger = setup_hook_logging("agent-dispatch-check")
 
 # Hook 模式常數
 HOOK_MODE_STRICT = "strict"
@@ -40,7 +56,7 @@ HOOK_MODE_WARNING = "warning"
 DEFAULT_HOOK_MODE = HOOK_MODE_STRICT
 
 
-def get_hook_mode() -> str:
+def get_hook_mode(logger) -> str:
     """取得當前 Hook 運作模式"""
     env_mode = os.environ.get("HOOK_MODE", "").lower()
     if env_mode in [HOOK_MODE_STRICT, HOOK_MODE_WARNING]:
@@ -61,7 +77,7 @@ def get_hook_mode() -> str:
     return DEFAULT_HOOK_MODE
 
 
-def log_warning_to_file(warning_data: Dict) -> None:
+def log_warning_to_file(warning_data: Dict, logger) -> None:
     """記錄警告到 JSONL 檔案"""
     try:
         project_root = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
@@ -76,7 +92,7 @@ def log_warning_to_file(warning_data: Dict) -> None:
         logger.error(f"記錄警告失敗: {e}")
 
 
-def detect_task_type(prompt: str, config: Dict) -> str:
+def detect_task_type(prompt: str, config: Dict, logger) -> str:
     """偵測任務類型"""
     # 優先級 1: 明確 Phase 標記檢測
     explicit_phase_patterns = [
@@ -130,7 +146,7 @@ def detect_task_type(prompt: str, config: Dict) -> str:
     return "未知"
 
 
-def check_agent_dispatch(prompt: str, current_agent: str, config: Dict) -> Dict:
+def check_agent_dispatch(prompt: str, current_agent: str, config: Dict, logger) -> Dict:
     """檢查代理人分派是否正確"""
     known_agents = set(config.get("known_agents", []))
     agent_to_task_map = config.get("agent_to_task_map", {})
@@ -154,7 +170,7 @@ def check_agent_dispatch(prompt: str, current_agent: str, config: Dict) -> Dict:
         }
 
     # 任務類型關鍵字判定
-    task_type = detect_task_type(prompt, config)
+    task_type = detect_task_type(prompt, config, logger)
     if task_type == "未知":
         return {"is_error": False}
 
@@ -184,51 +200,10 @@ def check_agent_dispatch(prompt: str, current_agent: str, config: Dict) -> Dict:
     }
 
 
-def check_task_requirements(prompt: str, config: Dict) -> List[str]:
-    """檢查任務必要參考文件"""
-    missing_items = []
-    task_detection = config.get("task_detection", {})
-
-    # 識別任務類型
-    infrastructure_keywords = task_detection.get("infrastructure_keywords", [])
-    documentation_keywords = task_detection.get("documentation_keywords", [])
-
-    is_infrastructure_task = any(
-        re.search(kw, prompt, re.IGNORECASE) for kw in infrastructure_keywords
-    )
-    is_documentation_task = any(
-        re.search(kw, prompt, re.IGNORECASE) for kw in documentation_keywords
-    )
-    is_phase4_task = bool(re.search(r'Phase 4|重構評估|cinnamon-refactor-owl', prompt, re.IGNORECASE))
-    is_phase3b_test_task = bool(re.search(r'Phase 3b.*測試|實作測試|撰寫測試程式碼|test/unit/', prompt, re.IGNORECASE))
-
-    # 跳過特定任務類型的檢查
-    if is_infrastructure_task or is_documentation_task or is_phase4_task or is_phase3b_test_task:
-        return []
-
-    # UseCase 參考檢查
-    if not re.search(r'UC-\d{2}', prompt):
-        missing_items.append("UseCase 參考 (格式: UC-XX)")
-
-    # Event 參考檢查
-    if not re.search(r'Event \d+|事件 \d+', prompt, re.IGNORECASE):
-        missing_items.append("流程圖 Event 參考")
-
-    # 架構規範引用檢查
-    architecture_patterns = task_detection.get("architecture_patterns", [])
-    if not any(re.search(p, prompt, re.IGNORECASE) for p in architecture_patterns):
-        missing_items.append("架構規範引用")
-
-    # 依賴類別說明檢查
-    dependency_patterns = task_detection.get("dependency_patterns", [])
-    if not any(re.search(p, prompt, re.IGNORECASE) for p in dependency_patterns):
-        missing_items.append("依賴類別說明")
-
-    return missing_items
-
-
 def main() -> None:
     """主執行函式"""
+    logger = setup_hook_logging("agent-dispatch-check")
+
     try:
         input_data = read_hook_input()
         if not input_data:
@@ -251,22 +226,19 @@ def main() -> None:
         write_hook_output(output)
         sys.exit(0)
 
+    # Handoff 恢復模式：略過所有檢查
+    if is_handoff_recovery_mode():
+        logger.info("檢測到 Handoff 恢復模式，略過代理人分派檢查")
+        sys.exit(0)
+
     # 載入配置
     config = load_agents_config()
-
-    # 檢查必要參考文件
-    missing_items = check_task_requirements(prompt, config)
-    if missing_items:
-        reason = f"任務分派準備度不足，缺失: {', '.join(missing_items)}"
-        output = create_pretooluse_output("deny", reason)
-        write_hook_output(output)
-        sys.exit(0)
 
     # 代理人分派檢查
     subagent_type = tool_input.get("subagent_type", "")
     if subagent_type:
-        hook_mode = get_hook_mode()
-        agent_check_result = check_agent_dispatch(prompt, subagent_type, config)
+        hook_mode = get_hook_mode(logger)
+        agent_check_result = check_agent_dispatch(prompt, subagent_type, config, logger)
 
         if agent_check_result.get("is_error"):
             if hook_mode == HOOK_MODE_STRICT:
@@ -284,8 +256,8 @@ def main() -> None:
                     "wrong_agent": subagent_type,
                     "correct_agent": agent_check_result.get("correct_agent", "未知"),
                     "prompt_preview": prompt[:200]
-                })
-                print(f"[WARNING] {agent_check_result['error_message']}", file=sys.stderr)
+                }, logger)
+                print(f"[WARNING] {agent_check_result['error_message']}")
 
     logger.info("所有檢查通過")
     sys.exit(0)

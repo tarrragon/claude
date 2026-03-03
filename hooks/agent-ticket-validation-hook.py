@@ -14,6 +14,11 @@ Agent Ticket Validation Hook
 - 驗證 Ticket 是否存在
 - 驗證 Ticket 是否包含決策樹欄位
 - 無效時拒絕派發
+- 支援豁免機制：特定代理人類型（如 Explore）可跳過 Ticket 驗證
+
+豁免機制：
+- Explore 代理人：用於前置資訊蒐集，在建立 Ticket 之前執行
+- 豁免的代理人類型定義在 TICKET_EXEMPT_AGENT_TYPES 常數中
 
 Hook 類型: PreToolUse（阻塞式）
 Matcher: Task
@@ -28,22 +33,26 @@ Matcher: Task
 
 import sys
 import json
-import logging
 import re
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
+
+# 加入 hook_utils 路徑（相同目錄）
+sys.path.insert(0, str(Path(__file__).parent))
+
+from hook_utils import setup_hook_logging, run_hook_safely
 
 
 # ============================================================================
 # 常數定義
 # ============================================================================
 
-# Ticket ID 引用格式
+# Ticket ID 引用格式（支援子任務 ID，如 0.31.0-W3-002.1.1）
 TICKET_ID_PATTERNS = [
-    r"Ticket:\s*(\d+\.\d+\.\d+-W\d+-\d+)",
-    r"#Ticket-(\d+\.\d+\.\d+-W\d+-\d+)",
-    r"\[Ticket\s+(\d+\.\d+\.\d+-W\d+-\d+)\]"
+    r"Ticket:\s*(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)",
+    r"#Ticket-(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)",
+    r"\[Ticket\s+(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)\]"
 ]
 
 # 決策樹欄位識別
@@ -54,46 +63,24 @@ DECISION_TREE_MARKERS = [
     "## 決策樹"
 ]
 
+# 豁免 Ticket 驗證的代理人類型
+# 這些代理人用於前置資訊蒐集，在建立 Ticket 之前執行
+TICKET_EXEMPT_AGENT_TYPES = [
+    "Explore",  # 探索代理人：用於蒐集資訊以建立 Ticket
+]
+
 # Exit Code
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_BLOCK = 2
 
 
-# ============================================================================
-# 日誌設置
-# ============================================================================
-
-def setup_logging() -> None:
-    """初始化日誌系統"""
-    import os
-
-    log_level = logging.DEBUG if os.getenv("HOOK_DEBUG") == "true" else logging.INFO
-
-    # 建立日誌目錄
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
-    log_dir = project_dir / ".claude" / "hook-logs" / "agent-ticket-validation"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    log_file = log_dir / "agent-ticket-validation.log"
-
-    logging.basicConfig(
-        level=log_level,
-        format="[%(asctime)s] %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stderr)
-        ]
-    )
-
-
-# ============================================================================
-# 輸入讀取和驗證
-# ============================================================================
-
-def read_json_from_stdin() -> Dict[str, Any]:
+def read_json_from_stdin(logger) -> Dict[str, Any]:
     """
     從 stdin 讀取 JSON 輸入
+
+    Args:
+        logger: 日誌物件
 
     Returns:
         dict - 解析後的 JSON 資料
@@ -103,31 +90,32 @@ def read_json_from_stdin() -> Dict[str, Any]:
     """
     try:
         input_data = json.load(sys.stdin)
-        logging.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
+        logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
         return input_data
     except json.JSONDecodeError as e:
-        logging.error(f"JSON 解析錯誤: {e}")
+        logger.error(f"JSON 解析錯誤: {e}")
         raise ValueError(f"Invalid JSON input: {e}")
 
 
-def validate_input(input_data: Dict[str, Any]) -> bool:
+def validate_input(input_data: Dict[str, Any], logger) -> bool:
     """
     驗證輸入格式
 
     Args:
         input_data: Hook 輸入資料
+        logger: 日誌物件
 
     Returns:
         bool - 輸入格式是否正確
     """
     # PreToolUse Hook 需要 tool_input 欄位
     if "tool_input" not in input_data:
-        logging.error("缺少必要欄位: tool_input")
+        logger.error("缺少必要欄位: tool_input")
         return False
 
     tool_input = input_data.get("tool_input", {})
     if "prompt" not in tool_input:
-        logging.error("缺少必要欄位: tool_input.prompt")
+        logger.error("缺少必要欄位: tool_input.prompt")
         return False
 
     return True
@@ -137,12 +125,13 @@ def validate_input(input_data: Dict[str, Any]) -> bool:
 # Ticket ID 提取
 # ============================================================================
 
-def extract_ticket_reference(prompt: str) -> Optional[str]:
+def extract_ticket_reference(prompt: str, logger) -> Optional[str]:
     """
     從 prompt 中提取 Ticket ID 引用
 
     Args:
         prompt: 派發提示文本
+        logger: 日誌物件
 
     Returns:
         str - Ticket ID，或 None 如未找到
@@ -153,17 +142,17 @@ def extract_ticket_reference(prompt: str) -> Optional[str]:
     - [Ticket 0.30.1-W2-003]
     """
     if not prompt:
-        logging.debug("prompt 為空")
+        logger.debug("prompt 為空")
         return None
 
     for pattern in TICKET_ID_PATTERNS:
         match = re.search(pattern, prompt)
         if match:
             ticket_id = match.group(1)
-            logging.info(f"從 prompt 提取 Ticket ID: {ticket_id}")
+            logger.info(f"從 prompt 提取 Ticket ID: {ticket_id}")
             return ticket_id
 
-    logging.debug(f"未在 prompt 中找到 Ticket ID 引用")
+    logger.debug(f"未在 prompt 中找到 Ticket ID 引用")
     return None
 
 
@@ -171,12 +160,13 @@ def extract_ticket_reference(prompt: str) -> Optional[str]:
 # Ticket 檔案查找和驗證
 # ============================================================================
 
-def find_ticket_file(ticket_id: str) -> Optional[Path]:
+def find_ticket_file(ticket_id: str, logger) -> Optional[Path]:
     """
     尋找 Ticket 檔案
 
     Args:
         ticket_id: Ticket ID
+        logger: 日誌物件
 
     Returns:
         Path - Ticket 檔案路徑，或 None 如未找到
@@ -195,7 +185,7 @@ def find_ticket_file(ticket_id: str) -> Optional[Path]:
     if search_locations[0].exists():
         ticket_file = search_locations[0] / f"{ticket_id}.md"
         if ticket_file.exists():
-            logging.info(f"在 .claude/tickets/ 中找到 Ticket: {ticket_id}")
+            logger.info(f"在 .claude/tickets/ 中找到 Ticket: {ticket_id}")
             return ticket_file
 
     # 搜尋 docs/work-logs/*/tickets/
@@ -204,38 +194,40 @@ def find_ticket_file(ticket_id: str) -> Optional[Path]:
         if tickets_dir.exists():
             ticket_file = tickets_dir / f"{ticket_id}.md"
             if ticket_file.exists():
-                logging.info(f"在 {tickets_dir} 中找到 Ticket: {ticket_id}")
+                logger.info(f"在 {tickets_dir} 中找到 Ticket: {ticket_id}")
                 return ticket_file
 
-    logging.warning(f"未找到 Ticket 檔案: {ticket_id}")
+    logger.warning(f"未找到 Ticket 檔案: {ticket_id}")
     return None
 
 
-def load_ticket_content(ticket_path: Path) -> Optional[str]:
+def load_ticket_content(ticket_path: Path, logger) -> Optional[str]:
     """
     讀取 Ticket 檔案內容
 
     Args:
         ticket_path: Ticket 檔案路徑
+        logger: 日誌物件
 
     Returns:
         str - 檔案內容，或 None 如讀取失敗
     """
     try:
         content = ticket_path.read_text(encoding="utf-8")
-        logging.debug(f"成功讀取 Ticket 檔案: {ticket_path}")
+        logger.debug(f"成功讀取 Ticket 檔案: {ticket_path}")
         return content
     except Exception as e:
-        logging.error(f"無法讀取 Ticket 檔案 {ticket_path}: {e}")
+        logger.error(f"無法讀取 Ticket 檔案 {ticket_path}: {e}")
         return None
 
 
-def validate_ticket_has_decision_tree(content: str) -> bool:
+def validate_ticket_has_decision_tree(content: str, logger) -> bool:
     """
     驗證 Ticket 是否包含決策樹欄位
 
     Args:
         content: Ticket 檔案內容
+        logger: 日誌物件
 
     Returns:
         bool - 是否包含決策樹欄位
@@ -245,25 +237,26 @@ def validate_ticket_has_decision_tree(content: str) -> bool:
     - 內容中的決策樹相關標記
     """
     if not content:
-        logging.warning("Ticket 內容為空")
+        logger.warning("Ticket 內容為空")
         return False
 
     # 檢查任何決策樹欄位
     for marker in DECISION_TREE_MARKERS:
         if marker in content:
-            logging.info(f"Ticket 包含決策樹欄位: {marker}")
+            logger.info(f"Ticket 包含決策樹欄位: {marker}")
             return True
 
-    logging.warning("Ticket 缺少決策樹欄位")
+    logger.warning("Ticket 缺少決策樹欄位")
     return False
 
 
-def validate_ticket(ticket_id: str) -> Tuple[bool, str]:
+def validate_ticket(ticket_id: str, logger) -> Tuple[bool, str]:
     """
     驗證 Ticket 的完整性
 
     Args:
         ticket_id: Ticket ID
+        logger: 日誌物件
 
     Returns:
         tuple - (is_valid, error_message)
@@ -271,26 +264,26 @@ def validate_ticket(ticket_id: str) -> Tuple[bool, str]:
             - error_message: 錯誤訊息（如有）
     """
     # 尋找 Ticket 檔案
-    ticket_path = find_ticket_file(ticket_id)
+    ticket_path = find_ticket_file(ticket_id, logger)
     if not ticket_path:
         msg = f"找不到 Ticket: {ticket_id}"
-        logging.error(msg)
+        logger.error(msg)
         return False, msg
 
     # 讀取 Ticket 內容
-    content = load_ticket_content(ticket_path)
+    content = load_ticket_content(ticket_path, logger)
     if not content:
         msg = f"無法讀取 Ticket 檔案: {ticket_id}"
-        logging.error(msg)
+        logger.error(msg)
         return False, msg
 
     # 驗證決策樹欄位
-    if not validate_ticket_has_decision_tree(content):
+    if not validate_ticket_has_decision_tree(content, logger):
         msg = f"Ticket {ticket_id} 缺少決策樹欄位，為無效 Ticket"
-        logging.error(msg)
+        logger.error(msg)
         return False, msg
 
-    logging.info(f"Ticket {ticket_id} 驗證通過")
+    logger.info(f"Ticket {ticket_id} 驗證通過")
     return True, ""
 
 
@@ -298,12 +291,61 @@ def validate_ticket(ticket_id: str) -> Tuple[bool, str]:
 # 派發驗證
 # ============================================================================
 
-def validate_task_dispatch(tool_input: Dict[str, Any]) -> Tuple[bool, str]:
+def is_handoff_recovery_mode(logger) -> bool:
+    """
+    檢查是否處於 Handoff 恢復模式
+
+    Handoff 恢復時，Claude 自動讀取 Ticket 和派發代理人，
+    這些操作應被豁免，允許恢復流程正常進行。
+
+    Args:
+        logger: 日誌物件
+    """
+    import os
+
+    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+    handoff_pending_dir = project_dir / ".claude" / "handoff" / "pending"
+
+    # 檢查是否存在 pending Handoff 任務
+    if handoff_pending_dir.exists() and handoff_pending_dir.is_dir():
+        # 檢查是否有任何 pending JSON 檔案
+        if any(handoff_pending_dir.glob("*.json")):
+            logger.info("檢測到 Handoff 恢復模式")
+            return True
+
+    return False
+
+
+def is_exempt_agent_type(subagent_type: str, logger) -> bool:
+    """
+    檢查代理人類型是否豁免 Ticket 驗證
+
+    Args:
+        subagent_type: 代理人類型
+        logger: 日誌物件
+
+    Returns:
+        bool - 是否豁免驗證
+
+    豁免的代理人類型用於前置資訊蒐集，在建立 Ticket 之前執行。
+    例如：Explore 代理人用於探索 codebase 以蒐集建立 Ticket 所需的資訊。
+    """
+    if not subagent_type:
+        return False
+
+    is_exempt = subagent_type in TICKET_EXEMPT_AGENT_TYPES
+    if is_exempt:
+        logger.info(f"代理人類型 '{subagent_type}' 豁免 Ticket 驗證（用於前置資訊蒐集）")
+    return is_exempt
+
+
+def validate_task_dispatch(tool_input: Dict[str, Any], logger) -> Tuple[bool, str]:
     """
     驗證 Task 派發是否有效
 
     Args:
         tool_input: 工具輸入資料
+        logger: 日誌物件
 
     Returns:
         tuple - (is_valid, error_message)
@@ -311,20 +353,32 @@ def validate_task_dispatch(tool_input: Dict[str, Any]) -> Tuple[bool, str]:
             - error_message: 錯誤訊息（如有）
 
     驗證流程：
-    1. 從 prompt 提取 Ticket ID 引用
-    2. 驗證 Ticket 是否存在且包含決策樹欄位
+    0. 檢查是否為 Handoff 恢復模式
+    1. 檢查是否為豁免的代理人類型（如 Explore）
+    2. 從 prompt 提取 Ticket ID 引用
+    3. 驗證 Ticket 是否存在且包含決策樹欄位
     """
     prompt = tool_input.get("prompt", "")
+    subagent_type = tool_input.get("subagent_type", "")
 
-    # 步驟 1: 提取 Ticket ID
-    ticket_id = extract_ticket_reference(prompt)
+    # 步驟 0: 檢查 Handoff 恢復模式
+    if is_handoff_recovery_mode(logger):
+        logger.info("Handoff 恢復模式: 略過 Ticket 驗證")
+        return True, ""
+
+    # 步驟 1: 檢查豁免代理人類型
+    if is_exempt_agent_type(subagent_type, logger):
+        return True, ""
+
+    # 步驟 2: 提取 Ticket ID
+    ticket_id = extract_ticket_reference(prompt, logger)
     if not ticket_id:
         msg = "派發任務必須引用有效的 Ticket ID（格式：Ticket: {id} 或 #Ticket-{id} 或 [Ticket {id}]）"
-        logging.error(msg)
+        logger.error(msg)
         return False, msg
 
-    # 步驟 2: 驗證 Ticket
-    is_valid, error_msg = validate_ticket(ticket_id)
+    # 步驟 3: 驗證 Ticket
+    is_valid, error_msg = validate_ticket(ticket_id, logger)
     return is_valid, error_msg
 
 
@@ -375,7 +429,8 @@ def generate_hook_output(
 def save_check_log(
     is_valid: bool,
     ticket_id: Optional[str],
-    error_message: Optional[str]
+    error_message: Optional[str],
+    logger
 ) -> None:
     """
     儲存檢查日誌
@@ -384,6 +439,7 @@ def save_check_log(
         is_valid: 驗證是否通過
         ticket_id: Ticket ID
         error_message: 錯誤訊息（如有）
+        logger: 日誌物件
     """
     import os
 
@@ -403,9 +459,9 @@ def save_check_log(
 """
         with open(report_file, "a", encoding="utf-8") as f:
             f.write(log_entry)
-        logging.debug(f"檢查日誌已儲存: {report_file}")
+        logger.debug(f"檢查日誌已儲存: {report_file}")
     except Exception as e:
-        logging.warning(f"儲存檢查日誌失敗: {e}")
+        logger.warning(f"儲存檢查日誌失敗: {e}")
 
 
 # ============================================================================
@@ -428,17 +484,17 @@ def main() -> int:
     Returns:
         int - Exit code (0=allow, 2=deny, 1=error)
     """
+    logger = setup_hook_logging("agent-ticket-validation")
     try:
         # 步驟 1: 初始化日誌
-        setup_logging()
-        logging.info("Agent Ticket Validation Hook 啟動")
+        logger.info("Agent Ticket Validation Hook 啟動")
 
         # 步驟 2: 讀取 JSON 輸入
-        input_data = read_json_from_stdin()
+        input_data = read_json_from_stdin(logger)
 
         # 步驟 3: 驗證輸入格式
-        if not validate_input(input_data):
-            logging.error("輸入格式錯誤")
+        if not validate_input(input_data, logger):
+            logger.error("輸入格式錯誤")
             print(json.dumps({
                 "hookSpecificOutput": {"hookEventName": "PreToolUse"}
             }, ensure_ascii=False, indent=2))
@@ -447,28 +503,28 @@ def main() -> int:
         tool_input = input_data.get("tool_input", {})
 
         # 步驟 4: 驗證 Task 派發有效性
-        is_valid, error_message = validate_task_dispatch(tool_input)
-        ticket_id = extract_ticket_reference(tool_input.get("prompt", ""))
+        is_valid, error_message = validate_task_dispatch(tool_input, logger)
+        ticket_id = extract_ticket_reference(tool_input.get("prompt", ""), logger)
 
-        logging.info(f"Task 派發驗證: is_valid={is_valid}, ticket_id={ticket_id}")
+        logger.info(f"Task 派發驗證: is_valid={is_valid}, ticket_id={ticket_id}")
 
         # 步驟 5: 生成 Hook 輸出
         hook_output = generate_hook_output(is_valid, error_message if not is_valid else None)
         print(json.dumps(hook_output, ensure_ascii=False, indent=2))
 
         # 步驟 6: 儲存日誌
-        save_check_log(is_valid, ticket_id, error_message if not is_valid else None)
+        save_check_log(is_valid, ticket_id, error_message if not is_valid else None, logger)
 
         # 步驟 7: 決定 exit code
         if is_valid:
-            logging.info("Agent Ticket Validation Hook 檢查通過")
+            logger.info("Agent Ticket Validation Hook 檢查通過")
             return EXIT_SUCCESS
         else:
-            logging.warning("Agent Ticket Validation Hook 拒絕派發")
+            logger.warning("Agent Ticket Validation Hook 拒絕派發")
             return EXIT_BLOCK
 
     except Exception as e:
-        logging.critical(f"Hook 執行錯誤: {e}", exc_info=True)
+        logger.critical(f"Hook 執行錯誤: {e}", exc_info=True)
         error_output = {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
@@ -484,4 +540,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run_hook_safely(main, "agent-ticket-validation"))

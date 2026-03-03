@@ -299,22 +299,29 @@ You are a {role description in English}. Your core mission is {mission statement
 - 範例：`saffron-system-analyst.md`
 
 ### 觸發條件規則檔案
-- 位置：`.claude/rules/agent-triggers/`
-- 命名：`{縮寫}-trigger-conditions.md`
-- 範例：`sa-trigger-conditions.md`
+- 位置：`.claude/rules/dispatch-rules/`
+- 命名：`{agent-name}.md`
+- 範例：`system-analyst.md`
 
 ---
 
 ## 關聯文件
 
-建立新代理人時，可能需要同步建立或更新：
+建立新代理人時，**必須**同步建立以下文件：
 
 | 文件 | 說明 | 位置 |
 |------|------|------|
-| 代理人規則 | 詳細的代理人定義 | `.claude/rules/agents/` |
-| 職責矩陣 | 更新職責邊界 | `.claude/rules/agents/overview.md` |
-| CLAUDE.md | 更新代理人列表 | `CLAUDE.md` |
-| 決策流程 | 更新派發規則 | `.claude/rules/core/decision-tree.md` |
+| Task 工具版本 | 完整的代理人定義（詳細指令） | `.claude/agents/` |
+| 派發規則版本 | 精簡的派發規則摘要 | `.claude/rules/dispatch-rules/` |
+| 職責矩陣 | 更新職責邊界 | `.claude/rules/dispatch-rules/overview.md` |
+| CLAUDE.md | 更新代理人列表（如適用） | `CLAUDE.md` |
+| 決策流程 | 更新派發規則（如適用） | `.claude/rules/core/decision-tree.md` |
+
+### 雙目錄建立檢查
+
+- [ ] `.claude/agents/{name}.md` 已建立（Task 工具版本）
+- [ ] `.claude/rules/dispatch-rules/{name}.md` 已建立（派發規則版本）
+- [ ] `.claude/rules/dispatch-rules/overview.md` 已更新
 
 ---
 

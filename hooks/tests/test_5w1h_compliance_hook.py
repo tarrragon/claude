@@ -48,7 +48,7 @@ class TestCore:
         tool_input = {
             "tool_name": "TodoWrite",
             "tool_input": {
-                "file_path": "docs/todolist.md",
+                "file_path": "docs/todolist.yaml",
                 "content": """🎯 5W1H-20251018-120000-abc123
 Who: parsley-flutter-developer (執行者) | rosemary-project-manager (分派者)
 What: 實作書籍驗證功能
@@ -82,7 +82,7 @@ How: [Task Type: Implementation] TDD 實作策略
         tool_input = {
             "tool_name": "TodoWrite",
             "tool_input": {
-                "file_path": "docs/todolist.md",
+                "file_path": "docs/todolist.yaml",
                 "content": """🎯 5W1H-20251018-120000-def456
 Who: rosemary-project-manager (自行執行 - 分派/驗收)
 What: 設計 v0.12.M.2 Phase 2 測試設計 Ticket
@@ -114,7 +114,7 @@ How: [Task Type: Dispatch] 設計 Ticket 並分派給 sage-test-architect
         tool_input = {
             "tool_name": "TodoWrite",
             "tool_input": {
-                "file_path": "docs/todolist.md",
+                "file_path": "docs/todolist.yaml",
                 "content": """🎯 5W1H-20251018-120000-ghi789
 Who: rosemary-project-manager (自行執行 - 分派/驗收)
 What: 驗收 v0.12.M.1 Phase 1 功能設計成果
@@ -141,7 +141,7 @@ How: [Task Type: Review] 驗收功能規格文件""",
         tool_input = {
             "tool_name": "TodoWrite",
             "tool_input": {
-                "file_path": "docs/todolist.md",
+                "file_path": "docs/todolist.yaml",
                 "content": """🎯 5W1H-20251018-120000-jkl012
 Who: thyme-documentation-integrator (執行者) | rosemary-project-manager (分派者)
 What: 將 v0.12.M 工作日誌轉化為方法論文件
@@ -168,7 +168,7 @@ How: [Task Type: Documentation] 提取工作日誌並整合到方法論""",
         tool_input = {
             "tool_name": "TodoWrite",
             "tool_input": {
-                "file_path": "docs/todolist.md",
+                "file_path": "docs/todolist.yaml",
                 "content": """🎯 5W1H-20251018-120000-mno345
 Who: lavender-interface-designer (執行者) | rosemary-project-manager (分派者)
 What: 分析當前事件設計的缺陷
@@ -195,7 +195,7 @@ How: [Task Type: Analysis] 分析設計缺陷並提出修正方案""",
         tool_input = {
             "tool_name": "TodoWrite",
             "tool_input": {
-                "file_path": "docs/todolist.md",
+                "file_path": "docs/todolist.yaml",
                 "content": """🎯 5W1H-20251018-120000-pqr678
 Who: cinnamon-refactor-owl (執行者) | rosemary-project-manager (分派者)
 What: 重構程式碼改善架構
@@ -222,7 +222,7 @@ How: [Task Type: Implementation] 重構程式碼改善架構""",
         tool_input = {
             "tool_name": "TodoWrite",
             "tool_input": {
-                "file_path": "docs/todolist.md",
+                "file_path": "docs/todolist.yaml",
                 "content": """🎯 5W1H-20251018-120000-stu901
 Who: pepper-test-implementer (執行者) | rosemary-project-manager (分派者)
 What: 實作測試策略並撰寫測試程式碼
@@ -249,7 +249,7 @@ How: [Task Type: Implementation] 實作測試策略並撰寫測試程式碼""",
         tool_input = {
             "tool_name": "TodoWrite",
             "tool_input": {
-                "file_path": "docs/todolist.md",
+                "file_path": "docs/todolist.yaml",
                 "content": """🎯 5W1H-20251018-120000-vwx234
 Who: rosemary-project-manager (自行執行 - 分派/驗收)
 What: 規劃 v0.13 版本的重構策略
@@ -276,7 +276,7 @@ How: [Task Type: Planning] 規劃 v0.13 版本的重構策略""",
         tool_input = {
             "tool_name": "TodoWrite",
             "tool_input": {
-                "file_path": "docs/todolist.md",
+                "file_path": "docs/todolist.yaml",
                 "content": """🎯 5W1H-20251018-120000-yza567
 Who: rosemary-project-manager (自行執行 - 分派/驗收)
 What: 分析問題根因並提出解決方案
@@ -303,7 +303,7 @@ How: [Task Type: Analysis] 分析問題根因並提出解決方案""",
         tool_input = {
             "tool_name": "TodoWrite",
             "tool_input": {
-                "file_path": "docs/todolist.md",
+                "file_path": "docs/todolist.yaml",
                 "content": """🎯 5W1H-20251018-120000-bcd890
 Who: mint-format-specialist (執行者) | rosemary-project-manager (分派者)
 What: 修正程式碼格式和品質問題

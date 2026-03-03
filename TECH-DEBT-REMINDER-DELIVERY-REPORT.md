@@ -27,19 +27,19 @@
 ### 文件體系
 
 ```
-✅ .claude/hooks/TECH-DEBT-REMINDER-QUICK-REF.md (4 KB)
+✅ .claude/references/hooks/TECH-DEBT-REMINDER-QUICK-REF.md (4 KB)
    快速參考卡片 - 一頁參考資料
 
-✅ .claude/hooks/TECH-DEBT-REMINDER-USAGE.md (6 KB)
+✅ .claude/references/hooks/TECH-DEBT-REMINDER-USAGE.md (6 KB)
    完整使用指南 - 5 頁詳細文件
 
-✅ .claude/hooks/README-TECH-DEBT-REMINDER.md (2 KB)
+✅ .claude/references/hooks/README-TECH-DEBT-REMINDER.md (2 KB)
    部署總結 - 快速開始指引
 
-✅ .claude/hooks/IMPLEMENTATION-SUMMARY.md (8 KB)
+✅ .claude/references/hooks/IMPLEMENTATION-SUMMARY.md (8 KB)
    實作總結 - 技術細節和品質評估
 
-✅ .claude/hooks/DEPLOYMENT-CHECKLIST.md (6 KB)
+✅ .claude/references/hooks/DEPLOYMENT-CHECKLIST.md (6 KB)
    驗收清單 - 完整的驗收標準
 ```
 

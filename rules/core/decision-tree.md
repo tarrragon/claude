@@ -3,6 +3,9 @@
 本文件定義主線程（rosemary-project-manager）的完整決策流程，是規則系統的核心。
 
 > **核心原則**：所有任務入口都從這裡開始，其他規則都是它的支撐或延伸。
+>
+> **管理哲學**：主管的價值不在於解決問題的速度，而在於讓團隊的人力發揮到極致。
+> 詳見：.claude/skills/manager/SKILL.md
 
 ---
 
@@ -10,6 +13,31 @@
 
 ```
 接收訊息
+    |
+    v
+[Skill 匹配層] 已註冊 Skill 觸發條件匹配?
+    |
+    +-- 是（明確指令/關鍵字/Hook 提示）→ 使用 Skill tool 執行
+    |
+    +─── 否 → 繼續決策樹
+    |
+    v
+[第負一層] 並行化評估（最高優先）
+    |
+    +-- 可並行拆分? ─是→ Agent A 的發現會改變 Agent B 正在進行的工作?
+    |                      |
+    |                      +─ 否 → [並行派發 Task subagent]
+    |                      |
+    |                      +─ 是 → 3-4x 成本合理?
+    |                               |
+    |                               +─ 是 → [Agent Teams 派發]（/agent-team）
+    |                               +─ 否 → [Task subagent + PM 中轉]
+    |
+    +─── 否 → 主線程必須親自處理? ─是→ [僅限：用戶溝通、最終決策]
+    |                             |       ↓
+    |                             |  [強制] 用戶決策使用 AskUserQuestion
+    |                             |
+    |                             └─否→ [必須派發給代理人]
     |
     v
 [第零層] 明確性檢查
@@ -23,124 +51,99 @@
     |                                      └─否→ [第一層]
 ```
 
-**第零層後的流程**：
-- 錯誤優先：直接進入第六層（事件回應流程）
-- 不確定性詞彙：確認後進入第一層
-- 複雜需求：確認後進入第一層
-- 明確內容：進入第一層
+> 視覺化 Mermaid 圖表：.claude/references/decision-tree-diagrams.md
+
+---
+
+## Skill 匹配層（最高優先）
+
+Skill 是預建的專用工具，優先於代理人派發。
+
+| 優先級 | 匹配方式 | 範例 |
+|--------|---------|------|
+| 1 | 明確指令 (`/skill-name`) | `/ticket track summary` |
+| 2 | Skill description 中的觸發關鍵字 | 「確認待辦的 ticket」→ ticket Skill |
+| 3 | Hook `[SKILL 提示]` 輸出 | Hook 建議使用某 Skill |
+
+無 Skill 匹配 → 進入第負一層。
+
+---
+
+## 第負一層：並行化評估
+
+> **核心原則**：決策第一步不是「這是什麼類型的任務」，而是「這個工作可以讓多少人去做？」
+
+接收到任務後，主線程必須先問自己：
+1. **這個任務可以拆成幾個獨立部分？**
+2. **拆分後的部分有依賴關係嗎？**
+3. **哪些可以同時開始？**
+4. **我需要親自處理的部分是什麼？**（應該極少）
+
+**主線程允許親自處理**：用戶溝通、任務拆分設計、Ticket 建立和指派、閱讀報告和最終決策、驗收結果。其餘一律派發代理人。
+
+**派發方式判斷**：「Agent A 的發現會改變 Agent B 正在進行的工作嗎？」
+
+| 判斷結果 | 路由 |
+|---------|------|
+| 否（各自獨立） | Task subagent 並行派發 |
+| 是（需即時互動）且成本合理 | Agent Teams 派發 |
+| 是 但成本不合理 | Task subagent + PM 中轉 |
+
+> 場景表和詳細規則：.claude/rules/guides/parallel-dispatch.md
+> AskUserQuestion 強制使用規則：.claude/rules/core/askuserquestion-rules.md
 
 ---
 
 ## 第零層：明確性檢查
 
-> **核心原則**：當定義不明確時，應該往上詢問確認，而非強行做出判斷。
-
-### 觸發確認機制的情境
+> 當定義不明確時，應該往上詢問確認，而非強行做出判斷。
 
 | 情境 | 觸發條件 | 確認目標 |
 |------|---------|---------|
-| 不確定性詞彙 | 包含「好像」、「可能」、「似乎」等 | 確認問題性質 |
+| 不確定性詞彙 | 包含「好像」「可能」「似乎」等 | 確認問題性質 |
 | 複雜需求 | 觸發 3+ 代理人 | 確認 use case 和優先級 |
 | 模糊需求 | 無法用「動詞+目標」描述 | 確認具體需求 |
-| 多解釋可能 | 可解釋為多種意圖 | 確認用戶意圖 |
-
-### 不確定性詞彙清單
-
-| 類型 | 詞彙 |
-|------|------|
-| 推測 | 好像、似乎、可能、應該是、大概 |
-| 疑問 | 是不是、會不會、有沒有 |
-| 模糊 | 有點、有時候、偶爾 |
-
-### 確認流程
-
-```
-接收訊息
-    |
-    v
-[第零層] 明確性檢查
-    |
-    +-- 包含明確錯誤關鍵字（test failed, crash, error）?
-    |   +-- 是 --> 直接進入錯誤流程（不需確認）
-    |
-    +-- 包含不確定性詞彙?
-    |   +-- 是 --> [確認機制] 向用戶確認問題性質
-    |
-    +-- 複雜需求（觸發 3+ 代理人）?
-    |   +-- 是 --> [確認機制] 向用戶確認 use case
-    |
-    +-- 明確 --> 繼續第一層判斷
-```
-
-### 確認問題模板
-
-**不確定性詞彙確認**：
-```
-您提到「{問題描述}」，請確認：
-1. 這是一個需要修復的錯誤嗎？
-2. 還是您想諮詢/了解如何處理？
-```
-
-**複雜需求確認**：
-```
-這個需求涉及多個面向（{面向列表}），請確認：
-1. 主要目標是什麼？
-2. 有沒有優先級順序？
-3. 是否有相關的 use case 或規格文件？
-```
 
 ---
 
 ## 第一層：訊息類型判斷
 
-```
-[第零層完成]
-    |
-    v
-是問題? ─是→ [第二層] 問題處理流程
-       |
-       └─否→ [第三層] 命令處理流程
-```
-
-### 訊息類型判斷規則
-
 | 訊息類型 | 識別關鍵字 |
 |---------|-----------|
 | 問題 | "怎麼樣"、"進度"、"為什麼"、"如何"、"是什麼"、"?" |
-| 命令 | "實作"、"建立"、"修復"、"處理"、"執行"、"開始" |
+| 命令 | "實作"、"建立"、"修復"、"處理"、"執行"、"開始"、"測試"、"驗證"、"調整" |
 
 ---
 
 ## 第二層：問題處理流程
 
-```
-是問題
-    |
-    v
-是查詢類問題? ─是→ 執行查詢命令
-             |
-             └─否→ 派發對應諮詢代理人
-```
+> 所有查詢都應派發代理人，主線程禁止直接執行查詢命令、WebFetch、WebSearch。
 
-### 查詢類問題判斷
+| 問題類型 | 路由 |
+|---------|------|
+| Ticket/版本進度查詢 | → Explore agent |
+| 外部資源 | → oregano-data-miner |
+| 架構/設計諮詢 | → system-analyst / system-designer |
+| 環境/安全/效能 | → system-engineer / security-reviewer / ginger |
 
-| 問題類型 | 識別關鍵字 | 執行動作 |
-|---------|-----------|---------|
-| Ticket 進度總覽 | "進度"、"狀態"、"完成了嗎" | `/ticket-track summary` |
-| 特定 Ticket 查詢 | "Ticket {id}"、"查詢 {id}" | `/ticket-track query {id}` |
-| 版本進度查詢 | "版本進度"、"v0.x.x 進度" | 讀取 `docs/work-logs/{version}/` |
-| 待辦事項查詢 | "待辦"、"還有什麼要做" | 讀取 `docs/todolist.md` |
+**SKILL 提示強制採納**：當 Hook 輸出 `[SKILL 提示]` 時，**必須**使用建議的 SKILL 指令。
 
-### 諮詢類問題派發
+> 完整派發對照表：.claude/rules/guides/query-vs-research.md
 
-| 問題類型 | 識別關鍵字 | 派發代理人 |
-|---------|-----------|-----------|
-| 系統架構問題 | "架構"、"設計模式"、"系統結構" | → [system-analyst](../agents/system-analyst.md) |
-| UI/UX 設計問題 | "畫面"、"介面"、"UI"、"操作流程" | → [system-designer](../agents/system-designer.md) |
-| 資料設計問題 | "資料庫"、"資料結構"、"儲存" | → [data-administrator](../agents/data-administrator.md) |
-| 環境配置問題 | "環境"、"配置"、"安裝"、"設定" | → [system-engineer](../agents/system-engineer.md) |
-| 安全問題 | "安全"、"漏洞"、"認證"、"授權" | → [security-reviewer](../agents/security-reviewer.md) |
-| 效能問題 | "效能"、"FPS"、"卡頓"、"延遲"、"慢" | → ginger-performance-tuner |
+---
+
+## 第二層半：基於檔案類型的派發規則
+
+| 檔案類型 | 派發代理人 |
+|---------|-----------|
+| `.claude/hooks/*.py` 新增/設計 | basil-hook-architect |
+| `.claude/hooks/*.py` 優化/修正 | thyme-python-developer |
+| `*.py`（其他） | thyme-python-developer |
+| `*.dart`（lib/ 或 test/） | parsley-flutter-developer |
+| `.md`（.claude/rules/ 或 docs/） | 主線程允許編輯 |
+
+> Hook 派發原則：「Hook 該怎麼運作」→ basil；「Hook 程式碼該怎麼寫」→ thyme
+> IMP-003 防護：.claude/error-patterns/implementation/IMP-003-refactoring-scope-regression.md
 
 ---
 
@@ -157,84 +160,41 @@
                                 └─否→ 其他命令類型 (ignore)
 ```
 
-### Level 2 驗證：Ticket 存在檢查
+| 判斷條件 | 路由 |
+|---------|------|
+| 開發命令（實作/建立/新增/重構） | Hook 驗證 Ticket → 行為分類（IMP/TST/ADJ/ANA） |
+| 安全相關（auth/token/permission） | → 強制派發 security-reviewer |
+| 除錯命令（test failed/crash/bug） | → 強制派發 incident-responder |
+| **計畫執行中發現超範圍需求** | → **[強制] 立即 `/ticket create`，不中斷主線** |
 
-**何時驗證**：接收開發/修改命令後立即執行
-**誰負責**：Hook 系統（command-entrance-gate-hook.py）
+---
+
+## 第三層半：Plan Mode 執行中額外發現規則
+
+> 當 PM 或 Agent 在計畫執行中發現超出原計畫範圍的需求時，適用本規則。
+
+**識別條件**：超出當前 Ticket scope 的延伸工作、未在原計畫中涵蓋的設計缺口
+
+**強制動作**：
 
 ```
-是開發/修改命令
+發現超範圍需求（執行中）
     |
     v
-有對應 Ticket? ─是→ Ticket 已認領? ─是→ 涉及安全相關? ...
-             |                    |
-             |                    └─否→ [Ticket 執行流程]
-             |
-             └─否→ [警告] 建議執行 /ticket-create
-                 (用戶決策：繼續或修正)
-```
-
-| 檢查點 | 驗證內容 | 成功時 | 失敗時 |
-|--------|---------|--------|--------|
-| Ticket 存在檢查 | 是否存在 pending/in_progress Ticket | 進入認領檢查 | 輸出 `/ticket-create` 建議 |
-| Ticket 認領檢查 | Ticket 是否已認領（status=in_progress） | 進入命令執行 | 輸出 `/ticket-track claim` 建議 |
-
-### 開發/修改命令
-
-```
-開發/修改命令（已通過 Level 2 驗證）
+[強制] 立即 /ticket create → 建立 pending Ticket
     |
-    +-- 涉及安全相關?（認證/授權/API/敏感資料）
-    |   +-- 是 --> [強制] 派發 security-reviewer
-    |
-    +-- 有對應 Ticket?
-    |   +-- 是 --> /ticket-track query {id}
-    |   |         --> 進入 [Ticket 執行流程]
-    |   |
-    |   +-- 否 --> 是新功能需求?
-    |              +-- 是 --> /ticket-create → SA 前置審查
-    |              +-- 否（小型修改）--> /ticket-create → TDD 流程
+    v
+繼續執行當前計畫主線（不中斷、不延後）
 ```
 
-**說明**：
-- Level 2 驗證是非阻塞式的警告機制（不會強制停止執行）
-- 用戶可選擇忽略警告繼續執行，但應遵循建議操作
-- 驗證檢查點詳見：command-entrance-gate-hook.py
+| 禁止行為 | 說明 |
+|---------|------|
+| 忽視不建 Ticket | 額外發現必須立即追蹤 |
+| 中斷主線去處理額外發現 | 先建 Ticket，完成當前任務後再執行 |
+| 口頭回報取代 Ticket | 必須有可追蹤的 Ticket 記錄 |
+| 等計畫完成後補建 | 必須**立即**建立 |
 
-### 安全相關命令（強制規則）
-
-| 安全類型 | 識別關鍵字 |
-|---------|-----------|
-| 認證相關 | "authentication", "login", "password", "token", "session" |
-| 授權相關 | "authorization", "permission", "role", "access control" |
-| 輸入處理 | "user input", "form validation", "request body" |
-| 敏感資料 | "credential", "secret", "API key", "private key" |
-
-### 除錯命令（強制規則）
-
-| 錯誤類型 | 識別關鍵字 |
-|---------|-----------|
-| 測試失敗 | "test failed", "測試失敗", "X tests failed", "FAILED" |
-| 編譯錯誤 | "compile error", "編譯錯誤", "build failed" |
-| 執行時錯誤 | "runtime error", "exception", "crash" |
-| 用戶回報問題 | "bug", "問題", "不正常", "出錯" |
-
-**強制動作**：除錯命令 → [強制] 派發 incident-responder
-
-### 禁止行為（與 Level 2 驗證關係）
-
-**禁止違反 Level 2 驗證結果**：
-
-| 禁止行為 | 正確做法 | 違規等級 |
-|---------|---------|---------|
-| 主線程直接修改程式碼（未建立 Ticket） | 按 Hook 建議執行 `/ticket-create` | 嚴重 |
-| 主線程跳過 incident-responder | 必須派發 incident-responder | 嚴重 |
-| 忽視 Level 2 警告後直接修改 | 應修正 Ticket 狀態後再繼續 | 中等 |
-| 在未認領 Ticket 的情況下修改 | 執行 `/ticket-track claim {id}` 先認領 | 中等 |
-
-**警告類型（由 Hook 輸出）**：
-- 「未找到待處理 Ticket」：建議執行 `/ticket-create`
-- 「Ticket 尚未認領」：建議執行 `/ticket-track claim {id}`
+> 詳細觸發條件和流程：.claude/rules/flows/plan-to-ticket-flow.md（「執行中額外發現」章節）
 
 ---
 
@@ -244,499 +204,231 @@
 [Ticket 驗證通過]
     |
     v
-Ticket 是 pending? ─是→ 執行 /ticket-track claim {id}
-               |      └→ [階段判斷]
-               |
-               └─否→ Ticket 是 in_progress? ─是→ 繼續執行 [階段判斷]
-                                          |
-                                          └─否→ Ticket 是 completed? ─是→ 詢問後續任務
-                                                                    |
-                                                                    └─否→ (blocked) 升級 PM
+是「繼續任務鏈」類請求? ─是→ [強制] 並行可行性分析 → 主動建議並行
+    |
+    └─否→ pending? → claim → 階段判斷
+          in_progress? → 繼續執行
+          completed? → [AskUserQuestion] 後續步驟選擇
+          blocked? → 升級 PM
 ```
 
-### Ticket 狀態對應動作
+**Wave 邊界檢查（強制）**：當用戶指定「繼續 Wx」時，**必須**只處理該 Wave 的任務，禁止跨 Wave 執行。
 
-| Ticket 狀態 | 動作 | 下一步 |
-|------------|------|--------|
-| pending | 執行 `/ticket-track claim {id}` | 進入階段判斷 |
-| in_progress | 繼續執行 | 進入階段判斷 |
-| completed | 詢問是否有後續任務 | 根據回答決定 |
-| blocked | 升級到 PM | PM 處理阻塞 |
+**Handoff 方向選擇（AskUserQuestion）**：當 handoff 有多個可能方向時，**必須**使用 AskUserQuestion 讓使用者選擇。
 
----
-
-## 第四層半：並行派發判斷
-
-> 詳細規則：[parallel-dispatch](../guides/parallel-dispatch.md)
-
-### 並行派發觸發條件
-
-| 條件 | 說明 | 判斷方法 |
-|------|------|---------|
-| 多任務 | 有 2+ 個待處理任務 | 同一 Wave 中有多個 pending Ticket |
-| 無相互依賴 | 任務之間無先後順序 | Ticket 間無 blockedBy 關係 |
-| 無檔案重疊 | 修改的檔案集合無交集 | 檢查 Ticket 的 target 目錄 |
-| 同類型任務 | 屬於同一 TDD 階段 | 都是 Phase 3b 或都是 Phase 1 |
-
-### 並行安全檢查清單
-
-```markdown
-- [ ] 檔案無重疊：各任務修改的檔案集合無交集
-- [ ] 測試無衝突：各任務的測試可獨立執行
-- [ ] 依賴無循環：任務之間無先後依賴關係
-- [ ] 資源無競爭：不會同時存取相同外部資源
-```
+> Ticket 生命週期：.claude/rules/flows/ticket-lifecycle.md
+> 並行派發規則：.claude/rules/guides/parallel-dispatch.md
 
 ---
 
 ## 第五層：TDD 階段判斷
 
-```
-[Ticket 認領並執行]
-    |
-    v
-需要 SA 前置審查? ─是→ [派發] system-analyst
-               |     └→ (SA 審查通過) [進入 Phase 1]
-               |
-               └─否→ [TDD 階段派發]
-```
+| 階段 | 代理人 | 進入條件 |
+|------|-------|---------|
+| SA 前置審查 | system-analyst | 新功能/架構變更 |
+| Phase 1 | lavender-interface-designer | SA 通過 |
+| Phase 2 | sage-test-architect | Phase 1 完成 |
+| Phase 3a | pepper-test-implementer | Phase 2 完成 |
+| Phase 3b | parsley-flutter-developer | Phase 3a 完成 |
+| Phase 4 | cinnamon-refactor-owl | Phase 3b 完成 |
 
-### TDD 四階段派發
-
-| 階段 | 代理人 | 進入條件 | 完成後 |
-|------|-------|---------|--------|
-| SA 前置審查 | [system-analyst](../agents/system-analyst.md) | 新功能/架構變更 | Phase 1 |
-| Phase 1 | [lavender-interface-designer](../agents/lavender-interface-designer.md) | SA 通過 | Phase 2 |
-| Phase 2 | [sage-test-architect](../agents/sage-test-architect.md) | Phase 1 完成 | Phase 3a |
-| Phase 3a | [pepper-test-implementer](../agents/pepper-test-implementer.md) | Phase 2 完成 | Phase 3b |
-| Phase 3b | [parsley-flutter-developer](../agents/parsley-flutter-developer.md) | Phase 3a 完成 | Phase 4 |
-| Phase 4 | [cinnamon-refactor-owl](../agents/cinnamon-refactor-owl.md) | Phase 3b 完成 | [完成判斷] |
+> TDD 完整流程：.claude/rules/flows/tdd-flow.md
 
 ---
 
-## 第六層：事件回應流程（錯誤分類決策樹）
+## 第六層：事件回應流程
 
-> 詳細流程：[incident-response](../flows/incident-response.md)
+**強制流程**：錯誤發生 → `/pre-fix-eval` → 派發 incident-responder → 建立 Ticket → 對應代理人修復
 
-### 二元化錯誤分類樹
-
-```
-[錯誤發生] --> /pre-fix-eval --> 派發 incident-responder
-                |
-                v
-           是編譯錯誤? ─是→ 依賴問題? ─是→ [Ticket] --> system-engineer
-                     |              |
-                     |              └─否→ [Ticket] --> parsley-flutter-developer
-                     |
-                     └─否→ 是測試失敗? ─是→ 測試本身問題? ─是→ [Ticket] --> sage-test-architect
-                                   |                    |
-                                   |                    └─否→ 設計邏輯錯誤? ─是→ [Ticket] --> system-analyst
-                                   |                                       |
-                                   |                                       └─否→ [Ticket] --> parsley-flutter-developer
-                                   |
-                                   └─否→ 是執行時錯誤? ─是→ 環境問題? ─是→ [Ticket] --> system-engineer
-                                                      |              |
-                                                      |              └─否→ 資料問題? ─是→ [Ticket] --> data-administrator
-                                                      |                               |
-                                                      |                               └─否→ [Ticket] --> parsley-flutter-developer
-                                                      |
-                                                      └─否→ 是效能問題? ─是→ [Ticket] --> ginger-performance-tuner
-                                                                       |
-                                                                       └─否→ [Ticket] --> security-reviewer
-```
-
-### 錯誤類型派發表
-
-| 錯誤分類 | 子分類 | 派發代理人 |
-|---------|-------|-----------|
-| 編譯錯誤 | 依賴問題 | system-engineer |
-| 編譯錯誤 | 類型/語法錯誤 | parsley-flutter-developer |
-| 測試失敗 | 測試本身問題 | sage-test-architect |
-| 測試失敗 | 設計邏輯錯誤 | system-analyst |
-| 測試失敗 | 實作不符預期 | parsley-flutter-developer |
-| 執行時錯誤 | 環境問題 | system-engineer |
-| 執行時錯誤 | 資料問題 | data-administrator |
-| 執行時錯誤 | 程式錯誤 | parsley-flutter-developer |
-| 效能問題 | - | ginger-performance-tuner |
-| 安全問題 | - | security-reviewer |
+> 完整錯誤分類和派發對應表：.claude/rules/flows/incident-response.md
 
 ---
 
 ## 第七層：完成判斷流程
 
+**驗收方式確認（AskUserQuestion）**：complete 前必須確認驗收方式（標準/簡化/先完成後補）。
+
+**下一步選擇（AskUserQuestion）**：有多個後續 Ticket 可選時，必須讓使用者選擇。
+
+> Ticket 生命週期和驗收流程：.claude/rules/flows/ticket-lifecycle.md
+
+---
+
+## 第八層：完成後路由（Commit-Evaluate-Handoff 循環）
+
+任務或階段完成後的統一路由機制，確保每個完成點都有明確的確認。
+
 ```
-[階段/Ticket 完成]
+任務/階段完成
     |
     v
-有技術債務記錄? ─是→ 執行 /tech-debt-capture
-             |     └→ 建立技術債務 Ticket
-             |
-             └─否→ 涉及規則變更? ─是→ 檢查 SKILL/方法論同步
-                              |     └→ 更新相關引用和內容
-                              |
-                              └─否→ 需記錄學習經驗? ─是→ [派發] memory-network-builder
-                                                  |
-                                                  └─否→ 有後續階段? ─是→ 更新 worklog 進入下一個 Ticket
-                                                               |
-                                                               └─否→ 版本所有 Ticket 完成? ─是→ /version-release check
-                                                                                       |
-                                                                                       └─否→ 等待其他 Ticket 完成
+[Checkpoint 1] 變更狀態檢查
+    |
+    +-- git status 有未提交變更?
+    |   |
+    |   +-- 是 + 批量變更 → AskUserQuestion #15（備份確認）
+    |   +-- 是 → 建議 commit（/commit-as-prompt）
+    |   +-- 否 → [Checkpoint 3]
+    |
+    v
+[Checkpoint 2] Commit 後情境評估（每次 commit 後，PM 必須先查詢再選擇路由）
+    |
+    +-- [強制查詢] ticket track list --wave W{n} --status pending,in_progress
+    |   → 取得數據後再評估，禁止依賴記憶判斷
+    |
+    +-- [前置分流] 當前 commit 屬於 TDD Phase 完成?
+    |   識別：PM 工作流為 TDD 模式，已完成 ticket 含 tdd_phase 欄位
+    |
+    +-- [情境 D] TDD Phase 完成路由（優先於情境 A/B/C）
+    |   |
+    |   +-- [D1] Phase 1/2/3a 完成 → 全自動，無分岔
+    |   |       → 直接派發下一 Phase 代理人，無需 AskUserQuestion
+    |   |       Phase 1→2: sage-test-architect（Phase 2 測試設計）
+    |   |       Phase 2→3a: pepper-test-implementer（Phase 3a 策略規劃）
+    |   |       Phase 3a→3b: parsley-flutter-developer（Phase 3b 實作）
+    |   |
+    |   +-- [D2] Phase 3b 完成 → AskUserQuestion #13（Phase 3b 路由確認）
+    |   |       +-- /parallel-evaluation A → 程式碼審查後進 Phase 4（Recommended）
+    |   |       +-- 直接進入 Phase 4（派發 cinnamon-refactor-owl）
+    |   |       +-- 先 commit 再決定
+    |   |
+    |   +-- [D3] Phase 4 完成 → [強制] /tech-debt-capture
+    |           → 不可跳過，必須優先於 Wave 收尾判斷
+    |           → /tech-debt-capture 完成後 AskUserQuestion #13（Phase 4 + tech-debt 路由）
+    |           → commit 後回到情境 B/C 評估
+    |
+    +-- [情境 A] 查詢結果有自己的 ticket 仍 in_progress
+    |   目的：Context 刷新（新 session 繼續同一 ticket）
+    |   → AskUserQuestion #11a
+    |   +-- Handoff (Context 刷新) → [強制] /ticket handoff → 結束 context
+    |   +-- 繼續在此 session → [Checkpoint 3]
+    |
+    +-- [情境 B] ticket 已 completed + 同 Wave 有 pending 任務
+    |   目的：任務切換（切換到下一個 ticket）
+    |   → AskUserQuestion #11b
+    |   +-- Handoff 到 {next_ticket_id} → [強制] /ticket handoff → 結束 context
+    |   +-- 此 session 繼續 {next_ticket_id} → 直接 claim → [Checkpoint 3]
+    |   +-- 查看所有待處理任務再決定 → 列出任務 → [Checkpoint 3]
+    |
+    +-- [情境 C] ticket 已 completed + 同 Wave 無待處理任務（Wave 完成）
+        → [再次查詢] ticket track list --status pending（查詢版本其他 Wave）
+        |
+        +-- [情境 C1] 版本有其他 Wave 的 pending 任務
+        |   → AskUserQuestion #3a（Wave 收尾 + 開始下一 Wave）
+        |
+        +-- [情境 C2] 版本無任何待處理任務（版本全部完成）
+            → [強制] /version-release check
+            → AskUserQuestion #13（版本推進確認）
+    |
+    v
+[Checkpoint 3] 後續任務路由（AskUserQuestion #13）
+    |
+    +-- 分析完成 → 實作 or /parallel-evaluation F
+    +-- 規劃完成 → /parallel-evaluation C/G or TDD
+    +-- Phase 3b 完成 → /parallel-evaluation A or Phase 4
+    +-- Phase 4 完成 → /tech-debt-capture → 收尾
+    +-- 規則/Skill 變更 → /parallel-evaluation G
+    +-- 無後續 → 場景 3（Wave 收尾）
+    |
+    v
+[Checkpoint 4] parallel-evaluation 觸發（AskUserQuestion #14）
+    |
+    +-- 執行 → /parallel-evaluation 情境 X → 回到 Checkpoint 1
+    +-- 跳過 → AskUserQuestion #12（省略確認）→ 進入下一步
 ```
 
-### 完成判斷規則
+**與現有層級的銜接**：
 
-| 判斷項目 | 條件 | 動作 |
-|---------|------|------|
-| 技術債務 | 發現可優化項目 | `/tech-debt-capture` 建立 Ticket |
-| 規則變更同步 | 修改了 `.claude/rules/` 下的檔案 | 檢查 SKILL 和方法論是否需要同步 |
-| 學習經驗 | 重要決策或經驗 | 派發 memory-network-builder 記錄 |
-| 後續階段 | 有對應下一階段 | 更新 worklog 進入下一個 Ticket |
-| 版本完成 | 所有 Ticket 完成 | `/version-release check` 準備發布 |
-| 等待中 | 其他 Ticket 未完成 | 繼續等待其他 Ticket
+| 現有出口 | 進入第八層入口 |
+|---------|-------------|
+| 第五層 Phase 3b/4 完成 | Checkpoint 1 |
+| 第六層 incident 分析完成 | Checkpoint 3 |
+| 第七層 Ticket complete | 既有場景 2 → Checkpoint 1 |
+| SA 審查完成 | Checkpoint 3 |
 
-### 規則變更同步檢查
+**Checkpoint 2 情境評估規則**：每次 commit 後 PM **必須**先執行強制查詢再評估情境，禁止依賴記憶判斷。
 
-當修改了 `.claude/rules/` 下的規則檔案時，必須檢查以下相關文件是否需要同步更新：
+- **強制查詢**：`ticket track list --wave W{n} --status pending,in_progress`（取得數據後再選路由）
+- **情境 D**（TDD Phase 完成，識別依據：ticket 含 tdd_phase 欄位，**優先於 A/B/C**）：
+  - D1（Phase 1/2/3a）→ 全自動直接進入下一 Phase，無 AskUserQuestion
+  - D2（Phase 3b）→ AskUserQuestion #13（/parallel-evaluation A 或直接 Phase 4）
+  - D3（Phase 4）→ [強制] /tech-debt-capture → AskUserQuestion #13（tech-debt 後路由）→ commit 後情境 B/C
+- **情境 A**（查詢結果有 in_progress ticket）→ AskUserQuestion #11a（Context 刷新），新 session 繼續同一 ticket
+- **情境 B**（ticket completed + 同 Wave 有 pending 任務）→ AskUserQuestion #11b（任務切換），切換到下一個 ticket
+- **情境 C**（ticket completed + 同 Wave 無待處理任務）→ 再次查詢版本全狀態 → 分為 C1 或 C2
+- **情境 C1**（版本有其他 Wave pending）→ AskUserQuestion #3a（Wave 收尾 + 開始下一 Wave）
+- **情境 C2**（版本無任何 pending）→ [強制] /version-release check → AskUserQuestion #13
 
-| 檢查項目 | 檔案位置 | 說明 |
-|---------|---------|------|
-| 相關 SKILL | `.claude/skills/` | 檢查是否有 SKILL 引用了變更的規則 |
-| 方法論 | `.claude/methodologies/` | 檢查是否有方法論引用了變更的規則 |
-| 代理人定義 | `.claude/agents/` | 檢查代理人定義是否需要更新 |
-| 範本 | `.claude/templates/` | 檢查範本是否需要同步 |
+**Handoff 強制動作**：選擇任何 Handoff 選項後，PM **必須**執行 `/ticket handoff` 建立標準 `pending/*.json` 檔案，**禁止**手動建立 `.claude/handoff/*.md` 交接文件。`/ticket handoff` 會自動判斷下一步方向（父/子/兄弟），確保 `resume --list` 在下一個 session 能正確偵測待恢復任務。
 
-**同步檢查命令**：
+**流程省略防護（AskUserQuestion #12）**：主線程輸出含省略意圖關鍵字時，process-skip-guard-hook 自動偵測並提醒確認。
 
-```bash
-# 搜尋引用了特定規則檔案的文件
-grep -r "rules/{changed-file}" .claude/
-```
+> AskUserQuestion 場景 11-15 詳見：.claude/rules/core/askuserquestion-rules.md
+> 模板詳見：.claude/references/ticket-askuserquestion-templates.md
 
 ---
 
 ## 代理人觸發優先級
 
-> 詳細定義：[agents/overview](../agents/overview.md)
-
-### 優先級順序
-
-**注意**：以下優先級適用於代理人派發決策。此外還有 **Level 2 驗證** 在命令入口執行。
-
 ```
-Level 2: Hook 系統驗證 - 命令入口檢查點
-    |
-    +-- Ticket 存在？
-    +-- Ticket 已認領？
-
+Level 2: Hook 系統驗證（命令入口，最早觸發）
 Level 1: incident-responder（錯誤/失敗最高優先）
-Level 2 (代理人): system-analyst（架構審查）
+Level 2: system-analyst（架構審查）
 Level 3: security-reviewer（安全審查）
 Level 4: 其他專業代理人（DBA, SE, SD, ginger 等）
-Level 5: TDD 階段代理人（lavender, sage, pepper, parsley, cinnamon）
+Level 5: TDD 階段代理人 + thyme-python-developer
 ```
 
-**Level 2 驗證特性**：
-- 觸發時機：接收開發命令後立即執行（比任何代理人派發都早）
-- 驗證責任：Hook 系統完全自動化
-- 特性：非阻塞式警告（不會強制停止）
-
-### 多條件觸發處理規則
-
-| 觸發組合 | 處理方式 | 理由 |
-|---------|---------|------|
-| 錯誤 + 任何 | incident-responder 先處理 | 錯誤必須優先排除 |
-| SA + security | SA 先審查架構 | 安全審查依賴架構設計 |
-| SA + 專業代理人 | SA 先分解需求 | 需先確定範圍 |
-| 多個專業代理人 | SA 協調或按需求分解為多 Ticket | 避免職責混亂 |
-
----
-
-## 任務拆分認知負擔檢查
-
-> 詳細指南：[task-splitting](../guides/task-splitting.md)
-
-### 拆分觸發條件
-
-**任一條件符合即需拆分**：
-
-| 條件 | 閾值 | 說明 |
-|------|------|------|
-| 變數狀態數 | > 5 個 | 單一任務需追蹤超過 5 個變數狀態 |
-| 架構層級數 | > 2 層 | 任務跨越 3+ 架構層 |
-| 依賴關係數 | > 3 個 | 任務依賴超過 3 個其他模組 |
-| 修改檔案數 | > 5 個 | 單一任務需修改超過 5 個檔案 |
-
-### 複雜度快速評估
-
-| 總分 | 複雜度 | 建議 |
-|------|--------|------|
-| 0-2 | 低 | 直接派發單一代理人 |
-| 3-5 | 中 | 謹慎評估，考慮拆分 |
-| 6-8 | 高 | 必須拆分後再派發 |
+| 觸發組合 | 處理方式 |
+|---------|---------|
+| 錯誤 + 任何 | incident-responder 先處理 |
+| SA + security | SA 先審查架構 |
+| 多個專業代理人 | SA 協調或分解為多 Ticket |
 
 ---
 
 ## 派發記錄要求
 
-### Ticket 決策樹欄位（必填）
-
-所有 Ticket 必須包含 `decision_tree_path` 欄位，記錄從進入決策樹到最終決策的完整路徑。
-
-**欄位格式**：
-
-```yaml
-decision_tree_path:
-  entry_point: "{進入層級}"           # 第零層~第七層
-  decision_nodes:                      # 經過的決策節點
-    - layer: "{層級}"
-      question: "{決策問題}"
-      answer: "{答案}"
-      next_action: "{下一步}"
-  final_decision: "{最終決策}"         # 派發的代理人或執行的動作
-  rationale: "{決策理由}"              # 簡述決策原因
-```
-
-### 驗證機制
-
-- **建立時**：Ticket 建立工具自動要求填寫
-- **派發時**：Hook 系統驗證決策樹欄位存在
-- **無效 Ticket**：缺少決策樹欄位的 Ticket 無法用於派發
-
-### 為何需要決策樹欄位？
-
-| 價值 | 說明 |
-|------|------|
-| 釐清任務內容 | 強制記錄決策過程，確保任務定義明確 |
-| 知識傳承 | 決策路徑可作為後續類似任務的參考 |
-| 品質把關 | 防止跳過必要的分析步驟 |
-| 模型優化 | 模糊之處可提出討論，持續改進決策樹 |
-
----
-
-## 命令快速參考
-
-### Ticket 管理命令
-
-| 命令 | 用途 | 觸發時機 |
-|------|------|---------|
-| `/ticket-create` | 建立新 Ticket | 新任務、無對應 Ticket |
-| `/ticket-track summary` | 查詢所有 Ticket 進度 | 用戶詢問進度 |
-| `/ticket-track query {id}` | 查詢特定 Ticket | 需要詳細資訊 |
-| `/ticket-track claim {id}` | 認領 Ticket | 開始執行時 |
-| `/ticket-track complete {id}` | 完成 Ticket | 階段完成時 |
-| `/ticket-track release {id}` | 釋放 Ticket | 無法繼續時 |
-
-### 決策和評估命令
-
-| 命令 | 用途 | 觸發時機 |
-|------|------|---------|
-| `/5w1h-decision` | 5W1H 決策框架 | 需要決策時 |
-| `/pre-fix-eval` | 修復前評估 | 除錯命令入口（強制） |
-| `/tech-debt-capture` | 技術債務捕獲 | Phase 4 完成後（強制） |
-
-### 版本管理命令
-
-| 命令 | 用途 | 觸發時機 |
-|------|------|---------|
-| `/version-release check` | 檢查發布準備度 | 版本完成時（強制） |
-| `/version-release update-docs` | 更新文件 | 發布前 |
-| `/version-release release` | 執行發布 | 確認發布 |
-
-### 其他常用命令
-
-| 命令 | 用途 |
-|------|------|
-| `/commit-as-prompt` | 提交流程 |
-| `/lsp-first` | LSP 使用指南 |
-| `/startup-check` | Session 開始檢查 |
-| `/cognitive-load` | 認知負擔評估 |
-| `/decision-helper` | 決策樹助手 |
+所有 Ticket 必須包含 `decision_tree_path` 欄位（entry_point、final_decision、rationale）。
 
 ---
 
 ## 強制執行命令
 
-以下命令在特定情境下**必須執行**，不可跳過：
-
-| 情境 | 強制命令 | 理由 |
-|------|---------|------|
-| 錯誤/失敗發生 | `/pre-fix-eval` | 防止衝動修復 |
-| Phase 4 完成 | `/tech-debt-capture` | 捕獲技術債務 |
-| 版本發布前 | `/version-release check` | 確保發布品質 |
+| 情境 | 強制命令 |
+|------|---------|
+| 錯誤/失敗發生 | `/pre-fix-eval` |
+| Phase 4 完成 | `/tech-debt-capture` |
+| 版本發布前 | `/version-release check` |
+| 用戶決策確認 | AskUserQuestion（15 個場景，詳見 askuserquestion-rules.md） |
+| Commit 後 | AskUserQuestion #11（Handoff 確認） |
+| 流程省略偵測 | AskUserQuestion #12（省略確認） |
+| **計畫執行中發現超範圍需求** | **`/ticket create` 建立 pending Ticket（立即，不延後）** |
 
 ---
 
 ## 違規處理
 
-### 主線程違規行為
-
 | 違規行為 | 處理方式 |
 |---------|---------|
-| 跳過 incident-responder 直接修復 | 停止，回滾修改，重新走流程 |
+| 跳過 incident-responder 直接修復 | 停止，回滾，重新走流程 |
 | 未建立 Ticket 就開始實作 | 停止，先建立 Ticket |
 | 跳過 SA 前置審查（新功能） | 停止，派發 SA |
 | 跳過 Phase 4 | 強制執行 Phase 4 |
+| 計畫執行中發現額外需求未立即建立 Ticket | 補建 Ticket，記錄遺漏原因 |
 
 ---
 
 ## 相關文件
 
-### 代理人定義
-- [agents/overview](../agents/overview.md) - 代理人總覽
-
-### 執行流程
-- [flows/tdd-flow](../flows/tdd-flow.md) - TDD 流程
-- [flows/incident-response](../flows/incident-response.md) - 事件回應流程
-- [flows/ticket-lifecycle](../flows/ticket-lifecycle.md) - Ticket 生命週期
-
-### 操作指南
-- [guides/task-splitting](../guides/task-splitting.md) - 任務拆分指南
-- [guides/parallel-dispatch](../guides/parallel-dispatch.md) - 並行派發指南
-
-### Hook 系統
-- Hook 實作：`.claude/hooks/command-entrance-gate-hook.py` - Level 2 驗證檢查點實作
-- Hook 日誌：`.claude/hook-logs/command-entrance-gate/` - 驗證檢查日誌
-
-### 禁止行為
-- [forbidden/skip-gate](../forbidden/skip-gate.md) - Skip-gate 防護
+- .claude/rules/guides/parallel-dispatch.md - 並行派發指南（場景表、安全檢查）
+- .claude/rules/flows/tdd-flow.md - TDD 流程
+- .claude/rules/flows/incident-response.md - 事件回應流程（錯誤分類表）
+- .claude/rules/flows/ticket-lifecycle.md - Ticket 生命週期（驗收流程）
+- .claude/rules/forbidden/skip-gate.md - Skip-gate 防護
+- @.claude/rules/core/askuserquestion-rules.md - AskUserQuestion 強制使用規則
 
 ---
 
-**Last Updated**: 2026-01-28
-**Version**: 3.1.0
-
-**Change Log**:
-- v3.1.0 (2026-01-28): 新增規則變更同步檢查
-  - 第七層新增「規則變更同步」判斷節點
-  - 當修改 `.claude/rules/` 時，強制檢查 SKILL 和方法論是否需要同步
-  - 更新 Mermaid 圖表反映新判斷節點
-- v3.0.0 (2026-01-28): 完整二元化決策樹結構
-  - 將所有決策節點改為嚴格的二元樹結構（只有是/否兩個分支）
-  - 重構第零層：3 個連續是/否判斷（錯誤關鍵字→不確定性詞彙→複雜需求）
-  - 重構第一層：單一判斷（是問題 vs 是命令）
-  - 重構第二層：單一判斷（查詢類 vs 諮詢類）
-  - 重構第三層：連續 2 個判斷（開發命令→除錯命令）
-  - 重構第四層：連續 3 個判斷（pending→in_progress→completed）
-  - 新增第五層：TDD 階段判斷（SA 前置審查 vs 直接進入 TDD）
-  - 重構第六層：完整二元化錯誤分類樹（編譯→測試→執行時→效能→安全）
-  - 重構第七層：連續 4 個判斷（技術債務→學習經驗→後續階段→版本完成）
-  - 移除所有多分支節點，實現純二元樹結構
-- v2.2.0 (2026-01-27): 新增派發記錄要求章節，引入決策樹欄位強制紀錄
-- v2.1.0 (2026-01-23): 新增 Level 2 驗證檢查點明確化，填補缺口 3
-- v2.0.0 (2026-01-23): 重構為核心決策樹，合併 command-mapping
-
----
-
-## 附錄：二元決策樹圖表
-
-### 主流程圖（第零層至第七層）
-
-```mermaid
-flowchart TD
-    START[接收訊息] --> L0_ERR{包含錯誤關鍵字?}
-
-    %% 第零層
-    L0_ERR -->|是| L6[第六層:事件回應]
-    L0_ERR -->|否| L0_UNC{包含不確定性詞彙?}
-    L0_UNC -->|是| CONFIRM[確認機制]
-    L0_UNC -->|否| L0_CMP{複雜需求?}
-    L0_CMP -->|是| CONFIRM
-    L0_CMP -->|否| L1
-    CONFIRM --> L1
-
-    %% 第一層
-    L1{是問題?}
-    L1 -->|是| L2[第二層:問題處理]
-    L1 -->|否| L3[第三層:命令處理]
-
-    %% 第二層
-    L2 --> L2_Q{是查詢類?}
-    L2_Q -->|是| QUERY[執行查詢命令]
-    L2_Q -->|否| CONSULT[派發諮詢代理人]
-
-    %% 第三層
-    L3 --> L3_DEV{是開發命令?}
-    L3_DEV -->|是| L3_TKT{有對應 Ticket?}
-    L3_DEV -->|否| L3_DBG{是除錯命令?}
-    L3_DBG -->|是| INCIDENT[派發 incident-responder]
-    L3_DBG -->|否| OTHER[其他命令]
-
-    L3_TKT -->|是| L3_CLAIM{已認領?}
-    L3_TKT -->|否| WARN1["警告: ticket-create"]
-    L3_CLAIM -->|是| L4[第四層:Ticket執行]
-    L3_CLAIM -->|否| WARN2["警告: ticket-track claim"]
-
-    %% 第四層
-    L4 --> L4_P{pending?}
-    L4_P -->|是| CLAIM[claim 後執行]
-    L4_P -->|否| L4_IP{in_progress?}
-    L4_IP -->|是| L5[第五層:TDD階段]
-    L4_IP -->|否| L4_C{completed?}
-    L4_C -->|是| ASK[詢問後續]
-    L4_C -->|否| ESCALATE[blocked→升級PM]
-    CLAIM --> L5
-
-    %% 第五層
-    L5 --> L5_SA{需SA審查?}
-    L5_SA -->|是| SA[system-analyst]
-    L5_SA -->|否| TDD[TDD階段派發]
-    SA --> TDD
-
-    %% 第七層（完成判斷）
-    TDD --> L7[第七層:完成判斷]
-    L7 --> L7_TD{技術債務?}
-    L7_TD -->|是| TECHDEBT["tech-debt-capture"]
-    L7_TD -->|否| L7_RULE{規則變更?}
-    L7_RULE -->|是| SYNC[檢查SKILL/方法論同步]
-    L7_RULE -->|否| L7_LEARN{學習經驗?}
-    SYNC --> L7_LEARN
-    L7_LEARN -->|是| MNB[memory-network-builder]
-    L7_LEARN -->|否| L7_NEXT{後續階段?}
-    L7_NEXT -->|是| NEXT[下一個Ticket]
-    L7_NEXT -->|否| L7_VER{版本完成?}
-    L7_VER -->|是| RELEASE["version-release"]
-    L7_VER -->|否| WAIT[等待其他Ticket]
-```
-
-### 第六層：錯誤分類決策樹
-
-```mermaid
-flowchart TD
-    L6[錯誤發生] --> PREFIX["pre-fix-eval"]
-    PREFIX --> IR[incident-responder分析]
-
-    IR --> E1{編譯錯誤?}
-    E1 -->|是| E1A{依賴問題?}
-    E1A -->|是| SE1[system-engineer]
-    E1A -->|否| PARSLEY1[parsley-flutter-developer]
-
-    E1 -->|否| E2{測試失敗?}
-    E2 -->|是| E2A{測試本身問題?}
-    E2A -->|是| SAGE[sage-test-architect]
-    E2A -->|否| E2B{設計邏輯錯誤?}
-    E2B -->|是| SA[system-analyst]
-    E2B -->|否| PARSLEY2[parsley-flutter-developer]
-
-    E2 -->|否| E3{執行時錯誤?}
-    E3 -->|是| E3A{環境問題?}
-    E3A -->|是| SE2[system-engineer]
-    E3A -->|否| E3B{資料問題?}
-    E3B -->|是| DBA[data-administrator]
-    E3B -->|否| PARSLEY3[parsley-flutter-developer]
-
-    E3 -->|否| E4{效能問題?}
-    E4 -->|是| GINGER[ginger-performance-tuner]
-    E4 -->|否| SECURITY[security-reviewer]
-```
-
-### TDD 階段流程
-
-```mermaid
-flowchart LR
-    SA[SA審查] --> P1[Phase 1<br/>lavender]
-    P1 --> P2[Phase 2<br/>sage]
-    P2 --> P3A[Phase 3a<br/>pepper]
-    P3A --> P3B[Phase 3b<br/>parsley]
-    P3B --> P4[Phase 4<br/>cinnamon]
-    P4 --> DONE[完成判斷]
-```
+**Last Updated**: 2026-03-03
+**Version**: 7.3.0 - 新增第三層半 Plan Mode 執行中額外發現規則，同步更新強制執行命令表和違規行為表（W30-002）

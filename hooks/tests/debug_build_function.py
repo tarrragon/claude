@@ -9,7 +9,7 @@ from pathlib import Path
 hooks_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(hooks_dir))
 
-from parsers.dart_parser import DartParser
+from ..lib.parsers.dart_parser import DartParser
 
 # 測試 build 函式
 code = """

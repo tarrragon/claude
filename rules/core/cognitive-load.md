@@ -158,10 +158,10 @@
 
 ## 相關文件
 
-- [decision-tree](decision-tree.md) - 主線程決策樹
-- [task-splitting](../guides/task-splitting.md) - 任務拆分指南
-- [認知負擔量化標準]($CLAUDE_PROJECT_DIR/.claude/skills/cognitive-load-assessment/thresholds.md) - 詳細閾值
-- [認知負擔設計方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/cognitive-load-design-methodology.md) - 完整方法論
+- @.claude/rules/core/decision-tree.md - 主線程決策樹
+- .claude/rules/guides/task-splitting.md - 任務拆分指南
+- @.claude/skills/cognitive-load-assessment/thresholds.md - 詳細閾值
+- @.claude/methodologies/cognitive-load-design-methodology.md - 完整方法論
 
 ---
 
