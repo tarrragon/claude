@@ -12,6 +12,7 @@
 
 - [關於本 Repo](#關於本-repo)
 - [快速開始](#快速開始)
+- [新專案配置指南](#新專案配置指南)
 - [目錄結構](#目錄結構)
 - [同步機制](#同步機制)
 - [配置說明](#配置說明)
@@ -40,24 +41,30 @@
 ### 方案 A：新專案首次設置
 
 ```bash
-# 1. Clone 本 repo 到專案的 .claude 目錄
+# 1. 確認環境前置需求
+python3 --version  # 需要 Python 3.9+
+
+# 2. Clone 本 repo 到專案的 .claude 目錄
 cd your-project
 git clone https://github.com/tarrragon/claude.git .claude
 
-# 2. 複製 CLAUDE.md 和 FLUTTER.md（根據專案類型調整）
-cp .claude/CLAUDE.md .
-# 如果是 Flutter 專案
-cp .claude/FLUTTER.md .
+# 3. 移除框架的 .git 目錄（避免 submodule 衝突）
+rm -rf .claude/.git
 
-# 3. 調整專案特定配置
-vim .claude/settings.local.json
+# 4. 設定 hook 執行權限
+chmod +x .claude/hooks/*.py .claude/hooks/*.sh
 
-# 4. 複製同步腳本到專案（可選）
-mkdir -p scripts
-cp .claude/../scripts/sync-claude-*.sh scripts/
-chmod +x scripts/sync-claude-*.sh
+# 5. 更新 settings.local.json（詳見「新專案配置指南」章節）
+#    - 搜尋並替換硬編碼路徑
+#    - 移除不適用的語言特定 permission
+#    - 調整 MCP server 配置
 
-# 5. 提交到專案 Git
+# 6. 建立 CLAUDE.md（詳見「新專案配置指南 > 建立 CLAUDE.md」）
+#    - 填入專案類型、語言、框架版本
+#    - 指定實作代理人（如 parsley-flutter-developer）
+#    - 引用語言特定規範檔案（如 FLUTTER.md）
+
+# 7. 提交到專案 Git
 git add .claude CLAUDE.md
 git commit -m "feat: 添加 Claude AI 開發規範配置"
 ```
@@ -78,6 +85,113 @@ git commit -m "feat: 添加 Claude AI 開發規範配置"
 ```bash
 # 使用拉取腳本（自動備份）
 ./scripts/sync-claude-pull.sh
+```
+
+---
+
+## 新專案配置指南
+
+將框架 clone 到新專案後，需要完成以下配置才能正常運作。
+
+### settings.local.json 更新指南
+
+`settings.local.json` 包含 permission 和 hook 配置。依照以下分類逐項處理：
+
+| 分類 | 項目 | 操作 |
+|------|------|------|
+| **必須更新** | 含硬編碼路徑的 permission（如 `/Users/xxx/project/xxx`） | 搜尋替換為新專案路徑，或改用相對路徑（如 `./.claude/hooks/...`） |
+| 按需調整 | `enabledMcpjsonServers`（如 `["dart"]`） | 非 Flutter 專案移除或替換為對應語言的 MCP server |
+| 按需調整 | Flutter/Dart 特定 permission（`flutter test`、`dart analyze` 等） | 非 Flutter 專案移除，替換為對應語言的工具指令 |
+| 按需調整 | `WebFetch` domain 白名單 | 根據需要增減（如移除 `blog.flutter.dev`、新增專案相關 domain） |
+| 安全保留 | 使用 `$CLAUDE_PROJECT_DIR` 的 hooks 配置 | 運行時自動解析路徑，無需修改 |
+| 安全保留 | 通用工具 permission（`git`、`python3`、`uv run`、`chmod` 等） | 跨專案通用 |
+| 安全保留 | Skill permission（`Skill(ticket)`、`Skill(tech-debt-capture)` 等） | 框架內建功能 |
+| 建議移除 | 舊專案特定的 shell 迴圈 permission（`while read`、`do wc -l` 等） | 一次性操作產生的殘留，新專案不需要 |
+
+**快速搜尋硬編碼路徑**：
+
+```bash
+# 找出所有包含絕對路徑的行
+grep -n '/Users/' .claude/settings.local.json
+```
+
+### 環境檢查清單
+
+逐項驗證框架能正常運作：
+
+```bash
+# 1. Python 版本（Hook 系統需要 3.9+）
+python3 --version
+
+# 2. Hook 執行權限
+chmod +x .claude/hooks/*.py .claude/hooks/*.sh
+
+# 3. 驗證 Hook 可編譯（挑選一個核心 hook 測試）
+python3 -m py_compile .claude/hooks/prompt-submit-hook.py
+
+# 4. 驗證 settings.local.json 格式正確
+python3 -c "import json; json.load(open('.claude/settings.local.json'))"
+
+# 5. 確認無殘留的硬編碼路徑
+grep -c '/Users/' .claude/settings.local.json
+# 預期輸出：0
+```
+
+### 常見問題排除
+
+| 問題 | 原因 | 解法 |
+|------|------|------|
+| Hook 執行失敗 `Permission denied` | 缺少執行權限 | `chmod +x .claude/hooks/*.py .claude/hooks/*.sh` |
+| Hook 報錯 `SyntaxError` | Python 版本低於 3.9 | 升級 Python 或安裝 3.9+，確認 `python3 --version` |
+| `settings.local.json` 解析錯誤 | JSON 格式損壞（多餘逗號等） | `python3 -c "import json; json.load(open('.claude/settings.local.json'))"` 定位錯誤行 |
+| Session 啟動時大量 Hook 失敗 | 硬編碼路徑指向不存在的目錄 | `grep '/Users/' .claude/settings.local.json` 找出並修正 |
+| MCP server 連線失敗 | `enabledMcpjsonServers` 配置了未安裝的 server | 移除不適用的 server 或安裝對應工具 |
+| `.claude` 出現 Git 衝突 | 未移除框架的 `.git` 目錄 | `rm -rf .claude/.git` |
+
+### 建立 CLAUDE.md
+
+新專案需要在專案根目錄建立 `CLAUDE.md`，作為 Claude Code 讀取專案資訊的入口。
+
+**CLAUDE.md 必須包含的資訊**：
+
+| 項目 | 說明 | 範例 |
+|------|------|------|
+| 專案類型 | 應用程式類型 | Flutter 移動應用程式、Node.js Web API |
+| 開發語言 | 主要程式語言 | Dart、TypeScript、Python |
+| 框架版本 | 使用的框架和版本 | Flutter 3.41、Next.js 14 |
+| 實作代理人 | Phase 3b 使用的語言特定代理人 | parsley-flutter-developer |
+| 語言特定規範 | 指向語言規範檔案 | FLUTTER.md |
+
+**建立步驟**：
+
+1. 從模板複製或手動建立 `CLAUDE.md`
+2. 填入專案基本資訊（類型、語言、框架版本）
+3. 指定實作代理人（決定 Phase 3b 由誰執行）
+4. 如有語言特定規範檔案（如 `FLUTTER.md`），在 CLAUDE.md 中引用
+
+**實作代理人對照表**：
+
+| 語言/框架 | 實作代理人 | 語言規範檔 |
+|-----------|-----------|-----------|
+| Flutter/Dart | parsley-flutter-developer | `.claude/project-templates/FLUTTER.md` |
+| Python | thyme-python-developer | （依專案建立） |
+
+> 其餘 TDD 階段代理人（Phase 1/2/3a/4）為語言無關，跨專案通用，不需調整。
+
+**範例**（Flutter 專案）：
+
+```markdown
+# CLAUDE.md - 專案開發規範
+
+## 專案資訊
+
+| 項目 | 說明 |
+|------|------|
+| **專案類型** | Flutter 移動應用程式 |
+| **開發語言** | Dart |
+| **框架版本** | Flutter 3.41 |
+| **實作代理人** | parsley-flutter-developer |
+| **語言特定規範** | [FLUTTER.md](./.claude/project-templates/FLUTTER.md) |
 ```
 
 ---
@@ -266,23 +380,17 @@ git commit -m "feat: 改進 Hook 系統配置"
 
 ### settings.local.json
 
-這是 Claude Code 的權限配置文件，定義哪些命令可以自動執行：
+Claude Code 的權限與 Hook 配置文件，包含以下區塊：
 
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(flutter clean:*)",
-      "Bash(dart test:*)",
-      "mcp__serena__find_symbol",
-      "mcp__context7__get-library-docs",
-      ...
-    ]
-  }
-}
-```
+| 區塊 | 用途 | 新專案是否需調整 |
+|------|------|----------------|
+| `permissions.allow` | 自動允許的工具和指令 | 是 — 移除不適用的語言特定 permission，修正硬編碼路徑 |
+| `permissions.ask` | 需確認才執行的指令（如 `git push`） | 通常保留 |
+| `enabledMcpjsonServers` | 啟用的 MCP server | 是 — 根據專案語言調整 |
+| `hooks` | Hook 觸發配置 | 通常保留（使用 `$CLAUDE_PROJECT_DIR` 自動解析） |
+| `outputStyle` | 回應格式 | 可保留 |
 
-**重要**：每個專案可能需要調整權限列表，根據專案需求添加或移除權限。
+詳細的新專案配置步驟請參考 [新專案配置指南](#新專案配置指南)。
 
 ### Hook 系統配置
 

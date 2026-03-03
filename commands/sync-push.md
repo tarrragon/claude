@@ -1,16 +1,14 @@
 ---
-description: 推送 .claude 配置和專案模板到獨立 repo (https://github.com/tarrragon/claude.git)
+description: 推送 .claude 配置到獨立 repo (https://github.com/tarrragon/claude.git)
 ---
 
 # 同步推送 .claude 配置到獨立 Repo
 
-請執行以下流程，將本地 .claude 配置和專案模板推送到獨立 repo 供其他專案使用。
+請執行以下流程，將本地 .claude 配置推送到獨立 repo 供其他專案使用。
 
 ## 推送內容
 
-- `.claude/` 目錄所有檔案（Hook、Agent、方法論、規則）
-- `FLUTTER.md` Flutter 特定規範
-- `.claude/templates/CLAUDE-template.md` CLAUDE.md 範本
+- `.claude/` 目錄所有檔案（Hook、Agent、方法論、規則、project-templates）
 
 ## 不推送內容
 
@@ -19,12 +17,12 @@ description: 推送 .claude 配置和專案模板到獨立 repo (https://github.
 ## 檢查清單
 
 1. **確認變更已提交到主專案**
-   - 檢查 `.claude`、`FLUTTER.md` 是否已提交
+   - 檢查 `.claude` 是否已提交
    - 確保提交訊息清楚描述變更內容
 
 2. **詢問用戶提交訊息**
    - 如果尚未提交，先詢問用戶提交訊息
-   - 使用 `git add .claude FLUTTER.md` 和 `git commit -m "訊息"` 提交
+   - 使用 `git add .claude` 和 `git commit -m "訊息"` 提交
 
 3. **執行推送腳本**
    - 使用用戶提供的提交訊息執行：

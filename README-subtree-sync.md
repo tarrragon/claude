@@ -1,14 +1,15 @@
-# .claude 資料夾 Git Subtree 同步機制
+# .claude 資料夾同步機制
 
-## 📋 概述
+## 概述
 
-本專案使用 **Git Subtree** 機制管理 `.claude` 資料夾，實現跨專案配置共享。
+本專案使用同步腳本管理 `.claude` 資料夾，實現跨專案配置共享。
 
 - **本地管理**: `.claude` 是實體目錄，納入主專案 Git 版本控制
 - **獨立 Repo**: https://github.com/tarrragon/claude.git
 - **同步方式**: 雙向同步（推送和拉取）
+- **同步範圍**: `.claude/` 目錄（FLUTTER.md 位於 `.claude/project-templates/` 中，隨 rsync 自動包含）
 
-## 🎯 設計原理
+## 設計原理
 
 ### 為什麼使用這個同步方案？
 
@@ -17,26 +18,18 @@
 3. **歷史保留推送** - Clone 遠端後基於歷史建立新 commit，保留完整演進記錄
 4. **安全拉取** - 自動備份當前配置，拉取失敗可輕鬆還原
 
-### 為什麼不用標準 Git Subtree？
-
-原始設計使用 `git subtree`，但因專案歷史複雜（.claude 曾為符號連結），導致 `git subtree push/pull` 失敗。
-
-當前方案改用：
-- **推送**：Clone 遠端 → 更新內容 → 正常 push（保留歷史）
-- **拉取**：clone + 檔案複製（安全且有備份）
-
 ### 與其他方案的比較
 
 | 特性 | 當前方案 | Git Submodule | 標準 Git Subtree |
 |-----|---------|---------------|-----------------|
-| 目錄類型 | ✅ 實體目錄 | 符號連結 | 實體目錄 |
-| Hook 系統 | ✅ 正常運作 | ⚠️ 需特殊配置 | ✅ 正常運作 |
+| 目錄類型 | 實體目錄 | 符號連結 | 實體目錄 |
+| Hook 系統 | 正常運作 | 需特殊配置 | 正常運作 |
 | 推送方式 | clone + push | 自動追蹤 | subtree push |
 | 拉取方式 | clone + 複製 | 自動追蹤 | subtree pull |
-| 歷史處理 | ✅ 保留歷史 | ✅ 完整歷史 | ⚠️ 可能失敗 |
-| 管理複雜度 | ✅ 低 | 高 | 中 |
+| 歷史處理 | 保留歷史 | 完整歷史 | 可能失敗 |
+| 管理複雜度 | 低 | 高 | 中 |
 
-## 🚀 使用方式
+## 使用方式
 
 ### 推送本地變更到獨立 Repo
 
@@ -44,7 +37,7 @@
 
 ```bash
 # 1. 先提交變更到主專案
-git add .claude CLAUDE.md FLUTTER.md
+git add .claude
 git commit -m "feat: 更新 .claude 配置"
 
 # 2. 推送到獨立 repo
@@ -60,9 +53,9 @@ git commit -m "feat: 更新 .claude 配置"
 ./scripts/sync-claude-pull.sh
 ```
 
-**注意**：拉取會自動合併變更，如有衝突需手動解決。
+**注意**：拉取會自動備份當前配置，如有問題可輕鬆還原。
 
-## 🔧 其他專案如何使用
+## 其他專案如何使用
 
 ### 方案 A: 首次設置（新專案）
 
@@ -70,17 +63,16 @@ git commit -m "feat: 更新 .claude 配置"
 # 1. 進入專案目錄
 cd your-project
 
-# 2. 添加 claude-shared remote
-git remote add claude-shared https://github.com/tarrragon/claude.git
+# 2. Clone .claude 配置
+git clone https://github.com/tarrragon/claude.git .claude-temp
+cp -r .claude-temp/* .claude/
+rm -rf .claude-temp
 
-# 3. 使用 subtree 拉取 .claude 資料夾
-git subtree add --prefix=.claude claude-shared main --squash
-
-# 4. 複製腳本（可選）
+# 3. 複製腳本
 mkdir -p scripts
-cp /path/to/book_overview_app/scripts/sync-claude-*.sh scripts/
+cp /path/to/source/scripts/sync-claude-*.sh scripts/
 
-# 5. 根據專案需求調整 settings.local.json
+# 4. 根據專案需求調整 settings.local.json
 vim .claude/settings.local.json
 ```
 
@@ -88,26 +80,26 @@ vim .claude/settings.local.json
 
 ```bash
 # 拉取最新配置
-git subtree pull --prefix=.claude claude-shared main --squash
+./scripts/sync-claude-pull.sh
 ```
 
-## 📁 目錄結構
+## 目錄結構
 
 ```text
-book_overview_app/
-├── .claude/                  # 實體目錄（由 subtree 管理）
+project/
+├── .claude/                  # 實體目錄（同步管理）
 │   ├── hooks/               # Hook 腳本
 │   ├── agents/              # Agent 配置
 │   ├── methodologies/       # 方法論文件
+│   ├── project-templates/   # 專案模板（含 FLUTTER.md）
 │   └── settings.local.json  # 專案特定配置
-├── CLAUDE.md                # 主配置文件
-├── FLUTTER.md               # Flutter 特定配置
+├── CLAUDE.md                # 主配置文件（專案特定，不同步）
 └── scripts/
     ├── sync-claude-push.sh  # 推送腳本
     └── sync-claude-pull.sh  # 拉取腳本
 ```
 
-## ⚠️ 注意事項
+## 注意事項
 
 ### settings.local.json 管理
 
@@ -123,21 +115,13 @@ book_overview_app/
 3. **測試 Hook 系統**
 4. **再次推送/拉取**
 
-### Git Subtree 原理
-
-Subtree 會：
-- 保留完整 commit 歷史
-- 將獨立 repo 的內容合併到主專案
-- 推送時只推送 `.claude` 目錄的變更
-
-## 🔗 相關連結
+## 相關連結
 
 - 獨立 Repo: https://github.com/tarrragon/claude.git
-- Git Subtree 官方文件: https://git-scm.com/docs/git-subtree
 
-## 📝 最佳實踐
+## 最佳實踐
 
 1. **定期同步** - 有重大變更時推送到獨立 repo
 2. **測試驗證** - 同步後測試 Hook 系統是否正常
 3. **文件更新** - 同步配置變更時更新此 README
-4. **版本管理** - 獨立 repo 使用語意化版本號（可選）
+4. **版本管理** - 獨立 repo 使用語意化版本號（自動遞增）

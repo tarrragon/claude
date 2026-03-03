@@ -1,15 +1,14 @@
 ---
-description: 從獨立 repo 拉取最新 .claude 配置和專案模板 (https://github.com/tarrragon/claude.git)
+description: 從獨立 repo 拉取最新 .claude 配置 (https://github.com/tarrragon/claude.git)
 ---
 
 # 從獨立 Repo 拉取最新 .claude 配置
 
-請執行以下流程，從獨立 repo 拉取最新的 .claude 配置和專案模板到本專案。
+請執行以下流程，從獨立 repo 拉取最新的 .claude 配置到本專案。
 
 ## 拉取內容
 
-- `.claude/` 目錄所有檔案（Hook、Agent、方法論、規則）
-- `FLUTTER.md` Flutter 特定規範（更新到專案根目錄）
+- `.claude/` 目錄所有檔案（Hook、Agent、方法論、規則、project-templates）
 
 ## 不覆蓋內容
 
@@ -18,7 +17,7 @@ description: 從獨立 repo 拉取最新 .claude 配置和專案模板 (https://
 ## 執行流程
 
 1. **確認本地無未提交變更**
-   - 檢查 `.claude`、`FLUTTER.md` 是否有未提交的變更
+   - 檢查 `.claude` 是否有未提交的變更
    - 如有變更，詢問用戶是否先提交或暫存
 
 2. **覆蓋確認（強制使用 AskUserQuestion）**
@@ -27,8 +26,7 @@ description: 從獨立 repo 拉取最新 .claude 配置和專案模板 (https://
    - AskUserQuestion 問題格式：
      ```
      question: "即將從 tarrragon/claude.git 拉取更新。以下內容將被覆蓋：
-     - .claude/ 目錄所有內容（包含 hooks、agents、methodologies、rules 等）
-     - FLUTTER.md
+     - .claude/ 目錄所有內容（包含 hooks、agents、methodologies、rules、project-templates 等）
 
      根目錄 CLAUDE.md 不受影響。腳本會自動備份到 /tmp 臨時目錄。
      確認繼續？"
@@ -45,7 +43,6 @@ description: 從獨立 repo 拉取最新 .claude 配置和專案模板 (https://
      ```bash
      BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
      cp -r .claude "$BACKUP_DIR/"
-     [ -f FLUTTER.md ] && cp FLUTTER.md "$BACKUP_DIR/"
      echo "備份已建立：$BACKUP_DIR"
      ```
      然後執行：`./scripts/sync-claude-pull.sh`
@@ -75,13 +72,12 @@ description: 從獨立 repo 拉取最新 .claude 配置和專案模板 (https://
 ```bash
 # 備份位置會在拉取時顯示
 cp -r /tmp/備份目錄/.claude .
-cp /tmp/備份目錄/FLUTTER.md .
 ```
 
 ## 注意事項
 
-- 自動備份當前配置和專案模板到臨時目錄
-- 拉取會完全替換本地 .claude 和 FLUTTER.md 檔案
+- 自動備份當前 .claude 配置到臨時目錄
+- 拉取會完全替換本地 .claude 檔案
 - 不會覆蓋根目錄 CLAUDE.md（專案特定配置）
 - 拉取後建議檢查 settings.local.json 是否需要調整
 - 拉取後建議重啟 Claude Code Session
