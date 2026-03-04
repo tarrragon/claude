@@ -414,7 +414,51 @@ import '../entities/book.dart';
 
 > 完整方法論：.claude/methodologies/package-import-methodology.md
 
-### 2.2 i18n 管理
+### 2.2 常數集中管理（強制）
+
+> **核心原則**：程式碼中禁止任何硬編碼數值或字串，所有常數集中在 `lib/core/constants/` 管理。
+
+```
+ui/lib/core/constants/
+├── app_constants.dart      # 全域常數（Panel 數量上限等）
+├── duration_constants.dart # 時間常數（重連間隔、心跳等）
+└── style_constants.dart    # 樣式數值常數
+```
+
+```dart
+// ✅ 正確
+if (panels.length > AppConstants.maxSplitPanels)
+Future.delayed(DurationConstants.reconnectInitialDelay)
+
+// ❌ 錯誤：魔法數字/字串
+if (panels.length > 4)
+Future.delayed(Duration(seconds: 1))
+```
+
+### 2.3 i18n 多語系管理（強制）
+
+> **核心原則**：UI 中禁止任何硬編碼顯示文字，所有使用者可見字串透過 ARB/l10n 系統。
+
+```
+ui/lib/l10n/
+├── app_en.arb      # 英文（預設）
+└── app_zh_TW.arb   # 繁體中文
+```
+
+```dart
+// ✅ 正確
+Text(context.l10n.sessionListTitle)
+Text(context.l10n.connectionStatusConnected)
+
+// ❌ 錯誤
+Text('Session List')
+Text('Connected')
+```
+
+**適用範圍**：Widget 文字、錯誤提示、按鈕標籤、狀態文字
+**例外**：開發者 log、測試斷言、技術標識符（package name 等）
+
+### 2.4 i18n 管理
 
 **ViewModel 層三個合法訊息來源**：
 
@@ -459,7 +503,134 @@ throw Exception('Book already exists');
 
 ---
 
-## 3. Python 補充規則
+## 3. Go 補充規則
+
+> 本節僅列出 Go 的**差異規則**，通用規則見第 1 節。
+> 適用版本：**Go 1.21+**（使用 `log/slog` 標準庫）
+
+### 3.1 命名慣例（Effective Go）
+
+| 類型 | 規則 | 正確 | 錯誤 |
+|------|------|------|------|
+| 套件名稱 | 小寫單詞，不用下劃線 | `parser`, `watcher` | `jsonlParser`, `file_watcher` |
+| 導出名稱 | MixedCaps | `SessionEvent`, `ParseLine` | `session_event`, `parse_line` |
+| 未導出名稱 | mixedCaps | `sessionID`, `parseRawLine` | `session_id`, `parse_raw_line` |
+| 方法 | 不加 Get 前綴 | `Owner()` | `GetOwner()` |
+| 介面（單方法） | 方法名 + `-er` | `Reader`, `Parser` | `IParser`, `ParserInterface` |
+| 接收者 | 1-2 字母縮寫 | `(p *Parser)` | `(this *Parser)` |
+| 錯誤變數 | `err` 或 `ErrXxx` | `ErrSessionNotFound` | `sessionError` |
+
+**禁止**：蛇形命名、冗餘包名重複、縮寫（`usrMgr`）、模糊詞（`data`, `info`）
+
+### 3.2 常數集中管理（強制）
+
+每個 package 必須有 `constants.go` 集中定義所有常數，**程式碼中禁止硬編碼數值或字串**。
+
+```go
+// constants.go
+type SessionStatus int
+
+const (
+    SessionStatusActive SessionStatus = iota
+    SessionStatusIdle
+    SessionStatusCompleted
+)
+
+const (
+    DefaultPort            = 8765
+    ActiveThresholdSeconds = 120
+    MaxHistoryLines        = 1000
+    HeartbeatIntervalSecs  = 30
+)
+```
+
+**禁止行為**：
+
+| 禁止 | 正確做法 |
+|------|---------|
+| `port := 8765` | `port := DefaultPort` |
+| `time.Sleep(30 * time.Second)` | `time.Sleep(HeartbeatIntervalSecs * time.Second)` |
+| `if count > 1000` | `if count > MaxHistoryLines` |
+
+### 3.3 字串集中管理與多語系（強制）
+
+所有字串統一在 `messages/` 目錄管理，**程式碼中禁止硬編碼任何字串**。
+
+```
+server/messages/
+├── log_messages.go    # 開發者 log 訊息（英文常數）
+├── api_messages.go    # API 錯誤碼（Client 可見）
+├── cli_messages.go    # CLI 提示訊息
+└── i18n/              # 使用者可見文字（多語系）
+    ├── en.json
+    └── zh-TW.json
+```
+
+```go
+// ✅ 正確：使用常數
+logger.Info(messages.LogNewSessionFile, "sessionID", id)
+return WSResponse{Error: messages.ErrCodeSessionNotFound}
+
+// ❌ 錯誤：硬編碼字串
+logger.Info("new session detected", "id", id)
+return WSResponse{Error: "session not found"}
+```
+
+Client 可見的錯誤使用**錯誤碼**（如 `"SESSION_NOT_FOUND"`），由 Client 側負責本地化顯示。
+
+### 3.4 結構化日誌（log/slog，強制）
+
+```go
+// 初始化（main.go）
+logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+    Level: slog.LevelDebug,
+}))
+
+// 每條 log 必須包含 "layer" 欄位（UC-011 格式變動偵測）
+logger.Warn(messages.LogUnknownField,
+    "layer", "jsonl_parser",
+    "field", unknownKey,
+    "hint", messages.LogFormatChangeHint)
+```
+
+### 3.5 錯誤處理
+
+```go
+// ✅ Sentinel error（可比較）
+var ErrSessionNotFound = errors.New("session not found")
+
+// ✅ 自訂錯誤類型（含上下文）
+type ParseError struct {
+    SessionID string
+    Cause     error
+}
+func (e *ParseError) Error() string { return fmt.Sprintf("parse session %s: %v", e.SessionID, e.Cause) }
+func (e *ParseError) Unwrap() error { return e.Cause }
+
+// ✅ 保留上下文
+return fmt.Errorf("read file %s: %w", path, err)
+
+// ❌ 丟棄上下文
+return errors.New("read failed")
+```
+
+**禁止 `_ = err` 丟棄錯誤**，必須處理或明確在註解說明理由。
+
+### 3.6 執行方式
+
+- 所有 Go 指令必須在 `server/` 子目錄下執行，使用子 shell 避免 cd 污染：
+  ```bash
+  (cd server && go test ./...)
+  (cd server && go vet ./...)
+  (cd server && go build ./...)
+  ```
+- 禁止直接 `cd server`（污染 shell 工作目錄）
+
+> 詳細規則：.claude/rules/core/bash-tool-usage-rules.md
+
+---
+
+## 5. Python 補充規則
 
 > 本節僅列出 Python 的**差異規則**，通用規則見第 1 節。
 
@@ -513,7 +684,7 @@ Python 特有的處理方式：
 
 ---
 
-## 4. 統一品質檢查清單
+## 6. 統一品質檢查清單
 
 ### 4.1 所有語言通用
 
@@ -563,14 +734,15 @@ Python 特有的處理方式：
 
 ---
 
-## 5. 代理人引用規則
+## 7. 代理人引用規則
 
 | 代理人 | 必須遵循的章節 |
 |--------|-------------|
-| parsley-flutter-developer | 第 1 節 + 第 2 節 + 第 4.1 節 + 第 4.2 節 |
-| thyme-python-developer | 第 1 節 + 第 3 節 + 第 4.1 節 + 第 4.3 節 |
+| parsley-flutter-developer | 第 1 節 + 第 2 節 + 第 6.1 節 + 第 6.2 節 |
+| fennel-go-developer | 第 1 節 + 第 3 節 + 第 6.1 節 + 第 6.4 節（新增） |
+| thyme-python-developer | 第 1 節 + 第 5 節 + 第 6.1 節 + 第 6.3 節 |
 | cinnamon-refactor-owl | 第 1 節全部（作為重構評估基線） |
-| basil-hook-architect | 第 1 節 + 第 3 節（Hook 為 Python） |
+| basil-hook-architect | 第 1 節 + 第 5 節（Hook 為 Python） |
 
 ---
 
@@ -589,5 +761,5 @@ Python 特有的處理方式：
 
 ---
 
-**Last Updated**: 2026-03-04
-**Version**: 1.3.0 - 新增 1.2.3 破壞性操作設計防護（IMP-010, ARCH-002）
+**Last Updated**: 2026-03-05
+**Version**: 1.4.0 - 新增第 3 節 Go 規範（命名/常數/i18n/slog/錯誤處理）；第 2 節補充 Dart 常數和 i18n 管理；章節重新編號 3→4 Python、4→6 清單、5→7 代理人引用

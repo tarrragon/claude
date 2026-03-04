@@ -216,9 +216,9 @@ Hook 系統自動處理基本的工作流程合規，你的職責專注於需要
 
 ---
 
-## 🎨 TDD Phase 1 Handoff Standards
+## TDD Phase 1 Handoff Standards
 
-**🎯 Phase 1 行為場景提取職責** (新增 v1.2.0):
+** Phase 1 行為場景提取職責** (新增 v1.2.0):
 
 **目標**: 從需求中識別使用者行為場景,為 Phase 2 測試設計奠定基礎。
 
@@ -262,7 +262,7 @@ Then: [預期行為]
 - [ ] API interface definitions complete, including input/output and data structures
 - [ ] Boundary conditions and exception situations comprehensively identified
 - [ ] Acceptance criteria clearly verifiable, usable for test design
-- [ ] **行為場景已提取 (Given-When-Then 格式)** ⭐
+- [ ] **行為場景已提取 (Given-When-Then 格式)** 
 - [ ] Work log `docs/work-logs/vX.X.X-feature-design.md` established and meets standards
 
 When creating functional specifications:
@@ -299,7 +299,7 @@ When creating functional specifications:
 - Create specifications without clear acceptance criteria
 - Design functionality without considering error scenarios
 - Proceed without establishing complete API interface definitions
-- Violate 「📚 專案文件責任明確區分」standards
+- Violate 「 專案文件責任明確區分」standards
 
 Your design specifications should provide comprehensive user experience strategy while ensuring accessibility planning and performance-oriented design principles.
 

@@ -3,8 +3,7 @@
 # 使用方式: ./.claude/scripts/sync-claude-push.sh "提交訊息"
 #
 # 推送內容:
-# - .claude/ 目錄（包含 templates/CLAUDE-template.md）
-# - FLUTTER.md
+# - .claude/ 目錄（包含 templates/CLAUDE-template.md、project-templates/FLUTTER.md）
 #
 # 不推送內容:
 # - 根目錄 CLAUDE.md（專案特定配置）
@@ -30,9 +29,9 @@ echo -e "${YELLOW}開始推送 .claude 資料夾到獨立 repo...${NC}"
 
 # 1. 確保 .claude 變更已提交到主專案（不再檢查 CLAUDE.md）
 echo -e "${YELLOW}檢查 .claude 資料夾狀態...${NC}"
-if git status --porcelain .claude FLUTTER.md | grep -q .; then
-    echo -e "${RED}警告: .claude 或 FLUTTER.md 有未提交的變更${NC}"
-    echo "請先提交到主專案，或使用 git add .claude FLUTTER.md"
+if git status --porcelain .claude | grep -q .; then
+    echo -e "${RED}警告: .claude 有未提交的變更${NC}"
+    echo "請先提交到主專案，或使用 git add .claude"
     exit 1
 fi
 
@@ -70,13 +69,8 @@ rsync -av \
     --exclude='pm-status.json' \
     "$OLDPWD/.claude/" .
 
-# 建立專案模板目錄並複製模板檔案（不再複製 CLAUDE.md）
-echo -e "${YELLOW}複製專案模板檔案...${NC}"
-mkdir -p project-templates
-# 只複製 FLUTTER.md，CLAUDE-template.md 已在 .claude/templates/ 中
-cp "$OLDPWD/FLUTTER.md" project-templates/
-echo -e "${GREEN}   已複製 FLUTTER.md${NC}"
 echo -e "${YELLOW}   注意: CLAUDE.md 不再同步（專案特定配置）${NC}"
+echo -e "${GREEN}   FLUTTER.md 位於 project-templates/ 目錄中（已由 rsync 複製）${NC}"
 echo -e "${GREEN}   CLAUDE-template.md 位於 templates/ 目錄中${NC}"
 
 # 計算新版本號（使用之前保存的 REMOTE_VERSION）

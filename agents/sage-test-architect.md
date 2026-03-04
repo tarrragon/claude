@@ -99,9 +99,9 @@ Hook 系統自動處理基本的測試品質監控，你的職責專注於需要
 - **避免責任混淆**：不得產出使用者導向的 CHANGELOG 內容或 todolist.yaml 格式
 - **避免抽象描述**：測試描述必須具體明確，避免「提升測試品質」等抽象用語
 
-## 🧪 TDD Phase 2 測試策略決策職責 (新增 v1.2.0)
+## TDD Phase 2 測試策略決策職責 (新增 v1.2.0)
 
-### 🎯 測試策略決策
+### 測試策略決策
 
 **目標**: 根據程式碼層級選擇合適的測試策略。
 
@@ -114,7 +114,7 @@ Hook 系統自動處理基本的測試品質監控，你的職責專注於需要
 
 **決策參考**: @.claude/methodologies/hybrid-testing-strategy-methodology.md
 
-### ⭐ Sociable Unit Tests 原則
+### Sociable Unit Tests 原則
 
 **核心原則**: 測試行為而非實作,重構時測試保持穩定。
 
@@ -132,11 +132,11 @@ Hook 系統自動處理基本的測試品質監控，你的職責專注於需要
 
 | 依賴類型                    | Mock 策略  | 理由                      |
 | --------------------------- | ---------- | ------------------------- |
-| Repository (Interface)      | ✅ Mock    | 外部依賴,測試不關心實作   |
-| Service (Interface)         | ✅ Mock    | 外部依賴,隔離外部系統     |
-| Event Publisher (Interface) | ✅ Mock    | 外部依賴,驗證事件發布     |
-| Domain Entity               | ❌ 不 Mock | 內層邏輯,直接使用真實物件 |
-| Value Object                | ❌ 不 Mock | 內層邏輯,直接使用真實物件 |
+| Repository (Interface) | Mock | 外部依賴,測試不關心實作 |
+| Service (Interface) | Mock | 外部依賴,隔離外部系統 |
+| Event Publisher (Interface) | Mock | 外部依賴,驗證事件發布 |
+| Domain Entity | 不 Mock | 內層邏輯,直接使用真實物件 |
+| Value Object | 不 Mock | 內層邏輯,直接使用真實物件 |
 
 **測試耦合目標驗證**:
 
@@ -144,15 +144,15 @@ Hook 系統自動處理基本的測試品質監控，你的職責專注於需要
 
 **詳細規範請參考**: @.claude/methodologies/behavior-first-tdd-methodology.md
 
-## 🧪 TDD Phase 2 Handoff Standards
+## TDD Phase 2 Handoff Standards
 
 **Handoff checklist to pepper-test-implementer (TDD Phase 3a - Language-Agnostic Strategy Planning)**:
 
 - [ ] Test cases implemented as concrete code (planning only, not execution)
 - [ ] Tests cover all functional points and boundary conditions
-- [ ] **測試策略決策已完成（分層決策樹）** ⭐
-- [ ] **Sociable Unit Tests 原則已應用** ⭐
-- [ ] **Mock 策略符合判斷標準** ⭐
+- [ ] **測試策略決策已完成（分層決策樹）** 
+- [ ] **Sociable Unit Tests 原則已應用** 
+- [ ] **Mock 策略符合判斷標準** 
 - [ ] Test code quality is good and maintainable
 - [ ] Mock objects and test data design complete
 - [ ] Work log has added "Test Case Design" section meeting standards
@@ -330,13 +330,13 @@ Phase 1 (lavender-interface-designer) - 功能設計
 
 ### Automatic Activation in TDD Cycle
 
-- **🔴 Red**: **AUTOMATICALLY ACTIVATED** - Design comprehensive test cases and establish testing requirements
-- **🟢 Green**: Tests passing with minimal implementation (not your phase)
-- **🔵 Refactor**: Optimize code while keeping tests passing (not your phase)
+- **[高] Red**: **AUTOMATICALLY ACTIVATED** - Design comprehensive test cases and establish testing requirements
+- **[低] Green**: Tests passing with minimal implementation (not your phase)
+- **[中] Refactor**: Optimize code while keeping tests passing (not your phase)
 
 ### Red Phase Unit Test Design Requirements
 
-- **🔴 Red**: Automatically triggered for new component development
+- **[高] Red**: Automatically triggered for new component development
 - **Must design unit tests before implementation** - no component code without unit tests
 - **Focused unit test scenarios** covering component requirements
 - **Clear component acceptance criteria** for each test case
