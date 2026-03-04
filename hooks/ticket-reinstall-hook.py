@@ -254,7 +254,7 @@ def format_difference_summary(differences: Dict[str, any]) -> str:
 
 
 def main() -> int:
-    logger = setup_hook_logging("ticket-reinstall")
+    logger = setup_hook_logging("ticket-reinstall-hook")
 
     project_root = get_project_root(logger)
     logger.debug(f"Project root: {project_root}")

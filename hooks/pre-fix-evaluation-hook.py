@@ -49,7 +49,7 @@ from typing import Dict, List, Tuple, Optional
 sys.path.insert(0, str(Path(__file__).parent))
 
 try:
-    from hook_utils import setup_hook_logging
+    from hook_utils import setup_hook_logging, run_hook_safely
     from lib.common_functions import hook_output, read_hook_input
     from lib.hook_messages import WorkflowMessages, format_message
 except ImportError as e:
@@ -307,41 +307,41 @@ def generate_non_syntax_error_output(error_type: ErrorType, errors: List[Dict[st
 # 主程式
 # ============================================================================
 
-def main():
+def main() -> int:
     """主程式進入點"""
     logger = setup_hook_logging("pre-fix-evaluation-hook")
-    logger.info("=== 修復前強制評估 Hook 開始 ===")
+    logger.info("=== pre-fix-evaluation hook start ===")
 
     try:
         # 從 stdin 讀取 JSON 輸入
         input_data = read_hook_input()
         if not input_data:
-            logger.info("沒有輸入資料，跳過評估")
-            sys.exit(0)
-        logger.debug(f"輸入資料: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
+            logger.info("No input data, skipping evaluation")
+            return 0
+        logger.debug("Input data: {}".format(json.dumps(input_data, ensure_ascii=False, indent=2)))
 
         # 提取工具回應
         tool_response = input_data.get("tool_response", "")
         if not tool_response:
-            logger.info("沒有工具回應，跳過評估")
-            sys.exit(0)
+            logger.info("No tool response, skipping evaluation")
+            return 0
 
         # 檢查是否有錯誤或失敗
         output_str = str(tool_response) if not isinstance(tool_response, str) else tool_response
 
         # 檢查成功標誌 (Dart 測試成功輸出中會有這些標誌)
         if "all tests passed" in output_str.lower() or "no issues found" in output_str.lower():
-            logger.info("測試全部通過，無需評估")
-            sys.exit(0)
+            logger.info("All tests passed, no evaluation needed")
+            return 0
 
         # 分類錯誤
         error_type, errors = classify_errors(output_str, logger)
 
         if not errors:
-            logger.info("沒有偵測到錯誤")
-            sys.exit(0)
+            logger.info("No errors detected")
+            return 0
 
-        logger.info(f"偵測到 {len(errors)} 個 {error_type.value} 錯誤")
+        logger.info("Detected {} {} errors".format(len(errors), error_type.value))
 
         # 記錄評估結果
         log_evaluation(error_type, errors, logger)
@@ -356,21 +356,21 @@ def main():
 
         # 輸出結果
         print(json.dumps(output, ensure_ascii=False, indent=2))
-        logger.info("=== 修復前強制評估 Hook 完成 ===")
-        sys.exit(exit_code)
+        logger.info("=== pre-fix-evaluation hook complete ===")
+        return exit_code
 
     except Exception as e:
-        logger.exception(f"未預期的錯誤: {e}")
+        logger.exception("Unexpected error: {}".format(e))
         print(json.dumps({
             "hookSpecificOutput": {
                 "hookEventName": "PostToolUse",
                 "decision": "allow"
             },
-            "systemMessage": f"Hook 內部錯誤: {e}",
+            "systemMessage": "Hook internal error: {}".format(e),
             "suppressOutput": False
         }))
-        sys.exit(0)
+        return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(run_hook_safely(main, "pre-fix-evaluation-hook"))

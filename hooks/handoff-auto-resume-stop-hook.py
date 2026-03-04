@@ -46,7 +46,7 @@ from typing import Dict, Any, Optional
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, parse_ticket_frontmatter
 
 EXIT_SUCCESS = 0
 
@@ -197,53 +197,6 @@ def read_session_state(logger) -> Optional[Dict[str, Any]]:
         return None
     except Exception as e:
         logger.warning(f"讀取 session 狀態檔案失敗: {e}")
-        return None
-
-
-def parse_ticket_frontmatter(file_path: Path, logger) -> Optional[Dict[str, str]]:
-    """
-    簡易 YAML frontmatter 解析（無外部依賴）
-
-    只解析頂層 key-value，忽略巢狀結構和陣列。
-
-    Args:
-        file_path: Ticket 檔案路徑
-        logger: 日誌記錄器
-
-    Returns:
-        dict - 解析出的 frontmatter key-value；若檔案無 frontmatter 則回傳 None
-    """
-    try:
-        content = file_path.read_text(encoding='utf-8')
-        if not content.startswith('---'):
-            return None
-
-        # 找到第二個 ---
-        end_idx = content.find('---', 3)
-        if end_idx == -1:
-            return None
-
-        frontmatter_text = content[3:end_idx]
-        result = {}
-
-        for line in frontmatter_text.strip().split('\n'):
-            # 跳過空行和註解
-            if not line.strip() or line.strip().startswith('#'):
-                continue
-
-            # 跳過已縮排的行（巢狀結構）
-            if line.startswith(' ') or line.startswith('\t'):
-                continue
-
-            # 只解析頂層 key
-            if ':' in line:
-                key, _, value = line.partition(':')
-                result[key.strip()] = value.strip().strip("'\"")
-
-        return result if result else None
-
-    except Exception as e:
-        logger.warning(f"解析 frontmatter 失敗 ({file_path.name}): {e}")
         return None
 
 
@@ -438,6 +391,11 @@ def should_preserve_pending_json(direction: str, logger) -> bool:
     direction 為 to-sibling / to-parent / to-child 的 handoff，
     來源 Ticket 已 completed 是預期狀態，應保留 pending JSON。
 
+    direction 格式：
+    - "to-sibling" (無目標) 或 "to-sibling:TARGET_ID" (帶目標 ID)
+    - "to-parent" (無目標) 或 "to-parent:TARGET_ID" (帶目標 ID)
+    - "to-child" (無目標) 或 "to-child:TARGET_ID" (帶目標 ID)
+
     Args:
         direction: handoff 的 direction 欄位
         logger: 日誌記錄器
@@ -446,9 +404,11 @@ def should_preserve_pending_json(direction: str, logger) -> bool:
         bool - 是否應保留 pending JSON
     """
     # 任務鏈類型（來源已完成是預期狀態）
+    # direction 格式為 "to-sibling" 或 "to-sibling:TARGET_ID"
     chain_directions = {"to-sibling", "to-parent", "to-child"}
+    direction_type = direction.split(":")[0]
 
-    if direction in chain_directions:
+    if direction_type in chain_directions:
         logger.debug(f"handoff 類型 '{direction}' 應保留已完成 Ticket 的 pending JSON")
         return True
 

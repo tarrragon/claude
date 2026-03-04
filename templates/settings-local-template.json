@@ -46,7 +46,7 @@
       "Skill(test-async-guardian)",
 
       "_COMMENT_SYNC: --- 同步腳本 ---",
-      "Bash(./scripts/sync-claude-push.sh:*)",
+      "Bash(./.claude/scripts/sync-claude-push.sh:*)",
 
       "_COMMENT_SEARCH: --- 搜尋工具 ---",
       "WebSearch",

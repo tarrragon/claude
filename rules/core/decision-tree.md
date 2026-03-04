@@ -206,11 +206,16 @@ Skill 是預建的專用工具，優先於代理人派發。
     v
 是「繼續任務鏈」類請求? ─是→ [強制] 並行可行性分析 → 主動建議並行
     |
-    └─否→ pending? → claim → 階段判斷
+    └─否→ pending? → creation_accepted?
+          |           ─否→ [強制] 並行審核（acceptance-auditor + system-analyst）
+          |                → 通過後設定 creation_accepted: true
+          |           ─是→ claim → 階段判斷
           in_progress? → 繼續執行
           completed? → [AskUserQuestion] 後續步驟選擇
           blocked? → 升級 PM
 ```
+
+**建立後審核檢查（強制）**：pending Ticket 認領前必須 `creation_accepted: true`，否則強制並行派發 acceptance-auditor + system-analyst 審核。豁免：DOC 類型或已審核父 Ticket 的子任務。
 
 **Wave 邊界檢查（強制）**：當用戶指定「繼續 Wx」時，**必須**只處理該 Wave 的任務，禁止跨 Wave 執行。
 
@@ -262,6 +267,22 @@ Skill 是預建的專用工具，優先於代理人派發。
 任務/階段完成
     |
     v
+[Checkpoint 0] 建立後 Handoff 判斷（Ticket 建立/拆分完成後適用）
+    |
+    +-- 建立了子任務或獨立 Ticket，且可並行派發?
+    |   （條件：creation_accepted + 檔案無重疊 + 敘述完善 + 符合並行安全條件）
+    |   → 留在當前 session → 並行派發代理人 → 進入 Checkpoint 1
+    |
+    +-- 建立了子任務且不可並行派發?
+    |   → commit → handoff → 新 session 逐一處理子任務
+    |
+    +-- 建立了獨立 Ticket（非子任務，不可並行）?
+    |   → commit → handoff → 新 session 認領執行
+    |
+    +-- 非建立/拆分場景（執行完成、Phase 完成等）?
+        → 跳過，進入 Checkpoint 1
+    |
+    v
 [Checkpoint 1] 變更狀態檢查
     |
     +-- git status 有未提交變更?
@@ -269,6 +290,12 @@ Skill 是預建的專用工具，優先於代理人派發。
     |   +-- 是 + 批量變更 → AskUserQuestion #15（備份確認）
     |   +-- 是 → 建議 commit（/commit-as-prompt）
     |   +-- 否 → [Checkpoint 3]
+    |
+    v
+[Checkpoint 1.5] 錯誤學習經驗確認（AskUserQuestion #16）
+    |
+    +-- 記錄 → 執行 /error-pattern add → 可能產生新 commit → 回到 Checkpoint 1.5
+    +-- 無需記錄 / 稍後記錄 → 繼續
     |
     v
 [Checkpoint 2] Commit 後情境評估（每次 commit 後，PM 必須先查詢再選擇路由）
@@ -341,6 +368,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 | 現有出口 | 進入第八層入口 |
 |---------|-------------|
+| 第四層 Ticket 建立/拆分完成 | Checkpoint 0（建立後 Handoff 判斷） |
 | 第五層 Phase 3b/4 完成 | Checkpoint 1 |
 | 第六層 incident 分析完成 | Checkpoint 3 |
 | 第七層 Ticket complete | 既有場景 2 → Checkpoint 1 |
@@ -363,7 +391,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 **流程省略防護（AskUserQuestion #12）**：主線程輸出含省略意圖關鍵字時，process-skip-guard-hook 自動偵測並提醒確認。
 
-> AskUserQuestion 場景 11-15 詳見：.claude/rules/core/askuserquestion-rules.md
+> AskUserQuestion 場景 11-17 詳見：.claude/rules/core/askuserquestion-rules.md
 > 模板詳見：.claude/references/ticket-askuserquestion-templates.md
 
 ---
@@ -400,8 +428,8 @@ Level 5: TDD 階段代理人 + thyme-python-developer
 | 錯誤/失敗發生 | `/pre-fix-eval` |
 | Phase 4 完成 | `/tech-debt-capture` |
 | 版本發布前 | `/version-release check` |
-| 用戶決策確認 | AskUserQuestion（15 個場景，詳見 askuserquestion-rules.md） |
-| Commit 後 | AskUserQuestion #11（Handoff 確認） |
+| 用戶決策確認 | AskUserQuestion（17 個場景，詳見 askuserquestion-rules.md） |
+| Commit 後 | AskUserQuestion #16（錯誤學習）→ #11（Handoff 確認） |
 | 流程省略偵測 | AskUserQuestion #12（省略確認） |
 | **計畫執行中發現超範圍需求** | **`/ticket create` 建立 pending Ticket（立即，不延後）** |
 
@@ -430,5 +458,5 @@ Level 5: TDD 階段代理人 + thyme-python-developer
 
 ---
 
-**Last Updated**: 2026-03-03
-**Version**: 7.3.0 - 新增第三層半 Plan Mode 執行中額外發現規則，同步更新強制執行命令表和違規行為表（W30-002）
+**Last Updated**: 2026-03-04
+**Version**: 7.7.0 - 第八層新增 Checkpoint 0 建立後 Handoff 判斷（含獨立 Ticket 並行派發路徑）

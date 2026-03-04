@@ -40,7 +40,7 @@ from typing import Dict, Any, List, Optional, Tuple
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 
 try:
     import yaml
@@ -52,9 +52,6 @@ except ImportError:
 # 全域常數
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
-
-
-
 
 def get_project_root() -> Path:
     """
@@ -81,26 +78,6 @@ def get_project_root() -> Path:
     except Exception:
         return Path.cwd()
 
-
-def read_json_from_stdin(logger) -> Dict[str, Any]:
-    """
-    從 stdin 讀取 JSON 輸入
-
-    Returns:
-        dict - 解析後的 JSON 資料
-
-    Raises:
-        ValueError: JSON 格式錯誤
-    """
-    try:
-        input_data = json.load(sys.stdin)
-        logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
-        return input_data
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON 解析錯誤: {e}")
-        raise ValueError(f"Invalid JSON input: {e}")
-
-
 def read_pubspec_yaml(project_root: Path, logger) -> Optional[Dict[str, Any]]:
     """
     讀取 pubspec.yaml 並解析版本
@@ -126,7 +103,6 @@ def read_pubspec_yaml(project_root: Path, logger) -> Optional[Dict[str, Any]]:
         logger.error(f"讀取 pubspec.yaml 失敗: {e}")
         return None
 
-
 def extract_version(pubspec_data: Dict[str, Any], logger) -> Optional[str]:
     """
     從 pubspec.yaml 提取版本號
@@ -144,7 +120,6 @@ def extract_version(pubspec_data: Dict[str, Any], logger) -> Optional[str]:
 
     logger.info(f"當前版本: {version}")
     return str(version)
-
 
 def parse_version_series(version: str, logger) -> Optional[Tuple[int, int]]:
     """
@@ -171,7 +146,6 @@ def parse_version_series(version: str, logger) -> Optional[Tuple[int, int]]:
     except (ValueError, IndexError) as e:
         logger.error(f"版本號解析失敗: {e}")
         return None
-
 
 def find_tickets_directory(
     project_root: Path,
@@ -211,7 +185,6 @@ def find_tickets_directory(
     logger.info(f"tickets 目錄不存在: {tickets_dir}")
     return None
 
-
 def extract_frontmatter(file_path: Path, logger) -> Optional[Dict[str, Any]]:
     """
     從 Markdown 檔案提取 frontmatter
@@ -249,7 +222,6 @@ def extract_frontmatter(file_path: Path, logger) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.warning(f"提取 frontmatter 失敗 ({file_path.name}): {e}")
         return None
-
 
 def scan_tech_debt_tickets(tickets_dir: Path, logger) -> List[Dict[str, Any]]:
     """
@@ -304,7 +276,6 @@ def scan_tech_debt_tickets(tickets_dir: Path, logger) -> List[Dict[str, Any]]:
     logger.info(f"掃描完成，找到 {len(pending_tickets)} 個 pending TD Ticket")
     return pending_tickets
 
-
 def generate_warning_message(pending_tickets: List[Dict[str, Any]], version: str) -> str:
     """
     生成技術債務警告訊息
@@ -349,7 +320,6 @@ _此提醒由 tech-debt-reminder Hook 自動生成_
 
     return message
 
-
 def generate_hook_output(
     pending_tickets: List[Dict[str, Any]],
     version: str,
@@ -383,7 +353,6 @@ def generate_hook_output(
         },
         "suppressOutput": False
     }
-
 
 def main() -> int:
     """
@@ -465,7 +434,6 @@ def main() -> int:
             "suppressOutput": True
         }, ensure_ascii=False, indent=2))
         return EXIT_SUCCESS  # 不中斷 Session 啟動
-
 
 if __name__ == "__main__":
     sys.exit(run_hook_safely(main, "tech-debt-reminder"))

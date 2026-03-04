@@ -37,9 +37,8 @@ from typing import Dict, Any, Optional, Tuple, List
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.hook_messages import QualityMessages, CoreMessages, AskUserQuestionMessages, format_message
-
 
 # ============================================================================
 # 常數定義
@@ -68,29 +67,6 @@ EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_BLOCK = 2
 
-
-def read_json_from_stdin(logger) -> Dict[str, Any]:
-    """
-    從 stdin 讀取 JSON 輸入
-
-    Args:
-        logger: Logger 實例
-
-    Returns:
-        dict - 解析後的 JSON 資料
-
-    Raises:
-        ValueError: JSON 格式錯誤
-    """
-    try:
-        input_data = json.load(sys.stdin)
-        logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
-        return input_data
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON 解析錯誤: {e}")
-        raise ValueError(f"Invalid JSON input: {e}")
-
-
 def validate_input(input_data: Dict[str, Any], logger) -> bool:
     """
     驗證輸入格式
@@ -108,7 +84,6 @@ def validate_input(input_data: Dict[str, Any], logger) -> bool:
         return False
 
     return True
-
 
 # ============================================================================
 # 工具操作識別
@@ -146,7 +121,6 @@ def is_worklog_write_operation(tool_name: str, tool_input: Dict[str, Any], logge
     logger.debug(f"檔案路徑不符合 worklog 模式: {file_path}")
     return False
 
-
 def extract_file_content_from_input(tool_input: Dict[str, Any], logger) -> Optional[str]:
     """
     從工具輸入中提取檔案內容
@@ -167,7 +141,6 @@ def extract_file_content_from_input(tool_input: Dict[str, Any], logger) -> Optio
     # Edit 工具：tool_response 中可能包含檔案內容
     # 但通常 Edit 只是修改現有檔案，我們應該直接讀取檔案
     return None
-
 
 # ============================================================================
 # Phase 完成識別
@@ -213,7 +186,6 @@ def is_phase_completion_report(file_path: str, content: Optional[str], logger) -
     logger.debug(f"未識別為 Phase 完成報告: {file_path}")
     return False, None
 
-
 # ============================================================================
 # worklog 驗證
 # ============================================================================
@@ -237,7 +209,6 @@ def read_file_content(file_path: str, logger) -> Optional[str]:
     except Exception as e:
         logger.warning(f"無法讀取檔案 {file_path}: {e}")
         return None
-
 
 def check_worklog_structure(file_path: str, content: str, logger) -> Tuple[bool, List[str]]:
     """
@@ -279,7 +250,6 @@ def check_worklog_structure(file_path: str, content: str, logger) -> Tuple[bool,
     is_complete = len(missing_items) == 0
     return is_complete, missing_items
 
-
 def check_ticket_completion_status(project_dir: str, ticket_id: Optional[str]) -> Tuple[bool, Optional[str]]:
     """
     檢查 Ticket 是否已標記為完成
@@ -304,13 +274,11 @@ def check_ticket_completion_status(project_dir: str, ticket_id: Optional[str]) -
 
     return False, message
 
-
 def get_project_root() -> str:
     """取得專案根目錄"""
     import os
     project_root = os.getenv("CLAUDE_PROJECT_DIR", str(Path.cwd()))
     return project_root
-
 
 # ============================================================================
 # 報告生成和儲存
@@ -350,7 +318,6 @@ def generate_completion_report(
 
     return report
 
-
 def save_completion_report(project_dir: str, report: Dict[str, Any], logger) -> str:
     """
     儲存 Phase 完成驗證報告
@@ -376,7 +343,6 @@ def save_completion_report(project_dir: str, report: Dict[str, Any], logger) -> 
     except Exception as e:
         logger.warning(f"儲存報告失敗: {e}")
         return ""
-
 
 # ============================================================================
 # 路由提醒
@@ -416,7 +382,6 @@ def get_route_reminder(phase_type: Optional[str]) -> Optional[str]:
         AskUserQuestionMessages.POST_TASK_ROUTE_REMINDER,
         task_type=phase_type
     )
-
 
 # ============================================================================
 # 輸出生成
@@ -487,7 +452,6 @@ def generate_hook_output(
             logger.info(f"Phase {phase_type} 完成，已輸出後續路由提醒")
 
     return output
-
 
 # ============================================================================
 # 主入口點
@@ -604,7 +568,6 @@ def main() -> int:
         }
         print(json.dumps(error_output, ensure_ascii=False, indent=2))
         return EXIT_ERROR
-
 
 if __name__ == "__main__":
     sys.exit(run_hook_safely(main, "phase-completion-gate"))

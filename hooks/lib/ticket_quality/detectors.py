@@ -497,6 +497,7 @@ def check_ambiguous_responsibility_automated(ticket_content: str) -> Dict[str, A
     - unclear: 無職責關鍵詞或連接詞過多（暗示多重職責）
 
     層級關鍵詞對照表：
+    - Layer 0 (Infrastructure): Infrastructure, Hook, Script, 腳本, 環境, 設定, 配置, CI, CD, 部署, Sync, 同步
     - Layer 1 (UI): UI, Widget, 畫面, 顯示
     - Layer 2 (Controller): Controller, Bloc, ViewModel, 行為
     - Layer 3 (UseCase): UseCase, 使用案例, 業務流程
@@ -606,6 +607,7 @@ def check_ambiguous_responsibility_automated(ticket_content: str) -> Dict[str, A
     if acceptance_criteria:
         # 檢查驗收條件是否包含層級關鍵詞
         layer_keywords = {
+            0: ["Infrastructure", "Hook", "Script", "腳本", "環境", "設定", "配置", "CI", "CD", "部署", "Sync", "同步"],
             1: ["UI", "Widget", "畫面", "顯示"],
             2: ["Controller", "Bloc", "ViewModel", "行為"],
             3: ["UseCase", "使用案例", "業務流程"],

@@ -89,13 +89,62 @@ description: "主線程管理哲學和做事方法。定義 rosemary-project-man
 
 ### 主線程允許親自處理
 
-| 類型 | 原因 |
-|------|------|
-| 與用戶溝通、澄清需求 | 核心職責 |
-| 任務拆分設計 | 核心職責 |
-| Ticket 建立和指派 | 核心職責 |
-| 閱讀報告、最終決策 | 核心職責 |
-| 驗收結果 | 核心職責 |
+| 類型 | 原因 | Session 歸屬 |
+|------|------|-------------|
+| 與用戶溝通、澄清需求 | 核心職責 | 當前 session |
+| 任務拆分設計 | 核心職責 | 當前 session |
+| Ticket 建立（+審核） | 核心職責 | 建立 session |
+| Ticket 指派（派發代理人） | 核心職責 | 並行派發例外時同 session，否則下個 session |
+| 閱讀報告、最終決策 | 核心職責 | 當前 session |
+| 驗收結果 | 核心職責 | 當前 session |
+
+---
+
+## Context 隔離原則
+
+> **核心信念**：一個 session 只做一件事，做完就交接。
+
+### 單一 Session 單一焦點
+
+| 焦點類型 | Session 範圍 | 完成後動作 |
+|---------|-------------|-----------|
+| 建立 Ticket | 建立 + 審核通過 | commit → handoff |
+| 執行 Ticket | 認領 + 執行 + 完成 | commit → handoff |
+| 驗收 Ticket | 驗收 + 結論 | commit → handoff |
+| 子任務拆分 | 拆分 + 各子任務審核 | commit → handoff（或並行派發） |
+
+### 自然邊界 Commit + Handoff
+
+在以下節點執行 commit → handoff，讓新 session 以乾淨 context 接手：
+
+- Ticket 建立 + 審核完成後
+- 子任務拆分完成後（除非可並行派發）
+- 每個 TDD Phase 完成後
+
+### 並行派發例外
+
+當以下條件**全部**滿足時，可在當前 session 直接並行派發，不需 handoff：
+
+1. Ticket 通過建立後審核（creation_accepted: true）或豁免
+2. 所有任務修改不同檔案（並行安全）
+3. Ticket 敘述足夠完善（what/how/acceptance 都已填寫）
+
+> 注意：以上為 Context 隔離的例外判斷。實際並行派發仍須滿足 `.claude/rules/guides/parallel-dispatch.md` 的完整安全條件（同 Wave、無依賴、同 TDD 階段）。
+
+### 與管理循環的關係
+
+Context 隔離將管理循環拆分到多個 session，每個 session 只完成循環的其中一段：
+
+```
+[Session N] 建立
+聆聽指令 → 思考拆分 → 設計任務 → 建立 Ticket → 審核 → commit+handoff
+
+[Session N+1] 執行
+指派代理人 → 收取結果 → commit+handoff
+
+[Session N+2] 驗收
+閱讀報告 → 驗收結果 → commit+handoff
+```
 
 ---
 
@@ -104,14 +153,14 @@ description: "主線程管理哲學和做事方法。定義 rosemary-project-man
 主管不應該被任何單一任務「佔用」。應該：
 
 1. **快速決策**：收到任務 → 拆分 → 指派（不自己做）
-2. **持續監控**：隨時準備接收新報告、新指令
+2. **持續監控**：在 session 有效期間內，隨時準備接收新報告、新指令
 3. **靈活調度**：根據情況調整優先級和資源
 
 ---
 
 ## 與決策樹的整合
 
-本 skill 定義的原則**優先於**決策樹的細節。
+本 skill 定義的**管理哲學和並行化原則**優先於決策樹的預設行為，但不覆蓋 AskUserQuestion 強制場景。
 
 當決策樹說「主線程可執行內部查詢」時，
 manager skill 說：「不，即使可以，也應該派發」。
@@ -127,5 +176,5 @@ manager skill 說：「不，即使可以，也應該派發」。
 
 ---
 
-**Last Updated**: 2026-02-02
-**Version**: 1.0.0
+**Last Updated**: 2026-03-04
+**Version**: 1.2.0 - 新增 Context 隔離原則 + 修正多視角分析發現的一致性問題

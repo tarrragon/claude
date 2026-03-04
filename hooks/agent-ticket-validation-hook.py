@@ -41,8 +41,7 @@ from typing import Dict, Any, Optional, Tuple
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
-
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 
 # ============================================================================
 # 常數定義
@@ -74,29 +73,6 @@ EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_BLOCK = 2
 
-
-def read_json_from_stdin(logger) -> Dict[str, Any]:
-    """
-    從 stdin 讀取 JSON 輸入
-
-    Args:
-        logger: 日誌物件
-
-    Returns:
-        dict - 解析後的 JSON 資料
-
-    Raises:
-        ValueError: JSON 格式錯誤
-    """
-    try:
-        input_data = json.load(sys.stdin)
-        logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
-        return input_data
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON 解析錯誤: {e}")
-        raise ValueError(f"Invalid JSON input: {e}")
-
-
 def validate_input(input_data: Dict[str, Any], logger) -> bool:
     """
     驗證輸入格式
@@ -119,7 +95,6 @@ def validate_input(input_data: Dict[str, Any], logger) -> bool:
         return False
 
     return True
-
 
 # ============================================================================
 # Ticket ID 提取
@@ -154,7 +129,6 @@ def extract_ticket_reference(prompt: str, logger) -> Optional[str]:
 
     logger.debug(f"未在 prompt 中找到 Ticket ID 引用")
     return None
-
 
 # ============================================================================
 # Ticket 檔案查找和驗證
@@ -200,7 +174,6 @@ def find_ticket_file(ticket_id: str, logger) -> Optional[Path]:
     logger.warning(f"未找到 Ticket 檔案: {ticket_id}")
     return None
 
-
 def load_ticket_content(ticket_path: Path, logger) -> Optional[str]:
     """
     讀取 Ticket 檔案內容
@@ -219,7 +192,6 @@ def load_ticket_content(ticket_path: Path, logger) -> Optional[str]:
     except Exception as e:
         logger.error(f"無法讀取 Ticket 檔案 {ticket_path}: {e}")
         return None
-
 
 def validate_ticket_has_decision_tree(content: str, logger) -> bool:
     """
@@ -248,7 +220,6 @@ def validate_ticket_has_decision_tree(content: str, logger) -> bool:
 
     logger.warning("Ticket 缺少決策樹欄位")
     return False
-
 
 def validate_ticket(ticket_id: str, logger) -> Tuple[bool, str]:
     """
@@ -286,7 +257,6 @@ def validate_ticket(ticket_id: str, logger) -> Tuple[bool, str]:
     logger.info(f"Ticket {ticket_id} 驗證通過")
     return True, ""
 
-
 # ============================================================================
 # 派發驗證
 # ============================================================================
@@ -315,7 +285,6 @@ def is_handoff_recovery_mode(logger) -> bool:
 
     return False
 
-
 def is_exempt_agent_type(subagent_type: str, logger) -> bool:
     """
     檢查代理人類型是否豁免 Ticket 驗證
@@ -337,7 +306,6 @@ def is_exempt_agent_type(subagent_type: str, logger) -> bool:
     if is_exempt:
         logger.info(f"代理人類型 '{subagent_type}' 豁免 Ticket 驗證（用於前置資訊蒐集）")
     return is_exempt
-
 
 def validate_task_dispatch(tool_input: Dict[str, Any], logger) -> Tuple[bool, str]:
     """
@@ -380,7 +348,6 @@ def validate_task_dispatch(tool_input: Dict[str, Any], logger) -> Tuple[bool, st
     # 步驟 3: 驗證 Ticket
     is_valid, error_msg = validate_ticket(ticket_id, logger)
     return is_valid, error_msg
-
 
 # ============================================================================
 # 輸出生成
@@ -425,7 +392,6 @@ def generate_hook_output(
 
     return output
 
-
 def save_check_log(
     is_valid: bool,
     ticket_id: Optional[str],
@@ -462,7 +428,6 @@ def save_check_log(
         logger.debug(f"檢查日誌已儲存: {report_file}")
     except Exception as e:
         logger.warning(f"儲存檢查日誌失敗: {e}")
-
 
 # ============================================================================
 # 主入口點
@@ -539,7 +504,6 @@ def main() -> int:
         }
         print(json.dumps(error_output, ensure_ascii=False, indent=2))
         return EXIT_ERROR
-
 
 if __name__ == "__main__":
     sys.exit(run_hook_safely(main, "agent-ticket-validation"))

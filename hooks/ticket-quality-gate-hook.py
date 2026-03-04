@@ -32,7 +32,7 @@ from typing import Dict, Any, Optional
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.hook_messages import QualityMessages, CoreMessages, format_message
 
 from lib.ticket_quality.detectors import (
@@ -69,7 +69,6 @@ EXIT_BLOCK = 2
 _check_cache: Dict[str, Dict[str, Any]] = {}
 _quality_config: Optional[Dict[str, Any]] = None
 
-
 def get_quality_config() -> Dict[str, Any]:
     """取得品質規則配置（快取）"""
     global _quality_config
@@ -77,13 +76,11 @@ def get_quality_config() -> Dict[str, Any]:
         _quality_config = load_quality_rules()
     return _quality_config
 
-
 def get_cache_ttl() -> timedelta:
     """從配置取得快取 TTL"""
     config = get_quality_config()
     ttl_minutes = config.get("cache", {}).get("ttl_minutes", 5)
     return timedelta(minutes=ttl_minutes)
-
 
 def get_default_cache_stats() -> Dict[str, Any]:
     """從配置取得預設快取統計"""
@@ -97,28 +94,6 @@ def get_default_cache_stats() -> Dict[str, Any]:
         "last_updated": "",
         "version": "v0.28.0"
     })
-
-
-
-
-def read_json_from_stdin(logger) -> Dict[str, Any]:
-    """
-    從 stdin 讀取 JSON 輸入
-
-    Returns:
-        dict - 解析後的 JSON 資料
-
-    Raises:
-        ValueError: JSON 格式錯誤
-    """
-    try:
-        input_data = json.load(sys.stdin)
-        logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
-        return input_data
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON 解析錯誤: {e}")
-        raise ValueError(f"Invalid JSON input: {e}")
-
 
 def validate_input(input_data: Dict[str, Any], logger) -> bool:
     """
@@ -144,7 +119,6 @@ def validate_input(input_data: Dict[str, Any], logger) -> bool:
         return False
 
     return True
-
 
 def should_trigger_check(input_data: Dict[str, Any], logger) -> bool:
     """
@@ -207,7 +181,6 @@ def should_trigger_check(input_data: Dict[str, Any], logger) -> bool:
     logger.info(f"觸發條件檢查通過: {file_path}")
     return True
 
-
 def calculate_file_hash(content: str) -> str:
     """
     計算檔案內容 hash
@@ -219,7 +192,6 @@ def calculate_file_hash(content: str) -> str:
         str - MD5 hash
     """
     return hashlib.md5(content.encode()).hexdigest()
-
 
 def should_skip_check_due_to_cache(file_path: str, file_hash: str, logger) -> bool:
     """
@@ -266,7 +238,6 @@ def should_skip_check_due_to_cache(file_path: str, file_hash: str, logger) -> bo
     logger.info(f"快取命中: {file_path}")
     return True
 
-
 def update_check_cache(file_path: str, file_hash: str, check_results: Dict[str, Any], logger) -> None:
     """
     更新快取
@@ -284,7 +255,6 @@ def update_check_cache(file_path: str, file_hash: str, check_results: Dict[str, 
     }
     logger.debug(f"快取已更新: {file_path}")
 
-
 def cleanup_expired_cache(logger) -> None:
     """清理過期快取（避免記憶體洩漏，使用配置的 TTL）"""
     current_time = datetime.now()
@@ -301,7 +271,6 @@ def cleanup_expired_cache(logger) -> None:
     if expired_keys:
         logger.info(f"清理了 {len(expired_keys)} 個過期快取條目")
 
-
 def get_cache_stats_dir() -> Path:
     """
     取得快取統計目錄路徑
@@ -314,7 +283,6 @@ def get_cache_stats_dir() -> Path:
     cache_dir = project_dir / ".claude" / "hook-logs" / "ticket-quality-gate" / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
-
 
 def load_cache_stats(logger) -> Dict[str, Any]:
     """
@@ -338,7 +306,6 @@ def load_cache_stats(logger) -> Dict[str, Any]:
         logger.warning(f"快取統計資料載入失敗，使用預設值: {e}")
         return get_default_cache_stats()
 
-
 def save_cache_stats(stats: Dict[str, Any], logger) -> None:
     """
     儲存快取統計資料
@@ -357,7 +324,6 @@ def save_cache_stats(stats: Dict[str, Any], logger) -> None:
     except Exception as e:
         # 快取統計失敗不應該阻止 Hook 執行
         logger.warning(f"快取統計資料儲存失敗: {e}")
-
 
 def update_cache_stats(cache_hit: bool, execution_time: float, logger) -> None:
     """
@@ -403,7 +369,6 @@ def update_cache_stats(cache_hit: bool, execution_time: float, logger) -> None:
         )
     except Exception as e:
         logger.warning(f"更新快取統計失敗: {e}")
-
 
 def generate_cache_stats_report(logger) -> str:
     """
@@ -466,7 +431,6 @@ _無統計資料_
 快取統計將在首次執行後開始記錄。
 """
 
-
 def run_check_with_error_handling(check_name: str, check_function, logger) -> Dict[str, Any]:
     """
     執行檢測函式，處理異常
@@ -495,7 +459,6 @@ def run_check_with_error_handling(check_name: str, check_function, logger) -> Di
             "error_message": str(e),
             "error_type": type(e).__name__
         }
-
 
 def run_all_checks(ticket_content: str, file_path: str, logger) -> Dict[str, Any]:
     """
@@ -557,7 +520,6 @@ def run_all_checks(ticket_content: str, file_path: str, logger) -> Dict[str, Any
 
     return results
 
-
 def update_summary(results: Dict[str, Any], check_key: str) -> None:
     """
     更新檢測摘要
@@ -577,7 +539,6 @@ def update_summary(results: Dict[str, Any], check_key: str) -> None:
         results["summary"]["warnings"] += 1
     elif status == "error":
         results["summary"]["errors"] += 1
-
 
 def calculate_overall_status(results: Dict[str, Any]) -> str:
     """
@@ -601,7 +562,6 @@ def calculate_overall_status(results: Dict[str, Any]) -> str:
         return "warning"
     else:
         return "passed"
-
 
 def calculate_overall_confidence(results: Dict[str, Any]) -> float:
     """
@@ -629,7 +589,6 @@ def calculate_overall_confidence(results: Dict[str, Any]) -> float:
     else:
         return min(confidences)
 
-
 def collect_needs_human_review(results: Dict[str, Any]) -> list:
     """
     收集需人工審查的項目
@@ -647,7 +606,6 @@ def collect_needs_human_review(results: Dict[str, Any]) -> list:
             needs_review.append(check_key)
 
     return needs_review
-
 
 def generate_hook_output(check_results: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -677,7 +635,6 @@ def generate_hook_output(check_results: Dict[str, Any]) -> Dict[str, Any]:
         },
         "check_results": check_results
     }
-
 
 def determine_decision(check_results: Dict[str, Any]) -> tuple:
     """
@@ -724,7 +681,6 @@ def determine_decision(check_results: Dict[str, Any]) -> tuple:
     reason = QualityMessages.TICKET_QUALITY_CHECK_PASSED
     return "allow", reason
 
-
 def save_check_report(check_results: Dict[str, Any], file_path: str, logger) -> None:
     """
     儲存檢測報告
@@ -757,7 +713,6 @@ def save_check_report(check_results: Dict[str, Any], file_path: str, logger) -> 
     json_file.write_text(json_content, encoding="utf-8")
     logger.info(f"JSON 報告已儲存: {json_file}")
 
-
 def print_error_json(error: Exception, logger) -> None:
     """
     輸出錯誤 JSON
@@ -780,7 +735,6 @@ def print_error_json(error: Exception, logger) -> None:
         }
     }
     print(json.dumps(error_output, ensure_ascii=False, indent=2))
-
 
 def main() -> int:
     """
@@ -872,7 +826,6 @@ def main() -> int:
         logger.critical(f"Hook 執行錯誤: {e}", exc_info=True)
         print_error_json(e, logger)
         return EXIT_ERROR  # 1
-
 
 if __name__ == "__main__":
     sys.exit(run_hook_safely(main, "ticket-quality-gate"))

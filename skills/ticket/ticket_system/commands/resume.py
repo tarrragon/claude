@@ -20,6 +20,7 @@ from ticket_system.lib.constants import (
     HANDOFF_DIR,
     HANDOFF_PENDING_SUBDIR,
     HANDOFF_ARCHIVE_SUBDIR,
+    STATUS_COMPLETED,
 )
 from ticket_system.lib.ticket_loader import resolve_version, load_ticket, get_project_root
 from ticket_system.lib.messages import (
@@ -52,6 +53,35 @@ def _get_handoff_dir(subdir: str = HANDOFF_PENDING_SUBDIR) -> Path:
     return handoff_dir
 
 
+def _is_ticket_completed(ticket_id: str) -> bool:
+    """
+    檢查 Ticket 是否已 completed。
+
+    從 ticket_id 提取版本後載入 ticket 檢查狀態。
+    若無法載入（不存在或格式錯誤），返回 False（保守策略：不確定時顯示）。
+
+    Args:
+        ticket_id: Ticket ID，格式如 "0.31.1-W5-004"
+
+    Returns:
+        bool: True 表示已完成，False 表示未完成或無法判斷
+    """
+    try:
+        # 從 ticket_id 提取版本（前三個數字段）
+        parts = ticket_id.split("-")
+        if len(parts) < 3:
+            return False
+        version = parts[0]  # "0.31.1"
+
+        ticket = load_ticket(version, ticket_id)
+        if not ticket:
+            return False
+
+        return ticket.get("status") == STATUS_COMPLETED
+    except Exception:
+        return False  # 保守策略：無法判斷時顯示
+
+
 def _find_handoff_file(ticket_id: str, subdir: str = HANDOFF_PENDING_SUBDIR) -> Optional[tuple[Path, str]]:
     """
     尋找 handoff 檔案，返回 (路徑, 格式)
@@ -82,8 +112,10 @@ def list_pending_handoffs() -> List[Dict[str, Any]]:
     """
     列出所有待恢復的 handoff 檔案
 
+    過濾規則：已 completed 的 Ticket 對應的 handoff 條目不顯示（stale handoff）
+
     Returns:
-        List[Dict]: handoff 資料列表
+        List[Dict]: 有效的（非 stale）handoff 資料列表
     """
     pending_dir = _get_handoff_dir(HANDOFF_PENDING_SUBDIR)
 
@@ -98,11 +130,22 @@ def list_pending_handoffs() -> List[Dict[str, Any]]:
             if handoff_file.suffix == ".json":
                 with open(handoff_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
+
+                    # 過濾已完成 ticket 的 stale handoff
+                    ticket_id = data.get("ticket_id", "")
+                    if ticket_id and _is_ticket_completed(ticket_id):
+                        continue  # 跳過 stale 條目
+
                     handoffs.append(data)
             elif handoff_file.suffix == ".md":
                 # Markdown 格式的 handoff 檔案也支援
                 # 提取檔名作為 ticket_id
                 ticket_id = handoff_file.stem
+
+                # 過濾已完成 ticket 的 stale handoff
+                if ticket_id and _is_ticket_completed(ticket_id):
+                    continue  # 跳過 stale 條目
+
                 handoffs.append({
                     "ticket_id": ticket_id,
                     "format": "markdown",

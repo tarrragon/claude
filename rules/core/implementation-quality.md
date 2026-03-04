@@ -84,6 +84,21 @@ do_something()
 >
 > **觸發時機**：任何涉及「變數作用域變更」的重構（全域→區域、模組級→函式內、類別屬性→方法參數）。
 
+**認知層 — 理解設計意圖（來源: IMP-013）**
+
+在執行影響範圍分析之前，先質疑設計意圖：
+
+| 步驟 | 質疑問題 | 判斷依據 |
+|------|---------|---------|
+| 1 | 這個參數/變數在舊版中是否被正確使用？ | 檢查實際呼叫和引用 |
+| 2 | 如果舊版也未使用，原始設計意圖是什麼？ | git log / git blame / docstring |
+| 3 | 在新設計中，這個參數應該在哪裡被使用？ | 需求文件 / 設計規格 |
+
+**判斷結果**：
+- 設計意圖已實現 → 繼續下方影響範圍分析
+- 設計意圖未實現 → 補上實作，而非盲目沿用或移除
+- 確認不再需要 → 移除並記錄原因到工作日誌
+
 **強制檢查清單**（修改作用域前必須完成）：
 
 | 步驟 | 動作 | 驗證方式 |
@@ -110,6 +125,142 @@ do_something()
 | 把變數改回全域以「修復」 | 違反重構目標 |
 
 > 完整錯誤模式：.claude/error-patterns/implementation/IMP-003-refactoring-scope-regression.md
+
+---
+
+### 1.2.2 欄位格式溯源（修復時強制）
+
+> **來源**：IMP-011 — 修復函式讀取 `direction` 欄位時，假設為簡單字串（`"to-sibling"`），但生產者實際輸出 `"to-sibling:target_id"`。精確匹配失敗，修復無效。
+>
+> **觸發時機**：任何修復程式碼中**讀取現有欄位/資料**來做判斷的場景。
+
+**強制檢查清單**（寫修復程式碼前必須完成）：
+
+| 步驟 | 動作 | 驗證方式 |
+|------|------|---------|
+| 1 | 列出修復程式碼讀取的所有欄位 | 程式碼審閱 |
+| 2 | 找到每個欄位的**生產者**（寫入端函式） | `grep` 搜尋賦值位置 |
+| 3 | 確認欄位的**完整格式**（所有變體） | 閱讀生產者程式碼 |
+| 4 | 在程式碼註解中記錄格式規格 | 文件字串 |
+| 5 | 測試案例覆蓋所有格式變體 | 測試每個變體 |
+
+**正確做法**：
+
+```python
+def should_preserve(direction: str) -> bool:
+    """判斷是否保留。
+
+    direction 格式（來源：handoff.py._resolve_direction_from_args）：
+    - "to-parent"（無後綴）
+    - "to-sibling:{target_id}"（帶目標 ID）
+    - "context-refresh"（非任務鏈）
+    """
+    # 使用前綴匹配，容許後綴變化
+    direction_type = direction.split(":")[0]
+    return direction_type in {"to-sibling", "to-parent", "to-child"}
+```
+
+**錯誤做法**：
+
+```python
+# 錯誤：基於假設使用精確匹配，未查閱生產者
+def should_preserve(direction: str) -> bool:
+    return direction in {"to-sibling", "to-parent", "to-child"}
+    # "to-sibling:0.31.1-W3-002" 不在 set 中 → False
+```
+
+**禁止行為**：
+
+| 禁止行為 | 原因 |
+|---------|------|
+| 基於欄位名稱假設格式 | 實際格式可能含後綴、前綴、分隔符 |
+| 只看消費端推測格式 | 必須查閱生產端確認 |
+| 測試只用「理想化」格式 | 必須從生產端取得真實格式做測試 |
+
+> 完整錯誤模式：.claude/error-patterns/implementation/IMP-011-incomplete-format-matching.md
+
+---
+
+### 1.2.3 破壞性操作設計防護（自動刪除/清理/GC 時強制）
+
+> **來源**：IMP-010 — GC 只檢查來源 Ticket 的 `status`，未考慮 handoff 的 `direction`，導致有效的 pending JSON 被誤刪。ARCH-002 — Plugin 解除安裝只清理部分儲存層，殘留的 `known_marketplaces.json` 觸發自動重新 clone。
+>
+> **觸發時機**：任何涉及**自動刪除、GC、快取清理、資料清除**的程式碼設計或修改。
+
+**強制設計檢查清單**（寫破壞性操作程式碼前必須完成）：
+
+| 步驟 | 問題 | 來源 |
+|------|------|------|
+| 1 | 刪除條件依賴的狀態值，在所有上下文中語義是否一致？ | IMP-010 |
+| 2 | 是否需要額外欄位（上下文）才能做出正確的刪除決策？ | IMP-010 |
+| 3 | 清理操作是否覆蓋所有儲存層（快取、註冊、目錄、配置）？ | ARCH-002 |
+| 4 | 不確定時，預設行為是保留還是刪除？（必須為保留） | IMP-010 |
+
+**正確做法**：
+
+```python
+# 正確：結合上下文欄位做刪除決策，不確定時保留
+if is_ticket_completed(project_root, ticket_id, logger):
+    direction = handoff_data.get("direction", "")
+    direction_type = direction.split(":")[0]
+    if direction_type in ("to-sibling", "to-parent", "to-child"):
+        # 任務鏈 handoff，completed 是預期狀態，保留
+        logger.info(f"保留 {direction_type} handoff: {ticket_id}")
+        continue
+    # 非任務鏈類型，completed 表示 stale，可清理
+    file_path.unlink()
+```
+
+**錯誤做法**：
+
+```python
+# 錯誤：只檢查單一狀態值，不考慮上下文
+if is_ticket_completed(project_root, ticket_id, logger):
+    file_path.unlink()  # 一律刪除 → 誤刪有效的 handoff
+```
+
+**禁止行為**：
+
+| 禁止行為 | 原因 |
+|---------|------|
+| 只依賴單一狀態值做刪除決策 | 同一狀態在不同上下文可能有不同語義（IMP-010） |
+| 清理只處理部分儲存層 | 殘留的註冊/配置會觸發重建（ARCH-002） |
+| 預設行為為刪除 | 破壞性操作應保守，不確定時必須保留 |
+
+> 完整錯誤模式：.claude/error-patterns/implementation/IMP-010-gc-state-semantic-conflict.md
+> 完整錯誤模式：.claude/error-patterns/architecture/ARCH-002-incomplete-cleanup.md
+
+---
+
+### 1.2.4 未使用程式碼處理（Phase 4 重構時強制）
+
+> **來源**：IMP-013 — 重構時發現 unused code，應先質疑設計意圖而非盲目移除。
+>
+> **觸發時機**：Phase 4 重構評估中發現未使用的參數、變數、函式或類別時。
+
+**強制檢查清單**（發現 unused code 時必須完成）：
+
+| 步驟 | 動作 | 驗證方式 |
+|------|------|---------|
+| 1 | 追溯原始目的：這段程式碼為什麼存在？ | git log / git blame / docstring |
+| 2 | 判斷類型：是「曾經有用但不再需要」還是「設計意圖未實現」？ | 對照需求文件和設計規格 |
+| 3 | 如果是未實現的設計意圖 → 補上實作 | 建立 Ticket 追蹤 |
+| 4 | 如果確認不再需要 → 移除並記錄原因 | 工作日誌記錄移除理由 |
+
+**禁止行為**：
+
+| 禁止行為 | 原因 |
+|---------|------|
+| 直接刪除 unused code 不記錄理由 | 設計意圖永遠消失 |
+| 只依賴 linter 報告而不人工審查 | 無法區分「不再需要」與「未實現」兩種情況 |
+| 重構時將「未使用」等同於「多餘」 | 可能是尚未完成的設計，移除會讓需求被遺忘 |
+
+**核心教訓**：
+
+> Unused code is a question, not an answer.
+> 未使用的程式碼是一個待回答的問題（「為什麼存在？」），而不是一個已知的答案（「應該移除」）。
+
+> 完整錯誤模式：.claude/error-patterns/implementation/IMP-013-refactoring-design-intent-blindness.md
 
 ---
 
@@ -434,8 +585,9 @@ Python 特有的處理方式：
 - .claude/error-patterns/implementation/IMP-001-scattered-duplicate-code.md - 重複程式碼模式
 - .claude/error-patterns/implementation/IMP-002-magic-numbers.md - 魔法數字模式
 - .claude/error-patterns/implementation/IMP-003-refactoring-scope-regression.md - 作用域迴歸模式
+- .claude/error-patterns/implementation/IMP-011-incomplete-format-matching.md - 格式假設錯誤模式
 
 ---
 
-**Last Updated**: 2026-02-26
-**Version**: 1.1.0 - 新增 1.2.1 作用域變更防護（W25-004）
+**Last Updated**: 2026-03-04
+**Version**: 1.3.0 - 新增 1.2.3 破壞性操作設計防護（IMP-010, ARCH-002）

@@ -67,9 +67,8 @@ from typing import Dict, Any, Optional, Tuple, List
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.hook_messages import GateMessages, CoreMessages, format_message
-
 
 # ============================================================================
 # 常數定義
@@ -118,29 +117,6 @@ EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_BLOCK = 2
 
-
-def read_json_from_stdin(logger) -> Dict[str, Any]:
-    """
-    從 stdin 讀取 JSON 輸入
-
-    Args:
-        logger: 日誌物件
-
-    Returns:
-        dict - 解析後的 JSON 資料
-
-    Raises:
-        ValueError: JSON 格式錯誤
-    """
-    try:
-        input_data = json.load(sys.stdin)
-        logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
-        return input_data
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON 解析錯誤: {e}")
-        raise ValueError(f"Invalid JSON input: {e}")
-
-
 def validate_input(input_data: Dict[str, Any], logger) -> bool:
     """
     驗證輸入格式
@@ -158,7 +134,6 @@ def validate_input(input_data: Dict[str, Any], logger) -> bool:
         return False
 
     return True
-
 
 # ============================================================================
 # 開發命令識別
@@ -199,7 +174,6 @@ def is_system_internal_message(prompt: str, logger) -> bool:
             return True
 
     return False
-
 
 def is_management_operation(prompt: str, logger) -> bool:
     """
@@ -341,7 +315,6 @@ def is_management_operation(prompt: str, logger) -> bool:
 
     return False
 
-
 def is_development_command(prompt: str, logger) -> bool:
     """
     判斷是否為開發/測試/調整命令
@@ -376,7 +349,6 @@ def is_development_command(prompt: str, logger) -> bool:
 
     logger.debug(f"未識別為開發命令: {prompt[:50]}...")
     return False
-
 
 # ============================================================================
 # Ticket 檢查
@@ -417,7 +389,6 @@ def find_ticket_files(logger) -> List[Path]:
     logger.debug(f"找到 {len(all_tickets)} 個 Ticket 檔案")
     return all_tickets
 
-
 def extract_ticket_status(file_path: Path, logger) -> Tuple[Optional[str], Optional[str], str]:
     """
     從 Ticket 檔案提取 ID、狀態和完整內容
@@ -450,7 +421,6 @@ def extract_ticket_status(file_path: Path, logger) -> Tuple[Optional[str], Optio
     except Exception as e:
         logger.debug(f"無法提取 Ticket 狀態 {file_path}: {e}")
         return None, None, ""
-
 
 def validate_ticket_has_decision_tree(ticket_content: str, logger) -> bool:
     """
@@ -491,7 +461,6 @@ def validate_ticket_has_decision_tree(ticket_content: str, logger) -> bool:
     logger.debug("未在 Ticket 中找到決策樹欄位")
     return False
 
-
 def split_kebab_case(word: str) -> List[str]:
     """
     將 kebab-case 詞彙拆分為多個單詞
@@ -511,7 +480,6 @@ def split_kebab_case(word: str) -> List[str]:
     parts = word.split("-")
     # 過濾掉空字串
     return [p for p in parts if p]
-
 
 def tokenize_text(text: str) -> List[str]:
     """
@@ -556,7 +524,6 @@ def tokenize_text(text: str) -> List[str]:
 
     return result
 
-
 def check_word_relevance(prompt_words: List[str], title_words: List[str], logger) -> bool:
     """
     檢查 prompt 詞彙與 title 詞彙的關聯性
@@ -595,7 +562,6 @@ def check_word_relevance(prompt_words: List[str], title_words: List[str], logger
                 return True
 
     return False
-
 
 def check_ticket_relevance(prompt: str, ticket_id: str, ticket_content: str, logger) -> Tuple[bool, str]:
     """
@@ -661,7 +627,6 @@ def check_ticket_relevance(prompt: str, ticket_id: str, ticket_content: str, log
     logger.warning(f"Ticket {ticket_id} 與 prompt 無關聯")
     return False, warning
 
-
 def get_latest_pending_ticket(logger) -> Optional[Tuple[str, str, str]]:
     """
     取得最新的待處理 Ticket
@@ -685,7 +650,6 @@ def get_latest_pending_ticket(logger) -> Optional[Tuple[str, str, str]]:
 
     logger.debug("未找到待處理 Ticket")
     return None
-
 
 def check_ticket_status(prompt: Optional[str] = None, logger=None) -> Tuple[bool, Optional[str], Optional[str], Optional[str]]:
     """
@@ -750,7 +714,6 @@ def check_ticket_status(prompt: Optional[str] = None, logger=None) -> Tuple[bool
     logger.warning(f"Ticket {ticket_id} 狀態不明 ({status}) - 阻止執行")
     return False, msg, ticket_id, None
 
-
 # ============================================================================
 # 輸出生成
 # ============================================================================
@@ -809,7 +772,6 @@ def generate_hook_output(
 
     return output
 
-
 def save_check_log(
     prompt: str,
     is_dev_cmd: bool,
@@ -856,7 +818,6 @@ def save_check_log(
         logger.debug(f"檢查日誌已儲存: {report_file}")
     except Exception as e:
         logger.warning(f"儲存檢查日誌失敗: {e}")
-
 
 # ============================================================================
 # 主入口點
@@ -961,7 +922,6 @@ def main() -> int:
         }
         print(json.dumps(error_output, ensure_ascii=False, indent=2))
         return EXIT_ERROR
-
 
 if __name__ == "__main__":
     sys.exit(run_hook_safely(main, "command-entrance-gate"))

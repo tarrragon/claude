@@ -50,12 +50,11 @@ from typing import Dict, Any, List, Optional
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, parse_ticket_frontmatter
 from lib.hook_messages import WorkflowMessages, CoreMessages, format_message
 
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
-
 
 def get_project_root(logger) -> Path:
     """
@@ -82,26 +81,6 @@ def get_project_root(logger) -> Path:
     except Exception:
         return Path.cwd()
 
-
-def read_json_from_stdin(logger) -> Optional[Dict[str, Any]]:
-    """
-    從 stdin 讀取 JSON 輸入
-
-    Args:
-        logger: Logger 實例
-
-    Returns:
-        dict - 解析後的 JSON 資料，若無輸入則回傳 None
-    """
-    try:
-        input_data = json.load(sys.stdin)
-        logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
-        return input_data
-    except (json.JSONDecodeError, EOFError):
-        logger.debug("無 stdin 輸入")
-        return None
-
-
 def get_session_flag_file(logger) -> Path:
     """
     取得 session flag 檔案路徑
@@ -117,7 +96,6 @@ def get_session_flag_file(logger) -> Path:
     ppid = os.getppid()
     return Path(f"/tmp/claude-handoff-reminded-{ppid}")
 
-
 def has_reminded_this_session(logger) -> bool:
     """
     檢查此 session 是否已提醒過
@@ -130,7 +108,6 @@ def has_reminded_this_session(logger) -> bool:
     """
     flag_file = get_session_flag_file(logger)
     return flag_file.exists()
-
 
 def mark_reminded_this_session(logger) -> None:
     """
@@ -145,54 +122,6 @@ def mark_reminded_this_session(logger) -> None:
         logger.debug(f"建立 session flag: {flag_file}")
     except Exception as e:
         logger.warning(f"建立 session flag 失敗: {e}")
-
-
-def parse_ticket_frontmatter(file_path: Path, logger) -> Optional[Dict[str, str]]:
-    """
-    簡易 YAML frontmatter 解析（無外部依賴）
-
-    只解析頂層 key-value，忽略巢狀結構和陣列。
-
-    Args:
-        file_path: Ticket 檔案路徑
-        logger: Logger 實例
-
-    Returns:
-        dict - 解析出的 frontmatter key-value；若檔案無 frontmatter 則回傳 None
-    """
-    try:
-        content = file_path.read_text(encoding='utf-8')
-        if not content.startswith('---'):
-            return None
-
-        # 找到第二個 ---
-        end_idx = content.find('---', 3)
-        if end_idx == -1:
-            return None
-
-        frontmatter_text = content[3:end_idx]
-        result = {}
-
-        for line in frontmatter_text.strip().split('\n'):
-            # 跳過空行和註解
-            if not line.strip() or line.strip().startswith('#'):
-                continue
-
-            # 跳過已縮排的行（巢狀結構）
-            if line.startswith(' ') or line.startswith('\t'):
-                continue
-
-            # 只解析頂層 key
-            if ':' in line:
-                key, _, value = line.partition(':')
-                result[key.strip()] = value.strip().strip("'\"")
-
-        return result if result else None
-
-    except Exception as e:
-        logger.warning(f"解析 frontmatter 失敗 ({file_path.name}): {e}")
-        return None
-
 
 def is_ticket_completed(project_root: Path, ticket_id: str, logger) -> bool:
     """
@@ -230,7 +159,6 @@ def is_ticket_completed(project_root: Path, ticket_id: str, logger) -> bool:
         logger.warning(f"檢查 Ticket 完成狀態失敗 ({ticket_id}): {e}")
         return False
 
-
 def resolve_ticket_path(project_root: Path, ticket_id: str, logger) -> Path:
     """
     從 ticket_id 解析版本號並組合 Ticket 檔案路徑
@@ -262,7 +190,6 @@ def resolve_ticket_path(project_root: Path, ticket_id: str, logger) -> Path:
         logger.warning(f"解析 Ticket 路徑失敗 ({ticket_id}): {e}")
         return None
 
-
 def read_ticket_content(ticket_path: Optional[Path], logger) -> Optional[str]:
     """
     讀取 Ticket 檔案完整內容
@@ -290,7 +217,6 @@ def read_ticket_content(ticket_path: Optional[Path], logger) -> Optional[str]:
     except Exception as e:
         logger.warning(f"讀取 Ticket 檔案失敗 ({ticket_path}): {e}")
         return None
-
 
 def scan_handoff_pending_directory(project_root: Path, logger) -> List[Dict[str, Any]]:
     """
@@ -369,7 +295,6 @@ def scan_handoff_pending_directory(project_root: Path, logger) -> List[Dict[str,
     pending_tasks.sort(key=lambda t: t.get("ticket_id", ""), reverse=True)
     return pending_tasks
 
-
 def write_session_state(ticket_id: str, logger) -> None:
     """
     將任務 ID 寫入 session 狀態檔案
@@ -396,7 +321,6 @@ def write_session_state(ticket_id: str, logger) -> None:
 
     except Exception as e:
         logger.warning(f"寫入 session 狀態失敗: {e}")
-
 
 def mark_task_resumed(file_path: str, logger) -> bool:
     """
@@ -443,7 +367,6 @@ def mark_task_resumed(file_path: str, logger) -> bool:
     except Exception as e:
         logger.warning(f"標記任務接手失敗 ({file_path}): {e}")
         return False
-
 
 def generate_reminder_message(
     pending_tasks: List[Dict[str, Any]],
@@ -528,7 +451,6 @@ def generate_reminder_message(
 
     return message
 
-
 def generate_hook_output(
     pending_tasks: List[Dict[str, Any]],
     project_root: Path,
@@ -579,7 +501,6 @@ def generate_hook_output(
         "suppressOutput": False
     }
 
-
 def main() -> int:
     """
     主入口點
@@ -619,7 +540,6 @@ def main() -> int:
         logger.critical(f"Hook 執行錯誤: {e}", exc_info=True)
         print(json.dumps({"suppressOutput": True}, ensure_ascii=False, indent=2))
         return EXIT_SUCCESS
-
 
 if __name__ == "__main__":
     sys.exit(run_hook_safely(main, "handoff-prompt-reminder"))

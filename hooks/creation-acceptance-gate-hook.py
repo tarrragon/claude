@@ -47,7 +47,7 @@ _hooks_dir = Path(__file__).parent
 if _hooks_dir not in [p for p in sys.path if Path(p) == _hooks_dir]:
     sys.path.insert(0, str(_hooks_dir))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, parse_ticket_frontmatter
 from lib.hook_messages import GateMessages, CoreMessages, format_message
 
 import re
@@ -73,29 +73,6 @@ EXIT_BLOCK = 2
 # ============================================================================
 # 日誌設置
 # ============================================================================
-
-
-
-def read_json_from_stdin(logger) -> Dict[str, Any]:
-    """
-    從 stdin 讀取 JSON 輸入
-
-    Args:
-        logger: 日誌物件
-
-    Returns:
-        dict - 解析後的 JSON 資料
-
-    Raises:
-        ValueError: JSON 格式錯誤
-    """
-    try:
-        input_data = json.load(sys.stdin)
-        logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
-        return input_data
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON 解析錯誤: {e}")
-        raise ValueError(f"Invalid JSON input: {e}")
 
 
 def validate_input(input_data: Dict[str, Any], logger) -> bool:
@@ -206,73 +183,6 @@ def locate_ticket_file(ticket_id: str, logger) -> Optional[Path]:
 
     logger.debug(f"Ticket 檔案不存在: {ticket_file}")
     return None
-
-
-def parse_ticket_frontmatter(file_path: Path, logger) -> Dict[str, Any]:
-    """
-    從 Ticket 檔案解析 YAML frontmatter
-
-    嘗試使用 pyyaml；如果不可用，使用正則表達式 fallback。
-
-    Args:
-        file_path: Ticket 檔案路徑
-        logger: 日誌物件
-
-    Returns:
-        dict - 解析後的 frontmatter 資料
-    """
-    try:
-        content = file_path.read_text(encoding="utf-8")
-    except Exception as e:
-        logger.error(f"讀取 Ticket 檔案失敗 {file_path}: {e}")
-        return {}
-
-    # 檢查是否有 frontmatter（以 --- 開頭）
-    if not content.startswith("---"):
-        logger.debug(f"{file_path.name} 無 YAML frontmatter")
-        return {}
-
-    # 提取 frontmatter
-    try:
-        frontmatter_end = content.find("---", 3)
-        if frontmatter_end == -1:
-            logger.debug(f"{file_path.name} frontmatter 格式不正確（缺少結尾 ---）")
-            return {}
-
-        frontmatter_str = content[3:frontmatter_end].strip()
-
-        # 使用 pyyaml 解析
-        if HAS_YAML:
-            try:
-                data = yaml.safe_load(frontmatter_str)
-                logger.debug(f"使用 pyyaml 解析 {file_path.name} frontmatter")
-                return data if isinstance(data, dict) else {}
-            except yaml.YAMLError as e:
-                logger.warning(f"pyyaml 解析失敗 {file_path.name}: {e}，使用 fallback")
-
-        # Fallback: 使用正則表達式解析
-        logger.debug(f"使用正則表達式解析 {file_path.name} frontmatter")
-        data = {}
-
-        # 匹配 key: value 行
-        for line in frontmatter_str.split("\n"):
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-
-            # 簡單的 key: value 匹配
-            if ":" in line:
-                key, value = line.split(":", 1)
-                key = key.strip()
-                value = value.strip().strip('"\'')
-                data[key] = value
-
-        logger.debug(f"正則表達式解析完成，提取 {len(data)} 個欄位")
-        return data
-
-    except Exception as e:
-        logger.error(f"frontmatter 解析異常 {file_path}: {e}")
-        return {}
 
 
 def check_creation_accepted(ticket_id: str, logger) -> Tuple[bool, Optional[str]]:

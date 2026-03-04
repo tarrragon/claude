@@ -616,6 +616,10 @@ PM 必須使用 AskUserQuestion 確認收尾動作。
 
 偵測到 git commit 成功完成。
 
+[錯誤學習檢查]：
+  commit 完成後，先執行 AskUserQuestion #16（錯誤學習經驗確認），再進入 #11（Handoff 路由）。
+  #16 選項：無需記錄 (Recommended) / 記錄錯誤學習經驗 / 稍後記錄
+
 [必須先執行的查詢]：
   ticket track list --wave {n} --status pending
   （{n} 為當前 Wave 編號，例如 30）
@@ -634,8 +638,12 @@ PM 必須使用 AskUserQuestion 確認收尾動作。
   情境 C1: 版本有其他 Wave pending → AskUserQuestion #3a（Wave 收尾 + 開始下一 Wave）
   情境 C2: 版本無任何 pending → /version-release check → AskUserQuestion #13
 
+[AskUserQuestion 共通規則]：
+  1. question 中必須包含本次 session 的完成摘要（已完成項目 + commit hash）
+  2. 選項中必須包含「/clear 結束 session」（清空對話，不建立 handoff）
+
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md（第八層 Checkpoint 2）
+詳見: .claude/rules/core/askuserquestion-rules.md（場景 11/16 共通規則）
 ============================================================"""
 
     # ========================================================================

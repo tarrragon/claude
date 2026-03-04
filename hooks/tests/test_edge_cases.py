@@ -260,6 +260,88 @@ def test_unicode_and_emojis():
     print("✅ 測試 5 通過：Unicode 和表情符號處理正確")
 
 
+def test_c3_layer_0_infrastructure():
+    """
+    測試邊界情況 6: Layer 0 (Infrastructure) 層級的 C3 檢測
+
+    驗證點:
+    - [Layer 0] 層級標示被正確識別
+    - Infrastructure 層關鍵詞（Hook, Script, 腳本, 環境, 設定, 配置等）在驗收條件中被識別
+    - 驗收條件包含層級關鍵詞時，acceptance_aligned 應為 True（核心修復驗證）
+    - 驗收條件無 Layer 0 關鍵詞時，acceptance_aligned 應為 False
+    """
+    print("\n=== 測試 6: C3 Layer 0 Infrastructure 層級檢測 ===")
+
+    # 情況 1: Infrastructure Ticket 驗收條件含 Layer 0 關鍵詞 → acceptance_aligned 應為 True（核心修復）
+    infrastructure_ticket = """
+[Layer 0]
+
+## 驗收條件
+- [ ] Infrastructure 層 layer_keywords[0] 已補充
+- [ ] Hook 系統修復完成
+- [ ] Script 測試通過
+- [ ] 環境 配置驗證完成
+
+## 修改檔案
+.claude/hooks/lib/ticket_quality/detectors.py
+"""
+
+    result = check_ambiguous_responsibility_automated(infrastructure_ticket)
+    assert result["details"]["has_layer_marker"], "C3: 應有 Layer 0 標示"
+    assert result["details"]["declared_layer"] == 0, "C3: 應識別為 Layer 0"
+    assert result["details"]["acceptance_aligned"] == True, f"C3: Infrastructure 關鍵詞應對齊驗收條件（核心修復），實際: {result['details']['acceptance_aligned']}"
+    print("✅ 情況 1 通過: Layer 0 驗收條件含關鍵詞時 acceptance_aligned = True")
+
+    # 情況 2: Layer 0 但驗收條件無 Layer 0 關鍵詞 → acceptance_aligned 應為 False
+    infrastructure_ticket_without_keywords = """
+[Layer 0]
+
+## 驗收條件
+- [ ] 完成
+- [ ] 測試通過
+
+## 修改檔案
+.claude/hooks/lib/ticket_quality/detectors.py
+"""
+
+    result = check_ambiguous_responsibility_automated(infrastructure_ticket_without_keywords)
+    assert result["details"]["declared_layer"] == 0, "C3: 應識別為 Layer 0"
+    assert not result["details"]["acceptance_aligned"], "C3: 無 Layer 0 關鍵詞時 acceptance_aligned 應為 False"
+    print("✅ 情況 2 通過: Layer 0 驗收條件無關鍵詞時 acceptance_aligned = False")
+
+    # 情況 3: 驗證 Layer 0 的 11 個關鍵詞都被正確識別
+    test_keywords = [
+        ("Infrastructure", "Infrastructure 修復完成"),
+        ("Hook", "Hook 系統最佳化"),
+        ("Script", "Script 執行檢查"),
+        ("腳本", "腳本 優化"),
+        ("環境", "環境 配置"),
+        ("設定", "設定 檢驗"),
+        ("配置", "配置 驗證"),
+        ("CI", "CI 管道構建"),
+        ("CD", "CD 流程測試"),
+        ("部署", "部署 驗證"),
+        ("Sync", "Sync 機制實作"),
+    ]
+
+    for idx, (keyword, sample_text) in enumerate(test_keywords):
+        ticket = f"""
+[Layer 0]
+
+## 驗收條件
+- [ ] {sample_text}
+
+## 修改檔案
+.claude/hooks/lib/ticket_quality/detectors.py
+"""
+        result = check_ambiguous_responsibility_automated(ticket)
+        assert result["details"]["acceptance_aligned"], f"C3: 應識別關鍵詞「{keyword}」在驗收條件中（{idx+1}/11）"
+
+    print("✅ 情況 3 通過: Layer 0 的 11 個關鍵詞都被正確識別")
+
+    print("✅ 測試 6 通過：Layer 0 Infrastructure 層級 C3 檢測正確")
+
+
 def run_all_edge_case_tests():
     """執行所有邊界測試案例"""
     print("\n" + "="*60)
@@ -271,7 +353,8 @@ def run_all_edge_case_tests():
         ("T2: 超大 Ticket", test_large_ticket),
         ("T3: 特殊字元路徑", test_special_characters_in_paths),
         ("T4: 巢狀章節", test_nested_sections),
-        ("T5: Unicode 和表情符號", test_unicode_and_emojis)
+        ("T5: Unicode 和表情符號", test_unicode_and_emojis),
+        ("T6: Layer 0 Infrastructure 檢測", test_c3_layer_0_infrastructure)
     ]
 
     passed = 0

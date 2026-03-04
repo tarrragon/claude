@@ -263,5 +263,95 @@ class TestStopHookPendingDirectoryScan:
         assert tasks == []
 
 
+class TestShouldPreservePendingJson:
+    """should_preserve_pending_json 函式測試"""
+
+    def test_preserve_to_sibling_with_target_id(self):
+        """測試 to-sibling 帶目標 ID 格式"""
+        hook_module = load_stop_hook_module()
+        logger = MagicMock()
+
+        result = hook_module.should_preserve_pending_json("to-sibling:0.31.1-W3-002", logger)
+
+        assert result is True
+        logger.debug.assert_called_once()
+        assert "to-sibling:0.31.1-W3-002" in logger.debug.call_args[0][0]
+
+    def test_preserve_to_parent_with_target_id(self):
+        """測試 to-parent 帶目標 ID 格式"""
+        hook_module = load_stop_hook_module()
+        logger = MagicMock()
+
+        result = hook_module.should_preserve_pending_json("to-parent:0.31.1-W3-001", logger)
+
+        assert result is True
+
+    def test_preserve_to_child_with_target_id(self):
+        """測試 to-child 帶目標 ID 格式"""
+        hook_module = load_stop_hook_module()
+        logger = MagicMock()
+
+        result = hook_module.should_preserve_pending_json("to-child:0.31.1-W3-003", logger)
+
+        assert result is True
+
+    def test_preserve_to_sibling_without_target_id(self):
+        """測試 to-sibling 無目標 ID 格式"""
+        hook_module = load_stop_hook_module()
+        logger = MagicMock()
+
+        result = hook_module.should_preserve_pending_json("to-sibling", logger)
+
+        assert result is True
+
+    def test_preserve_to_parent_without_target_id(self):
+        """測試 to-parent 無目標 ID 格式"""
+        hook_module = load_stop_hook_module()
+        logger = MagicMock()
+
+        result = hook_module.should_preserve_pending_json("to-parent", logger)
+
+        assert result is True
+
+    def test_preserve_to_child_without_target_id(self):
+        """測試 to-child 無目標 ID 格式"""
+        hook_module = load_stop_hook_module()
+        logger = MagicMock()
+
+        result = hook_module.should_preserve_pending_json("to-child", logger)
+
+        assert result is True
+
+    def test_do_not_preserve_context_refresh(self):
+        """測試 context-refresh 不應保留"""
+        hook_module = load_stop_hook_module()
+        logger = MagicMock()
+
+        result = hook_module.should_preserve_pending_json("context-refresh", logger)
+
+        assert result is False
+        logger.debug.assert_not_called()
+
+    def test_do_not_preserve_continuation(self):
+        """測試 continuation 不應保留"""
+        hook_module = load_stop_hook_module()
+        logger = MagicMock()
+
+        result = hook_module.should_preserve_pending_json("continuation", logger)
+
+        assert result is False
+
+    def test_do_not_preserve_other_formats(self):
+        """測試其他不相關格式不應保留"""
+        hook_module = load_stop_hook_module()
+        logger = MagicMock()
+
+        # 測試幾個其他格式
+        other_formats = ["other-direction", "to-sibling-unknown", "unknown-to-sibling"]
+        for fmt in other_formats:
+            result = hook_module.should_preserve_pending_json(fmt, logger)
+            assert result is False
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

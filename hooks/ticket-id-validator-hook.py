@@ -37,8 +37,7 @@ from typing import Dict, Any, Optional, Tuple
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
-
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 
 # ============================================================================
 # 常數定義
@@ -64,32 +63,9 @@ EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_BLOCK = 2
 
-
 # ============================================================================
 # 輸入讀取和驗證
 # ============================================================================
-
-def read_json_from_stdin(logger) -> Dict[str, Any]:
-    """
-    從 stdin 讀取 JSON 輸入
-
-    Args:
-        logger: Logger 實例
-
-    Returns:
-        dict - 解析後的 JSON 資料
-
-    Raises:
-        ValueError: JSON 格式錯誤
-    """
-    try:
-        input_data = json.load(sys.stdin)
-        logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
-        return input_data
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON 解析錯誤: {e}")
-        raise ValueError(f"Invalid JSON input: {e}")
-
 
 def validate_input(input_data: Dict[str, Any], logger) -> bool:
     """
@@ -114,7 +90,6 @@ def validate_input(input_data: Dict[str, Any], logger) -> bool:
 
     return True
 
-
 # ============================================================================
 # 檔案路徑檢查
 # ============================================================================
@@ -138,7 +113,6 @@ def is_ticket_file(file_path: str, logger) -> bool:
         ("docs/work-logs/" in path_str and "/tickets/" in path_str and path_str.endswith(".md")) or
         (".claude/tickets/" in path_str and path_str.endswith(".md"))
     )
-
 
 def get_directory_version(file_path: str, logger) -> Optional[str]:
     """
@@ -169,7 +143,6 @@ def get_directory_version(file_path: str, logger) -> Optional[str]:
     # 模式 2: .claude/tickets/{id}.md
     # 此模式中無法從目錄提取版本，需要從 ID 中提取
     return None
-
 
 # ============================================================================
 # Ticket ID 提取和驗證
@@ -209,7 +182,6 @@ def extract_ticket_id_from_file(file_path: str, logger) -> Optional[str]:
     except Exception as e:
         logger.error(f"讀取檔案失敗 {file_path}: {e}")
         return None
-
 
 def validate_ticket_id_format(ticket_id: str, logger) -> Tuple[bool, str]:
     """
@@ -256,7 +228,6 @@ def validate_ticket_id_format(ticket_id: str, logger) -> Tuple[bool, str]:
 
     return True, ""
 
-
 def validate_ticket_id_version_consistency(
     ticket_id: str,
     directory_version: Optional[str],
@@ -299,7 +270,6 @@ def validate_ticket_id_version_consistency(
     logger.info(f"版本一致: {id_version}")
     return True, ""
 
-
 def validate_ticket_id(file_path: str, ticket_id: str, logger) -> Tuple[bool, str]:
     """
     完整的 Ticket ID 驗證
@@ -331,7 +301,6 @@ def validate_ticket_id(file_path: str, ticket_id: str, logger) -> Tuple[bool, st
         return False, warning_msg
 
     return True, ""
-
 
 # ============================================================================
 # 輸出生成
@@ -380,7 +349,6 @@ def generate_hook_output(
 
     return output
 
-
 def save_check_log(
     is_valid: bool,
     file_path: str,
@@ -420,7 +388,6 @@ def save_check_log(
         logger.debug(f"檢查日誌已儲存: {report_file}")
     except Exception as e:
         logger.warning(f"儲存檢查日誌失敗: {e}")
-
 
 # ============================================================================
 # 主入口點
@@ -522,7 +489,6 @@ def main() -> int:
         }
         print(json.dumps(error_output, ensure_ascii=False, indent=2))
         return EXIT_ERROR
-
 
 if __name__ == "__main__":
     sys.exit(run_hook_safely(main, "ticket-id-validator"))

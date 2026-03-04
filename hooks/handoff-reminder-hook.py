@@ -34,7 +34,7 @@ from pathlib import Path
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 
 import re
 from datetime import datetime
@@ -43,7 +43,6 @@ from typing import Dict, Any, List, Optional
 # 全域常數
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
-
 
 def get_project_root(logger) -> Path:
     """
@@ -72,26 +71,6 @@ def get_project_root(logger) -> Path:
         return Path(result.stdout.strip())
     except Exception:
         return Path.cwd()
-
-
-def read_json_from_stdin(logger) -> Optional[Dict[str, Any]]:
-    """
-    從 stdin 讀取 JSON 輸入（可選）
-
-    Args:
-        logger: 日誌物件
-
-    Returns:
-        dict - 解析後的 JSON 資料，若無輸入則回傳 None
-    """
-    try:
-        input_data = json.load(sys.stdin)
-        logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
-        return input_data
-    except (json.JSONDecodeError, EOFError):
-        logger.debug("無 stdin 輸入")
-        return None
-
 
 def scan_handoff_pending_directory(project_root: Path, logger) -> List[Dict[str, Any]]:
     """
@@ -181,7 +160,6 @@ def scan_handoff_pending_directory(project_root: Path, logger) -> List[Dict[str,
     pending_tasks.sort(key=lambda t: t.get("timestamp", ""), reverse=True)
     return pending_tasks
 
-
 def mark_handoff_as_resumed(ticket_id: str, project_root: Path, logger) -> None:
     """
     標記 handoff 檔案為已接手（更新 resumed_at 欄位）
@@ -211,7 +189,6 @@ def mark_handoff_as_resumed(ticket_id: str, project_root: Path, logger) -> None:
         logger.info(f"已標記 Handoff 為已接手: {ticket_id}")
     except Exception as e:
         logger.warning(f"標記 Handoff 失敗 ({ticket_id}): {e}")
-
 
 def generate_auto_resume_message(selected_task: Dict[str, Any], all_tasks: List[Dict[str, Any]], logger) -> str:
     """
@@ -272,7 +249,6 @@ def generate_auto_resume_message(selected_task: Dict[str, Any], all_tasks: List[
 
     return message
 
-
 def generate_reminder_message(pending_tasks: List[Dict[str, Any]], logger) -> str:
     """
     生成 Handoff 待恢復任務提醒訊息
@@ -308,7 +284,6 @@ def generate_reminder_message(pending_tasks: List[Dict[str, Any]], logger) -> st
 
     return message
 
-
 def generate_hook_output(pending_tasks: List[Dict[str, Any]], project_root: Path, logger) -> Dict[str, Any]:
     """
     生成 Hook 輸出格式
@@ -341,7 +316,6 @@ def generate_hook_output(pending_tasks: List[Dict[str, Any]], project_root: Path
         "suppressOutput": False
     }
 
-
 def main() -> int:
     """
     主入口點
@@ -357,7 +331,7 @@ def main() -> int:
     Returns:
         int - Exit code (0 = 成功)
     """
-    logger = setup_hook_logging("handoff-reminder")
+    logger = setup_hook_logging("handoff-reminder-hook")
 
     try:
         # 步驟 1: 初始化日誌
@@ -389,7 +363,6 @@ def main() -> int:
             "suppressOutput": True
         }, ensure_ascii=False, indent=2))
         return EXIT_SUCCESS  # 不中斷 Session 啟動
-
 
 if __name__ == "__main__":
     sys.exit(run_hook_safely(main, "handoff-reminder"))

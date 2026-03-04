@@ -1,3 +1,11 @@
+## [1.1.21] - 2026-03-05
+
+### Summary
+feat: W5-006 handoff 驗收前置檢查 + W5-007 resume --list stale 過濾修復
+
+---
+
+
 ## [1.1.20] - 2026-03-04
 
 ### Summary

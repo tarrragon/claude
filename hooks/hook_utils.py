@@ -14,11 +14,13 @@ Python 版本：3.9 相容（禁用 PEP 604、634、613）
 - run_hook_safely(main_func: Callable[[], int], hook_name: str) -> int
 """
 
+import json
 import logging
 import os
 import sys
+import time
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -52,6 +54,12 @@ CLAUDE_MD_SEARCH_DEPTH = 5
 
 # Exit code 常數
 EXIT_ERROR = 1
+
+# 日誌保留策略（天數）
+LOG_RETENTION_DAYS = 7
+
+# 日誌清理觸發頻率（每 N 次呼叫執行一次清理）
+LOG_CLEANUP_TRIGGER_FREQUENCY = 10
 
 
 # ============================================================================
@@ -166,6 +174,28 @@ def _create_file_handler(log_file_path: Path) -> Optional[logging.FileHandler]:
         return None
 
 
+def _cleanup_old_logs(log_base_dir: Path, retention_days: int = LOG_RETENTION_DAYS) -> None:
+    """清理超期日誌檔案
+
+    Args:
+        log_base_dir: 日誌基礎目錄
+        retention_days: 保留天數（預設 7 天）
+    """
+    try:
+        cutoff_time = datetime.now() - timedelta(days=retention_days)
+        for log_file in log_base_dir.glob("*.log"):
+            try:
+                mtime = datetime.fromtimestamp(log_file.stat().st_mtime)
+                if mtime < cutoff_time:
+                    log_file.unlink()
+            except (OSError, ValueError):
+                # 檔案已被刪除或無法存取，忽略
+                pass
+    except OSError:
+        # 目錄不存在或無法存取，忽略
+        pass
+
+
 def _create_fallback_logger(hook_name: str) -> logging.Logger:
     """建立 Fallback Logger（僅 StreamHandler）
 
@@ -186,12 +216,42 @@ def _create_fallback_logger(hook_name: str) -> logging.Logger:
 
 def _setup_logger_handlers(logger: logging.Logger, log_base_dir: Path,
                            sanitized_name: str, is_debug: bool) -> None:
-    """為 logger 配置 handlers"""
+    """為 logger 配置 handlers
+
+    採用 lazy file creation 策略：只在實際寫入日誌時才建立檔案，
+    避免產生空日誌檔案（W3-004）。使用 FileHandler 的 delay=True 參數。
+    """
+    # 觸發日誌清理（降低頻率，每 LOG_CLEANUP_TRIGGER_FREQUENCY 次呼叫執行一次）
+    cleanup_marker = log_base_dir / ".cleanup_trigger"
+    try:
+        if cleanup_marker.exists():
+            count = int(cleanup_marker.read_text().strip() or "0")
+            if count >= LOG_CLEANUP_TRIGGER_FREQUENCY:
+                _cleanup_old_logs(log_base_dir)
+                cleanup_marker.write_text("0")
+            else:
+                cleanup_marker.write_text(str(count + 1))
+        else:
+            cleanup_marker.write_text("1")
+    except (OSError, ValueError):
+        pass
+
+    # 配置 FileHandler（使用 delay=True 實現 lazy file creation）
     timestamp = datetime.now().strftime(TIMESTAMP_FORMAT)
     log_file_path = log_base_dir / "{}-{}.log".format(sanitized_name, timestamp)
-    file_handler = _create_file_handler(log_file_path)
-    if file_handler:
+
+    try:
+        # delay=True 延遲檔案建立至第一次寫入時
+        file_handler = logging.FileHandler(
+            str(log_file_path), encoding='utf-8', delay=True
+        )
+        file_handler.setLevel(FILE_HANDLER_LEVEL)
+        file_handler.setFormatter(logging.Formatter(FILE_FORMAT, datefmt=DATE_FORMAT))
         logger.addHandler(file_handler)
+    except OSError:
+        # 檔案創建失敗，忽略，僅使用 StreamHandler
+        pass
+
     logger.addHandler(_create_stream_handler(is_debug))
 
 
@@ -251,10 +311,89 @@ def _log_exception(logger: logging.Logger, hook_name: str, tb_str: str) -> None:
         logger.critical("Unhandled exception in {}".format(hook_name))
         logger.critical(tb_str)
     except Exception as logging_error:
-        print("Failed to log exception: {}".format(logging_error), file=sys.stdout)
-        print(tb_str, file=sys.stdout)
+        # 備援路徑：日誌寫入失敗時輸出到 stderr（W3-004）
+        sys.stderr.write("Failed to log exception: {}\n".format(logging_error))
+        sys.stderr.write(tb_str + "\n")
     # 輸出到 stderr 確保用戶可見（W25-005）
-    print("[Hook Error] {} failed unexpectedly. Check hook logs for details.".format(hook_name), file=sys.stderr)
+    sys.stderr.write("[Hook Error] {} failed unexpectedly. Check hook logs for details.\n".format(hook_name))
+
+
+def read_json_from_stdin(logger: logging.Logger) -> Optional[dict]:
+    """從 stdin 讀取 JSON 輸入
+
+    處理三種情況：
+    1. 空輸入（SessionStart 等事件無輸入）
+    2. JSON 解析失敗
+    3. 有效的 JSON 物件
+
+    Args:
+        logger: Logger 實例
+
+    Returns:
+        dict: 解析後的 JSON，或 None（空輸入或解析失敗）
+    """
+    try:
+        input_text = sys.stdin.read().strip()
+
+        # 空輸入：直接返回 None
+        if not input_text:
+            return None
+
+        # 解析 JSON
+        return json.loads(input_text)
+
+    except json.JSONDecodeError as e:
+        logger.error("JSON 解析錯誤: {}".format(e))
+        return None
+    except Exception as e:
+        logger.error("讀取 stdin 失敗: {}".format(e))
+        return None
+
+
+def parse_ticket_frontmatter(file_path: Path, logger: logging.Logger) -> Optional[dict]:
+    """簡易 YAML frontmatter 解析（無外部依賴）
+
+    只解析頂層 key-value，忽略巢狀結構和陣列。
+
+    Args:
+        file_path: Ticket 檔案路徑
+        logger: Logger 實例
+
+    Returns:
+        dict: 解析出的 frontmatter key-value；若檔案無 frontmatter 則回傳 None
+    """
+    try:
+        content = file_path.read_text(encoding='utf-8')
+        if not content.startswith('---'):
+            return None
+
+        # 找到第二個 ---
+        end_idx = content.find('---', 3)
+        if end_idx == -1:
+            return None
+
+        frontmatter_text = content[3:end_idx]
+        result = {}
+
+        for line in frontmatter_text.strip().split('\n'):
+            # 跳過空行和註解
+            if not line.strip() or line.strip().startswith('#'):
+                continue
+
+            # 跳過已縮排的行（巢狀結構）
+            if line.startswith(' ') or line.startswith('\t'):
+                continue
+
+            # 只解析頂層 key
+            if ':' in line:
+                key, _, value = line.partition(':')
+                result[key.strip()] = value.strip().strip("'\"")
+
+        return result if result else None
+
+    except Exception as e:
+        logger.warning("解析 frontmatter 失敗 ({}): {}".format(file_path.name, e))
+        return None
 
 
 def run_hook_safely(main_func: Callable[[], int], hook_name: str) -> int:
@@ -264,6 +403,7 @@ def run_hook_safely(main_func: Callable[[], int], hook_name: str) -> int:
     - 呼叫 setup_hook_logging 獲取 logger
     - 執行 main_func，捕獲 Exception（非 SystemExit/KeyboardInterrupt）
     - 異常時記錄完整 traceback 到日誌，返回 1
+    - 記錄執行時間到日誌
 
     Args:
         main_func: Hook 主入口函式，必須返回 int
@@ -273,6 +413,7 @@ def run_hook_safely(main_func: Callable[[], int], hook_name: str) -> int:
         int: main_func 的返回值（正常），或 1（異常）
     """
     logger = setup_hook_logging(hook_name)
+    start_time = time.time()
 
     try:
         exit_code = main_func()
@@ -282,10 +423,16 @@ def run_hook_safely(main_func: Callable[[], int], hook_name: str) -> int:
                 exit_code = int(exit_code)
             except (ValueError, TypeError):
                 exit_code = 0
+
+        # 記錄執行時間
+        elapsed_time = time.time() - start_time
+        logger.debug("Hook execution time: {:.2f}s".format(elapsed_time))
         return exit_code
     except (KeyboardInterrupt, SystemExit):
         raise
     except Exception:
+        elapsed_time = time.time() - start_time
         tb_str = traceback.format_exc()
+        logger.debug("Hook execution time before failure: {:.2f}s".format(elapsed_time))
         _log_exception(logger, hook_name, tb_str)
         return EXIT_ERROR

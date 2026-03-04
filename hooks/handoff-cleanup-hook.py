@@ -38,7 +38,7 @@ from pathlib import Path
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 
 import re
 from datetime import datetime
@@ -50,7 +50,6 @@ EXIT_ERROR = 1
 
 # Ticket ID 格式正則 (支援子任務格式：0.31.0-W7-012.1.2)
 TICKET_ID_PATTERN = r'\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*'
-
 
 def get_project_root() -> Path:
     """
@@ -76,23 +75,6 @@ def get_project_root() -> Path:
         return Path(result.stdout.strip())
     except Exception:
         return Path.cwd()
-
-
-def read_json_from_stdin(logger) -> Optional[Dict[str, Any]]:
-    """
-    從 stdin 讀取 JSON 輸入
-
-    Returns:
-        dict - 解析後的 JSON 資料，若無輸入則回傳 None
-    """
-    try:
-        input_data = json.load(sys.stdin)
-        logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
-        return input_data
-    except (json.JSONDecodeError, EOFError):
-        logger.debug("無 stdin 輸入")
-        return None
-
 
 def is_complete_command_success(input_data: Dict[str, Any], logger) -> bool:
     """
@@ -148,7 +130,6 @@ def is_complete_command_success(input_data: Dict[str, Any], logger) -> bool:
     logger.debug(f"命令未成功: exit_code={exit_code}, stdout={stdout}")
     return False
 
-
 def extract_ticket_ids(input_data: Dict[str, Any], logger) -> List[str]:
     """
     從輸入資料中提取 Ticket ID
@@ -189,7 +170,6 @@ def extract_ticket_ids(input_data: Dict[str, Any], logger) -> List[str]:
 
     logger.info(f"提取到 {len(ticket_ids)} 個 Ticket ID: {ticket_ids}")
     return sorted(list(ticket_ids))
-
 
 def cleanup_handoff_files(project_root: Path, ticket_id: str, logger) -> Tuple[bool, Dict[str, Any]]:
     """
@@ -260,7 +240,6 @@ def cleanup_handoff_files(project_root: Path, ticket_id: str, logger) -> Tuple[b
         result["errors"].append(error_msg)
         return False, result
 
-
 def generate_hook_output(cleanup_results: List[Dict[str, Any]], logger) -> Dict[str, Any]:
     """
     生成 Hook 輸出格式
@@ -283,7 +262,6 @@ def generate_hook_output(cleanup_results: List[Dict[str, Any]], logger) -> Dict[
     return {
         "suppressOutput": True
     }
-
 
 def generate_summary_log(project_root: Path, cleanup_results: List[Dict[str, Any]], logger) -> None:
     """
@@ -315,7 +293,6 @@ def generate_summary_log(project_root: Path, cleanup_results: List[Dict[str, Any
         logger.debug(f"清理報告已保存: {report_file}")
     except Exception as e:
         logger.warning(f"保存清理報告失敗: {e}")
-
 
 def main() -> int:
     """
@@ -383,7 +360,6 @@ def main() -> int:
             "suppressOutput": True
         }, ensure_ascii=False, indent=2))
         return EXIT_SUCCESS
-
 
 if __name__ == "__main__":
     sys.exit(run_hook_safely(main, "handoff-cleanup"))

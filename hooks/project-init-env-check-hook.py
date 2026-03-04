@@ -154,7 +154,7 @@ def main() -> int:
     Returns:
         int - Exit code (0 = 成功，不阻塊 session)
     """
-    logger = setup_hook_logging("project-init-env-check")
+    logger = setup_hook_logging("project-init-env-check-hook")
 
     try:
         logger.debug("Project Init 環境檢查 Hook 啟動")

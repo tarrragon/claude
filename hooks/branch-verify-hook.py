@@ -4,10 +4,11 @@
 Branch Verify Hook - PreToolUse Hook 用於編輯前檢查分支
 
 在 Edit 或 Write 工具執行前檢查當前分支是否為保護分支。
-如果是保護分支，會詢問用戶是否繼續或建立新分支。
+如果是保護分支，會拒絕（deny）操作並提示用戶切換到 feature 分支。
 
 Hook Event: PreToolUse
 Matcher: Edit, Write
+Decision: "allow" (feature 分支) | "deny" (保護分支)
 
 重構紀錄 (v0.28.0):
 - 使用 .claude/lib/git_utils 共用模組
@@ -16,6 +17,11 @@ Matcher: Edit, Write
 
 重構紀錄 (v0.31.0-W22-001.3):
 - 遷移至統一日誌系統 (hook_utils)
+
+修改紀錄 (0.31.1-W5-001):
+- 將保護分支決策從 "ask" 改為 "deny"（預防 Edit 操作在保護分支上執行）
+- 優化 block 訊息，包含詳細的分支切換指引
+- 移除未使用的 worktree_info 變數
 """
 
 import sys
@@ -82,25 +88,26 @@ def main() -> int:
     # 檢查是否為保護分支
     if is_protected_branch(current_branch):
         file_path = tool_input.get("file_path", "unknown")
-        worktree_info = generate_worktree_info()
 
-        user_prompt = f"""
-分支保護警告
+        logger.info(f"在保護分支 '{current_branch}' 上嘗試編輯檔案 {file_path}，操作已阻止")
+        output = create_pretooluse_output(
+            "deny",
+            f"""保護分支編輯被阻止
 
-當前在保護分支 '{current_branch}' 上嘗試編輯檔案：
+對不起，當前在保護分支 '{current_branch}' 上，無法直接編輯檔案：
 {file_path}
 
-保護分支不應直接編輯，建議：
-1. 建立 feature 分支進行開發
-2. 使用 git worktree 建立獨立工作空間
-{worktree_info}
-是否仍要在保護分支上繼續編輯？
-"""
-        logger.info(f"在保護分支 '{current_branch}' 上嘗試編輯，需要用戶確認")
-        output = create_pretooluse_output(
-            "ask",
-            f"在保護分支 '{current_branch}' 上嘗試編輯，需要用戶確認",
-            user_prompt.strip()
+保護分支用於穩定開發，需要在獨立分支上進行更改。
+
+建議的分支切換方式：
+
+1. 建立新 feature 分支並切換：
+   git checkout -b feat/your-feature
+
+2. 或使用 git worktree 建立獨立工作空間：
+   git worktree add ../book-feat feat/your-feature
+
+請先建立並切換到 feature 分支後再進行編輯。"""
         )
         write_hook_output(output)
         return 0

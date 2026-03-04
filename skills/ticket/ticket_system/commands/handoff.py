@@ -189,6 +189,111 @@ def _verify_handoff_dependencies(ticket: Dict[str, Any], ticket_id: str, version
     return True
 
 
+def _check_all_acceptance_complete(ticket: Dict[str, Any]) -> bool:
+    """
+    檢查 Ticket 的所有驗收條件是否已全部勾選。
+
+    驗收條件格式支援：
+    - "[x] 項目" 表示完成
+    - "[ ] 項目" 表示未完成
+    - 無前綴的項目（舊格式）視為未完成
+
+    Args:
+        ticket: Ticket 資料
+
+    Returns:
+        bool: True 表示全部已勾選，False 表示有未完成項目或無驗收條件
+    """
+    from ticket_system.lib.ticket_validator import validate_acceptance_criteria
+
+    acceptance_list = ticket.get("acceptance")
+    if not acceptance_list:
+        return False  # 無驗收條件，不觸發警告
+
+    # 使用驗證工具檢查驗收條件
+    all_complete, incomplete_items = validate_acceptance_criteria(ticket.get("id", ""), acceptance_list)
+    return all_complete
+
+
+def _warn_and_prompt_complete_before_handoff(
+    ticket: Dict[str, Any],
+    ticket_id: str,
+    version: str,
+    context_refresh: bool = False,
+) -> int:
+    """
+    當所有驗收條件已完成但 status 仍為 in_progress 時，
+    顯示警告並提供自動 complete 選項。
+
+    防止 PC-003 錯誤：handoff 前未執行 complete，導致任務鏈狀態不一致。
+
+    Args:
+        ticket: Ticket 資料
+        ticket_id: Ticket ID
+        version: 版本號
+        context_refresh: 是否為 context-refresh handoff
+
+    Returns:
+        int: 0 表示繼續 handoff（用戶跳過或 complete 成功）
+             1 表示中止 handoff（complete 失敗）
+    """
+    status = ticket.get("status", "")
+
+    # context-refresh 不需要檢查（允許 in_progress）
+    if context_refresh:
+        return 0
+
+    # 只對 in_progress 的 ticket 做檢查
+    if status != STATUS_IN_PROGRESS:
+        return 0
+
+    # 有未完成的驗收條件，不顯示警告
+    if not _check_all_acceptance_complete(ticket):
+        return 0
+
+    # 所有驗收條件已勾選，但 status 仍 in_progress → 顯示警告
+    print()
+    print("[WARNING] 驗收條件前置檢查")
+    print("=" * 60)
+    print(f"  Ticket {ticket_id} 的所有驗收條件已勾選 [x]，")
+    print(f"  但狀態仍為 in_progress。")
+    print()
+    print("  建議在 handoff 前先執行 complete，以確保任務鏈完整性。")
+    print()
+    print(f"  執行命令: ticket track complete {ticket_id}")
+    print("=" * 60)
+    print()
+
+    # 詢問是否自動 complete
+    if not _is_interactive():
+        # 非互動環境下，顯示提示但不自動執行
+        print("  在非互動環境下，請手動執行 complete 命令。")
+        print("  或使用 --context-refresh 旗標跳過此檢查。")
+        return 0
+
+    try:
+        response = input("  是否自動執行 complete 再繼續 handoff？[Y/n] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        response = "n"
+
+    if response in ("", "y", "yes"):
+        # 執行 complete
+        from ticket_system.commands.lifecycle import execute_complete
+
+        complete_args = argparse.Namespace(ticket_id=ticket_id, version=version)
+        result = execute_complete(complete_args)
+
+        if result != 0:
+            print(f"[Error] complete 執行失敗，中止 handoff")
+            return 1
+
+        print(f"[OK] {ticket_id} 已完成，繼續 handoff...")
+        return 0
+    else:
+        print("  已跳過 complete，繼續 handoff...")
+        return 0
+
+
 def _print_id_error() -> None:
     """列印 Ticket ID 格式錯誤訊息"""
     print(f"{ErrorMessages.INVALID_TICKET_ID}")
@@ -350,6 +455,11 @@ def _execute_handoff(args: argparse.Namespace) -> int:
     # 步驟 5：驗證 Ticket 狀態
     if not _verify_handoff_status(ticket, ticket_id, context_refresh=context_refresh):
         return 1
+
+    # 步驟 5.5：驗收條件前置檢查（防止 PC-003）
+    acceptance_check_result = _warn_and_prompt_complete_before_handoff(ticket, ticket_id, version, context_refresh=context_refresh)
+    if acceptance_check_result != 0:
+        return acceptance_check_result
 
     # 步驟 6：驗證 blockedBy 依賴都已完成（除非 context-refresh）
     if not context_refresh:

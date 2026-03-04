@@ -8,6 +8,17 @@ Hook 系統通用函數庫
 - 新增 hooks 應使用 hook_utils.setup_hook_logging
 
 參考：.claude/hooks/hook_utils.py（新日誌系統）
+
+標準化 Import 防護模板：
+若 hook 檔案使用本模組，應在導入時加入 try-except：
+
+    try:
+        from lib.common_functions import hook_output, read_hook_input
+    except ImportError as e:
+        print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+這樣可確保 import 失敗時向使用者明確報告，而不是靜默失敗。
 """
 
 import json

@@ -26,11 +26,11 @@ pending → claim → in_progress → complete → completed
 | 階段 | 強制規則 | AskUserQuestion |
 |------|---------|----------------|
 | **建立** | 必須用 `/ticket create`，禁止直接寫 .md | 任務拆分確認（認知 > 10） |
-| **建立後** | 派發 acceptance-auditor 品質驗收 | - |
+| **建立後** | 強制並行審核：acceptance-auditor（品質）+ system-analyst（設計）→ creation_accepted: true | - |
 | **認領** | 阻塞依賴檢查 | - |
 | **執行** | 錯誤強制派發 incident-responder；日誌必填 | - |
 | **驗收** | acceptance-gate-hook 檢查 | **驗收方式確認**（標準/簡化/先完成後補） |
-| **完成** | 驗收通過後執行 `/ticket track complete` | **後續步驟選擇** |
+| **完成** | 驗收通過後執行 `/ticket track complete`；錯誤學習驗證（#17） | **後續步驟選擇** |
 | **收尾** | PM 主動告知變更狀態 + 查詢待處理 | **Wave 收尾確認** |
 
 > 各階段詳細規則：.claude/references/ticket-lifecycle-phases.md
@@ -48,12 +48,99 @@ pending → claim → in_progress → complete → completed
 
 ---
 
+## 建立後強制審核流程
+
+Ticket 建立後、認領前，強制並行派發多代理人審核。
+
+### 觸發條件
+
+- Ticket 建立完成（`/ticket create` 執行成功）
+- `creation_accepted` 為 false（預設）
+
+### 審核內容
+
+| 審核者 | 面向 | 檢查項目 |
+|--------|------|---------|
+| acceptance-auditor | 品質 | 驗收條件 4V 合規、where.files 完整性、數字正確性 |
+| system-analyst | 設計 | 設計合理性、重複實作檢查、範圍適當性 |
+
+### 審核流程
+
+```
+/ticket create → creation_accepted: false
+    |
+    v
+[強制] 並行派發 acceptance-auditor + system-analyst
+    |
+    v
+彙整結果 → 通過（無高/中缺陷）→ creation_accepted: true → 可認領
+         → 未通過 → 修正 → 重新審核
+```
+
+### 判定標準
+
+| 缺陷等級 | 判定 | 處理 |
+|---------|------|------|
+| 無/僅低缺陷 | 通過 | creation_accepted: true |
+| 中缺陷 | 不通過 | PM 修正後重新審核或確認 |
+| 高缺陷 | 不通過 | 必須修正後重新審核 |
+
+### 豁免條件
+
+| 條件 | 說明 |
+|------|------|
+| DOC 類型（認知 < 5） | 純文件更新，可跳過 |
+| 已審核父 Ticket 的子任務 | 範圍已確認，可跳過 |
+
+> 來源：PC-002 錯誤模式 — Ticket 建立後未經審核直接派發
+
+---
+
 ## 驗收流程
 
 | 任務類型 | 驗收深度 |
 |---------|---------|
 | IMP/ADJ/TDD Phase/複雜/安全 | 完整驗收（acceptance-auditor） |
 | DOC/簡單（認知 < 5） | 簡化驗收 |
+
+---
+
+## 完成階段錯誤學習驗證
+
+`ticket track complete` 執行時，在既有驗收條件檢查之後，新增錯誤學習經驗檢查。
+
+### 檢查流程
+
+```
+ticket track complete
+    ↓
+[既有] 驗收條件檢查
+    ↓
+[新增] 錯誤學習經驗檢查
+    ↓
+    查詢本 ticket 執行期間是否有新增 error-pattern
+    （比對 ticket created 時間 vs error-pattern 檔案 mtime）
+    ↓
+    +-- 有新增 error-pattern → AskUserQuestion #17（改進 Ticket 確認）
+    +-- 無新增 → 正常完成
+```
+
+### AskUserQuestion #17 觸發條件
+
+| 條件 | 說明 |
+|------|------|
+| 有新增 error-pattern | ticket 執行期間 `.claude/error-patterns/` 下有新增或修改的檔案 |
+| 無新增 error-pattern | 跳過 #17，正常完成 |
+
+### #17 選項
+
+| 選項 | 說明 |
+|------|------|
+| 建立改進 Ticket（Recommended） | 為新增的 error-pattern 建立修復/防護 Ticket |
+| 已有對應 Ticket | error-pattern 相關修復已在現有 Ticket 中 |
+| 延後處理 | 記錄到 todolist.yaml，後續版本排程 |
+
+> 場景定義詳見：.claude/rules/core/askuserquestion-rules.md（場景 #17）
 
 ---
 
@@ -66,5 +153,5 @@ pending → claim → in_progress → complete → completed
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 5.0.0 - Progressive Disclosure 精簡，詳細階段說明移至 references/
+**Last Updated**: 2026-03-04
+**Version**: 5.2.0 - 完成階段新增錯誤學習驗證（AskUserQuestion #17）

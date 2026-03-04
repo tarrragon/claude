@@ -98,7 +98,7 @@ SessionStart Hook 提供的 JSON 資料（通過 stdin）：
 |------|------|
 | Hook 腳本 | `.claude/hooks/handoff-reminder-hook.py` |
 | 設定檔 | `.claude/settings.local.json` |
-| 日誌目錄 | `.claude/hook-logs/handoff-reminder/` |
+| 日誌目錄 | `.claude/hook-logs/handoff-reminder-hook/` |
 | Handoff 檔案 | `.claude/handoff/pending/*.json` |
 
 ---
@@ -181,7 +181,7 @@ HOOK_DEBUG=true CLAUDE_PROJECT_DIR=. echo '{}' | python3 .claude/hooks/handoff-r
 ### 日誌位置
 
 ```
-.claude/hook-logs/handoff-reminder/handoff-reminder-YYYYMMDD.log
+.claude/hook-logs/handoff-reminder-hook/handoff-reminder-hook-YYYYMMDD.log
 ```
 
 ### 日誌內容

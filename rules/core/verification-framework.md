@@ -97,6 +97,7 @@ Ticket 標記完成
 | 開發命令識別 | 判斷是否為開發/修改命令 | 不是開發命令則跳過檢查 |
 | Ticket 內容品質 | Task Summary 完整（所有 Ticket 適用） | 建議補充內容 |
 | Solution 並行化 | Solution 已評估並行化可能性（所有 Ticket 適用） | 建議評估並行化 |
+| 建立後品質審核 | acceptance-auditor + system-analyst 並行審核通過（creation_accepted: true） | 派發審核代理人 |
 
 **實作位置**：`.claude/hooks/command-entrance-gate-hook.py` (W2-001)
 
@@ -226,6 +227,7 @@ PM 審核並做最終決策
 | Ticket 認領 | Hook | Level 1 | 提示認領 | 用戶決定 |
 | Ticket 內容品質 | PM | Level 1 | 建議補充 | PM 決定 |
 | Solution 並行化 | PM | Level 1 | 建議評估 | PM 決定 |
+| 建立後品質審核 | acceptance-auditor + system-analyst | Level 1 | 派發審核代理人 | PM 決定 |
 | 前置依賴 | 代理人 | Level 2 | 升級 PM | PM 決定 |
 | 環境正常 | 代理人 | Level 2 | 派發 SE | SE 處理 |
 | 產出物完整 | Hook | Level 3 | 提示補充 | 代理人決定 |
@@ -417,12 +419,16 @@ Hook 系統自動產出的驗證報告存放在：
 
 ---
 
-**Last Updated**: 2026-02-26
-**Version**: 1.4.0 - Level 3 新增並行派發後驗證（W25-003）
+**Last Updated**: 2026-03-04
+**Version**: 1.5.0 - Level 1 新增建立後品質審核（W4-002, PC-002）
 **Status**: Active
 **Responsible**: rosemary-project-manager, acceptance-auditor, Hook 系統
 
 **Change Log**:
+- v1.5.0 (2026-03-04): Level 1 新增建立後品質審核（W4-002）
+  - Level 1 驗證表格新增「建立後品質審核」項目
+  - 統一責任對照表新增對應項目
+  - 配合 ticket-lifecycle.md v5.1.0 建立後強制審核流程
 - v1.4.0 (2026-02-26): Level 3 新增並行派發後驗證（W25-003）
   - Level 3 驗證表格新增「並行派發後驗證」項目（git diff --stat 強制驗證）
   - 統一責任對照表新增對應項目（PM 負責、Level 3）
