@@ -128,7 +128,7 @@ def is_complete_command_success(input_data: Dict[str, Any], logger) -> bool:
     tool_input = input_data.get("tool_input", {})
     command = tool_input.get("command", "")
 
-    if "ticket track complete" not in command and "ticket" not in command and "complete" not in command:
+    if "ticket track complete" not in command:
         logger.debug(f"命令非 ticket track complete: {command}")
         return False
 

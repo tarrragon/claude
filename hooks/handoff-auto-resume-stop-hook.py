@@ -5,16 +5,24 @@
 # ///
 
 """
-Handoff 自動恢復 Stop Hook (v2.1.0)
+Handoff 自動恢復 Stop Hook (v2.2.0)
 
 在對話終止時，檢查是否有未完成的 handoff 任務並阻止退出。
 
 功能:
 1. 檢查 stop flag 檔案是否存在且未過期（防重複觸發）
 2. 讀取 session 狀態，若有 locked_ticket_id，提示用戶恢復
-3. 掃描 .claude/handoff/pending/ 查找未恢復任務（含 GC 清理已完成 Ticket 的 stale JSON）
+3. 掃描 .claude/handoff/pending/ 查找未恢復任務
+   - GC：自動刪除已完成 Ticket 的 stale pending JSON
+   - GC 例外：to-sibling / to-parent / to-child 類型保留（來源完成是預期狀態）
 4. 有任務就阻止退出，無任務就靜默通過
 5. 建立 stop flag 防止同一 session 重複觸發
+
+v2.2.0 變更 (W3-005):
+    - 修復 GC bug：to-sibling / to-parent / to-child 類型的 handoff，
+      來源 Ticket completed 是預期狀態，不應被 GC 刪除
+    - 新增 should_preserve_pending_json() 函式判斷是否保留
+    - 改善 GC 日誌訊息，區分保留和刪除的原因
 
 v2.1.0 變更:
     - 移除 scan_in_progress_tickets（不再主動建立 pending JSON）
@@ -423,6 +431,30 @@ def scan_in_progress_tickets(project_root: Path, logger) -> list:
     return created_tickets
 
 
+def should_preserve_pending_json(direction: str, logger) -> bool:
+    """
+    判斷是否應保留 pending JSON，即使來源 Ticket 已完成
+
+    direction 為 to-sibling / to-parent / to-child 的 handoff，
+    來源 Ticket 已 completed 是預期狀態，應保留 pending JSON。
+
+    Args:
+        direction: handoff 的 direction 欄位
+        logger: 日誌記錄器
+
+    Returns:
+        bool - 是否應保留 pending JSON
+    """
+    # 任務鏈類型（來源已完成是預期狀態）
+    chain_directions = {"to-sibling", "to-parent", "to-child"}
+
+    if direction in chain_directions:
+        logger.debug(f"handoff 類型 '{direction}' 應保留已完成 Ticket 的 pending JSON")
+        return True
+
+    return False
+
+
 def scan_pending_handoff_tasks(project_root: Path, logger) -> list:
     """
     掃描待恢復的 handoff 任務（resumed_at == null 的任務）
@@ -431,7 +463,10 @@ def scan_pending_handoff_tasks(project_root: Path, logger) -> list:
 
     GC 機制：
     - resumed_at 不為 null → 已接手，跳過
-    - Ticket 已 completed → 刪除 pending JSON（GC）
+    - Ticket 已 completed + direction 不是 to-sibling/to-parent/to-child
+      → 刪除 pending JSON（GC）
+    - Ticket 已 completed + direction 是任務鏈類型
+      → 保留 pending JSON（來源完成是預期狀態）
     - Ticket 未完成且 resumed_at 為 null → 收集為待恢復
 
     Args:
@@ -462,9 +497,24 @@ def scan_pending_handoff_tasks(project_root: Path, logger) -> list:
 
                     # 檢查對應 Ticket 是否已完成
                     if is_ticket_completed(project_root, ticket_id, logger):
-                        # GC：刪除已完成 Ticket 的 stale pending JSON
-                        file_path.unlink()
-                        logger.info(f"GC: 刪除已完成 Ticket 的 pending JSON: {ticket_id}")
+                        # GC：檢查 direction，判斷是否應保留
+                        if should_preserve_pending_json(direction, logger):
+                            pending_tasks.append({
+                                "ticket_id": ticket_id,
+                                "title": title,
+                                "direction": direction
+                            })
+                            logger.debug(
+                                f"保留任務鏈類型 handoff 的 pending JSON "
+                                f"({ticket_id}, direction={direction})"
+                            )
+                        else:
+                            # 刪除已完成 Ticket 的 stale pending JSON
+                            file_path.unlink()
+                            logger.info(
+                                f"GC: 刪除已完成 Ticket 的 pending JSON "
+                                f"({ticket_id}, direction={direction})"
+                            )
                     else:
                         pending_tasks.append({
                             "ticket_id": ticket_id,
