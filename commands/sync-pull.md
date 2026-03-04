@@ -52,7 +52,18 @@ description: 從獨立 repo 拉取最新 .claude 配置 (https://github.com/tarr
    - 腳本會輸出備份目錄位置
    - 告知用戶如需還原可使用備份
 
-5. **建議測試 Hook 系統**
+5. **重新安裝自訂套件（強制）**
+   - 讀取 `.claude/installed-packages.json` 取得追蹤的套件清單
+   - 對每個套件，檢查是否已安裝為全域 CLI tool（`uv tool list`）
+   - 已安裝為全域 tool 的套件：執行完整重新安裝流程
+     ```bash
+     # 對每個需要更新的套件（例如 ticket-system）：
+     (cd {package_path} && uv tool uninstall {package_name} 2>/dev/null; uv cache clean {package_name} 2>/dev/null; uv tool install . --reinstall)
+     ```
+   - 確認看到 `Building ...` 輸出才表示真正重建了 wheel（避免快取陷阱）
+   - 僅有 `uv run` 使用的套件（非全域 tool）：由 `package-version-sync-hook` 在下次 SessionStart 自動處理
+
+6. **建議測試 Hook 系統**
    - 提醒用戶測試 Hook 系統是否正常運作
    - 建議重啟 Claude Code Session 驗證
 
@@ -93,6 +104,7 @@ cp -r /tmp/備份目錄/.claude .
 - 自動備份當前 .claude 配置到臨時目錄
 - 拉取會完全替換本地 .claude 檔案
 - 不會覆蓋根目錄 CLAUDE.md（專案特定配置）
+- 拉取後自動重新安裝已追蹤的全域 CLI 套件（`installed-packages.json` + `uv tool list` 交集）
 - 拉取後建議執行 `project-init onboard` 完成框架定制
 - 拉取後建議檢查 settings.local.json 是否需要調整
 - 拉取後建議重啟 Claude Code Session

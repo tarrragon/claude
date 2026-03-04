@@ -121,6 +121,79 @@ def compute_package_hash(package_dir: Path) -> str:
         return ""
 
 
+def get_installed_uv_tools() -> Set[str]:
+    """
+    Get the set of package names installed as global uv tools.
+
+    Returns:
+        Set of installed tool package names (e.g. {'ticket-system', 'mermaid-ascii'})
+    """
+    try:
+        result = subprocess.run(
+            ["uv", "tool", "list"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            return set()
+
+        tools = set()
+        for line in result.stdout.splitlines():
+            # Format: "package-name vX.Y.Z" or "- entry-point"
+            if line.startswith("-") or not line.strip():
+                continue
+            parts = line.strip().split()
+            if parts:
+                tools.add(parts[0])
+        return tools
+    except Exception:
+        return set()
+
+
+def reinstall_uv_tool(package_name: str, package_full_path: Path) -> bool:
+    """
+    Fully reinstall a uv tool: uninstall -> cache clean -> install --reinstall.
+
+    This avoids the uv cache trap where stale wheels are reused.
+
+    Args:
+        package_name: Name of the package (e.g. 'ticket-system')
+        package_full_path: Absolute path to the package directory
+
+    Returns:
+        True if reinstall succeeded (Building output detected), False otherwise
+    """
+    try:
+        # Step 1: uninstall (ignore errors if not installed)
+        subprocess.run(
+            ["uv", "tool", "uninstall", package_name],
+            capture_output=True, text=True, timeout=30,
+        )
+
+        # Step 2: cache clean (ignore errors)
+        subprocess.run(
+            ["uv", "cache", "clean", package_name],
+            capture_output=True, text=True, timeout=30,
+        )
+
+        # Step 3: install --reinstall
+        result = subprocess.run(
+            ["uv", "tool", "install", ".", "--reinstall"],
+            cwd=str(package_full_path),
+            capture_output=True, text=True, timeout=120,
+        )
+
+        # Verify: "Building" in output confirms wheel was rebuilt
+        combined_output = (result.stdout or "") + (result.stderr or "")
+        if result.returncode == 0 and "Building" in combined_output:
+            return True
+        # returncode 0 but no "Building" means cache was used (shouldn't happen after clean)
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
 def sync_package(project_root: Path, package_path: str) -> bool:
     """
     Sync a package via 'uv run --directory {path}' to ensure dependencies are resolved.
@@ -182,6 +255,9 @@ def main():
     print("Package Version Sync - Session Startup Check")
     print("=" * 60)
 
+    # Get installed uv tools once (avoid repeated subprocess calls)
+    installed_tools = get_installed_uv_tools()
+
     # Track if any package was updated
     any_updated = False
 
@@ -216,18 +292,34 @@ def main():
             continue
 
         # Changes detected
-        print(f"{package_name}: Changes detected, reinstalling...")
+        is_uv_tool = package_name in installed_tools
+        sync_type = "uv tool + venv" if is_uv_tool else "venv"
+        print(f"{package_name}: Changes detected, syncing ({sync_type})...")
 
-        # Reinstall
+        sync_success = True
+
+        # Reinstall uv tool if applicable
+        if is_uv_tool:
+            if reinstall_uv_tool(package_name, package_full_path):
+                print(f"{package_name}: uv tool reinstalled")
+            else:
+                print(f"{package_name}: uv tool reinstall failed", file=sys.stderr)
+                sync_success = False
+
+        # Sync venv
         if sync_package(project_root, package_path):
-            # Success - update tracking file
+            print(f"{package_name}: venv sync successful")
+        else:
+            print(f"{package_name}: venv sync failed", file=sys.stderr)
+            sync_success = False
+
+        if sync_success:
+            # Update tracking file
             package_info["content_hash"] = current_hash
             package_info["last_synced"] = format_time_iso8601()
-            print(f"{package_name}: Sync successful")
             any_updated = True
         else:
-            # Failed
-            print(f"{package_name}: Sync failed (continuing with stale package)")
+            print(f"{package_name}: Partial sync (continuing with available state)")
 
     # Save updated tracking file if any package changed
     if any_updated:
