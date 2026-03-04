@@ -67,6 +67,9 @@ rsync -av \
     --exclude='PM_INTERVENTION_REQUIRED' \
     --exclude='ARCHITECTURE_REVIEW_REQUIRED' \
     --exclude='pm-status.json' \
+    --exclude='__pycache__' \
+    --exclude='*.pyc' \
+    --exclude='.pytest_cache' \
     "$OLDPWD/.claude/" .
 
 echo -e "${YELLOW}   注意: CLAUDE.md 不再同步（專案特定配置）${NC}"

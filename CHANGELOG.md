@@ -1,3 +1,11 @@
+## [1.1.23] - 2026-03-05
+
+### Summary
+fix: 修正框架路徑偵測 - get_project_root() 支援 Go/混合型專案（CLAUDE.md/go.mod 搜尋），version.py 加入 fallback WARNING log，sync-push 排除 Python 暫存目錄
+
+---
+
+
 ## [1.1.22] - 2026-03-05
 
 ### Summary

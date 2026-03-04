@@ -15,26 +15,33 @@ def get_project_root() -> Path:
     """
     取得專案根目錄
 
-    通過向上搜尋 pubspec.yaml 檔案來定位專案根目錄。
+    搜尋優先級：
+    1. CLAUDE_PROJECT_DIR 環境變數
+    2. 向上搜尋 CLAUDE.md（通用框架標準入口，支援 Go/混合型專案）
+    3. 向上搜尋 go.mod（Go 專案）
+    4. 向上搜尋 pubspec.yaml（Flutter 專案）
+    5. fallback: Path.cwd()
 
     Returns:
         Path: 專案根目錄路徑
 
     Examples:
         >>> root = get_project_root()
-        >>> (root / "pubspec.yaml").exists()
+        >>> (root / "CLAUDE.md").exists() or (root / "go.mod").exists() or (root / "pubspec.yaml").exists()
         True
     """
-    # 優先使用環境變數
+    # 1. 環境變數優先
     claude_project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
     if claude_project_dir:
         return Path(claude_project_dir)
 
-    # 向上搜尋 pubspec.yaml
+    # 2-4. 向上搜尋標記檔案（依通用性排序）
+    markers = ["CLAUDE.md", "go.mod", "pubspec.yaml"]
     current = Path.cwd()
     while current != current.parent:
-        if (current / "pubspec.yaml").exists():
-            return current
+        for marker in markers:
+            if (current / marker).exists():
+                return current
         current = current.parent
 
     return Path.cwd()
