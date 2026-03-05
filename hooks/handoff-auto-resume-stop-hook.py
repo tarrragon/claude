@@ -5,7 +5,7 @@
 # ///
 
 """
-Handoff 自動恢復 Stop Hook (v2.2.0)
+Handoff 自動恢復 Stop Hook (v2.3.0)
 
 在對話終止時，檢查是否有未完成的 handoff 任務並阻止退出。
 
@@ -17,6 +17,11 @@ Handoff 自動恢復 Stop Hook (v2.2.0)
    - GC 例外：to-sibling / to-parent / to-child 類型保留（來源完成是預期狀態）
 4. 有任務就阻止退出，無任務就靜默通過
 5. 建立 stop flag 防止同一 session 重複觸發
+
+v2.3.0 變更:
+    - 修正 reason 欄位內容：從 "/ticket resume {id}" 改為說明文字
+    - 原問題：reason 文字被 Claude 當作斜線命令自動執行，違反 handoff 設計
+    - 修正後：reason 明確指示 Claude 告知用戶手動執行，不自動 resume
 
 v2.2.0 變更 (W3-005):
     - 修復 GC bug：to-sibling / to-parent / to-child 類型的 handoff，
@@ -580,7 +585,12 @@ def generate_hook_output(logger) -> Dict[str, Any]:
                 logger.info(f"單任務，提示恢復: {ticket_id}")
                 return {
                     "decision": "block",
-                    "reason": f"/ticket resume {ticket_id}"
+                    "reason": (
+                        f"[Handoff] 偵測到未完成的 handoff 任務：{ticket_id}\n"
+                        f"請告知用戶：先執行 /clear 清空 context，"
+                        f"然後再執行 /ticket resume {ticket_id} 恢復任務。\n"
+                        f"請勿自動執行 resume，必須等待用戶手動操作。"
+                    )
                 }
             else:
                 # 多任務時：列出清單到 stderr，exit 2 阻止停止

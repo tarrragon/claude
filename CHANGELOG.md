@@ -1,3 +1,11 @@
+## [1.1.24] - 2026-03-05
+
+### Summary
+fix: 修正 Stop hook reason 欄位被 Claude 解讀為命令導致自動執行 resume (IMP-014)
+
+---
+
+
 ## [1.1.23] - 2026-03-05
 
 ### Summary
