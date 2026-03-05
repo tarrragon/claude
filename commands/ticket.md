@@ -1,1 +1,0 @@
-Use the Skill tool to invoke the "ticket" skill with these arguments: $ARGUMENTS

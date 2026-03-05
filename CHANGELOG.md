@@ -1,3 +1,11 @@
+## [1.1.36] - 2026-03-06
+
+### Summary
+fix: merge fix/ticket-cross-version-warning - 跨版本任務遺漏防護
+
+---
+
+
 ## [1.1.35] - 2026-03-05
 
 ### Summary
