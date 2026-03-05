@@ -188,30 +188,99 @@ def _update_acceptance_status(
     return "\n".join(table_lines)
 
 
+def _parse_acceptance_index(index_input: str, acceptance_items: list) -> tuple[bool, str, int]:
+    """
+    解析驗收條件索引，支援三種輸入方式。
+
+    Args:
+        index_input: 使用者輸入，可以是：
+                     - 1-based 整數："1", "2", "3"（現有功能）
+                     - 0-based 整數："0"（新功能，轉換為 1-based）
+                     - 文字搜尋："任務實作完成"（新功能，模糊比對）
+        acceptance_items: 驗收條件清單
+
+    Returns:
+        (成功, 錯誤訊息或資訊, 1-based 索引)
+        - 成功時返回 (True, "", 1-based 索引)
+        - 失敗時返回 (False, 錯誤訊息, -1)
+    """
+    # 先嘗試解析為整數
+    try:
+        n = int(index_input)
+
+        # 特殊情況：0 被視為 0-based 索引，對應第 1 個項目（1-based）
+        if n == 0:
+            if len(acceptance_items) >= 1:
+                return True, "", 1
+            else:
+                msg = format_error(
+                    ErrorMessages.ACCEPTANCE_CRITERIA_INDEX_OUT_OF_RANGE,
+                    max_index=len(acceptance_items),
+                    index=0
+                )
+                return False, msg, -1
+
+        # 檢查是否為有效的 1-based（1 到 len 範圍）
+        if 1 <= n <= len(acceptance_items):
+            return True, "", n
+
+        # 超出範圍
+        msg = format_error(
+            ErrorMessages.ACCEPTANCE_CRITERIA_INDEX_OUT_OF_RANGE,
+            max_index=len(acceptance_items),
+            index=n
+        )
+        return False, msg, -1
+
+    except ValueError:
+        # 不是整數，嘗試文字搜尋
+        pass
+
+    # 文字搜尋（模糊比對）
+    matches = []
+    for i, item in enumerate(acceptance_items):
+        # 提取文字（移除前綴如 [x] 或 [ ]）
+        item_text = item
+        if item.startswith("["):
+            # 移除 [x] 或 [ ] 前綴
+            item_text = item.split("]", 1)[1].strip() if "]" in item else item
+
+        if index_input in item_text:
+            matches.append(i + 1)  # 1-based
+
+    if len(matches) == 1:
+        return True, "", matches[0]
+    elif len(matches) > 1:
+        msg = format_error(
+            ErrorMessages.ACCEPTANCE_CRITERIA_INDEX_NOT_INTEGER,
+            value=f"'{index_input}' 匹配到 {len(matches)} 個項目，請使用索引"
+        )
+        return False, msg, -1
+    else:
+        msg = format_error(
+            ErrorMessages.ACCEPTANCE_CRITERIA_INDEX_NOT_INTEGER,
+            value=f"找不到包含 '{index_input}' 的驗收條件"
+        )
+        return False, msg, -1
+
+
 def execute_check_acceptance(args: argparse.Namespace, version: str) -> int:
     """
     勾選或取消勾選驗收條件（在 frontmatter 中操作）
 
     支援命令格式：
-    - ticket track check-acceptance <id> <index>
+    - ticket track check-acceptance <id> <index>     # 1-based 整數或文字搜尋
     - ticket track check-acceptance <id> <index> --uncheck
 
-    改為操作 frontmatter 的 acceptance 欄位，而非 body 表格。
+    支援三種 index 格式：
+    - 1-based 整數："1", "2", "3"（現有功能）
+    - 0-based 整數："0", "1", "2"（自動換算為 1-based）
+    - 文字搜尋："任務實作完成"（模糊比對驗收條件文字）
     """
     # 載入 Ticket
     ticket = load_ticket(version, args.ticket_id)
     if not ticket:
         print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
-        return 1
-
-    # 驗證 index 參數
-    try:
-        index = int(args.index)
-        if index <= 0:
-            print(format_error(ErrorMessages.ACCEPTANCE_CRITERIA_INDEX_NOT_POSITIVE, value=index))
-            return 1
-    except ValueError:
-        print(format_error(ErrorMessages.ACCEPTANCE_CRITERIA_INDEX_NOT_INTEGER, value=args.index))
         return 1
 
     # 取得 acceptance 列表（來自 frontmatter）
@@ -220,9 +289,9 @@ def execute_check_acceptance(args: argparse.Namespace, version: str) -> int:
         print(format_error(ErrorMessages.ACCEPTANCE_CRITERIA_NOT_FOUND, ticket_id=args.ticket_id))
         return 1
 
-    # 驗證 index 範圍
-    if index < 1 or index > len(acceptance_list):
-        msg = format_error(ErrorMessages.ACCEPTANCE_CRITERIA_INDEX_OUT_OF_RANGE, max_index=len(acceptance_list), index=index)
+    # 解析 index 參數（支援三種格式）
+    success, msg, index = _parse_acceptance_index(args.index, acceptance_list)
+    if not success:
         print(msg)
         return 1
 
