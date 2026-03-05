@@ -1,3 +1,11 @@
+## [1.1.26] - 2026-03-05
+
+### Summary
+feat: 新增 incident-response 修復三階段規則 + 測試金字塔驗證順序 + PC-004 error-pattern (W1-009)
+
+---
+
+
 ## [1.1.25] - 2026-03-05
 
 ### Summary
