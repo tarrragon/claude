@@ -13,19 +13,19 @@
 症狀：
 ```
 Python: 版本未安裝
-狀態: Python 3.11+ 是必需的
+狀態: Python 3.14+ 是必需的
 ```
 
 修復步驟：
 
-1. 訪問 https://www.python.org/downloads 下載 Python 3.11 或更高版本
+1. 訪問 https://www.python.org/downloads 下載 Python 3.14 或更高版本
 2. 執行安裝程式並完成安裝
-3. 驗證安裝：執行 `python3 --version` 確認版本 >= 3.11
+3. 驗證安裝：執行 `python3 --version` 確認版本 >= 3.14
 4. 重新執行 `project-init check`
 
 macOS 用戶（使用 Homebrew）：
 ```bash
-brew install python@3.11
+brew install python@3.14
 # 驗證
 python3 --version
 ```
@@ -33,7 +33,7 @@ python3 --version
 Linux 用戶（Debian/Ubuntu）：
 ```bash
 sudo apt-get update
-sudo apt-get install -y python3.11
+sudo apt-get install -y python3.14
 # 驗證
 python3 --version
 ```
@@ -132,12 +132,12 @@ scoop install ripgrep
 
 ## VersionTooOldError — 版本過舊
 
-### Python 版本過舊（< 3.11）
+### Python 版本過舊（< 3.14）
 
 症狀：
 ```
 Python: 版本 3.10.x 不符合最低要求
-狀態: 需要 Python 3.11+
+狀態: 需要 Python 3.14+
 ```
 
 升級步驟：
@@ -147,8 +147,8 @@ macOS（使用 Homebrew）：
 # 移除舊版本（可選）
 brew uninstall python@3.10
 
-# 安裝 Python 3.11+
-brew install python@3.11
+# 安裝 Python 3.14+
+brew install python@3.14
 
 # 驗證
 python3 --version
@@ -157,10 +157,10 @@ python3 --version
 Linux（Debian/Ubuntu）：
 ```bash
 sudo apt-get update
-sudo apt-get install -y python3.11
+sudo apt-get install -y python3.14
 
 # 設定為預設版本
-sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.14 1
 sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 2
 
 # 驗證
@@ -168,7 +168,7 @@ python3 --version
 ```
 
 Windows：
-1. 訪問 https://www.python.org/downloads 下載 Python 3.11+
+1. 訪問 https://www.python.org/downloads 下載 Python 3.14+
 2. 執行安裝程式，選擇「Upgrade Now」或卸載舊版後重新安裝
 3. 驗證：`python3 --version`
 

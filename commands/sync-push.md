@@ -27,7 +27,7 @@ description: 推送 .claude 配置到獨立 repo (https://github.com/tarrragon/c
 3. **執行推送腳本**
    - 使用用戶提供的提交訊息執行：
      ```bash
-     ./.claude/scripts/sync-claude-push.sh "提交訊息"
+     python3 ./.claude/scripts/sync-claude-push.py "提交訊息"
      ```
 
 4. **驗證推送結果**

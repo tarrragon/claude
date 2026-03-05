@@ -38,14 +38,14 @@ description: 從獨立 repo 拉取最新 .claude 配置 (https://github.com/tarr
      ```
 
 3. **根據用戶選擇執行**
-   - **確認拉取**：直接執行 `./.claude/scripts/sync-claude-pull.sh`
+   - **確認拉取**：直接執行 `python3 ./.claude/scripts/sync-claude-pull.py`
    - **先備份再拉取**：先執行以下備份指令，再執行拉取腳本
      ```bash
      BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
      cp -r .claude "$BACKUP_DIR/"
      echo "備份已建立：$BACKUP_DIR"
      ```
-     然後執行：`./.claude/scripts/sync-claude-pull.sh`
+     然後執行：`python3 ./.claude/scripts/sync-claude-pull.py`
    - **取消**：中止操作，不執行任何動作
 
 4. **顯示備份位置**

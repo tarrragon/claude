@@ -3,11 +3,13 @@
 # 使用方式: ./.claude/scripts/sync-claude-pull.sh
 #
 # 拉取內容:
-# - .claude/ 目錄所有檔案
+# - .claude/ 目錄所有檔案（增量覆蓋，不刪除本地獨有檔案）
 # - FLUTTER.md
 #
 # 不覆蓋內容:
 # - 根目錄 CLAUDE.md（保留專案特定配置）
+# - .claude/hook-logs/（本地日誌）
+# - .claude/handoff/（本地交接檔案）
 
 set -e
 
@@ -28,10 +30,7 @@ if git diff --name-only .claude FLUTTER.md 2>/dev/null | grep -q . || \
     exit 1
 fi
 
-# 2. 先將腳本內容讀入記憶體，避免自我刪除問題
-# （bash 不保證一次讀取整個腳本，cd/rm 後可能無法繼續讀取）
-SCRIPT_REMAINING='
-# 3. Clone 獨立 repo 到臨時目錄（設定 timeout 防止網路問題）
+# 2. Clone 獨立 repo 到臨時目錄
 echo -e "${YELLOW}從獨立 repo 拉取更新...${NC}"
 TEMP_DIR=$(mktemp -d)
 trap "rm -rf \"$TEMP_DIR\"" EXIT
@@ -42,24 +41,24 @@ if ! GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=30 \
     exit 1
 fi
 
-# 4. 備份當前 .claude 和 FLUTTER.md（不備份 CLAUDE.md）
+# 3. 備份當前 .claude 和 FLUTTER.md
 echo -e "${YELLOW}備份當前配置...${NC}"
 BACKUP_DIR=$(mktemp -d)
 cp -r .claude "$BACKUP_DIR/"
 [ -f FLUTTER.md ] && cp FLUTTER.md "$BACKUP_DIR/" 2>/dev/null || true
 
-# 5. 更新 .claude 資料夾（排除 project-templates）
-echo -e "${YELLOW}更新 .claude 資料夾...${NC}"
-rm -rf .claude
-mkdir -p .claude
-for item in "$TEMP_DIR"/*; do
-    basename_item=$(basename "$item")
-    if [ "$basename_item" != "project-templates" ] && [ "$basename_item" != ".git" ]; then
-        cp -r "$item" .claude/
-    fi
-done
+# 4. 使用 rsync 增量更新 .claude 資料夾
+#    - 不刪除本地獨有檔案（如 hook-logs/, handoff/, tickets 快取等）
+#    - 排除 .git 和 project-templates
+echo -e "${YELLOW}更新 .claude 資料夾（rsync 增量覆蓋）...${NC}"
+rsync -av \
+    --exclude='.git' \
+    --exclude='project-templates' \
+    --exclude='hook-logs' \
+    --exclude='handoff' \
+    "$TEMP_DIR/" .claude/
 
-# 6. 只更新 FLUTTER.md（不更新 CLAUDE.md）
+# 5. 只更新 FLUTTER.md（不更新 CLAUDE.md）
 if [ -d "$TEMP_DIR/project-templates" ]; then
     echo -e "${YELLOW}更新專案模板檔案...${NC}"
     [ -f "$TEMP_DIR/project-templates/FLUTTER.md" ] && cp "$TEMP_DIR/project-templates/FLUTTER.md" .
@@ -67,7 +66,7 @@ if [ -d "$TEMP_DIR/project-templates" ]; then
     echo -e "${YELLOW}   注意: CLAUDE.md 未被覆蓋（保留專案特定配置）${NC}"
 fi
 
-# 7. 清理臨時目錄（trap EXIT 自動處理）
+# 6. 清理臨時目錄（trap EXIT 自動處理）
 
 echo -e "${GREEN}成功拉取 .claude 更新！${NC}"
 echo -e "${GREEN}備份位置: $BACKUP_DIR${NC}"
@@ -79,7 +78,3 @@ echo -e "${YELLOW}如果是新專案，請手動建立 CLAUDE.md:${NC}"
 echo -e "${YELLOW}  1. cp .claude/templates/CLAUDE-template.md CLAUDE.md${NC}"
 echo -e "${YELLOW}  2. 填入專案特定資訊${NC}"
 echo -e "${YELLOW}  3. 驗證所有連結有效${NC}"
-'
-
-# 執行剩餘腳本（已完整載入記憶體，不受 rm -rf .claude 影響）
-eval "$SCRIPT_REMAINING"

@@ -13,7 +13,7 @@ from .env_detector import OsInfo
 
 SUPPORTED_TOOLS = {"python3", "uv", "ripgrep"}
 
-MINIMUM_PYTHON_VERSION = "3.11"
+MINIMUM_PYTHON_VERSION = "3.14"
 MINIMUM_UV_VERSION = "0.1.0"
 MINIMUM_RIPGREP_VERSION = "13.0.0"
 
@@ -64,8 +64,8 @@ def _get_macos_instructions(tool: str) -> InstallInstructions:
         return InstallInstructions(
             tool="python3",
             os_type="macOS",
-            commands=["brew install python@3.11"],
-            notes="安裝 Python 3.11。若已存在，可用 `brew upgrade python@3.11`。",
+            commands=["brew install python@3.14"],
+            notes="安裝 Python 3.14。若已存在，可用 `brew upgrade python@3.14`。",
         )
     elif tool == "uv":
         return InstallInstructions(
@@ -92,9 +92,9 @@ def _get_linux_instructions(tool: str) -> InstallInstructions:
             os_type="Linux",
             commands=[
                 "sudo apt-get update",
-                "sudo apt-get install -y python3.11",
+                "sudo apt-get install -y python3.14",
             ],
-            notes="使用 apt-get (Debian/Ubuntu)。若系統使用 dnf (Fedora/RHEL)，改用: sudo dnf install -y python3.11",
+            notes="使用 apt-get (Debian/Ubuntu)。若系統使用 dnf (Fedora/RHEL)，改用: sudo dnf install -y python3.14",
         )
     elif tool == "uv":
         return InstallInstructions(
@@ -126,9 +126,9 @@ def _get_windows_instructions(tool: str) -> InstallInstructions:
             tool="python3",
             os_type="Windows",
             commands=[
-                "winget install -e --id Python.Python.3.11",
+                "winget install -e --id Python.Python.3.14",
             ],
-            notes="使用 winget。若無 winget，可使用 scoop: scoop install python@3.11",
+            notes="使用 winget。若無 winget，可使用 scoop: scoop install python@3.14",
         )
     elif tool == "uv":
         return InstallInstructions(

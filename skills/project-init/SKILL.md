@@ -83,7 +83,7 @@ project-init --version
 
 檢查項目：
 - **OS** — 作業系統和版本
-- **Python** — Python 版本（需 3.11+）
+- **Python** — Python 版本（需 3.14+）
 - **UV** — UV 套件管理工具
 - **ripgrep** — 文字搜尋工具（可選）
 - **Hook 系統** — Hook 編譯狀態和 PEP 723 支援
@@ -104,7 +104,7 @@ project-init check — 環境狀態報告
   macOS 14.6
 
 [Python]
-  版本: 3.11.13
+  版本: 3.14.13
   路徑: /opt/homebrew/bin/python3
 
 [UV]

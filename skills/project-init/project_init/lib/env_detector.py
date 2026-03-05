@@ -28,7 +28,7 @@ class PythonInfo:
     """Python 環境資訊."""
 
     version: str
-    """Python 版本字串 (如 '3.11.13')."""
+    """Python 版本字串 (如 '3.14.13')."""
     path: Optional[str]
     """Python 執行檔路徑."""
     is_available: bool

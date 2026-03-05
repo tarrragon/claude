@@ -112,7 +112,7 @@ class TestRemediationGuidance:
         steps = RemediationGuidance.get_python_install_steps()
         assert len(steps) == 4
         assert any("python.org" in step for step in steps)
-        assert any("3.11" in step for step in steps)
+        assert any("3.14" in step for step in steps)
 
     def test_uv_install_steps(self) -> None:
         """測試 UV 安裝步驟."""

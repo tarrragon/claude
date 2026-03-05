@@ -1,3 +1,10 @@
+## [1.1.31] - 2026-03-05
+
+### Summary
+chore: W1-014/015/016 sync 腳本修正、project-init Python 3.14、IMP-016 error-pattern
+
+---
+
 ## [1.1.30] - 2026-03-05
 
 ### Summary

@@ -48,12 +48,12 @@ class TestEnvironmentSetupError:
 
     def test_get_full_message_with_guidance(self) -> None:
         """測試含指導的完整訊息."""
-        guidance = ["安裝 Python 3.11", "驗證安裝"]
+        guidance = ["安裝 Python 3.14", "驗證安裝"]
         exc = EnvironmentSetupError("Python", "版本過舊", guidance)
         message = exc.get_full_message()
         assert "Python: 版本過舊" in message
         assert "修復步驟:" in message
-        assert "1. 安裝 Python 3.11" in message
+        assert "1. 安裝 Python 3.14" in message
         assert "2. 驗證安裝" in message
 
 
