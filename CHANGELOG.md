@@ -1,3 +1,10 @@
+## [1.1.33] - 2026-03-05
+
+### Summary
+fix: escape sequence warning + 移除舊 .sh 腳本
+
+---
+
 ## [1.1.32] - 2026-03-05
 
 ### Summary
