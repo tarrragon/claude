@@ -62,7 +62,7 @@ find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
 
 # 複製 .claude/ 目錄內容（排除本機暫存檔案）
 echo -e "${YELLOW}複製 .claude 配置檔案...${NC}"
-rsync -av \
+rsync -a \
     --exclude='hook-logs' \
     --exclude='PM_INTERVENTION_REQUIRED' \
     --exclude='ARCHITECTURE_REVIEW_REQUIRED' \
@@ -71,6 +71,8 @@ rsync -av \
     --exclude='*.pyc' \
     --exclude='.pytest_cache' \
     "$OLDPWD/.claude/" .
+FILE_COUNT=$(find . -mindepth 1 ! -path './.git/*' -type f | wc -l | tr -d ' ')
+echo -e "${GREEN}   已複製 ${FILE_COUNT} 個檔案${NC}"
 
 echo -e "${YELLOW}   注意: CLAUDE.md 不再同步（專案特定配置）${NC}"
 echo -e "${GREEN}   FLUTTER.md 位於 project-templates/ 目錄中（已由 rsync 複製）${NC}"
