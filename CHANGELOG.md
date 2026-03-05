@@ -1,3 +1,11 @@
+## [1.1.27] - 2026-03-05
+
+### Summary
+fix: sync-claude-pull.sh 修復自我刪除風險、untracked 誤判、clone timeout + 同步 v1.1.26 更新
+
+---
+
+
 ## [1.1.26] - 2026-03-05
 
 ### Summary
