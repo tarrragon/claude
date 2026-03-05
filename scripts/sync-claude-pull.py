@@ -85,6 +85,9 @@ def check_uncommitted_changes(project_root: Path) -> None:
         ["diff", "--cached", "--name-only", ".claude", "FLUTTER.md"],
         cwd=str(project_root),
     )
+    if result.returncode != 0 or cached.returncode != 0:
+        print_color("警告: git diff 執行失敗，請確認 git 狀態正常", "red")
+        sys.exit(1)
     has_changes = bool(result.stdout.strip() or cached.stdout.strip())
     if has_changes:
         print_color("警告: .claude 或 FLUTTER.md 有未提交的變更", "red")
@@ -143,6 +146,8 @@ def collect_remote_files(src: Path, prefix: Path = Path()) -> set[Path]:
     for item in src.iterdir():
         if item.name in EXCLUDE_FROM_SYNC:
             continue
+        if item.is_symlink():
+            continue
         rel = prefix / item.name
         if item.is_dir():
             files.update(collect_remote_files(item, rel))
@@ -163,6 +168,8 @@ def cleanup_stale_files(claude_dir: Path, remote_files: set[Path]) -> list[str]:
             return
         for item in sorted(directory.iterdir()):
             if item.name in LOCAL_ONLY or item.name in EXCLUDE_FROM_SYNC:
+                continue
+            if item.is_symlink():
                 continue
             rel = prefix / item.name
             if item.is_dir():
