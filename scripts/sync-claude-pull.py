@@ -6,7 +6,7 @@
 依賴：Python 3.8+, git
 
 拉取內容:
-  - .claude/ 目錄所有檔案（增量覆蓋，不刪除本地獨有檔案）
+  - .claude/ 目錄所有檔案（同步覆蓋 + 清理遠端已刪除的檔案）
   - FLUTTER.md
 
 不覆蓋內容:
@@ -29,6 +29,18 @@ EXCLUDE_FROM_SYNC = {
     "project-templates",
     "hook-logs",
     "handoff",
+}
+
+# 本地專有目錄/檔案，pull 時不刪除
+LOCAL_ONLY = {
+    "hook-logs",
+    "handoff",
+    "PM_INTERVENTION_REQUIRED",
+    "ARCHITECTURE_REVIEW_REQUIRED",
+    "pm-status.json",
+    "__pycache__",
+    ".pytest_cache",
+    ".venv",
 }
 
 
@@ -125,6 +137,48 @@ def sync_directory(src: Path, dst: Path) -> int:
     return count
 
 
+def collect_remote_files(src: Path, prefix: Path = Path()) -> set[Path]:
+    """Collect all relative file paths from the remote repo."""
+    files: set[Path] = set()
+    for item in src.iterdir():
+        if item.name in EXCLUDE_FROM_SYNC:
+            continue
+        rel = prefix / item.name
+        if item.is_dir():
+            files.update(collect_remote_files(item, rel))
+        else:
+            files.add(rel)
+    return files
+
+
+def cleanup_stale_files(claude_dir: Path, remote_files: set[Path]) -> list[str]:
+    """Remove local files that no longer exist in the remote repo.
+
+    Returns a list of removed file paths (relative to claude_dir).
+    """
+    removed: list[str] = []
+
+    def _walk(directory: Path, prefix: Path = Path()) -> None:
+        if not directory.exists():
+            return
+        for item in sorted(directory.iterdir()):
+            if item.name in LOCAL_ONLY or item.name in EXCLUDE_FROM_SYNC:
+                continue
+            rel = prefix / item.name
+            if item.is_dir():
+                _walk(item, rel)
+                # Remove empty directories after cleaning files
+                if item.exists() and not any(item.iterdir()):
+                    item.rmdir()
+                    removed.append(f"{rel}/ (empty dir)")
+            elif rel not in remote_files:
+                item.unlink()
+                removed.append(str(rel))
+
+    _walk(claude_dir)
+    return removed
+
+
 def main() -> None:
     print_color("開始從獨立 repo 拉取 .claude 更新...")
 
@@ -151,9 +205,19 @@ def main() -> None:
             shutil.copy2(flutter_md, backup_dir / "FLUTTER.md")
 
         # 5. Sync .claude directory
-        print_color("更新 .claude 資料夾（增量覆蓋）...")
+        print_color("更新 .claude 資料夾...")
+        remote_files = collect_remote_files(temp_dir)
         file_count = sync_directory(temp_dir, claude_dir)
         print_color(f"   已更新 {file_count} 個檔案", "green")
+
+        # 5.5. Remove stale files (local-only but not in remote)
+        removed = cleanup_stale_files(claude_dir, remote_files)
+        if removed:
+            print_color(f"   已清理 {len(removed)} 個過時檔案:", "green")
+            for r in removed:
+                print_color(f"     - {r}")
+        else:
+            print_color("   無過時檔案需清理", "green")
 
         # 6. Update FLUTTER.md (not CLAUDE.md)
         templates_dir = temp_dir / "project-templates"
