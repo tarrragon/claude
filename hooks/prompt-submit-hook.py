@@ -54,7 +54,7 @@ QUERY_KEYWORDS = {
     "完成了沒": "/ticket track query",
     "還有哪些": "/ticket track list --status pending",
     "待處理": "/ticket track list --status pending",
-    "未完成": "/ticket track list --status pending,in_progress",
+    "未完成": "/ticket track list --status pending in_progress",
     "有哪些 ticket": "/ticket track list",
     "ticket 列表": "/ticket track list",
 }

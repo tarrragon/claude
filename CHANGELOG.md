@@ -1,3 +1,11 @@
+## [1.1.38] - 2026-03-06
+
+### Summary
+fix: merge fix/prompt-submit-hook-status-syntax - 修正 hook 中的 --status 語法
+
+---
+
+
 ## [1.1.37] - 2026-03-06
 
 ### Summary
