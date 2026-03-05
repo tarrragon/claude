@@ -1,3 +1,11 @@
+## [1.1.30] - 2026-03-05
+
+### Summary
+docs: 新增 PC-003 錯誤模式 + CLI 失敗調查流程改進（decision-tree, incident-response）
+
+---
+
+
 ## [1.1.29] - 2026-03-05
 
 ### Summary

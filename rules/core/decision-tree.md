@@ -243,9 +243,20 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 ## 第六層：事件回應流程
 
-**強制流程**：錯誤發生 → `/pre-fix-eval` → 派發 incident-responder → 建立 Ticket → 對應代理人修復
+```
+錯誤/失敗發生
+    |
+    v
+是工具/CLI 本身報錯? ─是→ [CLI 調查流程] --help → 字面解讀 → 比對狀態 → 歸因
+    |                       → 語法問題 → 修正後重試
+    |                       → 確認非語法問題 → 進入下方邏輯錯誤流程
+    |
+    +─── 否（程式碼/邏輯錯誤）→ [強制] /pre-fix-eval → 派發 incident-responder
+                                → 建立 Ticket → 對應代理人修復
+```
 
-> 完整錯誤分類和派發對應表：.claude/rules/flows/incident-response.md
+> CLI 調查流程詳見：.claude/rules/flows/incident-response.md（CLI/工具失敗調查步驟）
+> 錯誤分類和派發對應表：.claude/rules/flows/incident-response.md
 
 ---
 
@@ -458,5 +469,5 @@ Level 5: TDD 階段代理人 + thyme-python-developer
 
 ---
 
-**Last Updated**: 2026-03-04
-**Version**: 7.7.0 - 第八層新增 Checkpoint 0 建立後 Handoff 判斷（含獨立 Ticket 並行派發路徑）
+**Last Updated**: 2026-03-05
+**Version**: 7.8.0 - 第六層新增工具失敗 vs 邏輯失敗分流（PC-003）
