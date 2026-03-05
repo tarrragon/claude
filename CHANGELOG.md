@@ -1,3 +1,11 @@
+## [1.1.39] - 2026-03-06
+
+### Summary
+fix: merge fix/prompt-submit-hook-negation - hook 否定語境誤觸發修正
+
+---
+
+
 ## [1.1.38] - 2026-03-06
 
 ### Summary

@@ -45,6 +45,9 @@ from lib.hook_messages import WorkflowMessages, CoreMessages, AskUserQuestionMes
 # SKILL 提示檢測
 # ============================================================================
 
+# 否定詞列表（用於避免誤判否定語境）
+NEGATION_WORDS = ["不是", "不需要", "不用", "不要", "沒有", "無需", "不必", "無須"]
+
 # 查詢類關鍵字對應 → /ticket track 系列
 QUERY_KEYWORDS = {
     "進度如何": "/ticket track summary",
@@ -184,6 +187,14 @@ def resolve_ticket_path(project_root: Path, ticket_id: str) -> Optional[Path]:
         return None
 
 
+def _is_keyword_negated(prompt: str, keyword: str) -> bool:
+    """檢查 keyword 在 prompt 中是否緊接在否定詞之後"""
+    for negation in NEGATION_WORDS:
+        if negation + keyword in prompt:
+            return True
+    return False
+
+
 def check_action_keywords(prompt: str) -> Optional[str]:
     """
     檢測操作類關鍵字（組合關鍵字）
@@ -197,6 +208,9 @@ def check_action_keywords(prompt: str) -> Optional[str]:
     for (keyword1, keyword2), skill_cmd in ACTION_KEYWORDS.items():
         # 兩個關鍵字都需要出現（不需要相鄰）
         if keyword1 in prompt and keyword2 in prompt:
+            # 若任一關鍵字被否定詞修飾，跳過此匹配（避免誤判否定語境）
+            if _is_keyword_negated(prompt, keyword1) or _is_keyword_negated(prompt, keyword2):
+                continue
             return skill_cmd
     return None
 
