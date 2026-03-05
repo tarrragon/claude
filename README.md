@@ -289,10 +289,10 @@ grep -c '/Users/' .claude/settings.local.json
 
 本框架支援跨專案同步，使用雙向同步腳本管理 `.claude` 資料夾。
 
-| 操作 | Slash 命令 | Shell 腳本 |
-|------|-----------|-----------|
-| 推送變更到獨立 Repo | `/sync-push` | `scripts/sync-claude-push.sh` |
-| 拉取最新配置 | `/sync-pull` | `scripts/sync-claude-pull.sh` |
+| 操作 | Slash 命令 | 腳本 |
+|------|-----------|------|
+| 推送變更到獨立 Repo | `/sync-push` | `scripts/sync-claude-push.py` |
+| 拉取最新配置 | `/sync-pull` | `scripts/sync-claude-pull.py` |
 
 **獨立 Repo**：https://github.com/tarrragon/claude.git
 
