@@ -341,6 +341,69 @@ def check_technical_debt(version: str) -> Tuple[bool, List[str]]:
         return False, errors
 
 
+def check_previous_versions_completed(version: str) -> Tuple[bool, List[str]]:
+    """檢查前版本是否有未完成的 Ticket"""
+    root = get_project_root()
+    worklog_dir = root / "docs" / "work-logs"
+    errors = []
+
+    if not worklog_dir.exists():
+        return True, []
+
+    version_pattern = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+    current_parts = tuple(int(p) for p in version.split("."))
+
+    for version_dir in sorted(worklog_dir.iterdir()):
+        if not version_dir.is_dir():
+            continue
+        match = version_pattern.match(version_dir.name)
+        if not match:
+            continue
+
+        dir_parts = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+        if dir_parts >= current_parts:
+            continue
+
+        # 掃描此版本的 tickets 目錄
+        tickets_dir = version_dir / "tickets"
+        if not tickets_dir.exists():
+            continue
+
+        pending_count = 0
+        in_progress_count = 0
+
+        for ticket_file in tickets_dir.glob("*.md"):
+            try:
+                with open(ticket_file, encoding="utf-8") as f:
+                    content = f.read()
+                fm_match = re.search(r"^---\n(.*?)\n---", content, re.DOTALL)
+                if not fm_match:
+                    continue
+                status_match = re.search(r"status:\s+(\S+)", fm_match.group(1))
+                if not status_match:
+                    continue
+                status = status_match.group(1).strip()
+                if status == "pending":
+                    pending_count += 1
+                elif status == "in_progress":
+                    in_progress_count += 1
+            except Exception:
+                continue
+
+        total = pending_count + in_progress_count
+        if total > 0:
+            ver_str = version_dir.name[1:]  # 移除 v 前綴
+            errors.append(
+                f"v{ver_str} 有 {total} 個未完成 Ticket "
+                f"({pending_count} pending, {in_progress_count} in_progress)"
+            )
+
+    if errors:
+        errors.append("請先完成前版本任務，或使用 /ticket migrate 遷移到當前版本")
+
+    return len(errors) == 0, errors
+
+
 def check_version_sync(version: str) -> Tuple[bool, List[str]]:
     """檢查版本號同步"""
     root = get_project_root()
@@ -460,7 +523,18 @@ def preflight_check(version: str) -> Tuple[bool, Dict[str, Tuple[bool, List[str]
         for error in td_errors:
             print_error(error)
 
-    # 1.4 檢查版本同步
+    # 1.4 檢查前版本未完成任務
+    print_info("✓ 檢查前版本未完成任務...")
+    pv_ok, pv_errors = check_previous_versions_completed(version)
+    results["previous_versions"] = (pv_ok, pv_errors)
+
+    if pv_ok:
+        print_success("前版本任務已完成")
+    else:
+        for error in pv_errors:
+            print_error(error)
+
+    # 1.5 檢查版本同步
     print_info("✓ 檢查版本同步...")
     vs_ok, vs_errors = check_version_sync(version)
     results["version_sync"] = (vs_ok, vs_errors)
@@ -471,7 +545,7 @@ def preflight_check(version: str) -> Tuple[bool, Dict[str, Tuple[bool, List[str]
         for error in vs_errors:
             print_error(error)
 
-    all_ok = wl_ok and td_status["passed"] and td_ok and vs_ok
+    all_ok = wl_ok and td_status["passed"] and td_ok and pv_ok and vs_ok
     return all_ok, results
 
 

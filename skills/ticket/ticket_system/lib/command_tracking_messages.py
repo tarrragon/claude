@@ -50,6 +50,11 @@ class TrackQueryMessages:
     # YAML 格式錯誤訊息格式
     YAML_ERROR_FORMAT = "Ticket {ticket_id} 的 YAML 格式錯誤：{error}"
 
+    # 跨版本未完成任務警告
+    CROSS_VERSION_WARNING_HEADER = "[WARNING] 其他版本有未完成的 Ticket："
+    CROSS_VERSION_WARNING_ITEM = "   v{version}: {pending} 個 pending, {in_progress} 個 in_progress"
+    CROSS_VERSION_WARNING_HINT = "   使用 --version <version> 查看詳情"
+
 
 # ============================================================================
 # TrackBoardMessages - track_board.py 相關訊息

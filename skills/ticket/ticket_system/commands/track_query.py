@@ -41,11 +41,13 @@ from ticket_system.lib.constants import (
     STATUS_IN_PROGRESS,
     STATUS_COMPLETED,
     STATUS_BLOCKED,
+    WORK_LOGS_DIR,
 )
 from ticket_system.lib.ticket_loader import (
     list_tickets,
     load_ticket,
 )
+from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.ticket_formatter import (
     format_ticket_summary,
     format_ticket_list,
@@ -117,6 +119,53 @@ def _check_yaml_error(ticket: Optional[Dict[str, Any]], ticket_id: str) -> bool:
     return False
 
 
+def _print_cross_version_warning(current_version: str) -> None:
+    """
+    掃描所有版本，若其他版本有未完成的 Ticket 則印出警告。
+
+    Args:
+        current_version: 當前顯示的版本號（無 v 前綴，如 "0.3.0"）
+    """
+    root = get_project_root()
+    work_logs = root / WORK_LOGS_DIR
+
+    if not work_logs.exists():
+        return
+
+    version_pattern = re.compile(r"^v\d+\.\d+\.\d+$")
+    current_v_prefix = f"v{current_version}"
+
+    warnings = []
+    for version_dir in sorted(work_logs.iterdir()):
+        if not version_dir.is_dir() or not version_pattern.match(version_dir.name):
+            continue
+        if version_dir.name == current_v_prefix:
+            continue
+
+        version_str = version_dir.name[1:]  # 移除 v 前綴
+        tickets = list_tickets(version_str)
+        if not tickets:
+            continue
+
+        pending_count = sum(1 for t in tickets if t.get("status") == STATUS_PENDING)
+        in_progress_count = sum(1 for t in tickets if t.get("status") == STATUS_IN_PROGRESS)
+
+        if pending_count > 0 or in_progress_count > 0:
+            warnings.append(format_msg(
+                TrackQueryMessages.CROSS_VERSION_WARNING_ITEM,
+                version=version_str,
+                pending=pending_count,
+                in_progress=in_progress_count,
+            ))
+
+    if warnings:
+        print()
+        print(TrackQueryMessages.CROSS_VERSION_WARNING_HEADER)
+        for line in warnings:
+            print(line)
+        print(TrackQueryMessages.CROSS_VERSION_WARNING_HINT)
+
+
 def execute_query(args: argparse.Namespace, version: str) -> int:
     """查詢單一 Ticket"""
     ticket = load_ticket(version, args.ticket_id)
@@ -153,6 +202,7 @@ def execute_summary(args: argparse.Namespace, version: str) -> int:
     if not tickets:
         print(format_msg(TrackQueryMessages.SUMMARY_NO_TICKETS_TITLE, version=version))
         print(TrackQueryMessages.NO_TICKETS_MESSAGE)
+        _print_cross_version_warning(version)
         return 0
 
     stats = get_ticket_stats(tickets)
@@ -165,6 +215,8 @@ def execute_summary(args: argparse.Namespace, version: str) -> int:
     formatted = format_ticket_list(tickets, include_who=True)
     if formatted:
         print(formatted)
+
+    _print_cross_version_warning(version)
 
     return 0
 
@@ -328,6 +380,7 @@ def execute_list(args: argparse.Namespace, version: str) -> int:
     if not all_tickets:
         print(format_msg(TrackQueryMessages.LIST_NO_TICKETS_TITLE, version=version))
         print(TrackQueryMessages.NO_TICKETS_MESSAGE)
+        _print_cross_version_warning(version)
         return 0
 
     # 應用狀態篩選（支援 --status 和 --pending 等 flag）
@@ -347,7 +400,9 @@ def execute_list(args: argparse.Namespace, version: str) -> int:
 
     # 根據格式輸出
     output_format = getattr(args, "format", "table")
-    return _output_tickets(filtered_tickets, version, output_format)
+    result = _output_tickets(filtered_tickets, version, output_format)
+    _print_cross_version_warning(version)
+    return result
 
 
 def _build_status_filters(args: argparse.Namespace) -> set:
