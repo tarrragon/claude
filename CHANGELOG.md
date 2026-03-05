@@ -1,3 +1,11 @@
+## [1.1.37] - 2026-03-06
+
+### Summary
+fix: merge fix/ticket-list-multi-status - ticket --status 多值篩選
+
+---
+
+
 ## [1.1.36] - 2026-03-06
 
 ### Summary

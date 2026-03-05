@@ -220,7 +220,7 @@ def _register_query_commands(
     p_list.add_argument("--completed", action="store_true", help=TrackMessages.ARG_COMPLETED)
     p_list.add_argument("--blocked", action="store_true", help=TrackMessages.ARG_BLOCKED)
     p_list.add_argument("--wave", type=int, help=TrackMessages.ARG_WAVE)
-    p_list.add_argument("--status", choices=["pending", "in_progress", "completed", "blocked"], help=TrackMessages.ARG_STATUS)
+    p_list.add_argument("--status", nargs="+", choices=["pending", "in_progress", "completed", "blocked"], help=TrackMessages.ARG_STATUS)
     p_list.add_argument("--format", choices=["table", "ids", "yaml"], default="table", help=TrackMessages.ARG_FORMAT)
     p_list.add_argument("--version", help=TrackMessages.ARG_VERSION)
 

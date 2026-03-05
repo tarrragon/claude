@@ -300,7 +300,7 @@ Skill 是預建的專用工具，優先於代理人派發。
     v
 [Checkpoint 2] Commit 後情境評估（每次 commit 後，PM 必須先查詢再選擇路由）
     |
-    +-- [強制查詢] ticket track list --wave W{n} --status pending,in_progress
+    +-- [強制查詢] ticket track list --wave W{n} --status pending in_progress
     |   → 取得數據後再評估，禁止依賴記憶判斷
     |
     +-- [前置分流] 當前 commit 屬於 TDD Phase 完成?
@@ -376,7 +376,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 **Checkpoint 2 情境評估規則**：每次 commit 後 PM **必須**先執行強制查詢再評估情境，禁止依賴記憶判斷。
 
-- **強制查詢**：`ticket track list --wave W{n} --status pending,in_progress`（取得數據後再選路由）
+- **強制查詢**：`ticket track list --wave W{n} --status pending in_progress`（取得數據後再選路由）
 - **情境 D**（TDD Phase 完成，識別依據：ticket 含 tdd_phase 欄位，**優先於 A/B/C**）：
   - D1（Phase 1/2/3a）→ 全自動直接進入下一 Phase，無 AskUserQuestion
   - D2（Phase 3b）→ AskUserQuestion #13（/parallel-evaluation A 或直接 Phase 4）

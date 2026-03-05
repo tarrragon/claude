@@ -415,10 +415,10 @@ def _build_status_filters(args: argparse.Namespace) -> set:
     Returns:
         set: 狀態值集合
     """
-    # 優先使用 --status 參數
-    status_value = getattr(args, "status", None)
-    if status_value and status_value in STATUS_MAP:
-        return {STATUS_MAP[status_value]}
+    # 優先使用 --status 參數（支援單值或多值）
+    status_values = getattr(args, "status", None)
+    if status_values:
+        return {STATUS_MAP[v] for v in status_values if v in STATUS_MAP}
 
     # 其次檢查舊 flag（向後相容）
     status_filters = set()
