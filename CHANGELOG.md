@@ -1,3 +1,10 @@
+## [1.1.42] - 2026-03-06
+
+### Summary
+fix: 移除 handoff/archive/ 並加入 .gitignore
+
+---
+
 ## [1.1.41] - 2026-03-06
 
 ### Summary
