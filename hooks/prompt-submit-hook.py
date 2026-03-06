@@ -45,13 +45,6 @@ from lib.hook_messages import WorkflowMessages, CoreMessages, AskUserQuestionMes
 # SKILL 提示檢測
 # ============================================================================
 
-# 否定詞列表（用於避免誤判否定語境）
-NEGATION_WORDS = ["不是", "不需要", "不用", "不要", "沒有", "無需", "不必", "無須"]
-
-# 遠距否定詞搜索窗口大小（字符數）
-# 支援否定詞和關鍵字之間有其他詞彙的情況（如「不是說不用查詢」）
-NEGATION_WINDOW_SIZE = 15
-
 # 查詢類關鍵字對應 → /ticket track 系列
 QUERY_KEYWORDS = {
     "進度如何": "/ticket track summary",
@@ -61,7 +54,7 @@ QUERY_KEYWORDS = {
     "完成了沒": "/ticket track query",
     "還有哪些": "/ticket track list --status pending",
     "待處理": "/ticket track list --status pending",
-    "未完成": "/ticket track list --status pending in_progress",
+    "未完成": "/ticket track list --status pending,in_progress",
     "有哪些 ticket": "/ticket track list",
     "ticket 列表": "/ticket track list",
 }
@@ -191,35 +184,6 @@ def resolve_ticket_path(project_root: Path, ticket_id: str) -> Optional[Path]:
         return None
 
 
-def _is_keyword_negated(prompt: str, keyword: str) -> bool:
-    """
-    檢查 keyword 在 prompt 中是否被否定詞修飾。
-
-    支援兩種模式：
-    1. 緊鄰模式：否定詞 + 關鍵字（如「不需要查詢」）
-    2. 遠距模式：否定詞出現在關鍵字前 NEGATION_WINDOW_SIZE 字符內
-       （如「完全不需要去查詢」、「我不是說不用查詢進度」）
-
-    Args:
-        prompt: 用戶輸入的提示文本（已轉小寫）
-        keyword: 待檢查的關鍵字
-
-    Returns:
-        True 如果關鍵字被否定詞修飾，否則 False
-    """
-    for negation in NEGATION_WORDS:
-        negation_idx = prompt.find(negation)
-        if negation_idx == -1:
-            continue
-        # 取否定詞後的窗口文本（支援遠距否定詞）
-        window_start = negation_idx + len(negation)
-        window_end = window_start + NEGATION_WINDOW_SIZE
-        window_text = prompt[window_start:window_end]
-        if keyword in window_text:
-            return True
-    return False
-
-
 def check_action_keywords(prompt: str) -> Optional[str]:
     """
     檢測操作類關鍵字（組合關鍵字）
@@ -233,9 +197,6 @@ def check_action_keywords(prompt: str) -> Optional[str]:
     for (keyword1, keyword2), skill_cmd in ACTION_KEYWORDS.items():
         # 兩個關鍵字都需要出現（不需要相鄰）
         if keyword1 in prompt and keyword2 in prompt:
-            # 若任一關鍵字被否定詞修飾，跳過此匹配（避免誤判否定語境）
-            if _is_keyword_negated(prompt, keyword1) or _is_keyword_negated(prompt, keyword2):
-                continue
             return skill_cmd
     return None
 
@@ -254,24 +215,15 @@ def check_handoff_keywords(prompt: str) -> Optional[str]:
         if len(keywords) == 1:
             # 單一關鍵字
             if keywords[0] in prompt:
-                # 若關鍵字被否定詞修飾，跳過此匹配（避免誤判否定語境）
-                if _is_keyword_negated(prompt, keywords[0]):
-                    continue
                 return skill_cmd
         elif len(keywords) == 2:
             # 組合關鍵字（都需要出現）
             # 處理特殊情況：("go back", "") 只需要檢查第一個關鍵字
             if keywords[1] == "":
                 if keywords[0] in prompt:
-                    # 若關鍵字被否定詞修飾，跳過此匹配（避免誤判否定語境）
-                    if _is_keyword_negated(prompt, keywords[0]):
-                        continue
                     return skill_cmd
             else:
                 if keywords[0] in prompt and keywords[1] in prompt:
-                    # 若任一關鍵字被否定詞修飾，跳過此匹配（避免誤判否定語境）
-                    if _is_keyword_negated(prompt, keywords[0]) or _is_keyword_negated(prompt, keywords[1]):
-                        continue
                     return skill_cmd
     return None
 
@@ -289,15 +241,9 @@ def check_decision_keywords(prompt: str) -> Optional[str]:
     for keywords, scenario in DECISION_KEYWORDS.items():
         if len(keywords) == 1:
             if keywords[0] in prompt:
-                # 若關鍵字被否定詞修飾，跳過此匹配（避免誤判否定語境）
-                if _is_keyword_negated(prompt, keywords[0]):
-                    continue
                 return scenario
         elif len(keywords) == 2:
             if keywords[0] in prompt and keywords[1] in prompt:
-                # 若任一關鍵字被否定詞修飾，跳過此匹配（避免誤判否定語境）
-                if _is_keyword_negated(prompt, keywords[0]) or _is_keyword_negated(prompt, keywords[1]):
-                    continue
                 return scenario
     return None
 
@@ -336,9 +282,6 @@ def check_skill_suggestion(prompt: str) -> Optional[tuple]:
     # 2. 檢查查詢類關鍵字
     for keyword, skill_cmd in QUERY_KEYWORDS.items():
         if keyword in prompt_lower:
-            # 若關鍵字被否定詞修飾，跳過此匹配（避免誤判否定語境）
-            if _is_keyword_negated(prompt_lower, keyword):
-                continue
             return (skill_cmd, "query")
 
     # 3. 檢查操作類關鍵字

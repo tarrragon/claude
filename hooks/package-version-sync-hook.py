@@ -3,49 +3,302 @@
 # requires-python = ">=3.9"
 # dependencies = [
 #     "pyyaml>=5.0",
+#     "tomli>=1.2.0;python_version<'3.11'",
 # ]
 # ///
 
 """
-Python Package Version Sync Hook
+Python Package Version Sync Hook - Redesigned
 
-Monitors installed Python packages and detects content changes.
-Automatically reinstalls packages when their source code changes.
+Auto-discovers Python packages from .claude/skills/*/pyproject.toml
+and syncs them based on version comparison with installed tools.
 
 Hook Event: SessionStart
 
 Purpose:
-    When Python package source code (in .claude/skills/*) is modified,
-    the package environment may become stale.
-    This hook detects the mismatch and syncs via 'uv run' to keep them in sync.
+    This hook automatically discovers which packages need to be installed
+    as uv tools by scanning .claude/skills/ directory. It then compares
+    the desired versions (from pyproject.toml) with the actually installed
+    versions (via 'uv tool list') and reinstalls if versions mismatch.
 
 How it works:
-    1. Loads tracked packages from .claude/installed-packages.json
-    2. Computes SHA256 hashes of all .py files in each package directory
-    3. Compares with previously recorded hashes
-    4. For changed packages: validates via 'uv run --directory {path}'
-    5. Updates tracking file with new hashes and timestamp
+    Phase 1: Auto-scan - Traverse .claude/skills/*/pyproject.toml
+             and extract package names and versions
+    Phase 2: Query - Execute 'uv tool list' to get actual installed versions
+    Phase 3: Compare - Check if desired version == installed version
+    Phase 4: Sync - Reinstall packages that need updates
 
 Exit codes:
-    0 - Sync successful or no action needed
-    1 - Warnings (unable to process, but continue)
+    0 - Sync completed (success or no action needed)
+    1 - Warnings (errors caught, hook continues)
 """
 
-import hashlib
-import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional, Set
+from typing import Dict, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 from hook_utils import setup_hook_logging, run_hook_safely
 
+# TOML 解析：試圖使用 tomllib（Python 3.11+），否則 fallback 到 tomli
+try:
+    import tomllib
+except ImportError:
+    try:
+        import tomli as tomllib  # type: ignore
+    except ImportError:
+        tomllib = None  # type: ignore
 
-def get_project_root() -> Path:
-    """Get project root from CLAUDE_PROJECT_DIR or infer from current location."""
+
+# ============================================================================
+# Constants
+# ============================================================================
+
+SKILLS_DIR_NAME = ".claude/skills"
+PYPROJECT_FILENAME = "pyproject.toml"
+HOOK_NAME = "package-version-sync-hook"
+
+# Timeout constants (in seconds)
+SHORT_OPERATION_TIMEOUT_SECONDS = 30  # For uv tool list, uninstall, cache clean
+INSTALL_OPERATION_TIMEOUT_SECONDS = 120  # For uv tool install with --reinstall
+
+# Output formatting
+SEPARATOR_LINE_WIDTH = 60
+
+
+
+
+def scan_skill_packages(project_root: Path, logger: Optional[object] = None) -> Dict[str, Dict[str, str]]:
+    """Scan .claude/skills/*/pyproject.toml and extract package info.
+
+    Traverses the skills directory and parses each pyproject.toml to extract
+    the [project] name and version fields. Returns a dict mapping package names
+    to their metadata.
+
+    Args:
+        project_root: Root directory of the project.
+        logger: Optional Logger instance. If not provided, will be created.
+
+    Returns:
+        Dict mapping package name → {"path": relative_path, "version": version_str}.
+        Returns empty dict if skills directory doesn't exist or no valid packages found.
+
+    Example:
+        {
+            "ticket-system": {
+                "path": ".claude/skills/ticket",
+                "version": "1.0.0"
+            },
+            "mermaid-ascii": {
+                "path": ".claude/skills/mermaid-ascii",
+                "version": "0.5.0"
+            }
+        }
+    """
+    packages: Dict[str, Dict[str, str]] = {}
+    skills_dir = project_root / SKILLS_DIR_NAME
+
+    # 如果未提供 logger，建立一次
+    if logger is None:
+        logger = setup_hook_logging(HOOK_NAME)
+
+    if not skills_dir.exists():
+        return packages
+
+    try:
+        for skill_dir in skills_dir.iterdir():
+            if not skill_dir.is_dir():
+                continue
+
+            pyproject_path = skill_dir / PYPROJECT_FILENAME
+            if not pyproject_path.exists():
+                continue
+
+            try:
+                pyproject_data = _load_pyproject_toml(pyproject_path)
+                if not pyproject_data:
+                    continue
+
+                project_info = pyproject_data.get("project", {})
+                pkg_name = project_info.get("name", "")
+                version = project_info.get("version", "")
+
+                if pkg_name and version:
+                    packages[pkg_name] = {
+                        "path": str(skill_dir.relative_to(project_root)),
+                        "version": version,
+                    }
+            except Exception as e:
+                # Log warning but continue scanning other skills
+                logger.warning("Failed to parse {}: {}".format(pyproject_path, e))
+                continue
+    except Exception:
+        # If iterating skills_dir fails, return what we have
+        pass
+
+    return packages
+
+
+def _load_pyproject_toml(pyproject_path: Path) -> Optional[Dict]:
+    """Load and parse a pyproject.toml file.
+
+    Attempts to use tomllib (Python 3.11+) or tomli fallback (Python 3.9-3.10).
+    Returns None if the file cannot be parsed.
+
+    Args:
+        pyproject_path: Path to the pyproject.toml file.
+
+    Returns:
+        Parsed TOML dict, or None if parsing fails.
+    """
+    if tomllib is None:
+        return None
+
+    try:
+        with open(pyproject_path, "rb") as f:
+            return tomllib.load(f)
+    except Exception:
+        return None
+
+
+def get_installed_uv_tools() -> Dict[str, str]:
+    """Query 'uv tool list' and extract installed package versions.
+
+    Executes 'uv tool list' and parses the output to extract tool names
+    and their versions. Returns a dict mapping tool names to versions.
+
+    Returns:
+        Dict mapping tool name → version string.
+        Returns empty dict if 'uv tool list' fails.
+
+    Example output format:
+        Tool Name      Version  Executable Location
+        ─────────────  ───────  ──────────────────────────
+        ticket-system  1.0.0    ~/.venv/bin/ticket
+        mermaid-ascii  0.5.0    ~/.venv/bin/mermaid
+    """
+    tools: Dict[str, str] = {}
+    logger = setup_hook_logging(HOOK_NAME)
+
+    try:
+        result = subprocess.run(
+            ["uv", "tool", "list"],
+            capture_output=True,
+            text=True,
+            timeout=SHORT_OPERATION_TIMEOUT_SECONDS,
+        )
+        if result.returncode != 0:
+            return tools
+
+        # Parse output lines: skip headers and empty lines
+        for line in result.stdout.splitlines():
+            # Skip separator lines and empty lines
+            if not line.strip() or "─" in line or "─" in line:
+                continue
+            # Skip header line
+            if "Tool Name" in line or "Version" in line:
+                continue
+
+            parts = line.split()
+            if len(parts) >= 2:
+                tool_name = parts[0]
+                version_str = parts[1]
+                # Normalize version: remove 'v' prefix if present
+                version_str = version_str.lstrip("v")
+                tools[tool_name] = version_str
+
+        return tools
+    except Exception as e:
+        # stderr 輸出 + 日誌記錄（符合 quality-baseline.md 規則 4 雙通道要求）
+        sys.stderr.write("[Hook Error] Failed to query uv tool list: {}\n".format(e))
+        logger.error("Failed to query uv tool list: {}".format(e))
+        return tools
+
+
+def should_reinstall(desired_version: str, installed_version: Optional[str]) -> bool:
+    """Check if a package needs to be reinstalled based on version mismatch.
+
+    Compares desired version (from pyproject.toml) with installed version
+    (from uv tool list). Returns True if:
+    - Package is not installed (installed_version is None)
+    - Versions don't match (string comparison, not semantic versioning)
+
+    Args:
+        desired_version: Version string from pyproject.toml (e.g. "1.0.0")
+        installed_version: Version string from 'uv tool list' or None if not installed
+
+    Returns:
+        True if package needs reinstallation, False if versions match.
+    """
+    if installed_version is None:
+        return True  # Not installed, need to install
+    return desired_version != installed_version  # Mismatch, need to reinstall
+
+
+def reinstall_uv_tool(package_name: str, package_full_path: Path) -> bool:
+    """Reinstall a uv tool: uninstall → cache clean → install --reinstall.
+
+    Avoids the uv cache trap where stale wheels are reused.
+
+    Args:
+        package_name: Name of the package (e.g. 'ticket-system')
+        package_full_path: Absolute path to the package directory
+
+    Returns:
+        True if reinstall succeeded, False otherwise.
+    """
+    logger = setup_hook_logging(HOOK_NAME)
+
+    try:
+        # Step 1: uninstall (ignore errors if not installed)
+        subprocess.run(
+            ["uv", "tool", "uninstall", package_name],
+            capture_output=True,
+            text=True,
+            timeout=SHORT_OPERATION_TIMEOUT_SECONDS,
+        )
+
+        # Step 2: cache clean (ignore errors)
+        subprocess.run(
+            ["uv", "cache", "clean", package_name],
+            capture_output=True,
+            text=True,
+            timeout=SHORT_OPERATION_TIMEOUT_SECONDS,
+        )
+
+        # Step 3: install --reinstall
+        result = subprocess.run(
+            ["uv", "tool", "install", ".", "--reinstall"],
+            cwd=str(package_full_path),
+            capture_output=True,
+            text=True,
+            timeout=INSTALL_OPERATION_TIMEOUT_SECONDS,
+        )
+
+        # Verify: "Building" in output confirms wheel was rebuilt
+        combined_output = (result.stdout or "") + (result.stderr or "")
+        if result.returncode == 0 and "Building" in combined_output:
+            return True
+        # returncode 0 but no "Building" means cache was used
+        return result.returncode == 0
+    except Exception as e:
+        # stderr 輸出 + 日誌記錄（符合 quality-baseline.md 規則 4 雙通道要求）
+        sys.stderr.write("[Hook Error] Failed to reinstall uv tool {}: {}\n".format(package_name, e))
+        logger.error("Failed to reinstall uv tool {}: {}".format(package_name, e))
+        return False
+
+
+def _get_project_root() -> Path:
+    """Determine the project root directory.
+
+    Prefers CLAUDE_PROJECT_DIR environment variable if set.
+    Falls back to inferring from hook location (.claude/hooks/xxx.py).
+
+    Returns:
+        Path object pointing to the project root directory.
+    """
     if "CLAUDE_PROJECT_DIR" in os.environ:
         return Path(os.environ["CLAUDE_PROJECT_DIR"])
 
@@ -54,280 +307,90 @@ def get_project_root() -> Path:
     return hook_dir.parent.parent
 
 
-def load_tracking_file(tracking_file: Path) -> Dict:
-    """Load the installed packages tracking file."""
-    if not tracking_file.exists():
-        return {"packages": {}}
-
-    try:
-        with open(tracking_file, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {"packages": {}}
-
-
-def save_tracking_file(tracking_file: Path, data: Dict) -> bool:
-    """Save the installed packages tracking file."""
-    try:
-        with open(tracking_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        return True
-    except Exception:
-        return False
-
-
-def compute_package_hash(package_dir: Path) -> str:
-    """
-    Compute SHA256 hash of all .py files in a package directory.
-
-    Args:
-        package_dir: Path to the package directory
-
-    Returns:
-        SHA256 hex digest of concatenated file hashes, or empty string if error
-    """
-    if not package_dir.exists():
-        return ""
-
-    file_hashes = []
-
-    try:
-        # Get all .py files, sorted for consistency
-        py_files = sorted(package_dir.rglob("*.py"))
-
-        for py_file in py_files:
-            # Skip __pycache__, .venv, venv, .pytest_cache directories
-            if any(
-                skip_part in py_file.parts
-                for skip_part in ["__pycache__", ".venv", "venv", ".pytest_cache", "test_env", "test_venv"]
-            ):
-                continue
-
-            try:
-                with open(py_file, "rb") as f:
-                    file_hash = hashlib.sha256(f.read()).hexdigest()
-                    file_hashes.append(file_hash)
-            except Exception:
-                # Skip files that can't be read
-                continue
-
-        if not file_hashes:
-            return ""
-
-        # Combine all file hashes and compute final hash
-        combined = "".join(file_hashes).encode()
-        return hashlib.sha256(combined).hexdigest()
-    except Exception:
-        return ""
-
-
-def get_installed_uv_tools() -> Set[str]:
-    """
-    Get the set of package names installed as global uv tools.
-
-    Returns:
-        Set of installed tool package names (e.g. {'ticket-system', 'mermaid-ascii'})
-    """
-    try:
-        result = subprocess.run(
-            ["uv", "tool", "list"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode != 0:
-            return set()
-
-        tools = set()
-        for line in result.stdout.splitlines():
-            # Format: "package-name vX.Y.Z" or "- entry-point"
-            if line.startswith("-") or not line.strip():
-                continue
-            parts = line.strip().split()
-            if parts:
-                tools.add(parts[0])
-        return tools
-    except Exception:
-        return set()
-
-
-def reinstall_uv_tool(package_name: str, package_full_path: Path) -> bool:
-    """
-    Fully reinstall a uv tool: uninstall -> cache clean -> install --reinstall.
-
-    This avoids the uv cache trap where stale wheels are reused.
+def _process_package(
+    package_name: str,
+    package_info: Dict[str, str],
+    project_root: Path,
+    installed_tools: Dict[str, str],
+) -> None:
+    """Process a single package: validate, compare versions, and reinstall if needed.
 
     Args:
         package_name: Name of the package (e.g. 'ticket-system')
-        package_full_path: Absolute path to the package directory
-
-    Returns:
-        True if reinstall succeeded (Building output detected), False otherwise
+        package_info: Package metadata dict with 'path' and 'version' keys
+        project_root: Project root directory path
+        installed_tools: Dict of installed tool names and versions
     """
-    try:
-        # Step 1: uninstall (ignore errors if not installed)
-        subprocess.run(
-            ["uv", "tool", "uninstall", package_name],
-            capture_output=True, text=True, timeout=30,
-        )
+    package_path = package_info.get("path", "")
+    desired_version = package_info.get("version", "")
 
-        # Step 2: cache clean (ignore errors)
-        subprocess.run(
-            ["uv", "cache", "clean", package_name],
-            capture_output=True, text=True, timeout=30,
-        )
+    if not package_path or not desired_version:
+        print(f"{package_name}: Invalid package metadata")
+        return
 
-        # Step 3: install --reinstall
-        result = subprocess.run(
-            ["uv", "tool", "install", ".", "--reinstall"],
-            cwd=str(package_full_path),
-            capture_output=True, text=True, timeout=120,
-        )
+    package_full_path = project_root / package_path
+    if not package_full_path.exists():
+        print(f"{package_name}: Package directory not found")
+        return
 
-        # Verify: "Building" in output confirms wheel was rebuilt
-        combined_output = (result.stdout or "") + (result.stderr or "")
-        if result.returncode == 0 and "Building" in combined_output:
-            return True
-        # returncode 0 but no "Building" means cache was used (shouldn't happen after clean)
-        return result.returncode == 0
-    except Exception:
-        return False
+    installed_version = installed_tools.get(package_name)
+    version_display = installed_version or "not installed"
+    print(f"{package_name}: desired={desired_version}, installed={version_display}")
+
+    if not should_reinstall(desired_version, installed_version):
+        print(f"  Status: up to date")
+        return
+
+    print(f"  Status: installing...")
+    if reinstall_uv_tool(package_name, package_full_path):
+        print(f"  Result: reinstalled")
+    else:
+        print(f"  Result: failed", file=sys.stderr)
 
 
-def sync_package(project_root: Path, package_path: str) -> bool:
-    """
-    Sync a package via 'uv run --directory {path}' to ensure dependencies are resolved.
-
-    Uses 'uv run' instead of 'uv pip install -e' so no project-level .venv is needed.
-    Each package manages its own environment via its pyproject.toml.
+def _sync_packages(project_root: Path, packages: Dict[str, Dict[str, str]]) -> None:
+    """Sync all discovered packages: query installed tools and process each package.
 
     Args:
-        project_root: Root directory of the project
-        package_path: Relative path to the package (from project root)
-
-    Returns:
-        True if successful, False otherwise
+        project_root: Project root directory path
+        packages: Dict of package names to their metadata
     """
-    package_full_path = project_root / package_path
-
-    if not package_full_path.exists():
-        return False
-
-    try:
-        result = subprocess.run(
-            ["uv", "run", "--directory", str(package_full_path), "python", "-c", "pass"],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-
-        return result.returncode == 0
-    except subprocess.TimeoutExpired:
-        return False
-    except FileNotFoundError:
-        return False
-    except Exception:
-        return False
-
-
-def format_time_iso8601() -> str:
-    """Return current time in ISO 8601 format with UTC timezone."""
-    return datetime.now(timezone.utc).isoformat()
-
-
-def main():
-    logger = setup_hook_logging("package-version-sync-hook")
-    project_root = get_project_root()
-    tracking_file = project_root / ".claude" / "installed-packages.json"
-
-    # Load tracking file
-    tracking_data = load_tracking_file(tracking_file)
-    packages = tracking_data.get("packages", {})
-
-    if not packages:
-        # No packages to track
-        print("Package Version Sync - No packages configured")
-        return 0
-
-    # Print header
-    print("=" * 60)
+    print("=" * SEPARATOR_LINE_WIDTH)
     print("Package Version Sync - Session Startup Check")
-    print("=" * 60)
+    print("=" * SEPARATOR_LINE_WIDTH)
 
-    # Get installed uv tools once (avoid repeated subprocess calls)
     installed_tools = get_installed_uv_tools()
 
-    # Track if any package was updated
-    any_updated = False
-
-    # Check each package
     for package_name, package_info in packages.items():
-        package_path = package_info.get("path", "")
+        _process_package(package_name, package_info, project_root, installed_tools)
 
-        if not package_path:
-            print(f"{package_name}: Invalid package path")
-            continue
+    print("=" * SEPARATOR_LINE_WIDTH)
 
-        package_full_path = project_root / package_path
 
-        if not package_full_path.exists():
-            print(f"{package_name}: Package directory not found")
-            continue
+def main() -> int:
+    """Main hook entry point.
 
-        # Compute current hash
-        current_hash = compute_package_hash(package_full_path)
+    Orchestrates the package version sync process:
+    Phase 1: Auto-scan .claude/skills/*/pyproject.toml
+    Phase 2: Query 'uv tool list' for installed versions
+    Phase 3: Compare desired vs installed versions
+    Phase 4: Reinstall packages that need updates
 
-        if not current_hash:
-            print(f"{package_name}: Unable to compute hash")
-            continue
+    Returns:
+        0 if successful or no action needed
+        1 if errors occurred (but hook continues)
+    """
+    logger = setup_hook_logging(HOOK_NAME)
+    project_root = _get_project_root()
 
-        # Get previous hash
-        previous_hash = package_info.get("content_hash", "")
+    packages = scan_skill_packages(project_root, logger)
+    if not packages:
+        print("Package Version Sync - No packages found in .claude/skills/")
+        return 0
 
-        # Compare hashes
-        if current_hash == previous_hash and previous_hash:
-            # No change
-            print(f"{package_name}: No changes (up to date)")
-            continue
-
-        # Changes detected
-        is_uv_tool = package_name in installed_tools
-        sync_type = "uv tool + venv" if is_uv_tool else "venv"
-        print(f"{package_name}: Changes detected, syncing ({sync_type})...")
-
-        sync_success = True
-
-        # Reinstall uv tool if applicable
-        if is_uv_tool:
-            if reinstall_uv_tool(package_name, package_full_path):
-                print(f"{package_name}: uv tool reinstalled")
-            else:
-                print(f"{package_name}: uv tool reinstall failed", file=sys.stderr)
-                sync_success = False
-
-        # Sync venv
-        if sync_package(project_root, package_path):
-            print(f"{package_name}: venv sync successful")
-        else:
-            print(f"{package_name}: venv sync failed", file=sys.stderr)
-            sync_success = False
-
-        if sync_success:
-            # Update tracking file
-            package_info["content_hash"] = current_hash
-            package_info["last_synced"] = format_time_iso8601()
-            any_updated = True
-        else:
-            print(f"{package_name}: Partial sync (continuing with available state)")
-
-    # Save updated tracking file if any package changed
-    if any_updated:
-        save_tracking_file(tracking_file, tracking_data)
-
-    print("=" * 60)
+    _sync_packages(project_root, packages)
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(run_hook_safely(main, "package-version-sync-hook"))
+    sys.exit(run_hook_safely(main, HOOK_NAME))

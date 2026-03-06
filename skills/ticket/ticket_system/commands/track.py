@@ -11,6 +11,7 @@ if __name__ == "__main__":
 
 
 import argparse
+import re
 from typing import Optional
 
 from ticket_system.lib.ticket_loader import (
@@ -150,6 +151,37 @@ def _create_command_handlers() -> dict:
     }
 
 
+def _extract_version_from_ticket_id(ticket_id: str) -> Optional[str]:
+    """
+    從 Ticket ID 中提取版本號
+
+    Ticket ID 格式: {version}-W{wave}-{seq[.seq...]}
+    例如: 0.1.0-W1-017 → 0.1.0
+         0.1.0-W1-017.1 → 0.1.0
+
+    Args:
+        ticket_id: Ticket ID 字串
+
+    Returns:
+        Optional[str]: 提取的版本號（不含 'v' 前綴），若無法提取則返回 None
+
+    Examples:
+        >>> _extract_version_from_ticket_id("0.1.0-W1-017")
+        '0.1.0'
+        >>> _extract_version_from_ticket_id("0.31.0-W4-001.1")
+        '0.31.0'
+        >>> _extract_version_from_ticket_id("invalid-id")
+        None
+    """
+    # 使用 Ticket ID 正則提取版本號
+    # 正則格式: ^(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)$
+    # 第一個捕獲組就是版本號
+    match = re.match(r"^(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)$", ticket_id)
+    if match:
+        return match.group(1)
+    return None
+
+
 def execute(args: argparse.Namespace) -> int:
     """執行 track 命令"""
     operation = args.operation
@@ -158,12 +190,28 @@ def execute(args: argparse.Namespace) -> int:
     if operation == "version":
         return execute_version(args, None)
 
-    # 其他命令需要版本資訊（使用共用 API）
-    try:
-        version = require_version(getattr(args, 'version', None))
-    except ValueError:
-        print(format_error(ErrorMessages.VERSION_NOT_DETECTED))
-        return 1
+    # 其他命令需要版本資訊
+    # 優先級：
+    # 1. 使用 --version 明確指定的版本
+    # 2. 從 Ticket ID 中提取版本（針對 query、set-*、tree、chain、full、log 等需要 ticket_id 的命令）
+    # 3. 自動偵測當前活躍版本
+
+    explicit_version = getattr(args, 'version', None)
+    version = None
+
+    # 如果未明確指定版本，嘗試從 Ticket ID 提取
+    if not explicit_version and hasattr(args, 'ticket_id'):
+        extracted_version = _extract_version_from_ticket_id(args.ticket_id)
+        if extracted_version:
+            version = extracted_version
+
+    # 如果仍未取得版本，使用自動偵測
+    if not version:
+        try:
+            version = require_version(explicit_version)
+        except ValueError:
+            print(format_error(ErrorMessages.VERSION_NOT_DETECTED))
+            return 1
 
     # 從命令處理器字典查找對應的處理函式
     handlers = _create_command_handlers()
@@ -220,7 +268,7 @@ def _register_query_commands(
     p_list.add_argument("--completed", action="store_true", help=TrackMessages.ARG_COMPLETED)
     p_list.add_argument("--blocked", action="store_true", help=TrackMessages.ARG_BLOCKED)
     p_list.add_argument("--wave", type=int, help=TrackMessages.ARG_WAVE)
-    p_list.add_argument("--status", nargs="+", choices=["pending", "in_progress", "completed", "blocked"], help=TrackMessages.ARG_STATUS)
+    p_list.add_argument("--status", choices=["pending", "in_progress", "completed", "blocked"], help=TrackMessages.ARG_STATUS)
     p_list.add_argument("--format", choices=["table", "ids", "yaml"], default="table", help=TrackMessages.ARG_FORMAT)
     p_list.add_argument("--version", help=TrackMessages.ARG_VERSION)
 

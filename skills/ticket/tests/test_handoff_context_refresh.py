@@ -277,9 +277,12 @@ class TestResumeContextRefresh:
             handoff_dir.mkdir(parents=True, exist_ok=True)
 
             # 建立 context-refresh handoff 檔案
-            handoff_file = handoff_dir / "0.1.0-W1-001.json"
+            # 注意：使用不存在的 ticket ID（0.1.0-W9-999）避免與真實 ticket 衝突
+            # 如果使用真實 ticket ID（如 0.1.0-W1-001）且該 ticket 已 completed，
+            # 則此 from_status=in_progress 的 handoff 會被視為 stale 被過濾掉
+            handoff_file = handoff_dir / "0.1.0-W9-999.json"
             handoff_data = {
-                "ticket_id": "0.1.0-W1-001",
+                "ticket_id": "0.1.0-W9-999",
                 "direction": "context-refresh",
                 "timestamp": "2026-03-04T10:00:00",
                 "from_status": "in_progress",
@@ -296,5 +299,5 @@ class TestResumeContextRefresh:
 
                 # 驗證
                 assert len(handoffs) == 1
-                assert handoffs[0]["ticket_id"] == "0.1.0-W1-001"
+                assert handoffs[0]["ticket_id"] == "0.1.0-W9-999"
                 assert handoffs[0]["direction"] == "context-refresh"

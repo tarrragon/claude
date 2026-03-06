@@ -21,6 +21,7 @@ from ticket_system.lib.constants import (
     HANDOFF_PENDING_SUBDIR,
     HANDOFF_ARCHIVE_SUBDIR,
     STATUS_COMPLETED,
+    TASK_CHAIN_DIRECTION_TYPES,
 )
 from ticket_system.lib.ticket_loader import resolve_version, load_ticket, get_project_root
 from ticket_system.lib.messages import (
@@ -51,6 +52,32 @@ def _get_handoff_dir(subdir: str = HANDOFF_PENDING_SUBDIR) -> Path:
     root = get_project_root()
     handoff_dir = root / HANDOFF_DIR / subdir
     return handoff_dir
+
+
+def _is_task_chain_direction(direction: str) -> bool:
+    """
+    判斷 handoff 的 direction 是否為任務鏈類型。
+
+    任務鏈 direction（to-sibling、to-parent、to-child）中，
+    來源 ticket completed 是預期狀態（先 complete 再 handoff 到下一任務），
+    不應被過濾為 stale。
+
+    格式：direction 格式可為 "to-sibling:target_id" 或 "to-sibling" 等，
+    使用 split(":") 提取第一段來判斷。
+
+    Args:
+        direction: Handoff direction 字符串，可能為 "to-sibling", "to-sibling:xxx", etc.
+
+    Returns:
+        bool: True 表示為任務鏈類型，False 表示為其他類型（context-refresh 等）
+    """
+    if not direction:
+        return False
+
+    # 提取 direction type（split ":" 取首段）
+    direction_type = direction.split(":")[0]
+
+    return direction_type in TASK_CHAIN_DIRECTION_TYPES
 
 
 def _is_ticket_completed(ticket_id: str) -> bool:
@@ -131,10 +158,30 @@ def list_pending_handoffs() -> List[Dict[str, Any]]:
                 with open(handoff_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
 
-                    # 過濾已完成 ticket 的 stale handoff
+                    # 過濾 stale handoff：
+                    # Handoff 是 stale 當且僅當：
+                    # 1. 來源 Ticket 已 completed（status: completed）
+                    # 2. 且 Handoff 是從非 completed 狀態創建的（from_status != "completed"）
+                    #
+                    # 特殊情況（保留）：
+                    # - 任務鏈 handoff（to-sibling/to-parent/to-child），即使 completed 也保留
+                    # - Handoff 本身是從 completed 狀態創建的，不算 stale
                     ticket_id = data.get("ticket_id", "")
                     if ticket_id and _is_ticket_completed(ticket_id):
-                        continue  # 跳過 stale 條目
+                        # Ticket 已 completed，檢查 handoff 狀態
+                        from_status = data.get("from_status", "")
+                        direction = data.get("direction", "")
+
+                        # 檢查是否為任務鏈類型
+                        if _is_task_chain_direction(direction):
+                            # 任務鏈 handoff，completed 是預期，保留
+                            handoffs.append(data)
+                            continue
+
+                        # 非任務鏈：只有當 from_status 不是 completed 時才過濾為 stale
+                        if from_status != "completed":
+                            # Stale handoff，跳過
+                            continue
 
                     handoffs.append(data)
             elif handoff_file.suffix == ".md":
@@ -143,6 +190,7 @@ def list_pending_handoffs() -> List[Dict[str, Any]]:
                 ticket_id = handoff_file.stem
 
                 # 過濾已完成 ticket 的 stale handoff
+                # Markdown 格式無 direction 資訊，保持原行為
                 if ticket_id and _is_ticket_completed(ticket_id):
                     continue  # 跳過 stale 條目
 
@@ -440,6 +488,13 @@ def _execute_resume(ticket_id: str, version: Optional[str]) -> int:
         print(format_warning(WarningMessages.INVALID_OPERATION))
         print(WarningMessages.HANDOFF_UPDATE_FAILED)
         return 1
+
+    # 將 handoff 檔案從 pending/ 移動到 archive/
+    # 注意：mark_handoff_as_resumed() 已自動歸檔 Markdown 格式，所以這裡只會歸檔 JSON
+    if not archive_handoff_file(ticket_id):
+        # 歸檔失敗不應該視為 resume 失敗（核心功能已完成），只發出警告
+        print(format_warning(WarningMessages.INVALID_OPERATION))
+        print(WarningMessages.HANDOFF_ARCHIVE_FAILED)
 
     print("=" * 60)
     print(SectionHeaders.COMPLETION)

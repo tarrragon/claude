@@ -38,30 +38,26 @@ description: 從獨立 repo 拉取最新 .claude 配置 (https://github.com/tarr
      ```
 
 3. **根據用戶選擇執行**
-   - **確認拉取**：直接執行 `./.claude/scripts/sync-claude-pull.sh`
+   - **確認拉取**：直接執行 `python3 ./.claude/scripts/sync-claude-pull.py`
    - **先備份再拉取**：先執行以下備份指令，再執行拉取腳本
      ```bash
      BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
      cp -r .claude "$BACKUP_DIR/"
      echo "備份已建立：$BACKUP_DIR"
      ```
-     然後執行：`./.claude/scripts/sync-claude-pull.sh`
+     然後執行：`python3 ./.claude/scripts/sync-claude-pull.py`
    - **取消**：中止操作，不執行任何動作
 
 4. **顯示備份位置**
    - 腳本會輸出備份目錄位置
    - 告知用戶如需還原可使用備份
 
-5. **重新安裝自訂套件（強制）**
-   - 讀取 `.claude/installed-packages.json` 取得追蹤的套件清單
-   - 對每個套件，檢查是否已安裝為全域 CLI tool（`uv tool list`）
-   - 已安裝為全域 tool 的套件：執行完整重新安裝流程
-     ```bash
-     # 對每個需要更新的套件（例如 ticket-system）：
-     (cd {package_path} && uv tool uninstall {package_name} 2>/dev/null; uv cache clean {package_name} 2>/dev/null; uv tool install . --reinstall)
-     ```
-   - 確認看到 `Building ...` 輸出才表示真正重建了 wheel（避免快取陷阱）
-   - 僅有 `uv run` 使用的套件（非全域 tool）：由 `package-version-sync-hook` 在下次 SessionStart 自動處理
+5. **自動偵測需要重新安裝的套件**
+   - 使用 `git diff` 自動掃描 `.claude/skills/*/pyproject.toml` 的版本變更
+   - 偵測到變更的套件會在日誌中列出
+   - 實際的套件重新安裝由 `package-version-sync-hook` 在下次 SessionStart 自動執行
+   - Hook 會自動比對 pyproject.toml 版本 vs uv tool list 實際安裝版本
+   - 版本不符時自動執行 `uv tool uninstall + cache clean + tool install --reinstall`
 
 6. **建議測試 Hook 系統**
    - 提醒用戶測試 Hook 系統是否正常運作
@@ -104,7 +100,9 @@ cp -r /tmp/備份目錄/.claude .
 - 自動備份當前 .claude 配置到臨時目錄
 - 拉取會完全替換本地 .claude 檔案
 - 不會覆蓋根目錄 CLAUDE.md（專案特定配置）
-- 拉取後自動重新安裝已追蹤的全域 CLI 套件（`installed-packages.json` + `uv tool list` 交集）
+- 不再需要 `.claude/installed-packages.json` 靜態追蹤檔案（已刪除）
+- 套件版本變更由 `git diff` 自動偵測，重新安裝由 Hook 自動處理
+- 無需手動執行套件安裝命令，下次 SessionStart 時 Hook 會自動同步
 - 拉取後建議執行 `project-init onboard` 完成框架定制
 - 拉取後建議檢查 settings.local.json 是否需要調整
-- 拉取後建議重啟 Claude Code Session
+- 拉取後建議重啟 Claude Code Session 確保 Hook 正確執行

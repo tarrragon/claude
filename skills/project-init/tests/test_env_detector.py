@@ -23,11 +23,11 @@ class TestPythonDetection:
         with patch("shutil.which", return_value="/usr/bin/python3"):
             with patch("subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(
-                    returncode=0, stdout="Python 3.11.13\n"
+                    returncode=0, stdout="Python 3.14.13\n"
                 )
                 info = detect_python()
                 assert info.is_available
-                assert info.version == "Python 3.11.13"
+                assert info.version == "Python 3.14.13"
                 assert info.failure_reason is None
 
     def test_python_not_found(self) -> None:
@@ -139,7 +139,7 @@ class TestPythonInfoDataclass:
     def test_failure_reason_optional(self) -> None:
         """測試 failure_reason 是可選欄位."""
         info = PythonInfo(
-            version="3.11.13",
+            version="3.14.13",
             path="/usr/bin/python3",
             is_available=True
         )

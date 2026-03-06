@@ -366,11 +366,45 @@ class TestExecute:
         assert "0.31.0-W4-001" in captured.out
         assert "Test Task" in captured.out
 
-        # 確認檔案已標記為已接手（resumed_at 已更新）
+        # 確認檔案已從 pending/ 移至 archive/（resume 後自動歸檔）
         pending_file = handoff_dir / "0.31.0-W4-001.json"
-        assert pending_file.exists()
+        archive_file = project_root / ".claude" / "handoff" / "archive" / "0.31.0-W4-001.json"
+
+        assert not pending_file.exists(), "JSON 檔案應該從 pending/ 目錄移除"
+        assert archive_file.exists(), "JSON 檔案應該存在於 archive/ 目錄"
+
         import json
-        with open(pending_file, "r", encoding="utf-8") as f:
+        with open(archive_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert data.get("resumed_at") is not None
+
+    def test_execute_resume_archives_json_file(self, temp_handoff_env, capsys):
+        """測試 resume 後 JSON 檔案已從 pending/ 移至 archive/"""
+        project_root, handoff_dir = temp_handoff_env
+
+        _create_handoff_json(handoff_dir, "0.31.0-W4-001", title="Test Task")
+
+        args = argparse.Namespace(
+            list=False,
+            ticket_id="0.31.0-W4-001",
+            version=None
+        )
+
+        result = execute(args)
+
+        assert result == 0
+
+        # 確認檔案已從 pending/ 移至 archive/
+        pending_file = handoff_dir / "0.31.0-W4-001.json"
+        archive_file = project_root / ".claude" / "handoff" / "archive" / "0.31.0-W4-001.json"
+
+        # resume 後應該將檔案從 pending 移到 archive
+        assert not pending_file.exists(), "JSON 檔案應該從 pending/ 目錄移除"
+        assert archive_file.exists(), "JSON 檔案應該存在於 archive/ 目錄"
+
+        # 確認歸檔後的檔案包含 resumed_at
+        import json
+        with open(archive_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         assert data.get("resumed_at") is not None
 

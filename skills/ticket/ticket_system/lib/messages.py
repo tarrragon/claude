@@ -65,6 +65,7 @@ class WarningMessages:
     TICKET_ALREADY_BLOCKED = "[Warning] {ticket_id} 已被阻塞，無法釋放"
     NO_BODY_CONTENT = "[Warning] Ticket {ticket_id} 沒有 body 內容"
     HANDOFF_UPDATE_FAILED = "無法更新 handoff 檔案（可能已不存在）"
+    HANDOFF_ARCHIVE_FAILED = "無法歸檔 handoff 檔案到 archive/（檔案已不存在或權限問題）"
     NO_EXECUTION_LOG = "[Warning] Ticket {ticket_id} 找不到 Execution Log 區塊"
     NO_TICKETS = "[Warning] 無符合條件的 Tickets"
     BLOCKED_EXECUTION = "[BLOCKED] 找不到 Ticket: {ticket_id}"

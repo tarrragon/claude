@@ -27,13 +27,13 @@ description: 推送 .claude 配置到獨立 repo (https://github.com/tarrragon/c
 3. **執行推送腳本**
    - 使用用戶提供的提交訊息執行：
      ```bash
-     ./.claude/scripts/sync-claude-push.sh "提交訊息"
+     python3 ./.claude/scripts/sync-claude-push.py "提交訊息"
      ```
 
 4. **驗證推送結果**
-   - 確認腳本輸出最後出現「成功推送 .claude 到獨立 repo！」訊息
-   - 確認腳本輸出包含 `To https://github.com/tarrragon/claude.git` 推送記錄
-   - 注意：腳本使用臨時目錄操作，主專案沒有 `claude-shared` remote，**禁止**執行 `git fetch claude-shared`
+   - 執行 `git fetch claude-shared`
+   - 執行 `git log --oneline claude-shared/main | head -1` 查看最新 commit
+   - 確認推送成功
 
 ## 提交訊息範例
 

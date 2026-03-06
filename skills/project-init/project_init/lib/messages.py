@@ -17,7 +17,7 @@ class PythonMessages:
     """Python 環境相關訊息."""
 
     NOT_INSTALLED = "版本: 未安裝"
-    NOT_INSTALLED_STATUS = "狀態: Python 3.11+ 是必需的"
+    NOT_INSTALLED_STATUS = "狀態: Python 3.14+ 是必需的"
     INSTALL_GUIDANCE = "安裝指引: https://www.python.org/downloads/"
 
 
@@ -128,7 +128,7 @@ class RemediationGuidance:
     def get_python_install_steps() -> list[str]:
         """取得 Python 安裝步驟."""
         return [
-            "訪問 https://www.python.org/downloads/ 下載 Python 3.11 或更高版本",
+            "訪問 https://www.python.org/downloads/ 下載 Python 3.14 或更高版本",
             "執行安裝程式並完成安裝",
             "驗證安裝: python3 --version",
             "重新執行 project-init check",

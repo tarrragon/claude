@@ -77,7 +77,7 @@ class TestCheckCommandOutput:
                             with patch("project_init.commands.check.scan_custom_packages") as mock_packages:
                                 # 所有工具都正常
                                 mock_python.return_value = PythonInfo(
-                                    version="Python 3.11.13",
+                                    version="Python 3.14.13",
                                     path="/usr/bin/python3",
                                     is_available=True
                                 )
@@ -123,7 +123,7 @@ class TestExceptionUsageExample:
         try:
             guidance = [
                 "訪問 https://www.python.org/downloads/",
-                "下載 Python 3.11 或更高版本",
+                "下載 Python 3.14 或更高版本",
                 "執行安裝程式",
                 "驗證: python3 --version"
             ]

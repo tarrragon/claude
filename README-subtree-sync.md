@@ -43,7 +43,7 @@ git add .claude
 git commit -m "feat: 更新 .claude 配置"
 
 # 2. 推送到獨立 repo
-./.claude/scripts/sync-claude-push.sh "更新說明"
+python3 ./.claude/scripts/sync-claude-push.py "更新說明"
 ```
 
 ### 從獨立 Repo 拉取更新
@@ -52,7 +52,7 @@ git commit -m "feat: 更新 .claude 配置"
 
 ```bash
 # 拉取最新配置
-./.claude/scripts/sync-claude-pull.sh
+python3 ./.claude/scripts/sync-claude-pull.py
 ```
 
 **注意**：拉取會自動備份當前配置，如有問題可輕鬆還原。
@@ -71,8 +71,8 @@ project/
 │   ├── methodologies/       # 方法論文件
 │   ├── project-templates/   # 專案模板（含 FLUTTER.md）
 │   ├── scripts/             # 同步腳本
-│   │   ├── sync-claude-push.sh  # 推送腳本
-│   │   └── sync-claude-pull.sh  # 拉取腳本
+│   │   ├── sync-claude-push.py   # 推送腳本
+│   │   └── sync-claude-pull.py   # 拉取腳本
 │   └── settings.local.json  # 專案特定配置
 ├── CLAUDE.md                # 主配置文件（專案特定，不同步）
 ```

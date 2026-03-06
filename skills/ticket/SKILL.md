@@ -128,7 +128,7 @@ ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"
 | `create`       | 建立新 Ticket           | `/ticket create --version 0.31.0 --wave 1 --action "實作" --target "XXX"`    |
 | `batch-create` | 批次建立 Tickets        | `/ticket batch-create --template impl-parsley --targets "a,b,c" --wave 28`   |
 | `track`        | 追蹤 Ticket 狀態        | `/ticket track summary`                                                       |
-| `handoff`      | 任務交接                | `/ticket handoff --to-parent`                                               |
+| `handoff`      | 任務交接                | `/ticket handoff 0.1.0-W1-002 --to-sibling 0.1.0-W2-003`                   |
 | `resume`       | 恢復任務                | `/ticket resume <id>`                                                         |
 | `migrate`      | Ticket ID 遷移          | `/ticket migrate 0.31.0-W4-001 0.31.0-W5-001`                                |
 | `generate`     | Plan 轉換為 Tickets     | `/ticket generate plan.md --version 0.31.0 --wave 5`                         |

@@ -85,6 +85,16 @@ TICKET_TYPES: Dict[str, str] = {
 PRIORITY_LEVELS: List[str] = ["P0", "P1", "P2", "P3"]
 
 # ============================================================
+# Handoff Direction 常數
+# ============================================================
+
+# 任務鏈 direction 類型（來源 ticket completed 時應保留）
+TASK_CHAIN_DIRECTION_TYPES: tuple = ("to-sibling", "to-parent", "to-child")
+
+# 非任務鏈 direction 類型（來源 ticket completed 時應過濾為 stale）
+NON_CHAIN_DIRECTION_TYPES: tuple = ("context-refresh",)
+
+# ============================================================
 # TDD 階段
 # ============================================================
 
