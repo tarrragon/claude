@@ -8,6 +8,7 @@ import hashlib
 import shutil
 import subprocess
 import sys
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -269,10 +270,39 @@ def compare_versions(
     )
 
 
+_pyproject_cache: dict[str, Optional[dict]] = {}
+"""快取已解析的 pyproject.toml，避免重複解析同一檔案。"""
+
+
+def _parse_pyproject(pyproject_path: Path) -> Optional[dict]:
+    """使用 tomllib 解析 pyproject.toml 檔案。
+
+    解析結果會被快取，同一檔案多次呼叫會回傳快取結果。
+
+    Args:
+        pyproject_path: pyproject.toml 檔案路徑。
+
+    Returns:
+        dict: 解析後的 TOML 資料結構，或 None 若解析失敗。
+    """
+    path_key = str(pyproject_path)
+    if path_key in _pyproject_cache:
+        return _pyproject_cache[path_key]
+
+    try:
+        with open(pyproject_path, "rb") as f:
+            data = tomllib.load(f)
+            _pyproject_cache[path_key] = data
+            return data
+    except Exception:
+        _pyproject_cache[path_key] = None
+        return None
+
+
 def _extract_version_from_pyproject(pyproject_path: Path) -> Optional[str]:
     """從 pyproject.toml 提取版本字串.
 
-    簡單的文字搜尋，尋找 `version = "..."` 行。
+    使用 tomllib 結構化解析，從 [project] 表格取出 version 欄位。
 
     Args:
         pyproject_path: pyproject.toml 檔案路徑。
@@ -280,19 +310,20 @@ def _extract_version_from_pyproject(pyproject_path: Path) -> Optional[str]:
     Returns:
         version: 版本字串，或 None 若未找到。
     """
+    data = _parse_pyproject(pyproject_path)
+    if data is None:
+        return None
+
     try:
-        with open(pyproject_path, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.strip().startswith('version = "'):
-                    version = line.split('"')[1]
-                    return version
+        return data.get("project", {}).get("version")
     except Exception:
-        pass
-    return None
+        return None
 
 
 def _extract_package_name_from_pyproject(pyproject_path: Path) -> Optional[str]:
     """從 pyproject.toml 提取 [project] name.
+
+    使用 tomllib 結構化解析，從 [project] 表格取出 name 欄位。
 
     Args:
         pyproject_path: pyproject.toml 檔案路徑。
@@ -300,19 +331,20 @@ def _extract_package_name_from_pyproject(pyproject_path: Path) -> Optional[str]:
     Returns:
         套件名稱（如 'ticket-system'），或 None。
     """
+    data = _parse_pyproject(pyproject_path)
+    if data is None:
+        return None
+
     try:
-        with open(pyproject_path, "r", encoding="utf-8") as f:
-            for line in f:
-                stripped = line.strip()
-                if stripped.startswith('name = "'):
-                    return stripped.split('"')[1]
+        return data.get("project", {}).get("name")
     except Exception:
-        pass
-    return None
+        return None
 
 
 def _extract_cli_name_from_pyproject(pyproject_path: Path) -> Optional[str]:
     """從 pyproject.toml 提取 [project.scripts] 的 CLI 入口名稱.
+
+    使用 tomllib 結構化解析，從 [project.scripts] 表格取出第一個 key。
 
     Args:
         pyproject_path: pyproject.toml 檔案路徑。
@@ -320,20 +352,14 @@ def _extract_cli_name_from_pyproject(pyproject_path: Path) -> Optional[str]:
     Returns:
         CLI 命令名稱（如 'ticket'），或 None。
     """
+    data = _parse_pyproject(pyproject_path)
+    if data is None:
+        return None
+
     try:
-        in_scripts_section = False
-        with open(pyproject_path, "r", encoding="utf-8") as f:
-            for line in f:
-                stripped = line.strip()
-                if stripped == "[project.scripts]":
-                    in_scripts_section = True
-                    continue
-                if in_scripts_section:
-                    if stripped.startswith("["):
-                        break
-                    if "=" in stripped:
-                        cli_name = stripped.split("=")[0].strip()
-                        return cli_name
+        scripts = data.get("project", {}).get("scripts", {})
+        if scripts:
+            return next(iter(scripts.keys()))
     except Exception:
         pass
     return None
