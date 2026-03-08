@@ -38,6 +38,23 @@ handoff       │                            │
 - [x] `/ticket handoff --to-sibling <id>` - 切換到兄弟任務
 - [x] `/ticket handoff --status` - 查看交接狀態
 
+## 狀態-命令映射規則
+
+**根據 Ticket 當前狀態選擇旗標**：
+
+| Ticket 狀態 | 適用旗標 | 說明 |
+|-------------|---------|------|
+| `completed` | 不加旗標（或 `--to-parent` / `--to-sibling <id>`） | 任務已完成，切換到下一個任務 |
+| `in_progress` | `--context-refresh` | 任務未完成，在新 session 以乾淨 context 繼續 |
+| `in_progress`（被子任務阻塞） | `--to-child <id>` | 先切換到子任務，解除阻塞 |
+
+**禁止行為**：
+
+| 禁止 | 說明 |
+|------|------|
+| 在 `completed` ticket 使用 `--context-refresh` | `--context-refresh` 僅適用 `in_progress` 狀態，在 completed 上會直接報錯 |
+| 在 `in_progress` ticket 使用 `--to-sibling` / `--to-parent` | 任務未完成不可切換，CLI 會拒絕 |
+
 ## 恢復流程決策樹
 
 ```

@@ -38,6 +38,10 @@ from ticket_system.lib.messages import (
 from ticket_system.lib.command_lifecycle_messages import (
     FieldsMessages,
 )
+from ticket_system.lib.ticket_ops import (
+    load_and_validate_ticket,
+    resolve_ticket_path,
+)
 
 
 def execute_get_field(
@@ -68,14 +72,8 @@ def execute_get_field(
         - ticket track why <ticket-id>
         - ticket track how <ticket-id>
     """
-    try:
-        ticket = ticket_loader.load_ticket(version, args.ticket_id)
-    except (FileNotFoundError, Exception):
-        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
-        return 1
-
-    if not ticket:
-        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
+    ticket, error = load_and_validate_ticket(version, args.ticket_id)
+    if error:
         return 1
 
     # 決定欄位名稱（優先使用參數傳入，否則從 args 中取得）
@@ -135,14 +133,8 @@ def execute_set_field(
         - ticket track set-why <ticket-id> <value>
         - ticket track set-how <ticket-id> <value>
     """
-    try:
-        ticket = ticket_loader.load_ticket(version, args.ticket_id)
-    except (FileNotFoundError, Exception):
-        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
-        return 1
-
-    if not ticket:
-        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
+    ticket, error = load_and_validate_ticket(version, args.ticket_id)
+    if error:
         return 1
 
     # 決定欄位名稱（優先使用參數傳入，否則從 args 中取得）
@@ -158,7 +150,7 @@ def execute_set_field(
     ticket[actual_field_name] = new_value
 
     # 儲存
-    ticket_path = Path(ticket.get("_path", ticket_loader.get_ticket_path(version, args.ticket_id)))
+    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
     ticket_loader.save_ticket(ticket, ticket_path)
 
     print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name=actual_field_name))

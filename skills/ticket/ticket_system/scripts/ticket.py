@@ -28,6 +28,8 @@ import argparse
 import os
 from pathlib import Path
 
+from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
+
 # 導入所有子命令（含環境檢測）
 try:
     from ticket_system.commands import (
@@ -39,10 +41,11 @@ try:
         generate_register,
         batch_create_register,
     )
+    from ticket_system.commands.version_shift import register as version_shift_register
 except ModuleNotFoundError:
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print("[ERROR] 套件未正確安裝")
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print()
     print("推薦方式：全局安裝（只需執行一次）")
     print("  cd .claude/skills/ticket")
@@ -56,7 +59,7 @@ except ModuleNotFoundError:
     print("  uv run ticket track summary")
     print()
     print("或透過 Claude 使用 /ticket 指令")
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     sys.exit(1)
 
 
@@ -99,9 +102,9 @@ def check_installation() -> None:
         return
     except ValueError:
         # 不在 ticket 目錄中，提示全局安裝
-        print("=" * 60)
+        print(SEPARATOR_PRIMARY)
         print("[INFO] 為了在任何目錄執行 ticket 指令，建議全局安裝")
-        print("=" * 60)
+        print(SEPARATOR_PRIMARY)
         print()
         print("執行以下命令進行全局安裝（只需執行一次）：")
         print()
@@ -112,7 +115,7 @@ def check_installation() -> None:
         print("  ticket track summary")
         print("  ticket track query 0.31.0-W4-001")
         print()
-        print("=" * 60)
+        print(SEPARATOR_PRIMARY)
         print()
 
 
@@ -141,6 +144,7 @@ def main() -> int:
     migrate_register(subparsers)
     generate_register(subparsers)
     batch_create_register(subparsers)
+    version_shift_register(subparsers)
 
     # 解析命令行參數
     args = parser.parse_args()

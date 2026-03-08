@@ -10,8 +10,14 @@ Hook 系統訊息常數模組 - 集中管理所有 Hook 的使用者訊息
 - WorkflowMessages: 工作流指導訊息
 - QualityMessages: 品質檢查訊息
 - ValidationMessages: 驗證相關訊息
-- AskUserQuestionMessages: AskUserQuestion 強制場景提醒
+- ProcessSkipMessages: 流程省略相關訊息
+
+注意：AskUserQuestionMessages/AskUserQuestionReminders 已提取至獨立模組
+  → from lib.ask_user_question_reminders import AskUserQuestionReminders
+  backward-compatible alias 仍在此模組可用（見下方）
 """
+
+from lib.ask_user_question_reminders import AskUserQuestionReminders, AskUserQuestionMessages  # noqa: F401
 
 
 class CoreMessages:
@@ -137,6 +143,15 @@ Ticket: {ticket_id} (type: {ticket_type})
   3. 再次執行 `ticket track claim {ticket_id}`
 
 詳見: .claude/rules/flows/ticket-lifecycle.md（建立後品質驗收）"""
+
+    CONTRADICTORY_STATE_WARNING = """[WARNING] Ticket {ticket_id} 存在矛盾狀態（in_progress + creation_accepted: false）
+
+說明：
+  此 Ticket 已被認領（status: in_progress），但建立後品質驗收尚未通過（creation_accepted: false）。
+  此狀態通常發生在 Ticket 於建立審核機制加入前就已認領，系統允許繼續執行。
+
+建議操作：
+  執行 `ticket track accept-creation {ticket_id}` 修正矛盾狀態"""
 
     # ========================================================================
     # Main Thread Edit Restriction Hook
@@ -540,7 +555,7 @@ class ProcessSkipMessages:
     SKIP_ACCEPTANCE_DESCRIPTION = "跳過驗收檢查"
     SKIP_ACCEPTANCE_FULL_PROCESS = (
         "派發 acceptance-auditor 執行完整驗收（標準驗收）或簡化驗收"
-        "（認知負擔 < 5 或 DOC 類型）"
+        "（任務範圍單純 或 DOC 類型）"
     )
 
     # ========================================================================
@@ -562,211 +577,6 @@ class ProcessSkipMessages:
         "完成 TDD 四階段（Phase 1 功能設計 → Phase 2 測試設計 → "
         "Phase 3a 策略規劃 → Phase 3b 實作 → Phase 4 重構評估）"
     )
-
-
-class AskUserQuestionMessages:
-    """AskUserQuestion 強制場景提醒訊息 - 關鍵決策點使用
-
-    覆蓋場景：驗收方式確認、Complete 後下一步、Wave 收尾、派發方式選擇、決策確認、
-    Commit Handoff、流程省略偵測、後續任務路由、parallel-evaluation 觸發、批量變更備份。
-    Source of Truth: .claude/rules/core/decision-tree.md
-    """
-
-    COMPLETE_REMINDER = """============================================================
-[AskUserQuestion 強制提醒] complete 流程
-============================================================
-
-complete 前必須使用 AskUserQuestion 確認驗收方式：
-- 標準驗收 (Recommended) - 派發 acceptance-auditor
-- 簡化驗收 - DOC 類型或認知負擔 < 5
-- 先完成後補驗收 - P0 緊急任務
-
-complete 後必須使用 AskUserQuestion 選擇下一步。
-
-提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md
-============================================================"""
-
-    WAVE_WRAP_UP_REMINDER = """============================================================
-[AskUserQuestion 強制提醒] Wave 收尾
-============================================================
-
-偵測到 Wave 可能已完成（無待處理任務）。
-PM 必須使用 AskUserQuestion 確認收尾動作。
-
-收尾前步驟（必須先執行）：
-1. 列出本次修改的檔案清單
-2. 告知 git 未提交狀態
-
-提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md
-============================================================"""
-
-    DISPATCH_REMINDER = """============================================================
-[AskUserQuestion 提醒] 多任務派發
-============================================================
-
-派發多任務前，建議使用 AskUserQuestion 確認派發方式：
-- Task subagent（各 Agent 獨立完成）
-- Agent Teams（Agent 間需要即時互動）
-- 序列派發（有依賴關係）
-
-如果已經確認，請忽略此提醒。
-
-提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/guides/parallel-dispatch.md
-============================================================"""
-
-    DECISION_REMINDER = """============================================================
-[AskUserQuestion 提醒] 偵測到{scenario}
-============================================================
-
-此場景建議使用 AskUserQuestion 工具而非文字提問，
-避免用戶回答被 Hook 系統誤判為開發命令。
-
-提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md
-============================================================"""
-
-    # ========================================================================
-    # 場景 11: Commit 後 Handoff 確認
-    # ========================================================================
-
-    COMMIT_HANDOFF_REMINDER = """============================================================
-[AskUserQuestion 強制提醒] Commit 後情境感知路由
-============================================================
-
-偵測到 git commit 成功完成。
-
-[錯誤學習檢查]：
-  commit 完成後，先執行 AskUserQuestion #16（錯誤學習經驗確認），再進入 #11（Handoff 路由）。
-  #16 選項：無需記錄 (Recommended) / 記錄錯誤學習經驗 / 稍後記錄
-
-[必須先執行的查詢]：
-  ticket track list --wave {n} --status pending
-  （{n} 為當前 Wave 編號，例如 30）
-
-[根據查詢結果選擇路由]：
-  有 in_progress ticket → 情境 A，使用 AskUserQuestion #11a
-  有 pending ticket     → 情境 B，使用 AskUserQuestion #11b
-  皆無（Wave 完成）     → 情境 C，再執行：
-    ticket track list --status pending
-    → 有其他 Wave pending → #3a（Wave 收尾）
-    → 無任何 pending    → #3b（/version-release check）
-
-[情境說明]：
-  情境 A:  ticket 仍 in_progress → Context 刷新，新 session 繼續
-  情境 B:  ticket completed + 同 Wave 有 pending → 任務切換
-  情境 C1: 版本有其他 Wave pending → AskUserQuestion #3a（Wave 收尾 + 開始下一 Wave）
-  情境 C2: 版本無任何 pending → /version-release check → AskUserQuestion #13
-
-[AskUserQuestion 共通規則]：
-  1. question 中必須包含本次 session 的完成摘要（已完成項目 + commit hash）
-  2. 選項中必須包含「/clear 結束 session」（清空對話，不建立 handoff）
-
-提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/askuserquestion-rules.md（場景 11/16 共通規則）
-============================================================"""
-
-    # ========================================================================
-    # 場景 12: 流程省略確認
-    # ========================================================================
-
-    PROCESS_SKIP_REMINDER = """============================================================
-[AskUserQuestion 強制提醒] 流程省略偵測
-============================================================
-
-偵測到可能的流程省略意圖：{skip_description}
-
-完整流程：{full_process}
-
-PM 必須使用 AskUserQuestion 確認：
-- 不省略，執行完整流程 (Recommended)
-- 確認省略 - 用戶明確同意
-- 簡化執行 - 精簡版本
-
-提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/forbidden/skip-gate.md
-============================================================"""
-
-    # ========================================================================
-    # 場景 13: 後續任務路由確認
-    # ========================================================================
-
-    POST_TASK_ROUTE_REMINDER = """============================================================
-[AskUserQuestion 提醒] 後續任務路由（{task_type}）
-============================================================
-
-任務完成後，PM 必須使用 AskUserQuestion 確認後續路由。
-根據 task_type 提供對應選項。
-
-提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md（第八層）
-============================================================"""
-
-    POST_PHASE3B_ROUTE_REMINDER = """============================================================
-[AskUserQuestion 提醒] Phase 3b 完成後路由
-============================================================
-
-Phase 3b（實作執行）已完成。建議下一步：
-- 執行 /parallel-evaluation A（程式碼審查）(Recommended)
-- 直接進入 Phase 4（重構評估）
-- 先 commit 再決定
-
-提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md（第八層）
-============================================================"""
-
-    POST_PHASE4_ROUTE_REMINDER = """============================================================
-[AskUserQuestion 提醒] Phase 4 完成後路由
-============================================================
-
-Phase 4（重構評估）已完成。建議下一步：
-- 執行 /tech-debt-capture 並 commit (Recommended)
-- 查看待處理 Ticket
-- Wave 收尾
-
-提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md（第八層）
-============================================================"""
-
-    # ========================================================================
-    # 場景 14: parallel-evaluation 觸發確認
-    # ========================================================================
-
-    PARALLEL_EVAL_TRIGGER_REMINDER = """============================================================
-[AskUserQuestion 提醒] parallel-evaluation 建議
-============================================================
-
-建議執行 /parallel-evaluation 情境 {scenario}（{scenario_name}）
-
-PM 必須使用 AskUserQuestion 確認：
-- 執行 /parallel-evaluation {scenario} (Recommended)
-- 跳過，直接進入下一步（觸發省略確認）
-- 執行其他情境
-
-提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/skills/parallel-evaluation/SKILL.md
-============================================================"""
-
-    # ========================================================================
-    # 場景 15: Bulk 變更前備份確認
-    # ========================================================================
-
-    BULK_CHANGE_BACKUP_REMINDER = """============================================================
-[AskUserQuestion 強制提醒] 批量變更前備份確認
-============================================================
-
-即將進行批量修改（多檔案變更）。
-
-PM 必須使用 AskUserQuestion 確認：
-- 先 commit 備份 (Recommended) - 建立回退點
-- 直接開始 - 不備份
-- 查看變更範圍 - 確認後再決定
-
-提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md（第八層）
-============================================================"""
 
 
 # ============================================================================

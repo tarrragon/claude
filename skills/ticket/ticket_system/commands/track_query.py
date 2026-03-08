@@ -14,9 +14,10 @@ Ticket track 查詢操作模組
 # 防止直接執行此模組
 if __name__ == "__main__":
     import sys
-    print("=" * 60)
+    from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
+    print(SEPARATOR_PRIMARY)
     print("[ERROR] 此檔案不支援直接執行")
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print()
     print("正確使用方式：")
     print("  ticket track summary")
@@ -26,7 +27,7 @@ if __name__ == "__main__":
     print("  cd .claude/skills/ticket && uv tool install .")
     print()
     print("詳見 SKILL.md")
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     sys.exit(1)
 
 
@@ -71,10 +72,14 @@ from ticket_system.lib.ui_constants import (
     SECTION_5W1H_INDENT,
     SEPARATOR_CHAR,
     SEPARATOR_WIDTH,
+    SEPARATOR_PRIMARY,
     EXECUTION_LOG_PATTERN,
     DOTALL_FLAG,
     VERSION_PREFIX,
     VERSION_PREFIX_LENGTH,
+)
+from ticket_system.lib.ticket_ops import (
+    load_and_validate_ticket,
 )
 
 # 狀態值映射
@@ -168,9 +173,8 @@ def _print_cross_version_warning(current_version: str) -> None:
 
 def execute_query(args: argparse.Namespace, version: str) -> int:
     """查詢單一 Ticket"""
-    ticket = load_ticket(version, args.ticket_id)
-    if not ticket:
-        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
+    ticket, error = load_and_validate_ticket(version, args.ticket_id)
+    if error:
         return 1
 
     if _check_yaml_error(ticket, args.ticket_id):
@@ -223,9 +227,8 @@ def execute_summary(args: argparse.Namespace, version: str) -> int:
 
 def execute_tree(args: argparse.Namespace, version: str) -> int:
     """顯示任務鏈樹狀結構"""
-    ticket = load_ticket(version, args.ticket_id)
-    if not ticket:
-        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
+    ticket, error = load_and_validate_ticket(version, args.ticket_id)
+    if error:
         return 1
 
     if _check_yaml_error(ticket, args.ticket_id):
@@ -243,9 +246,8 @@ def execute_tree(args: argparse.Namespace, version: str) -> int:
 
 def execute_chain(args: argparse.Namespace, version: str) -> int:
     """顯示完整任務鏈（從 root 到所有 leaf）"""
-    ticket = load_ticket(version, args.ticket_id)
-    if not ticket:
-        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
+    ticket, error = load_and_validate_ticket(version, args.ticket_id)
+    if error:
         return 1
 
     if _check_yaml_error(ticket, args.ticket_id):
@@ -272,9 +274,8 @@ def execute_chain(args: argparse.Namespace, version: str) -> int:
 
 def execute_full(args: argparse.Namespace, version: str) -> int:
     """顯示 Ticket 完整內容"""
-    ticket = load_ticket(version, args.ticket_id)
-    if not ticket:
-        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
+    ticket, error = load_and_validate_ticket(version, args.ticket_id)
+    if error:
         return 1
 
     if _check_yaml_error(ticket, args.ticket_id):
@@ -309,9 +310,8 @@ def execute_full(args: argparse.Namespace, version: str) -> int:
 
 def execute_log(args: argparse.Namespace, version: str) -> int:
     """顯示執行日誌區塊"""
-    ticket = load_ticket(version, args.ticket_id)
-    if not ticket:
-        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
+    ticket, error = load_and_validate_ticket(version, args.ticket_id)
+    if error:
         return 1
 
     if _check_yaml_error(ticket, args.ticket_id):
@@ -415,10 +415,10 @@ def _build_status_filters(args: argparse.Namespace) -> set:
     Returns:
         set: 狀態值集合
     """
-    # 優先使用 --status 參數
-    status_value = getattr(args, "status", None)
-    if status_value and status_value in STATUS_MAP:
-        return {STATUS_MAP[status_value]}
+    # 優先使用 --status 參數（支援單值或多值）
+    status_values = getattr(args, "status", None)
+    if status_values:
+        return {STATUS_MAP[v] for v in status_values if v in STATUS_MAP}
 
     # 其次檢查舊 flag（向後相容）
     status_filters = set()

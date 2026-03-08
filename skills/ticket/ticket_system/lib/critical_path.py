@@ -20,6 +20,7 @@ from typing import Dict, List, Optional, Set
 from collections import defaultdict
 
 from .cycle_detector import CycleDetector
+from .ui_constants import SEPARATOR_SECONDARY, SEPARATOR_SECONDARY_DASH
 
 
 @dataclass
@@ -497,7 +498,7 @@ class CriticalPathAnalyzer:
 
         # 格式化輸出
         summary = f"關鍵路徑分析結果\n"
-        summary += "=" * 50 + "\n\n"
+        summary += SEPARATOR_SECONDARY + "\n\n"
 
         summary += f"關鍵路徑長度：{result.critical_path_length}\n"
         summary += f"關鍵路徑：{' → '.join(result.critical_path)}\n"
@@ -510,9 +511,9 @@ class CriticalPathAnalyzer:
 
         # 時程資訊（僅列出關鍵路徑上的節點）
         summary += "\n關鍵路徑上的節點時程：\n"
-        summary += "-" * 50 + "\n"
+        summary += SEPARATOR_SECONDARY_DASH + "\n"
         summary += f"{'Ticket':<15} {'ES':<5} {'EF':<5} {'LS':<5} {'LF':<5} {'Slack':<5}\n"
-        summary += "-" * 50 + "\n"
+        summary += SEPARATOR_SECONDARY_DASH + "\n"
 
         for ticket_id in result.critical_path:
             schedule = result.ticket_schedule.get(ticket_id, {})

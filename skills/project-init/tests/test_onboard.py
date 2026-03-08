@@ -173,3 +173,63 @@ class TestRunOnboard:
 
         captured = capsys.readouterr()
         assert "0 項需處理" in captured.out or "需處理" in captured.out
+
+    def test_onboard_hook_completeness_section(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """測試 onboard 包含 Hook 完整性驗證區段."""
+        # 建立最小的 Flutter 專案
+        (tmp_path / "pubspec.yaml").touch()
+
+        (tmp_path / ".claude" / "config").mkdir(parents=True)
+        hook_config = tmp_path / ".claude" / "config" / "hook-language-classification.yaml"
+        hook_config.write_text("hooks:\n")
+
+        # 建立 Hook 目錄和檔案，但不登記
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "test-unregistered.py").touch()
+
+        result = run_onboard(tmp_path)
+
+        captured = capsys.readouterr()
+        # 應該包含 Hook 完整性檢查的輸出
+        assert "Hook 完整性驗證" in captured.out
+
+    def test_onboard_unregistered_hooks_in_todo(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        """測試未登記的 Hook 會加入待辦清單."""
+        import json
+
+        # 建立最小的 Flutter 專案
+        (tmp_path / "pubspec.yaml").touch()
+
+        (tmp_path / ".claude" / "config").mkdir(parents=True)
+        hook_config = tmp_path / ".claude" / "config" / "hook-language-classification.yaml"
+        hook_config.write_text("hooks:\n")
+
+        # 建立 Hook 目錄和未登記的檔案
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        hooks_dir.mkdir(parents=True)
+        (hooks_dir / "test-unregistered.py").touch()
+
+        # 建立空的 settings.json（沒有登記任何 Hook）
+        settings = {
+            "hooks": {
+                "PreToolUse": [
+                    {"matcher": "Bash", "hooks": []}
+                ]
+            }
+        }
+        settings_path = tmp_path / ".claude" / "settings.json"
+        settings_path.write_text(json.dumps(settings))
+
+        result = run_onboard(tmp_path)
+
+        # 應該有待辦項目
+        assert result.todo_count > 0
+
+        # 待辦項目中應該包含未登記的 Hook
+        todo_descriptions = [item.description for item in result.todo_items]
+        assert any("Hook" in desc or "未登記" in desc for desc in todo_descriptions)

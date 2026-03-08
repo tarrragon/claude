@@ -11,6 +11,8 @@ if __name__ == "__main__":
     from ticket_system.lib.messages import print_not_executable_and_exit
     print_not_executable_and_exit()
 
+from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
+
 
 class HandoffMessages:
     """handoff.py 相關訊息"""
@@ -85,6 +87,7 @@ class HandoffMessages:
     RECOMMENDATION_EXECUTE = "執行: {command}"
     RECOMMENDATION_EXECUTE_COMMENT_CHECK = "  # 查看阻塞任務狀態"
     RECOMMENDATION_EXECUTE_COMMENT_COMPLETE = "  # 標記完成"
+    RECOMMENDATION_EXECUTE_WITH_COMMENT = "執行: {command}  {comment}"
 
     # Handoff 用法說明
     USAGE_HEADER = "用法:"
@@ -113,7 +116,7 @@ class LifecycleMessages:
     """lifecycle.py 相關訊息"""
 
     # 自動 Handoff 完成提示
-    AUTO_HANDOFF_SEPARATOR = "=" * 60
+    AUTO_HANDOFF_SEPARATOR = SEPARATOR_PRIMARY
     AUTO_HANDOFF_HEADER = "[自動 Handoff 已完成]"
     AUTO_HANDOFF_NEXT_TASK = "下一步任務: {next_ticket_id}"
     AUTO_HANDOFF_NEXT_TASK_TITLE = "           [{next_title}]"
@@ -121,7 +124,7 @@ class LifecycleMessages:
     AUTO_HANDOFF_AUTO_LOAD = "新對話將自動載入任務 context"
 
     # Phase 前置條件警告
-    PHASE_PREREQUISITE_WARNING_SEPARATOR = "=" * 60
+    PHASE_PREREQUISITE_WARNING_SEPARATOR = SEPARATOR_PRIMARY
     PHASE_PREREQUISITE_WARNING_HEADER = "[WARNING] Phase 前置條件未滿足"
     PHASE_PREREQUISITE_CURRENT = "Ticket {ticket_id} 屬於 {current_phase_label}"
     PHASE_PREREQUISITE_MISSING_HEADER = "缺失的前置 Phase："
@@ -137,6 +140,7 @@ class LifecycleMessages:
     CHECKLIST_ACCEPTANCE = "   [ ] 已理解驗收條件"
     CHECKLIST_DEV_ENV = "   [ ] 開發環境已準備就緒"
     CHECKLIST_ERROR_PATTERNS = "   [ ] 已查詢是否有相關的 error-patterns"
+    CHECKLIST_SCOPE_VERIFICATION = "   [ ] 已獨立驗證 Ticket 描述的數量/範圍（描述是草稿，可能有遺漏）"
     CHECKLIST_EXECUTION_LOG = "   [ ] 完成時記得更新執行日誌（ticket track append-log）"
     CONFIRM_DEPENDENCIES = "   請確認這些依賴已完成後再開始"
 
@@ -188,6 +192,14 @@ class ResumeMessages:
     ARG_TICKET_ID_HELP = "Ticket ID (格式: {version}-W{wave}-{seq}，與 --list 配合時可省略)"
     ARG_LIST_HELP = "列出所有待恢復的任務"
     ARG_VERSION_HELP = "指定版本 (如不指定則自動偵測)"
+
+    # Resume 後 Checkpoint（標準化接手流程引導）
+    CHECKPOINT_HEADER = "接手後的標準化步驟："
+    CHECKPOINT_SCOPE_VERIFY = "   1. [ ] 獨立驗證 Ticket 描述的數量/範圍是否正確（PC-007）"
+    CHECKPOINT_CLAIM_LABEL = "   2. 認領 Ticket："
+    CHECKPOINT_CLAIM_CMD = "         ticket track claim {ticket_id}"
+    CHECKPOINT_CHAIN_LABEL = "   3. （可選）查看任務鏈進度："
+    CHECKPOINT_CHAIN_CMD = "         ticket track chain {ticket_id}"
 
 
 class CreateMessages:

@@ -10,7 +10,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+
 from .env_detector import detect_ripgrep, detect_uv
+from .hook_checker import (
+    extract_registered_hooks,
+    get_exclude_patterns,
+    load_json_file,
+    scan_hooks_directory,
+    should_exclude_file,
+)
 
 
 MINIMUM_UV_VERSION = "0.1.0"
@@ -43,6 +51,22 @@ class HookSystemStatus:
     """所有 Hook 是否都能編譯通過."""
     errors: list[str]
     """編譯失敗的 Hook 清單."""
+
+
+@dataclass
+class HookCompletenessResult:
+    """Hook 完整性檢查結果."""
+
+    all_hooks: set[str]
+    """掃描到的所有 Hook 檔案（排除 exclude list）."""
+    registered_hooks: set[str]
+    """在 settings.json 中已登記的 Hook 檔案."""
+    unregistered_hooks: set[str]
+    """未在 settings.json 中登記的 Hook 檔案。"""
+    excluded_count: int
+    """被排除在檢查外的 Hook 檔案數量。"""
+    completeness_ok: bool
+    """是否所有 Hook 都已登記。"""
 
 
 def verify_uv_available() -> ToolStatus:
@@ -171,4 +195,60 @@ def verify_hooks_system(project_root: Path) -> HookSystemStatus:
         hook_count=len(hook_files),
         all_compilable=all_compilable,
         errors=errors,
+    )
+
+
+def check_hook_completeness(project_root: Path) -> HookCompletenessResult:
+    """檢查 Hook 完整性 — 驗證所有 .claude/hooks/*.py 都已在 settings.json 登記.
+
+    掃描 .claude/hooks/ 目錄，與 settings.json 比對已登記的 Hook，
+    回傳未登記的清單。
+
+    Args:
+        project_root: 專案根目錄。
+
+    Returns:
+        HookCompletenessResult: 完整性檢查結果。
+    """
+    hooks_dir = project_root / ".claude" / "hooks"
+    settings_path = project_root / ".claude" / "settings.json"
+    exclude_list_path = hooks_dir / "hook-exclude-list.json"
+
+    # 載入設定檔
+    settings = load_json_file(settings_path)
+    if settings is None:
+        # settings.json 不存在，無法驗證
+        return HookCompletenessResult(
+            all_hooks=set(),
+            registered_hooks=set(),
+            unregistered_hooks=set(),
+            excluded_count=0,
+            completeness_ok=True,
+        )
+
+    exclude_list = load_json_file(exclude_list_path)
+    exact_excludes, patterns = get_exclude_patterns(exclude_list)
+
+    # 掃描 Hook 目錄
+    all_hooks = scan_hooks_directory(hooks_dir, exact_excludes, patterns)
+    registered_hooks = extract_registered_hooks(settings)
+
+    # 計算未登記的 Hook
+    unregistered_hooks = all_hooks - registered_hooks
+
+    # 計算被排除的檔案數量
+    excluded_count = sum(
+        1
+        for f in hooks_dir.glob("*.py")
+        if should_exclude_file(f.name, exact_excludes, patterns)
+    )
+
+    completeness_ok = len(unregistered_hooks) == 0
+
+    return HookCompletenessResult(
+        all_hooks=all_hooks,
+        registered_hooks=registered_hooks,
+        unregistered_hooks=unregistered_hooks,
+        excluded_count=excluded_count,
+        completeness_ok=completeness_ok,
     )

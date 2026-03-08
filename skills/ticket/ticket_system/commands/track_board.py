@@ -6,9 +6,11 @@ Ticket 看板命令模組
 # 防止直接執行此模組
 if __name__ == "__main__":
     import sys
-    print("=" * 60)
+    # 模組直接執行時套件 import 不可用，用局部常數替代 SEPARATOR_PRIMARY
+    _SEP = "=" * 60
+    print(_SEP)
     print("[ERROR] 此檔案不支援直接執行")
-    print("=" * 60)
+    print(_SEP)
     print()
     print("正確使用方式：")
     print("  ticket track board")
@@ -16,7 +18,7 @@ if __name__ == "__main__":
     print("  ticket track board --ascii")
     print()
     print("詳見 SKILL.md")
-    print("=" * 60)
+    print(_SEP)
     sys.exit(1)
 
 
@@ -40,9 +42,13 @@ from ticket_system.lib.command_tracking_messages import (
     TrackBoardMessages,
     format_msg,
 )
-
-
-import re
+from ticket_system.lib.ui_constants import (
+    SEPARATOR_PRIMARY,
+    SEPARATOR_SECONDARY,
+    SEPARATOR_WIDE,
+    SEPARATOR_WIDE_DASH,
+)
+from ticket_system.lib.ticket_validator import extract_wave_from_ticket_id
 from typing import Tuple
 
 
@@ -55,9 +61,9 @@ def filter_incomplete_tickets(tickets: List[Dict[str, Any]]) -> List[Dict[str, A
 
 
 def extract_wave_number(ticket_id: str) -> str:
-    """從 Ticket ID 提取 Wave 號"""
-    match = re.search(r'-W(\d+)-', ticket_id or "")
-    return f"W{match.group(1)}" if match else "Unknown"
+    """從 Ticket ID 提取 Wave 號（顯示格式，如 W9）"""
+    wave = extract_wave_from_ticket_id(ticket_id)
+    return f"W{wave}" if wave is not None else "Unknown"
 
 
 def group_by_wave(tickets: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
@@ -159,7 +165,7 @@ def render_board_tree(
         lines.append(format_msg(TrackBoardMessages.TREE_TITLE_ALL, version=version))
     else:
         lines.append(format_msg(TrackBoardMessages.TREE_TITLE_INCOMPLETE, version=version))
-    lines.append("=" * 50)
+    lines.append(SEPARATOR_SECONDARY)
     lines.append("")
 
     # 過濾任務
@@ -581,7 +587,7 @@ def render_board_ascii(
     lines = []
 
     # 渲染表格標題
-    title_line = "=" * 70
+    title_line = SEPARATOR_WIDE
     lines.append(title_line)
 
     board_title = TrackBoardMessages.ASCII_BOARD_TITLE
@@ -594,7 +600,7 @@ def render_board_ascii(
 
     # 渲染欄標題
     lines.append(TrackBoardMessages.ASCII_HEADER_ROW)
-    lines.append("-" * 70)
+    lines.append(SEPARATOR_WIDE_DASH)
 
     # 遍歷每個狀態建立行
     for status in [STATUS_PENDING, STATUS_IN_PROGRESS, STATUS_COMPLETED, STATUS_BLOCKED]:
@@ -610,7 +616,7 @@ def render_board_ascii(
         lines.append(row)
 
     # 渲染表格邊界
-    lines.append("=" * 70)
+    lines.append(SEPARATOR_WIDE)
 
     return "\n".join(lines)
 

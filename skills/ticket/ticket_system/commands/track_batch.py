@@ -6,9 +6,10 @@ Ticket 批量操作模組
 # 防止直接執行此模組
 if __name__ == "__main__":
     import sys
-    print("=" * 60)
+    from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
+    print(SEPARATOR_PRIMARY)
     print("[ERROR] 此檔案不支援直接執行")
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print()
     print("正確使用方式：")
     print("  ticket track summary")
@@ -18,7 +19,7 @@ if __name__ == "__main__":
     print("  cd .claude/skills/ticket && uv tool install .")
     print()
     print("詳見 SKILL.md")
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     sys.exit(1)
 
 
@@ -35,7 +36,6 @@ from ticket_system.lib.constants import (
 )
 from ticket_system.lib.ticket_loader import (
     get_ticket_path,
-    load_ticket,
     save_ticket,
     list_tickets,
 )
@@ -55,6 +55,11 @@ from ticket_system.lib.command_tracking_messages import (
     TrackBatchMessages,
     format_msg,
 )
+from ticket_system.lib.ticket_ops import (
+    load_and_validate_ticket,
+    resolve_ticket_path,
+)
+from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 
 
 # ============================================================================
@@ -175,24 +180,6 @@ def _resolve_ticket_ids_for_complete(
 
     # 最後使用逗號分隔 ID
     return ticket_ids_arg
-
-
-def _check_yaml_error(ticket: Dict[str, Any], ticket_id: str) -> bool:
-    """
-    檢查 Ticket 是否有 YAML 解析錯誤。
-
-    Args:
-        ticket: load_ticket() 回傳的 Ticket 字典
-        ticket_id: Ticket ID（用於錯誤訊息）
-
-    Returns:
-        bool: True 表示有錯誤，False 表示無錯誤
-    """
-    if "_yaml_error" in ticket:
-        error_msg = format_msg(TrackBatchMessages.YAML_ERROR_FORMAT, ticket_id=ticket_id, error=ticket['_yaml_error'])
-        print(f"   {format_error(error_msg)}")
-        return True
-    return False
 
 
 def _parse_ticket_ids(ids_str: str) -> list[str]:
@@ -325,7 +312,7 @@ def _execute_batch_operation(
         # 模擬執行模式：只顯示清單
         print(format_info(BatchEnhancedMessages.DRY_RUN_HEADER))
         for ticket_id in ticket_ids:
-            ticket = load_ticket(version, ticket_id)
+            ticket, _ = load_and_validate_ticket(version, ticket_id, auto_print_error=False)
             if ticket:
                 title = ticket.get("title", "無標題")
                 print(format_info(BatchEnhancedMessages.DRY_RUN_ITEM_FORMAT, ticket_id=ticket_id, title=title))
@@ -338,13 +325,10 @@ def _execute_batch_operation(
 
     success_count = 0
     for ticket_id in ticket_ids:
-        ticket = load_ticket(version, ticket_id)
-        if not ticket:
+        # 使用 auto_print_error=False 以支援自訂 BATCH 格式
+        ticket, error = load_and_validate_ticket(version, ticket_id, auto_print_error=False)
+        if error:
             print(f"   {format_error(ErrorMessages.TICKET_NOT_FOUND_IN_BATCH, ticket_id=ticket_id)}")
-            continue
-
-        # 檢查 YAML 錯誤
-        if _check_yaml_error(ticket, ticket_id):
             continue
 
         # 處理 Ticket
@@ -352,7 +336,7 @@ def _execute_batch_operation(
 
         if success:
             # 保存更改
-            ticket_path = Path(ticket.get("_path", get_ticket_path(version, ticket_id)))
+            ticket_path = resolve_ticket_path(ticket, version, ticket_id)
             save_ticket(ticket, ticket_path)
             # 使用 format_info 確保一致的訊息格式
             print(f"   {TrackBatchMessages.OK_PREFIX} {message}")

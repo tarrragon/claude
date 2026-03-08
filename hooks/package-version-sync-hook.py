@@ -36,6 +36,8 @@ Exit codes:
 import os
 import subprocess
 import sys
+import json
+import hashlib
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -59,6 +61,8 @@ except ImportError:
 SKILLS_DIR_NAME = ".claude/skills"
 PYPROJECT_FILENAME = "pyproject.toml"
 HOOK_NAME = "package-version-sync-hook"
+SYNC_CACHE_FILENAME = "sync-cache.json"
+SYNC_CACHE_VERSION = "1"
 
 # Timeout constants (in seconds)
 SHORT_OPERATION_TIMEOUT_SECONDS = 30  # For uv tool list, uninstall, cache clean
@@ -68,6 +72,190 @@ INSTALL_OPERATION_TIMEOUT_SECONDS = 120  # For uv tool install with --reinstall
 SEPARATOR_LINE_WIDTH = 60
 
 
+# ============================================================================
+# Cache Management
+# ============================================================================
+
+
+def _get_cache_dir(project_root: Path) -> Path:
+    """Get the cache directory for sync cache.
+
+    Creates the directory if it doesn't exist.
+
+    Args:
+        project_root: Root directory of the project.
+
+    Returns:
+        Path to the cache directory.
+    """
+    cache_dir = project_root / ".claude" / "hook-logs" / HOOK_NAME / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def _calculate_pyproject_hash(pyproject_path: Path) -> Optional[str]:
+    """Calculate SHA256 hash of a pyproject.toml file.
+
+    Args:
+        pyproject_path: Path to the pyproject.toml file.
+
+    Returns:
+        SHA256 hash string, or None if file doesn't exist or read fails.
+    """
+    try:
+        if not pyproject_path.exists():
+            return None
+        with open(pyproject_path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except Exception:
+        return None
+
+
+def _load_sync_cache(project_root: Path, logger: Optional[object] = None) -> Dict:
+    """Load the sync cache from disk.
+
+    Returns empty dict if cache doesn't exist or is invalid.
+
+    Args:
+        project_root: Root directory of the project.
+        logger: Optional Logger instance.
+
+    Returns:
+        Dict with cache contents, or empty dict if cache doesn't exist.
+    """
+    cache_dir = _get_cache_dir(project_root)
+    cache_file = cache_dir / SYNC_CACHE_FILENAME
+
+    try:
+        if not cache_file.exists():
+            return {}
+
+        with open(cache_file, "r", encoding="utf-8") as f:
+            cache_data = json.load(f)
+
+        # Validate cache version
+        if cache_data.get("version") != SYNC_CACHE_VERSION:
+            return {}
+
+        return cache_data
+    except Exception:
+        # On any error, return empty cache (will trigger full sync)
+        return {}
+
+
+def _save_sync_cache(project_root: Path, cache_data: Dict, logger: Optional[object] = None) -> bool:
+    """Save the sync cache to disk.
+
+    Args:
+        project_root: Root directory of the project.
+        cache_data: Cache data to save.
+        logger: Optional Logger instance.
+
+    Returns:
+        True if save succeeded, False otherwise.
+    """
+    cache_dir = _get_cache_dir(project_root)
+    cache_file = cache_dir / SYNC_CACHE_FILENAME
+
+    try:
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(cache_data, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception:
+        # Cache failure should not block the sync
+        return False
+
+
+def _should_skip_sync_due_to_cache(
+    project_root: Path,
+    packages: Dict[str, Dict[str, str]],
+    logger: Optional[object] = None,
+) -> bool:
+    """Check if sync should be skipped due to cache hit.
+
+    Cache hit conditions:
+    1. Cache exists and is valid
+    2. All pyproject.toml files have matching hashes
+    3. No new packages have been added
+    4. No packages have been removed
+
+    Args:
+        project_root: Root directory of the project.
+        packages: Dict of discovered packages (name → {path, version}).
+        logger: Optional Logger instance.
+
+    Returns:
+        True if cache hit (can skip sync), False if cache miss (must sync).
+    """
+    cache_data = _load_sync_cache(project_root, logger)
+
+    if not cache_data or "pyproject_hashes" not in cache_data:
+        return False
+
+    cached_hashes = cache_data.get("pyproject_hashes", {})
+    skills_dir = project_root / SKILLS_DIR_NAME
+
+    # Build current hashes
+    current_hashes: Dict[str, str] = {}
+    for package_name, package_info in packages.items():
+        package_path = package_info.get("path", "")
+        if not package_path:
+            continue
+
+        pyproject_path = project_root / package_path / PYPROJECT_FILENAME
+        file_hash = _calculate_pyproject_hash(pyproject_path)
+        if file_hash:
+            current_hashes[package_path] = file_hash
+
+    # Compare hashes
+    if len(current_hashes) != len(cached_hashes):
+        # Number of files changed
+        return False
+
+    for package_path, file_hash in current_hashes.items():
+        if cached_hashes.get(package_path) != file_hash:
+            # Hash mismatch
+            return False
+
+    # All hashes match → cache hit
+    return True
+
+
+def _update_sync_cache(
+    project_root: Path,
+    packages: Dict[str, Dict[str, str]],
+    installed_tools: Dict[str, str],
+    logger: Optional[object] = None,
+) -> None:
+    """Update the sync cache with current package hashes and versions.
+
+    Args:
+        project_root: Root directory of the project.
+        packages: Dict of discovered packages (name → {path, version}).
+        installed_tools: Dict of installed tools (name → version).
+        logger: Optional Logger instance.
+    """
+    pyproject_hashes: Dict[str, str] = {}
+
+    # Calculate hashes for all discovered packages
+    for package_name, package_info in packages.items():
+        package_path = package_info.get("path", "")
+        if not package_path:
+            continue
+
+        pyproject_path = project_root / package_path / PYPROJECT_FILENAME
+        file_hash = _calculate_pyproject_hash(pyproject_path)
+        if file_hash:
+            pyproject_hashes[package_path] = file_hash
+
+    # Build cache data
+    cache_data = {
+        "version": SYNC_CACHE_VERSION,
+        "pyproject_hashes": pyproject_hashes,
+        "installed_versions": installed_tools,
+    }
+
+    _save_sync_cache(project_root, cache_data, logger)
 
 
 def scan_skill_packages(project_root: Path, logger: Optional[object] = None) -> Dict[str, Dict[str, str]]:
@@ -195,7 +383,7 @@ def get_installed_uv_tools() -> Dict[str, str]:
         # Parse output lines: skip headers and empty lines
         for line in result.stdout.splitlines():
             # Skip separator lines and empty lines
-            if not line.strip() or "─" in line or "─" in line:
+            if not line.strip() or "─" in line:
                 continue
             # Skip header line
             if "Tool Name" in line or "Version" in line:
@@ -351,6 +539,8 @@ def _process_package(
 def _sync_packages(project_root: Path, packages: Dict[str, Dict[str, str]]) -> None:
     """Sync all discovered packages: query installed tools and process each package.
 
+    This function also updates the cache after sync completes.
+
     Args:
         project_root: Project root directory path
         packages: Dict of package names to their metadata
@@ -364,15 +554,19 @@ def _sync_packages(project_root: Path, packages: Dict[str, Dict[str, str]]) -> N
     for package_name, package_info in packages.items():
         _process_package(package_name, package_info, project_root, installed_tools)
 
+    # Update cache after successful sync
+    _update_sync_cache(project_root, packages, installed_tools)
+
     print("=" * SEPARATOR_LINE_WIDTH)
 
 
 def main() -> int:
     """Main hook entry point.
 
-    Orchestrates the package version sync process:
+    Orchestrates the package version sync process with caching:
+    Phase 0: Check cache for pyproject.toml changes
     Phase 1: Auto-scan .claude/skills/*/pyproject.toml
-    Phase 2: Query 'uv tool list' for installed versions
+    Phase 2: Query 'uv tool list' for installed versions (if cache miss)
     Phase 3: Compare desired vs installed versions
     Phase 4: Reinstall packages that need updates
 
@@ -386,6 +580,13 @@ def main() -> int:
     packages = scan_skill_packages(project_root, logger)
     if not packages:
         print("Package Version Sync - No packages found in .claude/skills/")
+        return 0
+
+    # Phase 0: Check cache
+    if _should_skip_sync_due_to_cache(project_root, packages, logger):
+        print("=" * SEPARATOR_LINE_WIDTH)
+        print("Package Version Sync - cached, skip sync")
+        print("=" * SEPARATOR_LINE_WIDTH)
         return 0
 
     _sync_packages(project_root, packages)

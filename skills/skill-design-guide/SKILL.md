@@ -177,6 +177,25 @@ description 注入 system prompt，人稱不一致會導致觸發問題。
 [做什麼] + [何時使用（觸發條件）] + [關鍵能力]
 ```
 
+### Undertrigger 防護（官方建議）
+
+Claude 傾向 **undertrigger**（有用時不觸發）。Description 應稍微積極，主動列出觸發情境，包括用戶沒有明說但明顯需要的場景。
+
+**對比**：
+
+```yaml
+# 太被動（undertrigger 風險）
+description: "Processes PDF files to extract text and tables."
+
+# 積極版（防止 undertrigger）
+description: "Processes PDF files to extract text and tables. Use whenever the user mentions PDFs, wants to read a document, asks to summarize a file, or uploads any document — even if they don't explicitly say 'PDF'."
+```
+
+**加強觸發的技巧**：
+- 列出用戶可能說的**同義詞和近似詞**（e.g., "document", "file", "report" 不只是 "PDF"）
+- 加上 "even if they don't explicitly ask for..." 涵蓋隱性需求
+- 加上 "Make sure to use this skill whenever..." 作為明確的觸發指引
+
 ### 正確範例
 
 ```yaml
@@ -483,5 +502,5 @@ description: "Does things"
 
 ---
 
-*Last Updated: 2026-03-02*
-*Source: Anthropic Official Platform Docs + "Lessons from Building Claude Code" + Project Experience*
+*Last Updated: 2026-03-08*
+*Source: Anthropic Official Platform Docs + "Lessons from Building Claude Code" + anthropics/skills skill-creator + Project Experience*

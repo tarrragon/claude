@@ -35,7 +35,7 @@ class TestQuery:
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
 
-        with patch('ticket_system.commands.track_query.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "title": "Test Ticket",
@@ -75,7 +75,7 @@ class TestQuery:
         args.ticket_id = "0.31.0-W4-001"
         args.version = None
 
-        with patch('ticket_system.commands.track_query.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "title": "Test Ticket",
@@ -98,6 +98,7 @@ class TestSummary:
         """
         args = Mock()
         args.version = "0.31.0"
+        args.status = None
 
         with patch('ticket_system.commands.track_query.list_tickets') as mock_list:
             mock_tickets = [
@@ -108,10 +109,12 @@ class TestSummary:
             mock_list.return_value = mock_tickets
 
             with patch('ticket_system.commands.track_query.format_ticket_list'):
-                result = execute_summary(args, "0.31.0")
+                with patch('ticket_system.commands.track_query._print_cross_version_warning'):
+                    result = execute_summary(args, "0.31.0")
 
-                assert result == 0
-                mock_list.assert_called_once()
+                    assert result == 0
+                    # 應該被調用至少一次（針對當前版本）
+                    assert mock_list.called
 
     def test_summary_empty_ticket_list(self):
         """
@@ -408,6 +411,7 @@ class TestList:
         args.completed = False
         args.blocked = False
         args.version = "0.31.0"
+        args.status = None
 
         with patch('ticket_system.lib.ticket_loader.list_tickets') as mock_list:
             mock_tickets = [
@@ -434,6 +438,7 @@ class TestList:
         args.completed = False
         args.blocked = False
         args.version = "0.31.0"
+        args.status = None
 
         with patch('ticket_system.lib.ticket_loader.list_tickets') as mock_list:
             mock_tickets = [
@@ -457,6 +462,7 @@ class TestList:
         args.completed = False
         args.blocked = False
         args.version = "0.31.0"
+        args.status = None
 
         with patch('ticket_system.lib.ticket_loader.list_tickets') as mock_list:
             mock_tickets = [
@@ -481,6 +487,7 @@ class TestList:
         args.completed = False
         args.blocked = False
         args.version = "0.31.0"
+        args.status = None
 
         with patch('ticket_system.lib.ticket_loader.list_tickets') as mock_list:
             mock_list.return_value = []
@@ -569,6 +576,7 @@ class TestListFilterEnhancements:
         args.wave = 28
         args.format = "table"
         args.version = "0.31.0"
+        args.status = None
 
         with patch('ticket_system.lib.ticket_loader.list_tickets') as mock_list:
             mock_tickets = [
@@ -623,26 +631,27 @@ class TestListFilterEnhancements:
         args.in_progress = False
         args.completed = False
         args.blocked = False
-        args.status = None
         args.wave = None
         args.format = "ids"
         args.version = "0.31.0"
+        args.status = None
 
-        with patch('ticket_system.lib.ticket_loader.list_tickets') as mock_list:
+        with patch('ticket_system.commands.track_query.list_tickets') as mock_list:
             mock_tickets = [
                 {"id": "0.31.0-W4-001", "status": "pending"},
                 {"id": "0.31.0-W4-002", "status": "completed"},
             ]
             mock_list.return_value = mock_tickets
 
-            with patch('builtins.print') as mock_print:
-                result = execute_list(args, "0.31.0")
+            with patch('ticket_system.commands.track_query._print_cross_version_warning'):
+                with patch('builtins.print') as mock_print:
+                    result = execute_list(args, "0.31.0")
 
-            # 驗證只輸出了 ID
-            calls = [str(call) for call in mock_print.call_args_list]
-            assert any("0.31.0-W4-001" in str(call) for call in calls)
-            assert any("0.31.0-W4-002" in str(call) for call in calls)
-            assert result == 0
+                    # 驗證只輸出了 ID
+                    calls = [str(call) for call in mock_print.call_args_list]
+                    assert any("0.31.0-W4-001" in str(call) for call in calls)
+                    assert any("0.31.0-W4-002" in str(call) for call in calls)
+                    assert result == 0
 
     def test_list_output_format_yaml(self):
         """

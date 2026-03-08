@@ -18,110 +18,24 @@ Exit codes:
     0 - Missing/unregistered hooks detected (warning, does not block)
 """
 
-import json
-import os
 import sys
-import fnmatch
 from pathlib import Path
-from typing import Dict, Set, List, Tuple, Optional
 
-sys.path.insert(0, str(Path(__file__).parent))
+_HOOKS_DIR = Path(__file__).parent
+_CLAUDE_DIR = _HOOKS_DIR.parent
+_PROJECT_INIT_DIR = _CLAUDE_DIR / "skills" / "project-init"
+
+sys.path.insert(0, str(_HOOKS_DIR))
+sys.path.insert(0, str(_PROJECT_INIT_DIR))
+
 from hook_utils import setup_hook_logging, run_hook_safely
-
-
-def load_json_file(file_path: Path, logger=None) -> Optional[dict]:
-    """Load and parse a JSON file."""
-    if not file_path.exists():
-        return None
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except json.JSONDecodeError as e:
-        log_output = f"[HookCheck] Error parsing {file_path}: {e}"
-        print(log_output)
-        if logger:
-            logger.info(log_output)
-        return None
-
-
-def get_exclude_patterns(exclude_list: Optional[dict]) -> Tuple[Set[str], Set[str]]:
-    """Extract exact filenames and patterns to exclude from hook-exclude-list.json."""
-    exact_excludes: Set[str] = set()
-    patterns: Set[str] = set()
-
-    if exclude_list is None:
-        # Default excludes if file doesn't exist
-        exact_excludes = {
-            'common_functions.py',
-            'frontmatter_parser.py',
-            'markdown_formatter.py',
-            'parse-test-json.py'
-        }
-        patterns = {'*-backup.py'}
-        return exact_excludes, patterns
-
-    # Load from configuration
-    exact_excludes = set(exclude_list.get('exclude', []))
-    patterns = set(exclude_list.get('exclude_patterns', []))
-
-    return exact_excludes, patterns
-
-
-def should_exclude_file(filename: str, exact_excludes: Set[str], patterns: Set[str]) -> bool:
-    """Check if a file should be excluded from registration check."""
-    # Check exact matches
-    if filename in exact_excludes:
-        return True
-
-    # Check patterns
-    for pattern in patterns:
-        if fnmatch.fnmatch(filename, pattern):
-            return True
-
-    return False
-
-
-def scan_hooks_directory(hooks_dir: Path, exact_excludes: Set[str], patterns: Set[str]) -> Set[str]:
-    """Scan .claude/hooks directory for all .py files (excluding those in exclude list)."""
-    hook_files: Set[str] = set()
-
-    if not hooks_dir.exists():
-        return hook_files
-
-    for file_path in hooks_dir.glob('*.py'):
-        filename = file_path.name
-
-        # Skip excluded files
-        if should_exclude_file(filename, exact_excludes, patterns):
-            continue
-
-        hook_files.add(filename)
-
-    return hook_files
-
-
-def extract_registered_hooks(settings: dict) -> Set[str]:
-    """Extract all registered hook filenames from settings.json."""
-    registered: Set[str] = set()
-    hooks_config = settings.get('hooks', {})
-
-    for event_type, event_hooks in hooks_config.items():
-        if isinstance(event_hooks, list):
-            for hook_group in event_hooks:
-                if isinstance(hook_group, dict):
-                    for hook in hook_group.get('hooks', []):
-                        if isinstance(hook, dict):
-                            command = hook.get('command', '')
-                            # Extract filename from command path
-                            # e.g., "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-name.py" -> "hook-name.py"
-                            if '.claude/hooks/' in command:
-                                filename = command.split('.claude/hooks/')[-1]
-                                # Remove any trailing arguments
-                                filename = filename.split()[0] if filename else ''
-                                if filename.endswith('.py'):
-                                    registered.add(filename)
-
-    return registered
+from project_init.lib.hook_checker import (
+    extract_registered_hooks,
+    get_exclude_patterns,
+    load_json_file,
+    scan_hooks_directory,
+    should_exclude_file,
+)
 
 
 def main():

@@ -39,6 +39,7 @@ from ticket_system.lib.messages import (
 from ticket_system.lib.command_tracking_messages import (
     BulkCreateMessages,
 )
+from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 
 
 @dataclass
@@ -264,9 +265,9 @@ def _print_batch_summary(
 ) -> None:
     """顯示批次建立摘要"""
     print()
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print(format_info(BulkCreateMessages.BATCH_CREATE_SUMMARY_TITLE))
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print()
     print(f"{BulkCreateMessages.SUMMARY_TEMPLATE_PREFIX} {template}")
     print(f"{BulkCreateMessages.SUMMARY_VERSION_PREFIX} {version}")
@@ -285,9 +286,9 @@ def _print_batch_summary(
 
 def _print_batch_result(result: BulkCreateResult) -> None:
     """顯示批次建立結果"""
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print(format_info(BulkCreateMessages.BATCH_CREATE_COMPLETE))
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print()
     print(
         BulkCreateMessages.RESULT_FORMAT.format(

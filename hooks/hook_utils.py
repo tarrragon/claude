@@ -20,9 +20,9 @@ import os
 import sys
 import time
 import traceback
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, List, Optional, Tuple
 
 # ============================================================================
 # 常數定義
@@ -260,6 +260,69 @@ def _setup_logger_handlers(logger: logging.Logger, log_base_dir: Path,
 # ============================================================================
 
 
+def get_project_root() -> Path:
+    """取得專案根目錄
+
+    優先順序：
+    1. 環境變數 CLAUDE_PROJECT_DIR
+    2. 從 cwd 向上搜尋 CLAUDE.md（最多 5 層）
+    3. os.getcwd() fallback（永不失敗）
+
+    Returns:
+        Path: 專案根目錄路徑
+    """
+    return _find_project_root()
+
+
+def run_git(
+    args: list,
+    cwd: "str | Path | None" = None,
+    timeout: int = 5,
+    logger: "logging.Logger | None" = None,
+) -> "str | None":
+    """執行 git 命令並回傳 stdout
+
+    Args:
+        args: git 子命令和參數，如 ["log", "-1", "--format=%ct"]
+        cwd: 工作目錄（預設為當前目錄）
+        timeout: 執行超時秒數（預設 5）
+        logger: 可選日誌物件，失敗時記錄 warning
+
+    Returns:
+        stdout 輸出（stripped），或 None 若執行失敗
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            timeout=timeout,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+        else:
+            if logger:
+                logger.warning("git 命令失敗: {} (exit code: {})".format(
+                    " ".join(args), result.returncode
+                ))
+            return None
+    except subprocess.TimeoutExpired:
+        if logger:
+            logger.warning("git 命令超時: {}".format(" ".join(args)))
+        return None
+    except FileNotFoundError:
+        if logger:
+            logger.warning("git 命令未找到")
+        return None
+    except OSError as e:
+        if logger:
+            logger.warning("執行 git 命令失敗: {}".format(e))
+        return None
+
+
 def setup_hook_logging(hook_name: str) -> logging.Logger:
     """建立並設定 Hook 日誌系統
 
@@ -350,50 +413,241 @@ def read_json_from_stdin(logger: logging.Logger) -> Optional[dict]:
         return None
 
 
-def parse_ticket_frontmatter(file_path: Path, logger: logging.Logger) -> Optional[dict]:
-    """簡易 YAML frontmatter 解析（無外部依賴）
+def parse_ticket_frontmatter(
+    content_or_path: "str | Path",
+    logger: "logging.Logger | None" = None
+) -> Optional[dict]:
+    """統一的 YAML frontmatter 解析（支援 str 和 Path 輸入）
 
-    只解析頂層 key-value，忽略巢狀結構和陣列。
+    支援以下 YAML 特性：
+    - 頂層 key-value 對
+    - 多行字串（|, >, |-, >-）
+    - 嵌套結構（縮排鍵值對）
+    - 簡單列表
+
+    無外部依賴，支援 Python 3.9+。
 
     Args:
-        file_path: Ticket 檔案路徑
-        logger: Logger 實例
+        content_or_path: Ticket 檔案內容（字串）或檔案路徑（Path）
+        logger: 可選 Logger 實例，用於記錄錯誤
 
     Returns:
-        dict: 解析出的 frontmatter key-value；若檔案無 frontmatter 則回傳 None
+        dict: 解析出的 frontmatter key-value（始終返回 dict，無 frontmatter 時返回空 dict）；
+              若解析失敗，返回空 dict 並記錄警告（如提供 logger）
     """
     try:
-        content = file_path.read_text(encoding='utf-8')
-        if not content.startswith('---'):
-            return None
+        # 步驟 1：取得文件內容
+        if isinstance(content_or_path, Path):
+            try:
+                content = content_or_path.read_text(encoding='utf-8')
+                file_name = content_or_path.name
+            except Exception as e:
+                if logger:
+                    logger.warning("讀取檔案失敗 ({}): {}".format(content_or_path.name, e))
+                return {}
+        else:
+            content = str(content_or_path) if content_or_path else ""
+            file_name = "frontmatter"
 
-        # 找到第二個 ---
+        # 步驟 2：驗證 frontmatter 標記
+        if not content.startswith('---'):
+            return {}
+
+        # 步驟 3：找到 frontmatter 結束標記
         end_idx = content.find('---', 3)
         if end_idx == -1:
-            return None
+            return {}
 
-        frontmatter_text = content[3:end_idx]
+        frontmatter_text = content[3:end_idx].strip()
+        if not frontmatter_text:
+            return {}
+
+        # 步驟 4：解析 YAML
         result = {}
+        current_key = None
+        multiline_marker = None
 
-        for line in frontmatter_text.strip().split('\n'):
+        lines = frontmatter_text.split('\n')
+        i = 0
+
+        while i < len(lines):
+            line = lines[i]
+
             # 跳過空行和註解
             if not line.strip() or line.strip().startswith('#'):
+                i += 1
                 continue
 
-            # 跳過已縮排的行（巢狀結構）
-            if line.startswith(' ') or line.startswith('\t'):
+            # 檢查是否為嵌套行（以 2 個空格開頭）
+            if line.startswith('  ') and not line.startswith('    '):
+                nested_line = line.strip()
+
+                # 若有多行標記，直接收集縮排行
+                if multiline_marker is not None:
+                    if current_key:
+                        if current_key not in result:
+                            result[current_key] = ""
+                        result[current_key] += "\n" + nested_line if result[current_key] else nested_line
+                    i += 1
+                    continue
+
+                # 否則作為嵌套鍵值對
+                if ':' in nested_line:
+                    nested_key, nested_value = nested_line.split(':', 1)
+                    nested_key = nested_key.strip()
+                    nested_value = nested_value.strip().strip("'\"")
+
+                    if current_key:
+                        if not isinstance(result.get(current_key), dict):
+                            result[current_key] = {}
+                        result[current_key][nested_key] = nested_value
+                i += 1
                 continue
 
-            # 只解析頂層 key
+            # 頂層鍵值對
             if ':' in line:
                 key, _, value = line.partition(':')
-                result[key.strip()] = value.strip().strip("'\"")
+                key = key.strip()
+                value = value.strip()
 
-        return result if result else None
+                # 檢查多行標記
+                if value in ('|', '>', '|-', '>-'):
+                    current_key = key
+                    multiline_marker = value
+                    result[key] = ""
+                    i += 1
+                    continue
+
+                # 移除引號
+                value_clean = value.strip("'\"") if value else ""
+                result[key] = value_clean
+                current_key = key
+                multiline_marker = None
+
+            i += 1
+
+        return result
 
     except Exception as e:
-        logger.warning("解析 frontmatter 失敗 ({}): {}".format(file_path.name, e))
+        if logger:
+            logger.warning("解析 frontmatter 失敗: {}".format(e))
+        return {}
+
+
+def parse_ticket_date(value: "any", logger: "logging.Logger | None" = None) -> Optional[datetime]:
+    """支援多格式的 Ticket 日期解析。
+
+    格式優先級：
+    1. datetime.date 物件（YAML 直接解析）
+    2. ISO 8601 / RFC 3339 字串（fromisoformat）
+    3. 簡單日期字串 YYYY-MM-DD
+
+    Args:
+        value: 日期值（可能是 datetime、date 或字串）
+        logger: 日誌物件（可選）
+
+    Returns:
+        datetime 物件或 None（無法解析時）
+    """
+    # 已經是 datetime 物件
+    if isinstance(value, datetime):
+        return value
+
+    # 是 date 物件，轉為 datetime
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+
+    # 字串解析
+    if not isinstance(value, str):
+        if logger:
+            logger.warning("無法解析日期類型: {}".format(type(value)))
         return None
+
+    value = value.strip()
+    if not value:
+        return None
+
+    # 優先級 1: ISO 8601 / RFC 3339（使用 fromisoformat）
+    try:
+        dt = datetime.fromisoformat(value)
+        if logger:
+            logger.debug("日期解析成功（ISO 8601）: {}".format(dt.isoformat()))
+        return dt
+    except ValueError:
+        pass
+
+    # 優先級 2: 簡單日期 YYYY-MM-DD（strptime）
+    try:
+        dt = datetime.strptime(value, "%Y-%m-%d")
+        if logger:
+            logger.debug("日期解析成功（YYYY-MM-DD）: {}".format(dt.isoformat()))
+        return dt
+    except ValueError:
+        pass
+
+    # 所有格式都失敗
+    if logger:
+        logger.warning("無法解析日期字串: {}".format(value))
+    return None
+
+
+def check_error_patterns_changed(
+    project_root: Path,
+    ticket_created: datetime,
+    logger: "logging.Logger | None" = None
+) -> "Tuple[bool, List[str]]":
+    """掃描 .claude/error-patterns/ 目錄，找出所有 mtime > ticket_created 的 .md 檔案。
+
+    Args:
+        project_root: 專案根目錄
+        ticket_created: Ticket 建立時間
+        logger: 日誌物件（可選）
+
+    Returns:
+        tuple - (has_changed, file_list)
+            - has_changed: 是否有新增/修改的 error-pattern
+            - file_list: 新增/修改的檔案相對路徑清單
+    """
+    # 前置檢查
+    if ticket_created is None:
+        if logger:
+            logger.warning("ticket created time 為 None，跳過檢查")
+        return False, []
+
+    # 檢查目錄是否存在
+    error_patterns_dir = project_root / ".claude" / "error-patterns"
+    if not error_patterns_dir.exists():
+        if logger:
+            logger.info("error-patterns 目錄不存在，跳過檢查")
+        return False, []
+
+    changed_files = []
+    ticket_created_timestamp = ticket_created.timestamp()
+
+    try:
+        # 遞迴掃描所有 .md 檔案
+        for file_path in error_patterns_dir.rglob("*.md"):
+            try:
+                file_mtime = file_path.stat().st_mtime
+                if file_mtime > ticket_created_timestamp:
+                    relative_path = file_path.relative_to(project_root)
+                    changed_files.append(str(relative_path))
+                    if logger:
+                        logger.debug("找到新增檔案: {}".format(relative_path))
+            except (OSError, PermissionError) as e:
+                if logger:
+                    logger.warning("無法讀取檔案 stat: {}: {}".format(file_path, e))
+                continue
+
+    except (OSError, PermissionError) as e:
+        if logger:
+            logger.warning("讀取 error-patterns 目錄失敗: {}".format(e))
+        return False, []
+
+    if logger:
+        logger.info("掃描 error-patterns 目錄完成：發現 {} 個新增/修改檔案".format(len(changed_files)))
+    has_changed = len(changed_files) > 0
+    return has_changed, changed_files
 
 
 def run_hook_safely(main_func: Callable[[], int], hook_name: str) -> int:

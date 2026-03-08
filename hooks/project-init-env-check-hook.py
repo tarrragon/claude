@@ -21,34 +21,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely
-
-
-def get_project_root(logger) -> Path:
-    """取得專案根目錄。
-
-    Args:
-        logger: 日誌物件
-
-    Returns:
-        Path - 專案根目錄
-    """
-    project_dir = os.getenv("CLAUDE_PROJECT_DIR")
-    if project_dir:
-        return Path(project_dir)
-
-    # Fallback: 使用 git 查找
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=5
-        )
-        return Path(result.stdout.strip())
-    except Exception:
-        return Path.cwd()
+from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, run_git
 
 
 def run_project_init_check(project_root: Path, logger) -> tuple[bool, str]:
@@ -160,7 +133,7 @@ def main() -> int:
         logger.debug("Project Init 環境檢查 Hook 啟動")
 
         # 取得專案根目錄
-        project_root = get_project_root(logger)
+        project_root = get_project_root()
         logger.debug(f"專案根目錄: {project_root}")
 
         # 執行 project-init check

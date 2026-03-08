@@ -37,13 +37,20 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, run_git
 from lib.hook_messages import WorkflowMessages, CoreMessages, AskUserQuestionMessages, format_message
 
 
 # ============================================================================
 # SKILL 提示檢測
 # ============================================================================
+
+# 否定詞列表（用於避免誤判否定語境）
+NEGATION_WORDS = ["不是", "不需要", "不用", "不要", "沒有", "無需", "不必", "無須"]
+
+# 遠距否定詞搜索窗口大小（字符數）
+# 支援否定詞和關鍵字之間有其他詞彙的情況（如「不是說不用查詢」）
+NEGATION_WINDOW_SIZE = 15
 
 # 查詢類關鍵字對應 → /ticket track 系列
 QUERY_KEYWORDS = {
@@ -54,7 +61,7 @@ QUERY_KEYWORDS = {
     "完成了沒": "/ticket track query",
     "還有哪些": "/ticket track list --status pending",
     "待處理": "/ticket track list --status pending",
-    "未完成": "/ticket track list --status pending,in_progress",
+    "未完成": "/ticket track list --status pending in_progress",
     "有哪些 ticket": "/ticket track list",
     "ticket 列表": "/ticket track list",
 }
@@ -184,6 +191,35 @@ def resolve_ticket_path(project_root: Path, ticket_id: str) -> Optional[Path]:
         return None
 
 
+def _is_keyword_negated(prompt: str, keyword: str) -> bool:
+    """
+    檢查 keyword 在 prompt 中是否被否定詞修飾。
+
+    支援兩種模式：
+    1. 緊鄰模式：否定詞 + 關鍵字（如「不需要查詢」）
+    2. 遠距模式：否定詞出現在關鍵字前 NEGATION_WINDOW_SIZE 字符內
+       （如「完全不需要去查詢」、「我不是說不用查詢進度」）
+
+    Args:
+        prompt: 用戶輸入的提示文本（已轉小寫）
+        keyword: 待檢查的關鍵字
+
+    Returns:
+        True 如果關鍵字被否定詞修飾，否則 False
+    """
+    for negation in NEGATION_WORDS:
+        negation_idx = prompt.find(negation)
+        if negation_idx == -1:
+            continue
+        # 取否定詞後的窗口文本（支援遠距否定詞）
+        window_start = negation_idx + len(negation)
+        window_end = window_start + NEGATION_WINDOW_SIZE
+        window_text = prompt[window_start:window_end]
+        if keyword in window_text:
+            return True
+    return False
+
+
 def check_action_keywords(prompt: str) -> Optional[str]:
     """
     檢測操作類關鍵字（組合關鍵字）
@@ -197,6 +233,9 @@ def check_action_keywords(prompt: str) -> Optional[str]:
     for (keyword1, keyword2), skill_cmd in ACTION_KEYWORDS.items():
         # 兩個關鍵字都需要出現（不需要相鄰）
         if keyword1 in prompt and keyword2 in prompt:
+            # 若任一關鍵字被否定詞修飾，跳過此匹配（避免誤判否定語境）
+            if _is_keyword_negated(prompt, keyword1) or _is_keyword_negated(prompt, keyword2):
+                continue
             return skill_cmd
     return None
 
@@ -215,15 +254,24 @@ def check_handoff_keywords(prompt: str) -> Optional[str]:
         if len(keywords) == 1:
             # 單一關鍵字
             if keywords[0] in prompt:
+                # 若關鍵字被否定詞修飾，跳過此匹配（避免誤判否定語境）
+                if _is_keyword_negated(prompt, keywords[0]):
+                    continue
                 return skill_cmd
         elif len(keywords) == 2:
             # 組合關鍵字（都需要出現）
             # 處理特殊情況：("go back", "") 只需要檢查第一個關鍵字
             if keywords[1] == "":
                 if keywords[0] in prompt:
+                    # 若關鍵字被否定詞修飾，跳過此匹配（避免誤判否定語境）
+                    if _is_keyword_negated(prompt, keywords[0]):
+                        continue
                     return skill_cmd
             else:
                 if keywords[0] in prompt and keywords[1] in prompt:
+                    # 若任一關鍵字被否定詞修飾，跳過此匹配（避免誤判否定語境）
+                    if _is_keyword_negated(prompt, keywords[0]) or _is_keyword_negated(prompt, keywords[1]):
+                        continue
                     return skill_cmd
     return None
 
@@ -241,9 +289,15 @@ def check_decision_keywords(prompt: str) -> Optional[str]:
     for keywords, scenario in DECISION_KEYWORDS.items():
         if len(keywords) == 1:
             if keywords[0] in prompt:
+                # 若關鍵字被否定詞修飾，跳過此匹配（避免誤判否定語境）
+                if _is_keyword_negated(prompt, keywords[0]):
+                    continue
                 return scenario
         elif len(keywords) == 2:
             if keywords[0] in prompt and keywords[1] in prompt:
+                # 若任一關鍵字被否定詞修飾，跳過此匹配（避免誤判否定語境）
+                if _is_keyword_negated(prompt, keywords[0]) or _is_keyword_negated(prompt, keywords[1]):
+                    continue
                 return scenario
     return None
 
@@ -282,6 +336,9 @@ def check_skill_suggestion(prompt: str) -> Optional[tuple]:
     # 2. 檢查查詢類關鍵字
     for keyword, skill_cmd in QUERY_KEYWORDS.items():
         if keyword in prompt_lower:
+            # 若關鍵字被否定詞修飾，跳過此匹配（避免誤判否定語境）
+            if _is_keyword_negated(prompt_lower, keyword):
+                continue
             return (skill_cmd, "query")
 
     # 3. 檢查操作類關鍵字
@@ -431,36 +488,20 @@ def main():
         logger.info("Current 5W1H Token: no active token, recommend running generate")
         logger.info("Reminder: Must include complete 5W1H analysis (Who/What/When/Where/Why/How)")
 
-    # 5. 檢查 TDD Phase 完整性 (第四大鐵律)
-    logger.info("Check: TDD Phase completeness")
-
-    # 調用 TDD Phase 檢查 Hook
-    tdd_check_script = script_dir / 'tdd-phase-check-hook.py'
-    if tdd_check_script.exists() and os.access(tdd_check_script, os.X_OK):
-        subprocess.Popen([sys.executable, str(tdd_check_script)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        logger.info("OK: TDD Phase check started")
-    else:
-        logger.warning("WARNING: TDD Phase check hook not found or not executable")
-
-    # 6. 生成工作流程建議
+    # 5. 生成工作流程建議
     logger.info("Suggest: generating workflow suggestions")
 
     # 檢查最近是否有提交
     try:
-        result = subprocess.run(
-            ['git', 'log', '-1', '--format=%ct'],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0:
-            last_commit_time = int(result.stdout.strip())
+        output = run_git(['git', 'log', '-1', '--format=%ct'], timeout=5, logger=logger)
+        if output:
+            last_commit_time = int(output)
             current_time = int(datetime.now().timestamp())
             time_diff = current_time - last_commit_time
 
             if time_diff > 3600:  # 超過1小時
                 logger.info("Suggest: recommend checking if current progress needs to be committed")
-    except (subprocess.TimeoutExpired, ValueError, IOError):
+    except (ValueError, IOError):
         pass
 
     # 檢查todolist.yaml更新時間

@@ -48,7 +48,7 @@ from typing import Dict, Any, Optional, List, Tuple, Set
 sys.path.insert(0, str(Path(__file__).parent))
 
 try:
-    from hook_utils import setup_hook_logging
+    from hook_utils import setup_hook_logging, parse_ticket_frontmatter
     from lib.common_functions import hook_output, read_hook_input
     from lib.hook_messages import AskUserQuestionMessages
 except ImportError as e:
@@ -174,76 +174,6 @@ def find_ticket_files(logger) -> List[Path]:
     return all_tickets
 
 
-def parse_ticket_frontmatter(content: str) -> Dict[str, Any]:
-    """
-    解析 Ticket 的 YAML frontmatter
-
-    Args:
-        content: Ticket 檔案內容
-
-    Returns:
-        dict - 解析後的 frontmatter 資料
-    """
-    frontmatter = {}
-
-    if not content.startswith("---"):
-        return frontmatter
-
-    # 找到第二個 ---
-    frontmatter_end = content.find("---", 3)
-    if frontmatter_end <= 0:
-        return frontmatter
-
-    frontmatter_content = content[3:frontmatter_end].strip()
-
-    # 簡單的 YAML 解析（只提取我們需要的欄位）
-    current_key = None
-    for line in frontmatter_content.split("\n"):
-        if not line.strip():
-            continue
-
-        # 檢查是否為嵌套鍵（以 2 個空格開頭）
-        if line.startswith("  "):
-            nested_line = line.strip()
-            if ":" in nested_line:
-                nested_key, nested_value = nested_line.split(":", 1)
-                nested_key = nested_key.strip()
-                nested_value = nested_value.strip()
-
-                # 移除引號
-                if nested_value.startswith('"') and nested_value.endswith('"'):
-                    nested_value = nested_value[1:-1]
-                elif nested_value.startswith("'") and nested_value.endswith("'"):
-                    nested_value = nested_value[1:-1]
-
-                # 儲存到當前父鍵
-                if current_key and isinstance(frontmatter.get(current_key), dict):
-                    frontmatter[current_key][nested_key] = nested_value
-
-        elif ":" in line:
-            key, value = line.split(":", 1)
-            key = key.strip()
-            value = value.strip()
-
-            # 檢查是否為容器開始（chain:, blockedBy: 等）
-            if not value or value.startswith("["):
-                # 初始化為字典或列表
-                if value.startswith("["):
-                    frontmatter[key] = value
-                else:
-                    frontmatter[key] = {}
-                    current_key = key
-            else:
-                # 移除引號
-                if value.startswith('"') and value.endswith('"'):
-                    value = value[1:-1]
-                elif value.startswith("'") and value.endswith("'"):
-                    value = value[1:-1]
-
-                frontmatter[key] = value
-                current_key = None
-
-    return frontmatter
 
 
 def extract_ticket_info(file_path: Path, logger) -> Optional[Dict[str, Any]]:

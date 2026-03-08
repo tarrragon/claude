@@ -46,6 +46,18 @@
 | 工具改善不推進版本 | Hook/SKILL/驗證機制在當前版本處理 |
 | 版本推進需語義理由 | 必須通過 Q1-Q4 判斷 |
 | 活躍版本由 todolist.yaml 決定 | `status: active` 為 Source of Truth |
+| 版本邊界以 active 為準 | 版本邊界時（舊版剛完成/新版剛啟動），todolist.yaml active 版本即為「當前版本」，無需推斷 |
+| .claude 工件歸活躍版本 | .claude 規則/Hook/Skill 修正歸入 active 版本，無需 Q1-Q4 判斷 |
+
+---
+
+## Ticket 版本歸屬規則
+
+| 規則 | 說明 |
+|------|------|
+| 新 Ticket 默認歸活躍版本 | 建立 Ticket 時，版本號默認跟隨當前 active 版本，除非有明確跨版本要求 |
+| 版本號不主動調整 | Ticket 版本號建立後不主動變更；只有 wave 可根據任務鏈位置調整 |
+| 版本目標改變時同步處理 | 版本開發目標改變時，必須同步執行：(1) 更新版本目標設定，(2) 遷移受影響 Ticket，(3) 重新規劃 wave |
 
 ---
 
@@ -65,5 +77,5 @@ Wave 是相互隔離的執行單位。禁止跨 Wave 依賴和並行派發。
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 3.0.0 - Progressive Disclosure 精簡，詳細內容移至 references/
+**Last Updated**: 2026-03-07
+**Version**: 3.1.0 - 新增版本邊界語義、.claude 工件歸屬、Ticket 版本歸屬規則（W3-004 分析結論）

@@ -21,9 +21,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-# Import the hook module
-sys.path.insert(0, str(Path(__file__).parent.parent))
-import package_version_sync_hook as hook
+# Import the hook module (filename contains hyphens, use importlib)
+import importlib.util
+
+_hook_path = str(Path(__file__).parent.parent / "package-version-sync-hook.py")
+_spec = importlib.util.spec_from_file_location("package_version_sync_hook", _hook_path)
+hook = importlib.util.module_from_spec(_spec)
+sys.modules["package_version_sync_hook"] = hook
+_spec.loader.exec_module(hook)
 
 
 # ============================================================================
@@ -380,7 +385,7 @@ class TestMainIntegration:
                 stderr=""
             )
 
-            with patch("package_version_sync_hook.get_project_root", return_value=temp_project_root):
+            with patch("package_version_sync_hook._get_project_root", return_value=temp_project_root):
                 with patch("package_version_sync_hook.setup_hook_logging"):
                     # Execute
                     result = hook.main()
@@ -411,7 +416,7 @@ class TestMainIntegration:
                 stderr=""
             )
 
-            with patch("package_version_sync_hook.get_project_root", return_value=temp_project_root):
+            with patch("package_version_sync_hook._get_project_root", return_value=temp_project_root):
                 with patch("package_version_sync_hook.setup_hook_logging"):
                     with patch("package_version_sync_hook.reinstall_uv_tool", return_value=True):
                         # Execute
@@ -422,7 +427,7 @@ class TestMainIntegration:
 
     def test_no_skills_directory(self, temp_project_root):
         """Test Case 4.3: No .claude/skills directory."""
-        with patch("package_version_sync_hook.get_project_root", return_value=temp_project_root):
+        with patch("package_version_sync_hook._get_project_root", return_value=temp_project_root):
             with patch("package_version_sync_hook.setup_hook_logging"):
                 # Execute
                 result = hook.main()
@@ -441,7 +446,7 @@ class TestMainIntegration:
             # Mock uv tool list failure
             mock_run.side_effect = Exception("uv not found")
 
-            with patch("package_version_sync_hook.get_project_root", return_value=temp_project_root):
+            with patch("package_version_sync_hook._get_project_root", return_value=temp_project_root):
                 with patch("package_version_sync_hook.setup_hook_logging"):
                     # Execute - should handle exception gracefully
                     result = hook.main()
@@ -453,6 +458,134 @@ class TestMainIntegration:
 # ============================================================================
 # Boundary condition tests
 # ============================================================================
+
+
+class TestCacheMechanism:
+    """Test cases for cache mechanism."""
+
+    def test_cache_hit_no_changes(self, temp_project_root, skills_dir, valid_pyproject_content):
+        """Test Case 5.1: Cache hit when pyproject.toml files are unchanged."""
+        # Setup: Create skill directory with pyproject.toml
+        skill_dir = skills_dir / "ticket"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "pyproject.toml").write_text(valid_pyproject_content)
+
+        # First scan - create initial packages
+        packages = hook.scan_skill_packages(temp_project_root)
+        assert len(packages) == 1
+
+        # Create cache
+        hook._update_sync_cache(temp_project_root, packages, {"test-package": "1.0.0"})
+
+        # Second scan - same packages, should hit cache
+        cache_hit = hook._should_skip_sync_due_to_cache(temp_project_root, packages)
+        assert cache_hit is True
+
+    def test_cache_miss_pyproject_modified(self, temp_project_root, skills_dir, valid_pyproject_content):
+        """Test Case 5.2: Cache miss when pyproject.toml is modified."""
+        # Setup: Create initial skill
+        skill_dir = skills_dir / "ticket"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        pyproject_path = skill_dir / "pyproject.toml"
+        pyproject_path.write_text(valid_pyproject_content)
+
+        # First scan and cache
+        packages = hook.scan_skill_packages(temp_project_root)
+        hook._update_sync_cache(temp_project_root, packages, {"test-package": "1.0.0"})
+
+        # Modify pyproject.toml
+        modified_content = valid_pyproject_content.replace("1.0.0", "1.0.1")
+        pyproject_path.write_text(modified_content)
+
+        # Re-scan - should miss cache due to hash change
+        packages = hook.scan_skill_packages(temp_project_root)
+        cache_hit = hook._should_skip_sync_due_to_cache(temp_project_root, packages)
+        assert cache_hit is False
+
+    def test_cache_miss_new_package_added(self, temp_project_root, skills_dir, valid_pyproject_content):
+        """Test Case 5.3: Cache miss when a new package is added."""
+        # Setup: Create initial skill
+        skill_dir = skills_dir / "ticket"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "pyproject.toml").write_text(valid_pyproject_content)
+
+        # First scan and cache
+        packages = hook.scan_skill_packages(temp_project_root)
+        assert len(packages) == 1
+        hook._update_sync_cache(temp_project_root, packages, {"test-package": "1.0.0"})
+
+        # Add new package
+        new_skill_dir = skills_dir / "mermaid-ascii"
+        new_skill_dir.mkdir(parents=True, exist_ok=True)
+        content = valid_pyproject_content.replace("test-package", "mermaid-ascii-system").replace("1.0.0", "0.5.0")
+        (new_skill_dir / "pyproject.toml").write_text(content)
+
+        # Re-scan - should miss cache due to new package
+        packages = hook.scan_skill_packages(temp_project_root)
+        assert len(packages) == 2
+        cache_hit = hook._should_skip_sync_due_to_cache(temp_project_root, packages)
+        assert cache_hit is False
+
+    def test_cache_miss_package_removed(self, temp_project_root, skills_dir, valid_pyproject_content):
+        """Test Case 5.4: Cache miss when a package is removed."""
+        # Setup: Create two skills
+        for skill_name in ["ticket", "mermaid-ascii"]:
+            skill_dir = skills_dir / skill_name
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            content = valid_pyproject_content.replace("test-package", f"{skill_name}-system")
+            (skill_dir / "pyproject.toml").write_text(content)
+
+        # First scan and cache
+        packages = hook.scan_skill_packages(temp_project_root)
+        assert len(packages) == 2
+        hook._update_sync_cache(temp_project_root, packages, {
+            "ticket-system": "1.0.0",
+            "mermaid-ascii-system": "0.5.0"
+        })
+
+        # Remove one package directory
+        import shutil
+        shutil.rmtree(skills_dir / "mermaid-ascii")
+
+        # Re-scan - should miss cache due to removed package
+        packages = hook.scan_skill_packages(temp_project_root)
+        assert len(packages) == 1
+        cache_hit = hook._should_skip_sync_due_to_cache(temp_project_root, packages)
+        assert cache_hit is False
+
+    def test_cache_format_error_fallback_to_sync(self, temp_project_root, skills_dir, valid_pyproject_content):
+        """Test Case 5.5: Cache format error causes fallback to full sync."""
+        # Setup: Create skill
+        skill_dir = skills_dir / "ticket"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "pyproject.toml").write_text(valid_pyproject_content)
+
+        # Create corrupted cache
+        cache_dir = hook._get_cache_dir(temp_project_root)
+        cache_file = cache_dir / hook.SYNC_CACHE_FILENAME
+        cache_file.write_text("{invalid json")
+
+        # Scan - should treat corrupted cache as miss
+        packages = hook.scan_skill_packages(temp_project_root)
+        cache_hit = hook._should_skip_sync_due_to_cache(temp_project_root, packages)
+        assert cache_hit is False
+
+    def test_cache_not_exist_triggers_sync(self, temp_project_root, skills_dir, valid_pyproject_content):
+        """Test Case 5.6: Non-existent cache triggers full sync."""
+        # Setup: Create skill
+        skill_dir = skills_dir / "ticket"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "pyproject.toml").write_text(valid_pyproject_content)
+
+        # First scan without cache
+        packages = hook.scan_skill_packages(temp_project_root)
+        cache_hit = hook._should_skip_sync_due_to_cache(temp_project_root, packages)
+        assert cache_hit is False
+
+        # After cache creation, should hit
+        hook._update_sync_cache(temp_project_root, packages, {"test-package": "1.0.0"})
+        cache_hit = hook._should_skip_sync_due_to_cache(temp_project_root, packages)
+        assert cache_hit is True
 
 
 class TestBoundaryConditions:
@@ -521,7 +654,7 @@ version = "1.0.0"
                 stderr=""
             )
 
-            with patch("package_version_sync_hook.get_project_root", return_value=temp_project_root):
+            with patch("package_version_sync_hook._get_project_root", return_value=temp_project_root):
                 with patch("package_version_sync_hook.setup_hook_logging"):
                     with patch("package_version_sync_hook.reinstall_uv_tool", return_value=False):
                         # Execute
@@ -529,3 +662,115 @@ version = "1.0.0"
 
         # Verify: Should return 0 even if reinstall fails
         assert result == 0
+
+
+# ============================================================================
+# Tests for cache mechanism integration with main()
+# ============================================================================
+
+
+class TestCacheIntegrationWithMain:
+    """Test cases for cache mechanism integrated with main()."""
+
+    def test_main_cache_hit_skips_uv_list(self, temp_project_root, skills_dir, valid_pyproject_content):
+        """Test Case 7.1: main() skips 'uv tool list' when cache hits."""
+        # Setup: Create skill
+        skill_dir = skills_dir / "ticket"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "pyproject.toml").write_text(valid_pyproject_content)
+
+        # Pre-populate cache
+        packages = hook.scan_skill_packages(temp_project_root)
+        hook._update_sync_cache(temp_project_root, packages, {"test-package": "1.0.0"})
+
+        with patch("subprocess.run") as mock_run:
+            # Should NOT call subprocess (uv tool list)
+            mock_run.side_effect = Exception("Should not be called")
+
+            with patch("package_version_sync_hook._get_project_root", return_value=temp_project_root):
+                with patch("package_version_sync_hook.setup_hook_logging"):
+                    # Execute
+                    result = hook.main()
+
+        # Verify: Should skip uv tool list call
+        assert result == 0
+        assert not mock_run.called
+
+    def test_main_cache_miss_executes_full_sync(self, temp_project_root, skills_dir, valid_pyproject_content):
+        """Test Case 7.2: main() executes full sync on cache miss."""
+        # Setup: Create skill (no cache)
+        skill_dir = skills_dir / "ticket"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "pyproject.toml").write_text(valid_pyproject_content)
+
+        with patch("subprocess.run") as mock_run:
+            # Mock uv tool list response
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout=(
+                    "Tool Name      Version  Executable Location\n"
+                    "─────────────  ───────  ──────────────────────\n"
+                    "test-package   1.0.0    ~/.venv/bin/test\n"
+                ),
+                stderr=""
+            )
+
+            with patch("package_version_sync_hook._get_project_root", return_value=temp_project_root):
+                with patch("package_version_sync_hook.setup_hook_logging"):
+                    # Execute
+                    result = hook.main()
+
+        # Verify: Should call subprocess (uv tool list)
+        assert result == 0
+        assert mock_run.called
+
+        # Verify cache was created
+        cache_hit = hook._should_skip_sync_due_to_cache(
+            temp_project_root,
+            hook.scan_skill_packages(temp_project_root)
+        )
+        assert cache_hit is True
+
+    def test_main_cache_updated_after_pyproject_change(self, temp_project_root, skills_dir, valid_pyproject_content):
+        """Test Case 7.3: Cache is updated after pyproject.toml change triggers sync."""
+        # Setup: Create initial skill and cache
+        skill_dir = skills_dir / "ticket"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        pyproject_path = skill_dir / "pyproject.toml"
+        pyproject_path.write_text(valid_pyproject_content)
+
+        packages = hook.scan_skill_packages(temp_project_root)
+        hook._update_sync_cache(temp_project_root, packages, {"test-package": "1.0.0"})
+
+        # Verify initial cache hit
+        assert hook._should_skip_sync_due_to_cache(temp_project_root, packages) is True
+
+        # Modify pyproject.toml (version change)
+        modified_content = valid_pyproject_content.replace("1.0.0", "1.0.1")
+        pyproject_path.write_text(modified_content)
+
+        with patch("subprocess.run") as mock_run:
+            # Mock uv tool list (old version)
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout=(
+                    "Tool Name      Version  Executable Location\n"
+                    "─────────────  ───────  ──────────────────────\n"
+                    "test-package   1.0.0    ~/.venv/bin/test\n"
+                ),
+                stderr=""
+            )
+
+            with patch("package_version_sync_hook._get_project_root", return_value=temp_project_root):
+                with patch("package_version_sync_hook.setup_hook_logging"):
+                    with patch("package_version_sync_hook.reinstall_uv_tool", return_value=True):
+                        # Execute - should miss cache and perform sync
+                        result = hook.main()
+
+        # Verify: result is 0
+        assert result == 0
+
+        # Verify cache is updated with new hash
+        new_packages = hook.scan_skill_packages(temp_project_root)
+        # Next call should hit cache
+        assert hook._should_skip_sync_due_to_cache(temp_project_root, new_packages) is True

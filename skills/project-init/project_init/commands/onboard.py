@@ -13,6 +13,7 @@ from project_init.lib import (
     check_settings_local_json,
     detect_project_language,
     parse_hook_classification,
+    check_hook_completeness,
 )
 
 # 狀態標記常數
@@ -77,9 +78,12 @@ def run_onboard(project_root: Path) -> OnboardResult:
     # Step 5: 檢查 settings.local.json
     settings_info = check_settings_local_json(project_root)
 
-    # Step 6: 彙整待辦清單
+    # Step 6: 檢查 Hook 完整性
+    hook_completeness = check_hook_completeness(project_root)
+
+    # Step 7: 彙整待辦清單
     todo_items = _collect_todo_items(
-        language, claude_md_info, template_info, settings_info
+        language, claude_md_info, template_info, settings_info, hook_completeness
     )
 
     result = OnboardResult(
@@ -90,13 +94,15 @@ def run_onboard(project_root: Path) -> OnboardResult:
     )
 
     # 輸出格式化結果
-    _print_onboard_result(result, language_info, hook_classification)
+    _print_onboard_result(
+        result, language_info, hook_classification, hook_completeness
+    )
 
     return result
 
 
 def _collect_todo_items(
-    language: str, claude_md_info, template_info, settings_info
+    language: str, claude_md_info, template_info, settings_info, hook_completeness
 ) -> list[TodoItem]:
     """彙整待辦項目.
 
@@ -105,6 +111,7 @@ def _collect_todo_items(
         claude_md_info: CLAUDE.md 檢查結果。
         template_info: 語言模板檢查結果。
         settings_info: settings.local.json 檢查結果。
+        hook_completeness: Hook 完整性檢查結果。
 
     Returns:
         list[TodoItem]: 待辦項目清單。
@@ -138,11 +145,21 @@ def _collect_todo_items(
             )
         )
 
+    # Hook 未完整登記
+    if not hook_completeness.completeness_ok:
+        unregistered_list = ", ".join(sorted(hook_completeness.unregistered_hooks))
+        items.append(
+            TodoItem(
+                description=f"有 {len(hook_completeness.unregistered_hooks)} 個未登記的 Hook",
+                hint=f"未登記: {unregistered_list[:80]}{'...' if len(unregistered_list) > 80 else ''} — 檢查是否需要在 settings.json 註冊或新增到 hook-exclude-list.json",
+            )
+        )
+
     return items
 
 
 def _print_onboard_result(
-    result: OnboardResult, language_info, hook_classification
+    result: OnboardResult, language_info, hook_classification, hook_completeness
 ) -> None:
     """輸出格式化的 onboard 結果到 stdout."""
     print()
@@ -150,6 +167,7 @@ def _print_onboard_result(
     print()
     _print_language_section(language_info)
     _print_hook_classification_section(hook_classification)
+    _print_hook_completeness_section(hook_completeness)
     _print_claude_md_section(result)
     _print_language_template_section(result)
     _print_settings_local_section(result)
@@ -191,6 +209,33 @@ def _print_hook_classification_section(hook_classification) -> None:
             print("  無需調整的 Hook")
     else:
         print("  無法讀取 Hook 分類配置")
+    print()
+
+
+def _print_hook_completeness_section(hook_completeness) -> None:
+    """輸出 Hook 完整性驗證部分."""
+    print(f"[{OnboardMessages.HOOK_COMPLETENESS_SECTION}]")
+    print(f"  {OnboardMessages.HOOK_REGISTERED_COUNT.format(count=len(hook_completeness.registered_hooks))}")
+    print(f"  {OnboardMessages.HOOK_UNREGISTERED_COUNT.format(count=len(hook_completeness.unregistered_hooks))}")
+    print(f"  {OnboardMessages.HOOK_EXCLUDED_COUNT.format(count=hook_completeness.excluded_count)}")
+    print()
+
+    if hook_completeness.completeness_ok:
+        print(f"  {OnboardMessages.HOOK_COMPLETENESS_OK}")
+    else:
+        print(f"  {OnboardMessages.HOOK_COMPLETENESS_TODO}")
+        print(f"  {OnboardMessages.HOOK_UNREGISTERED_LIST}")
+        for hook in sorted(hook_completeness.unregistered_hooks)[:15]:
+            print(f"    - {hook}")
+
+        if len(hook_completeness.unregistered_hooks) > 15:
+            remaining = len(hook_completeness.unregistered_hooks) - 15
+            print(
+                f"  {OnboardMessages.HOOK_UNREGISTERED_MORE.format(count=remaining)}"
+            )
+
+        print(f"  {OnboardMessages.HOOK_COMPLETENESS_HINT}")
+
     print()
 
 

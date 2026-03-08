@@ -9,14 +9,41 @@ UI 常數定義模組
 """
 # 防止直接執行此模組
 # ============================================================================
-# 分隔線定義
+# 分隔線層級定義（三層架構）
 # ============================================================================
+# Layer 1 (PRIMARY = 60)：命令頂層標題、主要章節分隔
+# Layer 2 (SECONDARY = 50)：摘要分析、Wave 建議、內嵌分隔
+# Layer 3 (WIDE = 70)：ASCII 看板表格，寬數據對齊專用
 
 SEPARATOR_CHAR = "-"
-"""分隔線字元"""
+"""分隔線字元（用於次級分隔）"""
 
 SEPARATOR_WIDTH = 80
-"""分隔線寬度"""
+"""分隔線寬度（終端標準寬度參考，向後相容保留）"""
+
+SEPARATOR_WIDTH_PRIMARY = 60
+"""主分隔線寬度：命令輸出頂層標題、主要章節分隔"""
+
+SEPARATOR_WIDTH_SECONDARY = 50
+"""次分隔線寬度：摘要分析、Wave 建議、內嵌分隔"""
+
+SEPARATOR_WIDTH_WIDE = 70
+"""寬表格分隔線寬度：ASCII 看板專用（適應寬數據對齊）"""
+
+SEPARATOR_PRIMARY = "=" * SEPARATOR_WIDTH_PRIMARY
+"""主分隔線字串（60 個等號）"""
+
+SEPARATOR_SECONDARY = "=" * SEPARATOR_WIDTH_SECONDARY
+"""次分隔線字串（50 個等號）"""
+
+SEPARATOR_WIDE = "=" * SEPARATOR_WIDTH_WIDE
+"""寬分隔線字串（70 個等號，用於表格）"""
+
+SEPARATOR_SECONDARY_DASH = "-" * SEPARATOR_WIDTH_SECONDARY
+"""次級橫線字串（50 個減號，用於表格行分隔）"""
+
+SEPARATOR_WIDE_DASH = "-" * SEPARATOR_WIDTH_WIDE
+"""寬橫線字串（70 個減號，用於寬表格行分隔）"""
 
 # ============================================================================
 # 縮排定義

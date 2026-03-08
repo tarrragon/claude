@@ -34,7 +34,7 @@ from pathlib import Path
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root
 
 import re
 from datetime import datetime
@@ -43,34 +43,6 @@ from typing import Dict, Any, List, Optional
 # 全域常數
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
-
-def get_project_root(logger) -> Path:
-    """
-    取得專案根目錄
-
-    Args:
-        logger: 日誌物件
-
-    Returns:
-        Path - 專案根目錄
-    """
-    import os
-
-    project_dir = os.getenv("CLAUDE_PROJECT_DIR")
-    if project_dir:
-        return Path(project_dir)
-
-    # Fallback: 使用 git 查找
-    try:
-        result = __import__("subprocess").run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return Path(result.stdout.strip())
-    except Exception:
-        return Path.cwd()
 
 def scan_handoff_pending_directory(project_root: Path, logger) -> List[Dict[str, Any]]:
     """
@@ -341,7 +313,7 @@ def main() -> int:
         input_data = read_json_from_stdin(logger)
 
         # 步驟 3: 取得專案根目錄
-        project_root = get_project_root(logger)
+        project_root = get_project_root()
         logger.info(f"專案根目錄: {project_root}")
 
         # 步驟 4: 掃描待恢復任務

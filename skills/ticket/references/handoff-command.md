@@ -36,9 +36,25 @@
 
 commit-handoff-hook 偵測到 `git commit` 成功後，PM 會用 AskUserQuestion 確認下一步。用戶選擇「Handoff」後：
 
+0. **前置檢查（強制）**：先執行 `ticket handoff --status` 確認無殘留 pending handoff；若有殘留，執行 `ticket handoff --gc --execute` 清理後再繼續
 1. **必須**執行 `/ticket handoff` 或 `/ticket handoff <ticket-id>`
 2. **禁止**手動建立 `.claude/handoff/*.md` 交接文件
 3. 命令建立 `pending/*.json` → 下一個 session 的 `resume --list` 自動偵測
+
+## 按 Ticket 狀態選擇命令
+
+| Ticket 狀態 | 目標 | 命令 | 說明 |
+|-------------|------|------|------|
+| `completed` | 切換到兄弟任務 | `/ticket handoff <id> --to-sibling <target>` | 任務完成，切換平行任務 |
+| `completed` | 返回父任務 | `/ticket handoff <id> --to-parent` | 子任務完成，返回父任務 |
+| `completed` | 進入子任務 | `/ticket handoff <id> --to-child <target>` | 父任務完成，執行子任務 |
+| `completed` | 自動判斷 | `/ticket handoff <id>` | 讓 CLI 根據任務鏈決定方向 |
+| `in_progress` | Context 刷新 | `/ticket handoff <id> --context-refresh` | 乾淨 context 繼續同一任務 |
+| `in_progress` | 先處理子任務 | `/ticket handoff <id> --to-child <target>` | 被子任務阻塞，先切換 |
+
+**禁止行為**：在 `completed` ticket 使用 `--context-refresh`（此旗標僅適用 `in_progress`，會直接報錯）
+
+---
 
 ## 五種情境
 

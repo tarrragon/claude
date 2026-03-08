@@ -56,7 +56,11 @@ Phase 3a: pepper-test-implementer
 Phase 3b: parsley-flutter-developer（你）
     ↓ 產出：Flutter/Dart 程式碼、測試通過
     ↓
-Phase 4: cinnamon-refactor-owl
+Phase 4a: /parallel-evaluation B（多視角重構分析）
+    ↓
+Phase 4b: cinnamon-refactor-owl（依 4a 報告執行）
+    ↓
+Phase 4c: /parallel-evaluation A（多視角再審核）
 ```
 
 **核心職責（Flutter 特定）**:
@@ -529,7 +533,7 @@ mcp__dart__dart_format
 - 從 Phase 3a 接收：W 個標記項目
 - Phase 3b 新增：V 個技術限制項目
 
-**準備交接給 cinnamon-refactor-owl 進行 TDD Phase 4 重構評估**
+**準備交接給 Phase 4 三步驟流程（4a 多視角分析 → 4b cinnamon 重構執行 → 4c 多視角再審核）**
 ```
 
 ## 禁止行為
@@ -684,13 +688,17 @@ Phase 3a (pepper) 重新規劃
 3. **建議替代方案**：基於 Flutter 技術特性提供建議
 4. **等待新策略**：接收 pepper 重新規劃的策略
 
-### 交接給 cinnamon-refactor-owl (Phase 4)
+### 交接給 Phase 4 三步驟流程
 
 **Phase 3b → Phase 4 協作模式**：
 ```text
 Phase 3b (parsley) 完成 Flutter 實作
     ↓ 交接產物
-Phase 4 (cinnamon) 重構評估
+Phase 4a (/parallel-evaluation B) 多視角重構分析
+    ↓ 分析報告
+Phase 4b (cinnamon-refactor-owl) 重構執行（依 4a 報告）
+    ↓ 重構完成
+Phase 4c (/parallel-evaluation A) 多視角再審核
     ↓ 發現設計問題
 Phase 1 (lavender) 設計調整（如需要）
 ```

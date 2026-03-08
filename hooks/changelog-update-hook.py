@@ -39,7 +39,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, run_git
 
 # 不需要 CHANGELOG 提醒的 commit 類型
 SKIP_PREFIXES = (
@@ -89,39 +89,29 @@ def should_skip_reminder(tool_input: dict) -> bool:
     return False
 
 
-def check_changelog_in_commit(project_dir: Path) -> bool:
+def check_changelog_in_commit(project_dir: Path, logger) -> bool:
     """檢查最近一次 commit 是否包含 CHANGELOG.md 變更。"""
-    try:
-        result = subprocess.run(
-            ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
-            capture_output=True,
-            text=True,
-            cwd=project_dir,
-            timeout=5,
-        )
-        if result.returncode == 0:
-            changed_files = result.stdout.strip().split("\n")
-            return "CHANGELOG.md" in changed_files
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+    output = run_git(
+        ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
+        cwd=project_dir,
+        timeout=5,
+        logger=logger,
+    )
+    if output:
+        changed_files = output.split("\n")
+        return "CHANGELOG.md" in changed_files
     return False
 
 
-def get_commit_subject(project_dir: Path) -> str:
+def get_commit_subject(project_dir: Path, logger) -> str:
     """取得最近一次 commit 的 subject。"""
-    try:
-        result = subprocess.run(
-            ["git", "log", "-1", "--format=%s"],
-            capture_output=True,
-            text=True,
-            cwd=project_dir,
-            timeout=5,
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
-    return ""
+    output = run_git(
+        ["git", "log", "-1", "--format=%s"],
+        cwd=project_dir,
+        timeout=5,
+        logger=logger,
+    )
+    return output if output else ""
 
 
 def main():
@@ -146,11 +136,11 @@ def main():
     project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
 
     # 檢查 CHANGELOG 是否在此次 commit 中更新
-    if check_changelog_in_commit(project_dir):
+    if check_changelog_in_commit(project_dir, logger):
         return 0
 
     # 取得 commit subject 供提醒使用
-    subject = get_commit_subject(project_dir)
+    subject = get_commit_subject(project_dir, logger)
 
     message = (
         f"[CHANGELOG Reminder] commit \"{subject}\" 未包含 CHANGELOG.md 更新。\n"

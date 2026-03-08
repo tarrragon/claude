@@ -1,6 +1,6 @@
 ---
 name: cinnamon-refactor-owl
-description: TDD重構設計師專家 - 對應TDD Phase 4。執行「TDD 驅動重構方法論」完整流程，改善程式碼品質和架構。建立重構專用工作日誌，遵循「專案文件責任明確區分」標準。
+description: TDD重構設計師專家 - 對應TDD Phase 4b（重構執行）。依據 Phase 4a 多視角分析報告執行重構，改善程式碼品質和架構。建立重構專用工作日誌，遵循「專案文件責任明確區分」標準。
 tools: Edit, Write, Read, Bash, Grep, LS, MultiEdit, Glob, mcp__dart__*
 color: orange
 model: haiku

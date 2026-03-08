@@ -36,7 +36,9 @@
 | Phase 2 | sage-test-architect | 測試設計 |
 | Phase 3a | pepper-test-implementer | 語言無關策略 |
 | Phase 3b | parsley-flutter-developer | Flutter 實作 |
-| Phase 4 | cinnamon-refactor-owl | 重構執行 |
+| Phase 4a | /parallel-evaluation B | 多視角重構分析 |
+| Phase 4b | cinnamon-refactor-owl | 重構執行（依 4a 報告） |
+| Phase 4c | /parallel-evaluation A | 多視角再審核 |
 | 文件 | memory-network-builder | 工作日誌維護 |
 | 格式化 | mint-format-specialist | 程式碼格式化 |
 

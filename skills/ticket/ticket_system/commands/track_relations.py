@@ -6,9 +6,9 @@ Ticket 關係和狀態管理模組
 # 防止直接執行此模組
 if __name__ == "__main__":
     import sys
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print("[ERROR] 此檔案不支援直接執行")
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print()
     print("正確使用方式：")
     print("  ticket track summary")
@@ -18,7 +18,7 @@ if __name__ == "__main__":
     print("  cd .claude/skills/ticket && uv tool install .")
     print()
     print("詳見 SKILL.md")
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     sys.exit(1)
 
 
@@ -26,6 +26,7 @@ if __name__ == "__main__":
 import argparse
 from pathlib import Path
 
+from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 from ticket_system.lib.constants import (
     STATUS_PENDING,
     STATUS_IN_PROGRESS,
@@ -48,6 +49,10 @@ from ticket_system.lib.messages import (
 from ticket_system.lib.command_tracking_messages import (
     TrackRelationsMessages,
     format_msg,
+)
+from ticket_system.lib.ticket_ops import (
+    load_and_validate_ticket,
+    resolve_ticket_path,
 )
 
 
@@ -164,7 +169,7 @@ def _execute_set_relation_field(
     # Step 5：更新 Ticket 並保存
     target_ticket[field_name] = new_value
 
-    ticket_path = Path(target_ticket.get("_path", get_ticket_path(version, target_id)))
+    ticket_path = resolve_ticket_path(target_ticket, version, target_id)
     save_ticket(target_ticket, ticket_path)
 
     # Step 6：輸出成功訊息
@@ -271,11 +276,11 @@ def execute_add_child(args: argparse.Namespace, version: str) -> int:
     child_ticket["chain"] = chain_info
 
     # Step 7：保存父 Ticket
-    parent_path = Path(parent_ticket.get("_path", get_ticket_path(version, parent_id)))
+    parent_path = resolve_ticket_path(parent_ticket, version, parent_id)
     save_ticket(parent_ticket, parent_path)
 
     # Step 8：保存子 Ticket
-    child_path = Path(child_ticket.get("_path", get_ticket_path(version, child_id)))
+    child_path = resolve_ticket_path(child_ticket, version, child_id)
     save_ticket(child_ticket, child_path)
 
     # Step 9：輸出成功訊息
@@ -309,7 +314,7 @@ def execute_phase(args: argparse.Namespace, version: str) -> int:
     ticket["current_phase"] = phase
     ticket["assignee"] = args.agent
 
-    ticket_path = Path(ticket.get("_path", get_ticket_path(version, args.ticket_id)))
+    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
     save_ticket(ticket, ticket_path)
 
     print(format_info(InfoMessages.PHASE_UPDATED, ticket_id=args.ticket_id))
@@ -345,11 +350,21 @@ def execute_agent(args: argparse.Namespace, version: str) -> int:
         if agent_name in assignee or agent_name in who:
             agent_tickets.append(ticket)
 
-    # 按狀態分組
-    pending_tickets = [t for t in agent_tickets if t.get("status") == STATUS_PENDING]
-    in_progress_tickets = [t for t in agent_tickets if t.get("status") == STATUS_IN_PROGRESS]
-    completed_tickets = [t for t in agent_tickets if t.get("status") == STATUS_COMPLETED]
-    blocked_tickets = [t for t in agent_tickets if t.get("status") == STATUS_BLOCKED]
+    # 按狀態分組（單次遍歷）
+    status_groups: dict[str, list] = {
+        STATUS_PENDING: [],
+        STATUS_IN_PROGRESS: [],
+        STATUS_COMPLETED: [],
+        STATUS_BLOCKED: [],
+    }
+    for t in agent_tickets:
+        status = t.get("status", "")
+        if status in status_groups:
+            status_groups[status].append(t)
+    pending_tickets = status_groups[STATUS_PENDING]
+    in_progress_tickets = status_groups[STATUS_IN_PROGRESS]
+    completed_tickets = status_groups[STATUS_COMPLETED]
+    blocked_tickets = status_groups[STATUS_BLOCKED]
 
     # 顯示摘要
     print(format_info(AgentProgressMessages.AGENT_PROGRESS, agent_name=args.agent_name))

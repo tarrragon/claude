@@ -51,7 +51,7 @@ from typing import Dict, Any, Optional
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, parse_ticket_frontmatter
+from hook_utils import setup_hook_logging, run_hook_safely, parse_ticket_frontmatter, get_project_root
 
 EXIT_SUCCESS = 0
 
@@ -65,29 +65,6 @@ LOG_FILE_PREFIX = "stop-hook"
 WORK_LOGS_DIR_NAME = "docs/work-logs"
 TICKETS_SUBDIR_NAME = "tickets"
 TODOLIST_FILE_NAME = "docs/todolist.yaml"
-
-
-def get_project_root() -> Path:
-    """
-    取得專案根目錄
-
-    Returns:
-        Path - 專案根目錄
-    """
-    project_dir = os.getenv("CLAUDE_PROJECT_DIR")
-    if project_dir:
-        return Path(project_dir)
-
-    try:
-        result = __import__("subprocess").run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return Path(result.stdout.strip())
-    except Exception:
-        return Path.cwd()
 
 
 def get_session_stop_flag() -> Path:

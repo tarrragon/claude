@@ -406,6 +406,165 @@ class TestSaveTicket:
                 del os.environ["CLAUDE_PROJECT_DIR"]
 
 
+class TestLoadTicketCache:
+    """載入 Ticket 快取功能的測試"""
+
+    def test_cache_returns_same_object(self, temp_project_dir, valid_ticket_markdown):
+        """測試快取回傳相同物件
+
+        驗證 load_ticket 呼叫兩次相同 ticket，應回傳相同物件（使用 is 比較）。
+        """
+        from ticket_system.lib import parser
+
+        old_env = os.environ.get("CLAUDE_PROJECT_DIR")
+        try:
+            os.environ["CLAUDE_PROJECT_DIR"] = str(temp_project_dir)
+            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets"
+            tickets_dir.mkdir(parents=True, exist_ok=True)
+
+            # 寫入 Ticket 檔案
+            ticket_path = tickets_dir / "0.31.0-W4-001.md"
+            ticket_path.write_text(valid_ticket_markdown, encoding="utf-8")
+
+            # 清空快取以確保乾淨測試環境
+            parser._ticket_cache.clear()
+
+            # 第一次載入
+            result1 = load_ticket("0.31.0", "0.31.0-W4-001")
+            assert result1 is not None
+
+            # 第二次載入
+            result2 = load_ticket("0.31.0", "0.31.0-W4-001")
+            assert result2 is not None
+
+            # 驗證回傳相同物件
+            assert result1 is result2, "快取應該回傳相同物件"
+        finally:
+            if old_env:
+                os.environ["CLAUDE_PROJECT_DIR"] = old_env
+            elif "CLAUDE_PROJECT_DIR" in os.environ:
+                del os.environ["CLAUDE_PROJECT_DIR"]
+
+    def test_cache_reduces_file_reads(self, temp_project_dir, valid_ticket_markdown):
+        """測試快取減少檔案讀取次數
+
+        驗證呼叫 load_ticket 兩次相同 ticket，open() 只被調用一次。
+        使用 mock 來追蹤 open 呼叫。
+        """
+        from unittest.mock import patch, mock_open
+        from ticket_system.lib import parser
+
+        old_env = os.environ.get("CLAUDE_PROJECT_DIR")
+        try:
+            os.environ["CLAUDE_PROJECT_DIR"] = str(temp_project_dir)
+            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets"
+            tickets_dir.mkdir(parents=True, exist_ok=True)
+
+            # 寫入 Ticket 檔案
+            ticket_path = tickets_dir / "0.31.0-W4-001.md"
+            ticket_path.write_text(valid_ticket_markdown, encoding="utf-8")
+
+            # 清空快取以確保乾淨測試環境
+            parser._ticket_cache.clear()
+
+            # Mock open 來追蹤呼叫次數
+            with patch("builtins.open", mock_open(read_data=valid_ticket_markdown)) as mock_file:
+                # 第一次載入 - 應該讀取檔案
+                result1 = load_ticket("0.31.0", "0.31.0-W4-001")
+                assert result1 is not None
+                assert mock_file.call_count == 1
+
+                # 第二次載入 - 應該從快取取得，不讀取檔案
+                result2 = load_ticket("0.31.0", "0.31.0-W4-001")
+                assert result2 is not None
+                # 仍然只有 1 次呼叫（快取命中）
+                assert mock_file.call_count == 1
+        finally:
+            if old_env:
+                os.environ["CLAUDE_PROJECT_DIR"] = old_env
+            elif "CLAUDE_PROJECT_DIR" in os.environ:
+                del os.environ["CLAUDE_PROJECT_DIR"]
+
+    def test_save_ticket_invalidates_cache(self, temp_project_dir, valid_ticket_data, valid_ticket_markdown):
+        """測試 save_ticket 失效快取
+
+        驗證 load → save → load 流程時，第三次載入應讀取新版本（不是快取）。
+        """
+        from ticket_system.lib import parser
+
+        old_env = os.environ.get("CLAUDE_PROJECT_DIR")
+        try:
+            os.environ["CLAUDE_PROJECT_DIR"] = str(temp_project_dir)
+            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets"
+            tickets_dir.mkdir(parents=True, exist_ok=True)
+
+            # 寫入初始 Ticket 檔案
+            ticket_path = tickets_dir / "0.31.0-W4-001.md"
+            ticket_path.write_text(valid_ticket_markdown, encoding="utf-8")
+
+            # 清空快取
+            parser._ticket_cache.clear()
+
+            # 第一次載入
+            result1 = load_ticket("0.31.0", "0.31.0-W4-001")
+            assert result1 is not None
+            assert result1["status"] == "pending"
+
+            # 修改並儲存
+            result1["status"] = "in_progress"
+            save_ticket(result1, ticket_path)
+
+            # 驗證快取已失效
+            cache_key = str(ticket_path)
+            assert cache_key not in parser._ticket_cache, "快取應該被失效"
+
+            # 第三次載入 - 應該讀取新版本
+            result3 = load_ticket("0.31.0", "0.31.0-W4-001")
+            assert result3 is not None
+            assert result3["status"] == "in_progress", "應該讀取到新的 status 值"
+        finally:
+            if old_env:
+                os.environ["CLAUDE_PROJECT_DIR"] = old_env
+            elif "CLAUDE_PROJECT_DIR" in os.environ:
+                del os.environ["CLAUDE_PROJECT_DIR"]
+
+    def test_cache_does_not_cache_nonexistent(self, temp_project_dir):
+        """測試不存在的 ticket 不被快取
+
+        驗證不存在的 ticket 回傳 None，每次都真正查詢（不快取 None）。
+        """
+        from unittest.mock import patch
+        from ticket_system.lib import parser
+
+        old_env = os.environ.get("CLAUDE_PROJECT_DIR")
+        try:
+            os.environ["CLAUDE_PROJECT_DIR"] = str(temp_project_dir)
+            (temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets").mkdir(
+                parents=True, exist_ok=True
+            )
+
+            # 清空快取
+            parser._ticket_cache.clear()
+
+            # 第一次呼叫 - 檔案不存在
+            result1 = load_ticket("0.31.0", "nonexistent")
+            assert result1 is None
+
+            # 驗證快取不包含此 key（None 不被快取）
+            ticket_path = get_ticket_path("0.31.0", "nonexistent")
+            cache_key = str(ticket_path)
+            assert cache_key not in parser._ticket_cache, "None 結果不應該被快取"
+
+            # 第二次呼叫 - 仍然回傳 None，但應該再次查詢檔案
+            result2 = load_ticket("0.31.0", "nonexistent")
+            assert result2 is None
+        finally:
+            if old_env:
+                os.environ["CLAUDE_PROJECT_DIR"] = old_env
+            elif "CLAUDE_PROJECT_DIR" in os.environ:
+                del os.environ["CLAUDE_PROJECT_DIR"]
+
+
 class TestListTickets:
     """列出 Tickets 的測試"""
 

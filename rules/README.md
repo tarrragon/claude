@@ -23,6 +23,10 @@
 │   ├── python-execution.md       # Python 執行規則
 │   ├── bash-tool-usage-rules.md  # Bash 工具使用規則（cd 污染 / TaskOutput）
 │   ├── quality-baseline.md       # 流程品質基線
+│   ├── quality-common.md         # 通用品質基線（所有語言）
+│   ├── quality-dart.md           # Dart/Flutter 品質規則
+│   ├── quality-go.md             # Go 品質規則
+│   ├── quality-python.md         # Python 品質規則
 │   └── verification-framework.md # 驗證責任分配框架
 │
 ├── flows/                        # 執行流程

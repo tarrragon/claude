@@ -1,0 +1,427 @@
+# 通用品質基線（所有語言適用）
+
+本文件為所有語言共用的程式碼品質基線。語言專屬規則見 quality-dart.md / quality-go.md / quality-python.md。
+
+---
+
+## 1. 通用規則（所有語言適用）
+
+### 1.1 命名規範
+
+> **原則**：名稱本身就是文件，讓閱讀者不需要額外資訊。
+
+#### 變數命名
+
+| 規則 | 正確 | 錯誤 |
+|------|------|------|
+| 描述「這是什麼」 | `valid_user` | `user_after_validation` |
+| 布林以 is/has/can 開頭 | `is_active`, `has_permission` | `active`, `permission` |
+| 集合使用複數 | `users` | `user_list` |
+| 禁止模糊詞 | `discountAmount` | `data`, `temp`, `flag`, `info` |
+
+#### 函式命名
+
+| 規則 | 正確 | 錯誤 |
+|------|------|------|
+| 動詞開頭 | `validate_input()` | `input()` |
+| 描述「做什麼」 | `calculate_sum()` | `process()`, `handle()`, `do()` |
+| 對稱命名 | `open_` / `close_` | `open_` / `end_` |
+
+#### 類別命名
+
+| 規則 | 正確 | 錯誤 |
+|------|------|------|
+| 描述業務責任 | `BookMetadataEnrichmentService` | `Manager`, `Helper` |
+| 名詞 | `SearchQuery` | `DoSearch` |
+
+#### 禁止的命名模式
+
+| 模式 | 問題 | 替代 |
+|------|------|------|
+| 匈牙利命名法 | `strName`, `intCount` | `name`, `count` |
+| 無意義前綴 | `theUser`, `aBook` | `user`, `book` |
+| 過度縮寫 | `usrMgr` | `userManager` |
+| 數字後綴 | `user1`, `user2` | `primaryUser`, `secondaryUser` |
+
+---
+
+### 1.2 函式設計
+
+| 指標 | 理想值 | 上限 | 超過時 |
+|------|-------|------|--------|
+| 函式長度 | 5-10 行 | 30 行 | 必須拆分 |
+| 參數數量 | 1-2 個 | 3 個 | 考慮封裝為物件 |
+| 巢狀深度 | 1-2 層 | 3 層 | 使用 Guard Clause |
+| 區域變數 | 2-3 個 | 5 個 | 考慮拆分 |
+
+**單一責任判斷**：如果描述函式需要「和」或「或」→ 必須拆分。
+
+**Guard Clause 優先**：
+
+```
+# 錯誤：深層巢狀
+if user:
+    if user.is_admin:
+        if has_permission:
+            do_something()
+
+# 正確：提前返回
+if not user: return
+if not user.is_admin: return
+if not has_permission: return
+do_something()
+```
+
+---
+
+### 1.2.1 作用域變更防護（重構時強制）
+
+> **來源**：IMP-003 — 變數從全域移入函式內部後，引用該變數的其他函式產生 NameError。
+>
+> **觸發時機**：任何涉及「變數作用域變更」的重構（全域→區域、模組級→函式內、類別屬性→方法參數）。
+
+**認知層 — 理解設計意圖（來源: IMP-013）**
+
+在執行影響範圍分析之前，先質疑設計意圖：
+
+| 步驟 | 質疑問題 | 判斷依據 |
+|------|---------|---------|
+| 1 | 這個參數/變數在舊版中是否被正確使用？ | 檢查實際呼叫和引用 |
+| 2 | 如果舊版也未使用，原始設計意圖是什麼？ | git log / git blame / docstring |
+| 3 | 在新設計中，這個參數應該在哪裡被使用？ | 需求文件 / 設計規格 |
+
+**判斷結果**：
+- 設計意圖已實現 → 繼續下方影響範圍分析
+- 設計意圖未實現 → 補上實作，而非盲目沿用或移除
+- 確認不再需要 → 移除並記錄原因到工作日誌
+
+**強制檢查清單**（修改作用域前必須完成）：
+
+| 步驟 | 動作 | 驗證方式 |
+|------|------|---------|
+| 1 | 列出所有引用該變數的函式 | `grep` 或 AST 分析 |
+| 2 | 每個函式確認：透過參數接收？還是依賴全域？ | 逐一檢查函式簽名 |
+| 3 | 依賴全域的函式必須新增參數 | 修改函式簽名 |
+| 4 | 所有呼叫端必須傳遞新參數 | 修改所有 call site |
+
+**驗證優先級**：
+
+| 驗證方式 | 可偵測作用域問題 | 推薦度 |
+|---------|----------------|-------|
+| AST 分析 | 是 | 最佳 |
+| 實際執行 | 是 | 推薦 |
+| py_compile | 否（只驗語法） | 不足 |
+
+**禁止行為**：
+
+| 禁止行為 | 原因 |
+|---------|------|
+| 只移動變數定義，不檢查引用 | 產生 NameError |
+| 僅用 py_compile 驗證 | 無法偵測作用域問題 |
+| 把變數改回全域以「修復」 | 違反重構目標 |
+
+> 完整錯誤模式：.claude/error-patterns/implementation/IMP-003-refactoring-scope-regression.md
+
+---
+
+### 1.2.2 欄位格式溯源（修復時強制）
+
+> **來源**：IMP-011 — 修復函式讀取 `direction` 欄位時，假設為簡單字串（`"to-sibling"`），但生產者實際輸出 `"to-sibling:target_id"`。精確匹配失敗，修復無效。
+>
+> **觸發時機**：任何修復程式碼中**讀取現有欄位/資料**來做判斷的場景。
+
+**強制檢查清單**（寫修復程式碼前必須完成）：
+
+| 步驟 | 動作 | 驗證方式 |
+|------|------|---------|
+| 1 | 列出修復程式碼讀取的所有欄位 | 程式碼審閱 |
+| 2 | 找到每個欄位的**生產者**（寫入端函式） | `grep` 搜尋賦值位置 |
+| 3 | 確認欄位的**完整格式**（所有變體） | 閱讀生產者程式碼 |
+| 4 | 在程式碼註解中記錄格式規格 | 文件字串 |
+| 5 | 測試案例覆蓋所有格式變體 | 測試每個變體 |
+
+**正確做法**：
+
+```python
+def should_preserve(direction: str) -> bool:
+    """判斷是否保留。
+
+    direction 格式（來源：handoff.py._resolve_direction_from_args）：
+    - "to-parent"（無後綴）
+    - "to-sibling:{target_id}"（帶目標 ID）
+    - "context-refresh"（非任務鏈）
+    """
+    # 使用前綴匹配，容許後綴變化
+    direction_type = direction.split(":")[0]
+    return direction_type in {"to-sibling", "to-parent", "to-child"}
+```
+
+**錯誤做法**：
+
+```python
+# 錯誤：基於假設使用精確匹配，未查閱生產者
+def should_preserve(direction: str) -> bool:
+    return direction in {"to-sibling", "to-parent", "to-child"}
+    # "to-sibling:0.31.1-W3-002" 不在 set 中 → False
+```
+
+**禁止行為**：
+
+| 禁止行為 | 原因 |
+|---------|------|
+| 基於欄位名稱假設格式 | 實際格式可能含後綴、前綴、分隔符 |
+| 只看消費端推測格式 | 必須查閱生產端確認 |
+| 測試只用「理想化」格式 | 必須從生產端取得真實格式做測試 |
+
+> 完整錯誤模式：.claude/error-patterns/implementation/IMP-011-incomplete-format-matching.md
+
+---
+
+### 1.2.3 破壞性操作設計防護（自動刪除/清理/GC 時強制）
+
+> **來源**：IMP-010 — GC 只檢查來源 Ticket 的 `status`，未考慮 handoff 的 `direction`，導致有效的 pending JSON 被誤刪。ARCH-002 — Plugin 解除安裝只清理部分儲存層，殘留的 `known_marketplaces.json` 觸發自動重新 clone。
+>
+> **觸發時機**：任何涉及**自動刪除、GC、快取清理、資料清除**的程式碼設計或修改。
+
+**強制設計檢查清單**（寫破壞性操作程式碼前必須完成）：
+
+| 步驟 | 問題 | 來源 |
+|------|------|------|
+| 1 | 刪除條件依賴的狀態值，在所有上下文中語義是否一致？ | IMP-010 |
+| 2 | 是否需要額外欄位（上下文）才能做出正確的刪除決策？ | IMP-010 |
+| 3 | 清理操作是否覆蓋所有儲存層（快取、註冊、目錄、配置）？ | ARCH-002 |
+| 4 | 不確定時，預設行為是保留還是刪除？（必須為保留） | IMP-010 |
+
+**正確做法**：
+
+```python
+# 正確：結合上下文欄位做刪除決策，不確定時保留
+if is_ticket_completed(project_root, ticket_id, logger):
+    direction = handoff_data.get("direction", "")
+    direction_type = direction.split(":")[0]
+    if direction_type in ("to-sibling", "to-parent", "to-child"):
+        # 任務鏈 handoff，completed 是預期狀態，保留
+        logger.info(f"保留 {direction_type} handoff: {ticket_id}")
+        continue
+    # 非任務鏈類型，completed 表示 stale，可清理
+    file_path.unlink()
+```
+
+**錯誤做法**：
+
+```python
+# 錯誤：只檢查單一狀態值，不考慮上下文
+if is_ticket_completed(project_root, ticket_id, logger):
+    file_path.unlink()  # 一律刪除 → 誤刪有效的 handoff
+```
+
+**禁止行為**：
+
+| 禁止行為 | 原因 |
+|---------|------|
+| 只依賴單一狀態值做刪除決策 | 同一狀態在不同上下文可能有不同語義（IMP-010） |
+| 清理只處理部分儲存層 | 殘留的註冊/配置會觸發重建（ARCH-002） |
+| 預設行為為刪除 | 破壞性操作應保守，不確定時必須保留 |
+
+> 完整錯誤模式：.claude/error-patterns/implementation/IMP-010-gc-state-semantic-conflict.md
+> 完整錯誤模式：.claude/error-patterns/architecture/ARCH-002-plugin-cache-only-cleanup.md
+
+---
+
+### 1.2.4 未使用程式碼處理（Phase 4 重構時強制）
+
+> **來源**：IMP-013 — 重構時發現 unused code，應先質疑設計意圖而非盲目移除。
+>
+> **觸發時機**：Phase 4 重構評估中發現未使用的參數、變數、函式或類別時。
+
+**強制檢查清單**（發現 unused code 時必須完成）：
+
+| 步驟 | 動作 | 驗證方式 |
+|------|------|---------|
+| 1 | 追溯原始目的：這段程式碼為什麼存在？ | git log / git blame / docstring |
+| 2 | 判斷類型：是「曾經有用但不再需要」還是「設計意圖未實現」？ | 對照需求文件和設計規格 |
+| 3 | 如果是未實現的設計意圖 → 補上實作 | 建立 Ticket 追蹤 |
+| 4 | 如果確認不再需要 → 移除並記錄原因 | 工作日誌記錄移除理由 |
+
+**禁止行為**：
+
+| 禁止行為 | 原因 |
+|---------|------|
+| 直接刪除 unused code 不記錄理由 | 設計意圖永遠消失 |
+| 只依賴 linter 報告而不人工審查 | 無法區分「不再需要」與「未實現」兩種情況 |
+| 重構時將「未使用」等同於「多餘」 | 可能是尚未完成的設計，移除會讓需求被遺忘 |
+
+**核心教訓**：
+
+> Unused code is a question, not an answer.
+> 未使用的程式碼是一個待回答的問題（「為什麼存在？」），而不是一個已知的答案（「應該移除」）。
+
+> 完整錯誤模式：.claude/error-patterns/implementation/IMP-013-refactoring-design-intent-blindness.md
+
+---
+
+### 1.3 常數管理（禁止硬編碼）
+
+> **核心原則**：所有非程式邏輯本身的字面值都必須提取為具名常數。
+
+#### 1.3.1 禁止硬編碼字串
+
+| 類型 | 錯誤 | 正確 |
+|------|------|------|
+| 使用者訊息 | `print("找不到檔案")` | `print(Messages.FILE_NOT_FOUND)` |
+| 錯誤訊息 | `raise Exception("無效格式")` | `raise InvalidFormatError()` |
+| 格式字串 | `f"版本: {v}"` | `f"{Labels.VERSION}: {v}"` |
+| 提示文字 | `"請輸入名稱"` | `Prompts.ENTER_NAME` |
+
+**訊息常數的組織方式**：
+
+```
+# 每個模組有對應的 messages 檔案
+module/
+  commands/
+    create.py            # 使用 CreateMessages
+    track.py             # 使用 TrackMessages
+  lib/
+    messages.py          # 共用訊息
+    commands_messages.py  # 命令專用訊息
+```
+
+**允許的例外**：
+
+| 例外 | 原因 |
+|------|------|
+| 日誌訊息（Logger/print） | 供開發者閱讀，非使用者介面 |
+| 測試斷言字串 | 測試專用，不面向使用者 |
+| 程式碼內部的技術標識 | 如 key name、format pattern |
+
+#### 1.3.2 禁止魔法數字
+
+| 錯誤 | 正確 | 說明 |
+|------|------|------|
+| `line[9:]` | `line[len(PREFIX):]` | 用 len() 動態計算 |
+| `sleep(3)` | `sleep(RETRY_DELAY_SECONDS)` | 具名常數 |
+| `if count > 50:` | `if count > MAX_ITEMS:` | 具名常數加註解 |
+| `range(5)` | `range(MAX_RETRIES)` | 具名常數 |
+
+**常數定義位置**：
+
+| 作用域 | 定義位置 |
+|-------|---------|
+| 單一函式內使用 | 函式頂部區域常數 |
+| 單一檔案多處使用 | 檔案頂部模組常數 |
+| 跨模組共用 | 獨立常數檔案（constants.py / constants.dart） |
+
+#### 1.3.3 配置與程式碼分離
+
+| 問題 | 若答「是」 | 放置位置 |
+|------|-----------|---------|
+| 會隨環境改變？ | 是 | YAML/ENV 配置 |
+| 非工程師可能修改？ | 是 | YAML 配置 |
+| 是業務規則？ | 是 | 常數檔 + 註解 |
+| 與程式邏輯緊密耦合？ | 是 | 程式碼內常數 |
+
+---
+
+### 1.4 DRY 原則
+
+> **Every piece of knowledge must have a single, unambiguous, authoritative representation within a system.**
+
+| 重複類型 | 範例 | 處理方式 |
+|---------|------|---------|
+| 完全相同 | 複製貼上的程式碼 | 提取到共用模組 |
+| 結構相同 | 相似但參數不同 | 提取並參數化 |
+| 概念相同 | 同目的不同實作 | 統一介面 |
+
+**量化標準**：程式碼重複率 < 10%
+
+---
+
+### 1.5 認知負擔閾值
+
+```
+認知負擔指數 = 變數數 + 分支數 + 巢狀深度 + 依賴數
+```
+
+| 指數 | 評估 | 行動 |
+|------|------|------|
+| 1-5 | 優良 | 維持 |
+| 6-10 | 可接受 | 考慮優化 |
+| 11-15 | 需重構 | 建立重構 Ticket |
+| > 15 | 必須重構 | 立即處理 |
+
+> 詳細閾值：.claude/rules/core/cognitive-load.md
+
+---
+
+### 1.6 註解標準
+
+> **原則**：註解記錄需求和設計意圖，不解釋程式碼做什麼。
+
+**註解是**：需求保護器、設計意圖記錄、維護指引
+**註解不是**：程式碼翻譯、API 說明、TODO 清單
+
+**標準格式**：
+
+```
+/// 需求：[UC/BR-xxx] [簡短描述]
+/// [詳細業務描述]
+/// 約束：[限制條件和邊界規則]
+/// [維護指引：修改須知、相依性警告]
+```
+
+**覆蓋要求**：
+
+| 程式碼類型 | 需要需求註解 |
+|-----------|------------|
+| 業務邏輯函式 | 是（100%） |
+| 純技術工具函式 | 否 |
+| 值物件建構式 | 是（約束條件） |
+| Domain 模型方法 | 是（業務規則） |
+
+**禁止的註解**：
+
+| 類型 | 範例 | 原因 |
+|------|------|------|
+| 程式碼翻譯 | `// 將計數器加 1` | 程式碼已自明 |
+| 技術實作描述 | `// 用 Map 做快速查找` | 程式碼已自明 |
+| 過時的 TODO | `// TODO: 之後加驗證` | 應建 Ticket 追蹤 |
+
+> 完整方法論：.claude/methodologies/comment-writing-methodology.md
+
+---
+
+## 2. 通用品質檢查清單
+
+### 命名
+
+- [ ] 函式以動詞開頭
+- [ ] 變數完整描述內容，無縮寫
+- [ ] 布林變數以 is/has/can 開頭
+- [ ] 類別描述業務責任
+- [ ] 無模糊詞（data, info, temp, flag）
+
+### 結構
+
+- [ ] 函式長度 <= 30 行（理想 5-10 行）
+- [ ] 巢狀深度 <= 3 層
+- [ ] 參數數量 <= 3
+- [ ] 認知負擔指數 < 10
+- [ ] 作用域變更已完成影響範圍分析（1.2.1）
+
+### 常數管理
+
+- [ ] 無硬編碼使用者訊息（提取為常數）
+- [ ] 無魔法數字（使用具名常數）
+- [ ] 配置與程式碼分離
+- [ ] 無重複程式碼（DRY，重複率 < 10%）
+
+### 註解
+
+- [ ] 業務邏輯函式有需求編號註解
+- [ ] 無程式碼翻譯式註解
+- [ ] 複雜邏輯有維護指引
+
+---
+
+**Last Updated**: 2026-03-08
+**Version**: 1.0.0 - 從 implementation-quality.md 提取通用規則

@@ -313,7 +313,9 @@ grep -c '/Users/' .claude/settings.local.json
 | Phase 2 | [sage-test-architect.md](./agents/sage-test-architect.md) | 測試案例設計 |
 | Phase 3a | [pepper-test-implementer.md](./agents/pepper-test-implementer.md) | 策略規劃、虛擬碼設計 |
 | Phase 3b | [parsley-flutter-developer.md](./agents/parsley-flutter-developer.md) | 語言特定實作（Flutter） |
-| Phase 4 | [cinnamon-refactor-owl.md](./agents/cinnamon-refactor-owl.md) | 重構評估、技術債務識別 |
+| Phase 4a | /parallel-evaluation B | 多視角重構分析（Redundancy/Coupling/Complexity） |
+| Phase 4b | [cinnamon-refactor-owl.md](./agents/cinnamon-refactor-owl.md) | 重構執行（依 4a 報告）、技術債務識別 |
+| Phase 4c | /parallel-evaluation A | 多視角再審核（Reuse/Quality/Efficiency） |
 
 ### 專案管理與品質
 

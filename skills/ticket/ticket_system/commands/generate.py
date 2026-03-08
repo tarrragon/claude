@@ -27,6 +27,7 @@ from ticket_system.lib.messages import (
 from ticket_system.lib.command_tracking_messages import (
     GenerateMessages,
 )
+from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 
 
 def execute(args: argparse.Namespace) -> int:
@@ -88,9 +89,9 @@ def _print_generation_summary(gen_result, plan_file: Path) -> None:
         plan_file: Plan 檔案路徑
     """
     print()
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print(format_info(GenerateMessages.GENERATION_SUMMARY_TITLE))
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print()
     print(f"{GenerateMessages.SUMMARY_PLAN_FILE_PREFIX} {plan_file}")
     print(f"{GenerateMessages.SUMMARY_GENERATED_COUNT_PREFIX} {gen_result.total}{GenerateMessages.SUMMARY_GENERATED_COUNT_SUFFIX}")

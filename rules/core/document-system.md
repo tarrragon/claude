@@ -13,7 +13,7 @@
 | CHANGELOG | 這個版本做了什麼改變？ | `CHANGELOG.md` |
 | todolist | 還有哪些問題需要處理？ | `docs/todolist.yaml` |
 | worklog | 這個版本要達成什麼目標？ | `docs/work-logs/` |
-| ticket | 這個任務的完整執行歷程？ | `.claude/tickets/` |
+| ticket | 這個任務的完整執行歷程？ | `docs/work-logs/v{version}/tickets/` |
 | error-patterns | 之前遇過類似問題嗎？ | `.claude/error-patterns/` |
 
 ---
@@ -219,5 +219,5 @@ ticket       執行細節、分析、結果
 
 ---
 
-**Last Updated**: 2026-02-10
-**Version**: 1.1.0 - 新增代理人產出物路徑規則（W14-010.2）
+**Last Updated**: 2026-03-08
+**Version**: 1.2.0 - 修正 ticket 路徑定義（.claude/tickets/ → docs/work-logs/v{version}/tickets/）

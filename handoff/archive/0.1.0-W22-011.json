@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W22-011",
+  "direction": "to-sibling:0.1.0-W22-012",
+  "timestamp": "2026-03-09T01:25:17.524754",
+  "from_status": "completed",
+  "title": "修復 ticket-askuserquestion-templates.md 場景編號系統（1-10）與主規則 askuserquestion-rules.md 場景編號（#1-17）不對應，造成引用混亂",
+  "what": "修復 ticket-askuserquestion-templates.md 場景編號系統（1-10）與主規則 askuserquestion-rules.md 場景編號（#1-17）不對應，造成引用混亂",
+  "chain": {},
+  "resumed_at": "2026-03-09T01:25:48.549905"
+}

@@ -194,9 +194,9 @@ def check_creation_accepted(ticket_id: str, logger) -> Tuple[bool, Optional[str]
         logger: 日誌物件
 
     Returns:
-        tuple - (is_accepted, error_message)
-            - is_accepted: True 表示已接受，False 表示未接受或缺失
-            - error_message: 如果未接受，提供錯誤訊息；否則為 None
+        tuple - (is_accepted, message)
+            - is_accepted: True 表示允許執行，False 表示阻止（EXIT_BLOCK）
+            - message: 錯誤訊息（阻止時）或警告訊息（矛盾狀態時）；正常通過時為 None
     """
     ticket_file = locate_ticket_file(ticket_id, logger)
 
@@ -222,7 +222,19 @@ def check_creation_accepted(ticket_id: str, logger) -> Tuple[bool, Optional[str]
     if creation_accepted:
         return True, None
 
-    # 生成阻止訊息
+    # 檢查矛盾狀態：in_progress + creation_accepted: false
+    # 此狀態發生於 Ticket 在建立審核機制加入前就已認領
+    # re-claim 是 no-op，不應觸發 EXIT_BLOCK 導致 session 終止
+    current_status = frontmatter.get("status", "pending")
+    if current_status == "in_progress":
+        logger.warning(f"Ticket {ticket_id} 矛盾狀態（in_progress + creation_accepted: false），允許繼續")
+        warning_msg = format_message(
+            GateMessages.CONTRADICTORY_STATE_WARNING,
+            ticket_id=ticket_id
+        )
+        return True, warning_msg
+
+    # 正常阻止：pending + creation_accepted: false
     error_msg = format_message(
         GateMessages.CREATION_NOT_ACCEPTED_ERROR,
         ticket_id=ticket_id
@@ -365,16 +377,20 @@ def main() -> int:
 
         # 步驟 5: 檢查各 Ticket 的 creation_accepted 欄位
         error_messages = []
+        warning_messages = []
         is_blocked = False
 
         for ticket_id in ticket_ids:
-            is_accepted, error_msg = check_creation_accepted(ticket_id, logger)
+            is_accepted, msg = check_creation_accepted(ticket_id, logger)
             if not is_accepted:
                 is_blocked = True
-                error_messages.append(error_msg)
+                error_messages.append(msg)
+            elif msg:
+                # 允許執行但有警告（矛盾狀態）
+                warning_messages.append(msg)
 
-        # 步驟 6: 生成 Hook 輸出
-        hook_output = generate_hook_output(is_blocked, error_messages)
+        # 步驟 6: 生成 Hook 輸出（警告訊息也包含在 additionalContext 中）
+        hook_output = generate_hook_output(is_blocked, error_messages + warning_messages)
         print(json.dumps(hook_output, ensure_ascii=False, indent=2))
 
         # 步驟 7: 儲存日誌

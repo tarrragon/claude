@@ -44,6 +44,11 @@ from ticket_system.lib.tdd_sequence import (
     validate_phase_prerequisite,
     PHASE_LABELS,
 )
+from ticket_system.lib.ticket_ops import (
+    load_and_validate_ticket,
+    resolve_ticket_path,
+)
+from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 
 
 # ============================================================================
@@ -312,16 +317,8 @@ class TicketLifecycle:
         Returns:
             0 表示成功，非 0 表示失敗
         """
-        ticket = load_ticket(self.version, ticket_id)
-        if not ticket:
-            print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=ticket_id))
-            return 1
-
-        # 檢查 YAML 解析錯誤
-        if "_yaml_error" in ticket:
-            print(format_error(
-                f"Ticket {ticket_id} 的 YAML 格式錯誤：{ticket['_yaml_error']}"
-            ))
+        ticket, error = load_and_validate_ticket(self.version, ticket_id)
+        if error:
             return 1
 
         status = ticket.get("status", STATUS_PENDING)
@@ -361,7 +358,7 @@ class TicketLifecycle:
         ticket["assigned"] = True
         ticket["started_at"] = datetime.now().isoformat(timespec="seconds")
 
-        ticket_path = Path(ticket.get("_path", get_ticket_path(self.version, ticket_id)))
+        ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
         save_ticket(ticket, ticket_path)
 
         print(format_info(InfoMessages.TICKET_CLAIMED, ticket_id=ticket_id))
@@ -389,16 +386,8 @@ class TicketLifecycle:
             0 表示成功，非 0 表示失敗
         """
         # Step 1：載入 Ticket
-        ticket = load_ticket(self.version, ticket_id)
-        if not ticket:
-            print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=ticket_id))
-            return 1
-
-        # 檢查 YAML 解析錯誤
-        if "_yaml_error" in ticket:
-            print(format_error(
-                f"Ticket {ticket_id} 的 YAML 格式錯誤：{ticket['_yaml_error']}"
-            ))
+        ticket, error = load_and_validate_ticket(self.version, ticket_id)
+        if error:
             return 1
 
         # Step 2：驗證狀態
@@ -460,7 +449,7 @@ class TicketLifecycle:
         ticket["status"] = STATUS_COMPLETED
         ticket["completed_at"] = datetime.now().isoformat(timespec="seconds")
 
-        ticket_path = Path(ticket.get("_path", get_ticket_path(self.version, ticket_id)))
+        ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
         save_ticket(ticket, ticket_path)
 
         print(format_info(InfoMessages.TICKET_COMPLETED, ticket_id=ticket_id))
@@ -474,7 +463,7 @@ class TicketLifecycle:
         print("  2. 確認所有建議已處理（無 pending）")
         print("  3. 派發 acceptance-auditor 執行驗收")
         print()
-        print("  豁免條件：P0 緊急任務、純文件更新、認知負擔 < 5")
+        print("  豁免條件：P0 緊急任務、純文件更新、任務範圍單純")
 
         # 任務鏈後續步驟建議
         all_tickets = list_tickets(self.version)
@@ -496,16 +485,8 @@ class TicketLifecycle:
         Returns:
             0 表示成功，非 0 表示失敗
         """
-        ticket = load_ticket(self.version, ticket_id)
-        if not ticket:
-            print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=ticket_id))
-            return 1
-
-        # 檢查 YAML 解析錯誤
-        if "_yaml_error" in ticket:
-            print(format_error(
-                f"Ticket {ticket_id} 的 YAML 格式錯誤：{ticket['_yaml_error']}"
-            ))
+        ticket, error = load_and_validate_ticket(self.version, ticket_id)
+        if error:
             return 1
 
         status = ticket.get("status", STATUS_PENDING)
@@ -526,7 +507,7 @@ class TicketLifecycle:
         ticket["assigned"] = False
         ticket["started_at"] = None
 
-        ticket_path = Path(ticket.get("_path", get_ticket_path(self.version, ticket_id)))
+        ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
         save_ticket(ticket, ticket_path)
 
         print(format_info(InfoMessages.TICKET_RELEASED, ticket_id=ticket_id))
@@ -541,9 +522,9 @@ class TicketLifecycle:
 def _print_stage_separator(title: str) -> None:
     """印出階段分隔線"""
     print()
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print(f"[{title}]")
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
 
 
 def _check_pending_children(
@@ -813,6 +794,7 @@ def _print_claim_checklist(ticket: Dict[str, Any]) -> None:
     if ticket_type in ["IMP", "ADJ"]:
         print(LifecycleMessages.CHECKLIST_ERROR_PATTERNS)
 
+    print(LifecycleMessages.CHECKLIST_SCOPE_VERIFICATION)
     print(LifecycleMessages.CHECKLIST_EXECUTION_LOG)
     print()
 

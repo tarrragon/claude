@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from hook_utils import setup_hook_logging, run_hook_safely
 from lib.hook_messages import AskUserQuestionMessages, CoreMessages
+from lib.ask_user_question_reminders import AskUserQuestionReminders
 
 # ============================================================================
 # 常數定義
@@ -43,6 +44,17 @@ EXCLUDED_COMMAND_PATTERNS = [
     "git status",
     "git commit --amend",
 ]
+
+# 自動跳過 #16 的 commit 類型（conventional commit 前綴）
+SKIP_SCENE16_COMMIT_PREFIXES = frozenset({
+    "docs",
+    "chore",
+    "style",
+    "revert",
+    "test",
+    "ci",
+    "build",
+})
 
 # commit 成功標記
 COMMIT_SUCCESS_MARKERS = [
@@ -102,6 +114,33 @@ def is_commit_successful(stdout: str) -> bool:
     return False
 
 
+def extract_commit_type(command: str) -> str:
+    """
+    從 git commit 命令中提取 conventional commit 類型
+
+    支援格式：
+    - git commit -m "type: ..."
+    - git commit -m "type(scope): ..."
+    - git commit -m "$(cat <<'EOF'\ntype: ...\nEOF\n)"
+
+    Args:
+        command: Bash 命令字串
+
+    Returns:
+        str - commit 類型（如 "docs", "chore"），無法提取時回傳 ""
+    """
+    import re
+    # 匹配 -m "type: ..." 或 -m "type(scope): ..."
+    match = re.search(r'-m\s+["\']([a-z]+)(?:\([^)]*\))?:', command)
+    if match:
+        return match.group(1).lower()
+    # 匹配 heredoc 中的類型（COMMIT_MSG=... 或直接在 EOF 區塊）
+    match = re.search(r'\n\s*([a-z]+)(?:\([^)]*\))?:', command)
+    if match:
+        return match.group(1).lower()
+    return ""
+
+
 def main() -> int:
     """
     主入口點
@@ -140,11 +179,26 @@ def main() -> int:
 
     # 檢測 git commit 成功
     if is_git_commit_command(command) and is_commit_successful(stdout):
-        logger.info("偵測到 git commit 成功，輸出 AskUserQuestion 提醒")
+        commit_type = extract_commit_type(command)
+        should_skip_scene16 = commit_type in SKIP_SCENE16_COMMIT_PREFIXES
+
+        if should_skip_scene16:
+            logger.info(
+                "偵測到 git commit 成功（type=%s），自動跳過場景 #16，輸出 Skip16 提醒",
+                commit_type,
+            )
+            reminder = AskUserQuestionMessages.COMMIT_HANDOFF_SKIP16_REMINDER
+        else:
+            logger.info(
+                "偵測到 git commit 成功（type=%s），輸出含 #16 的 AskUserQuestion 提醒",
+                commit_type or "unknown",
+            )
+            reminder = AskUserQuestionMessages.COMMIT_HANDOFF_REMINDER
+
         output = {
             "hookSpecificOutput": {
                 "hookEventName": "PostToolUse",
-                "additionalContext": AskUserQuestionMessages.COMMIT_HANDOFF_REMINDER
+                "additionalContext": reminder
             }
         }
     else:

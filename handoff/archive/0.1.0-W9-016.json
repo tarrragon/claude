@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W9-016",
+  "direction": "to-sibling:0.1.0-W9-018",
+  "timestamp": "2026-03-07T15:53:39.318683",
+  "from_status": "completed",
+  "title": "研究並實作 context 用量感知機制：調查 Claude Code 是否暴露 token 使用量，建立 Hook 在 context 達到閾值時主動建議 handoff；同時調整 AskUserQuestion #11 預設路由為 handoff-first",
+  "what": "三項實作：(1) 新建 session-context-guard-hook.py 追蹤 session 內完成 ticket 數並警告；(2) 更新 COMMIT_HANDOFF_REMINDER 加入 Handoff first 原則；(3) 更新 askuserquestion-rules.md #11 強調 handoff 是預設",
+  "chain": {},
+  "resumed_at": "2026-03-07T15:54:45.979054"
+}

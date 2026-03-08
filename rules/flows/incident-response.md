@@ -150,6 +150,53 @@ CLI 或內部工具報錯時，**禁止假設歸因**，必須依序調查：
 
 ---
 
+## 操作失誤根因分析（強制）
+
+> **適用場景**：incident-responder 或 PM 判斷錯誤屬於「人的操作行為失誤」，而非程式碼錯誤或工具報錯。
+>
+> **識別特徵**：error-pattern 歸類為 `process-compliance`，或描述含「假設」「直接」「跳過」「手動繞過」。
+
+當確認為操作失誤時，**必須執行三層根因分析**（而非直接加入禁止清單）：
+
+```
+操作失誤確認
+    |
+    v
+[第一層] 設計邊界
+  → 設計規範是否明確禁止此操作？
+  → 邊界條件和例外情況是否清楚？
+
+    |
+    v
+[第二層] 使用情境
+  → 情境中是否有足夠的警示信號和防呆機制？
+  → 是否在高壓推進時才犯，還是一般情況也容易犯？
+
+    |
+    v
+[第三層] 說明充分性
+  → 正確做法是否有清楚文件且容易找到？
+  → 禁止行為是否給出具體的替代做法？
+
+    |
+    v
+根因結論 → 建立改善 Ticket（設計邊界/Hook/文件補充）
+```
+
+**三層分析的具體問題和分析模板**：
+
+> 詳見：.claude/methodologies/operational-error-root-cause-methodology.md
+
+**強制規則**：
+
+| 規則 | 說明 |
+|------|------|
+| 操作失誤必須三層分析 | 禁止只記錄「禁止行為」而不分析根因 |
+| 每層都要給出結論 | 不可跳過任何一層 |
+| 分析結果必須建立 Ticket | 後續改善行動必須有追蹤 |
+
+---
+
 ## 禁止行為
 
 | 禁止 | 說明 |
@@ -165,6 +212,7 @@ CLI 或內部工具報錯時，**禁止假設歸因**，必須依序調查：
 
 ## 相關文件
 
+- .claude/methodologies/operational-error-root-cause-methodology.md - 操作失誤三層根因分析方法論
 - .claude/references/incident-response-details.md - 詳細規則（多視角分析、安全等級、報告格式）
 - .claude/agents/incident-responder.md - 代理人定義
 - .claude/rules/forbidden/skip-gate.md - Skip-gate 防護
@@ -172,5 +220,5 @@ CLI 或內部工具報錯時，**禁止假設歸因**，必須依序調查：
 
 ---
 
-**Last Updated**: 2026-03-05
-**Version**: 3.2.1 - 修正 PC-003→PC-005 引用（PC-003 為跨版本靜默遺漏，PC-005 為 CLI 假設歸因）
+**Last Updated**: 2026-03-07
+**Version**: 3.3.0 - 新增操作失誤根因分析章節，引用 operational-error-root-cause-methodology（0.1.0-W10-001）

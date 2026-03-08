@@ -144,7 +144,9 @@ pepper-test-implementer 在以下情況下**應該被觸發**：
 |--------|--------------------------|--------------|
 | sage-test-architect (Phase 2) | 理解和遵循測試設計 | 設計測試案例和驗收標準 |
 | parsley-flutter-developer (Phase 3b) | 設計語言無關策略和虛擬碼 | 將策略轉換為具體語言程式碼 |
-| cinnamon-refactor-owl (Phase 4) | 標記技術債務和重構機會 | 執行重構和效能優化 |
+| /parallel-evaluation B (Phase 4a) | 標記技術債務和重構機會 | 多視角重構分析 |
+| cinnamon-refactor-owl (Phase 4b) | 標記技術債務和重構機會 | 執行重構和效能優化（依 4a 報告） |
+| /parallel-evaluation A (Phase 4c) | 標記技術債務和重構機會 | 多視角再審核 |
 | saffron-system-analyst | 遵循系統架構規範 | 進行架構級審查和決策 |
 
 ### 明確邊界
@@ -196,7 +198,13 @@ Phase 2 (測試設計) - sage-test-architect
 Phase 3b (程式碼實作) - 語言特定代理人
     |
     v (所有測試綠燈)
-Phase 4 (重構優化) - cinnamon-refactor-owl
+Phase 4a (多視角分析) - /parallel-evaluation B
+    |
+    v (分析報告完成)
+Phase 4b (重構執行) - cinnamon-refactor-owl
+    |
+    v (重構完成)
+Phase 4c (多視角再審核) - /parallel-evaluation A
 ```
 
 ### 與相關代理人的協作

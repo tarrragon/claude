@@ -1,6 +1,6 @@
 ---
 name: tdd-phase1-split
-description: "TDD Phase 1 SOLID 原則驅動拆分輔助工具。在 Phase 1（功能設計）階段分析功能範圍，識別獨立職責，產出拆分建議和版本號分配。確保設計階段就考慮 DIP、LSP、ISP，才能實踐 SRP 和 OCP。"
+description: "TDD Phase 1 SOLID 原則驅動拆分輔助工具。Use for: (1) Phase 1 功能設計階段分析功能範圍, (2) 識別獨立職責並產出拆分建議, (3) 分配 Ticket 版本號, (4) 確保設計階段套用 DIP、LSP、ISP。Use when: 進入 TDD Phase 1、需要將大型功能拆分成獨立職責、設計新功能架構時不確定如何拆分 Ticket 時。"
 ---
 
 # TDD Phase 1 Split v1.0

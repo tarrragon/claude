@@ -13,6 +13,7 @@ Command Entrance Gate Hook - 阻塞式驗證
 - 識別開發/測試/調整命令（行為分離原則）
 - 驗證 Ticket 是否存在且已認領
 - 驗證 Ticket 是否包含決策樹欄位
+- 優先掃描當前活躍版本（來自 todolist.yaml 的 current_version）
 - 無效時阻止執行（exit code 2）
 - 有效時允許執行（exit code 0）
 
@@ -47,13 +48,17 @@ Hook 類型: UserPromptSubmit
 4. 如果 Ticket 已認領，必須包含決策樹欄位（decision_tree_path 或 ## 決策樹）
 5. 所有驗證通過才允許執行
 
+版本過濾（v3.4.0 更新）：
+- 優先掃描當前活躍版本的 Ticket（來自 docs/todolist.yaml 的 current_version 欄位）
+- 若 current_version 讀取失敗或目錄不存在，fallback 到掃描所有版本目錄
+
 HOOK_METADATA (JSON):
 {
   "event_type": "UserPromptSubmit",
   "timeout": 5000,
   "description": "命令入口閘門 - 驗證開發命令的 Ticket 前置條件",
   "dependencies": [],
-  "version": "1.0.0"
+  "version": "3.4.0"
 }
 """
 
@@ -215,15 +220,27 @@ def is_management_operation(prompt: str, logger) -> bool:
         "不要", "不用",
         # 理解確認
         "了解", "知道了", "收到", "明白", "got it",
-        # 數字選擇
+        # 數字選擇（0-20）
         "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+        "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
     ]
 
-    # 檢查短回答：長度 <= 15 且完全匹配白名單
+    # 短回答正則模式（長度 <= 15 的特殊格式，需完整匹配整個字串）
+    short_answer_regex_patterns = [
+        r"^\d{1,2}(,\s*\d{1,2})*$",  # 組合多選：如 "2, 4" 或 "1,3,5"
+        r"^phase\s+\d+[a-z]?$",        # Phase 選項標籤：如 "Phase 4a"、"phase 3b"
+        r"^[a-z]$",                     # 單字母選項：如 "a"、"b"
+    ]
+
+    # 檢查短回答：長度 <= 15 且完全匹配白名單或正則模式
     if len(prompt_stripped) <= 15:
         if prompt_stripped.lower() in short_answer_patterns:
             logger.info(f"識別為短回答（白名單）: {prompt}")
             return True
+        for pattern in short_answer_regex_patterns:
+            if re.match(pattern, prompt_stripped.lower()):
+                logger.info(f"識別為短回答（正則模式 {pattern}）: {prompt}")
+                return True
 
     # Ticket 管理相關模式
     ticket_patterns = [
@@ -354,9 +371,47 @@ def is_development_command(prompt: str, logger) -> bool:
 # Ticket 檢查
 # ============================================================================
 
+def read_current_version(project_dir: Path, logger) -> Optional[str]:
+    """
+    從 docs/todolist.yaml 讀取 current_version 欄位
+
+    格式: current_version: 0.1.0
+
+    Args:
+        project_dir: 專案根目錄
+        logger: 日誌物件
+
+    Returns:
+        str - 版本號（如 "0.1.0"），或 None（若讀取失敗）
+    """
+    todolist_file = project_dir / "docs" / "todolist.yaml"
+
+    if not todolist_file.exists():
+        logger.debug(f"todolist.yaml 不存在: {todolist_file}")
+        return None
+
+    try:
+        content = todolist_file.read_text(encoding="utf-8")
+
+        # 簡單正則提取 current_version: 欄位值
+        match = re.search(r"current_version:\s*(\S+)", content)
+        if match:
+            version = match.group(1).strip()
+            logger.info(f"從 todolist.yaml 讀取 current_version: {version}")
+            return version
+        else:
+            logger.debug("todolist.yaml 中未找到 current_version 欄位")
+            return None
+    except Exception as e:
+        logger.warning(f"讀取 todolist.yaml 失敗: {e}")
+        return None
+
 def find_ticket_files(logger) -> List[Path]:
     """
     尋找所有 Ticket 檔案
+
+    優先掃描當前活躍版本（從 docs/todolist.yaml 的 current_version 讀取）。
+    若讀取失敗或目錄不存在，fallback 到掃描所有版本目錄。
 
     Args:
         logger: 日誌物件
@@ -379,14 +434,42 @@ def find_ticket_files(logger) -> List[Path]:
     # 搜尋 .claude/tickets/
     if ticket_locations[0].exists():
         all_tickets.extend(ticket_locations[0].glob("*.md"))
+        logger.debug(f"從 .claude/tickets/ 找到 {len(all_tickets)} 個 Ticket 檔案")
 
-    # 搜尋 docs/work-logs/*/tickets/
-    for version_dir in ticket_locations[1].glob("v*"):
-        tickets_dir = version_dir / "tickets"
-        if tickets_dir.exists():
-            all_tickets.extend(tickets_dir.glob("*.md"))
+    # 嘗試讀取當前版本，優先掃描當前版本目錄
+    current_version = read_current_version(project_dir, logger)
 
-    logger.debug(f"找到 {len(all_tickets)} 個 Ticket 檔案")
+    if current_version:
+        # 優先掃描當前版本
+        current_version_dir = ticket_locations[1] / f"v{current_version}"
+        current_tickets_dir = current_version_dir / "tickets"
+
+        if current_tickets_dir.exists():
+            current_tickets = list(current_tickets_dir.glob("*.md"))
+            all_tickets.extend(current_tickets)
+            logger.info(f"從當前版本 v{current_version} 找到 {len(current_tickets)} 個 Ticket 檔案")
+        else:
+            logger.warning(f"當前版本目錄不存在: {current_tickets_dir}")
+
+        # Fallback: 掃描其他版本目錄（非當前版本）
+        for version_dir in ticket_locations[1].glob("v*"):
+            if version_dir.name != f"v{current_version}":
+                tickets_dir = version_dir / "tickets"
+                if tickets_dir.exists():
+                    other_tickets = list(tickets_dir.glob("*.md"))
+                    all_tickets.extend(other_tickets)
+                    logger.debug(f"從其他版本 {version_dir.name} 找到 {len(other_tickets)} 個 Ticket 檔案")
+    else:
+        # Fallback: 讀取失敗時，掃描所有版本目錄
+        logger.info("current_version 讀取失敗，fallback 到掃描所有版本目錄")
+        for version_dir in ticket_locations[1].glob("v*"):
+            tickets_dir = version_dir / "tickets"
+            if tickets_dir.exists():
+                version_tickets = list(tickets_dir.glob("*.md"))
+                all_tickets.extend(version_tickets)
+                logger.debug(f"從版本 {version_dir.name} 找到 {len(version_tickets)} 個 Ticket 檔案")
+
+    logger.debug(f"總計找到 {len(all_tickets)} 個 Ticket 檔案")
     return all_tickets
 
 def extract_ticket_status(file_path: Path, logger) -> Tuple[Optional[str], Optional[str], str]:

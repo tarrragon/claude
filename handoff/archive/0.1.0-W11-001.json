@@ -1,0 +1,17 @@
+{
+  "ticket_id": "0.1.0-W11-001",
+  "direction": "to-sibling:0.1.0-W11-002",
+  "timestamp": "2026-03-07T22:51:10.953949",
+  "from_status": "completed",
+  "title": "修正 SKILL.md append-log 有效區段說明（移除錯誤列出的 Execution Log）",
+  "what": "修正 SKILL.md append-log 有效區段說明（移除錯誤列出的 Execution Log）",
+  "chain": {
+    "root": "0.1.0-W11-1",
+    "parent": null,
+    "depth": 0,
+    "sequence": [
+      1
+    ]
+  },
+  "resumed_at": "2026-03-07T22:54:03.108473"
+}

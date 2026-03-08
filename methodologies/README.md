@@ -3,7 +3,7 @@
 > **測試是可執行的需求規格書，而非驗證實作的工具。**
 > — Kent Beck, Martin Fowler
 
-## 📚 方法論體系概覽
+## 方法論體系概覽
 
 本目錄包含三篇互補的測試方法論，共同構成完整的行為驅動測試體系。
 
@@ -25,25 +25,25 @@
 
 ---
 
-## 🎯 三篇方法論的角色定位
+## 三篇方法論的角色定位
 
-### 1️⃣ Behavior-First TDD 方法論（理論基礎 - WHY）
+### 1. Behavior-First TDD 方法論（理論基礎 - WHY）
 
 **檔案**: [`behavior-first-tdd-methodology.md`](./behavior-first-tdd-methodology.md)
 
 **核心定位**：揭示TDD痛點的根本原因，說明測試應該耦合到行為而非結構。
 
 **主要內容**：
-- 🔍 **TDD痛點的根本原因** - 為什麼TDD變得痛苦？
-- 📖 **歷史證據** - Kent Beck、Martin Fowler、Google的實踐經驗
-- 🆚 **Sociable vs Solitary Unit Tests** - 兩種測試風格的完整對比
-- ⚖️ **Test-First vs Test-Last** - 反饋循環的差異分析
+- **TDD痛點的根本原因** - 為什麼TDD變得痛苦？
+- **歷史證據** - Kent Beck、Martin Fowler、Google的實踐經驗
+- **Sociable vs Solitary Unit Tests** - 兩種測試風格的完整對比
+- **Test-First vs Test-Last** - 反饋循環的差異分析
 
 **核心概念**：
-- ✅ **Sociable Unit Tests** - Module層級測試，只Mock外部依賴
-- ❌ **Solitary Unit Tests** - Class層級測試，Mock所有協作者
-- 📋 **Executable Specifications** - 測試是可執行的需求規格書
-- 🔄 **Coupling to Behavior** - 測試耦合到行為而非結構
+- **Sociable Unit Tests** - Module層級測試，只Mock外部依賴
+- **Solitary Unit Tests** - Class層級測試，Mock所有協作者
+- **Executable Specifications** - 測試是可執行的需求規格書
+- **Coupling to Behavior** - 測試耦合到行為而非結構
 
 **適合閱讀時機**：
 - 想理解「為什麼TDD會痛苦」
@@ -56,23 +56,23 @@
 
 ---
 
-### 2️⃣ BDD 測試方法論（實作格式 - HOW）
+### 2. BDD 測試方法論（實作格式 - HOW）
 
 **檔案**: [`bdd-testing-methodology.md`](./bdd-testing-methodology.md)
 
 **核心定位**：定義Given-When-Then格式規範，整合到Clean Architecture和TDD四階段流程。
 
 **主要內容**：
-- 📋 **Given-When-Then結構** - BDD測試場景撰寫規範
-- 🏗 **Clean Architecture整合** - 分層測試策略（Layer 1-5）
-- 🔄 **TDD四階段整合** - Phase 1-4的BDD測試設計
-- ✅ **核心原則** - 測試行為而非實作、UseCase層BDD、Mock策略
+- **Given-When-Then結構** - BDD測試場景撰寫規範
+- **Clean Architecture整合** - 分層測試策略（Layer 1-5）
+- **TDD四階段整合** - Phase 1-4的BDD測試設計
+- **核心原則** - 測試行為而非實作、UseCase層BDD、Mock策略
 
 **核心概念**：
-- 📝 **Given-When-Then** - 業務場景描述格式
-- 🎯 **UseCase層測試** - BDD的核心應用層
-- 🔀 **Mock策略** - 只Mock外層依賴（Repository, Service）
-- 🚫 **不Mock Domain** - 使用真實的Domain Entity和Value Object
+- **Given-When-Then** - 業務場景描述格式
+- **UseCase層測試** - BDD的核心應用層
+- **Mock策略** - 只Mock外層依賴（Repository, Service）
+- **不Mock Domain** - 使用真實的Domain Entity和Value Object
 
 **適合閱讀時機**：
 - 需要撰寫BDD測試時
@@ -88,23 +88,23 @@
 
 ---
 
-### 3️⃣ 混合測試策略方法論（決策執行 - WHEN）
+### 3. 混合測試策略方法論（決策執行 - WHEN）
 
 **檔案**: [`hybrid-testing-strategy-methodology.md`](./hybrid-testing-strategy-methodology.md)
 
 **核心定位**：為每層Ticket提供明確的測試設計指引，包含分層測試決策樹和量化覆蓋率指標。
 
 **主要內容**：
-- 🌳 **分層測試決策樹** - Layer 1-5測試策略判斷流程
-- 📊 **量化覆蓋率指標** - 每層的測試覆蓋率要求
-- 🎫 **Ticket測試策略設計** - 整合到Ticket設計流程
-- 🔍 **技術性檢查清單** - Null、空集合、邊界條件、異常處理
+- **分層測試決策樹** - Layer 1-5測試策略判斷流程
+- **量化覆蓋率指標** - 每層的測試覆蓋率要求
+- **Ticket測試策略設計** - 整合到Ticket設計流程
+- **技術性檢查清單** - Null、空集合、邊界條件、異常處理
 
 **核心概念**：
-- 🏗 **Layer 1 (UI)** - 整合測試（關鍵流程）
-- 🔄 **Layer 2 (Behavior)** - 單元測試（複雜轉換）
-- 📋 **Layer 3 (UseCase)** - BDD測試（所有場景）
-- 🧩 **Layer 5 (Domain)** - 單元測試（複雜邏輯）
+- **Layer 1 (UI)** - 整合測試（關鍵流程）
+- **Layer 2 (Behavior)** - 單元測試（複雜轉換）
+- **Layer 3 (UseCase)** - BDD測試（所有場景）
+- **Layer 5 (Domain)** - 單元測試（複雜邏輯）
 
 **適合閱讀時機**：
 - 規劃Ticket的測試策略時
@@ -120,9 +120,9 @@
 
 ---
 
-## 🎓 閱讀順序建議
+## 閱讀順序建議
 
-### 🌱 新手路徑（第一次接觸行為驅動測試）
+### 新手路徑（第一次接觸行為驅動測試）
 
 建議按照「理論 → 格式 → 決策」的順序閱讀：
 
@@ -143,7 +143,7 @@
 
 ---
 
-### 🚀 老手路徑（快速參考）
+### 老手路徑（快速參考）
 
 根據具體需求快速查找：
 
@@ -159,7 +159,7 @@
 
 ---
 
-### 🎯 問題導向路徑
+### 問題導向路徑
 
 根據遇到的問題直接查找解決方案：
 
@@ -185,7 +185,7 @@
 
 **問題 6: 「測試覆蓋率要求是多少？」**
 - 閱讀：`hybrid-testing-strategy-methodology.md` → 第5章（量化指標）
-- 答案：UseCase 100%場景、Domain 100%程式碼、整體≥80%
+- 答案：UseCase 100%場景、Domain 100%程式碼、整體>=80%
 
 **問題 7: 「要不要Mock Domain Entity？」**
 - 閱讀：`bdd-testing-methodology.md` → 第3.3節（依賴倒置測試）
@@ -193,7 +193,7 @@
 
 ---
 
-## 🔗 與TDD四階段流程的整合
+## 與TDD四階段流程的整合
 
 三篇方法論如何對應到TDD四階段：
 
@@ -218,14 +218,21 @@ Phase 3b: 程式碼實作（parsley-flutter-developer）
 └─ 使用：BDD測試方法論
    └─ Mock策略和驗證標準
 
-Phase 4: 重構優化（cinnamon-refactor-owl）
+Phase 4a: 多視角重構分析（/parallel-evaluation B）
+├─ 使用：Behavior-First TDD方法論
+└─ 測試穩定性檢查（測試不應破裂）
+
+Phase 4b: 重構執行（cinnamon-refactor-owl，依 4a 報告）
 └─ 使用：Behavior-First TDD方法論
-   └─ 測試穩定性檢查（測試不應破裂）
+
+Phase 4c: 多視角再審核（/parallel-evaluation A）
+└─ 使用：Behavior-First TDD方法論
+   └─ 重構品質最終驗證
 ```
 
 ---
 
-## 🧭 核心原則快速參考
+## 核心原則快速參考
 
 ### 測試的本質
 
@@ -237,10 +244,10 @@ Phase 4: 重構優化（cinnamon-refactor-owl）
 
 | 應該耦合到 | 不應該耦合到 |
 |----------|-----------|
-| ✅ 行為（Behavior） | ❌ 結構（Structure） |
-| ✅ Module API | ❌ Class Methods |
-| ✅ 需求規格 | ❌ 實作細節 |
-| ✅ 可觀察的結果 | ❌ 內部狀態 |
+| 行為（Behavior） | 結構（Structure） |
+| Module API | Class Methods |
+| 需求規格 | 實作細節 |
+| 可觀察的結果 | 內部狀態 |
 
 ### Sociable Unit Tests核心
 
@@ -279,24 +286,24 @@ test('使用者提交訂單成功', () async {
 ```
 
 **規範要點**：
-- ✅ Given明確描述前置條件
-- ✅ When只有單一動作
-- ✅ Then驗證可觀察的結果
-- ✅ 使用業務語言而非技術術語
+- Given明確描述前置條件
+- When只有單一動作
+- Then驗證可觀察的結果
+- 使用業務語言而非技術術語
 
 ### Mock策略原則
 
 | 依賴類型 | Mock策略 | 理由 |
 |---------|---------|------|
-| Repository | ✅ Mock | 外層依賴，隔離Database |
-| Service | ✅ Mock | 外層依賴，隔離External Services |
-| Event Publisher | ✅ Mock | 外層依賴，驗證事件發布 |
-| Domain Entity | ❌ 不Mock | 內層邏輯，使用真實物件 |
-| Value Object | ❌ 不Mock | 內層邏輯，使用真實物件 |
+| Repository | Mock | 外層依賴，隔離Database |
+| Service | Mock | 外層依賴，隔離External Services |
+| Event Publisher | Mock | 外層依賴，驗證事件發布 |
+| Domain Entity | 不Mock | 內層邏輯，使用真實物件 |
+| Value Object | 不Mock | 內層邏輯，使用真實物件 |
 
 ---
 
-## 🎯 常見場景指引
+## 常見場景指引
 
 ### 場景 1: 撰寫UseCase測試
 
@@ -395,13 +402,13 @@ Step 3: 查看對應章節
 3. `behavior-first-tdd-methodology.md` → 第3.5節（對比總結）
 
 **關鍵論據**：
-- ✅ Kent Beck、Martin Fowler等TDD創始人都使用Sociable Unit Tests
-- ✅ Google實踐證明：測試行為而非實作降低維護成本
-- ✅ 量化對比：重構時測試修改從20-50%降至0-5%
+- Kent Beck、Martin Fowler等TDD創始人都使用Sociable Unit Tests
+- Google實踐證明：測試行為而非實作降低維護成本
+- 量化對比：重構時測試修改從20-50%降至0-5%
 
 ---
 
-## 📊 整合關係圖
+## 整合關係圖
 
 ```text
 ┌─────────────────────────────────────────────────────────┐
@@ -410,28 +417,28 @@ Step 3: 查看對應章節
 │                                                         │
 │  Behavior-First TDD（理論基礎 - WHY）                    │
 │  ┌───────────────────────────────────────────┐         │
-│  │ • TDD痛點根源                              │         │
-│  │ • Sociable vs Solitary對比                │         │
-│  │ • 歷史證據（Kent Beck, Martin Fowler）    │         │
-│  │ • Test-First vs Test-Last反饋循環        │         │
+│  │ - TDD痛點根源                              │         │
+│  │ - Sociable vs Solitary對比                │         │
+│  │ - 歷史證據（Kent Beck, Martin Fowler）    │         │
+│  │ - Test-First vs Test-Last反饋循環        │         │
 │  └───────────────┬───────────────────────────┘         │
 │                  │ 提供理論基礎                         │
 │                  ↓                                      │
 │  BDD測試方法論（實作格式 - HOW）                         │
 │  ┌───────────────────────────────────────────┐         │
-│  │ • Given-When-Then格式規範                  │         │
-│  │ • Clean Architecture整合                   │         │
-│  │ • TDD四階段流程整合                        │         │
-│  │ • Mock策略原則                             │         │
+│  │ - Given-When-Then格式規範                  │         │
+│  │ - Clean Architecture整合                   │         │
+│  │ - TDD四階段流程整合                        │         │
+│  │ - Mock策略原則                             │         │
 │  └───────────────┬───────────────────────────┘         │
 │                  │ 提供實作格式                         │
 │                  ↓                                      │
 │  混合測試策略（決策執行 - WHEN）                         │
 │  ┌───────────────────────────────────────────┐         │
-│  │ • 分層測試決策樹（Layer 1-5）              │         │
-│  │ • 量化覆蓋率指標                           │         │
-│  │ • Ticket測試策略設計                       │         │
-│  │ • Code Review檢查清單                      │         │
+│  │ - 分層測試決策樹（Layer 1-5）              │         │
+│  │ - 量化覆蓋率指標                           │         │
+│  │ - Ticket測試策略設計                       │         │
+│  │ - Code Review檢查清單                      │         │
 │  └───────────────────────────────────────────┘         │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
@@ -439,7 +446,7 @@ Step 3: 查看對應章節
 
 ---
 
-## 🚨 重要提醒
+## 重要提醒
 
 ### 測試的核心原則（不可妥協）
 
@@ -447,28 +454,28 @@ Step 3: 查看對應章節
 > — Kent Beck
 
 **這意味著**：
-1. ✅ 重構時測試不應該破裂（如果破裂，表示測試耦合到結構）
-2. ✅ 測試描述「系統做什麼」而非「系統怎麼做」
-3. ✅ 測試使用業務語言而非技術術語
-4. ✅ 測試透過Module API而非直接存取內部類別
+1. 重構時測試不應該破裂（如果破裂，表示測試耦合到結構）
+2. 測試描述「系統做什麼」而非「系統怎麼做」
+3. 測試使用業務語言而非技術術語
+4. 測試透過Module API而非直接存取內部類別
 
 ### 常見誤解
 
 **誤解 1**: 「BDD和TDD是不同的方法」
-- ❌ 錯誤：BDD創造了新的測試方法
-- ✅ 真相：BDD只是修正了TDD中「Test」這個詞造成的命名混淆
+- 錯誤：BDD創造了新的測試方法
+- 真相：BDD只是修正了TDD中「Test」這個詞造成的命名混淆
 
 **誤解 2**: 「Unit Test必須測試單一Class」
-- ❌ 錯誤：Unit = Class
-- ✅ 真相：Unit = Module（可包含多個類別）
+- 錯誤：Unit = Class
+- 真相：Unit = Module（可包含多個類別）
 
 **誤解 3**: 「所有協作者都要Mock」
-- ❌ 錯誤：Solitary Unit Tests（Mock所有協作者）
-- ✅ 真相：Sociable Unit Tests（只Mock外部依賴）
+- 錯誤：Solitary Unit Tests（Mock所有協作者）
+- 真相：Sociable Unit Tests（只Mock外部依賴）
 
 **誤解 4**: 「測試程式碼是production code的2-4倍很正常」
-- ❌ 錯誤：接受測試的高維護成本
-- ✅ 真相：正確的測試方法不會產生如此高的成本
+- 錯誤：接受測試的高維護成本
+- 真相：正確的測試方法不會產生如此高的成本
 
 ### 閱讀注意事項
 
@@ -479,7 +486,7 @@ Step 3: 查看對應章節
 
 ---
 
-## 📖 延伸閱讀
+## 延伸閱讀
 
 ### 經典書籍
 
@@ -512,7 +519,7 @@ Step 3: 查看對應章節
 
 ---
 
-## 🆘 需要幫助？
+## 需要幫助？
 
 如果在閱讀過程中遇到問題，可以：
 
@@ -523,7 +530,8 @@ Step 3: 查看對應章節
 
 ---
 
-**文件版本**: v1.0
+**文件版本**: v1.1
 **建立日期**: 2025-10-16
 **維護者**: thyme-documentation-integrator
-**狀態**: ✅ 已啟用
+**狀態**: 已啟用
+**最後更新**: 2026-03-09 - 清除 emoji 違規（0.1.0-W22-020）

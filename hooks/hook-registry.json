@@ -2,6 +2,34 @@
   "version": "1.0.0",
   "description": "Hook configuration registry - defines all hooks that should be registered in settings.json",
   "last_updated": "2025-01-23",
+  "schema": {
+    "description": "hooks 欄位為以事件類型為 key 的 dict 結構（object），每個 key 是 Claude Code 支援的 Hook 事件類型",
+    "hooks": {
+      "type": "object",
+      "key": {
+        "type": "string",
+        "description": "Hook 事件類型",
+        "valid_values": ["PreToolUse", "PostToolUse", "SessionStart", "UserPromptSubmit", "Stop"]
+      },
+      "value": {
+        "type": "array",
+        "description": "HookGroup 陣列，每個 HookGroup 對應一個工具匹配規則與命令清單",
+        "items": {
+          "type": "object",
+          "properties": {
+            "matcher": {
+              "type": "string | null",
+              "description": "工具名稱（如 'Bash', 'Edit', 'Write'），null 表示匹配所有工具"
+            },
+            "commands": {
+              "type": "array of string",
+              "description": "當 Hook 觸發時依序執行的命令路徑清單"
+            }
+          }
+        }
+      }
+    }
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -77,7 +105,13 @@
       {
         "matcher": null,
         "commands": [
-          ".claude/hooks/prompt-submit-hook.sh"
+          ".claude/hooks/command-entrance-gate-hook.py",
+          ".claude/hooks/creation-acceptance-gate-hook.py",
+          ".claude/hooks/prompt-submit-hook.py",
+          ".claude/hooks/language-guard-hook.py",
+          ".claude/hooks/handoff-prompt-reminder-hook.py",
+          ".claude/hooks/parallel-suggestion-hook.py",
+          ".claude/hooks/process-skip-guard-hook.py"
         ]
       }
     ],

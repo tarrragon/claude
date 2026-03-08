@@ -12,7 +12,7 @@
 |---------|---------|
 | 計畫文件 | `.claude/plans/` |
 | 工作日誌 | `docs/work-logs/` |
-| Ticket 文件 | `.claude/tickets/` |
+| Ticket 文件 | `docs/work-logs/v{version}/tickets/` |
 | 錯誤模式記錄 | `.claude/error-patterns/` |
 | README 文件 | 各目錄下的 `README.md` |
 
@@ -109,5 +109,5 @@ updated: {更新日期}
 
 ---
 
-**Last Updated**: 2026-01-23
-**Version**: 1.0.0
+**Last Updated**: 2026-03-08
+**Version**: 1.1.0 - 修正 Ticket 文件存放路徑（.claude/tickets/ → docs/work-logs/v{version}/tickets/）

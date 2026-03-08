@@ -147,6 +147,38 @@ def _scan_worklog_directories() -> Optional[str]:
     return selected_version
 
 
+def normalize_version(version_str: str) -> str:
+    """
+    標準化版本號（去除 'v' 前綴）。
+
+    將版本號標準化為無 'v' 前綴的格式。
+    如果輸入為空字串，直接返回空字串。
+
+    Args:
+        version_str: 版本號字串，可帶 'v' 前綴也可不帶
+
+    Returns:
+        str: 標準化後的版本號（無 'v' 前綴），
+             如 "0.31.0"；空輸入返回空字串
+
+    Examples:
+        >>> normalize_version("v0.31.0")
+        '0.31.0'
+        >>> normalize_version("0.31.0")
+        '0.31.0'
+        >>> normalize_version("")
+        ''
+    """
+    if not version_str:
+        return ""
+
+    version_str = version_str.strip()
+    if version_str.lower().startswith("v"):
+        version_str = version_str[1:]
+
+    return version_str
+
+
 def resolve_version(explicit_version: Optional[str] = None) -> Optional[str]:
     """
     解析版本號（優先級：明確指定 > 自動偵測）

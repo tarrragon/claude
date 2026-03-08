@@ -11,6 +11,51 @@ from .constants import TICKET_ID_PATTERN
 from .cycle_detector import CycleDetector
 
 
+def extract_version_from_ticket_id(ticket_id: str) -> Optional[str]:
+    """
+    從 Ticket ID 提取版本號。
+
+    格式：0.1.0-W9-002 → "0.1.0"（以 "-W" 為分割點，語意清晰）
+
+    Args:
+        ticket_id: Ticket ID，格式如 "0.1.0-W9-002"
+
+    Returns:
+        Optional[str]: 版本號；ID 不含 "-W" 時返回 None
+
+    Examples:
+        >>> extract_version_from_ticket_id("0.1.0-W9-002")
+        '0.1.0'
+        >>> extract_version_from_ticket_id("invalid")
+        None
+    """
+    if not ticket_id or "-W" not in ticket_id:
+        return None
+    return ticket_id.split("-W")[0]
+
+
+def extract_wave_from_ticket_id(ticket_id: str) -> Optional[int]:
+    """
+    從 Ticket ID 提取 Wave 號（整數）。
+
+    格式：0.1.0-W9-002 → 9（以 regex 匹配 -W{num}- 模式）
+
+    Args:
+        ticket_id: Ticket ID，格式如 "0.1.0-W9-002"
+
+    Returns:
+        Optional[int]: Wave 號整數；格式不符時返回 None
+
+    Examples:
+        >>> extract_wave_from_ticket_id("0.1.0-W9-002")
+        9
+        >>> extract_wave_from_ticket_id("invalid")
+        None
+    """
+    match = re.search(r'-W(\d+)-', ticket_id or "")
+    return int(match.group(1)) if match else None
+
+
 def validate_ticket_id(ticket_id: str) -> bool:
     """
     驗證 Ticket ID 格式。

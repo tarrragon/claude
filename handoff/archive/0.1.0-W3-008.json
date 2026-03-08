@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W3-008",
+  "direction": "to-sibling:0.1.0-W3-009",
+  "timestamp": "2026-03-07T00:48:45.509093",
+  "from_status": "completed",
+  "title": "修復 prompt-submit-hook TDD Phase check 每次觸發 WARNING（tdd-phase-check-hook.py 缺失）",
+  "what": "修復 prompt-submit-hook TDD Phase check：tdd-phase-check-hook.py 不存在導致每次 prompt 都輸出 WARNING，且遷移類任務不應觸發此檢查",
+  "chain": {},
+  "resumed_at": "2026-03-07T01:14:43.062302"
+}

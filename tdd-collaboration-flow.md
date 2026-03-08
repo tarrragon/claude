@@ -474,7 +474,7 @@ Phase 3b: 語言特定代理人（程式碼實作）
     ├─ Python → python-developer（未來）
     └─ Vue → vue-developer（未來）
     ↓
-Phase 4 重構優化
+Phase 4 重構優化（4a 多視角分析 → 4b 重構執行 → 4c 多視角再審核）
 ```
 
 ### 🎨 Phase 3a: pepper-test-implementer - 語言無關策略規劃
@@ -1019,6 +1019,12 @@ Memory類型: concept
 **目標**: 改善程式碼品質和架構，執行完整的重構方法論，並建立需求保護機制
 
 **重要**: 重構設計師必須按照本文件「🧠 TDD 驅動重構方法論」章節的完整流程執行
+
+**標準三步驟流程（詳見 .claude/rules/flows/tdd-flow.md）**:
+- **Phase 4a**: `/parallel-evaluation` Skill 情境 B（多視角重構分析，視角：Redundancy/Coupling/Complexity）
+- **Phase 4b**: cinnamon-refactor-owl（依 4a 分析報告執行重構）
+- **Phase 4c**: `/parallel-evaluation` Skill 情境 A（多視角再審核，視角：Reuse/Quality/Efficiency）
+- **豁免條件**（直接進入 4b，跳過 4a/4c）：修改 ≤ 2 個檔案 / DOC 類型 / 認知負擔指數 < 5
 
 **🎯 UI 開發自動觸發效能檢查**:
 

@@ -39,15 +39,14 @@ class TestCheckAcceptance:
             "acceptance": ["[x] Condition 1", "[x] Condition 2", "[ ] Condition 3"],
         }
 
-        with patch('ticket_system.commands.track_acceptance.load_ticket') as mock_load:
-            mock_load.return_value = mock_ticket
+        with patch('ticket_system.commands.track_acceptance.load_and_validate_ticket') as mock_load:
+            mock_load.return_value = (mock_ticket, None)
 
-            with patch('ticket_system.commands.track_acceptance.get_ticket_path'):
-                with patch('ticket_system.commands.track_acceptance.save_ticket') as mock_save:
-                    result = execute_check_acceptance(args, "0.31.0")
+            with patch('ticket_system.commands.track_acceptance.save_ticket') as mock_save:
+                result = execute_check_acceptance(args, "0.31.0")
 
-                    assert result == 0
-                    mock_save.assert_called_once()
+                assert result == 0
+                mock_save.assert_called_once()
 
     def test_check_acceptance_partial_completed(self):
         """
@@ -68,15 +67,14 @@ class TestCheckAcceptance:
             "acceptance": ["[x] Condition 1", "[ ] Condition 2", "[x] Condition 3"],
         }
 
-        with patch('ticket_system.commands.track_acceptance.load_ticket') as mock_load:
-            mock_load.return_value = mock_ticket
+        with patch('ticket_system.commands.track_acceptance.load_and_validate_ticket') as mock_load:
+            mock_load.return_value = (mock_ticket, None)
 
-            with patch('ticket_system.commands.track_acceptance.get_ticket_path'):
-                with patch('ticket_system.commands.track_acceptance.save_ticket') as mock_save:
-                    result = execute_check_acceptance(args, "0.31.0")
+            with patch('ticket_system.commands.track_acceptance.save_ticket') as mock_save:
+                result = execute_check_acceptance(args, "0.31.0")
 
-                    assert result == 0
-                    mock_save.assert_called_once()
+                assert result == 0
+                mock_save.assert_called_once()
 
     def test_check_acceptance_no_criteria(self):
         """
@@ -97,8 +95,8 @@ class TestCheckAcceptance:
             "acceptance": [],
         }
 
-        with patch('ticket_system.commands.track_acceptance.load_ticket') as mock_load:
-            mock_load.return_value = mock_ticket
+        with patch('ticket_system.commands.track_acceptance.load_and_validate_ticket') as mock_load:
+            mock_load.return_value = (mock_ticket, None)
 
             result = execute_check_acceptance(args, "0.31.0")
 
@@ -116,8 +114,8 @@ class TestCheckAcceptance:
         args.index = "1"
         args.uncheck = False
 
-        with patch('ticket_system.commands.track_acceptance.load_ticket') as mock_load:
-            mock_load.return_value = None
+        with patch('ticket_system.commands.track_acceptance.load_and_validate_ticket') as mock_load:
+            mock_load.return_value = (None, "Ticket not found")
 
             result = execute_check_acceptance(args, "0.31.0")
 
@@ -141,16 +139,15 @@ class TestCheckAcceptance:
             "acceptance": ["[x] C1", "[x] C2", "[ ] C3", "[ ] C4"],
         }
 
-        with patch('ticket_system.commands.track_acceptance.load_ticket') as mock_load:
-            mock_load.return_value = mock_ticket
+        with patch('ticket_system.commands.track_acceptance.load_and_validate_ticket') as mock_load:
+            mock_load.return_value = (mock_ticket, None)
 
-            with patch('ticket_system.commands.track_acceptance.get_ticket_path'):
-                with patch('ticket_system.commands.track_acceptance.save_ticket') as mock_save:
-                    result = execute_check_acceptance(args, "0.31.0")
+            with patch('ticket_system.commands.track_acceptance.save_ticket') as mock_save:
+                result = execute_check_acceptance(args, "0.31.0")
 
-                    # 應返回 0（操作成功）
-                    assert result == 0
-                    mock_save.assert_called_once()
+                # 應返回 0（操作成功）
+                assert result == 0
+                mock_save.assert_called_once()
 
 
 class TestAppendLog:
@@ -205,14 +202,15 @@ class TestAppendLog:
             "_body": "## Execution Log\n",
         }
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.commands.track_acceptance.load_ticket') as mock_load:
             mock_load.return_value = mock_ticket
 
-            result = execute_append_log(args, "0.31.0")
+            with patch('ticket_system.commands.track_acceptance.save_ticket') as mock_save:
+                result = execute_append_log(args, "0.31.0")
 
-            # 空內容通常會返回 0（因為追加空內容不會報錯）
-            # 但如果實現有驗證，可能返回 1
-            assert result in [0, 1]
+                # 空內容通常會返回 0（因為追加空內容不會報錯）
+                # 但如果實現有驗證，可能返回 1
+                assert result in [0, 1]
 
     def test_append_log_nonexistent_ticket(self):
         """
@@ -226,7 +224,7 @@ class TestAppendLog:
         args.section = "Execution Log"
         args.content = "Some log"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.commands.track_acceptance.load_ticket') as mock_load:
             mock_load.return_value = None
 
             result = execute_append_log(args, "0.31.0")

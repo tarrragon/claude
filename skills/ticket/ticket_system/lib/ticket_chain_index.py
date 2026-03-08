@@ -14,6 +14,8 @@ Ticket 任務鏈索引模組
 from collections import defaultdict
 from typing import Dict, List, Any
 
+from ticket_system.lib.ticket_ops import resolve_id_from_ref
+
 
 class TicketChainIndex:
     """
@@ -74,7 +76,7 @@ class TicketChainIndex:
             # 遍歷所有子任務（支援字串 ID 和字典兩種格式）
             for child in children:
                 # 提取子任務 ID（字串或字典）
-                child_id = self._extract_id(child)
+                child_id = resolve_id_from_ref(child)
                 if child_id:
                     self.parent_index[ticket_id].append(child_id)
 
@@ -95,26 +97,6 @@ class TicketChainIndex:
                 descendants = [ticket_id]
                 self._collect_descendants(ticket_id, descendants)
                 self.root_index[ticket_id] = descendants
-
-    def _extract_id(self, child: Any) -> str:
-        """
-        從子任務記錄中提取 ID
-
-        支援兩種格式：
-        - 字串：直接返回
-        - 字典：返回 'id' 欄位
-
-        Args:
-            child: 子任務記錄（字串或字典）
-
-        Returns:
-            str: 子任務 ID（若無法提取返回空字串）
-        """
-        if isinstance(child, str):
-            return child
-        elif isinstance(child, dict):
-            return child.get("id", "")
-        return ""
 
     def _collect_descendants(self, parent_id: str, descendants: List[str]) -> None:
         """

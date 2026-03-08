@@ -22,6 +22,7 @@ from typing import Dict, List, Optional, Tuple
 from collections import defaultdict, deque
 
 from .cycle_detector import CycleDetector
+from .ui_constants import SEPARATOR_SECONDARY
 
 
 @dataclass
@@ -305,7 +306,7 @@ class WaveCalculator:
 
         # 格式化輸出
         suggestion = f"Wave 自動分配建議（共 {result.total_waves} 個 Wave）\n"
-        suggestion += "=" * 50 + "\n\n"
+        suggestion += SEPARATOR_SECONDARY + "\n\n"
 
         for wave_num in sorted(result.waves.keys()):
             tickets_in_wave = result.waves[wave_num]

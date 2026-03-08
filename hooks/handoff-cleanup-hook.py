@@ -38,7 +38,7 @@ from pathlib import Path
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root
 
 import re
 from datetime import datetime
@@ -50,31 +50,6 @@ EXIT_ERROR = 1
 
 # Ticket ID 格式正則 (支援子任務格式：0.31.0-W7-012.1.2)
 TICKET_ID_PATTERN = r'\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*'
-
-def get_project_root() -> Path:
-    """
-    取得專案根目錄
-
-    Returns:
-        Path - 專案根目錄
-    """
-    import os
-
-    project_dir = os.getenv("CLAUDE_PROJECT_DIR")
-    if project_dir:
-        return Path(project_dir)
-
-    # Fallback: 使用 git 查找
-    try:
-        result = __import__("subprocess").run(
-            ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return Path(result.stdout.strip())
-    except Exception:
-        return Path.cwd()
 
 def is_complete_command_success(input_data: Dict[str, Any], logger) -> bool:
     """

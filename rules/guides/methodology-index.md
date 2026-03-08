@@ -52,8 +52,9 @@
 | parallel-evaluation-methodology.md | 並行評估 |
 | problem-awareness-evaluation-methodology.md | 問題意識評估 |
 | design-driven-refactoring-methodology.md | 設計驅動重構 |
-| systematic-debugging-methodology.md | 系統性除錯 |
+| systematic-debugging-methodology.md | 系統性除錯（程式碼層次 unused 警告） |
 | error-fix-refactor-methodology.md | 錯誤修復重構 |
+| operational-error-root-cause-methodology.md | 操作錯誤三層根因分析（操作行為失誤） |
 
 ## 工具與系統
 

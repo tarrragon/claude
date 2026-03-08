@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W15-010",
+  "direction": "to-sibling:0.1.0-W15-011",
+  "timestamp": "2026-03-08T13:19:38.908066",
+  "from_status": "completed",
+  "title": "分析 ticket complete 後 Checkpoint 流程中斷的根本原因",
+  "what": "分析 ticket complete 後 Checkpoint 流程中斷的根本原因",
+  "chain": {},
+  "resumed_at": "2026-03-08T13:20:24.035173"
+}

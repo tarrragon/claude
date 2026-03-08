@@ -30,12 +30,12 @@ class TestBatchClaim:
         args.version = "0.31.0"
 
         # 使用正確的 patch 路徑（patch 模組導入的位置）
-        with patch('ticket_system.commands.track_batch.load_ticket') as mock_load:
-            # 使用 lambda 函式作為 side_effect，正確處理 (version, ticket_id) 參數
-            def load_side_effect(version, ticket_id):
-                return {"id": ticket_id, "status": "pending"}
+        with patch('ticket_system.commands.track_batch.load_and_validate_ticket') as mock_load_validate:
+            # 使用 lambda 函式作為 side_effect，正確處理 (version, ticket_id, auto_print_error) 參數
+            def load_side_effect(version, ticket_id, auto_print_error=False):
+                return ({"id": ticket_id, "status": "pending"}, None)
 
-            mock_load.side_effect = load_side_effect
+            mock_load_validate.side_effect = load_side_effect
 
             with patch('ticket_system.commands.track_batch.save_ticket') as mock_save:
                 result = execute_batch_claim(args, "0.31.0")
@@ -54,12 +54,12 @@ class TestBatchClaim:
         args.ticket_ids = "0.31.0-W4-001,0.31.0-W4-002"
         args.version = "0.31.0"
 
-        with patch('ticket_system.commands.track_batch.load_ticket') as mock_load:
+        with patch('ticket_system.commands.track_batch.load_and_validate_ticket') as mock_load:
             # 使用 lambda 函式作為 side_effect，正確處理 (version, ticket_id) 參數
-            def load_side_effect(version, ticket_id):
+            def load_side_effect(version, ticket_id, auto_print_error=False):
                 if ticket_id == "0.31.0-W4-001":
-                    return {"id": ticket_id, "status": "in_progress"}  # Already claimed
-                return {"id": ticket_id, "status": "pending"}
+                    return ({"id": ticket_id, "status": "in_progress"}, None)  # Already claimed
+                return ({"id": ticket_id, "status": "pending"}, None)
 
             mock_load.side_effect = load_side_effect
 
@@ -93,10 +93,10 @@ class TestBatchClaim:
         args.ticket_ids = " 0.31.0-W4-001 , 0.31.0-W4-002 , 0.31.0-W4-003 "
         args.version = "0.31.0"
 
-        with patch('ticket_system.commands.track_batch.load_ticket') as mock_load:
+        with patch('ticket_system.commands.track_batch.load_and_validate_ticket') as mock_load:
             # 使用 lambda 函式作為 side_effect，正確處理 (version, ticket_id) 參數
-            def load_side_effect(version, ticket_id):
-                return {"id": ticket_id, "status": "pending"}
+            def load_side_effect(version, ticket_id, auto_print_error=False):
+                return ({"id": ticket_id, "status": "pending"}, None)
 
             mock_load.side_effect = load_side_effect
 
@@ -119,14 +119,17 @@ class TestBatchComplete:
         args.ticket_ids = "0.31.0-W4-001,0.31.0-W4-002"
         args.version = "0.31.0"
 
-        with patch('ticket_system.commands.track_batch.load_ticket') as mock_load:
+        with patch('ticket_system.commands.track_batch.load_and_validate_ticket') as mock_load:
             # 使用 lambda 函式作為 side_effect，正確處理 (version, ticket_id) 參數
-            def load_side_effect(version, ticket_id):
-                return {
-                    "id": ticket_id,
-                    "status": "in_progress",
-                    "acceptance": ["[x] 完成項 1", "[x] 完成項 2"],
-                }
+            def load_side_effect(version, ticket_id, auto_print_error=False):
+                return (
+                    {
+                        "id": ticket_id,
+                        "status": "in_progress",
+                        "acceptance": ["[x] 完成項 1", "[x] 完成項 2"],
+                    },
+                    None
+                )
 
             mock_load.side_effect = load_side_effect
 
@@ -146,21 +149,27 @@ class TestBatchComplete:
         args.ticket_ids = "0.31.0-W4-001,0.31.0-W4-002"
         args.version = "0.31.0"
 
-        with patch('ticket_system.commands.track_batch.load_ticket') as mock_load:
+        with patch('ticket_system.commands.track_batch.load_and_validate_ticket') as mock_load:
             # 使用 lambda 函式作為 side_effect，正確處理 (version, ticket_id) 參數
-            def load_side_effect(version, ticket_id):
+            def load_side_effect(version, ticket_id, auto_print_error=False):
                 if ticket_id == "0.31.0-W4-001":
-                    return {
+                    return (
+                        {
+                            "id": ticket_id,
+                            "status": "in_progress",
+                            "acceptance": ["[x] 完成項"],
+                        },
+                        None
+                    )
+                # 第二個 Ticket 有未完成的驗收條件
+                return (
+                    {
                         "id": ticket_id,
                         "status": "in_progress",
-                        "acceptance": ["[x] 完成項"],
-                    }
-                # 第二個 Ticket 有未完成的驗收條件
-                return {
-                    "id": ticket_id,
-                    "status": "in_progress",
-                    "acceptance": ["[ ] 未完成項"],
-                }
+                        "acceptance": ["[ ] 未完成項"],
+                    },
+                    None
+                )
 
             mock_load.side_effect = load_side_effect
 
@@ -179,15 +188,18 @@ class TestBatchComplete:
         args.ticket_ids = "0.31.0-W4-001,0.31.0-W4-999"
         args.version = "0.31.0"
 
-        with patch('ticket_system.commands.track_batch.load_ticket') as mock_load:
-            def load_side_effect(version, ticket_id):
+        with patch('ticket_system.commands.track_batch.load_and_validate_ticket') as mock_load:
+            def load_side_effect(version, ticket_id, auto_print_error=False):
                 if ticket_id == "0.31.0-W4-999":
-                    return None  # 返回 None 表示找不到
-                return {
-                    "id": ticket_id,
-                    "status": "in_progress",
-                    "acceptance": ["[x] 完成項"],
-                }
+                    return (None, "Not found")  # 返回 error message
+                return (
+                    {
+                        "id": ticket_id,
+                        "status": "in_progress",
+                        "acceptance": ["[x] 完成項"],
+                    },
+                    None
+                )
 
             mock_load.side_effect = load_side_effect
 
@@ -206,13 +218,13 @@ class TestBatchComplete:
         args.ticket_ids = "0.31.0-W4-001"
         args.version = "0.31.0"
 
-        with patch('ticket_system.commands.track_batch.load_ticket') as mock_load:
+        with patch('ticket_system.commands.track_batch.load_and_validate_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "status": "in_progress",
                 "acceptance": ["[x] 完成項"],
             }
-            mock_load.return_value = mock_ticket
+            mock_load.return_value = (mock_ticket, None)
 
             with patch('ticket_system.commands.track_batch.save_ticket') as mock_save:
                 result = execute_batch_complete(args, "0.31.0")
@@ -245,14 +257,17 @@ class TestBatchComplete:
         args.ticket_ids = "0.31.0-W4-001,0.31.0-W4-001,0.31.0-W4-002"
         args.version = "0.31.0"
 
-        with patch('ticket_system.commands.track_batch.load_ticket') as mock_load:
+        with patch('ticket_system.commands.track_batch.load_and_validate_ticket') as mock_load:
             # 使用 lambda 函式作為 side_effect，正確處理 (version, ticket_id) 參數
-            def load_side_effect(version, ticket_id):
-                return {
-                    "id": ticket_id,
-                    "status": "in_progress",
-                    "acceptance": ["[x] 完成項"],
-                }
+            def load_side_effect(version, ticket_id, auto_print_error=False):
+                return (
+                    {
+                        "id": ticket_id,
+                        "status": "in_progress",
+                        "acceptance": ["[x] 完成項"],
+                    },
+                    None
+                )
 
             mock_load.side_effect = load_side_effect
 
@@ -289,12 +304,12 @@ class TestBatchCompleteEnhanced:
         with patch('ticket_system.commands.track_batch.list_tickets') as mock_list:
             mock_list.return_value = mock_tickets
 
-            with patch('ticket_system.commands.track_batch.load_ticket') as mock_load:
-                def load_side_effect(version, ticket_id):
+            with patch('ticket_system.commands.track_batch.load_and_validate_ticket') as mock_load:
+                def load_side_effect(version, ticket_id, auto_print_error=False):
                     for ticket in mock_tickets:
                         if ticket["id"] == ticket_id:
-                            return ticket
-                    return None
+                            return (ticket, None)
+                    return (None, "Not found")
 
                 mock_load.side_effect = load_side_effect
 
@@ -328,12 +343,12 @@ class TestBatchCompleteEnhanced:
         with patch('ticket_system.commands.track_batch.list_tickets') as mock_list:
             mock_list.return_value = mock_tickets
 
-            with patch('ticket_system.commands.track_batch.load_ticket') as mock_load:
-                def load_side_effect(version, ticket_id):
+            with patch('ticket_system.commands.track_batch.load_and_validate_ticket') as mock_load:
+                def load_side_effect(version, ticket_id, auto_print_error=False):
                     for ticket in mock_tickets:
                         if ticket["id"] == ticket_id:
-                            return ticket
-                    return None
+                            return (ticket, None)
+                    return (None, "Not found")
 
                 mock_load.side_effect = load_side_effect
 
@@ -381,12 +396,12 @@ class TestBatchCompleteEnhanced:
         with patch('ticket_system.commands.track_batch.list_tickets') as mock_list:
             mock_list.return_value = mock_tickets
 
-            with patch('ticket_system.commands.track_batch.load_ticket') as mock_load:
-                def load_side_effect(version, ticket_id):
+            with patch('ticket_system.commands.track_batch.load_and_validate_ticket') as mock_load:
+                def load_side_effect(version, ticket_id, auto_print_error=False):
                     for ticket in mock_tickets:
                         if ticket["id"] == ticket_id:
-                            return ticket
-                    return None
+                            return (ticket, None)
+                    return (None, "Not found")
 
                 mock_load.side_effect = load_side_effect
 
@@ -418,12 +433,12 @@ class TestBatchCompleteEnhanced:
         with patch('ticket_system.commands.track_batch.list_tickets') as mock_list:
             mock_list.return_value = mock_tickets
 
-            with patch('ticket_system.commands.track_batch.load_ticket') as mock_load:
-                def load_side_effect(version, ticket_id):
+            with patch('ticket_system.commands.track_batch.load_and_validate_ticket') as mock_load:
+                def load_side_effect(version, ticket_id, auto_print_error=False):
                     for ticket in mock_tickets:
                         if ticket["id"] == ticket_id:
-                            return ticket
-                    return None
+                            return (ticket, None)
+                    return (None, "Not found")
 
                 mock_load.side_effect = load_side_effect
 
@@ -454,7 +469,7 @@ class TestBatchCompleteEnhanced:
         with patch('ticket_system.commands.track_batch.list_tickets') as mock_list:
             mock_list.return_value = mock_tickets
 
-            with patch('ticket_system.commands.track_batch.load_ticket') as mock_load:
+            with patch('ticket_system.commands.track_batch.load_and_validate_ticket') as mock_load:
                 mock_load.return_value = None
 
                 result = execute_batch_complete(args, "0.31.0")

@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W9-012",
+  "direction": "to-sibling:0.1.0-W9-010",
+  "timestamp": "2026-03-07T14:23:45.882732",
+  "from_status": "completed",
+  "title": "修復 ticket handoff <ticket_id> argparse 回歸（W9-005 subparser 重構引入，ticket_id 位置參數與 gc 子命令衝突）",
+  "what": "修復 ticket handoff <ticket_id> argparse 回歸：handoff.py 在同一層級同時定義 subparsers（gc）和 positional ticket_id，argparse 將 ticket_id 解讀為 subcommand positional，導致 'invalid choice' 錯誤，無法執行 ticket handoff 0.1.0-W9-008 --to-sibling 0.1.0-W9-009",
+  "chain": {},
+  "resumed_at": "2026-03-07T14:34:26.717378"
+}

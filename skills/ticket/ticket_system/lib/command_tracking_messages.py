@@ -485,6 +485,83 @@ class GenerateMessages:
 
 
 # ============================================================================
+# VersionShiftMessages - version_shift.py 相關訊息
+# ============================================================================
+
+class VersionShiftMessages:
+    """version-shift 命令相關訊息常數"""
+
+    # CLI 幫助信息
+    HELP_VERSION_SHIFT = "將整個版本的 Ticket 遷移至新版本"
+    ARG_FROM_VERSION = "來源版本號（無 v 前綴，如 0.1.0）"
+    ARG_TO_VERSION = "目標版本號（無 v 前綴，如 0.2.0）"
+    ARG_DRY_RUN = "預覽模式，不執行任何修改"
+    ARG_NO_BACKUP = "跳過備份步驟（風險自負）"
+    ARG_SKIP_TODOLIST = "不更新 todolist.yaml"
+
+    # 步驟訊息
+    STEP_VALIDATE = "[1/8] 前置驗證..."
+    STEP_BACKUP = "[2/8] 備份原始目錄..."
+    STEP_UPDATE_TICKETS = "[3/8] 更新 Ticket 版本欄位..."
+    STEP_RENAME_TICKETS = "[4/8] 重新命名 Ticket 檔案..."
+    STEP_CROSS_REFS = "[5/8] 更新跨版本交叉引用..."
+    STEP_RENAME_DIR = "[6/8] 重新命名 worklog 目錄..."
+    STEP_UPDATE_TODOLIST = "[7/8] 更新 todolist.yaml..."
+    STEP_SUMMARY = "[8/8] 輸出操作摘要..."
+
+    # 驗證訊息
+    ERROR_INVALID_VERSION_FORMAT = "版本號格式無效：{version}（預期 N.N.N 格式）"
+    ERROR_FROM_VERSION_NOT_EXISTS = "版本目錄不存在：docs/work-logs/v{version}/"
+    ERROR_TO_VERSION_EXISTS = "目標版本目錄已存在：docs/work-logs/v{version}/，請先確認目標目錄內容"
+    INFO_SAME_VERSION = "來源版本與目標版本相同（{version}），無需遷移"
+
+    # 備份訊息
+    BACKUP_SUCCESS = "備份完成：{path}"
+    BACKUP_SKIP = "跳過備份步驟（已指定 --no-backup）"
+    ERROR_BACKUP_FAILED = "備份失敗：{error}。操作已中止。如需跳過備份，請使用 --no-backup（風險自負）"
+
+    # 處理訊息
+    TICKETS_UPDATED = "處理 {count} 個 Ticket"
+    TICKET_PARSE_ERROR = "跳過無法解析的檔案：{filename}"
+    AUXILIARY_FILES_UPDATED = "附屬文件更新: {count} 個"
+    CROSS_REFS_UPDATED = "跨版本引用更新: {count} 個"
+    DIRECTORY_RENAMED = "docs/work-logs/v{from_version}/ → docs/work-logs/v{to_version}/"
+    TODOLIST_FIELDS_UPDATED = "todolist.yaml 欄位更新: {count} 個"
+
+    # 警告訊息
+    WARNING_NO_TICKETS_DIR = "找不到 tickets/ 子目錄，跳過 Ticket 更新"
+    WARNING_TODOLIST_NOT_EXISTS = "todolist.yaml 不存在，跳過版本記錄更新"
+    WARNING_CURRENT_VERSION_MISMATCH = "當前版本號不匹配，todolist.yaml 的 current_version 未更新"
+
+    # Dry-run 訊息
+    DRY_RUN_HEADER = "[DRY-RUN] 以下為預計執行的操作（未實際修改任何檔案）："
+    DRY_RUN_PLAN_TITLE = "版本遷移計畫："
+    DRY_RUN_FROM = "  來源: {version}"
+    DRY_RUN_TO = "  目標: {version}"
+    DRY_RUN_TICKETS_PREVIEW = "Ticket 更新預覽（{count} 個）："
+    DRY_RUN_AUXILIARY_PREVIEW = "附屬文件更新預覽："
+    DRY_RUN_DIRECTORY_OPERATION = "目錄操作："
+    DRY_RUN_TODOLIST_PREVIEW = "todolist.yaml 更新預覽："
+    DRY_RUN_BACKUP = "備份：不執行（dry-run 模式）"
+    DRY_RUN_FOOTER = "執行實際遷移請移除 --dry-run 旗標。"
+    DRY_RUN_PREVIEW_ELLIPSIS = "（以及其他 {count} 個 Ticket）"
+
+    # 摘要訊息
+    SUMMARY_TITLE = "============================================================\nversion-shift 完成摘要\n============================================================"
+    SUMMARY_FROM_VERSION = "來源版本: {version}"
+    SUMMARY_TO_VERSION = "目標版本: {version}"
+    SUMMARY_BACKUP_LOCATION = "備份位置: {path}"
+    SUMMARY_RESULTS = "處理結果:"
+    SUMMARY_TICKETS_UPDATED = "  Ticket 更新: {count} 個"
+    SUMMARY_AUXILIARY_UPDATED = "  附屬文件更新: {count} 個"
+    SUMMARY_CROSS_REFS_UPDATED = "  跨版本引用更新: {count} 個"
+    SUMMARY_TODOLIST_UPDATED = "  todolist.yaml 欄位更新: {count} 個"
+    SUMMARY_FILES_SKIPPED = "  跳過的檔案: {count} 個"
+    SUMMARY_DIR_OPERATION = "目錄操作:"
+    SUMMARY_SEPARATOR = "============================================================"
+
+
+# ============================================================================
 # 輔助函式
 # ============================================================================
 

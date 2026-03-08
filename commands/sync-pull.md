@@ -63,7 +63,17 @@ description: 從獨立 repo 拉取最新 .claude 配置 (https://github.com/tarr
    - 提醒用戶測試 Hook 系統是否正常運作
    - 建議重啟 Claude Code Session 驗證
 
-6. **Post-pull 框架定制引導**
+7. **Hook 完整性驗證（重要）**
+   - sync-pull 可能引入新的 hook 檔案，但尚未在 `settings.json` 中登記
+   - 建議執行以下指令確認未登記的 hook：
+     ```
+     提示用戶：「建議執行 project-init onboard 或在 SessionStart 時檢查 hook 完整性報告，
+     確認 .claude/hooks/ 下所有 hook 都已在 settings.json 登記，
+     若有未登記的 hook 請補充到 settings.json 或加入 exclude list」
+     ```
+   - 或等待下次 session 啟動，SessionStart hook `hook-completeness-check.py` 會自動報告
+
+8. **Post-pull 框架定制引導**
    - 提示用戶執行 `project-init onboard` 完成框架定制：
      ```
      拉取完成。建議執行以下步驟完成框架定制：

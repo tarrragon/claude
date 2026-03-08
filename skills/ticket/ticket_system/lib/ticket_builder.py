@@ -25,6 +25,7 @@ from ticket_system.lib.ticket_loader import (
     load_ticket,
     get_ticket_path,
 )
+from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
 
 
 class TicketConfig(TypedDict, total=False):
@@ -208,11 +209,9 @@ def get_next_child_seq(parent_id: str) -> int:
         - 只有 001.1、001.2 會被計入
     """
     # 從 parent_id 中提取 version（如 0.31.0）
-    parts = parent_id.split("-W")
-    if len(parts) != 2:
+    version = extract_version_from_ticket_id(parent_id)
+    if version is None:
         return 1
-
-    version = parts[0]
 
     parent = load_ticket(version, parent_id)
     if not parent:
@@ -403,7 +402,14 @@ def create_ticket_body(what: str, who: str) -> str:
 
 ## Problem Analysis
 
-<!-- To be filled by executing agent -->
+<!-- 建立者可在此記錄調查過程，範例：
+搜尋指令：grep -rn "pattern" path/ --include="*.py"
+確認的位置（已確認）：
+- file1.py:123
+確認的位置（推測，待接手者驗證）：
+- file2.py:456（未逐一確認）
+注意：接手者應獨立重新驗證數量/範圍（PC-007）
+-->
 
 ---
 

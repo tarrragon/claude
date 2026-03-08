@@ -21,7 +21,10 @@ from ticket_system.lib.ticket_loader import (
     resolve_version,
     get_ticket_path,
 )
-from ticket_system.lib.ticket_validator import validate_ticket_id
+from ticket_system.lib.ticket_validator import (
+    validate_ticket_id,
+    extract_wave_from_ticket_id,
+)
 from ticket_system.lib.messages import (
     ErrorMessages,
     WarningMessages,
@@ -47,6 +50,7 @@ from ticket_system.lib.ticket_builder import (
     create_ticket_body,
     update_parent_children,
 )
+from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 
 
 def execute(args: argparse.Namespace) -> int:
@@ -71,14 +75,10 @@ def execute(args: argparse.Namespace) -> int:
             ))
         ticket_id = format_child_ticket_id(args.parent, child_seq)
 
-        # 從 parent_id 中提取 wave（如 0.31.0-W4-020 -> 4）
-        parent_parts = args.parent.split("-W")
-        if len(parent_parts) == 2:
-            wave_str = parent_parts[1].split("-")[0]
-            try:
-                wave = int(wave_str)
-            except ValueError:
-                pass
+        # 從 parent_id 中提取 wave
+        extracted_wave = extract_wave_from_ticket_id(args.parent)
+        if extracted_wave is not None:
+            wave = extracted_wave
     else:
         # 建立根任務 ID
         if not wave:
@@ -210,9 +210,9 @@ def _print_create_checklist(
         new_ticket: 新建立的 Ticket 資訊（用於並行分析）
     """
     print()
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print(SectionHeaders.CREATION_CHECKLIST)
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print()
 
     print(CreateMessages.POST_CREATE_CHECKLIST)
@@ -257,9 +257,9 @@ def _print_tdd_sequence_suggestion(ticket_type: str) -> None:
     if not result.phases:
         return
 
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print(SectionHeaders.TDD_SEQUENCE_SUGGESTION)
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print()
 
     print(format_msg(CreateMessages.TASK_TYPE_LABEL, task_type=result.task_type))
@@ -328,9 +328,9 @@ def _print_parallel_analysis_result(
     analysis_result = ParallelAnalyzer.analyze_tasks(tasks)
 
     # 輸出並行分析結果
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print(SectionHeaders.PARALLEL_ANALYSIS)
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print()
 
     print(f"分析結果: {'可並行' if analysis_result.can_parallel else '無法並行'}")

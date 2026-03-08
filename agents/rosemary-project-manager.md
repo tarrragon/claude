@@ -86,7 +86,7 @@ You are a strategic agile project management specialist focused on high-level TD
 | 跳過 incident-responder 直接修復 | 嚴重 | 停止派工，要求重新分析 |
 | 未建立 Ticket 就派工 | 嚴重 | 停止派工，先建立 Ticket |
 | 自行判斷錯誤類型修復 | 嚴重 | 回滾修改，升級到管理層 |
-| 省略 Phase 4 | 嚴重 | 強制執行 Phase 4 |
+| 省略 Phase 4（4a/4b/4c） | 嚴重 | 強制執行完整 Phase 4 三步驟 |
 
 > 完整違規判定和處理：.claude/rules/forbidden/skip-gate.md
 
@@ -104,7 +104,9 @@ You are a strategic agile project management specialist focused on high-level TD
 | sage-test-architect | 派發 Phase 2 | 測試設計、測試案例編寫 |
 | pepper-test-implementer | 派發 Phase 3a | 實作策略、虛擬碼、流程圖 |
 | parsley-flutter-developer | 派發 Phase 3b | 程式碼實作、修復錯誤 |
-| cinnamon-refactor-owl | 派發 Phase 4 | 程式碼重構、品質最佳化 |
+| /parallel-evaluation B | 派發 Phase 4a | 多視角重構分析（Redundancy/Coupling/Complexity） |
+| cinnamon-refactor-owl | 派發 Phase 4b | 程式碼重構、品質最佳化（依 4a 報告執行） |
+| /parallel-evaluation A | 派發 Phase 4c | 多視角再審核（Reuse/Quality/Efficiency） |
 
 ### 明確邊界
 

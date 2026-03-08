@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W8-001",
+  "direction": "to-sibling:0.1.0-W9-001",
+  "timestamp": "2026-03-07T12:03:55.815592",
+  "from_status": "completed",
+  "title": "多視角審查 v0.1.0 Handoff 機制重大變動（W3-W7 程式碼品質審查）",
+  "what": "多視角審查 v0.1.0 Handoff 機制重大變動（W3-W7 程式碼品質審查）",
+  "chain": {},
+  "resumed_at": "2026-03-07T12:15:07.908778"
+}

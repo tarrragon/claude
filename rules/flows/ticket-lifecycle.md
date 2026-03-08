@@ -30,7 +30,7 @@ pending → claim → in_progress → complete → completed
 | **認領** | 阻塞依賴檢查 | - |
 | **執行** | 錯誤強制派發 incident-responder；日誌必填 | - |
 | **驗收** | acceptance-gate-hook 檢查 | **驗收方式確認**（標準/簡化/先完成後補） |
-| **完成** | 驗收通過後執行 `/ticket track complete`；錯誤學習驗證（#17） | **後續步驟選擇** |
+| **完成** | 驗收通過後執行 `/ticket track complete`；complete 後處理 #17（錯誤學習） | **後續步驟選擇** |
 | **收尾** | PM 主動告知變更狀態 + 查詢待處理 | **Wave 收尾確認** |
 
 > 各階段詳細規則：.claude/references/ticket-lifecycle-phases.md
@@ -89,7 +89,7 @@ Ticket 建立後、認領前，強制並行派發多代理人審核。
 
 | 條件 | 說明 |
 |------|------|
-| DOC 類型（認知 < 5） | 純文件更新，可跳過 |
+| DOC 類型（任務範圍單純） | 純文件更新，可跳過 |
 | 已審核父 Ticket 的子任務 | 範圍已確認，可跳過 |
 
 > 來源：PC-002 錯誤模式 — Ticket 建立後未經審核直接派發
@@ -101,29 +101,42 @@ Ticket 建立後、認領前，強制並行派發多代理人審核。
 | 任務類型 | 驗收深度 |
 |---------|---------|
 | IMP/ADJ/TDD Phase/複雜/安全 | 完整驗收（acceptance-auditor） |
-| DOC/簡單（認知 < 5） | 簡化驗收 |
+| DOC/簡單（任務範圍單純） | 簡化驗收 |
 
 ---
 
 ## 完成階段錯誤學習驗證
 
-`ticket track complete` 執行時，在既有驗收條件檢查之後，新增錯誤學習經驗檢查。
+`ticket track complete` 執行前，acceptance-gate-hook（PreToolUse）會自動檢查執行期間是否有新增 error-pattern，並輸出場景 #17 提醒。
 
-### 檢查流程
+### 執行時序（重要：先 complete，後處理 #17）
 
 ```
-ticket track complete
+[1] 用戶執行: ticket track complete X
     ↓
-[既有] 驗收條件檢查
+[2] acceptance-gate-hook 觸發（PreToolUse）
+    |
+    ├── [阻擋] 子任務未完成 → 阻止執行（exit 2）
+    |
+    ├── [有新增 error-pattern] → 輸出 #17 提醒（非阻擋，exit 0）
+    |
+    └── [正常情況] → 輸出 #1 驗收確認提醒（非阻擋，exit 0）
     ↓
-[新增] 錯誤學習經驗檢查
+[3] ticket track complete X 執行（in_progress → completed）
     ↓
-    查詢本 ticket 執行期間是否有新增 error-pattern
-    （比對 ticket created 時間 vs error-pattern 檔案 mtime）
-    ↓
-    +-- 有新增 error-pattern → AskUserQuestion #17（改進 Ticket 確認）
-    +-- 無新增 → 正常完成
+[4] PM 根據 hook 輸出，complete 後執行對應動作
+    +-- [若有 #17 提醒] → AskUserQuestion #17 → 選擇後處理
+    +-- [場景 #1/#2] → AskUserQuestion #1 → 確認驗收方式 → AskUserQuestion #2 → 路由下一步
 ```
+
+**死鎖防護：complete 必須先執行，#17 在 complete 後處理**
+
+> **問題根源**：error-pattern 檔案在 #17 處理後不會自動移除。若 PM 先處理 #17 再執行 complete，下一次執行 complete 時 hook 仍會觸發 #17 提醒，造成無限循環無法完成。
+
+| 行為 | 結果 |
+|------|------|
+| 看到 #17 提醒 → 先處理 → 再執行 complete | 死鎖：hook 持續觸發 #17，complete 永遠等待 |
+| 看到 #17 提醒 → 直接執行 complete → 完成後處理 #17 | 正確：non-blocking，一次完成 |
 
 ### AskUserQuestion #17 觸發條件
 
@@ -153,5 +166,5 @@ ticket track complete
 
 ---
 
-**Last Updated**: 2026-03-04
-**Version**: 5.2.0 - 完成階段新增錯誤學習驗證（AskUserQuestion #17）
+**Last Updated**: 2026-03-09
+**Version**: 5.3.0 - 修復完成階段時序：釐清 #1/#17 執行順序，新增死鎖防護說明（W22-009）

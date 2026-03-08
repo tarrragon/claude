@@ -1,6 +1,6 @@
 ---
 name: version-release
-description: "版本發布整合工具，處理 worklog 檢查、文件更新、合併推送等完整流程。三步驟流程：Pre-flight 檢查 → Document Updates → Git Operations。支援 check / update-docs / release 子命令，包含 --dry-run 預覽模式。"
+description: "版本發布整合工具。Use for: (1) 發布新版本（合併到 main、打 Tag、推送）, (2) 發布前健康檢查（所有 Ticket 完成？CHANGELOG 更新？）, (3) 更新版本文件（worklog 狀態、CHANGELOG）。Use when: 準備發布版本、執行 /version-release check 確認發布前狀態、完成所有 Ticket 後要收尾時。"
 ---
 
 # Version Release Skill

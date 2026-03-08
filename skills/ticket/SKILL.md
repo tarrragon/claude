@@ -188,6 +188,8 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 0.31.0-W28-
 包含 READ 操作（summary/query/version/tree/chain/full/log/list/board/agent/5W1H）和 UPDATE 操作（claim/complete/release/set-who/set-what/set-when/set-where/set-why/set-how/phase/check-acceptance/append-log/add-child/batch-claim/batch-complete/audit/accept-creation）。`list` 支援 `--wave`、`--status`、`--format` 篩選參數。
 
 > **注意**：僅有 6 個 `set-*` 命令（對應 5W1H 欄位）。`blockedBy`、`relatedTo`、`priority` 等欄位無 CLI 命令，需手動編輯 frontmatter。完整對照表見 `references/track-command.md`。
+>
+> **注意**：`append-log` 必須加上 `--section` 必填參數：`ticket track append-log <id> --section "Problem Analysis" "內容"`。有效區段值：`Problem Analysis`、`Solution`、`Test Results`。
 
 > 決策樹：Read `references/workflow-execute.md` 和 `references/workflow-query.md`
 > 詳細用法：Read `references/track-command.md`

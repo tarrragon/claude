@@ -29,6 +29,15 @@ class YAMLParseError(Exception):
         super().__init__(self.message)
 
 
+# ============================================================================
+# Process-scoped ticket cache
+# ============================================================================
+
+# 使用完整路徑作為 key，避免版本號正規化問題
+# 每次 CLI 執行時自動清空（process 結束即失效）
+_ticket_cache: Dict[str, Optional[Dict[str, Any]]] = {}
+
+
 # 特殊欄位常數
 SPECIAL_FIELDS = ["chain", "decision_tree_path", "created"]
 
@@ -158,14 +167,17 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
     - _path: Ticket 檔案路徑（絕對路徑字串）
     - _yaml_error: 若有 YAML 解析錯誤，包含錯誤訊息
 
+    實作 process-scoped 記憶體快取，避免同一 process 內重複讀取相同 ticket。
+
     演算法:
     1. 取得 Ticket 檔案路徑
-    2. 檢查檔案是否存在
-    3. 讀取檔案內容（支援 UTF-8 編碼）
-    4. 根據副檔名選擇解析策略：
+    2. 檢查快取（命中則直接返回）
+    3. 檢查檔案是否存在
+    4. 讀取檔案內容（支援 UTF-8 編碼）
+    5. 根據副檔名選擇解析策略：
        - .md: 解析 frontmatter（YAML）和 body，捕獲 YAMLParseError
        - 其他: 直接解析為 YAML，捕獲 yaml.YAMLError
-    5. 附加元資料並返回；若有解析錯誤則在字典中記錄
+    6. 附加元資料、更新快取並返回；若有解析錯誤則在字典中記錄
 
     Args:
         version: 版本號（如 "0.31.0" 或 "v0.31.0"）
@@ -191,6 +203,12 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
     """
     # Guard Clause 1：檔案不存在
     ticket_path = get_ticket_path(version, ticket_id)
+    cache_key = str(ticket_path)
+
+    # Guard Clause 1.5：檢查快取
+    if cache_key in _ticket_cache:
+        return _ticket_cache[cache_key]
+
     if not ticket_path.exists():
         return None
 
@@ -207,12 +225,14 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
         try:
             frontmatter, body = parse_frontmatter(content)
         except YAMLParseError as e:
-            # 若 YAML 解析失敗，返回包含錯誤訊息的字典
-            return {
+            # 若 YAML 解析失敗，返回包含錯誤訊息的字典（並快取）
+            result = {
                 "id": ticket_id,
                 "_path": str(ticket_path),
                 "_yaml_error": e.message
             }
+            _ticket_cache[cache_key] = result
+            return result
 
         # Guard Clause 3：frontmatter 為空（無 frontmatter）
         if not frontmatter:
@@ -221,6 +241,8 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
         # 附加元資料：body 內容和檔案路徑
         frontmatter["_body"] = body
         frontmatter["_path"] = str(ticket_path)
+        # 更新快取
+        _ticket_cache[cache_key] = frontmatter
         return frontmatter
     else:
         # YAML 格式：純 YAML 或 { ticket: {...} } 包裝格式
@@ -240,15 +262,19 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
                 ticket_content = ticket_content["ticket"]
                 ticket_content["_path"] = str(ticket_path)
 
+            # 更新快取
+            _ticket_cache[cache_key] = ticket_content
             return ticket_content
         except yaml.YAMLError as e:
-            # YAML 解析失敗時，返回包含錯誤訊息的字典
+            # YAML 解析失敗時，返回包含錯誤訊息的字典（並快取）
             error_msg = str(e).strip()
-            return {
+            result = {
                 "id": ticket_id,
                 "_path": str(ticket_path),
                 "_yaml_error": error_msg
             }
+            _ticket_cache[cache_key] = result
+            return result
 
 
 def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
@@ -258,6 +284,7 @@ def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
     根據檔案副檔名自動決定格式（Markdown 或 YAML）。
     自動備份和恢復特殊欄位（_body、_path、chain、decision_tree_path）
     以保持傳入的 ticket 物件完整性。
+    寫入成功後失效快取以確保後續讀取取得最新資料。
 
     演算法:
     1. 備份元資料欄位（_body、_path）
@@ -266,6 +293,7 @@ def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
     4. 根據副檔名選擇格式序列化
     5. 寫入檔案
     6. finally 區塊恢復所有備份欄位到 ticket 物件
+    7. 寫入成功後失效對應的快取 entry
 
     Args:
         ticket: Ticket 資料字典（會被臨時修改但最終會恢復）
@@ -326,6 +354,10 @@ def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
             ticket["_body"] = body
         if path_str:
             ticket["_path"] = path_str
+
+    # 寫入成功後失效快取，確保後續讀取取得最新資料
+    # 注意：這行在 try-finally 後執行，只有寫入成功才到達
+    _ticket_cache.pop(str(ticket_path), None)
 
 
 if __name__ == "__main__":

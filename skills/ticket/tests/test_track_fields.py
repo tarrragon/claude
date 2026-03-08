@@ -43,7 +43,7 @@ class TestGetField:
         args.field = "title"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "title": "Test Ticket",
@@ -66,7 +66,7 @@ class TestGetField:
         args.field = "nonexistent_field"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "title": "Test Ticket",
@@ -88,8 +88,8 @@ class TestGetField:
         args.field = "title"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
-            mock_load.side_effect = FileNotFoundError("Not found")
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
+            mock_load.return_value = None
 
             result = execute_get_field(args, "0.31.0")
 
@@ -111,7 +111,7 @@ class TestSetField:
         args.value = "New Title"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "title": "Old Title",
@@ -138,8 +138,8 @@ class TestSetField:
         args.value = "New Title"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
-            mock_load.side_effect = FileNotFoundError("Not found")
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
+            mock_load.return_value = None
 
             result = execute_set_field(args, "0.31.0")
 
@@ -157,7 +157,7 @@ class TestSetField:
         args.value = ""
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "description": "Old Description",
@@ -183,7 +183,7 @@ class TestWhoField:
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "who": "sage-test-architect",
@@ -205,7 +205,7 @@ class TestWhoField:
         args.value = "parsley-flutter-developer"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "who": "sage-test-architect",
@@ -233,7 +233,7 @@ class TestWhatField:
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "what": "設計測試案例",
@@ -255,7 +255,7 @@ class TestWhatField:
         args.value = "實作測試模組"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "what": "設計測試案例",
@@ -283,7 +283,7 @@ class TestWhenField:
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "when": "2026-01-30",
@@ -305,7 +305,7 @@ class TestWhenField:
         args.value = "2026-02-01"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "when": "2026-01-30",
@@ -333,7 +333,7 @@ class TestWhereField:
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "where": "tests/",
@@ -355,7 +355,7 @@ class TestWhereField:
         args.value = "lib/commands/"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "where": "tests/",
@@ -383,7 +383,7 @@ class TestWhyField:
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "why": "改善程式碼品質",
@@ -405,7 +405,7 @@ class TestWhyField:
         args.value = "支援完整 TDD 流程"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "why": "改善程式碼品質",
@@ -433,7 +433,7 @@ class TestHowField:
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "how": "使用模組拆分",
@@ -455,7 +455,7 @@ class TestHowField:
         args.value = "按層級和功能拆分"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "how": "使用模組拆分",

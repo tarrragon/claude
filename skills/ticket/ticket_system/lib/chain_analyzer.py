@@ -10,6 +10,8 @@ from typing import Any, Dict, Optional, List
 
 from ticket_system.lib.constants import STATUS_IN_PROGRESS, STATUS_COMPLETED, STATUS_PENDING, STATUS_BLOCKED
 from ticket_system.lib.ticket_loader import load_ticket
+from ticket_system.lib.ticket_ops import resolve_id_from_ref
+from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
 
 
 @dataclass
@@ -109,7 +111,7 @@ class ChainAnalyzer:
         # 版本號解析：優先使用傳入參數，否則從 Ticket ID 提取
         # Ticket ID 格式：version-Wn-seq（如 0.31.0-W4-001）
         if not version:
-            version = ticket_id.split("-W")[0] if "-W" in ticket_id else None
+            version = extract_version_from_ticket_id(ticket_id)
 
         # Guard Clause 1：情境 2 - 被阻塞，等待前置任務完成
         if status == STATUS_BLOCKED:
@@ -167,19 +169,22 @@ class ChainAnalyzer:
             return False
 
         # 檢查每個子任務
-        for child_id in children:
-            # 類型 1：字串型 ID（需要載入檔案）
-            if isinstance(child_id, str) and version:
+        for child_item in children:
+            # 提取子任務 ID
+            child_id = resolve_id_from_ref(child_item)
+
+            # 情況 1：字典型子任務（已嵌入狀態）
+            if isinstance(child_item, dict):
+                # 直接檢查字典中的 status 欄位
+                if child_item.get("status") != STATUS_COMPLETED:
+                    return True
+
+            # 情況 2：字串型 ID（需要載入檔案）
+            elif child_id and version:
                 # 載入子 Ticket 以檢查其狀態
                 child_ticket = load_ticket(version, child_id)
                 # 只要有一個子任務未完成，立即返回 True
                 if child_ticket and child_ticket.get("status") != STATUS_COMPLETED:
-                    return True
-
-            # 類型 2：字典型子任務（已嵌入狀態）
-            elif isinstance(child_id, dict):
-                # 直接檢查字典中的 status 欄位
-                if child_id.get("status") != STATUS_COMPLETED:
                     return True
 
         # 全部子任務都已完成或無可檢查的子任務
@@ -233,9 +238,21 @@ class ChainAnalyzer:
                 siblings = parent_ticket.get("children", [])
 
                 # 檢查每個兄弟
-                for sibling_id in siblings:
-                    # 類型 1：字串型 ID
-                    if isinstance(sibling_id, str):
+                for sibling_item in siblings:
+                    # 提取兄弟任務 ID
+                    sibling_id = resolve_id_from_ref(sibling_item)
+
+                    # 情況 1：字典型兄弟（已嵌入狀態）
+                    if isinstance(sibling_item, dict):
+                        # 跳過自己
+                        if sibling_item.get("id") == ticket_id:
+                            continue
+                        # 直接檢查字典中的 status
+                        if sibling_item.get("status") != STATUS_COMPLETED:
+                            return "has_pending"
+
+                    # 情況 2：字串型 ID
+                    elif sibling_id:
                         # 跳過自己
                         if sibling_id == ticket_id:
                             continue
@@ -243,15 +260,6 @@ class ChainAnalyzer:
                         sibling_ticket = load_ticket(version, sibling_id)
                         # 只要有一個兄弟未完成，立即返回
                         if sibling_ticket and sibling_ticket.get("status") != STATUS_COMPLETED:
-                            return "has_pending"
-
-                    # 類型 2：字典型兄弟（已嵌入狀態）
-                    elif isinstance(sibling_id, dict):
-                        # 跳過自己
-                        if sibling_id.get("id") == ticket_id:
-                            continue
-                        # 直接檢查字典中的 status
-                        if sibling_id.get("status") != STATUS_COMPLETED:
                             return "has_pending"
 
         # 全部兄弟都完成或無待處理兄弟
@@ -359,9 +367,22 @@ class ChainAnalyzer:
         Returns:
             Recommendation: 子任務建議
         """
-        for child_id in children:
-            # 處理字串型 ID
-            if isinstance(child_id, str) and version:
+        for child_item in children:
+            # 提取子任務 ID
+            child_id = resolve_id_from_ref(child_item)
+
+            # 情況 1：字典型 child（已嵌入狀態）
+            if isinstance(child_item, dict) and child_item.get("status") != STATUS_COMPLETED:
+                child_id_str = child_item.get("id", "")
+                return Recommendation(
+                    direction="to-child",
+                    reason="有子任務待處理",
+                    next_target_id=child_id_str,
+                    command=f"/ticket handoff {ticket_id} --to-child {child_id_str}"
+                )
+
+            # 情況 2：字串型 ID（需要載入檔案）
+            elif child_id and version:
                 child_ticket = load_ticket(version, child_id)
                 if child_ticket and child_ticket.get("status") != STATUS_COMPLETED:
                     child_title = child_ticket.get("title", "")
@@ -372,16 +393,6 @@ class ChainAnalyzer:
                         next_target_title=child_title,
                         command=f"/ticket handoff {ticket_id} --to-child {child_id}"
                     )
-
-            # 處理 dict 型 child
-            if isinstance(child_id, dict) and child_id.get("status") != STATUS_COMPLETED:
-                child_id_str = child_id.get("id", "")
-                return Recommendation(
-                    direction="to-child",
-                    reason="有子任務待處理",
-                    next_target_id=child_id_str,
-                    command=f"/ticket handoff {ticket_id} --to-child {child_id_str}"
-                )
 
         # 預設：無待處理子任務
         return Recommendation(
@@ -422,9 +433,25 @@ class ChainAnalyzer:
 
         # 搜尋第一個待處理兄弟
         siblings = parent_ticket.get("children", [])
-        for sibling_id in siblings:
-            # 處理字串型兄弟 ID
-            if isinstance(sibling_id, str):
+        for sibling_item in siblings:
+            # 提取兄弟任務 ID
+            sibling_id = resolve_id_from_ref(sibling_item)
+
+            # 情況 1：字典型兄弟（已嵌入狀態）
+            if isinstance(sibling_item, dict):
+                sibling_id_str = sibling_item.get("id")
+                if sibling_id_str == ticket_id:
+                    continue
+                if sibling_item.get("status") != STATUS_COMPLETED:
+                    return Recommendation(
+                        direction="to-sibling",
+                        reason="有平行任務待處理",
+                        next_target_id=sibling_id_str,
+                        command=f"/ticket handoff {ticket_id} --to-sibling {sibling_id_str}"
+                    )
+
+            # 情況 2：字串型兄弟 ID（需要載入檔案）
+            elif sibling_id:
                 if sibling_id == ticket_id:
                     continue
                 sibling_ticket = load_ticket(version, sibling_id)
@@ -436,19 +463,6 @@ class ChainAnalyzer:
                         next_target_id=sibling_id,
                         next_target_title=sibling_title,
                         command=f"/ticket handoff {ticket_id} --to-sibling {sibling_id}"
-                    )
-
-            # 處理 dict 型兄弟
-            if isinstance(sibling_id, dict):
-                sibling_id_str = sibling_id.get("id")
-                if sibling_id_str == ticket_id:
-                    continue
-                if sibling_id.get("status") != STATUS_COMPLETED:
-                    return Recommendation(
-                        direction="to-sibling",
-                        reason="有平行任務待處理",
-                        next_target_id=sibling_id_str,
-                        command=f"/ticket handoff {ticket_id} --to-sibling {sibling_id_str}"
                     )
 
         # 預設：無待處理兄弟

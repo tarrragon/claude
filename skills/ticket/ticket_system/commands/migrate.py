@@ -19,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
+from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 from ticket_system.lib.constants import TICKET_ID_PATTERN, WORK_LOGS_DIR, TICKETS_DIR
 from ticket_system.lib.ticket_loader import (
     get_project_root,
@@ -30,6 +31,12 @@ from ticket_system.lib.ticket_loader import (
 )
 from ticket_system.lib.parser import parse_frontmatter
 from ticket_system.lib.ticket_validator import validate_ticket_id
+from ticket_system.lib.id_parser import (
+    extract_id_components,
+    parse_sequence,
+    format_sequence,
+    calculate_chain_info,
+)
 from ticket_system.lib.messages import (
     ErrorMessages,
     MigrationMessages,
@@ -42,87 +49,9 @@ from ticket_system.lib.messages import (
 from ticket_system.lib.command_tracking_messages import (
     MigrateMessages,
 )
-
-
-def _extract_id_components(ticket_id: str) -> Optional[Dict[str, Any]]:
-    """
-    提取 Ticket ID 的元件
-
-    Args:
-        ticket_id: Ticket ID (格式: {version}-W{wave}-{seq})
-
-    Returns:
-        Dict: {version, wave, sequence} 或 None 如果格式無效
-    """
-    match = re.match(TICKET_ID_PATTERN, ticket_id)
-    if not match:
-        return None
-
-    return {
-        "version": match.group(1),
-        "wave": int(match.group(2)),
-        "sequence": match.group(3),
-    }
-
-
-def _parse_sequence(sequence_str: str) -> List[int]:
-    """
-    解析序號字串為整數列表
-
-    Args:
-        sequence_str: 序號字串 (如 "1" 或 "1.2.3")
-
-    Returns:
-        List[int]: 序號列表
-    """
-    return [int(x) for x in sequence_str.split(".")]
-
-
-def _format_sequence(sequence_list: List[int]) -> str:
-    """
-    格式化序號列表為字串
-
-    Args:
-        sequence_list: 序號列表
-
-    Returns:
-        str: 格式化的序號字串
-    """
-    return ".".join(str(x) for x in sequence_list)
-
-
-def _calculate_chain_info(target_id: str) -> Dict[str, Any]:
-    """
-    根據目標 ID 計算 chain 資訊
-
-    Args:
-        target_id: 目標 Ticket ID
-
-    Returns:
-        Dict: {root, parent, depth, sequence}
-    """
-    components = _extract_id_components(target_id)
-    if not components:
-        return {}
-
-    sequence_list = _parse_sequence(components["sequence"])
-    depth = len(sequence_list) - 1
-
-    # 計算根 ID
-    root_id = f"{components['version']}-W{components['wave']}-{sequence_list[0]}"
-
-    # 計算父 ID
-    parent_id = None
-    if depth > 0:
-        parent_sequence = _format_sequence(sequence_list[:-1])
-        parent_id = f"{components['version']}-W{components['wave']}-{parent_sequence}"
-
-    return {
-        "root": root_id,
-        "parent": parent_id,
-        "depth": depth,
-        "sequence": sequence_list,
-    }
+from ticket_system.lib.ticket_ops import (
+    load_and_validate_ticket,
+)
 
 
 def _update_ticket_id_references(ticket: Dict[str, Any], old_id: str, new_id: str) -> None:
@@ -326,13 +255,12 @@ def _migrate_single_ticket(
         return 1
 
     # 從 source_id 提取版本號，支援跨版本遷移
-    source_components = _extract_id_components(source_id)
+    source_components = extract_id_components(source_id)
     source_version = source_components["version"] if source_components else version
 
     # 載入來源 Ticket
-    ticket = load_ticket(source_version, source_id)
-    if not ticket:
-        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=source_id))
+    ticket, error = load_and_validate_ticket(source_version, source_id)
+    if error:
         return 2
 
     # 預覽模式
@@ -356,13 +284,13 @@ def _migrate_single_ticket(
     ticket["id"] = target_id
 
     # 更新 wave
-    components = _extract_id_components(target_id)
+    components = extract_id_components(target_id)
     if components:
         ticket["version"] = components["version"]
         ticket["wave"] = components["wave"]
 
         # 更新 chain 資訊
-        chain_info = _calculate_chain_info(target_id)
+        chain_info = calculate_chain_info(target_id)
         if chain_info:
             ticket["chain"] = chain_info
 
@@ -377,7 +305,7 @@ def _migrate_single_ticket(
     source_path = get_ticket_path(source_version, source_id)
 
     # 提取目標版本（從目標 ID 中）以支援跨版本遷移
-    target_components = _extract_id_components(target_id)
+    target_components = extract_id_components(target_id)
     target_version = target_components["version"] if target_components else version
     target_path = get_ticket_path(target_version, target_id)
 
@@ -504,12 +432,12 @@ def _batch_migrate(
 
     # 輸出摘要
     print()
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
     print(format_info(MigrateMessages.MIGRATION_SUMMARY))
     print(format_info(MigrationMessages.SUCCESS_COUNT, count=success_count))
     print(format_info(MigrationMessages.FAIL_COUNT, count=fail_count))
     print(format_info(MigrationMessages.SKIP_COUNT, count=skip_count))
-    print("=" * 60)
+    print(SEPARATOR_PRIMARY)
 
     if fail_count > 0:
         return 1 if success_count > 0 else 2

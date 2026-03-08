@@ -1,0 +1,17 @@
+{
+  "ticket_id": "0.1.0-W11-002",
+  "direction": "to-sibling:0.1.0-W11-003",
+  "timestamp": "2026-03-07T23:29:01.037421",
+  "from_status": "completed",
+  "title": "同步 ticket CLI 完成提示及 hook 中殘留的舊豁免條件說明（認知負擔 < 5）",
+  "what": "同步 ticket CLI 完成提示及 hook 中殘留的舊豁免條件說明（認知負擔 < 5）",
+  "chain": {
+    "root": "0.1.0-W11-2",
+    "parent": null,
+    "depth": 0,
+    "sequence": [
+      2
+    ]
+  },
+  "resumed_at": "2026-03-07T23:30:15.962702"
+}

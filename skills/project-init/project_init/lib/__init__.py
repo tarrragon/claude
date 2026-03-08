@@ -24,8 +24,10 @@ from .exceptions import (
     VersionTooOldError,
 )
 from .hook_verifier import (
+    HookCompletenessResult,
     HookSystemStatus,
     ToolStatus,
+    check_hook_completeness,
     verify_hooks_system,
     verify_pep723_execution,
     verify_ripgrep_available,
@@ -95,10 +97,12 @@ __all__ = [
     "RemediationGuidance",
     "ToolStatus",
     "HookSystemStatus",
+    "HookCompletenessResult",
     "verify_uv_available",
     "verify_ripgrep_available",
     "verify_pep723_execution",
     "verify_hooks_system",
+    "check_hook_completeness",
     "PackageInfo",
     "InstalledInfo",
     "VersionCompareResult",
