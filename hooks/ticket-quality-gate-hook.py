@@ -32,7 +32,7 @@ from typing import Dict, Any, Optional
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root
 from lib.hook_messages import QualityMessages, CoreMessages, format_message
 
 from lib.ticket_quality.detectors import (
@@ -113,7 +113,7 @@ def validate_input(input_data: Dict[str, Any], logger) -> bool:
             logger.error(f"缺少必要欄位: {field}")
             return False
 
-    tool_input = input_data.get("tool_input", {})
+    tool_input = input_data.get("tool_input") or {}
     if "file_path" not in tool_input or "content" not in tool_input:
         logger.error("tool_input 缺少 file_path 或 content")
         return False
@@ -278,8 +278,7 @@ def get_cache_stats_dir() -> Path:
     Returns:
         Path - 快取統計目錄
     """
-    import os
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+    project_dir = get_project_root()
     cache_dir = project_dir / ".claude" / "hook-logs" / "ticket-quality-gate" / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
@@ -690,10 +689,8 @@ def save_check_report(check_results: Dict[str, Any], file_path: str, logger) -> 
         file_path: Ticket 檔案路徑
         logger: 日誌記錄器
     """
-    import os
-
     # 建立報告目錄
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+    project_dir = get_project_root()
     report_dir = project_dir / ".claude" / "hook-logs" / "ticket-quality-gate" / datetime.now().strftime("%Y-%m-%d")
     report_dir.mkdir(parents=True, exist_ok=True)
 

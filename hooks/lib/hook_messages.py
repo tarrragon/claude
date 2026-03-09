@@ -432,24 +432,24 @@ class ValidationMessages:
     MCP_TESTS_VALIDATION_FAILED = "mcp__dart__run_tests 使用規範檢查失敗: {reason}"
 
     # mcp-run-tests-validator.py 局部常數
-    MCP_TESTS_ERROR_TITLE = "❌ MCP run_tests 使用規範違規"
+    MCP_TESTS_ERROR_TITLE = "[ERROR] MCP run_tests 使用規範違規"
     MCP_TESTS_PROBLEM_HEADER = "問題描述:"
     MCP_TESTS_PROBLEM_DESC = (
         "mcp__dart__run_tests 在無 paths 參數時會執行全量測試，"
         "導致卡住超過 20 分鐘。必須指定 paths 限制測試範圍。"
     )
     MCP_TESTS_VIOLATION_HEADER = "違規詳情:"
-    MCP_TESTS_CORRECT_HEADER = "✅ 正確用法示例:"
+    MCP_TESTS_CORRECT_HEADER = "[OK] 正確用法示例:"
     MCP_TESTS_EXAMPLE_1 = "1. 指定單一測試目錄:"
     MCP_TESTS_EXAMPLE_1_CODE = '   mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/domains/"]}])'
     MCP_TESTS_EXAMPLE_2 = "2. 指定多個測試目錄:"
     MCP_TESTS_EXAMPLE_2_CODE = '   mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/unit/core/", "test/unit/models/"]}])'
     MCP_TESTS_EXAMPLE_3 = "3. 指定單一測試檔案:"
     MCP_TESTS_EXAMPLE_3_CODE = '   mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/domains/import/events_test.dart"]}])'
-    MCP_TESTS_RECOMMENDED_HEADER = "📋 推薦方案:"
+    MCP_TESTS_RECOMMENDED_HEADER = "[推薦方案]"
     MCP_TESTS_RECOMMENDED_1 = "  • 使用 ./.claude/hooks/test-summary.sh 執行全量測試"
     MCP_TESTS_RECOMMENDED_2 = "  • 或使用 flutter test --reporter compact 直接執行"
-    MCP_TESTS_REFERENCE_HEADER = "📚 相關規範: FLUTTER.md 第 72-101 行"
+    MCP_TESTS_REFERENCE_HEADER = "[相關規範] FLUTTER.md 第 72-101 行"
 
     # ========================================================================
     # Pre-Test Hook

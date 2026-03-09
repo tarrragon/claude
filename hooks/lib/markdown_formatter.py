@@ -62,7 +62,7 @@ def format_markdown(content):
 # Main execution
 try:
     input_data = json.load(sys.stdin)
-    file_path = input_data.get('tool_input', {}).get('file_path', '')
+    file_path = (input_data.get('tool_input') or {}).get('file_path', '')
     
     if not file_path.endswith(('.md', '.mdx')):
         sys.exit(0)  # Not a markdown file

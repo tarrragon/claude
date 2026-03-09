@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W31-002",
+  "direction": "to-sibling:0.1.0-W31-003",
+  "timestamp": "2026-03-10T04:10:37.901259",
+  "from_status": "completed",
+  "title": "提取 validate_ticket_has_decision_tree 到 hook_utils（消除跨 hook 重複）",
+  "what": "提取 validate_ticket_has_decision_tree 到 hook_utils（消除跨 hook 重複）",
+  "chain": {},
+  "resumed_at": "2026-03-10T04:30:58.138847"
+}

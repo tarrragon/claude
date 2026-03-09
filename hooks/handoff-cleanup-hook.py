@@ -82,7 +82,7 @@ def is_complete_command_success(input_data: Dict[str, Any], logger) -> bool:
         return False
 
     # 檢查命令內容
-    tool_input = input_data.get("tool_input", {})
+    tool_input = input_data.get("tool_input") or {}
     command = tool_input.get("command", "")
 
     if "ticket track complete" not in command:
@@ -90,7 +90,7 @@ def is_complete_command_success(input_data: Dict[str, Any], logger) -> bool:
         return False
 
     # 檢查執行結果 (exit code 0 或輸出包含成功標記)
-    tool_response = input_data.get("tool_response", {})
+    tool_response = input_data.get("tool_response") or {}
     stdout = tool_response.get("stdout", "")
     stderr = tool_response.get("stderr", "")
     exit_code = tool_response.get("exit_code", -1)
@@ -123,14 +123,14 @@ def extract_ticket_ids(input_data: Dict[str, Any], logger) -> List[str]:
         return list(ticket_ids)
 
     # 從命令中提取
-    tool_input = input_data.get("tool_input", {})
+    tool_input = input_data.get("tool_input") or {}
     command = tool_input.get("command", "")
     logger.debug(f"掃描命令: {command}")
     matches = re.findall(TICKET_ID_PATTERN, command)
     ticket_ids.update(matches)
 
     # 從輸出中提取
-    tool_response = input_data.get("tool_response", {})
+    tool_response = input_data.get("tool_response") or {}
     stdout = tool_response.get("stdout", "")
     stderr = tool_response.get("stderr", "")
 

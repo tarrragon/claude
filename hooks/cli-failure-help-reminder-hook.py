@@ -142,10 +142,10 @@ def main() -> int:
         return EXIT_SUCCESS
 
     # 取得命令和回應
-    tool_input = input_data.get("tool_input", {})
+    tool_input = input_data.get("tool_input") or {}
     command = tool_input.get("command", "")
 
-    tool_response = input_data.get("tool_response", {})
+    tool_response = input_data.get("tool_response") or {}
 
     # 支援 tool_response 為字串或字典
     if isinstance(tool_response, str):

@@ -401,8 +401,8 @@ class TestSummary:
         assert returncode == 0
         assert "v0.1.0" in stdout
         assert "1/3" in stdout  # 1 完成，共 3 個
-        assert "✅" in stdout  # 有完成的
-        assert "⏸️" in stdout  # 有未接手的
+        assert "[PASS]" in stdout  # 有完成的
+        assert "[PAUSED]" in stdout  # 有未接手的
 
 
 if __name__ == "__main__":

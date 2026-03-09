@@ -19,7 +19,7 @@ from ..lib.parsers.javascript_parser import JavaScriptParser, Function, JS_KEYWO
 
 def test_case(name: str, passed: bool, error_msg: str = ""):
     """顯示測試結果"""
-    status = "✅ PASS" if passed else "❌ FAIL"
+    status = "[PASS]" if passed else "[FAIL]"
     print(f"{status} {name}")
     if not passed and error_msg:
         print(f"    錯誤: {error_msg}")

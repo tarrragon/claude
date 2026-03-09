@@ -51,7 +51,13 @@ from typing import Dict, Any, Optional
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, parse_ticket_frontmatter, get_project_root
+from hook_utils import (
+    setup_hook_logging,
+    run_hook_safely,
+    parse_ticket_frontmatter,
+    get_project_root,
+    scan_ticket_files_by_version,
+)
 
 EXIT_SUCCESS = 0
 
@@ -312,7 +318,9 @@ def scan_in_progress_tickets(project_root: Path, logger) -> list:
         return created_tickets
 
     try:
-        for file_path in sorted(tickets_dir.glob("*.md")):
+        # 使用共用函式掃描 Ticket 檔案
+        ticket_files = scan_ticket_files_by_version(project_root, active_version, logger)
+        for file_path in sorted(ticket_files):
             try:
                 # 解析 frontmatter
                 frontmatter = parse_ticket_frontmatter(file_path, logger)

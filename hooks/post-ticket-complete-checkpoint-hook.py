@@ -30,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, extract_tool_input, extract_tool_response
 from lib.hook_messages import AskUserQuestionMessages
 
 # ============================================================================
@@ -112,11 +112,11 @@ def main() -> int:
         print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
         return EXIT_SUCCESS
 
-    # 取得命令和輸出
-    tool_input = input_data.get("tool_input", {})
+    # 取得命令和輸出（使用共用函式提取）
+    tool_input = extract_tool_input(input_data, logger)
     command = tool_input.get("command", "")
 
-    tool_response = input_data.get("tool_response", {})
+    tool_response = extract_tool_response(input_data, logger)
     stdout = tool_response.get("stdout", "")
 
     # 偵測 ticket complete 成功

@@ -27,7 +27,13 @@ from pathlib import Path
 from typing import Optional, Tuple, List, Dict
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, parse_ticket_frontmatter
+from hook_utils import (
+    setup_hook_logging,
+    run_hook_safely,
+    get_project_root,
+    parse_ticket_frontmatter,
+    scan_ticket_files_by_version,
+)
 
 
 # ============================================================================
@@ -78,12 +84,13 @@ def version_is_older(version_a: Tuple[int, ...], version_b: Tuple[int, ...]) -> 
 # Ticket discovery
 # ============================================================================
 
-def get_incomplete_tickets(version_dir: Path, logger) -> List[Dict[str, str]]:
+def get_incomplete_tickets(version_dir: Path, logger, project_root: Path = None) -> List[Dict[str, str]]:
     """Find all incomplete Tickets in a version directory.
 
     Args:
         version_dir: Path to version directory like v0.1.0
         logger: Logger instance
+        project_root: Project root (optional, used for scan_ticket_files_by_version)
 
     Returns:
         List of dicts with keys: id, status
@@ -96,7 +103,17 @@ def get_incomplete_tickets(version_dir: Path, logger) -> List[Dict[str, str]]:
     incomplete = []
 
     try:
-        for ticket_file in sorted(tickets_dir.glob("*.md")):
+        # 提取版本號（例如 v0.1.0 -> 0.1.0）
+        version_name = version_dir.name
+        version = version_name[1:] if version_name.startswith('v') else version_name
+
+        # 使用共用函式掃描 Ticket 檔案
+        if project_root:
+            ticket_files = scan_ticket_files_by_version(project_root, version, logger)
+        else:
+            ticket_files = sorted(tickets_dir.glob("*.md"))
+
+        for ticket_file in sorted(ticket_files) if project_root else ticket_files:
             # Extract ticket ID from filename (e.g. "0.1.0-W1-001.md" -> "0.1.0-W1-001")
             ticket_id = ticket_file.stem
 
@@ -160,7 +177,7 @@ def find_older_versions_with_incomplete_tickets(
 
             # Check if this version is older than current_version
             if version_is_older(version_tuple, current_ver_tuple):
-                incomplete = get_incomplete_tickets(version_dir, logger)
+                incomplete = get_incomplete_tickets(version_dir, logger, project_root)
                 if incomplete:
                     result[version_str] = incomplete
 

@@ -31,8 +31,8 @@ def test_keyword_filtering():
     }
     """
     functions = parser.extract_functions(code_if)
-    assert len(functions) == 0, "❌ if 被誤判為函式"
-    print("✅ if 關鍵字正確排除")
+    assert len(functions) == 0, "[FAIL] if 被誤判為函式"
+    print("[PASS] if 關鍵字正確排除")
 
     # 測試 for 關鍵字
     code_for = """
@@ -41,8 +41,8 @@ def test_keyword_filtering():
     }
     """
     functions = parser.extract_functions(code_for)
-    assert len(functions) == 0, "❌ for 被誤判為函式"
-    print("✅ for 關鍵字正確排除")
+    assert len(functions) == 0, "[FAIL] for 被誤判為函式"
+    print("[PASS] for 關鍵字正確排除")
 
     # 測試 while 關鍵字
     code_while = """
@@ -51,8 +51,8 @@ def test_keyword_filtering():
     }
     """
     functions = parser.extract_functions(code_while)
-    assert len(functions) == 0, "❌ while 被誤判為函式"
-    print("✅ while 關鍵字正確排除")
+    assert len(functions) == 0, "[FAIL] while 被誤判為函式"
+    print("[PASS] while 關鍵字正確排除")
 
     # 測試所有關鍵字
     failed_keywords = []
@@ -63,9 +63,9 @@ def test_keyword_filtering():
             failed_keywords.append(keyword)
 
     if failed_keywords:
-        print(f"❌ 以下關鍵字未正確過濾: {failed_keywords}")
+        print(f"[FAIL] 以下關鍵字未正確過濾: {failed_keywords}")
     else:
-        print(f"✅ 所有 {len(DART_KEYWORDS)} 個關鍵字正確過濾")
+        print(f"[PASS] 所有 {len(DART_KEYWORDS)} 個關鍵字正確過濾")
 
     print()
 
@@ -85,9 +85,9 @@ def test_constructor_filtering():
     }
     """
     functions = parser.extract_functions(code_sized_box)
-    assert len(functions) == 1, f"❌ 應識別 1 個函式，實際識別 {len(functions)} 個"
-    assert functions[0].name == 'build', f"❌ 應識別 build，實際識別 {functions[0].name}"
-    print("✅ SizedBox 正確排除，build 正確識別")
+    assert len(functions) == 1, f"[FAIL] 應識別 1 個函式，實際識別 {len(functions)} 個"
+    assert functions[0].name == 'build', f"[FAIL] 應識別 build，實際識別 {functions[0].name}"
+    print("[PASS] SizedBox 正確排除，build 正確識別")
 
     # 測試常見 Widget
     common_widgets = [
@@ -103,9 +103,9 @@ def test_constructor_filtering():
             failed_widgets.append(widget)
 
     if failed_widgets:
-        print(f"❌ 以下 Widget 未正確過濾: {failed_widgets}")
+        print(f"[FAIL] 以下 Widget 未正確過濾: {failed_widgets}")
     else:
-        print(f"✅ 所有 {len(common_widgets)} 個常見 Widget 正確過濾")
+        print(f"[PASS] 所有 {len(common_widgets)} 個常見 Widget 正確過濾")
 
     print()
 
@@ -125,10 +125,10 @@ def test_normal_function_detection():
     }
     """
     functions = parser.extract_functions(code_void)
-    assert len(functions) == 1, "❌ void 函式識別失敗"
-    assert functions[0].name == 'testFunction', "❌ 函式名稱錯誤"
-    assert functions[0].return_type == 'void', "❌ 回傳類型錯誤"
-    print("✅ void 函式正確識別")
+    assert len(functions) == 1, "[FAIL] void 函式識別失敗"
+    assert functions[0].name == 'testFunction', "[FAIL] 函式名稱錯誤"
+    assert functions[0].return_type == 'void', "[FAIL] 回傳類型錯誤"
+    print("[PASS] void 函式正確識別")
 
     # 測試 Future 函式
     code_future = """
@@ -137,10 +137,10 @@ def test_normal_function_detection():
     }
     """
     functions = parser.extract_functions(code_future)
-    assert len(functions) == 1, "❌ Future 函式識別失敗"
-    assert functions[0].name == 'fetchData', "❌ 函式名稱錯誤"
-    assert 'Future' in functions[0].return_type, "❌ 回傳類型錯誤"
-    print("✅ Future 函式正確識別")
+    assert len(functions) == 1, "[FAIL] Future 函式識別失敗"
+    assert functions[0].name == 'fetchData', "[FAIL] 函式名稱錯誤"
+    assert 'Future' in functions[0].return_type, "[FAIL] 回傳類型錯誤"
+    print("[PASS] Future 函式正確識別")
 
     # 測試多個函式
     code_multiple = """
@@ -151,11 +151,11 @@ def test_normal_function_detection():
     Future<void> functionC() async { }
     """
     functions = parser.extract_functions(code_multiple)
-    assert len(functions) == 3, f"❌ 應識別 3 個函式，實際識別 {len(functions)} 個"
+    assert len(functions) == 3, f"[FAIL] 應識別 3 個函式，實際識別 {len(functions)} 個"
     expected_names = ['functionA', 'functionB', 'functionC']
     actual_names = [f.name for f in functions]
-    assert actual_names == expected_names, f"❌ 函式識別錯誤: {actual_names}"
-    print("✅ 多個函式正確識別")
+    assert actual_names == expected_names, f"[FAIL] 函式識別錯誤: {actual_names}"
+    print("[PASS] 多個函式正確識別")
 
     print()
 
@@ -175,9 +175,9 @@ def test_comment_detection():
     void testFunction() { }
     """
     functions = parser.extract_functions(code_complete)
-    assert len(functions) == 1, "❌ 函式識別失敗"
-    assert functions[0].has_comment == True, "❌ 完整註解未正確檢測"
-    print("✅ 完整註解正確檢測")
+    assert len(functions) == 1, "[FAIL] 函式識別失敗"
+    assert functions[0].has_comment == True, "[FAIL] 完整註解未正確檢測"
+    print("[PASS] 完整註解正確檢測")
 
     # 測試簡單註解（不完整）
     code_simple = """
@@ -185,18 +185,18 @@ def test_comment_detection():
     void testFunction() { }
     """
     functions = parser.extract_functions(code_simple)
-    assert len(functions) == 1, "❌ 函式識別失敗"
-    assert functions[0].has_comment == False, "❌ 簡單註解應視為不完整"
-    print("✅ 簡單註解正確判定為不完整")
+    assert len(functions) == 1, "[FAIL] 函式識別失敗"
+    assert functions[0].has_comment == False, "[FAIL] 簡單註解應視為不完整"
+    print("[PASS] 簡單註解正確判定為不完整")
 
     # 測試無註解
     code_no_comment = """
     void testFunction() { }
     """
     functions = parser.extract_functions(code_no_comment)
-    assert len(functions) == 1, "❌ 函式識別失敗"
-    assert functions[0].has_comment == False, "❌ 無註解未正確檢測"
-    print("✅ 無註解正確檢測")
+    assert len(functions) == 1, "[FAIL] 函式識別失敗"
+    assert functions[0].has_comment == False, "[FAIL] 無註解未正確檢測"
+    print("[PASS] 無註解正確檢測")
 
     print()
 
@@ -253,14 +253,14 @@ def test_complex_code():
     expected_functions = ['handleBookAdded', '_validateBook', 'build', 'fetchData']
     actual_functions = [f.name for f in functions]
 
-    assert len(functions) == 4, f"❌ 應識別 4 個函式，實際識別 {len(functions)} 個"
-    assert actual_functions == expected_functions, f"❌ 函式識別不正確: {actual_functions}"
-    print(f"✅ 複雜程式碼正確識別 4 個函式: {actual_functions}")
+    assert len(functions) == 4, f"[FAIL] 應識別 4 個函式，實際識別 {len(functions)} 個"
+    assert actual_functions == expected_functions, f"[FAIL] 函式識別不正確: {actual_functions}"
+    print(f"[PASS] 複雜程式碼正確識別 4 個函式: {actual_functions}")
 
     # 檢查註解檢測
-    assert functions[0].has_comment == True, "❌ handleBookAdded 註解檢測錯誤"
-    assert functions[1].has_comment == False, "❌ _validateBook 註解檢測錯誤"
-    print("✅ 註解檢測正確")
+    assert functions[0].has_comment == True, "[FAIL] handleBookAdded 註解檢測錯誤"
+    assert functions[1].has_comment == False, "[FAIL] _validateBook 註解檢測錯誤"
+    print("[PASS] 註解檢測正確")
 
     print()
 
@@ -283,12 +283,12 @@ def test_performance():
     functions = parser.extract_functions(code)
     elapsed = (time.time() - start) * 1000  # 轉換為 ms
 
-    assert len(functions) == 1000, f"❌ 應識別 1000 個函式，實際識別 {len(functions)} 個"
+    assert len(functions) == 1000, f"[FAIL] 應識別 1000 個函式，實際識別 {len(functions)} 個"
 
     if elapsed < 100:
-        print(f"✅ 效能測試通過: {elapsed:.2f}ms < 100ms")
+        print(f"[PASS] 效能測試通過: {elapsed:.2f}ms < 100ms")
     else:
-        print(f"⚠️  效能警告: {elapsed:.2f}ms > 100ms（可接受，但建議優化）")
+        print(f"[WARNING] 效能警告: {elapsed:.2f}ms > 100ms（可接受，但建議優化）")
 
     print()
 
@@ -309,22 +309,22 @@ def run_all_tests():
         test_performance()
 
         print("=" * 60)
-        print("🎉 所有測試通過！")
+        print("[SUCCESS] 所有測試通過！")
         print("=" * 60)
         print()
-        print("✅ Dart 關鍵字過濾正確")
-        print("✅ Widget 建構式過濾正確")
-        print("✅ 正常函式識別正確")
-        print("✅ 註解檢測正確")
-        print("✅ 複雜程式碼處理正確")
-        print("✅ 效能符合要求")
+        print("[PASS] Dart 關鍵字過濾正確")
+        print("[PASS] Widget 建構式過濾正確")
+        print("[PASS] 正常函式識別正確")
+        print("[PASS] 註解檢測正確")
+        print("[PASS] 複雜程式碼處理正確")
+        print("[PASS] 效能符合要求")
         print()
 
         return True
 
     except AssertionError as e:
         print("\n" + "=" * 60)
-        print("❌ 測試失敗")
+        print("[FAIL] 測試失敗")
         print("=" * 60)
         print(f"錯誤: {e}")
         print()
@@ -332,7 +332,7 @@ def run_all_tests():
 
     except Exception as e:
         print("\n" + "=" * 60)
-        print("❌ 測試執行錯誤")
+        print("[FAIL] 測試執行錯誤")
         print("=" * 60)
         print(f"錯誤: {e}")
         import traceback

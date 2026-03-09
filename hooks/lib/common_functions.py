@@ -2,12 +2,10 @@
 """
 Hook 系統通用函數庫
 
-[DEPRECATED] v0.31.0
-- setup_hook_logging 已遷移至 hook_utils.py
-- 僅保留其他公開函式（hook_output, read_hook_input, get_project_root）
-- 新增 hooks 應使用 hook_utils.setup_hook_logging
-
-參考：.claude/hooks/hook_utils.py（新日誌系統）
+提供公開函式：
+- hook_output: 統一輸出 Hook 結果
+- read_hook_input: 從 stdin 讀取 Hook 輸入 JSON
+- get_project_root: 動態定位專案根目錄
 
 標準化 Import 防護模板：
 若 hook 檔案使用本模組，應在導入時加入 try-except：
@@ -19,10 +17,11 @@ Hook 系統通用函數庫
         sys.exit(1)
 
 這樣可確保 import 失敗時向使用者明確報告，而不是靜默失敗。
+
+註：Logging 系統已遷移至 hook_utils.py，使用 hook_utils.setup_hook_logging。
 """
 
 import json
-import logging
 import os
 import sys
 from datetime import datetime
@@ -132,63 +131,6 @@ def check_key_files(project_root: Path) -> int:
             missing_files += 1
 
     return missing_files
-
-
-# ============================================================================
-# Hook 系統核心函式（新增）
-# ============================================================================
-
-def setup_hook_logging(hook_name: str) -> logging.Logger:
-    """設定 Hook logging 系統
-
-    將日誌輸出到檔案，避免污染 stderr（會導致 "hook error"）
-
-    Args:
-        hook_name: Hook 名稱（用於日誌目錄名）
-
-    Returns:
-        設定完成的 Logger 物件
-    """
-    project_root = get_project_root()
-    if not project_root:
-        # Fallback：使用預設 logger，輸出到 stdout
-        logger = logging.getLogger(hook_name)
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
-        return logger
-
-    # 建立 Hook 日誌目錄
-    log_dir = project_root / '.claude' / 'hook-logs' / hook_name
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    # 建立檔案日誌
-    log_file = log_dir / f'{datetime.now().strftime("%Y%m%d-%H%M%S")}.log'
-
-    logger = logging.getLogger(hook_name)
-    logger.setLevel(logging.DEBUG)
-
-    # 清除舊有的 handler（避免重複配置）
-    for handler in logger.handlers[:]:
-        logger.removeHandler(handler)
-
-    # 檔案 handler：輸出詳細日誌
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(logging.Formatter(
-        '[%(asctime)s] %(levelname)s: %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    ))
-    logger.addHandler(file_handler)
-
-    # 標準輸出 handler：只輸出 WARNING 級別及以上（給用戶看）
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.WARNING)
-    console_handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
-    logger.addHandler(console_handler)
-
-    return logger
 
 
 def read_hook_input() -> Optional[dict[str, Any]]:

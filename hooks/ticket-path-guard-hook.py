@@ -39,7 +39,7 @@ from pathlib import Path
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, get_project_root
 from lib.hook_messages import GateMessages, CoreMessages, format_message
 
 from datetime import datetime
@@ -166,7 +166,7 @@ def save_check_log(
 ) -> None:
     """儲存檢查日誌"""
     try:
-        project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+        project_dir = get_project_root()
         log_dir = project_dir / ".claude" / "hook-logs" / "ticket-path-guard"
         log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -226,7 +226,7 @@ def main() -> int:
         logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False)[:200]}...")
 
         tool_name = input_data.get("tool_name", "")
-        tool_input = input_data.get("tool_input", {})
+        tool_input = input_data.get("tool_input") or {}
 
         # 只檢查 Write, Edit 工具
         if tool_name not in ["Write", "Edit"]:

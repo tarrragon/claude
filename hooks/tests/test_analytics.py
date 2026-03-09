@@ -391,8 +391,8 @@ class TestReportGeneration:
 
         assert isinstance(report, str)
         assert "代理人分派智慧分析報告" in report
-        assert "📊 總體統計" in report
-        assert "💡 改進建議" in report
+        assert "[METRIC] 總體統計" in report
+        assert "Tips: 改進建議" in report
 
     def test_report_contains_key_sections(self, sample_corrections, sample_warnings):
         """測試報告包含所有關鍵區塊"""
@@ -419,11 +419,11 @@ class TestReportGeneration:
         )
 
         required_sections = [
-            "📊 總體統計",
-            "🔍 常見誤判模式",
-            "💡 改進建議",
-            "📈 趨勢追蹤",
-            "🎯 後續行動計畫",
+            "[METRIC] 總體統計",
+            "[SEARCH] 常見誤判模式",
+            "Tips: 改進建議",
+            "[TREND] 趨勢追蹤",
+            "[TARGET] 後續行動計畫",
         ]
 
         for section in required_sections:

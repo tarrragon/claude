@@ -520,7 +520,7 @@ def main() -> int:
 
         # 提取工具資訊
         tool_name = input_data.get("tool_name")
-        tool_input = input_data.get("tool_input", {})
+        tool_input = input_data.get("tool_input") or {}
 
         # 執行決策邏輯
         result = make_decision(tool_name, tool_input, logger)

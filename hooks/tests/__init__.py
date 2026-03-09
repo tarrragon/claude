@@ -1,5 +1,1 @@
-"""
-Hook 測試套件
-
-此模組包含所有 Hook 系統的測試程式碼
-"""
+"""Tests for .claude/hooks"""

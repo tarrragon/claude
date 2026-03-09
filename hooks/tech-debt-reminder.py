@@ -40,7 +40,13 @@ from typing import Dict, Any, List, Optional, Tuple
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root
+from hook_utils import (
+    setup_hook_logging,
+    run_hook_safely,
+    read_json_from_stdin,
+    get_project_root,
+    scan_ticket_files_by_version,
+)
 
 try:
     import yaml
@@ -221,6 +227,8 @@ def scan_tech_debt_tickets(tickets_dir: Path, logger) -> List[Dict[str, Any]]:
         return pending_tickets
 
     # 掃描所有 .md 檔案
+    # 注：tech-debt-reminder 使用 pubspec.yaml 版本，不使用 todolist.yaml，所以不用共用函式
+    # 保持本地 glob 以相容特殊的版本檢測邏輯
     for file_path in sorted(tickets_dir.glob("*.md")):
         # 檔案名稱檢查
         if "TD" not in file_path.name:

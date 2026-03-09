@@ -22,11 +22,19 @@ Commit Handoff Hook - PostToolUse Hook
 
 import sys
 import json
+import re
 from pathlib import Path
+from typing import Optional, Dict, List, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import (
+    setup_hook_logging,
+    run_hook_safely,
+    read_json_from_stdin,
+    get_project_root,
+    get_current_version_from_todolist,
+)
 from lib.hook_messages import AskUserQuestionMessages, CoreMessages
 from lib.ask_user_question_reminders import AskUserQuestionReminders
 
@@ -129,7 +137,6 @@ def extract_commit_type(command: str) -> str:
     Returns:
         str - commit 類型（如 "docs", "chore"），無法提取時回傳 ""
     """
-    import re
     # 匹配 -m "type: ..." 或 -m "type(scope): ..."
     match = re.search(r'-m\s+["\']([a-z]+)(?:\([^)]*\))?:', command)
     if match:
@@ -139,6 +146,140 @@ def extract_commit_type(command: str) -> str:
     if match:
         return match.group(1).lower()
     return ""
+
+
+# ============================================================================
+# Wave 完成偵測邏輯
+# ============================================================================
+
+
+def scan_wave_tickets(
+    project_dir: Path,
+    version: str,
+    logger
+) -> List[Dict[str, Optional[str]]]:
+    """
+    掃描版本目錄中的 Ticket 檔案，回傳 wave 和 status 的清單
+
+    Args:
+        project_dir: 專案根目錄
+        version: 版本號（如 "0.1.0"）
+        logger: 日誌物件
+
+    Returns:
+        list - [{wave, status}] 清單，其中 wave 和 status 可能為 None
+    """
+    tickets_dir = project_dir / "docs" / "work-logs" / f"v{version}" / "tickets"
+
+    if not tickets_dir.exists():
+        logger.debug(f"Ticket 目錄不存在: {tickets_dir}")
+        return []
+
+    tickets = []
+
+    try:
+        ticket_files = list(tickets_dir.glob("*.md"))
+        logger.debug(f"在 {tickets_dir} 找到 {len(ticket_files)} 個 Ticket 檔案")
+
+        for ticket_file in ticket_files:
+            try:
+                content = ticket_file.read_text(encoding="utf-8")
+
+                # 解析 YAML frontmatter
+                wave = None
+                status = None
+
+                if content.startswith("---"):
+                    frontmatter_end = content.find("---", 3)
+                    if frontmatter_end > 0:
+                        frontmatter = content[:frontmatter_end]
+
+                        # 提取 wave: 和 status: 欄位
+                        wave_match = re.search(r"wave:\s*(\d+)", frontmatter)
+                        if wave_match:
+                            wave = wave_match.group(1)
+
+                        status_match = re.search(r"status:\s*(\S+)", frontmatter)
+                        if status_match:
+                            status = status_match.group(1)
+
+                tickets.append({"wave": wave, "status": status, "file": ticket_file.name})
+            except Exception as e:
+                logger.debug(f"無法解析 Ticket 檔案 {ticket_file.name}: {e}")
+                tickets.append({"wave": None, "status": None, "file": ticket_file.name})
+
+        logger.debug(f"掃描完成，共 {len(tickets)} 個 Ticket")
+        return tickets
+
+    except Exception as e:
+        logger.warning(f"掃描 Ticket 目錄失敗: {e}")
+        return []
+
+
+def detect_wave_completion(logger) -> bool:
+    """
+    偵測是否為情境 C（當前 Wave 完成，同 Wave 無 pending ticket）
+
+    邏輯：
+    1. 讀取 current_version from docs/todolist.yaml
+    2. 掃描 ticket 目錄
+    3. 解析 frontmatter 取得 wave 和 status
+    4. 找到 in_progress ticket 的 wave（當前 Wave）
+    5. 統計同 wave 的 pending ticket 數量
+    6. pending == 0 → 情境 C（True）
+
+    Args:
+        logger: 日誌物件
+
+    Returns:
+        bool - 是否為情境 C（Wave 完成）。若無 in_progress ticket 或讀取失敗，安全降級為 False
+    """
+    try:
+        project_dir = get_project_root()
+
+        # Step 1: 讀取當前版本
+        current_version = get_current_version_from_todolist(project_dir, logger)
+        if not current_version:
+            logger.debug("無法讀取 current_version，無法判斷 Wave 完成狀態")
+            return False
+
+        # Step 2: 掃描 Ticket 目錄
+        tickets = scan_wave_tickets(project_dir, current_version, logger)
+        if not tickets:
+            logger.debug("未找到任何 Ticket 檔案")
+            return False
+
+        # Step 3: 找到 in_progress ticket 的 wave（當前 Wave）
+        current_wave = None
+        for ticket in tickets:
+            if ticket.get("status") == "in_progress":
+                current_wave = ticket.get("wave")
+                logger.debug(f"找到 in_progress ticket，所屬 Wave: {current_wave}")
+                break
+
+        if current_wave is None:
+            logger.debug("未找到 in_progress ticket，無法判斷當前 Wave")
+            return False
+
+        # Step 4: 統計同 wave 的 pending ticket 數量
+        pending_count = 0
+        for ticket in tickets:
+            if ticket.get("wave") == current_wave and ticket.get("status") == "pending":
+                pending_count += 1
+
+        logger.debug(f"Wave {current_wave} 中有 {pending_count} 個 pending ticket")
+
+        # Step 5: pending == 0 → 情境 C
+        if pending_count == 0:
+            logger.info(f"偵測到情境 C：Wave {current_wave} 完成（無 pending ticket）")
+            return True
+
+        logger.debug(f"Wave {current_wave} 仍有 pending ticket，非情境 C")
+        return False
+
+    except Exception as e:
+        logger.warning(f"偵測 Wave 完成狀態時發生錯誤: {e}")
+        return False
 
 
 def main() -> int:
@@ -154,12 +295,10 @@ def main() -> int:
     """
     logger = setup_hook_logging("commit-handoff")
 
-    try:
-        # 讀取 PostToolUse JSON
-        input_data = json.load(sys.stdin)
-    except json.JSONDecodeError as e:
-        logger.error("JSON 解析錯誤: %s", e)
-        # JSON 解析失敗：輸出預設允許訊息
+    # 讀取 PostToolUse JSON（使用統一的 stdin 讀取方法）
+    input_data = read_json_from_stdin(logger)
+    if input_data is None:
+        # 空輸入或 JSON 解析失敗：輸出預設允許訊息
         print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
         return EXIT_SUCCESS
 
@@ -171,10 +310,10 @@ def main() -> int:
         return EXIT_SUCCESS
 
     # 取得命令和輸出
-    tool_input = input_data.get("tool_input", {})
+    tool_input = input_data.get("tool_input") or {}
     command = tool_input.get("command", "")
 
-    tool_response = input_data.get("tool_response", {})
+    tool_response = input_data.get("tool_response") or {}
     stdout = tool_response.get("stdout", "")
 
     # 檢測 git commit 成功
@@ -194,6 +333,12 @@ def main() -> int:
                 commit_type or "unknown",
             )
             reminder = AskUserQuestionMessages.COMMIT_HANDOFF_REMINDER
+
+        # 偵測情境 C（Wave 完成）
+        is_wave_completion = detect_wave_completion(logger)
+        if is_wave_completion:
+            logger.info("偵測到情境 C（Wave 完成），附加 WAVE_COMPLETION_REMINDER")
+            reminder += "\n" + AskUserQuestionReminders.WAVE_COMPLETION_REMINDER
 
         output = {
             "hookSpecificOutput": {

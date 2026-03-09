@@ -103,7 +103,7 @@ def main() -> int:
         # 讀取 stdin 輸入
         input_data = json.load(sys.stdin)
         tool_name = input_data.get("tool_name", "")
-        tool_input = input_data.get("tool_input", {})
+        tool_input = input_data.get("tool_input") or {}
 
         # 只處理 mcp__dart__run_tests 工具
         if tool_name != "mcp__dart__run_tests":

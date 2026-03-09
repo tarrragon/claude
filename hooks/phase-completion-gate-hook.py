@@ -30,6 +30,7 @@ Hook 類型: PostToolUse
 import sys
 import json
 import re
+import os
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple, List
@@ -37,7 +38,7 @@ from typing import Dict, Any, Optional, Tuple, List
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, extract_tool_input
 from lib.hook_messages import QualityMessages, CoreMessages, AskUserQuestionMessages, format_message
 
 # ============================================================================
@@ -276,7 +277,6 @@ def check_ticket_completion_status(project_dir: str, ticket_id: Optional[str]) -
 
 def get_project_root() -> str:
     """取得專案根目錄"""
-    import os
     project_root = os.getenv("CLAUDE_PROJECT_DIR", str(Path.cwd()))
     return project_root
 
@@ -493,9 +493,9 @@ def main() -> int:
             return EXIT_SUCCESS
 
         tool_name = input_data.get("tool_name", "")
-        tool_input = input_data.get("tool_input", {})
 
-        # 步驟 4: 識別是否為 worklog 寫入操作
+        # 步驟 4: 識別是否為 worklog 寫入操作（使用共用函式提取）
+        tool_input = extract_tool_input(input_data, logger)
         is_worklog_op = is_worklog_write_operation(tool_name, tool_input, logger)
 
         # 初始化標誌

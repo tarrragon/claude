@@ -76,7 +76,7 @@ def main():
     # 獲取專案根目錄
     base_path = Path(os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd()))
 
-    output = "\n" + "=" * 60 + "\n📋 Output Style Check - 系統級格式強制驗證\n" + "=" * 60 + "\n\n"
+    output = "\n" + "=" * 60 + "\nOutput Style Check - 系統級格式強制驗證\n" + "=" * 60 + "\n\n"
     print(output, end="")
     logger.info("Output Style Check 開始")
 
@@ -89,12 +89,12 @@ def main():
 
         if passed:
             passed_styles += 1
-            msg = f"✅ {style['file']}: 驗證通過"
+            msg = f"[PASS] {style['file']}: 驗證通過"
             print(msg)
             logger.info(msg)
         else:
             all_passed = False
-            msg = f"❌ {style['file']}: 驗證失敗"
+            msg = f"[FAIL] {style['file']}: 驗證失敗"
             print(msg)
             logger.info(msg)
             for error in errors:
@@ -104,14 +104,14 @@ def main():
 
     # 摘要
     if all_passed:
-        msg = f"✅ Output Style 檢查通過 ({passed_styles}/{total_styles})"
+        msg = f"[PASS] Output Style 檢查通過 ({passed_styles}/{total_styles})"
         print(msg)
         logger.info(msg)
         msg = "   5W1H 回應格式已在系統級別啟用"
         print(msg)
         logger.info(msg)
     else:
-        msg = f"⚠️  Output Style 檢查部分失敗 ({passed_styles}/{total_styles})"
+        msg = f"[WARNING] Output Style 檢查部分失敗 ({passed_styles}/{total_styles})"
         print(msg)
         logger.warning(msg)
         print()

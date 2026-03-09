@@ -184,10 +184,10 @@ def main() -> int:
         return EXIT_SUCCESS
 
     # 取得命令和輸出
-    tool_input = input_data.get("tool_input", {})
+    tool_input = input_data.get("tool_input") or {}
     command = tool_input.get("command", "")
 
-    tool_response = input_data.get("tool_response", {})
+    tool_response = input_data.get("tool_response") or {}
     stdout = tool_response.get("stdout", "")
 
     # 偵測 ticket track complete 成功

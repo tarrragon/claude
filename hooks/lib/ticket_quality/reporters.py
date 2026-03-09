@@ -38,7 +38,7 @@ def _build_report_header(results: Dict[str, Any], path: str) -> str:
     Returns:
         str: Markdown 標題章節
     """
-    return f"""# 🚨 Ticket 品質檢測報告
+    return f"""# [WARNING] Ticket 品質檢測報告
 
 **檔案**: `{path}`
 **檢測時間**: {results.get('check_time', '')}
@@ -57,13 +57,13 @@ def _build_report_summary(results: Dict[str, Any]) -> str:
         str: Markdown 摘要章節
     """
     summary = results.get("summary", {})
-    return f"""## 📊 檢測摘要
+    return f"""## 檢測摘要
 
 - **總檢測數**: {summary.get('total_checks', 0)}
-- **通過**: {summary.get('passed', 0)} ✅
-- **失敗**: {summary.get('failed', 0)} ❌
-- **警告**: {summary.get('warnings', 0)} ⚠️
-- **錯誤**: {summary.get('errors', 0)} 🔥
+- **通過**: {summary.get('passed', 0)} [PASS]
+- **失敗**: {summary.get('failed', 0)} [FAIL]
+- **警告**: {summary.get('warnings', 0)} [WARNING]
+- **錯誤**: {summary.get('errors', 0)} [ERROR]
 
 ---
 """
@@ -81,7 +81,7 @@ def _build_c1_section(results: Dict[str, Any]) -> str:
         return ""
 
     c1 = checks["c1_god_ticket"]
-    emoji = "❌" if c1["status"] == "failed" else "✅"
+    emoji = "[FAIL]" if c1["status"] == "failed" else "[PASS]"
     lines = [
         f"## {emoji} C1. God Ticket 檢測",
         "",
@@ -118,7 +118,7 @@ def _build_c2_section(results: Dict[str, Any]) -> str:
         return ""
 
     c2 = checks["c2_incomplete_ticket"]
-    emoji = "❌" if c2["status"] == "failed" else "✅"
+    emoji = "[FAIL]" if c2["status"] == "failed" else "[PASS]"
     lines = [
         f"## {emoji} C2. Incomplete Ticket 檢測",
         "",
@@ -132,17 +132,17 @@ def _build_c2_section(results: Dict[str, Any]) -> str:
         lines.extend([
             "### 檢測詳情",
             "",
-            f"- **驗收條件**: {'✅' if details.get('has_acceptance_criteria') else '❌'} ({details.get('acceptance_count', 0)} 個)",
-            f"- **測試規劃**: {'✅' if details.get('has_test_plan') else '❌'} ({len(details.get('test_files', []))} 個測試檔案)",
-            f"- **工作日誌**: {'✅' if details.get('has_work_log') else '❌'} ({details.get('work_log_file', '')})",
-            f"- **參考文件**: {'✅' if details.get('has_references') else '❌'} ({details.get('reference_count', 0)} 個)",
+            f"- **驗收條件**: {'[PASS]' if details.get('has_acceptance_criteria') else '[FAIL]'} ({details.get('acceptance_count', 0)} 個)",
+            f"- **測試規劃**: {'[PASS]' if details.get('has_test_plan') else '[FAIL]'} ({len(details.get('test_files', []))} 個測試檔案)",
+            f"- **工作日誌**: {'[PASS]' if details.get('has_work_log') else '[FAIL]'} ({details.get('work_log_file', '')})",
+            f"- **參考文件**: {'[PASS]' if details.get('has_references') else '[FAIL]'} ({details.get('reference_count', 0)} 個)",
             ""
         ])
 
         missing = details.get("missing_elements", [])
         if missing:
             lines.extend(["### 缺失元素", ""])
-            lines.extend([f"- ❌ {elem}" for elem in missing])
+            lines.extend([f"- [FAIL] {elem}" for elem in missing])
             lines.append("")
 
     lines.extend(_build_recommendations_section(c2))
@@ -161,7 +161,7 @@ def _build_c3_section(results: Dict[str, Any]) -> str:
         return ""
 
     c3 = checks["c3_ambiguous_responsibility"]
-    emoji = "❌" if c3["status"] == "failed" else "✅"
+    emoji = "[FAIL]" if c3["status"] == "failed" else "[PASS]"
     lines = [
         f"## {emoji} C3. Ambiguous Responsibility 檢測",
         "",
@@ -175,10 +175,10 @@ def _build_c3_section(results: Dict[str, Any]) -> str:
         lines.extend([
             "### 檢測詳情",
             "",
-            f"- **層級標示**: {'✅' if details.get('has_layer_marker') else '❌'} ({details.get('layer_marker', '')})",
-            f"- **職責描述**: {'✅' if details.get('has_responsibility_desc') else '❌'} (清晰度: {details.get('responsibility_clarity', 'none')})",
-            f"- **檔案範圍**: {'✅' if details.get('file_scope_clear') else '❌'}",
-            f"- **驗收限定**: {'✅' if details.get('acceptance_aligned') else '❌'}",
+            f"- **層級標示**: {'[PASS]' if details.get('has_layer_marker') else '[FAIL]'} ({details.get('layer_marker', '')})",
+            f"- **職責描述**: {'[PASS]' if details.get('has_responsibility_desc') else '[FAIL]'} (清晰度: {details.get('responsibility_clarity', 'none')})",
+            f"- **檔案範圍**: {'[PASS]' if details.get('file_scope_clear') else '[FAIL]'}",
+            f"- **驗收限定**: {'[PASS]' if details.get('acceptance_aligned') else '[FAIL]'}",
             ""
         ])
 
@@ -224,7 +224,7 @@ def _build_human_review_section(results: Dict[str, Any]) -> str:
     if not needs_review:
         return ""
 
-    lines = ["---", "", "## ⚠️ 需人工審查項目", ""]
+    lines = ["---", "", "## [WARNING] 需人工審查項目", ""]
     lines.extend([f"- {item}" for item in needs_review])
     lines.append("")
     return "\n".join(lines)

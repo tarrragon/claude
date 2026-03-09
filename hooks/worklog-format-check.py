@@ -120,7 +120,7 @@ def main():
         return 0
 
     # 獲取工具輸入
-    tool_input = hook_input.get('tool_input', {})
+    tool_input = hook_input.get('tool_input') or {}
 
     # 獲取檔案路徑
     file_path = tool_input.get('file_path', '')

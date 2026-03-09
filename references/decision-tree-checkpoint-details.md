@@ -55,7 +55,7 @@
 
 **觸發時機**：每次 git commit 成功後
 
-**強制前置動作**：`ticket track list --wave W{n} --status pending in_progress`（取得數據後再評估，禁止依賴記憶判斷）
+**強制前置動作**：`ticket track list --wave {n} --status pending in_progress`（取得數據後再評估，禁止依賴記憶判斷）
 
 **前置分流**：當前 commit 是否屬於 TDD Phase 完成？識別依據：已完成 ticket 含 `tdd_phase` 欄位。
 
@@ -95,6 +95,32 @@
 ---
 
 ### 情境 C：ticket 已 completed + 同 Wave 無待處理任務（Wave 完成）
+
+**強制前置步驟：Wave 完成審查**
+
+進入情境 C 時，在判斷 C1/C2 之前，**必須**先執行 `/parallel-evaluation` 對整個 Wave 的變更進行多視角審查。
+
+```
+同 Wave 無 pending 任務
+    |
+    v
+[強制] /parallel-evaluation（Wave 完成審查）
+    視角：Consistency（跨 Ticket 一致性）、Regression（迴歸風險）、Gap（盲點偵測）
+    |
+    v
+審查發現 → 建立 Ticket（/ticket create，不中斷，不詢問）
+    |
+    v
+[再次查詢] ticket track list --status pending（查詢版本其他 Wave）
+```
+
+**觸發條件**：Wave 內所有 Ticket 已 completed（情境 C 的進入條件即為觸發條件）
+
+**審查範圍**：本 Wave 內所有已完成 Ticket 涉及的變更檔案
+
+**審查後處理**：
+- 審查發現問題 → 立即建立 Ticket（遵循 plan-to-ticket-flow 執行中額外發現規則）
+- 無問題發現 → 繼續 C1/C2 流程
 
 **動作**：[再次查詢] `ticket track list --status pending`（查詢版本其他 Wave）
 
@@ -226,5 +252,5 @@ ticket handoff --gc --execute
 
 ---
 
-**Last Updated**: 2026-03-08
-**Version**: 1.2.0 - 情境 D 重構：D1-D3c 五子情境合併為 4 行路由總覽表，認知負擔從 >15 降至 ~10（W22-002）
+**Last Updated**: 2026-03-09
+**Version**: 1.3.0 - 情境 C 新增強制 /parallel-evaluation Wave 完成審查步驟（0.1.0-W25-012）

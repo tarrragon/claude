@@ -175,7 +175,7 @@ git status
 |-----------|--------|
 | Checkpoint 1 | `git status` → 有變更：`/commit-as-prompt`；無變更：直接到 Checkpoint 2 |
 | Checkpoint 1.5 | `ToolSearch("select:AskUserQuestion")` → AskUserQuestion #16（錯誤學習確認） |
-| Checkpoint 2 | `ticket track list --wave W{n} --status pending in_progress` → #11b（有 pending）/ #13（無） |
+| Checkpoint 2 | `ticket track list --wave {n} --status pending in_progress` → #11b（有 pending）/ #13（無） |
 | Checkpoint R | `ticket track claim {id}` |
 
 > 原則：讓 CLI 查詢結果告訴你答案，而非靠記憶背誦規則。

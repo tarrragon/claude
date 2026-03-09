@@ -17,12 +17,14 @@ Python 版本：3.9 相容（禁用 PEP 604、634、613）
 import json
 import logging
 import os
+import re
+import subprocess
 import sys
 import time
 import traceback
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 # ============================================================================
 # 常數定義
@@ -58,8 +60,18 @@ EXIT_ERROR = 1
 # 日誌保留策略（天數）
 LOG_RETENTION_DAYS = 7
 
-# 日誌清理觸發頻率（每 N 次呼叫執行一次清理）
-LOG_CLEANUP_TRIGGER_FREQUENCY = 10
+# 日誌清理觸發間隔（秒數，預設 5 分鐘）
+CLEANUP_INTERVAL_SECONDS = 300
+
+# 決策樹欄位識別標記（統一版本，合併 command-entrance-gate-hook 和 agent-ticket-validation-hook）
+DECISION_TREE_MARKERS = [
+    "decision_tree_path:",
+    "## 決策樹路徑",
+    "decision_nodes:",
+    "## 決策樹",
+    "## Decision Tree",
+    "## 決策流程",
+]
 
 
 # ============================================================================
@@ -141,7 +153,7 @@ def _clear_logger_handlers(logger: logging.Logger) -> None:
 
 
 def _create_stream_handler(is_debug: bool = False) -> logging.StreamHandler:
-    """建立 StreamHandler（stdout）
+    """建立 StreamHandler（stderr）
 
     Args:
         is_debug: 是否為 DEBUG 模式
@@ -149,7 +161,7 @@ def _create_stream_handler(is_debug: bool = False) -> logging.StreamHandler:
     Returns:
         logging.StreamHandler: 配置完成的 handler
     """
-    handler = logging.StreamHandler(sys.stdout)
+    handler = logging.StreamHandler(sys.stderr)
     level = STREAM_HANDLER_LEVEL_DEBUG if is_debug else STREAM_HANDLER_LEVEL_NORMAL
     handler.setLevel(level)
     handler.setFormatter(logging.Formatter(STREAM_FORMAT))
@@ -170,7 +182,10 @@ def _create_file_handler(log_file_path: Path) -> Optional[logging.FileHandler]:
         handler.setLevel(FILE_HANDLER_LEVEL)
         handler.setFormatter(logging.Formatter(FILE_FORMAT, datefmt=DATE_FORMAT))
         return handler
-    except OSError:
+    except OSError as e:
+        # 檔案操作失敗（如無權限、磁碟滿）時輸出到 stderr 並回傳 None，
+        # 由上層呼叫者決定是否使用 fallback logger（如 _setup_logger_handlers）
+        sys.stderr.write("Failed to create file handler for {}: {}\n".format(log_file_path, e))
         return None
 
 
@@ -221,19 +236,21 @@ def _setup_logger_handlers(logger: logging.Logger, log_base_dir: Path,
     採用 lazy file creation 策略：只在實際寫入日誌時才建立檔案，
     避免產生空日誌檔案（W3-004）。使用 FileHandler 的 delay=True 參數。
     """
-    # 觸發日誌清理（降低頻率，每 LOG_CLEANUP_TRIGGER_FREQUENCY 次呼叫執行一次）
+    # 觸發日誌清理（基於 mtime 時間間隔）
     cleanup_marker = log_base_dir / ".cleanup_trigger"
+    current_time = time.time()
+
     try:
         if cleanup_marker.exists():
-            count = int(cleanup_marker.read_text().strip() or "0")
-            if count >= LOG_CLEANUP_TRIGGER_FREQUENCY:
+            # 檢查檔案的 mtime
+            marker_mtime = cleanup_marker.stat().st_mtime
+            if current_time - marker_mtime >= CLEANUP_INTERVAL_SECONDS:
                 _cleanup_old_logs(log_base_dir)
-                cleanup_marker.write_text("0")
-            else:
-                cleanup_marker.write_text(str(count + 1))
+                cleanup_marker.touch()
         else:
-            cleanup_marker.write_text("1")
-    except (OSError, ValueError):
+            # 檔案不存在，建立它
+            cleanup_marker.touch()
+    except OSError:
         pass
 
     # 配置 FileHandler（使用 delay=True 實現 lazy file creation）
@@ -275,7 +292,7 @@ def get_project_root() -> Path:
 
 
 def run_git(
-    args: list,
+    args: List[str],
     cwd: "str | Path | None" = None,
     timeout: int = 5,
     logger: "logging.Logger | None" = None,
@@ -291,8 +308,6 @@ def run_git(
     Returns:
         stdout 輸出（stripped），或 None 若執行失敗
     """
-    import subprocess
-
     try:
         result = subprocess.run(
             args,
@@ -413,10 +428,126 @@ def read_json_from_stdin(logger: logging.Logger) -> Optional[dict]:
         return None
 
 
+def extract_tool_input(
+    input_data: "dict | None",
+    logger: "logging.Logger | None" = None
+) -> dict:
+    """安全提取 input_data 中的 tool_input 欄位
+
+    處理三種情況：
+    1. input_data 為 None 或空值 → 返回 {}
+    2. tool_input 欄位缺失或為 None → 返回 {}
+    3. tool_input 為有效的 dict → 返回該 dict
+
+    Args:
+        input_data: Hook 輸入資料（dict 或 None）
+        logger: 可選 Logger 實例，用於記錄詳細資訊
+
+    Returns:
+        dict: 提取出的 tool_input（始終返回 dict，無欄位時返回空 dict）
+
+    Examples:
+        >>> extract_tool_input({"tool_input": {"file_path": "test.py"}})
+        {'file_path': 'test.py'}
+
+        >>> extract_tool_input({"other": "value"})
+        {}
+
+        >>> extract_tool_input(None)
+        {}
+    """
+    if input_data is None:
+        if logger:
+            logger.debug("input_data 為 None，返回空 dict")
+        return {}
+
+    if not isinstance(input_data, dict):
+        if logger:
+            logger.warning("input_data 非 dict 類型，返回空 dict: {}".format(type(input_data)))
+        return {}
+
+    tool_input = input_data.get("tool_input")
+
+    # tool_input 為 None 或不存在時返回 {}
+    if tool_input is None:
+        if logger:
+            logger.debug("tool_input 欄位為 None 或不存在，返回空 dict")
+        return {}
+
+    # tool_input 應為 dict，但可能是其他型別
+    if not isinstance(tool_input, dict):
+        if logger:
+            logger.warning("tool_input 非 dict 類型，返回空 dict: {}".format(type(tool_input)))
+        return {}
+
+    if logger:
+        logger.debug("成功提取 tool_input，欄位數: {}".format(len(tool_input)))
+
+    return tool_input
+
+
+def extract_tool_response(
+    input_data: "dict | None",
+    logger: "logging.Logger | None" = None
+) -> dict:
+    """安全提取 input_data 中的 tool_response 欄位
+
+    處理三種情況：
+    1. input_data 為 None 或空值 → 返回 {}
+    2. tool_response 欄位缺失或為 None → 返回 {}
+    3. tool_response 為有效的 dict → 返回該 dict
+
+    Args:
+        input_data: Hook 輸入資料（dict 或 None）
+        logger: 可選 Logger 實例，用於記錄詳細資訊
+
+    Returns:
+        dict: 提取出的 tool_response（始終返回 dict，無欄位時返回空 dict）
+
+    Examples:
+        >>> extract_tool_response({"tool_response": {"stdout": "OK", "exit_code": 0}})
+        {'stdout': 'OK', 'exit_code': 0}
+
+        >>> extract_tool_response({"other": "value"})
+        {}
+
+        >>> extract_tool_response(None)
+        {}
+    """
+    if input_data is None:
+        if logger:
+            logger.debug("input_data 為 None，返回空 dict")
+        return {}
+
+    if not isinstance(input_data, dict):
+        if logger:
+            logger.warning("input_data 非 dict 類型，返回空 dict: {}".format(type(input_data)))
+        return {}
+
+    tool_response = input_data.get("tool_response")
+
+    # tool_response 為 None 或不存在時返回 {}
+    if tool_response is None:
+        if logger:
+            logger.debug("tool_response 欄位為 None 或不存在，返回空 dict")
+        return {}
+
+    # tool_response 應為 dict，但可能是其他型別
+    if not isinstance(tool_response, dict):
+        if logger:
+            logger.warning("tool_response 非 dict 類型，返回空 dict: {}".format(type(tool_response)))
+        return {}
+
+    if logger:
+        logger.debug("成功提取 tool_response，欄位數: {}".format(len(tool_response)))
+
+    return tool_response
+
+
 def parse_ticket_frontmatter(
     content_or_path: "str | Path",
     logger: "logging.Logger | None" = None
-) -> Optional[dict]:
+) -> dict:
     """統一的 YAML frontmatter 解析（支援 str 和 Path 輸入）
 
     支援以下 YAML 特性：
@@ -432,8 +563,8 @@ def parse_ticket_frontmatter(
         logger: 可選 Logger 實例，用於記錄錯誤
 
     Returns:
-        dict: 解析出的 frontmatter key-value（始終返回 dict，無 frontmatter 時返回空 dict）；
-              若解析失敗，返回空 dict 並記錄警告（如提供 logger）
+        dict: 解析出的 frontmatter key-value（始終返回 dict，無 frontmatter 時返回空 dict、
+              或解析失敗時也返回空 dict 並記錄警告）
     """
     try:
         # 步驟 1：取得文件內容
@@ -534,7 +665,7 @@ def parse_ticket_frontmatter(
         return {}
 
 
-def parse_ticket_date(value: "any", logger: "logging.Logger | None" = None) -> Optional[datetime]:
+def parse_ticket_date(value: "Any", logger: "logging.Logger | None" = None) -> Optional[datetime]:
     """支援多格式的 Ticket 日期解析。
 
     格式優先級：
@@ -648,6 +779,291 @@ def check_error_patterns_changed(
         logger.info("掃描 error-patterns 目錄完成：發現 {} 個新增/修改檔案".format(len(changed_files)))
     has_changed = len(changed_files) > 0
     return has_changed, changed_files
+
+
+# ============================================================================
+# Ticket 檔案掃描函式（共用）
+# ============================================================================
+
+
+def get_current_version_from_todolist(
+    project_root: Path, logger: "Optional[logging.Logger]" = None
+) -> "Optional[str]":
+    """從 docs/todolist.yaml 讀取 current_version 欄位
+
+    Args:
+        project_root: 專案根目錄
+        logger: 可選日誌物件
+
+    Returns:
+        版本號字串（如 "0.1.0"）或 None（若讀取失敗）
+    """
+    todolist_file = project_root / "docs" / "todolist.yaml"
+
+    if not todolist_file.exists():
+        if logger:
+            logger.debug("todolist.yaml 不存在: {}".format(todolist_file))
+        return None
+
+    try:
+        content = todolist_file.read_text(encoding="utf-8")
+
+        # 簡單正則提取 current_version: 欄位值
+        match = re.search(r"current_version:\s*(\S+)", content)
+        if match:
+            version = match.group(1).strip()
+            if logger:
+                logger.info("從 todolist.yaml 讀取 current_version: {}".format(version))
+            return version
+        else:
+            if logger:
+                logger.debug("todolist.yaml 中未找到 current_version 欄位")
+            return None
+    except Exception as e:
+        if logger:
+            logger.warning("讀取 todolist.yaml 失敗: {}".format(e))
+        return None
+
+
+def scan_ticket_files_by_version(
+    project_root: Path, version: str, logger: "Optional[logging.Logger]" = None
+) -> List[Path]:
+    """掃描特定版本的 Ticket 檔案
+
+    Args:
+        project_root: 專案根目錄
+        version: 版本號（如 "0.1.0"）
+        logger: 可選日誌物件
+
+    Returns:
+        Ticket 檔案路徑清單
+    """
+    tickets_dir = project_root / "docs" / "work-logs" / "v{}".format(version) / "tickets"
+
+    if not tickets_dir.exists():
+        if logger:
+            logger.debug("Ticket 目錄不存在: {}".format(tickets_dir))
+        return []
+
+    try:
+        ticket_files = list(tickets_dir.glob("*.md"))
+        if logger:
+            logger.debug("從版本 v{} 找到 {} 個 Ticket 檔案".format(version, len(ticket_files)))
+        return ticket_files
+    except (OSError, PermissionError) as e:
+        if logger:
+            logger.warning("掃描 Ticket 目錄失敗 (v{}): {}".format(version, e))
+        return []
+
+
+def find_ticket_files(
+    project_root: Path, version: "Optional[str]" = None, logger: "Optional[logging.Logger]" = None
+) -> List[Path]:
+    """尋找所有 Ticket 檔案（支援版本優先和後向相容）
+
+    功能：
+    - 如指定 version，只掃描該版本目錄
+    - 如未指定 version，優先掃描當前活躍版本（從 todolist.yaml 讀取）
+    - 若讀取失敗或目錄不存在，掃描所有版本目錄
+    - 支援後向相容：檢查舊位置 .claude/tickets/
+
+    Args:
+        project_root: 專案根目錄
+        version: 版本號（可選，如 "0.1.0"）；若不指定則自動讀取
+        logger: 可選日誌物件
+
+    Returns:
+        Ticket 檔案路徑清單
+    """
+    all_tickets = []
+
+    # 檢查舊位置 .claude/tickets/（後向相容）
+    old_tickets_dir = project_root / ".claude" / "tickets"
+    if old_tickets_dir.exists():
+        try:
+            old_tickets = list(old_tickets_dir.glob("*.md"))
+            all_tickets.extend(old_tickets)
+            if logger:
+                logger.debug("從 .claude/tickets/ 找到 {} 個 Ticket 檔案".format(len(old_tickets)))
+        except (OSError, PermissionError) as e:
+            if logger:
+                logger.warning("掃描舊 Ticket 位置失敗: {}".format(e))
+
+    # 如指定 version，只掃描該版本
+    if version:
+        version_tickets = scan_ticket_files_by_version(project_root, version, logger)
+        all_tickets.extend(version_tickets)
+        return all_tickets
+
+    # 未指定 version：優先掃描當前活躍版本
+    current_version = get_current_version_from_todolist(project_root, logger)
+
+    if current_version:
+        # 優先掃描當前版本
+        current_tickets = scan_ticket_files_by_version(project_root, current_version, logger)
+        all_tickets.extend(current_tickets)
+
+        # Fallback：掃描其他版本（非當前版本）
+        work_logs_dir = project_root / "docs" / "work-logs"
+        if work_logs_dir.exists():
+            try:
+                for version_dir in work_logs_dir.glob("v*"):
+                    if version_dir.name != "v{}".format(current_version):
+                        other_tickets = scan_ticket_files_by_version(
+                            project_root, version_dir.name[1:], logger
+                        )
+                        all_tickets.extend(other_tickets)
+            except (OSError, PermissionError) as e:
+                if logger:
+                    logger.warning("掃描其他版本目錄失敗: {}".format(e))
+    else:
+        # Fallback：讀取失敗時，掃描所有版本目錄
+        if logger:
+            logger.info("current_version 讀取失敗，fallback 到掃描所有版本目錄")
+
+        work_logs_dir = project_root / "docs" / "work-logs"
+        if work_logs_dir.exists():
+            try:
+                for version_dir in work_logs_dir.glob("v*"):
+                    version_tickets = scan_ticket_files_by_version(
+                        project_root, version_dir.name[1:], logger
+                    )
+                    all_tickets.extend(version_tickets)
+            except (OSError, PermissionError) as e:
+                if logger:
+                    logger.warning("掃描版本目錄失敗: {}".format(e))
+
+    if logger:
+        logger.debug("總計找到 {} 個 Ticket 檔案".format(len(all_tickets)))
+    return all_tickets
+
+
+def find_ticket_file(
+    ticket_id: str,
+    project_root: Optional[Path] = None,
+    logger: Optional[logging.Logger] = None
+) -> Optional[Path]:
+    """尋找特定 ID 的 Ticket 檔案
+
+    優化策略（O(1) early return）：
+    1. 從 ticket_id 解析版本號（格式：{version}-W{wave}-{seq}）
+    2. 直接構建路徑：docs/work-logs/v{version}/tickets/{ticket_id}.md
+    3. 如果直接路徑存在 → 立即返回（early return）
+    4. 檢查舊位置 .claude/tickets/{ticket_id}.md（向後相容）
+    5. 如果上述路徑都不存在 → fallback 到 find_ticket_files() 全量掃描
+
+    Args:
+        ticket_id: Ticket ID（如 "0.1.0-W1-001" 或非標準格式）
+        project_root: 專案根目錄（可選，若為 None 則自動取得）
+        logger: 日誌物件（可選）
+
+    Returns:
+        Path: Ticket 檔案路徑，或 None 如未找到
+    """
+    if project_root is None:
+        project_root = get_project_root()
+
+    # 嘗試解析 ticket_id 中的版本號（格式：{version}-W{wave}-{seq}）
+    # 範例：0.1.0-W31-003 → version="0.1.0"
+    version = _parse_version_from_ticket_id(ticket_id)
+
+    # Strategy 1: 直接構建路徑（如果能解析出版本號）
+    if version:
+        direct_path = (
+            project_root / "docs" / "work-logs" / f"v{version}" / "tickets" / f"{ticket_id}.md"
+        )
+        if direct_path.exists():
+            if logger:
+                logger.info("找到 Ticket: {} 於 {} (direct path)".format(ticket_id, direct_path))
+            return direct_path
+        else:
+            if logger:
+                logger.debug("直接路徑不存在，嘗試舊位置: {}".format(ticket_id))
+
+    # Strategy 2: 檢查舊位置 .claude/tickets/{ticket_id}.md（向後相容）
+    old_path = project_root / ".claude" / "tickets" / f"{ticket_id}.md"
+    if old_path.exists():
+        if logger:
+            logger.info("找到 Ticket: {} 於 {} (old location)".format(ticket_id, old_path))
+        return old_path
+
+    # Strategy 3: Fallback 到全量掃描（版本號解析失敗或直接路徑不存在）
+    if logger:
+        logger.debug("全部直接路徑未找到，執行全量掃描: {}".format(ticket_id))
+
+    all_tickets = find_ticket_files(project_root, logger=logger)
+
+    # 根據檔名篩選符合的 ticket_id
+    expected_name = "{}.md".format(ticket_id)
+    for ticket_file in all_tickets:
+        if ticket_file.name == expected_name:
+            if logger:
+                logger.info("找到 Ticket: {} 於 {} (fallback scan)".format(ticket_id, ticket_file))
+            return ticket_file
+
+    if logger:
+        logger.warning("未找到 Ticket 檔案: {}".format(ticket_id))
+    return None
+
+
+def _parse_version_from_ticket_id(ticket_id: str) -> Optional[str]:
+    """從 Ticket ID 解析版本號
+
+    Ticket ID 標準格式：{version}-W{wave}-{seq}
+    範例：0.1.0-W31-003 → "0.1.0"
+
+    Args:
+        ticket_id: Ticket ID 字串
+
+    Returns:
+        版本號字串，或 None 如無法解析
+    """
+    if not ticket_id:
+        return None
+
+    # 尋找第一個 '-W' 分隔符
+    wave_marker = "-W"
+    wave_index = ticket_id.find(wave_marker)
+
+    if wave_index <= 0:
+        # 未找到 '-W' 或位置不合法
+        return None
+
+    # 版本號是 '-W' 之前的部分
+    version = ticket_id[:wave_index]
+
+    # 驗證版本號不為空，且形如 "x.y.z" 或類似格式
+    if version and "." in version:
+        return version
+
+    return None
+
+
+def validate_ticket_has_decision_tree(ticket_content: str, logger: "logging.Logger") -> bool:
+    """驗證 Ticket 是否包含決策樹欄位
+
+    檢查 Ticket 是否在 YAML frontmatter 或內容中包含決策樹相關欄位。
+    支援多個決策樹標記變體（YAML 欄位、中文標題、英文標題）。
+
+    Args:
+        ticket_content: Ticket 檔案內容
+        logger: Logger 物件
+
+    Returns:
+        bool: 是否包含決策樹欄位
+    """
+    if not ticket_content:
+        logger.debug("Ticket 內容為空")
+        return False
+
+    # 檢查任何決策樹欄位（包含 YAML frontmatter 和標題區段）
+    for marker in DECISION_TREE_MARKERS:
+        if marker in ticket_content:
+            logger.debug("在 Ticket 中找到決策樹標記: {}".format(marker))
+            return True
+
+    logger.debug("未在 Ticket 中找到決策樹欄位")
+    return False
 
 
 def run_hook_safely(main_func: Callable[[], int], hook_name: str) -> int:

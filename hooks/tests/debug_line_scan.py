@@ -52,6 +52,6 @@ for i, line in enumerate(lines):
         elif func_name[0].isupper():
             print(f"    → 過濾（PascalCase 建構式）")
         else:
-            print(f"    → ✅ 應該加入函式列表")
+            print(f"    → [PASS] 應該加入函式列表")
     else:
         print(f"  → 正則匹配失敗")

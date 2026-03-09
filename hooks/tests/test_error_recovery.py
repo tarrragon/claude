@@ -153,7 +153,7 @@ class TestErrorMessageParsing:
 
     def test_parse_hook_development_error(self):
         """測試 Hook 開發錯誤訊息解析"""
-        error_msg = """❌ 代理人分派錯誤：
+        error_msg = """[FAIL] 代理人分派錯誤：
 任務類型：Hook 開發
 當前代理人：parsley-flutter-developer
 正確代理人：basil-hook-architect
@@ -169,7 +169,7 @@ class TestErrorMessageParsing:
 
     def test_parse_documentation_integration_error(self):
         """測試文件整合錯誤訊息解析"""
-        error_msg = """❌ 代理人分派錯誤：
+        error_msg = """[FAIL] 代理人分派錯誤：
 任務類型：文件整合
 當前代理人：parsley-flutter-developer
 正確代理人：thyme-documentation-integrator"""
@@ -182,7 +182,7 @@ class TestErrorMessageParsing:
 
     def test_parse_phase4_refactor_error(self):
         """測試 Phase 4 重構錯誤訊息解析"""
-        error_msg = """❌ 代理人分派錯誤：
+        error_msg = """[FAIL] 代理人分派錯誤：
 任務類型：Phase 4 重構
 當前代理人：basil-hook-architect
 正確代理人：cinnamon-refactor-owl"""
@@ -216,7 +216,7 @@ class TestShouldRetry:
 
     def test_should_retry_agent_dispatch_error(self):
         """測試代理人分派錯誤應該重試"""
-        error_msg = """❌ 代理人分派錯誤：
+        error_msg = """[FAIL] 代理人分派錯誤：
 正確代理人：basil-hook-architect"""
 
         assert should_retry(error_msg) is True
@@ -258,7 +258,7 @@ class TestAutoRetryMechanism:
         def mock_hook(agent, prompt):
             # Hook 相關任務 + parsley → 攔截
             if "Hook" in prompt and agent == "parsley-flutter-developer":
-                return (False, """❌ 代理人分派錯誤：
+                return (False, """[FAIL] 代理人分派錯誤：
 任務類型：Hook 開發
 當前代理人：parsley-flutter-developer
 正確代理人：basil-hook-architect""")
@@ -287,11 +287,11 @@ class TestAutoRetryMechanism:
             if "文件整合" in prompt:
                 if agent == "parsley-flutter-developer":
                     correction_history.append((agent, "basil-hook-architect"))
-                    return (False, """❌ 代理人分派錯誤：
+                    return (False, """[FAIL] 代理人分派錯誤：
 正確代理人：basil-hook-architect""")
                 elif agent == "basil-hook-architect":
                     correction_history.append((agent, "thyme-documentation-integrator"))
-                    return (False, """❌ 代理人分派錯誤：
+                    return (False, """[FAIL] 代理人分派錯誤：
 正確代理人：thyme-documentation-integrator""")
                 elif agent == "thyme-documentation-integrator":
                     return (True, None)
@@ -322,7 +322,7 @@ class TestInfiniteLoopProtection:
             nonlocal retry_count
             retry_count += 1
             # 總是返回錯誤，測試是否會無限循環
-            return (False, """❌ 代理人分派錯誤：
+            return (False, """[FAIL] 代理人分派錯誤：
 正確代理人：another-agent""")
 
         success, final_agent, attempts = dispatch_with_auto_retry(
@@ -363,7 +363,7 @@ class TestRealWorldScenarios:
         def mock_hook(agent, prompt):
             if "Hook" in prompt:
                 if agent == "parsley-flutter-developer":
-                    return (False, """❌ 代理人分派錯誤：
+                    return (False, """[FAIL] 代理人分派錯誤：
 任務類型：Hook 開發
 當前代理人：parsley-flutter-developer
 正確代理人：basil-hook-architect""")
@@ -389,7 +389,7 @@ class TestRealWorldScenarios:
             if "Hook" in prompt and "Phase 4" in prompt:
                 # 這是 v0.12.N 實際發生的誤判
                 if agent == "cinnamon-refactor-owl":
-                    return (False, """❌ 代理人分派錯誤：
+                    return (False, """[FAIL] 代理人分派錯誤：
 任務類型：Hook 開發
 當前代理人：cinnamon-refactor-owl
 正確代理人：basil-hook-architect""")

@@ -194,14 +194,16 @@ def classify_errors(output: str, logger) -> Tuple[ErrorType, List[Dict[str, str]
     return error_type, errors
 
 
-def get_project_root(logger) -> Path:
-    """取得專案根目錄"""
-    return Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+def _get_project_root_internal(logger) -> Path:
+    """取得專案根目錄（來自 hook_utils）"""
+    # 使用 hook_utils 的標準函式
+    from hook_utils import get_project_root as hook_get_project_root
+    return hook_get_project_root()
 
 
 def log_evaluation(error_type: ErrorType, errors: List[Dict[str, str]], logger) -> None:
     """記錄評估結果到日誌"""
-    project_root = get_project_root(logger)
+    project_root = _get_project_root_internal(logger)
     log_dir = project_root / ".claude" / "hook-logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -228,7 +230,7 @@ def log_evaluation(error_type: ErrorType, errors: List[Dict[str, str]], logger) 
 def generate_syntax_error_output(errors: List[Dict[str, str]], logger) -> Dict:
     """生成語法錯誤輸出 (簡化流程)"""
     message = f"""
-🔧 語法錯誤 - 簡化修復流程
+語法錯誤 - 簡化修復流程
 
 錯誤數量: {len(errors)}
 推薦代理人: mint-format-specialist
@@ -263,9 +265,9 @@ def generate_non_syntax_error_output(error_type: ErrorType, errors: List[Dict[st
     )
 
     message = f"""
-🚨 修復前強制評估 - {error_type.value.upper().replace('_', ' ')}
+[WARNING] 修復前強制評估 - {error_type.value.upper().replace('_', ' ')}
 
-⚠️ 此錯誤類型 **必須開 Ticket** 追蹤，禁止直接分派修復！
+[WARNING] 此錯誤類型 **必須開 Ticket** 追蹤，禁止直接分派修復！
 
 識別的錯誤：
 """
@@ -275,7 +277,7 @@ def generate_non_syntax_error_output(error_type: ErrorType, errors: List[Dict[st
     message += f"""
 
 執行以下步驟：
-1️⃣ 完成六階段評估 (使用 /pre-fix-eval Skill)
+1. 完成六階段評估 (使用 /pre-fix-eval Skill)
    - Stage 1: 錯誤分類 (已自動完成)
    - Stage 2: BDD 意圖分析
    - Stage 3: 設計文件查詢
@@ -283,12 +285,12 @@ def generate_non_syntax_error_output(error_type: ErrorType, errors: List[Dict[st
    - Stage 5: 開 Ticket 記錄
    - Stage 6: 分派執行
 
-2️⃣ 使用 /ticket create 建立修復 Ticket
+2. 使用 /ticket create 建立修復 Ticket
    - 標題: Fix {error_type.value}: [簡短描述]
    - 描述: 包含以上六階段分析結果
    - Agent: 根據錯誤類型分派
 
-3️⃣ Ticket 建立後分派給專業代理人執行
+3. Ticket 建立後分派給專業代理人執行
 
 禁止直接分派或跳過評估流程！
 """

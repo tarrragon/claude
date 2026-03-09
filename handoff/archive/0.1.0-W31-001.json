@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W31-001",
+  "direction": "context-refresh",
+  "timestamp": "2026-03-10T03:49:12.876421",
+  "from_status": "in_progress",
+  "title": "遷移 acceptance-gate-hook 本地 find_ticket_file 到 hook_utils 版本",
+  "what": "遷移 acceptance-gate-hook 本地 find_ticket_file 到 hook_utils 版本",
+  "chain": {},
+  "resumed_at": "2026-03-10T03:50:03.267220"
+}

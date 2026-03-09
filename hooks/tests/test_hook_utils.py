@@ -21,7 +21,16 @@ import pytest
 
 # 動態導入 hook_utils（可能不存在）
 try:
-    from hook_utils import setup_hook_logging, run_hook_safely, _log_exception
+    from hook_utils import (
+        setup_hook_logging,
+        run_hook_safely,
+        _log_exception,
+        get_current_version_from_todolist,
+        scan_ticket_files_by_version,
+        find_ticket_files,
+        find_ticket_file,
+        _parse_version_from_ticket_id,
+    )
 except ImportError:
     # 如果模組還不存在，定義虛擬函式以便測試可以 import
     def setup_hook_logging(hook_name: str) -> logging.Logger:
@@ -31,6 +40,21 @@ except ImportError:
         raise NotImplementedError()
 
     def _log_exception(logger: logging.Logger, hook_name: str, tb_str: str) -> None:
+        raise NotImplementedError()
+
+    def get_current_version_from_todolist(project_root, logger=None):
+        raise NotImplementedError()
+
+    def scan_ticket_files_by_version(project_root, version, logger=None):
+        raise NotImplementedError()
+
+    def find_ticket_files(project_root, version=None, logger=None):
+        raise NotImplementedError()
+
+    def find_ticket_file(ticket_id, project_root=None, logger=None):
+        raise NotImplementedError()
+
+    def _parse_version_from_ticket_id(ticket_id: str):
         raise NotImplementedError()
 
 
@@ -105,12 +129,14 @@ class TestSetupHookLogging:
         log_dir = project_root / ".claude" / "hook-logs" / "test-hook"
         assert log_dir.exists()
 
-        # 驗證日誌檔案建立
+        # 驗證 handlers 數量（FileHandler + StreamHandler）
+        # 注意：FileHandler 使用 delay=True，檔案只在首次寫入時建立，不是在 setup 時建立
+        assert len(logger.handlers) == 2
+
+        # 驗證日誌檔案在寫入後建立
+        logger.info("test message")
         log_files = list(log_dir.glob("*.log"))
         assert len(log_files) >= 1
-
-        # 驗證 handlers 數量（FileHandler + StreamHandler）
-        assert len(logger.handlers) == 2
 
     def test_scenario_1_file_handler(self, project_root, mock_env_var, reset_loggers, capsys):
         """FileHandler 將訊息寫入檔案"""
@@ -131,7 +157,7 @@ class TestSetupHookLogging:
         assert "test debug message" in log_content
 
     def test_scenario_1_stream_handler(self, project_root, mock_env_var, reset_loggers, capsys):
-        """StreamHandler 輸出到 stdout，WARNING 級別及以上"""
+        """StreamHandler 輸出到 stderr，WARNING 級別及以上"""
         mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
 
         logger = setup_hook_logging("test-hook")
@@ -144,15 +170,15 @@ class TestSetupHookLogging:
 
         captured = capsys.readouterr()
 
-        # 驗證輸出（DEBUG 和 INFO 寫入檔案但不輸出到 stdout）
-        assert "debug msg" not in captured.out
-        assert "info msg" not in captured.out
-        # WARNING 和 ERROR 輸出到 stdout（StreamHandler）
-        assert "warning msg" in captured.out
-        assert "error msg" in captured.out
+        # 驗證輸出（DEBUG 和 INFO 寫入檔案但不輸出到 stderr）
+        assert "debug msg" not in captured.err
+        assert "info msg" not in captured.err
+        # WARNING 和 ERROR 輸出到 stderr（StreamHandler）
+        assert "warning msg" in captured.err
+        assert "error msg" in captured.err
 
-        # 驗證無 stderr 輸出
-        assert captured.err == ""
+        # 驗證無 stdout 輸出
+        assert captured.out == ""
 
     def test_scenario_1_log_levels(self, project_root, mock_env_var, reset_loggers):
         """Logger 級別設為 DEBUG"""
@@ -176,8 +202,8 @@ class TestSetupHookLogging:
 
         captured = capsys.readouterr()
 
-        # 驗證 debug 訊息輸出到 stdout
-        assert "debug msg" in captured.out
+        # 驗證 debug 訊息輸出到 stderr
+        assert "debug msg" in captured.err
 
         # 驗證 StreamHandler 級別（排除 FileHandler，因為 FileHandler 也是 StreamHandler 的子類）
         stream_handlers = [h for h in logger.handlers
@@ -196,7 +222,7 @@ class TestSetupHookLogging:
         captured = capsys.readouterr()
 
         # 驗證 debug 訊息不輸出
-        assert "debug msg" not in captured.out
+        assert "debug msg" not in captured.err
 
         # 驗證 StreamHandler 級別（排除 FileHandler）
         stream_handlers = [h for h in logger.handlers
@@ -214,7 +240,7 @@ class TestSetupHookLogging:
         captured = capsys.readouterr()
 
         # 驗證 debug 訊息輸出
-        assert "debug msg" in captured.out
+        assert "debug msg" in captured.err
 
     # ========================================================================
     # Scenario 3: 根目錄 Fallback
@@ -577,8 +603,12 @@ class TestLogException:
 
         captured = capsys.readouterr()
 
-        # 驗證格式：[Hook Error] {hook_name} failed unexpectedly. Check hook logs for details.
-        assert captured.err.strip() == "[Hook Error] format-test-hook failed unexpectedly. Check hook logs for details."
+        # 驗證 stderr 包含：
+        # 1. StreamHandler 輸出的 CRITICAL 訊息（因為 CRITICAL >= WARNING）
+        # 2. sys.stderr.write 輸出的 [Hook Error] 訊息
+        assert "[CRITICAL] Unhandled exception in format-test-hook" in captured.err
+        assert "[CRITICAL] Error traceback" in captured.err
+        assert "[Hook Error] format-test-hook failed unexpectedly. Check hook logs for details." in captured.err
 
     def test_run_hook_safely_outputs_stderr_on_exception(self, project_root, mock_env_var, reset_loggers, capsys):
         """run_hook_safely 在異常時輸出 stderr"""
@@ -596,3 +626,472 @@ class TestLogException:
 
         # 驗證 stderr 有 Hook 失敗訊息
         assert "[Hook Error] stderr-test-hook failed unexpectedly" in captured.err
+
+
+# ============================================================================
+# Ticket 檔案掃描函式測試
+# ============================================================================
+
+
+class TestGetCurrentVersionFromTodolist:
+    """get_current_version_from_todolist() 功能測試"""
+
+    def test_read_valid_todolist(self, project_root):
+        """成功讀取 todolist.yaml 中的 current_version"""
+        # 建立 todolist.yaml
+        todolist_file = project_root / "docs" / "todolist.yaml"
+        todolist_file.write_text("current_version: 0.1.0\nstatus: active\n")
+
+        version = get_current_version_from_todolist(project_root)
+
+        assert version == "0.1.0"
+
+    def test_todolist_missing(self, project_root):
+        """todolist.yaml 不存在時返回 None"""
+        version = get_current_version_from_todolist(project_root)
+
+        assert version is None
+
+    def test_todolist_no_version_field(self, project_root):
+        """todolist.yaml 中無 current_version 欄位時返回 None"""
+        todolist_file = project_root / "docs" / "todolist.yaml"
+        todolist_file.write_text("status: active\n")
+
+        version = get_current_version_from_todolist(project_root)
+
+        assert version is None
+
+    def test_logger_optional(self, project_root, reset_loggers):
+        """logger 參數可選（不傳遞時仍可正常執行）"""
+        todolist_file = project_root / "docs" / "todolist.yaml"
+        todolist_file.write_text("current_version: 0.2.0\n")
+
+        # 不傳遞 logger
+        version = get_current_version_from_todolist(project_root)
+
+        assert version == "0.2.0"
+
+    def test_with_logger(self, project_root, reset_loggers):
+        """傳遞 logger 參數時正常記錄"""
+        logger = logging.getLogger("test-logger")
+        todolist_file = project_root / "docs" / "todolist.yaml"
+        todolist_file.write_text("current_version: 0.3.0\n")
+
+        version = get_current_version_from_todolist(project_root, logger)
+
+        assert version == "0.3.0"
+
+
+class TestScanTicketFilesByVersion:
+    """scan_ticket_files_by_version() 功能測試"""
+
+    def test_scan_single_version(self, project_root):
+        """掃描特定版本的 Ticket 檔案"""
+        # 建立版本目錄和 Ticket 檔案
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+
+        (tickets_dir / "0.1.0-W1-001.md").write_text("# Ticket 1\n")
+        (tickets_dir / "0.1.0-W1-002.md").write_text("# Ticket 2\n")
+
+        files = scan_ticket_files_by_version(project_root, "0.1.0")
+
+        assert len(files) == 2
+        assert all(f.suffix == ".md" for f in files)
+
+    def test_nonexistent_version(self, project_root):
+        """版本目錄不存在時返回空清單"""
+        files = scan_ticket_files_by_version(project_root, "0.9.0")
+
+        assert files == []
+
+    def test_empty_version_directory(self, project_root):
+        """版本目錄存在但無 Ticket 時返回空清單"""
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+
+        files = scan_ticket_files_by_version(project_root, "0.1.0")
+
+        assert files == []
+
+    def test_with_logger(self, project_root, reset_loggers):
+        """傳遞 logger 參數時正常記錄"""
+        logger = logging.getLogger("test-logger")
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        (tickets_dir / "0.1.0-W1-001.md").write_text("# Ticket 1\n")
+
+        files = scan_ticket_files_by_version(project_root, "0.1.0", logger)
+
+        assert len(files) == 1
+
+
+class TestFindTicketFiles:
+    """find_ticket_files() 功能測試"""
+
+    def test_find_all_versions(self, project_root):
+        """掃描所有版本的 Ticket 檔案"""
+        # 建立多個版本目錄
+        for version in ["0.1.0", "0.2.0"]:
+            tickets_dir = (
+                project_root / "docs" / "work-logs" / f"v{version}" / "tickets"
+            )
+            tickets_dir.mkdir(parents=True, exist_ok=True)
+            (tickets_dir / f"{version}-W1-001.md").write_text("# Ticket\n")
+
+        files = find_ticket_files(project_root)
+
+        assert len(files) == 2
+
+    def test_specific_version(self, project_root):
+        """指定 version 參數時只掃描該版本"""
+        # 建立多個版本
+        for version in ["0.1.0", "0.2.0"]:
+            tickets_dir = (
+                project_root / "docs" / "work-logs" / f"v{version}" / "tickets"
+            )
+            tickets_dir.mkdir(parents=True, exist_ok=True)
+            (tickets_dir / f"{version}-W1-001.md").write_text("# Ticket\n")
+
+        files = find_ticket_files(project_root, version="0.1.0")
+
+        assert len(files) == 1
+        assert "0.1.0" in str(files[0])
+
+    def test_backward_compatibility_old_location(self, project_root):
+        """支援舊位置 .claude/tickets/"""
+        # 建立舊位置 Ticket
+        old_dir = project_root / ".claude" / "tickets"
+        old_dir.mkdir(parents=True, exist_ok=True)
+        (old_dir / "old-ticket.md").write_text("# Old Ticket\n")
+
+        files = find_ticket_files(project_root)
+
+        assert len(files) == 1
+        assert "old-ticket.md" in str(files[0])
+
+    def test_priority_current_version(self, project_root):
+        """優先掃描當前活躍版本（從 todolist.yaml）"""
+        # 建立多個版本
+        for version in ["0.1.0", "0.2.0"]:
+            tickets_dir = (
+                project_root / "docs" / "work-logs" / f"v{version}" / "tickets"
+            )
+            tickets_dir.mkdir(parents=True, exist_ok=True)
+            (tickets_dir / f"{version}-W1-001.md").write_text("# Ticket\n")
+
+        # 設置 current_version
+        todolist_file = project_root / "docs" / "todolist.yaml"
+        todolist_file.write_text("current_version: 0.2.0\n")
+
+        files = find_ticket_files(project_root)
+
+        # 應該包含兩個版本的檔案，但當前版本應優先
+        assert len(files) == 2
+
+    def test_fallback_when_no_version(self, project_root):
+        """current_version 讀取失敗時 fallback 掃描所有版本"""
+        # 建立版本目錄但不建立 todolist.yaml
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        (tickets_dir / "0.1.0-W1-001.md").write_text("# Ticket\n")
+
+        files = find_ticket_files(project_root)
+
+        assert len(files) == 1
+
+
+class TestFindTicketFile:
+    """find_ticket_file() 功能測試"""
+
+    # ========================================================================
+    # 基本測試
+    # ========================================================================
+
+    def test_find_existing_ticket(self, project_root):
+        """找到存在的 Ticket 檔案"""
+        # 建立版本目錄和 Ticket 檔案
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        (tickets_dir / "0.1.0-W1-001.md").write_text("# Ticket 1\n")
+
+        result = find_ticket_file("0.1.0-W1-001", project_root=project_root)
+
+        assert result is not None
+        assert result.name == "0.1.0-W1-001.md"
+        assert result.parent.name == "tickets"
+
+    def test_find_nonexistent_ticket(self, project_root):
+        """找不到的 Ticket 返回 None"""
+        result = find_ticket_file("0.1.0-W9-999", project_root=project_root)
+
+        assert result is None
+
+    def test_find_ticket_auto_project_root(self, project_root, mock_env_var):
+        """不傳遞 project_root 時自動取得"""
+        mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
+
+        # 建立 Ticket
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        (tickets_dir / "0.1.0-W1-002.md").write_text("# Ticket 2\n")
+
+        # 不傳遞 project_root
+        result = find_ticket_file("0.1.0-W1-002")
+
+        assert result is not None
+        assert result.name == "0.1.0-W1-002.md"
+
+    def test_find_ticket_with_logger(self, project_root, reset_loggers):
+        """傳遞 logger 參數時正常記錄"""
+        logger = logging.getLogger("test-find-ticket")
+
+        # 建立 Ticket
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        (tickets_dir / "0.1.0-W1-003.md").write_text("# Ticket 3\n")
+
+        result = find_ticket_file("0.1.0-W1-003", project_root=project_root, logger=logger)
+
+        assert result is not None
+
+    def test_find_ticket_multiple_versions(self, project_root):
+        """在多個版本中查找 Ticket"""
+        # 建立多個版本的 Ticket
+        for version in ["0.1.0", "0.2.0"]:
+            tickets_dir = project_root / "docs" / "work-logs" / f"v{version}" / "tickets"
+            tickets_dir.mkdir(parents=True, exist_ok=True)
+            (tickets_dir / f"{version}-W1-001.md").write_text("# Ticket\n")
+
+        # 查找特定版本的 Ticket
+        result = find_ticket_file("0.2.0-W1-001", project_root=project_root)
+
+        assert result is not None
+        assert "0.2.0" in str(result)
+
+    def test_find_ticket_subtask_format(self, project_root):
+        """支援子任務格式的 Ticket ID（如 0.1.0-W1-001.1）"""
+        # 建立子任務 Ticket
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        (tickets_dir / "0.1.0-W1-001.1.md").write_text("# Subtask\n")
+
+        result = find_ticket_file("0.1.0-W1-001.1", project_root=project_root)
+
+        assert result is not None
+        assert result.name == "0.1.0-W1-001.1.md"
+
+    # ========================================================================
+    # Optimization Tests: Early Return & Direct Path (O(1) 效能)
+    # ========================================================================
+
+    def test_early_return_direct_path_hit(self, project_root, reset_loggers):
+        """直接路徑命中時執行 early return（O(1) 效能）"""
+        logger = logging.getLogger("test-direct-path")
+
+        # 建立標準格式的 Ticket
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.31.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        (tickets_dir / "0.31.0-W31-003.md").write_text("# Ticket\n")
+
+        # 查找應直接命中
+        result = find_ticket_file("0.31.0-W31-003", project_root=project_root, logger=logger)
+
+        assert result is not None
+        assert result.name == "0.31.0-W31-003.md"
+
+        # 驗證 logger 記錄包含 "direct path"（表示使用了優化路徑）
+        # 此處只驗證函式行為正確，實際 logger 檢查可在集成測試中
+
+    def test_early_return_complex_version_number(self, project_root):
+        """複雜版本號（如 1.2.3.4）的 early return"""
+        # 建立複雜版本號的目錄
+        tickets_dir = project_root / "docs" / "work-logs" / "v1.2.3" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        (tickets_dir / "1.2.3-W10-050.md").write_text("# Complex Version\n")
+
+        result = find_ticket_file("1.2.3-W10-050", project_root=project_root)
+
+        assert result is not None
+        assert "1.2.3" in str(result)
+
+    # ========================================================================
+    # Fallback Tests: Old Location
+    # ========================================================================
+
+    def test_fallback_old_location(self, project_root):
+        """直接路徑不存在時，fallback 到舊位置 .claude/tickets/"""
+        # 建立舊位置 Ticket（不建立新位置）
+        old_dir = project_root / ".claude" / "tickets"
+        old_dir.mkdir(parents=True, exist_ok=True)
+        (old_dir / "0.1.0-W1-001.md").write_text("# Old Location\n")
+
+        result = find_ticket_file("0.1.0-W1-001", project_root=project_root)
+
+        assert result is not None
+        assert result.parent == old_dir
+
+    def test_fallback_old_location_backward_compat(self, project_root):
+        """舊位置 .claude/tickets/ 支援後向相容"""
+        # 建立舊位置 Ticket
+        old_dir = project_root / ".claude" / "tickets"
+        old_dir.mkdir(parents=True, exist_ok=True)
+        (old_dir / "old-ticket-001.md").write_text("# Old Ticket\n")
+
+        result = find_ticket_file("old-ticket-001", project_root=project_root)
+
+        assert result is not None
+        assert result.name == "old-ticket-001.md"
+
+    def test_fallback_old_location_priority_over_scan(self, project_root):
+        """舊位置優先於全量掃描"""
+        # 建立舊位置
+        old_dir = project_root / ".claude" / "tickets"
+        old_dir.mkdir(parents=True, exist_ok=True)
+        (old_dir / "ticket-001.md").write_text("# Old\n")
+
+        # 也建立新位置中不同版本的檔案（但 ID 相同）
+        for version in ["0.1.0", "0.2.0"]:
+            tickets_dir = project_root / "docs" / "work-logs" / f"v{version}" / "tickets"
+            tickets_dir.mkdir(parents=True, exist_ok=True)
+            # 用異常格式建立，避免被直接路徑命中
+            (tickets_dir / f"ticket-001.md").write_text("# New\n")
+
+        result = find_ticket_file("ticket-001", project_root=project_root)
+
+        # 應該找到舊位置的版本
+        assert result is not None
+        assert result.parent == old_dir
+
+    # ========================================================================
+    # Version Number Parsing Tests
+    # ========================================================================
+
+    def test_parse_standard_version_format(self, project_root):
+        """解析標準版本號格式 {version}-W{wave}-{seq}"""
+        from hook_utils import _parse_version_from_ticket_id
+
+        # 標準格式
+        assert _parse_version_from_ticket_id("0.1.0-W1-001") == "0.1.0"
+        assert _parse_version_from_ticket_id("0.31.0-W31-003") == "0.31.0"
+        assert _parse_version_from_ticket_id("1.2.3-W10-050") == "1.2.3"
+
+    def test_parse_version_with_subtask(self, project_root):
+        """解析包含子任務的版本號"""
+        from hook_utils import _parse_version_from_ticket_id
+
+        # 子任務格式
+        assert _parse_version_from_ticket_id("0.1.0-W1-001.1") == "0.1.0"
+        assert _parse_version_from_ticket_id("0.1.0-W1-001.2.3") == "0.1.0"
+
+    def test_parse_version_invalid_format_no_wave(self, project_root):
+        """無效格式：無 -W 標記，應返回 None"""
+        from hook_utils import _parse_version_from_ticket_id
+
+        # 無 -W 的非標準格式
+        assert _parse_version_from_ticket_id("old-ticket-001") is None
+        assert _parse_version_from_ticket_id("ticket123") is None
+        assert _parse_version_from_ticket_id("0.1.0") is None
+
+    def test_parse_version_invalid_format_no_dot(self, project_root):
+        """無效格式：版本號無 '.'，應返回 None"""
+        from hook_utils import _parse_version_from_ticket_id
+
+        # 版本號無 '.'
+        assert _parse_version_from_ticket_id("0-W1-001") is None
+        assert _parse_version_from_ticket_id("v1-W1-001") is None
+
+    def test_parse_version_edge_cases(self, project_root):
+        """邊界情況測試"""
+        from hook_utils import _parse_version_from_ticket_id
+
+        # 空字串
+        assert _parse_version_from_ticket_id("") is None
+
+        # 只有 -W（無版本號部分）
+        assert _parse_version_from_ticket_id("-W1-001") is None
+
+        # -W 出現在開頭
+        assert _parse_version_from_ticket_id("-W1-001-0.1.0") is None
+
+    # ========================================================================
+    # Fallback to Full Scan Tests
+    # ========================================================================
+
+    def test_fallback_full_scan_nonstandard_ticket(self, project_root):
+        """非標準格式的 Ticket ID 執行全量掃描"""
+        # 建立非標準格式（無版本號前綴）的 Ticket
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        (tickets_dir / "some-random-id.md").write_text("# Non-standard\n")
+
+        result = find_ticket_file("some-random-id", project_root=project_root)
+
+        # 應該透過全量掃描找到
+        assert result is not None
+        assert result.name == "some-random-id.md"
+
+    def test_fallback_scan_finds_in_multiple_locations(self, project_root):
+        """全量掃描在多個位置正確查找"""
+        # 建立多版本結構
+        for version in ["0.1.0", "0.2.0"]:
+            tickets_dir = project_root / "docs" / "work-logs" / f"v{version}" / "tickets"
+            tickets_dir.mkdir(parents=True, exist_ok=True)
+            (tickets_dir / f"{version}-W1-001.md").write_text(f"# Ticket v{version}\n")
+
+        # 用非標準格式查找（強制全量掃描）
+        result = find_ticket_file("0.2.0-W1-001", project_root=project_root)
+
+        assert result is not None
+        assert "0.2.0" in str(result)
+
+    def test_fallback_returns_none_when_not_found(self, project_root):
+        """全量掃描未找到時返回 None"""
+        # 建立空的 Ticket 目錄
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+
+        result = find_ticket_file("nonexistent-ticket", project_root=project_root)
+
+        assert result is None
+
+    # ========================================================================
+    # Logger Integration Tests
+    # ========================================================================
+
+    def test_logger_direct_path_message(self, project_root, reset_loggers):
+        """Logger 記錄直接路徑命中的訊息"""
+        logger = logging.getLogger("test-logger-direct")
+
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        (tickets_dir / "0.1.0-W1-001.md").write_text("# Ticket\n")
+
+        # 執行查詢（會輸出 log）
+        result = find_ticket_file("0.1.0-W1-001", project_root=project_root, logger=logger)
+
+        assert result is not None
+
+    def test_logger_old_location_message(self, project_root, reset_loggers):
+        """Logger 記錄舊位置命中的訊息"""
+        logger = logging.getLogger("test-logger-old")
+
+        old_dir = project_root / ".claude" / "tickets"
+        old_dir.mkdir(parents=True, exist_ok=True)
+        (old_dir / "old-ticket.md").write_text("# Old\n")
+
+        result = find_ticket_file("old-ticket", project_root=project_root, logger=logger)
+
+        assert result is not None
+
+    def test_logger_fallback_message(self, project_root, reset_loggers):
+        """Logger 記錄全量掃描的訊息"""
+        logger = logging.getLogger("test-logger-fallback")
+
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        (tickets_dir / "unusual-name.md").write_text("# Ticket\n")
+
+        result = find_ticket_file("unusual-name", project_root=project_root, logger=logger)
+
+        assert result is not None

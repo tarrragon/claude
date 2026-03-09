@@ -48,10 +48,19 @@ from typing import Dict, Any, Optional, List, Tuple, Set
 sys.path.insert(0, str(Path(__file__).parent))
 
 try:
-    from hook_utils import setup_hook_logging, parse_ticket_frontmatter
-    from lib.common_functions import hook_output, read_hook_input
+    from hook_utils import (
+        setup_hook_logging,
+        parse_ticket_frontmatter,
+        read_json_from_stdin,
+        run_hook_safely,
+        get_project_root,
+        find_ticket_files,
+    )
     from lib.hook_messages import AskUserQuestionMessages
 except ImportError as e:
+    # 輸出合法 JSON 到 stdout（遵守 Hook 協定）
+    print(json.dumps({"result": "continue"}))
+    # 同時輸出錯誤到 stderr（雙通道要求）
     print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
     sys.exit(1)
 
@@ -146,34 +155,6 @@ def is_continuation_request(prompt: str, logger) -> bool:
 # ============================================================================
 # Ticket 掃描和分析
 # ============================================================================
-
-def find_ticket_files(logger) -> List[Path]:
-    """
-    尋找所有 Ticket 檔案
-
-    Args:
-        logger: 日誌物件
-
-    Returns:
-        list - Ticket 檔案路徑清單
-    """
-    import os
-
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
-
-    # 搜尋位置：docs/work-logs/*/tickets/
-    all_tickets = []
-
-    # 搜尋 docs/work-logs/*/tickets/
-    for version_dir in project_dir.glob("docs/work-logs/v*"):
-        tickets_dir = version_dir / "tickets"
-        if tickets_dir.exists():
-            all_tickets.extend(tickets_dir.glob("*.md"))
-
-    logger.debug(f"找到 {len(all_tickets)} 個 Ticket 檔案")
-    return all_tickets
-
-
 
 
 def extract_ticket_info(file_path: Path, logger) -> Optional[Dict[str, Any]]:
@@ -447,13 +428,10 @@ def find_parallelizable_tickets(pending_tickets: List[Dict[str, Any]], logger) -
         for ticket2 in unblocked[i + 1:]:
             files2 = extract_ticket_files(ticket2, logger)
 
-            # 檢查是否有重疊和依賴
+            # 檢查是否有檔案重疊
             if not check_files_overlap(files1, files2):
-                # 檢查 blockedBy 關係
-                if (ticket2["id"] not in ticket1.get("blockedBy", "") and
-                    ticket1["id"] not in ticket2.get("blockedBy", "")):
-                    group.append(ticket2)
-                    files1.update(files2)
+                group.append(ticket2)
+                files1.update(files2)
 
         # 只記錄多於 1 個任務的分組
         if len(group) > 1:
@@ -627,9 +605,7 @@ def save_analysis_log(
         parallel_count: 並行任務數
         logger: 日誌物件
     """
-    import os
-
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+    project_dir = get_project_root()
     log_dir = project_dir / ".claude" / "hook-logs" / "parallel-suggestion"
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -671,111 +647,94 @@ def main() -> int:
     # 步驟 0: 初始化日誌
     logger = setup_hook_logging("parallel-suggestion-hook")
 
-    try:
-        logger.info("Parallel Suggestion Hook 啟動")
+    logger.info("Parallel Suggestion Hook 啟動")
 
-        # 步驟 1: 讀取 JSON 輸入
-        input_data = read_hook_input()
-        if not input_data:
-            input_data = {}
+    # 步驟 1: 讀取 JSON 輸入
+    input_data = read_json_from_stdin(logger)
+    if not input_data:
+        input_data = {}
 
-        # 步驟 2: 驗證輸入格式
-        if not validate_input(input_data, logger):
-            logger.error("輸入格式錯誤")
-            print(json.dumps({
-                "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}
-            }, ensure_ascii=False, indent=2))
-            return EXIT_SUCCESS
-
-        prompt = input_data.get("prompt", "")
-
-        # 步驟 3: 判斷是否為繼續請求
-        is_continuation = is_continuation_request(prompt, logger)
-        logger.info(f"繼續請求判斷: {is_continuation}")
-
-        parallel_suggestion = None
-        parallel_count = 0
-
-        if is_continuation:
-            # 步驟 4: 掃描 Ticket 並分析
-            logger.info("開始掃描並行任務...")
-
-            all_tickets = find_ticket_files(logger)
-            tickets_info = []
-
-            for ticket_file in all_tickets:
-                ticket_info = extract_ticket_info(ticket_file, logger)
-                if ticket_info:
-                    tickets_info.append(ticket_info)
-
-            logger.info(f"掃描到 {len(tickets_info)} 個 Ticket")
-
-            # 統計狀態分佈
-            status_counts = {}
-            for ticket in tickets_info:
-                status = ticket.get("status", "unknown")
-                status_counts[status] = status_counts.get(status, 0) + 1
-
-            logger.debug(f"狀態分佈: {status_counts}")
-
-            # 找到最近完成的任務鏈
-            root_id = find_latest_completed_ticket_root(tickets_info, logger)
-
-            if root_id:
-                logger.info(f"找到最近任務鏈根: {root_id}")
-                # 在該任務鏈中找待處理 Ticket
-                pending = find_pending_tickets_in_chain(root_id, tickets_info, logger)
-                logger.info(f"找到 {len(pending)} 個待處理 Ticket")
-
-                if pending:
-                    # 分析可並行執行的任務
-                    parallel_groups = find_parallelizable_tickets(pending, logger)
-                    logger.info(f"找到 {len(parallel_groups)} 個並行分組")
-
-                    if parallel_groups:
-                        parallel_count = len(parallel_groups[0])
-                        # 步驟 6: 生成並行建議報告
-                        parallel_suggestion = generate_parallel_suggestion_report(
-                            parallel_groups, prompt, logger
-                        )
-                        logger.info(f"生成並行建議: {parallel_count} 個任務")
-            else:
-                logger.info("未找到最近完成的任務鏈根")
-
-        # 步驟 6.5: 繼續請求但無並行建議時，提示 Wave 收尾
-        if is_continuation and not parallel_suggestion:
-            parallel_suggestion = AskUserQuestionMessages.WAVE_WRAP_UP_REMINDER
-            logger.info("無並行建議，輸出 Wave 收尾提醒")
-
-        # 步驟 7: 產出 Hook 輸出
-        hook_output = generate_hook_output(is_continuation, parallel_suggestion)
-        print(json.dumps(hook_output, ensure_ascii=False, indent=2))
-
-        # 儲存分析日誌
-        root_id = find_latest_completed_ticket_root(
-            [extract_ticket_info(f, logger) for f in find_ticket_files(logger)],
-            logger
-        ) if is_continuation else None
-        save_analysis_log(is_continuation, root_id, parallel_count, logger)
-
-        logger.info("Parallel Suggestion Hook 執行完成")
+    # 步驟 2: 驗證輸入格式
+    if not validate_input(input_data, logger):
+        logger.error("輸入格式錯誤")
+        print(json.dumps({
+            "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}
+        }, ensure_ascii=False, indent=2))
         return EXIT_SUCCESS
 
-    except Exception as e:
-        logger.critical(f"Hook 執行錯誤: {e}", exc_info=True)
-        error_output = {
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": "Hook 執行錯誤，詳見日誌: .claude/hook-logs/parallel-suggestion/"
-            },
-            "error": {
-                "type": type(e).__name__,
-                "message": str(e)
-            }
-        }
-        print(json.dumps(error_output, ensure_ascii=False, indent=2))
-        return EXIT_ERROR
+    prompt = input_data.get("prompt", "")
+
+    # 步驟 3: 判斷是否為繼續請求
+    is_continuation = is_continuation_request(prompt, logger)
+    logger.info(f"繼續請求判斷: {is_continuation}")
+
+    parallel_suggestion = None
+    parallel_count = 0
+    root_id = None
+
+    if is_continuation:
+        # 步驟 4: 掃描 Ticket 並分析
+        logger.info("開始掃描並行任務...")
+
+        project_root = get_project_root()
+        all_tickets = find_ticket_files(project_root, logger=logger)
+        tickets_info = []
+
+        for ticket_file in all_tickets:
+            ticket_info = extract_ticket_info(ticket_file, logger)
+            if ticket_info:
+                tickets_info.append(ticket_info)
+
+        logger.info(f"掃描到 {len(tickets_info)} 個 Ticket")
+
+        # 統計狀態分佈
+        status_counts = {}
+        for ticket in tickets_info:
+            status = ticket.get("status", "unknown")
+            status_counts[status] = status_counts.get(status, 0) + 1
+
+        logger.debug(f"狀態分佈: {status_counts}")
+
+        # 找到最近完成的任務鏈
+        root_id = find_latest_completed_ticket_root(tickets_info, logger)
+
+        if root_id:
+            logger.info(f"找到最近任務鏈根: {root_id}")
+            # 在該任務鏈中找待處理 Ticket
+            pending = find_pending_tickets_in_chain(root_id, tickets_info, logger)
+            logger.info(f"找到 {len(pending)} 個待處理 Ticket")
+
+            if pending:
+                # 分析可並行執行的任務
+                parallel_groups = find_parallelizable_tickets(pending, logger)
+                logger.info(f"找到 {len(parallel_groups)} 個並行分組")
+
+                if parallel_groups:
+                    parallel_count = len(parallel_groups[0])
+                    # 步驟 6: 生成並行建議報告
+                    parallel_suggestion = generate_parallel_suggestion_report(
+                        parallel_groups, prompt, logger
+                    )
+                    logger.info(f"生成並行建議: {parallel_count} 個任務")
+        else:
+            logger.info("未找到最近完成的任務鏈根")
+
+    # 步驟 6.5: 繼續請求但無並行建議時，提示 Wave 收尾
+    if is_continuation and not parallel_suggestion:
+        parallel_suggestion = AskUserQuestionMessages.WAVE_WRAP_UP_REMINDER
+        logger.info("無並行建議，輸出 Wave 收尾提醒")
+
+    # 步驟 7: 產出 Hook 輸出
+    hook_output = generate_hook_output(is_continuation, parallel_suggestion)
+    print(json.dumps(hook_output, ensure_ascii=False, indent=2))
+
+    # 儲存分析日誌（直接使用已有的 root_id，避免重複掃描）
+    save_analysis_log(is_continuation, root_id, parallel_count, logger)
+
+    logger.info("Parallel Suggestion Hook 執行完成")
+    return EXIT_SUCCESS
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    exit_code = run_hook_safely(main, "parallel-suggestion-hook")
+    sys.exit(exit_code)

@@ -44,7 +44,7 @@ check_agent_dispatch = hook_module.check_agent_dispatch
 detect_project_type = hook_module.detect_project_type
 
 
-# ===== 1️⃣ 正確分派測試 (9 個) =====
+# ===== [1] 正確分派測試 (9 個) =====
 
 @pytest.mark.parametrize("task_type,prompt,agent,expected_pass", [
     (
@@ -111,7 +111,7 @@ def test_correct_dispatch(task_type: str, prompt: str, agent: str, expected_pass
         assert result.get("correct_agent") is not None
 
 
-# ===== 2️⃣ 錯誤分派測試 (9 個) =====
+# ===== [2] 錯誤分派測試 (9 個) =====
 
 @pytest.mark.parametrize("task_type,prompt,wrong_agent,correct_agent", [
     (
@@ -174,10 +174,10 @@ def test_error_dispatch(task_type: str, prompt: str, wrong_agent: str, correct_a
     result = check_agent_dispatch(prompt, wrong_agent)
     assert result["is_error"] == True, f"Failed for {task_type}"
     assert result.get("correct_agent") == correct_agent
-    assert "❌" in result.get("error_message", "")
+    assert "[FAIL]" in result.get("error_message", "")
 
 
-# ===== 3️⃣ 邊界測試 (6 個) =====
+# ===== [3] 邊界測試 (6 個) =====
 
 def test_edge_001_multiple_keywords() -> None:
     """TC_EDGE_001 - 多種任務類型關鍵字優先級測試"""
@@ -255,7 +255,7 @@ def test_edge_008_phase4_wrong_agent() -> None:
     assert result.get("correct_agent") == "cinnamon-refactor-owl"
 
 
-# ===== 4️⃣ 整合測試 (4 個) =====
+# ===== [4] 整合測試 (4 個) =====
 
 def test_integration_001_complete_pass() -> None:
     """TC_INTEGRATION_001 - 完全通過測試"""
@@ -304,7 +304,7 @@ def test_integration_004_double_failure() -> None:
         assert result.get("correct_agent") == "basil-hook-architect"
 
 
-# ===== 5️⃣ 關鍵字檢測測試 (4 個) =====
+# ===== [5] 關鍵字檢測測試 (4 個) =====
 
 def test_keyword_001_high_weight() -> None:
     """TC_KEYWORD_001 - 高權重關鍵字檢測"""
@@ -336,7 +336,7 @@ def test_keyword_004_cumulative_weight() -> None:
     assert task_type == "Hook 開發"
 
 
-# ===== 6️⃣ 效能測試 (1 個) =====
+# ===== [6] 效能測試 (1 個) =====
 
 def test_performance_001_execution_time() -> None:
     """TC_PERFORMANCE_001 - 代理人檢查執行時間 < 10ms"""
@@ -413,7 +413,7 @@ def test_error_message_contains_required_elements() -> None:
     if result["is_error"]:
         error_msg = result.get("error_message", "")
         # 驗證錯誤訊息包含必要元素
-        assert "❌" in error_msg
+        assert "[FAIL]" in error_msg
         assert "任務類型" in error_msg
         assert "當前代理人" in error_msg
         assert "正確代理人" in error_msg
@@ -421,7 +421,7 @@ def test_error_message_contains_required_elements() -> None:
         assert "請參考" in error_msg
 
 
-# ===== 7️⃣ Hook 模式切換測試 (4 個) =====
+# ===== [7] Hook 模式切換測試 (4 個) =====
 
 def test_mode_001_get_hook_mode_env_var(monkeypatch) -> None:
     """TC_MODE_001 - 環境變數模式讀取測試"""

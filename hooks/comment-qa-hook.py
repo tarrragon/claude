@@ -668,8 +668,8 @@ def main():
 
         # 3. 提取工具資訊
         tool_name = input_data.get("tool_name", "")
-        tool_input = input_data.get("tool_input", {})
-        tool_response = input_data.get("tool_response", {})
+        tool_input = input_data.get("tool_input") or {}
+        tool_response = input_data.get("tool_response") or {}
 
         # 4. 檢查工具是否成功執行
         if not tool_response.get("success", False):

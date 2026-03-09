@@ -41,7 +41,10 @@ from typing import Dict, Any, Optional, Tuple
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import (
+    setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root,
+    find_ticket_files, find_ticket_file, validate_ticket_has_decision_tree
+)
 
 # ============================================================================
 # 常數定義
@@ -52,14 +55,6 @@ TICKET_ID_PATTERNS = [
     r"Ticket:\s*(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)",
     r"#Ticket-(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)",
     r"\[Ticket\s+(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)\]"
-]
-
-# 決策樹欄位識別
-DECISION_TREE_MARKERS = [
-    "decision_tree_path:",
-    "## 決策樹路徑",
-    "decision_nodes:",
-    "## 決策樹"
 ]
 
 # 豁免 Ticket 驗證的代理人類型
@@ -89,7 +84,7 @@ def validate_input(input_data: Dict[str, Any], logger) -> bool:
         logger.error("缺少必要欄位: tool_input")
         return False
 
-    tool_input = input_data.get("tool_input", {})
+    tool_input = input_data.get("tool_input") or {}
     if "prompt" not in tool_input:
         logger.error("缺少必要欄位: tool_input.prompt")
         return False
@@ -134,46 +129,6 @@ def extract_ticket_reference(prompt: str, logger) -> Optional[str]:
 # Ticket 檔案查找和驗證
 # ============================================================================
 
-def find_ticket_file(ticket_id: str, logger) -> Optional[Path]:
-    """
-    尋找 Ticket 檔案
-
-    Args:
-        ticket_id: Ticket ID
-        logger: 日誌物件
-
-    Returns:
-        Path - Ticket 檔案路徑，或 None 如未找到
-    """
-    import os
-
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
-
-    # 搜尋位置：.claude/tickets/ 和 docs/work-logs/*/tickets/
-    search_locations = [
-        project_dir / ".claude" / "tickets",
-        project_dir / "docs" / "work-logs"
-    ]
-
-    # 搜尋 .claude/tickets/
-    if search_locations[0].exists():
-        ticket_file = search_locations[0] / f"{ticket_id}.md"
-        if ticket_file.exists():
-            logger.info(f"在 .claude/tickets/ 中找到 Ticket: {ticket_id}")
-            return ticket_file
-
-    # 搜尋 docs/work-logs/*/tickets/
-    for version_dir in search_locations[1].glob("v*"):
-        tickets_dir = version_dir / "tickets"
-        if tickets_dir.exists():
-            ticket_file = tickets_dir / f"{ticket_id}.md"
-            if ticket_file.exists():
-                logger.info(f"在 {tickets_dir} 中找到 Ticket: {ticket_id}")
-                return ticket_file
-
-    logger.warning(f"未找到 Ticket 檔案: {ticket_id}")
-    return None
-
 def load_ticket_content(ticket_path: Path, logger) -> Optional[str]:
     """
     讀取 Ticket 檔案內容
@@ -193,35 +148,7 @@ def load_ticket_content(ticket_path: Path, logger) -> Optional[str]:
         logger.error(f"無法讀取 Ticket 檔案 {ticket_path}: {e}")
         return None
 
-def validate_ticket_has_decision_tree(content: str, logger) -> bool:
-    """
-    驗證 Ticket 是否包含決策樹欄位
-
-    Args:
-        content: Ticket 檔案內容
-        logger: 日誌物件
-
-    Returns:
-        bool - 是否包含決策樹欄位
-
-    檢查項目：
-    - YAML frontmatter 中的 decision_tree_path 欄位
-    - 內容中的決策樹相關標記
-    """
-    if not content:
-        logger.warning("Ticket 內容為空")
-        return False
-
-    # 檢查任何決策樹欄位
-    for marker in DECISION_TREE_MARKERS:
-        if marker in content:
-            logger.info(f"Ticket 包含決策樹欄位: {marker}")
-            return True
-
-    logger.warning("Ticket 缺少決策樹欄位")
-    return False
-
-def validate_ticket(ticket_id: str, logger) -> Tuple[bool, str]:
+def validate_ticket(ticket_id: str, logger) -> Tuple[bool, Optional[str]]:
     """
     驗證 Ticket 的完整性
 
@@ -232,10 +159,10 @@ def validate_ticket(ticket_id: str, logger) -> Tuple[bool, str]:
     Returns:
         tuple - (is_valid, error_message)
             - is_valid: Ticket 是否有效
-            - error_message: 錯誤訊息（如有）
+            - error_message: 錯誤訊息（如有），成功時為 None
     """
     # 尋找 Ticket 檔案
-    ticket_path = find_ticket_file(ticket_id, logger)
+    ticket_path = find_ticket_file(ticket_id, logger=logger)
     if not ticket_path:
         msg = f"找不到 Ticket: {ticket_id}"
         logger.error(msg)
@@ -255,7 +182,7 @@ def validate_ticket(ticket_id: str, logger) -> Tuple[bool, str]:
         return False, msg
 
     logger.info(f"Ticket {ticket_id} 驗證通過")
-    return True, ""
+    return True, None
 
 # ============================================================================
 # 派發驗證
@@ -271,9 +198,7 @@ def is_handoff_recovery_mode(logger) -> bool:
     Args:
         logger: 日誌物件
     """
-    import os
-
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+    project_dir = get_project_root()
     handoff_pending_dir = project_dir / ".claude" / "handoff" / "pending"
 
     # 檢查是否存在 pending Handoff 任務
@@ -307,7 +232,7 @@ def is_exempt_agent_type(subagent_type: str, logger) -> bool:
         logger.info(f"代理人類型 '{subagent_type}' 豁免 Ticket 驗證（用於前置資訊蒐集）")
     return is_exempt
 
-def validate_task_dispatch(tool_input: Dict[str, Any], logger) -> Tuple[bool, str]:
+def validate_task_dispatch(tool_input: Dict[str, Any], logger) -> Tuple[bool, Optional[str], Optional[str]]:
     """
     驗證 Task 派發是否有效
 
@@ -316,9 +241,10 @@ def validate_task_dispatch(tool_input: Dict[str, Any], logger) -> Tuple[bool, st
         logger: 日誌物件
 
     Returns:
-        tuple - (is_valid, error_message)
+        tuple - (is_valid, error_message, ticket_id)
             - is_valid: 派發是否有效
-            - error_message: 錯誤訊息（如有）
+            - error_message: 錯誤訊息（如有），成功時為 None
+            - ticket_id: 提取的 Ticket ID，或 None（豁免/handoff 模式或未找到）
 
     驗證流程：
     0. 檢查是否為 Handoff 恢復模式
@@ -332,22 +258,22 @@ def validate_task_dispatch(tool_input: Dict[str, Any], logger) -> Tuple[bool, st
     # 步驟 0: 檢查 Handoff 恢復模式
     if is_handoff_recovery_mode(logger):
         logger.info("Handoff 恢復模式: 略過 Ticket 驗證")
-        return True, ""
+        return True, None, None
 
     # 步驟 1: 檢查豁免代理人類型
     if is_exempt_agent_type(subagent_type, logger):
-        return True, ""
+        return True, None, None
 
     # 步驟 2: 提取 Ticket ID
     ticket_id = extract_ticket_reference(prompt, logger)
     if not ticket_id:
         msg = "派發任務必須引用有效的 Ticket ID（格式：Ticket: {id} 或 #Ticket-{id} 或 [Ticket {id}]）"
         logger.error(msg)
-        return False, msg
+        return False, msg, None
 
     # 步驟 3: 驗證 Ticket
     is_valid, error_msg = validate_ticket(ticket_id, logger)
-    return is_valid, error_msg
+    return is_valid, error_msg, ticket_id
 
 # ============================================================================
 # 輸出生成
@@ -407,9 +333,7 @@ def save_check_log(
         error_message: 錯誤訊息（如有）
         logger: 日誌物件
     """
-    import os
-
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+    project_dir = get_project_root()
     log_dir = project_dir / ".claude" / "hook-logs" / "agent-ticket-validation"
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -465,11 +389,10 @@ def main() -> int:
             }, ensure_ascii=False, indent=2))
             return EXIT_SUCCESS
 
-        tool_input = input_data.get("tool_input", {})
+        tool_input = input_data.get("tool_input") or {}
 
         # 步驟 4: 驗證 Task 派發有效性
-        is_valid, error_message = validate_task_dispatch(tool_input, logger)
-        ticket_id = extract_ticket_reference(tool_input.get("prompt", ""), logger)
+        is_valid, error_message, ticket_id = validate_task_dispatch(tool_input, logger)
 
         logger.info(f"Task 派發驗證: is_valid={is_valid}, ticket_id={ticket_id}")
 

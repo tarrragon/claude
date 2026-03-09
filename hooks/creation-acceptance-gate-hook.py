@@ -47,7 +47,7 @@ _hooks_dir = Path(__file__).parent
 if _hooks_dir not in [p for p in sys.path if Path(p) == _hooks_dir]:
     sys.path.insert(0, str(_hooks_dir))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, parse_ticket_frontmatter
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, parse_ticket_frontmatter, get_project_root
 from lib.hook_messages import GateMessages, CoreMessages, format_message
 
 import re
@@ -163,9 +163,7 @@ def locate_ticket_file(ticket_id: str, logger) -> Optional[Path]:
     Returns:
         Path - Ticket 檔案路徑，如果不存在則返回 None
     """
-    import os
-
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+    project_dir = get_project_root()
 
     # 從 ID 中解析版本號
     # 格式：v{version}-W{wave}-{number}
@@ -297,9 +295,7 @@ def save_check_log(
         error_count: 錯誤數量
         logger: 日誌物件
     """
-    import os
-
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+    project_dir = get_project_root()
     log_dir = project_dir / ".claude" / "hook-logs" / "creation-acceptance-gate"
     log_dir.mkdir(parents=True, exist_ok=True)
 

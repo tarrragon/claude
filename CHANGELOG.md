@@ -1,3 +1,10 @@
+## [1.1.45] - 2026-03-10
+
+### Summary
+refactor: W28~W31 Hook DRY 重構 — hook_utils 共用函式、sentinel 統一、error-pattern 偵測修復
+
+---
+
 ## [1.1.44] - 2026-03-09
 
 ### Summary

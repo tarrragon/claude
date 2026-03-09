@@ -35,7 +35,7 @@ def is_handoff_recovery_mode() -> bool:
     Handoff 恢復時，Claude 自動讀取 Ticket 和派發代理人，
     這些操作應被豁免，允許恢復流程正常進行。
     """
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+    project_dir = get_project_root()
     handoff_pending_dir = project_dir / ".claude" / "handoff" / "pending"
 
     # 檢查是否存在 pending Handoff 任務
@@ -46,7 +46,7 @@ def is_handoff_recovery_mode() -> bool:
 
     return False
 
-from hook_utils import setup_hook_logging
+from hook_utils import setup_hook_logging, get_project_root
 from hook_io import read_hook_input, write_hook_output, create_pretooluse_output
 from config_loader import load_agents_config
 
@@ -214,7 +214,7 @@ def main() -> None:
         sys.exit(1)
 
     tool_name = input_data.get("tool_name", "")
-    tool_input = input_data.get("tool_input", {})
+    tool_input = input_data.get("tool_input") or {}
 
     # 只處理 Task 工具
     if tool_name != "Task":

@@ -24,12 +24,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from hook_utils import setup_hook_logging, run_hook_safely
-
-
-def get_project_root() -> Path:
-    """取得專案根目錄"""
-    return Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+from hook_utils import setup_hook_logging, run_hook_safely, get_project_root
 
 
 def is_arb_file(file_path: str) -> bool:
@@ -211,7 +206,7 @@ def main() -> int:
         input_data = json.load(sys.stdin)
 
         # 檢查編輯的檔案是否為 ARB 檔案
-        tool_input = input_data.get("tool_input", {})
+        tool_input = input_data.get("tool_input") or {}
         file_path = tool_input.get("file_path", "")
 
         # 只在編輯 ARB 檔案時執行檢查

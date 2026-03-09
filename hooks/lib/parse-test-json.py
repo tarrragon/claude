@@ -58,7 +58,7 @@ class FlutterTestParser:
 
             return True
         except Exception as e:
-            print(f"❌ 錯誤: 無法解析 JSON 檔案")
+            print(f"[FAIL] 錯誤: 無法解析 JSON 檔案")
             print(f"   檔案: {self.json_file}")
             print(f"   原因: {e}")
             return False
@@ -230,7 +230,7 @@ class FlutterTestParser:
 def main():
     """主程式入口"""
     if len(sys.argv) < 2:
-        print("❌ 使用方式: python3 parse-test-json.py <json-file>")
+        print("[FAIL] 使用方式: python3 parse-test-json.py <json-file>")
         print("")
         print("引數:")
         print("  json-file: flutter test --reporter json 的輸出檔案")
@@ -240,7 +240,7 @@ def main():
 
     # 驗證檔案存在
     if not Path(json_file).exists():
-        print(f"❌ 錯誤: 檔案不存在: {json_file}")
+        print(f"[FAIL] 錯誤: 檔案不存在: {json_file}")
         sys.exit(2)
 
     # 解析和生成摘要

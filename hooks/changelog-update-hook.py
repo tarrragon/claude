@@ -39,7 +39,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely, run_git
+from hook_utils import setup_hook_logging, run_hook_safely, run_git, get_project_root
 
 # 不需要 CHANGELOG 提醒的 commit 類型
 SKIP_PREFIXES = (
@@ -118,7 +118,7 @@ def main():
     logger = setup_hook_logging("changelog-update-hook")
     input_data = json.load(sys.stdin)
     tool_name = input_data.get("tool_name", "")
-    tool_input = input_data.get("tool_input", {})
+    tool_input = input_data.get("tool_input") or {}
     tool_result = input_data.get("tool_result", {})
 
     # 只處理 Bash git commit
@@ -133,7 +133,7 @@ def main():
     if should_skip_reminder(tool_input):
         return 0
 
-    project_dir = Path(os.getenv("CLAUDE_PROJECT_DIR", Path.cwd()))
+    project_dir = get_project_root()
 
     # 檢查 CHANGELOG 是否在此次 commit 中更新
     if check_changelog_in_commit(project_dir, logger):

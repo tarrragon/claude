@@ -125,7 +125,7 @@ def main() -> int:
 
     hook_input = read_hook_input()
     tool_name = hook_input.get("tool_name", "")
-    tool_input = hook_input.get("tool_input", {})
+    tool_input = hook_input.get("tool_input") or {}
 
     # 只處理 Bash 工具
     if tool_name != "Bash":

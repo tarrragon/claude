@@ -48,7 +48,7 @@ version = "{version}"
         assert "ticket-system" in result
         assert result["ticket-system"]["version"] == "1.0.0"
         assert result["mermaid-ascii-system"]["version"] == "0.5.0"
-        print("✓ Test 1.1 passed: Normal scan with multiple skills")
+        print("[V] Test 1.1 passed: Normal scan with multiple skills")
 
 
 def test_scan_skill_packages_empty():
@@ -58,7 +58,7 @@ def test_scan_skill_packages_empty():
         result = hook.scan_skill_packages(project_root)
 
         assert result == {}, f"Expected empty dict, got {result}"
-        print("✓ Test 1.2 passed: Empty skills directory")
+        print("[V] Test 1.2 passed: Empty skills directory")
 
 
 def test_scan_skill_packages_no_pyproject():
@@ -71,7 +71,7 @@ def test_scan_skill_packages_no_pyproject():
         result = hook.scan_skill_packages(project_root)
 
         assert result == {}, f"Expected empty dict, got {result}"
-        print("✓ Test 1.3 passed: Skill without pyproject.toml")
+        print("[V] Test 1.3 passed: Skill without pyproject.toml")
 
 
 def test_scan_skill_packages_missing_fields():
@@ -88,13 +88,13 @@ def test_scan_skill_packages_missing_fields():
         result = hook.scan_skill_packages(project_root)
 
         assert result == {}, f"Expected empty dict, got {result}"
-        print("✓ Test 1.4 passed: Missing required fields")
+        print("[V] Test 1.4 passed: Missing required fields")
 
 
 def test_version_comparison_identical():
     """Test Case 3.1: Versions are identical."""
     assert not hook.should_reinstall("1.0.0", "1.0.0")
-    print("✓ Test 3.1 passed: Identical versions")
+    print("[V] Test 3.1 passed: Identical versions")
 
 
 def test_version_comparison_mismatch():
@@ -105,7 +105,7 @@ def test_version_comparison_mismatch():
     assert hook.should_reinstall("1.0.0", "1.0.1")
     # Not installed
     assert hook.should_reinstall("1.0.0", None)
-    print("✓ Test 3.2-3.4 passed: Version mismatches")
+    print("[V] Test 3.2-3.4 passed: Version mismatches")
 
 
 def test_version_normalization():
@@ -114,7 +114,7 @@ def test_version_normalization():
     # In should_reinstall, they're treated as different strings
     assert hook.should_reinstall("1.0.0", "v1.0.0")  # Different strings
     assert not hook.should_reinstall("1.0.0", "1.0.0")  # Same strings
-    print("✓ Test 3.5 passed: Version normalization")
+    print("[V] Test 3.5 passed: Version normalization")
 
 
 def test_parse_uv_output():
@@ -139,7 +139,7 @@ mermaid-ascii  0.5.0    ~/.venv/bin/mermaid
 
     assert tools["ticket-system"] == "1.0.0"
     assert tools["mermaid-ascii"] == "0.5.0"
-    print("✓ Test 2.1 passed: Normal output parsing")
+    print("[V] Test 2.1 passed: Normal output parsing")
 
 
 def main():
@@ -159,14 +159,14 @@ def main():
         test_parse_uv_output()
 
         print("\n" + "=" * 60)
-        print("All 8 manual verification tests passed! ✓")
+        print("All 8 manual verification tests passed! [V]")
         print("=" * 60 + "\n")
         return 0
     except AssertionError as e:
-        print(f"\n✗ Test failed: {e}")
+        print(f"\n[X] Test failed: {e}")
         return 1
     except Exception as e:
-        print(f"\n✗ Unexpected error: {e}")
+        print(f"\n[X] Unexpected error: {e}")
         import traceback
         traceback.print_exc()
         return 1
