@@ -61,6 +61,19 @@ ticket track claim 0.31.0-W4-001
 - 無需加上 `uv run` 前綴
 - 全局可用，提升使用體驗
 
+**修改原始碼後必須重新安裝**（IMP-023）：
+
+```bash
+# 修改 ticket_system/ 下的 .py 檔案後，必須用 --reinstall
+uv tool install .claude/skills/ticket --reinstall
+
+# 錯誤：--force 只更新執行檔，不更新套件程式碼
+uv tool install .claude/skills/ticket --force  # 套件程式碼不會更新！
+
+# 備用方案：清除快取後重新安裝
+uv tool uninstall ticket-system && uv cache clean ticket-system && uv tool install .claude/skills/ticket
+```
+
 ### 局部執行（不安裝）
 
 如果不進行全局安裝，必須在 ticket 目錄下執行。

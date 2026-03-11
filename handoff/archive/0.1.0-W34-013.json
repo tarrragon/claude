@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W34-013",
+  "direction": "to-sibling:0.1.0-W37-002",
+  "timestamp": "2026-03-11T16:21:41.527231",
+  "from_status": "completed",
+  "title": "評估 extract_wave_from_ticket_id 跨套件平行實作是否需統一",
+  "what": "評估 extract_wave_from_ticket_id 跨套件平行實作是否需統一",
+  "chain": {},
+  "resumed_at": "2026-03-11T16:33:58.013281"
+}

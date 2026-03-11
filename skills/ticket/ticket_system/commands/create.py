@@ -372,7 +372,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     parser.add_argument(
         "--where-layer", help="架構層級: Domain, Application, Infrastructure, Presentation"
     )
-    parser.add_argument("--where-files", help="影響檔案（逗號分隔）")
+    parser.add_argument("--where", "--where-files", dest="where_files", help="影響檔案（逗號分隔）")
     parser.add_argument("--why", help="需求依據")
     parser.add_argument("--how-type", help="Task Type: Implementation, Analysis, etc.")
     parser.add_argument("--how-strategy", help="實作策略")

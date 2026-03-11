@@ -65,6 +65,21 @@ Plan Mode 產出到 Atomic Ticket 的轉換流程。
 當前 Ticket 完成後 → 處理新建的 pending Ticket
 ```
 
+**子任務 vs 獨立 Ticket 判斷**：
+
+```
+發現額外需求
+    |
+    v
+因執行當前 Ticket 而產生? ─是→ /ticket create --parent {current_id}
+    |
+    └─否→ /ticket create（獨立 Ticket）
+```
+
+判斷依據：「如果當前 Ticket 不存在，這個問題還會被發現嗎？」
+- 不會 → 子任務（因果關係）
+- 會 → 獨立 Ticket（獨立問題）
+
 ### 禁止行為
 
 | 禁止 | 說明 |
@@ -87,5 +102,5 @@ Plan Mode 產出到 Atomic Ticket 的轉換流程。
 
 ---
 
-**Last Updated**: 2026-03-03
-**Version**: 3.2.0 - 擴大「執行中額外發現」範圍至技術債/bug/回歸，明確禁止詢問用戶確認（0.1.0-W9-013）
+**Last Updated**: 2026-03-11
+**Version**: 3.3.0 - 執行中額外發現流程新增子任務 vs 獨立 Ticket 判斷標準（0.1.0-W36-002）

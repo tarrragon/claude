@@ -73,8 +73,8 @@ class TrackBoardMessages:
     # render_tree_node 中的 Wave 標題格式
     WAVE_TITLE_FORMAT = "{wave} ({count} tasks)"
 
-    # render_board_unicode 中的標題
-    UNICODE_BOARD_TITLE = "TICKET BOARD - v0.31.0 (W7)"
+    # render_board_unicode 中的標題（動態版本號）
+    UNICODE_BOARD_TITLE = "TICKET BOARD - v{version}"
 
     # render_board_unicode 中的統計行標籤
     UNICODE_STATS_PENDING = "[待處理]"
@@ -168,6 +168,12 @@ class TrackAcceptanceMessages:
 
     # execute_append_log 中執行日誌的時間戳格式
     LOG_TIMESTAMP_FORMAT = "- [{timestamp}] {content}"
+
+    # execute_check_acceptance 中的批量勾選摘要格式
+    BATCH_CHECK_SUMMARY_FORMAT = "[OK] {ticket_id} 已勾選 {checked_count}/{total_count} 項"
+
+    # execute_check_acceptance 中的批量取消勾選摘要格式
+    BATCH_UNCHECK_SUMMARY_FORMAT = "[OK] {ticket_id} 已取消勾選 {unchecked_count}/{total_count} 項"
 
     # execute_accept_creation 中的成功訊息格式
     ACCEPT_CREATION_SUCCESS_FORMAT = "[OK] {ticket_id} 建立後驗收已通過"
@@ -338,10 +344,11 @@ class TrackMessages:
     ARG_CHILD_ID = "子 Ticket ID"
     ARG_INDEX = "驗收條件索引（1 開始）"
     ARG_UNCHECK = "取消勾選（預設為勾選）"
+    ARG_CHECK_ACCEPTANCE_ALL = "勾選（或 --uncheck 時取消勾選）所有驗收條件"
     ARG_SECTION = "日誌區段 (Problem Analysis/Solution/Test Results/Execution Log)"
     ARG_CONTENT = "日誌內容"
     ARG_WAVE = "只顯示特定 Wave"
-    ARG_STATUS = "篩選狀態（pending/in_progress/completed/blocked）"
+    ARG_STATUS = "篩選狀態（pending/in_progress/completed/blocked，支援多個值）"
     ARG_FORMAT = "輸出格式（table/ids/yaml，預設 table）"
     ARG_ALL = "顯示所有任務（包含已完成）"
 

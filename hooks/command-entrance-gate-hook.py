@@ -80,6 +80,8 @@ from hook_utils import (
     validate_ticket_has_decision_tree,
     find_ticket_files,
     get_current_version_from_todolist,
+    save_check_log,
+    validate_hook_input,
 )
 from lib.hook_messages import GateMessages, CoreMessages, format_message
 
@@ -125,28 +127,125 @@ DEVELOPMENT_KEYWORDS = (
     DELETE_KEYWORDS
 )
 
+# ============================================================================
+# is_management_operation 函式的白名單常數
+# ============================================================================
+
+# 短回答白名單（確認、同意等，長度 <= 15 字元）
+SHORT_ANSWER_PATTERNS = frozenset([
+    # 肯定
+    "是", "好", "確認", "同意", "ok", "yes", "y",
+    "對", "沒錯", "没错",
+    # 否定
+    "否", "不", "取消", "cancel", "no", "n",
+    "不要", "不用",
+    # 理解確認
+    "了解", "知道了", "收到", "明白", "got it",
+    # 數字選擇（0-20）
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+    "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
+])
+
+# 短回答正則模式（長度 <= 15 的特殊格式，需完整匹配整個字串）
+SHORT_ANSWER_REGEX_PATTERNS = [
+    r"^\d{1,2}(,\s*\d{1,2})*$",  # 組合多選：如 "2, 4" 或 "1,3,5"
+    r"^phase\s+\d+[a-z]?$",        # Phase 選項標籤：如 "Phase 4a"、"phase 3b"
+    r"^[a-z]$",                     # 單字母選項：如 "a"、"b"
+]
+
+# Ticket 管理相關模式
+TICKET_PATTERNS = [
+    "ticket", "/ticket",
+    "建立 ticket", "新增 ticket", "建 ticket",
+    "認領", "claim",
+]
+
+# Hook / 系統管理相關模式
+MANAGEMENT_PATTERNS = [
+    "hook", "暫停", "停用", "啟用",
+    "設定", "配置", "config",
+    "/commit", "/version-release",
+    "/pre-fix-eval", "/tech-debt",
+    "/manager",
+    "commit",  # 不帶 / 的 commit 指令
+    "plan",    # Plan Mode 相關操作
+    "記錄",    # 記錄狀況、記錄筆記（非開發行為）
+    # 提交和 Git 操作
+    "提交",    # 中文 commit（git 提交）
+    "git",     # Git 操作前綴（push, pull, status 等）
+    "push",    # git push
+    # 查詢和摘要操作
+    "查詢",    # 查詢操作（非開發）
+    "摘要",    # 摘要操作（非開發）
+    "summary", # 英文摘要
+    "列出",    # 列出操作
+    "查看",    # 查看操作
+    "顯示",    # 顯示操作
+]
+
+# PM 調度/派發相關模式
+DISPATCH_PATTERNS = [
+    "派發", "並行", "繼續", "序列",
+    "開始處理", "恢復", "接手",
+    "開始",    # 「W25-006 開始」等 Ticket 生命週期指令
+    "完成",    # 「W25-006 完成」等 Ticket 生命週期指令
+    # 工作流延續
+    "接著",    # 「接著處理下一個」工作流延續
+    "然後",    # 「然後測試」工作流延續
+    "下一步",  # 工作流延續
+    "next",    # 英文工作流延續
+]
+
+# 探索 / 分析模式（前置行為，非開發命令）
+# 與決策樹第二層一致：分析類走「問題處理流程」
+EXPLORATION_PATTERNS = [
+    "分析",    # 分析程式碼/架構/結構
+    "研究",    # 研究文章/方案
+    "調查",    # 調查問題原因
+    "探索",    # 探索程式碼庫
+    "評估",    # 評估方案/風險
+    "追蹤",    # 追蹤問題/進度
+    "閱讀",    # 閱讀文章/文件
+    "瀏覽",    # 瀏覽程式碼
+    "了解",    # 了解架構/現況
+    "比較",    # 比較方案
+    "review",  # Code review / 文件 review
+    "analyze", # 英文分析
+    "explore", # 英文探索
+    "investigate", # 英文調查
+]
+
+# 問題 / 討論模式（非指令性）
+DISCUSSION_PATTERNS = [
+    "為什麼", "怎麼", "如何", "是什麼",
+    "可以嗎", "應該", "建議", "說明",
+    "幫我", "請問", "?", "？",
+    # 追問和選擇
+    "什麼",    # 「這是什麼」等問句
+    "哪個",    # 「哪個方案」等問句
+    "多少",    # 「多少個」等問句
+    # 英文禮貌和問句
+    "please",  # 英文禮貌用語
+    "can you", # 英文問句
+    "could",   # 英文問句
+    "would",   # 英文問句
+    "what",    # 英文問句
+    "how",     # 英文問句
+    "why",     # 英文問句
+]
+
+# 管理操作白名單合併（is_management_operation 使用）
+ALL_BYPASS_PATTERNS = (
+    TICKET_PATTERNS + MANAGEMENT_PATTERNS + DISPATCH_PATTERNS +
+    EXPLORATION_PATTERNS + DISCUSSION_PATTERNS
+)
+
 # Exit Code
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_BLOCK = 2
 
-def validate_input(input_data: Dict[str, Any], logger) -> bool:
-    """
-    驗證輸入格式
-
-    Args:
-        input_data: Hook 輸入資料
-        logger: 日誌物件
-
-    Returns:
-        bool - 輸入格式是否正確
-    """
-    # UserPromptSubmit Hook 至少需要 prompt 欄位
-    if "prompt" not in input_data:
-        logger.error("缺少必要欄位: prompt")
-        return False
-
-    return True
+# validate_input 已遷移至 hook_utils.validate_hook_input
 
 # ============================================================================
 # 開發命令識別
@@ -217,123 +316,18 @@ def is_management_operation(prompt: str, logger) -> bool:
         logger.info(f"識別為 SKILL 指令（/ 前綴）: {prompt_stripped[:30]}")
         return True
 
-    # 短回答白名單（確認、同意等，長度 <= 15 字元）
-    # 新增：否定、理解確認、更多數字選擇
-    short_answer_patterns = [
-        # 肯定
-        "是", "好", "確認", "同意", "ok", "yes", "y",
-        "對", "沒錯", "没错",
-        # 否定
-        "否", "不", "取消", "cancel", "no", "n",
-        "不要", "不用",
-        # 理解確認
-        "了解", "知道了", "收到", "明白", "got it",
-        # 數字選擇（0-20）
-        "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
-        "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
-    ]
-
-    # 短回答正則模式（長度 <= 15 的特殊格式，需完整匹配整個字串）
-    short_answer_regex_patterns = [
-        r"^\d{1,2}(,\s*\d{1,2})*$",  # 組合多選：如 "2, 4" 或 "1,3,5"
-        r"^phase\s+\d+[a-z]?$",        # Phase 選項標籤：如 "Phase 4a"、"phase 3b"
-        r"^[a-z]$",                     # 單字母選項：如 "a"、"b"
-    ]
-
     # 檢查短回答：長度 <= 15 且完全匹配白名單或正則模式
     if len(prompt_stripped) <= 15:
-        if prompt_stripped.lower() in short_answer_patterns:
+        if prompt_stripped.lower() in SHORT_ANSWER_PATTERNS:
             logger.info(f"識別為短回答（白名單）: {prompt}")
             return True
-        for pattern in short_answer_regex_patterns:
+        for pattern in SHORT_ANSWER_REGEX_PATTERNS:
             if re.match(pattern, prompt_stripped.lower()):
                 logger.info(f"識別為短回答（正則模式 {pattern}）: {prompt}")
                 return True
 
-    # Ticket 管理相關模式
-    ticket_patterns = [
-        "ticket", "/ticket",
-        "建立 ticket", "新增 ticket", "建 ticket",
-        "認領", "claim",
-    ]
-
-    # Hook / 系統管理相關模式
-    management_patterns = [
-        "hook", "暫停", "停用", "啟用",
-        "設定", "配置", "config",
-        "/commit", "/version-release",
-        "/pre-fix-eval", "/tech-debt",
-        "/manager",
-        "commit",  # 不帶 / 的 commit 指令
-        "plan",    # Plan Mode 相關操作
-        "記錄",    # 記錄狀況、記錄筆記（非開發行為）
-        # 提交和 Git 操作
-        "提交",    # 中文 commit（git 提交）
-        "git",     # Git 操作前綴（push, pull, status 等）
-        "push",    # git push
-        # 查詢和摘要操作
-        "查詢",    # 查詢操作（非開發）
-        "摘要",    # 摘要操作（非開發）
-        "summary", # 英文摘要
-        "列出",    # 列出操作
-        "查看",    # 查看操作
-        "顯示",    # 顯示操作
-    ]
-
-    # PM 調度/派發相關模式
-    dispatch_patterns = [
-        "派發", "並行", "繼續", "序列",
-        "開始處理", "恢復", "接手",
-        "開始",    # 「W25-006 開始」等 Ticket 生命週期指令
-        "完成",    # 「W25-006 完成」等 Ticket 生命週期指令
-        # 工作流延續
-        "接著",    # 「接著處理下一個」工作流延續
-        "然後",    # 「然後測試」工作流延續
-        "下一步",  # 工作流延續
-        "next",    # 英文工作流延續
-    ]
-
-    # 探索 / 分析模式（前置行為，非開發命令）
-    # 與決策樹第二層一致：分析類走「問題處理流程」
-    exploration_patterns = [
-        "分析",    # 分析程式碼/架構/結構
-        "研究",    # 研究文章/方案
-        "調查",    # 調查問題原因
-        "探索",    # 探索程式碼庫
-        "評估",    # 評估方案/風險
-        "追蹤",    # 追蹤問題/進度
-        "閱讀",    # 閱讀文章/文件
-        "瀏覽",    # 瀏覽程式碼
-        "了解",    # 了解架構/現況
-        "比較",    # 比較方案
-        "review",  # Code review / 文件 review
-        "analyze", # 英文分析
-        "explore", # 英文探索
-        "investigate", # 英文調查
-    ]
-
-    # 問題 / 討論模式（非指令性）
-    discussion_patterns = [
-        "為什麼", "怎麼", "如何", "是什麼",
-        "可以嗎", "應該", "建議", "說明",
-        "幫我", "請問", "?", "？",
-        # 追問和選擇
-        "什麼",    # 「這是什麼」等問句
-        "哪個",    # 「哪個方案」等問句
-        "多少",    # 「多少個」等問句
-        # 英文禮貌和問句
-        "please",  # 英文禮貌用語
-        "can you", # 英文問句
-        "could",   # 英文問句
-        "would",   # 英文問句
-        "what",    # 英文問句
-        "how",     # 英文問句
-        "why",     # 英文問句
-    ]
-
-    all_bypass_patterns = ticket_patterns + management_patterns + dispatch_patterns + exploration_patterns + discussion_patterns
-
-    for pattern in all_bypass_patterns:
+    # 檢查管理操作白名單
+    for pattern in ALL_BYPASS_PATTERNS:
         if pattern in prompt_lower:
             logger.info(f"識別為管理/討論操作（白名單）: {pattern}")
             return True
@@ -724,50 +718,6 @@ def generate_hook_output(
 
     return output
 
-def save_check_log(
-    prompt: str,
-    is_dev_cmd: bool,
-    is_valid: bool,
-    ticket_id: Optional[str],
-    has_relevance_warning: bool = False,
-    logger=None
-) -> None:
-    """
-    儲存檢查日誌
-
-    Args:
-        prompt: 用戶提示文本
-        is_dev_cmd: 是否為開發命令
-        is_valid: Ticket 驗證是否通過
-        ticket_id: Ticket ID
-        has_relevance_warning: 是否有關聯性警告
-        logger: 日誌物件
-    """
-    project_dir = get_project_root()
-    log_dir = project_dir / ".claude" / "hook-logs" / "command-entrance-gate"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    report_file = log_dir / f"checks-{datetime.now().strftime('%Y%m%d')}.log"
-
-    try:
-        should_block = is_dev_cmd and not is_valid
-        status = "BLOCKED" if should_block else "ALLOWED"
-        warning_status = "WITH_WARNING" if has_relevance_warning else "OK"
-
-        log_entry = f"""[{datetime.now().isoformat()}]
-  Prompt: {prompt[:100]}...
-  IsDevelopmentCommand: {is_dev_cmd}
-  TicketValidationPassed: {is_valid}
-  TicketID: {ticket_id}
-  RelevanceWarning: {warning_status}
-  Status: {status}
-
-"""
-        with open(report_file, "a", encoding="utf-8") as f:
-            f.write(log_entry)
-        logger.debug(f"檢查日誌已儲存: {report_file}")
-    except Exception as e:
-        logger.warning(f"儲存檢查日誌失敗: {e}")
 
 # ============================================================================
 # 主入口點
@@ -799,7 +749,7 @@ def main() -> int:
         input_data = read_json_from_stdin(logger)
 
         # 步驟 3: 驗證輸入格式
-        if not validate_input(input_data, logger):
+        if not validate_hook_input(input_data, logger, ("prompt",)):
             logger.error("輸入格式錯誤")
             print(json.dumps({
                 "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}
@@ -845,7 +795,19 @@ def main() -> int:
         print(json.dumps(hook_output, ensure_ascii=False, indent=2))
 
         # 步驟 7: 儲存日誌
-        save_check_log(prompt, is_dev_cmd, is_valid, ticket_id, relevance_warning is not None, logger)
+        should_block = is_dev_cmd and not is_valid
+        status = "BLOCKED" if should_block else "ALLOWED"
+        warning_status = "WITH_WARNING" if relevance_warning is not None else "OK"
+        log_entry = f"""[{datetime.now().isoformat()}]
+  Prompt: {prompt[:100]}...
+  IsDevelopmentCommand: {is_dev_cmd}
+  TicketValidationPassed: {is_valid}
+  TicketID: {ticket_id}
+  RelevanceWarning: {warning_status}
+  Status: {status}
+
+"""
+        save_check_log("command-entrance-gate", log_entry, logger)
 
         # 步驟 8: 決定 exit code（阻塞式）
         if is_dev_cmd and not is_valid:

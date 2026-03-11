@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W24-006",
+  "direction": "to-sibling:0.1.0-W25-001",
+  "timestamp": "2026-03-09T13:55:15.694711",
+  "from_status": "completed",
+  "title": "實作 acceptance-gate-hook 抽取 _output_allow_json 輔助函式消除 4 處 DRY 違反",
+  "what": "抽取 _output_allow_json() 輔助函式，替換 acceptance-gate-hook.py 中 4 處重複的 allow JSON 輸出程式碼",
+  "chain": {},
+  "resumed_at": "2026-03-09T13:56:19.945676"
+}

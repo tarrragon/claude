@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W25-004",
+  "direction": "to-sibling:0.1.0-W25-007",
+  "timestamp": "2026-03-09T15:51:01.268903",
+  "from_status": "completed",
+  "title": "統一 AskUserQuestionMessages alias 雙軌改為單一 import 路徑",
+  "what": "統一 AskUserQuestionMessages alias 為單一 import 路徑（保留 lib.hook_messages 路徑）",
+  "chain": {},
+  "resumed_at": "2026-03-09T16:01:42.819667"
+}

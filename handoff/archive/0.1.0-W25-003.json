@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W25-003",
+  "direction": "to-sibling:0.1.0-W25-002",
+  "timestamp": "2026-03-09T14:27:03.937484",
+  "from_status": "completed",
+  "title": "清理 移除 common_functions.py deprecated setup_hook_logging 完整實作",
+  "what": "移除 common_functions.py 中已 deprecated 的 setup_hook_logging 函式體",
+  "chain": {},
+  "resumed_at": "2026-03-09T14:30:28.385581"
+}

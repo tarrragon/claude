@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W23-007",
+  "direction": "to-sibling:0.1.0-W24-001",
+  "timestamp": "2026-03-09T11:50:54.255144",
+  "from_status": "completed",
+  "title": "修復 hook_messages.py ValidationMessages 硬編碼 emoji 違反 language-constraints",
+  "what": "修復 hook_messages.py ValidationMessages 硬編碼 emoji 違反 language-constraints",
+  "chain": {},
+  "resumed_at": "2026-03-09T11:51:32.189659"
+}

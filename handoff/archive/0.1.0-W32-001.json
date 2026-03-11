@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W32-001",
+  "direction": "to-sibling:0.1.0-W33-001",
+  "timestamp": "2026-03-10T10:29:46.901092",
+  "from_status": "completed",
+  "title": "修復 ticket track board 標題截斷問題",
+  "what": "移除 tree view 中 truncate_title 的硬編碼寬度限制，讓標題完整顯示",
+  "chain": {},
+  "resumed_at": "2026-03-10T10:34:06.966954"
+}

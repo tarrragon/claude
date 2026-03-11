@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W24-002",
+  "direction": "to-sibling:0.1.0-W24-003",
+  "timestamp": "2026-03-09T12:55:53.438018",
+  "from_status": "completed",
+  "title": "修復 parallel-suggestion-hook.py blockedBy dead code 和缺少 run_hook_safely",
+  "what": "修復 parallel-suggestion-hook.py blockedBy dead code 和缺少 run_hook_safely",
+  "chain": {},
+  "resumed_at": "2026-03-09T12:57:13.178359"
+}

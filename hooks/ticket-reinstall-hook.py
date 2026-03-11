@@ -18,7 +18,7 @@ How it works:
     2. Locates source code in .claude/skills/ticket/ticket_system/
     3. Computes SHA256 hashes of all .py files in both locations
     4. Compares hash sets and file presence
-    5. If differences: reinstalls via 'uv tool install . --force'
+    5. If differences: reinstalls via 'uv tool install . --reinstall'
     6. If identical: quick pass (< 1 second)
 
 Exit codes:
@@ -190,7 +190,7 @@ def compare_source_and_installed(
 
 def reinstall_ticket_cli(project_root: Path, logger: logging.Logger) -> bool:
     """
-    Reinstall ticket CLI via 'uv tool install . --force'
+    Reinstall ticket CLI via 'uv tool install . --reinstall'
 
     Args:
         project_root: Project root path
@@ -208,7 +208,7 @@ def reinstall_ticket_cli(project_root: Path, logger: logging.Logger) -> bool:
 
     try:
         result = subprocess.run(
-            ["uv", "tool", "install", ".", "--force"],
+            ["uv", "tool", "install", ".", "--reinstall"],
             cwd=ticket_manager_dir,
             capture_output=True,
             text=True,

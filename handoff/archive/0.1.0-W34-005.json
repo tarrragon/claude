@@ -1,0 +1,17 @@
+{
+  "ticket_id": "0.1.0-W34-005",
+  "direction": "to-sibling:0.1.0-W34-007",
+  "timestamp": "2026-03-11T14:21:49.891518",
+  "from_status": "completed",
+  "title": "重構 統一 hook 系統共用模式到 hook_utils（is_handoff_recovery_mode、EXIT_CODE、validate_input）",
+  "what": "重構 統一 hook 系統共用模式到 hook_utils（is_handoff_recovery_mode、EXIT_CODE、validate_input）",
+  "chain": {
+    "root": "0.1.0-W34-5",
+    "parent": null,
+    "depth": 0,
+    "sequence": [
+      5
+    ]
+  },
+  "resumed_at": "2026-03-11T14:23:43.987975"
+}

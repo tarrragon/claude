@@ -182,6 +182,15 @@ Skill 是預建的專用工具，優先於代理人派發。
 - 發現了需要追蹤的問題嗎？→ 是 → **直接 /ticket create**
 - 要不要處理、優先級高不高 → 這是後續 acceptance-auditor 審核的職責，不是此刻的決策點
 
+### 子任務 vs 獨立 Ticket 判斷
+
+| 判斷條件 | 建立方式 | 範例 |
+|---------|---------|------|
+| 因執行當前 Ticket 而產生（因果關係） | 子任務（`/ticket create --parent {current_id}`） | 實作中發現需要先重構某模組 |
+| 與當前 Ticket 相同功能模組 | 子任務 | 同一個 feature 的額外驗收條件 |
+| 獨立問題、不同模組 | 獨立 Ticket | 發現另一個模組的 bug |
+| 跨版本的技術債 | 獨立 Ticket（歸入 todolist） | 長期架構改善 |
+
 > 識別條件、強制處理流程、禁止行為清單：.claude/rules/flows/plan-to-ticket-flow.md（「執行中額外發現」章節）
 
 ---
@@ -203,7 +212,7 @@ Skill 是預建的專用工具，優先於代理人派發。
           blocked? → 升級 PM
 ```
 
-**建立後審核檢查（強制）**：pending Ticket 認領前必須 `creation_accepted: true`，否則強制並行派發 acceptance-auditor + system-analyst 審核。豁免：DOC 類型或已審核父 Ticket 的子任務。
+**建立後審核檢查（強制）**：pending Ticket 認領前必須 `creation_accepted: true`，否則強制並行派發 acceptance-auditor + system-analyst 審核。豁免：已審核父 Ticket 的子任務。
 
 **Wave 邊界檢查（強制）**：當用戶指定「繼續 Wx」時，**必須**只處理該 Wave 的任務，禁止跨 Wave 執行。
 
@@ -262,103 +271,37 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 ## 第八層：完成後路由（Commit-Evaluate-Handoff 循環）
 
-> 詳細流程：.claude/references/decision-tree-checkpoint-details.md
+任務或階段完成後的統一路由機制（Checkpoint 0 → 1 → 1.5 → 2 → 3 → 4）。
 
-任務或階段完成後的統一路由機制，確保每個完成點都有明確的確認。
+**核心判斷規則**：
 
-```
-任務/階段完成
-    |
-    v
-[Checkpoint 0] 建立後 Handoff 判斷（Ticket 建立/拆分完成後適用）
-    |
-    +-- 可並行派發? → 留在 session → 並行派發 → Checkpoint 1
-    +-- 子任務不可並行? → commit → handoff → 新 session
-    +-- 獨立 Ticket 不可並行? → commit → handoff → 新 session
-    +-- 非建立場景? → 跳過，進入 Checkpoint 1
-    |
-    v
-[Checkpoint 1] 變更狀態檢查
-    |
-    +-- 有未提交變更 + 批量? → AskUserQuestion #15（備份確認）
-    +-- 有未提交變更 → 建議 commit（/commit-as-prompt）
-    +-- 無變更 → [Checkpoint 3]
-    |
-    v
-[Checkpoint 1.5] 錯誤學習經驗確認（AskUserQuestion #16）
-    |
-    +-- 記錄 → /error-pattern add → 回到 Checkpoint 1.5
-    +-- 無需記錄 / 稍後記錄 → 繼續
-    |
-    v
-[Checkpoint 2] Commit 後情境評估（強制先查詢再路由）
-    |
-    +-- [強制查詢] ticket track list --wave {n} --status pending in_progress
-    |
-    +-- [情境 D] TDD Phase 完成（優先，識別：ticket 含 tdd_phase 欄位）
-    |   +-- D1：Phase 1/2/3a 完成 → [全自動] 直接派發下一 Phase
-    |   +-- D2：Phase 3b 完成 → AskUserQuestion #13
-    |       +-- 標準流程 → 派發 /parallel-evaluation B（Phase 4a）
-    |       +-- 豁免（<=2 檔案/DOC/任務範圍單純）→ 直接派發 cinnamon-refactor-owl（4b）
-    |   +-- D3a：Phase 4a 完成 → [全自動] 派發 cinnamon-refactor-owl（4b）
-    |   +-- D3b：Phase 4b 完成（標準）→ [全自動] 派發 /parallel-evaluation A（4c）
-    |            Phase 4b 完成（豁免，同 D2 豁免條件）→ [強制] /tech-debt-capture → AskUserQuestion #13
-    |   +-- D3c：Phase 4c 完成 → [強制] /tech-debt-capture → AskUserQuestion #13
-    |
-    +-- [情境 A | #11a] ticket 仍 in_progress → AskUserQuestion #11a（Context 刷新）
-    +-- [情境 B | #11b] ticket completed + 同 Wave 有 pending → AskUserQuestion #11b（任務切換）
-    +-- [情境 C] ticket completed + 同 Wave 無 pending → [強制] /parallel-evaluation（Wave 完成審查）
-        → 審查發現 → 建立 Ticket（不中斷）→ 再查詢版本全狀態
-        +-- C1：有其他 Wave pending → AskUserQuestion #3a（Wave 收尾）
-        +-- C2：版本全部完成 → [強制] /version-release check → AskUserQuestion #13
-    |
-    v
-[Checkpoint 3] 後續任務路由（AskUserQuestion #13）
-    |
-    +-- 分析完成 → 實作 or /parallel-evaluation F
-    +-- 規劃完成 → /parallel-evaluation C/G or TDD
-    +-- Phase 3b 完成 → Phase 4a 或直接 Phase 4b（豁免）
-    +-- Phase 4b 完成（豁免）→ /tech-debt-capture → 收尾
-    +-- Phase 4c 完成 → /tech-debt-capture → 收尾
-    +-- 規則/Skill 變更 → /parallel-evaluation G
-    +-- 無後續 → 場景 3（Wave 收尾）
-    |
-    v
-[Checkpoint 4] parallel-evaluation 觸發（AskUserQuestion #14）
-    |
-    +-- 執行 → /parallel-evaluation 情境 X → 回到 Checkpoint 1
-    +-- 跳過 → AskUserQuestion #12（省略確認）→ 進入下一步
-```
+| Checkpoint | 判斷條件 | 路由 |
+|------------|---------|------|
+| 0 建立後 Handoff | 可並行派發? | 是 → 留在 session 並行派發；否 → commit + handoff |
+| 1 變更狀態 | 有未提交變更? | 是 → commit；無 → 跳至 Checkpoint 3 |
+| 1.5 錯誤學習 | commit 成功後 | AskUserQuestion #16 |
+| 2 情境評估 | [強制查詢] ticket track list | 情境 D/A/B/C（見下方） |
+| 3 後續路由 | 任務類型 | AskUserQuestion #13 |
+| 4 parallel-evaluation | 階段完成後 | AskUserQuestion #14 |
 
-**與現有層級的銜接**：
+**Checkpoint 2 情境評估（強制先查詢再路由，禁止依賴記憶）**：
 
-| 現有出口 | 進入第八層入口 |
-|---------|-------------|
-| 第四層 Ticket 建立/拆分完成 | Checkpoint 0（建立後 Handoff 判斷） |
-| 第五層 Phase 3b/4 完成 | Checkpoint 1 |
-| 第六層 incident 分析完成 | Checkpoint 3 |
-| 第七層 Ticket complete | 既有場景 2 → Checkpoint 1 |
-| SA 審查完成 | Checkpoint 3 |
+| 情境 | 條件 | 路由 |
+|------|------|------|
+| D（優先） | ticket 含 tdd_phase 欄位 | D1: Phase 1/2/3a → 全自動下一 Phase；D2: Phase 3b → #13；D3a: 4a → 全自動 4b；D3b: 4b 標準 → 全自動 4c / 豁免 → /tech-debt-capture + #13；D3c: 4c → /tech-debt-capture + #13 |
+| A（#11a） | ticket 仍 in_progress | Context 刷新 Handoff |
+| B（#11b） | ticket completed + 同 Wave 有 pending | 任務切換 Handoff |
+| C | ticket completed + 同 Wave 無 pending | [強制] /parallel-evaluation Wave 審查 → C1: 有其他 Wave → #3a；C2: 全完成 → /version-release check + #13 |
 
-**Checkpoint 2 情境評估規則**：每次 commit 後 PM **必須**先執行強制查詢再評估情境，禁止依賴記憶判斷。情境 D（TDD Phase，識別：ticket 含 tdd_phase 欄位）優先於 A/B/C。D1/D3a 全自動；D3b 標準流程全自動、豁免路徑強制 /tech-debt-capture；D2/D3c 需 AskUserQuestion。**情境 C 強制 Wave 審查**：進入情境 C 時，必須先執行 `/parallel-evaluation`（Wave 完成審查），審查完畢後再進入 C1/C2 分支。**情境命名對應**：情境 A = AskUserQuestion #11a（Context 刷新）；情境 B = AskUserQuestion #11b（任務切換）；情境 C1 = #3；情境 C2 = #13。
+**與現有層級的銜接**：第四層（建立完成）→ Checkpoint 0；第五層（Phase 完成）→ Checkpoint 1；第六層（incident 完成）→ Checkpoint 3；第七層（complete）→ Checkpoint 1
 
-**Handoff 強制動作**：選擇任何 Handoff 選項後，PM **必須**執行 `/ticket handoff` 建立標準 `pending/*.json` 檔案，**禁止**手動建立 `.claude/handoff/*.md` 交接文件。Handoff 前須執行 `ticket handoff --status` 確認無殘留。
+**Handoff 強制動作**：PM **必須**執行 `/ticket handoff`，**禁止**手動建立交接文件。前須 `ticket handoff --status` 確認無殘留。
 
-> AskUserQuestion 場景 11-17 詳見：.claude/rules/core/askuserquestion-rules.md
-> 模板詳見：.claude/references/ticket-askuserquestion-templates.md
-> Checkpoint 詳細說明：.claude/references/decision-tree-checkpoint-details.md
+**Resume 後接手（Checkpoint R）**：resume 後先確認範圍再 claim，不直接開始實作。
 
----
-
-## Resume 後標準化接手流程（Checkpoint R）
-
-`ticket resume <id>` 完成後，CLI 自動輸出「建議下一步」（Checkpoint R）。PM 依此引導執行。
-
-**核心原則**：resume 後不直接開始實作，先走 Checkpoint R 確認範圍再 claim。
-
-步驟：(1) 獨立驗證 Ticket 描述數量/範圍（PC-007）→ (2) `ticket track claim <id>` → (3) `ticket track chain <id>`（可選）
-
-> 詳細流程：.claude/references/decision-tree-checkpoint-details.md（Checkpoint R 章節）
+> Checkpoint 0-4 完整流程、情境子規則、Checkpoint R 詳細步驟：.claude/references/decision-tree-checkpoint-details.md
+> AskUserQuestion 場景 11-17：.claude/rules/core/askuserquestion-rules.md
+> 模板：.claude/references/ticket-askuserquestion-templates.md
 
 ---
 
@@ -425,5 +368,5 @@ Level 5: TDD 階段代理人 + thyme-python-developer
 
 ---
 
-**Last Updated**: 2026-03-09
-**Version**: 7.18.0 - 情境 C 新增強制 /parallel-evaluation Wave 完成審查步驟（0.1.0-W25-012）
+**Last Updated**: 2026-03-11
+**Version**: 7.20.0 - 移除建立後審核的 DOC 類型豁免條件（0.1.0-W37-001）

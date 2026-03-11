@@ -38,7 +38,10 @@ from typing import Dict, Any, Optional, Tuple, List
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, extract_tool_input
+from hook_utils import (
+    setup_hook_logging, run_hook_safely, read_json_from_stdin,
+    extract_tool_input, validate_hook_input
+)
 from lib.hook_messages import QualityMessages, CoreMessages, AskUserQuestionMessages, format_message
 
 # ============================================================================
@@ -68,23 +71,7 @@ EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_BLOCK = 2
 
-def validate_input(input_data: Dict[str, Any], logger) -> bool:
-    """
-    驗證輸入格式
-
-    Args:
-        input_data: Hook 輸入資料
-        logger: Logger 實例
-
-    Returns:
-        bool - 輸入格式是否正確
-    """
-    # PostToolUse Hook 需要 tool_name 和 tool_input
-    if "tool_name" not in input_data or "tool_input" not in input_data:
-        logger.error("缺少必要欄位: tool_name 或 tool_input")
-        return False
-
-    return True
+# validate_input 已遷移至 hook_utils.validate_hook_input
 
 # ============================================================================
 # 工具操作識別
@@ -485,7 +472,7 @@ def main() -> int:
         input_data = read_json_from_stdin(logger)
 
         # 步驟 3: 驗證輸入格式
-        if not validate_input(input_data, logger):
+        if not validate_hook_input(input_data, logger, ("tool_name", "tool_input")):
             logger.error("輸入格式錯誤")
             print(json.dumps({
                 "hookSpecificOutput": {"hookEventName": "PostToolUse"}

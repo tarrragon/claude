@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W26-001",
+  "direction": "to-sibling:0.1.0-W26-002",
+  "timestamp": "2026-03-09T16:44:37.547803",
+  "from_status": "completed",
+  "title": "修復 W25 Wave 審查發現的 4 個品質問題（None 防護、import 遺漏、except 註解）",
+  "what": "修復 W25 Wave 審查發現的 4 個品質問題（None 防護、import 遺漏、except 註解）",
+  "chain": {},
+  "resumed_at": "2026-03-09T16:45:03.750481"
+}

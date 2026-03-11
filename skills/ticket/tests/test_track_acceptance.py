@@ -31,6 +31,7 @@ class TestCheckAcceptance:
         args.version = "0.31.0"
         args.index = "3"  # 勾選第三個項目（未勾選狀態）
         args.uncheck = False
+        args.all = False
 
         mock_ticket = {
             "id": "0.31.0-W4-001",
@@ -59,6 +60,7 @@ class TestCheckAcceptance:
         args.version = "0.31.0"
         args.index = "2"  # 第二個項目
         args.uncheck = False
+        args.all = False
 
         mock_ticket = {
             "id": "0.31.0-W4-001",
@@ -87,6 +89,7 @@ class TestCheckAcceptance:
         args.version = "0.31.0"
         args.index = "1"
         args.uncheck = False
+        args.all = False
 
         mock_ticket = {
             "id": "0.31.0-W4-001",
@@ -113,6 +116,7 @@ class TestCheckAcceptance:
         args.version = "0.31.0"
         args.index = "1"
         args.uncheck = False
+        args.all = False
 
         with patch('ticket_system.commands.track_acceptance.load_and_validate_ticket') as mock_load:
             mock_load.return_value = (None, "Ticket not found")
@@ -132,6 +136,7 @@ class TestCheckAcceptance:
         args.version = "0.31.0"
         args.index = "3"  # 第三個項目，未勾選
         args.uncheck = False
+        args.all = False
 
         mock_ticket = {
             "id": "0.31.0-W4-001",
@@ -148,6 +153,120 @@ class TestCheckAcceptance:
                 # 應返回 0（操作成功）
                 assert result == 0
                 mock_save.assert_called_once()
+
+    def test_check_acceptance_all_flag(self):
+        """
+        Given: Ticket 有部分驗收條件未勾選
+        When: 執行 check-acceptance --all 批量勾選
+        Then: 應返回 0，勾選所有未勾選的項目
+        """
+        args = Mock()
+        args.ticket_id = "0.31.0-W4-001"
+        args.version = "0.31.0"
+        args.index = None  # --all 時不提供 index
+        args.uncheck = False
+        args.all = True
+
+        mock_ticket = {
+            "id": "0.31.0-W4-001",
+            "_path": "/path/to/ticket.md",
+            "acceptance": ["[x] Condition 1", "[ ] Condition 2", "[ ] Condition 3"],
+        }
+
+        with patch('ticket_system.commands.track_acceptance.load_and_validate_ticket') as mock_load:
+            mock_load.return_value = (mock_ticket, None)
+
+            with patch('ticket_system.commands.track_acceptance.save_ticket') as mock_save:
+                result = execute_check_acceptance(args, "0.31.0")
+
+                assert result == 0
+                # 驗證所有項目都被勾選
+                saved_ticket = mock_save.call_args[0][0]
+                assert saved_ticket["acceptance"] == ["[x] Condition 1", "[x] Condition 2", "[x] Condition 3"]
+
+    def test_check_acceptance_all_uncheck_flag(self):
+        """
+        Given: Ticket 有部分驗收條件已勾選
+        When: 執行 check-acceptance --all --uncheck 批量取消勾選
+        Then: 應返回 0，取消勾選所有已勾選的項目
+        """
+        args = Mock()
+        args.ticket_id = "0.31.0-W4-001"
+        args.version = "0.31.0"
+        args.index = None  # --all 時不提供 index
+        args.uncheck = True
+        args.all = True
+
+        mock_ticket = {
+            "id": "0.31.0-W4-001",
+            "_path": "/path/to/ticket.md",
+            "acceptance": ["[x] Condition 1", "[x] Condition 2", "[ ] Condition 3"],
+        }
+
+        with patch('ticket_system.commands.track_acceptance.load_and_validate_ticket') as mock_load:
+            mock_load.return_value = (mock_ticket, None)
+
+            with patch('ticket_system.commands.track_acceptance.save_ticket') as mock_save:
+                result = execute_check_acceptance(args, "0.31.0")
+
+                assert result == 0
+                # 驗證所有項目都被取消勾選
+                saved_ticket = mock_save.call_args[0][0]
+                assert saved_ticket["acceptance"] == ["[ ] Condition 1", "[ ] Condition 2", "[ ] Condition 3"]
+
+    def test_check_acceptance_all_and_index_mutually_exclusive(self):
+        """
+        Given: 同時提供 --all 和 index 參數
+        When: 執行 check-acceptance <id> <index> --all
+        Then: 應返回 1，報錯互斥參數
+        """
+        args = Mock()
+        args.ticket_id = "0.31.0-W4-001"
+        args.version = "0.31.0"
+        args.index = "1"  # 提供 index
+        args.uncheck = False
+        args.all = True  # 同時使用 --all
+
+        mock_ticket = {
+            "id": "0.31.0-W4-001",
+            "_path": "/path/to/ticket.md",
+            "acceptance": ["[ ] Condition 1", "[ ] Condition 2"],
+        }
+
+        with patch('ticket_system.commands.track_acceptance.load_and_validate_ticket') as mock_load:
+            mock_load.return_value = (mock_ticket, None)
+
+            result = execute_check_acceptance(args, "0.31.0")
+
+            # 應返回 1，錯誤代碼
+            assert result == 1
+
+    def test_check_acceptance_missing_index_and_all(self):
+        """
+        Given: 未提供 --all，也未提供 index 參數
+        When: 執行 check-acceptance <id>
+        Then: 應返回 1，報錯缺少參數
+        """
+        args = Mock()
+        args.ticket_id = "0.31.0-W4-001"
+        args.version = "0.31.0"
+        args.index = None  # 未提供 index
+        args.uncheck = False
+        args.all = False  # 未使用 --all
+
+        mock_ticket = {
+            "id": "0.31.0-W4-001",
+            "_path": "/path/to/ticket.md",
+            "acceptance": ["[ ] Condition 1"],
+        }
+
+        with patch('ticket_system.commands.track_acceptance.load_and_validate_ticket') as mock_load:
+            mock_load.return_value = (mock_ticket, None)
+
+            result = execute_check_acceptance(args, "0.31.0")
+
+            # 應返回 1，錯誤代碼
+            assert result == 1
 
 
 class TestAppendLog:

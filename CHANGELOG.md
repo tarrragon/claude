@@ -1,3 +1,10 @@
+## [1.1.46] - 2026-03-11
+
+### Summary
+sync: W34-W37 變更同步 — hook 重構、quality-common 分離、test_track_board 測試、error-pattern IMP-030
+
+---
+
 ## [1.1.45] - 2026-03-10
 
 ### Summary

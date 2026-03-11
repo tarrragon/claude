@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W34-007",
+  "direction": "to-sibling:0.1.0-W34-008",
+  "timestamp": "2026-03-11T14:43:52.612771",
+  "from_status": "completed",
+  "title": "重構 _parse_nested_line 回傳值語義不清晰",
+  "what": "重構 _parse_nested_line 回傳值語義不清晰",
+  "chain": {},
+  "resumed_at": "2026-03-11T14:45:24.405330"
+}

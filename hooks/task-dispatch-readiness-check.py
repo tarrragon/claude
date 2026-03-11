@@ -28,25 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 
-def is_handoff_recovery_mode() -> bool:
-    """
-    檢查是否處於 Handoff 恢復模式
-
-    Handoff 恢復時，Claude 自動讀取 Ticket 和派發代理人，
-    這些操作應被豁免，允許恢復流程正常進行。
-    """
-    project_dir = get_project_root()
-    handoff_pending_dir = project_dir / ".claude" / "handoff" / "pending"
-
-    # 檢查是否存在 pending Handoff 任務
-    if handoff_pending_dir.exists() and handoff_pending_dir.is_dir():
-        # 檢查是否有任何 pending JSON 檔案
-        if any(handoff_pending_dir.glob("*.json")):
-            return True
-
-    return False
-
-from hook_utils import setup_hook_logging, get_project_root
+from hook_utils import setup_hook_logging, get_project_root, is_handoff_recovery_mode
 from hook_io import read_hook_input, write_hook_output, create_pretooluse_output
 from config_loader import load_agents_config
 
@@ -227,7 +209,7 @@ def main() -> None:
         sys.exit(0)
 
     # Handoff 恢復模式：略過所有檢查
-    if is_handoff_recovery_mode():
+    if is_handoff_recovery_mode(logger):
         logger.info("檢測到 Handoff 恢復模式，略過代理人分派檢查")
         sys.exit(0)
 

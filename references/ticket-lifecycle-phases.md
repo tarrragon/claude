@@ -161,6 +161,56 @@
 
 ---
 
+## 完成階段錯誤學習驗證
+
+### 執行時序（重要：先 complete，後處理 #17）
+
+```
+[1] 用戶執行: ticket track complete X
+    ↓
+[2] acceptance-gate-hook 觸發（PreToolUse）
+    |
+    ├── [阻擋] 子任務未完成 → 阻止執行（exit 2）
+    |
+    ├── [有新增 error-pattern] → 輸出 #17 提醒（非阻擋，exit 0）
+    |
+    └── [正常情況] → 輸出 #1 驗收確認提醒（非阻擋，exit 0）
+    ↓
+[3] ticket track complete X 執行（in_progress → completed）
+    ↓
+[4] PM 根據 hook 輸出，complete 後執行對應動作
+    +-- [若有 #17 提醒] → AskUserQuestion #17 → 選擇後處理
+    +-- [場景 #1/#2] → AskUserQuestion #1 → 確認驗收方式 → AskUserQuestion #2 → 路由下一步
+```
+
+### 死鎖防護：complete 必須先執行，#17 在 complete 後處理
+
+> **問題根源**：error-pattern 檔案在 #17 處理後不會自動移除。若 PM 先處理 #17 再執行 complete，下一次執行 complete 時 hook 仍會觸發 #17 提醒，造成無限循環無法完成。
+
+| 行為 | 結果 |
+|------|------|
+| 看到 #17 提醒 → 先處理 → 再執行 complete | 死鎖：hook 持續觸發 #17，complete 永遠等待 |
+| 看到 #17 提醒 → 直接執行 complete → 完成後處理 #17 | 正確：non-blocking，一次完成 |
+
+### AskUserQuestion #17 觸發條件
+
+| 條件 | 說明 |
+|------|------|
+| 有新增 error-pattern | ticket 執行期間 `.claude/error-patterns/` 下有新增或修改的檔案 |
+| 無新增 error-pattern | 跳過 #17，正常完成 |
+
+### #17 選項
+
+| 選項 | 說明 |
+|------|------|
+| 建立改進 Ticket（Recommended） | 為新增的 error-pattern 建立修復/防護 Ticket |
+| 已有對應 Ticket | error-pattern 相關修復已在現有 Ticket 中 |
+| 延後處理 | 記錄到 todolist.yaml，後續版本排程 |
+
+> 場景定義詳見：.claude/rules/core/askuserquestion-rules.md（場景 #17）
+
+---
+
 ## 相關文件
 
 - .claude/rules/flows/ticket-lifecycle.md - 精簡版（常駐）
@@ -170,5 +220,5 @@
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 1.0.0 - 從 ticket-lifecycle.md v4.3.0 移出詳細階段說明
+**Last Updated**: 2026-03-11
+**Version**: 1.1.0 - 新增完成階段錯誤學習驗證詳細時序和死鎖防護（W35-001.7）

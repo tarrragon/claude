@@ -31,6 +31,20 @@
 
 ---
 
+## 拆分後組織方式
+
+| 場景 | 組織方式 | 建立指令 |
+|------|---------|---------|
+| 拆分產生的子步驟（共享目標） | 子任務 | `/ticket create --parent {parent_id}` |
+| 拆分中發現的獨立問題 | 獨立 Ticket | `/ticket create` |
+| 原 Ticket 過大需拆分 | 子任務群組 | 原 Ticket 改為協調任務，各子步驟建為子任務 |
+
+**判斷原則**：拆分後的任務是否共享同一個完成目標？
+- 是 → 子任務（parent-child 關係）
+- 否 → 獨立 Ticket（各自獨立完成）
+
+---
+
 ## 拆分後檢查清單
 
 ### A. Atomic 性（每個 ticket）
@@ -89,5 +103,5 @@
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 4.0.0 - Progressive Disclosure 精簡，策略詳細說明移至 references/
+**Last Updated**: 2026-03-11
+**Version**: 4.1.0 - 新增拆分後組織方式指引（子任務 vs 獨立 Ticket 判斷，W36-003）

@@ -55,6 +55,8 @@ class ErrorMessages:
     INCOMPLETE_ACCEPTANCE_CRITERIA = "[Error] {ticket_id} 有未完成的驗收條件"
     STATUS_ERROR = "[Error] {status_msg}"
     TICKET_NOT_FOUND_IN_BATCH = "[Error] {ticket_id} 找不到"
+    CHECK_ACCEPTANCE_ALL_WITH_INDEX = "[Error] --all 和 index 參數互斥，只能選擇其中之一"
+    CHECK_ACCEPTANCE_MISSING_INDEX = "[Error] 必須提供 index 或使用 --all 參數"
 
 
 class WarningMessages:

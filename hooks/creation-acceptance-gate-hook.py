@@ -47,7 +47,12 @@ _hooks_dir = Path(__file__).parent
 if _hooks_dir not in [p for p in sys.path if Path(p) == _hooks_dir]:
     sys.path.insert(0, str(_hooks_dir))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, parse_ticket_frontmatter, get_project_root
+from hook_utils import (
+    setup_hook_logging, run_hook_safely, read_json_from_stdin,
+    parse_ticket_frontmatter, get_project_root, save_check_log,
+    validate_hook_input
+)
+from hook_utils.hook_ticket import find_ticket_file
 from lib.hook_messages import GateMessages, CoreMessages, format_message
 
 import re
@@ -75,23 +80,7 @@ EXIT_BLOCK = 2
 # ============================================================================
 
 
-def validate_input(input_data: Dict[str, Any], logger) -> bool:
-    """
-    驗證輸入格式
-
-    Args:
-        input_data: Hook 輸入資料
-        logger: 日誌物件
-
-    Returns:
-        bool - 輸入格式是否正確
-    """
-    # UserPromptSubmit Hook 至少需要 prompt 欄位
-    if "prompt" not in input_data:
-        logger.error("缺少必要欄位: prompt")
-        return False
-
-    return True
+# validate_input 已遷移至 hook_utils.validate_hook_input
 
 
 # ============================================================================
@@ -149,40 +138,6 @@ def extract_claim_ticket_ids(prompt: str, logger) -> Optional[List[str]]:
 # Ticket 檔案操作
 # ============================================================================
 
-def locate_ticket_file(ticket_id: str, logger) -> Optional[Path]:
-    """
-    定位 Ticket 檔案
-
-    根據 Ticket ID 格式解析版本號，定位檔案位置：
-    docs/work-logs/v{version}/tickets/{ticket_id}.md
-
-    Args:
-        ticket_id: Ticket ID（格式如 0.31.0-W17-003）
-        logger: 日誌物件
-
-    Returns:
-        Path - Ticket 檔案路徑，如果不存在則返回 None
-    """
-    project_dir = get_project_root()
-
-    # 從 ID 中解析版本號
-    # 格式：v{version}-W{wave}-{number}
-    version_match = re.match(r"(\d+\.\d+\.\d+)", ticket_id)
-    if not version_match:
-        logger.warning(f"無法從 Ticket ID {ticket_id} 解析版本號")
-        return None
-
-    version = version_match.group(1)
-    ticket_file = project_dir / "docs" / "work-logs" / f"v{version}" / "tickets" / f"{ticket_id}.md"
-
-    if ticket_file.exists():
-        logger.info(f"找到 Ticket 檔案: {ticket_file}")
-        return ticket_file
-
-    logger.debug(f"Ticket 檔案不存在: {ticket_file}")
-    return None
-
-
 def check_creation_accepted(ticket_id: str, logger) -> Tuple[bool, Optional[str]]:
     """
     檢查 Ticket 的 creation_accepted 欄位
@@ -196,7 +151,7 @@ def check_creation_accepted(ticket_id: str, logger) -> Tuple[bool, Optional[str]
             - is_accepted: True 表示允許執行，False 表示阻止（EXIT_BLOCK）
             - message: 錯誤訊息（阻止時）或警告訊息（矛盾狀態時）；正常通過時為 None
     """
-    ticket_file = locate_ticket_file(ticket_id, logger)
+    ticket_file = find_ticket_file(ticket_id, logger=logger)
 
     # Ticket 檔案不存在 → 靜默通過（不阻止，讓後續命令處理錯誤）
     if not ticket_file:
@@ -278,45 +233,6 @@ def generate_hook_output(
     return output
 
 
-def save_check_log(
-    prompt: str,
-    ticket_ids: Optional[List[str]],
-    is_blocked: bool,
-    error_count: int,
-    logger
-) -> None:
-    """
-    儲存檢查日誌
-
-    Args:
-        prompt: 用戶提示文本
-        ticket_ids: Ticket ID 清單
-        is_blocked: 是否被阻止
-        error_count: 錯誤數量
-        logger: 日誌物件
-    """
-    project_dir = get_project_root()
-    log_dir = project_dir / ".claude" / "hook-logs" / "creation-acceptance-gate"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    report_file = log_dir / f"checks-{datetime.now().strftime('%Y%m%d')}.log"
-
-    try:
-        status = "BLOCKED" if is_blocked else "ALLOWED"
-        ticket_ids_str = ", ".join(ticket_ids) if ticket_ids else "none"
-
-        log_entry = f"""[{datetime.now().isoformat()}]
-  Prompt: {prompt[:100]}...
-  TicketIDs: {ticket_ids_str}
-  Errors: {error_count}
-  Status: {status}
-
-"""
-        with open(report_file, "a", encoding="utf-8") as f:
-            f.write(log_entry)
-        logger.debug(f"檢查日誌已儲存: {report_file}")
-    except Exception as e:
-        logger.warning(f"儲存檢查日誌失敗: {e}")
 
 
 # ============================================================================
@@ -351,7 +267,7 @@ def main() -> int:
         input_data = read_json_from_stdin(logger)
 
         # 步驟 3: 驗證輸入格式
-        if not validate_input(input_data, logger):
+        if not validate_hook_input(input_data, logger, ("prompt",)):
             logger.error("輸入格式錯誤")
             print(json.dumps({
                 "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}
@@ -368,7 +284,14 @@ def main() -> int:
             logger.debug("非 claim 命令，靜默通過")
             output = generate_hook_output(False, [])
             print(json.dumps(output, ensure_ascii=False, indent=2))
-            save_check_log(prompt, None, False, 0, logger)
+            log_entry = f"""[{datetime.now().isoformat()}]
+  Prompt: {prompt[:100]}...
+  TicketIDs: none
+  Errors: 0
+  Status: ALLOWED
+
+"""
+            save_check_log("creation-acceptance-gate", log_entry, logger)
             return EXIT_SUCCESS
 
         # 步驟 5: 檢查各 Ticket 的 creation_accepted 欄位
@@ -390,7 +313,16 @@ def main() -> int:
         print(json.dumps(hook_output, ensure_ascii=False, indent=2))
 
         # 步驟 7: 儲存日誌
-        save_check_log(prompt, ticket_ids, is_blocked, len(error_messages), logger)
+        status = "BLOCKED" if is_blocked else "ALLOWED"
+        ticket_ids_str = ", ".join(ticket_ids) if ticket_ids else "none"
+        log_entry = f"""[{datetime.now().isoformat()}]
+  Prompt: {prompt[:100]}...
+  TicketIDs: {ticket_ids_str}
+  Errors: {len(error_messages)}
+  Status: {status}
+
+"""
+        save_check_log("creation-acceptance-gate", log_entry, logger)
 
         # 步驟 8: 決定 exit code
         if is_blocked:

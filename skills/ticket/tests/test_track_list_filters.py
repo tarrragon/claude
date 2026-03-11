@@ -140,7 +140,7 @@ class TestStatusFilter:
         args.in_progress = False
         args.completed = False
         args.blocked = False
-        args.status = "pending"
+        args.status = ["pending"]
         args.wave = None
         args.format = "table"
         args.version = "0.31.0"
@@ -180,7 +180,7 @@ class TestStatusFilter:
         args.in_progress = False
         args.completed = False
         args.blocked = False
-        args.status = "completed"
+        args.status = ["completed"]
         args.wave = None
         args.format = "table"
         args.version = "0.31.0"
@@ -377,6 +377,21 @@ class TestBuildStatusFilters:
 
         assert STATUS_BLOCKED in filters
 
+    def test_status_filter_multiple_values(self):
+        """Given: --status pending in_progress，Then: 應返回多個狀態"""
+        args = Mock()
+        args.status = ["pending", "in_progress"]
+        args.pending = False
+        args.in_progress = False
+        args.completed = False
+        args.blocked = False
+
+        filters = _build_status_filters(args)
+
+        assert STATUS_PENDING in filters
+        assert STATUS_IN_PROGRESS in filters
+        assert len(filters) == 2
+
     def test_flag_filter_pending(self):
         """Given: --pending flag，Then: 應返回 STATUS_PENDING"""
         args = Mock()
@@ -433,7 +448,7 @@ class TestComplexFilters:
         args.in_progress = False
         args.completed = False
         args.blocked = False
-        args.status = "pending"
+        args.status = ["pending"]
         args.wave = 1
         args.format = "ids"
         args.version = "0.31.0"
@@ -473,7 +488,7 @@ class TestComplexFilters:
         args.in_progress = False
         args.completed = False
         args.blocked = False
-        args.status = "pending"
+        args.status = ["pending"]
         args.wave = 99
         args.format = "table"
         args.version = "0.31.0"

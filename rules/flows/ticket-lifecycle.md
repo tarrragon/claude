@@ -89,7 +89,6 @@ Ticket 建立後、認領前，強制並行派發多代理人審核。
 
 | 條件 | 說明 |
 |------|------|
-| DOC 類型（任務範圍單純） | 純文件更新，可跳過 |
 | 已審核父 Ticket 的子任務 | 範圍已確認，可跳過 |
 
 > 來源：PC-002 錯誤模式 — Ticket 建立後未經審核直接派發
@@ -107,53 +106,17 @@ Ticket 建立後、認領前，強制並行派發多代理人審核。
 
 ## 完成階段錯誤學習驗證
 
-`ticket track complete` 執行前，acceptance-gate-hook（PreToolUse）會自動檢查執行期間是否有新增 error-pattern，並輸出場景 #17 提醒。
+`ticket track complete` 執行前，acceptance-gate-hook 會自動檢查是否有新增 error-pattern，並輸出場景 #17 提醒。
 
-### 執行時序（重要：先 complete，後處理 #17）
+**強制時序**：先執行 complete，後處理 #17（避免死鎖）。
 
-```
-[1] 用戶執行: ticket track complete X
-    ↓
-[2] acceptance-gate-hook 觸發（PreToolUse）
-    |
-    ├── [阻擋] 子任務未完成 → 阻止執行（exit 2）
-    |
-    ├── [有新增 error-pattern] → 輸出 #17 提醒（非阻擋，exit 0）
-    |
-    └── [正常情況] → 輸出 #1 驗收確認提醒（非阻擋，exit 0）
-    ↓
-[3] ticket track complete X 執行（in_progress → completed）
-    ↓
-[4] PM 根據 hook 輸出，complete 後執行對應動作
-    +-- [若有 #17 提醒] → AskUserQuestion #17 → 選擇後處理
-    +-- [場景 #1/#2] → AskUserQuestion #1 → 確認驗收方式 → AskUserQuestion #2 → 路由下一步
-```
-
-**死鎖防護：complete 必須先執行，#17 在 complete 後處理**
-
-> **問題根源**：error-pattern 檔案在 #17 處理後不會自動移除。若 PM 先處理 #17 再執行 complete，下一次執行 complete 時 hook 仍會觸發 #17 提醒，造成無限循環無法完成。
-
-| 行為 | 結果 |
+| 條件 | 處理 |
 |------|------|
-| 看到 #17 提醒 → 先處理 → 再執行 complete | 死鎖：hook 持續觸發 #17，complete 永遠等待 |
-| 看到 #17 提醒 → 直接執行 complete → 完成後處理 #17 | 正確：non-blocking，一次完成 |
-
-### AskUserQuestion #17 觸發條件
-
-| 條件 | 說明 |
-|------|------|
-| 有新增 error-pattern | ticket 執行期間 `.claude/error-patterns/` 下有新增或修改的檔案 |
+| 有新增 error-pattern | complete 後執行 AskUserQuestion #17 |
 | 無新增 error-pattern | 跳過 #17，正常完成 |
 
-### #17 選項
-
-| 選項 | 說明 |
-|------|------|
-| 建立改進 Ticket（Recommended） | 為新增的 error-pattern 建立修復/防護 Ticket |
-| 已有對應 Ticket | error-pattern 相關修復已在現有 Ticket 中 |
-| 延後處理 | 記錄到 todolist.yaml，後續版本排程 |
-
-> 場景定義詳見：.claude/rules/core/askuserquestion-rules.md（場景 #17）
+> 執行時序詳細說明和死鎖防護：.claude/references/ticket-lifecycle-phases.md（完成階段錯誤學習驗證章節）
+> 場景定義：.claude/rules/core/askuserquestion-rules.md（場景 #17）
 
 ---
 
@@ -166,5 +129,5 @@ Ticket 建立後、認領前，強制並行派發多代理人審核。
 
 ---
 
-**Last Updated**: 2026-03-09
-**Version**: 5.3.0 - 修復完成階段時序：釐清 #1/#17 執行順序，新增死鎖防護說明（W22-009）
+**Last Updated**: 2026-03-11
+**Version**: 5.5.0 - 移除建立後審核的 DOC 類型豁免條件（0.1.0-W37-001）

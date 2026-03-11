@@ -72,6 +72,22 @@ cat ~/.local/share/uv/tools/<tool-name>/lib/python*/site-packages/<package>/<fil
 |------|-----------|--------------|
 | `uv tool install . --force` | 是 | 否 |
 | `uv tool install . --reinstall` | 是 | 是 |
+| `uv tool uninstall + uv cache clean + uv tool install` | 是 | 是（備用） |
+
+### 備用方案：清除快取後重新安裝
+
+當 `--reinstall` 仍無效時（極端情況），使用完整清除流程：
+
+```bash
+uv tool uninstall ticket-system
+uv cache clean ticket-system
+uv tool install .claude/skills/ticket
+```
+
+### 再次踩坑紀錄（2026-03-10）
+
+W32-002 修復 `--status` 多值篩選時，代理人使用 `uv tool install --force` 安裝，全局 CLI 仍為舊版。
+原因：已有 IMP-023 記錄但未在操作前查詢。強調每次修改 ticket CLI 後必須用 `--reinstall`。
 
 ## 相關文件
 

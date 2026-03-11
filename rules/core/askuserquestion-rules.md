@@ -24,48 +24,17 @@
 
 ## 背景
 
-### 為什麼需要 AskUserQuestion
+PM 用開放式提問時，用戶的自然語言回答可能被 Hook 系統誤判為開發命令。使用 AskUserQuestion 工具可消除此風險。
 
-PM 用開放式提問（如「要並行處理嗎？」）時，用戶的自然語言回答可能被 Hook 系統誤判為開發命令（觸發 command-entrance-gate-hook）。使用 Claude Code 原生的 AskUserQuestion 工具可消除此風險。
-
-### AskUserQuestion 是 Deferred Tool
-
-AskUserQuestion 是 deferred tool，使用前**必須**先載入：
-
-```
-ToolSearch("select:AskUserQuestion")
-```
-
-載入後即可直接呼叫。每個 Hook 提醒訊息都包含此提示。
+AskUserQuestion 是 deferred tool，使用前**必須**先 `ToolSearch("select:AskUserQuestion")` 載入。
 
 ---
 
-## 使用對象限制（Subagent 行為規範）
+## 使用對象限制
 
-**AskUserQuestion 僅限 PM（rosemary-project-manager）使用，所有 subagent 禁止直接使用此工具。**
+**AskUserQuestion 僅限 PM 使用，所有 subagent 禁止。**
 
-| 角色 | 可使用 AskUserQuestion | 遇到路由/選擇場景時的行為 |
-|------|---------------------|--------------------------|
-| rosemary-project-manager（PM） | 允許（場景 1-17） | 直接使用 AskUserQuestion |
-| 所有 subagent（代理人） | 禁止 | 停止決策，回報 PM 中轉 |
-
-### Subagent 路由決策強制行為
-
-當 subagent 執行任務時遇到多方案選擇、路由決策或需用戶確認的場景，**必須**：
-
-1. 停止決策，不自行選擇路徑
-2. 在產出物（Ticket 執行日誌或分析報告）中標記「需 PM 決策：[描述問題和選項]」
-3. 回報主線程，由 PM 使用 AskUserQuestion 中轉決策
-
-**禁止行為**：
-
-| 禁止 | 說明 |
-|------|------|
-| Subagent 使用 AskUserQuestion | 繞過 PM 決策授權，違反職責邊界 |
-| Subagent 假設用戶偏好自行選擇路徑 | 缺少確認，可能走錯方向 |
-| Subagent 向用戶直接輸出選擇問句 | 用戶回答可能被 Hook 誤判為開發命令 |
-
-**原因**：PM 掌握全局視角，決策集中由 PM 管理可確保紀錄完整、避免並行 subagent 各自詢問用戶造成混亂。
+Subagent 遇到路由/選擇場景時：停止決策 → 在產出物中標記「需 PM 決策」→ 回報主線程中轉。
 
 ---
 
@@ -116,26 +85,11 @@ PM 需要用戶做任何決策時（包含多選路由和二元 yes/no 確認）
 
 ### 場景執行順序約束
 
-部分場景有強制的先後順序，**新 session 接手或 commit 後必須遵守**：
-
-| 約束 | 說明 | 違反後果 |
-|------|------|---------|
-| **#16 必須先於 #11a/#11b**（強制） | commit 後先執行 #16（錯誤學習確認 @ Checkpoint 1.5），再進入 #11a 或 #11b（Commit Handoff @ Checkpoint 2） | 跳過 #16 直接 #11a/#11b → 該次 commit 的錯誤學習永久遺漏，無從追溯 |
-
-**執行流程**：`git commit 成功 → Checkpoint 1.5（#16）→ Checkpoint 2（#11a 或 #11b，依情境）`
-
-> 詳見：decision-tree.md 第八層 Checkpoint 1.5、askuserquestion-scene-details.md 場景 16
-
-### AskUserQuestion 工具能力
-
-- 2-4 個選項，帶標籤和描述
-- 單選（`multiSelect: false`）或多選（`multiSelect: true`）
-- 自動提供「Other」選項供自由輸入
-- markdown 預覽（方案比較時使用）
+**#16 必須先於 #11a/#11b**（強制）：commit 後先執行 #16（錯誤學習），再進入 #11（Handoff）。
 
 ---
 
-> 各場景完整操作細節：.claude/references/askuserquestion-scene-details.md
+> 各場景完整操作細節、選項配置、工具能力說明：.claude/references/askuserquestion-scene-details.md
 
 ## 違規處理
 
@@ -173,6 +127,6 @@ PM 需要用戶做任何決策時（包含多選路由和二元 yes/no 確認）
 
 ---
 
-**Last Updated**: 2026-03-09
-**Version**: 3.2.0 - 場景 #11 細分為 #11a（情境 A/Context 刷新）和 #11b（情境 B/任務切換），統一 decision-tree.md 情境命名（0.1.0-W22-017）
+**Last Updated**: 2026-03-11
+**Version**: 3.3.0 - 操作指引提取至 references/askuserquestion-scene-details.md，原位留索引（0.1.0-W35-001.6）
 **Purpose**: AskUserQuestion 規則唯一 Source of Truth

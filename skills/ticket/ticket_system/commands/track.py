@@ -247,7 +247,7 @@ def _register_query_commands(
     p_list.add_argument("--completed", action="store_true", help=TrackMessages.ARG_COMPLETED)
     p_list.add_argument("--blocked", action="store_true", help=TrackMessages.ARG_BLOCKED)
     p_list.add_argument("--wave", type=_parse_wave_arg, help=TrackMessages.ARG_WAVE)
-    p_list.add_argument("--status", nargs="+", choices=["pending", "in_progress", "completed", "blocked"], help=TrackMessages.ARG_STATUS)
+    p_list.add_argument("--status", nargs='+', help=TrackMessages.ARG_STATUS)
     p_list.add_argument("--format", choices=["table", "ids", "yaml"], default="table", help=TrackMessages.ARG_FORMAT)
     p_list.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
@@ -425,11 +425,16 @@ def _register_acceptance_commands(
         help=TrackMessages.HELP_CHECK_ACCEPTANCE
     )
     p_check_acceptance.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
-    p_check_acceptance.add_argument("index", help=TrackMessages.ARG_INDEX)
+    p_check_acceptance.add_argument("index", nargs="?", default=None, help=TrackMessages.ARG_INDEX)
     p_check_acceptance.add_argument(
         "--uncheck",
         action="store_true",
         help=TrackMessages.ARG_UNCHECK
+    )
+    p_check_acceptance.add_argument(
+        "--all",
+        action="store_true",
+        help=TrackMessages.ARG_CHECK_ACCEPTANCE_ALL
     )
     p_check_acceptance.add_argument("--version", help=TrackMessages.ARG_VERSION)
 

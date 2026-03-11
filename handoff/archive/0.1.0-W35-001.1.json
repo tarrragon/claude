@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W35-001.1",
+  "direction": "to-sibling:0.1.0-W35-001",
+  "timestamp": "2026-03-11T10:38:10.837045",
+  "from_status": "completed",
+  "title": "驗證 CLAUDE.md 去重後品質規範規則權重是否維持",
+  "what": "驗證 CLAUDE.md 去重後品質規範規則權重是否維持",
+  "chain": {},
+  "resumed_at": "2026-03-11T10:42:50.911256"
+}

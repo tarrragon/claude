@@ -24,12 +24,12 @@ try:
     from hook_utils import (
         setup_hook_logging,
         run_hook_safely,
-        _log_exception,
         get_current_version_from_todolist,
         scan_ticket_files_by_version,
         find_ticket_files,
         find_ticket_file,
-        _parse_version_from_ticket_id,
+        extract_version_from_ticket_id,
+        extract_wave_from_ticket_id,
     )
 except ImportError:
     # 如果模組還不存在，定義虛擬函式以便測試可以 import
@@ -37,9 +37,6 @@ except ImportError:
         raise NotImplementedError()
 
     def run_hook_safely(main_func, hook_name: str) -> int:
-        raise NotImplementedError()
-
-    def _log_exception(logger: logging.Logger, hook_name: str, tb_str: str) -> None:
         raise NotImplementedError()
 
     def get_current_version_from_todolist(project_root, logger=None):
@@ -54,7 +51,10 @@ except ImportError:
     def find_ticket_file(ticket_id, project_root=None, logger=None):
         raise NotImplementedError()
 
-    def _parse_version_from_ticket_id(ticket_id: str):
+    def extract_version_from_ticket_id(ticket_id: str):
+        raise NotImplementedError()
+
+    def extract_wave_from_ticket_id(ticket_id: str):
         raise NotImplementedError()
 
 
@@ -533,99 +533,174 @@ class TestRunHookSafely:
 
 
 # ============================================================================
-# TestLogException - _log_exception() 測試（W25-005）
+# TestExceptionHandling - run_hook_safely() 異常處理與 stderr 輸出測試
 # ============================================================================
 
-class TestLogException:
-    """_log_exception() stderr 輸出測試"""
+class TestExceptionHandling:
+    """run_hook_safely() 異常時的日誌與 stderr 輸出測試
 
-    def test_log_exception_writes_to_stderr_normal_path(self, project_root, mock_env_var, reset_loggers, capsys):
-        """_log_exception 在正常路徑寫入 stderr"""
+    這些測試驗證當 hook main_func 拋出異常時，
+    run_hook_safely 透過 _log_exception 記錄異常並輸出到 stderr 的行為。
+    （原 TestLogException，重構為透過 run_hook_safely 間接測試）
+    """
+
+    def test_exception_stderr_normal_path(self, project_root, mock_env_var, reset_loggers, capsys):
+        """Scenario 1: 異常時 stderr 正常輸出異常通知"""
+        # Given: 設定專案根目錄
         mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
 
-        logger = setup_hook_logging("test-hook")
-        tb_str = "Traceback (most recent call last):\n  File 'test.py', line 1\n    raise ValueError('test')\nValueError: test"
+        # When: 執行會拋出異常的 hook
+        def main_func() -> int:
+            raise ValueError("test error")
 
-        _log_exception(logger, "test-hook", tb_str)
+        exit_code = run_hook_safely(main_func, "test-hook")
 
         captured = capsys.readouterr()
 
-        # 驗證 stderr 包含預期的訊息
+        # Then: 返回異常碼 1，stderr 包含異常通知
+        assert exit_code == 1
         assert "[Hook Error] test-hook failed unexpectedly" in captured.err
         assert "Check hook logs for details" in captured.err
 
-    def test_log_exception_writes_to_stderr_logging_failure(self, project_root, mock_env_var, reset_loggers, capsys, monkeypatch):
-        """_log_exception 在 logging 失敗時仍然寫入 stderr"""
+    def test_exception_logged_to_file(self, project_root, mock_env_var, reset_loggers):
+        """Scenario 2: 異常記錄到日誌檔案"""
+        # Given: 設定專案根目錄
         mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
 
-        logger = setup_hook_logging("test-hook")
-        tb_str = "Traceback (most recent call last):\n  File 'test.py', line 1\n    raise ValueError('test')\nValueError: test"
+        # When: 執行會拋出異常的 hook
+        def main_func() -> int:
+            raise RuntimeError("test runtime error")
 
-        # Mock logger.critical 拋出異常
-        original_critical = logger.critical
+        run_hook_safely(main_func, "log-test-hook")
 
-        def mock_critical(msg):
-            raise RuntimeError("Logger write failed")
+        # Then: 日誌檔案包含異常 traceback
+        log_dir = project_root / ".claude" / "hook-logs" / "log-test-hook"
+        log_files = list(log_dir.glob("*.log"))
+        assert len(log_files) >= 1
 
-        monkeypatch.setattr(logger, "critical", mock_critical)
+        log_content = log_files[-1].read_text()
+        assert "RuntimeError" in log_content
+        assert "test runtime error" in log_content
+        assert "Unhandled exception in log-test-hook" in log_content
 
-        _log_exception(logger, "test-hook-fail", tb_str)
-
-        captured = capsys.readouterr()
-
-        # 驗證即使 logging 失敗，stderr 仍然有輸出
-        assert "[Hook Error] test-hook-fail failed unexpectedly" in captured.err
-        assert "Check hook logs for details" in captured.err
-
-    def test_log_exception_stderr_always_written(self, project_root, mock_env_var, reset_loggers, capsys):
-        """_log_exception 的 stderr 輸出在 try-except 外面，永遠執行"""
+    def test_exception_stderr_and_file_both_written(self, project_root, mock_env_var, reset_loggers, capsys):
+        """Scenario 3: 異常同時寫入 stderr 和日誌檔（雙通道）"""
+        # Given: 設定專案根目錄
         mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
 
-        logger = setup_hook_logging("another-hook")
-        tb_str = "Some traceback"
+        # When: 執行會拋出異常的 hook
+        def main_func() -> int:
+            raise TypeError("double channel test")
 
-        _log_exception(logger, "another-hook", tb_str)
-
+        exit_code = run_hook_safely(main_func, "double-channel-hook")
         captured = capsys.readouterr()
 
-        # 驗證 stderr 有輸出
+        # Then: stderr 有用戶可見的異常通知
+        assert exit_code == 1
+        assert "[Hook Error] double-channel-hook failed unexpectedly" in captured.err
+
+        # And: 日誌檔案有完整的 traceback
+        log_dir = project_root / ".claude" / "hook-logs" / "double-channel-hook"
+        log_files = list(log_dir.glob("*.log"))
+        assert len(log_files) >= 1
+
+        log_content = log_files[-1].read_text()
+        assert "TypeError" in log_content
+        assert "double channel test" in log_content
+
+    def test_exception_critical_level_logging(self, project_root, mock_env_var, reset_loggers, capsys):
+        """Scenario 4: 異常以 CRITICAL 級別記錄到日誌"""
+        # Given: 設定專案根目錄
+        mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
+
+        # When: 執行會拋出異常的 hook
+        def main_func() -> int:
+            raise ValueError("critical level test")
+
+        run_hook_safely(main_func, "critical-level-hook")
+        captured = capsys.readouterr()
+
+        # Then: stderr 包含 Hook 異常通知
         assert "[Hook Error]" in captured.err
-        assert "another-hook" in captured.err
 
-    def test_log_exception_stderr_format(self, project_root, mock_env_var, reset_loggers, capsys):
-        """_log_exception 的 stderr 輸出格式符合預期"""
+        # And: 日誌檔案包含 CRITICAL 級別的異常訊息
+        log_dir = project_root / ".claude" / "hook-logs" / "critical-level-hook"
+        log_files = list(log_dir.glob("*.log"))
+        log_content = log_files[-1].read_text()
+        # 日誌格式為 "[yyyy-mm-dd HH:MM:SS] CRITICAL - ..."
+        assert "CRITICAL" in log_content
+        assert "Unhandled exception" in log_content
+
+    def test_exception_with_hook_name(self, project_root, mock_env_var, reset_loggers, capsys):
+        """Scenario 5: 異常訊息包含正確的 hook 名稱"""
+        # Given: 設定專案根目錄
         mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
 
-        logger = setup_hook_logging("format-test-hook")
-        tb_str = "Error traceback"
+        hook_name = "my-custom-hook"
 
-        _log_exception(logger, "format-test-hook", tb_str)
+        # When: 執行會拋出異常的 hook
+        def main_func() -> int:
+            raise RuntimeError("error in custom hook")
 
+        exit_code = run_hook_safely(main_func, hook_name)
         captured = capsys.readouterr()
 
-        # 驗證 stderr 包含：
-        # 1. StreamHandler 輸出的 CRITICAL 訊息（因為 CRITICAL >= WARNING）
-        # 2. sys.stderr.write 輸出的 [Hook Error] 訊息
-        assert "[CRITICAL] Unhandled exception in format-test-hook" in captured.err
-        assert "[CRITICAL] Error traceback" in captured.err
-        assert "[Hook Error] format-test-hook failed unexpectedly. Check hook logs for details." in captured.err
+        # Then: stderr 和日誌都包含正確的 hook 名稱
+        assert exit_code == 1
+        assert hook_name in captured.err
 
-    def test_run_hook_safely_outputs_stderr_on_exception(self, project_root, mock_env_var, reset_loggers, capsys):
-        """run_hook_safely 在異常時輸出 stderr"""
+        log_dir = project_root / ".claude" / "hook-logs" / hook_name
+        log_files = list(log_dir.glob("*.log"))
+        log_content = log_files[-1].read_text()
+        assert hook_name in log_content
+
+    def test_exception_stderr_survives_logging_failure(self, project_root, mock_env_var, reset_loggers, capsys, monkeypatch):
+        """Scenario 6: 即使日誌寫入失敗，stderr 仍然輸出（備援路徑）"""
+        # Given: 設定專案根目錄
         mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
+
+        # When: 執行會拋出異常的 hook，並模擬日誌寫入失敗
+        def main_func() -> int:
+            raise ValueError("error with logging failure")
+
+        # Mock logger.critical 拋出異常（模擬日誌寫入失敗）
+        original_critical = logging.Logger.critical
+
+        def mock_critical(self, msg, *args, **kwargs):
+            raise OSError("Disk full")
+
+        monkeypatch.setattr(logging.Logger, "critical", mock_critical)
+
+        exit_code = run_hook_safely(main_func, "logging-failure-hook")
+        captured = capsys.readouterr()
+
+        # Then: 即使日誌失敗，stderr 仍然輸出用戶可見的訊息
+        assert exit_code == 1
+        # stderr 可能包含「Failed to log exception」或 [Hook Error]
+        assert "logging-failure-hook" in captured.err
+
+    def test_exception_traceback_format(self, project_root, mock_env_var, reset_loggers):
+        """Scenario 7: 異常 traceback 格式完整"""
+        # Given: 設定專案根目錄
+        mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
+
+        # When: 執行會拋出異常的 hook
+        def helper_func():
+            raise ValueError("nested error")
 
         def main_func() -> int:
-            raise RuntimeError("Test runtime error")
+            helper_func()
+            return 0
 
-        exit_code = run_hook_safely(main_func, "stderr-test-hook")
+        run_hook_safely(main_func, "traceback-format-hook")
 
-        captured = capsys.readouterr()
+        # Then: 日誌包含完整的 traceback，包含函式堆疊
+        log_dir = project_root / ".claude" / "hook-logs" / "traceback-format-hook"
+        log_files = list(log_dir.glob("*.log"))
+        log_content = log_files[-1].read_text()
 
-        # 驗證返回 1
-        assert exit_code == 1
-
-        # 驗證 stderr 有 Hook 失敗訊息
-        assert "[Hook Error] stderr-test-hook failed unexpectedly" in captured.err
+        assert "Traceback" in log_content or "ValueError" in log_content
+        assert "nested error" in log_content
 
 
 # ============================================================================
@@ -969,50 +1044,79 @@ class TestFindTicketFile:
 
     def test_parse_standard_version_format(self, project_root):
         """解析標準版本號格式 {version}-W{wave}-{seq}"""
-        from hook_utils import _parse_version_from_ticket_id
-
         # 標準格式
-        assert _parse_version_from_ticket_id("0.1.0-W1-001") == "0.1.0"
-        assert _parse_version_from_ticket_id("0.31.0-W31-003") == "0.31.0"
-        assert _parse_version_from_ticket_id("1.2.3-W10-050") == "1.2.3"
+        assert extract_version_from_ticket_id("0.1.0-W1-001") == "0.1.0"
+        assert extract_version_from_ticket_id("0.31.0-W31-003") == "0.31.0"
+        assert extract_version_from_ticket_id("1.2.3-W10-050") == "1.2.3"
 
     def test_parse_version_with_subtask(self, project_root):
         """解析包含子任務的版本號"""
-        from hook_utils import _parse_version_from_ticket_id
-
         # 子任務格式
-        assert _parse_version_from_ticket_id("0.1.0-W1-001.1") == "0.1.0"
-        assert _parse_version_from_ticket_id("0.1.0-W1-001.2.3") == "0.1.0"
+        assert extract_version_from_ticket_id("0.1.0-W1-001.1") == "0.1.0"
+        assert extract_version_from_ticket_id("0.1.0-W1-001.2.3") == "0.1.0"
 
     def test_parse_version_invalid_format_no_wave(self, project_root):
         """無效格式：無 -W 標記，應返回 None"""
-        from hook_utils import _parse_version_from_ticket_id
-
         # 無 -W 的非標準格式
-        assert _parse_version_from_ticket_id("old-ticket-001") is None
-        assert _parse_version_from_ticket_id("ticket123") is None
-        assert _parse_version_from_ticket_id("0.1.0") is None
+        assert extract_version_from_ticket_id("old-ticket-001") is None
+        assert extract_version_from_ticket_id("ticket123") is None
+        assert extract_version_from_ticket_id("0.1.0") is None
 
     def test_parse_version_invalid_format_no_dot(self, project_root):
         """無效格式：版本號無 '.'，應返回 None"""
-        from hook_utils import _parse_version_from_ticket_id
-
         # 版本號無 '.'
-        assert _parse_version_from_ticket_id("0-W1-001") is None
-        assert _parse_version_from_ticket_id("v1-W1-001") is None
+        assert extract_version_from_ticket_id("0-W1-001") is None
+        assert extract_version_from_ticket_id("v1-W1-001") is None
 
     def test_parse_version_edge_cases(self, project_root):
         """邊界情況測試"""
-        from hook_utils import _parse_version_from_ticket_id
-
         # 空字串
-        assert _parse_version_from_ticket_id("") is None
+        assert extract_version_from_ticket_id("") is None
 
         # 只有 -W（無版本號部分）
-        assert _parse_version_from_ticket_id("-W1-001") is None
+        assert extract_version_from_ticket_id("-W1-001") is None
 
         # -W 出現在開頭
-        assert _parse_version_from_ticket_id("-W1-001-0.1.0") is None
+        assert extract_version_from_ticket_id("-W1-001-0.1.0") is None
+
+    def test_extract_wave_standard_format(self, project_root):
+        """解析標準 Wave 號格式"""
+        # 標準格式
+        assert extract_wave_from_ticket_id("0.1.0-W1-001") == 1
+        assert extract_wave_from_ticket_id("0.31.0-W31-003") == 31
+        assert extract_wave_from_ticket_id("1.2.3-W10-050") == 10
+        assert extract_wave_from_ticket_id("0.1.0-W100-001") == 100
+
+    def test_extract_wave_with_subtask(self, project_root):
+        """解析包含子任務的 Wave 號"""
+        # 子任務格式
+        assert extract_wave_from_ticket_id("0.1.0-W1-001.1") == 1
+        assert extract_wave_from_ticket_id("0.1.0-W22-025.2.3") == 22
+
+    def test_extract_wave_invalid_format_no_wave(self, project_root):
+        """無效格式：無 -W 標記，應返回 None"""
+        # 無 -W 的非標準格式
+        assert extract_wave_from_ticket_id("old-ticket-001") is None
+        assert extract_wave_from_ticket_id("ticket123") is None
+        assert extract_wave_from_ticket_id("0.1.0") is None
+
+    def test_extract_wave_invalid_format_malformed(self, project_root):
+        """無效格式：Wave 號格式不符合 -W{digits}-"""
+        # 格式不符
+        assert extract_wave_from_ticket_id("0.1.0-W-001") is None
+        assert extract_wave_from_ticket_id("0.1.0-WABC-001") is None
+        assert extract_wave_from_ticket_id("0.1.0-W1") is None
+
+    def test_extract_wave_edge_cases(self, project_root):
+        """邊界情況測試"""
+        # 空字串
+        assert extract_wave_from_ticket_id("") is None
+
+        # 只有 -W（無波次號）
+        assert extract_wave_from_ticket_id("-W-001") is None
+
+        # Wave 號為 0
+        assert extract_wave_from_ticket_id("0.1.0-W0-001") == 0
 
     # ========================================================================
     # Fallback to Full Scan Tests

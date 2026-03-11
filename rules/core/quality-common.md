@@ -56,21 +56,9 @@
 
 **單一責任判斷**：如果描述函式需要「和」或「或」→ 必須拆分。
 
-**Guard Clause 優先**：
+**Guard Clause 優先**：使用提前返回模式而非深層巢狀。
 
-```
-# 錯誤：深層巢狀
-if user:
-    if user.is_admin:
-        if has_permission:
-            do_something()
-
-# 正確：提前返回
-if not user: return
-if not user.is_admin: return
-if not has_permission: return
-do_something()
-```
+> 詳細範例：.claude/references/quality-common-details.md（1.2 函式設計 — Guard Clause 範例章節）
 
 ---
 
@@ -79,21 +67,6 @@ do_something()
 > **來源**：IMP-003 — 變數從全域移入函式內部後，引用該變數的其他函式產生 NameError。
 >
 > **觸發時機**：任何涉及「變數作用域變更」的重構（全域→區域、模組級→函式內、類別屬性→方法參數）。
-
-**認知層 — 理解設計意圖（來源: IMP-013）**
-
-在執行影響範圍分析之前，先質疑設計意圖：
-
-| 步驟 | 質疑問題 | 判斷依據 |
-|------|---------|---------|
-| 1 | 這個參數/變數在舊版中是否被正確使用？ | 檢查實際呼叫和引用 |
-| 2 | 如果舊版也未使用，原始設計意圖是什麼？ | git log / git blame / docstring |
-| 3 | 在新設計中，這個參數應該在哪裡被使用？ | 需求文件 / 設計規格 |
-
-**判斷結果**：
-- 設計意圖已實現 → 繼續下方影響範圍分析
-- 設計意圖未實現 → 補上實作，而非盲目沿用或移除
-- 確認不再需要 → 移除並記錄原因到工作日誌
 
 **強制檢查清單**（修改作用域前必須完成）：
 
@@ -120,6 +93,8 @@ do_something()
 | 僅用 py_compile 驗證 | 無法偵測作用域問題 |
 | 把變數改回全域以「修復」 | 違反重構目標 |
 
+> 詳細檢查流程、場景範例、設計意圖質疑步驟：.claude/references/quality-common-details.md（1.2.1 作用域變更防護 — 詳細檢查清單章節）
+
 > 完整錯誤模式：.claude/error-patterns/implementation/IMP-003-refactoring-scope-regression.md
 
 ---
@@ -140,31 +115,6 @@ do_something()
 | 4 | 在程式碼註解中記錄格式規格 | 文件字串 |
 | 5 | 測試案例覆蓋所有格式變體 | 測試每個變體 |
 
-**正確做法**：
-
-```python
-def should_preserve(direction: str) -> bool:
-    """判斷是否保留。
-
-    direction 格式（來源：handoff.py._resolve_direction_from_args）：
-    - "to-parent"（無後綴）
-    - "to-sibling:{target_id}"（帶目標 ID）
-    - "context-refresh"（非任務鏈）
-    """
-    # 使用前綴匹配，容許後綴變化
-    direction_type = direction.split(":")[0]
-    return direction_type in {"to-sibling", "to-parent", "to-child"}
-```
-
-**錯誤做法**：
-
-```python
-# 錯誤：基於假設使用精確匹配，未查閱生產者
-def should_preserve(direction: str) -> bool:
-    return direction in {"to-sibling", "to-parent", "to-child"}
-    # "to-sibling:0.31.1-W3-002" 不在 set 中 → False
-```
-
 **禁止行為**：
 
 | 禁止行為 | 原因 |
@@ -172,6 +122,8 @@ def should_preserve(direction: str) -> bool:
 | 基於欄位名稱假設格式 | 實際格式可能含後綴、前綴、分隔符 |
 | 只看消費端推測格式 | 必須查閱生產端確認 |
 | 測試只用「理想化」格式 | 必須從生產端取得真實格式做測試 |
+
+> 詳細檢查流程、場景範例、前綴匹配實作：.claude/references/quality-common-details.md（1.2.2 欄位格式溯源 — 詳細檢查清單章節）
 
 > 完整錯誤模式：.claude/error-patterns/implementation/IMP-011-incomplete-format-matching.md
 
@@ -192,29 +144,6 @@ def should_preserve(direction: str) -> bool:
 | 3 | 清理操作是否覆蓋所有儲存層（快取、註冊、目錄、配置）？ | ARCH-002 |
 | 4 | 不確定時，預設行為是保留還是刪除？（必須為保留） | IMP-010 |
 
-**正確做法**：
-
-```python
-# 正確：結合上下文欄位做刪除決策，不確定時保留
-if is_ticket_completed(project_root, ticket_id, logger):
-    direction = handoff_data.get("direction", "")
-    direction_type = direction.split(":")[0]
-    if direction_type in ("to-sibling", "to-parent", "to-child"):
-        # 任務鏈 handoff，completed 是預期狀態，保留
-        logger.info(f"保留 {direction_type} handoff: {ticket_id}")
-        continue
-    # 非任務鏈類型，completed 表示 stale，可清理
-    file_path.unlink()
-```
-
-**錯誤做法**：
-
-```python
-# 錯誤：只檢查單一狀態值，不考慮上下文
-if is_ticket_completed(project_root, ticket_id, logger):
-    file_path.unlink()  # 一律刪除 → 誤刪有效的 handoff
-```
-
 **禁止行為**：
 
 | 禁止行為 | 原因 |
@@ -222,6 +151,8 @@ if is_ticket_completed(project_root, ticket_id, logger):
 | 只依賴單一狀態值做刪除決策 | 同一狀態在不同上下文可能有不同語義（IMP-010） |
 | 清理只處理部分儲存層 | 殘留的註冊/配置會觸發重建（ARCH-002） |
 | 預設行為為刪除 | 破壞性操作應保守，不確定時必須保留 |
+
+> 詳細設計檢查流程、場景分析、正確實作範例：.claude/references/quality-common-details.md（1.2.3 破壞性操作設計防護 — 詳細檢查清單章節）
 
 > 完整錯誤模式：.claude/error-patterns/implementation/IMP-010-gc-state-semantic-conflict.md
 > 完整錯誤模式：.claude/error-patterns/architecture/ARCH-002-plugin-cache-only-cleanup.md
@@ -251,10 +182,9 @@ if is_ticket_completed(project_root, ticket_id, logger):
 | 只依賴 linter 報告而不人工審查 | 無法區分「不再需要」與「未實現」兩種情況 |
 | 重構時將「未使用」等同於「多餘」 | 可能是尚未完成的設計，移除會讓需求被遺忘 |
 
-**核心教訓**：
+**核心教訓**：未使用的程式碼是一個待回答的問題（「為什麼存在？」），而不是一個已知的答案（「應該移除」）。
 
-> Unused code is a question, not an answer.
-> 未使用的程式碼是一個待回答的問題（「為什麼存在？」），而不是一個已知的答案（「應該移除」）。
+> 詳細檢查清單、場景分析、判斷決策樹、工作日誌記錄方式：.claude/references/quality-common-details.md（1.2.4 未使用程式碼處理 — 詳細檢查清單章節）
 
 > 完整錯誤模式：.claude/error-patterns/implementation/IMP-013-refactoring-design-intent-blindness.md
 
@@ -273,19 +203,6 @@ if is_ticket_completed(project_root, ticket_id, logger):
 | 格式字串 | `f"版本: {v}"` | `f"{Labels.VERSION}: {v}"` |
 | 提示文字 | `"請輸入名稱"` | `Prompts.ENTER_NAME` |
 
-**訊息常數的組織方式**：
-
-```
-# 每個模組有對應的 messages 檔案
-module/
-  commands/
-    create.py            # 使用 CreateMessages
-    track.py             # 使用 TrackMessages
-  lib/
-    messages.py          # 共用訊息
-    commands_messages.py  # 命令專用訊息
-```
-
 **允許的例外**：
 
 | 例外 | 原因 |
@@ -293,6 +210,8 @@ module/
 | 日誌訊息（Logger/print） | 供開發者閱讀，非使用者介面 |
 | 測試斷言字串 | 測試專用，不面向使用者 |
 | 程式碼內部的技術標識 | 如 key name、format pattern |
+
+> 訊息常數組織方式、定義範例、命名規範：.claude/references/quality-common-details.md（1.3.1 訊息常數管理 — 目錄結構組織章節）
 
 #### 1.3.2 禁止魔法數字
 
@@ -360,15 +279,6 @@ module/
 **註解是**：需求保護器、設計意圖記錄、維護指引
 **註解不是**：程式碼翻譯、API 說明、TODO 清單
 
-**標準格式**：
-
-```
-/// 需求：[UC/BR-xxx] [簡短描述]
-/// [詳細業務描述]
-/// 約束：[限制條件和邊界規則]
-/// [維護指引：修改須知、相依性警告]
-```
-
 **覆蓋要求**：
 
 | 程式碼類型 | 需要需求註解 |
@@ -385,6 +295,8 @@ module/
 | 程式碼翻譯 | `// 將計數器加 1` | 程式碼已自明 |
 | 技術實作描述 | `// 用 Map 做快速查找` | 程式碼已自明 |
 | 過時的 TODO | `// TODO: 之後加驗證` | 應建 Ticket 追蹤 |
+
+> 標準格式、詳細指引、各類型註解範例、禁止註解分析：.claude/references/quality-common-details.md（1.6 註解標準 — 詳細指引章節）
 
 > 完整方法論：.claude/methodologies/comment-writing-methodology.md
 
@@ -423,5 +335,11 @@ module/
 
 ---
 
-**Last Updated**: 2026-03-08
-**Version**: 1.0.0 - 從 implementation-quality.md 提取通用規則
+## 相關文件
+
+- .claude/references/quality-common-details.md - 詳細指引、程式碼範例、檢查清單
+
+---
+
+**Last Updated**: 2026-03-11
+**Version**: 1.1.0 - 操作指引提取至 references/quality-common-details.md（W34-016）

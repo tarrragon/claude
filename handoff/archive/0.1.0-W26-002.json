@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W26-002",
+  "direction": "to-sibling:0.1.0-W27-002",
+  "timestamp": "2026-03-09T17:17:28.625370",
+  "from_status": "completed",
+  "title": "分析 Wave 完成多視角審查的觸發機制缺口，確保情境 C 時 PM 被提醒執行 /parallel-evaluation",
+  "what": "分析 Wave 完成多視角審查的觸發機制缺口，確保情境 C 時 PM 被提醒執行 /parallel-evaluation",
+  "chain": {},
+  "resumed_at": "2026-03-09T17:18:24.498511"
+}

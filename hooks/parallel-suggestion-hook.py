@@ -55,6 +55,7 @@ try:
         run_hook_safely,
         get_project_root,
         find_ticket_files,
+        validate_hook_input,
     )
     from lib.hook_messages import AskUserQuestionMessages
 except ImportError as e:
@@ -104,22 +105,8 @@ def get_json_from_input(input_data: Optional[Dict[str, Any]], logger) -> Dict[st
 
 
 def validate_input(input_data: Dict[str, Any], logger) -> bool:
-    """
-    驗證輸入格式
-
-    Args:
-        input_data: Hook 輸入資料
-        logger: 日誌物件
-
-    Returns:
-        bool - 輸入格式是否正確
-    """
-    # UserPromptSubmit Hook 至少需要 prompt 欄位
-    if "prompt" not in input_data:
-        logger.error("缺少必要欄位: prompt")
-        return False
-
-    return True
+    """驗證輸入格式 - 已遷移至 hook_utils.validate_hook_input"""
+    return validate_hook_input(input_data, logger, ("prompt",))
 
 
 # ============================================================================

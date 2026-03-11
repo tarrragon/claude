@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W33-004",
+  "direction": "to-sibling:0.1.0-W33-005",
+  "timestamp": "2026-03-10T13:00:37.160091",
+  "from_status": "completed",
+  "title": "重構 統一 extract_version/wave_from_ticket_id 到 hook_utils",
+  "what": "將 acceptance-gate-hook.py 的 extract_version_from_ticket_id 和 extract_wave_from_ticket_id 統一到 hook_utils.py 公開 API（縮小範圍：不涉及 ticket_validator，維持套件邊界獨立）",
+  "chain": {},
+  "resumed_at": "2026-03-10T13:01:14.856176"
+}

@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W24-003",
+  "direction": "to-sibling:0.1.0-W24-004",
+  "timestamp": "2026-03-09T13:05:47.973884",
+  "from_status": "completed",
+  "title": "修復 acceptance-gate-hook.py #17 被 warning_msg 壓制和 has_acceptance_record 重複呼叫",
+  "what": "修復 acceptance-gate-hook.py #17 被 warning_msg 壓制和 has_acceptance_record 重複呼叫",
+  "chain": {},
+  "resumed_at": "2026-03-09T13:06:12.969795"
+}

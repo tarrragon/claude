@@ -39,7 +39,7 @@ from pathlib import Path
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, get_project_root
+from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin
 from lib.hook_messages import GateMessages, CoreMessages, format_message
 
 from datetime import datetime
@@ -157,31 +157,6 @@ def generate_hook_output(is_allowed: bool, reason: str, logger) -> Dict[str, Any
     }
 
 
-def save_check_log(
-    tool_name: str,
-    file_path: str,
-    is_allowed: bool,
-    reason: str,
-    logger
-) -> None:
-    """儲存檢查日誌"""
-    try:
-        project_dir = get_project_root()
-        log_dir = project_dir / ".claude" / "hook-logs" / "ticket-path-guard"
-        log_dir.mkdir(parents=True, exist_ok=True)
-
-        report_file = log_dir / f"checks-{datetime.now().strftime('%Y%m%d')}.log"
-
-        log_entry = f"""[{datetime.now().isoformat()}]
-  Tool: {tool_name}
-  FilePath: {file_path}
-  Permission: {"ALLOWED" if is_allowed else "BLOCKED"}
-
-"""
-        with open(report_file, "a", encoding="utf-8") as f:
-            f.write(log_entry)
-    except Exception as e:
-        logger.error(f"儲存檢查日誌失敗: {e}")
 
 
 # ============================================================================
@@ -195,29 +170,15 @@ def main() -> int:
     try:
         logger.info(CoreMessages.HOOK_START.format(hook_name="Ticket Path Guard Hook"))
 
-        # 防禦性編程：處理空輸入或無效 JSON
-        input_text = sys.stdin.read().strip()
-        if not input_text:
-            logger.warning("輸入為空，返回預設允許")
+        # 讀取 JSON 輸入
+        input_data = read_json_from_stdin(logger)
+        if not input_data:
+            logger.warning("輸入為空或解析失敗，返回預設允許")
             error_output = {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "allow",
-                    "permissionDecisionReason": "輸入為空，預設允許"
-                }
-            }
-            print(json.dumps(error_output, ensure_ascii=False))
-            return EXIT_ALLOW
-
-        try:
-            input_data = json.loads(input_text)
-        except json.JSONDecodeError as parse_error:
-            logger.error(f"JSON 解析錯誤: {parse_error}，輸入內容: {input_text[:100]}")
-            error_output = {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "allow",
-                    "permissionDecisionReason": f"JSON 解析錯誤，預設允許: {str(parse_error)}"
+                    "permissionDecisionReason": "輸入為空或解析失敗，預設允許"
                 }
             }
             print(json.dumps(error_output, ensure_ascii=False))
@@ -249,7 +210,13 @@ def main() -> int:
         hook_output = generate_hook_output(is_allowed, reason, logger)
         print(json.dumps(hook_output, ensure_ascii=False))
 
-        save_check_log(tool_name, file_path, is_allowed, reason, logger)
+        log_entry = f"""[{datetime.now().isoformat()}]
+  Tool: {tool_name}
+  FilePath: {file_path}
+  Permission: {"ALLOWED" if is_allowed else "BLOCKED"}
+
+"""
+        save_check_log("ticket-path-guard", log_entry, logger)
 
         exit_code = EXIT_ALLOW if is_allowed else EXIT_BLOCK
         logger.info(f"Hook 檢查完成，exit code: {exit_code}")

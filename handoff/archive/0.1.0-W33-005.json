@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W33-005",
+  "direction": "to-sibling:0.1.0-W33-010",
+  "timestamp": "2026-03-10T13:42:30.554535",
+  "from_status": "completed",
+  "title": "清理 移除 acceptance-gate-hook.py 已棄用的 get_ticket_created_time",
+  "what": "移除 acceptance-gate-hook.py 已棄用的 get_ticket_created_time 函式（無消費者，已確認）",
+  "chain": {},
+  "resumed_at": "2026-03-10T13:43:00.562716"
+}

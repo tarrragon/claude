@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W37-002",
+  "direction": "context-refresh",
+  "timestamp": "2026-03-11T16:59:40.121709",
+  "from_status": "in_progress",
+  "title": "補充 track_board.py 單元測試覆蓋",
+  "what": "為 track_board.py 設計單元測試案例，覆蓋 17 個公開函式（重點：中文寬度計算、樹狀渲染、看板佈局）",
+  "chain": {},
+  "resumed_at": "2026-03-11T17:37:41.620286"
+}
