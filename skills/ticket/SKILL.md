@@ -118,13 +118,23 @@ ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"
 
 ## 無子命令時的預設行為
 
-當用戶輸入 `/ticket`（無子命令或參數）時，執行以下流程：
+當用戶輸入 `/ticket`（無子命令或參數）時，依序執行以下流程：
 
-1. 執行 `ticket resume --list` 檢查是否有待恢復的 handoff 任務
-2. **有待恢復任務** → 使用 AskUserQuestion 列出選項：
-   - 各待恢復任務作為選項（label: `{ticket_id} - {title}`, description: `方向: {direction}`）
-   - 用戶選擇後執行 `ticket resume <selected_id>`
-3. **無待恢復任務** → 顯示子命令總覽（下方表格）
+1. **檢查待恢復任務** — 執行 `ticket resume --list`
+   - **有待恢復任務** → 使用 AskUserQuestion 列出選項：
+     - 各待恢復任務作為選項（label: `{ticket_id} - {title}`, description: `方向: {direction}`）
+     - 用戶選擇後執行 `ticket resume <selected_id>`
+     - 流程結束
+
+2. **檢查待辦任務** — 執行 `ticket track list --status pending,in_progress`
+   - **有待辦任務** → 使用 AskUserQuestion 列出選項：
+     - 各待辦任務作為選項（label: `{ticket_id} - {title}`, description: `狀態: {status}`）
+     - 額外選項：「建立新 Ticket」（description: `執行 /ticket create`）
+     - 用戶選擇既有任務 → 依狀態處理（pending → claim，in_progress → 繼續執行）
+     - 用戶選擇「建立新 Ticket」→ 引導進入 `/ticket create` 流程
+     - 流程結束
+
+3. **無任何待辦** → 顯示子命令總覽（下方表格）
 
 ---
 
@@ -257,12 +267,15 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 0.31.0-W28-
 
 ---
 
-**Version**: 2.2.0
-**Last Updated**: 2026-03-02
+**Version**: 2.3.0
+**Last Updated**: 2026-03-11
 **Status**: Completed
 
 **Change Log**:
 
+- v2.3.0 (2026-03-11): `/ticket` 裸指令新增待辦任務檢查步驟
+  - 流程調整為三層：(1) 檢查 handoff → (2) 檢查 pending/in_progress 待辦 → (3) 顯示子命令
+  - 待辦任務以 AskUserQuestion 列出，含「建立新 Ticket」選項
 - v2.2.0 (2026-03-02): `/ticket` 裸指令自動檢查 handoff 待恢復任務
   - 新增「無子命令時的預設行為」章節
   - `/ticket` → 檢查 pending handoff → AskUserQuestion 選擇 → resume

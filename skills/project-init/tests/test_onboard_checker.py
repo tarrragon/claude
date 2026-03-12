@@ -7,8 +7,15 @@ import json
 import pytest
 from pathlib import Path
 from project_init.lib.onboard_checker import (
+    check_claude_config_directory,
+    check_claude_directory_structure,
     check_claude_md,
+    check_docs_structure,
+    check_gitignore_completeness,
+    check_hook_configurations,
+    check_language_standards,
     check_language_template,
+    check_readme_md,
     check_settings_local_json,
     detect_project_language,
     parse_hook_classification,
@@ -376,3 +383,364 @@ class TestCheckHookCompleteness:
         assert not result.completeness_ok
         assert len(result.unregistered_hooks) == 3
         assert result.unregistered_hooks == {"hook1.py", "hook2.py", "hook3.py"}
+
+
+class TestCheckDocsStructure:
+    """測試 docs 目錄結構檢查."""
+
+    def test_docs_structure_complete(self, tmp_path: Path) -> None:
+        """測試 docs 目錄結構完整."""
+        # 建立完整的 docs 結構
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "work-logs").mkdir()
+        (tmp_path / "docs" / "todolist.yaml").touch()
+
+        result = check_docs_structure(tmp_path)
+
+        assert result.exists
+        assert result.has_work_logs
+        assert result.has_todolist
+        assert result.all_complete
+
+    def test_docs_directory_missing(self, tmp_path: Path) -> None:
+        """測試 docs 目錄不存在."""
+        result = check_docs_structure(tmp_path)
+
+        assert not result.exists
+        assert not result.has_work_logs
+        assert not result.has_todolist
+        assert not result.all_complete
+
+    def test_work_logs_directory_missing(self, tmp_path: Path) -> None:
+        """測試 docs/work-logs 子目錄不存在."""
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "todolist.yaml").touch()
+
+        result = check_docs_structure(tmp_path)
+
+        assert result.exists
+        assert not result.has_work_logs
+        assert result.has_todolist
+        assert not result.all_complete
+
+    def test_todolist_file_missing(self, tmp_path: Path) -> None:
+        """測試 docs/todolist.yaml 檔案不存在."""
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "work-logs").mkdir()
+
+        result = check_docs_structure(tmp_path)
+
+        assert result.exists
+        assert result.has_work_logs
+        assert not result.has_todolist
+        assert not result.all_complete
+
+    def test_partial_structure(self, tmp_path: Path) -> None:
+        """測試部分缺失的結構."""
+        (tmp_path / "docs").mkdir()
+
+        result = check_docs_structure(tmp_path)
+
+        assert result.exists
+        assert not result.has_work_logs
+        assert not result.has_todolist
+        assert not result.all_complete
+
+
+class TestCheckGitignoreCompleteness:
+    """測試 .gitignore 完整性檢查."""
+
+    def test_gitignore_all_rules_present(self, tmp_path: Path) -> None:
+        """測試所有必須規則都存在."""
+        gitignore_content = """# 框架排除規則
+coverage/
+htmlcov/
+.claude/hook-logs/
+.claude/worktrees/
+.claude/tool-results/
+.claude/handoff/
+"""
+        (tmp_path / ".gitignore").write_text(gitignore_content)
+
+        result = check_gitignore_completeness(tmp_path)
+
+        assert result.exists
+        assert result.all_required_complete
+        assert result.missing_rules == []
+
+    def test_gitignore_missing_rules(self, tmp_path: Path) -> None:
+        """測試缺失部分規則."""
+        gitignore_content = """coverage/
+.claude/hook-logs/
+"""
+        (tmp_path / ".gitignore").write_text(gitignore_content)
+
+        result = check_gitignore_completeness(tmp_path)
+
+        assert result.exists
+        assert not result.all_required_complete
+        assert len(result.missing_rules) > 0
+        assert ".claude/worktrees/" in result.missing_rules
+
+    def test_gitignore_not_exists(self, tmp_path: Path) -> None:
+        """測試 .gitignore 不存在."""
+        result = check_gitignore_completeness(tmp_path)
+
+        assert not result.exists
+        assert not result.all_required_complete
+        assert len(result.missing_rules) == 6
+
+    def test_gitignore_fuzzy_match_coverage_variants(self, tmp_path: Path) -> None:
+        """測試 coverage 規則變體."""
+        gitignore_content = """coverage
+htmlcov/*
+.claude/hook-logs/
+.claude/worktrees/
+.claude/tool-results/
+.claude/handoff/
+"""
+        (tmp_path / ".gitignore").write_text(gitignore_content)
+
+        result = check_gitignore_completeness(tmp_path)
+
+        assert result.has_coverage_rules
+
+    def test_gitignore_empty_file(self, tmp_path: Path) -> None:
+        """測試空的 .gitignore 檔案."""
+        (tmp_path / ".gitignore").write_text("")
+
+        result = check_gitignore_completeness(tmp_path)
+
+        assert result.exists
+        assert not result.all_required_complete
+        assert len(result.missing_rules) == 6
+
+    def test_gitignore_encoding_error(self, tmp_path: Path) -> None:
+        """測試編碼錯誤時的優雅處理."""
+        gitignore_path = tmp_path / ".gitignore"
+        # 寫入二進位資料模擬編碼錯誤
+        gitignore_path.write_bytes(b"\xff\xfe")
+
+        result = check_gitignore_completeness(tmp_path)
+
+        assert result.exists
+        assert not result.all_required_complete
+
+
+class TestCheckClaudeDirectoryStructure:
+    """測試 .claude 目錄結構檢查."""
+
+    def test_claude_all_directories_present(self, tmp_path: Path) -> None:
+        """測試所有必須目錄都存在."""
+        claude_dir = tmp_path / ".claude"
+        required_dirs = ["rules", "hooks", "skills", "methodologies", "references", "agents", "config"]
+        claude_dir.mkdir()
+        for dir_name in required_dirs:
+            (claude_dir / dir_name).mkdir()
+
+        result = check_claude_directory_structure(tmp_path)
+
+        assert result.exists
+        assert result.all_required_complete
+        assert result.missing_directories == []
+        assert result.directory_count == 7
+
+    def test_claude_missing_directories(self, tmp_path: Path) -> None:
+        """測試缺失部分目錄."""
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+        (claude_dir / "rules").mkdir()
+        (claude_dir / "hooks").mkdir()
+
+        result = check_claude_directory_structure(tmp_path)
+
+        assert result.exists
+        assert not result.all_required_complete
+        assert len(result.missing_directories) == 5
+        assert "skills/" in result.missing_directories
+
+    def test_claude_directory_not_exists(self, tmp_path: Path) -> None:
+        """測試 .claude 目錄不存在."""
+        result = check_claude_directory_structure(tmp_path)
+
+        assert not result.exists
+        assert not result.all_required_complete
+        assert len(result.missing_directories) == 7
+
+    def test_claude_is_file_not_directory(self, tmp_path: Path) -> None:
+        """測試 .claude 是檔案而非目錄."""
+        (tmp_path / ".claude").touch()
+
+        result = check_claude_directory_structure(tmp_path)
+
+        assert not result.exists
+        assert not result.all_required_complete
+
+
+class TestCheckHookConfigurations:
+    """測試 Hook 配置檔完整性檢查."""
+
+    def test_hook_config_all_files_present_and_valid(self, tmp_path: Path) -> None:
+        """測試所有配置檔都存在且格式有效."""
+        config_dir = tmp_path / ".claude" / "config"
+        config_dir.mkdir(parents=True)
+
+        (config_dir / "hook-language-classification.yaml").write_text("hooks:\n  test: flutter\n")
+        (config_dir / "hook-exclude-list.json").write_text('{"exclude": []}')
+        (config_dir / "settings.json").write_text('{"hooks": {}}')
+
+        result = check_hook_configurations(tmp_path)
+
+        assert result.config_dir_exists
+        assert result.all_required_complete
+        assert result.missing_files == []
+        assert result.yaml_format_valid
+        assert result.json_format_valid
+
+    def test_hook_config_missing_files(self, tmp_path: Path) -> None:
+        """測試缺失配置檔."""
+        config_dir = tmp_path / ".claude" / "config"
+        config_dir.mkdir(parents=True)
+        (config_dir / "settings.json").write_text('{}')
+
+        result = check_hook_configurations(tmp_path)
+
+        assert result.config_dir_exists
+        assert not result.all_required_complete
+        assert "hook-language-classification.yaml" in result.missing_files
+        assert "hook-exclude-list.json" in result.missing_files
+
+    def test_hook_config_directory_not_exists(self, tmp_path: Path) -> None:
+        """測試 config 目錄不存在."""
+        result = check_hook_configurations(tmp_path)
+
+        assert not result.config_dir_exists
+        assert not result.all_required_complete
+
+    def test_hook_config_invalid_json(self, tmp_path: Path) -> None:
+        """測試無效的 JSON 格式."""
+        config_dir = tmp_path / ".claude" / "config"
+        config_dir.mkdir(parents=True)
+
+        (config_dir / "hook-language-classification.yaml").write_text("hooks:\n")
+        (config_dir / "hook-exclude-list.json").write_text("{invalid json}")
+        (config_dir / "settings.json").write_text('{}')
+
+        result = check_hook_configurations(tmp_path)
+
+        assert result.config_dir_exists
+        assert not result.all_required_complete
+        assert not result.json_format_valid
+        assert len(result.format_errors) > 0
+
+
+class TestCheckClaudeConfigDirectory:
+    """測試 .claude/config 目錄檢查."""
+
+    def test_config_directory_exists_and_readable(self, tmp_path: Path) -> None:
+        """測試 config 目錄存在且可讀."""
+        config_dir = tmp_path / ".claude" / "config"
+        config_dir.mkdir(parents=True)
+        (config_dir / "test.json").write_text("{}")
+
+        result = check_claude_config_directory(tmp_path)
+
+        assert result.exists
+        assert result.is_directory
+        assert result.has_read_permissions
+        assert result.config_file_count == 1
+
+    def test_config_directory_not_exists(self, tmp_path: Path) -> None:
+        """測試 config 目錄不存在."""
+        result = check_claude_config_directory(tmp_path)
+
+        assert not result.exists
+        assert not result.is_directory
+
+    def test_config_is_file_not_directory(self, tmp_path: Path) -> None:
+        """測試 config 是檔案而非目錄."""
+        (tmp_path / ".claude").mkdir()
+        (tmp_path / ".claude" / "config").touch()
+
+        result = check_claude_config_directory(tmp_path)
+
+        assert result.exists
+        assert not result.is_directory
+
+
+class TestCheckReadmeMd:
+    """測試 README.md 檢查."""
+
+    def test_readme_exists_and_nonempty(self, tmp_path: Path) -> None:
+        """測試 README.md 存在且非空."""
+        (tmp_path / "README.md").write_text("# Project\n\nDescription")
+
+        result = check_readme_md(tmp_path)
+
+        assert result.exists
+        assert result.is_nonempty
+        assert result.size_bytes > 0
+
+    def test_readme_not_exists(self, tmp_path: Path) -> None:
+        """測試 README.md 不存在."""
+        result = check_readme_md(tmp_path)
+
+        assert not result.exists
+        assert result.path is None
+
+    def test_readme_exists_but_empty(self, tmp_path: Path) -> None:
+        """測試 README.md 存在但為空."""
+        (tmp_path / "README.md").write_text("")
+
+        result = check_readme_md(tmp_path)
+
+        assert result.exists
+        assert not result.is_nonempty
+
+
+class TestCheckLanguageStandards:
+    """測試語言規範文件檢查."""
+
+    def test_flutter_standard_exists(self, tmp_path: Path) -> None:
+        """測試 Flutter 規範檔存在."""
+        templates_dir = tmp_path / ".claude" / "project-templates"
+        templates_dir.mkdir(parents=True)
+        (templates_dir / "FLUTTER.md").write_text("# Flutter Standards")
+
+        result = check_language_standards(tmp_path, "flutter")
+
+        assert result.detected_language == "flutter"
+        assert result.expected_standard_file == "FLUTTER.md"
+        assert result.exists
+        assert result.missing_standards == []
+
+    def test_flutter_standard_not_exists(self, tmp_path: Path) -> None:
+        """測試 Flutter 規範檔不存在."""
+        result = check_language_standards(tmp_path, "flutter")
+
+        assert result.detected_language == "flutter"
+        assert result.expected_standard_file == "FLUTTER.md"
+        assert not result.exists
+        assert "FLUTTER.md" in result.missing_standards
+
+    def test_unknown_language(self, tmp_path: Path) -> None:
+        """測試未知語言."""
+        result = check_language_standards(tmp_path, "unknown")
+
+        assert result.detected_language == "unknown"
+        assert not result.exists
+        assert result.missing_standards == []
+
+    def test_multiple_standards_available(self, tmp_path: Path) -> None:
+        """測試多個規範檔可用."""
+        templates_dir = tmp_path / ".claude" / "project-templates"
+        templates_dir.mkdir(parents=True)
+        (templates_dir / "FLUTTER.md").touch()
+        (templates_dir / "GO.md").touch()
+        (templates_dir / "PYTHON.md").touch()
+
+        result = check_language_standards(tmp_path, "flutter")
+
+        assert len(result.standard_files_available) == 3
+        assert "FLUTTER.md" in result.standard_files_available
+        assert "GO.md" in result.standard_files_available

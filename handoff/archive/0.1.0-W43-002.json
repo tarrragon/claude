@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W43-002",
+  "direction": "to-sibling:0.1.0-W43-003",
+  "timestamp": "2026-03-12T11:51:37.070323",
+  "from_status": "completed",
+  "title": "評估並調整 TDD Phase 3b 進入前基於 3a 策略評估是否需要拆分為多個不衝突子任務，避免單一代理人負責大量修改",
+  "what": "在 tdd-flow.md 的 Phase 3a→3b 轉換點新增拆分評估步驟，定義觸發條件和判斷標準",
+  "chain": {},
+  "resumed_at": "2026-03-12T11:52:05.573036"
+}

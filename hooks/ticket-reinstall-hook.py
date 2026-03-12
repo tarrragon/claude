@@ -40,17 +40,7 @@ from typing import Optional, Set, Dict, Tuple
 
 # 導入 hook_utils
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely
-
-
-def get_project_root(logger: logging.Logger) -> Path:
-    """Get project root from CLAUDE_PROJECT_DIR or infer from current location."""
-    if "CLAUDE_PROJECT_DIR" in os.environ:
-        return Path(os.environ["CLAUDE_PROJECT_DIR"])
-
-    # Fallback: infer from hook location (.claude/hooks/xxx.py)
-    hook_dir = Path(__file__).parent
-    return hook_dir.parent.parent
+from hook_utils import setup_hook_logging, run_hook_safely, get_project_root
 
 
 def find_ticket_cli_path(logger: logging.Logger) -> Optional[Path]:
@@ -256,7 +246,7 @@ def format_difference_summary(differences: Dict[str, any]) -> str:
 def main() -> int:
     logger = setup_hook_logging("ticket-reinstall-hook")
 
-    project_root = get_project_root(logger)
+    project_root = get_project_root()
     logger.debug(f"Project root: {project_root}")
 
     # Find source code

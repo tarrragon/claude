@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
-from ticket_system.lib.constants import TICKET_ID_PATTERN, WORK_LOGS_DIR, TICKETS_DIR
+from ticket_system.lib.constants import WORK_LOGS_DIR, TICKETS_DIR
 from ticket_system.lib.ticket_loader import (
     get_project_root,
     get_ticket_path,

@@ -154,18 +154,126 @@ Ticket: {ticket_id} (type: {ticket_type})
   執行 `ticket track accept-creation {ticket_id}` 修正矛盾狀態"""
 
     # ========================================================================
-    # Main Thread Edit Restriction Hook
+    # Main Thread Edit Restriction Hook - 路徑類型細分
     # ========================================================================
 
-    EDIT_ALLOWED = "編輯操作被允許"
-    EDIT_RESTRICTED = "編輯操作受限"
+    # 禁止編輯的程式碼檔案
+    EDIT_BLOCKED_PROGRAM_FILES = """錯誤：主線程禁止直接編輯程式碼檔案
+
+為什麼阻止編輯：
+  主線程不應直接修改應用程式碼。程式碼變更必須透過專業的代理人執行，
+  確保品質審查和測試驗證完整。
+
+編輯的檔案類型：
+  - 應用程式碼: lib/*, backend/*, *.dart, *.go 等
+  - 測試程式碼: test/*
+  - 依賴配置: pubspec.yaml, go.mod, go.sum 等
+
+建議操作：
+  1. 建立 Ticket 記錄需要的程式碼變更
+  2. 根據程式碼類型派發對應代理人：
+     - Dart/Flutter: parsley-flutter-developer
+     - Go Backend: fennel-go-developer
+     - Python Hook: thyme-python-developer
+  3. 代理人完成實作和測試後回傳結果
+
+詳見: .claude/rules/forbidden/skip-gate.md"""
+
+    # .claude/ 非白名單路徑（防止建立未預定義子目錄）
+    EDIT_BLOCKED_CLAUDE_INVALID_PATH = """錯誤：主線程禁止寫入 .claude/ 非白名單路徑
+
+為什麼阻止編輯：
+  .claude/ 目錄是系統配置區域，未預定義的子目錄可能破壞系統結構。
+
+當前允許的子目錄：
+  - .claude/plans/           (計畫檔案)
+  - .claude/rules/           (規則)
+  - .claude/methodologies/   (方法論)
+  - .claude/hooks/           (Hook 系統)
+  - .claude/skills/          (Skill 工具)
+  - .claude/agents/          (代理人定義)
+  - .claude/references/      (參考檔案)
+  - .claude/error-patterns/  (錯誤模式)
+  - .claude/handoff/         (交接檔案)
+
+建議操作：
+  1. 確認目標路徑是否在允許列表中
+  2. 若需要新增 .claude/ 子目錄，請聯繫 PM 更新白名單
+  3. 使用 /ticket create 建立對應需求
+
+詳見: .claude/rules/forbidden/skip-gate.md"""
+
+    # 其他禁止路徑（預設拒絕原則）
+    EDIT_BLOCKED_DEFAULT_DENY = """錯誤：主線程禁止編輯此路徑（預設拒絕）
+
+為什麼阻止編輯：
+  安全政策要求所有檔案編輯必須在允許清單中。未列在允許清單的路徑
+  會被攔截以防止意外修改。
+
+主線程允許編輯的路徑：
+  - .claude/ 系統檔案 (plans/rules/methodologies/hooks/skills/agents/references/error-patterns/handoff/)
+  - docs/work-logs/** (含 tickets/)
+  - docs/todolist.yaml
+  - CLAUDE.md
+
+建議操作：
+  1. 檢查目標檔案是否在允許路徑中
+  2. 如果需要編輯其他檔案，請建立 Ticket 派發對應代理人
+  3. 使用 /ticket create 建立任務
+
+詳見: .claude/rules/forbidden/skip-gate.md"""
 
     # ========================================================================
-    # Ticket Path Guard Hook
+    # Ticket Path Guard Hook - 錯誤位置操作
+    # ========================================================================
+
+    TICKET_PATH_FORBIDDEN_WRITE = """錯誤：禁止在 .claude/tickets/ 路徑下建立檔案
+
+為什麼阻止操作：
+  Ticket 的正確存放位置是 docs/work-logs/v{version}/tickets/，而非 .claude/tickets/。
+  統一位置確保編號正確、易於追蹤且符合五重文件系統規範。
+
+錯誤位置：.claude/tickets/
+正確位置：docs/work-logs/v{version}/tickets/
+
+建議操作：
+  1. 使用 /ticket create 命令建立新 Ticket
+     此命令會自動將 Ticket 存放到正確位置並產生有效編號
+  2. 或使用 /ticket track 指令管理現有 Ticket
+  3. 若需要手動編輯 Ticket，請確認檔案位置為正確路徑
+
+詳見: .claude/rules/flows/ticket-lifecycle.md"""
+
+    TICKET_PATH_FORBIDDEN_EDIT = """錯誤：禁止直接編輯 .claude/tickets/ 路徑下的檔案
+
+為什麼阻止操作：
+  .claude/tickets/ 是廢棄的路徑。所有 Ticket 應存放在正確位置：
+  docs/work-logs/v{version}/tickets/
+
+錯誤位置：.claude/tickets/
+正確位置：docs/work-logs/v{version}/tickets/
+
+建議操作：
+  1. 確認您要編輯的 Ticket 位置是否正確：
+     docs/work-logs/v{version}/tickets/{ticket-id}.md
+  2. 使用 /ticket track 指令管理 Ticket：
+     - /ticket track claim {id}         認領 Ticket
+     - /ticket track append-log {id}    追加執行日誌
+     - /ticket track complete {id}      完成 Ticket
+  3. 若需要查看 Ticket 內容，使用：
+     /ticket track query {ticket-id}
+
+詳見: .claude/rules/flows/ticket-lifecycle.md"""
+
+    # ========================================================================
+    # Ticket Path Guard Hook - 狀態常數
     # ========================================================================
 
     TICKET_PATH_ALLOWED = "Ticket 路徑檢查通過，允許編輯"
     TICKET_PATH_DENIED = "Ticket 路徑檢查失敗，禁止編輯"
+
+    EDIT_ALLOWED = "編輯操作被允許"
+    EDIT_RESTRICTED = "編輯操作受限"
 
 
 class WorkflowMessages:

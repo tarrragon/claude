@@ -40,7 +40,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from hook_utils import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin,
-    extract_tool_input, validate_hook_input
+    extract_tool_input, validate_hook_input, get_project_root
 )
 from lib.hook_messages import QualityMessages, CoreMessages, AskUserQuestionMessages, format_message
 
@@ -262,10 +262,6 @@ def check_ticket_completion_status(project_dir: str, ticket_id: Optional[str]) -
 
     return False, message
 
-def get_project_root() -> str:
-    """取得專案根目錄"""
-    project_root = os.getenv("CLAUDE_PROJECT_DIR", str(Path.cwd()))
-    return project_root
 
 # ============================================================================
 # 報告生成和儲存
@@ -521,7 +517,7 @@ def main() -> int:
 
                 # 檢查 Ticket 完成狀態
                 project_root = get_project_root()
-                _, ticket_msg = check_ticket_completion_status(project_root, None)
+                _, ticket_msg = check_ticket_completion_status(str(project_root), None)
 
         # 步驟 8: 生成 Hook 輸出
         hook_output = generate_hook_output(
@@ -536,7 +532,7 @@ def main() -> int:
                 file_path, is_phase_completion, phase_type,
                 worklog_complete, missing_items, ticket_msg
             )
-            save_completion_report(project_root, report, logger)
+            save_completion_report(str(project_root), report, logger)
 
         logger.info("Phase Completion Gate Hook 檢查完成")
         return EXIT_SUCCESS

@@ -28,30 +28,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple, Any
 
-
-def get_project_root() -> Optional[Path]:
-    """透過 CLAUDE.md 位置動態定位專案根目錄"""
-    current_dir = Path.cwd()
-
-    # 從當前目錄開始往上搜尋 CLAUDE.md
-    while current_dir != current_dir.parent:
-        if (current_dir / "CLAUDE.md").exists():
-            return current_dir
-        current_dir = current_dir.parent
-
-    return None
+# 導入統一的 get_project_root
+from hook_utils import get_project_root
 
 
-def setup_project_environment() -> Tuple[Optional[Path], Optional[Path], Optional[Path]]:
+def setup_project_environment() -> Tuple[Path, Path, Path]:
     """設定專案根目錄和相關環境變數
 
     Returns:
-        Tuple of (project_dir, hooks_dir, logs_dir) or (None, None, None) if failed
+        Tuple of (project_dir, hooks_dir, logs_dir)
     """
     project_dir = get_project_root()
-    if project_dir is None:
-        print("錯誤: 找不到 CLAUDE.md，無法確定專案根目錄", file=sys.stdout)
-        return None, None, None
 
     hooks_dir = project_dir / '.claude' / 'hooks'
     logs_dir = project_dir / '.claude' / 'hook-logs'

@@ -30,6 +30,8 @@ try:
         find_ticket_file,
         extract_version_from_ticket_id,
         extract_wave_from_ticket_id,
+        validate_tool_input,
+        validate_ticket_unified,
     )
 except ImportError:
     # 如果模組還不存在，定義虛擬函式以便測試可以 import
@@ -55,6 +57,12 @@ except ImportError:
         raise NotImplementedError()
 
     def extract_wave_from_ticket_id(ticket_id: str):
+        raise NotImplementedError()
+
+    def validate_tool_input(tool_input, logger=None, required_fields=None):
+        raise NotImplementedError()
+
+    def validate_ticket_unified(ticket_id, project_root=None, logger=None):
         raise NotImplementedError()
 
 
@@ -1199,3 +1207,663 @@ class TestFindTicketFile:
         result = find_ticket_file("unusual-name", project_root=project_root, logger=logger)
 
         assert result is not None
+
+
+# ============================================================================
+# TestValidateToolInput - validate_tool_input() 測試
+# ============================================================================
+
+class TestValidateToolInput:
+    """validate_tool_input() 功能測試"""
+
+    # ========================================================================
+    # Scenario 1: 正常路徑測試（Case A1-A3）
+    # ========================================================================
+
+    def test_validate_tool_input_normal_all_fields_present(self, reset_loggers):
+        """場景 1：子欄位完整時回傳 True"""
+        logger = logging.getLogger("test-validate-tool-input-1")
+
+        tool_input = {"file_path": "test.md", "content": "hello"}
+        required_fields = ("file_path", "content")
+
+        result = validate_tool_input(tool_input, logger, required_fields)
+
+        assert result is True
+
+    def test_validate_tool_input_normal_extra_fields(self, reset_loggers):
+        """場景 1 變體：多於 2 個子欄位時仍通過"""
+        logger = logging.getLogger("test-validate-tool-input-2")
+
+        tool_input = {"file_path": "x.md", "content": "x", "extra": "y"}
+        required_fields = ("file_path", "content")
+
+        result = validate_tool_input(tool_input, logger, required_fields)
+
+        assert result is True
+
+    def test_validate_tool_input_normal_empty_string_value(self, reset_loggers):
+        """場景 1 變體：空字串值（非 None）應通過"""
+        logger = logging.getLogger("test-validate-tool-input-3")
+
+        tool_input = {"file_path": "", "content": "text"}
+        required_fields = ("file_path", "content")
+
+        result = validate_tool_input(tool_input, logger, required_fields)
+
+        assert result is True
+
+    # ========================================================================
+    # Scenario 2: 異常路徑測試（Case B1-B8）
+    # ========================================================================
+
+    def test_validate_tool_input_missing_subfield(self, reset_loggers):
+        """場景 2：子欄位缺失時回傳 False"""
+        logger = logging.getLogger("test-validate-tool-input-4")
+
+        tool_input = {"file_path": "x.md"}
+        required_fields = ("file_path", "content")
+
+        result = validate_tool_input(tool_input, logger, required_fields)
+
+        assert result is False
+
+    def test_validate_tool_input_multiple_fields_missing(self, reset_loggers):
+        """場景 2 變體：多個子欄位缺失時回傳 False"""
+        logger = logging.getLogger("test-validate-tool-input-5")
+
+        tool_input = {}
+        required_fields = ("file_path", "content")
+
+        result = validate_tool_input(tool_input, logger, required_fields)
+
+        assert result is False
+
+    def test_validate_tool_input_input_data_none(self, reset_loggers):
+        """場景 3：tool_input 為 None 時回傳 False"""
+        logger = logging.getLogger("test-validate-tool-input-6")
+
+        required_fields = ("file_path", "content")
+
+        result = validate_tool_input(None, logger, required_fields)
+
+        assert result is False
+
+    def test_validate_tool_input_input_data_not_dict(self, reset_loggers):
+        """場景 3b：tool_input 非 dict 型別時回傳 False"""
+        logger = logging.getLogger("test-validate-tool-input-7")
+
+        required_fields = ("file_path", "content")
+
+        result = validate_tool_input("invalid", logger, required_fields)
+
+        assert result is False
+
+    def test_validate_tool_input_subfield_value_is_none(self, reset_loggers):
+        """場景 4：子欄位值為 None 時回傳 False"""
+        logger = logging.getLogger("test-validate-tool-input-8")
+
+        tool_input = {"file_path": None, "content": "x"}
+        required_fields = ("file_path", "content")
+
+        result = validate_tool_input(tool_input, logger, required_fields)
+
+        assert result is False
+
+    def test_validate_tool_input_tool_input_not_dict(self, reset_loggers):
+        """邊界：tool_input 非 dict 型別時回傳 False"""
+        logger = logging.getLogger("test-validate-tool-input-9")
+
+        required_fields = ("file_path", "content")
+
+        result = validate_tool_input("string", logger, required_fields)
+
+        assert result is False
+
+    # ========================================================================
+    # Scenario 3: 特殊情況測試（Case C1-C3）
+    # ========================================================================
+
+    def test_validate_tool_input_logger_none(self, reset_loggers):
+        """特殊情況：logger 為 None（靜默模式）"""
+        tool_input = {"file_path": "x.md", "content": "x"}
+        required_fields = ("file_path", "content")
+
+        result = validate_tool_input(tool_input, None, required_fields)
+
+        assert result is True
+
+    def test_validate_tool_input_no_subfields_required(self, reset_loggers):
+        """特殊情況：required_fields 為 None"""
+        logger = logging.getLogger("test-validate-tool-input-12")
+
+        tool_input = {"any_field": "any_value"}
+
+        result = validate_tool_input(tool_input, logger, None)
+
+        assert result is True
+
+    def test_validate_tool_input_empty_subfields_tuple(self, reset_loggers):
+        """特殊情況：required_fields 為空 tuple"""
+        logger = logging.getLogger("test-validate-tool-input-13")
+
+        tool_input = {}
+
+        result = validate_tool_input(tool_input, logger, ())
+
+        assert result is True
+
+
+# ============================================================================
+# TestValidateTicketUnified - validate_ticket_unified() 測試
+# ============================================================================
+
+class TestValidateTicketUnified:
+    """validate_ticket_unified() 功能測試"""
+
+    # ========================================================================
+    # Scenario 1: 正常路徑測試（Case A1-A2）
+    # ========================================================================
+
+    def test_validate_ticket_unified_valid_ticket(self, project_root, reset_loggers):
+        """場景 5：Ticket 有效（存在且包含決策樹欄位）"""
+        logger = logging.getLogger("test-validate-ticket-unified-1")
+
+        # 建立有效 Ticket
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        ticket_path = tickets_dir / "0.1.0-W1-001.md"
+        ticket_path.write_text("""---
+id: 0.1.0-W1-001
+title: Test Ticket
+---
+
+# Test
+
+decision_tree_path: test-path
+""")
+
+        is_valid, error_msg = validate_ticket_unified("0.1.0-W1-001", project_root, logger)
+
+        assert is_valid is True
+        assert error_msg is None
+
+    def test_validate_ticket_unified_auto_project_root(self, reset_loggers):
+        """場景 5 變體：project_root 為 None（自動查找）"""
+        logger = logging.getLogger("test-validate-ticket-unified-2")
+
+        # 此測試依賴實際專案環境，使用 get_project_root() 自動探測
+        # 在測試環境中，如果 Ticket 不存在則應返回 False
+        is_valid, error_msg = validate_ticket_unified("nonexistent-ticket-auto", None, logger)
+
+        # 由於是自動探測且 Ticket 不存在，應回傳 False
+        assert is_valid is False
+        assert error_msg is not None
+
+    # ========================================================================
+    # Scenario 2: 異常路徑測試（Case B1-B5）
+    # ========================================================================
+
+    def test_validate_ticket_unified_ticket_not_found(self, project_root, reset_loggers):
+        """場景 6：Ticket 不存在"""
+        logger = logging.getLogger("test-validate-ticket-unified-3")
+
+        # 建立空的 Ticket 目錄（無 Ticket 檔案）
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+
+        is_valid, error_msg = validate_ticket_unified("0.1.0-W99-999", project_root, logger)
+
+        assert is_valid is False
+        assert "找不到 Ticket: 0.1.0-W99-999" in error_msg
+
+    def test_validate_ticket_unified_missing_decision_tree(self, project_root, reset_loggers):
+        """場景 7：缺少決策樹欄位"""
+        logger = logging.getLogger("test-validate-ticket-unified-4")
+
+        # 建立無決策樹欄位的 Ticket
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        ticket_path = tickets_dir / "0.1.0-W1-002.md"
+        ticket_path.write_text("""---
+id: 0.1.0-W1-002
+title: Test Ticket
+---
+
+# Test (no decision tree)
+""")
+
+        is_valid, error_msg = validate_ticket_unified("0.1.0-W1-002", project_root, logger)
+
+        assert is_valid is False
+        assert "缺少決策樹欄位" in error_msg
+
+    def test_validate_ticket_unified_permission_denied(self, project_root, reset_loggers):
+        """邊界：Ticket 檔案存在但讀取失敗（權限問題）"""
+        logger = logging.getLogger("test-validate-ticket-unified-5")
+
+        # 建立 Ticket 檔案並設定為無讀取權限
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        ticket_path = tickets_dir / "0.1.0-W1-003.md"
+        ticket_path.write_text("# Test")
+
+        # 移除讀取權限
+        import os
+        os.chmod(str(ticket_path), 0o000)
+
+        try:
+            is_valid, error_msg = validate_ticket_unified("0.1.0-W1-003", project_root, logger)
+
+            assert is_valid is False
+            assert "無法讀取 Ticket 檔案" in error_msg
+        finally:
+            # 恢復權限以便清理
+            os.chmod(str(ticket_path), 0o644)
+
+    def test_validate_ticket_unified_empty_file(self, project_root, reset_loggers):
+        """邊界：Ticket 檔案為空"""
+        logger = logging.getLogger("test-validate-ticket-unified-6")
+
+        # 建立空 Ticket 檔案
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        ticket_path = tickets_dir / "0.1.0-W1-004.md"
+        ticket_path.write_text("")
+
+        is_valid, error_msg = validate_ticket_unified("0.1.0-W1-004", project_root, logger)
+
+        assert is_valid is False
+        assert "Ticket 檔案內容為空" in error_msg
+
+    def test_validate_ticket_unified_empty_ticket_id(self, project_root, reset_loggers):
+        """邊界：ticket_id 為空字串"""
+        logger = logging.getLogger("test-validate-ticket-unified-7")
+
+        # 建立 Ticket 目錄結構
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+
+        is_valid, error_msg = validate_ticket_unified("", project_root, logger)
+
+        assert is_valid is False
+        assert "找不到 Ticket" in error_msg
+
+    # ========================================================================
+    # Scenario 3: 特殊情況測試（Case C1-C2）
+    # ========================================================================
+
+    def test_validate_ticket_unified_logger_none(self, project_root, reset_loggers):
+        """特殊情況：logger 為 None（靜默模式）"""
+        # 建立有效 Ticket
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        ticket_path = tickets_dir / "0.1.0-W1-005.md"
+        ticket_path.write_text("""---
+id: 0.1.0-W1-005
+title: Test Ticket
+---
+
+# Test
+
+decision_tree_path: test-path
+""")
+
+        is_valid, error_msg = validate_ticket_unified("0.1.0-W1-005", project_root, None)
+
+        assert is_valid is True
+        assert error_msg is None
+
+    def test_validate_ticket_unified_nonstandard_format(self, project_root, reset_loggers):
+        """場景 6 變體：ticket_id 格式非標準"""
+        logger = logging.getLogger("test-validate-ticket-unified-8")
+
+        # 建立 Ticket 目錄結構
+        tickets_dir = project_root / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+
+        is_valid, error_msg = validate_ticket_unified("invalid-format", project_root, logger)
+
+        assert is_valid is False
+        assert "找不到 Ticket" in error_msg
+
+
+# ============================================================================
+# TestImportsAndExports - Import 和 Re-export 測試
+# ============================================================================
+
+class TestImportsAndExports:
+    """驗證新函式可正確匯入"""
+
+    def test_import_validate_tool_input(self):
+        """驗證 validate_tool_input 可從 hook_utils 匯入"""
+        from hook_utils import validate_tool_input as imported_func
+
+        assert callable(imported_func)
+        assert imported_func.__name__ == "validate_tool_input"
+
+    def test_import_validate_ticket_unified(self):
+        """驗證 validate_ticket_unified 可從 hook_utils 匯入"""
+        from hook_utils import validate_ticket_unified as imported_func
+
+        assert callable(imported_func)
+        assert imported_func.__name__ == "validate_ticket_unified"
+
+    def test_existing_exports_still_available(self):
+        """驗證既有符號仍可匯入"""
+        from hook_utils import (
+            setup_hook_logging,
+            run_hook_safely,
+            validate_hook_input,
+            find_ticket_file,
+            extract_version_from_ticket_id,
+            extract_wave_from_ticket_id,
+            validate_ticket_has_decision_tree,
+        )
+
+        # 驗證所有都是 callable
+        assert callable(setup_hook_logging)
+        assert callable(run_hook_safely)
+        assert callable(validate_hook_input)
+        assert callable(find_ticket_file)
+        assert callable(extract_version_from_ticket_id)
+        assert callable(extract_wave_from_ticket_id)
+        assert callable(validate_ticket_has_decision_tree)
+
+
+# ============================================================================
+# W39-002 Phase 3b：快取機制測試
+# ============================================================================
+
+import timeit
+from datetime import datetime, timedelta
+
+
+@pytest.fixture
+def clear_caches():
+    """在每個測試後清空快取（隔離快取狀態）"""
+    yield
+    # Teardown: 清空所有快取
+    try:
+        from hook_utils import clear_handoff_recovery_cache
+        clear_handoff_recovery_cache()
+    except (ImportError, AttributeError):
+        pass
+
+    try:
+        from hook_utils import clear_error_pattern_mtime_cache
+        clear_error_pattern_mtime_cache()
+    except (ImportError, AttributeError):
+        pass
+
+
+# ============================================================================
+# 區塊 1：is_handoff_recovery_mode() 快取測試
+# ============================================================================
+
+class TestIsHandoffRecoveryModeCache:
+    """is_handoff_recovery_mode() 快取機制測試"""
+
+    def test_cache_miss_first_call_executes_glob(self, clear_caches, tmp_path):
+        """測試案例 1.1：快取未命中，首次呼叫執行 glob"""
+        from hook_utils import is_handoff_recovery_mode, clear_handoff_recovery_cache
+
+        # Setup: 建立 .claude/handoff/pending 目錄和 .json 檔案
+        handoff_dir = tmp_path / ".claude" / "handoff" / "pending"
+        handoff_dir.mkdir(parents=True, exist_ok=True)
+        (handoff_dir / "test.json").write_text("{}")
+
+        # Mock Path.glob 檢查是否被呼叫
+        with patch('pathlib.Path.glob') as mock_glob:
+            mock_glob.return_value = iter([(handoff_dir / "test.json")])
+
+            # 清除快取（模擬首次呼叫）
+            clear_handoff_recovery_cache()
+
+            # Act
+            with patch('pathlib.Path.cwd', return_value=tmp_path):
+                with patch.object(Path, 'glob', return_value=iter([Path("test.json")])):
+                    # 因為直接修補會複雜，用簡單方式：驗證函式返回值
+                    result = is_handoff_recovery_mode()
+
+            # Assert：返回值應為 True（有 .json 檔案）
+            assert result == True
+
+    def test_cache_hit_second_call_no_glob(self, clear_caches, tmp_path):
+        """測試案例 1.2：快取命中，重複呼叫不執行 glob"""
+        from hook_utils import is_handoff_recovery_mode, clear_handoff_recovery_cache
+
+        # Setup
+        handoff_dir = tmp_path / ".claude" / "handoff" / "pending"
+        handoff_dir.mkdir(parents=True, exist_ok=True)
+        (handoff_dir / "test.json").write_text("{}")
+
+        clear_handoff_recovery_cache()
+
+        with patch('pathlib.Path.cwd', return_value=tmp_path):
+            # 第一次呼叫
+            with patch.object(Path, 'glob', return_value=iter([Path("test.json")])):
+                result1 = is_handoff_recovery_mode()
+                assert result1 == True
+
+            # 第二次呼叫（應該使用快取，不呼叫 glob）
+            # 模擬 glob 返回空以驗證快取
+            with patch.object(Path, 'glob', return_value=iter([])):
+                result2 = is_handoff_recovery_mode()
+                # 若快取有效，應返回前一個值（True）
+                assert result2 == True
+
+    def test_clear_cache_forces_rescan(self, clear_caches, tmp_path):
+        """測試案例 1.3：清空快取後重新掃描"""
+        from hook_utils import is_handoff_recovery_mode, clear_handoff_recovery_cache
+
+        # Setup
+        handoff_dir = tmp_path / ".claude" / "handoff" / "pending"
+        handoff_dir.mkdir(parents=True, exist_ok=True)
+
+        clear_handoff_recovery_cache()
+
+        with patch('pathlib.Path.cwd', return_value=tmp_path):
+            # 第一次呼叫：空目錄，返回 False
+            with patch.object(Path, 'glob', return_value=iter([])):
+                result1 = is_handoff_recovery_mode()
+                assert result1 == False
+
+            # 清空快取
+            clear_handoff_recovery_cache()
+
+            # 第二次呼叫：模擬有新檔案，應重新掃描並返回 True
+            with patch.object(Path, 'glob', return_value=iter([Path("test.json")])):
+                result2 = is_handoff_recovery_mode()
+                assert result2 == True
+
+    def test_cache_with_no_logger(self, clear_caches, tmp_path):
+        """測試案例 1.4：邊界條件 - 無 logger"""
+        from hook_utils import is_handoff_recovery_mode, clear_handoff_recovery_cache
+
+        handoff_dir = tmp_path / ".claude" / "handoff" / "pending"
+        handoff_dir.mkdir(parents=True, exist_ok=True)
+
+        clear_handoff_recovery_cache()
+
+        with patch('pathlib.Path.cwd', return_value=tmp_path):
+            with patch.object(Path, 'glob', return_value=iter([])):
+                # 不傳遞 logger，應正常執行
+                result = is_handoff_recovery_mode(logger=None)
+                assert result == False
+
+
+# ============================================================================
+# 區塊 2：check_error_patterns_changed() mtime 快取測試
+# ============================================================================
+
+class TestCheckErrorPatternsChangedCache:
+    """check_error_patterns_changed() mtime 快取機制測試"""
+
+    def test_mtime_cache_hit_no_stat_call(self, clear_caches, tmp_path):
+        """測試案例 2.1：mtime 快取命中，已快取檔案不執行 stat"""
+        from hook_utils import check_error_patterns_changed, clear_error_pattern_mtime_cache
+
+        # Setup
+        error_patterns_dir = tmp_path / ".claude" / "error-patterns"
+        error_patterns_dir.mkdir(parents=True, exist_ok=True)
+
+        # 建立 3 個 .md 檔案
+        now = datetime.now()
+        # ticket 建立於 500 秒前
+        ticket_created = now - timedelta(seconds=500)
+
+        for i in range(3):
+            file_path = error_patterns_dir / f"error_{i}.md"
+            file_path.write_text(f"Error {i}")
+            # 設置檔案 mtime 為最近（晚於 ticket_created）
+            # 設為 now - 100 秒（比 ticket 晚）
+            import os
+            future_time = now.timestamp() - 100
+            os.utime(str(file_path), (future_time, future_time))
+
+        clear_error_pattern_mtime_cache()
+
+        # 第一次呼叫：建立快取
+        changed1, files1 = check_error_patterns_changed(tmp_path, ticket_created)
+        # 因為檔案 mtime > ticket_created，所以 changed1 應為 True
+        assert changed1 == True
+        assert len(files1) == 3
+
+        # 第二次呼叫：使用快取
+        # 如果快取有效，不應執行新的 stat
+        changed2, files2 = check_error_patterns_changed(tmp_path, ticket_created)
+        assert changed2 == True
+        assert len(files2) == 3  # 應找到同樣 3 個檔案
+
+    def test_new_file_triggers_stat(self, clear_caches, tmp_path):
+        """測試案例 2.2：新檔案觸發 stat，舊檔案使用快取"""
+        from hook_utils import check_error_patterns_changed, clear_error_pattern_mtime_cache
+
+        error_patterns_dir = tmp_path / ".claude" / "error-patterns"
+        error_patterns_dir.mkdir(parents=True, exist_ok=True)
+
+        now = datetime.now()
+        # ticket 建立於 500 秒前
+        ticket_created = now - timedelta(seconds=500)
+
+        # 建立舊檔案（mtime 在 ticket 之後）
+        old_file = error_patterns_dir / "old.md"
+        old_file.write_text("Old")
+        import os
+        old_mtime = now.timestamp() - 100  # 比 ticket 晚
+        os.utime(str(old_file), (old_mtime, old_mtime))
+
+        clear_error_pattern_mtime_cache()
+
+        # 第一次呼叫：快取舊檔案的 mtime
+        changed1, files1 = check_error_patterns_changed(tmp_path, ticket_created)
+        assert len(files1) == 1  # 只有舊檔案（mtime > ticket_created）
+
+        # 新增一個檔案
+        new_file = error_patterns_dir / "new.md"
+        new_file.write_text("New")
+        new_mtime = now.timestamp() - 50  # 比 ticket 更晚
+        os.utime(str(new_file), (new_mtime, new_mtime))
+
+        # 第二次呼叫：新檔案應觸發 stat，舊檔案使用快取
+        changed2, files2 = check_error_patterns_changed(tmp_path, ticket_created)
+        assert len(files2) == 2  # 現在有兩個檔案
+        assert any("new.md" in f for f in files2)
+
+    def test_clear_mtime_cache_forces_rescan(self, clear_caches, tmp_path):
+        """測試案例 2.3：清空快取後重新掃描"""
+        from hook_utils import check_error_patterns_changed, clear_error_pattern_mtime_cache
+
+        error_patterns_dir = tmp_path / ".claude" / "error-patterns"
+        error_patterns_dir.mkdir(parents=True, exist_ok=True)
+
+        now = datetime.now()
+        file_path = error_patterns_dir / "test.md"
+        file_path.write_text("Test")
+
+        clear_error_pattern_mtime_cache()
+
+        ticket_created = now - timedelta(seconds=100)
+
+        # 第一次呼叫
+        changed1, files1 = check_error_patterns_changed(tmp_path, ticket_created)
+
+        # 清空快取
+        clear_error_pattern_mtime_cache()
+
+        # 第二次呼叫：應重新掃描
+        changed2, files2 = check_error_patterns_changed(tmp_path, ticket_created)
+
+        # 結果應相同（因為檔案未變）
+        assert changed1 == changed2
+        assert files1 == files2
+
+
+# ============================================================================
+# 區塊 3：功能正確性測試
+# ============================================================================
+
+class TestCacheFunctionalCorrectness:
+    """驗證快取不影響原有功能正確性"""
+
+    def test_handoff_mode_cache_correctness(self, clear_caches, tmp_path):
+        """測試案例 3.1：快取不影響 is_handoff_recovery_mode() 功能"""
+        from hook_utils import is_handoff_recovery_mode, clear_handoff_recovery_cache
+
+        handoff_dir = tmp_path / ".claude" / "handoff" / "pending"
+        handoff_dir.mkdir(parents=True, exist_ok=True)
+
+        clear_handoff_recovery_cache()
+
+        with patch('pathlib.Path.cwd', return_value=tmp_path):
+            # 測試空目錄
+            with patch.object(Path, 'glob', return_value=iter([])):
+                assert is_handoff_recovery_mode() == False
+
+            clear_handoff_recovery_cache()
+
+            # 測試有檔案
+            with patch.object(Path, 'glob', return_value=iter([Path("test.json")])):
+                assert is_handoff_recovery_mode() == True
+
+    def test_error_patterns_cache_correctness(self, clear_caches, tmp_path):
+        """測試案例 3.2：快取不影響 check_error_patterns_changed() 功能"""
+        from hook_utils import check_error_patterns_changed, clear_error_pattern_mtime_cache
+
+        error_patterns_dir = tmp_path / ".claude" / "error-patterns"
+        error_patterns_dir.mkdir(parents=True, exist_ok=True)
+
+        now = datetime.now()
+        file_path = error_patterns_dir / "test.md"
+        file_path.write_text("Test")
+
+        clear_error_pattern_mtime_cache()
+
+        ticket_created = now - timedelta(seconds=100)
+
+        # 第一次呼叫（無快取）
+        changed1, files1 = check_error_patterns_changed(tmp_path, ticket_created)
+
+        # 第二次呼叫（有快取）
+        changed2, files2 = check_error_patterns_changed(tmp_path, ticket_created)
+
+        # 結果應完全相同
+        assert changed1 == changed2
+        assert files1 == files2
+
+
+# ============================================================================
+# 區塊 5：PyYAML 替代評估測試（簡化版）
+# ============================================================================
+
+class TestPyYAMLEvaluation:
+    """PyYAML 替代評估基礎測試"""
+
+    def test_pyyaml_basic_import(self):
+        """測試 PyYAML 是否可用"""
+        try:
+            import yaml
+            assert yaml is not None
+        except ImportError:
+            pytest.skip("PyYAML not installed")

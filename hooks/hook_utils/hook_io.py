@@ -21,6 +21,28 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
 
+from .hook_base import get_project_root
+
+
+# ============================================================================
+# 快取變數（模組級，用於 W39-002 效能改善）
+# ============================================================================
+
+_handoff_recovery_cache: Optional[bool] = None
+"""Process-level 快取：is_handoff_recovery_mode() 的結果（同一 session 內快取）"""
+
+
+def clear_handoff_recovery_cache() -> None:
+    """清空 Handoff 恢復模式快取（測試輔助函式）
+
+    將 _handoff_recovery_cache 重設為 None，
+    供測試隔離或其他需要重新掃描的場景使用。
+
+    生產環境不應呼叫此函式。
+    """
+    global _handoff_recovery_cache
+    _handoff_recovery_cache = None
+
 
 def _extract_field(
     input_data: "dict | None",
@@ -221,10 +243,14 @@ def extract_tool_response(
 def is_handoff_recovery_mode(
     logger: "logging.Logger | None" = None
 ) -> bool:
-    """檢查是否處於 Handoff 恢復模式
+    """檢查是否處於 Handoff 恢復模式（快取版本）
 
     Handoff 恢復時，Claude 自動讀取 Ticket 和派發代理人，
     這些操作應被豁免，允許恢復流程正常進行。
+
+    本函式使用 Process-level 快取：
+    - 首次呼叫：執行 glob 掃描，快取結果
+    - 後續呼叫：直接返回快取結果，避免重複 I/O
 
     Args:
         logger: 可選 Logger 實例，用於記錄詳細資訊
@@ -236,13 +262,15 @@ def is_handoff_recovery_mode(
     - 檢查 .claude/handoff/pending 目錄是否存在
     - 目錄內是否有任何 .json 檔案
     """
-    try:
-        # 嘗試從環境變數或尋找 CLAUDE.md 取得專案根目錄
-        from .hook_logging import get_project_root as _get_project_root
-        project_root = _get_project_root()
-    except Exception:
-        # Fallback：使用當前工作目錄
-        project_root = Path.cwd()
+    global _handoff_recovery_cache
+
+    # 快取命中：直接返回快取結果
+    if _handoff_recovery_cache is not None:
+        if logger:
+            logger.debug("使用快取的 Handoff 恢復模式結果: {}".format(_handoff_recovery_cache))
+        return _handoff_recovery_cache
+
+    project_root = get_project_root()
 
     handoff_pending_dir = project_root / ".claude" / "handoff" / "pending"
 
@@ -253,15 +281,19 @@ def is_handoff_recovery_mode(
             if any(handoff_pending_dir.glob("*.json")):
                 if logger:
                     logger.info("檢測到 Handoff 恢復模式")
+                _handoff_recovery_cache = True
                 return True
 
         if logger:
             logger.debug("未檢測到 Handoff 恢復模式")
+        _handoff_recovery_cache = False
         return False
 
     except Exception as e:
         if logger:
             logger.warning("檢查 Handoff 恢復模式時發生錯誤: {}".format(e))
+        # 錯誤時快取 False（安全預設）
+        _handoff_recovery_cache = False
         return False
 
 
@@ -324,4 +356,54 @@ def validate_hook_input(
 
     if logger:
         logger.debug("輸入驗證通過")
+    return True
+
+
+def validate_tool_input(
+    tool_input: dict,
+    logger: "logging.Logger | None" = None,
+    required_fields: "Tuple[str, ...] | None" = None
+) -> bool:
+    """驗證 tool_input 的必要欄位
+
+    呼叫前應確保 tool_input 已由 validate_hook_input() 驗證存在。
+    此函式只檢查 tool_input 內的子欄位。
+
+    Args:
+        tool_input: tool_input dict（已驗證存在）
+        logger: 可選 Logger 實例，允許 None（靜默模式）
+        required_fields: tool_input 必須包含的欄位清單，如 ("file_path", "content")
+                        預設為 None，表示只做存在性確認（寬鬆驗證）
+
+    Returns:
+        bool: tool_input 子欄位驗證是否通過
+
+    Examples:
+        # 使用流程：先驗證頂層欄位，再驗證 tool_input 子欄位
+        >>> if not validate_hook_input(input_data, logger, ("tool_name", "tool_input")):
+        ...     return False
+        >>> tool_input = input_data["tool_input"]
+        >>> if not validate_tool_input(tool_input, logger, ("file_path", "content")):
+        ...     return False
+    """
+    # 防禦性檢查：tool_input 本身
+    if not isinstance(tool_input, dict):
+        if logger:
+            logger.error("tool_input 非 dict 型別: {}".format(type(tool_input)))
+        return False
+
+    # 欄位驗證
+    if required_fields:
+        for field in required_fields:
+            if field not in tool_input:
+                if logger:
+                    logger.error("tool_input 缺少必要欄位: {}".format(field))
+                return False
+            if tool_input.get(field) is None:
+                if logger:
+                    logger.error("tool_input 欄位值為 None: {}".format(field))
+                return False
+
+    if logger:
+        logger.debug("tool_input 驗證通過")
     return True

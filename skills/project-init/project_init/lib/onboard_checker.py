@@ -3,9 +3,37 @@
 此模組提供一組 onboard 相關的偵測函式，用於引導新專案使用框架。
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+import json
+
+
+# 必須目錄清單常數
+REQUIRED_DIRECTORIES = [
+    ("rules", "rules/"),
+    ("hooks", "hooks/"),
+    ("skills", "skills/"),
+    ("methodologies", "methodologies/"),
+    ("references", "references/"),
+    ("agents", "agents/"),
+    ("config", "config/"),
+]
+
+# 必須的 .gitignore 規則
+GITIGNORE_REQUIRED_RULES = [
+    "coverage",
+    "htmlcov",
+    ".claude/hook-logs",
+    ".claude/worktrees",
+    ".claude/tool-results",
+    ".claude/handoff",
+]
+
+# Hook 配置檔案名稱常數
+HOOK_CONFIG_YAML = "hook-language-classification.yaml"
+HOOK_CONFIG_EXCLUDE_JSON = "hook-exclude-list.json"
+HOOK_CONFIG_SETTINGS_JSON = "settings.json"
 
 
 @dataclass
@@ -42,6 +70,142 @@ class FrameworkFileInfo:
     """檔案是否存在."""
     path: Optional[Path] = None
     """檔案完整路徑."""
+
+
+@dataclass
+class DocsStructureInfo:
+    """Docs 目錄結構狀態."""
+
+    exists: bool
+    """docs/ 目錄是否存在."""
+    has_work_logs: bool
+    """docs/work-logs/ 子目錄是否存在."""
+    has_todolist: bool
+    """docs/todolist.yaml 檔案是否存在."""
+    all_complete: bool
+    """所有必要目錄和檔案是否都存在."""
+
+
+@dataclass
+class GitignoreCheckInfo:
+    """GitIgnore 完整性檢查結果."""
+
+    exists: bool
+    """檔案是否存在."""
+    has_coverage_rules: bool
+    """包含 coverage/ 規則."""
+    has_hook_logs_rule: bool
+    """包含 .claude/hook-logs/ 規則."""
+    has_worktrees_rule: bool
+    """包含 .claude/worktrees/ 規則."""
+    has_tool_results_rule: bool
+    """包含 .claude/tool-results/ 規則."""
+    has_handoff_rule: bool
+    """包含 .claude/handoff/ 規則."""
+    all_required_complete: bool
+    """所有必須規則都存在."""
+    missing_rules: list[str] = field(default_factory=list)
+    """缺失的規則清單."""
+
+
+@dataclass
+class ClaudeDirectoryCheckInfo:
+    """Claude 核心目錄結構檢查結果."""
+
+    exists: bool
+    """目錄是否存在."""
+    has_rules: bool
+    """包含 rules 目錄."""
+    has_hooks: bool
+    """包含 hooks 目錄."""
+    has_skills: bool
+    """包含 skills 目錄."""
+    has_methodologies: bool
+    """包含 methodologies 目錄."""
+    has_references: bool
+    """包含 references 目錄."""
+    has_agents: bool
+    """包含 agents 目錄."""
+    has_config: bool
+    """包含 config 目錄."""
+    all_required_complete: bool
+    """所有必須目錄都存在."""
+    missing_directories: list[str] = field(default_factory=list)
+    """缺失目錄清單."""
+    directory_count: int = 0
+    """已驗證的目錄總數."""
+
+
+@dataclass
+class HookConfigurationCheckInfo:
+    """Hook 配置檔完整性檢查結果."""
+
+    config_dir_exists: bool
+    """設定目錄是否存在."""
+    has_language_classification_yaml: bool
+    """包含 hook-language-classification.yaml."""
+    has_exclude_list_json: bool
+    """包含 hook-exclude-list.json."""
+    has_settings_json: bool
+    """包含 settings.json."""
+    all_required_complete: bool
+    """所有必須檔案都存在."""
+    missing_files: list[str] = field(default_factory=list)
+    """缺失的檔案清單."""
+    yaml_format_valid: bool = True
+    """YAML 格式是否有效."""
+    json_format_valid: bool = True
+    """JSON 格式是否有效."""
+    format_errors: list[str] = field(default_factory=list)
+    """格式錯誤清單."""
+
+
+@dataclass
+class ClaudeConfigCheckInfo:
+    """Claude 設定目錄檢查結果."""
+
+    exists: bool
+    """目錄是否存在."""
+    is_directory: bool
+    """確認是目錄而非檔案."""
+    config_file_count: int = 0
+    """設定檔數量."""
+    total_size_bytes: int = 0
+    """目錄總大小."""
+    has_read_permissions: bool = True
+    """有讀取權限."""
+
+
+@dataclass
+class ReadmeCheckInfo:
+    """README.md 檢查結果."""
+
+    exists: bool
+    """檔案是否存在."""
+    path: Optional[Path] = None
+    """檔案路徑."""
+    size_bytes: int = 0
+    """檔案大小."""
+    is_nonempty: bool = False
+    """是否非空檔案."""
+
+
+@dataclass
+class LanguageStandardCheckInfo:
+    """語言規範文件檢查結果."""
+
+    detected_language: str
+    """偵測到的語言."""
+    expected_standard_file: str
+    """預期的規範檔名."""
+    exists: bool
+    """規範檔是否存在."""
+    path: Optional[Path] = None
+    """檔案路徑."""
+    standard_files_available: list[str] = field(default_factory=list)
+    """可用的規範檔清單."""
+    missing_standards: list[str] = field(default_factory=list)
+    """缺失的規範檔清單."""
 
 
 def detect_project_language(project_root: Path) -> ProjectLanguageInfo:
@@ -228,4 +392,441 @@ def check_settings_local_json(project_root: Path) -> FrameworkFileInfo:
         name="settings.local.json",
         exists=settings_file.exists(),
         path=settings_file if settings_file.exists() else None,
+    )
+
+
+def check_docs_structure(project_root: Path) -> DocsStructureInfo:
+    """檢查 docs/ 目錄結構是否完整.
+
+    檢查以下項目：
+    - docs/ 目錄存在
+    - docs/work-logs/ 子目錄存在
+    - docs/todolist.yaml 檔案存在
+
+    Args:
+        project_root: 專案根目錄。
+
+    Returns:
+        DocsStructureInfo: docs 結構檢查結果。
+    """
+    docs_dir = project_root / "docs"
+    work_logs_dir = docs_dir / "work-logs"
+    todolist_file = docs_dir / "todolist.yaml"
+
+    docs_exists = docs_dir.exists() and docs_dir.is_dir()
+    work_logs_exists = work_logs_dir.exists() and work_logs_dir.is_dir()
+    todolist_exists = todolist_file.exists() and todolist_file.is_file()
+
+    all_complete = docs_exists and work_logs_exists and todolist_exists
+
+    return DocsStructureInfo(
+        exists=docs_exists,
+        has_work_logs=work_logs_exists,
+        has_todolist=todolist_exists,
+        all_complete=all_complete,
+    )
+
+
+def _has_gitignore_rule(content: str, pattern: str) -> bool:
+    """檢查 .gitignore 是否包含規則（模糊匹配）.
+
+    支援規則變體：/coverage/, coverage, coverage/* 等。
+
+    Args:
+        content: .gitignore 檔案內容。
+        pattern: 要檢查的規則模式。
+
+    Returns:
+        bool: 規則是否存在。
+    """
+    base_pattern = pattern.rstrip("/*")
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        line_base = line.rstrip("/*")
+        if base_pattern in line or line_base == base_pattern:
+            return True
+    return False
+
+
+def _create_missing_gitignore_result(exists: bool = False) -> GitignoreCheckInfo:
+    """建立 .gitignore 缺失或無法讀取的結果.
+
+    Args:
+        exists: .gitignore 檔案是否存在（用於編碼錯誤情況）。
+
+    Returns:
+        GitignoreCheckInfo: 缺失項目的檢查結果。
+    """
+    return GitignoreCheckInfo(
+        exists=exists,
+        has_coverage_rules=False,
+        has_hook_logs_rule=False,
+        has_worktrees_rule=False,
+        has_tool_results_rule=False,
+        has_handoff_rule=False,
+        all_required_complete=False,
+        missing_rules=[
+            "coverage/",
+            "htmlcov/",
+            ".claude/hook-logs/",
+            ".claude/worktrees/",
+            ".claude/tool-results/",
+            ".claude/handoff/",
+        ],
+    )
+
+
+def check_gitignore_completeness(project_root: Path) -> GitignoreCheckInfo:
+    """檢查 .gitignore 是否包含所有必須的框架排除規則.
+
+    驗證 .gitignore 包含所有 GITIGNORE_REQUIRED_RULES 中的規則。
+    使用模糊匹配支援規則變體（如 /coverage/, coverage, coverage/* 等）。
+
+    Args:
+        project_root: 專案根目錄。
+
+    Returns:
+        GitignoreCheckInfo: .gitignore 檢查結果。
+    """
+    gitignore_path = project_root / ".gitignore"
+
+    if not gitignore_path.exists():
+        return _create_missing_gitignore_result(exists=False)
+
+    try:
+        content = gitignore_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return _create_missing_gitignore_result(exists=True)
+
+    # 檢查每個必須規則
+    has_coverage = _has_gitignore_rule(content, "coverage") or _has_gitignore_rule(content, "htmlcov")
+    has_hook_logs = _has_gitignore_rule(content, ".claude/hook-logs")
+    has_worktrees = _has_gitignore_rule(content, ".claude/worktrees")
+    has_tool_results = _has_gitignore_rule(content, ".claude/tool-results")
+    has_handoff = _has_gitignore_rule(content, ".claude/handoff")
+
+    # 彙整缺失的規則
+    missing = []
+    if not has_coverage:
+        missing.extend(["coverage/", "htmlcov/"])
+    if not has_hook_logs:
+        missing.append(".claude/hook-logs/")
+    if not has_worktrees:
+        missing.append(".claude/worktrees/")
+    if not has_tool_results:
+        missing.append(".claude/tool-results/")
+    if not has_handoff:
+        missing.append(".claude/handoff/")
+
+    return GitignoreCheckInfo(
+        exists=True,
+        has_coverage_rules=has_coverage,
+        has_hook_logs_rule=has_hook_logs,
+        has_worktrees_rule=has_worktrees,
+        has_tool_results_rule=has_tool_results,
+        has_handoff_rule=has_handoff,
+        all_required_complete=len(missing) == 0,
+        missing_rules=missing,
+    )
+
+
+def check_claude_directory_structure(project_root: Path) -> ClaudeDirectoryCheckInfo:
+    """檢查 .claude/ 核心目錄結構是否完整.
+
+    驗證以下必須目錄存在：
+    - rules/（規則和流程）
+    - hooks/（Hook 系統）
+    - skills/（Skill 工具）
+    - methodologies/（方法論）
+    - references/（參考檔案）
+    - agents/（代理人定義）
+    - config/（設定檔案）
+
+    Args:
+        project_root: 專案根目錄。
+
+    Returns:
+        ClaudeDirectoryCheckInfo: .claude 目錄結構檢查結果。
+    """
+    claude_dir = project_root / ".claude"
+
+    if not claude_dir.exists() or not claude_dir.is_dir():
+        return ClaudeDirectoryCheckInfo(
+            exists=False,
+            has_rules=False,
+            has_hooks=False,
+            has_skills=False,
+            has_methodologies=False,
+            has_references=False,
+            has_agents=False,
+            has_config=False,
+            all_required_complete=False,
+            missing_directories=[
+                "rules/",
+                "hooks/",
+                "skills/",
+                "methodologies/",
+                "references/",
+                "agents/",
+                "config/",
+            ],
+            directory_count=0,
+        )
+
+    dir_status = {}
+    missing = []
+    count = 0
+
+    for dir_name, display_name in REQUIRED_DIRECTORIES:
+        dir_path = claude_dir / dir_name
+        exists = dir_path.exists() and dir_path.is_dir()
+        dir_status[dir_name] = exists
+        count += 1
+        if not exists:
+            missing.append(display_name)
+
+    return ClaudeDirectoryCheckInfo(
+        exists=True,
+        has_rules=dir_status.get("rules", False),
+        has_hooks=dir_status.get("hooks", False),
+        has_skills=dir_status.get("skills", False),
+        has_methodologies=dir_status.get("methodologies", False),
+        has_references=dir_status.get("references", False),
+        has_agents=dir_status.get("agents", False),
+        has_config=dir_status.get("config", False),
+        all_required_complete=len(missing) == 0,
+        missing_directories=missing,
+        directory_count=count,
+    )
+
+
+def check_hook_configurations(project_root: Path) -> HookConfigurationCheckInfo:
+    """檢查 Hook 配置檔完整性.
+
+    驗證 .claude/config/ 下存在所有必須設定檔：
+    - hook-language-classification.yaml
+    - hook-exclude-list.json
+    - settings.json
+
+    同時驗證 YAML 和 JSON 格式的有效性。
+
+    Args:
+        project_root: 專案根目錄。
+
+    Returns:
+        HookConfigurationCheckInfo: Hook 配置檔檢查結果。
+    """
+    config_dir = project_root / ".claude" / "config"
+
+    if not config_dir.exists() or not config_dir.is_dir():
+        return HookConfigurationCheckInfo(
+            config_dir_exists=False,
+            has_language_classification_yaml=False,
+            has_exclude_list_json=False,
+            has_settings_json=False,
+            all_required_complete=False,
+            missing_files=[
+                "hook-language-classification.yaml",
+                "hook-exclude-list.json",
+                "settings.json",
+            ],
+        )
+
+    # 檢查檔案存在
+    yaml_file = config_dir / HOOK_CONFIG_YAML
+    json_exclude = config_dir / HOOK_CONFIG_EXCLUDE_JSON
+    json_settings = config_dir / HOOK_CONFIG_SETTINGS_JSON
+
+    has_yaml = yaml_file.exists()
+    has_exclude = json_exclude.exists()
+    has_settings = json_settings.exists()
+
+    missing_files = []
+    if not has_yaml:
+        missing_files.append(HOOK_CONFIG_YAML)
+    if not has_exclude:
+        missing_files.append(HOOK_CONFIG_EXCLUDE_JSON)
+    if not has_settings:
+        missing_files.append(HOOK_CONFIG_SETTINGS_JSON)
+
+    # 驗證格式
+    format_errors = []
+    yaml_valid = True
+    json_valid = True
+
+    if has_yaml:
+        try:
+            yaml_file.read_text(encoding="utf-8")
+            # 簡單的格式檢查（無外部 YAML 依賴）
+        except (OSError, UnicodeDecodeError):
+            yaml_valid = False
+            format_errors.append("hook-language-classification.yaml: 無法讀取檔案")
+
+    if has_exclude:
+        try:
+            json.loads(json_exclude.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+            json_valid = False
+            format_errors.append(f"hook-exclude-list.json: {str(e)[:50]}")
+
+    if has_settings:
+        try:
+            json.loads(json_settings.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+            json_valid = False
+            format_errors.append(f"settings.json: {str(e)[:50]}")
+
+    all_complete = len(missing_files) == 0 and yaml_valid and json_valid
+
+    return HookConfigurationCheckInfo(
+        config_dir_exists=True,
+        has_language_classification_yaml=has_yaml,
+        has_exclude_list_json=has_exclude,
+        has_settings_json=has_settings,
+        all_required_complete=all_complete,
+        missing_files=missing_files,
+        yaml_format_valid=yaml_valid,
+        json_format_valid=json_valid,
+        format_errors=format_errors,
+    )
+
+
+def check_claude_config_directory(project_root: Path) -> ClaudeConfigCheckInfo:
+    """檢查 .claude/config 目錄的存在和狀態.
+
+    驗證目錄的存在性、讀取權限和檔案數量。
+
+    Args:
+        project_root: 專案根目錄。
+
+    Returns:
+        ClaudeConfigCheckInfo: 目錄檢查結果。
+    """
+    config_dir = project_root / ".claude" / "config"
+
+    exists = config_dir.exists()
+    is_dir = exists and config_dir.is_dir()
+
+    file_count = 0
+    total_size = 0
+    has_permissions = True
+
+    if is_dir:
+        try:
+            # 計算目錄中的檔案數和總大小
+            for item in config_dir.iterdir():
+                if item.is_file():
+                    file_count += 1
+                    try:
+                        total_size += item.stat().st_size
+                    except OSError:
+                        pass
+        except (OSError, PermissionError):
+            has_permissions = False
+
+    return ClaudeConfigCheckInfo(
+        exists=exists,
+        is_directory=is_dir,
+        config_file_count=file_count,
+        total_size_bytes=total_size,
+        has_read_permissions=has_permissions,
+    )
+
+
+def check_readme_md(project_root: Path) -> ReadmeCheckInfo:
+    """檢查 README.md 是否存在.
+
+    此檢查為 [SHOULD] 優先級（推薦但非必須）。
+
+    Args:
+        project_root: 專案根目錄。
+
+    Returns:
+        ReadmeCheckInfo: README.md 檢查結果。
+    """
+    readme_path = project_root / "README.md"
+
+    if not readme_path.exists():
+        return ReadmeCheckInfo(
+            exists=False,
+            path=None,
+            size_bytes=0,
+            is_nonempty=False,
+        )
+
+    try:
+        content = readme_path.read_text(encoding="utf-8")
+        size = readme_path.stat().st_size
+        is_nonempty = len(content.strip()) > 0
+    except (OSError, UnicodeDecodeError):
+        return ReadmeCheckInfo(
+            exists=True,
+            path=readme_path,
+            size_bytes=0,
+            is_nonempty=False,
+        )
+
+    return ReadmeCheckInfo(
+        exists=True,
+        path=readme_path,
+        size_bytes=size,
+        is_nonempty=is_nonempty,
+    )
+
+
+def check_language_standards(
+    project_root: Path, detected_language: str
+) -> LanguageStandardCheckInfo:
+    """檢查語言特定的開發規範文件.
+
+    根據偵測到的語言，驗證對應規範檔是否存在。
+    此檢查為 [SHOULD] 優先級（推薦但非必須）。
+
+    Args:
+        project_root: 專案根目錄。
+        detected_language: 偵測到的語言。
+
+    Returns:
+        LanguageStandardCheckInfo: 規範檔檢查結果。
+    """
+    templates_dir = project_root / ".claude" / "project-templates"
+
+    # 語言與規範檔的對應關係
+    language_mapping = {
+        "flutter": "FLUTTER.md",
+        "go": "GO.md",
+        "nodejs": "NODEJS.md",
+        "python": "PYTHON.md",
+    }
+
+    expected_file = language_mapping.get(detected_language, f"{detected_language.upper()}.md")
+
+    # 掃描可用的規範檔
+    available = []
+    if templates_dir.exists() and templates_dir.is_dir():
+        try:
+            for file in templates_dir.iterdir():
+                if file.suffix == ".md" and file.is_file():
+                    available.append(file.name)
+        except OSError:
+            pass
+
+    # 檢查期望的規範檔
+    expected_path = templates_dir / expected_file if templates_dir.exists() else None
+    file_exists = expected_path and expected_path.exists()
+
+    # 識別缺失的規範檔
+    missing = []
+    if detected_language != "unknown" and not file_exists:
+        missing.append(expected_file)
+
+    return LanguageStandardCheckInfo(
+        detected_language=detected_language,
+        expected_standard_file=expected_file,
+        exists=file_exists,
+        path=expected_path if file_exists else None,
+        standard_files_available=sorted(available),
+        missing_standards=missing,
     )

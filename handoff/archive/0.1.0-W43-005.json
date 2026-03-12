@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W43-005",
+  "direction": "to-sibling:0.1.0-W43-006",
+  "timestamp": "2026-03-12T12:47:16.378861",
+  "from_status": "completed",
+  "title": "分析 TDD 階段 Ticket 命名規範統一（避免自由命名導致判讀問題）",
+  "what": "分析 TDD 階段 Ticket 的命名慣例問題，確認是否需要命名字典或擴充 ticket 系統的 ID 解析包容性",
+  "chain": {},
+  "resumed_at": "2026-03-12T12:49:11.736175"
+}

@@ -239,7 +239,7 @@ def check_file_permission(file_path: str, logger) -> Tuple[bool, str]:
 
     # 檢查禁止清單（在檢查允許清單之前）
     if is_blocked_path(normalized_path, logger):
-        reason = "主線程禁止直接編輯程式碼。請建立 Ticket 並派發給對應代理人執行。"  # TODO: move to GateMessages
+        reason = GateMessages.EDIT_BLOCKED_PROGRAM_FILES
         logger.warning(f"拒絕編輯禁止的檔案: {normalized_path}")
         return False, reason
 
@@ -251,19 +251,12 @@ def check_file_permission(file_path: str, logger) -> Tuple[bool, str]:
     # 對 .claude/ 路徑，非白名單 = 攔截
     # （防止主線程在 .claude/ 建立未預定義的子目錄）
     if normalized_path.startswith(".claude/"):
-        reason = "主線程禁止寫入 .claude/ 非白名單路徑。請確認路徑是否正確，或聯繫 PM 更新白名單。"  # TODO: move to GateMessages
+        reason = GateMessages.EDIT_BLOCKED_CLAUDE_INVALID_PATH
         logger.warning(f"拒絕編輯非白名單 .claude/ 路徑: {normalized_path}")
         return False, reason
 
     # 預設拒絕所有其他檔案（安全策略）
-    reason = (
-        "主線程禁止編輯此路徑（預設拒絕）。允許的範圍：\n"
-        "  .claude/ 系統檔案（plans/rules/methodologies/hooks/skills/agents/references/error-patterns/handoff/）\n"
-        "  docs/work-logs/**（含 tickets/）\n"
-        "  docs/todolist.yaml\n"
-        "  CLAUDE.md\n"
-        "其他檔案請建立 Ticket 派發給對應代理人。"
-    )
+    reason = GateMessages.EDIT_BLOCKED_DEFAULT_DENY
     logger.warning(f"拒絕編輯非白名單路徑（預設拒絕）: {normalized_path}")
     return False, reason
 

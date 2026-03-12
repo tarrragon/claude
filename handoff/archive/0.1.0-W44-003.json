@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W44-003",
+  "direction": "to-sibling:0.1.0-W45-001",
+  "timestamp": "2026-03-12T15:29:02.173798",
+  "from_status": "completed",
+  "title": "實作 W43-005 分析建議的 ID 解析包容性擴充和命名字典，修改 ticket CLI 核心模組和相關 Hook",
+  "what": "實作 W43-005 分析建議的 ID 解析包容性擴充和命名字典，修改 ticket CLI 核心模組和相關 Hook",
+  "chain": {},
+  "resumed_at": "2026-03-12T15:29:42.724708"
+}

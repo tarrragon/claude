@@ -89,21 +89,7 @@ def is_correct_ticket_path(file_path: str, logger) -> bool:
 def check_write_permission(file_path: str, logger) -> Tuple[bool, str]:
     """檢查 Write 操作權限"""
     if is_forbidden_ticket_path(file_path, logger):
-        # TODO: add TICKET_PATH_FORBIDDEN_WRITE template to GateMessages
-        reason = (
-            "禁止在 .claude/tickets/ 路徑下建立檔案\n"
-            "\n"
-            "錯誤位置: .claude/tickets/\n"
-            "正確位置: docs/work-logs/v{version}/tickets/\n"
-            "\n"
-            "為什麼: 統一 Ticket 存放位置，確保編號正確且易於追蹤\n"
-            "\n"
-            "建議操作:\n"
-            "  使用 /ticket create 命令建立新 Ticket\n"
-            "  這將自動存放到正確位置並產出有效的 ID\n"
-            "\n"
-            "詳見: .claude/rules/flows/ticket-lifecycle.md"
-        )
+        reason = GateMessages.TICKET_PATH_FORBIDDEN_WRITE
         logger.warning(f"阻止在禁止路徑建立 Ticket: {file_path}")
         return False, reason
 
@@ -113,26 +99,7 @@ def check_write_permission(file_path: str, logger) -> Tuple[bool, str]:
 def check_edit_permission(file_path: str, logger) -> Tuple[bool, str]:
     """檢查 Edit 操作權限"""
     if is_forbidden_ticket_path(file_path, logger):
-        # TODO: add TICKET_PATH_FORBIDDEN_EDIT template to GateMessages
-        reason = (
-            "禁止直接編輯 .claude/tickets/ 路徑下的檔案\n"
-            "\n"
-            "錯誤位置: .claude/tickets/\n"
-            "正確位置: docs/work-logs/v{version}/tickets/\n"
-            "\n"
-            "為什麼: 防止在錯誤位置建立或修改 Ticket\n"
-            "\n"
-            "建議操作:\n"
-            "  如果需要編輯 Ticket，請確認它在正確位置:\n"
-            "  docs/work-logs/v{version}/tickets/{id}.md\n"
-            "\n"
-            "  使用 /ticket track 指令管理 Ticket:\n"
-            "  /ticket track claim {id}    - 認領 Ticket\n"
-            "  /ticket track append-log {id} ... - 追加執行日誌\n"
-            "  /ticket track complete {id} - 完成 Ticket\n"
-            "\n"
-            "詳見: .claude/rules/flows/ticket-lifecycle.md"
-        )
+        reason = GateMessages.TICKET_PATH_FORBIDDEN_EDIT
         logger.warning(f"阻止直接編輯禁止路徑的 Ticket: {file_path}")
         return False, reason
 

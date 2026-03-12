@@ -21,6 +21,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable, Optional
 
+from .hook_base import get_project_root, ENV_PROJECT_DIR, CLAUDE_MD_SEARCH_DEPTH  # re-export for backward compatibility
+
 # ============================================================================
 # 常數定義
 # ============================================================================
@@ -43,11 +45,7 @@ STREAM_HANDLER_LEVEL_NORMAL = logging.WARNING
 LOGGER_LEVEL = logging.DEBUG
 
 # 環境變數名稱
-ENV_PROJECT_DIR = "CLAUDE_PROJECT_DIR"
 ENV_HOOK_DEBUG = "HOOK_DEBUG"
-
-# 搜尋深度
-CLAUDE_MD_SEARCH_DEPTH = 5
 
 # Exit code 常數
 EXIT_ERROR = 1
@@ -57,43 +55,6 @@ LOG_RETENTION_DAYS = 7
 
 # 日誌清理觸發間隔（秒數，預設 5 分鐘）
 CLEANUP_INTERVAL_SECONDS = 300
-
-
-# ============================================================================
-# 內部輔助函式
-# ============================================================================
-
-def _find_project_root() -> Path:
-    """查詢專案根目錄
-
-    優先順序：
-    1. 環境變數 CLAUDE_PROJECT_DIR
-    2. 從 cwd 向上搜尋 CLAUDE.md（最多 5 層）
-    3. os.getcwd() fallback（永不失敗）
-
-    Returns:
-        Path: 專案根目錄路徑
-    """
-    # 優先級 1：環境變數
-    env_dir = os.getenv(ENV_PROJECT_DIR)
-    if env_dir:
-        return Path(env_dir)
-
-    # 優先級 2：搜尋 CLAUDE.md（從 cwd 向上）
-    current_dir = Path.cwd()
-    for _ in range(CLAUDE_MD_SEARCH_DEPTH):
-        if (current_dir / "CLAUDE.md").exists():
-            return current_dir
-
-        # 檢查是否已到達檔案系統根目錄
-        parent = current_dir.parent
-        if parent == current_dir:
-            break
-
-        current_dir = parent
-
-    # 優先級 3：Fallback 到 cwd
-    return Path.cwd()
 
 
 def _sanitize_hook_name(name: str) -> str:
@@ -280,19 +241,6 @@ def _log_exception(logger: logging.Logger, hook_name: str, tb_str: str) -> None:
 # 公開 API
 # ============================================================================
 
-def get_project_root() -> Path:
-    """取得專案根目錄
-
-    優先順序：
-    1. 環境變數 CLAUDE_PROJECT_DIR
-    2. 從 cwd 向上搜尋 CLAUDE.md（最多 5 層）
-    3. os.getcwd() fallback（永不失敗）
-
-    Returns:
-        Path: 專案根目錄路徑
-    """
-    return _find_project_root()
-
 
 def setup_hook_logging(hook_name: str) -> logging.Logger:
     """建立並設定 Hook 日誌系統
@@ -312,7 +260,7 @@ def setup_hook_logging(hook_name: str) -> logging.Logger:
         hook_name = DEFAULT_HOOK_NAME
 
     sanitized_name = _sanitize_hook_name(hook_name)
-    root_dir = _find_project_root()
+    root_dir = get_project_root()
     log_base_dir = root_dir / ".claude" / "hook-logs" / sanitized_name
 
     # 建立日誌目錄

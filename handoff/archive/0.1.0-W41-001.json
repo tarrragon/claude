@@ -1,0 +1,17 @@
+{
+  "ticket_id": "0.1.0-W41-001",
+  "direction": "to-sibling:0.1.0-W41-002",
+  "timestamp": "2026-03-12T10:19:58.793825",
+  "from_status": "completed",
+  "title": "重構 將 get_project_root 從 hook_logging.py 移至獨立的 hook_base.py 基礎設施層，消除 hook_ticket→hook_logging 的不必要耦合",
+  "what": "重構 將 get_project_root 從 hook_logging.py 移至獨立的 hook_base.py 基礎設施層，消除 hook_ticket→hook_logging 的不必要耦合",
+  "chain": {
+    "root": "0.1.0-W41-1",
+    "parent": null,
+    "depth": 0,
+    "sequence": [
+      1
+    ]
+  },
+  "resumed_at": "2026-03-12T10:22:53.926480"
+}

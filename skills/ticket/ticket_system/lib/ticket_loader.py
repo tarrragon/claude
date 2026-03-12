@@ -38,11 +38,10 @@ from .parser import (
 from .ticket_chain_index import TicketChainIndex
 
 # 匯入 list_tickets 的實作（仍然在此模組中定義）
-import re
 from typing import Dict, Any
 
-# 匯入 Ticket ID 格式常數
-from .constants import TICKET_ID_PATTERN
+# 匯入 Ticket ID 解析函式
+from .id_parser import extract_core_ticket_id
 
 
 # 索引快取：版本號 → TicketChainIndex
@@ -53,22 +52,30 @@ def list_tickets(version: str) -> list[Dict[str, Any]]:
     """
     列出版本的所有 Tickets
 
-    掃描 Tickets 目錄，載入所有 .md 和 .yaml 檔案。
-    按檔名排序，跳過無法載入的檔案。
+    掃描 Tickets 目錄，載入所有 .md 和 .yaml 檔案，包括帶描述後綴的檔案。
+    按檔名排序，跳過無法載入的檔案。支援去重機制，避免重複載入同一核心 ID。
 
     演算法:
     1. 取得版本的 Tickets 目錄
     2. 檢查目錄是否存在
     3. 掃描所有 .md 和 .yaml 檔案（按檔名排序）
-    4. 使用 load_ticket 載入每個檔案
-    5. 只加入成功載入的 Ticket
-    6. 建立任務鏈索引並快取
+    4. 對每個檔案提取核心 ID（去掉後綴）
+    5. 使用 loaded_core_ids 集合去重，避免重複載入
+    6. 使用 load_ticket 載入每個檔案
+    7. 只加入成功載入的 Ticket
+    8. 建立任務鏈索引並快取
+
+    去重設計：
+    - 標準檔案優先載入（檔案掃描順序通常標準格式在前）
+    - 帶後綴的檔案會被跳過（核心 ID 已載入）
+    - 同一版本內不會重複載入同一核心 ID
+    - .md 檔案優先於 .yaml 檔案（sorted() 按檔名字母順序）
 
     Args:
         version: 版本號（如 "0.31.0" 或 "v0.31.0"）
 
     Returns:
-        list[Dict]: Ticket 資料列表（按檔名排序）
+        list[Dict]: Ticket 資料列表（按檔名排序，無重複）
 
     Examples:
         >>> tickets = list_tickets("0.31.0")
@@ -85,22 +92,29 @@ def list_tickets(version: str) -> list[Dict[str, Any]]:
         return []
 
     tickets = []
+    loaded_core_ids = set()  # 去重追蹤集合
 
     # 同時掃描 .md 和 .yaml 檔案，分別排序後合併
     # 這樣可以支援多種格式的 Ticket 檔案
     all_ticket_files = sorted(tickets_dir.glob("*.md")) + sorted(tickets_dir.glob("*.yaml"))
 
     for ticket_file in all_ticket_files:
-        # 從檔名（不含副檔名）提取 Ticket ID
-        ticket_id = ticket_file.stem
-        # 跳過不符合 Ticket ID 格式的檔案（如驗收報告）
-        if not re.match(TICKET_ID_PATTERN, ticket_id):
+        # 從檔名（不含副檔名）提取原始 ID（可能帶後綴）
+        ticket_id_raw = ticket_file.stem
+        # 提取核心 ID（去掉後綴）
+        core_id = extract_core_ticket_id(ticket_id_raw)
+        # 跳過無法解析的非 Ticket 檔案（如驗收報告）
+        if core_id is None:
+            continue
+        # 去重檢查：已載入此核心 ID，跳過此檔案
+        if core_id in loaded_core_ids:
             continue
         # 載入 Ticket 資料（load_ticket 會安全處理不存在或格式錯誤的檔案）
-        ticket = load_ticket(version, ticket_id)
+        ticket = load_ticket(version, core_id)
         # 只加入成功載入的 Ticket，跳過失敗的檔案
         if ticket:
             tickets.append(ticket)
+            loaded_core_ids.add(core_id)
 
     # 建立並快取任務鏈索引
     index = TicketChainIndex()

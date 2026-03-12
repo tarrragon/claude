@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W41-003",
+  "direction": "to-sibling:0.1.0-W41-002",
+  "timestamp": "2026-03-12T10:46:16.571186",
+  "from_status": "completed",
+  "title": "重構 統一活躍 Hook 中 4 個重複的 get_project_root 定義為使用 hook_base",
+  "what": "重構 統一活躍 Hook 中 4 個重複的 get_project_root 定義為使用 hook_base",
+  "chain": {},
+  "resumed_at": "2026-03-12T10:46:46.754061"
+}

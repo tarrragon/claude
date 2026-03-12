@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W44-002",
+  "direction": "to-sibling:0.1.0-W44-003",
+  "timestamp": "2026-03-12T14:36:13.211321",
+  "from_status": "completed",
+  "title": "設計 Phase 2 BDD 行為鏈式測試設計方法論強化，建立標準化的行為驅動測試思維指引",
+  "what": "設計 Phase 2 BDD 行為鏈式測試設計方法論強化，建立標準化的行為驅動測試思維指引",
+  "chain": {},
+  "resumed_at": "2026-03-12T14:38:01.068494"
+}

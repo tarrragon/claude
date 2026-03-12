@@ -1,9 +1,25 @@
 ---
 name: tdd-phase1-split
-description: "TDD Phase 1 SOLID 原則驅動拆分輔助工具。Use for: (1) Phase 1 功能設計階段分析功能範圍, (2) 識別獨立職責並產出拆分建議, (3) 分配 Ticket 版本號, (4) 確保設計階段套用 DIP、LSP、ISP。Use when: 進入 TDD Phase 1、需要將大型功能拆分成獨立職責、設計新功能架構時不確定如何拆分 Ticket 時。"
+description: "[DEPRECATED] 已遷移至 /tdd SKILL。請使用 /tdd split 命令。"
 ---
 
-# TDD Phase 1 Split v1.0
+# [DEPRECATED] TDD Phase 1 Split
+
+> **此 SKILL 已棄用，所有功能已遷移至 `/tdd` SKILL。**
+>
+> - SOLID 拆分分析：`/tdd split`
+> - CLI 腳本：`.claude/skills/tdd/scripts/tdd-phase1-split.py`
+> - 方法論文件：`.claude/skills/tdd/references/phase1-split-methodology.md`
+> - Phase 1 設計指引：`.claude/skills/tdd/references/phase1-design.md`
+>
+> **遷移日期**：2026-03-12
+> **遷移 Ticket**：0.1.0-W44-001.6
+
+---
+
+以下為原始內容（僅供參考，不再維護）：
+
+---
 
 SOLID 原則驅動的功能拆分輔助工具 - 在設計階段就進行拆分，而非實作階段。
 

@@ -18,26 +18,50 @@ class TestRunOnboard:
         # 建立完整的 Flutter 專案結構
         (tmp_path / "pubspec.yaml").touch()
         (tmp_path / "CLAUDE.md").touch()
+        (tmp_path / "README.md").write_text("# Project")
 
-        # 建立 Hook 分類檔
-        (tmp_path / ".claude" / "config").mkdir(parents=True)
+        # 建立 .gitignore
+        gitignore_content = """coverage/
+htmlcov/
+.claude/hook-logs/
+.claude/worktrees/
+.claude/tool-results/
+.claude/handoff/
+"""
+        (tmp_path / ".gitignore").write_text(gitignore_content)
+
+        # 建立 .claude 核心目錄
+        for dir_name in ["rules", "hooks", "skills", "methodologies", "references", "agents", "config"]:
+            (tmp_path / ".claude" / dir_name).mkdir(parents=True, exist_ok=True)
+
+        # 建立 Hook 配置檔
         hook_config = tmp_path / ".claude" / "config" / "hook-language-classification.yaml"
         hook_config.write_text("""hooks:
   test-timeout-pre.py: flutter
 """)
 
+        hook_exclude = tmp_path / ".claude" / "config" / "hook-exclude-list.json"
+        hook_exclude.write_text('{"exclude": []}')
+
+        settings_json = tmp_path / ".claude" / "config" / "settings.json"
+        settings_json.write_text('{"hooks": {}}')
+
         # 建立 settings.local.json
-        (tmp_path / ".claude").mkdir(exist_ok=True)
         (tmp_path / ".claude" / "settings.local.json").touch()
 
         # 建立 Flutter 模板
         (tmp_path / ".claude" / "project-templates").mkdir(exist_ok=True)
         (tmp_path / ".claude" / "project-templates" / "FLUTTER.md").touch()
 
+        # 建立 docs 結構
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "work-logs").mkdir()
+        (tmp_path / "docs" / "todolist.yaml").touch()
+
         result = run_onboard(tmp_path)
 
         assert result.language == "flutter"
-        assert result.all_ok
+        assert result.all_ok, f"Expected all_ok but got {result.todo_items}"
         assert result.todo_count == 0
 
         # 驗證輸出
@@ -155,20 +179,44 @@ class TestRunOnboard:
         # Flutter 專案，所有檔案都存在
         (tmp_path / "pubspec.yaml").touch()
         (tmp_path / "CLAUDE.md").touch()
+        (tmp_path / "README.md").write_text("# Project")
 
-        (tmp_path / ".claude" / "config").mkdir(parents=True)
+        # 建立 .gitignore
+        gitignore_content = """coverage/
+htmlcov/
+.claude/hook-logs/
+.claude/worktrees/
+.claude/tool-results/
+.claude/handoff/
+"""
+        (tmp_path / ".gitignore").write_text(gitignore_content)
+
+        # 建立 .claude 核心目錄
+        for dir_name in ["rules", "hooks", "skills", "methodologies", "references", "agents", "config"]:
+            (tmp_path / ".claude" / dir_name).mkdir(parents=True, exist_ok=True)
+
         hook_config = tmp_path / ".claude" / "config" / "hook-language-classification.yaml"
         hook_config.write_text("hooks:\n")
 
-        (tmp_path / ".claude").mkdir(exist_ok=True)
+        hook_exclude = tmp_path / ".claude" / "config" / "hook-exclude-list.json"
+        hook_exclude.write_text('{"exclude": []}')
+
+        settings_json = tmp_path / ".claude" / "config" / "settings.json"
+        settings_json.write_text('{"hooks": {}}')
+
         (tmp_path / ".claude" / "settings.local.json").touch()
 
         (tmp_path / ".claude" / "project-templates").mkdir(exist_ok=True)
         (tmp_path / ".claude" / "project-templates" / "FLUTTER.md").touch()
 
+        # 建立 docs 結構
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "work-logs").mkdir()
+        (tmp_path / "docs" / "todolist.yaml").touch()
+
         result = run_onboard(tmp_path)
 
-        assert result.all_ok
+        assert result.all_ok, f"Expected all_ok but got {result.todo_items}"
         assert result.todo_count == 0
 
         captured = capsys.readouterr()

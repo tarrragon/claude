@@ -44,7 +44,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from hook_utils import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root,
     find_ticket_files, find_ticket_file, validate_ticket_has_decision_tree, save_check_log,
-    is_handoff_recovery_mode, validate_hook_input
+    is_handoff_recovery_mode, validate_hook_input, validate_ticket_unified
 )
 
 # ============================================================================
@@ -109,28 +109,9 @@ def extract_ticket_reference(prompt: str, logger) -> Optional[str]:
 # Ticket 檔案查找和驗證
 # ============================================================================
 
-def load_ticket_content(ticket_path: Path, logger) -> Optional[str]:
-    """
-    讀取 Ticket 檔案內容
-
-    Args:
-        ticket_path: Ticket 檔案路徑
-        logger: 日誌物件
-
-    Returns:
-        str - 檔案內容，或 None 如讀取失敗
-    """
-    try:
-        content = ticket_path.read_text(encoding="utf-8")
-        logger.debug(f"成功讀取 Ticket 檔案: {ticket_path}")
-        return content
-    except Exception as e:
-        logger.error(f"無法讀取 Ticket 檔案 {ticket_path}: {e}")
-        return None
-
 def validate_ticket(ticket_id: str, logger) -> Tuple[bool, Optional[str]]:
     """
-    驗證 Ticket 的完整性
+    驗證 Ticket 的完整性（委派給 hook_utils.validate_ticket_unified）
 
     Args:
         ticket_id: Ticket ID
@@ -138,31 +119,8 @@ def validate_ticket(ticket_id: str, logger) -> Tuple[bool, Optional[str]]:
 
     Returns:
         tuple - (is_valid, error_message)
-            - is_valid: Ticket 是否有效
-            - error_message: 錯誤訊息（如有），成功時為 None
     """
-    # 尋找 Ticket 檔案
-    ticket_path = find_ticket_file(ticket_id, logger=logger)
-    if not ticket_path:
-        msg = f"找不到 Ticket: {ticket_id}"
-        logger.error(msg)
-        return False, msg
-
-    # 讀取 Ticket 內容
-    content = load_ticket_content(ticket_path, logger)
-    if not content:
-        msg = f"無法讀取 Ticket 檔案: {ticket_id}"
-        logger.error(msg)
-        return False, msg
-
-    # 驗證決策樹欄位
-    if not validate_ticket_has_decision_tree(content, logger):
-        msg = f"Ticket {ticket_id} 缺少決策樹欄位，為無效 Ticket"
-        logger.error(msg)
-        return False, msg
-
-    logger.info(f"Ticket {ticket_id} 驗證通過")
-    return True, None
+    return validate_ticket_unified(ticket_id, project_root=None, logger=logger)
 
 # ============================================================================
 # 派發驗證

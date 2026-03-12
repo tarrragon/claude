@@ -7,7 +7,7 @@ Ticket 驗證模組
 import re
 from typing import List, Optional, Tuple, Dict, Any
 
-from .constants import TICKET_ID_PATTERN
+from .constants import TICKET_ID_RE
 from .cycle_detector import CycleDetector
 
 
@@ -97,10 +97,8 @@ def validate_ticket_id(ticket_id: str) -> bool:
     if not ticket_id or not isinstance(ticket_id, str):
         return False
 
-    # 編譯正則表達式（TICKET_ID_PATTERN 在 constants 中定義）
-    pattern = re.compile(TICKET_ID_PATTERN)
-    # 返回匹配結果（bool 型）
-    return bool(pattern.match(ticket_id))
+    # 返回匹配結果（bool 型，使用預編譯的正則避免重複編譯）
+    return bool(TICKET_ID_RE.match(ticket_id))
 
 
 def validate_ticket_fields(

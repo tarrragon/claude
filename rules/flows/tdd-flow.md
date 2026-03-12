@@ -25,6 +25,12 @@
 [Phase 3a] 策略規劃 → [pepper-test-implementer](../../agents/pepper-test-implementer.md)
     |
     v
+[3b 拆分評估] PM 評估是否拆分為多個並行子任務
+    |
+    +-- 不拆分（豁免）→ 單一 parsley 執行
+    +-- 拆分 → 建立 N 個子任務，並行派發
+    |
+    v
 [Phase 3b] 實作執行 → [parsley-flutter-developer](../../agents/parsley-flutter-developer.md)
     |
     v
@@ -126,19 +132,61 @@
 | Phase 0 | Phase 1 | SA 審查通過 |
 | Phase 1 | Phase 2 | 功能規格完成 |
 | Phase 2 | Phase 3a | 測試案例設計完成 |
-| Phase 3a | Phase 3b | 策略文件完成 |
+| Phase 3a | 3b 拆分評估 | 策略文件完成 |
+| 3b 拆分評估 | Phase 3b | PM 完成拆分評估（見下方） |
 | Phase 3b | Phase 4a | 測試全部通過（標準流程）；直接到 Phase 4b（豁免條件） |
 | Phase 4a | Phase 4b | 多視角分析報告完成 |
 | Phase 4b | Phase 4c | 重構執行完成（標準流程）；/tech-debt-capture → 完成（豁免條件） |
 | Phase 4c | 完成 | 多視角再審核報告完成 |
 
+### 3b 拆分評估（Phase 3a 完成後，強制）
+
+Phase 3a 策略文件完成後，PM **必須**評估 Phase 3b 是否需要拆分為多個並行子任務。
+
+**評估依據**（基於 Phase 3a 策略文件產出）：
+
+| 指標 | 閾值 | 判定 |
+|------|------|------|
+| 預期修改檔案數 | > 5 個 | 必須拆分 |
+| 認知負擔指數 | > 10 | 必須拆分 |
+| 跨架構層級數 | > 2 層 | 必須拆分 |
+| 策略文件中的獨立模組數 | > 1 個且無交叉依賴 | 建議拆分 |
+
+**不拆分的豁免條件**（任一符合即跳過拆分）：
+
+| 條件 | 說明 |
+|------|------|
+| 修改 <= 5 個檔案 | 影響範圍有限，單一代理人可負責 |
+| 單一模組內修改 | 無跨模組衝突風險 |
+| 修改目的單一明確 | 低複雜度，無需拆分 |
+
+**拆分時的操作**：
+
+1. 依 Phase 3a 策略文件的模組分割，建立 N 個子任務（`/ticket create --parent {3b_ticket_id}`）
+2. 每個子任務指定修改檔案清單（`where.files`），確保無交集
+3. 執行並行安全檢查（見 parallel-dispatch.md）
+4. 並行派發 parsley-flutter-developer 執行各子任務
+
+> 詳細評估流程和範例：.claude/references/tdd-flow-details.md（3b 拆分評估章節）
+
 ### 轉換動作
 
-每次階段轉換時：
+**Phase 1/2/3a（代理人自治）**：
+
+代理人完成後自行執行，PM 不介入：
+
+1. 更新 Ticket Execution Log（`ticket track append-log`）
+2. 執行 `git commit`（message 格式：`feat({ticket-id}): Phase X 完成 - {摘要}`）
+3. 執行 `/ticket track complete {id}`
+4. 回報主線程：僅「成功」或「失敗 + 原因」
+
+**Phase 3b/4a/4b/4c（PM 管理）**：
+
+PM 收到代理人回報後執行：
 
 1. 執行 `/ticket track complete {id}`
 2. 更新工作日誌
-3. 派發下一階段代理人
+3. 依決策樹第八層 Checkpoint 路由下一步
 
 ---
 
@@ -157,11 +205,12 @@
 
 ## 相關文件
 
+- .claude/skills/tdd/SKILL.md - `/tdd` SKILL（統一 TDD 流程入口，含 `/tdd start`、`/tdd next`、`/tdd split`、`/tdd status`、`/tdd phase4-exempt`）
 - .claude/references/tdd-flow-details.md - 豁免規則詳細、Phase 詳細描述、異常處理、日誌模板
 - @.claude/rules/core/decision-tree.md - 主線程決策樹
 - @.claude/rules/core/quality-baseline.md - 品質基線（Phase 4 不可跳過）
 
 ---
 
-**Last Updated**: 2026-03-11
-**Version**: 2.4.0 - 操作指引提取至 references/tdd-flow-details.md（W35-001.7）
+**Last Updated**: 2026-03-12
+**Version**: 2.7.0 - 新增 /tdd SKILL 引用（0.1.0-W44-001.6 遷移整合）

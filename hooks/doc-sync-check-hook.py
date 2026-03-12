@@ -26,13 +26,8 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, get_project_root
 from lib.hook_messages import ValidationMessages
-
-
-def get_project_root() -> Path:
-    """獲取專案根目錄"""
-    return Path(os.environ.get("CLAUDE_PROJECT_DIR", ".")).resolve()
 
 
 def get_latest_version() -> Optional[str]:

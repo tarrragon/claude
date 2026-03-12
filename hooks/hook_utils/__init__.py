@@ -24,12 +24,15 @@ from .hook_io import (
     extract_tool_input,
     extract_tool_response,
     is_handoff_recovery_mode,
+    clear_handoff_recovery_cache,
     validate_hook_input,
+    validate_tool_input,
 )
 from .hook_ticket import (
     parse_ticket_frontmatter,
     parse_ticket_date,
     check_error_patterns_changed,
+    clear_error_pattern_mtime_cache,
     get_current_version_from_todolist,
     scan_ticket_files_by_version,
     find_ticket_files,
@@ -37,6 +40,7 @@ from .hook_ticket import (
     extract_version_from_ticket_id,
     extract_wave_from_ticket_id,
     validate_ticket_has_decision_tree,
+    validate_ticket_unified,
 )
 
 __all__ = [
@@ -49,10 +53,13 @@ __all__ = [
     "extract_tool_input",
     "extract_tool_response",
     "is_handoff_recovery_mode",
+    "clear_handoff_recovery_cache",
     "validate_hook_input",
+    "validate_tool_input",
     "parse_ticket_frontmatter",
     "parse_ticket_date",
     "check_error_patterns_changed",
+    "clear_error_pattern_mtime_cache",
     "get_current_version_from_todolist",
     "scan_ticket_files_by_version",
     "find_ticket_files",
@@ -60,4 +67,5 @@ __all__ = [
     "extract_version_from_ticket_id",
     "extract_wave_from_ticket_id",
     "validate_ticket_has_decision_tree",
+    "validate_ticket_unified",
 ]

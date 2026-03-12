@@ -91,6 +91,26 @@ Skill 是預建的專用工具，優先於代理人派發。
 | 是（需即時互動）且成本合理 | Agent Teams 派發 |
 | 是 但成本不合理 | Task subagent + PM 中轉 |
 
+### 派發模式選擇規則
+
+派發代理人時，**預設使用背景模式**（`run_in_background: true`），釋放主線程靈活性。
+
+| 派發類型 | 模式 | 原因 |
+|---------|------|------|
+| Task subagent（開發/分析/重構） | 背景 | PM 無需等待，準備下一步決策 |
+| Agent Teams | 背景 | 內部協作，PM 釋放靈活性 |
+| TDD Phase 代理人（Phase 1-4） | 背景 | 完整週期較長，產出物寫入 Ticket |
+| 建立後審核（acceptance-auditor + SA） | 背景 | PM 可同時準備其他 Ticket |
+
+**例外（前景執行）**：
+
+| 場景 | 原因 |
+|------|------|
+| Skill/CLI 查詢（`/ticket track list` 等） | PM 需要結果做下一步決策 |
+| 即時驗證（格式檢查、語法驗證） | PM 需要立即反饋 |
+
+**背景派發後跟蹤**：代理人完成時 TaskOutput 自動通知 PM。PM 透過 `/ticket track` 查詢結果，不需要等待。
+
 > 場景表和詳細規則：.claude/rules/guides/parallel-dispatch.md
 > AskUserQuestion 強制使用規則：.claude/rules/core/askuserquestion-rules.md
 
@@ -288,7 +308,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 | 情境 | 條件 | 路由 |
 |------|------|------|
-| D（優先） | ticket 含 tdd_phase 欄位 | D1: Phase 1/2/3a → 全自動下一 Phase；D2: Phase 3b → #13；D3a: 4a → 全自動 4b；D3b: 4b 標準 → 全自動 4c / 豁免 → /tech-debt-capture + #13；D3c: 4c → /tech-debt-capture + #13 |
+| D（優先） | ticket 含 tdd_phase 欄位 | D1: Phase 1/2 → 全自動下一 Phase；D1a: Phase 3a → 3b 拆分評估（見 tdd-flow.md）後派發 3b；D2: Phase 3b → #13；D3a: 4a → 全自動 4b；D3b: 4b 標準 → 全自動 4c / 豁免 → /tech-debt-capture + #13；D3c: 4c → /tech-debt-capture + #13 |
 | A（#11a） | ticket 仍 in_progress | Context 刷新 Handoff |
 | B（#11b） | ticket completed + 同 Wave 有 pending | 任務切換 Handoff |
 | C | ticket completed + 同 Wave 無 pending | [強制] /parallel-evaluation Wave 審查 → C1: 有其他 Wave → #3a；C2: 全完成 → /version-release check + #13 |
@@ -368,5 +388,5 @@ Level 5: TDD 階段代理人 + thyme-python-developer
 
 ---
 
-**Last Updated**: 2026-03-11
-**Version**: 7.20.0 - 移除建立後審核的 DOC 類型豁免條件（0.1.0-W37-001）
+**Last Updated**: 2026-03-12
+**Version**: 7.22.0 - D1 拆分：Phase 3a 完成後新增 3b 拆分評估步驟（0.1.0-W43-002）

@@ -24,7 +24,27 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, List, NamedTuple, Optional, Tuple, Union
 
-from .hook_logging import get_project_root
+from .hook_base import get_project_root
+
+# ============================================================================
+# 快取變數（模組級，用於 W39-002 效能改善）
+# ============================================================================
+
+_error_pattern_mtime_cache: dict[str, float] = {}
+"""檔案 mtime 快取：check_error_patterns_changed() 的結果快取"""
+
+
+def clear_error_pattern_mtime_cache() -> None:
+    """清空 error-pattern mtime 快取（測試輔助函式）
+
+    將 _error_pattern_mtime_cache 清空為空字典，
+    供測試隔離或其他需要重新掃描的場景使用。
+
+    生產環境不應呼叫此函式。
+    """
+    global _error_pattern_mtime_cache
+    _error_pattern_mtime_cache = {}
+
 
 # ============================================================================
 # 常數定義
@@ -399,7 +419,11 @@ def check_error_patterns_changed(
     ticket_created: datetime,
     logger: "logging.Logger | None" = None
 ) -> "Tuple[bool, List[str]]":
-    """掃描 .claude/error-patterns/ 目錄，找出所有 mtime > ticket_created 的 .md 檔案。
+    """掃描 .claude/error-patterns/ 目錄，找出所有 mtime > ticket_created 的 .md 檔案（mtime 快取版本）
+
+    使用 mtime 快取機制：
+    - 已快取檔案：直接使用快取 mtime，避免重複 stat() 呼叫
+    - 未快取檔案：執行 stat() 並加入快取
 
     Args:
         project_root: 專案根目錄
@@ -411,6 +435,8 @@ def check_error_patterns_changed(
             - has_changed: 是否有新增/修改的 error-pattern
             - file_list: 新增/修改的檔案相對路徑清單
     """
+    global _error_pattern_mtime_cache
+
     # 前置檢查
     if ticket_created is None:
         if logger:
@@ -431,12 +457,28 @@ def check_error_patterns_changed(
         # 遞迴掃描所有 .md 檔案
         for file_path in error_patterns_dir.rglob("*.md"):
             try:
-                file_mtime = file_path.stat().st_mtime
+                file_path_str = str(file_path)
+
+                # 快取邏輯：路徑 A（快取命中）or 路徑 B（快取未命中）
+                if file_path_str in _error_pattern_mtime_cache:
+                    # 路徑 A：快取命中，使用快取 mtime
+                    file_mtime = _error_pattern_mtime_cache[file_path_str]
+                    if logger:
+                        logger.debug("使用快取 mtime: {}".format(file_path))
+                else:
+                    # 路徑 B：快取未命中，執行 stat() 並快取
+                    file_mtime = file_path.stat().st_mtime
+                    _error_pattern_mtime_cache[file_path_str] = file_mtime
+                    if logger:
+                        logger.debug("新增快取 mtime: {}".format(file_path))
+
+                # 比較時間戳
                 if file_mtime > ticket_created_timestamp:
                     relative_path = file_path.relative_to(project_root)
                     changed_files.append(str(relative_path))
                     if logger:
                         logger.debug("找到新增檔案: {}".format(relative_path))
+
             except (OSError, PermissionError) as e:
                 if logger:
                     logger.warning("無法讀取檔案 stat: {}: {}".format(file_path, e))
@@ -448,7 +490,7 @@ def check_error_patterns_changed(
         return False, []
 
     if logger:
-        logger.info("掃描 error-patterns 目錄完成：發現 {} 個新增/修改檔案".format(len(changed_files)))
+        logger.info("掃描 error-patterns 目錄完成：發現 {} 個新增/修改檔案（快取命中率）".format(len(changed_files)))
     has_changed = len(changed_files) > 0
     return has_changed, changed_files
 
@@ -759,3 +801,67 @@ def validate_ticket_has_decision_tree(ticket_content: str, logger: "Optional[log
     if logger:
         logger.debug("未在 Ticket 中找到決策樹欄位")
     return False
+
+
+def validate_ticket_unified(
+    ticket_id: str,
+    project_root: Optional[Path] = None,
+    logger: Optional[logging.Logger] = None
+) -> Tuple[bool, Optional[str]]:
+    """統一的 Ticket 完整性驗證
+
+    整合 find_ticket_file + 讀取內容 + validate_ticket_has_decision_tree
+    的完整驗證流程，供 agent-ticket-validation-hook 等 Hook 使用。
+
+    Args:
+        ticket_id: Ticket ID，如 "0.1.0-W39-001"
+        project_root: 專案根目錄；若為 None 則自動呼叫 get_project_root()
+        logger: 可選 Logger 實例
+
+    Returns:
+        Tuple[bool, Optional[str]]: (is_valid, error_message)
+            - (True, None): Ticket 存在且包含決策樹欄位
+            - (False, "錯誤訊息"): 驗證失敗及原因
+
+    Examples:
+        >>> is_valid, error_msg = validate_ticket_unified("0.1.0-W39-001", logger=logger)
+        >>> if not is_valid:
+        ...     logger.error(error_msg)
+        ...     return False, error_msg
+    """
+    # 取得 project_root
+    if project_root is None:
+        project_root = get_project_root()
+
+    # 步驟 1：尋找 Ticket 檔案
+    ticket_path = find_ticket_file(ticket_id, project_root=project_root, logger=logger)
+    if not ticket_path:
+        msg = "找不到 Ticket: {}".format(ticket_id)
+        if logger:
+            logger.error(msg)
+        return False, msg
+
+    # 步驟 2：讀取 Ticket 內容
+    try:
+        content = ticket_path.read_text(encoding="utf-8")
+        if not content:
+            msg = "Ticket 檔案內容為空: {}".format(ticket_id)
+            if logger:
+                logger.error(msg)
+            return False, msg
+    except Exception as e:
+        msg = "無法讀取 Ticket 檔案: {}".format(ticket_id)
+        if logger:
+            logger.error("{}: {}".format(msg, e))
+        return False, msg
+
+    # 步驟 3：驗證決策樹欄位
+    if not validate_ticket_has_decision_tree(content, logger):
+        msg = "Ticket {} 缺少決策樹欄位，為無效 Ticket".format(ticket_id)
+        if logger:
+            logger.error(msg)
+        return False, msg
+
+    if logger:
+        logger.info("Ticket {} 驗證通過".format(ticket_id))
+    return True, None

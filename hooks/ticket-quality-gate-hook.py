@@ -25,7 +25,7 @@ Ticket Quality Gate Hook
 import sys
 import json
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from hook_utils import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin,
-    get_project_root, validate_hook_input
+    get_project_root, validate_hook_input, validate_tool_input
 )
 from lib.hook_messages import QualityMessages, CoreMessages, format_message
 
@@ -68,8 +68,7 @@ EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_BLOCK = 2
 
-# 全域快取（記憶體）
-_check_cache: Dict[str, Dict[str, Any]] = {}
+# 全域配置快取
 _quality_config: Optional[Dict[str, Any]] = None
 
 def get_quality_config() -> Dict[str, Any]:
@@ -79,29 +78,10 @@ def get_quality_config() -> Dict[str, Any]:
         _quality_config = load_quality_rules()
     return _quality_config
 
-def get_cache_ttl() -> timedelta:
-    """從配置取得快取 TTL"""
-    config = get_quality_config()
-    ttl_minutes = config.get("cache", {}).get("ttl_minutes", 5)
-    return timedelta(minutes=ttl_minutes)
-
-def get_default_cache_stats() -> Dict[str, Any]:
-    """從配置取得預設快取統計"""
-    config = get_quality_config()
-    return config.get("cache", {}).get("default_stats", {
-        "total_checks": 0,
-        "cache_hits": 0,
-        "cache_misses": 0,
-        "avg_execution_time_with_cache": 0.0,
-        "avg_execution_time_without_cache": 0.0,
-        "last_updated": "",
-        "version": "v0.28.0"
-    })
 
 def validate_input(input_data: Dict[str, Any], logger) -> bool:
     """
-    驗證輸入格式 - 由 hook_utils.validate_hook_input 擔當基礎驗證，
-    此函式負責額外的深層驗證（tool_input 的子欄位檢查）
+    驗證輸入格式 - 由 hook_utils 提供統一驗證
 
     Args:
         input_data: Hook 輸入資料
@@ -110,14 +90,13 @@ def validate_input(input_data: Dict[str, Any], logger) -> bool:
     Returns:
         bool - 輸入格式是否正確
     """
-    # 基礎驗證：必要頂層欄位
+    # 頂層欄位驗證
     if not validate_hook_input(input_data, logger, ("tool_name", "tool_input")):
         return False
 
-    # 額外驗證：tool_input 子欄位
-    tool_input = input_data.get("tool_input") or {}
-    if "file_path" not in tool_input or "content" not in tool_input:
-        logger.error("tool_input 缺少 file_path 或 content")
+    # tool_input 子欄位驗證（委派給 hook_utils）
+    tool_input = input_data["tool_input"]
+    if not validate_tool_input(tool_input, logger, ("file_path", "content")):
         return False
 
     return True
@@ -195,242 +174,6 @@ def calculate_file_hash(content: str) -> str:
     """
     return hashlib.md5(content.encode()).hexdigest()
 
-def should_skip_check_due_to_cache(file_path: str, file_hash: str, logger) -> bool:
-    """
-    檢查是否應跳過檢測（基於快取，使用配置的 TTL）
-
-    快取命中條件:
-    1. 快取中存在該檔案
-    2. 時間未過期（從配置讀取）
-    3. 檔案 hash 未變更
-
-    Args:
-        file_path: 檔案路徑
-        file_hash: 檔案內容 hash
-        logger: 日誌記錄器
-
-    Returns:
-        bool - True 表示應跳過（快取命中），False 表示應執行檢測
-    """
-    # 檢查快取是否存在
-    if file_path not in _check_cache:
-        logger.debug(f"快取未命中: {file_path}")
-        return False
-
-    cached_entry = _check_cache[file_path]
-    cached_time = cached_entry["time"]
-    cached_hash = cached_entry["hash"]
-
-    # 從配置取得 TTL
-    cache_ttl = get_cache_ttl()
-
-    # 檢查 1: 時間是否過期
-    if datetime.now() - cached_time > cache_ttl:
-        logger.debug(f"快取過期: {file_path}")
-        del _check_cache[file_path]
-        return False
-
-    # 檢查 2: 檔案內容是否變更
-    if cached_hash != file_hash:
-        logger.debug(f"檔案內容已變更: {file_path}")
-        del _check_cache[file_path]
-        return False
-
-    # 快取命中
-    logger.info(f"快取命中: {file_path}")
-    return True
-
-def update_check_cache(file_path: str, file_hash: str, check_results: Dict[str, Any], logger) -> None:
-    """
-    更新快取
-
-    Args:
-        file_path: 檔案路徑
-        file_hash: 檔案內容 hash
-        check_results: 檢測結果
-        logger: 日誌記錄器
-    """
-    _check_cache[file_path] = {
-        "hash": file_hash,
-        "time": datetime.now(),
-        "result": check_results
-    }
-    logger.debug(f"快取已更新: {file_path}")
-
-def cleanup_expired_cache(logger) -> None:
-    """清理過期快取（避免記憶體洩漏，使用配置的 TTL）"""
-    current_time = datetime.now()
-    cache_ttl = get_cache_ttl()
-    expired_keys = [
-        file_path for file_path, cached_entry in _check_cache.items()
-        if current_time - cached_entry["time"] > cache_ttl
-    ]
-
-    for key in expired_keys:
-        del _check_cache[key]
-        logger.debug(f"清理過期快取: {key}")
-
-    if expired_keys:
-        logger.info(f"清理了 {len(expired_keys)} 個過期快取條目")
-
-def get_cache_stats_dir() -> Path:
-    """
-    取得快取統計目錄路徑
-
-    Returns:
-        Path - 快取統計目錄
-    """
-    project_dir = get_project_root()
-    cache_dir = project_dir / ".claude" / "hook-logs" / "ticket-quality-gate" / "cache"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir
-
-def load_cache_stats(logger) -> Dict[str, Any]:
-    """
-    載入快取統計資料（使用配置的預設值）
-
-    Returns:
-        dict - 快取統計資料
-    """
-    cache_dir = get_cache_stats_dir()
-    stats_file = cache_dir / "cache_stats.json"
-
-    if not stats_file.exists():
-        return get_default_cache_stats()
-
-    try:
-        with open(stats_file, 'r', encoding='utf-8') as f:
-            stats = json.load(f)
-        logger.debug("快取統計資料載入成功")
-        return stats
-    except Exception as e:
-        logger.warning(f"快取統計資料載入失敗，使用預設值: {e}")
-        return get_default_cache_stats()
-
-def save_cache_stats(stats: Dict[str, Any], logger) -> None:
-    """
-    儲存快取統計資料
-
-    Args:
-        stats: 快取統計資料
-        logger: 日誌記錄器
-    """
-    cache_dir = get_cache_stats_dir()
-    stats_file = cache_dir / "cache_stats.json"
-
-    try:
-        with open(stats_file, 'w', encoding='utf-8') as f:
-            json.dump(stats, f, ensure_ascii=False, indent=2)
-        logger.debug("快取統計資料儲存成功")
-    except Exception as e:
-        # 快取統計失敗不應該阻止 Hook 執行
-        logger.warning(f"快取統計資料儲存失敗: {e}")
-
-def update_cache_stats(cache_hit: bool, execution_time: float, logger) -> None:
-    """
-    更新快取統計資料
-
-    使用指數移動平均（EMA）計算平均執行時間，避免舊資料過度影響
-
-    Args:
-        cache_hit: 是否命中快取
-        execution_time: 執行時間（秒）
-        logger: 日誌記錄器
-    """
-    try:
-        stats = load_cache_stats(logger)
-
-        # 更新統計資料
-        stats["total_checks"] += 1
-
-        # 指數移動平均（alpha=0.1，較重視新資料）
-        alpha = 0.1
-
-        if cache_hit:
-            stats["cache_hits"] += 1
-            prev_avg = stats.get("avg_execution_time_with_cache", execution_time)
-            stats["avg_execution_time_with_cache"] = (
-                alpha * execution_time + (1 - alpha) * prev_avg
-            )
-        else:
-            stats["cache_misses"] += 1
-            prev_avg = stats.get("avg_execution_time_without_cache", execution_time)
-            stats["avg_execution_time_without_cache"] = (
-                alpha * execution_time + (1 - alpha) * prev_avg
-            )
-
-        stats["last_updated"] = datetime.now().isoformat()
-
-        # 儲存統計資料
-        save_cache_stats(stats, logger)
-
-        logger.info(
-            f"快取統計更新：命中={cache_hit}, 執行時間={execution_time:.3f}s, "
-            f"總檢測={stats['total_checks']}, 命中率={(stats['cache_hits'] / stats['total_checks'] * 100):.1f}%"
-        )
-    except Exception as e:
-        logger.warning(f"更新快取統計失敗: {e}")
-
-def generate_cache_stats_report(logger) -> str:
-    """
-    生成快取統計報告（Markdown 格式）
-
-    Returns:
-        str: Markdown 格式的統計報告
-    """
-    try:
-        stats = load_cache_stats(logger)
-
-        # 計算命中率
-        total = stats.get("total_checks", 0)
-        hits = stats.get("cache_hits", 0)
-        hit_rate = (hits / total * 100) if total > 0 else 0
-
-        # 計算效能提升
-        with_cache = stats.get("avg_execution_time_with_cache", 0)
-        without_cache = stats.get("avg_execution_time_without_cache", 0)
-        speedup = (without_cache / with_cache) if with_cache > 0 else 1.0
-
-        report = f"""## 快取統計報告
-
-**版本**: {stats.get("version", "unknown")}
-**最後更新**: {stats.get("last_updated", "N/A")}
-
-### 總覽
-
-- **總檢測次數**: {total:,}
-- **快取命中**: {hits:,} ({hit_rate:.1f}%)
-- **快取未命中**: {stats.get("cache_misses", 0):,} ({100 - hit_rate:.1f}%)
-
-### 執行時間
-
-- **快取命中平均時間**: {with_cache:.3f}s
-- **快取未命中平均時間**: {without_cache:.3f}s
-- **效能提升**: {speedup:.1f}x
-
-### 效能評級
-
-"""
-
-        # 效能評級
-        if hit_rate >= 70:
-            report += "優秀 - 快取命中率 > 70%\n"
-        elif hit_rate >= 50:
-            report += "良好 - 快取命中率 50-70%\n"
-        else:
-            report += "需改善 - 快取命中率 < 50%\n"
-
-        report += "\n---\n\n_此統計由 Ticket Quality Gate Hook 自動生成_\n"
-
-        return report
-    except Exception as e:
-        logger.warning(f"生成快取統計報告失敗: {e}")
-        return """## 快取統計報告
-
-_無統計資料_
-
-快取統計將在首次執行後開始記錄。
-"""
 
 def run_check_with_error_handling(check_name: str, check_function, logger) -> Dict[str, Any]:
     """
@@ -742,13 +485,11 @@ def main() -> int:
     執行流程:
     1. 讀取 JSON 輸入
     2. 檢查觸發條件
-    3. 快取檢查（記錄時間）
-    4. 執行檢測（記錄時間）
+    3. 計算檔案 hash（用於偵測格式變化）
+    4. 執行檢測
     5. 產生 Hook 輸出
     6. 儲存報告
-    7. 更新快取
-    8. 更新快取統計
-    9. 決定 exit code
+    7. 決定 exit code
 
     Returns:
         int - Exit code
@@ -778,42 +519,24 @@ def main() -> int:
             logger.info("不符合觸發條件，跳過檢測")
             return EXIT_SUCCESS
 
-        # 步驟 5: 快取檢查（記錄開始時間）
+        # 步驟 5: 提取檔案內容並執行檢測
         file_path = input_data["tool_input"]["file_path"]
         ticket_content = input_data["tool_input"]["content"]
+        # 計算檔案 hash 用於偵測格式變化（留作未來使用）
         file_hash = calculate_file_hash(ticket_content)
 
         start_time = time.time()
-        cache_hit = should_skip_check_due_to_cache(file_path, file_hash, logger)
-
-        if cache_hit:
-            # 快取命中：記錄快速執行時間
-            execution_time = time.time() - start_time
-            update_cache_stats(cache_hit=True, execution_time=execution_time, logger=logger)
-            logger.info(f"快取命中，跳過檢測，執行時間: {execution_time:.3f}s")
-            return EXIT_SUCCESS
-
-        # 步驟 6: 執行檢測（快取未命中）
         check_results = run_all_checks(ticket_content, file_path, logger)
         execution_time = time.time() - start_time
 
-        # 步驟 7: 產生 Hook 輸出
+        # 步驟 6: 產生 Hook 輸出
         hook_output = generate_hook_output(check_results)
         print(json.dumps(hook_output, ensure_ascii=False, indent=2))
 
-        # 步驟 8: 儲存報告
+        # 步驟 7: 儲存報告
         save_check_report(check_results, file_path, logger)
 
-        # 步驟 9: 更新快取
-        update_check_cache(file_path, file_hash, check_results, logger)
-
-        # 步驟 10: 更新快取統計（快取未命中）
-        update_cache_stats(cache_hit=False, execution_time=execution_time, logger=logger)
-
-        # 步驟 11: 清理過期快取
-        cleanup_expired_cache(logger)
-
-        # 步驟 12: 決定 exit code
+        # 步驟 8: 決定 exit code
         if check_results["overall_status"] == "failed":
             logger.info(f"檢測失敗，exit code = 2（通知 Claude），執行時間: {execution_time:.3f}s")
             return EXIT_BLOCK  # 2

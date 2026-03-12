@@ -61,6 +61,21 @@
 
 ---
 
+## 派發模式：預設背景
+
+所有代理人派發**預設使用 `run_in_background: true`**，讓主線程保持靈活。
+
+**背景派發的含義**：
+- PM 派發後立即釋放，可接收新指令、與用戶溝通、建立 Ticket
+- 代理人執行結果寫入 Ticket，只回報成功/失敗
+- PM 透過 `/ticket track` 查詢獲得詳細結果
+
+**例外（前景執行）**：Skill/CLI 查詢、即時驗證等需要結果才能繼續的場景。
+
+> 詳細規則：.claude/references/background-dispatch-rules.md
+
+---
+
 ## 派發方式判斷
 
 **核心問題**：「Agent A 的發現會改變 Agent B 正在進行的工作嗎？」
@@ -98,6 +113,29 @@
 
 ---
 
+## Commit 責任邊界
+
+> **核心原則**：TDD Phase 1-3 代理人自行 commit，Phase 3b+ 由 PM 管理 commit。
+
+| 階段 | 誰 commit | 誰 push | commit message 格式 |
+|------|----------|---------|-------------------|
+| Phase 1/2/3a | 代理人自行 | 禁止（PM 統一 push） | `feat({ticket-id}): Phase X 完成 - {摘要}` |
+| Phase 3b | PM（收到回報後） | PM | 依 commit-as-prompt 規範 |
+| Phase 4a/4b/4c | PM（收到回報後） | PM | 依 commit-as-prompt 規範 |
+
+**代理人自治 commit 規則**：
+
+| 規則 | 說明 |
+|------|------|
+| commit 前測試通過 | 代理人必須確保相關測試通過才 commit |
+| commit 後更新 Ticket | `ticket track append-log` 記錄產出物 |
+| 禁止 push | push 權限保留給 PM，避免分支衝突 |
+| 禁止 amend | 每次 commit 獨立，不修改歷史 |
+
+**Hook 相容性**：commit-handoff-hook 在 subagent 中觸發時，因 subagent 禁止使用 AskUserQuestion，Handoff 提醒自然跳過——這是預期行為，Phase 1-3 的 commit 不需要 PM 介入 Handoff 決策。
+
+---
+
 ## 並行派發後驗證（強制）
 
 所有並行代理人回報完成後，**必須**執行 `git diff --stat` 驗證實際變更。
@@ -123,5 +161,5 @@
 
 ---
 
-**Last Updated**: 2026-03-04
-**Version**: 3.2.0 - 新增代理人回報原則 + 多視角彙整結論回報規則
+**Last Updated**: 2026-03-12
+**Version**: 3.4.0 - 新增 Commit 責任邊界章節：Phase 1-3 代理人自治 commit 規範（0.1.0-W43-003）
