@@ -30,6 +30,16 @@ from typing import Optional, List, Tuple, Dict
 import yaml
 
 
+# 版本檔配置：(相對路徑, 解析方式)
+# 按優先順序排列，偵測專案語言
+VERSION_FILE_CANDIDATES = [
+    ("pubspec.yaml", "yaml"),           # Flutter（根目錄）
+    ("ui/pubspec.yaml", "yaml"),        # Flutter（子目錄）
+    ("package.json", "json"),           # Node.js
+    ("pyproject.toml", "toml"),         # Python（需要 3.10+）
+]
+
+
 class Colors:
     """ANSI 顏色代碼"""
     GREEN = "\033[92m"
@@ -83,6 +93,64 @@ def get_project_root() -> Path:
     return Path(__file__).parent.parent.parent.parent.parent
 
 
+def detect_version_files(root: Path) -> List[Tuple[Path, str]]:
+    """
+    偵測專案中存在的版本檔案
+
+    Args:
+        root: 專案根目錄
+
+    Returns:
+        [(absolute_path, parser_type), ...] 依優先順序排列
+    """
+    found = []
+    for rel_path, parser_type in VERSION_FILE_CANDIDATES:
+        full_path = root / rel_path
+        if full_path.exists():
+            found.append((full_path, parser_type))
+    return found
+
+
+def extract_version_from_file(file_path: Path, parser_type: str) -> Optional[str]:
+    """
+    從版本檔提取版本號
+
+    Args:
+        file_path: 版本檔路徑
+        parser_type: 解析方式 ("yaml", "json", "toml")
+
+    Returns:
+        版本號字串或 None
+    """
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            content = f.read()
+
+        if parser_type == "yaml":
+            # YAML 格式：version: X.Y.Z
+            match = re.search(r"^version:\s+(.+)$", content, re.MULTILINE)
+            if match:
+                return match.group(1).strip()
+
+        elif parser_type == "json":
+            # JSON 格式：{ "version": "X.Y.Z" }
+            data = json.loads(content)
+            if "version" in data:
+                return str(data["version"]).strip()
+
+        elif parser_type == "toml":
+            # TOML 格式：version = "X.Y.Z"
+            # 使用正則表達式因為 requires-python >= 3.10 沒有 tomllib
+            match = re.search(r'^version\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
+            if match:
+                return match.group(1).strip()
+
+    except Exception:
+        pass
+
+    return None
+
+
 def detect_version() -> Optional[str]:
     """自動偵測版本號"""
     root = get_project_root()
@@ -104,17 +172,12 @@ def detect_version() -> Optional[str]:
     except Exception:
         pass
 
-    # 2. 嘗試從 pubspec.yaml 偵測
-    pubspec_path = root / "pubspec.yaml"
-    if pubspec_path.exists():
-        try:
-            with open(pubspec_path) as f:
-                data = yaml.safe_load(f)
-                if "version" in data:
-                    version = str(data["version"]).strip()
-                    return version
-        except Exception:
-            pass
+    # 2. 嘗試從版本檔案偵測（語言感知）
+    version_files = detect_version_files(root)
+    for file_path, parser_type in version_files:
+        version = extract_version_from_file(file_path, parser_type)
+        if version:
+            return version
 
     # 3. 嘗試從 git tag 偵測
     try:
@@ -409,27 +472,33 @@ def check_version_sync(version: str) -> Tuple[bool, List[str]]:
     root = get_project_root()
     errors = []
 
-    # 檢查 pubspec.yaml
-    pubspec_path = root / "pubspec.yaml"
-    if pubspec_path.exists():
-        try:
-            with open(pubspec_path, encoding="utf-8") as f:
-                content = f.read()
-                match = re.search(r"^version:\s+(.+)$", content, re.MULTILINE)
-                if match:
-                    pubspec_version = match.group(1).strip()
-                    if pubspec_version != version:
-                        errors.append(
-                            f"pubspec.yaml 版本不匹配: {pubspec_version} vs {version}"
-                        )
-                else:
-                    errors.append("pubspec.yaml 找不到 version 行")
-        except Exception as e:
-            errors.append(f"讀取 pubspec.yaml 失敗: {e}")
-    else:
-        errors.append("找不到 pubspec.yaml")
+    # 偵測版本檔案（動態，語言感知）
+    version_files = detect_version_files(root)
 
-    # 檢查當前分支
+    if version_files:
+        # 檢查所有偵測到的版本檔（僅警告，不阻塞）
+        # Monorepo 場景：專案管理版本與子專案版本可能獨立管理
+        for file_path, parser_type in version_files:
+            try:
+                file_version = extract_version_from_file(file_path, parser_type)
+                if file_version:
+                    if file_version != version:
+                        print_warning(
+                            f"{file_path.name} 版本不匹配: {file_version} vs {version}"
+                            "（monorepo 場景下此為預期行為）"
+                        )
+                    else:
+                        print_success(f"{file_path.name} 版本一致: {version}")
+                else:
+                    print_warning(f"{file_path.name} 找不到 version 欄位")
+            except Exception as e:
+                print_warning(f"讀取 {file_path.name} 失敗: {e}")
+    else:
+        # 沒有找到版本檔（純規格版本或其他情況）
+        print_warning("未偵測到版本檔案（pubspec.yaml/package.json/pyproject.toml）")
+        print_info("  此可能是純規格版本或其他非程式碼專案")
+
+    # 檢查當前分支（僅警告，不同專案可能有不同分支命名慣例）
     try:
         result = subprocess.run(
             ["git", "branch", "--show-current"],
@@ -443,11 +512,11 @@ def check_version_sync(version: str) -> Tuple[bool, List[str]]:
             major_minor = ".".join(version.split(".")[:2])
             expected_branch = f"feature/v{major_minor}"
             if current_branch != expected_branch:
-                errors.append(
-                    f"當前分支不正確: {current_branch} (應為 {expected_branch})"
+                print_warning(
+                    f"當前分支: {current_branch} (慣例為 {expected_branch})"
                 )
     except Exception as e:
-        errors.append(f"檢查 git 分支失敗: {e}")
+        print_warning(f"檢查 git 分支失敗: {e}")
 
     # 檢查工作目錄是否乾淨
     try:
@@ -858,34 +927,34 @@ def update_todolist(version: str, dry_run: bool = False) -> bool:
         return False
 
 
-def verify_pubspec_version(version: str) -> bool:
-    """驗證 pubspec.yaml 版本"""
+def verify_version_files(version: str) -> bool:
+    """驗證所有版本檔"""
     root = get_project_root()
-    pubspec_path = root / "pubspec.yaml"
+    version_files = detect_version_files(root)
 
-    if not pubspec_path.exists():
-        print_error("找不到 pubspec.yaml")
-        return False
+    if not version_files:
+        print_warning("未偵測到版本檔案（pubspec.yaml/package.json/pyproject.toml）")
+        print_info("  此可能是純規格版本", 1)
+        return True  # 不阻塞發布流程
 
-    try:
-        with open(pubspec_path, encoding="utf-8") as f:
-            content = f.read()
-            match = re.search(r"^version:\s+(.+)$", content, re.MULTILINE)
-            if match:
-                pubspec_version = match.group(1).strip()
-                if pubspec_version == version:
-                    print_success(f"pubspec.yaml 版本正確: {version}")
-                    return True
+    # Monorepo 場景：版本不匹配為警告，不阻塞發布
+    for file_path, parser_type in version_files:
+        try:
+            file_version = extract_version_from_file(file_path, parser_type)
+            if file_version:
+                if file_version == version:
+                    print_success(f"{file_path.name} 版本正確: {version}")
                 else:
-                    print_error(
-                        f"pubspec.yaml 版本不匹配: {pubspec_version} vs {version}"
+                    print_warning(
+                        f"{file_path.name} 版本不匹配: {file_version} vs {version}"
+                        "（monorepo 場景下此為預期行為）"
                     )
-                    return False
-    except Exception as e:
-        print_error(f"讀取 pubspec.yaml 失敗: {e}")
-        return False
+            else:
+                print_warning(f"{file_path.name} 找不到 version 欄位")
+        except Exception as e:
+            print_warning(f"讀取 {file_path.name} 失敗: {e}")
 
-    return False
+    return True
 
 
 def update_documents(version: str, dry_run: bool = False) -> bool:
@@ -904,9 +973,9 @@ def update_documents(version: str, dry_run: bool = False) -> bool:
     if not update_changelog(version, dry_run):
         all_ok = False
 
-    # 2.3 驗證 pubspec.yaml
-    print_info("✅ 確認 pubspec.yaml 版本號")
-    if not verify_pubspec_version(version):
+    # 2.3 驗證版本檔
+    print_info("✅ 確認版本號")
+    if not verify_version_files(version):
         all_ok = False
 
     if all_ok:
