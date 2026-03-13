@@ -6,7 +6,15 @@ Ticket 格式化模組
 # 防止直接執行此模組
 from typing import Dict, Any, List, Optional, Union
 
-from .constants import STATUS_LABELS, STATUS_COMPLETED
+from .constants import (
+    STATUS_LABELS,
+    STATUS_COMPLETED,
+    STATUS_PENDING,
+    STATUS_IN_PROGRESS,
+    STATUS_BLOCKED,
+    STATUS_SUPERSEDED,
+    STATUS_CLOSED,
+)
 from .ui_constants import (
     DEFAULT_UNKNOWN_VALUE,
     DEFAULT_ELAPSED_TIME_FORMAT_HOURS,
@@ -33,13 +41,11 @@ def format_status_icon(status: str) -> str:
         >>> format_status_icon("completed")
         '[已完成]'
     """
-    status_icons = {
-        "pending": "[待處理]",
-        "in_progress": "[進行中]",
-        "completed": "[已完成]",
-        "blocked": "[被阻塞]",
-    }
-    return status_icons.get(status, f"[{DEFAULT_UNKNOWN_VALUE}]")
+    # 使用 STATUS_LABELS 常數，若狀態不存在返回預設值
+    label = STATUS_LABELS.get(status)
+    if label:
+        return f"[{label}]"
+    return f"[{DEFAULT_UNKNOWN_VALUE}]"
 
 
 def get_ticket_what(ticket: Dict[str, Any]) -> str:
@@ -366,7 +372,7 @@ def get_ticket_stats(tickets: List[Dict[str, Any]]) -> Dict[str, int]:
         tickets: Ticket 列表
 
     Returns:
-        Dict[str, int]: 統計資訊（pending, in_progress, completed, blocked）
+        Dict[str, int]: 統計資訊（pending, in_progress, completed, blocked, superseded, closed）
 
     Examples:
         >>> tickets = [
@@ -385,6 +391,8 @@ def get_ticket_stats(tickets: List[Dict[str, Any]]) -> Dict[str, int]:
         "in_progress": 0,
         "completed": 0,
         "blocked": 0,
+        "superseded": 0,
+        "closed": 0,
     }
 
     for ticket in tickets:
@@ -408,19 +416,27 @@ def format_ticket_stats(stats: Dict[str, int]) -> str:
         str: 格式化的統計訊息
 
     Examples:
-        >>> stats = {"pending": 2, "in_progress": 1, "completed": 1, "blocked": 0, "total": 4}
+        >>> stats = {"pending": 2, "in_progress": 1, "completed": 1, "blocked": 0, "superseded": 0, "closed": 0, "total": 4}
         >>> format_ticket_stats(stats)
-        '[已完成]: 1 | [進行中]: 1 | [待處理]: 2 | [被阻塞]: 0 (總計 4)'
+        '[已完成]: 1 | [進行中]: 1 | [待處理]: 2 | [被阻塞]: 0 | [已結案]: 0 (總計 4)'
     """
-    completed = stats.get("completed", 0)
-    in_progress = stats.get("in_progress", 0)
-    pending = stats.get("pending", 0)
-    blocked = stats.get("blocked", 0)
+    completed = stats.get(STATUS_COMPLETED, 0)
+    in_progress = stats.get(STATUS_IN_PROGRESS, 0)
+    pending = stats.get(STATUS_PENDING, 0)
+    blocked = stats.get(STATUS_BLOCKED, 0)
+    superseded = stats.get(STATUS_SUPERSEDED, 0)
+    closed = stats.get(STATUS_CLOSED, 0)
     total = stats.get("total", 0)
 
+    # 已結案數 = superseded + closed
+    concluded = superseded + closed
+
     return (
-        f"[已完成]: {completed} | [進行中]: {in_progress} | "
-        f"[待處理]: {pending} | [被阻塞]: {blocked} (總計 {total})"
+        f"[{STATUS_LABELS[STATUS_COMPLETED]}]: {completed} | "
+        f"[{STATUS_LABELS[STATUS_IN_PROGRESS]}]: {in_progress} | "
+        f"[{STATUS_LABELS[STATUS_PENDING]}]: {pending} | "
+        f"[{STATUS_LABELS[STATUS_BLOCKED]}]: {blocked} | "
+        f"[已結案]: {concluded} (總計 {total})"
     )
 
 

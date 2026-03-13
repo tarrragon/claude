@@ -64,7 +64,7 @@
 | lsp-first-development-methodology.md | LSP 優先開發 |
 | migration-methodology.md | 遷移策略 |
 | instant-review-mechanism-methodology.md | 即時審查機制 |
-| methodology-writing-methodology.md | 方法論撰寫指南 |
+| methodology-writing-methodology.md | 寫作方法論（方法論撰寫 + 經驗分享文章） |
 | methodology-rewriting-methodology.md | 方法論改寫指南 |
 
 ## i18n 與業務

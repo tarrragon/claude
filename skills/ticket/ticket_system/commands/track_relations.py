@@ -56,6 +56,29 @@ from ticket_system.lib.ticket_ops import (
 )
 
 
+def validate_ticket_exists(version: str, ticket_id: str) -> tuple[dict | None, bool]:
+    """
+    驗證並載入 Ticket。不存在時輸出錯誤訊息。
+
+    共用驗證函式，減少重複的 load_ticket + error check 邏輯，
+    同時回傳載入的 Ticket 避免重複呼叫 load_ticket()。
+
+    Args:
+        version: 版本號
+        ticket_id: Ticket ID
+
+    Returns:
+        tuple: (ticket dict or None, success: bool)
+               - ticket: 載入的 Ticket 物件（驗證失敗時為 None）
+               - success: True 表示驗證成功，False 表示失敗（已輸出錯誤訊息）
+    """
+    ticket = load_ticket(version, ticket_id)
+    if not ticket:
+        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=ticket_id))
+        return None, False
+    return ticket, True
+
+
 def _normalize_ticket_id_list(value: str | list) -> list[str]:
     """
     標準化 Ticket ID 清單為列表
@@ -133,10 +156,9 @@ def _execute_set_relation_field(
     """
     target_id = args.ticket_id
 
-    # Step 1：載入目標 Ticket
-    target_ticket = load_ticket(version, target_id)
-    if not target_ticket:
-        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=target_id))
+    # Step 1：驗證並載入目標 Ticket
+    target_ticket, success = validate_ticket_exists(version, target_id)
+    if not success:
         return 1
 
     # 解析被引用的 Ticket ID 清單
@@ -147,9 +169,8 @@ def _execute_set_relation_field(
     is_remove_mode = getattr(args, "remove", False)
     if not is_remove_mode:
         for ref_id in referenced_ids:
-            ref_ticket = load_ticket(version, ref_id)
-            if not ref_ticket:
-                print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=ref_id))
+            _, success = validate_ticket_exists(version, ref_id)
+            if not success:
                 return 1
 
     # Step 3：取得並標準化目前欄位值
@@ -233,16 +254,14 @@ def execute_add_child(args: argparse.Namespace, version: str) -> int:
     parent_id = args.parent_id
     child_id = args.child_id
 
-    # Step 1：載入父 Ticket
-    parent_ticket = load_ticket(version, parent_id)
-    if not parent_ticket:
-        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=parent_id))
+    # Step 1：驗證父 Ticket
+    parent_ticket, success = validate_ticket_exists(version, parent_id)
+    if not success:
         return 1
 
-    # Step 2：載入子 Ticket
-    child_ticket = load_ticket(version, child_id)
-    if not child_ticket:
-        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=child_id))
+    # Step 2：驗證子 Ticket
+    child_ticket, success = validate_ticket_exists(version, child_id)
+    if not success:
         return 1
 
     # Step 3：檢查是否已經是子 Ticket（避免重複）
@@ -298,9 +317,9 @@ def execute_phase(args: argparse.Namespace, version: str) -> int:
     # 有效的 Phase 值
     VALID_PHASES = TrackRelationsMessages.VALID_PHASES
 
-    ticket = load_ticket(version, args.ticket_id)
-    if not ticket:
-        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
+    # 驗證 Ticket 存在
+    ticket, success = validate_ticket_exists(version, args.ticket_id)
+    if not success:
         return 1
 
     # 驗證 phase 參數
@@ -334,9 +353,15 @@ def execute_agent(args: argparse.Namespace, version: str) -> int:
         print(AgentProgressMessages.NO_TICKETS)
         return 0
 
-    # 過濾此代理人的 Tickets
+    # 過濾代理人的 Tickets 並按狀態分組（單次遍歷）
     # 支援模糊匹配：parsley 可匹配 parsley-flutter-developer
-    agent_tickets = []
+    status_groups: dict[str, list] = {
+        STATUS_PENDING: [],
+        STATUS_IN_PROGRESS: [],
+        STATUS_COMPLETED: [],
+        STATUS_BLOCKED: [],
+    }
+
     for ticket in all_tickets:
         # 從 assignee 或 who 欄位匹配代理人
         assignee = ticket.get("assignee", "").lower()
@@ -348,23 +373,17 @@ def execute_agent(args: argparse.Namespace, version: str) -> int:
 
         # 進行模糊匹配（子字串比對）
         if agent_name in assignee or agent_name in who:
-            agent_tickets.append(ticket)
+            # 直接按狀態分組（消除獨立的 agent_tickets 和第二次遍歷）
+            status = ticket.get("status", "")
+            if status in status_groups:
+                status_groups[status].append(ticket)
 
-    # 按狀態分組（單次遍歷）
-    status_groups: dict[str, list] = {
-        STATUS_PENDING: [],
-        STATUS_IN_PROGRESS: [],
-        STATUS_COMPLETED: [],
-        STATUS_BLOCKED: [],
-    }
-    for t in agent_tickets:
-        status = t.get("status", "")
-        if status in status_groups:
-            status_groups[status].append(t)
+    # 取得分組結果
     pending_tickets = status_groups[STATUS_PENDING]
     in_progress_tickets = status_groups[STATUS_IN_PROGRESS]
     completed_tickets = status_groups[STATUS_COMPLETED]
     blocked_tickets = status_groups[STATUS_BLOCKED]
+    agent_tickets = pending_tickets + in_progress_tickets + completed_tickets + blocked_tickets
 
     # 顯示摘要
     print(format_info(AgentProgressMessages.AGENT_PROGRESS, agent_name=args.agent_name))

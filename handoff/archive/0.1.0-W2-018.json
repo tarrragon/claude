@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W2-018",
+  "direction": "to-sibling:0.1.0-W2-017",
+  "timestamp": "2026-03-06T13:40:37.444602",
+  "from_status": "completed",
+  "title": "修復 ticket resume 完成後自動清除 pending handoff JSON 檔案",
+  "what": "修復 ticket resume 完成後自動清除 pending handoff JSON 檔案",
+  "chain": {},
+  "resumed_at": "2026-03-06T13:46:49.623691"
+}

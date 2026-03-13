@@ -64,24 +64,26 @@ PM 需要用戶做任何決策時（包含多選路由和二元 yes/no 確認）
 |---|------|---------|--------|-----------|
 | 1 | 驗收方式確認 | ticket track complete 前（P0 優先級時觸發；DOC/ANA/非 P0 IMP 自動決定，不觸發） | ticket-lifecycle 驗收階段 | acceptance-gate-hook |
 | 2 | Complete 後下一步 | ticket track complete 後 | ticket-lifecycle 完成階段 | acceptance-gate-hook |
-| 3 | Wave/任務收尾確認 | 當前 Wave 無 pending Ticket（情境 C1：版本仍有其他 Wave pending） | ticket-lifecycle 收尾 | parallel-suggestion-hook |
+| 3 | Wave/任務收尾確認 | 當前 Wave 無 pending Ticket（前置：強制 /parallel-evaluation Wave 審查；情境 C1：有其他 Wave → #3a；情境 C2：全完成 → 技術債整理 + /version-release check） | ticket-lifecycle 收尾 | parallel-suggestion-hook |
 | 4 | 方案選擇 | 多個技術方案 | 決策樹第負一層 | prompt-submit-hook |
 | 5 | 優先級確認 | 多任務排序 | 決策樹第負一層 | prompt-submit-hook |
 | 6 | 任務拆分確認 | 認知負擔 > 10 | 決策樹第負一層 | prompt-submit-hook |
 | 7 | 派發方式選擇 | Task subagent / Agent Teams / 序列 | 決策樹第負一層 | askuserquestion-reminder-hook |
-| 8 | 執行方向確認 | 並行/序列、先後順序 | 決策樹第負一層 | - |
+| 8 | 執行方向確認 | 並行/序列、先後順序 | 決策樹第負一層 | prompt-submit-hook |
 | 9 | Handoff 方向選擇 | 多個兄弟/子任務可選 | ticket-lifecycle 完成階段 | - |
 | 10 | 開始/收尾確認 | 確認是否開始執行 | 決策樹第負一層 | - |
 | 11a | Commit 後 Context 刷新 Handoff（情境 A） | ticket 仍 in_progress | 決策樹第八層 Checkpoint 2 | commit-handoff-hook |
 | 11b | Commit 後任務切換 Handoff（情境 B） | ticket completed + 同 Wave 有 pending | 決策樹第八層 Checkpoint 2 | commit-handoff-hook |
 | 12 | 流程省略確認 | 省略意圖偵測 | 決策樹第八層 | process-skip-guard-hook |
-| 13 | 後續任務路由確認 | Phase 3b/4b（豁免）/4c 完成、版本完成（C2）、incident 或分析完成後有多個後續路由可選（Phase 1/2/3a 全自動，不觸發） | 決策樹第八層 | phase-completion-gate（擴充） |
+| 13 | 後續任務路由確認 | Phase 3b 完成且豁免條件不符時、Phase 4b（豁免）/4c 完成、版本完成（C2）、incident 或分析完成後有多個後續路由可選（Phase 1/2/3a 全自動不觸發；Phase 3b 豁免條件符合時自動進入 4b 不觸發） | 決策樹第八層 | phase-completion-gate（擴充） |
 | 14 | parallel-evaluation 觸發確認 | 階段完成後 | 決策樹第八層 | phase-completion-gate（擴充） |
 | 15 | Bulk 變更前備份確認 | 批量修改前 | 決策樹第八層 | parallel-suggestion-hook（擴充） |
 | 16 | 錯誤學習經驗確認 | commit 完成後（#11a/#11b 之前）；docs:/chore:/style: 等 commit 自動跳過；選項簡化為二元確認 | 決策樹第八層 Checkpoint 1.5 | commit-handoff-hook（擴充） |
 | 17 | 錯誤經驗改進追蹤 | ticket complete 時有新增 error-pattern | ticket-lifecycle 完成階段 | acceptance-gate-hook（擴充） |
 
-**Hook 覆蓋狀態**：13/18 場景有 Hook 自動提醒（13/18 = 72%）。其中 #13/#14 為條件式觸發（僅當 TDD Phase 完成且 worklog 更新時），未計入 13/18 計數，列於下方 Hook 提醒機制表僅供參考。
+**Hook 覆蓋狀態**：14/18 場景有 Hook 自動提醒（14/18 = 78%）。其中 #13/#14 為條件式觸發（僅當 TDD Phase 完成且 worklog 更新時），未計入 14/18 計數，列於下方 Hook 提醒機制表僅供參考。
+
+**Phase 1-3 自治 commit 相容性**：場景 #11/#16 由 commit-handoff-hook 觸發，但 Phase 1-3 代理人自治 commit 時，因 subagent 禁止使用 AskUserQuestion，Hook 提醒自然跳過——這是預期行為，Phase 1-3 的 commit 不需要 PM 介入 Handoff 或錯誤學習決策。
 
 ### 場景執行順序約束
 
@@ -108,7 +110,7 @@ PM 需要用戶做任何決策時（包含多選路由和二元 yes/no 確認）
 | Hook | 觸發時機 | 覆蓋場景 |
 |------|---------|---------|
 | parallel-suggestion-hook | 繼續請求但無 pending Ticket | #3 Wave 收尾 + #15 批量備份 |
-| prompt-submit-hook | 用戶提問含決策關鍵字 | #4 方案 + #5 優先級 + #6 拆分 |
+| prompt-submit-hook | 用戶提問含決策關鍵字 | #4 方案 + #5 優先級 + #6 拆分 + #8 執行方向 |
 | askuserquestion-reminder-hook | Task 派發含多個 Ticket ID | #7 派發方式 |
 | commit-handoff-hook | git commit 成功後 | #11 Commit Handoff + #16 錯誤學習 |
 | process-skip-guard-hook | 用戶輸入含省略關鍵字 | #12 流程省略 |
@@ -127,6 +129,6 @@ PM 需要用戶做任何決策時（包含多選路由和二元 yes/no 確認）
 
 ---
 
-**Last Updated**: 2026-03-11
-**Version**: 3.3.0 - 操作指引提取至 references/askuserquestion-scene-details.md，原位留索引（0.1.0-W35-001.6）
+**Last Updated**: 2026-03-13
+**Version**: 3.4.0 - 同步 W43-W47 規則：D2 自動豁免閘門、Phase 1-3 自治 commit 相容性、Hook 覆蓋數 14/18（0.1.0-W48-003）
 **Purpose**: AskUserQuestion 規則唯一 Source of Truth

@@ -38,6 +38,14 @@ class TestFormatStatusIcon:
         """測試被阻塞狀態"""
         assert format_status_icon("blocked") == "[被阻塞]"
 
+    def test_superseded_status(self):
+        """測試已取代狀態"""
+        assert format_status_icon("superseded") == "[已取代]"
+
+    def test_closed_status(self):
+        """測試已關閉狀態"""
+        assert format_status_icon("closed") == "[已關閉]"
+
     def test_unknown_status(self):
         """測試未知狀態"""
         assert format_status_icon("unknown") == "[?]"
@@ -342,6 +350,57 @@ class TestGetTicketStats:
         assert stats["pending"] == 1
         assert stats["total"] == 2
 
+    def test_superseded_status(self):
+        """測試 superseded 狀態統計"""
+        tickets = [
+            {"status": "completed"},
+            {"status": "superseded"},
+        ]
+        stats = get_ticket_stats(tickets)
+        assert stats["completed"] == 1
+        assert stats["superseded"] == 1
+        assert stats["total"] == 2
+
+    def test_closed_status(self):
+        """測試 closed 狀態統計"""
+        tickets = [
+            {"status": "completed"},
+            {"status": "closed"},
+        ]
+        stats = get_ticket_stats(tickets)
+        assert stats["completed"] == 1
+        assert stats["closed"] == 1
+        assert stats["total"] == 2
+
+    def test_mixed_concluded_statuses(self):
+        """測試混合 superseded 和 closed 狀態"""
+        tickets = [
+            {"status": "pending"},
+            {"status": "in_progress"},
+            {"status": "completed"},
+            {"status": "blocked"},
+            {"status": "superseded"},
+            {"status": "closed"},
+        ]
+        stats = get_ticket_stats(tickets)
+        assert stats["pending"] == 1
+        assert stats["in_progress"] == 1
+        assert stats["completed"] == 1
+        assert stats["blocked"] == 1
+        assert stats["superseded"] == 1
+        assert stats["closed"] == 1
+        assert stats["total"] == 6
+        # 驗證各分類計數之和 = total
+        classified_sum = (
+            stats["pending"]
+            + stats["in_progress"]
+            + stats["completed"]
+            + stats["blocked"]
+            + stats["superseded"]
+            + stats["closed"]
+        )
+        assert classified_sum == stats["total"]
+
 
 class TestFormatTicketStats:
     """格式化統計資訊的測試"""
@@ -362,6 +421,23 @@ class TestFormatTicketStats:
         assert "[被阻塞]: 0" in result
         assert "總計 4" in result
 
+    def test_format_stats_backward_compatible_concluded(self):
+        """測試向後相容性 — 舊格式輸入時正確計算已結案數"""
+        # 舊格式可能沒有 superseded/closed 欄位
+        stats = {
+            "pending": 1,
+            "in_progress": 1,
+            "completed": 1,
+            "blocked": 1,
+            "superseded": 0,
+            "closed": 0,
+            "total": 4,
+        }
+        result = format_ticket_stats(stats)
+        # 驗證已結案 (superseded + closed) = 0 + 0 = 0
+        assert "[已結案]: 0" in result
+        assert "總計 4" in result
+
     def test_all_zero_stats(self):
         """測試全為 0 的統計"""
         stats = {
@@ -379,6 +455,40 @@ class TestFormatTicketStats:
         stats = {}
         result = format_ticket_stats(stats)
         assert "[已完成]: 0" in result
+
+    def test_format_stats_with_superseded_and_closed(self):
+        """測試包含 superseded 和 closed 狀態的統計格式"""
+        stats = {
+            "pending": 2,
+            "in_progress": 1,
+            "completed": 1,
+            "blocked": 0,
+            "superseded": 1,
+            "closed": 1,
+            "total": 6,
+        }
+        result = format_ticket_stats(stats)
+        assert "[已完成]: 1" in result
+        assert "[進行中]: 1" in result
+        assert "[待處理]: 2" in result
+        assert "[被阻塞]: 0" in result
+        assert "[已結案]: 2" in result  # superseded + closed = 1 + 1
+        assert "總計 6" in result
+
+    def test_format_stats_with_only_concluded_tickets(self):
+        """測試只有 superseded/closed 狀態的統計"""
+        stats = {
+            "pending": 0,
+            "in_progress": 0,
+            "completed": 0,
+            "blocked": 0,
+            "superseded": 1,
+            "closed": 1,
+            "total": 2,
+        }
+        result = format_ticket_stats(stats)
+        assert "[已結案]: 2" in result
+        assert "總計 2" in result
 
 
 class TestFormattingIntegration:

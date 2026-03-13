@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W2-005",
+  "direction": "context-refresh",
+  "timestamp": "2026-03-06T14:53:27.171105",
+  "from_status": "in_progress",
+  "title": "升級 project-init 的 pyproject.toml 解析為 tomllib（消除文字解析脆弱性）",
+  "what": "升級 project-init 的 pyproject.toml 解析為 tomllib（消除文字解析脆弱性）",
+  "chain": {},
+  "resumed_at": "2026-03-06T14:54:02.982848"
+}

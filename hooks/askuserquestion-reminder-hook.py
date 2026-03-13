@@ -21,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 try:
-    from hook_utils import setup_hook_logging
+    from hook_utils import setup_hook_logging, is_subagent_environment
     from lib.hook_messages import AskUserQuestionMessages
 except ImportError as e:
     print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
@@ -40,6 +40,19 @@ def main() -> int:
 
         # 讀取輸入
         input_data = json.load(sys.stdin)
+
+        # 偵測 subagent 環境：agent_id 僅在 subagent 中出現
+        if is_subagent_environment(input_data):
+            logger.info("偵測到 subagent 環境（agent_id=%s），跳過 AskUserQuestion 提醒", input_data.get("agent_id"))
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow"
+                }
+            }
+            print(json.dumps(output, ensure_ascii=False, indent=2))
+            return 0
+
         tool_name = input_data.get("tool_name", "")
 
         # 只處理 Task 工具

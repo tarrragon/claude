@@ -29,8 +29,8 @@ pending → claim → in_progress → complete → completed
 | **建立後** | 強制並行審核：acceptance-auditor（品質）+ system-analyst（設計）→ creation_accepted: true | - |
 | **認領** | 阻塞依賴檢查 | - |
 | **執行** | 錯誤強制派發 incident-responder；日誌必填 | - |
-| **驗收** | acceptance-gate-hook 檢查 | **驗收方式確認**（標準/簡化/先完成後補） |
-| **完成** | 驗收通過後執行 `/ticket track complete`；complete 後處理 #17（錯誤學習） | **後續步驟選擇** |
+| **驗收** | **主動勾選驗收條件**（`check-acceptance`）→ acceptance-gate-hook 事後驗證 | **驗收方式確認**（標準/簡化/先完成後補） |
+| **完成** | 所有驗收條件已勾選後執行 `/ticket track complete`；complete 後處理 #17（錯誤學習） | **後續步驟選擇** |
 | **收尾** | PM 主動告知變更狀態 + 查詢待處理 | **Wave 收尾確認** |
 
 > 各階段詳細規則：.claude/references/ticket-lifecycle-phases.md
@@ -102,6 +102,37 @@ Ticket 建立後、認領前，強制並行派發多代理人審核。
 | IMP/ADJ/TDD Phase/複雜/安全 | 完整驗收（acceptance-auditor） |
 | DOC/簡單（任務範圍單純） | 簡化驗收 |
 
+### Complete 前主動勾選驗收條件（強制）
+
+> **來源**：用戶反饋 — 每次 complete 都被 CLI 擋回才補勾驗收條件，浪費 context 和耐心。
+
+PM 執行 `ticket track complete` **前**，必須先主動勾選所有驗收條件。禁止依賴 CLI 的錯誤提示才補勾。
+
+**強制步驟順序**：
+
+```
+任務執行完成
+    |
+    v
+Step 1: 逐條確認驗收條件已滿足
+    |
+    v
+Step 2: 執行 ticket track check-acceptance <id>
+    |
+    v
+Step 3: 執行 ticket track complete <id>
+    |
+    v
+acceptance-gate-hook 事後驗證（最後防線）
+```
+
+**禁止行為**：
+
+| 禁止 | 說明 |
+|------|------|
+| 直接執行 complete 不先 check-acceptance | 會被 CLI 擋回，浪費 context |
+| 被擋回後才補勾 | 應主動確認，不依賴被動提醒 |
+
 ---
 
 ## 完成階段錯誤學習驗證
@@ -129,5 +160,5 @@ Ticket 建立後、認領前，強制並行派發多代理人審核。
 
 ---
 
-**Last Updated**: 2026-03-11
-**Version**: 5.5.0 - 移除建立後審核的 DOC 類型豁免條件（0.1.0-W37-001）
+**Last Updated**: 2026-03-13
+**Version**: 5.6.0 - 驗收階段新增 complete 前主動勾選驗收條件流程（0.1.0-W51-001）

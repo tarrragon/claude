@@ -69,6 +69,55 @@ Wave 是相互隔離的執行單位。禁止跨 Wave 依賴和並行派發。
 
 ---
 
+## 版本收尾技術債整理流程
+
+> **觸發時機**：決策樹第八層情境 C2（版本內所有 Ticket 已完成，無任何待處理任務）
+>
+> **來源**：W49 實踐 — Wave 收尾多視角審查 + 版本收尾技術債批量建 Ticket 模式
+
+版本完成後、執行 `/version-release check` 之前，**必須**整理未追蹤的技術債。
+
+### 流程
+
+```
+情境 C2：版本無任何待處理任務
+    |
+    v
+[強制] 檢查 todolist.yaml
+    → 篩選與當前版本相關的未排程項目
+    → 識別需要帶入下一版本的技術債
+    |
+    v
+有需要建立的技術債 Ticket?
+    |
+    +── 是 → /ticket batch-create 批量建立（歸入下一版本）
+    |         → 建立後不影響當前版本完成狀態
+    |
+    +── 否 → 繼續
+    |
+    v
+[強制] /version-release check
+    → AskUserQuestion #13（版本推進確認）
+```
+
+### 技術債篩選標準
+
+| 來源 | 判斷 | 處理 |
+|------|------|------|
+| todolist.yaml 已記錄但未排程 | 是否與下一版本目標相關？ | 相關 → 建立 Ticket；不相關 → 保留在 todolist |
+| Phase 4 `/tech-debt-capture` 產出 | 已建立 Ticket？ | 已建 → 確認版本歸屬；未建 → 補建 |
+| Wave 審查發現但未處理 | 是否阻塞版本發布？ | 阻塞 → 當前版本處理；不阻塞 → 歸入下一版本 |
+
+### 禁止行為
+
+| 禁止 | 說明 |
+|------|------|
+| 跳過 todolist 檢查直接發布 | 可能遺漏已知技術債 |
+| 將技術債 Ticket 建在當前版本 | 版本已完成，應歸入下一版本 |
+| 只口頭記錄不建 Ticket | 必須有可追蹤的 Ticket |
+
+---
+
 ## 相關文件
 
 - .claude/references/version-progression-details.md - Wave 獨立性、Ticket 歸屬、二元決策流程
@@ -77,5 +126,5 @@ Wave 是相互隔離的執行單位。禁止跨 Wave 依賴和並行派發。
 
 ---
 
-**Last Updated**: 2026-03-07
-**Version**: 3.1.0 - 新增版本邊界語義、.claude 工件歸屬、Ticket 版本歸屬規則（W3-004 分析結論）
+**Last Updated**: 2026-03-13
+**Version**: 3.2.0 - 新增版本收尾技術債整理流程（todolist → batch ticket create），標準化 W49 收尾模式（0.1.0-W50-008）

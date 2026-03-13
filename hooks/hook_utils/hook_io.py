@@ -407,3 +407,75 @@ def validate_tool_input(
     if logger:
         logger.debug("tool_input 驗證通過")
     return True
+
+
+def is_subagent_environment(input_data: "dict | None") -> bool:
+    """檢查是否為 subagent 環境
+
+    subagent 執行時，Hook 會在 input_data 中包含 agent_id 欄位。
+    此函式用於 Hook 的早期跳過邏輯，避免在 subagent 中輸出 AskUserQuestion 提醒。
+
+    Args:
+        input_data: Hook 收到的 input_data dict
+
+    Returns:
+        bool: 如果 input_data 包含 agent_id（非空），返回 True；否則返回 False
+
+    Examples:
+        >>> if is_subagent_environment(input_data):
+        ...     logger.info("偵測到 subagent 環境，跳過 AskUserQuestion 提醒")
+        ...     print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
+        ...     return EXIT_SUCCESS
+    """
+    if input_data is None:
+        return False
+    return bool(input_data.get("agent_id"))
+
+
+# ============================================================================
+# Hook 輸出生成
+# ============================================================================
+
+
+def generate_hook_output(
+    hook_event_name: str,
+    additional_context: "str | None" = None
+) -> dict:
+    """生成符合 Hook 協定的輸出 JSON
+
+    統一的 Hook 輸出生成函式，用於各種 Hook 的協定遵循。
+
+    Hook 協定格式：
+    - 基本輸出：{"hookSpecificOutput": {"hookEventName": "<事件名>"}}
+    - 帶額外上下文：{"hookSpecificOutput": {"hookEventName": "<事件名>", "additionalContext": "<訊息>"}}
+
+    Args:
+        hook_event_name: Hook 事件名稱，如 "UserPromptSubmit", "PreToolUse"
+        additional_context: 可選的額外上下文訊息（如警告、提醒等）
+
+    Returns:
+        dict: 符合 Hook 協定的輸出結構
+
+    Examples:
+        # 基本輸出（無額外訊息）
+        >>> generate_hook_output("UserPromptSubmit")
+        {'hookSpecificOutput': {'hookEventName': 'UserPromptSubmit'}}
+
+        # 帶額外上下文的輸出（如警告訊息）
+        >>> generate_hook_output("UserPromptSubmit", "警告：檢測到流程省略意圖")
+        {'hookSpecificOutput': {
+            'hookEventName': 'UserPromptSubmit',
+            'additionalContext': '警告：檢測到流程省略意圖'
+        }}
+    """
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": hook_event_name
+        }
+    }
+
+    # 當提供了額外上下文時，添加到輸出
+    if additional_context:
+        output["hookSpecificOutput"]["additionalContext"] = additional_context
+
+    return output

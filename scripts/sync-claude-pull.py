@@ -37,10 +37,10 @@ GIT_HTTP_LOW_SPEED_TIME_SECONDS = "30"
 MAX_CHANGED_FILES_DISPLAY = 3
 
 # 遠端 repo 專有：存在於遠端但不需複製到本地
-_REMOTE_REPO_ONLY = frozenset({".git", "project-templates"})
+REMOTE_ONLY = frozenset({".git", "project-templates"})
 
 # 本地專有：只存在於本地，同步時不刪除也不覆蓋
-_LOCAL_ONLY_PATHS = frozenset({
+LOCAL_ONLY = frozenset({
     "hook-logs",
     "handoff",
     "PM_INTERVENTION_REQUIRED",
@@ -52,7 +52,7 @@ _LOCAL_ONLY_PATHS = frozenset({
 })
 
 # 同步時跳過的所有路徑（合併使用）
-SKIP_DURING_SYNC = _REMOTE_REPO_ONLY | _LOCAL_ONLY_PATHS
+SKIP_DURING_SYNC = REMOTE_ONLY | LOCAL_ONLY
 
 
 def print_color(msg: str, color: str = "yellow") -> None:
@@ -217,7 +217,18 @@ def sync_directory(src: Path, dst: Path) -> int:
 
 
 def collect_remote_files(src: Path, prefix: Path = Path()) -> set[Path]:
-    """Collect all relative file paths from the remote repo."""
+    """遞迴蒐集遠端 repo 中所有檔案的相對路徑。
+
+    跳過排除清單中的項目和符號連結，返回所有檔案的相對路徑集合，
+    用於後續的過時檔案清理工作。
+
+    參數:
+        src: 來源目錄路徑
+        prefix: 相對於起始目錄的路徑前綴，用於遞迴調用
+
+    傳回:
+        set[Path]: 所有檔案的相對路徑集合
+    """
     files: set[Path] = set()
     for item in src.iterdir():
         if item.name in SKIP_DURING_SYNC:
@@ -240,6 +251,14 @@ def cleanup_stale_files(claude_dir: Path, remote_files: set[Path]) -> list[str]:
     removed: list[str] = []
 
     def _walk(directory: Path, prefix: Path = Path()) -> None:
+        """遞迴走訪目錄，移除不存在於遠端 repo 中的過時檔案。
+
+        跳過排除清單中的項目和符號連結。對於空目錄在清理後自動刪除。
+
+        參數:
+            directory: 目前走訪的目錄路徑
+            prefix: 相對於 claude_dir 的路徑前綴
+        """
         if not directory.exists():
             return
         for item in sorted(directory.iterdir()):
@@ -400,36 +419,78 @@ def _finalize_sync(backup_dir: Path) -> None:
     print_color("  3. 驗證所有連結有效")
 
 
+def _validate_environment(project_root: Path) -> None:
+    """驗證專案環境和本地狀態。
+
+    檢查專案根目錄有效性和本地未提交變更。若檢查失敗則終止程式。
+
+    參數:
+        project_root: 專案根目錄路徑
+
+    異常:
+        呼叫 sys.exit(1)，若檢查失敗則終止程式
+    """
+    print_color("檢查本地狀態...", "yellow")
+    check_uncommitted_changes(project_root)
+
+
+def _clone_and_backup(project_root: Path) -> tuple[Path, Path]:
+    """克隆遠端 repo 並執行備份和同步。
+
+    建立臨時目錄、克隆遠端 repo、執行備份和同步操作。
+    返回臨時目錄和備份目錄路徑。
+
+    參數:
+        project_root: 專案根目錄路徑
+
+    傳回:
+        tuple[Path, Path]: (臨時目錄路徑, 備份目錄路徑)
+
+    異常:
+        subprocess.TimeoutExpired: 若克隆超過設定的超時時間
+    """
+    print_color("從獨立 repo 拉取更新...", "yellow")
+    temp_dir = Path(tempfile.mkdtemp())
+    clone_repo(temp_dir)
+    backup_dir = _sync_with_backup(project_root, temp_dir)
+    return temp_dir, backup_dir
+
+
+def _complete_sync(temp_dir: Path, project_root: Path, backup_dir: Path) -> None:
+    """完成同步：更新專案模板和輸出結果。
+
+    更新專案模板檔案、清理臨時目錄、輸出完成訊息。
+
+    參數:
+        temp_dir: 臨時目錄路徑
+        project_root: 專案根目錄路徑
+        backup_dir: 備份目錄路徑
+    """
+    _update_project_templates(temp_dir, project_root)
+    shutil.rmtree(temp_dir, ignore_errors=True)
+    _finalize_sync(backup_dir)
+
+
 def main() -> None:
     """同步 .claude 配置從獨立 repo。
 
     主要流程：
     1. 找出專案根目錄
-    2. 檢查本地未提交的變更
-    3. 從遠端 repo 克隆最新版本
-    4. 執行備份和同步
-    5. 更新專案模板
-    6. 輸出完成訊息
+    2. 驗證環境和本地狀態
+    3. 克隆遠端 repo 並執行備份同步
+    4. 完成同步（更新模板、清理、輸出結果）
     """
     print_color("開始從獨立 repo 拉取 .claude 更新...")
 
     project_root = find_project_root()
+    _validate_environment(project_root)
 
-    print_color("檢查本地狀態...")
-    check_uncommitted_changes(project_root)
-
-    print_color("從獨立 repo 拉取更新...")
-    temp_dir = Path(tempfile.mkdtemp())
     try:
-        clone_repo(temp_dir)
-        backup_dir = _sync_with_backup(project_root, temp_dir)
-        _update_project_templates(temp_dir, project_root)
-        _finalize_sync(backup_dir)
+        temp_dir, backup_dir = _clone_and_backup(project_root)
+        _complete_sync(temp_dir, project_root, backup_dir)
     except subprocess.TimeoutExpired:
         print_color(f"git clone 超時（{GIT_CLONE_TIMEOUT_SECONDS} 秒），請檢查網路連線", "red")
         sys.exit(1)
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":

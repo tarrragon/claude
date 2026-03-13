@@ -66,7 +66,7 @@
 | Phase 完成 | 路由 |
 |-----------|------|
 | Phase 1/2/3a | 全自動 → 下一 Phase 代理人 [注 1] |
-| Phase 3b | AskUserQuestion #13：進入 Phase 4a（標準）或豁免直接 4b [注 2] |
+| Phase 3b | PM 自動檢查豁免條件 [注 2]：符合 → 全自動進入 Phase 4b；不符合 → AskUserQuestion #13（選擇 Phase 4a 或 4b） |
 | Phase 4a/4b | 全自動 → 下一 Phase（Phase 4b 可豁免跳至 tech-debt [注 2]） |
 | Phase 4c | 強制 /tech-debt-capture → AskUserQuestion #13（不可跳過） |
 
@@ -137,9 +137,17 @@ AskUserQuestion #3a（Wave 收尾 + 開始下一 Wave）
 #### 情境 C2：版本無任何待處理任務（版本全部完成）
 
 ```
+[強制] 版本收尾技術債整理
+    → 檢查 todolist.yaml 未排程項目
+    → 有技術債 → /ticket batch-create 歸入下一版本
+    → 無技術債 → 繼續
+    |
+    v
 [強制] /version-release check
 → AskUserQuestion #13（版本推進確認）
 ```
+
+> 技術債整理流程：.claude/rules/flows/version-progression.md（版本收尾技術債整理流程章節）
 
 ---
 
@@ -153,7 +161,7 @@ AskUserQuestion #3a（Wave 收尾 + 開始下一 Wave）
 |-----------|--------|--------|--------|
 | 分析完成 | 進入實作（建立 Ticket） | /parallel-evaluation F（結論審查） | 先 commit 再決定 |
 | 規劃完成 | /parallel-evaluation C/G（審核） | 直接進入 TDD Phase 1 | 先 commit 再決定 |
-| Phase 3b 完成 | 進入 Phase 4a（Recommended） | 直接進入 Phase 4b（豁免） | 先 commit 再決定 |
+| Phase 3b 完成（不符合豁免時才觸發 #13） | 進入 Phase 4a（Recommended） | 直接進入 Phase 4b | 先 commit 再決定 |
 | Phase 4c + tech-debt 完成 | commit 並查看 Wave 狀態（Recommended） | Handoff，下個 session 繼續 Wave 路由 | 查看所有待處理 Ticket |
 | incident 分析完成 | /parallel-evaluation F（結論審查） | 直接建立修復 Ticket | 先 commit 再決定 |
 | Wave 完成（有下一 Wave） | 開始 Wave X+1（列出任務） | Handoff 到 Wave X+1 | 先 commit 再決定 |
@@ -252,5 +260,5 @@ ticket handoff --gc --execute
 
 ---
 
-**Last Updated**: 2026-03-09
-**Version**: 1.3.0 - 情境 C 新增強制 /parallel-evaluation Wave 完成審查步驟（0.1.0-W25-012）
+**Last Updated**: 2026-03-13
+**Version**: 1.4.0 - 情境 C2 新增版本收尾技術債整理步驟（0.1.0-W50-008）

@@ -56,6 +56,7 @@ try:
         get_project_root,
         find_ticket_files,
         validate_hook_input,
+        is_subagent_environment,
     )
     from lib.hook_messages import AskUserQuestionMessages
 except ImportError as e:
@@ -640,6 +641,14 @@ def main() -> int:
     input_data = read_json_from_stdin(logger)
     if not input_data:
         input_data = {}
+
+    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現
+    if is_subagent_environment(input_data):
+        logger.info("偵測到 subagent 環境（agent_id=%s），跳過 AskUserQuestion 提醒", input_data.get("agent_id"))
+        print(json.dumps({
+            "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}
+        }, ensure_ascii=False))
+        return EXIT_SUCCESS
 
     # 步驟 2: 驗證輸入格式
     if not validate_input(input_data, logger):

@@ -27,6 +27,8 @@ from .hook_io import (
     clear_handoff_recovery_cache,
     validate_hook_input,
     validate_tool_input,
+    is_subagent_environment,
+    generate_hook_output,
 )
 from .hook_ticket import (
     parse_ticket_frontmatter,
@@ -56,6 +58,8 @@ __all__ = [
     "clear_handoff_recovery_cache",
     "validate_hook_input",
     "validate_tool_input",
+    "is_subagent_environment",
+    "generate_hook_output",
     "parse_ticket_frontmatter",
     "parse_ticket_date",
     "check_error_patterns_changed",

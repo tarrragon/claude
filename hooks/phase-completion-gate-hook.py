@@ -40,7 +40,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from hook_utils import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin,
-    extract_tool_input, validate_hook_input, get_project_root
+    extract_tool_input, validate_hook_input, get_project_root,
+    is_subagent_environment
 )
 from lib.hook_messages import QualityMessages, CoreMessages, AskUserQuestionMessages, format_message
 
@@ -466,6 +467,14 @@ def main() -> int:
 
         # 步驟 2: 讀取 JSON 輸入
         input_data = read_json_from_stdin(logger)
+
+        # 偵測 subagent 環境：agent_id 僅在 subagent 中出現
+        if is_subagent_environment(input_data):
+            logger.info("偵測到 subagent 環境（agent_id=%s），跳過 AskUserQuestion 提醒", input_data.get("agent_id"))
+            print(json.dumps({
+                "hookSpecificOutput": {"hookEventName": "PostToolUse"}
+            }, ensure_ascii=False, indent=2))
+            return EXIT_SUCCESS
 
         # 步驟 3: 驗證輸入格式
         if not validate_hook_input(input_data, logger, ("tool_name", "tool_input")):

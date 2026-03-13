@@ -63,6 +63,7 @@ from hook_utils import (
     extract_version_from_ticket_id,
     extract_wave_from_ticket_id,
     validate_hook_input,
+    is_subagent_environment,
 )
 from lib.hook_messages import GateMessages, CoreMessages, AskUserQuestionMessages, format_message
 
@@ -890,6 +891,12 @@ def main() -> int:
 
         # 步驟 1: 解析驗證輸入
         input_data = read_json_from_stdin(logger)
+
+        # 偵測 subagent 環境：agent_id 僅在 subagent 中出現
+        if is_subagent_environment(input_data):
+            logger.info("偵測到 subagent 環境（agent_id=%s），跳過 AskUserQuestion 提醒", input_data.get("agent_id"))
+            return EXIT_SUCCESS
+
         parsed = _parse_and_validate_input(input_data, logger)
         if parsed is None:
             return EXIT_SUCCESS

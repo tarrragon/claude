@@ -71,6 +71,11 @@ INSTALL_OPERATION_TIMEOUT_SECONDS = 120  # For uv tool install with --reinstall
 # Output formatting
 SEPARATOR_LINE_WIDTH = 60
 
+# Tool list parsing
+TOOL_LIST_MIN_PARTS = 2
+TOOL_NAME_INDEX = 0
+TOOL_VERSION_INDEX = 1
+
 
 # ============================================================================
 # Cache Management
@@ -390,9 +395,9 @@ def get_installed_uv_tools() -> Dict[str, str]:
                 continue
 
             parts = line.split()
-            if len(parts) >= 2:
-                tool_name = parts[0]
-                version_str = parts[1]
+            if len(parts) >= TOOL_LIST_MIN_PARTS:
+                tool_name = parts[TOOL_NAME_INDEX]
+                version_str = parts[TOOL_VERSION_INDEX]
                 # Normalize version: remove 'v' prefix if present
                 version_str = version_str.lstrip("v")
                 tools[tool_name] = version_str
@@ -560,6 +565,28 @@ def _sync_packages(project_root: Path, packages: Dict[str, Dict[str, str]]) -> N
     print("=" * SEPARATOR_LINE_WIDTH)
 
 
+def _handle_no_packages() -> int:
+    """Handle case where no packages are discovered.
+
+    Returns:
+        0 (successful, no action needed)
+    """
+    print("Package Version Sync - No packages found in .claude/skills/")
+    return 0
+
+
+def _handle_cache_hit() -> int:
+    """Handle case where cache indicates no sync needed.
+
+    Returns:
+        0 (successful, skipped due to cache)
+    """
+    print("=" * SEPARATOR_LINE_WIDTH)
+    print("Package Version Sync - cached, skip sync")
+    print("=" * SEPARATOR_LINE_WIDTH)
+    return 0
+
+
 def main() -> int:
     """Main hook entry point.
 
@@ -579,15 +606,11 @@ def main() -> int:
 
     packages = scan_skill_packages(project_root, logger)
     if not packages:
-        print("Package Version Sync - No packages found in .claude/skills/")
-        return 0
+        return _handle_no_packages()
 
     # Phase 0: Check cache
     if _should_skip_sync_due_to_cache(project_root, packages, logger):
-        print("=" * SEPARATOR_LINE_WIDTH)
-        print("Package Version Sync - cached, skip sync")
-        print("=" * SEPARATOR_LINE_WIDTH)
-        return 0
+        return _handle_cache_hit()
 
     _sync_packages(project_root, packages)
     return 0

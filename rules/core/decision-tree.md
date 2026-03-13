@@ -24,14 +24,18 @@
     v
 [第負一層] 並行化評估（最高優先）
     |
-    +-- 可並行拆分? ─是→ Agent A 的發現會改變 Agent B 正在進行的工作?
+    +-- 可並行拆分? ─是→ 複雜度適合並行?（詳見 parallel-dispatch.md 複雜度評估章節）
     |                      |
-    |                      +─ 否 → [並行派發 Task subagent]
+    |                      +─ 否 → [序列派發]
     |                      |
-    |                      +─ 是 → 3-4x 成本合理?
+    |                      +─ 是 → Agent A 的發現會改變 Agent B?
     |                               |
-    |                               +─ 是 → [Agent Teams 派發]（/agent-team）
-    |                               +─ 否 → [Task subagent + PM 中轉]
+    |                               +─ 否 → [並行派發 Task subagent]
+    |                               |
+    |                               +─ 是 → 3-4x 成本合理?
+    |                                        |
+    |                                        +─ 是 → [Agent Teams 派發]（/agent-team）
+    |                                        +─ 否 → [Task subagent + PM 中轉]
     |
     +─── 否 → 主線程必須親自處理? ─是→ [僅限：用戶溝通、最終決策]
     |                             |       ↓
@@ -283,9 +287,24 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 **驗收方式確認（AskUserQuestion）**：complete 前必須確認驗收方式（標準/簡化/先完成後補）。
 
+**主動勾選驗收條件（強制）**：確認驗收方式後、執行 complete 前，PM **必須**主動勾選驗收條件，禁止依賴 CLI 擋回才補勾。
+
+```
+Step 1: 確認驗收方式（AskUserQuestion #1）
+    |
+    v
+Step 2: 逐條確認驗收條件已滿足
+    |
+    v
+Step 3: ticket track check-acceptance <id>
+    |
+    v
+Step 4: ticket track complete <id>
+```
+
 **下一步選擇（AskUserQuestion）**：有多個後續 Ticket 可選時，必須讓使用者選擇。
 
-> Ticket 生命週期和驗收流程：.claude/rules/flows/ticket-lifecycle.md
+> 驗收流程詳細規則：.claude/rules/flows/ticket-lifecycle.md（Complete 前主動勾選驗收條件章節）
 
 ---
 
@@ -308,10 +327,10 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 | 情境 | 條件 | 路由 |
 |------|------|------|
-| D（優先） | ticket 含 tdd_phase 欄位 | D1: Phase 1/2 → 全自動下一 Phase；D1a: Phase 3a → 3b 拆分評估（見 tdd-flow.md）後派發 3b；D2: Phase 3b → #13；D3a: 4a → 全自動 4b；D3b: 4b 標準 → 全自動 4c / 豁免 → /tech-debt-capture + #13；D3c: 4c → /tech-debt-capture + #13 |
+| D（優先） | ticket 含 tdd_phase 欄位 | D1: Phase 1/2 → 全自動下一 Phase；D1a: Phase 3a → 3b 拆分評估（見 tdd-flow.md）後派發 3b；D2: Phase 3b → [自動檢查豁免條件] → 符合豁免 → 全自動 4b / 不符合 → #13（選擇 4a 或 4b）；D3a: 4a → 全自動 4b；D3b: 4b 標準 → 全自動 4c / 豁免 → /tech-debt-capture + #13；D3c: 4c → /tech-debt-capture + #13 |
 | A（#11a） | ticket 仍 in_progress | Context 刷新 Handoff |
 | B（#11b） | ticket completed + 同 Wave 有 pending | 任務切換 Handoff |
-| C | ticket completed + 同 Wave 無 pending | [強制] /parallel-evaluation Wave 審查 → C1: 有其他 Wave → #3a；C2: 全完成 → /version-release check + #13 |
+| C | ticket completed + 同 Wave 無 pending | [強制] /parallel-evaluation Wave 審查 → C1: 有其他 Wave → #3a；C2: 全完成 → [強制] 版本收尾技術債整理（見 version-progression.md）→ /version-release check + #13 |
 
 **與現有層級的銜接**：第四層（建立完成）→ Checkpoint 0；第五層（Phase 完成）→ Checkpoint 1；第六層（incident 完成）→ Checkpoint 3；第七層（complete）→ Checkpoint 1
 
@@ -388,5 +407,5 @@ Level 5: TDD 階段代理人 + thyme-python-developer
 
 ---
 
-**Last Updated**: 2026-03-12
-**Version**: 7.22.0 - D1 拆分：Phase 3a 完成後新增 3b 拆分評估步驟（0.1.0-W43-002）
+**Last Updated**: 2026-03-13
+**Version**: 7.26.0 - 第七層新增 complete 前主動勾選驗收條件步驟（0.1.0-W51-001）

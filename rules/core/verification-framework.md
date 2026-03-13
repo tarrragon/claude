@@ -36,6 +36,7 @@ Level 1 入口層 → Level 2 執行層 → Level 3 完成層 → Level 4 驗收
 | 環境正常 | 代理人 | Level 2 | 派發 SE | SE 處理 |
 | 產出物完整 | Hook | Level 3 | 提示補充 | 代理人決定 |
 | 工作日誌 | Hook | Level 3 | 提示更新 | 代理人決定 |
+| 驗收條件主動勾選 | PM | Level 3 | complete 前執行 check-acceptance | PM 決定 |
 | 並行派發後驗證 | PM | Level 3 | 補派代理人 | PM 決定 |
 | 驗收條件 | acceptance-auditor | Level 4 | 要求補充 | PM 決定 |
 | 建議追蹤 | acceptance-auditor | Level 4 | 要求處理 | PM 決定 |
@@ -114,8 +115,8 @@ Level 1 入口層 → Level 2 執行層 → Level 3 完成層 → Level 4 驗收
 
 ---
 
-**Last Updated**: 2026-03-11
-**Version**: 1.6.0 - 操作指引提取至 references/verification-framework-details.md，原位留索引（0.1.0-W35-001.6）
+**Last Updated**: 2026-03-13
+**Version**: 1.7.0 - Level 3 新增「驗收條件主動勾選」驗證項目（0.1.0-W51-001）
 **Status**: Active
 **Responsible**: rosemary-project-manager, acceptance-auditor, Hook 系統
 

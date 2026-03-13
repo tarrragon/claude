@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W50-007",
+  "direction": "to-sibling:0.1.0-W50-008",
+  "timestamp": "2026-03-13T13:39:19.405662",
+  "from_status": "completed",
+  "title": "重構 規則文件邏輯去重 — decision-tree.md 和 parallel-dispatch.md 複雜度判斷邏輯改為引用關係（TD-021）",
+  "what": "重構 規則文件邏輯去重 — decision-tree.md 和 parallel-dispatch.md 複雜度判斷邏輯改為引用關係（TD-021）",
+  "chain": {},
+  "resumed_at": "2026-03-13T13:39:57.939073"
+}

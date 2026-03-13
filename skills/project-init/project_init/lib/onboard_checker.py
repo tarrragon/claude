@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 import json
+import yaml
+import stat
 
 
 # 必須目錄清單常數
@@ -137,6 +139,20 @@ class ClaudeDirectoryCheckInfo:
 
 
 @dataclass
+class PermissionInfo:
+    """檔案權限資訊."""
+
+    can_read: bool
+    """是否有讀取權限."""
+    can_write: bool
+    """是否有寫入權限."""
+    can_execute: bool
+    """是否有執行權限."""
+    error_message: str = ""
+    """權限檢查錯誤訊息."""
+
+
+@dataclass
 class HookConfigurationCheckInfo:
     """Hook 配置檔完整性檢查結果."""
 
@@ -158,6 +174,10 @@ class HookConfigurationCheckInfo:
     """JSON 格式是否有效."""
     format_errors: list[str] = field(default_factory=list)
     """格式錯誤清單."""
+    yaml_permission_info: PermissionInfo = field(default_factory=lambda: PermissionInfo(True, False, False))
+    """YAML 檔案權限資訊."""
+    json_permission_info: PermissionInfo = field(default_factory=lambda: PermissionInfo(True, False, False))
+    """JSON 檔案權限資訊."""
 
 
 @dataclass
@@ -271,7 +291,7 @@ def detect_project_language(project_root: Path) -> ProjectLanguageInfo:
 def parse_hook_classification(config_path: Path) -> HookClassificationInfo:
     """解析 Hook 語言分類配置檔.
 
-    簡單文字解析 YAML 檔案（無外部依賴）。
+    使用結構化 YAML 解析，確保準確的配置識別。
 
     Args:
         config_path: hook-language-classification.yaml 的路徑。
@@ -282,54 +302,66 @@ def parse_hook_classification(config_path: Path) -> HookClassificationInfo:
     flutter_hooks = []
     project_specific_hooks = []
 
-    try:
-        if not config_path.exists():
+    if not config_path.exists():
+        return HookClassificationInfo(
+            flutter_hooks=[],
+            project_specific_hooks=[],
+            is_available=False,
+        )
+
+    # 使用結構化 YAML 解析
+    data, errors = _parse_yaml_safely(config_path)
+
+    if errors or data is None:
+        # YAML 解析失敗，回到文字模式（向後相容）
+        try:
+            text = config_path.read_text(encoding="utf-8")
+            in_hooks_section = False
+
+            for line in text.splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                if stripped == "hooks:":
+                    in_hooks_section = True
+                    continue
+                if in_hooks_section and ":" in stripped:
+                    parts = stripped.split(":", 1)
+                    if len(parts) == 2:
+                        hook_name = parts[0].strip()
+                        hook_type = parts[1].strip()
+                        if hook_type == "flutter":
+                            flutter_hooks.append(hook_name)
+                        elif hook_type == "project-specific":
+                            project_specific_hooks.append(hook_name)
+
+            return HookClassificationInfo(
+                flutter_hooks=sorted(flutter_hooks),
+                project_specific_hooks=sorted(project_specific_hooks),
+                is_available=True,
+            )
+        except (OSError, UnicodeDecodeError):
             return HookClassificationInfo(
                 flutter_hooks=[],
                 project_specific_hooks=[],
                 is_available=False,
             )
 
-        text = config_path.read_text(encoding="utf-8")
-        in_hooks_section = False
+    # 結構化解析成功
+    if isinstance(data, dict) and "hooks" in data:
+        hooks_dict = data.get("hooks", {})
+        if isinstance(hooks_dict, dict):
+            for hook_name, hook_type in hooks_dict.items():
+                if hook_type == "flutter":
+                    flutter_hooks.append(hook_name)
+                elif hook_type == "project-specific":
+                    project_specific_hooks.append(hook_name)
 
-        for line in text.splitlines():
-            stripped = line.strip()
-
-            # 跳過空行和註解
-            if not stripped or stripped.startswith("#"):
-                continue
-
-            # 進入 hooks 段落
-            if stripped == "hooks:":
-                in_hooks_section = True
-                continue
-
-            # 解析 hooks 段落中的 key: value 行
-            if in_hooks_section and ":" in stripped:
-                parts = stripped.split(":", 1)
-                if len(parts) == 2:
-                    hook_name = parts[0].strip()
-                    hook_type = parts[1].strip()
-
-                    if hook_type == "flutter":
-                        flutter_hooks.append(hook_name)
-                    elif hook_type == "project-specific":
-                        project_specific_hooks.append(hook_name)
-
-        return HookClassificationInfo(
-            flutter_hooks=sorted(flutter_hooks),
-            project_specific_hooks=sorted(project_specific_hooks),
-            is_available=True,
-        )
-    except (OSError, UnicodeDecodeError):
-        # OSError: 檔案讀取失敗（權限、磁碟等）
-        # UnicodeDecodeError: 編碼錯誤
-        return HookClassificationInfo(
-            flutter_hooks=[],
-            project_specific_hooks=[],
-            is_available=False,
-        )
+    return HookClassificationInfo(
+        flutter_hooks=sorted(flutter_hooks),
+        project_specific_hooks=sorted(project_specific_hooks),
+        is_available=True,
+    )
 
 
 def check_claude_md(project_root: Path) -> FrameworkFileInfo:
@@ -427,26 +459,120 @@ def check_docs_structure(project_root: Path) -> DocsStructureInfo:
     )
 
 
-def _has_gitignore_rule(content: str, pattern: str) -> bool:
-    """檢查 .gitignore 是否包含規則（模糊匹配）.
+def _check_file_read_permission(file_path: Path) -> bool:
+    """檢查檔案讀取權限."""
+    try:
+        file_path.read_bytes()
+        return True
+    except (OSError, PermissionError):
+        return False
 
-    支援規則變體：/coverage/, coverage, coverage/* 等。
+
+def _check_file_write_permission(file_path: Path) -> bool:
+    """檢查檔案寫入權限."""
+    try:
+        with file_path.open('a'):
+            pass
+        return True
+    except (OSError, PermissionError):
+        return False
+
+
+def _check_file_permissions(file_path: Path) -> PermissionInfo:
+    """檢查檔案的讀/寫/執行權限.
+
+    Args:
+        file_path: 檔案路徑。
+
+    Returns:
+        PermissionInfo: 權限資訊。
+    """
+    if not file_path.exists():
+        return PermissionInfo(
+            can_read=False,
+            can_write=False,
+            can_execute=False,
+            error_message="檔案不存在"
+        )
+
+    try:
+        can_read = _check_file_read_permission(file_path)
+        can_write = _check_file_write_permission(file_path)
+
+        # 檢查執行權限
+        file_mode = file_path.stat().st_mode
+        can_execute = bool(file_mode & stat.S_IXUSR)
+
+        return PermissionInfo(
+            can_read=can_read,
+            can_write=can_write,
+            can_execute=can_execute
+        )
+    except Exception as e:
+        return PermissionInfo(
+            can_read=False,
+            can_write=False,
+            can_execute=False,
+            error_message=str(e)
+        )
+
+
+def _parse_yaml_safely(file_path: Path) -> tuple[dict | list | None, list[str]]:
+    """安全地解析 YAML 檔案.
+
+    Args:
+        file_path: YAML 檔案路徑。
+
+    Returns:
+        tuple: (解析結果, 錯誤清單)。
+    """
+    errors = []
+    try:
+        if not file_path.exists():
+            errors.append("檔案不存在")
+            return None, errors
+
+        content = file_path.read_text(encoding="utf-8")
+        try:
+            data = yaml.safe_load(content)
+            return data, errors
+        except yaml.YAMLError as e:
+            errors.append(f"YAML 格式錯誤: {str(e)[:100]}")
+            return None, errors
+    except (OSError, UnicodeDecodeError) as e:
+        errors.append(f"檔案讀取失敗: {str(e)[:100]}")
+        return None, errors
+
+
+def _has_gitignore_rule(content: str, pattern: str) -> bool:
+    """檢查 .gitignore 是否包含精確的前綴匹配規則.
+
+    使用精確前綴匹配（不進行模糊匹配），以提高精確度。
+    支援規則變體：coverage/, coverage, .claude/hook-logs/ 等。
 
     Args:
         content: .gitignore 檔案內容。
-        pattern: 要檢查的規則模式。
+        pattern: 要檢查的規則模式（如 'coverage' 或 '.claude/hook-logs'）。
 
     Returns:
         bool: 規則是否存在。
     """
-    base_pattern = pattern.rstrip("/*")
+    # 標準化 pattern（移除末尾斜線和 /*)
+    pattern_normalized = pattern.rstrip("/*").rstrip("/")
+
     for line in content.splitlines():
+        # 移除空白和註解
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        line_base = line.rstrip("/*")
-        if base_pattern in line or line_base == base_pattern:
+
+        # 標準化 line（移除末尾斜線和 /*)
+        line_normalized = line.rstrip("/*").rstrip("/")
+
+        # 精確比對
+        if line_normalized == pattern_normalized:
             return True
+
     return False
 
 
@@ -610,7 +736,7 @@ def check_hook_configurations(project_root: Path) -> HookConfigurationCheckInfo:
     - hook-exclude-list.json
     - settings.json
 
-    同時驗證 YAML 和 JSON 格式的有效性。
+    同時驗證 YAML 和 JSON 格式的有效性，並記錄詳細的權限資訊。
 
     Args:
         project_root: 專案根目錄。
@@ -651,18 +777,23 @@ def check_hook_configurations(project_root: Path) -> HookConfigurationCheckInfo:
     if not has_settings:
         missing_files.append(HOOK_CONFIG_SETTINGS_JSON)
 
-    # 驗證格式
+    # 驗證格式和權限
     format_errors = []
     yaml_valid = True
     json_valid = True
+    yaml_perm_info = PermissionInfo(False, False, False, "檔案不存在")
+    json_perm_info = PermissionInfo(False, False, False, "檔案不存在")
 
     if has_yaml:
-        try:
-            yaml_file.read_text(encoding="utf-8")
-            # 簡單的格式檢查（無外部 YAML 依賴）
-        except (OSError, UnicodeDecodeError):
+        yaml_perm_info = _check_file_permissions(yaml_file)
+        # 嘗試結構化 YAML 驗證
+        yaml_data, yaml_errors = _parse_yaml_safely(yaml_file)
+        if yaml_errors:
             yaml_valid = False
-            format_errors.append("hook-language-classification.yaml: 無法讀取檔案")
+            format_errors.extend([f"hook-language-classification.yaml: {err}" for err in yaml_errors])
+
+    if has_exclude or has_settings:
+        json_perm_info = _check_file_permissions(json_exclude if has_exclude else json_settings)
 
     if has_exclude:
         try:
@@ -690,6 +821,8 @@ def check_hook_configurations(project_root: Path) -> HookConfigurationCheckInfo:
         yaml_format_valid=yaml_valid,
         json_format_valid=json_valid,
         format_errors=format_errors,
+        yaml_permission_info=yaml_perm_info,
+        json_permission_info=json_perm_info,
     )
 
 

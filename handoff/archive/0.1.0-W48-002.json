@@ -1,0 +1,17 @@
+{
+  "ticket_id": "0.1.0-W48-002",
+  "direction": "to-sibling:0.1.0-W48-003",
+  "timestamp": "2026-03-13T10:47:02.607704",
+  "from_status": "completed",
+  "title": "補充 AskUserQuestion 場景 #8 Hook 覆蓋（執行順序確認提醒）",
+  "what": "在 prompt-submit-hook.py 的 DECISION_KEYWORDS 中新增場景 #8 觸發關鍵字，偵測「執行順序/方向確認」類提問並提醒使用 AskUserQuestion",
+  "chain": {
+    "root": "0.1.0-W48-002",
+    "parent": null,
+    "depth": 0,
+    "sequence": [
+      2
+    ]
+  },
+  "resumed_at": "2026-03-13T10:47:51.400134"
+}

@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely, run_git
+from hook_utils import setup_hook_logging, run_hook_safely, run_git, is_subagent_environment
 from lib.hook_messages import WorkflowMessages, CoreMessages, AskUserQuestionMessages, format_message
 
 
@@ -161,6 +161,11 @@ DECISION_KEYWORDS = {
     ("agent team",): "派發方式選擇",
     ("優先", "處理"): "優先級確認",
     ("先做", "哪個"): "優先級確認",
+
+    # 場景 #8：執行方向確認（執行順序/先後/並行安排）
+    ("順序", "任務"): "執行方向確認",       # 「任務順序怎麼排」「按什麼順序做任務」
+    ("接下來", "做"): "執行方向確認",        # 「接下來要做什麼」「接下來先做哪個」
+    ("先後", "執行"): "執行方向確認",        # 「先後執行順序」「先後執行哪些」
 }
 
 # Ticket ID 正則表達式 (支援版本號格式和 W 波次格式)
@@ -399,21 +404,21 @@ def generate_skill_hint(skill_cmd: str, hint_type: str = "query") -> str:
 ============================================================"""
 
 
-def read_prompt_from_stdin() -> Optional[str]:
+def read_prompt_from_stdin() -> Optional[tuple]:
     """
-    從 stdin 讀取用戶 prompt
+    從 stdin 讀取用戶 prompt 和完整 input_data
 
     Returns:
-        用戶輸入的 prompt，如果無法讀取則返回 None
+        (prompt, input_data) tuple，若無法讀取則返回 (None, {})
     """
     try:
         # 嘗試讀取 JSON 格式輸入
         input_data = json.load(sys.stdin)
-        return input_data.get("prompt", "")
+        return input_data.get("prompt", ""), input_data
     except (json.JSONDecodeError, AttributeError):
-        return None
+        return None, {}
     except Exception:
-        return None
+        return None, {}
 
 
 def main():
@@ -421,8 +426,13 @@ def main():
     script_dir = Path(__file__).parent
     project_root = script_dir.parent.parent
 
-    # 讀取用戶 prompt
-    prompt = read_prompt_from_stdin()
+    # 讀取用戶 prompt 和完整 input_data
+    prompt, input_data = read_prompt_from_stdin()
+
+    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現
+    if is_subagent_environment(input_data):
+        logger.info("偵測到 subagent 環境（agent_id=%s），跳過工作流程檢查和提示", input_data.get("agent_id"))
+        return 0
 
     # ============================================================================
     # SKILL 主動提示（新功能）

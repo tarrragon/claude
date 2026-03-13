@@ -336,6 +336,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-quality-gate-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/layer-boundary-validator-hook.py"
           }
         ]
       }

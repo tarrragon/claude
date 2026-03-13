@@ -69,14 +69,31 @@ TICKET_ID_REGEX = r"^(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)(-[a-z0-9][a-z0-9-]{0
 #   - .claude/skills/ticket/ticket_system/lib/constants.py (KNOWN_TICKET_SUFFIXES)
 #   詳見 .claude/rules/core/ticket-id-conventions.md
 KNOWN_TICKET_SUFFIXES = [
+    # TDD Phase 標準後綴（Phase 1-3）
     "-phase1-design",
     "-phase2-test-design",
     "-phase3a-strategy",
     "-phase3b-execution-report",
+    # Phase 4 重構相關後綴
+    "-phase4-evaluation",
+    "-refactor",
+    "-refactoring-report",
+    # Phase 3b 測試報告
+    "-phase3b-test-report",
+    "-phase3b-execution-log",
+    # 分析和測試相關後綴
     "-analysis",
     "-test-cases",
     "-test-cases-quick-reference",
+    "-test-case-design",
+    "-test-design",
+    # 設計和規格相關後綴
     "-feature-spec",
+    "-feature-design",
+    "-phase1-feature-spec",
+    # Use Case 和評估後綴
+    "-uc-analysis",
+    "-evaluation-report",
 ]
 
 # Ticket ID 在檔案中可能出現的位置

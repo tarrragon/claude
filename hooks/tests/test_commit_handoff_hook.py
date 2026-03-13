@@ -204,3 +204,89 @@ def test_detect_wave_completion_file_error():
 
     assert result is False, \
         "detect_wave_completion() 應在檔案讀取失敗時安全降級為 False"
+
+
+def test_subagent_environment_detection_skips_reminder():
+    """驗證 subagent 環境（含 agent_id）中不輸出 AskUserQuestion 提醒"""
+    import json
+    import sys
+    from io import StringIO
+
+    # 模擬 subagent 環境的輸入（含 agent_id）
+    input_json = {
+        "tool_name": "Bash",
+        "agent_id": "parsley-flutter-developer",  # subagent 特有欄位
+        "tool_input": {
+            "command": "git commit -m \"feat(0.1.0-W47-004): Phase 3b 實作完成\""
+        },
+        "tool_response": {
+            "stdout": "1 file changed, 10 insertions(+)"
+        }
+    }
+
+    # 捕捉標準輸出
+    captured_output = StringIO()
+    original_stdout = sys.stdout
+    sys.stdout = captured_output
+
+    try:
+        with patch('sys.stdin', StringIO(json.dumps(input_json))):
+            with patch.object(commit_handoff_hook, 'setup_hook_logging') as mock_logger:
+                mock_logger.return_value = logging.getLogger("test")
+                exit_code = commit_handoff_hook.main()
+
+        # 驗證
+        assert exit_code == 0, "main() 應回傳 EXIT_SUCCESS"
+
+        output_str = captured_output.getvalue()
+        output_json = json.loads(output_str)
+
+        # 驗證輸出不含 AskUserQuestion 提醒（應為預設輸出）
+        assert output_json == commit_handoff_hook.DEFAULT_OUTPUT, \
+            "subagent 環境應輸出預設輸出，不含 AskUserQuestion 提醒"
+
+    finally:
+        sys.stdout = original_stdout
+
+
+def test_main_environment_outputs_reminder():
+    """驗證主線程環境（無 agent_id）中正常輸出 AskUserQuestion 提醒"""
+    import json
+    import sys
+    from io import StringIO
+
+    # 模擬主線程環境的輸入（無 agent_id）
+    input_json = {
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": "git commit -m \"feat(0.1.0-W47-004): Phase 3b 實作完成\""
+        },
+        "tool_response": {
+            "stdout": "1 file changed, 10 insertions(+)"
+        }
+    }
+
+    # 捕捉標準輸出
+    captured_output = StringIO()
+    original_stdout = sys.stdout
+    sys.stdout = captured_output
+
+    try:
+        with patch('sys.stdin', StringIO(json.dumps(input_json))):
+            with patch.object(commit_handoff_hook, 'setup_hook_logging') as mock_logger:
+                mock_logger.return_value = logging.getLogger("test")
+                with patch.object(commit_handoff_hook, 'detect_wave_completion', return_value=False):
+                    exit_code = commit_handoff_hook.main()
+
+        # 驗證
+        assert exit_code == 0, "main() 應回傳 EXIT_SUCCESS"
+
+        output_str = captured_output.getvalue()
+        output_json = json.loads(output_str)
+
+        # 驗證輸出含 additionalContext（AskUserQuestion 提醒）
+        assert "additionalContext" in output_json.get("hookSpecificOutput", {}), \
+            "主線程環境應輸出 additionalContext 欄位（AskUserQuestion 提醒）"
+
+    finally:
+        sys.stdout = original_stdout

@@ -30,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, extract_tool_input, extract_tool_response
+from hook_utils import setup_hook_logging, run_hook_safely, extract_tool_input, extract_tool_response, is_subagent_environment
 from lib.hook_messages import AskUserQuestionMessages
 
 # ============================================================================
@@ -102,6 +102,12 @@ def main() -> int:
         input_data = json.load(sys.stdin)
     except json.JSONDecodeError as e:
         logger.error("JSON 解析錯誤: %s", e)
+        print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
+        return EXIT_SUCCESS
+
+    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現
+    if is_subagent_environment(input_data):
+        logger.info("偵測到 subagent 環境（agent_id=%s），跳過 AskUserQuestion 提醒", input_data.get("agent_id"))
         print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
         return EXIT_SUCCESS
 

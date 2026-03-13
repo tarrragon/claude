@@ -34,6 +34,7 @@ from hook_utils import (
     read_json_from_stdin,
     get_project_root,
     get_current_version_from_todolist,
+    is_subagent_environment,
 )
 from lib.hook_messages import AskUserQuestionMessages, CoreMessages
 from lib.ask_user_question_reminders import AskUserQuestionReminders
@@ -306,6 +307,12 @@ def main() -> int:
     tool_name = input_data.get("tool_name", "")
     if tool_name != "Bash":
         logger.debug("跳過: 工具類型為 %s，非 Bash", tool_name)
+        print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
+        return EXIT_SUCCESS
+
+    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現
+    if is_subagent_environment(input_data):
+        logger.info("偵測到 subagent 環境（agent_id=%s），跳過 AskUserQuestion 提醒", input_data.get("agent_id"))
         print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
         return EXIT_SUCCESS
 
