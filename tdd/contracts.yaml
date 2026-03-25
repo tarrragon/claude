@@ -1,0 +1,266 @@
+# .claude/tdd/contracts.yaml
+# TDD Phase Input/Output Contract 定義
+# 版本：1.0.0
+# 建立日期：2026-03-24
+
+version: "1.0.0"
+description: "TDD Phase 1-4 產出物格式契約定義"
+
+contracts:
+
+  # ============================================================
+  # Phase 1 Output Contract
+  # Producer: lavender-interface-designer
+  # Consumer: sage-test-architect
+  # ============================================================
+  phase1_output:
+    producer: "lavender-interface-designer"
+    consumer:
+      - "sage-test-architect"
+    description: "功能規格設計文件"
+
+    artifacts:
+      - name: "feature-specification"
+        required: true
+        format:
+          type: "markdown"
+          path_pattern: "{ticket-id}-phase1-design.md"
+          # 允許的替代後綴（向後相容）
+          alternate_patterns:
+            - "{ticket-id}-feature-spec.md"
+            - "{ticket-id}-feature-design.md"
+            - "{ticket-id}-phase1-feature-spec.md"
+
+        frontmatter_schema:
+          # 所有欄位均為 optional（向後相容），但建議填寫
+          fields:
+            - name: "id"
+              type: "string"
+              required: false
+              pattern: "^\\d+\\.\\d+\\.\\d+-W\\d+-\\d+(?:\\.\\d+)*"
+            - name: "title"
+              type: "string"
+              required: false
+            - name: "phase"
+              type: "string"
+              required: false
+              allowed_values: ["phase1"]
+
+        content_sections:
+          - name: "功能描述"
+            required: true
+            min_length: 50
+            validation_level: "error"
+          - name: "驗收條件"
+            required: true
+            min_length: 20
+            validation_level: "error"
+          - name: "API/Schema 定義"
+            required: false
+            validation_level: "warning"
+          - name: "關鍵設計決策"
+            required: false
+            validation_level: "warning"
+
+        validation_rules:
+          - id: "P1-001"
+            level: "error"
+            description: "必要 Section 存在性"
+            check: "sections_exist(['功能描述', '驗收條件'])"
+          - id: "P1-002"
+            level: "warning"
+            description: "驗收條件至少 3 條"
+            check: "acceptance_criteria_count >= 3"
+          - id: "P1-003"
+            level: "warning"
+            description: "驗收條件符合 checkbox 格式"
+            check: "acceptance_criteria_format matches '- \\[ \\]'"
+
+  # ============================================================
+  # Phase 2 Output Contract
+  # Producer: sage-test-architect
+  # Consumer: pepper-test-implementer
+  # ============================================================
+  phase2_output:
+    producer: "sage-test-architect"
+    consumer:
+      - "pepper-test-implementer"
+    description: "測試案例設計文件"
+
+    artifacts:
+      - name: "test-case-design"
+        required: true
+        format:
+          type: "markdown"
+          path_pattern: "{ticket-id}-phase2-test-design.md"
+          alternate_patterns:
+            - "{ticket-id}-test-design.md"
+            - "{ticket-id}-test-case-design.md"
+            - "{ticket-id}-phase2-tests.md"
+
+        content_sections:
+          - name: "測試策略"
+            required: true
+            validation_level: "error"
+          - name: "測試案例設計"
+            required: true
+            validation_level: "error"
+          - name: "測試檔案結構"
+            required: true
+            validation_level: "warning"
+
+        validation_rules:
+          - id: "P2-001"
+            level: "error"
+            description: "必要 Section 存在性"
+            check: "sections_exist(['測試策略', '測試案例設計'])"
+          - id: "P2-002"
+            level: "warning"
+            description: "至少 3 個 Given-When-Then 測試案例"
+            check: "gwt_count >= 3"
+          - id: "P2-003"
+            level: "warning"
+            description: "測試案例包含邊界條件"
+            check: "contains_boundary_tests"
+
+  # ============================================================
+  # Phase 3a Output Contract
+  # Producer: pepper-test-implementer
+  # Consumer: parsley-flutter-developer
+  # ============================================================
+  phase3a_output:
+    producer: "pepper-test-implementer"
+    consumer:
+      - "parsley-flutter-developer"
+    description: "實作策略規劃文件（語言無關虛擬碼）"
+
+    artifacts:
+      - name: "strategy-document"
+        required: true
+        format:
+          type: "markdown"
+          path_pattern: "{ticket-id}-phase3a-strategy.md"
+          # 無替代命名（Phase 3a 命名規範較統一）
+
+        content_sections:
+          - name: "實作策略"
+            required: true
+            validation_level: "error"
+          - name: "虛擬碼"
+            required: true
+            validation_level: "error"
+          - name: "技術債務標記"
+            required: false
+            validation_level: "warning"
+
+        # IMP-011 關鍵：direction 欄位格式規範
+        field_formats:
+          - field_name: "direction"
+            description: "handoff direction 欄位（如存在於文件中）"
+            pattern: "^to-(sibling|parent|child|context-refresh)(?::[\\w.-]+)?$"
+            examples:
+              - "to-sibling"
+              - "to-sibling:0.31.1-W3-002"
+              - "to-parent"
+            validation_level: "error"
+            # 這是 IMP-011 的核心修復：明確規範 direction 欄位允許帶有 :target_id 後綴
+
+        validation_rules:
+          - id: "P3A-001"
+            level: "error"
+            description: "必要 Section 存在性"
+            check: "sections_exist(['實作策略', '虛擬碼'])"
+          - id: "P3A-002"
+            level: "warning"
+            description: "虛擬碼必須使用語言無關格式（禁止 Dart 特有語法）"
+            check: "pseudocode_is_language_agnostic"
+          - id: "P3A-003"
+            level: "warning"
+            description: "技術債務以 [TD-XX] 格式標記"
+            check: "tech_debt_format_valid"
+
+  # ============================================================
+  # Phase 3b Output Contract
+  # Producer: parsley-flutter-developer
+  # Consumer: cinnamon-refactor-owl（Phase 4）
+  # ============================================================
+  phase3b_output:
+    producer: "parsley-flutter-developer"
+    consumer:
+      - "cinnamon-refactor-owl"
+    description: "Flutter/Dart 實作程式碼 + 執行報告"
+
+    artifacts:
+      - name: "source-code"
+        required: false
+        format:
+          type: "dart"
+          path_pattern: "ui/lib/**/*.dart"
+
+        code_requirements:
+          - id: "CODE-001"
+            description: "使用 package: 格式導入（禁止相對路徑）"
+            validation_level: "error"
+          - id: "CODE-002"
+            description: "dart analyze 0 issues"
+            validation_level: "error"
+          - id: "CODE-003"
+            description: "flutter test 100% 通過"
+            validation_level: "error"
+
+      - name: "execution-report"
+        required: true
+        format:
+          type: "markdown"
+          path_pattern: "{ticket-id}-phase3b-execution-report.md"
+          alternate_patterns:
+            - "{ticket-id}-phase3b-test-report.md"
+            - "{ticket-id}-phase3b-execution-log.md"
+
+        content_sections:
+          - name: "實作概況"
+            required: true
+            validation_level: "error"
+            # IMP-045 擴展：支援替代名稱（向後相容）
+            alternate_names: ["Implementation Overview", "Overview"]
+          - name: "測試結果"
+            required: true
+            validation_level: "error"
+            # IMP-045 擴展：支援替代名稱（向後相容）
+            alternate_names: ["Test Results", "Testing", "Tests"]
+          - name: "品質審計"
+            required: true
+            validation_level: "warning"
+
+        validation_rules:
+          - id: "P3B-001"
+            level: "error"
+            description: "必要 Section 存在性"
+            check: "sections_exist(['實作概況', '測試結果'])"
+          - id: "P3B-002"
+            level: "error"
+            description: "測試結果包含通過數量和 0 failed"
+            check: "test_result_shows_passing"
+          - id: "P3B-003"
+            level: "warning"
+            description: "品質審計包含 dart analyze 結果"
+            check: "quality_audit_includes_analyze"
+
+# ============================================================
+# 向後相容策略配置
+# ============================================================
+compatibility:
+  legacy_mode: true  # 啟用向後相容驗證（現存 Phase 輸出不會被 error 阻止）
+  legacy_threshold_date: "2026-03-24"  # contracts.yaml 建立日期之前的產出視為 legacy
+
+  # legacy 模式下的降級策略：所有 error 降級為 warning
+  legacy_artifact_behavior:
+    missing_sections: "warning"  # 缺少 Section 降為 warning
+    wrong_format: "warning"      # 格式錯誤降為 warning
+    missing_frontmatter: "info"  # 缺少 frontmatter 降為 info
+
+  # 非 legacy 模式（contracts.yaml 建立後產生的新文件）
+  strict_artifact_behavior:
+    missing_required_section: "error"   # 阻止 Phase 轉移
+    wrong_field_format: "error"         # 阻止 Phase 轉移
+    missing_optional_section: "warning" # 提示但不阻止

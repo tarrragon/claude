@@ -75,6 +75,7 @@ from .package_manager import (
     VersionCompareResult,
     check_installed_version,
     compare_versions,
+    resolve_source_module_dir,
     scan_custom_packages,
 )
 from .python_installer import (
@@ -123,6 +124,7 @@ __all__ = [
     "scan_custom_packages",
     "check_installed_version",
     "compare_versions",
+    "resolve_source_module_dir",
     "InstallInstructions",
     "get_install_instructions",
     "ProjectLanguageInfo",

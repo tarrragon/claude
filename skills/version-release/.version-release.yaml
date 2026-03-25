@@ -1,0 +1,80 @@
+# .version-release.yaml - Monorepo 版本管理配置
+# 來源：.claude/rules/flows/monorepo-version-strategy.md
+
+# 版本定義
+versions:
+  monorepo:
+    source: docs/todolist.yaml       # 唯一的權威來源
+    key: current_version
+    semantic_version: true
+    description: "整個專案的發布版本（用於 Ticket、Wave、發布計劃）"
+
+  ui:
+    source: ui/pubspec.yaml
+    key: version
+    semantic_version: true
+    independent: true                 # UI 可獨立於 monorepo 升級
+    description: "Flutter 應用版本（用於 App Store）"
+    sync_policy: "optional"           # 建議同步，非強制
+    sync_recommendation: "保持主版本號一致（如都是 v0.x.0）"
+
+  server:
+    source: null                      # go.mod 無版本欄位
+    semantic_version: false
+    independent: false
+    description: "Go Server 版本由 monorepo 版本決定"
+    sync_policy: "implicit"           # 隱含同步
+
+# 版本同步規則
+sync_rules:
+  on_release:
+    monorepo:
+      required: true                  # 必須更新
+    ui:
+      required: false                 # 可選
+      recommendation: "建議更新 UI 版本的 build number 或更新主版本號以匹配 monorepo"
+    server:
+      required: false                 # 無需更新（由 go.mod 決定）
+
+  on_development:
+    allow_version_mismatch: true
+    reason: "開發中 UI 和 Server 可獨立迭代"
+
+  conflict_detection:
+    ui_ahead_of_monorepo:
+      severity: "warning"
+      message: "UI 版本大於 monorepo，確認是否故意？"
+    ui_behind_monorepo:
+      severity: "info"
+      message: "UI 版本低於 monorepo（正常）"
+
+# 版本偵測策略
+detection:
+  version_files:
+    - path: ui/pubspec.yaml
+      type: yaml
+      key: version
+      context: "Flutter 應用版本"
+
+    - path: server/go.mod
+      type: toml
+      key: null
+      context: "Go module（無版本欄位）"
+
+    - path: docs/todolist.yaml
+      type: yaml
+      key: current_version
+      context: "權威的 monorepo 版本來源"
+
+  auto_detect_order:
+    - git_branch                      # feature/v0.1
+    - monorepo_version_file           # todolist.yaml
+    - ui_version_file                 # ui/pubspec.yaml
+    - git_tag                         # v0.1-final
+
+# 發布前檢查項
+preflight_checks:
+  version_sync:
+    enabled: true
+    fail_on_error: false              # monorepo 版本不匹配不阻塞
+    warn_on_mismatch: true

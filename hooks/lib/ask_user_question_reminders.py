@@ -141,10 +141,18 @@ PM 必須使用 AskUserQuestion 確認收尾動作。
   Handoff first，繼續 session 是例外，不是預設。
   Context 是有限資源，每次 Ticket 完成後 handoff 能保護下一個任務的思考品質。
 
-[第一步 - 強制] AskUserQuestion #16（錯誤學習確認）：
+[強制要求] AskUserQuestion #16（錯誤學習確認）的雙通道記錄：
+  選擇「記錄錯誤學習」時，必須同時執行以下兩項，缺一不可：
+    (1) /error-pattern add — 寫入 .claude/error-patterns/（結構化知識庫）
+    (2) 更新 memory — 寫入使用者 auto-memory（跨對話記憶）
+  [WARNING] 只寫 memory 或只執行 /error-pattern add 均不符合規範
+
+[第一步 - 強制，不可跳過] AskUserQuestion #16（錯誤學習確認）：
+  即使非 Ticket 工作，commit 後仍必須執行。無「非正式任務」豁免（規則 4）。
   → ToolSearch("select:AskUserQuestion") 載入後使用
   → 選項：無需記錄 (Recommended) / 記錄錯誤學習
-  → 選擇「記錄」→ /error-pattern add → 重新確認 #16 直到選擇「無需記錄」
+  → 選擇「記錄」→ 執行上述「強制要求」的雙通道記錄
+  → 重新確認 #16 直到選擇「無需記錄」
 
 [第二步 - 強制] 執行查詢：
   ticket track list --wave {n} --status pending

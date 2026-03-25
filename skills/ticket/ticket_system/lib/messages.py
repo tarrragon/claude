@@ -78,7 +78,11 @@ class WarningMessages:
     BACKUP_SKIPPED = "[WARNING] 備份失敗，繼續遷移..."
     INVALID_MIGRATION_ITEM = "[WARNING] 跳過無效的遷移項目"
     MIGRATION_ITEM_INCOMPLETE = "[WARNING] 遷移項目缺少 'from' 或 'to'，已跳過"
-    PARENT_UPDATE_FAILED = "[Warning] 無法更新 Parent {parent_id} 的 children"
+    PARENT_UPDATE_FAILED = (
+        "[Warning] 無法更新 Parent {parent_id} 的 children（子 Ticket {child_id} 已建立）\n"
+        "   手動修復: 編輯父 Ticket 的 frontmatter，在 children 欄位加入 {child_id}\n"
+        "   指令: ticket track add-child {parent_id} {child_id}"
+    )
     BLOCKED_DEPENDENCIES = "[WARNING] 此 Ticket 有阻塞依賴:"
     CLAIMABLE_STATUS_WARNING = "[Warning] {error_msg}"
     SEQ_IGNORED_WITH_PARENT = "[提示] --seq {seq} 在子任務模式下被忽略，自動使用序號 {child_seq}"

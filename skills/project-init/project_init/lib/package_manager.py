@@ -13,6 +13,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+# 導入共用掃描模組
+_lib_path = Path(__file__).parent.parent.parent.parent.parent / 'lib'
+sys.path.insert(0, str(_lib_path))
+
+from pyproject_scanner import (
+    scan_skills_directory,
+    extract_version_from_pyproject,
+    extract_package_name_from_pyproject,
+    extract_cli_name_from_pyproject,
+)
+
 
 @dataclass
 class PackageInfo:
@@ -67,33 +78,33 @@ def scan_custom_packages(project_root: Path) -> list[PackageInfo]:
     Returns:
         list[PackageInfo]: 找到的所有自製套件清單。
     """
-    skills_dir = project_root / ".claude" / "skills"
-    packages = []
-
-    if not skills_dir.exists():
-        return packages
-
-    for skill_dir in skills_dir.iterdir():
-        if not skill_dir.is_dir():
-            continue
-
+    packages: list[PackageInfo] = []
+    
+    # 使用共用模組掃描
+    scanned = scan_skills_directory(project_root)
+    
+    # 轉換為 PackageInfo 格式
+    for pkg_name, pkg_info in scanned.items():
+        # 找到對應的 skill 目錄
+        skill_dir = project_root / pkg_info["path"]
         pyproject_path = skill_dir / "pyproject.toml"
-        if not pyproject_path.exists():
+        
+        if not skill_dir.exists() or not pyproject_path.exists():
             continue
-
-        version = _extract_version_from_pyproject(pyproject_path)
-        package_name = _extract_package_name_from_pyproject(pyproject_path)
-        cli_name = _extract_cli_name_from_pyproject(pyproject_path)
+        
+        # 提取 CLI 名稱
+        cli_name = extract_cli_name_from_pyproject(pyproject_path)
+        
         packages.append(
             PackageInfo(
                 name=skill_dir.name,
                 source_path=skill_dir,
-                version=version,
-                package_name=package_name,
+                version=pkg_info.get("version"),
+                package_name=pkg_name,
                 cli_name=cli_name,
             )
         )
-
+    
     return sorted(packages, key=lambda p: p.name)
 
 
@@ -166,6 +177,29 @@ def _check_via_uv_tool(package_name: str) -> Optional[InstalledInfo]:
     return None
 
 
+def _locate_module_subdir(parent_dir: Path, module_name: str) -> Optional[Path]:
+    """在父目錄下搜尋特定名稱的模組子目錄.
+
+    用於定位已安裝模組或 source 目錄下的特定子目錄。
+    若 parent_dir 下存在直接或深層嵌套的同名目錄，回傳第一個找到的。
+
+    Args:
+        parent_dir: 父目錄路徑。
+        module_name: 欲搜尋的模組名稱。
+
+    Returns:
+        找到的模組子目錄 Path，或 None。
+    """
+    if not parent_dir.exists():
+        return None
+
+    for candidate in parent_dir.rglob(module_name):
+        if candidate.is_dir():
+            return candidate
+
+    return None
+
+
 def _find_uv_tool_site_packages(package_name: str) -> Optional[Path]:
     """定位 uv tool 安裝的套件 site-packages 路徑.
 
@@ -182,8 +216,8 @@ def _find_uv_tool_site_packages(package_name: str) -> Optional[Path]:
     # 搜尋 lib/pythonX.Y/site-packages/{package_module}/
     package_module = package_name.replace("-", "_")
     for site_packages in uv_tools_dir.rglob("site-packages"):
-        candidate = site_packages / package_module
-        if candidate.exists():
+        candidate = _locate_module_subdir(site_packages, package_module)
+        if candidate:
             return candidate
 
     return None
@@ -231,17 +265,43 @@ def _check_via_pip(package_name: str) -> Optional[InstalledInfo]:
         return None
 
 
+def resolve_source_module_dir(source_dir: Path, installed_dir: Path) -> Path:
+    """從 skill 根目錄定位到與 installed 對應的模組子目錄.
+
+    當 source_dir 是 skill 根目錄（含 pyproject.toml、tests/ 等），
+    而 installed_dir 是 site-packages 下的模組目錄時，
+    兩者的掃描範圍不對齊。此函式定位到 source_dir 下
+    與 installed_dir 同名的模組子目錄，確保比較範圍一致。
+
+    Args:
+        source_dir: 原始碼目錄（skill 根目錄或模組子目錄）。
+        installed_dir: 已安裝目錄（site-packages 下的模組目錄）。
+
+    Returns:
+        Path: 對齊後的 source 模組目錄。若無法定位則回傳原 source_dir。
+    """
+    if (source_dir / "pyproject.toml").exists():
+        module_subdir = _locate_module_subdir(source_dir, installed_dir.name)
+        if module_subdir:
+            return module_subdir
+    return source_dir
+
+
 def compare_versions(
     source_dir: Path, installed_dir: Path
 ) -> VersionCompareResult:
-    """使用 SHA256 比對原始碼和已安裝版本.
+    """使用 SHA256 比對兩個對等模組目錄.
 
     計算兩個目錄下所有 .py 檔案的 SHA256 雜湊，並比較。
     忽略 __pycache__ 和 .venv 目錄。
 
+    兩個目錄應為對等的模組目錄（相同的檔案結構）。
+    若需要從 skill 根目錄定位到模組子目錄，
+    請先使用 resolve_source_module_dir()。
+
     Args:
-        source_dir: 原始碼目錄。
-        installed_dir: 已安裝目錄。
+        source_dir: 原始碼模組目錄。
+        installed_dir: 已安裝模組目錄。
 
     Returns:
         VersionCompareResult: 版本比對結果。
@@ -270,99 +330,10 @@ def compare_versions(
     )
 
 
-_pyproject_cache: dict[str, Optional[dict]] = {}
-"""快取已解析的 pyproject.toml，避免重複解析同一檔案。"""
 
 
-def _parse_pyproject(pyproject_path: Path) -> Optional[dict]:
-    """使用 tomllib 解析 pyproject.toml 檔案。
-
-    解析結果會被快取，同一檔案多次呼叫會回傳快取結果。
-
-    Args:
-        pyproject_path: pyproject.toml 檔案路徑。
-
-    Returns:
-        dict: 解析後的 TOML 資料結構，或 None 若解析失敗。
-    """
-    path_key = str(pyproject_path)
-    if path_key in _pyproject_cache:
-        return _pyproject_cache[path_key]
-
-    try:
-        with open(pyproject_path, "rb") as f:
-            data = tomllib.load(f)
-            _pyproject_cache[path_key] = data
-            return data
-    except Exception:
-        _pyproject_cache[path_key] = None
-        return None
 
 
-def _extract_version_from_pyproject(pyproject_path: Path) -> Optional[str]:
-    """從 pyproject.toml 提取版本字串.
-
-    使用 tomllib 結構化解析，從 [project] 表格取出 version 欄位。
-
-    Args:
-        pyproject_path: pyproject.toml 檔案路徑。
-
-    Returns:
-        version: 版本字串，或 None 若未找到。
-    """
-    data = _parse_pyproject(pyproject_path)
-    if data is None:
-        return None
-
-    try:
-        return data.get("project", {}).get("version")
-    except Exception:
-        return None
-
-
-def _extract_package_name_from_pyproject(pyproject_path: Path) -> Optional[str]:
-    """從 pyproject.toml 提取 [project] name.
-
-    使用 tomllib 結構化解析，從 [project] 表格取出 name 欄位。
-
-    Args:
-        pyproject_path: pyproject.toml 檔案路徑。
-
-    Returns:
-        套件名稱（如 'ticket-system'），或 None。
-    """
-    data = _parse_pyproject(pyproject_path)
-    if data is None:
-        return None
-
-    try:
-        return data.get("project", {}).get("name")
-    except Exception:
-        return None
-
-
-def _extract_cli_name_from_pyproject(pyproject_path: Path) -> Optional[str]:
-    """從 pyproject.toml 提取 [project.scripts] 的 CLI 入口名稱.
-
-    使用 tomllib 結構化解析，從 [project.scripts] 表格取出第一個 key。
-
-    Args:
-        pyproject_path: pyproject.toml 檔案路徑。
-
-    Returns:
-        CLI 命令名稱（如 'ticket'），或 None。
-    """
-    data = _parse_pyproject(pyproject_path)
-    if data is None:
-        return None
-
-    try:
-        scripts = data.get("project", {}).get("scripts", {})
-        if scripts:
-            return next(iter(scripts.keys()))
-    except Exception:
-        pass
-    return None
 
 
 def _compute_file_hashes(directory: Path) -> dict[str, str]:

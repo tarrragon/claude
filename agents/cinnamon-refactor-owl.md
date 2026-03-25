@@ -161,7 +161,26 @@ cinnamon-refactor-owl 在以下情況下**應該被觸發**：
 **重構工作必須遵循 CLAUDE.md「TDD 驅動重構方法論：預期管理與工作日誌為核心」的完整流程**
 
 **輸入要求**: 包含實作記錄的完整工作日誌
-**輸出標準**: 建立獨立的重構專用工作日誌
+**輸出標準**: 建立獨立的重構專用文件
+
+### 產出物路徑規範（強制）
+
+所有非程式碼產出物（重構報告、重構評估、重構工作日誌）**必須**寫入 Ticket 目錄，禁止寫入 `docs/work-logs/` 根目錄或其他位置。
+
+| 項目 | 規範 |
+|------|------|
+| **存放目錄** | `docs/work-logs/v{version}/tickets/` |
+| **命名格式** | `{ticket-id}-refactoring-report.md` 或 `{ticket-id}-refactor.md` |
+| **禁止路徑** | `docs/work-logs/vX.X.X-refactor-[功能名稱].md`（根目錄） |
+
+**範例**：
+
+```
+正確：docs/work-logs/v0.1.0/tickets/0.1.0-W39-001-refactoring-report.md
+錯誤：docs/work-logs/v0.1.0-refactor-session-monitor.md
+```
+
+> 命名後綴規範詳見：.claude/rules/core/ticket-id-conventions.md（第 2.1 節 TDD Phase 後綴）
 
 **重構核心原則**: 重構是預期管理與驗證的思考框架，不是執行步驟
 
@@ -171,7 +190,7 @@ cinnamon-refactor-owl 在以下情況下**應該被觸發**：
 
 **對應CLAUDE.md要求**: 必須建立新工作日誌，確保重構思考過程可追蹤
 
-**必須建立新重構工作日誌**: `docs/work-logs/vX.X.X-refactor-[功能名稱].md`
+**必須建立新重構文件**（存放於 `docs/work-logs/v{version}/tickets/`，命名格式見上方「產出物路徑規範」）
 
 **工作日誌必須回答的問題**:
 
@@ -281,7 +300,7 @@ cinnamon-refactor-owl 在以下情況下**應該被觸發**：
 
 **何時填寫**: Phase 4 重構評估和執行過程中，持續更新工作日誌
 
-**填寫位置**: 建立新重構工作日誌 `docs/work-logs/vX.X.X-refactor-[功能名稱].md`
+**填寫位置**: 建立新重構文件於 `docs/work-logs/v{version}/tickets/{ticket-id}-refactoring-report.md`
 
 **模板引用**: .claude/templates/work-log-template.md - Phase 4 重構優化章節
 
@@ -423,7 +442,7 @@ cinnamon-refactor-owl 在以下情況下**應該被觸發**：
 
 ### TDD Phase 4 品質要求
 
-**必須建立新重構工作日誌**: `docs/work-logs/vX.X.X-refactor-[功能名稱].md`
+**必須建立新重構文件**（存放於 `docs/work-logs/v{version}/tickets/`，命名格式見上方「產出物路徑規範」）
 
 - **重構完整度**：每次重構必須100%完成所有識別的程式碼品質改善，不允許任何已識別問題未解決
 - **功能保持**：重構過程中必須保持原有功能不變

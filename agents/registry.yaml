@@ -1,0 +1,945 @@
+# Agent Capability Registry
+# Schema Version: 1.0.0
+# 用途：Agent 能力宣告的機器可讀 Source of Truth
+# 更新原則：每次新增或修改 agent 時同步更新
+# 最後更新：2026-03-23（Phase 3b 初始化）
+
+schema_version: "1.0"
+
+agents:
+  # ===== TDD Phase 代理人（五階段完整流程） =====
+
+  lavender-interface-designer:
+    name: lavender-interface-designer
+    description: TDD Phase 1 功能設計專家。根據 Ticket 需求設計功能規格、API 介面定義、驗收標準。為後續測試和實作奠定基礎。
+    model: sonnet
+    color: purple
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+        description: "包含功能需求的 Ticket"
+
+    produces:
+      - artifact_type: "phase1-design"
+        path_pattern: "docs/work-logs/v*/tickets/*phase1-design.md"
+        description: "功能規格、API 定義、驗收標準"
+
+    requires:
+      - capability: "serena-tools"
+        description: "Markdown 撰寫和編輯能力"
+      - capability: "analysis"
+        description: "需求分析和功能設計"
+
+    preconditions:
+      - condition: "ticket-exists"
+      - condition: "ticket-has-requirements"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["lavender-interface-designer"]
+        reason: "同一 agent 不可重複派發至同一 Ticket"
+      - type: "must_complete_before"
+        agents: ["sage-test-architect"]
+        reason: "Phase 1 必須完成才能進入 Phase 2"
+
+    tdd_phases:
+      - "phase1"
+
+    file_patterns:
+      - "docs/work-logs/v*/tickets/*phase1-design.md"
+      - "docs/work-logs/v*/tickets/*feature-design.md"
+      - "docs/work-logs/v*/tickets/*feature-spec.md"
+
+
+  sage-test-architect:
+    name: sage-test-architect
+    description: TDD Phase 2 測試設計專家。根據 Phase 1 功能規格設計完整測試案例和測試策略。禁止程式碼實作。
+    model: haiku
+    color: red
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "phase1-design"
+        description: "Phase 1 功能規格文件"
+      - artifact_type: "ticket"
+        description: "測試設計需求"
+
+    produces:
+      - artifact_type: "phase2-test-design"
+        path_pattern: "docs/work-logs/v*/tickets/*phase2-test-design.md"
+        description: "測試案例設計、測試策略、Given-When-Then 規格"
+      - artifact_type: "test-cases"
+        path_pattern: "docs/work-logs/v*/tickets/*test-design.md"
+        description: "測試案例清單和規格"
+
+    requires:
+      - capability: "dart-analysis"
+        description: "Dart/Flutter 程式碼理解（非實作）"
+      - capability: "test-design"
+        description: "測試設計和測試策略規劃"
+
+    preconditions:
+      - condition: "phase1-design-completed"
+      - condition: "phase1-acceptance-approved"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["sage-test-architect"]
+        reason: "同一 agent 不可重複派發至同一 Ticket"
+      - type: "must_complete_before"
+        agents: ["pepper-test-implementer"]
+        reason: "Phase 2 必須完成才能進入 Phase 3a"
+
+    tdd_phases:
+      - "phase2"
+
+    file_patterns:
+      - "docs/work-logs/v*/tickets/*phase2-test-design.md"
+      - "docs/work-logs/v*/tickets/*test-design.md"
+      - "docs/work-logs/v*/tickets/*test-case-design.md"
+
+
+  pepper-test-implementer:
+    name: pepper-test-implementer
+    description: TDD Phase 3a 實作策略規劃專家。根據測試設計規劃語言無關的實作策略、虛擬碼、流程圖。為多語言實作代理人指導實作方向。
+    model: haiku
+    color: orange
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "phase2-test-design"
+        description: "Phase 2 測試設計文件"
+      - artifact_type: "ticket"
+        description: "策略規劃需求"
+
+    produces:
+      - artifact_type: "phase3a-strategy"
+        path_pattern: "docs/work-logs/v*/tickets/*phase3a-strategy.md"
+        description: "實作策略、虛擬碼、流程圖、技術方案"
+
+    requires:
+      - capability: "pseudocode"
+        description: "虛擬碼設計能力"
+      - capability: "architecture"
+        description: "系統架構理解"
+
+    preconditions:
+      - condition: "phase2-test-design-completed"
+      - condition: "phase2-acceptance-approved"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["pepper-test-implementer"]
+        reason: "同一 agent 不可重複派發至同一 Ticket"
+      - type: "must_complete_before"
+        agents: ["parsley-flutter-developer"]
+        reason: "Phase 3a 必須完成才能進入 Phase 3b"
+
+    tdd_phases:
+      - "phase3a"
+
+    file_patterns:
+      - "docs/work-logs/v*/tickets/*phase3a-strategy.md"
+
+
+  parsley-flutter-developer:
+    name: parsley-flutter-developer
+    description: TDD Phase 3b Flutter 實作代理人。將 Phase 3a 語言無關策略轉換為高品質 Dart/Flutter 程式碼。執行測試驅動開發，確保 100% 測試通過。
+    model: haiku
+    color: green
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "phase3a-strategy"
+        description: "Phase 3a 實作策略和虛擬碼"
+      - artifact_type: "ticket"
+        description: "實作需求"
+
+    produces:
+      - artifact_type: "phase3b-execution-report"
+        path_pattern: "docs/work-logs/v*/tickets/*phase3b-execution-report.md"
+        description: "實作執行報告、程式碼產出、測試結果"
+      - artifact_type: "dart-code"
+        path_pattern: "ui/lib/**/*.dart"
+        description: "Dart/Flutter 程式碼（lib/）"
+      - artifact_type: "dart-test"
+        path_pattern: "ui/test/**/*_test.dart"
+        description: "Dart 測試程式碼（test/）"
+
+    requires:
+      - capability: "dart-code"
+        description: "Dart 程式碼撰寫能力"
+      - capability: "flutter-framework"
+        description: "Flutter 框架知識"
+      - capability: "dart-test-execution"
+        description: "Dart 測試執行能力（flutter test）"
+      - capability: "git-commit"
+        description: "Git commit 自治能力"
+
+    preconditions:
+      - condition: "phase3a-strategy-completed"
+      - condition: "phase2-test-design-completed"
+      - condition: "acceptance-auditor-approved"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["parsley-flutter-developer"]
+        reason: "同一 agent 不可重複派發至同一 Ticket"
+        scope: "same_ticket"
+      - type: "cannot_work_with"
+        agents: ["cinnamon-refactor-owl"]
+        reason: "Phase 3b 和 Phase 4b 不可在同一 Ticket 並行派發（會修改相同 Dart 檔案）"
+        scope: "same_ticket"
+      - type: "must_complete_before"
+        agents: ["cinnamon-refactor-owl"]
+        reason: "Phase 3b 必須完成並測試通過才能進入 Phase 4b"
+
+    tdd_phases:
+      - "phase3b"
+
+    file_patterns:
+      - "ui/lib/**/*.dart"
+      - "ui/test/**/*_test.dart"
+      - "docs/work-logs/v*/tickets/*phase3b-execution-report.md"
+
+
+  cinnamon-refactor-owl:
+    name: cinnamon-refactor-owl
+    description: TDD Phase 4b 重構代理人。在 Phase 3b 程式碼完成後執行程式碼品質優化、技術債務修復、重構執行。確保程式碼品質高標準。
+    model: sonnet
+    color: yellow
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "phase3b-execution-report"
+        description: "Phase 3b 實作產出"
+      - artifact_type: "phase4a-analysis"
+        description: "Phase 4a 多視角重構分析報告"
+      - artifact_type: "ticket"
+        description: "重構需求"
+
+    produces:
+      - artifact_type: "phase4b-execution-report"
+        path_pattern: "docs/work-logs/v*/tickets/*phase4b-execution-report.md"
+        description: "重構執行報告、程式碼優化記錄、技術債務修復"
+      - artifact_type: "dart-code"
+        path_pattern: "ui/lib/**/*.dart"
+        description: "重構後的 Dart 程式碼"
+
+    requires:
+      - capability: "refactoring"
+        description: "程式碼重構和品質優化"
+      - capability: "dart-code"
+        description: "Dart 程式碼修改能力"
+      - capability: "code-analysis"
+        description: "程式碼品質分析"
+
+    preconditions:
+      - condition: "phase3b-completed"
+      - condition: "phase3b-tests-pass"
+      - condition: "phase4a-analysis-available-or-exempted"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["cinnamon-refactor-owl"]
+        reason: "同一 agent 不可重複派發至同一 Ticket"
+      - type: "cannot_work_with"
+        agents: ["parsley-flutter-developer"]
+        reason: "Phase 3b 和 Phase 4b 不可並行派發（共用 Dart 程式碼檔案）"
+
+    tdd_phases:
+      - "phase4b"
+
+    file_patterns:
+      - "ui/lib/**/*.dart"
+      - "docs/work-logs/v*/tickets/*phase4b-execution-report.md"
+      - "docs/work-logs/v*/tickets/*refactoring-report.md"
+
+
+
+  # ===== 系統分析和設計代理人 =====
+
+  saffron-system-analyst:
+    name: saffron-system-analyst
+    description: SA 前置審查專家。在 TDD 開始前審查新功能的系統一致性、架構合理性、重複實作檢查。
+    model: sonnet
+    color: saffron
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+        description: "新功能或架構變更 Ticket"
+
+    produces:
+      - artifact_type: "sa-review"
+        path_pattern: "docs/work-logs/v*/tickets/*analysis.md"
+
+    requires:
+      - capability: "architecture"
+
+    preconditions:
+      - condition: "ticket-exists"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["saffron-system-analyst"]
+
+    tdd_phases:
+      - "phase0"
+
+    file_patterns:
+      - "docs/work-logs/v*/tickets/*analysis.md"
+
+
+  star-anise-system-designer:
+    name: star-anise-system-designer
+    description: 系統設計專家。負責系統架構設計、介面設計。
+    model: sonnet
+    color: star-anise
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "design-document"
+
+    requires:
+      - capability: "system-design"
+
+    preconditions:
+      - condition: "ticket-exists"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["star-anise-system-designer"]
+
+    tdd_phases: []
+
+    file_patterns: []
+
+
+  # ===== 實作和技術代理人 =====
+
+  thyme-python-developer:
+    name: thyme-python-developer
+    description: Python 開發專家。負責 Python 程式碼品質、Hook 優化、Skill 實作。
+    model: haiku
+    color: green
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+      - artifact_type: "python-code"
+
+    produces:
+      - artifact_type: "python-code"
+        path_pattern: ".claude/**/*.py"
+
+    requires:
+      - capability: "python-code"
+
+    preconditions:
+      - condition: "ticket-exists"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["thyme-python-developer"]
+
+    tdd_phases: []
+
+    file_patterns:
+      - ".claude/hooks/**/*.py"
+      - ".claude/skills/**/*.py"
+      - ".claude/lib/**/*.py"
+
+
+  fennel-go-developer:
+    name: fennel-go-developer
+    description: Go 後端開發專家。負責 Go 程式碼開發。
+    model: haiku
+    color: green
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "go-code"
+        path_pattern: "server/**/*.go"
+
+    requires:
+      - capability: "go-code"
+
+    preconditions:
+      - condition: "ticket-exists"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["fennel-go-developer"]
+
+    tdd_phases: []
+
+    file_patterns:
+      - "server/**/*.go"
+
+
+  # ===== 質量保證代理人 =====
+
+  acceptance-auditor:
+    name: acceptance-auditor
+    description: 驗收審核員。審查 Ticket 建立品質、驗收條件完整性。
+    model: haiku
+    color: blue
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "acceptance-report"
+
+    requires:
+      - capability: "audit"
+
+    preconditions:
+      - condition: "ticket-created"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["acceptance-auditor"]
+
+    tdd_phases: []
+
+    file_patterns: []
+
+
+  clove-security-reviewer:
+    name: clove-security-reviewer
+    description: 安全審查員。審查程式碼安全性。
+    model: sonnet
+    color: red
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "security-report"
+
+    requires:
+      - capability: "security-review"
+
+    preconditions:
+      - condition: "security-review-required"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["clove-security-reviewer"]
+
+    tdd_phases: []
+
+    file_patterns: []
+
+
+  coriander-integration-tester:
+    name: coriander-integration-tester
+    description: 整合測試代理人。設計和執行系統整合測試。
+    model: haiku
+    color: orange
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "test-code"
+
+    requires:
+      - capability: "integration-testing"
+
+    preconditions:
+      - condition: "ticket-exists"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["coriander-integration-tester"]
+
+    tdd_phases: []
+
+    file_patterns:
+      - "ui/test/**/*_test.dart"
+
+
+  ginger-performance-tuner:
+    name: ginger-performance-tuner
+    description: 效能優化專家。分析系統效能。
+    model: haiku
+    color: orange
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "performance-report"
+
+    requires:
+      - capability: "performance-analysis"
+
+    preconditions:
+      - condition: "performance-review-required"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["ginger-performance-tuner"]
+
+    tdd_phases: []
+
+    file_patterns: []
+
+
+  # ===== 資料和系統管理 =====
+
+  sassafras-data-administrator:
+    name: sassafras-data-administrator
+    description: 資料管理員。負責資料模型設計。
+    model: haiku
+    color: brown
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "data-design"
+
+    requires:
+      - capability: "data-design"
+
+    preconditions:
+      - condition: "ticket-exists"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["sassafras-data-administrator"]
+
+    tdd_phases: []
+
+    file_patterns: []
+
+
+  sumac-system-engineer:
+    name: sumac-system-engineer
+    description: 系統工程師。負責環境配置、工具設置。
+    model: haiku
+    color: brown
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "config"
+
+    requires:
+      - capability: "devops"
+
+    preconditions:
+      - condition: "ticket-exists"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["sumac-system-engineer"]
+
+    tdd_phases: []
+
+    file_patterns:
+      - "pubspec.yaml"
+      - "go.mod"
+
+
+  # ===== 輔助代理人 =====
+
+  oregano-data-miner:
+    name: oregano-data-miner
+    description: 資料研究員。負責外部資源研究。
+    model: haiku
+    color: green
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "research-report"
+
+    requires:
+      - capability: "research"
+
+    preconditions:
+      - condition: "research-required"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["oregano-data-miner"]
+
+    tdd_phases: []
+
+    file_patterns:
+      - "docs/work-logs/**/*analysis.md"
+
+
+  incident-responder:
+    name: incident-responder
+    description: 事件回應者。當系統發生錯誤時進行根因分析。
+    model: sonnet
+    color: red
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "error-report"
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "incident-analysis"
+
+    requires:
+      - capability: "debugging"
+
+    preconditions:
+      - condition: "error-detected"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["incident-responder"]
+
+    tdd_phases: []
+
+    file_patterns:
+      - ".claude/error-patterns/**/*.md"
+
+
+  linux:
+    name: linux
+    description: 品味守護者和常駐審查委員。以獨特的視角進行程式碼品質審查。
+    model: sonnet
+    color: black
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+      - artifact_type: "analysis"
+
+    produces:
+      - artifact_type: "review-report"
+
+    requires:
+      - capability: "code-review"
+
+    preconditions:
+      - condition: "parallel-evaluation-required"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["linux"]
+
+    tdd_phases: []
+
+    file_patterns: []
+
+
+  mint-format-specialist:
+    name: mint-format-specialist
+    description: 格式專家。負責文件格式規範。
+    model: haiku
+    color: green
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "document"
+
+    produces:
+      - artifact_type: "formatted-document"
+
+    requires:
+      - capability: "formatting"
+
+    preconditions:
+      - condition: "ticket-exists"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["mint-format-specialist"]
+
+    tdd_phases: []
+
+    file_patterns:
+      - "**/*.md"
+      - "**/*.yaml"
+
+
+  # ===== 特殊架構代理人 =====
+
+  basil-hook-architect:
+    name: basil-hook-architect
+    description: Hook 系統架構師。負責 Hook 系統設計。
+    model: haiku
+    color: green
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "hook-code"
+        path_pattern: ".claude/hooks/**/*.py"
+
+    requires:
+      - capability: "hook-architecture"
+
+    preconditions:
+      - condition: "ticket-exists"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["basil-hook-architect"]
+      - type: "cannot_work_with"
+        agents: ["thyme-python-developer"]
+        reason: "Hook 設計由 basil 負責，優化由 thyme 負責"
+
+    tdd_phases: []
+
+    file_patterns:
+      - ".claude/hooks/**/*.py"
+
+
+  basil-event-architect:
+    name: basil-event-architect
+    description: 事件系統架構師。負責事件驅動系統設計。
+    model: haiku
+    color: green
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "event-design"
+
+    requires:
+      - capability: "event-architecture"
+
+    preconditions:
+      - condition: "ticket-exists"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["basil-event-architect"]
+
+    tdd_phases: []
+
+    file_patterns: []
+
+
+  bay-quality-auditor:
+    name: bay-quality-auditor
+    description: 品質審計員。全面評估程式碼品質。
+    model: sonnet
+    color: blue
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "quality-report"
+
+    requires:
+      - capability: "quality-audit"
+
+    preconditions:
+      - condition: "audit-required"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["bay-quality-auditor"]
+
+    tdd_phases: []
+
+    file_patterns:
+      - "docs/work-logs/**/*evaluation.md"
+
+
+  project-compliance-agent:
+    name: project-compliance-agent
+    description: 專案合規檢查員。檢查流程是否符合規範。
+    model: haiku
+    color: blue
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "compliance-report"
+
+    requires:
+      - capability: "compliance-check"
+
+    preconditions:
+      - condition: "ticket-created"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["project-compliance-agent"]
+
+    tdd_phases: []
+
+    file_patterns: []
+
+
+  memory-network-builder:
+    name: memory-network-builder
+    description: 記憶網路建構者。建立跨對話知識連結。
+    model: haiku
+    color: purple
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "knowledge-base"
+
+    requires:
+      - capability: "knowledge-management"
+
+    preconditions:
+      - condition: "ticket-exists"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["memory-network-builder"]
+
+    tdd_phases: []
+
+    file_patterns:
+      - ".claude/projects/**/*memory*.md"
+
+
+  john-carmack:
+    name: john-carmack
+    description: 技術願景領導者。提供長期技術規劃。
+    model: sonnet
+    color: purple
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "vision-document"
+
+    requires:
+      - capability: "strategic-vision"
+
+    preconditions:
+      - condition: "strategic-decision-required"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["john-carmack"]
+
+    tdd_phases: []
+
+    file_patterns:
+      - "docs/work-logs/**/*vision*.md"
+
+
+  rosemary-project-manager:
+    name: rosemary-project-manager
+    description: 專案經理。主線程決策、任務派發、進度管理。
+    model: haiku
+    color: green
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "dispatch-decision"
+
+    requires:
+      - capability: "project-management"
+
+    preconditions:
+      - condition: "always"
+
+    conflict_avoidance: []
+
+    tdd_phases: []
+
+    file_patterns:
+      - ".claude/plans/**/*.md"
+      - "docs/work-logs/**/*.md"
+
+
+  thyme-documentation-integrator:
+    name: thyme-documentation-integrator
+    description: 文件整合者。負責文件結構管理。
+    model: haiku
+    color: green
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "document"
+
+    produces:
+      - artifact_type: "documentation"
+
+    requires:
+      - capability: "documentation"
+
+    preconditions:
+      - condition: "documentation-required"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["thyme-documentation-integrator"]
+
+    tdd_phases: []
+
+    file_patterns:
+      - "docs/**/*.md"
+
+
+  thyme-extension-engineer:
+    name: thyme-extension-engineer
+    description: 擴展工程師。負責工具擴展和模組開發。
+    model: haiku
+    color: green
+    version: "1.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "extension-code"
+
+    requires:
+      - capability: "extension-development"
+
+    preconditions:
+      - condition: "ticket-exists"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["thyme-extension-engineer"]
+
+    tdd_phases: []
+
+    file_patterns:
+      - ".claude/**/*extension*.py"
+

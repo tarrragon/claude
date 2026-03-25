@@ -95,6 +95,25 @@ class TestValidateTargetTicketExists:
         _validate_target_ticket_exists("to-sibling:0.1.0-W5-002", "0.1.0")
         mock_load.assert_called_once_with("0.1.0", "0.1.0-W5-002")
 
+    @patch("ticket_system.commands.handoff.load_ticket")
+    def test_cross_version_handoff_uses_target_version(self, mock_load):
+        """跨版本 handoff：應使用目標 ticket 的版本號而非來源版本號"""
+        # 來源 ticket 版本 0.1.0，目標 ticket 版本 0.1.1
+        mock_load.return_value = {"id": "0.1.1-W5-002", "status": "pending"}
+        _validate_target_ticket_exists("to-sibling:0.1.1-W5-002", "0.1.0")
+        # load_ticket 應使用目標 ticket 的版本 0.1.1，而非來源版本 0.1.0
+        mock_load.assert_called_once_with("0.1.1", "0.1.1-W5-002")
+
+    @patch("ticket_system.commands.handoff.load_ticket")
+    def test_cross_version_handoff_missing_target_raises_error(self, mock_load):
+        """跨版本 handoff 目標不存在時應拋出例外"""
+        mock_load.return_value = None
+        with pytest.raises(HandoffTargetNotFoundError) as exc_info:
+            _validate_target_ticket_exists("to-sibling:0.1.1-W5-999", "0.1.0")
+        assert exc_info.value.target_id == "0.1.1-W5-999"
+        # 驗證使用了目標版本 0.1.1
+        mock_load.assert_called_once_with("0.1.1", "0.1.1-W5-999")
+
 
 # ==============================================================================
 # W5-003: 重複 handoff 警告

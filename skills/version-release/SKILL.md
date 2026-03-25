@@ -170,6 +170,30 @@ uv run .claude/skills/version-release/scripts/version_release.py update-docs
 
 詳細說明和輸出範例：`references/cli-output-examples.md`
 
+## 版本策略（Monorepo 三層架構）
+
+本工具支援 monorepo 三層版本架構，透過 `.version-release.yaml` 配置檔定義版本策略。
+
+### 三層版本定義
+
+| 層級 | 來源 | 獨立性 | 說明 |
+|------|------|--------|------|
+| L1 Monorepo | docs/todolist.yaml | 權威來源 | 整體專案版本，Ticket/Wave 以此為準 |
+| L2 UI | ui/pubspec.yaml | 獨立 | Flutter 應用版本，可獨立升級 |
+| L3 Server | server/go.mod | 隱含同步 | Go module 無自身版本欄位 |
+
+### 版本不匹配判斷
+
+`check` 子命令會輸出三層版本對比。L2 UI 版本與 L1 不同是**預期行為**，
+不視為錯誤。只有 L1 monorepo 版本與 git tag 不一致才是需要修正的情況。
+
+### .version-release.yaml 配置檔
+
+若需調整版本策略，可在專案根目錄建立或編輯 `.version-release.yaml`。
+配置檔不存在時，工具使用內建預設值（三層架構策略）。
+
+詳細配置結構：`.claude/rules/flows/monorepo-version-strategy.md`
+
 ## 前置條件
 
 - **系統要求**: Python 3.10+、Git 2.0+

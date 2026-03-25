@@ -7,6 +7,21 @@ Error Patterns 是五重文件系統的核心組件之一，用於：
 - 傳承經驗，避免重複犯錯
 - 建立可查詢的錯誤知識庫
 
+## 與 Claude Code 官方 Memory 系統的差異
+
+Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/memory/`），本專案的 Error Patterns 系統與其定位不同：
+
+| 面向 | 官方 Memory 系統 | Error Patterns 系統 |
+|------|-----------------|-------------------|
+| **儲存位置** | 用戶 home 目錄（`~/.claude/`） | 專案目錄（`.claude/error-patterns/`） |
+| **版本控制** | 不納入 git | 納入 git，隨專案版本管理 |
+| **共享範圍** | 個人，跨 session 持久化 | 團隊，所有協作者共享 |
+| **內容類型** | 用戶偏好、反饋、專案狀態 | 結構化錯誤模式（症狀/根因/解決方案/預防） |
+| **查詢方式** | 系統自動載入相關記憶 | `/error-pattern query` 主動查詢 |
+| **適用場景** | 「記住我喜歡 X 做法」 | 「上次遇到 Y 問題的根因和防護」 |
+
+**協作關係**：兩個系統互補。Memory 記錄個人的行為反饋（如「禁止用 Bash 繞過 Hook」），Error Patterns 記錄團隊的結構化知識（如「PC-016: Hook 繞過的根因分析和防護措施」）。同一事件可能同時產生兩種記錄。
+
 ---
 
 ## 目錄結構
@@ -166,6 +181,13 @@ Error Patterns 是五重文件系統的核心組件之一，用於：
 | IMP-024 | phase-completion-gate-hook 在編輯 tdd_phase 欄位時誤觸 Phase 3b 完成警告 | 低 | v0.1.0 |
 | IMP-025 | 新模組引入 except Exception: pass 靜默吞掉異常 | 中 | v0.1.0 |
 | IMP-026 | 新建 Hook 檔案後未設定執行權限（+x） | 高 | v0.1.1 |
+| IMP-027 | 跨 Context 函式庫與 Hook 邏輯重複 | 低 | v0.1.0 |
+| IMP-028 | Hook 提前返回與 API 簽名漂移 | 中 | v0.1.0 |
+| IMP-029 | 強制 logger 參數破壞共用工具重用性 | 中 | v0.1.0 |
+| IMP-030 | Agent 測試 importlib 缺少 exec_module | 中 | v0.1.0 |
+| IMP-031 | Agent 部分完成後偽報告成功 | 中 | v0.1.0 |
+| IMP-032 | Hook 傳遞 CLI 不支援的參數 | 中 | v0.1.1 |
+| IMP-033 | 版本比對時 source 掃描範圍與 installed 不對齊 | 中 | v0.1.1 |
 
 ### 流程合規 (PC)
 
@@ -178,6 +200,15 @@ Error Patterns 是五重文件系統的核心組件之一，用於：
 | PC-005 | CLI 失敗時基於假設歸因 | 中 | v0.1.0 |
 | PC-006 | 過早統一抽象（DRY 誤用） | 中 | v0.1.0 |
 | PC-007 | Command 引導與腳本實作行為不符 | 中 | v0.3.0 |
+| PC-008 | Stub Ticket 驗收條件未更新 | 中 | v0.1.0 |
+| PC-009 | Handoff 對已完成 Ticket 使用錯誤 flag | 中 | v0.1.0 |
+| PC-010 | PM 跳過 Ticket 完成後 Checkpoint | 中 | v0.1.0 |
+| PC-011 | Ticket 版本歸類錯誤 | 中 | v0.1.0 |
+| PC-012 | Complete 前處理 #17 造成死鎖 | 中 | v0.1.0 |
+| PC-013 | 重複建立 Ticket 未偵測 | 中 | v0.1.0 |
+| PC-014 | 以非正式任務合理化跳過 AskUserQuestion | 中 | v0.1.1 |
+| PC-015 | 錯誤提示靜默繞過 | 中 | v0.1.1 |
+| PC-016 | Hook 阻止後使用 Bash 工具繞過保護機制 | 高 | v0.1.1 |
 
 ---
 

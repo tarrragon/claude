@@ -5,10 +5,14 @@
 """
 # 防止直接執行此模組
 import os
+import subprocess
 from pathlib import Path
 
 from .constants import WORK_LOGS_DIR, TICKETS_DIR
 from .ui_constants import VERSION_PREFIX, VERSION_PREFIX_LENGTH
+
+# git rev-parse 執行超時時限（秒）
+GIT_TOPLEVEL_TIMEOUT = 5
 
 
 def get_project_root() -> Path:
@@ -17,10 +21,11 @@ def get_project_root() -> Path:
 
     搜尋優先級：
     1. CLAUDE_PROJECT_DIR 環境變數
-    2. 向上搜尋 CLAUDE.md（通用框架標準入口，支援 Go/混合型專案）
-    3. 向上搜尋 go.mod（Go 專案）
-    4. 向上搜尋 pubspec.yaml（Flutter 專案）
-    5. fallback: Path.cwd()
+    2. git rev-parse --show-toplevel（git-native，支援 worktree 環境）
+    3. 向上搜尋 CLAUDE.md（通用框架標準入口，支援 Go/混合型專案）
+    4. 向上搜尋 go.mod（Go 專案）
+    5. 向上搜尋 pubspec.yaml（Flutter 專案）
+    6. fallback: Path.cwd()
 
     Returns:
         Path: 專案根目錄路徑
@@ -35,7 +40,21 @@ def get_project_root() -> Path:
     if claude_project_dir:
         return Path(claude_project_dir)
 
-    # 2-4. 向上搜尋標記檔案（依通用性排序）
+    # 2. git rev-parse --show-toplevel（git-native，支援 worktree）
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=GIT_TOPLEVEL_TIMEOUT
+        )
+        if result.returncode == 0:
+            return Path(result.stdout.strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        # git 命令不存在或超時，進入 fallback
+        pass
+
+    # 3-5. 向上搜尋標記檔案（依通用性排序）
     markers = ["CLAUDE.md", "go.mod", "pubspec.yaml"]
     current = Path.cwd()
     while current != current.parent:

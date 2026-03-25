@@ -92,16 +92,12 @@ def create_feature_worktree(
     if not branch_exists(base_branch):
         return False, f"基礎分支不存在: {base_branch}"
 
-    # 從基礎分支創建新分支
-    success, msg = run_git_command(["checkout", "-b", branch, base_branch])
+    # 執行單一原子命令：同時建立分支和 worktree
+    success, msg = run_git_command(
+        ["worktree", "add", "-b", branch, worktree_abs_path, base_branch]
+    )
     if not success:
-        return False, f"創建分支失敗: {msg}"
-
-    # 創建 worktree
-    success, msg = run_git_command(["worktree", "add", worktree_abs_path, branch])
-    if not success:
-        # 回滾：刪除剛創建的分支
-        run_git_command(["branch", "-D", branch])
+        # 原子操作失敗：git 已自動清理，無需手動回滾
         return False, f"創建 worktree 失敗: {msg}"
 
     return True, f"成功創建分支 '{branch}' 和 worktree '{worktree_abs_path}'"
@@ -137,8 +133,7 @@ def main():
     if args.dry_run:
         print("=== Dry Run 模式 ===")
         print(f"將要執行的操作:")
-        print(f"  1. 從 '{args.base}' 創建分支 '{args.branch}'")
-        print(f"  2. 創建 worktree 到 '{os.path.abspath(args.worktree)}'")
+        print(f"  git worktree add -b {args.branch} {os.path.abspath(args.worktree)} {args.base}")
         print()
         print("實際執行請移除 --dry-run 參數")
         return 0

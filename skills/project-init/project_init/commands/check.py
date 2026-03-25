@@ -15,6 +15,7 @@ from project_init.lib import (
     UVMessages,
     check_installed_version,
     compare_versions,
+    resolve_source_module_dir,
     detect_os,
     detect_python,
     detect_ripgrep,
@@ -290,9 +291,12 @@ def _check_single_package(package, details: list[str]) -> bool:
     if installed is None:
         return _handle_package_not_installed(package, details)
 
-    # 比對版本
-    compare_result = compare_versions(
+    # 對齊 source 目錄到模組子目錄後比對版本
+    source_module = resolve_source_module_dir(
         package.source_path, installed.installed_path
+    )
+    compare_result = compare_versions(
+        source_module, installed.installed_path
     )
     return _handle_package_version_check(
         package, installed, compare_result, details

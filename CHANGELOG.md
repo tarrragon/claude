@@ -1,3 +1,10 @@
+## [1.1.50] - 2026-03-25
+
+### Summary
+feat(v0.1.2): Phase Contract 驗證 + Agent Registry + 檔案所有權 Hook + 82 Ticket 品質改善
+
+---
+
 ## [1.1.49] - 2026-03-13
 
 ### Summary

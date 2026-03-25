@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.2-W2-011",
+  "direction": "context-refresh",
+  "timestamp": "2026-03-24T22:51:54.254368",
+  "from_status": "in_progress",
+  "title": "分析代理人自我審查問題 — 為什麼 subagent 不嘗試就放棄編輯",
+  "what": "分析代理人自我審查（self-censorship）的根因和改善方向",
+  "chain": {},
+  "resumed_at": "2026-03-24T22:55:01.999708"
+}

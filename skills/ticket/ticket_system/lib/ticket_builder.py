@@ -28,6 +28,53 @@ from ticket_system.lib.ticket_loader import (
 from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
 
 
+# 預設驗收條件（依 Ticket 類型）
+# 注意：所有條件都應包含量化佔位符或可客觀驗證的標準，禁止使用模糊詞
+DEFAULT_ACCEPTANCE_CRITERIA = {
+    "IMP": [
+        "指定功能（{feature_name}）實作符合設計規格",
+        "相關測試 100% 通過（flutter test / uv run pytest）",
+        "dart analyze / ruff check 0 issues"
+    ],
+    "TST": [
+        "設計 N 個測試案例，覆蓋正常/邊界/異常路徑",
+        "所有測試案例執行通過（通過率 100%）",
+        "測試覆蓋率達 {coverage_target}%（由 SA 或代理人指定）"
+    ],
+    "ADJ": [
+        "調整內容（{adjustment_target}）符合規格",
+        "相關測試通過（通過率 100%）",
+        "lint 檢查 0 critical issues"
+    ],
+    "RES": [
+        "研究報告已撰寫（含背景、方法、發現、結論 4 部分）",
+        "結論明確且可行（避免「可能」「似乎」等模糊詞）",
+        "至少提出 N 個可行的改善建議"
+    ],
+    "ANA": [
+        "分析報告已撰寫（含問題敘述、根因分析、改善方案 3 部分）",
+        "根因已通過 5W1H 或因果鏈分析確認",
+        "改善方案至少包含症狀修復和根因防護兩個方向",
+        "[ ] 分析結論已建立修復 Ticket（症狀修復），Ticket ID 已記錄在 spawned_tickets",
+        "[ ] 根因已建立防護 Ticket（機制防護），Ticket ID 已記錄在 spawned_tickets",
+        "[ ] 若無後續 Ticket 需建立，需說明理由"
+    ],
+    "INV": [
+        "調查報告已撰寫（含調查範圍、發現、驗證過程 3 部分）",
+        "事實已通過實驗/測試/文件驗證確認（不依賴推測）",
+        "後續行動已定義：建立 {N} 個相關 Ticket，IDs 已記錄"
+    ],
+    "DOC": [
+        "文件內容完整：包含標題、背景、正文、結論、附錄等 {N} 部分",
+        "格式符合規範：遵守 CLAUDE.md 的文件格式規則",
+        "內容無遺漏：所有預期的小節都已填寫（無 TODO 或空白區段）"
+    ],
+    # 問題 5 修正：移除未在 TICKET_TYPES 中註冊的類型
+    # SEC、PERF、INFRA 類型未在 constants.py 的 TICKET_TYPES 中定義
+    # 若需支援這些類型，請先在 TICKET_TYPES 中註冊
+}
+
+
 class TicketConfig(TypedDict, total=False):
     """Ticket 建立配置。
 
@@ -64,6 +111,37 @@ class TicketConfig(TypedDict, total=False):
 
     # 驗收條件（1 個欄位）
     acceptance: Optional[List[str]]  # 驗收條件清單
+
+    # 決策樹路徑（1 個欄位）
+    decision_tree_path: Optional[Dict[str, str]]  # {"entry_point": ..., "final_decision": ..., "rationale": ...}
+
+
+def get_default_acceptance_criteria(ticket_type: str) -> List[str]:
+    """取得預設驗收條件（依 Ticket 類型）。
+
+    Args:
+        ticket_type: Ticket 類型（IMP, TST, ADJ, RES, ANA, INV, DOC）
+
+    Returns:
+        預設驗收條件清單
+
+    Examples:
+        >>> get_default_acceptance_criteria("IMP")
+        ["任務實作完成", "相關測試通過", "無程式碼品質警告"]
+
+        >>> get_default_acceptance_criteria("ANA")
+        ["分析報告完成", "根因已識別", "改善方案已提出",
+         "[ ] 分析結論已建立修復 Ticket（症狀修復）",
+         "[ ] 根因已建立防護 Ticket（機制防護）",
+         "[ ] 後續 Ticket 已記錄在 children 或 spawned_tickets"]
+
+        >>> get_default_acceptance_criteria("UNKNOWN")
+        ["任務實作完成", "相關測試通過", "無程式碼品質警告"]
+    """
+    return DEFAULT_ACCEPTANCE_CRITERIA.get(
+        ticket_type,
+        DEFAULT_ACCEPTANCE_CRITERIA["IMP"]  # 預設為 IMP 類型
+    )
 
 
 def format_ticket_id(version: str, wave: int, seq: int) -> str:
@@ -251,7 +329,7 @@ def create_ticket_frontmatter(config: TicketConfig) -> Dict[str, Any]:
     Returns:
         包含 frontmatter 資訊的字典
 
-    Frontmatter 欄位清單（27 個欄位）:
+    Frontmatter 欄位清單（28 個欄位）:
         - id: config["ticket_id"]
         - title: config["title"]
         - type: config["ticket_type"]
@@ -266,6 +344,7 @@ def create_ticket_frontmatter(config: TicketConfig) -> Dict[str, Any]:
         - spawned_tickets: []（空清單）
         - source_ticket: None
         - dispatch_reason: ""（空字串）
+        - decision_tree_path: config.get("decision_tree_path")（決策樹路徑，可選）
         - who: {"current": config["who"], "history": {}}
         - what: config["what"]
         - when: config["when"]
@@ -282,8 +361,13 @@ def create_ticket_frontmatter(config: TicketConfig) -> Dict[str, Any]:
         - created: 當前日期（YYYY-MM-DD）
         - updated: 當前日期（YYYY-MM-DD）
 
-    預設驗收條件:
-        ["任務實作完成", "相關測試通過", "無程式碼品質警告"]
+    預設驗收條件（依 Ticket 類型）:
+        - IMP: ["任務實作完成", "相關測試通過", "無程式碼品質警告"]
+        - ANA: ["分析報告完成", "根因已識別", "改善方案已提出",
+                "[ ] 分析結論已建立修復 Ticket（症狀修復）",
+                "[ ] 根因已建立防護 Ticket（機制防護）",
+                "[ ] 後續 Ticket 已記錄在 children 或 spawned_tickets"]
+        - 其他類型: 參考 DEFAULT_ACCEPTANCE_CRITERIA
 
     Examples:
         >>> config = TicketConfig(
@@ -323,6 +407,7 @@ def create_ticket_frontmatter(config: TicketConfig) -> Dict[str, Any]:
         "spawned_tickets": [],
         "source_ticket": None,
         "dispatch_reason": "",
+        "decision_tree_path": config.get("decision_tree_path"),
         "who": {"current": config["who"], "history": {}},
         "what": config["what"],
         "when": config["when"],
@@ -331,7 +416,7 @@ def create_ticket_frontmatter(config: TicketConfig) -> Dict[str, Any]:
         "how": {"task_type": config["how_task_type"], "strategy": config["how_strategy"]},
         "acceptance": [
             f"[ ] {item}" if not (item.startswith("[") and "]" in item) else item
-            for item in (config.get("acceptance") or ["任務實作完成", "相關測試通過", "無程式碼品質警告"])
+            for item in (config.get("acceptance") or get_default_acceptance_criteria(config["ticket_type"]))
         ],
         "tdd_phase": config.get("tdd_phase"),
         "tdd_stage": config.get("tdd_stage") or [],
@@ -363,7 +448,7 @@ def create_ticket_body(what: str, who: str) -> str:
         ---
 
         ## Problem Analysis
-        <!-- To be filled by executing agent -->
+        結構化的問題分析區段，包含根因、影響範圍和相關錯誤模式
 
         ---
 
@@ -402,12 +487,22 @@ def create_ticket_body(what: str, who: str) -> str:
 
 ## Problem Analysis
 
-<!-- 建立者可在此記錄調查過程，範例：
+### 問題根因
+
+（待填寫：問題發生的直接原因是什麼？）
+
+### 影響範圍
+
+（待填寫：哪些檔案、模組或功能受影響？）
+
+### 相關 Error Pattern
+
+（待填寫：是否有相關的已知錯誤模式？執行 /error-pattern query 確認）
+
+<!-- 調查過程記錄（可選）：
 搜尋指令：grep -rn "pattern" path/ --include="*.py"
-確認的位置（已確認）：
+確認的位置：
 - file1.py:123
-確認的位置（推測，待接手者驗證）：
-- file2.py:456（未逐一確認）
 注意：接手者應獨立重新驗證數量/範圍（PC-007）
 -->
 

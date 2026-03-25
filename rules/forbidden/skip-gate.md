@@ -1,5 +1,7 @@
 # Skip-gate 防護機制
 
+> **受眾**：本文件的限制規則僅適用於 rosemary-project-manager（主線程）。subagent 開發代理人不受「主線程禁止」類規則約束，其職責正是執行 PM 派發的開發任務。
+
 本文件定義 Skip-gate 防護機制，明確禁止主線程直接修復測試失敗的行為。
 
 ---
@@ -185,6 +187,8 @@ incident-responder 分析和分類
 
 **違規處理**：Hook 系統會在執行 Edit/Write 工具時驗證檔案路徑，如果超出允許範圍，將阻止操作並輸出警告訊息。
 
+Subagent 的可編輯路徑見 decision-tree.md「代理人可編輯路徑對照表」（唯一 Source of Truth）。
+
 ### 規則 6：外部查詢工作流規則
 
 外部資源查詢（WebFetch、WebSearch）應由 oregano-data-miner 專業代理人執行。
@@ -270,8 +274,8 @@ incident-responder 分析和分類
 
 ---
 
-**Last Updated**: 2026-02-06
-**Version**: 2.4.0
+**Last Updated**: 2026-03-21
+**Version**: 2.7.0 - 適用對象標註集中至頂部受眾宣告，移除 4 處分散重複標註（0.1.1-W16-003）
 **Purpose**: Skip-gate Prevention with Multi-Level Protection
 **Changes**:
 - v2.4.0 (2026-02-06): 精簡主檔案，外移參考內容

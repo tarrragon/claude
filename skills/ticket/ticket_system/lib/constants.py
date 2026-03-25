@@ -147,6 +147,14 @@ TICKET_TYPES: Dict[str, str] = {
 PRIORITY_LEVELS: List[str] = ["P0", "P1", "P2", "P3"]
 
 # ============================================================
+# Ticket 建立預設值
+# ============================================================
+
+DEFAULT_PRIORITY: str = "P2"
+DEFAULT_HOW_TASK_TYPE: str = "Implementation"
+DEFAULT_UNDEFINED_VALUE: str = "待定義"
+
+# ============================================================
 # Handoff Direction 常數
 # ============================================================
 
@@ -161,6 +169,28 @@ NON_CHAIN_DIRECTION_TYPES: tuple = ("context-refresh",)
 # ============================================================
 
 TDD_PHASES: List[str] = ["phase1", "phase2", "phase3a", "phase3b", "phase4"]
+
+# TDD Phase 顯示名稱映射（包含代理人名稱）
+#
+# ⚠️ 同步契約：此映射與 ticket_system/lib/tdd_sequence.py 中的 PHASE_LABELS 有同步關係
+#   - PHASE_LABELS 的鍵集必須是 TDD_PHASE_DISPLAY 的子集
+#   - 當修改此映射時，必須檢查 PHASE_LABELS 是否需要同步：
+#     1. 若新增/刪除 phase1-phase4 的條目，必須同時更新 PHASE_LABELS
+#     2. 若新增 phase0/phase4a/phase4b/phase4c，可不更新 PHASE_LABELS（非核心 TDD 序列）
+#   - 修改 phase1-phase4 的顯示文字時，PHASE_LABELS 中的對應值可保持簡潔
+#   - 詳見 .claude/rules/core/decision-tree.md（第五層 TDD 階段判斷）和 tdd_sequence.py
+#
+TDD_PHASE_DISPLAY: Dict[str, str] = {
+    "phase0": "Phase 0 SA 前置審查",
+    "phase1": "Phase 1 - 功能設計 (lavender)",
+    "phase2": "Phase 2 - 測試設計 (sage)",
+    "phase3a": "Phase 3a - 策略規劃 (pepper)",
+    "phase3b": "Phase 3b - 實作執行 (parsley)",
+    "phase4": "Phase 4 - 重構優化 (cinnamon)",
+    "phase4a": "Phase 4a 多視角分析",
+    "phase4b": "Phase 4b 重構執行",
+    "phase4c": "Phase 4c 多視角再審核",
+}
 
 # ============================================================
 # 必填欄位列表
@@ -180,6 +210,95 @@ HANDOFF_REQUIRED_FIELDS: List[str] = REQUIRED_FIELDS + [
     "acceptance",
     "dependencies",
 ]
+
+# ============================================================
+# 驗收條件含糊詞彙清單
+# ============================================================
+
+# 驗收條件中的模糊詞彙（需要配合量化指標）
+VAGUE_ACCEPTANCE_WORDS: List[str] = [
+    "完成", "通過", "合理", "適當", "正常", "足夠",
+    "良好", "改善", "優化", "確保", "驗證",
+    "妥善", "恰當", "滿足", "實現", "達成",
+]
+
+# ============================================================
+# 認知負擔評估閾值
+# ============================================================
+
+# 修改檔案數閾值（超過此數則警告）
+COGNITIVE_LOAD_FILE_THRESHOLD: int = 5
+
+# ============================================================
+# SRP（單一職責原則）偵測常數
+# ============================================================
+
+# what 欄位多目標偵測：並列連接詞清單
+# 偵測到這些連接詞時，疑似 Ticket 包含多個獨立目標
+SRP_WHAT_CONJUNCTIONS: List[str] = [
+    "和",
+    "與",
+    "及",
+    "並",
+    "同時",
+]
+
+# 驗收條件跨模組偵測：不同模組數量閾值
+# 超過此閾值時，疑似驗收條件指向不相關模組
+SRP_ACCEPTANCE_MODULE_THRESHOLD: int = 2
+
+# ============================================================
+# 重複偵測常數
+# ============================================================
+
+# Jaccard 相似度閾值：用於判斷兩個 Ticket 標題/描述是否相似
+# 0.3 表示 30% 的詞彙重疊即視為相似，觸發警告提示
+# Phase 4 可根據實際誤報率調整此值
+DUPLICATE_DETECTION_THRESHOLD: float = 0.3
+
+# 重複偵測時間窗口（天數）：只掃描 N 天內完成的 completed Ticket
+# 防止大量歷史 Ticket 造成效能衰減和警告泛濫
+DUPLICATE_DETECTION_COMPLETED_WINDOW_DAYS: int = 7
+
+
+# ============================================================
+# Protocol Version 常數（v0.1.2 新增）
+# ============================================================
+
+# 當前協議版本（新 ticket 使用）
+PROTOCOL_VERSION_CURRENT: str = "2.0"
+
+# 舊 ticket 推斷版本（無 protocol_version 欄位時的預設值）
+PROTOCOL_VERSION_DEFAULT: str = "1.0"
+
+# 支援的協議版本清單
+PROTOCOL_VERSIONS_SUPPORTED: List[str] = ["1.0", "2.0"]
+
+# 協議版本格式：Major.Minor（例如 "2.0", "1.0"）
+# 格式說明：
+#   - Major：非負整數，代表主版本號（破壞性改變時遞增）
+#   - Minor：非負整數，代表次版本號（向後相容新增時遞增）
+#   - 分隔符：英文句號 "."
+PROTOCOL_VERSION_PATTERN: str = r"^\d+\.\d+$"
+
+# 預編譯協議版本正則表達式，避免重複編譯
+PROTOCOL_VERSION_RE = re.compile(PROTOCOL_VERSION_PATTERN)
+
+# 協議版本遷移鏈（支援未來擴展）
+# 定義版本之間的遷移規則和相容性
+PROTOCOL_VERSION_MIGRATIONS: Dict[str, Dict] = {
+    "1.0": {
+        "target": "2.0",
+        "handler": "migrate_v1_to_v2",
+        "breaking_changes": False,  # v1→v2 向後相容
+    },
+    # 未來可擴展：
+    # "2.0": {
+    #     "target": "3.0",
+    #     "handler": "migrate_v2_to_v3",
+    #     "breaking_changes": True,
+    # }
+}
 
 
 if __name__ == "__main__":

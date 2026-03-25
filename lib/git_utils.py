@@ -9,6 +9,9 @@ Git 操作共用工具
 - run_git_command: 執行 git 命令
 - get_current_branch: 獲取當前分支
 - get_project_root: 獲取專案根目錄
+- FileStatus: 結構化檔案狀態資訊（高階 API）
+- get_uncommitted_files: 獲取未提交變更的結構化資訊（高階 API）
+- _get_uncommitted_status_lines: 獲取未提交變更狀態行（內部 API）
 - get_worktree_list: 獲取 worktree 列表
 - is_protected_branch: 檢查是否為保護分支
 - is_allowed_branch: 檢查是否為允許編輯的分支
@@ -16,8 +19,10 @@ Git 操作共用工具
 
 import fnmatch
 import os
+import sys
 import subprocess
 from typing import Optional
+from dataclasses import dataclass
 
 
 # ===== 分支配置常數 =====
@@ -26,6 +31,9 @@ from typing import Optional
 WORKTREE_PREFIX_LEN = len("worktree ")  # 9
 BRANCH_PREFIX_LEN = len("branch ")      # 7
 REFS_HEADS_PREFIX = "refs/heads/"
+
+# Git status --porcelain 格式常數
+GIT_STATUS_CODE_LEN = 2  # porcelain 格式的狀態碼長度
 
 # 保護分支列表（支援 glob 模式）
 PROTECTED_BRANCHES = [
@@ -48,6 +56,58 @@ ALLOWED_BRANCHES = [
     "refactor/*",
     "test/*",
 ]
+
+
+@dataclass
+class FileStatus:
+    """
+    結構化的檔案狀態資訊
+
+    git status --porcelain 格式為：XY file_path
+    - X: staged 狀態（M=modified, A=added, D=deleted, R=renamed, C=copied, ?=untracked）
+    - Y: unstaged 狀態（同上）
+    - file_path: 檔案路徑
+
+    示例：
+    - " M file.txt"：unstaged 修改
+    - "A  file.py"：staged 新增
+    - "?? untracked.txt"：未追蹤檔案
+    - "RM old.txt -> new.txt"：renamed
+
+    特殊限制：
+    - Renamed/Copied 檔案：file_path 包含 " -> " 分隔符，格式為 "old_name -> new_name"
+    """
+    status: str  # 完整的 XY 狀態碼（如 " M"、"A "、"??"）
+    file_path: str  # 檔案路徑
+
+    @property
+    def is_staged(self) -> bool:
+        """檢查是否有 staged 變更（X 位置非空格和 ?）"""
+        return self.status[0] not in (' ', '?')
+
+    @property
+    def is_modified(self) -> bool:
+        """檢查是否為修改狀態（staged 或 unstaged 任一位置包含 'M'）"""
+        return 'M' in self.status
+
+    @property
+    def is_added(self) -> bool:
+        """檢查是否為新增狀態（staged 或 unstaged 任一位置包含 'A'）"""
+        return 'A' in self.status
+
+    @property
+    def is_deleted(self) -> bool:
+        """檢查是否為刪除狀態（staged 或 unstaged 任一位置包含 'D'）"""
+        return 'D' in self.status
+
+    @property
+    def is_untracked(self) -> bool:
+        """檢查是否為未追蹤"""
+        return self.status == '??'
+
+    def __str__(self) -> str:
+        """格式化為可讀的字串"""
+        return f"{self.status} {self.file_path}"
 
 
 def run_git_command(
@@ -87,7 +147,9 @@ def run_git_command(
     except FileNotFoundError:
         return False, "git command not found"
     except Exception as e:
-        return False, str(e)
+        error_msg = str(e)
+        print(f"[Error] git command failed: {error_msg}", file=sys.stderr)
+        return False, error_msg
 
 
 def get_current_branch() -> Optional[str]:
@@ -119,6 +181,77 @@ def get_project_root() -> str:
     """
     success, output = run_git_command(["rev-parse", "--show-toplevel"])
     return output if success else os.getcwd()
+
+
+def get_uncommitted_files() -> list[FileStatus]:
+    """
+    獲取未提交變更的結構化資訊（高階 API）
+
+    內部呼叫 git status --porcelain，將結果解析為 FileStatus 物件列表。
+    每個 FileStatus 物件包含狀態碼和檔案路徑的結構化資訊。
+
+    Returns:
+        list[FileStatus]: 未提交變更的 FileStatus 物件列表，
+                         如果沒有變更或命令失敗則返回空列表
+
+    Example:
+        files = get_uncommitted_files()
+        for file in files:
+            if file.is_modified:
+                print(f"Modified: {file.file_path}")
+            elif file.is_untracked:
+                print(f"Untracked: {file.file_path}")
+
+        # 統計未提交檔案
+        total = len(files)
+        untracked = sum(1 for f in files if f.is_untracked)
+        print(f"Total changes: {total}, Untracked: {untracked}")
+    """
+    status_lines = _get_uncommitted_status_lines()
+
+    if not status_lines:
+        return []
+
+    files = []
+    for line in status_lines:
+        # porcelain 格式：XY file_path
+        # 狀態碼長度為 2（X 和 Y），後跟空格，然後是檔案路徑
+        if len(line) >= GIT_STATUS_CODE_LEN + 1:
+            status = line[:GIT_STATUS_CODE_LEN]
+            # 跳過狀態碼和分隔符（空格）
+            file_path = line[GIT_STATUS_CODE_LEN + 1:]
+            files.append(FileStatus(status=status, file_path=file_path))
+
+    return files
+
+
+def _get_uncommitted_status_lines() -> list[str]:
+    """
+    獲取未提交變更的狀態行（內部低階 API，已棄用）
+
+    執行 git status --porcelain，返回所有未提交變更的狀態行。
+    每行格式為 git porcelain 格式（如 " M file.txt"、"?? new.txt"）。
+    空輸出或 git 命令失敗時返回空列表。
+
+    注意：此函式為內部實作，建議改用 get_uncommitted_files() 高階 API。
+
+    Returns:
+        list[str]: 未提交變更的狀態行列表，如果沒有變更或命令失敗則返回空列表
+
+    Example:
+        status_lines = _get_uncommitted_status_lines()
+        if status_lines:
+            print(f"有 {len(status_lines)} 個未提交變更")
+        for line in status_lines:
+            print(f"  {line}")
+    """
+    success, output = run_git_command(["status", "--porcelain"])
+
+    if not success or not output:
+        return []
+
+    lines = output.split("\n")
+    return [line for line in lines if line.strip()]
 
 
 def get_worktree_list() -> list[dict]:
@@ -202,6 +335,52 @@ def is_allowed_branch(branch: str) -> bool:
         if fnmatch.fnmatch(branch, pattern):
             return True
     return False
+
+
+def is_in_worktree() -> bool:
+    """
+    檢查當前工作目錄是否在 git worktree（非主倉庫）中
+
+    在 worktree 中，git rev-parse --git-dir 返回的路徑會是
+    /path/to/.git/worktrees/name，而 --git-common-dir 返回 /path/to/.git
+    兩者不同即表示在 worktree 中。
+
+    在主倉庫中，兩者都返回 /path/to/.git（相同）
+
+    Returns:
+        bool: True 表示在 worktree 中，False 表示在主倉庫或非 git 環境
+
+    Example:
+        if is_in_worktree():
+            print("Currently in a feature worktree")
+        else:
+            print("Currently in the main repository")
+    """
+    try:
+        # 取得主 .git 目錄路徑
+        success_common, git_common_dir = run_git_command(["rev-parse", "--git-common-dir"])
+        if not success_common:
+            return False
+
+        # 取得當前 .git 目錄路徑
+        success_dir, git_dir = run_git_command(["rev-parse", "--git-dir"])
+        if not success_dir:
+            return False
+
+        # 正規化路徑以便正確比較（移除相對路徑等）
+        git_common_dir = os.path.abspath(git_common_dir)
+        git_dir = os.path.abspath(git_dir)
+
+        # 比較兩者
+        # 在 worktree 中：不同（git_dir 包含 /worktrees/ 路徑）
+        # 在主倉庫中：相同
+        return git_common_dir != git_dir
+
+    except Exception as e:
+        # 錯誤時保守預設為主倉庫
+        print(f"[Warning] is_in_worktree check failed: {e}", file=sys.stderr)
+        return False
+
 
 
 def generate_worktree_info() -> str:

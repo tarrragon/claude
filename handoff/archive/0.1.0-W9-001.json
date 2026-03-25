@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W9-001",
+  "direction": "to-sibling:0.1.0-W9-002",
+  "timestamp": "2026-03-07T12:23:54.498821",
+  "from_status": "completed",
+  "title": "修復 _execute_list() 遇到 HandoffDirectionUnknownError 中斷整個 --list 的設計缺陷",
+  "what": "修復 _execute_list() 遇到 HandoffDirectionUnknownError 中斷整個 --list 的設計缺陷",
+  "chain": {},
+  "resumed_at": "2026-03-07T12:26:01.558527"
+}

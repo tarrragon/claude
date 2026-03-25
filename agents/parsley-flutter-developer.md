@@ -481,6 +481,25 @@ mcp__dart__dart_format
 - [ ] **需求註解**：業務邏輯函式包含需求編號
 - [ ] **測試通過率**：100% 測試通過
 
+### 產出物路徑規範（強制）
+
+所有非程式碼產出物（執行報告、測試報告）**必須**寫入 Ticket 目錄，禁止寫入 `docs/work-logs/` 根目錄或其他位置。
+
+| 項目 | 規範 |
+|------|------|
+| **存放目錄** | `docs/work-logs/v{version}/tickets/` |
+| **命名格式** | `{ticket-id}-phase3b-execution-report.md` 或 `{ticket-id}-phase3b-test-report.md` |
+| **禁止路徑** | `docs/work-logs/vX.X.X-execution-report.md`（根目錄） |
+
+**範例**：
+
+```
+正確：docs/work-logs/v0.1.0/tickets/0.1.0-W44-003-phase3b-execution-report.md
+錯誤：docs/work-logs/v0.1.0-execution-report.md
+```
+
+> 命名後綴規範詳見：.claude/rules/core/ticket-id-conventions.md（第 2.1 節 TDD Phase 後綴）
+
 ### Step 5: 交接 Phase 4 重構代理人
 
 **Phase 3b → Phase 4 交接標準**：

@@ -36,10 +36,11 @@ def run_project_init_check(project_root: Path, logger) -> tuple[bool, str]:
     """
     try:
         result = subprocess.run(
-            ["project-init", "check", "--project-root", str(project_root)],
+            ["project-init", "check"],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
+            cwd=str(project_root)
         )
 
         output = result.stdout.strip() if result.stdout else ""
@@ -58,7 +59,7 @@ def run_project_init_check(project_root: Path, logger) -> tuple[bool, str]:
         logger.debug("project-init check 執行超時（30 秒）")
         return False, ""
     except Exception as e:
-        logger.debug(f"執行 project-init check 失敗: {e}")
+        logger.warning(f"執行 project-init check 失敗: {e}")
         return False, ""
 
 

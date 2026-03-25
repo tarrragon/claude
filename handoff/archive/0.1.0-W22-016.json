@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W22-016",
+  "direction": "to-sibling:0.1.0-W22-021",
+  "timestamp": "2026-03-09T03:01:21.733235",
+  "from_status": "completed",
+  "title": "分析 AskUserQuestion 場景完整性評估：分析 Ticket 重新開啟確認、並行衝突決策、多任務優先級確認、技術債排程確認、Version Release 失敗確認等 5 個真實場景是否需要納入（場景 #18-22）",
+  "what": "分析 AskUserQuestion 場景完整性評估：分析 Ticket 重新開啟確認、並行衝突決策、多任務優先級確認、技術債排程確認、Version Release 失敗確認等 5 個真實場景是否需要納入（場景 #18-22）",
+  "chain": {},
+  "resumed_at": "2026-03-09T03:01:52.849394"
+}

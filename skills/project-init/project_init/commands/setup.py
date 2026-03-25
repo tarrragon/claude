@@ -14,6 +14,7 @@ from project_init.lib import (
     SetupMessages,
     check_installed_version,
     compare_versions,
+    resolve_source_module_dir,
     detect_os,
     detect_python,
     detect_ripgrep,
@@ -285,8 +286,11 @@ def _identify_package_problems(project_root: Path) -> dict[str, str | None]:
         if installed is None:
             packages_dict[package.name] = "install"
         else:
-            compare_result = compare_versions(
+            source_module = resolve_source_module_dir(
                 package.source_path, installed.installed_path
+            )
+            compare_result = compare_versions(
+                source_module, installed.installed_path
             )
             action = "update" if not compare_result.is_up_to_date else None
             packages_dict[package.name] = action

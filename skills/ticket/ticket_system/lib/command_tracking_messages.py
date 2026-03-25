@@ -235,6 +235,53 @@ class TrackAuditMessages:
 
 
 # ============================================================================
+# AuditVersionMessages - audit_version.py 相關訊息
+# ============================================================================
+
+class AuditVersionMessages:
+    """audit_version.py 相關訊息常數"""
+
+    # 報告標題
+    AUDIT_REPORT_TITLE = "[版本歸屬審計報告]"
+
+    # 掃描進度訊息
+    SCANNING_TICKETS = "[掃描中] 掃描所有 Ticket 版本資訊..."
+
+    # 過濾訊息
+    FILTERED_VERSION = "[篩選] 從 {total} 個 Ticket 中篩選版本 v{version}：{filtered} 個"
+
+    # 報告統計標題
+    SECTION_MISMATCHES = "[版本不一致] 發現以下 Ticket 版本號與所在目錄不一致："
+    SECTION_DUPLICATES = "[重複 Ticket] 發現以下 Ticket 出現在多個版本目錄："
+
+    # 不一致項目格式
+    MISMATCH_ITEM = "[不一致] {ticket_id}"
+    MISMATCH_ID_VERSION = "  ID 版本: {version}"
+    MISMATCH_DIR_VERSION = "  目錄版本: {version}（source of truth）"
+    MISMATCH_FRONTMATTER_VERSION = "  Frontmatter 版本: {version}"
+
+    # 修復建議
+    FIX_SUGGESTION_MOVE = "  建議: 將檔案從 v{old_version} 搬移到 v{new_version}"
+    FIX_SUGGESTION_FRONTMATTER = "  建議: 修正 frontmatter 中的 version 欄位為 {version}"
+
+    # 重複項目格式
+    DUPLICATE_ITEM = "[重複] {ticket_id}"
+    DUPLICATE_SUGGESTION = "  建議: 保留版本 v{recommended_version} 中的檔案，刪除其他版本的副本"
+
+    # 審計結果
+    AUDIT_PASSED = "[通過] 審計成功，{total} 個 Ticket 版本一致"
+    AUDIT_FOUND_ISSUES = "[發現問題] 共 {issues} 個問題：{mismatches} 個不一致，{duplicates} 個重複"
+
+    # 修復操作
+    FIXING_ISSUES = "[修復中] 開始修復發現的問題..."
+    FIX_COMPLETED = "[完成] 修復操作已完成"
+
+    # 結論
+    CONCLUSION_PASS = "[結論] 審計通過，所有 Ticket 版本歸屬正確"
+    CONCLUSION_FAIL = "[結論] 審計失敗，發現 {issues} 個問題，請執行 --fix 進行修復"
+
+
+# ============================================================================
 # TrackRelationsMessages - track_relations.py 相關訊息
 # ============================================================================
 
@@ -599,6 +646,7 @@ __all__ = [
     "TrackBatchMessages",
     "TrackAcceptanceMessages",
     "TrackAuditMessages",
+    "AuditVersionMessages",
     "TrackRelationsMessages",
     "TrackMessages",
     "BulkCreateMessages",

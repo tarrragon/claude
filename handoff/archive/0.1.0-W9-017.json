@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W9-017",
+  "direction": "to-sibling:0.1.0-W9-014",
+  "timestamp": "2026-03-07T14:57:53.580135",
+  "from_status": "completed",
+  "title": "搬移 extract_wave_from_ticket_id 至 ticket_validator.py（W9-009 加入 ticket_ops.py，同樣違反 CQ-006 純工具函式層級規則，W9-010 執行中發現）",
+  "what": "搬移 extract_wave_from_ticket_id 至 ticket_validator.py（W9-009 加入 ticket_ops.py，同樣違反 CQ-006 純工具函式層級規則，W9-010 執行中發現）",
+  "chain": {},
+  "resumed_at": "2026-03-07T15:03:26.585239"
+}

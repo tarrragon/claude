@@ -11,6 +11,7 @@ Hook 基礎設施層模組
 """
 
 import os
+import subprocess
 from pathlib import Path
 
 # ============================================================================
@@ -23,6 +24,9 @@ ENV_PROJECT_DIR = "CLAUDE_PROJECT_DIR"
 # 搜尋深度（從 cwd 向上搜尋 CLAUDE.md 的最大層數）
 CLAUDE_MD_SEARCH_DEPTH = 5
 
+# git rev-parse 執行超時時限（秒）
+GIT_TOPLEVEL_TIMEOUT = 5
+
 
 # ============================================================================
 # 內部輔助函式
@@ -33,8 +37,9 @@ def _find_project_root() -> Path:
 
     優先順序：
     1. 環境變數 CLAUDE_PROJECT_DIR
-    2. 從 cwd 向上搜尋 CLAUDE.md（最多 5 層）
-    3. os.getcwd() fallback（永不失敗）
+    2. git rev-parse --show-toplevel（git-native，支援 worktree）
+    3. 從 cwd 向上搜尋 CLAUDE.md（最多 5 層）
+    4. Path.cwd() fallback（永不失敗）
 
     Returns:
         Path: 專案根目錄路徑
@@ -44,7 +49,21 @@ def _find_project_root() -> Path:
     if env_dir:
         return Path(env_dir)
 
-    # 優先級 2：搜尋 CLAUDE.md（從 cwd 向上）
+    # 優先級 2：git rev-parse --show-toplevel（worktree 修復的關鍵）
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=GIT_TOPLEVEL_TIMEOUT
+        )
+        if result.returncode == 0:
+            return Path(result.stdout.strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        # git 命令不存在或超時，進入 fallback
+        pass
+
+    # 優先級 3：搜尋 CLAUDE.md（從 cwd 向上）
     current_dir = Path.cwd()
     for _ in range(CLAUDE_MD_SEARCH_DEPTH):
         if (current_dir / "CLAUDE.md").exists():
@@ -57,7 +76,7 @@ def _find_project_root() -> Path:
 
         current_dir = parent
 
-    # 優先級 3：Fallback 到 cwd
+    # 優先級 4：Fallback 到 cwd
     return Path.cwd()
 
 
@@ -70,10 +89,15 @@ def get_project_root() -> Path:
 
     優先順序：
     1. 環境變數 CLAUDE_PROJECT_DIR
-    2. 從 cwd 向上搜尋 CLAUDE.md（最多 5 層）
-    3. os.getcwd() fallback（永不失敗）
+    2. git rev-parse --show-toplevel（git-native，支援 worktree）
+    3. 從 cwd 向上搜尋 CLAUDE.md（最多 5 層）
+    4. Path.cwd() fallback（永不失敗）
 
     Returns:
         Path: 專案根目錄路徑
+
+    Note:
+        此函式不拋出例外。所有失敗情況均有 fallback。
+        worktree 環境下 git rev-parse 策略確保路徑正確。
     """
     return _find_project_root()

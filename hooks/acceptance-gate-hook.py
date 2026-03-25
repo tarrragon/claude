@@ -86,6 +86,7 @@ class TicketFrontmatter(TypedDict, total=False):
     type: str
     status: str
     children: str
+    spawned_tickets: str
     created: str
     started_at: str
     priority: str
@@ -342,6 +343,85 @@ def is_doc_type(ticket_type: Optional[str]) -> bool:
     return ticket_type and ticket_type.upper() == "DOC"
 
 
+def is_ana_type(ticket_type: Optional[str]) -> bool:
+    """
+    判斷是否為 ANA 類型 Ticket
+
+    Args:
+        ticket_type: Ticket 類型
+
+    Returns:
+        bool - 是否為 ANA 類型
+    """
+    return ticket_type and ticket_type.upper() == "ANA"
+
+
+def extract_spawned_tickets_from_frontmatter(frontmatter: TicketFrontmatter, logger) -> List[str]:
+    """
+    從 frontmatter 提取 spawned_tickets 欄位
+
+    Args:
+        frontmatter: Ticket frontmatter 結構
+        logger: 日誌物件
+
+    Returns:
+        list - 後續 Ticket ID 清單
+    """
+    spawned_str = frontmatter.get("spawned_tickets", "").strip()
+
+    if not spawned_str:
+        logger.debug("Ticket 無 spawned_tickets 欄位")
+        return []
+
+    # 解析 YAML 清單格式 (e.g., "- 0.31.0-W4-036\n- 0.31.0-W4-037")
+    spawned = []
+    for line in spawned_str.split("\n"):
+        line = line.strip()
+        if line.startswith("-"):
+            ticket_id = line[1:].strip()
+            if ticket_id:
+                spawned.append(ticket_id)
+
+    logger.info(f"提取 {len(spawned)} 個後續 Ticket: {spawned}")
+    return spawned
+
+
+def check_ana_has_spawned_tickets(frontmatter: TicketFrontmatter, logger) -> Tuple[bool, Optional[str]]:
+    """
+    檢查 ANA Ticket 是否有後續 Ticket（children 或 spawned_tickets）
+
+    ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於轉化分析結論為修復或防護措施。
+    此檢查驗證 ANA Ticket 是否已將分析結論轉化為可追蹤的子任務或獨立 Ticket。
+
+    Args:
+        frontmatter: Ticket frontmatter 結構
+        logger: 日誌物件
+
+    Returns:
+        tuple - (should_warn, warning_message)
+            - should_warn: 是否應輸出警告
+            - warning_message: 警告訊息或 None（不阻擋，僅警告）
+    """
+    children = extract_children_from_frontmatter(frontmatter, logger)
+    spawned = extract_spawned_tickets_from_frontmatter(frontmatter, logger)
+
+    if not children and not spawned:
+        # ANA Ticket 缺少後續 Ticket → 警告（雙通道輸出）
+        title = frontmatter.get("title", "未知")
+        ticket_id = frontmatter.get("id", "未知")
+        warning_msg = format_message(
+            GateMessages.ANA_MISSING_SPAWNED_TICKETS_WARNING,
+            ticket_id=ticket_id,
+            title=title
+        )
+        logger.warning(f"ANA Ticket {ticket_id} 缺少後續 Ticket - 輸出警告")
+        sys.stderr.write(f"WARNING: ANA Ticket {ticket_id} 缺少後續 Ticket（children 或 spawned_tickets）\n")
+        return True, warning_msg
+
+    logger.info(f"ANA Ticket 有後續 Ticket: children={len(children)}, spawned={len(spawned)}")
+    return False, None
+
+
 # ============================================================================
 # Sibling Ticket 檢查（場景 #9）
 # ============================================================================
@@ -579,9 +659,10 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
     """
     檢查 Ticket 的驗收狀態（主協調函式）
 
-    此函式協調四個子檢查函式：
+    此函式協調五個子檢查函式：
     1. 子任務完成度檢查
     2. 驗收記錄驗證
+    2.5. ANA Ticket 後續 Ticket 檢查（新增）
     3. Error-pattern 新增檢查
     4. Sibling tickets 完成度檢查（場景 #9）
 
@@ -622,6 +703,13 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
         # 問題 1 修復：不提前 return，繼續執行步驟 3 和 4，將 warning_msg 帶入最終結果
         if not warning_msg:
             logger.info(f"Ticket {ticket_id} 驗收檢查通過")
+
+        # 步驟 2.5：檢查 ANA Ticket 是否有後續 Ticket（新增）
+        # 如果當前沒有警告訊息，檢查 ANA 類型
+        if not warning_msg and is_ana_type(frontmatter.get("type")):
+            ana_should_warn, ana_warning_msg = check_ana_has_spawned_tickets(frontmatter, logger)
+            if ana_should_warn:
+                warning_msg = ana_warning_msg
 
         # 步驟 3：檢查 error-pattern 新增
         has_new_error_patterns = False

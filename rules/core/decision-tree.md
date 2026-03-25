@@ -6,6 +6,8 @@
 >
 > **管理哲學**：主管的價值不在於解決問題的速度，而在於讓團隊的人力發揮到極致。
 > 詳見：.claude/skills/manager/SKILL.md
+>
+> **適用對象**：本文件的行為限制（禁止直接查詢、禁止直接修復等）僅適用於 rosemary-project-manager（主線程）。被派發的 subagent 開發代理人應依據自身職責定義執行任務，不受主線程行為限制。
 
 ---
 
@@ -24,7 +26,18 @@
     v
 [第負一層] 並行化評估（最高優先）
     |
-    +-- 可並行拆分? ─是→ 複雜度適合並行?（詳見 parallel-dispatch.md 複雜度評估章節）
+    v
+[強制] 派發前複雜度關卡（Dispatch Complexity Gate）
+    → 評估認知負擔指數（變數數 + 分支數 + 巢狀深度 + 依賴數）
+    |
+    +-- 指數 <= 10 → 繼續（進入並行化判斷）
+    |
+    +-- 指數 > 10 → [強制] 先拆分子任務再派發（AskUserQuestion #6）
+    |                禁止整包派發給單一代理人
+    |                → 拆分後每個子任務重新通過本關卡
+    |
+    v
+可並行拆分? ─是→ 複雜度適合並行?（詳見 parallel-dispatch.md 複雜度評估章節）
     |                      |
     |                      +─ 否 → [序列派發]
     |                      |
@@ -77,6 +90,38 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 > **核心原則**：決策第一步不是「這是什麼類型的任務」，而是「這個工作可以讓多少人去做？」
 
+### 派發前複雜度關卡（Dispatch Complexity Gate，強制）
+
+> **來源**：0.1.1-W15-004 — W15-001 派發時，PM 將認知負擔 > 10 的整包任務直接派發給單一代理人，未先拆分。
+
+**任何派發（單一或並行）前，PM 必須先評估目標任務的認知負擔指數。**
+
+| 認知負擔指數 | 判定 | 行動 |
+|-------------|------|------|
+| <= 10 | 通過 | 繼續進入並行化判斷 |
+| > 10 | 阻塞 | 先拆分子任務再派發（AskUserQuestion #6） |
+
+**評估方式**：`認知負擔指數 = 變數數 + 分支數 + 巢狀深度 + 依賴數`（詳見 cognitive-load.md）
+
+**快速判斷指標**（任一超標即視為 > 10）：
+
+| 指標 | 閾值 | 超標行動 |
+|------|------|---------|
+| 修改檔案數 | > 5 | 必須拆分 |
+| 跨架構層級數 | > 2 | 必須拆分 |
+| 依賴模組數 | > 3 | 必須拆分 |
+
+**禁止行為**：
+
+| 禁止 | 說明 |
+|------|------|
+| 整包派發認知負擔 > 10 的任務給單一代理人 | 必須先拆分為子任務 |
+| 跳過評估直接派發 | 每次派發前都必須通過本關卡 |
+
+**拆分後重新評估**：拆分產生的每個子任務必須重新通過本關卡（指數 <= 10），確保遞迴拆分至可管理粒度。
+
+### 並行化判斷
+
 接收到任務後，主線程必須先問自己：
 1. **這個任務可以拆成幾個獨立部分？**
 2. **拆分後的部分有依賴關係嗎？**
@@ -97,25 +142,9 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 ### 派發模式選擇規則
 
-派發代理人時，**預設使用背景模式**（`run_in_background: true`），釋放主線程靈活性。
+派發代理人時，**預設使用背景模式**（`run_in_background: true`）。完整的派發模式表格、例外場景和背景派發後跟蹤規則：
 
-| 派發類型 | 模式 | 原因 |
-|---------|------|------|
-| Task subagent（開發/分析/重構） | 背景 | PM 無需等待，準備下一步決策 |
-| Agent Teams | 背景 | 內部協作，PM 釋放靈活性 |
-| TDD Phase 代理人（Phase 1-4） | 背景 | 完整週期較長，產出物寫入 Ticket |
-| 建立後審核（acceptance-auditor + SA） | 背景 | PM 可同時準備其他 Ticket |
-
-**例外（前景執行）**：
-
-| 場景 | 原因 |
-|------|------|
-| Skill/CLI 查詢（`/ticket track list` 等） | PM 需要結果做下一步決策 |
-| 即時驗證（格式檢查、語法驗證） | PM 需要立即反饋 |
-
-**背景派發後跟蹤**：代理人完成時 TaskOutput 自動通知 PM。PM 透過 `/ticket track` 查詢結果，不需要等待。
-
-> 場景表和詳細規則：.claude/rules/guides/parallel-dispatch.md
+> 詳見：.claude/rules/guides/parallel-dispatch.md（派發模式：預設背景章節）
 > AskUserQuestion 強制使用規則：.claude/rules/core/askuserquestion-rules.md
 
 ---
@@ -172,6 +201,20 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 > Hook 派發原則：「Hook 該怎麼運作」→ basil；「Hook 程式碼該怎麼寫」→ thyme
 > IMP-003 防護：.claude/error-patterns/implementation/IMP-003-refactoring-scope-regression.md
+
+### 代理人可編輯路徑對照表（Source of Truth）
+
+> **派發即授權**：PM 派發任務時已驗證路徑權限。subagent 被派發後應放心執行，無需預先評估風險。被阻擋時上報 PM 即可。
+>
+> **唯一來源**：本表是代理人路徑權限的唯一定義。其他檔案（skip-gate.md、agent 定義等）引用本表，不自行維護路徑清單。
+
+| 代理人 | 可編輯路徑（glob） | 說明 |
+|--------|-------------------|------|
+| thyme-python-developer | `.claude/hooks/*.py`、`.claude/skills/**/*.py`、`.claude/lib/*.py` | Hook 優化/修正、Skill 程式碼、共用程式庫 |
+| parsley-flutter-developer | `ui/lib/**/*.dart`、`ui/test/**/*.dart`、`ui/pubspec.yaml` | Flutter 應用程式碼和測試 |
+| basil-hook-architect | `.claude/hooks/*.py`、`.claude/lib/*.py` | Hook 新增/設計、共用程式庫設計 |
+| fennel-go-developer | `server/**/*.go` | Go 後端程式碼 |
+| sage-test-architect | `ui/test/**/*.dart` | 測試設計（不修改實作碼） |
 
 ---
 
@@ -262,6 +305,8 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 > TDD 完整流程：.claude/rules/flows/tdd-flow.md
 
+> **Agent Registry 關係**（v0.1.2 規劃）：上方 TDD 階段代理人對應表是**決策規則**（本文件是決策引擎）。未來 Agent Registry（`.claude/agents/registry.yaml`）將作為**能力資料層**，提供機器可讀的代理人能力查詢和派發驗證，但不取代本文件的決策邏輯。架構分工：decision-tree（判斷需要什麼能力）→ registry（查詢誰有這個能力）→ Hook（驗證選定的 Agent 符合）。詳見：docs/work-logs/v0.1.1/tickets/0.1.1-W14-001-analysis.md（附錄：已確認設計決策）
+
 ---
 
 ## 第六層：事件回應流程
@@ -285,11 +330,28 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 ## 第七層：完成判斷流程
 
+**ANA Ticket 結論轉化檢查（強制）**：ANA 類型 Ticket 完成前，必須確認分析結論已轉化為後續 Ticket。
+
+> **來源**：PC-017 — ANA Ticket 完成時分析結論未轉化為後續 Ticket，導致分析成果無法落地。
+
 **驗收方式確認（AskUserQuestion）**：complete 前必須確認驗收方式（標準/簡化/先完成後補）。
 
 **主動勾選驗收條件（強制）**：確認驗收方式後、執行 complete 前，PM **必須**主動勾選驗收條件，禁止依賴 CLI 擋回才補勾。
 
 ```
+任務執行完成
+    |
+    v
+Ticket type == ANA?
+    |
+    +-- 是 → [強制] 確認分析結論已轉化為 Ticket
+    |         → children 或 spawned_tickets 非空?
+    |           +-- 是 → 繼續標準完成流程
+    |           +-- 否 → 建立修復+防護 Ticket 後再繼續
+    |
+    +-- 否 → 繼續標準完成流程
+    |
+    v
 Step 1: 確認驗收方式（AskUserQuestion #1）
     |
     v
@@ -301,6 +363,15 @@ Step 3: ticket track check-acceptance <id>
     v
 Step 4: ticket track complete <id>
 ```
+
+**ANA 結論轉化規則**：
+
+| 檢查項 | 說明 |
+|--------|------|
+| children 非空 | ANA Ticket 已建立子任務（修復/防護等） |
+| spawned_tickets 非空 | ANA Ticket 已衍生獨立 Ticket |
+| 任一滿足即通過 | 至少有一個後續 Ticket 追蹤分析結論 |
+| 均為空 | **阻塞完成**：必須先建立後續 Ticket（修復+防護）再繼續 |
 
 **下一步選擇（AskUserQuestion）**：有多個後續 Ticket 可選時，必須讓使用者選擇。
 
@@ -319,6 +390,7 @@ Step 4: ticket track complete <id>
 | 0 建立後 Handoff | 可並行派發? | 是 → 留在 session 並行派發；否 → commit + handoff |
 | 1 變更狀態 | 有未提交變更? | 是 → commit；無 → 跳至 Checkpoint 3 |
 | 1.5 錯誤學習 | commit 成功後 | AskUserQuestion #16 |
+| 1.8 合併回 main | 在開發分支上? | 是 → merge --no-ff → main → 刪除開發分支；否 → 跳過 |
 | 2 情境評估 | [強制查詢] ticket track list | 情境 D/A/B/C（見下方） |
 | 3 後續路由 | 任務類型 | AskUserQuestion #13 |
 | 4 parallel-evaluation | 階段完成後 | AskUserQuestion #14 |
@@ -330,7 +402,7 @@ Step 4: ticket track complete <id>
 | D（優先） | ticket 含 tdd_phase 欄位 | D1: Phase 1/2 → 全自動下一 Phase；D1a: Phase 3a → 3b 拆分評估（見 tdd-flow.md）後派發 3b；D2: Phase 3b → [自動檢查豁免條件] → 符合豁免 → 全自動 4b / 不符合 → #13（選擇 4a 或 4b）；D3a: 4a → 全自動 4b；D3b: 4b 標準 → 全自動 4c / 豁免 → /tech-debt-capture + #13；D3c: 4c → /tech-debt-capture + #13 |
 | A（#11a） | ticket 仍 in_progress | Context 刷新 Handoff |
 | B（#11b） | ticket completed + 同 Wave 有 pending | 任務切換 Handoff |
-| C | ticket completed + 同 Wave 無 pending | [強制] /parallel-evaluation Wave 審查 → C1: 有其他 Wave → #3a；C2: 全完成 → [強制] 版本收尾技術債整理（見 version-progression.md）→ /version-release check + #13 |
+| C | ticket completed + 同 Wave 無 pending | [強制] /parallel-evaluation Wave 審查（必須包含 linux 常駐審查委員，見 parallel-dispatch.md 多視角審查固定三人組）→ C1: 有其他 Wave → #3a；C2: 全完成 → [強制] 版本收尾技術債整理（見 version-progression.md）→ /version-release check + #13 |
 
 **與現有層級的銜接**：第四層（建立完成）→ Checkpoint 0；第五層（Phase 完成）→ Checkpoint 1；第六層（incident 完成）→ Checkpoint 3；第七層（complete）→ Checkpoint 1
 
@@ -380,6 +452,8 @@ Level 5: TDD 階段代理人 + thyme-python-developer
 | Commit 後 | AskUserQuestion #16（錯誤學習）→ #11（Handoff 確認） |
 | 流程省略偵測 | AskUserQuestion #12（省略確認） |
 | **執行中發現技術債/問題/回歸/超範圍需求** | **`/ticket create` 建立 pending Ticket（立即，不詢問，不延後）** |
+| **ANA Ticket 完成前** | **確認 children 或 spawned_tickets 非空（PC-017）** |
+| **派發代理人前** | **派發前複雜度關卡：認知負擔指數 > 10 必須先拆分（W15-004）** |
 
 ---
 
@@ -392,6 +466,8 @@ Level 5: TDD 階段代理人 + thyme-python-developer
 | 跳過 SA 前置審查（新功能） | 停止，派發 SA |
 | 跳過 Phase 4 | 強制執行 Phase 4 |
 | 計畫執行中發現額外需求未立即建立 Ticket | 補建 Ticket，記錄遺漏原因 |
+| ANA Ticket 完成時無後續 Ticket（PC-017） | 阻塞完成，先建立修復+防護 Ticket |
+| **跳過複雜度關卡直接派發** | **停止派發，執行認知負擔評估，超標則先拆分** |
 
 ---
 
@@ -407,5 +483,5 @@ Level 5: TDD 階段代理人 + thyme-python-developer
 
 ---
 
-**Last Updated**: 2026-03-13
-**Version**: 7.26.0 - 第七層新增 complete 前主動勾選驗收條件步驟（0.1.0-W51-001）
+**Last Updated**: 2026-03-23
+**Version**: 7.33.0 - 情境 C Wave 審查補充 linux 常駐審查委員要求（多視角固定三人組）

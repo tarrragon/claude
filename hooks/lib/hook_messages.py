@@ -131,6 +131,20 @@ Ticket: {ticket_id} (type: {ticket_type})
 標題: {title}
 建議在 complete 前派發 acceptance-auditor 執行驗收。"""
 
+    # ANA Ticket 缺少後續 Ticket 警告訊息（acceptance-gate-hook.py）
+    ANA_MISSING_SPAWNED_TICKETS_WARNING = """[WARNING] Acceptance Gate: ANA Ticket 缺少後續 Ticket
+
+Ticket: {ticket_id}
+標題: {title}
+
+ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於轉化分析結論為修復或防護措施。
+
+請確認：
+  1. 分析結論是否已轉化為可追蹤的 Ticket？
+  2. 是否有建立 children 任務（子任務鏈）或 spawned_tickets（並行獨立 Ticket）？
+
+如果分析結論確實不需要後續工作，請在 Ticket 內容中明確說明理由。"""
+
     # 建立後品質驗收未通過錯誤訊息（creation-acceptance-gate-hook.py）
     CREATION_NOT_ACCEPTED_ERROR = """錯誤：Ticket {ticket_id} 尚未通過建立後品質驗收
 

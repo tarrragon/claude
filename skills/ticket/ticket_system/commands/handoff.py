@@ -347,9 +347,11 @@ def _validate_target_ticket_exists(direction: str, version: str) -> None:
 
     context-refresh 和 to-parent 不需要目標驗證。
 
+    支援跨版本 handoff：從 target_id 提取版本號，而非使用來源版本號。
+
     Args:
         direction: handoff direction（如 "to-sibling:0.1.0-W5-002"）
-        version: 版本號（用於載入目標 ticket）
+        version: 版本號（目前未使用，保留用於向後相容）
 
     Raises:
         HandoffTargetNotFoundError: 目標 ticket 不存在時
@@ -367,8 +369,13 @@ def _validate_target_ticket_exists(direction: str, version: str) -> None:
     if not target_id:
         return  # 空 target_id 不需驗證
 
+    # 從 target_id 提取版本號（支援跨版本 handoff）
+    target_version = extract_version_from_ticket_id(target_id)
+    if not target_version:
+        raise HandoffTargetNotFoundError(target_id)
+
     # 驗證目標 ticket 是否存在
-    target_ticket = load_ticket(version, target_id)
+    target_ticket = load_ticket(target_version, target_id)
     if target_ticket is None:
         raise HandoffTargetNotFoundError(target_id)
 

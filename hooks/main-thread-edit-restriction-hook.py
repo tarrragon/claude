@@ -18,6 +18,7 @@ Main Thread Edit Restriction Hook - PreToolUse Hook
 觸發時機: 執行 Edit/Write 工具時
 
 許可的檔案路徑（具體白名單）:
+  ^\.claude/[^/]+\.(json|yaml)$  # .claude/ 根目錄配置檔（settings.json 等）
   ^\.claude/plans/.*              # plan 檔案
   ^\.claude/rules/.*              # 規則檔案
   ^\.claude/methodologies/.*      # 方法論
@@ -65,7 +66,7 @@ from typing import Dict, Any, Optional, Tuple
 # 設置 sys.path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin, is_subagent_environment
 from lib.hook_messages import GateMessages, CoreMessages, format_message
 
 
@@ -81,6 +82,7 @@ EXIT_BLOCK = 2
 # 允許的檔案路徑模式（正則）
 # 注意：Ticket 檔案由 ticket-file-access-guard-hook.py 專責處理
 ALLOWED_PATTERNS = [
+    r"^\.claude/[^/]+\.(json|yaml)$",  # .claude/ 根目錄配置檔（settings.json 等）
     r"^\.claude/plans/.*",              # plan 檔案
     r"^\.claude/rules/.*",              # 規則檔案
     r"^\.claude/methodologies/.*",      # 方法論
@@ -162,6 +164,15 @@ def is_allowed_path(file_path: str, logger) -> bool:
     Returns:
         bool - 是否為允許的路徑
     """
+    # Claude Code 官方路徑（在用戶 home 目錄下，不在專案內）
+    normalized_abs = file_path.replace("\\", "/")
+    if "/.claude/projects/" in normalized_abs and "/memory/" in normalized_abs:
+        logger.debug(f"檔案匹配 Claude Code memory 系統路徑: {normalized_abs}")
+        return True
+    if "/.claude/plans/" in normalized_abs:
+        logger.debug(f"檔案匹配 Claude Code plan 路徑: {normalized_abs}")
+        return True
+
     normalized_path = normalize_path(file_path)
 
     for pattern in ALLOWED_PATTERNS:
@@ -336,6 +347,14 @@ def main() -> int:
         if tool_name not in ["Edit", "Write"]:
             logger.debug(f"跳過: 工具類型 {tool_name} 不在檢查範圍內")
             result = generate_hook_output(True, f"工具 {tool_name} 不在檢查範圍")
+            print(json.dumps(result, ensure_ascii=False))
+            return EXIT_ALLOW
+
+        # Subagent 跳過：此 Hook 僅限制主線程，subagent 開發代理人不受限
+        # 設計依據：skip-gate.md「限制規則僅適用於 rosemary-project-manager（主線程）」
+        if is_subagent_environment(input_data):
+            logger.info(f"subagent 環境（agent_id={input_data.get('agent_id')}），跳過編輯限制")
+            result = generate_hook_output(True, "subagent 不受主線程編輯限制")
             print(json.dumps(result, ensure_ascii=False))
             return EXIT_ALLOW
 

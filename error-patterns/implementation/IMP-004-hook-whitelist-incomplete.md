@@ -75,12 +75,28 @@
 - [ ] 是否有「卡死」風險（攔截導致用戶無法恢復）？
 - [ ] 負面測試（不應攔截的案例）是否足夠？
 
+## 復發記錄
+
+### 復發 1: main-thread-edit-restriction-hook 根目錄配置檔誤攔（2026-03-23）
+
+| 項目 | 說明 |
+|------|------|
+| **來源 Ticket** | 0.1.2-W3-005.1 |
+| **受影響 Hook** | `main-thread-edit-restriction-hook.py` |
+| **症狀** | 編輯 `.claude/settings.json` 被攔截，包括 subagent 也無法編輯 |
+| **根因** | ALLOWED_PATTERNS 只包含 `.claude/` 子目錄模式（如 `^\.claude/hooks/.*`），遺漏了根目錄下的配置檔（settings.json、settings.local.json） |
+| **修復** | 新增 `^\.claude/[^/]+\.(json\|yaml)$` 模式到白名單 |
+| **復發原因** | 與初次相同：白名單設計時只考慮子目錄場景，未涵蓋根目錄配置檔 |
+
+**教訓**：白名單設計應區分「目錄層級」和「檔案層級」，避免只考慮子目錄模式而遺漏根目錄下的合法檔案。
+
 ## 相關檔案
 
-- `.claude/hooks/command-entrance-gate-hook.py` - 受影響的 Hook
+- `.claude/hooks/command-entrance-gate-hook.py` - 初次受影響的 Hook
+- `.claude/hooks/main-thread-edit-restriction-hook.py` - 復發受影響的 Hook
 - `.claude/rules/forbidden/skip-gate.md` - Skip-gate 防護機制定義
 
 ---
 
-**Last Updated**: 2026-02-26
-**Version**: 1.0.0
+**Last Updated**: 2026-03-23
+**Version**: 1.1.0 - 新增復發 1 記錄（main-thread-edit-restriction-hook 根目錄配置檔誤攔）

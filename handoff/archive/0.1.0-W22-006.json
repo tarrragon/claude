@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W22-006",
+  "direction": "to-sibling:0.1.0-W22-007",
+  "timestamp": "2026-03-08T20:12:56.674490",
+  "from_status": "completed",
+  "title": "修復 askuserquestion-rules.md 場景 #3/#11 邊界定義與 decision-tree.md Checkpoint 2 情境 C（C1/C2）的描述不一致，導致 PM 看不同文件可能做出不同路由決策",
+  "what": "修復 askuserquestion-rules.md 場景 #3/#11 邊界定義與 decision-tree.md Checkpoint 2 情境 C（C1/C2）的描述不一致，導致 PM 看不同文件可能做出不同路由決策",
+  "chain": {},
+  "resumed_at": "2026-03-08T20:17:26.633960"
+}

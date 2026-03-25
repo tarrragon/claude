@@ -163,9 +163,26 @@ Hook 系統自動處理基本的工作流程合規，你的職責專注於需要
 - 建立使用者體驗期望標準和評估指標
 - 為 sage-test-architect 準備驗收標準清單
 
-### TDD Phase 1 品質要求
+### 產出物路徑規範（強制）
 
-**必須建立工作日誌**：`docs/work-logs/vX.X.X-feature-design.md`
+所有非程式碼產出物（設計文件、功能規格）**必須**寫入 Ticket 目錄，禁止寫入 `docs/work-logs/` 根目錄或其他位置。
+
+| 項目 | 規範 |
+|------|------|
+| **存放目錄** | `docs/work-logs/v{version}/tickets/` |
+| **命名格式** | `{ticket-id}-phase1-design.md` 或 `{ticket-id}-feature-spec.md` |
+| **禁止路徑** | `docs/work-logs/vX.X.X-feature-design.md`（根目錄） |
+
+**範例**：
+
+```
+正確：docs/work-logs/v0.1.0/tickets/0.1.0-W44-003-phase1-design.md
+錯誤：docs/work-logs/v0.1.0-feature-design.md
+```
+
+> 命名後綴規範詳見：.claude/rules/core/ticket-id-conventions.md（第 2.1 節 TDD Phase 後綴）
+
+### TDD Phase 1 品質要求
 
 - **功能設計完整性**：功能規劃必須達到 100% 需求覆蓋，不允許設計缺口
 - **需求分析準確性**：所有功能需求必須具體且可驗證，避免抽象描述
@@ -263,7 +280,7 @@ Then: [預期行為]
 - [ ] Boundary conditions and exception situations comprehensively identified
 - [ ] Acceptance criteria clearly verifiable, usable for test design
 - [ ] **行為場景已提取 (Given-When-Then 格式)** 
-- [ ] Work log `docs/work-logs/vX.X.X-feature-design.md` established and meets standards
+- [ ] 功能設計文件已建立於 `docs/work-logs/v{version}/tickets/{ticket-id}-phase1-design.md` 且符合標準
 
 When creating functional specifications:
 

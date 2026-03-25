@@ -1,0 +1,17 @@
+{
+  "ticket_id": "0.1.0-W21-001",
+  "direction": "to-sibling:0.1.0-W21-002",
+  "timestamp": "2026-03-08T17:20:53.547147",
+  "from_status": "completed",
+  "title": "重構 提取 hook_verifier.py 與 hook-completeness-check.py 共享邏輯到 lib/hook_checker.py 模組，消除 ~70-80% 的邏輯重複",
+  "what": "重構 提取 hook_verifier.py 與 hook-completeness-check.py 共享邏輯到 lib/hook_checker.py 模組，消除 ~70-80% 的邏輯重複",
+  "chain": {
+    "root": "0.1.0-W21-1",
+    "parent": null,
+    "depth": 0,
+    "sequence": [
+      1
+    ]
+  },
+  "resumed_at": "2026-03-08T17:21:55.298739"
+}

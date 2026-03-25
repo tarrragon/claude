@@ -1,0 +1,17 @@
+{
+  "ticket_id": "0.1.0-W16-004",
+  "direction": "context-refresh",
+  "timestamp": "2026-03-08T15:18:16.997139",
+  "from_status": "in_progress",
+  "title": "分析調整 Use Case 規格：UC-001~UC-011 逐一審查並確認實作可行性",
+  "what": "審查 UC-001~UC-011 每個 Use Case 的技術可行性、優先級和實作邊界，確認與 Go Backend + Flutter Frontend 架構的對齊",
+  "chain": {
+    "root": "0.1.0-W16-4",
+    "parent": null,
+    "depth": 0,
+    "sequence": [
+      4
+    ]
+  },
+  "resumed_at": "2026-03-08T16:28:08.694949"
+}

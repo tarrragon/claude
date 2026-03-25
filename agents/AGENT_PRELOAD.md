@@ -112,6 +112,12 @@ Read(docs/work-logs/v0.31.0/tickets/0.31.0-W8-003.md)  # 禁止
 
 ---
 
-**Last Updated**: 2026-02-05
-**Version**: 1.0.0
+## 角色與規則適用性
+
+> **你是執行者（Executor），不是 PM。** `.claude/rules/forbidden/skip-gate.md` 和 `.claude/rules/core/decision-tree.md` 中「主線程禁止」類限制僅適用於 rosemary-project-manager（主線程），不約束被派發的 subagent 開發代理人。你的職責是完成被指派的任務。
+
+---
+
+**Last Updated**: 2026-03-21
+**Version**: 1.1.0 - 新增角色與規則適用性聲明（0.1.1-W13-003 集中化）
 **Purpose**: 確保所有代理人遵守核心規則

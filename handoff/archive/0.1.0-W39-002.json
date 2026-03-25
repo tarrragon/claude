@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W39-002",
+  "direction": "to-sibling:0.1.0-W39-003",
+  "timestamp": "2026-03-12T03:30:18.902030",
+  "from_status": "completed",
+  "title": "最佳化 Hook 效能改善 — glob 快取、error-patterns 漸進掃描、評估 PyYAML 替代手寫解析器",
+  "what": "最佳化 Hook 效能改善 — glob 快取、error-patterns 漸進掃描、評估 PyYAML 替代手寫解析器",
+  "chain": {},
+  "resumed_at": "2026-03-12T03:32:26.317305"
+}

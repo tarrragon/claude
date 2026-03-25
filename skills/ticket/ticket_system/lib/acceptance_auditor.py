@@ -15,7 +15,7 @@ from datetime import datetime
 
 from .ticket_loader import load_ticket, resolve_version, get_project_root, get_tickets_dir
 from .parser import parse_frontmatter
-from .constants import STATUS_COMPLETED
+from .constants import STATUS_COMPLETED, VAGUE_ACCEPTANCE_WORDS, SRP_WHAT_CONJUNCTIONS, SRP_ACCEPTANCE_MODULE_THRESHOLD
 
 
 # ============================================================
@@ -377,6 +377,204 @@ def validate_acceptance_consistency(
 
 
 # ============================================================
+# Step 4.5: 含糊驗收條件偵測
+# ============================================================
+
+def detect_vague_acceptance(
+    acceptance_list: Optional[List[str]],
+) -> List[str]:
+    """
+    偵測驗收條件中的模糊詞彙
+
+    掃描驗收條件中的模糊詞彙清單。若條件只包含模糊詞而無量化指標，輸出 WARNING。
+    判斷邏輯：條件文字（去除 `[ ]` 前綴後）若只由模糊詞 + 連接詞組成，
+    沒有數字、百分比、具體檔案名、具體功能名等量化指標，則標記為 vague。
+
+    Args:
+        acceptance_list: 驗收條件清單（YAML list 或 None）
+
+    Returns:
+        List[str]: 警告訊息清單
+        - []: 無模糊詞或有量化指標
+        - [warnings...]: 偵測到的模糊詞警告
+    """
+    if not acceptance_list or len(acceptance_list) == 0:
+        return []
+
+    warnings = []
+
+    for idx, condition in enumerate(acceptance_list, 1):
+        if not isinstance(condition, str):
+            continue
+
+        # 移除 [ ] 或 [x] 前綴
+        cleaned = condition.strip()
+        if cleaned.startswith("[") and "]" in cleaned:
+            # 移除 [ ] 或 [x] 及其後的空白
+            cleaned = cleaned.split("]", 1)[1].strip()
+
+        # 判斷是否只包含模糊詞
+        has_vague_word = False
+        vague_found = []
+
+        for vague_word in VAGUE_ACCEPTANCE_WORDS:
+            if vague_word in cleaned:
+                has_vague_word = True
+                vague_found.append(vague_word)
+
+        # 若有模糊詞，檢查是否有量化指標
+        if has_vague_word:
+            # 檢查是否包含量化指標：數字、百分比、具體名稱等
+            has_metrics = bool(re.search(r'\d+|%|個|次|項|檔|行|秒|分|小時|天', cleaned))
+
+            # 若無量化指標，標記為含糊
+            if not has_metrics:
+                vague_preview = cleaned[:50]
+                vague_words_str = ", ".join(set(vague_found))
+                warnings.append(
+                    f"AC-{idx} 含糊：「{vague_preview}...」只有模糊詞（{vague_words_str}），"
+                    f"建議補充量化指標（如：「5 個案例」「100% 通過」等）"
+                )
+
+    return warnings
+
+
+# ============================================================
+# SRP 違規偵測（create 層輕量提示）
+# ============================================================
+
+def _detect_srp_multi_target(what_text: str) -> Tuple[bool, List[str]]:
+    """
+    偵測 what 欄位中的多目標連接詞。
+
+    掃描 what 文字是否包含並列連接詞（和/與/及/並/同時），
+    暗示 Ticket 可能包含多個獨立目標。
+
+    Args:
+        what_text: what 欄位文字
+
+    Returns:
+        (has_conjunction, found_conjunctions):
+        - has_conjunction: 是否找到並列連接詞
+        - found_conjunctions: 找到的連接詞清單
+    """
+    # Guard Clause：空值或無意義文字
+    if not what_text or not isinstance(what_text, str):
+        return False, []
+
+    cleaned = what_text.strip()
+    if not cleaned or len(cleaned) < 2:
+        return False, []
+
+    # 掃描並列連接詞
+    found_conjunctions = []
+    for conjunction in SRP_WHAT_CONJUNCTIONS:
+        if conjunction in cleaned:
+            found_conjunctions.append(conjunction)
+
+    # 回傳結果
+    if found_conjunctions:
+        return True, found_conjunctions
+    return False, []
+
+
+def _detect_srp_cross_module(acceptance_list: Optional[List[str]]) -> Tuple[bool, List[str]]:
+    """
+    偵測驗收條件中的跨模組特徵。
+
+    從驗收條件文字中識別模組名稱（.py 檔案）。
+    若不同模組數量超過閾值，視為跨模組。
+
+    Args:
+        acceptance_list: 驗收條件清單
+
+    Returns:
+        (is_cross_module, detected_modules):
+        - is_cross_module: 是否偵測到跨模組特徵
+        - detected_modules: 識別到的模組名稱清單
+    """
+    # Guard Clause：空值或無意義清單
+    if not acceptance_list or len(acceptance_list) == 0:
+        return False, []
+
+    detected_modules = set()
+
+    # 掃描驗收條件並提取模組名稱
+    for item in acceptance_list:
+        # 跳過非字串元素
+        if not isinstance(item, str):
+            continue
+
+        # 識別方式：檔案路徑（含 .py）
+        # 匹配 xxx.py 或 xxx_yyy.py 格式
+        file_matches = re.findall(r'\b(\w+)\.py\b', item)
+        detected_modules.update(m.lower() for m in file_matches)
+
+    # 判斷是否跨模組
+    module_count = len(detected_modules)
+    if module_count > SRP_ACCEPTANCE_MODULE_THRESHOLD:
+        return True, sorted(list(detected_modules))
+    return False, []
+
+
+def detect_srp_violations(
+    what_text: str,
+    acceptance_list: Optional[List[str]],
+) -> List[str]:
+    """
+    偵測 Ticket 是否有潛在的 SRP（單一職責原則）違規。
+
+    執行兩項輕量偵測：
+    1. what 欄位多目標連接詞偵測
+    2. 驗收條件跨模組偵測
+
+    此函式僅用於建立時的輕量提示，不作為阻止建立的依據。
+    詳細 SRP 審查由 SA 層（saffron-system-analyst）在 Phase 0 執行。
+
+    Args:
+        what_text: Ticket 的 what 欄位文字（不可為 None）
+        acceptance_list: 驗收條件清單（可為 None）
+
+    Returns:
+        List[str]: 警告訊息清單
+        - []: 未偵測到 SRP 疑慮
+        - [warning_messages...]: 偵測到的疑慮，回傳警告訊息清單
+
+    Note:
+        回傳為警告清單，調用端用 `if warnings:` 判斷有無疑慮。
+        偵測結果只用於輸出 WARNING，不影響 create 命令的回傳碼。
+    """
+    # Guard Clause
+    if not what_text:
+        what_text = ""
+    if not acceptance_list:
+        acceptance_list = []
+
+    warning_messages = []
+
+    # Lazy import：只在需要時才載入（減少依賴開銷）
+    from .command_lifecycle_messages import CreateMessages
+
+    # 執行 what 欄位偵測
+    has_what_issue, conjunctions = _detect_srp_multi_target(what_text)
+    if has_what_issue and conjunctions:
+        message = CreateMessages.SRP_MULTI_TARGET_WARNING.format(
+            conjunctions="、".join(conjunctions)
+        )
+        warning_messages.append(message)
+
+    # 執行 acceptance 欄位偵測
+    has_accept_issue, modules = _detect_srp_cross_module(acceptance_list)
+    if has_accept_issue and modules:
+        message = CreateMessages.SRP_CROSS_MODULE_WARNING.format(
+            modules="、".join(modules)
+        )
+        warning_messages.append(message)
+
+    return warning_messages
+
+
+# ============================================================
 # Step 5: 後續任務銜接檢查
 # ============================================================
 
@@ -693,13 +891,14 @@ def run_audit(ticket_id: str, version: Optional[str] = None) -> AuditReport:
         issues=log_issues
     ))
 
-    # Step 4: 驗收條件一致性檢查
+    # Step 4: 驗收條件一致性檢查（Bug 2 修正）
     # 從 body 中提取 Solution 和 Test Results 區段
-    solution_match = re.search(r"^##\s+Solution\s*$|^###\s+Solution\s*$(.*?)(?=^##\s+|^###\s+|\Z)", body, re.MULTILINE | re.DOTALL)
-    test_results_match = re.search(r"^##\s+Test Results\s*$|^###\s+Test Results\s*$(.*?)(?=^##\s+|^###\s+|\Z)", body, re.MULTILINE | re.DOTALL)
+    # 使用 lookahead (?=^##\s+[^#]|\Z) 確保只在 ## 後跟非 # 時截斷，允許 ### 子標題
+    solution_match = re.search(r"^(?:##|###)\s+Solution\s*$(.*?)(?=^##\s+[^#]|\Z)", body, re.MULTILINE | re.DOTALL)
+    test_results_match = re.search(r"^(?:##|###)\s+Test Results\s*$(.*?)(?=^##\s+[^#]|\Z)", body, re.MULTILINE | re.DOTALL)
 
-    solution_text = solution_match.group(1) if solution_match else ""
-    test_results_text = test_results_match.group(1) if test_results_match else ""
+    solution_text = solution_match.group(1).strip() if solution_match else ""
+    test_results_text = test_results_match.group(1).strip() if test_results_match else ""
 
     acceptance = ticket.get("acceptance", [])
     consistency_passed, consistency_warnings = validate_acceptance_consistency(
@@ -711,6 +910,14 @@ def run_audit(ticket_id: str, version: Optional[str] = None) -> AuditReport:
         name="驗收條件一致性檢查",
         passed=consistency_passed,
         warnings=consistency_warnings
+    ))
+
+    # Step 4.5: 含糊驗收條件偵測
+    vague_warnings = detect_vague_acceptance(acceptance)
+    report.add_step(AuditStep(
+        name="含糊驗收條件偵測",
+        passed=len(vague_warnings) == 0,
+        warnings=vague_warnings
     ))
 
     # Step 5: 後續任務銜接檢查

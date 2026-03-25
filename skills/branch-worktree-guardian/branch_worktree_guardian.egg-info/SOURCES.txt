@@ -1,0 +1,6 @@
+pyproject.toml
+branch_worktree_guardian.egg-info/PKG-INFO
+branch_worktree_guardian.egg-info/SOURCES.txt
+branch_worktree_guardian.egg-info/dependency_links.txt
+branch_worktree_guardian.egg-info/requires.txt
+branch_worktree_guardian.egg-info/top_level.txt

@@ -51,8 +51,27 @@ Hook 系統自動處理基本的測試品質監控，你的職責專注於需要
 
 **測試設計工作必須遵循完整的測試分析和設計流程**
 
-**輸入要求**：Phase 1 功能設計工作日誌
-**輸出標準**：在現有工作日誌中新增「Test Case Design」章節
+**輸入要求**：Phase 1 功能設計文件（位於 `docs/work-logs/v{version}/tickets/`）
+**輸出標準**：建立獨立的測試設計文件或在現有 Ticket 文件中新增「Test Case Design」章節
+
+### 產出物路徑規範（強制）
+
+所有非程式碼產出物（測試設計文件）**必須**寫入 Ticket 目錄，禁止寫入 `docs/work-logs/` 根目錄或其他位置。
+
+| 項目 | 規範 |
+|------|------|
+| **存放目錄** | `docs/work-logs/v{version}/tickets/` |
+| **命名格式** | `{ticket-id}-phase2-test-design.md` 或 `{ticket-id}-test-design.md` |
+| **禁止路徑** | `docs/work-logs/vX.X.X-test-design.md`（根目錄） |
+
+**範例**：
+
+```
+正確：docs/work-logs/v0.1.0/tickets/0.1.0-W44-003-phase2-test-design.md
+錯誤：docs/work-logs/v0.1.0-test-design.md
+```
+
+> 命名後綴規範詳見：.claude/rules/core/ticket-id-conventions.md（第 2.1 節 TDD Phase 後綴）
 
 ### 測試設計工作流程
 

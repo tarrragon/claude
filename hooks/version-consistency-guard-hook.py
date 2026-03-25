@@ -2,20 +2,23 @@
 """
 Version Consistency Guard Hook
 
-Detects version inconsistencies and alerts on incomplete tasks in older versions.
+Detects version inconsistencies and alerts on incomplete tasks in older versions
+and version mismatches between current_version and work-logs directories.
 
 Hook Event: SessionStart (non-blocking warning)
 
 Purpose:
-    Prevents version number from advancing (current_version in todolist.yaml)
-    while older versions still have pending/in_progress/blocked Tickets.
+    1. Prevents version number from advancing (current_version in todolist.yaml)
+       while older versions still have pending/in_progress/blocked Tickets.
+    2. Alerts when current_version is lower than the highest version directory
+       in docs/work-logs/ (indicates todolist.yaml is out of sync).
 
 Logic:
     1. Read current_version from docs/todolist.yaml
     2. Scan all version directories in docs/work-logs/
-    3. Find versions older than current_version
-    4. Check tickets/ directories for incomplete Tickets (pending/in_progress/blocked)
-    5. If found, print clear warning message (non-blocking)
+    3. Check for incomplete Tickets in versions older than current_version
+    4. Check for version mismatch (current_version vs highest worklog version)
+    5. Print clear warning message(s) (non-blocking)
 
 Exit code:
     0 - Always (non-blocking warning, never prevents session start)
@@ -170,6 +173,7 @@ def find_older_versions_with_incomplete_tickets(
 
             # Extract version from directory name
             version_str = dir_name[1:]  # Remove 'v' prefix
+
             version_tuple = parse_version_string(version_str)
 
             if not version_tuple:
@@ -190,6 +194,74 @@ def find_older_versions_with_incomplete_tickets(
 # ============================================================================
 # Output formatting
 # ============================================================================
+
+ACTIVE_STATUSES = {"in_progress", "blocked"}
+
+
+def find_higher_active_versions(
+    project_root: Path, current_version: str, logger
+) -> List[str]:
+    """Find version directories higher than current_version with active Tickets.
+
+    Only versions containing in_progress or blocked Tickets are considered
+    a real mismatch signal. Versions with only pending Tickets are normal
+    future planning and should not trigger a warning.
+
+    Args:
+        project_root: Project root path
+        current_version: Current version string from todolist.yaml
+        logger: Logger instance
+
+    Returns:
+        List of version strings higher than current_version with active Tickets
+    """
+    work_logs_dir = project_root / "docs" / "work-logs"
+
+    if not work_logs_dir.exists():
+        return []
+
+    current_ver_tuple = parse_version_string(current_version)
+    if not current_ver_tuple:
+        return []
+
+    active_higher = []
+
+    try:
+        for version_dir in work_logs_dir.iterdir():
+            if not version_dir.is_dir():
+                continue
+
+            dir_name = version_dir.name
+            if not dir_name.startswith('v'):
+                continue
+
+            version_str = dir_name[1:]  # Remove 'v' prefix
+
+            version_tuple = parse_version_string(version_str)
+            if not version_tuple:
+                continue
+
+            # Only check versions higher than current_version
+            if not version_is_older(current_ver_tuple, version_tuple):
+                continue
+
+            # Check if this higher version has active (in_progress/blocked) Tickets
+            tickets_dir = version_dir / "tickets"
+            if not tickets_dir.exists():
+                continue
+
+            for ticket_file in tickets_dir.glob("*.md"):
+                frontmatter = parse_ticket_frontmatter(ticket_file, logger)
+                status = frontmatter.get('status') if frontmatter else None
+                if status in ACTIVE_STATUSES:
+                    active_higher.append(version_str)
+                    break  # One active ticket is enough to flag this version
+
+    except Exception as e:
+        logger.warning(f"Error scanning work-logs for higher active versions: {e}")
+
+    return sorted(active_higher, key=lambda v: parse_version_string(v))
+
 
 def print_warning(current_version: str, older_versions_info: Dict[str, List[Dict[str, str]]]) -> None:
     """Print warning message about incomplete tickets in older versions.
@@ -233,6 +305,33 @@ def print_warning(current_version: str, older_versions_info: Dict[str, List[Dict
     print()
     print("建議：使用 ticket track list --version {version} --status pending in_progress")
     print("      查看完整任務列表")
+    print()
+    print(separator)
+    print()
+
+
+def print_version_mismatch_warning(current_version: str, active_version: str) -> None:
+    """Print warning about active development in a version higher than current_version.
+
+    Args:
+        current_version: Current version from todolist.yaml
+        active_version: Higher version with in_progress/blocked Tickets
+    """
+    separator = "=" * 60
+
+    print()
+    print(separator)
+    print("[Version Consistency Guard] 版本配置可能過期")
+    print(separator)
+    print()
+    print(f"current_version (todolist.yaml): {current_version}")
+    print(f"活躍開發版本 (docs/work-logs/):  {active_version}")
+    print()
+    print(f"v{active_version} 中有 in_progress 或 blocked 的 Ticket，")
+    print(f"但 todolist.yaml 的 current_version 仍為 {current_version}。")
+    print()
+    print("建議：")
+    print(f"  修改 docs/todolist.yaml current_version 為 {active_version}")
     print()
     print(separator)
     print()
@@ -305,6 +404,19 @@ def main() -> int:
         )
     else:
         logger.debug("No incomplete tickets in older versions")
+
+    # Check for version mismatch: higher versions with active (in_progress/blocked) Tickets
+    higher_active = find_higher_active_versions(project_root, current_version, logger)
+
+    if higher_active:
+        for version in higher_active:
+            print_version_mismatch_warning(current_version, version)
+        logger.info(
+            f"Version mismatch warning: {len(higher_active)} higher version(s) "
+            f"with active Tickets: {', '.join(higher_active)}"
+        )
+    else:
+        logger.debug("No higher versions with active Tickets")
 
     return 0
 

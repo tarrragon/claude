@@ -18,7 +18,7 @@
 
 **常見陷阱**：「要繼續執行下一個 Ticket 嗎？」看似簡單，但屬於二元確認（準則 2），**必須**用 AskUserQuestion，不得用純文字問句。
 
-**重要**：下方 17 個場景是常見情境的範例，**不是**觸發條件的完整清單。觸發條件只有一個：向用戶呈現任何形式的選擇（多選或二元確認）。
+**重要**：下方 18 個場景是常見情境的範例（#11 細分為 #11a/#11b 計 2 個），**不是**觸發條件的完整清單。觸發條件只有一個：向用戶呈現任何形式的選擇（多選或二元確認）。
 
 ---
 
@@ -54,6 +54,19 @@ PM 需要用戶做任何決策時（包含多選路由和二元 yes/no 確認）
 
 注意：AskUserQuestion tool 內的 `question` 文字本身可以是開放語氣（如「接下來要做什麼？」），只要回答由預定義選項限制即可。
 
+### 規則 4：無 Ticket 場景仍適用
+
+即使當前工作不在正式 Ticket 追蹤中（如臨時修正、流程更新、用戶直接指示的小任務），通用觸發原則和 commit 後路由（#16/#11）仍然適用。**不存在「非正式任務可跳過」的豁免。**
+
+| 場景 | AskUserQuestion 適用？ |
+|------|----------------------|
+| 正式 Ticket 工作 | 是 |
+| 臨時修正（無 Ticket） | 是 |
+| 用戶直接指示的小任務 | 是 |
+| 唯一豁免 | 用戶明確表示「不需要走流程」 |
+
+> **來源**：PC-014 — 以「非正式任務」合理化跳過 AskUserQuestion，導致 3 次違規。
+
 ---
 
 ## 場景列表
@@ -64,7 +77,7 @@ PM 需要用戶做任何決策時（包含多選路由和二元 yes/no 確認）
 |---|------|---------|--------|-----------|
 | 1 | 驗收方式確認 | ticket track complete 前（P0 優先級時觸發；DOC/ANA/非 P0 IMP 自動決定，不觸發） | ticket-lifecycle 驗收階段 | acceptance-gate-hook |
 | 2 | Complete 後下一步 | ticket track complete 後 | ticket-lifecycle 完成階段 | acceptance-gate-hook |
-| 3 | Wave/任務收尾確認 | 當前 Wave 無 pending Ticket（前置：強制 /parallel-evaluation Wave 審查；情境 C1：有其他 Wave → #3a；情境 C2：全完成 → 技術債整理 + /version-release check） | ticket-lifecycle 收尾 | parallel-suggestion-hook |
+| 3 | Wave/任務收尾確認 | 當前 Wave 無 pending Ticket（**前置步驟**：強制執行 `/parallel-evaluation` Wave 多視角審查，審查完成並建立發現 Ticket 後才進入 #3 選項；情境 C1：有其他 Wave → #3a；情境 C2：全完成 → 技術債整理 + /version-release check） | ticket-lifecycle 收尾 | parallel-suggestion-hook |
 | 4 | 方案選擇 | 多個技術方案 | 決策樹第負一層 | prompt-submit-hook |
 | 5 | 優先級確認 | 多任務排序 | 決策樹第負一層 | prompt-submit-hook |
 | 6 | 任務拆分確認 | 認知負擔 > 10 | 決策樹第負一層 | prompt-submit-hook |
@@ -84,6 +97,17 @@ PM 需要用戶做任何決策時（包含多選路由和二元 yes/no 確認）
 **Hook 覆蓋狀態**：14/18 場景有 Hook 自動提醒（14/18 = 78%）。其中 #13/#14 為條件式觸發（僅當 TDD Phase 完成且 worklog 更新時），未計入 14/18 計數，列於下方 Hook 提醒機制表僅供參考。
 
 **Phase 1-3 自治 commit 相容性**：場景 #11/#16 由 commit-handoff-hook 觸發，但 Phase 1-3 代理人自治 commit 時，因 subagent 禁止使用 AskUserQuestion，Hook 提醒自然跳過——這是預期行為，Phase 1-3 的 commit 不需要 PM 介入 Handoff 或錯誤學習決策。
+
+### 場景 #16 雙通道記錄要求（強制）
+
+選擇「記錄錯誤學習」後，必須同時執行雙通道記錄，**缺一不可**：
+
+| 通道 | 操作 | 位置 | 說明 |
+|------|------|------|------|
+| error-pattern | /error-pattern add | .claude/error-patterns/ | 結構化可查詢知識庫，供將來查詢參考 |
+| memory | 更新使用者 auto-memory | .claude/projects/.../memory/ | 跨對話個人記憶，服務當前用戶的持續學習 |
+
+**強制要求**：禁止只寫單一通道。只寫 memory 不執行 /error-pattern add，或反之，均違反雙通道規範，無法落實錯誤學習的完整目標。
 
 ### 場景執行順序約束
 
@@ -129,6 +153,6 @@ PM 需要用戶做任何決策時（包含多選路由和二元 yes/no 確認）
 
 ---
 
-**Last Updated**: 2026-03-13
-**Version**: 3.4.0 - 同步 W43-W47 規則：D2 自動豁免閘門、Phase 1-3 自治 commit 相容性、Hook 覆蓋數 14/18（0.1.0-W48-003）
+**Last Updated**: 2026-03-23
+**Version**: 3.6.0 - 場景 #3 明確標註前置步驟為強制多視角審查，審查完成後才進入收尾選項
 **Purpose**: AskUserQuestion 規則唯一 Source of Truth

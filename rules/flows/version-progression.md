@@ -120,6 +120,7 @@ Wave 是相互隔離的執行單位。禁止跨 Wave 依賴和並行派發。
 
 ## 相關文件
 
+- .claude/rules/flows/monorepo-version-strategy.md - Monorepo 三層版本定義和同步規則（L1/L2/L3）
 - .claude/references/version-progression-details.md - Wave 獨立性、Ticket 歸屬、二元決策流程
 - .claude/references/version-decision-case-studies.md - 案例分析
 - .claude/rules/flows/ticket-lifecycle.md - Ticket 生命週期

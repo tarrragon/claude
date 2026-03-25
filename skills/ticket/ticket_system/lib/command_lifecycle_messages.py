@@ -212,6 +212,10 @@ class CreateMessages:
     SPLIT_NEEDED = "   [ ] 是否需要拆分子任務？（認知負擔 > 10）"
     ACCEPTANCE_4V_CHECK = "   [ ] 驗收條件是否符合 4V 原則？"
     ACCEPTANCE_4V_DESC = "       （可驗證、可量化、可追溯、可記錄）"
+    DEFAULT_ACCEPTANCE_WARNING = (
+        "[WARNING] 使用預設驗收條件模板。請修改為具體、可量化的驗收標準。\n"
+        "           使用 /ticket fields update <ticket-id> acceptance <criteria> 修改"
+    )
     BLOCKED_BY_CHECK = "   [ ] 是否有需要設定的 blockedBy？"
     DECISION_TREE_CHECK = "   [ ] 是否已填寫 decision_tree_path 欄位？"
     DECISION_TREE_DESC = "       （派發驗證必需）"
@@ -252,6 +256,84 @@ class CreateMessages:
     # Wave 計算相關訊息
     RECOMMENDED_WAVE = "建議使用 Wave: {wave_num}"
     WAVE_CALCULATION_REASON = "原因: {reason}"
+
+    # decision_tree_path 驗證錯誤訊息（v0.1.1 新增）
+    DECISION_TREE_MISSING_ALL = (
+        "[ERROR] 缺少 decision_tree_path 必填欄位\n"
+        "       請提供以下三個參數：\n"
+        "         --decision-tree-entry    <進入決策樹的層級>\n"
+        "         --decision-tree-decision <做出的決策>\n"
+        "         --decision-tree-rationale <決策理由>\n"
+        "\n"
+        "       豁免條件（可省略）：子任務（--parent）或 DOC 類型（--type DOC）"
+    )
+
+    DECISION_TREE_MISSING_PARTIAL = (
+        "[ERROR] decision_tree_path 欄位不完整\n"
+        "       缺少：{missing_fields}\n"
+        "       三個子欄位必須同時提供或同時省略"
+    )
+
+    DECISION_TREE_EMPTY_VALUE = (
+        "[ERROR] decision_tree_path 欄位值不能為空字串\n"
+        "       欄位：{field_name}"
+    )
+
+    # 含糊驗收條件警告（W2-001.2 變更 1）
+    VAGUE_ACCEPTANCE_WARNING = (
+        "[WARNING] 驗收條件含有模糊詞彙，建議補充量化指標\n"
+        "          模糊詞彙：{vague_words}\n"
+        "          範例：「完成」→「新增 5 個測試案例」，「通過」→「100% 測試通過」"
+    )
+
+    # 認知負擔評估警告（W2-001.2 變更 4）
+    COGNITIVE_LOAD_FILE_THRESHOLD_WARNING = (
+        "[WARNING] 修改檔案數 > {threshold}，認知負擔可能超閾值，"
+        "建議考慮拆分子任務"
+    )
+    COGNITIVE_LOAD_FILES_UNDEFINED_WARNING = (
+        "[WARNING] 尚未填寫影響檔案清單（where_files），無法評估認知負擔。"
+        "請使用 /ticket fields update <ticket-id> where <files> 補充"
+    )
+
+    # SRP 多目標偵測警告（W3-002）
+    SRP_MULTI_TARGET_WARNING = (
+        "[WARNING] what 欄位含連接詞「{conjunctions}」，疑似包含多個獨立目標\n"
+        "          Atomic Ticket 原則：一個 Ticket = 一個 Action + 一個 Target\n"
+        "          建議：考慮拆分為多個 Ticket，或確認目標確實是單一職責"
+    )
+
+    # SRP 跨模組驗收偵測警告（W3-002）
+    SRP_CROSS_MODULE_WARNING = (
+        "[WARNING] 驗收條件涉及多個模組（{modules}），疑似包含多個職責\n"
+        "          Atomic Ticket 原則：所有驗收條件應指向同一目標\n"
+        "          建議：確認是否需要拆分為多個獨立 Ticket"
+    )
+
+    # blockedBy 驗證錯誤訊息（Bug 1 修正）
+    BLOCKED_BY_NOT_FOUND = "[ERROR] blockedBy 中的 {bid} 不存在，請確認 ID 是否正確"
+
+    # 重複偵測警告訊息（W3-003）
+    DUPLICATE_TICKETS_WARNING_HEADER = (
+        "[WARNING] 發現 {count} 個可能重複的 Ticket，"
+        "請確認是否需要建立新 Ticket："
+    )
+    DUPLICATE_TICKETS_WARNING_ITEM = "   - {ticket_id}: {title}"
+    DUPLICATE_TICKETS_WARNING_ITEM_WITH_STATUS = "   - {ticket_id}: {title} [{status_label}]"
+    DUPLICATE_TICKETS_WARNING_SUGGESTION = (
+        "   建議：執行 /ticket track list 查看所有現有 Ticket 後再決定"
+    )
+    DUPLICATE_STATUS_LABEL_IN_PROGRESS = "進行中"
+    DUPLICATE_STATUS_LABEL_COMPLETED = "已完成"
+
+    # 問題 4 新增常數（0.1.2-W4-001.1）
+    EXEMPTED_PARTIAL_PARAMS_ERROR = (
+        "[ERROR] 豁免條件下三個參數必須全部提供或全部省略"
+    )
+
+    TICKET_LOCATION = "   Location: {ticket_path}"
+
+    PARENT_UPDATED = "   Parent: {parent_id} (已更新 children)"
 
 
 class FieldsMessages:

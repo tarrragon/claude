@@ -43,6 +43,8 @@ from typing import Dict, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 from hook_utils import setup_hook_logging, run_hook_safely
+sys.path.insert(0, str(Path(__file__).parent.parent / 'lib'))
+from pyproject_scanner import load_pyproject_toml, scan_skills_directory
 
 # TOML 解析：試圖使用 tomllib（Python 3.11+），否則 fallback 到 tomli
 try:
@@ -290,71 +292,14 @@ def scan_skill_packages(project_root: Path, logger: Optional[object] = None) -> 
             }
         }
     """
-    packages: Dict[str, Dict[str, str]] = {}
-    skills_dir = project_root / SKILLS_DIR_NAME
-
     # 如果未提供 logger，建立一次
     if logger is None:
         logger = setup_hook_logging(HOOK_NAME)
 
-    if not skills_dir.exists():
-        return packages
-
-    try:
-        for skill_dir in skills_dir.iterdir():
-            if not skill_dir.is_dir():
-                continue
-
-            pyproject_path = skill_dir / PYPROJECT_FILENAME
-            if not pyproject_path.exists():
-                continue
-
-            try:
-                pyproject_data = _load_pyproject_toml(pyproject_path)
-                if not pyproject_data:
-                    continue
-
-                project_info = pyproject_data.get("project", {})
-                pkg_name = project_info.get("name", "")
-                version = project_info.get("version", "")
-
-                if pkg_name and version:
-                    packages[pkg_name] = {
-                        "path": str(skill_dir.relative_to(project_root)),
-                        "version": version,
-                    }
-            except Exception as e:
-                # Log warning but continue scanning other skills
-                logger.warning("Failed to parse {}: {}".format(pyproject_path, e))
-                continue
-    except Exception:
-        # If iterating skills_dir fails, return what we have
-        pass
+    # 使用共用模組掃描
+    packages = scan_skills_directory(project_root)
 
     return packages
-
-
-def _load_pyproject_toml(pyproject_path: Path) -> Optional[Dict]:
-    """Load and parse a pyproject.toml file.
-
-    Attempts to use tomllib (Python 3.11+) or tomli fallback (Python 3.9-3.10).
-    Returns None if the file cannot be parsed.
-
-    Args:
-        pyproject_path: Path to the pyproject.toml file.
-
-    Returns:
-        Parsed TOML dict, or None if parsing fails.
-    """
-    if tomllib is None:
-        return None
-
-    try:
-        with open(pyproject_path, "rb") as f:
-            return tomllib.load(f)
-    except Exception:
-        return None
-
 
 def get_installed_uv_tools() -> Dict[str, str]:
     """Query 'uv tool list' and extract installed package versions.

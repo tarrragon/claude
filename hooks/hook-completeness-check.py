@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["pyyaml"]
+# ///
 """
 Hook Completeness Check
 
@@ -9,9 +12,6 @@ list mechanism instead of relying on hook-registry.json.
 
 Runs on SessionStart to catch missing configurations and help maintain
 comprehensive hook registration.
-
-Usage:
-    python3 .claude/hooks/hook-completeness-check.py
 
 Exit codes:
     0 - All hooks properly configured (or warning only)

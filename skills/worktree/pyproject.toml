@@ -1,0 +1,23 @@
+# #8 修復：新增 build-system 宣告
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "worktree-skill"
+version = "1.0.0"
+description = "Git Worktree Management SKILL for Claude Code"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+worktree = "scripts.worktree_manager:main"
+
+[tool.setuptools.packages.find]
+include = ["scripts*"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]

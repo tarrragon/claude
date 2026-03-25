@@ -70,10 +70,25 @@ grep -r "get_project_root" docs/work-logs/v{version}/tickets/ --include="*.md" -
 
 ---
 
+## 再發案例
+
+### 案例 2：跨 Ticket 子任務功能重疊（2026-03-23）
+
+| 項目 | 值 |
+|------|------|
+| 來源 | 0.1.2-W3-002 Phase 4a 審查 |
+| 症狀 | PM 為審查發現的既有 Bug（detect_vague_acceptance 永遠回傳 True）建立 W3-003，但 W3-001.2 已涵蓋完全相同問題（vague_passed dead branch） |
+| 根因 | 建立修復 Ticket 前未查詢既有 pending Ticket，且問題分散在不同父任務的子任務中不易察覺 |
+| 處理 | 刪除 W3-003，確認 W3-001.2 已涵蓋 |
+
+**新增教訓**：重複不僅發生在「同 Wave 標題相似」，也會發生在「跨 Ticket 子任務功能重疊」場景。建立修復 Ticket 前，除了 `ticket track list --wave {n}`，還需 `grep` 搜尋問題關鍵字（如函式名）確認無重複。
+
+---
+
 ## 相關資訊
 
 | 項目 | 值 |
 |------|------|
-| 相關 Ticket | 0.1.0-W41-003, 0.1.0-W41-004（已刪除） |
-| 防護機制 | 建議：system-analyst 審查清單補充重複比對 |
+| 相關 Ticket | 0.1.0-W41-003, 0.1.0-W41-004（已刪除）; 0.1.2-W3-003（已刪除，與 W3-001.2 重複） |
+| 防護機制 | 建議：system-analyst 審查清單補充重複比對；建立修復 Ticket 前強制查詢 pending tickets |
 | 相關錯誤模式 | PC-002（Ticket 設計未確認現有類似實作） |

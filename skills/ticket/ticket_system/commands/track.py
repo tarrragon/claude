@@ -97,6 +97,10 @@ from .track_audit import (
 from .track_board import (
     execute_board,
 )
+# 導入版本審計命令模組
+from .audit_version import (
+    execute_audit_version,
+)
 
 
 def _execute_claim(args: argparse.Namespace, version: str) -> int:  # type: ignore
@@ -157,6 +161,7 @@ def _create_command_handlers() -> dict:
         "set-blocked-by": execute_set_blocked_by,
         "set-related-to": execute_set_related_to,
         "audit": execute_audit,
+        "audit-version": execute_audit_version,
         "board": execute_board,
     }
 
@@ -471,6 +476,27 @@ def _register_acceptance_commands(
 
 
 
+def _register_version_audit_commands(
+    subparsers: argparse._SubParsersAction,
+) -> None:
+    """註冊版本審計命令：audit-version"""
+    # audit-version 操作
+    p_audit_version = subparsers.add_parser(
+        "audit-version",
+        help="掃描並驗證 Ticket 版本歸屬一致性"
+    )
+    p_audit_version.add_argument(
+        "--fix",
+        action="store_true",
+        help="自動修復發現的版本不一致問題"
+    )
+    p_audit_version.add_argument(
+        "--version",
+        dest="audit_version",
+        help="只檢查指定版本的 Tickets（如 0.1.0）"
+    )
+
+
 def _register_board_commands(
     subparsers: argparse._SubParsersAction,
 ) -> None:
@@ -500,6 +526,7 @@ def _register_all_subcommands(
     _register_batch_commands(track_subparsers)
     _register_relation_commands(track_subparsers)
     _register_acceptance_commands(track_subparsers)
+    _register_version_audit_commands(track_subparsers)
     _register_board_commands(track_subparsers)
 
 

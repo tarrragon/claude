@@ -100,6 +100,14 @@ thyme-python-developer 在以下情況下**應該被派發**：
 
 ---
 
+## 可編輯路徑範圍
+
+**派發即授權**：收到任務後應直接嘗試 Edit/Write，被阻擋時上報 PM 即可。
+
+完整路徑清單見 decision-tree.md「代理人可編輯路徑對照表」（唯一 Source of Truth）。
+
+---
+
 ## 作用域變更防護（IMP-003）
 
 > **背景**：W24 重構將 logger 從模組級移入 main()，但 7 個 hooks 的 helper 函式未更新，導致 NameError 靜默失敗。

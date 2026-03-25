@@ -86,6 +86,27 @@ pepper-test-implementer 在以下情況下**應該被觸發**：
 
 ---
 
+## 產出物路徑規範（強制）
+
+所有非程式碼產出物（策略文件、虛擬碼、流程圖）**必須**寫入 Ticket 目錄，禁止寫入 `docs/work-logs/` 根目錄或其他位置。
+
+| 項目 | 規範 |
+|------|------|
+| **存放目錄** | `docs/work-logs/v{version}/tickets/` |
+| **命名格式** | `{ticket-id}-phase3a-strategy.md` |
+| **禁止路徑** | `docs/work-logs/vX.X.X-strategy.md`（根目錄） |
+
+**範例**：
+
+```
+正確：docs/work-logs/v0.1.0/tickets/0.1.0-W44-003-phase3a-strategy.md
+錯誤：docs/work-logs/v0.1.0-strategy.md
+```
+
+> 命名後綴規範詳見：.claude/rules/core/ticket-id-conventions.md（第 2.1 節 TDD Phase 後綴）
+
+---
+
 ## 輸出格式
 
 ### Phase 3a 實作策略規劃章節模板
