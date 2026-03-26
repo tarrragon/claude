@@ -1,10 +1,10 @@
 {
   "ticket_id": "0.1.1-W5-001",
-  "direction": "to-sibling:0.1.1-W6-001",
-  "timestamp": "2026-03-13T15:40:48.926524",
-  "from_status": "completed",
-  "title": "設計 Monorepo 版本管理策略",
-  "what": "分析 monorepo 版本管理需求，設計版本策略：(1) monorepo 版本 vs 子專案版本的關係定義，(2) version-release check 如何正確處理多版本，(3) 是否需要 .version-release.yaml 配置檔",
+  "direction": "context-refresh",
+  "timestamp": "2026-03-08T14:12:59.380905",
+  "from_status": "in_progress",
+  "title": "修正 Hook 系統健康問題：4 個 hook 缺少執行權限（post-ticket-complete-checkpoint、ticket-file-access-guard、askuserquestion-reminder、language-guard）、hook_utils.py 缺少 exclude list、version-consistency-guard log dir 名稱不一致假警告",
+  "what": "修正 Hook 系統健康問題：4 個 hook 缺少執行權限（post-ticket-complete-checkpoint、ticket-file-access-guard、askuserquestion-reminder、language-guard）、hook_utils.py 缺少 exclude list、version-consistency-guard log dir 名稱不一致假警告",
   "chain": {},
-  "resumed_at": "2026-03-13T15:45:16.580607"
+  "resumed_at": "2026-03-08T14:13:46.618680"
 }

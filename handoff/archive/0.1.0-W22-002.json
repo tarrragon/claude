@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W22-002",
+  "direction": "to-sibling:0.1.0-W22-003",
+  "timestamp": "2026-03-08T19:42:29.772587",
+  "from_status": "completed",
+  "title": "重構 decision-tree-checkpoint-details.md Checkpoint 2 情境 D 認知負擔超標（>15），拆分 TDD Phase 路由為獨立文件或簡化呈現",
+  "what": "重構 decision-tree-checkpoint-details.md Checkpoint 2 情境 D 認知負擔超標（>15），將 D1/D2/D3a/D3b/D3c 五個子情境合併為單一路由總覽表，簡化呈現降低認知負擔",
+  "chain": {},
+  "resumed_at": "2026-03-08T19:43:03.510989"
+}

@@ -1,0 +1,18 @@
+{
+  "ticket_id": "0.2.0-W2-001.4",
+  "direction": "to-sibling:0.2.0-W2-002",
+  "timestamp": "2026-03-25T21:08:58.168353",
+  "from_status": "completed",
+  "title": "WebSocket Server — 即時推送 (spec §3.3)",
+  "what": "實作 WebSocket Server (§3.3)：Client 連線管理、訂閱機制、四種訊息類型推送（session_list/session_event/session_history/session_status_change）、心跳機制",
+  "chain": {
+    "root": "0.2.0-W2-001",
+    "parent": "0.2.0-W2-001",
+    "depth": 1,
+    "sequence": [
+      1,
+      4
+    ]
+  },
+  "resumed_at": "2026-03-25T21:17:49.821113"
+}

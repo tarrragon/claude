@@ -1,0 +1,17 @@
+{
+  "ticket_id": "0.2.0-W3-001",
+  "direction": "to-sibling:0.2.0-W4-001",
+  "timestamp": "2026-03-26T21:54:10.076546",
+  "from_status": "completed",
+  "title": "驗證 端對端整合 (Backend+Frontend MVP)",
+  "what": "驗證 Go Backend 和 Flutter Frontend 的端對端整合，確認 WebSocket 通訊、即時事件推送、session 生命週期完整運作",
+  "chain": {
+    "root": "0.2.0-W3-1",
+    "parent": null,
+    "depth": 0,
+    "sequence": [
+      1
+    ]
+  },
+  "resumed_at": "2026-03-26T21:55:11.951154"
+}

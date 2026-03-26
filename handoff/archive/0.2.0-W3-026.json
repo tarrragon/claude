@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.2.0-W3-026",
+  "direction": "to-sibling:0.2.0-W3-028",
+  "timestamp": "2026-03-26T20:34:26.097834",
+  "from_status": "completed",
+  "title": "重構 Bubble _buildTextContent 結構重複提取為 buildHighlightableText 工具函式",
+  "what": "重構 Bubble _buildTextContent 結構重複提取為 buildHighlightableText 工具函式",
+  "chain": {},
+  "resumed_at": "2026-03-26T20:41:19.542647"
+}

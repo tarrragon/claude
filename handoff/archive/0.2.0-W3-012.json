@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.2.0-W3-012",
+  "direction": "to-sibling:0.2.0-W3-006",
+  "timestamp": "2026-03-25T22:45:00.166687",
+  "from_status": "completed",
+  "title": "調整 tdd-flow.md 測試群組拆分閾值從 >1 改為 >3",
+  "what": "調整 tdd-flow.md 測試群組拆分閾值從 >1 改為 >3",
+  "chain": {},
+  "resumed_at": "2026-03-25T22:45:27.768085"
+}

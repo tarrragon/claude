@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W9-014",
+  "direction": "to-sibling:0.1.0-W9-015",
+  "timestamp": "2026-03-07T15:15:16.085324",
+  "from_status": "completed",
+  "title": "補充 decision-tree.md Handoff 後流程說明：handoff pending 檔案不需 git commit（ticket handoff 命令本地建立即完成，.claude/handoff/pending 在 .gitignore 中）",
+  "what": "補充 decision-tree.md Handoff 後流程說明：handoff pending 檔案不需 git commit（ticket handoff 命令本地建立即完成，.claude/handoff/pending 在 .gitignore 中）",
+  "chain": {},
+  "resumed_at": "2026-03-07T15:20:23.076138"
+}

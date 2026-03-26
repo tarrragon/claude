@@ -51,7 +51,7 @@ from hook_io import (
 from hook_utils import setup_hook_logging, run_hook_safely
 
 
-def is_exempt_path_on_protected_branch(file_path: str) -> bool:
+def is_exempt_path_on_protected_branch(file_path: str, cwd: str | None = None) -> bool:
     """
     判斷此路徑是否在保護分支上被豁免（允許編輯）
 
@@ -83,7 +83,7 @@ def is_exempt_path_on_protected_branch(file_path: str) -> bool:
         "README.md",
     ]
 
-    project_root = get_project_root()
+    project_root = get_project_root(cwd=cwd)
 
     # 檢查 file_path 是否為絕對路徑且不在專案根目錄下
     # 非專案檔案（如 auto-memory）不受保護分支限制，直接豁免
@@ -133,8 +133,12 @@ def main() -> int:
         write_hook_output(output)
         return 0
 
+    # 從被編輯檔案路徑推導 git repo context（支援 worktree 環境）
+    file_path = tool_input.get("file_path", "")
+    file_dir = str(Path(file_path).parent) if file_path and file_path.startswith("/") else None
+
     # 獲取當前分支
-    current_branch = get_current_branch()
+    current_branch = get_current_branch(cwd=file_dir)
     if not current_branch:
         logger.warning("無法獲取分支資訊，默認允許")
         output = create_pretooluse_output("allow", "無法獲取分支資訊，默認允許")
@@ -156,7 +160,7 @@ def main() -> int:
         file_path = tool_input.get("file_path", "unknown")
 
         # 檢查是否為豁免路徑（在保護分支上允許編輯）
-        if is_exempt_path_on_protected_branch(file_path):
+        if is_exempt_path_on_protected_branch(file_path, cwd=file_dir):
             logger.info(f"在保護分支 '{current_branch}' 上編輯豁免路徑 {file_path}，允許")
             output = create_pretooluse_output(
                 "allow",
@@ -166,7 +170,7 @@ def main() -> int:
             return 0
 
         # 判斷是否為專案檔案
-        project_root = get_project_root()
+        project_root = get_project_root(cwd=file_dir)
         is_project_file = file_path.startswith(project_root) if file_path.startswith("/") else True
 
         logger.info(f"在保護分支 '{current_branch}' 上嘗試編輯非豁免檔案 {file_path}，操作已阻止")

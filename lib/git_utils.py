@@ -152,9 +152,12 @@ def run_git_command(
         return False, error_msg
 
 
-def get_current_branch() -> Optional[str]:
+def get_current_branch(cwd: Optional[str] = None) -> Optional[str]:
     """
     獲取當前分支名稱
+
+    Args:
+        cwd: 執行 git 命令的工作目錄（支援 worktree 環境）
 
     Returns:
         str | None: 分支名稱，如果無法獲取則返回 None
@@ -164,13 +167,16 @@ def get_current_branch() -> Optional[str]:
         if branch:
             print(f"Current branch: {branch}")
     """
-    success, output = run_git_command(["branch", "--show-current"])
+    success, output = run_git_command(["branch", "--show-current"], cwd=cwd)
     return output if success and output else None
 
 
-def get_project_root() -> str:
+def get_project_root(cwd: Optional[str] = None) -> str:
     """
     獲取專案根目錄（git 倉庫根目錄）
+
+    Args:
+        cwd: 執行 git 命令的工作目錄（支援 worktree 環境）
 
     Returns:
         str: 專案根目錄路徑，如果無法獲取則返回當前工作目錄
@@ -179,7 +185,7 @@ def get_project_root() -> str:
         root = get_project_root()
         config_path = os.path.join(root, ".claude", "config.json")
     """
-    success, output = run_git_command(["rev-parse", "--show-toplevel"])
+    success, output = run_git_command(["rev-parse", "--show-toplevel"], cwd=cwd)
     return output if success else os.getcwd()
 
 

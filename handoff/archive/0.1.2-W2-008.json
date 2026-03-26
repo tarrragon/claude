@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.2-W2-008",
+  "direction": "to-sibling:0.1.2-W3-011",
+  "timestamp": "2026-03-25T01:18:25.305518",
+  "from_status": "completed",
+  "title": "建立 where.files 檔案所有權隔離自動檢查 Hook",
+  "what": "建立 where.files 檔案所有權隔離自動檢查 Hook",
+  "chain": {},
+  "resumed_at": "2026-03-25T01:21:48.993295"
+}

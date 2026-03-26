@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W29-004",
+  "direction": "to-sibling:0.1.0-W30-001",
+  "timestamp": "2026-03-10T03:08:58.917972",
+  "from_status": "completed",
+  "title": "修正 test_hook_utils.py 2 個測試預期不符",
+  "what": "test_scenario_1_normal_setup 和 test_log_exception_stderr_format 測試預期與實作不符",
+  "chain": {},
+  "resumed_at": "2026-03-10T03:09:54.803097"
+}

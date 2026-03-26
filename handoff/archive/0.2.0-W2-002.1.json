@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.2.0-W2-002.1",
+  "direction": "to-sibling:0.2.0-W2-002.2",
+  "timestamp": "2026-03-25T22:24:21.864657",
+  "from_status": "completed",
+  "title": "實作 WebSocket Client 基礎設施 + Flutter 資料模型 (spec §4.4)",
+  "what": "實作 WebSocket Client 基礎設施 + Flutter 資料模型 (spec §4.4)",
+  "chain": {},
+  "resumed_at": "2026-03-25T22:26:13.550355"
+}

@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W22-005",
+  "direction": "to-sibling:0.1.0-W22-001",
+  "timestamp": "2026-03-08T18:20:12.975400",
+  "from_status": "completed",
+  "title": "修復 command-entrance-gate-hook.py 短回答白名單：支援多字元數字（11-20）、文字選項標籤（如 Phase 4a）、組合多選（如 2, 4），消除 AskUserQuestion 回答仍被誤判的根本矛盾",
+  "what": "修復 command-entrance-gate-hook.py 短回答白名單：支援多字元數字（11-20）、文字選項標籤（如 Phase 4a）、組合多選（如 2, 4），消除 AskUserQuestion 回答仍被誤判的根本矛盾",
+  "chain": {},
+  "resumed_at": "2026-03-08T18:20:43.402092"
+}

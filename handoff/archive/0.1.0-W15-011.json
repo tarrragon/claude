@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W15-011",
+  "direction": "to-sibling:0.1.0-W15-012",
+  "timestamp": "2026-03-08T13:24:26.604723",
+  "from_status": "completed",
+  "title": "實作 post-ticket-complete-checkpoint-hook（ticket complete 成功後的 Checkpoint 1/1.5 強制提醒）",
+  "what": "實作 post-ticket-complete-checkpoint-hook（ticket complete 成功後的 Checkpoint 1/1.5 強制提醒）",
+  "chain": {},
+  "resumed_at": "2026-03-08T13:24:47.608516"
+}

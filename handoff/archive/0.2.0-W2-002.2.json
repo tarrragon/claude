@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.2.0-W2-002.2",
+  "direction": "to-sibling:0.2.0-W2-002.3",
+  "timestamp": "2026-03-25T23:10:31.511086",
+  "from_status": "completed",
+  "title": "實作 Session List Sidebar 按狀態分組顯示 (spec §4.1)",
+  "what": "實作 Session List Sidebar 按狀態分組顯示 (spec §4.1)",
+  "chain": {},
+  "resumed_at": "2026-03-25T23:11:21.743911"
+}

@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W28-003",
+  "direction": "to-sibling:0.1.0-W28-004",
+  "timestamp": "2026-03-10T02:10:08.007804",
+  "from_status": "completed",
+  "title": "修正 Hook 測試檔案 emoji 清理（16 個檔案統一改用純文字輸出）",
+  "what": "將 16 個 Hook 測試/輔助檔案中的 emoji 符號統一替換為純文字輸出，符合 language-constraints.md 規則 3",
+  "chain": {},
+  "resumed_at": "2026-03-10T02:11:55.025374"
+}

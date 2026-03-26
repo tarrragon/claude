@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W14-003",
+  "direction": "to-sibling:0.1.0-W14-004",
+  "timestamp": "2026-03-08T11:23:08.772448",
+  "from_status": "completed",
+  "title": "建立 broken-link-check skill（掃描 .claude/ 所有引用路徑，支援 /loop 定時執行）",
+  "what": "建立 broken-link-check skill（掃描 .claude/ 所有引用路徑，支援 /loop 定時執行）",
+  "chain": {},
+  "resumed_at": "2026-03-08T11:23:55.533719"
+}
