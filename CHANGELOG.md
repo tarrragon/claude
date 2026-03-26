@@ -1,3 +1,10 @@
+## [1.2.0] - 2026-03-27
+
+### Summary
+1 feat [minor bump suggested]
+
+---
+
 ## [1.1.53] - 2026-03-27
 
 ### Summary

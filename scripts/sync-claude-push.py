@@ -11,6 +11,11 @@
 
 不推送內容:
   - 根目錄 CLAUDE.md（專案特定配置）
+
+commit 訊息生成:
+  - 無參數時自動分析 .claude/ 相關 commit 生成結構化摘要
+  - 提供參數時使用用戶指定的訊息
+  - 自動建議版本遞增幅度（patch/minor/major）
 """
 
 import os
@@ -19,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
@@ -35,6 +41,28 @@ EXCLUDE_PATTERNS = {
 }
 
 EXCLUDE_SUFFIXES = {".pyc"}
+
+# commit 訊息中需要過濾的專案特定模式
+# 獨立 repo 是跨專案通用框架，commit 訊息禁止包含專案版本號/Wave/Ticket 編號
+PROJECT_SPECIFIC_PATTERNS = [
+    r"\b\d+\.\d+\.\d+-W\d+-\d+\b",  # Ticket ID: 0.2.0-W5-014
+    r"\bW\d+-\d+\b",                  # 短格式 Ticket: W5-014
+    r"\bv\d+\.\d+\.\d+\b",           # 版本號: v0.2.0
+    r"\bWave\s*\d+\b",               # Wave 5
+    r"\b0\.\d+\.\d+\b",              # 裸版本: 0.2.0
+]
+
+# commit type 分類對應的版本遞增建議
+VERSION_BUMP_WEIGHTS = {
+    "feat": "minor",
+    "refactor": "minor",
+    "fix": "patch",
+    "docs": "patch",
+    "chore": "patch",
+    "style": "patch",
+    "test": "patch",
+    "perf": "minor",
+}
 
 
 def print_color(msg: str, color: str = "yellow") -> None:
@@ -104,13 +132,147 @@ def copy_filtered(src: Path, dst: Path) -> int:
     return count
 
 
-def bump_patch_version(version: str) -> str:
-    """Increment the patch version number."""
+def strip_project_specific_info(text: str) -> str:
+    """Remove project-specific info (Ticket IDs, version numbers, Wave refs) from text.
+
+    The independent repo is a cross-project framework.
+    Commit messages must focus on framework functionality, not project-specific progress.
+    """
+    result = text
+    for pattern in PROJECT_SPECIFIC_PATTERNS:
+        result = re.sub(pattern, "", result)
+    # Clean up leftover artifacts: multiple spaces, trailing colons, empty parens
+    result = re.sub(r"\(\s*\)", "", result)
+    result = re.sub(r":\s*$", "", result, flags=re.MULTILINE)
+    result = re.sub(r"  +", " ", result)
+    return result.strip()
+
+
+def parse_commit_type(subject: str) -> tuple[str, str]:
+    """Parse conventional commit subject into (type, description).
+
+    Returns (type, description) where type is feat/fix/refactor/docs/chore/etc.
+    If no conventional prefix, returns ("other", full_subject).
+    """
+    match = re.match(r"^(\w+)(?:\([^)]*\))?:\s*(.+)", subject)
+    if match:
+        return match.group(1).lower(), match.group(2).strip()
+    return "other", subject.strip()
+
+
+def get_last_sync_timestamp(remote_repo_dir: str) -> str | None:
+    """Get the timestamp of the latest commit in the remote repo.
+
+    This represents when the last sync-push happened.
+    """
+    result = run_git(
+        ["log", "-1", "--format=%aI"],
+        cwd=remote_repo_dir,
+        check=False,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+    return None
+
+
+def collect_claude_commits(project_root: str, since: str | None) -> list[str]:
+    """Collect commit subjects that touch .claude/ since the given timestamp.
+
+    Returns list of commit subject lines.
+    """
+    args = ["log", "--format=%s", "--no-merges", "--", ".claude/"]
+    if since:
+        args.insert(2, f"--since={since}")
+    result = run_git(args, cwd=project_root, check=False)
+    if result.returncode != 0 or not result.stdout.strip():
+        return []
+    return [line for line in result.stdout.strip().split("\n") if line.strip()]
+
+
+def categorize_commits(subjects: list[str]) -> dict[str, list[str]]:
+    """Categorize commit subjects by conventional commit type.
+
+    Returns dict mapping type -> list of descriptions.
+    """
+    categories: dict[str, list[str]] = defaultdict(list)
+    for subject in subjects:
+        commit_type, description = parse_commit_type(subject)
+        cleaned = strip_project_specific_info(description)
+        if cleaned:
+            categories[commit_type].append(cleaned)
+    return dict(categories)
+
+
+def suggest_version_bump(categories: dict[str, list[str]]) -> str:
+    """Suggest version bump level based on commit types.
+
+    Returns "major", "minor", or "patch".
+    """
+    has_minor = False
+    for commit_type in categories:
+        bump = VERSION_BUMP_WEIGHTS.get(commit_type, "patch")
+        if bump == "major":
+            return "major"
+        if bump == "minor":
+            has_minor = True
+    return "minor" if has_minor else "patch"
+
+
+def generate_commit_summary(categories: dict[str, list[str]], bump_suggestion: str) -> str:
+    """Generate a structured commit message from categorized commits.
+
+    Format: summary line + categorized bullet points.
+    """
+    # Build summary line
+    type_counts = []
+    # Display order: feat > refactor > fix > docs > others
+    display_order = ["feat", "refactor", "fix", "docs", "chore", "style", "test", "perf", "other"]
+    for t in display_order:
+        if t in categories:
+            count = len(categories[t])
+            type_counts.append(f"{count} {t}")
+
+    summary_line = ", ".join(type_counts)
+    if bump_suggestion != "patch":
+        summary_line += f" [{bump_suggestion} bump suggested]"
+
+    # Build detail lines (max 3 items per category to keep it concise)
+    MAX_ITEMS_PER_CATEGORY = 3
+    details: list[str] = []
+    for t in display_order:
+        if t not in categories:
+            continue
+        items = categories[t]
+        # Deduplicate similar descriptions
+        unique_items = list(dict.fromkeys(items))
+        shown = unique_items[:MAX_ITEMS_PER_CATEGORY]
+        remaining = len(unique_items) - MAX_ITEMS_PER_CATEGORY
+        for item in shown:
+            details.append(f"- {t}: {item}")
+        if remaining > 0:
+            details.append(f"- {t}: ... +{remaining} more")
+
+    if details:
+        return f"{summary_line}\n\n" + "\n".join(details)
+    return summary_line
+
+
+def bump_version(version: str, bump_level: str) -> str:
+    """Increment version based on bump level (major/minor/patch)."""
     match = re.match(r"(\d+)\.(\d+)\.(\d+)", version)
     if not match:
         return "1.0.1"
-    major, minor, patch = match.groups()
-    return f"{major}.{minor}.{int(patch) + 1}"
+    major, minor, patch = int(match.group(1)), int(match.group(2)), int(match.group(3))
+    if bump_level == "major":
+        return f"{major + 1}.0.0"
+    if bump_level == "minor":
+        return f"{major}.{minor + 1}.0"
+    return f"{major}.{minor}.{patch + 1}"
+
+
+def bump_patch_version(version: str) -> str:
+    """Increment the patch version number."""
+    return bump_version(version, "patch")
 
 
 def update_changelog(repo_dir: Path, new_version: str, commit_message: str, old_content: str = "") -> None:
@@ -133,12 +295,8 @@ def update_changelog(repo_dir: Path, new_version: str, commit_message: str, old_
 
 
 def main() -> None:
-    if len(sys.argv) < 2:
-        print_color('錯誤: 請提供提交訊息', "red")
-        print(f'使用方式: python3 {sys.argv[0]} "提交訊息"')
-        sys.exit(1)
-
-    commit_message = sys.argv[1]
+    # commit message is now optional - auto-generated when not provided
+    user_message = sys.argv[1] if len(sys.argv) >= 2 else None
 
     print_color("開始推送 .claude 資料夾到獨立 repo...")
 
@@ -170,11 +328,35 @@ def main() -> None:
             remote_version = "1.0.0"
             print_color("   遠端無版本檔案，使用預設 v1.0.0")
 
+        # 5. Auto-analyze commits since last sync
+        bump_suggestion = "patch"
+        if user_message:
+            commit_message = user_message
+            print_color(f"使用用戶指定的 commit 訊息: {commit_message}")
+        else:
+            print_color("分析自上次推送以來的 .claude/ 變更...")
+            last_sync = get_last_sync_timestamp(str(temp_dir))
+            if last_sync:
+                print_color(f"   上次推送時間: {last_sync}", "green")
+
+            subjects = collect_claude_commits(str(project_root), last_sync)
+            if subjects:
+                print_color(f"   找到 {len(subjects)} 個相關 commit", "green")
+                categories = categorize_commits(subjects)
+                bump_suggestion = suggest_version_bump(categories)
+                commit_message = generate_commit_summary(categories, bump_suggestion)
+                print_color("--- 自動生成的 commit 摘要 ---")
+                print(commit_message)
+                print_color("--- 摘要結束 ---")
+            else:
+                print_color("   未找到新的 .claude/ commit，使用預設訊息")
+                commit_message = "sync .claude configuration"
+
         # Save CHANGELOG content before cleaning
         changelog_path = temp_dir / "CHANGELOG.md"
         saved_changelog = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else ""
 
-        # 5. Clean existing content (preserve .git)
+        # 6. Clean existing content (preserve .git)
         print_color("清空舊內容...")
         for item in temp_dir.iterdir():
             if item.name == ".git":
@@ -184,22 +366,25 @@ def main() -> None:
             else:
                 item.unlink()
 
-        # 6. Copy .claude/ content with exclusions
+        # 7. Copy .claude/ content with exclusions
         print_color("複製 .claude 配置檔案...")
         file_count = copy_filtered(claude_dir, temp_dir)
         print_color(f"   已複製 {file_count} 個檔案", "green")
         print_color("   注意: CLAUDE.md 不再同步（專案特定配置）")
 
-        # 7. Calculate new version
-        new_version = bump_patch_version(remote_version)
+        # 8. Calculate new version (use bump suggestion for auto-generated messages)
+        new_version = bump_version(remote_version, bump_suggestion)
         (temp_dir / "VERSION").write_text(new_version + "\n", encoding="utf-8")
 
-        # 8. Update CHANGELOG
-        update_changelog(temp_dir, new_version, commit_message, saved_changelog)
-        print_color(f"版本: v{new_version} (自動遞增)", "green")
+        # 9. Update CHANGELOG (use first line as summary for CHANGELOG)
+        changelog_message = commit_message.split("\n")[0] if "\n" in commit_message else commit_message
+        update_changelog(temp_dir, new_version, changelog_message, saved_changelog)
+        print_color(f"版本: v{new_version} ({bump_suggestion} bump)", "green")
 
-        # 9. Commit and push
-        commit_msg = f"v{new_version}: {commit_message}"
+        # 10. Commit and push
+        # For git commit, use only the summary line to keep it clean
+        commit_summary = commit_message.split("\n")[0] if "\n" in commit_message else commit_message
+        commit_msg = f"v{new_version}: {commit_summary}"
         print_color("提交變更...")
         run_git(["add", "-A"], cwd=str(temp_dir))
 
