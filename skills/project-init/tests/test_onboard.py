@@ -27,6 +27,7 @@ htmlcov/
 .claude/worktrees/
 .claude/tool-results/
 .claude/handoff/
+__pycache__/
 """
         (tmp_path / ".gitignore").write_text(gitignore_content)
 
@@ -188,6 +189,7 @@ htmlcov/
 .claude/worktrees/
 .claude/tool-results/
 .claude/handoff/
+__pycache__/
 """
         (tmp_path / ".gitignore").write_text(gitignore_content)
 
@@ -294,6 +296,7 @@ htmlcov/
 .claude/worktrees
 .claude/tool-results/
 .claude/handoff/
+__pycache__/
 """
         (tmp_path / ".gitignore").write_text(gitignore_content)
 

@@ -38,3 +38,8 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "--verbose"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

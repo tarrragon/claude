@@ -30,6 +30,7 @@ GITIGNORE_REQUIRED_RULES = [
     ".claude/worktrees",
     ".claude/tool-results",
     ".claude/handoff",
+    "__pycache__",
 ]
 
 # Hook 配置檔案名稱常數
@@ -104,6 +105,8 @@ class GitignoreCheckInfo:
     """包含 .claude/tool-results/ 規則."""
     has_handoff_rule: bool
     """包含 .claude/handoff/ 規則."""
+    has_pycache_rule: bool
+    """包含 __pycache__/ 規則."""
     all_required_complete: bool
     """所有必須規則都存在."""
     missing_rules: list[str] = field(default_factory=list)
@@ -592,6 +595,7 @@ def _create_missing_gitignore_result(exists: bool = False) -> GitignoreCheckInfo
         has_worktrees_rule=False,
         has_tool_results_rule=False,
         has_handoff_rule=False,
+        has_pycache_rule=False,
         all_required_complete=False,
         missing_rules=[
             "coverage/",
@@ -600,6 +604,7 @@ def _create_missing_gitignore_result(exists: bool = False) -> GitignoreCheckInfo
             ".claude/worktrees/",
             ".claude/tool-results/",
             ".claude/handoff/",
+            "__pycache__/",
         ],
     )
 
@@ -632,6 +637,7 @@ def check_gitignore_completeness(project_root: Path) -> GitignoreCheckInfo:
     has_worktrees = _has_gitignore_rule(content, ".claude/worktrees")
     has_tool_results = _has_gitignore_rule(content, ".claude/tool-results")
     has_handoff = _has_gitignore_rule(content, ".claude/handoff")
+    has_pycache = _has_gitignore_rule(content, "__pycache__")
 
     # 彙整缺失的規則
     missing = []
@@ -645,6 +651,8 @@ def check_gitignore_completeness(project_root: Path) -> GitignoreCheckInfo:
         missing.append(".claude/tool-results/")
     if not has_handoff:
         missing.append(".claude/handoff/")
+    if not has_pycache:
+        missing.append("__pycache__/")
 
     return GitignoreCheckInfo(
         exists=True,
@@ -653,6 +661,7 @@ def check_gitignore_completeness(project_root: Path) -> GitignoreCheckInfo:
         has_worktrees_rule=has_worktrees,
         has_tool_results_rule=has_tool_results,
         has_handoff_rule=has_handoff,
+        has_pycache_rule=has_pycache,
         all_required_complete=len(missing) == 0,
         missing_rules=missing,
     )

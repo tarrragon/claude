@@ -364,6 +364,9 @@ find . -type d -name __pycache__ -exec rm -rf {} +
 find . -type d -name .pytest_cache -exec rm -rf {} +
 ```
 
+建議在 .gitignore 加入 `__pycache__/` 規則，從根本上避免 Python bytecode 快取被 git 追蹤。
+這能防止每次 session 啟動時 Hook 編譯產生的 .pyc 變更阻擋 sync-pull/sync-push 流程。
+
 4. 清理其他臨時檔案：
 
 macOS：
@@ -490,6 +493,9 @@ find .claude/hooks -name "*.pyc" -delete
 # 移除 __pycache__
 rm -rf .claude/hooks/__pycache__
 ```
+
+建議在 .gitignore 加入 `__pycache__/` 規則，從根本上避免 Python bytecode 快取被 git 追蹤。
+這能防止每次 session 啟動時 Hook 編譯產生的 .pyc 變更阻擋 sync-pull/sync-push 流程。
 
 5. 重新檢查環境：
 ```bash

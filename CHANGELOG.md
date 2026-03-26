@@ -1,3 +1,14 @@
+## [1.3.0] - 2026-03-27
+
+### Summary
+feat: 新增 __pycache__ 到 .gitignore 必須規則檢查
+
+Changes: 1 feat
+
+- feat: 新增 __pycache__ 到 .gitignore 必須規則檢查
+
+---
+
 ## [1.2.2] - 2026-03-27
 
 ### Summary
