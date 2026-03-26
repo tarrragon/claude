@@ -1,3 +1,16 @@
+## [1.4.0] - 2026-03-27
+
+### Summary
+refactor: 統一 Logger 靜態呼叫第二參數為物件格式; fix: 時間敏感測試、 ESLint toThrow 修復、 版本同步; docs: 新增 PC-029 並行代理人共用檔案衝突
+
+Changes: 1 refactor, 1 fix, 1 docs
+
+- refactor: 統一 Logger 靜態呼叫第二參數為物件格式
+- fix: 時間敏感測試、 ESLint toThrow 修復、 版本同步
+- docs: 新增 PC-029 並行代理人共用檔案衝突
+
+---
+
 ## [1.3.0] - 2026-03-27
 
 ### Summary
