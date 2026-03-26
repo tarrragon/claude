@@ -7,7 +7,7 @@
 
 拉取內容:
   - .claude/ 目錄所有檔案（同步覆蓋 + 清理遠端已刪除的檔案）
-  - FLUTTER.md
+  - FLUTTER.md（若遠端 project-templates 中存在）
 
 不覆蓋內容:
   - 根目錄 CLAUDE.md（保留專案特定配置）
@@ -118,7 +118,7 @@ def find_project_root() -> Path:
 
 
 def check_uncommitted_changes(project_root: Path) -> None:
-    """檢查 .claude 和 FLUTTER.md 的未提交變更。
+    """檢查 .claude 的未提交變更。
 
     執行 git diff 檢查工作目錄和暫存區是否有未提交的變更。
     若發現變更則輸出警告訊息並終止程式，防止同步時發生衝突。
@@ -130,11 +130,11 @@ def check_uncommitted_changes(project_root: Path) -> None:
         呼叫 sys.exit(1)，若有未提交變更或 git 命令失敗則終止程式
     """
     result = run_git(
-        ["diff", "--name-only", ".claude", "FLUTTER.md"],
+        ["diff", "--name-only", "--", ".claude"],
         cwd=str(project_root),
     )
     cached = run_git(
-        ["diff", "--cached", "--name-only", ".claude", "FLUTTER.md"],
+        ["diff", "--cached", "--name-only", "--", ".claude"],
         cwd=str(project_root),
     )
     if result.returncode != 0 or cached.returncode != 0:
@@ -142,7 +142,7 @@ def check_uncommitted_changes(project_root: Path) -> None:
         sys.exit(1)
     has_changes = bool(result.stdout.strip() or cached.stdout.strip())
     if has_changes:
-        print_color("警告: .claude 或 FLUTTER.md 有未提交的變更", "red")
+        print_color("警告: .claude 有未提交的變更", "red")
         print("請先提交或暫存變更，避免衝突")
         sys.exit(1)
 

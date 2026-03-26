@@ -1,3 +1,17 @@
+## [1.2.2] - 2026-03-27
+
+### Summary
+fix: 將 __pycache__ 加入 .gitignore 並從 git 追蹤移除; fix: 移除 FLUTTER.md pathspec 避免非 Flutter 專案執行失敗; chore: 同步遠端更新 — sync-push 增強與版本遞增至 1.2.1 (+1 more)
+
+Changes: 2 fix, 2 chore
+
+- fix: 將 __pycache__ 加入 .gitignore 並從 git 追蹤移除
+- fix: 移除 FLUTTER.md pathspec 避免非 Flutter 專案執行失敗
+- chore: 同步遠端更新 — sync-push 增強與版本遞增至 1.2.1
+- chore: 同步更新 .claude 配置至 並更新專案文件
+
+---
+
 ## [1.2.1] - 2026-03-27
 
 ### Summary
