@@ -188,6 +188,17 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | IMP-031 | Agent 部分完成後偽報告成功 | 中 | v0.1.0 |
 | IMP-032 | Hook 傳遞 CLI 不支援的參數 | 中 | v0.1.1 |
 | IMP-033 | 版本比對時 source 掃描範圍與 installed 不對齊 | 中 | v0.1.1 |
+| IMP-034 | init.py transitive import breakage | 中 | v0.1.1 |
+| IMP-035 | Guard clause 與篩選狀態衝突 | 中 | v0.1.1 |
+| IMP-036 | Hook 絕對路徑豁免不匹配 | 中 | v0.1.1 |
+| IMP-037 | Hook 缺少 subagent 環境判斷 | 中 | v0.1.2 |
+| IMP-038 | hook_utils YAML 列表欄位回傳為字串 | 低 | v0.1.2 |
+| IMP-039 | Phase 4b context 耗盡（開放式 prompt） | 中 | v0.1.2 |
+| IMP-040 | 狀態機終態未受保護 | 中 | v0.1.2 |
+| IMP-041 | Go build binary 未清理 | 低 | v0.2.0 |
+| IMP-042 | 刪除操作後殘留引用未同步清理 | 中 | v0.2.0 |
+| IMP-043 | 函式實作完整但呼叫端未接線 | 高 | v0.2.0 |
+| IMP-044 | 生命週期階段缺乏可觀測性 | 中 | v0.2.0 |
 
 ### 流程合規 (PC)
 
