@@ -221,40 +221,52 @@ def suggest_version_bump(categories: dict[str, list[str]]) -> str:
 def generate_commit_summary(categories: dict[str, list[str]], bump_suggestion: str) -> str:
     """Generate a structured commit message from categorized commits.
 
-    Format: summary line + categorized bullet points.
+    The first line is always a descriptive summary suitable for git commit subject.
+    Additional detail lines follow after a blank line.
     """
-    # Build summary line
-    type_counts = []
-    # Display order: feat > refactor > fix > docs > others
     display_order = ["feat", "refactor", "fix", "docs", "chore", "style", "test", "perf", "other"]
-    for t in display_order:
-        if t in categories:
-            count = len(categories[t])
-            type_counts.append(f"{count} {t}")
 
-    summary_line = ", ".join(type_counts)
-    if bump_suggestion != "patch":
-        summary_line += f" [{bump_suggestion} bump suggested]"
-
-    # Build detail lines (max 3 items per category to keep it concise)
-    MAX_ITEMS_PER_CATEGORY = 3
-    details: list[str] = []
+    # Collect all unique descriptions with their types, preserving order
+    all_items: list[tuple[str, str]] = []
     for t in display_order:
         if t not in categories:
             continue
-        items = categories[t]
-        # Deduplicate similar descriptions
-        unique_items = list(dict.fromkeys(items))
-        shown = unique_items[:MAX_ITEMS_PER_CATEGORY]
-        remaining = len(unique_items) - MAX_ITEMS_PER_CATEGORY
-        for item in shown:
-            details.append(f"- {t}: {item}")
-        if remaining > 0:
-            details.append(f"- {t}: ... +{remaining} more")
+        for desc in dict.fromkeys(categories[t]):
+            all_items.append((t, desc))
 
+    total_count = len(all_items)
+
+    # First line: descriptive summary (not just counts)
+    # Few commits (1-3): list actual descriptions joined by "; "
+    # Many commits (4+): highlight top items with count context
+    MAX_SUBJECT_ITEMS = 3
+    if total_count <= MAX_SUBJECT_ITEMS:
+        subject_parts = [f"{t}: {desc}" for t, desc in all_items]
+        summary_line = "; ".join(subject_parts)
+    else:
+        # Show first few items + count of remaining
+        shown_parts = [f"{t}: {desc}" for t, desc in all_items[:MAX_SUBJECT_ITEMS]]
+        remaining = total_count - MAX_SUBJECT_ITEMS
+        summary_line = "; ".join(shown_parts) + f" (+{remaining} more)"
+
+    # Build detail lines for body (all items)
+    details: list[str] = []
+    for t, desc in all_items:
+        details.append(f"- {t}: {desc}")
+
+    # Stats line for context
+    type_counts = []
+    for t in display_order:
+        if t in categories:
+            type_counts.append(f"{len(categories[t])} {t}")
+    stats = ", ".join(type_counts)
+
+    body_parts = [f"Changes: {stats}"]
     if details:
-        return f"{summary_line}\n\n" + "\n".join(details)
-    return summary_line
+        body_parts.append("")
+        body_parts.extend(details)
+
+    return f"{summary_line}\n\n" + "\n".join(body_parts)
 
 
 def bump_version(version: str, bump_level: str) -> str:
@@ -376,9 +388,8 @@ def main() -> None:
         new_version = bump_version(remote_version, bump_suggestion)
         (temp_dir / "VERSION").write_text(new_version + "\n", encoding="utf-8")
 
-        # 9. Update CHANGELOG (use first line as summary for CHANGELOG)
-        changelog_message = commit_message.split("\n")[0] if "\n" in commit_message else commit_message
-        update_changelog(temp_dir, new_version, changelog_message, saved_changelog)
+        # 9. Update CHANGELOG (use full commit message for detailed history)
+        update_changelog(temp_dir, new_version, commit_message, saved_changelog)
         print_color(f"版本: v{new_version} ({bump_suggestion} bump)", "green")
 
         # 10. Commit and push
