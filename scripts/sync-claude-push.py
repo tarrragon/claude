@@ -25,6 +25,7 @@ from pathlib import Path
 REPO_URL = "https://github.com/tarrragon/claude.git"
 
 EXCLUDE_PATTERNS = {
+    "handoff",
     "hook-logs",
     "PM_INTERVENTION_REQUIRED",
     "ARCHITECTURE_REVIEW_REQUIRED",
