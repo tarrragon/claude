@@ -5,6 +5,7 @@ allowed-tools: Read, Grep, Glob, Bash
 metadata:
   color: crimson
 model: opus
+effort: low
 ---
 
 @.claude/agents/AGENT_PRELOAD.md

@@ -1,0 +1,17 @@
+{
+  "ticket_id": "0.1.2-W1-002",
+  "direction": "to-child:0.1.2-W1-002.3",
+  "timestamp": "2026-03-24T14:46:14.116262",
+  "from_status": "in_progress",
+  "title": "[IMP] 實作 TDD Phase Input/Output Contract 驗證機制",
+  "what": "設計並實作 Phase contract YAML schema 和驗證 Hook，確保 Phase 銜接格式標準化",
+  "chain": {
+    "root": "0.1.2-W1-2",
+    "parent": null,
+    "depth": 0,
+    "sequence": [
+      2
+    ]
+  },
+  "resumed_at": "2026-03-24T14:58:20.339431"
+}

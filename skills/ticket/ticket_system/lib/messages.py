@@ -56,7 +56,16 @@ class ErrorMessages:
     STATUS_ERROR = "[Error] {status_msg}"
     TICKET_NOT_FOUND_IN_BATCH = "[Error] {ticket_id} 找不到"
     CHECK_ACCEPTANCE_ALL_WITH_INDEX = "[Error] --all 和 index 參數互斥，只能選擇其中之一"
-    CHECK_ACCEPTANCE_MISSING_INDEX = "[Error] 必須提供 index 或使用 --all 參數"
+    CHECK_ACCEPTANCE_MISSING_INDEX = (
+        "[Error] 必須提供 index 或使用 --all 參數\n"
+        "\n"
+        "用法：\n"
+        "  ticket track check-acceptance <id> --all          # 勾選全部驗收條件\n"
+        "  ticket track check-acceptance <id> 1 2 3          # 勾選第 1、2、3 項\n"
+        "  ticket track check-acceptance <id> 1 --uncheck    # 取消勾選第 1 項\n"
+        "\n"
+        "提示：先用 ticket track query <id> 查看驗收條件清單和編號"
+    )
 
 
 class WarningMessages:

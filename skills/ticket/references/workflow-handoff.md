@@ -55,6 +55,29 @@ handoff       │                            │
 | 在 `completed` ticket 使用 `--context-refresh` | `--context-refresh` 僅適用 `in_progress` 狀態，在 completed 上會直接報錯 |
 | 在 `in_progress` ticket 使用 `--to-sibling` / `--to-parent` | 任務未完成不可切換，CLI 會拒絕 |
 
+## 任務鏈結束決策樹
+
+當 completed ticket 無有效 handoff 目標時：
+
+```
+[Ticket completed]
+    |
+    v
+有子任務/兄弟待處理?
+    |
+    +── 是 → /ticket handoff <id> --to-child/--to-sibling <target>
+    |
+    +── 否（任務鏈結束）
+         |
+         v
+    /ticket（回到任務入口，查看所有待辦）
+         |
+         +── 同 Wave 有 pending → 選擇任務認領
+         +── Wave 全部完成 → Wave 收尾流程
+```
+
+**核心原則**：handoff 是任務鏈內的 context 交接工具，不是通用任務路由器。任務鏈結束後，使用 `/ticket` 重新選擇下一個任務。
+
 ## 恢復流程決策樹
 
 ```

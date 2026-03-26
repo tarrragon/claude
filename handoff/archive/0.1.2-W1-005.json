@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.2-W1-005",
+  "direction": "context-refresh",
+  "timestamp": "2026-03-23T17:17:35.186646",
+  "from_status": "in_progress",
+  "title": "實作 Protocol Version 版本控制機制",
+  "what": "為 Ticket frontmatter 新增 protocol_version 欄位（Semantic Versioning Major.Minor），支援 schema 演進和向後相容遷移。包含常數定義、遷移邏輯、驗證 Hook 和 dry-run 驗證四個步驟。",
+  "chain": {},
+  "resumed_at": "2026-03-23T17:20:51.386006"
+}

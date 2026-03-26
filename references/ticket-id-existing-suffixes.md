@@ -1,6 +1,6 @@
 # Ticket 檔案命名清單（現存後綴清單）
 
-> 來源：`.claude/rules/core/ticket-id-conventions.md` 第 4 節外放
+> 來源：`.claude/references/ticket-id-conventions.md` 第 4 節外放
 
 本清單列出專案實際使用的所有後綴檔案，已被系統識別為有效。
 

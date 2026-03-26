@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.1-W13-003",
+  "direction": "to-sibling:0.1.1-W13-001",
+  "timestamp": "2026-03-21T08:46:05.682270",
+  "from_status": "completed",
+  "title": "重構 Agent 職責聲明集中化 — 從 26 個 agent 移至 AGENT_PRELOAD + skip-gate 開頭",
+  "what": "重構 Agent 職責聲明集中化 — 從 26 個 agent 移至 AGENT_PRELOAD + skip-gate 開頭",
+  "chain": {},
+  "resumed_at": "2026-03-21T08:47:15.733848"
+}

@@ -110,6 +110,23 @@ ANALYZER_WARNING_PATTERNS = [
     (r"deprecated\s+(?:function|class|method)", "已棄用 API"),
 ]
 
+# 截斷輸出偵測
+TRUNCATED_OUTPUT_PATTERN = re.compile(
+    r"Output too large.*?Full output saved to:\s*(\S+)"
+)
+
+# 截斷輸出相關訊息
+TRUNCATED_OUTPUT_READ_FAILED_MESSAGE = (
+    "[WARNING] 工具輸出被截斷，但無法讀取完整輸出檔案: {path}\n"
+    "錯誤: {error}\n"
+    "請手動檢查該檔案以確認是否有測試失敗或錯誤。"
+)
+TRUNCATED_OUTPUT_BLOCK_MESSAGE = (
+    "[WARNING] 工具輸出被截斷且無法讀取完整內容。\n"
+    "為避免遺漏錯誤，已阻塞後續操作。\n"
+    "請使用 Read 工具讀取完整輸出檔案後再繼續。"
+)
+
 
 # ============================================================================
 # 錯誤分類函式
@@ -306,6 +323,55 @@ def generate_non_syntax_error_output(error_type: ErrorType, errors: List[Dict[st
 
 
 # ============================================================================
+# 截斷輸出處理
+# ============================================================================
+
+def _resolve_truncated_output(output_str: str, logger) -> str:
+    """
+    偵測截斷輸出並讀取完整檔案內容。
+
+    當 Claude Code 將超過 2KB 的工具輸出替換為截斷訊息時，
+    從指定的完整輸出檔案讀取原始內容，確保正則匹配正常運作。
+
+    Args:
+        output_str: 原始工具輸出（可能是截斷訊息）
+        logger: 日誌物件
+
+    Returns:
+        完整輸出內容（成功讀取時）或原始字串（無截斷時）。
+        讀取失敗時透過 hook_output 輸出阻塞訊息並終止程式。
+    """
+    match = TRUNCATED_OUTPUT_PATTERN.search(output_str)
+    if not match:
+        return output_str
+
+    saved_file_path = match.group(1)
+    logger.info(f"偵測到截斷輸出，嘗試讀取完整檔案: {saved_file_path}")
+
+    try:
+        full_content = Path(saved_file_path).read_text(encoding="utf-8")
+        logger.info(f"成功讀取完整輸出，大小: {len(full_content)} 字元")
+        return full_content
+    except (OSError, ValueError) as e:
+        error_msg = TRUNCATED_OUTPUT_READ_FAILED_MESSAGE.format(
+            path=saved_file_path, error=e
+        )
+        logger.error(error_msg)
+        print(error_msg, file=sys.stderr)
+
+        # 保守處理：阻塞後續操作
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "decision": "block"
+            },
+            "systemMessage": TRUNCATED_OUTPUT_BLOCK_MESSAGE,
+            "suppressOutput": False
+        }))
+        sys.exit(2)
+
+
+# ============================================================================
 # 主程式
 # ============================================================================
 
@@ -330,6 +396,9 @@ def main() -> int:
 
         # 檢查是否有錯誤或失敗
         output_str = str(tool_response) if not isinstance(tool_response, str) else tool_response
+
+        # 截斷輸出偵測：讀取完整輸出檔案替換截斷內容
+        output_str = _resolve_truncated_output(output_str, logger)
 
         # 檢查成功標誌 (Dart 測試成功輸出中會有這些標誌)
         if "all tests passed" in output_str.lower() or "no issues found" in output_str.lower():

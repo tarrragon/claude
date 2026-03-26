@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.1-W15-002",
+  "direction": "context-refresh",
+  "timestamp": "2026-03-20T16:39:26.603799",
+  "from_status": "in_progress",
+  "title": "分析 docs/work-logs/ 散落檔案的產生機制 — 釐清為何 worklog 和 TDD Phase 產出物未放入正確版本目錄",
+  "what": "分析 docs/work-logs/ 散落檔案的產生機制 — 釐清為何 worklog 和 TDD Phase 產出物未放入正確版本目錄",
+  "chain": {},
+  "resumed_at": "2026-03-20T16:40:16.729536"
+}

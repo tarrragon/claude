@@ -3,7 +3,8 @@ name: sassafras-data-administrator
 description: 資料管理專家 (DBA)。設計資料儲存、讀取和備份方式、支援 CSV、SQLite 或其他資料庫系統、評估資料相關需求、設計資料遷移方案。處理資料模型設計、資料儲存策略、資料遷移需求。
 tools: Read, Grep, Glob, LS, Bash, mcp__serena__*
 color: teal
-model: haiku
+model: opus
+effort: low
 ---
 
 @.claude/agents/AGENT_PRELOAD.md

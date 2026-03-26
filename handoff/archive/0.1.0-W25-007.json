@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W25-007",
+  "direction": "to-sibling:0.1.0-W25-008",
+  "timestamp": "2026-03-09T16:05:01.391392",
+  "from_status": "completed",
+  "title": "修復 parallel-suggestion-hook ImportError 未輸出 JSON 就 exit(1)",
+  "what": "修復 parallel-suggestion-hook ImportError 未輸出 JSON 就 exit(1)",
+  "chain": {},
+  "resumed_at": "2026-03-09T16:06:07.845979"
+}

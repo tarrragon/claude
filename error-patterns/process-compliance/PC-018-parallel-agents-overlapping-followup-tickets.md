@@ -61,7 +61,7 @@
 ## 相關文件
 
 - .claude/rules/guides/parallel-dispatch.md - 並行派發指南
-- .claude/rules/flows/plan-to-ticket-flow.md - 執行中額外發現規則
+- .claude/pm-rules/plan-to-ticket-flow.md - 執行中額外發現規則
 
 ---
 

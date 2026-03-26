@@ -14,7 +14,7 @@
 
 ### 驗收基準
 
-參考計劃檔案: `/Users/mac-eric/.claude/plans/iterative-swimming-feather.md`
+參考計劃檔案: `~/.claude/plans/iterative-swimming-feather.md`
 
 **驗收條件**:
 1. Hook 腳本可正確分類錯誤類型
@@ -482,7 +482,7 @@ PostToolUse Hook 中添加配置：
 
 ## 📚 相關文件
 
-- **計劃**: `/Users/mac-eric/.claude/plans/iterative-swimming-feather.md`
+- **計劃**: `~/.claude/plans/iterative-swimming-feather.md`
 - **實作**: `.claude/hook-specs/pre-fix-evaluation-implementation.md`
 - **快速參考**: `.claude/quick-ref-pre-fix-eval.md`
 - **Hook 腳本**: `.claude/hooks/pre-fix-evaluation-hook.py`

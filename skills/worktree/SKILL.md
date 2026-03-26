@@ -80,12 +80,12 @@ $ /worktree create 0.1.1-W9-002.1
   Ticket: 0.1.1-W9-002.1
   分支:   feat/0.1.1-W9-002.1
   基礎:   main
-  路徑:   /Users/mac-eric/project/ccsession-0.1.1-W9-002.1
+  路徑:   /path/to/project-0.1.1-W9-002.1
 
 建立成功。
 
 下一步：
-  cd /Users/mac-eric/project/ccsession-0.1.1-W9-002.1
+  cd /path/to/project-0.1.1-W9-002.1
 ```
 
 #### 錯誤情境
@@ -118,19 +118,19 @@ Worktree 狀態（共 3 個）
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 [主倉庫]
-  路徑：   /Users/mac-eric/project/ccsession
+  路徑：   /path/to/project
   分支：   main
   變更：   0 個未 commit
 
 [0.1.1-W9-002.1]
-  路徑：   /Users/mac-eric/project/ccsession-0.1.1-W9-002.1
+  路徑：   /path/to/project-0.1.1-W9-002.1
   分支：   feat/0.1.1-W9-002.1
   領先：   +3 commits ahead of main
   落後：   -0 commits behind main
   變更：   2 個未 commit
 
 [0.1.1-W9-002.2]
-  路徑：   /Users/mac-eric/project/ccsession-0.1.1-W9-002.2
+  路徑：   /path/to/project-0.1.1-W9-002.2
   分支：   feat/0.1.1-W9-002.2
   領先：   +1 commits ahead of main
   落後：   -1 commits behind main
@@ -143,7 +143,7 @@ Worktree 狀態（共 3 個）
 $ /worktree status 0.1.1-W9-002.1
 
 [0.1.1-W9-002.1]
-  路徑：   /Users/mac-eric/project/ccsession-0.1.1-W9-002.1
+  路徑：   /path/to/project-0.1.1-W9-002.1
   分支：   feat/0.1.1-W9-002.1
   領先：   +3 commits ahead of main
   落後：   -0 commits behind main
@@ -173,7 +173,7 @@ $ /worktree status
 /worktree create 0.1.1-W9-002.1
 
 # 3. 一鍵切換環境
-cd /Users/mac-eric/project/ccsession-0.1.1-W9-002.1
+cd /path/to/project-0.1.1-W9-002.1
 
 # 4. 開始開發...
 ```

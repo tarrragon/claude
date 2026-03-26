@@ -87,4 +87,4 @@
 
 - 0.2.0-W5-001 - 跨版本警告實作
 - 0.2.0-W5-002 - 版本推進防護（待處理）
-- .claude/rules/flows/version-progression.md - 版本推進決策規則
+- .claude/pm-rules/version-progression.md - 版本推進決策規則

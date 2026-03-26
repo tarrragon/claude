@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W25-001",
+  "direction": "to-sibling:0.1.0-W25-006",
+  "timestamp": "2026-03-09T14:40:00.700250",
+  "from_status": "completed",
+  "title": "修復 hook_utils StreamHandler 寫入 stdout 改為 stderr（Critical）",
+  "what": "修復 hook_utils StreamHandler 寫入 stdout 改為 stderr（Critical）",
+  "chain": {},
+  "resumed_at": "2026-03-09T14:42:41.351580"
+}

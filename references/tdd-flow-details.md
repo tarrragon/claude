@@ -2,7 +2,7 @@
 
 本文件包含 TDD 流程的豁免規則詳細、各 Phase 描述、異常處理流程和工作日誌模板。
 
-> 精簡版（常駐載入）：.claude/rules/flows/tdd-flow.md
+> 精簡版（常駐載入）：.claude/pm-rules/tdd-flow.md
 
 ---
 
@@ -52,19 +52,24 @@ Phase 3a 策略文件完成
     |
     v
 PM 閱讀策略文件，提取以下資訊：
-  - 預期修改檔案清單
-  - 模組分割方式
+  - Phase 2 定義的 GWT scenario group（測試群組）
+  - 各測試群組對應的修改檔案
   - 實作順序和依賴關係
     |
     v
-任一拆分閾值觸發? （檔案 > 5、認知 > 10、跨層 > 2、多獨立模組）
+任一拆分閾值觸發? （測試群組 > 1 且無交叉依賴、認知 > 10、跨層 > 2、context > 20K）
     |
     +-- 否（豁免）→ 直接派發單一 parsley 執行 Phase 3b
     |
     +-- 是 → 拆分流程
         |
         v
-    依策略文件的模組分割建立子任務
+    依 Phase 2 的 GWT scenario group 建立子任務
+    （每個子任務 = 「通過特定測試群組」）
+        |
+        v
+    PM 使用 phase3b-prompt-template.md 提取必要資訊
+    （API 簽名 + 測試案例 + 相關常數）
         |
         v
     每個子任務指定 where.files（無交集）
@@ -78,31 +83,35 @@ PM 閱讀策略文件，提取以下資訊：
 
 ### 拆分粒度
 
+**拆分單位是 Phase 2 的 GWT scenario group（測試群組），非模組或檔案。**
+
 | 拆分方式 | 適用場景 | 對應 task-splitting.md 策略 |
 |---------|---------|--------------------------|
+| 按測試群組（推薦） | Phase 3b 實作拆分 | 策略 7 |
 | 按架構層 | 跨 domain/service/UI 層 | 策略 1 |
 | 按功能模組 | 涉及多個獨立模組 | 策略 2 |
-| 按操作類型 | 混合機械性和邏輯修改 | 策略 3 |
 
 ### 範例
 
-**場景**：Phase 3a 策略文件顯示需修改 8 個檔案，涉及 WebSocket 模組和 JSONL Parser 模組。
+**場景**：Phase 2 定義了 3 個 GWT scenario group：TC-01~TC-13（連線管理）、TC-14~TC-16,TC-18~TC-34（事件推送+心跳+分頁）。
 
 **評估**：
-- 修改檔案數 = 8（> 5，觸發拆分）
-- 兩個模組無交叉依賴
+- 測試群組數 = 2（無交叉依賴，觸發拆分）
+- 預估 context：各子任務 < 20K tokens
 
 **拆分結果**：
-- 子任務 A：WebSocket 模組（4 個檔案）
-- 子任務 B：JSONL Parser 模組（4 個檔案）
+- 子任務 A：通過 TC-01~TC-13（連線管理）
+- 子任務 B：通過 TC-14~TC-16,TC-18~TC-34（事件推送+心跳）
+- PM 使用 prompt 模板提取 API 簽名 + 測試案例
 - 並行派發兩個 parsley 代理人
 
 ### 與現有規則的一致性
 
 | 規則 | 關係 |
 |------|------|
-| task-splitting.md | 拆分閾值和策略來自此文件 |
+| task-splitting.md | 拆分閾值和策略來自此文件（策略 7：按測試群組） |
 | parallel-dispatch.md | 並行安全檢查和派發規則來自此文件 |
+| phase3b-prompt-template.md | PM 派發時的資訊提取模板 |
 | decision-tree.md 第負一層 | 並行化評估原則的 TDD 具體實踐 |
 
 ---
@@ -233,7 +242,7 @@ Phase 3b 測試失敗
 根據分析派發對應代理人
 ```
 
-> 詳細流程：.claude/rules/flows/incident-response.md
+> 詳細流程：.claude/pm-rules/incident-response.md
 
 ### 情況 2：SA 審查發現問題
 
@@ -266,7 +275,7 @@ Phase 3b 測試失敗
 
 ## 相關文件
 
-- .claude/rules/flows/tdd-flow.md - 精簡版（常駐）
+- .claude/pm-rules/tdd-flow.md - 精簡版（常駐）
 - .claude/rules/core/decision-tree.md - 主線程決策樹
 - .claude/rules/core/quality-baseline.md - 品質基線
 

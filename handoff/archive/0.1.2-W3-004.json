@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.2-W3-004",
+  "direction": "to-sibling:0.1.2-W3-001",
+  "timestamp": "2026-03-23T13:21:00.619457",
+  "from_status": "completed",
+  "title": "實作 錯誤學習雙通道記錄保護機制",
+  "what": "實作 錯誤學習雙通道記錄保護機制",
+  "chain": {},
+  "resumed_at": "2026-03-23T13:23:19.095587"
+}

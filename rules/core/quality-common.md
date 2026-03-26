@@ -1,6 +1,9 @@
 # 通用品質基線（所有語言適用）
 
-本文件為所有語言共用的程式碼品質基線。語言專屬規則見 quality-dart.md / quality-go.md / quality-python.md。
+本文件為所有語言共用的程式碼品質基線。
+
+> **語言專屬規則**位於 `.claude/references/quality-{lang}.md`，代理人按需讀取，不自動載入。
+> 流程品質基線見 quality-baseline.md。重構代理人以本文件為評估基線。
 
 ---
 
@@ -371,5 +374,5 @@
 
 ---
 
-**Last Updated**: 2026-03-21
-**Version**: 1.3.0 - 1.2.5 移除步驟 5（測試覆蓋指引屬 sage-test-architect 職責，超出函式設計範圍）（0.1.1-W13-006）
+**Last Updated**: 2026-03-26
+**Version**: 1.4.0 - 合併 implementation-quality.md Hub 表格，語言規則移至 references/（0.2.0-W5-012.2）

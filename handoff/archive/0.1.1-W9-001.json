@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.1-W9-001",
+  "direction": "to-sibling:0.1.1-W9-002",
+  "timestamp": "2026-03-17T23:38:39.218256",
+  "from_status": "completed",
+  "title": "[P0] worktree 前置修復 — get_project_root 統一和原子操作",
+  "what": "階段 0 父任務：統一 get_project_root() 為 git-native 策略 + 修正 create_feature_worktree.py 為原子操作",
+  "chain": {},
+  "resumed_at": "2026-03-17T23:48:10.650676"
+}

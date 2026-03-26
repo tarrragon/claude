@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W24-005",
+  "direction": "to-sibling:0.1.0-W24-006",
+  "timestamp": "2026-03-09T13:35:38.728857",
+  "from_status": "completed",
+  "title": "實作 hook_utils cleanup_trigger 改用 mtime 時間觸發替代計數器",
+  "what": "實作 hook_utils cleanup_trigger 改用 mtime 時間觸發替代計數器",
+  "chain": {},
+  "resumed_at": "2026-03-09T13:37:10.371173"
+}

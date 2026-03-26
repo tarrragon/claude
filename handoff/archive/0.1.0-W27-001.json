@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W27-001",
+  "direction": "to-sibling:0.1.0-W28-001",
+  "timestamp": "2026-03-09T17:37:55.187662",
+  "from_status": "completed",
+  "title": "實作 commit-handoff-hook 情境 C 偵測邏輯擴充",
+  "what": "實作 commit-handoff-hook 情境 C 偵測邏輯擴充",
+  "chain": {},
+  "resumed_at": "2026-03-09T17:45:16.702330"
+}

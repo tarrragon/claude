@@ -212,7 +212,7 @@ export CLAUDE_PROJECT_DIR=/path/to/project
 
 - [Skip-gate 防護機制](../../rules/forbidden/skip-gate.md)
 - [決策樹規則](../../rules/core/decision-tree.md)
-- [Ticket 生命週期](../../rules/flows/ticket-lifecycle.md)
+- [Ticket 生命週期](../../pm-rules/ticket-lifecycle.md)
 
 ## 下一步
 

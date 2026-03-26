@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.1-W11-002",
+  "direction": "to-sibling:0.1.1-W11-001",
+  "timestamp": "2026-03-18T04:16:02.162230",
+  "from_status": "completed",
+  "title": "修復 worktree SKILL Wave 9 審查發現 — 8 個高嚴重度 + 6 個中嚴重度品質問題",
+  "what": "修復 worktree SKILL Wave 9 審查發現 — 8 個高嚴重度 + 6 個中嚴重度品質問題",
+  "chain": {},
+  "resumed_at": "2026-03-18T04:17:36.364228"
+}

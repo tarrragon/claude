@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W48-001.1",
+  "direction": "to-sibling:0.1.0-W48-002",
+  "timestamp": "2026-03-13T09:53:40.471026",
+  "from_status": "completed",
+  "title": "實作 Layer 1/2 邊界驗證 Hook .claude/hooks/layer-boundary-validator-hook.py",
+  "what": "實作 Hook 掃描 8 類禁止項，檢測 Layer 1 檔案的邊界違規",
+  "chain": {},
+  "resumed_at": "2026-03-13T09:57:54.389332"
+}

@@ -71,9 +71,9 @@
 
 | 措施 | 位置 | 狀態 |
 |------|------|------|
-| 修復三階段強制規則 | .claude/rules/flows/incident-response.md | 已新增（W1-009） |
-| 測試驗證金字塔順序規則 | .claude/rules/flows/incident-response.md | 已新增（W1-009） |
-| 認知負擔拆分閾值表 | .claude/rules/flows/incident-response.md | 已新增（W1-009） |
+| 修復三階段強制規則 | .claude/pm-rules/incident-response.md | 已新增（W1-009） |
+| 測試驗證金字塔順序規則 | .claude/pm-rules/incident-response.md | 已新增（W1-009） |
+| 認知負擔拆分閾值表 | .claude/pm-rules/incident-response.md | 已新增（W1-009） |
 
 ### 教訓
 

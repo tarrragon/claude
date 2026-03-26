@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W44-001",
+  "direction": "to-sibling:0.1.0-W44-002",
+  "timestamp": "2026-03-12T14:18:31.985245",
+  "from_status": "completed",
+  "title": "[協調] 設計獨立 /tdd SKILL 架構，整合 tdd-phase1-split，定義可攜式標準化 TDD 流程操作工具",
+  "what": "設計獨立 /tdd SKILL 架構，整合 tdd-phase1-split，定義可攜式標準化 TDD 流程操作工具",
+  "chain": {},
+  "resumed_at": "2026-03-12T14:22:07.338333"
+}

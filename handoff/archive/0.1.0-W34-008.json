@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W34-008",
+  "direction": "to-sibling:0.1.0-W34-009",
+  "timestamp": "2026-03-11T14:57:36.630770",
+  "from_status": "completed",
+  "title": "重構 ALL_BYPASS_PATTERNS 提升為模組常數",
+  "what": "重構 ALL_BYPASS_PATTERNS 提升為模組常數",
+  "chain": {},
+  "resumed_at": "2026-03-11T15:04:30.868426"
+}

@@ -264,7 +264,7 @@ Ticket 狀態保持不變（Ticket 是持久的）
 - .claude/skills/agent-team/SKILL.md - Agent Teams 指南入口
 - .claude/skills/agent-team/references/ticket-task-bridge.md - Ticket-Task 橋接規則
 - .claude/skills/agent-team/references/teammate-onboarding-protocol.md - 入職模板
-- .claude/rules/flows/ticket-lifecycle.md - Ticket 生命週期
+- .claude/pm-rules/ticket-lifecycle.md - Ticket 生命週期
 - .claude/rules/guides/parallel-dispatch.md - 並行派發指南
 
 ---

@@ -423,7 +423,7 @@ Stage 6: 分派執行 (根據根因分派代理人)
 
 ## 📚 相關檔案
 
-- Plan: `/Users/mac-eric/.claude/plans/iterative-swimming-feather.md`
+- Plan: `~/.claude/plans/iterative-swimming-feather.md`
 - Hook 規格: `.claude/hook-specs/`
 - Hook 系統方法論: `.claude/methodologies/hook-system-methodology.md`
 - Ticket 方法論: `.claude/methodologies/ticket-lifecycle-management-methodology.md`

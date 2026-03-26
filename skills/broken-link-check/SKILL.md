@@ -86,7 +86,7 @@ broken-link-check 掃描結果
     → .claude/agents/system-analyst.md（不存在）
     → 建議：可能已重命名，搜尋相似文件
 
-  .claude/rules/flows/tdd-flow.md:45
+  .claude/pm-rules/tdd-flow.md:45
     → .claude/project-templates/FLUTTER.md（不存在）
     → 建議：確認正確路徑
 

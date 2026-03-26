@@ -2,7 +2,7 @@
 
 本文件包含 Plan-to-Ticket 轉換流程的詳細映射規則和 TDD 階段對應表。
 
-> 主要流程：@.claude/rules/flows/plan-to-ticket-flow.md
+> 主要流程：@.claude/pm-rules/plan-to-ticket-flow.md
 
 ---
 
@@ -228,7 +228,7 @@ Plan 檔案通常包含以下結構：
 
 ## 相關文件
 
-- @.claude/rules/flows/plan-to-ticket-flow.md - Plan-to-Ticket 轉換流程（主要檔案）
+- @.claude/pm-rules/plan-to-ticket-flow.md - Plan-to-Ticket 轉換流程（主要檔案）
 - @.claude/methodologies/atomic-ticket-methodology.md - Atomic Ticket 方法論
 - @.claude/methodologies/acceptance-criteria-methodology.md - 驗收條件方法論
 

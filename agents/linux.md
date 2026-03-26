@@ -3,7 +3,8 @@ name: linux
 description: 程式碼品質執行專家。由 Linus Torvalds 精神啟發，負責架構決策和技術審查。應用「good taste」原則、實用主義和零容忍複雜度原則，確保專案建立在紮實技術基礎上。
 tools: Read, Grep, Glob, Bash, mcp__dart__hover
 color: blue
-model: sonnet
+model: opus
+effort: low
 ---
 
 @.claude/agents/AGENT_PRELOAD.md

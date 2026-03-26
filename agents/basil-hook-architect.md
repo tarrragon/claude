@@ -3,7 +3,8 @@ name: basil-hook-architect
 description: Claude Code Hook System Design and Implementation Expert. Designs and implements high-quality Hook scripts following IndyDevDan's best practices and agile refactor methodology. Specializes in observability design, UV single-file mode, and complete Hook lifecycle implementation.
 tools: Write, Read, Edit, Grep, LS, Bash, Glob, mcp__serena__*
 color: blue
-model: haiku
+model: opus
+effort: low
 ---
 
 @.claude/agents/AGENT_PRELOAD.md

@@ -1020,7 +1020,7 @@ Memory類型: concept
 
 **重要**: 重構設計師必須按照本文件「🧠 TDD 驅動重構方法論」章節的完整流程執行
 
-**標準三步驟流程（詳見 .claude/rules/flows/tdd-flow.md）**:
+**標準三步驟流程（詳見 .claude/pm-rules/tdd-flow.md）**:
 - **Phase 4a**: `/parallel-evaluation` Skill 情境 B（多視角重構分析，視角：Redundancy/Coupling/Complexity）
 - **Phase 4b**: cinnamon-refactor-owl（依 4a 分析報告執行重構）
 - **Phase 4c**: `/parallel-evaluation` Skill 情境 A（多視角再審核，視角：Reuse/Quality/Efficiency）

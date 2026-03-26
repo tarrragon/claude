@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W24-004",
+  "direction": "to-sibling:0.1.0-W24-005",
+  "timestamp": "2026-03-09T13:19:12.701603",
+  "from_status": "completed",
+  "title": "修復 擴大 emoji 清理至 pre-fix-evaluation-hook output-style-check reporters.py",
+  "what": "修復 擴大 emoji 清理至 pre-fix-evaluation-hook output-style-check reporters.py",
+  "chain": {},
+  "resumed_at": "2026-03-09T13:20:49.041798"
+}

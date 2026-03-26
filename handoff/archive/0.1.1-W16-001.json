@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.1-W16-001",
+  "direction": "to-sibling:0.1.1-W16-002",
+  "timestamp": "2026-03-21T09:49:32.384587",
+  "from_status": "completed",
+  "title": "修復 worktree SKILL W13 審查發現的 4 個高嚴重度問題（subprocess stderr/PROTECTED_BRANCHES 同步/behind_str 語義/detached 處理）",
+  "what": "修復 worktree SKILL W13 審查發現的 4 個高嚴重度問題（subprocess stderr/PROTECTED_BRANCHES 同步/behind_str 語義/detached 處理）",
+  "chain": {},
+  "resumed_at": "2026-03-21T09:52:46.336947"
+}

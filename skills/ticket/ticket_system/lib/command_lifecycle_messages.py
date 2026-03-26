@@ -265,13 +265,31 @@ class CreateMessages:
         "         --decision-tree-decision <做出的決策>\n"
         "         --decision-tree-rationale <決策理由>\n"
         "\n"
+        "       常見 entry 值：\n"
+        "         - \"第三層:命令處理\" — PM 接收開發命令\n"
+        "         - \"第三層半:執行中額外發現\" — 執行中發現需追蹤\n"
+        "         - \"第五層:TDD\" — Phase 完成後建立後續 Ticket\n"
+        "         - \"第六層:事件回應\" — 錯誤修復\n"
+        "\n"
+        "       範例：\n"
+        "         /ticket create --wave 2 --action \"實作\" --target \"XXX\" \\\n"
+        "           --decision-tree-entry \"第五層:TDD\" \\\n"
+        "           --decision-tree-decision \"create-refactor-ticket\" \\\n"
+        "           --decision-tree-rationale \"quality-baseline-rule-5\"\n"
+        "\n"
         "       豁免條件（可省略）：子任務（--parent）或 DOC 類型（--type DOC）"
     )
 
     DECISION_TREE_MISSING_PARTIAL = (
         "[ERROR] decision_tree_path 欄位不完整\n"
         "       缺少：{missing_fields}\n"
-        "       三個子欄位必須同時提供或同時省略"
+        "       三個子欄位必須同時提供或同時省略\n"
+        "\n"
+        "       完整範例（三個參數都需要）：\n"
+        "         /ticket create --wave 2 --action \"實作\" --target \"XXX\" \\\n"
+        "           --decision-tree-entry \"進入點描述\" \\\n"
+        "           --decision-tree-decision \"決策內容\" \\\n"
+        "           --decision-tree-rationale \"決策原因\""
     )
 
     DECISION_TREE_EMPTY_VALUE = (

@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W2-006",
+  "direction": "to-sibling:0.1.0-W2-007",
+  "timestamp": "2026-03-06T15:23:36.587174",
+  "from_status": "completed",
+  "title": "統一 subprocess/git 命令包裝到 hook_utils",
+  "what": "公開 get_project_root() + 新增 run_git() 到 hook_utils，消除 5 個 hook 的 __import__ 反模式並統一 git 命令呼叫",
+  "chain": {},
+  "resumed_at": "2026-03-06T15:26:12.833810"
+}

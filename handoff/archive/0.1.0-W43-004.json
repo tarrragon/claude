@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W43-004",
+  "direction": "to-sibling:0.1.0-W43-005",
+  "timestamp": "2026-03-12T12:04:10.428887",
+  "from_status": "completed",
+  "title": "分析 3b 拆分評估的子任務規劃與依賴關係設計",
+  "what": "分析 3b 拆分評估時如何設計子任務結構（parent-child）和兄弟任務間的依賴關係劃分，產出設計規格",
+  "chain": {},
+  "resumed_at": "2026-03-12T12:09:16.506406"
+}

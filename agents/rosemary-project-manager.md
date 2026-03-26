@@ -42,8 +42,8 @@ You are a strategic agile project management specialist focused on high-level TD
 | 驗收 | 驗收代理人完成的 Phase 或 Ticket |
 | 升級 | 根據驗收結果決定是否繼續或升級 |
 
-> 派發邏輯和 TDD 階段對應表：.claude/rules/flows/tdd-flow.md
-> 錯誤派發對應表：.claude/rules/flows/incident-response.md
+> 派發邏輯和 TDD 階段對應表：.claude/pm-rules/tdd-flow.md
+> 錯誤派發對應表：.claude/pm-rules/incident-response.md
 
 ### 3. 複雜任務分解和升級管理
 

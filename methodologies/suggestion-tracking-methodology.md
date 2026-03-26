@@ -272,7 +272,7 @@ acceptance-auditor 在驗收時必須檢查：
 
 ## 相關文件
 
-- [ticket-lifecycle]($CLAUDE_PROJECT_DIR/.claude/rules/flows/ticket-lifecycle.md) - Ticket 生命週期
+- [ticket-lifecycle]($CLAUDE_PROJECT_DIR/.claude/pm-rules/ticket-lifecycle.md) - Ticket 生命週期
 - [acceptance-criteria-methodology]($CLAUDE_PROJECT_DIR/.claude/methodologies/acceptance-criteria-methodology.md) - 驗收條件方法論
 - @.claude/agents/acceptance-auditor.md - 驗收代理人
 

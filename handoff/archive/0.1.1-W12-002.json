@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.1-W12-002",
+  "direction": "context-refresh",
+  "timestamp": "2026-03-19T11:10:47.336471",
+  "from_status": "in_progress",
+  "title": "todolist.yaml current_version 過期無偵測機制 — 已有 v0.1.1 Ticket 但配置仍為 v0.1.0",
+  "what": "1. 更新 todolist.yaml current_version 為 0.1.1  2. 建立版本配置一致性檢查：當 docs/work-logs/ 存在某版本的 Ticket 但 todolist 未配置該版本時發出警告",
+  "chain": {},
+  "resumed_at": "2026-03-19T11:11:24.819849"
+}

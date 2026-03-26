@@ -70,7 +70,7 @@ for pkg, info in desired.items():
 
 ### 相關規則
 
-- `.claude/rules/core/implementation-quality.md` 第 1.2.3 節（破壞性操作設計防護）中的「狀態語義一致性」原則同樣適用
+- `.claude/rules/core/quality-common.md` 第 1.2.3 節（破壞性操作設計防護）中的「狀態語義一致性」原則同樣適用
 
 ## 關聯 Ticket
 

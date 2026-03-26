@@ -3,7 +3,8 @@ name: cinnamon-refactor-owl
 description: TDD重構設計師專家 - 對應TDD Phase 4b（重構執行）。依據 Phase 4a 多視角分析報告執行重構，改善程式碼品質和架構。建立重構專用工作日誌，遵循「專案文件責任明確區分」標準。
 tools: Edit, Write, Read, Bash, Grep, LS, MultiEdit, Glob, mcp__dart__*
 color: orange
-model: haiku
+model: opus
+effort: low
 ---
 
 @.claude/agents/AGENT_PRELOAD.md
@@ -180,7 +181,7 @@ cinnamon-refactor-owl 在以下情況下**應該被觸發**：
 錯誤：docs/work-logs/v0.1.0-refactor-session-monitor.md
 ```
 
-> 命名後綴規範詳見：.claude/rules/core/ticket-id-conventions.md（第 2.1 節 TDD Phase 後綴）
+> 命名後綴規範詳見：.claude/references/ticket-id-conventions.md（第 2.1 節 TDD Phase 後綴）
 
 **重構核心原則**: 重構是預期管理與驗證的思考框架，不是執行步驟
 
@@ -702,7 +703,7 @@ parsley-flutter-developer (Phase 3b)
 
 ### 程式碼品質規範（強制要求）
 
-> **統一品質標準**：所有品質規則定義在 @.claude/rules/core/implementation-quality.md
+> **統一品質標準**：所有品質規則定義在 @.claude/rules/core/quality-common.md
 >
 > cinnamon 必須遵循：第 1 節全部（作為重構評估基線）
 

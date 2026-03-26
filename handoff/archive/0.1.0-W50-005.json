@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W50-005",
+  "direction": "to-sibling:0.1.0-W50-007",
+  "timestamp": "2026-03-13T13:36:37.670474",
+  "from_status": "completed",
+  "title": "重構 Hook 系統 — generate_hook_output() 統一到 hook_utils + process-skip-guard-hook 測試語義修正（TD-017, TD-019）",
+  "what": "重構 Hook 系統 — generate_hook_output() 統一到 hook_utils + process-skip-guard-hook 測試語義修正（TD-017, TD-019）",
+  "chain": {},
+  "resumed_at": "2026-03-13T13:37:18.751899"
+}

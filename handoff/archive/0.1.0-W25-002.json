@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W25-002",
+  "direction": "to-sibling:0.1.0-W25-004",
+  "timestamp": "2026-03-09T15:36:50.687593",
+  "from_status": "completed",
+  "title": "修復 多處 hook 內聯 project_dir 解析改用 hook_utils.get_project_root()",
+  "what": "修復 10 個 hook 檔案中 13 處內聯 project_dir 解析，統一改用 hook_utils.get_project_root()",
+  "chain": {},
+  "resumed_at": "2026-03-09T15:40:47.311562"
+}

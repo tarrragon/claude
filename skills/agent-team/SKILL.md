@@ -156,7 +156,7 @@ PM 在 spawn teammate 時，必須提供入職指令，包含：
 
 - .claude/rules/core/decision-tree.md - 第負一層並行化評估
 - .claude/rules/guides/parallel-dispatch.md - 並行派發指南
-- .claude/rules/flows/ticket-lifecycle.md - Ticket 生命週期
+- .claude/pm-rules/ticket-lifecycle.md - Ticket 生命週期
 - .claude/methodologies/multi-perspective-analysis-methodology.md - 多視角分析（Task subagent 方式）
 
 ---

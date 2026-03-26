@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W37-001",
+  "direction": "context-refresh",
+  "timestamp": "2026-03-11T12:01:53.660428",
+  "from_status": "in_progress",
+  "title": "移除 ticket-lifecycle.md 建立後審核的 DOC 類型豁免條件 — 所有 Ticket 不論類型都必須經過 creation_accepted 審核",
+  "what": "移除 ticket-lifecycle.md 建立後審核的 DOC 類型豁免條件 — 所有 Ticket 不論類型都必須經過 creation_accepted 審核",
+  "chain": {},
+  "resumed_at": "2026-03-11T12:03:44.075927"
+}

@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W2-017",
+  "direction": "to-sibling:0.1.0-W2-016",
+  "timestamp": "2026-03-06T13:57:00.939585",
+  "from_status": "completed",
+  "title": "重構 sync-claude-pull.py EXCLUDE_FROM_SYNC 和 LOCAL_ONLY 集合設計優化",
+  "what": "重構 sync-claude-pull.py EXCLUDE_FROM_SYNC 和 LOCAL_ONLY 集合設計優化",
+  "chain": {},
+  "resumed_at": "2026-03-06T13:57:29.891086"
+}

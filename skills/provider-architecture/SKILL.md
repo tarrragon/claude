@@ -331,7 +331,7 @@ void someMethod() {
 ### 方法論
 
 - [敏捷重構方法論](.claude/methodologies/agile-refactor-methodology.md)
-- [TDD 四階段流程](.claude/rules/flows/tdd-flow.md)
+- [TDD 四階段流程](.claude/pm-rules/tdd-flow.md)
 
 ### Tickets
 

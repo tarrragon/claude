@@ -35,4 +35,4 @@
 
 - `.claude/methodologies/atomic-ticket-methodology.md` - Atomic Ticket 方法論
 - `.claude/methodologies/ticket-lifecycle-management-methodology.md` - Ticket 生命週期管理
-- `.claude/rules/flows/ticket-lifecycle.md` - Ticket 生命週期流程
+- `.claude/pm-rules/ticket-lifecycle.md` - Ticket 生命週期流程

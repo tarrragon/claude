@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W40-001",
+  "direction": "to-sibling:0.1.0-W41-001",
+  "timestamp": "2026-03-12T09:41:28.612377",
+  "from_status": "completed",
+  "title": "改善 框架下載後初始化引導 — docs 結構強制建立、.gitignore 設定、Hook 阻擋後操作說明",
+  "what": "改善框架下載後初始化引導 — 三個缺口修復（docs 結構強制建立、.gitignore 設定、Hook 阻擋操作說明）",
+  "chain": {},
+  "resumed_at": "2026-03-12T09:46:30.253354"
+}

@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.2.0-W5-008",
+  "direction": "to-sibling:0.2.0-W5-010",
+  "timestamp": "2026-03-26T12:24:07.016089",
+  "from_status": "completed",
+  "title": "擴展 worktree-branch-check-hook 新增目標分支比對和切換建議",
+  "what": "擴展 worktree-branch-check-hook.py 新增目標分支比對邏輯，整合前檢查主倉庫 HEAD 是否指向預期合併目標分支（如 main），不符時輸出警告和 git checkout 建議",
+  "chain": {},
+  "resumed_at": "2026-03-26T12:24:42.608377"
+}

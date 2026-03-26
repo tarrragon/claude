@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.1-W13-002",
+  "direction": "to-sibling:0.1.1-W13-001",
+  "timestamp": "2026-03-21T09:22:08.191938",
+  "from_status": "completed",
+  "title": "修復 worktree SKILL W11 審查發現 — 7 高 + 12 中嚴重度品質問題",
+  "what": "修復 worktree SKILL W11 審查發現 — 7 高 + 12 中嚴重度品質問題",
+  "chain": {},
+  "resumed_at": "2026-03-21T09:22:48.586563"
+}

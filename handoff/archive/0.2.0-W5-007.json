@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.2.0-W5-007",
+  "direction": "to-sibling:0.2.0-W5-008",
+  "timestamp": "2026-03-26T12:01:25.774484",
+  "from_status": "completed",
+  "title": "移除 freezed 依賴，改用 json_serializable + 手寫 copyWith/equality",
+  "what": "移除 freezed 依賴，改用 json_serializable + 手寫 copyWith/equality",
+  "chain": {},
+  "resumed_at": "2026-03-26T12:02:17.682267"
+}

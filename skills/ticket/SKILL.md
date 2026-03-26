@@ -164,10 +164,37 @@ ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"
 
 ### create - 建立新 Ticket
 
-建立 Atomic Ticket，支援 5W1H 引導式建立、子 Ticket 建立（create-child）、版本目錄初始化（init）。
+建立 Atomic Ticket，支援 5W1H 引導式建立、子 Ticket 建立、版本目錄初始化（init）。
 
 > 決策樹：Read `references/workflow-create.md`
 > 詳細用法：Read `references/create-command.md`
+
+**常用範例**：
+
+```bash
+# 建立根任務（必須提供 decision-tree 三參數）
+ticket create --version 0.2.0 --wave 2 --action "實作" --target "HTTP Handler" --type IMP \
+  --decision-tree-entry "第五層:TDD" \
+  --decision-tree-decision "Phase 3b 完成後建立重構 Ticket" \
+  --decision-tree-rationale "quality-baseline-rule-5"
+
+# 建立子任務（--parent 自動產生子序號，可省略 decision-tree 參數）
+ticket create --parent "0.2.0-W2-001" --action "實作" --target "事件融合層"
+
+# DOC 類型（可省略 decision-tree 參數）
+ticket create --version 0.2.0 --wave 2 --action "撰寫" --target "工作日誌" --type DOC
+
+# 多值參數格式
+#   --acceptance：多次指定或用 | 分隔
+ticket create ... --acceptance "條件A" --acceptance "條件B"
+ticket create ... --acceptance "條件A|條件B|條件C"
+
+#   --where：逗號分隔
+ticket create ... --where "file1.py,file2.py"
+
+#   --blocked-by / --related-to：逗號分隔
+ticket create ... --blocked-by "0.2.0-W2-001.1,0.2.0-W2-001.2"
+```
 
 ### batch-create - 批次建立 Tickets
 
@@ -213,6 +240,8 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 0.31.0-W28-
 > **注意**：僅有 6 個 `set-*` 命令（對應 5W1H 欄位）。`blockedBy`、`relatedTo`、`priority` 等欄位無 CLI 命令，需手動編輯 frontmatter。完整對照表見 `references/track-command.md`。
 >
 > **注意**：`append-log` 必須加上 `--section` 必填參數：`ticket track append-log <id> --section "Problem Analysis" "內容"`。有效區段值：`Problem Analysis`、`Solution`、`Test Results`。
+>
+> **注意**：`check-acceptance` 必須指定 `--all`（勾選全部）或 index（如 `1 2 3`，從 1 開始編號）：`ticket track check-acceptance <id> --all` 或 `ticket track check-acceptance <id> 1 2 3`。先用 `ticket track query <id>` 查看驗收條件清單和編號。
 
 > 決策樹：Read `references/workflow-execute.md` 和 `references/workflow-query.md`
 > 詳細用法：Read `references/track-command.md`
@@ -263,7 +292,7 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 0.31.0-W28-
 
 - `.claude/methodologies/atomic-ticket-methodology.md` - Atomic Ticket 方法論
 - `.claude/methodologies/ticket-lifecycle-management-methodology.md` - Ticket 生命週期管理
-- `.claude/rules/flows/ticket-lifecycle.md` - Ticket 生命週期流程
+- `.claude/pm-rules/ticket-lifecycle.md` - Ticket 生命週期流程
 
 ---
 

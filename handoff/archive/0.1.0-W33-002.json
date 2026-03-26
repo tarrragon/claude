@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W33-002",
+  "direction": "to-sibling:0.1.0-W33-004",
+  "timestamp": "2026-03-10T11:48:54.490685",
+  "from_status": "completed",
+  "title": "重構 save_check_log 統一到 hook_utils",
+  "what": "將 8 個 hook 中重複的 save_check_log 函式統一到 hook_utils.py，消除跨 hook 重複",
+  "chain": {},
+  "resumed_at": "2026-03-10T11:50:11.554166"
+}

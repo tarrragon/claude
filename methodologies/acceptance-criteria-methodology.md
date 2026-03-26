@@ -662,7 +662,7 @@ acceptance:
 ## 相關文件
 
 - [atomic-ticket-methodology]($CLAUDE_PROJECT_DIR/.claude/methodologies/atomic-ticket-methodology.md) - Atomic Ticket 設計
-- [ticket-lifecycle]($CLAUDE_PROJECT_DIR/.claude/rules/flows/ticket-lifecycle.md) - Ticket 生命週期
+- [ticket-lifecycle]($CLAUDE_PROJECT_DIR/.claude/pm-rules/ticket-lifecycle.md) - Ticket 生命週期
 - [quality-baseline]($CLAUDE_PROJECT_DIR/.claude/rules/core/quality-baseline.md) - 品質基線
 - @.claude/agents/acceptance-auditor.md - 驗收代理人
 - [suggestion-tracking-methodology]($CLAUDE_PROJECT_DIR/.claude/methodologies/suggestion-tracking-methodology.md) - 建議追蹤方法論

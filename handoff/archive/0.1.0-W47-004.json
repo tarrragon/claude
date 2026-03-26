@@ -1,0 +1,17 @@
+{
+  "ticket_id": "0.1.0-W47-004",
+  "direction": "to-sibling:0.1.0-W47-007",
+  "timestamp": "2026-03-12T17:43:16.893638",
+  "from_status": "completed",
+  "title": "修復 commit-handoff-hook.py 缺少 subagent 環境檢測，Phase 1-3 自治 commit 會誤觸 AskUserQuestion 提醒",
+  "what": "修復 commit-handoff-hook.py 缺少 subagent 環境檢測，Phase 1-3 自治 commit 會誤觸 AskUserQuestion 提醒",
+  "chain": {
+    "root": "0.1.0-W47-004",
+    "parent": null,
+    "depth": 0,
+    "sequence": [
+      4
+    ]
+  },
+  "resumed_at": null
+}

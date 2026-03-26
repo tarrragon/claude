@@ -2,7 +2,8 @@
 name: ginger-performance-tuner
 description: "效能分析與架構優化專家。負責效能瓶頸分析、量化指標建立、記憶體優化規劃、載入速度改善策略、熱路徑分析、控制流簡化和狀態管理架構設計。只提供策略和指引，不執行程式碼實作。"
 allowed-tools: Grep, LS, Read, Glob, mcp__dart__hover, mcp__dart__analyze_files, mcp__dart__resolve_workspace_symbol, Bash
-model: sonnet
+model: opus
+effort: low
 ---
 
 @.claude/agents/AGENT_PRELOAD.md

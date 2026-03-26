@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.1-W12-001.1",
+  "direction": "to-sibling:0.1.1-W12-001.1.1",
+  "timestamp": "2026-03-21T03:41:08.453682",
+  "from_status": "completed",
+  "title": "實施 ticket create 強制 decision_tree_path 驗證",
+  "what": "實施方案 A + B：CLI 強制參數 + PostToolUse Hook，使 ticket create 建立時強制要求 decision_tree_path",
+  "chain": {},
+  "resumed_at": "2026-03-21T07:22:56.004822"
+}

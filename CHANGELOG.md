@@ -1,3 +1,10 @@
+## [1.1.51] - 2026-03-26
+
+### Summary
+feat: 新增 Agent commit 驗證 Hook + Go build artifact 清理指引
+
+---
+
 ## [1.1.50] - 2026-03-25
 
 ### Summary

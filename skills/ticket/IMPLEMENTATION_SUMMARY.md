@@ -197,7 +197,7 @@ ticket generate plans/my-plan.md --version 0.31.0 --wave 5
   - `tests/test_ticket_generator.py`
 
 - 參考規格：
-  - `.claude/rules/flows/plan-to-ticket-flow.md`（Plan-to-Ticket 轉換流程）
+  - `.claude/pm-rules/plan-to-ticket-flow.md`（Plan-to-Ticket 轉換流程）
   - `.claude/rules/core/cognitive-load.md`（認知負擔設計原則）
 
 ## 符合要求

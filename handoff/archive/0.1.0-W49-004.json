@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W49-004",
+  "direction": "to-sibling:0.1.0-W50-001",
+  "timestamp": "2026-03-13T13:11:49.770483",
+  "from_status": "completed",
+  "title": "修正 ticket track summary 統計邏輯：將 superseded/closed 計入已結案數，避免與 completed 總數不符造成誤判",
+  "what": "修正 ticket track summary 統計邏輯：將 superseded/closed 計入已結案數，避免與 completed 總數不符造成誤判",
+  "chain": {},
+  "resumed_at": "2026-03-13T13:12:59.231012"
+}

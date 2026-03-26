@@ -2,7 +2,7 @@
 
 本文件包含版本推進的 Wave 獨立性規則、Ticket 歸屬規則和二元決策流程。
 
-> 精簡版（常駐載入）：.claude/rules/flows/version-progression.md
+> 精簡版（常駐載入）：.claude/pm-rules/version-progression.md
 > 案例分析：.claude/references/version-decision-case-studies.md
 
 ---
@@ -116,9 +116,9 @@
 
 ## 相關文件
 
-- .claude/rules/flows/version-progression.md - 精簡版（常駐）
+- .claude/pm-rules/version-progression.md - 精簡版（常駐）
 - .claude/references/version-decision-case-studies.md - 案例分析
-- .claude/rules/flows/ticket-lifecycle.md - Ticket 生命週期
+- .claude/pm-rules/ticket-lifecycle.md - Ticket 生命週期
 
 ---
 

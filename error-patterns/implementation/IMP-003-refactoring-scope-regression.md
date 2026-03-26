@@ -142,7 +142,7 @@ def main():
 ## 相關資源
 
 - `docs/work-logs/v0.31.0/tickets/0.31.0-W24-004.md` - W24 完整決策記錄
-- `.claude/rules/core/implementation-quality.md` - 實作品質標準
+- `.claude/rules/core/quality-common.md` - 實作品質標準
 - `.claude/hooks/hook_utils.py` - run_hook_safely 實作
 
 ## 標籤

@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.2-W3-005.1",
+  "direction": "to-sibling:0.1.2-W3-001",
+  "timestamp": "2026-03-23T15:20:53.769431",
+  "from_status": "completed",
+  "title": "實作 派發計數驗證 Hook（雙 Hook 組合 + ppid 狀態檔）",
+  "what": "實作 派發計數驗證 Hook（雙 Hook 組合 + ppid 狀態檔）",
+  "chain": {},
+  "resumed_at": "2026-03-23T15:23:40.921971"
+}

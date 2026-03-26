@@ -148,6 +148,6 @@ docs/
 - 職責詳解：`references/document-responsibilities.md`
 - 工作流程整合：`references/workflow-integration.md`
 - 方法論：`.claude/methodologies/five-document-system-methodology.md`
-- 規則：`.claude/rules/core/document-system.md`
+- 規則：`.claude/references/document-system.md`
 - Worklog 模板：`.claude/skills/doc-flow/templates/worklog.md.template`
 - Todolist 模板：`.claude/skills/doc-flow/templates/todolist.yaml.template`

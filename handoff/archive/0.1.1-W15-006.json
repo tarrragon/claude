@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.1-W15-006",
+  "direction": "to-sibling:0.1.1-W12-001.1",
+  "timestamp": "2026-03-21T00:31:46.672656",
+  "from_status": "completed",
+  "title": "修復 branch-verify-hook 絕對路徑豁免比對失敗 — is_exempt_path_on_protected_branch 收到絕對路徑但只做 lstrip 導致 .claude/ 豁免失效",
+  "what": "修復 branch-verify-hook 絕對路徑豁免比對失敗 — is_exempt_path_on_protected_branch 收到絕對路徑但只做 lstrip 導致 .claude/ 豁免失效",
+  "chain": {},
+  "resumed_at": "2026-03-21T00:49:57.052101"
+}

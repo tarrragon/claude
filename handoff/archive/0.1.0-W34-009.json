@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W34-009",
+  "direction": "to-sibling:0.1.0-W34-015",
+  "timestamp": "2026-03-11T15:12:32.025063",
+  "from_status": "completed",
+  "title": "重構 SHORT_ANSWER_PATTERNS 從 list 改為 set 提升查詢效率",
+  "what": "重構 SHORT_ANSWER_PATTERNS 從 list 改為 set 提升查詢效率",
+  "chain": {},
+  "resumed_at": "2026-03-11T15:13:28.482595"
+}

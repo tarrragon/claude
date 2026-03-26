@@ -256,7 +256,7 @@ cat .claude/hook-logs/parallel-suggestion/analysis-$(date +%Y%m%d).log
 ### 規則參考
 - [decision-tree](.claude/rules/core/decision-tree.md) - 第四層、第四層半（並行化評估）
 - [parallel-dispatch](.claude/rules/guides/parallel-dispatch.md) - 並行派發指南
-- [ticket-lifecycle](.claude/rules/flows/ticket-lifecycle.md) - Ticket 生命週期
+- [ticket-lifecycle](.claude/pm-rules/ticket-lifecycle.md) - Ticket 生命週期
 
 ### 方法論
 - [並行化優先原則](methodologies/manager-skill.md)

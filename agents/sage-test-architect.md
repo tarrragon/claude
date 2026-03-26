@@ -3,7 +3,8 @@ name: sage-test-architect
 description: TDD 測試建築師。TDD Phase 2 測試設計專家，根據功能規格設計完整測試案例和測試策略，指導測試實作方向，禁止實作程式碼和超出職責範圍的工作。
 tools: Edit, Write, Grep, LS, Read, Bash, Glob, mcp__dart__*
 color: red
-model: haiku
+model: opus
+effort: low
 ---
 
 @.claude/agents/AGENT_PRELOAD.md
@@ -71,7 +72,7 @@ Hook 系統自動處理基本的測試品質監控，你的職責專注於需要
 錯誤：docs/work-logs/v0.1.0-test-design.md
 ```
 
-> 命名後綴規範詳見：.claude/rules/core/ticket-id-conventions.md（第 2.1 節 TDD Phase 後綴）
+> 命名後綴規範詳見：.claude/references/ticket-id-conventions.md（第 2.1 節 TDD Phase 後綴）
 
 ### 測試設計工作流程
 
@@ -216,6 +217,22 @@ Then: 無記錄項目可點擊（不需要測試點擊動作）
 
 **詳細規範請參考**: @.claude/methodologies/behavior-first-tdd-methodology.md
 
+### 拆分友善測試設計（Phase 3b 可拆分性，強制考量）
+
+> **來源**：0.2.0-W3-020 — 測試群組應設計為可獨立執行，支援 Phase 3b 按 SRP 功能職責拆分派發。
+
+設計 GWT scenario group 時，**必須**同時考量 Phase 3b 的可拆分性：
+
+| 設計原則 | 說明 | 範例 |
+|---------|------|------|
+| 功能職責對齊 | 每個測試群組應對應單一功能職責 | 「版本解析」和「版本比較」應為獨立測試群組 |
+| 最小化跨群組依賴 | 測試群組間應盡量不共享 mutable 狀態 | 共用的 fixture 抽為獨立 helper，各群組獨立呼叫 |
+| 可獨立執行 | 單一測試群組應能獨立跑通，不依賴其他群組先執行 | 避免測試 B 依賴測試 A 的副作用 |
+
+**設計時自問**：「如果 Phase 3b 要將這些測試群組分派給不同代理人，每個代理人能否只讀自己負責的測試群組就完成實作？」
+
+**Handoff 新增項目**：測試設計文件應標註各 GWT scenario group 的功能職責歸屬和跨群組依賴（如有）。
+
 ## TDD Phase 2 Handoff Standards
 
 **Handoff checklist to pepper-test-implementer (TDD Phase 3a - Language-Agnostic Strategy Planning)**:
@@ -231,6 +248,7 @@ Then: 無記錄項目可點擊（不需要測試點擊動作）
 - [ ] **行為鏈式推演已完成（每個場景的前置條件已識別並設計驗證斷言）**
 - [ ] **四個維度的行為分支已窮舉（正常流程、異常流程、邊界條件、中斷操作）**
 - [ ] **測試設計完成標準已達到（無法再提出新的行為分支或前置條件缺口）**
+- [ ] **各 GWT scenario group 已標註功能職責歸屬和跨群組依賴（拆分友善性）**
 
 **Note**: Phase 3 is divided into two stages:
 

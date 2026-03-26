@@ -158,8 +158,8 @@
 
 ## 相關文件
 
-- @.claude/rules/core/decision-tree.md - 主線程決策樹
-- .claude/rules/guides/task-splitting.md - 任務拆分指南
+- .claude/pm-rules/decision-tree.md - 主線程決策樹
+- .claude/pm-rules/task-splitting.md - 任務拆分指南
 - @.claude/skills/cognitive-load-assessment/thresholds.md - 詳細閾值
 - @.claude/methodologies/cognitive-load-design-methodology.md - 完整方法論
 

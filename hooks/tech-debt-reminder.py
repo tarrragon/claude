@@ -1,9 +1,7 @@
-#!/usr/bin/env -S uv run
+#!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.10"
-# dependencies = [
-#     "pyyaml>=6.0",
-# ]
+# dependencies = []
 # ///
 
 """
@@ -12,11 +10,10 @@
 在 Session 啟動時檢查當前版本是否有待處理的技術債務。
 
 功能:
-1. 讀取 pubspec.yaml 取得當前版本
-2. 解析版本系列 (v{major}.{minor}.x)
-3. 掃描 docs/work-logs/v{major}.{minor}.0/tickets/ 目錄
-4. 檢查所有 TD Ticket 的 frontmatter status
-5. 若有 pending 的 TD → 顯示警告
+1. 從 docs/todolist.yaml 取得當前版本（專案類型無關）
+2. 掃描 docs/work-logs/v{version}/tickets/ 目錄
+3. 檢查所有 TD Ticket 的 frontmatter status
+4. 若有 pending 的 TD → 顯示警告
 
 使用方式:
     SessionStart Hook 自動觸發，或手動測試:
@@ -33,9 +30,8 @@
 import sys
 import json
 import re
-from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
@@ -45,106 +41,24 @@ from hook_utils import (
     run_hook_safely,
     read_json_from_stdin,
     get_project_root,
-    scan_ticket_files_by_version,
+    get_current_version_from_todolist,
 )
-
-try:
-    import yaml
-except ImportError:
-    # Graceful degradation: 依賴不可用時靜默跳過，避免 SessionStart error
-    print(json.dumps({"suppressOutput": True}))
-    sys.exit(0)
 
 # 全域常數
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 
-def read_pubspec_yaml(project_root: Path, logger) -> Optional[Dict[str, Any]]:
-    """
-    讀取 pubspec.yaml 並解析版本
-
-    Args:
-        project_root: 專案根目錄
-
-    Returns:
-        dict - pubspec.yaml 內容，若失敗則回傳 None
-    """
-    pubspec_file = project_root / "pubspec.yaml"
-
-    if not pubspec_file.exists():
-        logger.warning(f"pubspec.yaml 不存在: {pubspec_file}")
-        return None
-
-    try:
-        with open(pubspec_file, 'r', encoding='utf-8') as f:
-            data = yaml.safe_load(f)
-        logger.info(f"成功讀取 pubspec.yaml")
-        return data
-    except Exception as e:
-        logger.error(f"讀取 pubspec.yaml 失敗: {e}")
-        return None
-
-def extract_version(pubspec_data: Dict[str, Any], logger) -> Optional[str]:
-    """
-    從 pubspec.yaml 提取版本號
-
-    Args:
-        pubspec_data: pubspec.yaml 內容
-
-    Returns:
-        str - 版本號 (例如 "0.19.8")，若失敗則回傳 None
-    """
-    version = pubspec_data.get("version")
-    if not version:
-        logger.warning("pubspec.yaml 中找不到 version 欄位")
-        return None
-
-    logger.info(f"當前版本: {version}")
-    return str(version)
-
-def parse_version_series(version: str, logger) -> Optional[Tuple[int, int]]:
-    """
-    解析版本系列 (v{major}.{minor}.x)
-
-    Args:
-        version: 版本號 (例如 "0.19.8")
-
-    Returns:
-        (major, minor) - 版本系列，若解析失敗則回傳 None
-    """
-    try:
-        # 解析格式: "major.minor.patch"
-        parts = version.split('.')
-        if len(parts) < 2:
-            logger.warning(f"無法解析版本號: {version}")
-            return None
-
-        major = int(parts[0])
-        minor = int(parts[1])
-
-        logger.info(f"版本系列: v{major}.{minor}.x")
-        return (major, minor)
-    except (ValueError, IndexError) as e:
-        logger.error(f"版本號解析失敗: {e}")
-        return None
-
 def find_tickets_directory(
     project_root: Path,
-    major: int,
-    minor: int,
+    version: str,
     logger
 ) -> Optional[Path]:
     """
-    尋找版本系列的 tickets 目錄
-
-    搜尋順序:
-    1. 當前主版本系列: v{major}.{minor}.0/tickets/
-    2. 如果找不到，返回 None
+    尋找版本的 tickets 目錄
 
     Args:
         project_root: 專案根目錄
-        major: 主版本號
-        minor: 小版本號
+        version: 版本號（如 "0.2.0"）
 
     Returns:
         Path - tickets 目錄路徑，若找不到則回傳 None
@@ -155,9 +69,7 @@ def find_tickets_directory(
         logger.info(f"work-logs 目錄不存在: {work_logs_dir}")
         return None
 
-    # 構建版本系列目錄名稱
-    version_dir = work_logs_dir / f"v{major}.{minor}.0"
-    tickets_dir = version_dir / "tickets"
+    tickets_dir = work_logs_dir / f"v{version}" / "tickets"
 
     if tickets_dir.exists() and tickets_dir.is_dir():
         logger.info(f"找到 tickets 目錄: {tickets_dir}")
@@ -226,9 +138,6 @@ def scan_tech_debt_tickets(tickets_dir: Path, logger) -> List[Dict[str, Any]]:
         logger.info(f"tickets 目錄不存在: {tickets_dir}")
         return pending_tickets
 
-    # 掃描所有 .md 檔案
-    # 注：tech-debt-reminder 使用 pubspec.yaml 版本，不使用 todolist.yaml，所以不用共用函式
-    # 保持本地 glob 以相容特殊的版本檢測邏輯
     for file_path in sorted(tickets_dir.glob("*.md")):
         # 檔案名稱檢查
         if "TD" not in file_path.name:
@@ -344,13 +253,11 @@ def main() -> int:
     執行流程:
     1. 初始化日誌
     2. 讀取 JSON 輸入（Session 資訊）
-    3. 讀取 pubspec.yaml
-    4. 提取版本號
-    5. 解析版本系列
-    6. 尋找 tickets 目錄
-    7. 掃描 pending TD Ticket
-    8. 產生 Hook 輸出
-    9. 輸出 JSON 結果
+    3. 從 todolist.yaml 取得版本號
+    4. 尋找 tickets 目錄
+    5. 掃描 pending TD Ticket
+    6. 產生 Hook 輸出
+    7. 輸出 JSON 結果
 
     Returns:
         int - Exit code (0 = 成功)
@@ -360,48 +267,39 @@ def main() -> int:
         # 步驟 1: 初始化日誌
         logger.info("技術債務提醒 Hook 啟動")
 
+        # 靜默跳過時的統一輸出（確保 stdout 不為空）
+        suppress_json = json.dumps({"suppressOutput": True})
+
         # 步驟 2: 讀取 JSON 輸入
         try:
             input_data = read_json_from_stdin(logger)
         except ValueError:
-            # SessionStart 可能沒有 stdin，靜默跳過
             logger.info("無 stdin 輸入，靜默跳過")
+            print(suppress_json)
             return EXIT_SUCCESS
 
         # 步驟 3: 取得專案根目錄
         project_root = get_project_root()
         logger.info(f"專案根目錄: {project_root}")
 
-        # 步驟 4: 讀取 pubspec.yaml
-        pubspec_data = read_pubspec_yaml(project_root, logger)
-        if not pubspec_data:
-            logger.info("無法讀取 pubspec.yaml，靜默跳過")
-            return EXIT_SUCCESS
-
-        # 步驟 5: 提取版本號
-        version = extract_version(pubspec_data, logger)
+        # 步驟 4: 從 todolist.yaml 取得版本（專案類型無關）
+        version = get_current_version_from_todolist(project_root, logger)
         if not version:
-            logger.info("無法提取版本號，靜默跳過")
+            logger.info("無法取得版本號，靜默跳過")
+            print(suppress_json)
             return EXIT_SUCCESS
 
-        # 步驟 6: 解析版本系列
-        version_tuple = parse_version_series(version, logger)
-        if not version_tuple:
-            logger.info("無法解析版本系列，靜默跳過")
-            return EXIT_SUCCESS
-
-        major, minor = version_tuple
-
-        # 步驟 7: 尋找 tickets 目錄
-        tickets_dir = find_tickets_directory(project_root, major, minor, logger)
+        # 步驟 5: 尋找 tickets 目錄
+        tickets_dir = find_tickets_directory(project_root, version, logger)
         if not tickets_dir:
-            logger.info(f"tickets 目錄不存在，靜默跳過")
+            logger.info("tickets 目錄不存在，靜默跳過")
+            print(suppress_json)
             return EXIT_SUCCESS
 
-        # 步驟 8: 掃描 pending TD Ticket
+        # 步驟 6: 掃描 pending TD Ticket
         pending_tickets = scan_tech_debt_tickets(tickets_dir, logger)
 
-        # 步驟 9: 產生 Hook 輸出
+        # 步驟 7: 產生 Hook 輸出
         hook_output = generate_hook_output(pending_tickets, version, logger)
 
         # 步驟 10: 輸出 JSON 結果

@@ -1,7 +1,8 @@
 ---
 name: acceptance-auditor
 description: "Ticket 契約驗收專家。驗證結構完整性、執行日誌填寫、測試執行、驗收條件一致性、子任務完成、後續任務銜接。Use when a Ticket is about to be marked complete, PM dispatches acceptance verification, or acceptance-gate-hook triggers pre-completion audit."
-model: sonnet
+model: opus
+effort: low
 ---
 
 @.claude/agents/AGENT_PRELOAD.md
@@ -167,7 +168,7 @@ You are an Acceptance Auditor - the mandatory verifier before any Ticket can be 
 ## 相關文件
 
 - .claude/references/acceptance-auditor-details.md - 各步驟詳細判定規則和報告格式範例
-- .claude/rules/flows/ticket-lifecycle.md - Ticket 生命週期
+- .claude/pm-rules/ticket-lifecycle.md - Ticket 生命週期
 - .claude/rules/core/quality-baseline.md - 品質基線
 
 ---

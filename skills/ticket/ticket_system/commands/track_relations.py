@@ -312,6 +312,24 @@ def execute_add_child(args: argparse.Namespace, version: str) -> int:
     return 0
 
 
+def _normalize_phase_input(phase: str) -> str:
+    """將各種 Phase 輸入格式正規化為標準 'Phase X' 格式。
+
+    支援輸入: phase0, phase1, phase2, phase3a, phase3b, phase4,
+              Phase 0, Phase 1, Phase 3a 等。
+
+    Returns:
+        正規化後的 Phase 名稱（如 'Phase 2'），或原始輸入（若無法辨識）。
+    """
+    normalized = phase.lower().strip()
+    # 移除 "phase" 前綴，取得數字部分
+    if normalized.startswith("phase"):
+        num_part = normalized[5:].strip()
+        if num_part in ("0", "1", "2", "3a", "3b", "4"):
+            return f"Phase {num_part}"
+    return phase
+
+
 def execute_phase(args: argparse.Namespace, version: str) -> int:
     """更新 Ticket 的 TDD Phase"""
     # 有效的 Phase 值
@@ -322,11 +340,12 @@ def execute_phase(args: argparse.Namespace, version: str) -> int:
     if not success:
         return 1
 
-    # 驗證 phase 參數
-    phase = args.phase
+    # 正規化並驗證 phase 參數
+    phase = _normalize_phase_input(args.phase)
     if phase not in VALID_PHASES:
-        print(format_error(ErrorMessages.INVALID_PHASE_VALUE, phase=phase))
+        print(format_error(ErrorMessages.INVALID_PHASE_VALUE, phase=args.phase))
         print(f"{TrackRelationsMessages.PHASE_VALID_VALUES_PREFIX} {', '.join(VALID_PHASES)}")
+        print("  也接受簡寫格式: phase0, phase1, phase2, phase3a, phase3b, phase4")
         return 1
 
     # 更新 Ticket 欄位

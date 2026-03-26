@@ -111,7 +111,7 @@ ticket track append-log 0.31.0-W22-001.1 --section "Test Results" "12 tests pass
 
 ## 相關文件
 
-- .claude/rules/flows/ticket-lifecycle.md - Ticket 生命週期
+- .claude/pm-rules/ticket-lifecycle.md - Ticket 生命週期
 - .claude/skills/ticket/SKILL.md - Ticket 操作指南
 
 ---

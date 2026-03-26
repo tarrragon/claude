@@ -2,7 +2,7 @@
 
 本文件包含 Plan-to-Ticket 轉換的驗證清單、輸出格式和完整流程圖。
 
-> 主要流程：@.claude/rules/flows/plan-to-ticket-flow.md
+> 主要流程：@.claude/pm-rules/plan-to-ticket-flow.md
 
 ---
 
@@ -162,7 +162,7 @@ flowchart TD
 
 ## 相關文件
 
-- @.claude/rules/flows/plan-to-ticket-flow.md - Plan-to-Ticket 轉換流程（主要檔案）
+- @.claude/pm-rules/plan-to-ticket-flow.md - Plan-to-Ticket 轉換流程（主要檔案）
 - .claude/references/plan-to-ticket-mapping-details.md - 詳細映射規範
 - @.claude/rules/guides/task-splitting.md - 任務拆分指南
 - @.claude/rules/guides/parallel-dispatch.md - 並行派發指南

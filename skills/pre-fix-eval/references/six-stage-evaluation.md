@@ -197,7 +197,7 @@ Stage 4: 根因定位
 
 **目標**: 將 Ticket 分派給專業代理人執行
 
-**分派規則**: 依據 `.claude/rules/flows/incident-response.md` 的「派發對應表」決定代理人。
+**分派規則**: 依據 `.claude/pm-rules/incident-response.md` 的「派發對應表」決定代理人。
 
 **分派前檢查清單**:
 - [ ] Ticket 已建立並有 ID

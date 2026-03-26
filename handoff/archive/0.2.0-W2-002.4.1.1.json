@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.2.0-W2-002.4.1.1",
+  "direction": "context-refresh",
+  "timestamp": "2026-03-26T12:50:35.831866",
+  "from_status": "in_progress",
+  "title": "修復 4 個失敗的 dashboard 測試 (TC-30-01, TC-30-04, TC-32-04, TC-32-05)",
+  "what": "修復 4 個失敗的 dashboard 測試 (TC-30-01, TC-30-04, TC-32-04, TC-32-05)",
+  "chain": {},
+  "resumed_at": "2026-03-26T12:51:30.175150"
+}

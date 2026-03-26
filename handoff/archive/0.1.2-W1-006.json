@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.2-W1-006",
+  "direction": "context-refresh",
+  "timestamp": "2026-03-23T17:17:35.310264",
+  "from_status": "in_progress",
+  "title": "實作 Agent Capability Registry 機制",
+  "what": "設計 agent registry YAML（能力資料層 Source of Truth），支援機器可讀的能力宣告、三種衝突檢查（Agent 衝突 + TDD 相序 + 檔案寫入）和派發驗證。不取代 decision-tree 決策邏輯。",
+  "chain": {},
+  "resumed_at": "2026-03-23T17:20:52.561126"
+}

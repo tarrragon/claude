@@ -63,10 +63,10 @@ Error: No task found with ID: b8refllkc
 
 ```
 # 系統訊息
-Output too large. Full output saved to: /Users/mac-eric/.claude/projects/.../tool-results/b8refllkc.txt
+Output too large. Full output saved to: ~/.claude/projects/.../tool-results/b8refllkc.txt
 
 # 正確做法：複製完整路徑到 Read 工具
-Read(file_path: "/Users/mac-eric/.claude/projects/.../tool-results/b8refllkc.txt")
+Read(file_path: "~/.claude/projects/.../tool-results/b8refllkc.txt")
 ```
 
 ### 主動預防大輸出

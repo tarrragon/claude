@@ -2,7 +2,7 @@
 
 本文件包含版本推進決策的實際案例和錯誤案例分析，供學習和參考。
 
-> 核心規則：@.claude/rules/flows/version-progression.md
+> 核心規則：@.claude/pm-rules/version-progression.md
 
 ---
 
@@ -191,9 +191,9 @@ Phase 3b 中發現: "程式碼重複度高，應該重構"
 
 ## 相關文件
 
-- @.claude/rules/flows/version-progression.md - 核心決策規則
+- @.claude/pm-rules/version-progression.md - 核心決策規則
 - @.claude/rules/core/decision-tree.md - 主線程決策樹
-- @.claude/rules/flows/ticket-lifecycle.md - Ticket 生命週期
+- @.claude/pm-rules/ticket-lifecycle.md - Ticket 生命週期
 
 ---
 

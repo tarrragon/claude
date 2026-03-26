@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.2.0-W3-002",
+  "direction": "to-sibling:0.2.0-W3-020",
+  "timestamp": "2026-03-26T10:55:56.939873",
+  "from_status": "completed",
+  "title": "實作 HTTP Hooks 版本檢測與 fallback 降級機制 (spec §3.6 容錯)",
+  "what": "實作 HTTP Hooks 版本檢測與 fallback 降級機制 (spec §3.6 容錯)",
+  "chain": {},
+  "resumed_at": "2026-03-26T10:59:19.245918"
+}

@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W23-004",
+  "direction": "to-sibling:0.1.0-W23-005",
+  "timestamp": "2026-03-09T10:59:16.168764",
+  "from_status": "completed",
+  "title": "修復 commit-handoff-hook.py stdin 讀取統一和 hook_utils 型別標注修正",
+  "what": "修復 commit-handoff-hook.py stdin 讀取統一和 hook_utils 型別標注修正",
+  "chain": {},
+  "resumed_at": "2026-03-09T11:06:37.833151"
+}

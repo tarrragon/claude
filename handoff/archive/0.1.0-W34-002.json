@@ -1,0 +1,17 @@
+{
+  "ticket_id": "0.1.0-W34-002",
+  "direction": "to-sibling:0.1.0-W34-005",
+  "timestamp": "2026-03-11T14:08:03.758115",
+  "from_status": "completed",
+  "title": "修復 command-entrance-gate-hook validate_input 缺少 input_data is None 防護",
+  "what": "修復 command-entrance-gate-hook validate_input 缺少 input_data is None 防護",
+  "chain": {
+    "root": "0.1.0-W34-2",
+    "parent": null,
+    "depth": 0,
+    "sequence": [
+      2
+    ]
+  },
+  "resumed_at": "2026-03-11T14:09:41.164065"
+}

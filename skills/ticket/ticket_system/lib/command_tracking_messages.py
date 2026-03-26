@@ -385,8 +385,18 @@ class TrackMessages:
     ARG_TICKET_IDS = "Ticket ID 列表（以逗號分隔）"
     ARG_VALUE = "新的值"
     ARG_AGENT_NAME = "代理人名稱（支援模糊匹配，如 parsley）"
-    ARG_PHASE = "TDD Phase (Phase 0/1/2/3a/3b/4)"
-    ARG_AGENT = "Agent 名稱"
+    ARG_PHASE = (
+        "TDD Phase，支援多種格式："
+        " phase0, phase1, phase2, phase3a, phase3b, phase4"
+        " 或 'Phase 0', 'Phase 1' 等（引號包裹）。"
+        " 範例: ticket track phase <ID> phase2 <agent>"
+    )
+    ARG_AGENT = (
+        "負責該 Phase 的代理人名稱。"
+        " 範例: lavender-interface-designer, sage-test-architect,"
+        " pepper-test-implementer, parsley-flutter-developer,"
+        " cinnamon-refactor-owl"
+    )
     ARG_PARENT_ID = "父 Ticket ID"
     ARG_CHILD_ID = "子 Ticket ID"
     ARG_INDEX = "驗收條件索引（1 開始）"
@@ -398,6 +408,41 @@ class TrackMessages:
     ARG_STATUS = "篩選狀態（pending/in_progress/completed/blocked，支援多個值）"
     ARG_FORMAT = "輸出格式（table/ids/yaml，預設 table）"
     ARG_ALL = "顯示所有任務（包含已完成）"
+
+    # create 命令參數 help 文字
+    ARG_CREATE_ACTION = (
+        "動詞：描述任務要做什麼（必填）。"
+        " 範例: 實作, 修復, 重構, 分析, 建立, 改善"
+    )
+    ARG_CREATE_TARGET = (
+        "目標：描述任務對象（必填）。"
+        " 範例: SessionListPage 排序功能, ticket CLI 參數引導"
+    )
+
+    # create 缺少必填參數時的友善錯誤提示
+    ERROR_MISSING_ACTION_TARGET = (
+        "[ERROR] 缺少必填參數 --action 和/或 --target。\n"
+        "ticket create 需要至少指定 --action（動詞）和 --target（目標）。\n"
+        "範例:\n"
+        "  ticket create --action 實作 --target 'SessionListPage 排序功能' --wave 3\n"
+        "  ticket create --action 修復 --target 'ticket CLI 參數引導' --wave 3"
+    )
+
+    # phase 缺少 agent 參數時的友善錯誤提示
+    ERROR_MISSING_PHASE_AGENT = (
+        "[ERROR] 缺少必填參數 agent（負責代理人）。\n"
+        "用法: ticket track phase <ticket_id> <phase> <agent>\n"
+        "範例:\n"
+        "  ticket track phase 0.2.0-W3-001 phase1 lavender-interface-designer\n"
+        "  ticket track phase 0.2.0-W3-001 phase3b parsley-flutter-developer\n"
+        "常用代理人:\n"
+        "  Phase 0:  saffron-system-analyst\n"
+        "  Phase 1:  lavender-interface-designer\n"
+        "  Phase 2:  sage-test-architect\n"
+        "  Phase 3a: pepper-test-implementer\n"
+        "  Phase 3b: parsley-flutter-developer\n"
+        "  Phase 4:  cinnamon-refactor-owl"
+    )
 
 
 # ============================================================================

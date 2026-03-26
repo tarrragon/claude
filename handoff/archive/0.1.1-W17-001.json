@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.1-W17-001",
+  "direction": "to-sibling:0.1.1-W14-001",
+  "timestamp": "2026-03-21T10:51:00.126458",
+  "from_status": "completed",
+  "title": "補充 worktree SKILL 新拆分函式單元測試 + 清理棄用常數 + 統一命名 + 提取共用驗證模式",
+  "what": "補充 worktree SKILL 新拆分函式單元測試 + 清理棄用常數 + 統一命名 + 提取共用驗證模式",
+  "chain": {},
+  "resumed_at": "2026-03-21T10:52:03.007871"
+}

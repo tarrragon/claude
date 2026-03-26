@@ -46,7 +46,9 @@ from lib.hook_messages import WorkflowMessages
 
 EXIT_SUCCESS = 0
 
-# 已由 pre-fix-evaluation-hook 處理的命令模式（避免重複提醒）
+# 已由其他 Hook 處理的命令模式（避免重複提醒）
+# - pre-fix-evaluation-hook 處理測試和程式碼品質命令
+# - skill-cli-error-feedback-hook 處理 ticket/skill CLI 命令
 HANDLED_BY_OTHER_HOOKS = [
     "flutter test",
     "dart test",
@@ -55,6 +57,9 @@ HANDLED_BY_OTHER_HOOKS = [
     "go vet",
     "pytest",
     "uv run pytest",
+    "ticket ",
+    "skill ",
+    "uv run ticket",
 ]
 
 # 預期可能有 stderr 輸出但非真正失敗的命令

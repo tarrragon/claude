@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.2.0-W3-007",
+  "direction": "to-sibling:0.2.0-W3-002",
+  "timestamp": "2026-03-26T10:00:59.372169",
+  "from_status": "completed",
+  "title": "重構 isKnownEventType 統一來源消除三處同步風險",
+  "what": "重構 isKnownEventType 統一來源消除三處同步風險",
+  "chain": {},
+  "resumed_at": "2026-03-26T10:01:36.641059"
+}

@@ -68,8 +68,10 @@
 # 追加執行日誌
 /ticket track append-log <id> --section "Problem Analysis" "內容"
 
-# 勾選驗收條件（--uncheck 取消勾選）
-/ticket track check-acceptance <id> <index> [--uncheck]
+# 勾選驗收條件
+/ticket track check-acceptance <id> --all              # 勾選全部驗收條件
+/ticket track check-acceptance <id> 1 2 3              # 勾選指定項（index 從 1 開始）
+/ticket track check-acceptance <id> 1 --uncheck        # 取消勾選第 1 項
 
 # 標記建立後驗收已通過
 /ticket track accept-creation <id>

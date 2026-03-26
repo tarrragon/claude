@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W33-010",
+  "direction": "to-sibling:0.1.0-W33-006",
+  "timestamp": "2026-03-10T14:16:25.712142",
+  "from_status": "completed",
+  "title": "修復 ticket track list --status 分隔符歧義（nargs=+ 與 batch-complete 相容性）",
+  "what": "track list --status 改用 nargs=+ 支援空格分隔（與 decision-tree.md 一致）；batch-complete --status 為獨立定義，確認不受影響即可",
+  "chain": {},
+  "resumed_at": "2026-03-10T14:16:55.482138"
+}

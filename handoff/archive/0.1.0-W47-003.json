@@ -1,0 +1,17 @@
+{
+  "ticket_id": "0.1.0-W47-003",
+  "direction": "to-sibling:0.1.0-W47-004",
+  "timestamp": "2026-03-12T17:29:14.460140",
+  "from_status": "completed",
+  "title": "修復 3b 拆分閾值邊界模糊問題（拆分觸發和豁免條件指向同一數字 5）",
+  "what": "修復 3b 拆分閾值邊界模糊問題（拆分觸發和豁免條件指向同一數字 5）",
+  "chain": {
+    "root": "0.1.0-W47-3",
+    "parent": null,
+    "depth": 0,
+    "sequence": [
+      3
+    ]
+  },
+  "resumed_at": "2026-03-12T17:30:25.516205"
+}

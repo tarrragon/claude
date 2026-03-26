@@ -62,6 +62,6 @@ error-pattern 檔案的 mtime > ticket.created 時間
 
 ## 相關文件
 
-- `.claude/rules/flows/ticket-lifecycle.md` - 完成階段時序說明（v5.3.0 修復）
+- `.claude/pm-rules/ticket-lifecycle.md` - 完成階段時序說明（v5.3.0 修復）
 - `.claude/rules/core/askuserquestion-rules.md` - 場景 #17 定義
 - `.claude/hooks/acceptance-gate-hook.py` - hook 實作（exit code 邏輯）

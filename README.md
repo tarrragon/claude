@@ -351,9 +351,9 @@ grep -c '/Users/' .claude/settings.local.json
 |------|------|
 | [rules/core/decision-tree.md](./rules/core/decision-tree.md) | 主線程決策樹（核心入口） |
 | [rules/core/quality-baseline.md](./rules/core/quality-baseline.md) | 品質基線（不可協商） |
-| [rules/core/implementation-quality.md](./rules/core/implementation-quality.md) | 實作品質標準 |
-| [rules/flows/tdd-flow.md](./rules/flows/tdd-flow.md) | TDD 含 SA 前置審查流程 |
-| [rules/flows/ticket-lifecycle.md](./rules/flows/ticket-lifecycle.md) | Ticket 生命週期 |
+| [rules/core/quality-common.md](./rules/core/quality-common.md) | 實作品質標準 |
+| [pm-rules/tdd-flow.md](./pm-rules/tdd-flow.md) | TDD 含 SA 前置審查流程 |
+| [pm-rules/ticket-lifecycle.md](./pm-rules/ticket-lifecycle.md) | Ticket 生命週期 |
 | [rules/forbidden/skip-gate.md](./rules/forbidden/skip-gate.md) | Skip-gate 防護機制 |
 
 > 完整規則索引：[rules/README.md](./rules/README.md)

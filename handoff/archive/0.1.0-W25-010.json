@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W25-010",
+  "direction": "to-sibling:0.1.0-W25-011",
+  "timestamp": "2026-03-09T16:12:26.382362",
+  "from_status": "completed",
+  "title": "清理 acceptance-gate-hook _check_error_patterns 薄包裝函式消除",
+  "what": "評估並清理 acceptance-gate-hook _check_error_patterns 薄包裝函式（需確認是否真為薄包裝）",
+  "chain": {},
+  "resumed_at": "2026-03-09T16:20:46.718894"
+}

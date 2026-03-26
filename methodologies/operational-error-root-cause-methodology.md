@@ -158,14 +158,14 @@
 本方法論在 `incident-response.md` 的「操作失誤根因分析」章節中被引用。
 當 incident-responder 或 PM 判斷錯誤屬於「操作層」而非「程式層」時，切換到本方法論執行三層分析。
 
-> 詳見：.claude/rules/flows/incident-response.md（操作失誤根因分析章節）
+> 詳見：.claude/pm-rules/incident-response.md（操作失誤根因分析章節）
 
 ---
 
 ## 相關文件
 
 - .claude/error-patterns/process-compliance/ - 操作失誤案例庫（PC-xxx）
-- .claude/rules/flows/incident-response.md - 事件回應流程（含操作失誤分支）
+- .claude/pm-rules/incident-response.md - 事件回應流程（含操作失誤分支）
 - .claude/methodologies/systematic-debugging-methodology.md - 程式碼層次除錯方法論
 - .claude/methodologies/problem-awareness-evaluation-methodology.md - 問題意識評估方法論
 

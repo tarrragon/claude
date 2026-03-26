@@ -1,0 +1,17 @@
+{
+  "ticket_id": "0.1.0-W34-001",
+  "direction": "to-sibling:0.1.0-W34-002",
+  "timestamp": "2026-03-11T13:23:14.478679",
+  "from_status": "completed",
+  "title": "修復 WAVE_MAX=10 硬編碼上限導致 W10+ Ticket 誤判警告",
+  "what": "修復 WAVE_MAX=10 硬編碼上限導致 W10+ Ticket 誤判警告",
+  "chain": {
+    "root": "0.1.0-W34-1",
+    "parent": null,
+    "depth": 0,
+    "sequence": [
+      1
+    ]
+  },
+  "resumed_at": "2026-03-11T13:49:06.144342"
+}

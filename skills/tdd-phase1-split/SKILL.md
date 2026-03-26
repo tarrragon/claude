@@ -356,7 +356,7 @@ v0.29.3：W3-006（序列）
 
 ## 相關資源
 
-- TDD 流程：`.claude/rules/flows/tdd-flow.md`
+- TDD 流程：`.claude/pm-rules/tdd-flow.md`
 - 任務拆分指南：`.claude/rules/guides/task-splitting.md`
 - Atomic Ticket 方法論：`.claude/methodologies/atomic-ticket-methodology.md`
 - Ticket Skill：`.claude/skills/ticket/SKILL.md`

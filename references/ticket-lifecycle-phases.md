@@ -2,7 +2,7 @@
 
 本文件包含 Ticket 各階段的詳細流程規則。
 
-> 精簡版（常駐載入）：.claude/rules/flows/ticket-lifecycle.md
+> 精簡版（常駐載入）：.claude/pm-rules/ticket-lifecycle.md
 > 操作指南：.claude/skills/ticket/SKILL.md
 
 ---
@@ -213,7 +213,7 @@
 
 ## 相關文件
 
-- .claude/rules/flows/ticket-lifecycle.md - 精簡版（常駐）
+- .claude/pm-rules/ticket-lifecycle.md - 精簡版（常駐）
 - .claude/rules/core/askuserquestion-rules.md - AskUserQuestion 規則
 - .claude/methodologies/acceptance-criteria-methodology.md - 驗收條件方法論
 - .claude/methodologies/suggestion-tracking-methodology.md - 建議追蹤方法論

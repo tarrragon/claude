@@ -192,7 +192,7 @@ uv run .claude/skills/version-release/scripts/version_release.py update-docs
 若需調整版本策略，可在專案根目錄建立或編輯 `.version-release.yaml`。
 配置檔不存在時，工具使用內建預設值（三層架構策略）。
 
-詳細配置結構：`.claude/rules/flows/monorepo-version-strategy.md`
+詳細配置結構：`.claude/pm-rules/monorepo-version-strategy.md`
 
 ## 前置條件
 

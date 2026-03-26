@@ -140,7 +140,7 @@ python3 -m py_compile .claude/hooks/handoff-reminder-hook.py
 ### 2. 功能測試（有待恢復任務）
 
 ```bash
-cd /Users/mac-eric/project/book_overview_app
+cd /path/to/project
 CLAUDE_PROJECT_DIR=. echo '{}' | python3 .claude/hooks/handoff-reminder-hook.py
 ```
 
@@ -188,7 +188,7 @@ HOOK_DEBUG=true CLAUDE_PROJECT_DIR=. echo '{}' | python3 .claude/hooks/handoff-r
 
 ```
 [2026-02-03 11:19:39,825] INFO - Handoff 提醒 Hook 啟動
-[2026-02-03 11:19:39,828] INFO - 專案根目錄: /Users/mac-eric/project/book_overview_app
+[2026-02-03 11:19:39,828] INFO - 專案根目錄: /path/to/project
 [2026-02-03 11:19:39,828] INFO - 掃描完成，找到 2 個待恢復任務
 [2026-02-03 11:19:39,828] INFO - Hook 執行完成
 ```

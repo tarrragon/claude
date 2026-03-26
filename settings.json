@@ -29,6 +29,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pre-test-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-branch-check-hook.py"
           }
         ]
       },
@@ -253,6 +257,11 @@
           },
           {
             "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill-cli-error-feedback-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-context-guard-hook.py",
             "timeout": 5000
           },
@@ -303,6 +312,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/l10n-sync-verification-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/deletion-residual-reference-hook.py"
           }
         ]
       },
@@ -354,6 +367,11 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/dispatch-count-guard-hook.py",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/agent-commit-verification-hook.py",
+            "timeout": 10000
           }
         ]
       }

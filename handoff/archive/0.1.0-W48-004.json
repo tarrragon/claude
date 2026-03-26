@@ -1,0 +1,17 @@
+{
+  "ticket_id": "0.1.0-W48-004",
+  "direction": "to-sibling:0.1.0-W48-005",
+  "timestamp": "2026-03-13T11:05:01.405317",
+  "from_status": "completed",
+  "title": "重構 ticket-id-conventions.md 例外清單外放",
+  "what": "重構 ticket-id-conventions.md 例外清單外放",
+  "chain": {
+    "root": "0.1.0-W48-4",
+    "parent": null,
+    "depth": 0,
+    "sequence": [
+      4
+    ]
+  },
+  "resumed_at": "2026-03-13T11:06:35.043990"
+}

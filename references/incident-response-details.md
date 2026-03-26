@@ -2,7 +2,7 @@
 
 本文件包含事件回應的詳細分析步驟、多視角分析流程和報告格式。
 
-> 精簡版（常駐載入）：.claude/rules/flows/incident-response.md
+> 精簡版（常駐載入）：.claude/pm-rules/incident-response.md
 
 ---
 
@@ -276,7 +276,7 @@ CLI 或內部工具報錯時，**禁止假設歸因**，必須依序調查：
 
 ## 相關文件
 
-- .claude/rules/flows/incident-response.md - 精簡版（常駐）
+- .claude/pm-rules/incident-response.md - 精簡版（常駐）
 - .claude/agents/incident-responder.md - 代理人定義
 - .claude/rules/forbidden/skip-gate.md - Skip-gate 防護
 - .claude/methodologies/multi-perspective-analysis-methodology.md - 多視角分析方法論

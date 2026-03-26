@@ -149,7 +149,7 @@ uv run scripts/i18n_batch_replace.py --target lib/presentation --report
 ## 相關規範
 
 - 分層 i18n 管理方法論：`.claude/methodologies/layered-i18n-management-methodology.md`
-- ViewModel 層硬編碼規範：`.claude/rules/core/implementation-quality.md` 第 2.2 節
+- ViewModel 層硬編碼規範：`.claude/rules/core/quality-common.md` 第 2.2 節
 
 ---
 

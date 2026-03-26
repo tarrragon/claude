@@ -18,7 +18,7 @@ Automated technical debt capture from Phase 4 evaluation reports and conversion 
 3. 建立 Atomic Ticket 檔案
 4. 更新 todolist.yaml 技術債務追蹤區塊
 
-> 完整技術債務處理流程：`.claude/rules/flows/tech-debt.md`
+> 完整技術債務處理流程：`.claude/pm-rules/tech-debt.md`
 
 ## 前置條件
 
@@ -148,7 +148,7 @@ uv run .claude/skills/tech-debt-capture/scripts/tech_debt_capturer.py capture \
 
 - `/ticket create` - 手動建立 Atomic Ticket
 - `/ticket track` - 追蹤和更新 Ticket 狀態
-- `.claude/rules/flows/tech-debt.md` - 技術債務處理流程
+- `.claude/pm-rules/tech-debt.md` - 技術債務處理流程
 - `.claude/methodologies/atomic-ticket-methodology.md` - 單一職責原則
 
 ---

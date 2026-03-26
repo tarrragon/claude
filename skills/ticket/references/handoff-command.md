@@ -56,6 +56,33 @@ commit-handoff-hook 偵測到 `git commit` 成功後，PM 會用 AskUserQuestion
 
 ---
 
+## 任務鏈結束時的替代流程
+
+當 completed ticket 無有效 handoff 目標時（無子任務、無兄弟任務、任務鏈已全部完成），handoff 不適用。此時應使用以下替代方式：
+
+| 情境 | 判斷條件 | 替代操作 |
+|------|---------|---------|
+| 同 Wave 有其他 pending 任務 | 同 Wave 有未認領的 ticket | `/ticket`（列出待辦任務供選擇） |
+| 同 Wave 全部完成 | 無 pending/in_progress ticket | Wave 收尾流程（決策樹第八層情境 C） |
+| 跨 Wave 繼續 | 當前 Wave 完成，下個 Wave 有任務 | `/ticket`（列出下一 Wave 待辦） |
+
+**為什麼 completed ticket 不能 handoff 到無關任務？**
+
+handoff 設計為**任務鏈內的 context 交接**（父→子、子→父、兄弟間），不是通用的「下一個任務」路由器。任務鏈結束後，應回到 `/ticket` 入口重新選擇任務。
+
+**快速參考**：
+
+```
+completed ticket，想繼續工作？
+    |
+    v
+有子任務/兄弟待處理? ─是→ /ticket handoff <id> --to-child/--to-sibling
+    |
+    └─否→ /ticket（查看所有待辦任務，選擇下一個）
+```
+
+---
+
 ## 五種情境
 
 | 情境 | 方向     | 觸發條件                 |

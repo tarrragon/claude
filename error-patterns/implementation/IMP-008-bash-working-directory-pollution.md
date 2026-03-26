@@ -44,7 +44,7 @@ Claude Code 的 Bash 工具在同一 session 內保持**持久 shell 狀態**。
 pwd
 
 # 切回專案根目錄
-cd /Users/mac-eric/project/book_overview_app
+cd /path/to/project
 ```
 
 ### 預防措施（避免污染）
@@ -73,4 +73,4 @@ cd /project/root && ./scripts/sync-push.sh
 **版本**: 0.31.1
 **操作**: 執行 ticket 查詢後接著執行 sync-push
 **根因鏈**: `cd .claude/skills/ticket` → 工作目錄污染 → `./scripts/sync-claude-push.sh` 找不到
-**修復**: 改用絕對路徑 `cd /Users/mac-eric/project/book_overview_app && bash scripts/...`
+**修復**: 改用絕對路徑 `cd /path/to/project && bash scripts/...`

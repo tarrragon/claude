@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W33-001",
+  "direction": "to-sibling:0.1.0-W33-002",
+  "timestamp": "2026-03-10T10:45:02.066782",
+  "from_status": "completed",
+  "title": "修復 UNICODE_BOARD_TITLE 硬編碼版本號 + board 卡片渲染邏輯",
+  "what": "1. UNICODE_BOARD_TITLE 硬編碼 v0.31.0(W7) 改為動態佔位符 2. render_board_unicode row_idx>0 永遠空白的渲染邏輯修復 3. 欄標題 ljust 未考慮中文寬度",
+  "chain": {},
+  "resumed_at": "2026-03-10T10:50:25.307186"
+}

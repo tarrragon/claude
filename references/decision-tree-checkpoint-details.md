@@ -200,7 +200,7 @@ AskUserQuestion #3a（Wave 收尾 + 開始下一 Wave）
 → AskUserQuestion #13（版本推進確認）
 ```
 
-> 技術債整理流程：.claude/rules/flows/version-progression.md（版本收尾技術債整理流程章節）
+> 技術債整理流程：.claude/pm-rules/version-progression.md（版本收尾技術債整理流程章節）
 
 ---
 
@@ -309,7 +309,7 @@ ticket handoff --gc --execute
 - `.claude/rules/core/askuserquestion-rules.md` - AskUserQuestion 規則 Source of Truth（場景清單）
 - `.claude/references/askuserquestion-scene-details.md` - 場景 1-17 完整操作細節（Source of Truth）
 - `.claude/references/ticket-askuserquestion-templates.md` - AskUserQuestion 模板
-- `.claude/rules/flows/ticket-lifecycle.md` - Ticket 生命週期
+- `.claude/pm-rules/ticket-lifecycle.md` - Ticket 生命週期
 
 ---
 

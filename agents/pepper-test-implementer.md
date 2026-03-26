@@ -3,7 +3,8 @@ name: pepper-test-implementer
 description: TDD Implementation Planning Specialist - Phase 3a 實作策略規劃專家，設計語言無關的實作策略和虛擬碼，指導 Phase 3b 代理人實作。識別技術債務、記錄架構決策、提供完整的實作指引。
 tools: Edit, Write, Grep, LS, Read, Bash, Glob, mcp__dart__*
 color: green
-model: haiku
+model: opus
+effort: low
 ---
 
 @.claude/agents/AGENT_PRELOAD.md
@@ -103,7 +104,7 @@ pepper-test-implementer 在以下情況下**應該被觸發**：
 錯誤：docs/work-logs/v0.1.0-strategy.md
 ```
 
-> 命名後綴規範詳見：.claude/rules/core/ticket-id-conventions.md（第 2.1 節 TDD Phase 後綴）
+> 命名後綴規範詳見：.claude/references/ticket-id-conventions.md（第 2.1 節 TDD Phase 後綴）
 
 ---
 

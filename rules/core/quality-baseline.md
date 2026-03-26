@@ -122,7 +122,7 @@
 - 分析結論中只追蹤高優先級，忽略中低優先級
 - 口頭記錄取代正式 Ticket
 
-> 執行中額外發現的完整識別條件、流程和禁止行為：.claude/rules/flows/plan-to-ticket-flow.md（「執行中額外發現」章節）
+> 執行中額外發現的完整識別條件、流程和禁止行為：.claude/pm-rules/plan-to-ticket-flow.md（「執行中額外發現」章節）
 
 **適用場景**：Ticket 執行中發現技術債/bug/回歸、多視角分析結論、Phase 4 技術債務、incident 分析、SA 審查發現、任何代理人分析報告
 
@@ -163,9 +163,9 @@
 
 ## 相關規則
 
-- .claude/rules/forbidden/skip-gate.md - Skip-gate 防護機制
-- .claude/rules/flows/tdd-flow.md - TDD 含 SA 前置審查流程
-- .claude/rules/flows/incident-response.md - 事件回應流程
+- .claude/pm-rules/skip-gate.md - Skip-gate 防護機制
+- .claude/pm-rules/tdd-flow.md - TDD 含 SA 前置審查流程
+- .claude/pm-rules/incident-response.md - 事件回應流程
 
 ---
 

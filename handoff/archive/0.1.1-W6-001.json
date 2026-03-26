@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.1-W6-001",
+  "direction": "to-sibling:0.1.1-W6-002",
+  "timestamp": "2026-03-13T17:40:11.063159",
+  "from_status": "completed",
+  "title": "建立 monorepo 版本策略正式文件 monorepo-version-strategy.md",
+  "what": "建立 monorepo 版本策略正式文件 monorepo-version-strategy.md",
+  "chain": {},
+  "resumed_at": "2026-03-13T19:40:33.256420"
+}

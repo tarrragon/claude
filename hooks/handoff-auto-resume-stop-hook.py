@@ -450,9 +450,11 @@ def scan_pending_handoff_tasks(project_root: Path, logger) -> tuple:
       → 刪除 pending JSON（GC）
     - Ticket 已 completed + direction 是任務鏈類型
       → 保留 pending JSON（來源完成是預期狀態）
-    - Ticket 未完成且 resumed_at 為 null + 在最近 N 分鐘開始執行
+    - Ticket 未完成且 direction 為 auto 類型（auto 或 auto:TARGET_ID）
+      → 收集為「最近任務」（建議性任務，不阻塞退出）
+    - Ticket 未完成且非 auto + 在最近 N 分鐘開始執行
       → 收集為「最近任務」（可能有代理人正在執行）
-    - Ticket 未完成且 resumed_at 為 null + 超過 N 分鐘未開始
+    - Ticket 未完成且非 auto + 超過 N 分鐘未開始
       → 收集為「待恢復任務」（可能被遺忘）
 
     Args:
@@ -504,8 +506,20 @@ def scan_pending_handoff_tasks(project_root: Path, logger) -> tuple:
                                 f"({ticket_id}, direction={direction})"
                             )
                     else:
-                        # Ticket 未完成，檢查是否在最近開始執行
-                        if is_ticket_recently_started(project_root, ticket_id, logger):
+                        # Ticket 未完成，根據 direction 類型判斷分類
+                        direction_type = direction.split(":")[0]
+
+                        if direction_type == "auto":
+                            # auto handoff 為建議性任務，不阻塞退出
+                            recent_tasks.append({
+                                "ticket_id": ticket_id,
+                                "title": title,
+                                "direction": direction
+                            })
+                            logger.info(
+                                f"auto handoff 為建議性任務，不阻塞退出: {ticket_id}"
+                            )
+                        elif is_ticket_recently_started(project_root, ticket_id, logger):
                             recent_tasks.append({
                                 "ticket_id": ticket_id,
                                 "title": title,

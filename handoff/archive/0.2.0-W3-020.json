@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.2.0-W3-020",
+  "direction": "to-sibling:0.2.0-W3-001",
+  "timestamp": "2026-03-26T11:11:03.804511",
+  "from_status": "completed",
+  "title": "調整 TDD 3b 拆分評估流程 — 從 context 預算導向改為 SRP 功能職責導向",
+  "what": "調整 TDD 3b 拆分評估流程 — 從 context 預算導向改為 SRP 功能職責導向",
+  "chain": {},
+  "resumed_at": "2026-03-26T11:11:46.261813"
+}

@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W34-015",
+  "direction": "to-sibling:0.1.0-W34-013",
+  "timestamp": "2026-03-11T15:16:22.186095",
+  "from_status": "completed",
+  "title": "修復 棄用函式仍列在模組 docstring 公開 API 清單中",
+  "what": "修復 棄用函式仍列在模組 docstring 公開 API 清單中",
+  "chain": {},
+  "resumed_at": "2026-03-11T15:33:04.773945"
+}

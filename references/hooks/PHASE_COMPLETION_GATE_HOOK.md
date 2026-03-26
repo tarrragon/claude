@@ -78,7 +78,7 @@
 {
   "hookSpecificOutput": {
     "hookEventName": "PostToolUse",
-    "additionalContext": "警告：Phase 完成報告缺少必要內容\n\n缺少的部分:\n- Problem Analysis 實際內容\n- Solution 實際內容\n\n建議:\n1. 補充上述缺少的部分\n2. 確保提供完整的問題分析、解決方案和測試結果\n3. 執行 /ticket track complete {ticket-id} 標記 Ticket 完成\n\n詳見: .claude/rules/flows/tdd-flow.md"
+    "additionalContext": "警告：Phase 完成報告缺少必要內容\n\n缺少的部分:\n- Problem Analysis 實際內容\n- Solution 實際內容\n\n建議:\n1. 補充上述缺少的部分\n2. 確保提供完整的問題分析、解決方案和測試結果\n3. 執行 /ticket track complete {ticket-id} 標記 Ticket 完成\n\n詳見: .claude/pm-rules/tdd-flow.md"
   }
 }
 ```
@@ -283,9 +283,9 @@ ls -lt /Users/tarragon/Projects/book_overview_app/.claude/hook-logs/phase-comple
 
 ## 相關文件
 
-- [TDD 流程](./../rules/flows/tdd-flow.md) - 完整 TDD 流程說明
+- [TDD 流程](./../pm-rules/tdd-flow.md) - 完整 TDD 流程說明
 - @.claude/agents/cinnamon-refactor-owl.md - Phase 4 執行指南
-- [五重文件系統](./../rules/core/document-system.md) - 文件系統規則
+- [五重文件系統](./../references/document-system.md) - 文件系統規則
 - [Ticket 0.30.0-W2-004](./../../../docs/work-logs/v0.30.0/tickets/0.30.0-W2-004.md) - 原始 Ticket
 
 ---

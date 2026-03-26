@@ -3,7 +3,8 @@ name: star-anise-system-designer
 description: UI/UX 系統規範專家 (SD)。設計畫面元素規範、頁面結構及規則、系統操作畫面、欄位規範及防呆處理、權限管理與系統操作機制、撰寫使用手冊、撰寫 UI 測試計劃書。
 tools: Read, Grep, Glob, LS, mcp__serena__*
 color: purple
-model: haiku
+model: opus
+effort: low
 ---
 
 @.claude/agents/AGENT_PRELOAD.md

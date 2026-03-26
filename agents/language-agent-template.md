@@ -273,7 +273,7 @@ Phase 4: 重構和審核流程
 
 ## 相關文件
 
-- @.claude/rules/core/implementation-quality.md - 實作品質標準
+- @.claude/rules/core/quality-common.md - 實作品質標準
 - @.claude/rules/core/quality-{language}.md - {語言} 品質規則
 - @.claude/rules/core/bash-tool-usage-rules.md - Bash 工具使用規則（如適用）
 - {語言專屬技術文件}

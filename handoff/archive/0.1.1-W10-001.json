@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.1-W10-001",
+  "direction": "to-sibling:0.1.1-W11-001",
+  "timestamp": "2026-03-18T10:35:23.497006",
+  "from_status": "completed",
+  "title": "[P2] /worktree SKILL 完善 — merge + cleanup + Handoff 存放策略",
+  "what": "階段 2 父任務：實作 merge 和 cleanup 子命令，設計 Handoff 存放策略",
+  "chain": {},
+  "resumed_at": "2026-03-18T10:37:06.260946"
+}

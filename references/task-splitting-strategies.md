@@ -1,6 +1,6 @@
 # 任務拆分策略詳細說明
 
-本文件包含任務拆分的 6 個策略詳細說明和範例。
+本文件包含任務拆分的 7 個策略詳細說明和範例。
 
 > 精簡版（常駐載入）：.claude/rules/guides/task-splitting.md
 
@@ -181,6 +181,44 @@ Code Review 報告（N 個問題，M 個檔案）
 **與 ticket create 的整合**：
 - 建立批量 ticket 時，`where.files` 必須填入完整修改檔案清單
 - PM 驗證同一 Wave 所有 ticket 的 `where.files` 無交集
+
+---
+
+## 策略 7：按測試群組拆分（Phase 3b 推薦）
+
+**適用情境**：Phase 3b 實作拆分，Phase 2 定義了多個獨立的 GWT scenario group
+
+**核心原則**：拆分單位是 Phase 2 的 GWT scenario group（測試群組），而非模組或檔案。每個子任務聚焦「通過特定測試群組」。
+
+```
+Phase 2 測試設計產出：
+  - TC-01~TC-13：連線管理（建立/斷開/重連）
+  - TC-14~TC-16,TC-18~TC-34：事件推送+心跳+分頁+並發
+    |
+    v
+拆分為 2 個 Phase 3b 子任務：
+  - 子任務 A：通過 TC-01~TC-13
+  - 子任務 B：通過 TC-14~TC-16,TC-18~TC-34
+```
+
+**與模組拆分的差異**：
+
+| 維度 | 按測試群組（推薦） | 按模組（舊方式） |
+|------|-------------------|----------------|
+| 子任務定義 | 「通過 TC-01~TC-13」 | 「實作 Module A」 |
+| 代理人需讀取 | API 簽名 + 測試案例 | 整個模組設計文件 |
+| 完成判斷 | 測試全部通過 | 模組功能完成 |
+| context 消耗 | 低（只讀相關區段） | 高（讀完整文件） |
+
+**PM 派發流程**：
+
+1. 從 Phase 2 test-design 識別獨立的 GWT scenario group
+2. 每個 group 建立一個子任務，標明 TC 範圍
+3. 使用 phase3b-prompt-template.md 提取 API 簽名 + 測試案例 + 常數
+4. 確認各子任務修改檔案無交集
+5. 並行派發
+
+> 完整 prompt 模板：.claude/references/phase3b-prompt-template.md
 
 ---
 

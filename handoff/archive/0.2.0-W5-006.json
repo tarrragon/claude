@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.2.0-W5-006",
+  "direction": "to-sibling:0.2.0-W2-001",
+  "timestamp": "2026-03-25T15:46:26.634628",
+  "from_status": "completed",
+  "title": "修正 spec.md 回滾 v0.3 預留欄位至 §8 並補充 Use Case 和已知限制",
+  "what": "修正 spec.md 回滾 v0.3 預留欄位至 §8 並補充 Use Case 和已知限制",
+  "chain": {},
+  "resumed_at": "2026-03-25T15:49:01.266857"
+}

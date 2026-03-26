@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W25-009",
+  "direction": "to-sibling:0.1.0-W25-002",
+  "timestamp": "2026-03-09T15:18:57.442287",
+  "from_status": "completed",
+  "title": "修復 hook_utils _create_file_handler except 靜默 return None 缺少 stderr 輸出",
+  "what": "修復 hook_utils _create_file_handler except 靜默 return None 缺少 stderr 輸出",
+  "chain": {},
+  "resumed_at": "2026-03-09T15:19:58.765043"
+}

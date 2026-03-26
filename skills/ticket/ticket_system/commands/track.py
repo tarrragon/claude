@@ -382,7 +382,18 @@ def _register_relation_commands(
     p_agent.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
     # phase 操作
-    p_phase = subparsers.add_parser("phase", help=TrackMessages.HELP_PHASE)
+    p_phase = subparsers.add_parser(
+        "phase",
+        help=TrackMessages.HELP_PHASE,
+        epilog=(
+            "範例:\n"
+            "  ticket track phase 0.2.0-W3-001 phase1 lavender-interface-designer\n"
+            "  ticket track phase 0.2.0-W3-001 phase3b parsley-flutter-developer\n"
+            "\n"
+            "Phase 支援簡寫: phase0, phase1, phase2, phase3a, phase3b, phase4"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     p_phase.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_phase.add_argument("phase", help=TrackMessages.ARG_PHASE)
     p_phase.add_argument("agent", help=TrackMessages.ARG_AGENT)

@@ -3,7 +3,8 @@ name: project-compliance-agent
 description: 合規專家。處理 Hook 系統無法自動化的複雜合規場景，重點關注跨文件一致性檢查、法規要求、Hook 自動化失敗時的手動備份程序。
 tools: Edit, Write, Read, Bash, Grep, Glob, LS
 color: yellow
-model: haiku
+model: opus
+effort: low
 ---
 
 @.claude/agents/AGENT_PRELOAD.md

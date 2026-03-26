@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.2.0-W5-010",
+  "direction": "to-sibling:0.2.0-W5-011",
+  "timestamp": "2026-03-26T12:41:57.908488",
+  "from_status": "completed",
+  "title": "分析 pre-fix-evaluation-hook 測試失敗攔截失效原因（PC-026 防護）",
+  "what": "分析 pre-fix-evaluation-hook 測試失敗攔截機制為何未能防止 PC-026，識別覆蓋盲區並產出補強方案",
+  "chain": {},
+  "resumed_at": "2026-03-26T12:43:40.970155"
+}

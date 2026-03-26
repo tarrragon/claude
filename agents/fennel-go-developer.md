@@ -3,7 +3,8 @@ name: fennel-go-developer
 description: Go 後端開發專家 (Phase 3b)。從 pepper (Phase 3a) 接收語言無關策略，轉換為符合規範的 Go 程式碼。執行 TDD Phase 3b，確保 100% 測試通過，遵循 Go 1.21+ 最佳實踐、集中常數管理和多語系字串管理。
 tools: Edit, Write, Read, Bash, Grep, LS, Glob
 color: cyan
-model: haiku
+model: opus
+effort: low
 ---
 
 @.claude/agents/AGENT_PRELOAD.md
@@ -431,6 +432,7 @@ grep -rn '"[A-Z]' server/ --include="*.go" | grep -v "_test.go" | grep -v "const
 5. **禁止直接 cd 進入 server/**：必須使用子 shell `(cd server && ...)`
 6. **禁止修改測試邏輯**：測試本身有問題升級 sage-test-architect
 7. **禁止跳過測試**：必須執行 `go test ./...` 確認 100% 通過
+8. **禁止遺留 build 產物**：`go build` 產生的二進位檔必須在測試後清理（`rm -f` 或使用 `go build -o /dev/null`），不可提交到版本控制
 
 ---
 
@@ -458,7 +460,7 @@ grep -rn '"[A-Z]' server/ --include="*.go" | grep -v "_test.go" | grep -v "const
 
 ## 相關文件
 
-- @.claude/rules/core/implementation-quality.md - 實作品質標準（第 1 節 + 第 4 節 Go）
+- @.claude/rules/core/quality-common.md - 實作品質標準（第 1 節 + 第 4 節 Go）
 - @.claude/rules/core/bash-tool-usage-rules.md - cd 子 shell 規範
 - docs/spec.md - 技術規格（第 3 節 Go Backend + 第 7 節可觀測性）
 - docs/usecase/UC-010-structured-logging.md - 結構化日誌 UC

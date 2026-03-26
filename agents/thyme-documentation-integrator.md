@@ -228,7 +228,7 @@ Step 6: 驗證和記錄 -> 內容、一致性、完整性、品質驗證
 
 - `.claude/skills/methodology-writing/SKILL.md` - 方法論撰寫 Skill
 - `.claude/skills/doc-flow/SKILL.md` - 文件流程 Skill
-- `.claude/rules/core/document-system.md` - 五重文件系統規則
+- `.claude/references/document-system.md` - 五重文件系統規則
 - `.claude/rules/core/document-format-rules.md` - 文件格式規則
 
 ---

@@ -1,0 +1,17 @@
+{
+  "ticket_id": "0.2.0-W2-001",
+  "direction": "to-child:0.2.0-W2-001.3",
+  "timestamp": "2026-03-25T17:02:20.625206",
+  "from_status": "in_progress",
+  "title": "Go Backend MVP — 混合事件驅動架構 (spec §3.1-§3.7)",
+  "what": "實作 Go Backend 混合事件驅動架構的 6 個核心元件：File Watcher (§3.1)、JSONL Parser (§3.2)、WebSocket Server (§3.3)、Session Registry (§3.4)、HTTP Hooks Handler (§3.6)、Unified Event Dispatcher (§3.7)",
+  "chain": {
+    "root": "0.2.0-W2-001",
+    "parent": null,
+    "depth": 0,
+    "sequence": [
+      1
+    ]
+  },
+  "resumed_at": "2026-03-25T17:09:31.402588"
+}

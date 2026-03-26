@@ -39,4 +39,4 @@
 4. 自動識別依賴關係
 5. 產生 Atomic Tickets 並保存
 
-> 詳細流程：`.claude/rules/flows/plan-to-ticket-flow.md`
+> 詳細流程：`.claude/pm-rules/plan-to-ticket-flow.md`

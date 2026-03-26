@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W25-013",
+  "direction": "to-sibling:0.1.0-W25-002",
+  "timestamp": "2026-03-09T14:56:55.658261",
+  "from_status": "completed",
+  "title": "修復 6 處引導文字 --wave W{n} 改為 --wave {n}（CLI 只接受純數字）",
+  "what": "修復 6 處引導文字 --wave W{n} 改為 --wave {n}（CLI 只接受純數字）",
+  "chain": {},
+  "resumed_at": "2026-03-09T15:09:00.538506"
+}

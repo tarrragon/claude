@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W24-001",
+  "direction": "to-sibling:0.1.0-W24-002",
+  "timestamp": "2026-03-09T12:36:36.021765",
+  "from_status": "completed",
+  "title": "修復 hook_utils.py parse_ticket_date 型別標注 any 改為 Any",
+  "what": "修復 hook_utils.py parse_ticket_date 型別標注 any 改為 Any",
+  "chain": {},
+  "resumed_at": "2026-03-09T12:41:12.666989"
+}

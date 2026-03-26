@@ -134,4 +134,4 @@
 ## 相關文件
 
 - `.claude/methodologies/five-document-system-methodology.md` - 完整方法論
-- `.claude/rules/core/document-system.md` - 文件系統規則
+- `.claude/references/document-system.md` - 文件系統規則

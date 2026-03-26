@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W25-011",
+  "direction": "to-sibling:0.1.0-W26-001",
+  "timestamp": "2026-03-09T16:30:44.373964",
+  "from_status": "completed",
+  "title": "改善 acceptance-gate-hook frontmatter 裸 Dict 改用 TypedDict",
+  "what": "改善 acceptance-gate-hook frontmatter 裸 Dict 改用 TypedDict",
+  "chain": {},
+  "resumed_at": "2026-03-09T16:32:12.083245"
+}

@@ -1,0 +1,10 @@
+{
+  "ticket_id": "0.1.0-W33-012",
+  "direction": "to-sibling:0.1.0-W33-006",
+  "timestamp": "2026-03-10T17:20:35.921063",
+  "from_status": "completed",
+  "title": "重構 parse_ticket_frontmatter 認知負擔降低（~52→~15），提取 while 迴圈內三個分支為私有函式",
+  "what": "重構 parse_ticket_frontmatter 認知負擔降低（~52→~15），提取 while 迴圈內三個分支為私有函式",
+  "chain": {},
+  "resumed_at": "2026-03-10T17:23:49.553237"
+}
