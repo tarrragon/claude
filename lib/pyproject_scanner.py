@@ -144,6 +144,8 @@ def scan_skills_directory(
 
     Returns:
         Dict mapping package name → {"path": relative_path, "version": version_str}.
+        Only includes packages that have [project.scripts] defined (CLI entrypoint),
+        since packages without it cannot be installed via ``uv tool install``.
         Returns empty dict if skills directory doesn't exist or no packages found.
 
     Example:
@@ -176,8 +178,11 @@ def scan_skills_directory(
             try:
                 pkg_name = extract_package_name_from_pyproject(pyproject_path)
                 version = extract_version_from_pyproject(pyproject_path)
+                cli_name = extract_cli_name_from_pyproject(pyproject_path)
 
-                if pkg_name and version:
+                # 只收錄有 [project.scripts] 的套件，
+                # 沒有 CLI entrypoint 的套件無法用 uv tool install 安裝
+                if pkg_name and version and cli_name:
                     packages[pkg_name] = {
                         "path": str(skill_dir.relative_to(project_root)),
                         "version": version,

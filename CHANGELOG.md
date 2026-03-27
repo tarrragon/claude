@@ -1,3 +1,14 @@
+## [1.4.2] - 2026-03-27
+
+### Summary
+fix: pyproject_scanner 排除無 CLI entrypoint 的套件
+
+Changes: 1 fix
+
+- fix: pyproject_scanner 排除無 CLI entrypoint 的套件
+
+---
+
 ## [1.4.1] - 2026-03-27
 
 ### Summary
