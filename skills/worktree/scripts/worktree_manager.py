@@ -780,6 +780,22 @@ def _print_existing_worktrees() -> None:
             print(item)
 
 
+def _get_main_new_commits(branch_name: str) -> str:
+    """
+    取得 main 上比 branch 新的 commit 列表（一行一個）
+
+    Args:
+        branch_name: feature 分支名稱
+
+    Returns:
+        str: commit 列表文字，每行一個 commit
+    """
+    success, output = run_git_command(
+        ["log", "--oneline", f"{branch_name}..{DEFAULT_BASE_BRANCH}"]
+    )
+    return output.strip() if success and output.strip() else "(無法取得 commit 列表)"
+
+
 def _merge_build_warnings_list(ahead: int, behind: int, status_msg: str) -> list[str]:
     """
     根據 metrics 和狀態訊息構建警告清單
@@ -799,8 +815,6 @@ def _merge_build_warnings_list(ahead: int, behind: int, status_msg: str) -> list
         warnings.append(status_msg)
     if ahead == 0:
         warnings.append(MergeMessages.NO_NEW_COMMITS.format(base=DEFAULT_BASE_BRANCH))
-    if behind > 0:
-        warnings.append(MergeMessages.BRANCH_BEHIND_BASE.format(base=DEFAULT_BASE_BRANCH, count=behind))
     return warnings
 
 
@@ -918,10 +932,29 @@ def cmd_merge(ticket_id: str) -> int:
     if not passed:
         return 1
 
-    # Step 4: 輸出指令
     branch_name = worktree.get("branch", f"feat/{ticket_id}")
-    _merge_build_output(ticket_id, branch_name, ahead, behind, warnings)
 
+    # Step 4: behind > 0 時阻擋合併
+    if behind > 0:
+        commit_list = _get_main_new_commits(branch_name)
+        print(MergeMessages.BRANCH_BEHIND_BASE.format(
+            base=DEFAULT_BASE_BRANCH,
+            count=behind,
+            commit_list=commit_list,
+            worktree_path=worktree["path"],
+        ))
+        return 1
+
+    # Step 5: 輸出驗證結果並執行合併
+    _merge_build_output(ticket_id, branch_name, ahead, behind, warnings)
+    print()
+    print(MergeMessages.MERGE_EXECUTING.format(branch=branch_name, base=DEFAULT_BASE_BRANCH))
+    success, output = run_git_command(["merge", "--no-ff", branch_name])
+    if not success:
+        print(MergeMessages.MERGE_FAILED.format(error=output))
+        return 1
+
+    print(MergeMessages.MERGE_SUCCESS.format(ticket_id=ticket_id))
     return 0
 
 

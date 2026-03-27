@@ -175,13 +175,11 @@ class TestMergeBuildWarningsList:
         assert len(warnings) == 1
         assert MergeMessages.NO_NEW_COMMITS.format(base="main") in warnings[0]
 
-    def test_behind_warning(self):
-        """場景 4.3：behind > 0 警告"""
+    def test_behind_no_warning(self):
+        """場景 4.3：behind > 0 不再產生警告（改由 cmd_merge 層級阻擋）"""
         warnings = _merge_build_warnings_list(ahead=2, behind=1, status_msg="")
 
-        assert len(warnings) == 1
-        assert "main" in warnings[0]
-        assert "1" in warnings[0]
+        assert len(warnings) == 0
 
     def test_status_msg_warning(self):
         """場景 4.4：包含狀態訊息警告"""

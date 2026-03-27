@@ -422,7 +422,7 @@ saffron-system-analyst (架構設計)
 
 **文字搜尋優先使用 rg（透過 Bash）**，內建 Grep 工具作為備選。
 
-**完整指南**：`/search-tools-guide` 或閱讀 `.claude/skills/search-tools-guide/SKILL.md`
+**完整指南**：`.claude/skills/search-tools-guide/SKILL.md`
 
 **環境要求**：需要安裝 ripgrep。未安裝時建議：
 - macOS: `brew install ripgrep`

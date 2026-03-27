@@ -582,7 +582,7 @@ mcp__dart__dart_format
    - 只能修改 Ticket 指定的檔案和功能
    - 發現相關問題應建立新 Ticket 而非直接修改
 
-6. **禁止在測試失敗時停滯**：測試失敗時應按照 `/pre-fix-eval` 流程升級
+6. **禁止在測試失敗時停滯**：測試失敗時應按照 `.claude/skills/pre-fix-eval/SKILL.md` 流程升級
    - 不得直接嘗試「修復」失敗的測試
    - 必須分析失敗原因，判斷是實作問題還是設計問題
    - 如果無法在 3 次嘗試內解決，必須向 rosemary-project-manager 升級
@@ -960,7 +960,7 @@ mcp__serena__replace_symbol_body
 
 **文字搜尋優先使用 rg（透過 Bash）**，內建 Grep 工具作為備選。
 
-**完整指南**：`/search-tools-guide` 或閱讀 `.claude/skills/search-tools-guide/SKILL.md`
+**完整指南**：`.claude/skills/search-tools-guide/SKILL.md`
 
 **環境要求**：需要安裝 ripgrep。未安裝時建議：
 - macOS: `brew install ripgrep`

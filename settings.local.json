@@ -7,7 +7,8 @@
       "Skill(worktree)",
       "WebSearch",
       "WebFetch(domain:docs.anthropic.com)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Skill(zellij)"
     ]
   }
 }

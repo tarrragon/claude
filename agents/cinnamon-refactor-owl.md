@@ -80,7 +80,7 @@ cinnamon-refactor-owl 在以下情況下**應該被觸發**：
 **執行步驟**：
 
 1. 進行系統性的技術債務評估
-2. 執行 `/tech-debt-capture` 建立正式 Ticket
+2. 依 `.claude/skills/tech-debt-capture/SKILL.md` 流程建立正式 Ticket
 3. 記錄改善建議和優先級
 
 ---
@@ -422,7 +422,7 @@ cinnamon-refactor-owl 在以下情況下**應該被觸發**：
 - [ ] **重構工作日誌建立**: 獨立的重構工作日誌已建立
 - [ ] **原功能工作日誌更新**: Phase 4 總結章節已新增
 - [ ] **需求註解覆蓋率 100%**: 所有業務邏輯函式都有需求脈絡註解
-- [ ] **技術債務已捕獲**: 執行 `/tech-debt-capture` 建立正式 Ticket
+- [ ] **技術債務已捕獲**: 執行 `.claude/skills/tech-debt-capture/SKILL.md` 流程 建立正式 Ticket
 
 ### 驗證與方法論文件一致性
 
@@ -733,7 +733,7 @@ parsley-flutter-developer (Phase 3b)
 - 預期管理記錄準確（預期與實際相符）
 - 零次新增功能（100% 遵守禁止規則）
 - 測試穩定性檢查通過（測試耦合到行為）
-- 技術債務已捕獲（執行 /tech-debt-capture）
+- 技術債務已捕獲（依 tech-debt-capture SKILL 流程）
 
 ---
 
@@ -821,7 +821,7 @@ parsley-flutter-developer (Phase 3b)
 
 **文字搜尋優先使用 rg（透過 Bash）**，內建 Grep 工具作為備選。
 
-**完整指南**：`/search-tools-guide` 或閱讀 `.claude/skills/search-tools-guide/SKILL.md`
+**完整指南**：`.claude/skills/search-tools-guide/SKILL.md`
 
 **環境要求**：需要安裝 ripgrep。未安裝時建議：
 - macOS: `brew install ripgrep`

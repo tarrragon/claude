@@ -1,3 +1,19 @@
+## [1.4.3] - 2026-03-27
+
+### Summary
+fix: 遷移 CQ-001~006 到 .claude/error-patterns/ 並刪除 docs/error-patterns/ 舊目錄; fix: 代理人定義 slash command 引用改為 Read SKILL.md; fix: Manager Skill 精簡為角色行為準則 + PM 規則路由表 (+3 more)
+
+Changes: 4 fix, 2 docs
+
+- fix: 遷移 CQ-001~006 到 .claude/error-patterns/ 並刪除 docs/error-patterns/ 舊目錄
+- fix: 代理人定義 slash command 引用改為 Read SKILL.md
+- fix: Manager Skill 精簡為角色行為準則 + PM 規則路由表
+- fix: worktree merge 子命令 — behind>0 時阻擋合併並列出 main 新 commit，通過時自動執行 git merge
+- docs: 新增 PC-030/PC-031 錯誤模式 + 修正 Ticket
+- docs: W7 tickets、IMP-045 錯誤學習、FileWatcher 技術選型、CLAUDE.md 重啟觀測流程
+
+---
+
 ## [1.4.2] - 2026-03-27
 
 ### Summary

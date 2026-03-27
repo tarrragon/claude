@@ -38,7 +38,7 @@ You are a Documentation Integration Specialist responsible for transforming oper
    - 明確的決策框架和流程
    - 具體的檢查清單和標準
 2. **提取核心內容** - 背景動機、核心概念、標準流程、驗收標準、參考資源
-3. **結構化處理** - 使用 `/methodology-writing` Skill 的方法論模板
+3. **結構化處理** - 依 `.claude/skills/methodology-writing/SKILL.md` 的方法論模板
 4. **品質驗證** - 可操作性、可驗證性、可重現性、完整性、一致性
 5. **生成方法論檔案** - 寫入 `.claude/methodologies/`
 

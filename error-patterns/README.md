@@ -33,6 +33,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 ├── documentation/         # 文件相關錯誤模式
 ├── architecture/          # 架構相關錯誤模式
 ├── implementation/        # 實作相關錯誤模式
+├── code-quality/          # 程式碼品質相關錯誤模式
 └── process-compliance/    # 流程合規相關錯誤模式
 ```
 
@@ -48,6 +49,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | 文件 | DOC | 文件格式、規範相關 |
 | 架構 | ARCH | 架構設計相關 |
 | 實作 | IMP | 程式碼實作相關 |
+| 程式碼品質 | CQ | 程式碼品質、設計模式相關 |
 | 流程合規 | PC | 流程合規相關 |
 
 **範例**:
@@ -151,6 +153,17 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | ARCH-007 | Per-project 追蹤檔追蹤全域資源 | 中 | v0.1.0 |
 | ARCH-008 | 依賴全域狀態推斷而非從本地資料提取 | 中 | v0.1.0 |
 
+### 程式碼品質 (CQ)
+
+| ID | 標題 | 風險 | 來源版本 |
+|----|------|------|---------|
+| CQ-001 | 私有函式跨模組引用導致封裝破壞 | 中 | v0.1.0 |
+| CQ-002 | Positional Argument 作為子命令偵測導致路由不一致 | 中 | v0.1.0 |
+| CQ-003 | Exception 定義後無實際拋出點（設計意圖未實現） | 中 | v0.1.0 |
+| CQ-004 | namedtuple 早退路徑返回裸型別 | 高 | v0.1.0 |
+| CQ-005 | Mock 路徑未隨函式遷移同步更新 | 中 | v0.1.0 |
+| CQ-006 | 純工具函式定義在 commands/ 層阻礙複用 | 中 | v0.1.0 |
+
 ### 實作 (IMP)
 
 | ID | 標題 | 風險 | 來源版本 |
@@ -199,6 +212,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | IMP-042 | 刪除操作後殘留引用未同步清理 | 中 | v0.2.0 |
 | IMP-043 | 函式實作完整但呼叫端未接線 | 高 | v0.2.0 |
 | IMP-044 | 生命週期階段缺乏可觀測性 | 中 | v0.2.0 |
+| IMP-045 | 伺服器重啟 port 佔用靜默失敗 | 中 | v0.2.0 |
 
 ### 流程合規 (PC)
 
@@ -220,6 +234,21 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-014 | 以非正式任務合理化跳過 AskUserQuestion | 中 | v0.1.1 |
 | PC-015 | 錯誤提示靜默繞過 | 中 | v0.1.1 |
 | PC-016 | Hook 阻止後使用 Bash 工具繞過保護機制 | 高 | v0.1.1 |
+| PC-017 | ANA 完成後缺少實作 Ticket | 中 | v0.1.1 |
+| PC-018 | 並行代理人重複建立後續 Ticket | 中 | v0.1.1 |
+| PC-019 | 設計決策只存 memory 未建 Ticket | 中 | v0.1.1 |
+| PC-020 | Plan 派發與實際執行不一致 | 中 | v0.1.2 |
+| PC-021 | Worktree 隔離失敗導致跨 Wave 交叉污染 | 高 | v0.1.2 |
+| PC-022 | Subagent 權限不足無法編輯 Hook | 中 | v0.1.2 |
+| PC-023 | PM 繞過權限而非修復根因 | 中 | v0.1.2 |
+| PC-024 | Subagent 跳過 commit | 中 | v0.2.0 |
+| PC-025 | Worktree 合併目標分支狀態不一致 | 高 | v0.2.0 |
+| PC-026 | 測試失敗未立即建 Ticket | 高 | v0.2.0 |
+| PC-027 | Phase 3b 失敗無 Ticket 直接派發 | 中 | v0.2.0 |
+| PC-028 | 代理人報告未驗證假設 | 中 | v0.2.0 |
+| PC-029 | 並行代理人共用檔案衝突 | 中 | v0.2.0 |
+| PC-030 | 代理人定義 slash command 引用無法執行 | 中 | v0.2.0 |
+| PC-031 | error-pattern SKILL 引用錯誤的知識庫路徑 | 中 | v0.2.0 |
 
 ---
 

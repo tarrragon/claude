@@ -82,7 +82,7 @@
 **新 Session 啟動時**：
 1. 讀取本工作日誌了解目標和進度
 2. 檢查 `docs/work-logs/v{VERSION}/tickets/` 了解待修復項目
-3. 檢查 `docs/error-patterns/` 了解已知錯誤模式
+3. 檢查 `.claude/error-patterns/` 了解已知錯誤模式
 4. 從「下一步行動」繼續執行
 
 ---
@@ -90,7 +90,7 @@
 ## 相關文件
 
 - 計畫檔案：`~/.claude/plans/{PLAN_FILE}`
-- 錯誤模式知識庫：`docs/error-patterns/README.md`
+- 錯誤模式知識庫：`.claude/error-patterns/README.md`
 - Tickets 目錄：`docs/work-logs/v{VERSION}/tickets/`
 
 ---

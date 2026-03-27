@@ -186,10 +186,10 @@ class TestMergeWarning:
 
         exit_code = cmd_merge("0.1.1-W9-002")
 
-        assert exit_code == 0
+        assert exit_code == 1
         captured = capsys.readouterr()
-        assert "提示" in captured.out or "rebase" in captured.out
-        assert "git merge" in captured.out
+        assert "阻擋" in captured.out
+        assert "rebase" in captured.out
 
     def test_merge_hint_no_new_commits(self, monkeypatch, capsys):
         """場景 6: merge — 分支無新 commit（警告）

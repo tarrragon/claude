@@ -295,7 +295,7 @@ rosemary-project-manager (驗收和部署)
 - 需要 JSON 格式輸出（`--json` 參數）
 - 需要複雜管線操作
 
-**完整指南**：`/search-tools-guide` 或閱讀 `.claude/skills/search-tools-guide/SKILL.md`
+**完整指南**：`.claude/skills/search-tools-guide/SKILL.md`
 
 **環境要求**：需要安裝 ripgrep。未安裝時建議：
 - macOS: `brew install ripgrep`

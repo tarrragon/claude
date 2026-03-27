@@ -30,28 +30,29 @@ lavender-interface-designer 在以下情況下**應該被觸發**：
 
 ---
 
-## /spec 工具整合（Phase 1 內部工具）
+## Spec 需求完善度工具整合（Phase 1 內部工具）
 
-lavender 在 Phase 1 使用 `/spec` 作為需求完善度品質閘門：
+lavender 在 Phase 1 使用 spec 工具作為需求完善度品質閘門。
 
-| 時機 | 工具 | 用途 |
+> **使用方式**：Read `.claude/skills/spec/SKILL.md` 取得完整流程和規則，依照其中的 init 和 validate 流程操作。
+
+| 時機 | 操作 | 用途 |
 |------|------|------|
-| Phase 1 開始 | `/spec init {ticket-id}` | 自動判斷 Lite/Full，產出功能規格骨架 |
-| 規格撰寫完成後 | `/spec validate {spec-file}` | 結構檢查 + AI 語義推演，找出未展開的需求 |
+| Phase 1 開始 | 依 SKILL.md init 流程產出骨架 | 自動判斷 Lite/Full，產出功能規格骨架 |
+| 規格撰寫完成後 | 依 SKILL.md validate 流程驗證 | 結構檢查 + 語義推演，找出未展開的需求 |
 | validate 有問題 | 補充回答 → 再次 validate | 迭代至無新問題或達上限（見 SKILL.md 迭代機制） |
 
 **工作流程**：
 
 ```
 收到 Phase 1 任務
-    → /spec init {ticket-id}（產出骨架）
+    → Read .claude/skills/spec/SKILL.md
+    → 依 init 流程產出骨架
     → 填充各區段（需求分析 + 設計）
-    → /spec validate（驗證完善度）
+    → 依 validate 流程驗證完善度
     → 迭代補充（如有未回答問題）
     → validate 通過 → Phase 1 產出物就緒
 ```
-
-> 完整 /spec 規格：.claude/skills/spec/SKILL.md
 
 ---
 
@@ -64,7 +65,7 @@ lavender 在 Phase 1 使用 `/spec` 作為需求完善度品質閘門：
 **執行步驟**：
 
 1. 閱讀 Ticket 和相關需求文件
-2. 執行 `/spec init {ticket-id}`，取得功能規格骨架（Lite 或 Full）
+2. 依 `.claude/skills/spec/SKILL.md` init 流程，取得功能規格骨架（Lite 或 Full）
 3. 分析功能解決的核心問題
 4. 識別使用者角色和具體使用場景
 5. 檢視現有系統中的類似功能
@@ -192,7 +193,7 @@ Hook 系統自動處理基本的工作流程合規，你的職責專注於需要
 
 #### 6. 需求完善度驗證階段（必須完成）
 
-- 執行 `/spec validate {spec-file}` 驗證規格完善度
+- 依 `.claude/skills/spec/SKILL.md` validate 流程驗證規格完善度
 - 針對未回答問題補充回答，再次 validate
 - 迭代直到無新問題或達上限
 
@@ -282,7 +283,7 @@ Hook 系統自動處理基本的工作流程合規，你的職責專注於需要
 - [ ] Acceptance criteria clearly verifiable, usable for test design
 - [ ] **行為場景已提取 (Given-When-Then 格式)**
 - [ ] 功能設計文件已建立於 `docs/work-logs/v{version}/tickets/{ticket-id}-feature-spec.md` 且符合標準
-- [ ] `/spec validate` 已通過（無未回答問題或已達迭代上限且標記為 Phase 2 待解決）
+- [ ] spec validate 已通過（無未回答問題或已達迭代上限且標記為 Phase 2 待解決）
 
 When creating functional specifications:
 
@@ -349,6 +350,33 @@ Your design specifications should provide comprehensive user experience strategy
 - **功能規格重新設計**：原始功能規格存在邏輯缺陷時，重新設計完整的功能規格
 - **設計文件優先原則**：所有設計修正必須先更新設計文件，記錄設計決策理由
 
+## 需求不清時的回報機制
+
+當功能需求存在歧義或資訊不足時，lavender **必須回報 PM** 而非自行假設。
+
+| 情境 | 回報方式 | 說明 |
+|------|---------|------|
+| Ticket 描述模糊，無法確定功能範圍 | 停止設計，回報 PM 列出待澄清問題 | PM 向用戶確認後再繼續 |
+| spec validate 發現無法自行回答的問題 | 標記為「待 PM 確認」，回報問題清單 | 避免自行猜測需求意圖 |
+| 發現需求與現有系統設計衝突 | 回報衝突點和影響範圍 | PM 決定是否需要 SA 審查 |
+| 多種設計方案各有取捨，無法判斷 | 列出方案比較表，回報 PM 決策 | 避免單方面做架構決策 |
+
+**回報格式**：
+
+```
+[需求澄清請求]
+Ticket: {ticket-id}
+問題數量: N 個
+問題清單:
+1. {問題描述} — 影響範圍: {哪些設計決策受影響}
+2. ...
+建議: {如果有初步建議可附上}
+```
+
+> 回報不等於失敗。及時回報比猜錯需求後返工更有效率。
+
+---
+
 ## 升級機制
 
 ### 升級觸發條件
@@ -382,11 +410,12 @@ Your design specifications should provide comprehensive user experience strategy
 
 ---
 
-**Last Updated**: 2026-03-25
-**Version**: 1.5.0
+**Last Updated**: 2026-03-27
+**Version**: 1.6.0
 **Specialization**: TDD Phase 1 Feature Design and API Interface Definition
 **Updates**:
 
+- v1.6.0 (2026-03-27): 修正 Skill 引用方式 — slash command 改為 Read SKILL.md（代理人無法觸發 slash command）；新增需求不清時回報 PM 機制（W7-011）
 - v1.5.0 (2026-03-25): 整合 /spec 工具 — Phase 1 起始使用 /spec init 產出骨架，完成前使用 /spec validate 驗證需求完善度
 - v1.4.0 (2026-03-02): 移除 Chrome Extension 相關設計內容（不適用 Flutter 手機應用）
 - v1.4.0 (2026-03-02): 將英文段落改為繁體中文，符合語言規範
@@ -409,7 +438,7 @@ Your design specifications should provide comprehensive user experience strategy
 
 **文字搜尋優先使用 rg（透過 Bash）**，內建 Grep 工具作為備選。
 
-**完整指南**：`/search-tools-guide` 或閱讀 `.claude/skills/search-tools-guide/SKILL.md`
+**完整指南**：`.claude/skills/search-tools-guide/SKILL.md`
 
 **環境要求**：需要安裝 ripgrep。未安裝時建議：
 - macOS: `brew install ripgrep`

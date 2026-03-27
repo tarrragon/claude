@@ -163,7 +163,7 @@ incident-responder 分析結果
 
 ### 步驟 3：建立 Ticket
 
-使用 `/ticket create` 建立對應的 Ticket，包含：
+使用 `ticket create` CLI 指令（透過 Bash 工具）建立對應的 Ticket，包含：
 - 事件類型和分類
 - 完整的錯誤資訊
 - 分析結果和根本原因判斷
@@ -264,7 +264,7 @@ incident-responder 分析結果
 
 **文字搜尋優先使用 rg（透過 Bash）**，內建 Grep 工具作為備選。
 
-**完整指南**：`/search-tools-guide` 或閱讀 `.claude/skills/search-tools-guide/SKILL.md`
+**完整指南**：`.claude/skills/search-tools-guide/SKILL.md`
 
 **環境要求**：需要安裝 ripgrep。未安裝時建議：
 - macOS: `brew install ripgrep`
