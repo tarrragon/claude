@@ -5,18 +5,16 @@
 # ///
 
 """
-Handoff 自動接手 Hook（注入即接手）
+Handoff 提醒 Hook — WARN 模式
 
 在用戶每次提交 Prompt 時檢查是否有待恢復的 handoff 任務。
-設計哲學：與 Plan Mode 一致，注入 context 即代表開始工作。
+僅提供提醒訊息，不自動接手或修改檔案。PM 透過 /ticket resume 手動決定。
 
 功能:
 1. 掃描 .claude/handoff/pending/ 目錄
 2. 讀取所有 JSON handoff 檔案，跳過已接手的任務（resumed_at 非 null）
-3. 對未接手任務寫入 resumed_at 時間戳（樂觀鎖，防止多 CLI 重複領取）
-4. 自動讀取對應的 Ticket 檔案內容
-5. 注入 Ticket 完整內容到 additionalContext（Fallback 到簡單提醒模式）
-6. 防重複觸發：同一 session 只注入一次
+3. 顯示待恢復任務提醒（不修改任何檔案）
+4. 防重複觸發：同一 session 只提醒一次
 
 使用方式:
     UserPromptSubmit Hook 自動觸發，或手動測試:
@@ -25,24 +23,14 @@ Handoff 自動接手 Hook（注入即接手）
 輸入格式:
     UserPromptSubmit Hook 提供的 JSON (stdin)
 
-防重複領取:
-    寫入 resumed_at 時間戳到 handoff JSON，後續 session 掃描時自動跳過
-
 防重複觸發:
     使用父進程 PID 作為 session 識別符
     flag 檔案: /tmp/claude-handoff-reminded-{ppid}
-
-Ticket 內容注入:
-    - 從 ticket_id 解析版本號（e.g., 0.31.0-W13-003 → 0.31.0）
-    - 讀取 docs/work-logs/v{version}/tickets/{ticket_id}.md
-    - 注入完整內容到 additionalContext
-    - Fallback: 若檔案不存在，則顯示簡單提醒訊息
 """
 
 import sys
 import json
 import os
-import fcntl
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List, Optional
@@ -270,158 +258,43 @@ def scan_handoff_pending_directory(project_root: Path, logger) -> List[Dict[str,
     pending_tasks.sort(key=lambda t: t.get("ticket_id", ""), reverse=True)
     return pending_tasks
 
-def write_session_state(ticket_id: str, logger) -> None:
-    """
-    將任務 ID 寫入 session 狀態檔案
-
-    用於 Stop hook 查詢當前 session 鎖定的任務
-
-    Args:
-        ticket_id: 任務 ID
-        logger: Logger 實例
-    """
-    try:
-        ppid = os.getppid()
-        state_file = Path(f"/tmp/claude-handoff-state-{ppid}.json")
-
-        state_data = {
-            "locked_ticket_id": ticket_id,
-            "locked_at": datetime.now().isoformat()
-        }
-
-        with open(state_file, 'w', encoding='utf-8') as f:
-            json.dump(state_data, f, ensure_ascii=False, indent=2)
-
-        logger.debug(f"寫入 session 狀態: {state_file} → {ticket_id}")
-
-    except Exception as e:
-        logger.warning(f"寫入 session 狀態失敗: {e}")
-
-def mark_task_resumed(file_path: str, logger) -> bool:
-    """
-    將 handoff JSON 的 resumed_at 欄位寫入當前時間戳
-
-    使用 fcntl.flock() 排他鎖確保原子性，防止多個 CLI session 重複領取同一任務。
-    寫入時機在 context 注入之前，確保最早的 session 鎖定任務。
-
-    Args:
-        file_path: handoff JSON 檔案的絕對路徑
-        logger: Logger 實例
-
-    Returns:
-        bool - 是否成功寫入
-    """
-    try:
-        path = Path(file_path)
-        with open(path, 'r+', encoding='utf-8') as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            try:
-                data = json.load(f)
-
-                # 再次檢查：若已被其他 session 接手，放棄
-                if data.get("resumed_at") is not None:
-                    logger.info(f"任務已被其他 session 接手: {path.stem}")
-                    return False
-
-                data["resumed_at"] = datetime.now().isoformat()
-
-                f.seek(0)
-                f.truncate()
-                json.dump(data, f, ensure_ascii=False, indent=2)
-
-                logger.info(f"標記任務已接手: {path.stem} (resumed_at: {data['resumed_at']})")
-
-                # 寫入 session 狀態檔案（用於 Stop hook）
-                ticket_id = data.get("ticket_id", path.stem)
-                write_session_state(ticket_id, logger)
-
-                return True
-            finally:
-                fcntl.flock(f, fcntl.LOCK_UN)
-
-    except Exception as e:
-        logger.warning(f"標記任務接手失敗 ({file_path}): {e}")
-        return False
-
 def generate_reminder_message(
     pending_tasks: List[Dict[str, Any]],
     project_root: Path,
     logger
 ) -> str:
     """
-    生成 Handoff 自動接手訊息（含 Ticket 內容注入、支援多任務）
+    生成 Handoff 提醒訊息（WARN 模式，不修改檔案）
 
-    注入即接手：自動寫入 resumed_at 鎖定任務，防止多 CLI 重複領取。
-    嘗試讀取並注入 Ticket 完整內容。若檔案不存在，則退回簡單提醒模式。
-
-    多任務時按順序注入所有任務內容。
+    僅列出待恢復任務供 PM 參考，不自動接手或寫入 resumed_at。
+    PM 透過 /ticket resume 手動決定是否恢復。
 
     Args:
-        pending_tasks: 待恢復任務列表 (已通過前置驗證，ticket_path 已暫存)
+        pending_tasks: 待恢復任務列表 (已通過前置驗證)
         project_root: 專案根目錄
         logger: Logger 實例
 
     Returns:
-        str - 格式化的接手訊息和 Ticket 內容
+        str - 格式化的提醒訊息
     """
     if not pending_tasks:
         return ""
 
-    # 先鎖定所有任務（寫入 resumed_at），再注入 context
-    resumed_tasks = []
-    skipped_tasks = []
-
-    for task in pending_tasks:
-        if mark_task_resumed(task["file_path"], logger):
-            resumed_tasks.append(task)
-        else:
-            skipped_tasks.append(task)
-
-    if skipped_tasks:
-        logger.info(f"跳過 {len(skipped_tasks)} 個已被其他 session 接手的任務")
-
-    if not resumed_tasks:
-        return ""
-
     message = "============================================================\n"
-    message += f"[Handoff 自動接手] 已接手 {len(resumed_tasks)} 個任務，開始工作\n"
+    message += f"[Handoff 提醒] 有 {len(pending_tasks)} 個待恢復的任務\n"
     message += "============================================================\n\n"
 
-    ticket_count_with_content = 0
-    ticket_count_without_content = 0
-
-    # 處理每個已接手的任務
-    for idx, task in enumerate(resumed_tasks, 1):
+    message += "待恢復任務：\n"
+    for idx, task in enumerate(pending_tasks, 1):
         ticket_id = task["ticket_id"]
         title = task["title"]
         direction = task["direction"]
+        message += f"  {idx}. {ticket_id}: {title}\n"
+        message += f"     方向: {direction}\n\n"
 
-        # 使用掃描時已驗證和暫存的 ticket_path
-        ticket_path = Path(task.get("ticket_path", ""))
-        ticket_content = read_ticket_content(ticket_path if ticket_path.exists() else None, logger)
-
-        # 多任務時加上序號
-        if len(resumed_tasks) > 1:
-            message += f"[{idx}/{len(resumed_tasks)}] === Ticket: {ticket_id} - {title} ===\n"
-        else:
-            message += f"=== Ticket: {ticket_id} - {title} ===\n"
-
-        message += f"方向: {direction}\n\n"
-
-        if ticket_content:
-            message += ticket_content
-            message += "\n\n"
-            ticket_count_with_content += 1
-        else:
-            message += "（Ticket 檔案未找到，請手動確認任務內容）\n\n"
-            ticket_count_without_content += 1
-
-        message += "-" * 60 + "\n\n"
-
-    message += "============================================================\n"
-    message += "重要指令：這是 Handoff 自動恢復。你必須立即開始處理上述 Ticket，\n"
-    message += "不要詢問用戶是否開始，不要列出待辦清單，直接認領並執行任務。\n"
-    message += "用戶的輸入即為開始信號，請立即閱讀 Ticket 內容並開始工作。\n"
+    message += "執行提醒：\n"
+    message += "  /ticket resume <id>        恢復指定任務 context\n"
+    message += "  /ticket resume --list      查看完整清單\n\n"
     message += "============================================================\n"
 
     return message
@@ -433,10 +306,10 @@ def generate_hook_output(
     input_data: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
-    生成 Hook 輸出格式
+    生成 Hook 輸出格式（WARN 模式）
 
-    若有待恢復任務且此 session 尚未處理過，則自動接手並注入 Ticket 內容。
-    接手流程：寫入 resumed_at（鎖定）→ 注入 context → 標記 session 已處理
+    若有待恢復任務且此 session 尚未提醒過，則顯示提醒訊息。
+    不修改任何檔案，PM 透過 /ticket resume 手動決定。
 
     Args:
         pending_tasks: 待恢復任務列表
@@ -495,7 +368,7 @@ def main() -> int:
     logger = setup_hook_logging("handoff-prompt-reminder")
 
     try:
-        logger.info("Handoff 自動接手 Hook 啟動（注入即接手）")
+        logger.info("Handoff 提醒 Hook 啟動（WARN 模式）")
 
         input_data = read_json_from_stdin(logger)
 

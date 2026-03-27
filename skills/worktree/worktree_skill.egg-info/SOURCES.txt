@@ -5,6 +5,7 @@ scripts/messages.py
 scripts/worktree_manager.py
 tests/test_branch_extraction.py
 tests/test_git_utils_extensions.py
+tests/test_helper_functions.py
 tests/test_hook_integration.py
 tests/test_ticket_id_parsing.py
 tests/test_worktree_cleanup.py

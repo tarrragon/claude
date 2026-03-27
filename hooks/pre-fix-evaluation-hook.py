@@ -5,13 +5,13 @@
 # ///
 
 """
-修復前強制評估 Hook (PostToolUse)
+修復前強制評估 Hook (PostToolUse) — WARN 模式
 
 功能:
   自動偵測測試失敗、編譯錯誤、lint 警告
-  根據錯誤類型分類：
-  - SYNTAX_ERROR: 直接分派修復，無需開 Ticket
-  - 其他錯誤: 強制開 Ticket，禁止直接分派
+  根據錯誤類型分類並提供建議（僅警告，不自動決策）：
+  - SYNTAX_ERROR: 建議直接修復
+  - 其他錯誤: 建議開 Ticket 追蹤
 
 觸發時機:
   - mcp__dart__run_tests 執行完成且有失敗
@@ -19,8 +19,7 @@
   - Bash(dart analyze) 執行完成且有錯誤
 
 輸出:
-  成功: exitCode=0, stdout 包含評估提示
-  阻塊: exitCode=2, stderr 包含強制開 Ticket 提示
+  所有路徑: exitCode=0, stdout 包含 [WARN] 建議（不阻塞）
 
 環境變數:
   HOOK_DEBUG: 啟用詳細日誌 (true/false)
@@ -30,9 +29,9 @@ HOOK_METADATA (JSON):
   "event_type": "PostToolUse",
   "matcher": "Bash",
   "timeout": 10000,
-  "description": "修復前強制評估 - 自動偵測錯誤並進行分類",
+  "description": "修復前評估 WARN 模式 — 偵測錯誤並提供分類建議，不自動決策",
   "dependencies": [],
-  "version": "1.0.0"
+  "version": "2.0.0"
 }
 """
 
@@ -231,7 +230,7 @@ def log_evaluation(error_type: ErrorType, errors: List[Dict[str, str]], logger) 
         "error_type": error_type.value,
         "error_count": len(errors),
         "errors": errors,
-        "requires_ticket": error_type != ErrorType.SYNTAX_ERROR
+        "requires_ticket": "pm_decision"
     }
 
     with open(report_file, "w", encoding="utf-8") as f:
@@ -258,11 +257,8 @@ def generate_syntax_error_output(errors: List[Dict[str, str]], logger) -> Dict:
         message += f"{i}. {error['description']}\n"
 
     message += """
-直接執行精確修復，無需開 Ticket。
-執行步驟：
-1. 識別每個語法錯誤的確切位置
-2. 最小化修改（只改必要字元）
-3. 修改後立即執行測試驗證
+[WARN] 建議直接修復語法錯誤（無需開 Ticket）。
+PM 可決定是否直接分派修復或開 Ticket 追蹤。
 """
 
     return {
@@ -293,29 +289,18 @@ def generate_non_syntax_error_output(error_type: ErrorType, errors: List[Dict[st
 
     message += f"""
 
-執行以下步驟：
-1. 完成六階段評估 (使用 /pre-fix-eval Skill)
-   - Stage 1: 錯誤分類 (已自動完成)
-   - Stage 2: BDD 意圖分析
-   - Stage 3: 設計文件查詢
-   - Stage 4: 根因定位
-   - Stage 5: 開 Ticket 記錄
-   - Stage 6: 分派執行
-
+[WARN] 建議流程：
+1. 使用 /pre-fix-eval Skill 進行六階段評估
 2. 使用 /ticket create 建立修復 Ticket
-   - 標題: Fix {error_type.value}: [簡短描述]
-   - 描述: 包含以上六階段分析結果
-   - Agent: 根據錯誤類型分派
+3. 分派給專業代理人執行
 
-3. Ticket 建立後分派給專業代理人執行
-
-禁止直接分派或跳過評估流程！
+PM 可根據情況決定是否開 Ticket 或直接修復。
 """
 
     return {
         "hookSpecificOutput": {
             "hookEventName": "PostToolUse",
-            "decision": "block"
+            "decision": "allow"
         },
         "systemMessage": message,
         "suppressOutput": False
@@ -423,7 +408,7 @@ def main() -> int:
             exit_code = 0
         else:
             output = generate_non_syntax_error_output(error_type, errors, logger)
-            exit_code = 2  # 阻塊錯誤
+            exit_code = 0  # WARN 模式：不阻塞
 
         # 輸出結果
         print(json.dumps(output, ensure_ascii=False, indent=2))
