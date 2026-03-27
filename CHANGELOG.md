@@ -1,3 +1,14 @@
+## [1.4.4] - 2026-03-27
+
+### Summary
+fix: 遷移 Manager Skill 到 rules/core/pm-role.md（自動載入）
+
+Changes: 1 fix
+
+- fix: 遷移 Manager Skill 到 rules/core/pm-role.md（自動載入）
+
+---
+
 ## [1.4.3] - 2026-03-27
 
 ### Summary

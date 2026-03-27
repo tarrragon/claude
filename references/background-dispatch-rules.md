@@ -86,7 +86,7 @@ git diff --stat  # 驗證實際變更
 
 - .claude/rules/core/decision-tree.md - 派發模式選擇規則
 - .claude/rules/guides/parallel-dispatch.md - 並行派發指南
-- .claude/skills/manager/SKILL.md - 主線程管理哲學
+- .claude/rules/core/pm-role.md - 主線程管理哲學
 
 ---
 

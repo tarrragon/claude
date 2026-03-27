@@ -207,7 +207,9 @@ ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於
   - .claude/skills/          (Skill 工具)
   - .claude/agents/          (代理人定義)
   - .claude/references/      (參考檔案)
+  - .claude/pm-rules/        (PM 流程規則)
   - .claude/error-patterns/  (錯誤模式)
+  - .claude/hook-specs/      (Hook 規格)
   - .claude/handoff/         (交接檔案)
 
 建議操作：

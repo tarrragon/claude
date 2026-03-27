@@ -269,9 +269,9 @@ How: [Task Type: Dispatch] 並行派發 N 個分析視角
 ## 相關文件
 
 - .claude/rules/guides/parallel-dispatch.md - 精簡版（常駐）
-- .claude/skills/manager/SKILL.md - 管理哲學
-- .claude/skills/manager/parallel-first.md - 並行優先策略
-- .claude/skills/manager/async-mindset.md - 非同步心態
+- .claude/rules/core/pm-role.md - 管理哲學
+- .claude/pm-rules/parallel-first.md - 並行優先策略
+- .claude/pm-rules/async-mindset.md - 非同步心態
 - .claude/methodologies/multi-perspective-analysis-methodology.md - 多視角並行分析方法論
 - .claude/skills/agent-team/SKILL.md - Agent Teams 協作派發指南
 

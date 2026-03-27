@@ -11,7 +11,8 @@ Main Thread Edit Restriction Hook - PreToolUse Hook
 - 允許編輯：.claude/plans/*, .claude/rules/*, .claude/methodologies/*,
            .claude/hooks/*, .claude/skills/*, .claude/agents/*,
            .claude/references/*, .claude/error-patterns/*, .claude/scripts/*,
-           .claude/handoff/*, docs/work-logs/**（含 tickets/）, docs/todolist.yaml, CLAUDE.md
+           .claude/pm-rules/*, .claude/handoff/*,
+           docs/work-logs/**（含 tickets/）, docs/todolist.yaml, CLAUDE.md
 - 拒絕編輯：lib/*, test/*, *.dart（除 .claude/ 中的）, backend/*, *.go, go.mod, go.sum
 - 拒絕時返回 exit code 2 和錯誤訊息，提示允許的路徑範圍
 
@@ -90,7 +91,9 @@ ALLOWED_PATTERNS = [
     r"^\.claude/skills/.*",             # Skill 檔案
     r"^\.claude/agents/.*",             # 代理人定義
     r"^\.claude/references/.*",         # 參考檔案
+    r"^\.claude/pm-rules/.*",            # PM 流程規則
     r"^\.claude/error-patterns/.*",     # 錯誤模式
+    r"^\.claude/hook-specs/.*",         # Hook 規格
     r"^\.claude/scripts/.*",            # 工具腳本（公共工具）
     r"^\.claude/handoff/.*",            # 交接檔案
     r"^docs/work-logs/.*",              # worklog 資料夾（含 tickets/）

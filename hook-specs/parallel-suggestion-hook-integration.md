@@ -312,7 +312,7 @@ CONTINUATION_KEYWORDS = [
 - [parallel-suggestion-hook-test-report.md](#) - 測試報告
 
 ### 方法論
-- [manager-skill]($CLAUDE_PROJECT_DIR/.claude/skills/manager/SKILL.md) - 主線程管理哲學
+- [pm-role]($CLAUDE_PROJECT_DIR/.claude/rules/core/pm-role.md) - 主線程管理哲學
 
 ---
 

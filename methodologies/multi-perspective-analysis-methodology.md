@@ -410,7 +410,7 @@
 - [incident-response]($CLAUDE_PROJECT_DIR/.claude/pm-rules/incident-response.md) - 事件回應流程
 - [parallel-dispatch]($CLAUDE_PROJECT_DIR/.claude/rules/guides/parallel-dispatch.md) - 並行派發指南
 - [cognitive-load]($CLAUDE_PROJECT_DIR/.claude/rules/core/cognitive-load.md) - 認知負擔設計原則
-- [manager skill]($CLAUDE_PROJECT_DIR/.claude/skills/manager/SKILL.md) - 管理哲學
+- [pm-role]($CLAUDE_PROJECT_DIR/.claude/rules/core/pm-role.md) - 管理哲學
 
 ---
 
