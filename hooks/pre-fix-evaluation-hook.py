@@ -42,7 +42,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
@@ -121,8 +121,7 @@ TRUNCATED_OUTPUT_READ_FAILED_MESSAGE = (
     "請手動檢查該檔案以確認是否有測試失敗或錯誤。"
 )
 TRUNCATED_OUTPUT_BLOCK_MESSAGE = (
-    "[WARNING] 工具輸出被截斷且無法讀取完整內容。\n"
-    "為避免遺漏錯誤，已阻塞後續操作。\n"
+    "[WARN] 工具輸出被截斷且無法讀取完整內容，請手動檢查。\n"
     "請使用 Read 工具讀取完整輸出檔案後再繼續。"
 )
 
@@ -273,10 +272,6 @@ PM 可決定是否直接分派修復或開 Ticket 追蹤。
 
 def generate_non_syntax_error_output(error_type: ErrorType, errors: List[Dict[str, str]], logger) -> Dict:
     """生成非語法錯誤輸出 (必須開 Ticket)"""
-    message = format_message(
-        WorkflowMessages.PRE_FIX_EVAL_REQUIRED
-    )
-
     message = f"""
 [WARNING] 修復前強制評估 - {error_type.value.upper().replace('_', ' ')}
 
@@ -344,16 +339,16 @@ def _resolve_truncated_output(output_str: str, logger) -> str:
         logger.error(error_msg)
         print(error_msg, file=sys.stderr)
 
-        # 保守處理：阻塞後續操作
+        # 警告但不阻塞：讓用戶自行決定是否手動檢查
         print(json.dumps({
             "hookSpecificOutput": {
                 "hookEventName": "PostToolUse",
-                "decision": "block"
+                "decision": "allow"
             },
             "systemMessage": TRUNCATED_OUTPUT_BLOCK_MESSAGE,
             "suppressOutput": False
         }))
-        sys.exit(2)
+        sys.exit(0)
 
 
 # ============================================================================

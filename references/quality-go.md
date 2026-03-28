@@ -159,12 +159,64 @@ return errors.New("read failed")
 
 ---
 
+## 8. 可觀測性要求（Go 後端）
+
+> **來源**：.claude/rules/core/observability-rules.md — 通用可觀測性規則的 Go 特化要求。
+
+### 8.1 啟動日誌（強制）
+
+服務啟動時必須輸出版本和監聽位址，便於確認服務正常運行：
+
+```go
+log.Printf("ccsession-monitor %s starting on :%d", Version, DefaultPort)
+log.Printf("scanning existing JSONL files in %s", watchDir)
+```
+
+### 8.2 運行心跳（建議）
+
+長時間運行的服務應定期輸出統計資訊：
+
+```go
+// 每 HeartbeatIntervalSecs 輸出一次
+slog.Info(messages.LogHeartbeat,
+    "layer", "server",
+    "active_sessions", len(sessions),
+    "ws_connections", connCount,
+)
+```
+
+### 8.3 異常告警（強制）
+
+錯誤處理必須同時輸出到 stderr（透過 slog）和結構化日誌，保留完整上下文：
+
+```go
+// 正確：含 layer、操作、錯誤上下文
+slog.Error(messages.LogParseError,
+    "layer", "jsonl_parser",
+    "sessionID", id,
+    "error", err,
+)
+
+// 錯誤：只記錄錯誤訊息，缺少上下文
+log.Println(err)
+```
+
+### 8.4 Go 可觀測性檢查清單
+
+- [ ] `main()` 啟動時輸出版本和監聽位址
+- [ ] 每個 `if err != nil` 區塊有含 layer 的結構化 log
+- [ ] WebSocket 連線建立/斷開有日誌
+- [ ] 檔案監控事件（新增/變更/刪除）有 Debug log
+
+---
+
 ## 相關文件
 
 - .claude/rules/core/quality-common.md - 通用品質基線
 - .claude/rules/core/bash-tool-usage-rules.md - Bash 工具使用規則
+- .claude/rules/core/observability-rules.md - 通用可觀測性規則
 
 ---
 
-**Last Updated**: 2026-03-08
-**Version**: 1.0.0 - 從 implementation-quality.md 拆分（W13-007）
+**Last Updated**: 2026-03-27
+**Version**: 1.1.0 - 新增可觀測性要求章節（0.2.1-W1-003）

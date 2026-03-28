@@ -115,30 +115,30 @@ Level 1 入口層 → Level 2 執行層 → Level 3 完成層 → Level 4 驗收
 
 ---
 
-**Last Updated**: 2026-03-13
-**Version**: 1.7.0 - Level 3 新增「驗收條件主動勾選」驗證項目（0.1.0-W51-001）
+## 品質不達標重做決策
+
+| 品質問題 | 處理方式 |
+|---------|---------|
+| 測試未通過 | 派發 incident-responder 分析，不可直接修復 |
+| dart analyze 有新增 error | 退回執行代理人修復 |
+| 認知負擔超標 | 建立重構 Ticket（Phase 4 流程） |
+| 驗收條件未滿足 | 退回執行代理人補充，附上具體缺失說明 |
+
+重做上限：同一 Ticket 重做 3 次後，PM 必須重新評估 Ticket 設計是否合理。
+
+---
+
+**Last Updated**: 2026-03-27
+**Version**: 1.8.0 - 新增品質不達標重做決策（0.2.1-W1-008）
 **Status**: Active
 **Responsible**: rosemary-project-manager, acceptance-auditor, Hook 系統
 
 **Change Log**:
+- v1.8.0 (2026-03-27): 新增品質不達標重做決策（0.2.1-W1-008）
+- v1.7.0 (2026-03-13): Level 3 新增「驗收條件主動勾選」驗證項目（0.1.0-W51-001）
 - v1.5.0 (2026-03-04): Level 1 新增建立後品質審核（W4-002）
-  - Level 1 驗證表格新增「建立後品質審核」項目
-  - 統一責任對照表新增對應項目
-  - 配合 ticket-lifecycle.md v5.1.0 建立後強制審核流程
 - v1.4.0 (2026-02-26): Level 3 新增並行派發後驗證（W25-003）
-  - Level 3 驗證表格新增「並行派發後驗證」項目（git diff --stat 強制驗證）
-  - 統一責任對照表新增對應項目（PM 負責、Level 3）
-  - 配合 parallel-dispatch.md v2.5.0 新增並行派發後驗證章節
 - v1.3.0 (2026-02-10): Level 1 新增 Ticket 內容品質驗證（W17-001）
-  - Level 1 驗證表格新增「Ticket 內容品質」和「Solution 並行化」兩項
-  - 統一責任對照表新增對應項目
-  - 配合 ticket-lifecycle.md v4.1.0 建立後品質驗收機制
 - v1.2.0 (2026-02-06): Context 最佳化
-  - 簡化主檔案結構，移除重複說明
-  - 新增「統一責任對照表」（合併原有 2 個表格）
-  - 「常見驗證場景」移至 verification-scenario-examples.md
-  - 「Hook 實作規範」詳細內容移至 verification-hook-implementation.md
-  - 保留核心架構圖和流程圖完整
-  - 添加參考連結方便查閱
 - v1.1.0 (2026-01-30): Level 4 驗收層更新
 - v1.0.0 (2026-01-23): 初始版本

@@ -148,13 +148,72 @@ throw Exception('Book already exists');
 
 ---
 
+## 8. 可觀測性要求（Flutter 前端）
+
+> **來源**：.claude/rules/core/observability-rules.md — 通用可觀測性規則的 Flutter 特化要求。
+
+### 8.1 關鍵狀態變化日誌（強制）
+
+使用 `debugPrint` 記錄關鍵狀態變化，便於開發階段追蹤：
+
+```dart
+// 正確：記錄狀態變化和原因
+debugPrint('[WebSocket] connected to $url');
+debugPrint('[Session] status changed: $oldStatus -> $newStatus (reason: $reason)');
+
+// 錯誤：無上下文的日誌
+print('connected');
+```
+
+### 8.2 catch 區塊完整記錄（強制）
+
+每個 `catch` 區塊必須記錄完整上下文，包含元件名稱和操作：
+
+```dart
+// 正確：含元件、操作、錯誤和堆疊
+try {
+  await connect();
+} catch (e, stackTrace) {
+  debugPrint('[WebSocket] connect failed: $e');
+  debugPrint('[WebSocket] stackTrace: $stackTrace');
+}
+
+// 錯誤：靜默吞掉異常
+try {
+  await connect();
+} catch (_) {}
+```
+
+### 8.3 生命週期 Log 表格
+
+以下元件的生命週期事件必須有日誌輸出：
+
+| 元件 | 事件 | Log 內容 |
+|------|------|---------|
+| WebSocket | 連線建立 | 目標 URL、連線結果 |
+| WebSocket | 連線斷開 | 斷開原因（正常/異常）、重連排程 |
+| WebSocket | 重連嘗試 | 第 N 次重連、間隔時間 |
+| Session | 新增偵測 | session ID、來源檔案 |
+| Session | 狀態變更 | 舊狀態、新狀態、觸發原因 |
+| 搜尋/篩選 | 執行查詢 | 搜尋條件、結果數量 |
+
+### 8.4 Flutter 可觀測性檢查清單
+
+- [ ] 每個 `catch` 區塊有 `debugPrint` 含元件名稱前綴
+- [ ] WebSocket 連線/斷開/重連有日誌
+- [ ] Session 狀態變更有日誌
+- [ ] 無靜默的 `catch (_) {}` 區塊
+
+---
+
 ## 相關文件
 
 - .claude/rules/core/quality-common.md - 通用品質基線
 - .claude/methodologies/package-import-methodology.md - 導入路徑方法論
 - .claude/methodologies/business-layer-i18n-management-methodology.md - i18n 方法論
+- .claude/rules/core/observability-rules.md - 通用可觀測性規則
 
 ---
 
-**Last Updated**: 2026-03-08
-**Version**: 1.0.0 - 從 implementation-quality.md 拆分（W13-007）
+**Last Updated**: 2026-03-27
+**Version**: 1.1.0 - 新增可觀測性要求章節（0.2.1-W1-003）
