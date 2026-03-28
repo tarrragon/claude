@@ -1,3 +1,14 @@
+## [1.4.8] - 2026-03-28
+
+### Summary
+docs: 規則系統架構優化 — observability 歸類 + hook-governance 合併
+
+Changes: 1 docs
+
+- docs: 規則系統架構優化 — observability 歸類 + hook-governance 合併
+
+---
+
 ## [1.4.7] - 2026-03-28
 
 ### Summary

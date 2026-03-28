@@ -150,7 +150,7 @@ throw Exception('Book already exists');
 
 ## 8. 可觀測性要求（Flutter 前端）
 
-> **來源**：.claude/rules/core/observability-rules.md — 通用可觀測性規則的 Flutter 特化要求。
+> **來源**：.claude/references/observability-rules.md — 通用可觀測性規則的 Flutter 特化要求。
 
 ### 8.1 關鍵狀態變化日誌（強制）
 
@@ -211,7 +211,7 @@ try {
 - .claude/rules/core/quality-common.md - 通用品質基線
 - .claude/methodologies/package-import-methodology.md - 導入路徑方法論
 - .claude/methodologies/business-layer-i18n-management-methodology.md - i18n 方法論
-- .claude/rules/core/observability-rules.md - 通用可觀測性規則
+- .claude/references/observability-rules.md - 通用可觀測性規則
 
 ---
 

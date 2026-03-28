@@ -141,5 +141,45 @@ Wave 是相互隔離的執行單位。禁止跨 Wave 依賴和並行派發。
 
 ---
 
-**Last Updated**: 2026-03-27
-**Version**: 3.3.0 - 新增跨版本 Ticket 遷移決策流程（0.2.1-W1-008）
+## 版本遷移觸發條件與判斷流程
+
+### 觸發條件
+
+| 觸發時機 | 說明 | 判斷入口 |
+|---------|------|---------|
+| 版本內所有 Ticket 完成 | 決策樹情境 C2 觸發 | 版本收尾技術債整理 → /version-release check |
+| 新功能需求超出當前版本範圍 | Q1 回答「否」時 | Q2-Q4 判斷決定新版本層級 |
+| todolist.yaml current_version 不一致 | Version Consistency Guard Hook 偵測 | 修正 todolist.yaml 或完成舊版本任務 |
+| 舊版本有遺留未完成 Ticket | Version Consistency Guard Hook 偵測 | 評估遷移、關閉或完成 |
+
+### 判斷流程
+
+```
+觸發遷移評估
+    |
+    v
+[Step 1] 確認當前版本所有 Ticket 已完成
+    → ticket track list --version {current} --status pending in_progress
+    → 有未完成? → 先處理完成或遷移
+    |
+    v
+[Step 2] 執行 /version-release check
+    → CHANGELOG 更新? Smoke test 通過?
+    |
+    v
+[Step 3] 更新 todolist.yaml
+    → current_version: {new}
+    → previous_version: {old current}
+    → next_version: {new + 1}
+    |
+    v
+[Step 4] 確認舊版本遺留 Ticket 處理方式
+    → 仍相關 → /ticket migrate
+    → 已解決 → 關閉並記錄原因
+    → 不再相關 → 關閉並記錄原因
+```
+
+---
+
+**Last Updated**: 2026-03-28
+**Version**: 3.4.0 - 補充版本遷移觸發條件和判斷流程（0.2.1-W3-002）
