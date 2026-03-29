@@ -1,3 +1,15 @@
+## [1.8.1] - 2026-03-29
+
+### Summary
+fix: sync 審查最終修復 — 路徑格式/大小寫/hash 長度/.gitignore; chore: 完成 + sync-state hash 基線建立
+
+Changes: 1 fix, 1 chore
+
+- fix: sync 審查最終修復 — 路徑格式/大小寫/hash 長度/.gitignore
+- chore: 完成 + sync-state hash 基線建立
+
+---
+
 ## [1.8.0] - 2026-03-29
 
 ### Summary
