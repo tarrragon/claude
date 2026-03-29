@@ -228,8 +228,7 @@ ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於
 
 主線程允許編輯的路徑：
   - .claude/ 系統檔案 (plans/rules/methodologies/hooks/skills/agents/references/error-patterns/handoff/)
-  - docs/work-logs/** (含 tickets/)
-  - docs/todolist.yaml
+  - docs/** (含 work-logs/、tickets/、參考文件等)
   - CLAUDE.md
 
 建議操作：

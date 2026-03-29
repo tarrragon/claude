@@ -12,7 +12,7 @@ Main Thread Edit Restriction Hook - PreToolUse Hook
            .claude/hooks/*, .claude/skills/*, .claude/agents/*,
            .claude/references/*, .claude/error-patterns/*, .claude/scripts/*,
            .claude/pm-rules/*, .claude/handoff/*,
-           docs/work-logs/**（含 tickets/）, docs/todolist.yaml, CLAUDE.md
+           docs/**（含 work-logs/、tickets/、參考文件等）, CLAUDE.md
 - 拒絕編輯：lib/*, test/*, *.dart（除 .claude/ 中的）, backend/*, *.go, go.mod, go.sum
 - 拒絕時返回 exit code 2 和錯誤訊息，提示允許的路徑範圍
 
@@ -30,8 +30,7 @@ Main Thread Edit Restriction Hook - PreToolUse Hook
   ^\.claude/error-patterns/.*     # 錯誤模式
   ^\.claude/scripts/.*            # 工具腳本（公共工具）
   ^\.claude/handoff/.*            # 交接檔案
-  ^docs/work-logs/.*              # worklog 資料夾（含 tickets/）
-  ^docs/todolist\.yaml$           # todolist 檔案
+  ^docs/.*                        # docs 目錄（含 work-logs/、tickets/、參考文件等）
   ^CLAUDE\.md$                    # 專案入口文件
 
 禁止的檔案路徑:
@@ -96,8 +95,7 @@ ALLOWED_PATTERNS = [
     r"^\.claude/hook-specs/.*",         # Hook 規格
     r"^\.claude/scripts/.*",            # 工具腳本（公共工具）
     r"^\.claude/handoff/.*",            # 交接檔案
-    r"^docs/work-logs/.*",              # worklog 資料夾（含 tickets/）
-    r"^docs/todolist\.yaml$",           # todolist 檔案
+    r"^docs/.*",                         # docs 目錄（含 work-logs/、tickets/、參考文件等）
     r"^CLAUDE\.md$",                    # 專案入口文件
 ]
 

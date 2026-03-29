@@ -32,6 +32,7 @@ import sys
 import json
 import os
 from pathlib import Path
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 # 加入 hook_utils 路徑（相同目錄）
@@ -41,6 +42,7 @@ from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.hook_messages import WorkflowMessages, CoreMessages, format_message
 
 EXIT_SUCCESS = 0
+EXIT_ERROR = 1
 
 def get_session_flag_file(logger) -> Path:
     """
