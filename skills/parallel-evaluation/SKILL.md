@@ -1,6 +1,6 @@
 ---
 name: parallel-evaluation
-description: "並行評估決策工具。啟動多個 Agent 從不同視角並行掃描，所有發現必須追蹤（Ticket 或 todolist），Worth-It Filter 只決定執行時機。Use for: 重構前掃描冗餘/重複, 架構方案快速評估, 系統設計品質掃描, 結論/報告審查, 任何需要多角度快速評估的決策"
+description: "多視角審核/code review 工具。派發三人組（含常駐委員 linux）並行掃描程式碼品質、架構設計、重構評估。Use for: 程式碼審查, 架構評估, 重構掃描, 結論審查"
 ---
 
 # 並行評估工具

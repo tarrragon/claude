@@ -176,39 +176,112 @@ class TestGetNextSeq:
 class TestGetNextChildSeq:
     """測試 get_next_child_seq() 函式"""
 
-    def test_get_next_child_seq_no_children(self, monkeypatch):
-        """Given: 父任務 "0.31.0-W5-001" 的 children 清單為空
-        When: 呼叫 get_next_child_seq("0.31.0-W5-001")
+    def test_get_next_child_seq_no_children(self, monkeypatch, tmp_path):
+        """Given: 父任務 children 為空，檔案系統無子 Ticket
+        When: 呼叫 get_next_child_seq
         Then: 返回 1
         """
         def mock_load_ticket(version, ticket_id):
             return {"children": []}
 
+        def mock_get_tickets_dir(version):
+            return tmp_path
+
         monkeypatch.setattr("ticket_system.lib.ticket_builder.load_ticket", mock_load_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.get_tickets_dir", mock_get_tickets_dir)
         result = get_next_child_seq("0.31.0-W5-001")
         assert result == 1
 
-    def test_get_next_child_seq_with_existing_children(self, monkeypatch):
-        """Given: 父任務 "0.31.0-W5-001" 的 children 為 ["0.31.0-W5-001.1", "0.31.0-W5-001.2"]
-        When: 呼叫 get_next_child_seq("0.31.0-W5-001")
+    def test_get_next_child_seq_with_existing_children(self, monkeypatch, tmp_path):
+        """Given: 父任務 children 有兩個子任務
+        When: 呼叫 get_next_child_seq
         Then: 返回 3
         """
         def mock_load_ticket(version, ticket_id):
             return {"children": ["0.31.0-W5-001.1", "0.31.0-W5-001.2"]}
 
+        def mock_get_tickets_dir(version):
+            return tmp_path
+
         monkeypatch.setattr("ticket_system.lib.ticket_builder.load_ticket", mock_load_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.get_tickets_dir", mock_get_tickets_dir)
         result = get_next_child_seq("0.31.0-W5-001")
         assert result == 3
 
-    def test_get_next_child_seq_ignores_deep_nesting(self, monkeypatch):
-        """Given: 父任務 "0.31.0-W5-001" 的 children 為 ["0.31.0-W5-001.1", "0.31.0-W5-001.1.1"]（有孫任務）
-        When: 呼叫 get_next_child_seq("0.31.0-W5-001")
-        Then: 返回 2（只計算直接子任務 001.1，忽略 001.1.1）
+    def test_get_next_child_seq_ignores_deep_nesting(self, monkeypatch, tmp_path):
+        """Given: children 含孫任務 001.1.1
+        When: 呼叫 get_next_child_seq
+        Then: 返回 2（只計算直接子任務 001.1）
         """
         def mock_load_ticket(version, ticket_id):
             return {"children": ["0.31.0-W5-001.1", "0.31.0-W5-001.1.1"]}
 
+        def mock_get_tickets_dir(version):
+            return tmp_path
+
         monkeypatch.setattr("ticket_system.lib.ticket_builder.load_ticket", mock_load_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.get_tickets_dir", mock_get_tickets_dir)
+        result = get_next_child_seq("0.31.0-W5-001")
+        assert result == 2
+
+    def test_get_next_child_seq_files_override_empty_children(self, monkeypatch, tmp_path):
+        """Given: 父任務 children 為空，但檔案系統有 001.1.md 和 001.2.md
+        When: 呼叫 get_next_child_seq
+        Then: 返回 3（從檔案系統偵測到最大序號 2）
+
+        驗證修復：即使父 Ticket 的 children 欄位未同步，
+        也能從檔案系統正確偵測已存在的子 Ticket。
+        """
+        # 建立子 Ticket 檔案（模擬 children 欄位未同步的情況）
+        (tmp_path / "0.31.0-W5-001.1.md").touch()
+        (tmp_path / "0.31.0-W5-001.2.md").touch()
+
+        def mock_load_ticket(version, ticket_id):
+            return {"children": []}
+
+        def mock_get_tickets_dir(version):
+            return tmp_path
+
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.load_ticket", mock_load_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.get_tickets_dir", mock_get_tickets_dir)
+        result = get_next_child_seq("0.31.0-W5-001")
+        assert result == 3
+
+    def test_get_next_child_seq_takes_max_of_both_sources(self, monkeypatch, tmp_path):
+        """Given: children 有 001.1，檔案系統有 001.1.md 和 001.3.md
+        When: 呼叫 get_next_child_seq
+        Then: 返回 4（檔案系統的 3 > children 的 1）
+        """
+        (tmp_path / "0.31.0-W5-001.1.md").touch()
+        (tmp_path / "0.31.0-W5-001.3.md").touch()
+
+        def mock_load_ticket(version, ticket_id):
+            return {"children": ["0.31.0-W5-001.1"]}
+
+        def mock_get_tickets_dir(version):
+            return tmp_path
+
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.load_ticket", mock_load_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.get_tickets_dir", mock_get_tickets_dir)
+        result = get_next_child_seq("0.31.0-W5-001")
+        assert result == 4
+
+    def test_get_next_child_seq_file_scan_ignores_deep_nesting(self, monkeypatch, tmp_path):
+        """Given: 檔案系統有 001.1.md 和 001.1.1.md
+        When: 呼叫 get_next_child_seq
+        Then: 返回 2（忽略孫任務檔案 001.1.1.md）
+        """
+        (tmp_path / "0.31.0-W5-001.1.md").touch()
+        (tmp_path / "0.31.0-W5-001.1.1.md").touch()
+
+        def mock_load_ticket(version, ticket_id):
+            return {"children": []}
+
+        def mock_get_tickets_dir(version):
+            return tmp_path
+
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.load_ticket", mock_load_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.get_tickets_dir", mock_get_tickets_dir)
         result = get_next_child_seq("0.31.0-W5-001")
         assert result == 2
 

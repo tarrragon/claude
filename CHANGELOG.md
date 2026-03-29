@@ -1,3 +1,27 @@
+## [1.10.0] - 2026-03-29
+
+### Summary
+feat: SessionStart Hook 自動檢查 Skill description 長度（）; feat: PreToolUse Hook 強制實作代理人使用 worktree 隔離（）; refactor: parallel-dispatch 精簡至核心決策 （） (+11 more)
+
+Changes: 2 feat, 2 refactor, 7 fix, 2 docs, 1 chore
+
+- feat: SessionStart Hook 自動檢查 Skill description 長度（）
+- feat: PreToolUse Hook 強制實作代理人使用 worktree 隔離（）
+- refactor: parallel-dispatch 精簡至核心決策 （）
+- refactor: ticket_builder 提取 _normalize_children 消除 DRY 違反（）
+- fix: 框架清理 /015/016
+- fix: worktree 表格同步 Hook 清單 + git commit 規則語義修正（/005）
+- fix: parallel-evaluation description 縮短至 70 字 + /018 完成（/018）
+- fix: ticket CLI update_parent_children 根因修復（）
+- fix: 代理人 worktree 隔離規則（）
+- fix: parallel-evaluation 觸發詞新增多視角審核/code review（）
+- fix: ticket CLI --parent 子 Ticket 序號不遞增（）
+- docs: decision-tree worktree 提醒 + Skill 創建流程文件（/020/021）
+- docs: skill-design-guide 加入 description 長度限制為最重要規則（）
+- chore: sync-pull .claude 框架 → 1.9.2
+
+---
+
 ## [1.9.2] - 2026-03-29
 
 ### Summary

@@ -163,6 +163,20 @@ metadata:
 
 description 是 Skill 觸發的**唯一機制**（除手動 `/name`）。寫好 description 是 Skill 成敗的關鍵。
 
+### 強制：長度限制（最重要的規則）
+
+> **description 超過 250 字會被截斷，導致自動觸發完全失敗。**
+
+| 長度 | 評估 | 說明 |
+|------|------|------|
+| < 100 字 | 推薦 | Claude 能完整看到所有觸發詞 |
+| 100-250 字 | 可接受 | 接近上限，注意關鍵詞位置 |
+| > 250 字 | 禁止 | **被截斷，後半段觸發詞不可見** |
+
+**關鍵詞位置策略**：最重要的觸發詞放在 description 最前面。截斷時後面的先丟失。
+
+**實際案例**：`/parallel-evaluation` 的 description 超過 250 字，「多視角審核」「code review」等觸發詞在 Use for: 段落中被截斷，Claude 完全無法自動觸發，PM 被迫手動派發 Agent 繞過標準流程。
+
 ### 強制：第三人稱
 
 description 注入 system prompt，人稱不一致會導致觸發問題。
@@ -382,7 +396,8 @@ Skill 內容支援動態變數替換：
 
 - **預算**: context window 的 2%（fallback: 16,000 字元）
 - **超出時**: 部分 Skill 會被排除
-- **建議**: description 保持 1-3 句，focus on 觸發條件
+- **單一 description 上限**: 250 字（超過被截斷，觸發詞丟失）
+- **建議**: description 保持 1-3 句（< 100 字），focus on 觸發條件
 
 ---
 

@@ -14,6 +14,7 @@ Ticket 建構模組
 使用 TypedDict 減少函式參數數量，提高程式碼可讀性。
 """
 
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TypedDict
@@ -256,8 +257,82 @@ def get_next_seq(version: str, wave: int) -> int:
     return max_seq + 1
 
 
+def _extract_direct_child_seq(child_id: str, parent_id: str) -> Optional[int]:
+    """從子任務 ID 中提取直接子任務序號。
+
+    只提取直接子任務（深度 = parent_depth + 1），
+    忽略更深層的子任務（如 001.1.1）。
+
+    Args:
+        child_id: 子任務 ID（如 "0.31.0-W5-001.2"）
+        parent_id: 父任務 ID（如 "0.31.0-W5-001"）
+
+    Returns:
+        直接子任務序號，若非直接子任務則返回 None
+    """
+    prefix = parent_id + "."
+    if not child_id.startswith(prefix):
+        return None
+    remainder = child_id[len(prefix):]
+    # 直接子任務的 remainder 不含點號
+    if "." in remainder:
+        return None
+    try:
+        return int(remainder)
+    except ValueError:
+        return None
+
+
+def _scan_child_files_max_seq(tickets_dir: Path, parent_id: str) -> int:
+    """掃描檔案系統中已存在的子 Ticket 檔案，找出最大直接子任務序號。
+
+    這是防止父 Ticket 的 children 欄位未同步時的安全機制，
+    確保不會覆蓋已存在的子 Ticket 檔案。
+
+    Args:
+        tickets_dir: Ticket 檔案目錄
+        parent_id: 父任務 ID
+
+    Returns:
+        最大直接子任務序號，無子 Ticket 檔案時返回 0
+    """
+    if not tickets_dir.exists():
+        return 0
+
+    max_seq = 0
+    # 掃描 {parent_id}.*.md 檔案
+    pattern = f"{parent_id}.*.md"
+    for f in tickets_dir.glob(pattern):
+        seq = _extract_direct_child_seq(f.stem, parent_id)
+        if seq is not None:
+            max_seq = max(max_seq, seq)
+    return max_seq
+
+
+def _normalize_children(raw: Any) -> List[str]:
+    """將 children 欄位正規化為字串清單。
+
+    防禦性型別處理：children 可能因手動編輯變成字串（換行分隔），
+    或因序列化問題變成非預期型別。
+
+    Args:
+        raw: children 欄位的原始值（list、str 或其他型別）
+
+    Returns:
+        正規化後的子任務 ID 清單
+    """
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, str):
+        return [c.strip() for c in raw.split("\n") if c.strip()]
+    return []
+
+
 def get_next_child_seq(parent_id: str) -> int:
     """取得下一個子任務序號。
+
+    同時檢查父 Ticket 的 children 欄位和檔案系統中的子 Ticket 檔案，
+    取兩者的最大序號 + 1，確保不會覆蓋已存在的子 Ticket。
 
     Args:
         parent_id: 父 Ticket ID（如 "0.31.0-W5-001"）
@@ -270,51 +345,42 @@ def get_next_child_seq(parent_id: str) -> int:
         >>> get_next_child_seq("0.31.0-W5-001")
         3
 
-        若父 Ticket 無 children：
+        若父 Ticket 無 children 但檔案系統有 0.31.0-W5-001.1.md：
+        >>> get_next_child_seq("0.31.0-W5-001")
+        2
+
+        若父 Ticket 無 children 且無檔案：
         >>> get_next_child_seq("0.31.0-W5-001")
         1
-
-    Implementation:
-        1. 從 parent_id 提取 version
-        2. 載入 parent Ticket（使用 load_ticket）
-        3. 取得 children 欄位
-        4. 解析 children IDs，只計算直接子任務
-        5. 返回 max_seq + 1
-
-    注意:
-        - 只計算直接子任務（深度 = parent_depth + 1）
-        - 如 parent 為 001，child 為 001.1.1，則不計入
-        - 只有 001.1、001.2 會被計入
     """
-    # 從 parent_id 中提取 version（如 0.31.0）
     version = extract_version_from_ticket_id(parent_id)
     if version is None:
         return 1
 
+    # 來源 1：父 Ticket 的 children 欄位（single source of truth）
+    max_seq_from_children = 0
     parent = load_ticket(version, parent_id)
-    if not parent:
-        return 1
+    if parent:
+        children_list = _normalize_children(parent.get("children", []))
+        for child_id in children_list:
+            seq = _extract_direct_child_seq(child_id, parent_id)
+            if seq is not None:
+                max_seq_from_children = max(max_seq_from_children, seq)
 
-    children = parent.get("children", [])
-    if not children:
-        return 1
+    # 來源 2：檔案系統掃描（fallback 安全機制，防止覆蓋已存在的子 Ticket）
+    tickets_dir = get_tickets_dir(version)
+    max_seq_from_files = _scan_child_files_max_seq(tickets_dir, parent_id)
 
-    # 找出最大的直接子任務序號
-    max_seq = 0
-    for child_id in children:
-        try:
-            # 解析子任務 ID，找出直接子任務
-            # parent: 0.31.0-W4-020, child: 0.31.0-W4-020.1, 0.31.0-W4-020.1.1
-            # 只計算直接子任務（只有一層點）
-            if child_id.startswith(parent_id + "."):
-                remainder = child_id[len(parent_id) + 1:]
-                # 如果 remainder 中沒有點，這是直接子任務
-                if "." not in remainder:
-                    seq = int(remainder)
-                    max_seq = max(max_seq, seq)
-        except (ValueError, IndexError):
-            continue
+    # 不一致時輸出 warning，便於追蹤 update_parent_children 失敗
+    if max_seq_from_children != max_seq_from_files and max_seq_from_children > 0 and max_seq_from_files > 0:
+        print(
+            f"[WARNING] 父 Ticket {parent_id} 的 children 欄位（max_seq={max_seq_from_children}）"
+            f"與檔案系統（max_seq={max_seq_from_files}）不一致",
+            file=sys.stderr,
+        )
 
+    # 取兩者最大值，確保不覆蓋
+    max_seq = max(max_seq_from_children, max_seq_from_files)
     return max_seq + 1
 
 
@@ -531,8 +597,11 @@ def create_ticket_body(what: str, who: str) -> str:
 def update_parent_children(version: str, parent_id: str, child_id: str) -> bool:
     """更新父 Ticket 的 children 欄位。
 
+    version 參數為向後相容保留，實際使用從 parent_id 提取的版本號。
+    這確保跨版本建立子 Ticket 時不會因版本不符而找不到父 Ticket。
+
     Args:
-        version: 版本號（如 "0.31.0"）
+        version: 版本號（向後相容保留，實際不使用）
         parent_id: 父 Ticket ID（如 "0.31.0-W5-001"）
         child_id: 子 Ticket ID（如 "0.31.0-W5-001.1"）
 
@@ -540,13 +609,14 @@ def update_parent_children(version: str, parent_id: str, child_id: str) -> bool:
         bool: 成功更新返回 True，失敗返回 False
 
     Implementation:
-        1. 載入 parent Ticket（使用 load_ticket）
-        2. 若 parent 不存在，返回 False
-        3. 取得 children 欄位（預設為空清單）
-        4. 若 child_id 不在 children 中，加入
-        5. 更新 parent["children"]
-        6. 儲存 parent Ticket（使用 save_ticket）
-        7. 返回 True
+        1. 從 parent_id 提取版本號（不依賴 version 參數）
+        2. 載入 parent Ticket（使用 load_ticket）
+        3. 若 parent 不存在，返回 False
+        4. 取得 children 欄位，確保為 list 型別
+        5. 若 child_id 不在 children 中，加入
+        6. 更新 parent["children"]
+        7. 儲存 parent Ticket（使用 save_ticket）
+        8. 返回 True
 
     Examples:
         >>> update_parent_children("0.31.0", "0.31.0-W5-001", "0.31.0-W5-001.1")
@@ -559,16 +629,31 @@ def update_parent_children(version: str, parent_id: str, child_id: str) -> bool:
         - 修改父 Ticket 檔案
         - 更新 parent["children"] 清單
     """
-    parent: Optional[Dict[str, Any]] = load_ticket(version, parent_id)
+    # 從 parent_id 提取版本，避免 version 參數與 parent_id 版本不一致
+    # （根因：create 命令傳入 current_version，但 parent 可能屬於不同版本）
+    resolved_version: Optional[str] = extract_version_from_ticket_id(parent_id)
+    if resolved_version is None:
+        return False
+
+    parent: Optional[Dict[str, Any]] = load_ticket(resolved_version, parent_id)
     if not parent:
         return False
 
-    children: List[str] = parent.get("children", [])
+    # 防禦性型別檢查：children 可能因手動編輯變成字串
+    raw_children = parent.get("children", [])
+    if isinstance(raw_children, str):
+        print(
+            f"[WARNING] 父 Ticket {parent_id} 的 children 欄位為字串而非清單，"
+            f"已自動修正",
+            file=sys.stderr,
+        )
+    children: List[str] = _normalize_children(raw_children)
+
     if child_id not in children:
         children.append(child_id)
         parent["children"] = children
 
-        parent_path: Path = Path(parent.get("_path", get_ticket_path(version, parent_id)))
+        parent_path: Path = Path(parent.get("_path", get_ticket_path(resolved_version, parent_id)))
         save_ticket(parent, parent_path)
 
     return True

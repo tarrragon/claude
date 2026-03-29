@@ -12,25 +12,19 @@
 
 **所有輸出必須使用繁體中文 (zh-TW)**
 
-#### 禁用詞彙對照表
+#### 常見禁用詞彙（摘要）
 
-| 禁用詞彙 | 正確用語 |
-|---------|---------|
+| 禁用 | 正確 |
+|------|------|
 | 文檔 | 文件 |
 | 數據 | 資料 |
-| 默認 | 預設 |
 | 代碼 | 程式碼 |
-| 視頻 | 影片 |
-| 軟件 | 軟體 |
-| 硬件 | 硬體 |
-| 信息 | 資訊 |
-| 智能 | Hook 系統、規則比對 |
+
+> 完整禁用詞彙清單見 `.claude/rules/core/language-constraints.md`
 
 #### 技術術語保留英文
 
 程式碼識別符、技術專有名詞（Flutter, Dart, TDD 等）、指令（`/ticket`）保留英文。
-
-> 完整規範：@.claude/rules/core/language-constraints.md
 
 ---
 
@@ -90,6 +84,23 @@ Read(docs/work-logs/v0.31.0/tickets/0.31.0-W8-003.md)  # 禁止
 
 ---
 
+### 5. Git 操作限制（強制）
+
+> 代理人禁止修改主倉庫的 git 狀態。
+
+| 操作 | 規則 | 原因 |
+|------|------|------|
+| `git checkout` | 禁止 | 修改 .git/HEAD，污染主線程工作目錄 |
+| `git branch` | 禁止 | 在主倉庫建立分支 |
+| `git switch` | 禁止 | 同 checkout |
+| `git commit`（Phase 3b+） | 禁止 | PM 負責提交（PC-024） |
+| `git commit`（Phase 1-3a） | 允許 | 代理人可自行提交，但禁止 push |
+| `git push` | 禁止 | PM 負責推送 |
+
+如需在獨立分支工作，PM 會使用 `Agent(isolation: "worktree")` 派發，代理人無需自行建立分支。
+
+---
+
 ## 執行檢查清單
 
 代理人在開始任務前，自我確認：
@@ -98,6 +109,7 @@ Read(docs/work-logs/v0.31.0/tickets/0.31.0-W8-003.md)  # 禁止
 - [ ] 無禁用詞彙（文檔→文件、數據→資料...）
 - [ ] 讀取 Ticket 使用 `ticket track query`
 - [ ] 文件無 emoji
+- [ ] 未執行 git checkout/branch/switch/commit
 - [ ] 報告結構清晰（5W1H）
 
 ---
@@ -118,6 +130,6 @@ Read(docs/work-logs/v0.31.0/tickets/0.31.0-W8-003.md)  # 禁止
 
 ---
 
-**Last Updated**: 2026-03-21
-**Version**: 1.1.0 - 新增角色與規則適用性聲明（0.1.1-W13-003 集中化）
+**Last Updated**: 2026-03-29
+**Version**: 1.2.0 - 新增 Git 操作限制章節（0.4.0-W2-009）
 **Purpose**: 確保所有代理人遵守核心規則
