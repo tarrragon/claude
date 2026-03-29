@@ -922,6 +922,54 @@ mcp__serena__replace_symbol_body
 - [ ] **函式行數**：平均符合 5-10 行原則
 - [ ] **需求註解**：業務邏輯函式 100% 包含需求編號
 - [ ] **錯誤處理**：100% 使用預編譯錯誤或專用異常
+- [ ] **Widget 重建效能**：有狀態的 Widget 不因無關資料變更而全體刷新（見下方章節）
+
+### 2.1 Widget 重建與狀態保持（效能意識）
+
+> **來源**：ARCH-010 — 對話列表刷新導致所有 ExpansionTile 展開狀態丟失。
+
+實作涉及狀態變更的 Widget 時，必須考慮：**這個 Widget 的狀態會不會因為無關的資料更新而被重置？**
+
+**常見問題場景**：
+- ListView 新增項目時，既有項目的展開/摺疊、輸入框內容被重置
+- Provider 狀態變更觸發整棵 Widget tree 重建，子 Widget 的本地狀態丟失
+- 動畫進行中因父層重建而中斷
+
+**解決方案選擇（依場景而定）**：
+
+| 方案 | 適用場景 | 範例 |
+|------|---------|------|
+| `ValueKey` | StatefulWidget 在列表中需跨 rebuild 保持 State | `ExpansionTile(key: ValueKey(id))` |
+| `const` Widget | 子樹不依賴變動資料 | `const Padding(...)` |
+| `select` / `where` | 只監聽部分狀態變更 | `ref.watch(provider.select((s) => s.count))` |
+| StatefulWidget 本地狀態 | 狀態僅該 Widget 使用 | `_isExpanded` 欄位 |
+| 外部狀態管理 | 狀態需跨 Widget 或跨頁面共享 | Riverpod Notifier |
+
+**實作時自問**：
+1. 這個 Widget 的父層多久重建一次？
+2. 重建時，哪些子 Widget 的狀態不應該丟失？
+3. 用 Key 就能解決嗎？還是真的需要外部狀態管理？
+
+### 2.2 記憶體與資源管理（即時監控場景）
+
+> **來源**：W5-002 — ccsession 佔用 70GB 記憶體；W5-003/004 — 多處資源累積無上限。
+
+本專案是即時監控系統，資料會持續增長。實作時必須考慮資源的生命週期和上限。
+
+**必須遵守的原則**：
+
+| 原則 | 說明 | 反面教材 |
+|------|------|---------|
+| 集合必須有上限 | List/Map/Set 持續增長的必須設定 maxSize 或清理機制 | session 事件無限累積 → 70GB |
+| 訂閱必須有清理 | ref.listen/StreamSubscription 必須在 dispose 中取消 | ref.listen 累積未清理 |
+| 大物件延遲載入 | toolInput 等大物件不隨列表全量載入 | 所有 ToolInput 常駐記憶體 |
+| 重連必須清理舊連線 | WebSocket 重連前必須完全關閉舊連線 | WS 重連殘留多條連線 |
+| keepAlive 謹慎使用 | `keepAlive: true` 的 Provider 永不被 dispose，確認是否真的需要 | 展開狀態用 keepAlive 造成洩漏 |
+
+**實作時自問**：
+1. 這個集合會無限增長嗎？上限是多少？
+2. 這個訂閱在哪裡取消？dispose 有覆蓋到嗎？
+3. 這個資料需要常駐記憶體嗎？能否按需載入？
 
 ### 3. 協作流程合規標準
 - [ ] **Phase 3a 接收確認**：虛擬碼、流程圖、架構決策完整接收

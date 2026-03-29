@@ -1,3 +1,18 @@
+## [1.4.10] - 2026-03-29
+
+### Summary
+docs: 決策樹新增效能問題發現後代理人更新規則; docs: 代理人新增效能與資源管理章節 (parsley + fennel); docs: parsley agent 新增 Widget 重建效能意識章節 (+2 more)
+
+Changes: 4 docs, 1 chore
+
+- docs: 決策樹新增效能問題發現後代理人更新規則
+- docs: 代理人新增效能與資源管理章節 (parsley + fennel)
+- docs: parsley agent 新增 Widget 重建效能意識章節
+- docs: Phase 1 加入 ARCH-010 框架內建機制驗證步驟
+- chore: sync-pull .claude 框架 1.4.0 → 1.4.9 + 還原本地新增檔案
+
+---
+
 ## [1.4.9] - 2026-03-29
 
 ### Summary

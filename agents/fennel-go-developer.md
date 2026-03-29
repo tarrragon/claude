@@ -420,6 +420,28 @@ grep -rn '"[A-Z]' server/ --include="*.go" | grep -v "_test.go" | grep -v "const
 - [ ] 函式長度 <= 40 行
 - [ ] 巢狀深度 <= 3 層
 - [ ] 錯誤處理使用 sentinel error 或自訂類型
+- [ ] 長時間運行的資源有清理機制（見下方效能章節）
+
+### 資源管理與狀態保護（即時監控場景）
+
+> **來源**：W5-002 — 70GB 記憶體洩漏；W6-002 — completed session 被新事件復活為 active。
+
+本專案 Go 後端是長時間運行的即時監控服務，持續接收 file watcher 事件。實作時必須考慮資源生命週期。
+
+**必須遵守的原則**：
+
+| 原則 | 說明 | 反面教材 |
+|------|------|---------|
+| Map/Slice 必須有上限或清理 | 持續增長的資料結構需設 maxSize 或定期 GC | session 事件無限累積 → 70GB |
+| File Watcher 必須可關閉 | watcher goroutine 需有 context cancel 或 done channel | watcher 殘留無法回收 |
+| 狀態機終態不可逆 | completed/closed 等終態不可被外部事件改回 active | 新 JSONL 事件復活已完成的 session |
+| goroutine 必須可退出 | 所有 goroutine 必須監聽 context 或 done channel | goroutine 洩漏 |
+| 大物件按需載入 | 對話內容等大物件不常駐記憶體，按需從磁碟讀取 | 全量載入所有 session 對話 |
+
+**實作時自問**：
+1. 這個 Map 會無限增長嗎？需要 eviction 策略嗎？
+2. 這個 goroutine 什麼時候退出？有退出機制嗎？
+3. 這個狀態轉換是否合法？終態能被改回嗎？
 
 ---
 
