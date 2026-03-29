@@ -15,6 +15,7 @@
   - .claude/handoff/（本地交接檔案）
 """
 
+import filecmp
 import os
 import shutil
 import subprocess
@@ -276,7 +277,11 @@ def sync_directory(
         else:
             rel_str = str(rel).replace("\\", "/")
             if rel_str in preserve:
-                print_color(f"   保留本地特化檔案: {rel_str}", "green")
+                # 比對本地和遠端檔案是否不同，提示有可用更新
+                if dest_item.exists() and not filecmp.cmp(str(item), str(dest_item), shallow=False):
+                    print_color(f"   本地特化檔案有遠端更新可用: {rel_str}", "yellow")
+                else:
+                    print_color(f"   保留本地特化檔案: {rel_str}", "green")
                 continue
             dest_item.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(item, dest_item)

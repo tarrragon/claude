@@ -1,3 +1,14 @@
+## [1.6.0] - 2026-03-29
+
+### Summary
+feat: sync 腳本 W3 改善 — 版本衝突檢測 + preserve 更新提示 + 敏感檔案保護
+
+Changes: 1 feat
+
+- feat: sync 腳本 W3 改善 — 版本衝突檢測 + preserve 更新提示 + 敏感檔案保護
+
+---
+
 ## [1.5.1] - 2026-03-29
 
 ### Summary

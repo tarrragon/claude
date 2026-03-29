@@ -39,9 +39,17 @@ EXCLUDE_PATTERNS = {
     "__pycache__",
     ".pytest_cache",
     "sync-preserve.yaml",
+    # 敏感檔案：避免意外推送憑證和環境變數
+    ".env",
+    ".env.local",
+    ".env.production",
+    "credentials.json",
+    "secrets.yaml",
+    "secrets.json",
+    ".secrets",
 }
 
-EXCLUDE_SUFFIXES = {".pyc"}
+EXCLUDE_SUFFIXES = {".pyc", ".pem", ".key"}
 
 # commit 訊息中需要過濾的專案特定模式
 # 獨立 repo 是跨專案通用框架，commit 訊息禁止包含專案版本號/Wave/Ticket 編號
@@ -400,6 +408,24 @@ def main() -> None:
             return
 
         run_git(["commit", "-m", commit_msg], cwd=str(temp_dir))
+
+        # 推送前版本衝突檢測：確認遠端版本未被其他人變更
+        print_color("檢查遠端版本是否變更...")
+        fetch_result = run_git(["fetch", "origin"], cwd=str(temp_dir), check=False)
+        if fetch_result.returncode != 0:
+            print_color("警告: fetch 失敗，跳過版本衝突檢測（網路問題？）", "yellow")
+        else:
+            current_remote_result = run_git(
+                ["show", "origin/main:VERSION"], cwd=str(temp_dir), check=False
+            )
+            if current_remote_result.returncode == 0:
+                current_remote = current_remote_result.stdout.strip()
+                if current_remote != remote_version:
+                    print_color(
+                        f"遠端版本已變更（{remote_version} → {current_remote}），請先 pull 再 push",
+                        "red",
+                    )
+                    sys.exit(1)
 
         print_color("推送到獨立 repo...")
         run_git(["push", "origin", "main"], cwd=str(temp_dir))
