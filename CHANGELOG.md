@@ -1,3 +1,14 @@
+## [1.9.1] - 2026-03-29
+
+### Summary
+fix: W4 審查修復 — symlink 防護 + clean 排除補充 + 空目錄清理
+
+Changes: 1 fix
+
+- fix: W4 審查修復 — symlink 防護 + clean 排除補充 + 空目錄清理
+
+---
+
 ## [1.9.0] - 2026-03-29
 
 ### Summary

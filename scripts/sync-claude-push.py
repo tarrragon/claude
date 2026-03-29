@@ -376,7 +376,7 @@ def clean_stale_files(temp_dir: Path, claude_dir: Path) -> int:
     排除 .git 目錄、CHANGELOG.md、VERSION 等遠端獨有檔案。
     回傳已刪除的檔案數量。
     """
-    CLEAN_EXCLUDE = {".git", "CHANGELOG.md", "VERSION"}
+    CLEAN_EXCLUDE = {".git", "CHANGELOG.md", "VERSION", "README.md", "LICENSE", ".gitignore"}
     deleted_count = 0
 
     for file_path in sorted(temp_dir.rglob("*")):
@@ -394,6 +394,23 @@ def clean_stale_files(temp_dir: Path, claude_dir: Path) -> int:
             print(f"   刪除過時檔案: {rel}")
             file_path.unlink()
             deleted_count += 1
+
+    # 清理空目錄（反向排序以支援巢狀目錄）
+    for dir_path in sorted(
+        temp_dir.rglob("*"),
+        key=lambda p: len(p.parts),
+        reverse=True,
+    ):
+        if not dir_path.is_dir():
+            continue
+        if any(part in CLEAN_EXCLUDE for part in dir_path.relative_to(temp_dir).parts):
+            continue
+        try:
+            if not any(dir_path.iterdir()):
+                dir_path.rmdir()
+                deleted_count += 1
+        except OSError:
+            pass
 
     return deleted_count
 

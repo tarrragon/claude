@@ -235,6 +235,9 @@ def clone_repo(temp_dir: Path) -> None:
 
 def _files_differ(src: Path, dst: Path) -> bool:
     """比對兩個檔案是否不同。大檔案用 size 快速判斷，小檔案做完整內容比對。"""
+    # 拒絕比對符號連結，視為不同以確保安全
+    if src.is_symlink() or dst.is_symlink():
+        return True
     src_stat = src.stat()
     dst_stat = dst.stat()
     # 大小不同一定不同
