@@ -1,3 +1,14 @@
+## [1.4.11] - 2026-03-29
+
+### Summary
+chore: sync-pull + 還原本地特化
+
+Changes: 1 chore
+
+- chore: sync-pull + 還原本地特化
+
+---
+
 ## [1.4.10] - 2026-03-29
 
 ### Summary
