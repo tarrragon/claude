@@ -1,3 +1,17 @@
+## [1.11.0] - 2026-03-30
+
+### Summary
+feat: 新增 git index.lock 自動清理 PreToolUse hook（）; feat: 啟用跨設備同步 45/45 + 效能基準 9/9 測試通過（.7, .8）; fix: Hook git 呼叫加上 --no-optional-locks 消除 index.lock 競爭根因（） (+1 more)
+
+Changes: 2 feat, 1 fix, 1 chore
+
+- feat: 新增 git index.lock 自動清理 PreToolUse hook（）
+- feat: 啟用跨設備同步 45/45 + 效能基準 9/9 測試通過（.7, .8）
+- fix: Hook git 呼叫加上 --no-optional-locks 消除 index.lock 競爭根因（）
+- chore: 同步 .claude 配置變更
+
+---
+
 ## [1.10.0] - 2026-03-29
 
 ### Summary

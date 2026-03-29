@@ -106,7 +106,7 @@ def check_changelog_in_commit(project_dir: Path, logger) -> bool:
 def get_commit_subject(project_dir: Path, logger) -> str:
     """取得最近一次 commit 的 subject。"""
     output = run_git(
-        ["git", "log", "-1", "--format=%s"],
+        ["git", "--no-optional-locks", "log", "-1", "--format=%s"],
         cwd=project_dir,
         timeout=5,
         logger=logger,

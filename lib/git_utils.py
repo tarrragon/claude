@@ -132,7 +132,7 @@ def run_git_command(
     """
     try:
         result = subprocess.run(
-            ["git"] + args,
+            ["git", "--no-optional-locks"] + args,
             cwd=cwd,
             capture_output=True,
             text=True,

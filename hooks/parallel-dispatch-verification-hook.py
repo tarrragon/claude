@@ -270,7 +270,7 @@ def get_git_changed_files(project_root: Path, logger: logging.Logger) -> list[st
     """
     try:
         result = subprocess.run(
-            ["git", "diff", "HEAD", "--name-only"],
+            ["git", "--no-optional-locks", "diff", "HEAD", "--name-only"],
             cwd=str(project_root),
             capture_output=True,
             text=True,

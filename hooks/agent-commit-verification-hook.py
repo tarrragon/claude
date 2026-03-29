@@ -89,7 +89,7 @@ def get_uncommitted_files(project_root: str, logger: logging.Logger) -> list[str
     """
     try:
         result = subprocess.run(
-            ["git", "status", "--porcelain"],
+            ["git", "--no-optional-locks", "status", "--porcelain"],
             capture_output=True,
             text=True,
             timeout=GIT_STATUS_TIMEOUT,
