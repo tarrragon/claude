@@ -277,11 +277,16 @@ def sync_directory(
         else:
             rel_str = str(rel).replace("\\", "/")
             if rel_str in preserve:
-                # 比對本地和遠端檔案是否不同，提示有可用更新
-                if dest_item.exists() and not filecmp.cmp(str(item), str(dest_item), shallow=False):
-                    print_color(f"   本地特化檔案有遠端更新可用: {rel_str}", "yellow")
+                if not dest_item.exists():
+                    print_color(f"   本地特化檔案不存在（可能已刪除）: {rel_str}", "yellow")
                 else:
-                    print_color(f"   保留本地特化檔案: {rel_str}", "green")
+                    try:
+                        if not filecmp.cmp(str(item), str(dest_item), shallow=False):
+                            print_color(f"   本地特化檔案有遠端更新可用: {rel_str}", "yellow")
+                        else:
+                            print_color(f"   保留本地特化檔案: {rel_str}", "green")
+                    except (FileNotFoundError, OSError):
+                        print_color(f"   警告: 無法比對檔案 {rel_str}", "yellow")
                 continue
             dest_item.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(item, dest_item)

@@ -49,7 +49,7 @@ EXCLUDE_PATTERNS = {
     ".secrets",
 }
 
-EXCLUDE_SUFFIXES = {".pyc", ".pem", ".key"}
+EXCLUDE_SUFFIXES = {".pyc", ".pem", ".key", ".p12", ".pfx", ".jks"}
 
 # commit 訊息中需要過濾的專案特定模式
 # 獨立 repo 是跨專案通用框架，commit 訊息禁止包含專案版本號/Wave/Ticket 編號
@@ -114,6 +114,9 @@ def should_exclude(path: Path) -> bool:
     if path.name in EXCLUDE_PATTERNS:
         return True
     if path.suffix in EXCLUDE_SUFFIXES:
+        return True
+    # .env.* 通配符匹配（涵蓋 .env.staging, .env.test 等所有變體）
+    if path.name.startswith(".env."):
         return True
     return any(part in EXCLUDE_PATTERNS for part in path.parts)
 
