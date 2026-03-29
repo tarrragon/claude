@@ -1,3 +1,14 @@
+## [1.8.0] - 2026-03-29
+
+### Summary
+feat: 新增 sync-claude-status 版本+內容 hash 快速比對工具
+
+Changes: 1 feat
+
+- feat: 新增 sync-claude-status 版本+內容 hash 快速比對工具
+
+---
+
 ## [1.7.1] - 2026-03-29
 
 ### Summary

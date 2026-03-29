@@ -18,6 +18,8 @@ commit 訊息生成:
   - 自動建議版本遞增幅度（patch/minor/major）
 """
 
+import hashlib
+import json
 import os
 import re
 import shutil
@@ -39,6 +41,7 @@ EXCLUDE_PATTERNS = {
     "__pycache__",
     ".pytest_cache",
     "sync-preserve.yaml",
+    ".sync-state.json",
     # 敏感檔案：避免意外推送憑證和環境變數
     ".env",
     ".env.local",
@@ -335,6 +338,26 @@ def update_changelog(repo_dir: Path, new_version: str, commit_message: str, old_
     changelog_path.write_text(updated, encoding="utf-8")
 
 
+def _compute_content_hash(claude_dir: Path) -> str:
+    """計算 .claude/ 目錄的內容指紋（前 8 字元）。
+
+    每個檔案產生 "相對路徑:sha256(內容)" 字串，
+    所有字串排序後合併取總 sha256 前 8 字元。
+    """
+    file_hashes: list[str] = []
+    for file_path in sorted(claude_dir.rglob("*")):
+        if not file_path.is_file() or file_path.is_symlink():
+            continue
+        rel = file_path.relative_to(claude_dir)
+        if should_exclude(rel):
+            continue
+        content_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
+        file_hashes.append(f"{rel}:{content_hash}")
+
+    combined = "\n".join(file_hashes)
+    return hashlib.sha256(combined.encode("utf-8")).hexdigest()[:8]
+
+
 def main() -> None:
     # commit message is now optional - auto-generated when not provided
     user_message = sys.argv[1] if len(sys.argv) >= 2 else None
@@ -449,6 +472,20 @@ def main() -> None:
 
         print_color("推送到獨立 repo...")
         run_git(["push", "origin", "main"], cwd=str(temp_dir))
+
+        # 計算內容指紋並寫入 .sync-state.json
+        content_hash = _compute_content_hash(claude_dir)
+        sync_state = {
+            "last_push_hash": content_hash,
+            "last_push_version": new_version,
+            "last_push_time": datetime.now().isoformat(timespec="seconds"),
+        }
+        sync_state_path = claude_dir / ".sync-state.json"
+        sync_state_path.write_text(
+            json.dumps(sync_state, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print_color(f"已更新同步狀態 (hash: {content_hash})", "green")
 
         print_color("成功推送 .claude 到獨立 repo！", "green")
         print_color(f"Remote: {REPO_URL}", "green")
