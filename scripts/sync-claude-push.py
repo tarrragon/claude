@@ -51,6 +51,12 @@ EXCLUDE_PATTERNS = {
 
 EXCLUDE_SUFFIXES = {".pyc", ".pem", ".key", ".p12", ".pfx", ".jks"}
 
+# 檔案名稱前綴匹配（涵蓋 .env.staging, secrets_prod.json 等變體）
+EXCLUDE_NAME_PREFIXES = {
+    ".env.",    # .env.staging, .env.test, .env.development 等
+    "secret",   # secrets.json, secret_key.txt 等
+}
+
 # commit 訊息中需要過濾的專案特定模式
 # 獨立 repo 是跨專案通用框架，commit 訊息禁止包含專案版本號/Wave/Ticket 編號
 PROJECT_SPECIFIC_PATTERNS = [
@@ -115,8 +121,7 @@ def should_exclude(path: Path) -> bool:
         return True
     if path.suffix in EXCLUDE_SUFFIXES:
         return True
-    # .env.* 通配符匹配（涵蓋 .env.staging, .env.test 等所有變體）
-    if path.name.startswith(".env."):
+    if any(path.name.startswith(prefix) for prefix in EXCLUDE_NAME_PREFIXES):
         return True
     return any(part in EXCLUDE_PATTERNS for part in path.parts)
 
@@ -281,6 +286,18 @@ def generate_commit_summary(categories: dict[str, list[str]], bump_suggestion: s
     return f"{summary_line}\n\n" + "\n".join(body_parts)
 
 
+def extract_version_string(content: str) -> str:
+    """從可能包含多行或註解的 VERSION 檔案內容中提取版本號。
+
+    跳過空行和 # 開頭的註解行，取第一行有效內容並移除 v 前綴。
+    """
+    for line in content.split("\n"):
+        line = line.strip()
+        if line and not line.startswith("#"):
+            return line.lstrip("v")
+    return ""
+
+
 def bump_version(version: str, bump_level: str) -> str:
     """Increment version based on bump level (major/minor/patch)."""
     match = re.match(r"(\d+)\.(\d+)\.(\d+)", version)
@@ -346,7 +363,7 @@ def main() -> None:
         print_color("讀取遠端版本號...")
         version_file = temp_dir / "VERSION"
         if version_file.exists():
-            remote_version = version_file.read_text(encoding="utf-8").strip()
+            remote_version = extract_version_string(version_file.read_text(encoding="utf-8"))
             print_color(f"   遠端版本: v{remote_version}", "green")
         else:
             remote_version = "1.0.0"
@@ -422,7 +439,7 @@ def main() -> None:
                 ["show", "origin/main:VERSION"], cwd=str(temp_dir), check=False
             )
             if current_remote_result.returncode == 0:
-                current_remote = current_remote_result.stdout.strip()
+                current_remote = extract_version_string(current_remote_result.stdout)
                 if current_remote != remote_version:
                     print_color(
                         f"遠端版本已變更（{remote_version} → {current_remote}），請先 pull 再 push",

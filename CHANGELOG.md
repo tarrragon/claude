@@ -1,3 +1,14 @@
+## [1.7.0] - 2026-03-29
+
+### Summary
+refactor: sync-push VERSION 魯棒性 + 模式匹配改善
+
+Changes: 1 refactor
+
+- refactor: sync-push VERSION 魯棒性 + 模式匹配改善
+
+---
+
 ## [1.6.1] - 2026-03-29
 
 ### Summary
