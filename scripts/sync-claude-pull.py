@@ -42,6 +42,9 @@ GIT_HTTP_LOW_SPEED_TIME_SECONDS = "30"
 # Changed files display limit
 MAX_CHANGED_FILES_DISPLAY = 3
 
+# 大檔案比對閾值（超過此大小只比 size，不做全量內容比對）
+_LARGE_FILE_THRESHOLD = 1_048_576  # 1MB
+
 # 遠端 repo 專有：存在於遠端但不需複製到本地
 REMOTE_ONLY = frozenset({".git", "project-templates"})
 
@@ -230,6 +233,20 @@ def clone_repo(temp_dir: Path) -> None:
         sys.exit(1)
 
 
+def _files_differ(src: Path, dst: Path) -> bool:
+    """比對兩個檔案是否不同。大檔案用 size 快速判斷，小檔案做完整內容比對。"""
+    src_stat = src.stat()
+    dst_stat = dst.stat()
+    # 大小不同一定不同
+    if src_stat.st_size != dst_stat.st_size:
+        return True
+    # 大檔案：大小相同就視為相同（避免全量比對）
+    if src_stat.st_size > _LARGE_FILE_THRESHOLD:
+        return False
+    # 小檔案：完整內容比對
+    return not filecmp.cmp(str(src), str(dst), shallow=False)
+
+
 def sync_directory(
     src: Path,
     dst: Path,
@@ -282,7 +299,7 @@ def sync_directory(
                     print_color(f"   本地特化檔案不存在（可能已刪除）: {rel_str}", "yellow")
                 else:
                     try:
-                        if not filecmp.cmp(str(item), str(dest_item), shallow=False):
+                        if _files_differ(item, dest_item):
                             print_color(f"   本地特化檔案有遠端更新可用: {rel_str}", "yellow")
                         else:
                             print_color(f"   保留本地特化檔案: {rel_str}", "green")
@@ -454,6 +471,10 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
     preserve = load_preserve_list(claude_dir)
     if preserve:
         print_color(f"   載入 {len(preserve)} 個本地特化檔案路徑", "green")
+        for rel_path in sorted(preserve):
+            full_path = claude_dir / rel_path
+            if not full_path.exists():
+                print_color(f"   警告: preserve 清單中的檔案不存在: {rel_path}", "yellow")
 
     # 同步 .claude 目錄
     print_color("更新 .claude 資料夾...")

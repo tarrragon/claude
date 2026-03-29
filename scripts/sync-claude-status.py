@@ -37,6 +37,10 @@ EXCLUDE_PATTERNS = {
     "secrets.json",
     ".secrets",
     ".venv",
+    # 目錄層級排除（與 .secrets 對齊）
+    "secrets",
+    "private",
+    ".keys",
 }
 
 EXCLUDE_SUFFIXES = {".pyc", ".pem", ".key", ".p12", ".pfx", ".jks"}
