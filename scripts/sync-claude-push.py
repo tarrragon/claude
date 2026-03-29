@@ -38,6 +38,7 @@ EXCLUDE_PATTERNS = {
     "pm-status.json",
     "__pycache__",
     ".pytest_cache",
+    "sync-preserve.yaml",
 }
 
 EXCLUDE_SUFFIXES = {".pyc"}
@@ -368,17 +369,10 @@ def main() -> None:
         changelog_path = temp_dir / "CHANGELOG.md"
         saved_changelog = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else ""
 
-        # 6. Clean existing content (preserve .git)
-        print_color("清空舊內容...")
-        for item in temp_dir.iterdir():
-            if item.name == ".git":
-                continue
-            if item.is_dir():
-                shutil.rmtree(item)
-            else:
-                item.unlink()
+        # 6. Merge 模式：不清空遠端內容，直接增量覆蓋
+        # 保留遠端獨有的檔案（其他專案推送的內容）
 
-        # 7. Copy .claude/ content with exclusions
+        # 7. Copy .claude/ content with exclusions（覆蓋本地有修改的檔案）
         print_color("複製 .claude 配置檔案...")
         file_count = copy_filtered(claude_dir, temp_dir)
         print_color(f"   已複製 {file_count} 個檔案", "green")

@@ -1,3 +1,15 @@
+## [1.5.0] - 2026-03-29
+
+### Summary
+feat: sync 腳本改為 merge 機制，新增 sync-preserve.yaml; fix: sync-pull 審查修復 — P0 preserve 保護 + P1 解析/路徑修正
+
+Changes: 1 feat, 1 fix
+
+- feat: sync 腳本改為 merge 機制，新增 sync-preserve.yaml
+- fix: sync-pull 審查修復 — P0 preserve 保護 + P1 解析/路徑修正
+
+---
+
 ## [1.4.11] - 2026-03-29
 
 ### Summary
