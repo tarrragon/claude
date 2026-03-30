@@ -1,3 +1,16 @@
+## [1.14.0] - 2026-03-30
+
+### Summary
+feat: doc CLI 新增 create/update 子命令（建立文件+狀態更新+tracking 同步）; fix: 新增 Bash 規則三 — 禁止串接多個 git 寫入操作（index.lock 競爭防護）; docs: 更新 /doc SKILL.md — 觸發詞+CLI 狀態+關係圖+評估路徑
+
+Changes: 1 feat, 1 fix, 1 docs
+
+- feat: doc CLI 新增 create/update 子命令（建立文件+狀態更新+tracking 同步）
+- fix: 新增 Bash 規則三 — 禁止串接多個 git 寫入操作（index.lock 競爭防護）
+- docs: 更新 /doc SKILL.md — 觸發詞+CLI 狀態+關係圖+評估路徑
+
+---
+
 ## [1.13.0] - 2026-03-30
 
 ### Summary

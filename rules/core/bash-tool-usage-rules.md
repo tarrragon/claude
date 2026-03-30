@@ -117,6 +117,59 @@ Bash 工具輸出：
 
 ---
 
+## 規則三：禁止串接多個 git 寫入操作
+
+### 問題根源
+
+Claude Code 的 PostToolUse Hook 在每個 Bash 呼叫完成後觸發。Hook 內部會執行 git 命令（如 `git status`、`git log`）。
+
+當多個 git 寫入操作用 `&&` 串接在同一個 Bash 呼叫中時：
+
+```
+git commit -m "msg" && git merge feat/xxx --no-edit
+    |                      |
+    v                      v
+    commit 完成             merge 開始（同一 Bash 內，不等 Hook）
+    |
+    v
+    Hook 觸發 → Hook 內的 git 命令
+    |                      |
+    v                      v
+    git 競爭 index.lock ← git merge 也需要 index.lock
+    → fatal: Unable to create index.lock
+```
+
+### 強制規範
+
+| 組合 | 允許 | 原因 |
+|------|------|------|
+| `git add && git commit` | 允許 | add 不觸發 Hook，commit 是唯一的寫入操作 |
+| `git commit && git merge` | 禁止 | 兩個寫入操作，Hook 和 merge 競爭 lock |
+| `git commit && git push` | 禁止 | push 可能觸發遠端 Hook 或本地 post-push 處理 |
+| `git merge && git push` | 禁止 | 同上 |
+
+### 正確做法
+
+每個 git 寫入操作（commit/merge/rebase/push）獨立一個 Bash 呼叫：
+
+```bash
+# 正確：分開呼叫
+Bash: git add file.md && git commit -m "msg"     ← 第一個 Bash 呼叫
+Bash: git merge feat/xxx --no-edit               ← 第二個 Bash 呼叫（等 Hook 完成後）
+Bash: git push                                    ← 第三個 Bash 呼叫
+
+# 錯誤：串接
+Bash: git add file.md && git commit -m "msg" && git merge feat/xxx --no-edit && git push
+```
+
+### 檢查清單
+
+- [ ] Bash 命令中有 `git commit`？→ commit 之後不可再串接 merge/push/rebase
+- [ ] 需要連續執行多個 git 寫入操作？→ 拆成多個獨立的 Bash 呼叫
+- [ ] 看到 `index.lock` 錯誤？→ 確認是否有 git 操作串接
+
+---
+
 ## 統一檢查清單
 
 執行 Bash 命令前：
@@ -125,6 +178,7 @@ Bash 工具輸出：
 - [ ] 輸出可能很大？→ 提前加 `head` / 用摘要腳本
 - [ ] 命令以 `run_in_background: true` 執行？→ 用 `TaskOutput`
 - [ ] 看到「Full output saved to: /path/xxx.txt」？→ 用 `Read` 加完整路徑
+- [ ] 命令串接多個 git 寫入操作？→ 拆成獨立 Bash 呼叫
 
 ---
 
@@ -137,6 +191,6 @@ Bash 工具輸出：
 
 ---
 
-**Last Updated**: 2026-03-08
-**Version**: 1.1.0 - 移除硬編碼個人路徑，改為通用佔位符（/your/project/root）
-**Source**: IMP-008（cd 污染）、IMP-009（TaskOutput 混淆）防護需求
+**Last Updated**: 2026-03-30
+**Version**: 1.2.0 - 新增規則三：禁止串接多個 git 寫入操作（index.lock 競爭防護）
+**Source**: IMP-008（cd 污染）、IMP-009（TaskOutput 混淆）、index.lock 競爭（Hook 與 git 寫入操作衝突）
