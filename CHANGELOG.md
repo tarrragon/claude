@@ -1,3 +1,15 @@
+## [1.15.0] - 2026-03-30
+
+### Summary
+refactor: 精簡 legacy code 接手流程（多視角審查修復 4 項）; docs: 新增 Legacy Code 接手處理標準化七步驟流程（）
+
+Changes: 1 refactor, 1 docs
+
+- refactor: 精簡 legacy code 接手流程（多視角審查修復 4 項）
+- docs: 新增 Legacy Code 接手處理標準化七步驟流程（）
+
+---
+
 ## [1.14.0] - 2026-03-30
 
 ### Summary

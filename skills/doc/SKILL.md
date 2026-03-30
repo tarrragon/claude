@@ -113,6 +113,7 @@ cp .claude/skills/doc/templates/usecase-template.md docs/usecases/UC-{XX}-{desc}
 | `references/usecases.md` | 用例規範、UC 測試對應要求、資訊鏈驗證 |
 | `references/tracking.md` | 追蹤索引格式、跨文件導航機制 |
 | `references/proposal-evaluation-guide.md` | 提案評估指南（跨專案通用的三關式審查） |
+| `references/legacy-code-workflow.md` | Legacy Code 接手處理標準化七步驟流程 |
 
 ---
 
