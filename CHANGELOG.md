@@ -1,3 +1,23 @@
+## [1.12.0] - 2026-03-30
+
+### Summary
+feat: 建立 /doc Skill — 需求追蹤文件系統管理; refactor: 模板移至 Skill，docs/ 只放產物; fix: 記錄 PC-010 錯誤模式 + 更新 UC 完整性探問需求 (+7 more)
+
+Changes: 1 feat, 1 refactor, 4 fix, 4 docs
+
+- feat: 建立 /doc Skill — 需求追蹤文件系統管理
+- refactor: 模板移至 Skill，docs/ 只放產物
+- fix: 記錄 PC-010 錯誤模式 + 更新 UC 完整性探問需求
+- fix: 修復全部 7 個延後項目 — 無延後項目殘留
+- fix: 第二輪審查修復 — PROP-000 命名、PROP-005 引用鏈、tracking verified_by
+- fix: 修復多視角審查發現的 4 個高嚴重程度問題
+- docs: 提案評估指南新增資安維度探問（認證/加密/稽核/機密管理）
+- docs: 建立提案評估指南 — 三關式審查架構（必要性/完整性/流程）
+- docs: 補充審查延後項目到文件，避免交接資訊遺失
+- docs: 記錄 ARCH-011 框架資產與專案產物混放錯誤模式
+
+---
+
 ## [1.11.0] - 2026-03-30
 
 ### Summary
