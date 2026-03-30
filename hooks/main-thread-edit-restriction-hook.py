@@ -47,26 +47,34 @@ Main Thread Edit Restriction Hook - PreToolUse Hook
   - 禁止清單中的檔案 → 拒絕編輯
   - .claude/ 內非白名單路徑 → 拒絕編輯（防止建立未預定義的子目錄）
   - 其他所有檔案 → 拒絕編輯（預設拒絕）
+  - feat/* 等開發分支 → 跳過限制（允許所有編輯）
 
 行為:
   - 允許的檔案: 允許編輯，返回 exit code 0
   - 禁止的檔案: 拒絕編輯，返回 exit code 2，輸出錯誤訊息
   - .claude/ 非白名單: 拒絕編輯，返回 exit code 2，輸出錯誤訊息
   - 其他檔案: 拒絕編輯，返回 exit code 2，輸出錯誤訊息
+
+修改紀錄 (0.16.2-W6-001):
+- 新增 feat/* 分支偵測：在開發分支上跳過主線程編輯限制
+- 從檔案路徑推導 git repo context，支援 worktree 環境正確偵測分支
 """
 
 import json
 import os
 import sys
 import re
+import subprocess
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
 
 # 設置 sys.path
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
 from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin, is_subagent_environment
+from git_utils import get_current_branch, is_allowed_branch
 from lib.hook_messages import GateMessages, CoreMessages, format_message
 
 
@@ -316,6 +324,7 @@ def main() -> int:
     1. 初始化日誌
     2. 讀取 JSON 輸入
     3. 取得檔案路徑
+    3.5. 檢查開發分支（feat/* 等）→ 跳過限制
     4. 檢查編輯權限
     5. 生成 Hook 輸出
     6. 儲存日誌
@@ -361,6 +370,17 @@ def main() -> int:
 
         file_path = tool_input.get("file_path", "")
         logger.info(f"檢查工具: {tool_name}, 檔案: {file_path}")
+
+        # 步驟 3.5: 開發分支跳過
+        # 在 feat/*, fix/* 等開發分支上，主線程編輯限制不適用
+        # 從檔案路徑推導 git repo context，支援 worktree 環境
+        file_dir = str(Path(file_path).parent) if file_path and file_path.startswith("/") else None
+        current_branch = get_current_branch(cwd=file_dir)
+        if current_branch and is_allowed_branch(current_branch):
+            logger.info(f"開發分支 '{current_branch}' 上，跳過主線程編輯限制")
+            result = generate_hook_output(True, f"開發分支 '{current_branch}' 不受主線程編輯限制")
+            print(json.dumps(result, ensure_ascii=False))
+            return EXIT_ALLOW
 
         # 步驟 4: 檢查編輯權限
         is_allowed, reason = check_file_permission(file_path, logger)

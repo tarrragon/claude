@@ -50,6 +50,25 @@ draft → discussing → confirmed → implemented
 | confirmed_date | 否 | 風險與權衡 |
 | related_proposals, supersedes | 否 | 討論記錄、轉化記錄 |
 
+### Frontmatter 欄位結構化用途
+
+| 欄位 | 用途 | 消費者 |
+|------|------|--------|
+| id | 唯一識別，跨文件引用的錨點 | /doc query, /doc nav |
+| status | 提案生命週期狀態，驅動 /doc status 摘要 | /doc status, tracking.yaml |
+| source | 需求來源分類，支援按來源篩選 | /doc list --source |
+| priority | 排程優先級（P0/P1/P2） | PM 排程決策 |
+| target_version | 綁定目標版本，確保單版本範圍 | /doc list --version |
+| proposed_by, proposed_date | 追蹤提案歷史 | 審查記錄 |
+| confirmed_date | 標記確認時間點，觸發 ticket 開立 | 流程節點 |
+| outputs.spec_refs | 連結到對應的 spec 文件（相對路徑） | /doc nav 跨文件導航 |
+| outputs.usecase_refs | 連結到對應的 UC 文件（裸 ID） | /doc nav 跨文件導航 |
+| outputs.ticket_refs | 連結到對應的 ticket（裸 ID） | /doc nav 跨文件導航 |
+| related_proposals | 關聯提案，建立提案間的依賴圖 | /doc nav |
+| supersedes | 標記被取代的舊提案 | 歷史追溯 |
+
+> outputs.* 三個欄位是跨文件導航（/doc nav）的核心資料來源。移除任何一個都會讓導航功能無法從 Proposal 連結到對應的 Spec/UC/Ticket。
+
 ## 命名規範
 
 格式：`PROP-{NNN}-{簡短描述}.md`

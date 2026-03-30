@@ -1,3 +1,21 @@
+## [1.13.0] - 2026-03-30
+
+### Summary
+feat: worktree create 自動合併 blockedBy 依賴分支; feat: 實作 doc CLI 全部 6 個子命令（query/list/status/nav/domain/test-map）; feat: 建立 doc_system Python 套件骨架（CLI 入口 + frontmatter 解析 + 檔案定位） (+5 more)
+
+Changes: 3 feat, 2 fix, 3 docs
+
+- feat: worktree create 自動合併 blockedBy 依賴分支
+- feat: 實作 doc CLI 全部 6 個子命令（query/list/status/nav/domain/test-map）
+- feat: 建立 doc_system Python 套件骨架（CLI 入口 + frontmatter 解析 + 檔案定位）
+- fix: /doc CLI 10 項品質修復（精確匹配+project_root+模組解耦+BOM+常數）
+- fix: Hook 允許 .claude/skills/ 在 feat 分支上編輯（解決代理人 4 次被攔截問題）
+- docs: 補充 SKILL.md/references 設計決策理由（防審查重複覆議）
+- docs: 修正 PROP-000 frontmatter + tracking.md 欄位名稱 + 引用格式慣例
+- docs: 記錄 三視角審查結果 — 4 個簡化建議均被否決（含歷史理由）
+
+---
+
 ## [1.12.0] - 2026-03-30
 
 ### Summary

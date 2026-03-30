@@ -27,8 +27,13 @@ Decision: "allow" (feature 分支) | "deny" (保護分支)
 - 新增路徑豁免邏輯（.claude/, docs/, CLAUDE.md, README.md 在保護分支上允許編輯）
 - 新增 is_exempt_path_on_protected_branch() 函式
 - 在保護分支上，豁免路徑不阻止編輯
+
+修改紀錄 (0.16.2-W6-001):
+- 強化 worktree 環境支援：當檔案路徑無法推導 cwd 時，嘗試從 CLAUDE_PROJECT_DIR 推導
+- 在 feat/* 分支上，所有路徑檢查均跳過（明確 early return）
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -49,6 +54,36 @@ from hook_io import (
     create_pretooluse_output,
 )
 from hook_utils import setup_hook_logging, run_hook_safely
+
+
+def _resolve_cwd_for_branch_detection(file_path: str) -> "str | None":
+    """
+    從檔案路徑推導用於分支偵測的工作目錄
+
+    優先使用檔案所在目錄（支援 worktree 環境）。
+    如果檔案路徑非絕對路徑，fallback 到 CLAUDE_PROJECT_DIR。
+
+    Args:
+        file_path: 被編輯的檔案路徑
+
+    Returns:
+        str | None: 用於 git 命令的工作目錄，None 表示使用預設 cwd
+    """
+    if file_path and file_path.startswith("/"):
+        parent = str(Path(file_path).parent)
+        # 如果父目錄存在，使用它；否則向上尋找存在的目錄
+        check_dir = parent
+        while check_dir and check_dir != "/" and not Path(check_dir).exists():
+            check_dir = str(Path(check_dir).parent)
+        if check_dir and check_dir != "/" and Path(check_dir).exists():
+            return check_dir
+
+    # Fallback: 使用 CLAUDE_PROJECT_DIR（可能是 worktree 路徑）
+    project_dir = os.getenv("CLAUDE_PROJECT_DIR")
+    if project_dir and Path(project_dir).exists():
+        return project_dir
+
+    return None
 
 
 def is_exempt_path_on_protected_branch(file_path: str, cwd: str | None = None) -> bool:
@@ -135,7 +170,7 @@ def main() -> int:
 
     # 從被編輯檔案路徑推導 git repo context（支援 worktree 環境）
     file_path = tool_input.get("file_path", "")
-    file_dir = str(Path(file_path).parent) if file_path and file_path.startswith("/") else None
+    file_dir = _resolve_cwd_for_branch_detection(file_path)
 
     # 獲取當前分支
     current_branch = get_current_branch(cwd=file_dir)
@@ -145,7 +180,8 @@ def main() -> int:
         write_hook_output(output)
         return 0
 
-    # 檢查是否為允許的分支
+    # 檢查是否為允許的分支（feat/*, fix/* 等）
+    # 在開發分支上，所有路徑均允許編輯，不需要進一步檢查
     if is_allowed_branch(current_branch):
         logger.info(f"當前在 feature 分支 '{current_branch}' 上，允許編輯")
         output = create_pretooluse_output(

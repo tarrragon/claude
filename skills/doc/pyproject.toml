@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "doc-system"
+version = "1.0.0"
+description = "需求追蹤文件系統 CLI — 管理 proposals/spec/usecases"
+requires-python = ">=3.12"
+dependencies = ["pyyaml>=6.0"]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+doc = "doc_system.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["doc_system"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "--verbose"

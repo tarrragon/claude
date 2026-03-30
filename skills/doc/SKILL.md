@@ -112,6 +112,7 @@ cp .claude/skills/doc/templates/usecase-template.md docs/usecases/UC-{XX}-{desc}
 | `references/spec.md` | 規格文件規範、Domain 組織、FR/NFR 格式 |
 | `references/usecases.md` | 用例規範、UC 測試對應要求、資訊鏈驗證 |
 | `references/tracking.md` | 追蹤索引格式、跨文件導航機制 |
+| `references/proposal-evaluation-guide.md` | 提案評估指南（跨專案通用的三關式審查） |
 
 ---
 
@@ -141,11 +142,24 @@ cp .claude/skills/doc/templates/usecase-template.md docs/usecases/UC-{XX}-{desc}
 | 用途 | 擴充/重構時審視 domain 設計 | TDD Phase 1 功能設計 |
 | 轉化時機 | Ticket 完成後，設計成果沉澱為 domain spec | - |
 
+### 設計決策備註
+
+以下設計決策經過多次審查確認，記錄理由以避免重複覆議：
+
+| 決策 | 理由 |
+|------|------|
+| tracking.yaml 保留 checklist | 需求生命週期（提案確認/撤回/變更）!= 任務生命週期（ticket 建立/完成）。提案可能在 ticket 完成後仍需變更 |
+| CLI 保留 6 個子命令 | 查詢精確性是長期需求。文件數量增長後 grep 會產生大量不相關結果。nav 是核心功能無法用 grep 替代 |
+| proposal-evaluation-guide 保持完整 | .claude/ 是跨專案通用框架。資安/UX/效能維度對其他專案類型完全適用 |
+| proposal frontmatter 保持 12 欄位 | outputs.* 是跨文件導航的核心欄位，source/priority 是分類排程必要欄位。砍掉會讓 /doc nav 無法運作 |
+
+> 完整審查歷史見 `references/review-notes.md`
+
 ### 審查記錄
 
 審查歷史和修復記錄見 `references/review-notes.md`。
 
 ---
 
-**Version**: 1.3.0
+**Version**: 1.4.0
 **Last Updated**: 2026-03-30

@@ -48,6 +48,19 @@ class MergeMessages:
     MERGE_FAILED = "[錯誤] 合併失敗：{error}"
 
 
+class CreateMessages:
+    """create 子命令訊息常數"""
+
+    # blockedBy 依賴合併
+    DEPENDENCY_MERGED = "已合併依賴分支：{branch}"
+    DEPENDENCY_MERGE_FAILED = "[警告] 合併依賴分支失敗：{branch}，請手動處理"
+    DEPENDENCY_BRANCH_NOT_FOUND = "依賴分支不存在，跳過：{branch}"
+    DEPENDENCY_TICKET_NOT_COMPLETED = "依賴 Ticket {ticket_id} 狀態非 completed（{status}），跳過合併"
+    DEPENDENCY_SECTION_HEADER = "正在檢查 blockedBy 依賴分支..."
+    TICKET_FILE_NOT_FOUND = "[警告] 找不到 Ticket 檔案：{path}"
+    TICKET_FILE_PARSE_ERROR = "[警告] 解析 Ticket 檔案失敗：{error}"
+
+
 class CleanupMessages:
     """cleanup 子命令訊息常數"""
 
