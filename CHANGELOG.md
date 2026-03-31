@@ -1,3 +1,19 @@
+## [1.16.0] - 2026-03-31
+
+### Summary
+feat: 新增 Legacy Code 評估報告機制 — 解決跨 session 進度遺失問題; docs: 修正評估報告模板和實際報告的審查發現; docs: 記錄 PC-034 錯誤模式 — 流程產出物無持久化導致跨 session 進度遺失 (+3 more)
+
+Changes: 1 feat, 4 docs, 1 chore
+
+- feat: 新增 Legacy Code 評估報告機制 — 解決跨 session 進度遺失問題
+- docs: 修正評估報告模板和實際報告的審查發現
+- docs: 記錄 PC-034 錯誤模式 — 流程產出物無持久化導致跨 session 進度遺失
+- docs: 完成 workflow 平台遷移 — 步驟 0/4/5 改為語言無關
+- docs: 重寫 legacy-code-workflow 步驟 2 並完成三視角審查修正
+- chore: sync-pull 從 tarrragon/claude.git 拉取最新 .claude 配置
+
+---
+
 ## [1.15.0] - 2026-03-30
 
 ### Summary

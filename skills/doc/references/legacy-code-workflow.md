@@ -5,6 +5,25 @@
 
 ---
 
+## 評估報告（必要）
+
+每次執行本流程時，**必須**在 `docs/` 建立一份評估報告：
+
+```bash
+cp .claude/skills/doc/templates/legacy-assessment-report-template.md \
+   docs/legacy-assessment-{date}.md
+```
+
+此報告是本流程的**核心交接文件**，功能：
+- **進度追蹤**：記錄每個步驟的完成狀態、執行者、commit hash
+- **產出物索引**：記錄每個步驟的產出物落地路徑
+- **跨 session 延續**：中斷後可從報告恢復進度（不依賴對話 context）
+- **最終交付**：流程完成後作為整體評估結論的載體
+
+每完成一個步驟，**立即更新報告**對應區段。不要等到最後才回填。
+
+---
+
 ## 流程總覽
 
 ```
@@ -14,7 +33,7 @@
 步驟 1: Spec 標準化與功能實作盤點
     |
     v
-步驟 2: 測試程式碼審查（非執行）
+步驟 2: 測試健康度評估
     |
     v
 步驟 3: 提案與標準流程
@@ -36,23 +55,29 @@
 
 ### 操作流程
 
-1. 執行安裝指令（如 `npm install`），確認依賴安裝無誤
-2. 執行建置指令（如 `npm run build:dev`），觀察編譯錯誤
+1. 執行依賴安裝指令，確認依賴安裝無誤
+2. 執行建置指令，觀察編譯錯誤
 3. 修復所有編譯阻礙問題
-4. 確認 build script 能正常完成
+4. 確認建置能正常完成
+
+> **常見指令參考**（依專案語言選用）：
+> - Flutter/Dart：`flutter pub get` → `flutter build` / `dart analyze`
+> - Node.js：`npm install` → `npm run build`
+> - Go：`go mod download` → `go build ./...`
+> - Python：`pip install -r requirements.txt` → `python -m compileall .`
 
 ### 常見問題類型
 
 | 問題類型 | 範例 | 處理方式 |
 |---------|------|---------|
 | 過時引用 | 引用已刪除/重命名的檔案 | 更新引用路徑或移除無效引用 |
-| 模組宣告缺失 | ES module 缺少 `type: module` | 補充缺失的宣告 |
-| Build script 引用過時檔名 | build.js 中的路徑與實際不符 | 更新 build script |
-| 依賴版本衝突 | package-lock.json 過時 | 重新安裝依賴 |
+| 模組/套件宣告缺失 | 缺少必要的模組宣告或設定 | 補充缺失的宣告 |
+| 建置腳本引用過時檔名 | 建置設定中的路徑與實際不符 | 更新建置設定 |
+| 依賴版本衝突 | lock 檔案過時或依賴版本不相容 | 重新安裝依賴 |
 
 ### 經驗來源
 
-- **v0.15.1** — content.js 缺失、ES module 宣告 `type: module` 缺失、build validation 引用過時檔名
+- **v0.15.1**（Chrome Extension）— 檔案缺失、模組宣告缺失、建置驗證引用過時檔名
 
 ### 檢查清單
 
@@ -107,38 +132,76 @@
 
 ---
 
-## 步驟 2：測試程式碼審查（非執行）
+## 步驟 2：測試健康度評估
 
 ### 目的
 
-在不執行測試的前提下，審查測試程式碼的品質和覆蓋範圍，識別 skip 測試和過時測試。
-
-> **重要**：本步驟是「審查」測試程式碼，不是「執行」測試。執行測試在步驟 4。
+評估測試套件的健康狀態，包含靜態審查和一次性執行分類，為步驟 4 的逐 UC 驗證提供優先級依據。
 
 ### 操作流程
 
-1. 列出所有測試檔案，按 domain/usecase 分類
-2. 審查測試是否符合 usecase 描述的驗收標準
-3. 盤點所有被 skip 的測試（`test.skip`、`xit`、`xdescribe` 等）
-4. 記錄每個 skip 測試的原因，評估是否仍然有效
-5. 識別過時的測試（測試的功能已重構或移除）
+本步驟分為兩個子任務，依序執行：
 
-### Skip 測試盤點格式
+#### 2a. 靜態審查（純程式碼掃描，不執行測試）
 
-| 測試檔案 | 測試名稱 | Skip 原因 | 評估結果 |
-|---------|---------|----------|---------|
-| `xxx.test.js` | `should handle...` | 依賴未實作功能 | 待步驟 4 啟用 |
-| `yyy.test.js` | `should validate...` | 功能已移除 | 可刪除 |
+使用 Grep/Glob 工具掃描，不執行任何測試：
+
+1. **測試-UC 對應盤點**：掃描 `test/` 目錄結構，建立測試檔案與 UC 的對應表
+2. **Skip 測試盤點**：搜尋該語言的 skip/pending 標記。常見範例：
+   - Dart/Flutter：`skip: true`、`skip: '原因'`、`@Skip('原因')`
+   - JavaScript：`test.skip`、`xit`、`xdescribe`、`.skip(`
+   - Python：`@pytest.mark.skip`、`@unittest.skip`
+   - Go：`t.Skip()`
+3. **過時測試識別**：搜尋測試中引用的類別/函式名，確認是否仍存在於 `lib/`
+4. **測試覆蓋差距**：比對步驟 1 的 UC 實作狀態與測試檔案數量
+
+> **工具選擇**：優先使用 Grep（搜尋內容）和 Glob（搜尋檔案）。
+> 大範圍掃描派發 Explore agent 處理，避免主線程 context 膨脹。
+
+#### 2b. 失敗分類（一次性執行，摘要輸出）
+
+執行一次完整測試，取得失敗清單並分類：
+
+1. **執行方式**：使用摘要腳本或 `--reporter compact` + `tail` 限制輸出
+2. **提取失敗清單**：僅取失敗測試的檔案路徑和錯誤類型
+3. **失敗分類**：
+
+| 分類 | 判斷標準 | 處理方式 |
+|------|---------|---------|
+| 編譯/靜態分析錯誤 | 編譯器或分析器報錯（未定義的類別、型別不符等） | 歸屬到對應的 in_progress Ticket |
+| 邏輯失敗 | 斷言不符（Expected/Actual 不一致） | 步驟 4 逐 UC 修復 |
+| 測試環境/配置問題 | timeout、mock/stub 配置缺失、DI 容器未設定 | 建立修復 Ticket |
+| 測試框架特有失敗 | UI 測試建構失敗、非同步等待逾時等（見下方備註） | 修復測試 setup |
+| 過時測試 | 引用已移除/重命名的 API、斷言已過時的行為 | 標記刪除或更新 |
+
+> **測試框架特有失敗範例**（依專案語言選用）：
+> - Flutter/Dart：`pumpWidget` 缺少 `MaterialApp` 包裹、`pumpAndSettle` 無限迴圈（動畫未結束）、`ProviderScope` 未配置、`MissingPluginException`（平台通道 mock 缺失）
+> - React/Jest：`act()` 包裹缺失、`waitFor` 逾時、mock module 未設定
+> - Go：`testify` mock 未滿足、`httptest` server 未關閉
+
+4. **產出失敗分佈表**：按 UC/目錄分組統計
+
+### 產出物
+
+| 產出物 | 格式 | 用途 |
+|--------|------|------|
+| 測試-UC 對應表 | Markdown 表格 | 步驟 4 逐 UC 驗證的索引 |
+| Skip 測試清單 | Markdown 表格 | 評估是否啟用或刪除 |
+| 失敗分類表 | Markdown 表格（按 UC 分組） | 步驟 4 的優先級排序依據 |
+| 測試健康度摘要 | 文字段落 | 步驟 3 提案輸入 |
 
 ### 經驗來源
 
 - **v0.16.1** — 191 個 skip 測試逐批啟用（191 -> 147 -> 65），分批處理避免一次處理過多失敗
+- **v0.31.1** — flutter test 完整輸出超過 4.6MB，必須使用摘要腳本或限制輸出
 
 ### 檢查清單
 
+- [ ] 測試-UC 對應表已建立
 - [ ] Skip 測試已列出並標記原因
+- [ ] 失敗測試已分類（編譯/邏輯/環境/過時）
 - [ ] 過時測試已識別
-- [ ] 測試與 usecase 的對應關係已釐清
+- [ ] 測試健康度摘要已撰寫
 
 ---
 
@@ -218,7 +281,7 @@
 | E2E 測試 | 流程端到端正確 | 所有邊界情況已覆蓋 |
 | 實機測試 | 目標平台可運作 | 其他平台也可運作 |
 
-> **經驗教訓**：mock 環境通過的測試不代表實機能正常運作。Chrome Extension 的 var hoisting、SPA 渲染等待、CSS 選擇器失效等問題只在實機才會出現。
+> **經驗教訓**：mock 環境通過的測試不代表實機能正常運作。平台特有問題（如瀏覽器的 var hoisting、行動裝置的權限限制、桌面應用的檔案系統差異）只在實機才會出現。
 
 ### 經驗來源
 
@@ -250,42 +313,52 @@
 4. 識別平台特有陷阱
 5. 驗證錯誤能被正確捕獲和報告
 
-### 審計項目
+### 審計項目（通用）
 
 | 審計項目 | 檢查內容 | 風險等級 |
 |---------|---------|---------|
-| 靜默失敗 | try-catch 中只 return 不記錄 | 高 |
+| 靜默失敗 | 例外處理區塊中只 return 不記錄 | 高 |
 | Error handler 時序 | handler 是否在錯誤發生前已註冊 | 高 |
 | 日誌覆蓋率 | 關鍵流程是否有啟動/完成/錯誤日誌 | 中 |
-| 平台陷阱 | 變數提升、ASI 衝突、IIFE 問題 | 高 |
 | 錯誤傳播 | 錯誤是否能從發生點傳播到使用者 | 中 |
-| Promise 未 catch | unhandled rejection 導致異步靜默失敗 | 高 |
-| async/await try-catch 遺漏 | await 呼叫未被 try-catch 包裹 | 高 |
-| 回調中例外未捕獲 | setTimeout/setInterval 回調內的例外未處理 | 中 |
+| 非同步例外未捕獲 | 非同步操作的例外未被處理（見下方語言範例） | 高 |
 
-### 平台特有陷阱（Chrome Extension）
+### 語言特有的非同步例外審計
 
-| 陷阱 | 說明 | 防護方式 |
-|------|------|---------|
-| var hoisting | 多 script 載入時變數衝突 | 使用 `let`/`const`，避免 `var` |
-| IIFE/require ASI | 自動分號插入導致語法錯誤 | 明確加分號，使用 linter |
-| SW error handler 延遲註冊 | Service Worker 啟動時錯誤未被捕獲 | 在最早的時機點註冊 handler |
-| Content Script 隔離 | 注入頁面的 script 存取限制 | 使用 message passing |
+> 依專案語言選用對應的審計項目：
+
+| 語言 | 審計項目 | 風險等級 |
+|------|---------|---------|
+| JavaScript | unhandled Promise rejection、async/await 未 try-catch、setTimeout 回調未捕獲 | 高 |
+| Dart/Flutter | 未處理的 Future exception、Stream error 未監聽、Isolate 錯誤未傳播 | 高 |
+| Go | goroutine panic 未 recover、channel 操作未處理 error | 高 |
+| Python | 未 await 的 coroutine、threading 例外未捕獲 | 高 |
+
+### 平台特有陷阱
+
+> 依專案目標平台識別適用的陷阱。以下為常見範例：
+
+| 平台 | 陷阱 | 說明 | 防護方式 |
+|------|------|------|---------|
+| Chrome Extension | var hoisting | 多 script 載入時變數衝突 | 使用 `let`/`const` |
+| Chrome Extension | Service Worker 延遲註冊 | 啟動時錯誤未被捕獲 | 最早時機點註冊 handler |
+| Flutter 行動端 | 權限對話框阻斷 | 權限拒絕後流程中斷 | 預先檢查權限狀態 |
+| Flutter 行動端 | 平台通道例外 | Native 端拋出的例外未被 Dart 捕獲 | PlatformException 統一處理 |
+| Web SPA | 渲染時序 | DOM 未就緒時操作元素 | 使用框架的生命週期鉤子 |
 
 ### 經驗來源
 
-- **v0.15.3** — popup 多 script 載入時變數衝突（var hoisting），導致 UI 無法正常顯示
-- **v0.15.4** — 提取流程靜默失敗（無日誌輸出），問題無法被發現；Service Worker error handler 延遲註冊，早期錯誤被遺漏
+- **v0.15.3**（Chrome Extension）— 多 script 載入時變數衝突，導致 UI 無法正常顯示
+- **v0.15.4**（Chrome Extension）— 提取流程靜默失敗、error handler 延遲註冊
+- **v0.31.1**（Flutter）— export 模組 289 個靜態分析錯誤，部分為未處理的非同步例外
 
 ### 檢查清單
 
-- [ ] 無靜默失敗路徑（所有 catch 區塊有日誌）
+- [ ] 無靜默失敗路徑（所有例外處理區塊有日誌）
 - [ ] Error handler 在最早時機註冊
 - [ ] 關鍵流程有啟動/完成/錯誤三階段日誌
 - [ ] 平台特有陷阱已識別並加入防護
-- [ ] 無 unhandled Promise rejection
-- [ ] async/await 呼叫已有 try-catch 覆蓋
-- [ ] setTimeout/setInterval 回調已有例外處理
+- [ ] 非同步例外已全部處理（依語言審計表逐項確認）
 
 ---
 
@@ -294,8 +367,8 @@
 | 步驟 | 前置條件 | 產出物 | 後續步驟使用 |
 |------|---------|--------|------------|
 | 0 | 無 | 可編譯的專案 | 所有後續步驟 |
-| 1 | 步驟 0 完成 | 功能盤點報告、標準化 spec | 步驟 2, 3 |
-| 2 | 步驟 0 完成 | 測試審查報告、skip 清單 | 步驟 3, 4 |
+| 1 | 步驟 0 完成 | 功能盤點報告、標準化 spec/UC | 步驟 2, 3 |
+| 2 | 步驟 0, 1 完成 | 測試-UC 對應表、失敗分類表、skip 清單、測試健康度摘要 | 步驟 3, 4 |
 | 3 | 步驟 1, 2 產出 | 提案、spec、usecase、ticket | 步驟 4 |
 | 4 | 步驟 3 的 usecase | 測試程式碼、測試驗證結果 | 步驟 5 |
 | 5 | 步驟 4 完成 | 可觀測性審計報告 | 維護階段 |
@@ -336,5 +409,5 @@
 
 ---
 
-**Last Updated**: 2026-03-30
-**Version**: 1.1.0 - 合併步驟 4+5 為單一步驟（七步驟->六步驟）、修正步驟 5 禁止措辭為引導語氣、精簡流程圖和自明檢查項、新增異步靜默失敗審計項目
+**Last Updated**: 2026-03-31
+**Version**: 1.5.0 - 新增評估報告機制：解決步驟間產出物無持久化、跨 session 進度遺失問題。新增報告模板和流程強制建立指引
