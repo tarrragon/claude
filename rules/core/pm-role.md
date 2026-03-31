@@ -61,6 +61,7 @@
 | 技術債評估 | `pm-rules/tech-debt.md` |
 | 驗收結果 | `pm-rules/verification-framework.md` |
 | 版本規劃 | `pm-rules/version-progression.md`, `pm-rules/monorepo-version-strategy.md` |
+| 版本發布前檢討 | `pm-rules/version-retrospective.md` |
 
 ---
 

@@ -97,6 +97,8 @@ Hook 系統自動處理基本的測試品質監控，你的職責專注於需要
 - 規劃測試清理：說明測試後的清理方法和環境還原
 - 建立測試隔離和獨立性策略
 
+**UI/Presentation 層測試設計時**：設計 UI 層測試案例前，必須查閱專案 CLAUDE.md 中的測試注意事項和測試規範章節，確保測試設計符合專案的測試工具和自訂元件約定。
+
 #### 4. 行為鏈式推演階段（必須完成，v1.5.0 新增）
 
 **核心原則**：測試設計必須沿著使用者操作序列逐步推演，每個步驟先驗證前置條件，再觸發行為，再確認結果（A → B → C）。
@@ -253,7 +255,7 @@ Then: 無記錄項目可點擊（不需要測試點擊動作）
 **Note**: Phase 3 is divided into two stages:
 
 - **Phase 3a (pepper)**: Language-agnostic implementation strategy planning
-- **Phase 3b (parsley/language-specific agents)**: Language-specific code implementation
+- **Phase 3b (language-specific agents)**: Language-specific code implementation
 
 設計測試時：
 
@@ -283,7 +285,7 @@ Then: 無記錄項目可點擊（不需要測試點擊動作）
 1. **禁止實作程式碼**：
    - 不得撰寫任何可執行的程式碼（包括測試實作）
    - 只進行設計和規劃
-   - 程式碼實作由 pepper-test-implementer 和 parsley-flutter-developer 負責
+   - 程式碼實作由 pepper-test-implementer 和語言特定開發代理人負責
 
 2. **禁止設計功能規格**：
    - 不得設計或修改功能規格（那是 lavender-interface-designer 的職責）
@@ -309,7 +311,7 @@ Then: 無記錄項目可點擊（不需要測試點擊動作）
 | --------------------------- | ---------------------- | ------------------------------ |
 | lavender-interface-designer | 基於功能規格設計測試   | 設計功能規格和介面             |
 | pepper-test-implementer     | 規劃語言無關策略       | 將策略轉換為虛擬碼/Pseudo Code |
-| parsley-flutter-developer   | 定義測試結構和預期行為 | 撰寫實際測試程式碼             |
+| 語言特定開發代理人          | 定義測試結構和預期行為 | 撰寫實際測試程式碼             |
 | cinnamon-refactor-owl       | 確保測試覆蓋完整       | 在 Phase 4 重構測試程式碼      |
 | incident-responder          | 分類測試失敗問題       | 根據分類派發修復               |
 | ginger-performance-tuner    | 設計單元測試策略       | 設計效能和負載測試             |
@@ -383,9 +385,9 @@ Phase 1 (lavender-interface-designer) - 功能設計
    - 提供測試策略和結構指導
    - pepper 負責轉換為語言無關的策略/虛擬碼
 
-3. **與 parsley-flutter-developer 協作**：
-   - pepper 將策略移交給 parsley
-   - parsley 根據設計撰寫實際測試程式碼
+3. **與語言特定開發代理人協作**（查閱 CLAUDE.md 第 1 節確認專案使用的代理人）：
+   - pepper 將策略移交給語言特定開發代理人
+   - 語言特定開發代理人根據設計撰寫實際測試程式碼
    - 如發現測試程式碼與設計不符，回報給 sage 審視
 
 4. **與 incident-responder 協作**：

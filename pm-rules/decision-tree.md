@@ -313,6 +313,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 | 階段 | 代理人 | 進入條件 |
 |------|-------|---------|
 | SA 前置審查 | system-analyst | 新功能/架構變更 |
+| Legacy Code 評估 | PM + 多視角審查（含語言代理人） | 接手舊專案/測試大量失敗/無測試 |
 | Phase 1 | lavender-interface-designer | SA 通過 |
 | Phase 2 | sage-test-architect | Phase 1 完成 |
 | Phase 3a | pepper-test-implementer | Phase 2 完成 |

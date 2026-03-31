@@ -369,18 +369,16 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 
 ## 🌐 語言代理人自動分派機制
 
-**本專案採用通用規範與語言特定實作分離的架構設計**，CLAUDE.md 定義語言無關的開發規範，語言配置檔案（如 FLUTTER.md）定義語言特定的工具鏈和實作細節。
+**本專案採用專案設定與代理人知識分離的架構設計**：CLAUDE.md 記錄專案的技術選型和架構決策，代理人定義（`.claude/agents/`）帶技術知識庫。
 
-### 📋 專案類型自動檢測
+### 專案類型與代理人對照
 
-**Startup Hook 自動檢測專案類型並載入對應配置**：
+| 專案類型    | 識別特徵               | Phase 3b 代理人           |
+| ----------- | ---------------------- | ------------------------- |
+| **Flutter** | `pubspec.yaml`         | parsley-flutter-developer |
+| **Python**  | `requirements.txt`     | thyme-python-developer    |
 
-| 專案類型    | 識別特徵               | 語言配置檔案        | Phase 3b 代理人           |
-| ----------- | ---------------------- | ------------------- | ------------------------- |
-| **Flutter** | `pubspec.yaml`         | `FLUTTER.md`        | parsley-flutter-developer |
-| **React**   | `package.json` + React | `REACT.md`（未來）  | react-developer（未來）   |
-| **Python**  | `requirements.txt`     | `PYTHON.md`（未來） | python-developer（未來）  |
-| **Vue**     | `package.json` + Vue   | `VUE.md`（未來）    | vue-developer（未來）     |
+> 專案的技術選型（用什麼框架、什麼架構模式）記錄在 CLAUDE.md。代理人帶技術知識（框架怎麼用好），不建立獨立的語言設定檔。
 
 ### 🔧 Phase 3 兩階段執行模式
 
@@ -423,41 +421,41 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 **核心職責**:
 
 - 將 Phase 3a 虛擬碼轉換為實際程式碼
-- 遵循語言特定配置檔案的規範（如 FLUTTER.md）
+- 遵循 CLAUDE.md 的專案設定和代理人自身的技術知識庫
 - 執行測試確保 100% 通過率
 - 處理語言特定問題（如 Widget 生命週期、狀態管理）
 
 **輸入來源**:
 
 - Phase 3a 實作策略（虛擬碼、流程圖、架構決策）
-- 語言配置檔案（FLUTTER.md / REACT.md / etc.）
+- CLAUDE.md 專案技術選型
 - Phase 2 測試規格
 
 **交接標準**:
 
-- ✅ 所有 Phase 2 測試案例 100% 通過
-- ✅ 程式碼符合語言特定品質標準
-- ✅ 實作完整記錄到工作日誌
+- 所有 Phase 2 測試案例 100% 通過
+- 程式碼符合專案品質標準
+- 實作完整記錄到工作日誌
 
-### 🔄 分派流程
+### 分派流程
 
-1. **檢測專案類型** - Startup Hook 檢查關鍵檔案（pubspec.yaml, package.json, requirements.txt）
-2. **載入語言配置** - 讀取對應的語言配置檔案（FLUTTER.md, REACT.md, etc.）
+1. **檢測專案類型** - 檢查關鍵檔案（pubspec.yaml, package.json 等）
+2. **讀取專案設定** - 從 CLAUDE.md 取得技術選型和架構決策
 3. **Phase 3 分階段執行**:
    - **Phase 3a** - pepper-test-implementer 產生語言無關策略
-   - **Phase 3b** - 自動分派語言特定代理人執行程式碼實作
+   - **Phase 3b** - 自動分派語言特定代理人（代理人參考自身技術知識庫 + CLAUDE.md 專案設定）
 
-### 🎯 語言特定代理人：parsley-flutter-developer
+### 語言特定代理人：parsley-flutter-developer
 
 **角色定位**: Flutter/Dart 專案的 Phase 3b 程式碼實作執行者
 
 **核心職責**:
 
-- ✅ 接收 pepper 的實作策略（虛擬碼、流程圖）
-- ✅ 將策略轉換為 Flutter/Dart 程式碼
-- ✅ 遵循 FLUTTER.md 的語言特定規範
-- ✅ 執行測試確保綠燈（100% 通過率）
-- ✅ 處理 Flutter/Dart 特定問題
+- 接收 pepper 的實作策略（虛擬碼、流程圖）
+- 將策略轉換為 Flutter/Dart 程式碼
+- 遵循 CLAUDE.md 的專案設定和代理人技術知識庫
+- 執行測試確保綠燈（100% 通過率）
+- 處理 Flutter/Dart 特定問題
 
 **技能專精**:
 

@@ -48,6 +48,7 @@ from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
     resolve_ticket_path,
 )
+from ticket_system.lib.worklog_appender import append_worklog_progress
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 
 
@@ -453,6 +454,10 @@ class TicketLifecycle:
         save_ticket(ticket, ticket_path)
 
         print(format_info(InfoMessages.TICKET_COMPLETED, ticket_id=ticket_id))
+
+        # 自動追加 worklog 進度行
+        ticket_title = ticket.get("title", "")
+        append_worklog_progress(self.version, ticket_id, ticket_title)
 
         # 驗收提示
         _print_stage_separator("驗收提示")

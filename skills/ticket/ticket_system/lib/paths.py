@@ -70,6 +70,8 @@ def get_tickets_dir(version: str) -> Path:
     """
     取得 Tickets 目錄路徑
 
+    支援階層式目錄結構：docs/work-logs/v{major}/v{major}.{minor}/v{version}/tickets/
+
     Args:
         version: 版本號（可以帶 v 前綴，可以不帶）
 
@@ -83,11 +85,22 @@ def get_tickets_dir(version: str) -> Path:
     """
     root = get_project_root()
 
-    # 標準化版本號
-    if not version.startswith(VERSION_PREFIX):
-        version = f"{VERSION_PREFIX}{version}"
+    # 標準化版本號（去掉 v 前綴再加回）
+    bare_version = version.lstrip("v").lstrip(VERSION_PREFIX)
+    versioned = f"{VERSION_PREFIX}{bare_version}"
 
-    return root / WORK_LOGS_DIR / version / TICKETS_DIR
+    # 解析 major.minor 用於階層路徑
+    parts = bare_version.split(".")
+    if len(parts) >= 2:
+        major = parts[0]
+        minor = f"{parts[0]}.{parts[1]}"
+        hierarchical = root / WORK_LOGS_DIR / f"v{major}" / f"v{minor}" / versioned / TICKETS_DIR
+        if hierarchical.exists() or (hierarchical.parent.exists()):
+            return hierarchical
+
+    # 向後相容：舊式平行結構
+    flat = root / WORK_LOGS_DIR / versioned / TICKETS_DIR
+    return flat
 
 
 def get_ticket_path(version: str, ticket_id: str) -> Path:

@@ -656,6 +656,169 @@ throw 'Title is required';
 throw Exception('Book already exists');
 ```
 
+## Flutter 技術知識庫
+
+### Riverpod 3.0 Notifier 模式
+
+`Notifier<T>` 是 Riverpod 3.0 的標準 ViewModel 基底類別（`StateNotifier` 已移除）。
+
+```dart
+// Notifier 模式：依賴在 build() 中透過 ref.watch() 取得
+class ExampleViewModel extends Notifier<ExampleState> {
+  late final SomeRepository _repository;
+
+  @override
+  ExampleState build() {
+    _repository = ref.watch(someRepositoryProvider);
+    return ExampleState.initial();
+  }
+
+  void doSomething() {
+    state = state.copyWith(isLoading: true);
+  }
+}
+
+// Provider 定義使用 .new
+final exampleViewModelProvider =
+    NotifierProvider<ExampleViewModel, ExampleState>(ExampleViewModel.new);
+```
+
+**要點**：
+- `build()` 回傳初始狀態，取代 `super(initialState)`
+- `ref` 在 `build()` 中可用，用 `ref.watch()` 取得依賴
+- Provider 工廠使用 `ClassName.new`，不需要手動建構
+
+### Widget 測試技術知識
+
+**螢幕尺寸處理**：Flutter 測試預設 800x600，複雜佈局容易 overflow。
+
+```dart
+testWidgets('複雜佈局測試', (tester) async {
+  tester.view.physicalSize = const Size(1080, 1920);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.resetPhysicalSize);
+
+  await tester.pumpWidget(const MyComplexWidget());
+  expect(find.byType(MyComplexWidget), findsOneWidget);
+});
+```
+
+**Mock 策略**：
+- Domain 層使用 Mockito
+- Repository 使用介面定義，測試時用 `ProviderScope.overrides` 注入 Mock
+
+**編譯阻擋**：Flutter 編譯拉入整個 lib/，一個檔案的型別錯誤會阻擋所有測試。
+
+### Widget 測試核心策略（PROP-006 四視角審查結論）
+
+> **來源**：PROP-006 四視角審查（Consistency + Impact + linux + parsley）結論。W7-001 的根因是知識問題，不是基礎設施缺陷。
+
+**第一原則：優先使用 `WidgetTestHelper.createFullTestApp()`**
+
+此方法提供 real `AppLocalizations` delegates，直接避免 80%+ 的 Widget 測試失敗：
+- 不需要 MockAppLocalizations（real delegates 已涵蓋所有 l10n key）
+- 不需要手動配置 ScreenUtil（Helper 已初始化）
+- 不需要手動加 Scaffold（Helper 已包裹）
+
+```dart
+// 標準模式：涵蓋 l10n + ScreenUtil + Scaffold
+await tester.pumpWidget(
+  WidgetTestHelper.createFullTestApp(const MyWidget()),
+);
+```
+
+**只有在以下情況才需要自訂初始化**：
+- 需要注入特定 Provider override（測試 ViewModel 互動）
+- 需要自訂 Locale（多語言測試）
+- 需要自訂螢幕尺寸（響應式佈局測試）
+
+**禁止**：從零開始手動建構 `MaterialApp` + `ScreenUtilInit` + `ProviderScope`，除非有明確的技術理由。
+
+### Widget 測試常見陷阱（W7-001 實戰教訓）
+
+> **來源**：0.31.1-W7-001 Legacy Code 驗證過程中，6 個 UC 的 Widget 測試反覆出現相同類型的問題。
+
+#### 1. 元件類型斷言必須匹配實作
+
+本專案有自訂元件封裝，測試斷言必須使用實際實作的類型：
+
+```dart
+// 錯誤：假設使用 Flutter 標準元件
+expect(find.byType(AlertDialog), findsOneWidget);  // 實作用 Dialog
+expect(find.byType(TextButton), findsOneWidget);    // 實作用 AppButton
+
+// 正確：匹配專案實際實作
+expect(find.byType(Dialog), findsOneWidget);
+expect(find.byType(AppButton), findsOneWidget);
+```
+
+**規則**：寫測試前先確認實際 Widget 類型，不要假設使用 Flutter 標準元件。
+
+#### 2. l10n 上下文配置
+
+Widget 使用 l10n 時，測試的 `MaterialApp` 必須配置 localization：
+
+```dart
+await tester.pumpWidget(
+  MaterialApp(
+    localizationsDelegates: const [
+      AppLocalizations.delegate,  // 必須加入
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+    ],
+    home: const MyWidget(),
+  ),
+);
+```
+
+**禁止**：用 `find.text('硬編碼中文')` 斷言 l10n 文字，因為文字隨語言變動。
+
+#### 3. ScreenUtil 初始化
+
+使用 ScreenUtil 的 Widget 測試必須用 Helper 初始化：
+
+```dart
+// 正確：使用 WidgetTestHelper
+await tester.pumpWidget(
+  WidgetTestHelper.createScreenUtilTestApp(child: const MyWidget()),
+);
+
+// 錯誤：直接 pumpWidget 會觸發 LateInitializationError
+await tester.pumpWidget(const MaterialApp(home: MyWidget()));
+```
+
+#### 4. RenderFlex Overflow 處理
+
+展開或動態內容容易觸發 overflow，用 `SingleChildScrollView` 包裹：
+
+```dart
+// 解決方案：在 Widget 實作中包裹可滾動容器
+SingleChildScrollView(
+  child: Column(children: [...]),
+)
+```
+
+#### 5. 未實作功能的測試標記
+
+```dart
+// 正確：使用 skip 標記未實作功能
+test('Platform system integration', skip: 'Platform system not yet implemented');
+
+// 錯誤：使用 fail() 會導致測試失敗
+test('Platform system integration', () {
+  fail('Not implemented');  // 會計入失敗數
+});
+```
+
+#### 6. 整合測試設計要點
+
+- 複雜模組（50+ 檔案）必須有整合測試，單元測試不足以驗證跨層互動
+- 使用 BDD Given-When-Then 格式提升測試可讀性
+- Mock 必須實作所有被呼叫的方法，不完整的 Mock 會掩蓋真實問題
+- 使用 `TestSetupBehavior` 進行 Mock 依賴注入
+
+---
+
 ## 與其他代理人的邊界
 
 | 代理人 | parsley 負責 | 其他代理人負責 |

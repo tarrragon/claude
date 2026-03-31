@@ -1,3 +1,39 @@
+## [1.17.0] - 2026-04-01
+
+### Summary
+feat: ticket complete 自動追加 worklog 進度行（）; feat: 整合 Legacy Code 評估到 TDD 流程和決策樹（）; feat: 修復 UC-01 整合測試 Mock 配置，確認核心功能正常 (+23 more)
+
+Changes: 3 feat, 3 refactor, 6 fix, 14 docs
+
+- feat: ticket complete 自動追加 worklog 進度行（）
+- feat: 整合 Legacy Code 評估到 TDD 流程和決策樹（）
+- feat: 修復 UC-01 整合測試 Mock 配置，確認核心功能正常
+- refactor: 更新 ticket 系統和文件支援階層式 work-logs 結構
+- refactor: 移除 project-init FLUTTER.md 引用改用 CLAUDE.md 技術選型
+- refactor: 消除 FLUTTER.md，統一專案設定與代理人知識分離
+- fix: 移除 sage-test-architect 中 parsley 硬編碼引用（/ARCH-012）
+- fix: 撤回 sage 硬編碼 parsley 引用，改為通用 CLAUDE.md 引導
+- fix: 修復 ticket-id-validator 版本誤報 + parallel-eval 加入語言代理人（, , ）
+- fix: 修復 hook_ticket.py 不支援三層 work-logs 目錄結構
+- fix: 遷移 22 個 Hook + 2 個 Skill + 3 個同步腳本的 Python shebang 至 uv script 模式
+- fix: 修復 UC-04 Widget 層前 3 個測試檔案 (data_diff_preview, search_candidate_list, search_dialog)
+- docs: 擴充 legacy-code-workflow 步驟 5 可觀測性設計指引（）
+- docs: 新增 rules/core/observability-rules.md 可觀測性通用規則（）
+- docs: 新增 Legacy Code 測試重建方法論（）
+- docs: 新增 ARCH-012 錯誤模式 - 通用代理人禁止專案特定引用
+- docs: sage 代理人新增引用 parsley Widget 測試知識的規則（）
+- docs: 更新 CLAUDE.md 和 parsley 知識庫反映四視角審查結論（）
+- docs: 從 教訓新增 Widget 測試常見陷阱指引
+- docs: 修正 legacy-code-workflow 步驟 4 策略 — UC 整合測試優先於全量測試
+- docs: 補強 legacy-code-workflow 流程記錄機制 — 新增回溯盤點和逐 UC 即時記錄要求
+- docs: 重寫 worklog 為敘事性事件日誌風格
+- docs: 修正 worklog/ticket 追蹤機制缺失
+- docs: 更新 rules/README/agent-collaboration 反映專案設定與代理人知識分離
+- docs: 建立版本發布前標準化檢討流程
+- docs: 實作 Worklog 即時進度同步規範 (.1)
+
+---
+
 ## [1.16.0] - 2026-03-31
 
 ### Summary

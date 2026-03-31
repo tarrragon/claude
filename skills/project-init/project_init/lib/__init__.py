@@ -66,6 +66,7 @@ from .onboard_checker import (
     check_language_template,
     check_readme_md,
     check_settings_local_json,
+    check_tech_stack_section,
     detect_project_language,
     parse_hook_classification,
 )
@@ -149,4 +150,5 @@ __all__ = [
     "check_claude_config_directory",
     "check_readme_md",
     "check_language_standards",
+    "check_tech_stack_section",
 ]

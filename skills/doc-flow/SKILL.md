@@ -36,7 +36,7 @@ description: "Manages project documentation system including CHANGELOG, worklog,
 | ------------------ | ---------------------------- | --------------------------------- | ------------- |
 | **CHANGELOG**      | 這個版本做了什麼改變？       | 版本推進變化（給工程師看）        | 版本發布時    |
 | **todolist.yaml**  | 還有哪些問題需要處理？       | 結構化版本索引（Source of Truth） | 持續更新      |
-| **worklog**        | 這個版本要達成什麼目標？     | 版本企劃（大方向 + 策略）         | 版本開始/結束 |
+| **worklog**        | 這個版本要達成什麼目標？     | 版本企劃 + 進度記錄              | 版本開始/結束 + 重要事件 |
 | **ticket**         | 這個任務的執行細節是什麼？   | 任務執行歷程（細節記錄）          | 執行過程中    |
 | **error-patterns** | 之前遇過類似問題嗎？         | 經驗學習（查詢/更新）             | 執行前後      |
 
@@ -80,6 +80,34 @@ description: "Manages project documentation system including CHANGELOG, worklog,
 /doc-flow worklog update            # 更新當前版本 worklog 狀態
 ```
 
+#### worklog init 執行步驟（強制）
+
+每個版本**必須**有 `v{VERSION}-main.md` 主 worklog。init 指令執行以下步驟：
+
+1. 建立階層目錄 `docs/work-logs/v{MAJOR}/v{MAJOR}.{MINOR}/v{VERSION}/tickets/`（如不存在）
+2. 從模板建立主 worklog：
+   ```bash
+   cp .claude/skills/doc-flow/templates/worklog.md.template \
+      docs/work-logs/v{MAJOR}/v{MAJOR}.{MINOR}/v{VERSION}/v{VERSION}-main.md
+   ```
+3. 填入版本資訊（版本號、日期、目標）
+4. 在 `docs/todolist.yaml` 新增版本條目
+
+**觸發時機**：版本開始時，在建立第一個 Ticket 之前。
+
+**主 worklog 職責**：版本的**敘事性事件日誌**。記錄「發生了什麼」和「為什麼」，不是 ticket 狀態表的重複。
+
+**記錄什麼**（因果鏈和決策）：
+- A 任務執行中發現額外的 BUG，所以建立了 B 任務
+- C 任務解決了什麼問題，接下來準備進行 D 任務
+- 發現 E 任務太過複雜（說明為什麼），所以拆分三個子任務
+- 某個決策的背景和理由
+
+**不記錄什麼**（ticket 系統已追蹤）：
+- Ticket 狀態表（用 `ticket track list` 查詢）
+- 單一任務的完成/未完成清單
+- TDD 階段進度
+
 ### Todo 管理
 
 ```bash
@@ -114,11 +142,16 @@ docs/
 │   ├── README.md
 │   └── categories/
 └── work-logs/
-    └── v{VERSION}/
-        ├── v{VERSION}-main.md       # 版本企劃（大方向）
-        └── tickets/                 # 執行細節
-            ├── {version}-W1-001.md
-            └── ...
+    ├── v{MAJOR}/                    # 大版本目錄
+    │   ├── v{MAJOR}-main.md         # 大版本工作日誌
+    │   └── v{MAJOR}.{MINOR}/        # 中版本目錄
+    │       ├── v{MAJOR}.{MINOR}-main.md  # 中版本工作日誌
+    │       └── v{VERSION}/          # 小版本目錄
+    │           ├── v{VERSION}-main.md    # 小版本工作日誌（敘事性事件日誌）
+    │           └── tickets/         # 執行細節
+    │               ├── {version}-W1-001.md
+    │               └── ...
+    └── legacy/                      # 舊格式散落檔案
 ```
 
 ---

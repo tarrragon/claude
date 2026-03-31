@@ -60,6 +60,7 @@ from ticket_system.lib.ticket_ops import (
     resolve_ticket_path,
 )
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
+from ticket_system.lib.worklog_appender import append_worklog_progress
 
 
 # ============================================================================
@@ -338,6 +339,10 @@ def _execute_batch_operation(
             # 保存更改
             ticket_path = resolve_ticket_path(ticket, version, ticket_id)
             save_ticket(ticket, ticket_path)
+            # 完成操作時自動追加 worklog 進度行
+            if operation == "complete":
+                ticket_title = ticket.get("title", "")
+                append_worklog_progress(version, ticket_id, ticket_title)
             # 使用 format_info 確保一致的訊息格式
             print(f"   {TrackBatchMessages.OK_PREFIX} {message}")
             success_count += 1

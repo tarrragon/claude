@@ -19,6 +19,7 @@ from project_init.lib import (
     check_language_template,
     check_readme_md,
     check_settings_local_json,
+    check_tech_stack_section,
     detect_project_language,
     parse_hook_classification,
 )
@@ -72,11 +73,12 @@ def _run_detection_checks(project_root: Path) -> tuple:
     hook_classification = parse_hook_classification(hook_config_path)
 
     claude_md_info = check_claude_md(project_root)
-    template_info = check_language_template(project_root, language)
+    # 檢查 CLAUDE.md 技術選型 section（已取代獨立語言模板）
+    tech_stack_info = check_tech_stack_section(project_root)
     settings_info = check_settings_local_json(project_root)
     hook_completeness = check_hook_completeness(project_root)
 
-    return (language_info, hook_classification, claude_md_info, template_info,
+    return (language_info, hook_classification, claude_md_info, tech_stack_info,
             settings_info, hook_completeness, language)
 
 
@@ -123,14 +125,14 @@ def _build_onboard_result(language: str, todo_items: list[TodoItem]) -> OnboardR
 def run_onboard(project_root: Path) -> OnboardResult:
     """執行 onboard 引導流程."""
     # 執行檢查
-    lang_info, hook_class, claude_md, template, settings, hook_comp, lang = (
+    lang_info, hook_class, claude_md, tech_stack, settings, hook_comp, lang = (
         _run_detection_checks(project_root))
     docs, gitignore, claude_dir, hook_cfg, cfg_dir = _run_structure_checks(project_root)
     readme, lang_standards = _run_final_checks(project_root, lang)
 
     # 彙整結果
     todo_items = _collect_todo_items(
-        lang, claude_md, template, settings, hook_comp, docs, gitignore,
+        lang, claude_md, tech_stack, settings, hook_comp, docs, gitignore,
         claude_dir, hook_cfg, cfg_dir, readme, lang_standards)
 
     result = _build_onboard_result(lang, todo_items)
@@ -204,14 +206,17 @@ def _collect_claude_md_items(claude_md_info) -> list[TodoItem]:
     return items
 
 
-def _collect_template_items(template_info, language) -> list[TodoItem]:
-    """彙整語言模板項目."""
+def _collect_template_items(tech_stack_info, language) -> list[TodoItem]:
+    """彙整技術選型檢查項目.
+
+    根據 W1-017 重構，技術選型檢查已改為驗證 CLAUDE.md 中的技術選型 section。
+    """
     items = []
-    if language == "flutter" and not template_info.exists:
+    if language != "unknown" and not tech_stack_info.exists:
         items.append(
             TodoItem(
-                description=f"{language.upper()} 模板不存在",
-                hint="檢查或複製 .claude/project-templates/FLUTTER.md",
+                description="CLAUDE.md 缺少技術選型 section",
+                hint="在 CLAUDE.md 中補充「6. 技術選型與架構決策」section",
             )
         )
     return items
@@ -231,13 +236,13 @@ def _collect_settings_items(settings_info) -> list[TodoItem]:
 
 
 def _collect_core_file_items(
-    claude_md_info, template_info, settings_info, config_dir_info, language
+    claude_md_info, tech_stack_info, settings_info, config_dir_info, language
 ) -> list[TodoItem]:
     """彙整核心檔案相關待辦項目."""
     items = []
     items.extend(_collect_config_dir_items(config_dir_info))
     items.extend(_collect_claude_md_items(claude_md_info))
-    items.extend(_collect_template_items(template_info, language))
+    items.extend(_collect_template_items(tech_stack_info, language))
     items.extend(_collect_settings_items(settings_info))
     return items
 
@@ -255,7 +260,7 @@ def _collect_hook_completeness_items(hook_completeness) -> list[TodoItem]:
 def _collect_must_items(
     language: str,
     claude_md_info,
-    template_info,
+    tech_stack_info,
     settings_info,
     hook_completeness,
     gitignore_info,
@@ -269,7 +274,7 @@ def _collect_must_items(
     items.extend(_collect_claude_dir_items(claude_dir_info))
     items.extend(_collect_hook_config_items(hook_config_info))
     items.extend(_collect_core_file_items(
-        claude_md_info, template_info, settings_info, config_dir_info, language))
+        claude_md_info, tech_stack_info, settings_info, config_dir_info, language))
     items.extend(_collect_hook_completeness_items(hook_completeness))
     return items
 
@@ -308,7 +313,7 @@ def _collect_should_items(
 def _collect_todo_items(
     language: str,
     claude_md_info,
-    template_info,
+    tech_stack_info,
     settings_info,
     hook_completeness,
     docs_structure,
@@ -321,7 +326,7 @@ def _collect_todo_items(
 ) -> list[TodoItem]:
     """彙整待辦項目（MUST + SHOULD）."""
     must_items = _collect_must_items(
-        language, claude_md_info, template_info, settings_info,
+        language, claude_md_info, tech_stack_info, settings_info,
         hook_completeness, gitignore_info, claude_dir_info,
         hook_config_info, config_dir_info)
 
@@ -490,16 +495,18 @@ def _print_claude_md_section(result: OnboardResult) -> None:
 
 
 def _print_language_template_section(result: OnboardResult) -> None:
-    """輸出語言模板部分."""
+    """輸出技術選型 section 檢查部分.
+
+    根據 W1-017 重構，技術選型檢查已改為驗證 CLAUDE.md 中的技術選型 section。
+    """
     print(f"[{OnboardMessages.LANGUAGE_TEMPLATE_SECTION}]")
-    if result.language == "flutter":
-        if _has_todo_item(result.todo_items, "FLUTTER"):
-            print(f"  {OnboardMessages.TEMPLATE_TODO.format(language='Flutter')}")
-        else:
-            print(f"  {OnboardMessages.TEMPLATE_OK.format(language='Flutter', template_file='FLUTTER.md')}")
+    if result.language == "unknown":
+        print(f"  {STATUS_SKIP} 無法確認語言")
+    elif _has_todo_item(result.todo_items, "CLAUDE.md 缺少技術選型"):
+        print(f"  {STATUS_TODO} CLAUDE.md 缺少技術選型 section")
+        print(f"  {STATUS_TODO} 在 CLAUDE.md 中補充「6. 技術選型與架構決策」section")
     else:
-        language_upper = result.language.upper()
-        print(f"  {OnboardMessages.TEMPLATE_TODO.format(language=language_upper)}")
+        print(f"  {STATUS_OK} CLAUDE.md 技術選型設定完整")
     print()
 
 

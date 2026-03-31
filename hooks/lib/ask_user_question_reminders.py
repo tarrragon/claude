@@ -436,6 +436,12 @@ PM 必須使用 AskUserQuestion 選擇下一步：
 
 ticket track complete 已成功。下一步強制流程：
 
+[Worklog 進度更新提醒]
+  → 確認本次 Ticket 的進度已記錄到 worklog 的「進度追蹤」區段
+  → 需記錄的事件：完成、拆分、額外發現、UC 推進、阻塞
+  → 格式：`- YYYY-MM-DD: [事件] -- [摘要]`
+  → 參考：worklog-writing-methodology.md 第三原則
+
 [Checkpoint 1] 檢查未提交變更
   → 執行: git status
   → 有未提交變更 → 執行 /commit-as-prompt → [進入路徑 A]

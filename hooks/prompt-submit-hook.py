@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 """
 UserPromptSubmit Hook: 檢查工作流程合規性 + SKILL 主動提示
 

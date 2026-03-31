@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 """
 .claude 資料夾同步腳本 - 從獨立 repo 拉取更新
 

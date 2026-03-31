@@ -98,7 +98,9 @@ WORK_LOGS_RELATIVE_PATH = "docs/work-logs"
 VERSION_PREFIX = "v"
 
 # Glob pattern 用於掃描所有版本目錄
-TICKET_GLOB_PATTERN = "v*/tickets/*.md"
+TICKET_GLOB_PATTERN = "v*/v*/v*/tickets/*.md"
+# 向後相容舊結構
+TICKET_GLOB_PATTERN_FLAT = "v*/tickets/*.md"
 
 
 # ============================================================================
@@ -217,8 +219,10 @@ def scan_all_tickets() -> List[TicketVersionInfo]:
 
     results = []
 
-    # 掃描所有 v*/tickets/*.md 檔案
-    for ticket_file in sorted(work_logs_dir.glob(TICKET_GLOB_PATTERN)):
+    # 掃描所有 ticket 檔案（新式階層 + 舊式平行）
+    all_ticket_files = set(work_logs_dir.glob(TICKET_GLOB_PATTERN))
+    all_ticket_files.update(work_logs_dir.glob(TICKET_GLOB_PATTERN_FLAT))
+    for ticket_file in sorted(all_ticket_files):
         # 從檔名（不含副檔名）提取原始 ID（可能帶後綴）
         ticket_id_raw = ticket_file.stem
 

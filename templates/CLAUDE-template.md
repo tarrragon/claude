@@ -14,9 +14,11 @@
 
 **專案類型**: <!-- Flutter / Python / Node.js 等 -->
 
-| 專案類型 | 識別特徵 | 語言配置 | 執行代理人 |
-|---------|---------|---------|-----------|
-| <!-- 例如 Flutter --> | `pubspec.yaml` | @FLUTTER.md | parsley-flutter-developer |
+| 項目 | 值 |
+|------|------|
+| **語言** | <!-- Flutter/Dart, Python, Node.js 等 --> |
+| **實作代理人** | <!-- parsley-flutter-developer 等 --> |
+| **識別特徵** | <!-- pubspec.yaml, package.json 等 --> |
 
 **啟用的 MCP/Plugin**:
 
@@ -52,15 +54,11 @@
 
 ---
 
-## 6. 語言特定規範
+## 6. 技術選型與架構決策
 
-<!-- 根據專案類型指定語言規範和實作代理人 -->
-
-| 項目 | 值 |
-|------|------|
-| **語言** | <!-- Flutter/Dart, Python, TypeScript 等 --> |
-| **語言規範** | <!-- @FLUTTER.md, @PYTHON.md 等（實作代理人按需載入） --> |
-| **實作代理人** | <!-- parsley-flutter-developer, thyme-python-developer 等 --> |
+<!-- 在此記錄專案的技術選型（架構模式、狀態管理、目錄結構等） -->
+<!-- 技術知識（怎麼寫好某個框架）放在代理人定義中 -->
+<!-- 專案設定（我們選了什麼、為什麼）放在這裡 -->
 
 ---
 

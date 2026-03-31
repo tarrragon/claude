@@ -1,26 +1,11 @@
 <!-- 注意：本文件禁止使用 emoji（交接文件規範） -->
 
-# v{VERSION} {VERSION_TITLE}
+# v{VERSION} 版本工作日誌
 
-## 版本資訊
-
-| 項目 | 內容 |
-|------|------|
-| 版本號 | v{VERSION} |
-| 開始日期 | {START_DATE} |
-| 目標 | {ONE_LINE_GOAL} |
-| 狀態 | 進行中 |
-
----
-
-## 版本目標
-
-**一句話描述**：{ONE_LINE_GOAL}
-
-**具體目標**：
-1. {GOAL_1}
-2. {GOAL_2}
-3. {GOAL_3}
+**版本號**: v{VERSION}
+**開始日期**: {START_DATE}
+**目標**: {ONE_LINE_GOAL}
+**狀態**: 進行中
 
 ---
 
@@ -30,68 +15,26 @@
 
 ---
 
-## 執行策略
+## 開發日誌
 
-**核心策略**：{CORE_STRATEGY}
+### {START_DATE}：版本開始
 
-**Step-by-Step**：
-1. {STEP_1}
-2. {STEP_2}
-3. {STEP_3}
-4. {STEP_4}
-5. {STEP_5}
+- {INITIAL_CONTEXT}
 
 ---
 
-## Ticket 總覽
+## 關鍵文件
 
-| Ticket ID | Action | Target | 狀態 |
-|-----------|--------|--------|------|
-| {VERSION}-W1-001 | {ACTION_1} | {TARGET_1} | 待處理 |
-
-**執行細節請查看**：`docs/work-logs/v{VERSION}/tickets/`
-
----
-
-## TDD 四階段進度
-
-### Phase 1: 功能設計
-- 狀態：{PHASE1_STATUS}
-
-### Phase 2: 測試驗證
-- 狀態：{PHASE2_STATUS}
-
-### Phase 3: 實作執行
-- 狀態：{PHASE3_STATUS}
-
-### Phase 4: 重構優化
-- 狀態：{PHASE4_STATUS}
-
----
-
-## 下一步行動
-
-1. [ ] {NEXT_ACTION_1}
-2. [ ] {NEXT_ACTION_2}
-3. [ ] {NEXT_ACTION_3}
+- Tickets 目錄：`docs/work-logs/v{VERSION}/tickets/`
 
 ---
 
 ## Context 還原指引
 
 **新 Session 啟動時**：
-1. 讀取本工作日誌了解目標和進度
-2. 檢查 `docs/work-logs/v{VERSION}/tickets/` 了解待修復項目
-3. 檢查 `.claude/error-patterns/` 了解已知錯誤模式
-4. 從「下一步行動」繼續執行
-
----
-
-## 相關文件
-
-- 計畫檔案：`~/.claude/plans/{PLAN_FILE}`
-- 錯誤模式知識庫：`.claude/error-patterns/README.md`
-- Tickets 目錄：`docs/work-logs/v{VERSION}/tickets/`
+1. 讀取本文件了解版本故事線和當前狀態
+2. 執行 `ticket track list --version {VERSION} --status pending in_progress` 查看待處理任務
+3. 從開發日誌最後一個日期的記錄繼續
 
 ---
 

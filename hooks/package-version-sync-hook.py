@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --quiet --script
 # /// script
-# requires-python = ">=3.9"
-# dependencies = [
-#     "pyyaml>=5.0",
+# requires-python = ">=3.11"
+# dependencies = ["pyyaml>=5.0",
 #     "tomli>=1.2.0;python_version<'3.11'",
 # ]
 # ///

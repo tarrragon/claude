@@ -17,7 +17,15 @@ class TestRunOnboard:
         """測試完整設定的 Flutter 專案 onboard."""
         # 建立完整的 Flutter 專案結構
         (tmp_path / "pubspec.yaml").touch()
-        (tmp_path / "CLAUDE.md").touch()
+
+        # 建立包含技術選型的 CLAUDE.md
+        claude_content = """# CLAUDE.md
+
+## 6. 技術選型與架構決策
+
+本專案採用 Flutter/Dart 技術。
+"""
+        (tmp_path / "CLAUDE.md").write_text(claude_content)
         (tmp_path / "README.md").write_text("# Project")
 
         # 建立 .gitignore
@@ -49,10 +57,6 @@ __pycache__/
 
         # 建立 settings.local.json
         (tmp_path / ".claude" / "settings.local.json").touch()
-
-        # 建立 Flutter 模板
-        (tmp_path / ".claude" / "project-templates").mkdir(exist_ok=True)
-        (tmp_path / ".claude" / "project-templates" / "FLUTTER.md").touch()
 
         # 建立 docs 結構
         (tmp_path / "docs").mkdir()
@@ -179,7 +183,15 @@ __pycache__/
         """測試所有檔案都存在的情況."""
         # Flutter 專案，所有檔案都存在
         (tmp_path / "pubspec.yaml").touch()
-        (tmp_path / "CLAUDE.md").touch()
+
+        # 建立包含技術選型的 CLAUDE.md
+        claude_content = """# CLAUDE.md
+
+## 6. 技術選型與架構決策
+
+本專案採用 Flutter/Dart 技術。
+"""
+        (tmp_path / "CLAUDE.md").write_text(claude_content)
         (tmp_path / "README.md").write_text("# Project")
 
         # 建立 .gitignore
@@ -207,9 +219,6 @@ __pycache__/
         settings_json.write_text('{"hooks": {}}')
 
         (tmp_path / ".claude" / "settings.local.json").touch()
-
-        (tmp_path / ".claude" / "project-templates").mkdir(exist_ok=True)
-        (tmp_path / ".claude" / "project-templates" / "FLUTTER.md").touch()
 
         # 建立 docs 結構
         (tmp_path / "docs").mkdir()

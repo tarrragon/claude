@@ -543,30 +543,54 @@ def scan_ticket_files_by_version(
 ) -> List[Path]:
     """掃描特定版本的 Ticket 檔案
 
+    支援兩種目錄結構：
+    - 舊結構：docs/work-logs/v{version}/tickets/
+    - 新結構（三層階層）：docs/work-logs/v{major}/v{major}.{minor}/v{version}/tickets/
+
     Args:
         project_root: 專案根目錄
-        version: 版本號（如 "0.1.0"）
+        version: 版本號（如 "0.31.1"）
         logger: 可選日誌物件
 
     Returns:
         Ticket 檔案路徑清單
     """
-    tickets_dir = project_root / "docs" / "work-logs" / "v{}".format(version) / "tickets"
+    # Strategy 1: 舊結構（直接路徑）
+    flat_dir = project_root / "docs" / "work-logs" / "v{}".format(version) / "tickets"
+    if flat_dir.exists():
+        try:
+            ticket_files = list(flat_dir.glob("*.md"))
+            if logger:
+                logger.debug("從版本 v{} 找到 {} 個 Ticket 檔案 (flat)".format(version, len(ticket_files)))
+            return ticket_files
+        except (OSError, PermissionError) as e:
+            if logger:
+                logger.warning("掃描 Ticket 目錄失敗 (v{}): {}".format(version, e))
+            return []
 
-    if not tickets_dir.exists():
-        if logger:
-            logger.debug("Ticket 目錄不存在: {}".format(tickets_dir))
-        return []
+    # Strategy 2: 新三層結構（v{major}/v{major}.{minor}/v{version}/tickets/）
+    parts = version.split(".")
+    if len(parts) >= 3:
+        major = parts[0]
+        minor = "{}.{}".format(parts[0], parts[1])
+        hierarchical_dir = (
+            project_root / "docs" / "work-logs"
+            / "v{}".format(major) / "v{}".format(minor) / "v{}".format(version) / "tickets"
+        )
+        if hierarchical_dir.exists():
+            try:
+                ticket_files = list(hierarchical_dir.glob("*.md"))
+                if logger:
+                    logger.debug("從版本 v{} 找到 {} 個 Ticket 檔案 (hierarchical)".format(version, len(ticket_files)))
+                return ticket_files
+            except (OSError, PermissionError) as e:
+                if logger:
+                    logger.warning("掃描 Ticket 目錄失敗 (v{}, hierarchical): {}".format(version, e))
+                return []
 
-    try:
-        ticket_files = list(tickets_dir.glob("*.md"))
-        if logger:
-            logger.debug("從版本 v{} 找到 {} 個 Ticket 檔案".format(version, len(ticket_files)))
-        return ticket_files
-    except (OSError, PermissionError) as e:
-        if logger:
-            logger.warning("掃描 Ticket 目錄失敗 (v{}): {}".format(version, e))
-        return []
+    if logger:
+        logger.debug("Ticket 目錄不存在: v{}".format(version))
+    return []
 
 
 def find_ticket_files(
@@ -630,18 +654,16 @@ def find_ticket_files(
                 if logger:
                     logger.warning("掃描其他版本目錄失敗: {}".format(e))
     else:
-        # Fallback：讀取失敗時，掃描所有版本目錄
+        # Fallback：讀取失敗時，遞迴搜尋所有 tickets 目錄
         if logger:
-            logger.info("current_version 讀取失敗，fallback 到掃描所有版本目錄")
+            logger.info("current_version 讀取失敗，fallback 到遞迴掃描所有 tickets 目錄")
 
         work_logs_dir = project_root / "docs" / "work-logs"
         if work_logs_dir.exists():
             try:
-                for version_dir in work_logs_dir.glob("v*"):
-                    version_tickets = scan_ticket_files_by_version(
-                        project_root, version_dir.name[1:], logger
-                    )
-                    all_tickets.extend(version_tickets)
+                for tickets_dir in work_logs_dir.rglob("tickets"):
+                    if tickets_dir.is_dir():
+                        all_tickets.extend(tickets_dir.glob("*.md"))
             except (OSError, PermissionError) as e:
                 if logger:
                     logger.warning("掃描版本目錄失敗: {}".format(e))
@@ -682,6 +704,7 @@ def find_ticket_file(
 
     # Strategy 1: 直接構建路徑（如果能解析出版本號）
     if version:
+        # 1a: 舊結構（flat）
         direct_path = (
             project_root / "docs" / "work-logs" / f"v{version}" / "tickets" / f"{ticket_id}.md"
         )
@@ -689,9 +712,23 @@ def find_ticket_file(
             if logger:
                 logger.info("找到 Ticket: {} 於 {} (direct path)".format(ticket_id, direct_path))
             return direct_path
-        else:
-            if logger:
-                logger.debug("直接路徑不存在，嘗試舊位置: {}".format(ticket_id))
+
+        # 1b: 新三層結構（hierarchical）
+        parts = version.split(".")
+        if len(parts) >= 3:
+            major = parts[0]
+            minor = "{}.{}".format(parts[0], parts[1])
+            hierarchical_path = (
+                project_root / "docs" / "work-logs"
+                / f"v{major}" / f"v{minor}" / f"v{version}" / "tickets" / f"{ticket_id}.md"
+            )
+            if hierarchical_path.exists():
+                if logger:
+                    logger.info("找到 Ticket: {} 於 {} (hierarchical path)".format(ticket_id, hierarchical_path))
+                return hierarchical_path
+
+        if logger:
+            logger.debug("直接路徑不存在，嘗試舊位置: {}".format(ticket_id))
 
     # Strategy 2: 檢查舊位置 .claude/tickets/{ticket_id}.md（向後相容）
     old_path = project_root / ".claude" / "tickets" / f"{ticket_id}.md"

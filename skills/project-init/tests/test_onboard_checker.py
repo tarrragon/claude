@@ -17,6 +17,7 @@ from project_init.lib.onboard_checker import (
     check_language_template,
     check_readme_md,
     check_settings_local_json,
+    check_tech_stack_section,
     detect_project_language,
     parse_hook_classification,
 )
@@ -168,27 +169,22 @@ class TestCheckClaudeMd:
 
 
 class TestCheckLanguageTemplate:
-    """測試語言模板檢查."""
+    """測試語言模板檢查（已棄用）."""
 
-    def test_flutter_template_exists(self, tmp_path: Path) -> None:
-        """測試 Flutter 模板存在."""
+    def test_flutter_template_always_not_exists(self, tmp_path: Path) -> None:
+        """測試 Flutter 模板檢查已棄用（始終返回不存在）."""
+        # 即使建立了舊模板，也應返回不存在
         (tmp_path / ".claude" / "project-templates").mkdir(parents=True)
         (tmp_path / ".claude" / "project-templates" / "FLUTTER.md").touch()
 
         result = check_language_template(tmp_path, "flutter")
 
-        assert result.exists
-        assert result.name == "FLUTTER.md"
-
-    def test_flutter_template_not_exists(self, tmp_path: Path) -> None:
-        """測試 Flutter 模板不存在."""
-        result = check_language_template(tmp_path, "flutter")
-
+        # 舊模板檢查已棄用
         assert not result.exists
         assert result.name == "FLUTTER.md"
 
-    def test_unknown_language_template(self, tmp_path: Path) -> None:
-        """測試未知語言模板（應返回不存在）."""
+    def test_language_template_always_not_exists(self, tmp_path: Path) -> None:
+        """測試所有語言的模板檢查都已棄用（始終返回不存在）."""
         result = check_language_template(tmp_path, "go")
 
         assert not result.exists
@@ -700,48 +696,107 @@ class TestCheckReadmeMd:
 
 
 class TestCheckLanguageStandards:
-    """測試語言規範文件檢查."""
+    """測試語言規範文件檢查（已移至 CLAUDE.md）."""
 
-    def test_flutter_standard_exists(self, tmp_path: Path) -> None:
-        """測試 Flutter 規範檔存在."""
-        templates_dir = tmp_path / ".claude" / "project-templates"
-        templates_dir.mkdir(parents=True)
-        (templates_dir / "FLUTTER.md").write_text("# Flutter Standards")
-
+    def test_language_standards_always_exist(self, tmp_path: Path) -> None:
+        """測試語言規範已統一在 CLAUDE.md（根據 W1-017）."""
         result = check_language_standards(tmp_path, "flutter")
 
         assert result.detected_language == "flutter"
-        assert result.expected_standard_file == "FLUTTER.md"
+        # 規範已移至 CLAUDE.md，此檢查始終返回 exists=True
         assert result.exists
         assert result.missing_standards == []
 
-    def test_flutter_standard_not_exists(self, tmp_path: Path) -> None:
-        """測試 Flutter 規範檔不存在."""
-        result = check_language_standards(tmp_path, "flutter")
-
-        assert result.detected_language == "flutter"
-        assert result.expected_standard_file == "FLUTTER.md"
-        assert not result.exists
-        assert "FLUTTER.md" in result.missing_standards
-
-    def test_unknown_language(self, tmp_path: Path) -> None:
-        """測試未知語言."""
+    def test_unknown_language_standards(self, tmp_path: Path) -> None:
+        """測試未知語言的規範檢查."""
         result = check_language_standards(tmp_path, "unknown")
 
         assert result.detected_language == "unknown"
-        assert not result.exists
+        # 規範已移至 CLAUDE.md，此檢查始終返回 exists=True
+        assert result.exists
         assert result.missing_standards == []
 
-    def test_multiple_standards_available(self, tmp_path: Path) -> None:
-        """測試多個規範檔可用."""
-        templates_dir = tmp_path / ".claude" / "project-templates"
-        templates_dir.mkdir(parents=True)
-        (templates_dir / "FLUTTER.md").touch()
-        (templates_dir / "GO.md").touch()
-        (templates_dir / "PYTHON.md").touch()
+    def test_go_language_standards(self, tmp_path: Path) -> None:
+        """測試 Go 語言的規範檢查."""
+        result = check_language_standards(tmp_path, "go")
 
-        result = check_language_standards(tmp_path, "flutter")
+        assert result.detected_language == "go"
+        # 規範已移至 CLAUDE.md，此檢查始終返回 exists=True
+        assert result.exists
+        assert result.missing_standards == []
 
-        assert len(result.standard_files_available) == 3
-        assert "FLUTTER.md" in result.standard_files_available
-        assert "GO.md" in result.standard_files_available
+
+class TestCheckTechStackSection:
+    """測試技術選型 section 檢查."""
+
+    def test_tech_stack_section_exists(self, tmp_path: Path) -> None:
+        """測試 CLAUDE.md 包含技術選型 section."""
+        claude_content = """# CLAUDE.md
+
+## 6. 技術選型與架構決策
+
+本專案採用 Flutter/Dart。
+"""
+        (tmp_path / "CLAUDE.md").write_text(claude_content)
+
+        result = check_tech_stack_section(tmp_path)
+
+        assert result.exists
+        assert result.name == "CLAUDE.md 技術選型"
+        assert result.path == tmp_path / "CLAUDE.md"
+
+    def test_tech_stack_section_not_exists(self, tmp_path: Path) -> None:
+        """測試 CLAUDE.md 不包含技術選型 section."""
+        claude_content = """# CLAUDE.md
+
+## 其他內容
+"""
+        (tmp_path / "CLAUDE.md").write_text(claude_content)
+
+        result = check_tech_stack_section(tmp_path)
+
+        assert not result.exists
+        assert result.name == "CLAUDE.md 技術選型"
+        assert result.path is None
+
+    def test_claude_md_not_exists(self, tmp_path: Path) -> None:
+        """測試 CLAUDE.md 檔案不存在."""
+        result = check_tech_stack_section(tmp_path)
+
+        assert not result.exists
+        assert result.name == "CLAUDE.md 技術選型"
+        assert result.path is None
+
+    def test_claude_md_encoding_error(self, tmp_path: Path) -> None:
+        """測試 CLAUDE.md 編碼錯誤時的優雅處理."""
+        claude_path = tmp_path / "CLAUDE.md"
+        # 寫入二進位資料模擬編碼錯誤
+        claude_path.write_bytes(b"\xff\xfe")
+
+        result = check_tech_stack_section(tmp_path)
+
+        assert not result.exists
+        assert result.path is None
+
+    def test_tech_stack_various_formats(self, tmp_path: Path) -> None:
+        """測試技術選型 section 的各種格式."""
+        # 測試多個變體
+        test_cases = [
+            "技術選型",
+            "## 技術選型",
+            "## 6. 技術選型與架構決策",
+            "### 技術選型與架構決策",
+        ]
+
+        for keyword in test_cases:
+            claude_content = f"""# CLAUDE.md
+
+{keyword}
+
+某些內容。
+"""
+            (tmp_path / "CLAUDE.md").write_text(claude_content)
+
+            result = check_tech_stack_section(tmp_path)
+
+            assert result.exists, f"Failed to detect: {keyword}"

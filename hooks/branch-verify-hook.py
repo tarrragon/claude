@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 """
 Branch Verify Hook - PreToolUse Hook 用於編輯前檢查分支
 

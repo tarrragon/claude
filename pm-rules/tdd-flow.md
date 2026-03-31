@@ -7,13 +7,26 @@
 ## 流程總覽
 
 ```
-新功能需求
+需求進入
     |
     v
-[Phase 0] SA 前置審查 → [saffron-system-analyst](../../agents/saffron-system-analyst.md)
+需求類型判斷
     |
-    +-- 審查通過 --> 進入 TDD 流程
-    +-- 審查不通過 --> 補充前置作業 --> 重新審查
+    +-- 新功能需求 --> [Phase 0] SA 前置審查 → saffron-system-analyst
+    |                      |
+    |                      +-- 通過 --> 進入 TDD Phase 1
+    |                      +-- 不通過 --> 補充前置作業 --> 重新審查
+    |
+    +-- Legacy Code 處理 --> [Phase 0-L] Legacy Code 評估
+                               |
+                               +-- Step 1: UC/功能盤點
+                               +-- Step 2: 逐 UC 測試漏洞分析
+                               +-- Step 3: 根因分類（知識/基礎設施/設計）
+                               +-- Step 4: 多視角精簡（含語言代理人）
+                               +-- Step 5: 聚焦執行
+                               |
+                               +-- 完成 --> 進入 TDD Phase 1（如需新功能）
+                               +-- 完成 --> 直接結束（如僅修復測試）
     |
     v
 [Phase 1] 功能設計 → [lavender-interface-designer](../../agents/lavender-interface-designer.md)
@@ -74,6 +87,39 @@
 | 不建議 | 升級到 PM 決定 |
 
 > 詳細規格：@.claude/agents/saffron-system-analyst.md
+
+---
+
+## Phase 0-L：Legacy Code 評估
+
+### 觸發條件
+
+| 條件 | 需要 Legacy Code 評估 |
+|------|---------------------|
+| 接手現有專案/模組 | 是 |
+| 測試大量失敗（>10%） | 是 |
+| 為無測試的程式碼建立測試 | 是 |
+| 現有測試全部通過的新功能開發 | 否（走 Phase 0 SA 審查） |
+
+### 評估流程
+
+遵循 Legacy Code 測試重建方法論的五步驟流程：
+
+1. **UC/功能盤點** — 列出所有功能和測試覆蓋狀態
+2. **逐 UC 測試漏洞分析** — 跑測試、記錄失敗模式
+3. **根因分類** — 區分知識問題 / 基礎設施問題 / 設計問題
+4. **多視角精簡** — 含語言代理人，避免過度工程
+5. **聚焦執行** — 只做解決根因的工作
+
+### 評估結論
+
+| 結論 | 下一步 |
+|------|-------|
+| 主要是知識問題 | 更新 CLAUDE.md + 代理人知識，可直接進入 TDD |
+| 主要是基礎設施問題 | 建立修復 Ticket，完成後進入 TDD |
+| 主要是設計問題 | 建立重構 Ticket，優先修復架構後再進入 TDD |
+
+> 詳細方法論：@.claude/methodologies/legacy-code-test-rebuild-methodology.md
 
 ---
 

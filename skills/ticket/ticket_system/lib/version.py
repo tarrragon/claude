@@ -120,11 +120,22 @@ def _scan_worklog_directories() -> Optional[str]:
     # 版本號格式正則
     version_pattern = re.compile(r"^v\d+\.\d+\.\d+$")
 
-    # 蒐集版本目錄
-    versions = [
-        d.name for d in work_logs.iterdir()
-        if d.is_dir() and version_pattern.match(d.name)
-    ]
+    # 蒐集版本目錄（支援階層結構和舊式平行結構）
+    versions = []
+    # 新式階層：docs/work-logs/v{major}/v{major}.{minor}/v{version}/
+    for major_dir in work_logs.iterdir():
+        if not major_dir.is_dir() or not major_dir.name.startswith("v"):
+            continue
+        for minor_dir in major_dir.iterdir():
+            if not minor_dir.is_dir() or not minor_dir.name.startswith("v"):
+                continue
+            for patch_dir in minor_dir.iterdir():
+                if patch_dir.is_dir() and version_pattern.match(patch_dir.name):
+                    versions.append(patch_dir.name)
+    # 舊式平行：docs/work-logs/v{version}/（向後相容）
+    for d in work_logs.iterdir():
+        if d.is_dir() and version_pattern.match(d.name) and d.name not in versions:
+            versions.append(d.name)
 
     if not versions:
         logger.warning("無法在 work-logs 目錄中找到版本目錄，請確保 docs/work-logs/v*/tickets 目錄存在")

@@ -133,38 +133,32 @@ grep -c '/Users/' .claude/settings.local.json
 | 開發語言 | 主要程式語言 | Dart、TypeScript、Python |
 | 框架版本 | 使用的框架和版本 | Flutter 3.41、Next.js 14 |
 | 實作代理人 | Phase 3b 使用的語言特定代理人 | parsley-flutter-developer |
-| 語言特定規範 | 指向語言規範檔案 | FLUTTER.md |
-
 **建立步驟**：
 
 1. 從模板複製（`.claude/templates/CLAUDE-template.md`）或手動建立 `CLAUDE.md`
-2. 填入專案基本資訊（類型、語言、框架版本）
-3. 指定實作代理人（決定 Phase 3b 由誰執行）
-4. 如有語言特定規範檔案（如 `FLUTTER.md`），在 CLAUDE.md 中引用
+2. 填入專案基本資訊（類型、語言、框架版本、實作代理人）
+3. 在「技術選型與架構決策」章節記錄專案的技術選型
+4. 代理人的技術知識放在 `.claude/agents/` 定義中，不放在 CLAUDE.md
 
 **實作代理人對照表**：
 
-| 語言/框架 | 實作代理人 | 語言規範檔 |
-|-----------|-----------|-----------|
-| Flutter/Dart | parsley-flutter-developer | `.claude/project-templates/FLUTTER.md` |
-| Python | thyme-python-developer | 依專案建立 |
+| 語言/框架 | 實作代理人 |
+|-----------|-----------|
+| Flutter/Dart | parsley-flutter-developer |
+| Python | thyme-python-developer |
 
-> 其餘 TDD 階段代理人（Phase 1/2/3a/4）為語言無關，跨專案通用，不需調整。
+> 代理人帶技術知識（怎麼寫），CLAUDE.md 記錄專案選型（選了什麼）。不建立獨立的語言設定檔。
 
-**範例**（Flutter 專案）：
+**範例**（Flutter 專案 CLAUDE.md）：
 
 ```markdown
-# CLAUDE.md - 專案開發規範
+## 技術選型與架構決策
 
-## 專案資訊
-
-| 項目 | 說明 |
-|------|------|
-| **專案類型** | Flutter 移動應用程式 |
-| **開發語言** | Dart |
-| **框架版本** | Flutter 3.41 |
-| **實作代理人** | parsley-flutter-developer |
-| **語言特定規範** | [FLUTTER.md](./.claude/project-templates/FLUTTER.md) |
+| 決策 | 選擇 | 理由 |
+|------|------|------|
+| 架構模式 | MVVM | Domain/UI 分離 |
+| 狀態管理 | Riverpod 3.0 | 編譯安全、測試友善 |
+| 實作代理人 | parsley-flutter-developer | Flutter 專精 |
 ```
 
 ---
@@ -177,9 +171,6 @@ grep -c '/Users/' .claude/settings.local.json
 ├── README-subtree-sync.md             # 同步機制詳細說明
 ├── settings.local.json                # Claude Code 權限配置
 ├── installed-packages.json            # 已安裝套件記錄
-│
-├── project-templates/                 # 專案模板檔案
-│   └── FLUTTER.md                     # Flutter 特定規範
 │
 ├── templates/                         # 通用模板
 │   ├── CLAUDE-template.md             # CLAUDE.md 模板

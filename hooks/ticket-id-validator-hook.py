@@ -161,14 +161,16 @@ def get_directory_version(file_path: str, logger) -> Optional[str]:
     """
     path = Path(file_path)
 
-    # 模式 1: docs/work-logs/v{version}/tickets/{id}.md
+    # 模式 1: docs/work-logs/v{major}/v{major}.{minor}/v{version}/tickets/{id}.md
+    # 階層結構中可能有多個版本目錄（如 v0/v0.31/v0.31.1），取最深層的
     if "docs/work-logs/" in str(path):
-        parts = path.parts
-        for i, part in enumerate(parts):
+        deepest_version = None
+        for part in path.parts:
             if part.startswith("v") and part[1:].replace(".", "").isdigit():
-                version = part[1:]  # 移除 'v' 前綴
-                logger.debug(f"從目錄提取版本: {version}")
-                return version
+                deepest_version = part[1:]  # 移除 'v' 前綴
+        if deepest_version:
+            logger.debug(f"從目錄提取版本: {deepest_version}")
+            return deepest_version
 
     # 模式 2: .claude/tickets/{id}.md
     # 此模式中無法從目錄提取版本，需要從 ID 中提取
