@@ -1,3 +1,14 @@
+## [1.19.0] - 2026-04-02
+
+### Summary
+feat: 新增 evidence-driven-bugfix Skill（證據驅動除錯流程 ）
+
+Changes: 1 feat
+
+- feat: 新增 evidence-driven-bugfix Skill（證據驅動除錯流程 ）
+
+---
+
 ## [1.18.0] - 2026-04-01
 
 ### Summary
