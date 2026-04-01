@@ -11,108 +11,43 @@ allowed-tools: Bash(ticket *), Read, Write, Edit, Grep, Glob
 
 ---
 
-## 重要：執行方式（必讀）
-
-> **禁止直接執行 Python 檔案！** 直接執行 `.py` 檔案會導致 `ModuleNotFoundError`。
-
-### 正確方式
-
-```bash
-# 使用已安裝的 ticket CLI（推薦）
-ticket track summary
-ticket track claim 0.31.0-W4-001
-
-# 或在 ticket 目錄下使用 uv run
-cd .claude/skills/ticket && uv run ticket track summary
-```
-
-### 錯誤方式（禁止）
-
-```bash
-# 以下方式會失敗，請勿使用
-python3 .claude/skills/ticket/ticket_system/commands/track.py ...
-python3 .claude/skills/ticket/ticket_system/scripts/ticket.py ...
-```
-
-**原因**：`ticket_system` 是 Python 套件，必須透過 `pyproject.toml` 定義的入口點執行，直接執行 `.py` 檔案無法解析套件內的導入。
-
----
-
 ## 執行方式
+
+> **禁止直接執行 Python 檔案！** `ticket_system` 是 Python 套件，必須透過 `pyproject.toml` 定義的入口點執行。
 
 ### 全局安裝（推薦）
 
-全局安裝後可在任何目錄執行 `ticket` 指令。
-
 ```bash
-# 首次安裝（只需執行一次）
-cd .claude/skills/ticket
-uv tool install .
+# 首次安裝
+(cd .claude/skills/ticket && uv tool install .)
 
-# 安裝完成後，在任何目錄執行
+# 之後在任何目錄執行
 ticket track summary
-ticket track query 0.31.0-W4-001
 ticket track claim 0.31.0-W4-001
 ```
-
-**benefits**：
-
-- 無需 cd 到 ticket 目錄
-- 無需加上 `uv run` 前綴
-- 全局可用，提升使用體驗
 
 **修改原始碼後必須重新安裝**（IMP-023）：
 
 ```bash
-# 修改 ticket_system/ 下的 .py 檔案後，必須用 --reinstall
+# 必須用 --reinstall（--force 不會更新套件程式碼）
 uv tool install .claude/skills/ticket --reinstall
-
-# 錯誤：--force 只更新執行檔，不更新套件程式碼
-uv tool install .claude/skills/ticket --force  # 套件程式碼不會更新！
-
-# 備用方案：清除快取後重新安裝
-uv tool uninstall ticket-system && uv cache clean ticket-system && uv tool install .claude/skills/ticket
 ```
 
-### 局部執行（不安裝）
-
-如果不進行全局安裝，必須在 ticket 目錄下執行。
+### 本地執行
 
 ```bash
-# 首次使用時初始化
-cd .claude/skills/ticket
-uv sync  # 只需要執行一次
-
-# 執行命令
-uv run ticket <command> [options]
+(cd .claude/skills/ticket && uv run ticket track summary)
 ```
 
 ### 常用範例
 
 ```bash
-# 摘要
-ticket track summary
-
-# 查詢 Ticket
-ticket track query 0.31.0-W4-001
-
-# 認領 Ticket
-ticket track claim 0.31.0-W4-001
-
-# 完成 Ticket
-ticket track complete 0.31.0-W4-001
-
-# 建立 Ticket
-ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"
+ticket track summary                                    # 摘要
+ticket track query 0.31.0-W4-001                       # 查詢
+ticket track claim 0.31.0-W4-001                       # 認領
+ticket track complete 0.31.0-W4-001                    # 完成
+ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"  # 建立
 ```
-
-### 使用 SKILL 指令（透過 Claude）
-
-```bash
-/ticket <subcommand> [options]
-```
-
-> **注意**：直接執行 `python3 ticket.py` 會失敗，必須使用 `ticket` (全局) 或 `uv run ticket` (局部)。
 
 ---
 

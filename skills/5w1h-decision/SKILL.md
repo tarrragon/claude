@@ -161,3 +161,8 @@ How: [Task Type: {TYPE}] {TDD strategy steps}
 - **Output Style** (system prompt injection) - Always active
 - **PreToolUse Hook** - Validates todo creation
 - **UserPromptSubmit Hook** - Generates session token
+
+---
+
+**Last Updated**: 2026-03-02
+**Version**: 1.0.0

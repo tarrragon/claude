@@ -22,7 +22,7 @@
 - [ ] 所有工作日誌檔案位置正確
 
 **相關檔案**:
-- `docs/work-logs/v0.XX.0-main.md`
+- `docs/work-logs/v{VERSION}/v{VERSION}-main.md`
 - `docs/work-logs/v0.XX.1-phase1-*.md`
 - `docs/work-logs/v0.XX.2-phase2-*.md`
 - `docs/work-logs/v0.XX.3-phase3a-*.md`
@@ -236,7 +236,7 @@ git branch -a | grep feature/v0.XX
 
 - [ ] 決定下一個版本號和 UseCase
 - [ ] 建立新的 feature 分支: `feature/v0.XX`
-- [ ] 建立主版本工作日誌: `v0.XX.0-main.md`
+- [ ] 建立主工作日誌: `v{VERSION}-main.md`
 - [ ] 規劃 Phase 1 任務
 
 ---

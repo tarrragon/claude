@@ -295,3 +295,8 @@ import 'package:book_overview_app/core/ui/ui_config.dart';
 | `.h` | Height scaling | `16.h` |
 | `.rsp` | Font scaling | `14.rsp` |
 | `.r` | Radius scaling | `8.r` |
+
+---
+
+**Last Updated**: 2026-03-02
+**Version**: 1.0.0

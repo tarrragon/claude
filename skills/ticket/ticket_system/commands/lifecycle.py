@@ -469,6 +469,13 @@ class TicketLifecycle:
         print("  3. 派發 acceptance-auditor 執行驗收")
         print()
         print("  豁免條件：P0 緊急任務、純文件更新、任務範圍單純")
+        print()
+        print(
+            f"  [Proposals 同步] 若此 Ticket ({ticket_id}) 被 proposals-tracking.yaml 引用，"
+        )
+        print(
+            "  請同步更新對應提案的 checklist 狀態和 verified_by 欄位"
+        )
 
         # 任務鏈後續步驟建議
         all_tickets = list_tickets(self.version)

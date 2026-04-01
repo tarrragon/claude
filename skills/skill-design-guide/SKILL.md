@@ -517,5 +517,6 @@ description: "Does things"
 
 ---
 
-*Last Updated: 2026-03-08*
-*Source: Anthropic Official Platform Docs + "Lessons from Building Claude Code" + anthropics/skills skill-creator + Project Experience*
+**Last Updated**: 2026-03-08
+**Version**: 1.0.0
+**Source**: Anthropic Official Platform Docs + "Lessons from Building Claude Code" + anthropics/skills skill-creator + Project Experience

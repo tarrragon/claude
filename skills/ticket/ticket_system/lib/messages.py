@@ -77,8 +77,8 @@ class WarningMessages:
     TICKET_NOT_YET_CLAIMED = "[Warning] {ticket_id} 尚未被接手，無法釋放"
     TICKET_ALREADY_BLOCKED = "[Warning] {ticket_id} 已被阻塞，無法釋放"
     NO_BODY_CONTENT = "[Warning] Ticket {ticket_id} 沒有 body 內容"
-    HANDOFF_UPDATE_FAILED = "無法更新 handoff 檔案（可能已不存在）"
-    HANDOFF_ARCHIVE_FAILED = "無法歸檔 handoff 檔案到 archive/（檔案已不存在或權限問題）"
+    HANDOFF_UPDATE_FAILED = "[Warning] 無法更新 handoff 檔案（可能已不存在）"
+    HANDOFF_ARCHIVE_FAILED = "[Warning] 無法歸檔 handoff 檔案到 archive/（檔案已不存在或權限問題）"
     NO_EXECUTION_LOG = "[Warning] Ticket {ticket_id} 找不到 Execution Log 區塊"
     NO_TICKETS = "[Warning] 無符合條件的 Tickets"
     BLOCKED_EXECUTION = "[BLOCKED] 找不到 Ticket: {ticket_id}"
@@ -97,6 +97,7 @@ class WarningMessages:
     SEQ_IGNORED_WITH_PARENT = "[提示] --seq {seq} 在子任務模式下被忽略，自動使用序號 {child_seq}"
     EXECUTION_LOG_NOT_FILLED = "[WARNING] 以下執行日誌區段尚未填寫:"
     EXECUTION_LOG_SUGGESTION = "建議使用以下命令填寫:"
+    COMPLETED_NO_DIRECTION = "[Warning] {ticket_id} 已完成但無交接方向，請確認 handoff 設定"
 
 
 class InfoMessages:

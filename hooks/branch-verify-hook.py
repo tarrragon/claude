@@ -119,6 +119,7 @@ def is_exempt_path_on_protected_branch(file_path: str, cwd: str | None = None) -
     exempt_exact = [
         "CLAUDE.md",
         "README.md",
+        "CHANGELOG.md",
     ]
 
     project_root = get_project_root(cwd=cwd)
@@ -234,7 +235,7 @@ def main() -> int:
 豁免路徑（允許在保護分支上編輯）：
 - .claude/ （規則、配置、Hook、方法論）
 - docs/ （工作日誌、Ticket 檔案）
-- CLAUDE.md、README.md """
+- CLAUDE.md、README.md、CHANGELOG.md """
         else:
             # 非專案檔案（應該不會發生，但保留說明）
             deny_message = f"""保護分支編輯被阻止

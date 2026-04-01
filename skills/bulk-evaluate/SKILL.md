@@ -155,3 +155,8 @@ Step 5: 統計 59 個子 Ticket 結論 → 更新父 Ticket
 - .claude/skills/parallel-evaluation/SKILL.md - 多視角並行評估（正交工具）
 - .claude/rules/guides/parallel-dispatch.md - 並行派發指南
 - .claude/rules/guides/task-splitting.md - 任務拆分指南
+
+---
+
+**Last Updated**: 2026-03-02
+**Version**: 1.0.0

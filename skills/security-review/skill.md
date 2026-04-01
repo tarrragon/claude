@@ -285,4 +285,5 @@ Release 建置或上架前，逐項確認：
 
 ---
 
-*Last Updated: 2026-03-02*
+**Last Updated**: 2026-03-02
+**Version**: 1.0.0

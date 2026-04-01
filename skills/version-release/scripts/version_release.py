@@ -9,7 +9,7 @@ Version Release Tool - 完整版本發布流程自動化工具
 
 功能:
 - Pre-flight 檢查：驗證 worklog、技術債務、版本同步
-- 文件更新：CHANGELOG、todolist、pubspec.yaml 驗證
+- 文件更新：CHANGELOG、todolist、package.json/manifest.json 驗證
 - Git 操作：合併、Tag、推送、分支清理
 - 預覽模式：--dry-run 查看完整操作流程
 
@@ -32,17 +32,17 @@ import yaml
 
 
 # ============================================================================
-# Phase 3b 新增：版本同步檢查（Monorepo 三層架構）
+# 版本同步檢查（Chrome Extension 雙版本來源）
 # ============================================================================
 
 # 配置檔路徑
 VERSION_RELEASE_CONFIG_FILE = ".version-release.yaml"
 
-# 三層版本來源
-MONOREPO_VERSION_SOURCE = "docs/todolist.yaml"
-MONOREPO_VERSION_KEY = "current_version"
-UI_VERSION_SOURCE = "ui/pubspec.yaml"
-SERVER_VERSION_SOURCE = "server/go.mod"
+# 雙版本來源（Chrome Extension）
+PACKAGE_VERSION_SOURCE = "package.json"
+PACKAGE_VERSION_KEY = "version"
+MANIFEST_VERSION_SOURCE = "manifest.json"
+MANIFEST_VERSION_KEY = "version"
 
 # 同步策略類型
 SYNC_POLICY_REQUIRED = "required"
@@ -58,60 +58,51 @@ SEVERITY_SUCCESS = "success"
 # 預設配置
 DEFAULT_VERSION_RELEASE_CONFIG = {
     "versions": {
-        "monorepo": {
-            "source": MONOREPO_VERSION_SOURCE,
-            "key": MONOREPO_VERSION_KEY,
+        "package": {
+            "source": PACKAGE_VERSION_SOURCE,
+            "key": PACKAGE_VERSION_KEY,
             "semantic_version": True,
-            "description": "整個專案的發布版本（用於 Ticket、Wave、發布計劃）"
+            "description": "專案主版本（用於 Ticket、Wave、發布計劃）"
         },
-        "ui": {
-            "source": UI_VERSION_SOURCE,
-            "key": "version",
+        "manifest": {
+            "source": MANIFEST_VERSION_SOURCE,
+            "key": MANIFEST_VERSION_KEY,
             "semantic_version": True,
-            "independent": True,
-            "description": "Flutter 應用版本（用於 App Store）",
-            "sync_policy": SYNC_POLICY_OPTIONAL,
-            "sync_recommendation": "保持主版本號一致（如都是 v0.x.0）"
-        },
-        "server": {
-            "source": None,
-            "semantic_version": False,
             "independent": False,
-            "description": "Go Server 版本由 monorepo 版本決定",
-            "sync_policy": SYNC_POLICY_IMPLICIT
+            "description": "Chrome Extension 發布版本（用於 Chrome Web Store）",
+            "sync_policy": SYNC_POLICY_REQUIRED,
+            "sync_recommendation": "必須與 package.json 版本一致"
         }
     },
     "sync_rules": {
         "on_release": {
-            "monorepo": {"required": True},
-            "ui": {"required": False},
-            "server": {"required": False}
+            "package": {"required": True},
+            "manifest": {"required": True}
         },
         "on_development": {
-            "allow_version_mismatch": True
+            "allow_version_mismatch": False
         },
         "conflict_detection": {
-            "ui_ahead_of_monorepo": {
-                "severity": SEVERITY_WARNING,
-                "message": "UI 版本大於 monorepo，確認是否故意？"
+            "manifest_ahead_of_package": {
+                "severity": SEVERITY_ERROR,
+                "message": "manifest.json 版本大於 package.json，必須修正"
             },
-            "ui_behind_monorepo": {
-                "severity": SEVERITY_INFO,
-                "message": "UI 版本低於 monorepo（正常）"
+            "manifest_behind_package": {
+                "severity": SEVERITY_ERROR,
+                "message": "manifest.json 版本低於 package.json，必須修正"
             }
         }
     },
     "detection": {
         "version_files": [
-            {"path": UI_VERSION_SOURCE, "type": "yaml", "key": "version", "context": "Flutter 應用版本"},
-            {"path": SERVER_VERSION_SOURCE, "type": "toml", "key": None, "context": "Go module（無版本欄位）"},
-            {"path": MONOREPO_VERSION_SOURCE, "type": "yaml", "key": MONOREPO_VERSION_KEY, "context": "權威的 monorepo 版本來源"}
+            {"path": PACKAGE_VERSION_SOURCE, "type": "json", "key": PACKAGE_VERSION_KEY, "context": "NPM 專案版本"},
+            {"path": MANIFEST_VERSION_SOURCE, "type": "json", "key": MANIFEST_VERSION_KEY, "context": "Chrome Extension 版本"}
         ]
     },
     "preflight_checks": {
         "version_sync": {
             "enabled": True,
-            "fail_on_error": False,
+            "fail_on_error": True,
             "warn_on_mismatch": True
         }
     }
@@ -121,10 +112,8 @@ DEFAULT_VERSION_RELEASE_CONFIG = {
 # 版本檔配置：(相對路徑, 解析方式)
 # 按優先順序排列，偵測專案語言
 VERSION_FILE_CANDIDATES = [
-    ("pubspec.yaml", "yaml"),           # Flutter（根目錄）
-    ("ui/pubspec.yaml", "yaml"),        # Flutter（子目錄）
-    ("package.json", "json"),           # Node.js
-    ("pyproject.toml", "toml"),         # Python（需要 3.10+）
+    ("package.json", "json"),           # NPM 專案版本
+    ("manifest.json", "json"),          # Chrome Extension 版本
 ]
 
 
@@ -381,22 +370,23 @@ def check_worklog_completed(version: str) -> Tuple[bool, List[str]]:
             with open(main_worklog, encoding="utf-8") as f:
                 content = f.read()
 
-            # 檢查 Phase 完成情況（多 Wave 版本可跳過）
-            # 若工作日誌含 "status" 欄位標記為 completed，視為非 TDD 版本，跳過 Phase 檢查
-            if re.search(r"^status:\s*completed|^completed$", content, re.MULTILINE):
-                pass  # 非 TDD 版本，Phase 檢查跳過
-            else:
-                phases = {
-                    "Phase 0": r"## Phase 0:.*?✅",
-                    "Phase 1": r"## Phase 1:.*?✅",
-                    "Phase 2": r"## Phase 2:.*?✅",
-                    "Phase 3": r"## Phase 3.*?✅",
-                    "Phase 4": r"## Phase 4.*?✅",
-                }
-
-                for phase_name, pattern in phases.items():
-                    if not re.search(pattern, content, re.DOTALL):
-                        errors.append(f"{main_worklog.name}: {phase_name} 未標記為完成")
+            # 檢查 Ticket 完成情況（透過掃描 tickets 目錄的 YAML frontmatter）
+            tickets_dir = version_subdir / "tickets" if version_subdir.exists() else None
+            if tickets_dir and tickets_dir.exists():
+                total, pending = 0, 0
+                for ticket_file in tickets_dir.glob("*.md"):
+                    try:
+                        with open(ticket_file, encoding="utf-8") as tf:
+                            ticket_content = tf.read()
+                        status_match = re.search(r"^status:\s*(\S+)", ticket_content, re.MULTILINE)
+                        if status_match:
+                            total += 1
+                            if status_match.group(1) in ("pending", "in_progress"):
+                                pending += 1
+                    except Exception:
+                        pass
+                if pending > 0:
+                    errors.append(f"版本 v{version} 有 {pending}/{total} 個未完成的 Ticket")
         except Exception as e:
             errors.append(f"讀取 {main_worklog} 失敗: {e}")
     else:
@@ -675,38 +665,38 @@ def load_version_release_config(root: Path) -> dict:
 
 
 # ============================================================================
-# 新增函式 2：get_monorepo_version
+# 新增函式 2：get_package_version
 # ============================================================================
 
-def get_monorepo_version(root: Path) -> Optional[str]:
+def get_package_version(root: Path) -> Optional[str]:
     """
-    從 docs/todolist.yaml 讀取 L1 monorepo 版本。
+    從 package.json 讀取專案主版本。
 
-    需求：三層版本中 L1 為唯一權威來源
+    需求：Chrome Extension 專案以 package.json 為權威版本來源
     邊界條件：
-    - todolist.yaml 不存在 -> 回傳 None
-    - current_version 欄位不存在 -> 回傳 None
+    - package.json 不存在 -> 回傳 None
+    - version 欄位不存在 -> 回傳 None
     - 版本格式非 X.Y.Z -> 原樣回傳（不強制正規化）
 
     Args:
         root: 專案根目錄
 
     Returns:
-        版本字串（例如 "0.1.1"）或 None
+        版本字串（例如 "0.16.2"）或 None
     """
-    todolist_path = root / MONOREPO_VERSION_SOURCE
+    package_path = root / PACKAGE_VERSION_SOURCE
 
-    if not todolist_path.exists():
+    if not package_path.exists():
         return None
 
     try:
-        with open(todolist_path, encoding='utf-8') as f:
-            data = yaml.safe_load(f)
+        with open(package_path, encoding='utf-8') as f:
+            data = json.loads(f.read())
 
         if not isinstance(data, dict):
             return None
 
-        version = data.get(MONOREPO_VERSION_KEY)
+        version = data.get(PACKAGE_VERSION_KEY)
 
         if version is None:
             return None
@@ -718,7 +708,7 @@ def get_monorepo_version(root: Path) -> Optional[str]:
 
     except Exception as e:
         logger = logging.getLogger(__name__)
-        logger.debug(f"讀取 monorepo 版本失敗: {e}")
+        logger.debug(f"讀取 package.json 版本失敗: {e}")
         return None
 
 
@@ -766,68 +756,68 @@ def compare_semantic_versions(v1: str, v2: str) -> int:
 
 
 # ============================================================================
-# 新增函式 4：Helper — _read_l2_version
+# 新增函式 4：Helper — _read_manifest_version
 # ============================================================================
 
-def _read_l2_version(root: Path, config: dict) -> Tuple[Optional[str], List[dict]]:
+def _read_manifest_version(root: Path, config: dict) -> Tuple[Optional[str], List[dict]]:
     """
-    讀取 L2 (UI) 版本。
+    讀取 manifest.json 版本。
 
     Args:
         root: 專案根目錄
         config: 配置字典
 
     Returns:
-        (l2_version or None, messages list)
+        (manifest_version or None, messages list)
     """
     messages = []
-    l2_version = None
-    ui_config = config.get("versions", {}).get("ui", {})
-    ui_source = ui_config.get("source")
-    l2_path = root / ui_source if ui_source else None
+    manifest_version = None
+    manifest_config = config.get("versions", {}).get("manifest", {})
+    manifest_source = manifest_config.get("source", MANIFEST_VERSION_SOURCE)
+    manifest_path = root / manifest_source if manifest_source else None
 
-    if not l2_path or not l2_path.exists():
+    if not manifest_path or not manifest_path.exists():
         messages.append({
             "level": SEVERITY_INFO,
-            "layer": "l2",
-            "text": f"{ui_source} 不存在，跳過 L2 檢查"
+            "layer": "manifest",
+            "text": f"{manifest_source} 不存在，跳過 manifest 檢查"
         })
-        return l2_version, messages
+        return manifest_version, messages
 
     try:
-        with open(l2_path, encoding='utf-8') as f:
-            l2_data = yaml.safe_load(f)
+        with open(manifest_path, encoding='utf-8') as f:
+            manifest_data = json.loads(f.read())
 
-        if isinstance(l2_data, dict):
-            ui_key = ui_config.get("key", "version")
-            l2_version = l2_data.get(ui_key)
+        if isinstance(manifest_data, dict):
+            manifest_key = manifest_config.get("key", "version")
+            manifest_version = manifest_data.get(manifest_key)
 
-            if l2_version and not isinstance(l2_version, str):
-                l2_version = str(l2_version)
+            if manifest_version and not isinstance(manifest_version, str):
+                manifest_version = str(manifest_version)
 
     except Exception as e:
         logger = logging.getLogger(__name__)
-        logger.debug(f"讀取 {ui_source} 失敗: {e}")
+        logger.debug(f"讀取 {manifest_source} 失敗: {e}")
         messages.append({
             "level": SEVERITY_INFO,
-            "layer": "l2",
-            "text": f"讀取 {ui_source} 失敗，跳過 L2 檢查"
+            "layer": "manifest",
+            "text": f"讀取 {manifest_source} 失敗，跳過 manifest 檢查"
         })
 
-    return l2_version, messages
+    return manifest_version, messages
 
 
 # ============================================================================
-# 新增函式 4.1：Helper — _compare_l2_version
+# 新增函式 4.1：Helper — _compare_manifest_version
 # ============================================================================
 
-def _compare_l2_version(l1_version: str, l2_version: str, config: dict) -> List[dict]:
+def _compare_manifest_version(package_version: str, manifest_version: str, config: dict) -> List[dict]:
     """
-    比對 L2 版本與 L1 版本，生成訊息。
+    比對 manifest.json 版本與 package.json 版本，生成訊息。
 
     Args:
-        l1_version: L1 monorepo 版本
-        l2_version: L2 UI 版本（含 build number）
+        package_version: package.json 版本
+        manifest_version: manifest.json 版本
         config: 配置字典
 
     Returns:
@@ -835,124 +825,88 @@ def _compare_l2_version(l1_version: str, l2_version: str, config: dict) -> List[
     """
     messages = []
 
-    # 去除 build number（"1.0.0+1" → "1.0.0"）
-    l2_main = l2_version.split("+")[0]
-    cmp_result = compare_semantic_versions(l2_main, l1_version)
+    cmp_result = compare_semantic_versions(manifest_version, package_version)
 
     conflict_cfg = config.get("sync_rules", {}).get("conflict_detection", {})
 
-    if cmp_result > 0:  # L2 > L1
-        severity = conflict_cfg.get("ui_ahead_of_monorepo", {}).get("severity", SEVERITY_WARNING)
+    if cmp_result > 0:  # manifest > package
+        severity = conflict_cfg.get("manifest_ahead_of_package", {}).get("severity", SEVERITY_ERROR)
         messages.append({
             "level": severity,
-            "layer": "l2",
-            "text": "UI 版本大於 monorepo，確認是否故意？"
+            "layer": "manifest",
+            "text": "manifest.json 版本大於 package.json，必須修正"
         })
-    elif cmp_result < 0:  # L2 < L1
-        severity = conflict_cfg.get("ui_behind_monorepo", {}).get("severity", SEVERITY_INFO)
+    elif cmp_result < 0:  # manifest < package
+        severity = conflict_cfg.get("manifest_behind_package", {}).get("severity", SEVERITY_ERROR)
         messages.append({
             "level": severity,
-            "layer": "l2",
-            "text": "UI 版本低於 monorepo（正常）"
+            "layer": "manifest",
+            "text": "manifest.json 版本低於 package.json，必須修正"
         })
-    else:  # L2 = L1
+    else:  # manifest = package
         messages.append({
             "level": SEVERITY_SUCCESS,
-            "layer": "l2",
-            "text": "UI 版本與 monorepo 版本一致"
+            "layer": "manifest",
+            "text": "manifest.json 版本與 package.json 版本一致"
         })
 
     return messages
 
 
+# （已移除 _check_l3_status — Chrome Extension 無 L3 Server 層）
+
+
 # ============================================================================
-# 新增函式 4.2：Helper — _check_l3_status
+# 新增函式 4：check_version_sync_dual
 # ============================================================================
 
-def _check_l3_status(config: dict) -> Tuple[bool, List[dict]]:
+def check_version_sync_dual(version: str, config: dict) -> dict:
     """
-    檢查 L3 (Server) 版本狀態。
+    執行雙版本來源同步檢查（package.json + manifest.json）。
 
-    Args:
-        config: 配置字典
-
-    Returns:
-        (l3_has_version, messages list)
-    """
-    messages = []
-    server_config = config.get("versions", {}).get("server", {})
-    server_source = server_config.get("source")
-    l3_has_version = server_source is not None
-
-    if server_source is None:
-        messages.append({
-            "level": SEVERITY_INFO,
-            "layer": "l3",
-            "text": "server/go.mod 無版本欄位，由 monorepo 版本決定"
-        })
-
-    return l3_has_version, messages
-
-
-# ============================================================================
-# 新增函式 4：check_monorepo_version_sync
-# ============================================================================
-
-def check_monorepo_version_sync(version: str, config: dict) -> dict:
-    """
-    執行三層版本同步檢查。
-
-    需求：功能 2 三層版本對比
+    需求：Chrome Extension 雙版本對比
     邊界條件：
-    - L2 版本不存在 -> 跳過 L2 檢查
-    - L3 source 為 null -> 顯示 Server 版本由 monorepo 決定
-    - L2 版本大於 L1 -> 輸出 warning（severity: "warning"）
-    - L2 版本小於 L1 -> 輸出 info（severity: "info"）
+    - manifest.json 版本不存在 -> 跳過 manifest 檢查
+    - manifest 版本與 package 版本不一致 -> 輸出 error
 
     Args:
-        version: L1 monorepo 版本（例如 "0.1.1"）
+        version: package.json 版本（例如 "0.16.2"）
         config: load_version_release_config() 回傳的配置字典
 
     Returns:
         {
             "passed": bool,
-            "l1_version": str,
-            "l2_version": Optional[str],
-            "l3_has_version": bool,
+            "package_version": str,
+            "manifest_version": Optional[str],
             "messages": List[dict],
             "summary": str
         }
     """
     messages = []
 
-    # [檢查 L1]
+    # [檢查 package.json 版本]
     if not version:
         messages.append({
             "level": SEVERITY_ERROR,
-            "layer": "l1",
-            "text": "L1 monorepo 版本為空"
+            "layer": "package",
+            "text": "package.json 版本為空"
         })
         return {
             "passed": False,
-            "l1_version": version,
-            "l2_version": None,
-            "l3_has_version": False,
+            "package_version": version,
+            "manifest_version": None,
             "messages": messages,
-            "summary": "失敗（L1 monorepo 版本為空）"
+            "summary": "失敗（package.json 版本為空）"
         }
 
-    # [檢查 L2]
+    # [檢查 manifest.json 版本]
     root = get_project_root()
-    l2_version, l2_messages = _read_l2_version(root, config)
-    messages.extend(l2_messages)
+    manifest_version, manifest_messages = _read_manifest_version(root, config)
+    messages.extend(manifest_messages)
 
-    if l2_version:
-        l2_cmp_messages = _compare_l2_version(version, l2_version, config)
-        messages.extend(l2_cmp_messages)
-
-    # [檢查 L3]
-    l3_has_version, l3_messages = _check_l3_status(config)
-    messages.extend(l3_messages)
+    if manifest_version:
+        cmp_messages = _compare_manifest_version(version, manifest_version, config)
+        messages.extend(cmp_messages)
 
     # [最終判定]
     has_error = any(m["level"] == SEVERITY_ERROR for m in messages)
@@ -960,17 +914,16 @@ def check_monorepo_version_sync(version: str, config: dict) -> dict:
     has_warning = any(m["level"] == SEVERITY_WARNING for m in messages)
 
     if passed and not has_warning:
-        summary = "通過（版本策略符合 monorepo 三層架構）"
+        summary = "通過（package.json 與 manifest.json 版本一致）"
     elif passed and has_warning:
         summary = "通過（附警告）"
     else:
-        summary = "失敗（version 檢查未通過）"
+        summary = "失敗（版本同步檢查未通過）"
 
     return {
         "passed": passed,
-        "l1_version": version,
-        "l2_version": l2_version,
-        "l3_has_version": l3_has_version,
+        "package_version": version,
+        "manifest_version": manifest_version,
         "messages": messages,
         "summary": summary
     }
@@ -982,48 +935,39 @@ def check_monorepo_version_sync(version: str, config: dict) -> dict:
 
 def print_version_sync_report(sync_result: dict):
     """
-    輸出三層版本對比報告（樹狀結構）。
+    輸出雙版本對比報告。
 
-    需求：功能 2 CLI 輸出格式
+    需求：Chrome Extension 雙版本同步檢查輸出格式
     邊界條件：
-    - 無 L2 版本 -> 顯示 "ui/pubspec.yaml: 未偵測到"
-    - 無 L3 版本 -> 顯示 "server/go.mod: 無版本欄位（正常）"
+    - 無 manifest 版本 -> 顯示 "manifest.json: 未偵測到"
 
     Args:
-        sync_result: check_monorepo_version_sync() 的回傳值
+        sync_result: check_version_sync_dual() 的回傳值
 
     Side effects:
         打印到 stdout
     """
     width = 60
     print(f"\n{Colors.BOLD}{'━' * width}{Colors.RESET}")
-    print(f"{Colors.BOLD}版本同步檢查（Monorepo 三層架構）{Colors.RESET}")
+    print(f"{Colors.BOLD}版本同步檢查（Chrome Extension 雙版本來源）{Colors.RESET}")
     print(f"{Colors.BOLD}{'━' * width}{Colors.RESET}\n")
 
-    # [打印 L1]
-    l1 = sync_result.get("l1_version", "未知")
-    print(f"L1 monorepo 版本: {l1} (docs/todolist.yaml)")
+    # [打印 package.json 版本]
+    pkg_ver = sync_result.get("package_version", "未知")
+    print(f"package.json 版本: {pkg_ver}")
     print("|")
 
-    # [打印 L2]
-    l2 = sync_result.get("l2_version")
-    if l2 is None:
-        print("|-- L2 ui/pubspec.yaml: 未偵測到")
+    # [打印 manifest.json 版本]
+    manifest_ver = sync_result.get("manifest_version")
+    if manifest_ver is None:
+        print("+-- manifest.json: 未偵測到")
     else:
-        print(f"|-- L2 ui/pubspec.yaml: {l2}")
-        # 輸出 L2 相關的訊息（基於 layer 欄位）
+        print(f"+-- manifest.json: {manifest_ver}")
+        # 輸出 manifest 相關的訊息（基於 layer 欄位）
         for msg in sync_result.get("messages", []):
-            if msg.get("layer") == "l2":
+            if msg.get("layer") == "manifest":
                 level_marker = f"[{msg['level'].upper()}]" if msg['level'] != SEVERITY_SUCCESS else "[OK]"
-                print(f"|   +-- {level_marker} {msg['text']}")
-
-    print("|")
-
-    # [打印 L3]
-    l3_has = sync_result.get("l3_has_version", False)
-    if not l3_has:
-        print("+-- L3 server/go.mod: 無版本欄位（正常）")
-        print("    理由：Go module 無自身版本，由 monorepo 版本決定")
+                print(f"    +-- {level_marker} {msg['text']}")
 
     # [打印所有訊息]
     print()
@@ -1053,14 +997,14 @@ def print_version_sync_report(sync_result: dict):
 
 
 def check_version_sync(version: str) -> Tuple[bool, List[str]]:
-    """檢查版本號同步（包括 Monorepo 三層架構）"""
+    """檢查版本號同步（package.json + manifest.json）"""
     root = get_project_root()
     errors = []
 
-    # [新增] 檢查 Monorepo 三層版本（優先於傳統檢查）
-    print_info("  檢查 Monorepo 版本同步...")
+    # 檢查 Chrome Extension 雙版本同步
+    print_info("  檢查版本同步...")
     config = load_version_release_config(root)
-    sync_result = check_monorepo_version_sync(version, config)
+    sync_result = check_version_sync_dual(version, config)
     print_version_sync_report(sync_result)
 
     # 偵測版本檔案（動態，語言感知）
@@ -1068,24 +1012,14 @@ def check_version_sync(version: str) -> Tuple[bool, List[str]]:
 
     if version_files:
         # 檢查所有偵測到的版本檔（僅警告，不阻塞）
-        # Monorepo 場景：專案管理版本與子專案版本可能獨立管理
-        # 優化：複用 sync_result 中已讀取的 L2 版本，避免重複讀取 ui/pubspec.yaml
-        l2_version = sync_result.get("l2_version")
-        ui_pubspec_path = root / "ui" / "pubspec.yaml"
-
         for file_path, parser_type in version_files:
             try:
-                # 優化：若是 ui/pubspec.yaml 且已有 L2 版本，複用已讀版本
-                if file_path == ui_pubspec_path and l2_version is not None:
-                    file_version = l2_version
-                else:
-                    file_version = extract_version_from_file(file_path, parser_type)
+                file_version = extract_version_from_file(file_path, parser_type)
 
                 if file_version:
                     if file_version != version:
                         print_warning(
                             f"{file_path.name} 版本不匹配: {file_version} vs {version}"
-                            "（monorepo 場景下此為預期行為）"
                         )
                     else:
                         print_success(f"{file_path.name} 版本一致: {version}")
@@ -1095,8 +1029,8 @@ def check_version_sync(version: str) -> Tuple[bool, List[str]]:
                 print_warning(f"讀取 {file_path.name} 失敗: {e}")
     else:
         # 沒有找到版本檔（純規格版本或其他情況）
-        print_warning("未偵測到版本檔案（pubspec.yaml/package.json/pyproject.toml）")
-        print_info("  此可能是純規格版本或其他非程式碼專案")
+        print_warning("未偵測到版本檔案（package.json/manifest.json）")
+        print_info("  請確認專案根目錄下有 package.json 和 manifest.json")
 
     # 檢查當前分支（僅警告，不同專案可能有不同分支命名慣例）
     try:
@@ -1531,11 +1465,10 @@ def verify_version_files(version: str) -> bool:
     version_files = detect_version_files(root)
 
     if not version_files:
-        print_warning("未偵測到版本檔案（pubspec.yaml/package.json/pyproject.toml）")
-        print_info("  此可能是純規格版本", 1)
+        print_warning("未偵測到版本檔案（package.json/manifest.json）")
+        print_info("  請確認專案根目錄下有 package.json 和 manifest.json", 1)
         return True  # 不阻塞發布流程
 
-    # Monorepo 場景：版本不匹配為警告，不阻塞發布
     for file_path, parser_type in version_files:
         try:
             file_version = extract_version_from_file(file_path, parser_type)
@@ -1545,7 +1478,6 @@ def verify_version_files(version: str) -> bool:
                 else:
                     print_warning(
                         f"{file_path.name} 版本不匹配: {file_version} vs {version}"
-                        "（monorepo 場景下此為預期行為）"
                     )
             else:
                 print_warning(f"{file_path.name} 找不到 version 欄位")

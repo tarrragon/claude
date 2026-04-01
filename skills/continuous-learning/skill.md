@@ -114,5 +114,5 @@ Add to `.claude/settings.json`:
 
 ---
 
-*Last Updated: 2026-03-02*
-*Version: 2.0.0 - 整合 memory-network-builder 的記憶網路構建能力*
+**Last Updated**: 2026-03-02
+**Version**: 2.0.0 - 整合 memory-network-builder 的記憶網路構建能力

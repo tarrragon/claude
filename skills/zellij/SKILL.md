@@ -192,3 +192,8 @@ sleep 5 && \
 - [ ] dump-screen 前有 scroll-to-bottom？
 - [ ] 操作完成後有切回 claude pane？
 - [ ] 目標 pane 是否有前台程序在運行（影響 write 行為）？
+
+---
+
+**Last Updated**: 2026-03-02
+**Version**: 1.0.0

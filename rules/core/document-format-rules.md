@@ -96,6 +96,24 @@ updated: {更新日期}
 
 ---
 
+## 跨檔案引用格式規範
+
+### 規則 6：引用路徑格式
+
+| 引用場景 | 格式 | 範例 |
+|---------|------|------|
+| Skill 內部引用（同 Skill 目錄） | 相對路徑 | `references/workflow-create.md` |
+| 跨 Skill 引用 | 完整路徑（從 .claude/ 開始） | `.claude/skills/doc-flow/SKILL.md` |
+| 引用 rules/references | 完整路徑 | `.claude/rules/core/quality-baseline.md` |
+| 引用專案根目錄檔案 | 從根目錄開始 | `docs/work-logs/v{VERSION}/` |
+| CLAUDE.md 中的引用 | `@` 前綴 | `@.claude/rules/core/quality-baseline.md` |
+
+**理由**：
+- 內部引用用相對路徑，搬移 Skill 目錄時只需改外部引用
+- 跨 Skill 引用用完整路徑，避免閱讀者不知道要從哪個目錄起算
+
+---
+
 ## 檢查清單
 
 建立交接文件時，確認：
@@ -106,8 +124,9 @@ updated: {更新日期}
 - [ ] Markdown 格式正確
 - [ ] 檔案命名符合規範
 - [ ] 有適當的 frontmatter（如適用）
+- [ ] 跨 Skill 引用使用完整路徑
 
 ---
 
-**Last Updated**: 2026-03-08
-**Version**: 1.1.0 - 修正 Ticket 文件存放路徑（.claude/tickets/ → docs/work-logs/v{version}/tickets/）
+**Last Updated**: 2026-04-01
+**Version**: 1.2.0 - 新增規則 6：跨檔案引用格式規範（W4-010）

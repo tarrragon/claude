@@ -31,7 +31,7 @@ from lib.hook_messages import ValidationMessages
 
 
 def get_latest_version() -> Optional[str]:
-    """從 work-logs 目錄取得最新版本號"""
+    """從 work-logs 目錄取得最新版本號（支援三層結構）"""
     project_root = get_project_root()
     work_logs = project_root / "docs" / "work-logs"
 
@@ -39,22 +39,41 @@ def get_latest_version() -> Optional[str]:
         return None
 
     versions = []
-    for item in work_logs.iterdir():
-        if item.is_dir() and item.name.startswith("v"):
-            versions.append(item.name)
+
+    # 三層結構：v{major}/v{major}.{minor}/v{major}.{minor}.{patch}/
+    for major_dir in work_logs.iterdir():
+        if not major_dir.is_dir() or not major_dir.name.startswith("v"):
+            continue
+        for minor_dir in major_dir.iterdir():
+            if not minor_dir.is_dir() or not minor_dir.name.startswith("v"):
+                continue
+            for patch_dir in minor_dir.iterdir():
+                if patch_dir.is_dir() and patch_dir.name.startswith("v"):
+                    versions.append(patch_dir.name)
 
     if not versions:
         return None
 
-    # 簡單排序，取最新
-    versions.sort(reverse=True)
+    # 語義版本排序
+    def version_key(v):
+        parts = v.lstrip("v").split(".")
+        return tuple(int(p) for p in parts if p.isdigit())
+
+    versions.sort(key=version_key, reverse=True)
     return versions[0].lstrip("v")
 
 
 def check_worklog_exists(version: str) -> dict:
-    """檢查 worklog 是否存在"""
+    """檢查 worklog 是否存在（支援三層結構）"""
     project_root = get_project_root()
-    worklog_dir = project_root / "docs" / "work-logs" / f"v{version}"
+
+    # 解析版本號
+    parts = version.split(".")
+    if len(parts) >= 3:
+        major, minor = parts[0], f"{parts[0]}.{parts[1]}"
+        worklog_dir = project_root / "docs" / "work-logs" / f"v{major}" / f"v{minor}" / f"v{version}"
+    else:
+        worklog_dir = project_root / "docs" / "work-logs" / f"v{version}"
 
     result = {
         "exists": False,

@@ -12,7 +12,7 @@ Main Thread Edit Restriction Hook - PreToolUse Hook
            .claude/hooks/*, .claude/skills/*, .claude/agents/*,
            .claude/references/*, .claude/error-patterns/*, .claude/scripts/*,
            .claude/pm-rules/*, .claude/handoff/*,
-           docs/**（含 work-logs/、tickets/、參考文件等）, CLAUDE.md
+           docs/**（含 work-logs/、tickets/、參考文件等）, CLAUDE.md, CHANGELOG.md
 - 拒絕編輯：lib/*, test/*, *.dart（除 .claude/ 中的）, backend/*, *.go, go.mod, go.sum
 - 拒絕時返回 exit code 2 和錯誤訊息，提示允許的路徑範圍
 
@@ -105,6 +105,7 @@ ALLOWED_PATTERNS = [
     r"^\.claude/handoff/.*",            # 交接檔案
     r"^docs/.*",                         # docs 目錄（含 work-logs/、tickets/、參考文件等）
     r"^CLAUDE\.md$",                    # 專案入口文件
+    r"^CHANGELOG\.md$",                 # 版本變更紀錄
 ]
 
 # 禁止的檔案路徑模式（正則）

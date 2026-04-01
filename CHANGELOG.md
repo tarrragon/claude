@@ -1,3 +1,44 @@
+## [1.18.0] - 2026-04-01
+
+### Summary
+feat: Wave 收尾流程加入多視角審查建議（）; feat: 新增 session 經驗持久化提醒 Stop hook（）; fix: Hook 允許清單加入 CHANGELOG.md（主線程編輯 + 保護分支豁免） (+28 more)
+
+Changes: 2 feat, 9 fix, 17 docs, 3 chore
+
+- feat: Wave 收尾流程加入多視角審查建議（）
+- feat: 新增 session 經驗持久化提醒 Stop hook（）
+- fix: Hook 允許清單加入 CHANGELOG.md（主線程編輯 + 保護分支豁免）
+- fix: resume.py INVALID_OPERATION 語義修正 + _execute_resume routing 抽離（, ）
+- fix: 多視角審查修復 — resume 審計記錄、direction 分支、DRY 違規（）
+- fix: ticket resume 已完成 Ticket 時自動導向 handoff 目標（）
+- fix: preflight Phase emoji 檢查改為 Ticket 完成率驗證（）
+- fix: 修復 ticket list --wave 跨版本搜尋失敗（）
+- fix: 修正 version-release Skill 路徑/專案類型/CLI 不一致（）
+- fix: 修正 ticket CLI 版本解析優先從 ID 提取（）+ 建立
+- fix: 修正 index.lock 殘留 + hook 權限問題（, ）
+- docs: 整合 Chrome Extension 實戰知識庫到 thyme-extension-engineer（）
+- docs: 修正 thyme-extension-engineer 描述移除錯誤的 Flutter 限制說明（）
+- docs: 合併 project-init 和 ticket SKILL.md 重複的執行方式章節（）
+- docs: 統一所有 Skill SKILL.md 加入 Version + Last Updated 尾部標記（）
+- docs: legacy-code-workflow 步驟 3/6 加入明確的 /ticket create 和 /doc-flow 引用（）
+- docs: project-init 加入後續流程銜接說明（）
+- docs: ticket complete 流程加入 proposals-tracking.yaml 同步提示（）
+- docs: 重構 version-release SKILL.md 偽程式碼移至 references/（）
+- docs: 建立跨 Skill 引用格式規範（）
+- docs: 統一主工作日誌命名為 v{VERSION}-main.md（）
+- docs: 修正 legacy-code-workflow 步驟數描述矛盾（）
+- docs: 提取三系統同步原則為共用 reference（）
+- docs: 新增 doc-flow 三方分工速查表（）
+- docs: 記錄 PC-035 版本 status 與 ticket 狀態不一致錯誤模式
+- docs: 消除 legacy-code-workflow worklog 初始化重複描述（）
+- docs: 完成 W3 流程更新 — worklog 前置步驟 + Roadmap 步驟 6 + 變更流程
+- docs: 補建 ~ 主工作日誌 + 更新 Hook 路徑
+- chore: 遷移審查延後 Ticket 到 （, ）
+- chore: 遷移 ticket resume 流程修復從 v0.19 到 （ → ）
+- chore: sync-pull .claude 配置更新（58 檔案，+1293/-419）
+
+---
+
 ## [1.17.0] - 2026-04-01
 
 ### Summary

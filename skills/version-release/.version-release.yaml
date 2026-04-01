@@ -1,80 +1,64 @@
-# .version-release.yaml - Monorepo 版本管理配置
-# 來源：.claude/rules/flows/monorepo-version-strategy.md
+# .version-release.yaml - Chrome Extension 版本管理配置
 
 # 版本定義
 versions:
-  monorepo:
-    source: docs/todolist.yaml       # 唯一的權威來源
-    key: current_version
-    semantic_version: true
-    description: "整個專案的發布版本（用於 Ticket、Wave、發布計劃）"
-
-  ui:
-    source: ui/pubspec.yaml
+  package:
+    source: package.json
     key: version
     semantic_version: true
-    independent: true                 # UI 可獨立於 monorepo 升級
-    description: "Flutter 應用版本（用於 App Store）"
-    sync_policy: "optional"           # 建議同步，非強制
-    sync_recommendation: "保持主版本號一致（如都是 v0.x.0）"
+    description: "專案主版本（用於 Ticket、Wave、發布計劃）"
 
-  server:
-    source: null                      # go.mod 無版本欄位
-    semantic_version: false
+  manifest:
+    source: manifest.json
+    key: version
+    semantic_version: true
     independent: false
-    description: "Go Server 版本由 monorepo 版本決定"
-    sync_policy: "implicit"           # 隱含同步
+    description: "Chrome Extension 發布版本（用於 Chrome Web Store）"
+    sync_policy: "required"
+    sync_recommendation: "必須與 package.json 版本一致"
 
 # 版本同步規則
 sync_rules:
   on_release:
-    monorepo:
-      required: true                  # 必須更新
-    ui:
-      required: false                 # 可選
-      recommendation: "建議更新 UI 版本的 build number 或更新主版本號以匹配 monorepo"
-    server:
-      required: false                 # 無需更新（由 go.mod 決定）
+    package:
+      required: true
+    manifest:
+      required: true
+      recommendation: "manifest.json 版本必須與 package.json 一致"
 
   on_development:
-    allow_version_mismatch: true
-    reason: "開發中 UI 和 Server 可獨立迭代"
+    allow_version_mismatch: false
+    reason: "Chrome Extension 兩個版本來源必須保持同步"
 
   conflict_detection:
-    ui_ahead_of_monorepo:
-      severity: "warning"
-      message: "UI 版本大於 monorepo，確認是否故意？"
-    ui_behind_monorepo:
-      severity: "info"
-      message: "UI 版本低於 monorepo（正常）"
+    manifest_ahead_of_package:
+      severity: "error"
+      message: "manifest.json 版本大於 package.json，必須修正"
+    manifest_behind_package:
+      severity: "error"
+      message: "manifest.json 版本低於 package.json，必須修正"
 
 # 版本偵測策略
 detection:
   version_files:
-    - path: ui/pubspec.yaml
-      type: yaml
+    - path: package.json
+      type: json
       key: version
-      context: "Flutter 應用版本"
+      context: "NPM 專案版本"
 
-    - path: server/go.mod
-      type: toml
-      key: null
-      context: "Go module（無版本欄位）"
-
-    - path: docs/todolist.yaml
-      type: yaml
-      key: current_version
-      context: "權威的 monorepo 版本來源"
+    - path: manifest.json
+      type: json
+      key: version
+      context: "Chrome Extension 版本"
 
   auto_detect_order:
     - git_branch                      # feature/v0.1
-    - monorepo_version_file           # todolist.yaml
-    - ui_version_file                 # ui/pubspec.yaml
+    - package_json                    # package.json
     - git_tag                         # v0.1-final
 
 # 發布前檢查項
 preflight_checks:
   version_sync:
     enabled: true
-    fail_on_error: false              # monorepo 版本不匹配不阻塞
+    fail_on_error: true               # 版本不匹配阻塞發布
     warn_on_mismatch: true

@@ -281,3 +281,8 @@ uv run .claude/skills/test-async-guardian/scripts/async_resource_scanner.py \
 ### hooks/
 
 - `pre-test-scan.py` - PreToolUse Hook 入口腳本
+
+---
+
+**Last Updated**: 2026-03-02
+**Version**: 1.0.0

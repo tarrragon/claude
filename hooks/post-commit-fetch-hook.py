@@ -29,12 +29,21 @@ def main() -> None:
     if "create mode" not in stdout and "] " not in stdout:
         return
 
-    # Commit succeeded — background fetch
-    subprocess.Popen(
-        ["git", "fetch", "--quiet", "--all"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    # Commit succeeded — synchronous fetch with timeout
+    # 使用 subprocess.run 確保 fetch 完成後 hook 才返回，
+    # 避免背景 fetch 持有 index.lock 與下一個 git 操作競爭（IMP-046）
+    try:
+        subprocess.run(
+            ["git", "fetch", "--quiet", "--all"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=4,
+        )
+    except subprocess.TimeoutExpired:
+        print(
+            "[WARNING] git fetch timeout after 4s, process killed",
+            file=sys.stderr,
+        )
 
 
 if __name__ == "__main__":

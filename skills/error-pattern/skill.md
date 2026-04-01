@@ -139,3 +139,8 @@ Widget Finder (2)
 |------|------|
 | `.claude/error-patterns/README.md` | 知識庫索引 |
 | `.claude/error-patterns/{category}/*.md` | 各分類錯誤模式檔案 |
+
+---
+
+**Last Updated**: 2026-03-02
+**Version**: 1.0.0

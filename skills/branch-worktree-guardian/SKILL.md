@@ -178,3 +178,8 @@ Hook 整合和分支保護規則的配置說明：
 - [Git Worktree 官方文件](https://git-scm.com/docs/git-worktree)
 - [專案 Hook 系統方法論](../../methodologies/hook-system-methodology.md)
 - [敏捷重構方法論](../../methodologies/agile-refactor-methodology.md)
+
+---
+
+**Last Updated**: 2026-03-18
+**Version**: 1.0.0

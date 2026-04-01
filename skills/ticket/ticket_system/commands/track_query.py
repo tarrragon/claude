@@ -376,6 +376,50 @@ def execute_version(args: argparse.Namespace, current_version: str) -> int:
 
 def execute_list(args: argparse.Namespace, version: str) -> int:
     """列出 Tickets，支援狀態篩選、Wave 篩選和多種輸出格式"""
+    # 當 --wave 指定但未明確指定 --version 時，搜尋所有 active 版本
+    wave_value = getattr(args, "wave", None)
+    explicit_version = getattr(args, "version", None)
+
+    if wave_value is not None and not explicit_version:
+        return _execute_list_cross_version(args, version, wave_value)
+
+    return _execute_list_single_version(args, version, wave_value)
+
+
+def _execute_list_cross_version(
+    args: argparse.Namespace, default_version: str, wave_value: int
+) -> int:
+    """跨版本搜尋 Wave — 當未指定 --version 時嘗試所有 active 版本"""
+    from ticket_system.lib.version import get_active_versions
+
+    active_versions = get_active_versions()
+    # 標準化版本號（移除 v 前綴）
+    candidates = [v.lstrip("v") for v in active_versions] if active_versions else [default_version]
+
+    status_filters = _build_status_filters(args)
+
+    for ver in candidates:
+        all_tickets = list_tickets(ver)
+        if not all_tickets:
+            continue
+
+        filtered = all_tickets
+        if status_filters:
+            filtered = [t for t in filtered if t.get("status") in status_filters]
+        filtered = [t for t in filtered if t.get("wave") == wave_value]
+
+        if filtered:
+            output_format = getattr(args, "format", "table")
+            return _output_tickets(filtered, ver, output_format)
+
+    print(format_warning(WarningMessages.NO_TICKETS))
+    return 0
+
+
+def _execute_list_single_version(
+    args: argparse.Namespace, version: str, wave_value: Optional[int]
+) -> int:
+    """單一版本列表（原始邏輯，用於明確指定 --version 時）"""
     all_tickets = list_tickets(version)
     if not all_tickets:
         print(format_msg(TrackQueryMessages.LIST_NO_TICKETS_TITLE, version=version))
@@ -390,7 +434,6 @@ def execute_list(args: argparse.Namespace, version: str) -> int:
         filtered_tickets = [t for t in filtered_tickets if t.get("status") in status_filters]
 
     # 應用 Wave 篩選（如果指定）
-    wave_value = getattr(args, "wave", None)
     if wave_value is not None:
         filtered_tickets = [t for t in filtered_tickets if t.get("wave") == wave_value]
 

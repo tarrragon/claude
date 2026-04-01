@@ -122,3 +122,8 @@ Git: {分支名} | {狀態}
 - SKILL 輸出在主對話流中，Claude 會自然處理並主動執行
 - Hook 輸出在 system-reminder 中，作為備用提醒
 - 兩者可共存，SKILL 提供最佳體驗，Hook 提供安全網
+
+---
+
+**Last Updated**: 2026-03-02
+**Version**: 1.0.0

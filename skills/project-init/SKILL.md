@@ -11,57 +11,25 @@ allowed-tools: Bash(project-init *), Read, Write, Edit
 
 ---
 
-## 重要：執行方式（必讀）
-
-### 正確方式
-
-```bash
-# 使用已安裝的 project-init CLI（推薦）
-project-init --version
-project-init check
-project-init setup
-
-# 或在 project-init 目錄下使用 uv run
-cd .claude/skills/project-init && uv run project-init check
-```
-
-### 錯誤方式（禁止）
-
-```bash
-# 以下方式會失敗，請勿使用
-python3 .claude/skills/project-init/project_init/scripts/main.py
-uv run python .claude/skills/project-init/project_init/scripts/main.py
-```
-
-**原因**：`project_init` 是 Python 套件，必須透過 `pyproject.toml` 定義的入口點執行。
-
----
-
 ## 執行方式
+
+> **禁止直接執行 Python 檔案！** `project_init` 是 Python 套件，必須透過 `pyproject.toml` 定義的入口點執行。
 
 ### 全局安裝（推薦）
 
-全局安裝後可在任何目錄執行 `project-init` 指令。
-
 ```bash
-# 首次安裝（只需執行一次）
-cd .claude/skills/project-init
-uv tool install .
+# 首次安裝
+(cd .claude/skills/project-init && uv tool install .)
 
 # 之後在任何目錄執行
-project-init --version
 project-init check
 project-init setup
 ```
 
-### 本地執行（開發用）
-
-在 project-init 目錄下使用 `uv run`：
+### 本地執行
 
 ```bash
-cd .claude/skills/project-init
-uv run project-init check
-uv run project-init setup
+(cd .claude/skills/project-init && uv run project-init check)
 ```
 
 ---
@@ -284,33 +252,17 @@ uv tool install .
 
 ---
 
-## 相關技巧
+## 後續流程銜接
 
-### 整合到開發流程
+環境初始化完成後，依專案狀態選擇下一步：
 
-在 Hook 或自動化指令中使用 project-init 驗證環境：
-
-```bash
-# 檢查環境是否就緒
-project-init check || (project-init setup && echo "環境已就緒")
-```
-
-### 搭配其他工具
-
-結合 UV 和 project-init 進行完整設定：
-
-```bash
-# 檢查環境
-project-init check
-
-# 更新所有工具
-uv tool upgrade --all
-
-# 重新檢查
-project-init check
-```
+| 場景 | 下一步 | 說明 |
+|------|--------|------|
+| 全新專案 | `/doc-flow init` | 初始化文件系統（worklog、todolist、CHANGELOG） |
+| 既有專案重啟 | `.claude/skills/doc/references/legacy-code-workflow.md` | 六步驟既有專案評估流程（健康檢查 → Ticket 建立） |
+| 已有文件系統 | `/ticket` | 直接查看待辦任務或建立新 Ticket |
 
 ---
 
-**Last Updated**: 2026-03-03
-**Version**: 1.0.0
+**Last Updated**: 2026-04-01
+**Version**: 1.1.0 - 新增後續流程銜接說明（W4-013）

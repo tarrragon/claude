@@ -101,3 +101,8 @@ Dart MCP 和 Serena MCP 的工具列表與使用建議：`/search-tools-guide`
 - [boostvolt/claude-code-lsps](https://github.com/boostvolt/claude-code-lsps) - 官方 LSP 插件市場
 - [Marksman](https://github.com/artempyanykh/marksman) - Markdown LSP
 - [yaml-language-server](https://github.com/redhat-developer/yaml-language-server) - YAML LSP
+
+---
+
+**Last Updated**: 2026-03-02
+**Version**: 1.0.0

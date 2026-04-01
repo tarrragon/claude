@@ -137,3 +137,12 @@ v             v
 v                 v
 [交接流程]        [任務完成]
 ```
+
+## 完成後同步提醒
+
+Ticket 完成後，系統會自動提示以下同步操作：
+
+| 項目 | 說明 |
+|------|------|
+| Worklog 進度 | 自動追加完成記錄到主工作日誌 |
+| Proposals 同步 | 若 Ticket 被 `proposals-tracking.yaml` 引用，需同步更新提案的 checklist 狀態和 `verified_by` 欄位 |

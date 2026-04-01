@@ -504,7 +504,16 @@ def _execute_handoff(args: argparse.Namespace) -> int:
         return 1
 
     # 步驟 2：解析版本
-    version = resolve_version(getattr(args, "version", None))
+    # 優先從 Ticket ID 提取版本，fallback 到 --version 或自動偵測
+    explicit_version = getattr(args, "version", None)
+    if not explicit_version:
+        extracted = extract_version_from_ticket_id(ticket_id)
+        if extracted:
+            version = extracted
+        else:
+            version = resolve_version(None)
+    else:
+        version = resolve_version(explicit_version)
     if not version:
         _print_version_error()
         return 1
@@ -1106,7 +1115,16 @@ def execute(args: argparse.Namespace) -> int:
                 _print_id_error()
                 return 1
 
-            version = resolve_version(getattr(args, "version", None))
+            # 優先從 Ticket ID 提取版本，fallback 到 --version 或自動偵測
+            explicit_ver = getattr(args, "version", None)
+            if not explicit_ver:
+                extracted = extract_version_from_ticket_id(ticket_id)
+                if extracted:
+                    version = extracted
+                else:
+                    version = resolve_version(None)
+            else:
+                version = resolve_version(explicit_ver)
             if not version:
                 _print_version_error()
                 return 1

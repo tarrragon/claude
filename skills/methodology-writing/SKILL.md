@@ -286,3 +286,8 @@ grep -r "方法論檔名" .claude/
 - [方法論改寫方法論](../../methodologies/methodology-rewriting-methodology.md) - 改寫流程（30 秒版）
 - [方法論撰寫方法論](../../methodologies/methodology-writing-methodology.md) - 撰寫新方法論
 - [Atomic Ticket 方法論](../../methodologies/atomic-ticket-methodology.md) - 精簡範本參考
+
+---
+
+**Last Updated**: 2026-03-02
+**Version**: 1.0.0

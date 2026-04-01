@@ -488,6 +488,46 @@ def _print_resume_checkpoint(ticket_id: str) -> None:
     print()
 
 
+def _handle_completed_ticket_redirect(ticket_id: str, handoff: Dict[str, Any]) -> Optional[int]:
+    """
+    檢查 Ticket 是否已完成，若有明確 handoff 目標則自動導向。
+
+    Returns:
+        int: 返回碼（0=已 redirect 並歸檔）
+        None: 不需 redirect，應繼續正常 resume 流程
+    """
+    if not is_ticket_completed(ticket_id):
+        return None
+
+    direction = handoff.get("direction", "")
+    target_id = extract_direction_target_id(direction) if direction else None
+
+    if target_id:
+        print(SEPARATOR_PRIMARY)
+        print(format_warning(WarningMessages.TICKET_ALREADY_COMPLETED, ticket_id=ticket_id))
+        print(f"  交接方向: {direction}")
+        print(f"  目標 Ticket: {target_id}")
+        print()
+        print(ResumeMessages.REDIRECT_TO_TARGET)
+        print(f"  ticket resume {target_id}")
+        print(SEPARATOR_PRIMARY)
+
+        # 標記為已接手再歸檔（保留 resumed_at 審計記錄）
+        mark_handoff_as_resumed(ticket_id)
+        archive_handoff_file(ticket_id)
+        return 0
+
+    if direction:
+        # 有 direction 但無 embedded target_id（如 to-parent, to-child, context-refresh）
+        # 正常情況，fall through 到一般 resume 流程
+        return None
+
+    # 真正無 direction（異常情況），顯示警告後繼續 resume
+    print(format_warning(WarningMessages.COMPLETED_NO_DIRECTION, ticket_id=ticket_id))
+    print()
+    return None
+
+
 def _execute_resume(ticket_id: str, version: Optional[str]) -> int:
     """
     執行恢復單一 Ticket 的邏輯
@@ -530,21 +570,24 @@ def _execute_resume(ticket_id: str, version: Optional[str]) -> int:
         if resolved_version:
             ticket = load_ticket(resolved_version, ticket_id)
 
+    # 已完成 Ticket 自動導向：若有明確目標則 redirect，否則 fall through
+    redirect_result = _handle_completed_ticket_redirect(ticket_id, handoff)
+    if redirect_result is not None:
+        return redirect_result
+
     # 列印 handoff 資訊
     _print_handoff_info(handoff, ticket)
 
     # 標記為已接手（更新 resumed_at 時間戳）
     if not mark_handoff_as_resumed(ticket_id):
-        print(format_warning(WarningMessages.INVALID_OPERATION))
-        print(WarningMessages.HANDOFF_UPDATE_FAILED)
+        print(format_warning(WarningMessages.HANDOFF_UPDATE_FAILED))
         return 1
 
     # 將 handoff 檔案從 pending/ 移動到 archive/
     # 注意：mark_handoff_as_resumed() 已自動歸檔 Markdown 格式，所以這裡只會歸檔 JSON
     if not archive_handoff_file(ticket_id):
         # 歸檔失敗不應該視為 resume 失敗（核心功能已完成），只發出警告
-        print(format_warning(WarningMessages.INVALID_OPERATION))
-        print(WarningMessages.HANDOFF_ARCHIVE_FAILED)
+        print(format_warning(WarningMessages.HANDOFF_ARCHIVE_FAILED))
 
     print(SEPARATOR_PRIMARY)
     print(SectionHeaders.COMPLETION)

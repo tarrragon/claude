@@ -193,6 +193,9 @@ class ResumeMessages:
     ARG_LIST_HELP = "列出所有待恢復的任務"
     ARG_VERSION_HELP = "指定版本 (如不指定則自動偵測)"
 
+    # 已完成 Ticket 自動導向
+    REDIRECT_TO_TARGET = "[建議] 此 Ticket 已完成，請直接 resume 目標 Ticket："
+
     # Resume 後 Checkpoint（標準化接手流程引導）
     CHECKPOINT_HEADER = "接手後的標準化步驟："
     CHECKPOINT_SCOPE_VERIFY = "   1. [ ] 獨立驗證 Ticket 描述的數量/範圍是否正確（PC-007）"
