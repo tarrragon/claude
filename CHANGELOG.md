@@ -1,3 +1,14 @@
+## [1.20.2] - 2026-04-02
+
+### Summary
+chore: 更新 .claude sync 狀態
+
+Changes: 1 chore
+
+- chore: 更新 .claude sync 狀態
+
+---
+
 ## [1.20.1] - 2026-04-02
 
 ### Summary
