@@ -310,9 +310,13 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 ## 第五層：TDD 階段判斷
 
+> **PROP 核准後**：進入 TDD 前，必須先完成文件準備流程。
+> 詳見：.claude/pm-rules/proposal-to-development-flow.md
+
 | 階段 | 代理人 | 進入條件 |
 |------|-------|---------|
-| SA 前置審查 | system-analyst | 新功能/架構變更 |
+| 文件準備 | PM | PROP 核准（見 proposal-to-development-flow.md） |
+| SA 前置審查 | system-analyst | 文件準備完成，新功能/架構變更 |
 | Legacy Code 評估 | PM + 多視角審查（含語言代理人） | 接手舊專案/測試大量失敗/無測試 |
 | Phase 1 | lavender-interface-designer | SA 通過 |
 | Phase 2 | sage-test-architect | Phase 1 完成 |

@@ -1,3 +1,21 @@
+## [1.20.1] - 2026-04-02
+
+### Summary
+fix: 移除規則四 — 技術前提經 驗證不成立; docs: 完成 — 提案流程觸發條件邊界定義; docs: 完成 /023 — 精簡提案流程 + 決策樹入口引用 (+5 more)
+
+Changes: 1 fix, 4 docs, 1 chore, 2 test
+
+- fix: 移除規則四 — 技術前提經 驗證不成立
+- docs: 完成 — 提案流程觸發條件邊界定義
+- docs: 完成 /023 — 精簡提案流程 + 決策樹入口引用
+- docs: 完成 /021 修復 — 提案流程標準化 + git 驗證規則
+- docs: 建立 PROP-007 跨專案 Spec 對齊提案 + 修復 command-entrance-gate-hook 長文本誤判
+- chore: sync-pull .claude 從獨立 repo
+- test: cleanup rule4 verification temp files
+- test: edit tool test file for rule4 verification
+
+---
+
 ## [1.20.0] - 2026-04-02
 
 ### Summary

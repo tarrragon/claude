@@ -1,6 +1,6 @@
 # Bash 工具使用規則
 
-本文件定義 Claude Code Bash 工具的使用規範，涵蓋工作目錄管理和工具輸出處理兩個核心問題。
+本文件定義 Claude Code Bash 工具的使用規範，涵蓋工作目錄管理、工具輸出處理和 git 操作串接等核心問題。
 
 ---
 
@@ -191,6 +191,6 @@ Bash: git add file.md && git commit -m "msg" && git merge feat/xxx --no-edit && 
 
 ---
 
-**Last Updated**: 2026-03-30
-**Version**: 1.2.0 - 新增規則三：禁止串接多個 git 寫入操作（index.lock 競爭防護）
+**Last Updated**: 2026-04-02
+**Version**: 1.3.1 - 移除規則四（技術前提經驗證不成立，git status 在 Write 後正確偵測變更，W1-024）
 **Source**: IMP-008（cd 污染）、IMP-009（TaskOutput 混淆）、index.lock 競爭（Hook 與 git 寫入操作衝突）
