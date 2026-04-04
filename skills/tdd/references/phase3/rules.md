@@ -99,7 +99,26 @@ Layer 4（Presentation / UI）
 
 Phase 3a 完成後，必須評估 Phase 3b 是否需要拆分。
 
-### 拆分觸發條件（任一符合）
+### 任務粒度 — 引導式拆分 + 安全網閾值
+
+> 完整規則：[task-granularity-rules.md](../task-granularity-rules.md)
+
+**主要機制**：Phase 1 的行為單元清單決定 Phase 2/3 的 Ticket 粒度。每個行為單元 = 1 個測試 Ticket = 1 個實作 Ticket。如果 Phase 1 拆分充分，Ticket 粒度自然合適。
+
+**安全網閾值**（單一 Ticket 粒度檢查 — 超標時回到 Phase 1 重新檢視行為單元拆分）：
+
+| 指標 | 上限 | 超標意味著 |
+|------|------|-----------|
+| 驗收關注點數 | 2 個 | 可能混入多個行為單元（正常路徑 + 邊界條件算同一關注點） |
+| 修改檔案數 | 2 個 | 可能跨越模組邊界（測試檔案不計入） |
+| 關注點數 | 1 個 | 需要「和」或「+」描述 = 不是一個單元 |
+| 預估執行時間 | 10 分鐘 | 行為單元可能還能再拆 |
+
+> **安全網 vs 3b 拆分是不同層級的判斷**：安全網閾值檢查「單一 Ticket 是否只含一個行為單元」（粒度），3b 拆分觸發判斷「整個 Phase 3b 是否需要拆為多個並行子任務」（並行度）。3-5 檔案的 Ticket：安全網超標（回 Phase 1 確認行為單元是否過大）但不一定需要 3b 拆分（可能是同一關注點跨多檔案）。
+
+**粒度超標時的回環路徑**：安全網超標 → 建立「補充行為單元識別」修正 Ticket → 回到 [Phase 1 行為單元識別章節](../phase1/rules.md)（「行為單元識別」段落）重新拆解 → 產出更細的行為單元清單 → 據此重建 Phase 2/3 Ticket。
+
+### 3b 拆分觸發條件（整體 Phase 3b 並行度判斷，任一符合）
 
 | 指標 | 閾值 | 說明 |
 |------|------|------|
@@ -291,10 +310,12 @@ BookSchemaV2.js 第 12 行 `require('src/core/errors/ErrorCodes')` — 未使用
 | 案例 | 主要教訓 |
 |------|---------|
 | [並行實作重複與 Lint](../cases/parallel-impl-duplication-and-lint.md) | lint 未執行、並行未識別共用元件 |
+| [按優先級打包反模式](../cases/task-over-bundling-anti-pattern.md) | 多個不相關問題合成 1 個 Ticket，27 min → 應拆為 4 個並行 Ticket |
+| [全範圍重寫拆分策略](../cases/rewrite-scope-split-strategy.md) | 「重寫 X」應按功能切片拆分，測試與實作 1:1 對應 |
 
 > 新案例追加方式：Phase 4 審查完成後，依流程改善回饋環（見 `references/phase4/rules.md`）追加。
 
 ---
 
 **Last Updated**: 2026-04-04
-**Version**: 2.0.0 - 從 phase3-implementation.md 拆出，新增 Decision Questions、完成前執行清單、案例索引（0.17.0-W4-005.3）
+**Version**: 2.1.0 - 新增單一 Ticket 粒度閾值（驗收 <= 2、檔案 <= 2、目標 3-7 min）+ 2 個粒度案例（v0.17.0 回顧）

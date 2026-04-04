@@ -1,6 +1,6 @@
 # v0.17.0 Phase 3 實作品質案例
 
-> 來源：0.17.0-W4-004（Phase 4 多視角審查報告）
+> **背景**：並行派發 4 個代理人在獨立 worktree 實作。合併後發現 dead import（bare specifier 會阻斷 build）和重複驗證框架 — 代理人未執行 lint，且並行前未識別共用元件。
 
 ---
 

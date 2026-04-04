@@ -1,6 +1,6 @@
 # Chrome Storage API 效能延遲與批量操作瓶頸
 
-> 來源：performance-optimizer.js、chrome-storage-adapter.js、performance-optimization-report.md
+> **背景**：規格只寫「操作要快」「使用者體驗流暢」，未定義具體數值。實作者各自決定批次大小和延遲間隔，導致不同模組的效能假設不一致，整合時才發現 Chrome Storage API 的讀寫延遲遠超預期。
 > 對應 Phase：Phase 1（功能規格設計）
 > 對應 Decision Question：Q6a（效能瓶頸與最慢操作路徑）
 

@@ -1,6 +1,6 @@
 # 私有方法測試覆蓋缺口：合併邏輯和快取鍵生成
 
-> 來源：0.17.0-W4-012 回報（overview-page-controller.js、readmoo-data-validator.js）
+> **背景**：新建的私有方法（書籍合併的 key 生成、快取鍵計算）只靠上層公開方法間接覆蓋，沒有獨立的單元測試。當 key 生成邏輯讀錯欄位名（author vs authors），因測試資料碰巧同時有兩個欄位而未被偵測到。
 > 對應 Phase：Phase 2（測試設計）
 > 對應 Decision Question：Q8（私有方法測試覆蓋）
 

@@ -1,6 +1,6 @@
 # 批次書籍寫入失敗：孤立策略、回滾與預防中止的權衡
 
-> 來源：0.17.0-W4-011 回報（ValidationBatchProcessor、ChromeStorageAdapter、SchemaMigrationService、SynchronizationOrchestrator）
+> **背景**：批量寫入 100+ 本書到 Chrome Storage 時，第 50 本失敗了 — 是回滾前 49 本、忽略失敗繼續、還是中止整個操作？4 個模組各自面臨相同問題，但規格未定義失敗策略。
 > 對應 Phase：Phase 1（功能規格設計）
 > 對應 Decision Question：Q6b（寫入失敗處理策略）
 

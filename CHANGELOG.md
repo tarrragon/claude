@@ -1,3 +1,17 @@
+## [1.21.1] - 2026-04-04
+
+### Summary
+docs: TDD 案例「來源」改為「背景」故事格式，自包含來龍去脈; docs: 案例「發現位置」改為自包含描述，移除 Ticket 引用依賴; docs: TDD 粒度規則 P2 修復 — SOLID/行為單元關係、案例格式、Phase 4 粒度提醒 (+1 more)
+
+Changes: 4 docs
+
+- docs: TDD 案例「來源」改為「背景」故事格式，自包含來龍去脈
+- docs: 案例「發現位置」改為自包含描述，移除 Ticket 引用依賴
+- docs: TDD 粒度規則 P2 修復 — SOLID/行為單元關係、案例格式、Phase 4 粒度提醒
+- docs: TDD 任務粒度規則 — Use Case 驅動拆分 + 多視角審查修復
+
+---
+
 ## [1.21.0] - 2026-04-04
 
 ### Summary

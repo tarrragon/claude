@@ -270,6 +270,14 @@ Phase 4 檢討完成後的標準動作：
 - 禁止修改 SKILL.md（SKILL.md 只做路由，不放規則內容）
 - 改善內容必須包含：新增的 decision question 或執行清單項 + 至少一個正面/反面範例
 
+### 修復 Ticket 粒度規則
+
+Phase 4 產出的修復 Ticket 必須遵循粒度規則（[task-granularity-rules.md](../task-granularity-rules.md)）：
+
+- **一個發現 = 一個 Ticket**，不按 P0/P1/P2 合併多個不相關問題
+- 每個修復 Ticket 的驗收關注點 <= 2 個
+- 範例：[按優先級打包反模式](../cases/task-over-bundling-anti-pattern.md)（GRAN-001）
+
 ### 回測驗證方法
 
 改善完成後，用以下方式驗證：
@@ -340,6 +348,7 @@ Phase 4 必須記錄所有發現的技術債務，無論優先級高低。
 |------|---------|
 | [多視角審查發現總結](../cases/multi-perspective-review-findings-v0170.md) | 根因分析方法、規格/測試/實作三面向歸因 |
 | [Phase 4 豁免判斷邊界](../cases/phase4-exemption-doc-task.md) | DOC 標籤不等於低風險，豁免條件應改為 AND 邏輯 |
+| [按優先級打包反模式](../cases/task-over-bundling-anti-pattern.md) | Phase 4 發現應一個問題一個 Ticket，不按 P0/P1/P2 合併 |
 
 > 新案例追加方式：每次 Phase 4 審查完成後，依流程改善回饋環追加。
 

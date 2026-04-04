@@ -1,6 +1,6 @@
 # UC-07 錯誤場景 E/F/G：遷移失敗、Tag 不一致、配額不足
 
-> 來源：0.17.0-W5-002（W4-016 掃描發現 DQ 缺口）
+> **背景**：tag-based model 新增了三種過去不存在的錯誤場景 — 遷移中途斷電（E）、tag 引用指向已刪除的 category（F）、Chrome Storage 配額不足（G）。規格只定義了正常流程，這三種失敗場景沒有恢復策略。
 > 對應 Phase：Phase 1（功能規格設計）
 > 對應 Decision Question：Q7（錯誤恢復策略與使用者介面一致性）
 

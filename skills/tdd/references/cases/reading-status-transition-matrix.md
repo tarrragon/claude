@@ -1,6 +1,6 @@
 # isManualStatus 狀態轉換矩陣：36 種組合的合法性與自動追蹤交互
 
-> 來源：0.17.0-W5-002（W4-016 掃描發現 DQ 缺口）
+> **背景**：新增 isManualStatus 欄位（使用者手動覆蓋 Readmoo 同步的閱讀狀態）後，6 種閱讀狀態 x 6 種目標狀態 = 36 種轉換組合。規格只定義了「正常轉換路徑」，未回答：手動覆蓋後 Readmoo 再次同步時，以誰為準？
 > 對應 Phase：Phase 1（功能規格設計）
 > 對應 Decision Question：Q8（狀態轉換的完整性與 isManualStatus 行為）
 

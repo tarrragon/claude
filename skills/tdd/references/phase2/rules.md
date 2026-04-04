@@ -526,6 +526,7 @@ Then: {預期結果}
 | [印表機測試覆蓋深度不足](../cases/printer-test-coverage-depth-failure.md) | 路徑深度不足（Q7）、存在性驗證（Q_new3）、try-catch 吞錯誤（Q10） |
 | [私有方法測試覆蓋缺口](../cases/private-method-test-coverage-gap.md) | 合併邏輯和快取鍵的私有方法無獨立斷言，邊界條件未覆蓋（Q8） |
 | [異常路徑測試覆蓋缺口](../cases/error-path-test-coverage-gap.md) | 180 錯誤碼中 49% 生產路徑未測，引用 != 測試（Q_new4） |
+| [全範圍重寫拆分策略](../cases/rewrite-scope-split-strategy.md) | 測試 Ticket 應按面向拆分（欄位/狀態/CRUD/邊界），與實作 1:1 對應 |
 
 > 新案例追加方式：Phase 4 審查完成後，依流程改善回饋環（見 `references/phase4/rules.md`）追加。
 

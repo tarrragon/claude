@@ -1,6 +1,6 @@
 # Phase 0 SA 審查：Tag-based Book Model 重構（PROP-007）
 
-> 來源：0.17.0-W4-015 回報（PROP-007 Tag-based Book Model 重構的 SA 前置審查）
+> **背景**：從分類系統（category + parentId）改為標籤系統（tag-based）是跨 7 個 Use Case 的大型重構。Phase 0 SA 審查需要確認：哪些模組受影響、是否有重複造輪子、既有測試是否需要全面重寫。
 > 對應 Phase：Phase 0（架構前置審查）
 
 ---
