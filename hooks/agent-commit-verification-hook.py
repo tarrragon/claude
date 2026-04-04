@@ -7,14 +7,19 @@
 """
 Agent Commit Verification Hook - PostToolUse (Agent)
 
-功能: Agent 完成工作後，檢查是否有未 commit 的變更。
-若偵測到未 commit 的修改，輸出警告提醒 PM 確認。
+功能:
+  1. Agent 完成工作後，檢查是否有未 commit 的變更。
+     若偵測到未 commit 的修改，輸出警告提醒 PM 確認。
+  2. 輸出工作目錄還原提醒，防止 worktree 代理人完成後
+     主線程 Shell 工作目錄被污染到 worktree 路徑。
 
 觸發時機: Agent 工具完成後 (PostToolUse, matcher: Agent)
 行為: 不阻擋（exit 0），僅在 additionalContext 輸出警告
 
-來源: PC-024 — 代理人完成實作但跳過 git commit，變更未持久化
-Ticket: 0.2.0-W3-022
+來源:
+  - PC-024 — 代理人完成實作但跳過 git commit，變更未持久化
+  - 0.17.0-W5-005 — Worktree 代理人完成後主線程 Shell cwd 被污染
+Ticket: 0.2.0-W3-022, 0.17.0-W5-005
 """
 
 import json
@@ -70,6 +75,16 @@ MSG_SUGGESTED_ACTION = "建議動作"
 MSG_SUGGESTION_REVIEW = "1. 確認變更內容是否符合預期"
 MSG_SUGGESTION_COMMIT = '2. 執行 commit：git add <files> && git commit -m "feat: <description>"'
 MSG_SUGGESTION_DISCARD = "3. 若不需要：git checkout -- <files>"
+
+# cwd 還原提醒訊息（防止 worktree 代理人完成後 Shell cwd 被污染）
+MSG_CWD_RESTORE_TITLE = "[Agent 完成 - 工作目錄還原提醒]"
+MSG_CWD_RESTORE_BODY = (
+    "Worktree 代理人完成後，主線程的 Bash Shell 工作目錄可能被污染到 worktree 路徑。\n"
+    "後續的 git 操作（status/add/commit）會在錯誤的分支上執行。\n"
+    "\n"
+    "[強制] 執行下一個 Bash 命令前，先確認並還原工作目錄：\n"
+    "  cd {project_root} && pwd && git branch --show-current"
+)
 
 
 # ============================================================================
@@ -164,6 +179,26 @@ def build_warning_message(
     return "\n".join(lines)
 
 
+def build_cwd_restore_message(project_root: str) -> str:
+    """建構工作目錄還原提醒訊息
+
+    Args:
+        project_root: 專案根目錄路徑
+
+    Returns:
+        str: 格式化的還原提醒訊息
+    """
+    lines = [
+        MSG_SEPARATOR,
+        MSG_CWD_RESTORE_TITLE,
+        MSG_SEPARATOR,
+        "",
+        MSG_CWD_RESTORE_BODY.format(project_root=project_root),
+        MSG_SEPARATOR,
+    ]
+    return "\n".join(lines)
+
+
 def main() -> None:
     """主函式"""
     logger = setup_hook_logging(HOOK_NAME)
@@ -185,33 +220,40 @@ def main() -> None:
     # 取得代理人描述
     agent_description = tool_input.get("description", "unknown")
 
-    # 取得專案根目錄
+    # 取得專案根目錄（使用 CLAUDE_PROJECT_DIR 環境變數，確保是主倉庫而非 worktree）
     project_root = get_project_root()
 
     # 檢查未 commit 的檔案
     uncommitted_files = get_uncommitted_files(str(project_root), logger)
 
-    if not uncommitted_files:
+    # 建構訊息：一律附加 cwd 還原提醒（防止 worktree cwd 污染）
+    messages = []
+
+    if uncommitted_files:
+        # 有未 commit 的變更，輸出警告
+        logger.info(
+            "uncommitted files detected after agent: %s (%d files)",
+            agent_description,
+            len(uncommitted_files),
+        )
+        messages.append(build_warning_message(agent_description, uncommitted_files))
+
+        # 同時輸出到 stderr（雙通道可觀測性）
+        sys.stderr.write(f"[{HOOK_NAME}] {MSG_UNCOMMITTED_DETECTED}\n")
+    else:
         logger.debug("no uncommitted files after agent completed")
-        print(json.dumps(DEFAULT_OUTPUT))
-        sys.exit(EXIT_SUCCESS)
 
-    # 有未 commit 的變更，輸出警告
-    logger.info(
-        "uncommitted files detected after agent: %s (%d files)",
-        agent_description,
-        len(uncommitted_files),
-    )
+    # 一律附加 cwd 還原提醒（根因：Claude Code 的 worktree isolation 在
+    # 代理人完成後可能不會還原主線程的 Shell 工作目錄）
+    messages.append(build_cwd_restore_message(str(project_root)))
+    logger.info("cwd restore reminder appended (project_root=%s)", project_root)
 
-    warning_message = build_warning_message(agent_description, uncommitted_files)
-
-    # 同時輸出到 stderr（雙通道可觀測性）
-    sys.stderr.write(f"[{HOOK_NAME}] {MSG_UNCOMMITTED_DETECTED}\n")
+    combined_message = "\n\n".join(messages)
 
     output = {
         "hookSpecificOutput": {
             "hookEventName": "PostToolUse",
-            "additionalContext": warning_message,
+            "additionalContext": combined_message,
         }
     }
     print(json.dumps(output))

@@ -1,3 +1,28 @@
+## [1.21.0] - 2026-04-04
+
+### Summary
+feat: 完成 — worktree 基底距離驗證 Hook 新增; refactor: TDD SKILL 全面重整 + worktree 自動 commit hook; fix: /006 完成 — worktree 污染緩解 + 過時分支根因分析 (+12 more)
+
+Changes: 1 feat, 1 refactor, 2 fix, 11 docs
+
+- feat: 完成 — worktree 基底距離驗證 Hook 新增
+- refactor: TDD SKILL 全面重整 + worktree 自動 commit hook
+- fix: /006 完成 — worktree 污染緩解 + 過時分支根因分析
+- fix: 規格文件引用穩定性 — 移除 ticket 引用，建立規則 7
+- docs: 新增 PC-037 error pattern — 背景代理人完成前過早驗證產出物
+- docs: /003/004 完成 — 4 個 DQ 案例新增 + 流程追蹤修正 + 測試驗證
+- docs: 完成 — 三視角遺漏掃描，建立 4 個 W5 修復 Ticket
+- docs: TDD SKILL 案例體系完善 — 新增 6 個案例覆蓋 DQ 缺口
+- docs: W4 收尾 — TDD SKILL 案例索引補充 + worktree 調查結論
+- docs: worktree 調查 + TDD 結構清理完成
+- docs: .2 完成 — Phase 2 rules.md 新增案例索引 + Ticket 狀態更新
+- docs: TDD Phase 1/2 references 目錄重構（.1 + .2）
+- docs: TDD Phase 3/4 references 目錄重構（.3）
+- docs: 新增 TDD Phase 1.5 規格多視角審查 + 3 個修正 Ticket
+- docs: roadmap 重整 — PROP-007 tag-based model 提前至 v0.17，建立水平式 TDD Ticket 結構
+
+---
+
 ## [1.20.2] - 2026-04-02
 
 ### Summary

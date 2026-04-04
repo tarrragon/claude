@@ -9,8 +9,8 @@ description: "[DEPRECATED] 已遷移至 /tdd SKILL。請使用 /tdd split 命令
 >
 > - SOLID 拆分分析：`/tdd split`
 > - CLI 腳本：`.claude/skills/tdd/scripts/tdd-phase1-split.py`
-> - 方法論文件：`.claude/skills/tdd/references/phase1-split-methodology.md`
-> - Phase 1 設計指引：`.claude/skills/tdd/references/phase1-design.md`
+> - 方法論文件：`.claude/skills/tdd/references/phase1/rules.md`（SOLID 拆分進階工具與範本章節）
+> - Phase 1 設計指引：`.claude/skills/tdd/references/phase1/rules.md`
 >
 > **遷移日期**：2026-03-12
 > **遷移 Ticket**：0.1.0-W44-001.6

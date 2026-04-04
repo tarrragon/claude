@@ -32,6 +32,12 @@
 [Phase 1] 功能設計 → [lavender-interface-designer](../../agents/lavender-interface-designer.md)
     |
     v
+[Phase 1.5] 規格多視角審查 → /parallel-evaluation G（Consistency/Completeness/CogLoad）
+    |
+    +-- 發現問題 → 建立修正 Ticket → 修正後重新審查
+    +-- 通過 → 進入 Phase 2
+    |
+    v
 [Phase 2] 測試設計 → [sage-test-architect](../../agents/sage-test-architect.md)
     |
     v
@@ -145,11 +151,46 @@
 
 ---
 
+## Phase 1.5：規格多視角審查（Phase 1 完成後強制）
+
+### 目的
+
+單一視角必然有盲點。Phase 1 產出的功能規格、Schema 定義、邊界條件等文件，需經多視角審查才能作為測試和實作的穩定依據。
+
+### 觸發條件
+
+Phase 1 功能規格完成後**強制執行**，無豁免。
+
+### 審查方式
+
+使用 `/parallel-evaluation`（情境 G：系統設計）派發三人組：
+
+| 視角 | 審查重點 |
+|------|---------|
+| linux（常駐） | 設計品味：是否過度複雜、YAGNI、是否有更簡單的解法 |
+| Consistency | 跨文件一致性：UC vs Schema vs Storage vs 遷移規則 |
+| Completeness | 邊界條件完整性：遺漏的錯誤場景、模糊的規格、測試撰寫時的缺口 |
+
+### 審查後處理
+
+| 發現優先級 | 處理方式 |
+|-----------|---------|
+| 高（設計缺陷、雙重真相、YAGNI） | 建立修正 Ticket，修正後方可進入 Phase 2 |
+| 中（規格模糊、邊界遺漏） | 建立修正 Ticket，修正後方可進入 Phase 2 |
+| 低（風格、最佳化建議） | 建立延後追蹤 Ticket，不阻擋 Phase 2 |
+
+### 通過條件
+
+所有高/中優先發現的修正 Ticket 已完成。低優先可延後。
+
+---
+
 ## Phase 1-4：標準 TDD 流程
 
 | Phase | 代理人 | 產出 |
 |-------|-------|------|
 | Phase 1 功能設計 | lavender-interface-designer | 功能規格、API 定義、驗收標準 |
+| Phase 1.5 規格審查 | /parallel-evaluation G | 跨文件一致性、邊界完整性、設計品味 |
 | Phase 2 測試設計 | sage-test-architect | 測試案例、GWT 規格、檔案結構 |
 | Phase 3a 策略規劃 | pepper-test-implementer | 策略文件、虛擬碼、債務評估 |
 | Phase 3b 實作執行 | parsley-flutter-developer | 程式碼、通過測試、品質報告 |
@@ -176,7 +217,8 @@
 | 從 | 到 | 條件 |
 |----|----|----|
 | Phase 0 | Phase 1 | SA 審查通過 |
-| Phase 1 | Phase 2 | 功能規格完成 |
+| Phase 1 | Phase 1.5 | 功能規格完成 |
+| Phase 1.5 | Phase 2 | 多視角審查通過（無未修正的高/中優先發現） |
 | Phase 2 | Phase 3a | 測試案例設計完成 |
 | Phase 3a | 3b 拆分評估 | 策略文件完成 |
 | 3b 拆分評估 | Phase 3b | PM 完成拆分評估（見下方） |
@@ -291,5 +333,5 @@ SA 否決不可繞過 — 必須解決否決原因後重新審查。
 
 ---
 
-**Last Updated**: 2026-03-27
-**Version**: 2.14.0 - 新增 SA 否決升級路徑（0.2.1-W1-008）
+**Last Updated**: 2026-04-03
+**Version**: 2.15.0 - 新增 Phase 1.5 規格多視角審查（單一視角必然有盲點，規格完成後強制多視角審查）

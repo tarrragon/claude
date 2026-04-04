@@ -58,7 +58,7 @@ LAYER1_PATTERNS = [
     ".claude/rules/flows/",
     ".claude/rules/guides/",
     ".claude/rules/forbidden/",
-    ".claude/skills/tdd/references/portable-design-boundary.md",
+    ".claude/skills/tdd/references/phase0/rules.md",
     ".claude/skills/tdd/references/portable-tdd-standard.md",
 ]
 
@@ -385,7 +385,7 @@ def format_warning_message(violations: List[Dict[str, Any]], file_path: str) -> 
         output_lines.append(f"禁止項：{violation['type']}")
         output_lines.append(f"內容：{violation['content']}")
         output_lines.append(f"建議：改為「{violation['replacement']}」")
-        output_lines.append("相關規範：.claude/skills/tdd/references/portable-design-boundary.md")
+        output_lines.append("相關規範：.claude/skills/tdd/references/phase0/rules.md")
         output_lines.append("")
 
     return "\n".join(output_lines)
