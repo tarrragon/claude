@@ -221,7 +221,7 @@ Phase 1 功能規格完成後**強制執行**，無豁免。
 | Phase 1.5 | Phase 2 | 多視角審查通過 | 填寫 Context Bundle（→ Phase 2） |
 | Phase 2 | Phase 3a | 測試案例設計完成 | 填寫 Context Bundle（→ Phase 3a） |
 | Phase 3a | 3b 拆分評估 | 策略文件完成 | 填寫 Context Bundle（→ Phase 3b） |
-| 3b 拆分評估 | Phase 3b | PM 完成拆分評估（見下方） | - |
+| 3b 拆分評估 | Phase 3b | PM 完成拆分評估（見下方） | 各子任務填寫 Context Bundle |
 | Phase 3b | Phase 4a 或 4b | 測試全部通過 | 填寫 Context Bundle（→ Phase 4a） |
 | Phase 4a | Phase 4b | 多視角分析報告完成 | - |
 | Phase 4b | Phase 4c | 重構執行完成 | - |

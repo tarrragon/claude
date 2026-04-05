@@ -1,3 +1,17 @@
+## [1.23.0] - 2026-04-06
+
+### Summary
+refactor: 多視角審查修正 — Context Bundle 精簡 + 不一致修復; docs: PROC-001 — 擴展為「所有角色依照文件做事」通用原則; docs: PROC-001 錯誤模式 — 錯誤假設 PM 具備人類學習能力 (+1 more)
+
+Changes: 1 refactor, 3 docs
+
+- refactor: 多視角審查修正 — Context Bundle 精簡 + 不一致修復
+- docs: PROC-001 — 擴展為「所有角色依照文件做事」通用原則
+- docs: PROC-001 錯誤模式 — 錯誤假設 PM 具備人類學習能力
+- docs: 建立 Context Bundle Phase Guide — 各 Phase 特定欄位指引
+
+---
+
 ## [1.22.1] - 2026-04-06
 
 ### Summary

@@ -9,7 +9,7 @@
 ## 核心原則
 
 > 1. **Context Bundle 優先**：派發前 PM 必須在 Ticket 中填寫 Context Bundle（見 `context-bundle-spec.md`）
-> 2. **Tool call 預算**：如果「探索 + 寫入 + 測試 + commit」超過 15 次，使用分工模式（見 `two-stage-dispatch.md`）
+> 2. **Tool call 預算**：評估 subagent tool call 消耗，超出預算時使用分工模式（閾值見 `two-stage-dispatch.md`）
 
 ---
 
