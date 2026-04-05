@@ -162,7 +162,7 @@ DEFAULT_UNDEFINED_VALUE: str = "待定義"
 TASK_CHAIN_DIRECTION_TYPES: tuple = ("to-sibling", "to-parent", "to-child")
 
 # 非任務鏈 direction 類型（來源 ticket completed 時應過濾為 stale）
-NON_CHAIN_DIRECTION_TYPES: tuple = ("context-refresh",)
+NON_CHAIN_DIRECTION_TYPES: tuple = ("context-refresh", "next-wave")
 
 # ============================================================
 # TDD 階段

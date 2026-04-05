@@ -411,9 +411,10 @@ Step 4: ticket track complete <id>
 | Checkpoint | 判斷條件 | 路由 |
 |------------|---------|------|
 | 0 建立後 Handoff | 可並行派發? | 是 → 留在 session 並行派發；否 → commit + handoff |
-| 1 變更狀態 | 有未提交變更? | 是 → commit；無 → 跳至 Checkpoint 3 |
+| 1 變更狀態 | 有未提交變更? | 是 → commit；無 → 跳至 Checkpoint 1.5 |
 | 1.5 錯誤學習 | commit 成功後 | AskUserQuestion #16 |
 | 1.8 合併回 main | 在開發分支上? | 是 → merge --no-ff → main → 刪除開發分支；否 → 跳過 |
+| 1.9 Worktree 合併 | `git worktree list` 有非 main worktree? | 有未合併 commit → 合併 + 清理；無 → 跳過 |
 | 2 情境評估 | [強制查詢] ticket track list | 情境 D/A/B/C（見下方） |
 | 3 後續路由 | 任務類型 | AskUserQuestion #13 |
 | 4 parallel-evaluation | 階段完成後 | AskUserQuestion #14 |
@@ -426,6 +427,29 @@ Step 4: ticket track complete <id>
 | A（#11a） | ticket 仍 in_progress | Context 刷新 Handoff |
 | B（#11b） | ticket completed + 同 Wave 有 pending | 任務切換 Handoff |
 | C | ticket completed + 同 Wave 無 pending | [強制] /parallel-evaluation Wave 審查（必須包含 linux 常駐審查委員，見 parallel-dispatch.md 多視角審查固定三人組）→ C1: 有其他 Wave → #3a；C2: 全完成 → [強制] 版本收尾技術債整理（見 version-progression.md）→ /version-release check + #13 |
+
+**Checkpoint 1.9 Worktree 合併（強制，來源 PC-039）**：
+
+```
+git worktree list → 有非 main worktree?
+    |
+    +-- 否 → 跳過
+    |
+    +-- 是 → 逐一檢查 git log main..{branch} --oneline
+              |
+              +-- 有未合併 commit → git merge {branch} --no-edit
+              |                     → git worktree remove {path}
+              |                     → git branch -d {branch}
+              |
+              +-- 無 commit → git worktree remove {path} --force
+                              → git branch -d {branch}
+```
+
+**觸發時機**：所有涉及 worktree 的工作流結束點：
+- Agent 完成後（PostToolUse:Agent Hook 提醒 + PM 主動執行）
+- ticket complete 後（Checkpoint 1.9）
+- Session 結束前（handoff/clear 前）
+- 切換到其他 Ticket 前
 
 **與現有層級的銜接**：第四層（建立完成）→ Checkpoint 0；第五層（Phase 完成）→ Checkpoint 1；第六層（incident 完成）→ Checkpoint 3；第七層（complete）→ Checkpoint 1
 

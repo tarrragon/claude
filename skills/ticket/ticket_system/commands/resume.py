@@ -316,9 +316,11 @@ def _print_basic_info(handoff: Dict[str, Any]) -> None:
         direction = handoff.get("direction", "auto")
         print(f"  交接方向: {direction}")
 
-        # Context refresh 額外說明
+        # Direction 額外說明
         if direction == "context-refresh":
             print(f"    （Context 刷新：在新 session 中以乾淨環境繼續此任務）")
+        elif direction == "next-wave":
+            print(f"    （Wave 交接：前一 wave 完成，進入下一 wave 規劃/實作）")
 
     if "timestamp" in handoff:
         print(f"  交接時間: {handoff.get('timestamp')}")
@@ -331,6 +333,26 @@ def _print_5w1h_info(handoff: Dict[str, Any]) -> None:
     if "what" in handoff:
         print(SectionHeaders.TASK_DESCRIPTION)
         print(f"  {handoff.get('what')}")
+        print()
+
+
+def _print_wave_info(handoff: Dict[str, Any]) -> None:
+    """列印 wave-level 交接專屬資訊（from_version, to_version, session_summary）"""
+    if handoff.get("direction") != "next-wave":
+        return
+
+    from_version = handoff.get("from_version")
+    to_version = handoff.get("to_version")
+    session_summary = handoff.get("session_summary")
+
+    if from_version or to_version or session_summary:
+        print("[Wave 交接資訊]")
+        if from_version:
+            print(f"  來源 Wave: {from_version}")
+        if to_version:
+            print(f"  目標 Wave: {to_version}")
+        if session_summary:
+            print(f"  Session 摘要: {session_summary}")
         print()
 
 
@@ -390,6 +412,7 @@ def _print_handoff_info(handoff: Dict[str, Any], ticket: Optional[Dict[str, Any]
     print()
 
     _print_basic_info(handoff)
+    _print_wave_info(handoff)
     _print_5w1h_info(handoff)
     _print_chain_info(handoff)
     _print_markdown_content(handoff)
@@ -470,6 +493,19 @@ def _print_args_error(error_msg: str) -> None:
     print(ResumeMessages.RESUME_EXAMPLES)
     print(ResumeMessages.RESUME_EXAMPLE_ID)
     print(ResumeMessages.RESUME_LIST_CMD)
+
+
+def _print_wave_checkpoint(handoff: Dict[str, Any]) -> None:
+    """Wave-level handoff 的 checkpoint 引導（非 ticket 交接）。"""
+    to_version = handoff.get("to_version", "?")
+    print()
+    print(SEPARATOR_PRIMARY)
+    print(SectionHeaders.SUGGESTED_NEXT_STEP)
+    print(SEPARATOR_PRIMARY)
+    print()
+    print(f"  Wave 交接已恢復，目標 wave: {to_version}")
+    print(f"  請根據 context 中的審查發現和建議，規劃下一步行動。")
+    print()
 
 
 def _print_resume_checkpoint(ticket_id: str) -> None:
@@ -594,7 +630,11 @@ def _execute_resume(ticket_id: str, version: Optional[str]) -> int:
     print(InfoMessages.HANDOFF_RESUMED)
     print(SEPARATOR_PRIMARY)
 
-    _print_resume_checkpoint(ticket_id)
+    # Wave-level handoff 使用不同的 checkpoint（無 ticket 認領流程）
+    if handoff.get("direction") == "next-wave":
+        _print_wave_checkpoint(handoff)
+    else:
+        _print_resume_checkpoint(ticket_id)
     return 0
 
 

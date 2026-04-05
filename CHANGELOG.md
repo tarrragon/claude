@@ -1,3 +1,33 @@
+## [1.22.0] - 2026-04-06
+
+### Summary
+feat: 修正派工規則 — 從行數閾值改為 tool call 預算模型; feat: 派工改善方案落地 — 規則更新三件組; feat: 擴充 Worktree 狀態檢查流程（PC-039） (+17 more)
+
+Changes: 8 feat, 1 refactor, 3 fix, 7 docs, 1 chore
+
+- feat: 修正派工規則 — 從行數閾值改為 tool call 預算模型
+- feat: 派工改善方案落地 — 規則更新三件組
+- feat: 擴充 Worktree 狀態檢查流程（PC-039）
+- feat: agent-commit-verification-hook 新增 worktree 合併檢查（）
+- feat: 完成 — worktree-merge-reminder-hook 實作 + 註冊
+- feat: + 實作完成 — ticket create why 必填 + commit-before-dispatch Hook
+- feat: W2 規劃 — resume next-wave 修正 + 7 個實作 Ticket 建立
+- feat: 新增 /version-release start 子命令 + 修復 handoff stop hook 誤觸發
+- refactor: 多視角審查修正 — DRY 精簡 + phase3b-dispatch-guide 更新
+- fix: 修復方向修正 — ticket create 強制 why 必填（非 resume 檢查）
+- fix: handoff stop hook reason 從複述改為引導檢查
+- fix: 修正 todolist.yaml 活躍版本 — 補上 ，對齊 CLAUDE.md 里程碑
+- docs: 建立 Claude Code 平台限制參考文件
+- docs: PC-039 錯誤模式 — Worktree 未合併導致代理人產出不可見
+- docs: PC-020 錯誤模式 — 修復方向應在生產端而非消費端
+- docs: ~010 流程修復完成 — Worktree SOP + Resume 5W1H + Phase 3b 派發指南
+- docs: 記錄 3 個錯誤模式 + 建立 3 個修復/分析 Ticket
+- docs: W1 — 4 Ticket 完成（26 failed → 2 failed）
+- docs: handoff — 發布完成，規劃下一版本
+- chore: 註冊 commit-before-dispatch Hook + worklog 更新
+
+---
+
 ## [1.21.1] - 2026-04-04
 
 ### Summary

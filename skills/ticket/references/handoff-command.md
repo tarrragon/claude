@@ -52,6 +52,14 @@ commit-handoff-hook 偵測到 `git commit` 成功後，PM 會用 AskUserQuestion
 | `in_progress` | Context 刷新 | `/ticket handoff <id> --context-refresh` | 乾淨 context 繼續同一任務 |
 | `in_progress` | 先處理子任務 | `/ticket handoff <id> --to-child <target>` | 被子任務阻塞，先切換 |
 
+**Wave-level 交接**（非 ticket 綁定）：
+
+| 情境 | Direction | 說明 |
+|------|-----------|------|
+| Wave 完成，進入下一 Wave | `next-wave` | 由 Hook 或手動建立，不綁定特定 ticket |
+
+`next-wave` handoff 的 JSON 包含 `from_version`、`to_version`、`session_summary` 等 wave-level 欄位，`ticket_id` 為描述性名稱（如 `v0.17.2-W2-planning`）。
+
 **禁止行為**：在 `completed` ticket 使用 `--context-refresh`（此旗標僅適用 `in_progress`，會直接報錯）
 
 ---

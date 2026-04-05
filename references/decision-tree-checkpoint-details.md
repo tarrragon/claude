@@ -267,6 +267,8 @@ ticket resume <id>
 
 **核心原則**：resume 後不直接開始實作，先走 Checkpoint R 確認範圍再 claim。
 
+> **PC-018 防護**：5W1H 完整性應在 **ticket create 時** 強制填寫（why 為必填），而非 resume 時補救。詳見 ticket create 流程。
+
 ---
 
 ## Handoff 強制動作與前置檢查

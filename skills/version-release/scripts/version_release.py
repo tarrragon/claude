@@ -8,12 +8,14 @@
 Version Release Tool - 完整版本發布流程自動化工具
 
 功能:
+- 版本啟動：建立新版本的 todolist 條目、worklog 結構、bump 版本檔案
 - Pre-flight 檢查：驗證 worklog、技術債務、版本同步
 - 文件更新：CHANGELOG、todolist、package.json/manifest.json 驗證
 - Git 操作：合併、Tag、推送、分支清理
 - 預覽模式：--dry-run 查看完整操作流程
 
 使用方式:
+  uv run version_release.py start --version X.Y.Z [--from X.Y.Z] [--description "..."] [--dry-run]
   uv run version_release.py release [--version X.Y.Z] [--dry-run]
   uv run version_release.py check [--version X.Y.Z]
   uv run version_release.py update-docs [--version X.Y.Z] [--dry-run]
@@ -1375,6 +1377,381 @@ def defer_technical_debts(version: str, defer_to_version: str, dry_run: bool = F
         return True
 
 
+def find_last_completed_version(todolist_path: Path) -> Optional[str]:
+    """從 todolist.yaml 找出最後一個 completed 版本。
+
+    遍歷 versions 列表，回傳最後一個 status 為 completed 的版本號。
+
+    Args:
+        todolist_path: todolist.yaml 的完整路徑
+
+    Returns:
+        版本號字串，或 None（找不到任何 completed 版本）
+    """
+    with open(todolist_path, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+
+    last_completed = None
+    for entry in data.get("versions", []):
+        if entry.get("status") == "completed":
+            last_completed = entry.get("version")
+    return last_completed
+
+
+def insert_version_to_todolist(
+    todolist_path: Path,
+    new_version: str,
+    from_version: str,
+    description: str,
+    dry_run: bool = False,
+) -> bool:
+    """在 todolist.yaml 中插入新版本條目（字串操作，保留格式）。
+
+    在 from_version 條目之後插入新版本條目，狀態設為 active。
+
+    Args:
+        todolist_path: todolist.yaml 路徑
+        new_version: 新版本號
+        from_version: 前一個版本號（插入位置參考）
+        description: 版本描述
+        dry_run: 預覽模式
+
+    Returns:
+        是否成功
+    """
+    with open(todolist_path, encoding="utf-8") as f:
+        content = f.read()
+
+    # 找到 from_version 條目
+    from_major_minor = extract_major_minor(from_version)
+    from_candidates = [from_version, from_major_minor]
+    insert_pos = -1
+
+    for ver_str in from_candidates:
+        marker = f'version: "{ver_str}"'
+        start = content.find(f"  - {marker}")
+        if start == -1:
+            start = content.find(f"- {marker}")
+        if start == -1:
+            continue
+
+        # 找到該條目的結尾（下一個條目的開頭）
+        next_entry = content.find("\n  - version:", start + 1)
+        if next_entry == -1:
+            next_entry = content.find("\n- version:", start + 1)
+
+        if next_entry != -1:
+            insert_pos = next_entry + 1  # 換行後
+        else:
+            # from_version 是最後一個條目，附加到末尾
+            insert_pos = len(content)
+            if not content.endswith("\n"):
+                insert_pos = len(content)
+        break
+
+    if insert_pos == -1:
+        print_error(f"在 todolist.yaml 中找不到版本 {from_version}")
+        return False
+
+    # 建立新條目
+    new_entry = (
+        f'\n  - version: "{new_version}"\n'
+        f"    status: active\n"
+        f'    description: "{description}"\n'
+    )
+
+    new_content = content[:insert_pos] + new_entry + content[insert_pos:]
+
+    # 更新 last_updated
+    today = datetime.now().strftime("%Y-%m-%d")
+    new_content = re.sub(
+        r'(last_updated: ")[^"]*(")',
+        rf"\g<1>{today}\2",
+        new_content,
+        count=1,
+    )
+
+    if dry_run:
+        print_info("[DRY RUN] 將在 todolist.yaml 插入:")
+        print_info(new_entry.rstrip())
+    else:
+        with open(todolist_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+
+    return True
+
+
+def create_worklog_structure(
+    version: str, description: str, dry_run: bool = False
+) -> Tuple[bool, List[str]]:
+    """建立版本 worklog 目錄結構和主檔案。
+
+    建立目錄結構：docs/work-logs/v{major}/v{major}.{minor}/v{version}/tickets/
+    建立 worklog 主檔案（從模板生成）。
+    如果 middle worklog 不存在，也一併建立。
+
+    Args:
+        version: 版本號（如 "0.17.2"）
+        description: 版本描述
+        dry_run: 預覽模式
+
+    Returns:
+        (是否成功, 建立的檔案/目錄清單)
+    """
+    root = get_project_root()
+    major = version.split(".")[0]
+    major_minor = extract_major_minor(version)
+
+    worklog_base = root / "docs" / "work-logs"
+    major_dir = worklog_base / f"v{major}"
+    minor_dir = major_dir / f"v{major_minor}"
+    version_dir = minor_dir / f"v{version}"
+    tickets_dir = version_dir / "tickets"
+
+    created_items: List[str] = []
+
+    # 建立目錄
+    if dry_run:
+        print_info(f"[DRY RUN] 建立目錄: {tickets_dir.relative_to(root)}")
+        created_items.append(str(tickets_dir.relative_to(root)))
+    else:
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        created_items.append(str(tickets_dir.relative_to(root)))
+
+    # 建立 middle worklog（如果不存在）
+    middle_worklog = minor_dir / f"v{major_minor}-main.md"
+    if not middle_worklog.exists():
+        middle_content = (
+            f"# v{major_minor} 版本系列索引\n\n"
+            f"| 版本 | 狀態 | 說明 |\n"
+            f"|------|------|------|\n"
+            f"| v{version} | 進行中 | {description} |\n"
+        )
+        if dry_run:
+            print_info(
+                f"[DRY RUN] 建立索引: {middle_worklog.relative_to(root)}"
+            )
+        else:
+            middle_worklog.write_text(middle_content, encoding="utf-8")
+        created_items.append(str(middle_worklog.relative_to(root)))
+
+    # 建立 worklog 主檔案（從模板）
+    template_path = (
+        root / ".claude" / "skills" / "doc-flow" / "templates" / "worklog.md.template"
+    )
+    worklog_file = version_dir / f"v{version}-main.md"
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    if template_path.exists():
+        template = template_path.read_text(encoding="utf-8")
+        worklog_content = (
+            template.replace("{VERSION}", version)
+            .replace("{START_DATE}", today)
+            .replace("{ONE_LINE_GOAL}", description or "待定義")
+            .replace("{WHY_THIS_VERSION}", "待補充")
+            .replace("{INITIAL_CONTEXT}", "待補充")
+            .replace("{LAST_UPDATE}", today)
+        )
+    else:
+        # 模板不存在時的 fallback
+        worklog_content = (
+            f"# v{version} 版本工作日誌\n\n"
+            f"**版本號**: v{version}\n"
+            f"**開始日期**: {today}\n"
+            f"**目標**: {description or '待定義'}\n"
+            f"**狀態**: 進行中\n"
+        )
+        print_warning(f"模板不存在: {template_path.relative_to(root)}，使用簡易格式")
+
+    if dry_run:
+        print_info(f"[DRY RUN] 建立 worklog: {worklog_file.relative_to(root)}")
+    else:
+        worklog_file.write_text(worklog_content, encoding="utf-8")
+    created_items.append(str(worklog_file.relative_to(root)))
+
+    return True, created_items
+
+
+def bump_json_version(file_path: Path, new_version: str, dry_run: bool = False) -> bool:
+    """更新 JSON 檔案中的 version 欄位。
+
+    讀取 JSON → 更新 version → 寫回（保留 2 空格縮排 + 結尾換行）。
+
+    Args:
+        file_path: JSON 檔案路徑
+        new_version: 新版本號
+        dry_run: 預覽模式
+
+    Returns:
+        是否成功
+    """
+    if not file_path.exists():
+        print_error(f"找不到 {file_path}")
+        return False
+
+    with open(file_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    old_version = data.get("version", "unknown")
+    data["version"] = new_version
+
+    if dry_run:
+        print_info(
+            f"[DRY RUN] {file_path.name}: {old_version} -> {new_version}"
+        )
+    else:
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+
+    return True
+
+
+def cmd_start_version(
+    version: str,
+    from_version: Optional[str] = None,
+    description: str = "",
+    dry_run: bool = False,
+) -> bool:
+    """執行 start 子命令：程式化版本啟動流程。
+
+    依序執行：前版本驗證 → 重複檢查 → 更新 todolist →
+    建立 worklog 結構 → bump 版本檔案 → 摘要報告。
+
+    Args:
+        version: 新版本號（已 normalize）
+        from_version: 前一個版本號（可選，自動偵測）
+        description: 版本描述
+        dry_run: 預覽模式
+
+    Returns:
+        是否成功
+    """
+    root = get_project_root()
+    todolist_path = root / "docs" / "todolist.yaml"
+    changed_files: List[str] = []
+
+    if not todolist_path.exists():
+        print_error("找不到 docs/todolist.yaml")
+        return False
+
+    # ── Step 1: 前版本驗證 ──
+    print_section("Step 1: 前版本驗證")
+
+    if not from_version:
+        from_version = find_last_completed_version(todolist_path)
+        if from_version:
+            print_info(f"自動偵測前版本: {from_version}")
+        else:
+            print_error("無法自動偵測前版本，請使用 --from 指定")
+            return False
+    else:
+        # 驗證指定的 from_version 為 completed
+        with open(todolist_path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        found = False
+        for entry in data.get("versions", []):
+            if entry.get("version") == from_version:
+                if entry.get("status") != "completed":
+                    print_error(
+                        f"版本 {from_version} 狀態為 {entry.get('status')}，非 completed"
+                    )
+                    return False
+                found = True
+                break
+        if not found:
+            print_error(f"版本 {from_version} 不在 todolist.yaml 中")
+            return False
+
+    print_success(f"前版本: {from_version}")
+
+    # 檢查 git tag
+    try:
+        result = subprocess.run(
+            ["git", "tag", "-l", f"v{from_version}"],
+            capture_output=True,
+            text=True,
+            cwd=root,
+        )
+        if result.stdout.strip():
+            print_success(f"Git tag v{from_version} 存在")
+        else:
+            print_warning(f"Git tag v{from_version} 不存在（非致命）")
+    except Exception:
+        print_warning("無法檢查 git tag（非致命）")
+
+    # ── Step 2: 重複檢查 ──
+    print_section("Step 2: 重複檢查")
+
+    with open(todolist_path, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    for entry in data.get("versions", []):
+        if entry.get("version") == version:
+            print_error(f"版本 {version} 已存在於 todolist.yaml（狀態: {entry.get('status')}）")
+            return False
+    print_success("todolist.yaml 中無重複版本")
+
+    major = version.split(".")[0]
+    major_minor = extract_major_minor(version)
+    version_dir = root / "docs" / "work-logs" / f"v{major}" / f"v{major_minor}" / f"v{version}"
+    if version_dir.exists():
+        print_error(f"Worklog 目錄已存在: {version_dir.relative_to(root)}")
+        return False
+    print_success("worklog 目錄不存在，可以建立")
+
+    # ── Step 3: 更新 todolist.yaml ──
+    print_section("Step 3: 更新 todolist.yaml")
+
+    ok = insert_version_to_todolist(
+        todolist_path, version, from_version, description or "待定義", dry_run
+    )
+    if not ok:
+        return False
+    print_success("todolist.yaml 已更新")
+    changed_files.append("docs/todolist.yaml")
+
+    # ── Step 4: 建立 worklog 目錄結構 ──
+    print_section("Step 4: 建立 worklog 目錄結構")
+
+    ok, created = create_worklog_structure(version, description or "待定義", dry_run)
+    if not ok:
+        return False
+    for item in created:
+        print_success(f"建立: {item}")
+    changed_files.extend(created)
+
+    # ── Step 5: Bump 版本檔案 ──
+    print_section("Step 5: Bump 版本檔案")
+
+    for json_file in ["package.json", "manifest.json"]:
+        path = root / json_file
+        ok = bump_json_version(path, version, dry_run)
+        if not ok:
+            return False
+        print_success(f"{json_file} 版本已更新為 {version}")
+        changed_files.append(json_file)
+
+    # ── 摘要報告 ──
+    print_section("摘要")
+
+    mode_label = " (DRY RUN)" if dry_run else ""
+    print_info(f"版本啟動完成{mode_label}:")
+    print_info(f"  新版本: {version}")
+    print_info(f"  前版本: {from_version}")
+    print_info(f"  描述: {description or '待定義'}")
+    print_info("")
+    print_info("變更檔案:")
+    for f in changed_files:
+        print_info(f"  - {f}")
+    print_info("")
+    print_info("下一步建議:")
+    print_info("  1. 建立第一批 Ticket（Wave 1）")
+    print_info("  2. 執行 git add + commit 提交版本啟動變更")
+    print_info(f"  3. 開始 v{version} 開發")
+
+    return True
+
+
 def update_todolist(version: str, dry_run: bool = False) -> bool:
     """更新 todolist.yaml - 使用字串替換保留格式和注釋
 
@@ -1758,6 +2135,12 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 常用範例:
+  # 啟動新版本
+  uv run version_release.py start --version 0.18.0 --description "測試重寫"
+
+  # 啟動新版本（預覽模式）
+  uv run version_release.py start --version 0.18.0 --dry-run
+
   # 檢查版本是否準備好發布
   uv run version_release.py check --version 0.20
 
@@ -1785,6 +2168,13 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command", help="可用的子命令")
 
+    # start 子命令
+    start_parser = subparsers.add_parser("start", help="啟動新版本")
+    start_parser.add_argument("--version", required=True, help="新版本號 (X.Y 或 X.Y.Z)")
+    start_parser.add_argument("--from", dest="from_version", help="前一個版本號（預設自動偵測）")
+    start_parser.add_argument("--description", default="", help="版本描述")
+    start_parser.add_argument("--dry-run", action="store_true", help="預覽模式")
+
     # release 子命令
     release_parser = subparsers.add_parser("release", help="完整發布流程")
     release_parser.add_argument("--version", help="版本號 (X.Y 或 X.Y.Z)")
@@ -1808,6 +2198,24 @@ def main():
         return 1
 
     try:
+        if args.command == "start":
+            version = normalize_version(args.version)
+            header = f"Version Start - {version}"
+            if args.dry_run:
+                header += " (DRY RUN)"
+            print_header(header)
+
+            if args.dry_run:
+                print_warning("預覽模式：不會寫入任何檔案\n")
+
+            ok = cmd_start_version(
+                version=version,
+                from_version=args.from_version,
+                description=args.description,
+                dry_run=args.dry_run,
+            )
+            return 0 if ok else 1
+
         # 規範化版本號
         version = normalize_version(args.version if hasattr(args, "version") else None)
 

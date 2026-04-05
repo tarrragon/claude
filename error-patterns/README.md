@@ -249,6 +249,13 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-029 | 並行代理人共用檔案衝突 | 中 | v0.2.0 |
 | PC-030 | 代理人定義 slash command 引用無法執行 | 中 | v0.2.0 |
 | PC-031 | error-pattern SKILL 引用錯誤的知識庫路徑 | 中 | v0.2.0 |
+| PC-032 | 版本完成後跳過 release flow | 中 | v0.2.0 |
+| PC-033 | worklog 過時阻塞 release | 中 | v0.2.0 |
+| PC-034 | 工作流輸出無持久化 | 中 | v0.2.0 |
+| PC-035 | 版本狀態與 Ticket 狀態脫鉤 | 中 | v0.2.0 |
+| PC-036 | Worktree base commit 過舊導致無效工作 | 中 | v0.2.0 |
+| PC-037 | 背景代理人未完成即提前驗證 | 中 | v0.2.0 |
+| PC-038 | 新版本開始時未同步更新 todolist.yaml | 高 | v0.17.2 |
 
 ---
 

@@ -86,6 +86,14 @@ MSG_CWD_RESTORE_BODY = (
     "  cd {project_root} && pwd && git branch --show-current"
 )
 
+# Worktree 合併提醒訊息（來源：0.17.2-W2-018）
+MSG_WORKTREE_MERGE_TITLE = "[Worktree 合併提醒] 有未合併回 main 的 commit"
+MSG_WORKTREE_MERGE_BODY = (
+    "Agent 完成後，以下 worktree 有 commit 尚未合併回 main。\n"
+    "請在進行下一步前先合併：\n"
+)
+MSG_WORKTREE_MERGE_SUGGESTION = "[強制] 合併後才能進行 ticket complete 或切換任務"
+
 
 # ============================================================================
 # 核心邏輯
@@ -179,6 +187,90 @@ def build_warning_message(
     return "\n".join(lines)
 
 
+def get_unmerged_worktrees(project_root: str, logger: logging.Logger) -> list[tuple[str, str, list[str]]]:
+    """取得有未合併 commit 的 worktree 清單
+
+    Args:
+        project_root: 專案根目錄路徑
+        logger: Logger 實例
+
+    Returns:
+        list[tuple[str, str, list[str]]]: [(路徑, 分支, [commit 摘要])]
+    """
+    try:
+        result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            capture_output=True, text=True, timeout=GIT_STATUS_TIMEOUT,
+            cwd=project_root,
+        )
+        if result.returncode != 0:
+            return []
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return []
+
+    # 解析 worktree 清單
+    worktrees = []
+    current_path = None
+    current_branch = None
+    for line in result.stdout.splitlines():
+        if line.startswith("worktree "):
+            current_path = line[len("worktree "):]
+        elif line.startswith("branch "):
+            current_branch = line[len("branch refs/heads/"):]
+        elif line == "":
+            if current_path and current_branch and current_branch not in ("main", "master"):
+                worktrees.append((current_path, current_branch))
+            current_path = None
+            current_branch = None
+    if current_path and current_branch and current_branch not in ("main", "master"):
+        worktrees.append((current_path, current_branch))
+
+    # 檢查每個 worktree 是否有未合併 commit
+    unmerged = []
+    for wt_path, branch in worktrees:
+        try:
+            log_result = subprocess.run(
+                ["git", "log", f"main..{branch}", "--oneline"],
+                capture_output=True, text=True, timeout=GIT_STATUS_TIMEOUT,
+                cwd=project_root,
+            )
+            if log_result.returncode == 0 and log_result.stdout.strip():
+                commits = [l for l in log_result.stdout.strip().splitlines() if l]
+                if commits:
+                    unmerged.append((wt_path, branch, commits))
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            continue
+
+    return unmerged
+
+
+def build_worktree_merge_message(
+    unmerged: list[tuple[str, str, list[str]]],
+) -> str:
+    """建構 worktree 合併提醒訊息"""
+    lines = [
+        MSG_SEPARATOR,
+        MSG_WORKTREE_MERGE_TITLE,
+        MSG_SEPARATOR,
+        "",
+        MSG_WORKTREE_MERGE_BODY,
+    ]
+
+    for wt_path, branch, commits in unmerged:
+        lines.append(f"  [{branch}] {len(commits)} 個 commit 待合併")
+        lines.append(f"  路徑: {wt_path}")
+        for c in commits[:5]:
+            lines.append(f"    - {c}")
+        if len(commits) > 5:
+            lines.append(f"    ... 還有 {len(commits) - 5} 個")
+        lines.append(f"  建議: git merge {branch} --no-edit")
+        lines.append("")
+
+    lines.append(MSG_WORKTREE_MERGE_SUGGESTION)
+    lines.append(MSG_SEPARATOR)
+    return "\n".join(lines)
+
+
 def build_cwd_restore_message(project_root: str) -> str:
     """建構工作目錄還原提醒訊息
 
@@ -242,6 +334,16 @@ def main() -> None:
         sys.stderr.write(f"[{HOOK_NAME}] {MSG_UNCOMMITTED_DETECTED}\n")
     else:
         logger.debug("no uncommitted files after agent completed")
+
+    # 檢查 worktree 未合併 commit（來源：0.17.2-W2-018）
+    unmerged_worktrees = get_unmerged_worktrees(str(project_root), logger)
+    if unmerged_worktrees:
+        total_commits = sum(len(c) for _, _, c in unmerged_worktrees)
+        logger.warning(
+            "unmerged worktrees detected: %d worktrees, %d commits",
+            len(unmerged_worktrees), total_commits,
+        )
+        messages.append(build_worktree_merge_message(unmerged_worktrees))
 
     # 一律附加 cwd 還原提醒（根因：Claude Code 的 worktree isolation 在
     # 代理人完成後可能不會還原主線程的 Shell 工作目錄）

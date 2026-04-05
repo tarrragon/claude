@@ -578,6 +578,13 @@ def _parse_cli_args_to_config(
     # 若有 TDD Phase 順序，取第一個 Phase 作為初始階段
     tdd_phase = tdd_result.phases[0] if tdd_result.phases else None
 
+    # PC-018: why 必填驗證（DOC 類型豁免）
+    why_value = args.why or (parent_ticket.get("why") if parent_ticket else DEFAULT_UNDEFINED_VALUE)
+    if why_value == DEFAULT_UNDEFINED_VALUE and ticket_type != "DOC":
+        print(f"[ERROR] --why 為必填欄位（type={ticket_type}）。請提供需求依據。", file=sys.stderr)
+        print("  範例: --why '匯出功能需支援 v2 格式'", file=sys.stderr)
+        sys.exit(1)
+
     return {
         "ticket_id": ticket_id,
         "version": version,
@@ -590,7 +597,7 @@ def _parse_cli_args_to_config(
         "when": args.when or DEFAULT_UNDEFINED_VALUE,
         "where_layer": args.where_layer or (parent_ticket.get("where", {}).get("layer") if parent_ticket else DEFAULT_UNDEFINED_VALUE),
         "where_files": where_files,
-        "why": args.why or (parent_ticket.get("why") if parent_ticket else DEFAULT_UNDEFINED_VALUE),
+        "why": why_value,
         "how_task_type": args.how_type or DEFAULT_HOW_TASK_TYPE,
         "how_strategy": args.how_strategy or DEFAULT_UNDEFINED_VALUE,
         "parent_id": args.parent,
@@ -1076,7 +1083,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--where-layer", help="架構層級: Domain, Application, Infrastructure, Presentation"
     )
     parser.add_argument("--where", "--where-files", dest="where_files", help="影響檔案（逗號分隔，如 'file1.py,file2.py'）")
-    parser.add_argument("--why", help="需求依據")
+    parser.add_argument("--why", help="需求依據（IMP/ANA/ADJ 類型必填）")
     parser.add_argument("--how-type", help="Task Type: Implementation, Analysis, etc.")
     parser.add_argument("--how-strategy", help="實作策略")
     parser.add_argument("--parent", help="父 Ticket ID（子任務序號自動產生，勿指定 --seq）")

@@ -13,6 +13,12 @@
 | 依賴關係數 | > 3 個 |
 | 修改檔案數 | > 5 個 |
 | 認知負擔指數 | > 10 |
+| Subagent tool call 預算 | > 15 次 |
+
+### Subagent Tool Call 預算（W2-019/W2-020 新增）
+
+> Subagent 每 turn 約 ~20 tool calls。超過 15 次的任務必須拆分。
+> 預算評估方法和分工流程：`.claude/pm-rules/two-stage-dispatch.md`
 
 ---
 
@@ -107,5 +113,5 @@
 
 ---
 
-**Last Updated**: 2026-03-26
-**Version**: 4.2.0 - 策略 7 從 context 預算導向改為 SRP 功能職責導向（0.2.0-W3-020）
+**Last Updated**: 2026-04-06
+**Version**: 4.4.0 - 從「寫入量閾值」改為「tool call 預算」模型（基於平台限制實證，0.17.2-W2-020）

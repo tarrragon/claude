@@ -5,7 +5,7 @@
 # ///
 
 """
-Handoff 自動恢復 Stop Hook (v2.4.0)
+Handoff 自動恢復 Stop Hook (v2.5.0)
 
 在對話終止時，檢查是否有未完成的 handoff 任務並判斷是否阻止退出。
 
@@ -21,6 +21,12 @@ Handoff 自動恢復 Stop Hook (v2.4.0)
    - 只有最近任務（可能有代理人執行） → 輸出 INFO 提示，允許退出
    - 無任務 → 靜默通過
 5. 建立 stop flag 防止同一 session 重複觸發
+
+v2.5.0 變更:
+    - next-wave direction 加入非阻塞方向類型（與 auto 同級）
+    - 修正 next-wave handoff 在非 Ticket 工作時反覆阻止退出的問題
+    - stop flag 過期時間從 5 分鐘延長到 2 小時（一個 session 的合理長度）
+    - 重構 direction 判斷：從單一 "auto" 判斷改為 non_blocking_directions 集合
 
 v2.4.0 變更 (0.1.2-W2-002):
     - 新增「最近任務」判斷邏輯，區分「遺留任務」和「正在執行任務」
@@ -77,7 +83,7 @@ EXIT_SUCCESS = 0
 
 # 常數定義
 STOP_FLAG_FILE = ".claude/handoff/.stop-blocked"
-STOP_FLAG_EXPIRY_SECONDS = 300  # 5 分鐘過期
+STOP_FLAG_EXPIRY_SECONDS = 7200  # 2 小時過期（一個 session 的合理長度）
 STATE_FILE_TEMPLATE = "/tmp/claude-handoff-state-{ppid}.json"
 PENDING_DIR_NAME = ".claude/handoff/pending"
 LOG_DIR_NAME = ".claude/hook-logs/handoff-auto-resume"
@@ -509,15 +515,17 @@ def scan_pending_handoff_tasks(project_root: Path, logger) -> tuple:
                         # Ticket 未完成，根據 direction 類型判斷分類
                         direction_type = direction.split(":")[0]
 
-                        if direction_type == "auto":
-                            # auto handoff 為建議性任務，不阻塞退出
+                        # 建議性方向類型：提醒但不阻塞退出
+                        non_blocking_directions = {"auto", "next-wave"}
+                        if direction_type in non_blocking_directions:
+                            # 建議性 handoff，不阻塞退出
                             recent_tasks.append({
                                 "ticket_id": ticket_id,
                                 "title": title,
                                 "direction": direction
                             })
                             logger.info(
-                                f"auto handoff 為建議性任務，不阻塞退出: {ticket_id}"
+                                f"建議性 handoff ({direction_type})，不阻塞退出: {ticket_id}"
                             )
                         elif is_ticket_recently_started(project_root, ticket_id, logger):
                             recent_tasks.append({
@@ -646,8 +654,10 @@ def generate_hook_output(logger) -> Dict[str, Any]:
                     "decision": "block",
                     "reason": (
                         f"[Handoff] 偵測到未完成的 handoff 任務：{ticket_id}\n"
-                        f"請告知用戶：先執行 /clear 清空 context，"
-                        f"然後再執行 /ticket resume {ticket_id} 恢復任務。\n"
+                        f"請執行以下步驟：\n"
+                        f"1. 檢查本 session 中是否有待辦工作尚未建立對應 Ticket（若有，先建立）\n"
+                        f"2. 確認所有變更已 commit\n"
+                        f"3. 通知用戶可以執行 /clear，然後 /ticket resume {ticket_id}\n"
                         f"請勿自動執行 resume，必須等待用戶手動操作。"
                     )
                 }
