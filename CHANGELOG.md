@@ -1,3 +1,15 @@
+## [1.23.1] - 2026-04-06
+
+### Summary
+fix: Context Bundle CLI section 修正 + 品質基線新增文件即知識原則; docs: 文件即知識原則用 OCP 重新定義
+
+Changes: 1 fix, 1 docs
+
+- fix: Context Bundle CLI section 修正 + 品質基線新增文件即知識原則
+- docs: 文件即知識原則用 OCP 重新定義
+
+---
+
 ## [1.23.0] - 2026-04-06
 
 ### Summary

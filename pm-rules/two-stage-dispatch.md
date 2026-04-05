@@ -49,7 +49,7 @@
 
 **目標**：閱讀程式碼、理解結構、產出完整的可貼入程式碼
 
-**產出物**：寫入 Ticket 的 **Context Bundle** 區段（`ticket track append-log --section "Context Bundle"`），包含：
+**產出物**：寫入 Ticket 的 **Context Bundle** 區段（`ticket track append-log --section "Execution Log" "### Context Bundle\n..."`），包含：
 - 完整程式碼片段（可直接 Edit 注入）
 - 目標檔案路徑和注入位置（精確的 old_string）
 - 預期測試指令

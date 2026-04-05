@@ -6,7 +6,7 @@
 
 ## 定義
 
-**Context Bundle** 是 Ticket 執行日誌中的一個區段。PM 在派發代理人前，透過 `ticket track append-log --section "Context Bundle"` 寫入下一階段代理人所需的前置資訊。
+**Context Bundle** 是 Ticket 執行日誌中的一個區段。PM 在派發代理人前，透過 `ticket track append-log --section "Execution Log" "### Context Bundle\n..."` 寫入下一階段代理人所需的前置資訊。
 
 ---
 
@@ -44,6 +44,22 @@
 ```
 
 **派發 prompt 只需**：Ticket 路徑 + 動作指令 + 「Context Bundle 已準備，讀取 Ticket 後開始」。
+
+---
+
+## 代理人完成摘要格式
+
+代理人完成任務後，寫入 Ticket Solution 區段：
+
+```markdown
+### Phase {N} 完成摘要
+**產出物**: {路徑}
+**關鍵決策**: {1-3 個}
+**下一階段需注意**: {代理人認為下一階段應知道的事}
+**結果**: {數字摘要}
+```
+
+PM 從此摘要提取資訊填入下一個 Context Bundle。
 
 ---
 
