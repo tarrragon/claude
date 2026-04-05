@@ -49,10 +49,12 @@
 
 **目標**：閱讀程式碼、理解結構、產出完整的可貼入程式碼
 
-**產出物**：設計文件或 Ticket Solution 區段，包含：
+**產出物**：寫入 Ticket 的 **Context Bundle** 區段（`ticket track append-log --section "Context Bundle"`），包含：
 - 完整程式碼片段（可直接 Edit 注入）
 - 目標檔案路徑和注入位置（精確的 old_string）
 - 預期測試指令
+
+> Context Bundle 格式詳見 `.claude/pm-rules/context-bundle-spec.md`
 
 **不做的事**：不修改 src/ 或 tests/ 檔案
 
@@ -60,13 +62,14 @@
 
 **角色**：general-purpose / thyme / parsley
 
-**Prompt 要點**：
-- 告訴代理人從哪裡讀取程式碼（Ticket 路徑）
-- 告訴代理人注入到哪裡（目標檔案 + 位置）
-- 告訴代理人跑什麼測試
-- **不包含程式碼本身**（程式碼在 Ticket/設計文件中）
+**輸入**：Ticket 的 Context Bundle（由任務 A 填寫）
 
-**Tool call 估算**：Read 設計文件（1）+ Read 目標檔案尾部（1）+ Edit（1-2）+ Bash 測試（1）+ Bash commit（1）= **5-6 次**，充裕。
+**Prompt 要點**：
+- 告訴代理人讀取 Ticket 的 Context Bundle（1 次 Read）
+- Context Bundle 中已包含程式碼、目標路徑、注入位置
+- **prompt 不包含程式碼本身**
+
+**Tool call 估算**：Read Ticket（1）+ Read 目標檔案尾部（1）+ Edit（1-2）+ Bash 測試（1）+ Bash commit（1）= **5-6 次**，充裕。
 
 ---
 

@@ -1,6 +1,6 @@
 # Phase 3b 派發指南
 
-本文件定義 TDD Phase 3b（實作執行）的代理人派發規範。
+本文件定義 TDD Phase 3b（實作執行）的代理人派發規範。本文件是 `context-bundle-spec.md` 在 Phase 3b 的特化應用。
 
 > **來源**：IMP-047 — Worktree subagent 平台限制（~20 tool calls/turn、32K output token）導致複雜任務耗盡。
 
@@ -8,9 +8,8 @@
 
 ## 核心原則
 
-> 派發前先評估 subagent 的 **tool call 預算**。如果「探索 + 寫入 + 測試 + commit」超過 15 次 tool calls，使用分工模式。
-
-詳細的預算評估方法和分工流程：`.claude/pm-rules/two-stage-dispatch.md`
+> 1. **Context Bundle 優先**：派發前 PM 必須在 Ticket 中填寫 Context Bundle（見 `context-bundle-spec.md`）
+> 2. **Tool call 預算**：如果「探索 + 寫入 + 測試 + commit」超過 15 次，使用分工模式（見 `two-stage-dispatch.md`）
 
 ---
 
@@ -58,7 +57,8 @@
 
 ## 相關文件
 
-- .claude/pm-rules/two-stage-dispatch.md - 分工模式詳細規範（平���限制數據定義在此）
+- .claude/pm-rules/context-bundle-spec.md - Context Bundle 規範（本文件為其 Phase 3b 特化）
+- .claude/pm-rules/two-stage-dispatch.md - 分工模式詳細規範
 - .claude/error-patterns/implementation/IMP-047-worktree-subagent-read-only-exhaustion.md - 錯誤模式記錄
 - .claude/pm-rules/tdd-flow.md - TDD 流程
 

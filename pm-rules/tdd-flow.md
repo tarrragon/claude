@@ -214,18 +214,20 @@ Phase 1 功能規格完成後**強制執行**，無豁免。
 
 ### 轉換條件
 
-| 從 | 到 | 條件 |
-|----|----|----|
-| Phase 0 | Phase 1 | SA 審查通過 |
-| Phase 1 | Phase 1.5 | 功能規格完成 |
-| Phase 1.5 | Phase 2 | 多視角審查通過（無未修正的高/中優先發現） |
-| Phase 2 | Phase 3a | 測試案例設計完成 |
-| Phase 3a | 3b 拆分評估 | 策略文件完成 |
-| 3b 拆分評估 | Phase 3b | PM 完成拆分評估（見下方） |
-| Phase 3b | Phase 4a 或 4b | 測試全部通過後，PM 自動檢查豁免條件（<=2 檔案/DOC/單純）：符合 → 直接 Phase 4b；不符合 → AskUserQuestion #13 選擇 Phase 4a 或 4b |
-| Phase 4a | Phase 4b | 多視角分析報告完成 |
-| Phase 4b | Phase 4c | 重構執行完成（標準流程）；/tech-debt-capture → 完成（豁免條件） |
-| Phase 4c | 完成 | 多視角再審核報告完成 |
+| 從 | 到 | 條件 | PM 強制動作 |
+|----|----|------|-----------|
+| Phase 0 | Phase 1 | SA 審查通過 | 填寫 Context Bundle（→ Phase 1） |
+| Phase 1 | Phase 1.5 | 功能規格完成 | 填寫 Context Bundle（→ 多視角審查） |
+| Phase 1.5 | Phase 2 | 多視角審查通過 | 填寫 Context Bundle（→ Phase 2） |
+| Phase 2 | Phase 3a | 測試案例設計完成 | 填寫 Context Bundle（→ Phase 3a） |
+| Phase 3a | 3b 拆分評估 | 策略文件完成 | 填寫 Context Bundle（→ Phase 3b） |
+| 3b 拆分評估 | Phase 3b | PM 完成拆分評估（見下方） | - |
+| Phase 3b | Phase 4a 或 4b | 測試全部通過 | 填寫 Context Bundle（→ Phase 4a） |
+| Phase 4a | Phase 4b | 多視角分析報告完成 | - |
+| Phase 4b | Phase 4c | 重構執行完成 | - |
+| Phase 4c | 完成 | 多視角再審核報告完成 | - |
+
+> **Context Bundle**：PM 在派發下一階段代理人前，必須將該代理人所需的前置資訊寫入 Ticket。詳見 `.claude/pm-rules/context-bundle-spec.md`。
 
 ### 3b 拆分評估（Phase 3a 完成後，強制）
 
@@ -290,9 +292,11 @@ PM 在派發 Phase 3b 代理人前，可根據 Phase 3a 策略文件估算 conte
 
 PM 收到代理人回報後執行：
 
-1. 執行 `/ticket track complete {id}`
-2. 更新工作日誌
-3. 依決策樹第八層 Checkpoint 路由下一步
+1. 讀取代理人的「Phase N 完成摘要」
+2. 提取關鍵資訊，填寫下一階段的 Context Bundle（`ticket track append-log --section "Context Bundle"`）
+3. 執行 `/ticket track complete {id}`
+4. 更新工作日誌
+5. 依決策樹第八層 Checkpoint 路由下一步
 
 ---
 
@@ -314,6 +318,7 @@ PM 收到代理人回報後執行：
 - .claude/skills/tdd/SKILL.md - `/tdd` SKILL（統一 TDD 流程入口，含 `/tdd start`、`/tdd next`、`/tdd split`、`/tdd status`、`/tdd phase4-exempt`）
 - .claude/references/tdd-flow-details.md - 豁免規則詳細、Phase 詳細描述、異常處理、日誌模板
 - .claude/pm-rules/decision-tree.md - 主線程決策樹
+- .claude/pm-rules/context-bundle-spec.md - Context Bundle 規範（派發前資訊準備）
 - @.claude/rules/core/quality-baseline.md - 品質基線（Phase 4 不可跳過）
 
 ---

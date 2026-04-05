@@ -120,6 +120,20 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 **拆分後重新評估**：拆分產生的每個子任務必須重新通過本關卡（指數 <= 10），確保遞迴拆分至可管理粒度。
 
+### 派發前 Context Bundle 檢查（強制）
+
+> **來源**：W2-005 四次 subagent 派發失敗 — 代理人浪費 50%+ tool calls 重複查詢已知資訊。
+
+**通過 Dispatch Complexity Gate 後，PM 必須確認 Ticket 的 Context Bundle 已填寫。**
+
+| Context Bundle 狀態 | 判定 | 行動 |
+|--------------------|------|------|
+| 已填寫 | 通過 | 繼續派發 |
+| 未填寫 | 阻塞 | PM 先填寫 Context Bundle 再派發 |
+| 不適用（主線程自行處理） | 豁免 | 繼續 |
+
+> Context Bundle 模板和填寫指引：`.claude/pm-rules/context-bundle-spec.md`
+
 ### 並行化判斷
 
 接收到任務後，主線程必須先問自己：

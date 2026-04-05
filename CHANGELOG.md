@@ -1,3 +1,17 @@
+## [1.22.1] - 2026-04-06
+
+### Summary
+docs: Context Bundle 產出契約定義; docs: 派發指南統一指向 Context Bundle; docs: tdd-flow + decision-tree 整合 Context Bundle (+1 more)
+
+Changes: 4 docs
+
+- docs: Context Bundle 產出契約定義
+- docs: 派發指南統一指向 Context Bundle
+- docs: tdd-flow + decision-tree 整合 Context Bundle
+- docs: 建立 Context Bundle 規範
+
+---
+
 ## [1.22.0] - 2026-04-06
 
 ### Summary
