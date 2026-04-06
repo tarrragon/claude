@@ -39,7 +39,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely, run_git, get_project_root
+from hook_utils import setup_hook_logging, run_hook_safely, run_git, get_project_root, read_json_from_stdin
 
 # 不需要 CHANGELOG 提醒的 commit 類型
 SKIP_PREFIXES = (
@@ -116,7 +116,10 @@ def get_commit_subject(project_dir: Path, logger) -> str:
 
 def main():
     logger = setup_hook_logging("changelog-update-hook")
-    input_data = json.load(sys.stdin)
+    input_data = read_json_from_stdin(logger)
+    if input_data is None:
+        return 0
+
     tool_name = input_data.get("tool_name", "")
     tool_input = input_data.get("tool_input") or {}
     tool_result = input_data.get("tool_result", {})

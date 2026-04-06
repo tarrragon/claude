@@ -45,6 +45,19 @@
 
 **派發 prompt 只需**：Ticket 路徑 + 動作指令 + 「Context Bundle 已準備，讀取 Ticket 後開始」。
 
+### 標準 Agent Prompt 模板
+
+```
+Ticket: {ticket_id}
+任務: {ticket title}
+Ticket 路徑: docs/work-logs/v{version}/tickets/{ticket_id}.md
+
+請 Read Ticket 取得完整 Context Bundle 和驗收條件。
+完成後用 ticket track append-log 更新 Solution 和 Test Results。
+```
+
+> **[強制] Prompt 長度上限**：Agent prompt 不得超過 30 行。超過表示 context 未正確存入 Ticket。（PC-040）
+
 ---
 
 ## 代理人完成摘要格式
@@ -70,6 +83,7 @@ PM 從此摘要提取資訊填入下一個 Context Bundle。
 | 只給路徑不給內容 | 代理人還是要花 tool calls 讀檔案 |
 | 要求代理人「自行探索」 | 浪費 50%+ tool calls |
 | 跳過 Context Bundle 直接派發 | subagent ~20 tool calls 預算，探索就耗盡 |
+| 將 context 嵌入 Agent prompt 而非 Ticket | Prompt 是 ephemeral 載體，agent 失敗後 context 不可重用（PC-040） |
 
 ---
 
@@ -83,4 +97,4 @@ PM 從此摘要提取資訊填入下一個 Context Bundle。
 ---
 
 **Last Updated**: 2026-04-06
-**Version**: 2.0.0 - 精簡重寫：6 個模板合併為 1 個通用模板，移除產出契約（多視角審查修正）
+**Version**: 2.1.0 - 新增標準 prompt 模板、prompt 長度上限、禁止嵌入 prompt（PC-040, W3-004）

@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 
 
 BLOCK_MESSAGE = """[PC-019 防護] main 上有未 commit 的 tracked 變更，禁止派發 worktree agent
@@ -41,10 +41,13 @@ def main() -> int:
     logger = setup_hook_logging("worktree-commit-before-dispatch")
 
     try:
-        input_data = json.load(sys.stdin)
+        input_data = read_json_from_stdin(logger)
     except (json.JSONDecodeError, EOFError):
         logger.warning("無法解析 stdin JSON")
         return 0  # 解析失敗不阻擋
+
+    if not input_data:
+        return 0
 
     tool_input = input_data.get("tool_input", {})
     isolation = tool_input.get("isolation", "")

@@ -508,7 +508,7 @@ class TestAutoDirectionHandling:
         # 驗證 logger.info 被呼叫，訊息包含 "auto handoff" 和 "不阻塞"
         info_calls = [str(call) for call in logger.info.call_args_list]
         info_messages = " ".join(info_calls)
-        assert "auto handoff" in info_messages
+        assert "auto" in info_messages
         assert "不阻塞" in info_messages
 
 

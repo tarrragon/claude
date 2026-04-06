@@ -30,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, extract_tool_input, extract_tool_response, is_subagent_environment
+from hook_utils import setup_hook_logging, run_hook_safely, extract_tool_input, extract_tool_response, is_subagent_environment, read_json_from_stdin
 from lib.hook_messages import AskUserQuestionMessages
 
 # ============================================================================
@@ -99,9 +99,14 @@ def main() -> int:
     logger = setup_hook_logging("post-ticket-complete-checkpoint")
 
     try:
-        input_data = json.load(sys.stdin)
-    except json.JSONDecodeError as e:
+        input_data = read_json_from_stdin(logger)
+    except (json.JSONDecodeError, Exception) as e:
         logger.error("JSON 解析錯誤: %s", e)
+        print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
+        return EXIT_SUCCESS
+
+    if input_data is None:
+        logger.info("無法解析輸入，安全降級")
         print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
         return EXIT_SUCCESS
 

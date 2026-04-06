@@ -24,7 +24,7 @@
 ### 簡單任務 Prompt 要點
 
 - 提供精確的檔案路徑和注入位置
-- 如有程式碼，放在 Ticket/設計文件中，prompt 只提�� Ticket 路徑
+- 如有程式碼，放在 Ticket Context Bundle 中，prompt 只提供 Ticket 路徑（PC-040）
 - 明確告知「不需要探��其他檔案」
 
 ### 複雜任務分工模式

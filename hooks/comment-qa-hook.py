@@ -57,7 +57,7 @@ from dataclasses import dataclass
 from typing import Optional, List, Dict, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.hook_messages import QualityMessages, CoreMessages, format_message
 
 # 專案根目錄
@@ -664,7 +664,9 @@ def main():
         config = load_config(logger)
 
         # 2. 讀取 JSON 輸入
-        input_data = json.load(sys.stdin)
+        input_data = read_json_from_stdin(logger)
+        if not input_data:
+            return 0
 
         # 3. 提取工具資訊
         tool_name = input_data.get("tool_name", "")

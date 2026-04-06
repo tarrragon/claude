@@ -76,6 +76,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin, is_subagent_environment
 from git_utils import get_current_branch, is_allowed_branch
 from lib.hook_messages import GateMessages, CoreMessages, format_message
+from lib.dispatch_tracker import is_file_under_dispatch
 
 
 # ============================================================================
@@ -386,8 +387,30 @@ def main() -> int:
         # 步驟 4: 檢查編輯權限
         is_allowed, reason = check_file_permission(file_path, logger)
 
+        # 步驟 4.5: Active dispatch 警告
+        # 當檔案允許編輯但正在被背景代理人處理時，發出警告
+        dispatch_warning = ""
+        if is_allowed and file_path:
+            project_root = get_project_root()
+            rel_path = file_path
+            if file_path.startswith("/"):
+                try:
+                    rel_path = str(Path(file_path).relative_to(project_root))
+                except ValueError:
+                    pass
+            dispatch = is_file_under_dispatch(project_root, rel_path)
+            if dispatch:
+                dispatch_warning = (
+                    f"[WARNING] 此檔案正在被背景代理人處理 "
+                    f"(agent: {dispatch.get('agent_description', '?')}, "
+                    f"ticket: {dispatch.get('ticket_id', '?')})"
+                )
+                logger.info("Dispatch 衝突警告: %s -> %s", file_path, dispatch_warning)
+
         # 步驟 5: 生成 Hook 輸出
         hook_output = generate_hook_output(is_allowed, reason)
+        if dispatch_warning:
+            hook_output["additionalContext"] = dispatch_warning
         print(json.dumps(hook_output, ensure_ascii=False))
 
         # 步驟 6: 儲存日誌

@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely, run_git, is_subagent_environment
+from hook_utils import setup_hook_logging, run_hook_safely, run_git, is_subagent_environment, read_json_from_stdin
 from lib.hook_messages import WorkflowMessages, CoreMessages, AskUserQuestionMessages, format_message
 
 
@@ -415,14 +415,11 @@ def read_prompt_from_stdin() -> Optional[tuple]:
     Returns:
         (prompt, input_data) tuple，若無法讀取則返回 (None, {})
     """
-    try:
-        # 嘗試讀取 JSON 格式輸入
-        input_data = json.load(sys.stdin)
-        return input_data.get("prompt", ""), input_data
-    except (json.JSONDecodeError, AttributeError):
+    _logger = setup_hook_logging("prompt-submit-hook-stdin")
+    input_data = read_json_from_stdin(_logger)
+    if input_data is None:
         return None, {}
-    except Exception:
-        return None, {}
+    return input_data.get("prompt", ""), input_data
 
 
 def main():

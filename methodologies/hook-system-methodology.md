@@ -290,17 +290,14 @@ import sys
 from pathlib import Path
 
 # 標準化導入共用模組
-lib_path = Path(__file__).parent.parent / "lib"
-if str(lib_path) not in sys.path:
-    sys.path.insert(0, str(lib_path))
-
-from hook_io import read_hook_input, write_hook_output, create_pretooluse_output
-from hook_logging import setup_hook_logging
-from config_loader import load_agents_config
+sys.path.insert(0, str(Path(__file__).parent))
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 
 def main():
     logger = setup_hook_logging("hook-name")
-    input_data = read_hook_input()
+    input_data = read_json_from_stdin(logger)
+    if input_data is None:
+        return 0
 
     # ... 處理邏輯 ...
 
@@ -315,7 +312,7 @@ if __name__ == "__main__":
 
 | 需求 | 使用模組 | 函式 |
 |------|---------|------|
-| 讀取 Hook 輸入 | hook_io | `read_hook_input()` |
+| 讀取 Hook 輸入 | hook_utils (hook_io) | `read_json_from_stdin(logger)` |
 | 輸出決策結果 | hook_io | `write_hook_output()` |
 | PreToolUse 輸出 | hook_io | `create_pretooluse_output()` |
 | PostToolUse 輸出 | hook_io | `create_posttooluse_output()` |

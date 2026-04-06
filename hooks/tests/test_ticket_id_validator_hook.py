@@ -63,7 +63,7 @@ class TestValidateTicketIdFormat:
         ticket_validator_module.WAVE_MAX = 999
         ticket_validator_module.WAVE_MIN = 1
 
-        is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+        is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
             "0.31.0-W5-001",
             mock_logger
         )
@@ -75,7 +75,7 @@ class TestValidateTicketIdFormat:
         ticket_validator_module.WAVE_MAX = 999
         ticket_validator_module.WAVE_MIN = 1
 
-        is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+        is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
             "0.31.0-W5-001.1",
             mock_logger
         )
@@ -87,7 +87,7 @@ class TestValidateTicketIdFormat:
         ticket_validator_module.WAVE_MAX = 999
         ticket_validator_module.WAVE_MIN = 1
 
-        is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+        is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
             "0.31.0-W5-001.1.2",
             mock_logger
         )
@@ -100,7 +100,7 @@ class TestValidateTicketIdFormat:
         ticket_validator_module.WAVE_MIN = 1
 
         for wave in [1, 5, 10]:
-            is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+            is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
                 f"0.31.0-W{wave}-001",
                 mock_logger
             )
@@ -114,7 +114,7 @@ class TestValidateTicketIdFormat:
 
         # W33, W34, W37, W50 都應該通過
         for wave in [33, 34, 37, 50, 100]:
-            is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+            is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
                 f"0.1.0-W{wave}-001",
                 mock_logger
             )
@@ -126,7 +126,7 @@ class TestValidateTicketIdFormat:
         ticket_validator_module.WAVE_MAX = 999
         ticket_validator_module.WAVE_MIN = 1
 
-        is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+        is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
             "0.31.0-W1000-001",
             mock_logger
         )
@@ -139,7 +139,7 @@ class TestValidateTicketIdFormat:
         ticket_validator_module.WAVE_MAX = 999
         ticket_validator_module.WAVE_MIN = 1
 
-        is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+        is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
             "0.31.0-W0-001",
             mock_logger
         )
@@ -151,7 +151,7 @@ class TestValidateTicketIdFormat:
         ticket_validator_module.WAVE_MAX = 999
         ticket_validator_module.WAVE_MIN = 1
 
-        is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+        is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
             "0.31-W5-001",  # 缺少 patch 版本
             mock_logger
         )
@@ -163,7 +163,7 @@ class TestValidateTicketIdFormat:
         ticket_validator_module.WAVE_MAX = 999
         ticket_validator_module.WAVE_MIN = 1
 
-        is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+        is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
             "0.31.0-wave5-001",  # 應為 W 不是 wave
             mock_logger
         )
@@ -174,7 +174,7 @@ class TestValidateTicketIdFormat:
         ticket_validator_module.WAVE_MAX = 999
         ticket_validator_module.WAVE_MIN = 1
 
-        is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+        is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
             "",
             mock_logger
         )
@@ -186,7 +186,7 @@ class TestValidateTicketIdFormat:
         ticket_validator_module.WAVE_MAX = 999
         ticket_validator_module.WAVE_MIN = 1
 
-        is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+        is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
             None,
             mock_logger
         )
@@ -299,7 +299,7 @@ class TestRegressionW10Plus:
         ticket_validator_module.WAVE_MAX = 999
         ticket_validator_module.WAVE_MIN = 1
 
-        is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+        is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
             "0.1.0-W10-001",
             mock_logger
         )
@@ -310,7 +310,7 @@ class TestRegressionW10Plus:
         ticket_validator_module.WAVE_MAX = 999
         ticket_validator_module.WAVE_MIN = 1
 
-        is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+        is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
             "0.1.0-W11-001",
             mock_logger
         )
@@ -321,7 +321,7 @@ class TestRegressionW10Plus:
         ticket_validator_module.WAVE_MAX = 999
         ticket_validator_module.WAVE_MIN = 1
 
-        is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+        is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
             "0.1.0-W37-001",
             mock_logger
         )
@@ -332,7 +332,7 @@ class TestRegressionW10Plus:
         ticket_validator_module.WAVE_MAX = 999
         ticket_validator_module.WAVE_MIN = 1
 
-        is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+        is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
             "0.1.0-W50-001",
             mock_logger
         )
@@ -407,7 +407,7 @@ title: Test W37 Ticket
         assert ticket_id == "0.37.0-W37-001"
 
         # 驗證格式
-        is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+        is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
             ticket_id,
             mock_logger
         )
@@ -447,7 +447,7 @@ title: Old Ticket
         assert ticket_id == "0.31.0-W5-001"
 
         # 驗證格式
-        is_valid, msg = ticket_validator_module.validate_ticket_id_format(
+        is_valid, msg, _ = ticket_validator_module.validate_ticket_id_format(
             ticket_id,
             mock_logger
         )

@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.hook_messages import ValidationMessages, format_message
 
 
@@ -114,9 +114,12 @@ def main():
     """主函式"""
     # 讀取 stdin 獲取 Hook 輸入
     try:
-        hook_input = json.load(sys.stdin)
+        hook_input = read_json_from_stdin(logger)
     except json.JSONDecodeError:
         # 無法解析輸入，靜默退出
+        return 0
+
+    if not hook_input:
         return 0
 
     # 獲取工具輸入

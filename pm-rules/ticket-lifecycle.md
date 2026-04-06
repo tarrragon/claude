@@ -27,7 +27,7 @@ pending → claim → in_progress → complete → completed
 |------|---------|----------------|
 | **建立** | 必須用 `/ticket create`，禁止直接寫 .md | 任務拆分確認（認知 > 10） |
 | **建立後** | 強制並行審核：acceptance-auditor（品質）+ system-analyst（設計）→ creation_accepted: true | - |
-| **認領** | 阻塞依賴檢查 | - |
+| **認領** | 阻塞依賴檢查 + **5W1H 待定義欄位補全（強制）** | - |
 | **執行** | 錯誤強制派發 incident-responder；日誌必填 | - |
 | **驗收** | **主動勾選驗收條件**（`check-acceptance`）→ acceptance-gate-hook 事後驗證 | **驗收方式確認**（標準/簡化/先完成後補） |
 | **完成** | 所有驗收條件已勾選後執行 `/ticket track complete`；complete 後處理 #17（錯誤學習） | **後續步驟選擇** |
@@ -45,6 +45,28 @@ pending → claim → in_progress → complete → completed
 | 唯一存放路徑 | `docs/work-logs/v{version}/tickets/` |
 | 子任務建立 | `/ticket create --parent {parent_id}` |
 | 任務層級判斷 | 因執行現有 Ticket 產生 → 子任務；獨立問題 → 新任務鏈 |
+| **ANA 衍生 Ticket 溯源驗證** | **AC 必須 1:1 對應來源 ANA Solution 修改項（PC-041）** |
+
+### ANA 衍生 Ticket 溯源驗證（強制）
+
+> **來源**：PC-041 — 分析 Ticket 結論的落地執行不完整，PM 只執行部分項目就標記完成。
+
+從 ANA Ticket 衍生執行 Ticket 時，建立階段必須執行溯源驗證：
+
+| 步驟 | 動作 | 說明 |
+|------|------|------|
+| 1 | 列出 ANA Solution 所有修改項 | 逐項列出，不遺漏 |
+| 2 | 合併背景代理人分析結果 | 等待通知或查閱 output |
+| 3 | 建立執行 Ticket 的 AC | 每個修改項對應一條 AC |
+| 4 | 交叉驗證覆蓋率 | AC 合集覆蓋 Solution 所有項 = 100% |
+
+**禁止行為**：
+
+| 禁止 | 原因 |
+|------|------|
+| 依記憶建立 AC，不逐項對照 Solution | 容易遺漏（PC-041 根因） |
+| 背景代理人未完成就建立執行 Ticket | 延遲分析結果被跳過 |
+| 執行 Ticket AC 比 ANA Solution 少 | 修改不完整，驗收失效 |
 
 ---
 
@@ -160,5 +182,5 @@ acceptance-gate-hook 事後驗證（最後防線）
 
 ---
 
-**Last Updated**: 2026-03-13
-**Version**: 5.6.0 - 驗收階段新增 complete 前主動勾選驗收條件流程（0.1.0-W51-001）
+**Last Updated**: 2026-04-06
+**Version**: 5.8.0 - 認領階段新增 5W1H 待定義欄位補全（強制）（0.17.2-W3-010.1）

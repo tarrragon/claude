@@ -30,7 +30,7 @@ File Type Permission Hook - PreToolUse Hook
 import json
 import sys
 from pathlib import Path
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.hook_messages import QualityMessages, format_message
 
 
@@ -89,7 +89,9 @@ def main() -> int:
 
     try:
         # 讀取 JSON 輸入
-        input_data = json.load(sys.stdin)
+        input_data = read_json_from_stdin(logger)
+        if input_data is None:
+            return 0
         tool_name = input_data.get("tool_name", "")
         tool_input = input_data.get("tool_input") or {}
 

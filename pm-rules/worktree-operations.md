@@ -136,6 +136,31 @@ git branch | grep "worktree-agent-" | xargs git branch -D 2>/dev/null
 
 ---
 
+## 手動修復前檢查清單
+
+> **來源**：W6-001 事件 — PM 在背景代理人執行時自行修復同一 Ticket。
+
+在手動修復任何問題前，**必須先確認無背景代理人正在處理**：
+
+| 步驟 | 動作 | 命令 |
+|------|------|------|
+| 1 | 檢查 active dispatch | `cat .claude/dispatch-active.json` |
+| 2 | 檢查 worktree 分支 | `git worktree list` |
+| 3 | 確認無衝突 | 目標檔案不在任何 active dispatch 的 files 清單中 |
+
+**自動防護**：
+- `active-dispatch-tracker-hook.py`（PostToolUse:Agent）自動清理完成的派發記錄
+- `main-thread-edit-restriction-hook.py` 會在 PM 編輯已派發檔案時發出 WARNING
+
+**如果發現衝突**：
+1. 等待背景代理人完成
+2. 合併代理人產出物
+3. 在代理人產出物基礎上繼續修復
+
+**禁止**：在背景代理人執行中直接修復同一檔案。
+
+---
+
 ## 相關文件
 
 - .claude/error-patterns/process-compliance/PC-019-worktree-merge-state-loss.md

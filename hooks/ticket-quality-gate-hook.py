@@ -48,12 +48,10 @@ from lib.ticket_quality.reporters import (
     generate_json_report
 )
 
-# 注意：hook_io 和 config_loader 需要別處定義或導入
+# 注意：config_loader 需要別處定義或導入
 try:
-    from hook_io import read_hook_input, write_hook_output
+    from hook_io import write_hook_output
 except ImportError:
-    def read_hook_input():
-        return json.load(sys.stdin)
     def write_hook_output(data):
         print(json.dumps(data, ensure_ascii=False))
 

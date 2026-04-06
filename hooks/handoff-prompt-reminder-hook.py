@@ -371,6 +371,8 @@ def main() -> int:
         logger.info("Handoff 提醒 Hook 啟動（WARN 模式）")
 
         input_data = read_json_from_stdin(logger)
+        if not input_data:
+            return 0
 
         project_root = get_project_root()
         logger.info(f"專案根目錄: {project_root}")

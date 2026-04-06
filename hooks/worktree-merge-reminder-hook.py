@@ -22,7 +22,7 @@ from typing import List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 
 
 def parse_worktree_list(logger) -> List[Tuple[str, str]]:
@@ -101,9 +101,12 @@ def main() -> int:
     logger = setup_hook_logging("worktree-merge-reminder")
 
     try:
-        input_data = json.load(sys.stdin)
+        input_data = read_json_from_stdin(logger)
     except (json.JSONDecodeError, EOFError):
         logger.warning("無法解析 stdin JSON")
+        return 0
+
+    if not input_data:
         return 0
 
     # 只在 ticket complete 命令時觸發

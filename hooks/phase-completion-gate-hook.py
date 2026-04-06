@@ -467,6 +467,11 @@ def main() -> int:
 
         # 步驟 2: 讀取 JSON 輸入
         input_data = read_json_from_stdin(logger)
+        if not input_data:
+            print(json.dumps({
+                "hookSpecificOutput": {"hookEventName": "PostToolUse"}
+            }, ensure_ascii=False, indent=2))
+            return EXIT_SUCCESS
 
         # 偵測 subagent 環境：agent_id 僅在 subagent 中出現
         if is_subagent_environment(input_data):

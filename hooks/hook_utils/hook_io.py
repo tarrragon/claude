@@ -166,10 +166,10 @@ def read_json_from_stdin(logger: logging.Logger) -> Optional[dict]:
         return json.loads(input_text)
 
     except json.JSONDecodeError as e:
-        logger.error("JSON 解析錯誤: {}".format(e))
+        logger.info("JSON 解析跳過（stdin 含控制字元）: {}".format(e))
         return None
     except Exception as e:
-        logger.error("讀取 stdin 失敗: {}".format(e))
+        logger.info("讀取 stdin 跳過: {}".format(e))
         return None
 
 

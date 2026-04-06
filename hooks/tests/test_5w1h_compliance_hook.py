@@ -23,10 +23,18 @@ hook_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(hook_module)
 
 # 導出需要的函式
-make_decision = hook_module.make_decision
+_make_decision = hook_module.make_decision
 
 import pytest
 import json
+import logging
+
+_test_logger = logging.getLogger("test-5w1h-compliance")
+
+
+def make_decision(tool_input):
+    """測試用 wrapper：補充 tool_name 和 logger 參數"""
+    return _make_decision("TodoWrite", tool_input, _test_logger)
 
 
 # ============================================================================

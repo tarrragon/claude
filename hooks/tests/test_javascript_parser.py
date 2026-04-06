@@ -21,7 +21,7 @@ from pathlib import Path
 hooks_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(hooks_dir))
 
-from ..lib.parsers.javascript_parser import JavaScriptParser, Function, JS_KEYWORDS
+from lib.parsers.javascript_parser import JavaScriptParser, Function, JS_KEYWORDS
 
 
 class TestJavaScriptFunctionPatterns:

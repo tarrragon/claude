@@ -278,6 +278,10 @@ def main() -> int:
             print(suppress_json)
             return EXIT_SUCCESS
 
+        if not input_data:
+            print(suppress_json)
+            return EXIT_SUCCESS
+
         # 步驟 3: 取得專案根目錄
         project_root = get_project_root()
         logger.info(f"專案根目錄: {project_root}")

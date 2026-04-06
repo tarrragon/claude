@@ -11,7 +11,9 @@
 
 **代理人只需知道「要通過哪些測試」和「介面長什麼樣」**。
 
-PM 在派發前將必要資訊寫入 Ticket 的 Context Bundle 區段（或直接嵌入 prompt）。代理人不需要讀取完整的 Phase 1/2/3a 設計文件。
+PM 在派發前將必要資訊寫入 Ticket 的 Context Bundle 區段。代理人不需要讀取完整的 Phase 1/2/3a 設計文件。
+
+> **禁止**將 context 嵌入 Agent prompt。Prompt 只包含 Ticket 路徑和動作指令。詳見 PC-040。
 
 ---
 
@@ -130,8 +132,9 @@ const MaxPageSize = 100
 
 | 禁止 | 說明 |
 |------|------|
-| 在 prompt 中要求代理人「先讀取 Phase 1/2/3a 文件」 | PM 應預先提取，代理人只讀 prompt |
+| 在 prompt 中要求代理人「先讀取 Phase 1/2/3a 文件」 | PM 應預先提取，寫入 Ticket Context Bundle |
 | 提供整份設計文件的路徑 | 代理人會讀取全文，浪費 context |
+| 在 prompt 中嵌入規格摘要、實作策略或程式碼範例 | Context 必須存入 Ticket Context Bundle 區段（PC-040） |
 | 省略測試案例只給「通過所有測試」 | 代理人需要知道具體的 GWT 才能實作 |
 | 省略 API 簽名 | 代理人需要知道函式介面才能實作 |
 
@@ -145,6 +148,6 @@ const MaxPageSize = 100
 
 ---
 
-**Version**: 1.0.0
-**Last Updated**: 2026-03-25
-**Source**: 0.2.0-W3-005
+**Version**: 1.1.0
+**Last Updated**: 2026-04-06
+**Source**: 0.2.0-W3-005, 0.17.2-W3-004（PC-040 修正）

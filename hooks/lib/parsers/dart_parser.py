@@ -98,7 +98,7 @@ class DartParser(LanguageParser):
         # 3. 自定義類別: Widget, Book, 等（PascalCase）
         self.function_pattern = re.compile(
             r'^(?:'
-            r'(Future<[^>]+>|Stream<[^>]+>|OperationResult<[^>]+>|List<[^>]+>|Map<[^>]+>)|'  # 泛型
+            r'(Future<(?:[^<>]+|<[^<>]*>)+>|Stream<(?:[^<>]+|<[^<>]*>)+>|OperationResult<(?:[^<>]+|<[^<>]*>)+>|List<(?:[^<>]+|<[^<>]*>)+>|Map<(?:[^<>]+|<[^<>]*>)+>)|'  # 泛型（支援一層巢狀）
             r'(void|bool|int|String|double|dynamic|num)|'  # 內建類型
             r'([A-Z]\w*)'  # 自定義類別（PascalCase）
             r')\s+'

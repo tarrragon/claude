@@ -24,7 +24,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from hook_utils import setup_hook_logging, run_hook_safely, get_project_root
+from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, read_json_from_stdin
 
 
 def is_arb_file(file_path: str) -> bool:
@@ -203,7 +203,9 @@ def main() -> int:
 
     try:
         # 讀取 stdin JSON (Hook 輸入)
-        input_data = json.load(sys.stdin)
+        input_data = read_json_from_stdin(logger)
+        if not input_data:
+            return 0
 
         # 檢查編輯的檔案是否為 ARB 檔案
         tool_input = input_data.get("tool_input") or {}

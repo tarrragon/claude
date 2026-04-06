@@ -18,7 +18,7 @@ Hook 類型：PreToolUse
 import json
 import sys
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 
 # 需要 worktree 隔離的實作代理人
 IMPLEMENTATION_AGENTS = frozenset({
@@ -47,9 +47,12 @@ def main() -> int:
     logger = setup_hook_logging("agent-dispatch-validation")
 
     try:
-        input_data = json.load(sys.stdin)
+        input_data = read_json_from_stdin(logger)
     except (json.JSONDecodeError, EOFError):
         logger.warning("無法解析 stdin JSON，放行")
+        return 0
+
+    if not input_data:
         return 0
 
     tool_name = input_data.get("tool_name", "")

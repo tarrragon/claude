@@ -1,3 +1,53 @@
+## [1.24.0] - 2026-04-07
+
+### Summary
+feat: agent-dispatch-logger-hook 自動記錄 Agent 派發; refactor: 統一 27 個 Hook stdin JSON 解析到 read_json_from_stdin (IMP-048 根治); refactor: 拆分檔案語義化重新命名（用戶反饋） (+37 more)
+
+Changes: 1 feat, 3 refactor, 20 fix, 16 docs
+
+- feat: agent-dispatch-logger-hook 自動記錄 Agent 派發
+- refactor: 統一 27 個 Hook stdin JSON 解析到 read_json_from_stdin (IMP-048 根治)
+- refactor: 拆分檔案語義化重新命名（用戶反饋）
+- refactor: decision-tree DDD domain 拆分為 4 檔案 (.1)
+- fix: detect_orphan_branches 改為精確 branch name 比對
+- fix: 註冊 3 個未登記 Hook + 排除 2 個非 Hook 腳本
+- fix: 補齊其餘 12 個 Hook 的 read_json_from_stdin None guard
+- fix: 修復 4 個 Hook read_json_from_stdin None guard
+- fix: 註冊 active-dispatch-tracker-hook 到 settings.json
+- fix: 整合 dispatch 警告到 edit restriction + worktree SOP 更新
+- fix: 建立 active dispatch tracker 共用模組和 Hook
+- fix: 修復 test_manual_verification 測試 pyproject.toml 缺少 scripts 段落
+- fix: 修復 javascript_parser TS arrow function 型別註解匹配
+- fix: 修復 dart_parser 巢狀泛型匹配支援多行函式簽名
+- fix: 修復散布的 38 個 FAILED 測試（35 修復 + 3 待追蹤）
+- fix: 修復 5w1h-compliance-check-hook 26 個 FAILED 測試
+- fix: 修復 test_agent_dispatch_check 56 個 FAILED 測試
+- fix: 修復 4 個 Hook 測試 collection errors
+- fix: Hook stdin JSON 解析統一防護分析 + P0 修復
+- fix: StreamHandler level WARNING→CRITICAL 防止 hook error 顯示
+- fix: 5 個 Hook json.load(sys.stdin) 加 JSONDecodeError 保護
+- fix: PM 角色規則 v2.0 — 前台分析+背景實作分工
+- fix: phase3b-dispatch-guide L27 明確指向 Ticket Context Bundle (PC-040)
+- fix: 移除「嵌入 prompt」後門，強制 context 存 Ticket
+- docs: IMP-051/052 錯誤模式 — Hook 未註冊 + 批量遷移 None guard 遺漏
+- docs: IMP-050 錯誤模式 — hook_utils 是 Package 路徑資訊不準確
+- docs: IMP-049 錯誤模式 — Hook 常數未定義靜默失敗
+- docs: DOC-009 錯誤模式 — 「靜默處理」用語誤用
+- docs: 修正「靜默退出」用語為「正常退出（已記錄到日誌）」
+- docs: 修正 Hook 錯誤處理決策樹用語 — 消除「靜默處理」誤導
+- docs: Hook 開發規範更新 — 禁止直接 json.load(sys.stdin)
+- docs: IMP-048 Hook stderr 觸發 hook error 顯示錯誤模式
+- docs: Agent 失敗標準除錯 SOP
+- docs: PC-043 PM 跳過階段轉換 + PC-044 拆分命名結構化
+- docs: 認領階段 5W1H 補全 + 執行階段即時日誌要求 (.1)
+- docs: 認知負擔評估框架重構 — DDD domain 邊界 + 檔案體量維度 (, PC-042)
+- docs: ANA 結論轉化從存在性升級為完整性檢查 (, PC-041)
+- docs: PC-042 規則文件過長 + 分析 Ticket
+- docs: PC-041 錯誤模式 + 改善 Ticket
+- docs: PC-040 錯誤模式 + 流程改善 Ticket
+
+---
+
 ## [1.23.1] - 2026-04-06
 
 ### Summary

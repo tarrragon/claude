@@ -510,6 +510,9 @@ def main() -> int:
 
         # 讀取輸入
         input_data = read_json_from_stdin(logger)
+        if not input_data:
+            _output_success()
+            return EXIT_SUCCESS
 
         # 檢測 subagent 環境
         if is_subagent_environment(input_data):

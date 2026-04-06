@@ -69,12 +69,23 @@ shebang 保留供終端機直接執行時使用。
 
 ### stdin 輸入讀取
 
+**強制規範**：所有 Hook 必須使用 `hook_utils.read_json_from_stdin(logger)` 讀取 stdin，禁止直接 `json.load(sys.stdin)`。
+
 ```python
-try:
-    input_data = json.load(sys.stdin)
-except json.JSONDecodeError as e:
-    print(f"Error: Invalid JSON input: {e}", file=sys.stderr)
-    sys.exit(1)
+from hook_utils import setup_hook_logging, read_json_from_stdin
+
+def main():
+    logger = setup_hook_logging("hook-name")
+    input_data = read_json_from_stdin(logger)
+    if input_data is None:
+        return 0  # 空輸入或解析失敗，正常退出（已記錄到日誌）
+    # ... 處理邏輯 ...
+```
+
+**禁止的模式**：
+```python
+# 錯誤：直接 json.load — 已由 W5-001 全面遷移移除
+input_data = json.load(sys.stdin)
 ```
 
 ### hookSpecificOutput 格式
@@ -252,7 +263,8 @@ PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)
 
 | 陷阱 | 問題 | 解決 |
 |------|------|------|
-| 忽略 stdin JSON | 直接用環境變數 | `json.load(sys.stdin)` |
+| 直接 json.load(sys.stdin) | 無統一錯誤處理，重複 IMP-048 | `read_json_from_stdin(logger)` |
+| 忽略 stdin JSON | 直接用環境變數 | `read_json_from_stdin(logger)` |
 | 錯誤的決策欄位 | PreToolUse 用 `decision` | 用 `permissionDecision` |
 | 不用官方環境變數 | 手動定位根目錄 | 用 `$CLAUDE_PROJECT_DIR` |
 | 缺少可觀察性 | 無日誌 | hook_utils 或手動 log |

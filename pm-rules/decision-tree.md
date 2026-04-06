@@ -90,76 +90,22 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 > **核心原則**：決策第一步不是「這是什麼類型的任務」，而是「這個工作可以讓多少人去做？」
 
-### 派發前複雜度關卡（Dispatch Complexity Gate，強制）
+**派發前兩道關卡（強制）**：
 
-> **來源**：0.1.1-W15-004 — W15-001 派發時，PM 將認知負擔 > 10 的整包任務直接派發給單一代理人，未先拆分。
+| 關卡 | 條件 | 行動 |
+|------|------|------|
+| 複雜度關卡 | 認知負擔指數 > 10 | 先拆分子任務再派發（AskUserQuestion #6） |
+| Context Bundle | 未填寫 | PM 先填寫 Context Bundle 再派發 |
 
-**任何派發（單一或並行）前，PM 必須先評估目標任務的認知負擔指數。**
+> 複雜度評估公式：`認知負擔指數 = 變數數 + 分支數 + 巢狀深度 + 依賴數`（詳見 cognitive-load.md）
+> Context Bundle 模板：.claude/pm-rules/context-bundle-spec.md
 
-| 認知負擔指數 | 判定 | 行動 |
-|-------------|------|------|
-| <= 10 | 通過 | 繼續進入並行化判斷 |
-| > 10 | 阻塞 | 先拆分子任務再派發（AskUserQuestion #6） |
+**並行化判斷**：「Agent A 的發現會改變 Agent B?」→ 否: 並行派發 / 是+成本合理: Agent Teams / 是+成本不合理: PM 中轉
 
-**評估方式**：`認知負擔指數 = 變數數 + 分支數 + 巢狀深度 + 依賴數`（詳見 cognitive-load.md）
+**派發模式**：預設背景模式（`run_in_background: true`）。
 
-**快速判斷指標**（任一超標即視為 > 10）：
-
-| 指標 | 閾值 | 超標行動 |
-|------|------|---------|
-| 修改檔案數 | > 5 | 必須拆分 |
-| 跨架構層級數 | > 2 | 必須拆分 |
-| 依賴模組數 | > 3 | 必須拆分 |
-
-**禁止行為**：
-
-| 禁止 | 說明 |
-|------|------|
-| 整包派發認知負擔 > 10 的任務給單一代理人 | 必須先拆分為子任務 |
-| 跳過評估直接派發 | 每次派發前都必須通過本關卡 |
-
-**拆分後重新評估**：拆分產生的每個子任務必須重新通過本關卡（指數 <= 10），確保遞迴拆分至可管理粒度。
-
-### 派發前 Context Bundle 檢查（強制）
-
-> **來源**：W2-005 四次 subagent 派發失敗 — 代理人浪費 50%+ tool calls 重複查詢已知資訊。
-
-**通過 Dispatch Complexity Gate 後，PM 必須確認 Ticket 的 Context Bundle 已填寫。**
-
-| Context Bundle 狀態 | 判定 | 行動 |
-|--------------------|------|------|
-| 已填寫 | 通過 | 繼續派發 |
-| 未填寫 | 阻塞 | PM 先填寫 Context Bundle 再派發 |
-| 不適用（主線程自行處理） | 豁免 | 繼續 |
-
-> Context Bundle 模板和填寫指引：`.claude/pm-rules/context-bundle-spec.md`
-
-### 並行化判斷
-
-接收到任務後，主線程必須先問自己：
-1. **這個任務可以拆成幾個獨立部分？**
-2. **拆分後的部分有依賴關係嗎？**
-3. **哪些可以同時開始？**
-4. **我需要親自處理的部分是什麼？**（應該極少）
-
-**主線程允許親自處理**：用戶溝通、任務拆分設計、Ticket 建立和指派、閱讀報告和最終決策、驗收結果。其餘一律派發代理人。
-
-**Subagent 禁止事項**：Subagent 遇到多方案選擇或路由決策時，**禁止**直接向用戶呈現選擇（禁止使用 AskUserQuestion），必須在產出物中標記「需 PM 決策」後回報主線程，由 PM 中轉。詳見：.claude/pm-rules/askuserquestion-rules.md（使用對象限制章節）
-
-**派發方式判斷**：「Agent A 的發現會改變 Agent B 正在進行的工作嗎？」
-
-| 判斷結果 | 路由 |
-|---------|------|
-| 否（各自獨立） | Task subagent 並行派發 |
-| 是（需即時互動）且成本合理 | Agent Teams 派發 |
-| 是 但成本不合理 | Task subagent + PM 中轉 |
-
-### 派發模式選擇規則
-
-派發代理人時，**預設使用背景模式**（`run_in_background: true`）。完整的派發模式表格、例外場景和背景派發後跟蹤規則：
-
-> 詳見：.claude/pm-rules/parallel-dispatch.md（派發模式：預設背景章節）
-> AskUserQuestion 強制使用規則：.claude/pm-rules/askuserquestion-rules.md
+> 完整並行化規則、派發模式、Subagent 禁止事項：.claude/pm-rules/parallel-dispatch.md
+> AskUserQuestion 使用對象限制：.claude/pm-rules/askuserquestion-rules.md
 
 ---
 
@@ -248,77 +194,27 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 | 判斷條件 | 路由 |
 |---------|------|
-| 開發命令（實作/建立/新增/重構） | Hook 驗證 Ticket → 行為分類（IMP/TST/ADJ/ANA） |
+| 開發命令（實作/建立/新增/重構） | Hook 驗證 Ticket → 行為分類（IMP/TST/ADJ/ANA）→ 分工路由（見下） |
 | 安全相關（auth/token/permission） | → 強制派發 security-reviewer |
 | 除錯命令（test failed/crash/bug） | → 強制派發 incident-responder |
+
+**分工路由（基於 subagent ~20 tool call 限制，PC-042）**：
+
+| Ticket 類型 | 執行方式 | 理由 |
+|------------|---------|------|
+| ANA（分析） | **PM 前台執行** | 需跨文件讀取、不受 tool call 限制 |
+| DOC（文件修改） | **PM 前台執行** | 修改範圍明確、無需代理人 |
+| IMP（實作） | **代理人背景派發** | 機械性程式碼工作、PM 同時做其他事 |
+| TST（測試） | **代理人背景派發** | 測試撰寫和執行適合代理人 |
 | **執行中發現技術債/問題/回歸/超範圍需求** | → **[強制] 立即 `/ticket create`，不詢問，不中斷主線** |
 
 ---
 
-## 第三層半：執行中額外發現規則（技術債/問題/超範圍需求）
+## 第三層半 + 第四層：執行 Domain
 
-> 當 PM 或 Agent 在 Ticket 執行過程中發現任何需要追蹤的問題時，適用本規則。
-
-**核心規則：發現即建立，不詢問確認**
-
-- 發現了需要追蹤的問題嗎？→ 是 → **直接 /ticket create**
-- 要不要處理、優先級高不高 → 這是後續 acceptance-auditor 審核的職責，不是此刻的決策點
-
-### 子任務 vs 獨立 Ticket 判斷
-
-| 判斷條件 | 建立方式 | 範例 |
-|---------|---------|------|
-| 因執行當前 Ticket 而產生（因果關係） | 子任務（`/ticket create --parent {current_id}`） | 實作中發現需要先重構某模組 |
-| 與當前 Ticket 相同功能模組 | 子任務 | 同一個 feature 的額外驗收條件 |
-| 獨立問題、不同模組 | 獨立 Ticket | 發現另一個模組的 bug |
-| 跨版本的技術債 | 獨立 Ticket（歸入 todolist） | 長期架構改善 |
-
-> 識別條件、強制處理流程、禁止行為清單：.claude/pm-rules/plan-to-ticket-flow.md（「執行中額外發現」章節）
-
-### 效能問題發現後的代理人更新（強制）
-
-> **來源**：v0.2.1 W5-002/003/004（記憶體洩漏）、W6-002（狀態機終態）、W7-003（Widget 重建）— 多次效能問題修復後教訓未即時內化到代理人定義，導致同類問題可能重複發生。
-
-當修復效能相關問題（記憶體洩漏、不必要的重建、資源未清理、狀態機問題等）時，除了建立 Ticket 追蹤外，**必須同時評估是否需要更新對應代理人的開發注意事項**。
-
-| 效能問題類型 | 更新目標代理人 | 更新內容 |
-|------------|--------------|---------|
-| 記憶體洩漏（集合無上限、訂閱未清理） | 對應語言的開發代理人 | 資源管理章節 |
-| Widget/Component 不必要重建 | UI 開發代理人 | 重建效能意識章節 |
-| 狀態機設計問題 | 對應語言的開發代理人 | 狀態保護原則 |
-| goroutine/async 洩漏 | 對應語言的開發代理人 | 並行資源管理 |
-
-**執行時機**：效能修復 Ticket 完成後（Phase 4 或 complete 時），PM 檢查對應代理人是否已有相關注意事項，沒有則補充。
-
----
-
-## 第四層：Ticket 執行流程
-
-```
-[Ticket 驗證通過]
-    |
-    v
-是「繼續任務鏈」類請求? ─是→ [強制] 並行可行性分析 → 主動建議並行
-    |
-    └─否→ pending? → creation_accepted?
-          |           ─否→ [強制] 並行審核（acceptance-auditor + system-analyst）
-          |                → 通過後設定 creation_accepted: true
-          |           ─是→ claim → 階段判斷
-          in_progress? → 繼續執行
-          completed? → [AskUserQuestion] 後續步驟選擇
-          blocked? → 升級 PM
-```
-
-**建立後審核檢查（強制）**：pending Ticket 認領前必須 `creation_accepted: true`，否則強制並行派發 acceptance-auditor + system-analyst 審核。豁免：已審核父 Ticket 的子任務。
-
-**Wave 邊界檢查（強制）**：當用戶指定「繼續 Wx」時，**必須**只處理該 Wave 的任務，禁止跨 Wave 執行。
-
-**Handoff 方向選擇（AskUserQuestion）**：當 handoff 有多個可能方向時，**必須**使用 AskUserQuestion 讓使用者選擇。
-
-> **Worktree 隔離**：派發會修改檔案的代理人（parsley, fennel, thyme-python, cinnamon, pepper, mint）必須使用 `Agent(isolation: "worktree")`。詳見 parallel-dispatch.md（Worktree 隔離章節）。
-
-> Ticket 生命週期：.claude/pm-rules/ticket-lifecycle.md
-> 並行派發規則：.claude/pm-rules/parallel-dispatch.md
+> 詳見：.claude/pm-rules/execution-discovery-rules.md
+>
+> 包含：執行中額外發現規則、子任務 vs 獨立 Ticket 判斷、效能問題代理人更新、Ticket 執行流程
 
 ---
 
@@ -365,174 +261,31 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 ---
 
-## 第七層：完成判斷流程
+## 第七層 + 第八層：完成 Domain
 
-**ANA Ticket 結論轉化檢查（強制）**：ANA 類型 Ticket 完成前，必須確認分析結論已轉化為後續 Ticket。
-
-> **來源**：PC-017 — ANA Ticket 完成時分析結論未轉化為後續 Ticket，導致分析成果無法落地。
-
-**驗收方式確認（AskUserQuestion）**：complete 前必須確認驗收方式（標準/簡化/先完成後補）。
-
-**主動勾選驗收條件（強制）**：確認驗收方式後、執行 complete 前，PM **必須**主動勾選驗收條件，禁止依賴 CLI 擋回才補勾。
-
-```
-任務執行完成
-    |
-    v
-Ticket type == ANA?
-    |
-    +-- 是 → [強制] 確認分析結論已轉化為 Ticket
-    |         → children 或 spawned_tickets 非空?
-    |           +-- 是 → 繼續標準完成流程
-    |           +-- 否 → 建立修復+防護 Ticket 後再繼續
-    |
-    +-- 否 → 繼續標準完成流程
-    |
-    v
-Step 1: 確認驗收方式（AskUserQuestion #1）
-    |
-    v
-Step 2: 逐條確認驗收條件已滿足
-    |
-    v
-Step 3: ticket track check-acceptance <id>
-    |
-    v
-Step 4: ticket track complete <id>
-```
-
-**ANA 結論轉化規則**：
-
-| 檢查項 | 說明 |
-|--------|------|
-| children 非空 | ANA Ticket 已建立子任務（修復/防護等） |
-| spawned_tickets 非空 | ANA Ticket 已衍生獨立 Ticket |
-| 任一滿足即通過 | 至少有一個後續 Ticket 追蹤分析結論 |
-| 均為空 | **阻塞完成**：必須先建立後續 Ticket（修復+防護）再繼續 |
-
-**下一步選擇（AskUserQuestion）**：有多個後續 Ticket 可選時，必須讓使用者選擇。
-
-> 驗收流程詳細規則：.claude/pm-rules/ticket-lifecycle.md（Complete 前主動勾選驗收條件章節）
+> 詳見：.claude/pm-rules/completion-checkpoint-rules.md
+>
+> 包含：ANA 結論轉化檢查（PC-017 + PC-041）、驗收方式確認、Checkpoint 循環（0-4）、Worktree 合併、背景代理人結果合併
 
 ---
 
-## 第八層：完成後路由（Commit-Evaluate-Handoff 循環）
+## 代理人管理 + 強制命令 + 違規處理
 
-任務或階段完成後的統一路由機制（Checkpoint 0 → 1 → 1.5 → 2 → 3 → 4）。
-
-**核心判斷規則**：
-
-| Checkpoint | 判斷條件 | 路由 |
-|------------|---------|------|
-| 0 建立後 Handoff | 可並行派發? | 是 → 留在 session 並行派發；否 → commit + handoff |
-| 1 變更狀態 | 有未提交變更? | 是 → commit；無 → 跳至 Checkpoint 1.5 |
-| 1.5 錯誤學習 | commit 成功後 | AskUserQuestion #16 |
-| 1.8 合併回 main | 在開發分支上? | 是 → merge --no-ff → main → 刪除開發分支；否 → 跳過 |
-| 1.9 Worktree 合併 | `git worktree list` 有非 main worktree? | 有未合併 commit → 合併 + 清理；無 → 跳過 |
-| 2 情境評估 | [強制查詢] ticket track list | 情境 D/A/B/C（見下方） |
-| 3 後續路由 | 任務類型 | AskUserQuestion #13 |
-| 4 parallel-evaluation | 階段完成後 | AskUserQuestion #14 |
-
-**Checkpoint 2 情境評估（強制先查詢再路由，禁止依賴記憶）**：
-
-| 情境 | 條件 | 路由 |
-|------|------|------|
-| D（優先） | ticket 含 tdd_phase 欄位 | D1: Phase 1/2 → 全自動下一 Phase；D1a: Phase 3a → 3b 拆分評估（見 tdd-flow.md）後派發 3b；D2: Phase 3b → [自動檢查豁免條件] → 符合豁免 → 全自動 4b / 不符合 → #13（選擇 4a 或 4b）；D3a: 4a → 全自動 4b；D3b: 4b 標準 → 全自動 4c / 豁免 → /tech-debt-capture + #13；D3c: 4c → /tech-debt-capture + #13 |
-| A（#11a） | ticket 仍 in_progress | Context 刷新 Handoff |
-| B（#11b） | ticket completed + 同 Wave 有 pending | 任務切換 Handoff |
-| C | ticket completed + 同 Wave 無 pending | [強制] /parallel-evaluation Wave 審查（必須包含 linux 常駐審查委員，見 parallel-dispatch.md 多視角審查固定三人組）→ C1: 有其他 Wave → #3a；C2: 全完成 → [強制] 版本收尾技術債整理（見 version-progression.md）→ /version-release check + #13 |
-
-**Checkpoint 1.9 Worktree 合併（強制，來源 PC-039）**：
-
-```
-git worktree list → 有非 main worktree?
-    |
-    +-- 否 → 跳過
-    |
-    +-- 是 → 逐一檢查 git log main..{branch} --oneline
-              |
-              +-- 有未合併 commit → git merge {branch} --no-edit
-              |                     → git worktree remove {path}
-              |                     → git branch -d {branch}
-              |
-              +-- 無 commit → git worktree remove {path} --force
-                              → git branch -d {branch}
-```
-
-**觸發時機**：所有涉及 worktree 的工作流結束點：
-- Agent 完成後（PostToolUse:Agent Hook 提醒 + PM 主動執行）
-- ticket complete 後（Checkpoint 1.9）
-- Session 結束前（handoff/clear 前）
-- 切換到其他 Ticket 前
-
-**與現有層級的銜接**：第四層（建立完成）→ Checkpoint 0；第五層（Phase 完成）→ Checkpoint 1；第六層（incident 完成）→ Checkpoint 3；第七層（complete）→ Checkpoint 1
-
-**Handoff 強制動作**：PM **必須**執行 `/ticket handoff`，**禁止**手動建立交接文件。前須 `ticket handoff --status` 確認無殘留。
-
-**Resume 後接手（Checkpoint R）**：resume 後先確認範圍再 claim，不直接開始實作。
-
-> Checkpoint 0-4 完整流程、情境子規則、Checkpoint R 詳細步驟：.claude/references/decision-tree-checkpoint-details.md
-> AskUserQuestion 場景 11-17：.claude/pm-rules/askuserquestion-rules.md
-> 模板：.claude/references/ticket-askuserquestion-templates.md
-
----
-
-## 代理人觸發優先級
-
-```
-Level 2: Hook 系統驗證（命令入口，最早觸發）
-Level 1: incident-responder（錯誤/失敗最高優先）
-Level 2: system-analyst（架構審查）
-Level 3: security-reviewer（安全審查）
-Level 4: 其他專業代理人（DBA, SE, SD, ginger 等）
-Level 5: TDD 階段代理人 + thyme-python-developer
-```
-
-| 觸發組合 | 處理方式 |
-|---------|---------|
-| 錯誤 + 任何 | incident-responder 先處理 |
-| SA + security | SA 先審查架構 |
-| 多個專業代理人 | SA 協調或分解為多 Ticket |
-
----
-
-## 派發記錄要求
-
-所有 Ticket 必須包含 `decision_tree_path` 欄位（entry_point、final_decision、rationale）。
-
----
-
-## 強制執行命令
-
-| 情境 | 強制命令 |
-|------|---------|
-| 錯誤/失敗發生 | `/pre-fix-eval` |
-| Phase 4 完成 | `/tech-debt-capture` |
-| 版本發布前 | `/version-release check` |
-| 用戶決策確認 | AskUserQuestion（17 個場景，詳見 askuserquestion-rules.md） |
-| Commit 後 | AskUserQuestion #16（錯誤學習）→ #11（Handoff 確認） |
-| 流程省略偵測 | AskUserQuestion #12（省略確認） |
-| **執行中發現技術債/問題/回歸/超範圍需求** | **`/ticket create` 建立 pending Ticket（立即，不詢問，不延後）** |
-| **ANA Ticket 完成前** | **確認 children 或 spawned_tickets 非空（PC-017）** |
-| **派發代理人前** | **派發前複雜度關卡：認知負擔指數 > 10 必須先拆分（W15-004）** |
-
----
-
-## 違規處理
-
-| 違規行為 | 處理方式 |
-|---------|---------|
-| 跳過 incident-responder 直接修復 | 停止，回滾，重新走流程 |
-| 未建立 Ticket 就開始實作 | 停止，先建立 Ticket |
-| 跳過 SA 前置審查（新功能） | 停止，派發 SA |
-| 跳過 Phase 4 | 強制執行 Phase 4 |
-| 計畫執行中發現額外需求未立即建立 Ticket | 補建 Ticket，記錄遺漏原因 |
-| ANA Ticket 完成時無後續 Ticket（PC-017） | 阻塞完成，先建立修復+防護 Ticket |
-| **跳過複雜度關卡直接派發** | **停止派發，執行認知負擔評估，超標則先拆分** |
+> 詳見：.claude/pm-rules/agent-dispatch-enforcement.md
+>
+> 包含：代理人觸發優先級、派發記錄要求、強制執行命令表、違規處理
 
 ---
 
 ## 相關文件
+
+### Domain 拆分檔案（DDD 邊界，W3-007.1）
+
+- .claude/pm-rules/execution-discovery-rules.md - 執行 Domain（第三層半 + 第四層）
+- .claude/pm-rules/completion-checkpoint-rules.md - 完成 Domain（第七層 + 第八層）
+- .claude/pm-rules/agent-dispatch-enforcement.md - 代理人管理 Domain（觸發優先級 + 強制命令 + 違規）
+
+### 支撐規則
 
 - .claude/pm-rules/parallel-dispatch.md - 並行派發指南（場景表、安全檢查）
 - .claude/pm-rules/tdd-flow.md - TDD 流程
@@ -540,9 +293,9 @@ Level 5: TDD 階段代理人 + thyme-python-developer
 - .claude/pm-rules/ticket-lifecycle.md - Ticket 生命週期（驗收流程）
 - .claude/pm-rules/skip-gate.md - Skip-gate 防護
 - @.claude/pm-rules/askuserquestion-rules.md - AskUserQuestion 強制使用規則
-- .claude/references/decision-tree-checkpoint-details.md - 第八層 Checkpoint 詳細流程（情境 A/B/C/D、#11a/11b、Handoff 說明）
+- .claude/references/decision-tree-checkpoint-details.md - 第八層 Checkpoint 詳細流程
 
 ---
 
-**Last Updated**: 2026-03-23
-**Version**: 7.33.0 - 情境 C Wave 審查補充 linux 常駐審查委員要求（多視角固定三人組）
+**Last Updated**: 2026-04-06
+**Version**: 8.0.0 - DDD domain 邊界拆分：execution/completion/agents 三個 domain 檔案（0.17.2-W3-007.1）

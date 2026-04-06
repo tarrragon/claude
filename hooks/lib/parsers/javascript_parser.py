@@ -104,14 +104,14 @@ class JavaScriptParser(LanguageParser):
         # 模式 2: const 箭頭函式
         # 格式: [export] const functionName = [async] (...) =>
         self.arrow_const_pattern = re.compile(
-            r'^\s*(export\s+)?const\s+([a-zA-Z_$]\w*)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>',
+            r'^\s*(export\s+)?const\s+([a-zA-Z_$]\w*)\s*=\s*(?:async\s+)?\([^)]*\)(?:\s*:\s*\S+)?\s*=>',
             re.MULTILINE
         )
 
         # 模式 3: let 箭頭函式
         # 格式: [export] let functionName = [async] (...) =>
         self.arrow_let_pattern = re.compile(
-            r'^\s*(export\s+)?let\s+([a-zA-Z_$]\w*)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>',
+            r'^\s*(export\s+)?let\s+([a-zA-Z_$]\w*)\s*=\s*(?:async\s+)?\([^)]*\)(?:\s*:\s*\S+)?\s*=>',
             re.MULTILINE
         )
 
