@@ -141,6 +141,10 @@ class LifecycleMessages:
     CHECKLIST_DEV_ENV = "   [ ] 開發環境已準備就緒"
     CHECKLIST_ERROR_PATTERNS = "   [ ] 已查詢是否有相關的 error-patterns"
     CHECKLIST_SCOPE_VERIFICATION = "   [ ] 已獨立驗證 Ticket 描述的數量/範圍（描述是草稿，可能有遺漏）"
+    CHECKLIST_CONTEXT_BUNDLE = (
+        "   [ ] 派發代理人前已將分析結果寫入 Ticket Context Bundle（PC-040）\n"
+        "       → ticket track append-log <id> --section \"Problem Analysis\" \"### Context Bundle\\n...\""
+    )
     CHECKLIST_EXECUTION_LOG = "   [ ] 完成時記得更新執行日誌（ticket track append-log）"
     CONFIRM_DEPENDENCIES = "   請確認這些依賴已完成後再開始"
 

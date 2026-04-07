@@ -135,6 +135,12 @@ CLI 或內部工具報錯時，**禁止假設歸因**，必須依序：查語法
 代理人回傳截斷/不完整結果
     |
     v
+[強制] 更新 Ticket Context Bundle（PC-040）
+    → 將代理人的部分產出/PM 分析寫入 Ticket
+    → 確認 Agent prompt <= 30 行（只含 Ticket ID + 動作指令）
+    → 禁止：膨脹 Agent prompt 補償 context 不足
+    |
+    v
 檢查目標檔案體量（行數）
     |
     +-- 有 > 300 行的檔案 → 確認體量問題
@@ -154,10 +160,12 @@ CLI 或內部工具報錯時，**禁止假設歸因**，必須依序：查語法
 | 目標檔案 > 300 行 | 建立拆分 Ticket（以 DDD domain 邊界為拆分依據），拆分後重新派發 |
 | 目標檔案 < 200 行但任務仍耗盡 | 拆分任務為更小的子 Ticket（任務複雜度過高） |
 | 反覆失敗（3 次以上） | 評估是否需要多 session 策略，或由 PM 前台直接執行 |
+| 代理人失敗後重派 | [強制] 先更新 Ticket Context Bundle，再重派。禁止膨脹 prompt（PC-040） |
 
 禁止：無限重試同一 prompt。每次重試必須調整策略（縮小範圍或拆分檔案）。
+禁止：透過膨脹 Agent prompt 補償 context 不足。必須更新 Ticket Context Bundle（PC-040）。
 
 ---
 
-**Last Updated**: 2026-03-27
-**Version**: 3.6.0 - 新增代理人 Context 耗盡重試策略（0.2.1-W1-008）
+**Last Updated**: 2026-04-07
+**Version**: 3.7.0 - 新增 Context Bundle 優先更新步驟（0.17.2-W3-011）

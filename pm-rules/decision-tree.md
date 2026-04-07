@@ -95,10 +95,20 @@ Skill 是預建的專用工具，優先於代理人派發。
 | 關卡 | 條件 | 行動 |
 |------|------|------|
 | 複雜度關卡 | 認知負擔指數 > 10 | 先拆分子任務再派發（AskUserQuestion #6） |
-| Context Bundle | 未填寫 | PM 先填寫 Context Bundle 再派發 |
+| Context Bundle | 未通過以下檢查 | PM 必須修正後再派發 |
 
 > 複雜度評估公式：`認知負擔指數 = 變數數 + 分支數 + 巢狀深度 + 依賴數`（詳見 cognitive-load.md）
 > Context Bundle 模板：.claude/pm-rules/context-bundle-spec.md
+
+**Context Bundle 關卡檢查步驟（強制）**：
+
+| # | 檢查項 | 通過條件 |
+|---|--------|---------|
+| 1 | Ticket 含分析結果 | Execution Log 有 PM 寫入的 Context Bundle |
+| 2 | Agent prompt <= 30 行 | 只含 Ticket ID + 動作指令（Hook 自動攔截） |
+| 3 | 重派已更新 Bundle | 前次失敗產出已納入 Ticket |
+
+> 自動防護：`agent-prompt-length-guard-hook.py` 在 prompt 超過 30 行時阻擋（PC-040）。
 
 **並行化判斷**：「Agent A 的發現會改變 Agent B?」→ 否: 並行派發 / 是+成本合理: Agent Teams / 是+成本不合理: PM 中轉
 
@@ -297,5 +307,5 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 ---
 
-**Last Updated**: 2026-04-06
-**Version**: 8.0.0 - DDD domain 邊界拆分：execution/completion/agents 三個 domain 檔案（0.17.2-W3-007.1）
+**Last Updated**: 2026-04-07
+**Version**: 8.1.0 - Context Bundle 關卡具體化：新增三步驟檢查表（0.17.2-W3-011）

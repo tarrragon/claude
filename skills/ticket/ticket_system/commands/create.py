@@ -871,6 +871,9 @@ def _print_create_checklist(
     # 變更 4：初步認知負擔評估
     _print_cognitive_load_assessment(new_ticket)
 
+    # 變更 5：strategy 完整度檢查（W3-011, PC-040 引導）
+    _print_strategy_completeness_check(new_ticket)
+
     # SRP 偵測（W3-002）
     if new_ticket:
         what_text = new_ticket.get("what", "") or ""
@@ -1045,6 +1048,32 @@ def _print_cognitive_load_assessment(
             CreateMessages.COGNITIVE_LOAD_FILE_THRESHOLD_WARNING,
             threshold=COGNITIVE_LOAD_FILE_THRESHOLD
         ))
+
+
+def _print_strategy_completeness_check(
+    new_ticket: Optional[Dict[str, Any]],
+) -> None:
+    """
+    檢查 how.strategy 欄位是否已填寫（W3-011, PC-040 引導）。
+
+    IMP/ADJ 類型的 Ticket 需要在派發代理人前提供 Context Bundle，
+    strategy 欄位是其中的關鍵部分。提前提醒 PM 填寫。
+    """
+    if not new_ticket:
+        return
+
+    ticket_type = new_ticket.get("type", "IMP")
+    if ticket_type not in ("IMP", "ADJ"):
+        return
+
+    strategy = new_ticket.get("how", {}).get("strategy", "")
+    if not strategy or strategy == DEFAULT_UNDEFINED_VALUE:
+        print(
+            "[提醒] how.strategy 尚未填寫。"
+            "派發代理人前，請將分析結果寫入 Ticket Context Bundle（PC-040）\n"
+            "   → ticket track append-log <id> --section \"Problem Analysis\" "
+            "\"### Context Bundle\\n...\""
+        )
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:

@@ -805,6 +805,7 @@ def _print_claim_checklist(ticket: Dict[str, Any]) -> None:
     ticket_type = ticket.get("type", "IMP")
     if ticket_type in ["IMP", "ADJ"]:
         print(LifecycleMessages.CHECKLIST_ERROR_PATTERNS)
+        print(LifecycleMessages.CHECKLIST_CONTEXT_BUNDLE)
 
     print(LifecycleMessages.CHECKLIST_SCOPE_VERIFICATION)
     print(LifecycleMessages.CHECKLIST_EXECUTION_LOG)
