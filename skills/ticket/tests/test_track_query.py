@@ -58,8 +58,8 @@ class TestQuery:
         args.ticket_id = "0.31.0-W4-999"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
-            mock_load.side_effect = FileNotFoundError("Not found")
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
+            mock_load.return_value = None
 
             result = execute_query(args, "0.31.0")
 
@@ -176,7 +176,7 @@ class TestTree:
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "title": "Root Ticket",
@@ -199,7 +199,7 @@ class TestTree:
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "title": "Root Ticket",
@@ -225,8 +225,8 @@ class TestTree:
         args.ticket_id = "0.31.0-W4-999"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
-            mock_load.side_effect = FileNotFoundError("Root not found")
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
+            mock_load.return_value = None
 
             result = execute_tree(args, "0.31.0")
 
@@ -246,7 +246,7 @@ class TestChain:
         args.ticket_id = "0.31.0-W4-001.1"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001.1",
                 "title": "Child Ticket",
@@ -268,7 +268,7 @@ class TestChain:
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "title": "Root Ticket",
@@ -295,7 +295,7 @@ class TestFull:
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "title": "Test Ticket",
@@ -325,7 +325,7 @@ class TestFull:
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "title": "Complete Ticket",
@@ -357,7 +357,7 @@ class TestLog:
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "title": "Test Ticket",
@@ -383,7 +383,7 @@ class TestLog:
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
 
-        with patch('ticket_system.lib.ticket_loader.load_ticket') as mock_load:
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
             mock_ticket = {
                 "id": "0.31.0-W4-001",
                 "title": "Test Ticket",

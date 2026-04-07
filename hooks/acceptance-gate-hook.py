@@ -704,12 +704,15 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
         if not warning_msg:
             logger.info(f"Ticket {ticket_id} 驗收檢查通過")
 
-        # 步驟 2.5：檢查 ANA Ticket 是否有後續 Ticket（新增）
-        # 如果當前沒有警告訊息，檢查 ANA 類型
-        if not warning_msg and is_ana_type(frontmatter.get("type")):
+        # 步驟 2.5：檢查 ANA Ticket 是否有後續 Ticket
+        # ANA spawned 檢查獨立於步驟 2 的 warning，兩者可同時存在（W9-005）
+        if is_ana_type(frontmatter.get("type")):
             ana_should_warn, ana_warning_msg = check_ana_has_spawned_tickets(frontmatter, logger)
             if ana_should_warn:
-                warning_msg = ana_warning_msg
+                if warning_msg:
+                    warning_msg = warning_msg + "\n\n" + ana_warning_msg
+                else:
+                    warning_msg = ana_warning_msg
 
         # 步驟 3：檢查 error-pattern 新增
         has_new_error_patterns = False

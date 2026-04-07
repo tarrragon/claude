@@ -4,70 +4,25 @@
 # dependencies = []
 # ///
 
-r"""
+"""
 Main Thread Edit Restriction Hook - PreToolUse Hook
 
-功能: 限制主線程的 Edit/Write 工具使用，防止直接編輯程式碼（預設拒絕安全策略）
-- 允許編輯：.claude/plans/*, .claude/rules/*, .claude/methodologies/*,
-           .claude/hooks/*, .claude/skills/*, .claude/agents/*,
-           .claude/references/*, .claude/error-patterns/*, .claude/scripts/*,
-           .claude/pm-rules/*, .claude/handoff/*,
-           docs/**（含 work-logs/、tickets/、參考文件等）, CLAUDE.md, CHANGELOG.md
-- 拒絕編輯：lib/*, test/*, *.dart（除 .claude/ 中的）, backend/*, *.go, go.mod, go.sum
-- 拒絕時返回 exit code 2 和錯誤訊息，提示允許的路徑範圍
+限制主線程的 Edit/Write 工具使用，防止直接編輯程式碼（預設拒絕安全策略）。
+路徑模式定義和權限判斷邏輯見 lib/path_permission.py。
 
 觸發時機: 執行 Edit/Write 工具時
+行為: 允許 → exit 0, 拒絕 → exit 2
 
-許可的檔案路徑（具體白名單）:
-  ^\.claude/[^/]+\.(json|yaml)$  # .claude/ 根目錄配置檔（settings.json 等）
-  ^\.claude/plans/.*              # plan 檔案
-  ^\.claude/rules/.*              # 規則檔案
-  ^\.claude/methodologies/.*      # 方法論
-  ^\.claude/hooks/.*              # Hook 檔案
-  ^\.claude/skills/.*             # Skill 檔案
-  ^\.claude/agents/.*             # 代理人定義
-  ^\.claude/references/.*         # 參考檔案
-  ^\.claude/error-patterns/.*     # 錯誤模式
-  ^\.claude/scripts/.*            # 工具腳本（公共工具）
-  ^\.claude/handoff/.*            # 交接檔案
-  ^docs/.*                        # docs 目錄（含 work-logs/、tickets/、參考文件等）
-  ^CLAUDE\.md$                    # 專案入口文件
-
-禁止的檔案路徑:
-  ^lib/.*                         # 應用程式碼
-  ^test/.*                        # 測試程式碼
-  .*\.dart$                       # Dart 檔案（除 .claude/ 中的）
-  ^backend/.*                     # Go backend 程式碼
-  .*\.go$                         # Go 檔案
-  ^go\.mod$                       # Go 依賴管理
-  ^go\.sum$                       # Go 依賴鎖檔
-
-安全策略（預設拒絕）:
-  - 白名單中的檔案 → 允許編輯
-  - 禁止清單中的檔案 → 拒絕編輯
-  - .claude/ 內非白名單路徑 → 拒絕編輯（防止建立未預定義的子目錄）
-  - 其他所有檔案 → 拒絕編輯（預設拒絕）
-  - feat/* 等開發分支 → 跳過限制（允許所有編輯）
-
-行為:
-  - 允許的檔案: 允許編輯，返回 exit code 0
-  - 禁止的檔案: 拒絕編輯，返回 exit code 2，輸出錯誤訊息
-  - .claude/ 非白名單: 拒絕編輯，返回 exit code 2，輸出錯誤訊息
-  - 其他檔案: 拒絕編輯，返回 exit code 2，輸出錯誤訊息
-
-修改紀錄 (0.16.2-W6-001):
-- 新增 feat/* 分支偵測：在開發分支上跳過主線程編輯限制
-- 從檔案路徑推導 git repo context，支援 worktree 環境正確偵測分支
+修改紀錄:
+- 0.16.2-W6-001: 新增 feat/* 分支偵測，開發分支跳過限制
+- 0.17.2-W8-005: 路徑權限邏輯提取至 lib/path_permission.py
 """
 
 import json
-import os
 import sys
-import re
-import subprocess
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any
 
 # 設置 sys.path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -75,234 +30,18 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
 from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin, is_subagent_environment
 from git_utils import get_current_branch, is_allowed_branch
-from lib.hook_messages import GateMessages, CoreMessages, format_message
+from lib.hook_messages import GateMessages
 from lib.dispatch_tracker import is_file_under_dispatch
-
-
-# ============================================================================
-# 常數定義
-# ============================================================================
+from lib.path_permission import check_file_permission
 
 # Exit Code
-EXIT_SUCCESS = 0
 EXIT_ALLOW = 0
 EXIT_BLOCK = 2
 
-# 允許的檔案路徑模式（正則）
-# 注意：Ticket 檔案由 ticket-file-access-guard-hook.py 專責處理
-ALLOWED_PATTERNS = [
-    r"^\.claude/[^/]+\.(json|yaml)$",  # .claude/ 根目錄配置檔（settings.json 等）
-    r"^\.claude/plans/.*",              # plan 檔案
-    r"^\.claude/rules/.*",              # 規則檔案
-    r"^\.claude/methodologies/.*",      # 方法論
-    r"^\.claude/hooks/.*",              # Hook 檔案
-    r"^\.claude/skills/.*",             # Skill 檔案
-    r"^\.claude/agents/.*",             # 代理人定義
-    r"^\.claude/references/.*",         # 參考檔案
-    r"^\.claude/pm-rules/.*",            # PM 流程規則
-    r"^\.claude/error-patterns/.*",     # 錯誤模式
-    r"^\.claude/hook-specs/.*",         # Hook 規格
-    r"^\.claude/scripts/.*",            # 工具腳本（公共工具）
-    r"^\.claude/handoff/.*",            # 交接檔案
-    r"^docs/.*",                         # docs 目錄（含 work-logs/、tickets/、參考文件等）
-    r"^CLAUDE\.md$",                    # 專案入口文件
-    r"^CHANGELOG\.md$",                 # 版本變更紀錄
-]
-
-# 禁止的檔案路徑模式（正則）
-BLOCKED_PATTERNS = [
-    r"^lib/.*",                         # 應用程式碼
-    r"^test/.*",                        # 測試程式碼
-    r".*\.dart$",                       # Dart 檔案（除 .claude/ 中的）
-    r"^\.claude/skills/.*\.py$",        # Skills 中的 Python 檔案
-    r"^\.claude/lib/.*\.py$",           # lib 中的 Python 檔案
-    r"^backend/.*",                     # Go backend 程式碼
-    r".*\.go$",                         # Go 檔案
-    r"^go\.mod$",                       # Go 依賴管理
-    r"^go\.sum$",                       # Go 依賴鎖檔
-]
-
-# 例外：允許編輯的特定檔案路徑（優先於禁止清單）
-EXCEPTION_PATTERNS = [
-    r"^\.claude/hooks/.*\.py$",         # Hook 檔案可以編輯
-    r"^\.claude/skills/.*\.py$",        # Skills 中的 Python 檔案（派發給代理人時允許）
-]
-
-
-# ============================================================================
-# 檔案路徑檢查
-# ============================================================================
-
-def normalize_path(file_path: str) -> str:
-    """
-    正規化檔案路徑為相對於專案根目錄的路徑
-
-    Args:
-        file_path: 原始檔案路徑（可能是絕對或相對路徑）
-
-    Returns:
-        str - 正規化後的相對路徑（使用正斜杠）
-    """
-    # 統一使用正斜杠
-    normalized = file_path.replace("\\", "/")
-
-    # 取得專案根目錄（絕對路徑）
-    project_dir = os.getenv("CLAUDE_PROJECT_DIR", str(Path.cwd()))
-    project_dir = project_dir.replace("\\", "/")
-
-    # 如果是絕對路徑且在專案目錄內，轉換為相對路徑
-    if normalized.startswith(project_dir):
-        normalized = normalized[len(project_dir):]
-        # 移除開頭的斜杠
-        if normalized.startswith("/"):
-            normalized = normalized[1:]
-
-    # 移除開頭的 ./ 如果有的話
-    if normalized.startswith("./"):
-        normalized = normalized[2:]
-
-    return normalized
-
-
-def is_allowed_path(file_path: str, logger) -> bool:
-    """
-    檢查檔案路徑是否在允許清單中
-
-    Args:
-        file_path: 要檢查的檔案路徑
-        logger: 日誌物件
-
-    Returns:
-        bool - 是否為允許的路徑
-    """
-    # Claude Code 官方路徑（在用戶 home 目錄下，不在專案內）
-    normalized_abs = file_path.replace("\\", "/")
-    if "/.claude/projects/" in normalized_abs and "/memory/" in normalized_abs:
-        logger.debug(f"檔案匹配 Claude Code memory 系統路徑: {normalized_abs}")
-        return True
-    if "/.claude/plans/" in normalized_abs:
-        logger.debug(f"檔案匹配 Claude Code plan 路徑: {normalized_abs}")
-        return True
-
-    normalized_path = normalize_path(file_path)
-
-    for pattern in ALLOWED_PATTERNS:
-        if re.match(pattern, normalized_path):
-            logger.debug(f"檔案匹配允許模式 {pattern}: {normalized_path}")
-            return True
-
-    return False
-
-
-def is_blocked_path(file_path: str, logger) -> bool:
-    """
-    檢查檔案路徑是否在禁止清單中
-
-    Args:
-        file_path: 要檢查的檔案路徑
-        logger: 日誌物件
-
-    Returns:
-        bool - 是否為禁止的路徑
-    """
-    normalized_path = normalize_path(file_path)
-
-    for pattern in BLOCKED_PATTERNS:
-        if re.match(pattern, normalized_path):
-            logger.debug(f"檔案匹配禁止模式 {pattern}: {normalized_path}")
-            return True
-
-    return False
-
-
-def is_exception_path(file_path: str, logger) -> bool:
-    """
-    檢查檔案路徑是否在例外清單中（允許編輯的特定檔案）
-
-    Args:
-        file_path: 要檢查的檔案路徑
-        logger: 日誌物件
-
-    Returns:
-        bool - 是否為例外的路徑
-    """
-    normalized_path = normalize_path(file_path)
-
-    for pattern in EXCEPTION_PATTERNS:
-        if re.match(pattern, normalized_path):
-            logger.debug(f"檔案匹配例外模式 {pattern}: {normalized_path}")
-            return True
-
-    return False
-
-
-def check_file_permission(file_path: str, logger) -> Tuple[bool, str]:
-    """
-    檢查檔案編輯權限
-
-    Args:
-        file_path: 要編輯的檔案路徑
-        logger: 日誌物件
-
-    Returns:
-        tuple - (is_allowed, reason)
-            - is_allowed: 是否允許編輯
-            - reason: 原因說明
-    """
-    if not file_path:
-        logger.warning("警告: 檔案路徑為空")
-        return True, "檔案路徑為空，允許編輯"
-
-    normalized_path = normalize_path(file_path)
-    logger.debug(f"檢查檔案路徑: {normalized_path}")
-
-    # 優先檢查例外清單（允許編輯的特定檔案）
-    if is_exception_path(normalized_path, logger):
-        logger.info(f"允許編輯例外檔案: {normalized_path}")
-        return True, "檔案在例外清單中，允許編輯"
-
-    # 檢查禁止清單（在檢查允許清單之前）
-    if is_blocked_path(normalized_path, logger):
-        reason = GateMessages.EDIT_BLOCKED_PROGRAM_FILES
-        logger.warning(f"拒絕編輯禁止的檔案: {normalized_path}")
-        return False, reason
-
-    # 檢查允許清單
-    if is_allowed_path(normalized_path, logger):
-        logger.info(f"允許編輯檔案: {normalized_path}")
-        return True, "檔案在允許清單中"
-
-    # 對 .claude/ 路徑，非白名單 = 攔截
-    # （防止主線程在 .claude/ 建立未預定義的子目錄）
-    if normalized_path.startswith(".claude/"):
-        reason = GateMessages.EDIT_BLOCKED_CLAUDE_INVALID_PATH
-        logger.warning(f"拒絕編輯非白名單 .claude/ 路徑: {normalized_path}")
-        return False, reason
-
-    # 預設拒絕所有其他檔案（安全策略）
-    reason = GateMessages.EDIT_BLOCKED_DEFAULT_DENY
-    logger.warning(f"拒絕編輯非白名單路徑（預設拒絕）: {normalized_path}")
-    return False, reason
-
-
-# ============================================================================
-# Hook 輸出生成
-# ============================================================================
 
 def generate_hook_output(is_allowed: bool, reason: str) -> Dict[str, Any]:
-    """
-    生成 Hook 輸出
-
-    Args:
-        is_allowed: 是否允許編輯
-        reason: 原因說明
-
-    Returns:
-        dict - Hook 輸出 JSON
-    """
-    permission = GateMessages.EDIT_ALLOWED if is_allowed else GateMessages.EDIT_RESTRICTED
+    """生成 Hook 輸出 JSON"""
     decision = "allow" if is_allowed else "deny"
-
     return {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -312,108 +51,98 @@ def generate_hook_output(is_allowed: bool, reason: str) -> Dict[str, Any]:
     }
 
 
+def _allow_and_exit(logger, result_json: dict) -> int:
+    """輸出允許結果並返回 EXIT_ALLOW"""
+    print(json.dumps(result_json, ensure_ascii=False))
+    return EXIT_ALLOW
 
 
-# ============================================================================
-# 主入口點
-# ============================================================================
+def _check_dispatch_warning(file_path: str, logger) -> str:
+    """
+    檢查檔案是否正在被背景代理人處理，回傳警告訊息或空字串
+
+    業務規則：當檔案允許編輯但正在被背景代理人處理時，
+    應發出警告避免主線程和代理人同時修改同一檔案。
+    """
+    if not file_path:
+        return ""
+
+    project_root = get_project_root()
+    rel_path = file_path
+    if file_path.startswith("/"):
+        try:
+            rel_path = str(Path(file_path).relative_to(project_root))
+        except ValueError:
+            pass
+
+    dispatch = is_file_under_dispatch(project_root, rel_path)
+    if not dispatch:
+        return ""
+
+    warning = (
+        f"[WARNING] 此檔案正在被背景代理人處理 "
+        f"(agent: {dispatch.get('agent_description', '?')}, "
+        f"ticket: {dispatch.get('ticket_id', '?')})"
+    )
+    logger.info("Dispatch 衝突警告: %s -> %s", file_path, warning)
+    return warning
+
 
 def main() -> int:
     """
     主入口點
 
-    執行流程:
-    1. 初始化日誌
-    2. 讀取 JSON 輸入
-    3. 取得檔案路徑
-    3.5. 檢查開發分支（feat/* 等）→ 跳過限制
-    4. 檢查編輯權限
-    5. 生成 Hook 輸出
-    6. 儲存日誌
-    7. 返回適當的 exit code
-
-    Returns:
-        int - Exit code (0 for allow, 2 for deny)
+    流程: 初始化 → 讀取輸入 → 工具/分支過濾 → 權限檢查 → dispatch 警告 → 輸出
     """
-    # 步驟 1: 初始化日誌
     logger = setup_hook_logging("main-thread-edit-restriction")
 
     try:
         logger.info("Main Thread Edit Restriction Hook 啟動")
 
-        # 步驟 2: 讀取 JSON 輸入
+        # 讀取 JSON 輸入
         input_data = read_json_from_stdin(logger)
-        if input_data:
-            logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False)[:200]}...")
-        else:
+        if not input_data:
             logger.debug("輸入為空或解析失敗，返回預設允許")
-            result = generate_hook_output(True, "輸入為空，預設允許")
-            print(json.dumps(result, ensure_ascii=False))
-            return EXIT_ALLOW
+            return _allow_and_exit(logger, generate_hook_output(True, "輸入為空，預設允許"))
 
-        # 步驟 3: 取得工具資訊和檔案路徑
+        logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False)[:200]}...")
+
+        # 只檢查 Edit 和 Write 工具
         tool_name = input_data.get("tool_name", "")
         tool_input = input_data.get("tool_input") or {}
 
-        # 只檢查 Edit 和 Write 工具
         if tool_name not in ["Edit", "Write"]:
             logger.debug(f"跳過: 工具類型 {tool_name} 不在檢查範圍內")
-            result = generate_hook_output(True, f"工具 {tool_name} 不在檢查範圍")
-            print(json.dumps(result, ensure_ascii=False))
-            return EXIT_ALLOW
+            return _allow_and_exit(logger, generate_hook_output(True, f"工具 {tool_name} 不在檢查範圍"))
 
-        # Subagent 跳過：此 Hook 僅限制主線程，subagent 開發代理人不受限
-        # 設計依據：skip-gate.md「限制規則僅適用於 rosemary-project-manager（主線程）」
+        # Subagent 跳過：此 Hook 僅限制主線程
         if is_subagent_environment(input_data):
             logger.info(f"subagent 環境（agent_id={input_data.get('agent_id')}），跳過編輯限制")
-            result = generate_hook_output(True, "subagent 不受主線程編輯限制")
-            print(json.dumps(result, ensure_ascii=False))
-            return EXIT_ALLOW
+            return _allow_and_exit(logger, generate_hook_output(True, "subagent 不受主線程編輯限制"))
 
         file_path = tool_input.get("file_path", "")
         logger.info(f"檢查工具: {tool_name}, 檔案: {file_path}")
 
-        # 步驟 3.5: 開發分支跳過
-        # 在 feat/*, fix/* 等開發分支上，主線程編輯限制不適用
-        # 從檔案路徑推導 git repo context，支援 worktree 環境
+        # 開發分支跳過（feat/*, fix/* 等）
         file_dir = str(Path(file_path).parent) if file_path and file_path.startswith("/") else None
         current_branch = get_current_branch(cwd=file_dir)
         if current_branch and is_allowed_branch(current_branch):
             logger.info(f"開發分支 '{current_branch}' 上，跳過主線程編輯限制")
-            result = generate_hook_output(True, f"開發分支 '{current_branch}' 不受主線程編輯限制")
-            print(json.dumps(result, ensure_ascii=False))
-            return EXIT_ALLOW
+            return _allow_and_exit(logger, generate_hook_output(True, f"開發分支 '{current_branch}' 不受主線程編輯限制"))
 
-        # 步驟 4: 檢查編輯權限
+        # 檢查編輯權限
         is_allowed, reason = check_file_permission(file_path, logger)
 
-        # 步驟 4.5: Active dispatch 警告
-        # 當檔案允許編輯但正在被背景代理人處理時，發出警告
-        dispatch_warning = ""
-        if is_allowed and file_path:
-            project_root = get_project_root()
-            rel_path = file_path
-            if file_path.startswith("/"):
-                try:
-                    rel_path = str(Path(file_path).relative_to(project_root))
-                except ValueError:
-                    pass
-            dispatch = is_file_under_dispatch(project_root, rel_path)
-            if dispatch:
-                dispatch_warning = (
-                    f"[WARNING] 此檔案正在被背景代理人處理 "
-                    f"(agent: {dispatch.get('agent_description', '?')}, "
-                    f"ticket: {dispatch.get('ticket_id', '?')})"
-                )
-                logger.info("Dispatch 衝突警告: %s -> %s", file_path, dispatch_warning)
-
-        # 步驟 5: 生成 Hook 輸出
+        # Dispatch 衝突警告（僅在允許編輯時檢查）
         hook_output = generate_hook_output(is_allowed, reason)
-        if dispatch_warning:
-            hook_output["additionalContext"] = dispatch_warning
+        if is_allowed:
+            dispatch_warning = _check_dispatch_warning(file_path, logger)
+            if dispatch_warning:
+                hook_output["additionalContext"] = dispatch_warning
+
         print(json.dumps(hook_output, ensure_ascii=False))
 
-        # 步驟 6: 儲存日誌
+        # 儲存日誌
         log_entry = f"""[{datetime.now().isoformat()}]
   FilePath: {file_path}
   Permission: {"ALLOWED" if is_allowed else "BLOCKED"}
@@ -422,7 +151,6 @@ def main() -> int:
 """
         save_check_log("main-thread-edit-restriction", log_entry, logger)
 
-        # 步驟 7: 返回適當的 exit code
         exit_code = EXIT_ALLOW if is_allowed else EXIT_BLOCK
         logger.info(f"Hook 檢查完成，exit code: {exit_code}")
         return exit_code

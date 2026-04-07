@@ -173,6 +173,28 @@ acceptance-gate-hook 事後驗證（最後防線）
 
 ---
 
+## ANA Ticket 完成階段衍生 Ticket 檢查（強制）
+
+> **來源**：W9-005 — ANA Ticket 完成時未強制確認分析結論是否需要建立衍生 Ticket，導致建議被遺忘需事後人工補建。
+
+`ticket track complete` 對 ANA 類型 Ticket 執行前，acceptance-gate-hook 自動檢查 `spawned_tickets` 和 `children` 欄位。
+
+| 情況 | 處理方式 |
+|------|---------|
+| spawned_tickets 或 children 不為空 | 通過，正常完成 |
+| 兩者皆為空 | 輸出 WARNING，提醒 PM 確認是否需要建立衍生 Ticket |
+
+**PM 在看到 WARNING 後必須二選一**：
+
+| 選擇 | 動作 |
+|------|------|
+| 需要衍生 Ticket | 先建立 Ticket，更新 spawned_tickets 後再 complete |
+| 不需要 | 在 Ticket 執行日誌中記錄理由（如「分析結論為維持現狀，無需修改」）|
+
+> acceptance-gate-hook 實作：步驟 2.5（check_ana_has_spawned_tickets），獨立於步驟 2 驗收記錄檢查。
+
+---
+
 ## 相關文件
 
 - .claude/references/ticket-lifecycle-phases.md - 各階段詳細規則

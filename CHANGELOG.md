@@ -1,3 +1,30 @@
+## [1.25.0] - 2026-04-07
+
+### Summary
+feat: 合併 PostToolUse:Bash hooks 從 12 個精簡為 7 個; feat: 實作 ticket track search 和 list --version all; refactor: /009 Hook 輸出機制統一 variant B + 低優先級清理 (+14 more)
+
+Changes: 2 feat, 4 refactor, 10 fix, 1 perf
+
+- feat: 合併 PostToolUse:Bash hooks 從 12 個精簡為 7 個
+- feat: 實作 ticket track search 和 list --version all
+- refactor: /009 Hook 輸出機制統一 variant B + 低優先級清理
+- refactor: 消除 EXCEPTION 層，path_permission 改為 ALLOWED 優先檢查
+- refactor: 路徑權限邏輯提取至 lib/path_permission.py，Hook 從 444 行降至 172 行
+- refactor: dart_parser 泛型 regex 改為通用 PascalCase<...> 模式
+- fix: 修復 test_track_query 10 個測試 mock 路徑和方式錯誤
+- fix: /004 Hook 寫入保護 + 廢棄常數清理 + where 三元式重構
+- fix: /002 track_query 跨版本標題修正 + flag fallback 死碼清理
+- fix: ~007 W9 審查發現批次修復
+- fix: parallel-evaluation 強制延後項目必須建 Ticket — SKILL + 方法論同步更新
+- fix: W10 修復 check_changelog_update tool_result 欄位名錯誤 + 補建 4 個審查追蹤 Ticket
+- fix: W9 審查清理 — 刪除原始 hooks + 修復 6 項發現 + 建立 4 個追蹤 Ticket
+- fix: ANA Ticket 驗收流程新增衍生 Ticket 強制檢查
+- fix: dispatch_tracker 並行寫入加入 fcntl.flock 檔案鎖防護
+- fix: dispatch_tracker 3 個 except 區塊補充 stderr 可觀測性日誌
+- perf: dispatch_tracker _read_state 加入 mtime 驅動記憶體快取
+
+---
+
 ## [1.24.0] - 2026-04-07
 
 ### Summary

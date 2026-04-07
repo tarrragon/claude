@@ -252,3 +252,31 @@ class TestEdgeCases:
         state_file = get_state_file_path(project_root)
         data = json.loads(state_file.read_text(encoding="utf-8"))
         assert len(data["dispatches"]) == 10
+
+    def test_parallel_writes_no_data_loss(self, project_root: Path):
+        """多執行緒並行寫入不遺失資料（fcntl.flock 防護驗證）"""
+        import threading
+
+        errors = []
+        num_threads = 5
+
+        def write_dispatch(thread_id):
+            try:
+                record_dispatch(project_root, f"Thread-{thread_id}")
+            except Exception as e:
+                errors.append(e)
+
+        threads = [
+            threading.Thread(target=write_dispatch, args=(i,))
+            for i in range(num_threads)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, f"並行寫入發生錯誤: {errors}"
+        dispatches = get_active_dispatches(project_root)
+        assert len(dispatches) == num_threads, (
+            f"預期 {num_threads} 筆記錄，實際 {len(dispatches)} 筆（資料遺失）"
+        )

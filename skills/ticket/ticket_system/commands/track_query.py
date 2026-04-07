@@ -90,7 +90,7 @@ STATUS_MAP = {
     "blocked": STATUS_BLOCKED,
 }
 
-# 舊 flag 到狀態值映射
+# argparser flag（--pending/--in-progress/--completed/--blocked）對應的狀態值
 FLAG_TO_STATUS = {
     "pending": STATUS_PENDING,
     "in_progress": STATUS_IN_PROGRESS,
@@ -171,6 +171,13 @@ def _print_cross_version_warning(current_version: str) -> None:
         print(TrackQueryMessages.CROSS_VERSION_WARNING_HINT)
 
 
+def _format_where_field(where_value) -> str:
+    """格式化 where 欄位顯示值（支援 dict 和 str 兩種格式）。"""
+    if isinstance(where_value, dict):
+        return where_value.get("layer", DEFAULT_UNKNOWN_VALUE)
+    return where_value if where_value else DEFAULT_UNKNOWN_VALUE
+
+
 def execute_query(args: argparse.Namespace, version: str) -> int:
     """查詢單一 Ticket"""
     ticket, error = load_and_validate_ticket(version, args.ticket_id)
@@ -193,7 +200,7 @@ def execute_query(args: argparse.Namespace, version: str) -> int:
 
     print(f"{SECTION_5W1H_INDENT}What: {ticket.get('what', DEFAULT_UNKNOWN_VALUE)}")
     print(f"{SECTION_5W1H_INDENT}When: {ticket.get('when', DEFAULT_UNKNOWN_VALUE)}")
-    print(f"{SECTION_5W1H_INDENT}Where: {ticket.get('where', {}).get('layer', DEFAULT_UNKNOWN_VALUE) if isinstance(ticket.get('where'), dict) else ticket.get('where', DEFAULT_UNKNOWN_VALUE)}")
+    print(f"{SECTION_5W1H_INDENT}Where: {_format_where_field(ticket.get('where'))}")
     print(f"{SECTION_5W1H_INDENT}Why: {ticket.get('why', DEFAULT_UNKNOWN_VALUE)}")
 
     return 0
@@ -284,13 +291,13 @@ def execute_full(args: argparse.Namespace, version: str) -> int:
     # 重建檔案內容（YAML frontmatter + body）
     import yaml
 
-    # 分離特殊欄位
-    body = ticket.pop("_body", "")
-    ticket.pop("_path", None)
+    # 複製 dict 以避免修改原始資料
+    frontmatter = {k: v for k, v in ticket.items() if not k.startswith("_")}
+    body = ticket.get("_body", "")
 
     # 產出 frontmatter
     frontmatter_yaml = yaml.dump(
-        ticket,
+        frontmatter,
         allow_unicode=True,
         default_flow_style=False,
         sort_keys=False,
@@ -300,11 +307,6 @@ def execute_full(args: argparse.Namespace, version: str) -> int:
     full_content = f"---\n{frontmatter_yaml}---\n\n{body}"
 
     print(full_content)
-
-    # 恢復特殊欄位
-    if body:
-        ticket["_body"] = body
-
     return 0
 
 
@@ -376,6 +378,10 @@ def execute_version(args: argparse.Namespace, current_version: str) -> int:
 
 def execute_list(args: argparse.Namespace, version: str) -> int:
     """列出 Tickets，支援狀態篩選、Wave 篩選和多種輸出格式"""
+    # --version all: 跨版本查詢所有 Tickets（W9-002）
+    if version == "all":
+        return _execute_list_all_versions(args)
+
     # 當 --wave 指定但未明確指定 --version 時，搜尋所有 active 版本
     wave_value = getattr(args, "wave", None)
     explicit_version = getattr(args, "version", None)
@@ -384,6 +390,41 @@ def execute_list(args: argparse.Namespace, version: str) -> int:
         return _execute_list_cross_version(args, version, wave_value)
 
     return _execute_list_single_version(args, version, wave_value)
+
+
+def _execute_list_all_versions(args: argparse.Namespace) -> int:
+    """跨所有版本列出 Tickets（--version all，W9-002）"""
+    from ticket_system.lib.version import get_active_versions
+
+    active_versions = get_active_versions()
+    if not active_versions:
+        print(format_warning(WarningMessages.NO_TICKETS))
+        return 0
+
+    status_filters = _build_status_filters(args)
+    wave_value = getattr(args, "wave", None)
+    output_format = getattr(args, "format", "table")
+    found_any = False
+
+    for ver in sorted(active_versions):
+        ver_clean = ver.lstrip("v")
+        all_tickets = list_tickets(ver_clean)
+        if not all_tickets:
+            continue
+
+        filtered = all_tickets
+        if status_filters:
+            filtered = [t for t in filtered if t.get("status") in status_filters]
+        if wave_value is not None:
+            filtered = [t for t in filtered if t.get("wave") == wave_value]
+
+        if filtered:
+            found_any = True
+            _output_tickets(filtered, ver_clean, output_format)
+
+    if not found_any:
+        print(format_warning(WarningMessages.NO_TICKETS))
+    return 0
 
 
 def _execute_list_cross_version(
@@ -398,6 +439,9 @@ def _execute_list_cross_version(
 
     status_filters = _build_status_filters(args)
 
+    # 聚合所有版本的結果（不止第一個匹配版本）
+    all_filtered = []
+    matched_versions = []
     for ver in candidates:
         all_tickets = list_tickets(ver)
         if not all_tickets:
@@ -409,8 +453,13 @@ def _execute_list_cross_version(
         filtered = [t for t in filtered if t.get("wave") == wave_value]
 
         if filtered:
-            output_format = getattr(args, "format", "table")
-            return _output_tickets(filtered, ver, output_format)
+            all_filtered.extend(filtered)
+            matched_versions.append(ver)
+
+    if all_filtered:
+        output_format = getattr(args, "format", "table")
+        display_version = ", ".join(matched_versions) if matched_versions else default_version
+        return _output_tickets(all_filtered, display_version, output_format)
 
     print(format_warning(WarningMessages.NO_TICKETS))
     return 0
@@ -466,7 +515,7 @@ def _build_status_filters(args: argparse.Namespace) -> set:
     # 其次檢查舊 flag（向後相容）
     status_filters = set()
     for flag_name, status in FLAG_TO_STATUS.items():
-        if getattr(args, flag_name.replace("_", "_"), False):
+        if getattr(args, flag_name, False):
             status_filters.add(status)
 
     return status_filters
@@ -542,3 +591,73 @@ def _output_table(tickets: list, version: str) -> int:
         print(formatted)
 
     return 0
+
+
+def execute_search(args: argparse.Namespace, version: str) -> int:
+    """搜尋 Tickets — 依 UC/Spec/Prop 引用或檔案路徑（W9-002）"""
+    ref_query = getattr(args, "ref", None)
+    file_query = getattr(args, "file_path", None)
+
+    if not ref_query and not file_query:
+        print(format_error("必須指定 --ref 或 --file 搜尋條件"))
+        return 1
+
+    from ticket_system.lib.version import get_active_versions
+
+    # 決定搜尋範圍
+    if version == "all":
+        versions = [v.lstrip("v") for v in get_active_versions()]
+    else:
+        versions = [version]
+
+    output_format = getattr(args, "format", "table")
+    matched_tickets = []
+
+    for ver in sorted(versions):
+        all_tickets = list_tickets(ver)
+        if not all_tickets:
+            continue
+
+        for ticket in all_tickets:
+            if _ticket_matches_search(ticket, ref_query, file_query):
+                matched_tickets.append(ticket)
+
+    if not matched_tickets:
+        search_term = ref_query or file_query
+        print(format_warning(f"未找到匹配 '{search_term}' 的 Tickets"))
+        return 0
+
+    # 輸出結果
+    print(f"[Search] 找到 {len(matched_tickets)} 個匹配的 Tickets")
+    print(SEPARATOR_CHAR * SEPARATOR_WIDTH)
+    formatted = format_ticket_list(matched_tickets, include_who=True)
+    if formatted:
+        print(formatted)
+
+    return 0
+
+
+def _ticket_matches_search(
+    ticket: dict, ref_query: Optional[str], file_query: Optional[str]
+) -> bool:
+    """檢查 Ticket 是否匹配搜尋條件"""
+    if ref_query:
+        ref_upper = ref_query.upper()
+        # 搜尋 where.files、why、what、title 中的引用
+        where = ticket.get("where", {})
+        files = where.get("files", []) if isinstance(where, dict) else []
+        searchable_text = " ".join([
+            ticket.get("title", ""),
+            ticket.get("what", ""),
+            ticket.get("why", ""),
+            " ".join(str(f) for f in files),
+        ]).upper()
+        return ref_upper in searchable_text
+
+    if file_query:
+        where = ticket.get("where", {})
+        files = where.get("files", []) if isinstance(where, dict) else []
+        file_lower = file_query.lower()
+        return any(file_lower in str(f).lower() for f in files)
+
+    return False

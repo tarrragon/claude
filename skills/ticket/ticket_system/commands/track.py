@@ -52,11 +52,10 @@ from .track_query import (
     execute_log,
     execute_list,
     execute_version,
+    execute_search,
 )
 # 導入欄位操作模組
 from .fields import (
-    execute_get_field,
-    execute_set_field,
     execute_get_who,
     execute_set_who,
     execute_get_what,
@@ -134,6 +133,7 @@ def _create_command_handlers() -> dict:
         "complete": _execute_complete,
         "tree": execute_tree,
         "list": execute_list,
+        "search": execute_search,
         "release": _execute_release,
         "chain": execute_chain,
         "full": execute_full,
@@ -182,6 +182,15 @@ def execute(args: argparse.Namespace) -> int:
 
     explicit_version = getattr(args, 'version', None)
     version = None
+
+    # --version all 特殊處理：跨版本查詢（W9-002）
+    if explicit_version and explicit_version.lower() == "all":
+        if operation in ("list", "search"):
+            all_handlers = _create_command_handlers()
+            return all_handlers[operation](args, "all")
+        else:
+            print(format_error("--version all 僅支援 list 和 search 命令"))
+            return 1
 
     # 如果未明確指定版本，嘗試從 Ticket ID 提取
     if not explicit_version and hasattr(args, 'ticket_id'):
@@ -255,6 +264,13 @@ def _register_query_commands(
     p_list.add_argument("--status", nargs='+', help=TrackMessages.ARG_STATUS)
     p_list.add_argument("--format", choices=["table", "ids", "yaml"], default="table", help=TrackMessages.ARG_FORMAT)
     p_list.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # search 操作（W9-002: 跨維度查詢）
+    p_search = subparsers.add_parser("search", help="搜尋 Tickets（依 UC/Spec/Prop 引用或檔案路徑）")
+    p_search.add_argument("--ref", help="搜尋引用特定 UC/Spec/Prop 的 Tickets（如 UC-01、SPEC-001、PROP-007）")
+    p_search.add_argument("--file", dest="file_path", help="搜尋修改特定檔案的 Tickets（如 src/core/errors/）")
+    p_search.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    p_search.add_argument("--format", choices=["table", "ids", "yaml"], default="table", help=TrackMessages.ARG_FORMAT)
 
     # chain 操作
     p_chain = subparsers.add_parser("chain", help=TrackMessages.HELP_CHAIN)
