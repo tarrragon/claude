@@ -30,33 +30,43 @@
 
 ### 2. Ticket 操作規範
 
-**讀取 Ticket 必須使用 `ticket` 指令，禁止直接使用 Read 工具**
-
-#### 正確方式
+#### 2.1 讀取（必須用 CLI，禁止 Read 工具）
 
 ```bash
-# 查詢特定 Ticket
-ticket track query 0.31.0-W8-003
-
-# 查詢 Ticket 列表
-ticket track list
-
-# 查詢摘要
-ticket track summary
+ticket track query 0.17.3-W1-001    # 查詢特定 Ticket
+ticket track list                     # 列表
+ticket track summary                  # 摘要
 ```
 
-#### 禁止方式
+禁止 `Read(docs/work-logs/.../tickets/xxx.md)`。CLI 會解析 frontmatter 和驗證格式。
+
+#### 2.2 進度更新（執行過程中必須更新）
+
+代理人在執行任務過程中**必須**更新 Ticket 進度，讓 PM 查 Ticket 即可知道代理人進度。
 
 ```bash
-# 禁止直接讀取 Ticket 檔案
-Read(docs/work-logs/v0.31.0/tickets/0.31.0-W8-003.md)  # 禁止
+# 更新 Problem Analysis（分析完成時）
+(cd .claude/skills/ticket && uv run ticket track append-log <id> --section "Problem Analysis" "分析內容")
+
+# 更新 Solution（實作完成時）
+(cd .claude/skills/ticket && uv run ticket track append-log <id> --section "Solution" "實作內容")
+
+# 更新 Test Results（測試完成時）
+(cd .claude/skills/ticket && uv run ticket track append-log <id> --section "Test Results" "測試結果")
 ```
 
-#### 原因
+#### 2.3 更新時機
 
-1. `ticket` 指令會自動解析 frontmatter 和結構
-2. 確保 Ticket 追蹤系統的一致性
-3. 指令會驗證 Ticket 狀態和格式
+| 時機 | 更新什麼 | 範例 |
+|------|---------|------|
+| 分析完成 | Problem Analysis | 「根因是 X，影響 Y 個檔案」 |
+| 實作完成 | Solution | 「新增方法 A、修改檔案 B」 |
+| 測試完成 | Test Results | 「40/40 通過，無回歸」 |
+| 遇到阻塞 | Problem Analysis | 「發現 X 問題，需 PM 決策」 |
+
+#### 2.4 為什麼代理人必須更新 Ticket
+
+PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度而非代理人 output。只有異常時才用 SendMessage 直接聯繫。這降低 PM-代理人的依賴，讓 PM 可以同時管理多個任務線。
 
 > 完整規範：@.claude/skills/ticket/SKILL.md
 
@@ -108,6 +118,7 @@ Read(docs/work-logs/v0.31.0/tickets/0.31.0-W8-003.md)  # 禁止
 - [ ] 所有輸出使用繁體中文
 - [ ] 無禁用詞彙（文檔→文件、數據→資料...）
 - [ ] 讀取 Ticket 使用 `ticket track query`
+- [ ] 執行過程中更新 Ticket 進度（`append-log`）
 - [ ] 文件無 emoji
 - [ ] 未執行 git checkout/branch/switch/commit
 - [ ] 報告結構清晰（5W1H）
@@ -120,6 +131,7 @@ Read(docs/work-logs/v0.31.0/tickets/0.31.0-W8-003.md)  # 禁止
 |---------|---------|
 | 使用禁用詞彙 | 立即修正輸出 |
 | 直接 Read Ticket 檔案 | 改用 `ticket` 指令重新讀取 |
+| 完成任務但未更新 Ticket 進度 | 補上 append-log 再回報完成 |
 | 使用簡體中文 | 重新輸出繁體中文版本 |
 
 ---
@@ -130,6 +142,6 @@ Read(docs/work-logs/v0.31.0/tickets/0.31.0-W8-003.md)  # 禁止
 
 ---
 
-**Last Updated**: 2026-03-29
-**Version**: 1.2.0 - 新增 Git 操作限制章節（0.4.0-W2-009）
+**Last Updated**: 2026-04-08
+**Version**: 1.3.0 - 新增 Ticket 進度更新規範（代理人→Ticket 雙向溝通，PC-045）
 **Purpose**: 確保所有代理人遵守核心規則

@@ -1,3 +1,18 @@
+## [1.25.2] - 2026-04-08
+
+### Summary
+fix: PC-045 追加修正 — PM 背景派發後立刻切換，禁止空等（pm-role ）; fix: PC-045 PM 禁止寫產品程式碼 + 代理人失敗 SOP（pm-role ）; docs: AGENT_PRELOAD 新增 Ticket 進度更新規範 (+2 more)
+
+Changes: 2 fix, 3 docs
+
+- fix: PC-045 追加修正 — PM 背景派發後立刻切換，禁止空等（pm-role ）
+- fix: PC-045 PM 禁止寫產品程式碼 + 代理人失敗 SOP（pm-role ）
+- docs: AGENT_PRELOAD 新增 Ticket 進度更新規範
+- docs: pm-role 新增工作階段切換 SOP
+- docs: Controller 拆分從 遷移至
+
+---
+
 ## [1.25.1] - 2026-04-07
 
 ### Summary
