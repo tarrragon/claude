@@ -254,7 +254,7 @@ Phase 4c (多視角再審核) - /parallel-evaluation A
 
 ---
 
-## 二元樹決策流程
+## 決策路由決策流程
 
 ### Phase 3a 觸發判斷
 

@@ -7,7 +7,7 @@
 
 ## 根因
 
-Claude Code 工具（Edit/Write）傳入的 `file_path` 是**絕對路徑**（如 `/path/to/project/.claude/rules/core/decision-tree.md`），但 Hook 的豁免比對邏輯只做 `lstrip("/")`，結果是 `Users/username/...`，永遠不會匹配 `.claude/` 前綴。
+Claude Code 工具（Edit/Write）傳入的 `file_path` 是**絕對路徑**（如 `/path/to/project/.claude/pm-rules/decision-tree.md`），但 Hook 的豁免比對邏輯只做 `lstrip("/")`，結果是 `Users/username/...`，永遠不會匹配 `.claude/` 前綴。
 
 **行為模式**：開發者在寫路徑比對邏輯時，假設輸入是相對路徑，但實際上工具 API 傳入的是絕對路徑。`lstrip("/")` 只移除開頭斜線，不會轉換為相對路徑。
 

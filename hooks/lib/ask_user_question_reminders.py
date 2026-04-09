@@ -31,7 +31,7 @@ class AskUserQuestionReminders:
 
     覆蓋場景：驗收方式確認、Complete 後下一步、Wave 收尾、派發方式選擇、決策確認、
     Commit Handoff、流程省略偵測、後續任務路由、parallel-evaluation 觸發、批量變更備份。
-    Source of Truth: .claude/rules/core/decision-tree.md
+    Source of Truth: .claude/pm-rules/decision-tree.md
     """
 
     COMPLETE_REMINDER = """============================================================
@@ -46,7 +46,7 @@ complete 前必須使用 AskUserQuestion 確認驗收方式：
 complete 後必須使用 AskUserQuestion 選擇下一步。
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md
+詳見: .claude/pm-rules/decision-tree.md
 ============================================================"""
 
     COMPLETE_NEXT_STEP_REMINDER = """============================================================
@@ -98,7 +98,7 @@ PM 必須使用 AskUserQuestion 確認收尾動作。
 2. 告知 git 未提交狀態
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md
+詳見: .claude/pm-rules/decision-tree.md
 ============================================================"""
 
     DISPATCH_REMINDER = """============================================================
@@ -124,7 +124,7 @@ PM 必須使用 AskUserQuestion 確認收尾動作。
 避免用戶回答被 Hook 系統誤判為開發命令。
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md
+詳見: .claude/pm-rules/decision-tree.md
 ============================================================"""
 
     # ========================================================================
@@ -285,7 +285,7 @@ PM 必須使用 AskUserQuestion 確認：
 - 簡化執行 - 精簡版本
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/forbidden/skip-gate.md
+詳見: .claude/pm-rules/skip-gate.md
 ============================================================"""
 
     # ========================================================================
@@ -300,7 +300,7 @@ PM 必須使用 AskUserQuestion 確認：
 根據 task_type 提供對應選項。
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md（第八層）
+詳見: .claude/pm-rules/decision-tree.md（第八層）
 ============================================================"""
 
     POST_PHASE3B_ROUTE_REMINDER = """============================================================
@@ -313,7 +313,7 @@ Phase 3b（實作執行）已完成。建議下一步：
 - 先 commit 再決定
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md（第八層）
+詳見: .claude/pm-rules/decision-tree.md（第八層）
 ============================================================"""
 
     POST_PHASE4_ROUTE_REMINDER = """============================================================
@@ -326,7 +326,7 @@ Phase 4（重構評估）已完成。建議下一步：
 - Wave 收尾
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md（第八層）
+詳見: .claude/pm-rules/decision-tree.md（第八層）
 ============================================================"""
 
     # ========================================================================
@@ -364,7 +364,7 @@ PM 必須使用 AskUserQuestion 確認：
 - 查看變更範圍 - 確認後再決定
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md（第八層）
+詳見: .claude/pm-rules/decision-tree.md（第八層）
 ============================================================"""
 
     # ========================================================================
@@ -473,7 +473,7 @@ ticket track complete 已成功。下一步強制流程：
   → 無任何待處理 → AskUserQuestion #13（後續任務路由）
 
 禁止：直接結束回應或進入下一個 Ticket（跳過 Checkpoint 1/1.5/2）
-詳見: .claude/rules/core/decision-tree.md（第八層）
+詳見: .claude/pm-rules/decision-tree.md（第八層）
 ============================================================"""
 
 

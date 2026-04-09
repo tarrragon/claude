@@ -1,6 +1,6 @@
 # 背景派發詳細規則
 
-> 核心入口：.claude/rules/core/decision-tree.md（派發模式選擇規則）
+> 核心入口：.claude/pm-rules/decision-tree.md（派發模式選擇規則）
 
 ---
 
@@ -84,7 +84,7 @@ git diff --stat  # 驗證實際變更
 
 ## 相關文件
 
-- .claude/rules/core/decision-tree.md - 派發模式選擇規則
+- .claude/pm-rules/decision-tree.md - 派發模式選擇規則
 - .claude/rules/guides/parallel-dispatch.md - 並行派發指南
 - .claude/rules/core/pm-role.md - 主線程管理哲學
 

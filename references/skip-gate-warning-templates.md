@@ -17,7 +17,7 @@
   3. 建立 Ticket
   4. 派發對應代理人
 
-詳見: .claude/rules/forbidden/skip-gate.md
+詳見: .claude/pm-rules/skip-gate.md
 ```
 
 ---
@@ -30,7 +30,7 @@
 [WARNING] Skip-gate Protection Triggered (Level 2)
 - 命令入口驗證失敗：未找到待處理的 Ticket
 - 請先執行：/ticket create
-- 詳見：.claude/rules/forbidden/skip-gate.md
+- 詳見：.claude/pm-rules/skip-gate.md
 ```
 
 ### Ticket 未認領情況
@@ -39,7 +39,7 @@
 [WARNING] Skip-gate Protection Triggered (Level 2)
 - 命令入口驗證失敗：Ticket {id} 尚未認領
 - 請先執行：/ticket track claim {id}
-- 詳見：.claude/rules/forbidden/skip-gate.md
+- 詳見：.claude/pm-rules/skip-gate.md
 ```
 
 ### Hook 內部警告（無 Ticket 詳細版）
@@ -51,7 +51,7 @@
 1. 執行 `/ticket create` 建立新 Ticket
 2. 或執行 `/ticket track claim {id}` 認領現有 Ticket
 
-詳見: .claude/rules/core/decision-tree.md
+詳見: .claude/pm-rules/decision-tree.md
 ```
 
 ### Hook 內部警告（Ticket 未認領詳細版）
@@ -63,7 +63,7 @@
 1. 執行 `/ticket track claim {ticket_id}` 認領 Ticket
 2. 使用 `/ticket track query {ticket_id}` 查看詳細資訊
 
-詳見: .claude/rules/core/decision-tree.md
+詳見: .claude/pm-rules/decision-tree.md
 ```
 
 ---
@@ -79,7 +79,7 @@
   1. 確認任務是否應由代理人執行
   2. 建立對應 Ticket
   3. 派發 parsley-flutter-developer 或對應代理人
-- 詳見：.claude/rules/forbidden/skip-gate.md
+- 詳見：.claude/pm-rules/skip-gate.md
 ```
 
 ### 依賴檔案編輯嘗試
@@ -90,7 +90,7 @@
 - 建議操作：
   1. 派發 system-engineer 處理依賴更新
   2. 使用 /ticket create 建立環境配置 Ticket
-- 詳見：.claude/rules/forbidden/skip-gate.md
+- 詳見：.claude/pm-rules/skip-gate.md
 ```
 
 ### 超出允許範圍的編輯
@@ -99,7 +99,7 @@
 [ERROR] Skip-gate Protection Triggered (Level 3)
 - 檔案路徑超出主線程允許編輯範圍：{file_path}
 - 允許編輯的路徑：.claude/plans/*, .claude/rules/*, docs/work-logs/*, 等
-- 詳見：.claude/rules/forbidden/skip-gate.md
+- 詳見：.claude/pm-rules/skip-gate.md
 ```
 
 ---

@@ -387,7 +387,7 @@ class TestFileIdentification:
     def test_rules_core_identified_as_layer1(self, mock_logger):
         """T9.1: .claude/rules/core/ 檔案識別"""
         assert hook_module.is_layer1_file(
-            ".claude/rules/core/decision-tree.md", mock_logger
+            ".claude/pm-rules/decision-tree.md", mock_logger
         )
 
     def test_rules_flows_identified_as_layer1(self, mock_logger):

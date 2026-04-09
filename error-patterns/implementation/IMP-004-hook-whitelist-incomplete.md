@@ -94,7 +94,7 @@
 
 - `.claude/hooks/command-entrance-gate-hook.py` - 初次受影響的 Hook
 - `.claude/hooks/main-thread-edit-restriction-hook.py` - 復發受影響的 Hook
-- `.claude/rules/forbidden/skip-gate.md` - Skip-gate 防護機制定義
+- `.claude/pm-rules/skip-gate.md` - Skip-gate 防護機制定義
 
 ---
 

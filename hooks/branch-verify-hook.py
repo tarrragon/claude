@@ -106,7 +106,7 @@ def is_exempt_path_on_protected_branch(file_path: str, cwd: str | None = None) -
         bool: True 表示豁免（允許編輯），False 表示不豁免（需要 deny）
 
     Example:
-        if is_exempt_path_on_protected_branch(".claude/rules/core/decision-tree.md"):
+        if is_exempt_path_on_protected_branch(".claude/pm-rules/decision-tree.md"):
             print("Allowed to edit .claude/ files on main")
     """
     # 豁免的路徑字首

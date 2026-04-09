@@ -55,8 +55,8 @@ class GateMessages:
   1. 執行 `/ticket create` 建立新 Ticket
   2. 或執行 `/ticket track claim {id}` 認領現有 Ticket
 
-詳見: .claude/rules/core/decision-tree.md
-詳見: .claude/rules/forbidden/skip-gate.md"""
+詳見: .claude/pm-rules/decision-tree.md
+詳見: .claude/pm-rules/skip-gate.md"""
 
     TICKET_NOT_CLAIMED_ERROR = """錯誤：Ticket {ticket_id} 尚未認領
 
@@ -68,8 +68,8 @@ class GateMessages:
   2. 或執行 `/ticket track claim {ticket_id}` 親自認領
   3. 使用 `/ticket track query {ticket_id}` 查看詳細資訊
 
-詳見: .claude/rules/core/decision-tree.md
-詳見: .claude/rules/forbidden/skip-gate.md"""
+詳見: .claude/pm-rules/decision-tree.md
+詳見: .claude/pm-rules/skip-gate.md"""
 
     DECISION_TREE_MISSING_ERROR = """錯誤：Ticket {ticket_id} 缺少決策樹欄位
 
@@ -83,8 +83,8 @@ class GateMessages:
   2. 使用 `/ticket track query {ticket_id}` 查看當前 Ticket
   3. 完成編輯後重新執行命令
 
-詳見: .claude/rules/core/decision-tree.md
-詳見: .claude/rules/forbidden/skip-gate.md"""
+詳見: .claude/pm-rules/decision-tree.md
+詳見: .claude/pm-rules/skip-gate.md"""
 
     TICKET_STATUS_UNKNOWN_ERROR = """錯誤：Ticket {ticket_id} 狀態不明 ({status})
 
@@ -109,7 +109,7 @@ Ticket 標題: {title}
 如果這是正確的 Ticket，請忽略此警告。
 如果不是，請先建立或認領正確的 Ticket。
 
-詳見: .claude/rules/forbidden/skip-gate.md
+詳見: .claude/pm-rules/skip-gate.md
 
 ============================================================
 """
@@ -191,7 +191,7 @@ ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於
      - Python Hook: thyme-python-developer
   3. 代理人完成實作和測試後回傳結果
 
-詳見: .claude/rules/forbidden/skip-gate.md"""
+詳見: .claude/pm-rules/skip-gate.md"""
 
     # .claude/ 非白名單路徑（防止建立未預定義子目錄）
     EDIT_BLOCKED_CLAUDE_INVALID_PATH = """錯誤：主線程禁止寫入 .claude/ 非白名單路徑
@@ -217,7 +217,7 @@ ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於
   2. 若需要新增 .claude/ 子目錄，請聯繫 PM 更新白名單
   3. 使用 /ticket create 建立對應需求
 
-詳見: .claude/rules/forbidden/skip-gate.md"""
+詳見: .claude/pm-rules/skip-gate.md"""
 
     # 其他禁止路徑（預設拒絕原則）
     EDIT_BLOCKED_DEFAULT_DENY = """錯誤：主線程禁止編輯此路徑（預設拒絕）
@@ -236,7 +236,7 @@ ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於
   2. 如果需要編輯其他檔案，請建立 Ticket 派發對應代理人
   3. 使用 /ticket create 建立任務
 
-詳見: .claude/rules/forbidden/skip-gate.md"""
+詳見: .claude/pm-rules/skip-gate.md"""
 
     # ========================================================================
     # Ticket Path Guard Hook - 錯誤位置操作
@@ -327,7 +327,7 @@ oregano-data-miner 代理人執行，以獲得更專業的蒐集
   - 完整的執行記錄和追蹤
   - 遵循工作流規範
 
-詳見: .claude/rules/forbidden/skip-gate.md
+詳見: .claude/pm-rules/skip-gate.md
 詳見: .claude/agents/oregano-data-miner.md
 
 ============================================================
@@ -352,7 +352,7 @@ oregano-data-miner 代理人執行，以獲得更專業的蒐集
   4. 對應代理人執行修復
 
 詳見: .claude/rules/flows/incident-response.md
-詳見: .claude/rules/forbidden/skip-gate.md
+詳見: .claude/pm-rules/skip-gate.md
 
 ============================================================
 """

@@ -192,7 +192,7 @@ Phase 3b 中發現: "程式碼重複度高，應該重構"
 ## 相關文件
 
 - @.claude/pm-rules/version-progression.md - 核心決策規則
-- @.claude/rules/core/decision-tree.md - 主線程決策樹
+- @.claude/pm-rules/decision-tree.md - 主線程決策樹
 - @.claude/pm-rules/ticket-lifecycle.md - Ticket 生命週期
 
 ---

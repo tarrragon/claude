@@ -67,14 +67,8 @@
 每次切換工作焦點（包括 `/clear` 清除 session）前，執行進度快照：
 
 ```bash
-# 1. 查看背景代理人狀態
-ticket track list --status in_progress
-
-# 2. 查看待處理任務全貌
-ticket track list --status pending,in_progress
-
-# 3. 確認 git 未提交狀態
-git status --short
+# 一條命令掌握全局（含版本進度、in_progress、pending、git status）
+ticket track snapshot
 ```
 
 ### 切換時：記錄當前進度到 worklog
@@ -98,8 +92,8 @@ git status --short
 ### 新 session 開始時：重建全局視野
 
 ```bash
-# 快速掌握所有任務線的進度
-ticket track list --status in_progress,pending --version all
+# 快速掌握全局進度
+ticket track snapshot
 ```
 
 然後根據 worklog 記錄決定從哪個 Ticket 繼續。
@@ -204,5 +198,5 @@ ticket track list --status in_progress,pending --version all
 ---
 
 **Last Updated**: 2026-04-08
-**Version**: 3.2.0 - 新增工作階段切換 SOP + /clear 前確認清單（PC-045 追加）
+**Version**: 3.3.0 - 切換 SOP 整合 ticket track snapshot 命令（W15-001）
 **Source**: 從 .claude/skills/manager/SKILL.md v2.0.0 遷移 + PC-045 教訓

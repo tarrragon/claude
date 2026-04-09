@@ -276,7 +276,7 @@ Phase 3b 測試失敗
 ## 相關文件
 
 - .claude/pm-rules/tdd-flow.md - 精簡版（常駐）
-- .claude/rules/core/decision-tree.md - 主線程決策樹
+- .claude/pm-rules/decision-tree.md - 主線程決策樹
 - .claude/rules/core/quality-baseline.md - 品質基線
 
 ---

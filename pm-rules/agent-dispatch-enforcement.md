@@ -8,14 +8,7 @@
 
 ## 代理人觸發優先級
 
-```
-Level 2: Hook 系統驗證（命令入口，最早觸發）
-Level 1: incident-responder（錯誤/失敗最高優先）
-Level 2: system-analyst（架構審查）
-Level 3: security-reviewer（安全審查）
-Level 4: 其他專業代理人（DBA, SE, SD, ginger 等）
-Level 5: TDD 階段代理人 + thyme-python-developer
-```
+> 觸發優先級表已合併至 dispatch-gate.md（派發閘門），統一在派發前參考。
 
 | 觸發組合 | 處理方式 |
 |---------|---------|
@@ -61,5 +54,5 @@ Level 5: TDD 階段代理人 + thyme-python-developer
 
 ---
 
-**Last Updated**: 2026-04-06
-**Version**: 1.0.0 - 從 decision-tree.md 拆分（DDD domain 邊界，0.17.2-W3-007.1）
+**Last Updated**: 2026-04-09
+**Version**: 1.1.0 - 觸發優先級合併至 dispatch-gate.md + 優先級表分離（W9-003/W8-001.4）

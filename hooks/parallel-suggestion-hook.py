@@ -539,7 +539,7 @@ def generate_parallel_suggestion_report(
 例如：「以下 {} 個任務可並行執行，是否派發？」
 
 詳見: .claude/rules/guides/parallel-dispatch.md
-詳見: .claude/rules/core/decision-tree.md 第四層半
+詳見: .claude/pm-rules/decision-tree.md 第四層半
 
 ============================================================
 """.format(len(parallel_tasks))

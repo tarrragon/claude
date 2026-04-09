@@ -1,3 +1,27 @@
+## [1.26.0] - 2026-04-09
+
+### Summary
+feat: .2 新增 Checkpoint 0.5 PM 進度更新時機; feat: 新增 ticket track close 指令 + ~006 改用 close 結案; feat: PM-代理人解耦自動化（snapshot 命令 + 查詢範圍限制） (+11 more)
+
+Changes: 3 feat, 2 refactor, 6 fix, 3 docs
+
+- feat: .2 新增 Checkpoint 0.5 PM 進度更新時機
+- feat: 新增 ticket track close 指令 + ~006 改用 close 結案
+- feat: PM-代理人解耦自動化（snapshot 命令 + 查詢範圍限制）
+- refactor: completion-checkpoint 複雜度拆分（157→101 行）
+- refactor: 決策樹二元化拆分 — 主檔案精簡為路由索引 + 5 個路由子檔案
+- fix: registry 範圍釐清 + dispatch 觸發優先級整合
+- fix: 決策路由完整性 + 術語一致性 + 命名更新
+- fix: .3 流程圖拆分明確性/類型判斷 + 閘門職責純化
+- fix: .1 路徑表新增 thyme-extension-engineer + 查詢規則分工修正
+- fix: snapshot 統計修正 closed Ticket 從分母排除並獨立顯示
+- fix: PC-046 ticket CLI 改為全域直接呼叫，移除多餘 cd+uv run
+- docs: 補充規則 + 版本日期 + 引用驗證通過
+- docs: .4 文件微調 — 空章節移除、跨專案引用清理、優先級表分離
+- docs: ~006 批量完成（已在 修復）+ 遷移至
+
+---
+
 ## [1.25.2] - 2026-04-08
 
 ### Summary

@@ -25,7 +25,7 @@ Matcher: Write
 
 使用方式:
     PostToolUse Hook 自動觸發，或手動測試:
-    echo '{"tool_name":"Write","tool_input":{"file_path":".claude/rules/core/decision-tree.md"}}' | python3 layer-boundary-validator-hook.py
+    echo '{"tool_name":"Write","tool_input":{"file_path":".claude/pm-rules/decision-tree.md"}}' | python3 layer-boundary-validator-hook.py
 """
 
 import sys

@@ -54,6 +54,8 @@ class ErrorMessages:
     ACCEPTANCE_CRITERIA_INDEX_NOT_POSITIVE = "[Error] index 必須是正整數，收到: {value}"
     INCOMPLETE_ACCEPTANCE_CRITERIA = "[Error] {ticket_id} 有未完成的驗收條件"
     STATUS_ERROR = "[Error] {status_msg}"
+    CLOSE_MISSING_RESOLVED_BY = "[Error] --resolved-by 為必填參數，請提供解決此問題的 Ticket ID"
+    CLOSE_ALREADY_CLOSED = "[Error] {ticket_id} 已經是 closed 狀態"
     TICKET_NOT_FOUND_IN_BATCH = "[Error] {ticket_id} 找不到"
     CHECK_ACCEPTANCE_ALL_WITH_INDEX = "[Error] --all 和 index 參數互斥，只能選擇其中之一"
     CHECK_ACCEPTANCE_MISSING_INDEX = (
@@ -106,6 +108,7 @@ class InfoMessages:
     TICKET_CLAIMED = "[OK] 已接手 {ticket_id}"
     TICKET_COMPLETED = "[OK] 已完成 {ticket_id}"
     TICKET_RELEASED = "[OK] 已釋放 {ticket_id}"
+    TICKET_CLOSED = "[OK] 已關閉 {ticket_id}"
     HANDOFF_FILE_CREATED = "[OK] 已建立交接檔案: {path}"
     HANDOFF_NEXT_STEP = "[下一步] 請執行 /clear 清除對話，開始新的工作階段"
     HANDOFF_RESUMED = "Handoff 已接手，resumed_at 已更新"

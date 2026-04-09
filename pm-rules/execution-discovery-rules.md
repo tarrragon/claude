@@ -73,5 +73,5 @@
 
 ---
 
-**Last Updated**: 2026-04-06
-**Version**: 1.0.0 - 從 decision-tree.md 拆分（DDD domain 邊界，0.17.2-W3-007.1）
+**Last Updated**: 2026-04-09
+**Version**: 1.0.1 - 版本日期更新（W9-004，二元化拆分後多視角審查修正）

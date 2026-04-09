@@ -46,14 +46,16 @@ ticket track summary                  # 摘要
 
 ```bash
 # 更新 Problem Analysis（分析完成時）
-(cd .claude/skills/ticket && uv run ticket track append-log <id> --section "Problem Analysis" "分析內容")
+ticket track append-log <id> --section "Problem Analysis" "分析內容"
 
 # 更新 Solution（實作完成時）
-(cd .claude/skills/ticket && uv run ticket track append-log <id> --section "Solution" "實作內容")
+ticket track append-log <id> --section "Solution" "實作內容"
 
 # 更新 Test Results（測試完成時）
-(cd .claude/skills/ticket && uv run ticket track append-log <id> --section "Test Results" "測試結果")
+ticket track append-log <id> --section "Test Results" "測試結果"
 ```
+
+> **注意**：`ticket` 是全域安裝的 CLI 工具，直接呼叫即可。**禁止** `(cd .claude/skills/ticket && uv run ...)`。
 
 #### 2.3 更新時機
 
@@ -94,7 +96,42 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 ---
 
-### 5. Git 操作限制（強制）
+### 5. 實作代理人查詢範圍限制（Phase 3b 強制）
+
+> **來源**：PC-047 — PM prompt 誘導代理人大量讀取，回合耗盡未進入寫入。
+
+#### 核心原則
+
+**實作基於測試，不基於探索。** 代理人收到任務後，查詢範圍嚴格限縮在以下四類：
+
+| 允許查詢 | 目的 | 範例 |
+|---------|------|------|
+| 測試程式碼 | 了解要通過什麼 | Read 測試檔案中的 TC 案例 |
+| 目標 model/DTO | 了解資料結構 | Read 要修改的 class/struct 定義 |
+| Domain 邏輯 | 了解業務規則 | Read 相關 domain service |
+| 介面定義 | 了解呼叫契約 | Read interface/abstract class |
+
+#### 禁止查詢
+
+| 禁止 | 原因 | 正確做法 |
+|------|------|---------|
+| 「參考 X 檔案的模式」式的大範圍讀取 | 這是探索，不是實作 | PM 應在 Context Bundle 中 inline 必要資訊 |
+| grep 搜尋「其他地方怎麼做」 | 消耗 tool call 預算 | PM 應預先提取模式並寫入 Ticket |
+| 讀取完整設計文件（Phase 1/2/3a） | context 浪費 | PM 已提取摘要到 Context Bundle |
+| 讀取與任務無直接關係的程式碼 | 超出實作範圍 | 聚焦測試要求的最小修改集 |
+
+#### 資訊不足時的處理
+
+如果 Ticket 的 Context Bundle 不足以完成實作（缺少 API 簽名、常數定義、介面資訊等），代理人**不應自行大量查詢**，而應：
+
+1. 在 Ticket 記錄缺少什麼：`ticket track append-log <id> "資訊不足：缺少 X 介面定義和 Y 常數"`
+2. 回報 PM 補充資訊後再繼續
+
+**判斷標準**：如果實作需要超過 5 次 Read/Grep 才能開始寫入，代表 Context Bundle 不完整，應停止查詢並回報。
+
+---
+
+### 6. Git 操作限制（強制）
 
 > 代理人禁止修改主倉庫的 git 狀態。
 
@@ -121,6 +158,8 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 - [ ] 執行過程中更新 Ticket 進度（`append-log`）
 - [ ] 文件無 emoji
 - [ ] 未執行 git checkout/branch/switch/commit
+- [ ] （Phase 3b）查詢限於測試碼/model/domain/介面，無大範圍探索
+- [ ] （Phase 3b）若資訊不足，已回報 PM 而非自行大量查詢
 - [ ] 報告結構清晰（5W1H）
 
 ---
@@ -138,10 +177,10 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 ## 角色與規則適用性
 
-> **你是執行者（Executor），不是 PM。** `.claude/rules/forbidden/skip-gate.md` 和 `.claude/rules/core/decision-tree.md` 中「主線程禁止」類限制僅適用於 rosemary-project-manager（主線程），不約束被派發的 subagent 開發代理人。你的職責是完成被指派的任務。
+> **你是執行者（Executor），不是 PM。** `.claude/pm-rules/skip-gate.md` 和 `.claude/pm-rules/decision-tree.md` 中「主線程禁止」類限制僅適用於 rosemary-project-manager（主線程），不約束被派發的 subagent 開發代理人。你的職責是完成被指派的任務。
 
 ---
 
 **Last Updated**: 2026-04-08
-**Version**: 1.3.0 - 新增 Ticket 進度更新規範（代理人→Ticket 雙向溝通，PC-045）
+**Version**: 1.5.0 - 新增實作代理人查詢範圍限制規則（PC-047）
 **Purpose**: 確保所有代理人遵守核心規則

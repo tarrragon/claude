@@ -406,7 +406,7 @@
 
 ## 相關文件
 
-- [decision-tree]($CLAUDE_PROJECT_DIR/.claude/rules/core/decision-tree.md) - 主線程決策樹
+- [decision-tree]($CLAUDE_PROJECT_DIR/.claude/pm-rules/decision-tree.md) - 主線程決策樹
 - [incident-response]($CLAUDE_PROJECT_DIR/.claude/pm-rules/incident-response.md) - 事件回應流程
 - [parallel-dispatch]($CLAUDE_PROJECT_DIR/.claude/rules/guides/parallel-dispatch.md) - 並行派發指南
 - [cognitive-load]($CLAUDE_PROJECT_DIR/.claude/rules/core/cognitive-load.md) - 認知負擔設計原則

@@ -233,7 +233,7 @@
 - .claude/skills/parallel-evaluation/references/lens-prompts.md - Agent 提示模板
 - .claude/skills/parallel-evaluation/references/worth-it-filter-details.md - 過濾標準詳細
 - .claude/skills/parallel-evaluation/references/integration-guide.md - 整合指南
-- .claude/rules/core/decision-tree.md - 主線程決策樹
+- .claude/pm-rules/decision-tree.md - 主線程決策樹
 - .claude/rules/guides/parallel-dispatch.md - 並行派發指南
 
 ---

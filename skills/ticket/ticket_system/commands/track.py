@@ -40,6 +40,7 @@ from ticket_system.lib.command_tracking_messages import (
 from .lifecycle import (
     execute_claim,
     execute_complete,
+    execute_close,
     execute_release,
 )
 # 導入查詢操作模組
@@ -96,6 +97,10 @@ from .track_audit import (
 from .track_board import (
     execute_board,
 )
+# 導入快照命令模組
+from .track_snapshot import (
+    execute_snapshot,
+)
 # 導入版本審計命令模組
 from .audit_version import (
     execute_audit_version,
@@ -110,6 +115,11 @@ def _execute_claim(args: argparse.Namespace, version: str) -> int:  # type: igno
 def _execute_complete(args: argparse.Namespace, version: str) -> int:
     """標記完成 - 包裝生命週期模組"""
     return execute_complete(args, version)
+
+
+def _execute_close(args: argparse.Namespace, version: str) -> int:
+    """關閉 Ticket（包裝生命週期模組）"""
+    return execute_close(args, version)
 
 
 def _execute_release(args: argparse.Namespace, version: str) -> int:
@@ -131,6 +141,7 @@ def _create_command_handlers() -> dict:
         "query": execute_query,
         "claim": _execute_claim,
         "complete": _execute_complete,
+        "close": _execute_close,
         "tree": execute_tree,
         "list": execute_list,
         "search": execute_search,
@@ -170,9 +181,11 @@ def execute(args: argparse.Namespace) -> int:
     """執行 track 命令"""
     operation = args.operation
 
-    # version 命令特殊處理（不需要版本資訊）
+    # version / snapshot 命令特殊處理（不需要版本資訊）
     if operation == "version":
         return execute_version(args, None)
+    if operation == "snapshot":
+        return execute_snapshot(args)
 
     # 其他命令需要版本資訊
     # 優先級：
@@ -229,6 +242,14 @@ def _register_lifecycle_commands(
     p_complete = subparsers.add_parser("complete", help=TrackMessages.HELP_COMPLETE)
     p_complete.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_complete.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # close 操作
+    p_close = subparsers.add_parser("close", help="關閉 Ticket（已在其他 Ticket 一併解決）")
+    p_close.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_close.add_argument("--resolved-by", required=True, dest="resolved_by",
+                         help="解決此問題的 Ticket ID")
+    p_close.add_argument("--reason", default="", help="關閉原因（選填）")
+    p_close.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
     # release 操作
     p_release = subparsers.add_parser("release", help=TrackMessages.HELP_RELEASE)
@@ -555,6 +576,14 @@ def _register_all_subcommands(
     _register_acceptance_commands(track_subparsers)
     _register_version_audit_commands(track_subparsers)
     _register_board_commands(track_subparsers)
+    _register_snapshot_commands(track_subparsers)
+
+
+def _register_snapshot_commands(
+    subparsers: argparse._SubParsersAction,
+) -> None:
+    """註冊快照命令：snapshot"""
+    subparsers.add_parser("snapshot", help="產出專案全局狀態快照")
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:

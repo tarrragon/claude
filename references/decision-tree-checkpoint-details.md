@@ -2,7 +2,8 @@
 
 本文件為 `decision-tree.md` 第八層的詳細展開，包含 Checkpoint 0~4 的完整流程說明、各情境子規則，以及 Resume 後標準化接手流程（Checkpoint R）。
 
-主檔概覽：`.claude/rules/core/decision-tree.md`
+主檔概覽：`.claude/pm-rules/decision-tree.md`（路由索引）
+完成 Domain 詳細：`.claude/pm-rules/completion-checkpoint-rules.md`
 
 ---
 
@@ -307,8 +308,9 @@ ticket handoff --gc --execute
 
 ## 相關文件
 
-- `.claude/rules/core/decision-tree.md` - 主檔（第八層主幹流程圖）
-- `.claude/rules/core/askuserquestion-rules.md` - AskUserQuestion 規則 Source of Truth（場景清單）
+- `.claude/pm-rules/decision-tree.md` - 路由索引
+- `.claude/pm-rules/completion-checkpoint-rules.md` - 完成 Domain（第七層 + 第八層）
+- `.claude/pm-rules/askuserquestion-rules.md` - AskUserQuestion 規則 Source of Truth（場景清單）
 - `.claude/references/askuserquestion-scene-details.md` - 場景 1-17 完整操作細節（Source of Truth）
 - `.claude/references/ticket-askuserquestion-templates.md` - AskUserQuestion 模板
 - `.claude/pm-rules/ticket-lifecycle.md` - Ticket 生命週期

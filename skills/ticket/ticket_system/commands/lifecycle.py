@@ -14,6 +14,7 @@ from ticket_system.lib.constants import (
     STATUS_IN_PROGRESS,
     STATUS_COMPLETED,
     STATUS_BLOCKED,
+    STATUS_CLOSED,
 )
 from ticket_system.lib.ticket_loader import (
     get_project_root,
@@ -526,6 +527,59 @@ class TicketLifecycle:
         print(f"   狀態: 被阻塞")
         return 0
 
+    def close(self, ticket_id: str, resolved_by: str, reason: str = "") -> int:
+        """
+        關閉 Ticket - 問題已在其他 Ticket 一併解決，無需獨立處理
+
+        與 complete 的區別：
+        - complete：自己做完（需 who + acceptance 全勾）
+        - close：被其他 Ticket 解決（需 resolved_by）
+
+        Args:
+            ticket_id: 要關閉的 Ticket ID
+            resolved_by: 解決此問題的 Ticket ID
+            reason: 關閉原因（選填）
+
+        Returns:
+            0 表示成功，非 0 表示失敗
+        """
+        # Step 1：載入 Ticket
+        ticket, error = load_and_validate_ticket(self.version, ticket_id)
+        if error:
+            return 1
+
+        # Step 2：驗證狀態
+        status = ticket.get("status", STATUS_PENDING)
+
+        if status == STATUS_CLOSED:
+            print(format_error(
+                ErrorMessages.CLOSE_ALREADY_CLOSED, ticket_id=ticket_id
+            ))
+            return 1
+
+        # completed 可轉為 closed（事後發現應為 close 而非 complete）
+        if status == STATUS_COMPLETED:
+            print(f"[INFO] {ticket_id} 從 completed 轉為 closed")
+            ticket.pop("completed_at", None)
+
+        # Step 3：執行關閉操作
+        close_reason = reason if reason else f"已在 {resolved_by} 一併解決"
+
+        ticket["status"] = STATUS_CLOSED
+        ticket["closed_at"] = datetime.now().isoformat(timespec="seconds")
+        ticket["closed_by"] = resolved_by
+        ticket["close_reason"] = close_reason
+
+        ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
+        save_ticket(ticket, ticket_path)
+
+        print(format_info(InfoMessages.TICKET_CLOSED, ticket_id=ticket_id))
+        print(f"   解決者: {resolved_by}")
+        print(f"   原因: {close_reason}")
+        print(f"   關閉時間: {ticket['closed_at']}")
+
+        return 0
+
 
 # ============================================================================
 # 生命週期階段提示模組
@@ -834,6 +888,18 @@ def execute_complete(args: argparse.Namespace, version: str) -> int:
     """
     lifecycle = TicketLifecycle(version)
     return lifecycle.complete(args.ticket_id)
+
+
+def execute_close(args: argparse.Namespace, version: str) -> int:
+    """
+    關閉 Ticket - 問題已在其他 Ticket 一併解決
+
+    必填參數：--resolved-by（解決此問題的 Ticket ID）
+    """
+    resolved_by = args.resolved_by
+    reason = getattr(args, "reason", "")
+    lifecycle = TicketLifecycle(version)
+    return lifecycle.close(args.ticket_id, resolved_by, reason)
 
 
 def execute_release(args: argparse.Namespace, version: str) -> int:

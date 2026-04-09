@@ -106,7 +106,7 @@ def main():
 
 ## 相關文件
 
-- .claude/rules/forbidden/skip-gate.md（主線程限制設計意圖）
+- .claude/pm-rules/skip-gate.md（主線程限制設計意圖）
 - .claude/hooks/hook_utils/hook_io.py（is_subagent_environment 定義）
 - .claude/error-patterns/process-compliance/PC-022-subagent-permission-denied-hook-edit.md（相關事件）
 

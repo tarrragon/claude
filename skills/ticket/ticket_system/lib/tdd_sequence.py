@@ -160,7 +160,7 @@ PHASE_PREREQUISITES: dict[str, List[str]] = {
 #     1. 修改 phase1-phase4 的標籤文字時，TDD_PHASE_DISPLAY 中的對應值須同步
 #     2. 禁止在此映射中新增 phase0/phase4a/phase4b/phase4c（屬於 TDD_PHASE_DISPLAY 獨有）
 #   - 修改前必須確認影響範圍：_generate_sequence_description/PHASE_PREREQUISITES
-#   - 詳見 .claude/rules/core/decision-tree.md（第五層 TDD 階段判斷）和 constants.py
+#   - 詳見 .claude/pm-rules/decision-tree.md（第五層 TDD 階段判斷）和 constants.py
 #
 PHASE_LABELS: dict[str, str] = {
     "phase1": "Phase 1（功能設計）",

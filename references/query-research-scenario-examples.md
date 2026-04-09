@@ -120,7 +120,7 @@
 
 **執行**：
 ```bash
-Read file_path=".claude/rules/forbidden/skip-gate.md"
+Read file_path=".claude/pm-rules/skip-gate.md"
 Grep pattern="五重文件系統" path=".claude/rules"
 ```
 

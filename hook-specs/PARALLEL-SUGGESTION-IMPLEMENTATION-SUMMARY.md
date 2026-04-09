@@ -339,7 +339,7 @@ $ HOOK_DEBUG=true echo '{"prompt":"下一個"}' | \
 ## 參考資源
 
 - Hook 規範: `.claude/hook-system-reference.md`
-- 決策樹: `.claude/rules/core/decision-tree.md`
+- 決策樹: `.claude/pm-rules/decision-tree.md`
 - 並行派發: `.claude/rules/guides/parallel-dispatch.md`
 - 專案配置: `.claude/settings.local.json`
 
