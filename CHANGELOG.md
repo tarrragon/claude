@@ -1,3 +1,14 @@
+## [1.26.1] - 2026-04-09
+
+### Summary
+docs: 新增 ARCH-013/014 錯誤模式 + parallel-evaluation 流程加入錯誤模式記錄步驟
+
+Changes: 1 docs
+
+- docs: 新增 ARCH-013/014 錯誤模式 + parallel-evaluation 流程加入錯誤模式記錄步驟
+
+---
+
 ## [1.26.0] - 2026-04-09
 
 ### Summary
