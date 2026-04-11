@@ -68,9 +68,10 @@ Skill 是預建的專用工具，優先於代理人派發。
 | 分支條件 | 路由檔案 | 適用場景 |
 |---------|---------|---------|
 | 所有派發前（強制） | dispatch-gate.md | 複雜度關卡 + Context Bundle + 並行化 |
+| ANA/Debug/提案（強制 WRAP） | /wrap-decision | 分析、除錯、提案評估必須先 WRAP（0.18.0-W4-002） |
 | 問題類型訊息 | question-routing.md | 查詢、諮詢、進度 |
 | 命令類型訊息 | command-routing.md | 開發、修改、TDD 階段 |
-| 錯誤/失敗 | incident-routing.md | 事件回應 |
+| 錯誤/失敗 | incident-routing.md | 事件回應（含 WRAP 強制） |
 | 執行中發現 | execution-discovery-rules.md | 技術債、超範圍需求 |
 | 完成後發現 | execution-discovery-rules.md 3.5-B | completed Ticket 交付物需修正 |
 | 任務完成 | completion-checkpoint-rules.md | Checkpoint 循環（0/0.5/1/1.5/1.8/1.9/2/3/4/R） |

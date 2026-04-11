@@ -1,3 +1,17 @@
+## [1.28.1] - 2026-04-11
+
+### Summary
+docs: PC-053 錯誤模式 + 補建 Ticket + 品質清單新增 Ticket 追蹤檢查; docs: 新增影響範圍驗證機制 — 防止修改不完整/判斷不全面; docs: 決策樹系統整合 WRAP 強制觸發路由（ANA/Debug/提案/事件回應） (+1 more)
+
+Changes: 4 docs
+
+- docs: PC-053 錯誤模式 + 補建 Ticket + 品質清單新增 Ticket 追蹤檢查
+- docs: 新增影響範圍驗證機制 — 防止修改不完整/判斷不全面
+- docs: 決策樹系統整合 WRAP 強制觸發路由（ANA/Debug/提案/事件回應）
+- docs: WRAP 觸發條件擴大 — ANA/Debug/提案類 Ticket 強制使用 WRAP 分析
+
+---
+
 ## [1.28.0] - 2026-04-11
 
 ### Summary

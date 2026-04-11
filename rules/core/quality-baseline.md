@@ -143,6 +143,8 @@
 - [ ] 所有分析發現都有對應 Ticket？
 - [ ] 工作日誌已更新？
 - [ ] 新功能的可觀測性已確認？（啟動 log、異常 log、狀態 log）
+- [ ] 引用一致性已確認？（`grep -rl "修改的概念" .claude/` 確認所有引用已同步更新）
+- [ ] 修改有對應 Ticket？（rules/pm-rules/skills 修改必須有 Ticket 追蹤，PC-053）
 
 ---
 
