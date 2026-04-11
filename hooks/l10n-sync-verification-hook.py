@@ -237,10 +237,10 @@ def main() -> int:
             return 0
         else:
             # ARB 不同步或生成檔案缺失，自動執行 flutter gen-l10n
-            print("偵測到 L10n 不同步，自動執行 flutter gen-l10n...")
+            print("偵測到 L10n 不同步，自動執行 flutter gen-l10n...", file=sys.stderr)
 
             gen_success, gen_message = run_flutter_gen_l10n(project_root, logger)
-            print(gen_message)
+            print(gen_message, file=sys.stderr)
 
             if gen_success:
                 # 自動生成成功，允許繼續
@@ -256,7 +256,7 @@ def main() -> int:
             else:
                 # 自動生成失敗，顯示手動修復步驟
                 error_msg = generate_error_message(details)
-                print(error_msg)
+                print(error_msg, file=sys.stderr)
 
                 output = {
                     "hookSpecificOutput": {
@@ -269,7 +269,7 @@ def main() -> int:
 
     except json.JSONDecodeError as e:
         logger.error("JSON 解析錯誤: %s", e)
-        print(f"Error: Invalid JSON input: {e}")
+        print(f"Error: Invalid JSON input: {e}", file=sys.stderr)
         return 1
     except Exception as e:
         logger.error("執行錯誤: %s", e)

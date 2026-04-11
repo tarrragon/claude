@@ -55,6 +55,17 @@ uv -d .claude/skills/ticket run ticket track list
 cd /your/project/root && ./scripts/sync-push.sh
 ```
 
+### Shell 環境警告：chpwd Hook（IMP-056）
+
+> **此環境的 zsh 配置了 `chpwd` hook，切換目錄時會自動執行 `ls`。**
+> 裸 `cd` 命令會觸發大量 ls 輸出，佔用工具結果空間，導致後續命令結果被淹沒。
+
+| 命令類型 | 錯誤做法 | 正確做法 |
+|---------|---------|---------|
+| 需要在其他目錄執行 | `cd /path && command` | `(cd /path && command)` — 子 shell 不觸發 chpwd |
+| 讀取/編輯檔案 | `cd /path && cat file` | 使用 Read/Edit/Write 工具搭配絕對路徑 |
+| uv 指令 | `cd /path && uv run ...` | `uv -d /path run ...` |
+
 ### 檢查清單
 
 - [ ] 命令中有 `cd`？→ 改用子 shell `()` 或 `uv -d`
@@ -191,6 +202,6 @@ Bash: git add file.md && git commit -m "msg" && git merge feat/xxx --no-edit && 
 
 ---
 
-**Last Updated**: 2026-04-02
-**Version**: 1.3.1 - 移除規則四（技術前提經驗證不成立，git status 在 Write 後正確偵測變更，W1-024）
+**Last Updated**: 2026-04-11
+**Version**: 1.4.0 - 新增 chpwd Shell Hook 環境警告（IMP-056，0.17.4-W2-002）
 **Source**: IMP-008（cd 污染）、IMP-009（TaskOutput 混淆）、index.lock 競爭（Hook 與 git 寫入操作衝突）

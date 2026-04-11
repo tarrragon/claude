@@ -94,11 +94,16 @@ def get_tickets_dir(version: str) -> Path:
     if len(parts) >= 2:
         major = parts[0]
         minor = f"{parts[0]}.{parts[1]}"
-        hierarchical = root / WORK_LOGS_DIR / f"v{major}" / f"v{minor}" / versioned / TICKETS_DIR
+        major_dir = root / WORK_LOGS_DIR / f"v{major}"
+        hierarchical = major_dir / f"v{minor}" / versioned / TICKETS_DIR
         if hierarchical.exists() or (hierarchical.parent.exists()):
             return hierarchical
+        # 階層結構的 major 目錄存在但此版本不存在 → 仍使用階層路徑
+        # 防止 fallback 到平行結構建立跨專案殘留目錄
+        if major_dir.exists():
+            return hierarchical
 
-    # 向後相容：舊式平行結構
+    # 向後相容：舊式平行結構（僅在無階層結構時使用）
     flat = root / WORK_LOGS_DIR / versioned / TICKETS_DIR
     return flat
 

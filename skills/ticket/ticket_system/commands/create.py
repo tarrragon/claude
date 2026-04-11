@@ -646,6 +646,53 @@ def _validate_before_persist(
     return True
 
 
+def _validate_create_checklist(
+    config: TicketConfig,
+    ticket_type: str,
+) -> List[str]:
+    """PROP-009 清單式欄位驗證。
+
+    建立前檢查建議填寫的欄位，回傳缺失欄位名稱清單。
+    此驗證為 WARNING 層級，不阻擋建立。
+
+    Args:
+        config: Ticket 配置
+        ticket_type: Ticket 類型（IMP, ANA, DOC 等）
+
+    Returns:
+        缺失欄位名稱的清單，空清單表示全部通過
+    """
+    missing: List[str] = []
+
+    # where.files 至少 1 個
+    if not config.get("where_files"):
+        missing.append("where.files")
+
+    # acceptance 至少 1 項
+    if not config.get("acceptance"):
+        missing.append("acceptance")
+
+    # decision_tree_path 三個子欄位都非空（DOC 類型和子任務豁免）
+    is_exempt_from_decision_tree = (
+        ticket_type == "DOC" or config.get("parent_id")
+    )
+    if not is_exempt_from_decision_tree:
+        dt = config.get("decision_tree_path") or {}
+        has_complete_path = (
+            dt.get("entry_point")
+            and dt.get("final_decision")
+            and dt.get("rationale")
+        )
+        if not has_complete_path:
+            missing.append("decision_tree_path")
+
+    # when 非「待定義」
+    if config.get("when") == DEFAULT_UNDEFINED_VALUE:
+        missing.append("when")
+
+    return missing
+
+
 def _build_and_save_ticket(
     version: str,
     ticket_id: str,
@@ -786,6 +833,16 @@ def _persist_and_report(
     if not _validate_before_persist(version, ticket_id, config):
         return 1
 
+    # 步驟 1.5：PROP-009 清單式欄位驗證（WARNING，不阻擋）
+    missing_fields = _validate_create_checklist(config, config.get("ticket_type", "IMP"))
+    if missing_fields:
+        print()
+        print(format_warning("Create 清單驗證：以下欄位未填寫"))
+        for field in missing_fields:
+            print(f"  - {field}")
+        print(format_info("這些欄位建議在建立時填寫，避免交接時才發現遺漏"))
+        print()
+
     # 步驟 2：持久化
     ticket = _build_and_save_ticket(version, ticket_id, config)
     ticket_path = str(get_ticket_path(version, ticket_id))
@@ -812,6 +869,13 @@ def execute(args: argparse.Namespace) -> int:
     version = resolve_version(args.version)
     if not version:
         print(format_error(ErrorMessages.VERSION_NOT_DETECTED))
+        return 1
+
+    # 驗證版本已在 todolist.yaml 中註冊
+    from ticket_system.lib.version import validate_version_registered
+    is_valid, error_msg = validate_version_registered(version)
+    if not is_valid:
+        print(format_error(error_msg))
         return 1
 
     # Step 1: 解析版本和 Ticket ID

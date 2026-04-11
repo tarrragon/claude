@@ -222,3 +222,104 @@ def execute_get_how(args: argparse.Namespace, version: str) -> int:
 def execute_set_how(args: argparse.Namespace, version: str) -> int:
     """設定 Ticket 的 how 欄位"""
     return execute_set_field(args, version, "how")
+
+
+def execute_set_priority(args: argparse.Namespace, version: str) -> int:
+    """設定 Ticket 的 priority 欄位"""
+    return execute_set_field(args, version, "priority")
+
+
+def execute_add_acceptance(args: argparse.Namespace, version: str) -> int:
+    """追加驗收條件到 Ticket"""
+    ticket, error = load_and_validate_ticket(version, args.ticket_id)
+    if error:
+        return 1
+
+    acceptance = ticket.get("acceptance") or []
+    new_item = f"[ ] {args.value}"
+    acceptance.append(new_item)
+    ticket["acceptance"] = acceptance
+
+    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+    ticket_loader.save_ticket(ticket, ticket_path)
+
+    print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="acceptance"))
+    print(f"   新增: {new_item}")
+    print(f"   目前共 {len(acceptance)} 項")
+    return 0
+
+
+def execute_remove_acceptance(args: argparse.Namespace, version: str) -> int:
+    """移除驗收條件（按 index，從 1 開始）"""
+    import sys
+
+    ticket, error = load_and_validate_ticket(version, args.ticket_id)
+    if error:
+        return 1
+
+    acceptance = ticket.get("acceptance") or []
+    index = args.index - 1
+
+    if index < 0 or index >= len(acceptance):
+        print(format_error(f"索引超出範圍：{args.index}（共 {len(acceptance)} 項）"), file=sys.stderr)
+        return 1
+
+    removed = acceptance.pop(index)
+    ticket["acceptance"] = acceptance
+
+    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+    ticket_loader.save_ticket(ticket, ticket_path)
+
+    print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="acceptance"))
+    print(f"   移除: {removed}")
+    print(f"   剩餘 {len(acceptance)} 項")
+    return 0
+
+
+def execute_add_spawned(args: argparse.Namespace, version: str) -> int:
+    """追加 spawned_tickets 項目"""
+    ticket, error = load_and_validate_ticket(version, args.ticket_id)
+    if error:
+        return 1
+
+    spawned = ticket.get("spawned_tickets") or []
+    if args.value in spawned:
+        print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="spawned_tickets"))
+        print(f"   已存在: {args.value}")
+        return 0
+
+    spawned.append(args.value)
+    ticket["spawned_tickets"] = spawned
+
+    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+    ticket_loader.save_ticket(ticket, ticket_path)
+
+    print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="spawned_tickets"))
+    print(f"   新增: {args.value}")
+    print(f"   目前共 {len(spawned)} 項")
+    return 0
+
+
+def execute_set_decision_tree(args: argparse.Namespace, version: str) -> int:
+    """設定 Ticket 的 decision_tree_path 欄位（3 個子欄位）"""
+    ticket, error = load_and_validate_ticket(version, args.ticket_id)
+    if error:
+        return 1
+
+    dt = ticket.get("decision_tree_path") or {}
+    if args.entry:
+        dt["entry_point"] = args.entry
+    if args.decision:
+        dt["final_decision"] = args.decision
+    if args.rationale:
+        dt["rationale"] = args.rationale
+
+    ticket["decision_tree_path"] = dt
+
+    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+    ticket_loader.save_ticket(ticket, ticket_path)
+
+    print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="decision_tree_path"))
+    for key, val in dt.items():
+        print(f"   {key}: {val}")
+    return 0

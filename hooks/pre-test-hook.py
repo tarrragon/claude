@@ -117,19 +117,19 @@ def main():
         issues.append(f"[WARNING] {warning}")
 
     # 輸出結果
+    # 單一 JSON 輸出：合併警告和 permissionDecision
+    hook_output = {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "allow",
+        "permissionDecisionReason": (
+            f"{ValidationMessages.PRE_TEST_ENV_CHECK_PREFIX}{len(issues)}{ValidationMessages.PRE_TEST_ENV_CHECK_SUFFIX}" if issues else ValidationMessages.PRE_TEST_ENV_READY
+        ),
+    }
     if issues:
         warning_text = "\n".join(issues)
-        print(f"{ValidationMessages.PRE_TEST_CHECK_HEADER}\n{warning_text}")
+        hook_output["additionalContext"] = f"{ValidationMessages.PRE_TEST_CHECK_HEADER}\n{warning_text}"
 
-    result = {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "allow",
-            "permissionDecisionReason": (
-                f"{ValidationMessages.PRE_TEST_ENV_CHECK_PREFIX}{len(issues)}{ValidationMessages.PRE_TEST_ENV_CHECK_SUFFIX}" if issues else ValidationMessages.PRE_TEST_ENV_READY
-            ),
-        }
-    }
+    result = {"hookSpecificOutput": hook_output}
     print(json.dumps(result, ensure_ascii=False))
     return 0
 

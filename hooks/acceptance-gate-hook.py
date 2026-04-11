@@ -5,23 +5,24 @@
 # ///
 
 """
-Acceptance Gate Hook - 驗收流程完整引導
+Acceptance Gate Hook - 驗收流程完整引導（Orchestrator）
 
 在 `ticket track complete` 執行前檢查並引導驗收流程。
 
 功能：
 - 監控 Bash 工具中的 ticket track complete 命令
-- 檢查子任務是否全部完成（阻塊）
-- 檢查是否有驗收記錄（警告）
-- 檢查同 Wave 中的 pending sibling tickets（場景 #9）
-- 在檢查完成後輸出 AskUserQuestion 場景提醒：
-  * 場景 #1（complete 前）：驗收方式確認（標準/簡化/先完成後補）
-  * 場景 #2（complete 後的邏輯）：complete 後下一步選擇（下個 Ticket/Wave 收尾/版本發布）
-  * 場景 #9（Handoff 方向選擇）：同 Wave 中有 2+ pending sibling tickets 時觸發
-  * 場景 #17（錯誤學習確認）：執行期間新增 error-pattern 時觸發（與 #1/#9 並存，不互斥）
-  * 補充說明：此時仍在 PreToolUse，complete 尚未執行，故提醒涵蓋整個 complete 流程
-  * 修復 W22-012：#17 原本會壓制 #1/#9，現已改為並存觸發
-- 使用 hook_utils 統一日誌系統
+- 協調 8 個獨立 checker 模組執行驗收檢查
+- 生成 Hook 輸出（含 AskUserQuestion 場景提醒）
+
+檢查項目（由 acceptance_checkers/ 模組執行）：
+- 子任務完成度（阻塞）
+- 驗收記錄（警告）
+- ANA Ticket 後續 Ticket
+- Error-pattern 衝突（Step 2.7）
+- Error-pattern 新增（場景 #17）
+- 5W1H 完整性
+- Execution log 填寫
+- 同 Wave pending sibling tickets（場景 #9）
 
 Exit Code：
 - 0 (EXIT_SUCCESS): 命令允許執行
@@ -31,17 +32,16 @@ Exit Code：
 Hook 類型: PreToolUse
 觸發時機: Bash 工具執行前，命令含 "ticket track complete" 或 "ticket track batch-complete"
 
-Matcher 條件（settings.json）:
-  matcher: "Bash"
-  command 須含 "ticket track complete" 或 "ticket track batch-complete"
-
 使用方式:
     echo '{"tool_name":"Bash","tool_input":{"command":"ticket track complete 0.31.0-W4-036"}}' | python3 acceptance-gate-hook.py
 """
 
 import sys
 import json
+import re
 from pathlib import Path
+from datetime import datetime
+from typing import Dict, Any, Optional, Tuple, List, NamedTuple, TypedDict
 
 # 加入 hook_utils 路徑（相同目錄）
 _hooks_dir = Path(__file__).parent
@@ -54,22 +54,28 @@ from hook_utils import (
     read_json_from_stdin,
     extract_tool_input,
     parse_ticket_frontmatter,
-    parse_ticket_date,
     check_error_patterns_changed,
     get_project_root,
-    scan_ticket_files_by_version,
     find_ticket_file,
     save_check_log,
-    extract_version_from_ticket_id,
-    extract_wave_from_ticket_id,
     validate_hook_input,
     is_subagent_environment,
 )
 from lib.hook_messages import GateMessages, CoreMessages, AskUserQuestionMessages, format_message
 
-import re
-from datetime import datetime
-from typing import Dict, Any, Optional, Tuple, List, NamedTuple, TypedDict
+from acceptance_checkers import (
+    extract_children_from_frontmatter,
+    is_doc_type,
+    is_ana_type,
+    check_children_completed_from_frontmatter,
+    verify_acceptance_record,
+    check_error_pattern_conflicts,
+    check_5w1h_completeness,
+    check_execution_log_filled,
+    check_ana_has_spawned_tickets,
+    find_pending_sibling_tickets,
+)
+from acceptance_checkers.ticket_parser import get_ticket_start_time
 
 
 # ============================================================================
@@ -77,10 +83,7 @@ from typing import Dict, Any, Optional, Tuple, List, NamedTuple, TypedDict
 # ============================================================================
 
 class TicketFrontmatter(TypedDict, total=False):
-    """Ticket Frontmatter 結構
-
-    提供型別檢查和文件化，欄位皆可選（因為不是所有 Ticket 都有所有欄位）。
-    """
+    """Ticket Frontmatter 結構"""
     id: str
     title: str
     type: str
@@ -103,22 +106,19 @@ class AcceptanceCheckResult(NamedTuple):
     task_type: str = ""
     priority: str = ""
     error_pattern_conflicts: List[str] = []
+    incomplete_5w1h_fields: List[str] = []
+    has_empty_execution_log: bool = False
 
 
 # ============================================================================
 # 常數定義
 # ============================================================================
 
-# Exit Code
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_BLOCK = 2
 
-# Ticket ID 格式正則表達式
 TICKET_ID_PATTERN = r'\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*'
-
-# Error-pattern 衝突檢查豁免的 Ticket 類型
-ERROR_PATTERN_CONFLICT_EXEMPT_TYPES = {"DOC", "ANA", "REF"}
 
 # Error-pattern 衝突提醒訊息模板
 ERROR_PATTERN_CONFLICT_WARNING = (
@@ -130,33 +130,14 @@ ERROR_PATTERN_CONFLICT_WARNING = (
 
 
 # ============================================================================
-# 日誌設置
-# ============================================================================
-
-
-# validate_input 已遷移至 hook_utils.validate_hook_input
-
-
-# ============================================================================
 # 命令識別
 # ============================================================================
 
 def extract_ticket_id_from_command(command: str, logger) -> Optional[str]:
-    """
-    從命令中提取 Ticket ID
-
-    Args:
-        command: Bash 命令字串
-        logger: 日誌物件
-
-    Returns:
-        str - Ticket ID 或 None
-    """
-    # 搜尋 ticket track complete 或 ticket track batch-complete 命令
+    """從命令中提取 Ticket ID"""
     if "ticket track complete" not in command and "ticket track batch-complete" not in command:
         return None
 
-    # 從命令中提取 Ticket ID（格式：\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*）
     match = re.search(TICKET_ID_PATTERN, command)
     if match:
         ticket_id = match.group(0)
@@ -168,622 +149,28 @@ def extract_ticket_id_from_command(command: str, logger) -> Optional[str]:
 
 
 def is_complete_command(command: str) -> bool:
-    """
-    判斷是否為 ticket track complete 命令
-
-    Args:
-        command: Bash 命令字串
-
-    Returns:
-        bool - 是否為 complete 命令
-    """
+    """判斷是否為 ticket track complete 命令"""
     return "ticket track complete" in command or "ticket track batch-complete" in command
 
 
-
-
-
-
 # ============================================================================
-# 子任務檢查
+# 主協調函式
 # ============================================================================
-
-def extract_children_from_frontmatter(frontmatter: TicketFrontmatter, logger) -> List[str]:
-    """
-    從 frontmatter 提取 children 欄位
-
-    Args:
-        frontmatter: Ticket frontmatter 結構
-        logger: 日誌物件
-
-    Returns:
-        list - 子任務 ID 清單
-    """
-    children_str = frontmatter.get("children", "").strip()
-
-    if not children_str:
-        logger.debug("Ticket 無 children 欄位")
-        return []
-
-    # 解析 YAML 清單格式 (e.g., "- 0.31.0-W4-036.1\n- 0.31.0-W4-036.2")
-    children = []
-    for line in children_str.split("\n"):
-        line = line.strip()
-        if line.startswith("-"):
-            child_id = line[1:].strip()
-            if child_id:
-                children.append(child_id)
-
-    logger.info(f"提取 {len(children)} 個子任務: {children}")
-    return children
-
-
-def get_ticket_status(frontmatter: TicketFrontmatter, logger) -> Optional[str]:
-    """
-    從 Ticket frontmatter 提取狀態
-
-    Args:
-        frontmatter: Ticket frontmatter 結構
-        logger: 日誌物件
-
-    Returns:
-        str - Ticket 狀態或 None
-    """
-    status = frontmatter.get("status")
-
-    if status:
-        logger.debug(f"Ticket 狀態: {status}")
-
-    return status
-
-
-def get_ticket_type(frontmatter: TicketFrontmatter, logger) -> Optional[str]:
-    """
-    從 Ticket frontmatter 提取型別
-
-    Args:
-        frontmatter: Ticket frontmatter 結構
-        logger: 日誌物件
-
-    Returns:
-        str - Ticket 型別或 None
-    """
-    ticket_type = frontmatter.get("type")
-
-    if ticket_type:
-        logger.debug(f"Ticket 型別: {ticket_type}")
-
-    return ticket_type
-
-
-def check_children_completed(children: List[str], project_dir: Path, logger) -> Tuple[bool, List[Tuple[str, str, str]]]:
-    """
-    檢查所有子任務是否已完成
-
-    Args:
-        children: 子任務 ID 清單
-        project_dir: 專案根目錄
-        logger: 日誌物件
-
-    Returns:
-        tuple - (all_completed, incomplete_children)
-            - all_completed: 是否全部完成
-            - incomplete_children: [(child_id, title, status), ...] 未完成的子任務清單
-    """
-    incomplete_children = []
-
-    for child_id in children:
-        child_file = find_ticket_file(child_id, project_dir, logger)
-
-        if not child_file:
-            logger.warning(f"無法找到子任務檔案: {child_id}")
-            incomplete_children.append((child_id, "未知", "not_found"))
-            continue
-
-        try:
-            content = child_file.read_text(encoding="utf-8")
-            frontmatter = parse_ticket_frontmatter(content)
-
-            status = frontmatter.get("status", "unknown")
-            title = frontmatter.get("title", "未知")
-
-            if status != "completed":
-                logger.warning(f"子任務未完成: {child_id} (status={status})")
-                incomplete_children.append((child_id, title, status))
-            else:
-                logger.info(f"子任務已完成: {child_id}")
-
-        except Exception as e:
-            logger.warning(f"無法讀取子任務檔案 {child_file}: {e}")
-            incomplete_children.append((child_id, "未知", "read_error"))
-
-    all_completed = len(incomplete_children) == 0
-    return all_completed, incomplete_children
-
-
-# ============================================================================
-# 驗收記錄檢查
-# ============================================================================
-
-def has_acceptance_record(ticket_content: str, logger) -> bool:
-    """
-    檢查 Ticket 是否有驗收記錄
-
-    尋找以下關鍵字：
-    - 驗收結果: 通過
-    - Acceptance Audit Report
-    - 驗收通過
-    - 驗收者：
-    - Auditor:
-
-    Args:
-        ticket_content: Ticket 檔案內容
-        logger: 日誌物件
-
-    Returns:
-        bool - 是否有驗收記錄
-    """
-    acceptance_keywords = [
-        "驗收結果: 通過",
-        "Acceptance Audit Report",
-        "驗收通過",
-        "驗收者：",
-        "Auditor:",
-        "PM 直接驗收",
-        "acceptance-auditor",
-    ]
-
-    for keyword in acceptance_keywords:
-        if keyword in ticket_content:
-            logger.info(f"找到驗收記錄關鍵字: {keyword}")
-            return True
-
-    logger.debug("未找到驗收記錄")
-    return False
-
-
-def is_doc_type(ticket_type: Optional[str]) -> bool:
-    """
-    判斷是否為 DOC 類型 Ticket
-
-    Args:
-        ticket_type: Ticket 類型
-
-    Returns:
-        bool - 是否為 DOC 類型
-    """
-    return ticket_type and ticket_type.upper() == "DOC"
-
-
-def is_ana_type(ticket_type: Optional[str]) -> bool:
-    """
-    判斷是否為 ANA 類型 Ticket
-
-    Args:
-        ticket_type: Ticket 類型
-
-    Returns:
-        bool - 是否為 ANA 類型
-    """
-    return ticket_type and ticket_type.upper() == "ANA"
-
-
-def extract_spawned_tickets_from_frontmatter(frontmatter: TicketFrontmatter, logger) -> List[str]:
-    """
-    從 frontmatter 提取 spawned_tickets 欄位
-
-    Args:
-        frontmatter: Ticket frontmatter 結構
-        logger: 日誌物件
-
-    Returns:
-        list - 後續 Ticket ID 清單
-    """
-    spawned_str = frontmatter.get("spawned_tickets", "").strip()
-
-    if not spawned_str:
-        logger.debug("Ticket 無 spawned_tickets 欄位")
-        return []
-
-    # 解析 YAML 清單格式 (e.g., "- 0.31.0-W4-036\n- 0.31.0-W4-037")
-    spawned = []
-    for line in spawned_str.split("\n"):
-        line = line.strip()
-        if line.startswith("-"):
-            ticket_id = line[1:].strip()
-            if ticket_id:
-                spawned.append(ticket_id)
-
-    logger.info(f"提取 {len(spawned)} 個後續 Ticket: {spawned}")
-    return spawned
-
-
-def check_ana_has_spawned_tickets(frontmatter: TicketFrontmatter, logger) -> Tuple[bool, Optional[str]]:
-    """
-    檢查 ANA Ticket 是否有後續 Ticket（children 或 spawned_tickets）
-
-    ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於轉化分析結論為修復或防護措施。
-    此檢查驗證 ANA Ticket 是否已將分析結論轉化為可追蹤的子任務或獨立 Ticket。
-
-    Args:
-        frontmatter: Ticket frontmatter 結構
-        logger: 日誌物件
-
-    Returns:
-        tuple - (should_warn, warning_message)
-            - should_warn: 是否應輸出警告
-            - warning_message: 警告訊息或 None（不阻擋，僅警告）
-    """
-    children = extract_children_from_frontmatter(frontmatter, logger)
-    spawned = extract_spawned_tickets_from_frontmatter(frontmatter, logger)
-
-    if not children and not spawned:
-        # ANA Ticket 缺少後續 Ticket → 警告（雙通道輸出）
-        title = frontmatter.get("title", "未知")
-        ticket_id = frontmatter.get("id", "未知")
-        warning_msg = format_message(
-            GateMessages.ANA_MISSING_SPAWNED_TICKETS_WARNING,
-            ticket_id=ticket_id,
-            title=title
-        )
-        logger.warning(f"ANA Ticket {ticket_id} 缺少後續 Ticket - 輸出警告")
-        sys.stderr.write(f"WARNING: ANA Ticket {ticket_id} 缺少後續 Ticket（children 或 spawned_tickets）\n")
-        return True, warning_msg
-
-    logger.info(f"ANA Ticket 有後續 Ticket: children={len(children)}, spawned={len(spawned)}")
-    return False, None
-
-
-# ============================================================================
-# Sibling Ticket 檢查（場景 #9）
-# ============================================================================
-
-def find_pending_sibling_tickets(
-    ticket_id: str,
-    project_dir: Path,
-    logger
-) -> List[str]:
-    """
-    查詢同 Wave 中的 pending sibling tickets
-
-    搜尋邏輯:
-    1. 從 ticket_id 提取 wave 號和版本號
-    2. 掃描 docs/work-logs/v{version}/tickets/ 目錄
-    3. 找出所有 "WN-" 中 N 相同的 tickets，且 status=pending
-    4. 排除當前 ticket 自身
-    5. 返回 pending sibling 清單（不排序，保持掃描順序）
-
-    Args:
-        ticket_id: 當前 Ticket ID (e.g., "0.1.0-W22-025")
-        project_dir: 專案根目錄
-        logger: 日誌物件
-
-    Returns:
-        list - pending sibling ticket ID 清單，若查詢失敗或無 sibling，返回 []
-    """
-    # 步驟 1: 提取 wave 號和版本號
-    wave_num = extract_wave_from_ticket_id(ticket_id)
-    version = extract_version_from_ticket_id(ticket_id)
-
-    if wave_num is None or version is None:
-        logger.warning(f"無法從 {ticket_id} 提取 wave 或 version，返回空清單")
-        return []
-
-    # 步驟 2: 構造 tickets 目錄路徑
-    tickets_dir = project_dir / "docs" / "work-logs" / f"v{version}" / "tickets"
-
-    if not tickets_dir.exists():
-        logger.debug(f"Tickets 目錄不存在: {tickets_dir}，返回空清單")
-        return []
-
-    logger.info(f"掃描 sibling tickets 在 Wave {wave_num}，目錄: {tickets_dir}")
-
-    sibling_tickets = []
-
-    try:
-        # 步驟 3-5: 掃描並過濾 tickets（使用共用函式）
-        ticket_files = scan_ticket_files_by_version(project_dir, version, logger)
-        for ticket_file in sorted(ticket_files):
-            try:
-                file_ticket_id = ticket_file.stem  # 移除 .md 副檔名
-
-                # 排除當前 ticket 自身
-                if file_ticket_id == ticket_id:
-                    logger.debug(f"排除自身 Ticket: {file_ticket_id}")
-                    continue
-
-                # 檢查是否為同 Wave
-                file_wave = extract_wave_from_ticket_id(file_ticket_id)
-                if file_wave != wave_num:
-                    logger.debug(f"不同 Wave: {file_ticket_id} (Wave {file_wave})")
-                    continue
-
-                # 讀取檔案取得 status
-                content = ticket_file.read_text(encoding="utf-8")
-                frontmatter = parse_ticket_frontmatter(content)
-                status = frontmatter.get("status", "unknown")
-
-                # 篩選 pending 狀態
-                if status == "pending":
-                    sibling_tickets.append(file_ticket_id)
-                    logger.info(f"找到 pending sibling ticket: {file_ticket_id}")
-                else:
-                    logger.debug(f"非 pending 狀態，排除: {file_ticket_id} (status: {status})")
-
-            except Exception as e:
-                logger.warning(f"讀取 Ticket 檔案失敗 {ticket_file}: {e}")
-                continue
-
-    except Exception as e:
-        logger.warning(f"掃描 sibling tickets 失敗: {e}")
-        return []
-
-    logger.info(f"掃描完成，共找到 {len(sibling_tickets)} 個 pending sibling tickets: {sibling_tickets}")
-    return sibling_tickets
-
-
-# ============================================================================
-# Error Pattern 檢查
-# ============================================================================
-
-def _get_ticket_start_time(frontmatter: TicketFrontmatter, logger) -> Optional[datetime]:
-    """取得 Ticket 開始執行的時間，用於 error-pattern 偵測基準。
-
-    優先使用 started_at（認領時間，有精確時間戳），
-    fallback 到 created（建立時間，僅日期精度）。
-
-    Args:
-        frontmatter: Ticket frontmatter 結構
-        logger: 日誌物件
-
-    Returns:
-        datetime 物件或 None（無法解析時）
-
-    說明：
-        started_at 格式為 ISO 8601 字串，如 '2026-03-10T04:48:01'，精度為秒級。
-        created 格式為簡單日期字串，如 '2026-03-10'，精度為日期級。
-        場景 #17 檢查的是「Ticket 執行期間新增的 error-pattern」，起點應是
-        started_at（認領時間），而非 created（建立時間）。
-    """
-    try:
-        # 優先使用 started_at（精確時間戳）
-        started_at = frontmatter.get("started_at")
-        if started_at:
-            dt = parse_ticket_date(started_at, logger)
-            if dt:
-                logger.info(f"使用 started_at 作為 error-pattern 偵測基準: {dt.isoformat()}")
-                return dt
-
-        # Fallback 到 created（僅日期精度）
-        logger.info("started_at 不可用，fallback 到 created")
-        created_value = frontmatter.get("created")
-        if not created_value:
-            logger.warning("Ticket frontmatter 缺少 created 欄位")
-            return None
-
-        dt = parse_ticket_date(created_value, logger)
-        if dt:
-            logger.info(f"使用 created 作為 error-pattern 偵測基準: {dt.isoformat()}")
-        return dt
-
-    except Exception as e:
-        logger.warning(f"解析 ticket 開始時間失敗: {e}")
-        sys.stderr.write(f"WARNING: 解析 ticket 開始時間失敗: {e}\n")
-        return None
-
-
-# ============================================================================
-# 檢查邏輯
-# ============================================================================
-
-def _check_children_completed(ticket_file: Path, frontmatter: TicketFrontmatter, project_dir: Path, ticket_id: str, logger) -> Tuple[bool, Optional[str]]:
-    """
-    子任務完成度檢查。
-
-    Args:
-        ticket_file: Ticket 檔案路徑
-        frontmatter: Ticket frontmatter 結構
-        project_dir: 專案根目錄
-        ticket_id: Ticket ID
-        logger: 日誌物件
-
-    Returns:
-        tuple - (should_block, error_message)
-            - should_block: 是否應阻擋執行
-            - error_message: 錯誤訊息或 None
-    """
-    children = extract_children_from_frontmatter(frontmatter, logger)
-
-    if not children:
-        return False, None
-
-    logger.info(f"Ticket {ticket_id} 有 {len(children)} 個子任務")
-    all_completed, incomplete_children = check_children_completed(children, project_dir, logger)
-
-    if not all_completed:
-        # 子任務未完成 → 阻擋
-        title = frontmatter.get("title", "未知")
-        incomplete_list = "\n".join(
-            f"  - {child_id}: {child_title} (status: {status})"
-            for child_id, child_title, status in incomplete_children
-        )
-        error_msg = format_message(
-            GateMessages.CHILDREN_INCOMPLETE_ERROR,
-            ticket_id=ticket_id,
-            title=title,
-            incomplete_list=incomplete_list
-        )
-        logger.error(f"Ticket {ticket_id} 有未完成的子任務 - 阻擋執行")
-        return True, error_msg
-
-    logger.info(f"Ticket {ticket_id} 所有子任務已完成")
-    return False, None
-
-
-def _verify_acceptance_record(ticket_content: str, frontmatter: TicketFrontmatter, ticket_id: str, logger) -> Tuple[bool, Optional[str], bool, bool]:
-    """
-    驗收記錄驗證。
-
-    Args:
-        ticket_content: Ticket 檔案內容
-        frontmatter: Ticket frontmatter 結構
-        ticket_id: Ticket ID
-        logger: 日誌物件
-
-    Returns:
-        tuple - (should_block, warning_message, should_check_acceptance, has_acceptance)
-            - should_block: 是否應阻擋執行
-            - warning_message: 警告訊息或 None
-            - should_check_acceptance: 是否應檢查 error-pattern
-            - has_acceptance: 是否有驗收記錄
-    """
-    ticket_type = frontmatter.get("type")
-    title = frontmatter.get("title", "未知")
-
-    # 決定是否需要檢查驗收
-    should_check_acceptance = True
-    children = extract_children_from_frontmatter(frontmatter, logger)
-
-    if is_doc_type(ticket_type) and not children:
-        logger.info(f"Ticket {ticket_id} 為 DOC 類型且無子任務，豁免驗收檢查")
-        should_check_acceptance = False
-
-    has_acceptance = has_acceptance_record(ticket_content, logger)
-
-    if should_check_acceptance and not has_acceptance:
-        # 未驗收 → 警告
-        warning_msg = format_message(
-            GateMessages.ACCEPTANCE_RECORD_MISSING_WARNING,
-            ticket_id=ticket_id,
-            ticket_type=ticket_type,
-            title=title
-        )
-        logger.warning(f"Ticket {ticket_id} 未找到驗收記錄 - 輸出警告")
-        return False, warning_msg, should_check_acceptance, has_acceptance
-
-    logger.info(f"Ticket {ticket_id} 驗收檢查通過")
-    return False, None, should_check_acceptance, has_acceptance
-
-
-
-
-def _check_error_pattern_conflicts(
-    frontmatter: TicketFrontmatter, project_dir: Path, logger
-) -> List[str]:
-    """
-    檢查修改的模組是否與既有 error-pattern 記錄衝突（Step 2.7）。
-
-    從 Ticket frontmatter 的 where.files 欄位取得修改檔案清單，
-    提取模組關鍵詞後搜尋 error-patterns 目錄。
-
-    Args:
-        frontmatter: Ticket frontmatter 結構
-        project_dir: 專案根目錄
-        logger: 日誌物件
-
-    Returns:
-        List[str] - 衝突的 error-pattern 檔案路徑清單（空表示無衝突）
-    """
-    import subprocess
-
-    # 豁免檢查：DOC/ANA/REF 類型跳過
-    ticket_type = (frontmatter.get("type") or "").upper()
-    if ticket_type in ERROR_PATTERN_CONFLICT_EXEMPT_TYPES:
-        logger.debug(f"Ticket 類型 {ticket_type} 豁免 error-pattern 衝突檢查")
-        return []
-
-    # 從 where.files 取得修改檔案清單
-    where = frontmatter.get("where")
-    if not isinstance(where, dict):
-        logger.debug("frontmatter 無 where 欄位，跳過衝突檢查")
-        return []
-
-    files = where.get("files")
-    if not files or not isinstance(files, list):
-        logger.debug("where.files 為空或不存在，跳過衝突檢查")
-        return []
-
-    # 提取模組關鍵詞（檔案名去副檔名、路徑中的目錄名）
-    keywords = set()
-    for filepath in files:
-        if not isinstance(filepath, str):
-            continue
-        path = Path(filepath)
-        # 檔案名（去副檔名）
-        stem = path.stem
-        if stem and len(stem) > 2:
-            keywords.add(stem.lower())
-        # 路徑中的目錄名（取最後兩層）
-        parts = path.parts
-        for part in parts[-3:-1] if len(parts) > 2 else parts[:-1]:
-            if part and len(part) > 2 and part not in ("src", "lib", "core", "test", "tests"):
-                keywords.add(part.lower())
-
-    if not keywords:
-        logger.debug("未提取到有效關鍵詞，跳過衝突檢查")
-        return []
-
-    logger.info(f"error-pattern 衝突檢查關鍵詞: {sorted(keywords)}")
-
-    # 用 grep 搜尋 error-patterns 目錄
-    error_patterns_dir = project_dir / ".claude" / "error-patterns"
-    if not error_patterns_dir.is_dir():
-        logger.debug("error-patterns 目錄不存在，跳過衝突檢查")
-        return []
-
-    # 構建 grep pattern：用 | 連接所有關鍵詞（不區分大小寫）
-    grep_pattern = "|".join(sorted(keywords))
-    conflicts = []
-
-    try:
-        result = subprocess.run(
-            ["grep", "-r", "-l", "-i", "-E", grep_pattern, str(error_patterns_dir)],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            matched_files = result.stdout.strip().split("\n")
-            # 轉為相對路徑
-            for f in matched_files:
-                rel = Path(f).relative_to(project_dir)
-                conflicts.append(str(rel))
-            logger.info(f"發現 {len(conflicts)} 個 error-pattern 衝突")
-        else:
-            logger.debug("未發現 error-pattern 衝突")
-    except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
-        logger.info(f"error-pattern 衝突搜尋失敗（不阻擋）: {e}")
-
-    return conflicts
-
 
 def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> AcceptanceCheckResult:
     """
     檢查 Ticket 的驗收狀態（主協調函式）
 
-    此函式協調六個子檢查函式：
+    協調所有 checker 模組：
     1. 子任務完成度檢查
     2. 驗收記錄驗證
     2.5. ANA Ticket 後續 Ticket 檢查
-    2.7. Error-pattern 衝突檢查（修改模組 vs 既有 error-pattern）
+    2.7. Error-pattern 衝突檢查
     3. Error-pattern 新增檢查
     4. Sibling tickets 完成度檢查（場景 #9）
-
-    Args:
-        ticket_id: Ticket ID
-        project_dir: 專案根目錄
-        logger: 日誌物件
-
-    Returns:
-        AcceptanceCheckResult 物件，包含：
-            - should_block: 是否應該阻擋執行（子任務未完成）
-            - has_acceptance: 是否有驗收記錄
-            - message: 錯誤或警告訊息
-            - has_new_error_patterns: 是否有新增/修改的 error-pattern
-            - new_error_pattern_files: 新增/修改的 error-pattern 檔案清單
-            - pending_sibling_tickets: 同 Wave 中的 pending sibling tickets（場景 #9）
+    5. 5W1H 完整性
+    6. Execution log 填寫
     """
-    # 找到 Ticket 檔案
     ticket_file = find_ticket_file(ticket_id, project_dir, logger)
 
     if not ticket_file:
@@ -791,24 +178,25 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
         return AcceptanceCheckResult(False, False, None, False, [])
 
     try:
-        # 一次讀取檔案及解析 frontmatter，避免重複讀取（問題 3 修復）
         content = ticket_file.read_text(encoding="utf-8")
         frontmatter = parse_ticket_frontmatter(content)
 
         # 步驟 1：檢查子任務完成度
-        should_block, error_msg = _check_children_completed(ticket_file, frontmatter, project_dir, ticket_id, logger)
+        should_block, error_msg = check_children_completed_from_frontmatter(
+            ticket_file, frontmatter, project_dir, ticket_id, logger
+        )
         if should_block:
-            return AcceptanceCheckResult(True, False, error_msg, False, [])
+            return AcceptanceCheckResult(True, False, error_msg, False, [], [], "", "", [], [], False)
 
         # 步驟 2：驗證驗收記錄
-        should_block, warning_msg, should_check_acceptance, has_acceptance = _verify_acceptance_record(content, frontmatter, ticket_id, logger)
+        should_block, warning_msg, should_check_acceptance, has_acceptance = verify_acceptance_record(
+            content, frontmatter, ticket_id, logger
+        )
 
-        # 問題 1 修復：不提前 return，繼續執行步驟 3 和 4，將 warning_msg 帶入最終結果
         if not warning_msg:
             logger.info(f"Ticket {ticket_id} 驗收檢查通過")
 
         # 步驟 2.5：檢查 ANA Ticket 是否有後續 Ticket
-        # ANA spawned 檢查獨立於步驟 2 的 warning，兩者可同時存在（W9-005）
         if is_ana_type(frontmatter.get("type")):
             ana_should_warn, ana_warning_msg = check_ana_has_spawned_tickets(frontmatter, logger)
             if ana_should_warn:
@@ -818,21 +206,17 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
                     warning_msg = ana_warning_msg
 
         # 步驟 2.7：檢查修改模組與既有 error-pattern 的衝突
-        error_pattern_conflicts = _check_error_pattern_conflicts(frontmatter, project_dir, logger)
+        error_pattern_conflicts = check_error_pattern_conflicts(frontmatter, project_dir, logger)
 
         # 步驟 3：檢查 error-pattern 新增
         has_new_error_patterns = False
         new_error_pattern_files = []
 
         if should_check_acceptance:
-            # 使用 started_at（精確時間戳）做為基準，避免日期精度不足的誤報
-            ticket_start_time = _get_ticket_start_time(frontmatter, logger)
+            ticket_start_time = get_ticket_start_time(frontmatter, logger)
             if ticket_start_time:
-                # 檢查 error-patterns 目錄
                 has_new_error_patterns, new_error_pattern_files = check_error_patterns_changed(
-                    project_dir,
-                    ticket_start_time,
-                    logger
+                    project_dir, ticket_start_time, logger
                 )
                 if has_new_error_patterns:
                     logger.info(f"發現 {len(new_error_pattern_files)} 個新增/修改的 error-pattern")
@@ -843,19 +227,27 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
         pending_siblings = find_pending_sibling_tickets(ticket_id, project_dir, logger)
         logger.info(f"發現 {len(pending_siblings)} 個 pending sibling tickets")
 
+        # 步驟 5：檢查 5W1H 完整性
+        incomplete_5w1h = check_5w1h_completeness(frontmatter, logger)
+
+        # 步驟 6：檢查 execution log 填寫
+        has_empty_log = check_execution_log_filled(content, logger)
+
         task_type = frontmatter.get("type", "")
         priority = frontmatter.get("priority", "")
 
         return AcceptanceCheckResult(
             False,
             has_acceptance,
-            warning_msg,  # 將 warning_msg 帶入最終結果（不提前 return）
+            warning_msg,
             has_new_error_patterns,
             new_error_pattern_files,
             pending_siblings,
             task_type,
             priority,
             error_pattern_conflicts,
+            incomplete_5w1h,
+            has_empty_log,
         )
 
     except Exception as e:
@@ -874,25 +266,7 @@ def generate_hook_output(
     project_dir: Path,
     logger,
 ) -> Dict[str, Any]:
-    """
-    生成 Hook 輸出
-
-    Args:
-        ticket_id: Ticket ID（用於日誌和調試）
-        check_result: AcceptanceCheckResult 物件，包含驗收狀態和 sibling tickets
-        project_dir: 專案根目錄（用於 sibling 查詢，已通過 check_result.pending_sibling_tickets 傳入）
-        logger: 日誌物件（用於日誌記錄）
-
-    Returns:
-        dict - Hook 輸出 JSON
-
-    優先級順序:
-    1. 錯誤或警告訊息（should_block 或 message）
-    2. Error-pattern 場景 #17 提醒（has_new_error_patterns）
-    3. Handoff 方向選擇（場景 #9，pending siblings >= 2）
-    4. complete 流程提醒（場景 #1，驗收方式確認）
-    5. complete 後下一步提醒（場景 #2，路由選擇）
-    """
+    """生成 Hook 輸出"""
     output = {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -901,6 +275,47 @@ def generate_hook_output(
     }
 
     context_parts = []
+
+    # 統一清單輸出（PROP-009 面向 C）
+    checklist_items = []
+
+    # 項目 1: acceptance
+    if check_result.has_acceptance:
+        checklist_items.append("[x] 1. acceptance 已全勾選")
+    else:
+        checklist_items.append("[WARNING] 1. acceptance 未全勾選")
+
+    # 項目 2: 5W1H
+    if not check_result.incomplete_5w1h_fields:
+        checklist_items.append("[x] 2. 5W1H 已補完")
+    else:
+        fields_str = ", ".join(check_result.incomplete_5w1h_fields)
+        checklist_items.append(f"[WARNING] 2. 5W1H 未補完（{fields_str}）")
+
+    # 項目 3: error-pattern
+    if check_result.error_pattern_conflicts:
+        checklist_items.append("[WARNING] 3. error-pattern 衝突待確認")
+    else:
+        checklist_items.append("[x] 3. error-pattern 無衝突")
+
+    # 項目 4: execution log
+    if not check_result.has_empty_execution_log:
+        checklist_items.append("[x] 4. execution log 已填寫")
+    else:
+        checklist_items.append("[WARNING] 4. execution log 未填寫")
+
+    # 項目 5: spawned_tickets (只對 ANA 類型顯示)
+    ticket_type_upper_for_checklist = (check_result.task_type or "").upper()
+    if ticket_type_upper_for_checklist == "ANA":
+        if check_result.message and "spawned" in check_result.message.lower():
+            checklist_items.append("[WARNING] 5. spawned_tickets 未建立（ANA）")
+        else:
+            checklist_items.append("[x] 5. spawned_tickets 已更新（ANA）")
+    else:
+        checklist_items.append("[--] 5. spawned_tickets（非 ANA，不適用）")
+
+    checklist_text = "[Complete 清單]\n" + "\n".join(checklist_items)
+    context_parts.append(checklist_text)
 
     # 優先級 1：錯誤或警告訊息
     if check_result.message:
@@ -927,7 +342,6 @@ def generate_hook_output(
         logger.info(f"新增 error-pattern 衝突提醒，衝突數量: {len(check_result.error_pattern_conflicts)}")
 
     # 優先級 3：Handoff 方向選擇 場景 #9（無訊息時，sibling >= 2）
-    # 注意：即使有 error-pattern（#17 已觸發），仍需提醒 Handoff 方向
     if (
         not check_result.message
         and len(check_result.pending_sibling_tickets) >= 2
@@ -944,10 +358,6 @@ def generate_hook_output(
         logger.info(f"新增場景 #9 (Handoff 方向) 提醒，sibling 數量: {len(check_result.pending_sibling_tickets)}")
 
     # 優先級 4：complete 流程提醒（驗收方式，場景 #1）
-    # 觸發條件：P0 且非 DOC/ANA 類型 → 需人工確認驗收方式
-    # 豁免條件：DOC/ANA 類型 或 非 P0（P1/P2/...） → 自動採用簡化驗收，不觸發
-    # 注意：即使有 error-pattern（#17 已觸發），仍需提醒驗收方式確認
-    # 修復：原本 has_new_error_patterns 會壓制 #1，導致 PM 錯過驗收確認（W22-012）
     if (
         not check_result.message
         and len(check_result.pending_sibling_tickets) < 2
@@ -966,8 +376,6 @@ def generate_hook_output(
             )
 
     # 優先級 5：complete 後下一步提醒（路由選擇，場景 #2）
-    # 問題 2 修復：場景 #2 不應只在 sibling < 2 時觸發，即使有 2+ sibling（場景 #9），
-    # 也需要在完成當前 ticket 後附加場景 #2 的下一步提醒
     if not check_result.message:
         context_parts.append(AskUserQuestionMessages.COMPLETE_NEXT_STEP_REMINDER)
         logger.info("新增場景 #2 (complete 後下一步) 提醒")
@@ -983,41 +391,19 @@ def generate_hook_output(
     return output
 
 
-
-
 # ============================================================================
 # 主入口點輔助函式
 # ============================================================================
 
 def _output_allow_json() -> None:
-    """
-    輸出允許執行的 Hook 應答 JSON。
-
-    此函式用於 PreToolUse Hook 的快速通行路徑，輸出標準的
-    允許執行決策 JSON，無需進行深入檢查。
-
-    輸出格式：
-        {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}
-    """
+    """輸出允許執行的 Hook 應答 JSON。"""
     print(json.dumps({
         "hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}
     }, ensure_ascii=False, indent=2))
 
 
 def _parse_and_validate_input(input_data: Dict[str, Any], logger) -> Optional[Tuple[str, str]]:
-    """
-    解析並驗證輸入資料。
-
-    驗證 Hook 輸入格式並提取必要欄位。若輸入無效，直接輸出 allow JSON 並回傳 None。
-
-    Args:
-        input_data: Hook 輸入資料
-        logger: 日誌物件
-
-    Returns:
-        Tuple[str, str] - (tool_name, command) 或 None（無效時）
-    """
-    # 防護：input_data 可能為 None（read_json_from_stdin 返回）
+    """解析並驗證輸入資料。"""
     if input_data is None:
         logger.debug("輸入資料為 None，跳過驗證")
         _output_allow_json()
@@ -1036,27 +422,12 @@ def _parse_and_validate_input(input_data: Dict[str, Any], logger) -> Optional[Tu
 
 
 def _extract_ticket_or_skip(tool_name: str, command: str, logger) -> Optional[str]:
-    """
-    識別 complete 命令並提取 Ticket ID。
-
-    驗證是 Bash 工具且是 complete 命令，則提取 Ticket ID。
-    不符合條件時，直接輸出 allow JSON 並回傳 None。
-
-    Args:
-        tool_name: 工具名稱
-        command: Bash 命令字串
-        logger: 日誌物件
-
-    Returns:
-        str - Ticket ID 或 None（不符合條件時）
-    """
-    # 不是 Bash 工具
+    """識別 complete 命令並提取 Ticket ID。"""
     if tool_name != "Bash":
         logger.debug(f"非 Bash 工具: {tool_name}，直接放行")
         _output_allow_json()
         return None
 
-    # 不是 complete 命令
     if not is_complete_command(command):
         logger.debug(f"非 ticket track complete 命令: {command}")
         _output_allow_json()
@@ -1064,7 +435,6 @@ def _extract_ticket_or_skip(tool_name: str, command: str, logger) -> Optional[st
 
     logger.info(f"識別到 ticket track complete 命令: {command}")
 
-    # 提取 Ticket ID
     ticket_id = extract_ticket_id_from_command(command, logger)
     if not ticket_id:
         logger.error("無法從命令中提取 Ticket ID")
@@ -1080,19 +450,7 @@ def _extract_ticket_or_skip(tool_name: str, command: str, logger) -> Optional[st
 # ============================================================================
 
 def main() -> int:
-    """
-    主入口點 - 驗收流程協調
-
-    驗收流程：
-    1. 解析驗證輸入
-    2. 識別 complete 命令並提取 Ticket ID
-    3. 檢查驗收狀態
-    4. 生成 Hook 輸出並儲存日誌
-    5. 決定 exit code
-
-    Returns:
-        int - Exit code (EXIT_SUCCESS, EXIT_BLOCK, 或 EXIT_ERROR)
-    """
+    """主入口點 - 驗收流程協調"""
     logger = setup_hook_logging("acceptance-gate")
 
     try:
@@ -1101,7 +459,6 @@ def main() -> int:
         # 步驟 1: 解析驗證輸入
         input_data = read_json_from_stdin(logger)
 
-        # 偵測 subagent 環境：agent_id 僅在 subagent 中出現
         if is_subagent_environment(input_data):
             logger.info("偵測到 subagent 環境（agent_id=%s），跳過 AskUserQuestion 提醒", input_data.get("agent_id"))
             return EXIT_SUCCESS

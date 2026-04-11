@@ -33,6 +33,14 @@ class ErrorMessages:
     TICKET_NOT_FOUND = "[Error] 找不到 Ticket {ticket_id}"
     NO_HANDOFF_FILE = "[Error] Ticket {ticket_id} 無待恢復的交接檔案"
     VERSION_NOT_DETECTED = "[Error] 無法偵測版本，請使用 --version 指定"
+    VERSION_NOT_REGISTERED = (
+        "[Error] 版本 {version} 未在 todolist.yaml 中註冊。"
+        "請先執行 /version-release start 或 /doc-flow worklog init 建立版本。"
+    )
+    VERSION_NOT_ACTIVE = (
+        "[Error] 版本 {version} 狀態為 {status}（非 active）。"
+        "只能在 active 版本中建立 Ticket。"
+    )
     INVALID_TICKET_ID = "[Error] Ticket ID 格式無效"
     INVALID_TICKET_ID_FORMAT = "[Error] 無效的 Ticket ID 格式: {ticket_id}"
     FILE_NOT_FOUND = "[Error] 檔案不存在: {path}"

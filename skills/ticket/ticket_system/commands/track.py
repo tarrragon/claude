@@ -69,6 +69,11 @@ from .fields import (
     execute_set_why,
     execute_get_how,
     execute_set_how,
+    execute_set_priority,
+    execute_add_acceptance,
+    execute_remove_acceptance,
+    execute_add_spawned,
+    execute_set_decision_tree,
 )
 # 導入批量操作模組
 from .track_batch import (
@@ -171,6 +176,11 @@ def _create_command_handlers() -> dict:
         "add-child": execute_add_child,
         "set-blocked-by": execute_set_blocked_by,
         "set-related-to": execute_set_related_to,
+        "set-priority": execute_set_priority,
+        "add-acceptance": execute_add_acceptance,
+        "remove-acceptance": execute_remove_acceptance,
+        "add-spawned": execute_add_spawned,
+        "set-decision-tree": execute_set_decision_tree,
         "audit": execute_audit,
         "audit-version": execute_audit_version,
         "board": execute_board,
@@ -388,6 +398,38 @@ def _register_field_write_commands(
     p_set_how.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_set_how.add_argument("value", help=TrackMessages.ARG_VALUE)
     p_set_how.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # set-priority 操作
+    p_set_priority = subparsers.add_parser("set-priority", help=TrackMessages.HELP_SET_PRIORITY)
+    p_set_priority.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_set_priority.add_argument("value", help=TrackMessages.ARG_VALUE)
+    p_set_priority.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # add-acceptance 操作
+    p_add_acc = subparsers.add_parser("add-acceptance", help=TrackMessages.HELP_ADD_ACCEPTANCE)
+    p_add_acc.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_add_acc.add_argument("value", help="驗收條件文字")
+    p_add_acc.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # remove-acceptance 操作
+    p_rm_acc = subparsers.add_parser("remove-acceptance", help=TrackMessages.HELP_REMOVE_ACCEPTANCE)
+    p_rm_acc.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_rm_acc.add_argument("index", type=int, help="要移除的驗收條件編號（從 1 開始）")
+    p_rm_acc.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # add-spawned 操作
+    p_add_spawned = subparsers.add_parser("add-spawned", help=TrackMessages.HELP_ADD_SPAWNED)
+    p_add_spawned.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_add_spawned.add_argument("value", help="Spawned Ticket ID")
+    p_add_spawned.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # set-decision-tree 操作
+    p_set_dt = subparsers.add_parser("set-decision-tree", help=TrackMessages.HELP_SET_DECISION_TREE)
+    p_set_dt.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_set_dt.add_argument("--entry", help="entry_point 欄位值")
+    p_set_dt.add_argument("--decision", help="final_decision 欄位值")
+    p_set_dt.add_argument("--rationale", help="rationale 欄位值")
+    p_set_dt.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
 
 def _register_batch_commands(

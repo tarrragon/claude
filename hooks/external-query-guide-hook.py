@@ -89,7 +89,7 @@ def _print_guide_message(tool_name: str, tool_input: Dict[str, Any]) -> None:
         WorkflowMessages.EXTERNAL_QUERY_GUIDE,
         tool_name=tool_name
     )
-    print(guide_message)
+    print(guide_message, file=sys.stderr)
 
 
 def main() -> int:

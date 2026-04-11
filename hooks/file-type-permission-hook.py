@@ -80,7 +80,7 @@ def _print_permission_prompt(file_path: str, category: str) -> None:
 說明: 此類檔案的修改需要人工審查確認
 
 """
-    print(prompt)
+    print(prompt, file=sys.stderr)
 
 
 def main() -> int:

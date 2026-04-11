@@ -239,7 +239,7 @@ def main() -> None:
                     "correct_agent": agent_check_result.get("correct_agent", "未知"),
                     "prompt_preview": prompt[:200]
                 }, logger)
-                print(f"[WARNING] {agent_check_result['error_message']}")
+                print(f"[WARNING] {agent_check_result['error_message']}", file=sys.stderr)
 
     logger.info("所有檢查通過")
     sys.exit(0)

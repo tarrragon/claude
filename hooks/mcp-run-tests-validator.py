@@ -153,14 +153,14 @@ def main() -> int:
         }
 
         # 輸出錯誤訊息到 stderr 供調試
-        print(error_message)
+        print(error_message, file=sys.stderr)
         print(json.dumps(result, ensure_ascii=False))
         return 2
 
     except json.JSONDecodeError as e:
         logger.error("JSON 解析錯誤: %s", e)
         error_msg = f"Hook 錯誤: 無效的 JSON 輸入: {e}"
-        print(error_msg)
+        print(error_msg, file=sys.stderr)
         result = {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
@@ -174,7 +174,7 @@ def main() -> int:
     except Exception as e:
         logger.error("執行錯誤: %s: %s", type(e).__name__, str(e))
         error_msg = f"Hook 執行失敗: {type(e).__name__}: {str(e)}"
-        print(error_msg)
+        print(error_msg, file=sys.stderr)
         # 發生未預期的錯誤時，允許工具執行以防 Hook 故障
         result = {
             "hookSpecificOutput": {

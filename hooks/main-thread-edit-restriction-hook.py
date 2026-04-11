@@ -28,7 +28,7 @@ from typing import Dict, Any
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
-from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin, is_subagent_environment
+from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin, is_subagent_environment, emit_hook_output
 from git_utils import get_current_branch, is_allowed_branch
 from lib.hook_messages import GateMessages
 from lib.dispatch_tracker import is_file_under_dispatch
@@ -39,21 +39,9 @@ EXIT_ALLOW = 0
 EXIT_BLOCK = 2
 
 
-def generate_hook_output(is_allowed: bool, reason: str) -> Dict[str, Any]:
-    """生成 Hook 輸出 JSON"""
-    decision = "allow" if is_allowed else "deny"
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": decision,
-            "permissionDecisionReason": reason,
-        }
-    }
-
-
-def _allow_and_exit(logger, result_json: dict) -> int:
+def _allow_and_exit(logger, reason: str) -> int:
     """輸出允許結果並返回 EXIT_ALLOW"""
-    print(json.dumps(result_json, ensure_ascii=False))
+    emit_hook_output("PreToolUse", permission_decision="allow", permission_decision_reason=reason)
     return EXIT_ALLOW
 
 
@@ -103,7 +91,7 @@ def main() -> int:
         input_data = read_json_from_stdin(logger)
         if not input_data:
             logger.debug("輸入為空或解析失敗，返回預設允許")
-            return _allow_and_exit(logger, generate_hook_output(True, "輸入為空，預設允許"))
+            return _allow_and_exit(logger, "輸入為空，預設允許")
 
         logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False)[:200]}...")
 
@@ -113,12 +101,12 @@ def main() -> int:
 
         if tool_name not in ["Edit", "Write"]:
             logger.debug(f"跳過: 工具類型 {tool_name} 不在檢查範圍內")
-            return _allow_and_exit(logger, generate_hook_output(True, f"工具 {tool_name} 不在檢查範圍"))
+            return _allow_and_exit(logger, f"工具 {tool_name} 不在檢查範圍")
 
         # Subagent 跳過：此 Hook 僅限制主線程
         if is_subagent_environment(input_data):
             logger.info(f"subagent 環境（agent_id={input_data.get('agent_id')}），跳過編輯限制")
-            return _allow_and_exit(logger, generate_hook_output(True, "subagent 不受主線程編輯限制"))
+            return _allow_and_exit(logger, "subagent 不受主線程編輯限制")
 
         file_path = tool_input.get("file_path", "")
         logger.info(f"檢查工具: {tool_name}, 檔案: {file_path}")
@@ -128,19 +116,23 @@ def main() -> int:
         current_branch = get_current_branch(cwd=file_dir)
         if current_branch and is_allowed_branch(current_branch):
             logger.info(f"開發分支 '{current_branch}' 上，跳過主線程編輯限制")
-            return _allow_and_exit(logger, generate_hook_output(True, f"開發分支 '{current_branch}' 不受主線程編輯限制"))
+            return _allow_and_exit(logger, f"開發分支 '{current_branch}' 不受主線程編輯限制")
 
         # 檢查編輯權限
         is_allowed, reason = check_file_permission(file_path, logger)
 
         # Dispatch 衝突警告（僅在允許編輯時檢查）
-        hook_output = generate_hook_output(is_allowed, reason)
+        decision = "allow" if is_allowed else "deny"
+        dispatch_warning = None
         if is_allowed:
-            dispatch_warning = _check_dispatch_warning(file_path, logger)
-            if dispatch_warning:
-                hook_output["additionalContext"] = dispatch_warning
+            dispatch_warning = _check_dispatch_warning(file_path, logger) or None
 
-        print(json.dumps(hook_output, ensure_ascii=False))
+        emit_hook_output(
+            "PreToolUse",
+            additional_context=dispatch_warning,
+            permission_decision=decision,
+            permission_decision_reason=reason,
+        )
 
         # 儲存日誌
         log_entry = f"""[{datetime.now().isoformat()}]
@@ -157,14 +149,11 @@ def main() -> int:
 
     except Exception as e:
         logger.error(f"Hook 執行錯誤: {e}")
-        error_output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "allow",
-                "permissionDecisionReason": f"Hook 執行錯誤：{str(e)}"
-            }
-        }
-        print(json.dumps(error_output, ensure_ascii=False))
+        emit_hook_output(
+            "PreToolUse",
+            permission_decision="allow",
+            permission_decision_reason=f"Hook 執行錯誤：{str(e)}",
+        )
         return EXIT_ALLOW
 
 

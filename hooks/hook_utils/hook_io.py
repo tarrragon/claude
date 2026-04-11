@@ -439,7 +439,9 @@ def is_subagent_environment(input_data: "dict | None") -> bool:
 
 def generate_hook_output(
     hook_event_name: str,
-    additional_context: "str | None" = None
+    additional_context: Optional[str] = None,
+    permission_decision: Optional[str] = None,
+    permission_decision_reason: Optional[str] = None,
 ) -> dict:
     """生成符合 Hook 協定的輸出 JSON
 
@@ -447,26 +449,27 @@ def generate_hook_output(
 
     Hook 協定格式：
     - 基本輸出：{"hookSpecificOutput": {"hookEventName": "<事件名>"}}
-    - 帶額外上下文：{"hookSpecificOutput": {"hookEventName": "<事件名>", "additionalContext": "<訊息>"}}
+    - 帶額外上下文：增加 "additionalContext" 欄位
+    - 帶權限決策：增加 "permissionDecision" 和 "permissionDecisionReason" 欄位
 
     Args:
         hook_event_name: Hook 事件名稱，如 "UserPromptSubmit", "PreToolUse"
         additional_context: 可選的額外上下文訊息（如警告、提醒等）
+        permission_decision: 可選的權限決策，"allow" / "deny" / "block"
+        permission_decision_reason: 可選的權限決策理由
 
     Returns:
         dict: 符合 Hook 協定的輸出結構
 
     Examples:
-        # 基本輸出（無額外訊息）
         >>> generate_hook_output("UserPromptSubmit")
         {'hookSpecificOutput': {'hookEventName': 'UserPromptSubmit'}}
 
-        # 帶額外上下文的輸出（如警告訊息）
-        >>> generate_hook_output("UserPromptSubmit", "警告：檢測到流程省略意圖")
-        {'hookSpecificOutput': {
-            'hookEventName': 'UserPromptSubmit',
-            'additionalContext': '警告：檢測到流程省略意圖'
-        }}
+        >>> generate_hook_output("PreToolUse", permission_decision="allow",
+        ...     permission_decision_reason="工具不在檢查範圍")
+        {'hookSpecificOutput': {'hookEventName': 'PreToolUse',
+            'permissionDecision': 'allow',
+            'permissionDecisionReason': '工具不在檢查範圍'}}
     """
     output = {
         "hookSpecificOutput": {
@@ -474,8 +477,36 @@ def generate_hook_output(
         }
     }
 
-    # 當提供了額外上下文時，添加到輸出
     if additional_context:
         output["hookSpecificOutput"]["additionalContext"] = additional_context
 
+    if permission_decision:
+        output["hookSpecificOutput"]["permissionDecision"] = permission_decision
+
+    if permission_decision_reason:
+        output["hookSpecificOutput"]["permissionDecisionReason"] = permission_decision_reason
+
     return output
+
+
+def emit_hook_output(
+    hook_event_name: str,
+    additional_context: Optional[str] = None,
+    permission_decision: Optional[str] = None,
+    permission_decision_reason: Optional[str] = None,
+) -> None:
+    """一步完成 Hook JSON stdout 輸出 — 防止遺漏 json.dumps 格式
+
+    組合 generate_hook_output + json.dumps + print，確保輸出格式正確。
+
+    Args:
+        hook_event_name: Hook 事件名稱
+        additional_context: 可選的額外上下文訊息
+        permission_decision: 可選的權限決策
+        permission_decision_reason: 可選的權限決策理由
+    """
+    output = generate_hook_output(
+        hook_event_name, additional_context,
+        permission_decision, permission_decision_reason,
+    )
+    print(json.dumps(output, ensure_ascii=False))

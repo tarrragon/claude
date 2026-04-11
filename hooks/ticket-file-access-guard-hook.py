@@ -44,7 +44,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from hook_utils import (
     setup_hook_logging, run_hook_safely, get_project_root, save_check_log,
-    read_json_from_stdin, is_handoff_recovery_mode
+    read_json_from_stdin, is_handoff_recovery_mode, emit_hook_output
 )
 
 from datetime import datetime
@@ -245,24 +245,10 @@ def check_write_permission(file_path: str, logger) -> Tuple[bool, str]:
 # Hook 輸出生成
 # ============================================================================
 
-def generate_hook_output(is_allowed: bool, reason: str) -> Dict[str, Any]:
-    """生成 Hook 輸出"""
-    if is_allowed:
-        return {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "allow",
-                "permissionDecisionReason": reason,
-            }
-        }
-    else:
-        return {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        }
+def _emit_permission_output(is_allowed: bool, reason: str) -> None:
+    """生成並輸出 Hook 權限決策 JSON"""
+    decision = "allow" if is_allowed else "deny"
+    emit_hook_output("PreToolUse", permission_decision=decision, permission_decision_reason=reason)
 
 
 
@@ -281,14 +267,11 @@ def main() -> int:
         input_data = read_json_from_stdin(logger)
         if not input_data:
             logger.warning("輸入為空或解析失敗，返回預設允許")
-            error_output = {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "allow",
-                    "permissionDecisionReason": "輸入為空或解析失敗，預設允許"
-                }
-            }
-            print(json.dumps(error_output, ensure_ascii=False))
+            emit_hook_output(
+                "PreToolUse",
+                permission_decision="allow",
+                permission_decision_reason="輸入為空或解析失敗，預設允許",
+            )
             return EXIT_ALLOW
 
         logger.debug(f"輸入 JSON: {json.dumps(input_data, ensure_ascii=False)[:200]}...")
@@ -299,8 +282,7 @@ def main() -> int:
         # 只檢查 Read, Edit, Write 工具
         if tool_name not in ["Read", "Edit", "Write"]:
             logger.debug(f"跳過: 工具類型 {tool_name} 不在檢查範圍內")
-            result = generate_hook_output(True, f"工具 {tool_name} 不在檢查範圍")
-            print(json.dumps(result, ensure_ascii=False))
+            _emit_permission_output(True, f"工具 {tool_name} 不在檢查範圍")
             return EXIT_ALLOW
 
         file_path = tool_input.get("file_path", "")
@@ -317,8 +299,7 @@ def main() -> int:
         else:
             is_allowed, reason = True, "未知工具類型，預設允許"
 
-        hook_output = generate_hook_output(is_allowed, reason)
-        print(json.dumps(hook_output, ensure_ascii=False))
+        _emit_permission_output(is_allowed, reason)
 
         log_entry = f"""[{datetime.now().isoformat()}]
   Tool: {tool_name}
@@ -335,14 +316,11 @@ def main() -> int:
 
     except Exception as e:
         logger.error(f"Hook 執行錯誤: {type(e).__name__}: {e}")
-        error_output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "allow",
-                "permissionDecisionReason": f"Hook 執行錯誤，預設允許: {str(e)}"
-            }
-        }
-        print(json.dumps(error_output, ensure_ascii=False))
+        emit_hook_output(
+            "PreToolUse",
+            permission_decision="allow",
+            permission_decision_reason=f"Hook 執行錯誤，預設允許: {str(e)}",
+        )
         return EXIT_ALLOW
 
 

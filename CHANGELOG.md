@@ -1,3 +1,39 @@
+## [1.29.0] - 2026-04-12
+
+### Summary
+feat: 新增 UTF-8 完整性檢查 Hook（）; feat: version-consistency-guard 新增版本註冊狀態檢查（）; feat: ticket create 版本存在性檢查（） (+23 more)
+
+Changes: 9 feat, 3 refactor, 5 fix, 9 docs
+
+- feat: 新增 UTF-8 完整性檢查 Hook（）
+- feat: version-consistency-guard 新增版本註冊狀態檢查（）
+- feat: ticket create 版本存在性檢查（）
+- feat: WRAP — 新增 Consider the Opposite + Zoom Out 搜尋範圍確認（）
+- feat: 統一 emit_hook_output helper + 3 Hook 遷移（）
+- feat: bash-tool-usage 新增 chpwd Shell Hook 環境警告（IMP-056）
+- feat: acceptance-gate 新增 Complete 清單式驗證（PROP-009 面向 C）
+- feat: PROP-009 面向 A — 新增 5 個 CLI 欄位命令
+- feat: PROP-009 面向 B — create 清單式欄位驗證
+- refactor: task-splitting 核心目標重定位為 SRP 品質（.3）
+- refactor: WRAP 重分析後移除 task-splitting 重複三階表格（.3）
+- refactor: acceptance-gate-hook God Hook 拆分（）
+- fix: 修復 3 個文件的 UTF-8 截斷亂碼（auto-compaction 邊界問題）
+- fix: 修復 children/spawned checker YAML list 型別處理（）
+- fix: 修復雙 JSON stdout 問題 — bash-edit-guard + pre-test（）
+- fix: 8 個 Pre/PostToolUse Hook stdout JSON 合規修復（IMP-055）
+- fix: Ticket 遷移至階層結構 + 防止跨專案版本目錄污染
+- docs: IMP-059 auto-compaction UTF-8 截斷導致文件亂碼
+- docs: PC-054 分析視角錨定防禦性而非品質目標
+- docs: tool call 預算閾值校準 ��� 15 次為安全預算非硬斷（.3）
+- docs: 補充子任務 vs 獨立 Ticket 決策流程圖和案例（.2）
+- docs: 新增 task-splitting 策略 8 — 按依賴鏈序列拆分（.1）
+- docs: IMP-058 YAML 欄位型別假設錯誤（）
+- docs: 新增規則 6 — 框架修改優先於專案進度（）
+- docs: IMP-057 grep 多行 print 語句誤報模式
+- docs: 完成 + IMP-056 chpwd shell hook 錯誤模式
+
+---
+
 ## [1.28.1] - 2026-04-11
 
 ### Summary

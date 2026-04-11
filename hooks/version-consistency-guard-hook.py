@@ -49,6 +49,9 @@ from hook_utils import (
 
 INCOMPLETE_STATUSES = {"pending", "in_progress", "blocked"}
 
+# Regex for version directory names like v0.17.4
+VERSION_DIR_PATTERN = re.compile(r'^v(\d+\.\d+\.\d+)$')
+
 
 # ============================================================================
 # Version parsing
@@ -85,6 +88,112 @@ def version_is_older(version_a: Tuple[int, ...], version_b: Tuple[int, ...]) -> 
     a_padded = version_a + (0,) * (max_len - len(version_a))
     b_padded = version_b + (0,) * (max_len - len(version_b))
     return a_padded < b_padded
+
+
+# ============================================================================
+# Version registration checks
+# ============================================================================
+
+
+def get_registered_versions(project_root: Path, logger) -> set:
+    """Extract all version strings from docs/todolist.yaml using regex.
+
+    Parses lines like:
+        version: "0.17.4"
+        version: 0.17.4
+
+    Args:
+        project_root: Project root path
+        logger: Logger instance
+
+    Returns:
+        Set of version strings (e.g. {"0.17.3", "0.17.4"})
+    """
+    todolist_path = project_root / "docs" / "todolist.yaml"
+
+    if not todolist_path.exists():
+        logger.debug("todolist.yaml not found, returning empty registered versions")
+        return set()
+
+    try:
+        content = todolist_path.read_text(encoding='utf-8')
+        # Match version: "X.Y.Z" or version: X.Y.Z (with or without quotes)
+        matches = re.findall(
+            r'^\s*version:\s*["\']?(\d+\.\d+\.\d+)["\']?\s*$',
+            content,
+            re.MULTILINE,
+        )
+        result = set(matches)
+        logger.debug(f"Registered versions in todolist.yaml: {sorted(result)}")
+        return result
+    except Exception as e:
+        logger.info(f"Failed to parse todolist.yaml for registered versions: {e}")
+        return set()
+
+
+def scan_worklog_version_directories(project_root: Path, logger) -> set:
+    """Scan docs/work-logs/ for all version directories (hierarchical or flat).
+
+    Supports:
+        - Hierarchical: docs/work-logs/v0/v0.17/v0.17.4/ -> "0.17.4"
+        - Flat (legacy): docs/work-logs/v0.17.4/ -> "0.17.4"
+
+    Only leaf directories matching vX.Y.Z pattern are collected.
+
+    Args:
+        project_root: Project root path
+        logger: Logger instance
+
+    Returns:
+        Set of version strings (e.g. {"0.17.3", "0.17.4"})
+    """
+    work_logs_dir = project_root / "docs" / "work-logs"
+
+    if not work_logs_dir.exists():
+        return set()
+
+    versions = set()
+
+    try:
+        # Walk the directory tree to find all vX.Y.Z directories
+        for path in work_logs_dir.rglob("v*"):
+            if not path.is_dir():
+                continue
+            match = VERSION_DIR_PATTERN.match(path.name)
+            if match:
+                versions.add(match.group(1))
+    except Exception as e:
+        logger.info(f"Failed to scan worklog version directories: {e}")
+
+    logger.debug(f"Worklog version directories found: {sorted(versions)}")
+    return versions
+
+
+def print_unregistered_versions_warning(unregistered: list) -> None:
+    """Print warning about worklog directories not registered in todolist.yaml.
+
+    Args:
+        unregistered: Sorted list of unregistered version strings
+    """
+    separator = "=" * 60
+
+    print()
+    print(separator)
+    print("[Version Consistency Guard] 發現未在 todolist.yaml 中註冊的版本目錄")
+    print(separator)
+    print()
+    print("以下版本在 docs/work-logs/ 中有目錄，但未在 docs/todolist.yaml 中註冊：")
+    print()
+
+    for version in unregistered:
+        print(f"  - v{version}")
+
+    print()
+    print("建議：執行 /version-release start {version}")
+    print("      或 /doc-flow worklog init {version} 註冊版本")
+    print()
+    print(separator)
+    print()
 
 
 # ============================================================================
@@ -381,6 +490,30 @@ def main() -> int:
 
     # Find project root using hook_utils
     project_root = get_project_root()
+
+    # Check 0: worklog directories vs todolist.yaml registration
+    # (runs independently of current_version)
+    # Only check versions >= the lowest registered version to avoid
+    # flooding warnings for historical directories (e.g. v0.0.1 ~ v0.14.x)
+    registered = get_registered_versions(project_root, logger)
+    worklog_versions = scan_worklog_version_directories(project_root, logger)
+
+    if registered:
+        min_registered = min(registered, key=lambda v: parse_version_string(v))
+        min_ver_tuple = parse_version_string(min_registered)
+        relevant_unregistered = sorted(
+            [v for v in (worklog_versions - registered)
+             if not version_is_older(parse_version_string(v), min_ver_tuple)],
+            key=lambda v: parse_version_string(v),
+        )
+    else:
+        relevant_unregistered = []
+
+    if relevant_unregistered:
+        print_unregistered_versions_warning(relevant_unregistered)
+        logger.info(f"Unregistered worklog versions: {', '.join(relevant_unregistered)}")
+    else:
+        logger.debug("All worklog version directories are registered in todolist.yaml")
 
     # Read current_version from todolist.yaml
     current_version = read_current_version_from_todolist(project_root, logger)
