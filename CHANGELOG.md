@@ -1,3 +1,19 @@
+## [1.28.0] - 2026-04-11
+
+### Summary
+feat: agent-commit-verification-hook 新增 Hook error 自動摘要（）; feat: acceptance-gate-hook 新增 error-pattern 衝突檢查（Step 2.7, ）; fix: 4 個 PostToolUse:Bash Hook 新增 subagent 跳過（ WRAP 結論） (+3 more)
+
+Changes: 2 feat, 2 fix, 2 docs
+
+- feat: agent-commit-verification-hook 新增 Hook error 自動摘要（）
+- feat: acceptance-gate-hook 新增 error-pattern 衝突檢查（Step 2.7, ）
+- fix: 4 個 PostToolUse:Bash Hook 新增 subagent 跳過（ WRAP 結論）
+- fix: 修正 3 個 PostToolUse Hook stdout 輸出為 JSON 格式（）
+- docs: pm-role.md 失敗判斷前置步驟新增 Step -1 hook-logs 檢查（）
+- docs: 新增 IMP-055 錯誤模式 + / Ticket 完成記錄
+
+---
+
 ## [1.27.0] - 2026-04-11
 
 ### Summary

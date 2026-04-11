@@ -109,6 +109,14 @@ MSG_PM_ACTION_TITLE = "[PM 立即動作]"
 # Feature 分支前綴（用於偵測代理人建立的分支）
 FEATURE_BRANCH_PREFIXES = ("feat/", "feature/", "fix/", "refactor/")
 
+# Hook error 摘要（來源：0.18.0-W4-003）
+HOOK_ERROR_SCAN_MINUTES = 5
+HOOK_ERROR_KEYWORDS = ("ERROR", "FAIL", "Exception", "Traceback", "TypeError", "NameError")
+MSG_HOOK_ERROR_TITLE = "[Hook Error 摘要] 代理人執行期間偵測到 Hook 錯誤"
+MSG_HOOK_ERROR_BODY = (
+    "以下 Hook 在最近 {minutes} 分鐘內有錯誤記錄（可能影響代理人執行）：\n"
+)
+
 
 # ============================================================================
 # 核心邏輯
@@ -423,6 +431,78 @@ def build_cwd_restore_message(project_root: str) -> str:
     return "\n".join(lines)
 
 
+def scan_hook_errors(project_root: str, minutes: int, logger: logging.Logger) -> list[tuple[str, int]]:
+    """掃描 hook-logs 目錄，找出最近 N 分鐘內含有錯誤的 Hook
+
+    Args:
+        project_root: 專案根目錄路徑
+        minutes: 掃描的時間範圍（分鐘）
+        logger: Logger 實例
+
+    Returns:
+        list[tuple[str, int]]: [(Hook 名稱, 錯誤數量)] 清單
+    """
+    import os
+    import time
+
+    hook_logs_dir = Path(project_root) / ".claude" / "hook-logs"
+    if not hook_logs_dir.is_dir():
+        logger.debug("hook-logs directory not found")
+        return []
+
+    cutoff_time = time.time() - (minutes * 60)
+    error_counts: dict[str, int] = {}
+
+    try:
+        for hook_dir in hook_logs_dir.iterdir():
+            if not hook_dir.is_dir():
+                continue
+            hook_name = hook_dir.name
+            for log_file in hook_dir.glob("*.log"):
+                try:
+                    if log_file.stat().st_mtime < cutoff_time:
+                        continue
+                    content = log_file.read_text(encoding="utf-8", errors="ignore")
+                    if any(kw in content for kw in HOOK_ERROR_KEYWORDS):
+                        error_counts[hook_name] = error_counts.get(hook_name, 0) + 1
+                except OSError:
+                    continue
+    except OSError as e:
+        logger.info(f"hook-logs scan failed (non-blocking): {e}")
+        return []
+
+    result = sorted(error_counts.items(), key=lambda x: x[1], reverse=True)
+    if result:
+        logger.info(f"found hook errors in {len(result)} hooks (last {minutes} min)")
+    return result
+
+
+def build_hook_error_message(hook_errors: list[tuple[str, int]]) -> str:
+    """建構 Hook error 摘要訊息
+
+    Args:
+        hook_errors: [(Hook 名稱, 錯誤數量)] 清單
+
+    Returns:
+        str: 格式化的摘要訊息
+    """
+    lines = [
+        MSG_SEPARATOR,
+        MSG_HOOK_ERROR_TITLE,
+        MSG_SEPARATOR,
+        "",
+        MSG_HOOK_ERROR_BODY.format(minutes=HOOK_ERROR_SCAN_MINUTES),
+    ]
+    for hook_name, count in hook_errors[:10]:
+        lines.append(f"  - {hook_name}: {count} 個錯誤記錄")
+    if len(hook_errors) > 10:
+        lines.append(f"  ... 還有 {len(hook_errors) - 10} 個 Hook")
+    lines.append("")
+    lines.append("建議：檢查 .claude/hook-logs/ 確認錯誤是否影響代理人執行。")
+    lines.append(MSG_SEPARATOR)
+    return "\n".join(lines)
+
+
 def main() -> None:
     """主函式"""
     logger = setup_hook_logging(HOOK_NAME)
@@ -508,6 +588,11 @@ def main() -> None:
         logger.info("cwd restore reminder appended (worktree agent, project_root=%s)", project_root)
     else:
         logger.debug("cwd restore reminder skipped (non-worktree agent)")
+
+    # Hook error 摘要（來源：0.18.0-W4-003）
+    hook_errors = scan_hook_errors(str(project_root), HOOK_ERROR_SCAN_MINUTES, logger)
+    if hook_errors:
+        messages.append(build_hook_error_message(hook_errors))
 
     # PM 立即動作摘要（來源：0.17.3-W10-001）
     if has_uncommitted or has_unmerged_worktrees or has_unmerged_branches:

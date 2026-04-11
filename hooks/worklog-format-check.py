@@ -136,9 +136,15 @@ def main():
     issues = check_file_content(file_path)
 
     if issues:
-        # 輸出警告到 stderr（非阻擋）
+        # 輸出警告為 JSON 格式到 stdout
         warning = format_warning(file_path, issues)
-        print(warning)
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": warning
+            }
+        }
+        print(json.dumps(output, ensure_ascii=False, indent=2))
 
     # 總是返回成功（非阻擋式 Hook）
     return 0

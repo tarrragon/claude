@@ -150,13 +150,16 @@ git branch | grep feat/
 
 | 步驟 | 命令 | 目的 |
 |------|------|------|
+| -1 | `find .claude/hook-logs -name "*.log" -mmin -5 -exec grep -l "ERROR\|Exception\|TypeError" {} \;` | 檢查是否有 Hook error 干擾代理人（來源：0.18.0-W4-002） |
 | 0 | `cat .claude/dispatch-active.json` | 確認代理人是否仍在活躍派發中（可能還沒完成） |
 | 1 | `pwd && git branch --show-current` | 確認當前分支（可能被代理人污染到其他分支） |
 | 2 | `git worktree list` | 檢查是否有 worktree 包含代理人的 commit |
 | 3 | `git branch \| grep feat/` | 檢查是否有 feature 分支包含代理人的 commit |
 | 4 | `git log main..{branch} --oneline` | 查看分支上的未合併 commit |
 
-**只有 dispatch-active.json 為空且所有分支都沒有代理人的 commit 後，才能判定代理人失敗。**
+> **Hook error 可見性**（0.18.0-W4-002 教訓）：terminal 上的 Hook error 只有用戶看得到，PM 和代理人都看不到。代理人完成後 `agent-commit-verification-hook` 會自動掃描 hook-logs 並輸出摘要，但 PM 主動判斷時仍需執行 Step -1 確認環境是否正常。
+
+**只有 hook-logs 無 error 且 dispatch-active.json 為空且所有分支都沒有代理人的 commit 後，才能判定代理人失敗。**
 
 ### 失敗類型與處理
 

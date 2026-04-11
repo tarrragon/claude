@@ -102,6 +102,7 @@ class AcceptanceCheckResult(NamedTuple):
     pending_sibling_tickets: List[str] = []
     task_type: str = ""
     priority: str = ""
+    error_pattern_conflicts: List[str] = []
 
 
 # ============================================================================
@@ -115,6 +116,17 @@ EXIT_BLOCK = 2
 
 # Ticket ID 格式正則表達式
 TICKET_ID_PATTERN = r'\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*'
+
+# Error-pattern 衝突檢查豁免的 Ticket 類型
+ERROR_PATTERN_CONFLICT_EXEMPT_TYPES = {"DOC", "ANA", "REF"}
+
+# Error-pattern 衝突提醒訊息模板
+ERROR_PATTERN_CONFLICT_WARNING = (
+    "[WARNING] error-pattern 衝突檢查（Step 2.7）\n"
+    "本 Ticket 修改的模組與以下 error-pattern 相關，請確認是否已考慮這些已知問題：\n"
+    "{conflict_list}\n"
+    "建議：complete 前確認修改未引入已知的錯誤模式。"
+)
 
 
 # ============================================================================
@@ -655,14 +667,105 @@ def _verify_acceptance_record(ticket_content: str, frontmatter: TicketFrontmatte
 
 
 
+def _check_error_pattern_conflicts(
+    frontmatter: TicketFrontmatter, project_dir: Path, logger
+) -> List[str]:
+    """
+    檢查修改的模組是否與既有 error-pattern 記錄衝突（Step 2.7）。
+
+    從 Ticket frontmatter 的 where.files 欄位取得修改檔案清單，
+    提取模組關鍵詞後搜尋 error-patterns 目錄。
+
+    Args:
+        frontmatter: Ticket frontmatter 結構
+        project_dir: 專案根目錄
+        logger: 日誌物件
+
+    Returns:
+        List[str] - 衝突的 error-pattern 檔案路徑清單（空表示無衝突）
+    """
+    import subprocess
+
+    # 豁免檢查：DOC/ANA/REF 類型跳過
+    ticket_type = (frontmatter.get("type") or "").upper()
+    if ticket_type in ERROR_PATTERN_CONFLICT_EXEMPT_TYPES:
+        logger.debug(f"Ticket 類型 {ticket_type} 豁免 error-pattern 衝突檢查")
+        return []
+
+    # 從 where.files 取得修改檔案清單
+    where = frontmatter.get("where")
+    if not isinstance(where, dict):
+        logger.debug("frontmatter 無 where 欄位，跳過衝突檢查")
+        return []
+
+    files = where.get("files")
+    if not files or not isinstance(files, list):
+        logger.debug("where.files 為空或不存在，跳過衝突檢查")
+        return []
+
+    # 提取模組關鍵詞（檔案名去副檔名、路徑中的目錄名）
+    keywords = set()
+    for filepath in files:
+        if not isinstance(filepath, str):
+            continue
+        path = Path(filepath)
+        # 檔案名（去副檔名）
+        stem = path.stem
+        if stem and len(stem) > 2:
+            keywords.add(stem.lower())
+        # 路徑中的目錄名（取最後兩層）
+        parts = path.parts
+        for part in parts[-3:-1] if len(parts) > 2 else parts[:-1]:
+            if part and len(part) > 2 and part not in ("src", "lib", "core", "test", "tests"):
+                keywords.add(part.lower())
+
+    if not keywords:
+        logger.debug("未提取到有效關鍵詞，跳過衝突檢查")
+        return []
+
+    logger.info(f"error-pattern 衝突檢查關鍵詞: {sorted(keywords)}")
+
+    # 用 grep 搜尋 error-patterns 目錄
+    error_patterns_dir = project_dir / ".claude" / "error-patterns"
+    if not error_patterns_dir.is_dir():
+        logger.debug("error-patterns 目錄不存在，跳過衝突檢查")
+        return []
+
+    # 構建 grep pattern：用 | 連接所有關鍵詞（不區分大小寫）
+    grep_pattern = "|".join(sorted(keywords))
+    conflicts = []
+
+    try:
+        result = subprocess.run(
+            ["grep", "-r", "-l", "-i", "-E", grep_pattern, str(error_patterns_dir)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            matched_files = result.stdout.strip().split("\n")
+            # 轉為相對路徑
+            for f in matched_files:
+                rel = Path(f).relative_to(project_dir)
+                conflicts.append(str(rel))
+            logger.info(f"發現 {len(conflicts)} 個 error-pattern 衝突")
+        else:
+            logger.debug("未發現 error-pattern 衝突")
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+        logger.info(f"error-pattern 衝突搜尋失敗（不阻擋）: {e}")
+
+    return conflicts
+
+
 def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> AcceptanceCheckResult:
     """
     檢查 Ticket 的驗收狀態（主協調函式）
 
-    此函式協調五個子檢查函式：
+    此函式協調六個子檢查函式：
     1. 子任務完成度檢查
     2. 驗收記錄驗證
-    2.5. ANA Ticket 後續 Ticket 檢查（新增）
+    2.5. ANA Ticket 後續 Ticket 檢查
+    2.7. Error-pattern 衝突檢查（修改模組 vs 既有 error-pattern）
     3. Error-pattern 新增檢查
     4. Sibling tickets 完成度檢查（場景 #9）
 
@@ -714,6 +817,9 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
                 else:
                     warning_msg = ana_warning_msg
 
+        # 步驟 2.7：檢查修改模組與既有 error-pattern 的衝突
+        error_pattern_conflicts = _check_error_pattern_conflicts(frontmatter, project_dir, logger)
+
         # 步驟 3：檢查 error-pattern 新增
         has_new_error_patterns = False
         new_error_pattern_files = []
@@ -749,6 +855,7 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
             pending_siblings,
             task_type,
             priority,
+            error_pattern_conflicts,
         )
 
     except Exception as e:
@@ -807,6 +914,17 @@ def generate_hook_output(
         )
         context_parts.append(reminder_msg)
         logger.info(f"新增場景 #17 (error-pattern) 提醒")
+
+    # 優先級 2.5：error-pattern 衝突提醒（Step 2.7，WARNING 不阻擋）
+    if check_result.error_pattern_conflicts:
+        conflict_list_formatted = "\n".join(
+            f"  - {f}" for f in check_result.error_pattern_conflicts
+        )
+        conflict_msg = ERROR_PATTERN_CONFLICT_WARNING.format(
+            conflict_list=conflict_list_formatted
+        )
+        context_parts.append(conflict_msg)
+        logger.info(f"新增 error-pattern 衝突提醒，衝突數量: {len(check_result.error_pattern_conflicts)}")
 
     # 優先級 3：Handoff 方向選擇 場景 #9（無訊息時，sibling >= 2）
     # 注意：即使有 error-pattern（#17 已觸發），仍需提醒 Handoff 方向

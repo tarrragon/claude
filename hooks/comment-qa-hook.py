@@ -780,20 +780,38 @@ def main():
         output += f"詳細報告已儲存: {report_path.relative_to(PROJECT_ROOT)}\n\n"
         output += "📚 註解規範: .claude/methodologies/comment-writing-methodology.md\n"
 
-        print(output)
+        json_output = {
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": output
+            }
+        }
+        print(json.dumps(json_output, ensure_ascii=False, indent=2))
         log_message(logger, "Comment QA Hook v3.0: 執行完成")
         return 0
 
     except json.JSONDecodeError as e:
         log_message(logger, format_message(QualityMessages.COMMENT_QA_ERROR, error=f"JSON 解析失敗 - {e}"))
-        print(f"Comment QA Hook 錯誤: JSON 輸入格式錯誤")
+        error_output = {
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": "Comment QA Hook 錯誤: JSON 輸入格式錯誤"
+            }
+        }
+        print(json.dumps(error_output, ensure_ascii=False, indent=2))
         return 1
 
     except Exception as e:
         log_message(logger, format_message(QualityMessages.COMMENT_QA_ERROR, error=f"Hook 執行失敗 - {e}"))
         import traceback
         log_message(logger, f"Traceback: {traceback.format_exc()}")
-        print(f"Comment QA Hook 錯誤: {e}")
+        error_output = {
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": f"Comment QA Hook 錯誤: {e}"
+            }
+        }
+        print(json.dumps(error_output, ensure_ascii=False, indent=2))
         return 1
 
 

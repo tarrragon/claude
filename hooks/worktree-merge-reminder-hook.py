@@ -22,7 +22,7 @@ from typing import List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, is_subagent_environment
 
 
 def parse_worktree_list(logger) -> List[Tuple[str, str]]:
@@ -109,6 +109,10 @@ def main() -> int:
     if not input_data:
         return 0
 
+    # subagent 環境跳過（代理人不執行 complete）
+    if is_subagent_environment(input_data):
+        return 0
+
     # 只在 ticket complete 命令時觸發
     if not is_ticket_complete_command(input_data):
         return 0
@@ -147,7 +151,13 @@ def main() -> int:
     lines.append("請在 ticket 完成前合併這些 worktree 的變更。")
 
     message = "\n".join(lines)
-    print(message)  # stdout = additional context（警告但不阻擋）
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": message
+        }
+    }
+    print(json.dumps(output, ensure_ascii=False))
     logger.warning("發現 %d 個 worktree 有未合併 commit", len(unmerged))
 
     # 回傳 0（警告但不阻擋），讓 PM 決定是否處理

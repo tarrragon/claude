@@ -37,7 +37,7 @@ from typing import Optional, Dict, Any, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, is_subagent_environment
 from lib.hook_messages import WorkflowMessages
 
 # ============================================================================
@@ -339,6 +339,10 @@ def main() -> int:
 
     if not input_data:
         print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
+        return EXIT_SUCCESS
+
+    # subagent 環境跳過（CLI 錯誤回饋給 PM 看，代理人不需要）
+    if is_subagent_environment(input_data):
         return EXIT_SUCCESS
 
     # 驗證工具類型
