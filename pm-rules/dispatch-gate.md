@@ -56,6 +56,34 @@
 
 **派發模式**：預設背景模式（`run_in_background: true`）。
 
+**並行派發分支隔離（強制，來源 PC-050）**：
+
+| 規則 | 說明 |
+|------|------|
+| N 個代理人 = N 個獨立分支 | 每個代理人在獨立 feature 分支或 worktree 上工作 |
+| 派發前切回 main | 每次派發前確認在 main 上，建新分支後再派發 |
+| 禁止共用分支 | 兩個代理人在同一分支上工作會產生衝突 |
+
+---
+
+## 派發後清點（強制，來源 PC-050）
+
+> **核心原則**：派發完成後，立刻用 `dispatch-active.json` 確認派發記錄。這是防止「忘記派了幾個」的唯一可靠方式。
+
+**每次派發後**（不論單一或並行）：
+
+```bash
+cat .claude/dispatch-active.json | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print('{} 個活躍派發'.format(len(d)))
+for x in d:
+    print('  - {}'.format(x.get('agent_description', '?')))
+"
+```
+
+**PM 必須確認**：顯示的數量與自己派發的數量一致。
+
 ---
 
 ## 豁免條件

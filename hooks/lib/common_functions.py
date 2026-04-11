@@ -13,10 +13,11 @@ Hook 系統通用函數庫
     try:
         from lib.common_functions import hook_output, read_hook_input
     except ImportError as e:
+        print(json.dumps({"result": "continue"}))
         print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(0)  # exit 0 避免 CLI 顯示 hook error
 
-這樣可確保 import 失敗時向使用者明確報告，而不是靜默失敗。
+這樣可確保 import 失敗時向使用者明確報告（stderr），且 CLI 不會顯示 hook error。
 
 註：Logging 系統已遷移至 hook_utils.py，使用 hook_utils.setup_hook_logging。
 """

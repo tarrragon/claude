@@ -213,6 +213,14 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | IMP-043 | 函式實作完整但呼叫端未接線 | 高 | v0.2.0 |
 | IMP-044 | 生命週期階段缺乏可觀測性 | 中 | v0.2.0 |
 | IMP-045 | 伺服器重啟 port 佔用靜默失敗 | 中 | v0.2.0 |
+| IMP-046 | — | — | — |
+| IMP-047 | — | — | — |
+| IMP-048 | Hook stderr 輸出觸發 hook error 顯示 | 低 | v0.17.2 |
+| IMP-049 | hook error 顯示是 CLI 已知 Bug | 低 | v0.17.3 |
+| IMP-050 | hook_utils package 路徑誤導 | 中 | v0.17.3 |
+| IMP-051 | 新 Hook 未註冊到 settings | 中 | v0.17.3 |
+| IMP-052 | 批量遷移缺少 None guard | 中 | v0.17.3 |
+| IMP-053 | 一刀切修改忽略程式碼執行路徑差異 | 中 | v0.17.3 |
 
 ### 流程合規 (PC)
 
@@ -256,6 +264,20 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-036 | Worktree base commit 過舊導致無效工作 | 中 | v0.2.0 |
 | PC-037 | 背景代理人未完成即提前驗證 | 中 | v0.2.0 |
 | PC-038 | 新版本開始時未同步更新 todolist.yaml | 高 | v0.17.2 |
+| PC-039 | — | — | — |
+| PC-040 | — | — | — |
+| PC-041 | — | — | — |
+| PC-042 | — | — | — |
+| PC-043 | PM 執行跳過 phase 轉換 | 中 | v0.17.3 |
+| PC-044 | — | — | — |
+| PC-045 | PM 代理人失敗時自行撰寫產品程式碼 | 中 | v0.17.3 |
+| PC-046 | 不必要的 cd 操作全域 CLI | 中 | v0.17.3 |
+| PC-047 | Prompt 導致代理人過度讀取 | 中 | v0.17.3 |
+| PC-048 | — | — | — |
+| PC-049 | — | — | — |
+| PC-050 | 過早判斷代理人完成 | 中 | v0.17.3 |
+| PC-051 | 過早宣稱不可能 | 中 | v0.17.3 |
+| PC-052 | 忽略既有 error-pattern 警告直接實作 | 中 | v0.17.3 |
 
 ---
 

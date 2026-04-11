@@ -126,9 +126,10 @@ git branch | grep "worktree-agent-" | xargs git branch -D 2>/dev/null
 - [ ] Agent prompt 包含 `Ticket: {id}`？
 
 ### 合併時
-- [ ] `pwd` 確認在 main？
-- [ ] Worktree 有產出物？
-- [ ] `cp` 到 main 後測試通過？
+- [ ] `pwd && git branch --show-current` 確認在 main？
+- [ ] `git worktree list` 檢查 worktree 產出物？
+- [ ] `git branch | grep feat/` 檢查 feature 分支產出物？（來源：0.17.3-W10-001）
+- [ ] 合併到 main 後測試通過？
 
 ### 清理後
 - [ ] 產出物已 commit 到 main？

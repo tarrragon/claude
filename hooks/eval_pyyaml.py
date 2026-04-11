@@ -24,8 +24,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 try:
     from hook_utils import parse_ticket_frontmatter
 except ImportError:
-    print("Error: 無法導入 hook_utils")
-    sys.exit(1)
+    print("Error: 無法導入 hook_utils", file=sys.stderr)
+    sys.exit(0)
 
 try:
     import yaml

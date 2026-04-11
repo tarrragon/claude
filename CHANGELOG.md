@@ -1,3 +1,33 @@
+## [1.27.0] - 2026-04-11
+
+### Summary
+feat: 新增 dispatch-record-hook 記錄代理人派發到 dispatch-active.json; fix: Hook 權限修正 + completeness-check 權限自動防護 + dataclass 欄位順序 bug 修復; fix: WRAP 修正 — 選擇性回退 + exit code 規範統一 (+17 more)
+
+Changes: 1 feat, 8 fix, 11 docs
+
+- feat: 新增 dispatch-record-hook 記錄代理人派發到 dispatch-active.json
+- fix: Hook 權限修正 + completeness-check 權限自動防護 + dataclass 欄位順序 bug 修復
+- fix: WRAP 修正 — 選擇性回退 + exit code 規範統一
+- fix: Hook exit code 統一為 0 — 避免 CLI 顯示 hook error
+- fix: project-init gitignore 檢查新增 .claude/dispatch-active 規則
+- fix: 補強 — 代理人完成時自動報告剩餘活躍派發數量
+- fix: 確保 Hook stdout 一定有 JSON 輸出（防止空輸出觸發 hook error）
+- fix: 修復 Hook exit code 問題 — 異常時改為 exit 0 + JSON additionalContext
+- fix: 改善代理人完成後的分支偵測和 PM 提示流程
+- docs: WRAP 決策落地 — AC 凍結機制 + complete 前 error-pattern 檢查
+- docs: 新增「完成後發現」決策路由（3.5-B 層）— WRAP 教訓
+- docs: 新增 IMP-053 + PC-052 錯誤模式 — WRAP 修正教訓
+- docs: 認領時 Context 驗證檢查清單 — 新增 3 項前提驗證機制
+- docs: 方案 D 收尾 — 遷移 到 -（測試重寫版本）
+- docs: WRAP Skill 三項改善 — 快速模式重設計/雙錨點/Hook 設計（~007）
+- docs: 建立 WRAP 決策框架 Skill — 認知偏誤防護和選項擴增工具（）
+- docs: PC-051 過早宣稱做不到 + 完成記錄
+- docs: 代理人狀態追蹤 SOP 整合到決策樹系統
+- docs: PC-050 PM 代理人完成誤判錯誤模式 + Ticket + W11 完成狀態
+- docs: IMP-049 記錄 hook error 是 Claude Code CLI 已知 bug（非 Hook 問題）
+
+---
+
 ## [1.26.1] - 2026-04-09
 
 ### Summary

@@ -16,8 +16,11 @@ pending → claim → in_progress → complete → completed
 |------|---------|
 | pending | claim |
 | in_progress | complete, release |
-| completed | - |
+| completed | 就地修正（不變更狀態）或建立修正子 Ticket |
 | blocked | claim（重新認領） |
+
+> **completed 修正規則**：completed 狀態不可回退為 in_progress（歷史完整性）。
+> 修正走「完成後發現」流程：`.claude/pm-rules/execution-discovery-rules.md` 3.5-B 層。
 
 ---
 
@@ -139,6 +142,12 @@ PM 執行 `ticket track complete` **前**，必須先主動勾選所有驗收條
 Step 1: 逐條確認驗收條件已滿足
     |
     v
+Step 1.5: [IMP/ADJ] error-pattern 衝突檢查（PC-052 預防）
+    |       列出修改的核心函式/模組 → /error-pattern query <函式名>
+    |       有衝突 → 暫停，評估是否需調整方案
+    |       無衝突 → 繼續
+    |
+    v
 Step 2: 執行 ticket track check-acceptance <id>
     |
     v
@@ -147,6 +156,31 @@ Step 3: 執行 ticket track complete <id>
     v
 acceptance-gate-hook 事後驗證（最後防線）
 ```
+
+### Complete 前 error-pattern 衝突檢查（IMP/ADJ 強制）
+
+> **來源**：PC-052 — W10-002 修改 `run_hook_safely` 完成後，才發現 IMP-049 已記錄相同修改失敗 2 次。如果 complete 前查詢 error-pattern，問題在驗收階段就能攔截。
+
+**觸發條件**：IMP 或 ADJ 類型 Ticket 執行 complete 前。
+
+**執行方式**：
+
+| 步驟 | 動作 | 範例 |
+|------|------|------|
+| 1 | 列出 Ticket 修改的核心函式/模組 | `run_hook_safely`, `sys.exit` |
+| 2 | 用每個名稱查詢 error-pattern | `/error-pattern query run_hook_safely` |
+| 3 | 檢查是否有衝突 | 找到 IMP-049 警告不要修改 |
+| 4a | 有衝突 → 暫停 complete，評估方案 | WRAP 決策或調整修改 |
+| 4b | 無衝突 → 繼續正常 complete | — |
+
+**與認領時查詢的差異**：
+
+| 時機 | 查詢重點 | 目的 |
+|------|---------|------|
+| 認領時 | 問題描述關鍵字 | 了解歷史上類似問題的處理方式 |
+| complete 前 | 修改的核心函式名 | 確認修改不與已知失敗經驗衝突 |
+
+**豁免條件**：DOC/ANA/REF 類型 Ticket（不涉及程式碼修改）。
 
 **禁止行為**：
 

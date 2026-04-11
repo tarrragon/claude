@@ -40,8 +40,9 @@
 
 --- 以下按條件觸發，非線性序列 ---
 
-[執行中發現] → execution-discovery-rules.md（觸發：發現技術債/問題）
-[任務完成]   → completion-checkpoint-rules.md（觸發：Ticket complete 後）
+[執行中發現]   → execution-discovery-rules.md（觸發：發現技術債/問題）
+[完成後發現]   → execution-discovery-rules.md 3.5-B 層（觸發：completed Ticket 需修正）
+[任務完成]     → completion-checkpoint-rules.md（觸發：Ticket complete 後）
 ```
 
 > 視覺化 Mermaid 圖表：.claude/references/decision-tree-diagrams.md
@@ -71,6 +72,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 | 命令類型訊息 | command-routing.md | 開發、修改、TDD 階段 |
 | 錯誤/失敗 | incident-routing.md | 事件回應 |
 | 執行中發現 | execution-discovery-rules.md | 技術債、超範圍需求 |
+| 完成後發現 | execution-discovery-rules.md 3.5-B | completed Ticket 交付物需修正 |
 | 任務完成 | completion-checkpoint-rules.md | Checkpoint 循環（0/0.5/1/1.5/1.8/1.9/2/3/4/R） |
 | TDD 完成路由 | tdd-completion-routing.md | Checkpoint 2 情境 D（TDD Phase 完成） |
 | 代理人管理 | agent-dispatch-enforcement.md | 觸發優先級、強制命令、違規 |

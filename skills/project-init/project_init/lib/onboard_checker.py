@@ -30,6 +30,7 @@ GITIGNORE_REQUIRED_RULES = [
     ".claude/worktrees",
     ".claude/tool-results",
     ".claude/handoff",
+    ".claude/dispatch-active",
     "__pycache__",
 ]
 
@@ -109,6 +110,8 @@ class GitignoreCheckInfo:
     """包含 __pycache__/ 規則."""
     all_required_complete: bool
     """所有必須規則都存在."""
+    has_dispatch_active_rule: bool = True
+    """包含 .claude/dispatch-active 規則."""
     missing_rules: list[str] = field(default_factory=list)
     """缺失的規則清單."""
 
@@ -672,6 +675,7 @@ def check_gitignore_completeness(project_root: Path) -> GitignoreCheckInfo:
     has_worktrees = _has_gitignore_rule(content, ".claude/worktrees")
     has_tool_results = _has_gitignore_rule(content, ".claude/tool-results")
     has_handoff = _has_gitignore_rule(content, ".claude/handoff")
+    has_dispatch_active = _has_gitignore_rule(content, ".claude/dispatch-active")
     has_pycache = _has_gitignore_rule(content, "__pycache__")
 
     # 彙整缺失的規則
@@ -686,6 +690,8 @@ def check_gitignore_completeness(project_root: Path) -> GitignoreCheckInfo:
         missing.append(".claude/tool-results/")
     if not has_handoff:
         missing.append(".claude/handoff/")
+    if not has_dispatch_active:
+        missing.append(".claude/dispatch-active.json")
     if not has_pycache:
         missing.append("__pycache__/")
 
@@ -696,6 +702,7 @@ def check_gitignore_completeness(project_root: Path) -> GitignoreCheckInfo:
         has_worktrees_rule=has_worktrees,
         has_tool_results_rule=has_tool_results,
         has_handoff_rule=has_handoff,
+        has_dispatch_active_rule=has_dispatch_active,
         has_pycache_rule=has_pycache,
         all_required_complete=len(missing) == 0,
         missing_rules=missing,

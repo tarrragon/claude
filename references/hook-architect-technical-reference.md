@@ -152,10 +152,23 @@ fi
 ### Exit Code 控制
 
 ```bash
-exit 0  # 成功
-exit 2  # 阻塊錯誤（stderr 回饋給 Claude）
-exit 1  # 非阻塊錯誤（顯示給用戶，繼續執行）
+exit 0  # 成功（stdout JSON 作為 additionalContext）
+exit 2  # 阻止操作（Hook 要求 CLI 不執行該動作）
+# exit 1 — 避免使用：CLI 將 exit 1 視為 "hook error"，
+#           會吞掉 stdout 訊息並顯示錯誤標籤（IMP-049 已知 CLI bug）
 ```
+
+**Hook 錯誤處理原則**：
+
+| 情境 | 正確做法 | 錯誤做法 |
+|------|---------|---------|
+| Hook 內部異常 | `run_hook_safely` 捕獲 + 記錄日誌檔 | `sys.exit(1)` |
+| ImportError | `sys.exit(0)` + stderr 報錯 | `sys.exit(1)` |
+| 輸入解析失敗 | `return 0`（靜默跳過） | `sys.exit(1)` |
+| `__main__` CLI 工具 | `sys.exit(1)` 是正確的 | 不適用 |
+
+> **注意**：`__main__` 區塊是 CLI 測試入口，不經過 Hook 系統，exit 1 是正確的 CLI 語義。
+> Hook 執行路徑中應避免 `sys.exit(1)`，改用 `return 0` 或由 `run_hook_safely` 處理。
 
 ---
 

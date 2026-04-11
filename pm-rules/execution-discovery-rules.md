@@ -43,6 +43,91 @@
 
 ---
 
+## 第三層半-B：完成後發現（Post-Complete Discovery）
+
+> **來源**：0.17.3-W10-002 — Ticket complete + commit 後，WRAP 分析發現 IMP-049 矛盾，需要選擇性回退。完成後無正式修正流程，導致驗收條件與實際交付物不一致。
+
+**觸發條件**：已 completed 的 Ticket 的交付物需要修正（WRAP 修正、error-pattern 衝突、外部回饋等）。
+
+**與「執行中額外發現」的區別**：
+
+| 面向 | 執行中發現（3.5 層） | 完成後發現（3.5-B 層） |
+|------|-------------------|---------------------|
+| Ticket 狀態 | in_progress | completed |
+| 發現時機 | 實作過程中 | complete + commit 之後 |
+| 修正對象 | 當前 Ticket 範圍外的新問題 | 當前 Ticket 交付物本身 |
+
+### 修正規模判斷
+
+```
+已完成 Ticket 的交付物需要修正
+    |
+    v
+修正是否改變原始 Ticket 的核心結論/方向?
+    +-- 是（如：回退核心修改、方向完全改變）
+    |       → 路徑 A：建立修正 Ticket
+    +-- 否（如：補充文件、微調參數、更新驗收條件）
+            → 路徑 B：就地修正
+```
+
+### 路徑 A：建立修正 Ticket
+
+適用於修正規模大或方向改變的情況。
+
+| 步驟 | 動作 | 說明 |
+|------|------|------|
+| 1 | `/ticket create --parent {original_id}` | 建立子 Ticket，標題含「修正」 |
+| 2 | why 欄位記錄修正原因 | 引用 error-pattern 或 WRAP 決策 |
+| 3 | 原始 Ticket 追加日誌 | `ticket track append-log` 記錄「發現需修正，見子 Ticket {id}」 |
+| 4 | 正常 TDD/實作流程 | 修正 Ticket 走標準流程 |
+
+### 路徑 B：就地修正
+
+適用於修正規模小、不改變核心方向的情況。
+
+| 步驟 | 動作 | 說明 |
+|------|------|------|
+| 1 | 原始 Ticket 追加日誌 | 記錄修正原因和內容 |
+| 2 | 更新驗收條件 | 反映實際最終狀態（已做/未做/已知不做） |
+| 3 | commit 引用原始 Ticket | commit message 含原始 Ticket ID |
+| 4 | 不重新開啟 Ticket | completed 狀態不變（歷史完整性） |
+
+### 驗收條件處理：凍結 + 補充
+
+修正後，原始 AC **凍結不動**（保留歷史），新增 `amendment_acceptance` 和 `amendment_reason` 欄位：
+
+```yaml
+# 原始 AC（凍結，反映 complete 時的驗收狀態）
+acceptance:
+- '[x] 原始條件 A'
+- '[x] 原始條件 B'
+
+# 修正後 AC（反映實際最終狀態）
+amendment_acceptance:
+- '[x] 保留的改善項'
+- '[ ] 已知不做項（附原因）'
+amendment_reason: '修正原因簡述'
+```
+
+| 欄位 | 用途 | 可修改 |
+|------|------|--------|
+| `acceptance` | 原始驗收記錄（complete 時的狀態） | 凍結，不修改 |
+| `amendment_acceptance` | 修正後的實際狀態 | 修正時填寫 |
+| `amendment_reason` | 修正原因（引用 WRAP/error-pattern） | 修正時填寫 |
+
+**為什麼凍結而非覆蓋**：原始 AC 記錄了「complete 時認為已完成的事項」。覆蓋後無法追溯「為什麼當時認為通過驗收」，失去審計價值。
+
+**禁止行為**：
+
+| 禁止 | 原因 |
+|------|------|
+| 修改原始 acceptance 欄位 | 破壞驗收歷史，無法審計 |
+| 重新開啟已完成的 Ticket | 破壞完成歷史，狀態機不可逆 |
+| 修正了交付物但只 commit 不記錄 | 原始 Ticket 失去追溯性 |
+| 修正後不填 amendment_reason | 修正原因不可追溯 |
+
+---
+
 ## 第四層：Ticket 執行流程
 
 ```

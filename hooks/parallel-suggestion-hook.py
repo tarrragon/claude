@@ -16,8 +16,7 @@ Parallel Suggestion Hook - 並行任務分析與建議
 - 提醒主線程主動建議並行派發，而非詢問單一任務
 
 Exit Code：
-- 0 (EXIT_SUCCESS): Hook 執行成功
-- 1 (EXIT_ERROR): Hook 執行錯誤
+- 0 (EXIT_SUCCESS): Hook 執行成功（含異常時的安全退出）
 
 Hook 類型: UserPromptSubmit
 觸發時機: 接收用戶命令時
@@ -64,7 +63,8 @@ except ImportError as e:
     print(json.dumps({"result": "continue"}))
     # 同時輸出錯誤到 stderr（雙通道要求）
     print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
-    sys.exit(1)
+    # W10-002: exit 0 避免 CLI 顯示 hook error
+    sys.exit(0)
 
 # ============================================================================
 # 常數定義

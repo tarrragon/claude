@@ -322,37 +322,43 @@ if __name__ == "__main__":
 | Git 操作 | git_utils | `run_git_command()` |
 | 分支檢查 | git_utils | `is_protected_branch()` |
 
-### 輸出規範（stderr 禁止規則）
+### 輸出規範（stderr 與 exit code）
 
-> **背景**：Claude Code 將 hook 的任何 stderr 輸出視為 "hook error"。此問題在 W4-035、W18-004.3、W18-004.7 中反覆出現，最終在 W19-001 系統性修復。
+> **背景**：Claude Code 將 hook 的 stderr 輸出和 exit code 1 都視為 "hook error"（IMP-048, IMP-049）。此為 CLI 已知 bug（anthropics/claude-code#34713 等），但在 CLI 修復前 Hook 需配合。
 
-**強制規則**：所有 hook 禁止寫入 stderr。
+**Hook 執行路徑規則**（由 `run_hook_safely` 呼叫的程式碼）：
 
-| 禁止模式 | 正確替代 |
-|---------|---------|
-| `logging.StreamHandler(sys.stderr)` | `logging.StreamHandler(sys.stdout)` |
-| `print(..., file=sys.stderr)` | `print(...)` |
-| `sys.stderr.write(...)` | `sys.stdout.write(...)` 或 `print(...)` |
+| 規則 | 說明 |
+|------|------|
+| 禁止 `sys.exit(1)` | 改用 `return 0` 或拋出 Exception 由 `run_hook_safely` 捕獲 |
+| 避免 stderr 輸出 | StreamHandler 使用 stdout，錯誤記錄到日誌檔 |
+| ImportError 防護 | `sys.exit(0)` + stderr 報錯（ImportError 在 `run_hook_safely` 外，無法被捕獲） |
+
+**`__main__` CLI 工具規則**（不經過 Hook 系統的 CLI 測試入口）：
+
+| 規則 | 說明 |
+|------|------|
+| `sys.exit(1)` 是正確的 | CLI 用法錯誤或處理失敗應返回非零 exit code |
+| stderr 輸出是正確的 | CLI 工具的標準錯誤輸出行為 |
 
 **日誌配置標準模板**：
 
 ```python
-# 正確：使用 stdout
+# 正確：使用 stdout（Hook 執行路徑）
 logging.basicConfig(
     level=log_level,
     format="[%(asctime)s] %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler(log_file),
-        logging.StreamHandler(sys.stdout)  # 必須用 stdout
+        logging.StreamHandler(sys.stdout)  # Hook 路徑必須用 stdout
     ]
 )
 ```
 
-**檢查方式**：
-```bash
-# 驗證無 stderr 使用（應返回空結果）
-grep -r "sys\.stderr" .claude/hooks/ --include="*.py"
-```
+**與 quality-baseline 規則 4 的關係**：
+quality-baseline 要求「異常必須寫入 stderr」，但 Hook 系統因 CLI bug 限制無法遵守。
+Hook 的替代方案：異常記錄到**日誌檔**（`.claude/hook-logs/`），不寫 stderr。
+這是 CLI bug 的已知妥協，不適用於非 Hook 的一般程式碼。
 
 ### 測試要求
 

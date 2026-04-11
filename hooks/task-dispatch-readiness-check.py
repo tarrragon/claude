@@ -190,10 +190,10 @@ def main() -> None:
         input_data = read_hook_input()
         if not input_data:
             logger.error("Invalid JSON input")
-            sys.exit(1)
+            sys.exit(0)
     except Exception as e:
         logger.error(f"讀取輸入失敗: {e}")
-        sys.exit(1)
+        sys.exit(0)
 
     tool_name = input_data.get("tool_name", "")
     tool_input = input_data.get("tool_input") or {}

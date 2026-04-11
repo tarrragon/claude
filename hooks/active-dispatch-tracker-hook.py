@@ -23,7 +23,7 @@ from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 from dispatch_tracker import clear_dispatch, cleanup_expired, detect_orphan_branches
-from dispatch_tracker import get_state_file_path
+from dispatch_tracker import get_state_file_path, get_active_dispatches
 
 HOOK_NAME = "active-dispatch-tracker"
 
@@ -82,10 +82,21 @@ def main() -> int:
         )
         logger.info("偵測到 orphan worktree 分支: %s", orphan_list)
 
+    # 查詢剩餘活躍派發（讓 PM 知道還有幾個代理人在執行）
+    remaining = get_active_dispatches(project_root)
+    if remaining:
+        agents_list = ", ".join(
+            d.get("agent_description", "?") for d in remaining
+        )
+        messages.append(
+            "[WAIT] 仍有 {} 個代理人在執行: {}".format(len(remaining), agents_list)
+        )
+    else:
+        messages.append("[OK] 所有代理人已完成，可開始驗收")
+
     # 輸出 additionalContext
-    if messages:
-        context = " | ".join(messages)
-        print(json.dumps({"additionalContext": context}))
+    context = " | ".join(messages)
+    print(json.dumps({"additionalContext": context}))
 
     return 0
 

@@ -10,8 +10,9 @@ Agent Commit Verification Hook - PostToolUse (Agent)
 功能:
   1. Agent 完成工作後，檢查是否有未 commit 的變更。
      若偵測到未 commit 的修改，輸出警告提醒 PM 確認。
-  2. 輸出工作目錄還原提醒，防止 worktree 代理人完成後
-     主線程 Shell 工作目錄被污染到 worktree 路徑。
+  2. 檢查 worktree 和 feature 分支是否有未合併到 main 的 commit。
+  3. 根據代理人是否使用 worktree 隔離，條件性輸出 CWD 還原提醒。
+  4. 輸出整合的「PM 立即動作」摘要，指引 PM 下一步操作。
 
 觸發時機: Agent 工具完成後 (PostToolUse, matcher: Agent)
 行為: 不阻擋（exit 0），僅在 additionalContext 輸出警告
@@ -19,7 +20,8 @@ Agent Commit Verification Hook - PostToolUse (Agent)
 來源:
   - PC-024 — 代理人完成實作但跳過 git commit，變更未持久化
   - 0.17.0-W5-005 — Worktree 代理人完成後主線程 Shell cwd 被污染
-Ticket: 0.2.0-W3-022, 0.17.0-W5-005
+  - 0.17.3-W10-001 — feature 分支偵測 + CWD 條件化 + PM 立即動作摘要
+Ticket: 0.2.0-W3-022, 0.17.0-W5-005, 0.17.3-W10-001
 """
 
 import json
@@ -93,6 +95,19 @@ MSG_WORKTREE_MERGE_BODY = (
     "請在進行下一步前先合併：\n"
 )
 MSG_WORKTREE_MERGE_SUGGESTION = "[強制] 合併後才能進行 ticket complete 或切換任務"
+
+# Feature 分支未合併提醒訊息（來源：0.17.3-W10-001）
+MSG_FEATURE_BRANCH_TITLE = "[Feature 分支提醒] 有未合併回 main 的 commit"
+MSG_FEATURE_BRANCH_BODY = (
+    "Agent 完成後，以下 feature 分支有 commit 尚未合併回 main。\n"
+    "代理人的變更可能在這些分支上，請先合併再驗收：\n"
+)
+
+# PM 立即動作摘要訊息（來源：0.17.3-W10-001）
+MSG_PM_ACTION_TITLE = "[PM 立即動作]"
+
+# Feature 分支前綴（用於偵測代理人建立的分支）
+FEATURE_BRANCH_PREFIXES = ("feat/", "feature/", "fix/", "refactor/")
 
 
 # ============================================================================
@@ -271,6 +286,123 @@ def build_worktree_merge_message(
     return "\n".join(lines)
 
 
+def get_unmerged_feature_branches(
+    project_root: str,
+    logger: logging.Logger,
+    worktree_branches: set[str] | None = None,
+) -> list[tuple[str, list[str]]]:
+    """取得有未合併 commit 的 feature 分支清單（排除 worktree 分支避免重複）
+
+    Args:
+        project_root: 專案根目錄路徑
+        logger: Logger 實例
+        worktree_branches: 已被 worktree 偵測涵蓋的分支名稱集合
+
+    Returns:
+        list[tuple[str, list[str]]]: [(分支名, [commit 摘要])]
+    """
+    if worktree_branches is None:
+        worktree_branches = set()
+
+    try:
+        result = subprocess.run(
+            ["git", "branch", "--format=%(refname:short)"],
+            capture_output=True, text=True, timeout=GIT_STATUS_TIMEOUT,
+            cwd=project_root,
+        )
+        if result.returncode != 0:
+            return []
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return []
+
+    unmerged = []
+    for branch in result.stdout.strip().splitlines():
+        branch = branch.strip()
+        if not branch or branch in ("main", "master"):
+            continue
+        # 跳過已被 worktree 偵測涵蓋的分支
+        if branch in worktree_branches:
+            continue
+        # 只偵測 feature 相關分支
+        if not any(branch.startswith(prefix) for prefix in FEATURE_BRANCH_PREFIXES):
+            continue
+
+        try:
+            log_result = subprocess.run(
+                ["git", "log", f"main..{branch}", "--oneline"],
+                capture_output=True, text=True, timeout=GIT_STATUS_TIMEOUT,
+                cwd=project_root,
+            )
+            if log_result.returncode == 0 and log_result.stdout.strip():
+                commits = [line for line in log_result.stdout.strip().splitlines() if line]
+                if commits:
+                    unmerged.append((branch, commits))
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            continue
+
+    return unmerged
+
+
+def build_feature_branch_message(
+    unmerged: list[tuple[str, list[str]]],
+) -> str:
+    """建構 feature 分支合併提醒訊息"""
+    lines = [
+        MSG_SEPARATOR,
+        MSG_FEATURE_BRANCH_TITLE,
+        MSG_SEPARATOR,
+        "",
+        MSG_FEATURE_BRANCH_BODY,
+    ]
+
+    for branch, commits in unmerged:
+        lines.append(f"  [{branch}] {len(commits)} 個 commit 待合併")
+        for c in commits[:5]:
+            lines.append(f"    - {c}")
+        if len(commits) > 5:
+            lines.append(f"    ... 還有 {len(commits) - 5} 個")
+        lines.append(f"  建議: git checkout main && git merge {branch} --no-edit")
+        lines.append("")
+
+    lines.append(MSG_SEPARATOR)
+    return "\n".join(lines)
+
+
+def build_pm_action_summary(
+    project_root: str,
+    has_uncommitted: bool,
+    has_unmerged_worktrees: bool,
+    has_unmerged_branches: bool,
+    unmerged_branch_name: str | None = None,
+) -> str:
+    """建構 PM 立即動作摘要（根據偵測狀態動態生成）"""
+    lines = [
+        MSG_SEPARATOR,
+        MSG_PM_ACTION_TITLE,
+        MSG_SEPARATOR,
+        "",
+    ]
+
+    step = 1
+    # 一律建議確認工作目錄
+    lines.append(f"{step}. 確認工作目錄: cd {project_root} && pwd && git branch --show-current")
+    step += 1
+
+    if has_uncommitted:
+        lines.append(f"{step}. 確認變更後 commit: git add <files> && git commit -m \"...\"")
+        step += 1
+
+    if has_unmerged_worktrees or has_unmerged_branches:
+        branch_hint = f" {unmerged_branch_name}" if unmerged_branch_name else " <branch>"
+        lines.append(f"{step}. 合併到 main: git checkout main && git merge{branch_hint} --no-edit")
+        step += 1
+
+    lines.append(f"{step}. 驗證: npm test")
+    lines.append("")
+    lines.append(MSG_SEPARATOR)
+    return "\n".join(lines)
+
+
 def build_cwd_restore_message(project_root: str) -> str:
     """建構工作目錄還原提醒訊息
 
@@ -315,14 +447,21 @@ def main() -> None:
     # 取得專案根目錄（使用 CLAUDE_PROJECT_DIR 環境變數，確保是主倉庫而非 worktree）
     project_root = get_project_root()
 
+    # 判斷代理人是否使用 worktree 隔離
+    agent_uses_worktree = tool_input.get("isolation") == "worktree"
+
     # 檢查未 commit 的檔案
     uncommitted_files = get_uncommitted_files(str(project_root), logger)
 
-    # 建構訊息：一律附加 cwd 還原提醒（防止 worktree cwd 污染）
+    # 建構訊息
     messages = []
+    has_uncommitted = False
+    has_unmerged_worktrees = False
+    has_unmerged_branches = False
+    first_unmerged_branch = None
 
     if uncommitted_files:
-        # 有未 commit 的變更，輸出警告
+        has_uncommitted = True
         logger.info(
             "uncommitted files detected after agent: %s (%d files)",
             agent_description,
@@ -337,7 +476,10 @@ def main() -> None:
 
     # 檢查 worktree 未合併 commit（來源：0.17.2-W2-018）
     unmerged_worktrees = get_unmerged_worktrees(str(project_root), logger)
+    worktree_branch_names = {branch for _, branch, _ in unmerged_worktrees}
     if unmerged_worktrees:
+        has_unmerged_worktrees = True
+        first_unmerged_branch = unmerged_worktrees[0][1]
         total_commits = sum(len(c) for _, _, c in unmerged_worktrees)
         logger.warning(
             "unmerged worktrees detected: %d worktrees, %d commits",
@@ -345,10 +487,37 @@ def main() -> None:
         )
         messages.append(build_worktree_merge_message(unmerged_worktrees))
 
-    # 一律附加 cwd 還原提醒（根因：Claude Code 的 worktree isolation 在
-    # 代理人完成後可能不會還原主線程的 Shell 工作目錄）
-    messages.append(build_cwd_restore_message(str(project_root)))
-    logger.info("cwd restore reminder appended (project_root=%s)", project_root)
+    # 檢查 feature 分支未合併 commit（來源：0.17.3-W10-001）
+    unmerged_branches = get_unmerged_feature_branches(
+        str(project_root), logger, worktree_branch_names,
+    )
+    if unmerged_branches:
+        has_unmerged_branches = True
+        if not first_unmerged_branch:
+            first_unmerged_branch = unmerged_branches[0][0]
+        total_commits = sum(len(c) for _, c in unmerged_branches)
+        logger.warning(
+            "unmerged feature branches detected: %d branches, %d commits",
+            len(unmerged_branches), total_commits,
+        )
+        messages.append(build_feature_branch_message(unmerged_branches))
+
+    # CWD 還原提醒：只在 worktree 代理人時顯示（來源：0.17.3-W10-001）
+    if agent_uses_worktree:
+        messages.append(build_cwd_restore_message(str(project_root)))
+        logger.info("cwd restore reminder appended (worktree agent, project_root=%s)", project_root)
+    else:
+        logger.debug("cwd restore reminder skipped (non-worktree agent)")
+
+    # PM 立即動作摘要（來源：0.17.3-W10-001）
+    if has_uncommitted or has_unmerged_worktrees or has_unmerged_branches:
+        messages.append(build_pm_action_summary(
+            str(project_root),
+            has_uncommitted,
+            has_unmerged_worktrees,
+            has_unmerged_branches,
+            first_unmerged_branch,
+        ))
 
     combined_message = "\n\n".join(messages)
 

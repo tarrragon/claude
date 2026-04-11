@@ -34,8 +34,9 @@ try:
     from hook_utils import setup_hook_logging
     from lib.common_functions import hook_output
 except ImportError as e:
+    print(json.dumps({"result": "continue"}))
     print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
-    sys.exit(1)
+    sys.exit(0)
 
 # === 常數定義 ===
 

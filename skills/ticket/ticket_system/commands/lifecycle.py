@@ -853,6 +853,10 @@ def _print_claim_checklist(ticket: Dict[str, Any]) -> None:
     print("開始前請確認:")
     print(LifecycleMessages.CHECKLIST_DESIGN_DOCS)
     print(LifecycleMessages.CHECKLIST_ACCEPTANCE)
+    # Context 驗證（W12-009：所有 Ticket 類型適用）
+    print(LifecycleMessages.CHECKLIST_TARGET_EXISTS)
+    print(LifecycleMessages.CHECKLIST_ASSUMPTIONS_VALID)
+    print(LifecycleMessages.CHECKLIST_CROSS_PROJECT)
     print(LifecycleMessages.CHECKLIST_DEV_ENV)
 
     # 根據 Ticket 類型給出特定提示

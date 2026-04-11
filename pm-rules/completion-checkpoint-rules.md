@@ -59,6 +59,7 @@ Ticket type == ANA?
 | 1 變更狀態 | 有未提交變更? | 是 → commit；無 → 跳至 1.5 |
 | 1.5 錯誤學習 | commit 成功後 | AskUserQuestion #16 |
 | 1.8 合併回 main | 在開發分支上? | 是 → merge --no-ff → main → 刪除開發分支；否 → 跳過 |
+| 1.85 代理人清點 | `dispatch-active.json` 為空? | 否 → **阻塞**：仍有代理人在執行，禁止繼續；是 → 通過 |
 | 1.9 Worktree 合併 | `git worktree list` 有非 main worktree? | 有未合併 commit → 合併 + 清理；無 → 跳過 |
 | 2 情境評估 | [強制查詢] ticket track list | 情境 D/A/B/C（見下方） |
 | 3 後續路由 | 任務類型 | AskUserQuestion #13 |
@@ -72,6 +73,31 @@ Ticket type == ANA?
 | A（#11a） | ticket 仍 in_progress | Context 刷新 Handoff |
 | B（#11b） | ticket completed + 同 Wave 有 pending | 任務切換 Handoff |
 | C | ticket completed + 同 Wave 無 pending | [強制] /parallel-evaluation Wave 審查（含 linux 常駐委員）→ C1: 有其他 Wave → #3a；C2: 全完成 → 版本收尾 → /version-release check + #13 |
+
+**Checkpoint 1.85 代理人清點（強制，PC-050）**：
+
+所有代理人完成前，禁止進入後續 Checkpoint。
+
+```bash
+cat .claude/dispatch-active.json | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+if d:
+    print('[BLOCK] 仍有 {} 個代理人在執行：'.format(len(d)))
+    for x in d:
+        print('  - {}'.format(x.get('agent_description', '?')))
+    print('禁止繼續。等待所有代理人完成通知。')
+else:
+    print('[PASS] 無活躍派發，可繼續。')
+"
+```
+
+| 結果 | 行動 |
+|------|------|
+| 有活躍派發 | **阻塞**：等待完成通知，不做任何 commit/merge/complete |
+| 無活躍派發 | 通過，進入 Checkpoint 1.9 |
+
+> 來源：PC-050 — PM 在代理人仍在工作時誤判完成
 
 **Checkpoint 1.9 Worktree 合併（強制，PC-039）**：
 

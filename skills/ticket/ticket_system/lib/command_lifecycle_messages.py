@@ -138,6 +138,10 @@ class LifecycleMessages:
     # 認領檢查清單相關訊息
     CHECKLIST_DESIGN_DOCS = "   [ ] 已閱讀相關設計文件（功能規格、測試案例等）"
     CHECKLIST_ACCEPTANCE = "   [ ] 已理解驗收條件"
+    # Context 驗證檢查項（W12-009：認領時強制補充背景資訊）
+    CHECKLIST_TARGET_EXISTS = "   [ ] 已驗證目標檔案/模組存在（where.files 列出的路徑）"
+    CHECKLIST_ASSUMPTIONS_VALID = "   [ ] 已確認前提假設仍成立（架構狀態、依賴、API 未變更）"
+    CHECKLIST_CROSS_PROJECT = "   [ ] 已檢查跨專案/版本關聯性（範疇正確、無重疊 Ticket）"
     CHECKLIST_DEV_ENV = "   [ ] 開發環境已準備就緒"
     CHECKLIST_ERROR_PATTERNS = "   [ ] 已查詢是否有相關的 error-patterns"
     CHECKLIST_SCOPE_VERIFICATION = "   [ ] 已獨立驗證 Ticket 描述的數量/範圍（描述是草稿，可能有遺漏）"

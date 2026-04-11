@@ -334,7 +334,7 @@ def run_hook_safely(main_func: Callable[[], int], hook_name: str) -> int:
     功能：
     - 呼叫 setup_hook_logging 獲取 logger
     - 執行 main_func，捕獲 Exception（非 SystemExit/KeyboardInterrupt）
-    - 異常時記錄完整 traceback 到日誌，返回 1
+    - 異常時記錄完整 traceback 到日誌檔，返回 EXIT_ERROR
     - 記錄執行時間到日誌
 
     Args:
@@ -342,7 +342,11 @@ def run_hook_safely(main_func: Callable[[], int], hook_name: str) -> int:
         hook_name: Hook 識別名稱
 
     Returns:
-        int: main_func 的返回值（正常），或 1（異常）
+        int: main_func 的返回值（正常），或 EXIT_ERROR（異常）
+
+    Note:
+        exit 1 在 CLI 中可能觸發 "hook error" 顯示（IMP-049 已知 CLI bug），
+        但這是 CLI 層問題，不應在 Hook 層繞過。異常記錄到日誌檔即可。
     """
     logger = setup_hook_logging(hook_name)
     start_time = time.time()

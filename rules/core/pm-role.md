@@ -108,11 +108,62 @@ ticket track snapshot
 
 代理人派發後可能出現以下情況。PM **永遠不自己寫程式碼**，而是按 SOP 處理。
 
+### 代理人完成確認 SOP（強制，來源 PC-050）
+
+> **核心原則**：收到完成通知 ≠ 全部完成。必須清點 dispatch-active.json 確認所有代理人都已完成。
+
+**收到任何代理人完成通知時**，執行以下兩步：
+
+```bash
+# 步驟 1：確認剩餘活躍派發
+cat .claude/dispatch-active.json | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+if d:
+    print('[WAIT] 仍有 {} 個代理人在執行：'.format(len(d)))
+    for x in d:
+        print('  - {}'.format(x.get('agent_description', '?')))
+else:
+    print('[OK] 所有代理人已完成，可開始驗收。')
+"
+```
+
+```bash
+# 步驟 2：確認分支狀態
+pwd && git branch --show-current
+git worktree list
+git branch | grep feat/
+```
+
+| 結果 | 行動 |
+|------|------|
+| 仍有活躍派發 | **等待**：不做 commit/merge/complete，切去做其他 Ticket 準備工作 |
+| 無活躍派發 | 開始驗收：檢查變更 → commit → merge |
+
+> 完整 Checkpoint 流程（含 1.85 代理人清點）：.claude/pm-rules/completion-checkpoint-rules.md
+
+### 失敗判斷前置步驟（強制，來源 0.17.3-W10-001）
+
+> **禁止**：看到主倉庫 `git status` 沒有變更就直接判定代理人失敗。代理人可能在 worktree 或 feature 分支上完成了工作。
+
+判斷代理人是否失敗**之前**，必須先確認：
+
+| 步驟 | 命令 | 目的 |
+|------|------|------|
+| 0 | `cat .claude/dispatch-active.json` | 確認代理人是否仍在活躍派發中（可能還沒完成） |
+| 1 | `pwd && git branch --show-current` | 確認當前分支（可能被代理人污染到其他分支） |
+| 2 | `git worktree list` | 檢查是否有 worktree 包含代理人的 commit |
+| 3 | `git branch \| grep feat/` | 檢查是否有 feature 分支包含代理人的 commit |
+| 4 | `git log main..{branch} --oneline` | 查看分支上的未合併 commit |
+
+**只有 dispatch-active.json 為空且所有分支都沒有代理人的 commit 後，才能判定代理人失敗。**
+
 ### 失敗類型與處理
 
 | 失敗類型 | 症狀 | PM 處理方式 |
 |---------|------|-----------|
-| 完全沒改 | source 檔案無變更，測試仍 FAIL | 檢查 prompt 是否清楚，**重新派發** |
+| 看似沒改 | source 無變更（但可能在其他分支） | **先執行前置步驟**，確認無分支 commit 後才判定失敗 |
+| 完全沒改 | 前置步驟確認無任何分支有 commit | 檢查 prompt 是否清楚，**重新派發** |
 | 改了錯誤檔案 | 修改了非目標檔案 | 回退變更，調整 prompt 指定檔案，重新派發 |
 | 回合耗盡 | 代理人報告截斷，部分完成 | 簡化 prompt（減少讀取範圍），重新派發 |
 | 改壞既有測試 | 舊測試 FAIL | 回退變更，在 prompt 加入「不可修改測試」約束，重新派發 |
@@ -122,6 +173,9 @@ ticket track snapshot
 
 ```
 代理人完成但結果不符預期
+    |
+    v
+0. 執行失敗判斷前置步驟（檢查分支和 worktree）
     |
     v
 1. 確認失敗類型（上表）
