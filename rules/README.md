@@ -15,7 +15,11 @@
 
 - 專案設定 vs 代理人知識分離、框架資產 vs 專案產物分離 → `.claude/references/framework-asset-separation.md`
 
+**環境管理原則**（安裝 / 審查 / 卸載 Claude Code plugin 前請讀）：
+
+- Plugin 注入成本、安裝前評估清單、審查週期、卸載流程 → `.claude/references/plugin-management.md`
+
 ---
 
-**Last Updated**: 2026-04-16
-**Version**: 10.0.0 — 精簡至導航表；職責分離章節移至 `references/framework-asset-separation.md`（W10-078.3）
+**Last Updated**: 2026-04-20
+**Version**: 10.1.0 — 新增「環境管理原則」導航，指向 `references/plugin-management.md`（避免 plugin 誤裝膨脹 context）

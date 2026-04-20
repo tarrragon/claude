@@ -224,6 +224,24 @@
       "files": [],
       "branch_name": "worktree",
       "dispatched_at": "2026-04-19T09:13:39.871564+00:00"
+    },
+    {
+      "agent_description": "Research readmoo-tracker auto-navigation",
+      "tool_use_id": "toolu_0112cVw53Rer2rBJYRCu7AVk",
+      "agent_id": null,
+      "ticket_id": "",
+      "files": [],
+      "branch_name": "",
+      "dispatched_at": "2026-04-20T04:32:46.764474+00:00"
+    },
+    {
+      "agent_description": "Implement dispatch-check CLI",
+      "tool_use_id": "toolu_014RsJB4TUu8bYZjwWwK3oTU",
+      "agent_id": null,
+      "ticket_id": "",
+      "files": [],
+      "branch_name": "",
+      "dispatched_at": "2026-04-20T05:57:33.124377+00:00"
     }
   ]
 }

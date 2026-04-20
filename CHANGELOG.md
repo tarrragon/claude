@@ -1,3 +1,17 @@
+## [1.19.0] - 2026-04-20
+
+### Summary
+feat: 新增 ticket track dispatch-check CLI (PC-050 CLI 化); docs: worklog 進度追加 + PC-077 累積 Meta 循環案例; docs: 建立 plugin 管理準則文件 (+1 more)
+
+Changes: 1 feat, 2 docs, 1 chore
+
+- feat: 新增 ticket track dispatch-check CLI (PC-050 CLI 化)
+- docs: worklog 進度追加 + PC-077 累積 Meta 循環案例
+- docs: 建立 plugin 管理準則文件
+- chore: 版號基底修正 + complete
+
+---
+
 ## [1.18.0] - 2026-04-20
 
 ### Summary

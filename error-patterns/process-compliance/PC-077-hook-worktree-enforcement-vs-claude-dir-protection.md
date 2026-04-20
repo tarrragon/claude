@@ -80,6 +80,31 @@ PM 派發實作代理人（thyme-python-developer、parsley-flutter-developer、
 
 ---
 
+## Meta 循環觀察（2026-04-20 W10-017.2 新增）
+
+修該 Hook 自身的 Ticket（W11-004.7「修改 agent-dispatch-validation-hook 使 `.claude/` 豁免 worktree」）**本身也受同 Hook 限制**。具體鏈：
+
+| 修 Hook Ticket | 被同 Hook 擋 | 後果 |
+|---------------|------------|------|
+| W11-004.7 目標：讓 `.claude/` prompt 豁免 worktree | 派發前即撞 Hook 要求 worktree | 需 PM 前台修 Hook 才能解開循環 |
+
+**Why（實踐驗證）**：Hook 修復前，任何修 `.claude/` 的 ticket（包含修 Hook 本身）都只能走 PM 前台。這不是 PC-077 的漏洞，是 PC-077 結論的實證。
+
+**How to apply（固化為規則）**：
+- 遇到「修 Hook 的 Ticket 被同 Hook 擋」立刻認定為 PC-077 觸發案例，PM 前台處理
+- W11-004.7 落地前，任何 `.claude/` 修改都走 PM 前台，不做例外嘗試
+
+---
+
+## 觸發案例累積
+
+| 日期 | Ticket | 情境 |
+|------|--------|------|
+| 2026-04-17 | W13-003 | 修 `askuserquestion-charset-guard-hook.py`（首發記錄） |
+| 2026-04-20 | W10-017.2 | 新增 `ticket track dispatch-check` CLI，涉及 `.claude/skills/ticket/` Python 套件（meta 循環觀察） |
+
+---
+
 ## 相關文件
 
 - `.claude/error-patterns/architecture/ARCH-015-subagent-claude-dir-hardcoded-protection.md` — Runtime 保護記錄
