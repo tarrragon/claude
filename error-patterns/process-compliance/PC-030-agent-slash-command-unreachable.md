@@ -1,7 +1,6 @@
 # PC-030: 代理人定義中使用 slash command 引用 Skill，但代理人無法觸發 slash command
 
 **發現日期**: 2026-03-27
-**相關 Ticket**: 0.2.0-W7-011
 
 ## 症狀
 

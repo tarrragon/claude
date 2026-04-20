@@ -108,6 +108,14 @@ clove-security-reviewer 在以下情況下**應該被觸發**：
 
 ---
 
+## 允許產出
+
+- **檔案類別**：安全審查報告（`.md`，SEC-YYYYMMDD-NN）、機密偵測報告、漏洞修復建議
+- **操作類型**：Read / Grep / Glob / Bash（唯讀掃描指令）
+- **路徑範圍**：只讀全專案；產出報告至 ticket context 或 `docs/security-reports/`；禁止修改任何程式碼
+
+---
+
 ## 禁止行為
 
 ### 絕對禁止
@@ -116,6 +124,14 @@ clove-security-reviewer 在以下情況下**應該被觸發**：
 2. **禁止自行決定派發**：只提供建議，由 rosemary-project-manager 決定
 3. **禁止省略安全報告**：必須產出完整的安全審查報告
 4. **禁止暴露實際機密**：報告中不得包含真實的機密值，只標記位置
+
+---
+
+## 適用情境
+
+- **TDD Phase 標註**：Phase 0 / Phase 4（規格前安全評估、實作後安全審查）/ 獨立任務（版本發布前安全審計）
+- **觸發條件**：涉及用戶輸入/認證授權/API 端點/敏感資料的程式碼變更、OWASP Top 10 偵測、硬編碼機密掃描
+- **排除情境**：實際修復漏洞 → 改派 thyme-extension-engineer / parsley-flutter-developer；通用品質審計 → 改派 bay-quality-auditor
 
 ---
 

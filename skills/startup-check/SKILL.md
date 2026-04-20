@@ -35,7 +35,7 @@ disable-model-invocation: true
 對每個待恢復任務：
 
 a. 讀取 handoff JSON 檔案，取得 `ticket_id`、`title`、`direction`
-b. 從 `ticket_id` 解析版本號（例如 `0.31.0-W13-003` -> `v0.31.0`）
+b. 從 `ticket_id` 解析版本號（例如 `{version}-W{wave}-{seq}` -> `v{version}`）
 c. 讀取對應的 Ticket 檔案：`docs/work-logs/v{version}/tickets/{ticket_id}.md`
 d. 輸出完整的 Ticket 內容到對話中
 
@@ -122,3 +122,8 @@ Git: {分支名} | {狀態}
 - SKILL 輸出在主對話流中，Claude 會自然處理並主動執行
 - Hook 輸出在 system-reminder 中，作為備用提醒
 - 兩者可共存，SKILL 提供最佳體驗，Hook 提供安全網
+
+---
+
+**Last Updated**: 2026-03-02
+**Version**: 1.0.0

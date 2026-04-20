@@ -121,6 +121,8 @@ def run_git_command(args: List[str], cwd: Optional[str] = None) -> Tuple[bool, s
             cwd=cwd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=GIT_COMMAND_TIMEOUT
         )
         return (result.returncode == 0, result.stdout.strip())
@@ -162,7 +164,7 @@ def get_worktree_list() -> List[WorktreeInfo]:
         if line.startswith(WORKTREE_PREFIX):
             path = line[len(WORKTREE_PREFIX):]
 
-            # 初始化分支信息
+            # 初始化分支資訊
             branch = "unknown"
             is_main = False
 

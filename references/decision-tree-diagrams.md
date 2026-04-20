@@ -2,7 +2,7 @@
 
 本文件包含主線程決策樹的 Mermaid 視覺化圖表，供需要圖形化理解時參考。
 
-> 決策樹規則本體：@.claude/rules/core/decision-tree.md
+> 決策樹規則本體：@.claude/pm-rules/decision-tree.md
 
 ---
 

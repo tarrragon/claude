@@ -4,7 +4,6 @@ title: 通用代理人硬編碼專案特定引用
 category: architecture
 severity: medium
 first_seen: 2026-03-31
-source_ticket: 0.31.1-W8-005
 ---
 
 # ARCH-012: 通用代理人硬編碼專案特定引用
@@ -22,7 +21,7 @@ source_ticket: 0.31.1-W8-005
 | **專案設定** | `CLAUDE.md` | 專案使用的測試工具、自訂元件、框架選擇 |
 | **代理人知識** | `.claude/agents/` | 通用的技術最佳實踐、框架寫法 |
 
-`.claude/rules/README.md` 已有明確的「專案設定與代理人知識的職責分離」規則，但在 W8-005 中未遵循。
+`.claude/references/framework-asset-separation.md` 已有明確的「專案設定與代理人知識的職責分離」規則，但在 某 Ticket 中未遵循。
 
 ## 錯誤範例
 
@@ -57,5 +56,5 @@ Read .claude/agents/parsley-flutter-developer.md
 
 ## 相關規則
 
-- `.claude/rules/README.md`「專案設定與代理人知識的職責分離」章節
+- `.claude/references/framework-asset-separation.md`「專案設定與代理人知識的職責分離」章節
 - `CLAUDE.md` 第 1 節「專案身份」中的「實作代理人」欄位

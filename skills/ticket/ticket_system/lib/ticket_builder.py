@@ -10,6 +10,7 @@ Ticket 建構模組
   - create_ticket_frontmatter(): 建立 Ticket frontmatter
   - create_ticket_body(): 建立 Ticket body
   - update_parent_children(): 更新父 Ticket 的 children
+  - update_source_spawned_tickets(): 更新 source Ticket 的 spawned_tickets（PC-073）
 
 使用 TypedDict 減少函式參數數量，提高程式碼可讀性。
 """
@@ -101,10 +102,11 @@ class TicketConfig(TypedDict, total=False):
     how_task_type: str          # Task Type（Implementation/Analysis/etc.）
     how_strategy: str           # 實作策略
 
-    # 關係資訊（3 個欄位）
+    # 關係資訊（4 個欄位）
     parent_id: Optional[str]    # 父 Ticket ID（子任務才有）
     blocked_by: Optional[List[str]]  # 依賴的 Ticket IDs
     related_to: Optional[List[str]]  # 相關的 Ticket IDs（多對多關聯）
+    source_ticket: Optional[str]  # 衍生來源 Ticket ID（spawned 關係，與 parent_id 互斥）
 
     # TDD 資訊（2 個欄位）
     tdd_phase: Optional[str]    # 當前 TDD 階段（phase1/phase2/phase3a/phase3b/phase4）
@@ -408,7 +410,7 @@ def create_ticket_frontmatter(config: TicketConfig) -> Dict[str, Any]:
         - blockedBy: config.get("blocked_by") or []
         - relatedTo: config.get("related_to") or []（多對多關聯）
         - spawned_tickets: []（空清單）
-        - source_ticket: None
+        - source_ticket: config.get("source_ticket")（可選；衍生關係）
         - dispatch_reason: ""（空字串）
         - decision_tree_path: config.get("decision_tree_path")（決策樹路徑，可選）
         - who: {"current": config["who"], "history": {}}
@@ -471,7 +473,7 @@ def create_ticket_frontmatter(config: TicketConfig) -> Dict[str, Any]:
         "blockedBy": config.get("blocked_by") or [],
         "relatedTo": config.get("related_to") or [],
         "spawned_tickets": [],
-        "source_ticket": None,
+        "source_ticket": config.get("source_ticket"),
         "dispatch_reason": "",
         "decision_tree_path": config.get("decision_tree_path"),
         "who": {"current": config["who"], "history": {}},
@@ -495,12 +497,43 @@ def create_ticket_frontmatter(config: TicketConfig) -> Dict[str, Any]:
     }
 
 
-def create_ticket_body(what: str, who: str) -> str:
+def _ana_reproduction_section(ticket_type: str) -> str:
+    """產生 ANA Ticket 專屬的「重現實驗結果」章節。
+
+    當 ticket_type == 'ANA' 時回傳完整章節（前後含空行），否則回傳空字串。
+    此章節為 PC-063 防護措施 1：強制 ANA Ticket 完成 Reality Test 才允許列方案，
+    防止基於未驗證假設過早收斂方案。
+    """
+    if ticket_type != "ANA":
+        return ""
+    return """
+## 重現實驗結果
+
+### 實驗方法
+
+（必填：如何重現問題？用什麼指令/測試？本章節為 ANA Ticket 強制章節——PC-063 防護措施）
+
+### 實驗執行
+
+（必填：實驗執行過程記錄，包含輸入、步驟、觀察到的實際行為）
+
+### 實驗發現
+
+（必填：實驗結論——已驗證的事實 vs 仍未驗證的假設。僅在完成實驗後才允許列候選方案。）
+
+---
+"""
+
+
+def create_ticket_body(what: str, who: str, ticket_type: str = "") -> str:
     """建立 Ticket body。
 
     Args:
         what: 任務描述（來自 frontmatter["what"]）
         who: 執行代理人（來自 frontmatter["who"]["current"]）
+        ticket_type: Ticket 類型（如 'ANA'、'IMP'、'DOC' 等）。當為 'ANA' 時，
+            body 會在 Problem Analysis 後插入「重現實驗結果」必填章節
+            （PC-063 防護措施 1：強制 ANA Ticket 完成 Reality Test 才列方案）。
 
     Returns:
         Ticket body 字串（Markdown 格式）
@@ -573,7 +606,7 @@ def create_ticket_body(what: str, who: str) -> str:
 -->
 
 ---
-
+{_ana_reproduction_section(ticket_type)}
 ## Solution
 
 <!-- To be filled by executing agent -->
@@ -655,5 +688,76 @@ def update_parent_children(version: str, parent_id: str, child_id: str) -> bool:
 
         parent_path: Path = Path(parent.get("_path", get_ticket_path(resolved_version, parent_id)))
         save_ticket(parent, parent_path)
+
+    return True
+
+
+def update_source_spawned_tickets(source_ticket_id: str, new_ticket_id: str) -> bool:
+    """更新 source Ticket 的 spawned_tickets 欄位（append + 去重）。
+
+    鏡像 update_parent_children 的結構，差異僅在欄位名（children → spawned_tickets）。
+    本函式對應 PC-073 CLI 能力缺口修補：spawned 關係代表衍生項獨立交付，
+    不會阻擋 source 的 complete。
+
+    Args:
+        source_ticket_id: source Ticket ID（如 "0.18.0-W12-002"）
+        new_ticket_id: 新建立的衍生 Ticket ID（如 "0.18.0-W12-006"）
+
+    Returns:
+        bool: 成功更新返回 True；source 不存在、版本解析失敗或儲存失敗返回 False。
+
+    Implementation:
+        1. 從 source_ticket_id 提取版本號
+        2. 載入 source Ticket
+        3. 若 source 不存在，返回 False
+        4. 取得 spawned_tickets 欄位，確保為 list 型別（防禦性：字串→list）
+        5. 若 new_ticket_id 不在清單中，append
+        6. 儲存 source Ticket（失敗捕獲 IOError/OSError 並返回 False，不向外傳播）
+        7. 返回 True
+
+    Side Effects:
+        - 修改 source Ticket 檔案
+        - 更新 source["spawned_tickets"] 清單
+
+    Examples:
+        >>> update_source_spawned_tickets("0.18.0-W12-002", "0.18.0-W12-006")
+        True
+
+        >>> update_source_spawned_tickets("invalid-id", "0.18.0-W12-006")
+        False
+    """
+    # 從 source_ticket_id 提取版本（對齊 update_parent_children 的跨版本處理）
+    resolved_version: Optional[str] = extract_version_from_ticket_id(source_ticket_id)
+    if resolved_version is None:
+        return False
+
+    source: Optional[Dict[str, Any]] = load_ticket(resolved_version, source_ticket_id)
+    if not source:
+        return False
+
+    # 防禦性型別檢查：spawned_tickets 可能因手動編輯變成字串
+    raw_spawned = source.get("spawned_tickets", [])
+    if isinstance(raw_spawned, str):
+        print(
+            f"[WARNING] Source Ticket {source_ticket_id} 的 spawned_tickets 欄位為字串而非清單，"
+            f"已自動修正",
+            file=sys.stderr,
+        )
+    # 重用 _normalize_children（語義上為「將任意輸入正規化為 list[str]」，
+    # 無 children 特化邏輯；pepper Phase 3a §2 決策不改名）
+    spawned: List[str] = _normalize_children(raw_spawned)
+
+    if new_ticket_id not in spawned:
+        spawned.append(new_ticket_id)
+        source["spawned_tickets"] = spawned
+
+        source_path: Path = Path(
+            source.get("_path", get_ticket_path(resolved_version, source_ticket_id))
+        )
+        # save_ticket 失敗時回傳 False（不 propagate exception；對齊 CLI 層不回滾設計）
+        try:
+            save_ticket(source, source_path)
+        except (IOError, OSError):
+            return False
 
     return True

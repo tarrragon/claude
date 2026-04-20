@@ -435,7 +435,7 @@ class TodoListUpdater:
     def update(self, tickets: List[Tuple[str, Dict, str]]) -> None:
         """更新 todolist 中的技術債務追蹤區塊"""
         if not self.todolist_path.exists():
-            print(f"⚠️  找不到 {self.todolist_path}")
+            print(f"[WARN]️  找不到 {self.todolist_path}")
             return
 
         content = self.todolist_path.read_text(encoding="utf-8")
@@ -486,13 +486,13 @@ def cmd_capture(args) -> int:
     log_file = Path(args.log_file)
 
     if not log_file.exists():
-        print(f"❌ 錯誤: 找不到工作日誌檔案: {log_file}")
+        print(f"[FAIL] 錯誤: 找不到工作日誌檔案: {log_file}")
         return 1
 
     # 提取版本號
     match = re.search(r"v(\d+\.\d+\.\d+)", log_file.name)
     if not match:
-        print(f"❌ 錯誤: 無法從檔案名提取版本號: {log_file.name}")
+        print(f"[FAIL] 錯誤: 無法從檔案名提取版本號: {log_file.name}")
         return 1
 
     source_version = f"v{match.group(1)}"
@@ -501,14 +501,14 @@ def cmd_capture(args) -> int:
     try:
         parser = TechDebtParser(log_file)
         debts = parser.parse()
-        print(f"📋 找到 {len(debts)} 個技術債務項目")
+        print(f"[INFO] 找到 {len(debts)} 個技術債務項目")
     except ValueError as e:
-        print(f"❌ 錯誤: {e}")
+        print(f"[FAIL] 錯誤: {e}")
         return 1
 
     # 版本決策
     decider = VersionDecider(source_version, args.target_version)
-    print("\n📊 版本對應決策")
+    print("\n[STATS] 版本對應決策")
 
     ticket_plan = []
     seq_counter = {}
@@ -529,11 +529,11 @@ def cmd_capture(args) -> int:
 
     # 預覽模式
     if args.dry_run:
-        print("\n📋 預覽模式 - 不會建立實際檔案")
+        print("\n[INFO] 預覽模式 - 不會建立實際檔案")
         return 0
 
     # 建立 Ticket
-    print("\n📝 建立 Ticket 檔案")
+    print("\n[NOTE] 建立 Ticket 檔案")
     generator = TicketGenerator(dry_run=False)
     created_tickets = []
 
@@ -541,15 +541,15 @@ def cmd_capture(args) -> int:
         seq = int(ticket_id.split("-")[-1])
         path = generator.generate_ticket(debt, target_version, source_version, seq)
         created_tickets.append((ticket_id, debt, source_version))
-        print(f"  ✅ {path.relative_to(PROJECT_ROOT)}")
+        print(f"  [OK] {path.relative_to(PROJECT_ROOT)}")
 
     # 更新 todolist
-    print("\n📝 更新 todolist.yaml")
+    print("\n[NOTE] 更新 todolist.yaml")
     updater = TodoListUpdater(dry_run=False)
     updater.update(created_tickets)
-    print("  ✅ 技術債務追蹤區塊已更新")
+    print("  [OK] 技術債務追蹤區塊已更新")
 
-    print(f"\n✅ 完成！共建立 {len(created_tickets)} 個技術債務 Ticket")
+    print(f"\n[OK] 完成！共建立 {len(created_tickets)} 個技術債務 Ticket")
     return 0
 
 
@@ -560,8 +560,8 @@ def cmd_init(args) -> int:
     tickets_dir = version_dir / "tickets"
 
     tickets_dir.mkdir(parents=True, exist_ok=True)
-    print(f"✅ 已建立版本目錄: {version_dir.relative_to(PROJECT_ROOT)}")
-    print(f"✅ 已建立 Tickets 子目錄: {tickets_dir.relative_to(PROJECT_ROOT)}")
+    print(f"[OK] 已建立版本目錄: {version_dir.relative_to(PROJECT_ROOT)}")
+    print(f"[OK] 已建立 Tickets 子目錄: {tickets_dir.relative_to(PROJECT_ROOT)}")
     return 0
 
 
@@ -571,17 +571,17 @@ def cmd_list(args) -> int:
     tickets_dir = WORK_LOGS_DIR / f"v{version}" / "tickets"
 
     if not tickets_dir.exists():
-        print(f"⚠️  找不到版本目錄: {tickets_dir}")
+        print(f"[WARN]️  找不到版本目錄: {tickets_dir}")
         return 1
 
     # 尋找所有 TD Ticket
     td_tickets = sorted(tickets_dir.glob("*-TD-*.md"))
 
     if not td_tickets:
-        print(f"📋 v{version} 中無技術債務 Ticket")
+        print(f"[INFO] v{version} 中無技術債務 Ticket")
         return 0
 
-    print(f"📋 v{version} 技術債務清單\n")
+    print(f"[INFO] v{version} 技術債務清單\n")
     print("Ticket ID         | 描述                      | 風險  | 來源版本")
     print("-" * 70)
 

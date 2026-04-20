@@ -34,8 +34,8 @@ Claude: "Plan-to-Ticket 功能是一個全新的功能，應該使用 v0.32.0"
 ```
 用戶: 實作 Plan-to-Ticket 機制
 
-Claude: "這是 0.31.0 開發過程中發現的流程缺口，
-        應該在當前版本 (0.31.0-W4 或 W5) 處理"
+Claude: "這是當前版本開發過程中發現的流程缺口，
+        應該在當前版本後續 Wave 處理"
 ```
 
 **分析**：
@@ -192,7 +192,7 @@ Phase 3b 中發現: "程式碼重複度高，應該重構"
 ## 相關文件
 
 - @.claude/pm-rules/version-progression.md - 核心決策規則
-- @.claude/rules/core/decision-tree.md - 主線程決策樹
+- @.claude/pm-rules/decision-tree.md - 主線程決策樹
 - @.claude/pm-rules/ticket-lifecycle.md - Ticket 生命週期
 
 ---

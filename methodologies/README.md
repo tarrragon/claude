@@ -508,7 +508,7 @@ Step 3: 查看對應章節
 
 ### 相關專案文件
 
-- [TDD 協作開發流程](../tdd-collaboration-flow.md) - TDD四階段流程
+- [TDD 協作開發流程](./tdd-collaboration-flow.md) - TDD四階段流程
 - [Clean Architecture實作方法論](./clean-architecture-implementation-methodology.md) - 架構分層原則
 - [Ticket設計派工方法論](./ticket-design-dispatch-methodology.md) - 任務拆分和設計
 
@@ -516,6 +516,7 @@ Step 3: 查看對應章節
 
 - [認知負擔設計方法論](./cognitive-load-design-methodology.md) - 程式碼設計的核心哲學：所有設計原則的終極目標是降低閱讀者的認知負擔
 - [自然語言程式設計方法論](./natural-language-programming-methodology.md) - 讓程式碼像閱讀文章一樣自然
+- [個人化諮詢方法論](./personalized-consultation-methodology.md) - AI 諮詢的核心哲學：個人化建議的第一步是承認不認識當事人，三層機制（識別/分級/誠實）防止視野狹窄偏誤
 
 ---
 
@@ -534,4 +535,4 @@ Step 3: 查看對應章節
 **建立日期**: 2025-10-16
 **維護者**: thyme-documentation-integrator
 **狀態**: 已啟用
-**最後更新**: 2026-03-09 - 清除 emoji 違規（0.1.0-W22-020）
+**最後更新**: 2026-03-09 - 清除 emoji 違規

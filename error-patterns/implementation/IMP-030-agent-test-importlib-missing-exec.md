@@ -5,7 +5,6 @@ category: implementation
 severity: medium
 created: 2026-03-11
 related_tickets:
-  - 0.1.0-W34-001
 ---
 
 # IMP-030：代理人產出的測試程式碼使用 importlib 但遺漏 exec_module 呼叫
@@ -25,7 +24,7 @@ related_tickets:
 
 ## 發現情境
 
-0.1.0-W34-001 修復 `WAVE_MAX` 硬編碼上限時，thyme-python-developer 新增了 31 個測試案例的測試檔案。代理人報告「9/9 測試通過」（手動驗證），但 PM 實際執行 `pytest` 時 31/31 全部失敗。
+某歷史 Ticket 修復 `WAVE_MAX` 硬編碼上限時，thyme-python-developer 新增了 31 個測試案例的測試檔案。代理人報告「9/9 測試通過」（手動驗證），但 PM 實際執行 `pytest` 時 31/31 全部失敗。
 
 ```python
 # 代理人產出的程式碼（錯誤）

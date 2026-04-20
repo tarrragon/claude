@@ -25,7 +25,7 @@ PM 建立 Task 時，metadata 必須包含 ticketId：
   "title": "實作 BookSearch Domain 層",
   "description": "...",
   "metadata": {
-    "ticketId": "0.31.0-W22-001.1",
+    "ticketId": "{version}-W{wave}-{seq}",
     "waveId": "W22"
   }
 }
@@ -55,24 +55,24 @@ PM 建立 Task 時，metadata 必須包含 ticketId：
 
 ```bash
 # 1. 認領 Ticket
-ticket track claim 0.31.0-W22-001.1
+ticket track claim {version}-W{wave}-{seq}
 
 # 2. 閱讀 Ticket 了解任務
-ticket track query 0.31.0-W22-001.1
+ticket track query {version}-W{wave}-{seq}
 ```
 
 **Teammate 更新進展**：
 
 ```bash
 # 記錄解決方案進展
-ticket track append-log 0.31.0-W22-001.1 --section "Solution" "完成 SearchQuery 值物件實作，包含 keyword、filter、pagination 三個屬性"
+ticket track append-log {version}-W{wave}-{seq} --section "Solution" "完成 SearchQuery 值物件實作，包含 keyword、filter、pagination 三個屬性"
 ```
 
 **Teammate 完成工作**：
 
 ```bash
 # 1. 記錄測試結果
-ticket track append-log 0.31.0-W22-001.1 --section "Test Results" "12 tests passed, 0 failed"
+ticket track append-log {version}-W{wave}-{seq} --section "Test Results" "12 tests passed, 0 failed"
 
 # 2. 標記 Task 完成（使用 TaskUpdate 工具）
 # 3. 通知 team-lead（使用 SendMessage 工具）

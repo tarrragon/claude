@@ -8,9 +8,9 @@ process-compliance
 
 ## 症狀
 
-1. **共用檔案衝突**：4 個並行代理人中，W3-003.1 和 W3-004 都修改 test-setup.js，W3-005.1 和 W3-006 都修改 ErrorCodes.js 相關檔案。git checkout 還原 W3-006 的意外修改時，連帶還原了 W3-003.1 和 W3-005.1 的目標修改。
-2. **Linter 意外擴散**：W3-006 代理人觸發了 linter，自動修改了 82 個非目標檔案（tests/ 目錄下的 import 路徑格式化），導致測試從 4135 通過暴跌至 3940 通過（7 個 suite 失敗）。
-3. **git index.lock 殘留**：W3-006 代理人大量操作後產生 .git/index.lock，阻擋後續 git 操作。
+1. **共用檔案衝突**：4 個並行代理人中，兩個 Ticket 都修改 test-setup.js，兩個 Ticket 都修改 ErrorCodes.js 相關檔案。git checkout 還原 某 Ticket 的意外修改時，連帶還原了 兩個 Ticket 的目標修改。
+2. **Linter 意外擴散**：某 Ticket 代理人觸發了 linter，自動修改了 82 個非目標檔案（tests/ 目錄下的 import 路徑格式化），導致測試從 4135 通過暴跌至 3940 通過（7 個 suite 失敗）。
+3. **git index.lock 殘留**：某 Ticket 代理人大量操作後產生 .git/index.lock，阻擋後續 git 操作。
 
 ## 根因
 
@@ -20,7 +20,7 @@ process-compliance
 
 ## 影響
 
-- 需要額外派發代理人重新套用被還原的修改（W3-003.1 + W3-005.1）
+- 需要額外派發代理人重新套用被還原的修改（+ 某 Ticket）
 - 浪費約 10 分鐘排查和還原
 - Context 空間被大量 git status 和還原操作消耗
 
@@ -55,10 +55,6 @@ process-compliance
 
 ## 關聯 Ticket
 
-- 0.15.0-W3-003.1（修改 test-setup.js）
-- 0.15.0-W3-004（修改 test-setup.js）
-- 0.15.0-W3-005.1（修改 ErrorCodes.js）
-- 0.15.0-W3-006（修改 StandardError + UC 適配器，觸發 linter 擴散）
 
 ## 相關錯誤模式
 
@@ -71,4 +67,4 @@ process-compliance
 
 ## 發現者
 
-主線程（還原 W3-006 意外修改時發現）
+主線程（還原 某 Ticket 意外修改時發現）

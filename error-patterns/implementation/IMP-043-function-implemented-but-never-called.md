@@ -7,12 +7,11 @@
 | **分類** | Implementation |
 | **嚴重性** | High（端到端功能完全不通，但單元測試全綠） |
 | **發現版本** | v0.2.0 |
-| **相關 Ticket** | 0.2.0-W7-001 |
 
 ## 症狀
 
 - 單元測試 100% 通過，但實際運行時功能完全不通
-- 某個關鍵函式（如 `connect()`、`loadSession()`）有完整的實作和單元測試，但沒有任何呼叫端觸發它
+- 某個關鍵函式（如 `connect`、`loadSession`）有完整的實作和單元測試，但沒有任何呼叫端觸發它
 - UI 停留在初始狀態（如 "Connecting..."、"No messages yet"），沒有錯誤、沒有 log、沒有任何線索
 
 ## 根因分析
@@ -20,10 +19,10 @@
 - Provider / Service 的建構和使用分離：建構端建立了物件，但忘記觸發初始化動作
 - 呼叫鏈斷裂：A 呼叫 B，B 應該呼叫 C，但 B 只更新了自己的狀態沒有通知 C
 - 單元測試只驗證「函式被呼叫時行為正確」，不驗證「函式是否會被呼叫」
-- 具體案例（W7-001 發現三個斷裂點）：
-  1. `webSocketServiceProvider` 建立 `WebSocketServiceImpl` 但未呼叫 `connect()`
-  2. `SessionListNotifier.selectSession()` 更新選中狀態但未呼叫 `ConversationNotifier.loadSession()`
-  3. `ParseLine()` 假設所有 JSONL 行都有 `message` 欄位，未處理新格式的非對話行
+- 具體案例（發現三個斷裂點）：
+ 1. `webSocketServiceProvider` 建立 `WebSocketServiceImpl` 但未呼叫 `connect`
+ 2. `SessionListNotifier.selectSession` 更新選中狀態但未呼叫 `ConversationNotifier.loadSession`
+ 3. `ParseLine` 假設所有 JSONL 行都有 `message` 欄位，未處理新格式的非對話行
 
 ## 防護措施
 
@@ -43,7 +42,7 @@ app 啟動 → WebSocket 連線成功 → 收到 session 列表 → 點擊 sessi
 
 | 檢查項 | 說明 |
 |--------|------|
-| 建構後是否需要 `init()` / `connect()` / `start()`？ | 有些物件建構完成不代表就緒 |
+| 建構後是否需要 `init` / `connect` / `start`？ | 有些物件建構完成不代表就緒 |
 | 狀態變更後是否需要通知下游？ | A 狀態改了，依賴 A 的 B 是否知道？ |
 | Stream 訂閱後是否有初始事件？ | 純 stream 在訂閱前的事件會遺失 |
 

@@ -129,10 +129,11 @@ class TestAddChild:
             }
             mock_load.side_effect = [parent_ticket, child_ticket]
 
-            result = execute_add_child(args, "0.31.0")
+            with patch('ticket_system.commands.track_relations.save_ticket'):
+                result = execute_add_child(args, "0.31.0")
 
-            # 應返回 0（冪等）或 1（錯誤）
-            assert result in [0, 1]
+                # 應返回 0（冪等）或 1（錯誤）
+                assert result in [0, 1]
 
     def test_add_child_verify_chain_info(self):
         """
@@ -156,7 +157,7 @@ class TestAddChild:
             }
             mock_load.side_effect = [parent_ticket, child_ticket]
 
-            with patch('ticket_system.lib.ticket_loader.save_ticket'):
+            with patch('ticket_system.commands.track_relations.save_ticket'):
                 result = execute_add_child(args, "0.31.0")
 
                 assert result == 0
@@ -184,7 +185,7 @@ class TestPhase:
             }
             mock_load.return_value = mock_ticket
 
-            with patch('ticket_system.lib.ticket_loader.save_ticket') as mock_save:
+            with patch('ticket_system.commands.track_relations.save_ticket') as mock_save:
                 result = execute_phase(args, "0.31.0")
 
                 assert result == 0
@@ -245,7 +246,7 @@ class TestPhase:
                 }
                 mock_load.return_value = mock_ticket
 
-                with patch('ticket_system.lib.ticket_loader.save_ticket') as mock_save:
+                with patch('ticket_system.commands.track_relations.save_ticket') as mock_save:
                     result = execute_phase(args, "0.31.0")
 
                     assert result == 0

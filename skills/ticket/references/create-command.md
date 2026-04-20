@@ -31,7 +31,7 @@
   --decision-tree-rationale "quality-baseline-rule"
 
 # 建立子任務（可省略 decision-tree 參數）
-/ticket create --parent 0.31.0-W1-001 --action "更新" --target "XXX"
+/ticket create --parent 1.0.0-W1-001 --action "更新" --target "XXX"
 
 # 建立 DOC 類型（可省略 decision-tree 參數）
 /ticket create --version 0.31.0 --wave 1 --action "撰寫" --target "工作日誌" --type DOC
@@ -98,7 +98,7 @@ ticket create --wave 2 --action "實作" --target "HTTP Handler" \
   --decision-tree-rationale "quality-baseline-rule-5"
 
 # 子任務 — 可省略 decision-tree 參數
-ticket create --parent 0.2.0-W2-001 --action "實作" --target "事件融合層"
+ticket create --parent 1.0.0-W2-001 --action "實作" --target "事件融合層"
 
 # DOC 類型 — 可省略 decision-tree 參數
 ticket create --wave 2 --action "撰寫" --target "工作日誌" --type DOC

@@ -56,7 +56,7 @@ Hook 檢測以下編輯操作模式：
 
 建議: 請使用 Edit Tool 替代 Bash sed/awk，以獲得更好的權限控制和變更追蹤
 
-詳情: 參考 .claude/agent-collaboration.md 的「工具使用強制規範」
+詳情: 參考 .claude/analyses/archived/agent-collaboration.md 的「工具使用強制規範」
 ```
 
 **stdout 輸出**:
@@ -351,7 +351,7 @@ ls -la /tmp
 ## 參考資料
 
 - [Claude Code Hooks 官方文件](https://github.com/ericbuess/claude-code-hooks-mastery)
-- [工具使用強制規範](./../agent-collaboration.md)
+- [工具使用強制規範](./../../analyses/archived/agent-collaboration.md)
 - [Bash Edit Guard Hook 測試報告](./.claude/hook-logs/bash-edit-guard/)
 
 ## 維護者

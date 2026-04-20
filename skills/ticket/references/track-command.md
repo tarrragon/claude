@@ -73,6 +73,15 @@
 /ticket track check-acceptance <id> 1 2 3              # 勾選指定項（index 從 1 開始）
 /ticket track check-acceptance <id> 1 --uncheck        # 取消勾選第 1 項
 
+# 勾選驗收條件（明確語意版，W14-030 推薦）
+/ticket track set-acceptance <id> --check 1 2 3        # 勾選多個 index（空白分隔）
+/ticket track set-acceptance <id> --uncheck 1          # 取消勾選指定 index
+/ticket track set-acceptance <id> --all-check          # 勾選全部
+/ticket track set-acceptance <id> --all-uncheck        # 取消勾選全部
+
+# 驗證 frontmatter 合規性（W14-030）
+/ticket track validate <id>                            # 檢查 status/completed_at/acceptance/who 4 欄位
+
 # 標記建立後驗收已通過
 /ticket track accept-creation <id>
 
@@ -94,7 +103,8 @@
 | status | `claim` / `complete` / `release` | 由生命週期命令管理，禁止手動編輯 |
 | tdd_phase | `phase <id> <phase> <agent>` | Phase 進度更新 |
 | children | `add-child <parent> <child>` | 父子關係 |
-| acceptance | `check-acceptance <id> <index>` | 勾選驗收條件 |
+| acceptance | `check-acceptance` / `set-acceptance` | 勾選/取消勾選驗收條件（set-acceptance 為 W14-030 明確語意版） |
+| frontmatter 驗證 | `validate <id>` | 檢查 status/completed_at/acceptance/who 4 欄位合規性（W14-030） |
 | blockedBy | 無 CLI 命令 | 建立時用 `--blocked-by`；之後手動編輯 frontmatter |
 | relatedTo | 無 CLI 命令 | 建立時用 `--related-to`；之後手動編輯 frontmatter |
 | priority | 無 CLI 命令 | 手動編輯 frontmatter |

@@ -7,13 +7,12 @@
 - **來源版本**: v0.31.1
 - **發現日期**: 2026-03-04
 - **風險等級**: 高
-- **來源 Ticket**: 0.31.1-W3-006
 
 ## 問題描述
 
 ### 症狀
 
-- W3-005 修復了 GC 狀態語義衝突（IMP-010），新增 `should_preserve_pending_json()` 函式
+- 某 Ticket 修復了 GC 狀態語義衝突（IMP-010），新增 `should_preserve_pending_json` 函式
 - 修復提交後，GC 仍然刪除 `to-sibling` 和 `to-child` 的 pending JSON
 - `ticket resume --list` 在下一個 session 依然回報「無待恢復任務」
 - 只有 `to-parent`（無目標 ID 後綴）的 handoff 被正確保留
@@ -21,10 +20,10 @@
 ### 根本原因 (5 Why 分析)
 
 1. Why 1: pending JSON 仍然被 GC 刪除
-2. Why 2: `should_preserve_pending_json()` 回傳 False，GC 未保留
+2. Why 2: `should_preserve_pending_json` 回傳 False，GC 未保留
 3. Why 3: 函式使用精確匹配 `direction in {"to-sibling", "to-parent", "to-child"}`
 4. Why 4: 實際 direction 值為 `"to-sibling:0.31.1-W3-002"`（帶目標 ID 後綴），精確匹配失敗
-5. Why 5: (根本原因) **修復時未查閱 direction 欄位的完整格式規範**。開發者假設 direction 是簡單字串，但實際上 `_resolve_direction_from_args()` 會附加 `:{target_id}` 後綴
+5. Why 5: (根本原因) **修復時未查閱 direction 欄位的完整格式規範**。開發者假設 direction 是簡單字串，但實際上 `_resolve_direction_from_args` 會附加 `:{target_id}` 後綴
 
 ### 錯誤模式歸納
 
@@ -104,8 +103,6 @@ if direction in chain_directions:  # "to-sibling:ID" 不在 set 中
 
 ## 相關資源
 
-- Ticket: 0.31.1-W3-006（修復 direction 前綴匹配）
-- 前置 Ticket: 0.31.1-W3-005（修復 GC 狀態語義衝突）
 - IMP-010: GC 狀態語義衝突（前置錯誤模式）
 - 修復 commit: `fix: 修復 GC should_preserve_pending_json 的 direction 匹配方式`
 - 修改檔案: `.claude/hooks/handoff-auto-resume-stop-hook.py`

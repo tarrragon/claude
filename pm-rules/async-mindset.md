@@ -132,13 +132,74 @@
 
 ---
 
+## 派發後注意力出口（強制）
+
+> **核心理念**：規則層面的 don't（禁止等待）必須搭配 do（切換到什麼）。注意力真空由焦慮填補，PM 會在派發後反覆執行 git status/grep/find 等無具體目的的檢查——動作本身中性，動機是焦慮性監控，違反非同步派發原則。
+
+### 合法檢查 vs 焦慮性檢查
+
+每次 Bash 前，PM 必須能回答：**「我執行這個命令要驗證什麼？」**
+
+| 檢查類型 | 合法情境（放行） | 焦慮性情境（禁止） |
+|---------|---------------|-----------------|
+| `git status` | commit 前驗證變更範圍；派發前清點 worktree 狀態；驗收代理人時檢查未 commit 變更 | 派發後短時間內重複查看；無具體目的的「看看進度」 |
+| `cat .claude/dispatch-active.json` | 派發後清點數量；task-notification 到達後確認剩餘 | 通知未到達前主動 polling |
+| `grep / find` 代理人產出 | 代理人完成通知後驗收具體檔案 | 通知未到達前「偵察」代理人做到哪 |
+| 讀 agent transcript output | `<task-notification>` 到達後檢視 tool call 細節 | **永遠禁止**讀 `<output>` body 推論執行狀態（PC-050 模式 D） |
+
+### 派發後注意力切換範本
+
+PM 派發代理人後（background），**立刻**依以下優先順序切換注意力：
+
+| 優先級 | 下一件事 | 範例動作 |
+|------|---------|---------|
+| 1 | 下個 Ticket 的 Context Bundle 準備 | 閱讀規格、蒐集相關檔案、整理驗收條件 |
+| 2 | 下個 Ticket 的 claim + 簡化 WRAP 三問 | 在同 session 並行推進（PM 前台型任務） |
+| 3 | 規則層面的文件改寫 | DOC 類型 Ticket 的 PM 前台工作 |
+| 4 | worklog 進度整理 | 記錄本 session 完成的 Ticket、決策理由 |
+| 5 | 回覆用戶問題、澄清需求 | 不要把用戶的等待時間浪費在焦慮檢查 |
+
+**禁止**：以「只是看一下」「確認代理人有沒有在動」為由執行 Bash 查詢。
+
+### 代理人完成訊號的唯一可信來源
+
+| 訊號 | 可信度 | 處理方式 |
+|------|-------|---------|
+| `<task-notification>` tag 到達 | 唯一可信 | 執行代理人完成確認 SOP（PC-050） |
+| `TaskOutput(<status>)` 查詢 | 可信（補查詢） | 非阻塞呼叫，只讀 `<status>` 標籤，不讀 `<output>` body |
+| Hook 附加訊息「已完成」 | 不可信（誤導來源） | 忽略；Hook 可能過早清理 dispatch-active.json |
+| dispatch-active.json 為空 | 次可信 | 可能被 Hook 過早清理，需配合 `<task-notification>` 才能判定 |
+
+### 合法與焦慮的邊界案例
+
+**案例 A**：派發後想「看看」代理人進展
+- 症狀：無具體目標，純粹好奇 → **焦慮性，禁止**
+- 例外：已超過合理時間（參考代理人歷史完成時間分佈），可用 TaskOutput 查 `<status>`
+
+**案例 B**：派發後發現 worklog 未更新前次 Ticket 進度
+- 症狀：明確目的（補記錄） → **合法，放行**
+- 執行：直接 Edit worklog，不涉及代理人狀態查詢
+
+**案例 C**：派發後想確認自己分派的 prompt 有沒有問題
+- 症狀：疑慮 prompt 品質 → **焦慮性變種，禁止**
+- 正確做法：派發前在主線程 review prompt，派發後信任代理人
+
+**案例 D**：派發後發現另一個必須立刻處理的 bug
+- 症狀：外部中斷，非對代理人的焦慮 → **合法，處理新問題**
+- 執行：建 Ticket 記錄新 bug，評估是否影響代理人工作
+
+---
+
 ## 相關文件
 
 - [SKILL.md](SKILL.md) - 管理哲學主文檔
 - [anti-patterns](anti-patterns.md) - 新手主管的錯誤
 - [parallel-first](parallel-first.md) - 並行優先策略
+- [parallel-dispatch](parallel-dispatch.md) - 並行派發規則（派發後注意力切換的執行情境來源）
+- .claude/error-patterns/process-compliance/PC-050-premature-agent-completion-judgment.md - 誤判代理人完成的防護
+- .claude/error-patterns/process-compliance/PC-062-post-dispatch-anxiety-checking.md - 派發後焦慮性檢查錯誤模式（待建立，W10-026）
 
 ---
 
-**Last Updated**: 2026-03-04
-**Version**: 1.1.0 - 持續狀態加入 session 範疇限制，與 Context 隔離原則同步
+**Last Updated**: 2026-04-13
+**Version**: 1.2.0 - 新增「派發後注意力出口」章節（don't 配 do：合法 vs 焦慮檢查對照表 + 5 層注意力切換範本 + 4 個邊界案例）

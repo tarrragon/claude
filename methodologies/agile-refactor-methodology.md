@@ -115,4 +115,4 @@
 
 - [Atomic Ticket 方法論](./atomic-ticket-methodology.md) - 單一職責設計
 - [Ticket 生命週期管理](./ticket-lifecycle-management-methodology.md) - 狀態流轉
-- [TDD 協作流程](../tdd-collaboration-flow.md) - 四階段詳細說明
+- [TDD 協作流程](./tdd-collaboration-flow.md) - 四階段詳細說明

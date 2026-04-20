@@ -15,7 +15,7 @@
 - ✅ 整合指南: 部署和使用說明
 
 ### 功能特性
-1. **智能關鍵字識別** - 識別 8+ 個繼續相關詞彙
+1. **自動關鍵字識別** - 識別 8+ 個繼續相關詞彙
 2. **完整 Ticket 掃描** - 支援 416 個 Ticket 的快速掃描
 3. **並行分析引擎** - 檢查依賴、檔案重疊、循環依賴
 4. **建議報告生成** - 清晰的用戶建議輸出
@@ -95,7 +95,7 @@ chain:
   parent: "0.31.0-W4-001.1"
 ```
 
-### 3. 智能並行檢查
+### 3. 自動並行檢查
 - 檢查 blockedBy 依賴
 - 檢查檔案重疊
 - 檢查循環依賴
@@ -338,8 +338,7 @@ $ HOOK_DEBUG=true echo '{"prompt":"下一個"}' | \
 
 ## 參考資源
 
-- Hook 規範: `.claude/hook-system-reference.md`
-- 決策樹: `.claude/rules/core/decision-tree.md`
+- 決策樹: `.claude/pm-rules/decision-tree.md`
 - 並行派發: `.claude/rules/guides/parallel-dispatch.md`
 - 專案配置: `.claude/settings.local.json`
 

@@ -3,7 +3,6 @@
 ## 版本
 - **版本**: 2.0.0（阻塞式驗證）
 - **更新日期**: 2026-01-27
-- **Ticket**: 0.30.1-W2-002
 
 ## 概述
 
@@ -89,7 +88,7 @@ Hook 現在在 `check_result` 中包含：
   "check_result": {
     "is_development_command": true,
     "ticket_validation_passed": true,
-    "ticket_id": "0.30.1-W2-001",
+    "ticket_id": "{ticket-id}",
     "should_block": false,
     "exit_code": "EXIT_SUCCESS",
     "timestamp": "2026-01-27T..."
@@ -210,8 +209,8 @@ export CLAUDE_PROJECT_DIR=/path/to/project
 
 ## 相關規則文件
 
-- [Skip-gate 防護機制](../../rules/forbidden/skip-gate.md)
-- [決策樹規則](../../rules/core/decision-tree.md)
+- [Skip-gate 防護機制](../../pm-rules/skip-gate.md)
+- [決策樹規則](../../pm-rules/decision-tree.md)
 - [Ticket 生命週期](../../pm-rules/ticket-lifecycle.md)
 
 ## 下一步
@@ -222,11 +221,11 @@ export CLAUDE_PROJECT_DIR=/path/to/project
 - [ ] Level 3 驗證（階段完成防護）- 未來版本
 - [ ] Hook 系統儀表板 - 未來版本
 
-### 相關 Ticket
+### 相關工作
 
-- [0.30.1-W2-001] Phase 完成層驗證 Hook（開發中）
-- [0.30.1-W2-003] 決策樹驗證優化（計畫中）
-- [0.30.1-W2-004] Hook 系統監控儀表板（計畫中）
+- Phase 完成層驗證 Hook（開發中）
+- 決策樹驗證優化（計畫中）
+- Hook 系統監控儀表板（計畫中）
 
 ## 故障排除
 

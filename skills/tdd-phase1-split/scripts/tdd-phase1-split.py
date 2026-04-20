@@ -189,7 +189,7 @@ def cmd_suggest(args):
     # 建議的拆分
     print_section("建議拆分清單")
 
-    # 產生建議的子功能（這是簡化版本，實際應該更智能）
+    # 產生建議的子功能（這是簡化版本，實際應更精確）
     suggestions = generate_split_suggestions(description, version)
 
     print(f"\n{'子功能':<6} | {'描述':<30} | {'架構層':<15} | {'版本':<8} | 依賴")
@@ -240,7 +240,7 @@ def extract_keywords(description: str) -> list[str]:
 
 def generate_split_suggestions(description: str, version: str) -> list[dict]:
     """產生拆分建議"""
-    # 這是簡化版本，實際應該更智能地分析
+    # 這是簡化版本，實際應更精確地分析
 
     # 從 version 產生小版本
     parts = version.split('.')

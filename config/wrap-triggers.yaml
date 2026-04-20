@@ -1,0 +1,134 @@
+# .claude/config/wrap-triggers.yaml
+# WRAP 絆腳索 Hook 的觸發條件配置
+# 權威來源：本檔案（機器可讀）
+# 人類可讀對應（本專案詳細對應表）：.claude/skills/wrap-decision/references/project-integration/triggers-alignment.md
+# 通用原理（跨專案）：.claude/skills/wrap-decision/SKILL.md 的「觸發條件」章節與 description frontmatter
+# 同步檢查：doc-sync-check-hook 擴充或 consistency-check-hook（follow-up ticket）
+
+version: "1.2.0"
+last_updated: "2026-04-18"
+source_of_truth_note: |
+  本檔案為 wrap-decision-tripwire-hook.py 的唯一觸發條件來源。
+  禁止在 Hook Python 程式碼中硬編碼 triggers / keywords / thresholds。
+  若新增訊號，必須同步更新：
+    1. .claude/skills/wrap-decision/references/project-integration/triggers-alignment.md（本專案對應表）
+    2. .claude/skills/wrap-decision/SKILL.md description（若新增關鍵字）
+  SKILL.md 本文（觸發條件章節）採抽象類別描述，不需同步具體關鍵字清單。
+
+  category 欄位（v1.2.0 新增）：
+    - wrap_standard: 標準 WRAP 絆腳索（原有 S1/S2/S3）
+    - reflection_trigger: 反思深度觸發（S4，three-phase-reflection 方法論）
+  Hook 依 category 分流處理訊息前綴與後續行動建議。未標註 category 的訊號預設為 wrap_standard（向後相容）。
+
+# 全域設定
+settings:
+  state_file: ".claude/hook-state/wrap-tripwire-state.json"
+  warn_cooldown_seconds: 300  # 同一訊號類型 5 分鐘內不重複提醒
+  hook_mode: "advisory"        # advisory: 只提醒不阻擋（exit 0 + stderr）
+
+# 訊號定義
+signals:
+  - id: consecutive_failures
+    category: wrap_standard
+    enabled: true
+    event_sources: ["PostToolUse"]
+    tool_matcher: "Task"        # 僅在代理人派發工具觸發
+    threshold: 2                # 連續失敗次數門檻
+    # B-1 + C3-1 (W10-056.3): 失敗判定條件 source-of-truth（W10-052）
+    # Hook 讀取 keywords 與 structured_statuses；不再硬編碼於 Python。
+    failure_detection:
+      keywords: ["error", "exception", "failed", "timeout"]
+      structured_statuses: ["failed", "error"]
+    reset_conditions:
+      - agent_success
+      - ticket_switch
+      - manual_wrap_invocation
+    message_template: |
+      [WRAP 絆腳索] 連續 {count} 次代理人失敗（Ticket: {ticket_id}）。
+      你是有選擇的：
+        /wrap-decision        — 系統性擴增選項
+        搜尋社群             — 看看有沒有人解決過
+        建 Ticket 延後       — 回到核心任務
+
+  - id: restrictive_keywords
+    category: wrap_standard
+    enabled: true
+    event_sources: ["UserPromptSubmit"]
+    keywords:
+      - "做不到"
+      - "沒辦法"
+      - "無法"
+      - "不支援"
+      - "CLI 不支援"
+      - "禁止"
+      - "不可能"
+      - "impossible"
+      - "限制性解法"
+    match_mode: "substring"
+    case_sensitive: false
+    min_prompt_length: 20
+    reset_conditions:
+      - manual_wrap_invocation
+    message_template: |
+      [WRAP 絆腳索] 偵測到限制性結論（關鍵字：{matched_keyword}）。
+      你是有選擇的：
+        /wrap-decision        — 搜尋間接方案
+        窮盡五問檢查         — tool-discovery.md 規則 1
+        確認後再下結論       — 至少執行 ToolSearch
+
+  - id: ana_claim
+    category: wrap_standard
+    enabled: true
+    event_sources: ["PostToolUse"]
+    tool_matcher: "Bash"
+    command_pattern: "ticket\\s+(track\\s+)?claim.*\\bANA\\b|ana[-_]?claim"
+    ticket_type_filter: "ANA"
+    reset_conditions:
+      - wrap_section_written
+      - manual_wrap_invocation
+    message_template: |
+      [WRAP 絆腳索] 你正在 claim ANA Ticket（{ticket_id}）。
+      ANA 分析過程必須執行 WRAP（至少快速模式）。
+      你是有選擇的：
+        /wrap-decision        — 執行完整 WRAP 流程
+        在 Solution 寫三問     — W/A/P 三問作為 claim checkpoint
+        降級為快速模式         — 錨點 + W + 基本率 + 決定
+
+      此外 Phase 1 多假設 Reality Test 強制要求：
+        - 必須列 5+ 候選根因假設（不只 1-2 個）
+        - 每個假設需 Reality Test 標註（當時是否真的這樣想）
+        - 至少挖 2 層深因
+      參考：.claude/methodologies/three-phase-reflection-methodology.md
+
+  - id: reflection_depth_challenge
+    category: reflection_trigger
+    enabled: true
+    event_sources: ["UserPromptSubmit"]
+    keywords:
+      - "太表層"
+      - "不夠深"
+      - "再想想"
+      - "這解釋不了"
+      - "為何不是"
+      - "更深一層"
+      - "還有其他可能嗎"
+      - "introspection"
+    match_mode: "substring"
+    case_sensitive: false
+    min_prompt_length: 30
+    reset_conditions:
+      - manual_reflection_invocation
+      - session_end
+    message_template: |
+      [Reflection Trigger] 偵測到反思深度質疑（關鍵字：{matched_keyword}）。
+      建議採用 three-phase-reflection 方法論：
+        Phase 1: 列 5+ 候選假設 + Reality Test + 2 層深因
+        Phase 2: WRAP 檢驗 Phase 1 結論
+        Phase 3: 與既有方法論對照檢查（friction / cognitive-load / ai-communication）
+      參考：.claude/methodologies/three-phase-reflection-methodology.md
+
+# 提醒訊息通用前綴
+# C3-3/C3-4 (W10-056.3): 移除 include_signal_id / include_state_snapshot
+# DetectResult.signal_id 為 Python 內部使用（CE-4+R2 解 drift 風險），不需 YAML flag 控制。
+output:
+  stderr_prefix: "[WRAP Tripwire]"

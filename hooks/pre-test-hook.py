@@ -36,7 +36,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely, get_project_root
+from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, read_json_from_stdin
 from lib.hook_messages import ValidationMessages
 
 
@@ -55,6 +55,8 @@ def check_flutter_sdk() -> tuple[bool, str]:
             ["flutter", "--version", "--machine"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=10,
         )
         if result.returncode == 0:
@@ -93,7 +95,10 @@ def check_dependencies(project_dir: Path) -> list[str]:
 
 def main():
     logger = setup_hook_logging("pre-test-hook")
-    input_data = json.load(sys.stdin)
+    input_data = read_json_from_stdin(logger)
+    if input_data is None:
+        return 0
+
     tool_name = input_data.get("tool_name", "")
     tool_input = input_data.get("tool_input") or {}
 
@@ -114,19 +119,19 @@ def main():
         issues.append(f"[WARNING] {warning}")
 
     # 輸出結果
+    # 單一 JSON 輸出：合併警告和 permissionDecision
+    hook_output = {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "allow",
+        "permissionDecisionReason": (
+            f"{ValidationMessages.PRE_TEST_ENV_CHECK_PREFIX}{len(issues)}{ValidationMessages.PRE_TEST_ENV_CHECK_SUFFIX}" if issues else ValidationMessages.PRE_TEST_ENV_READY
+        ),
+    }
     if issues:
         warning_text = "\n".join(issues)
-        print(f"{ValidationMessages.PRE_TEST_CHECK_HEADER}\n{warning_text}")
+        hook_output["additionalContext"] = f"{ValidationMessages.PRE_TEST_CHECK_HEADER}\n{warning_text}"
 
-    result = {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "allow",
-            "permissionDecisionReason": (
-                f"{ValidationMessages.PRE_TEST_ENV_CHECK_PREFIX}{len(issues)}{ValidationMessages.PRE_TEST_ENV_CHECK_SUFFIX}" if issues else ValidationMessages.PRE_TEST_ENV_READY
-            ),
-        }
-    }
+    result = {"hookSpecificOutput": hook_output}
     print(json.dumps(result, ensure_ascii=False))
     return 0
 

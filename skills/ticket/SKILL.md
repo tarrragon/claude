@@ -11,108 +11,43 @@ allowed-tools: Bash(ticket *), Read, Write, Edit, Grep, Glob
 
 ---
 
-## 重要：執行方式（必讀）
-
-> **禁止直接執行 Python 檔案！** 直接執行 `.py` 檔案會導致 `ModuleNotFoundError`。
-
-### 正確方式
-
-```bash
-# 使用已安裝的 ticket CLI（推薦）
-ticket track summary
-ticket track claim 0.31.0-W4-001
-
-# 或在 ticket 目錄下使用 uv run
-cd .claude/skills/ticket && uv run ticket track summary
-```
-
-### 錯誤方式（禁止）
-
-```bash
-# 以下方式會失敗，請勿使用
-python3 .claude/skills/ticket/ticket_system/commands/track.py ...
-python3 .claude/skills/ticket/ticket_system/scripts/ticket.py ...
-```
-
-**原因**：`ticket_system` 是 Python 套件，必須透過 `pyproject.toml` 定義的入口點執行，直接執行 `.py` 檔案無法解析套件內的導入。
-
----
-
 ## 執行方式
+
+> **禁止直接執行 Python 檔案！** `ticket_system` 是 Python 套件，必須透過 `pyproject.toml` 定義的入口點執行。
 
 ### 全局安裝（推薦）
 
-全局安裝後可在任何目錄執行 `ticket` 指令。
-
 ```bash
-# 首次安裝（只需執行一次）
-cd .claude/skills/ticket
-uv tool install .
+# 首次安裝
+(cd .claude/skills/ticket && uv tool install .)
 
-# 安裝完成後，在任何目錄執行
+# 之後在任何目錄執行
 ticket track summary
-ticket track query 0.31.0-W4-001
-ticket track claim 0.31.0-W4-001
+ticket track claim 1.0.0-W4-001
 ```
-
-**benefits**：
-
-- 無需 cd 到 ticket 目錄
-- 無需加上 `uv run` 前綴
-- 全局可用，提升使用體驗
 
 **修改原始碼後必須重新安裝**（IMP-023）：
 
 ```bash
-# 修改 ticket_system/ 下的 .py 檔案後，必須用 --reinstall
+# 必須用 --reinstall（--force 不會更新套件程式碼）
 uv tool install .claude/skills/ticket --reinstall
-
-# 錯誤：--force 只更新執行檔，不更新套件程式碼
-uv tool install .claude/skills/ticket --force  # 套件程式碼不會更新！
-
-# 備用方案：清除快取後重新安裝
-uv tool uninstall ticket-system && uv cache clean ticket-system && uv tool install .claude/skills/ticket
 ```
 
-### 局部執行（不安裝）
-
-如果不進行全局安裝，必須在 ticket 目錄下執行。
+### 本地執行
 
 ```bash
-# 首次使用時初始化
-cd .claude/skills/ticket
-uv sync  # 只需要執行一次
-
-# 執行命令
-uv run ticket <command> [options]
+(cd .claude/skills/ticket && uv run ticket track summary)
 ```
 
 ### 常用範例
 
 ```bash
-# 摘要
-ticket track summary
-
-# 查詢 Ticket
-ticket track query 0.31.0-W4-001
-
-# 認領 Ticket
-ticket track claim 0.31.0-W4-001
-
-# 完成 Ticket
-ticket track complete 0.31.0-W4-001
-
-# 建立 Ticket
-ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"
+ticket track summary                                    # 摘要
+ticket track query 1.0.0-W4-001                       # 查詢
+ticket track claim 1.0.0-W4-001                       # 認領
+ticket track complete 1.0.0-W4-001                    # 完成
+ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"  # 建立
 ```
-
-### 使用 SKILL 指令（透過 Claude）
-
-```bash
-/ticket <subcommand> [options]
-```
-
-> **注意**：直接執行 `python3 ticket.py` 會失敗，必須使用 `ticket` (全局) 或 `uv run ticket` (局部)。
 
 ---
 
@@ -151,9 +86,9 @@ ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"
 | `create`       | 建立新 Ticket           | `/ticket create --version 0.31.0 --wave 1 --action "實作" --target "XXX"`    |
 | `batch-create` | 批次建立 Tickets        | `/ticket batch-create --template impl-parsley --targets "a,b,c" --wave 28`   |
 | `track`        | 追蹤 Ticket 狀態        | `/ticket track summary`                                                       |
-| `handoff`      | 任務交接                | `/ticket handoff 0.1.0-W1-002 --to-sibling 0.1.0-W2-003`                   |
+| `handoff`      | 任務交接                | `/ticket handoff 1.0.0-W1-002 --to-sibling 1.0.0-W2-003`                   |
 | `resume`       | 恢復任務                | `/ticket resume <id>`                                                         |
-| `migrate`      | Ticket ID 遷移          | `/ticket migrate 0.31.0-W4-001 0.31.0-W5-001`                                |
+| `migrate`      | Ticket ID 遷移          | `/ticket migrate 1.0.0-W4-001 1.0.0-W5-001`                                |
 | `generate`     | Plan 轉換為 Tickets     | `/ticket generate plan.md --version 0.31.0 --wave 5`                         |
 
 ---
@@ -179,7 +114,7 @@ ticket create --version 0.2.0 --wave 2 --action "實作" --target "HTTP Handler"
   --decision-tree-rationale "quality-baseline-rule-5"
 
 # 建立子任務（--parent 自動產生子序號，可省略 decision-tree 參數）
-ticket create --parent "0.2.0-W2-001" --action "實作" --target "事件融合層"
+ticket create --parent "1.0.0-W2-001" --action "實作" --target "事件融合層"
 
 # DOC 類型（可省略 decision-tree 參數）
 ticket create --version 0.2.0 --wave 2 --action "撰寫" --target "工作日誌" --type DOC
@@ -193,7 +128,7 @@ ticket create ... --acceptance "條件A|條件B|條件C"
 ticket create ... --where "file1.py,file2.py"
 
 #   --blocked-by / --related-to：逗號分隔
-ticket create ... --blocked-by "0.2.0-W2-001.1,0.2.0-W2-001.2"
+ticket create ... --blocked-by "1.0.0-W2-001.1,1.0.0-W2-001.2"
 ```
 
 ### batch-create - 批次建立 Tickets
@@ -216,7 +151,7 @@ ticket batch-create --template impl-parsley --targets "a,b,c" --version 0.31.0 -
 ticket batch-create --template impl-parsley --targets "a,b,c" --dry-run
 
 # 建立子任務
-ticket batch-create --template impl-parsley --targets "a,b" --parent 0.31.0-W28-001
+ticket batch-create --template impl-parsley --targets "a,b" --parent 1.0.0-W28-001
 ```
 
 **參數說明**：
@@ -231,17 +166,23 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 0.31.0-W28-
 - `impl-parsley`：parsley-flutter-developer 實作 Ticket 模板（type: IMP, who: parsley-flutter-developer）
 - 更多模板可在 `ticket_system/templates/` 目錄中定義
 
-> 詳細設計：參考評估報告 `docs/work-logs/v0.31.0/tickets/0.31.0-W28-032.md`（CLI 設計、使用者體驗、批次操作流程）
+> 詳細設計：參考評估報告（CLI 設計、使用者體驗、批次操作流程）
 
 ### track - 追蹤和更新 Ticket 狀態
 
-包含 READ 操作（summary/query/version/tree/chain/full/log/list/board/agent/5W1H）和 UPDATE 操作（claim/complete/release/set-who/set-what/set-when/set-where/set-why/set-how/phase/check-acceptance/append-log/add-child/batch-claim/batch-complete/audit/accept-creation）。`list` 支援 `--wave`、`--status`、`--format` 篩選參數。
+包含 READ 操作（summary/query/version/tree/chain/deps/full/log/list/board/agent/5W1H/validate）和 UPDATE 操作（claim/complete/release/set-who/set-what/set-when/set-where/set-why/set-how/phase/check-acceptance/set-acceptance/append-log/add-child/batch-claim/batch-complete/audit/accept-creation）。`list` 支援 `--wave`、`--status`、`--format` 篩選參數。
 
 > **注意**：僅有 6 個 `set-*` 命令（對應 5W1H 欄位）。`blockedBy`、`relatedTo`、`priority` 等欄位無 CLI 命令，需手動編輯 frontmatter。完整對照表見 `references/track-command.md`。
 >
 > **注意**：`append-log` 必須加上 `--section` 必填參數：`ticket track append-log <id> --section "Problem Analysis" "內容"`。有效區段值：`Problem Analysis`、`Solution`、`Test Results`。
 >
 > **注意**：`check-acceptance` 必須指定 `--all`（勾選全部）或 index（如 `1 2 3`，從 1 開始編號）：`ticket track check-acceptance <id> --all` 或 `ticket track check-acceptance <id> 1 2 3`。先用 `ticket track query <id>` 查看驗收條件清單和編號。
+>
+> **注意**：`set-acceptance` 是 `check-acceptance` 的明確語意版（W14-030）：`--check <index>` / `--uncheck <index>`（可多個）、`--all-check` / `--all-uncheck`。禁止 subagent 直接 Edit frontmatter 的 acceptance 欄位。
+>
+> **注意**：`validate <id>` 驗證 Ticket frontmatter 4 關鍵欄位（status/completed_at/acceptance/who）合規性，違規時給出建議修復命令（W14-030）。
+>
+> **注意**：`deps <id>` 顯示衍生關係（`spawned_tickets` + `source_ticket`），與 `tree`/`chain` 純血緣語意（`parent_id`/`children`/`chain`）分離，對齊 Jira/Linear/GitHub 業界慣例（W15-004）。支援遞迴展開與循環引用防護（標記 `CYCLE DETECTED`）。用法：`ticket track deps <ticket-id>`。
 
 > 決策樹：Read `references/workflow-execute.md` 和 `references/workflow-query.md`
 > 詳細用法：Read `references/track-command.md`
@@ -313,11 +254,11 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 0.31.0-W28-
   - `decision-trees.md`（327 行）拆分為 5 個按工作流分組的檔案
   - 各子命令說明新增對應決策樹引用
   - 參考資料表更新為 5 個 workflow 檔案
-- v2.0.0 (2026-02-10): SKILL.md 拆分為入口 + references（0.31.0-W16-001）
+- v2.0.0 (2026-02-10): SKILL.md 拆分為入口 + references
   - 從 1273 行精簡為 ~170 行入口文件
   - 9 個子命令/架構/決策樹/完整性驗證移至 references/ 目錄
   - 遵循官方 Supporting Files 模式（SKILL.md < 500 行）
   - 保留執行方式和命令總覽作為入口必讀資訊
-- v1.9.0 (2026-02-06): 語意化重命名 commands_messages_a/b (0.31.0-W12-002)
-- v1.8.0 (2026-02-06): W7/W11 變更後文件一致性同步 (0.31.0-W12-001)
-- v1.7.0 (2026-02-06): 文件同步更新 - 新增 generate/board/audit 文件 (0.31.0-W8-007)
+- v1.9.0 (2026-02-06): 語意化重命名 commands_messages_a/b
+- v1.8.0 (2026-02-06): 變更後文件一致性同步
+- v1.7.0 (2026-02-06): 文件同步更新 - 新增 generate/board/audit 文件

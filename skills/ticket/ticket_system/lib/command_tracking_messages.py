@@ -207,9 +207,9 @@ class TrackAuditMessages:
 
     # _format_audit_report 中的描述文字
     AUDIT_DESCRIPTION_SKIPPED = "跳過（無子任務）"
-    AUDIT_DESCRIPTION_PASSED = "✓ 通過"
-    AUDIT_DESCRIPTION_PASSED_WITH_WARNINGS = "⚠ 通過（有 {count} 項警告）"
-    AUDIT_DESCRIPTION_FAILED = "✗ {issue}"
+    AUDIT_DESCRIPTION_PASSED = "[Y] 通過"
+    AUDIT_DESCRIPTION_PASSED_WITH_WARNINGS = "[WARN] 通過（有 {count} 項警告）"
+    AUDIT_DESCRIPTION_FAILED = "[N] {issue}"
 
     # _format_audit_report 中的結論標籤
     AUDIT_CONCLUSION_TITLE = "結論:"
@@ -356,6 +356,11 @@ class TrackMessages:
     HELP_SET_WHERE = "設定 Ticket 的 where 欄位"
     HELP_SET_WHY = "設定 Ticket 的 why 欄位"
     HELP_SET_HOW = "設定 Ticket 的 how 欄位"
+    HELP_SET_PRIORITY = "設定 Ticket 的 priority 欄位"
+    HELP_ADD_ACCEPTANCE = "追加驗收條件"
+    HELP_REMOVE_ACCEPTANCE = "移除驗收條件（按編號）"
+    HELP_ADD_SPAWNED = "追加 spawned_tickets 項目"
+    HELP_SET_DECISION_TREE = "設定 decision_tree_path 欄位"
     HELP_WHO = "查詢 Ticket 的 who 欄位"
     HELP_WHAT = "查詢 Ticket 的 what 欄位"
     HELP_WHEN = "查詢 Ticket 的 when 欄位"
@@ -590,7 +595,7 @@ class GenerateMessages:
 class VersionShiftMessages:
     """version-shift 命令相關訊息常數"""
 
-    # CLI 幫助信息
+    # CLI 幫助資訊
     HELP_VERSION_SHIFT = "將整個版本的 Ticket 遷移至新版本"
     ARG_FROM_VERSION = "來源版本號（無 v 前綴，如 0.1.0）"
     ARG_TO_VERSION = "目標版本號（無 v 前綴，如 0.2.0）"
@@ -685,6 +690,63 @@ def format_msg(template: str, **kwargs) -> str:
         raise ValueError(f"缺少格式化參數: {e}")
 
 
+# ============================================================================
+# ClaimWrapMessages - 認領時簡化 WRAP 三問提示（Ticket 0.18.0-W10-028）
+#
+# 來源：0.18.0-W10-027 ANA 分析結論。所有 ticket claim 時強制提示 PM 回答
+# 簡化 WRAP 三問（Widen / Attain distance / Prepare to be wrong），
+# 避免預設選項未經評估。ANA 類型額外提示完整 /wrap-decision 框架。
+# ============================================================================
+
+
+class ClaimWrapMessages:
+    """claim 命令附加的簡化 WRAP 三問提示訊息"""
+
+    # 區段標題（含來源 ticket 標注）
+    WRAP_SECTION_TITLE = "簡化 WRAP 三問 — 認領品質 Checkpoint（[Ticket 0.18.0-W10-027]）"
+
+    # 引導文字
+    WRAP_INTRO = (
+        "請在開始執行前回答以下三問，可寫入 ticket Problem Analysis 或\n"
+        "commit message："
+    )
+
+    # 三個問題
+    WRAP_WIDEN = (
+        "  W（Widen）—— 有其他做法嗎？\n"
+        "    至少列 2 個候選方案（含目前方案），確認選擇非默認值。"
+    )
+    WRAP_ATTAIN_DISTANCE = (
+        "  A（Attain distance）—— 機會成本是什麼？\n"
+        "    執行這個 ticket 會擠壓哪個更重要的目標？"
+    )
+    WRAP_PREPARE_WRONG = (
+        "  P（Prepare to be wrong）—— 最可能失敗的原因是什麼？\n"
+        "    行前預想 1 條：12 小時後失敗最可能的原因，對應防護措施。"
+    )
+
+    # 適用範圍說明（以 {ticket_type} 格式化）
+    WRAP_APPLIES_TO = "適用範圍：所有 ticket 強制；本 ticket 類型為 {ticket_type}。"
+
+    # ANA 類型專屬第四問（PC-063 防護 4/4）
+    ANA_REALITY_TEST = (
+        "  R（Reality Test）—— 真根因驗證了嗎？\n"
+        "    在列任何候選方案前，必須先做重現實驗：\n"
+        "    1. 列出當前接受的根因假設\n"
+        "    2. 用最小指令/測試重現問題\n"
+        "    3. 區分「已驗證的事實」與「仍未驗證的假設」\n"
+        "    4. 將實驗結果寫入 Ticket「重現實驗結果」章節\n"
+        "    禁止：未完成重現實驗即列方案（PC-063 教訓）"
+    )
+
+    # ANA 類型額外提示
+    ANA_EXTRA_HEADER = "[ANA 類型額外要求]"
+    ANA_EXTRA_BODY = (
+        "本 ticket 為 ANA（分析），簡化三問不足以保證分析品質。\n"
+        "請執行完整 /wrap-decision 框架（W/R/A/P 四階段 + 絆腳索）。"
+    )
+
+
 __all__ = [
     "TrackQueryMessages",
     "TrackBoardMessages",
@@ -697,5 +759,6 @@ __all__ = [
     "BulkCreateMessages",
     "MigrateMessages",
     "GenerateMessages",
+    "ClaimWrapMessages",
     "format_msg",
 ]

@@ -311,6 +311,8 @@ def main() -> int:
 
         # 步驟 2: 讀取 JSON 輸入（可選）
         input_data = read_json_from_stdin(logger)
+        if not input_data:
+            return 0
 
         # 步驟 3: 取得專案根目錄
         project_root = get_project_root()

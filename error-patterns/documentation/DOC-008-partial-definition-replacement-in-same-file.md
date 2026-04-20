@@ -4,7 +4,6 @@ title: 同一文件內定義替換遺漏（局部替換）
 category: documentation
 severity: medium
 discovered: 2026-03-08
-source_ticket: 0.1.0-W21-002
 detected_by: parallel-evaluation（W22 Consistency 視角掃描）
 ---
 

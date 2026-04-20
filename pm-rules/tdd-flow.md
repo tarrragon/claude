@@ -32,6 +32,12 @@
 [Phase 1] 功能設計 → [lavender-interface-designer](../../agents/lavender-interface-designer.md)
     |
     v
+[Phase 1.5] 規格多視角審查 → /parallel-evaluation G（Consistency/Completeness/CogLoad）
+    |
+    +-- 發現問題 → 建立修正 Ticket → 修正後重新審查
+    +-- 通過 → 進入 Phase 2
+    |
+    v
 [Phase 2] 測試設計 → [sage-test-architect](../../agents/sage-test-architect.md)
     |
     v
@@ -58,6 +64,23 @@
     v
 完成 → 提交
 ```
+
+> **各 Phase 的摩擦力配置原則**：前期階段（Phase 0/1/1.5）為決策點，摩擦力應較高（強制審查、多視角）；後期階段（Phase 3b）為執行點，摩擦力應較低（Hook 自動化、快速迭代）。詳見 `.claude/methodologies/friction-management-methodology.md`「開發流程階段的摩擦力曲線」章節。
+
+---
+
+## TDD Phase 代理人職責清單
+
+PM 派發 Phase 代理人時可立即查表確認允許/禁止產出，防止職責越界（如 W5-001 Phase 2 sage 越界撰寫測試 .py 實作案例）。
+
+| Phase | 代理人 | 允許產出 | 禁止產出 |
+|-------|-------|---------|---------|
+| 0 | saffron | 系統審查報告 | 程式碼、測試 |
+| 1 | lavender | 功能設計文件 | 程式碼、測試檔 |
+| 2 | sage | 測試設計文件 | **測試 .py 實作**（W5-001 Phase 2 越界教訓）|
+| 3a | pepper | 實作策略/虛擬碼 | 真實 .py 程式碼 |
+| 3b | {lang}-developer | 真實程式碼 + 測試 .py | 修改既有測試契約 |
+| 4 | cinnamon | 重構評估 + 重構執行 | 新功能開發 |
 
 ---
 
@@ -145,11 +168,46 @@
 
 ---
 
+## Phase 1.5：規格多視角審查（Phase 1 完成後強制）
+
+### 目的
+
+單一視角必然有盲點。Phase 1 產出的功能規格、Schema 定義、邊界條件等文件，需經多視角審查才能作為測試和實作的穩定依據。
+
+### 觸發條件
+
+Phase 1 功能規格完成後**強制執行**，無豁免。
+
+### 審查方式
+
+使用 `/parallel-evaluation`（情境 G：系統設計）派發三人組：
+
+| 視角 | 審查重點 |
+|------|---------|
+| linux（常駐） | 設計品味：是否過度複雜、YAGNI、是否有更簡單的解法 |
+| Consistency | 跨文件一致性：UC vs Schema vs Storage vs 遷移規則 |
+| Completeness | 邊界條件完整性：遺漏的錯誤場景、模糊的規格、測試撰寫時的缺口 |
+
+### 審查後處理
+
+| 發現優先級 | 處理方式 |
+|-----------|---------|
+| 高（設計缺陷、雙重真相、YAGNI） | 建立修正 Ticket，修正後方可進入 Phase 2 |
+| 中（規格模糊、邊界遺漏） | 建立修正 Ticket，修正後方可進入 Phase 2 |
+| 低（風格、最佳化建議） | 建立延後追蹤 Ticket，不阻擋 Phase 2 |
+
+### 通過條件
+
+所有高/中優先發現的修正 Ticket 已完成。低優先可延後。
+
+---
+
 ## Phase 1-4：標準 TDD 流程
 
 | Phase | 代理人 | 產出 |
 |-------|-------|------|
 | Phase 1 功能設計 | lavender-interface-designer | 功能規格、API 定義、驗收標準 |
+| Phase 1.5 規格審查 | /parallel-evaluation G | 跨文件一致性、邊界完整性、設計品味 |
 | Phase 2 測試設計 | sage-test-architect | 測試案例、GWT 規格、檔案結構 |
 | Phase 3a 策略規劃 | pepper-test-implementer | 策略文件、虛擬碼、債務評估 |
 | Phase 3b 實作執行 | parsley-flutter-developer | 程式碼、通過測試、品質報告 |
@@ -165,6 +223,18 @@
 | DOC 類型任務 | 純文件更新，不涉及程式碼品質 |
 | 任務範圍單純（單一模組、修改目的明確） | 低複雜度任務，cinnamon 單視角已足夠 |
 
+**Phase 4 強制 Checkpoint：重構評估 → WRAP Phase 2**：
+
+Phase 4a 多視角分析報告完成後，進入 Phase 4b 前，PM 必須執行 WRAP Phase 2 檢驗：
+
+| 步驟 | 說明 |
+|------|------|
+| 觸發條件 | Phase 4a 報告完成（或豁免後直接進 Phase 4b 前） |
+| 強制動作 | 以 Phase 4a 報告結論為 Phase 1 輸入，執行 WRAP Phase 2（R + A + P 三問） |
+| 目的 | 防止重構評估「太表層」——確認根因假設層級多元（非僅實作手段層級），並檢驗機會成本 |
+| 參考 | `.claude/skills/wrap-decision/SKILL.md`「觸發條件」S4 節 + `.claude/methodologies/three-phase-reflection-methodology.md` |
+| 豁免 | DOC 類型任務（無程式碼品質問題）+ 小型修改（認知負擔 <= 5）可豁免 |
+
 > 各 Phase 詳細描述和代理人連結：.claude/references/tdd-flow-details.md（Phase 1-4 章節）
 
 ---
@@ -173,17 +243,20 @@
 
 ### 轉換條件
 
-| 從 | 到 | 條件 |
-|----|----|----|
-| Phase 0 | Phase 1 | SA 審查通過 |
-| Phase 1 | Phase 2 | 功能規格完成 |
-| Phase 2 | Phase 3a | 測試案例設計完成 |
-| Phase 3a | 3b 拆分評估 | 策略文件完成 |
-| 3b 拆分評估 | Phase 3b | PM 完成拆分評估（見下方） |
-| Phase 3b | Phase 4a 或 4b | 測試全部通過後，PM 自動檢查豁免條件（<=2 檔案/DOC/單純）：符合 → 直接 Phase 4b；不符合 → AskUserQuestion #13 選擇 Phase 4a 或 4b |
-| Phase 4a | Phase 4b | 多視角分析報告完成 |
-| Phase 4b | Phase 4c | 重構執行完成（標準流程）；/tech-debt-capture → 完成（豁免條件） |
-| Phase 4c | 完成 | 多視角再審核報告完成 |
+| 從 | 到 | 條件 | PM 強制動作 |
+|----|----|------|-----------|
+| Phase 0 | Phase 1 | SA 審查通過 | 填寫 Context Bundle（→ Phase 1） |
+| Phase 1 | Phase 1.5 | 功能規格完成 | 填寫 Context Bundle（→ 多視角審查） |
+| Phase 1.5 | Phase 2 | 多視角審查通過 | 填寫 Context Bundle（→ Phase 2） |
+| Phase 2 | Phase 3a | 測試案例設計完成 | 填寫 Context Bundle（→ Phase 3a） |
+| Phase 3a | 3b 拆分評估 | 策略文件完成 | 填寫 Context Bundle（→ Phase 3b） |
+| 3b 拆分評估 | Phase 3b | PM 完成拆分評估（見下方） | 各子任務填寫 Context Bundle |
+| Phase 3b | Phase 4a 或 4b | 測試全部通過 | 填寫 Context Bundle（→ Phase 4a） |
+| Phase 4a | Phase 4b | 多視角分析報告完成 | - |
+| Phase 4b | Phase 4c | 重構執行完成 | - |
+| Phase 4c | 完成 | 多視角再審核報告完成 | - |
+
+> **Context Bundle**：PM 在派發下一階段代理人前，必須將該代理人所需的前置資訊寫入 Ticket。詳見 `.claude/pm-rules/context-bundle-spec.md`。
 
 ### 3b 拆分評估（Phase 3a 完成後，強制）
 
@@ -221,7 +294,7 @@ PM 在派發 Phase 3b 代理人前，可根據 Phase 3a 策略文件估算 conte
 
 **當 context 預算顯示單一子任務仍然過大時**（如超過 20K tokens），應檢查該子任務是否仍包含多個功能職責，需進一步拆分。
 
-> **來源**：0.1.1-W12-006 — Phase 3b 單一代理人 context 耗盡事件分析
+> **來源**：Phase 3b 單一代理人 context 耗盡事件分析
 
 **拆分時的操作**：
 
@@ -248,9 +321,11 @@ PM 在派發 Phase 3b 代理人前，可根據 Phase 3a 策略文件估算 conte
 
 PM 收到代理人回報後執行：
 
-1. 執行 `/ticket track complete {id}`
-2. 更新工作日誌
-3. 依決策樹第八層 Checkpoint 路由下一步
+1. 讀取代理人的「Phase N 完成摘要」
+2. 提取關鍵資訊，填寫下一階段的 Context Bundle（`ticket track append-log --section "Context Bundle"`）
+3. 執行 `/ticket track complete {id}`
+4. 更新工作日誌
+5. 依決策樹第八層 Checkpoint 路由下一步
 
 ---
 
@@ -272,6 +347,7 @@ PM 收到代理人回報後執行：
 - .claude/skills/tdd/SKILL.md - `/tdd` SKILL（統一 TDD 流程入口，含 `/tdd start`、`/tdd next`、`/tdd split`、`/tdd status`、`/tdd phase4-exempt`）
 - .claude/references/tdd-flow-details.md - 豁免規則詳細、Phase 詳細描述、異常處理、日誌模板
 - .claude/pm-rules/decision-tree.md - 主線程決策樹
+- .claude/pm-rules/context-bundle-spec.md - Context Bundle 規範（派發前資訊準備）
 - @.claude/rules/core/quality-baseline.md - 品質基線（Phase 4 不可跳過）
 
 ---
@@ -291,5 +367,6 @@ SA 否決不可繞過 — 必須解決否決原因後重新審查。
 
 ---
 
-**Last Updated**: 2026-03-27
-**Version**: 2.14.0 - 新增 SA 否決升級路徑（0.2.1-W1-008）
+**Last Updated**: 2026-04-18
+**Version**: 2.16.0 - Phase 4 新增強制 Checkpoint：重構評估前執行 WRAP Phase 2 檢驗（W15-019，防止重構根因分析太表層）
+**Version**: 2.15.0 - 新增 Phase 1.5 規格多視角審查（單一視角必然有盲點，規格完成後強制多視角審查）

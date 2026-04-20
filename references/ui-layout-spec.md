@@ -2,7 +2,7 @@
 
 本文件定義 Flutter 前端的 UI 排版規則，確保所有元件在不同視窗尺寸下具備一致的佈局行為。
 
-> **來源**：0.2.1-W4-001 — 專案頁籤溢出觸發全面排版規範建立。
+> **來源**：專案頁籤溢出事件觸發全面排版規範建立。
 
 ---
 
@@ -293,9 +293,9 @@ TabBar 中的 Tab 無最大寬度約束，長專案名稱佔滿 280px sidebar，
 
 - ui/lib/core/constants/session_list_constants.dart - Session List 常數
 - ui/lib/core/constants/app_constants.dart - 全域常數
-- .claude/rules/core/quality-common.md - 通用品質基線（1.3 常數管理）
+- .claude/references/quality-common.md - 通用品質基線（1.3 常數管理）
 
 ---
 
 **Last Updated**: 2026-03-28
-**Version**: 1.0.0 - 初始建立（0.2.1-W4-001）
+**Version**: 1.0.0 - 初始建立

@@ -2,19 +2,19 @@
 
 ---
 
-## 📖 模板使用說明
+## [DOC] 模板使用說明
 
 ### 使用時機
 
 **本模板適用於**：
-- ✅ 單一明確的 Ticket 任務
-- ✅ 從主版本任務拆分出的子任務
-- ✅ 可獨立執行和驗收的工作單元
-- ✅ 由單一執行代理人負責的任務
+- [OK] 單一明確的 Ticket 任務
+- [OK] 從主版本任務拆分出的子任務
+- [OK] 可獨立執行和驗收的工作單元
+- [OK] 由單一執行代理人負責的任務
 
 **不適用於**：
-- ❌ 包含多個 Ticket 的主版本任務 → 請使用 `work-log-template.md`
-- ❌ 需要多個代理人協作的複雜任務 → 拆分為多個 Ticket
+- [FAIL] 包含多個 Ticket 的主版本任務 → 請使用 `work-log-template.md`
+- [FAIL] 需要多個代理人協作的複雜任務 → 拆分為多個 Ticket
 
 ### 模板選擇決策樹
 
@@ -119,7 +119,7 @@ updated: 2026-01-23
 
 > **基於《清單革命》原則和 Ticket 生命週期管理方法論設計**。
 > 整合標準化工作日誌格式和 Ticket 特定欄位。
-> 所有標記為「❗必填」的欄位不可省略。
+> 所有標記為「[IMPORTANT]必填」的欄位不可省略。
 
 **核心原則**：
 1. **5 個核心欄位必填** - 確保 Ticket 設計完整
@@ -131,9 +131,9 @@ updated: 2026-01-23
 
 ## Ticket 資訊
 
-**Ticket 編號**: #N ❗必填
-**Ticket 類型**: [RES/ANA/EVA/IMP/INV/DOC] ❗必填
-**建立日期**: YYYY-MM-DD ❗必填
+**Ticket 編號**: #N [IMPORTANT]必填
+**Ticket 類型**: [RES/ANA/EVA/IMP/INV/DOC] [IMPORTANT]必填
+**建立日期**: YYYY-MM-DD [IMPORTANT]必填
 
 > **Ticket 類型說明**：
 > - **RES** (Research): 探索未知領域
@@ -143,8 +143,8 @@ updated: 2026-01-23
 > - **INV** (Investigation): 深入追蹤問題根因
 > - **DOC** (Documentation): 記錄和傳承經驗
 
-**狀態**: [參照下方「Ticket 狀態判定」] ❗必填
-**完成日期**: YYYY-MM-DD HH:MM（未完成則標記「N/A」） ❗必填
+**狀態**: [參照下方「Ticket 狀態判定」] [IMPORTANT]必填
+**完成日期**: YYYY-MM-DD HH:MM（未完成則標記「N/A」） [IMPORTANT]必填
 
 **指派**: [執行代理人名稱]
 **優先級**: [高/中/低]
@@ -153,7 +153,7 @@ updated: 2026-01-23
 
 ---
 
-## 1. 背景（Background）❗必填
+## 1. 背景（Background）[IMPORTANT]必填
 
 [為什麼需要這個 Ticket？來自哪個需求或問題？]
 
@@ -166,7 +166,7 @@ updated: 2026-01-23
 
 ---
 
-## 2. 目標（Objective）❗必填
+## 2. 目標（Objective）[IMPORTANT]必填
 
 [這個 Ticket 要達成什麼？明確且可驗證的目標描述]
 
@@ -176,7 +176,7 @@ updated: 2026-01-23
 
 ---
 
-## 3. 執行步驟（Steps）❗必填
+## 3. 執行步驟（Steps）[IMPORTANT]必填
 
 ### 步驟清單
 
@@ -196,7 +196,7 @@ updated: 2026-01-23
 
 ---
 
-## 4. 驗收條件（Acceptance Criteria）❗必填
+## 4. 驗收條件（Acceptance Criteria）[IMPORTANT]必填
 
 > **4V 原則**（詳見 acceptance-criteria-methodology.md）：
 > - **可驗證 (Verifiable)**: 能明確判斷完成/未完成，有具體確認方法
@@ -256,7 +256,7 @@ updated: 2026-01-23
 
 ---
 
-## 5. 參考文件（References）❗必填
+## 5. 參考文件（References）[IMPORTANT]必填
 
 ### 需求規格
 - `docs/app-requirements-spec.md` - #UC-XX
@@ -288,10 +288,10 @@ updated: 2026-01-23
 
 ---
 
-## 🎯 TDD 階段狀態
+## [TARGET] TDD 階段狀態
 
 > **填寫規則**：
-> - 每個階段只能有一個狀態：✅ 完成 / 🔄 進行中 / ⏸️ 待開始
+> - 每個階段只能有一個狀態：[OK] 完成 / [SYNC] 進行中 / ⏸️ 待開始
 > - 完成時間必須填寫實際時間（精確到分鐘）
 > - 備註欄記錄關鍵成果或決策
 
@@ -302,13 +302,13 @@ updated: 2026-01-23
 | **Phase 3** 實作 | ⏸️ 待開始 | N/A | 測試通過率：X/X |
 | **Phase 4** 重構 | ⏸️ 待開始 | N/A | 重構項目：X 項 / 無需重構 |
 
-### 📊 Ticket 狀態判定
+### [STATS] Ticket 狀態判定
 
 > **Ticket 生命週期狀態**（基於 ticket-lifecycle-management-methodology.md）：
 > - ⏸️ **待執行（Pending）** = Ticket 已建立，等待開發者領取
-> - 🔄 **進行中（In Progress）** = 開發者正在執行，TDD Phase 1-3 階段
-> - 👀 **Review 中（In Review）** = 開發者認為已完成，等待驗收
-> - ✅ **已完成（Completed）** = Review 通過，所有驗收條件滿足
+> - [SYNC] **進行中（In Progress）** = 開發者正在執行，TDD Phase 1-3 階段
+> - [REVIEW] **Review 中（In Review）** = 開發者認為已完成，等待驗收
+> - [OK] **已完成（Completed）** = Review 通過，所有驗收條件滿足
 
 **當前狀態**: ⏸️ 待執行
 
@@ -317,7 +317,7 @@ updated: 2026-01-23
 
 ---
 
-## 🤝 協作檢查點（Communication Checkpoints）
+## [HANDOFF] 協作檢查點（Communication Checkpoints）
 
 > **設計目標**: 確保跨代理人協作時關鍵資訊傳遞無誤
 >
@@ -367,9 +367,9 @@ updated: 2026-01-23
 ### 暫停點使用規則
 
 - ⏸️ 執行代理人完成階段後必須主動暫停
-- 📋 主線程在暫停點執行驗收檢查
-- ✅ 通過檢查後才能繼續下一階段
-- ❌ 未通過檢查則返回修正
+- [INFO] 主線程在暫停點執行驗收檢查
+- [OK] 通過檢查後才能繼續下一階段
+- [FAIL] 未通過檢查則返回修正
 
 ### Ticket 特定暫停點
 
@@ -400,7 +400,7 @@ updated: 2026-01-23
 
 ---
 
-## 📋 清單使用模式（Checklist Usage Modes）
+## [INFO] 清單使用模式（Checklist Usage Modes）
 
 > **設計目標**: 明確不同場景下的清單使用方式
 >
@@ -432,7 +432,7 @@ updated: 2026-01-23
 
 ---
 
-## 📋 執行記錄
+## [INFO] 執行記錄
 
 ### Ticket 執行時間軸
 
@@ -485,9 +485,9 @@ updated: 2026-01-23
 [記錄 parsley 實作的關鍵邏輯、程式碼片段]
 
 **步驟執行記錄**:
-- ✅ 步驟 1: [記錄完成情況]
-- ✅ 步驟 2: [記錄完成情況]
-- ✅ 步驟 3: [記錄完成情況]
+- [OK] 步驟 1: [記錄完成情況]
+- [OK] 步驟 2: [記錄完成情況]
+- [OK] 步驟 3: [記錄完成情況]
 
 **測試結果**:
 - 測試通過率：X/X (100%)
@@ -509,7 +509,7 @@ updated: 2026-01-23
 **重構項目**:
 - [ ] 重構項目 1（如有）
 - [ ] 重構項目 2（如有）
-- ✅ 確認無需重構（說明理由）
+- [OK] 確認無需重構（說明理由）
 
 **重構結果**:
 [記錄重構後的改善和測試結果]
@@ -522,7 +522,7 @@ updated: 2026-01-23
 
 **Reviewer**: XXX
 **Review 日期**: YYYY-MM-DD
-**Review 結果**: ✅ 通過 / ❌ 需修正
+**Review 結果**: [OK] 通過 / [FAIL] 需修正
 
 **檢查項目**:
 - [ ] 所有驗收條件已滿足
@@ -538,7 +538,7 @@ updated: 2026-01-23
 
 ---
 
-## 📦 產出檔案
+## [PACKAGE] 產出檔案
 
 ### 新增檔案
 - `lib/...` - [檔案說明]
@@ -553,11 +553,11 @@ updated: 2026-01-23
 
 ---
 
-## 💡 學習收穫（強制）
+## [TIP] 學習收穫（強制）
 
 > 理論依據：Will Guidara《Unreasonable Hospitality》- "Excellence is the culmination of thousands of details executed perfectly."
 
-### 經驗傳承檢查 ❗必填
+### 經驗傳承檢查 [IMPORTANT]必填
 
 完成每個 Ticket 時，必須回答以下問題：
 

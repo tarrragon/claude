@@ -41,7 +41,7 @@
 └── ticket-001.md        # 執行日誌
 
 新架構 (v3.0)：
-└── 0.16.0-W1-001.md     # 包含 frontmatter（設計+狀態）+ body（執行日誌）
+└── {version}-W{n}-001.md     # 包含 frontmatter（設計+狀態）+ body（執行日誌）
 ```
 
 **優勢**：
@@ -84,9 +84,9 @@
 docs/work-logs/
 ├── v0.16.0/                        # 版本資料夾
 │   ├── tickets/                    # Ticket 檔案目錄
-│   │   ├── 0.16.0-W1-001.md       # Ticket 檔案
-│   │   ├── 0.16.0-W1-002.md
-│   │   └── 0.16.0-W2-001.md
+│   │   ├── {version}-W{n}-001.md       # Ticket 檔案
+│   │   ├── {version}-W{n}-002.md
+│   │   └── {version}-W{n+1}-001.md
 │   └── v0.16.0-main.md            # 主版本日誌
 ├── v0.15.16/                       # 舊版本（CSV 格式，唯讀）
 │   ├── tickets.csv
@@ -97,7 +97,7 @@ docs/work-logs/
 
 - 版本資料夾：`vX.Y.Z`
 - Tickets 目錄：`tickets/`
-- Ticket 檔案：`{VERSION}-W{WAVE}-{SEQ}.md`（例如：`0.16.0-W1-001.md`）
+- Ticket 檔案：`{VERSION}-W{WAVE}-{SEQ}.md`（例如：`{version}-W{n}-001.md`）
 
 ### 2.2 Frontmatter 欄位定義
 
@@ -106,7 +106,7 @@ docs/work-logs/
 ```yaml
 ---
 # === 識別資訊 ===
-ticket_id: "0.16.0-W1-001"
+ticket_id: "{version}-W{n}-001"
 version: "0.16.0"
 wave: 1
 
@@ -137,7 +137,7 @@ files:
 
 # === 依賴 ===
 dependencies:
-  - 0.16.0-W1-001
+  - {version}-W{n}-001
 
 # === 狀態追蹤 ===
 status: "pending"
@@ -219,7 +219,7 @@ uv run ticket create \
 
 **結果**：
 
-- 建立 `docs/work-logs/v0.16.0/tickets/0.16.0-W1-001.md`
+- 建立 `docs/work-logs/v0.16.0/tickets/{version}-W{n}-001.md`
 - frontmatter 包含 5W1H 設計和初始狀態
 - body 包含執行日誌模板
 
@@ -230,7 +230,7 @@ uv run ticket create \
 **使用腳本**：
 
 ```bash
-uv run ticket track claim 0.16.0-W1-001
+uv run ticket track claim {version}-W{n}-001
 ```
 
 **Frontmatter 更新**：
@@ -246,7 +246,7 @@ uv run ticket track claim 0.16.0-W1-001
 **使用腳本**：
 
 ```bash
-uv run ticket track complete 0.16.0-W1-001
+uv run ticket track complete {version}-W{n}-001
 ```
 
 **Frontmatter 更新**：
@@ -261,7 +261,7 @@ uv run ticket track complete 0.16.0-W1-001
 **使用腳本**：
 
 ```bash
-uv run ticket track release 0.16.0-W1-001
+uv run ticket track release {version}-W{n}-001
 ```
 
 **Frontmatter 更新**：
@@ -275,7 +275,7 @@ uv run ticket track release 0.16.0-W1-001
 **單一 Ticket**：
 
 ```bash
-uv run ticket track query 0.16.0-W1-001
+uv run ticket track query {version}-W{n}-001
 ```
 
 **列出所有**：
@@ -302,11 +302,11 @@ uv run ticket track summary
 ```text
 📊 Ticket 摘要 v0.16.0 (2/5 完成) [markdown]
 ----------------------------------------------------------------------------------------------------
-0.16.0-W1-001 | ✅ | parsley         | Implement startScan() method
-0.16.0-W1-002 | 🔄 | parsley         | Implement stopScan() method (已 1h30m)
-0.16.0-W1-003 | ⏸️ | parsley         | Implement scan result handling
-0.16.0-W2-001 | ⏸️ | sage            | Add ScannerService unit tests
-0.16.0-W2-002 | ⏸️ | thyme           | Update scanner documentation
+{version}-W{n}-001 | ✅ | parsley         | Implement startScan() method
+{version}-W{n}-002 | 🔄 | parsley         | Implement stopScan() method (已 1h30m)
+{version}-W{n}-003 | ⏸️ | parsley         | Implement scan result handling
+{version}-W{n+1}-001 | ⏸️ | sage            | Add ScannerService unit tests
+{version}-W{n+1}-002 | ⏸️ | thyme           | Update scanner documentation
 ```
 
 ---
@@ -418,7 +418,7 @@ uv run ticket track summary
 
 **不要詢問代理人進度**：
 
-- ❌ 錯誤：「代理人，0.16.0-W1-001 完成了嗎？」
+- ❌ 錯誤：「代理人，{version}-W{n}-001 完成了嗎？」
 - ✅ 正確：直接執行 `summary` 或 `query` 命令
 
 ### 6.2 代理人最佳實踐
@@ -427,19 +427,19 @@ uv run ticket track summary
 
 ```bash
 # 開始執行任務前先接手
-uv run ticket track claim 0.16.0-W1-001
+uv run ticket track claim {version}-W{n}-001
 ```
 
 **完成後標記**：
 
 ```bash
 # 完成後立即標記
-uv run ticket track complete 0.16.0-W1-001
+uv run ticket track complete {version}-W{n}-001
 ```
 
 **不要回報進度給主線程**：
 
-- ❌ 錯誤：「我已經完成 0.16.0-W1-001，以下是詳細報告...」
+- ❌ 錯誤：「我已經完成 {version}-W{n}-001，以下是詳細報告...」
 - ✅ 正確：標記完成，詳細記錄到 Ticket 的執行日誌區段
 
 ### 6.3 執行日誌撰寫

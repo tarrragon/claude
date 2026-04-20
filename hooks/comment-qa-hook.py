@@ -35,7 +35,7 @@ Comment Quality Assurance Hook - 註解品質保證檢查 (v3.0 多語言支援)
 配置: .claude/hooks/comment-qa-config.yaml (可選)
 
 參考規範:
-- .claude/methodologies/comment-writing-methodology.md
+- .claude/skills/compositional-writing/references/writing-code-comments.md
 - docs/event-driven-architecture-design.md
 
 版本: v3.0
@@ -57,7 +57,7 @@ from dataclasses import dataclass
 from typing import Optional, List, Dict, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.hook_messages import QualityMessages, CoreMessages, format_message
 
 # 專案根目錄
@@ -564,7 +564,7 @@ def generate_report(
 
     # 事件處理函式建議
     if event_handlers:
-        report_lines.append("## ⚠️ 事件處理函式建議註解")
+        report_lines.append("## [WARN] 事件處理函式建議註解")
         report_lines.append("")
 
         for i, func in enumerate(event_handlers, 1):
@@ -578,7 +578,7 @@ def generate_report(
 
     # 獨立 Widget 建議
     if independent_widgets:
-        report_lines.append("## ⚠️ 獨立 Widget 建議註解")
+        report_lines.append("## [WARN] 獨立 Widget 建議註解")
         report_lines.append("")
 
         for i, widget in enumerate(independent_widgets, 1):
@@ -592,7 +592,7 @@ def generate_report(
 
     # 一般函式建議
     if regular_funcs:
-        report_lines.append("## ⚠️ 一般函式建議註解")
+        report_lines.append("## [WARN] 一般函式建議註解")
         report_lines.append("")
 
         for i, func in enumerate(regular_funcs[:5], 1):
@@ -611,7 +611,7 @@ def generate_report(
 
     # 良好實踐
     if auxiliary_funcs or dependent_widgets:
-        report_lines.append("## ✅ 良好實踐（已豁免註解）")
+        report_lines.append("## [OK] 良好實踐（已豁免註解）")
         report_lines.append("")
 
         for func in auxiliary_funcs[:3]:
@@ -626,8 +626,8 @@ def generate_report(
         report_lines.append("")
 
     report_lines.extend([
-        "## 📚 註解規範參考",
-        "- `.claude/methodologies/comment-writing-methodology.md` - 註解撰寫方法論",
+        "## [DOC] 註解規範參考",
+        "- `.claude/skills/compositional-writing/references/writing-code-comments.md` - 註解撰寫規範",
         "- `docs/event-driven-architecture-design.md` - 事件驅動架構規範",
         "- 註解必須記錄「為什麼」而非「做什麼」",
         "- 註解必須包含需求來源和工作日誌追溯",
@@ -664,7 +664,9 @@ def main():
         config = load_config(logger)
 
         # 2. 讀取 JSON 輸入
-        input_data = json.load(sys.stdin)
+        input_data = read_json_from_stdin(logger)
+        if not input_data:
+            return 0
 
         # 3. 提取工具資訊
         tool_name = input_data.get("tool_name", "")
@@ -750,48 +752,66 @@ def main():
         report_path = save_report(report_content)
 
         # 12. 輸出建議（友善格式）
-        output = "\n📝 註解品質檢查報告 (v3.0)\n\n"
+        output = "\n[INFO] 註解品質檢查報告 (v3.0)\n\n"
         output += f"檔案: {file_path}\n"
         output += f"語言: {language.value if language else 'dart'}\n\n"
 
         if event_handlers:
-            output += f"⚠️  {len(event_handlers)} 個事件處理函式缺少註解：\n"
+            output += f"[WARN] {len(event_handlers)} 個事件處理函式缺少註解：\n"
             for func in event_handlers[:2]:
                 output += f"   - {func.name} (行 {func.line_number})\n"
             output += "\n"
 
         if independent_widgets:
-            output += f"⚠️  {len(independent_widgets)} 個獨立 Widget 缺少註解：\n"
+            output += f"[WARN] {len(independent_widgets)} 個獨立 Widget 缺少註解：\n"
             for widget in independent_widgets[:2]:
                 output += f"   - {widget.name} (行 {widget.line_number})\n"
             output += "\n"
 
         if regular_funcs:
-            output += f"⚠️  {len(regular_funcs)} 個一般函式缺少註解：\n"
+            output += f"[WARN] {len(regular_funcs)} 個一般函式缺少註解：\n"
             for func in regular_funcs[:2]:
                 output += f"   - {func.name} (行 {func.line_number})\n"
             output += "\n"
 
         if auxiliary_funcs or dependent_widgets:
-            output += f"✅ {len(auxiliary_funcs)} 個輔助函式和 {len(dependent_widgets)} 個依賴型 Widget 已正確豁免\n\n"
+            output += f"[OK] {len(auxiliary_funcs)} 個輔助函式和 {len(dependent_widgets)} 個依賴型 Widget 已正確豁免\n\n"
 
         output += f"詳細報告已儲存: {report_path.relative_to(PROJECT_ROOT)}\n\n"
-        output += "📚 註解規範: .claude/methodologies/comment-writing-methodology.md\n"
+        output += "[DOC] 註解規範: .claude/skills/compositional-writing/references/writing-code-comments.md\n"
 
-        print(output)
+        json_output = {
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": output
+            }
+        }
+        print(json.dumps(json_output, ensure_ascii=False, indent=2))
         log_message(logger, "Comment QA Hook v3.0: 執行完成")
         return 0
 
     except json.JSONDecodeError as e:
         log_message(logger, format_message(QualityMessages.COMMENT_QA_ERROR, error=f"JSON 解析失敗 - {e}"))
-        print(f"Comment QA Hook 錯誤: JSON 輸入格式錯誤")
+        error_output = {
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": "Comment QA Hook 錯誤: JSON 輸入格式錯誤"
+            }
+        }
+        print(json.dumps(error_output, ensure_ascii=False, indent=2))
         return 1
 
     except Exception as e:
         log_message(logger, format_message(QualityMessages.COMMENT_QA_ERROR, error=f"Hook 執行失敗 - {e}"))
         import traceback
         log_message(logger, f"Traceback: {traceback.format_exc()}")
-        print(f"Comment QA Hook 錯誤: {e}")
+        error_output = {
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": f"Comment QA Hook 錯誤: {e}"
+            }
+        }
+        print(json.dumps(error_output, ensure_ascii=False, indent=2))
         return 1
 
 

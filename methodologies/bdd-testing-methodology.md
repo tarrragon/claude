@@ -294,7 +294,7 @@ Then: 清單顯示空狀態畫面「目前沒有記錄」
 **Last Updated**: 2026-03-12
 **Version**: 1.2.0
 **Updates**:
-- v1.2.0 (2026-03-12): 新增行為鏈式推演框架、前置條件驗證強制規則、測試設計完成標準、邊界條件系統化方法（0.1.0-W44-002）
+- v1.2.0 (2026-03-12): 新增行為鏈式推演框架、前置條件驗證強制規則、測試設計完成標準、邊界條件系統化方法
 
 ---
 
@@ -302,4 +302,4 @@ Then: 清單顯示空狀態畫面「目前沒有記錄」
 
 - [混合測試策略方法論](./hybrid-testing-strategy-methodology.md) - 分層測試決策樹
 - [行為優先 TDD 方法論](./behavior-first-tdd-methodology.md) - Sociable vs Solitary 與前置條件關係
-- [TDD 協作開發流程](../tdd-collaboration-flow.md) - 四階段流程整合
+- [TDD 協作開發流程](./tdd-collaboration-flow.md) - 四階段流程整合

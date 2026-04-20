@@ -7,7 +7,6 @@
 | **分類** | Implementation |
 | **嚴重性** | 中（subagent 任務失敗，需重新派發） |
 | **發現版本** | v0.1.2 |
-| **相關 Ticket** | 0.1.2-W6-005 |
 
 ## 症狀
 
@@ -106,7 +105,7 @@ def main():
 
 ## 相關文件
 
-- .claude/rules/forbidden/skip-gate.md（主線程限制設計意圖）
+- .claude/pm-rules/skip-gate.md（主線程限制設計意圖）
 - .claude/hooks/hook_utils/hook_io.py（is_subagent_environment 定義）
 - .claude/error-patterns/process-compliance/PC-022-subagent-permission-denied-hook-edit.md（相關事件）
 

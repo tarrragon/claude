@@ -1,0 +1,16 @@
+# .claude/ 框架檔案換行符強制規範
+#
+# 此檔案在框架 sync 到其他專案時隨之傳播，確保所有專案的 .claude/ 內容
+# 在任何平台都使用 LF 換行。
+#
+# 特別重要：.claude/hooks/*.py 的 shebang 不可被 CRLF 污染，否則在 Windows
+# 會產生「Failed with non-blocking status code: No stderr output」錯誤。
+
+*.py            text eol=lf
+*.sh            text eol=lf
+*.md            text eol=lf
+*.yaml          text eol=lf
+*.yml           text eol=lf
+*.json          text eol=lf
+*.toml          text eol=lf
+*.txt           text eol=lf

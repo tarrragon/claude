@@ -329,7 +329,6 @@ ticket       執行細節、分析、結果
 ## 參考文件
 
 - SKILL 定義：`.claude/skills/doc-flow/SKILL.md`
-- 原有規範：`.claude/document-responsibilities.md`
 - Worklog 模板：`.claude/skills/doc-flow/templates/worklog.md.template`
 
 ---

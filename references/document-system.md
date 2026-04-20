@@ -179,7 +179,7 @@ ticket       執行細節、分析、結果
 | 規則 | 說明 |
 |------|------|
 | 產出物位置 | `docs/work-logs/v{version}/tickets/` 目錄下 |
-| 命名格式 | `{ticket-id}-{描述}.md`（如 `0.31.0-W14-001-analysis.md`） |
+| 命名格式 | `{ticket-id}-{描述}.md`（如 `{version}-W{n}-{seq}-analysis.md`） |
 | 禁止行為 | 禁止在 `.claude/` 下建立非預定義的子目錄（如 `.claude/analysis/`） |
 
 **已預定義的 `.claude/` 子目錄**（僅限以下）：

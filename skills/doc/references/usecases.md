@@ -18,7 +18,7 @@
 | UC | 資訊鏈 | 測試名稱 pattern | 測試路徑（快照） |
 |----|--------|-----------------|-----------------|
 | UC-01 | 頁面偵測 → Content Script → DOM 擷取 → 驗證 → 訊息傳遞 → 儲存 → 顯示 | `Data Flow End-to-End` | tests/integration/chrome-extension/data-flow-end-to-end.test.js |
-| UC-02 | 選擇格式 → Storage 讀取 → 格式轉換 → 檔案產生 → 下載 | (缺少，W2-002 待建立) | - |
+| UC-02 | 選擇格式 → Storage 讀取 → 格式轉換 → 檔案產生 → 下載 | (缺少，待建立) | - |
 | UC-05 | 頁面載入 → Storage 讀取 → Grid 渲染 → 搜尋/篩選 → 匯出觸發 | `UI 互動流程整合測試` | tests/e2e/integration/ui-interaction-flow.test.js |
 | UC-07 | 變更偵測 → 匯出 → 匯入 → 衝突偵測 → 解決 → 一致性驗證 | `UC-05 跨設備同步` | tests/e2e/workflows/cross-device-sync.test.js |
 | UC-08 | 錯誤發生 → 捕獲 → 分類 → 恢復策略 → 執行 → 通知 | `錯誤恢復工作流程` | tests/integration/workflows/error-recovery-workflow.test.js |
@@ -31,8 +31,8 @@
 
 | 外部依賴 | 說明 | 要求 |
 |---------|------|------|
-| Readmoo DOM 結構 | 書城改版會導致選擇器失效 | 每個 DOM 操作必須有 try/catch + 日誌 |
-| Chrome Extension API | API 行為變更 | 每個 Chrome API 呼叫必須有錯誤處理 |
+| 目標站點 DOM 結構 | 站點改版會導致選擇器失效 | 每個 DOM 操作必須有 try/catch + 日誌 |
+| 平台/瀏覽器 API | API 行為變更 | 每個平台 API 呼叫必須有錯誤處理 |
 | 使用者環境 | 記憶體、效能、網路 | 有監控和降級策略 |
 
 ### 外部依賴邊界測試的驗證標準

@@ -542,6 +542,64 @@ class TestVerifyHandoffDependencies:
         result = _verify_handoff_dependencies(ticket, "0.31.0-W4-003", "0.31.0")
         assert result is True
 
+    def test_cross_version_completed_dependency_passes(self, temp_version_tickets):
+        """跨版本 blockedBy：依賴位於其他版本目錄且已完成 → 應通過（0.18.0-W3-005）"""
+        project_root, tickets_dir = temp_version_tickets
+
+        # 建立第二個版本目錄 v0.17.4，放入已完成的依賴
+        other_tickets_dir = project_root / "docs" / "work-logs" / "v0.17.4" / "tickets"
+        other_tickets_dir.mkdir(parents=True, exist_ok=True)
+        _create_ticket_file(other_tickets_dir, "0.17.4-W1-002", STATUS_COMPLETED, "Cross-version Dep")
+
+        # 當前 Ticket 在 v0.31.0，依賴 v0.17.4 的 Ticket
+        ticket = {
+            "id": "0.31.0-W4-001",
+            "status": STATUS_COMPLETED,
+            "title": "Test Ticket",
+            "blockedBy": ["0.17.4-W1-002"]
+        }
+        result = _verify_handoff_dependencies(ticket, "0.31.0-W4-001", "0.31.0")
+        assert result is True, "跨版本已完成依賴應通過檢查，不可誤判為未找到"
+
+    def test_cross_version_incomplete_dependency_blocks(self, temp_version_tickets, capsys):
+        """跨版本 blockedBy：依賴位於其他版本目錄但未完成 → 應被阻擋，且錯誤需含狀態而非「未找到」（0.18.0-W3-005）"""
+        project_root, tickets_dir = temp_version_tickets
+
+        # 建立第二個版本目錄 v0.17.4，放入未完成的依賴
+        other_tickets_dir = project_root / "docs" / "work-logs" / "v0.17.4" / "tickets"
+        other_tickets_dir.mkdir(parents=True, exist_ok=True)
+        _create_ticket_file(other_tickets_dir, "0.17.4-W1-002", STATUS_IN_PROGRESS, "Cross-version Dep")
+
+        ticket = {
+            "id": "0.31.0-W4-001",
+            "status": STATUS_COMPLETED,
+            "title": "Test Ticket",
+            "blockedBy": ["0.17.4-W1-002"]
+        }
+        result = _verify_handoff_dependencies(ticket, "0.31.0-W4-001", "0.31.0")
+        assert result is False, "跨版本未完成依賴應阻擋 handoff"
+        captured = capsys.readouterr().out
+        assert "狀態" in captured and "未找到" not in captured, \
+            "錯誤訊息應反映實際狀態（in_progress），而非誤報為未找到"
+
+    def test_cross_version_missing_dependency_reports_not_found(self, temp_version_tickets):
+        """跨版本 blockedBy：依賴 ID 格式合法但檔案真的不存在 → 仍應被阻擋並報告未找到（0.18.0-W3-005）"""
+        project_root, tickets_dir = temp_version_tickets
+
+        # 建立 v0.17.4 目錄但不放入依賴檔案
+        other_tickets_dir = project_root / "docs" / "work-logs" / "v0.17.4" / "tickets"
+        other_tickets_dir.mkdir(parents=True, exist_ok=True)
+
+        ticket = {
+            "id": "0.31.0-W4-001",
+            "status": STATUS_COMPLETED,
+            "title": "Test Ticket",
+            "blockedBy": ["0.17.4-W9-999"]
+        }
+        with patch("builtins.print"):
+            result = _verify_handoff_dependencies(ticket, "0.31.0-W4-001", "0.31.0")
+            assert result is False, "跨版本不存在的依賴應被阻擋"
+
 
 class TestHandoffStatusVerification:
     """測試 handoff 命令完整的狀態驗證流程"""

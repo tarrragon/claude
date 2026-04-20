@@ -153,14 +153,14 @@ PHASE_PREREQUISITES: dict[str, List[str]] = {
 
 # Phase 中文名稱對應表（用於訊息輸出）
 #
-# ⚠️ 同步契約：此映射為 constants.py 中 TDD_PHASE_DISPLAY 的子集
+# [WARN]️ 同步契約：此映射為 constants.py 中 TDD_PHASE_DISPLAY 的子集
 #   - 此映射僅包含核心 TDD 流程的 phase1-phase4 標籤
 #   - 用於 TDD 序列建議、Phase 前置條件驗證等內部邏輯
 #   - 當修改此映射時，必須同時檢查並更新 TDD_PHASE_DISPLAY：
 #     1. 修改 phase1-phase4 的標籤文字時，TDD_PHASE_DISPLAY 中的對應值須同步
 #     2. 禁止在此映射中新增 phase0/phase4a/phase4b/phase4c（屬於 TDD_PHASE_DISPLAY 獨有）
 #   - 修改前必須確認影響範圍：_generate_sequence_description/PHASE_PREREQUISITES
-#   - 詳見 .claude/rules/core/decision-tree.md（第五層 TDD 階段判斷）和 constants.py
+#   - 詳見 .claude/pm-rules/decision-tree.md（第五層 TDD 階段判斷）和 constants.py
 #
 PHASE_LABELS: dict[str, str] = {
     "phase1": "Phase 1（功能設計）",

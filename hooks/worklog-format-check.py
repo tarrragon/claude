@@ -10,7 +10,7 @@ PostToolUse Hook: 檢測工作日誌中表格內的問題 emoji 模式
 觸發時機: Edit/Write 操作 docs/work-logs/ 目錄下的 markdown 檔案
 行為: 警告（非阻擋），輸出問題位置到 stderr
 
-參考方法論: worklog-writing-methodology.md
+參考規範: .claude/skills/compositional-writing/references/writing-documents.md
 """
 
 import json
@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.hook_messages import ValidationMessages, format_message
 
 
@@ -101,7 +101,7 @@ def format_warning(file_path: str, issues: list[dict]) -> str:
     lines.extend([
         "-" * 40,
         "",
-        "Ref: .claude/methodologies/worklog-writing-methodology.md",
+        "Ref: .claude/skills/compositional-writing/references/writing-documents.md",
         "=" * 60,
         "",
     ])
@@ -114,9 +114,12 @@ def main():
     """主函式"""
     # 讀取 stdin 獲取 Hook 輸入
     try:
-        hook_input = json.load(sys.stdin)
+        hook_input = read_json_from_stdin(logger)
     except json.JSONDecodeError:
         # 無法解析輸入，靜默退出
+        return 0
+
+    if not hook_input:
         return 0
 
     # 獲取工具輸入
@@ -133,9 +136,15 @@ def main():
     issues = check_file_content(file_path)
 
     if issues:
-        # 輸出警告到 stderr（非阻擋）
+        # 輸出警告為 JSON 格式到 stdout
         warning = format_warning(file_path, issues)
-        print(warning)
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": warning
+            }
+        }
+        print(json.dumps(output, ensure_ascii=False, indent=2))
 
     # 總是返回成功（非阻擋式 Hook）
     return 0

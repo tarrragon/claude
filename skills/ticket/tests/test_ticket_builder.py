@@ -11,8 +11,10 @@ ticket_builder 模組的回歸測試
 - create_ticket_frontmatter() - 3 個案例（完整配置、最小配置、自訂驗收條件）
 - create_ticket_body() - 2 個案例（正常結構、特殊字元）
 - update_parent_children() - 3 個案例（新增子任務、追加、重複防止、父任務不存在）
+- update_source_spawned_tickets() - 6 個案例（A1-A6；PC-073）
+- create_ticket_frontmatter(source_ticket) - 3 個案例（D1-D3；PC-073）
 
-總共：22 個測試案例
+總共：既有 22 + 新增 9 = 31+ 測試案例
 """
 
 from datetime import datetime
@@ -30,6 +32,7 @@ from ticket_system.lib.ticket_builder import (
     create_ticket_frontmatter,
     create_ticket_body,
     update_parent_children,
+    update_source_spawned_tickets,
     get_default_acceptance_criteria,
 )
 from ticket_system.lib.ticket_loader import (
@@ -591,6 +594,28 @@ class TestCreateTicketBody:
         assert what in body
         assert "sage-test-architect" in body
 
+    def test_create_ticket_body_ana_includes_reproduction_section(self):
+        """Given: ticket_type = "ANA"
+        When: 呼叫 create_ticket_body(what, who, "ANA")
+        Then: 返回的 body 包含「重現實驗結果」章節及三個子節（PC-063 防護 1）
+        """
+        body = create_ticket_body("分析問題 Y", "sage-test-architect", "ANA")
+
+        assert "## 重現實驗結果" in body
+        assert "### 實驗方法" in body
+        assert "### 實驗執行" in body
+        assert "### 實驗發現" in body
+
+    def test_create_ticket_body_non_ana_excludes_reproduction_section(self):
+        """Given: ticket_type = "IMP"（非 ANA）
+        When: 呼叫 create_ticket_body(what, who, "IMP")
+        Then: 返回的 body 不含「重現實驗結果」章節
+        """
+        body = create_ticket_body("實作功能 Z", "parsley-flutter-developer", "IMP")
+
+        assert "## 重現實驗結果" not in body
+        assert "### 實驗方法" not in body
+
 
 class TestUpdateParentChildren:
     """測試 update_parent_children() 函式"""
@@ -693,3 +718,244 @@ class TestUpdateParentChildren:
         result = update_parent_children("0.31.0", "0.31.0-W5-999", "0.31.0-W5-999.1")
 
         assert result is False
+
+
+class TestUpdateSourceSpawnedTickets:
+    """測試 update_source_spawned_tickets() 函式（PC-073）
+
+    鏡像 TestUpdateParentChildren 的測試風格；只 mock 檔案 I/O 邊界
+    （load_ticket/save_ticket/get_ticket_path），內層正規化/去重邏輯走真實實作。
+    """
+
+    def test_update_source_spawned_new_entry(self, monkeypatch):
+        """A1 - Given: source `spawned_tickets: []`
+        When: 呼叫 update_source_spawned_tickets(source_id, new_id)
+        Then: 返回 True，且 source 的 spawned_tickets 包含 [new_id]
+        """
+        source_ticket = {
+            "id": "0.18.0-W12-002",
+            "spawned_tickets": [],
+            "_path": "/tmp/source.md"
+        }
+
+        def mock_load_ticket(version, ticket_id):
+            return source_ticket
+
+        def mock_save_ticket(ticket, path):
+            pass
+
+        def mock_get_ticket_path(version, ticket_id):
+            return "/tmp/source.md"
+
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.load_ticket", mock_load_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.save_ticket", mock_save_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.get_ticket_path", mock_get_ticket_path)
+
+        result = update_source_spawned_tickets("0.18.0-W12-002", "0.18.0-W12-006")
+
+        assert result is True
+        assert source_ticket["spawned_tickets"] == ["0.18.0-W12-006"]
+
+    def test_update_source_spawned_append_to_existing(self, monkeypatch):
+        """A2 - Given: source 已有 1 個 spawned = ["0.18.0-W12-003"]
+        When: append 第二個 spawned = "0.18.0-W12-006"
+        Then: 返回 True，spawned_tickets 變為 ["0.18.0-W12-003", "0.18.0-W12-006"]
+        """
+        source_ticket = {
+            "id": "0.18.0-W12-002",
+            "spawned_tickets": ["0.18.0-W12-003"],
+            "_path": "/tmp/source.md"
+        }
+
+        def mock_load_ticket(version, ticket_id):
+            return source_ticket
+
+        def mock_save_ticket(ticket, path):
+            pass
+
+        def mock_get_ticket_path(version, ticket_id):
+            return "/tmp/source.md"
+
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.load_ticket", mock_load_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.save_ticket", mock_save_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.get_ticket_path", mock_get_ticket_path)
+
+        result = update_source_spawned_tickets("0.18.0-W12-002", "0.18.0-W12-006")
+
+        assert result is True
+        assert source_ticket["spawned_tickets"] == [
+            "0.18.0-W12-003",
+            "0.18.0-W12-006",
+        ]
+
+    def test_update_source_spawned_duplicate_prevention(self, monkeypatch):
+        """A3 - Given: source 已有 spawned = ["0.18.0-W12-006"]
+        When: 以相同 ID 再呼叫一次 update_source_spawned_tickets
+        Then: 返回 True，spawned_tickets 仍為單一項（去重）
+        """
+        source_ticket = {
+            "id": "0.18.0-W12-002",
+            "spawned_tickets": ["0.18.0-W12-006"],
+            "_path": "/tmp/source.md"
+        }
+
+        def mock_load_ticket(version, ticket_id):
+            return source_ticket
+
+        def mock_save_ticket(ticket, path):
+            pass
+
+        def mock_get_ticket_path(version, ticket_id):
+            return "/tmp/source.md"
+
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.load_ticket", mock_load_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.save_ticket", mock_save_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.get_ticket_path", mock_get_ticket_path)
+
+        result = update_source_spawned_tickets("0.18.0-W12-002", "0.18.0-W12-006")
+
+        assert result is True
+        assert source_ticket["spawned_tickets"] == ["0.18.0-W12-006"]
+
+    def test_update_source_spawned_source_not_found(self, monkeypatch):
+        """A4 - Given: source Ticket 不存在（load_ticket 返回 None）
+        When: 呼叫 update_source_spawned_tickets
+        Then: 返回 False，不拋出異常
+        """
+        def mock_load_ticket(version, ticket_id):
+            return None
+
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.load_ticket", mock_load_ticket)
+
+        result = update_source_spawned_tickets("0.18.0-W99-999", "0.18.0-W12-006")
+
+        assert result is False
+
+    def test_update_source_spawned_normalizes_string_to_list(self, monkeypatch, capsys):
+        """A5 - Given: source 的 spawned_tickets 為字串（手動編輯異常）
+        When: 呼叫 update_source_spawned_tickets
+        Then: 函式自動正規化為 list 後 append，返回 True，stderr 有 WARNING
+        """
+        source_ticket = {
+            "id": "0.18.0-W12-002",
+            # 字串型別（模擬手動編輯損壞）
+            "spawned_tickets": "0.18.0-W12-003",
+            "_path": "/tmp/source.md"
+        }
+
+        def mock_load_ticket(version, ticket_id):
+            return source_ticket
+
+        def mock_save_ticket(ticket, path):
+            pass
+
+        def mock_get_ticket_path(version, ticket_id):
+            return "/tmp/source.md"
+
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.load_ticket", mock_load_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.save_ticket", mock_save_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.get_ticket_path", mock_get_ticket_path)
+
+        result = update_source_spawned_tickets("0.18.0-W12-002", "0.18.0-W12-006")
+
+        assert result is True
+        # 字串已正規化為 list，並 append 新 ID
+        assert source_ticket["spawned_tickets"] == [
+            "0.18.0-W12-003",
+            "0.18.0-W12-006",
+        ]
+        # stderr 有 WARNING 告知自動修正
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.err
+        assert "spawned_tickets" in captured.err
+
+    def test_update_source_spawned_save_failure_returns_false(self, monkeypatch):
+        """A6 - Given: save_ticket 拋 IOError
+        When: 呼叫 update_source_spawned_tickets
+        Then: 函式捕獲並返回 False，不向外傳播異常
+        """
+        source_ticket = {
+            "id": "0.18.0-W12-002",
+            "spawned_tickets": [],
+            "_path": "/tmp/source.md"
+        }
+
+        def mock_load_ticket(version, ticket_id):
+            return source_ticket
+
+        def mock_save_ticket(ticket, path):
+            raise IOError("disk full")
+
+        def mock_get_ticket_path(version, ticket_id):
+            return "/tmp/source.md"
+
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.load_ticket", mock_load_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.save_ticket", mock_save_ticket)
+        monkeypatch.setattr("ticket_system.lib.ticket_builder.get_ticket_path", mock_get_ticket_path)
+
+        # 不應拋出 IOError
+        result = update_source_spawned_tickets("0.18.0-W12-002", "0.18.0-W12-006")
+
+        assert result is False
+
+
+class TestCreateTicketFrontmatterSource:
+    """測試 create_ticket_frontmatter() 對 source_ticket 欄位的處理（PC-073）"""
+
+    def _build_base_config(self) -> TicketConfig:
+        """測試用最小 TicketConfig（不含 source_ticket / parent_id）"""
+        return {
+            "ticket_id": "0.18.0-W12-006",
+            "version": "0.18.0",
+            "wave": 12,
+            "title": "實作功能",
+            "ticket_type": "IMP",
+            "priority": "P2",
+            "who": "thyme-python-developer",
+            "what": "實作",
+            "when": "Phase 3b",
+            "where_layer": "Infrastructure",
+            "where_files": [],
+            "why": "PC-073 防護",
+            "how_task_type": "Implementation",
+            "how_strategy": "TDD Phase 3b"
+        }
+
+    def test_frontmatter_source_ticket_reads_from_config(self):
+        """D1 - Given: TicketConfig 含 source_ticket = "0.18.0-W12-002"
+        When: 呼叫 create_ticket_frontmatter(config)
+        Then: frontmatter["source_ticket"] == "0.18.0-W12-002"
+              （取代原本固定硬編碼 None）
+        """
+        config = self._build_base_config()
+        config["source_ticket"] = "0.18.0-W12-002"
+
+        frontmatter = create_ticket_frontmatter(config)
+
+        assert frontmatter["source_ticket"] == "0.18.0-W12-002"
+
+    def test_frontmatter_source_ticket_default_none_when_absent(self):
+        """D2 - Given: TicketConfig 未提供 source_ticket
+        When: 呼叫 create_ticket_frontmatter(config)
+        Then: frontmatter["source_ticket"] is None（向後相容：既有流程不受影響）
+        """
+        config = self._build_base_config()
+        # 不設 source_ticket
+
+        frontmatter = create_ticket_frontmatter(config)
+
+        assert frontmatter["source_ticket"] is None
+
+    def test_frontmatter_source_ticket_and_parent_id_coexist_in_schema(self):
+        """D3 - Given: frontmatter schema 同時包含 parent_id 與 source_ticket 欄位
+        When: 呼叫 create_ticket_frontmatter(config)
+        Then: 兩個欄位皆存在於輸出 dict；互斥由 CLI 層攔截，frontmatter 層不擋
+              （schema-level coexistence 驗證）
+        """
+        config = self._build_base_config()
+
+        frontmatter = create_ticket_frontmatter(config)
+
+        # schema 兩個欄位都存在（即使值為 None 也代表欄位已定義）
+        assert "parent_id" in frontmatter
+        assert "source_ticket" in frontmatter

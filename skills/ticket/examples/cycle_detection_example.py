@@ -171,7 +171,7 @@ def example_5_validate_new_dependency():
         print(f"錯誤訊息：{msg}")
         print(f"環路：{' → '.join(path)}")
     else:
-        print("✓ 可以安全地新增此依賴")
+        print("[Y] 可以安全地新增此依賴")
 
     # 嘗試另一種情況：C 被 A 阻塞（會產生環）
     print("\n嘗試修改：C 被 A 阻塞")
@@ -223,7 +223,7 @@ def example_6_complex_dag():
 
     print(f"\n發現 {len(cycles)} 個環")
     if len(cycles) == 0:
-        print("✓ 此結構為有向無環圖（DAG），無循環依賴")
+        print("[Y] 此結構為有向無環圖（DAG），無循環依賴")
 
     print()
 

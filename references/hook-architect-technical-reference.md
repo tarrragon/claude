@@ -33,11 +33,22 @@
 - **輸出**: decision (block), additionalContext
 - **特點**: 工具已執行，只能回饋訊息
 
-### Stop / SubagentStop
-- **用途**: 防止對話過早停止
-- **輸入**: session_id, transcript_path
+### Stop
+- **用途**: 主線程停止時的後處理（檢查未完成工作、強制完成檢查清單等）
+- **輸入**: session_id, transcript_path, stop_hook_active
 - **輸出**: decision (block), reason
-- **特點**: 可延續對話，要求完成特定工作
+- **特點**: 觸發於主線程結束，**非代理人**結束。可阻擋停止以要求完成特定工作。
+
+### SubagentStop
+- **用途**: **代理人（subagent）真正完成時觸發**，提供代理人完成訊號源（清理派發記錄、驗證 commit、廣播完成、handoff 提醒等）
+- **輸入**: session_id, transcript_path, stop_hook_active, **agent_id**, **agent_type**, **agent_transcript_path**, last_assistant_message (optional)
+- **輸出**: decision (block), reason
+- **特點**:
+  - 涵蓋前台與 `run_in_background: true` 派發兩種模式
+  - `agent_id` 為代理人精準識別碼，可用於匹配 `dispatch-active.json` 等狀態檔案
+  - **與 PostToolUse(Agent) 區別**：PostToolUse(Agent) 在 background 派發時於**啟動時**觸發（非完成），SubagentStop 才是真完成訊號
+
+> **重要**：「代理人完成」相關 Hook（清理派發、驗證 commit、廣播狀態、handoff 提醒等）一律使用 SubagentStop，**禁止使用 PostToolUse(Agent)**（時機錯位，詳見 ARCH-019）。
 
 ---
 
@@ -69,12 +80,23 @@ shebang 保留供終端機直接執行時使用。
 
 ### stdin 輸入讀取
 
+**強制規範**：所有 Hook 必須使用 `hook_utils.read_json_from_stdin(logger)` 讀取 stdin，禁止直接 `json.load(sys.stdin)`。
+
 ```python
-try:
-    input_data = json.load(sys.stdin)
-except json.JSONDecodeError as e:
-    print(f"Error: Invalid JSON input: {e}", file=sys.stderr)
-    sys.exit(1)
+from hook_utils import setup_hook_logging, read_json_from_stdin
+
+def main():
+    logger = setup_hook_logging("hook-name")
+    input_data = read_json_from_stdin(logger)
+    if input_data is None:
+        return 0  # 空輸入或解析失敗，正常退出（已記錄到日誌）
+    # ... 處理邏輯 ...
+```
+
+**禁止的模式**：
+```python
+# 錯誤：直接 json.load — 已全面遷移移除
+input_data = json.load(sys.stdin)
 ```
 
 ### hookSpecificOutput 格式
@@ -141,10 +163,23 @@ fi
 ### Exit Code 控制
 
 ```bash
-exit 0  # 成功
-exit 2  # 阻塊錯誤（stderr 回饋給 Claude）
-exit 1  # 非阻塊錯誤（顯示給用戶，繼續執行）
+exit 0  # 成功（stdout JSON 作為 additionalContext）
+exit 2  # 阻止操作（Hook 要求 CLI 不執行該動作）
+# exit 1 — 避免使用：CLI 將 exit 1 視為 "hook error"，
+#           會吞掉 stdout 訊息並顯示錯誤標籤（IMP-049 已知 CLI bug）
 ```
+
+**Hook 錯誤處理原則**：
+
+| 情境 | 正確做法 | 錯誤做法 |
+|------|---------|---------|
+| Hook 內部異常 | `run_hook_safely` 捕獲 + 記錄日誌檔 | `sys.exit(1)` |
+| ImportError | `sys.exit(0)` + stderr 報錯 | `sys.exit(1)` |
+| 輸入解析失敗 | `return 0`（靜默跳過） | `sys.exit(1)` |
+| `__main__` CLI 工具 | `sys.exit(1)` 是正確的 | 不適用 |
+
+> **注意**：`__main__` 區塊是 CLI 測試入口，不經過 Hook 系統，exit 1 是正確的 CLI 語義。
+> Hook 執行路徑中應避免 `sys.exit(1)`，改用 `return 0` 或由 `run_hook_safely` 處理。
 
 ---
 
@@ -252,7 +287,8 @@ PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)
 
 | 陷阱 | 問題 | 解決 |
 |------|------|------|
-| 忽略 stdin JSON | 直接用環境變數 | `json.load(sys.stdin)` |
+| 直接 json.load(sys.stdin) | 無統一錯誤處理，重複 IMP-048 | `read_json_from_stdin(logger)` |
+| 忽略 stdin JSON | 直接用環境變數 | `read_json_from_stdin(logger)` |
 | 錯誤的決策欄位 | PreToolUse 用 `decision` | 用 `permissionDecision` |
 | 不用官方環境變數 | 手動定位根目錄 | 用 `$CLAUDE_PROJECT_DIR` |
 | 缺少可觀察性 | 無日誌 | hook_utils 或手動 log |

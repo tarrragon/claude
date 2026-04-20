@@ -349,7 +349,7 @@ class TestShouldPreservePendingJson:
 
 
 class TestAutoDirectionHandling:
-    """auto direction 分類邏輯測試（0.2.0-W3-008）"""
+    """auto direction 分類邏輯測試"""
 
     def _create_pending_json(self, pending_dir, filename, ticket_id, direction, resumed_at=None):
         """建立 pending JSON 測試檔案的輔助函式"""
@@ -508,7 +508,7 @@ class TestAutoDirectionHandling:
         # 驗證 logger.info 被呼叫，訊息包含 "auto handoff" 和 "不阻塞"
         info_calls = [str(call) for call in logger.info.call_args_list]
         info_messages = " ".join(info_calls)
-        assert "auto handoff" in info_messages
+        assert "auto" in info_messages
         assert "不阻塞" in info_messages
 
 

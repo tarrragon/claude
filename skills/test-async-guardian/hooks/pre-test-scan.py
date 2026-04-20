@@ -68,7 +68,7 @@ def main() -> int:
     scanner_script = script_dir / 'async_resource_scanner.py'
 
     if not scanner_script.exists():
-        print(f"⚠️  掃描腳本不存在: {scanner_script}")
+        print(f"[WARN]️  掃描腳本不存在: {scanner_script}")
         return 0
 
     # 執行掃描（嚴格模式）
@@ -85,7 +85,7 @@ def main() -> int:
         )
         return result.returncode
     except Exception as e:
-        print(f"⚠️  執行掃描腳本失敗: {e}")
+        print(f"[WARN]️  執行掃描腳本失敗: {e}")
         return 0
 
 

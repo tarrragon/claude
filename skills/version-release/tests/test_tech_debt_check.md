@@ -31,14 +31,14 @@ uv run .claude/skills/version-release/scripts/version_release.py check --version
 uv run .claude/skills/version-release/scripts/version_release.py check --version 0.20
 
 # 2. 查看輸出是否包含:
-#    - ✅ 技術債務已處理或延遲完畢 (若無待處理 TD)
+#    - [OK] 技術債務已處理或延遲完畢 (若無待處理 TD)
 #    或
-#    - ❌ 發現 N 個待處理技術債務 (若有待處理 TD)
+#    - [FAIL] 發現 N 個待處理技術債務 (若有待處理 TD)
 
 # 3. 驗證待處理 TD 列表是否正確
 ```
 
-**驗證標準** ✅:
+**驗證標準** [OK]:
 - 掃描完成沒有錯誤
 - 輸出包含完整的 TD 資訊 (ticket_id, target, status)
 - 提供修復建議
@@ -79,7 +79,7 @@ uv run .claude/skills/version-release/scripts/version_release.py release \
 ls -la docs/work-logs/v0.20.0/tickets/
 ```
 
-**驗證標準** ✅:
+**驗證標準** [OK]:
 - 預覽完成沒有錯誤
 - 顯示正確的延後數量
 - TD 檔案在預覽後未被修改
@@ -118,16 +118,16 @@ uv run .claude/skills/version-release/scripts/version_release.py release \
 **預期會發生** (step by step):
 1. **Step 0**: 掃描並延後所有待處理 TD
    ```
-   ✅ 已延後 0.20.0-TD-001 到版本 0.21.0
-   ✅ 已延後 0.20.0-TD-002 到版本 0.21.0
-   ✅ 共延後 2 個技術債務
+   [OK] 已延後 0.20.0-TD-001 到版本 0.21.0
+   [OK] 已延後 0.20.0-TD-002 到版本 0.21.0
+   [OK] 共延後 2 個技術債務
    ```
 
 2. **Step 1**: Pre-flight Check
    ```
-   ✓ 檢查工作日誌完成度...
-   ✓ 檢查技術債務處理狀態...
-   ✅ 技術債務已處理或延遲完畢
+   [OK] 檢查工作日誌完成度...
+   [OK] 檢查技術債務處理狀態...
+   [OK] 技術債務已處理或延遲完畢
    ```
 
 3. **Step 2**: Document Updates
@@ -146,12 +146,12 @@ grep -E "version:|deferred_from:|defer_reason:" \
 
 **預期看到**:
 ```yaml
-version: 0.21.0                                    # ✅ 已更新
-deferred_from: 0.20                                # ✅ 已新增或更新
-defer_reason: "版本 0.20.5 發布前延後至 0.21.0"   # ✅ 已新增或更新
+version: 0.21.0                                    # [OK] 已更新
+deferred_from: 0.20                                # [OK] 已新增或更新
+defer_reason: "版本 0.20.5 發布前延後至 0.21.0"   # [OK] 已新增或更新
 ```
 
-**驗證標準** ✅:
+**驗證標準** [OK]:
 - `version` 從 `0.20` 更新為 `0.21.0`
 - `deferred_from` 欄位存在且值為 `0.20`
 - `defer_reason` 欄位存在且包含合理的原因文本
@@ -173,7 +173,7 @@ uv run .claude/skills/version-release/scripts/version_release.py check --version
 - 找到延後自 v0.20 的 TD （`deferred_from: 0.20`）
 - 檢查 `version: 0.21.0` 的 TD
 
-**驗證標準** ✅:
+**驗證標準** [OK]:
 - 能正確識別已延後的 TD
 - 待處理 TD 列表包含從 v0.20 延後過來的項目
 
@@ -192,10 +192,10 @@ uv run .claude/skills/version-release/scripts/version_release.py check --version
 
 **預期結果**:
 ```
-✅ 技術債務已處理或延遲完畢
+[OK] 技術債務已處理或延遲完畢
 ```
 
-**驗證標準** ✅:
+**驗證標準** [OK]:
 - 檢查完成，無待處理 TD
 - 提供正面反饋
 
@@ -208,7 +208,7 @@ uv run .claude/skills/version-release/scripts/version_release.py check --version
 uv run .claude/skills/version-release/scripts/version_release.py check --version 0.20
 ```
 
-**驗證標準** ✅:
+**驗證標準** [OK]:
 - 短版本 (0.20) 和長版本 (0.20.0) 被正確關聯
 - 掃描結果一致
 
@@ -241,8 +241,8 @@ grep -c "defer-td" .claude/skills/version-release/README.md
 # 預期: >= 3 (在描述、選項、範例中各出現一次)
 
 # 2. 檢查 TECH_DEBT_GUIDE.md 是否存在
-test -f .claude/skills/version-release/TECH_DEBT_GUIDE.md && echo "✅ 文檔存在"
-# 預期: ✅ 文檔存在
+test -f .claude/skills/version-release/TECH_DEBT_GUIDE.md && echo "[OK] 文檔存在"
+# 預期: [OK] 文檔存在
 
 # 3. 檢查文檔中是否包含關鍵概念
 grep -c "deferred_from\|defer_reason" .claude/skills/version-release/TECH_DEBT_GUIDE.md
@@ -268,19 +268,19 @@ grep -c "deferred_from\|defer_reason" .claude/skills/version-release/TECH_DEBT_G
 
 #### 日期: 2026-01-07
 
-**Test 1 - 掃描檢查** ✅
+**Test 1 - 掃描檢查** [OK]
 ```
 $ uv run .claude/skills/version-release/scripts/version_release.py check --version 0.20
 [執行成功，顯示完整檢查報告]
 ```
 
-**Test 2 - 預覽延後** ✅
+**Test 2 - 預覽延後** [OK]
 ```
 $ uv run .claude/skills/version-release/scripts/version_release.py release --version 0.20.5 --defer-td 0.21.0 --dry-run
 [預覽成功，無檔案被修改]
 ```
 
-**Test 3a - 查看初始狀態** ✅
+**Test 3a - 查看初始狀態** [OK]
 ```
 version: 0.20 或 0.20.0
 deferred_from: null

@@ -31,7 +31,7 @@ class AskUserQuestionReminders:
 
     覆蓋場景：驗收方式確認、Complete 後下一步、Wave 收尾、派發方式選擇、決策確認、
     Commit Handoff、流程省略偵測、後續任務路由、parallel-evaluation 觸發、批量變更備份。
-    Source of Truth: .claude/rules/core/decision-tree.md
+    Source of Truth: .claude/pm-rules/decision-tree.md
     """
 
     COMPLETE_REMINDER = """============================================================
@@ -46,7 +46,7 @@ complete 前必須使用 AskUserQuestion 確認驗收方式：
 complete 後必須使用 AskUserQuestion 選擇下一步。
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md
+詳見: .claude/pm-rules/decision-tree.md
 ============================================================"""
 
     COMPLETE_NEXT_STEP_REMINDER = """============================================================
@@ -98,7 +98,7 @@ PM 必須使用 AskUserQuestion 確認收尾動作。
 2. 告知 git 未提交狀態
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md
+詳見: .claude/pm-rules/decision-tree.md
 ============================================================"""
 
     DISPATCH_REMINDER = """============================================================
@@ -124,7 +124,7 @@ PM 必須使用 AskUserQuestion 確認收尾動作。
 避免用戶回答被 Hook 系統誤判為開發命令。
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md
+詳見: .claude/pm-rules/decision-tree.md
 ============================================================"""
 
     # ========================================================================
@@ -285,7 +285,7 @@ PM 必須使用 AskUserQuestion 確認：
 - 簡化執行 - 精簡版本
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/forbidden/skip-gate.md
+詳見: .claude/pm-rules/skip-gate.md
 ============================================================"""
 
     # ========================================================================
@@ -300,7 +300,7 @@ PM 必須使用 AskUserQuestion 確認：
 根據 task_type 提供對應選項。
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md（第八層）
+詳見: .claude/pm-rules/decision-tree.md（第八層）
 ============================================================"""
 
     POST_PHASE3B_ROUTE_REMINDER = """============================================================
@@ -313,7 +313,7 @@ Phase 3b（實作執行）已完成。建議下一步：
 - 先 commit 再決定
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md（第八層）
+詳見: .claude/pm-rules/decision-tree.md（第八層）
 ============================================================"""
 
     POST_PHASE4_ROUTE_REMINDER = """============================================================
@@ -326,7 +326,7 @@ Phase 4（重構評估）已完成。建議下一步：
 - Wave 收尾
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md（第八層）
+詳見: .claude/pm-rules/decision-tree.md（第八層）
 ============================================================"""
 
     # ========================================================================
@@ -364,7 +364,7 @@ PM 必須使用 AskUserQuestion 確認：
 - 查看變更範圍 - 確認後再決定
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/decision-tree.md（第八層）
+詳見: .claude/pm-rules/decision-tree.md（第八層）
 ============================================================"""
 
     # ========================================================================
@@ -440,7 +440,7 @@ ticket track complete 已成功。下一步強制流程：
   → 確認本次 Ticket 的進度已記錄到 worklog 的「進度追蹤」區段
   → 需記錄的事件：完成、拆分、額外發現、UC 推進、阻塞
   → 格式：`- YYYY-MM-DD: [事件] -- [摘要]`
-  → 參考：worklog-writing-methodology.md 第三原則
+  → 參考：.claude/skills/compositional-writing/references/writing-documents.md 第三原則
 
 [Checkpoint 1] 檢查未提交變更
   → 執行: git status
@@ -473,8 +473,33 @@ ticket track complete 已成功。下一步強制流程：
   → 無任何待處理 → AskUserQuestion #13（後續任務路由）
 
 禁止：直接結束回應或進入下一個 Ticket（跳過 Checkpoint 1/1.5/2）
-詳見: .claude/rules/core/decision-tree.md（第八層）
+詳見: .claude/pm-rules/decision-tree.md（第八層）
 ============================================================"""
+
+
+# ============================================================================
+# AUQ Option Pattern Detector Hook 訊息（W5-042 / PC-064）
+# ============================================================================
+
+
+class AUQOptionPatternMessages:
+    """AUQ Option Pattern Detector Hook 使用的提醒訊息（PC-064 防護層 1）。"""
+
+    REMINDER = """[AUQ Option Pattern Reminder]
+
+你上一次回覆疑似包含選項列表（A./B./C. 等）或二元確認問句，等待用戶做決策。
+
+根據 .claude/pm-rules/askuserquestion-rules.md 規則 1/3：
+- 規則 1：所有選擇型決策（多選或二元 yes/no）必須使用 AskUserQuestion 工具，禁止純文字列選項
+- 規則 3：禁止純文字提問讓用戶自由回答（自然語言回覆可能被 Hook 誤判為開發命令）
+
+若此次確為決策點，下一輪請改用：
+  1. ToolSearch("select:AskUserQuestion") 載入 schema
+  2. 以 AskUserQuestion 工具重新呈現選項
+
+若為引用文件 / 歷史回顧 / 規則寫作，忽略此提醒即可。
+
+參考：PC-064 錯誤模式 / askuserquestion-rules 18 個場景"""
 
 
 # ============================================================================

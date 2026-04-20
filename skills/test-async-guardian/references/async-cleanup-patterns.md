@@ -9,7 +9,7 @@
 ### 錯誤的實作
 
 ```dart
-// ❌ 錯誤：沒有 tearDown 清理
+// [FAIL] 錯誤：沒有 tearDown 清理
 setUp(() {
   mockApiService = MockBookInfoApiService();
   bookQueryService = BookQueryService(apiService: mockApiService);
@@ -35,7 +35,7 @@ test('應該能取消進行中的查詢', () async {
 ### 正確的實作
 
 ```dart
-// ✅ 正確：添加 tearDown 清理
+// [OK] 正確：添加 tearDown 清理
 setUp(() {
   mockApiService = MockBookInfoApiService();
   bookQueryService = BookQueryService(apiService: mockApiService);
@@ -75,7 +75,7 @@ test('應該能取消進行中的查詢', () async {
 ### 錯誤的實作
 
 ```dart
-// ❌ 錯誤：沒有重置 Mock 慢速模式
+// [FAIL] 錯誤：沒有重置 Mock 慢速模式
 setUp(() {
   mockSearchViewModel = MockSearchBookViewModelForBatch();
   mockBookRepository = MockBookRepository();
@@ -97,7 +97,7 @@ test('Test 5: 取消批次 - processing → cancelled', () async {
 ### 正確的實作
 
 ```dart
-// ✅ 正確：在 tearDown 中重置所有 Mock 設置
+// [OK] 正確：在 tearDown 中重置所有 Mock 設置
 setUp(() {
   mockSearchViewModel = MockSearchBookViewModelForBatch();
   mockBookRepository = MockBookRepository();
@@ -136,7 +136,7 @@ test('Test 5: 取消批次 - processing → cancelled', () async {
 ### 錯誤的實作
 
 ```dart
-// ❌ 錯誤：Timer 沒有保存引用，無法取消
+// [FAIL] 錯誤：Timer 沒有保存引用，無法取消
 class PerformanceMonitor {
   void startMemoryMonitoring({Duration interval = const Duration(milliseconds: 500)}) {
     // Timer 沒有保存引用
@@ -154,7 +154,7 @@ class PerformanceMonitor {
 ### 正確的實作
 
 ```dart
-// ✅ 正確：保存 Timer 引用並在 dispose 中取消
+// [OK] 正確：保存 Timer 引用並在 dispose 中取消
 class PerformanceMonitor {
   Timer? _memoryMonitorTimer;
   Timer? _frameRateMonitorTimer;
@@ -192,7 +192,7 @@ class PerformanceMonitor {
 ### 錯誤的實作
 
 ```dart
-// ❌ 錯誤：StreamController 沒有 dispose 方法
+// [FAIL] 錯誤：StreamController 沒有 dispose 方法
 class MockBookEnrichmentService implements IBookInfoEnrichmentService {
   final StreamController<EnrichmentProgress> _progressController =
       StreamController<EnrichmentProgress>.broadcast();
@@ -209,7 +209,7 @@ class MockBookEnrichmentService implements IBookInfoEnrichmentService {
 ### 正確的實作
 
 ```dart
-// ✅ 正確：添加 dispose 方法關閉 StreamController
+// [OK] 正確：添加 dispose 方法關閉 StreamController
 class MockBookEnrichmentService implements IBookInfoEnrichmentService {
   final StreamController<EnrichmentProgress> _progressController =
       StreamController<EnrichmentProgress>.broadcast();
@@ -298,7 +298,7 @@ ping -c 1 pub.dev
 ### 錯誤的實作
 
 ```dart
-// ❌ 錯誤：使用 testWidgets 但不需要 Widget 環境
+// [FAIL] 錯誤：使用 testWidgets 但不需要 Widget 環境
 // 來源：search_to_library_events_test.dart
 
 testWidgets('進行中搜尋應自動取消後重新搜尋', (tester) async {
@@ -309,7 +309,7 @@ testWidgets('進行中搜尋應自動取消後重新搜尋', (tester) async {
   await presenter.search('test');
 
   // 等待事件
-  await Future.delayed(const Duration(milliseconds: 50));  // ⚠️ 永遠不會完成！
+  await Future.delayed(const Duration(milliseconds: 50));  // [WARN]️ 永遠不會完成！
 
   // 驗證事件序列
   expect(events.length, 3);
@@ -325,7 +325,7 @@ testWidgets('進行中搜尋應自動取消後重新搜尋', (tester) async {
 ### 正確的實作
 
 ```dart
-// ✅ 正確：改用 test()，因為不需要 Widget 環境
+// [OK] 正確：改用 test()，因為不需要 Widget 環境
 
 test('進行中搜尋應自動取消後重新搜尋', () async {
   // 模擬搜尋耗時
@@ -345,7 +345,7 @@ test('進行中搜尋應自動取消後重新搜尋', () async {
 ### 替代方案（如果需要 Widget 環境）
 
 ```dart
-// ✅ 替代方案：使用 testWidgets + pump
+// [OK] 替代方案：使用 testWidgets + pump
 
 testWidgets('進行中搜尋應自動取消後重新搜尋', (tester) async {
   mockSearchBookUseCase.setDelay(const Duration(milliseconds: 200));

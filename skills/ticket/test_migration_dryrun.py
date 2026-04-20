@@ -84,10 +84,10 @@ def run_migration_dryrun() -> Tuple[int, int, int, List[Dict[str, Any]]]:
             # 驗證遷移結果
             if migrated.get("protocol_version") == PROTOCOL_VERSION_CURRENT:
                 success_count += 1
-                status = "✓ PASS"
+                status = "[Y] PASS"
             else:
                 error_count += 1
-                status = "✗ FAIL"
+                status = "[N] FAIL"
                 error_details.append({
                     "ticket_id": ticket_id,
                     "reason": f"版本未升級至 {PROTOCOL_VERSION_CURRENT}，當前: {migrated.get('protocol_version')}",
@@ -107,7 +107,7 @@ def run_migration_dryrun() -> Tuple[int, int, int, List[Dict[str, Any]]]:
                 "ticket_id": ticket_id,
                 "reason": str(e),
             })
-            print(f"  ✗ FAIL  {ticket_id} (Version Error)")
+            print(f"  [N] FAIL  {ticket_id} (Version Error)")
 
         except Exception as e:
             error_count += 1
@@ -115,7 +115,7 @@ def run_migration_dryrun() -> Tuple[int, int, int, List[Dict[str, Any]]]:
                 "ticket_id": ticket_id,
                 "reason": f"Unexpected Error: {str(e)}",
             })
-            print(f"  ✗ FAIL  {ticket_id} (Unexpected Error)")
+            print(f"  [N] FAIL  {ticket_id} (Unexpected Error)")
 
     # 產生摘要報告
     print(f"\n{'='*60}")

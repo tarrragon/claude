@@ -7,7 +7,7 @@
 
 ---
 
-## 🧪 Phase 3a: 語言無關實作策略（簡化版）
+## [TEST] Phase 3a: 語言無關實作策略（簡化版）
 
 **執行代理人**: pepper-test-implementer
 **執行時間**: YYYY-MM-DD
@@ -77,7 +77,7 @@
 
 ---
 
-## ✅ Phase 3a 完成檢查清單
+## [OK] Phase 3a 完成檢查清單
 
 **策略完整性**：
 - [ ] 所有測試檔案策略完整（結構、邏輯、驗證點）
@@ -96,13 +96,13 @@
 
 ---
 
-## 📋 使用說明
+## [INFO] 使用說明
 
 ### 何時使用此模板
 
-- ✅ **預設使用**：大部分測試案例（90%）
-- ✅ **一般複雜度**：標準的 CRUD、API 呼叫、資料轉換
-- ❌ **不適用**：複雜演算法、金融計算、效能關鍵路徑（使用完整版）
+- [OK] **預設使用**：大部分測試案例（90%）
+- [OK] **一般複雜度**：標準的 CRUD、API 呼叫、資料轉換
+- [FAIL] **不適用**：複雜演算法、金融計算、效能關鍵路徑（使用完整版）
 
 ### 填寫指引
 
@@ -119,8 +119,8 @@
 
 ---
 
-## 🔗 相關參考
+## [LINK] 相關參考
 
-- [TDD 協作流程]($CLAUDE_PROJECT_DIR/.claude/tdd-collaboration-flow.md) - Phase 3a 完整說明
+- [TDD 協作流程]($CLAUDE_PROJECT_DIR/.claude/methodologies/tdd-collaboration-flow.md) - Phase 3a 完整說明
 - [pepper 代理人描述]($CLAUDE_PROJECT_DIR/.claude/agents/pepper-test-implementer.md) - pepper 核心職責
 - [完整版模板]($CLAUDE_PROJECT_DIR/.claude/templates/work-log-template.md) - Phase 3a 完整版格式

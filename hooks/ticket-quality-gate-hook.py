@@ -48,12 +48,10 @@ from lib.ticket_quality.reporters import (
     generate_json_report
 )
 
-# 注意：hook_io 和 config_loader 需要別處定義或導入
+# 注意：config_loader 需要別處定義或導入
 try:
-    from hook_io import read_hook_input, write_hook_output
+    from hook_io import write_hook_output
 except ImportError:
-    def read_hook_input():
-        return json.load(sys.stdin)
     def write_hook_output(data):
         print(json.dumps(data, ensure_ascii=False))
 
@@ -403,7 +401,7 @@ def determine_decision(check_results: Dict[str, Any]) -> tuple:
         return "allow", format_message(CoreMessages.HOOK_ERROR, error="檢測系統錯誤，請查看日誌")
 
     if overall_status == "partial":
-        reason = f"⚠️ 部分檢測失敗（{summary['errors']} 個錯誤），允許操作繼續"
+        reason = f"[WARN] 部分檢測失敗（{summary['errors']} 個錯誤），允許操作繼續"
         return "allow", reason
 
     if summary["failed"] > 0:

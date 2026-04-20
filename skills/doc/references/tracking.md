@@ -47,7 +47,7 @@ proposals:
 |------|------|------|
 | spec_refs | 相對路徑（從 docs/ 起算） | `spec/platform/platform-management.md` |
 | usecase_refs | 裸 ID | `UC-01` |
-| ticket_refs | 裸 ID | `0.16.2-W1-001` |
+| ticket_refs | 裸 ID | `{version}-W{wave}-{seq}` |
 
 ## 查詢方式
 

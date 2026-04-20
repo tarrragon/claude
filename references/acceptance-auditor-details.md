@@ -37,6 +37,52 @@
 
 ---
 
+## Step 2.5：where.files 骨架/references 配對完整性檢查
+
+> **觸發條件**：Ticket where.files 欄位非空時執行。
+
+### 背景
+
+`.claude/rules/core/` 和 `.claude/pm-rules/` 等目錄採用「骨架 + references」拆分架構：骨架索引（如 `rules/core/quality-common.md`）只存觸發指標，實質內容在 `references/`（如 `references/quality-common.md`）。PM 撰寫 where.files 若只列骨架，執行代理人可能自行擴展至 references 路徑，導致與 ticket 範圍漂移。
+
+> 完整拆分對清單與規則說明：`.claude/methodologies/atomic-ticket-methodology.md` §「where.files 撰寫指引：拆分檔案配對」
+
+### 檢查規則
+
+| 情境 | 判定 | 說明 |
+|------|------|------|
+| where.files 列骨架路徑，未列對應 references 路徑 | WARN | 可能遺漏實質修改目標，建議補全 |
+| where.files 同時列骨架與 references | PASS | 配對完整 |
+| where.files 僅列 references（不含骨架） | PASS | 實質目標明確，骨架未改動可不列 |
+| where.files 中的路徑非拆分架構的一部分 | SKIP | 不適用本規則 |
+
+### 常見拆分對（抽樣驗證）
+
+以下為部分拆分對；完整清單見 atomic-ticket-methodology.md「where.files 撰寫指引」：
+
+| 骨架路徑 | references 路徑 |
+|---------|----------------|
+| `rules/core/quality-common.md` | `references/quality-common.md` |
+| `rules/core/bash-tool-usage-rules.md` | `references/bash-tool-usage-details.md` |
+| `pm-rules/ticket-lifecycle.md` | `references/ticket-lifecycle-phases.md` |
+| `pm-rules/decision-tree.md` | `references/decision-tree-checkpoint-details.md` |
+
+### 失敗報告格式
+
+```markdown
+[WARN] where.files 骨架/references 配對完整性檢查
+
+where.files 中列有骨架路徑但缺少對應 references：
+| 骨架路徑 | 缺少的 references 路徑 |
+|---------|----------------------|
+| .claude/rules/core/quality-common.md | .claude/references/quality-common.md |
+
+結論：where.files 可能遺漏實質修改目標，建議 PM 確認是否需同步補列 references 路徑。
+參考：.claude/methodologies/atomic-ticket-methodology.md §「where.files 撰寫指引：拆分檔案配對」
+```
+
+---
+
 ## Step 3：子任務完成狀態檢查
 
 ### 檢查規則
@@ -74,10 +120,10 @@ Ticket 有 children 欄位?
 未完成的子任務：
 | ID | 標題 | 狀態 |
 |----|------|------|
-| 0.31.0-W4-052.2 | 實作 acceptance-gate-hook | pending |
-| 0.31.0-W4-052.3 | 更新 ticket-lifecycle 規則 | pending |
+| {父 ticket-id}.2 | 實作 acceptance-gate-hook | pending |
+| {父 ticket-id}.3 | 更新 ticket-lifecycle 規則 | pending |
 
-結論：父任務 0.31.0-W4-052 有 2 個子任務未完成，不允許通過驗收。
+結論：父任務 {父 ticket-id} 有 2 個子任務未完成，不允許通過驗收。
 ```
 
 ---
@@ -357,6 +403,7 @@ Ticket 類型: RES（研究）
 | 檢查步驟 | 結果 | 說明 |
 |---------|------|------|
 | 結構完整性 | PASS/FAIL | {說明} |
+| where.files 骨架配對 | PASS/WARN/SKIP | {說明} |
 | 子任務完成 | PASS/FAIL/SKIP | {說明} |
 | 執行日誌完整 | PASS/FAIL | {說明} |
 | 測試執行驗證 | PASS/FAIL/SKIP | {說明} |

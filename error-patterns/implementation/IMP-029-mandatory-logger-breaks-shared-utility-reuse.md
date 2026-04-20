@@ -5,7 +5,6 @@ category: implementation
 severity: medium
 created: 2026-03-09
 related_tickets:
-  - 0.1.0-W22-024
 ---
 
 # IMP-029：強制 logger 參數導致函式提取至共用模組後介面不一致
@@ -20,7 +19,7 @@ Hook 內部函式的 logger 屬於「環境依賴」（所在 hook 永遠有 log
 
 ## 發現情境
 
-W22-024 將 `_parse_ticket_date()` 和 `check_error_patterns_changed()` 從 `acceptance-gate-hook.py` 提取至 `hook_utils.py` 時，原函式的 `logger` 為必填位置參數。提取後改為 `logger: ... = None` 選填，並在每個 logger 呼叫前加 `if logger:` 保護，才能讓函式在無 logger 環境下安全運作。
+某歷史 Ticket 將 `_parse_ticket_date()` 和 `check_error_patterns_changed()` 從 `acceptance-gate-hook.py` 提取至 `hook_utils.py` 時，原函式的 `logger` 為必填位置參數。提取後改為 `logger: ... = None` 選填，並在每個 logger 呼叫前加 `if logger:` 保護，才能讓函式在無 logger 環境下安全運作。
 
 ## 解決方案
 

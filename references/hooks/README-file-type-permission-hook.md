@@ -221,6 +221,5 @@ echo '{
 
 ## 參考資料
 
-- [Hook 系統快速參考]($CLAUDE_PROJECT_DIR/.claude/hook-system-reference.md)
 - [Hook 系統方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/hook-system-methodology.md)
 - [PreToolUse Hook 規範]($CLAUDE_PROJECT_DIR/.claude/hook-specs/claude-code-hooks-official-standards.md)

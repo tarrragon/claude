@@ -139,7 +139,7 @@ if 程式碼變更 > 0 AND 測試變更 == 0:
 **觸發時機**: Claude 主要代理完成回應時
 
 **方法論**:
-- **原則**: 智能版本推進建議，基於工作完成狀態和目標達成情況
+- **原則**: 自動化版本推進建議，基於工作完成狀態和目標達成情況
 - **分析範圍**: 檔案變更量、工作日誌狀態、TodoList 完成度
 - **建議導向**: 提供明確的下一步行動建議，不強制執行
 
@@ -154,6 +154,34 @@ if 檔案變更 > 0:
     else:
         建議繼續開發
 ```
+
+---
+
+### 🤖 SubagentStop Hook
+
+**觸發時機**: 代理人（subagent）真正完成時，涵蓋前台與 `run_in_background: true` 派發兩種模式
+
+**input 關鍵欄位**:
+
+| 欄位 | 用途 |
+|------|------|
+| `agent_id` | 代理人精準識別碼，**狀態檔案匹配的 source of truth** |
+| `agent_type` | 代理人類型（如 thyme-extension-engineer） |
+| `agent_transcript_path` | 代理人對話記錄路徑 |
+| `last_assistant_message` (optional) | 代理人最後一則訊息 |
+
+**典型責任**:
+- 清理派發追蹤記錄（如 `dispatch-active.json`，依 `agent_id` 精準匹配）
+- 驗證代理人 commit（避開啟動誤觸發）
+- 廣播代理人完成狀態（broadcast）
+- handoff 提醒
+- 累積執行統計（duration、tool_use_count）
+
+**禁止用於**:
+- 啟動時邏輯（註冊派發、驗證 prompt） → 應使用 PreToolUse(Agent)
+- 主線程結束邏輯 → 應使用 Stop
+
+> **Event 選擇強制規則**：「代理人完成」相關 Hook 一律掛 SubagentStop，**禁止掛 PostToolUse(Agent)**（後者在 background 派發時於啟動時觸發，與「完成」語意不符。詳見 ARCH-019）。
 
 ---
 
@@ -189,7 +217,7 @@ if 檔案變更 > 0:
 
 **方法論**:
 - **原則**: 主動文件同步提醒，確保文件與程式碼同步更新
-- **智能分析**: 根據變更檔案類型自動判斷需要更新的文件
+- **規則比對分析**: 根據變更檔案類型自動判斷需要更新的文件
 - **優先級分級**: High/Medium/Low 優先級，指導更新順序
 
 **變更類型對應**:
@@ -200,6 +228,50 @@ if 檔案變更 > 0:
 - 測試變更 → `docs/testing/` (Low)
 
 ## 🔧 Hook 系統設計原則
+
+### 0. **Event 選擇與識別碼（強制）**
+
+選擇 Hook event 前必須完成以下檢查，避免時機錯位（ARCH-019）。
+
+#### 0.1 不憑名稱推論觸發時機
+
+`PostToolUse(Agent)` 字面看像「Agent 結束後」，但在 `run_in_background: true` 派發時於**啟動時**就觸發。**必須查 hook-spec 確認真實觸發時機**，不憑名稱推論。
+
+#### 0.2 啟動 vs 完成職責分掛兩個 event
+
+| 職責 | 對應 event |
+|------|----------|
+| 啟動時邏輯（註冊派發、驗證 prompt、檢查 ticket reference） | `PreToolUse(Agent)` |
+| 完成時邏輯（清理記錄、驗證 commit、廣播完成、handoff 提醒） | `SubagentStop` |
+| 主線程結束邏輯 | `Stop` |
+| 工具執行後處理（一般工具 Read/Write/Bash 等） | `PostToolUse(<tool_name>)` |
+
+**反模式**：將啟動與完成邏輯混掛同一 event（如全部掛 `PostToolUse(Agent)`），導致 background 模式時機錯位，必須加 `if background_mode: skip` guard 繞道。
+
+#### 0.3 識別碼選擇：agent_id > agent_description
+
+代理人完成 Hook 匹配狀態檔案（如 `dispatch-active.json`）時：
+
+| 識別碼 | 來源 | 精準度 |
+|-------|------|-------|
+| `agent_id`（SubagentStop input） | runtime 提供，唯一 | **source of truth，建議使用** |
+| `agent_description` | 派發時 PM 自填字串 | 可能重複碰撞，不可靠 |
+
+#### 0.4 選 event 的決策流程
+
+```
+新增 Hook 前：
+1. 此 Hook 服務「啟動時」「完成時」還是「兩者」？
+2. 若兩者 → 拆成兩個 Hook 分掛兩個 event
+3. 若完成時且涉及代理人 → 必用 SubagentStop
+4. 查 hook-spec 確認選用 event 在 background 模式的觸發時機
+5. 確認狀態匹配使用 source of truth 識別碼（agent_id）
+```
+
+> 完整錯誤模式：`.claude/error-patterns/architecture/ARCH-019-hook-event-timing-mismatch.md`
+> Event input/output 規範：`.claude/references/hook-architect-technical-reference.md`
+
+---
 
 ### 1. **分離關注點**
 - 每個 hook 專注於特定的檢查範圍
@@ -216,7 +288,7 @@ if 檔案變更 > 0:
 - 給予開發者理解和修正的機會
 - 關鍵問題採用零容忍態度
 
-### 4. **智能化決策**
+### 4. **自動化決策**
 - 基於歷史資料和趨勢分析
 - 上下文感知的檢查邏輯
 - 自動優化和調整建議
@@ -241,7 +313,7 @@ if 檔案變更 > 0:
 - ESLint 錯誤: 自動偵測和追蹤
 - 測試覆蓋: 強制檢查
 - 技術債務: 自動監控和限制
-- 架構債務: 智能偵測和阻止
+- 架構債務: 自動偵測和阻止
 
 ## 🔄 維護和擴展
 
@@ -290,17 +362,14 @@ import sys
 from pathlib import Path
 
 # 標準化導入共用模組
-lib_path = Path(__file__).parent.parent / "lib"
-if str(lib_path) not in sys.path:
-    sys.path.insert(0, str(lib_path))
-
-from hook_io import read_hook_input, write_hook_output, create_pretooluse_output
-from hook_logging import setup_hook_logging
-from config_loader import load_agents_config
+sys.path.insert(0, str(Path(__file__).parent))
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 
 def main():
     logger = setup_hook_logging("hook-name")
-    input_data = read_hook_input()
+    input_data = read_json_from_stdin(logger)
+    if input_data is None:
+        return 0
 
     # ... 處理邏輯 ...
 
@@ -315,7 +384,7 @@ if __name__ == "__main__":
 
 | 需求 | 使用模組 | 函式 |
 |------|---------|------|
-| 讀取 Hook 輸入 | hook_io | `read_hook_input()` |
+| 讀取 Hook 輸入 | hook_utils (hook_io) | `read_json_from_stdin(logger)` |
 | 輸出決策結果 | hook_io | `write_hook_output()` |
 | PreToolUse 輸出 | hook_io | `create_pretooluse_output()` |
 | PostToolUse 輸出 | hook_io | `create_posttooluse_output()` |
@@ -325,37 +394,43 @@ if __name__ == "__main__":
 | Git 操作 | git_utils | `run_git_command()` |
 | 分支檢查 | git_utils | `is_protected_branch()` |
 
-### 輸出規範（stderr 禁止規則）
+### 輸出規範（stderr 與 exit code）
 
-> **背景**：Claude Code 將 hook 的任何 stderr 輸出視為 "hook error"。此問題在 W4-035、W18-004.3、W18-004.7 中反覆出現，最終在 W19-001 系統性修復。
+> **背景**：Claude Code 將 hook 的 stderr 輸出和 exit code 1 都視為 "hook error"（IMP-048, IMP-049）。此為 CLI 已知 bug（anthropics/claude-code#34713 等），但在 CLI 修復前 Hook 需配合。
 
-**強制規則**：所有 hook 禁止寫入 stderr。
+**Hook 執行路徑規則**（由 `run_hook_safely` 呼叫的程式碼）：
 
-| 禁止模式 | 正確替代 |
-|---------|---------|
-| `logging.StreamHandler(sys.stderr)` | `logging.StreamHandler(sys.stdout)` |
-| `print(..., file=sys.stderr)` | `print(...)` |
-| `sys.stderr.write(...)` | `sys.stdout.write(...)` 或 `print(...)` |
+| 規則 | 說明 |
+|------|------|
+| 禁止 `sys.exit(1)` | 改用 `return 0` 或拋出 Exception 由 `run_hook_safely` 捕獲 |
+| 避免 stderr 輸出 | StreamHandler 使用 stdout，錯誤記錄到日誌檔 |
+| ImportError 防護 | `sys.exit(0)` + stderr 報錯（ImportError 在 `run_hook_safely` 外，無法被捕獲） |
+
+**`__main__` CLI 工具規則**（不經過 Hook 系統的 CLI 測試入口）：
+
+| 規則 | 說明 |
+|------|------|
+| `sys.exit(1)` 是正確的 | CLI 用法錯誤或處理失敗應返回非零 exit code |
+| stderr 輸出是正確的 | CLI 工具的標準錯誤輸出行為 |
 
 **日誌配置標準模板**：
 
 ```python
-# 正確：使用 stdout
+# 正確：使用 stdout（Hook 執行路徑）
 logging.basicConfig(
     level=log_level,
     format="[%(asctime)s] %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler(log_file),
-        logging.StreamHandler(sys.stdout)  # 必須用 stdout
+        logging.StreamHandler(sys.stdout)  # Hook 路徑必須用 stdout
     ]
 )
 ```
 
-**檢查方式**：
-```bash
-# 驗證無 stderr 使用（應返回空結果）
-grep -r "sys\.stderr" .claude/hooks/ --include="*.py"
-```
+**與 quality-baseline 規則 4 的關係**：
+quality-baseline 要求「異常必須寫入 stderr」，但 Hook 系統因 CLI bug 限制無法遵守。
+Hook 的替代方案：異常記錄到**日誌檔**（`.claude/hook-logs/`），不寫 stderr。
+這是 CLI bug 的已知妥協，不適用於非 Hook 的一般程式碼。
 
 ### 測試要求
 
@@ -378,6 +453,127 @@ uv run pytest .claude/lib/tests/ -v
 - `quality_rules.yaml` - 品質檢測規則
 
 詳細 API 參考請見：[共用模組 README](../lib/README.md)
+
+---
+
+## 跨平台部署規範
+
+> **核心理念**：Hook 系統必須在 macOS、Linux、Windows 三平台行為一致。任何「我的機器可以跑」的假設在跨平台都是陷阱。
+
+Hook 在 macOS/Linux 上行為正常不代表 Windows 上可用。Windows 平台有三個獨立的斷層點會讓 Hook 完全無法啟動或輸出亂碼。本章節列出必做的防護措施。
+
+### 斷層點總覽
+
+| 斷層 | 症狀 | 根因 |
+|------|------|------|
+| Python 環境 | Hook 完全不執行，顯示「Failed with non-blocking status code: No stderr output」 | Windows 11 預裝 Microsoft Store Python Stub（exit 9009，不寫任何輸出） |
+| Shebang 污染 | env 找不到命令，exit 127，無 stderr | `core.autocrlf=true` 把 `#!/usr/bin/env -S uv run` 尾端加上 `\r` |
+| Console 編碼 | 中文輸出亂碼、JSON 解析失敗、異常寫 stderr 二次失敗 | Windows console 預設 cp950（Big5）/cp936（GBK），非 UTF-8 |
+
+### 規範 1：Windows Python 環境要求
+
+Hook 作者必須在使用者文件中明確要求：
+
+| 要求 | 說明 |
+|------|------|
+| 安裝真實 Python 3.12+ | 從 python.org 下載安裝，或使用 uv 管理（`uv python install 3.12`） |
+| 關閉 Microsoft Store 別名 | 設定 → 應用程式 → 進階應用程式設定 → App 執行別名 → 關閉 python.exe 與 python3.exe |
+| 驗證 | `python --version` 必須回傳版本號且 `$LASTEXITCODE=0`（若 exit 9009 表示 stub 仍生效） |
+
+**偵測 stub 的標準命令**（可納入 session-start 檢查）：
+
+```powershell
+$result = & python --version 2>&1
+if ($LASTEXITCODE -eq 9009 -or -not $result) {
+    Write-Warning "Python 是 Microsoft Store stub，請安裝真實 Python 或關閉 App 執行別名"
+}
+```
+
+### 規範 2：Shebang 與換行符防護
+
+所有 Python Hook 的 shebang 為 `#!/usr/bin/env -S uv run --quiet --script`。此 shebang 在 Windows 下**必須**配合以下兩項措施：
+
+| 措施 | 實施位置 |
+|------|---------|
+| 專案根目錄 `.gitattributes` 強制 `*.py text eol=lf` | 防止 `core.autocrlf=true` 污染 shebang |
+| `.claude/.gitattributes` 同步設定 | 隨框架 sync 傳播到其他專案 |
+| Windows 使用者 clone 後執行 `git config core.autocrlf false` | 防止後續 commit 被污染 |
+
+**驗證方式**：
+
+```bash
+git check-attr eol .claude/hooks/<任一>.py
+# 預期輸出：eol: lf（非 unspecified）
+```
+
+### 規範 3：UTF-8 I/O 強制
+
+Hook 執行時不可依賴 locale codepage，必須在入口強制 UTF-8。三種機制擇一（建議三者並用）：
+
+#### 機制 A：Hook 入口呼叫 `ensure_utf8_io()`
+
+```python
+def ensure_utf8_io() -> None:
+    """強制 stdin/stdout/stderr 使用 UTF-8。Python 3.11+ 可用 reconfigure。"""
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+def main() -> int:
+    ensure_utf8_io()  # 必須在 read_json_from_stdin 之前
+    ...
+```
+
+#### 機制 B：PEP 723 inline metadata 指定環境變數
+
+受限於 PEP 723 無法設定 env，此機制改由 hook launcher（CC runtime）提供 `PYTHONUTF8=1`。使用者環境需確保此變數存在。
+
+#### 機制 C：subprocess 呼叫強制 encoding
+
+```python
+# 錯誤：Windows 會用 cp950 解碼子程序輸出
+subprocess.run(["git", "log"], capture_output=True, text=True)
+
+# 正確：顯式指定 UTF-8 並處理非法字元
+subprocess.run(
+    ["git", "log"],
+    capture_output=True,
+    text=True,
+    encoding="utf-8",
+    errors="replace",
+)
+```
+
+### 規範 4：路徑分隔符
+
+`settings.json` 中的 hook command 路徑必須使用 forward slash（`/`），Windows 可正確解析。禁止使用 Windows 原生 backslash（`\`）或 escape 後 backslash（`\\`），這會在 macOS/Linux 失效。
+
+```json
+{
+  "command": ".claude/hooks/my-hook.py"  // 正確：forward slash 跨平台通用
+}
+```
+
+### 規範 5：Windows 測試要求
+
+每個新建或修改的 Hook 必須通過以下兩項跨平台驗證：
+
+| 驗證項 | 方法 |
+|-------|------|
+| shebang LF | `git check-attr eol <hook.py>` 顯示 `eol: lf` |
+| UTF-8 I/O | 中文字串通過 `ensure_utf8_io()` 後輸出無亂碼 |
+| subprocess encoding | grep `subprocess\.(run|Popen|check_output)` 結果均含 `encoding="utf-8"` |
+
+### Hook 作者檢查清單
+
+開發新 Hook 時，必做以下項目：
+
+- [ ] Hook 入口呼叫 `ensure_utf8_io()`
+- [ ] 所有 `subprocess.run/Popen/check_output` 加 `encoding="utf-8", errors="replace"`
+- [ ] `settings.json` 的 command 路徑使用 forward slash
+- [ ] 測試在 cp950/cp936 locale 下輸出不亂碼（至少理論驗證）
+- [ ] 使用者文件提醒：Windows 需安裝真實 Python 並關閉 Store 別名
+- [ ] Hook 檔案無 CRLF 污染（`git check-attr eol` 驗證）
 
 ---
 

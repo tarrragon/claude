@@ -96,7 +96,11 @@
 1. 合併所有視角的發現清單
 2. 去重（多個視角發現同一問題時合併，可信度提升）
 3. 對每個發現套用 Worth-It Filter
-4. 產出最終的行動清單
+4. **對每個「延後執行」項目執行 `ticket create`，取得 Ticket ID**
+5. 將 Ticket ID 填入報告表格的 Ticket 欄
+6. 產出最終的行動清單
+
+> **強制規則**：步驟 4-5 不可省略。報告的「延後追蹤」表格中，每一行的 Ticket 欄必須填入實際 Ticket ID。空白 Ticket 欄 = 未追蹤 = 違反 quality-baseline 規則 5。
 
 ---
 
@@ -229,7 +233,7 @@
 - .claude/skills/parallel-evaluation/references/lens-prompts.md - Agent 提示模板
 - .claude/skills/parallel-evaluation/references/worth-it-filter-details.md - 過濾標準詳細
 - .claude/skills/parallel-evaluation/references/integration-guide.md - 整合指南
-- .claude/rules/core/decision-tree.md - 主線程決策樹
+- .claude/pm-rules/decision-tree.md - 主線程決策樹
 - .claude/rules/guides/parallel-dispatch.md - 並行派發指南
 
 ---

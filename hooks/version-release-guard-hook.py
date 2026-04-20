@@ -21,7 +21,7 @@ Checks:
 - 使用 .claude/lib/git_utils 共用模組
 - 消除重複程式碼
 
-重構紀錄 (v0.31.0-W22-001.3):
+重構紀錄:
 - 遷移至統一日誌系統 (hook_utils)
 """
 
@@ -168,12 +168,12 @@ def main() -> int:
 繼續執行中...
 """
         logger.warning("Not executing via version_release.py")
-        print(warning_msg)
+        print(warning_msg, file=sys.stderr)
 
     # 檢查 2: pubspec.yaml 版本一致性
     version_ok, version_info = check_pubspec_version(logger)
     if not version_ok:
-        print(f"[Version Release Guard] 警告: {version_info}")
+        print(f"[Version Release Guard] 警告: {version_info}", file=sys.stderr)
 
     # 通過檢查（改為警告模式而非阻止）
     logger.info("Version release guard passed")

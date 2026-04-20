@@ -118,8 +118,8 @@ uv run scripts/i18n_batch_replace.py --target lib/presentation --report
 
 | 情況 | 處理方式 | 優先級 |
 |------|---------|--------|
-| Domain 層包含 UI 文字 | 建立重構 Ticket（如 W2-001） | 高 |
-| 默認參數硬編碼 | 建立策略 Ticket（如 W2-002） | 中 |
+| Domain 層包含 UI 文字 | 建立重構 Ticket | 高 |
+| 默認參數硬編碼 | 建立策略 Ticket | 中 |
 | 跨多檔案的模式 | 建立批量處理 Ticket | 高 |
 
 ## 實戰案例
@@ -128,10 +128,10 @@ uv run scripts/i18n_batch_replace.py --target lib/presentation --report
 
 | 等級 | 數量 | 處理方式 | 對應 Ticket |
 |------|------|---------|-----------|
-| A | 35 處 | 腳本替換 | W1-004 |
-| B | 90 處 | 待評估 | W1-004 |
-| C | 947 處 | 架構重構 | W2-001 |
-| C | 3 處 | 默認參數 | W2-002 |
+| A | 35 處 | 腳本替換 | 範例案例 A |
+| B | 90 處 | 待評估 | 範例案例 A |
+| C | 947 處 | 架構重構 | 範例案例 B |
+| C | 3 處 | 默認參數 | 範例案例 C |
 
 **學習要點**：
 - 架構層面的硬編碼（等級 C）佔比最高
@@ -149,7 +149,7 @@ uv run scripts/i18n_batch_replace.py --target lib/presentation --report
 ## 相關規範
 
 - 分層 i18n 管理方法論：`.claude/methodologies/layered-i18n-management-methodology.md`
-- ViewModel 層硬編碼規範：`.claude/rules/core/quality-common.md` 第 2.2 節
+- ViewModel 層硬編碼規範：`.claude/references/quality-common.md` 第 2.2 節
 
 ---
 

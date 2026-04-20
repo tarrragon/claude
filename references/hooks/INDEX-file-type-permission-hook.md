@@ -150,7 +150,6 @@ python3 -m py_compile .claude/hooks/file-type-permission-hook.py
 
 - Hook 規範: `.claude/hook-specs/`
 - 方法論: `.claude/methodologies/hook-system-methodology.md`
-- 官方文件: `.claude/hook-system-reference.md`
 
 ## 需要協助？
 

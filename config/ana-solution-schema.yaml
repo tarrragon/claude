@@ -1,0 +1,45 @@
+# ANA Ticket Solution Schema (Single Source of Truth)
+#
+# 定義 ANA 類型 Ticket 在 complete 前 Solution 區段必須包含的 multi_view_status 標註規格。
+# 由 acceptance-gate-hook 讀取此檔進行驗證，避免硬編碼散落（DRY）。
+#
+# 相關 Ticket：0.18.0-W10-051（治本方案 D — ANA 設計時強制 multi-view）
+# 源起：PC-066 + PC-067（ANA 規劃未質疑設計品質 / 多視角審查能識破過度設計）
+
+multi_view_status:
+  description: |
+    ANA Ticket 完成前，Solution 區段必須顯式標註多視角審查狀態，
+    在 ANA 設計階段即判定是否需要多視角介入，而非事後補。
+
+  # 欄位在 Solution 區段中的識別 key（大小寫不敏感的前綴）
+  field_key: "multi_view_status"
+
+  # 合法值域
+  allowed_values:
+    - reviewed   # 已執行多視角審查
+    - skipped    # 評估後跳過（必須附理由）
+    - n_a        # 不適用（如純資料彙整、不涉及設計決策）
+
+  # 每個值對應的必填子欄位
+  required_subfields:
+    reviewed:
+      - reviewers   # 審查代理人 ID 清單（至少 1 位）
+      - conclusion  # 結論摘要（非空字串）
+    skipped:
+      - reason      # 跳過理由（非空字串）
+    n_a:
+      - reason      # 判定不適用的理由（非空字串）
+
+  # 範例格式（Solution 區段中的呈現方式）
+  example_reviewed: |
+    multi_view_status: reviewed
+    reviewers: [linux-reviewer, security-reviewer]
+    conclusion: 三層防護 DRY 違反獲確認，建議治本方案 D
+
+  example_skipped: |
+    multi_view_status: skipped
+    reason: 本 ANA 僅彙整既有資料，無新設計決策
+
+  example_na: |
+    multi_view_status: n_a
+    reason: 純文件調查，無程式碼或架構影響

@@ -177,3 +177,8 @@ cat diagram.mmd | python -m mermaid_ascii --ascii
 
 - `--version`
   - 顯示套件版本資訊
+
+---
+
+**Last Updated**: 2026-03-02
+**Version**: 1.0.0

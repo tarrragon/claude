@@ -7,7 +7,6 @@
 | **分類** | Implementation |
 | **嚴重性** | 中（測試失敗，功能邏輯錯誤） |
 | **發現版本** | v0.1.2 |
-| **相關 Ticket** | 0.1.2-W2-008 |
 
 ## 症狀
 
@@ -63,4 +62,3 @@ def _ensure_file_list(where_value: object) -> list[str]:
 
 **Last Updated**: 2026-03-25
 **Version**: 1.0.0
-**Source**: 0.1.2-W2-008 Phase 3b 測試失敗修復過程

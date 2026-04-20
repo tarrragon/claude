@@ -51,5 +51,4 @@ rm -f .git/index.lock && git add <files> && git commit -m "..."
 ---
 
 **Created**: 2026-03-29
-**Source**: 0.16.1-W2-002.7 執行期間用戶回報
 **Severity**: 中（可繞過但頻繁打斷）

@@ -57,7 +57,7 @@ description: "決策樹助手工具。快速評估任務複雜度，提供派發
 | 2 | 包含不確定性詞彙？ | → 確認機制 | → 下一判斷 |
 | 3 | 複雜需求（3+ 代理人）？ | → 確認機制 | → 進入第一層 |
 
-注意：決策樹最高優先為「Skill 匹配層」（已註冊 Skill 觸發條件匹配），其次為「第負一層」並行化評估，再進入第零層明確性檢查。完整派發決策樹見 `.claude/rules/core/decision-tree.md`（v7.0.0，含第八層 Commit-Evaluate-Handoff 循環）。
+注意：決策樹最高優先為「Skill 匹配層」（已註冊 Skill 觸發條件匹配），其次為「第負一層」並行化評估，再進入第零層明確性檢查。完整派發決策樹見 `.claude/pm-rules/decision-tree.md`（v9.0.0 路由索引），派發閘門見 `.claude/pm-rules/dispatch-gate.md`。
 
 ---
 
@@ -162,8 +162,8 @@ description: "決策樹助手工具。快速評估任務複雜度，提供派發
 - [拆分策略詳細指南](references/splitting-strategies.md)
 - [派發決策樹完整版](references/dispatch-decision-tree.md)
 - [認知負擔量化標準](.claude/skills/cognitive-load-assessment/thresholds.md)
-- [主線程決策樹](.claude/rules/core/decision-tree.md)
-- [任務拆分指南](.claude/rules/guides/task-splitting.md)
+- [主線程決策樹](.claude/pm-rules/decision-tree.md)
+- [任務拆分指南](.claude/pm-rules/task-splitting.md)
 
 ---
 

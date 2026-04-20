@@ -17,6 +17,11 @@
   - 根目錄 CLAUDE.md（保留專案特定配置）
   - .claude/hook-logs/（本地日誌）
   - .claude/handoff/（本地交接檔案）
+
+Safety net:
+  上游 repo 的 hook 檔案 mode 可能已損壞（Windows 推送時 NTFS 無 exec bit），
+  本腳本會在同步後自動對 .claude/hooks/**/*.py 強制 chmod +x。
+  完整背景與除錯指南詳見 WINDOWS-NOTES.md。
 """
 
 import filecmp
@@ -68,6 +73,11 @@ LOCAL_ONLY = frozenset({
 
 # 同步時跳過的所有路徑（合併使用）
 SKIP_DURING_SYNC = REMOTE_ONLY | LOCAL_ONLY
+
+# 同步後強制還原 executable bit 的子目錄（convention-based safety net）
+# 上游 repo 的 mode 可能已損壞（push 端未保留 100755），
+# pull 後需對這些目錄下的 .py 強制 chmod +x 確保 Hook 可執行。
+EXECUTABLE_PY_SUBDIRS = ("hooks",)
 
 
 def load_preserve_list(claude_dir: Path) -> set[str]:
@@ -319,6 +329,41 @@ def sync_directory(
     return count
 
 
+def restore_executable_bits(claude_dir: Path) -> int:
+    """對 .claude/hooks/ 下所有 .py 檔案強制加入 executable bit。
+
+    背景：上游 tarrragon/claude.git 的 mode 已損壞（Python 檔案多為 100644），
+    shutil.copy2 雖保留來源 mode，但來源本身就錯。Hook 系統（Stop、SessionStart 等）
+    需要檔案有 +x 才能由 shell 直接執行，否則 Permission denied。
+
+    本函式作 convention-based safety net：EXECUTABLE_PY_SUBDIRS 列出的子目錄下
+    所有 .py 無條件加 +x（u/g/o 均加），獨立於上游 mode 狀態。
+
+    不處理 .claude/scripts/ 下檔案，因該目錄有 644/755 混合（如 sync 腳本本身），
+    精細處理屬另一範疇。
+
+    參數:
+        claude_dir: .claude 目錄的絕對路徑
+
+    傳回:
+        int: 實際變更 mode 的檔案數（已是可執行者不計）
+    """
+    count = 0
+    for subdir in EXECUTABLE_PY_SUBDIRS:
+        target_dir = claude_dir / subdir
+        if not target_dir.is_dir():
+            continue
+        for py_file in target_dir.rglob("*.py"):
+            if not py_file.is_file():
+                continue
+            mode = py_file.stat().st_mode
+            new_mode = mode | 0o111
+            if new_mode != mode:
+                py_file.chmod(new_mode)
+                count += 1
+    return count
+
+
 def collect_remote_files(src: Path, prefix: Path = Path()) -> set[Path]:
     """遞迴蒐集遠端 repo 中所有檔案的相對路徑。
 
@@ -497,6 +542,11 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
             print_color(f"     - {r}")
     else:
         print_color("   無過時檔案需清理", "green")
+
+    # 還原 hook 檔案的 executable bit（上游 mode 損壞的 safety net）
+    restored = restore_executable_bits(claude_dir)
+    if restored:
+        print_color(f"   已還原 {restored} 個 hook 檔案的執行權限", "green")
 
     # 偵測套件版本變更
     print_color("檢查套件版本變更...")

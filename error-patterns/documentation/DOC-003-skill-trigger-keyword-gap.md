@@ -7,7 +7,6 @@
 - **來源版本**: v0.31.0
 - **發現日期**: 2026-02-26
 - **風險等級**: 中
-- **來源 Ticket**: 0.31.0-W25-007（修復 Hook Import 路徑）
 
 ## 問題描述
 
@@ -76,7 +75,6 @@ description: "查詢既有錯誤經驗 (query), 記錄新發現的錯誤模式 (
 
 ## 修復紀錄
 
-- **W25-007**: 為 error-pattern Skill description 新增 `Triggers:` 區段
 - **新增關鍵字**: 學習經驗、教訓、錯誤學習、經驗記錄、避免再犯、防護措施、錯誤紀錄
 - **受影響檔案**: `.claude/skills/error-pattern/SKILL.md`
 

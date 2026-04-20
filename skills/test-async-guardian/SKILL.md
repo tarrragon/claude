@@ -85,7 +85,7 @@ void dispose() {
 ### 危險模式 1：長延遲沒有清理
 
 ```dart
-// ❌ 危險：10 秒延遲，測試只等 10ms
+// [FAIL] 危險：10 秒延遲，測試只等 10ms
 when(mockApiService.queryByIsbn('xxx'))
     .thenAnswer((_) async {
   await Future.delayed(const Duration(seconds: 10));
@@ -100,7 +100,7 @@ await Future.delayed(const Duration(milliseconds: 10));
 ### 危險模式 2：週期性定時器沒有取消
 
 ```dart
-// ❌ 危險：Timer.periodic 未在 tearDown 中取消
+// [FAIL] 危險：Timer.periodic 未在 tearDown 中取消
 Timer.periodic(Duration(seconds: 1), (timer) {
   captureSnapshot();
 });
@@ -111,7 +111,7 @@ Timer.periodic(Duration(seconds: 1), (timer) {
 ### 危險模式 3：StreamController 未關閉
 
 ```dart
-// ❌ 危險：broadcast StreamController 未關閉
+// [FAIL] 危險：broadcast StreamController 未關閉
 final controller = StreamController<Event>.broadcast();
 // 測試結束但 controller 仍在監聽
 ```
@@ -121,7 +121,7 @@ final controller = StreamController<Event>.broadcast();
 ### 危險模式 4：網路斷線導致測試卡住
 
 ```bash
-# ❌ 危險：網路斷線時 flutter test 卡在 Resolving dependencies
+# [FAIL] 危險：網路斷線時 flutter test 卡在 Resolving dependencies
 Resolving dependencies...
 ClientException with SocketException: Failed host lookup: 'pub.dev'
 ```
@@ -135,7 +135,7 @@ ClientException with SocketException: Failed host lookup: 'pub.dev'
 ### 危險模式 5：testWidgets 中 Future.delayed 永不完成
 
 ```dart
-// ❌ 危險：testWidgets 使用虛擬時鐘，Future.delayed 永不完成
+// [FAIL] 危險：testWidgets 使用虛擬時鐘，Future.delayed 永不完成
 testWidgets('事件測試', (tester) async {
   await Future.delayed(Duration(milliseconds: 50));  // 永遠等待！
   expect(events.length, 3);
@@ -170,7 +170,7 @@ test('事件測試', () async {
 ### 危險模式 6：MCP run_tests 執行全部測試卡住
 
 ```bash
-# ❌ 危險：不指定 paths 執行全部測試會卡住 20+ 分鐘
+# [FAIL] 危險：不指定 paths 執行全部測試會卡住 20+ 分鐘
 mcp__dart__run_tests (無 paths 參數)
 ```
 
@@ -187,11 +187,11 @@ mcp__dart__run_tests (無 paths 參數)
 **修復**：
 
 ```bash
-# ✅ 正確 - 必須指定 paths 參數限制測試範圍
+# [OK] 正確 - 必須指定 paths 參數限制測試範圍
 mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/domains/"]}])
 mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/unit/core/"]}])
 
-# ✅ 推薦 - 全量測試使用 Bash（最穩定）
+# [OK] 推薦 - 全量測試使用 Bash（最穩定）
 flutter test --reporter compact
 ./.claude/hooks/test-summary.sh
 ```
@@ -199,9 +199,9 @@ flutter test --reporter compact
 **適用場景對照**：
 | 測試範圍 | MCP run_tests | flutter test |
 |---------|---------------|--------------|
-| 單一檔案 | ✅ 適用 | ✅ 適用 |
-| 單一目錄 (paths) | ✅ 適用 | ✅ 適用 |
-| 全部測試 | ❌ 禁止 | ✅ 推薦 |
+| 單一檔案 | [OK] 適用 | [OK] 適用 |
+| 單一目錄 (paths) | [OK] 適用 | [OK] 適用 |
+| 全部測試 | [FAIL] 禁止 | [OK] 推薦 |
 
 ## 掃描腳本使用
 
@@ -234,7 +234,7 @@ uv run .claude/skills/test-async-guardian/scripts/async_resource_scanner.py \
    # 如果使用 mcp__dart__run_tests 不指定 paths，會卡住 20+ 分鐘
    # 解決方案：改用 flutter test 或指定 paths 參數
 
-   # ✅ 正確方式
+   # [OK] 正確方式
    flutter test --reporter compact
    mcp__dart__run_tests(paths: ["test/domains/"])
    ```
@@ -281,3 +281,8 @@ uv run .claude/skills/test-async-guardian/scripts/async_resource_scanner.py \
 ### hooks/
 
 - `pre-test-scan.py` - PreToolUse Hook 入口腳本
+
+---
+
+**Last Updated**: 2026-03-02
+**Version**: 1.0.0

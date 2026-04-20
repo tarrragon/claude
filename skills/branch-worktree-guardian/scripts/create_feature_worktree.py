@@ -151,13 +151,13 @@ def main():
     )
 
     if success:
-        print(f"✅ {message}")
+        print(f"[OK] {message}")
         print()
         print("下一步:")
         print(f"  cd {os.path.abspath(args.worktree)}")
         return 0
     else:
-        print(f"❌ {message}")
+        print(f"[FAIL] {message}")
         return 1
 
 

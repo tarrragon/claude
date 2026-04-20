@@ -20,7 +20,7 @@
 | 方法論 | 用途 |
 |-------|------|
 | natural-language-programming-methodology.md | 命名方法論 |
-| comment-writing-methodology.md | 註解方法論 |
+| .claude/skills/compositional-writing/references/writing-code-comments.md | 註解方法論 |
 | package-import-methodology.md | 導入路徑方法論 |
 | code-smell-quality-gate-methodology.md | 程式碼壞味道檢測 |
 | clean-architecture-implementation-methodology.md | Clean Architecture 實作 |
@@ -41,7 +41,7 @@
 | ticket-lifecycle-management-methodology.md | Ticket 生命週期 |
 | ticket-design-dispatch-methodology.md | Ticket 設計與派發 |
 | tdd-ticket-integration-methodology.md | TDD 與 Ticket 整合 |
-| worklog-writing-methodology.md | 工作日誌撰寫 |
+| .claude/skills/compositional-writing/references/writing-documents.md | 工作日誌撰寫 |
 | suggestion-tracking-methodology.md | 建議追蹤 |
 
 ## 分析與決策
@@ -64,7 +64,7 @@
 | lsp-first-development-methodology.md | LSP 優先開發 |
 | migration-methodology.md | 遷移策略 |
 | instant-review-mechanism-methodology.md | 即時審查機制 |
-| methodology-writing-methodology.md | 寫作方法論（方法論撰寫 + 經驗分享文章） |
+| framework-meta-methodology.md | 框架元層管理（SKILL vs 方法論分工、撰寫檢查清單、經驗分享敘事） |
 | methodology-rewriting-methodology.md | 方法論改寫指南 |
 
 ## i18n 與業務

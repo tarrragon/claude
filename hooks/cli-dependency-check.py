@@ -62,6 +62,8 @@ def _check_claude_bundled_rg():
                     [str(ver_path), "--ripgrep", "--version"],
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=5,
                 )
                 if result.returncode == 0:
@@ -123,6 +125,8 @@ def check_tool(name):
             shell=True,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
         return result.returncode == 0
@@ -138,6 +142,8 @@ def get_version(cmd):
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
         if result.returncode == 0:
@@ -153,6 +159,8 @@ def get_version(cmd):
             shell=True,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
         if result.returncode == 0:
@@ -170,6 +178,8 @@ def auto_install(cmd):
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=120,
         )
         if result.returncode == 0:

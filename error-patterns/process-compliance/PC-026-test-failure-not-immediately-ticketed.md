@@ -46,7 +46,6 @@
 
 ## 關聯
 
-- **Ticket**: 0.2.0-W5-009（widget_test.dart 修復）
 - **相關規則**: quality-baseline-rule-1（測試通過率 100%）、quality-baseline-rule-5（所有發現必須追蹤）
 - **發現日期**: 2026-03-26
 

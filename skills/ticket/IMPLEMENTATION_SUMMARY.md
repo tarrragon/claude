@@ -2,7 +2,7 @@
 
 ## 實現範圍
 
-完成了 Ticket 0.31.0-W5-001.6 的核心需求：
+完成了 Ticket 的核心需求：
 
 ### 1. ticket_generator.py（新建）
 位置：`ticket_system/lib/ticket_generator.py`
@@ -65,7 +65,7 @@ ticket generate <plan_file> --version <ver> --wave <wave> [--dry-run]
 ## 技術特色
 
 ### TDD 階段映射規則
-實作了根據任務類型的智能 TDD 階段選擇：
+實作了根據任務類型的自動化 TDD 階段選擇：
 - **IMP（實作）**：完整 TDD → Phase 1-4（高複雜度加 Phase 0）
 - **ADJ（調整）**：簡化 TDD → Phase 3b-4
 - **DOC（文件）**：無 TDD
@@ -107,36 +107,36 @@ options:
 
 ## 驗收條件檢查
 
-✅ **1. ticket_generator.py 建立完成**
-- GeneratedTicket 資料類：✅
-- GenerationResult 資料類：✅
-- 完整的生成邏輯：✅
+[OK] **1. ticket_generator.py 建立完成**
+- GeneratedTicket 資料類：[OK]
+- GenerationResult 資料類：[OK]
+- 完整的生成邏輯：[OK]
 
-✅ **2. 支援 TDD 階段映射和 Wave 分配**
-- TDD 階段映射規則實作：✅
-- Wave 分配算法實作：✅
-- 認知負擔高時加 Phase 0：✅
+[OK] **2. 支援 TDD 階段映射和 Wave 分配**
+- TDD 階段映射規則實作：[OK]
+- Wave 分配算法實作：[OK]
+- 認知負擔高時加 Phase 0：[OK]
 
-✅ **3. commands/generate.py 建立完成**
-- register() 函式：✅
-- execute() 函式：✅
-- CLI 介面完整：✅
+[OK] **3. commands/generate.py 建立完成**
+- register() 函式：[OK]
+- execute() 函式：[OK]
+- CLI 介面完整：[OK]
 
-✅ **4. 命令已註冊**
-- __init__.py 更新：✅
-- ticket.py 更新：✅
+[OK] **4. 命令已註冊**
+- __init__.py 更新：[OK]
+- ticket.py 更新：[OK]
 
-✅ **5. messages.py 新增 GenerateMessages 類別**
-- 訊息類別：✅
-- 格式化函式：✅
+[OK] **5. messages.py 新增 GenerateMessages 類別**
+- 訊息類別：[OK]
+- 格式化函式：[OK]
 
-✅ **6. dry-run 模式正常運作**
-- 預演模式實作：✅
-- 不建立實際檔案：✅
+[OK] **6. dry-run 模式正常運作**
+- 預演模式實作：[OK]
+- 不建立實際檔案：[OK]
 
-✅ **7. 所有新增和現有測試通過**
-- 新增 17 個測試：✅ 全部通過
-- 現有 339 個測試：✅ 全部通過
+[OK] **7. 所有新增和現有測試通過**
+- 新增 17 個測試：[OK] 全部通過
+- 現有 339 個測試：[OK] 全部通過
 
 ## 程式碼品質
 
@@ -144,14 +144,14 @@ options:
 - `generate()` 函式：認知負擔 6（中等，可接受）
 - `execute()` 函式：認知負擔 7（中等，可接受）
 - 平均函式長度：< 30 行
-- 無重複程式碼：✅（使用現有 ticket_builder）
-- 完整型別標註：✅
+- 無重複程式碼：[OK]（使用現有 ticket_builder）
+- 完整型別標註：[OK]
 
 ### 遵循現有架構
-- 遵循 ticket_builder 的設計模式：✅
-- 使用 TicketConfig TypedDict：✅
-- 遵循 messages.py 的訊息結構：✅
-- 遵循命令註冊模式：✅
+- 遵循 ticket_builder 的設計模式：[OK]
+- 使用 TicketConfig TypedDict：[OK]
+- 遵循 messages.py 的訊息結構：[OK]
+- 遵循命令註冊模式：[OK]
 
 ## 後續使用
 
@@ -202,10 +202,10 @@ ticket generate plans/my-plan.md --version 0.31.0 --wave 5
 
 ## 符合要求
 
-✅ 所有 7 個驗收條件都已滿足
-✅ 339 個現有測試未受影響（全部通過）
-✅ 新增 17 個測試（全部通過）
-✅ 認知負擔指數 < 10
-✅ 完整型別標註
-✅ 遵循現有架構和風格
-✅ CLI 命令已正確註冊
+[OK] 所有 7 個驗收條件都已滿足
+[OK] 339 個現有測試未受影響（全部通過）
+[OK] 新增 17 個測試（全部通過）
+[OK] 認知負擔指數 < 10
+[OK] 完整型別標註
+[OK] 遵循現有架構和風格
+[OK] CLI 命令已正確註冊

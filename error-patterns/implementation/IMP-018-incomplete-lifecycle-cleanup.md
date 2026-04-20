@@ -24,7 +24,6 @@
 
 ## 具體案例
 
-**發現於**：0.1.0-W2-018
 
 ```python
 # resume.py - _execute_resume()
@@ -70,7 +69,6 @@ if not archive_handoff_file(ticket_id):
 
 ## 關聯 Ticket
 
-- 0.1.0-W2-018: 修復 ticket resume 完成後自動清除 pending handoff JSON 檔案
 
 ---
 

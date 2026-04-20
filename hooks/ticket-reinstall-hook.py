@@ -28,7 +28,7 @@ Exit codes:
     0 - Sync successful or no action needed
     1 - Warnings (uv/ticket not found, reinstall warnings)
 
-重構紀錄 (v0.31.0-W22-001.3):
+重構紀錄:
 - 遷移至統一日誌系統 (hook_utils)
 """
 
@@ -58,6 +58,8 @@ def find_ticket_cli_path(logger: logging.Logger) -> Optional[Path]:
             ["which", "ticket"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5
         )
         if result.returncode == 0:
@@ -102,6 +104,8 @@ def find_ticket_module_path(ticket_binary: Path, logger: logging.Logger) -> Opti
                 [python_path, "-c", "import site; print(site.getsitepackages()[0])"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=5
             )
             if result.returncode == 0:
@@ -205,6 +209,8 @@ def reinstall_ticket_cli(project_root: Path, logger: logging.Logger) -> bool:
             cwd=ticket_manager_dir,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=60
         )
 

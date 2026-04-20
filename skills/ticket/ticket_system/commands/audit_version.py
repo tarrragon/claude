@@ -148,7 +148,7 @@ def _format_version_audit_report(
             ))
 
             for location in dup.locations:
-                status = "✓ 正確" if location.directory_version == dup.recommended_version else "✗ 錯誤"
+                status = "[Y] 正確" if location.directory_version == dup.recommended_version else "[N] 錯誤"
                 lines.append(f"  {status}: {location.file_path}")
 
             lines.append(AuditVersionMessages.DUPLICATE_SUGGESTION.format(

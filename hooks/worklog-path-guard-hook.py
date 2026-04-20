@@ -42,7 +42,7 @@ import re
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 
 
 def is_worklog_root_markdown(file_path: str) -> bool:
@@ -136,7 +136,9 @@ def main() -> int:
 
     try:
         # 讀取 JSON 輸入
-        input_data = json.load(sys.stdin)
+        input_data = read_json_from_stdin(logger)
+        if input_data is None:
+            return 0
         tool_name = input_data.get("tool_name", "")
         tool_input = input_data.get("tool_input") or {}
 

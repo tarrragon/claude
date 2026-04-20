@@ -7,6 +7,10 @@ import json
 import sys
 import re
 import os
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from hook_utils import setup_hook_logging, read_json_from_stdin
 
 def detect_language(code):
     """Best-effort language detection from code content."""
@@ -61,7 +65,10 @@ def format_markdown(content):
 
 # Main execution
 try:
-    input_data = json.load(sys.stdin)
+    logger = setup_hook_logging("markdown-formatter")
+    input_data = read_json_from_stdin(logger)
+    if input_data is None:
+        sys.exit(0)
     file_path = (input_data.get('tool_input') or {}).get('file_path', '')
     
     if not file_path.endswith(('.md', '.mdx')):
@@ -79,5 +86,6 @@ try:
             print(f"✓ Fixed markdown formatting in {file_path}")
     
 except Exception as e:
-    print(f"Error formatting markdown: {e}", file=sys.stdout)
-    sys.exit(1)
+    print(f"Error formatting markdown: {e}", file=sys.stderr)
+    # exit 0 避免 CLI 顯示 hook error
+    sys.exit(0)

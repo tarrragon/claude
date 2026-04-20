@@ -20,6 +20,12 @@ commit 訊息生成:
   - 無參數時自動分析 .claude/ 相關 commit 生成結構化摘要
   - 提供參數時使用用戶指定的訊息
   - 自動建議版本遞增幅度（patch/minor/major）
+
+Windows 使用者特別注意:
+  Windows NTFS 無 executable bit 概念，git 對新增 .py 檔案的 mode
+  預設記為 100644（非 100755），會導致下游 pull 後 hook Permission denied。
+  本腳本已內建 restore_executable_bits() safety net 防護，
+  完整說明與除錯指南詳見 WINDOWS-NOTES.md。
 """
 
 import hashlib
@@ -68,6 +74,10 @@ EXCLUDE_NAME_PREFIXES = {
     ".env.",    # .env.staging, .env.test, .env.development 等
     "secret",   # secrets.json, secret_key.txt 等
 }
+
+# Push 前強制還原 executable bit 的子目錄（與 sync-claude-pull.py 對稱）
+# 確保推上去的 git index mode 為 100755，避免下游 pull 拿到 644。
+EXECUTABLE_PY_SUBDIRS = ("hooks",)
 
 # 預計算小寫版本，避免每次呼叫 should_exclude 重複計算
 _EXCLUDE_PATTERNS_LOWER = {p.lower() for p in EXCLUDE_PATTERNS}
@@ -164,6 +174,77 @@ def copy_filtered(src: Path, dst: Path) -> int:
             dest_item.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(item, dest_item)
             count += 1
+    return count
+
+
+def restore_executable_bits(root: Path) -> int:
+    """對 root/hooks/ 下所有 .py 檔案強制加入 filesystem executable bit。
+
+    呼叫時機：copy_filtered 把本地 .claude/ 內容複製到 temp_dir 後、git add -A 前。
+    在 POSIX 環境有效（macOS/Linux）；Windows NTFS 無 exec bit 概念，此操作無效果，
+    但不會失敗或污染狀態。
+
+    與 sync-claude-pull.py::restore_executable_bits 對稱（pull 端 safety net）。
+
+    跨平台治本方案見 git_update_index_chmod()（在 git add 後呼叫）。
+
+    參數:
+        root: 遠端 repo 的本地暫存根目錄（temp_dir）
+
+    傳回:
+        int: 實際變更 mode 的檔案數
+    """
+    count = 0
+    for subdir in EXECUTABLE_PY_SUBDIRS:
+        target_dir = root / subdir
+        if not target_dir.is_dir():
+            continue
+        for py_file in target_dir.rglob("*.py"):
+            if not py_file.is_file():
+                continue
+            mode = py_file.stat().st_mode
+            new_mode = mode | 0o111
+            if new_mode != mode:
+                py_file.chmod(new_mode)
+                count += 1
+    return count
+
+
+def git_update_index_chmod(root: Path) -> int:
+    """對 root/hooks/ 下所有 .py 檔案的 git index mode 設為 100755。
+
+    Windows NTFS 無 executable bit 概念，filesystem chmod 對 git index 無作用；
+    `git update-index --chmod=+x` 直接寫入 git index，不依賴 filesystem 語意，
+    跨平台一致。這是 W16-004.3 的治本方案，覆蓋 restore_executable_bits 在
+    Windows 上的盲點。
+
+    呼叫時機：`git add -A` 之後（檔案已 tracked），`git commit` 之前。
+
+    背景：IMP-067 v1.36.2 事件——Windows push 使 379 個新 .py 檔案 mode
+    在 remote 記為 100644；需此函式顯式確保 index mode 正確。
+
+    參數:
+        root: 遠端 repo 的本地暫存根目錄（temp_dir）
+
+    傳回:
+        int: 成功設定 mode 的檔案數
+    """
+    count = 0
+    for subdir in EXECUTABLE_PY_SUBDIRS:
+        target_dir = root / subdir
+        if not target_dir.is_dir():
+            continue
+        for py_file in target_dir.rglob("*.py"):
+            if not py_file.is_file():
+                continue
+            rel = py_file.relative_to(root).as_posix()
+            result = run_git(
+                ["update-index", "--chmod=+x", rel],
+                cwd=str(root),
+                check=False,
+            )
+            if result.returncode == 0:
+                count += 1
     return count
 
 
@@ -308,12 +389,66 @@ def extract_version_string(content: str) -> str:
     """從可能包含多行或註解的 VERSION 檔案內容中提取版本號。
 
     跳過空行和 # 開頭的註解行，取第一行有效內容並移除 v 前綴。
+    移除 UTF-8 BOM（Windows 環境 VERSION 檔案可能含 BOM，
+    若未 strip 會導致 bump_version 正規式 parse 失敗 fallback 至 1.0.1）。
     """
     for line in content.split("\n"):
-        line = line.strip()
+        line = line.strip().lstrip("\ufeff")
         if line and not line.startswith("#"):
             return line.lstrip("v")
     return ""
+
+
+def validate_version_bump(remote_version: str, new_version: str) -> None:
+    """驗證新版號相對 remote 的跳躍幅度是否合理。
+
+    合法 bump 型態（恰好滿足一種）：
+      - major: X+1.0.0
+      - minor: X.Y+1.0
+      - patch: X.Y.Z+1
+
+    任何其他跳躍（如 1.17.0 → 1.36.2 共 19 個 minor）屬異常，
+    可能成因：local VERSION 污染、encoding 陷阱、bump 邏輯錯誤、
+    手動編輯後未同步。此時 fail-fast 而非靜默 push 出異常版號。
+
+    背景：W16-004.2 追蹤的 v1.17.0 → v1.36.2 事件即缺此防護所致。
+    """
+    r_match = re.match(r"(\d+)\.(\d+)\.(\d+)", remote_version)
+    n_match = re.match(r"(\d+)\.(\d+)\.(\d+)", new_version)
+    if not r_match or not n_match:
+        print_color(
+            f"版本格式無法解析: remote={remote_version!r}, new={new_version!r}",
+            "red",
+        )
+        sys.exit(1)
+
+    r_maj, r_min, r_pat = (int(x) for x in r_match.groups())
+    n_maj, n_min, n_pat = (int(x) for x in n_match.groups())
+
+    valid_major = n_maj == r_maj + 1 and n_min == 0 and n_pat == 0
+    valid_minor = n_maj == r_maj and n_min == r_min + 1 and n_pat == 0
+    valid_patch = n_maj == r_maj and n_min == r_min and n_pat == r_pat + 1
+
+    if not (valid_major or valid_minor or valid_patch):
+        print_color(
+            f"[FAIL] 版號跳躍異常: remote=v{remote_version} -> new=v{new_version}",
+            "red",
+        )
+        print_color(
+            "預期三種合法 bump: major+1/0/0、major/minor+1/0、或 major/minor/patch+1",
+            "red",
+        )
+        print_color(
+            "可能原因: 本地 .claude/VERSION 被其他來源污染、UTF-8 BOM、"
+            "bump 邏輯錯誤、或手動編輯未同步。",
+            "yellow",
+        )
+        print_color(
+            "建議操作: 檢查本地 .claude/VERSION 是否等於 remote（加 1 patch 內）；"
+            "若已異常，手動設為 remote + 1 patch 再重試。",
+            "yellow",
+        )
+        sys.exit(1)
 
 
 def bump_version(version: str, bump_level: str) -> str:
@@ -500,8 +635,18 @@ def main() -> None:
             deleted = clean_stale_files(temp_dir, claude_dir)
             print_color(f"   已清理 {deleted} 個遠端過時檔案", "green")
 
+        # 7.6. 還原 hook 檔案 executable bit（防止 push 出損壞 mode 到遠端）
+        restored = restore_executable_bits(temp_dir)
+        if restored:
+            print_color(f"   已還原 {restored} 個 hook 檔案的執行權限（push 前 safety net）", "green")
+
         # 8. Calculate new version (use bump suggestion for auto-generated messages)
         new_version = bump_version(remote_version, bump_suggestion)
+
+        # 8.5. Sanity check: 版號跳躍幅度防護（W16-004.2）
+        # v1.17.0 -> v1.36.2 事件即缺此防護，Windows 環境下意外推出跳躍 19 minor 的版號
+        validate_version_bump(remote_version, new_version)
+
         (temp_dir / "VERSION").write_text(new_version + "\n", encoding="utf-8")
 
         # 9. Update CHANGELOG (use full commit message for detailed history)
@@ -514,6 +659,13 @@ def main() -> None:
         commit_msg = f"v{new_version}: {commit_summary}"
         print_color("提交變更...")
         run_git(["add", "-A"], cwd=str(temp_dir))
+
+        # 10.5. 跨平台 hook mode 治本（W16-004.3）：直接寫 git index mode 為 100755
+        # Windows NTFS 無 exec bit，filesystem chmod 對 git index 無效；
+        # 此處 git update-index --chmod=+x 不依賴 filesystem，跨平台一致
+        index_fixed = git_update_index_chmod(temp_dir)
+        if index_fixed:
+            print_color(f"   git index mode 設定 {index_fixed} 個 hook 檔案為 100755", "green")
 
         # Check if there are actual changes
         diff_result = run_git(["diff", "--cached", "--quiet"], cwd=str(temp_dir), check=False)

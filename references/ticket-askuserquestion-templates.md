@@ -4,7 +4,7 @@
 場景編號與 askuserquestion-rules.md 場景 #1-#17 完全對應。
 
 > 規範來源：.claude/rules/core/askuserquestion-rules.md（Source of Truth）
-> 決策樹定義：.claude/rules/core/decision-tree.md
+> 決策樹定義：.claude/pm-rules/decision-tree.md
 > 場景詳細說明：.claude/references/askuserquestion-scene-details.md
 
 ---
@@ -663,12 +663,11 @@
 - .claude/rules/core/askuserquestion-rules.md - AskUserQuestion 規則（Source of Truth，場景 #1-#17）
 - .claude/references/askuserquestion-scene-details.md - 各場景詳細說明
 - .claude/pm-rules/ticket-lifecycle.md - Ticket 生命週期（互動規範定義）
-- .claude/rules/core/decision-tree.md - 決策樹（AskUserQuestion 強制場景）
+- .claude/pm-rules/decision-tree.md - 決策樹（AskUserQuestion 強制場景）
 - .claude/skills/ticket/SKILL.md - Ticket 系統使用指南
 - .claude/skills/parallel-evaluation/SKILL.md - parallel-evaluation 工具
 
 ---
 
 **Last Updated**: 2026-03-09
-**Version**: 3.0.0 - 修復場景編號系統：統一使用規則 #1-#17 編號（W22-011），補充缺失場景 #4/#5/#7/#8/#10/#16/#17
-**Source**: 0.31.0-W28-033, W22-011
+**Version**: 3.0.0 - 修復場景編號系統：統一使用規則 #1-#17 編號，補充缺失場景 #4/#5/#7/#8/#10/#16/#17

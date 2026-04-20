@@ -217,11 +217,11 @@ def main():
             print()
 
         if result.is_protected:
-            print(f"⚠️  {result.message}")
+            print(f"[WARN]️  {result.message}")
             if result.recommendation:
-                print(f"💡 {result.recommendation}")
+                print(f"[TIP] {result.recommendation}")
         else:
-            print(f"✅ {result.message}")
+            print(f"[OK] {result.message}")
 
         print("=" * 50)
 

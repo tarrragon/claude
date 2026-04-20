@@ -55,7 +55,7 @@
 ## Lite 填寫範例（Bug 修復場景）
 
 ```markdown
-# 0.2.0-W3-008 功能規格
+# {version}-{wave}-{seq} 功能規格
 
 ## 1. Purpose（目的）
 

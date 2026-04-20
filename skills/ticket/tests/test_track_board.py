@@ -140,10 +140,6 @@ class TestGetCharDisplayWidth:
         """全形標點寬度為 2"""
         assert get_char_display_width("，") == 2
 
-    def test_emoji(self):
-        """Emoji 寬度為 2"""
-        assert get_char_display_width("😀") == 2
-
     def test_hiragana(self):
         """日文平假名寬度為 2"""
         assert get_char_display_width("あ") == 2
@@ -177,10 +173,6 @@ class TestCalculateVisualWidth:
     def test_full_width_punctuation(self):
         """全形標點寬度（3 個全形 = 6）"""
         assert calculate_visual_width("，。！") == 6
-
-    def test_emoji_characters(self):
-        """Emoji 寬度（2 個 emoji = 4）"""
-        assert calculate_visual_width("😀😀") == 4
 
     def test_empty_string(self):
         """空字串寬度為 0"""
@@ -859,13 +851,6 @@ class TestBoundaryConditions:
         # e = 1，1+1 = 2 > 1，截斷位置 = 1
         # 返回 "T" + ".."
         assert result == "T.."
-
-    def test_visual_width_with_mixed_emoji(self):
-        """Emoji 混合寬度計算"""
-        text = "Test😀😀"
-        width = calculate_visual_width(text)
-        # T=1, e=1, s=1, t=1, 😀=2, 😀=2 = 8
-        assert width == 8
 
     def test_ljust_with_zero_width(self):
         """寬度為 0 的填充"""

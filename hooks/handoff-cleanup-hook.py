@@ -38,7 +38,7 @@ from pathlib import Path
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root, is_subagent_environment
 
 import re
 from datetime import datetime
@@ -292,6 +292,11 @@ def main() -> int:
 
         # 步驟 2: 讀取 JSON 輸入
         input_data = read_json_from_stdin(logger)
+
+        # 步驟 2.5: subagent 環境跳過（代理人不執行 complete）
+        if is_subagent_environment(input_data):
+            logger.info("subagent 環境，跳過 handoff 清理")
+            return EXIT_SUCCESS
 
         # 步驟 3: 判斷是否為 complete 命令成功
         if not is_complete_command_success(input_data, logger):

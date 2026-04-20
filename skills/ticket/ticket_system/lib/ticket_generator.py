@@ -244,7 +244,11 @@ def generate(
 
             # 產生 frontmatter 和 body
             frontmatter = create_ticket_frontmatter(config)
-            body = create_ticket_body(frontmatter["what"], frontmatter["who"]["current"])
+            body = create_ticket_body(
+                frontmatter["what"],
+                frontmatter["who"]["current"],
+                frontmatter.get("type", ""),
+            )
 
             # 格式化完整內容
             content = _format_ticket_content(frontmatter, body)

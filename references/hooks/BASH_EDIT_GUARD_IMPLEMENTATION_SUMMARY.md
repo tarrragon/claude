@@ -137,7 +137,7 @@ Hook 在以下時機自動觸發：
 建議: 請使用 Edit Tool 替代 Bash sed/awk，
 以獲得更好的權限控制和變更追蹤
 
-詳情: 參考 .claude/agent-collaboration.md 的「工具使用強制規範」
+詳情: 參考 .claude/analyses/archived/agent-collaboration.md 的「工具使用強制規範」
 ```
 
 ### 查看日誌
@@ -241,7 +241,7 @@ grep "警告" .claude/hook-logs/bash-edit-guard/*.log
 - **詳細文件**: `BASH_EDIT_GUARD_HOOK.md`
 - **日誌位置**: `.claude/hook-logs/bash-edit-guard/`
 - **配置文件**: `.claude/settings.local.json`
-- **參考規範**: `.claude/agent-collaboration.md`
+- **參考規範**: `.claude/analyses/archived/agent-collaboration.md`
 
 ## 版本資訊
 

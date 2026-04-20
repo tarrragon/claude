@@ -41,7 +41,7 @@ DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 # 日誌級別
 FILE_HANDLER_LEVEL = logging.DEBUG
 STREAM_HANDLER_LEVEL_DEBUG = logging.DEBUG
-STREAM_HANDLER_LEVEL_NORMAL = logging.WARNING
+STREAM_HANDLER_LEVEL_NORMAL = logging.CRITICAL
 LOGGER_LEVEL = logging.DEBUG
 
 # 環境變數名稱
@@ -180,7 +180,7 @@ def _setup_logger_handlers(logger: logging.Logger, log_base_dir: Path,
     """為 logger 配置 handlers
 
     採用 lazy file creation 策略：只在實際寫入日誌時才建立檔案，
-    避免產生空日誌檔案（W3-004）。使用 FileHandler 的 delay=True 參數。
+    避免產生空日誌檔案。使用 FileHandler 的 delay=True 參數。
     """
     # 觸發日誌清理（基於 mtime 時間間隔）
     cleanup_marker = log_base_dir / ".cleanup_trigger"
@@ -230,10 +230,10 @@ def _log_exception(logger: logging.Logger, hook_name: str, tb_str: str) -> None:
         logger.critical("Unhandled exception in {}".format(hook_name))
         logger.critical(tb_str)
     except Exception as logging_error:
-        # 備援路徑：日誌寫入失敗時輸出到 stderr（W3-004）
+        # 備援路徑：日誌寫入失敗時輸出到 stderr
         sys.stderr.write("Failed to log exception: {}\n".format(logging_error))
         sys.stderr.write(tb_str + "\n")
-    # 輸出到 stderr 確保用戶可見（W25-005）
+    # 輸出到 stderr 確保用戶可見
     sys.stderr.write("[Hook Error] {} failed unexpectedly. Check hook logs for details.\n".format(hook_name))
 
 
@@ -258,6 +258,11 @@ def setup_hook_logging(hook_name: str) -> logging.Logger:
     """
     if not hook_name:
         hook_name = DEFAULT_HOOK_NAME
+
+    # 跨平台 UTF-8 強制：在所有 Hook 入口統一設定
+    # 防止 Windows cp950/cp936 locale 造成 JSON 解析失敗或輸出亂碼
+    from .hook_base import ensure_utf8_io
+    ensure_utf8_io()
 
     sanitized_name = _sanitize_hook_name(hook_name)
     root_dir = get_project_root()
@@ -334,7 +339,7 @@ def run_hook_safely(main_func: Callable[[], int], hook_name: str) -> int:
     功能：
     - 呼叫 setup_hook_logging 獲取 logger
     - 執行 main_func，捕獲 Exception（非 SystemExit/KeyboardInterrupt）
-    - 異常時記錄完整 traceback 到日誌，返回 1
+    - 異常時記錄完整 traceback 到日誌檔，返回 EXIT_ERROR
     - 記錄執行時間到日誌
 
     Args:
@@ -342,7 +347,11 @@ def run_hook_safely(main_func: Callable[[], int], hook_name: str) -> int:
         hook_name: Hook 識別名稱
 
     Returns:
-        int: main_func 的返回值（正常），或 1（異常）
+        int: main_func 的返回值（正常），或 EXIT_ERROR（異常）
+
+    Note:
+        exit 1 在 CLI 中可能觸發 "hook error" 顯示（IMP-049 已知 CLI bug），
+        但這是 CLI 層問題，不應在 Hook 層繞過。異常記錄到日誌檔即可。
     """
     logger = setup_hook_logging(hook_name)
     start_time = time.time()

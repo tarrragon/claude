@@ -37,7 +37,10 @@ from ticket_system.lib.ticket_loader import (
     resolve_version,
     list_tickets,
 )
-from ticket_system.lib.ticket_validator import validate_ticket_id
+from ticket_system.lib.ticket_validator import (
+    validate_ticket_id,
+    validate_acceptance_criteria,
+)
 from ticket_system.lib.messages import (
     ErrorMessages,
     WarningMessages,
@@ -171,7 +174,10 @@ def _verify_handoff_dependencies(ticket: Dict[str, Any], ticket_id: str, version
     # 檢查每個依賴 Ticket 的狀態
     incomplete_deps = []
     for dep_id in blocked_by:
-        dep_ticket = load_ticket(version, dep_id)
+        # 從 dep_id 萃取版本以支援跨版本 blockedBy 查找
+        # 萃取失敗（ID 格式異常）時 fallback 到當前 version，保持既有行為
+        dep_version = extract_version_from_ticket_id(dep_id) or version
+        dep_ticket = load_ticket(dep_version, dep_id)
         if not dep_ticket:
             incomplete_deps.append(f"{dep_id} (未找到)")
         elif dep_ticket.get("status") != STATUS_COMPLETED:
@@ -210,8 +216,6 @@ def _check_all_acceptance_complete(ticket: Dict[str, Any]) -> bool:
     Returns:
         bool: True 表示全部已勾選，False 表示有未完成項目或無驗收條件
     """
-    from ticket_system.lib.ticket_validator import validate_acceptance_criteria
-
     acceptance_list = ticket.get("acceptance")
     if not acceptance_list:
         return False  # 無驗收條件，不觸發警告
@@ -504,7 +508,16 @@ def _execute_handoff(args: argparse.Namespace) -> int:
         return 1
 
     # 步驟 2：解析版本
-    version = resolve_version(getattr(args, "version", None))
+    # 優先從 Ticket ID 提取版本，fallback 到 --version 或自動偵測
+    explicit_version = getattr(args, "version", None)
+    if not explicit_version:
+        extracted = extract_version_from_ticket_id(ticket_id)
+        if extracted:
+            version = extracted
+        else:
+            version = resolve_version(None)
+    else:
+        version = resolve_version(explicit_version)
     if not version:
         _print_version_error()
         return 1
@@ -1106,7 +1119,16 @@ def execute(args: argparse.Namespace) -> int:
                 _print_id_error()
                 return 1
 
-            version = resolve_version(getattr(args, "version", None))
+            # 優先從 Ticket ID 提取版本，fallback 到 --version 或自動偵測
+            explicit_ver = getattr(args, "version", None)
+            if not explicit_ver:
+                extracted = extract_version_from_ticket_id(ticket_id)
+                if extracted:
+                    version = extracted
+                else:
+                    version = resolve_version(None)
+            else:
+                version = resolve_version(explicit_ver)
             if not version:
                 _print_version_error()
                 return 1

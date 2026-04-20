@@ -146,7 +146,7 @@ class TestIsKeywordNegated:
         """Test: negation and keyword are far apart"""
         # 「不用...查詢」在15字符窗口內，所以應返回True
         # 測試需要keyword在窗口外的情況，用不同的keyword
-        assert _is_keyword_negated("不用聯繫任何人我要查詢進度的詳細信息非常重要", "非常") is False
+        assert _is_keyword_negated("不用聯繫任何人我要查詢進度的詳細資訊非常重要", "非常") is False
 
     # =========================================================================
     # 分支：多個否定詞的情況

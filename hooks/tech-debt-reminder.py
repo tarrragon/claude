@@ -186,7 +186,7 @@ def generate_warning_message(pending_tickets: List[Dict[str, Any]], version: str
     version_parts = version.split('.')
     version_series = f"{version_parts[0]}.{version_parts[1]}.x" if len(version_parts) >= 2 else version
 
-    message = f"""⚠️ 技術債務提醒
+    message = f"""[WARN] 技術債務提醒
 
 當前版本 v{version_series} 有 {len(pending_tickets)} 個待處理技術債務：
 
@@ -275,6 +275,10 @@ def main() -> int:
             input_data = read_json_from_stdin(logger)
         except ValueError:
             logger.info("無 stdin 輸入，靜默跳過")
+            print(suppress_json)
+            return EXIT_SUCCESS
+
+        if not input_data:
             print(suppress_json)
             return EXIT_SUCCESS
 

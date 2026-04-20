@@ -7,15 +7,14 @@
 - **來源版本**: v0.31.0
 - **發現日期**: 2026-02-26
 - **風險等級**: 高
-- **來源 Ticket**: 0.31.0-W24（Code Review 後的批量修正拆分）
 
 ## 問題描述
 
 ### 症狀
 
 W24 第一次拆分（3 個 Ticket）時，多個 Ticket 都需要修改 `hook_messages.py`：
-- W24-001：修復 C-001/C-002 Critical bug（修改 hook_messages.py）
-- W24-003：遷移硬編碼訊息（修改 hook_messages.py + acceptance-gate + bash-edit-guard）
+- 某 Ticket：修復 C-001/C-002 Critical bug（修改 hook_messages.py）
+- 某 Ticket：遷移硬編碼訊息（修改 hook_messages.py + acceptance-gate + bash-edit-guard）
 
 如果並行派發，兩個代理人同時寫入同一檔案會產生衝突或覆蓋。
 
@@ -53,7 +52,7 @@ W24 第一次拆分（3 個 Ticket）時，多個 Ticket 都需要修改 `hook_m
 | 7     | ticket-file-access, ticket-id-validator, ticket-path-guard, ticket-quality-gate |
 ```
 
-關鍵改變：W24-003 被合併入 W24-001（因為都修改 hook_messages.py）。
+關鍵改變：某 Ticket 被合併入 某 Ticket（因為都修改 hook_messages.py）。
 
 ## 解決方案
 
@@ -114,11 +113,11 @@ hook_messages.py 被 C-001, C-002, M-004, M-005 觸及
 ### 防護措施
 
 1. **拆分前強制檢查清單**：
-   - [ ] 已建立問題-檔案矩陣
-   - [ ] 已識別所有共用檔案
-   - [ ] 共用檔案的問題已合併到同一 Ticket
-   - [ ] 檔案所有權矩陣無 Write-Write 衝突
-   - [ ] 每個檔案在同一 Wave 中最多被一個 Ticket 寫入
+ - [ ] 已建立問題-檔案矩陣
+ - [ ] 已識別所有共用檔案
+ - [ ] 共用檔案的問題已合併到同一 Ticket
+ - [ ] 檔案所有權矩陣無 Write-Write 衝突
+ - [ ] 每個檔案在同一 Wave 中最多被一個 Ticket 寫入
 
 2. **拆分單元優先級**：檔案 > 問題類型 > 架構層
 
@@ -132,7 +131,6 @@ hook_messages.py 被 C-001, C-002, M-004, M-005 觸及
 
 ## 相關資源
 
-- `docs/work-logs/v0.31.0/tickets/0.31.0-W24-004.md` - W24 完整決策記錄（第 2-3 節詳述拆分演進）
 - `.claude/rules/guides/task-splitting.md` - 任務拆分指南（策略 5 批量修正拆分、策略 6 檔案所有權隔離）
 - `.claude/rules/guides/parallel-dispatch.md` - 並行派發指南
 

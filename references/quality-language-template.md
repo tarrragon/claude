@@ -126,7 +126,7 @@
 
 ## 相關文件
 
-- .claude/rules/core/quality-common.md - 通用品質基線
+- .claude/references/quality-common.md - 通用品質基線
 - .claude/agents/{language}-developer.md - 語言代理人定義（含版本規範章節）
 - {語言官方風格指南連結}
 

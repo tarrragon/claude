@@ -94,11 +94,11 @@ class DartParser(LanguageParser):
         # 匹配函式定義格式: returnType functionName(
         # returnType 可以是:
         # 1. 內建類型: void, bool, int, String, double
-        # 2. 泛型類型: Future<T>, Stream<T>, List<T>, Map<K,V>, OperationResult<T>
-        # 3. 自定義類別: Widget, Book, 等（PascalCase）
+        # 2. 泛型類型: 任何 PascalCase<...>（支援一層巢狀角括號）
+        # 3. 自定義類別: Widget, Book, 等（PascalCase，無泛型參數）
         self.function_pattern = re.compile(
             r'^(?:'
-            r'(Future<[^>]+>|Stream<[^>]+>|OperationResult<[^>]+>|List<[^>]+>|Map<[^>]+>)|'  # 泛型
+            r'([A-Z]\w*<(?:[^<>]+|<[^<>]*>)+>)|'  # 通用泛型（PascalCase + 角括號，支援巢狀）
             r'(void|bool|int|String|double|dynamic|num)|'  # 內建類型
             r'([A-Z]\w*)'  # 自定義類別（PascalCase）
             r')\s+'
@@ -260,7 +260,7 @@ class DartParser(LanguageParser):
         """
         檢查是否有完整的追溯註解
 
-        完整註解標準（基於 comment-writing-methodology.md）:
+        完整註解標準（基於 writing-code-comments.md）:
         - 必須包含「需求來源」或「需求」關鍵字
         - 必須包含「規格文件」或「工作日誌」關鍵字
         - 或包含具體的需求編號（UC-, BR-）和文件路徑（docs/）

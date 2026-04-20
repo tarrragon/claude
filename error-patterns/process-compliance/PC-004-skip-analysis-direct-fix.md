@@ -11,7 +11,6 @@
 | 嚴重度 | 高 |
 | 發現版本 | 0.31.1 |
 | 發現日期 | 2026-03-05 |
-| 來源 | 0.31.1-W1-001.6.1 修復過程 |
 
 ### 症狀
 
@@ -71,9 +70,9 @@
 
 | 措施 | 位置 | 狀態 |
 |------|------|------|
-| 修復三階段強制規則 | .claude/pm-rules/incident-response.md | 已新增（W1-009） |
-| 測試驗證金字塔順序規則 | .claude/pm-rules/incident-response.md | 已新增（W1-009） |
-| 認知負擔拆分閾值表 | .claude/pm-rules/incident-response.md | 已新增（W1-009） |
+| 修復三階段強制規則 | .claude/pm-rules/incident-response.md | 已新增 |
+| 測試驗證金字塔順序規則 | .claude/pm-rules/incident-response.md | 已新增 |
+| 認知負擔拆分閾值表 | .claude/pm-rules/incident-response.md | 已新增 |
 
 ### 教訓
 

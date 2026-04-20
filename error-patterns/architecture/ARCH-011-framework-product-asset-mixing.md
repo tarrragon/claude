@@ -58,5 +58,4 @@ docs/
 ## 關聯
 
 - 觸發場景：建立新的文件管理系統、新的 Skill
-- 來源：0.16.2-W1-002 提案系統設計 session
 - 類似模式：ARCH-001（config/code 混放）、ARCH-006（env config 作用域錯誤）

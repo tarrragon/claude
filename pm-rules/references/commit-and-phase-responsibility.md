@@ -1,6 +1,6 @@
 # Commit 責任邊界
 
-> **來源**：從 parallel-dispatch.md 抽取（0.4.0-W3-020）
+> **來源**：從 parallel-dispatch.md 抽取
 
 ---
 
@@ -30,4 +30,4 @@
 ---
 
 **Last Updated**: 2026-03-29
-**Version**: 1.0.0 - 從 parallel-dispatch.md 抽取（0.4.0-W3-020）
+**Version**: 1.0.0 - 從 parallel-dispatch.md 抽取

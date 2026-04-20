@@ -22,7 +22,7 @@ External Query Guide Hook - PreToolUse Hook
 import json
 import sys
 from typing import Dict, Any
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.hook_messages import WorkflowMessages, format_message
 
 
@@ -46,7 +46,7 @@ def is_external_query_tool(tool_name: str) -> bool:
 
 def extract_tool_context(tool_input: Dict[str, Any]) -> str:
     """
-    提取工具調用的上下文信息
+    提取工具調用的上下文資訊
 
     Args:
         tool_input: 工具輸入資料
@@ -89,7 +89,7 @@ def _print_guide_message(tool_name: str, tool_input: Dict[str, Any]) -> None:
         WorkflowMessages.EXTERNAL_QUERY_GUIDE,
         tool_name=tool_name
     )
-    print(guide_message)
+    print(guide_message, file=sys.stderr)
 
 
 def main() -> int:
@@ -98,7 +98,9 @@ def main() -> int:
 
     try:
         # 讀取 JSON 輸入
-        input_data = json.load(sys.stdin)
+        input_data = read_json_from_stdin(logger)
+        if input_data is None:
+            return 0
         tool_name = input_data.get("tool_name", "")
         tool_input = input_data.get("tool_input") or {}
 

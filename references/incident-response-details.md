@@ -142,8 +142,6 @@ incident-responder 初步評估
 
 ## 修復三階段詳細流程
 
-> **來源**：0.31.1-W1-009
-
 ```
 [階段 1] 分析
     派發 incident-responder 分析根因
@@ -165,7 +163,7 @@ incident-responder 初步評估
 
 ## 測試驗證金字塔 Level 1-4
 
-> **來源**：0.31.1-W1-009 — 修復後直接跑全量測試（3+ 分鐘），應先用單元測試快速驗證。
+> **來源**：修復後直接跑全量測試（3+ 分鐘）的歷史教訓，應先用單元測試快速驗證。
 
 ```
 [Level 1] 單元測試（秒級）
@@ -278,10 +276,10 @@ CLI 或內部工具報錯時，**禁止假設歸因**，必須依序調查：
 
 - .claude/pm-rules/incident-response.md - 精簡版（常駐）
 - .claude/agents/incident-responder.md - 代理人定義
-- .claude/rules/forbidden/skip-gate.md - Skip-gate 防護
+- .claude/pm-rules/skip-gate.md - Skip-gate 防護
 - .claude/methodologies/multi-perspective-analysis-methodology.md - 多視角分析方法論
 
 ---
 
 **Last Updated**: 2026-03-11
-**Version**: 1.1.0 - 新增修復三階段流程、測試金字塔、CLI 調查步驟、操作失誤根因分析（W35-001.7）
+**Version**: 1.1.0 - 新增修復三階段流程、測試金字塔、CLI 調查步驟、操作失誤根因分析

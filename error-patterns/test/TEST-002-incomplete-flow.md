@@ -93,7 +93,6 @@ await verifyImportResult(); // 匯入從未開始
 ## 相關資源
 
 - 工作日誌: `docs/work-logs/v0.6.2-chrome-extension-import-tdd-phase2-test-design.md`
-- 測試設計反模式: `.claude/test-design-antipatterns.md`
 
 ## 標籤
 

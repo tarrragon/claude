@@ -89,11 +89,10 @@ PC-001 記錄了「保護分支上 Edit 被靜默還原」的問題，催生了 
 - 修復 session: fix/ticket-version-cleanup branch
 - 相關 Hook: `.claude/hooks/branch-verify-hook.py` (PreToolUse:Write/Edit)
 - 相關錯誤模式: PC-001（保護分支編輯被還原）
-- 相關 Ticket: 0.1.1-W15-001（版本偵測流程）
 
 ### 復發記錄
 
-**2026-03-23（v0.1.2-W3-005.1）**：
+**2026-03-23**：
 
 | 項目 | 說明 |
 |------|------|
@@ -102,9 +101,8 @@ PC-001 記錄了「保護分支上 Edit 被靜默還原」的問題，催生了 
 | 誤判原因 | 兩個 Hook 同時阻擋，PM 只讀了 main-thread-edit-restriction-hook（路徑白名單），忽略了 branch-verify-hook（保護分支） |
 | 額外發現 | Hook 阻擋訊息不夠清楚 — 應明確指出「在保護分支上，請建 worktree」而非只說「路徑不在白名單」 |
 | 修正 | 已用 `git checkout -- .claude/settings.json` 回滾 |
-| 追蹤 Ticket | 0.1.2-W3-007（改善 Hook 阻擋訊息清晰度） |
 
-**教訓**：即使已有 memory feedback（`feedback_never_bypass_hooks_with_bash.md`），多個 Hook 同時阻擋時，認知負擔增加仍可能導致復發。訊息改善（W3-007）是系統層防護。
+**教訓**：即使已有 memory feedback（`feedback_never_bypass_hooks_with_bash.md`），多個 Hook 同時阻擋時，認知負擔增加仍可能導致復發。訊息改善是系統層防護。
 
 ---
 

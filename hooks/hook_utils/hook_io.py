@@ -25,7 +25,7 @@ from .hook_base import get_project_root
 
 
 # ============================================================================
-# 快取變數（模組級，用於 W39-002 效能改善）
+# 快取變數（模組級，用於效能改善）
 # ============================================================================
 
 _handoff_recovery_cache: Optional[bool] = None
@@ -166,10 +166,10 @@ def read_json_from_stdin(logger: logging.Logger) -> Optional[dict]:
         return json.loads(input_text)
 
     except json.JSONDecodeError as e:
-        logger.error("JSON 解析錯誤: {}".format(e))
+        logger.info("JSON 解析跳過（stdin 含控制字元）: {}".format(e))
         return None
     except Exception as e:
-        logger.error("讀取 stdin 失敗: {}".format(e))
+        logger.info("讀取 stdin 跳過: {}".format(e))
         return None
 
 
@@ -326,10 +326,10 @@ def validate_hook_input(
         >>> validate_hook_input(input_data, logger)
 
     説明：
-    - 此函式統一處理 W34-002 修復的 None 防護問題
+    - 此函式統一處理 None 防護問題
     - 各 Hook 可根據需要指定檢查的欄位
     """
-    # 第一步：None 防護（W34-002 修復）
+    # 第一步：None 防護
     if input_data is None:
         if logger:
             logger.error("輸入資料為 None")
@@ -432,6 +432,35 @@ def is_subagent_environment(input_data: "dict | None") -> bool:
     return bool(input_data.get("agent_id"))
 
 
+def is_background_dispatch(tool_input: "dict | None") -> bool:
+    """檢查是否為背景代理人派發（run_in_background=true）
+
+    背景代理人的 PostToolUse(Agent) 在代理人「啟動完成」（agentId 返回）時觸發，
+    而非「工作完成」時。所有依賴「工作完成」語義的 PostToolUse(Agent) 類 Hook
+    必須使用此 helper 在背景路徑跳過完成判定邏輯，避免誘發 PM 誤判（PC-070 根因）。
+
+    真正的完成訊號應由 task-notification 事件（或對應 Hook event）處理。
+
+    Args:
+        tool_input: PostToolUse 的 tool_input dict（來自 input_data["tool_input"]）
+
+    Returns:
+        bool: 若 tool_input.run_in_background 為 truthy，回傳 True；否則 False。
+
+    Examples:
+        >>> tool_input = extract_tool_input(input_data, logger)
+        >>> if is_background_dispatch(tool_input):
+        ...     logger.info("背景代理人啟動，跳過完成判定邏輯")
+        ...     return EXIT_SUCCESS
+
+    相關 Ticket：0.18.0-W10-024（active-dispatch-tracker-hook 首例）、
+    0.18.0-W10-060（其他 PostToolUse(Agent) Hook 套用）
+    """
+    if not tool_input:
+        return False
+    return bool(tool_input.get("run_in_background", False))
+
+
 # ============================================================================
 # Hook 輸出生成
 # ============================================================================
@@ -439,7 +468,9 @@ def is_subagent_environment(input_data: "dict | None") -> bool:
 
 def generate_hook_output(
     hook_event_name: str,
-    additional_context: "str | None" = None
+    additional_context: Optional[str] = None,
+    permission_decision: Optional[str] = None,
+    permission_decision_reason: Optional[str] = None,
 ) -> dict:
     """生成符合 Hook 協定的輸出 JSON
 
@@ -447,26 +478,27 @@ def generate_hook_output(
 
     Hook 協定格式：
     - 基本輸出：{"hookSpecificOutput": {"hookEventName": "<事件名>"}}
-    - 帶額外上下文：{"hookSpecificOutput": {"hookEventName": "<事件名>", "additionalContext": "<訊息>"}}
+    - 帶額外上下文：增加 "additionalContext" 欄位
+    - 帶權限決策：增加 "permissionDecision" 和 "permissionDecisionReason" 欄位
 
     Args:
         hook_event_name: Hook 事件名稱，如 "UserPromptSubmit", "PreToolUse"
         additional_context: 可選的額外上下文訊息（如警告、提醒等）
+        permission_decision: 可選的權限決策，"allow" / "deny" / "block"
+        permission_decision_reason: 可選的權限決策理由
 
     Returns:
         dict: 符合 Hook 協定的輸出結構
 
     Examples:
-        # 基本輸出（無額外訊息）
         >>> generate_hook_output("UserPromptSubmit")
         {'hookSpecificOutput': {'hookEventName': 'UserPromptSubmit'}}
 
-        # 帶額外上下文的輸出（如警告訊息）
-        >>> generate_hook_output("UserPromptSubmit", "警告：檢測到流程省略意圖")
-        {'hookSpecificOutput': {
-            'hookEventName': 'UserPromptSubmit',
-            'additionalContext': '警告：檢測到流程省略意圖'
-        }}
+        >>> generate_hook_output("PreToolUse", permission_decision="allow",
+        ...     permission_decision_reason="工具不在檢查範圍")
+        {'hookSpecificOutput': {'hookEventName': 'PreToolUse',
+            'permissionDecision': 'allow',
+            'permissionDecisionReason': '工具不在檢查範圍'}}
     """
     output = {
         "hookSpecificOutput": {
@@ -474,8 +506,36 @@ def generate_hook_output(
         }
     }
 
-    # 當提供了額外上下文時，添加到輸出
     if additional_context:
         output["hookSpecificOutput"]["additionalContext"] = additional_context
 
+    if permission_decision:
+        output["hookSpecificOutput"]["permissionDecision"] = permission_decision
+
+    if permission_decision_reason:
+        output["hookSpecificOutput"]["permissionDecisionReason"] = permission_decision_reason
+
     return output
+
+
+def emit_hook_output(
+    hook_event_name: str,
+    additional_context: Optional[str] = None,
+    permission_decision: Optional[str] = None,
+    permission_decision_reason: Optional[str] = None,
+) -> None:
+    """一步完成 Hook JSON stdout 輸出 — 防止遺漏 json.dumps 格式
+
+    組合 generate_hook_output + json.dumps + print，確保輸出格式正確。
+
+    Args:
+        hook_event_name: Hook 事件名稱
+        additional_context: 可選的額外上下文訊息
+        permission_decision: 可選的權限決策
+        permission_decision_reason: 可選的權限決策理由
+    """
+    output = generate_hook_output(
+        hook_event_name, additional_context,
+        permission_decision, permission_decision_reason,
+    )
+    print(json.dumps(output, ensure_ascii=False))

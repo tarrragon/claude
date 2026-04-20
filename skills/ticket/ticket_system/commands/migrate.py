@@ -33,6 +33,7 @@ from ticket_system.lib.parser import parse_frontmatter
 from ticket_system.lib.ticket_validator import validate_ticket_id
 from ticket_system.lib.id_parser import (
     extract_id_components,
+    extract_core_ticket_id,
     parse_sequence,
     format_sequence,
     calculate_chain_info,
@@ -104,8 +105,13 @@ def _update_cross_references(old_id: str, new_id: str) -> int:
     # 掃描所有版本目錄下的 tickets 資料夾
     for tickets_dir in sorted(work_logs_root.glob("v*/tickets")):
         for ticket_file in sorted(tickets_dir.glob("*.md")):
-            # 跳過剛遷移的 Ticket 本身及其子 Ticket
-            if ticket_file.stem.startswith(new_id):
+            # 跳過剛遷移的 Ticket 本身（來源：0.18.0-W10-037 Bug 2）
+            # 原本使用 startswith 會誤跳過子 Ticket（檔名以 new_id 開頭），
+            # 導致它們的 blockedBy / parent_id / relatedTo 等引用不被更新。
+            # 改用 extract_core_ticket_id 取得核心 ID 做精確比較，
+            # 僅跳過「確實等於 new_id 的那個檔案」，子任務與帶後綴檔案都會被掃描。
+            core_id = extract_core_ticket_id(ticket_file.stem)
+            if core_id == new_id:
                 continue
 
             # 載入 Ticket

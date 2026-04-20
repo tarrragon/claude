@@ -245,17 +245,22 @@ def calculate_chain_info(target_id: str) -> Dict[str, Any]:
     if not components:
         return {}
 
-    sequence_list = parse_sequence(components["sequence"])
-    depth = len(sequence_list) - 1
+    # 使用原始字串 split 保留前導 0（Bug: 0.18.0-W10-037）
+    # parse_sequence 會把序號轉為 int 導致前導 0 遺失，這裡改以字串形式組回 ID，
+    # 同時仍輸出 int list 以維持 API 相容性。
+    sequence_parts = components["sequence"].split(".")
+    sequence_list = [int(x) for x in sequence_parts]
+    depth = len(sequence_parts) - 1
 
-    # 計算根 ID
-    root_id = f"{components['version']}-W{components['wave']}-{sequence_list[0]}"
+    base = f"{components['version']}-W{components['wave']}-"
 
-    # 計算父 ID
+    # 根 ID 使用原始字串首段，保留前導 0
+    root_id = base + sequence_parts[0]
+
+    # 父 ID 以原始字串序列重組，保留各層前導 0
     parent_id = None
     if depth > 0:
-        parent_sequence = format_sequence(sequence_list[:-1])
-        parent_id = f"{components['version']}-W{components['wave']}-{parent_sequence}"
+        parent_id = base + ".".join(sequence_parts[:-1])
 
     return {
         "root": root_id,

@@ -14,6 +14,7 @@ from ticket_system.lib.constants import (
     STATUS_COMPLETED,
     STATUS_IN_PROGRESS,
     TASK_CHAIN_DIRECTION_TYPES,
+    NON_CHAIN_DIRECTION_TYPES,
     HANDOFF_DIR,
     HANDOFF_PENDING_SUBDIR,
 )
@@ -21,8 +22,8 @@ from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.ticket_ops import load_and_validate_ticket
 from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
 
-# 所有已知的 direction 值
-_KNOWN_DIRECTION_VALUES = {"context-refresh", "auto"} | set(TASK_CHAIN_DIRECTION_TYPES)
+# 所有已知的 direction 值（從 constants 衍生，確保單一來源）
+_KNOWN_DIRECTION_VALUES = {"auto"} | set(TASK_CHAIN_DIRECTION_TYPES) | set(NON_CHAIN_DIRECTION_TYPES)
 
 # Handoff JSON 必填欄位
 _HANDOFF_REQUIRED_FIELDS = ("ticket_id", "direction", "timestamp")
@@ -33,7 +34,7 @@ class ParsedHandoff:
     """
     解析後的 handoff 記錄
 
-    包含完整的檔案和資料信息，支援呼叫端自訂的error處理。
+    包含完整的檔案和資料資訊，支援呼叫端自訂的error處理。
     """
     file_path: Path
     ticket_id: str
@@ -152,12 +153,13 @@ def is_valid_direction(direction: str) -> bool:
     """
     驗證 handoff 的 direction 是否為已知類型。
 
-    已知 direction 值（不含後綴）：to-sibling、to-parent、to-child、context-refresh、auto
+    已知 direction 值（不含後綴）：to-sibling、to-parent、to-child、context-refresh、next-wave、auto
     支援的格式：
     - "to-sibling"、"to-sibling:target_id"
     - "to-parent"、"to-parent:target_id"
     - "to-child"、"to-child:target_id"
     - "context-refresh"
+    - "next-wave"
     - "auto"
 
     Args:
@@ -184,7 +186,7 @@ def scan_pending_handoffs() -> List[ParsedHandoff]:
 
     每個記錄包含：
     - 成功解析的檔案：parse_error=None, schema_error=None
-    - JSON 讀取失敗：parse_error=<錯誤信息>, schema_error=None
+    - JSON 讀取失敗：parse_error=<錯誤資訊>, schema_error=None
     - 必填欄位缺失：schema_error=<缺失欄位清單>
 
     呼叫端可根據 parse_error/schema_error 決定是否統計計數或直接跳過。

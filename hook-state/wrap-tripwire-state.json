@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "current_ticket": "0.18.0-W11-010",
+  "last_updated": "2026-04-20T11:02:03.280195",
+  "signals": {
+    "consecutive_failures": {},
+    "restrictive_keywords": {
+      "last_matched_keyword": "沒辦法",
+      "last_warned_at": "2026-04-19T18:30:43.052793"
+    }
+  }
+}

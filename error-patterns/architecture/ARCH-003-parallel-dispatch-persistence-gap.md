@@ -7,7 +7,6 @@
 - **來源版本**: v0.31.0
 - **發現日期**: 2026-02-26
 - **風險等級**: 高
-- **來源 Ticket**: 0.31.0-W24（7 個並行代理人派發）
 
 ## 問題描述
 
@@ -109,7 +108,6 @@ git diff --name-only
 
 ## 相關資源
 
-- `docs/work-logs/v0.31.0/tickets/0.31.0-W24-004.md` - W24 完整決策記錄（第 4 節詳述持久化落差）
 - `.claude/rules/guides/parallel-dispatch.md` - 並行派發指南
 
 ## 標籤

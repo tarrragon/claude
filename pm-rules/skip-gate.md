@@ -275,7 +275,7 @@ Subagent 的可編輯路徑見 decision-tree.md「代理人可編輯路徑對照
 ---
 
 **Last Updated**: 2026-03-21
-**Version**: 2.7.0 - 適用對象標註集中至頂部受眾宣告，移除 4 處分散重複標註（0.1.1-W16-003）
+**Version**: 2.7.0 - 適用對象標註集中至頂部受眾宣告，移除 4 處分散重複標註
 **Purpose**: Skip-gate Prevention with Multi-Level Protection
 **Changes**:
 - v2.4.0 (2026-02-06): 精簡主檔案，外移參考內容

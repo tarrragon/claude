@@ -8,7 +8,7 @@
 
 ## 情境 1：查詢 Ticket 進度
 
-**用戶詢問**：「進度如何？」或「0.31.0-W4-010 完成了嗎？」
+**用戶詢問**：「進度如何？」或「{ticket-id} 完成了嗎？」
 
 **判斷**：內部查詢
 
@@ -20,7 +20,7 @@
 **執行**：
 ```bash
 /ticket track summary        # 全部進度
-/ticket track query 0.31.0-W4-010  # 特定 Ticket
+/ticket track query {ticket-id}  # 特定 Ticket
 ```
 
 ---
@@ -120,7 +120,7 @@
 
 **執行**：
 ```bash
-Read file_path=".claude/rules/forbidden/skip-gate.md"
+Read file_path=".claude/pm-rules/skip-gate.md"
 Grep pattern="五重文件系統" path=".claude/rules"
 ```
 
@@ -138,4 +138,4 @@ Grep pattern="五重文件系統" path=".claude/rules"
 
 **Last Updated**: 2026-02-06
 **Version**: 1.0.0
-**Source**: Extracted from query-vs-research.md (0.31.0-W9-007)
+**Source**: Extracted from query-vs-research.md

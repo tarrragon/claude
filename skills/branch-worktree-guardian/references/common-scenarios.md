@@ -50,7 +50,7 @@ git stash pop
 ### 多 Agent 場景下的最佳實踐
 
 - 每個 Agent 應在獨立的 worktree 中工作
-- 定期同步 main 分支確保信息一致
+- 定期同步 main 分支確保資訊一致
 - 避免在同一分支上進行併行修改
 - 使用 feature 分支完成隔離
 
@@ -131,7 +131,7 @@ git branch -vv
 # 檢查 worktree 狀態
 git worktree list
 
-# 驗證當前目錄的 git 信息
+# 驗證當前目錄的 git 資訊
 python .claude/skills/branch-worktree-guardian/scripts/verify_branch.py
 ```
 

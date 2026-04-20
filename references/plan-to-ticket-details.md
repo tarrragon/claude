@@ -143,8 +143,8 @@ flowchart TD
 
 **產出**：
 ```
-0.31.0-W9-001：建立 BookRating Entity（Phase 1）
-0.31.0-W9-002：實作 BookRatingRepository（Phase 3b）
+{version}-W{n}-001：建立 BookRating Entity（Phase 1）
+{version}-W{n}-002：實作 BookRatingRepository（Phase 3b）
 ```
 
 ### 案例 2：多步驟複雜功能

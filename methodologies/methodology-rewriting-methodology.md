@@ -51,4 +51,4 @@
 ## Reference
 
 - [methodology-writing SKILL](../skills/methodology-writing/SKILL.md) - 完整改寫指南
-- [方法論撰寫方法論](./methodology-writing-methodology.md) - 撰寫新方法論
+- [框架元層管理方法論](./framework-meta-methodology.md) - SKILL vs 方法論分工、撰寫/改寫檢查清單

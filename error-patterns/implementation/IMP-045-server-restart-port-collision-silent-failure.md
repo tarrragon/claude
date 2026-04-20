@@ -7,7 +7,6 @@
 | **分類** | Implementation |
 | **嚴重性** | High（浪費大量除錯時間在錯誤方向） |
 | **發現版本** | v0.2.0 |
-| **相關 Ticket** | 0.2.0-W7-004, 0.2.0-W7-007, 0.2.0-W7-008 |
 
 ## 症狀
 
@@ -70,7 +69,7 @@
 ### 已實施
 
 1. CLAUDE.md 新增「重啟伺服器注意事項」：kill-verify-start-verify 標準流程
-2. Flutter 端新增 `[WS]`/`[Conv]`/`[SessionList]` debug log（W7-009），可從 terminal 觀測前端收到的訊息
+2. Flutter 端新增 `[WS]`/`[Conv]`/`[SessionList]` debug log，可從 terminal 觀測前端收到的訊息
 
 ### 建議
 

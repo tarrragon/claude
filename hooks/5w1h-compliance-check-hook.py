@@ -30,7 +30,62 @@ from typing import Dict, Any, Optional, List
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+
+# Who 欄位正則模式
+# 格式 1（代理人執行）: "{agent} (執行者) | {dispatcher} (分派者)"
+WHO_PATTERN_DELEGATE = r'^([\w-]+)\s*\(執行者\)\s*\|\s*([\w-]+)\s*\(分派者\)'
+# 格式 2（主線程自行執行）: "主線程（...）" 或 "{pm-name} (...)"
+WHO_PATTERN_SELF = r'^(?:主線程|rosemary-project-manager)\s*[\(（](.+?)[\)）]$'
+
+# How 欄位正則模式: "[Task Type: {type}] {strategy}"
+HOW_PATTERN = r'^\[Task\s+Type:\s*(\w+)\]\s*(.+)'
+
+# 允許的代理人名稱
+ALLOWED_AGENTS = {
+    "lavender-interface-designer",
+    "sage-test-architect",
+    "pepper-test-implementer",
+    "parsley-flutter-developer",
+    "cinnamon-refactor-owl",
+    "mint-format-specialist",
+    "thyme-documentation-integrator",
+    "memory-network-builder",
+    "basil-hook-architect",
+    "rosemary-project-manager",
+}
+
+# 允許的任務類型（小寫比對）
+ALLOWED_TASK_TYPES = {
+    "implementation",
+    "dispatch",
+    "review",
+    "documentation",
+    "analysis",
+    "planning",
+}
+
+# 違規矩陣：執行者 × 任務類型的禁止組合
+VIOLATION_MATRIX = [
+    {
+        "executor": "rosemary-project-manager",
+        "task_type": "implementation",
+        "reason": "主線程不應執行 Implementation 任務",
+        "suggestion": "請分派給對應的執行代理人（如 parsley-flutter-developer）",
+    },
+    {
+        "executor": "lavender-interface-designer",
+        "task_type": "implementation",
+        "reason": "設計代理人不應執行 Implementation 任務",
+        "suggestion": "Phase 1 設計代理人只負責設計，實作應分派給 Phase 3b 代理人",
+    },
+    {
+        "executor": "parsley-flutter-developer",
+        "task_type": "dispatch",
+        "reason": "執行代理人不應分派任務",
+        "suggestion": "分派任務是主線程（rosemary-project-manager）的職責",
+    },
+]
 
 
 def extract_field(content: str, field_name: str) -> Optional[str]:
@@ -515,7 +570,9 @@ def main() -> int:
     logger = setup_hook_logging("5w1h-compliance-check")
     try:
         # 讀取 stdin 輸入
-        input_data = json.load(sys.stdin)
+        input_data = read_json_from_stdin(logger)
+        if not input_data:
+            return 0
         logger.debug(f"接收到 Hook 輸入: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
 
         # 提取工具資訊

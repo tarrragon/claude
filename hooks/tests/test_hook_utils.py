@@ -178,12 +178,12 @@ class TestSetupHookLogging:
 
         captured = capsys.readouterr()
 
-        # 驗證輸出（DEBUG 和 INFO 寫入檔案但不輸出到 stderr）
+        # IMP-048 後 StreamHandler 級別為 CRITICAL，避免 stderr 觸發 hook error
+        # DEBUG/INFO/WARNING/ERROR 都不會輸出到 stderr
         assert "debug msg" not in captured.err
         assert "info msg" not in captured.err
-        # WARNING 和 ERROR 輸出到 stderr（StreamHandler）
-        assert "warning msg" in captured.err
-        assert "error msg" in captured.err
+        assert "warning msg" not in captured.err
+        assert "error msg" not in captured.err
 
         # 驗證無 stdout 輸出
         assert captured.out == ""
@@ -220,7 +220,7 @@ class TestSetupHookLogging:
         assert stream_handlers[0].level == logging.DEBUG
 
     def test_scenario_2_debug_false_value(self, project_root, mock_env_var, reset_loggers, capsys):
-        """HOOK_DEBUG=false 時 StreamHandler 級別為 WARNING"""
+        """HOOK_DEBUG=false 時 StreamHandler 級別為 CRITICAL（IMP-048）"""
         mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
         mock_env_var("HOOK_DEBUG", "false")
 
@@ -232,10 +232,10 @@ class TestSetupHookLogging:
         # 驗證 debug 訊息不輸出
         assert "debug msg" not in captured.err
 
-        # 驗證 StreamHandler 級別（排除 FileHandler）
+        # IMP-048 後 StreamHandler 級別為 CRITICAL，避免 stderr 觸發 hook error
         stream_handlers = [h for h in logger.handlers
                           if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)]
-        assert stream_handlers[0].level == logging.WARNING
+        assert stream_handlers[0].level == logging.CRITICAL
 
     def test_scenario_2_debug_case_insensitive(self, project_root, mock_env_var, reset_loggers, capsys):
         """HOOK_DEBUG 環境變數不區分大小寫"""
@@ -1572,7 +1572,7 @@ class TestImportsAndExports:
 
 
 # ============================================================================
-# W39-002 Phase 3b：快取機制測試
+# 快取機制測試
 # ============================================================================
 
 import timeit

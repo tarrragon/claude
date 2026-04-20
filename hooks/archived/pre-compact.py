@@ -23,13 +23,14 @@ import subprocess
 import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from hook_utils import setup_hook_logging, read_json_from_stdin
+
 def main():
-    try:
-        # 讀取 Hook 輸入
-        input_data = json.load(sys.stdin)
-    except json.JSONDecodeError as e:
-        print(f"❌ PreCompact Hook: JSON 解析錯誤: {e}")
-        sys.exit(1)
+    logger = setup_hook_logging("pre-compact")
+    input_data = read_json_from_stdin(logger)
+    if input_data is None:
+        sys.exit(0)
 
     # 獲取 Hook 資訊
     trigger = input_data.get("trigger", "unknown")

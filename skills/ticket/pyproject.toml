@@ -18,6 +18,8 @@ license = {text = "MIT"}
 test = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "pytest-mock>=3.10",
+    "freezegun>=1.0",
 ]
 
 [project.scripts]
@@ -34,7 +36,10 @@ include = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# W10-017.13 AC4 / TD-E：加入 ticket_system/tests 讓其 149 支測試被 pytest 自動發現
+# （原僅包 tests/，導致 ticket_system/tests 下 track_snapshot / handoff_ready /
+# checkpoint_status 等命令層測試需 CLI 顯式指定路徑才跑）。
+testpaths = ["tests", "ticket_system/tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "--verbose"

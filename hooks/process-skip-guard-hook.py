@@ -35,6 +35,7 @@ from hook_utils import (
     run_hook_safely,
     is_subagent_environment,
     generate_hook_output,
+    read_json_from_stdin,
 )
 from lib.hook_messages import (
     AskUserQuestionMessages,
@@ -155,7 +156,7 @@ def generate_skip_reminder(skip_type: str, pattern_info: dict) -> str:
 
     Args:
         skip_type: 省略類型
-        pattern_info: 模式信息（包含 description 和 full_process）
+        pattern_info: 模式資訊（包含 description 和 full_process）
 
     Returns:
         格式化的提醒訊息
@@ -184,9 +185,13 @@ def main() -> int:
     logger = setup_hook_logging("process-skip-guard")
 
     try:
-        input_data = json.load(sys.stdin)
-    except json.JSONDecodeError:
+        input_data = read_json_from_stdin(logger)
+    except (json.JSONDecodeError, Exception):
         # 輸入解析失敗，輸出基本 JSON
+        print(json.dumps(generate_hook_output("UserPromptSubmit"), ensure_ascii=False, indent=2))
+        return EXIT_SUCCESS
+
+    if input_data is None:
         print(json.dumps(generate_hook_output("UserPromptSubmit"), ensure_ascii=False, indent=2))
         return EXIT_SUCCESS
 

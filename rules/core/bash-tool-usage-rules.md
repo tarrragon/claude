@@ -1,117 +1,46 @@
 # Bash 工具使用規則
 
-本文件定義 Claude Code Bash 工具的使用規範，涵蓋工作目錄管理和工具輸出處理兩個核心問題。
+Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git 串接三大核心問題。
 
----
-
-## 核心原則
-
-> **持久狀態意識**：Bash 工具在同一 session 內保持持久 shell 狀態。`cd` 會改變工作目錄並影響後續所有指令；大輸出會存為暫存檔案，不是背景任務。
+> **持久狀態意識**：Bash 在同一 session 內共享 shell。`cd` 會永久改變工作目錄；大輸出會存為暫存檔。
+> **詳細案例、根因圖解、chpwd 深度說明**：`.claude/references/bash-tool-usage-details.md`
 
 ---
 
 ## 規則一：禁止使用 cd 改變持久工作目錄
 
-### 問題根源
-
-Claude Code 的 Bash 工具在同一 session 內共享一個持久 shell。
-
-```
-session 開始
-    → shell 工作目錄：/project/root
-    → cd .claude/skills/ticket
-    → shell 工作目錄：/project/root/.claude/skills/ticket  ← 永久改變
-    → 後續 ./scripts/sync-push.sh  ← 找不到！
-```
-
-### 強制規範
-
 | 場景 | 錯誤做法 | 正確做法 |
 |------|---------|---------|
 | 在特定目錄執行命令 | `cd .claude/skills/ticket && uv run ...` | `(cd .claude/skills/ticket && uv run ...)` |
 | uv 指定目錄 | `cd .claude/skills/ticket && uv run ...` | `uv -d .claude/skills/ticket run ...` |
-| 需要回到根目錄 | 無操作（工作目錄已污染） | `cd /your/project/root && ...` |
+| 工作目錄已污染 | 無操作 | `cd /your/project/root && ...` |
 
-### 三種安全做法
+**三種安全做法速查**：
 
-**方法 1：子 shell（推薦，任何情況適用）**
+| 方法 | 指令形式 | 適用情境 |
+|------|---------|---------|
+| 子 shell（推薦） | `(cd path && command)` | 任何命令，通用最廣 |
+| uv -d 參數 | `uv -d path run ...` | 僅限 uv 指令 |
+| 絕對路徑還原 | `cd /project/root && ...` | 污染後補救 |
 
-```bash
-# 括號建立子 shell，原工作目錄不受影響
-(cd .claude/skills/ticket && uv run ticket track list)
-```
-
-**方法 2：uv -d 參數（適用 uv 指令）**
-
-```bash
-# uv 支援 -d 指定目錄，不改變 shell 工作目錄
-uv -d .claude/skills/ticket run ticket track list
-```
-
-**方法 3：絕對路徑還原**
-
-```bash
-# 若已污染，每次命令前加絕對路徑 cd
-cd /your/project/root && ./scripts/sync-push.sh
-```
-
-### 檢查清單
-
-- [ ] 命令中有 `cd`？→ 改用子 shell `()` 或 `uv -d`
-- [ ] 執行失敗「找不到檔案」？→ 確認 `pwd` 是否為預期目錄
-- [ ] 多步驟序列？→ 第一步加 `cd /project/root &&`
+> **chpwd 警告**：本環境 zsh 有 `chpwd` hook，裸 `cd` 觸發 `ls` 淹沒工具結果。必須用子 shell `()`。
 
 ---
 
 ## 規則二：正確區分 TaskOutput vs 暫存輸出檔案
 
-### 問題根源
-
-兩種機制外觀相似但用途完全不同：
-
 | 機制 | 觸發條件 | 識別特徵 | 正確處理工具 |
 |------|---------|---------|------------|
-| 背景任務 | `run_in_background: true` | 訊息含「background task」 | `TaskOutput` |
-| 暫存輸出檔案 | 輸出 > 2KB | `Output too large ... Full output saved to: /path/...txt` | `Read` |
+| 背景任務 | `run_in_background: true` | 訊息含「background task」 | `TaskOutput(taskId)` |
+| 暫存輸出檔案 | 輸出 > 2KB | `Full output saved to: /path/...txt` | `Read(file_path)` |
+| 一般同步輸出 | 小於 2KB 同步執行 | 無上述特徵 | 直接讀對話輸出 |
 
-### 判斷流程
-
-```
-工具執行完成
-    |
-    v
-是否使用 run_in_background: true 啟動？
-    |
-    +-- 是 → TaskOutput(taskId: "xxx")
-    |
-    +-- 否 → 輸出是否顯示 "Full output saved to: /path/xxx.txt"？
-        |
-        +-- 是 → Read(file_path: "/path/xxx.txt")  ← 使用完整路徑
-        +-- 否 → 直接讀取對話中的輸出
-```
-
-### 典型混淆案例
-
-```
-Bash 工具輸出：
-"Output too large (279.4KB). Full output saved to: .../tool-results/b8refllkc.txt"
-
-❌ 錯誤：TaskOutput(taskId: "b8refllkc")
-   → 回傳：No task found with ID: b8refllkc
-   → 原因：b8refllkc 是暫存檔案名，不是任務 ID
-
-✅ 正確：Read(file_path: ".../tool-results/b8refllkc.txt")
-   → 回傳：完整的輸出內容
-```
-
-### 主動預防大輸出
-
-若預期輸出很大，提前使用防護措施：
+**主動預防大輸出**：
 
 | 工具 | 大輸出防護 |
 |------|----------|
-| Bash（測試） | `flutter test 2>&1 \| tail -20`（只看最後結果） |
-| Bash（一般） | `命令 \| head -100` 或 `命令 \| wc -l` 確認大小 |
+| Bash（測試） | `flutter test 2>&1 \| tail -20` |
+| Bash（一般） | `命令 \| head -100` 或 `\| wc -l` 確認大小 |
 | Grep | 使用 `head_limit` 限制回傳行數 |
 | Read | 使用 `offset` + `limit` 分頁讀取 |
 
@@ -119,54 +48,61 @@ Bash 工具輸出：
 
 ## 規則三：禁止串接多個 git 寫入操作
 
-### 問題根源
-
-Claude Code 的 PostToolUse Hook 在每個 Bash 呼叫完成後觸發。Hook 內部會執行 git 命令（如 `git status`、`git log`）。
-
-當多個 git 寫入操作用 `&&` 串接在同一個 Bash 呼叫中時：
-
-```
-git commit -m "msg" && git merge feat/xxx --no-edit
-    |                      |
-    v                      v
-    commit 完成             merge 開始（同一 Bash 內，不等 Hook）
-    |
-    v
-    Hook 觸發 → Hook 內的 git 命令
-    |                      |
-    v                      v
-    git 競爭 index.lock ← git merge 也需要 index.lock
-    → fatal: Unable to create index.lock
-```
-
-### 強制規範
-
 | 組合 | 允許 | 原因 |
 |------|------|------|
-| `git add && git commit` | 允許 | add 不觸發 Hook，commit 是唯一的寫入操作 |
-| `git commit && git merge` | 禁止 | 兩個寫入操作，Hook 和 merge 競爭 lock |
-| `git commit && git push` | 禁止 | push 可能觸發遠端 Hook 或本地 post-push 處理 |
+| `git add && git commit` | 允許 | add 不觸發 Hook，commit 是唯一寫入 |
+| `git commit && git merge` | 禁止 | Hook 和 merge 競爭 index.lock |
+| `git commit && git push` | 禁止 | push 可能觸發遠端 Hook |
 | `git merge && git push` | 禁止 | 同上 |
 
-### 正確做法
+**正確做法**：每個 git 寫入操作（commit/merge/rebase/push）獨立一個 Bash 呼叫。
 
-每個 git 寫入操作（commit/merge/rebase/push）獨立一個 Bash 呼叫：
+---
 
-```bash
-# 正確：分開呼叫
-Bash: git add file.md && git commit -m "msg"     ← 第一個 Bash 呼叫
-Bash: git merge feat/xxx --no-edit               ← 第二個 Bash 呼叫（等 Hook 完成後）
-Bash: git push                                    ← 第三個 Bash 呼叫
+## 規則四：CLI 參數含 backtick 禁止用雙引號直接傳入
 
-# 錯誤：串接
-Bash: git add file.md && git commit -m "msg" && git merge feat/xxx --no-edit && git push
-```
+> 來源：PC-079。雙引號字串內的 backtick 被 Bash 解析為 command substitution，字元在傳給 CLI 前已被替換。
 
-### 檢查清單
+| 場景 | 錯誤做法 | 正確做法 |
+|------|---------|---------|
+| Markdown 路徑參考 | `ticket track append-log ID --section "S" "檔案 \`src/x.py\` 說明"` | heredoc 或單引號或 Edit 直接編輯 ticket md |
+| 程式碼片段傳入 | `python3 -c "print(\`cmd\`)"` | 用單引號 `python3 -c 'print(...)'` |
+| Commit 訊息含 backtick | `git commit -m "修改 \`x.py\`"` | `git commit -m "$(cat <<'EOF'\n修改 \`x.py\`\nEOF\n)"` |
 
-- [ ] Bash 命令中有 `git commit`？→ commit 之後不可再串接 merge/push/rebase
-- [ ] 需要連續執行多個 git 寫入操作？→ 拆成多個獨立的 Bash 呼叫
-- [ ] 看到 `index.lock` 錯誤？→ 確認是否有 git 操作串接
+**三種安全做法速查**：
+
+| 方法 | 指令形式 | 適用情境 |
+|------|---------|---------|
+| Heredoc with quoted delimiter（推薦） | `cmd "$(cat <<'EOF'\n...\nEOF\n)"` | 長文字、含特殊字元、commit 訊息（長文字傳遞見規則五） |
+| 單引號包整參數 | `cmd '...含 backtick...'` | 參數內無單引號 |
+| 改用 Edit 工具 | 直接 `Edit` ticket md 檔 | 長文字寫入 ticket 內容 |
+
+**識別特徵**：若 Bash 執行後看到 `command not found` / `permission denied` / `ModuleNotFoundError` 等錯誤且來源不明，優先檢查是否 backtick 被 command substitution。
+
+---
+
+## 規則五：長文字傳遞預設使用 heredoc
+
+> 來源：PC-087（PM 寫 /tmp 作 ticket 內容中介）+ W15-005 WRAP 方案 E。長文字（append-log 內容、commit msg、ANA 結論）直接用 heredoc 傳 CLI，禁止繞 `/tmp` 寫檔再讀回傳入。
+
+**容量事實（打破心理障礙）**：
+
+| 項目 | 容量 | 對照 |
+|------|------|------|
+| ARG_MAX（macOS） | ≥ 1 MB | 單一命令列總長度上限 |
+| ARG_MAX（Linux） | ≥ 2 MB | 同上 |
+| 80 行 markdown 長文字 | 約 3-8 KB | 遠低於 ARG_MAX |
+| 典型 append-log Solution | 1-10 KB | 完全可行 |
+
+**識別信號表**：
+
+| 場景 | 錯誤做法 | 正確做法 |
+|------|---------|---------|
+| append-log 長 Solution | `Write /tmp/sol.md` → `Read` → `--content "$(cat /tmp/sol.md)"` | `ticket ... append-log ... --content "$(cat <<'EOF'\n...\nEOF\n)"` |
+| Commit 訊息多段 | `echo > /tmp/msg` → `git commit -F /tmp/msg` | `git commit -m "$(cat <<'EOF'\n...\nEOF\n)"` |
+| ANA 結論傳 CLI | 中介 /tmp 檔 | heredoc 直傳 |
+
+**例外**：文字 > 100 KB（極少見）才考慮檔案中介；此時應優先改用 `Edit` 工具直接改 ticket md。
 
 ---
 
@@ -174,23 +110,28 @@ Bash: git add file.md && git commit -m "msg" && git merge feat/xxx --no-edit && 
 
 執行 Bash 命令前：
 
-- [ ] 命令包含 `cd`？→ 改用子 shell 或 `uv -d`
-- [ ] 輸出可能很大？→ 提前加 `head` / 用摘要腳本
-- [ ] 命令以 `run_in_background: true` 執行？→ 用 `TaskOutput`
-- [ ] 看到「Full output saved to: /path/xxx.txt」？→ 用 `Read` 加完整路徑
-- [ ] 命令串接多個 git 寫入操作？→ 拆成獨立 Bash 呼叫
+- [ ] 命令含 `cd`？→ 改用子 shell `()` 或 `uv -d`
+- [ ] 多步驟序列？→ 第一步加絕對路徑 `cd /project/root &&`
+- [ ] 輸出可能很大？→ 提前加 `head` / `tail`
+- [ ] `run_in_background: true`？→ 用 `TaskOutput(taskId)`
+- [ ] 輸出含「Full output saved to」？→ 用 `Read(file_path)`
+- [ ] 串接多個 git 寫入（commit/merge/rebase/push）？→ 拆成獨立呼叫
+- [ ] 看到 `index.lock` 錯誤？→ 確認是否有 git 串接
+- [ ] CLI 參數含 backtick？→ 改用 heredoc / 單引號 / Edit 工具（規則四）
+- [ ] 看到 `command not found` / `ModuleNotFoundError` 來源不明？→ 檢查 backtick command substitution（PC-079）
+- [ ] 準備 `Write /tmp/*.md` 作 CLI 中介？→ 改 heredoc 直傳（規則五，容量絕對夠）
 
 ---
 
 ## 相關文件
 
-- .claude/references/quality-python.md - Python 執行規則（類似規範）
-- .claude/error-patterns/implementation/IMP-008-bash-working-directory-pollution.md
-- .claude/error-patterns/implementation/IMP-009-taskoutput-confusion.md
-- CLAUDE.md - 專案開發規範（含語言特定的測試執行指令）
+- `.claude/references/bash-tool-usage-details.md` — 詳細案例、根因圖解、chpwd 深度說明
+- `.claude/references/quality-python.md` — Python 執行規則
+- `.claude/error-patterns/implementation/IMP-008-bash-working-directory-pollution.md`、`IMP-009-taskoutput-confusion.md`
+- `.claude/error-patterns/process-compliance/PC-079-bash-backtick-command-substitution-in-cli-args.md` — 規則四的完整案例與根因
+- `.claude/error-patterns/process-compliance/PC-087-pm-tmp-detour-for-long-text.md` — 規則五的觸發案例
+- CLAUDE.md — 專案開發規範
 
 ---
 
-**Last Updated**: 2026-03-30
-**Version**: 1.2.0 - 新增規則三：禁止串接多個 git 寫入操作（index.lock 競爭防護）
-**Source**: IMP-008（cd 污染）、IMP-009（TaskOutput 混淆）、index.lock 競爭（Hook 與 git 寫入操作衝突）
+**Last Updated**: 2026-04-18 | **Version**: 2.1.0 — 新增規則五 heredoc 長文字傳遞預設（W15-007 / W15-005 WRAP 方案 E） | **Source**: IMP-008、IMP-009、index.lock 競爭、PC-087

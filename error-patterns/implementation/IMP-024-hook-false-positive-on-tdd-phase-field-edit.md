@@ -5,7 +5,6 @@
 - **嚴重度**: 低
 - **發現版本**: v0.1.0
 - **發現日期**: 2026-03-08
-- **來源 Ticket**: 0.1.0-W11-004
 
 ## 模式描述
 
@@ -16,7 +15,7 @@ hook 會誤判為「Phase 3b 剛完成」，觸發不必要的 AskUserQuestion #
 
 ## 具體案例
 
-### 案例：W11-004 TDD Phase 推進中
+### 案例：TDD Phase 推進中
 
 PM 執行 Phase 4a 完成後，將 `tdd_phase: phase3b` 更新為 `tdd_phase: phase4`。
 檔案中 `tdd_stage` 欄位保留了歷史陣列：

@@ -324,6 +324,8 @@ def get_installed_uv_tools() -> Dict[str, str]:
             ["uv", "tool", "list"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=SHORT_OPERATION_TIMEOUT_SECONDS,
         )
         if result.returncode != 0:
@@ -394,6 +396,8 @@ def reinstall_uv_tool(package_name: str, package_full_path: Path) -> bool:
             ["uv", "tool", "uninstall", package_name],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=SHORT_OPERATION_TIMEOUT_SECONDS,
         )
 
@@ -402,6 +406,8 @@ def reinstall_uv_tool(package_name: str, package_full_path: Path) -> bool:
             ["uv", "cache", "clean", package_name],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=SHORT_OPERATION_TIMEOUT_SECONDS,
         )
 
@@ -411,6 +417,8 @@ def reinstall_uv_tool(package_name: str, package_full_path: Path) -> bool:
             cwd=str(package_full_path),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=INSTALL_OPERATION_TIMEOUT_SECONDS,
         )
 

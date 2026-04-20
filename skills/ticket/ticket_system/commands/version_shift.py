@@ -23,7 +23,7 @@ from ticket_system.lib.ticket_loader import (
     save_ticket,
 )
 from ticket_system.lib.constants import WORK_LOGS_DIR, TICKETS_DIR
-from ticket_system.lib.parser import parse_frontmatter
+from ticket_system.lib.parser import parse_frontmatter, YAMLParseError
 from ticket_system.lib.messages import (
     ErrorMessages,
     InfoMessages,
@@ -173,6 +173,9 @@ def _shift_single_ticket(
     """
     更新單一 Ticket 的所有版本欄位和內部引用。
 
+    直接從 ticket_path 讀檔避免 load_ticket 隱式解析真實 project_root，
+    確保測試用的 temp 目錄也能正確處理。
+
     Args:
         ticket_path: Ticket 檔案路徑
         from_version: 來源版本號
@@ -182,11 +185,20 @@ def _shift_single_ticket(
         (成功, 更新後的 Ticket 字典)
     """
     try:
-        # 從檔案路徑解析 ticket_id
-        ticket_id = ticket_path.stem
-        ticket = load_ticket(from_version, ticket_id)
-        if ticket is None:
+        if not ticket_path.exists():
             return (False, None)
+
+        content = ticket_path.read_text(encoding="utf-8")
+        try:
+            frontmatter, body = parse_frontmatter(content)
+        except YAMLParseError:
+            return (False, None)
+
+        if not frontmatter:
+            return (False, None)
+
+        ticket = frontmatter
+        ticket["_body"] = body
 
         # 提取舊 ID 並驗證
         old_id = ticket.get("id")
@@ -328,7 +340,6 @@ def _rename_ticket_files_in_dir(
 
 def _process_ticket_for_cross_refs(
     ticket_file: Path,
-    version_name_str: str,
     from_version: str,
     to_version: str,
     old_prefix: str,
@@ -336,9 +347,11 @@ def _process_ticket_for_cross_refs(
     """
     檢查並更新單一 Ticket 的跨版本引用。
 
+    直接從 ticket_file 讀檔，與 _shift_single_ticket 對稱，
+    避免 load_ticket 隱式解析 project_root。
+
     Args:
         ticket_file: Ticket 檔案路徑
-        version_name_str: 版本號（無 v 前綴）
         from_version: 來源版本號
         to_version: 目標版本號
         old_prefix: 舊版本前綴
@@ -347,10 +360,20 @@ def _process_ticket_for_cross_refs(
         是否更新成功
     """
     try:
-        ticket_id = ticket_file.stem
-        ticket = load_ticket(version_name_str, ticket_id)
-        if ticket is None:
+        if not ticket_file.exists():
             return False
+
+        content = ticket_file.read_text(encoding="utf-8")
+        try:
+            frontmatter, body = parse_frontmatter(content)
+        except YAMLParseError:
+            return False
+
+        if not frontmatter:
+            return False
+
+        ticket = frontmatter
+        ticket["_body"] = body
 
         # 檢查是否包含舊版本的引用
         fields_to_check = ["blockedBy", "relatedTo", "children", "parent_id", "spawned_tickets", "source_ticket"]
@@ -413,10 +436,9 @@ def _update_cross_version_refs(
             continue
 
         # 遍歷該版本的所有 Ticket
-        version_name_str = version_name.lstrip("v")
         for ticket_file in sorted(tickets_dir.glob("*.md")):
             if _process_ticket_for_cross_refs(
-                ticket_file, version_name_str, from_version, to_version, old_prefix
+                ticket_file, from_version, to_version, old_prefix
             ):
                 updated_count += 1
 

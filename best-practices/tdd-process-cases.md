@@ -418,4 +418,4 @@ sed -n "/^### 案例 $RANDOM_CASE:/,/^### 案例/p" "$CASES_FILE" | head -n -1
 ---
 
 **Last Updated**: 2026-03-07
-**Version**: 1.1.0 - 同步 Phase 4 三步驟流程（4a 多視角分析/4b 重構執行/4c 多視角再審核）；移除 emoji（0.1.1-W3-002）
+**Version**: 1.1.0 - 同步 Phase 4 三步驟流程（4a 多視角分析/4b 重構執行/4c 多視角再審核）；移除 emoji

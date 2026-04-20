@@ -12,6 +12,35 @@ import pytest
 import yaml
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _assert_no_repo_pollution():
+    """防止測試污染真實 repo 的 docs/work-logs/ 目錄。
+
+    來源：0.18.0-W5-031 WRAP 決策方案 D。
+    原因：測試若漏 mock save_ticket 或 mock 錯 import 路徑（見 TEST-005），
+    會寫入 repo 真實路徑 docs/work-logs/v0/v0.XX/，產生 untracked 檔案污染 repo。
+
+    機制：pytest session 開始前快照 docs/work-logs/v0/ 內容，
+    session 結束時比對，若有新增目錄則 raise AssertionError 強制失敗。
+
+    注意：parents[4] 層級對應 tests/conftest.py → tests → ticket → skills
+         → .claude → project root（即 book_overview_v1）。
+    """
+    project_root = Path(__file__).resolve().parents[4]
+    target_dir = project_root / "docs" / "work-logs" / "v0"
+    before = set(target_dir.iterdir()) if target_dir.exists() else set()
+    yield
+    after = set(target_dir.iterdir()) if target_dir.exists() else set()
+    new_dirs = after - before
+    if new_dirs:
+        raise AssertionError(
+            f"Test pollution detected: new directories in {target_dir}: "
+            f"{sorted(str(d.relative_to(project_root)) for d in new_dirs)}. "
+            f"Root cause: test likely missed patching save_ticket or used wrong "
+            f"import path for patch. See TEST-005 error pattern."
+        )
+
+
 @pytest.fixture
 def temp_project_dir() -> Path:
     """

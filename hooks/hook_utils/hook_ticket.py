@@ -27,7 +27,7 @@ from typing import Any, List, NamedTuple, Optional, Tuple, Union
 from .hook_base import get_project_root
 
 # ============================================================================
-# 快取變數（模組級，用於 W39-002 效能改善）
+# 快取變數（模組級，用於效能改善）
 # ============================================================================
 
 _error_pattern_mtime_cache: dict[str, float] = {}
@@ -193,14 +193,17 @@ def _parse_nested_line(
 def _parse_yaml_lines(frontmatter_text: str) -> dict:
     """解析 YAML frontmatter 文本（逐行）
 
-    支援列表項目：當遇到 "key:" 後跟著 "  - item" 格式的行時，
-    會將這些項目累積到該鍵底下（以換行符分隔）。
+    支援列表項目：
+    - 頂層 block-style 列表：`children:\n- id` 或 `children:\n  - id`
+      → 回傳 list[str]
+    - 頂層 flow-style 列表：`children: [a, b]` → 回傳 list[str]
+    - 嵌套列表項目：`history:\n  user: a\n    - item` → 累積到嵌套鍵
 
     Args:
         frontmatter_text: frontmatter 內容（已去除---標記）
 
     Returns:
-        dict: 解析出的 key-value 對
+        dict: 解析出的 key-value 對（列表欄位回傳 list）
     """
     result = {}
     current_key = None
@@ -209,6 +212,16 @@ def _parse_yaml_lines(frontmatter_text: str) -> dict:
 
     for line in frontmatter_text.split('\n'):
         if _skip_empty_or_comment(line):
+            continue
+
+        # 頂層 block-style 列表項目（無縮排 "- item"）
+        # 例如：children:\n- 0.1.0-W1-001.1
+        if line.startswith('- ') and current_key and multiline_marker is None:
+            item = line[2:].strip().strip("'\"")
+            if item:
+                if not isinstance(result.get(current_key), list):
+                    result[current_key] = []
+                result[current_key].append(item)
             continue
 
         # 判斷行的縮排層級
@@ -237,6 +250,24 @@ def _parse_yaml_lines(frontmatter_text: str) -> dict:
                 nested_dict[current_nested_key] += "\n" + item_content if nested_dict[current_nested_key] else item_content
             continue
         elif line.startswith('  '):
+            # 頂層 block-style 列表項目（2 空白縮排 "  - item"）
+            # 只在無 multiline_marker 且無 current_nested_key 時觸發
+            # （避免吃掉嵌套 dict 裡的列表）
+            stripped = line.strip()
+            if (
+                stripped.startswith('- ')
+                and current_key
+                and multiline_marker is None
+                and current_nested_key is None
+                and not isinstance(result.get(current_key), dict)
+            ):
+                item = stripped[2:].strip().strip("'\"")
+                if item:
+                    if not isinstance(result.get(current_key), list):
+                        result[current_key] = []
+                    result[current_key].append(item)
+                continue
+
             # 2 格：嵌套鍵值對、多行標記或列表項目
             nested_result = _parse_nested_line(line, current_key, multiline_marker, current_nested_key)
             multiline_marker = nested_result.multiline_marker
@@ -301,8 +332,28 @@ def _parse_top_level_pair(line: str, result: dict) -> Tuple[Optional[str], Optio
         result[key] = ""
         return key, value
 
+    # Flow-style 列表：`key: [a, b]` 或 `key: []`
+    if value.startswith('[') and value.endswith(']'):
+        inner = value[1:-1].strip()
+        if not inner:
+            result[key] = []
+        else:
+            items = []
+            for item in inner.split(','):
+                cleaned = item.strip().strip("'\"")
+                if cleaned:
+                    items.append(cleaned)
+            result[key] = items
+        return key, None
+
+    # 空值（例如 `children:`）：初始化為空字串，
+    # 後續若偵測到 block-style 列表會改為 list（見 _parse_yaml_lines）
+    if not value:
+        result[key] = ""
+        return key, None
+
     # 移除引號
-    value_clean = value.strip("'\"") if value else ""
+    value_clean = value.strip("'\"")
     result[key] = value_clean
     return key, None
 

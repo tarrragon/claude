@@ -61,7 +61,6 @@ git add <files> && git commit
 
 ## 關聯
 
-- **Ticket**: 0.2.0-W5-007（移除 freezed）
 - **相關模式**: PC-021（Worktree 隔離機制未正確使用）
 - **發現日期**: 2026-03-26
 

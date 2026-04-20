@@ -52,7 +52,6 @@ Phase 1 派發 lavender-interface-designer 時，應在 prompt 中加入：
 
 ## 相關 Ticket
 
-- 0.2.1-W7-003 — Tool 氣泡 ExpansionTile 摺疊狀態在對話刷新時被重置
 
 ## 適用範圍
 
@@ -61,4 +60,3 @@ Phase 1 派發 lavender-interface-designer 時，應在 prompt 中加入：
 ---
 
 **Created**: 2026-03-29
-**Source**: 0.2.1-W7-003 Phase 4a linux Garbage 評分

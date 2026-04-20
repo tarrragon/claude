@@ -530,6 +530,55 @@ class TestFindHandoffFile:
         file_path, _ = result
         assert file_path.name == "0.31.0-W9-001.json"
 
+    def test_find_by_ticket_id_field_with_legacy_filename(self, temp_handoff_env):
+        """測試 legacy 命名（v{id}-handoff.json）透過 ticket_id 欄位匹配找到
+
+        Regression test: W15-013
+        實測情境：.claude/handoff/pending/v0.18.0-W15-007-handoff.json
+        檔名不符 {id}.json 約定，且 direction="to-sibling" 無 embedded target，
+        舊版 _find_handoff_file 兩層 fallback 皆失敗，導致 resume 報錯。
+        """
+        project_root, handoff_dir = temp_handoff_env
+
+        # 模擬 legacy 命名：v{id}-handoff.json，direction 無 embedded target
+        ticket_id = "0.18.0-W15-007"
+        legacy_file = handoff_dir / f"v{ticket_id}-handoff.json"
+        legacy_data = {
+            "ticket_id": ticket_id,
+            "direction": "to-sibling",
+            "timestamp": "2026-04-18T00:00:00",
+            "from_status": "in_progress",
+            "title": "Legacy naming handoff",
+        }
+        with open(legacy_file, "w", encoding="utf-8") as f:
+            json.dump(legacy_data, f, ensure_ascii=False, indent=2)
+
+        result = _find_handoff_file(ticket_id, "pending")
+
+        assert result is not None, "legacy 命名 handoff 應能透過 ticket_id 欄位找到"
+        file_path, file_format = result
+        assert file_path.name == f"v{ticket_id}-handoff.json"
+        assert file_format == "json"
+
+    def test_ticket_id_field_match_not_applied_in_archive(self, temp_handoff_env):
+        """測試 archive 子目錄不執行 ticket_id 欄位匹配（保持與 direction 反查一致）"""
+        project_root, handoff_dir = temp_handoff_env
+        archive_dir = project_root / ".claude" / "handoff" / "archive"
+
+        ticket_id = "0.18.0-W15-007"
+        legacy_file = archive_dir / f"v{ticket_id}-handoff.json"
+        legacy_data = {
+            "ticket_id": ticket_id,
+            "direction": "to-sibling",
+            "timestamp": "2026-04-18T00:00:00",
+        }
+        with open(legacy_file, "w", encoding="utf-8") as f:
+            json.dump(legacy_data, f, ensure_ascii=False, indent=2)
+
+        result = _find_handoff_file(ticket_id, "archive")
+
+        assert result is None
+
     def test_no_reverse_match_in_archive(self, temp_handoff_env):
         """測試 archive 子目錄不執行反向匹配"""
         project_root, handoff_dir = temp_handoff_env

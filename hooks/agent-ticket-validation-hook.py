@@ -227,10 +227,10 @@ def generate_hook_output(
     else:
         output["hookSpecificOutput"]["permissionDecision"] = "allow"
 
-    # 記錄檢查結果
-    output["check_result"] = {
-        "is_valid": is_valid,
-        "error_message": error_message,
+    # 記錄檢查結果（包在 hookSpecificOutput 內，避免頂層出現未知欄位觸發 JSON validation failed，IMP-055）
+    output["hookSpecificOutput"]["checkResult"] = {
+        "isValid": is_valid,
+        "errorMessage": error_message,
         "timestamp": datetime.now().isoformat()
     }
 
@@ -306,14 +306,15 @@ def main() -> int:
 
     except Exception as e:
         logger.critical(f"Hook 執行錯誤: {e}", exc_info=True)
+        # error 詳情放進 hookSpecificOutput 內，避免頂層出現未知欄位觸發 JSON validation failed（IMP-055）
         error_output = {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
-                "additionalContext": "Hook 執行錯誤，詳見日誌: .claude/hook-logs/agent-ticket-validation/"
-            },
-            "error": {
-                "type": type(e).__name__,
-                "message": str(e)
+                "additionalContext": "Hook 執行錯誤，詳見日誌: .claude/hook-logs/agent-ticket-validation/",
+                "errorInfo": {
+                    "type": type(e).__name__,
+                    "message": str(e)
+                }
             }
         }
         print(json.dumps(error_output, ensure_ascii=False, indent=2))

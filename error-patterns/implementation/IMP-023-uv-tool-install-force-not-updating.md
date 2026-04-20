@@ -86,7 +86,7 @@ uv tool install .claude/skills/ticket
 
 ### 再次踩坑紀錄（2026-03-10）
 
-W32-002 修復 `--status` 多值篩選時，代理人使用 `uv tool install --force` 安裝，全局 CLI 仍為舊版。
+某歷史 Ticket 修復 `--status` 多值篩選時，代理人使用 `uv tool install --force` 安裝，全局 CLI 仍為舊版。
 原因：已有 IMP-023 記錄但未在操作前查詢。強調每次修改 ticket CLI 後必須用 `--reinstall`。
 
 ## 相關文件

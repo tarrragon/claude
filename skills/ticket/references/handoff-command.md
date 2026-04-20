@@ -1,5 +1,22 @@
 # handoff 子命令
 
+## 設計意圖
+
+handoff 是**任務鏈內的 context 移動機制**，不是通用的「下一個任務」路由器。
+
+| 移動方向 | handoff 旗標 | 用途 |
+|---------|------------|------|
+| 子 → 父 | `--to-parent` | 子完成返回父驗收 |
+| 父 → 子 | `--to-child <id>` | 父分派責任給子 |
+| 兄弟 → 兄弟 | `--to-sibling <id>` | 同父下水平協調 |
+| 任務鏈繼續 | 無旗標 | 自動判斷方向 |
+
+設計原理見 `.claude/methodologies/atomic-ticket-methodology.md` 的「任務鏈核心哲學」章節（結構：三種移動方向、Context 保留機制）。
+
+---
+
+## 基本用法
+
 任務鏈管理與 Context 交接。建立標準 `pending/*.json` 檔案，供下一個 session 的 `resume --list` 偵測。
 
 ## 用法
@@ -51,6 +68,14 @@ commit-handoff-hook 偵測到 `git commit` 成功後，PM 會用 AskUserQuestion
 | `completed` | 自動判斷 | `/ticket handoff <id>` | 讓 CLI 根據任務鏈決定方向 |
 | `in_progress` | Context 刷新 | `/ticket handoff <id> --context-refresh` | 乾淨 context 繼續同一任務 |
 | `in_progress` | 先處理子任務 | `/ticket handoff <id> --to-child <target>` | 被子任務阻塞，先切換 |
+
+**Wave-level 交接**（非 ticket 綁定）：
+
+| 情境 | Direction | 說明 |
+|------|-----------|------|
+| Wave 完成，進入下一 Wave | `next-wave` | 由 Hook 或手動建立，不綁定特定 ticket |
+
+`next-wave` handoff 的 JSON 包含 `from_version`、`to_version`、`session_summary` 等 wave-level 欄位，`ticket_id` 為描述性名稱（如 `v{version}-W{wave}-planning`）。
 
 **禁止行為**：在 `completed` ticket 使用 `--context-refresh`（此旗標僅適用 `in_progress`，會直接報錯）
 

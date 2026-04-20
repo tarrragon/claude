@@ -12,6 +12,7 @@ Hook 基礎設施層模組
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 # ============================================================================
@@ -55,6 +56,8 @@ def _find_project_root() -> Path:
             ["git", "rev-parse", "--show-toplevel"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=GIT_TOPLEVEL_TIMEOUT
         )
         if result.returncode == 0:
@@ -83,6 +86,33 @@ def _find_project_root() -> Path:
 # ============================================================================
 # 公開 API
 # ============================================================================
+
+def ensure_utf8_io() -> None:
+    """強制 Hook 的 stdin/stdout/stderr 使用 UTF-8 編碼。
+
+    跨平台必要性（Windows 特別關鍵）：
+    - Windows 預設 console codepage 為 cp950（繁中）/ cp936（簡中）/ cp437（英文）
+    - Python 未強制 UTF-8 時，stdin/stdout/stderr 用 locale codepage
+    - 導致 Hook 解析 Claude Code 傳入的 UTF-8 JSON 失敗，或中文輸出亂碼
+    - 更嚴重：異常寫 stderr 時若 stderr 也是 cp950，可能二次失敗產生空輸出
+      （「Failed with non-blocking status code: No stderr output」）
+
+    此函式於 Hook 入口呼叫一次即可。使用 Python 3.7+ 的 reconfigure API。
+    若平台/版本不支援 reconfigure，則靜默略過（避免因編碼設定失敗阻斷 Hook 執行）。
+
+    Note:
+        此函式不拋出例外。呼叫失敗時預設行為不變。
+    """
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, AttributeError):
+            # 某些環境（如 pytest 捕獲的 stream、已設定的 stream）不支援 reconfigure
+            continue
+
 
 def get_project_root() -> Path:
     """取得專案根目錄

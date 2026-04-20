@@ -7,7 +7,6 @@
 - **來源版本**: v0.31.0
 - **發現日期**: 2026-02-26
 - **風險等級**: 高
-- **來源 Ticket**: 0.31.0-W24（M-002 logger 初始化統一）
 
 ## 問題描述
 
@@ -141,8 +140,7 @@ def main():
 
 ## 相關資源
 
-- `docs/work-logs/v0.31.0/tickets/0.31.0-W24-004.md` - W24 完整決策記錄
-- `.claude/rules/core/quality-common.md` - 實作品質標準
+- `.claude/references/quality-common.md` - 實作品質標準
 - `.claude/hooks/hook_utils.py` - run_hook_safely 實作
 
 ## 標籤

@@ -123,9 +123,10 @@ Python 特有的處理方式：
 
 ## 相關文件
 
-- .claude/rules/core/quality-common.md - 通用品質基線
+- .claude/references/quality-common.md - 通用品質基線（核心規則定義）
+- .claude/rules/core/quality-common.md - 骨架指標（自動載入）
 
 ---
 
 **Last Updated**: 2026-03-26
-**Version**: 1.2.0 - 合併 python-execution.md 內容（0.2.0-W5-012.2 context 瘦身）
+**Version**: 1.2.0 - 合併 python-execution.md 內容（context 瘦身）

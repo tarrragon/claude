@@ -8,7 +8,6 @@
 | 類別 | process-compliance |
 | 嚴重度 | 中 |
 | 首次發現 | 2026-03-27 |
-| 相關 Ticket | 0.2.0-W3-031 |
 
 ## 症狀
 
@@ -19,9 +18,8 @@ Phase 4 評估報告宣告某函式為「未使用程式碼」，建議移除並
 Phase 4 重構代理人（cinnamon）在評估「未使用程式碼」時，只追蹤了當前 Ticket 變更範圍內的引用移除，未對全專案執行 grep 驗證。
 
 具體案例：
-- 0.2.1-W2-003 將 `_sessionSubtitle` 中的 `extractProjectName` 呼叫移除
 - Phase 4 判定 `extractProjectName` 為未使用
-- 實際上 0.2.1-W2-001（並行開發的專案頁籤功能）在 `session_list_page.dart:147` 和 `session_group_utils.dart:39-41` 新增了引用
+- 實際上某並行開發的 Ticket（並行開發的專案頁籤功能）在 `session_list_page.dart:147` 和 `session_group_utils.dart:39-41` 新增了引用
 
 **根本原因**：並行開發的 Ticket 之間產生的引用，在單一 Ticket 的 Phase 4 視角中不可見。
 

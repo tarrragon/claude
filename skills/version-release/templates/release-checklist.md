@@ -13,16 +13,16 @@
 
 ### Phase 工作日誌驗證
 
-- [ ] Phase 0 完成並標記為 ✅
-- [ ] Phase 1 完成並標記為 ✅
-- [ ] Phase 2 完成並標記為 ✅
-- [ ] Phase 3a 完成並標記為 ✅
-- [ ] Phase 3b 完成並標記為 ✅
-- [ ] Phase 4 完成並標記為 ✅
+- [ ] Phase 0 完成並標記為 [OK]
+- [ ] Phase 1 完成並標記為 [OK]
+- [ ] Phase 2 完成並標記為 [OK]
+- [ ] Phase 3a 完成並標記為 [OK]
+- [ ] Phase 3b 完成並標記為 [OK]
+- [ ] Phase 4 完成並標記為 [OK]
 - [ ] 所有工作日誌檔案位置正確
 
 **相關檔案**:
-- `docs/work-logs/v0.XX.0-main.md`
+- `docs/work-logs/v{VERSION}/v{VERSION}-main.md`
 - `docs/work-logs/v0.XX.1-phase1-*.md`
 - `docs/work-logs/v0.XX.2-phase2-*.md`
 - `docs/work-logs/v0.XX.3-phase3a-*.md`
@@ -77,7 +77,7 @@ uv run .claude/skills/version-release/scripts/version_release.py check --version
 ```markdown
 ## [0.XX.X] - YYYY-MM-DD
 
-**✅ UC-XX 功能名稱 - TDD 四階段完成**
+**[OK] UC-XX 功能名稱 - TDD 四階段完成**
 
 ### Added
 - 功能項目 1
@@ -92,13 +92,13 @@ uv run .claude/skills/version-release/scripts/version_release.py check --version
 
 ### Todolist 更新
 
-- [ ] 版本系列標記為 ✅ 已完成
+- [ ] 版本系列標記為 [OK] 已完成
 - [ ] 版本狀態表格已更新
 - [ ] 技術債務追蹤區塊已更新
 
 **預期變更**:
 ```markdown
-| **v0.XX.x** | UC-XX | 功能描述 | ✅ 已完成 |
+| **v0.XX.x** | UC-XX | 功能描述 | [OK] 已完成 |
 ```
 
 ### Pubspec.yaml 驗證
@@ -127,39 +127,39 @@ uv run .claude/skills/version-release/scripts/version_release.py check --version
 
 **自動執行步驟** (由工具自動完成):
 
-1. ✅ 提交檔案變更
+1. [OK] 提交檔案變更
    ```bash
    git add docs/todolist.yaml CHANGELOG.md
    git commit -m "docs: 版本 0.XX.X 發布準備"
    ```
 
-2. ✅ 切換到 main 分支
+2. [OK] 切換到 main 分支
    ```bash
    git checkout main
    ```
 
-3. ✅ 拉取最新 main
+3. [OK] 拉取最新 main
    ```bash
    git pull origin main
    ```
 
-4. ✅ 合併 feature 分支（保留合併記錄）
+4. [OK] 合併 feature 分支（保留合併記錄）
    ```bash
    git merge feature/v0.XX --no-ff -m "Merge v0.XX"
    ```
 
-5. ✅ 建立 Tag
+5. [OK] 建立 Tag
    ```bash
    git tag -a v0.XX.X-final -m "Release v0.XX.X"
    ```
 
-6. ✅ 推送到遠端
+6. [OK] 推送到遠端
    ```bash
    git push origin main
    git push origin v0.XX.X-final
    ```
 
-7. ✅ 清理 feature 分支
+7. [OK] 清理 feature 分支
    ```bash
    git branch -d feature/v0.XX
    git push origin --delete feature/v0.XX
@@ -195,11 +195,11 @@ uv run .claude/skills/version-release/scripts/version_release.py release --versi
 
 ### 發布完成後驗證
 
-- [ ] ✅ 命令執行成功（無錯誤）
-- [ ] ✅ 檔案變更已提交
-- [ ] ✅ main 分支已更新
-- [ ] ✅ Tag 已建立: `v0.XX.X-final`
-- [ ] ✅ feature 分支已清理
+- [ ] [OK] 命令執行成功（無錯誤）
+- [ ] [OK] 檔案變更已提交
+- [ ] [OK] main 分支已更新
+- [ ] [OK] Tag 已建立: `v0.XX.X-final`
+- [ ] [OK] feature 分支已清理
 
 ### Git 狀態驗證
 
@@ -236,7 +236,7 @@ git branch -a | grep feature/v0.XX
 
 - [ ] 決定下一個版本號和 UseCase
 - [ ] 建立新的 feature 分支: `feature/v0.XX`
-- [ ] 建立主版本工作日誌: `v0.XX.0-main.md`
+- [ ] 建立主工作日誌: `v{VERSION}-main.md`
 - [ ] 規劃 Phase 1 任務
 
 ---
@@ -259,7 +259,7 @@ uv run .claude/skills/version-release/scripts/version_release.py check
 # 1. 檢查工作日誌內容
 cat docs/work-logs/v0.XX.X-phaseX.md
 
-# 2. 確認 Phase 標記為 ✅ 完成
+# 2. 確認 Phase 標記為 [OK] 完成
 # 3. 重新執行檢查
 ```
 

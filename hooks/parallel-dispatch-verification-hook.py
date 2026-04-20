@@ -29,7 +29,7 @@ from typing import Optional
 
 from hook_utils.hook_base import get_project_root
 from hook_utils.hook_logging import setup_hook_logging
-from hook_utils.hook_io import read_json_from_stdin
+from hook_utils.hook_io import read_json_from_stdin, is_subagent_environment
 from hook_utils.hook_ticket import parse_ticket_frontmatter, find_ticket_file
 
 
@@ -277,6 +277,8 @@ def get_git_changed_files(project_root: Path, logger: logging.Logger) -> list[st
             cwd=str(project_root),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=GIT_DIFF_TIMEOUT
         )
 
@@ -438,6 +440,11 @@ def main() -> int:
         if not input_data:
             logger.debug("無 stdin JSON 輸入，靜默結束")
             print(json.dumps(DEFAULT_OUTPUT))
+            return 0
+
+        # subagent 環境跳過（代理人不執行 complete）
+        if is_subagent_environment(input_data):
+            logger.debug("subagent 環境，跳過")
             return 0
 
         # 驗證觸發條件

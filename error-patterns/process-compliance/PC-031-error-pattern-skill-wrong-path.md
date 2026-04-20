@@ -1,7 +1,6 @@
 # PC-031: error-pattern SKILL.md 引用錯誤的知識庫路徑（docs/ vs .claude/）
 
 **發現日期**: 2026-03-27
-**相關 Ticket**: 0.2.0-W7-011（執行中偶然發現）
 
 ## 症狀
 

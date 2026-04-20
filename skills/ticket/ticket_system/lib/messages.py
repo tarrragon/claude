@@ -33,6 +33,14 @@ class ErrorMessages:
     TICKET_NOT_FOUND = "[Error] 找不到 Ticket {ticket_id}"
     NO_HANDOFF_FILE = "[Error] Ticket {ticket_id} 無待恢復的交接檔案"
     VERSION_NOT_DETECTED = "[Error] 無法偵測版本，請使用 --version 指定"
+    VERSION_NOT_REGISTERED = (
+        "[Error] 版本 {version} 未在 todolist.yaml 中註冊。"
+        "請先執行 /version-release start 或 /doc-flow worklog init 建立版本。"
+    )
+    VERSION_NOT_ACTIVE = (
+        "[Error] 版本 {version} 狀態為 {status}（非 active）。"
+        "只能在 active 版本中建立 Ticket。"
+    )
     INVALID_TICKET_ID = "[Error] Ticket ID 格式無效"
     INVALID_TICKET_ID_FORMAT = "[Error] 無效的 Ticket ID 格式: {ticket_id}"
     FILE_NOT_FOUND = "[Error] 檔案不存在: {path}"
@@ -54,6 +62,8 @@ class ErrorMessages:
     ACCEPTANCE_CRITERIA_INDEX_NOT_POSITIVE = "[Error] index 必須是正整數，收到: {value}"
     INCOMPLETE_ACCEPTANCE_CRITERIA = "[Error] {ticket_id} 有未完成的驗收條件"
     STATUS_ERROR = "[Error] {status_msg}"
+    CLOSE_MISSING_RESOLVED_BY = "[Error] --resolved-by 為必填參數，請提供解決此問題的 Ticket ID"
+    CLOSE_ALREADY_CLOSED = "[Error] {ticket_id} 已經是 closed 狀態"
     TICKET_NOT_FOUND_IN_BATCH = "[Error] {ticket_id} 找不到"
     CHECK_ACCEPTANCE_ALL_WITH_INDEX = "[Error] --all 和 index 參數互斥，只能選擇其中之一"
     CHECK_ACCEPTANCE_MISSING_INDEX = (
@@ -77,8 +87,8 @@ class WarningMessages:
     TICKET_NOT_YET_CLAIMED = "[Warning] {ticket_id} 尚未被接手，無法釋放"
     TICKET_ALREADY_BLOCKED = "[Warning] {ticket_id} 已被阻塞，無法釋放"
     NO_BODY_CONTENT = "[Warning] Ticket {ticket_id} 沒有 body 內容"
-    HANDOFF_UPDATE_FAILED = "無法更新 handoff 檔案（可能已不存在）"
-    HANDOFF_ARCHIVE_FAILED = "無法歸檔 handoff 檔案到 archive/（檔案已不存在或權限問題）"
+    HANDOFF_UPDATE_FAILED = "[Warning] 無法更新 handoff 檔案（可能已不存在）"
+    HANDOFF_ARCHIVE_FAILED = "[Warning] 無法歸檔 handoff 檔案到 archive/（檔案已不存在或權限問題）"
     NO_EXECUTION_LOG = "[Warning] Ticket {ticket_id} 找不到 Execution Log 區塊"
     NO_TICKETS = "[Warning] 無符合條件的 Tickets"
     BLOCKED_EXECUTION = "[BLOCKED] 找不到 Ticket: {ticket_id}"
@@ -97,6 +107,7 @@ class WarningMessages:
     SEQ_IGNORED_WITH_PARENT = "[提示] --seq {seq} 在子任務模式下被忽略，自動使用序號 {child_seq}"
     EXECUTION_LOG_NOT_FILLED = "[WARNING] 以下執行日誌區段尚未填寫:"
     EXECUTION_LOG_SUGGESTION = "建議使用以下命令填寫:"
+    COMPLETED_NO_DIRECTION = "[Warning] {ticket_id} 已完成但無交接方向，請確認 handoff 設定"
 
 
 class InfoMessages:
@@ -105,6 +116,7 @@ class InfoMessages:
     TICKET_CLAIMED = "[OK] 已接手 {ticket_id}"
     TICKET_COMPLETED = "[OK] 已完成 {ticket_id}"
     TICKET_RELEASED = "[OK] 已釋放 {ticket_id}"
+    TICKET_CLOSED = "[OK] 已關閉 {ticket_id}"
     HANDOFF_FILE_CREATED = "[OK] 已建立交接檔案: {path}"
     HANDOFF_NEXT_STEP = "[下一步] 請執行 /clear 清除對話，開始新的工作階段"
     HANDOFF_RESUMED = "Handoff 已接手，resumed_at 已更新"

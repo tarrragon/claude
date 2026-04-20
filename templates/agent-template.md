@@ -315,7 +315,7 @@ You are a {role description in English}. Your core mission is {mission statement
 | 派發規則版本 | 精簡的派發規則摘要 | `.claude/rules/dispatch-rules/` |
 | 職責矩陣 | 更新職責邊界 | `.claude/rules/dispatch-rules/overview.md` |
 | CLAUDE.md | 更新代理人列表（如適用） | `CLAUDE.md` |
-| 決策流程 | 更新派發規則（如適用） | `.claude/rules/core/decision-tree.md` |
+| 決策流程 | 更新派發規則（如適用） | `.claude/pm-rules/decision-tree.md` |
 
 ### 雙目錄建立檢查
 

@@ -228,5 +228,5 @@ Phase 1 中 lavender 如何使用 /spec 的完整流程，詳見 lavender 代理
 
 **Version**: 1.1.0
 **Last Updated**: 2026-03-25
-**Source**: 0.2.0-W3-003（Phase 3b context 耗盡 → 需求完善度品質閘門）
-**Changes**: v1.1.0 - 三人組共識簡化（0.2.0-W3-011）：刪除核心抽象/反向提問策略、維度 4-7 降級為提示、精簡迭代機制、init 條件簡化為 2 個
+**Source**: Phase 3b context 耗盡案例 → 需求完善度品質閘門
+**Changes**: v1.1.0 - 三人組共識簡化：刪除核心抽象/反向提問策略、維度 4-7 降級為提示、精簡迭代機制、init 條件簡化為 2 個

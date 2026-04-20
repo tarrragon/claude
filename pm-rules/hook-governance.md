@@ -79,4 +79,4 @@ grep -c '"SessionStart"' .claude/settings.json
 ---
 
 **Last Updated**: 2026-03-28
-**Version**: 1.0.0 - 合併 hook-change-review.md + session-start-performance.md（0.2.1-W3-002）
+**Version**: 1.0.0 - 合併 hook-change-review.md + session-start-performance.md

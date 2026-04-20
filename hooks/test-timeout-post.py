@@ -23,7 +23,7 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely, get_project_root
+from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, read_json_from_stdin
 
 # 閾值設定（秒）
 WARNING_THRESHOLD = 300    # 5 分鐘
@@ -33,7 +33,10 @@ AUTO_KILL_THRESHOLD = 1800  # 30 分鐘
 
 def main():
     logger = setup_hook_logging("test-timeout-post")
-    input_data = json.load(sys.stdin)
+    input_data = read_json_from_stdin(logger)
+    if input_data is None:
+        return 0
+
     tool_name = input_data.get("tool_name", "")
 
     # 檢查是否為測試命令

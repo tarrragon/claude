@@ -39,7 +39,7 @@ class TestProjectRootSymmetry:
     """hook_base 和 paths 的對稱性測試"""
 
     def test_symmetry_env_var(self):
-        """環境變數場景：両個模組行為相同"""
+        """環境變數場景：兩個模組行為相同"""
         custom_path = "/custom/project/path"
         with patch.dict("os.environ", {"CLAUDE_PROJECT_DIR": custom_path}):
             # 模擬兩個模組的函式
@@ -50,11 +50,11 @@ class TestProjectRootSymmetry:
             with patch.dict("os.environ", {"CLAUDE_PROJECT_DIR": custom_path}):
                 result_paths = Path(custom_path)  # 直接測試邏輯
 
-            # 両個模組都應該回傳相同的路徑
+            # 兩個模組都應該回傳相同的路徑
             assert result_hook == Path(custom_path)
 
     def test_symmetry_git_success(self):
-        """git 成功場景：両個模組行為相同"""
+        """git 成功場景：兩個模組行為相同"""
         git_root = "/path/to/git/repo"
 
         with patch.dict("os.environ", {}, clear=True):
@@ -77,7 +77,7 @@ class TestProjectRootSymmetry:
         assert result_hook == result_paths == Path(git_root)
 
     def test_symmetry_git_fallback(self, tmp_path):
-        """git 失敗場景：両個模組 fallback 行為相同"""
+        """git 失敗場景：兩個模組 fallback 行為相同"""
         root = tmp_path / "project"
         root.mkdir()
         (root / "CLAUDE.md").write_text("# CLAUDE.md")
@@ -101,7 +101,7 @@ class TestProjectRootSymmetry:
         assert result_hook == result_paths == root
 
     def test_symmetry_cwd_fallback(self, tmp_path):
-        """cwd fallback 場景：両個模組行為相同"""
+        """cwd fallback 場景：兩個模組行為相同"""
         isolated_dir = tmp_path / "isolated"
         isolated_dir.mkdir()
 

@@ -23,7 +23,7 @@ Hook Event: SessionStart
 - 使用 .claude/lib/git_utils 共用模組
 - 消除重複程式碼
 
-修改紀錄 (0.1.1-W9-002.3):
+修改紀錄:
 - 改為靜默條件判斷（正確 worktree 環境時完全靜默）
 - 新增 is_in_worktree 和 is_allowed_branch 的判斷
 - 僅在異常情況時輸出提醒

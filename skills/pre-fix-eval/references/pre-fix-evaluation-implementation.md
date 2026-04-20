@@ -1,14 +1,14 @@
 # 修復前強制評估 Hook + Skill 實作說明
 
-## 📋 概述
+## [INFO] 概述
 
 本文件記錄「修復前強制評估」Hook + Skill 系統的完整實作。該系統自動偵測測試失敗和編譯錯誤，根據錯誤類型自動分類，並強制執行評估流程。
 
 **版本**: v1.0
 **建立日期**: 2025-01-12
-**狀態**: ✅ 實作完成，測試通過
+**狀態**: [OK] 實作完成，測試通過
 
-## 🎯 核心功能
+## [TARGET] 核心功能
 
 ### 自動錯誤分類
 
@@ -16,10 +16,10 @@ Hook 腳本能自動識別四種錯誤類型：
 
 | 錯誤類型 | 識別模式 | 開 Ticket | 流程 | 代理人 |
 |---------|---------|----------|------|--------|
-| **SYNTAX_ERROR** | 括號、分號、拼字 | ❌ 不需 | 簡化(直接修) | mint-format-specialist |
-| **COMPILATION_ERROR** | 類型、引用、導入 | ✅ 必須 | 完整評估 | parsley-flutter-developer |
-| **TEST_FAILURE** | 斷言失敗、失敗計數 | ✅ 必須 | 完整評估 | parsley-flutter-developer |
-| **ANALYZER_WARNING** | lint 警告、棄用 API | ✅ 必須 | 評估+延遲 | mint-format-specialist |
+| **SYNTAX_ERROR** | 括號、分號、拼字 | [FAIL] 不需 | 簡化(直接修) | mint-format-specialist |
+| **COMPILATION_ERROR** | 類型、引用、導入 | [OK] 必須 | 完整評估 | parsley-flutter-developer |
+| **TEST_FAILURE** | 斷言失敗、失敗計數 | [OK] 必須 | 完整評估 | parsley-flutter-developer |
+| **ANALYZER_WARNING** | lint 警告、棄用 API | [OK] 必須 | 評估+延遲 | mint-format-specialist |
 
 ### 強制評估流程
 
@@ -39,7 +39,7 @@ Stage 5: 開 Ticket 記錄 (強制, /ticket create)
 Stage 6: 分派執行 (根據根因分派代理人)
 ```
 
-## 📁 實作檔案
+## [DIR] 實作檔案
 
 ### 1. Hook 腳本
 
@@ -102,7 +102,7 @@ Stage 6: 分派執行 (根據根因分派代理人)
 }
 ```
 
-## 🧪 驗證結果
+## [TEST] 驗證結果
 
 ### 測試 1: 語法錯誤分類
 
@@ -114,16 +114,16 @@ Stage 6: 分派執行 (根據根因分派代理人)
 ```
 
 **預期結果**:
-- ✅ 識別為 SYNTAX_ERROR
-- ✅ 輸出簡化流程提示
-- ✅ 推薦 mint-format-specialist
-- ✅ 不要求開 Ticket
+- [OK] 識別為 SYNTAX_ERROR
+- [OK] 輸出簡化流程提示
+- [OK] 推薦 mint-format-specialist
+- [OK] 不要求開 Ticket
 
-**實際結果**: ✅ PASS
+**實際結果**: [OK] PASS
 
 **輸出片段**:
 ```
-🔧 語法錯誤 - 簡化修復流程
+[CONFIG] 語法錯誤 - 簡化修復流程
 
 錯誤數量: 1
 推薦代理人: mint-format-specialist
@@ -142,18 +142,18 @@ Stage 6: 分派執行 (根據根因分派代理人)
 ```
 
 **預期結果**:
-- ✅ 識別為 COMPILATION_ERROR
-- ✅ 輸出強制評估提示
-- ✅ 強制要求開 Ticket
-- ✅ Exit Code = 2 (阻塊)
+- [OK] 識別為 COMPILATION_ERROR
+- [OK] 輸出強制評估提示
+- [OK] 強制要求開 Ticket
+- [OK] Exit Code = 2 (阻塊)
 
-**實際結果**: ✅ PASS
+**實際結果**: [OK] PASS
 
 **輸出片段**:
 ```
-🚨 修復前強制評估 - COMPILATION ERROR
+[ALERT] 修復前強制評估 - COMPILATION ERROR
 
-⚠️ 此錯誤類型 **必須開 Ticket** 追蹤，禁止直接分派修復！
+[WARN]️ 此錯誤類型 **必須開 Ticket** 追蹤，禁止直接分派修復！
 
 識別的錯誤：
 1. 類型不匹配
@@ -170,12 +170,12 @@ Stage 6: 分派執行 (根據根因分派代理人)
 ```
 
 **預期結果**:
-- ✅ 識別為 TEST_FAILURE
-- ✅ 輸出強制評估提示
-- ✅ 強制要求開 Ticket
-- ✅ Exit Code = 2 (阻塊)
+- [OK] 識別為 TEST_FAILURE
+- [OK] 輸出強制評估提示
+- [OK] 強制要求開 Ticket
+- [OK] Exit Code = 2 (阻塊)
 
-**實際結果**: ✅ PASS
+**實際結果**: [OK] PASS
 
 ### 測試 4: 成功情況
 
@@ -187,11 +187,11 @@ Stage 6: 分派執行 (根據根因分派代理人)
 ```
 
 **預期結果**:
-- ✅ 識別測試成功
-- ✅ 無輸出，正常結束
-- ✅ Exit Code = 0
+- [OK] 識別測試成功
+- [OK] 無輸出，正常結束
+- [OK] Exit Code = 0
 
-**實際結果**: ✅ PASS
+**實際結果**: [OK] PASS
 
 **日誌**:
 ```
@@ -208,12 +208,12 @@ Stage 6: 分派執行 (根據根因分派代理人)
 ```
 
 **預期結果**:
-- ✅ 無錯誤檢測
-- ✅ 正常結束
+- [OK] 無錯誤檢測
+- [OK] 正常結束
 
-**實際結果**: ✅ PASS
+**實際結果**: [OK] PASS
 
-## 📊 正則表達式模式驗證
+## [STATS] 正則表達式模式驗證
 
 ### 語法錯誤模式 (SYNTAX_PATTERNS)
 
@@ -271,7 +271,7 @@ Stage 6: 分派執行 (根據根因分派代理人)
 
 **覆蓋範圍**: 3 種 Analyzer 警告
 
-## 🔧 配置詳情
+## [CONFIG] 配置詳情
 
 ### Hook 觸發條件
 
@@ -317,7 +317,7 @@ Stage 6: 分派執行 (根據根因分派代理人)
 - **依賴**: 無外部依賴 (標準庫)
 - **環境變數**: `CLAUDE_PROJECT_DIR` (自動設定), `HOOK_DEBUG` (可選)
 
-## 📝 日誌系統
+## [NOTE] 日誌系統
 
 ### 日誌檔案位置
 
@@ -345,7 +345,7 @@ Stage 6: 分派執行 (根據根因分派代理人)
 
 詳細執行日誌記錄到: `.claude/hook-logs/pre-fix-evaluation-hook.log`
 
-## 🛠 故障排除
+## [TOOL] 故障排除
 
 ### 問題 1: Hook 未觸發
 
@@ -371,7 +371,7 @@ Stage 6: 分派執行 (根據根因分派代理人)
 - [ ] 查看 stderr 輸出的錯誤訊息
 - [ ] 檢查 Python 版本是否 >= 3.11
 
-## ✅ 驗收條件檢查清單
+## [OK] 驗收條件檢查清單
 
 完整實作應滿足以下條件：
 
@@ -404,11 +404,11 @@ Stage 6: 分派執行 (根據根因分派代理人)
 - [x] Ticket 建立提示模板提供
 - [x] 常見情況處理指南清晰
 
-## 🚀 後續改進方向
+## [RELEASE] 後續改進方向
 
 ### 短期改進 (v1.1)
 1. 新增更多語言的錯誤模式 (JavaScript, TypeScript)
-2. 改進错误訊息的中文翻譯
+2. 改進錯誤訊息的中文翻譯
 3. 新增支援更多 Bash 命令輸出
 
 ### 中期改進 (v1.2)
@@ -421,7 +421,7 @@ Stage 6: 分派執行 (根據根因分派代理人)
 2. 自動生成修復建議
 3. 修復成功率統計和分析
 
-## 📚 相關檔案
+## [DOC] 相關檔案
 
 - Plan: `~/.claude/plans/iterative-swimming-feather.md`
 - Hook 規格: `.claude/hook-specs/`

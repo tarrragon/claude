@@ -139,7 +139,7 @@ def validate_ticket_fields(
     """
     # Guard Clause：未指定欄位時使用預設值
     if required_fields is None:
-        # 預設必填欄位：最基本的識別和狀態信息
+        # 預設必填欄位：最基本的識別和狀態資訊
         required_fields = ["id", "status"]
 
     missing_fields = []

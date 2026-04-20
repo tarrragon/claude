@@ -439,5 +439,4 @@ uv run pytest .claude/lib/tests/ -v --cov=.claude/lib --cov-report=term-missing
 
 ## 相關文件
 
-- [Hook 系統快速參考]($CLAUDE_PROJECT_DIR/.claude/hook-system-reference.md)
 - [Hook 系統方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/hook-system-methodology.md)

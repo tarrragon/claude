@@ -237,7 +237,7 @@ CLAUDE_PROJECT_DIR=/Users/tarragon/Projects/book_overview_app \
   ParallelTaskCount: 0
 ```
 
-**狀態**: ✅ 通過（統計信息正確）
+**狀態**: ✅ 通過（統計資訊正確）
 
 ---
 

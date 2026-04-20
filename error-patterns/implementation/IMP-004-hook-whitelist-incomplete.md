@@ -7,7 +7,6 @@
 - **來源版本**: v0.31.0
 - **發現日期**: 2026-02-26
 - **風險等級**: 高
-- **來源 Ticket**: 0.31.0-W25-006
 
 ## 問題描述
 
@@ -19,7 +18,7 @@
 
 1. Why 1: 用戶的 prompt 被 `command-entrance-gate-hook.py` 攔截
 2. Why 2: Hook 識別到 prompt 中的「驗證」屬於 `TEST_KEYWORDS`，判定為開發命令
-3. Why 3: 白名單 `is_management_operation()` 沒有涵蓋 Plan Mode 和工作流指令
+3. Why 3: 白名單 `is_management_operation` 沒有涵蓋 Plan Mode 和工作流指令
 4. Why 4: 白名單設計時只考慮了 Ticket 管理和討論場景，遺漏了其他合法操作場景
 5. Why 5 (根本原因): **關鍵字攔截式 Hook 的白名單設計不完整，新的使用場景出現時未同步更新白名單**
 
@@ -38,13 +37,13 @@
 | 層面 | 說明 |
 |------|------|
 | Plan Mode | 用戶無法退出 |
-| 工作流指令 | 「W25-006 開始」「完成」等被攔 |
+| 工作流指令 | 「某 Ticket 開始」「完成」等被攔 |
 | 記錄操作 | 「記錄這個問題」被攔 |
 | Commit 指令 | 不帶 `/` 的 `commit` 被攔 |
 
 ## 修復方案
 
-在 `is_management_operation()` 的白名單中添加缺漏模式：
+在 `is_management_operation` 的白名單中添加缺漏模式：
 
 | 模式 | 分類 | 用途 |
 |------|------|------|
@@ -81,7 +80,6 @@
 
 | 項目 | 說明 |
 |------|------|
-| **來源 Ticket** | 0.1.2-W3-005.1 |
 | **受影響 Hook** | `main-thread-edit-restriction-hook.py` |
 | **症狀** | 編輯 `.claude/settings.json` 被攔截，包括 subagent 也無法編輯 |
 | **根因** | ALLOWED_PATTERNS 只包含 `.claude/` 子目錄模式（如 `^\.claude/hooks/.*`），遺漏了根目錄下的配置檔（settings.json、settings.local.json） |
@@ -94,7 +92,7 @@
 
 - `.claude/hooks/command-entrance-gate-hook.py` - 初次受影響的 Hook
 - `.claude/hooks/main-thread-edit-restriction-hook.py` - 復發受影響的 Hook
-- `.claude/rules/forbidden/skip-gate.md` - Skip-gate 防護機制定義
+- `.claude/pm-rules/skip-gate.md` - Skip-gate 防護機制定義
 
 ---
 

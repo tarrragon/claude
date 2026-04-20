@@ -100,20 +100,26 @@ def _find_handoff_file(ticket_id: str, subdir: str = HANDOFF_PENDING_SUBDIR) -> 
     if md_file.exists():
         return (md_file, "markdown")
 
-    # Fallback：僅在 pending 目錄掃描，透過 direction 欄位反向查找
-    # 例：找 0.1.0-W9-001 時，也會找到指向它的 handoff（direction: "to-sibling:0.1.0-W9-001"）
+    # Fallback：僅在 pending 目錄掃描，支援兩種情況：
+    # 1. direction 欄位反向查找目標（例：direction: "to-sibling:0.1.0-W9-001"）
+    # 2. ticket_id 欄位直接比對（兼容 legacy 命名如 v{id}-handoff.json，檔名非 {id}.json）
     if subdir == HANDOFF_PENDING_SUBDIR:
         for json_candidate in sorted(dir_path.glob("*.json")):
             try:
                 with open(json_candidate, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                direction = data.get("direction", "")
-                if direction:
-                    if extract_direction_target_id(direction) == ticket_id:
-                        return (json_candidate, "json")
             except (json.JSONDecodeError, IOError):
                 # 略過無法解析的檔案
                 continue
+
+            # 反向匹配：透過 direction 找目標
+            direction = data.get("direction", "")
+            if direction and extract_direction_target_id(direction) == ticket_id:
+                return (json_candidate, "json")
+
+            # ticket_id 欄位匹配（兼容 legacy 命名格式）
+            if data.get("ticket_id") == ticket_id:
+                return (json_candidate, "json")
 
     return None
 
@@ -316,9 +322,11 @@ def _print_basic_info(handoff: Dict[str, Any]) -> None:
         direction = handoff.get("direction", "auto")
         print(f"  交接方向: {direction}")
 
-        # Context refresh 額外說明
+        # Direction 額外說明
         if direction == "context-refresh":
             print(f"    （Context 刷新：在新 session 中以乾淨環境繼續此任務）")
+        elif direction == "next-wave":
+            print(f"    （Wave 交接：前一 wave 完成，進入下一 wave 規劃/實作）")
 
     if "timestamp" in handoff:
         print(f"  交接時間: {handoff.get('timestamp')}")
@@ -331,6 +339,26 @@ def _print_5w1h_info(handoff: Dict[str, Any]) -> None:
     if "what" in handoff:
         print(SectionHeaders.TASK_DESCRIPTION)
         print(f"  {handoff.get('what')}")
+        print()
+
+
+def _print_wave_info(handoff: Dict[str, Any]) -> None:
+    """列印 wave-level 交接專屬資訊（from_version, to_version, session_summary）"""
+    if handoff.get("direction") != "next-wave":
+        return
+
+    from_version = handoff.get("from_version")
+    to_version = handoff.get("to_version")
+    session_summary = handoff.get("session_summary")
+
+    if from_version or to_version or session_summary:
+        print("[Wave 交接資訊]")
+        if from_version:
+            print(f"  來源 Wave: {from_version}")
+        if to_version:
+            print(f"  目標 Wave: {to_version}")
+        if session_summary:
+            print(f"  Session 摘要: {session_summary}")
         print()
 
 
@@ -390,6 +418,7 @@ def _print_handoff_info(handoff: Dict[str, Any], ticket: Optional[Dict[str, Any]
     print()
 
     _print_basic_info(handoff)
+    _print_wave_info(handoff)
     _print_5w1h_info(handoff)
     _print_chain_info(handoff)
     _print_markdown_content(handoff)
@@ -472,6 +501,19 @@ def _print_args_error(error_msg: str) -> None:
     print(ResumeMessages.RESUME_LIST_CMD)
 
 
+def _print_wave_checkpoint(handoff: Dict[str, Any]) -> None:
+    """Wave-level handoff 的 checkpoint 引導（非 ticket 交接）。"""
+    to_version = handoff.get("to_version", "?")
+    print()
+    print(SEPARATOR_PRIMARY)
+    print(SectionHeaders.SUGGESTED_NEXT_STEP)
+    print(SEPARATOR_PRIMARY)
+    print()
+    print(f"  Wave 交接已恢復，目標 wave: {to_version}")
+    print(f"  請根據 context 中的審查發現和建議，規劃下一步行動。")
+    print()
+
+
 def _print_resume_checkpoint(ticket_id: str) -> None:
     """Resume 後標準化 Checkpoint 引導（接手流程路由）。"""
     print()
@@ -486,6 +528,46 @@ def _print_resume_checkpoint(ticket_id: str) -> None:
     print(ResumeMessages.CHECKPOINT_CHAIN_LABEL)
     print(format_msg(ResumeMessages.CHECKPOINT_CHAIN_CMD, ticket_id=ticket_id))
     print()
+
+
+def _handle_completed_ticket_redirect(ticket_id: str, handoff: Dict[str, Any]) -> Optional[int]:
+    """
+    檢查 Ticket 是否已完成，若有明確 handoff 目標則自動導向。
+
+    Returns:
+        int: 返回碼（0=已 redirect 並歸檔）
+        None: 不需 redirect，應繼續正常 resume 流程
+    """
+    if not is_ticket_completed(ticket_id):
+        return None
+
+    direction = handoff.get("direction", "")
+    target_id = extract_direction_target_id(direction) if direction else None
+
+    if target_id:
+        print(SEPARATOR_PRIMARY)
+        print(format_warning(WarningMessages.TICKET_ALREADY_COMPLETED, ticket_id=ticket_id))
+        print(f"  交接方向: {direction}")
+        print(f"  目標 Ticket: {target_id}")
+        print()
+        print(ResumeMessages.REDIRECT_TO_TARGET)
+        print(f"  ticket resume {target_id}")
+        print(SEPARATOR_PRIMARY)
+
+        # 標記為已接手再歸檔（保留 resumed_at 審計記錄）
+        mark_handoff_as_resumed(ticket_id)
+        archive_handoff_file(ticket_id)
+        return 0
+
+    if direction:
+        # 有 direction 但無 embedded target_id（如 to-parent, to-child, context-refresh）
+        # 正常情況，fall through 到一般 resume 流程
+        return None
+
+    # 真正無 direction（異常情況），顯示警告後繼續 resume
+    print(format_warning(WarningMessages.COMPLETED_NO_DIRECTION, ticket_id=ticket_id))
+    print()
+    return None
 
 
 def _execute_resume(ticket_id: str, version: Optional[str]) -> int:
@@ -530,28 +612,35 @@ def _execute_resume(ticket_id: str, version: Optional[str]) -> int:
         if resolved_version:
             ticket = load_ticket(resolved_version, ticket_id)
 
+    # 已完成 Ticket 自動導向：若有明確目標則 redirect，否則 fall through
+    redirect_result = _handle_completed_ticket_redirect(ticket_id, handoff)
+    if redirect_result is not None:
+        return redirect_result
+
     # 列印 handoff 資訊
     _print_handoff_info(handoff, ticket)
 
     # 標記為已接手（更新 resumed_at 時間戳）
     if not mark_handoff_as_resumed(ticket_id):
-        print(format_warning(WarningMessages.INVALID_OPERATION))
-        print(WarningMessages.HANDOFF_UPDATE_FAILED)
+        print(format_warning(WarningMessages.HANDOFF_UPDATE_FAILED))
         return 1
 
     # 將 handoff 檔案從 pending/ 移動到 archive/
     # 注意：mark_handoff_as_resumed() 已自動歸檔 Markdown 格式，所以這裡只會歸檔 JSON
     if not archive_handoff_file(ticket_id):
         # 歸檔失敗不應該視為 resume 失敗（核心功能已完成），只發出警告
-        print(format_warning(WarningMessages.INVALID_OPERATION))
-        print(WarningMessages.HANDOFF_ARCHIVE_FAILED)
+        print(format_warning(WarningMessages.HANDOFF_ARCHIVE_FAILED))
 
     print(SEPARATOR_PRIMARY)
     print(SectionHeaders.COMPLETION)
     print(InfoMessages.HANDOFF_RESUMED)
     print(SEPARATOR_PRIMARY)
 
-    _print_resume_checkpoint(ticket_id)
+    # Wave-level handoff 使用不同的 checkpoint（無 ticket 認領流程）
+    if handoff.get("direction") == "next-wave":
+        _print_wave_checkpoint(handoff)
+    else:
+        _print_resume_checkpoint(ticket_id)
     return 0
 
 

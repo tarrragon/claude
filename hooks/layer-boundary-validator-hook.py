@@ -25,7 +25,7 @@ Matcher: Write
 
 使用方式:
     PostToolUse Hook 自動觸發，或手動測試:
-    echo '{"tool_name":"Write","tool_input":{"file_path":".claude/rules/core/decision-tree.md"}}' | python3 layer-boundary-validator-hook.py
+    echo '{"tool_name":"Write","tool_input":{"file_path":".claude/pm-rules/decision-tree.md"}}' | python3 layer-boundary-validator-hook.py
 """
 
 import sys
@@ -58,7 +58,7 @@ LAYER1_PATTERNS = [
     ".claude/rules/flows/",
     ".claude/rules/guides/",
     ".claude/rules/forbidden/",
-    ".claude/skills/tdd/references/portable-design-boundary.md",
+    ".claude/skills/tdd/references/phase0/rules.md",
     ".claude/skills/tdd/references/portable-tdd-standard.md",
 ]
 
@@ -385,7 +385,7 @@ def format_warning_message(violations: List[Dict[str, Any]], file_path: str) -> 
         output_lines.append(f"禁止項：{violation['type']}")
         output_lines.append(f"內容：{violation['content']}")
         output_lines.append(f"建議：改為「{violation['replacement']}」")
-        output_lines.append("相關規範：.claude/skills/tdd/references/portable-design-boundary.md")
+        output_lines.append("相關規範：.claude/skills/tdd/references/phase0/rules.md")
         output_lines.append("")
 
     return "\n".join(output_lines)
@@ -510,6 +510,9 @@ def main() -> int:
 
         # 讀取輸入
         input_data = read_json_from_stdin(logger)
+        if not input_data:
+            _output_success()
+            return EXIT_SUCCESS
 
         # 檢測 subagent 環境
         if is_subagent_environment(input_data):

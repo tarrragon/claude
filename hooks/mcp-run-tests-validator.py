@@ -20,7 +20,7 @@ MCP run_tests 使用規範驗證 Hook (PreToolUse)
 import json
 import sys
 from pathlib import Path
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.hook_messages import ValidationMessages
 
 
@@ -101,7 +101,9 @@ def main() -> int:
 
     try:
         # 讀取 stdin 輸入
-        input_data = json.load(sys.stdin)
+        input_data = read_json_from_stdin(logger)
+        if input_data is None:
+            return 0
         tool_name = input_data.get("tool_name", "")
         tool_input = input_data.get("tool_input") or {}
 
@@ -151,14 +153,14 @@ def main() -> int:
         }
 
         # 輸出錯誤訊息到 stderr 供調試
-        print(error_message)
+        print(error_message, file=sys.stderr)
         print(json.dumps(result, ensure_ascii=False))
         return 2
 
     except json.JSONDecodeError as e:
         logger.error("JSON 解析錯誤: %s", e)
         error_msg = f"Hook 錯誤: 無效的 JSON 輸入: {e}"
-        print(error_msg)
+        print(error_msg, file=sys.stderr)
         result = {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
@@ -172,7 +174,7 @@ def main() -> int:
     except Exception as e:
         logger.error("執行錯誤: %s: %s", type(e).__name__, str(e))
         error_msg = f"Hook 執行失敗: {type(e).__name__}: {str(e)}"
-        print(error_msg)
+        print(error_msg, file=sys.stderr)
         # 發生未預期的錯誤時，允許工具執行以防 Hook 故障
         result = {
             "hookSpecificOutput": {

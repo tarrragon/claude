@@ -11,7 +11,6 @@
 | 嚴重度 | 中 |
 | 發現版本 | 0.1.1 |
 | 發現日期 | 2026-03-07 |
-| 來源 | /parallel-evaluation G 審查 TDD Phase 4 三步驟重設計後發現（0.1.1-W2-003 follow-up） |
 
 ### 症狀
 
@@ -68,7 +67,6 @@
 ### 關聯
 
 - 修復 commit: 1400688（tdd-flow.md 總覽圖 + CLAUDE.md + cinnamon 代理人）
-- 觸發 Ticket: 0.1.1-W2-003（TDD Phase 4 三步驟重設計）
 - 相關模式: DOC-005（跨文件原則未同步）、ARCH-005（代理人定義衝突）
 
 ---

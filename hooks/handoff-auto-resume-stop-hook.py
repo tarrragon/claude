@@ -5,7 +5,7 @@
 # ///
 
 """
-Handoff 自動恢復 Stop Hook (v2.4.0)
+Handoff 自動恢復 Stop Hook (v2.5.0)
 
 在對話終止時，檢查是否有未完成的 handoff 任務並判斷是否阻止退出。
 
@@ -22,7 +22,13 @@ Handoff 自動恢復 Stop Hook (v2.4.0)
    - 無任務 → 靜默通過
 5. 建立 stop flag 防止同一 session 重複觸發
 
-v2.4.0 變更 (0.1.2-W2-002):
+v2.5.0 變更:
+    - next-wave direction 加入非阻塞方向類型（與 auto 同級）
+    - 修正 next-wave handoff 在非 Ticket 工作時反覆阻止退出的問題
+    - stop flag 過期時間從 5 分鐘延長到 2 小時（一個 session 的合理長度）
+    - 重構 direction 判斷：從單一 "auto" 判斷改為 non_blocking_directions 集合
+
+v2.4.0 變更:
     - 新增「最近任務」判斷邏輯，區分「遺留任務」和「正在執行任務」
     - 檢查 in_progress Ticket 的 started_at 時間，若在最近 N 分鐘內開始執行
       → 視為「可能有代理人正在執行」，不阻止對話終止
@@ -37,7 +43,7 @@ v2.3.0 變更:
     - 原問題：reason 文字被 Claude 當作斜線命令自動執行，違反 handoff 設計
     - 修正後：reason 明確指示 Claude 告知用戶手動執行，不自動 resume
 
-v2.2.0 變更 (W3-005):
+v2.2.0 變更:
     - 修復 GC bug：to-sibling / to-parent / to-child 類型的 handoff，
       來源 Ticket completed 是預期狀態，不應被 GC 刪除
     - 新增 should_preserve_pending_json() 函式判斷是否保留
@@ -71,47 +77,21 @@ from hook_utils import (
     parse_ticket_frontmatter,
     get_project_root,
     scan_ticket_files_by_version,
+    find_ticket_file,
 )
 
 EXIT_SUCCESS = 0
 
 # 常數定義
 STOP_FLAG_FILE = ".claude/handoff/.stop-blocked"
-STOP_FLAG_EXPIRY_SECONDS = 300  # 5 分鐘過期
+STOP_FLAG_EXPIRY_SECONDS = 7200  # 2 小時過期（一個 session 的合理長度）
 STATE_FILE_TEMPLATE = "/tmp/claude-handoff-state-{ppid}.json"
 PENDING_DIR_NAME = ".claude/handoff/pending"
 LOG_DIR_NAME = ".claude/hook-logs/handoff-auto-resume"
 LOG_FILE_PREFIX = "stop-hook"
 WORK_LOGS_DIR_NAME = "docs/work-logs"
-TICKETS_SUBDIR_NAME = "tickets"
 TODOLIST_FILE_NAME = "docs/todolist.yaml"
 RECENT_TASK_THRESHOLD_MINUTES = 30  # 30 分鐘內視為「最近任務」（可能有代理人正在執行）
-
-
-def _get_ticket_file_path(project_root: Path, ticket_id: str) -> Optional[Path]:
-    """
-    解析 Ticket ID 並構建檔案路徑。
-
-    問題 7 修正：提取重複的版本解析邏輯為共用函式。
-
-    Args:
-        project_root: 專案根目錄
-        ticket_id: Ticket ID（格式：0.31.0-W5-001）
-
-    Returns:
-        Optional[Path]: Ticket 檔案路徑；若解析失敗返回 None
-    """
-    try:
-        # 解析版本號（以 '-' 分割，第一部分是版本號）
-        parts = ticket_id.split('-')
-        if not parts:
-            return None
-
-        version = parts[0]
-        ticket_path = project_root / WORK_LOGS_DIR_NAME / f"v{version}" / TICKETS_SUBDIR_NAME / f"{ticket_id}.md"
-        return ticket_path
-    except Exception:
-        return None
 
 
 def get_session_stop_flag() -> Path:
@@ -310,9 +290,9 @@ def is_ticket_recently_started(project_root: Path, ticket_id: str, logger) -> bo
         bool - 是否在最近 N 分鐘內開始執行
     """
     try:
-        # 問題 7 修正：使用共用函式解析 Ticket 檔案路徑
-        ticket_path = _get_ticket_file_path(project_root, ticket_id)
-        if not ticket_path or not ticket_path.exists():
+        # 使用 find_ticket_file 支援三層階層與舊扁平結構
+        ticket_path = find_ticket_file(ticket_id, project_root, logger)
+        if not ticket_path:
             return False
 
         # 解析 frontmatter
@@ -366,9 +346,9 @@ def is_ticket_completed(project_root: Path, ticket_id: str, logger) -> bool:
         bool - 是否已完成
     """
     try:
-        # 問題 7 修正：使用共用函式解析 Ticket 檔案路徑
-        ticket_path = _get_ticket_file_path(project_root, ticket_id)
-        if not ticket_path or not ticket_path.exists():
+        # 使用 find_ticket_file 支援三層階層與舊扁平結構
+        ticket_path = find_ticket_file(ticket_id, project_root, logger)
+        if not ticket_path:
             return False
 
         # 解析 frontmatter
@@ -509,15 +489,17 @@ def scan_pending_handoff_tasks(project_root: Path, logger) -> tuple:
                         # Ticket 未完成，根據 direction 類型判斷分類
                         direction_type = direction.split(":")[0]
 
-                        if direction_type == "auto":
-                            # auto handoff 為建議性任務，不阻塞退出
+                        # 建議性方向類型：提醒但不阻塞退出
+                        non_blocking_directions = {"auto", "next-wave"}
+                        if direction_type in non_blocking_directions:
+                            # 建議性 handoff，不阻塞退出
                             recent_tasks.append({
                                 "ticket_id": ticket_id,
                                 "title": title,
                                 "direction": direction
                             })
                             logger.info(
-                                f"auto handoff 為建議性任務，不阻塞退出: {ticket_id}"
+                                f"建議性 handoff ({direction_type})，不阻塞退出: {ticket_id}"
                             )
                         elif is_ticket_recently_started(project_root, ticket_id, logger):
                             recent_tasks.append({
@@ -646,8 +628,10 @@ def generate_hook_output(logger) -> Dict[str, Any]:
                     "decision": "block",
                     "reason": (
                         f"[Handoff] 偵測到未完成的 handoff 任務：{ticket_id}\n"
-                        f"請告知用戶：先執行 /clear 清空 context，"
-                        f"然後再執行 /ticket resume {ticket_id} 恢復任務。\n"
+                        f"請執行以下步驟：\n"
+                        f"1. 檢查本 session 中是否有待辦工作尚未建立對應 Ticket（若有，先建立）\n"
+                        f"2. 確認所有變更已 commit\n"
+                        f"3. 通知用戶可以執行 /clear，然後 /ticket resume {ticket_id}\n"
                         f"請勿自動執行 resume，必須等待用戶手動操作。"
                     )
                 }

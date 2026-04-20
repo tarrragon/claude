@@ -6,7 +6,7 @@
 
 ---
 
-## 入口層驗證 Hook (W2-001)
+## 入口層驗證 Hook
 
 **檔案**：`.claude/hooks/command-entrance-gate-hook.py`
 
@@ -43,7 +43,7 @@
 
 ---
 
-## 完成層驗證 Hook (W2-004)
+## 完成層驗證 Hook
 
 **檔案**：`.claude/hooks/phase-completion-gate-hook.py`
 

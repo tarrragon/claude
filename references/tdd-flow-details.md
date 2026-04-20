@@ -118,7 +118,7 @@ PM 閱讀策略文件，提取以下資訊：
 
 ## Phase 1-3 代理人自治執行規範
 
-> **來源**：0.1.0-W43-003 — 減少 PM 中轉開銷，Phase 1-3 代理人自行管理 Ticket 和 commit。
+> **來源**：減少 PM 中轉開銷，Phase 1-3 代理人自行管理 Ticket 和 commit。
 
 ### 自治範圍
 
@@ -276,10 +276,10 @@ Phase 3b 測試失敗
 ## 相關文件
 
 - .claude/pm-rules/tdd-flow.md - 精簡版（常駐）
-- .claude/rules/core/decision-tree.md - 主線程決策樹
+- .claude/pm-rules/decision-tree.md - 主線程決策樹
 - .claude/rules/core/quality-baseline.md - 品質基線
 
 ---
 
 **Last Updated**: 2026-03-12
-**Version**: 1.2.0 - 新增 Phase 1-3 代理人自治執行規範章節（0.1.0-W43-003）
+**Version**: 1.2.0 - 新增 Phase 1-3 代理人自治執行規範章節

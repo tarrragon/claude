@@ -131,8 +131,6 @@ def load_and_validate_ticket(version, ticket_id, auto_print_error=True):
 
 ## 相關 Ticket
 
-- **發現**: 0.1.0-W2-012（重構 Ticket 驗證邏輯統一提取）
-- **修復**: 0.1.0-W2-026（修復 W2-012 重構後 mock 路徑失效）
 
 ## 教訓
 

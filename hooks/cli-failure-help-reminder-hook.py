@@ -37,7 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.hook_messages import WorkflowMessages
 
 # ============================================================================
@@ -133,9 +133,13 @@ def main() -> int:
     logger = setup_hook_logging("cli-failure-help-reminder")
 
     try:
-        input_data = json.load(sys.stdin)
+        input_data = read_json_from_stdin(logger)
     except json.JSONDecodeError as e:
         logger.error("JSON 解析錯誤: %s", e)
+        print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
+        return EXIT_SUCCESS
+
+    if not input_data:
         print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
         return EXIT_SUCCESS
 

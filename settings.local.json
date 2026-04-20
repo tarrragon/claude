@@ -106,6 +106,10 @@
       "// === MCP 工具（Context7）===",
       "mcp__context7__resolve-library-id",
       "mcp__context7__query-docs",
+      "// === 代理人基本編輯工具（全域開放）===",
+      "Edit",
+      "Write",
+      "Grep",
       "// === Skill ===",
       "Skill(lsp-first)",
       "Skill(startup-check)",
@@ -144,7 +148,14 @@
       "Skill(ticket)",
       "Skill(commit-commands:commit)",
       "WebFetch(domain:felipeelias.github.io)",
-      "Skill(worktree)"
+      "Skill(worktree)",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(ticket track append-log 0.18.0-W5-050.2 --section 'Test Results' ' *)",
+      "Bash(rm -f /Users/tarragon/Projects/book_overview_v1/.claude/agents/TEST_EXEMPT.md /Users/tarragon/Projects/book_overview_v1/.claude/rules/TEST_PROTECTED.md)",
+      "Bash(git worktree *)",
+      "Bash(mv .claude/handoff/pending/0.18.0-W5-047.json .claude/handoff/archive/)",
+      "Bash(mkdir -p .claude/handoff/archive)"
     ]
   },
   "enableAllProjectMcpServers": true,
@@ -175,5 +186,8 @@
       }
     ]
   },
-  "outputStyle": "5W1H Structured Response"
+  "outputStyle": "5W1H Structured Response",
+  "env": {
+    "PYTHONUTF8": "1"
+  }
 }

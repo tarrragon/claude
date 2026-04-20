@@ -11,7 +11,6 @@
 | 來源版本 | v0.1.1 |
 | 發現日期 | 2026-03-21 |
 | 風險等級 | 中 |
-| 來源 | 0.1.1-W12 並行派發 6 個代理人 |
 
 ## 症狀
 
@@ -23,14 +22,14 @@
 
 ### 行為模式
 
-並行代理人無法感知彼此的產出物。當 ANA Ticket（W12-005）分析完成後建立子 Ticket（005.1 補強 basil 聲明、005.2 補強 skip-gate），與同時執行的 ADJ Ticket（W12-007.1 已為 skip-gate 加標註、W12-007.2 已為所有 agent 加聲明）產生重疊。
+並行代理人無法感知彼此的產出物。當 ANA Ticket分析完成後建立子 Ticket（005.1 補強 basil 聲明、005.2 補強 skip-gate），與同時執行的 ADJ Ticket（已為 skip-gate 加標註、某 Ticket 已為所有 agent 加聲明）產生重疊。
 
 ### 具體案例
 
 | 重疊 Ticket | 被覆蓋的 Ticket | 原因 |
 |-------------|----------------|------|
-| W12-005.1（basil 職責聲明） | W12-007.2（所有 agent 職責聲明） | 007.2 範圍更廣，已包含 basil |
-| W12-005.2（skip-gate applies_to） | W12-007.1（skip-gate 角色標註） | 007.1 已完成相同工作 |
+| 某 Ticket（basil 職責聲明） | 某 Ticket（所有 agent 職責聲明） | 007.2 範圍更廣，已包含 basil |
+| 某 Ticket（skip-gate applies_to） | 某 Ticket（skip-gate 角色標註） | 007.1 已完成相同工作 |
 
 ### 結構性原因
 
@@ -42,7 +41,7 @@
 
 ### 事後處理（本次採用）
 
-關閉重疊 Ticket 為重複，在 Solution 中標記「已由 W12-007.x 覆蓋」。
+關閉重疊 Ticket 為重複，在 Solution 中標記「已由 某 Ticket.x 覆蓋」。
 
 ### 預防措施
 

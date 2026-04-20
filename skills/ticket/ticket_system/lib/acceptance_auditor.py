@@ -15,6 +15,7 @@ from datetime import datetime
 
 from .ticket_loader import load_ticket, resolve_version, get_project_root, get_tickets_dir
 from .parser import parse_frontmatter
+from .checkbox_utils import strip_checkbox_prefix
 from .constants import STATUS_COMPLETED, VAGUE_ACCEPTANCE_WORDS, SRP_WHAT_CONJUNCTIONS, SRP_ACCEPTANCE_MODULE_THRESHOLD
 
 
@@ -183,6 +184,103 @@ def _check_children_recursive(children_ids: List[str], version: str, visited: Op
 
     all_completed = len(incomplete) == 0
     return all_completed, incomplete
+
+
+def _check_spawned_recursive(
+    spawned_ids: List[str],
+    version: str,
+    visited: Optional[set] = None,
+) -> Tuple[bool, List[str]]:
+    """
+    檢查 spawned_tickets 是否全部完成（shallow 一層 + 循環引用防護）
+
+    與 _check_children_recursive 對應，但走 spawned_tickets 欄位。
+    採 shallow 原則（對齊 hook 的 check_spawned_tickets_status）：
+    - 只檢查 spawned 自身的 status，不 recurse 進 spawned 的 children/spawned
+    - 避免責任重疊（children 鏈完整性由 children checker 負責）
+    - 避免 ANA → IMP → ANA 鏈式檢查造成的語意混淆
+
+    循環引用防護：
+    - visited 集合記錄已訪問 ID，同一 ID 重複出現只檢查一次
+    - 即使未來升級為遞迴，visited 也保證不會無限遞迴
+
+    Args:
+        spawned_ids: spawned ticket ID 列表
+        version: 版本號
+        visited: 已訪問的 ID 集合（防止循環參照 / 重複計數）
+
+    Returns:
+        (all_completed: bool, incomplete_ids: list[str])
+        incomplete_ids 元素格式："{id}: status={status}"
+    """
+    if visited is None:
+        visited = set()
+
+    incomplete: List[str] = []
+
+    for spawned_id in spawned_ids:
+        # 防止循環參照 / 重複處理
+        if spawned_id in visited:
+            continue
+        visited.add(spawned_id)
+
+        # 載入 spawned ticket
+        spawned_ticket = load_ticket(version, spawned_id)
+        if not spawned_ticket:
+            incomplete.append(f"{spawned_id}: not_found")
+            continue
+
+        # 檢查 spawned ticket 狀態（shallow 一層，不 recurse）
+        status = spawned_ticket.get("status", "unknown")
+        if status != STATUS_COMPLETED:
+            incomplete.append(f"{spawned_id}: status={status}")
+
+    all_completed = len(incomplete) == 0
+    return all_completed, incomplete
+
+
+def validate_spawned_tickets_completed(
+    ticket: Dict[str, Any], version: str
+) -> Tuple[bool, List[str], bool]:
+    """
+    檢查 spawned_tickets 全部完成（W15-003）
+
+    規則：
+    - ANA Ticket：spawned_tickets 必須全 completed，否則 fail
+    - 非 ANA Ticket：跳過（skipped=True）
+    - 空 spawned_tickets：跳過
+    - 循環引用：由 _check_spawned_recursive 的 visited 集合防護
+
+    Returns:
+        (passed: bool, issues: list[str], skipped: bool)
+    """
+    ticket_type = ticket.get("type", "")
+    spawned = ticket.get("spawned_tickets", []) or []
+
+    # 非 ANA 類型或無 spawned → 跳過
+    if ticket_type != "ANA":
+        return True, [], True
+    if not spawned:
+        return True, [], True
+
+    all_completed, incomplete = _check_spawned_recursive(spawned, version)
+
+    if not all_completed:
+        # 統計直接 spawned 完成度（不含遞迴衍生層）
+        direct_incomplete_ids = {
+            item.split(":", 1)[0].strip() for item in incomplete
+        }
+        direct_completed = sum(
+            1 for sid in spawned if sid not in direct_incomplete_ids
+        )
+        total = len(spawned)
+        issues = [
+            f"spawned_tickets 未全完成（{direct_completed}/{total} completed）：",
+        ]
+        issues.extend(f"  - {item}" for item in incomplete)
+        return False, issues, False
+
+    return True, [], False
 
 
 def validate_children_completed(ticket: Dict[str, Any], version: str) -> Tuple[bool, List[str], bool]:
@@ -407,11 +505,8 @@ def detect_vague_acceptance(
         if not isinstance(condition, str):
             continue
 
-        # 移除 [ ] 或 [x] 前綴
-        cleaned = condition.strip()
-        if cleaned.startswith("[") and "]" in cleaned:
-            # 移除 [ ] 或 [x] 及其後的空白
-            cleaned = cleaned.split("]", 1)[1].strip()
+        # 移除 [ ] 或 [x] checkbox 前綴（共用 checkbox_utils，0.18.0-W11-001.5）
+        _, cleaned = strip_checkbox_prefix(condition)
 
         # 判斷是否只包含模糊詞
         has_vague_word = False
@@ -881,6 +976,17 @@ def run_audit(ticket_id: str, version: Optional[str] = None) -> AuditReport:
         passed=children_passed,
         issues=children_issues,
         skipped=children_skipped
+    ))
+
+    # Step 2.5: spawned_tickets 完成狀態檢查（W15-003，僅 ANA）
+    spawned_passed, spawned_issues, spawned_skipped = validate_spawned_tickets_completed(
+        ticket, version
+    )
+    report.add_step(AuditStep(
+        name="spawned_tickets 完成狀態檢查",
+        passed=spawned_passed,
+        issues=spawned_issues,
+        skipped=spawned_skipped
     ))
 
     # Step 3: 執行日誌完整性檢查

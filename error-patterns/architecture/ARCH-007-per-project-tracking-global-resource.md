@@ -70,11 +70,10 @@ for pkg, info in desired.items():
 
 ### 相關規則
 
-- `.claude/rules/core/quality-common.md` 第 1.2.3 節（破壞性操作設計防護）中的「狀態語義一致性」原則同樣適用
+- `.claude/references/quality-common.md` 第 1.2.3 節（破壞性操作設計防護）中的「狀態語義一致性」原則同樣適用
 
 ## 關聯 Ticket
 
-- 0.1.0-W1-017：重新設計套件追蹤機制（installed-packages.json → 自動掃描 + 實際狀態比對）
 - 與 ARCH-006 相關：同為「配置/追蹤放錯作用域」的模式
 
 ---

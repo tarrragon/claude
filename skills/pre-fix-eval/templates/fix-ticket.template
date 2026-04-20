@@ -2,7 +2,7 @@
 
 **描述**: 修復前強制評估流程記錄
 
-## 🎯 Stage 1: 錯誤分類
+## [TARGET] Stage 1: 錯誤分類
 
 - **錯誤類型**: {SYNTAX_ERROR/COMPILATION_ERROR/TEST_FAILURE/ANALYZER_WARNING}
 - **檔案位置**: {檔案路徑:行號}
@@ -16,7 +16,7 @@
 
 ---
 
-## 📊 Stage 2: BDD 意圖分析
+## [STATS] Stage 2: BDD 意圖分析
 
 **Given**: {測試或程式的初始狀態和前置條件}
 
@@ -28,7 +28,7 @@
 
 ---
 
-## 📚 Stage 3: 設計文件查詢
+## [DOC] Stage 3: 設計文件查詢
 
 ### 應用需求規格
 - [ ] 檔案已查詢: `docs/app-requirements-spec.md`
@@ -52,7 +52,7 @@
 
 ---
 
-## 🔍 Stage 4: 根因定位
+## [SEARCH] Stage 4: 根因定位
 
 **根因分析結果**:
 
@@ -79,7 +79,7 @@
 
 ---
 
-## 💡 Stage 5: 修復策略
+## [TIP] Stage 5: 修復策略
 
 **修復動作** (選擇一個):
 - [ ] 補完實作 (新增缺失的代碼)
@@ -103,7 +103,7 @@
 
 ---
 
-## 📋 Stage 6: 分派執行
+## [INFO] Stage 6: 分派執行
 
 **建議分派代理人** (根據決策樹):
 - [ ] mint-format-specialist (語法錯誤、未使用警告)
@@ -115,7 +115,7 @@
 
 ---
 
-## 📋 驗收條件
+## [INFO] 驗收條件
 
 修復完成後，必須滿足以下所有條件：
 
@@ -129,7 +129,7 @@
 
 ---
 
-## 🤝 5W1H 決策分析
+## [HANDOFF] 5W1H 決策分析
 
 **Who** (誰): {代理人名稱} (執行者) | rosemary-project-manager (分派者)
 
@@ -145,7 +145,7 @@
 
 ---
 
-## 📝 附注
+## [NOTE] 附注
 
 ### Hook 執行詳情
 - **Hook 名稱**: pre-fix-evaluation-hook.py

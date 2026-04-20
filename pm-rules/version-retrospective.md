@@ -103,4 +103,4 @@ ticket create --version {current} --wave {next_wave} \
 ---
 
 **Last Updated**: 2026-03-31
-**Version**: 1.0.0 - 初版（0.31.1-W1-016）
+**Version**: 1.0.0 - 初版

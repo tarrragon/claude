@@ -2,7 +2,7 @@
 
 本文件包含 quality-common.md 的操作指引、程式碼範例和詳細檢查清單。
 
-> 核心規則定義：.claude/rules/core/quality-common.md
+> 核心規則定義：.claude/references/quality-common.md
 
 ---
 
@@ -112,7 +112,7 @@ def should_preserve(direction: str) -> bool:
 # handoff.py:
 handoff["direction"] = f"to-sibling:{target_id}"
 
-# 結果：should_preserve("to-sibling:W3-002") → False（誤判）
+# 結果：should_preserve("to-sibling:{target_id}") → False（誤判）
 ```
 
 ### 完整檢查清單（寫修復程式碼前必須完成）
@@ -148,7 +148,7 @@ handoff["direction"] = f"to-sibling:{target_id}"
    ```python
    def test_should_preserve():
        assert should_preserve("to-parent")  # 無後綴
-       assert should_preserve("to-sibling:W3-002")  # 有後綴
+       assert should_preserve("to-sibling:target-id")  # 有後綴
        assert should_preserve("context-refresh")  # 特殊格式
        assert not should_preserve("unknown")  # 不符合
    ```
@@ -272,7 +272,7 @@ class SessionManager:
    # 記錄移除理由，安全移除
    # worklog 記錄：
    # - 移除 SessionManager.logger 參數
-   # - 理由：W34-010 重構後 logging 改由 session layer 統一管理
+   # - 理由：重構後 logging 改由 session layer 統一管理
    # - 確認：所有呼叫端都不依賴此參數
    ```
 
@@ -515,8 +515,8 @@ def calculate_discount_price(base_price: float, user_tier: str) -> float:
 
 ## 相關文件
 
-- .claude/rules/core/quality-common.md - 核心規則定義
-- .claude/methodologies/comment-writing-methodology.md - 註解方法論
+- .claude/references/quality-common.md - 核心規則定義
+- .claude/skills/compositional-writing/references/writing-code-comments.md - 註解撰寫規範
 
 ---
 

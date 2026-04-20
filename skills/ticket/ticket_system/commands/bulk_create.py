@@ -242,6 +242,7 @@ def _create_batch_tickets(
             body = create_ticket_body(
                 frontmatter.get("what", ""),
                 frontmatter.get("who", {}).get("current", "pending"),
+                frontmatter.get("type", ""),
             )
 
             # 寫入檔案（除非是預演模式）

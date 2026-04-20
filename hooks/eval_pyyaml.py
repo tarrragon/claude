@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-PyYAML 替代評估腳本 — W39-002 Phase 3b
+PyYAML 替代評估腳本 — Phase 3b
 
 評估步驟：
 1. 功能等價性測試：對比手寫解析器和 PyYAML 的輸出
@@ -24,8 +24,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 try:
     from hook_utils import parse_ticket_frontmatter
 except ImportError:
-    print("Error: 無法導入 hook_utils")
-    sys.exit(1)
+    print("Error: 無法導入 hook_utils", file=sys.stderr)
+    sys.exit(0)
 
 try:
     import yaml
@@ -257,7 +257,7 @@ def main():
     print("\n[Step 2] 執行功能等價性測試...")
     equiv_pass, equiv_diffs = test_functional_equivalence(samples)
     if equiv_pass:
-        print("  結果：全部通過 ✓")
+        print("  結果：全部通過 [OK]")
     else:
         print(f"  結果：{len(equiv_diffs)} 個差異")
 

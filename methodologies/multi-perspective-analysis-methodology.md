@@ -296,7 +296,7 @@
 
 **「加法 vs 減法」規則說明**：當審查者 A 說「刪除這個章節」而審查者 B 說「保留」時，B 必須提出保留的具體理由（不是「可能有用」）。PM 禁止透過折衷合併（如「保留一半」）來迴避二元決策。
 
-> **來源**：0.2.0-W3-014 — 多視角發想結構性加法偏見分析
+> **來源**：多視角發想結構性加法偏見分析的歷史教訓
 
 ---
 
@@ -406,7 +406,7 @@
 
 ## 相關文件
 
-- [decision-tree]($CLAUDE_PROJECT_DIR/.claude/rules/core/decision-tree.md) - 主線程決策樹
+- [decision-tree]($CLAUDE_PROJECT_DIR/.claude/pm-rules/decision-tree.md) - 主線程決策樹
 - [incident-response]($CLAUDE_PROJECT_DIR/.claude/pm-rules/incident-response.md) - 事件回應流程
 - [parallel-dispatch]($CLAUDE_PROJECT_DIR/.claude/rules/guides/parallel-dispatch.md) - 並行派發指南
 - [cognitive-load]($CLAUDE_PROJECT_DIR/.claude/rules/core/cognitive-load.md) - 認知負擔設計原則
@@ -417,4 +417,3 @@
 **Last Updated**: 2026-02-02
 **Version**: 1.0.0
 **Status**: Active
-**Source**: 0.31.0-W6-008

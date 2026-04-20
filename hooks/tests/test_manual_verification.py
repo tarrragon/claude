@@ -39,6 +39,9 @@ requires = ["hatchling"]
 [project]
 name = "{skill_name}-system"
 version = "{version}"
+
+[project.scripts]
+{skill_name} = "{skill_name}_system:main"
 """
             (skill_dir / "pyproject.toml").write_text(pyproject_content)
 

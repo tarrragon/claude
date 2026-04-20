@@ -18,6 +18,8 @@ Exit codes:
     0 - Missing/unregistered hooks detected (warning, does not block)
 """
 
+import os
+import stat
 import sys
 from pathlib import Path
 
@@ -38,6 +40,32 @@ from project_init.lib.hook_checker import (
 )
 
 
+def _check_and_fix_permissions(hooks_dir, logger):
+    """Check execute permissions for all .py files under hooks_dir and auto-fix.
+
+    Scans recursively, skipping __pycache__ and .venv directories.
+    Returns (fixed_count, already_ok_count).
+    """
+    fixed = []
+    already_ok = 0
+
+    for py_file in sorted(hooks_dir.rglob("*.py")):
+        # Skip non-essential directories
+        parts = py_file.relative_to(hooks_dir).parts
+        if any(p in ("__pycache__", ".venv", "node_modules") for p in parts):
+            continue
+
+        if os.access(py_file, os.X_OK):
+            already_ok += 1
+        else:
+            current_mode = py_file.stat().st_mode
+            py_file.chmod(current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            fixed.append(py_file.name)
+            logger.info(f"chmod +x: {py_file.name}")
+
+    return fixed, already_ok
+
+
 def main():
     logger = setup_hook_logging("hook-completeness-check")
     # Determine project root
@@ -47,6 +75,24 @@ def main():
     hooks_dir = script_dir
     settings_path = project_root / '.claude' / 'settings.json'
     exclude_list_path = script_dir / 'hook-exclude-list.json'
+
+    # --- Permission check (IMP-054) ---
+    fixed_files, ok_count = _check_and_fix_permissions(hooks_dir, logger)
+
+    if fixed_files:
+        log_output = f"[HookCheck] 權限修正: {len(fixed_files)} 個檔案已自動加上執行權限 (IMP-054)"
+        print(log_output)
+        logger.info(log_output)
+        for name in fixed_files[:10]:
+            detail = f"  chmod +x: {name}"
+            print(detail)
+            logger.info(detail)
+        if len(fixed_files) > 10:
+            more = f"  ... 還有 {len(fixed_files) - 10} 個"
+            print(more)
+            logger.info(more)
+
+    # --- Registration check ---
 
     # Load configuration files
     settings = load_json_file(settings_path, logger)
@@ -86,6 +132,9 @@ def main():
     print(log_output)
     logger.info(log_output)
     log_output = f"排除: {count_excluded} 個"
+    print(log_output)
+    logger.info(log_output)
+    log_output = f"權限: {ok_count + len(fixed_files)} 個已確認可執行" + (f" ({len(fixed_files)} 個本次修正)" if fixed_files else "")
     print(log_output)
     logger.info(log_output)
 

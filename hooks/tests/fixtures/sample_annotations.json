@@ -1,0 +1,27 @@
+{
+  "20260418T100000Z-aaaaaaaa": {
+    "label": "true_positive",
+    "note": "確實要求 sage 寫實作",
+    "annotated_at": "2026-04-19T06:00:00Z"
+  },
+  "20260418T110000Z-bbbbbbbb": {
+    "label": "false_positive",
+    "note": "只是引用 agent 定義",
+    "annotated_at": "2026-04-19T06:01:00Z"
+  },
+  "20260418T120000Z-cccccccc": {
+    "label": "false_positive",
+    "note": "明示禁止 commit 反而被誤判",
+    "annotated_at": "2026-04-19T06:02:00Z"
+  },
+  "20260418T130000Z-dddddddd": {
+    "label": "true_positive",
+    "note": "thyme 收實作 prompt 合理",
+    "annotated_at": "2026-04-19T06:03:00Z"
+  },
+  "20260418T999999Z-orphan00": {
+    "label": "unknown",
+    "note": "孤兒標註：對應 event 不存在",
+    "annotated_at": "2026-04-19T06:04:00Z"
+  }
+}

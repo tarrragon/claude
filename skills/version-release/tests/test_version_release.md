@@ -20,8 +20,8 @@ uv run .claude/skills/version-release/scripts/version_release.py check
 
 **預期結果**:
 
-- ✅ 自動偵測到正確版本號
-- ✅ 版本號用於後續檢查
+- [OK] 自動偵測到正確版本號
+- [OK] 版本號用於後續檢查
 
 ### TC-02: Pre-flight 檢查
 
@@ -35,10 +35,10 @@ uv run .claude/skills/version-release/scripts/version_release.py check --version
 
 **預期結果**:
 
-- ✅ 檢查工作日誌完成度
-- ✅ 檢查技術債務狀態
-- ✅ 檢查版本同步
-- ✅ 提供清晰的檢查結果
+- [OK] 檢查工作日誌完成度
+- [OK] 檢查技術債務狀態
+- [OK] 檢查版本同步
+- [OK] 提供清晰的檢查結果
 
 ### TC-03: 文件更新檢查
 
@@ -52,10 +52,10 @@ uv run .claude/skills/version-release/scripts/version_release.py update-docs --v
 
 **預期結果**:
 
-- ✅ 預覽 CHANGELOG.md 更新
-- ✅ 預覽 todolist.yaml 更新
-- ✅ 驗證 pubspec.yaml 版本
-- ✅ 不實際修改檔案
+- [OK] 預覽 CHANGELOG.md 更新
+- [OK] 預覽 todolist.yaml 更新
+- [OK] 驗證 pubspec.yaml 版本
+- [OK] 不實際修改檔案
 
 ### TC-04: 完整發布預覽
 
@@ -69,11 +69,11 @@ uv run .claude/skills/version-release/scripts/version_release.py release --versi
 
 **預期結果**:
 
-- ✅ Step 1: Pre-flight 檢查
-- ✅ Step 2: 文件更新預覽
-- ✅ Step 3: Git 操作預覽
-- ✅ 顯示將執行的 git 指令
-- ✅ 不實際執行任何操作
+- [OK] Step 1: Pre-flight 檢查
+- [OK] Step 2: 文件更新預覽
+- [OK] Step 3: Git 操作預覽
+- [OK] 顯示將執行的 git 指令
+- [OK] 不實際執行任何操作
 
 ### TC-05: 版本格式驗證
 
@@ -116,11 +116,11 @@ uv run .claude/skills/version-release/scripts/version_release.py check
 
 **預期結果**:
 
-- ✅ 成功訊息為綠色 (✅)
-- ✅ 錯誤訊息為紅色 (❌)
-- ✅ 警告訊息為黃色 (⚠️)
-- ✅ 標題為藍色
-- ✅ 章節為青色
+- [OK] 成功訊息為綠色 ([OK])
+- [OK] 錯誤訊息為紅色 ([FAIL])
+- [OK] 警告訊息為黃色 ([WARN]️)
+- [OK] 標題為藍色
+- [OK] 章節為青色
 
 ### TC-07: 幫助訊息
 
@@ -140,10 +140,10 @@ uv run .claude/skills/version-release/scripts/version_release.py update-docs --h
 
 **預期結果**:
 
-- ✅ 顯示所有可用命令
-- ✅ 顯示所有可用選項
-- ✅ 提供使用範例
-- ✅ 說明清晰易懂
+- [OK] 顯示所有可用命令
+- [OK] 顯示所有可用選項
+- [OK] 提供使用範例
+- [OK] 說明清晰易懂
 
 ## 滑鼠測試檢查清單
 
@@ -234,8 +234,8 @@ uv run scripts/version_release.py check --version invalid
 | TC-03 文件更新檢查    | ⏳   | 待測試 | -          |
 | TC-04 完整發布預覽    | ⏳   | 待測試 | -          |
 | TC-05 版本格式驗證    | ⏳   | 待測試 | -          |
-| TC-06 彩色輸出驗證    | ✅   | 已驗證 | 2026-01-06 |
-| TC-07 幫助訊息        | ✅   | 已驗證 | 2026-01-06 |
+| TC-06 彩色輸出驗證    | [OK]   | 已驗證 | 2026-01-06 |
+| TC-07 幫助訊息        | [OK]   | 已驗證 | 2026-01-06 |
 
 ## 測試報告
 
@@ -244,11 +244,11 @@ uv run scripts/version_release.py check --version invalid
 
 ### 基本功能驗證
 
-- ✅ 命令行解析
-- ✅ 彩色化輸出
-- ✅ 版本偵測邏輯
-- ✅ 幫助系統
-- ✅ 錯誤處理
+- [OK] 命令行解析
+- [OK] 彩色化輸出
+- [OK] 版本偵測邏輯
+- [OK] 幫助系統
+- [OK] 錯誤處理
 
 ### 待驗證項目
 

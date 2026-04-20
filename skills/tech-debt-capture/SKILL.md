@@ -153,6 +153,6 @@ uv run .claude/skills/tech-debt-capture/scripts/tech_debt_capturer.py capture \
 
 ---
 
-*Version: v1.1*
-*Last Updated: 2026-03-02*
-*維護責任: basil-hook-architect*
+**Last Updated**: 2026-03-02
+**Version**: 1.1.0
+**Maintainer**: basil-hook-architect

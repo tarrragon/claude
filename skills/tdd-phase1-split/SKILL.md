@@ -9,11 +9,11 @@ description: "[DEPRECATED] 已遷移至 /tdd SKILL。請使用 /tdd split 命令
 >
 > - SOLID 拆分分析：`/tdd split`
 > - CLI 腳本：`.claude/skills/tdd/scripts/tdd-phase1-split.py`
-> - 方法論文件：`.claude/skills/tdd/references/phase1-split-methodology.md`
-> - Phase 1 設計指引：`.claude/skills/tdd/references/phase1-design.md`
+> - 方法論文件：`.claude/skills/tdd/references/phase1/rules.md`（SOLID 拆分進階工具與範本章節）
+> - Phase 1 設計指引：`.claude/skills/tdd/references/phase1/rules.md`
 >
 > **遷移日期**：2026-03-12
-> **遷移 Ticket**：0.1.0-W44-001.6
+> **遷移 Ticket**：已遷移
 
 ---
 
@@ -160,7 +160,7 @@ uv run .claude/skills/tdd-phase1-split/scripts/tdd-phase1-split.py create-ticket
 
 ```bash
 uv run .claude/skills/tdd-phase1-split/scripts/tdd-phase1-split.py validate \
-  --ticket-id 0.29.0-W3-001
+  --ticket-id {version}-W{wave}-{seq}
 ```
 
 驗證已拆分的 Tickets 是否符合 SOLID 原則。
@@ -248,42 +248,42 @@ lavender 收到功能需求
 **Step 3: 拆分結果**
 
 ```text
-0.29.0-W3-001（父 Ticket）書籍搜尋功能
+父 Ticket（例：書籍搜尋功能）
 ├── version: 0.29.3（整體完成版本）
-└── children: [W3-002, W3-003, W3-004, W3-005, W3-006]
+└── children: [子 Ticket 1..N]
 
-0.29.0-W3-002（子）SearchQuery 值物件
+子 Ticket：SearchQuery 值物件
 ├── version: 0.29.1
 ├── blockedBy: []
 └── where: Domain
 
-0.29.0-W3-003（子）SearchResult Entity
+子 Ticket：SearchResult Entity
 ├── version: 0.29.1
 ├── blockedBy: []
 └── where: Domain
 
-0.29.0-W3-004（子）ISearchRepository 介面
+子 Ticket：ISearchRepository 介面
 ├── version: 0.29.1
 ├── blockedBy: []
 └── where: Domain
 
-0.29.0-W3-005（子）SearchBooksUseCase
+子 Ticket：SearchBooksUseCase
 ├── version: 0.29.2
-├── blockedBy: [W3-002, W3-003, W3-004]
+├── blockedBy: [值物件、Entity、介面]
 └── where: Application
 
-0.29.0-W3-006（子）SearchWidget
+子 Ticket：SearchWidget
 ├── version: 0.29.3
-├── blockedBy: [W3-005]
+├── blockedBy: [UseCase]
 └── where: Presentation
 ```
 
 **Step 4: 執行順序**
 
 ```text
-v0.29.1：W3-002 + W3-003 + W3-004（並行）
-v0.29.2：W3-005（序列）
-v0.29.3：W3-006（序列）
+階段 1：值物件 + Entity + 介面（並行）
+階段 2：UseCase（序列）
+階段 3：Widget（序列）
 ```
 
 ---
@@ -360,3 +360,8 @@ v0.29.3：W3-006（序列）
 - 任務拆分指南：`.claude/rules/guides/task-splitting.md`
 - Atomic Ticket 方法論：`.claude/methodologies/atomic-ticket-methodology.md`
 - Ticket Skill：`.claude/skills/ticket/SKILL.md`
+
+---
+
+**Last Updated**: 2026-03-02
+**Version**: 1.0.0

@@ -6,24 +6,16 @@
 
 | 目錄 | 載入方式 | 內容 |
 |------|---------|------|
-| `rules/core/` | 自動載入 | 通用品質基線、Bash 規則、認知負擔、文件格式、語言約束 |
+| `rules/core/` | 自動載入 | 通用品質基線、Bash 規則、認知負擔、文件格式、語言約束、AI 對話品質 |
 | `pm-rules/` | PM 按需讀取 | 決策樹、TDD、Ticket、事件回應、Skip-gate |
-| `references/` | 代理人按需讀取 | 語言品質（dart/go/python）、Ticket ID 規範 |
+| `references/` | 代理人按需讀取 | 語言品質（dart/go/python）、Ticket ID 規範、職責分離原則 |
 | `agents/` | 派發時讀取 | 代理人定義（含技術知識庫） |
 
-## 專案設定與代理人知識的職責分離
+**職責分離原則**（設計新規則 / Skill / 文件系統前請讀）：
 
-| 歸屬 | 位置 | 內容 | 範例 |
-|------|------|------|------|
-| **專案設定** | `CLAUDE.md` | 技術選型、架構決策、測試指令 | 「本專案用 Riverpod 3.0 + MVVM」 |
-| **代理人知識** | `.claude/agents/` | 技術最佳實踐、框架寫法 | 「Riverpod 3.0 Notifier 怎麼寫」 |
-| **品質規則** | `.claude/rules/` | 跨專案通用品質標準 | 「函式長度上限 30 行」 |
-
-代理人帶著多種技術的知識（如 Riverpod 2.0、3.0、BLoC），根據 CLAUDE.md 的專案設定選擇適用方案。
-
-**禁止**：建立獨立的語言設定檔（如 FLUTTER.md、PYTHON.md）。所有專案設定統一在 CLAUDE.md。
+- 專案設定 vs 代理人知識分離、框架資產 vs 專案產物分離 → `.claude/references/framework-asset-separation.md`
 
 ---
 
-**Last Updated**: 2026-03-31
-**Version**: 8.0.0 - 新增專案設定與代理人知識職責分離說明（0.31.1-W1-018）
+**Last Updated**: 2026-04-16
+**Version**: 10.0.0 — 精簡至導航表；職責分離章節移至 `references/framework-asset-separation.md`（W10-078.3）

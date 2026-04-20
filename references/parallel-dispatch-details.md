@@ -160,11 +160,11 @@ How: [Task Type: Dispatch] 並行派發 N 個分析視角
 並行任務進度：[3/5 completed]
 | Task | Ticket | Status | Agent |
 |------|--------|--------|-------|
-| 1 | 0.28.0-W1-001 | completed | parsley |
-| 2 | 0.28.0-W1-002 | completed | parsley |
-| 3 | 0.28.0-W1-003 | in_progress | parsley |
-| 4 | 0.28.0-W1-004 | completed | parsley |
-| 5 | 0.28.0-W1-005 | pending | - |
+| 1 | {ticket-id-1} | completed | parsley |
+| 2 | {ticket-id-2} | completed | parsley |
+| 3 | {ticket-id-3} | in_progress | parsley |
+| 4 | {ticket-id-4} | completed | parsley |
+| 5 | {ticket-id-5} | pending | - |
 ```
 
 ---
@@ -173,7 +173,7 @@ How: [Task Type: Dispatch] 並行派發 N 個分析視角
 
 > 核心原則：不依賴代理人自我報告，必須用 `git diff --stat` 驗證實際變更。
 >
-> 來源：W24-004 教訓 — 26 個檔案修改任務，代理人全部回報完成，實際只有 9 個檔案有變更。
+> 來源：歷史教訓 — 26 個檔案修改任務，代理人全部回報完成，實際只有 9 個檔案有變更。
 
 ### 驗證步驟
 

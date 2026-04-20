@@ -163,4 +163,4 @@
 ---
 
 **Last Updated**: 2026-03-11
-**Version**: 2.0.0 - Worth-It Filter 語義修正：「跳過」拆分為「執行決策」+「追蹤決策」，所有發現必須建 Ticket 追蹤（W34-017）
+**Version**: 2.0.0 - Worth-It Filter 語義修正：「跳過」拆分為「執行決策」+「追蹤決策」，所有發現必須建 Ticket 追蹤

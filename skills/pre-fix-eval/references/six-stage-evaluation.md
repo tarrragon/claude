@@ -93,7 +93,7 @@ docs/app-requirements-spec.md:
   必要欄位: title, author, ISBN, dateAdded
 
 docs/work-logs/:
-  找到相關記錄: v0.5.2-W1-003 (Chrome 書籍解析功能)
+  找到相關記錄: 歷史案例 (Chrome 書籍解析功能)
   狀態: 實作中
 ```
 

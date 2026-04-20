@@ -18,20 +18,16 @@ Decision: "allow" (feature 分支) | "deny" (保護分支)
 - 使用 .claude/lib/hook_io 共用模組
 - 消除重複程式碼
 
-重構紀錄 (v0.31.0-W22-001.3):
+重構紀錄:
 - 遷移至統一日誌系統 (hook_utils)
 
-修改紀錄 (0.31.1-W5-001):
+修改紀錄:
 - 將保護分支決策從 "ask" 改為 "deny"（預防 Edit 操作在保護分支上執行）
 - 優化 block 訊息，包含詳細的分支切換指引
 - 移除未使用的 worktree_info 變數
-
-修改紀錄 (0.1.1-W9-002.3):
 - 新增路徑豁免邏輯（.claude/, docs/, CLAUDE.md, README.md 在保護分支上允許編輯）
 - 新增 is_exempt_path_on_protected_branch() 函式
 - 在保護分支上，豁免路徑不阻止編輯
-
-修改紀錄 (0.16.2-W6-001):
 - 強化 worktree 環境支援：當檔案路徑無法推導 cwd 時，嘗試從 CLAUDE_PROJECT_DIR 推導
 - 在 feat/* 分支上，所有路徑檢查均跳過（明確 early return）
 """
@@ -106,19 +102,23 @@ def is_exempt_path_on_protected_branch(file_path: str, cwd: str | None = None) -
         bool: True 表示豁免（允許編輯），False 表示不豁免（需要 deny）
 
     Example:
-        if is_exempt_path_on_protected_branch(".claude/rules/core/decision-tree.md"):
+        if is_exempt_path_on_protected_branch(".claude/pm-rules/decision-tree.md"):
             print("Allowed to edit .claude/ files on main")
     """
     # 豁免的路徑字首
     exempt_prefixes = [
         ".claude/",
         "docs/",
+        "scripts/experiments/",  # 實驗一次性腳本（W15-023，對應 docs/experiments/ 報告）
     ]
 
     # 豁免的精確路徑
     exempt_exact = [
         "CLAUDE.md",
         "README.md",
+        "CHANGELOG.md",
+        ".gitignore",  # repo 層級忽略清單：保護分支放行主線程直接補 runtime artifact / lock（W10-033）
+        ".gitattributes",  # repo 層級檔案屬性：保護分支放行主線程維護 eol/binary 規範（W10-054.1.1）
     ]
 
     project_root = get_project_root(cwd=cwd)
@@ -234,7 +234,7 @@ def main() -> int:
 豁免路徑（允許在保護分支上編輯）：
 - .claude/ （規則、配置、Hook、方法論）
 - docs/ （工作日誌、Ticket 檔案）
-- CLAUDE.md、README.md """
+- CLAUDE.md、README.md、CHANGELOG.md """
         else:
             # 非專案檔案（應該不會發生，但保留說明）
             deny_message = f"""保護分支編輯被阻止

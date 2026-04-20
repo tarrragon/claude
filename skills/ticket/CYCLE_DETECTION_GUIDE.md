@@ -229,8 +229,8 @@ def get_deps(tid):
 ```python
 # 從 ticket_validator 呼叫
 valid, msg, path = validate_blocked_by(
-    ticket_id="0.31.0-W4-002",
-    blocked_by=["0.31.0-W4-001"],
+    ticket_id="1.0.0-W4-002",
+    blocked_by=["1.0.0-W4-001"],
     all_tickets=existing_tickets
 )
 
@@ -245,8 +245,8 @@ if not valid:
 ```python
 # 變更依賴關係時檢測
 valid, msg, path = validate_blocked_by(
-    ticket_id="0.31.0-W4-001",
-    blocked_by=["0.31.0-W4-002"],  # 新的依賴
+    ticket_id="1.0.0-W4-001",
+    blocked_by=["1.0.0-W4-002"],  # 新的依賴
     all_tickets=existing_tickets
 )
 ```

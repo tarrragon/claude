@@ -103,4 +103,4 @@ Plan Mode 產出到 Atomic Ticket 的轉換流程。
 ---
 
 **Last Updated**: 2026-03-11
-**Version**: 3.3.0 - 執行中額外發現流程新增子任務 vs 獨立 Ticket 判斷標準（0.1.0-W36-002）
+**Version**: 3.3.0 - 執行中額外發現流程新增子任務 vs 獨立 Ticket 判斷標準

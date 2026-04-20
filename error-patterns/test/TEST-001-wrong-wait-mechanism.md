@@ -78,13 +78,11 @@ await TestEnvironmentSetup.waitUntil(
 
 | Ticket ID | 狀態 | 說明 |
 |-----------|------|------|
-| 0.25.1-W1-001 | pending | 修復 UC-01 替代流程測試等待機制 |
 
 ## 相關資源
 
 - 工作日誌: `docs/work-logs/v0.6.2-chrome-extension-import-tdd-phase2-test-design.md`
 - 行為優先 TDD 方法論: `.claude/methodologies/behavior-first-tdd-methodology.md`
-- Ticket: `docs/work-logs/v0.25.1/tickets/0.25.1-W1-001.md`
 
 ## 標籤
 

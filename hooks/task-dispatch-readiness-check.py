@@ -190,10 +190,10 @@ def main() -> None:
         input_data = read_hook_input()
         if not input_data:
             logger.error("Invalid JSON input")
-            sys.exit(1)
+            sys.exit(0)
     except Exception as e:
         logger.error(f"讀取輸入失敗: {e}")
-        sys.exit(1)
+        sys.exit(0)
 
     tool_name = input_data.get("tool_name", "")
     tool_input = input_data.get("tool_input") or {}
@@ -239,7 +239,7 @@ def main() -> None:
                     "correct_agent": agent_check_result.get("correct_agent", "未知"),
                     "prompt_preview": prompt[:200]
                 }, logger)
-                print(f"[WARNING] {agent_check_result['error_message']}")
+                print(f"[WARNING] {agent_check_result['error_message']}", file=sys.stderr)
 
     logger.info("所有檢查通過")
     sys.exit(0)

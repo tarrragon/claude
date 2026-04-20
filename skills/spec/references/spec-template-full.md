@@ -128,7 +128,7 @@
 ## Full 填寫範例（WebSocket 心跳偵測場景）
 
 ```markdown
-# 0.2.0-W2-001.4 功能規格（心跳偵測子功能）
+# {version}-{wave}-{seq} 功能規格（心跳偵測子功能）
 
 ## 1. Purpose（目的）
 

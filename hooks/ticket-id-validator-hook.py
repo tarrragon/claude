@@ -252,7 +252,7 @@ def validate_ticket_id_format(ticket_id: str, logger) -> Tuple[bool, str, bool]:
     驗證 Ticket ID 格式（支援寬鬆驗證）
 
     標準 ID：執行完整驗證（格式 + 波次範圍檢查）
-    帶後綴 ID：執行寬鬆驗證（只檢查格式，提示後綴信息，不阻止）
+    帶後綴 ID：執行寬鬆驗證（只檢查格式，提示後綴資訊，不阻止）
 
     Args:
         ticket_id: Ticket ID
@@ -261,7 +261,7 @@ def validate_ticket_id_format(ticket_id: str, logger) -> Tuple[bool, str, bool]:
     Returns:
         tuple - (is_valid, message, has_suffix)
             - is_valid: 格式是否正確
-            - message: 訊息（錯誤或信息提示）
+            - message: 訊息（錯誤或資訊提示）
             - has_suffix: 是否含有後綴（用於區分完整驗證和寬鬆驗證）
     """
     if not ticket_id:
@@ -371,7 +371,7 @@ def validate_ticket_id(file_path: str, ticket_id: str, logger) -> Tuple[bool, st
     完整的 Ticket ID 驗證（支援寬鬆驗證）
 
     標準 ID：執行完整驗證（格式 + 版本一致性檢查）
-    帶後綴 ID：執行寬鬆驗證（只檢查格式，提示信息，不阻止）
+    帶後綴 ID：執行寬鬆驗證（只檢查格式，提示資訊，不阻止）
 
     Args:
         file_path: 檔案路徑
@@ -381,7 +381,7 @@ def validate_ticket_id(file_path: str, ticket_id: str, logger) -> Tuple[bool, st
     Returns:
         tuple - (is_valid, message)
             - is_valid: Ticket ID 是否有效
-            - message: 錯誤或信息訊息
+            - message: 錯誤或資訊訊息
     """
     # 步驟 1: 驗證格式（返回 has_suffix 標誌）
     is_valid, format_msg, has_suffix = validate_ticket_id_format(ticket_id, logger)

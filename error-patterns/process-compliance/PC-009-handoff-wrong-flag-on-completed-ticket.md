@@ -7,7 +7,6 @@
 - **來源版本**: v0.1.0
 - **發現日期**: 2026-03-07
 - **風險等級**: 中
-- **來源 Ticket**: 0.1.0-W11-005
 
 ## 問題描述
 
@@ -57,7 +56,7 @@ ticket handoff <id>
 
 ## 預防措施
 
-1. **文件防護**（已完成，W11-005）：
+1. **文件防護**（已完成）：
    - `workflow-handoff.md` 新增狀態-命令映射規則
    - `handoff-command.md` 新增按 Ticket 狀態選擇命令表和禁止行為
    - `askuserquestion-rules.md` #11a 新增警告：「禁止在 completed ticket 使用此旗標」；#11b 補充正確 CLI 命令

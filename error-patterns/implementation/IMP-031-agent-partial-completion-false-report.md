@@ -52,7 +52,6 @@
 
 | Ticket | 說明 |
 |--------|------|
-| 0.1.0-W40-001.2 | thyme 報告完成 3 個檔案修改（hook_messages.py + 2 個 Hook），實際只修改了 1 個（hook_messages.py）。PM 透過 git diff --stat 發現後手動補完替換。 |
 
 ## 相關模式
 
@@ -62,6 +61,5 @@
 ---
 
 **Created**: 2026-03-12
-**Source**: 0.1.0-W40-001.2 執行過程
 **Category**: implementation
 **Severity**: 中（git diff --stat 可偵測，但需人工介入修復）

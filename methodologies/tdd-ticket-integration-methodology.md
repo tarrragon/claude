@@ -242,7 +242,7 @@ PM 審核 Tickets（確認單一職責）
 
 | 文件 | 關係 | 說明 |
 |------|------|------|
-| [TDD 協作開發流程](../tdd-collaboration-flow.md) | 主流程 | 定義四階段和專家審查 |
+| [TDD 協作開發流程](./tdd-collaboration-flow.md) | 主流程 | 定義四階段和專家審查 |
 | [Atomic Ticket 方法論](./atomic-ticket-methodology.md) | 設計原則 | 單一職責四大檢查 |
 | [Frontmatter Ticket 追蹤](./frontmatter-ticket-tracking-methodology.md) | 追蹤機制 | 狀態管理和指令 |
 | [Ticket 設計派工](./ticket-design-dispatch-methodology.md) | 派工規範 | 5W1H 設計和驗收 |

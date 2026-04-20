@@ -206,9 +206,10 @@ class TestWhoField:
         args.version = "0.31.0"
 
         with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
+            # who 為 dict 結構（W10-086 修復後的正確格式）
             mock_ticket = {
                 "id": "0.31.0-W4-001",
-                "who": "sage-test-architect",
+                "who": {"current": "sage-test-architect", "history": {}},
             }
             mock_load.return_value = mock_ticket
 
@@ -217,7 +218,10 @@ class TestWhoField:
 
                 assert result == 0
                 saved_ticket = mock_save.call_args[0][0]
-                assert saved_ticket["who"] == "parsley-flutter-developer"
+                # set-who 僅更新 who.current，保留 dict 結構（W10-088 修復：防止壓扁）
+                assert isinstance(saved_ticket["who"], dict)
+                assert saved_ticket["who"]["current"] == "parsley-flutter-developer"
+                assert "history" in saved_ticket["who"]
 
 
 class TestWhatField:
@@ -356,9 +360,10 @@ class TestWhereField:
         args.version = "0.31.0"
 
         with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
+            # where 為 dict 結構（W10-086 修復後的正確格式）
             mock_ticket = {
                 "id": "0.31.0-W4-001",
-                "where": "tests/",
+                "where": {"layer": "tests/", "files": ["tests/test_a.py"]},
             }
             mock_load.return_value = mock_ticket
 
@@ -367,7 +372,10 @@ class TestWhereField:
 
                 assert result == 0
                 saved_ticket = mock_save.call_args[0][0]
-                assert saved_ticket["where"] == "lib/commands/"
+                # set-where 僅更新 where.layer，保留 files（W10-088 修復：防止壓扁）
+                assert isinstance(saved_ticket["where"], dict)
+                assert saved_ticket["where"]["layer"] == "lib/commands/"
+                assert saved_ticket["where"]["files"] == ["tests/test_a.py"]
 
 
 class TestWhyField:
@@ -456,9 +464,10 @@ class TestHowField:
         args.version = "0.31.0"
 
         with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
+            # how 為 dict 結構（W10-086 修復後的正確格式）
             mock_ticket = {
                 "id": "0.31.0-W4-001",
-                "how": "使用模組拆分",
+                "how": {"task_type": "Implementation", "strategy": "使用模組拆分"},
             }
             mock_load.return_value = mock_ticket
 
@@ -467,4 +476,73 @@ class TestHowField:
 
                 assert result == 0
                 saved_ticket = mock_save.call_args[0][0]
-                assert saved_ticket["how"] == "按層級和功能拆分"
+                # set-how 僅更新 how.strategy，保留 task_type（W10-088 修復：防止壓扁）
+                assert isinstance(saved_ticket["how"], dict)
+                assert saved_ticket["how"]["strategy"] == "按層級和功能拆分"
+                assert saved_ticket["how"]["task_type"] == "Implementation"
+
+
+class TestDictFieldFlattenRegression:
+    """W10-088 regression：set-who/set-where/set-how 對 dict 結構欄位的三種場景。
+
+    覆蓋 dict（正常）/ 已壓扁為 string（降級復原）/ 缺失欄位（初始化）三種情境。
+    """
+
+    def _run_set(self, executor, field_name: str, subkey: str, new_value: str,
+                 initial_ticket: Dict[str, Any]) -> Dict[str, Any]:
+        """共用 helper：執行 set-* 並回傳被 save 的 ticket。"""
+        args = Mock()
+        args.ticket_id = "0.31.0-W4-099"
+        args.value = new_value
+        args.version = "0.31.0"
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
+            mock_load.return_value = dict(initial_ticket)
+            with patch('ticket_system.lib.ticket_loader.save_ticket') as mock_save:
+                result = executor(args, "0.31.0")
+                assert result == 0
+                return mock_save.call_args[0][0]
+
+    def test_set_who_preserves_history_when_dict(self):
+        """Given who={current,history}, when set-who, then only current updated."""
+        saved = self._run_set(
+            execute_set_who, "who", "current", "new-agent",
+            {"id": "x", "who": {"current": "old-agent", "history": {"t0": "old-agent"}}},
+        )
+        assert saved["who"]["current"] == "new-agent"
+        assert saved["who"]["history"] == {"t0": "old-agent"}
+
+    def test_set_who_recovers_dict_when_flattened_string(self):
+        """Given who 已壓扁為 string（legacy 資料），when set-who, then 重建為 dict。"""
+        saved = self._run_set(
+            execute_set_who, "who", "current", "recovered",
+            {"id": "x", "who": "legacy-flattened"},
+        )
+        assert isinstance(saved["who"], dict)
+        assert saved["who"]["current"] == "recovered"
+        assert "history" in saved["who"]
+
+    def test_set_where_preserves_files(self):
+        """Given where={layer,files}, when set-where, then only layer updated, files 保留。"""
+        saved = self._run_set(
+            execute_set_where, "where", "layer", "新層級",
+            {"id": "x", "where": {"layer": "舊層級", "files": ["a.py", "b.py"]}},
+        )
+        assert saved["where"]["layer"] == "新層級"
+        assert saved["where"]["files"] == ["a.py", "b.py"]
+
+    def test_set_how_preserves_task_type(self):
+        """Given how={task_type,strategy}, when set-how, then only strategy updated。"""
+        saved = self._run_set(
+            execute_set_how, "how", "strategy", "新策略",
+            {"id": "x", "how": {"task_type": "Analysis", "strategy": "舊策略"}},
+        )
+        assert saved["how"]["strategy"] == "新策略"
+        assert saved["how"]["task_type"] == "Analysis"
+
+    def test_set_what_scalar_field_unchanged(self):
+        """Given what（非 dict 欄位）, when set-what, then 直接覆寫 string。"""
+        saved = self._run_set(
+            execute_set_what, "what", "", "新描述",
+            {"id": "x", "what": "舊描述"},
+        )
+        assert saved["what"] == "新描述"

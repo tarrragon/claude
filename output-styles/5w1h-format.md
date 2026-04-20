@@ -95,3 +95,4 @@ How: [Task Type: Review] git add && git commit
 從 UserPromptSubmit Hook 獲取當前 Token，格式為：`5W1H-YYYYMMDD-HHMMSS-XXXXXX`
 
 如果無法獲取 Token，使用佔位符 `5W1H-PENDING` 並在回應中說明。
+

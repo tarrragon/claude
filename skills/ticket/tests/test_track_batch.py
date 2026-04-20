@@ -173,10 +173,11 @@ class TestBatchComplete:
 
             mock_load.side_effect = load_side_effect
 
-            result = execute_batch_complete(args, "0.31.0")
+            with patch('ticket_system.commands.track_batch.save_ticket'):
+                result = execute_batch_complete(args, "0.31.0")
 
-            # 由於有一個成功的項目，返回 0（實現邏輯：success_count > 0）
-            assert result == 0
+                # 由於有一個成功的項目，返回 0（實現邏輯：success_count > 0）
+                assert result == 0
 
     def test_batch_complete_nonexistent_ticket(self):
         """
@@ -203,10 +204,11 @@ class TestBatchComplete:
 
             mock_load.side_effect = load_side_effect
 
-            result = execute_batch_complete(args, "0.31.0")
+            with patch('ticket_system.commands.track_batch.save_ticket'):
+                result = execute_batch_complete(args, "0.31.0")
 
-            # 由於有一個成功的項目，返回 0（實現邏輯：success_count > 0）
-            assert result == 0
+                # 由於有一個成功的項目，返回 0（實現邏輯：success_count > 0）
+                assert result == 0
 
     def test_batch_complete_single_ticket(self):
         """
@@ -242,10 +244,11 @@ class TestBatchComplete:
         args.ticket_ids = "invalid-id-1,invalid-id-2"
         args.version = "0.31.0"
 
-        result = execute_batch_complete(args, "0.31.0")
+        with patch('ticket_system.commands.track_batch.save_ticket'):
+            result = execute_batch_complete(args, "0.31.0")
 
-        # 應該返回錯誤或 0（取決於實現）
-        assert result in [0, 1]
+            # 應該返回錯誤或 0（取決於實現）
+            assert result in [0, 1]
 
     def test_batch_complete_duplicate_ids(self):
         """
@@ -472,6 +475,7 @@ class TestBatchCompleteEnhanced:
             with patch('ticket_system.commands.track_batch.load_and_validate_ticket') as mock_load:
                 mock_load.return_value = None
 
-                result = execute_batch_complete(args, "0.31.0")
+                with patch('ticket_system.commands.track_batch.save_ticket'):
+                    result = execute_batch_complete(args, "0.31.0")
 
-                assert result == 1
+                    assert result == 1

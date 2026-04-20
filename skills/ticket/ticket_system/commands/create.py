@@ -26,6 +26,7 @@ from ticket_system.lib.ticket_loader import (
 from ticket_system.lib.ticket_validator import (
     validate_ticket_id,
     extract_wave_from_ticket_id,
+    extract_version_from_ticket_id,
     validate_blocked_by,
 )
 from ticket_system.lib.messages import (
@@ -66,6 +67,7 @@ from ticket_system.lib.ticket_builder import (
     create_ticket_frontmatter,
     create_ticket_body,
     update_parent_children,
+    update_source_spawned_tickets,
 )
 from ticket_system.lib.acceptance_auditor import detect_vague_acceptance, detect_srp_violations
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
@@ -578,6 +580,13 @@ def _parse_cli_args_to_config(
     # 若有 TDD Phase 順序，取第一個 Phase 作為初始階段
     tdd_phase = tdd_result.phases[0] if tdd_result.phases else None
 
+    # PC-018: why 必填驗證（DOC 類型豁免）
+    why_value = args.why or (parent_ticket.get("why") if parent_ticket else DEFAULT_UNDEFINED_VALUE)
+    if why_value == DEFAULT_UNDEFINED_VALUE and ticket_type != "DOC":
+        print(f"[ERROR] --why 為必填欄位（type={ticket_type}）。請提供需求依據。", file=sys.stderr)
+        print("  範例: --why '匯出功能需支援 v2 格式'", file=sys.stderr)
+        sys.exit(1)
+
     return {
         "ticket_id": ticket_id,
         "version": version,
@@ -590,12 +599,13 @@ def _parse_cli_args_to_config(
         "when": args.when or DEFAULT_UNDEFINED_VALUE,
         "where_layer": args.where_layer or (parent_ticket.get("where", {}).get("layer") if parent_ticket else DEFAULT_UNDEFINED_VALUE),
         "where_files": where_files,
-        "why": args.why or (parent_ticket.get("why") if parent_ticket else DEFAULT_UNDEFINED_VALUE),
+        "why": why_value,
         "how_task_type": args.how_type or DEFAULT_HOW_TASK_TYPE,
         "how_strategy": args.how_strategy or DEFAULT_UNDEFINED_VALUE,
         "parent_id": args.parent,
         "blocked_by": blocked_by if blocked_by else None,
         "related_to": related_to if related_to else None,
+        "source_ticket": args.source_ticket,
         "acceptance": acceptance,
         "tdd_phase": tdd_phase,
         "tdd_stage": tdd_result.phases,
@@ -639,6 +649,53 @@ def _validate_before_persist(
     return True
 
 
+def _validate_create_checklist(
+    config: TicketConfig,
+    ticket_type: str,
+) -> List[str]:
+    """PROP-009 清單式欄位驗證。
+
+    建立前檢查建議填寫的欄位，回傳缺失欄位名稱清單。
+    此驗證為 WARNING 層級，不阻擋建立。
+
+    Args:
+        config: Ticket 配置
+        ticket_type: Ticket 類型（IMP, ANA, DOC 等）
+
+    Returns:
+        缺失欄位名稱的清單，空清單表示全部通過
+    """
+    missing: List[str] = []
+
+    # where.files 至少 1 個
+    if not config.get("where_files"):
+        missing.append("where.files")
+
+    # acceptance 至少 1 項
+    if not config.get("acceptance"):
+        missing.append("acceptance")
+
+    # decision_tree_path 三個子欄位都非空（DOC 類型和子任務豁免）
+    is_exempt_from_decision_tree = (
+        ticket_type == "DOC" or config.get("parent_id")
+    )
+    if not is_exempt_from_decision_tree:
+        dt = config.get("decision_tree_path") or {}
+        has_complete_path = (
+            dt.get("entry_point")
+            and dt.get("final_decision")
+            and dt.get("rationale")
+        )
+        if not has_complete_path:
+            missing.append("decision_tree_path")
+
+    # when 非「待定義」
+    if config.get("when") == DEFAULT_UNDEFINED_VALUE:
+        missing.append("when")
+
+    return missing
+
+
 def _build_and_save_ticket(
     version: str,
     ticket_id: str,
@@ -660,7 +717,11 @@ def _build_and_save_ticket(
         Dict[str, Any]: 建立的 Ticket 物件
     """
     frontmatter = create_ticket_frontmatter(config)
-    body = create_ticket_body(frontmatter["what"], frontmatter["who"]["current"])
+    body = create_ticket_body(
+        frontmatter["what"],
+        frontmatter["who"]["current"],
+        frontmatter.get("type", ""),
+    )
     ticket = frontmatter.copy()
     ticket["_body"] = body
 
@@ -779,12 +840,36 @@ def _persist_and_report(
     if not _validate_before_persist(version, ticket_id, config):
         return 1
 
+    # 步驟 1.5：PROP-009 清單式欄位驗證（WARNING，不阻擋）
+    missing_fields = _validate_create_checklist(config, config.get("ticket_type", "IMP"))
+    if missing_fields:
+        print()
+        print(format_warning("Create 清單驗證：以下欄位未填寫"))
+        for field in missing_fields:
+            print(f"  - {field}")
+        print(format_info("這些欄位建議在建立時填寫，避免交接時才發現遺漏"))
+        print()
+
     # 步驟 2：持久化
     ticket = _build_and_save_ticket(version, ticket_id, config)
     ticket_path = str(get_ticket_path(version, ticket_id))
 
     # 步驟 3：更新關係
     parent_info = _update_parent_and_get_parent_info(args, version, ticket_id)
+
+    # 步驟 3.5：更新 source 的 spawned_tickets（PC-073；與 --parent 互斥，兩者不會同時觸發）
+    if args.source_ticket:
+        if update_source_spawned_tickets(args.source_ticket, ticket_id):
+            print(format_msg(
+                CreateMessages.SOURCE_TICKET_UPDATED,
+                source_id=args.source_ticket,
+                new_id=ticket_id,
+            ))
+        else:
+            print(format_warning(
+                CreateMessages.SOURCE_UPDATE_FAILED,
+                source_id=args.source_ticket,
+            ))
 
     # 步驟 4：回報結果
     _report_creation_success(
@@ -800,6 +885,67 @@ def _persist_and_report(
     return 0
 
 
+def _validate_source_ticket_arg(args: argparse.Namespace) -> bool:
+    """Step 1.5：--source-ticket 參數前置驗證（PC-073）。
+
+    檢查順序（fail-fast，三視角共識）：
+    1. 互斥檢查：--source-ticket 與 --parent 不可同用
+    2. ID 格式檢查：沿用 validate_ticket_id
+    3. 存在性檢查：載入 source ticket
+    4. 狀態警告：completed 允許但顯示 WARNING（allow + warning，不阻擋）
+
+    所有錯誤路徑在持久化前結束；fail-fast 順序一致。
+
+    Args:
+        args: 命令行參數（含 source_ticket 和 parent）
+
+    Returns:
+        bool: True 表示驗證通過（或未提供 --source-ticket）；False 表示應 early return 1
+    """
+    # Guard Clause：未提供 --source-ticket 則跳過
+    if not args.source_ticket:
+        return True
+
+    # 子步驟 1：互斥檢查（最先；測試 B4 的 ordering 斷言依此成立）
+    if args.parent:
+        print(format_error(CreateMessages.SOURCE_PARENT_MUTUALLY_EXCLUSIVE))
+        return False
+
+    # 子步驟 2：ID 格式檢查（沿用 validate_ticket_id）
+    if not validate_ticket_id(args.source_ticket):
+        print(format_error(
+            ErrorMessages.INVALID_TICKET_ID_FORMAT,
+            ticket_id=args.source_ticket,
+        ))
+        return False
+
+    # 子步驟 3：存在性檢查
+    source_version = extract_version_from_ticket_id(args.source_ticket)
+    if source_version is None:
+        print(format_error(
+            CreateMessages.SOURCE_TICKET_NOT_FOUND,
+            source_id=args.source_ticket,
+        ))
+        return False
+    source_ticket = load_ticket(source_version, args.source_ticket)
+    if source_ticket is None:
+        print(format_error(
+            CreateMessages.SOURCE_TICKET_NOT_FOUND,
+            source_id=args.source_ticket,
+        ))
+        return False
+
+    # 子步驟 4：狀態警告（allow + warning；不阻擋）
+    if source_ticket.get("status") == STATUS_COMPLETED:
+        print(format_warning(
+            CreateMessages.SOURCE_TICKET_COMPLETED_WARN,
+            source_id=args.source_ticket,
+        ))
+        # 非 ANA type 無額外警告（pepper §8 決策：消除特例）
+
+    return True
+
+
 def execute(args: argparse.Namespace) -> int:
     """執行 create 命令 — 協調四個步驟"""
     version = resolve_version(args.version)
@@ -807,11 +953,23 @@ def execute(args: argparse.Namespace) -> int:
         print(format_error(ErrorMessages.VERSION_NOT_DETECTED))
         return 1
 
+    # 驗證版本已在 todolist.yaml 中註冊
+    from ticket_system.lib.version import validate_version_registered
+    is_valid, error_msg = validate_version_registered(version)
+    if not is_valid:
+        print(format_error(error_msg))
+        return 1
+
     # Step 1: 解析版本和 Ticket ID
     resolved = _resolve_ticket_id_and_wave(args, version)
     if resolved is None:
         return 1
     version, ticket_id, wave = resolved
+
+    # Step 1.5: --source-ticket 前置驗證（PC-073）
+    # 順序：互斥 → 格式 → 存在 → 狀態
+    if not _validate_source_ticket_arg(args):
+        return 1
 
     # 識別任務類型並取得 TDD 順序建議（需要在 Step 2 使用）
     ticket_type = args.type or "IMP"
@@ -863,6 +1021,9 @@ def _print_create_checklist(
 
     # 變更 4：初步認知負擔評估
     _print_cognitive_load_assessment(new_ticket)
+
+    # 變更 5：strategy 完整度檢查（W3-011, PC-040 引導）
+    _print_strategy_completeness_check(new_ticket)
 
     # SRP 偵測（W3-002）
     if new_ticket:
@@ -1040,6 +1201,32 @@ def _print_cognitive_load_assessment(
         ))
 
 
+def _print_strategy_completeness_check(
+    new_ticket: Optional[Dict[str, Any]],
+) -> None:
+    """
+    檢查 how.strategy 欄位是否已填寫（W3-011, PC-040 引導）。
+
+    IMP/ADJ 類型的 Ticket 需要在派發代理人前提供 Context Bundle，
+    strategy 欄位是其中的關鍵部分。提前提醒 PM 填寫。
+    """
+    if not new_ticket:
+        return
+
+    ticket_type = new_ticket.get("type", "IMP")
+    if ticket_type not in ("IMP", "ADJ"):
+        return
+
+    strategy = new_ticket.get("how", {}).get("strategy", "")
+    if not strategy or strategy == DEFAULT_UNDEFINED_VALUE:
+        print(
+            "[提醒] how.strategy 尚未填寫。"
+            "派發代理人前，請將分析結果寫入 Ticket Context Bundle（PC-040）\n"
+            "   → ticket track append-log <id> --section \"Problem Analysis\" "
+            "\"### Context Bundle\\n...\""
+        )
+
+
 def register(subparsers: argparse._SubParsersAction) -> None:
     """註冊 create 子命令"""
     parser = subparsers.add_parser(
@@ -1076,10 +1263,18 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--where-layer", help="架構層級: Domain, Application, Infrastructure, Presentation"
     )
     parser.add_argument("--where", "--where-files", dest="where_files", help="影響檔案（逗號分隔，如 'file1.py,file2.py'）")
-    parser.add_argument("--why", help="需求依據")
+    parser.add_argument("--why", help="需求依據（IMP/ANA/ADJ 類型必填）")
     parser.add_argument("--how-type", help="Task Type: Implementation, Analysis, etc.")
     parser.add_argument("--how-strategy", help="實作策略")
     parser.add_argument("--parent", help="父 Ticket ID（子任務序號自動產生，勿指定 --seq）")
+    parser.add_argument(
+        "--source-ticket",
+        dest="source_ticket",
+        help=(
+            "衍生來源 Ticket ID（建立 spawned_tickets 衍生關係，與 --parent 互斥）；"
+            "衍生項獨立排程，不阻擋 source complete（PC-073）"
+        ),
+    )
     parser.add_argument("--blocked-by", help="依賴的 Ticket IDs（逗號分隔，如 'ID1,ID2'）")
     parser.add_argument("--related-to", help="相關的 Ticket IDs（逗號分隔，如 'ID1,ID2'）")
     parser.add_argument("--acceptance", action="append", help="驗收條件（多次 --acceptance 或 | 分隔，如 '條件A|條件B'）")

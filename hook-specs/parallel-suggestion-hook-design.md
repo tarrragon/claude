@@ -254,7 +254,7 @@ cat .claude/hook-logs/parallel-suggestion/analysis-$(date +%Y%m%d).log
 ## 相關文件和規則
 
 ### 規則參考
-- [decision-tree](.claude/rules/core/decision-tree.md) - 第四層、第四層半（並行化評估）
+- [decision-tree](.claude/pm-rules/decision-tree.md) - 第四層、第四層半（並行化評估）
 - [parallel-dispatch](.claude/rules/guides/parallel-dispatch.md) - 並行派發指南
 - [ticket-lifecycle](.claude/pm-rules/ticket-lifecycle.md) - Ticket 生命週期
 
@@ -317,7 +317,7 @@ cat .claude/hook-logs/parallel-suggestion/analysis-$(date +%Y%m%d).log
 
 1. **增強並行分析**
    - 支援跨層級的並行檢查
-   - 智能的檔案重疊檢測
+   - 自動化檔案重疊檢測
 
 2. **改進報告格式**
    - 可視化並行分組

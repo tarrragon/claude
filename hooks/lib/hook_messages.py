@@ -17,7 +17,11 @@ Hook 系統訊息常數模組 - 集中管理所有 Hook 的使用者訊息
   backward-compatible alias 仍在此模組可用（見下方）
 """
 
-from lib.ask_user_question_reminders import AskUserQuestionReminders, AskUserQuestionMessages  # noqa: F401
+from lib.ask_user_question_reminders import (  # noqa: F401
+    AskUserQuestionReminders,
+    AskUserQuestionMessages,
+    AUQOptionPatternMessages,
+)
 
 
 class CoreMessages:
@@ -55,8 +59,8 @@ class GateMessages:
   1. 執行 `/ticket create` 建立新 Ticket
   2. 或執行 `/ticket track claim {id}` 認領現有 Ticket
 
-詳見: .claude/rules/core/decision-tree.md
-詳見: .claude/rules/forbidden/skip-gate.md"""
+詳見: .claude/pm-rules/decision-tree.md
+詳見: .claude/pm-rules/skip-gate.md"""
 
     TICKET_NOT_CLAIMED_ERROR = """錯誤：Ticket {ticket_id} 尚未認領
 
@@ -68,8 +72,8 @@ class GateMessages:
   2. 或執行 `/ticket track claim {ticket_id}` 親自認領
   3. 使用 `/ticket track query {ticket_id}` 查看詳細資訊
 
-詳見: .claude/rules/core/decision-tree.md
-詳見: .claude/rules/forbidden/skip-gate.md"""
+詳見: .claude/pm-rules/decision-tree.md
+詳見: .claude/pm-rules/skip-gate.md"""
 
     DECISION_TREE_MISSING_ERROR = """錯誤：Ticket {ticket_id} 缺少決策樹欄位
 
@@ -83,8 +87,8 @@ class GateMessages:
   2. 使用 `/ticket track query {ticket_id}` 查看當前 Ticket
   3. 完成編輯後重新執行命令
 
-詳見: .claude/rules/core/decision-tree.md
-詳見: .claude/rules/forbidden/skip-gate.md"""
+詳見: .claude/pm-rules/decision-tree.md
+詳見: .claude/pm-rules/skip-gate.md"""
 
     TICKET_STATUS_UNKNOWN_ERROR = """錯誤：Ticket {ticket_id} 狀態不明 ({status})
 
@@ -109,7 +113,7 @@ Ticket 標題: {title}
 如果這是正確的 Ticket，請忽略此警告。
 如果不是，請先建立或認領正確的 Ticket。
 
-詳見: .claude/rules/forbidden/skip-gate.md
+詳見: .claude/pm-rules/skip-gate.md
 
 ============================================================
 """
@@ -144,6 +148,35 @@ ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於
   2. 是否有建立 children 任務（子任務鏈）或 spawned_tickets（並行獨立 Ticket）？
 
 如果分析結論確實不需要後續工作，請在 Ticket 內容中明確說明理由。"""
+
+    # ANA Ticket spawned tickets 含非 terminal 項目警告（W12-004 Phase 1）
+    # 防護性 ANA 之 spawned IMP 仍 pending/in_progress/blocked 時觸發
+    ANA_SPAWNED_NON_TERMINAL_WARNING = """[WARNING] Acceptance Gate: ANA spawned tickets 含非 terminal 項目
+
+防護性 ANA 通常需要 spawned IMP 全部落地（completed/closed）後才該 complete。
+目前以下 spawned ticket 仍處於非 terminal 狀態（{non_terminal_count} 項）：
+
+{non_terminal_list}
+
+請確認：
+  1. 此 ANA 是研究性還是防護性？防護性 ANA 應等 spawned IMP 完成後再 complete。
+  2. 如為研究性（純分析、結論已落地為設計文件/規則）可繼續 complete。
+  3. 如為防護性（需 IMP 落地才算解決問題）建議 release 並先推進 spawned IMP。
+
+註：本警告為 shallow 一層檢查，不 recurse 進 spawned 的子任務。"""
+
+    # W15-003: ANA spawned tickets 未完成錯誤（阻擋 complete）
+    ANA_SPAWNED_INCOMPLETE_ERROR = """[ERROR] Acceptance Gate: ANA 的 spawned_tickets 未全部完成
+
+Ticket: {ticket_id}
+標題: {title}
+進度: {completed_count}/{total_count} completed
+
+未完成的 spawned tickets（{non_terminal_count} 項）：
+{non_terminal_list}
+
+ANA complete 要求所有衍生 IMP/ANA 先完成，以確保分析結論已落實。
+請先推進未完成的 spawned tickets，或若為純研究性 ANA，請移除不相關的 spawned_tickets 欄位。"""
 
     # 建立後品質驗收未通過錯誤訊息（creation-acceptance-gate-hook.py）
     CREATION_NOT_ACCEPTED_ERROR = """錯誤：Ticket {ticket_id} 尚未通過建立後品質驗收
@@ -191,7 +224,7 @@ ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於
      - Python Hook: thyme-python-developer
   3. 代理人完成實作和測試後回傳結果
 
-詳見: .claude/rules/forbidden/skip-gate.md"""
+詳見: .claude/pm-rules/skip-gate.md"""
 
     # .claude/ 非白名單路徑（防止建立未預定義子目錄）
     EDIT_BLOCKED_CLAUDE_INVALID_PATH = """錯誤：主線程禁止寫入 .claude/ 非白名單路徑
@@ -217,7 +250,7 @@ ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於
   2. 若需要新增 .claude/ 子目錄，請聯繫 PM 更新白名單
   3. 使用 /ticket create 建立對應需求
 
-詳見: .claude/rules/forbidden/skip-gate.md"""
+詳見: .claude/pm-rules/skip-gate.md"""
 
     # 其他禁止路徑（預設拒絕原則）
     EDIT_BLOCKED_DEFAULT_DENY = """錯誤：主線程禁止編輯此路徑（預設拒絕）
@@ -229,14 +262,15 @@ ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於
 主線程允許編輯的路徑：
   - .claude/ 系統檔案 (plans/rules/methodologies/hooks/skills/agents/references/error-patterns/handoff/)
   - docs/** (含 work-logs/、tickets/、參考文件等)
-  - CLAUDE.md
+  - CLAUDE.md / CHANGELOG.md
+  - .gitignore（repo 層級忽略清單，W10-033）
 
 建議操作：
   1. 檢查目標檔案是否在允許路徑中
   2. 如果需要編輯其他檔案，請建立 Ticket 派發對應代理人
   3. 使用 /ticket create 建立任務
 
-詳見: .claude/rules/forbidden/skip-gate.md"""
+詳見: .claude/pm-rules/skip-gate.md"""
 
     # ========================================================================
     # Ticket Path Guard Hook - 錯誤位置操作
@@ -327,7 +361,7 @@ oregano-data-miner 代理人執行，以獲得更專業的蒐集
   - 完整的執行記錄和追蹤
   - 遵循工作流規範
 
-詳見: .claude/rules/forbidden/skip-gate.md
+詳見: .claude/pm-rules/skip-gate.md
 詳見: .claude/agents/oregano-data-miner.md
 
 ============================================================
@@ -352,7 +386,7 @@ oregano-data-miner 代理人執行，以獲得更專業的蒐集
   4. 對應代理人執行修復
 
 詳見: .claude/rules/flows/incident-response.md
-詳見: .claude/rules/forbidden/skip-gate.md
+詳見: .claude/pm-rules/skip-gate.md
 
 ============================================================
 """
@@ -624,7 +658,7 @@ class ValidationMessages:
 
 建議: 請使用 Edit Tool 替代 Bash sed/awk，以獲得更好的權限控制和變更追蹤
 
-詳情: 參考 .claude/agent-collaboration.md 的「工具使用強制規範」"""
+詳情: 參考 .claude/analyses/archived/agent-collaboration.md 的「工具使用強制規範」"""
 
     # ========================================================================
     # Other Hooks

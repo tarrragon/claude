@@ -113,4 +113,3 @@
 
 ### 詳細資料
 - [LSP 優先策略 SKILL](../skills/lsp-first/SKILL.md) - 完整操作指南和故障排除
-- [Hook 系統快速參考](../hook-system-reference.md) - LSP 環境檢查 Hook

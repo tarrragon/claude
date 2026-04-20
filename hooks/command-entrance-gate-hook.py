@@ -187,8 +187,8 @@ MANAGEMENT_PATTERNS = [
 DISPATCH_PATTERNS = [
     "派發", "並行", "繼續", "序列",
     "開始處理", "恢復", "接手",
-    "開始",    # 「W25-006 開始」等 Ticket 生命週期指令
-    "完成",    # 「W25-006 完成」等 Ticket 生命週期指令
+    "開始",    # Ticket 生命週期指令
+    "完成",    # Ticket 生命週期指令
     # 工作流延續
     "接著",    # 「接著處理下一個」工作流延續
     "然後",    # 「然後測試」工作流延續
@@ -239,6 +239,9 @@ ALL_BYPASS_PATTERNS = (
     TICKET_PATTERNS + MANAGEMENT_PATTERNS + DISPATCH_PATTERNS +
     EXPLORATION_PATTERNS + DISCUSSION_PATTERNS
 )
+
+# 長文本豁免閾值（超過此長度且不以開發動詞開頭，視為描述/討論）
+LONG_TEXT_THRESHOLD = 50
 
 # Exit Code
 EXIT_SUCCESS = 0
@@ -330,6 +333,21 @@ def is_management_operation(prompt: str, logger) -> bool:
     for pattern in ALL_BYPASS_PATTERNS:
         if pattern in prompt_lower:
             logger.info(f"識別為管理/討論操作（白名單）: {pattern}")
+            return True
+
+    # 長文本豁免：超過閾值且不以開發動詞開頭，視為描述/討論
+    # 根據：短指令（如「實作 UC-06」）才是真正的開發命令，
+    # 長段落（如「抱歉我剛剛說反了，這是APP專案的部分...」）是對話描述
+    if len(prompt_stripped) > LONG_TEXT_THRESHOLD:
+        starts_with_dev_keyword = any(
+            prompt_stripped.startswith(kw)
+            for kw in DEVELOPMENT_KEYWORDS
+        )
+        if not starts_with_dev_keyword:
+            logger.info(
+                f"長文本豁免（{len(prompt_stripped)} 字 > {LONG_TEXT_THRESHOLD}，"
+                f"且不以開發動詞開頭）"
+            )
             return True
 
     return False

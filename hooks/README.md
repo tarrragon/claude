@@ -212,8 +212,7 @@ cat .claude/hook-logs/agent-dispatch-warnings.jsonl | jq '.'
 
 ### 使用指南
 
-- **完整指南**：`/Users/tarragon/Projects/book_overview_app/docs/agent-dispatch-auto-retry-guide.md`
-- **快速參考**：`/Users/tarragon/Projects/book_overview_app/.claude/quick-ref-agent-dispatch-recovery.md`
+- **完整指南**：`docs/agent-dispatch-auto-retry-guide.md`
 
 ### 實作報告
 

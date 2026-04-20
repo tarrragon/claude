@@ -1534,4 +1534,4 @@ Ticket 6：[Layer 1] 實作搜尋結果列表 Widget
 
 - [Atomic Ticket 方法論](./atomic-ticket-methodology.md) - 單一職責設計原則
 - [敏捷重構方法論](./agile-refactor-methodology.md) - Agent 分工協作模式
-- [TDD 四階段流程](../tdd-collaboration-flow.md) - 開發流程整合
+- [TDD 四階段流程](./tdd-collaboration-flow.md) - 開發流程整合

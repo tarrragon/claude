@@ -208,7 +208,7 @@ try {
 
 ## 相關文件
 
-- .claude/rules/core/quality-common.md - 通用品質基線
+- .claude/references/quality-common.md - 通用品質基線
 - .claude/methodologies/package-import-methodology.md - 導入路徑方法論
 - .claude/methodologies/business-layer-i18n-management-methodology.md - i18n 方法論
 - .claude/references/observability-rules.md - 通用可觀測性規則
@@ -216,4 +216,4 @@ try {
 ---
 
 **Last Updated**: 2026-03-27
-**Version**: 1.1.0 - 新增可觀測性要求章節（0.2.1-W1-003）
+**Version**: 1.1.0 - 新增可觀測性要求章節

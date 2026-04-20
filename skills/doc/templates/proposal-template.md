@@ -16,7 +16,7 @@ priority: null                   # P0 / P1 / P2
 outputs:
   spec_refs: []                  # 轉化的 spec 檔案，如 [spec/isbn-scan.md]
   usecase_refs: []               # 轉化的 usecase 檔案，如 [usecases/UC-02-scan.md]
-  ticket_refs: []                # 開立的 ticket，如 [0.17.0-W1-001]
+  ticket_refs: []                # 開立的 ticket，如 [{version}-W{wave}-{seq}]
 
 # 關聯
 related_proposals: []            # 相關提案，如 [PROP-001]

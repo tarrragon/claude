@@ -1,7 +1,6 @@
 # CQ-004: namedtuple/dataclass 早退路徑返回裸型別（AttributeError 潛在 Bug）
 
 **發現日期**: 2026-03-07
-**相關 Ticket**: 0.1.0-W7-004, 0.1.0-W8-001
 
 ## 症狀
 

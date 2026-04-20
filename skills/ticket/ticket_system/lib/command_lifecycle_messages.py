@@ -138,9 +138,17 @@ class LifecycleMessages:
     # 認領檢查清單相關訊息
     CHECKLIST_DESIGN_DOCS = "   [ ] 已閱讀相關設計文件（功能規格、測試案例等）"
     CHECKLIST_ACCEPTANCE = "   [ ] 已理解驗收條件"
+    # Context 驗證檢查項（W12-009：認領時強制補充背景資訊）
+    CHECKLIST_TARGET_EXISTS = "   [ ] 已驗證目標檔案/模組存在（where.files 列出的路徑）"
+    CHECKLIST_ASSUMPTIONS_VALID = "   [ ] 已確認前提假設仍成立（架構狀態、依賴、API 未變更）"
+    CHECKLIST_CROSS_PROJECT = "   [ ] 已檢查跨專案/版本關聯性（範疇正確、無重疊 Ticket）"
     CHECKLIST_DEV_ENV = "   [ ] 開發環境已準備就緒"
     CHECKLIST_ERROR_PATTERNS = "   [ ] 已查詢是否有相關的 error-patterns"
     CHECKLIST_SCOPE_VERIFICATION = "   [ ] 已獨立驗證 Ticket 描述的數量/範圍（描述是草稿，可能有遺漏）"
+    CHECKLIST_CONTEXT_BUNDLE = (
+        "   [ ] 派發代理人前已將分析結果寫入 Ticket Context Bundle（PC-040）\n"
+        "       → ticket track append-log <id> --section \"Problem Analysis\" \"### Context Bundle\\n...\""
+    )
     CHECKLIST_EXECUTION_LOG = "   [ ] 完成時記得更新執行日誌（ticket track append-log）"
     CONFIRM_DEPENDENCIES = "   請確認這些依賴已完成後再開始"
 
@@ -163,6 +171,23 @@ class LifecycleMessages:
     RELEASE_PROMPT = "是否確認釋放此 Ticket? (y/n): "
     RELEASE_CANCELLED = "已取消釋放"
     RELEASE_INVALID_INPUT = "無效的輸入，請輸入 y 或 n"
+
+    # ANA spawned 非 terminal 檢查訊息（W12-005 / PC-075 Phase 2）
+    SPAWNED_NON_TERMINAL_HEADER = (
+        "[WARNING] ANA Ticket {ticket_id} 有 {count} 個 spawned 非 terminal："
+    )
+    SPAWNED_NON_TERMINAL_ITEM = "  - {spawned_id}: {status}"
+    SPAWNED_INTERACTIVE_PROMPT = "確定 complete？(y/N) "
+    SPAWNED_CANCELLED_INFO = "[INFO] 已取消 complete 操作（spawned 未完成）"
+    SPAWNED_NON_INTERACTIVE_ERROR = (
+        "[ERROR] ANA Ticket {ticket_id} 有 {count} 個 spawned 非 terminal，"
+        "非互動環境需 --yes-spawned flag"
+    )
+    SPAWNED_NON_INTERACTIVE_USAGE = "  用法: ticket track complete {ticket_id} --yes-spawned"
+    SPAWNED_FLAG_BYPASS_HEADER = (
+        "[WARNING] ANA Ticket {ticket_id} 有 {count} 個 spawned 非 terminal"
+        "（--yes-spawned flag 旁路）："
+    )
 
 
 class ResumeMessages:
@@ -192,6 +217,9 @@ class ResumeMessages:
     ARG_TICKET_ID_HELP = "Ticket ID (格式: {version}-W{wave}-{seq}，與 --list 配合時可省略)"
     ARG_LIST_HELP = "列出所有待恢復的任務"
     ARG_VERSION_HELP = "指定版本 (如不指定則自動偵測)"
+
+    # 已完成 Ticket 自動導向
+    REDIRECT_TO_TARGET = "[建議] 此 Ticket 已完成，請直接 resume 目標 Ticket："
 
     # Resume 後 Checkpoint（標準化接手流程引導）
     CHECKPOINT_HEADER = "接手後的標準化步驟："
@@ -352,6 +380,30 @@ class CreateMessages:
     TICKET_LOCATION = "   Location: {ticket_path}"
 
     PARENT_UPDATED = "   Parent: {parent_id} (已更新 children)"
+
+    # --source-ticket 相關訊息（PC-073：spawned 關係 CLI 能力缺口修補）
+    SOURCE_TICKET_NOT_FOUND = (
+        "[ERROR] --source-ticket 指定的 {source_id} 不存在，"
+        "請以 ticket track list 確認 ID"
+    )
+    SOURCE_PARENT_MUTUALLY_EXCLUSIVE = (
+        "[ERROR] --source-ticket 與 --parent 互斥：\n"
+        "  --parent        建立父子關係（children），子任務未完成會阻擋父 complete\n"
+        "  --source-ticket 建立衍生關係（spawned_tickets），衍生項獨立排程、"
+        "不阻擋 source complete\n"
+        "  詳見 PC-073"
+    )
+    SOURCE_TICKET_UPDATED = (
+        "[INFO] 已雙向關聯：source={source_id} 新增 spawned={new_id}"
+    )
+    SOURCE_UPDATE_FAILED = (
+        "[WARNING] 新 Ticket 已建立，但更新 source {source_id}.spawned_tickets 失敗，"
+        "請手動檢查"
+    )
+    SOURCE_TICKET_COMPLETED_WARN = (
+        "[WARNING] source {source_id} 狀態為 completed，仍可建立衍生 Ticket；"
+        "如需追加工作請確認是否另開版本追蹤"
+    )
 
 
 class FieldsMessages:

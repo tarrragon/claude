@@ -2,6 +2,8 @@
 
 此決策樹描述 Ticket 交接和恢復的完整流程。
 
+> **理論基礎**：交接對應「任務鏈三種移動方向」（父↔子、兄弟↔兄弟），見 `.claude/methodologies/atomic-ticket-methodology.md` 的「任務鏈核心哲學」章節。
+
 ## 交接流程決策樹
 
 ```

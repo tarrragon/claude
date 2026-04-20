@@ -7,7 +7,6 @@
 - **來源版本**: v0.31.1
 - **發現日期**: 2026-03-04
 - **風險等級**: 高
-- **來源 Ticket**: 0.31.1-W3-005
 
 ## 問題描述
 
@@ -93,7 +92,6 @@ if is_ticket_completed(project_root, ticket_id, logger):
 
 ## 相關資源
 
-- Ticket: 0.31.1-W3-005
 - 修復 commit: `fix: 修復 handoff GC 誤刪 to-sibling/to-parent pending JSON 的 bug`
 - 修改檔案: `.claude/hooks/handoff-auto-resume-stop-hook.py`（新增 `should_preserve_pending_json()`）
 - 附帶修復: `.claude/hooks/handoff-cleanup-hook.py`（簡化命令匹配邏輯）

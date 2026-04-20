@@ -173,7 +173,7 @@ PM 彙整和過濾（Phase 3）
 - .claude/methodologies/parallel-evaluation-methodology.md - 完整方法論
 - .claude/skills/parallel-evaluation/SKILL.md - 操作指南
 - .claude/skills/bulk-evaluate/SKILL.md - 批量評估工具（正交工具）
-- .claude/rules/core/decision-tree.md - 主線程決策樹
+- .claude/pm-rules/decision-tree.md - 主線程決策樹
 - .claude/rules/guides/parallel-dispatch.md - 並行派發指南
 - .claude/pm-rules/incident-response.md - 事件回應流程
 - .claude/pm-rules/tdd-flow.md - TDD 流程

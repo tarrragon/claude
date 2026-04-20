@@ -33,18 +33,18 @@
 - 但 A 和 B 有 `relatedTo` 關聯（A 建立了 B 依賴的共用模組）
 
 **Ticket 設置**：
-- 0.31.0-W5-001（A - 實作 BookRepository）: `relatedTo: ["0.31.0-W5-002", "0.31.0-W5-003"]`
-- 0.31.0-W5-002（B - 實作 Book 功能）: `relatedTo: ["0.31.0-W5-001"]`
-- 0.31.0-W5-003（C - 實作 Author 功能）: `relatedTo: ["0.31.0-W5-001"]`
+- 1.0.0-W5-001（A - 實作 BookRepository）: `relatedTo: ["1.0.0-W5-002", "1.0.0-W5-003"]`
+- 1.0.0-W5-002（B - 實作 Book 功能）: `relatedTo: ["1.0.0-W5-001"]`
+- 1.0.0-W5-003（C - 實作 Author 功能）: `relatedTo: ["1.0.0-W5-001"]`
 
 ### 參考實作場景
 
 當一個 Ticket 在實作時參考了另一個 Ticket 的成果：
 
-- 0.31.0-W5-001: 實作通用 UI 組件
-- 0.31.0-W5-002: 實作新頁面（使用通用 UI 組件）
+- 1.0.0-W5-001: 實作通用 UI 組件
+- 1.0.0-W5-002: 實作新頁面（使用通用 UI 組件）
 
-此時 0.31.0-W5-002 的 `relatedTo` 可包含 `0.31.0-W5-001`
+此時 1.0.0-W5-002 的 `relatedTo` 可包含 `1.0.0-W5-001`
 
 ## 使用方式
 
@@ -55,7 +55,7 @@ uv run ticket create \
   --action "實作" \
   --target "新功能" \
   --wave 5 \
-  --related-to "0.31.0-W5-001,0.31.0-W5-003"
+  --related-to "1.0.0-W5-001,1.0.0-W5-003"
 ```
 
 相關 ID 用逗號分隔，無需空格。
@@ -64,11 +64,11 @@ uv run ticket create \
 
 ```yaml
 ---
-id: "0.31.0-W5-002"
+id: "1.0.0-W5-002"
 title: "實作新功能"
 relatedTo:
-  - "0.31.0-W5-001"
-  - "0.31.0-W5-003"
+  - "1.0.0-W5-001"
+  - "1.0.0-W5-003"
 ```
 
 ## 驗證規則
@@ -86,15 +86,15 @@ relatedTo:
 from ticket_system.lib.ticket_validator import validate_related_to
 
 # 有效的關聯
-valid, msg = validate_related_to("0.31.0-W5-001", ["0.31.0-W5-002", "0.31.0-W5-003"])
+valid, msg = validate_related_to("1.0.0-W5-001", ["1.0.0-W5-002", "1.0.0-W5-003"])
 # 返回: (True, None)
 
 # 無效：自我參考
-valid, msg = validate_related_to("0.31.0-W5-001", ["0.31.0-W5-001"])
+valid, msg = validate_related_to("1.0.0-W5-001", ["1.0.0-W5-001"])
 # 返回: (False, "自我參考錯誤訊息")
 
 # 無效：格式錯誤
-valid, msg = validate_related_to("0.31.0-W5-001", ["invalid-id"])
+valid, msg = validate_related_to("1.0.0-W5-001", ["invalid-id"])
 # 返回: (False, "無效的 Ticket ID 錯誤訊息")
 ```
 
@@ -152,7 +152,7 @@ class TicketConfig(TypedDict, total=False):
 
 ## 版本資訊
 
-- **實作版本**: 0.31.0-W7-005
+- **實作版本**: 歷史版本
 - **檔案修改**:
   - `ticket_system/lib/ticket_builder.py`: 新增 TicketConfig 欄位和 frontmatter 初始化
   - `ticket_system/lib/ticket_validator.py`: 新增 validate_related_to() 函式

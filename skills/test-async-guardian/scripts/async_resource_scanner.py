@@ -210,30 +210,30 @@ def print_report(results: list[ScanResult], strict: bool = True) -> bool:
     total_issues = sum(len(r.issues) for r in results)
 
     if total_issues == 0:
-        print("✅ 掃描完成，未發現異步資源問題")
+        print("[OK] 掃描完成，未發現異步資源問題")
         return False
 
     # 輸出問題
     if strict:
-        print(f"❌ 發現 {total_issues} 個異步資源問題，必須修復後才能執行測試\n")
+        print(f"[FAIL] 發現 {total_issues} 個異步資源問題，必須修復後才能執行測試\n")
     else:
-        print(f"⚠️  發現 {total_issues} 個潛在的異步資源問題\n")
+        print(f"[WARN]️  發現 {total_issues} 個潛在的異步資源問題\n")
 
     for result in results:
         if not result.issues:
             continue
 
-        print(f"📁 {result.file_path}")
+        print(f"[DIR] {result.file_path}")
         print("-" * 60)
 
         for issue in result.issues:
-            icon = "❌" if strict else "⚠️"
+            icon = "[FAIL]" if strict else "[WARN]️"
             print(f"  {icon} Line {issue.line_number}: {issue.description}")
-            print(f"     💡 {issue.suggestion}")
+            print(f"     [TIP] {issue.suggestion}")
             print()
 
     # 輸出修復建議摘要
-    print("\n📋 修復建議摘要：")
+    print("\n[INFO] 修復建議摘要：")
     print("1. 為每個測試 group 添加 tearDown 清理未完成的異步操作")
     print("2. 將長延遲（>= 5秒）縮短為 100-500ms（足夠測試邏輯但不阻塞）")
     print("3. 確保 Timer.periodic 有對應的 cancel()")
@@ -326,7 +326,7 @@ def main() -> int:
     path = Path(args.path)
 
     if not path.exists():
-        print(f"❌ 路徑不存在: {path}")
+        print(f"[FAIL] 路徑不存在: {path}")
         return 1
 
     # 執行掃描

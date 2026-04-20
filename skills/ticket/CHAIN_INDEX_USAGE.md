@@ -30,10 +30,10 @@ index = get_chain_index("0.31.0")
 返回直接子任務 ID 列表。
 
 ```python
-# 取得 0.31.0-W4-001 的所有直接子任務
-children = index.get_children("0.31.0-W4-001")
+# 取得 1.0.0-W4-001 的所有直接子任務
+children = index.get_children("1.0.0-W4-001")
 print(children)
-# 輸出：['0.31.0-W4-001.1', '0.31.0-W4-001.2']
+# 輸出：['1.0.0-W4-001.1', '1.0.0-W4-001.2']
 
 # 查詢不存在的任務返回空列表
 children = index.get_children("999")
@@ -48,10 +48,10 @@ print(children)
 返回所有後代任務 ID 列表（包含根任務本身），採用深度優先搜尋順序。
 
 ```python
-# 取得 0.31.0-W4-001 的所有後代
-descendants = index.get_descendants("0.31.0-W4-001")
+# 取得 1.0.0-W4-001 的所有後代
+descendants = index.get_descendants("1.0.0-W4-001")
 print(descendants)
-# 輸出：['0.31.0-W4-001', '0.31.0-W4-001.1', '0.31.0-W4-001.1.1', '0.31.0-W4-001.2']
+# 輸出：['1.0.0-W4-001', '1.0.0-W4-001.1', '1.0.0-W4-001.1.1', '1.0.0-W4-001.2']
 ```
 
 **注意**：此方法只針對根任務有效（即 parent_id 為空的任務）。子任務呼叫此方法會返回空列表。
@@ -64,7 +64,7 @@ print(descendants)
 
 ```python
 # 檢查任務是否有子任務
-if index.has_children("0.31.0-W4-001"):
+if index.has_children("1.0.0-W4-001"):
     print("此任務有子任務")
 else:
     print("此任務無子任務")
@@ -77,8 +77,8 @@ else:
 返回直接子任務的數量。
 
 ```python
-# 取得 0.31.0-W4-001 的子任務數量
-count = index.get_child_count("0.31.0-W4-001")
+# 取得 1.0.0-W4-001 的子任務數量
+count = index.get_child_count("1.0.0-W4-001")
 print(f"子任務數量：{count}")
 ```
 
@@ -89,8 +89,8 @@ print(f"子任務數量：{count}")
 返回所有後代任務的數量（包含根任務本身）。
 
 ```python
-# 取得 0.31.0-W4-001 的所有後代數量
-count = index.get_descendant_count("0.31.0-W4-001")
+# 取得 1.0.0-W4-001 的所有後代數量
+count = index.get_descendant_count("1.0.0-W4-001")
 print(f"後代數量：{count}")
 ```
 
@@ -109,8 +109,8 @@ print(f"後代數量：{count}")
 # 檢查索引結構
 print(index.parent_index)
 # 輸出：defaultdict(<class 'list'>, {
-#     '0.31.0-W4-001': ['0.31.0-W4-001.1', '0.31.0-W4-001.2'],
-#     '0.31.0-W4-001.1': ['0.31.0-W4-001.1.1']
+#     '1.0.0-W4-001': ['1.0.0-W4-001.1', '1.0.0-W4-001.2'],
+#     '1.0.0-W4-001.1': ['1.0.0-W4-001.1.1']
 # })
 ```
 
@@ -127,8 +127,8 @@ print(index.parent_index)
 # 檢查索引結構
 print(index.root_index)
 # 輸出：defaultdict(<class 'list'>, {
-#     '0.31.0-W4-001': ['0.31.0-W4-001', '0.31.0-W4-001.1', '0.31.0-W4-001.1.1', '0.31.0-W4-001.2'],
-#     '0.31.0-W4-002': ['0.31.0-W4-002', '0.31.0-W4-002.1']
+#     '1.0.0-W4-001': ['1.0.0-W4-001', '1.0.0-W4-001.1', '1.0.0-W4-001.1.1', '1.0.0-W4-001.2'],
+#     '1.0.0-W4-002': ['1.0.0-W4-002', '1.0.0-W4-002.1']
 # })
 ```
 
@@ -148,7 +148,7 @@ def print_task_tree(index, root_id, indent=0):
         print_task_tree(index, child_id, indent + 1)
 
 # 從根任務開始列印整個樹
-print_task_tree(index, "0.31.0-W4-001")
+print_task_tree(index, "1.0.0-W4-001")
 ```
 
 ### 場景 2：計算任務樹的規模
@@ -179,7 +179,7 @@ def check_completion_status(index, version, root_id):
     completion_rate = (completed / total * 100) if total > 0 else 0
     print(f"{root_id} 完成度：{completed}/{total} ({completion_rate:.1f}%)")
 
-check_completion_status(index, "0.31.0", "0.31.0-W4-001")
+check_completion_status(index, "0.31.0", "1.0.0-W4-001")
 ```
 
 ## 效能考量

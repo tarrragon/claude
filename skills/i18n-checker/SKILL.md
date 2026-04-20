@@ -67,3 +67,8 @@ uv run scripts/i18n_hardcode_checker.py
 
 - 分層 i18n 管理：`.claude/methodologies/business-layer-i18n-management-methodology.md`
 - Style Guardian：`.claude/skills/style-guardian/`
+
+---
+
+**Last Updated**: 2026-03-02
+**Version**: 1.0.0

@@ -369,7 +369,7 @@ PostToolUse Hook 中添加配置：
 
 #### 7.2 快速參考卡片
 
-`quick-ref-pre-fix-eval.md` 包含：
+`quick-ref-pre-fix-eval.md`（已於 W10-049.1 移除，內容已內化至 `.claude/skills/pre-fix-eval/`）包含：
 - ✅ 三步驟工作流
 - ✅ 錯誤分類速查表
 - ✅ 修復決策矩陣
@@ -410,7 +410,7 @@ PostToolUse Hook 中添加配置：
 | pre-fix-eval.md | Skill | 11 KB | ✅ |
 | settings.json | Config | Updated | ✅ |
 | pre-fix-evaluation-implementation.md | Tech Doc | 11 KB | ✅ |
-| quick-ref-pre-fix-eval.md | Quick Ref | 5.7 KB | ✅ |
+| quick-ref-pre-fix-eval.md | Quick Ref | 5.7 KB | ⚠️ 已於 W10-049.1 移除 |
 
 **整體文件驗收**: ✅ PASS
 
@@ -484,7 +484,7 @@ PostToolUse Hook 中添加配置：
 
 - **計劃**: `~/.claude/plans/iterative-swimming-feather.md`
 - **實作**: `.claude/hook-specs/pre-fix-evaluation-implementation.md`
-- **快速參考**: `.claude/quick-ref-pre-fix-eval.md`
+- **快速參考**: `.claude/skills/pre-fix-eval/`（原 `.claude/quick-ref-pre-fix-eval.md` 已於 W10-049.1 內化至 skill）
 - **Hook 腳本**: `.claude/hooks/pre-fix-evaluation-hook.py`
 - **Skill**: `.claude/commands/pre-fix-eval.md`
 

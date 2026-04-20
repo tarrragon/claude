@@ -40,6 +40,7 @@ from ticket_system.lib.command_tracking_messages import (
 from .lifecycle import (
     execute_claim,
     execute_complete,
+    execute_close,
     execute_release,
 )
 # 導入查詢操作模組
@@ -48,15 +49,15 @@ from .track_query import (
     execute_summary,
     execute_tree,
     execute_chain,
+    execute_deps,
     execute_full,
     execute_log,
     execute_list,
     execute_version,
+    execute_search,
 )
 # 導入欄位操作模組
 from .fields import (
-    execute_get_field,
-    execute_set_field,
     execute_get_who,
     execute_set_who,
     execute_get_what,
@@ -69,6 +70,11 @@ from .fields import (
     execute_set_why,
     execute_get_how,
     execute_set_how,
+    execute_set_priority,
+    execute_add_acceptance,
+    execute_remove_acceptance,
+    execute_add_spawned,
+    execute_set_decision_tree,
 )
 # 導入批量操作模組
 from .track_batch import (
@@ -81,6 +87,9 @@ from .track_acceptance import (
     execute_append_log,
     execute_accept_creation,
 )
+# 導入 set-acceptance / validate 子命令（W14-030）
+from .track_set_acceptance import execute_set_acceptance
+from .track_validate import execute_validate
 # 導入關係和狀態管理模組
 from .track_relations import (
     execute_add_child,
@@ -97,6 +106,22 @@ from .track_audit import (
 from .track_board import (
     execute_board,
 )
+# 導入快照命令模組
+from .track_agent_status import (
+    execute_agent_status,
+    register_agent_status,
+)
+from .track_snapshot import (
+    execute_snapshot,
+)
+from .track_handoff_ready import (
+    execute_handoff_ready,
+    register_handoff_ready,
+)
+from .track_checkpoint_status import (
+    execute_checkpoint_status,
+    register_checkpoint_status,
+)
 # 導入版本審計命令模組
 from .audit_version import (
     execute_audit_version,
@@ -111,6 +136,11 @@ def _execute_claim(args: argparse.Namespace, version: str) -> int:  # type: igno
 def _execute_complete(args: argparse.Namespace, version: str) -> int:
     """標記完成 - 包裝生命週期模組"""
     return execute_complete(args, version)
+
+
+def _execute_close(args: argparse.Namespace, version: str) -> int:
+    """關閉 Ticket（包裝生命週期模組）"""
+    return execute_close(args, version)
 
 
 def _execute_release(args: argparse.Namespace, version: str) -> int:
@@ -132,10 +162,13 @@ def _create_command_handlers() -> dict:
         "query": execute_query,
         "claim": _execute_claim,
         "complete": _execute_complete,
+        "close": _execute_close,
         "tree": execute_tree,
         "list": execute_list,
+        "search": execute_search,
         "release": _execute_release,
         "chain": execute_chain,
+        "deps": execute_deps,
         "full": execute_full,
         "log": execute_log,
         "batch-claim": execute_batch_claim,
@@ -155,11 +188,18 @@ def _create_command_handlers() -> dict:
         "agent": execute_agent,
         "phase": execute_phase,
         "check-acceptance": execute_check_acceptance,
+        "set-acceptance": execute_set_acceptance,
+        "validate": execute_validate,
         "append-log": execute_append_log,
         "accept-creation": execute_accept_creation,
         "add-child": execute_add_child,
         "set-blocked-by": execute_set_blocked_by,
         "set-related-to": execute_set_related_to,
+        "set-priority": execute_set_priority,
+        "add-acceptance": execute_add_acceptance,
+        "remove-acceptance": execute_remove_acceptance,
+        "add-spawned": execute_add_spawned,
+        "set-decision-tree": execute_set_decision_tree,
         "audit": execute_audit,
         "audit-version": execute_audit_version,
         "board": execute_board,
@@ -170,9 +210,17 @@ def execute(args: argparse.Namespace) -> int:
     """執行 track 命令"""
     operation = args.operation
 
-    # version 命令特殊處理（不需要版本資訊）
+    # version / snapshot 命令特殊處理（不需要版本資訊）
     if operation == "version":
         return execute_version(args, None)
+    if operation == "snapshot":
+        return execute_snapshot(args)
+    if operation == "agent-status":
+        return execute_agent_status(args)
+    if operation == "handoff-ready":
+        return execute_handoff_ready(args)
+    if operation == "checkpoint-status":
+        return execute_checkpoint_status(args)
 
     # 其他命令需要版本資訊
     # 優先級：
@@ -182,6 +230,15 @@ def execute(args: argparse.Namespace) -> int:
 
     explicit_version = getattr(args, 'version', None)
     version = None
+
+    # --version all 特殊處理：跨版本查詢（W9-002）
+    if explicit_version and explicit_version.lower() == "all":
+        if operation in ("list", "search"):
+            all_handlers = _create_command_handlers()
+            return all_handlers[operation](args, "all")
+        else:
+            print(format_error("--version all 僅支援 list 和 search 命令"))
+            return 1
 
     # 如果未明確指定版本，嘗試從 Ticket ID 提取
     if not explicit_version and hasattr(args, 'ticket_id'):
@@ -215,11 +272,53 @@ def _register_lifecycle_commands(
     p_claim = subparsers.add_parser("claim", help=TrackMessages.HELP_CLAIM)
     p_claim.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_claim.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    p_claim.add_argument(
+        "--skip-verify",
+        dest="skip_verify",
+        action="store_true",
+        help="跳過 AC 自動驗證（逃生閥），直接進入既有 claim 流程",
+    )
+    p_claim.add_argument(
+        "--yes",
+        "-y",
+        dest="yes",
+        action="store_true",
+        help="非互動模式：AC 驗證仍執行，但自動選 y 繼續 claim",
+    )
 
     # complete 操作
     p_complete = subparsers.add_parser("complete", help=TrackMessages.HELP_COMPLETE)
     p_complete.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_complete.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    p_complete.add_argument(
+        "--yes-spawned",
+        dest="yes_spawned",
+        action="store_true",
+        help="ANA 有 spawned 非 terminal 時旁路 blocking confirmation（非互動環境必需）",
+    )
+
+    # close 操作（W15-027 / PC-090：--reason 枚舉必填）
+    from ticket_system.constants import CLOSE_REASONS, CLOSE_REASON_RETROSPECTIVE_UNKNOWN
+    _close_reason_choices = sorted(CLOSE_REASONS) + [CLOSE_REASON_RETROSPECTIVE_UNKNOWN]
+    p_close = subparsers.add_parser("close", help="關閉 Ticket（已在其他 Ticket 一併解決）")
+    p_close.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_close.add_argument("--resolved-by", required=True, dest="resolved_by",
+                         help="解決此問題的 Ticket ID")
+    p_close.add_argument(
+        "--reason",
+        required=True,
+        choices=_close_reason_choices,
+        help=(
+            "close_reason 枚舉（PC-090 C1 必填）。合法值："
+            f"{sorted(CLOSE_REASONS)}；--retrospective 模式額外允許 "
+            f"'{CLOSE_REASON_RETROSPECTIVE_UNKNOWN}'"
+        ),
+    )
+    p_close.add_argument("--reason-note", dest="reason_note", default="",
+                         help="關閉原因補充說明（選填）")
+    p_close.add_argument("--retrospective", action="store_true",
+                         help="回顧式補填模式，允許 --reason unknown（PC-090 C4）")
+    p_close.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
     # release 操作
     p_release = subparsers.add_parser("release", help=TrackMessages.HELP_RELEASE)
@@ -256,10 +355,25 @@ def _register_query_commands(
     p_list.add_argument("--format", choices=["table", "ids", "yaml"], default="table", help=TrackMessages.ARG_FORMAT)
     p_list.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
+    # search 操作（W9-002: 跨維度查詢）
+    p_search = subparsers.add_parser("search", help="搜尋 Tickets（依 UC/Spec/Prop 引用或檔案路徑）")
+    p_search.add_argument("--ref", help="搜尋引用特定 UC/Spec/Prop 的 Tickets（如 UC-01、SPEC-001、PROP-007）")
+    p_search.add_argument("--file", dest="file_path", help="搜尋修改特定檔案的 Tickets（如 src/core/errors/）")
+    p_search.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    p_search.add_argument("--format", choices=["table", "ids", "yaml"], default="table", help=TrackMessages.ARG_FORMAT)
+
     # chain 操作
     p_chain = subparsers.add_parser("chain", help=TrackMessages.HELP_CHAIN)
     p_chain.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_chain.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # deps 操作：顯示衍生關係（spawned_tickets + source_ticket）
+    p_deps = subparsers.add_parser(
+        "deps",
+        help="顯示 Ticket 衍生關係（spawned_tickets + source_ticket，與 tree/chain 血緣分離）",
+    )
+    p_deps.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_deps.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
     # full 操作
     p_full = subparsers.add_parser("full", help=TrackMessages.HELP_FULL)
@@ -351,6 +465,38 @@ def _register_field_write_commands(
     p_set_how.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_set_how.add_argument("value", help=TrackMessages.ARG_VALUE)
     p_set_how.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # set-priority 操作
+    p_set_priority = subparsers.add_parser("set-priority", help=TrackMessages.HELP_SET_PRIORITY)
+    p_set_priority.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_set_priority.add_argument("value", help=TrackMessages.ARG_VALUE)
+    p_set_priority.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # add-acceptance 操作
+    p_add_acc = subparsers.add_parser("add-acceptance", help=TrackMessages.HELP_ADD_ACCEPTANCE)
+    p_add_acc.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_add_acc.add_argument("value", help="驗收條件文字")
+    p_add_acc.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # remove-acceptance 操作
+    p_rm_acc = subparsers.add_parser("remove-acceptance", help=TrackMessages.HELP_REMOVE_ACCEPTANCE)
+    p_rm_acc.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_rm_acc.add_argument("index", type=int, help="要移除的驗收條件編號（從 1 開始）")
+    p_rm_acc.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # add-spawned 操作
+    p_add_spawned = subparsers.add_parser("add-spawned", help=TrackMessages.HELP_ADD_SPAWNED)
+    p_add_spawned.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_add_spawned.add_argument("value", help="Spawned Ticket ID")
+    p_add_spawned.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # set-decision-tree 操作
+    p_set_dt = subparsers.add_parser("set-decision-tree", help=TrackMessages.HELP_SET_DECISION_TREE)
+    p_set_dt.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_set_dt.add_argument("--entry", help="entry_point 欄位值")
+    p_set_dt.add_argument("--decision", help="final_decision 欄位值")
+    p_set_dt.add_argument("--rationale", help="rationale 欄位值")
+    p_set_dt.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
 
 def _register_batch_commands(
@@ -454,6 +600,38 @@ def _register_acceptance_commands(
     )
     p_check_acceptance.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
+    # set-acceptance 操作（W14-030）
+    p_set_acceptance = subparsers.add_parser(
+        "set-acceptance",
+        help="勾選/取消勾選驗收條件（--check/--uncheck 支援多 index，--all-check/--all-uncheck 批量）"
+    )
+    p_set_acceptance.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_set_acceptance.add_argument(
+        "--check", nargs="+", metavar="INDEX",
+        help="勾選指定 1-based index（可多個，空白分隔）"
+    )
+    p_set_acceptance.add_argument(
+        "--uncheck", nargs="+", metavar="INDEX",
+        help="取消勾選指定 1-based index（可多個）"
+    )
+    p_set_acceptance.add_argument(
+        "--all-check", dest="all_check", action="store_true",
+        help="勾選全部驗收條件"
+    )
+    p_set_acceptance.add_argument(
+        "--all-uncheck", dest="all_uncheck", action="store_true",
+        help="取消勾選全部驗收條件"
+    )
+    p_set_acceptance.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # validate 操作（W14-030）
+    p_validate = subparsers.add_parser(
+        "validate",
+        help="驗證 Ticket frontmatter 4 欄位（status/completed_at/acceptance/who）合規性"
+    )
+    p_validate.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_validate.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
     # append-log 操作
     p_append_log = subparsers.add_parser(
         "append-log",
@@ -539,6 +717,17 @@ def _register_all_subcommands(
     _register_acceptance_commands(track_subparsers)
     _register_version_audit_commands(track_subparsers)
     _register_board_commands(track_subparsers)
+    _register_snapshot_commands(track_subparsers)
+    register_agent_status(track_subparsers)
+    register_handoff_ready(track_subparsers)
+    register_checkpoint_status(track_subparsers)
+
+
+def _register_snapshot_commands(
+    subparsers: argparse._SubParsersAction,
+) -> None:
+    """註冊快照命令：snapshot"""
+    subparsers.add_parser("snapshot", help="產出專案全局狀態快照")
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:

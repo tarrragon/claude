@@ -7,7 +7,9 @@
     "frontmatter_parser.py",
     "hook_utils.py",
     "markdown_formatter.py",
-    "parse-test-json.py"
+    "parse-test-json.py",
+    "eval_pyyaml.py",
+    "phase-contract-validator-hook.py"
   ],
   "exclude_patterns": [
     "*-backup.py",
@@ -20,6 +22,8 @@
     "hook_utils.py": "輔助函式庫 - 被其他 Hook 引入，提供 setup_hook_logging/run_hook_safely 等共用功能",
     "parse-test-json.py": "輔助函式庫 - 被其他 Hook 引入",
     "*-backup.py": "備份檔案模式",
-    "archived/*": "廢棄腳本存檔目錄 (2026-02-11 v0.31.0-W18-001.2)"
+    "archived/*": "廢棄腳本存檔目錄 (2026-02-11 v0.31.0-W18-001.2)",
+    "eval_pyyaml.py": "一次性評估腳本（PyYAML 替代評估），非 Hook",
+    "phase-contract-validator-hook.py": "CLI 工具（透過 argv 使用），非 stdin JSON Hook"
   }
 }
