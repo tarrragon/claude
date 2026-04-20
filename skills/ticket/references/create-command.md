@@ -33,6 +33,10 @@
 # 建立子任務（可省略 decision-tree 參數）
 /ticket create --parent 1.0.0-W1-001 --action "更新" --target "XXX"
 
+# 建立衍生任務（與 --parent 互斥，見下方「--parent vs --source-ticket」章節）
+/ticket create --version 0.31.0 --wave 1 --action "實作" --target "XXX" \
+  --source-ticket 0.18.0-W17-001 --type IMP
+
 # 建立 DOC 類型（可省略 decision-tree 參數）
 /ticket create --version 0.31.0 --wave 1 --action "撰寫" --target "工作日誌" --type DOC
 
@@ -103,3 +107,45 @@ ticket create --parent 1.0.0-W2-001 --action "實作" --target "事件融合層"
 # DOC 類型 — 可省略 decision-tree 參數
 ticket create --wave 2 --action "撰寫" --target "工作日誌" --type DOC
 ```
+
+## --source-ticket 參數（衍生關係）
+
+`--source-ticket <SOURCE-ID>` 用於建立「衍生 Ticket」關係（spawned_tickets），典型場景為 ANA 衍生 IMP / ADJ、執行中發現的獨立技術債。
+
+### 兩個副作用（顯性契約）
+
+建立新 Ticket 時帶 `--source-ticket <SOURCE-ID>`，CLI 會執行以下兩個副作用：
+
+| # | 副作用 | 寫入位置 |
+|---|------|---------|
+| 1 | 在**新 Ticket** 設定 `source_ticket: <SOURCE-ID>` 欄位 | 新 Ticket YAML frontmatter |
+| 2 | **自動**將新 Ticket ID 追加至 `<SOURCE-ID>` 的 `spawned_tickets` 清單 | source Ticket YAML frontmatter |
+
+副作用 2 為 CLI 自動完成，無需人工編輯 source Ticket；成功時 stdout 顯示 `[INFO] 已自動追加 <new_id> 至 <source_id>.spawned_tickets（雙向關聯）`，失敗時顯示 `[WARNING]` 提示手動檢查。
+
+### 前置驗證（fail-fast）
+
+| 檢查 | 說明 |
+|------|------|
+| 互斥檢查 | `--source-ticket` 與 `--parent` 不可同時使用（血緣語意不同） |
+| ID 格式 | 沿用 `validate_ticket_id` |
+| 存在性 | source Ticket 必須存在，否則拒絕建立 |
+| 狀態提醒 | source 狀態為 `completed` 時輸出 WARNING，仍允許建立 |
+
+### --parent vs --source-ticket 對比表
+
+| 面向 | `--parent` | `--source-ticket` |
+|------|-----------|-------------------|
+| 語意 | 血緣關係（直系子任務） | 衍生關係（副產品 / 延伸） |
+| 關係欄位 | `parent_id` + `<parent>.children[]` | `source_ticket` + `<source>.spawned_tickets[]` |
+| Complete 阻擋 | 父 Ticket 被未完成 children 阻擋 | source **不被** spawned 阻擋（獨立排程） |
+| 序號規則 | 自動子序號（如 `W17-001.1`） | 獨立 Ticket ID（不繼承序號） |
+| 使用時機 | 功能拆分、上游結論要求的落地 | ANA 衍生 IMP、執行中發現的獨立項 |
+| 典型場景 | ANA Solution 落地為 IMP/DOC | 執行中發現 bug/技術債另開單獨追蹤 |
+| 決策樹參數 | 可省略（繼承自 parent） | 不可省略（root ticket 規則） |
+
+> **判別問題**：新 Ticket 是上游結論「要求」的落地，還是執行中「衍生」的副產品？
+> - 要求的落地（上游 complete 前必須完成）→ `--parent`
+> - 衍生的副產品（獨立排程）→ `--source-ticket`
+>
+> 詳見 `.claude/pm-rules/ticket-lifecycle.md`「ANA Ticket children 建立原則」與 PC-073。

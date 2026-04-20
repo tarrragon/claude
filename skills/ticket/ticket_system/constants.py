@@ -53,6 +53,15 @@ __all__ = [
     "DEFAULT_PRIORITY",
     "DEFAULT_HOW_TASK_TYPE",
     "DEFAULT_UNDEFINED_VALUE",
+    # Context Bundle (W17-002.1)
+    "CONTEXT_BUNDLE_PLACEHOLDER_VALUES",
+    "CONTEXT_BUNDLE_MAX_TOTAL_CHARS",
+    "CONTEXT_BUNDLE_MAX_ITEMS_PER_FIELD",
+    "CONTEXT_BUNDLE_OPT_OUT_KEY",
+    "CONTEXT_BUNDLE_OPT_OUT_VALUE_MANUAL",
+    "CONTEXT_BUNDLE_SOURCE_KINDS",
+    "CONTEXT_BUNDLE_EXTRACT_STATUSES",
+    "CONTEXT_BUNDLE_SKIP_REASONS",
     # Handoff direction
     "TASK_CHAIN_DIRECTION_TYPES",
     "NON_CHAIN_DIRECTION_TYPES",
@@ -213,6 +222,60 @@ PRIORITY_LEVELS: List[str] = ["P0", "P1", "P2", "P3"]
 DEFAULT_PRIORITY: str = "P2"
 DEFAULT_HOW_TASK_TYPE: str = "Implementation"
 DEFAULT_UNDEFINED_VALUE: str = "待定義"
+
+# ============================================================
+# Context Bundle 抽取（W17-002 / W17-002.1）
+# ============================================================
+#
+# placeholder 清單：_is_placeholder 用於判定 source ticket 欄位是否已填入有效內容。
+# 擴為 list（W17-002.1 acceptance #10）涵蓋常見未填值：DEFAULT_UNDEFINED_VALUE
+# 為系統官方佔位，其餘為人工撰寫常見變體。
+CONTEXT_BUNDLE_PLACEHOLDER_VALUES: tuple = (
+    DEFAULT_UNDEFINED_VALUE,
+    "TBD",
+    "tbd",
+    "TODO",
+    "todo",
+    "待填寫",
+    "(待填寫)",
+    "（待填寫）",
+    "N/A",
+    "n/a",
+)
+
+# 規模限制
+#
+# MAX_TOTAL_CHARS rationale（W17-002.1 acceptance #2）：
+#   - 2000 字元約 1000 中文 token，對應典型 ticket body 中 Context Bundle section
+#     的 10-15% 體積，不致於淹沒 PM 認知負擔。
+#   - Phase 1 多視角審查以「PM 可於 10 秒內掃完」為錨，實測 2000 字元約 8-12 秒。
+#   - 超過此上限的來源，應由 PM 人工裁切重點，自動抽取退為截斷模式（非丟棄）。
+CONTEXT_BUNDLE_MAX_TOTAL_CHARS: int = 2000
+CONTEXT_BUNDLE_MAX_ITEMS_PER_FIELD: int = 5
+
+# opt-out 標記（W17-002.1 acceptance #9）：
+#   frontmatter 含 `context-bundle: manual` 時，自動抽取不覆寫 section，僅輸出略過訊息。
+CONTEXT_BUNDLE_OPT_OUT_KEY: str = "context_bundle"
+CONTEXT_BUNDLE_OPT_OUT_VALUE_MANUAL: str = "manual"
+
+# Literal 枚舉（W17-002.1 acceptance #3：Python 慣例對齊）
+# 將 SourceKind / ExtractStatus / SkipReason 的合法值集中於 constants，
+# 方便其他模組（test、metric hook）引用而不依賴 extractor 內部私有符號。
+CONTEXT_BUNDLE_SOURCE_KINDS: tuple = ("source_ticket", "blocked_by", "related_to")
+CONTEXT_BUNDLE_EXTRACT_STATUSES: tuple = (
+    "no_source",
+    "all_sources_missing",
+    "partial",
+    "success",
+    "self_reference",
+    "opt_out",
+)
+CONTEXT_BUNDLE_SKIP_REASONS: tuple = (
+    "source_missing",
+    "source_field_undefined",
+    "self_reference",
+    "opt_out",
+)
 
 # ============================================================
 # Handoff Direction 常數

@@ -40,6 +40,7 @@ try:
         migrate_register,
         generate_register,
         batch_create_register,
+        show_register,
     )
     from ticket_system.commands.version_shift import register as version_shift_register
 except ModuleNotFoundError:
@@ -126,6 +127,8 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(
         description="統一 Ticket 系統 - 整合建立、追蹤、交接、恢復、遷移功能",
+        epilog="查詢子命令詳細用法：ticket <command> -h\n"
+               "  （例如 ticket show -h、ticket track -h）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
@@ -145,6 +148,7 @@ def main() -> int:
     generate_register(subparsers)
     batch_create_register(subparsers)
     version_shift_register(subparsers)
+    show_register(subparsers)
 
     # 解析命令行參數
     args = parser.parse_args()

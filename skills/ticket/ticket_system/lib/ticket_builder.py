@@ -525,6 +525,45 @@ def _ana_reproduction_section(ticket_type: str) -> str:
 """
 
 
+def _schema_marker(ticket_type: str, section: str) -> str:
+    """回傳 Schema 標註註解（type-aware body schema）。
+
+    依 .claude/pm-rules/ticket-body-schema.md 映射章節填寫要求。未知 type 或
+    未定義章節回傳空字串（向後相容）。
+
+    Args:
+        ticket_type: Ticket 類型（ANA/IMP/DOC 等）
+        section: 章節名稱（Problem Analysis/Solution/Test Results/Completion Info）
+
+    Returns:
+        HTML 註解標註字串（含前綴換行）或空字串
+    """
+    schema = {
+        "ANA": {
+            "Problem Analysis": "必填",
+            "Solution": "必填",
+            "Test Results": "選填（ANA 若有實驗輸出才填；無實驗可留 placeholder）",
+            "Completion Info": "必填",
+        },
+        "IMP": {
+            "Problem Analysis": "選填（小型 IMP 可留 placeholder；大型 IMP 建議填寫）",
+            "Solution": "選填",
+            "Test Results": "必填（至少記錄執行指令與通過數或 commit SHA）",
+            "Completion Info": "必填",
+        },
+        "DOC": {
+            "Problem Analysis": "選填（若 DOC 起因於缺陷或盤點結論可填）",
+            "Solution": "免填（DOC 類型以變更摘要取代）",
+            "Test Results": "免填（DOC 類型無需測試）",
+            "Completion Info": "必填（需附變更摘要：哪些文件/章節更新）",
+        },
+    }
+    note = schema.get(ticket_type, {}).get(section)
+    if not note:
+        return ""
+    return f"\n<!-- Schema[{ticket_type}/{section}]: {note}（.claude/pm-rules/ticket-body-schema.md） -->"
+
+
 def create_ticket_body(what: str, who: str, ticket_type: str = "") -> str:
     """建立 Ticket body。
 
@@ -576,6 +615,10 @@ def create_ticket_body(what: str, who: str, ticket_type: str = "") -> str:
         >>> "實作功能 X" in body
         True
     """
+    pa_marker = _schema_marker(ticket_type, "Problem Analysis")
+    sol_marker = _schema_marker(ticket_type, "Solution")
+    tr_marker = _schema_marker(ticket_type, "Test Results")
+    ci_marker = _schema_marker(ticket_type, "Completion Info")
     return f"""# Execution Log
 
 ## Task Summary
@@ -584,7 +627,7 @@ def create_ticket_body(what: str, who: str, ticket_type: str = "") -> str:
 
 ---
 
-## Problem Analysis
+## Problem Analysis{pa_marker}
 
 ### 問題根因
 
@@ -607,19 +650,48 @@ def create_ticket_body(what: str, who: str, ticket_type: str = "") -> str:
 
 ---
 {_ana_reproduction_section(ticket_type)}
-## Solution
+## Solution{sol_marker}
 
 <!-- To be filled by executing agent -->
 
 ---
 
-## Test Results
+## Test Results{tr_marker}
 
 <!-- To be filled by executing agent -->
 
 ---
 
-## Completion Info
+## NeedsContext
+
+<!-- 代理人回報資料缺口時追加於此（W17-010 協議）。子項建議 template：
+- **缺失項**:（具體指出需要的 context 是什麼）
+- **觸發位置**:（檔案:行號 或 決策點）
+- **影響**:（缺料導致無法完成哪些 acceptance）
+- **建議補料**:（PM 可採取的補充動作）
+- **重派成本**:（若需重派所需 token/context 估算）
+-->
+
+---
+
+## Exit Status
+
+<!-- 代理人結束時以 YAML 格式回報（W17-010 schema）：
+```yaml
+status: success        # 枚舉: success|needs_context|blocked|partial_success|failed
+reason: ""             # 狀態原因說明
+confidence: 1.0        # 0.0-1.0 信心度
+acceptance_met: []     # 已完成的 acceptance index 列表
+acceptance_unmet: []   # 未完成的 acceptance index 列表
+artifacts: []          # 產出檔案路徑列表
+context_dependencies: []  # 依賴的 context 來源
+estimated_recovery_effort: ""  # 若 needs_context/blocked，預估補料成本
+```
+對應 exit code: success=0, partial_success=0, needs_context=2, blocked=2, failed=1 -->
+
+---
+
+## Completion Info{ci_marker}
 
 **Completion Time**: (pending)
 **Executing Agent**: {who}

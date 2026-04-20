@@ -617,6 +617,42 @@ class TestCreateTicketBody:
         assert "### 實驗方法" not in body
 
 
+class TestCreateTicketBodySchemaMarkers:
+    """測試 type-aware body schema 標註（W17-016.2）"""
+
+    def test_ana_body_has_ana_schema_markers(self):
+        """ANA body 四章節含 Schema[ANA/...] 標註"""
+        body = create_ticket_body("分析 X", "sage-test-architect", "ANA")
+        assert "Schema[ANA/Problem Analysis]: 必填" in body
+        assert "Schema[ANA/Solution]: 必填" in body
+        assert "Schema[ANA/Test Results]: 選填" in body
+        assert "Schema[ANA/Completion Info]: 必填" in body
+
+    def test_imp_body_has_imp_schema_markers(self):
+        """IMP body Test Results 必填、Problem Analysis 選填"""
+        body = create_ticket_body("實作 Y", "thyme-python-developer", "IMP")
+        assert "Schema[IMP/Test Results]: 必填" in body
+        assert "Schema[IMP/Problem Analysis]: 選填" in body
+        assert "Schema[IMP/Completion Info]: 必填" in body
+
+    def test_doc_body_has_doc_schema_markers(self):
+        """DOC body Solution/Test Results 免填、Completion Info 必填"""
+        body = create_ticket_body("更新文件 Z", "rosemary-project-manager", "DOC")
+        assert "Schema[DOC/Solution]: 免填" in body
+        assert "Schema[DOC/Test Results]: 免填" in body
+        assert "Schema[DOC/Completion Info]: 必填" in body
+
+    def test_unknown_type_has_no_schema_markers(self):
+        """未知 type（含空字串）不產出 Schema 標註（向後相容）"""
+        body = create_ticket_body("任務", "agent", "")
+        assert "Schema[" not in body
+
+    def test_schema_marker_references_pm_rules(self):
+        """Schema 標註引用 pm-rules/ticket-body-schema.md 路徑"""
+        body = create_ticket_body("分析", "sage-test-architect", "ANA")
+        assert ".claude/pm-rules/ticket-body-schema.md" in body
+
+
 class TestUpdateParentChildren:
     """測試 update_parent_children() 函式"""
 

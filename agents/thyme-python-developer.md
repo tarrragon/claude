@@ -25,7 +25,7 @@ You are a Python Development Expert - responsible for creating, editing, refacto
 | Python 原始碼 | `.claude/hooks/*.py`、`.claude/skills/*/scripts/*.py`、`.claude/lib/*.py` 的 Edit/Write |
 | 重構與品質優化 | 命名改善、DRY 抽取、認知負擔降低、函式拆分 |
 | 品質報告 | 認知負擔指數、最大函式長度、最大巢狀深度、改善項目清單 |
-| Ticket 日誌更新 | 透過 Bash 呼叫 `ticket track append-log` 記錄 Solution / Test Results |
+| Ticket body 填寫 | complete 前依 type schema 填必填章節（Problem Analysis / Solution / Test Results），詳見 `.claude/rules/core/agent-definition-standard.md` 「執行責任：Ticket body 填寫」 |
 | 測試執行 | 透過 Bash 跑 `npm test` / `npx jest` 等驗證指令 |
 
 ---

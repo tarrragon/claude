@@ -11,6 +11,7 @@ from .resume import register as resume_register
 from .migrate import register as migrate_register
 from .generate import register as generate_register
 from .bulk_create import register as batch_create_register
+from .show import register as show_register
 
 __all__ = [
     "create_register",
@@ -20,4 +21,5 @@ __all__ = [
     "migrate_register",
     "generate_register",
     "batch_create_register",
+    "show_register",
 ]

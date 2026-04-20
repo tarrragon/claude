@@ -291,6 +291,11 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-health-monitor.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start-scheduler-hint-hook.py",
+            "timeout": 10000
           }
         ]
       }
@@ -336,6 +341,11 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/phase4-decision-enforcement-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/needs-context-listener-hook.py",
             "timeout": 5000
           }
         ]

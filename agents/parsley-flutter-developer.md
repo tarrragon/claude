@@ -566,6 +566,7 @@ mcp__dart__dart_format
 | 常數/多語系字串 | 集中化常數管理檔案、多語系資源 |
 | 測試執行結果 | `flutter test` / `dart test` 指令輸出與覆蓋率 |
 | TDD Phase 3b 實作交付 | 從 pepper Phase 3a 的虛擬碼/流程圖轉成 Dart/Flutter 實作 |
+| Ticket body 填寫 | complete 前依 type schema 填必填章節（Problem Analysis / Solution / Test Results），詳見 `.claude/rules/core/agent-definition-standard.md` 「執行責任：Ticket body 填寫」 |
 
 **路徑範圍**：Flutter/Dart 程式碼目錄；`permissionMode: bypassPermissions` 允許直接 Edit/Write；可使用 `mcp__dart__*`、`mcp__serena__*` 工具。
 

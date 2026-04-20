@@ -394,7 +394,7 @@ class CreateMessages:
         "  詳見 PC-073"
     )
     SOURCE_TICKET_UPDATED = (
-        "[INFO] 已雙向關聯：source={source_id} 新增 spawned={new_id}"
+        "[INFO] 已自動追加 {new_id} 至 {source_id}.spawned_tickets（已雙向關聯）"
     )
     SOURCE_UPDATE_FAILED = (
         "[WARNING] 新 Ticket 已建立，但更新 source {source_id}.spawned_tickets 失敗，"

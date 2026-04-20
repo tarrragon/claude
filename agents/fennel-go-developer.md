@@ -455,6 +455,7 @@ grep -rn '"[A-Z]' server/ --include="*.go" | grep -v "_test.go" | grep -v "const
 | 常數/訊息檔 | `constants.go`、`messages/` 下的集中化常數與多語系字串 |
 | 測試執行結果 | `(cd server && go test ./...)` 等指令輸出 |
 | TDD Phase 3b 實作交付 | 從 pepper Phase 3a 的虛擬碼/流程圖轉成可執行 Go code |
+| Ticket body 填寫 | complete 前依 type schema 填必填章節（Problem Analysis / Solution / Test Results），詳見 `.claude/rules/core/agent-definition-standard.md` 「執行責任：Ticket body 填寫」 |
 
 **路徑範圍**：`server/` 目錄；`permissionMode: bypassPermissions` 允許直接 Edit/Write。
 

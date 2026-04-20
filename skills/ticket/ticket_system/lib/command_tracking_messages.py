@@ -155,7 +155,15 @@ class TrackAcceptanceMessages:
     STATUS_TEXT_UNCHECKED = "取消勾選"
 
     # execute_append_log 中有效的區段清單
-    VALID_SECTIONS = ["Problem Analysis", "Solution", "Test Results", "Execution Log"]
+    VALID_SECTIONS = [
+        "Problem Analysis",
+        "Context Bundle",
+        "Solution",
+        "Test Results",
+        "Execution Log",
+        "NeedsContext",
+        "Exit Status",
+    ]
 
     # execute_append_log 中的有效值提示前綴
     VALID_VALUES_PREFIX = "   有效值:"
@@ -407,7 +415,7 @@ class TrackMessages:
     ARG_INDEX = "驗收條件索引（1 開始）"
     ARG_UNCHECK = "取消勾選（預設為勾選）"
     ARG_CHECK_ACCEPTANCE_ALL = "勾選（或 --uncheck 時取消勾選）所有驗收條件"
-    ARG_SECTION = "日誌區段 (Problem Analysis/Solution/Test Results/Execution Log)"
+    ARG_SECTION = "日誌區段 (Problem Analysis/Context Bundle/Solution/Test Results/Execution Log)"
     ARG_CONTENT = "日誌內容"
     ARG_WAVE = "只顯示特定 Wave"
     ARG_STATUS = "篩選狀態（pending/in_progress/completed/blocked，支援多個值）"

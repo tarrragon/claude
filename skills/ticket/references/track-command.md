@@ -35,9 +35,38 @@
 # 看板視圖（樹狀未完成任務總覽）
 /ticket track board [--wave <wave>] [--all]
 
+# Scheduler 排程視圖（可執行清單 / DAG / 關鍵路徑）
+/ticket track runqueue [--format={list|dag|critical-path}] [--top N] [--context=resume] [--wave N]
+
 # 5W1H 單欄位查詢
 /ticket track who|what|when|where|why|how <id>
 ```
+
+## track runqueue 子命令（Scheduler）
+
+**用途**：回答「下一個該做哪個 ticket」（Linux schedule() 類比）。合併原 next/schedule/resume-hint 三概念為單一命令。
+
+**核心使用場景**：
+
+| 場景 | 命令 | 輸出 |
+|------|------|------|
+| PM 迷失方向 / 新 session 接手 | `ticket track runqueue --wave N` | priority 排序的可執行清單（blockedBy=[]） |
+| 查看完整依賴 DAG | `ticket track runqueue --wave N --format=dag` | 拓撲層級分組，關鍵路徑高亮 |
+| 查看關鍵路徑節點 | `ticket track runqueue --wave N --format=critical-path` | slack=0 節點（CPM） |
+| /clear 後接手 | `ticket track runqueue --context=resume --top 3` | 與 handoff/pending 交集 top 3 |
+
+**參數**：
+
+| 參數 | 值域 | 語意 |
+|------|------|------|
+| `--format` | `list`（預設）/ `dag` / `critical-path` | 輸出視圖 |
+| `--top N` | int | 限制 N 筆（list / critical-path 有效，dag 忽略） |
+| `--context=resume` | — | 交集 `.claude/handoff/pending/` |
+| `--wave N` | int | 過濾 wave |
+
+**新 session 自動引導**：`session-start-scheduler-hint-hook.py` 在 SessionStart 時自動呼叫 `runqueue --context=resume --top 3`（若無 handoff 則 fallback `--format=list --top 1`），結果顯示為 hook additionalContext。
+
+**典範**：W17-011.1 實作，W17-009 ANA 三視角審查（Evidence/Alternatives/linux）收斂結論。
 
 ## UPDATE 操作
 
@@ -66,7 +95,9 @@
 /ticket track set-how <id> <value>
 
 # 追加執行日誌
+# 有效 section: Problem Analysis / Context Bundle / Solution / Test Results / Execution Log
 /ticket track append-log <id> --section "Problem Analysis" "內容"
+/ticket track append-log <id> --section "Context Bundle" "PCB 內容（派發前分析結果，PC-040）"
 
 # 勾選驗收條件
 /ticket track check-acceptance <id> --all              # 勾選全部驗收條件

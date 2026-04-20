@@ -13,6 +13,7 @@ if __name__ == "__main__":
 import argparse
 import re
 import sys
+import traceback
 from typing import Any, Dict, List, Optional
 
 from ticket_system.lib.ticket_loader import (
@@ -946,6 +947,50 @@ def _validate_source_ticket_arg(args: argparse.Namespace) -> bool:
     return True
 
 
+def _auto_extract_context_bundle_post_create(
+    version: str,
+    ticket_id: str,
+    quiet: bool = False,
+    verbose: bool = False,
+    json_output: bool = False,
+) -> None:
+    """Create 後的 Context Bundle 自動抽取 wire-in（W17-002.2）。
+
+    僅當 target ticket 具備 source_ticket / blocked_by / related_to 之一時才觸發。
+    異常降級：任何例外都寫入 stderr traceback，退出碼保 0（主流程不阻斷）。
+
+    設計依據：W17-002 Phase 1 §5.1 create-insert 虛擬碼 + §v2.3 Non-raising。
+    """
+    try:
+        from ticket_system.lib.context_bundle_extractor import (
+            extract_and_write_context_bundle,
+            format_cli_summary,
+            format_cli_summary_json,
+        )
+        from ticket_system.lib.ticket_loader import load_ticket
+
+        target = load_ticket(version, ticket_id)
+        if target is None:
+            return
+        if not (
+            target.get("source_ticket")
+            or target.get("blocked_by")
+            or target.get("blockedBy")
+            or target.get("related_to")
+            or target.get("relatedTo")
+        ):
+            return
+
+        result, _notes = extract_and_write_context_bundle(version, ticket_id)
+        if json_output:
+            print(format_cli_summary_json(result))
+        else:
+            print(format_cli_summary(result, quiet=quiet, verbose=verbose))
+    except Exception:
+        sys.stderr.write(traceback.format_exc())
+        sys.stderr.write("[Context Bundle] 抽取失敗，不影響 ticket 建立\n")
+
+
 def execute(args: argparse.Namespace) -> int:
     """執行 create 命令 — 協調四個步驟"""
     version = resolve_version(args.version)
@@ -981,7 +1026,19 @@ def execute(args: argparse.Namespace) -> int:
         return 1
 
     # Step 3: 驗證 blockedBy + 重複偵測 + 持久化 + 輸出
-    return _persist_and_report(args, config, version, ticket_id, tdd_result)
+    rc = _persist_and_report(args, config, version, ticket_id, tdd_result)
+
+    # Step 4 (W17-002.2)：Context Bundle 自動抽取（post-persist enhancement）
+    if rc == 0:
+        _auto_extract_context_bundle_post_create(
+            version,
+            ticket_id,
+            quiet=bool(getattr(args, "quiet", False)),
+            verbose=bool(getattr(args, "verbose", False)),
+            json_output=bool(getattr(args, "json_output", False)),
+        )
+
+    return rc
 
 
 def _print_create_checklist(
@@ -1281,5 +1338,23 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     parser.add_argument("--decision-tree-entry", help="進入決策樹的層級")
     parser.add_argument("--decision-tree-decision", help="做出的決策")
     parser.add_argument("--decision-tree-rationale", help="決策理由")
+    parser.add_argument(
+        "--quiet",
+        dest="quiet",
+        action="store_true",
+        help="Context Bundle 抽取摘要單行輸出（W17-002.2）",
+    )
+    parser.add_argument(
+        "--verbose",
+        dest="verbose",
+        action="store_true",
+        help="Context Bundle 抽取摘要附欄位預覽（W17-002.2）",
+    )
+    parser.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Context Bundle 抽取結果以 JSON 結構化輸出（W17-002.1）",
+    )
 
     parser.set_defaults(func=execute)

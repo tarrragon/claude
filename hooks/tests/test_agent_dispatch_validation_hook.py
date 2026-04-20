@@ -1569,3 +1569,54 @@ class TestTieredVerdictIntegration:
             },
         )
         assert exit_code == 2
+
+
+# ----------------------------------------------------------------------------
+# W17-018：Ticket where.files fallback 測試
+# ----------------------------------------------------------------------------
+
+
+def test_extract_ticket_ids_finds_full_ids():
+    """從 prompt 擷取完整 ticket ID。"""
+    ids = _hook._extract_ticket_ids(
+        "Ticket: 0.18.0-W17-015.2，依賴 0.18.0-W17-015.3"
+    )
+    assert "0.18.0-W17-015.2" in ids
+    assert "0.18.0-W17-015.3" in ids
+
+
+def test_extract_ticket_ids_no_match_for_bare_short_id():
+    """短 ID（W17-015）無版本前綴時不匹配（避免誤判）。"""
+    ids = _hook._extract_ticket_ids("Ticket: W17-015")
+    assert ids == []
+
+
+def test_load_ticket_where_files_returns_paths_for_w17_015_2():
+    """W17-015.2 ticket md 存在時，應讀出 where.files。"""
+    files = _hook._load_ticket_where_files("0.18.0-W17-015.2")
+    # 此 ticket 已存在且 where 含 .claude/ 路徑
+    assert any(".claude/skills/ticket" in f for f in files)
+
+
+def test_load_ticket_where_files_returns_empty_for_nonexistent():
+    """不存在的 ticket 回傳空清單。"""
+    files = _hook._load_ticket_where_files("9.9.9-W99-999")
+    assert files == []
+
+
+def test_hook_fallback_to_ticket_when_prompt_has_no_paths(
+    monkeypatch, capsys
+):
+    """W17-018 關鍵：prompt 無路徑線索但含 ticket ID 指向 .claude/ 任務時，
+    應從 ticket where.files 補分類為主 repo .claude/，放行無 worktree。"""
+    exit_code = _run_hook(
+        monkeypatch,
+        capsys,
+        tool_input={
+            "subagent_type": "thyme-python-developer",
+            "prompt": "Ticket: 0.18.0-W17-015.2\nRead ticket md 依規格實作。",
+        },
+    )
+    # W17-015.2 where.files 為 .claude/skills/ticket/... → 全主 repo .claude/
+    # → 豁免 worktree 放行
+    assert exit_code == 0

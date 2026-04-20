@@ -136,6 +136,103 @@ def _emit_wide_staging_warning_if_parallel(prompt: str, logger) -> None:
     )
 
 
+# Ticket ID 偵測：0.18.0-W17-015.2、W17-015.2、0.18.0-W17-015 等格式
+_TICKET_ID_PATTERN = re.compile(
+    r"(?<![.\w])(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)(?![\w])"
+)
+
+
+def _extract_ticket_ids(prompt: str) -> List[str]:
+    """從 prompt 擷取所有 ticket ID（完整格式 X.Y.Z-WN-NNN[.N]）。"""
+    if not prompt:
+        return []
+    return list(dict.fromkeys(_TICKET_ID_PATTERN.findall(prompt)))
+
+
+def _load_ticket_where_files(ticket_id: str) -> List[str]:
+    """讀 ticket md 的 frontmatter where.files 欄位。
+
+    Returns:
+        檔案路徑清單；ticket 不存在或無 where.files 時回傳 []。
+    """
+    try:
+        project_root = get_project_root()
+    except Exception:
+        return []
+
+    # 解析版本：0.18.0-W17-015.2 → 0.18.0
+    version_match = re.match(r"(\d+\.\d+\.\d+)", ticket_id)
+    if not version_match:
+        return []
+    version = version_match.group(1)
+    major_minor = ".".join(version.split(".")[:2])  # 0.18
+    major = "v" + version.split(".")[0]              # v0
+
+    # 路徑模式：docs/work-logs/v0/v0.18/v0.18.0/tickets/{id}.md
+    ticket_md = (
+        project_root
+        / "docs" / "work-logs"
+        / major
+        / f"v{major_minor}"
+        / f"v{version}"
+        / "tickets"
+        / f"{ticket_id}.md"
+    )
+    if not ticket_md.exists():
+        return []
+
+    try:
+        content = ticket_md.read_text(encoding="utf-8")
+    except OSError:
+        return []
+
+    # 簡易 frontmatter 解析：找 where.files 區塊
+    # 格式：where:\n  layer: X\n  files:\n  - path1\n  - path2
+    fm_match = re.search(r"^---\n(.*?)\n---", content, re.DOTALL)
+    if not fm_match:
+        return []
+    fm = fm_match.group(1)
+
+    # 擷取 where.files 列表
+    where_block = re.search(
+        r"^where:\s*\n((?:  .*\n)+)", fm, re.MULTILINE
+    )
+    if not where_block:
+        return []
+
+    files_match = re.search(
+        r"^  files:\s*\n((?:  - .*\n)+)", where_block.group(1), re.MULTILINE
+    )
+    if not files_match:
+        return []
+
+    files = re.findall(r"^  - (.+)$", files_match.group(1), re.MULTILINE)
+    return [f.strip() for f in files]
+
+
+def _classify_paths(paths: List[str], project_root_str: str) -> Tuple[bool, bool, bool]:
+    """把路徑清單分類為 (main_repo_claude, external_claude, other)。"""
+    has_main = False
+    has_ext = False
+    has_other = False
+    for p in paths:
+        # 絕對路徑 .claude/ 判斷主 repo vs 外部
+        abs_match = _ABSOLUTE_CLAUDE_PATTERN.search(p)
+        if abs_match:
+            if project_root_str and p.startswith(project_root_str):
+                has_main = True
+            else:
+                has_ext = True
+            continue
+        # 相對路徑 .claude/ → 主 repo
+        if p.startswith(".claude/") or "/.claude/" in p:
+            has_main = True
+            continue
+        # 其他路徑 → has_other（不過濾特定 prefix，ticket where.files 已是具體路徑）
+        has_other = True
+    return has_main, has_ext, has_other
+
+
 def _classify_prompt_paths(prompt: str) -> Tuple[bool, bool, bool]:
     """分類 prompt 中的路徑提及。
 
@@ -1001,6 +1098,33 @@ def main() -> int:
     _emit_wide_staging_warning_if_parallel(prompt, logger)
 
     has_main_repo_claude, has_external_claude, has_other = _classify_prompt_paths(prompt)
+
+    # W17-018：若 prompt 路徑分類不明（都 False），fallback 讀 ticket where.files
+    # 動機：PM 寫短 prompt 時常省略路徑線索（如「Read ticket md 依規格實作」），
+    # hook 無從分類；但 ticket where.files 已記錄具體檔案。讀 ticket 補分類避免
+    # 強制 worktree 阻擋純 .claude/ 任務。
+    if not has_main_repo_claude and not has_external_claude and not has_other:
+        ticket_ids = _extract_ticket_ids(prompt)
+        if ticket_ids:
+            try:
+                project_root_str = str(get_project_root().resolve())
+            except Exception:
+                project_root_str = ""
+            for tid in ticket_ids:
+                files = _load_ticket_where_files(tid)
+                if not files:
+                    continue
+                m, e, o = _classify_paths(files, project_root_str)
+                has_main_repo_claude = has_main_repo_claude or m
+                has_external_claude = has_external_claude or e
+                has_other = has_other or o
+            if has_main_repo_claude or has_other:
+                logger.info(
+                    "W17-018：prompt 路徑不明，由 ticket where.files 補分類：ids=%s "
+                    "main_claude=%s external=%s other=%s",
+                    ticket_ids, has_main_repo_claude,
+                    has_external_claude, has_other,
+                )
 
     # 優先順序判斷：
 

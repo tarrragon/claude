@@ -14,6 +14,7 @@ from ticket_system.lib.ticket_validator import (
     validate_ticket_dict,
     validate_related_to,
     validate_execution_log,
+    validate_execution_log_by_type,
 )
 
 
@@ -537,3 +538,135 @@ Tests passing"""
         is_filled, unfilled = validate_execution_log("0.31.0-W4-001", body)
         assert is_filled is False  # N/A 被視為佔位符
         assert "Problem Analysis" in unfilled
+
+
+# ============================================================
+# W17-016.3: type-aware body schema 驗證 + 中文佔位符偵測
+# ============================================================
+
+
+class TestChinesePlaceholderDetection:
+    """驗證 `（待填寫：...）` / `（必填：...）` 中文佔位符偵測"""
+
+    def test_chinese_placeholder_triggers_unfilled(self):
+        """template 預設的中文佔位符應被辨識為未填寫"""
+        body = """## Problem Analysis
+
+### 問題根因
+
+（待填寫：問題發生的直接原因是什麼？）
+
+### 影響範圍
+
+（待填寫：哪些檔案、模組或功能受影響？）
+
+## Solution
+
+Real solution content here.
+
+## Test Results
+
+All tests passed.
+"""
+        is_filled, unfilled = validate_execution_log("W17-016.3", body)
+        assert is_filled is False
+        assert "Problem Analysis" in unfilled
+        assert "Solution" not in unfilled
+        assert "Test Results" not in unfilled
+
+    def test_chinese_required_placeholder_triggers_unfilled(self):
+        """ANA 重現實驗的『（必填：...）』也應視為佔位符"""
+        body = """## Problem Analysis
+
+（必填：如何重現問題？）
+
+## Solution
+
+Real content.
+
+## Test Results
+
+Passed.
+"""
+        is_filled, unfilled = validate_execution_log("W17-016.3", body)
+        assert is_filled is False
+        assert "Problem Analysis" in unfilled
+
+
+class TestValidateExecutionLogByType:
+    """依 type-aware schema 驗證必填章節"""
+
+    def _body(self, pa: str, sol: str, tr: str) -> str:
+        return f"""## Problem Analysis
+
+{pa}
+
+## Solution
+
+{sol}
+
+## Test Results
+
+{tr}
+"""
+
+    # ---------- ANA: Problem Analysis + Solution 必填 ----------
+
+    def test_ana_all_required_filled_passes(self):
+        body = self._body("root cause identified", "adopted fix A", "<!-- optional -->")
+        passed, unfilled = validate_execution_log_by_type("ANA", body)
+        assert passed is True
+        assert unfilled == []
+
+    def test_ana_missing_problem_analysis_fails(self):
+        body = self._body("（待填寫：問題根因？）", "adopted fix", "n/a")
+        passed, unfilled = validate_execution_log_by_type("ANA", body)
+        assert passed is False
+        assert "Problem Analysis" in unfilled
+
+    def test_ana_test_results_optional(self):
+        """ANA 的 Test Results 為選填，空 placeholder 不影響通過"""
+        body = self._body("root cause", "solution picked", "<!-- To be filled -->")
+        passed, unfilled = validate_execution_log_by_type("ANA", body)
+        assert passed is True
+        assert "Test Results" not in unfilled
+
+    # ---------- IMP: Test Results 必填 ----------
+
+    def test_imp_test_results_filled_passes(self):
+        body = self._body("<!-- optional -->", "<!-- optional -->", "pytest 42 passed")
+        passed, unfilled = validate_execution_log_by_type("IMP", body)
+        assert passed is True
+
+    def test_imp_test_results_placeholder_fails(self):
+        body = self._body("context", "impl details", "<!-- To be filled by executing agent -->")
+        passed, unfilled = validate_execution_log_by_type("IMP", body)
+        assert passed is False
+        assert "Test Results" in unfilled
+
+    def test_imp_problem_analysis_optional(self):
+        """IMP 的 Problem Analysis 為選填"""
+        body = self._body("（待填寫：）", "（待填寫：）", "pytest all green")
+        passed, unfilled = validate_execution_log_by_type("IMP", body)
+        assert passed is True
+
+    # ---------- DOC: 無強制章節 ----------
+
+    def test_doc_has_no_required_body_sections(self):
+        body = self._body("<!-- -->", "<!-- -->", "<!-- -->")
+        passed, unfilled = validate_execution_log_by_type("DOC", body)
+        assert passed is True
+        assert unfilled == []
+
+    # ---------- 未知 type 回退通用檢查 ----------
+
+    def test_unknown_type_falls_back_to_generic(self):
+        body = self._body("content", "content", "content")
+        passed, unfilled = validate_execution_log_by_type("TST", body)
+        assert passed is True
+
+    def test_empty_body_for_ana_fails(self):
+        passed, unfilled = validate_execution_log_by_type("ANA", "")
+        assert passed is False
+        assert "Problem Analysis" in unfilled
+        assert "Solution" in unfilled

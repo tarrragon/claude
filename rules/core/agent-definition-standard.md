@@ -86,6 +86,54 @@ grep -E "^## (允許產出|禁止行為|適用情境)" .claude/agents/<agent>.md
 
 ---
 
-**Last Updated**: 2026-04-18
-**Version**: 1.0.0 — 從 W5-009 方案 1 落地（W5-043.1）
-**Source**: W5-001 派發越界根因 A
+## 執行責任：Ticket body 填寫
+
+實作類 agent（thyme-python-developer / parsley-flutter-developer / fennel-go-developer 及其他執行代理人）完成任務前必須依 ticket type schema 填寫 body 章節。**Why**: Hook 擋是安全網，agent 主動填才是主責；agent 定義若不寫入此責任，agent 不會自律。**Consequence**: body 空白或佔位符未替換會造成後人（審查者、後續承接者）無法理解任務脈絡，ticket 失去歷史價值。**Action**: 本章節必須在實作類 agent 的區塊 1「允許產出」或 agent 通用責任段落中引用。
+
+### 必填章節（依 ticket type）
+
+| Type | 必填章節 |
+|------|---------|
+| IMP | Problem Analysis / Solution / Test Results |
+| ANA | Problem Analysis / Analysis Result |
+| DOC | Solution（文件變更摘要） |
+
+> 具體章節清單以 type-aware body schema（W17-016.2）為權威來源。
+
+### 填寫時機
+
+| 時機 | 對應章節 |
+|------|---------|
+| claim 後 | Problem Analysis（ticket md 若為空需補完） |
+| 實作中 | Solution（遞增式 append-log） |
+| complete 前 | Test Results（含測試指令與摘要輸出） |
+
+### 填寫方式
+
+使用 `ticket track append-log <id> --section "<章節名>"` 搭配 heredoc 傳長文字（參考 `.claude/rules/core/bash-tool-usage-rules.md` 規則五）。
+
+**禁止行為**：
+
+| 反模式 | 原因 |
+|-------|------|
+| 佔位符「（待填寫：...）」未替換就 complete | 等同空白 body |
+| 以「見 commit message」「略」「同上」迴避填寫 | ticket body 與 commit 各自承擔不同讀者 |
+| 寫 `/tmp/*.md` 作 CLI 中介（PC-087） | heredoc 容量足夠，無需繞路 |
+
+### 違規偵測
+
+complete 前驗證 body schema 完整性，偵測佔位符與必填章節缺失；違反時阻擋 complete（提供 `--force` / `--skip-body-check` 逃生閥，使用會被追蹤）。
+
+### 不適用範圍
+
+| 類別 | 說明 |
+|------|------|
+| 純分析型 agent（如 bay-quality-auditor、saffron-system-analyst） | 產出即 body 內容，由 PM 派發時明確指示寫入章節 |
+| DEPRECATED agent | 豁免 |
+| ANA 類 ticket 的子任務分派者 | 本體職責已明確，不加此段 |
+
+---
+
+**Last Updated**: 2026-04-20
+**Version**: 1.1.0 — 新增「執行責任：Ticket body 填寫」章節（W17-016.5），明示實作類 agent 的 body 填寫時機、方式、違規偵測
+**Source**: W5-001 派發越界根因 A + W17-015.1 body 空白系統性缺口（W17-017 group 協調）

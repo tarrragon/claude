@@ -354,6 +354,8 @@ ANA Ticket 的下游 Ticket **必須以 children 表達**（用 `--parent <ANA-i
 - 把「執行獨立性」（可獨立執行）誤當「血緣獨立性」（與上游無關）→ 仍應為 children
 - 用 `spawned_tickets` 代替 `parent_id` 表達血緣（spawned 是衍生副產品語意，非直系後代）
 
+> **CLI 對照**：`--parent` vs `--source-ticket` 的副作用、欄位寫入、阻擋規則完整對比表，見 `.claude/skills/ticket/references/create-command.md`「--parent vs --source-ticket 對比表」章節。建立衍生 Ticket 時使用 `--source-ticket <SOURCE-ID>`，CLI 會自動追加新 Ticket ID 至 source 的 `spawned_tickets`，無需人工編輯。
+
 ---
 
 ## ANA Ticket 完成階段衍生 Ticket 檢查（強制）

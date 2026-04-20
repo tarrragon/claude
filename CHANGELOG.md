@@ -1,3 +1,41 @@
+## [1.20.0] - 2026-04-21
+
+### Summary
+feat: 優化 Context Bundle extractor P2 風格與增強項; feat: Context Bundle CLI wire-in (create + claim); feat: 實作 Context Bundle 自動抽取機制 (+25 more)
+
+Changes: 12 feat, 1 fix, 11 docs, 4 chore
+
+- feat: 優化 Context Bundle extractor P2 風格與增強項
+- feat: Context Bundle CLI wire-in (create + claim)
+- feat: 實作 Context Bundle 自動抽取機制
+- feat: NeedsContext + Exit Status protocol + hook listener
+- feat: sync completed_at to body Completion Info on ticket complete
+- feat: type-aware ticket body schema
+- feat: append-log VALID_SECTIONS 加入 Context Bundle
+- feat: dispatch hook fallback 讀 ticket where.files
+- feat: 新建 session-start-scheduler-hint-hook（排程上下文恢復）
+- feat: 實作 ticket track runqueue 統一 scheduler CLI
+- feat: ticket handoff --auto 自動生成模式
+- feat: group ticket + 11 children 清理 遺漏項
+- fix: patch validate_execution_log_by_type mock + close ticket
+- docs: 新增 PC-107 Phase 3b 派發前未走拆分檢查
+- docs: agent body 填寫責任標準化
+- docs: 文件化 create --source-ticket 副作用 + parent vs source 對比表
+- docs: PC-106 規則失效跳過讀 code + .2 claim
+- docs: PC-105 新功能實作後缺乏文件引導整合（雙通道）
+- docs: 補 runqueue scheduler CLI 引導文件（4 檔）
+- docs: SKILL.md 補 ticket show 子命令使用範例與短 flag 對照
+- docs: PC-104 Agent 執行邊界誤判導致結果未落地（雙通道）
+- docs: 新增 PC-103 大型類比框架維度漏排（雙通道）
+- docs: 補 group + 11 children Context Bundle + group methodology
+- docs: 新增 PC-100 / PC-101 錯誤學習（雙通道記錄）
+- chore: 並行 session 未提交變更收整（scheduler hint hook 測試 + + worklog）
+- chore: complete .4 hook + group 收尾
+- chore: show enhancement commit（他人並行產出收整）
+- chore: .1 ticket show 實作登錄 + worklog 更新（pre-dispatch）
+
+---
+
 ## [1.19.0] - 2026-04-20
 
 ### Summary

@@ -49,11 +49,18 @@ ticket track snapshot
 ## 新 session 開始時：重建全局視野
 
 ```bash
-# 快速掌握全局進度
+# 快速掌握全局進度（含版本進度、in_progress、pending、git status）
 ticket track snapshot
+
+# 查看「接下來該做什麼」（scheduler / Linux runqueue 類比）
+ticket track runqueue --context=resume --top 3     # 與 handoff/pending 交集
+ticket track runqueue --wave N --format=list       # 當前 wave 可執行清單（priority 排序）
+ticket track runqueue --wave N --format=dag        # 完整依賴 DAG + 關鍵路徑
 ```
 
-然後根據 worklog 記錄決定從哪個 Ticket 繼續。
+**自動引導**：`session-start-scheduler-hint-hook.py` 在 SessionStart 時自動呼叫 `runqueue --context=resume`，結果顯示於 hook additionalContext。用戶無需手動呼叫即可看到排程建議；若需更多資訊（如 DAG 或其他 wave）再手動執行。
+
+然後根據 worklog + runqueue 提示決定從哪個 Ticket 繼續。
 
 **Context 隔離**：一個 session 只做一件事，做完 commit → handoff。
 

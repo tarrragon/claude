@@ -126,6 +126,11 @@ from .track_dispatch_check import (
     execute_dispatch_check,
     register_dispatch_check,
 )
+# 統一 scheduler CLI（W17-011.1 / W17-009 落地）
+from .track_runqueue import (
+    execute_runqueue,
+    register_runqueue,
+)
 # 導入版本審計命令模組
 from .audit_version import (
     execute_audit_version,
@@ -207,6 +212,8 @@ def _create_command_handlers() -> dict:
         "audit": execute_audit,
         "audit-version": execute_audit_version,
         "board": execute_board,
+        # W17-011.1 / W17-009 統一 scheduler CLI
+        "runqueue": execute_runqueue,
     }
 
 
@@ -291,6 +298,24 @@ def _register_lifecycle_commands(
         action="store_true",
         help="非互動模式：AC 驗證仍執行，但自動選 y 繼續 claim",
     )
+    p_claim.add_argument(
+        "--quiet",
+        dest="quiet",
+        action="store_true",
+        help="Context Bundle 抽取摘要單行輸出（W17-002.2）",
+    )
+    p_claim.add_argument(
+        "--verbose",
+        dest="verbose",
+        action="store_true",
+        help="Context Bundle 抽取摘要附欄位預覽（W17-002.2）",
+    )
+    p_claim.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Context Bundle 抽取結果以 JSON 結構化輸出（W17-002.1）",
+    )
 
     # complete 操作
     p_complete = subparsers.add_parser("complete", help=TrackMessages.HELP_COMPLETE)
@@ -301,6 +326,12 @@ def _register_lifecycle_commands(
         dest="yes_spawned",
         action="store_true",
         help="ANA 有 spawned 非 terminal 時旁路 blocking confirmation（非互動環境必需）",
+    )
+    p_complete.add_argument(
+        "--skip-body-check",
+        dest="skip_body_check",
+        action="store_true",
+        help="逃生閥：跳過 type-aware body schema 必填章節驗證（W17-016.3；需於 Completion Info 附理由）",
     )
 
     # close 操作（W15-027 / PC-090：--reason 枚舉必填）
@@ -728,6 +759,7 @@ def _register_all_subcommands(
     register_handoff_ready(track_subparsers)
     register_checkpoint_status(track_subparsers)
     register_dispatch_check(track_subparsers)
+    register_runqueue(track_subparsers)
 
 
 def _register_snapshot_commands(

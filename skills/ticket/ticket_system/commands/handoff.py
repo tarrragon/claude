@@ -1082,8 +1082,110 @@ def _execute_gc(args: argparse.Namespace) -> int:
     return execute_gc(dry_run=(dry_run or not execute_mode))
 
 
+_VALID_AUTO_DIRECTIONS = ("to-parent", "to-child", "to-sibling", "to-source", "context-refresh")
+
+
+def _execute_auto_handoff(args: argparse.Namespace) -> int:
+    """
+    執行 --auto 模式 handoff。
+
+    用途：由 scheduler / 自動化流程呼叫，以明確的 from_ticket_id + direction
+    生成標準 handoff JSON，不經過 status / dependency 驗證。
+
+    與互動模式差異：
+    - 必須同時提供 --from-ticket-id 與 --direction
+    - 跳過 _verify_handoff_status / _verify_handoff_dependencies
+    - 產出的 JSON 多一個 auto_generated=true 欄位
+
+    JSON schema（對齊 handoff-reminder-hook.py 讀取格式）：
+    - ticket_id, direction, timestamp, from_status, title, what
+    - chain: { root, parent, depth } —— 直接取 ticket.chain，不自行重解析
+    - resumed_at: None
+    - auto_generated: True
+
+    Args:
+        args: argparse Namespace，需含 from_ticket_id 與 direction
+
+    Returns:
+        int: exit code (0 成功, 1 失敗)
+    """
+    from_ticket_id = getattr(args, "from_ticket_id", None)
+    direction = getattr(args, "direction", None)
+
+    if not from_ticket_id:
+        print(format_error("--auto 需要 --from-ticket-id 參數"), file=sys.stderr)
+        return 1
+    if not direction:
+        print(format_error("--auto 需要 --direction 參數"), file=sys.stderr)
+        return 1
+
+    # 驗證 direction 前綴合法（支援 to-child:ID / to-sibling:ID 任務鏈格式）
+    direction_head = direction.split(":", 1)[0]
+    if direction_head not in _VALID_AUTO_DIRECTIONS:
+        print(format_error(
+            f"--direction 無效：{direction}；允許 {', '.join(_VALID_AUTO_DIRECTIONS)}"
+        ), file=sys.stderr)
+        return 1
+
+    if not validate_ticket_id(from_ticket_id):
+        _print_id_error()
+        return 1
+
+    # 解析版本
+    explicit_version = getattr(args, "version", None)
+    if explicit_version:
+        version = resolve_version(explicit_version)
+    else:
+        extracted = extract_version_from_ticket_id(from_ticket_id)
+        version = extracted if extracted else resolve_version(None)
+    if not version:
+        _print_version_error()
+        return 1
+
+    # 載入 ticket
+    ticket, error = load_and_validate_ticket(version, from_ticket_id, auto_print_error=False)
+    if error:
+        _print_ticket_not_found_error(from_ticket_id, version)
+        return 2
+
+    # 寫入 handoff JSON
+    root = get_project_root()
+    handoff_dir = root / HANDOFF_DIR / HANDOFF_PENDING_SUBDIR
+    handoff_dir.mkdir(parents=True, exist_ok=True)
+    handoff_file = handoff_dir / f"{from_ticket_id}.json"
+
+    handoff_data = {
+        "ticket_id": from_ticket_id,
+        "direction": direction,
+        "timestamp": datetime.now().isoformat(),
+        "from_status": ticket.get("status"),
+        "title": ticket.get("title"),
+        "what": ticket.get("what"),
+        "chain": ticket.get("chain", {}),
+        "resumed_at": None,
+        "auto_generated": True,
+    }
+
+    try:
+        with open(handoff_file, "w", encoding="utf-8") as f:
+            json.dump(handoff_data, f, ensure_ascii=False, indent=2)
+    except (IOError, OSError) as exc:
+        print(format_error(f"寫入 handoff 檔案失敗：{exc}"), file=sys.stderr)
+        return 1
+
+    print(format_info(
+        InfoMessages.HANDOFF_FILE_CREATED,
+        path=str(handoff_file.relative_to(root)),
+    ))
+    return 0
+
+
 def execute(args: argparse.Namespace) -> int:
     """執行 handoff 命令"""
+    # --auto 自動生成模式（scheduler / 自動化用途）
+    if getattr(args, "auto", False):
+        return _execute_auto_handoff(args)
+
     # 檢查是否為 gc 命令（改用 --gc 旗標，不用子命令）
     if getattr(args, "gc", False):
         return _execute_gc(args)
@@ -1231,5 +1333,20 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     parser.add_argument(
         "--version",
         help=HandoffMessages.ARG_VERSION_HELP
+    )
+    parser.add_argument(
+        "--auto",
+        action="store_true",
+        help="自動生成 handoff JSON（scheduler 用途；需搭配 --from-ticket-id 與 --direction）"
+    )
+    parser.add_argument(
+        "--from-ticket-id",
+        dest="from_ticket_id",
+        help="（搭配 --auto）來源 Ticket ID"
+    )
+    parser.add_argument(
+        "--direction",
+        dest="direction",
+        help="（搭配 --auto）handoff 方向：to-parent / to-child / to-sibling / to-source / context-refresh（可加 :TARGET_ID 後綴）"
     )
     parser.set_defaults(func=execute)
