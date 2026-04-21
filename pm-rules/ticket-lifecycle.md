@@ -358,6 +358,48 @@ ANA Ticket 的下游 Ticket **必須以 children 表達**（用 `--parent <ANA-i
 
 ---
 
+## ANA 衍生 Ticket Priority 繼承（強制）
+
+> **來源**：PC-075 下游傳播路徑軸 B — 無 priority 繼承規則時，P1 ANA 衍生 P2 IMP 造成「P1 分析結論的落地執行卻被排在其他 P1 後面」的語意矛盾。
+
+**預設繼承規則**：
+
+| ANA 類型 | 衍生 Ticket（children 或 spawned）預設 priority |
+|---------|----------------------------------------|
+| 防護性 ANA（結論需要 IMP 落地才算解決） | **繼承 source ANA 的 priority** |
+| 純研究性 ANA（結論是知識產出，無需落地） | 衍生 Ticket 視實際需求獨立指定 |
+
+**Why**：防護性 ANA 的衍生 Ticket 承載「分析結論的落地責任」，若 priority 降級，runqueue 排序會將結論落地推遲至其他同 priority 任務之後，違反「分析急迫性 → 落地急迫性」的邏輯延續。
+
+**降級條件**：
+
+衍生 Ticket 僅在以下情境可降級 priority：
+
+| 降級情境 | 範例 | 必要條件 |
+|---------|------|---------|
+| 非阻塞性優化 | 補強性 hook、增量提示、nice-to-have 功能 | ticket body 明示「降級理由」段落 |
+| 已有替代防護 | 其他 spawned Ticket 已覆蓋主要風險，本項為補強 | 引用替代防護的 Ticket ID |
+| 跨版本延後 | 本版本 scope 外，但保留追蹤 | 明示目標版本 |
+
+**降級明示要求**：
+
+降級 priority 的衍生 Ticket 必須在 ticket body（Problem Analysis 章節或建立備註）明示降級理由。禁止：
+
+- 無理由降級（PM 預設 P2 而非繼承）
+- 以「看起來不急」為由降級
+- 未引用替代防護就降級「非阻塞性」類別
+
+**檢查清單**（PM 建立 ANA 衍生 Ticket 時）：
+
+- [ ] source ANA 是否為防護性 ANA？（結論需 IMP 落地才算解決）
+- [ ] 若是，衍生 Ticket priority 是否預設繼承 source？
+- [ ] 若降級，ticket body 是否含明示降級理由段落？
+- [ ] 降級理由是否屬上表三種情境之一？
+
+> **CLI 行為**：`ticket create --source-ticket <ID>` 目前不自動繼承 priority（PM 需手動指定 `--priority`）。未來 CLI 可能實作自動繼承 + 降級需 `--priority-override-reason` 強制，屆時本規則作為實作依據。
+
+---
+
 ## ANA Ticket 完成階段衍生 Ticket 檢查（強制）
 
 > **來源**：ANA Ticket 完成時未強制確認分析結論是否需要建立衍生 Ticket，導致建議被遺忘需事後人工補建。
@@ -474,5 +516,7 @@ how:
 
 ---
 
-**Last Updated**: 2026-04-18
+**Last Updated**: 2026-04-21
+**Version**: 6.1.0 — 新增「ANA 衍生 Ticket Priority 繼承」章節（預設繼承 + 三種降級情境 + 降級明示要求 + 檢查清單），來源 PC-075 下游傳播路徑軸 B
+
 **Version**: 6.0.0 - 新增「Close 條件規則」章節（C1 close_reason 6 枚舉、C2 禁止假 close 案例、C3 條件型 ticket 三後果模板、C4 CLI 驗證規範），來源 W15-024 ANA + W15-025

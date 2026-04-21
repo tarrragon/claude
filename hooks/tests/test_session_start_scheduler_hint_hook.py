@@ -10,6 +10,17 @@ session-start-scheduler-hint-hook 測試套件
 6. hookEventName 必為 SessionStart
 7. additionalContext 為字串
 8. 輸出為合法 JSON
+
+W17-041 新增：spawned pending 提醒
+9. build_hook_output：只有 spawned_pending_section 也輸出 additionalContext
+10. build_hook_output：兩者皆無 → suppressOutput=True
+11. build_hook_output：兩者皆有 → 兩個小節都顯示且可區分
+12. build_spawned_pending_section：空清單 → None
+13. build_spawned_pending_section：區分原生 pending 與 spawned（標題含「來源為 completed ANA」）
+14. build_spawned_pending_section：超過顯示上限時標示「…其餘 N 筆省略」
+15. _extract_spawned_list：list 與 YAML 字串皆可解析
+16. _detect_active_version：status=active 的版本能被 regex 偵測到
+17. scan_spawned_pending：只納入 completed ANA；只回傳非 terminal spawned
 """
 
 import json
@@ -177,3 +188,246 @@ class _StdinStub:
 
     def isatty(self):
         return False
+
+
+# ===========================================================================
+# W17-041：spawned pending 提醒測試
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# 9. build_hook_output：只有 spawned_pending_section 也輸出 additionalContext
+# ---------------------------------------------------------------------------
+def test_build_output_only_spawned_section():
+    hook = load_hook_module()
+    section = "## Spawned 推進清單（來源為 completed ANA...）\n\n- ..."
+    out = hook.build_hook_output(None, section)
+    assert out.get("suppressOutput") is False
+    ac = out["hookSpecificOutput"]["additionalContext"]
+    assert "Spawned 推進清單" in ac
+    # 不含排程提示區塊
+    assert "## 排程提示" not in ac
+
+
+# ---------------------------------------------------------------------------
+# 10. build_hook_output：兩者皆無 → suppressOutput=True
+# ---------------------------------------------------------------------------
+def test_build_output_both_none_suppresses():
+    hook = load_hook_module()
+    out = hook.build_hook_output(None, None)
+    assert out.get("suppressOutput") is True
+    assert "hookSpecificOutput" not in out
+
+
+# ---------------------------------------------------------------------------
+# 11. build_hook_output：兩者皆有 → 兩個小節都顯示且可區分
+# ---------------------------------------------------------------------------
+def test_build_output_both_sections_visible():
+    hook = load_hook_module()
+    sched = "some scheduler context"
+    section = "## Spawned 推進清單（來源為 completed ANA...）\n\n- item"
+    out = hook.build_hook_output(sched, section)
+    ac = out["hookSpecificOutput"]["additionalContext"]
+    assert "## 排程提示" in ac
+    assert "## Spawned 推進清單" in ac
+    # 排程提示位於 spawned 之前
+    assert ac.index("## 排程提示") < ac.index("## Spawned 推進清單")
+
+
+# ---------------------------------------------------------------------------
+# 12. build_spawned_pending_section：空清單 → None
+# ---------------------------------------------------------------------------
+def test_build_spawned_section_empty_returns_none():
+    hook = load_hook_module()
+    assert hook.build_spawned_pending_section([]) is None
+
+
+# ---------------------------------------------------------------------------
+# 13. build_spawned_pending_section：區分原生 pending 與 spawned
+# ---------------------------------------------------------------------------
+def test_build_spawned_section_distinguishes_spawned_from_native():
+    hook = load_hook_module()
+    items = [
+        ("0.18.0-W17-032", "pending", "0.18.0-W17-022"),
+        ("0.18.0-W17-033", "pending", "0.18.0-W17-022"),
+    ]
+    section = hook.build_spawned_pending_section(items)
+    # 區分標記：必含「來源為 completed ANA」或「非原生 pending」字樣
+    assert (
+        "來源為 completed ANA" in section
+        or "非原生 pending" in section
+    )
+    # source ANA 有顯示
+    assert "0.18.0-W17-022" in section
+    # spawned 有顯示
+    assert "0.18.0-W17-032" in section
+    assert "0.18.0-W17-033" in section
+    # status 有顯示
+    assert "pending" in section
+
+
+# ---------------------------------------------------------------------------
+# 14. build_spawned_pending_section：超過顯示上限時顯示省略訊息
+# ---------------------------------------------------------------------------
+def test_build_spawned_section_respects_display_limit():
+    hook = load_hook_module()
+    limit = hook.SPAWNED_PENDING_DISPLAY_LIMIT
+    # 製造 limit+3 個項目（全來自同一 ANA 簡化）
+    items = [
+        (f"0.18.0-W99-{i:03d}", "pending", "0.18.0-W99-000")
+        for i in range(1, limit + 4)
+    ]
+    section = hook.build_spawned_pending_section(items)
+    # 含省略訊息
+    assert "省略" in section
+    # 只顯示 limit 項
+    displayed = sum(1 for line in section.split("\n") if "[status=" in line)
+    assert displayed == limit
+    # 總數顯示正確
+    assert str(len(items)) in section
+
+
+# ---------------------------------------------------------------------------
+# 15. _extract_spawned_list：list 與 YAML 字串皆可解析
+# ---------------------------------------------------------------------------
+def test_extract_spawned_list_handles_list():
+    hook = load_hook_module()
+    fm = {"spawned_tickets": ["0.18.0-W1-001", "0.18.0-W1-002"]}
+    assert hook._extract_spawned_list(fm) == ["0.18.0-W1-001", "0.18.0-W1-002"]
+
+
+def test_extract_spawned_list_handles_yaml_string():
+    hook = load_hook_module()
+    fm = {"spawned_tickets": "- 0.18.0-W1-001\n- 0.18.0-W1-002"}
+    assert hook._extract_spawned_list(fm) == ["0.18.0-W1-001", "0.18.0-W1-002"]
+
+
+def test_extract_spawned_list_handles_empty():
+    hook = load_hook_module()
+    assert hook._extract_spawned_list({"spawned_tickets": []}) == []
+    assert hook._extract_spawned_list({"spawned_tickets": None}) == []
+    assert hook._extract_spawned_list({}) == []
+
+
+# ---------------------------------------------------------------------------
+# 16. _detect_active_version：status=active 的版本能被偵測到
+# ---------------------------------------------------------------------------
+def test_detect_active_version_finds_status_active(tmp_path):
+    hook = load_hook_module()
+    todolist = tmp_path / "docs" / "todolist.yaml"
+    todolist.parent.mkdir(parents=True)
+    todolist.write_text(
+        "versions:\n"
+        "  - version: \"0.17.0\"\n"
+        "    status: completed\n"
+        "  - version: \"0.18.0\"\n"
+        "    status: active\n"
+        "  - version: \"0.19.0\"\n"
+        "    status: planned\n",
+        encoding="utf-8",
+    )
+    logger = MagicMock()
+    assert hook._detect_active_version(tmp_path, logger) == "0.18.0"
+
+
+def test_detect_active_version_no_active_returns_none(tmp_path):
+    hook = load_hook_module()
+    todolist = tmp_path / "docs" / "todolist.yaml"
+    todolist.parent.mkdir(parents=True)
+    todolist.write_text(
+        "versions:\n  - version: \"0.17.0\"\n    status: completed\n",
+        encoding="utf-8",
+    )
+    assert hook._detect_active_version(tmp_path, MagicMock()) is None
+
+
+def test_detect_active_version_no_todolist_returns_none(tmp_path):
+    hook = load_hook_module()
+    # 沒建 todolist
+    assert hook._detect_active_version(tmp_path, MagicMock()) is None
+
+
+# ---------------------------------------------------------------------------
+# 17. scan_spawned_pending：只納入 completed ANA，只回傳非 terminal spawned
+# ---------------------------------------------------------------------------
+def _write_ticket(root: Path, version: str, ticket_id: str, fm: dict):
+    """輔助：寫入 ticket md（flat 結構）。"""
+    d = root / "docs" / "work-logs" / f"v{version}" / "tickets"
+    d.mkdir(parents=True, exist_ok=True)
+    # 極簡 frontmatter（hook_utils.parse_ticket_frontmatter 支援）
+    lines = ["---"]
+    for k, v in fm.items():
+        if isinstance(v, list):
+            lines.append(f"{k}:")
+            for item in v:
+                lines.append(f"- {item}")
+        else:
+            lines.append(f"{k}: {v}")
+    lines.append("---")
+    lines.append("")
+    lines.append("# Body")
+    (d / f"{ticket_id}.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+def test_scan_spawned_pending_end_to_end(tmp_path):
+    hook = load_hook_module()
+    version = "0.18.0"
+    # ANA-1: completed，spawned=[IMP-A pending, IMP-B completed, IMP-C in_progress]
+    _write_ticket(tmp_path, version, "0.18.0-W1-001", {
+        "id": "0.18.0-W1-001",
+        "type": "ANA",
+        "status": "completed",
+        "spawned_tickets": ["0.18.0-W1-002", "0.18.0-W1-003", "0.18.0-W1-004"],
+    })
+    _write_ticket(tmp_path, version, "0.18.0-W1-002", {
+        "id": "0.18.0-W1-002", "type": "IMP", "status": "pending",
+    })
+    _write_ticket(tmp_path, version, "0.18.0-W1-003", {
+        "id": "0.18.0-W1-003", "type": "IMP", "status": "completed",
+    })
+    _write_ticket(tmp_path, version, "0.18.0-W1-004", {
+        "id": "0.18.0-W1-004", "type": "IMP", "status": "in_progress",
+    })
+    # ANA-2: in_progress（不應被納入，即便 spawned 有 pending）
+    _write_ticket(tmp_path, version, "0.18.0-W2-001", {
+        "id": "0.18.0-W2-001",
+        "type": "ANA",
+        "status": "in_progress",
+        "spawned_tickets": ["0.18.0-W2-002"],
+    })
+    _write_ticket(tmp_path, version, "0.18.0-W2-002", {
+        "id": "0.18.0-W2-002", "type": "IMP", "status": "pending",
+    })
+    # ANA-3: completed，無 spawned
+    _write_ticket(tmp_path, version, "0.18.0-W3-001", {
+        "id": "0.18.0-W3-001", "type": "ANA", "status": "completed",
+    })
+
+    logger = MagicMock()
+    result = hook.scan_spawned_pending(tmp_path, version, logger)
+
+    # 只含 ANA-1 的 pending 與 in_progress（completed 排除）
+    ids = sorted(sid for sid, _, _ in result)
+    assert ids == ["0.18.0-W1-002", "0.18.0-W1-004"]
+    # source ANA 皆為 W1-001
+    assert all(ana_id == "0.18.0-W1-001" for _, _, ana_id in result)
+
+
+def test_scan_spawned_pending_no_active_version_returns_empty(tmp_path):
+    """沒有 ticket 檔案時回空（scan_ticket_files_by_version 找不到目錄）。"""
+    hook = load_hook_module()
+    result = hook.scan_spawned_pending(tmp_path, "0.99.0", MagicMock())
+    assert result == []
+
+
+# ---------------------------------------------------------------------------
+# 18. 失敗靜默降級：fetch_spawned_pending_context 遇異常回傳 None
+# ---------------------------------------------------------------------------
+def test_fetch_spawned_pending_context_graceful_degrade(monkeypatch):
+    hook = load_hook_module()
+    logger = MagicMock()
+    # 強迫 get_project_root 拋例外 → 必回 None 且 logger 有警告
+    monkeypatch.setattr(hook, "get_project_root", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    result = hook.fetch_spawned_pending_context(logger)
+    assert result is None
+    assert logger.warning.called

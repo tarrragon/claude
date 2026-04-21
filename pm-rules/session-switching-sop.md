@@ -46,6 +46,57 @@ ticket track snapshot
 
 ---
 
+## Spawned 推進清單（ANA complete 後 handoff 強制欄位）
+
+> **Why**: ANA complete 與 spawned IMP 推進常跨 session（session A 結 ANA，session B 推 spawned），若 handoff 記錄無強制欄位列出 spawned 清單，接手者須重新 `ticket track deps` 查詢並容易遺忘；此機制確保「ANA 結論落地進度」在 handoff 時顯式可見。
+
+### 觸發條件
+
+當前 Ticket 為 ANA 類且 complete 後要進入 handoff / `/clear`；該 Ticket 的 `spawned_tickets` 欄位存在 `pending` 或 `in_progress` 項目時，**強制**在 handoff 記錄（worklog 或 handoff 文件）列出「Spawned 推進清單」欄位。
+
+### 欄位格式
+
+| 欄位 | 說明 |
+|------|------|
+| Source ANA ID | 衍生這些 IMP 的 ANA Ticket ID |
+| Spawned Ticket ID | 各未完成 spawned ticket（pending / in_progress） |
+| Priority | 該 spawned ticket 的 priority（依 `ticket-lifecycle.md` 繼承規則） |
+| 狀態 | pending / in_progress |
+| 預期責任人 | 下次推進建議派給誰（PM 前台 / 代理人類型） |
+
+### 強制性
+
+| 狀態 | 處理 |
+|------|------|
+| 所有 spawned 皆 completed / closed | 豁免，handoff 無需列出本章節 |
+| 任一 spawned 為 pending / in_progress | **強制**列出清單 |
+| 僅 P2 以下 spawned 未完成（且 P1 全 completed） | 可於 Wave 結尾集中清點，不強制每次 handoff 都列；但 worklog 需至少一行備註 |
+
+### 查詢 CLI
+
+```bash
+ticket track deps <ana-ticket-id>        # 衍生關係（spawned_tickets + source_ticket）與狀態
+ticket track query <spawned-id>          # 單一 spawned 詳情（標題、priority、where、acceptance）
+```
+
+### 範例
+
+```markdown
+### Spawned 推進清單
+
+| Source ANA | Spawned Ticket | Priority | 狀態 | 預期責任人 |
+|------------|----------------|----------|------|------------|
+| 0.18.0-W17-036 | 0.18.0-W17-039 | P1 | in_progress | rosemary（PM 前台） |
+| 0.18.0-W17-036 | 0.18.0-W17-040 | P1 | pending | rosemary（PM 前台） |
+| 0.18.0-W17-036 | 0.18.0-W17-041 | P2 | pending | basil-hook-architect |
+```
+
+### 來源
+
+W17-036 軸 D 缺口分析：跨 session 遺忘 spawned 推進。詳見 `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W17-036.md` Solution 章節軸 D（Handoff 觸發條件補強）。
+
+---
+
 ## 新 session 開始時：重建全局視野
 
 ```bash

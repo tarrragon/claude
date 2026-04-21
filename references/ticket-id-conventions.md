@@ -306,7 +306,7 @@ list_tickets() 掃描載入
 ### Q: 為什麼我的檔案被認為是 Ticket？
 
 A: 檔案名符合正則表達式 `^(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)(-[a-z0-9][a-z0-9-]{0,59})?$`
-且存放在 `docs/work-logs/v{version}/tickets/` 目錄下。
+且存放在 `docs/work-logs/v{major}/v{major}.{minor}/v{version}/tickets/` 目錄下（三層結構，例如 `docs/work-logs/v0/v0.18/v0.18.0/tickets/`）。
 
 ### Q: 後綴是否區分大小寫？
 

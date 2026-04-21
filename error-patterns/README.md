@@ -308,7 +308,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-072 | AskUserQuestion payload 生成時混入簡體字與 emoji | 中 | v0.18.0 |
 | PC-073 | ANA 衍生 IMP Ticket 誤用 --parent 導致 children 關係，complete 時被 acceptance-gate 擋下 | 低 | v0.18.0 |
 | PC-074 | 字元集守衛 Hook 實作時的繁簡共用字 false positive | 低 | v0.18.0 |
-| PC-075 | spawned 與 children 狀態檢查語義不對稱 | 中 | v0.18.0 |
+| PC-075 | spawned 與 children 狀態檢查語義不對稱（含四軸下游傳播路徑：decision-tree / priority / Wave / handoff） | 高 | v0.18.0 |
 | PC-076 | Session 間未 commit 變更在後續 session 執行中意外浮現 | 中 | v0.18.0 |
 | PC-077 | Hook 強制 worktree vs ARCH-015 `.claude/` 保護的派發死結 | 中 | v0.18.0 |
 | PC-078 | 並行 terminal/session 的 Ticket 狀態異動被誤判為前 session 遺留 | 高 | v0.18.0 |
@@ -324,6 +324,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-088 | LLM 對 tool call 路徑的步驟數估算偏誤 | 中 | v0.18.0 |
 | PC-089 | Hook 豁免路徑與 Ticket 寫入範圍不一致 | 中 | v0.18.0 |
 | PC-090 | 推延性 close 反模式 | 中 | v0.18.0 |
+| PC-105 | PM 對 SKILL CLI 語法的 autopilot 假設（同 session 多次撞 hook 警告後仍嘗試相似變體） | 中 | v0.18.0 |
 
 ---
 

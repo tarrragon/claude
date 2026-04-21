@@ -66,7 +66,46 @@
 
 **新 session 自動引導**：`session-start-scheduler-hint-hook.py` 在 SessionStart 時自動呼叫 `runqueue --context=resume --top 3`（若無 handoff 則 fallback `--format=list --top 1`），結果顯示為 hook additionalContext。
 
-**典範**：W17-011.1 實作，W17-009 ANA 三視角審查（Evidence/Alternatives/linux）收斂結論。
+### 排序規則（priority + spawned 加權）
+
+**第一層：Priority tier 排序**
+
+| Tier | 條件 | 優先度 |
+|------|------|--------|
+| L1 | priority=P1 | 最優先 |
+| L2 | priority=P2 | 次之 |
+| L3 | priority=P3 或未指定 | 最低 |
+
+**第二層：同 tier 內加權（來源 W17-036 軸 C 分析）**
+
+| 加權項 | 觸發條件 | 效果 |
+|-------|---------|------|
+| `spawned_from_completed_ana` | `source_ticket` 存在且該 source ANA status=completed | 排在同 tier 其他 ticket 前面 |
+
+**Why**: ANA 結論已產出的衍生 IMP 推進急迫性高於一般 pending —— source ANA 已結案代表分析完成、結論等待落地；若與其他同 priority pending 同等對待會造成結論擱置（PC-075 下游傳播防護；詳見 `.claude/error-patterns/process-compliance/PC-075-spawned-children-status-check-asymmetric.md`）。
+
+**第三層：依存關係過濾**
+
+`runqueue` 僅列出 `blockedBy=[]` 的 ticket（可執行清單）。被阻塞的 ticket 在 `--format=dag` 可見，在 `--format=list`（預設）不顯示。
+
+### Wave 完成判定與 spawned 清點
+
+Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
+
+1. 當前 Wave 無 `pending` / `in_progress` ticket
+2. **本 Wave 已 completed ANA 的 `spawned_tickets` 皆非 `pending`**（W17-037 落地）
+
+兩條件均滿足才算 Wave 完成。詳見 `.claude/pm-rules/completion-checkpoint-rules.md` 第八層 Checkpoint 2 情境 C。
+
+### 實作現況
+
+| 層 | 狀態 | 檔案 |
+|----|------|------|
+| 規則面（本章節） | 已落地 | `.claude/skills/ticket/references/track-command.md`（W17-040） |
+| Wave 完成判定 | 已落地 | `.claude/pm-rules/completion-checkpoint-rules.md` L76（W17-037） |
+| CLI 排序邏輯（第二層加權實作） | 未實作（若未來發現序列差異造成問題再建 IMP） | `.claude/skills/ticket/ticket_system/commands/track_runqueue.py` |
+
+**典範**：W17-011.1 實作（基礎 runqueue），W17-009 ANA 三視角審查（Evidence/Alternatives/linux）收斂結論；W17-036 軸 C 補強 spawned 加權規則。
 
 ## UPDATE 操作
 

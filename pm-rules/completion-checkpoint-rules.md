@@ -36,7 +36,8 @@ Ticket type == ANA?
 |--------|------|
 | children 非空 | ANA Ticket 已建立子任務（修復/防護等） |
 | spawned_tickets 非空 | ANA Ticket 已衍生獨立 Ticket |
-| 任一滿足即通過存在性 | 至少有一個後續 Ticket 追蹤分析結論 |
+| 任一（children 或 spawned）存在性通過 | 至少有一個後續 Ticket 追蹤分析結論 |
+| **spawned 狀態全非 pending** | **阻塞完成**：ANA 的 spawned_tickets 必須全部 complete/closed 才能 complete（PC-075 擴充，防止結論未落地即宣告完成） |
 | 均為空 | **阻塞完成**：必須先建立後續 Ticket（修復+防護）再繼續 |
 | **AC 覆蓋率 100%** | **後續 Ticket AC 合集必須 1:1 覆蓋 ANA Solution 所有修改項（PC-041）** |
 
@@ -70,9 +71,32 @@ Ticket type == ANA?
 | 情境 | 條件 | 路由 |
 |------|------|------|
 | D（優先） | ticket 含 tdd_phase 欄位 | → **tdd-completion-routing.md**（7 個子場景獨立展開） |
-| A（#11a） | ticket 仍 in_progress | Context 刷新 Handoff |
+| A（#11a） | ticket 仍 in_progress | Context 刷新 Handoff；**若為 ANA 類，額外執行 `ticket track deps <id>` 掃描 spawned_tickets 狀態；spawned 有 pending/in_progress 時應優先推進 spawned 而非單純 handoff（詳見下方「ANA Spawned 推進提醒」）** |
 | B（#11b） | ticket completed + 同 Wave 有 pending | 任務切換 Handoff |
-| C | ticket completed + 同 Wave 無 pending | [強制] /parallel-evaluation Wave 審查（含 linux 常駐委員）→ C1: 有其他 Wave → #3a；C2: 全完成 → 版本收尾 → /version-release check + #13 |
+| C | ticket completed + 同 Wave 無 pending **且本 Wave 已 completed ANA 的 spawned_tickets 皆非 pending** | [強制] /parallel-evaluation Wave 審查（含 linux 常駐委員）→ C1: 有其他 Wave → #3a；C2: 全完成 → 版本收尾 → /version-release check + #13 |
+
+**ANA Spawned 推進提醒（PC-075 下游傳播防護）**：
+
+ANA 類型 Ticket 處於 in_progress 時，每次進入 Checkpoint 2 路由必須：
+
+1. 執行 `ticket track deps <ana-id>` 列出 spawned_tickets 狀態（pending/in_progress/completed 分類）
+2. spawned 有 pending/in_progress 時：
+   - 若 PM 可在本 session 推進 → **優先 claim spawned 而非切換其他 pending**
+   - 若需跨 session 推進 → 進入 handoff 時必須在「Spawned 推進清單」章節列出（Handoff 模板落地後強制）
+3. Wave 完成判定（情境 C）前置條件已追加「本 Wave 已 completed ANA 的 spawned_tickets 皆非 pending」，兩條件均滿足才算 Wave 完成
+
+**Priority 繼承原則**：spawned Ticket 預設繼承 source ANA 的 priority；若需降級必須在 ticket body 明示理由（防止「P1 分析結論被排在其他 P1 後面」語意矛盾）。
+
+| 情況 | 行動 |
+|------|------|
+| ANA in_progress + spawned 全 pending | 檢查 priority 繼承是否合理，優先推進 spawned |
+| ANA in_progress + spawned 部分 completed | 繼續推進未完成項 |
+| ANA 嘗試 complete + spawned 非 terminal | acceptance-gate-hook 會阻擋，先清 spawned |
+| Wave 無 pending + 有 completed ANA 的 spawned pending | 阻塞 Wave 完成判定，先清 spawned |
+
+> 來源：PC-075 下游傳播路徑四軸（decision-tree/priority/Wave/handoff）
+
+---
 
 **Checkpoint 1.85 代理人清點（強制，PC-050）**：
 
@@ -123,5 +147,7 @@ PM 在 4 個時機必須 `ticket track append-log`：認領後（確認範圍）
 
 ---
 
-**Last Updated**: 2026-04-09
+**Last Updated**: 2026-04-21
+**Version**: 2.1.0 — 新增 ANA spawned 狀態強制檢查、Checkpoint 2 情境 A ANA 推進提醒、情境 C 前置條件追加 spawned 清點、Priority 繼承原則（PC-075 下游傳播防護落地）
+
 **Version**: 2.0.0 - 情境 D 拆分至 tdd-completion-routing.md + Worktree/ANA 流程精簡

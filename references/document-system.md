@@ -13,7 +13,7 @@
 | CHANGELOG | 這個版本做了什麼改變？ | `CHANGELOG.md` |
 | todolist | 還有哪些問題需要處理？ | `docs/todolist.yaml` |
 | worklog | 這個版本要達成什麼目標？ | `docs/work-logs/` |
-| ticket | 這個任務的完整執行歷程？ | `docs/work-logs/v{version}/tickets/` |
+| ticket | 這個任務的完整執行歷程？ | `docs/work-logs/v{major}/v{major}.{minor}/v{version}/tickets/` |
 | error-patterns | 之前遇過類似問題嗎？ | `.claude/error-patterns/` |
 
 ---
@@ -178,7 +178,7 @@ ticket       執行細節、分析、結果
 
 | 規則 | 說明 |
 |------|------|
-| 產出物位置 | `docs/work-logs/v{version}/tickets/` 目錄下 |
+| 產出物位置 | `docs/work-logs/v{major}/v{major}.{minor}/v{version}/tickets/` 目錄下 |
 | 命名格式 | `{ticket-id}-{描述}.md`（如 `{version}-W{n}-{seq}-analysis.md`） |
 | 禁止行為 | 禁止在 `.claude/` 下建立非預定義的子目錄（如 `.claude/analysis/`） |
 

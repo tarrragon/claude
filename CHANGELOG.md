@@ -1,3 +1,20 @@
+## [1.21.0] - 2026-04-21
+
+### Summary
+feat: 落地 軸 C 規則面（runqueue spawned 加權）; feat: session-start hook 新增 spawned pending 提醒; feat: 落地 軸 D 規則面（session-switching-sop Spawned 推進清單） (+4 more)
+
+Changes: 5 feat, 1 fix, 1 docs
+
+- feat: 落地 軸 C 規則面（runqueue spawned 加權）
+- feat: session-start hook 新增 spawned pending 提醒
+- feat: 落地 軸 D 規則面（session-switching-sop Spawned 推進清單）
+- feat: 落地 軸 B priority 繼承 + PC-105 CLI autopilot
+- feat: 落地 軸 A+C 規則擴充 + PC-075 擴充（/042 complete）
+- fix: _is_placeholder 剝除 HTML 註解後再判斷實質內容
+- docs: 核心文件路徑示範改三層結構（v{major}/v{minor}/v{patch}/tickets）
+
+---
+
 ## [1.20.0] - 2026-04-21
 
 ### Summary

@@ -1,12 +1,12 @@
 {
   "version": "1.0.0",
-  "current_ticket": "0.18.0-W11-010",
-  "last_updated": "2026-04-21T02:57:58.026043",
+  "current_ticket": "0.18.0-W10-017",
+  "last_updated": "2026-04-21T14:37:43.444708",
   "signals": {
     "consecutive_failures": {},
     "restrictive_keywords": {
       "last_matched_keyword": "無法",
-      "last_warned_at": "2026-04-20T22:06:35.863438"
+      "last_warned_at": "2026-04-21T12:35:18.527712"
     }
   }
 }

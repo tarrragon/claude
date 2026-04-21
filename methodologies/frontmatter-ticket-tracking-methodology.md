@@ -82,13 +82,18 @@
 
 ```text
 docs/work-logs/
-├── v0.16.0/                        # 版本資料夾
-│   ├── tickets/                    # Ticket 檔案目錄
-│   │   ├── {version}-W{n}-001.md       # Ticket 檔案
-│   │   ├── {version}-W{n}-002.md
-│   │   └── {version}-W{n+1}-001.md
-│   └── v0.16.0-main.md            # 主版本日誌
-├── v0.15.16/                       # 舊版本（CSV 格式，唯讀）
+├── v0/                                 # major 版本 group
+│   ├── v0.18/                          # minor 版本 group
+│   │   ├── v0.18.0/                    # patch 版本資料夾
+│   │   │   ├── tickets/                # Ticket 檔案目錄
+│   │   │   │   ├── {version}-W{n}-001.md   # 例：0.18.0-W17-001.md
+│   │   │   │   ├── {version}-W{n}-002.md
+│   │   │   │   └── {version}-W{n+1}-001.md
+│   │   │   └── v0.18.0-main.md         # 主版本日誌
+│   │   └── v0.18.1/                    # 同 minor 下其他 patch
+│   └── v0.16/
+│       └── v0.16.0/
+├── v0.15.16/                           # 舊版本（CSV 格式，唯讀，未轉三層結構）
 │   ├── tickets.csv
 │   └── ...
 ```
@@ -219,7 +224,7 @@ uv run ticket create \
 
 **結果**：
 
-- 建立 `docs/work-logs/v0.16.0/tickets/{version}-W{n}-001.md`
+- 建立 `docs/work-logs/v{major}/v{major}.{minor}/v{version}/tickets/{version}-W{n}-001.md`（例：`docs/work-logs/v0/v0.16/v0.16.0/tickets/0.16.0-W{n}-001.md`）
 - frontmatter 包含 5W1H 設計和初始狀態
 - body 包含執行日誌模板
 

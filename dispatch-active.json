@@ -1,112 +1,85 @@
 {
   "dispatches": [
     {
-      "agent_description": "thyme 實作 W17-011.1 runqueue",
-      "tool_use_id": "toolu_01Ww3QGuDByJaga5CeZTNwWh",
-      "agent_id": "a5d5e0dc6991f8547",
-      "ticket_id": "",
-      "files": [],
-      "branch_name": "worktree",
-      "dispatched_at": "2026-04-20T12:22:00.844768+00:00"
-    },
-    {
-      "agent_description": "thyme 實作 W17-011.4 scheduler hint hook",
-      "tool_use_id": "toolu_01649ucypjREcv2B1g2K5sBp",
-      "agent_id": "a165af1feb58180a4",
-      "ticket_id": "",
-      "files": [],
-      "branch_name": "worktree",
-      "dispatched_at": "2026-04-20T12:50:52.214329+00:00"
-    },
-    {
-      "agent_description": "W17-016.1 body 完整率盤點",
-      "tool_use_id": "toolu_01SjdYxwBjk47Ci9LjPA27XF",
-      "agent_id": "acb4a6b0b9441b436",
-      "ticket_id": "",
-      "files": [],
-      "branch_name": "",
-      "dispatched_at": "2026-04-20T13:12:13.816687+00:00"
-    },
-    {
-      "agent_description": "W17-005 Context Bundle section",
-      "tool_use_id": "toolu_01CrbNyDqHhgQd7ArJ2on4zF",
-      "agent_id": "afc5eb3aaf70ac049",
-      "ticket_id": "",
-      "files": [],
-      "branch_name": "",
-      "dispatched_at": "2026-04-20T13:23:51.926654+00:00"
-    },
-    {
-      "agent_description": "W17-006 source-ticket 文件化",
-      "tool_use_id": "toolu_01UN5tezVP3t3GzdYwgrZa4m",
-      "agent_id": "ad3484b7e39fa3c7c",
-      "ticket_id": "",
-      "files": [],
-      "branch_name": "",
-      "dispatched_at": "2026-04-20T13:27:49.710018+00:00"
-    },
-    {
-      "agent_description": "W17-010 NeedsContext + Exit Status",
-      "tool_use_id": "toolu_01128ZDFCbm7vVSAyG9KG4qy",
-      "agent_id": "a72ac8c175dcdfbeb",
-      "ticket_id": "",
-      "files": [],
-      "branch_name": "",
-      "dispatched_at": "2026-04-20T13:43:09.381491+00:00"
-    },
-    {
-      "agent_description": "W17-010 linux 審查",
-      "tool_use_id": "toolu_015uX9UUnbkkvkUWNJg8DYHX",
-      "agent_id": "a0a48e29cd71420a5",
-      "ticket_id": "",
-      "files": [],
-      "branch_name": "",
-      "dispatched_at": "2026-04-20T13:49:18.351123+00:00"
-    },
-    {
-      "agent_description": "W17-010 Explore 審查",
-      "tool_use_id": "toolu_01CYysorn3HgDm9V92ZmC3eY",
-      "agent_id": "a7020ecae8622d3b8",
-      "ticket_id": "",
-      "files": [],
-      "branch_name": "",
-      "dispatched_at": "2026-04-20T13:49:22.718116+00:00"
-    },
-    {
-      "agent_description": "cinnamon Phase 4",
-      "tool_use_id": "toolu_01Ph2Ec8YQztVqEYZybKQT1e",
+      "agent_description": "W17-024 ANA 分析",
+      "tool_use_id": "toolu_01XjdeQmiiGG4zwmFrMcmCZV",
       "agent_id": null,
       "ticket_id": "",
       "files": [],
       "branch_name": "",
-      "dispatched_at": "2026-04-20T15:59:48.915901+00:00"
+      "dispatched_at": "2026-04-21T04:27:31.531757+00:00"
     },
     {
-      "agent_description": "W17-002.1 extractor polish",
-      "tool_use_id": "toolu_01LVQWLraVPGBEQvNXdaHj1s",
+      "agent_description": "W17-025 ANA 分析",
+      "tool_use_id": "toolu_012VvC7BL3KRt21VwXgUaG8K",
       "agent_id": null,
       "ticket_id": "",
       "files": [],
       "branch_name": "",
-      "dispatched_at": "2026-04-20T16:20:41.674706+00:00"
+      "dispatched_at": "2026-04-21T04:27:45.075016+00:00"
     },
     {
-      "agent_description": "W17-002.1 extractor polish",
-      "tool_use_id": "toolu_015traWVzNGmA9S8nuHGinZc",
+      "agent_description": "W17-026 ANA 分析",
+      "tool_use_id": "toolu_01T1UfFc9PbnGmDrNnemNPJX",
       "agent_id": null,
       "ticket_id": "",
       "files": [],
-      "branch_name": "worktree",
-      "dispatched_at": "2026-04-20T16:20:57.125135+00:00"
+      "branch_name": "",
+      "dispatched_at": "2026-04-21T04:28:02.194168+00:00"
     },
     {
-      "agent_description": "W17-002.1 extractor polish",
-      "tool_use_id": "toolu_019ZqQmCZTAm6C4xmDLhLqCJ",
+      "agent_description": "W17-028 ANA 分析",
+      "tool_use_id": "toolu_01QJsxAQVv62VXLPiHC3MWGv",
       "agent_id": null,
       "ticket_id": "",
       "files": [],
-      "branch_name": "worktree",
-      "dispatched_at": "2026-04-20T16:21:11.446849+00:00"
+      "branch_name": "",
+      "dispatched_at": "2026-04-21T04:28:15.986288+00:00"
+    },
+    {
+      "agent_description": "W17-030 ANA 分析",
+      "tool_use_id": "toolu_01KNHWa3mCVgw3nURZuAeyXf",
+      "agent_id": null,
+      "ticket_id": "",
+      "files": [],
+      "branch_name": "",
+      "dispatched_at": "2026-04-21T04:28:31.942216+00:00"
+    },
+    {
+      "agent_description": "ANA W17-036 spawned execution guidance gap",
+      "tool_use_id": "toolu_01F2n921cZihShEfAhV9HXgM",
+      "agent_id": null,
+      "ticket_id": "",
+      "files": [],
+      "branch_name": "",
+      "dispatched_at": "2026-04-21T04:55:15.806426+00:00"
+    },
+    {
+      "agent_description": "ANA W17-036 spawned execution guidance gap",
+      "tool_use_id": "toolu_01VNRgLss5b1uhFaNUCxJ6Lx",
+      "agent_id": null,
+      "ticket_id": "",
+      "files": [],
+      "branch_name": "",
+      "dispatched_at": "2026-04-21T04:55:35.682381+00:00"
+    },
+    {
+      "agent_description": "W17-041 session-start hook spawned pending",
+      "tool_use_id": "toolu_014tQvhsPgEKdVtZy67oJ37G",
+      "agent_id": null,
+      "ticket_id": "",
+      "files": [],
+      "branch_name": "",
+      "dispatched_at": "2026-04-21T05:48:42.417215+00:00"
+    },
+    {
+      "agent_description": "W17-041 session-start hook spawned pending",
+      "tool_use_id": "toolu_012CH4aG4fwRfDt5xoV55EPh",
+      "agent_id": null,
+      "ticket_id": "",
+      "files": [],
+      "branch_name": "",
+      "dispatched_at": "2026-04-21T05:48:54.904868+00:00"
     }
   ]
 }
