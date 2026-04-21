@@ -1,3 +1,15 @@
+## [1.21.1] - 2026-04-21
+
+### Summary
+docs: 補完 check/set-acceptance 語法組合表 + 決策樹 + 5 常見錯誤警示; docs: 補列 set-blocked-by / set-related-to / set-acceptance CLI 範例
+
+Changes: 2 docs
+
+- docs: 補完 check/set-acceptance 語法組合表 + 決策樹 + 5 常見錯誤警示
+- docs: 補列 set-blocked-by / set-related-to / set-acceptance CLI 範例
+
+---
+
 ## [1.21.0] - 2026-04-21
 
 ### Summary

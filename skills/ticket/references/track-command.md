@@ -138,16 +138,28 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 /ticket track append-log <id> --section "Problem Analysis" "內容"
 /ticket track append-log <id> --section "Context Bundle" "PCB 內容（派發前分析結果，PC-040）"
 
-# 勾選驗收條件
-/ticket track check-acceptance <id> --all              # 勾選全部驗收條件
-/ticket track check-acceptance <id> 1 2 3              # 勾選指定項（index 從 1 開始）
+# 勾選驗收條件（check-acceptance，舊語法）
+/ticket track check-acceptance <id> 1                  # 勾選第 1 項（1-based 整數）
 /ticket track check-acceptance <id> 1 --uncheck        # 取消勾選第 1 項
+/ticket track check-acceptance <id> --all              # 勾選全部驗收條件
+/ticket track check-acceptance <id> --all --uncheck    # 取消勾選全部
+/ticket track check-acceptance <id> "實作完成"          # 文字搜尋勾選（模糊比對）
 
-# 勾選驗收條件（明確語意版，W14-030 推薦）
-/ticket track set-acceptance <id> --check 1 2 3        # 勾選多個 index（空白分隔）
-/ticket track set-acceptance <id> --uncheck 1          # 取消勾選指定 index
+# 勾選驗收條件（set-acceptance，W14-030 推薦語法）
+/ticket track set-acceptance <id> --check 1 2 3        # 勾選多個 index（空白分隔，支援 nargs）
+/ticket track set-acceptance <id> --uncheck 1 2        # 取消勾選多個 index
 /ticket track set-acceptance <id> --all-check          # 勾選全部
 /ticket track set-acceptance <id> --all-uncheck        # 取消勾選全部
+
+# 設定阻擋關係（blockedBy 欄位）
+/ticket track set-blocked-by <id> <blocked-by-id>      # 覆寫（設定單一 blockedBy）
+/ticket track set-blocked-by <id> <id2> --add          # 追加（去重）
+/ticket track set-blocked-by <id> <id2> --remove       # 移除指定 blockedBy
+
+# 設定相關關係（relatedTo 欄位）
+/ticket track set-related-to <id> <related-id>         # 覆寫（設定單一 relatedTo）
+/ticket track set-related-to <id> <id2> --add          # 追加（去重）
+/ticket track set-related-to <id> <id2> --remove       # 移除指定 relatedTo
 
 # 驗證 frontmatter 合規性（W14-030）
 /ticket track validate <id>                            # 檢查 status/completed_at/acceptance/who 4 欄位
@@ -163,6 +175,81 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 /ticket track batch-complete "id1,id2,id3"
 ```
 
+## 驗收條件操作詳解
+
+### 語法組合完整表
+
+#### check-acceptance 完整組合（舊語法，單索引）
+
+| 組合 | 指令 | 行為 |
+|------|------|------|
+| 單項勾選 | `check-acceptance <id> 1` | 勾選第 1 個驗收條件 |
+| 單項取消勾選 | `check-acceptance <id> 1 --uncheck` | 取消勾選第 1 項 |
+| 全部勾選 | `check-acceptance <id> --all` | 勾選全部驗收條件 |
+| 全部取消勾選 | `check-acceptance <id> --all --uncheck` | 取消勾選全部 |
+| 文字搜尋勾選 | `check-acceptance <id> "實作完成"` | 模糊比對後勾選 |
+| 文字搜尋取消 | `check-acceptance <id> "實作完成" --uncheck` | 模糊比對後取消勾選 |
+
+#### set-acceptance 完整組合（W14-030 推薦，多索引）
+
+| 組合 | 指令 | 行為 |
+|------|------|------|
+| 多項勾選 | `set-acceptance <id> --check 1 2 3` | 同時勾選第 1/2/3 項 |
+| 多項取消勾選 | `set-acceptance <id> --uncheck 1 2` | 同時取消勾選第 1/2 項 |
+| 全部勾選 | `set-acceptance <id> --all-check` | 勾選全部驗收條件 |
+| 全部取消勾選 | `set-acceptance <id> --all-uncheck` | 取消勾選全部 |
+
+### set vs check 決策樹
+
+```
+需要操作驗收條件？
+    |
+    v
+一次操作多個 index？
+    |
+    +── 是 ──> 用 set-acceptance --check 1 2 3（check-acceptance 不支援多索引）
+    |
+    +── 否 ──> 用文字搜尋？（不確定 index）
+                  |
+                  +── 是 ──> 用 check-acceptance <id> "關鍵字"（set-acceptance 不支援文字）
+                  |
+                  +── 否 ──> 兩者皆可，推薦 set-acceptance（語意清晰）
+```
+
+**場景對照（7 情境）**：
+
+| 場景 | 推薦命令 | 原因 |
+|------|---------|------|
+| 完成所有驗收條件 | `set-acceptance --all-check` | 語意清晰，等同批量操作 |
+| 逐一勾選（不確定 index） | `check-acceptance "關鍵字"` | 唯一支援文字搜尋的命令 |
+| 一次勾選多項 | `set-acceptance --check 1 3 5` | check-acceptance 不支援多索引 |
+| 取消上一個勾選 | `set-acceptance --uncheck 2` | 語意明確，等同 check + --uncheck |
+| 確認哪幾項已勾選 | `ticket track query <id>` | 先查再操作 |
+| 重置全部再重選 | `set-acceptance --all-uncheck` + `--check 1 2` | 分兩步清除後選取 |
+| 腳本自動化 | `set-acceptance --check ...` | 有具名 flag，腳本可讀性高 |
+
+### index 三種格式（僅 check-acceptance 支援）
+
+| 格式 | 範例 | 說明 |
+|------|------|------|
+| 1-based 整數 | `1`, `2`, `3` | 標準格式，第 1 項 = 索引 1 |
+| 0-based 整數 | `0` | 特殊支援，視為第 1 項（等同 `1`） |
+| 文字搜尋 | `"實作完成"` | 模糊比對 AC 條目文字；唯一比對才成功 |
+
+> **注意**：`set-acceptance` 只接受 1-based 整數，不支援 0-based 或文字搜尋。
+
+### 5 常見錯誤組合警示
+
+| 錯誤用法 | 症狀 | 正確用法 |
+|---------|------|---------|
+| `check-acceptance <id> 1 2 3` | argparse 錯誤（只接受單 index） | `set-acceptance <id> --check 1 2 3` |
+| `check-acceptance <id>`（無 index 無 --all） | `CHECK_ACCEPTANCE_MISSING_INDEX` 錯誤 | 加 index 或 `--all` |
+| `check-acceptance <id> --all 1` | `CHECK_ACCEPTANCE_ALL_WITH_INDEX` 錯誤（互斥） | 二選一：要嘛 `--all`，要嘛指定 index |
+| `set-acceptance <id> --check`（無數字） | argparse 錯誤（--check 需至少 1 個值） | `--check 1` 或 `--check 1 2 3` |
+| `check-acceptance <id> "關鍵字"`（比對多項）| `匹配到 N 個項目，請使用索引` 錯誤 | 改用具體 index 避免歧義 |
+
+---
+
 ## CLI 可修改欄位 vs 手動編輯欄位
 
 並非所有 frontmatter 欄位都有對應的 CLI 命令。修改欄位前請查閱此表：
@@ -175,8 +262,8 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 | children | `add-child <parent> <child>` | 父子關係 |
 | acceptance | `check-acceptance` / `set-acceptance` | 勾選/取消勾選驗收條件（set-acceptance 為 W14-030 明確語意版） |
 | frontmatter 驗證 | `validate <id>` | 檢查 status/completed_at/acceptance/who 4 欄位合規性（W14-030） |
-| blockedBy | 無 CLI 命令 | 建立時用 `--blocked-by`；之後手動編輯 frontmatter |
-| relatedTo | 無 CLI 命令 | 建立時用 `--related-to`；之後手動編輯 frontmatter |
+| blockedBy | `set-blocked-by <id> <value> [--add\|--remove]` | 建立時用 `--blocked-by`；之後用 CLI 更新 |
+| relatedTo | `set-related-to <id> <value> [--add\|--remove]` | 建立時用 `--related-to`；之後用 CLI 更新 |
 | priority | 無 CLI 命令 | 手動編輯 frontmatter |
 | dispatch_reason | 無 CLI 命令 | 手動編輯 frontmatter |
 
@@ -184,10 +271,8 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 
 | 錯誤呼叫 | 正確做法 |
 |---------|---------|
-| `set-blocked-by` / `set-blockedBy` | 手動編輯 frontmatter `blockedBy` 欄位 |
 | `set-status` | 使用 `claim` / `complete` / `release` |
 | `set-priority` | 手動編輯 frontmatter `priority` 欄位 |
-| `set-related-to` | 手動編輯 frontmatter `relatedTo` 欄位 |
 
 ---
 
