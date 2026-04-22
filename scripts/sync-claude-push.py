@@ -42,22 +42,44 @@ from pathlib import Path
 
 REPO_URL = "https://github.com/tarrragon/claude.git"
 
+# 排除分類（新增項目時請對應下列四類之一，若都不符合請先評估是否應進 framework）
+#
+# 類型 A - Runtime state（本 session 執行期狀態，專案特定且會隨時間變動）
+#   特徵：記錄當前派發/Hook/PM 狀態，跨專案共用會造成狀態污染
+#   範例：dispatch-active.json、hook-state/、pm-status.json
+#
+# 類型 B - Local-only settings（各專案個別設定，不應跨專案同步）
+#   特徵：每個專案 preserve/狀態/覆蓋設定獨立管理
+#   範例：settings.local.json、sync-preserve.yaml、.sync-state.json
+#
+# 類型 C - Session-bound log（本地產生的日誌/交接檔案）
+#   特徵：只對本機 session 有意義，無跨專案共用價值
+#   範例：hook-logs/、handoff/、PM_INTERVENTION_REQUIRED、ARCHITECTURE_REVIEW_REQUIRED
+#
+# 類型 D - 敏感憑證（嚴禁推送至公開 repo）
+#   特徵：含密鑰/token/環境變數，外流即安全事故
+#   範例：.env*、credentials.json、secrets.*、.keys、私鑰副檔名
+#
+# 新增機制時的 checklist 與決策流程見 .claude/references/sync-exclusion-guide.md
 EXCLUDE_PATTERNS = {
+    # 類型 C - Session-bound log
     "handoff",
     "hook-logs",
     "PM_INTERVENTION_REQUIRED",
     "ARCHITECTURE_REVIEW_REQUIRED",
+    # 類型 A - Runtime state
     "pm-status.json",
-    "__pycache__",
-    ".pytest_cache",
-    "sync-preserve.yaml",
-    ".sync-state.json",
-    # 專案 runtime state：記錄本 session 派發/Hook 狀態，不跨專案共用
     "dispatch-active.json",
     "hook-state",
-    # 本地設定：settings.local.json 為各專案個別覆蓋，不應同步
+    # 工具產物（Python 快取，非上述四類但無跨專案共用價值）
+    "__pycache__",
+    ".pytest_cache",
+    ".venv",
+    # 類型 B - Local-only settings
+    "sync-preserve.yaml",
+    ".sync-state.json",
     "settings.local.json",
-    # 敏感檔案：避免意外推送憑證和環境變數
+    # 類型 D - 敏感憑證（避免意外推送憑證和環境變數）
     ".env",
     ".env.local",
     ".env.production",
@@ -65,8 +87,7 @@ EXCLUDE_PATTERNS = {
     "secrets.yaml",
     "secrets.json",
     ".secrets",
-    ".venv",
-    # 目錄層級排除（與 .secrets 對齊）
+    # 類型 D - 目錄層級排除（與 .secrets 對齊）
     "secrets",
     "private",
     ".keys",

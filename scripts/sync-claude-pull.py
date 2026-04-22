@@ -58,19 +58,31 @@ _LARGE_FILE_THRESHOLD = 1_048_576  # 1MB
 REMOTE_ONLY = frozenset({".git", "project-templates"})
 
 # 本地專有：只存在於本地，同步時不刪除也不覆蓋
+#
+# 排除分類（與 sync-claude-push.py EXCLUDE_PATTERNS 對稱，詳版見
+# .claude/references/sync-exclusion-guide.md）：
+#   A - Runtime state：dispatch-active.json、hook-state/、pm-status.json
+#   B - Local-only settings：settings.local.json、sync-preserve.yaml、.sync-state.json
+#   C - Session-bound log：hook-logs/、handoff/、PM_INTERVENTION_REQUIRED、ARCHITECTURE_REVIEW_REQUIRED
+#
+# 新增機制時請對應分類並同步更新 push 端 EXCLUDE_PATTERNS，避免不對稱同步。
 LOCAL_ONLY = frozenset({
+    # 類型 C - Session-bound log
     "hook-logs",
     "handoff",
     "PM_INTERVENTION_REQUIRED",
     "ARCHITECTURE_REVIEW_REQUIRED",
+    # 類型 A - Runtime state
     "pm-status.json",
+    "dispatch-active.json",    # 本 session 派發狀態，專案特定 runtime state
+    "hook-state",              # Hook runtime state 目錄（wrap-tripwire 等）
+    # 工具產物（Python 快取，無跨專案共用價值）
     "__pycache__",
     ".pytest_cache",
     ".venv",
+    # 類型 B - Local-only settings
     "sync-preserve.yaml",      # 各專案的 preserve 清單不同，不可被遠端覆蓋
     ".sync-state.json",        # 本地同步狀態，不可被遠端覆蓋
-    "dispatch-active.json",    # 本 session 派發狀態，專案特定 runtime state
-    "hook-state",              # Hook runtime state 目錄（wrap-tripwire 等）
     "settings.local.json",     # 各專案個別覆蓋設定，不應被遠端同步覆蓋
 })
 
