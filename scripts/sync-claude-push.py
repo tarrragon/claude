@@ -52,6 +52,11 @@ EXCLUDE_PATTERNS = {
     ".pytest_cache",
     "sync-preserve.yaml",
     ".sync-state.json",
+    # 專案 runtime state：記錄本 session 派發/Hook 狀態，不跨專案共用
+    "dispatch-active.json",
+    "hook-state",
+    # 本地設定：settings.local.json 為各專案個別覆蓋，不應同步
+    "settings.local.json",
     # 敏感檔案：避免意外推送憑證和環境變數
     ".env",
     ".env.local",

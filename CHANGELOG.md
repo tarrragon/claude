@@ -1,3 +1,14 @@
+## [1.22.2] - 2026-04-22
+
+### Summary
+fix: 修復 sync 腳本遺漏 runtime state 排除清單
+
+Changes: 1 fix
+
+- fix: 修復 sync 腳本遺漏 runtime state 排除清單
+
+---
+
 ## [1.22.1] - 2026-04-22
 
 ### Summary

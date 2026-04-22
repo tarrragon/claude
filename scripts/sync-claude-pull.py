@@ -67,8 +67,11 @@ LOCAL_ONLY = frozenset({
     "__pycache__",
     ".pytest_cache",
     ".venv",
-    "sync-preserve.yaml",  # 各專案的 preserve 清單不同，不可被遠端覆蓋
-    ".sync-state.json",    # 本地同步狀態，不可被遠端覆蓋
+    "sync-preserve.yaml",      # 各專案的 preserve 清單不同，不可被遠端覆蓋
+    ".sync-state.json",        # 本地同步狀態，不可被遠端覆蓋
+    "dispatch-active.json",    # 本 session 派發狀態，專案特定 runtime state
+    "hook-state",              # Hook runtime state 目錄（wrap-tripwire 等）
+    "settings.local.json",     # 各專案個別覆蓋設定，不應被遠端同步覆蓋
 })
 
 # 同步時跳過的所有路徑（合併使用）
