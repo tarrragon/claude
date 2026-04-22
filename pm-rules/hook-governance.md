@@ -4,6 +4,90 @@ Hook 是系統治理的核心基礎設施。本文件涵蓋 Hook 修改審核和
 
 ---
 
+## Hook 配置治理
+
+### Handler 類型
+
+| 類型 | 用途 | 治理規則 |
+|------|------|---------|
+| `command` | 執行 shell / Python / Bash script | 預設選擇；需有測試或 smoke check |
+| `http` | 將 hook input 以 HTTP POST 傳給服務 | 僅用於本機或受控服務；需記錄 timeout 與失敗行為 |
+| `prompt` | 讓模型做單輪 yes/no 判斷 | 僅用於語意判斷；不得取代 deterministic script |
+| `agent` | 派 subagent 讀檔、grep、驗證條件 | 實驗性；需明確限制 scope 與 timeout |
+
+### `if` 條件
+
+`if` 用於縮小 hook handler 的啟動範圍，降低無效 spawn 成本。
+
+| 規則 | 說明 |
+|------|------|
+| 適用事件 | 只用於 `PreToolUse`、`PostToolUse`、`PostToolUseFailure`、`PermissionRequest` |
+| 語法 | 使用 permission rule syntax，如 `Bash(git *)`、`Edit(*.ts)` |
+| 組合方式 | 單一 `if` 只放一條 rule；需要多條件時拆成多個 handler |
+| 非 tool event | 不設定 `if`；非 tool event 上的 `if` 不會執行 |
+
+**範例**：
+
+```json
+{
+  "type": "command",
+  "if": "Bash(git push *)",
+  "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pre-push-check.py"
+}
+```
+
+```json
+{
+  "type": "command",
+  "if": "Edit(*.md)",
+  "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/markdown-policy-check.py"
+}
+```
+
+```json
+{
+  "type": "command",
+  "if": "Bash(uv run *)",
+  "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/test-command-check.py"
+}
+```
+
+### HTTP hooks
+
+HTTP hook 將事件 JSON 作為 `Content-Type: application/json` 的 POST body 送到 `url`。
+
+**使用規則**：
+
+- 優先使用本機 loopback 或受控內網 endpoint。
+- 不把 secrets 寫死在 URL 或 headers；需要 header token 時使用 `allowedEnvVars` 白名單。
+- 非 2xx、連線失敗、timeout 都視為 non-blocking error；需要阻擋時，endpoint 必須回 2xx 且 JSON body 含 block/deny 決策。
+- HTTP hook 必須設定合理 timeout，避免拖慢 agent loop。
+
+**範例**：
+
+```json
+{
+  "type": "http",
+  "url": "http://localhost:8080/hooks/pre-tool-use",
+  "timeout": 30,
+  "headers": {
+    "Authorization": "Bearer $HOOK_TOKEN"
+  },
+  "allowedEnvVars": ["HOOK_TOKEN"]
+}
+```
+
+### Prompt / agent hooks
+
+| 類型 | 適用 | 禁止 |
+|------|------|------|
+| `prompt` | 語意分類、文件品質判斷、需要模型理解的 yes/no gate | 檔案狀態檢查、可用 grep/script 決定的條件 |
+| `agent` | 需要 Read/Grep/Glob 多步查證的複合條件 | 大範圍重構、無 timeout 的長任務、會寫檔的驗證 |
+
+Prompt / agent hook 必須在設計文件中說明為何 deterministic script 不足。
+
+---
+
 ## Hook 修改審核
 
 ### 審核層級

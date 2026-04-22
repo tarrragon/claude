@@ -40,6 +40,69 @@ Ticket: {ticket_id}
 
 ---
 
+## 短 Prompt Snippets（PC-040 / PC-065）
+
+以下 snippets 是派發時優先使用的短版骨架。完整 context 必須先寫入 Ticket Context Bundle；prompt 只保留 Ticket ID、邊界摘要與執行指令。每個 snippet 第一行固定為 `Ticket: {id}`。
+
+### 單任務
+
+```markdown
+Ticket: {id}
+
+{agent-name}: Read ticket md and execute the current acceptance criteria.
+Allowed: {allowed files/actions from where.files}
+Forbidden: {out-of-scope files/actions}
+Use precise staging only: git add {exact files}
+If context is insufficient, append NeedsContext and stop.
+```
+
+### 並行多任務
+
+```markdown
+Ticket: {id}
+
+{agent-name}: Execute only this ticket from the dispatch-plan.
+Allowed: {this ticket files/actions}
+Forbidden: other parallel tickets' files and git add . / git add -A
+Commit policy: {agent commit | PM commit | no commit}
+If blocked, report Exit Status without touching sibling scope.
+```
+
+### Group Coordinator
+
+```markdown
+Ticket: {id}
+
+{agent-name}: Update the group/coordinator ticket only.
+Use the dispatch-plan table to track children/spawned tickets.
+Do not implement child scope or batch-dispatch agents.
+Record blockers, deps, and next runnable ticket IDs.
+```
+
+---
+
+## Dispatch-Plan Template
+
+對 2+ ticket、group ticket、spawned follow-up、或任何需要並行/序列混合派發的場景，PM 先在 ticket Problem Analysis 或 Solution 寫入 dispatch-plan。dispatch-plan 是 orchestration description，不是 batch dispatch CLI。
+
+| ticket | agent | files | deps | context source | commit policy | run mode |
+|--------|-------|-------|------|----------------|---------------|----------|
+| `{id}` | `{agent}` | `{exact files}` | `{none | ids}` | `{Context Bundle | handoff | manual note}` | `{agent commit | PM commit | no commit}` | `{parallel | serial | blocked}` |
+
+欄位要求：
+
+| 欄位 | 內容要求 |
+|------|---------|
+| `ticket` | 單一 ticket ID；不得把多個 ticket 合成同一列 |
+| `agent` | 指定 agent 或 PM 前台 |
+| `files` | 精確檔案 ownership；未知時先補 Context Bundle，不派發 |
+| `deps` | blockedBy / 前置 ticket；無依賴填 `none` |
+| `context source` | agent 應讀取的持久化 context 來源 |
+| `commit policy` | 明確 agent 自 commit、PM 統一 commit、或 no commit |
+| `run mode` | `parallel`、`serial` 或 `blocked`；不得用 `batch` 表示自動批量執行 |
+
+---
+
 ## 填寫要點
 
 | 欄位 | 內容要求 |
@@ -85,5 +148,7 @@ Ticket: {ticket_id}
 
 ---
 
-**Last Updated**: 2026-04-18
+**Last Updated**: 2026-04-22
+**Version**: 1.1.0 — 新增短 prompt snippets 與 dispatch-plan template（W17-044）
+
 **Version**: 1.0.0 — 從 W5-009 方案 2 落地（Ticket 0.18.0-W5-044）

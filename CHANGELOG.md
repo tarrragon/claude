@@ -1,3 +1,22 @@
+## [1.22.0] - 2026-04-22
+
+### Summary
+feat: show runqueue after auto handoff; fix: remove dead version flag from ticket track; docs: complete dispatch plan templates (+6 more)
+
+Changes: 1 feat, 1 fix, 7 docs
+
+- feat: show runqueue after auto handoff
+- fix: remove dead version flag from ticket track
+- docs: complete dispatch plan templates
+- docs: update hook system guidance
+- docs: expand worktree operation guidance
+- docs: clarify hook test execution with uv
+- docs: record subagent completion lifecycle pattern
+- docs: point handoff prompt to runqueue
+- docs: switch ticket resume entry to runqueue
+
+---
+
 ## [1.21.1] - 2026-04-21
 
 ### Summary

@@ -1083,6 +1083,34 @@ def _execute_gc(args: argparse.Namespace) -> int:
 
 
 _VALID_AUTO_DIRECTIONS = ("to-parent", "to-child", "to-sibling", "to-source", "context-refresh")
+_AUTO_RUNQUEUE_HINT_TITLE = "下一步候選（runqueue --context=resume --top 3）"
+_AUTO_RUNQUEUE_EMPTY_MESSAGE = "目前無待恢復 ticket"
+
+
+def _print_auto_runqueue_hint(version: str) -> None:
+    """在 handoff --auto 成功後輸出 resume context 的下一步候選。"""
+    from ticket_system.commands.track_runqueue import render_runqueue
+
+    args = argparse.Namespace(
+        format="list",
+        top=3,
+        context="resume",
+        wave=None,
+    )
+
+    print()
+    print(_AUTO_RUNQUEUE_HINT_TITLE)
+    print(SEPARATOR_SECONDARY)
+
+    try:
+        rendered = render_runqueue(args, version)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        print(format_warning(f"runqueue 建議產生失敗：{exc}"))
+        return
+
+    print(rendered)
+    if "  1. " not in rendered:
+        print(_AUTO_RUNQUEUE_EMPTY_MESSAGE)
 
 
 def _execute_auto_handoff(args: argparse.Namespace) -> int:
@@ -1177,6 +1205,7 @@ def _execute_auto_handoff(args: argparse.Namespace) -> int:
         InfoMessages.HANDOFF_FILE_CREATED,
         path=str(handoff_file.relative_to(root)),
     ))
+    _print_auto_runqueue_hint(version)
     return 0
 
 

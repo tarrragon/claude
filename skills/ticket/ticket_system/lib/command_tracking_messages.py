@@ -393,7 +393,6 @@ class TrackMessages:
     ARG_COMPLETED = "只顯示已完成的 Tickets"
     ARG_BLOCKED = "只顯示被阻塞的 Tickets"
     ARG_VERSION_STR = "版本號（如 0.31.0 或 v0.31.0）"
-    ARG_VERSION_PARAM = "版本號（自動偵測）"
     ARG_ROOT_TICKET_ID = "根 Ticket ID"
     ARG_TICKET_IDS = "Ticket ID 列表（以逗號分隔）"
     ARG_VALUE = "新的值"

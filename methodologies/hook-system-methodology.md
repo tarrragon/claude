@@ -9,12 +9,22 @@
 ### Hook 執行時機圖
 
 ```text
-User Input → UserPromptSubmit → PreToolUse → Tool Execution → PostToolUse → Stop
-     ↓              ↓               ↓                ↓              ↓        ↓
-  工作流程檢查    阻止狀態檢查    效能監控開始      效能監控結束     版本檢查
-  任務逃避偵測    安全檢查       錯誤攔截        品質檢查
-                                             程式異味偵測
-                                             文件更新提醒
+SessionStart / InstructionsLoaded
+     ↓
+UserPromptSubmit
+     ↓
+PreToolUse → PermissionRequest / PermissionDenied → Tool Execution
+     ↓                                           ↓
+PostToolUse / PostToolUseFailure                 Elicitation / ElicitationResult
+     ↓
+SubagentStart / SubagentStop / TaskCreated / TaskCompleted
+     ↓
+Stop / StopFailure
+     ↓
+PreCompact / PostCompact / SessionEnd
+
+Standalone async events:
+Notification / TeammateIdle / ConfigChange / CwdChanged / FileChanged / WorktreeCreate / WorktreeRemove
 ```
 
 ### 三大鐵律自動執行
@@ -264,9 +274,35 @@ if 檔案變更 > 0:
 1. 此 Hook 服務「啟動時」「完成時」還是「兩者」？
 2. 若兩者 → 拆成兩個 Hook 分掛兩個 event
 3. 若完成時且涉及代理人 → 必用 SubagentStop
-4. 查 hook-spec 確認選用 event 在 background 模式的觸發時機
-5. 確認狀態匹配使用 source of truth 識別碼（agent_id）
+4. 若是 task 狀態變更 → TaskCreated / TaskCompleted
+5. 若是 session / compact / config / cwd / file / worktree 生命週期 → 查事件總覽選擇對應 event
+6. 查 hook-spec 確認選用 event 在 background 模式的觸發時機
+7. 確認狀態匹配使用 source of truth 識別碼（agent_id）
 ```
+
+#### 0.5 Hook handler 選擇
+
+| 需求 | Handler | 原因 |
+|------|---------|------|
+| 可用 deterministic script 判斷 | `command` | 可測、可重現、成本低 |
+| 需呼叫本機或受控服務 | `http` | 將驗證集中到服務端，仍保留 JSON 決策 |
+| 需模型做語意分類 | `prompt` | 單輪判斷即可，不需工具 |
+| 需讀多檔或 grep 後再判斷 | `agent` | 可使用工具查證，但需限制 scope |
+
+**預設順序**：`command` → `http` → `prompt` → `agent`。越往右成本與不確定性越高，必須在設計中說明理由。
+
+#### 0.6 `if` 條件使用
+
+`if` 用來避免 hook handler 在不相關工具呼叫上啟動。
+
+| 情境 | 做法 |
+|------|------|
+| 只關心某種 Bash 子命令 | `if: "Bash(git *)"` |
+| 只關心特定副檔名 edit | `if: "Edit(*.ts)"` |
+| 多條件 | 拆多個 handler，不把邏輯塞進一條 `if` |
+| 非 tool event | 不使用 `if` |
+
+若條件需要讀專案狀態或跨檔判斷，不要硬塞進 `if`；用 `if` 做粗篩，詳細判斷交給 handler。
 
 > 完整錯誤模式：`.claude/error-patterns/architecture/ARCH-019-hook-event-timing-mismatch.md`
 > Event input/output 規範：`.claude/references/hook-architect-technical-reference.md`
@@ -442,8 +478,15 @@ Hook 的替代方案：異常記錄到**日誌檔**（`.claude/hook-logs/`），
 
 測試執行：
 ```bash
-uv run pytest .claude/lib/tests/ -v
+uv run --with pytest python -m pytest .claude/lib/tests/ -v
 ```
+
+Hook tests under `.claude/hooks/tests/` may include PEP 723 inline dependencies.
+Before running them, inspect the file header and follow `.claude/hooks/tests/README.md`:
+
+- PEP 723 test file: `uv run .claude/hooks/tests/<test-file>.py`
+- Ordinary pytest file: `uv run --with pytest python -m pytest .claude/hooks/tests/<test-file>.py -v`
+- Targeted selection on a PEP 723 file: mirror dependencies with `--with <package>`
 
 ### 配置外部化
 

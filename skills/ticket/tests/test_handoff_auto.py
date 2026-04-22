@@ -160,6 +160,46 @@ def test_auto_generates_json_to_pending(temp_project):
     assert out_file.exists()
 
 
+def test_auto_stdout_includes_runqueue_hint_for_pending_candidate(temp_project, capsys):
+    root, tickets_dir = temp_project
+    _create_ticket(
+        tickets_dir,
+        "0.18.0-W17-001",
+        status=STATUS_PENDING,
+        title="Resume candidate",
+    )
+
+    args = _make_args(from_ticket_id="0.18.0-W17-001", direction="to-child")
+    rc = _execute_auto_handoff(args)
+    assert rc == 0
+
+    out = capsys.readouterr().out
+    assert "下一步候選（runqueue --context=resume --top 3）" in out
+    assert "0.18.0-W17-001" in out
+    assert "Resume candidate" in out
+    assert "目前無待恢復 ticket" not in out
+
+
+def test_auto_stdout_shows_empty_resume_message_when_no_runnable_candidate(
+    temp_project, capsys
+):
+    root, tickets_dir = temp_project
+    _create_ticket(
+        tickets_dir,
+        "0.18.0-W17-002",
+        status=STATUS_IN_PROGRESS,
+        title="Not runnable yet",
+    )
+
+    args = _make_args(from_ticket_id="0.18.0-W17-002", direction="to-child")
+    rc = _execute_auto_handoff(args)
+    assert rc == 0
+
+    out = capsys.readouterr().out
+    assert "下一步候選（runqueue --context=resume --top 3）" in out
+    assert "目前無待恢復 ticket" in out
+
+
 def test_auto_json_schema_aligns_with_hook_reader(temp_project):
     root, tickets_dir = temp_project
     _create_ticket(

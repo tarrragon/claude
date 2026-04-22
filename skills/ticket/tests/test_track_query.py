@@ -508,7 +508,6 @@ class TestVersion:
         """
         args = Mock()
         args.version_str = "0.31.0"
-        args.version_param = None
 
         with patch('ticket_system.lib.ticket_loader.list_tickets') as mock_list:
             mock_tickets = [
@@ -531,7 +530,6 @@ class TestVersion:
         """
         args = Mock()
         args.version_str = "v0.31.0"
-        args.version_param = None
 
         with patch('ticket_system.lib.ticket_loader.list_tickets') as mock_list:
             mock_list.return_value = []
@@ -548,7 +546,6 @@ class TestVersion:
         """
         args = Mock()
         args.version_str = "invalid-version"
-        args.version_param = None
 
         with patch('ticket_system.commands.track_query.list_tickets') as mock_list:
             mock_list.return_value = []

@@ -85,6 +85,22 @@
 > 代理人路徑表（Source of Truth）：.claude/pm-rules/agent-path-registry.md
 > IMP-003 防護：.claude/error-patterns/implementation/IMP-003-refactoring-scope-regression.md
 
+### Worktree 路由
+
+涉及背景實作代理人、並行修改、或隔離 session 的命令，先讀：
+
+- .claude/pm-rules/worktree-operations.md - `--worktree` / `-w`、`isolation: worktree`、`worktree.sparsePaths`、`WorktreeCreate` / `WorktreeRemove`、stale cleanup
+- .claude/references/agent-dispatch-decision.md - 目標檔案位置與代理人派發策略
+
+路由摘要：
+
+| 目標 | 路由 |
+|------|------|
+| 非 `.claude/` 實作或測試 | 背景代理人可用 `isolation: worktree` |
+| `.claude/` Edit/Write | PM 前台或主 repo 流程，不派 worktree subagent |
+| 人工隔離 session | `claude --worktree <path>` 或 `claude -w <path>` |
+| 大型但範圍明確任務 | 可加 `worktree.sparsePaths` |
+
 ---
 
 ## TDD 階段判斷
@@ -116,8 +132,9 @@
 - .claude/pm-rules/ticket-lifecycle.md - Ticket 生命週期
 - .claude/pm-rules/incident-routing.md - 事件回應路由
 - .claude/references/agent-dispatch-decision.md - **代理人派發決策表**（IMP/TST 派發前必讀；目標檔案位置 × permissionMode 決策矩陣）
+- .claude/pm-rules/worktree-operations.md - **Worktree 操作 SOP**（`--worktree` / `-w`、`isolation: worktree`、sparsePaths、Hook events、清理）
 
 ---
 
-**Last Updated**: 2026-04-12
-**Version**: 1.1.0 - 分工路由表新增「驗證類子任務」列（強制背景派發，不詢問用戶）
+**Last Updated**: 2026-04-21
+**Version**: 1.2.0 - 補充 worktree 路由入口

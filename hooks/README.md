@@ -69,6 +69,11 @@ python .claude/hooks/agent_dispatch_recovery.py stats
 .claude/hooks/tests/test_agent_dispatch_check.py
 ```
 
+> Hook tests may declare PEP 723 inline dependencies. Before choosing a command, read
+> `.claude/hooks/tests/README.md`. For `test_agent_dispatch_check.py`, use
+> `uv run .claude/hooks/tests/test_agent_dispatch_check.py` so `uv` loads `pytest`
+> and `pyyaml` from the file header.
+
 #### `tests/test_error_recovery.py`
 **功能**：錯誤恢復工具模組測試套件
 
@@ -85,6 +90,9 @@ python .claude/hooks/agent_dispatch_recovery.py stats
 ```bash
 .claude/hooks/tests/test_error_recovery.py
 ```
+
+> For hook test execution rules, including ordinary pytest files and PEP 723 files,
+> see `.claude/hooks/tests/README.md`.
 
 ### 示範腳本
 

@@ -267,7 +267,7 @@ def generate_reminder_message(
     生成 Handoff 提醒訊息（WARN 模式，不修改檔案）
 
     僅列出待恢復任務供 PM 參考，不自動接手或寫入 resumed_at。
-    PM 透過 /ticket resume 手動決定是否恢復。
+    PM 透過 /ticket 或 runqueue 排序結果手動決定是否恢復。
 
     Args:
         pending_tasks: 待恢復任務列表 (已通過前置驗證)
@@ -293,8 +293,9 @@ def generate_reminder_message(
         message += f"     方向: {direction}\n\n"
 
     message += "執行提醒：\n"
-    message += "  /ticket resume <id>        恢復指定任務 context\n"
-    message += "  /ticket resume --list      查看完整清單\n\n"
+    message += "  /ticket                                  查看 scheduler 接手建議\n"
+    message += "  ticket track runqueue --context=resume --top 3  查看排序後待接手清單\n"
+    message += "  /ticket resume <id>                      恢復指定任務 context\n\n"
     message += "============================================================\n"
 
     return message
@@ -309,7 +310,7 @@ def generate_hook_output(
     生成 Hook 輸出格式（WARN 模式）
 
     若有待恢復任務且此 session 尚未提醒過，則顯示提醒訊息。
-    不修改任何檔案，PM 透過 /ticket resume 手動決定。
+    不修改任何檔案，PM 透過 /ticket 或 runqueue 排序結果手動決定。
 
     Args:
         pending_tasks: 待恢復任務列表

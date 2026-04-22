@@ -1,5 +1,67 @@
 # 🔧 Hook 系統快速參考
 
+本文件是 Hook 系統入口索引。需要設計新 Hook 時，先用本文件定位事件與能力，再依情境讀治理規則、方法論或技術參考。
+
+> 外部規格來源：Claude Code Hooks reference（`https://code.claude.com/docs/en/hooks`）。
+
+---
+
+## Hook 能力導覽
+
+| 主題 | 入口 |
+|------|------|
+| 事件何時觸發 | 本文件「Hook 事件總覽」 |
+| 事件選擇與啟動/完成分流 | `.claude/methodologies/hook-system-methodology.md` |
+| 修改審核、HTTP hook、`if` 條件治理 | `.claude/pm-rules/hook-governance.md` |
+| JSON input/output、permissionDecision、HTTP 範例 | `.claude/references/hook-architect-technical-reference.md` |
+| Hook 測試執行方式 | `.claude/hooks/tests/README.md` |
+
+---
+
+## Hook 事件總覽
+
+| Event | 觸發時機 | Matcher |
+|-------|----------|---------|
+| `SessionStart` | Session 開始或 resume | `startup` / `resume` / `clear` / `compact` |
+| `InstructionsLoaded` | CLAUDE.md 或 `.claude/rules/*.md` 載入 context | load reason |
+| `UserPromptSubmit` | 使用者 prompt 送出、Claude 處理前 | 無 matcher |
+| `PreToolUse` | 工具執行前，可阻止工具 | tool name |
+| `PermissionRequest` | 權限對話出現時 | tool name |
+| `PermissionDenied` | auto mode classifier 拒絕工具時 | tool name |
+| `PostToolUse` | 工具成功執行後 | tool name |
+| `PostToolUseFailure` | 工具執行失敗後 | tool name |
+| `Notification` | Claude Code 發出通知時 | notification type |
+| `SubagentStart` | subagent 被 spawn 時 | agent type |
+| `SubagentStop` | subagent 完成時 | agent type |
+| `TaskCreated` | `TaskCreate` 建立 task 時 | 無 matcher |
+| `TaskCompleted` | task 被標記 completed 時 | 無 matcher |
+| `Stop` | 主 agent 完成回應時 | 無 matcher |
+| `StopFailure` | turn 因 API error 結束時 | error type |
+| `TeammateIdle` | agent team teammate 即將 idle 時 | 無 matcher |
+| `ConfigChange` | 設定檔在 session 中變更時 | configuration source |
+| `CwdChanged` | 工作目錄改變時 | 無 matcher |
+| `FileChanged` | watched file 在磁碟上變更時 | literal filenames |
+| `WorktreeCreate` | `--worktree` 或 `isolation: "worktree"` 建立 worktree 時 | 無 matcher |
+| `WorktreeRemove` | worktree 被移除時 | 無 matcher |
+| `PreCompact` | context compaction 前 | `manual` / `auto` |
+| `PostCompact` | context compaction 完成後 | `manual` / `auto` |
+| `Elicitation` | MCP server 在 tool call 中要求使用者輸入時 | MCP server name |
+| `ElicitationResult` | 使用者回覆 MCP elicitation 後 | MCP server name |
+| `SessionEnd` | Session 終止時 | end reason |
+
+**Matcher 規則**：
+
+- `PreToolUse`、`PostToolUse`、`PostToolUseFailure`、`PermissionRequest`、`PermissionDenied` 以 tool name 匹配。
+- `UserPromptSubmit`、`Stop`、`TeammateIdle`、`TaskCreated`、`TaskCompleted`、`WorktreeCreate`、`WorktreeRemove`、`CwdChanged` 不支援 matcher。
+- `if` 只在 tool events 上使用；非 tool event 設定 `if` 不會執行。
+- `FileChanged` 的 matcher 是 watched filename 清單，不使用一般 tool matcher 規則。
+
+**名稱校準**：
+
+| 名稱 | 狀態 | 使用指引 |
+|------|------|----------|
+| `Setup` | 非官方 Hook event 名稱 | 依需求改用 `SessionStart`、`InstructionsLoaded`、`ConfigChange`、`CwdChanged` 或 `FileChanged` |
+
 ## 📋 Hook 執行流程
 
 ```mermaid
@@ -78,7 +140,7 @@ graph TD
 **任務規劃自動檢查 - 方法論合規性**
 
 - **觸發時機**: PostEdit - 工作日誌檔案修改後
-- **目標檔案**: `docs/work-logs/v*.*.*.md`
+- **目標檔案**: `<worklog-path>`
 - **執行順序**: order 30 (在 Code Smell Detection Hook 之後)
 
 #### 檢查項目
@@ -121,7 +183,7 @@ ls -lt .claude/hook-logs/task-doc-validation/ | head -2
 
 手動執行檢查:
 ```bash
-.claude/hooks/post-edit-task-doc-validation.sh docs/work-logs/v0.12.1-domain-interfaces.md
+.claude/hooks/post-edit-task-doc-validation.sh <worklog-path>
 ```
 
 ### Code Smell Detection Hook

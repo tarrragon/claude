@@ -25,7 +25,6 @@ hook-logs 記錄，不阻擋 Edit。
   使用 logger.info 寫日誌、用 stderr 寫警告（Claude Code 會顯示 hook error
   提示用戶注意；這是預期行為，非 crash）
 - 共用驗證邏輯由 ticket_system.validators.frontmatter_validator 提供
-  （W14-030 CLI 將 import 相同模組）
 
 Exit Code:
 - 0: 永遠成功（事後警告，不阻擋）

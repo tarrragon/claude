@@ -278,12 +278,8 @@ def _render_critical_path(
 # 主入口
 # ---------------------------------------------------------------------------
 
-def execute_runqueue(args: argparse.Namespace, version: str) -> int:
-    """執行 track runqueue 命令。
-
-    Returns:
-        0: 正常；非 0 僅用於內部錯誤
-    """
+def render_runqueue(args: argparse.Namespace, version: str) -> str:
+    """渲染 track runqueue 輸出文字。"""
     fmt = getattr(args, "format", FORMAT_LIST) or FORMAT_LIST
     top = getattr(args, "top", None)
     context = getattr(args, "context", None)
@@ -294,14 +290,26 @@ def execute_runqueue(args: argparse.Namespace, version: str) -> int:
     scoped = _apply_context_resume(scoped, context)
 
     if fmt == FORMAT_LIST:
-        print(_render_list(scoped, top, wave, context))
+        return _render_list(scoped, top, wave, context)
     elif fmt == FORMAT_DAG:
         # dag 忽略 --top（呈現完整 DAG）
-        print(_render_dag(scoped))
+        return _render_dag(scoped)
     elif fmt == FORMAT_CRITICAL_PATH:
-        print(_render_critical_path(scoped, top))
-    else:
-        print(f"[ERROR] 不支援的 --format={fmt}")
+        return _render_critical_path(scoped, top)
+
+    raise ValueError(f"不支援的 --format={fmt}")
+
+
+def execute_runqueue(args: argparse.Namespace, version: str) -> int:
+    """執行 track runqueue 命令。
+
+    Returns:
+        0: 正常；非 0 僅用於內部錯誤
+    """
+    try:
+        print(render_runqueue(args, version))
+    except ValueError as exc:
+        print(f"[ERROR] {exc}")
         return 1
     return 0
 

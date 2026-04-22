@@ -534,9 +534,7 @@ def execute_log(args: argparse.Namespace, version: str) -> int:
 
 def execute_version(args: argparse.Namespace, current_version: str) -> int:
     """顯示指定版本的進度摘要"""
-    # 優先使用 args.version_str（命令行位置參數）
-    # 次選 args.version_param（--version 選項）
-    # 最後使用 current_version（自動偵測）
+    # 使用 args.version_str（命令行位置參數）
     target_version_str = args.version_str
 
     # 確保版本號格式正確

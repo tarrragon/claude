@@ -9,11 +9,28 @@
 
 ## Hook 類型深度理解
 
+### Event 快速索引
+
+| 節奏 | Events |
+|------|--------|
+| Session lifecycle | `SessionStart`, `InstructionsLoaded`, `SessionEnd` |
+| Turn lifecycle | `UserPromptSubmit`, `Stop`, `StopFailure`, `PreCompact`, `PostCompact` |
+| Tool lifecycle | `PreToolUse`, `PermissionRequest`, `PermissionDenied`, `PostToolUse`, `PostToolUseFailure` |
+| Agent / task lifecycle | `SubagentStart`, `SubagentStop`, `TaskCreated`, `TaskCompleted`, `TeammateIdle` |
+| Environment async | `Notification`, `ConfigChange`, `CwdChanged`, `FileChanged`, `WorktreeCreate`, `WorktreeRemove` |
+| MCP elicitation | `Elicitation`, `ElicitationResult` |
+
 ### SessionStart / SessionEnd
 - **用途**: Session 生命週期管理
 - **輸入**: session_id, transcript_path, source
 - **輸出**: additionalContext (載入初始 context)
 - **特點**: 無 Matcher，每次啟動/結束都執行
+
+### InstructionsLoaded
+- **用途**: 偵測 CLAUDE.md 或 `.claude/rules/*.md` 載入 context
+- **輸入**: session_id, transcript_path, cwd, hook_event_name, load reason
+- **輸出**: additionalContext
+- **特點**: 可用於規則載入審計、上下文補充，不應阻擋一般流程
 
 ### UserPromptSubmit
 - **用途**: Prompt 提交前的檢查和 Context 注入
@@ -27,11 +44,25 @@
 - **輸出**: permissionDecision (allow/deny/ask)
 - **特點**: 可阻止工具呼叫，Exit code 2 阻塊
 
+### PermissionRequest / PermissionDenied
+- **用途**:
+  - `PermissionRequest`: 權限對話出現時記錄、補充審核或提示
+  - `PermissionDenied`: auto mode classifier 拒絕工具時處理 retry 或提示
+- **輸入**: tool_name, tool_input, permission context
+- **輸出**: permission decision 或 retry decision
+- **特點**: 適合權限審計；不得與一般 PreToolUse 安全檢查混淆
+
 ### PostToolUse
 - **用途**: 工具執行後的日誌記錄和後處理
 - **輸入**: tool_name, tool_input, tool_response
 - **輸出**: decision (block), additionalContext
 - **特點**: 工具已執行，只能回饋訊息
+
+### PostToolUseFailure
+- **用途**: 工具執行失敗後記錄錯誤、分類失敗、提供修復指引
+- **輸入**: tool_name, tool_input, failure response
+- **輸出**: decision 或 additionalContext
+- **特點**: 適合失敗觀測，不適合阻止已發生的工具呼叫
 
 ### Stop
 - **用途**: 主線程停止時的後處理（檢查未完成工作、強制完成檢查清單等）
@@ -49,6 +80,152 @@
   - **與 PostToolUse(Agent) 區別**：PostToolUse(Agent) 在 background 派發時於**啟動時**觸發（非完成），SubagentStop 才是真完成訊號
 
 > **重要**：「代理人完成」相關 Hook（清理派發、驗證 commit、廣播狀態、handoff 提醒等）一律使用 SubagentStop，**禁止使用 PostToolUse(Agent)**（時機錯位，詳見 ARCH-019）。
+
+### SubagentStart
+- **用途**: subagent spawn 時記錄派發、驗證 prompt、建立觀測狀態
+- **輸入**: session_id, transcript_path, cwd, hook_event_name, agent metadata
+- **輸出**: decision 或 additionalContext
+- **特點**: 啟動時邏輯放這裡或 PreToolUse(Agent)；完成時邏輯仍放 SubagentStop
+
+### TaskCreated / TaskCompleted
+- **用途**: task 建立與完成狀態觀測
+- **輸入**: task metadata
+- **輸出**: `TaskCompleted` 可做完成後提醒或狀態同步
+- **特點**: 無 matcher；每次 task 狀態事件都觸發
+
+### StopFailure
+- **用途**: turn 因 API error 結束時做觀測或紀錄
+- **輸入**: error type（如 rate_limit、authentication_failed、billing_error、server_error）
+- **輸出**: output 和 exit code 被忽略
+- **特點**: 僅用於記錄，不可設計成流程阻擋
+
+### TeammateIdle
+- **用途**: agent team teammate 即將 idle 時補充工作或紀錄狀態
+- **輸入**: teammate context
+- **輸出**: decision
+- **特點**: 無 matcher；只在 agent team 情境有意義
+
+### ConfigChange / CwdChanged / FileChanged
+- **用途**:
+  - `ConfigChange`: 設定來源變更後重載或審計
+  - `CwdChanged`: cwd 改變後做環境管理
+  - `FileChanged`: watched file 在磁碟上變更時觸發
+- **輸出**:
+  - `CwdChanged` / `FileChanged` 可輸出環境或檔案變更後的補充 context
+- **特點**: `FileChanged` matcher 是 literal filenames；`CwdChanged` 無 matcher
+
+### WorktreeCreate / WorktreeRemove
+- **用途**: worktree 建立/移除生命週期觀測與自訂行為
+- **輸入**: worktree path、branch、建立或移除 context
+- **輸出**:
+  - `WorktreeCreate` 可取代預設 git 行為
+  - `WorktreeRemove` 用於清理與記錄
+- **特點**: 無 matcher；不可把未審查產出自動丟棄
+
+### PreCompact / PostCompact
+- **用途**: compact 前保存恢復提示、compact 後驗證上下文
+- **輸入**: trigger (`manual` / `auto`)
+- **輸出**: context 或記錄
+- **特點**: compact 前後分離；不要把恢復提示生成放在 PostCompact 才做
+
+### Elicitation / ElicitationResult
+- **用途**: MCP server 要求使用者輸入與收到回覆的前後處理
+- **輸入**: MCP server name、elicitation request 或 result
+- **輸出**: elicitation decision 或 result handling
+- **特點**: 僅適用 MCP elicitation 流程
+
+---
+
+## Hook 設定 Schema
+
+### Handler 共通欄位
+
+| 欄位 | 必填 | 說明 |
+|------|------|------|
+| `type` | 是 | `command` / `http` / `prompt` / `agent` |
+| `if` | 否 | permission rule syntax；只用於 tool events |
+| `timeout` | 否 | handler timeout 秒數 |
+| `statusMessage` | 否 | 執行時 spinner 訊息 |
+| `once` | 否 | skill frontmatter 中可讓 hook 每 session 只跑一次 |
+
+### Command handler
+
+```json
+{
+  "type": "command",
+  "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/check-style.py",
+  "timeout": 30
+}
+```
+
+| 欄位 | 說明 |
+|------|------|
+| `command` | 要執行的 shell command |
+| `async` | true 時背景執行，不阻塞流程 |
+| `asyncRewake` | true 時背景執行，exit code 2 會喚醒 Claude |
+| `shell` | `bash` 或 `powershell` |
+
+### HTTP handler
+
+```json
+{
+  "type": "http",
+  "url": "http://localhost:8080/hooks/pre-tool-use",
+  "timeout": 30,
+  "headers": {
+    "Authorization": "Bearer $HOOK_TOKEN"
+  },
+  "allowedEnvVars": ["HOOK_TOKEN"]
+}
+```
+
+HTTP handler 將事件 JSON 以 POST body 送出，response body 使用與 command hook 相同的 JSON output 格式。非 2xx、連線失敗與 timeout 都是 non-blocking error；需要 block/deny 時，endpoint 必須回 2xx 且 body 含對應 JSON 決策。
+
+### Prompt / agent handler
+
+```json
+{
+  "type": "prompt",
+  "prompt": "Return JSON decision for this hook input: $ARGUMENTS",
+  "model": "fast"
+}
+```
+
+```json
+{
+  "type": "agent",
+  "prompt": "Inspect the changed files and return a JSON decision: $ARGUMENTS",
+  "timeout": 60
+}
+```
+
+Prompt hook 適合語意判斷。Agent hook 適合需要 Read/Grep/Glob 的複合檢查，屬實驗性能力，必須限制 scope。
+
+### `if` 條件範例
+
+```json
+{
+  "type": "command",
+  "if": "Bash(git push *)",
+  "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pre-push-check.py"
+}
+```
+
+```json
+{
+  "type": "command",
+  "if": "Edit(*.md)",
+  "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/markdown-policy-check.py"
+}
+```
+
+```json
+{
+  "type": "command",
+  "if": "Bash(uv run *)",
+  "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/test-command-check.py"
+}
+```
 
 ---
 

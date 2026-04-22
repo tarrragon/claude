@@ -8,7 +8,7 @@
 
 使用者：
 - .claude/hooks/ticket-frontmatter-validator-hook.py (PostToolUse 事後警告)
-- ticket_system CLI 子命令 (W14-030+)
+- ticket_system CLI 子命令 
 
 設計原則：
 - Pure function：不依賴 logger / 檔案 I/O / 外部狀態

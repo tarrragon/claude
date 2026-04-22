@@ -19,16 +19,20 @@
 
 ---
 
-## 關卡二：Context Bundle 檢查
+## 關卡二：Context Bundle / Prompt 檢查
 
 | # | 檢查項 | 通過條件 |
 |---|--------|---------|
 | 1 | Ticket 含分析結果 | Execution Log 有 PM 寫入的 Context Bundle |
 | 2 | Agent prompt <= 30 行 | 只含 Ticket ID + 動作指令（Hook 自動攔截） |
-| 3 | 重派已更新 Bundle | 前次失敗產出已納入 Ticket |
+| 3 | Prompt 第一行是 Ticket ID | 第一行為 `Ticket: {id}` / `#Ticket-{id}` / `[Ticket {id}]` |
+| 4 | 多任務已寫 dispatch-plan | 2+ ticket / group / spawned follow-up 已列 ticket-agent-files-deps-run mode |
+| 5 | 重派已更新 Bundle | 前次失敗產出已納入 Ticket |
 
 > 自動防護：`agent-prompt-length-guard-hook.py` 在 prompt 超過 30 行時阻擋（PC-040）。
+> 自動防護：`agent-ticket-validation-hook.py` 在 prompt 缺 Ticket ID 格式時阻擋（PC-065）。
 > Context Bundle 模板：.claude/pm-rules/context-bundle-spec.md
+> 短 prompt 與 dispatch-plan 模板：.claude/references/agent-dispatch-template.md
 
 ---
 
@@ -119,9 +123,12 @@ for x in d:
 - .claude/pm-rules/context-bundle-spec.md - Context Bundle 規範
 - .claude/pm-rules/askuserquestion-rules.md - AskUserQuestion 使用限制
 - .claude/pm-rules/task-splitting.md - 任務拆分指南
+- .claude/references/agent-dispatch-template.md - 短 prompt snippets 與 dispatch-plan template
 - .claude/references/agent-dispatch-decision.md - **代理人派發決策表**（根據目標檔案位置選派發策略，避開 worktree cwd 陷阱）
 
 ---
 
-**Last Updated**: 2026-04-09
+**Last Updated**: 2026-04-22
+**Version**: 1.1.0 - Context Bundle gate 補 PC-065 第一行 Ticket ID 與 dispatch-plan 檢查（W17-044）
+
 **Version**: 1.0.0 - 從 decision-tree.md 拆分（決策樹二元化拆分）
