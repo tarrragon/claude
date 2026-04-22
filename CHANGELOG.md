@@ -1,3 +1,14 @@
+## [1.23.1] - 2026-04-22
+
+### Summary
+docs: add rule 6 — positive framing in anti-pattern sections
+
+Changes: 1 docs
+
+- docs: add rule 6 — positive framing in anti-pattern sections
+
+---
+
 ## [1.23.0] - 2026-04-22
 
 ### Summary
