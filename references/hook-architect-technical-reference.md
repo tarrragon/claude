@@ -54,15 +54,15 @@
 
 ### PostToolUse
 - **用途**: 工具執行後的日誌記錄和後處理
-- **輸入**: tool_name, tool_input, tool_response
+- **輸入**: tool_name, tool_input, tool_response, **duration_ms**（工具執行毫秒數，v2.1.119+）
 - **輸出**: decision (block), additionalContext
-- **特點**: 工具已執行，只能回饋訊息
+- **特點**: 工具已執行，只能回饋訊息；`duration_ms` 可用於效能監控（如偵測執行時間超過閾值）
 
 ### PostToolUseFailure
 - **用途**: 工具執行失敗後記錄錯誤、分類失敗、提供修復指引
-- **輸入**: tool_name, tool_input, failure response
+- **輸入**: tool_name, tool_input, failure response, **duration_ms**（工具執行毫秒數，v2.1.119+）
 - **輸出**: decision 或 additionalContext
-- **特點**: 適合失敗觀測，不適合阻止已發生的工具呼叫
+- **特點**: 適合失敗觀測，不適合阻止已發生的工具呼叫；`duration_ms` 可用於記錄失敗前的等待時間
 
 ### Stop
 - **用途**: 主線程停止時的後處理（檢查未完成工作、強制完成檢查清單等）
@@ -142,7 +142,7 @@
 
 | 欄位 | 必填 | 說明 |
 |------|------|------|
-| `type` | 是 | `command` / `http` / `prompt` / `agent` |
+| `type` | 是 | `command` / `http` / `prompt` / `agent` / `mcp_tool` |
 | `if` | 否 | permission rule syntax；只用於 tool events |
 | `timeout` | 否 | handler timeout 秒數 |
 | `statusMessage` | 否 | 執行時 spinner 訊息 |
@@ -200,6 +200,27 @@ HTTP handler 將事件 JSON 以 POST body 送出，response body 使用與 comma
 ```
 
 Prompt hook 適合語意判斷。Agent hook 適合需要 Read/Grep/Glob 的複合檢查，屬實驗性能力，必須限制 scope。
+
+### MCP tool handler（v2.1.118+）
+
+```json
+{
+  "type": "mcp_tool",
+  "server": "serena",
+  "tool": "search_for_pattern",
+  "arguments": {
+    "pattern": "$HOOK_INPUT_TOOL_NAME"
+  }
+}
+```
+
+| 欄位 | 說明 |
+|------|------|
+| `server` | MCP server 名稱（必須已在 session 中連線） |
+| `tool` | 要呼叫的 MCP tool 名稱 |
+| `arguments` | 傳給 MCP tool 的參數（可引用 `$ARGUMENTS` 等 hook 環境變數） |
+
+Hook 可直接呼叫 MCP tool，無需透過 command 腳本再橋接。適合需要 serena 語意操作（如符號查詢）或其他 MCP server 能力的 hook。**限制**：server 必須已在 session 中連線，否則 handler 失敗為 non-blocking error。
 
 ### `if` 條件範例
 

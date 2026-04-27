@@ -76,6 +76,7 @@ from acceptance_checkers import (
     find_pending_sibling_tickets,
     check_multi_view_status,
     filter_error_patterns_by_ticket_scope,
+    check_custom_h2_sections,
 )
 from acceptance_checkers.ana_spawned_checker import (
     check_spawned_tickets_status,
@@ -119,6 +120,8 @@ class AcceptanceCheckResult(NamedTuple):
     # W12-004 Phase 1：ANA spawned 非 terminal 警告專用欄位
     # 獨立於 `message` 避免抑制 scene #9/#1 gate（`not check_result.message`）
     spawned_non_terminal_warning: Optional[str] = None
+    # W17-072：非 Schema H2 章節清單（偵測 agent 自定義 H2 違規，warning 不阻擋）
+    custom_h2_sections: List[str] = []
 
 
 # ============================================================================
@@ -137,6 +140,19 @@ ERROR_PATTERN_CONFLICT_WARNING = (
     "本 Ticket 修改的模組與以下 error-pattern 相關，請確認是否已考慮這些已知問題：\n"
     "{conflict_list}\n"
     "建議：complete 前確認修改未引入已知的錯誤模式。"
+)
+
+# W17-072：自定義 H2 警告訊息模板
+# 對應 `.claude/rules/core/agent-definition-standard.md` v1.2.0「禁止自定義 H2」條款
+# 與 PC-110 根因 B 防護。
+CUSTOM_H2_WARNING = (
+    "[WARNING] 偵測到非 Schema H2 章節（W17-072）\n"
+    "本 Ticket body 含以下非 Schema H2 章節：\n"
+    "{h2_list}\n"
+    "依 `.claude/rules/core/agent-definition-standard.md` v1.2.0「禁止自定義 H2」條款，\n"
+    "實作內容應寫入 Schema 章節（Problem Analysis / Solution / Test Results 等），\n"
+    "如需子結構請使用 H3（`### 子標題`）組織。\n"
+    "建議：complete 前搬移自定義 H2 內容到對應 Schema 章節並降為 H3。"
 )
 
 
@@ -291,6 +307,9 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
         # 步驟 6：檢查 execution log 填寫
         has_empty_log = check_execution_log_filled(content, logger)
 
+        # 步驟 7：檢查自定義 H2 章節（W17-072，warning 不阻擋）
+        custom_h2 = check_custom_h2_sections(content, logger)
+
         task_type = frontmatter.get("type", "")
         priority = frontmatter.get("priority", "")
 
@@ -308,6 +327,7 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
             has_empty_execution_log=has_empty_log,
             multi_view_warning=multi_view_warning,
             spawned_non_terminal_warning=spawned_non_terminal_warning,
+            custom_h2_sections=custom_h2,
         )
 
     except Exception as e:
@@ -396,6 +416,15 @@ def generate_hook_output(
     else:
         checklist_items.append("[--] 6. multi_view_status(非 ANA，不適用)")
 
+    # 項目 7: 自定義 H2 章節（W17-072）
+    if check_result.custom_h2_sections:
+        h2_count = len(check_result.custom_h2_sections)
+        checklist_items.append(
+            f"[WARNING] 7. 偵測到 {h2_count} 個非 Schema H2 章節"
+        )
+    else:
+        checklist_items.append("[x] 7. body 僅使用 Schema 章節")
+
     checklist_text = "[Complete 清單]\n" + "\n".join(checklist_items)
     context_parts.append(checklist_text)
 
@@ -428,6 +457,17 @@ def generate_hook_output(
         )
         context_parts.append(conflict_msg)
         logger.info(f"新增 error-pattern 衝突提醒，衝突數量: {len(check_result.error_pattern_conflicts)}")
+
+    # 優先級 2.6：自定義 H2 警告（W17-072，WARNING 不阻擋）
+    if check_result.custom_h2_sections:
+        h2_list_formatted = "\n".join(
+            f"  - `## {h2}`" for h2 in check_result.custom_h2_sections
+        )
+        h2_warning_msg = CUSTOM_H2_WARNING.format(h2_list=h2_list_formatted)
+        context_parts.append(h2_warning_msg)
+        logger.info(
+            f"新增自定義 H2 警告，違規章節數: {len(check_result.custom_h2_sections)}"
+        )
 
     # 優先級 3：Handoff 方向選擇 場景 #9（無訊息時，sibling >= 2）
     if (

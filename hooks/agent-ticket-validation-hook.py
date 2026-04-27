@@ -59,9 +59,23 @@ TICKET_ID_PATTERNS = [
 ]
 
 # 豁免 Ticket 驗證的代理人類型
-# 這些代理人用於前置資訊蒐集，在建立 Ticket 之前執行
+#
+# 判別準則（唯讀 vs 可寫）：
+# - 可豁免：agent 工具僅含唯讀（Read/Grep/Glob/WebFetch/WebSearch/Bash 查詢類），
+#   用途為情報蒐集、文件查詢、分析規劃，不會產生 Edit/Write/git commit 的持久化副作用。
+# - 不可豁免：agent 可 Edit/Write/git commit，用途為實作/重構/測試執行，
+#   必須引用有效 Ticket ID 以確保變更可追溯（符合所有發現必須追蹤原則）。
+#
+# 升級路徑：
+# - 當白名單長度 > 10 或誤用率升高（非白名單 agent 被誤擋頻率上升）時，
+#   應升級為「讀 agent definition 的 tools 欄位自動分類」的動態機制。
+# - 來源：W17-046 ANA 方案 A（白名單擴充立即解除情報蒐集類 agent 派發阻礙）。
 TICKET_EXEMPT_AGENT_TYPES = [
-    "Explore",  # 探索代理人：用於蒐集資訊以建立 Ticket
+    "Explore",                    # codebase 探索：蒐集資訊以建立 Ticket（既有）
+    "claude-code-guide",          # Claude Code / SDK / API 文件查詢（唯讀）
+    "general-purpose",            # 複雜問題多步驟研究（唯讀）
+    "Plan",                       # 架構規劃、實作計畫（唯讀）
+    "feature-dev:code-explorer",  # 既有功能深度分析（唯讀）
 ]
 
 # Exit Code

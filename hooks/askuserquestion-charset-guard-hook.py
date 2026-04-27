@@ -18,9 +18,17 @@ Hook 類型：PreToolUse
 - 根本解法需清洗所有污染源，但周期長
 - 本 Hook 是立即止血方案：偵測並攔截污染的 AUQ payload 送達用戶前
 
+W17-068 增補（PC-085 字形混淆防護）：
+- 新增 PC-085 相鄰 codepoint 對照表（CONFUSABLE_PAIRS），記錄繁/簡/日新字體
+  在同義對應字 codepoint 高度相鄰的清單
+- 啟動時 self-check：驗證 SIMPLIFIED_CHARS / JAPANESE_ONLY 與對照表一致性，
+  防止清單設計者寫 \\uXXXX 時誤打鄰近 codepoint（PC-085 §防護措施 Lint 輔助）
+- self-check 失敗時 logger.error + stderr 警告（規則 4：失敗必須可見）
+
 遵循：
 - language-constraints.md 規則 1（繁體）+ 規則 3（禁 emoji）
 - PC-072 AUQ payload 字元集污染檢查清單
+- PC-085 CJK codepoint 相鄰字形混淆防護
 """
 
 import json
@@ -77,6 +85,105 @@ EMOJI_RANGES = (
     (0x1F900, 0x1F9FF),  # Supplemental Symbols and Pictographs
     (0x1FA00, 0x1FAFF),  # Symbols and Pictographs Extended-A
 )
+
+# ============================================================================
+# PC-085：CJK 相鄰 codepoint 字形混淆防護（W17-068）
+# ============================================================================
+# 對照表記錄繁體 / 簡體 / 日文新字體三胞胎中 codepoint 高度相鄰的清單。
+# 用途：啟動 self-check 驗證 SIMPLIFIED_CHARS / JAPANESE_ONLY 設計一致性，
+# 防止清單作者在寫 \uXXXX 時誤打鄰近字（如想加「遗 U+9057」誤打「遺 U+907A」）。
+#
+# 格式：(traditional_cp, simplified_cp, japanese_new_cp_or_None, gloss)
+#   - traditional_cp: 繁體字 codepoint（必填）
+#   - simplified_cp:  簡體字 codepoint（無對應簡化時填 None）
+#   - japanese_new_cp: 日文新字體 codepoint（無對應新字體時填 None；繁日共用時 = traditional_cp）
+#   - gloss: 字形說明（人類可讀，輔助維護者辨識）
+#
+# 來源：PC-085 §症狀首發案例表 + PC-074 / PC-084 配對表
+# 設計原則（PC-085）：每個 codepoint 寫成 \uXXXX 形式 + 同行註解附字形（肉眼可辨）
+CONFUSABLE_PAIRS = (
+    (0x907A, 0x9057, 0x907A, "遺 / 遗 / 遺（日同繁）"),
+    (0x8B80, 0x8BFB, 0x8AAD, "讀 / 读 / 読"),
+    (0x9451, None,   0x9451, "鑑 / —— / 鑑（繁日共用，PC-084 禁入）"),
+    (0x96B8, 0x96B6, 0x96B8, "隸 / 隶 / 隸（日同繁）"),
+    (0x7368, 0x72EC, 0x7368, "獨 / 独 / 獨"),
+    (0x9055, 0x8FDD, 0x9055, "違 / 违 / 違"),
+    (0x6C7A, 0x51B3, 0x6C7A, "決 / 决 / 決"),
+    (0x95DC, 0x5173, 0x95A2, "關 / 关 / 関"),
+    (0x70BA, 0x4E3A, 0x70BA, "為 / 为 / 為"),
+    (0x8207, 0x4E0E, 0x8207, "與 / 与 / 與"),
+    (0x767C, 0x53D1, 0x767A, "發 / 发 / 発"),
+    (0x5716, 0x56FE, 0x56F3, "圖 / 图 / 図"),
+    (0x5169, 0x4E24, 0x4E21, "兩 / 两 / 両"),
+    (0x8B6F, 0x8BD1, 0x8A33, "譯 / 译 / 訳"),
+    (0x9A5B, 0x9A7F, 0x99C5, "驛 / 驿 / 駅"),
+    (0x5BE6, 0x5B9E, 0x5B9F, "實 / 实 / 実"),
+    (0x6C23, 0x6C14, 0x6C17, "氣 / 气 / 気"),
+    (0x6A02, 0x4E50, 0x697D, "樂 / 乐 / 楽"),
+    (0x89C0, 0x89C2, 0x89B3, "觀 / 观 / 観"),
+    (0x6AA2, 0x68C0, 0x691C, "檢 / 检 / 検"),
+    (0x6B0A, 0x6743, 0x6A29, "權 / 权 / 権"),
+    (0x8CE3, 0x5356, 0x58F2, "賣 / 卖 / 売"),
+    (0x9435, 0x94C1, 0x9244, "鐵 / 铁 / 鉄"),
+    (0x8F49, 0x8F6C, 0x8EE2, "轉 / 转 / 転"),
+    (0x5EE3, 0x5E7F, 0x5E83, "廣 / 广 / 広"),
+)
+
+
+def validate_confusable_pairs_consistency() -> dict:
+    """
+    啟動 self-check：驗證 SIMPLIFIED_CHARS / JAPANESE_ONLY 與 CONFUSABLE_PAIRS 一致性。
+
+    回傳分兩級（PC-085 §防護措施 Lint 輔助）：
+    - critical（誤入）：清單作者寫 \\uXXXX 時誤打鄰近 codepoint（PC-085 首發案例真實風險）
+        - 規則 2: traditional_cp 不應出現在 SIMPLIFIED_CHARS（繁體誤入）
+        - 規則 3: 日文新字體 cp 不應出現在 SIMPLIFIED_CHARS（PC-074 教訓）
+        - 規則 4: 繁日共用字（trad_cp == jp_cp）不應出現在 JAPANESE_ONLY（PC-084 禁入）
+    - info（漏網）：簡體字漏收，屬清單漸進擴充的預期狀態（PC-074：只收實際遇過字）
+        - 規則 1: simplified_cp 未在 SIMPLIFIED_CHARS
+
+    設計理由：
+    - critical 級別寫 stderr（規則 4：失敗必須可見），代表清單設計筆誤需修正
+    - info 級別僅 logger.info，不污染 stderr 雙通道契約（PC-074：清單漸進擴充）
+
+    Returns:
+        {
+            "critical": [warning_message, ...],  # 設計筆誤，須立即修正
+            "info":     [info_message, ...],     # 漏網提示，可選擴充
+        }
+    """
+    critical: list = []
+    info: list = []
+
+    for trad_cp, simp_cp, jp_cp, gloss in CONFUSABLE_PAIRS:
+        # 規則 1（info）：簡體應在 SIMPLIFIED_CHARS（除非 None）
+        # 漏網屬清單漸進擴充的預期狀態，不寫 stderr
+        if simp_cp is not None and chr(simp_cp) not in SIMPLIFIED_CHARS:
+            info.append(
+                f"PC-085 漏網提示：{gloss} 簡體 U+{simp_cp:04X} 未在 SIMPLIFIED_CHARS"
+            )
+
+        # 規則 2（critical）：繁體不應在 SIMPLIFIED_CHARS（PC-085 首發案例 codepoint 筆誤）
+        if chr(trad_cp) in SIMPLIFIED_CHARS:
+            critical.append(
+                f"PC-085 誤入：{gloss} 繁體 U+{trad_cp:04X} 不應在 SIMPLIFIED_CHARS（疑似 codepoint 筆誤）"
+            )
+
+        # 規則 3（critical）：日文新字體不應在 SIMPLIFIED_CHARS（PC-074 教訓）
+        # 但若 jp_cp == trad_cp（繁日共用），不檢查（屬正常情況）
+        if jp_cp is not None and jp_cp != trad_cp and chr(jp_cp) in SIMPLIFIED_CHARS:
+            critical.append(
+                f"PC-074/085 誤入：{gloss} 日文新字體 U+{jp_cp:04X} 不應在 SIMPLIFIED_CHARS"
+            )
+
+        # 規則 4（critical）：JAPANESE_ONLY 中若有 traditional_cp（繁日共用），警告（PC-084 禁入）
+        if jp_cp is not None and jp_cp == trad_cp and chr(jp_cp) in JAPANESE_ONLY:
+            critical.append(
+                f"PC-084/085 誤入：{gloss} 繁日共用字 U+{jp_cp:04X} 不應在 JAPANESE_ONLY（保守不入）"
+            )
+
+    return {"critical": critical, "info": info}
+
 
 BLOCK_MESSAGE_TEMPLATE = """錯誤：AskUserQuestion payload 含字元集污染（PC-072）
 
@@ -202,6 +309,34 @@ def format_violations(violations: list) -> str:
 def main() -> int:
     """Hook 主邏輯。"""
     logger = setup_hook_logging(HOOK_NAME)
+
+    # W17-068：啟動時 PC-085 self-check（驗證清單設計一致性）
+    # 規則 4：失敗必須可見（stderr + 日誌雙通道）
+    # critical（誤入）→ stderr + logger.error（清單設計筆誤需修正）
+    # info（漏網）→ 僅 logger.info（清單漸進擴充屬預期）
+    consistency_result = validate_confusable_pairs_consistency()
+    critical_warnings = consistency_result["critical"]
+    info_warnings = consistency_result["info"]
+
+    if critical_warnings:
+        logger.error(
+            "PC-085 self-check 偵測 %d 處清單設計筆誤：%s",
+            len(critical_warnings),
+            critical_warnings,
+        )
+        sys.stderr.write(
+            f"[charset-guard] PC-085 self-check 設計筆誤（{len(critical_warnings)} 處）：\n"
+        )
+        for w in critical_warnings:
+            sys.stderr.write(f"  - {w}\n")
+        # 不阻擋 hook 主邏輯，僅警示維護者；維護者應修正清單後重啟
+
+    if info_warnings:
+        logger.info(
+            "PC-085 self-check 漏網提示 %d 處（清單漸進擴充屬預期）：%s",
+            len(info_warnings),
+            info_warnings,
+        )
 
     try:
         input_data = read_json_from_stdin(logger)

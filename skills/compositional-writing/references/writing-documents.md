@@ -6,14 +6,14 @@
 
 Different document types have different readers, lifespans, and structural demands. Pick the type first; the rest of this reference applies the five compositional principles to each.
 
-| Document type | Primary reader | Lifespan | Volatility | Core job |
-|---------------|----------------|----------|------------|----------|
-| Worklog | Future self / handoff receiver | Per version (archived) | High (appended daily) | Record decisions and milestones, not execution details |
-| README | Newcomer / marketplace visitor | Permanent | Low (stable) | Orient readers in one screen, route to deeper docs |
-| Spec (requirement / use case) | Implementers, reviewers, QA | Permanent (versioned) | Medium (evolves with scope) | Define acceptable behaviour in testable terms |
-| Methodology | Framework users (cross-project) | Permanent | Low (distilled) | Give experts a 30-second recall checklist |
-| Error-pattern | Debuggers, reviewers | Permanent | Low (append-only) | Capture root cause + prevention so it doesn't recur |
-| Ticket | Executor, dispatcher | Per task (archived) | Medium (mutated during execution) | Carry a single atomic intent from creation to completion |
+| Document type                 | Primary reader                  | Lifespan               | Volatility                        | Core job                                                 |
+| ----------------------------- | ------------------------------- | ---------------------- | --------------------------------- | -------------------------------------------------------- |
+| Worklog                       | Future self / handoff receiver  | Per version (archived) | High (appended daily)             | Record decisions and milestones, not execution details   |
+| README                        | Newcomer / marketplace visitor  | Permanent              | Low (stable)                      | Orient readers in one screen, route to deeper docs       |
+| Spec (requirement / use case) | Implementers, reviewers, QA     | Permanent (versioned)  | Medium (evolves with scope)       | Define acceptable behaviour in testable terms            |
+| Methodology                   | Framework users (cross-project) | Permanent              | Low (distilled)                   | Give experts a 30-second recall checklist                |
+| Error-pattern                 | Debuggers, reviewers            | Permanent              | Low (append-only)                 | Capture root cause + prevention so it doesn't recur      |
+| Ticket                        | Executor, dispatcher            | Per task (archived)    | Medium (mutated during execution) | Carry a single atomic intent from creation to completion |
 
 Two rules follow from the table:
 
@@ -30,13 +30,13 @@ How much content belongs in a single file, and when do you cut?
 
 ### Decision table
 
-| Condition | Action | Reason |
-|-----------|--------|--------|
-| One document covers one concept cleanly, body < ~500 lines | Keep single file | Atomic at file level |
-| Body crosses ~500 lines but concept is still one | Split into sub-sections, not separate files | File is still atomic |
-| Body contains two independently retrievable concepts (reader consults only one at a time) | Split into two files | Violates atomicity |
-| Single file is consulted as five different situations (e.g. worklog + spec + methodology stacked) | Split by situation | Situation match beats line count |
-| Document is < 100 lines and only referenced from one place | Consider merging upward | Under-atomic, creates navigation cost |
+| Condition                                                                                         | Action                                      | Reason                                |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------- |
+| One document covers one concept cleanly, body < ~500 lines                                        | Keep single file                            | Atomic at file level                  |
+| Body crosses ~500 lines but concept is still one                                                  | Split into sub-sections, not separate files | File is still atomic                  |
+| Body contains two independently retrievable concepts (reader consults only one at a time)         | Split into two files                        | Violates atomicity                    |
+| Single file is consulted as five different situations (e.g. worklog + spec + methodology stacked) | Split by situation                          | Situation match beats line count      |
+| Document is < 100 lines and only referenced from one place                                        | Consider merging upward                     | Under-atomic, creates navigation cost |
 
 ### Split heuristics by document type
 
@@ -49,10 +49,10 @@ How much content belongs in a single file, and when do you cut?
 
 ### Anti-patterns
 
-| Anti-pattern | What happens |
-|--------------|--------------|
-| Stuffing three specs into one "spec-v2.md" | Readers scan past unrelated sections; grep lands on wrong context |
-| Splitting a methodology into methodology-part-1/2/3 | Cross-references explode; readers lose the recall benefit |
+| Anti-pattern                                           | What happens                                                          |
+| ------------------------------------------------------ | --------------------------------------------------------------------- |
+| Stuffing three specs into one "spec-v2.md"             | Readers scan past unrelated sections; grep lands on wrong context     |
+| Splitting a methodology into methodology-part-1/2/3    | Cross-references explode; readers lose the recall benefit             |
 | Merging two error-patterns because "they feel similar" | Prevention measures dilute each other; future query returns ambiguity |
 
 ---
@@ -71,12 +71,12 @@ Given many atomic documents, how does a reader find the right one?
 
 ### Cross-reference format
 
-| Reference type | Format | Example |
-|----------------|--------|---------|
-| Same-directory sibling | Relative path + intent | `See [validation rules](./validation.md) for acceptable field values` |
-| Cross-directory | Full repo-relative path | `Detailed flow: rules/decision-tree.md` |
-| External (stable) | URL with context | `Anthropic skill spec: https://...` |
-| External (volatile: ticket ID, commit hash, worklog path) | **Allowed only in volatile documents** | Never in spec / methodology / error-pattern content |
+| Reference type                                            | Format                                 | Example                                                               |
+| --------------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------- |
+| Same-directory sibling                                    | Relative path + intent                 | `See [validation rules](./validation.md) for acceptable field values` |
+| Cross-directory                                           | Full repo-relative path                | `Detailed flow: rules/decision-tree.md`                               |
+| External (stable)                                         | URL with context                       | `Anthropic skill spec: https://...`                                   |
+| External (volatile: ticket ID, commit hash, worklog path) | **Allowed only in volatile documents** | Never in spec / methodology / error-pattern content                   |
 
 > A reference without intent ("see X.md") is a broken signpost. Always say what the reader gains by clicking.
 
@@ -91,11 +91,11 @@ Given many atomic documents, how does a reader find the right one?
 
 ### Anti-patterns
 
-| Anti-pattern | What happens |
-|--------------|--------------|
-| README that says "this folder contains various utilities" | Provides no routing; reader opens every file |
-| Spec referencing a ticket ID | Spec stability breaks when ticket is archived |
-| Methodology A references methodology B which references A | Circular chase; no real content at the end |
+| Anti-pattern                                              | What happens                                  |
+| --------------------------------------------------------- | --------------------------------------------- |
+| README that says "this folder contains various utilities" | Provides no routing; reader opens every file  |
+| Spec referencing a ticket ID                              | Spec stability breaks when ticket is archived |
+| Methodology A references methodology B which references A | Circular chase; no real content at the end    |
 
 ---
 
@@ -109,22 +109,22 @@ How do you make the point land in the first paragraph — and how do you separat
 
 Put the conclusion first. A reader who stops after the opening paragraph should still leave with the main takeaway.
 
-| Pyramid level | Content |
-|---------------|---------|
-| Opening sentence | One-line answer or rule |
-| First paragraph | The concrete action or constraint |
-| Middle | Context, reasoning, exceptions |
-| End | Historical notes, references |
+| Pyramid level    | Content                           |
+| ---------------- | --------------------------------- |
+| Opening sentence | One-line answer or rule           |
+| First paragraph  | The concrete action or constraint |
+| Middle           | Context, reasoning, exceptions    |
+| End              | Historical notes, references      |
 
 ### Spec vs process record — a mandatory split
 
-| Aspect | Spec (stable) | Process record (volatile) |
-|--------|---------------|---------------------------|
-| Voice | Imperative / declarative | Narrative / chronological |
-| Tense | Present ("the system must") | Past ("we found that") |
-| Citations allowed | Other specs, external standards | Tickets, commits, worklog entries |
-| Ages well? | Yes — designed to outlast implementation | No — tied to a moment |
-| Safe to rewrite? | Yes (versioned) | No (append-only) |
+| Aspect            | Spec (stable)                            | Process record (volatile)         |
+| ----------------- | ---------------------------------------- | --------------------------------- |
+| Voice             | Imperative / declarative                 | Narrative / chronological         |
+| Tense             | Present ("the system must")              | Past ("we found that")            |
+| Citations allowed | Other specs, external standards          | Tickets, commits, worklog entries |
+| Ages well?        | Yes — designed to outlast implementation | No — tied to a moment             |
+| Safe to rewrite?  | Yes (versioned)                          | No (append-only)                  |
 
 **Rule**: Never mix the two in one document. A spec paragraph written in past tense is a process note; move it to worklog. A worklog entry that begins "the system must" is a spec fragment; promote it.
 
@@ -132,19 +132,19 @@ Put the conclusion first. A reader who stops after the opening paragraph should 
 
 Documents that touch business concepts must describe the *why*, not the *what of the syntax*.
 
-| Description style | Fits | Fails |
-|-------------------|------|-------|
-| "Readmoo extractor falls back to alternate selector when primary fails" | Business / design intent | — |
-| "A try-catch wraps the primary selector call" | — | Syntax translation, reader could get this from the code |
+| Description style                                                       | Fits                     | Fails                                                   |
+| ----------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------- |
+| "Readmoo extractor falls back to alternate selector when primary fails" | Business / design intent | —                                                       |
+| "A try-catch wraps the primary selector call"                           | —                        | Syntax translation, reader could get this from the code |
 
 Rule: if the sentence describes code mechanics a compiler already enforces, delete it and write the business reason instead.
 
 ### Anti-patterns
 
-| Anti-pattern | Fix |
-|--------------|-----|
-| Opening with "This document describes..." meta-talk | Delete, start with the actual rule |
-| Spec paragraph citing a ticket ID (e.g. `v{X}-W{Y}-{seq}`) | Move citation to worklog; keep spec ID-free |
+| Anti-pattern                                                             | Fix                                                                     |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Opening with "This document describes..." meta-talk                      | Delete, start with the actual rule                                      |
+| Spec paragraph citing a ticket ID (e.g. `v{X}-W{Y}-{seq}`)               | Move citation to worklog; keep spec ID-free                             |
 | Methodology paragraph preserving "we used to do X but found Y" narrative | Keep the distilled rule; move the narrative to error-pattern or worklog |
 
 ---
@@ -157,14 +157,14 @@ When a human or AI greps for a concept, does the right document surface, and doe
 
 ### Title conventions
 
-| Document type | Title format | grep target |
-|---------------|--------------|-------------|
-| Worklog | `v{version} {theme} 工作日誌` | `v{X.Y.Z}`, `工作日誌` |
-| README | `{directory name}` or `{concept name}` | Directory keyword |
-| Spec | `{UC ID} {behaviour name}` | UC ID is the key |
-| Methodology | `{subject} 方法論` | `方法論` + subject |
-| Error-pattern | `{ID}: {one-line symptom}` | Pattern ID + symptom keyword |
-| Ticket | `{ID} {verb + target}` | Ticket ID + verb |
+| Document type | Title format                           | grep target                  |
+| ------------- | -------------------------------------- | ---------------------------- |
+| Worklog       | `v{version} {theme} 工作日誌`          | `v{X.Y.Z}`, `工作日誌`       |
+| README        | `{directory name}` or `{concept name}` | Directory keyword            |
+| Spec          | `{UC ID} {behaviour name}`             | UC ID is the key             |
+| Methodology   | `{subject} 方法論`                     | `方法論` + subject           |
+| Error-pattern | `{ID}: {one-line symptom}`             | Pattern ID + symptom keyword |
+| Ticket        | `{ID} {verb + target}`                 | Ticket ID + verb             |
 
 ### Heading conventions
 
@@ -176,14 +176,14 @@ When a human or AI greps for a concept, does the right document surface, and doe
 
 Frontmatter is the most grep-friendly slice of a document. Use it for:
 
-| Field | Purpose | Document types |
-|-------|---------|----------------|
-| `id` | Stable anchor | Ticket, error-pattern, spec |
-| `status` | Lifecycle state | Ticket, worklog |
-| `type` | Taxonomy | Ticket (IMP / ANA / DOC), error-pattern (PC / IMP / ARCH) |
-| `relatedTo` | Weak link to siblings | Ticket, spec |
-| `version` | Scoping | Worklog, ticket, spec |
-| `tags` | Cross-cutting search | Methodology, error-pattern |
+| Field       | Purpose               | Document types                                            |
+| ----------- | --------------------- | --------------------------------------------------------- |
+| `id`        | Stable anchor         | Ticket, error-pattern, spec                               |
+| `status`    | Lifecycle state       | Ticket, worklog                                           |
+| `type`      | Taxonomy              | Ticket (IMP / ANA / DOC), error-pattern (PC / IMP / ARCH) |
+| `relatedTo` | Weak link to siblings | Ticket, spec                                              |
+| `version`   | Scoping               | Worklog, ticket, spec                                     |
+| `tags`      | Cross-cutting search  | Methodology, error-pattern                                |
 
 Frontmatter must be machine-parseable. Never include narrative text in values; keep values atomic (ID strings, statuses, dates).
 
@@ -195,11 +195,11 @@ Frontmatter must be machine-parseable. Never include narrative text in values; k
 
 ### Anti-patterns
 
-| Anti-pattern | Fix |
-|--------------|-----|
-| Document with no `id` field searched by filename only | Add frontmatter for stable ID |
-| H2 `## Details` appearing in 30 documents | Rename to concept-specific heading |
-| Rules written as "It does X; it does Y" (pronoun-only) | Repeat the subject in each row |
+| Anti-pattern                                           | Fix                                |
+| ------------------------------------------------------ | ---------------------------------- |
+| Document with no `id` field searched by filename only  | Add frontmatter for stable ID      |
+| H2 `## Details` appearing in 30 documents              | Rename to concept-specific heading |
+| Rules written as "It does X; it does Y" (pronoun-only) | Repeat the subject in each row     |
 
 ---
 
@@ -213,57 +213,57 @@ Each field in a template exists to answer a specific question. Two fields answer
 
 ### Worklog template
 
-| Section | Answers | Angle |
-|---------|---------|-------|
-| Metadata | Which version, dates, status? | Identification |
-| 版本目標 | What did this version set out to do? | Intent |
-| 進度追蹤 | What happened and when? | Chronological record |
-| Phase tables | Which tickets exist, what state? | Snapshot |
-| 技術筆記 | What non-ticket decisions were made? | Lateral knowledge |
+| Section      | Answers                              | Angle                |
+| ------------ | ------------------------------------ | -------------------- |
+| Metadata     | Which version, dates, status?        | Identification       |
+| 版本目標     | What did this version set out to do? | Intent               |
+| 進度追蹤     | What happened and when?              | Chronological record |
+| Phase tables | Which tickets exist, what state?     | Snapshot             |
+| 技術筆記     | What non-ticket decisions were made? | Lateral knowledge    |
 
 Append-only sections: 進度追蹤, 技術筆記. Mutable: Phase tables (statuses flip).
 
 ### README template
 
-| Section | Answers | Angle |
-|---------|---------|-------|
-| Title + one-line purpose | What is this directory / project? | Orient |
-| Sibling index | What's inside? | Route |
-| Quick start (if applicable) | How do I use this in 60 seconds? | Action |
-| Further reading | Where do I go next? | Defer |
+| Section                     | Answers                           | Angle  |
+| --------------------------- | --------------------------------- | ------ |
+| Title + one-line purpose    | What is this directory / project? | Orient |
+| Sibling index               | What's inside?                    | Route  |
+| Quick start (if applicable) | How do I use this in 60 seconds?  | Action |
+| Further reading             | Where do I go next?               | Defer  |
 
 ### Spec template
 
-| Section | Answers | Angle |
-|---------|---------|-------|
-| UC metadata | Stable IDs, priority | Identification |
-| Actors | Who uses this? | Scope |
-| Preconditions | What must be true before? | Entry guard |
-| Main flow | What happens on success? | Happy path |
-| Alternative / error flows | What else can happen? | Edge cases |
-| Acceptance criteria | When is this UC done? | Test hook |
+| Section                   | Answers                   | Angle          |
+| ------------------------- | ------------------------- | -------------- |
+| UC metadata               | Stable IDs, priority      | Identification |
+| Actors                    | Who uses this?            | Scope          |
+| Preconditions             | What must be true before? | Entry guard    |
+| Main flow                 | What happens on success?  | Happy path     |
+| Alternative / error flows | What else can happen?     | Edge cases     |
+| Acceptance criteria       | When is this UC done?     | Test hook      |
 
 Angles must not overlap: preconditions are entry guards, not flows; acceptance criteria are pass/fail, not behaviour descriptions.
 
 ### Methodology template (from methodology-writing core)
 
-| Section | Answers | Angle |
-|---------|---------|-------|
-| 核心概念 | What is this methodology in one sentence? | Recall trigger |
-| 執行步驟 | What do I do, in order? | Action list |
-| 檢查清單 | How do I verify I did it right? | Self-check |
-| Reference | Where is the full implementation guide? | Defer to SKILL |
+| Section   | Answers                                   | Angle          |
+| --------- | ----------------------------------------- | -------------- |
+| 核心概念  | What is this methodology in one sentence? | Recall trigger |
+| 執行步驟  | What do I do, in order?                   | Action list    |
+| 檢查清單  | How do I verify I did it right?           | Self-check     |
+| Reference | Where is the full implementation guide?   | Defer to SKILL |
 
 30-second rule: if a reader cannot read the whole methodology in 30 seconds, either split it or move detail into a SKILL.
 
 ### Error-pattern template
 
-| Section | Answers | Angle |
-|---------|---------|-------|
-| Symptom | What did the reader see? | Recognition |
-| Root cause | Why did it happen? | Diagnosis |
+| Section    | Answers                   | Angle                  |
+| ---------- | ------------------------- | ---------------------- |
+| Symptom    | What did the reader see?  | Recognition            |
+| Root cause | Why did it happen?        | Diagnosis              |
 | Prevention | How to stop it next time? | Forward-looking action |
-| Detection | How do we catch it early? | Tooling / hook |
+| Detection  | How do we catch it early? | Tooling / hook         |
 
 Each section answers a different question. Symptom is not cause; cause is not prevention.
 
@@ -271,22 +271,22 @@ Each section answers a different question. Symptom is not cause; cause is not pr
 
 Ticket fields are extensively defined elsewhere (designing-fields.md). Key angles here:
 
-| Field cluster | Angle |
-|---------------|-------|
-| `what` | Description of the action and target |
-| `why` | Motivation (distinct from `what`) |
-| `acceptance` | Pass/fail criteria (distinct from `what` and `why`) |
-| `how` | Strategy (distinct from `what` — `what` is the outcome, `how` is the path) |
+| Field cluster | Angle                                                                      |
+| ------------- | -------------------------------------------------------------------------- |
+| `what`        | Description of the action and target                                       |
+| `why`         | Motivation (distinct from `what`)                                          |
+| `acceptance`  | Pass/fail criteria (distinct from `what` and `why`)                        |
+| `how`         | Strategy (distinct from `what` — `what` is the outcome, `how` is the path) |
 
 Overlap between `what` and `why` is the most common ticket bug. Keep them at different angles.
 
 ### Anti-patterns
 
-| Anti-pattern | Fix |
-|--------------|-----|
-| README lists "features" and "what it does" as two sections | Collapse — same angle |
-| Spec has "preconditions" and "setup requirements" as two sections | Collapse — same angle |
-| Ticket `what` describes motivation | Move motivation to `why`, keep `what` for action |
+| Anti-pattern                                                      | Fix                                              |
+| ----------------------------------------------------------------- | ------------------------------------------------ |
+| README lists "features" and "what it does" as two sections        | Collapse — same angle                            |
+| Spec has "preconditions" and "setup requirements" as two sections | Collapse — same angle                            |
+| Ticket `what` describes motivation                                | Move motivation to `why`, keep `what` for action |
 
 ---
 
@@ -296,15 +296,15 @@ Overlap between `what` and `why` is the most common ticket bug. Keep them at dif
 
 Markdown table cells in worklogs must not contain multi-byte status emoji (`⏳`, `[SYNC]`, `[FAIL]`, etc.). CLI parsers have hit Rust panics on char-boundary issues. Use plain text:
 
-| Status | Plain text |
-|--------|-----------|
-| Waiting | 待處理 |
-| In progress | 進行中 |
-| Done | 已完成 |
-| Cancelled | 取消 |
-| Skipped | 跳過 |
-| Blocked | 阻塞 |
-| Failed | 失敗 |
+| Status      | Plain text |
+| ----------- | ---------- |
+| Waiting     | 待處理     |
+| In progress | 進行中     |
+| Done        | 已完成     |
+| Cancelled   | 取消       |
+| Skipped     | 跳過       |
+| Blocked     | 阻塞       |
+| Failed      | 失敗       |
 
 Emoji is allowed outside table cells (in prose headings).
 
@@ -312,13 +312,13 @@ Emoji is allowed outside table cells (in prose headings).
 
 Worklog records *decisions and milestones*, not execution detail (detail lives in tickets).
 
-| Event | Trigger | Format |
-|-------|---------|--------|
-| Ticket completed | `ticket track complete` | `{date}: {id} 完成 — {summary}` |
-| Task split | Child tickets created | `{date}: {parent} 拆分 — {child1}, {child2}` |
-| Unplanned finding | New ticket created mid-execution | `{date}: 新增 {id} — {reason}` |
-| UC progression | Group of related tickets done | `{date}: UC-XX 步驟 Y 完成 — {outcome}` |
-| Blocker / risk | Block or design issue found | `{date}: {id} 阻塞 — {cause}` |
+| Event             | Trigger                          | Format                                       |
+| ----------------- | -------------------------------- | -------------------------------------------- |
+| Ticket completed  | `ticket track complete`          | `{date}: {id} 完成 — {summary}`              |
+| Task split        | Child tickets created            | `{date}: {parent} 拆分 — {child1}, {child2}` |
+| Unplanned finding | New ticket created mid-execution | `{date}: 新增 {id} — {reason}`               |
+| UC progression    | Group of related tickets done    | `{date}: UC-XX 步驟 Y 完成 — {outcome}`      |
+| Blocker / risk    | Block or design issue found      | `{date}: {id} 阻塞 — {cause}`                |
 
 Prefer bullet list over table: easier to append, diff-friendly, still readable past 20 entries.
 
@@ -356,11 +356,11 @@ A methodology must be readable in 30 seconds. Everything beyond that belongs in 
 
 If rewriting an old verbose methodology, the test is:
 
-| Check | If fail |
-|-------|---------|
-| Does the file contain a complete operational workflow? | Move it to a SKILL |
-| Does it contain runnable code examples or error-handling detail? | Move to a SKILL |
-| Does compression lose critical information? | Create a SKILL alongside |
+| Check                                                            | If fail                  |
+| ---------------------------------------------------------------- | ------------------------ |
+| Does the file contain a complete operational workflow?           | Move it to a SKILL       |
+| Does it contain runnable code examples or error-handling detail? | Move to a SKILL          |
+| Does compression lose critical information?                      | Create a SKILL alongside |
 
 Methodology remains as the 30-second recall card; SKILL holds the full walk-through.
 
@@ -392,13 +392,33 @@ When the document is an experience-sharing write-up (not a methodology), six add
 
 ---
 
+## Multi-pass Re-read（refinement protocol）
+
+The checklist above is a single-frame final sweep — not multi-pass. Multi-pass requires each round to use a **different frame** to catch errors at different layers ([#82](principles/literal-interception-vs-behavioral-refinement.md) / [#83](principles/writing-multi-pass-review.md)).
+
+For documents (worklog / spec / methodology / error-pattern):
+
+| Round | Frame                                                             | Document-specific checklist                                                                 |
+| ----- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| 1     | Generation                                                        | Get content end-to-end; expect rough phrasing                                               |
+| 2     | Intent ([#67](principles/ease-of-writing-vs-intent-alignment.md)) | Does the document type match the structure used? Spec / process / methodology not mixed?    |
+| 3     | Opportunity-cost tone                                             | Grep "must / should / always / never" — translate absolutes to "A in scenario X / B in Y"   |
+| 4     | Grep-ability / naming                                             | Headings contain concept keywords (not "Overview"); cross-references explain *why* to click |
+| 5     | Counter-cases / boundaries                                        | "When not to apply" section present? Examples cover edge cases not just happy path?         |
+| 6'    | Stability layer                                                   | If this is a stable document (spec/methodology), are ticket IDs / commit hashes scrubbed?   |
+| 7'    | Atomic check                                                      | < 500 lines OR single concept despite length? Sections each answer one question?            |
+
+Skip rules: quick worklog notes can skip rounds 4-7'; stable specs / methodology should run all rounds twice.
+
+---
+
 ## Quick Routing by Scenario
 
-| You are about to... | Jump to |
-|---------------------|---------|
-| Write or append a worklog entry | Principle 1 + Worklog extensions |
-| Start a README from scratch | Principle 2 (indexing) + Principle 5 (README template) |
-| Draft a use-case spec | Principle 3 (spec vs process) + Principle 5 (spec template) |
-| Rewrite a bloated methodology | Methodology extensions (30-second test) + Principle 1 (atomize) |
-| Record a new error-pattern | Principle 5 (error-pattern template) + Principle 4 (ID as grep anchor) |
-| Fill a ticket's fields | Principle 5 (ticket template), then consult designing-fields.md |
+| You are about to...             | Jump to                                                                |
+| ------------------------------- | ---------------------------------------------------------------------- |
+| Write or append a worklog entry | Principle 1 + Worklog extensions                                       |
+| Start a README from scratch     | Principle 2 (indexing) + Principle 5 (README template)                 |
+| Draft a use-case spec           | Principle 3 (spec vs process) + Principle 5 (spec template)            |
+| Rewrite a bloated methodology   | Methodology extensions (30-second test) + Principle 1 (atomize)        |
+| Record a new error-pattern      | Principle 5 (error-pattern template) + Principle 4 (ID as grep anchor) |
+| Fill a ticket's fields          | Principle 5 (ticket template), then consult designing-fields.md        |

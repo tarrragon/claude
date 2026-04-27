@@ -32,6 +32,9 @@ SIMPLIFIED_CHARS = hook_module.SIMPLIFIED_CHARS
 # W14-007 Phase 3b 落地於 hook；直接屬性存取，AttributeError 即為回歸訊號
 JAPANESE_ONLY = hook_module.JAPANESE_ONLY
 BLOCK_MESSAGE_TEMPLATE = hook_module.BLOCK_MESSAGE_TEMPLATE
+# W17-068 Phase 3b 落地於 hook；直接屬性存取，AttributeError 即為回歸訊號
+CONFUSABLE_PAIRS = hook_module.CONFUSABLE_PAIRS
+validate_confusable_pairs_consistency = hook_module.validate_confusable_pairs_consistency
 
 
 # ============================================================================
@@ -667,6 +670,127 @@ class TestDualChannelOutput:
         if out.strip():
             parsed = _json.loads(out)
             assert parsed.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+
+
+# ============================================================================
+# 類別 H：W17-068 PC-085 CONFUSABLE_PAIRS self-check
+# 驗證 CONFUSABLE_PAIRS 對照表與 SIMPLIFIED_CHARS / JAPANESE_ONLY 一致性。
+# ============================================================================
+
+
+class TestConfusablePairsConsistency:
+    """W17-068：PC-085 相鄰 codepoint 字形混淆 self-check。"""
+
+    def test_confusable_pairs_loaded(self):
+        """H1: CONFUSABLE_PAIRS 常數存在且非空。"""
+        assert isinstance(CONFUSABLE_PAIRS, tuple), "CONFUSABLE_PAIRS 應為 tuple"
+        assert len(CONFUSABLE_PAIRS) >= 10, (
+            f"CONFUSABLE_PAIRS 應至少 10 組（PC-085 + PC-074/084 配對），"
+            f"實際 {len(CONFUSABLE_PAIRS)}"
+        )
+
+    def test_confusable_pairs_schema(self):
+        """H2: 每筆 (trad_cp, simp_cp_or_None, jp_cp_or_None, gloss) 結構正確。"""
+        for pair in CONFUSABLE_PAIRS:
+            assert len(pair) == 4, f"配對結構應為 4 元組，實際 {pair}"
+            trad_cp, simp_cp, jp_cp, gloss = pair
+            assert isinstance(trad_cp, int), f"trad_cp 應為 int：{pair}"
+            assert simp_cp is None or isinstance(simp_cp, int)
+            assert jp_cp is None or isinstance(jp_cp, int)
+            assert isinstance(gloss, str) and gloss, f"gloss 應為非空字串：{pair}"
+
+    def test_pc085_first_case_yi_pair_present(self):
+        """H3: PC-085 §症狀首發案例『遺/遗』必須在對照表。"""
+        codepoints = {(p[0], p[1]) for p in CONFUSABLE_PAIRS}
+        assert (0x907A, 0x9057) in codepoints, (
+            "PC-085 首發案例『遺 U+907A / 遗 U+9057』應在 CONFUSABLE_PAIRS"
+        )
+
+    def test_pc084_kan_shared_pair_present(self):
+        """H4: PC-084 首發案例『鑑』繁日共用字必須在對照表（trad == jp）。"""
+        kan_pairs = [p for p in CONFUSABLE_PAIRS if p[0] == 0x9451]
+        assert kan_pairs, "PC-084『鑑 U+9451』應在 CONFUSABLE_PAIRS"
+        trad_cp, simp_cp, jp_cp, _ = kan_pairs[0]
+        assert simp_cp is None, "鑑無對應簡體字（PC-084 禁入）"
+        assert jp_cp == trad_cp, "鑑為繁日共用字（jp_cp == trad_cp）"
+
+    def test_pc074_dou_pair_present(self):
+        """H5: PC-074 教訓字『讀/读/読』三胞胎必須在對照表。"""
+        dou_pairs = [p for p in CONFUSABLE_PAIRS if p[0] == 0x8B80]
+        assert dou_pairs, "『讀 U+8B80』應在 CONFUSABLE_PAIRS"
+        _, simp_cp, jp_cp, _ = dou_pairs[0]
+        assert simp_cp == 0x8BFB, "簡體應為『读 U+8BFB』"
+        assert jp_cp == 0x8AAD, "日文應為『読 U+8AAD』"
+
+    def test_consistency_check_returns_dict_schema(self):
+        """H6: self-check 回傳 dict 含 critical / info 兩鍵（契約）。"""
+        result = validate_confusable_pairs_consistency()
+        assert isinstance(result, dict), f"應回傳 dict，實際 {type(result)}"
+        assert "critical" in result, "缺 critical 鍵"
+        assert "info" in result, "缺 info 鍵"
+        assert isinstance(result["critical"], list)
+        assert isinstance(result["info"], list)
+
+    def test_consistency_check_no_critical_with_current_lists(self):
+        """H7: 既有清單通過 critical 級檢查（無設計筆誤）。"""
+        result = validate_confusable_pairs_consistency()
+        assert result["critical"] == [], (
+            f"既有清單應無 critical 級設計筆誤，實際：\n"
+            + "\n".join(f"  - {w}" for w in result["critical"])
+        )
+
+    def test_consistency_check_detects_traditional_in_simplified(self):
+        """H8: 模擬繁體誤入 SIMPLIFIED_CHARS（PC-085 首發場景）— critical 級偵測。"""
+        # 透過 monkeypatch 風格暫時注入污染清單
+        original = hook_module.SIMPLIFIED_CHARS
+        try:
+            hook_module.SIMPLIFIED_CHARS = frozenset(original | {"遺"})  # 遺（繁）
+            result = hook_module.validate_confusable_pairs_consistency()
+            critical = result["critical"]
+            assert any("U+907A" in w and "誤入" in w for w in critical), (
+                f"應偵測『遺 U+907A』誤入 SIMPLIFIED_CHARS（critical），實際：{critical}"
+            )
+        finally:
+            hook_module.SIMPLIFIED_CHARS = original
+
+    def test_consistency_check_detects_missing_simplified_as_info(self):
+        """H9: 模擬簡體缺失（漏網）— info 級偵測，非 critical（清單漸進擴充屬預期）。"""
+        original = hook_module.SIMPLIFIED_CHARS
+        try:
+            # 移除「独 U+72EC」測試漏網偵測
+            hook_module.SIMPLIFIED_CHARS = frozenset(original - {"独"})
+            result = hook_module.validate_confusable_pairs_consistency()
+            info = result["info"]
+            critical = result["critical"]
+            assert any("U+72EC" in w and "漏網" in w for w in info), (
+                f"應偵測『独 U+72EC』漏網（info 級），實際 info：{info}"
+            )
+            # 漏網不應升為 critical（不污染 stderr）
+            assert not any("U+72EC" in w for w in critical), (
+                f"漏網不應為 critical 級，實際 critical：{critical}"
+            )
+        finally:
+            hook_module.SIMPLIFIED_CHARS = original
+
+    def test_consistency_check_detects_japanese_shared_in_japanese_only(self):
+        """H10: 模擬繁日共用字誤入 JAPANESE_ONLY（PC-084 違反）— critical 級偵測。"""
+        original = hook_module.JAPANESE_ONLY
+        try:
+            hook_module.JAPANESE_ONLY = frozenset(original | {"鑑"})  # 鑑（繁日共用）
+            result = hook_module.validate_confusable_pairs_consistency()
+            critical = result["critical"]
+            assert any("U+9451" in w for w in critical), (
+                f"應偵測『鑑 U+9451』繁日共用字誤入 JAPANESE_ONLY（critical），實際：{critical}"
+            )
+        finally:
+            hook_module.JAPANESE_ONLY = original
+
+    def test_consistency_check_info_does_not_pollute_critical(self):
+        """H11: info 級警告不混入 critical list（雙通道契約）。"""
+        result = validate_confusable_pairs_consistency()
+        # 既有清單可能有漏網 info，但 critical 必為空
+        assert result["critical"] == []
+        # info list 可為空或含漏網提示，不影響 critical
 
 
 if __name__ == "__main__":

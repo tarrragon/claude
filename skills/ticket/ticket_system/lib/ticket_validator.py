@@ -313,17 +313,22 @@ def _is_placeholder(text: str) -> bool:
     """
     判斷文字是否為佔位符。
 
-    判斷策略（W17-032 修復後）：
-    1. 先剝除所有 HTML 註解（包含 body schema 範本的 `<!-- Schema[...]: ... -->`
-       指引、`<!-- To be filled by executing agent -->` 等），再看剩餘內容。
-    2. 剩餘內容為空 → placeholder（例如整段只有 HTML 註解）。
-    3. 剩餘內容含英文佔位符 `(pending)/TBD/TODO/N/A` → placeholder。
-    4. 剩餘內容扣掉所有「（待填寫：...）/（必填：...）」後為空 → placeholder。
-    5. 否則非 placeholder（視為已有實質內容）。
+    判斷策略（W17-071 修復後）：
+    1. 先剝除所有 HTML 註解（W17-032）。
+    2. 再剝除 markdown 分隔符（`---+` 行首行尾獨立一行；W17-071）——
+       分隔符本身是結構裝飾，不是實質內容。
+    3. 剩餘內容為空 → placeholder（例如只有 HTML 註解 + 分隔符的空殼章節）。
+    4. 剩餘內容含英文佔位符 `(pending)/TBD/TODO/N/A` → placeholder。
+    5. 剩餘內容扣掉所有「（待填寫：...）/（必填：...）」後為空 → placeholder。
+    6. 否則非 placeholder（視為已有實質內容）。
 
-    W17-032 修復重點：原本 `<!--.*?-->` 命中即回 True，會誤判
-    「body schema 範本的 Schema 標註註解 + 實質內容」為 placeholder，
-    導致 body-check 在 complete 階段阻擋合法 ticket。
+    W17-032 修復重點：`<!--.*?-->` 命中即回 True 會誤判
+    「body schema 範本的 Schema 標註註解 + 實質內容」為 placeholder。
+
+    W17-071 修復重點（root cause A）：HTML 註解剝除後若剩下 markdown 分隔符
+    `---`（ticket body schema 章節間的水平分隔），`_is_placeholder` 原先回傳
+    False，導致空殼章節（只有 schema note + `---`）被放行。增加分隔符剝除
+    堵住此 false negative 路徑。
 
     此函式與 acceptance_auditor.py 中的同名函式功能一致，
     用於統一驗證邏輯。
@@ -349,22 +354,78 @@ def _is_placeholder(text: str) -> bool:
     if not content_no_html:
         return True
 
-    # 待填寫標記（含英文/中文佔位符）— 對剝除 HTML 註解後的內容檢查
+    # W17-071：剝除 markdown 分隔符（行首行尾獨立一行的 `---+`）。
+    # schema 範本使用 `---` 分隔章節，但分隔符本身非實質內容；
+    # 原先未剝除導致「schema note + 分隔符」的空殼章節被誤判為非 placeholder。
+    content_no_separator = re.sub(
+        r"^[ \t]*-{3,}[ \t]*$", "", content_no_html, flags=re.MULTILINE
+    ).strip()
+    if not content_no_separator:
+        return True
+
+    # 待填寫標記（含英文/中文佔位符）— 對剝除 HTML 註解 + 分隔符後的內容檢查
     # - 英文：(pending), TBD, TODO, N/A
     # - 中文：（待填寫：...）、（必填：...）——template 預設佔位符
-    if re.search(r"\(pending\)|TBD|TODO|N/A", content_no_html, re.IGNORECASE):
+    if re.search(r"\(pending\)|TBD|TODO|N/A", content_no_separator, re.IGNORECASE):
         return True
-    if re.search(r"（待填寫[：:][^）]*）|（必填[：:][^）]*）", content_no_html):
+    if re.search(r"（待填寫[：:][^）]*）|（必填[：:][^）]*）", content_no_separator):
         return True
 
     # 判定「整段只由中文佔位符組成」：移除所有已知中文佔位符 + 空白後為空
     no_cn_placeholders = re.sub(
-        r"（(?:待填寫|必填)[：:][^）]*）", "", content_no_html
+        r"（(?:待填寫|必填)[：:][^）]*）", "", content_no_separator
     ).strip()
     if not no_cn_placeholders:
         return True
 
     return False
+
+
+# W17-071：Schema 定義章節名清單（Ticket body template 使用的固定章節集合）。
+# 擷取 section 內容時只把這些章節名當作邊界，避免 agent 自定義 H2
+# （如 `## 實作摘要`）把 schema section 範圍切斷。
+# 來源：.claude/pm-rules/ticket-body-schema.md
+_SCHEMA_SECTION_NAMES: List[str] = [
+    "Task Summary",
+    "Problem Analysis",
+    "Solution",
+    "Test Results",
+    "Completion Info",
+    "NeedsContext",
+    "Exit Status",
+    "重現實驗結果",
+    "Context Bundle",
+]
+
+
+def _find_next_schema_section_boundary(body: str, content_start: int) -> int:
+    """
+    尋找 `content_start` 之後下一個 Schema 定義章節標題的起始位置（W17-071）。
+
+    只把 Schema 定義的章節名（`_SCHEMA_SECTION_NAMES`）當作章節邊界；
+    自定義 H2（如 `## 實作摘要`）或其他非 schema 章節不算邊界。
+    若無後續 schema 章節，返回 `len(body)`。
+
+    支援 `## SectionName` 與 `### SectionName` 兩種層級，行首匹配
+    （避免 code block 內或段落中間的相似字串誤判）。
+
+    Args:
+        body: 完整 Ticket body 文字
+        content_start: 從此位置開始尋找（通常是當前章節內容的起點）
+
+    Returns:
+        int: 下一個 schema 章節標題的起始位置；若無則返回 `len(body)`
+    """
+    next_idx = len(body)
+    for name in _SCHEMA_SECTION_NAMES:
+        # 行首 `## SectionName` 或 `### SectionName`；章節名後允許空白/換行結尾
+        pattern = rf"^#{{2,3}} {re.escape(name)}\b"
+        match = re.search(pattern, body[content_start:], re.MULTILINE)
+        if match:
+            absolute_idx = content_start + match.start()
+            if absolute_idx < next_idx:
+                next_idx = absolute_idx
+    return next_idx
 
 
 def validate_execution_log(
@@ -381,6 +442,11 @@ def validate_execution_log(
 
     對於包含佔位符的區段，會回傳區段名稱清單。
     這是一個「軟檢查」：回傳結果供呼叫者決定是否警告或阻止。
+
+    W17-071 修復重點（root cause B）：原先使用「任意 `##` 或 `###`」作為
+    章節邊界，agent 寫自定義 H2（如 `## 實作摘要`）會把 schema section 的
+    內容切斷，導致 schema section 只剩 note + 分隔符被誤判為已填寫。
+    改為僅以 Schema 定義的章節名（`_SCHEMA_SECTION_NAMES`）作為邊界。
 
     Args:
         ticket_id: Ticket ID（用於錯誤訊息）
@@ -412,13 +478,13 @@ def validate_execution_log(
     unfilled_sections: list[str] = []
 
     for section in SECTIONS_TO_CHECK:
-        # 找到區段標題位置（支援 ### 或 ## 層級）
-        header_patterns = [f"### {section}", f"## {section}"]
+        # 找到區段標題位置（支援 ### 或 ## 層級，行首匹配避免誤判）
         section_start = -1
-        for pattern in header_patterns:
-            idx = body.find(pattern)
-            if idx != -1:
-                section_start = idx
+        for level in ("###", "##"):
+            pattern = rf"^{level} {re.escape(section)}\b"
+            match = re.search(pattern, body, re.MULTILINE)
+            if match:
+                section_start = match.start()
                 break
 
         # 若找不到此區段，視為未填寫
@@ -426,7 +492,7 @@ def validate_execution_log(
             unfilled_sections.append(section)
             continue
 
-        # 擷取區段內容（從標題到下一個 ## 或 ### 或文件結尾）
+        # 擷取區段內容（從標題到下一個 Schema 章節或文件結尾）
         content_start = body.find("\n", section_start)
         if content_start == -1:
             # 標題之後沒有內容
@@ -435,13 +501,9 @@ def validate_execution_log(
 
         content_start += 1  # 跳過換行符
 
-        # 找到下一個區段的開頭
-        next_section_idx = len(body)
-        for marker in ["## ", "### "]:
-            idx = body.find(marker, content_start)
-            if idx != -1 and idx < next_section_idx:
-                next_section_idx = idx
-
+        # W17-071：章節邊界限定為 Schema 定義的章節名；
+        # 自定義 H2 不再截斷 schema section 範圍。
+        next_section_idx = _find_next_schema_section_boundary(body, content_start)
         section_content = body[content_start:next_section_idx].strip()
 
         # 使用 _is_placeholder 進行更精確的檢查，支援多種佔位符格式
@@ -475,7 +537,7 @@ def validate_execution_log_by_type(
     - DOC: 無強制 body 章節（僅 Completion Info 由別處驗證）
 
     每個必填章節需：
-    1. 標題存在（## 或 ### 層級）
+    1. 標題存在（## 或 ### 層級，line-anchored 匹配避免 backtick 內誤判；W17-074）
     2. 內容非 placeholder（含 `（待填寫：...）` 中文佔位符）
 
     Args:
@@ -501,12 +563,15 @@ def validate_execution_log_by_type(
 
     unfilled: List[str] = []
     for section in required:
-        header_patterns = [f"### {section}", f"## {section}"]
+        # W17-074：使用 line-anchored regex 定位章節 header，避免 body.find
+        # substring 匹配命中 backtick 包住的章節名引用（如 `## Test Results`）。
+        # 同家族修復對照：W17-071 已於 validate_execution_log 使用相同 pattern。
         section_start = -1
-        for pattern in header_patterns:
-            idx = body.find(pattern)
-            if idx != -1:
-                section_start = idx
+        for level in ("###", "##"):
+            pattern = rf"^{level} {re.escape(section)}\b"
+            match = re.search(pattern, body, re.MULTILINE)
+            if match:
+                section_start = match.start()
                 break
 
         if section_start == -1:
@@ -519,11 +584,14 @@ def validate_execution_log_by_type(
             continue
         content_start += 1
 
+        # 章節邊界：僅 h2 (`## `) 行首才算下一章節起點
+        # W17-047：原本把 `### ` 也當邊界會誤切含 h3 子標題的章節；
+        # 改用 re.MULTILINE 行首匹配，避免 code block 或段落中間的
+        # `## ` 字串誤判。
         next_section_idx = len(body)
-        for marker in ["## ", "### "]:
-            idx = body.find(marker, content_start)
-            if idx != -1 and idx < next_section_idx:
-                next_section_idx = idx
+        match = re.search(r"^## ", body[content_start:], re.MULTILINE)
+        if match:
+            next_section_idx = content_start + match.start()
 
         section_content = body[content_start:next_section_idx].strip()
         if _is_placeholder(section_content):

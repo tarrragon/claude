@@ -40,6 +40,77 @@ Ticket: {ticket_id}
 
 ---
 
+## 三段式快速填空骨架（W17-048 方案 F）
+
+> **用途**：PM 派發前最常用的中文對話式骨架。把 context 寫入 ticket 後，直接複製以下骨架填三個空格即可派發。prompt 控制在 **10-15 行**，穩過 Hook 30 行上限。
+
+### 骨架（3 段）
+
+```markdown
+Ticket: {ticket_id}
+
+## 任務
+
+{一句話動作描述，≤ 40 字}
+
+讀取 ticket：`ticket track full {ticket_id}`
+依 Context Bundle 執行流程。遇阻立即停下回報，禁繞過 Hook。
+```
+
+### IMP 實戰範例（實作派發）
+
+```markdown
+Ticket: 0.18.0-W17-046.1
+
+## 任務
+
+擴充 TICKET_EXEMPT_AGENT_TYPES 白名單 + 補充 Hook 判別準則註解 + 新增測試。
+
+讀取 ticket：`ticket track full 0.18.0-W17-046.1`
+依 Problem Analysis 的 Context Bundle 規格實作 + commit + complete。
+遇阻立即停下回報，禁繞過 Hook。
+```
+
+### ANA 實戰範例（分析派發）
+
+```markdown
+Ticket: 0.18.0-W17-043
+
+## 任務
+
+分析 scenario-17 AskUserQuestion 提醒在 append-log 誤觸發根因。
+
+讀取 ticket：`ticket track full 0.18.0-W17-043`
+依 acceptance 產出分析報告寫入 Solution，衍生修復 ticket 後 complete。
+遇阻即停回報，禁繞過 Hook。
+```
+
+### DOC 實戰範例（文件派發）
+
+```markdown
+Ticket: 0.18.0-W17-048.3
+
+## 任務
+
+新增 agent-dispatch-template.md「短 prompt 三段式骨架」範例區。
+
+讀取 ticket：`ticket track full 0.18.0-W17-048.3`
+依 Context Bundle 設計文件結構，append Solution + commit + complete。
+遇阻即停回報。
+```
+
+### 填空檢查清單
+
+派發前確認：
+
+- [ ] 第一行為 `Ticket: {id}`（Hook 強制驗證）
+- [ ] 含「讀取 ticket」指引（W17-048.2 軟提示檢查）
+- [ ] context 已在 ticket 的 Problem Analysis / Context Bundle（不塞 prompt）
+- [ ] prompt 總行數 ≤ 15 行（遠低於 30 行硬上限）
+- [ ] 動作描述一句話可理解（不堆疊多個動詞）
+
+---
+
 ## 短 Prompt Snippets（PC-040 / PC-065）
 
 以下 snippets 是派發時優先使用的短版骨架。完整 context 必須先寫入 Ticket Context Bundle；prompt 只保留 Ticket ID、邊界摘要與執行指令。每個 snippet 第一行固定為 `Ticket: {id}`。

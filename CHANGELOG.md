@@ -1,3 +1,42 @@
+## [1.24.0] - 2026-04-27
+
+### Summary
+feat: IMP-B/C/D 落地（PC-111 升級 + 2 張新 IMP ticket）; feat: pm-judgment-interference-map （ IMP-A 直接落地）; feat: 強化 agent 自定義 H2 防護（PC-110 根因 B 落地） (+26 more)
+
+Changes: 7 feat, 3 fix, 16 docs, 3 chore
+
+- feat: IMP-B/C/D 落地（PC-111 升級 + 2 張新 IMP ticket）
+- feat: pm-judgment-interference-map （ IMP-A 直接落地）
+- feat: 強化 agent 自定義 H2 防護（PC-110 根因 B 落地）
+- feat: ANA 雙根因分析落地 + IMP-1/2 + PC-110
+- feat: 擴充 charset hook 涵蓋 emoji + PC-085 + 隱含表達 6 句型
+- feat: agent-prompt-length-guard 新增軟提示層偵測缺模板關鍵字
+- feat: 擴充 agent-ticket-validation 白名單支援情報蒐集類 agent
+- fix: validate_execution_log_by_type 章節定位改用 line-anchored regex 避免 backtick 誤判
+- fix: validator + hook body-check false negative 症狀修復
+- fix: 修復 body-check h3 子標題誤判章節結束 bug
+- docs: frontend-with-playwright 更新主文與 references + 新增 principles 卡片
+- docs: compositional-writing 更新主文與 references + 新增 principles 卡片
+- docs: 新增 requirement-protocol skill — 從需求確認到實作的對話協議
+- docs: 新增 frontend-with-playwright skill — 框架無關前端開發協議 + Playwright 驗證
+- docs: compositional-writing 五大原則 → 六大原則 + 情境 5b 文集管理
+- docs: session-switching-sop — worklog/CLI handoff 雙軌同步
+- docs: PC-111 新增 R5 素材跨層誤推 + 素材溯源鏈 + R1 改寫
+- docs: .2 pm-judgment-interference-map
+- docs: PC-111 PM 論述編造 + 根因淺層歸因雙層錯誤
+- docs: ARCH-020 驗證邏輯跨進程重複實作架構教訓
+- docs: 新增 parallel-evaluation --skip-basil opt-out + 重寫 thyme-doc-integrator description
+- docs: basil-writing-critic v2（3 職責 + Hook 層化 + 6 句型偵測）
+- docs: 建立 basil-writing-critic agent definition 檔案
+- docs: .1 + .3 派發流程範本化前台產出
+- docs: 更新 hook 技術參考文件補充 / 新功能
+- docs: 新增二次審查強制執行原則至 document-writing-style 與 compositional-writing
+- chore: 修正 新建 hook 檔案執行權限 (IMP-054 auto-fix)
+- chore: auto-fix exec bit for test_language_guard.py (IMP-054)
+- chore: HookCheck 自動加上 test 檔執行權限 (IMP-054)
+
+---
+
 ## [1.23.1] - 2026-04-22
 
 ### Summary
