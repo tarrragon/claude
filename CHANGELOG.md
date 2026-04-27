@@ -1,3 +1,15 @@
+## [1.25.0] - 2026-04-27
+
+### Summary
+feat: error-pattern README 新增「抽象層級分析」必填章節 + PC-111 backfill; feat: compositional-writing SKILL 原則 3 升級為「意圖顯性與層級貼合」
+
+Changes: 2 feat
+
+- feat: error-pattern README 新增「抽象層級分析」必填章節 + PC-111 backfill
+- feat: compositional-writing SKILL 原則 3 升級為「意圖顯性與層級貼合」
+
+---
+
 ## [1.24.0] - 2026-04-27
 
 ### Summary

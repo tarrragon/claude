@@ -94,6 +94,26 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 ### 錯誤做法 (避免)
 [描述應該避免的做法]
 
+## 抽象層級分析（必填）
+
+> **目的**：防止讀者把實作層 / 工具層 / 協作層素材跨層誤推至認知層 / 架構層論述（PC-111 R5）。撰寫者必須顯性標記症狀與根因所在層級，跨層提升必須說明支撐文件來源。
+
+| 欄位 | 內容 | 範例 |
+|------|------|------|
+| 症狀層級 | 外在表現所在抽象層 | 工具層（subagent transcript 局部視角） |
+| 根因層級 | 5 Why 終點所在抽象層 | 協作層（teammate 之間 state 不共享） |
+| 跨層路徑 | 症狀層 → 根因層的層級差，若同層填「N/A；症狀與根因同層」 | 工具層 → 協作層（向上 1 層） |
+| 防護層級 | 防護措施作用的抽象層（含支撐文件路徑） | 協作層；落地至 `.claude/skills/agent-team/SKILL.md` |
+| 跨層警示 | 本 PC 素材若被引用，禁止跨層提升至哪些層級；若無填「無」 | 禁止提升至認知層（讀者可能誤推為「working memory 競爭」，無支撐文件） |
+
+**層級分類參考**（細節見 `.claude/methodologies/pm-judgment-interference-map.md` 因子 1.4）：
+
+- **實作層**：具體程式碼、git index、檔案系統、單一函式行為
+- **工具層**：CLI / Hook / subagent transcript / runtime API
+- **協作層**：多代理人協調、Ticket / Task 介面、shared state 設計
+- **認知層**：working memory、注意力分配、判斷品質、心智模型
+- **架構層**：系統邊界、模組依賴、資料流、契約
+
 ## 相關資源
 
 - [相關文件連結]
