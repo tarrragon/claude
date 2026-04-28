@@ -30,7 +30,8 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Callable, Dict, List, Tuple
+import logging
+from typing import Callable, Dict, List, Optional, Tuple
 
 from hook_utils import (
     setup_hook_logging,
@@ -278,6 +279,93 @@ def _classify_prompt_paths(prompt: str) -> Tuple[bool, bool, bool]:
 
     has_other = bool(_NON_CLAUDE_PATH_PATTERN.search(prompt))
     return has_main_repo_claude, has_external_claude, has_other
+
+
+def _merge_ticket_scope(ticket_ids: List[str]) -> Tuple[bool, bool, bool]:
+    """合併多個 ticket 的 where.files 分類為 (m, e, o) tuple（OR 合併）。
+
+    讀取每個 ticket 的 where.files，逐路徑用 _classify_paths 取得 (m, e, o)，
+    再 OR 合併。任一 ticket 載入失敗或無 where.files 時跳過。
+
+    回傳：(has_main_repo_claude, has_external_claude, has_other)
+    """
+    try:
+        project_root_str = str(get_project_root().resolve())
+    except Exception:
+        project_root_str = ""
+
+    has_main = False
+    has_ext = False
+    has_other = False
+    for tid in ticket_ids:
+        files = _load_ticket_where_files(tid)
+        if not files:
+            continue
+        tm, te, to = _classify_paths(files, project_root_str)
+        has_main = has_main or tm
+        has_ext = has_ext or te
+        has_other = has_other or to
+    return has_main, has_ext, has_other
+
+
+def _resolve_path_classification(
+    prompt: str,
+    ticket_ids: List[str],
+    *,
+    logger: Optional[logging.Logger] = None,
+) -> Tuple[bool, bool, bool]:
+    """統一決議 prompt 的路徑分類結果（W11-004.7）。
+
+    依序套用三層規則並回傳合併後的 (has_main_repo_claude, has_external_claude, has_other)：
+
+    L1. 從 prompt 抽取分類（沿用 _classify_prompt_paths）
+    L2. W17-018 fallback：若 L1 全 False 且有 ticket_ids → 從 where.files 補分類
+    L3. W11-004.7 覆蓋：若 L1 has_other=True 且 ticket scope 純 .claude/
+        → 將 has_other 降為 False、has_main_repo_claude 升為 True
+        理由：ticket where.files 是 scope 的 source of truth；prompt 內出現的
+        tests/、src/、lib/ token 在純 .claude/ ticket 下視為 .claude/ 巢狀路徑
+        引用（如 `.claude/skills/ticket/tests/`），不應觸發 worktree 強制。
+
+    L2 / L3 互斥（elif）：L1 全 False 走 L2；L1 有 has_other 才走 L3。
+
+    Args:
+        prompt: 派發 prompt 全文
+        ticket_ids: 已抽出的 ticket ID 清單（可為空）
+        logger: 用於記錄 L2/L3 觸發的 logger；None 時不輸出日誌
+
+    Returns:
+        (has_main_repo_claude, has_external_claude, has_other) tuple
+    """
+    # L1: prompt 直接分類
+    m, e, o = _classify_prompt_paths(prompt)
+
+    # L2: W17-018 fallback（prompt 全空 → 讀 ticket scope）
+    if not m and not e and not o and ticket_ids:
+        tm, te, to = _merge_ticket_scope(ticket_ids)
+        m = m or tm
+        e = e or te
+        o = o or to
+        if logger is not None and (m or o or e):
+            logger.info(
+                "W17-018 fallback：prompt 路徑不明，由 ticket where.files 補分類："
+                "ids=%s main_claude=%s external=%s other=%s",
+                ticket_ids, m, e, o,
+            )
+    # L3: W11-004.7 覆蓋（has_other=True 但 ticket scope 純 .claude/）
+    elif o and ticket_ids and not e:
+        ticket_m, ticket_e, ticket_o = _merge_ticket_scope(ticket_ids)
+        # 純 .claude/ 條件：m=True AND e=False AND o=False
+        if ticket_m and not ticket_e and not ticket_o:
+            if logger is not None:
+                logger.info(
+                    "W11-004.7 覆蓋：ticket scope 純 .claude/（ids=%s），"
+                    "prompt 內 src/tests/lib/ token 視為 .claude/ 巢狀路徑",
+                    ticket_ids,
+                )
+            o = False
+            m = True
+
+    return m, e, o
 
 
 BLOCK_MESSAGE_TEMPLATE = """錯誤：實作代理人 {agent} 必須使用 isolation: "worktree" 派發
@@ -1097,34 +1185,12 @@ def main() -> int:
     # W5-047.2：並行場景廣域 staging 警告（PC-092 防護，非阻擋）
     _emit_wide_staging_warning_if_parallel(prompt, logger)
 
-    has_main_repo_claude, has_external_claude, has_other = _classify_prompt_paths(prompt)
-
-    # W17-018：若 prompt 路徑分類不明（都 False），fallback 讀 ticket where.files
-    # 動機：PM 寫短 prompt 時常省略路徑線索（如「Read ticket md 依規格實作」），
-    # hook 無從分類；但 ticket where.files 已記錄具體檔案。讀 ticket 補分類避免
-    # 強制 worktree 阻擋純 .claude/ 任務。
-    if not has_main_repo_claude and not has_external_claude and not has_other:
-        ticket_ids = _extract_ticket_ids(prompt)
-        if ticket_ids:
-            try:
-                project_root_str = str(get_project_root().resolve())
-            except Exception:
-                project_root_str = ""
-            for tid in ticket_ids:
-                files = _load_ticket_where_files(tid)
-                if not files:
-                    continue
-                m, e, o = _classify_paths(files, project_root_str)
-                has_main_repo_claude = has_main_repo_claude or m
-                has_external_claude = has_external_claude or e
-                has_other = has_other or o
-            if has_main_repo_claude or has_other:
-                logger.info(
-                    "W17-018：prompt 路徑不明，由 ticket where.files 補分類：ids=%s "
-                    "main_claude=%s external=%s other=%s",
-                    ticket_ids, has_main_repo_claude,
-                    has_external_claude, has_other,
-                )
+    # W11-004.7：統一路徑分類 helper，整合 L1 prompt + L2 W17-018 fallback
+    # + L3 純 .claude/ ticket 覆蓋（防止 prompt tests/ token 誤觸 worktree 強制）。
+    ticket_ids = _extract_ticket_ids(prompt)
+    has_main_repo_claude, has_external_claude, has_other = _resolve_path_classification(
+        prompt, ticket_ids, logger=logger
+    )
 
     # 優先順序判斷：
 

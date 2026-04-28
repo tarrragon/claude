@@ -15,10 +15,11 @@ Ticket 建構模組
 使用 TypedDict 減少函式參數數量，提高程式碼可讀性。
 """
 
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from ticket_system.lib.constants import STATUS_PENDING
 from ticket_system.lib.ticket_loader import (
@@ -833,3 +834,188 @@ def update_source_spawned_tickets(source_ticket_id: str, new_ticket_id: str) -> 
             return False
 
     return True
+
+
+# ---------------------------------------------------------------------------
+# Idempotent Schema H2 dedupe helper（W11-003.3）
+# ---------------------------------------------------------------------------
+#
+# Why: 既有 ticket md 出現相同 Schema H2（例如 ## Test Results）重複出現的情況
+# （根因：手動 Edit 時把 frontmatter 預設模板再次插入，或自定義 H2 切斷了 section
+# 擷取邊界後 append-log 又補了一份空模板）。重複 H2 會：
+#   1) 讓 acceptance-auditor 把純 placeholder 段判為 Solution/Test Results 空，誤報；
+#   2) 讓 append-log 的 regex 命中第一個 H2，內容寫入舊段而非預期段；
+#   3) 增加閱讀者的認知負擔。
+#
+# Action: 提供 idempotent 的 dedupe_schema_sections，輸入 body 字串、回傳整理後字串。
+# 只處理 Schema 章節清單（pm-rules/ticket-body-schema.md 的權威清單），其他 H2 維持
+# 原樣以免誤刪 ANA 重現實驗或 H3 自由結構。
+# ---------------------------------------------------------------------------
+
+# Schema 章節清單（與 .claude/rules/core/agent-definition-standard.md 「章節結構規則」一致）
+SCHEMA_H2_SECTIONS: Tuple[str, ...] = (
+    "Task Summary",
+    "Problem Analysis",
+    "重現實驗結果",
+    "Solution",
+    "Test Results",
+    "Context Bundle",
+    "NeedsContext",
+    "Exit Status",
+    "Completion Info",
+)
+
+# Placeholder pattern：純 frontmatter 模板殘留判定
+# 命中即視為「無實質內容」：
+#   - <!-- To be filled by executing agent -->
+#   - （待填寫：...）
+#   - <!-- 調查過程記錄（可選）：... -->（Problem Analysis 預設模板註解）
+#   - 純空白 / horizontal rule (---)
+_PLACEHOLDER_LINE_PATTERNS = (
+    re.compile(r"^\s*<!--\s*To be filled by executing agent\s*-->\s*$"),
+    re.compile(r"^\s*（待填寫[:：].*?）\s*$"),
+    re.compile(r"^\s*###\s+(問題根因|影響範圍|相關 Error Pattern)\s*$"),
+)
+
+
+def _is_placeholder_only(content: str) -> bool:
+    """判斷 H2 區塊內容是否僅為 frontmatter 預設模板殘留。
+
+    Args:
+        content: H2 標題之後、下一個 H2 之前的全部文字（含換行）。
+
+    Returns:
+        True 若每一個非空白行都符合 placeholder pattern 或屬於 HTML 註解區塊；
+        False 若存在任何被視為實質內容的行（包含 ### 子標題以外的人寫文字、
+        表格、列表、程式碼區塊等）。
+    """
+    in_html_comment = False
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        # 多行 HTML 註解（例：Problem Analysis 預設「<!-- 調查過程記錄... -->」）視為 placeholder
+        if in_html_comment:
+            if "-->" in line:
+                in_html_comment = False
+            continue
+        if line.startswith("<!--") and "-->" not in line:
+            in_html_comment = True
+            continue
+        if line == "---":
+            continue
+        if any(pat.match(line) for pat in _PLACEHOLDER_LINE_PATTERNS):
+            continue
+        # 預設 Problem Analysis 子標題下的「（待填寫：...）」已被 _PLACEHOLDER_LINE_PATTERNS
+        # 命中；此處仍出現代表為實質內容
+        return False
+    return True
+
+
+def _split_body_by_h2(body: str) -> List[Tuple[Optional[str], str]]:
+    """以 H2 (## Title) 為界把 body 切段。
+
+    Returns:
+        List of (h2_title or None, segment_text)。第一段若無 H2 前綴，h2_title 為 None；
+        segment_text 包含 H2 標題行本身（若有），以維持原始格式還原。
+    """
+    h2_re = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+    segments: List[Tuple[Optional[str], str]] = []
+    last_end = 0
+    last_title: Optional[str] = None
+    for match in h2_re.finditer(body):
+        if match.start() > last_end or last_title is not None:
+            segments.append((last_title, body[last_end:match.start()]))
+        last_end = match.start()
+        last_title = match.group(1).strip()
+    segments.append((last_title, body[last_end:]))
+    return segments
+
+
+def dedupe_schema_sections(body: str) -> str:
+    """合併重複出現的 Schema H2 章節，回傳 idempotent 結果。
+
+    規則：
+    1. 僅處理 SCHEMA_H2_SECTIONS 列出的章節；其他 H2（含 ANA 重現實驗子段、自定義 H2）
+       維持原樣不動。
+    2. 對於同名重複 H2：
+       - 若僅有一份有實質內容、其餘皆 placeholder：保留有內容那份位置（首次出現），
+         移除所有 placeholder 重複段。
+       - 若多份都有實質內容：保留首次出現的位置與內容，將後續同名段的內容
+         合併到首段尾端（以 `\\n\\n` 分隔），移除後續 H2 標題行避免重複。
+       - 若全部皆 placeholder：保留首次出現的 placeholder，移除後續。
+    3. 不改變 SCHEMA_H2_SECTIONS 各章節之間的相對順序，也不會新增本來不存在的章節。
+
+    Args:
+        body: Ticket body markdown 字串。
+
+    Returns:
+        整理後的 body 字串。對相同輸入呼叫多次回傳值穩定（idempotent）。
+    """
+    segments = _split_body_by_h2(body)
+
+    # 收集每個 Schema 章節的所有出現位置與內容
+    occurrences: Dict[str, List[int]] = {}
+    for idx, (title, _) in enumerate(segments):
+        if title in SCHEMA_H2_SECTIONS:
+            occurrences.setdefault(title, []).append(idx)
+
+    # 標記需要刪除的段索引；同時準備首段內容追加
+    indices_to_remove: set = set()
+    content_to_append: Dict[int, List[str]] = {}
+
+    for title, indices in occurrences.items():
+        if len(indices) <= 1:
+            continue
+        # 拆出每段「H2 標題行」與「內容」
+        segment_bodies: List[str] = []
+        for idx in indices:
+            seg_text = segments[idx][1]
+            # 移除第一行 H2 標題（含換行），剩下視為內容
+            content_match = re.match(r"^##\s+.+?$\n?", seg_text, re.MULTILINE)
+            content_only = seg_text[content_match.end():] if content_match else seg_text
+            segment_bodies.append(content_only)
+
+        # 找實質內容段
+        substantive_idx_in_indices: List[int] = [
+            i for i, c in enumerate(segment_bodies) if not _is_placeholder_only(c)
+        ]
+
+        if substantive_idx_in_indices:
+            keeper_pos_in_indices = substantive_idx_in_indices[0]
+        else:
+            keeper_pos_in_indices = 0
+
+        keeper_segment_idx = indices[keeper_pos_in_indices]
+
+        # 後續實質內容段 → 追加到 keeper 尾端
+        extras: List[str] = []
+        for i, seg_idx in enumerate(indices):
+            if i == keeper_pos_in_indices:
+                continue
+            indices_to_remove.add(seg_idx)
+            if i in substantive_idx_in_indices and i != keeper_pos_in_indices:
+                extras.append(segment_bodies[i].rstrip())
+        if extras:
+            content_to_append[keeper_segment_idx] = extras
+
+    if not indices_to_remove and not content_to_append:
+        return body
+
+    # 重組
+    rebuilt: List[str] = []
+    for idx, (title, seg_text) in enumerate(segments):
+        if idx in indices_to_remove:
+            continue
+        appended_text = seg_text
+        if idx in content_to_append:
+            extras_joined = "\n\n".join(content_to_append[idx])
+            # 確保 keeper 段尾與 extras 之間有空行分隔
+            if not appended_text.endswith("\n"):
+                appended_text += "\n"
+            if not appended_text.endswith("\n\n"):
+                appended_text += "\n"
+            appended_text += extras_joined + "\n"
+        rebuilt.append(appended_text)
+
+    return "".join(rebuilt)

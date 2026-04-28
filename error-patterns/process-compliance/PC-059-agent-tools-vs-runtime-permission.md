@@ -7,6 +7,7 @@ retries:
  - retry3: 確認 permissionMode 是 subagent Edit 的控制欄位
  - retry4: 聲稱 bypassPermissions 為 worktree 場景標準值（後被 retry5 推翻）
  - retry5: 確認 permissionMode 受 subagent cwd 限制，worktree 絕對路徑不可靠
+ - retry6: 主 repo cwd 內 `.claude/` 檔案 + thyme `permissionMode: acceptEdits` 仍被拒（W17-088）
 related:
  - PC-058
  - IMP-056
@@ -142,6 +143,36 @@ permissionMode: bypassPermissions
  - 環境的 zsh `chpwd` hook 會觸發 `ls` 淹沒代理人輸出（IMP-056）
 
 **檢測訊號**：代理人具 `permissionMode: bypassPermissions` 但仍回報 `Permission to use Edit has been denied` → 立即懷疑是 worktree cwd 不對齊，切換方案 1。
+
+### retry6 新案例（2026-04-28，W17-088）
+
+**事件**：派發 thyme-documentation-integrator（frontmatter `permissionMode: acceptEdits`）執行 Edit `.claude/agents/basil-writing-critic.md`，cwd 為主 repo（**非 worktree**）。Edit 與 `mcp__serena__replace_content` 兩者皆被拒，agent 回報「Both Edit and mcp__serena__replace_content have been denied」並停止執行。
+
+**新發現**：retry5 強調「worktree 絕對路徑」失敗，但本案件 target 在主 repo cwd 內部、且為 `.claude/` 框架檔案，理論上應在 acceptEdits 範圍。仍失敗代表 **subagent permissionMode 在某些 session 狀態下完全不生效**，不限於 worktree 場景。
+
+**最可能根因**（待後續調查確認）：
+
+1. **主 session 模式繼承問題**：subagent 的 Edit 批准行為可能繼承自主 session 當下的互動模式快照（retry5 已假設）。若主 session 啟動時不在 acceptEdits 模式，subagent 即使宣告 acceptEdits 也無法覆蓋。
+2. **`.claude/` 路徑的特殊保護**：CC runtime 對 `.claude/` 有 hardcoded 保護（ARCH-015 已指出 worktree 內 `.claude/` 被擋），可能擴展至 subagent 在主 repo 內 `.claude/` 也需互動批准。
+3. **Hook 攔截**：某 PreToolUse hook 在 subagent 環境下將 Edit/Write 改為 deny。
+
+**修復策略（更新優先序）**：
+
+優先序：
+
+1. **PM 在前台直接執行框架配置修改**（最高優先，retry5 即為此結論）
+   - 適用：`.claude/agents/`、`.claude/rules/`、`.claude/references/`、`.claude/error-patterns/` 等框架層檔案
+   - 為何：PM cwd 對齊主 repo，具完整 Edit 權限，避開 subagent permissionMode 黑箱
+
+2. **派發前測試 subagent 是否能 Edit 該路徑**
+   - 派發 thyme/mint 等代理人前，先派一個極小測試任務（Edit 一個無關緊要的檔案 + revert）確認 permissionMode 生效
+   - 不生效則切換方案 1
+
+3. **避免 subagent Edit `.claude/` 內檔案（保守規則）**
+   - W17-088 證據：即使主 repo cwd + acceptEdits 仍可能被拒
+   - 實務作法：`.claude/` 內所有 Edit 一律 PM 前台執行；subagent 限定處理 `src/`、`tests/`、`docs/` 等非框架檔案
+
+**檢測訊號（追加）**：subagent 派發後立即回報「Edit/Write 被拒」+ target 在 `.claude/` 內 → 不必嘗試任何修復，直接 PM 前台 Edit。
 
 ### 長期（框架級）
 

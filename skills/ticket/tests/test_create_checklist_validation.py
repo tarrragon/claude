@@ -21,6 +21,10 @@ def _build_complete_config():
         },
         "when": "v0.17.4",
         "parent_id": None,
+        "who": "thyme-python-developer",
+        "what": "升級驗證為阻擋",
+        "why": "規格不完整導致下游派發失敗",
+        "how_strategy": "改 sys.exit(1) 並加 --force",
     }
 
 
@@ -87,20 +91,30 @@ class TestValidateCreateChecklist:
         assert "when" in result
 
     def test_multiple_missing(self):
-        """多個欄位缺失，全部列出。"""
+        """多個欄位缺失，全部列出（W11-003.5 升級後含 5W1H 全欄位）。"""
         config = {
             "where_files": [],
             "acceptance": None,
             "decision_tree_path": None,
             "when": DEFAULT_UNDEFINED_VALUE,
             "parent_id": None,
+            "who": "pending",
+            "what": "",
+            "why": DEFAULT_UNDEFINED_VALUE,
+            "how_strategy": DEFAULT_UNDEFINED_VALUE,
         }
         result = _validate_create_checklist(config, "IMP")
+        # 原 4 項
         assert "where.files" in result
         assert "acceptance" in result
         assert "decision_tree_path" in result
         assert "when" in result
-        assert len(result) == 4
+        # W11-003.5 新增 4 項
+        assert "who" in result
+        assert "what" in result
+        assert "why" in result
+        assert "how_strategy" in result
+        assert len(result) == 8
 
     def test_doc_type_skips_decision_tree(self):
         """DOC 類型不檢查 decision_tree_path。"""
@@ -116,3 +130,54 @@ class TestValidateCreateChecklist:
         config["parent_id"] = "0.17.4-W1-001"
         result = _validate_create_checklist(config, "IMP")
         assert "decision_tree_path" not in result
+
+    # ===== W11-003.5: 5W1H 全欄位必填擴充 =====
+
+    def test_missing_who_pending(self):
+        """who 為 'pending' 視為缺失。"""
+        config = _build_complete_config()
+        config["who"] = "pending"
+        result = _validate_create_checklist(config, "IMP")
+        assert "who" in result
+
+    def test_missing_who_undefined(self):
+        """who 為「待定義」視為缺失。"""
+        config = _build_complete_config()
+        config["who"] = DEFAULT_UNDEFINED_VALUE
+        result = _validate_create_checklist(config, "IMP")
+        assert "who" in result
+
+    def test_missing_who_empty(self):
+        """who 為空字串視為缺失。"""
+        config = _build_complete_config()
+        config["who"] = ""
+        result = _validate_create_checklist(config, "IMP")
+        assert "who" in result
+
+    def test_missing_why(self):
+        """why 為「待定義」視為缺失（IMP 類型）。"""
+        config = _build_complete_config()
+        config["why"] = DEFAULT_UNDEFINED_VALUE
+        result = _validate_create_checklist(config, "IMP")
+        assert "why" in result
+
+    def test_doc_type_skips_why(self):
+        """DOC 類型豁免 why 檢查。"""
+        config = _build_complete_config()
+        config["why"] = DEFAULT_UNDEFINED_VALUE
+        result = _validate_create_checklist(config, "DOC")
+        assert "why" not in result
+
+    def test_missing_how_strategy(self):
+        """how_strategy 為「待定義」視為缺失。"""
+        config = _build_complete_config()
+        config["how_strategy"] = DEFAULT_UNDEFINED_VALUE
+        result = _validate_create_checklist(config, "IMP")
+        assert "how_strategy" in result
+
+    def test_missing_what(self):
+        """what 為空視為缺失。"""
+        config = _build_complete_config()
+        config["what"] = ""
+        result = _validate_create_checklist(config, "IMP")
+        assert "what" in result

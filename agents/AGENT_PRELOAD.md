@@ -148,6 +148,37 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 ---
 
+### 7. 工具選擇規則（MCP 寫入工具優先序）
+
+> **Why**：LLM 傾向選擇「單步高精度」工具（如 serena MCP 寫入工具），即使一般文字修改用 Edit / Write 即可完成。此偏誤（PC-088）加上 MCP 寫入工具在背景派發環境常不在 allow list，會導致代理人被拒後錯誤泛化為「所有寫入工具都被拒」而 early stop（W17-088 根因）。
+
+> **Consequence**：未遵循優先序時，代理人在 MCP 工具被拒後停止工作，未嘗試可行的 Edit / Write，造成任務失敗且 PM 無法察覺根本可執行。
+
+> **Action**：依下表選工具；MCP 寫入工具被拒時必須嘗試 Edit / Write 降級，不可自行宣告任務失敗。
+
+#### 工具選擇優先序
+
+| 任務類型 | 優先工具 | 禁止/不建議 |
+|---------|---------|------------|
+| 一般 Markdown / 文字檔修改 | **Edit**（首選）/ Write | 不應先選 MCP 寫入工具 |
+| 新建檔案 | **Write** | — |
+| 符號級重構（跨檔 rename、函式移動） | mcp__serena__rename_symbol 等 | 非符號重構不用 serena |
+| 讀取 / 查找特定符號 | mcp__serena__find_symbol | — |
+| 背景派發環境的 .md 檔修改 | **Edit 唯一首選** | mcp__serena__replace_content / replace_symbol_body 等寫入工具在 subagent 環境常不在 allow list |
+
+#### Fallback 規則（MCP 工具被拒時）
+
+1. MCP 寫入工具（`mcp__serena__replace_content`、`replace_symbol_body` 等）被拒時：
+   - **必須嘗試 Edit 工具降級**完成同一修改
+   - Edit 成功後繼續任務，不需回報 MCP 被拒
+   - Edit 也被拒時，才在 Ticket Problem Analysis 記錄並回報 PM
+2. **禁止 self-imposed early stop**：看到 MCP 工具一個被拒，不可推論「Edit 也會被拒」，必須實際嘗試
+3. 判別準則：`mcp__serena__*` 寫入工具屬 MCP 層限制；Edit / Write 屬 Claude Code 內建工具層，兩者限制機制完全不同
+
+> **來源**：PC-088（LLM 工具選擇偏誤）；W17-088（thyme early stop 失敗案例：serena 被拒 → 錯誤泛化 → Edit 未嘗試）
+
+---
+
 ## 執行檢查清單
 
 代理人在開始任務前，自我確認：
@@ -161,6 +192,8 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 - [ ] （Phase 3b）查詢限於測試碼/model/domain/介面，無大範圍探索
 - [ ] （Phase 3b）若資訊不足，已回報 PM 而非自行大量查詢
 - [ ] 報告結構清晰（5W1H）
+- [ ] .md 修改使用 Edit / Write，非 mcp__serena__replace_content 等 MCP 寫入工具（規則 7）
+- [ ] MCP 工具被拒時已嘗試 Edit 降級，未 self-imposed early stop（規則 7 Fallback）
 
 ---
 
@@ -181,6 +214,6 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 ---
 
-**Last Updated**: 2026-04-08
-**Version**: 1.5.0 - 新增實作代理人查詢範圍限制規則（PC-047）
+**Last Updated**: 2026-04-28
+**Version**: 1.6.0 - 新增規則 7「工具選擇規則（MCP 寫入工具優先序）」：一般 .md 修改用 Edit/Write，serena MCP 限於符號級重構；MCP 被拒時必須 fallback Edit，禁 self-imposed early stop（PC-088 / W17-088）
 **Purpose**: 確保所有代理人遵守核心規則

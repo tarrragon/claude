@@ -53,7 +53,7 @@ def _make_args(**overrides) -> argparse.Namespace:
         "target": "測試目標",
         "title": "W12-006 測試 Ticket",
         # 5W1H
-        "who": None,
+        "who": "thyme-python-developer",
         "what": "測試用 what",
         "when": "v0.18.0",
         "where_layer": "Infrastructure",
@@ -71,6 +71,12 @@ def _make_args(**overrides) -> argparse.Namespace:
         "decision_tree_entry": "第三層",
         "decision_tree_decision": "建立 IMP",
         "decision_tree_rationale": "PC-073 測試",
+        # W11-003.5 新增 --force 旗標（測試預設 False）
+        "force": False,
+        # 其他 create 既有旗標（避免 getattr 漏掉）
+        "quiet": False,
+        "verbose": False,
+        "json_output": False,
     }
     defaults.update(overrides)
     return argparse.Namespace(**defaults)

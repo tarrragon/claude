@@ -1620,3 +1620,225 @@ def test_hook_fallback_to_ticket_when_prompt_has_no_paths(
     # W17-015.2 where.files 為 .claude/skills/ticket/... → 全主 repo .claude/
     # → 豁免 worktree 放行
     assert exit_code == 0
+
+
+# ----------------------------------------------------------------------------
+# W11-004.7：_resolve_path_classification helper 測試（Phase 2 RED）
+#
+# 對應 Ticket 0.18.0-W11-004.7 規格：
+# - 抽取統一 helper：_resolve_path_classification(prompt, ticket_ids, *, logger=None)
+# - 三層整合：L1 _classify_prompt_paths → L2 W17-018 ticket where.files fallback
+#   → L3 W11-004.7 純 .claude/ 豁免判斷
+# - 回傳統一分類結果：(has_main_repo_claude, has_external_claude, has_other)
+#
+# 設計目標：
+# 1. 主入口 main() 將呼叫 helper 而非散落的三層邏輯
+# 2. helper 可獨立測試，覆蓋三大情境（純 .claude/、混合、空）+ 反向風險
+# 3. 邊界條件（空 ticket_ids、空 prompt、has_other 仍 True 的混合 case）
+# ----------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _resolve_helper():
+    """取得 _resolve_path_classification helper（RED：尚未實作）。"""
+    return _hook._resolve_path_classification
+
+
+# === 情境 1：純 .claude/ ticket（L1 + L2 都指向主 repo .claude/） ===
+
+def test_resolve_pure_claude_prompt_only(_resolve_helper):
+    """L1：prompt 直接含 .claude/ 路徑，無需 L2 fallback。
+    預期：(True, False, False) 純主 repo .claude/。"""
+    result = _resolve_helper(
+        prompt="修改 .claude/hooks/foo.py 加入新檢查",
+        ticket_ids=[],
+    )
+    assert result == (True, False, False)
+
+
+def test_resolve_pure_claude_via_ticket_fallback(_resolve_helper):
+    """L2：prompt 無路徑線索，ticket where.files 全為 .claude/。
+    預期：(True, False, False) 由 fallback 補分類後回傳。"""
+    result = _resolve_helper(
+        prompt="Ticket: 0.18.0-W17-015.2\nRead ticket md 依規格實作。",
+        ticket_ids=["0.18.0-W17-015.2"],
+    )
+    # W17-015.2 where.files 為 .claude/skills/ticket/...
+    assert result[0] is True, "應補分類為主 repo .claude/"
+    assert result[1] is False, "不應誤判為外部 .claude/"
+    assert result[2] is False, "純 .claude/ ticket 不應有 has_other"
+
+
+# === 情境 2：混合 ticket（.claude/ + 非 .claude/） ===
+
+def test_resolve_mixed_prompt_main_claude_and_other(_resolve_helper):
+    """L1：prompt 同時含主 repo .claude/ 與 src/。
+    預期：(True, False, True) 混合（has_other 仍為 True）。"""
+    result = _resolve_helper(
+        prompt="同時修改 .claude/hooks/foo.py 和 src/api/bar.py",
+        ticket_ids=[],
+    )
+    assert result == (True, False, True)
+
+
+def test_resolve_mixed_via_ticket_fallback(_resolve_helper, tmp_path, monkeypatch):
+    """L2：prompt 無路徑，ticket where.files 含 .claude/ + src/ 混合。
+    預期：(True, False, True)。"""
+    # 偽造 ticket md，含混合 where.files
+    fake_ticket_md = tmp_path / "tickets" / "9.9.9-W99-001.md"
+    fake_ticket_md.parent.mkdir(parents=True, exist_ok=True)
+    fake_ticket_md.write_text(
+        "---\nid: 9.9.9-W99-001\nwhere:\n  files:\n"
+        "  - .claude/hooks/foo.py\n"
+        "  - src/api/bar.py\n---\n",
+        encoding="utf-8",
+    )
+    # 注入 _load_ticket_where_files 返回混合路徑
+    monkeypatch.setattr(
+        _hook,
+        "_load_ticket_where_files",
+        lambda tid: [".claude/hooks/foo.py", "src/api/bar.py"]
+        if tid == "9.9.9-W99-001"
+        else [],
+    )
+
+    result = _resolve_helper(
+        prompt="Ticket: 9.9.9-W99-001\n依規格實作。",
+        ticket_ids=["9.9.9-W99-001"],
+    )
+    assert result[0] is True, "應補分類含主 repo .claude/"
+    assert result[2] is True, "應補分類含 has_other（src/）"
+
+
+# === 情境 3：空 ticket where.files（L2 fallback 無資料） ===
+
+def test_resolve_empty_ticket_where_files(_resolve_helper, monkeypatch):
+    """L2：prompt 無路徑、ticket 存在但 where.files 為空。
+    預期：(False, False, False) 三層皆無資訊，由上層決定阻擋。"""
+    monkeypatch.setattr(
+        _hook,
+        "_load_ticket_where_files",
+        lambda tid: [],
+    )
+    result = _resolve_helper(
+        prompt="Ticket: 9.9.9-W99-002\n做點事。",
+        ticket_ids=["9.9.9-W99-002"],
+    )
+    assert result == (False, False, False)
+
+
+def test_resolve_empty_prompt_empty_ticket_ids(_resolve_helper):
+    """邊界：prompt 空 + ticket_ids 空 → (False, False, False)。"""
+    result = _resolve_helper(prompt="", ticket_ids=[])
+    assert result == (False, False, False)
+
+
+# === 反向風險：非 .claude/ ticket 在 prompt 引用 .claude/ 規則文件 ===
+# 規則 .md 引用不應觸發豁免，避免錯誤豁免應走 worktree 的純 src/ ticket。
+
+def test_resolve_non_claude_ticket_prompt_quotes_claude_rule_doc(
+    _resolve_helper, monkeypatch
+):
+    """反向風險：純 src/ ticket 的 prompt 提及 .claude/rules/...md 作參考。
+
+    雖然 prompt 字串含 .claude/ 字樣（規則文件引用），但 ticket where.files
+    指向 src/，整合分類後 has_other 仍應為 True，不應被誤判為純 .claude/ 任務
+    而豁免 worktree。
+
+    預期：(True, False, True) — has_main_repo_claude 因 prompt 文本為 True，
+    但 has_other 同時為 True，上層仍會強制 worktree。
+    """
+    monkeypatch.setattr(
+        _hook,
+        "_load_ticket_where_files",
+        lambda tid: ["src/api/bar.py", "tests/api/bar_test.py"]
+        if tid == "9.9.9-W99-003"
+        else [],
+    )
+    result = _resolve_helper(
+        prompt=(
+            "Ticket: 9.9.9-W99-003\n"
+            "請依 .claude/rules/core/quality-baseline.md 規範實作 src/api/bar.py"
+        ),
+        ticket_ids=["9.9.9-W99-003"],
+    )
+    # 關鍵：has_other 必為 True（避免上層誤豁免）
+    assert result[2] is True, "ticket where.files 含 src/ → has_other 必為 True"
+
+
+# === 邊界：has_other 仍 True 的混合 case（豁免不應觸發） ===
+
+def test_resolve_mixed_case_has_other_remains_true(_resolve_helper):
+    """邊界：L1 已分類混合（has_main_claude=True, has_other=True），
+    L2 fallback 不應吞掉 has_other 訊號（即 OR 累加，非覆寫）。"""
+    result = _resolve_helper(
+        prompt="修改 .claude/hooks/foo.py 和 lib/widgets/bar.dart",
+        ticket_ids=[],
+    )
+    assert result[0] is True
+    assert result[2] is True, "has_other 必須保留，不可被豁免邏輯抹除"
+
+
+# === 邊界：logger 參數可選（不傳不應 crash） ===
+
+def test_resolve_logger_optional(_resolve_helper):
+    """helper 簽章：logger 為 keyword-only optional，不傳應正常運作。"""
+    # 不傳 logger
+    result = _resolve_helper(prompt=".claude/hooks/foo.py", ticket_ids=[])
+    assert result == (True, False, False)
+
+
+def test_resolve_logger_passed_does_not_crash(_resolve_helper):
+    """傳入 logger 也應正常運作（fallback 路徑會用到 logger.info）。"""
+    import logging
+    logger = logging.getLogger("test_resolve")
+    result = _resolve_helper(
+        prompt="修改 src/foo.py",
+        ticket_ids=[],
+        logger=logger,
+    )
+    assert result == (False, False, True)
+
+
+# === 整合：main() 呼叫 helper 後行為一致 ===
+
+def test_main_uses_resolver_for_pure_claude_ticket(monkeypatch, capsys):
+    """整合：純 .claude/ ticket 經 helper 分類後，main 應放行（無 worktree）。
+
+    與既有 test_hook_fallback_to_ticket_when_prompt_has_no_paths 相同行為，
+    但本測試確認在 helper 抽取後仍維持。
+    """
+    exit_code = _run_hook(
+        monkeypatch,
+        capsys,
+        tool_input={
+            "subagent_type": "thyme-python-developer",
+            "prompt": "Ticket: 0.18.0-W17-015.2\nRead ticket md 依規格實作。",
+        },
+    )
+    assert exit_code == 0
+
+
+def test_main_uses_resolver_for_mixed_ticket_blocks_without_worktree(
+    monkeypatch, capsys
+):
+    """整合：混合 ticket（.claude/ + src/）無 worktree → 阻擋。
+
+    確認 helper 整合後，has_other=True 的訊號不會被豁免邏輯吞掉。
+    """
+    monkeypatch.setattr(
+        _hook,
+        "_load_ticket_where_files",
+        lambda tid: [".claude/hooks/foo.py", "src/api/bar.py"]
+        if tid == "9.9.9-W99-004"
+        else [],
+    )
+    exit_code = _run_hook(
+        monkeypatch,
+        capsys,
+        tool_input={
+            "subagent_type": "thyme-python-developer",
+            "prompt": "Ticket: 9.9.9-W99-004\n依規格實作。",
+        },
+    )
+    assert exit_code == 2, "混合 ticket 無 worktree 應阻擋"

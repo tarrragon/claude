@@ -42,6 +42,13 @@ from lib.hook_messages import (
     ProcessSkipMessages,
     format_message,
 )
+from lib.frontmatter_parser import parse_frontmatter
+
+# Type/phase guard 規則：SKIP_SA_REVIEW 在以下 ticket 上下文應靜音
+# - DOC / ANA type：全面靜音（非實作任務無 SA 前置審查需求）
+# - IMP type + Phase 4：靜音（重構非新功能）
+SA_GUARD_SILENCE_TYPES = {"DOC", "ANA"}
+SA_GUARD_IMP_SILENCE_PHASE = "Phase 4"
 
 EXIT_SUCCESS = 0
 
@@ -63,11 +70,11 @@ SKIP_PATTERNS = {
         "full_process": ProcessSkipMessages.SKIP_PHASE4_FULL_PROCESS,
     },
     # 優先級 2：SA 審查（需要在通用 Phase 檢查前）
+    # 註：移除 ("不做","架構審查") — 與一般「這次不做架構審查改良」討論重疊（高 FP，W11-004.2）
     "SKIP_SA_REVIEW": {
         "pairs": [
             ("不需要", "sa"),
             ("跳過", "sa"),
-            ("不做", "架構審查"),
             ("不需要", "審查"),
             ("跳過", "系統分析"),
         ],
@@ -87,13 +94,13 @@ SKIP_PATTERNS = {
         "full_process": ProcessSkipMessages.SKIP_AGENT_DISPATCH_FULL_PROCESS,
     },
     # 優先級 4：驗收相關
+    # 註：移除 ("直接","完成") 與 ("不做","審查") — 高假陽性 pair（W11-004.2）
+    # 「直接修復後完成」「這次不做審查」是合法措辭，且 ("不做","審查") 語意屬 SA 而非驗收
     "SKIP_ACCEPTANCE": {
         "pairs": [
             ("不需要", "驗收"),
             ("跳過", "驗收"),
             ("省略", "驗收"),
-            ("直接", "完成"),
-            ("不做", "審查"),
         ],
         "description": ProcessSkipMessages.SKIP_ACCEPTANCE_DESCRIPTION,
         "full_process": ProcessSkipMessages.SKIP_ACCEPTANCE_FULL_PROCESS,
@@ -148,6 +155,60 @@ def detect_skip_intent(user_input: str) -> Tuple[Optional[str], Optional[dict]]:
                 return skip_type, pattern_info
 
     return None, None
+
+
+def _find_repo_root() -> Optional[Path]:
+    """向上尋找含 docs/work-logs 的祖先目錄（hook 隨 worktree/主 repo 走皆成立）"""
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "docs" / "work-logs").exists():
+            return parent
+    return None
+
+
+def get_active_in_progress_ticket() -> Optional[dict]:
+    """
+    掃描 docs/work-logs/**/tickets/*.md 找 status=in_progress ticket
+
+    Returns:
+        {"type": ..., "current_phase": ...} 若找到；None 若無或讀取失敗
+        多個 in_progress 時取 started_at 最新者
+    """
+    try:
+        root = _find_repo_root()
+        if root is None:
+            return None
+        in_progress = []
+        for path in root.glob("docs/work-logs/**/tickets/*.md"):
+            try:
+                fm = parse_frontmatter(path.read_text(encoding="utf-8"))
+                if fm.get("status") == "in_progress":
+                    in_progress.append((str(fm.get("started_at") or ""), fm))
+            except Exception:
+                # 單一檔案解析失敗不影響其他 ticket 掃描
+                continue
+        if not in_progress:
+            return None
+        in_progress.sort(key=lambda x: x[0], reverse=True)
+        fm = in_progress[0][1]
+        return {
+            "type": fm.get("type"),
+            "current_phase": fm.get("current_phase"),
+        }
+    except Exception:
+        return None
+
+
+def _should_silence_sa_review(active_ticket: Optional[dict]) -> bool:
+    """依 type/phase guard 規則判斷是否應靜音 SKIP_SA_REVIEW"""
+    if not active_ticket:
+        return False
+    ticket_type = active_ticket.get("type")
+    phase = active_ticket.get("current_phase")
+    if ticket_type in SA_GUARD_SILENCE_TYPES:
+        return True
+    if ticket_type == "IMP" and phase == SA_GUARD_IMP_SILENCE_PHASE:
+        return True
+    return False
 
 
 def generate_skip_reminder(skip_type: str, pattern_info: dict) -> str:
@@ -210,6 +271,23 @@ def main() -> int:
         return EXIT_SUCCESS
 
     skip_type, pattern_info = detect_skip_intent(user_input)
+
+    # SKIP_SA_REVIEW type/phase guard（cold path：僅在偵測到 skip intent 時查詢）
+    if skip_type == "SKIP_SA_REVIEW":
+        try:
+            active_ticket = get_active_in_progress_ticket()
+        except Exception as exc:
+            # 讀取例外不阻擋 hook，回退至原行為（觸發提醒）
+            logger.warning(f"get_active_in_progress_ticket 失敗，回退原行為: {exc}")
+            active_ticket = None
+
+        if _should_silence_sa_review(active_ticket):
+            logger.info(
+                f"SKIP_SA_REVIEW 因 ticket type={active_ticket.get('type')}/"
+                f"phase={active_ticket.get('current_phase')} 靜音"
+            )
+            print(json.dumps(generate_hook_output("UserPromptSubmit"), ensure_ascii=False, indent=2))
+            return EXIT_SUCCESS
 
     if skip_type and pattern_info:
         logger.info(f"偵測到流程省略意圖: {skip_type}")

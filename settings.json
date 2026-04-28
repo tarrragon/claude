@@ -84,6 +84,15 @@
         ]
       },
       {
+        "matcher": "mcp__serena__replace_content|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol|mcp__serena__safe_delete_symbol",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/mcp-write-tool-on-text-file-guard-hook.py"
+          }
+        ]
+      },
+      {
         "matcher": "Read",
         "hooks": [
           {

@@ -34,6 +34,7 @@ from ticket_system.lib.ticket_builder import (
     update_parent_children,
     update_source_spawned_tickets,
     get_default_acceptance_criteria,
+    dedupe_schema_sections,
 )
 from ticket_system.lib.ticket_loader import (
     get_tickets_dir,
@@ -995,3 +996,73 @@ class TestCreateTicketFrontmatterSource:
         # schema 兩個欄位都存在（即使值為 None 也代表欄位已定義）
         assert "parent_id" in frontmatter
         assert "source_ticket" in frontmatter
+
+
+class TestDedupeSchemaSections:
+    """測試 dedupe_schema_sections（W11-003.3 Layer 1）"""
+
+    def test_keeps_substantive_drops_placeholder_duplicate(self):
+        """Given: ## Test Results 出現兩次，第一次有實質內容，第二次為 placeholder
+        When: dedupe_schema_sections
+        Then: 保留有內容那一段，移除 placeholder 重複段
+        """
+        body = (
+            "## Solution\n\n實作摘要：完成。\n\n---\n\n"
+            "## Test Results\n\npytest passed 66/66.\n\n---\n\n"
+            "## 簡化 WRAP 三問\n\nW: ...\n"
+            "## Test Results\n\n<!-- To be filled by executing agent -->\n\n---\n\n"
+            "## Completion Info\n\n**Review Status**: pending\n"
+        )
+        result = dedupe_schema_sections(body)
+        assert result.count("## Test Results") == 1
+        assert "pytest passed 66/66" in result
+        assert "<!-- To be filled by executing agent -->" not in result.split("## Completion Info")[0].split("## Test Results")[1]
+        # 非 Schema H2（簡化 WRAP 三問）保留
+        assert "## 簡化 WRAP 三問" in result
+
+    def test_merges_two_substantive_duplicates(self):
+        """Given: ## Test Results 出現兩次，兩段都有實質內容
+        Then: 保留首段位置，將次段內容附加到首段尾端
+        """
+        body = (
+            "## Test Results\n\nfirst content here.\n\n---\n\n"
+            "## Other H2\n\n內容.\n\n"
+            "## Test Results\n\nsecond content here.\n\n---\n\n"
+            "## Completion Info\n\n**Review Status**: pending\n"
+        )
+        result = dedupe_schema_sections(body)
+        assert result.count("## Test Results") == 1
+        assert "first content here" in result
+        assert "second content here" in result
+        # 後段被合併進首段，## Other H2 仍在
+        assert "## Other H2" in result
+
+    def test_idempotent(self):
+        """Given: 已經 dedupe 過的 body
+        Then: 再呼叫一次回傳值不變
+        """
+        body = (
+            "## Solution\n\nimpl done.\n\n---\n\n"
+            "## Test Results\n\npass.\n\n---\n\n"
+            "## Completion Info\n\n**Review Status**: pending\n"
+        )
+        once = dedupe_schema_sections(body)
+        twice = dedupe_schema_sections(once)
+        assert once == twice
+        # 不重複的 body 也不應變動
+        assert once == body
+
+    def test_all_placeholder_keeps_first(self):
+        """Given: ## Test Results 出現兩次，兩段都是 placeholder
+        Then: 保留首次出現，移除後續
+        """
+        body = (
+            "## Test Results\n\n<!-- To be filled by executing agent -->\n\n---\n\n"
+            "## 簡化 WRAP 三問\n\nW: ...\n"
+            "## Test Results\n\n<!-- To be filled by executing agent -->\n\n---\n\n"
+            "## Completion Info\n\n**Review Status**: pending\n"
+        )
+        result = dedupe_schema_sections(body)
+        assert result.count("## Test Results") == 1
+        assert result.count("<!-- To be filled by executing agent -->") == 1
+

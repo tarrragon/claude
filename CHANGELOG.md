@@ -1,3 +1,28 @@
+## [1.27.0] - 2026-04-29
+
+### Summary
+feat: phase3b 完成 16 整合測試 GREEN（migrate 反向引用 W11 重組情境）; feat: phase3b 完成 type/phase guard + 關鍵字精確化 GREEN; feat: GREEN — _resolve_path_classification helper L1+L2+L3 整合 (+12 more)
+
+Changes: 9 feat, 2 docs, 4 chore, 1 test
+
+- feat: phase3b 完成 16 整合測試 GREEN（migrate 反向引用 W11 重組情境）
+- feat: phase3b 完成 type/phase guard + 關鍵字精確化 GREEN
+- feat: GREEN — _resolve_path_classification helper L1+L2+L3 整合
+- feat: 新增 Schema H2 idempotent dedupe 防止重複 placeholder
+- feat: upgrade PROP-009 checklist validation from WARNING to blocking
+- feat: mcp-write-tool guard hook + tool-selection rule
+- feat: WRAP 研究 serena MCP 必要性 + 修正 search-tools-guide 過時紀錄
+- feat: AGENT_PRELOAD + thyme 加入工具選擇規則防止 serena MCP 誤選與 early stop
+- feat: basil v4 改用 progressive disclosure 載入策略
+- docs: 新增 PC-112 — subagent 對非程式碼檔案誤選 MCP 寫入工具
+- docs: PC-059 retry6 補強 — 主 repo cwd .claude/ subagent Edit 失效
+- chore: phase2 sage 測試設計 RED 骨架
+- chore: 寫入 Context Bundle + claim ticket
+- chore: worklog + settings.local.json 同步
+- test: Phase 2 RED — _resolve_path_classification helper 測試
+
+---
+
 ## [1.26.0] - 2026-04-28
 
 ### Summary

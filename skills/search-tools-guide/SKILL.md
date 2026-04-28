@@ -297,7 +297,9 @@ rg "error" lib/ --glob '!lib/l10n/' --glob '!*.g.dart'
 
 ### 重要限制
 
-**Serena 的 LSP 符號分析僅對 Dart 有效**。對 Python 檔案（如 ticket_system），`find_symbol` 會回傳空結果。Python 程式碼搜尋應使用 Grep。
+**Serena 的 LSP 符號分析適用於有 LSP 插件的語言**：Dart / JavaScript（typescript-language-server）/ TypeScript / Python（pyright）等皆有效；對純文字檔（`.md` / `.txt` / `.yaml` / `.json`）無 LSP 結構優勢，應改用 Edit / Grep。
+
+**Why 此處原誤紀錄為「僅對 Dart 有效」**：此紀錄源自早期 Python 環境未配置 pyright 的觀察，已不適用當前環境。W17-091 ANA 實證 serena 對本專案 JavaScript 程式碼完整有效（Class / Methods / 行號邊界皆能解析）。
 
 ### Serena 工具
 
@@ -429,7 +431,7 @@ rg --version
 | WebSearch 網頁搜尋效果 | WebSearch 是唯一推薦的網頁搜尋工具 |
 | 多步驟研究效果 | Grep+Glob+Read 組合是預設選擇 |
 | 語意搜尋 vs 文字搜尋 | rg 精確度 ~90-94%，同義詞弱點可用多 Pattern 改善 |
-| Serena 結構化導航 | Serena LSP 僅對 Dart 有效，Grep 步驟數更少 |
+| Serena 結構化導航 | Serena LSP 對配置 LSP 的語言（Dart / JS / TS / Python via pyright）皆有效；非符號級操作（如純文字搜尋）Grep 步驟數更少 |
 | rg vs Serena search_for_pattern | 日常搜尋無法用 Serena 取代 rg |
 
 ---

@@ -754,7 +754,63 @@ def _validate_create_checklist(
     if config.get("when") == DEFAULT_UNDEFINED_VALUE:
         missing.append("when")
 
+    # W11-003.5: 5W1H 全欄位必填擴充
+    # who 不可為空、"pending" 或「待定義」
+    who_value = config.get("who")
+    if not who_value or who_value in ("pending", DEFAULT_UNDEFINED_VALUE):
+        missing.append("who")
+
+    # what 不可為空（CLI argparse 已強制 --action/--target，此處為防禦性檢查）
+    if not config.get("what"):
+        missing.append("what")
+
+    # why 非「待定義」（DOC 類型豁免；CLI 端已對 IMP/ANA/ADJ 做必填驗證，此處為清單一致性）
+    if ticket_type != "DOC" and config.get("why") == DEFAULT_UNDEFINED_VALUE:
+        missing.append("why")
+
+    # how_strategy 非「待定義」
+    if config.get("how_strategy") == DEFAULT_UNDEFINED_VALUE:
+        missing.append("how_strategy")
+
     return missing
+
+
+def _enforce_create_checklist(missing: List[str], force: bool) -> None:
+    """W11-003.5: 將清單式驗證從 WARNING 升級為阻擋建立。
+
+    根據缺失欄位清單與 --force 旗標決定行為：
+    - 無缺失：直接 return（不阻擋）
+    - 有缺失 + 未 --force：印錯誤訊息並 sys.exit(1)
+    - 有缺失 + --force：印 WARNING 但允許繼續（保留快速建立逃生閥）
+
+    Args:
+        missing: _validate_create_checklist 回傳的缺失欄位清單
+        force: 是否啟用 --force 跳過阻擋
+    """
+    if not missing:
+        return
+
+    if force:
+        # 逃生閥：警告但放行
+        print()
+        print(format_warning("Create 清單驗證：以下欄位未填寫（已 --force 跳過阻擋）"))
+        for field in missing:
+            print(f"  - {field}")
+        print()
+        return
+
+    # 阻擋建立
+    print()
+    print(format_error("Create 清單驗證失敗：以下欄位為必填（缺失將阻擋建立）"))
+    for field in missing:
+        print(f"  - {field}")
+    print()
+    print(
+        "請補齊上述欄位後重試。若需快速建立可加 --force 跳過此檢查"
+        "（不建議用於正式 Ticket，後續仍需補齊以利交接）。"
+    )
+    print()
+    sys.exit(1)
 
 
 def _build_and_save_ticket(
@@ -901,15 +957,10 @@ def _persist_and_report(
     if not _validate_before_persist(version, ticket_id, config):
         return 1
 
-    # 步驟 1.5：PROP-009 清單式欄位驗證（WARNING，不阻擋）
+    # 步驟 1.5：PROP-009 清單式欄位驗證（W11-003.5 升級為阻擋；--force 可豁免）
     missing_fields = _validate_create_checklist(config, config.get("ticket_type", "IMP"))
-    if missing_fields:
-        print()
-        print(format_warning("Create 清單驗證：以下欄位未填寫"))
-        for field in missing_fields:
-            print(f"  - {field}")
-        print(format_info("這些欄位建議在建立時填寫，避免交接時才發現遺漏"))
-        print()
+    force_flag = bool(getattr(args, "force", False))
+    _enforce_create_checklist(missing_fields, force=force_flag)
 
     # 步驟 2：持久化
     ticket = _build_and_save_ticket(version, ticket_id, config)
@@ -1420,6 +1471,15 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         dest="json_output",
         action="store_true",
         help="Context Bundle 抽取結果以 JSON 結構化輸出（W17-002.1）",
+    )
+    parser.add_argument(
+        "--force",
+        dest="force",
+        action="store_true",
+        help=(
+            "跳過 PROP-009 清單式欄位驗證（5W1H/acceptance/decision_tree_path）"
+            "的阻擋（W11-003.5 逃生閥；不建議用於正式 Ticket）"
+        ),
     )
 
     parser.set_defaults(func=execute)

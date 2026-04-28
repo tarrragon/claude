@@ -151,12 +151,39 @@ Step 6: 驗證和記錄 -> 內容、一致性、完整性、品質驗證
 |------|---------|---------|
 | 查找特定章節或符號 | Serena MCP find_symbol | Grep + Read |
 | 分析引用關係和影響範圍 | Serena MCP find_referencing_symbols | Grep |
-| 在特定位置插入內容 | Serena MCP insert_after_symbol | Edit |
+| 在特定位置插入內容 | **Edit**（首選）/ Serena MCP insert_after_symbol | — |
 | 廣範圍關鍵字搜尋 | Grep | - |
 | 完整檔案讀取 | Read | - |
 | 建立新檔案 | Write | - |
-| 修改現有檔案特定內容 | Edit | - |
+| 修改現有檔案特定內容 | **Edit**（首選） | — |
 | 驗證技術規範 | Context7 MCP | WebSearch（由 oregano 代理人執行） |
+
+### Fallback 規則（MCP 寫入工具被拒時）
+
+> **Why**：thyme 的任務以修改 .md 文件為主。背景派發（subagent）環境下，mcp__serena__replace_content / replace_symbol_body 等 MCP 寫入工具常不在 settings.local.json allow list，會被 runtime 拒絕。Edit / Write 屬 Claude Code 內建工具層，不受同一限制。
+
+> **Consequence**：若 MCP 寫入工具被拒後直接停止（self-imposed early stop），任務會錯誤失敗。PM 查看 ticket 只見「失敗」，誤以為任務無法執行，但實際上 Edit 工具可完成同一修改。
+
+> **Action**：依以下 Fallback 流程執行，Edit 被拒才真正回報失敗。
+
+**Fallback 流程**（適用於 MCP 寫入工具已被嘗試且被拒的情境）：
+
+1. MCP 寫入工具（mcp__serena__replace_content 等）被拒時：
+   - **立即切換 Edit 工具**完成同一修改，不停止任務
+   - Edit 成功後繼續，不需額外回報 MCP 被拒
+2. Edit 工具也被拒時，才在 Ticket Problem Analysis 記錄並回報 PM
+
+**正常情境**：.md 修改應優先使用 Edit（見上方工具使用策略表格），不需走 Fallback 流程。
+
+**禁止行為**：
+
+| 禁止 | 原因 |
+|------|------|
+| MCP 寫入工具被拒後直接宣告任務失敗（early stop） | MCP 限制不等於 Edit 限制，必須實際嘗試 |
+| 看到一個工具被拒就泛化為「所有寫入工具都被拒」 | 兩個工具層的 allow list 完全獨立 |
+| 未記錄實際嘗試過程就回報 deny | PM 無法判斷是真限制還是偏誤 |
+
+> **來源**：W17-088（thyme early stop 失敗案例：mcp__serena__replace_content 被拒 → 錯誤泛化為 Edit 也被拒 → 提前停止）；PC-088（LLM 工具選擇偏誤：單步敏感、總步驟盲）
 
 ---
 
@@ -280,5 +307,5 @@ Step 6: 驗證和記錄 -> 內容、一致性、完整性、品質驗證
 
 ---
 
-**Last Updated**: 2026-04-24
-**Version**: 2.2.0 - 重寫 description 為「文件結構/連結/版本一致性檢查 + 整合 + 衝突解決」（非文字明示性）；新增與 basil-writing-critic / mint / bay 的邊界對照；更新觸發條件表（W17-069 / W17-066 R-3 C-2）
+**Last Updated**: 2026-04-28
+**Version**: 2.3.0 - 新增「Fallback 規則」段落於工具使用策略章節：MCP 寫入工具被拒時必須 fallback Edit/Write，禁止 self-imposed early stop；更新「在特定位置插入內容」與「修改現有檔案特定內容」的首選工具為 Edit（PC-088 / W17-088）

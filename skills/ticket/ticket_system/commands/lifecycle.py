@@ -705,11 +705,21 @@ class TicketLifecycle:
         if existing_body:
             who = ticket.get("who") or {}
             executing_agent = who.get("current") if isinstance(who, dict) else ""
-            ticket["_body"] = sync_completion_body_fields(
+            new_body = sync_completion_body_fields(
                 existing_body,
                 ticket["completed_at"],
                 executing_agent or "",
             )
+            # W11-003.3 Layer 2：complete 寫回 body 前 idempotent dedupe Schema H2
+            try:
+                from ticket_system.lib.ticket_builder import dedupe_schema_sections
+                new_body = dedupe_schema_sections(new_body)
+            except Exception as exc:
+                import sys as _sys
+                _sys.stderr.write(
+                    f"[complete] dedupe_schema_sections skipped: {exc}\n"
+                )
+            ticket["_body"] = new_body
 
         ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
         save_ticket(ticket, ticket_path)

@@ -573,6 +573,16 @@ def execute_append_log(args: argparse.Namespace, version: str) -> int:
     # 更新 body
     new_body = body[:section_start] + updated_section + body[section_end:]
 
+    # W11-003.3 Layer 2：寫回前 idempotent dedupe 重複 Schema H2，避免歷史殘留 placeholder
+    # 與當前內容並存造成 acceptance-auditor 誤報（PC-110 同源防護）
+    try:
+        from ticket_system.lib.ticket_builder import dedupe_schema_sections
+        new_body = dedupe_schema_sections(new_body)
+    except Exception as exc:
+        # 失敗時保留原 body 寫入；同時將異常訊息輸出到 stderr 供觀察（quality-baseline 規則 4）
+        import sys as _sys
+        _sys.stderr.write(f"[append-log] dedupe_schema_sections skipped: {exc}\n")
+
     # 更新 Ticket
     ticket["_body"] = new_body
 
