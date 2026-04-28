@@ -1,3 +1,22 @@
+## [1.26.0] - 2026-04-28
+
+### Summary
+feat: 情境 C/D/F/G 加入 basil-writing-critic 視角; feat: 新增 basil-writing-critic 至 registry.yaml 和 decision-tree.md; feat: stuck-anas CLI + source ANA / group 提示行（.13/.14 方案 D） (+6 more)
+
+Changes: 3 feat, 1 refactor, 2 docs, 3 chore
+
+- feat: 情境 C/D/F/G 加入 basil-writing-critic 視角
+- feat: 新增 basil-writing-critic 至 registry.yaml 和 decision-tree.md
+- feat: stuck-anas CLI + source ANA / group 提示行（.13/.14 方案 D）
+- refactor: track.py 雙 dict 消除 5 命令 if-elif 雙軌
+- docs: agents README 新增 basil 前綴群組命名說明
+- docs: 補強 multi-pass review 層次意識（writing-articles.md ）
+- chore: complete IMP — basil agent 手抄改 @-import 重構
+- chore: complete IMP — wrap-decision SKILL 納入決策路徑層因子 5-8
+- chore: complete IMP — PM session 結束自檢 checklist
+
+---
+
 ## [1.25.0] - 2026-04-27
 
 ### Summary

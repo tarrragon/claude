@@ -743,6 +743,38 @@ agents:
     file_patterns: []
 
 
+  basil-writing-critic:
+    name: basil-writing-critic
+    description: 文字品質常駐審查委員（compositional-writing + document-writing-style 執行者）。審查書面文字的三明示結構（Why/Consequence/Action）、資訊優先序（原則先於示例）、禁用字、字元集污染、正面陳述。parallel-evaluation 情境 C / D / F / G 強制加入，與 linux 並列常駐。產出審查報告，不修改文件。
+    model: opus
+    color: green
+    version: "2.0"
+
+    accepts:
+      - artifact_type: "ticket"
+
+    produces:
+      - artifact_type: "writing-quality-report"
+
+    requires:
+      - capability: "writing-quality-review"
+
+    preconditions:
+      - condition: "ticket-exists"
+
+    conflict_avoidance:
+      - type: "cannot_work_with"
+        agents: ["basil-writing-critic"]
+
+    tdd_phases:
+      - phase1
+      - phase4
+
+    file_patterns:
+      - ".claude/**/*.md"
+      - "docs/**/*.md"
+
+
   bay-quality-auditor:
     name: bay-quality-auditor
     description: 品質審計員。全面評估程式碼品質。

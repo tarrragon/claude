@@ -131,6 +131,11 @@ from .track_runqueue import (
     execute_runqueue,
     register_runqueue,
 )
+# stuck-anas 列出卡住的 ANA（W17-008.15 方案 D）
+from .track_stuck_anas import (
+    execute_stuck_anas,
+    register_stuck_anas,
+)
 # 導入版本審計命令模組
 from .audit_version import (
     execute_audit_version,
@@ -157,14 +162,37 @@ def _execute_release(args: argparse.Namespace, version: str) -> int:
     return execute_release(args, version)
 
 
+def _create_version_agnostic_handlers() -> dict:
+    """
+    建立不需版本資訊的命令處理器字典（W17-014 / W17-008.11 方案 B）
+
+    這些命令操作專案全局狀態（snapshot / agent-status / handoff-ready /
+    checkpoint-status / dispatch-check），不對單一 Ticket 操作，因此
+    handler 簽名為 `handler(args)`，不接受 version 參數。
+
+    與 `_create_version_aware_handlers()` 形成雙 dict 設計，消除原本
+    line 224-236 的 5 命令 if-elif 雙軌；execute() 先查 agnostic 再查 aware。
+    """
+    return {
+        "snapshot": execute_snapshot,
+        "agent-status": execute_agent_status,
+        "handoff-ready": execute_handoff_ready,
+        "checkpoint-status": execute_checkpoint_status,
+        "dispatch-check": execute_dispatch_check,
+        "stuck-anas": execute_stuck_anas,
+    }
+
+
 def _create_command_handlers() -> dict:
     """
-    建立命令處理器字典
+    建立 version-aware 命令處理器字典（handler(args, version) 簽名）
 
     設計目的：
     - 遵循開放封閉原則（OCP）
     - 支援動態註冊新命令
     - 消除 if-elif 鏈
+
+    註：不需版本資訊的全局狀態命令見 `_create_version_agnostic_handlers()`。
     """
     return {
         "summary": execute_summary,
@@ -221,19 +249,14 @@ def execute(args: argparse.Namespace) -> int:
     """執行 track 命令"""
     operation = args.operation
 
-    # version / snapshot 命令特殊處理（不需要版本資訊）
+    # version 命令特殊處理（簽名為 handler(args, None)，與 agnostic 簽名 handler(args) 不同）
     if operation == "version":
         return execute_version(args, None)
-    if operation == "snapshot":
-        return execute_snapshot(args)
-    if operation == "agent-status":
-        return execute_agent_status(args)
-    if operation == "handoff-ready":
-        return execute_handoff_ready(args)
-    if operation == "checkpoint-status":
-        return execute_checkpoint_status(args)
-    if operation == "dispatch-check":
-        return execute_dispatch_check(args)
+
+    # version-agnostic 命令優先查找（W17-014 方案 B：雙 dict 消除雙軌）
+    agnostic_handlers = _create_version_agnostic_handlers()
+    if operation in agnostic_handlers:
+        return agnostic_handlers[operation](args)
 
     # 其他命令需要版本資訊
     # 優先級：
@@ -753,12 +776,24 @@ def _register_all_subcommands(
     _register_acceptance_commands(track_subparsers)
     _register_version_audit_commands(track_subparsers)
     _register_board_commands(track_subparsers)
-    _register_snapshot_commands(track_subparsers)
-    register_agent_status(track_subparsers)
-    register_handoff_ready(track_subparsers)
-    register_checkpoint_status(track_subparsers)
-    register_dispatch_check(track_subparsers)
+    _register_global_state_commands(track_subparsers)
     register_runqueue(track_subparsers)
+    register_stuck_anas(track_subparsers)
+
+
+def _register_global_state_commands(
+    subparsers: argparse._SubParsersAction,
+) -> None:
+    """註冊 version-agnostic 全局狀態命令（W17-014 方案 B 群組化）
+
+    對應 `_create_version_agnostic_handlers()` 的 5 個命令：
+    snapshot / agent-status / handoff-ready / checkpoint-status / dispatch-check
+    """
+    _register_snapshot_commands(subparsers)
+    register_agent_status(subparsers)
+    register_handoff_ready(subparsers)
+    register_checkpoint_status(subparsers)
+    register_dispatch_check(subparsers)
 
 
 def _register_snapshot_commands(

@@ -72,6 +72,53 @@ from ticket_system.commands.claim_verification import (
 
 
 # ============================================================================
+# Source ANA 完成提示（W17-008.15 方案 D）
+# ============================================================================
+
+def _print_source_ana_complete_hint(ticket: Dict[str, Any], version: str) -> None:
+    """IMP complete 後檢查 source ANA 的 spawned 是否全 completed，給出提示。
+
+    觸發條件：
+    - 完成的 ticket type=IMP
+    - source_ticket 非空
+    - source ANA 存在且 status=in_progress
+    - source ANA 的 spawned_tickets 全部 completed
+
+    輸出（stdout，非阻擋）：
+      → Source ANA <id> spawned 全 completed，可考慮 ticket track complete <id>
+    """
+    if ticket.get("type") != "IMP":
+        return
+    source_id = ticket.get("source_ticket")
+    if not source_id:
+        return
+
+    source = load_ticket(version, source_id)
+    if not source:
+        return
+    if source.get("type") != "ANA":
+        return
+    if source.get("status") != STATUS_IN_PROGRESS:
+        return
+
+    spawned_ids = source.get("spawned_tickets") or []
+    if not spawned_ids:
+        return
+
+    for sid in spawned_ids:
+        spawned = load_ticket(version, sid)
+        if not spawned:
+            return
+        if spawned.get("status") != STATUS_COMPLETED:
+            return
+
+    print(
+        f"  → Source ANA {source_id} spawned 全 completed，"
+        f"可考慮 ticket track complete {source_id}"
+    )
+
+
+# ============================================================================
 # 自動 Handoff 輔助函式
 # ============================================================================
 
@@ -705,6 +752,9 @@ class TicketLifecycle:
                 _print_cascade_unblocked(unblocked)
             if pending:
                 _print_children_warnings(pending)
+
+        # W17-008.15 方案 D：IMP complete 後檢查 source ANA 是否可 complete
+        _print_source_ana_complete_hint(ticket, self.version)
 
         # 自動 handoff：若有後續任務，自動建立 handoff 檔案
         _auto_handoff_if_needed(ticket, analysis, self.version)

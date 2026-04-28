@@ -299,4 +299,5 @@ WRAP 框架自身的失效（元層級）。
 - `.claude/rules/core/document-writing-style.md`（二次審查強制執行）
 - `.claude/skills/wrap-decision/SKILL.md`（WRAP 框架）
 - `.claude/error-patterns/process-compliance/PC-111-pm-narrative-fabrication-and-shallow-attribution.md`（本方法論的觸發事件）
+- `.claude/references/pm-session-self-check-checklist.md`（本方法論的 session 結束實踐入口；W17-077 落地）
 - `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W17-075.md`（WRAP 深度分析產出的 ANA ticket）

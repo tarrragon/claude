@@ -478,6 +478,66 @@ def _detect_duplicate_tickets(
         sys.stderr.write(f"[DEBUG] 重複偵測異常 ({type(e).__name__}): {e}\n")
 
 
+def _detect_in_progress_groups(
+    version: str, wave: Optional[int]
+) -> List[Dict[str, Any]]:
+    """偵測當前 wave 內 status=in_progress 且 children 非空的 group ticket。
+
+    用於 ticket create 不帶 --parent 時的提示，協助 PM 判斷是否該掛在
+    既有 group 之下（W17-008.15 方案 D 第 3 項）。
+
+    Args:
+        version: 版本號
+        wave: 當前 wave；None 時不過濾
+
+    Returns:
+        List[Dict]: 候選 group ticket 清單（可能為空）
+    """
+    try:
+        all_tickets = list_tickets(version) or []
+    except Exception:
+        return []
+
+    groups: List[Dict[str, Any]] = []
+    for ticket in all_tickets:
+        if ticket.get("status") != STATUS_IN_PROGRESS:
+            continue
+        children = ticket.get("children") or []
+        if not children:
+            continue
+        if wave is not None and ticket.get("wave") != wave:
+            continue
+        groups.append(ticket)
+    return groups
+
+
+def _print_in_progress_group_hint(
+    version: str, wave: Optional[int], new_ticket_id: str
+) -> None:
+    """印出 in_progress group 提示（不阻擋）。
+
+    若新 ticket 自身即為某 group 的子（ID 前綴匹配），跳過提示避免噪音。
+    """
+    groups = _detect_in_progress_groups(version, wave)
+    if not groups:
+        return
+
+    for group in groups:
+        gid = group.get("id") or ""
+        # 若新 ticket ID 已是該 group 的子（如 0.18.0-W17-008.15）→ 跳過
+        if gid and new_ticket_id.startswith(gid + "."):
+            return
+
+    print()
+    for group in groups:
+        gid = group.get("id", "<unknown>")
+        children_count = len(group.get("children") or [])
+        print(
+            f"  → 偵測到 in_progress group：{gid} "
+            f"({children_count} children)。是否該 --parent {gid}？"
+        )
+
+
 def _resolve_ticket_id_and_wave(args: argparse.Namespace, version: str) -> Optional[tuple]:
     """Step 1: 解析版本和 Ticket ID。
 
@@ -882,6 +942,11 @@ def _persist_and_report(
         tdd_result=tdd_result,
         ticket_path=ticket_path,
     )
+
+    # 步驟 5（W17-008.15 方案 D）：未帶 --parent 時提示 in_progress group
+    if not args.parent:
+        wave_for_hint = config.get("wave") if isinstance(config, dict) else None
+        _print_in_progress_group_hint(version, wave_for_hint, ticket_id)
 
     return 0
 

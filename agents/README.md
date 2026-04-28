@@ -51,6 +51,28 @@ parallel-evaluation 情境的常駐委員分兩類，詳見 `.claude/skills/para
 
 ## 代理人完整清單
 
+### basil 前綴群組命名說明
+
+**Why（共用前綴的理由）**：basil 在香料命名慣例中對應「語言藝術守護者」的次要聯想，適合同時承載「建造複雜結構」（architect）和「審查書面表達」（critic）兩種需要對語言/系統施加紀律的角色。採用共用前綴而非拆分為不同香料，是為了明示這兩類角色同屬「對規則的主動執行者」這一更大族群，便於 PM 在同族代理人間做精確路由。
+
+**architect 與 critic 的角色差異**：
+
+| 角色類型 | 代表代理人 | 核心職責 | 操作方向 |
+|---------|-----------|---------|---------|
+| architect（建造者） | basil-event-architect, basil-hook-architect | 設計並建造系統結構（事件驅動架構、Hook 系統架構）| 創造：從無到有定義架構邊界、介面、流程 |
+| critic（審查者） | basil-writing-critic | 審查書面文字的明示性品質（三明示 / 資訊優先序 / 正面陳述）| 把關：對已存在的文字出具審查報告，不修改文件 |
+
+兩者共同點在於「對複雜結構施加紀律」——architect 是在建造時施加，critic 是在完成後施加。兩者都不負責實作程式碼或格式修正（前者屬 parsley / fennel / thyme-extension-engineer，後者屬 mint-format-specialist）。
+
+**Consequence（不說明差異的後果）**：PM 在需要文字審查時誤派 basil-event-architect，或在需要架構設計時誤派 basil-writing-critic，兩者都會因職責不符而回報空產出，造成 token 浪費與進度停滯。
+
+**未來新增 basil-* 代理人的命名指引**：
+
+1. 先評估新代理人屬 architect（創造結構）還是 critic（把關品質）哪一類
+2. 若屬 architect 類：命名為 `basil-{領域}-architect`（例：`basil-api-architect`）
+3. 若屬 critic 類：命名為 `basil-{審查對象}-critic`（例：`basil-schema-critic`）
+4. 若兩者皆不符：重新評估是否應使用不同香料前綴，避免強行歸入 basil 群組造成語意污染
+
 | 代理人 | 定位摘要 |
 |--------|---------|
 | basil-event-architect | 事件驅動架構設計 |
@@ -82,5 +104,5 @@ parallel-evaluation 情境的常駐委員分兩類，詳見 `.claude/skills/para
 
 ---
 
-**Last Updated**: 2026-04-24
-**Version**: 1.0.0 - 初始建立，含文件品質職責邊界對照表（W17-069 / W17-066 R-3 C-2）
+**Last Updated**: 2026-04-28
+**Version**: 1.1.0 - 新增「basil 前綴群組命名說明」子章節：共用前綴理由、architect vs critic 角色差異表、未來命名指引四步驟（W17-059 / W17-066 saffron warning 1）
