@@ -49,6 +49,8 @@ from ticket_system.lib.handoff_utils import (
 )
 from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
+from ticket_system.commands.track_runqueue import _priority_rank
+from ticket_system.lib.ticket_ops import load_and_validate_ticket
 
 
 # W7-004：定義 handoff 列表結果型別（從函式屬性改為明確的返回值）
@@ -427,6 +429,53 @@ def _print_handoff_info(handoff: Dict[str, Any], ticket: Optional[Dict[str, Any]
         _print_ticket_info(ticket)
 
 
+def _load_ticket_for_handoff(ticket_id: str) -> Optional[Dict[str, Any]]:
+    """
+    從 handoff 的 ticket_id 載入對應 ticket（用於排序時取 priority）。
+
+    無法載入時返回 None；呼叫端應 fallback 為「未知 priority」。
+    """
+    if not ticket_id:
+        return None
+    try:
+        version = extract_version_from_ticket_id(ticket_id)
+        if version is None:
+            return None
+        ticket, error = load_and_validate_ticket(version, ticket_id, auto_print_error=False)
+        if error:
+            return None
+        return ticket
+    except Exception:
+        return None
+
+
+def _apply_runqueue_ordering(handoffs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    對 handoff 清單套用 runqueue context=resume 排序。
+
+    排序鍵與 track_runqueue._render_list 一致：
+        (priority_rank, ticket_id)
+    確保 resume --list 與 ticket track runqueue --context=resume 結果同序，
+    讓 runqueue 成為 ticket 排序的單一入口（W17-027.2）。
+
+    無法載入 ticket 的 handoff 以未知 priority 排最後。
+
+    Args:
+        handoffs: 已過濾 stale 的 handoff dict 清單
+
+    Returns:
+        List[Dict]: 依 priority + ticket_id 重新排序後的清單
+    """
+    def sort_key(handoff: Dict[str, Any]):
+        ticket_id = handoff.get("ticket_id", "") or ""
+        ticket = _load_ticket_for_handoff(ticket_id)
+        # 無 ticket 視為未知 priority（_priority_rank 對空 dict 返回預設值）
+        rank = _priority_rank(ticket or {})
+        return (rank, str(ticket_id))
+
+    return sorted(handoffs, key=sort_key)
+
+
 def _execute_list() -> int:
     """執行 --list 子命令"""
     try:
@@ -442,6 +491,10 @@ def _execute_list() -> int:
     # W7-004：從 namedtuple 提取 handoff 清單和 stale 計數
     handoffs = result.handoffs
     stale_count = result.stale_count
+
+    # W17-027.2：套用 runqueue context=resume 排序（priority + ticket_id），
+    # 與 track runqueue --context=resume 同序，讓 runqueue 成為單一排序入口。
+    handoffs = _apply_runqueue_ordering(handoffs)
     if not handoffs:
         print(ResumeMessages.NO_PENDING_RESUMPTIONS)
         if stale_count > 0:

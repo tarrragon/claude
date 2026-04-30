@@ -110,8 +110,8 @@ def _make_active_ticket_input(prompt: str) -> str:
     return json.dumps({"prompt": prompt})
 
 
-def _run_main_capture(input_data: str, mock_active_ticket=None):
-    """執行 main 並捕獲 stdout/stderr，可選 mock 當前 in_progress ticket"""
+def _run_main_capture(input_data: str, mock_active_ticket=None, mock_has_active_dispatch=False):
+    """執行 main 並捕獲 stdout/stderr，可選 mock 當前 in_progress ticket 與 active-dispatch"""
     with patch("sys.stdin", StringIO(input_data)):
         with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
             with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
@@ -124,7 +124,15 @@ def _run_main_capture(input_data: str, mock_active_ticket=None):
                             return_value=mock_active_ticket,
                             create=True,  # 允許 attribute 尚不存在（RED 階段）
                         ):
-                            exit_code = main()
+                            # mock active-dispatch guard（W11-004.3）：預設 False，
+                            # 避免測試環境讀到實際 dispatch-active.json
+                            with patch.object(
+                                process_skip_guard_hook,
+                                "has_active_dispatch",
+                                return_value=mock_has_active_dispatch,
+                                create=True,
+                            ):
+                                exit_code = main()
     return exit_code, mock_stdout.getvalue(), mock_stderr.getvalue()
 
 
@@ -226,7 +234,13 @@ class TestFallbackBehavior:
                                 side_effect=_raise,
                                 create=True,
                             ):
-                                exit_code = main()
+                                with patch.object(
+                                    process_skip_guard_hook,
+                                    "has_active_dispatch",
+                                    return_value=False,
+                                    create=True,
+                                ):
+                                    exit_code = main()
 
         assert exit_code == 0, "讀取例外不應阻擋 hook"
         assert _has_reminder(mock_stdout.getvalue(), mock_stderr.getvalue()), \

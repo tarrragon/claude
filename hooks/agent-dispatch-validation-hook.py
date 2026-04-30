@@ -38,6 +38,7 @@ from hook_utils import (
     run_hook_safely,
     read_json_from_stdin,
     get_project_root,
+    extract_where_files,
 )
 
 # 需要 worktree 隔離的實作代理人
@@ -153,62 +154,13 @@ def _extract_ticket_ids(prompt: str) -> List[str]:
 def _load_ticket_where_files(ticket_id: str) -> List[str]:
     """讀 ticket md 的 frontmatter where.files 欄位。
 
+    W11-004.7.2：改用 hook_utils.hook_ticket.extract_where_files 共用 helper，
+    消除與 file-ownership-guard / parallel-dispatch-verification 的重複實作。
+
     Returns:
-        檔案路徑清單；ticket 不存在或無 where.files 時回傳 []。
+        檔案路徑清單（原始字串、未規範化）；ticket 不存在或無 where.files 時回傳 []。
     """
-    try:
-        project_root = get_project_root()
-    except Exception:
-        return []
-
-    # 解析版本：0.18.0-W17-015.2 → 0.18.0
-    version_match = re.match(r"(\d+\.\d+\.\d+)", ticket_id)
-    if not version_match:
-        return []
-    version = version_match.group(1)
-    major_minor = ".".join(version.split(".")[:2])  # 0.18
-    major = "v" + version.split(".")[0]              # v0
-
-    # 路徑模式：docs/work-logs/v0/v0.18/v0.18.0/tickets/{id}.md
-    ticket_md = (
-        project_root
-        / "docs" / "work-logs"
-        / major
-        / f"v{major_minor}"
-        / f"v{version}"
-        / "tickets"
-        / f"{ticket_id}.md"
-    )
-    if not ticket_md.exists():
-        return []
-
-    try:
-        content = ticket_md.read_text(encoding="utf-8")
-    except OSError:
-        return []
-
-    # 簡易 frontmatter 解析：找 where.files 區塊
-    # 格式：where:\n  layer: X\n  files:\n  - path1\n  - path2
-    fm_match = re.search(r"^---\n(.*?)\n---", content, re.DOTALL)
-    if not fm_match:
-        return []
-    fm = fm_match.group(1)
-
-    # 擷取 where.files 列表
-    where_block = re.search(
-        r"^where:\s*\n((?:  .*\n)+)", fm, re.MULTILINE
-    )
-    if not where_block:
-        return []
-
-    files_match = re.search(
-        r"^  files:\s*\n((?:  - .*\n)+)", where_block.group(1), re.MULTILINE
-    )
-    if not files_match:
-        return []
-
-    files = re.findall(r"^  - (.+)$", files_match.group(1), re.MULTILINE)
-    return [f.strip() for f in files]
+    return extract_where_files(ticket_id)
 
 
 def _classify_paths(paths: List[str], project_root_str: str) -> Tuple[bool, bool, bool]:
@@ -292,6 +244,9 @@ def _merge_ticket_scope(ticket_ids: List[str]) -> Tuple[bool, bool, bool]:
     try:
         project_root_str = str(get_project_root().resolve())
     except Exception:
+        # 規則 4 雙通道：靜默降級為空字串可接受，因 _classify_paths 對空 root
+        # 退化為「全部當作非主 repo」的保守判斷（has_main=False），不會誤豁免
+        # worktree 強制；此處不寫 stderr 以免污染 hook 輸出，呼叫端日誌已足夠。
         project_root_str = ""
 
     has_main = False
@@ -336,15 +291,24 @@ def _resolve_path_classification(
     Returns:
         (has_main_repo_claude, has_external_claude, has_other) tuple
     """
-    # L1: prompt 直接分類
+    # L1: prompt 直接分類（總是執行）
+    # 狀態：(m, e, o) 反映 prompt 內實際出現的路徑訊號
     m, e, o = _classify_prompt_paths(prompt)
 
-    # L2: W17-018 fallback（prompt 全空 → 讀 ticket scope）
+    # 入口前置呼叫 _merge_ticket_scope 一次（W11-004.7.1 polish）：
+    # L2/L3 都需要 ticket scope 分類，前置呼叫消除重複 I/O 與重複解析。
+    # ticket_ids 為空時不呼叫，保留 (False, False, False) 預設值。
+    ticket_m = ticket_e = ticket_o = False
+    if ticket_ids:
+        ticket_m, ticket_e, ticket_o = _merge_ticket_scope(ticket_ids)
+
+    # L2: W17-018 fallback（prompt 全空 → 用 ticket scope 補分類）
+    # 觸發條件：L1 三欄全 False AND ticket_ids 非空
+    # 狀態轉換：(False, False, False) → (ticket_m, ticket_e, ticket_o)
     if not m and not e and not o and ticket_ids:
-        tm, te, to = _merge_ticket_scope(ticket_ids)
-        m = m or tm
-        e = e or te
-        o = o or to
+        m = m or ticket_m
+        e = e or ticket_e
+        o = o or ticket_o
         if logger is not None and (m or o or e):
             logger.info(
                 "W17-018 fallback：prompt 路徑不明，由 ticket where.files 補分類："
@@ -352,9 +316,17 @@ def _resolve_path_classification(
                 ticket_ids, m, e, o,
             )
     # L3: W11-004.7 覆蓋（has_other=True 但 ticket scope 純 .claude/）
+    # 觸發條件：L1 含 has_other AND 無 external_claude AND ticket_ids 非空
+    #          AND ticket scope 為純 .claude/（m=True, e=False, o=False）
+    # 狀態轉換：(*, False, True) → (True, False, False)
+    #
+    # WARNING（假設邊界）：本層假設「ticket where.files 為 scope 的 source of truth」，
+    # 故將 prompt 內的 src/tests/lib/ token 視為 .claude/ 巢狀路徑（如
+    # `.claude/skills/ticket/tests/`）。若 ticket where.files 漏填或未涵蓋
+    # 真正的非 .claude/ 變更目標，此層會誤豁免 worktree 強制。
+    # 防護依賴：ticket 建立時的 where.files 完整性（PC-040 規範）。
     elif o and ticket_ids and not e:
-        ticket_m, ticket_e, ticket_o = _merge_ticket_scope(ticket_ids)
-        # 純 .claude/ 條件：m=True AND e=False AND o=False
+        # 純 .claude/ 條件：ticket_m=True AND ticket_e=False AND ticket_o=False
         if ticket_m and not ticket_e and not ticket_o:
             if logger is not None:
                 logger.info(

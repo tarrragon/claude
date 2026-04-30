@@ -116,6 +116,29 @@ class TestIsPlaceholderLegacyBehavior:
     def test_plain_text_is_not_placeholder(self):
         assert _is_placeholder("這是實質內容，描述問題根因。") is False
 
+    # W17-094：regex 字邊界回歸測試（避免 substring 誤判）
+    def test_todolist_substring_is_not_placeholder(self):
+        """TodoList 內含 Todo 不應誤判為 placeholder（W17-094）。
+
+        原 regex `r"TODO"` IGNORECASE 會把 TodoList 的 Todo 命中，
+        導致 W17-007 complete 時整個 Problem Analysis section 被判 unfilled。
+        """
+        text = "列所有 CC tasks（非 TodoList）"
+        assert _is_placeholder(text) is False
+
+    def test_real_todo_marker_still_is_placeholder(self):
+        """真正的 TODO 單字仍應判為 placeholder（W17-094 回歸保護）。"""
+        assert _is_placeholder("# TODO: implement") is True
+        assert _is_placeholder("TODO 待實作") is True
+
+    def test_tbd_and_na_substring_is_not_placeholder(self):
+        """TBD / N/A 加字邊界後 substring 不應誤判（W17-094）。"""
+        # 不應誤判：TBDay（虛構但驗證字邊界）、Banana（含 N/A 的 substring 不可能但驗證 \b 邏輯一致）
+        assert _is_placeholder("ATBDay 是某種日期") is False
+        # 真正 TBD 仍應判 placeholder
+        assert _is_placeholder("TBD") is True
+        assert _is_placeholder("N/A") is True
+
 
 class TestValidateExecutionLogIntegration:
     """validate_execution_log 整合測試：HTML 註解 + 內容不應被擋"""

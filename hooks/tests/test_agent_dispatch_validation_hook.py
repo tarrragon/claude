@@ -1842,3 +1842,135 @@ def test_main_uses_resolver_for_mixed_ticket_blocks_without_worktree(
         },
     )
     assert exit_code == 2, "混合 ticket 無 worktree 應阻擋"
+
+
+# ----------------------------------------------------------------------------
+# W11-004.7.3：_resolve_path_classification 邊界補強測試（bay #2/#3/#4）
+#
+# AC1: L3 邊界 — ticket where.files 含 .claude/ + external + other 混合時
+#       不觸發 L3 純 .claude/ 覆蓋（has_other 必須保留）
+# AC2: symlink 路徑分類 — regex 不展開 symlink，純字串匹配行為驗證
+# ----------------------------------------------------------------------------
+
+
+def test_resolve_l3_not_triggered_when_ticket_scope_has_external_claude(
+    _resolve_helper, monkeypatch
+):
+    """L3 邊界：ticket where.files 同時含 .claude/、外部 .claude/、other 路徑。
+
+    觸發條件解析（hook 主檔 line 376-378）：
+    - L3 outer guard：`o and ticket_ids and not e`（e 為 L1 prompt 的 external 訊號）
+    - L3 inner check：`ticket_m and not ticket_e and not ticket_o`
+
+    本測試 ticket scope 含 external（ticket_e=True）→ inner check 必失敗 →
+    L3 不應吞掉 has_other / has_external。預期分類保留混合訊號，由上層阻擋。
+    """
+    monkeypatch.setattr(
+        _hook,
+        "_load_ticket_where_files",
+        lambda tid: [
+            ".claude/hooks/foo.py",       # main repo .claude/
+            "/tmp/worktree/.claude/x.py", # external .claude/
+            "src/api/bar.py",             # other
+        ]
+        if tid == "9.9.9-W99-005"
+        else [],
+    )
+
+    # prompt 無路徑 → L1=(False,False,False) → 走 L2 fallback 從 ticket 補分類
+    # L2 後 (m,e,o)=(True,True,True)，因 L1 e=False，L3 outer guard `not e` 通過
+    # 但 inner ticket_e=True → L3 不觸發 → 預期保留 (True, True, True)
+    result = _resolve_helper(
+        prompt="Ticket: 9.9.9-W99-005\n依規格實作。",
+        ticket_ids=["9.9.9-W99-005"],
+    )
+    assert result[0] is True, "ticket scope 含主 repo .claude/ → has_main 應為 True"
+    assert result[1] is True, "ticket scope 含外部 .claude/ → has_external 必須保留"
+    assert result[2] is True, "ticket scope 含 src/ → has_other 必須保留（L3 不應吞）"
+
+
+def test_resolve_l3_not_triggered_when_prompt_has_external_claude_marker(
+    _resolve_helper, monkeypatch
+):
+    """L3 邊界補強：L1 prompt 已偵測到 external（e=True）即使 ticket 純 .claude/
+    也不應觸發 L3 覆蓋（outer guard `not e` 直接擋住）。"""
+    monkeypatch.setattr(
+        _hook,
+        "_load_ticket_where_files",
+        lambda tid: [".claude/hooks/foo.py"] if tid == "9.9.9-W99-006" else [],
+    )
+    # prompt 含外部絕對路徑 .claude/ → L1 e=True → L3 outer guard 失敗
+    result = _resolve_helper(
+        prompt=(
+            "Ticket: 9.9.9-W99-006\n"
+            "參考 /tmp/some-worktree/.claude/skills/foo 並修改 src/bar.py"
+        ),
+        ticket_ids=["9.9.9-W99-006"],
+    )
+    assert result[1] is True, "prompt 含外部 .claude/ → has_external 必為 True"
+    assert result[2] is True, "prompt 含 src/ → has_other 必須保留（L3 不應觸發）"
+
+
+def test_resolve_symlink_path_not_expanded_by_regex(
+    _resolve_helper, tmp_path, monkeypatch
+):
+    """AC2：路徑分類基於純字串 regex，不展開 symlink。
+
+    驗證：即使 prompt 內提及的路徑是指向外部目錄的 symlink，分類仍依字串
+    本身（出現的字面 .claude/ 路徑）判定，不會 stat/readlink。
+
+    設計意圖：分類層快速且不依賴 filesystem 狀態；symlink 解析交由 CC runtime
+    實際存取時處理。本測試用真實 symlink 確認 regex 不觸發任何展開。
+    """
+    # 建立外部目錄與 symlink：tmp_path/external_claude/.claude/foo.py
+    external_dir = tmp_path / "external_claude"
+    external_claude = external_dir / ".claude" / "hooks"
+    external_claude.mkdir(parents=True)
+    (external_claude / "foo.py").write_text("# external", encoding="utf-8")
+
+    # 建立 symlink：tmp_path/link_claude → tmp_path/external_claude
+    link_path = tmp_path / "link_claude"
+    link_path.symlink_to(external_dir)
+
+    # 確認 symlink 真的存在且可解析（前置驗證）
+    assert link_path.is_symlink()
+    assert (link_path / ".claude" / "hooks" / "foo.py").exists()
+
+    # 案例 A：prompt 字串為 symlink 路徑（含 .claude/）
+    # 因為是絕對路徑且不在主 repo 樹內 → 應分類為 has_external（不展開）
+    prompt_a = f"請參考 {link_path}/.claude/hooks/foo.py"
+    result_a = _resolve_helper(prompt=prompt_a, ticket_ids=[])
+    # 主要驗證：regex 純字串匹配運作，has_external 為 True 即代表分類成功
+    assert result_a[1] is True, "symlink 絕對路徑含 .claude/ → has_external"
+    assert result_a[0] is False, "不應誤判為主 repo .claude/"
+
+    # 案例 B：純字串相對 .claude/ 開頭（最常見 PM 派發樣式）
+    # 即使在 filesystem 上對應目錄不存在或為 symlink，regex 純字串匹配
+    # 仍依規則歸類為主 repo（不 stat、不 readlink）
+    prompt_b = "編輯 .claude/hooks/foo.py"
+    result_b = _resolve_helper(prompt=prompt_b, ticket_ids=[])
+    assert result_b[0] is True, "相對 .claude/ 路徑視為主 repo（純字串匹配，不展開 symlink）"
+
+
+def test_resolve_symlink_in_ticket_where_files_not_expanded(
+    _resolve_helper, monkeypatch
+):
+    """AC2 補強：ticket where.files 含 symlink 風格絕對路徑時，
+    _classify_paths 也不展開——分類完全依字串前綴比對。"""
+    monkeypatch.setattr(
+        _hook,
+        "_load_ticket_where_files",
+        lambda tid: [
+            "/tmp/symlink_to_repo/.claude/hooks/foo.py",  # 看似 symlink 的外部絕對路徑
+        ]
+        if tid == "9.9.9-W99-007"
+        else [],
+    )
+    result = _resolve_helper(
+        prompt="Ticket: 9.9.9-W99-007\n依規格實作。",
+        ticket_ids=["9.9.9-W99-007"],
+    )
+    # 字串 prefix 不匹配主 repo project root → 分類為 external
+    # 即使該路徑「實際上」可能是 symlink 指回主 repo，hook 不展開
+    assert result[1] is True, "外部絕對 .claude/ 字串 → has_external（不展開 symlink）"
+    assert result[0] is False, "不應誤判為主 repo .claude/"

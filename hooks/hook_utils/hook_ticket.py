@@ -807,6 +807,92 @@ def find_ticket_file(
     return None
 
 
+def extract_where_files_from_frontmatter(frontmatter: Optional[dict]) -> List[str]:
+    """從已解析的 frontmatter dict 提取 where.files 路徑清單（W11-004.7.2）。
+
+    相容三種 YAML 解析結果：
+    - dict where:{files: [...]} → 取 files
+    - 字串 where: 'a\\nb' → 換行分隔
+    - 其他類型 → 視為空
+
+    回傳原始（已 strip）路徑字串，不做大小寫或規範化。
+
+    Args:
+        frontmatter: 已解析的 ticket frontmatter dict，或 None
+
+    Returns:
+        List[str]: 路徑清單（無 where.files 或解析失敗時回傳 []）
+    """
+    if not frontmatter:
+        return []
+
+    where_value = frontmatter.get("where", {})
+    if isinstance(where_value, dict):
+        files_raw = where_value.get("files", [])
+    else:
+        files_raw = where_value
+
+    if isinstance(files_raw, list):
+        items = files_raw
+    elif isinstance(files_raw, str):
+        if not files_raw:
+            return []
+        items = files_raw.split("\n")
+    else:
+        return []
+
+    return [str(f).strip() for f in items if f and str(f).strip()]
+
+
+def extract_where_files(
+    ticket_id: str,
+    project_root: Optional[Path] = None,
+    logger: "Optional[logging.Logger]" = None,
+) -> List[str]:
+    """讀取 Ticket frontmatter 的 where.files 欄位（共用 helper，W11-004.7.2）。
+
+    統一三個 hook（agent-dispatch-validation / file-ownership-guard /
+    parallel-dispatch-verification）的 where.files 解析邏輯。
+
+    回傳原始（已 strip）路徑字串，不做大小寫或路徑規範化；
+    需要規範化的呼叫端自行套用 normalize_path。
+
+    流程：
+    1. 透過 find_ticket_file 定位 ticket md（支援 flat + hierarchical 結構）
+    2. 透過 parse_ticket_frontmatter 解析 YAML frontmatter
+    3. 透過 extract_where_files_from_frontmatter 提取清單
+
+    Args:
+        ticket_id: Ticket ID（如 "0.18.0-W11-004"）
+        project_root: 專案根目錄；None 時呼叫 get_project_root()
+        logger: 可選 Logger 實例
+
+    Returns:
+        List[str]: 路徑字串清單（已 strip），ticket 不存在或無 where.files 時回傳 []
+    """
+    if project_root is None:
+        try:
+            project_root = get_project_root()
+        except Exception as e:
+            if logger:
+                logger.warning("無法取得 project_root: {}".format(e))
+            return []
+
+    ticket_file = find_ticket_file(ticket_id, project_root, logger)
+    if not ticket_file or not ticket_file.exists():
+        if logger:
+            logger.debug("Ticket 檔案不存在: {}".format(ticket_id))
+        return []
+
+    frontmatter = parse_ticket_frontmatter(ticket_file, logger)
+    if not frontmatter:
+        if logger:
+            logger.debug("無法解析 Ticket frontmatter: {}".format(ticket_id))
+        return []
+
+    return extract_where_files_from_frontmatter(frontmatter)
+
+
 def extract_version_from_ticket_id(ticket_id: str) -> Optional[str]:
     """從 Ticket ID 中提取版本號
 

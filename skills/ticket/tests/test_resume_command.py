@@ -771,5 +771,114 @@ class TestExecute:
         assert "用法" in captured.out or "usage" in captured.out.lower()
 
 
+class TestRunqueueOrdering:
+    """W17-027.2：驗證 _execute_list 套用 runqueue context=resume 排序
+
+    排序鍵：(priority_rank, ticket_id)
+    P0 → P1 → P2 → P3 → 未知；同 priority 內按 ticket_id 字母序。
+    """
+
+    @patch("ticket_system.commands.resume._load_ticket_for_handoff")
+    def test_apply_runqueue_ordering_priority(
+        self, mock_load, temp_handoff_env, capsys
+    ):
+        """priority 較高（P0）的 handoff 應排在 priority 較低（P2）之前"""
+        project_root, handoff_dir = temp_handoff_env
+
+        # 兩個 handoff：W4-001 P2、W4-002 P0
+        _create_handoff_json(handoff_dir, "0.31.0-W4-001", title="P2 task")
+        _create_handoff_json(handoff_dir, "0.31.0-W4-002", title="P0 task")
+
+        def fake_load(ticket_id):
+            mapping = {
+                "0.31.0-W4-001": {"id": ticket_id, "priority": "P2"},
+                "0.31.0-W4-002": {"id": ticket_id, "priority": "P0"},
+            }
+            return mapping.get(ticket_id)
+
+        mock_load.side_effect = fake_load
+
+        args = argparse.Namespace(list=True, ticket_id=None, version=None)
+        result = execute(args)
+        assert result == 0
+
+        out = capsys.readouterr().out
+        idx_001 = out.find("0.31.0-W4-001")
+        idx_002 = out.find("0.31.0-W4-002")
+        assert idx_001 != -1 and idx_002 != -1
+        assert idx_002 < idx_001, (
+            f"P0 (W4-002) 應排在 P2 (W4-001) 之前，但實際輸出順序顛倒\n{out}"
+        )
+
+    @patch("ticket_system.commands.resume._load_ticket_for_handoff")
+    def test_apply_runqueue_ordering_same_priority_alpha(
+        self, mock_load, temp_handoff_env, capsys
+    ):
+        """同 priority 時依 ticket_id 字母序排列"""
+        project_root, handoff_dir = temp_handoff_env
+
+        _create_handoff_json(handoff_dir, "0.31.0-W4-002")
+        _create_handoff_json(handoff_dir, "0.31.0-W4-001")
+
+        mock_load.side_effect = lambda tid: {"id": tid, "priority": "P1"}
+
+        args = argparse.Namespace(list=True, ticket_id=None, version=None)
+        result = execute(args)
+        assert result == 0
+
+        out = capsys.readouterr().out
+        idx_001 = out.find("0.31.0-W4-001")
+        idx_002 = out.find("0.31.0-W4-002")
+        assert idx_001 < idx_002, (
+            f"同 priority 應按 ticket_id 字母序，但順序顛倒\n{out}"
+        )
+
+    @patch("ticket_system.commands.resume._load_ticket_for_handoff")
+    def test_apply_runqueue_ordering_unknown_priority_last(
+        self, mock_load, temp_handoff_env, capsys
+    ):
+        """無法載入 ticket 的 handoff 應排在已知 priority 之後"""
+        project_root, handoff_dir = temp_handoff_env
+
+        _create_handoff_json(handoff_dir, "0.31.0-W4-001", title="unknown")
+        _create_handoff_json(handoff_dir, "0.31.0-W4-002", title="P3")
+
+        def fake_load(ticket_id):
+            if ticket_id == "0.31.0-W4-002":
+                return {"id": ticket_id, "priority": "P3"}
+            return None  # W4-001 載不到
+
+        mock_load.side_effect = fake_load
+
+        args = argparse.Namespace(list=True, ticket_id=None, version=None)
+        result = execute(args)
+        assert result == 0
+
+        out = capsys.readouterr().out
+        idx_001 = out.find("0.31.0-W4-001")
+        idx_002 = out.find("0.31.0-W4-002")
+        assert idx_002 < idx_001, (
+            f"未知 priority (W4-001) 應排最後，已知 P3 (W4-002) 在前\n{out}"
+        )
+
+    def test_list_output_format_compatible(self, temp_handoff_env, capsys):
+        """CLI --list 輸出仍包含 idx / id / title / timestamp（acceptance #5）"""
+        project_root, handoff_dir = temp_handoff_env
+
+        _create_handoff_json(handoff_dir, "0.31.0-W4-001", title="Format Task")
+
+        args = argparse.Namespace(list=True, ticket_id=None, version=None)
+        result = execute(args)
+        assert result == 0
+
+        out = capsys.readouterr().out
+        # idx
+        assert "1. 0.31.0-W4-001" in out
+        # title
+        assert "Format Task" in out
+        # timestamp（_create_handoff_json 預設帶 2026-01-30T12:00:00）
+        assert "2026-01-30T12:00:00" in out
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

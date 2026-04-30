@@ -366,7 +366,9 @@ def _is_placeholder(text: str) -> bool:
     # 待填寫標記（含英文/中文佔位符）— 對剝除 HTML 註解 + 分隔符後的內容檢查
     # - 英文：(pending), TBD, TODO, N/A
     # - 中文：（待填寫：...）、（必填：...）——template 預設佔位符
-    if re.search(r"\(pending\)|TBD|TODO|N/A", content_no_separator, re.IGNORECASE):
+    # W17-094：加 \b 字邊界避免 substring 誤判（如 TodoList 內的 Todo）。
+    # 同 W17-072 / W17-074 false positive 家族：pattern 過寬導致 schema section 誤判。
+    if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", content_no_separator, re.IGNORECASE):
         return True
     if re.search(r"（待填寫[：:][^）]*）|（必填[：:][^）]*）", content_no_separator):
         return True

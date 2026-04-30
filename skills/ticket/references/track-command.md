@@ -240,13 +240,15 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 
 ### 5 常見錯誤組合警示
 
-| 錯誤用法                                     | 症狀                                           | 正確用法                             |
-| -------------------------------------------- | ---------------------------------------------- | ------------------------------------ |
-| `check-acceptance <id> 1 2 3`                | argparse 錯誤（只接受單 index）                | `set-acceptance <id> --check 1 2 3`  |
-| `check-acceptance <id>`（無 index 無 --all） | `CHECK_ACCEPTANCE_MISSING_INDEX` 錯誤          | 加 index 或 `--all`                  |
-| `check-acceptance <id> --all 1`              | `CHECK_ACCEPTANCE_ALL_WITH_INDEX` 錯誤（互斥） | 二選一：要嘛 `--all`，要嘛指定 index |
-| `set-acceptance <id> --check`（無數字）      | argparse 錯誤（--check 需至少 1 個值）         | `--check 1` 或 `--check 1 2 3`       |
-| `check-acceptance <id> "關鍵字"`（比對多項） | `匹配到 N 個項目，請使用索引` 錯誤             | 改用具體 index 避免歧義              |
+> **實測來源**（W17-008.16 補完）：以下症狀欄為實際 CLI 輸出觀察結果。
+
+| 錯誤用法                                       | 實際症狀（CLI 輸出）                                              | 正確用法                              |
+| ---------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------- |
+| `check-acceptance <id> 1 2 3`                  | `argparse: unrecognized arguments: 2 3`                           | `set-acceptance <id> --check 1 2 3`   |
+| `check-acceptance <id> --uncheck`（無 index）  | `[Error] 必須提供 index 或使用 --all 參數`（含 usage hint）       | `check-acceptance <id> 1 --uncheck`   |
+| `check-acceptance <id> --all 1`                | `[Error] --all 和 index 參數互斥，只能選擇其中之一`                | 二選一：要嘛 `--all`，要嘛指定 index  |
+| `set-acceptance <id> --check`（無數字）        | argparse 錯誤（`--check` 需至少 1 個值）                          | `--check 1` 或 `--check 1 2 3`        |
+| `check-acceptance <id> "關鍵字"`（比對多項）   | `匹配到 N 個項目，請使用索引` 錯誤（文字搜尋僅唯一比對成功）       | 改用具體 index 避免歧義               |
 
 ---
 

@@ -154,7 +154,40 @@ grep -E "^## (允許產出|禁止行為|適用情境)" .claude/agents/<agent>.md
 
 ---
 
-**Last Updated**: 2026-04-24
+## 執行責任：Ticket 完成（收尾）
+
+實作類 agent 完成 commit 與 body 填寫後，必須自律執行 `ticket track check-acceptance --all <id>` 與 `ticket track complete <id>`。**Why**：歷史設計將 complete 視為 PM 專屬，導致 PM 每個 ticket 需多 2-3 tool call 補做收尾（W17-020 / W17-016.3 實證）；agent 自律 + acceptance-gate-hook 安全網的組合成本最低。**Consequence**：缺收尾責任會讓 ticket 滯留 in_progress、PM 在 handoff 時才發現未 complete，違反代理人自律主責原則。**Action**：本章節必須在實作類 agent 的「執行責任」段落或 AGENT_PRELOAD.md 規則 2.4 中引用。
+
+### 收尾步驟（依序執行）
+
+| 步驟 | 操作 | 條件 |
+|------|------|------|
+| 1 | `ticket track check-acceptance --all <id>` | body 填寫完畢 + commit 完成 |
+| 2 | `ticket track complete <id>` | acceptance 全數通過 |
+| 例外 | 在 NeedsContext 記錄缺口、**不 complete** | acceptance 有未通過 |
+
+### 安全網設計
+
+acceptance-gate-hook 在 complete 觸發前自動驗證，無論由 agent 或 PM 執行皆會觸發。故 agent 自律 complete 無安全風險，hook 失敗時依訊息修補後重試即可。
+
+### 不適用範圍（與 body 填寫責任同）
+
+| 類別 | 說明 |
+|------|------|
+| 純分析型 agent（bay-quality-auditor、saffron-system-analyst 等） | 由 PM 派發時明確指示是否 complete |
+| DEPRECATED agent | 豁免 |
+| 多 agent 協作的 group ticket | 由協調者（PM 或 group coordinator）統一 complete |
+
+### 違規偵測
+
+| 違規類型 | 偵測時機 | 行為 |
+|---------|---------|------|
+| 實作類 agent commit 後未 complete 也未回報缺口 | PM handoff 時發現 ticket 仍 in_progress | 視為 PC-105 模式（subagent-no-complete-after-commit），PM 補做但記錄為待防護 |
+
+---
+
+**Last Updated**: 2026-04-30
+**Version**: 1.3.0 — 新增「執行責任：Ticket 完成（收尾）」章節：實作類 agent commit + body 填寫後自律執行 check-acceptance --all + complete，acceptance-gate-hook 為安全網；補違規偵測表（W17-033 / 源 W17-022）
 **Version**: 1.2.0 — 新增「章節結構規則」：禁止自定義 H2，實作內容必須寫在 Schema 章節下可用 H3 子章節組織；違規偵測表分層（阻擋 vs 警告）
 **Version**: 1.1.0 — 新增「執行責任：Ticket body 填寫」章節，明示實作類 agent 的 body 填寫時機、方式、違規偵測
-**Source**: W5-001 派發越界根因 A + body 空白系統性缺口 + PC-110 根因 B（agent 自定義 H2 切斷 Schema section）
+**Source**: W5-001 派發越界根因 A + body 空白系統性缺口 + PC-110 根因 B（agent 自定義 H2 切斷 Schema section）+ W17-033 收尾責任落地

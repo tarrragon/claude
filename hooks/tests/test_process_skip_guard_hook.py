@@ -154,7 +154,14 @@ class TestMainFunction:
                 with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
                     with patch.object(process_skip_guard_hook, "setup_hook_logging"):
                         with patch.object(process_skip_guard_hook, "is_subagent_environment", return_value=False):
-                            exit_code = main()
+                            # W11-004.3：mock 無 active dispatch 避免 guard 靜音
+                            with patch.object(
+                                process_skip_guard_hook,
+                                "has_active_dispatch",
+                                return_value=False,
+                                create=True,
+                            ):
+                                exit_code = main()
 
         assert exit_code == 0
 

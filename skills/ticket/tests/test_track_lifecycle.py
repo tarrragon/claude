@@ -776,6 +776,273 @@ class TestCompleteCascadeChildren:
 
 
 # ============================================================================
+# TestCompleteCascadeSaveOrderContract：cascade 呼叫順序契約（W11-002.5）
+# ANA 0.18.0-W5-022 發現：Mock-based 測試共用 in-memory dict，可能矇混
+# 「parent 必須先落盤再 cascade」的順序契約。本區塊補強：
+#   1. TC-D1（順序斷言）：save_ticket(parent) 先於 list_tickets() 被呼叫
+#   2. TC-D2（真實往返）：tmp_path 寫實檔案，驗證 _post_complete_cascade
+#      透過 list_tickets fallback 讀到 disk 上 completed 的 parent，並真把
+#      child 落盤為 pending
+# 防護目標：若有人重構順序（例如把 save_ticket(parent) 移到 cascade 之後），
+# 既有 Mock 測試仍會綠燈，但本區塊會抓出 regression。
+# ============================================================================
+
+
+class TestCompleteCascadeSaveOrderContract:
+    """W11-002.5：cascade 呼叫順序契約測試。"""
+
+    def test_save_ticket_parent_called_before_list_tickets(
+        self, make_parent_child_tickets, complete_env, capsys
+    ):
+        """TC-D1：execute_complete 必須在呼叫 list_tickets 前 save_ticket(parent)。
+
+        Why：cascade 路徑（含 fallback）依賴 disk 上 parent 為 completed，
+        若順序顛倒，list_tickets 會讀到舊 parent status，導致 child
+        在 _can_cascade_unblock 判定時看到 parent 仍為 in_progress 而不解鎖。
+
+        實作：用一個共享的 call_log 記錄 save_ticket / list_tickets 的呼叫順序，
+        斷言「parent save」必先於「list_tickets」第一次呼叫出現。
+        """
+        parent, children, all_tickets = make_parent_child_tickets(
+            "P0", [("C1", "blocked", ["P0"])]
+        )
+        complete_env.set_tickets(parent, all_tickets)
+
+        call_log: List[Tuple[str, str]] = []
+
+        original_save = complete_env.save_ticket.side_effect
+        original_list = complete_env.list_tickets.return_value
+
+        def _save_spy(ticket_dict, *args, **kwargs):
+            call_log.append(("save", ticket_dict.get("id", "?")))
+            if callable(original_save):
+                return original_save(ticket_dict, *args, **kwargs)
+            return None
+
+        def _list_spy(*args, **kwargs):
+            call_log.append(("list", "*"))
+            return original_list
+
+        complete_env.save_ticket.side_effect = _save_spy
+        complete_env.list_tickets.side_effect = _list_spy
+
+        args = Mock()
+        args.ticket_id = "P0"
+        result = execute_complete(args, "0.18.0")
+
+        assert result == 0
+
+        # 找出 parent save 與第一次 list_tickets 在 call_log 中的索引
+        parent_save_idx = next(
+            (i for i, (k, tid) in enumerate(call_log) if k == "save" and tid == "P0"),
+            None,
+        )
+        first_list_idx = next(
+            (i for i, (k, _) in enumerate(call_log) if k == "list"), None
+        )
+
+        assert parent_save_idx is not None, (
+            f"parent (P0) 應被 save_ticket，實際 call_log: {call_log}"
+        )
+        assert first_list_idx is not None, (
+            f"應呼叫 list_tickets（cascade 載入 ticket_map），實際 call_log: {call_log}"
+        )
+        assert parent_save_idx < first_list_idx, (
+            f"save_ticket(parent) 必須先於 list_tickets()，"
+            f"實際順序：parent_save@{parent_save_idx}, first_list@{first_list_idx}, "
+            f"call_log={call_log}"
+        )
+
+
+class TestCascadeRealDiskRoundtrip:
+    """W11-002.5：cascade 真實 save→load 往返契約測試（避免 Mock 矇混）。"""
+
+    @staticmethod
+    def _write_real_ticket(
+        tickets_dir: Path,
+        ticket_id: str,
+        status: str,
+        children: List[str] = None,
+        blocked_by: List[str] = None,
+        parent_id: str = None,
+        title: str = None,
+    ) -> Path:
+        """於 tickets_dir 寫入符合 parser.load_ticket 慣例的最小 Ticket 檔案。"""
+        import yaml as _yaml
+
+        fm: Dict[str, Any] = {
+            "id": ticket_id,
+            "title": title or f"Ticket {ticket_id}",
+            "status": status,
+            "type": "IMP",
+            "version": "0.99.0",
+            "wave": 1,
+            "priority": "P2",
+            "children": list(children or []),
+            "blockedBy": list(blocked_by or []),
+            "parent_id": parent_id,
+            "acceptance": [{"text": "ac1", "completed": True}],
+        }
+        ticket_path = tickets_dir / f"{ticket_id}.md"
+        content = (
+            "---\n"
+            + _yaml.dump(fm, allow_unicode=True, sort_keys=False)
+            + "---\n\nbody\n"
+        )
+        ticket_path.write_text(content, encoding="utf-8")
+        return ticket_path
+
+    def test_post_complete_cascade_reads_completed_parent_from_disk(
+        self, temp_project_dir, monkeypatch, capsys
+    ):
+        """TC-D2：tmp_path 真實 save→load 往返。
+
+        Given：parent 已落盤為 completed，child 落盤為 blocked、blockedBy=[parent]
+        When：呼叫 _post_complete_cascade（不傳 ticket_map → 走 list_tickets fallback）
+        Then：
+          - 函式從 disk 讀到 parent status=completed
+          - child 被解鎖（status: blocked → pending）並真實 save 回 disk
+          - 重新 load_ticket(child) 從 disk 讀到 status=pending（真往返驗證）
+
+        防護：若有人改順序讓 parent 還沒落盤就跑 cascade，list_tickets 會讀到
+        舊 status（in_progress），_can_cascade_unblock 會判定不可解鎖，本測試會抓到。
+        """
+        # 隔離至 tmp_path，避免污染真實 repo
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(temp_project_dir))
+
+        # 建立版本 0.99.0 的 tickets 目錄（使用 flat 結構，避免階層 fallback）
+        version = "0.99.0"
+        tickets_dir = (
+            temp_project_dir / "docs" / "work-logs" / f"v{version}" / "tickets"
+        )
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+
+        parent_id = "0.99.0-W1-100"
+        child_id = "0.99.0-W1-101"
+
+        # 落盤 parent（已 completed）+ child（blocked + blockedBy=[parent]）
+        parent_path = self._write_real_ticket(
+            tickets_dir,
+            parent_id,
+            status="completed",
+            children=[child_id],
+            title="父任務 P",
+        )
+        child_path = self._write_real_ticket(
+            tickets_dir,
+            child_id,
+            status="blocked",
+            blocked_by=[parent_id],
+            parent_id=parent_id,
+            title="子任務 C",
+        )
+
+        # 清快取，確保 list_tickets / load_ticket 走真實 disk
+        from ticket_system.lib import parser as _parser
+        from ticket_system.lib import ticket_loader as _ticket_loader
+
+        _parser._ticket_cache.clear()
+        _ticket_loader._chain_index_cache.clear()
+
+        # 從 disk load parent 作為 _post_complete_cascade 入參
+        from ticket_system.lib.parser import load_ticket as _load_ticket
+        from ticket_system.commands.lifecycle import _post_complete_cascade
+
+        parent_dict = _load_ticket(version, parent_id)
+        assert parent_dict is not None and parent_dict.get("status") == "completed"
+
+        # 不傳 ticket_map → 走 list_tickets fallback（驗證 fallback 路徑也正確）
+        _post_complete_cascade(parent_dict, version, ticket_map=None)
+
+        out = capsys.readouterr().out
+        assert "[Cascade]" in out, f"應觸發 cascade unblock，stdout: {out!r}"
+        assert child_id in out
+
+        # 真實往返驗證：清快取後從 disk 重新 load child，必為 pending
+        _parser._ticket_cache.clear()
+        _ticket_loader._chain_index_cache.clear()
+        reloaded_child = _load_ticket(version, child_id)
+        assert reloaded_child is not None
+        assert reloaded_child.get("status") == "pending", (
+            f"child 應已被解鎖並落盤為 pending，實際 disk 上為 "
+            f"{reloaded_child.get('status')!r}"
+        )
+
+    def test_post_complete_cascade_skips_when_parent_still_in_progress_on_disk(
+        self, temp_project_dir, monkeypatch, capsys
+    ):
+        """TC-D3（負向驗證）：parent 在 disk 上仍 in_progress 時，cascade 不應解鎖 child。
+
+        這是 TC-D2 的對照組：刻意違反「parent 先落盤」契約，驗證 cascade 確實
+        從 disk 讀 parent status 並做正確判定，而非依賴呼叫者傳入的 in-memory dict。
+
+        構造：parent dict 在記憶體中標 completed（模擬 caller 改了 status 但沒 save），
+        但 disk 上 parent 仍是 in_progress。cascade 走 list_tickets fallback 會讀到
+        disk 上的舊 status，child 應保留 blocked。
+        """
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(temp_project_dir))
+
+        version = "0.99.0"
+        tickets_dir = (
+            temp_project_dir / "docs" / "work-logs" / f"v{version}" / "tickets"
+        )
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+
+        parent_id = "0.99.0-W1-200"
+        child_id = "0.99.0-W1-201"
+
+        # 故意：disk 上 parent 仍 in_progress（未落盤 completed）
+        self._write_real_ticket(
+            tickets_dir,
+            parent_id,
+            status="in_progress",
+            children=[child_id],
+            title="父任務 P",
+        )
+        self._write_real_ticket(
+            tickets_dir,
+            child_id,
+            status="blocked",
+            blocked_by=[parent_id],
+            parent_id=parent_id,
+            title="子任務 C",
+        )
+
+        from ticket_system.lib import parser as _parser
+        from ticket_system.lib import ticket_loader as _ticket_loader
+
+        _parser._ticket_cache.clear()
+        _ticket_loader._chain_index_cache.clear()
+
+        # 構造一個 in-memory parent_ticket：status=completed（模擬 caller 改了但沒 save）
+        in_memory_parent = {
+            "id": parent_id,
+            "status": "completed",
+            "title": "父任務 P",
+            "children": [child_id],
+        }
+
+        from ticket_system.commands.lifecycle import _post_complete_cascade
+
+        # 走 list_tickets fallback，會從 disk 讀到 in_progress parent
+        _post_complete_cascade(in_memory_parent, version, ticket_map=None)
+
+        # 重新 load child，應仍為 blocked
+        _parser._ticket_cache.clear()
+        _ticket_loader._chain_index_cache.clear()
+        from ticket_system.lib.parser import load_ticket as _load_ticket
+
+        reloaded_child = _load_ticket(version, child_id)
+        assert reloaded_child is not None
+        assert reloaded_child.get("status") == "blocked", (
+            f"parent 在 disk 上仍 in_progress 時，child 不應被解鎖；"
+            f"實際 status={reloaded_child.get('status')!r}。"
+            f"若此斷言失敗，表示 cascade 依賴 in-memory parent dict 而非 disk 真實狀態，"
+            f"違反呼叫契約（W11-002.5 / ANA W5-022）。"
+        )
+
+
+# ============================================================================
 # TestCompleteSpawnedBlocking：ANA spawned 非 terminal blocking confirmation
 # （W12-005 / PC-075 Phase 2 — 方案 K）
 # ============================================================================

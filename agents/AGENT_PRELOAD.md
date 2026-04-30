@@ -65,8 +65,31 @@ ticket track append-log <id> --section "Test Results" "測試結果"
 | 實作完成 | Solution | 「新增方法 A、修改檔案 B」 |
 | 測試完成 | Test Results | 「40/40 通過，無回歸」 |
 | 遇到阻塞 | Problem Analysis | 「發現 X 問題，需 PM 決策」 |
+| **任務完成（收尾）** | check-acceptance + complete | `ticket track check-acceptance --all <id>` 後 `ticket track complete <id>` |
 
-#### 2.4 為什麼代理人必須更新 Ticket
+#### 2.4 收尾責任：自律 complete（W17-033）
+
+**Why**：歷史設計將 complete 視為 PM 專屬，導致 PM 每次需額外執行 check-acceptance + complete（W17-020、W17-016.3 實證）。**Consequence**：違反代理人自律主責原則，PM 處理 N 個 ticket 即多 N 次 tool call 浪費。**Action**：實作類 agent 在 commit + body 填寫完成後，主動執行：
+
+```bash
+# 1. 勾選所有 acceptance（agent 已逐項確認完成）
+ticket track check-acceptance --all <ticket-id>
+
+# 2. acceptance 全數通過時 complete
+ticket track complete <ticket-id>
+```
+
+**例外情境**：
+
+| 狀況 | 處理 |
+|------|------|
+| 部分 acceptance 未達成 | 在 NeedsContext 章節記錄缺口，**不 complete**，回報 PM |
+| acceptance-gate-hook 阻擋 | 依 hook 訊息修補後重試（hook 是安全網，非懲罰） |
+| ANA 類 ticket（純分析）由 PM 派發者 | PM 在 prompt 明確指示時才執行 |
+
+> **安全網**：acceptance-gate-hook 在 complete 觸發前自動驗證，無論由 agent 或 PM 執行，故 agent 自律 complete 無安全風險。
+
+#### 2.5 為什麼代理人必須更新 Ticket
 
 PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度而非代理人 output。只有異常時才用 SendMessage 直接聯繫。這降低 PM-代理人的依賴，讓 PM 可以同時管理多個任務線。
 
@@ -194,6 +217,7 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 - [ ] 報告結構清晰（5W1H）
 - [ ] .md 修改使用 Edit / Write，非 mcp__serena__replace_content 等 MCP 寫入工具（規則 7）
 - [ ] MCP 工具被拒時已嘗試 Edit 降級，未 self-imposed early stop（規則 7 Fallback）
+- [ ] **任務完成後執行 `ticket track check-acceptance --all <id>` + `ticket track complete <id>`（規則 2.4）**
 
 ---
 
@@ -214,6 +238,7 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 ---
 
-**Last Updated**: 2026-04-28
+**Last Updated**: 2026-04-30
+**Version**: 1.7.0 - 新增規則 2.4「收尾責任：自律 complete」+ 2.3 表格「任務完成」列 + 檢查清單 complete 項：實作類 agent commit/body 填寫完成後主動執行 check-acceptance --all + complete，acceptance-gate-hook 為安全網（W17-033 / 源 W17-022）
 **Version**: 1.6.0 - 新增規則 7「工具選擇規則（MCP 寫入工具優先序）」：一般 .md 修改用 Edit/Write，serena MCP 限於符號級重構；MCP 被拒時必須 fallback Edit，禁 self-imposed early stop（PC-088 / W17-088）
 **Purpose**: 確保所有代理人遵守核心規則

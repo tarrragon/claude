@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 try:
     from hook_utils import setup_hook_logging, is_subagent_environment, read_json_from_stdin, run_hook_safely
     from lib.hook_messages import AUQOptionPatternMessages
+    from lib.transcript_tail_reader import read_last_assistant_text as _shared_read_last_assistant_text
 except ImportError as e:
     print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
     sys.exit(0)
@@ -47,7 +48,13 @@ FENCED_CODE_RE = re.compile(r"```.*?```", re.DOTALL)
 # Inline code (`…`)
 INLINE_CODE_RE = re.compile(r"`[^`\n]+`")
 
+# 半形/全形問號常數（規格 3.2/3.3 共用）
+QUESTION_MARKS = ("?", "？")
+
 # 選項語境問句關鍵字（3.2 條件 B）
+# 注意：「要不要」「需要做」與 BINARY_QUESTION_KEYWORDS 重疊為刻意保留——
+# OPTION 路徑需搭配選項標記（A./B./C.）才命中，BINARY 路徑需搭配問號才命中，
+# 兩條路徑語意分離且豁免邏輯獨立，重疊不會產生雙重判定。
 OPTION_QUESTION_KEYWORDS = (
     "要選哪個",
     "哪個比較好",
@@ -60,6 +67,8 @@ OPTION_QUESTION_KEYWORDS = (
 )
 
 # 二元問句關鍵字（3.3）
+# 不含「嗎？」「嗎?」：問號條件已由 is_binary_question 透過 QUESTION_MARKS 獨立檢查，
+# 在關鍵字清單再列「嗎？」會造成雙重判定（同一個問號被檢查兩次）。
 BINARY_QUESTION_KEYWORDS = (
     "要繼續",
     "確認執行",
@@ -69,8 +78,7 @@ BINARY_QUESTION_KEYWORDS = (
     "需要做",
     "要進",
     "要 commit",
-    "嗎？",
-    "嗎?",
+    "嗎",
 )
 
 # 豁免關鍵字
@@ -110,27 +118,27 @@ def has_option_markers(text: str) -> bool:
 
 
 def has_question_ending(text: str, window: int = 400) -> bool:
-    """判斷結尾 window 字內是否含選項問句關鍵字或問號。"""
+    """判斷結尾 window 字內是否含選項問句關鍵字或問號。
+
+    單次 tail 掃描合併三條件：
+    1. tail（window 字）含 OPTION_QUESTION_KEYWORDS 任一
+    2. tail 最後 50 字含半形或全形問號
+    3. tail 最後一行以半形或全形問號結尾
+    """
     tail = text[-window:] if len(text) > window else text
-    for kw in OPTION_QUESTION_KEYWORDS:
-        if kw in tail:
-            return True
-    # 最後 50 字含 ? / ?
-    last_50 = text[-50:]
-    if "?" in last_50 or "?" in last_50:
+    if any(kw in tail for kw in OPTION_QUESTION_KEYWORDS):
         return True
-    # 最後一行以問號結尾
-    last_line = text.rstrip().split("\n")[-1].rstrip()
-    if last_line.endswith("?") or last_line.endswith("?"):
+    if any(mark in tail[-50:] for mark in QUESTION_MARKS):
         return True
-    return False
+    last_line = tail.rstrip().split("\n")[-1].rstrip()
+    return last_line.endswith(QUESTION_MARKS)
 
 
 def is_binary_question(text: str) -> bool:
     """判斷結尾 200 字是否為二元問句（含關鍵字 + 半形或全形問號）。"""
     tail = text[-200:] if len(text) > 200 else text
     has_kw = any(kw in tail for kw in BINARY_QUESTION_KEYWORDS)
-    has_q = ("?" in tail) or ("\uff1f" in tail)
+    has_q = any(mark in tail for mark in QUESTION_MARKS)
     return has_kw and has_q
 
 
@@ -209,53 +217,10 @@ def detect_and_build_output(
 def read_last_assistant_text(transcript_path: Optional[str], logger) -> Optional[str]:
     """從 JSONL transcript 讀取最後一則 assistant 訊息文字。
 
-    支援兩種 content 格式：
-    - stringified: {"message": {"role": "assistant", "content": "..."}}
-    - blocks: {"message": {"role": "assistant", "content": [{"type":"text","text":"..."}]}}
-
-    失敗時回傳 None（不 raise），呼叫端會以放行處理。
+    委派至 lib.transcript_tail_reader 共用工具，使用 offset 快取避免每次全檔
+    掃描（W11-004.11）。保留本函式名稱以維持既有 import 相容性。
     """
-    if not transcript_path:
-        logger.info("transcript_path 為空，跳過")
-        return None
-
-    path = Path(transcript_path)
-    if not path.exists():
-        logger.info("transcript 檔案不存在: %s", transcript_path)
-        return None
-
-    try:
-        last_assistant_text: Optional[str] = None
-        with path.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except json.JSONDecodeError:
-                    # 跳過單行損壞，繼續讀
-                    continue
-                msg = obj.get("message") or {}
-                if not isinstance(msg, dict):
-                    continue
-                role = msg.get("role") or obj.get("type")
-                if role != "assistant":
-                    continue
-                content = msg.get("content")
-                if isinstance(content, str):
-                    last_assistant_text = content
-                elif isinstance(content, list):
-                    parts = []
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") == "text":
-                            parts.append(block.get("text", ""))
-                    if parts:
-                        last_assistant_text = "\n".join(parts)
-        return last_assistant_text
-    except OSError as e:
-        logger.info("transcript 讀取失敗: %s", e)
-        return None
+    return _shared_read_last_assistant_text(transcript_path, logger)
 
 
 def main() -> int:

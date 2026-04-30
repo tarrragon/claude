@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """
 Process Skip Guard Hook
@@ -157,6 +157,36 @@ def detect_skip_intent(user_input: str) -> Tuple[Optional[str], Optional[dict]]:
     return None, None
 
 
+def has_active_dispatch() -> bool:
+    """
+    檢查 .claude/dispatch-active.json 是否含 active dispatch
+
+    格式：{"dispatches": [...]}（dispatches 陣列非空 → active）
+
+    Returns:
+        True 若有 active dispatch；False 若檔案缺失/損毀/dispatches 空
+    """
+    try:
+        root = _find_repo_root()
+        if root is None:
+            return False
+        path = root / ".claude" / "dispatch-active.json"
+        if not path.exists():
+            return False
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            dispatches = data.get("dispatches", [])
+        elif isinstance(data, list):
+            # 兼容舊格式（裸陣列）
+            dispatches = data
+        else:
+            return False
+        return bool(dispatches)
+    except (json.JSONDecodeError, OSError, Exception):
+        # JSON 損毀 / 讀取失敗 → 視為無 active dispatch（不阻擋 hook）
+        return False
+
+
 def _find_repo_root() -> Optional[Path]:
     """向上尋找含 docs/work-logs 的祖先目錄（hook 隨 worktree/主 repo 走皆成立）"""
     for parent in Path(__file__).resolve().parents:
@@ -271,6 +301,17 @@ def main() -> int:
         return EXIT_SUCCESS
 
     skip_type, pattern_info = detect_skip_intent(user_input)
+
+    # Active-dispatch guard（cold path：偵測到 skip intent 才查 dispatch-active.json）
+    # 代理人執行中時用戶輸入易誤觸驗收/省略偵測，靜默避免誤報（W11-004.3）
+    if skip_type:
+        try:
+            if has_active_dispatch():
+                logger.info(f"偵測到 active dispatch，靜音 {skip_type} 提醒")
+                print(json.dumps(generate_hook_output("UserPromptSubmit"), ensure_ascii=False, indent=2))
+                return EXIT_SUCCESS
+        except Exception as exc:
+            logger.warning(f"has_active_dispatch 失敗，回退原行為: {exc}")
 
     # SKIP_SA_REVIEW type/phase guard（cold path：僅在偵測到 skip intent 時查詢）
     if skip_type == "SKIP_SA_REVIEW":

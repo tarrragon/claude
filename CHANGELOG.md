@@ -1,3 +1,35 @@
+## [1.28.0] - 2026-04-30
+
+### Summary
+feat: resume --list 改採 runqueue 排序; feat: 落地 agent 自律 complete 收尾責任; feat: ANA ticket metadata validation hook (+19 more)
+
+Changes: 4 feat, 8 refactor, 2 fix, 4 docs, 2 chore, 2 test
+
+- feat: resume --list 改採 runqueue 排序
+- feat: 落地 agent 自律 complete 收尾責任
+- feat: ANA ticket metadata validation hook
+- feat: active-dispatch guard for process-skip-guard-hook
+- refactor: 解耦 wrap-decision 外部引用 + 移除違規 README
+- refactor: extract _is_fully_unblocked predicate
+- refactor: extract cascade messages to command_lifecycle_messages
+- refactor: introduce ChildOutcome + classify/dispatch in cascade
+- refactor: inject ticket_map into _cascade_unblock_children + extract _post_complete_cascade
+- refactor: AUQ hook keyword dedup + DRY
+- refactor: extract where.files parsing to hook_utils
+- refactor: Phase 4b polish _resolve_path_classification
+- fix: _is_placeholder regex 加字邊界避免 substring 誤判
+- fix: process-skip-guard PEP 723 缺 pyyaml + IMP-069 錯誤學習
+- docs: 整合官方 skill-creator 規範並以 compositional-writing 重寫
+- docs: add UTF-8 enforcement template to hook-architect-technical-reference
+- docs: record PC-113 + PC-114 error patterns + memory
+- docs: 補完 track-command.md 常見錯誤實測症狀
+- chore: restore exec bit on transcript_tail_reader and related test files
+- chore: complete ticket body + YAML quote fix
+- test: add cascade save-order contract tests + docstring
+- test: add boundary tests for _resolve_path_classification
+
+---
+
 ## [1.27.1] - 2026-04-29
 
 ### Summary

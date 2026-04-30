@@ -30,7 +30,11 @@ from typing import Optional
 from hook_utils.hook_base import get_project_root
 from hook_utils.hook_logging import setup_hook_logging
 from hook_utils.hook_io import read_json_from_stdin, is_subagent_environment
-from hook_utils.hook_ticket import parse_ticket_frontmatter, find_ticket_file
+from hook_utils.hook_ticket import (
+    parse_ticket_frontmatter,
+    find_ticket_file,
+    extract_where_files,
+)
 
 
 # ============================================================================
@@ -214,6 +218,9 @@ def read_ticket_where_files(ticket_id: str, project_root: Path,
                             logger: logging.Logger) -> list[str]:
     """讀取 Ticket 的 where.files 清單
 
+    W11-004.7.2：raw 抽取統一委派 hook_utils.extract_where_files；
+    本函式僅保留路徑規範化（normalize_path）與錯誤觀察（雙通道日誌）。
+
     Args:
         ticket_id: Ticket ID（如 "0.1.0-W41-002"）
         project_root: 專案根目錄
@@ -223,37 +230,19 @@ def read_ticket_where_files(ticket_id: str, project_root: Path,
         list[str]: 規範化後的路徑清單（空列表若讀取失敗）
     """
     try:
-        # 使用 find_ticket_file 定位 Ticket 檔案
-        ticket_file = find_ticket_file(ticket_id, project_root, logger)
-        if not ticket_file or not ticket_file.exists():
-            logger.warning(f"Ticket 檔案不存在: {ticket_id}")
-            return []
-
-        # 解析 Ticket frontmatter
-        frontmatter = parse_ticket_frontmatter(ticket_file, logger)
-        if not frontmatter:
-            logger.debug(f"無法解析 Ticket frontmatter: {ticket_id}")
-            return []
-
-        # 提取 where.files
-        where_dict = frontmatter.get("where", {})
-        if not isinstance(where_dict, dict):
-            return []
-
-        where_files_raw = where_dict.get("files", [])
-        if not where_files_raw:
+        raw_files = extract_where_files(ticket_id, project_root, logger)
+        if not raw_files:
             logger.debug(f"Ticket 無 where.files: {ticket_id}")
             return []
 
-        # 規範化每個路徑
-        where_files_normalized = []
-        for file_path in where_files_raw:
-            normalized = normalize_path(str(file_path))
-            if normalized:
-                where_files_normalized.append(normalized)
+        normalized = []
+        for file_path in raw_files:
+            n = normalize_path(str(file_path))
+            if n:
+                normalized.append(n)
 
-        logger.debug(f"讀取 where.files: {len(where_files_normalized)} 個")
-        return where_files_normalized
+        logger.debug(f"讀取 where.files: {len(normalized)} 個")
+        return normalized
 
     except Exception as e:
         logger.error(f"讀取 Ticket where.files 失敗: {e}")

@@ -479,6 +479,63 @@ PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)
 ### 8. 測試驅動原則
 先設計測試案例，再實作 Hook 邏輯。
 
+### 9. 跨平台編碼原則（UTF-8 強制）
+
+Hook 不可依賴 locale codepage。Windows console 預設 cp950（Big5）/cp936（GBK），中文輸出與 subprocess 解碼會在該環境亂碼。每個 Hook 入口必須強制 UTF-8 I/O，subprocess 呼叫必須顯式指定 encoding。
+
+UV 單檔範本（PEP 723 + UTF-8 強制）：
+
+```python
+#!/usr/bin/env -S uv run --script --quiet
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+"""Hook 描述。"""
+import sys
+import json
+import subprocess
+
+
+def ensure_utf8_io() -> None:
+    """強制 stdin/stdout/stderr 使用 UTF-8（Python 3.11+ reconfigure）。"""
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
+def main() -> int:
+    ensure_utf8_io()  # 必須在 read_json_from_stdin 之前
+
+    payload = json.load(sys.stdin)
+
+    # subprocess 呼叫強制 utf-8 + errors='replace'
+    result = subprocess.run(
+        ["git", "log", "-1"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+關鍵點：
+
+| 項目 | 必要做法 |
+|------|---------|
+| stdin/stdout/stderr | 入口呼叫 `ensure_utf8_io()`（reconfigure 三 stream） |
+| subprocess.run / Popen | 顯式 `encoding="utf-8", errors="replace"` |
+| 檔案讀寫 | `open(..., encoding="utf-8")` 或 `Path.read_text(encoding="utf-8")` |
+| 路徑分隔符 | settings.json 中的 hook command 用 forward slash（`/`） |
+
+完整跨平台部署規範（含 shebang / CRLF / Windows 安裝）見 `.claude/methodologies/hook-system-methodology.md`「跨平台部署規範」章節。
+
 ---
 
 ## 常見陷阱
@@ -491,6 +548,7 @@ PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)
 | 不用官方環境變數 | 手動定位根目錄 | 用 `$CLAUDE_PROJECT_DIR` |
 | 缺少可觀察性 | 無日誌 | hook_utils 或手動 log |
 | Timeout 設定不當 | 預設不足/過長 | 依複雜度設定 |
+| Windows console 中文亂碼 | 未呼叫 `ensure_utf8_io()`；subprocess 未指定 `encoding` | 入口強制 UTF-8；subprocess 帶 `encoding="utf-8", errors="replace"`（詳見原則 9） |
 
 ---
 

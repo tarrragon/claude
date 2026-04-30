@@ -189,6 +189,20 @@ class LifecycleMessages:
         "（--yes-spawned flag 旁路）："
     )
 
+    # Cascade unblock 訊息（W11-002.3：父 complete 觸發子自動解鎖）
+    CASCADE_UNBLOCKED_HEADER = "[Cascade] 以下子 Ticket 已自動解鎖（blocked → pending）："
+    CASCADE_UNBLOCKED_ITEM = "   - {id}: {title}"
+
+    # 未完成 children 警告
+    CHILDREN_PENDING_WARNING_HEADER = "[Warning] 父 Ticket 完成時尚有未完成的子 Ticket："
+    CHILDREN_PENDING_WARNING_ITEM = "   - {id} [{status}]: {title}"
+    CHILDREN_PENDING_WARNING_HINT = (
+        "   （提示：父 complete 不阻止，但建議確認子任務是否需要獨立推進或 close）"
+    )
+
+    # Cascade save 失敗（§6.7 non-fail-fast）
+    CASCADE_SAVE_FAILED = "cascade 解鎖 {ticket_id} 儲存失敗：{error}"
+
 
 class ResumeMessages:
     """resume.py 相關訊息"""

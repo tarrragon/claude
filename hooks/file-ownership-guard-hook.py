@@ -26,7 +26,11 @@ from typing import Optional
 from hook_utils.hook_base import get_project_root
 from hook_utils.hook_logging import setup_hook_logging
 from hook_utils.hook_io import read_json_from_stdin
-from hook_utils.hook_ticket import parse_ticket_frontmatter, find_ticket_file
+from hook_utils.hook_ticket import (
+    parse_ticket_frontmatter,
+    find_ticket_file,
+    extract_where_files_from_frontmatter,
+)
 
 
 # ============================================================================
@@ -155,7 +159,8 @@ def _parse_ticket_files(
 ) -> list[str]:
     """從 Ticket frontmatter 提取並規範化 where.files
 
-    用於消除重複的 YAML where.files 解析邏輯。
+    W11-004.7.2：where.files 抽取邏輯統一委派 hook_utils.extract_where_files_from_frontmatter；
+    本函式僅保留路徑規範化（normalize_path）以維持原有跨檔比對行為。
 
     Args:
         frontmatter: 已解析的 Ticket frontmatter，或 None
@@ -164,21 +169,12 @@ def _parse_ticket_files(
     Returns:
         list[str]: 規範化後的檔案清單（空時返回 []）
     """
-    if not frontmatter:
+    raw_files = extract_where_files_from_frontmatter(frontmatter)
+    if not raw_files:
         return []
 
-    where_dict = frontmatter.get("where", {})
-    if isinstance(where_dict, dict):
-        where_files = where_dict.get("files", [])
-    else:
-        where_files = where_dict
-
-    # 確保列表格式
-    where_files = _ensure_file_list(where_files)
-
-    # 規範化路徑
-    normalized = [normalize_path(f) for f in where_files if f]
-    return [f for f in normalized if f]  # 過濾空字串
+    normalized = [normalize_path(f) for f in raw_files if f]
+    return [f for f in normalized if f]
 
 
 def _classify_conflict_type(
