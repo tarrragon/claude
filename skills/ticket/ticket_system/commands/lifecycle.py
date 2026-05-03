@@ -1228,18 +1228,88 @@ def _print_claim_checklist(ticket: Dict[str, Any]) -> None:
     print()
 
     # 附加簡化 WRAP 三問提示（Ticket 0.18.0-W10-028，來源 W10-027）
-    _print_claim_wrap_prompt(ticket_type)
+    _print_claim_wrap_prompt(ticket_type, ticket)
 
 
-def _print_claim_wrap_prompt(ticket_type: str) -> None:
+def _has_framework_path(ticket: Dict[str, Any]) -> bool:
+    """檢查 ticket where.files 是否任一路徑命中 framework 路徑前綴。
+
+    [Ticket 0.18.0-W17-127.2] 改用 .claude/hooks/lib/framework_paths 為唯一 SSOT，
+    移除原 _FRAMEWORK_PATH_PREFIXES inline 清單（避免 SSOT 漂移）。
+    [Ticket 0.18.0-W17-132] 改用 is_framework_path_broad（strict + .claude/hooks/）：
+    hook 內警告訊息屬規範性產物，編輯時亦應觸發 S 問提示讀 SKILL。
+    若 lib 不可用（隔離測試環境）則 fallback 至既有前綴清單以維持向後相容。
+    """
+    where = ticket.get("where") or {}
+    files = where.get("files") or []
+    if not isinstance(files, list):
+        return False
+
+    is_fw = _resolve_framework_path_checker()
+    for path in files:
+        if not isinstance(path, str):
+            continue
+        if is_fw(path):
+            return True
+    return False
+
+
+def _resolve_framework_path_checker():
+    """取得 framework path 判定函式（lib SSOT 為主，fallback 至 inline 前綴）。
+
+    Lazy import：避免 lifecycle 模組於非 hook 環境（如純 ticket CLI 單元測試）
+    強依賴 hooks/lib 與 PyYAML。失敗時降級至 inline 前綴比對，保留既有行為。
+    """
+    try:
+        # 將 .claude/hooks/ 加入 sys.path（從專案根目錄推導）
+        # lifecycle.py: .claude/skills/ticket/ticket_system/commands/lifecycle.py
+        # → 上溯 5 層至 .claude/，再進 hooks/
+        claude_dir = Path(__file__).resolve().parents[4]
+        hooks_dir = claude_dir / "hooks"
+        if str(hooks_dir) not in sys.path:
+            sys.path.insert(0, str(hooks_dir))
+        from lib import framework_paths  # noqa: WPS433
+        return framework_paths.is_framework_path_broad
+    except Exception:  # noqa: BLE001 — 任何 import 失敗皆 fallback
+        return _fallback_is_framework_path
+
+
+# Fallback 前綴清單（與 .claude/config/framework-paths.yaml 的 framework_paths_broad 對齊）
+# 僅在 lib.framework_paths 不可用時使用；正常路徑由 lib SSOT 負責。
+# [Ticket 0.18.0-W17-132] 加入 .claude/hooks/ 對齊 broad 範圍。
+_FALLBACK_FRAMEWORK_PREFIXES = (
+    ".claude/rules/",
+    ".claude/pm-rules/",
+    ".claude/references/",
+    ".claude/skills/",
+    ".claude/methodologies/",
+    ".claude/agents/",
+    ".claude/error-patterns/",
+    ".claude/hooks/",
+)
+
+
+def _fallback_is_framework_path(path: str) -> bool:
+    """lib.framework_paths 不可用時的降級判定。"""
+    if not isinstance(path, str) or not path:
+        return False
+    return any(path.startswith(p) for p in _FALLBACK_FRAMEWORK_PREFIXES)
+
+
+def _print_claim_wrap_prompt(
+    ticket_type: str,
+    ticket: Optional[Dict[str, Any]] = None,
+) -> None:
     """
     印出認領時的簡化 WRAP 三問提示。
 
     所有 ticket 類型共用三問區段；ANA 類型額外附加完整 /wrap-decision 提示。
-    來源：Ticket 0.18.0-W10-027（ANA 分析結論）。
+    type=IMP 且 where.files 含 framework 路徑時額外附加 S 問（SKILL trigger）。
+    來源：Ticket 0.18.0-W10-027（ANA 分析結論）、0.18.0-W17-125（S 問擴增）。
 
     Args:
         ticket_type: Ticket 類型（IMP/ANA/DOC 等），用於條件式輸出與文案格式化
+        ticket: 完整 ticket dict（用於 S 問 framework 路徑偵測，向後相容可為 None）
     """
     _print_stage_separator(ClaimWrapMessages.WRAP_SECTION_TITLE)
     print()
@@ -1253,6 +1323,12 @@ def _print_claim_wrap_prompt(ticket_type: str) -> None:
     print()
     print(ClaimWrapMessages.WRAP_APPLIES_TO.format(ticket_type=ticket_type))
     print()
+
+    # S 問（SKILL trigger）：type=IMP 且涉及 framework 路徑
+    # [Ticket 0.18.0-W17-125] 來源 W17-122 Solution Layer B
+    if ticket_type == "IMP" and ticket is not None and _has_framework_path(ticket):
+        print(ClaimWrapMessages.WRAP_SKILL_TRIGGER)
+        print()
 
     if ticket_type == "ANA":
         print(ClaimWrapMessages.ANA_REALITY_TEST)

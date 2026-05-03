@@ -1,0 +1,19 @@
+# skill-trigger-strict.yaml — framework-rule-edit-skill-trigger-hook 強制模式開關
+#
+# 來源：Ticket 0.18.0-W17-127.2（W17-122 ANA Solution Layer A 落地）
+#
+# 用途：
+#   控制 framework-rule-edit-skill-trigger-hook 在 transcript 未含
+#   `Skill compositional-writing` 呼叫紀錄時的行為。
+#
+# 預設 false（exit 0 警告）的理由（W17-122 ginger ROI 警示）：
+#   - 預估每日觸發 15-40 次（v0.18.x framework 編輯爆量期）
+#   - exit 2 強制模式下誤擋 typo / 純格式調整會引發 PC-066 mode（PM 累積 --skip）
+#   - 先以警告蒐集 1 週案例後，再評估是否切 strict
+#
+# 切換到 strict 模式的建議條件：
+#   - 已有 1 週 dry-run 數據顯示誤擋率低於 10%
+#   - PM 與代理人對警告訊息有穩定共識（豁免理由可預測）
+#   - 已有對應的 --skip 紀錄機制可追蹤豁免次數
+
+strict: false

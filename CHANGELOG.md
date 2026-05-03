@@ -1,3 +1,24 @@
+## [1.30.0] - 2026-05-04
+
+### Summary
+feat: commit-msg Layer 2 marker check hook 補事後維度防護; feat: framework-rule-edit-skill-trigger-hook + lifecycle.py 改用 framework_paths SSOT; feat: 擴增 claim WRAP 三問新增 S 問（framework 路徑提示） (+8 more)
+
+Changes: 3 feat, 2 refactor, 4 docs, 2 chore
+
+- feat: commit-msg Layer 2 marker check hook 補事後維度防護
+- feat: framework-rule-edit-skill-trigger-hook + lifecycle.py 改用 framework_paths SSOT
+- feat: 擴增 claim WRAP 三問新增 S 問（framework 路徑提示）
+- refactor: framework-paths SSOT 拆 strict/broad + lifecycle.py S 問改用 broad
+- refactor: 抽出 framework-paths.yaml SSOT + lib/framework_paths.py 共用模組
+- docs: 設計 Layer 1 自檢 prompt 模板
+- docs: agent-dispatch-template 新增 PM 自做 framework 規則編輯流程章節
+- docs: Layer 2 審查後微調規則 6 為機會成本語氣
+- docs: 新增 ai-communication-rules 規則 6 估時禁令條款
+- chore: 補正 hook 檔案執行權限為 755
+- chore: Layer 2 by basil-writing-critic — 吸納 3 P2 修正
+
+---
+
 ## [1.29.0] - 2026-05-03
 
 ### Summary

@@ -48,19 +48,17 @@ from hook_utils import (
     is_subagent_environment,
 )
 
+# W17-127.1：Layer 1 路徑改由 framework_paths SSOT 提供
+# （linux 視角 SSOT 警示：避免與 agent-dispatch-validation 雙寫漂移）
+from lib.framework_paths import get_layer1_paths, is_layer1_path as _is_layer1_path_lib
+
 # ============================================================================
 # 常數定義
 # ============================================================================
 
-# Layer 1 檔案路徑模式
-LAYER1_PATTERNS = [
-    ".claude/rules/core/",
-    ".claude/rules/flows/",
-    ".claude/rules/guides/",
-    ".claude/rules/forbidden/",
-    ".claude/skills/tdd/references/phase0/rules.md",
-    ".claude/skills/tdd/references/portable-tdd-standard.md",
-]
+# Layer 1 檔案路徑模式（向後相容性別名；實際來源為 .claude/config/framework-paths.yaml）
+# 既有測試 / 外部引用透過 LAYER1_PATTERNS 仍可運作；維護時請改 framework-paths.yaml。
+LAYER1_PATTERNS = get_layer1_paths()
 
 # Exit Code
 EXIT_SUCCESS = 0
@@ -138,6 +136,9 @@ def is_layer1_file(file_path: str, logger) -> bool:
     """
     判斷檔案是否為 Layer 1 規則檔
 
+    W17-127.1：實作改委派 lib.framework_paths.is_layer1_path（SSOT），
+    既有 substring + .md 結尾判定行為等價保留。
+
     Args:
         file_path: 檔案路徑
         logger: Logger 實例
@@ -146,12 +147,9 @@ def is_layer1_file(file_path: str, logger) -> bool:
         bool - 是否為 Layer 1 檔案
     """
     path_str = str(file_path)
-
-    for pattern in LAYER1_PATTERNS:
-        if pattern in path_str and path_str.endswith(".md"):
-            logger.debug(f"識別為 Layer 1 檔案: {path_str}")
-            return True
-
+    if _is_layer1_path_lib(path_str):
+        logger.debug(f"識別為 Layer 1 檔案: {path_str}")
+        return True
     logger.debug(f"非 Layer 1 檔案: {path_str}")
     return False
 

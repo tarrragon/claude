@@ -1,0 +1,79 @@
+# framework-paths.yaml — Framework Path SSOT
+#
+# 用途：集中管理 framework 規則層路徑分類，供多個 hook 共用，避免雙寫漂移
+#       （linux 視角 SSOT 警示，W17-122 ANA 採納）。
+#
+# 消費端：
+#   - .claude/hooks/lib/framework_paths.py（提供 is_framework_path 等共用函式）
+#   - .claude/hooks/layer-boundary-validator-hook.py（透過 lib 取 layer1_paths）
+#   - .claude/hooks/agent-dispatch-validation-hook.py（透過 lib 取 categories）
+#   - 後續 W17-127.2 skill-trigger-hook、W17-126 commit-msg Layer 2 hook
+#
+# 修改原則：
+#   - 新增 framework 規則類別 → 加入 categories 與對應 paths
+#   - 不要在消費端 hook 內 inline glob/regex（破壞 SSOT）
+#   - 變更後執行 .claude/hooks/tests/test_framework_paths.py 與相關 hook tests
+
+# Framework 路徑類別清單（用於 dispatch-validation _META_TASK_PATTERNS 等場景）
+# 對應正則 (rules|agents|hooks|pm-rules|skills|references|methodologies|error-patterns)
+categories:
+  - rules
+  - pm-rules
+  - references
+  - skills
+  - methodologies
+  - agents
+  - hooks
+  - error-patterns
+
+# Strict framework 路徑：規範性文字層（rules/methodology/skill/agent/error-patterns）
+# 消費端：
+#   - .claude/hooks/framework-rule-edit-skill-trigger-hook.py
+#     （PreToolUse Edit/Write 偵測「PM 編輯 framework 規範性文字」，hooks/ 不屬此範圍）
+# 別名：framework_paths（向後相容；既有消費端讀此 key 行為不變）
+framework_paths_strict: &framework_paths_strict
+  - .claude/rules/
+  - .claude/pm-rules/
+  - .claude/references/
+  - .claude/methodologies/
+  - .claude/agents/
+  - .claude/skills/  # 含 SKILL.md 與 references/*.md（W17-122 basil 視角警示）
+  - .claude/error-patterns/
+
+# 向後相容別名：W17-127.1 既有消費端（lib.is_framework_path / lib.get_framework_paths）讀此 key
+framework_paths: *framework_paths_strict
+
+# Broad framework 路徑：strict + .claude/hooks/
+# 消費端：
+#   - .claude/skills/ticket/ticket_system/commands/lifecycle.py 的 _has_framework_path
+#     （claim WRAP S 問觸發判定；hooks/ 內含警告訊息亦屬規範性產物，需提示讀 SKILL）
+# Why：lifecycle S 問範圍應比 PreToolUse 寬，因 hook 警告文字本身即規範性內容
+#      （W17-127.2 acceptance #4/#8 已明示），但 PreToolUse 不可對所有 hook Edit
+#      過度警告（cache invalidation 失準）。SSOT 內拆 strict/broad 兩 list 解此邊界差異。
+framework_paths_broad:
+  - .claude/rules/
+  - .claude/pm-rules/
+  - .claude/references/
+  - .claude/methodologies/
+  - .claude/agents/
+  - .claude/skills/
+  - .claude/error-patterns/
+  - .claude/hooks/
+
+# Layer 1 子集（layer-boundary-validator-hook 專用，narrower scope）
+# 不等同 framework_paths，僅含核心規則層
+layer1_paths:
+  - .claude/rules/core/
+  - .claude/rules/flows/
+  - .claude/rules/guides/
+  - .claude/rules/forbidden/
+  - .claude/skills/tdd/references/phase0/rules.md
+  - .claude/skills/tdd/references/portable-tdd-standard.md
+
+# 豁免路徑（即使匹配 framework_paths 也視為非 framework 編輯）
+# 用於避開測試檔、暫存檔、自動產出物
+exempt_paths:
+  - .claude/skills/**/tests/
+  - .claude/hooks/tests/
+  - .claude/hooks/__pycache__/
+  - .claude/hook-logs/

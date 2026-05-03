@@ -130,6 +130,37 @@ Ticket 路徑: docs/work-logs/v{version}/tickets/{ticket_id}.md
 
 ---
 
+## Layer 1 自檢
+
+代理人完成任務後、complete 前，執行 Layer 1 自律審查輪，攔截低階品質違規。
+
+### 觸發時機
+
+| 時機 | 動作 |
+|------|------|
+| IMP/ANA/DOC ticket 的 ticket body 填寫完畢後 | 依 `.claude/references/agent-self-check-template.md` 執行一輪掃描 |
+| 純機械任務（格式修正、路徑替換） | 可省略；需在 commit msg 標記「Layer 1 不適用 by 純格式修正」 |
+
+### 如何觸發
+
+PM 在派發 prompt 末段加入以下任一形式（詳見 `.claude/references/agent-dispatch-template.md` 的「Layer 1 自檢觸發指引」章節）：
+
+- **標準版**：「完成後 complete 前，依 agent-self-check-template 執行 Layer 1 自檢」
+- **精簡版**：「commit 前快速掃描禁用字和 emoji」
+
+### 自檢結果寫入位置
+
+| 自檢結論 | 寫入位置 |
+|---------|---------|
+| 發現違規（已修正） | Solution `### 自檢結果`：列出違規項目與處理方式 |
+| 零違規 | 可省略記錄；若有 Layer 2 委員審查需求時補寫 |
+
+### 與 Layer 2 委員的邊界
+
+Layer 1 寫入 `## Solution` 的子章節；Layer 2 委員報告寫入 `## Test Results`。兩者不重疊，PM 合併 ticket 時不會覆寫衝突。
+
+---
+
 ## 禁止行為
 
 | 禁止 | 原因 |
@@ -150,5 +181,7 @@ Ticket 路徑: docs/work-logs/v{version}/tickets/{ticket_id}.md
 
 ---
 
-**Last Updated**: 2026-04-08
-**Version**: 2.2.0 - 新增代理人中間進度更新規範
+**Last Updated**: 2026-05-04
+**Version**: 2.3.0 — 新增「Layer 1 自檢」章節（W17-061）：觸發時機表、觸發方式、寫入位置、與 Layer 2 委員的邊界分工
+
+**Version**: 2.2.0 — 新增代理人中間進度更新規範

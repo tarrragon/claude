@@ -735,6 +735,16 @@ class ClaimWrapMessages:
     # 適用範圍說明（以 {ticket_type} 格式化）
     WRAP_APPLIES_TO = "適用範圍：所有 ticket 強制；本 ticket 類型為 {ticket_type}。"
 
+    # S 問（SKILL trigger）—— framework 規則層 Edit 提示（[Ticket 0.18.0-W17-125]）
+    # 觸發條件：type=IMP 且 where.files 任一路徑命中 framework 路徑前綴
+    WRAP_SKILL_TRIGGER = (
+        "  S（SKILL trigger）—— framework 規則層 Edit 提示\n"
+        "    本次 ticket where.files 含 framework 路徑（規則/方法論/skill/agent）。\n"
+        "    Trade-off：Read .claude/skills/compositional-writing/SKILL.md 約 2-3K token\n"
+        "    換取首次撰寫品質；跳過則事後 Layer 2 委員補修約 5-10K token。\n"
+        "    同 session 已 Read 過、或本次 Edit 屬純格式調整時可省略。"
+    )
+
     # ANA 類型專屬第四問（PC-063 防護 4/4）
     ANA_REALITY_TEST = (
         "  R（Reality Test）—— 真根因驗證了嗎？\n"

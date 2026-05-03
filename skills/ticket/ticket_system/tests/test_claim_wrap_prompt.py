@@ -119,6 +119,87 @@ class TestPrintClaimChecklistWrapSection:
         assert "IMP" in out
 
 
+class TestSkillTriggerQuestion:
+    """[Ticket 0.18.0-W17-125] S 問（SKILL trigger）測試 — framework 路徑提示"""
+
+    @staticmethod
+    def _capture_output(ticket: dict) -> str:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            _print_claim_checklist(ticket)
+        return buf.getvalue()
+
+    def test_skill_trigger_constant_exists(self):
+        assert hasattr(ClaimWrapMessages, "WRAP_SKILL_TRIGGER")
+        assert "SKILL trigger" in ClaimWrapMessages.WRAP_SKILL_TRIGGER
+        assert "framework" in ClaimWrapMessages.WRAP_SKILL_TRIGGER
+        assert "compositional-writing" in ClaimWrapMessages.WRAP_SKILL_TRIGGER
+
+    def test_imp_with_framework_path_includes_skill_trigger(self):
+        """case 1: IMP + where.files 含 framework 路徑 → 印 S 問"""
+        out = self._capture_output({
+            "id": "0.18.0-W17-125",
+            "type": "IMP",
+            "where": {"files": [".claude/rules/core/example.md"]},
+        })
+        assert "S（SKILL trigger）" in out
+        assert "compositional-writing" in out
+
+    def test_imp_without_framework_path_excludes_skill_trigger(self):
+        """case 2: IMP + where.files 不含 framework 路徑 → 不印 S 問"""
+        out = self._capture_output({
+            "id": "0.18.0-W17-125",
+            "type": "IMP",
+            "where": {"files": ["src/foo/bar.py"]},
+        })
+        assert "S（SKILL trigger）" not in out
+
+    def test_ana_with_framework_path_excludes_skill_trigger(self):
+        """case 3: ANA + where.files 含 framework 路徑 → 不印 S 問（避免與 ANA 額外 prompt 重複）"""
+        out = self._capture_output({
+            "id": "0.18.0-W17-125",
+            "type": "ANA",
+            "where": {"files": [".claude/rules/core/example.md"]},
+        })
+        assert "S（SKILL trigger）" not in out
+        # ANA 額外 prompt 仍應出現
+        assert "ANA 類型額外要求" in out
+
+    def test_doc_with_framework_path_excludes_skill_trigger(self):
+        """case 4: DOC + where.files 含 framework 路徑 → 不印 S 問（DOC 偏描述性）"""
+        out = self._capture_output({
+            "id": "0.18.0-W17-125",
+            "type": "DOC",
+            "where": {"files": [".claude/rules/core/example.md"]},
+        })
+        assert "S（SKILL trigger）" not in out
+
+    def test_imp_multiple_framework_prefixes(self):
+        """涵蓋多種 framework 路徑前綴"""
+        for prefix in [
+            ".claude/rules/",
+            ".claude/pm-rules/",
+            ".claude/references/",
+            ".claude/skills/",
+            ".claude/methodologies/",
+            ".claude/agents/",
+        ]:
+            out = self._capture_output({
+                "id": "0.18.0-W17-125",
+                "type": "IMP",
+                "where": {"files": [f"{prefix}sample.md"]},
+            })
+            assert "S（SKILL trigger）" in out, f"prefix {prefix} should trigger S"
+
+    def test_imp_missing_where_safe(self):
+        """where 欄位缺失或為 None 不應 crash"""
+        out = self._capture_output({
+            "id": "0.18.0-W17-125",
+            "type": "IMP",
+        })
+        assert "S（SKILL trigger）" not in out
+
+
 class TestNoHardcodedWrapTextInLifecycle:
     """確保 WRAP 三問文案來自 ClaimWrapMessages 而非 lifecycle.py 硬編碼"""
 

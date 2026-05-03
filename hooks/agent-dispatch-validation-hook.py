@@ -41,6 +41,9 @@ from hook_utils import (
     extract_where_files,
 )
 
+# W17-127.1：framework 類別清單改由 SSOT 提供（避免與 layer-boundary 雙寫漂移）
+from lib.framework_paths import get_categories as _get_framework_categories
+
 # 需要 worktree 隔離的實作代理人
 IMPLEMENTATION_AGENTS = frozenset({
     "parsley-flutter-developer",
@@ -569,14 +572,29 @@ def _is_path_token(text: str) -> bool:
 _TICKET_ID_PATTERN = re.compile(r"\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*")
 
 # Meta-task 宣告關鍵字（prompt 前 100 字元內出現任一即視為 meta-task）
-_META_TASK_PATTERNS = (
-    re.compile(r"修改\s*\.claude/(?:rules|agents|hooks|pm-rules|skills|references)/"),
-    re.compile(r"編輯\s*\.claude/(?:rules|agents|hooks|pm-rules|skills|references)/"),
-    re.compile(r"編輯規則文件"),
-    re.compile(r"修改規則文件"),
-    re.compile(r"更新\s*FORBIDDEN_KEYWORD_MAP"),
-    re.compile(r"新增\s*FORBIDDEN_KEYWORD_MAP"),
-)
+# W17-127.1：類別清單改由 SSOT framework-paths.yaml 提供
+def _build_meta_task_patterns() -> Tuple[re.Pattern, ...]:
+    """從 framework_paths SSOT 動態組裝 meta-task patterns。
+
+    保留既有行為：類別字串以 `|` 串接成 alternation group，與 inline 版本等價。
+    為向後相容，若 SSOT 載入失敗（空清單）則退回 hardcoded 預設集。
+    """
+    categories = _get_framework_categories()
+    if not categories:
+        # 保守降級：SSOT 不可用時用既有預設類別
+        categories = ["rules", "agents", "hooks", "pm-rules", "skills", "references"]
+    cat_alt = "|".join(re.escape(c) for c in categories)
+    return (
+        re.compile(rf"修改\s*\.claude/(?:{cat_alt})/"),
+        re.compile(rf"編輯\s*\.claude/(?:{cat_alt})/"),
+        re.compile(r"編輯規則文件"),
+        re.compile(r"修改規則文件"),
+        re.compile(r"更新\s*FORBIDDEN_KEYWORD_MAP"),
+        re.compile(r"新增\s*FORBIDDEN_KEYWORD_MAP"),
+    )
+
+
+_META_TASK_PATTERNS = _build_meta_task_patterns()
 
 
 def _is_quoted_match(prompt: str, start: int, end: int) -> Tuple[bool, str]:

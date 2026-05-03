@@ -127,6 +127,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/file-type-permission-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/framework-rule-edit-skill-trigger-hook.py"
           }
         ]
       },
@@ -152,6 +156,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/skills/strategic-compact/suggest-compact.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/framework-rule-edit-skill-trigger-hook.py"
           }
         ]
       },
@@ -337,6 +345,11 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-git-commit-hook.py",
             "timeout": 10000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/commit-msg-layer2-marker-check-hook.py",
+            "timeout": 5000
           },
           {
             "type": "command",
