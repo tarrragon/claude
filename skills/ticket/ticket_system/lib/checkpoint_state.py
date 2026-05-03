@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, NamedTuple, Optional, Tuple, TypeVar
 
 from .paths import get_project_root
+from .constants import TERMINAL_STATUSES
 
 
 # CheckpointCaller：caller 欄位型別約束（TD6 / 017.8.4）。
@@ -424,7 +425,7 @@ def _read_dispatch_active(
     active_count = sum(
         1
         for d in dispatches
-        if isinstance(d, dict) and d.get("status") != "completed"
+        if isinstance(d, dict) and d.get("status") not in TERMINAL_STATUSES
     )
     return active_count, data
 

@@ -11,17 +11,22 @@ if __name__ == "__main__":
 
 
 import argparse
+import dataclasses
 import json
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+import yaml
 
 from ticket_system.lib.constants import (
     STATUS_IN_PROGRESS,
     STATUS_COMPLETED,
     STATUS_PENDING,
     STATUS_BLOCKED,
+    TERMINAL_STATUSES,
     HANDOFF_DIR,
     HANDOFF_PENDING_SUBDIR,
     HANDOFF_ARCHIVE_SUBDIR,
@@ -180,7 +185,7 @@ def _verify_handoff_dependencies(ticket: Dict[str, Any], ticket_id: str, version
         dep_ticket = load_ticket(dep_version, dep_id)
         if not dep_ticket:
             incomplete_deps.append(f"{dep_id} (未找到)")
-        elif dep_ticket.get("status") != STATUS_COMPLETED:
+        elif dep_ticket.get("status") not in TERMINAL_STATUSES:
             incomplete_deps.append(f"{dep_id} (狀態：{dep_ticket.get('status')})")
 
     # 若有未完成的依賴，輸出錯誤訊息
@@ -446,6 +451,7 @@ def _create_handoff_file_internal(ticket: Dict[str, Any], direction: str) -> int
         "what": ticket.get("what"),
         "chain": ticket.get("chain", {}),
         "resumed_at": None,  # 未接手時為 None，resume 時更新
+        "exit_status": _extract_exit_status_for_handoff(ticket),
     }
 
     try:
@@ -739,7 +745,7 @@ def _print_dict_sibling(ticket_id: str, sibling_item: dict) -> None:
     """
     if sibling_item.get("id") == ticket_id:
         return
-    if sibling_item.get("status") != STATUS_COMPLETED:
+    if sibling_item.get("status") not in TERMINAL_STATUSES:
         print(format_msg(
             HandoffMessages.STATUS_USE_TO_SIBLING,
             ticket_id=ticket_id,
@@ -763,7 +769,7 @@ def _print_string_sibling(
     if sibling_id == ticket_id:
         return
     sibling_ticket = load_ticket(version, sibling_id)
-    if sibling_ticket and sibling_ticket.get("status") != STATUS_COMPLETED:
+    if sibling_ticket and sibling_ticket.get("status") not in TERMINAL_STATUSES:
         print(format_msg(
             HandoffMessages.STATUS_USE_TO_SIBLING,
             ticket_id=ticket_id,
@@ -1113,6 +1119,132 @@ def _print_auto_runqueue_hint(version: str) -> None:
         print(_AUTO_RUNQUEUE_EMPTY_MESSAGE)
 
 
+def _extract_context_bundle_for_handoff(
+    ticket: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """
+    為 handoff --auto 抽取 Context Bundle 並序列化為 JSON 可存的 dict。
+
+    呼叫 W17-002 既有 extract_context_bundle()，將 ExtractResult 透過
+    dataclasses.asdict 序列化。抽取失敗時降級為 warning（stderr），
+    回傳 None 不阻擋 handoff 主流程（W17-031 盲區 B 設計）。
+
+    Args:
+        ticket: 已載入的 ticket dict（frontmatter）
+
+    Returns:
+        dict（成功）或 None（抽取失敗 / 模組不可用 / 其它例外）
+    """
+    try:
+        from ticket_system.lib.context_bundle_extractor import (
+            extract_context_bundle,
+        )
+    except Exception as exc:  # pragma: no cover - 防禦性
+        print(
+            format_warning(
+                f"Context Bundle 抽取器不可用，handoff 不附 context_bundle：{exc}"
+            ),
+            file=sys.stderr,
+        )
+        return None
+
+    try:
+        result = extract_context_bundle(ticket)
+        return dataclasses.asdict(result)
+    except Exception as exc:
+        # Non-raising 設計下不應到此；保留 fail-safe 確保 handoff 主流程不中斷。
+        print(
+            format_warning(
+                f"Context Bundle 抽取失敗，handoff 不附 context_bundle：{exc}"
+            ),
+            file=sys.stderr,
+        )
+        return None
+
+
+# Exit Status H2 section 抽取正則：匹配 `## Exit Status` 到下一個 `## ` 或檔尾。
+# 與 context_bundle_extractor._read_section_body 同模式。
+_EXIT_STATUS_SECTION_RE = re.compile(
+    r"##\s+Exit Status\s*\n(.*?)(?=^## |\Z)",
+    flags=re.MULTILINE | re.DOTALL,
+)
+
+# 匹配 ```yaml ... ``` 或 ``` ... ``` fenced code block（取首個）。
+_YAML_FENCE_RE = re.compile(
+    r"```(?:yaml)?\s*\n(.*?)```",
+    flags=re.DOTALL,
+)
+
+# 匹配 HTML 註解，用於剝離 schema 樣板註解區。
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", flags=re.DOTALL)
+
+_VALID_EXIT_STATUSES = {
+    "success",
+    "needs_context",
+    "blocked",
+    "partial_success",
+    "failed",
+}
+
+
+def _extract_exit_status_for_handoff(
+    ticket: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """為 handoff JSON 抽取 ticket body 的 Exit Status YAML（W17-031.6）。
+
+    讀 ticket _body 的 `## Exit Status` H2 section，剝除 HTML 註解（樣板）後
+    解析其 YAML 區塊（fenced ```yaml 優先，否則整段視為 YAML），回傳含
+    status 子欄位的 dict 供 runqueue / hook 使用。
+
+    Fail-open：缺段 / YAML 解析失敗 / status 非合法枚舉 → 回 None + stderr
+    warning，不阻擋 handoff 主流程。
+
+    Args:
+        ticket: 已載入的 ticket dict（需含 _body 欄位）
+
+    Returns:
+        dict（含 status 等子欄位）或 None
+    """
+    body = ticket.get("_body") if isinstance(ticket, dict) else None
+    if not isinstance(body, str) or not body:
+        return None
+
+    section_match = _EXIT_STATUS_SECTION_RE.search(body)
+    if not section_match:
+        return None  # 缺段：靜默回 None（樣板可能未渲染 H2，常見且非錯誤）
+
+    section = section_match.group(1)
+    # 剝除 HTML 註解（包含 schema 樣板說明）
+    cleaned = _HTML_COMMENT_RE.sub("", section).strip()
+    if not cleaned:
+        return None  # 段落只剩樣板註解
+
+    # 優先取 fenced YAML 區塊
+    fence_match = _YAML_FENCE_RE.search(cleaned)
+    yaml_text = fence_match.group(1) if fence_match else cleaned
+
+    try:
+        parsed = yaml.safe_load(yaml_text)
+    except yaml.YAMLError as exc:
+        print(
+            format_warning(
+                f"Exit Status YAML 解析失敗，handoff 不附 exit_status：{exc}"
+            ),
+            file=sys.stderr,
+        )
+        return None
+
+    if not isinstance(parsed, dict):
+        return None
+
+    status = parsed.get("status")
+    if not isinstance(status, str) or status not in _VALID_EXIT_STATUSES:
+        # status 缺失或非合法枚舉：仍回 None（runqueue tag 設計依賴 status 合法性）
+        return None
+
+    return parsed
+
+
 def _execute_auto_handoff(args: argparse.Namespace) -> int:
     """
     執行 --auto 模式 handoff。
@@ -1192,6 +1324,8 @@ def _execute_auto_handoff(args: argparse.Namespace) -> int:
         "chain": ticket.get("chain", {}),
         "resumed_at": None,
         "auto_generated": True,
+        "context_bundle": _extract_context_bundle_for_handoff(ticket),
+        "exit_status": _extract_exit_status_for_handoff(ticket),
     }
 
     try:

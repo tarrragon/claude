@@ -145,7 +145,9 @@ If blocked, report Exit Status without touching sibling scope.
 Ticket: {id}
 
 {agent-name}: Update the group/coordinator ticket only.
-Use the dispatch-plan table to track children/spawned tickets.
+Use the dispatch-plan table to track children (功能拆分 / ANA 落地，PC-091 路線)
+and spawned tickets (執行中發現獨立技術債，PC-073 殘存範圍).
+血緣 vs 衍生語意參考 .claude/skills/ticket/references/field-semantics.md
 Do not implement child scope or batch-dispatch agents.
 Record blockers, deps, and next runnable ticket IDs.
 ```

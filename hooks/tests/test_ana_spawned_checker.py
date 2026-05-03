@@ -1,6 +1,19 @@
 """
 ANA Spawned Checker - spawned_tickets 狀態檢查測試（W12-004 Phase 1）
 
+[DEPRECATED — W17-120.2 / PC-091]
+====================================================================
+本檔案測試的功能（check_spawned_tickets_status / blocking）已退場。
+
+PC-091 路線：ANA 落地統一用 children；spawned_tickets 對 ANA 為弱
+metadata 不阻擋父 complete。acceptance-gate-hook 已移除對應呼叫。
+
+整檔 testcase skip。新的 ANA 雙路徑收斂回歸測試見：
+  .claude/hooks/tests/test_acceptance_gate_hook.py（情境 9）
+
+詳見父 ANA 0.18.0-W17-120 與 IMP 0.18.0-W17-120.2。
+====================================================================
+
 測試 check_spawned_tickets_status 的行為：spawned 任一非 terminal 時產生警告。
 
 對應 Ticket 0.18.0-W12-004 AC：
@@ -15,6 +28,10 @@ import logging
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.skip(
+    reason="W17-120.2 / PC-091: ana_spawned_checker 退場，ANA complete 改由 children_checker 判斷"
+)
 
 # 將 .claude/hooks 加入 sys.path，讓測試能 import acceptance_checkers
 _hooks_dir = Path(__file__).parent.parent

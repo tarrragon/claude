@@ -207,7 +207,7 @@ def _format_missing_warning(ticket_id: str, field_key: str, allowed: List[str]) 
 def _format_invalid_value_warning(
     ticket_id: str, field_key: str, value: str, allowed: List[str]
 ) -> str:
-    return (
+    base = (
         f"[WARNING] Acceptance Gate: ANA Ticket {field_key} 值非法\n"
         f"\n"
         f"Ticket: {ticket_id}\n"
@@ -216,6 +216,18 @@ def _format_invalid_value_warning(
         f"\n"
         f"Schema 來源：.claude/config/ana-solution-schema.yaml"
     )
+    # nested YAML 結構誤用偵測（PC-117 / W17-111）
+    # 當 value 含冒號時，極可能是 PM 寫成 nested YAML（例：multi_view_status:\n  status: skipped）
+    # 而 _parse_field 將子欄位拼接為 "status: skipped" 形式回傳
+    if ":" in value:
+        base += (
+            f"\n\n[偵測到值含冒號]\n"
+            f"可能誤用 nested YAML 結構（例：{field_key}: 換行接 status: skipped）。\n"
+            f"schema 要求 flat 格式，正確寫法：\n"
+            f"  {field_key}: skipped\n"
+            f"  reason: <跳過理由>"
+        )
+    return base
 
 
 def _format_missing_subfields_warning(

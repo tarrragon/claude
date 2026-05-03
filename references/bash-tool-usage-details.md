@@ -201,7 +201,7 @@ PM 歷史上多次繞 `/tmp` 寫中介檔（PC-087），根因是**誤以為 her
 
 - macOS ARG_MAX = 1,048,576 bytes（1 MB）
 - Linux ARG_MAX 通常 ≥ 2 MB
-- 單次 `ticket track append-log --content "$(cat <<'EOF' ... EOF)"` 可安全傳遞 800 KB+ 純文字
+- 單次 `ticket track append-log <id> "$(cat <<'EOF' ... EOF)" --section "..."` 可安全傳遞 800 KB+ 純文字
 - 80 行密集中文 markdown 約 3-8 KB，完全在容量內
 
 **為何 PM 仍繞 /tmp**：
@@ -212,7 +212,7 @@ PM 歷史上多次繞 `/tmp` 寫中介檔（PC-087），根因是**誤以為 her
 ### 正確模式範例
 
 ```bash
-ticket track append-log 0.18.0-W15-007 --section Solution --content "$(cat <<'EOF'
+ticket track append-log 0.18.0-W15-007 "$(cat <<'EOF'
 ## Solution
 
 實作摘要：
@@ -221,7 +221,7 @@ ticket track append-log 0.18.0-W15-007 --section Solution --content "$(cat <<'EO
 3. details.md 補心理障礙破除段
 4. auto-memory 雙通道建立
 EOF
-)"
+)" --section Solution
 ```
 
 quoted delimiter (`'EOF'`) 禁用變數展開與 command substitution，內容原樣傳入，安全於 backtick 與 `$var`。

@@ -31,6 +31,7 @@ from ticket_system.lib.ticket_validator import (
     validate_blocked_by,
 )
 from ticket_system.lib.messages import (
+    ErrorEnvelope,
     ErrorMessages,
     WarningMessages,
     InfoMessages,
@@ -102,10 +103,12 @@ def _validate_blocked_by_references(
     for bid in blocked_by:
         blocked_ticket = load_ticket(version, bid)
         if blocked_ticket is None:
-            print(format_error(
-                CreateMessages.BLOCKED_BY_NOT_FOUND,
-                bid=bid
-            ))
+            print(format_error(ErrorEnvelope(
+                component="create",
+                action="validate_blocked_by",
+                errno="BLOCKED_BY_NOT_FOUND",
+                hint=f"找不到依賴的 Ticket: {bid}（請確認 ID 正確且已建立）",
+            )))
             return False
 
     # 驗證 2：blockedBy 循環依賴檢測
@@ -116,7 +119,12 @@ def _validate_blocked_by_references(
         all_tickets
     )
     if not valid and cycle_msg:
-        print(format_error(cycle_msg))
+        print(format_error(ErrorEnvelope(
+            component="create",
+            action="validate_blocked_by",
+            errno="BLOCKED_BY_CYCLE",
+            hint=cycle_msg,
+        )))
         return False
 
     return True
@@ -143,10 +151,12 @@ def _validate_decision_tree_params(
     params = [(entry, "entry_point"), (decision, "final_decision"), (rationale, "rationale")]
     for value, name in params:
         if value == "":  # 空字串值
-            print(format_error(
-                CreateMessages.DECISION_TREE_EMPTY_VALUE,
-                field_name=name
-            ))
+            print(format_error(ErrorEnvelope(
+                component="create",
+                action="validate_decision_tree",
+                errno="DECISION_TREE_EMPTY_VALUE",
+                hint=f"欄位 {name} 不可為空字串",
+            )))
             return False
     return True
 
@@ -196,7 +206,12 @@ def _build_decision_tree_path(
         if is_exempted:
             return None
         else:
-            print(format_error(CreateMessages.DECISION_TREE_MISSING_ALL))
+            print(format_error(ErrorEnvelope(
+                component="create",
+                action="build_decision_tree",
+                errno="DECISION_TREE_MISSING_ALL",
+                hint="非子任務且非 DOC 類型必須提供 --decision-tree-entry/--decision-tree-decision/--decision-tree-rationale 三參數",
+            )))
             raise ValueError("決策樹參數缺失")
 
     if provided_count == 3:
@@ -211,7 +226,12 @@ def _build_decision_tree_path(
 
     # 部分參數 - 全部拒絕
     if is_exempted:
-        print(format_error(CreateMessages.EXEMPTED_PARTIAL_PARAMS_ERROR))
+        print(format_error(ErrorEnvelope(
+            component="create",
+            action="build_decision_tree",
+            errno="EXEMPTED_PARTIAL_PARAMS",
+            hint="子任務或 DOC 類型可豁免 decision-tree 參數，但若提供必須三參數齊備",
+        )))
     else:
         missing_fields = []
         if entry is None:
@@ -220,10 +240,12 @@ def _build_decision_tree_path(
             missing_fields.append("final_decision")
         if rationale is None:
             missing_fields.append("rationale")
-        print(format_error(
-            CreateMessages.DECISION_TREE_MISSING_PARTIAL,
-            missing_fields=", ".join(missing_fields)
-        ))
+        print(format_error(ErrorEnvelope(
+            component="create",
+            action="build_decision_tree",
+            errno="DECISION_TREE_MISSING_PARTIAL",
+            hint=f"缺少欄位: {', '.join(missing_fields)}（三參數必須齊備）",
+        )))
     raise ValueError("決策樹參數不完整")
 
 
@@ -568,7 +590,12 @@ def _resolve_ticket_id_and_wave(args: argparse.Namespace, version: str) -> Optio
     else:
         # 建立根任務 ID
         if not wave:
-            print(format_error(ErrorMessages.MISSING_WAVE_PARAMETER))
+            print(format_error(ErrorEnvelope(
+                component="create",
+                action="resolve_ticket_id",
+                errno="MISSING_WAVE_PARAMETER",
+                hint="建立根任務必須提供 --wave 參數（子任務則用 --parent 自動繼承 wave）",
+            )))
             return None
 
         seq = get_next_seq(version, wave) if args.seq is None else args.seq
@@ -576,7 +603,12 @@ def _resolve_ticket_id_and_wave(args: argparse.Namespace, version: str) -> Optio
 
     # 驗證 Ticket ID
     if not validate_ticket_id(ticket_id):
-        print(format_error(ErrorMessages.INVALID_TICKET_ID_FORMAT, ticket_id=ticket_id))
+        print(format_error(ErrorEnvelope(
+            component="create",
+            action="resolve_ticket_id",
+            errno="INVALID_TICKET_ID_FORMAT",
+            hint=f"Ticket ID 格式無效: {ticket_id}（預期: <version>-W<wave>-<seq>）",
+        )))
         return None
 
     return (version, ticket_id, wave)
@@ -644,8 +676,12 @@ def _parse_cli_args_to_config(
     # PC-018: why 必填驗證（DOC 類型豁免）
     why_value = args.why or (parent_ticket.get("why") if parent_ticket else DEFAULT_UNDEFINED_VALUE)
     if why_value == DEFAULT_UNDEFINED_VALUE and ticket_type != "DOC":
-        print(f"[ERROR] --why 為必填欄位（type={ticket_type}）。請提供需求依據。", file=sys.stderr)
-        print("  範例: --why '匯出功能需支援 v2 格式'", file=sys.stderr)
+        sys.stderr.write(format_error(ErrorEnvelope(
+            component="create",
+            action="parse_cli_args",
+            errno="WHY_REQUIRED",
+            hint=f"--why 為必填欄位（type={ticket_type}）。範例: --why '匯出功能需支援 v2 格式'",
+        )) + "\n")
         sys.exit(1)
 
     return {
@@ -801,7 +837,12 @@ def _enforce_create_checklist(missing: List[str], force: bool) -> None:
 
     # 阻擋建立
     print()
-    print(format_error("Create 清單驗證失敗：以下欄位為必填（缺失將阻擋建立）"))
+    print(format_error(ErrorEnvelope(
+        component="create",
+        action="enforce_checklist",
+        errno="CHECKLIST_VALIDATION_FAILED",
+        hint=f"以下欄位為必填（缺失將阻擋建立）: {', '.join(missing)}",
+    )))
     for field in missing:
         print(f"  - {field}")
     print()
@@ -1025,31 +1066,42 @@ def _validate_source_ticket_arg(args: argparse.Namespace) -> bool:
 
     # 子步驟 1：互斥檢查（最先；測試 B4 的 ordering 斷言依此成立）
     if args.parent:
-        print(format_error(CreateMessages.SOURCE_PARENT_MUTUALLY_EXCLUSIVE))
+        print(format_error(ErrorEnvelope(
+            component="create",
+            action="validate_source_ticket",
+            errno="SOURCE_PARENT_MUTUALLY_EXCLUSIVE",
+            hint="--source-ticket 與 --parent 不可同時使用（前者為衍生關係，後者為父子關係）",
+        )))
         return False
 
     # 子步驟 2：ID 格式檢查（沿用 validate_ticket_id）
     if not validate_ticket_id(args.source_ticket):
-        print(format_error(
-            ErrorMessages.INVALID_TICKET_ID_FORMAT,
-            ticket_id=args.source_ticket,
-        ))
+        print(format_error(ErrorEnvelope(
+            component="create",
+            action="validate_source_ticket",
+            errno="INVALID_TICKET_ID_FORMAT",
+            hint=f"--source-ticket ID 格式無效: {args.source_ticket}",
+        )))
         return False
 
     # 子步驟 3：存在性檢查
     source_version = extract_version_from_ticket_id(args.source_ticket)
     if source_version is None:
-        print(format_error(
-            CreateMessages.SOURCE_TICKET_NOT_FOUND,
-            source_id=args.source_ticket,
-        ))
+        print(format_error(ErrorEnvelope(
+            component="create",
+            action="validate_source_ticket",
+            errno="SOURCE_TICKET_NOT_FOUND",
+            hint=f"無法從 ID 推斷版本: {args.source_ticket}",
+        )))
         return False
     source_ticket = load_ticket(source_version, args.source_ticket)
     if source_ticket is None:
-        print(format_error(
-            CreateMessages.SOURCE_TICKET_NOT_FOUND,
-            source_id=args.source_ticket,
-        ))
+        print(format_error(ErrorEnvelope(
+            component="create",
+            action="validate_source_ticket",
+            errno="SOURCE_TICKET_NOT_FOUND",
+            hint=f"找不到 source ticket: {args.source_ticket}（請確認 ID 正確且檔案存在）",
+        )))
         return False
 
     # 子步驟 4：狀態警告（allow + warning；不阻擋）
@@ -1111,14 +1163,24 @@ def execute(args: argparse.Namespace) -> int:
     """執行 create 命令 — 協調四個步驟"""
     version = resolve_version(args.version)
     if not version:
-        print(format_error(ErrorMessages.VERSION_NOT_DETECTED))
+        print(format_error(ErrorEnvelope(
+            component="create",
+            action="resolve_version",
+            errno="VERSION_NOT_DETECTED",
+            hint="無法自動偵測版本號，請使用 --version 明確指定（或確認 todolist.yaml 已設定 current_version）",
+        )))
         return 1
 
     # 驗證版本已在 todolist.yaml 中註冊
     from ticket_system.lib.version import validate_version_registered
     is_valid, error_msg = validate_version_registered(version)
     if not is_valid:
-        print(format_error(error_msg))
+        print(format_error(ErrorEnvelope(
+            component="create",
+            action="validate_version",
+            errno="VERSION_NOT_REGISTERED",
+            hint=error_msg,
+        )))
         return 1
 
     # Step 1: 解析版本和 Ticket ID

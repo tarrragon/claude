@@ -32,6 +32,8 @@ from ticket_system.lib.constants import (
     STATUS_IN_PROGRESS,
     STATUS_COMPLETED,
     STATUS_BLOCKED,
+    STATUS_CLOSED,
+    STATUS_SUPERSEDED,
 )
 from ticket_system.lib.ticket_loader import (
     get_ticket_path,
@@ -379,6 +381,8 @@ def execute_agent(args: argparse.Namespace, version: str) -> int:
         STATUS_IN_PROGRESS: [],
         STATUS_COMPLETED: [],
         STATUS_BLOCKED: [],
+        STATUS_CLOSED: [],
+        STATUS_SUPERSEDED: [],
     }
 
     for ticket in all_tickets:
@@ -402,7 +406,16 @@ def execute_agent(args: argparse.Namespace, version: str) -> int:
     in_progress_tickets = status_groups[STATUS_IN_PROGRESS]
     completed_tickets = status_groups[STATUS_COMPLETED]
     blocked_tickets = status_groups[STATUS_BLOCKED]
-    agent_tickets = pending_tickets + in_progress_tickets + completed_tickets + blocked_tickets
+    closed_tickets = status_groups[STATUS_CLOSED]
+    superseded_tickets = status_groups[STATUS_SUPERSEDED]
+    agent_tickets = (
+        pending_tickets
+        + in_progress_tickets
+        + completed_tickets
+        + blocked_tickets
+        + closed_tickets
+        + superseded_tickets
+    )
 
     # 顯示摘要
     print(format_info(AgentProgressMessages.AGENT_PROGRESS, agent_name=args.agent_name))

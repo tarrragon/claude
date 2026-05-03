@@ -43,6 +43,7 @@ from ticket_system.lib.constants import (
     STATUS_IN_PROGRESS,
     STATUS_COMPLETED,
     STATUS_BLOCKED,
+    TERMINAL_STATUSES,
     WORK_LOGS_DIR,
 )
 from ticket_system.lib.ticket_loader import (
@@ -222,7 +223,7 @@ def execute_query(args: argparse.Namespace, version: str) -> int:
                 incomplete_items.append(f"{sid} (not_found)")
                 continue
             sub_status = sub.get("status", "unknown")
-            if sub_status == STATUS_COMPLETED:
+            if sub_status in TERMINAL_STATUSES:
                 completed_ids.append(sid)
             else:
                 incomplete_items.append(f"{sid} (status={sub_status})")
@@ -503,7 +504,7 @@ def execute_full(args: argparse.Namespace, version: str) -> int:
 
 
 def execute_log(args: argparse.Namespace, version: str) -> int:
-    """顯示執行日誌區塊"""
+    """顯示執行日誌區塊；可選 --section 過濾單一區段"""
     ticket, error = load_and_validate_ticket(version, args.ticket_id)
     if error:
         return 1
@@ -516,6 +517,23 @@ def execute_log(args: argparse.Namespace, version: str) -> int:
 
     if not body:
         print(format_warning(WarningMessages.NO_BODY_CONTENT, ticket_id=args.ticket_id))
+        return 0
+
+    # W17-008.3: --section 過濾分支（W17-117.1: 統一抽至 section_locator helper）
+    section = getattr(args, "section", None)
+    if section:
+        from ticket_system.lib.section_locator import find_section
+        match = find_section(body, section)
+        if not match.found:
+            print(format_error(ErrorMessages.SECTION_NOT_FOUND, ticket_id=args.ticket_id, section=section))
+            if match.all_headers:
+                print(f"  該 ticket 現有 ## 標題：")
+                for header in match.all_headers:
+                    print(f"    - {header}")
+            else:
+                print(f"  該 ticket md 無任何 ## 標題")
+            return 1
+        print(match.text)
         return 0
 
     # 尋找 "# Execution Log" 區塊

@@ -98,7 +98,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 
 | 場景 | 錯誤做法 | 正確做法 |
 |------|---------|---------|
-| append-log 長 Solution | `Write /tmp/sol.md` → `Read` → `--content "$(cat /tmp/sol.md)"` | `ticket ... append-log ... --content "$(cat <<'EOF'\n...\nEOF\n)"` |
+| append-log 長 Solution | `Write /tmp/sol.md` → `Read` → `"$(cat /tmp/sol.md)"` | `ticket track append-log <id> "$(cat <<'EOF'\n...\nEOF\n)" --section "Solution"` |
 | Commit 訊息多段 | `echo > /tmp/msg` → `git commit -F /tmp/msg` | `git commit -m "$(cat <<'EOF'\n...\nEOF\n)"` |
 | ANA 結論傳 CLI | 中介 /tmp 檔 | heredoc 直傳 |
 

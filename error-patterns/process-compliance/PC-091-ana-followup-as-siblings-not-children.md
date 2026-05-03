@@ -12,13 +12,15 @@ related:
 
 # PC-091: ANA Ticket 落地下游用兄弟而非子任務（血緣斷裂）
 
+> **2026-05-03 升格**：W17-120 多視角審查共識——本規則為「ANA 落地下游關係選擇」**唯一權威**。PC-073 對 ANA 衍生 IMP 用 spawned 的指引已 deprecated，由本規則取代。權威語意彙總：`.claude/skills/ticket/references/field-semantics.md`。
+
 ## 問題描述
 
-PM 將 ANA Ticket 的「落地行動」（Solution 中提出的 IMP/DOC Ticket）建立為**兄弟 Ticket**（同 Wave 獨立編號），而非 ANA 的**子任務**（children），導致：
+PM 將 ANA Ticket 的「落地行動」（Solution 中提出的 IMP/DOC Ticket）建立為**兄弟 Ticket**（同 Wave 獨立編號）或**衍生 Ticket**（spawned_tickets），而非 ANA 的**子任務**（children），導致：
 
 1. 血緣關係斷裂：`tree` / `chain` 命令看不到 ANA → 落地的延伸鏈
 2. 編號語意誤導：W5-009（ANA）與 W5-043~046（落地）編號相距大，看似無關
-3. 誤用 spawned_tickets：把血緣關係（直系後代）誤當衍生關係（副產品/旁支）
+3. 概念混淆：把 ANA 結論的「落地責任」誤當「衍生副產品」
 
 ## 觸發案例
 
@@ -49,17 +51,19 @@ PM 沒使用 `--parent 0.18.0-W5-009` 參數。
 
 | 場景 | 血緣選擇 | 命令 |
 |------|---------|------|
-| ANA 結論的執行延伸（IMP/DOC 落地） | **children**（直系後代） | `--parent <ANA-id>` |
-| 執行 Ticket 過程中發現獨立 bug/技術債 | **spawned_tickets**（衍生副產品） | 建立後手動填入 |
-| 完全獨立的新需求 | **sibling**（同 Wave 獨立） | 不指定 parent |
+| **ANA 結論的執行延伸（IMP/DOC 落地）** | **children**（直系後代，唯一選項） | `--parent <ANA-ID>` |
+| 執行 Ticket 過程中發現獨立 bug / 技術債（與當前 ticket 無因果） | spawned_tickets（衍生副產品） | `--source-ticket <CURRENT-ID>` |
+| 完全獨立的新需求 | sibling（同 Wave 獨立） | 不指定 parent / source |
+
+> **重要**：ANA 落地不再有 spawned 選項。ANA 結論的 IMP/DOC 一律用 children（PC-091 路線）。spawned 保留給「執行 IMP / DOC 過程中發現獨立技術債」的場景（PC-073 殘存範圍）。
 
 ### 判別問題（建立 Ticket 前自問）
 
-> 這個 Ticket 的存在是因為「上游 Ticket 的結論要求」嗎？
+> 這個 Ticket 的存在是因為「上游 ANA Ticket 的結論要求落地」嗎？
 >
-> - 是 → children（用 `--parent`）
-> - 否，但發現於上游執行中 → spawned_tickets
-> - 否，是獨立發現/規劃 → sibling
+> - 是 → children（用 `--parent <ANA-ID>`）— 適用所有 ANA 衍生 IMP / DOC
+> - 否，但發現於執行中（與當前 ticket 無因果）→ spawned_tickets（用 `--source-ticket`）
+> - 否，是獨立發現 / 規劃 → sibling
 
 ## 補救措施（觸發案例）
 
@@ -79,6 +83,8 @@ PM 沒使用 `--parent 0.18.0-W5-009` 參數。
 
 ## 相關規則 / 經驗
 
+- `.claude/skills/ticket/references/field-semantics.md` — 六欄位語意 SSOT（含用戶情境對照表與決策樹）
+- PC-073 — `spawned_tickets` 對「執行中發現獨立技術債」的殘存指引（ANA 衍生段落已 deprecated）
 - PC-040 — Context 存 Ticket 不存 Prompt（Ticket Context Bundle）
 - PC-058 — ANA created Ticket metadata drift（ANA 建立的 Ticket 派發前必查 metadata）
 - ticket SKILL.md — `--parent` 參數說明
@@ -86,4 +92,6 @@ PM 沒使用 `--parent 0.18.0-W5-009` 參數。
 
 ---
 
-**Last Updated**: 2026-04-18
+**Last Updated**: 2026-05-03
+**Version**: 1.1.0 — W17-120 多視角審查升格為 ANA 落地唯一權威，PC-073 對 ANA 衍生 IMP 的指引已併入 deprecated；範圍確立、引用 field-semantics.md SSOT
+**Version**: 1.0.0 — 2026-04-18 W5-009 觸發案例首發

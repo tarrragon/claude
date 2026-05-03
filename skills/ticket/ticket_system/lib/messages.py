@@ -5,7 +5,17 @@
 
 消除訊息硬編碼，提供一致的訊息格式和內容。
 """
+import argparse
+import re
+import sys
+from dataclasses import dataclass
+from typing import Optional, Union
+
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
+
+# 結構化錯誤封包版本標記
+# 為 hook 提供穩定錨點：偵測到此標記即視為已套用統一格式，跳過重複補充
+ERROR_ENVELOPE_VERSION_MARKER = "__error_envelope_v1__"
 # 防止直接執行此模組
 if __name__ == "__main__":
     import sys
@@ -230,30 +240,92 @@ class ModuleMessages:
     SEE_DOCS = "詳見 SKILL.md"
 
 
-def format_error(template: str, **kwargs) -> str:
+@dataclass(frozen=True)
+class ErrorEnvelope:
     """
-    格式化錯誤訊息。
+    結構化錯誤封包（W17-008.5.2）。
 
-    使用 Python 內建的 str.format() 方法，將 {} 佔位符替換為實際參數。
-    所有錯誤訊息應該使用 ErrorMessages 類別中的常數作為 template。
+    將錯誤訊息從純文字升級為四元組結構，便於：
+    - CLI 統一輸出格式（component / action / errno / hint）
+    - Hook 偵測標記跳過重複補充（透過 ERROR_ENVELOPE_VERSION_MARKER）
+    - 後續 .5.3-.5.5 child ticket 共用呼叫基礎
 
-    Args:
-        template: 訊息模板字串，包含 {} 佔位符用於參數替換
-        **kwargs: 格式化參數（鍵必須與 template 中的佔位符相符）
-
-    Returns:
-        str: 格式化後的錯誤訊息（含 [Error] 前綴）
-
-    Raises:
-        KeyError: 若 kwargs 缺少 template 所需的參數
+    Attributes:
+        component: CLI 子命令或模組名稱（如 "track", "lifecycle"）
+        action: 操作動詞（如 "claim", "complete", "validate"）
+        errno: 錯誤分類代碼（如 "TICKET_NOT_FOUND", "INVALID_FORMAT"）
+        hint: 修復建議（可選；若提供則附在輸出末尾）
 
     Examples:
+        >>> env = ErrorEnvelope(
+        ...     component="track",
+        ...     action="claim",
+        ...     errno="TICKET_NOT_FOUND",
+        ...     hint="執行 ticket track list 確認可用 ID",
+        ... )
+        >>> "track" in format_error(env) and "TICKET_NOT_FOUND" in format_error(env)
+        True
+    """
+
+    component: str
+    action: str
+    errno: str
+    hint: Optional[str] = None
+
+
+def _render_envelope(envelope: ErrorEnvelope) -> str:
+    """將 ErrorEnvelope 渲染為含版本標記的統一格式字串。"""
+    lines = [
+        f"[Error] {ERROR_ENVELOPE_VERSION_MARKER}",
+        f"  component: {envelope.component}",
+        f"  action: {envelope.action}",
+        f"  errno: {envelope.errno}",
+    ]
+    if envelope.hint:
+        lines.append(f"  hint: {envelope.hint}")
+    return "\n".join(lines)
+
+
+def format_error(template: Union[str, ErrorEnvelope], **kwargs) -> str:
+    """
+    格式化錯誤訊息（雙路徑：legacy str template / structured envelope）。
+
+    路徑分發以 isinstance 判斷：
+    - ErrorEnvelope：渲染為含版本標記的結構化格式
+    - str：保留 W17-008.5.2 之前的文字插值行為（向後相容）
+
+    Args:
+        template: ErrorMessages 類別中的常數模板字串，或 ErrorEnvelope 實例
+        **kwargs: 格式化參數（僅 str 路徑使用）
+
+    Returns:
+        str: 格式化後的錯誤訊息（兩種路徑均含 [Error] 前綴）
+
+    Raises:
+        KeyError: str 路徑下 kwargs 缺少 template 所需的參數
+        TypeError: template 既非 str 也非 ErrorEnvelope
+
+    Examples:
+        # Legacy 路徑（向後相容）
         >>> format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id="0.31.0-W4-001")
         '[Error] 找不到 Ticket 0.31.0-W4-001'
-        >>> format_error(ErrorMessages.INVALID_TICKET_ID)
-        '[Error] Ticket ID 格式無效'
+
+        # Envelope 路徑（W17-008.5.2 新增）
+        >>> env = ErrorEnvelope("track", "claim", "TICKET_NOT_FOUND", hint="檢查 ID")
+        >>> print(format_error(env))
+        [Error] __error_envelope_v1__
+          component: track
+          action: claim
+          errno: TICKET_NOT_FOUND
+          hint: 檢查 ID
     """
-    return template.format(**kwargs)
+    if isinstance(template, ErrorEnvelope):
+        return _render_envelope(template)
+    if isinstance(template, str):
+        return template.format(**kwargs)
+    raise TypeError(
+        f"format_error template 必須為 str 或 ErrorEnvelope，收到: {type(template).__name__}"
+    )
 
 
 def format_warning(template: str, **kwargs) -> str:
@@ -298,6 +370,76 @@ def format_info(template: str, **kwargs) -> str:
         '[OK] 已接手 0.31.0-W4-001'
     """
     return template.format(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Argparse 業務錯誤統一格式（W17-008.5.4）
+# ---------------------------------------------------------------------------
+
+# 業務錯誤訊息特徵（argparse 內建訊息片段；穩定 keyword 易維護）
+# - "invalid choice"：subparser 子命令不存在 / choices=[...] 不匹配
+# - "invalid <type> value"：type=int/float/... 轉型失敗
+# 純語法錯誤（unrecognized arguments / the following arguments are required）
+# 不在此清單，落入預設 argparse 路徑保留 POSIX 風格。
+_ARGPARSE_BUSINESS_ERROR_PATTERNS = (
+    re.compile(r"invalid choice"),
+    re.compile(r"invalid \S+ value"),
+)
+
+
+def _classify_argparse_error(message: str) -> Optional[str]:
+    """判別 argparse error message 是否屬業務錯誤類別。
+
+    Returns:
+        errno 字串（"INVALID_CHOICE" / "INVALID_VALUE"）若為業務錯誤；
+        None 表示純語法錯誤，呼叫端應走 argparse 預設路徑。
+    """
+    if _ARGPARSE_BUSINESS_ERROR_PATTERNS[0].search(message):
+        return "INVALID_CHOICE"
+    if _ARGPARSE_BUSINESS_ERROR_PATTERNS[1].search(message):
+        return "INVALID_VALUE"
+    return None
+
+
+class ArgparseFormatErrorParser(argparse.ArgumentParser):
+    """ArgumentParser subclass：業務錯誤改走 format_error(ErrorEnvelope)。
+
+    W17-008.5.4 動機：argparse 預設 error() 輸出英文 POSIX 風格，與 CLI 業務錯誤
+    （format_error 結構化封包）格式分歧。本類別 overload error() 將業務錯誤
+    （invalid choice / invalid type value）改走 ErrorEnvelope 統一輸出，
+    保留純語法錯誤（unrecognized args / missing required positional）的 argparse 預設行為。
+
+    分類依據見 _classify_argparse_error；含 ERROR_ENVELOPE_VERSION_MARKER 讓 hook 可偵測。
+
+    Examples:
+        >>> import argparse
+        >>> p = ArgparseFormatErrorParser(prog="ticket track", exit_on_error=False)
+        >>> sub = p.add_subparsers(dest="op")
+        >>> _ = sub.add_parser("claim")
+        >>> # invalid choice "foo" → 走 ErrorEnvelope 結構化路徑
+    """
+
+    def error(self, message: str) -> None:  # type: ignore[override]
+        """覆寫 argparse 預設 error()。
+
+        業務錯誤 → 渲染 ErrorEnvelope + sys.exit(2)
+        純語法錯誤 → 委回父類 error()（保留 usage + POSIX 風格訊息）
+        """
+        errno = _classify_argparse_error(message)
+        if errno is None:
+            # 純語法錯誤保留 argparse 預設行為
+            super().error(message)
+            return  # pragma: no cover (super().error 會 sys.exit)
+
+        # 業務錯誤改走結構化 envelope 路徑
+        envelope = ErrorEnvelope(
+            component=self.prog or "ticket",
+            action="parse_args",
+            errno=errno,
+            hint=message,
+        )
+        sys.stderr.write(format_error(envelope) + "\n")
+        sys.exit(2)
 
 
 def print_not_executable_and_exit():

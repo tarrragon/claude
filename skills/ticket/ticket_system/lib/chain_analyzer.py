@@ -8,7 +8,7 @@ Ticket 任務鏈分析模組
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, List
 
-from ticket_system.lib.constants import STATUS_IN_PROGRESS, STATUS_COMPLETED, STATUS_PENDING, STATUS_BLOCKED
+from ticket_system.lib.constants import STATUS_IN_PROGRESS, STATUS_COMPLETED, STATUS_PENDING, STATUS_BLOCKED, TERMINAL_STATUSES
 from ticket_system.lib.ticket_loader import load_ticket
 from ticket_system.lib.ticket_ops import resolve_id_from_ref
 from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
@@ -176,7 +176,7 @@ class ChainAnalyzer:
             # 情況 1：字典型子任務（已嵌入狀態）
             if isinstance(child_item, dict):
                 # 直接檢查字典中的 status 欄位
-                if child_item.get("status") != STATUS_COMPLETED:
+                if child_item.get("status") not in TERMINAL_STATUSES:
                     return True
 
             # 情況 2：字串型 ID（需要載入檔案）
@@ -184,7 +184,7 @@ class ChainAnalyzer:
                 # 載入子 Ticket 以檢查其狀態
                 child_ticket = load_ticket(version, child_id)
                 # 只要有一個子任務未完成，立即返回 True
-                if child_ticket and child_ticket.get("status") != STATUS_COMPLETED:
+                if child_ticket and child_ticket.get("status") not in TERMINAL_STATUSES:
                     return True
 
         # 全部子任務都已完成或無可檢查的子任務
@@ -248,7 +248,7 @@ class ChainAnalyzer:
                         if sibling_item.get("id") == ticket_id:
                             continue
                         # 直接檢查字典中的 status
-                        if sibling_item.get("status") != STATUS_COMPLETED:
+                        if sibling_item.get("status") not in TERMINAL_STATUSES:
                             return "has_pending"
 
                     # 情況 2：字串型 ID
@@ -259,7 +259,7 @@ class ChainAnalyzer:
                         # 載入兄弟 Ticket 以檢查其狀態
                         sibling_ticket = load_ticket(version, sibling_id)
                         # 只要有一個兄弟未完成，立即返回
-                        if sibling_ticket and sibling_ticket.get("status") != STATUS_COMPLETED:
+                        if sibling_ticket and sibling_ticket.get("status") not in TERMINAL_STATUSES:
                             return "has_pending"
 
         # 全部兄弟都完成或無待處理兄弟
@@ -372,7 +372,7 @@ class ChainAnalyzer:
             child_id = resolve_id_from_ref(child_item)
 
             # 情況 1：字典型 child（已嵌入狀態）
-            if isinstance(child_item, dict) and child_item.get("status") != STATUS_COMPLETED:
+            if isinstance(child_item, dict) and child_item.get("status") not in TERMINAL_STATUSES:
                 child_id_str = child_item.get("id", "")
                 return Recommendation(
                     direction="to-child",
@@ -384,7 +384,7 @@ class ChainAnalyzer:
             # 情況 2：字串型 ID（需要載入檔案）
             elif child_id and version:
                 child_ticket = load_ticket(version, child_id)
-                if child_ticket and child_ticket.get("status") != STATUS_COMPLETED:
+                if child_ticket and child_ticket.get("status") not in TERMINAL_STATUSES:
                     child_title = child_ticket.get("title", "")
                     return Recommendation(
                         direction="to-child",
@@ -442,7 +442,7 @@ class ChainAnalyzer:
                 sibling_id_str = sibling_item.get("id")
                 if sibling_id_str == ticket_id:
                     continue
-                if sibling_item.get("status") != STATUS_COMPLETED:
+                if sibling_item.get("status") not in TERMINAL_STATUSES:
                     return Recommendation(
                         direction="to-sibling",
                         reason="有平行任務待處理",
@@ -455,7 +455,7 @@ class ChainAnalyzer:
                 if sibling_id == ticket_id:
                     continue
                 sibling_ticket = load_ticket(version, sibling_id)
-                if sibling_ticket and sibling_ticket.get("status") != STATUS_COMPLETED:
+                if sibling_ticket and sibling_ticket.get("status") not in TERMINAL_STATUSES:
                     sibling_title = sibling_ticket.get("title", "")
                     return Recommendation(
                         direction="to-sibling",

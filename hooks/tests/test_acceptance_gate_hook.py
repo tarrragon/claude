@@ -491,6 +491,145 @@ def test_fallback_parser_handles_block_style_children_list(project_dir, logger):
     assert "0.18.0-W10-940.1" not in error_msg, "completed 子任務不應被列出"
 
 
+# ----------------------------------------------------------------------------
+# 情境 9：ANA 雙路徑收斂（W17-120.2 / PC-091）
+#
+# 背景：W17-120.1 在規則層落地 PC-091 路線——ANA 落地統一用 children
+# （`--parent <ANA-ID>`），spawned_tickets 對 ANA 重定位為「弱 metadata」，
+# 不再阻擋父 complete。本 ticket 在 hook 層收斂雙路徑：ana_spawned_checker
+# 退場、children_checker 成為 ANA complete 阻擋的唯一判斷者。
+#
+# 4 個 case 對應 ticket Problem Analysis 的「必加回歸測試」表：
+#   (a) ANA 無 children + 空 spawned → 不阻擋（warning 由 ana_missing 警告層處理）
+#   (b) ANA 有 children 全 terminal → pass
+#   (c) ANA 有 children 部分 pending → block
+#   (d) **行為翻轉核心**：ANA 有 spawned（非空）但無 children → 不阻擋
+# ----------------------------------------------------------------------------
+
+def _write_ana_ticket(
+    project_dir: Path,
+    ticket_id: str,
+    status: str = "in_progress",
+    children: list = None,
+    spawned: list = None,
+    title: str = None,
+) -> Path:
+    """建立 ANA 類型 Ticket（含 children / spawned_tickets 欄位）。"""
+    version_part = ticket_id.split("-W")[0]
+    ticket_dir = project_dir / "docs" / "work-logs" / f"v{version_part}" / "tickets"
+    ticket_dir.mkdir(parents=True, exist_ok=True)
+
+    if children:
+        children_block = "children: [" + ", ".join(children) + "]"
+    else:
+        children_block = "children: []"
+
+    if spawned:
+        spawned_block = "spawned_tickets: [" + ", ".join(spawned) + "]"
+    else:
+        spawned_block = "spawned_tickets: []"
+
+    content = f"""---
+id: {ticket_id}
+title: {title or ticket_id}
+type: ANA
+status: {status}
+version: {version_part}
+{children_block}
+{spawned_block}
+---
+
+# Body
+"""
+    ticket_file = ticket_dir / f"{ticket_id}.md"
+    ticket_file.write_text(content, encoding="utf-8")
+    return ticket_file
+
+
+def _check_ana_via_orchestrator(project_dir: Path, ticket_id: str, logger):
+    """以 acceptance-gate-hook 主協調函式 check_acceptance_status 驗證 ANA 行為。
+
+    這是行為翻轉的關鍵驗證點：W17-120.2 後 orchestrator 對 ANA spawned
+    不再呼叫 check_spawned_tickets_blocking，僅由 children_checker 判斷。
+    """
+    # 動態 import 避免 module-level 失敗
+    import importlib.util
+    hook_path = _hooks_dir / "acceptance-gate-hook.py"
+    spec = importlib.util.spec_from_file_location("acceptance_gate_hook", hook_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.check_acceptance_status(ticket_id, project_dir, logger)
+
+
+def test_ana_no_children_no_spawned_does_not_block(project_dir, logger):
+    """Case (a): ANA 無 children + 空 spawned → 不阻擋（僅 missing 警告）。
+
+    PC-091 路線：缺後續 ticket 為提示性警告，不阻擋 complete。
+    """
+    _write_ana_ticket(
+        project_dir,
+        "0.18.0-W17-950",
+        children=None,
+        spawned=None,
+    )
+    result = _check_ana_via_orchestrator(project_dir, "0.18.0-W17-950", logger)
+    assert result.should_block is False, (
+        "ANA 無 children + 無 spawned 不應阻擋 complete（PC-091）"
+    )
+
+
+def test_ana_with_all_children_terminal_passes(project_dir, logger):
+    """Case (b): ANA 有 children 全 terminal → pass。"""
+    _write_ana_ticket(
+        project_dir,
+        "0.18.0-W17-951",
+        children=["0.18.0-W17-951.1", "0.18.0-W17-951.2"],
+    )
+    _write_ticket(project_dir, "0.18.0-W17-951.1", status="completed")
+    _write_ticket(project_dir, "0.18.0-W17-951.2", status="closed")
+
+    result = _check_ana_via_orchestrator(project_dir, "0.18.0-W17-951", logger)
+    assert result.should_block is False, "ANA 所有 children 終態時應 pass"
+
+
+def test_ana_with_pending_child_blocks(project_dir, logger):
+    """Case (c): ANA 有 children 部分 pending → block（children_checker 本職）。"""
+    _write_ana_ticket(
+        project_dir,
+        "0.18.0-W17-952",
+        children=["0.18.0-W17-952.1", "0.18.0-W17-952.2"],
+    )
+    _write_ticket(project_dir, "0.18.0-W17-952.1", status="completed")
+    _write_ticket(project_dir, "0.18.0-W17-952.2", status="pending")
+
+    result = _check_ana_via_orchestrator(project_dir, "0.18.0-W17-952", logger)
+    assert result.should_block is True, "ANA children 有 pending 必須 block"
+    assert "0.18.0-W17-952.2" in (result.message or "")
+
+
+def test_ana_with_spawned_no_children_does_not_block(project_dir, logger):
+    """Case (d) 行為翻轉核心：ANA 有 spawned（含 pending）但無 children → 不阻擋。
+
+    與舊行為（W15-003）相反：spawned 不再強制 terminal，重定位為弱 metadata。
+    這是 W17-120.2 的核心驗證——確認 ana_spawned_checker 阻擋路徑已退場。
+    """
+    _write_ana_ticket(
+        project_dir,
+        "0.18.0-W17-953",
+        children=None,
+        spawned=["0.18.0-W17-953.S1", "0.18.0-W17-953.S2"],
+    )
+    # 故意建立 pending 的 spawned ticket：舊行為應 block，新行為不應 block
+    _write_ticket(project_dir, "0.18.0-W17-953.S1", status="pending")
+    _write_ticket(project_dir, "0.18.0-W17-953.S2", status="in_progress")
+
+    result = _check_ana_via_orchestrator(project_dir, "0.18.0-W17-953", logger)
+    assert result.should_block is False, (
+        "PC-091 行為翻轉：ANA 有非 terminal spawned 但無 children 時不應阻擋 "
+        "(spawned_tickets 對 ANA 為弱 metadata)"
+    )
+
+
 def test_fallback_parser_empty_children_returns_no_descendants(project_dir, logger):
     """parser 返回空 children（無 children 欄位或為 []）時，視為無子任務 → pass。
 

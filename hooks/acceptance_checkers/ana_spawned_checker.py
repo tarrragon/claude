@@ -1,6 +1,32 @@
 """
 ANA Spawned Checker - ANA Ticket 後續 Ticket 檢查
 
+[DEPRECATED — W17-120.2 / PC-091]
+====================================================================
+本模組已退場。ANA complete 阻擋判斷統一收斂到 children_checker。
+
+PC-091 路線決議：
+- ANA 落地統一用 children（`ticket track create --parent <ANA-ID>`）。
+- spawned_tickets 對 ANA 重定位為「弱 metadata」，不阻擋父 complete。
+
+acceptance-gate-hook.py 已移除 Step 2.5.1（check_spawned_tickets_blocking
+呼叫）與本模組的 import。本檔案保留僅為：
+  1. check_ana_has_spawned_tickets：仍由 orchestrator 呼叫，提供「ANA 缺
+     後續 ticket」warning（不阻擋）。
+  2. extract_spawned_tickets_from_frontmatter：可能被舊測試或外部模組引用，
+     保留為向後相容。
+
+下列函式已不再被生產路徑呼叫，僅保留供舊測試引用：
+  - check_spawned_tickets_status
+  - check_spawned_tickets_blocking
+
+詳見：
+  - 父 ANA: 0.18.0-W17-120
+  - 規則層落地（DOC）: 0.18.0-W17-120.1
+  - hook 收斂（IMP）: 0.18.0-W17-120.2
+  - PC-091 error-pattern
+====================================================================
+
 檢查 ANA（分析）Ticket 是否已將分析結論轉化為可追蹤的子任務或獨立 Ticket。
 """
 

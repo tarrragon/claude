@@ -36,15 +36,26 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root
 
+# 加入 ticket_system lib 路徑以引用 handoff_utils.is_handoff_stale（W17-095.3）
+_TICKET_LIB_PATH = Path(__file__).parent.parent / "skills" / "ticket" / "ticket_system" / "lib"
+if str(_TICKET_LIB_PATH) not in sys.path:
+    sys.path.insert(0, str(_TICKET_LIB_PATH))
+
+try:
+    from handoff_utils import is_handoff_stale  # type: ignore
+except Exception:  # pragma: no cover - fallback：lib 不可用時不過濾，行為退化為原狀
+    def is_handoff_stale(record):  # type: ignore
+        return False, ""
+
 import re
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 # 全域常數
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 
-def scan_handoff_pending_directory(project_root: Path, logger) -> List[Dict[str, Any]]:
+def scan_handoff_pending_directory(project_root: Path, logger) -> Tuple[List[Dict[str, Any]], int]:
     """
     掃描 .claude/handoff/pending/ 目錄中的所有待恢復任務
 
@@ -71,19 +82,20 @@ def scan_handoff_pending_directory(project_root: Path, logger) -> List[Dict[str,
         project_root: 專案根目錄
 
     Returns:
-        list - 待恢復任務列表 (按 timestamp 排序)
+        tuple - (待恢復任務列表（按 timestamp 排序）, 已過濾 stale 數量)
     """
     pending_tasks = []
+    stale_count = 0
 
     handoff_dir = project_root / ".claude" / "handoff" / "pending"
 
     if not handoff_dir.exists():
         logger.info(f"handoff/pending 目錄不存在: {handoff_dir}")
-        return pending_tasks
+        return pending_tasks, stale_count
 
     if not handoff_dir.is_dir():
         logger.warning(f"handoff/pending 不是目錄: {handoff_dir}")
-        return pending_tasks
+        return pending_tasks, stale_count
 
     # 掃描所有 .json 檔案
     try:
@@ -98,6 +110,17 @@ def scan_handoff_pending_directory(project_root: Path, logger) -> List[Dict[str,
                 resumed_at = data.get("resumed_at")
                 if resumed_at is not None:
                     logger.debug(f"跳過已接手的任務: {file_path.stem} (resumed_at: {resumed_at})")
+                    continue
+
+                # W17-095.3：過濾 stale handoff（與 CLI resume --list 對齊）
+                try:
+                    is_stale, stale_reason = is_handoff_stale(data)
+                except Exception as stale_err:
+                    logger.warning(f"is_handoff_stale 判斷失敗 ({file_path.name}): {stale_err}")
+                    is_stale, stale_reason = False, ""
+                if is_stale:
+                    stale_count += 1
+                    logger.debug(f"跳過 stale handoff: {file_path.stem} ({stale_reason})")
                     continue
 
                 # 提取必要欄位
@@ -126,11 +149,14 @@ def scan_handoff_pending_directory(project_root: Path, logger) -> List[Dict[str,
     except Exception as e:
         logger.error(f"掃描 handoff/pending 目錄失敗: {e}")
 
-    logger.info(f"掃描完成，找到 {len(pending_tasks)} 個待恢復任務")
+    logger.info(
+        f"掃描完成，找到 {len(pending_tasks)} 個待恢復任務"
+        + (f"（已過濾 {stale_count} 個 stale）" if stale_count else "")
+    )
 
     # 按 timestamp 排序（最新優先）
     pending_tasks.sort(key=lambda t: t.get("timestamp", ""), reverse=True)
-    return pending_tasks
+    return pending_tasks, stale_count
 
 def mark_handoff_as_resumed(ticket_id: str, project_root: Path, logger) -> None:
     """
@@ -221,22 +247,29 @@ def generate_auto_resume_message(selected_task: Dict[str, Any], all_tasks: List[
 
     return message
 
-def generate_reminder_message(pending_tasks: List[Dict[str, Any]], logger) -> str:
+def generate_reminder_message(
+    pending_tasks: List[Dict[str, Any]],
+    logger,
+    stale_count: int = 0,
+) -> str:
     """
     生成 Handoff 待恢復任務提醒訊息
 
     Args:
         pending_tasks: 待恢復任務列表
         logger: 日誌物件
+        stale_count: 已過濾掉的 stale handoff 數量（W17-095.3，與 CLI resume --list 對齊）
 
     Returns:
         str - 格式化的提醒訊息
     """
-    if not pending_tasks:
+    if not pending_tasks and not stale_count:
         return ""
 
     message = "============================================================\n"
     message += f"[Handoff 提醒] 有 {len(pending_tasks)} 個待恢復的任務\n"
+    if stale_count:
+        message += f"            （已過濾 {stale_count} 個 stale handoff，與 ticket resume --list 一致）\n"
     message += "============================================================\n\n"
 
     message += "待恢復任務：\n"
@@ -256,7 +289,12 @@ def generate_reminder_message(pending_tasks: List[Dict[str, Any]], logger) -> st
 
     return message
 
-def generate_hook_output(pending_tasks: List[Dict[str, Any]], project_root: Path, logger) -> Dict[str, Any]:
+def generate_hook_output(
+    pending_tasks: List[Dict[str, Any]],
+    project_root: Path,
+    logger,
+    stale_count: int = 0,
+) -> Dict[str, Any]:
     """
     生成 Hook 輸出格式
 
@@ -278,7 +316,7 @@ def generate_hook_output(pending_tasks: List[Dict[str, Any]], project_root: Path
         }
 
     # 生成提醒訊息
-    reminder_message = generate_reminder_message(pending_tasks, logger)
+    reminder_message = generate_reminder_message(pending_tasks, logger, stale_count=stale_count)
 
     return {
         "hookSpecificOutput": {
@@ -318,11 +356,11 @@ def main() -> int:
         project_root = get_project_root()
         logger.info(f"專案根目錄: {project_root}")
 
-        # 步驟 4: 掃描待恢復任務
-        pending_tasks = scan_handoff_pending_directory(project_root, logger)
+        # 步驟 4: 掃描待恢復任務（W17-095.3：含 stale 過濾計數）
+        pending_tasks, stale_count = scan_handoff_pending_directory(project_root, logger)
 
         # 步驟 5: 產生 Hook 輸出（自動載入最新任務或靜默跳過）
-        hook_output = generate_hook_output(pending_tasks, project_root, logger)
+        hook_output = generate_hook_output(pending_tasks, project_root, logger, stale_count=stale_count)
 
         # 步驟 6: 輸出 JSON 結果
         print(json.dumps(hook_output, ensure_ascii=False, indent=2))

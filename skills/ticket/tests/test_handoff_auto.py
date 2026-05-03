@@ -289,6 +289,100 @@ def test_manual_handoff_not_triggered_without_auto(temp_project):
     )
 
 
+# ----------------------------------------------------------------------------
+# W17-031.2: handoff --auto 整合 Context Bundle 抽取器
+# ----------------------------------------------------------------------------
+
+def test_auto_handoff_includes_context_bundle_field(temp_project):
+    """handoff --auto 產出的 JSON 必含 context_bundle 欄位（無 source 時亦然）。"""
+    root, tickets_dir = temp_project
+    _create_ticket(tickets_dir, "0.18.0-W17-040", title="Standalone")
+
+    args = _make_args(from_ticket_id="0.18.0-W17-040", direction="to-parent")
+    rc = _execute_auto_handoff(args)
+    assert rc == 0
+
+    data = json.loads(
+        (root / ".claude" / "handoff" / "pending" / "0.18.0-W17-040.json").read_text()
+    )
+    # 無 source_ticket / blockedBy / relatedTo → status="no_source"，但欄位仍存在
+    assert "context_bundle" in data
+    assert isinstance(data["context_bundle"], dict)
+    assert data["context_bundle"]["status"] == "no_source"
+    assert data["context_bundle"]["target_ticket_id"] == "0.18.0-W17-040"
+
+
+def test_auto_handoff_context_bundle_extracts_from_source(temp_project):
+    """有 source_ticket 時 context_bundle 應抽到內容（extracted 非空 / sources_ok>0）。"""
+    root, tickets_dir = temp_project
+
+    # 先建一個 source ticket，含可抽取的 what 欄位
+    _create_ticket(
+        tickets_dir,
+        "0.18.0-W17-041",
+        title="Source",
+        what="source what content for extraction",
+    )
+
+    # target ticket 引用 source
+    target_data = {
+        "id": "0.18.0-W17-042",
+        "title": "Target",
+        "status": STATUS_IN_PROGRESS,
+        "priority": "P2",
+        "type": "IMP",
+        "what": "target what",
+        "created": "2026-04-22",
+        "source_ticket": "0.18.0-W17-041",
+    }
+    fm = yaml.dump(target_data, allow_unicode=True, sort_keys=False)
+    (tickets_dir / "0.18.0-W17-042.md").write_text(
+        f"---\n{fm}---\n# Target\n", encoding="utf-8"
+    )
+
+    args = _make_args(from_ticket_id="0.18.0-W17-042", direction="to-parent")
+    rc = _execute_auto_handoff(args)
+    assert rc == 0
+
+    data = json.loads(
+        (root / ".claude" / "handoff" / "pending" / "0.18.0-W17-042.json").read_text()
+    )
+    cb = data["context_bundle"]
+    assert cb["target_ticket_id"] == "0.18.0-W17-042"
+    assert cb["sources_declared"] >= 1
+    # extract status 應為 ok / partial（有 source 時不該是 no_source）
+    assert cb["status"] != "no_source"
+
+
+def test_auto_handoff_extractor_failure_degrades_to_warning(
+    temp_project, capsys, monkeypatch
+):
+    """抽取器拋例外時不應阻擋 handoff；context_bundle=None；stderr 有 warning。"""
+    root, tickets_dir = temp_project
+    _create_ticket(tickets_dir, "0.18.0-W17-043", title="Resilient")
+
+    # Patch extractor 強制丟例外
+    from ticket_system.lib import context_bundle_extractor as extractor_mod
+
+    def _boom(_ticket):
+        raise RuntimeError("simulated extractor failure")
+
+    monkeypatch.setattr(extractor_mod, "extract_context_bundle", _boom)
+
+    args = _make_args(from_ticket_id="0.18.0-W17-043", direction="to-parent")
+    rc = _execute_auto_handoff(args)
+    assert rc == 0  # 不阻擋
+
+    captured = capsys.readouterr()
+    assert "Context Bundle 抽取失敗" in captured.err
+
+    data = json.loads(
+        (root / ".claude" / "handoff" / "pending" / "0.18.0-W17-043.json").read_text()
+    )
+    assert "context_bundle" in data
+    assert data["context_bundle"] is None
+
+
 def test_auto_overwrites_existing_file(temp_project):
     """--auto 多次呼叫同 ticket 應覆寫（scheduler 重新生成場景）。"""
     root, tickets_dir = temp_project

@@ -43,3 +43,18 @@ multi_view_status:
   example_na: |
     multi_view_status: n_a
     reason: 純文件調查，無程式碼或架構影響
+
+  # 禁用格式（PC-117 / W17-111）
+  # PM 易誤用 nested YAML 結構導致 hook regex 跨行誤判：
+  forbidden_format: |
+    # 錯誤：nested YAML 結構
+    multi_view_status:
+      status: skipped       # hook 會跨行抓「status: skipped」字串並判定值非法
+      reason: ...
+
+    # 正確：flat YAML 結構（與 examples 一致）
+    multi_view_status: skipped
+    reason: ...
+
+  # 案例：W17-095 收尾踩坑 → PC-117 落地 → W17-111 ANA 評估改善方向
+  # 詳見：.claude/error-patterns/process-compliance/PC-117-ana-solution-multi-view-status-nested-yaml-misparse.md

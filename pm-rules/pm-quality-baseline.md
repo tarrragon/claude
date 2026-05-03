@@ -39,6 +39,60 @@
 
 ---
 
+### 規則 6.1：框架 ticket 版本歸屬補強
+
+**框架 ticket 必須建在當前 active 版本，禁止建在 planned 狀態的未來版本**
+
+> **來源**：規則 6 原條款規定「當前 Wave 內建立」但未明示「Wave 必須屬於 active 版本」。當 active 版本主題與框架 ticket 不符時，PM 易傾向放主題吻合的 planned 版本（如 W14-019 設計時 PM 內心傾向 v0.20.0 planned），實質延後框架改善並違反規則 6 本意。`version-progression.md` 已強制「.claude 工件歸活躍版本」，但規則 6 未交叉引用，造成 PM 漏看。
+
+**「當前 active 版本」定義**：
+
+| 來源 | 說明 |
+|------|------|
+| `docs/todolist.yaml` 中 `status: active` 的版本 | 與 `version-progression.md` 強制規則「活躍版本由 todolist.yaml 決定」「版本邊界以 active 為準」「.claude 工件歸活躍版本」一致 |
+| 多個 active 版本（monorepo） | 建在最早完成的 active 版本 |
+| 無 active 版本（罕見） | 先依 `version-progression.md` 啟用 planned 版本為 active，再建立 |
+
+**情境處置表**：
+
+| 情境 | 處置 |
+|------|------|
+| active 版本主題與框架 ticket 吻合 | 直接建在 active 版本對應 Wave |
+| active 版本主題與框架 ticket 不符 | **仍建在 active 版本**，新建專屬「框架雜項」Wave 或借用最新 Wave |
+| 多個 active 版本（monorepo） | 建在最早完成的 active 版本（L1 monorepo 版本） |
+| 框架 ticket 跨多版本適用 | 仍建在當前 active 版本，於 ticket 中說明跨版本適用性 |
+
+**禁止行為補強**：
+
+| 禁止 | 原因 |
+|------|------|
+| 以「主題吻合度」為由放 planned 版本 | 「主題吻合」是次要考量；「立即執行」才是規則 6 本意 |
+| 為避免「干擾現有版本規劃」放未來版本 | 框架 ticket 本質是「非版本主題的雜項」，不會干擾主題 |
+| 在 AskUserQuestion 用 (Recommended) 暗示用戶選未來版本 | 違反規則 5 機制 4「反討好設計」（`ai-communication-rules.md`）；規則 6 同樣禁止 |
+| 用「啟用未來版本」當建議選項規避 active 版本 | 啟用版本是版本規劃決策，不該為單一框架 ticket 變更 |
+
+**Why**: 規則 6 與 `version-progression.md` 之間缺乏交叉引用，導致 PM 設計框架 ticket 時走「規則 6 → 主題吻合度判斷」路徑，跳過「version-progression.md → active 版本強制」路徑。本 session（W14-019 ticket 設計）即為實證案例。
+
+**Consequence**: 框架改善若放 planned 版本，需等 planned 版本啟用才能執行，框架債務累積；其他相關 ticket 在等待期間重複支付成本（違反規則 6 上位原則）。
+
+**Action**:
+
+1. 建立框架 ticket 前先讀 `docs/todolist.yaml` 確認 active 版本。
+2. 若 active 版本主題與框架 ticket 不符，仍建在 active 版本（新增「框架雜項」Wave 或借用最新 Wave）。
+3. AskUserQuestion 提供版本選項時，禁止把 planned 版本標 (Recommended)（規則 5 機制 4）。
+4. 若實在需要啟用 planned 版本（例如 active 版本即將完結），先走 `/version-release check` + 啟用流程，再建框架 ticket。
+
+**與其他規則邊界**：
+
+| 規則 | 關係 |
+|------|------|
+| `version-progression.md`「.claude 工件歸活躍版本」 | 本條款是規則 6 對該強制規則的明文引用 + 補強執行細節 |
+| `monorepo-version-strategy.md` L1 權威來源 | 完全一致——L1 即 active 版本，Ticket 版本基於 L1 |
+| `ai-communication-rules.md` 規則 5 機制 4 反討好設計 | 互相引用——本 session PM 違反規則 5 才暴露規則 6 漏洞 |
+| `PC-121-pm-recommends-framework-ticket-to-future-version.md` | 本條款的反模式案例 + 防護記錄 |
+
+---
+
 ### 規則 7：Memory 寫入必須評估跨專案升級
 
 **寫入 feedback 類 memory 時，必須同時評估是否升級為框架規則**

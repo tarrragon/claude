@@ -37,6 +37,7 @@ from ticket_system.lib.constants import (
     STATUS_IN_PROGRESS,
     STATUS_COMPLETED,
     STATUS_BLOCKED,
+    TERMINAL_STATUSES,
 )
 from ticket_system.lib.messages import format_error, format_info
 from ticket_system.lib.command_tracking_messages import (
@@ -57,7 +58,7 @@ def filter_incomplete_tickets(tickets: List[Dict[str, Any]]) -> List[Dict[str, A
     """過濾未完成任務（保留 pending, in_progress, blocked），排除無效 ticket"""
     return [
         t for t in tickets
-        if t.get("status") is not None and t.get("status") != STATUS_COMPLETED
+        if t.get("status") is not None and t.get("status") not in TERMINAL_STATUSES
     ]
 
 

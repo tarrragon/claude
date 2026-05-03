@@ -78,11 +78,11 @@ from acceptance_checkers import (
     filter_error_patterns_by_ticket_scope,
     check_custom_h2_sections,
 )
-from acceptance_checkers.ana_spawned_checker import (
-    check_spawned_tickets_status,
-    check_spawned_tickets_blocking,
-    extract_spawned_tickets_from_frontmatter,
-)
+# W17-120.2 / PC-091: ana_spawned_checker 退場
+# ANA complete 阻擋判斷統一收斂到 children_checker（PC-091 路線：
+# ANA 落地統一用 --parent <ANA-ID>，spawned_tickets 對 ANA 重定位為弱 metadata）。
+# 既有 ana_spawned_checker.py 已 deprecated，僅保留 check_ana_has_spawned_tickets
+# 作為「無後續 ticket」的 missing 警告（不阻擋）。
 from acceptance_checkers.ticket_parser import get_ticket_start_time
 
 
@@ -232,24 +232,11 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
                 else:
                     warning_msg = ana_warning_msg
 
-        # 步驟 2.5.1：檢查 ANA spawned tickets 狀態
-        # W15-003 升級：從警告層升級為阻擋層
-        # - 任一 spawned 非 terminal → block (exit 2)
-        # - 全 terminal → pass
-        # 舊的 spawned_non_terminal_warning 欄位保留（已由 blocking 取代警告角色，
-        # 但 CLI/checklist 仍引用，保持為 None 代表「已通過或非 ANA」）
-        spawned_non_terminal_warning: Optional[str] = None
-        if is_ana_type(frontmatter.get("type")):
-            spawned_ids = extract_spawned_tickets_from_frontmatter(frontmatter, logger)
-            if spawned_ids:
-                title = frontmatter.get("title", "未知")
-                block_needed, block_msg = check_spawned_tickets_blocking(
-                    ticket_id, title, spawned_ids, project_dir, logger
-                )
-                if block_needed and block_msg:
-                    return AcceptanceCheckResult(
-                        True, False, block_msg, False, [], [], "", "", [], [], False
-                    )
+        # 步驟 2.5.1：[已退場 W17-120.2 / PC-091]
+        # 原 ana_spawned_checker 阻擋邏輯已移除。ANA complete 的阻擋判斷統一由
+        # children_checker（步驟 1）負責——ANA 落地請用 `--parent <ANA-ID>` 建 children。
+        # spawned_tickets 對 ANA 為弱 metadata，不阻擋父 complete。
+        spawned_non_terminal_warning: Optional[str] = None  # 保留欄位向後相容
 
         # 步驟 2.6：ANA Ticket Solution 必須含 multi_view_status 標註（W10-051）
         multi_view_warning: Optional[str] = None
@@ -384,28 +371,23 @@ def generate_hook_output(
     else:
         checklist_items.append("[WARNING] 4. execution log 未填寫")
 
-    # 項目 5: spawned_tickets (只對 ANA 類型顯示)
-    # W12-004 Phase 1：分支三種狀態（未建立 / 含非 terminal / 全 terminal）
+    # 項目 5: ANA 後續 ticket（W17-120.2 / PC-091）
+    # 路線：ANA 落地統一用 children（`--parent <ANA-ID>`），spawned_tickets 對 ANA
+    # 為弱 metadata 不阻擋。本項僅檢查「ANA 是否缺後續 ticket」（warning 層）。
     ticket_type_upper_for_checklist = (check_result.task_type or "").upper()
     if ticket_type_upper_for_checklist == "ANA":
         # 「未建立」訊息來自 GateMessages.ANA_MISSING_SPAWNED_TICKETS_WARNING
-        # 用「缺少後續 Ticket」作為精確標誌而非通用關鍵字「spawned」
-        spawned_missing = bool(
+        followup_missing = bool(
             check_result.message and "缺少後續 Ticket" in check_result.message
         )
-        spawned_non_terminal = bool(check_result.spawned_non_terminal_warning)
-        if spawned_missing:
-            checklist_items.append("[WARNING] 5. spawned_tickets 未建立（ANA）")
-        elif spawned_non_terminal:
+        if followup_missing:
             checklist_items.append(
-                "[WARNING] 5. spawned_tickets 含非 terminal 項目（ANA）"
+                "[WARNING] 5. ANA 缺後續 ticket（請用 --parent 建 children）"
             )
         else:
-            checklist_items.append(
-                "[x] 5. spawned_tickets 已建立且全 terminal（ANA）"
-            )
+            checklist_items.append("[x] 5. ANA 已有後續 ticket")
     else:
-        checklist_items.append("[--] 5. spawned_tickets(非 ANA，不適用)")
+        checklist_items.append("[--] 5. ANA 後續 ticket(非 ANA，不適用)")
 
     # 項目 6: multi_view_status（W10-051，只對 ANA 顯示）
     if ticket_type_upper_for_checklist == "ANA":
@@ -432,11 +414,11 @@ def generate_hook_output(
     if check_result.message:
         context_parts.append(check_result.message)
 
-    # 優先級 1.5：ANA spawned 非 terminal 警告（W12-004 Phase 1）
-    # 獨立 dedicated field 確保不抑制下方 scene #9/#1 gate（gate 只看 message）
+    # 優先級 1.5：[已退場 W17-120.2 / PC-091] 原 ANA spawned 非 terminal 警告已移除
+    # spawned_tickets 對 ANA 為弱 metadata，不再產生阻擋或專用警告
     if check_result.spawned_non_terminal_warning:
+        # 保留輸出邏輯防呼叫端外掛行為，但 orchestrator 已不再 set 此欄位
         context_parts.append(check_result.spawned_non_terminal_warning)
-        logger.info("新增 ANA spawned 非 terminal 警告（W12-004）")
 
     # 優先級 2：error-pattern 場景 #17 提醒（與 warning_msg 並存觸發）
     if check_result.has_new_error_patterns:

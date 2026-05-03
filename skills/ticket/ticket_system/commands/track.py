@@ -29,6 +29,7 @@ from ticket_system.lib.ticket_loader import (
 )
 from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
 from ticket_system.lib.messages import (
+    ArgparseFormatErrorParser,
     ErrorMessages,
     format_error,
     format_info,
@@ -207,6 +208,8 @@ def _create_command_handlers() -> dict:
         "chain": execute_chain,
         "deps": execute_deps,
         "full": execute_full,
+        # show 為 full 的 alias（W17-008.2 / W17-004 落差 2：對齊 git/docker/kubectl 慣例）
+        "show": execute_full,
         "log": execute_log,
         "batch-claim": execute_batch_claim,
         "batch-complete": execute_batch_complete,
@@ -440,10 +443,20 @@ def _register_query_commands(
     p_full.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_full.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
+    # show 操作（W17-008.2 / W17-004 落差 2：full 的 alias，對齊 git/docker/kubectl 慣例）
+    p_show = subparsers.add_parser(
+        "show",
+        help=f"{TrackMessages.HELP_FULL}（full 的 alias，對齊 git/docker/kubectl 慣例）",
+    )
+    p_show.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_show.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
     # log 操作
     p_log = subparsers.add_parser("log", help=TrackMessages.HELP_LOG)
     p_log.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_log.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    # W17-008.3: --section 過濾，對齊 append-log 介面對稱性
+    p_log.add_argument("--section", help=TrackMessages.ARG_SECTION, default=None)
 
     # version 操作
     p_version = subparsers.add_parser("version", help=TrackMessages.HELP_VERSION)
@@ -546,7 +559,7 @@ def _register_field_write_commands(
     # add-spawned 操作
     p_add_spawned = subparsers.add_parser("add-spawned", help=TrackMessages.HELP_ADD_SPAWNED)
     p_add_spawned.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
-    p_add_spawned.add_argument("value", help="Spawned Ticket ID")
+    p_add_spawned.add_argument("value", nargs="+", help="Spawned Ticket ID（可一次傳多個，對齊 Unix 慣例如 rm a b c）")
     p_add_spawned.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
     # set-decision-tree 操作
@@ -804,12 +817,23 @@ def _register_snapshot_commands(
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
-    """註冊 track 子命令及所有操作"""
-    parser = subparsers.add_parser("track", help=TrackMessages.HELP_TRACK)
+    """註冊 track 子命令及所有操作
 
-    # 建立子操作解析器
+    W17-008.5.4：track parser 與所有操作子 parser 套用 ArgparseFormatErrorParser，
+    讓業務錯誤（invalid choice / invalid type value）改走 format_error 結構化路徑；
+    純語法錯誤（unrecognized args / missing required positional）保留 argparse 預設。
+    """
+    parser = subparsers.add_parser("track", help=TrackMessages.HELP_TRACK)
+    # 範圍邊界：scripts/ticket.py 的頂層 parser 不在本 ticket 範圍，
+    # 故 track 本身為預設 ArgumentParser；這裡綁定 error() 將業務錯誤改走客製路徑。
+    parser.error = ArgparseFormatErrorParser.error.__get__(parser, type(parser))  # type: ignore[method-assign]
+
+    # 建立子操作解析器（parser_class 讓所有 operation subparser 繼承業務錯誤客製）
     track_subparsers = parser.add_subparsers(
-        dest="operation", required=True, help="操作類型"
+        dest="operation",
+        required=True,
+        help="操作類型",
+        parser_class=ArgparseFormatErrorParser,
     )
 
     # 按功能分組註冊所有子命令

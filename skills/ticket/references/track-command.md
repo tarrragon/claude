@@ -26,8 +26,16 @@
 # 完整內容
 /ticket track full <id>
 
-# 執行日誌
+# 完整內容（show 為 full 的 alias，對齊 git/docker/kubectl 慣例；W17-008.2）
+/ticket track show <id>
+
+# 執行日誌（全部）
 /ticket track log <id>
+
+# 執行日誌（過濾單一 section，W17-008.3；對齊 append-log 介面）
+# 範例：/ticket track log <id> --section "Solution"
+# 可用 section：Problem Analysis / Context Bundle / Solution / Test Results / Execution Log
+/ticket track log <id> --section "<Section Name>"
 
 # 列出 Tickets
 /ticket track list [--pending|--in-progress|--completed|--blocked]
@@ -53,7 +61,17 @@
 | PM 迷失方向 / 新 session 接手 | `ticket track runqueue --wave N`                        | priority 排序的可執行清單（blockedBy=[]） |
 | 查看完整依賴 DAG              | `ticket track runqueue --wave N --format=dag`           | 拓撲層級分組，關鍵路徑高亮                |
 | 查看關鍵路徑節點              | `ticket track runqueue --wave N --format=critical-path` | slack=0 節點（CPM）                       |
-| /clear 後接手                 | `ticket track runqueue --context=resume --top 3`        | 與 handoff/pending 交集 top 3             |
+| /clear 後接手                 | `ticket track runqueue --context=resume --top 3`        | 與 handoff/pending 交集 top 3，含 exit_status tag |
+
+**Exit Status tag（W17-031.1）**：`--context=resume` 模式下，list 視圖讀取 handoff JSON 的 `exit_status.status` 欄位，四類狀態以 `[<status>]` 取代 `blockedBy=[]` runnable 標記，避免 scheduler 誤把待補料 ticket 當可直接接手：
+
+| Tag                 | 含義                              |
+| ------------------- | --------------------------------- |
+| `[needs_context]`   | agent 回報資料缺口，待 PM 補料     |
+| `[blocked]`         | 環境/依賴阻塞，無法繼續           |
+| `[failed]`          | 執行失敗                          |
+| `[partial_success]` | 部分完成，剩餘子任務待跟進        |
+| 無 tag（保留 `blockedBy=[]`） | success / 缺欄位 / 未知值（fail-open，相容舊 handoff JSON） |
 
 **參數**：
 
@@ -134,9 +152,15 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 /ticket track set-how <id> <value>
 
 # 追加執行日誌
-# 有效 section: Problem Analysis / Context Bundle / Solution / Test Results / Execution Log
+# 有效 section: Problem Analysis / Context Bundle / Solution / Test Results / Execution Log / NeedsContext / Exit Status
 /ticket track append-log <id> --section "Problem Analysis" "內容"
 /ticket track append-log <id> --section "Context Bundle" "PCB 內容（派發前分析結果，PC-040）"
+#
+# Section 標題容錯（W17-008.9）：
+# - 標題比對採 MULTILINE + \s+ 容許多空白 + \s*$ 容尾空白
+# - 命中：「## Solution」、「## Solution 」（末尾空白）、「##  Solution」（雙空白）皆 OK
+# - 不誤匹配：「## Solutions」、「## Solution alt」不會被視為 Solution
+# - SECTION_NOT_FOUND 時錯誤訊息會列出該 ticket 所有現有 ## 標題引導用戶
 
 # 勾選驗收條件（check-acceptance，舊語法）
 /ticket track check-acceptance <id> 1                  # 勾選第 1 項（1-based 整數）
@@ -173,6 +197,11 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 # 批量操作
 /ticket track batch-claim "id1,id2,id3"
 /ticket track batch-complete "id1,id2,id3"
+
+# 追加 spawned_tickets（支援單 ID / 多 ID，對齊 Unix 慣例如 rm a b c）
+/ticket track add-spawned <id> <spawned-id>                    # 單一 ID
+/ticket track add-spawned <id> <spawned-1> <spawned-2> <s-3>   # 多 ID 空白分隔（W17-008.1）
+# 重複 ID 會自動去重並列入「已存在略過」
 ```
 
 ## 驗收條件操作詳解
@@ -324,3 +353,115 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 - 執行日誌填寫狀態
 - 子任務完成狀態
 - 品質標準符合性
+
+---
+
+## 統一錯誤訊息格式（W17-008.5.2）
+
+`lib/messages.py` 的 `format_error()` 支援雙路徑：
+
+### Legacy 路徑（向後相容）
+
+```python
+from ticket_system.lib.messages import ErrorMessages, format_error
+
+format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id="0.31.0-W4-001")
+# => "[Error] 找不到 Ticket 0.31.0-W4-001"
+```
+
+### 結構化 Envelope 路徑（推薦給 .5.3+ 後續呼叫）
+
+```python
+from ticket_system.lib.messages import ErrorEnvelope, format_error
+
+env = ErrorEnvelope(
+    component="track",         # CLI 子命令或模組名
+    action="claim",            # 操作動詞
+    errno="TICKET_NOT_FOUND",  # 錯誤分類代碼
+    hint="ticket track list",  # 修復建議（可選）
+)
+print(format_error(env))
+```
+
+輸出：
+
+```text
+[Error] __error_envelope_v1__
+  component: track
+  action: claim
+  errno: TICKET_NOT_FOUND
+  hint: ticket track list
+```
+
+### 版本標記 `__error_envelope_v1__`
+
+Hook 偵測到此標記即視為已套用統一格式，**跳過重複補充**（W17-008.5.5）。grep 可用：
+
+```bash
+grep -n "__error_envelope_v1__" .claude/skills/ticket/ticket_system/
+```
+
+#### Hook 端跳過機制（`.claude/hooks/skill-cli-error-feedback-hook.py`）
+
+Hook 在 PostToolUse 攔截 `ticket track` 系列命令的 stderr/stdout，若偵測到 `__error_envelope_v1__` 標記即直接放行，不再附加中文修復引導，避免「argparse 英文 + Hook 中文 markdown」雙軌訊息互相重疊：
+
+```python
+# .claude/hooks/skill-cli-error-feedback-hook.py（節錄）
+ENVELOPE_VERSION_MARKER = "__error_envelope_v1__"
+
+def is_envelope_output(stderr: str, stdout: str) -> bool:
+    return ENVELOPE_VERSION_MARKER in (stderr or "") or ENVELOPE_VERSION_MARKER in (stdout or "")
+
+# main() 內：
+if is_envelope_output(stderr, stdout):
+    return EXIT_SUCCESS  # 已是結構化訊息，跳過 hook 補充
+```
+
+**設計後果**：
+
+| 命令輸出 | hook 行為 |
+|---------|----------|
+| 含 `__error_envelope_v1__`（業務錯誤經 `format_error(ErrorEnvelope)`） | 跳過補充；用戶看到單一結構化訊息 |
+| 不含標記（純語法錯誤、legacy str 路徑、未遷移命令） | 補充中文修復建議（保留既有引導體驗） |
+
+---
+
+## CLI 錯誤分類（W17-008.5.4）
+
+`ticket track` 系列命令的 argparse 錯誤分為兩類，由 `ArgparseFormatErrorParser`（`lib/messages.py`）分流：
+
+| 錯誤類別 | 範例 | 輸出路徑 | exit code |
+|---------|------|---------|----------|
+| **業務錯誤** | `invalid choice` / `invalid <type> value` | `format_error(ErrorEnvelope)` 結構化（含版本標記） | 2 |
+| **純語法錯誤** | `unrecognized arguments` / `the following arguments are required` | argparse 預設 POSIX 風格 | 2 |
+
+### 業務錯誤範例
+
+```bash
+$ ticket track nonexistent_op
+[Error] __error_envelope_v1__
+  component: ticket track
+  action: parse_args
+  errno: INVALID_CHOICE
+  hint: argument operation: invalid choice: 'nonexistent_op' (...)
+```
+
+### 純語法錯誤範例
+
+```bash
+$ ticket track claim
+usage: ticket track claim [-h] ... ticket_id
+ticket track claim: error: the following arguments are required: ticket_id
+```
+
+### 設計理由
+
+- **業務錯誤**反映呼叫端對 CLI 語意的誤解（選錯子命令、傳錯型別），結構化輸出便於 hook 與後續工具偵測
+- **純語法錯誤**屬 argparse 通用範疇，保留預設 usage 提示對熟悉 POSIX CLI 的使用者更友善
+- 版本標記 `__error_envelope_v1__` 讓 hook 區分「已統一格式」vs「需補充」，可用 `grep` 偵測（見上節）
+
+### 不在本機制範圍
+
+- 業務邏輯錯誤（如 ticket id 不存在）：由各 command 自行用 `format_error` 產出，不經 argparse 路徑
+- `commands/create.py` argparse 客製：W17-008.5.3 處理
+- Hook 補充邏輯：W17-008.5.5 處理

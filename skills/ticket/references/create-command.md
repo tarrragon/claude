@@ -138,14 +138,15 @@ ticket create --wave 2 --action "撰寫" --target "工作日誌" --type DOC
 |------|-----------|-------------------|
 | 語意 | 血緣關係（直系子任務） | 衍生關係（副產品 / 延伸） |
 | 關係欄位 | `parent_id` + `<parent>.children[]` | `source_ticket` + `<source>.spawned_tickets[]` |
-| Complete 阻擋 | 父 Ticket 被未完成 children 阻擋 | source **不被** spawned 阻擋（獨立排程） |
+| Complete 阻擋 | 父 Ticket 被未完成 children 阻擋（永遠） | 非 ANA source：不被 spawned 阻擋（獨立排程）；ANA source：W15-003 升級後阻擋（過渡狀態，後續 hook 收斂後將回到「不阻擋」） |
 | 序號規則 | 自動子序號（如 `W17-001.1`） | 獨立 Ticket ID（不繼承序號） |
-| 使用時機 | 功能拆分、上游結論要求的落地 | ANA 衍生 IMP、執行中發現的獨立項 |
-| 典型場景 | ANA Solution 落地為 IMP/DOC | 執行中發現 bug/技術債另開單獨追蹤 |
+| 使用時機 | 功能拆分、ANA 結論要求的落地（PC-091 路線） | 執行中發現獨立 bug / 技術債（PC-073 殘存範圍） |
+| 典型場景 | ANA Solution 落地為 IMP/DOC（一律 children） | 執行 IMP/DOC 中發現 bug/技術債另開單獨追蹤 |
 | 決策樹參數 | 可省略（繼承自 parent） | 不可省略（root ticket 規則） |
 
-> **判別問題**：新 Ticket 是上游結論「要求」的落地，還是執行中「衍生」的副產品？
-> - 要求的落地（上游 complete 前必須完成）→ `--parent`
-> - 衍生的副產品（獨立排程）→ `--source-ticket`
+> **判別問題**：新 Ticket 是上游 ANA 結論「要求」的落地，還是執行中「衍生」的副產品？
+> - ANA 結論要求的落地 → `--parent <ANA-ID>`（PC-091 唯一路線）
+> - 執行中發現的獨立技術債 → `--source-ticket <CURRENT>`（PC-073 殘存範圍）
 >
-> 詳見 `.claude/pm-rules/ticket-lifecycle.md`「ANA Ticket children 建立原則」與 PC-073。
+> 完整決策樹與用戶情境對照表：`.claude/skills/ticket/references/field-semantics.md`「欄位選擇決策樹」。
+> 規則來源：`.claude/pm-rules/ticket-lifecycle.md`「ANA Ticket 落地下游血緣選擇」與 PC-091（ANA 落地）+ PC-073（執行中發現）。

@@ -48,6 +48,7 @@
 --- 以下按條件觸發，非線性序列 ---
 
 [執行中發現]   → execution-discovery-rules.md（觸發：發現技術債/問題）
+[無法立刻決策] → execution-discovery-rules.md「遇到問題的閉環流程」（觸發：問題需分析/驗證/實驗才能釐清，配合 .claude/rules/core/decision-trigger-binding.md）
 [完成後發現]   → execution-discovery-rules.md 3.5-B 層（觸發：completed Ticket 需修正）
 [任務完成]     → completion-checkpoint-rules.md（觸發：Ticket complete 後）
 ```

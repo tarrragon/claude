@@ -431,3 +431,161 @@ def test_fetch_spawned_pending_context_graceful_degrade(monkeypatch):
     result = hook.fetch_spawned_pending_context(logger)
     assert result is None
     assert logger.warning.called
+
+
+# ===========================================================================
+# W17-031.5：NeedsContext 警示測試（盲區 E）
+# ===========================================================================
+
+
+def _write_handoff(root: Path, ticket_id: str, payload: dict) -> Path:
+    """輔助：寫入 .claude/handoff/pending/<ticket_id>.json"""
+    pending = root / ".claude" / "handoff" / "pending"
+    pending.mkdir(parents=True, exist_ok=True)
+    path = pending / f"{ticket_id}.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+# ---------------------------------------------------------------------------
+# 19. scan_needs_context_handoffs：找出 exit_status=needs_context
+# ---------------------------------------------------------------------------
+def test_scan_needs_context_finds_marked(tmp_path):
+    hook = load_hook_module()
+    _write_handoff(tmp_path, "0.18.0-W17-100", {
+        "ticket_id": "0.18.0-W17-100", "exit_status": "needs_context",
+    })
+    _write_handoff(tmp_path, "0.18.0-W17-101", {
+        "ticket_id": "0.18.0-W17-101", "exit_status": "success",
+    })
+    _write_handoff(tmp_path, "0.18.0-W17-102", {
+        "ticket_id": "0.18.0-W17-102", "exit_status": "needs_context",
+    })
+    # 無 exit_status 欄位（schema 解耦：W17-031.2 前的舊 JSON）→ 不視為 needs_context
+    _write_handoff(tmp_path, "0.18.0-W17-103", {
+        "ticket_id": "0.18.0-W17-103",
+    })
+
+    ids = hook.scan_needs_context_handoffs(tmp_path, MagicMock())
+    assert ids == ["0.18.0-W17-100", "0.18.0-W17-102"]
+
+
+# ---------------------------------------------------------------------------
+# 20. scan_needs_context_handoffs：目錄不存在 fail-open
+# ---------------------------------------------------------------------------
+def test_scan_needs_context_dir_missing_returns_empty(tmp_path):
+    hook = load_hook_module()
+    # 完全不建 .claude/handoff/pending
+    assert hook.scan_needs_context_handoffs(tmp_path, MagicMock()) == []
+
+
+# ---------------------------------------------------------------------------
+# 21. scan_needs_context_handoffs：壞 JSON 不阻擋
+# ---------------------------------------------------------------------------
+def test_scan_needs_context_bad_json_skipped(tmp_path):
+    hook = load_hook_module()
+    pending = tmp_path / ".claude" / "handoff" / "pending"
+    pending.mkdir(parents=True)
+    (pending / "broken.json").write_text("{ not valid json", encoding="utf-8")
+    _write_handoff(tmp_path, "0.18.0-W17-200", {
+        "ticket_id": "0.18.0-W17-200", "exit_status": "needs_context",
+    })
+    ids = hook.scan_needs_context_handoffs(tmp_path, MagicMock())
+    assert ids == ["0.18.0-W17-200"]
+
+
+# ---------------------------------------------------------------------------
+# 22. build_needs_context_section：空清單 → None
+# ---------------------------------------------------------------------------
+def test_build_needs_context_section_empty_returns_none():
+    hook = load_hook_module()
+    assert hook.build_needs_context_section([]) is None
+
+
+# ---------------------------------------------------------------------------
+# 23. build_needs_context_section：總數 + ID 顯示
+# ---------------------------------------------------------------------------
+def test_build_needs_context_section_shows_total_and_ids():
+    hook = load_hook_module()
+    section = hook.build_needs_context_section([
+        "0.18.0-W17-100", "0.18.0-W17-101",
+    ])
+    assert "NeedsContext 警示" in section
+    assert "共 2 個" in section
+    assert "0.18.0-W17-100" in section
+    assert "0.18.0-W17-101" in section
+
+
+# ---------------------------------------------------------------------------
+# 24. build_needs_context_section：超過上限顯示省略
+# ---------------------------------------------------------------------------
+def test_build_needs_context_section_respects_limit():
+    hook = load_hook_module()
+    limit = hook.NEEDS_CONTEXT_DISPLAY_LIMIT
+    ids = [f"0.18.0-W99-{i:03d}" for i in range(1, limit + 3)]
+    section = hook.build_needs_context_section(ids)
+    # 最多 limit 個 ID 顯示
+    displayed = sum(1 for line in section.split("\n") if line.startswith("- `0.18.0-W99-"))
+    assert displayed == limit
+    # 省略訊息
+    assert "省略" in section
+    # 總數正確
+    assert f"共 {len(ids)} 個" in section
+
+
+# ---------------------------------------------------------------------------
+# 25. build_hook_output：三段全在時可區分順序
+# ---------------------------------------------------------------------------
+def test_build_output_three_sections_in_order():
+    hook = load_hook_module()
+    out = hook.build_hook_output(
+        "sched ctx",
+        "## Spawned 推進清單（來源為 completed ANA）\n\n- a",
+        "## NeedsContext 警示\n\n- b",
+    )
+    ac = out["hookSpecificOutput"]["additionalContext"]
+    assert "## 排程提示" in ac
+    assert "## Spawned 推進清單" in ac
+    assert "## NeedsContext 警示" in ac
+    # 順序：排程 < spawned < needs_context
+    assert ac.index("## 排程提示") < ac.index("## Spawned 推進清單") < ac.index("## NeedsContext 警示")
+
+
+# ---------------------------------------------------------------------------
+# 26. build_hook_output：只有 needs_context 也輸出 additionalContext
+# ---------------------------------------------------------------------------
+def test_build_output_only_needs_context_section():
+    hook = load_hook_module()
+    out = hook.build_hook_output(None, None, "## NeedsContext 警示\n\n- x")
+    assert out.get("suppressOutput") is False
+    ac = out["hookSpecificOutput"]["additionalContext"]
+    assert "NeedsContext 警示" in ac
+    assert "## 排程提示" not in ac
+
+
+# ---------------------------------------------------------------------------
+# 27. fetch_needs_context_section：失敗 fail-open
+# ---------------------------------------------------------------------------
+def test_fetch_needs_context_section_graceful_degrade(monkeypatch):
+    hook = load_hook_module()
+    logger = MagicMock()
+    monkeypatch.setattr(
+        hook, "get_project_root",
+        lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    result = hook.fetch_needs_context_section(logger)
+    assert result is None
+    assert logger.warning.called
+
+
+# ---------------------------------------------------------------------------
+# 28. fetch_needs_context_section：無 needs_context 時回 None
+# ---------------------------------------------------------------------------
+def test_fetch_needs_context_section_none_when_no_needs_context(tmp_path, monkeypatch):
+    hook = load_hook_module()
+    monkeypatch.setattr(hook, "get_project_root", lambda: tmp_path)
+    # 寫入只有 success 的 handoff
+    _write_handoff(tmp_path, "0.18.0-W17-300", {
+        "ticket_id": "0.18.0-W17-300", "exit_status": "success",
+    })
+    assert hook.fetch_needs_context_section(MagicMock()) is None

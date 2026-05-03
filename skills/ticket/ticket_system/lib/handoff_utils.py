@@ -177,6 +177,70 @@ def is_valid_direction(direction: str) -> bool:
     return direction_type in _KNOWN_DIRECTION_VALUES
 
 
+def is_handoff_stale(record: dict) -> tuple[bool, str]:
+    """判斷 handoff record 是否為 stale。
+
+    收斂三套消費者（reminder-hook / stop-hook / handoff_gc）對 stale 的判斷規則於單一函式，
+    避免規則漂移（W17-095 根因）。
+
+    判斷規則（依序檢查）：
+    1. 任務鏈方向（to-sibling/to-parent/to-child）且目標 ticket 已 in_progress/completed
+       → stale，reason 為「任務鏈目標 {target_id} 已 {status}」
+    2. 非任務鏈方向且來源 ticket 已 completed
+       → stale，reason 為「來源 ticket {ticket_id} 已 completed」
+    3. 非任務鏈方向且 from_status == "completed"
+       → stale，reason 為「from_status 標記 completed」
+    4. 上述皆不滿足
+       → 非 stale，reason 為空字串
+
+    Args:
+        record: 從 handoff/pending/*.json 載入的 dict，預期含
+            from_ticket / ticket_id / direction / from_status 等欄位。
+            ticket_id 與 from_ticket 二擇一，優先使用 from_ticket（向後相容 ticket_id）。
+
+    Returns:
+        tuple[bool, str]: (is_stale, reason)
+            is_stale=True 時 reason 為人類可讀說明；is_stale=False 時 reason 為空字串。
+    """
+    direction = record.get("direction", "") or ""
+    from_ticket = record.get("from_ticket") or record.get("ticket_id") or ""
+    from_status = record.get("from_status", "") or ""
+
+    # 情境 1：任務鏈目標已啟動
+    if is_task_chain_direction(direction):
+        target_id = extract_direction_target_id(direction)
+        if target_id and is_ticket_in_progress_or_completed(target_id):
+            # 取得 target 實際狀態以填入 reason（in_progress / completed）
+            try:
+                version = extract_version_from_ticket_id(target_id)
+                if version is not None:
+                    ticket, error = load_and_validate_ticket(
+                        version, target_id, auto_print_error=False
+                    )
+                    if not error:
+                        status = ticket.get("status", "in_progress")
+                    else:
+                        status = "in_progress"
+                else:
+                    status = "in_progress"
+            except Exception:
+                status = "in_progress"
+            return True, f"任務鏈目標 {target_id} 已 {status}"
+        # 任務鏈但目標未啟動：不 stale
+        return False, ""
+
+    # 情境 2：非任務鏈且來源 ticket 已 completed
+    if from_ticket and is_ticket_completed(from_ticket):
+        return True, f"來源 ticket {from_ticket} 已 completed"
+
+    # 情境 3：非任務鏈且 from_status 已標記 completed
+    if from_status == STATUS_COMPLETED:
+        return True, "from_status 標記 completed"
+
+    # 情境 4：未完成
+    return False, ""
+
+
 def scan_pending_handoffs() -> List[ParsedHandoff]:
     """
     掃描 pending/ 目錄，解析所有 handoff 檔案。

@@ -222,9 +222,10 @@ class TestCreateSourceTicketIntegration:
         assert result == 1
         captured = capsys.readouterr()
         combined_output = captured.out + captured.err
-        # 存在性失敗訊息
+        # 存在性失敗訊息（對齊 ErrorEnvelope 新格式：__error_envelope_v1__ 標記 + errno）
         assert "0.18.0-W99-999" in combined_output
-        assert "ticket track list" in combined_output
+        assert "__error_envelope_v1__" in combined_output
+        assert "errno: SOURCE_TICKET_NOT_FOUND" in combined_output
         # 新 Ticket 未進入持久化/雙向關聯階段
         mocks["update_source"].assert_not_called()
 
@@ -252,9 +253,10 @@ class TestCreateSourceTicketIntegration:
         assert result == 1
         captured = capsys.readouterr()
         combined = captured.out + captured.err
-        # 互斥訊息
-        assert "互斥" in combined
-        assert "PC-073" in combined
+        # 互斥訊息（對齊 ErrorEnvelope 新格式：__error_envelope_v1__ 標記 + errno）
+        # 註：原 PC-073 字面引用已移除，errno SOURCE_PARENT_MUTUALLY_EXCLUSIVE 為新權威語意載體
+        assert "__error_envelope_v1__" in combined
+        assert "errno: SOURCE_PARENT_MUTUALLY_EXCLUSIVE" in combined
         mocks["update_source"].assert_not_called()
 
     def test_b4_mutual_exclusion_precedes_existence_check(self, monkeypatch, capsys):
@@ -277,10 +279,11 @@ class TestCreateSourceTicketIntegration:
         assert result == 1
         captured = capsys.readouterr()
         combined = captured.out + captured.err
-        # 互斥訊息出現（關鍵：ordering 驗證）
-        assert "互斥" in combined
-        # 不應出現「不存在」相關 NOT_FOUND 訊息
-        assert "ticket track list" not in combined
+        # 互斥訊息出現（關鍵：ordering 驗證；對齊 ErrorEnvelope 新格式）
+        assert "__error_envelope_v1__" in combined
+        assert "errno: SOURCE_PARENT_MUTUALLY_EXCLUSIVE" in combined
+        # 不應出現「不存在」相關 NOT_FOUND errno（驗證 fail-fast 順序：互斥檢查先於存在性）
+        assert "errno: SOURCE_TICKET_NOT_FOUND" not in combined
         mocks["update_source"].assert_not_called()
 
     def test_b5_invalid_id_format(self, monkeypatch, capsys):
@@ -443,7 +446,9 @@ class TestCreateSourceTicketIntegration:
         assert result == 1
         captured = capsys.readouterr()
         combined = captured.out + captured.err
-        assert "ticket track list" in combined
+        # 對齊 ErrorEnvelope 新格式：自我引用 fail 由存在性檢查觸發 SOURCE_TICKET_NOT_FOUND
+        assert "__error_envelope_v1__" in combined
+        assert "errno: SOURCE_TICKET_NOT_FOUND" in combined
 
     def test_b11_cross_version(self, monkeypatch, capsys):
         """B11 - 跨版本：source 在 0.17.0，新 ticket 建在 0.18.0
@@ -577,4 +582,6 @@ class TestValidateSourceTicketArg:
         result = _validate_source_ticket_arg(args)
         assert result is False
         captured = capsys.readouterr()
-        assert "互斥" in captured.out
+        # 對齊 ErrorEnvelope 新格式：__error_envelope_v1__ 標記 + errno
+        assert "__error_envelope_v1__" in captured.out
+        assert "errno: SOURCE_PARENT_MUTUALLY_EXCLUSIVE" in captured.out

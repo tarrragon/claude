@@ -80,6 +80,25 @@ from hook_utils import (
     find_ticket_file,
 )
 
+# 加入 ticket_system lib 路徑以引用 handoff_utils.is_handoff_stale（W17-095.2）
+# 同時加入 skills/ticket 父路徑以解析 handoff_utils 內部的 `from ticket_system.lib.*` import
+_TICKET_SKILL_PATH = Path(__file__).parent.parent / "skills" / "ticket"
+_TICKET_LIB_PATH = _TICKET_SKILL_PATH / "ticket_system" / "lib"
+for _p in (_TICKET_SKILL_PATH, _TICKET_LIB_PATH):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
+
+try:
+    from handoff_utils import is_handoff_stale  # type: ignore
+except Exception:  # pragma: no cover - fallback：lib 不可用時退化為原邏輯（保留任務鏈）
+    def is_handoff_stale(record):  # type: ignore
+        direction = (record or {}).get("direction", "") or ""
+        direction_type = direction.split(":")[0]
+        # 任務鏈方向預設不視為 stale（保留語義與原 should_preserve_pending_json 一致）
+        if direction_type in {"to-sibling", "to-parent", "to-child"}:
+            return False, ""
+        return False, ""
+
 EXIT_SUCCESS = 0
 
 # 常數定義
@@ -384,35 +403,35 @@ def scan_in_progress_tickets(project_root: Path, logger) -> list:
     return []
 
 
-def should_preserve_pending_json(direction: str, logger) -> bool:
+def should_preserve_pending_json(record: dict, logger) -> bool:
     """
-    判斷是否應保留 pending JSON，即使來源 Ticket 已完成
+    判斷是否應保留 pending JSON，即使來源 Ticket 已完成。
 
-    direction 為 to-sibling / to-parent / to-child 的 handoff，
-    來源 Ticket 已 completed 是預期狀態，應保留 pending JSON。
+    W17-095.2 改造：對齊 CLI stale 規則，引用 handoff_utils.is_handoff_stale(record)。
+    回傳值定義為「非 stale → 應保留」，與原本的「任務鏈類型 → 保留」相比，
+    新增「任務鏈目標已 in_progress/completed → 視為 stale → 不保留（GC）」分支，
+    修正 W17-095 根因：原邏輯任務鏈一律 return True，導致目標已啟動的 stale handoff
+    反覆誤觸發 Stop hook block。
 
-    direction 格式：
-    - "to-sibling" (無目標) 或 "to-sibling:TARGET_ID" (帶目標 ID)
-    - "to-parent" (無目標) 或 "to-parent:TARGET_ID" (帶目標 ID)
-    - "to-child" (無目標) 或 "to-child:TARGET_ID" (帶目標 ID)
+    record 必要欄位（由 handoff_utils.is_handoff_stale 解析）：
+    - direction: "to-sibling[:TARGET_ID]" / "to-parent[:TARGET_ID]" / "to-child[:TARGET_ID]" / 其他
+    - from_ticket / ticket_id: 來源 ticket（向後相容）
+    - from_status: 可選
 
     Args:
-        direction: handoff 的 direction 欄位
+        record: 從 handoff/pending/*.json 載入的 dict
         logger: 日誌記錄器
 
     Returns:
-        bool - 是否應保留 pending JSON
+        bool - 是否應保留 pending JSON（True=保留，False=GC）
     """
-    # 任務鏈類型（來源已完成是預期狀態）
-    # direction 格式為 "to-sibling" 或 "to-sibling:TARGET_ID"
-    chain_directions = {"to-sibling", "to-parent", "to-child"}
-    direction_type = direction.split(":")[0]
-
-    if direction_type in chain_directions:
-        logger.debug(f"handoff 類型 '{direction}' 應保留已完成 Ticket 的 pending JSON")
-        return True
-
-    return False
+    is_stale, reason = is_handoff_stale(record or {})
+    direction = (record or {}).get("direction", "") or ""
+    if is_stale:
+        logger.debug(f"handoff direction='{direction}' 視為 stale（{reason}），不保留")
+        return False
+    logger.debug(f"handoff direction='{direction}' 非 stale，保留 pending JSON")
+    return True
 
 
 def scan_pending_handoff_tasks(project_root: Path, logger) -> tuple:
@@ -468,7 +487,7 @@ def scan_pending_handoff_tasks(project_root: Path, logger) -> tuple:
                     # 檢查對應 Ticket 是否已完成
                     if is_ticket_completed(project_root, ticket_id, logger):
                         # GC：檢查 direction，判斷是否應保留
-                        if should_preserve_pending_json(direction, logger):
+                        if should_preserve_pending_json(data, logger):
                             pending_tasks.append({
                                 "ticket_id": ticket_id,
                                 "title": title,

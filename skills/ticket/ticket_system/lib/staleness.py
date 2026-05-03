@@ -22,6 +22,12 @@ STALE_INFO_DAYS = 7
 STALE_WARNING_DAYS = 14
 STALE_CRITICAL_DAYS = 30
 
+# W17-031.4: stale in_progress 閾值（小時）
+# 用於 runqueue 識別 agent 中斷 / timeout 後遺留的 in_progress ticket。
+# W17-033 已落地 agent 自律 complete 規則 + acceptance-gate-hook 安全網，
+# 此閾值僅捕捉 W17-033 機制無法覆蓋的案例（agent 已不在，無法觸發 complete）。
+STALE_IN_PROGRESS_HOURS = 24
+
 # 等級常數
 LEVEL_INFO = "info"
 LEVEL_WARNING = "warning"
@@ -71,6 +77,60 @@ def calculate_stale_level(
     if age_days >= STALE_INFO_DAYS:
         return LEVEL_INFO
     return None
+
+
+def _parse_started_at(started_at: Any) -> Optional[datetime]:
+    """解析 frontmatter 的 started_at（ISO datetime 字串或 datetime 物件），失敗回 None。"""
+    if not started_at:
+        return None
+    if isinstance(started_at, datetime):
+        return started_at
+    if isinstance(started_at, str):
+        try:
+            # 接受 ISO 格式（含/不含 timezone）；ticket md 通常為 naive 'YYYY-MM-DDTHH:MM:SS'
+            return datetime.fromisoformat(started_at.strip())
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
+def is_stale_in_progress(
+    ticket: dict, now: Optional[datetime] = None
+) -> bool:
+    """
+    判斷 ticket 是否為 stale in_progress（W17-031.4）。
+
+    條件：
+    - status == "in_progress"
+    - completed_at 為 None / 缺欄位
+    - started_at 距今 >= STALE_IN_PROGRESS_HOURS
+
+    解析失敗（缺 started_at / 格式錯誤）→ False（fail-open，不誤標）。
+
+    Args:
+        ticket: ticket frontmatter dict
+        now: 當前時間（測試可注入）；預設使用 datetime.now()
+
+    Returns:
+        True 若符合 stale in_progress；否則 False
+    """
+    if ticket.get("status") != "in_progress":
+        return False
+    if ticket.get("completed_at"):
+        return False
+    started = _parse_started_at(ticket.get("started_at"))
+    if started is None:
+        return False
+
+    reference = now or datetime.now()
+    # 兼容 timezone-aware / naive：兩者只要其中一邊 aware 就轉同 naive
+    if started.tzinfo is not None and reference.tzinfo is None:
+        started = started.replace(tzinfo=None)
+    elif started.tzinfo is None and reference.tzinfo is not None:
+        reference = reference.replace(tzinfo=None)
+
+    elapsed_hours = (reference - started).total_seconds() / 3600
+    return elapsed_hours >= STALE_IN_PROGRESS_HOURS
 
 
 def _ticket_age_days(ticket: dict, today: date) -> Optional[int]:

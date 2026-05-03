@@ -18,15 +18,19 @@ SessionStart 事件觸發時，呼叫 `ticket track runqueue` 取得排程提示
 3. 若兩者皆無 → 本節顯示「無排程提示」
 4. 另掃描當前版本的 completed ANA spawned pending，若有則追加「Spawned 推進清單」小節
    （W17-041 / W17-036 軸 D 補強；PC-075 下游傳播路徑訊號通道）
+5. 另掃描 .claude/handoff/pending/ 的 JSON，若 exit_status=needs_context，
+   則追加「NeedsContext 警示」小節（W17-031.5 盲區 E）
 
 失敗模式：
 - CLI 執行錯誤 / timeout / 不存在 → logger.error（stderr）+ 靜默
   （規則 4：失敗可見；但 SessionStart hook 不阻塞 session 啟動）
 - Spawned 掃描失敗 → logger.warning + 回傳 None，不影響主排程提示
+- NeedsContext 掃描失敗 → logger.warning + 回傳 None，不影響主排程提示
 
 來源：
 - W17-011.4 / W17-009 scheduler 缺口 D（motd/login info 類比）
 - W17-041 / W17-036 軸 D：session-start 新增 spawned pending 提醒
+- W17-031.5：W17-028 盲區 E，session-start 顯示 needs_context 摘要
 """
 
 import json
@@ -58,6 +62,16 @@ EMPTY_MARKER = "無可執行 Ticket"
 
 # Spawned pending 掃描限制（避免洗版）
 SPAWNED_PENDING_DISPLAY_LIMIT = 5
+
+# NeedsContext 警示顯示上限（W17-031.5 盲區 E）
+NEEDS_CONTEXT_DISPLAY_LIMIT = 3
+
+# handoff pending 目錄（與 ticket_system.constants.HANDOFF_DIR 一致；
+# 此處硬編一致副本以維持 uv script dependencies=[] 約束）
+HANDOFF_PENDING_RELPATH = ".claude/handoff/pending"
+
+# Exit Status 枚舉值（W17-010 schema；只取 needs_context 作警示用）
+EXIT_STATUS_NEEDS_CONTEXT = "needs_context"
 
 # Terminal 狀態（spawned 視為「已推進完成」的集合，不列入 pending 清單）
 # 與 ticket_system.constants.TERMINAL_STATUSES 對齊（uv script 單檔 dependencies=[]，硬編一致副本）
@@ -337,17 +351,129 @@ def fetch_spawned_pending_context(logger) -> Optional[str]:
     return build_spawned_pending_section(non_terminal)
 
 
+def scan_needs_context_handoffs(
+    project_root: Path, logger
+) -> List[str]:
+    """掃描 .claude/handoff/pending/ 中 exit_status=needs_context 的 ticket_id。
+
+    Schema 解耦：
+    - W17-031.2 才會擴充 handoff JSON 加 exit_status 欄位
+    - 本函式在欄位缺失時靜默忽略（不視為 needs_context），實作零依賴
+    - JSON 解析失敗 / 檔案讀取失敗 / 目錄不存在皆 fail-open（回空 list）
+
+    Args:
+        project_root: 專案根目錄
+        logger: 日誌物件
+
+    Returns:
+        ticket_id 清單（依檔名排序），可能為空
+    """
+    pending_dir = project_root / HANDOFF_PENDING_RELPATH
+    if not pending_dir.exists():
+        logger.debug("handoff pending 目錄不存在: %s", pending_dir)
+        return []
+
+    needs_context_ids: List[str] = []
+    try:
+        json_files = sorted(pending_dir.glob("*.json"))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("列舉 handoff pending JSON 失敗: %s", e)
+        return []
+
+    for jf in json_files:
+        try:
+            data = json.loads(jf.read_text(encoding="utf-8"))
+        except Exception as e:  # noqa: BLE001
+            logger.debug("解析 handoff JSON 失敗 %s: %s", jf.name, e)
+            continue
+        if not isinstance(data, dict):
+            continue
+        # 欄位缺失時視為非 needs_context（schema 解耦）
+        exit_status = data.get("exit_status")
+        if exit_status != EXIT_STATUS_NEEDS_CONTEXT:
+            continue
+        ticket_id = data.get("ticket_id") or jf.stem
+        needs_context_ids.append(str(ticket_id))
+
+    logger.info(
+        "scan_needs_context_handoffs: pending_files=%d, needs_context=%d",
+        len(json_files), len(needs_context_ids),
+    )
+    return needs_context_ids
+
+
+def build_needs_context_section(
+    ticket_ids: List[str],
+) -> Optional[str]:
+    """將 needs_context ticket 清單格式化為警示 markdown 小節。
+
+    設計要點：
+    - 獨立小節 `## NeedsContext 警示`，與排程/spawned 區分
+    - 顯示總數 + 最多 NEEDS_CONTEXT_DISPLAY_LIMIT 個 ID
+    - 明示「不可直接接手」語意，避免 PM 誤拾未補料 ticket
+
+    Returns:
+        markdown 字串（有 needs_context 時）或 None（無）
+    """
+    if not ticket_ids:
+        return None
+
+    total = len(ticket_ids)
+    displayed = ticket_ids[:NEEDS_CONTEXT_DISPLAY_LIMIT]
+    omitted = total - len(displayed)
+
+    lines: List[str] = [
+        "## NeedsContext 警示（不可直接接手，需先補料或重派）",
+        "",
+        f"共 {total} 個 ticket 已標記 exit_status=needs_context；"
+        f"下列顯示最多 {NEEDS_CONTEXT_DISPLAY_LIMIT} 筆：",
+        "",
+    ]
+    for tid in displayed:
+        lines.append(f"- `{tid}`")
+    if omitted > 0:
+        lines.append(f"- …（其餘 {omitted} 筆省略）")
+    lines.append("")
+    lines.append(
+        "建議動作：執行 `ticket track full <id>` 檢視 NeedsContext 章節，"
+        "依缺料指引補 context 後再 resume；勿直接 claim。"
+    )
+    return "\n".join(lines)
+
+
+def fetch_needs_context_section(logger) -> Optional[str]:
+    """取得 needs_context 警示 markdown 小節（fail-open 包裝）。
+
+    任何步驟失敗回傳 None，不影響主排程提示輸出。
+    """
+    try:
+        project_root = get_project_root()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("取得 project_root 失敗（needs_context 跳過）: %s", e)
+        return None
+
+    try:
+        ids = scan_needs_context_handoffs(project_root, logger)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("scan_needs_context_handoffs 異常（降級忽略）: %s", e)
+        return None
+
+    return build_needs_context_section(ids)
+
+
 def build_hook_output(
     scheduler_context: Optional[str],
     spawned_pending_section: Optional[str] = None,
+    needs_context_section: Optional[str] = None,
 ) -> Dict[str, Any]:
     """組裝 SessionStart hook 的 JSON 輸出。
 
-    兩個區塊獨立存在：
+    三個區塊獨立存在：
     - scheduler_context → `## 排程提示` 區塊（原排程 hint）
-    - spawned_pending_section → `## Spawned 推進清單` 區塊（W17-041 新增）
+    - spawned_pending_section → `## Spawned 推進清單` 區塊（W17-041）
+    - needs_context_section → `## NeedsContext 警示` 區塊（W17-031.5）
 
-    兩者皆無時回傳 suppressOutput=True；任一有內容即輸出 additionalContext。
+    皆無時回傳 suppressOutput=True；任一有內容即輸出 additionalContext。
     """
     sections: List[str] = []
     if scheduler_context:
@@ -359,6 +485,8 @@ def build_hook_output(
         )
     if spawned_pending_section:
         sections.append(spawned_pending_section)
+    if needs_context_section:
+        sections.append(needs_context_section)
 
     if not sections:
         return {"suppressOutput": True}
@@ -386,12 +514,16 @@ def main() -> int:
 
     scheduler_context = fetch_scheduler_context(logger)
     spawned_pending_section = fetch_spawned_pending_context(logger)
-    output = build_hook_output(scheduler_context, spawned_pending_section)
+    needs_context_section = fetch_needs_context_section(logger)
+    output = build_hook_output(
+        scheduler_context, spawned_pending_section, needs_context_section
+    )
     print(json.dumps(output, ensure_ascii=False, indent=2))
     logger.info(
-        "scheduler hint hook 完成（scheduler=%s, spawned_pending=%s）",
+        "scheduler hint hook 完成（scheduler=%s, spawned_pending=%s, needs_context=%s）",
         scheduler_context is not None,
         spawned_pending_section is not None,
+        needs_context_section is not None,
     )
     return EXIT_SUCCESS
 

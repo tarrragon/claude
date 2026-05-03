@@ -15,6 +15,88 @@ allowed-tools: Bash, Read, Write, Edit
 
 ---
 
+## Agent isolation worktree（cc 自動建 worktree-agent-*）
+
+本章節說明 Claude Code runtime 自動建立的 agent worktree（與本 SKILL 的人工 `/worktree create` 為不同來源），重點在殭屍累積的成因與專案 GC 對策。
+
+### 機制
+
+Claude Code 的 Agent tool 設定 `isolation: "worktree"` 派發 subagent 時，cc runtime 會自動執行下列動作：
+
+- 在 `.claude/worktrees/agent-XXXXXXXX` 建立隔離 worktree（XXXXXXXX 為隨機 hash）
+- 對應分支命名為 `worktree-agent-XXXXXXXX`
+- 同時對該 worktree 加 git lock，lock reason 內含 cc CLI process 的 PID，目的是阻止 git 自動 GC 在 agent 執行期間誤清
+
+**Why**：worktree 隔離讓 subagent 的檔案改動與主 repo 解耦，避免並行派發時互相覆蓋；lock + PID 是 cc 對 git GC 的防護，確保長時間 agent 執行不被 `git worktree prune` 中斷。
+
+### 殭屍問題
+
+cc runtime 在 agent 結束或 process 異常死亡時**不會自動清理** agent worktree。後果：
+
+- PID 死亡後 lock 仍存在（git 看 lock 不看 PID），形成「殭屍 lock」
+- `.claude/worktrees/` 下殘留 worktree 目錄，累積占用 disk
+- `git worktree list` 與 statusline 顯示大量無用 entries，干擾人工判讀
+
+**Consequence**：未清理的殭屍 worktree 會無上限累積，每次 cc session 派發 isolation:worktree subagent 都新增一個，數天內可達數十個，污染 git 視圖並佔用 GB 級空間。
+
+**Action**：依賴下方「專案對策」自動 GC，或在察覺累積時執行「手動清理指令」。
+
+### 專案對策（W17-119.1 SessionStart hook GC）
+
+本專案在 `.claude/hooks/worktree-zombie-cleanup-hook.py` 實作 SessionStart 觸發的自動 GC，邏輯如下：
+
+| 步驟 | 動作 |
+|------|------|
+| 1 | 列舉 `.claude/worktrees/agent-*` 下所有 worktree |
+| 2 | 解析每個 worktree 的 lock reason，提取 PID |
+| 3 | 對 PID 執行死活檢測（`ps -p <pid>`） |
+| 4 | PID 已死 → `git worktree unlock` + `git worktree remove --force` |
+
+**安全防護**：
+
+- worktree 內 dirty 檔案數 != 0 時僅輸出警告，不自動清，避免誤刪未保存改動
+- 排除建立時間 < 30 分鐘的 worktree，避免清掉剛啟動還沒來得及註冊的 agent
+- 透過環境變數開關，可在偵錯時暫時關閉
+
+**Why**：SessionStart 是 cc session 入口，每次新 session 都做一次清理可保證殭屍上限不超過上一 session 累積量。
+
+### 手動清理指令
+
+當自動 GC 失效或要主動清理時，使用以下指令：
+
+```bash
+# 列出殭屍（PID 已死的 agent worktree lock）
+git worktree list --porcelain | grep "^locked" | grep -oE "pid [0-9]+" | awk '{print $2}' | while read p; do
+  ps -p $p > /dev/null 2>&1 || echo "$p dead"
+done
+
+# 強制清所有 agent worktree（謹慎使用：不檢查 dirty）
+git worktree list --porcelain | grep "^worktree .*\.claude/worktrees/agent-" | awk '{print $2}' | while read wt; do
+  git worktree unlock "$wt" 2>/dev/null
+  git worktree remove --force "$wt"
+done
+```
+
+**Action**：第一段指令僅列舉，可安全執行確認殭屍數量；第二段為強制清理，執行前請先用 `git worktree list` 人工確認沒有正在進行中的 agent。
+
+### 與人工 /worktree create 的區別
+
+兩者表面都是 git worktree，但來源、生命週期、清理機制完全不同。混淆會導致誤清正在工作的 worktree。
+
+| 維度 | cc Agent isolation:worktree | 人工 /worktree create |
+|------|----------------------------|----------------------|
+| 觸發者 | cc runtime（Agent tool 自動） | 使用者（本 SKILL） |
+| 路徑 | `.claude/worktrees/agent-XXXXXXXX` | `../ccsession-<ticket-id>` |
+| 分支命名 | `worktree-agent-XXXXXXXX` | `feat/<ticket-id>` |
+| Lock | 自動加 lock（含 PID） | 不加 lock |
+| 預期生命週期 | 單次 agent 執行（分鐘級） | 整個 ticket 開發（小時至天級） |
+| 清理機制 | cc 不清，依 W17-119.1 hook GC | 使用者手動 `git worktree remove` |
+| 殭屍風險 | 高（無自動清） | 低（使用者主動管理） |
+
+**Action**：判斷某個 worktree 屬哪一類，看路徑前綴即可（`.claude/worktrees/agent-` vs `../ccsession-`）；自動 GC hook 僅處理前者，後者請使用本 SKILL 的人工流程管理。
+
+---
+
 ## 快速開始
 
 ### 建立 Worktree

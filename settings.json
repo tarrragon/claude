@@ -310,6 +310,11 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start-sync-exclusion-check-hook.py",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-zombie-cleanup-hook.py",
+            "timeout": 15000
           }
         ]
       }
@@ -360,6 +365,11 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/needs-context-listener-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-skill-sync-check-hook.py",
             "timeout": 5000
           }
         ]

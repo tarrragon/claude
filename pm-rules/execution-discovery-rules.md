@@ -43,6 +43,52 @@
 
 ---
 
+### 遇到問題的閉環流程（無法立刻決策時的合法路徑）
+
+> **來源**：`.claude/rules/core/decision-trigger-binding.md` 規定決策只有兩種合法狀態（已決策含結論 / 綁 ticket trigger 延後），禁止無 trigger 延後。本節為規則層的流程層補充：當 PM 遇到問題不能立刻產出狀態 (a) 已決策時，必須走以下閉環產出狀態 (b)，最終回到 (a)。
+
+**核心主張**：「不能立刻決策」不等於「延後」。延後是無 trigger 飄忽，閉環是有明確 ticket trigger 的執行路徑。
+
+#### 5 step 閉環
+
+| Step | 動作 | 具體執行 |
+|------|------|---------|
+| 1. 識別 | 認知這是「不能立刻產出結論」的問題 | 若可立即決策則寫狀態 (a) 結論，跳過閉環；否則進入 step 2 |
+| 2. 建分析/規劃 ticket | 建 ANA（分析）或 DOC（規劃）ticket 承載問題 | `ticket create --type ANA --action "分析" --target "..."` 或 `--type DOC` |
+| 3. Solution 規劃驗證/實驗子任務 | 在 step 2 ticket 的 Solution 章節列出需建立的 spawned IMP/DOC tickets | 每項需含：產出物、acceptance、預估成本；用 `--source-ticket` 建衍生 ticket |
+| 4. 執行驗證/實驗 | 完成 spawned 子任務（依 Solution 方案逐項執行） | 標準 TDD 流程；每個子任務獨立 commit |
+| 5. 釐清解決方案 + 結案 | 根據驗證結果，原 ANA/DOC ticket 寫明確結論並 complete | 結論為狀態 (a)：「採方案 X」「不採方案 Y 因為 Z」「需另建 follow-up 追蹤」 |
+
+#### 結案的合法形式
+
+| 結案內容 | 範例 |
+|---------|------|
+| 採某方案 | 「採方案 A，理由 B（baseline 數據 C）」 |
+| 不採某方案 | 「方案 X 不可行，原因 Y（實驗結果 Z）」 |
+| 衍生 follow-up | 「驗證指向新方向 X，已建衍生 ticket 追蹤；本 ticket 結論：原方向不採」 |
+| 確認無需處理 | 「驗證後問題不存在/已自然消解，原因 Y」 |
+
+**禁止結案內容**（屬無 trigger 延後反模式，違反 `decision-trigger-binding.md` 規則 1）：
+
+| 反模式 | 原因 | 修正方向 |
+|-------|------|---------|
+| 「需要更多時間觀察」 | 無 trigger 飄忽 | 建監測 ticket 並設量化條件，以該 ticket 為 trigger |
+| 「Phase 5 再決定」 | 違規無 trigger 延後 | 在當下 Phase 內決策，或建 follow-up ticket 明示綁定 |
+| 「先放著看以後」 | 無結論等同無做 | 確認可立即下結論（狀態 a）或必須建 spawned ticket（狀態 b） |
+
+#### 與 `decision-trigger-binding.md` 的對應
+
+| 規則層 | 流程層（本章節） |
+|---|---|
+| 規則 1：決策只有兩種合法狀態 | 閉環是從狀態 (b) 回到狀態 (a) 的合法路徑 |
+| 規則 2：trigger 限 ticket ID only | 閉環中所有等待點都是 spawned ticket 完成 |
+| 規則 3：寫法替換對照表 | 「之後再評估」→「依 spawned ticket 驗證結果決策」 |
+| 規則 4：違規偵測 | 結案文字若含反模式句型且無 ticket 引用即違規 |
+
+任何 PM 工作中遇到「不能立刻決策」必走閉環，禁止用「以後再說」語句閃避。
+
+---
+
 ## 第三層半-B：完成後發現（Post-Complete Discovery）
 
 > **來源**：Ticket complete + commit 後 WRAP 分析發現與既有錯誤模式的矛盾，需要選擇性回退。完成後無正式修正流程，導致驗收條件與實際交付物不一致。

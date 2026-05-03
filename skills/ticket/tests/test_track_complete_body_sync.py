@@ -66,6 +66,72 @@ class TestSyncCompletionBodyFields:
         assert "thyme-python-developer" not in result
 
 
+class TestBodySchemaErrorMessageSyntax:
+    """W17-008.5.1: complete body schema 驗證失敗訊息應使用正確的 append-log 語法。
+
+    append-log --help 顯示 content 為 positional argument，正確語法為：
+        ticket track append-log <ticket_id> "內容" --section "<section>"
+    舊訊息錯誤地使用 --content flag，會導致使用者照提示執行又失敗。
+    """
+
+    def _capture_complete_output(self, capsys):
+        from unittest.mock import patch
+        from ticket_system.commands.lifecycle import TicketLifecycle
+
+        lifecycle = TicketLifecycle("0.18.0")
+        ticket = {
+            "id": "0.18.0-W17-999",
+            "type": "IMP",
+            "status": "in_progress",
+            "title": "Test",
+            "who": {"current": "thyme-python-developer"},
+            "acceptance": [{"text": "x", "completed": True}],
+            "_body": "# Execution Log\n\n## Problem Analysis\n\n（待填寫：x）\n",
+            "_path": "/tmp/fake.md",
+        }
+
+        with patch("ticket_system.commands.lifecycle.load_and_validate_ticket",
+                   return_value=(ticket, None)), \
+             patch("ticket_system.commands.lifecycle.validate_completable_status",
+                   return_value=(True, "", False)), \
+             patch("ticket_system.commands.lifecycle.validate_acceptance_criteria",
+                   return_value=(True, [])), \
+             patch("ticket_system.commands.lifecycle.validate_execution_log_by_type",
+                   return_value=(False, ["Problem Analysis", "Solution"])), \
+             patch("ticket_system.commands.lifecycle.resolve_ticket_path",
+                   return_value="/tmp/fake.md"):
+            result = lifecycle.complete("0.18.0-W17-999")
+
+        captured = capsys.readouterr()
+        return result, captured.out
+
+    def test_error_message_does_not_contain_content_flag(self, capsys):
+        """訊息不可包含 `--content`，避免使用者照錯誤提示執行又失敗。"""
+        result, output = self._capture_complete_output(capsys)
+        assert result == 1
+        assert "--content" not in output, (
+            f"訊息不應包含 --content flag（append-log content 是 positional），實際輸出：\n{output}"
+        )
+
+    def test_error_message_uses_positional_content_syntax(self, capsys):
+        """訊息應符合 append-log --help：content 為 positional，--section 為 option。"""
+        result, output = self._capture_complete_output(capsys)
+        assert result == 1
+        # 預期格式：ticket track append-log <ticket_id> "內容" --section "<section>"
+        assert "ticket track append-log" in output
+        assert "--section" in output
+        # positional content 必出現在 --section 之前（依 help 順序）
+        for line in output.splitlines():
+            if "ticket track append-log" in line and "--section" in line:
+                appendlog_idx = line.find("append-log")
+                section_idx = line.find("--section")
+                # append-log 與 --section 之間應有 ticket_id 與 content positional
+                between = line[appendlog_idx + len("append-log"):section_idx]
+                assert '"' in between, (
+                    f"append-log 與 --section 之間應有 positional content（含引號）：{line}"
+                )
+
+
 class TestCompleteIntegration:
     """驗證 complete 流程調用 sync_completion_body_fields。"""
 

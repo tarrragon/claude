@@ -1,3 +1,68 @@
+## [1.29.0] - 2026-05-03
+
+### Summary
+feat: 規則 6.1 框架 ticket 版本歸屬補強 + PC-121; feat: runqueue stale in_progress 標註; feat: runqueue readiness 標註 (+52 more)
+
+Changes: 24 feat, 3 refactor, 8 fix, 15 docs, 2 chore, 3 test
+
+- feat: 規則 6.1 框架 ticket 版本歸屬補強 + PC-121
+- feat: runqueue stale in_progress 標註
+- feat: runqueue readiness 標註
+- feat: handoff 寫入 exit_status 欄位
+- feat: runqueue --context=resume 讀 handoff exit_status 並標 tag
+- feat: handoff --auto 整合 Context Bundle 抽取器
+- feat: session-start NeedsContext 警示摘要（盲區 E）
+- feat: worktree-zombie-cleanup-hook (SessionStart PID 死活檢測 + 自動 GC)
+- feat: skill-cli-error-feedback-hook 補充模式（偵測 ErrorEnvelope 標記跳過引導）
+- feat: create.py 業務錯誤改走 ErrorEnvelope 結構化通道
+- feat: argparse 業務錯誤改走 format_error 結構化路徑
+- feat: format_error 升級為雙路徑（legacy str + ErrorEnvelope）
+- feat: ticket track log 新增 --section 過濾參數
+- feat: append-log section 標題容錯（A+B 合併方案）
+- feat: ticket track show 作為 full 的 alias
+- feat: add-spawned 支援 nargs='+' 多 ID 對齊 Unix 慣例
+- feat: ticket skill sync-check hook（C 路徑落地）
+- feat: 套用 multi-view review 修正規則檔 （AC-5 待 PM 二次 review）
+- feat: 補強 ticket skill 行為變更同步檢查規則（AC-4 待 PM multi-view）
+- feat: 決策樹閉環流程（無法立刻決策時的合法 5 step）
+- feat: 落地禁用無 ticket trigger 延後決策原則
+- feat: multi_view_checker 加 nested YAML 結構誤用提示
+- feat: Stop hook should_preserve_pending_json 對齊 CLI stale 規則
+- feat: 抽 handoff_utils.is_handoff_stale 共用函式 + 4 情境單元測試
+- refactor: acceptance-gate hook ana_spawned_checker 退場
+- refactor: process-skip-guard get_active_in_progress_ticket short-circuit
+- refactor: 抽取 section_locator helper 移除 4 處 section pattern 重複
+- fix: test_create_source_ticket 5 斷言對齊 ErrorEnvelope 新格式
+- fix: 修復 complete schema 錯誤訊息使用不存在的 append-log --content
+- fix: handoff-reminder-hook 套用 stale 過濾並提示已過濾數
+- fix: track_relations closed/superseded 分組 + grep lint 防護
+- fix: handoff/auditor/checkpoint 6 處 terminal 對齊
+- fix: view 層 board+stuck_anas+query 3 處 terminal 對齊
+- fix: chain_analyzer.py 8 處 terminal 語意對齊
+- fix: lifecycle 內部 terminal 語意一致性對齊
+- docs: 升級 提煉 memory 為 framework 規則
+- docs: 統一 ANA 落地語意 + 建立 field-semantics.md SSOT
+- docs: track-command.md 同步 runqueue exit_status tag 說明
+- docs: worktree SKILL 新增 Agent isolation worktree GC 機制章節
+- docs: 新增 PC-120 + 修正 multi-view 整合無 trigger 延後違規
+- docs: 新增 PC-119 parallel-evaluation 用法誤解 — 單派 linux 視角
+- docs: 補強 .5 group 引導文件 PC-105 防護（ErrorEnvelope / hook envelope 偵測說明）
+- docs: 撰寫 PC-118 ticket skill 行為變更未同步決策層反模式
+- docs: ana-solution-schema 加 forbidden_format 段落明示禁 nested
+- docs: 新增 PC error pattern — ANA multi_view_status nested YAML hook 誤判
+- docs: 落地 4 反模式防護三件式
+- docs: PC-115 真因調查計畫 + 4 spawned 子實驗 ticket
+- docs: Hypothesis K 強形式被否證
+- docs: PC-115 五輪實驗 + Hypothesis K + tickets 紀錄
+- docs: 更新 subagent .claude/ Edit deny 根因為 runtime hardcoded（）
+- chore: hook-completeness-check 自動加上 test file 執行權限 (IMP-054)
+- chore: 補齊 4 hook test 檔案執行權限
+- test: 新增 5+ 錯誤通道整合測試（驗證 .5 group 端到端行為）
+- test: 補多行 nested YAML invalid 分支測試 case
+- test: 三方 handoff stale 一致性整合測試（9 case 矩陣）
+
+---
+
 ## [1.28.0] - 2026-04-30
 
 ### Summary

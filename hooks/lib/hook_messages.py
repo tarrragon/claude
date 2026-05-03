@@ -119,6 +119,8 @@ Ticket 標題: {title}
 """
 
     # 子任務未完成錯誤訊息（acceptance-gate-hook.py）
+    # W17-120.2 / PC-091: ANA 落地統一用 children；ANA 父無 children 時改由
+    # ANA_MISSING_SPAWNED_TICKETS_WARNING 引導建 --parent children。
     CHILDREN_INCOMPLETE_ERROR = """[ERROR] Acceptance Gate: 子任務未全部完成
 
 Ticket: {ticket_id}
@@ -126,7 +128,8 @@ Ticket: {ticket_id}
 未完成的子任務：
 {incomplete_list}
 
-請先完成所有子任務後再執行 complete。"""
+請先完成所有子任務後再執行 complete。
+（ANA 落地請用 `ticket track create --parent {ticket_id} ...` 建 children）"""
 
     # 驗收記錄缺失警告訊息（acceptance-gate-hook.py）
     ACCEPTANCE_RECORD_MISSING_WARNING = """[WARNING] Acceptance Gate: 未找到驗收記錄
@@ -136,6 +139,8 @@ Ticket: {ticket_id} (type: {ticket_type})
 建議在 complete 前派發 acceptance-auditor 執行驗收。"""
 
     # ANA Ticket 缺少後續 Ticket 警告訊息（acceptance-gate-hook.py）
+    # W17-120.2 / PC-091: ANA 落地統一用 children（`--parent <ANA-ID>`），
+    # spawned_tickets 對 ANA 為弱 metadata，本警告主路徑提示建 children。
     ANA_MISSING_SPAWNED_TICKETS_WARNING = """[WARNING] Acceptance Gate: ANA Ticket 缺少後續 Ticket
 
 Ticket: {ticket_id}
@@ -145,7 +150,8 @@ ANA（分析）Ticket 的核心產出是「後續可追蹤的 Ticket」，用於
 
 請確認：
   1. 分析結論是否已轉化為可追蹤的 Ticket？
-  2. 是否有建立 children 任務（子任務鏈）或 spawned_tickets（並行獨立 Ticket）？
+  2. ANA 落地請用 `ticket track create --parent {ticket_id} ...` 建立 children
+     （PC-091 路線：ANA 落地統一用 children，不再用 spawned_tickets）。
 
 如果分析結論確實不需要後續工作，請在 Ticket 內容中明確說明理由。"""
 

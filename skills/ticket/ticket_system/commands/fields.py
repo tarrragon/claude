@@ -315,25 +315,34 @@ def execute_remove_acceptance(args: argparse.Namespace, version: str) -> int:
 
 
 def execute_add_spawned(args: argparse.Namespace, version: str) -> int:
-    """追加 spawned_tickets 項目"""
+    """追加 spawned_tickets 項目（支援多 ID，對齊 Unix 慣例）"""
     ticket, error = load_and_validate_ticket(version, args.ticket_id)
     if error:
         return 1
 
-    spawned = ticket.get("spawned_tickets") or []
-    if args.value in spawned:
-        print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="spawned_tickets"))
-        print(f"   已存在: {args.value}")
-        return 0
+    # args.value 為 list（nargs='+'），可能含 1 至多個 ID
+    values = args.value if isinstance(args.value, list) else [args.value]
 
-    spawned.append(args.value)
+    spawned = ticket.get("spawned_tickets") or []
+    added: list[str] = []
+    skipped: list[str] = []
+    for value in values:
+        if value in spawned:
+            skipped.append(value)
+            continue
+        spawned.append(value)
+        added.append(value)
+
     ticket["spawned_tickets"] = spawned
 
     ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
     ticket_loader.save_ticket(ticket, ticket_path)
 
     print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="spawned_tickets"))
-    print(f"   新增: {args.value}")
+    if added:
+        print(f"   新增: {', '.join(added)}")
+    if skipped:
+        print(f"   已存在略過: {', '.join(skipped)}")
     print(f"   目前共 {len(spawned)} 項")
     return 0
 

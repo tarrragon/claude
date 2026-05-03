@@ -438,3 +438,53 @@ class TestAppendLog:
 
                     assert result == 0
                     mock_save.assert_called_once()
+
+
+class TestAppendLogSectionMatching:
+    """W17-008.9 section 標題容錯邊界測試（標準/末尾空白/雙空白命中；Solutions/Solution alt 不誤匹配）"""
+
+    def _build_args(self, body: str, section: str = "Solution"):
+        args = Mock()
+        args.ticket_id = "0.31.0-W4-001"
+        args.version = "0.31.0"
+        args.section = section
+        args.content = "新內容"
+        ticket = {"id": args.ticket_id, "_path": "/p/t.md", "_body": body}
+        return args, ticket
+
+    def _run(self, args, ticket):
+        with patch('ticket_system.commands.track_acceptance.load_ticket') as mock_load:
+            mock_load.return_value = ticket
+            with patch('ticket_system.commands.track_acceptance.get_ticket_path'):
+                with patch('ticket_system.commands.track_acceptance.save_ticket'):
+                    return execute_append_log(args, "0.31.0")
+
+    def test_standard_header_matches(self):
+        args, ticket = self._build_args("## Solution\n\n內容\n")
+        assert self._run(args, ticket) == 0
+
+    def test_trailing_whitespace_header_matches(self):
+        args, ticket = self._build_args("## Solution \n\n內容\n")
+        assert self._run(args, ticket) == 0
+
+    def test_double_space_header_matches(self):
+        args, ticket = self._build_args("##  Solution\n\n內容\n")
+        assert self._run(args, ticket) == 0
+
+    def test_solutions_does_not_falsely_match_solution(self):
+        args, ticket = self._build_args("## Solutions\n\n內容\n", section="Solution")
+        assert self._run(args, ticket) == 1
+
+    def test_solution_alt_does_not_falsely_match(self):
+        args, ticket = self._build_args("## Solution alt\n\n內容\n", section="Solution")
+        assert self._run(args, ticket) == 1
+
+    def test_error_message_lists_existing_headers(self, capsys):
+        args, ticket = self._build_args(
+            "## Problem Analysis\n內容\n## Test Results\n內容\n",
+            section="Solution"
+        )
+        assert self._run(args, ticket) == 1
+        out = capsys.readouterr().out
+        assert "Problem Analysis" in out
+        assert "Test Results" in out

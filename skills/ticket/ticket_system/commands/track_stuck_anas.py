@@ -18,6 +18,7 @@ from typing import Dict, List, Optional
 from ticket_system.constants import (
     STATUS_IN_PROGRESS,
     STATUS_COMPLETED,
+    TERMINAL_STATUSES,
 )
 from ticket_system.lib.ticket_loader import list_tickets
 from ticket_system.lib.version import get_active_versions
@@ -47,7 +48,7 @@ def _all_spawned_completed(
         if not spawned:
             # spawned ticket 不存在 → 不視為已完成
             return False
-        if spawned.get("status") != STATUS_COMPLETED:
+        if spawned.get("status") not in TERMINAL_STATUSES:
             return False
     return True
 

@@ -29,6 +29,12 @@ SKILL CLI 錯誤自動偵測與引導不足回饋機制 - PostToolUse Hook
 - 幫助改進 SKILL 文檔的完整性
 - 記錄所有 SKILL CLI 錯誤，便於後續分析和改善
 
+Envelope 偵測模式 (W17-008.5.5):
+- 偵測 stdout/stderr 是否含 ErrorEnvelope 版本標記 `__error_envelope_v1__`
+- 命中表示 CLI 已輸出完整結構化錯誤訊息（format_error 雙路徑），hook 不需重複補充引導
+- Marker 來源: .claude/skills/ticket/ticket_system/lib/messages.py:ERROR_ENVELOPE_VERSION_MARKER
+- 升級至 v2 時兩處須同改
+
 HOOK_METADATA (JSON):
 {
   "event_type": "PostToolUse",
@@ -82,6 +88,11 @@ SKILL_ERROR_PATTERNS = [
     (r"unknown command '([^']+)'", "未知子命令"),
     (r"no such command", "未知子命令"),
 ]
+
+# ErrorEnvelope 版本標記
+# 與 .claude/skills/ticket/ticket_system/lib/messages.py:ERROR_ENVELOPE_VERSION_MARKER 同步
+# 升級至 v2 時兩處須同改
+ENVELOPE_VERSION_MARKER = "__error_envelope_v1__"
 
 # 排除的錯誤模式（業務邏輯錯誤，不是 SKILL 引導問題）
 EXCLUDED_ERROR_PATTERNS = [
@@ -157,6 +168,15 @@ def is_skill_cli_command(command: str) -> bool:
             if first_token in SKILL_CLI_COMMANDS:
                 return True
     return False
+
+
+def is_envelope_output(stderr: str, stdout: str) -> bool:
+    """偵測輸出是否含 ErrorEnvelope 版本標記。
+
+    與 messages.py:ERROR_ENVELOPE_VERSION_MARKER 同步。命中表示 CLI
+    已輸出完整結構化錯誤，hook 不需重複補充引導。
+    """
+    return ENVELOPE_VERSION_MARKER in stderr or ENVELOPE_VERSION_MARKER in stdout
 
 
 def is_excluded_error(stderr: str, stdout: str) -> bool:
@@ -282,6 +302,12 @@ def main() -> int:
     # 排除業務邏輯錯誤（Ticket 不存在、無法認領等）
     if is_excluded_error(stderr, stdout):
         logger.debug("業務邏輯錯誤，跳過: %s", command[:80])
+        print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
+        return EXIT_SUCCESS
+
+    # 跳過 ErrorEnvelope 已輸出完整結構化訊息的情況（W17-008.5.5）
+    if is_envelope_output(stderr, stdout):
+        logger.debug("ErrorEnvelope 已輸出完整訊息，跳過補充: %s", command[:80])
         print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
         return EXIT_SUCCESS
 
