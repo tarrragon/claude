@@ -173,13 +173,18 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | ARCH-007 | Per-project 追蹤檔追蹤全域資源 | 中 | v0.1.0 |
 | ARCH-008 | 依賴全域狀態推斷而非從本地資料提取 | 中 | v0.1.0 |
 | ARCH-009 | 將決策邏輯集中到單一 skill 造成 context 膨脹 | 中 | v0.1.0 |
-| ARCH-010 | 模組組裝遺漏導致功能鏈路靜默斷裂 | 高 | v0.1.0 |
-| ARCH-010 | 過度設計的狀態管理（編號重複，待整併） | 中 | v0.1.0 |
+| ARCH-010 | 過度設計的狀態管理 | 中 | v0.1.0 |
 | ARCH-011 | 框架資產與專案產物混放 | 中 | v0.1.0 |
 | ARCH-012 | 代理人專案特定硬編碼 | 中 | v0.1.0 |
 | ARCH-013 | ESM/CJS 混合匯出導致 Dead Code | 中 | v0.1.0 |
 | ARCH-014 | 跨執行環境共享可變常數物件 | 中 | v0.17.3 |
 | ARCH-015 | subagent .claude/ 寫入 hardcoded 保護 | 中 | v0.18.0 |
+| ARCH-016 | Hook 過度限制的允許清單 | 中 | v0.18.0 |
+| ARCH-017 | 兄弟 Ticket 隱藏依賴 | 中 | v0.18.0 |
+| ARCH-018 | Hook 全面性要求與巢狀規則衝突 | 中 | v0.18.0 |
+| ARCH-019 | Hook 事件時機不匹配 | 中 | v0.18.0 |
+| ARCH-020 | validator 與 hook 重複驗證邏輯 | 中 | v0.18.0 |
+| ARCH-021 | 模組組裝遺漏導致功能鏈路靜默斷裂（原 ARCH-010 重編號） | 高 | v0.15.4 |
 
 ### 程式碼品質 (CQ)
 
@@ -249,6 +254,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | IMP-051 | 新 Hook 未註冊到 settings | 中 | v0.17.3 |
 | IMP-052 | 批量遷移缺少 None guard | 中 | v0.17.3 |
 | IMP-053 | 一刀切修改忽略程式碼執行路徑差異 | 中 | v0.17.3 |
+| IMP-070 | Hook stdin 欄位命名規範混淆（input snake_case vs output camelCase） | 高 | v0.18.0 |
 
 ### 流程合規 (PC)
 

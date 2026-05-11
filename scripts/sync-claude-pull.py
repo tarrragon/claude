@@ -84,6 +84,7 @@ LOCAL_ONLY = frozenset({
     "sync-preserve.yaml",      # 各專案的 preserve 清單不同，不可被遠端覆蓋
     ".sync-state.json",        # 本地同步狀態，不可被遠端覆蓋
     "settings.local.json",     # 各專案個別覆蓋設定，不應被遠端同步覆蓋
+    ".zhtw-mcp-skip",          # 各專案 opt-out 繁中檢查的 flag，per-project 決定
 })
 
 # 同步時跳過的所有路徑（合併使用）

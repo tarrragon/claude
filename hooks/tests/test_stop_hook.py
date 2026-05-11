@@ -259,93 +259,114 @@ class TestStopHookPendingDirectoryScan:
 
 
 class TestShouldPreservePendingJson:
-    """should_preserve_pending_json 函式測試"""
+    """should_preserve_pending_json 函式測試（W17-095.2 改造後對齊 is_handoff_stale）
 
-    def test_preserve_to_sibling_with_target_id(self):
-        """測試 to-sibling 帶目標 ID 格式"""
+    新 API：should_preserve_pending_json(record: dict, logger, project_root=None) -> bool
+    語意：record 非 stale → True（保留）；stale → False（GC）
+    Stale 規則由 handoff_utils.is_handoff_stale 定義：
+    - 任務鏈方向且目標 ticket 已 in_progress/completed → stale
+    - 非任務鏈且 from_ticket 已 completed → stale
+    - 非任務鏈且 from_status == "completed" → stale
+    - 其他 → 非 stale
+    """
+
+    def test_preserve_to_sibling_with_target_id_target_not_started(self):
+        """to-sibling 帶目標 ID + 目標未啟動 → 保留"""
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
-        result = hook_module.should_preserve_pending_json("to-sibling:0.31.1-W3-002", logger)
+        record = {"direction": "to-sibling:0.31.1-W3-002", "ticket_id": "0.31.1-W3-001"}
+        result = hook_module.should_preserve_pending_json(record, logger)
 
         assert result is True
-        logger.debug.assert_called_once()
-        assert "to-sibling:0.31.1-W3-002" in logger.debug.call_args[0][0]
 
-    def test_preserve_to_parent_with_target_id(self):
-        """測試 to-parent 帶目標 ID 格式"""
+    def test_preserve_to_parent_with_target_id_target_not_started(self):
+        """to-parent 帶目標 ID + 目標未啟動 → 保留"""
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
-        result = hook_module.should_preserve_pending_json("to-parent:0.31.1-W3-001", logger)
+        record = {"direction": "to-parent:0.31.1-W3-001", "ticket_id": "0.31.1-W3-002"}
+        result = hook_module.should_preserve_pending_json(record, logger)
 
         assert result is True
 
-    def test_preserve_to_child_with_target_id(self):
-        """測試 to-child 帶目標 ID 格式"""
+    def test_preserve_to_child_with_target_id_target_not_started(self):
+        """to-child 帶目標 ID + 目標未啟動 → 保留"""
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
-        result = hook_module.should_preserve_pending_json("to-child:0.31.1-W3-003", logger)
+        record = {"direction": "to-child:0.31.1-W3-003", "ticket_id": "0.31.1-W3-001"}
+        result = hook_module.should_preserve_pending_json(record, logger)
 
         assert result is True
 
     def test_preserve_to_sibling_without_target_id(self):
-        """測試 to-sibling 無目標 ID 格式"""
+        """to-sibling 無目標 ID → 保留（任務鏈方向但無目標可判 stale）"""
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
-        result = hook_module.should_preserve_pending_json("to-sibling", logger)
+        record = {"direction": "to-sibling", "ticket_id": "0.31.1-W3-001"}
+        result = hook_module.should_preserve_pending_json(record, logger)
 
         assert result is True
 
     def test_preserve_to_parent_without_target_id(self):
-        """測試 to-parent 無目標 ID 格式"""
+        """to-parent 無目標 ID → 保留"""
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
-        result = hook_module.should_preserve_pending_json("to-parent", logger)
+        record = {"direction": "to-parent", "ticket_id": "0.31.1-W3-002"}
+        result = hook_module.should_preserve_pending_json(record, logger)
 
         assert result is True
 
     def test_preserve_to_child_without_target_id(self):
-        """測試 to-child 無目標 ID 格式"""
+        """to-child 無目標 ID → 保留"""
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
-        result = hook_module.should_preserve_pending_json("to-child", logger)
+        record = {"direction": "to-child", "ticket_id": "0.31.1-W3-001"}
+        result = hook_module.should_preserve_pending_json(record, logger)
 
         assert result is True
 
-    def test_do_not_preserve_context_refresh(self):
-        """測試 context-refresh 不應保留"""
+    def test_preserve_context_refresh_when_source_not_completed(self):
+        """context-refresh 且來源未 completed → 保留（W17-095.2 後語意改變）
+
+        舊行為：context-refresh 一律不保留（GC）
+        新行為：non-stale → 保留；只有來源 completed 或 from_status=completed 才視為 stale
+        """
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
-        result = hook_module.should_preserve_pending_json("context-refresh", logger)
+        record = {"direction": "context-refresh", "ticket_id": "0.31.1-W3-001"}
+        result = hook_module.should_preserve_pending_json(record, logger)
+
+        assert result is True
+
+    def test_do_not_preserve_when_from_status_completed(self):
+        """非任務鏈且 from_status == "completed" → stale → 不保留（GC）"""
+        hook_module = load_stop_hook_module()
+        logger = MagicMock()
+
+        record = {
+            "direction": "context-refresh",
+            "ticket_id": "0.31.1-W3-001",
+            "from_status": "completed",
+        }
+        result = hook_module.should_preserve_pending_json(record, logger)
 
         assert result is False
-        logger.debug.assert_not_called()
 
-    def test_do_not_preserve_continuation(self):
-        """測試 continuation 不應保留"""
+    def test_preserve_continuation_when_source_not_completed(self):
+        """continuation 且來源未 completed → 保留（與 context-refresh 同類）"""
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
-        result = hook_module.should_preserve_pending_json("continuation", logger)
+        record = {"direction": "continuation", "ticket_id": "0.31.1-W3-001"}
+        result = hook_module.should_preserve_pending_json(record, logger)
 
-        assert result is False
-
-    def test_do_not_preserve_other_formats(self):
-        """測試其他不相關格式不應保留"""
-        hook_module = load_stop_hook_module()
-        logger = MagicMock()
-
-        # 測試幾個其他格式
-        other_formats = ["other-direction", "to-sibling-unknown", "unknown-to-sibling"]
-        for fmt in other_formats:
-            result = hook_module.should_preserve_pending_json(fmt, logger)
-            assert result is False
+        assert result is True
 
 
 class TestAutoDirectionHandling:
@@ -448,7 +469,13 @@ class TestAutoDirectionHandling:
         assert len(pending_tasks) == 0
 
     def test_auto_direction_completed_ticket_gc(self, tmp_project_root):
-        """場景 6: auto + 已完成 Ticket 被 GC 刪除"""
+        """場景 6: auto + 已完成 Ticket 被 GC 刪除（W17-095.2 改造後）
+
+        新邏輯：scan_pending_handoff_tasks 先呼叫 is_handoff_stale（lib），
+        非任務鏈方向若來源 completed 即視為 stale → 直接 unlink。
+        測試需 patch hook_module.is_handoff_stale 使其回傳 (True, ...) 模擬
+        「來源 completed」狀態。
+        """
         hook_module = load_stop_hook_module()
         logger = MagicMock()
         pending_dir = tmp_project_root / ".claude" / "handoff" / "pending"
@@ -457,12 +484,15 @@ class TestAutoDirectionHandling:
             pending_dir, "auto-completed.json", "0.2.0-W3-009", "auto"
         )
 
-        with patch.object(hook_module, "is_ticket_completed", return_value=True):
+        with patch.object(
+            hook_module, "is_handoff_stale",
+            return_value=(True, "來源 ticket 0.2.0-W3-009 已 completed"),
+        ), patch.object(hook_module, "is_ticket_completed", return_value=True):
             pending_tasks, recent_tasks = hook_module.scan_pending_handoff_tasks(tmp_project_root, logger)
 
         assert len(pending_tasks) == 0
         assert len(recent_tasks) == 0
-        # auto 不在 chain_directions，should_preserve 回傳 False，檔案應被 GC 刪除
+        # stale handoff 應被 GC 刪除
         assert not file_path.exists()
 
     def test_mixed_auto_and_non_auto_directions(self, tmp_project_root):

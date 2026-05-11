@@ -235,6 +235,67 @@ def _extract_file_path(input_data: dict) -> Optional[str]:
     return fp
 
 
+def _compute_edit_metrics(
+    tool_name: str, tool_input: dict, file_path: str
+) -> tuple:
+    """計算編輯體量指標：(file_size_before, file_size_after, diff_line_count)。
+
+    用途：協助 W17-198 dry-run 期間誤報分類（typo / 格式 / 語意修訂）。
+    任何 IO/解析錯誤一律回傳 (0, 0, 0)，不破壞主流程。
+
+    - Edit：依 old_string / new_string 估算 size after，diff_line_count 為
+      新舊字串換行數差異絕對值（單行修改至少算 1 行）
+    - Write：新檔 size before=0；覆寫時讀取既有檔計算 size_before / old_lines
+    """
+    try:
+        if not isinstance(tool_input, dict):
+            return (0, 0, 0)
+
+        if tool_name == "Edit":
+            old = tool_input.get("old_string") or ""
+            new = tool_input.get("new_string") or ""
+            if not isinstance(old, str) or not isinstance(new, str):
+                return (0, 0, 0)
+            try:
+                file_size_before = os.path.getsize(file_path)
+            except OSError:
+                file_size_before = 0
+            file_size_after = (
+                file_size_before
+                - len(old.encode("utf-8"))
+                + len(new.encode("utf-8"))
+            )
+            line_diff = abs(new.count("\n") - old.count("\n"))
+            # 單行修改（行數相同但內容變更）至少算 1 行
+            if line_diff == 0 and old != new:
+                line_diff = 1
+            return (file_size_before, file_size_after, line_diff)
+
+        if tool_name == "Write":
+            content = tool_input.get("content") or ""
+            if not isinstance(content, str):
+                return (0, 0, 0)
+            file_size_before = 0
+            old_lines = 0
+            try:
+                if os.path.exists(file_path):
+                    file_size_before = os.path.getsize(file_path)
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        old_content = f.read()
+                    old_lines = old_content.count("\n") + (1 if old_content else 0)
+            except OSError:
+                file_size_before = 0
+                old_lines = 0
+            file_size_after = len(content.encode("utf-8"))
+            new_lines = content.count("\n") + (1 if content else 0)
+            line_diff = abs(new_lines - old_lines)
+            return (file_size_before, file_size_after, line_diff)
+
+        return (0, 0, 0)
+    except Exception:  # noqa: BLE001 — 廣捕保守降級，metrics 不可破壞主流程
+        return (0, 0, 0)
+
+
 def _normalize_to_relative(file_path: str) -> str:
     """將絕對路徑轉為相對於專案根目錄的形式（供 framework_paths 比對）。"""
     project_dir = _get_project_dir()
@@ -292,13 +353,24 @@ def main() -> int:
     warned_paths.add(rel_path)
     _save_cache(session_id, warned_paths, logger)
 
+    tool_input = input_data.get("tool_input") or {}
+    metrics = _compute_edit_metrics(tool_name, tool_input, file_path)
+
     if strict:
         sys.stderr.write(STRICT_MESSAGE.format(path=rel_path))
         logger.info("strict 模式阻擋 framework 編輯：%s", rel_path)
+        logger.info(
+            "edit metrics: path=%s tool=%s file_size_before=%d file_size_after=%d diff_line_count=%d",
+            rel_path, tool_name, metrics[0], metrics[1], metrics[2],
+        )
         return 2
 
     sys.stderr.write(WARN_MESSAGE.format(path=rel_path))
     logger.info("警告 framework 編輯未先讀 SKILL：%s", rel_path)
+    logger.info(
+        "edit metrics: path=%s tool=%s file_size_before=%d file_size_after=%d diff_line_count=%d",
+        rel_path, tool_name, metrics[0], metrics[1], metrics[2],
+    )
     return 0
 
 

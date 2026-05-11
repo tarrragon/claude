@@ -117,6 +117,7 @@ effort: low
 - [ ] 派發時目標路徑是否在主 repo cwd 內？→ 若否，改走 PM 直接執行或設 `additionalDirectories`
 - [ ] `name`、`description`、`tools` 三欄必填？
 - [ ] 引用 `AGENT_PRELOAD.md`？
+- [ ] **唯讀分析型代理人**（不需 Ticket ID 即可派發，如 Explore/code-explorer/Plan 類型）？→ 確認是否需加入 `.claude/hooks/agent-ticket-validation-hook.py` 的 `TICKET_EXEMPT_AGENT_TYPES` 白名單，否則該代理人會因 prompt 不含 Ticket ID 被 deny（W10-043.1 audit P2 風險）
 
 ---
 

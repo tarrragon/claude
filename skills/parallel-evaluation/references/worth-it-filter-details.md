@@ -1,6 +1,6 @@
 # Worth-It Filter 量化標準和案例
 
-行動過濾的詳細判斷準則、量化指標和實際案例。
+行動過濾的詳細判斷準則、量化指標和實際案例。本文件回答兩件事：(1) 「改善幅度 / 變更風險」如何量化判斷；(2) 決策矩陣的每一格如何映射到具體行動與追蹤方式。所有「延後執行」結果都必須綁定 Ticket，與 `.claude/rules/core/decision-trigger-binding.md` 規則 1 / 1.5（worklog / ticket 中的延後決策必須綁 ticket trigger）一致。
 
 ---
 
@@ -71,7 +71,13 @@
 
 ## 決策矩陣（完整版）
 
-> **核心原則**：所有發現都必須追蹤。「執行決策」決定何時修，「追蹤」決定是否記錄 — 答案永遠是「是」。
+**核心原則**：所有發現都必須追蹤。「執行決策」決定何時修，「追蹤」決定是否記錄——後者答案永遠是「是」。
+
+**Why**：執行成本與追蹤成本是兩個獨立決策。將兩者綁在一起會讓「不值得立即執行」誤等同於「不值得記錄」，導致中低幅度發現系統性流失（quality-baseline 規則 5 的反模式）。
+
+**Consequence**：缺漏追蹤的中幅度技術債會在版本疊加中累積，後期清理成本遠高於當下建 Ticket 的邊際成本。
+
+**Action**：表格右欄的「建 Ticket」是延後決策的 trigger 綁定，依 `.claude/rules/core/decision-trigger-binding.md` 規則 1 / 1.5 執行；缺 Ticket 即等於無 trigger 延後（PC-093 反模式）。
 
 | 改善幅度 | 變更風險 | 視角共識 | 執行決策 | 行動 | 追蹤 |
 |---------|---------|---------|---------|------|------|
@@ -162,5 +168,7 @@
 
 ---
 
-**Last Updated**: 2026-03-11
+**Last Updated**: 2026-05-04
+**Version**: 2.1.0 — 套用 compositional-writing 改寫（W17-135）：本檔開頭補意圖陳述；決策矩陣段「核心原則」改寫為三明示 Why / Consequence / Action，明示連結至 `.claude/rules/core/decision-trigger-binding.md` 規則 1 / 1.5
+
 **Version**: 2.0.0 - Worth-It Filter 語義修正：「跳過」拆分為「執行決策」+「追蹤決策」，所有發現必須建 Ticket 追蹤

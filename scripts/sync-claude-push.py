@@ -79,6 +79,7 @@ EXCLUDE_PATTERNS = {
     "sync-preserve.yaml",
     ".sync-state.json",
     "settings.local.json",
+    ".zhtw-mcp-skip",          # 各專案 opt-out 繁中檢查的 flag，per-project 決定
     # 類型 D - 敏感憑證（避免意外推送憑證和環境變數）
     ".env",
     ".env.local",

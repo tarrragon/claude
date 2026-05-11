@@ -74,6 +74,48 @@
 > - askuserquestion-rules 規則 3（禁止純文字提問讓用戶自由回答）：同上
 > - PC-064（PM 列純文字選項而未用 AUQ，無意識疏失）：`.claude/error-patterns/process-compliance/PC-064-pm-text-options-without-askuserquestion.md`
 
+### PM 對話回覆前自檢 checklist（三明示版）
+
+> **來源**：W17-174.4 落地。W17-174.1 L1 審計證實本 session PM 5 次列選項違規 AUQ，通用 4 條 checklist 在 context 高壓場景失效。本節為三明示版自檢題，對齊 W17-170 體例，與 hook 強制層（W17-174.2.1）形成自律 + 強制雙層防護。
+
+撰寫每則對話回覆前，依下列 4 題自檢：
+
+#### Q1：本回覆是否含 S1-S6 任一表面 pattern？
+
+**Why**：W17-174.1 F5 證實 hook 偵測盲區在觸發條件層；表面 pattern（Markdown 列表 / 表格 / Recommended 標記 / 隱性推薦 / 問句結尾 / 純文字 A./B.）即為 AUQ 觸發訊號，無論呈現形式。
+
+**Consequence**：若以「我用的是表格不是列表」「這是隱性建議不是顯式選項」豁免，會在 hook 強制層擴充前持續累積違規。
+
+**Action**：對照 askuserquestion-rules.md §具體觸發訊號 S1-S6 表格自檢；命中任一即進入 Q2。
+
+#### Q2：候選項是否 ≥ 2 個（含「不做」也算一個）？
+
+**Why**：≥2 候選項即構成「向用戶呈現選擇」的本質條件；單一選項屬資訊提供而非決策提問。
+
+**Consequence**：若候選項只有 1 個但仍以問句結尾（「要這樣做嗎？」），實質為二元確認（隱含「做 vs 不做」），仍 ≥ 2 候選項。
+
+**Action**：候選項計數時將「不做 / 暫緩 / 等等」算為一個獨立選項；≥2 進入 Q3。
+
+#### Q3：是否傾向用「快速確認」「stakes 低」「選項顯而易見」豁免？
+
+**Why**：W17-174.1 F3 證實低 stakes 感知是 PM 主要違規藉口（PC-064 陷阱模式第一條）。AUQ 觸發條件不區分 stakes 高低。
+
+**Consequence**：低 stakes 豁免會讓 AUQ 規則的實際覆蓋率遠低於名義覆蓋率，且訓練 PM 把列選項變成預設行為。
+
+**Action**：感受到「快速確認比較方便」念頭時，**反向強制呼叫 AUQ**；豁免理由不是合法考量。
+
+#### Q4：是否剛收到代理人完成回報？
+
+**Why**：W17-174.1 F1 證實 5/5 違規均發生在「代理人完成回報後」的 PM 回覆，此為 PM 最高頻決策點與工作記憶切換點。
+
+**Consequence**：若此場景系統性繞過 AUQ，AUQ 規則在 PM 最常用情境形同失效；context 越沉重越易觸發（F2 工作記憶遞減訊號）。
+
+**Action**：每次代理人完成通知後，撰寫第一回覆前**強制重跑 Q1-Q3**；命中任一即必呼叫 AUQ。本題為 F1 場景的硬觸發點，不可省。
+
+#### 自檢通過條件
+
+Q1-Q4 任一為「是」 → 必須執行 `ToolSearch("select:AskUserQuestion")` 載入 schema 後使用 AUQ。**禁止用 Markdown 列表 / 表格 / 純文字問句替代**。
+
 ---
 
 ## 相關文件
@@ -86,5 +128,6 @@
 
 ---
 
-**Last Updated**: 2026-04-16
+**Last Updated**: 2026-05-09
+**Version**: 1.1.0 — 新增「PM 對話回覆前自檢 checklist（三明示版）」章節 Q1-Q4，引用 W17-174.1 共同特徵 F1/F3/F5 + askuserquestion-rules.md S1-S6 訊號表（W17-174.4 落地）
 **Version**: 1.0.0 — 從 rules/core/pm-role.md 拆出（W10-076.2 拆分；原檔 v3.7.0 L41-L107）

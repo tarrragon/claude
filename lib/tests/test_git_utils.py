@@ -20,6 +20,7 @@ from git_utils import (
     is_allowed_branch,
     is_protected_branch,
     run_git_command,
+    find_target_repo,
     FileStatus,
     BRANCH_PREFIX_LEN,
     WORKTREE_PREFIX_LEN,
@@ -300,6 +301,69 @@ A  added_staged.py
         self.assertIn("new_untracked.txt", file_paths)
         self.assertIn("added_staged.py", file_paths)
         self.assertIn("deleted_unstaged.py", file_paths)
+
+
+class TestFindTargetRepo(unittest.TestCase):
+    """測試 find_target_repo：依檔案路徑往上找 .git 標記"""
+
+    def test_returns_none_for_empty_path(self):
+        self.assertIsNone(find_target_repo(""))
+
+    def test_finds_repo_with_git_directory(self):
+        """一般 repo（.git 為目錄）：應找到 repo 根"""
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo_a"
+            (repo / ".git").mkdir(parents=True)
+            (repo / "src").mkdir()
+            target_file = repo / "src" / "x.py"
+            target_file.write_text("")
+
+            result = find_target_repo(str(target_file))
+            self.assertEqual(Path(result).resolve(), repo.resolve())
+
+    def test_finds_repo_with_git_file_worktree(self):
+        """worktree（.git 為檔案）：應找到 worktree 根"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp) / "worktree_a"
+            (wt / "sub").mkdir(parents=True)
+            # worktree 的 .git 是檔案
+            (wt / ".git").write_text("gitdir: /some/path\n")
+            target_file = wt / "sub" / "y.py"
+            target_file.write_text("")
+
+            result = find_target_repo(str(target_file))
+            self.assertEqual(Path(result).resolve(), wt.resolve())
+
+    def test_returns_none_for_non_git_path(self):
+        """非 git 環境：應回傳 None"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            target_file = Path(tmp) / "x.py"
+            target_file.write_text("")
+            # /tmp 上層通常無 .git，但保險起見只驗證不為 tmp 本身
+            result = find_target_repo(str(target_file))
+            # 結果可能為 None，或為某個祖先 repo（CI 環境難保證）
+            # 至少必須不是 tmp 自身（因 tmp 無 .git）
+            if result is not None:
+                self.assertNotEqual(Path(result).resolve(), Path(tmp).resolve())
+
+    def test_distinguishes_two_separate_repos(self):
+        """兩個獨立 repo：分別找到正確的根"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_a = Path(tmp) / "repo_a"
+            repo_b = Path(tmp) / "repo_b"
+            (repo_a / ".git").mkdir(parents=True)
+            (repo_b / ".git").mkdir(parents=True)
+            file_a = repo_a / "a.py"
+            file_b = repo_b / "b.py"
+            file_a.write_text("")
+            file_b.write_text("")
+
+            self.assertEqual(Path(find_target_repo(str(file_a))).resolve(), repo_a.resolve())
+            self.assertEqual(Path(find_target_repo(str(file_b))).resolve(), repo_b.resolve())
 
 
 if __name__ == "__main__":

@@ -138,6 +138,17 @@ Ticket: {ticket_id} (type: {ticket_type})
 標題: {title}
 建議在 complete 前派發 acceptance-auditor 執行驗收。"""
 
+    # 純文件 IMP 驗收記錄缺失提示（W10-072.2）
+    # where.files 至少 80% 屬純文件路徑時，改為手動驗收建議，不派 auditor
+    ACCEPTANCE_RECORD_DOC_ONLY_HINT = """[WARNING] Acceptance Gate: 未找到驗收記錄（純文件 IMP）
+
+Ticket: {ticket_id} (type: {ticket_type})
+標題: {title}
+
+此 Ticket where.files 主要為純文件路徑（.claude/rules/、.claude/methodologies/、docs/、*.md）。
+建議手動驗收：PM 確認文件 spec 一致性後勾選 acceptance items 即可，
+不需派發 acceptance-auditor（純文件編輯無程式碼測試需求）。"""
+
     # ANA Ticket 缺少後續 Ticket 警告訊息（acceptance-gate-hook.py）
     # W17-120.2 / PC-091: ANA 落地統一用 children（`--parent <ANA-ID>`），
     # spawned_tickets 對 ANA 為弱 metadata，本警告主路徑提示建 children。

@@ -67,7 +67,7 @@ def _write_handoff_markdown(pending_dir: Path, ticket_id: str, content: str = "T
 class TestCollectStaleHandoffs:
     """測試 _collect_stale_handoffs 函式"""
 
-    @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
     def test_no_completed_ticket_returns_empty(self, mock_completed, temp_gc_env):
         """來源 ticket 未完成時，無 stale handoff"""
         project_root, pending, archive = temp_gc_env
@@ -76,7 +76,7 @@ class TestCollectStaleHandoffs:
         result = _collect_stale_handoffs()
         assert len(result) == 0
 
-    @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
     def test_context_refresh_completed_is_stale(self, mock_completed, temp_gc_env):
         """context-refresh + 來源已完成（from_status != completed）= stale"""
         project_root, pending, archive = temp_gc_env
@@ -86,17 +86,23 @@ class TestCollectStaleHandoffs:
         assert len(result) == 1
         assert result[0][1] == "0.1.0-W6-001"
 
-    @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
-    def test_context_refresh_from_completed_not_stale(self, mock_completed, temp_gc_env):
-        """context-refresh + from_status == completed = 不算 stale"""
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
+    def test_context_refresh_from_completed_is_stale(self, mock_completed, temp_gc_env):
+        """W17-163 L1-A: context-refresh + 來源 ticket 實際已 completed = stale。
+
+        新 delegate 行為對齊 is_handoff_stale 統一規則：非任務鏈方向 +
+        is_ticket_completed(from_ticket)=True → stale（情境 2）。三套消費者
+        統一判定避免漂移（W17-095 / W10-047.4 教訓）。
+        """
         project_root, pending, archive = temp_gc_env
         mock_completed.return_value = True
         _write_handoff(pending, "0.1.0-W6-001", "context-refresh", from_status="completed")
         result = _collect_stale_handoffs()
-        assert len(result) == 0
+        assert len(result) == 1
+        assert result[0][1] == "0.1.0-W6-001"
 
-    @patch("ticket_system.commands.handoff_gc.is_ticket_in_progress_or_completed")
-    @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_in_progress_or_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
     def test_task_chain_target_started_is_stale(self, mock_completed, mock_target_started, temp_gc_env):
         """任務鏈 handoff + 目標已啟動 = stale"""
         project_root, pending, archive = temp_gc_env
@@ -123,6 +129,37 @@ class TestCollectStaleHandoffs:
         result = _collect_stale_handoffs()
         assert result == []
 
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
+    def test_w10_047_4_regression_to_source_in_progress_marked_stale(
+        self, mock_completed, temp_gc_env
+    ):
+        """W17-163 L1-A 回歸測試：W10-047.4 漏判場景。
+
+        重現條件：
+        - direction=to-source（已從 _VALID_AUTO_DIRECTIONS 移除，但歷史 JSON 仍存在）
+        - from_status="in_progress"（非 completed）
+        - 來源 ticket 實際已 completed（is_ticket_completed → True）
+
+        舊邏輯（GC 獨立重寫）：to-source 走非任務鏈分支 → 檢查 from_status != "completed"
+        → False（因 from_status=in_progress）→ 漏判不標 stale → 永久堆積。
+
+        新邏輯（delegate is_handoff_stale）：is_handoff_stale 對非任務鏈方向
+        檢查 is_ticket_completed(from_ticket) → True → 標 stale。
+        """
+        project_root, pending, archive = temp_gc_env
+        mock_completed.return_value = True
+        _write_handoff(
+            pending,
+            "0.18.0-W10-047.4",
+            "to-source",
+            from_status="in_progress",
+        )
+        result = _collect_stale_handoffs()
+        assert len(result) == 1
+        assert result[0][1] == "0.18.0-W10-047.4"
+        # reason 應提及 ticket completed（單一判定來源輸出）
+        assert "completed" in result[0][2]
+
     @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
     def test_markdown_stale_handoff_collected(self, mock_completed, temp_gc_env):
         """Markdown 格式的 stale handoff 應被識別"""
@@ -144,10 +181,19 @@ class TestCollectStaleHandoffs:
         assert len(result) == 0
 
     @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
-    def test_mixed_json_and_markdown_stale(self, mock_completed, temp_gc_env):
-        """同時掃描 .json 和 .md 檔案"""
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
+    def test_mixed_json_and_markdown_stale(
+        self, mock_utils_completed, mock_md_completed, temp_gc_env
+    ):
+        """同時掃描 .json 和 .md 檔案。
+
+        W17-163 L1-A 後 JSON 走 lib.handoff_utils.is_ticket_completed（delegate
+        至 is_handoff_stale），Markdown 沿用 commands.handoff_gc.is_ticket_completed，
+        兩者皆需 mock。
+        """
         project_root, pending, archive = temp_gc_env
-        mock_completed.return_value = True
+        mock_utils_completed.return_value = True
+        mock_md_completed.return_value = True
         _write_handoff(pending, "0.1.0-W7-001", "context-refresh", from_status="in_progress")
         _write_handoff_markdown(pending, "0.1.0-W7-002", "# Markdown handoff")
         result = _collect_stale_handoffs()
@@ -169,7 +215,7 @@ class TestExecuteGcDryRun:
         captured = capsys.readouterr()
         assert "清潔" in captured.out or "無 stale" in captured.out
 
-    @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
     def test_dry_run_does_not_move_files(self, mock_completed, temp_gc_env, capsys):
         """--dry-run 不應移動檔案"""
         project_root, pending, archive = temp_gc_env
@@ -182,7 +228,7 @@ class TestExecuteGcDryRun:
         assert stale_file.exists(), "dry-run 不應移動檔案"
         assert not archive.exists() or not (archive / "0.1.0-W6-001.json").exists()
 
-    @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
     def test_dry_run_lists_stale_files(self, mock_completed, temp_gc_env, capsys):
         """--dry-run 應列出 stale handoff"""
         project_root, pending, archive = temp_gc_env
@@ -194,7 +240,7 @@ class TestExecuteGcDryRun:
         captured = capsys.readouterr()
         assert "0.1.0-W6-001.json" in captured.out
 
-    @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
     def test_dry_run_shows_execute_hint(self, mock_completed, temp_gc_env, capsys):
         """--dry-run 應提示如何執行實際清理"""
         project_root, pending, archive = temp_gc_env
@@ -210,7 +256,7 @@ class TestExecuteGcDryRun:
 class TestExecuteGcExecute:
     """測試 execute_gc(dry_run=False) 行為"""
 
-    @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
     def test_execute_moves_stale_to_archive(self, mock_completed, temp_gc_env):
         """--execute 應將 stale handoff 移至 archive/"""
         project_root, pending, archive = temp_gc_env
@@ -223,11 +269,11 @@ class TestExecuteGcExecute:
         assert not stale_file.exists(), "stale 檔案應被移走"
         assert (archive / "0.1.0-W6-001.json").exists(), "檔案應移至 archive/"
 
-    @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
     def test_execute_preserves_non_stale(self, mock_completed, temp_gc_env):
         """--execute 不應移動非 stale 的 handoff"""
         project_root, pending, archive = temp_gc_env
-        mock_completed.side_effect = lambda tid: tid == "0.1.0-W6-001"
+        mock_completed.side_effect = lambda tid, project_root=None: tid == "0.1.0-W6-001"
 
         stale_file = _write_handoff(pending, "0.1.0-W6-001", "context-refresh", from_status="in_progress")
         valid_file = _write_handoff(pending, "0.1.0-W6-002", "context-refresh", from_status="in_progress")
@@ -237,7 +283,7 @@ class TestExecuteGcExecute:
         assert not stale_file.exists(), "stale 檔案應被移走"
         assert valid_file.exists(), "非 stale 檔案應保留"
 
-    @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
     def test_execute_reports_count(self, mock_completed, temp_gc_env, capsys):
         """--execute 應回報清理數量"""
         project_root, pending, archive = temp_gc_env
@@ -263,10 +309,14 @@ class TestExecuteGcExecute:
         assert (archive / "0.1.0-W7-001.md").exists(), "Markdown 檔案應移至 archive/"
 
     @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
-    def test_execute_moves_mixed_formats_to_archive(self, mock_completed, temp_gc_env):
-        """--execute 應同時移動 .json 和 .md 格式的 stale handoff"""
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
+    def test_execute_moves_mixed_formats_to_archive(
+        self, mock_utils_completed, mock_md_completed, temp_gc_env
+    ):
+        """--execute 應同時移動 .json 和 .md 格式的 stale handoff（W17-163 L1-A 雙 mock）。"""
         project_root, pending, archive = temp_gc_env
-        mock_completed.return_value = True
+        mock_utils_completed.return_value = True
+        mock_md_completed.return_value = True
         json_file = _write_handoff(pending, "0.1.0-W7-001", "context-refresh", from_status="in_progress")
         md_file = _write_handoff_markdown(pending, "0.1.0-W7-002", "# Markdown")
 

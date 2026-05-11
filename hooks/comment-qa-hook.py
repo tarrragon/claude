@@ -157,6 +157,26 @@ def should_process_file(file_path: str, config: dict) -> Tuple[bool, Optional[La
     """
     path = Path(file_path)
 
+    # W10-047.2 matcher 限定降級（候選 4）：測試/文件/規則類變更時 skip
+    # 來源 ANA：W10-035.3（Phase 3b P3 五 Hook，0% Action 比）
+    # 測試/文件/規則檔案的註解品質非本 hook 主要關注（產品程式碼為主）
+    path_str = str(path).replace("\\", "/")
+    skip_prefixes = (
+        "/tests/", "tests/",
+        "/test/", "test/",
+        "/integration_test/", "integration_test/",
+        "/docs/", "docs/",
+        "/.claude/", ".claude/",
+    )
+    if any(p in path_str for p in skip_prefixes):
+        return False, None
+    # 測試檔副檔名/命名常見 pattern
+    if path.name.endswith(("_test.dart", ".test.js", ".test.ts", ".spec.js", ".spec.ts", "_spec.rb")):
+        return False, None
+    # 純文件類副檔名
+    if path.suffix.lower() in {".md", ".yaml", ".yml", ".json", ".toml", ".txt"}:
+        return False, None
+
     # 檢查排除模式
     exclude_patterns = config.get('exclude', {}).get('patterns', [])
     for pattern in exclude_patterns:

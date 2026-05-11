@@ -109,6 +109,60 @@
 1. **安全 Hook 優先避免 false positive**：false positive 打斷流程，比 false negative 更影響用戶信任；寧願漏擋幾個也不能誤擋
 2. **字元集設計要正面列舉**：簡體專屬字清單比「常見簡體詞拆字」可靠
 3. **首次啟用 Hook 立即測試**：Hook 啟用後的第一次真實呼叫就能暴露設計缺陷；本 session 的啟用→誤判→即修循環只花 2 分鐘，驗證機制運作正確
+4. **依賴維護者記憶力區分共用字 vs 簡體字會反覆失敗（W17-144.1 二度自證）**：詳見「動態驗證取代靜態維護（根本性解法）」章節
+
+---
+
+## 動態驗證取代靜態維護（根本性解法）
+
+> **來源**：W17-144.1（codepoint-aware detector 落地過程）。本 ticket 在實作 KNOWN_SIMPLIFIED_ANCHORS 黑名單時**二度自證 PC-074**：第一輪自製 SIMPLIFIED_SET 含「件/本/保/言/系/明」共用字，第三輪 ANCHORS 又從中文詞抽字（「资本」「证件」「语言」）再次混入相同共用字。Self-test 揪出後 PM 才意識到問題本質。
+
+### 現象
+
+每次新增「明確簡體字清單」時，維護者仍會把繁簡共用字混入。即使讀過 PC-074 警告也不能避免。
+
+### 根因
+
+人工撰寫過程是 token-by-token 生成，遇到「件保言系明」這類字元時記憶力分辨不出「這字是簡體還是共用」。**規則寫在文件上不等於 token 生成時會被檢查**。
+
+### 解法：動態建構黑名單
+
+把「驗證清單純度」的責任交給 OpenCC 自動執行：
+
+```python
+def _build_anchors(converter) -> frozenset[str]:
+    """從種子字串過濾出 OpenCC 認可的簡體字（s2t(X) != X）"""
+    return frozenset(ch for ch in _ANCHORS_SEED if converter.convert(ch) != ch)
+```
+
+種子字串可以隨意（含共用字也沒關係），OpenCC 會自動排除「s2t(X) == X」（即繁體共用字）的條目。
+
+### 自驗證機制（self-test）
+
+```python
+# 第三層：黑名單不含繁簡共用字（PC-074 防護）
+forbidden_in_anchors = [ch for ch in shared_chars if ch in KNOWN_SIMPLIFIED_ANCHORS]
+assert not forbidden_in_anchors, f"PC-074 違規: {forbidden_in_anchors}"
+
+# 第四層：黑名單所有字都應被 OpenCC 視為簡體（s2t(X) != X）
+invalid_anchors = [ch for ch in KNOWN_SIMPLIFIED_ANCHORS if converter.convert(ch) == ch]
+assert not invalid_anchors, f"非簡體字混入: {invalid_anchors}"
+```
+
+### 推廣原則
+
+**「依賴維護者記憶力區分相似實體 vs 不同實體」的清單，必須改用工具自動驗證**：
+
+| 場景 | 反模式 | 正確 |
+|------|-------|------|
+| 簡體字黑名單 | 人工列簡體字清單 | OpenCC 動態過濾 |
+| 日漢字黑名單（PC-084） | 人工列日漢字清單 | unicodedata + JIS 表動態過濾 |
+| 異體字白名單 | 人工列異體字 | OpenCC s2t/t2tw round-trip 動態判定 |
+| 任何「字元集子集」清單 | 靜態維護 | 依規則動態建構，啟動時 self-test 驗證 |
+
+### 與 PC-074 主文的關係
+
+主文「字元集設計要正面列舉」的「正面列舉」原則仍正確；本章節補強的是「**正面列舉的清單也要由工具動態驗證，不能僅依賴人工**」。
 
 ---
 
@@ -127,6 +181,8 @@
 
 ---
 
-**Last Updated**: 2026-04-17
+**Last Updated**: 2026-05-05
+**Version**: 1.2.0 — W17-144.1 二度自證後新增「動態驗證取代靜態維護（根本性解法）」章節：人工維護黑名單會反覆混入共用字，須交給 OpenCC 自動過濾 + self-test 雙層機制；推廣原則覆蓋簡體字 / 日漢字 / 異體字 / 任何字元集子集場景
+
 **Version**: 1.1.0 — 新增姊妹模式 PC-084 交叉引用（W14-014 落地）
 **Source**: AUQ payload「產出」含「出」被誤判為簡體，Hook 啟用後 2 分鐘內暴露

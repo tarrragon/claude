@@ -150,35 +150,33 @@ class _ScenarioStub:
         self.scenario = scenario  # "S1" | "S2" | "S3"
 
     # ---- handoff_utils 探測函式 stubs ----
-    def is_ticket_in_progress_or_completed(self, ticket_id: str) -> bool:
+    # W17-181.1: 改為新簽章（接受 optional project_root）
+    def is_ticket_in_progress_or_completed(self, ticket_id: str, project_root=None) -> bool:
         # 只有 S1 的 target 視為已啟動
         return self.scenario == "S1" and ticket_id == "0.18.0-W17-002"
 
-    def is_ticket_completed(self, ticket_id: str) -> bool:
+    def is_ticket_completed(self, ticket_id: str, project_root=None) -> bool:
         # 只有 S2 的 source 視為已 completed
         return self.scenario == "S2" and ticket_id == "0.18.0-W17-010"
 
-    def extract_version(self, ticket_id: str):
-        return "0.18.0"
-
-    def load_and_validate_ticket(self, version, ticket_id, auto_print_error=False):
-        # 僅 S1 reason 組裝會走到這裡（取得 target status 填入訊息）
+    def load_ticket_status(self, ticket_id: str, project_root=None):
+        """W17-181.1：替換原 extract_version + load_and_validate_ticket 的雙函式 stub。
+        僅 S1 reason 組裝會走到這裡（取得 target status 填入訊息）。
+        """
         if self.scenario == "S1" and ticket_id == "0.18.0-W17-002":
-            return ({"status": "in_progress"}, None)
-        return ({"status": "pending"}, None)
+            return "in_progress"
+        return "pending"
 
 
 def _patch_utils(utils_module, stub: _ScenarioStub):
-    """patch handoff_utils 的 4 個底層函式。回傳 patcher list 供 caller stop。"""
+    """patch handoff_utils 的 3 個底層函式（W17-181.1 簽章變更）。回傳 patcher list 供 caller stop。"""
     patches = [
         patch.object(utils_module, "is_ticket_in_progress_or_completed",
                      side_effect=stub.is_ticket_in_progress_or_completed),
         patch.object(utils_module, "is_ticket_completed",
                      side_effect=stub.is_ticket_completed),
-        patch.object(utils_module, "extract_version_from_ticket_id",
-                     side_effect=stub.extract_version),
-        patch.object(utils_module, "load_and_validate_ticket",
-                     side_effect=stub.load_and_validate_ticket),
+        patch.object(utils_module, "_load_ticket_status",
+                     side_effect=stub.load_ticket_status),
     ]
     for p in patches:
         p.start()

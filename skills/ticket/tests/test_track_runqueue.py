@@ -270,6 +270,14 @@ class TestRunqueueContextResume:
             "ticket_system.commands.track_runqueue.list_tickets",
             return_value=tickets,
         ), patch(
+            "ticket_system.commands.track_runqueue._get_pending_handoff_info",
+            return_value={
+                "0.18.0-W17-001": {
+                    "ticket_id": "0.18.0-W17-001",
+                    "direction": "context-refresh",
+                }
+            },
+        ), patch(
             "ticket_system.commands.track_runqueue._get_pending_handoff_ticket_ids",
             return_value={"0.18.0-W17-001"},
         ):

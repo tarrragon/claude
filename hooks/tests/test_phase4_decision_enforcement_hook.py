@@ -792,3 +792,48 @@ def test_self_ref_main_整合_豁免整檔(monkeypatch, tmp_path, capsys):
     captured = capsys.readouterr()
     assert rc == 0
     assert "PC-093 Phase 4 強制決斷" not in captured.err
+
+
+# ============================================================================
+# W17-085 — invalid exempt marker humanization
+# ============================================================================
+
+def test_format_warn_info_humanizes_ticket_tracked_need_id():
+    """ticket-tracked 類別缺 ticket ID 時，輸出含 grep 訊號 + humanized hint。"""
+    # 構造一份 ticket md 內容，含 W2 phrase 與 invalid exempt marker（無 W{wave}-{seq}）
+    lines = [
+        "<!-- PC-093-exempt: ticket-tracked:這是沒有 ticket id 的長理由說明 -->",
+        "未來可能需要快取機制",
+    ]
+    refs = collect_exempt_markers(lines)
+    # 該 marker 應 invalid 且 err code = ticket-tracked-need-id
+    invalid = [r for r in refs if not r.valid]
+    assert len(invalid) == 1
+    assert invalid[0].err == "ticket-tracked-need-id"
+
+    msg = format_warn_info_message(warned=[], info=[], exempted_refs=refs)
+    # 保留 grep 訊號（向後相容）
+    assert "ticket-tracked-need-id" in msg
+    assert "[INVALID:" in msg
+    # humanized hint 含 W{wave}-{seq} 關鍵字
+    assert "W{wave}-{seq}" in msg or "W17-085" in msg
+    assert "修復提示" in msg
+
+
+def test_format_warn_info_humanizes_format_error():
+    """格式錯誤（缺 cat:reason）時，輸出含 grep 訊號 + humanized 範例。"""
+    lines = [
+        "<!-- PC-093-exempt -->",
+    ]
+    refs = collect_exempt_markers(lines)
+    invalid = [r for r in refs if not r.valid]
+    assert len(invalid) == 1
+    assert invalid[0].err == "format-error"
+
+    msg = format_warn_info_message(warned=[], info=[], exempted_refs=refs)
+    # 保留 grep 訊號
+    assert "format-error" in msg
+    assert "[INVALID:" in msg
+    # humanized 範例含正確 marker 格式
+    assert "<!-- PC-093-exempt:" in msg
+    assert "修復提示" in msg

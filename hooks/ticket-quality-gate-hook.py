@@ -31,6 +31,8 @@ from typing import Dict, Any, Optional
 
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
+# 加入 .claude/lib 路徑（共用模組 config_loader / hook_io）
+sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
 from hook_utils import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin,
@@ -134,12 +136,21 @@ def should_trigger_check(input_data: Dict[str, Any], logger) -> bool:
         logger.info(f"檔案類型不符: {file_path}")
         return False
 
-    # 條件 3: 檔案路徑關鍵字檢查
+    # 條件 3a: 路徑黑名單檢查（W10-100）
+    # 黑名單優先於 keyword：即使檔名或內容意外命中 keyword/structure marker，
+    # 命中黑名單目錄（.claude/error-patterns/ 等）即跳過品質檢測，
+    # 避免框架資產被誤判為 ticket。
+    ticket_path_excludes = trigger_config.get("ticket_path_excludes", [])
+    if any(exclude in file_path for exclude in ticket_path_excludes):
+        logger.info(f"檔案路徑命中排除規則: {file_path}")
+        return False
+
+    # 條件 3b: 檔案路徑關鍵字檢查
+    # W10-100：移除過寬的 substring（-ticket-/-task-），改用含父目錄錨點的路徑模式
     ticket_path_keywords = trigger_config.get("ticket_path_keywords", [
         "docs/work-logs/",
         "docs/tickets/",
-        "-ticket-",
-        "-task-"
+        "/tickets/"
     ])
     if not any(keyword in file_path for keyword in ticket_path_keywords):
         logger.info(f"檔案路徑不符合 Ticket 格式: {file_path}")

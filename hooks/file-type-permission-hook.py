@@ -65,22 +65,22 @@ def get_file_category(file_path: str) -> str:
     return "other"
 
 
-def _print_permission_prompt(file_path: str, category: str) -> None:
+def _log_permission_prompt(logger, file_path: str, category: str) -> None:
     """
-    輸出人工確認提示訊息到 stderr
+    記錄人工確認提示訊息到 debug log（W10-047.2 候選 1 降級）
+
+    來源 ANA：W10-035.3（Phase 3b P3 五 Hook，0% Action 比）
+    原行為：寫入 stderr 觸發 UI 顯示。降級後改 debug log，可在 hook-logs 追溯。
 
     Args:
         file_path: 編輯的檔案路徑
         category: 檔案類別 ('ticket' 或 'worklog')
     """
     category_name = "Ticket" if category == "ticket" else "Worklog"
-    prompt = f"""[File Permission Guard] 提示: 正在編輯 {category_name} 檔案
-
-檔案: {file_path}
-說明: 此類檔案的修改需要人工審查確認
-
-"""
-    print(prompt, file=sys.stderr)
+    logger.debug(
+        "[File Permission Guard] 編輯 %s 檔案: %s（此類檔案的修改建議人工審查）",
+        category_name, file_path,
+    )
 
 
 def main() -> int:
@@ -113,11 +113,11 @@ def main() -> int:
 
         # 根據檔案類別決定行為
         if category in ("ticket", "worklog"):
-            # Ticket/Worklog 檔案：輸出提示訊息
-            logger.info("提示: %s 檔案 - %s", category.upper(), file_path)
-            _print_permission_prompt(file_path, category)
+            # W10-047.2 候選 1 降級：原 stderr 提示改為 debug log
+            # 仍輸出 allow 決策，保留審計鏈但不干擾 PM/agent UI
+            logger.info("允許: %s 檔案 - %s", category.upper(), file_path)
+            _log_permission_prompt(logger, file_path, category)
 
-            # 允許執行（提示已發送）
             category_name = "Ticket" if category == "ticket" else "Worklog"
             result = {
                 "hookSpecificOutput": {

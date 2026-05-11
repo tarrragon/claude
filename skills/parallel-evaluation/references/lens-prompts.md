@@ -1,6 +1,6 @@
 # 視角 Agent 提示模板
 
-每個情境的 Agent 提示模板，用於 Phase 2 並行派發。
+各情境的 Agent prompt 模板，用於 Phase 2 並行派發。模板以「檢查焦點 + 編號清單」為骨架，PM 派發時替換 `{files}` / `{target}` / `{report}` / `{scope}` 佔位符即可。模板對應的視角設計（為何選此檢查項）見 `lens-configurations.md`。
 
 > 視角定義和檢查項目: lens-configurations.md
 
@@ -227,5 +227,7 @@
 
 ---
 
-**Last Updated**: 2026-04-28
+**Last Updated**: 2026-05-04
+**Version**: 1.2.0 — 套用 compositional-writing 改寫（W17-135）：本檔開頭補意圖陳述與佔位符說明（intent-revealing / grep-friendly）
+
 **Version**: 1.1.0 - 情境 C/D/F/G 各新增 basil 視角 prompt 模板（W17-057，basil-writing-critic 常駐委員整合）

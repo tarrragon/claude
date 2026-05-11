@@ -18,15 +18,13 @@ from ticket_system.lib.handoff_utils import is_handoff_stale
 class TestIsHandoffStaleTaskChainTargetStarted:
     """情境 1：任務鏈方向且目標已啟動"""
 
-    @patch("ticket_system.lib.handoff_utils.load_and_validate_ticket")
-    @patch("ticket_system.lib.handoff_utils.extract_version_from_ticket_id")
+    @patch("ticket_system.lib.handoff_utils._load_ticket_status")
     @patch("ticket_system.lib.handoff_utils.is_ticket_in_progress_or_completed")
     def test_task_chain_target_in_progress_is_stale(
-        self, mock_target_started, mock_extract_version, mock_load
+        self, mock_target_started, mock_load_status
     ):
         mock_target_started.return_value = True
-        mock_extract_version.return_value = "0.18.0"
-        mock_load.return_value = ({"status": "in_progress"}, None)
+        mock_load_status.return_value = "in_progress"
 
         record = {
             "from_ticket": "0.18.0-W17-001",
@@ -39,15 +37,13 @@ class TestIsHandoffStaleTaskChainTargetStarted:
         assert "任務鏈目標 0.18.0-W17-002" in reason
         assert "in_progress" in reason
 
-    @patch("ticket_system.lib.handoff_utils.load_and_validate_ticket")
-    @patch("ticket_system.lib.handoff_utils.extract_version_from_ticket_id")
+    @patch("ticket_system.lib.handoff_utils._load_ticket_status")
     @patch("ticket_system.lib.handoff_utils.is_ticket_in_progress_or_completed")
     def test_task_chain_target_completed_is_stale(
-        self, mock_target_started, mock_extract_version, mock_load
+        self, mock_target_started, mock_load_status
     ):
         mock_target_started.return_value = True
-        mock_extract_version.return_value = "0.18.0"
-        mock_load.return_value = ({"status": "completed"}, None)
+        mock_load_status.return_value = "completed"
 
         record = {
             "from_ticket": "0.18.0-W17-001",

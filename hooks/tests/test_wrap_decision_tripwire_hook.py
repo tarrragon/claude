@@ -494,6 +494,100 @@ class TestD_S2:
 
 
 # ============================================================================
+# D2. S2 context-aware filter（黑名單版）— W10-058.1.1.2
+# ============================================================================
+
+class TestD2_ContextBlacklist:
+    """W10-058.1.1.2：context-aware filter 黑名單版測試。
+
+    根因：hit 4 案例「Stop 事件只在退出時觸發，不可能『每 turn fire』」中
+    「不可能」是技術陳述事實而非 PM 自動駕駛主張，但純 keyword 比對誤判。
+    解法：觸發詞前後 ±window 字內含技術語境黑名單詞 → suppress signal。
+    """
+
+    @pytest.fixture
+    def strategy(self, hook_mod):
+        return hook_mod.RestrictiveKeywordsStrategy()
+
+    @pytest.fixture
+    def sd_with_blacklist(self, hook_mod, tmp_path):
+        """產生帶 context_blacklist 的 SignalDef（覆蓋預設 keywords）。"""
+        custom_yaml = tmp_path / "custom_blacklist.yaml"
+        custom_yaml.write_text(
+            yaml_fixture(signal_overrides={
+                "restrictive_keywords": {
+                    "keywords": ["不可能", "做不到"],
+                    "min_prompt_length": 10,
+                    "context_blacklist": {
+                        "window": 20,
+                        "words": ["事件", "hook", "訊號", "fire"],
+                    },
+                },
+            }),
+            encoding="utf-8",
+        )
+        cfg = _load_config(hook_mod, custom_yaml)
+        return next(s for s in cfg.signals if s.id == "restrictive_keywords")
+
+    def test_blacklist_suppresses_hit4_case(self, hook_mod, strategy, sd_with_blacklist):
+        """hit 4 原案例：技術語境陳述應被 suppress。"""
+        import logging
+        # 確認 SignalDef 正確載入 context_blacklist
+        assert sd_with_blacklist.context_blacklist is not None
+        assert "事件" in sd_with_blacklist.context_blacklist.words
+
+        state = hook_mod._initial_state()
+        event = make_user_prompt("Stop 事件只在退出時觸發，不可能『每 turn fire』，所以這是技術限制")
+        result = strategy.detect(event, state, sd_with_blacklist, None, logging.getLogger("t"))
+        assert result.hit is False
+        assert result.log_reason == "context_blacklist"
+
+    def test_blacklist_does_not_suppress_real_pm_speech(self, hook_mod, strategy, sd_with_blacklist):
+        """純 PM 限制性主張（無技術詞）應仍觸發。"""
+        import logging
+        state = hook_mod._initial_state()
+        event = make_user_prompt("這個任務根本不可能完成啦，我們先放棄這個方向吧")
+        result = strategy.detect(event, state, sd_with_blacklist, None, logging.getLogger("t"))
+        assert result.hit is True
+        assert result.matched_keyword == "不可能"
+
+    def test_blacklist_window_boundary(self, hook_mod, strategy, sd_with_blacklist):
+        """黑名單詞在 window 內 → suppress；剛好在 window 外 → 觸發。"""
+        import logging
+        state = hook_mod._initial_state()
+
+        # 案例 A：黑名單詞「事件」距離「不可能」< 20 字 → suppress
+        # 「不可能」前 5 字內含「事件」
+        prompt_in = "這個 事件 完全不可能解決呢請幫忙"
+        event_in = make_user_prompt(prompt_in)
+        result_in = strategy.detect(event_in, state, sd_with_blacklist, None, logging.getLogger("t"))
+        assert result_in.hit is False, "blacklist within window should suppress"
+
+        # 案例 B：黑名單詞「事件」距離「不可能」> 20 字 → 觸發
+        # 構造：事件 + 30 字 padding + 不可能
+        padding = "啊" * 30
+        prompt_out = "事件" + padding + "不可能解決問題的這個方法"
+        event_out = make_user_prompt(prompt_out)
+        result_out = strategy.detect(event_out, state, sd_with_blacklist, None, logging.getLogger("t"))
+        assert result_out.hit is True, "blacklist outside window should not suppress"
+        assert result_out.matched_keyword == "不可能"
+
+    def test_no_blacklist_config_keeps_original_behavior(self, hook_mod, tmp_yaml):
+        """無 context_blacklist 配置時行為與原始一致（向後相容）。"""
+        import logging
+        cfg = _load_config(hook_mod, tmp_yaml)
+        sd = next(s for s in cfg.signals if s.id == "restrictive_keywords")
+        assert sd.context_blacklist is None  # DEFAULT_CONFIG 未含 context_blacklist
+
+        strat = hook_mod.RestrictiveKeywordsStrategy()
+        state = hook_mod._initial_state()
+        # 即使含「事件」等技術詞，無 blacklist 配置 → 仍觸發
+        event = make_user_prompt("Stop 事件只在退出時觸發，不可能每 turn fire 啦")
+        result = strat.detect(event, state, sd, None, logging.getLogger("t"))
+        assert result.hit is True
+
+
+# ============================================================================
 # E. S3 ana_claim
 # ============================================================================
 
@@ -907,18 +1001,16 @@ class TestJ_SourceOfTruth:
 # ============================================================================
 
 class TestK_DocSync:
+    # test_k2 / test_k3 已於 0.18.0-W10-104.1 移除，對齊 W11-004 / W13-004
+    # wrap-decision SKILL 解耦設計：
+    # - W11-004: SKILL.md 通用化，移除「機器可讀版本」與 wrap-triggers.yaml 引用
+    # - W13-004: tripwire-catalog.md 不再引用 W10-009（已 completed，無歷史引用義務）
+    # 詳見父 ticket 0.18.0-W10-104 結論，禁止為了讓測試通過而還原已解耦的引用。
+    # test_k1 保留：其檢查的 placeholder 語句（"實際 Hook 程式碼實作為獨立 Ticket（待建立）"）
+    # 仍適用於 catalog 的「不應遺留待辦標記」品質要求。
     def test_k1_catalog_pending_marker_removed(self):
         text = CATALOG_PATH.read_text(encoding="utf-8")
         assert "實際 Hook 程式碼實作為獨立 Ticket（待建立）" not in text
-
-    def test_k2_catalog_links_to_w10_009(self):
-        text = CATALOG_PATH.read_text(encoding="utf-8")
-        assert "0.18.0-W10-009" in text
-
-    def test_k3_skill_md_yaml_sync_note_present(self):
-        text = SKILL_PATH.read_text(encoding="utf-8")
-        assert "機器可讀版本" in text
-        assert "wrap-triggers.yaml" in text
 
 
 # ============================================================================
@@ -1142,3 +1234,177 @@ class TestM_ReflectionTrigger:
         for rec in caplog.records:
             assert "manual_reflection_invocation" not in rec.getMessage() or "unknown" not in rec.getMessage().lower()
             assert "session_end" not in rec.getMessage() or "unknown" not in rec.getMessage().lower()
+
+
+# ============================================================================
+# N. W10-101 observability log 欄位（matched_keyword + prompt_excerpt）
+#
+#   N1 _build_prompt_excerpt：基本中段
+#   N2 _build_prompt_excerpt：keyword 在開頭
+#   N3 _build_prompt_excerpt：keyword 在結尾
+#   N4 _build_prompt_excerpt：prompt 短於 100 字（不超界）
+#   N5 _build_prompt_excerpt：換行字元轉空格
+#   N6 _build_prompt_excerpt：無 prompt / 無 keyword 返回 "-"
+#   N7 _build_prompt_excerpt：keyword 不在 prompt（fallback "-"）
+#   N8 _process_signals 觸發時 log 含 matched_keyword + prompt_excerpt（S2）
+#   N9 _process_signals 保留原 "signal %s triggered" log 行（向後相容）
+#   N10 _process_signals 對 S1（無 keyword、無 prompt）填 "-"
+# ============================================================================
+
+
+class TestN_ObservabilityLog:
+    def test_n1_excerpt_middle(self, hook_mod):
+        prompt = "這個任務的部分需求我覺得做不到啦因為目前的架構限制相當嚴重所以無法處理"
+        out = hook_mod._build_prompt_excerpt(prompt, "做不到")
+        assert "做不到" in out
+        # 預期包含 keyword 周邊文字
+        assert "覺得" in out
+
+    def test_n2_excerpt_at_head(self, hook_mod):
+        prompt = "做不到啦這個任務真的有困難請放棄"
+        out = hook_mod._build_prompt_excerpt(prompt, "做不到")
+        assert out.startswith("做不到")
+
+    def test_n3_excerpt_at_tail(self, hook_mod):
+        prompt = "我已經盡力嘗試很多方式但最後還是做不到"
+        out = hook_mod._build_prompt_excerpt(prompt, "做不到")
+        assert out.endswith("做不到")
+
+    def test_n4_short_prompt_no_overrun(self, hook_mod):
+        prompt = "做不到"
+        out = hook_mod._build_prompt_excerpt(prompt, "做不到")
+        assert out == "做不到"
+
+    def test_n5_newline_replaced_with_space(self, hook_mod):
+        prompt = "前段文字\n中段做不到\n後段補充"
+        out = hook_mod._build_prompt_excerpt(prompt, "做不到")
+        assert "\n" not in out
+        assert "做不到" in out
+
+    def test_n6_empty_prompt_or_keyword_returns_dash(self, hook_mod):
+        assert hook_mod._build_prompt_excerpt("", "做不到") == "-"
+        assert hook_mod._build_prompt_excerpt("hello", None) == "-"
+        assert hook_mod._build_prompt_excerpt("hello", "") == "-"
+
+    def test_n7_keyword_not_in_prompt_returns_dash(self, hook_mod):
+        out = hook_mod._build_prompt_excerpt("沒有命中關鍵字的提示文字", "做不到")
+        assert out == "-"
+
+    def test_n8_process_signals_logs_observability_for_s2(self, hook_mod, tmp_yaml, caplog):
+        import logging
+        cfg = _load_config(hook_mod, tmp_yaml)
+        state = hook_mod._initial_state()
+        prompt = "這個功能我覺得做不到啦真的沒辦法繼續處理因為架構不允許這樣的擴展"
+        event = make_user_prompt(prompt)
+        with caplog.at_level(logging.INFO):
+            warnings = hook_mod._process_signals(
+                event, "UserPromptSubmit", state, cfg, None,
+                logging.getLogger("t_n8"),
+            )
+        assert warnings  # 應觸發 warning
+        msgs = [r.getMessage() for r in caplog.records]
+        # 觀測 log 行存在
+        obs = [m for m in msgs if "observability" in m and "restrictive_keywords" in m]
+        assert obs, "expected observability log for restrictive_keywords"
+        joined = "\n".join(obs)
+        assert "matched_keyword=做不到" in joined
+        assert "prompt_excerpt=" in joined
+        # excerpt 應包含 keyword
+        assert "做不到" in joined
+
+    def test_n9_legacy_log_line_preserved(self, hook_mod, tmp_yaml, caplog):
+        """向後相容：原 'signal %s triggered; warning emitted' 行必須保留。"""
+        import logging
+        cfg = _load_config(hook_mod, tmp_yaml)
+        state = hook_mod._initial_state()
+        prompt = "我覺得這個功能做不到啦真的沒辦法繼續處理因為現況架構受限"
+        event = make_user_prompt(prompt)
+        with caplog.at_level(logging.INFO):
+            hook_mod._process_signals(
+                event, "UserPromptSubmit", state, cfg, None,
+                logging.getLogger("t_n9"),
+            )
+        msgs = [r.getMessage() for r in caplog.records]
+        legacy = [m for m in msgs
+                  if "restrictive_keywords" in m
+                  and "triggered" in m
+                  and "warning emitted" in m]
+        assert legacy, "legacy log line must be preserved for backward compat"
+
+    def test_n10_s1_logs_dash_for_missing_fields(self, hook_mod, tmp_yaml, caplog):
+        """S1 觸發（無 prompt、無 matched_keyword）log 欄位應為 '-'。"""
+        import logging
+        cfg = _load_config(hook_mod, tmp_yaml)
+        state = hook_mod._initial_state()
+        # 連續兩次失敗以達 threshold=2
+        ev = make_post_tool_use_task({"status": "failed"})
+        with caplog.at_level(logging.INFO):
+            hook_mod._process_signals(ev, "PostToolUse", state, cfg, None,
+                                      logging.getLogger("t_n10_a"))
+            hook_mod._process_signals(ev, "PostToolUse", state, cfg, None,
+                                      logging.getLogger("t_n10_b"))
+        msgs = [r.getMessage() for r in caplog.records]
+        obs = [m for m in msgs
+               if "observability" in m and "consecutive_failures" in m]
+        assert obs, "expected observability log for consecutive_failures"
+        joined = "\n".join(obs)
+        assert "matched_keyword=-" in joined
+        assert "prompt_excerpt=-" in joined
+
+
+# ============================================================================
+# O. pytest 環境豁免（W10-058.1.1.1）
+# ============================================================================
+#
+# 目的：偵測自身在 pytest 環境執行時早期 return 0，避免 hit 2
+#       fixture 字串污染觸發 detection（W10-058.1.1 ANA 結論 MVP）。
+# ============================================================================
+
+class TestO_PytestEnvironmentExemption:
+    def test_o1_pytest_env_var_detected(self, hook_mod, monkeypatch):
+        """PYTEST_CURRENT_TEST 存在時 is_pytest_environment() 回 True。"""
+        monkeypatch.setenv("PYTEST_CURRENT_TEST", "test_o1 (call)")
+        assert hook_mod.is_pytest_environment() is True
+
+    def test_o2_pytest_path_detected(self, hook_mod, monkeypatch):
+        """cwd 含 pytest-of- 時 is_pytest_environment() 回 True。"""
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+        fake = Path("/tmp/pytest-of-tarragon/pytest-1/test_x0")
+        monkeypatch.setattr(hook_mod.Path, "cwd", lambda: fake)
+        assert hook_mod.is_pytest_environment() is True
+
+    def test_o3_non_pytest_env_returns_false(self, hook_mod, monkeypatch):
+        """非 pytest 環境（無 env var 且 cwd 不含 pytest-of-）回 False。"""
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+        monkeypatch.setattr(hook_mod.Path, "cwd",
+                            lambda: Path("/Users/dev/project"))
+        assert hook_mod.is_pytest_environment() is False
+
+    def test_o4_main_skips_when_pytest_env(self, hook_mod, monkeypatch, tmp_path):
+        """pytest 環境下 main() 早期 return 0，不執行 detection。
+
+        驗證方式：patch get_project_root 為不存在的路徑、不提供 yaml；
+        若 detection 真的執行會嘗試載入 config（雖仍回 0），
+        透過 patch derive_ticket 監測是否被呼叫即可確認跳過。
+        """
+        monkeypatch.setenv("PYTEST_CURRENT_TEST", "test_o4 (call)")
+        monkeypatch.setattr(sys, "stdin",
+                            io.StringIO(json.dumps(make_user_prompt("做不到啊真的"))))
+        called = {"derive_ticket": False, "get_project_root": False}
+
+        def fake_root():
+            called["get_project_root"] = True
+            return tmp_path
+
+        def fake_derive(ev, cwd, logger):
+            called["derive_ticket"] = True
+            return None
+
+        monkeypatch.setattr(hook_mod, "get_project_root", fake_root)
+        monkeypatch.setattr(hook_mod, "derive_ticket", fake_derive)
+        code = hook_mod.main()
+        assert code == 0
+        assert called["derive_ticket"] is False, (
+            "pytest 環境下 derive_ticket 不應被呼叫（main 應早期 return）")
+        assert called["get_project_root"] is False, (
+            "pytest 環境下 get_project_root 不應被呼叫")

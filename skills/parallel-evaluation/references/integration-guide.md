@@ -1,10 +1,12 @@
 # 整合指南
 
-並行評估與決策樹、Agent Teams、TDD 流程的整合方式。
+並行評估與決策樹、Agent Teams、TDD 流程的整合方式。本文件回答兩個核心問題：(1) 何時應觸發並行評估；(2) 並行評估與其他並行/協作工具（Agent Teams / bulk-evaluate / simplify）的選擇判準。
 
 ---
 
 ## 與決策樹的整合
+
+並行評估是決策樹中段的「品質掃描閘門」，不是強制步驟，由 PM 依標的特性決定是否觸發。
 
 ### 整合點
 
@@ -40,6 +42,8 @@ Phase 1 → Phase 2 → Phase 3
 ---
 
 ## 與 Agent Teams 的關係
+
+並行評估與 Agent Teams 都是多代理人協作機制，差異在於代理人之間是否需要即時互動。判準一句話：「Agent A 的發現會改變 Agent B 的工作嗎？」
 
 ### 何時用並行評估 vs Agent Teams
 
@@ -78,6 +82,8 @@ PM 彙整和過濾（Phase 3）
 ---
 
 ## 與 TDD 流程的整合
+
+並行評估是 TDD 各 Phase 的選用品質工具，不是強制步驟。何時觸發由標的特性（變更影響範圍、改善方向多元性、品質風險）決定。
 
 ### 各 Phase 的建議整合點
 
@@ -119,7 +125,7 @@ PM 彙整和過濾（Phase 3）
 
 ## 與 /bulk-evaluate 的關係
 
-`/bulk-evaluate` 是並行評估的正交工具，兩者並行軸不同。
+`/bulk-evaluate` 是並行評估的正交工具，兩者並行軸不同：parallel-evaluation 是「N 個視角 × 1 組標的」；bulk-evaluate 是「1 個標準 × N 個獨立目標」。
 
 | 維度 | /parallel-evaluation | /bulk-evaluate |
 |------|---------------------|---------------|
@@ -139,7 +145,7 @@ PM 彙整和過濾（Phase 3）
 
 ## 與 /simplify 的關係
 
-`/simplify` 是並行評估情境 A 的特化版本，專注於程式碼變更審查。
+`/simplify` 是並行評估情境 A 的特化版本，差異在 simplify 直接修改程式碼，parallel-evaluation 情境 A 只產出行動清單。需要快速 review + fix → simplify；需要評估但暫不行動 → 情境 A。
 
 | 維度 | /simplify | /parallel-evaluation 情境 A |
 |------|-----------|---------------------------|
@@ -157,7 +163,7 @@ PM 彙整和過濾（Phase 3）
 
 ## 報告流轉
 
-並行評估報告的後續處理：
+Phase 3 報告產出後，PM 依下表決定後續行動。所有「延後」項目必須已綁 Ticket（見 SKILL.md Worth-It Filter 三明示，與 `.claude/rules/core/decision-trigger-binding.md` 規則 1 / 1.5）。
 
 | 報告結果 | 後續行動 | 負責人 |
 |---------|---------|-------|
@@ -180,5 +186,7 @@ PM 彙整和過濾（Phase 3）
 
 ---
 
-**Last Updated**: 2026-03-02
+**Last Updated**: 2026-05-04
+**Version**: 1.1.0 — 套用 compositional-writing 改寫（W17-135）：各章節開頭補意圖陳述（atomic / intent-revealing），整合判準前置；報告流轉段引用 `.claude/rules/core/decision-trigger-binding.md` 規則 1 / 1.5
+
 **Version**: 1.0.0

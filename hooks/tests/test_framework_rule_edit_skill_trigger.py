@@ -264,6 +264,88 @@ def test_non_edit_tool_skips(project_dir, monkeypatch, capsys):
     assert stderr == ""
 
 
+# ---- W17-199：_compute_edit_metrics 測試 ----
+
+
+def test_edit_metrics_small_typo(tmp_path):
+    """Edit 工具，old='foo'、new='fo0'：diff_line_count=1、size delta=0。"""
+    target = tmp_path / "file.md"
+    target.write_text("foo bar\n", encoding="utf-8")
+    metrics = hook._compute_edit_metrics(
+        "Edit",
+        {"old_string": "foo", "new_string": "fo0"},
+        str(target),
+    )
+    file_size_before, file_size_after, diff_line_count = metrics
+    assert file_size_before == len("foo bar\n".encode("utf-8"))
+    # 同長度替換，size 不變
+    assert file_size_after == file_size_before
+    # 單行同行數修改 → 至少算 1 行
+    assert diff_line_count == 1
+
+
+def test_edit_metrics_multiline_revision(tmp_path):
+    """Edit 工具，多行替換：diff_line_count > 1。"""
+    target = tmp_path / "file.md"
+    target.write_text("line1\nline2\nline3\n", encoding="utf-8")
+    metrics = hook._compute_edit_metrics(
+        "Edit",
+        {
+            "old_string": "line1\nline2",
+            "new_string": "line1\nline2\nline2.5\nline2.6",
+        },
+        str(target),
+    )
+    _before, _after, diff_line_count = metrics
+    assert diff_line_count > 1
+
+
+def test_write_metrics_new_file(tmp_path):
+    """Write 工具新檔：file_size_before=0、file_size_after=len(content)。"""
+    target = tmp_path / "new_file.md"
+    content = "hello\nworld\n"
+    metrics = hook._compute_edit_metrics(
+        "Write",
+        {"content": content},
+        str(target),
+    )
+    file_size_before, file_size_after, _diff = metrics
+    assert file_size_before == 0
+    assert file_size_after == len(content.encode("utf-8"))
+
+
+def test_write_metrics_overwrite(tmp_path):
+    """Write 工具覆寫既有檔：file_size_before>0、file_size_after=len(new)。"""
+    target = tmp_path / "existing.md"
+    old_content = "old\n"
+    target.write_text(old_content, encoding="utf-8")
+    new_content = "new content line1\nnew content line2\n"
+    metrics = hook._compute_edit_metrics(
+        "Write",
+        {"content": new_content},
+        str(target),
+    )
+    file_size_before, file_size_after, _diff = metrics
+    assert file_size_before == len(old_content.encode("utf-8"))
+    assert file_size_after == len(new_content.encode("utf-8"))
+
+
+def test_metrics_io_error_returns_zero(tmp_path):
+    """不存在路徑與異常輸入：回傳 (0, 0, 0) 不拋例外。"""
+    # 不存在的路徑 + Edit
+    metrics = hook._compute_edit_metrics(
+        "Edit",
+        {"old_string": "x", "new_string": "y"},
+        str(tmp_path / "does-not-exist.md"),
+    )
+    # 不存在檔：before=0、after=delta、line_diff=1（單行修改保底）
+    assert metrics[0] == 0
+    # 異常 tool_name
+    assert hook._compute_edit_metrics("Other", {}, "whatever") == (0, 0, 0)
+    # 異常 tool_input 結構
+    assert hook._compute_edit_metrics("Edit", None, "whatever") == (0, 0, 0)
+
+
 def test_missing_file_path_skips(project_dir, monkeypatch, capsys):
     _write_strict_config(project_dir, False)
     transcript = _write_transcript(project_dir, with_skill_call=False)

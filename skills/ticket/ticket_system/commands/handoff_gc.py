@@ -22,11 +22,14 @@ from ticket_system.lib.constants import (
 from ticket_system.lib.paths import get_project_root
 
 # 共用的掃描和判斷函式
+# W17-163 L1-A: 改用 is_handoff_stale 統一 stale 判定（消除 ARCH-020 同構）
+# 歷史背景：handoff_gc 原獨立重寫 stale 判定邏輯，與 handoff_utils 漂移；
+# W10-047.4 漏判（direction=to-source + from_status="in_progress" 走非任務鏈分支
+# 但 from_status != "completed" 即不標 stale）即此漂移之直接成因。
+# 本次改 delegate 到 is_handoff_stale，三套消費者共用單一判定函式。
 from ticket_system.lib.handoff_utils import (
-    extract_direction_target_id,
+    is_handoff_stale,
     is_ticket_completed,
-    is_task_chain_direction,
-    is_ticket_in_progress_or_completed,
     scan_pending_handoffs,
 )
 
@@ -35,15 +38,11 @@ def _collect_stale_handoffs() -> List[Tuple[Path, str, str]]:
     """
     掃描 pending/ 目錄，收集所有 stale handoff 檔案。
 
-    Stale 判斷規則（與 list_pending_handoffs() 一致）：
-    1. 來源 ticket 已 completed
-    2. 且：
-       - JSON 檔：檢查 direction 和 from_status 欄位
-       - Markdown 檔：直接認定為 stale（因無法提取 direction 資訊）
-       - 非任務鏈（context-refresh 等）：from_status != "completed"
-       - 任務鏈（to-sibling/to-parent/to-child）：目標已 in_progress/completed
+    Stale 判斷 delegate 至 handoff_utils.is_handoff_stale（W17-163 L1-A，
+    消除 ARCH-020 跨進程重複邏輯）。判定規則詳見該函式 docstring。
 
-    使用共用的 scan_pending_handoffs() 函式進行掃描，避免重複邏輯。
+    Markdown 格式 handoff 因無 direction 資訊，沿用原行為：
+    來源 ticket 已 completed 即視為 stale。
 
     Returns:
         List of (file_path, ticket_id, reason) tuples
@@ -61,30 +60,15 @@ def _collect_stale_handoffs() -> List[Tuple[Path, str, str]]:
             if not ticket_id:
                 continue
 
-            if not is_ticket_completed(ticket_id):
-                continue  # 來源 ticket 未完成，保留
-
-            direction = record.direction
-            from_status = record.from_status
-
-            if is_task_chain_direction(direction):
-                # 任務鏈：只有目標已啟動才算 stale
-                target_id = extract_direction_target_id(direction)
-                if target_id and is_ticket_in_progress_or_completed(target_id):
-                    reason = f"任務鏈目標 {target_id} 已啟動"
-                    stale.append((record.file_path, ticket_id, reason))
-                # 無 target_id 或目標未啟動：不算 stale
-            else:
-                # 非任務鏈（context-refresh 等）：from_status != "completed" 才 stale
-                if from_status != "completed":
-                    reason = f"來源 ticket {ticket_id} 已完成（direction: {direction}）"
-                    stale.append((record.file_path, ticket_id, reason))
+            # W17-163 L1-A: delegate 至 is_handoff_stale（單一 stale 判定來源）
+            is_stale, reason = is_handoff_stale(record.data)
+            if is_stale:
+                stale.append((record.file_path, ticket_id, reason))
 
         elif record.format == "markdown":
-            # Markdown 格式的 handoff 檔案
+            # Markdown 格式無 direction 資訊，沿用原行為：
+            # 來源 ticket 已 completed → stale
             ticket_id = record.ticket_id
-
-            # Markdown 格式無 direction 資訊，保持原行為
             if ticket_id and is_ticket_completed(ticket_id):
                 reason = f"來源 ticket {ticket_id} 已完成（Markdown 格式）"
                 stale.append((record.file_path, ticket_id, reason))

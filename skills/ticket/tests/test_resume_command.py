@@ -113,24 +113,24 @@ class TestIsTicketInProgressOrCompleted:
         result = is_ticket_in_progress_or_completed("invalid-id")
         assert result is False
 
-    @patch("ticket_system.lib.handoff_utils.load_and_validate_ticket")
+    @patch("ticket_system.lib.handoff_utils._load_ticket_status")
     def test_returns_true_for_in_progress_ticket(self, mock_load, temp_handoff_env):
         """目標 ticket 為 in_progress 時返回 True"""
-        mock_load.return_value = ({"status": "in_progress"}, None)
+        mock_load.return_value = "in_progress"
         result = is_ticket_in_progress_or_completed("0.31.0-W4-001")
         assert result is True
 
-    @patch("ticket_system.lib.handoff_utils.load_and_validate_ticket")
+    @patch("ticket_system.lib.handoff_utils._load_ticket_status")
     def test_returns_true_for_completed_ticket(self, mock_load, temp_handoff_env):
         """目標 ticket 為 completed 時返回 True"""
-        mock_load.return_value = ({"status": "completed"}, None)
+        mock_load.return_value = "completed"
         result = is_ticket_in_progress_or_completed("0.31.0-W4-001")
         assert result is True
 
-    @patch("ticket_system.lib.handoff_utils.load_and_validate_ticket")
+    @patch("ticket_system.lib.handoff_utils._load_ticket_status")
     def test_returns_false_for_pending_ticket(self, mock_load, temp_handoff_env):
         """目標 ticket 為 pending 時返回 False"""
-        mock_load.return_value = ({"status": "pending"}, None)
+        mock_load.return_value = "pending"
         result = is_ticket_in_progress_or_completed("0.31.0-W4-001")
         assert result is False
 
@@ -670,7 +670,7 @@ class TestExecute:
         assert result == 0
 
         captured = capsys.readouterr()
-        assert "待恢復任務清單" in captured.out or "[待恢復任務清單]" in captured.out
+        assert "下 session 建議項目清單" in captured.out or "[下 session 建議項目清單]" in captured.out
         assert "0.31.0-W4-001" in captured.out
         assert "0.31.0-W4-002" in captured.out
 

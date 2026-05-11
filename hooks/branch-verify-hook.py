@@ -35,6 +35,7 @@ Decision: "allow" (feature 分支) | "deny" (保護分支)
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 # 添加 lib 目錄到路徑
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
@@ -46,6 +47,7 @@ from git_utils import (
     is_protected_branch,
     is_allowed_branch,
     generate_worktree_info,
+    find_target_repo,
 )
 from hook_io import (
     read_hook_input,
@@ -53,6 +55,16 @@ from hook_io import (
     create_pretooluse_output,
 )
 from hook_utils import setup_hook_logging, run_hook_safely
+
+
+# 跨專案豁免清單（W17-149）：當目標檔案不在本專案 repo 時，使用通用清單
+# 不使用本專案約定的 .claude/、docs/ 等前綴（那是 book_overview_v1 約定，外部 repo 不適用）
+GENERIC_EXEMPT_EXACT = [
+    "README.md",
+    "CHANGELOG.md",
+    ".gitignore",
+    ".gitattributes",
+]
 
 
 def _resolve_cwd_for_branch_detection(file_path: str) -> "str | None":
@@ -85,68 +97,96 @@ def _resolve_cwd_for_branch_detection(file_path: str) -> "str | None":
     return None
 
 
-def is_exempt_path_on_protected_branch(file_path: str, cwd: str | None = None) -> bool:
+def _is_same_repo(target_repo: Optional[str], host_root: str) -> bool:
+    """判斷 target_repo 是否與 host project 相同。"""
+    if not target_repo:
+        return True  # 無法判斷時視為同 repo（保守，套用本專案豁免）
+    return os.path.realpath(target_repo) == os.path.realpath(host_root)
+
+
+def is_exempt_path_on_protected_branch(
+    file_path: str,
+    cwd: "str | None" = None,
+    target_repo: "str | None" = None,
+) -> bool:
     """
     判斷此路徑是否在保護分支上被豁免（允許編輯）
 
-    適用場景：需要在 main 分支上更新規則、文件、Ticket 時
-
-    邏輯：
-    1. 如果 file_path 不在專案根目錄下（如 auto-memory 路徑），視為非專案檔案，直接豁免
-    2. 如果 file_path 在專案根目錄下，檢查是否匹配豁免路徑前綴或精確路徑
+    W17-149: 區分 same-repo（本專案豁免清單）vs cross-repo（通用豁免清單）
 
     Args:
         file_path: 要編輯的檔案路徑
+        cwd: 用於 host project 偵測的 cwd
+        target_repo: 目標檔案所屬的 repo 根目錄（從 find_target_repo 取得）
 
     Returns:
-        bool: True 表示豁免（允許編輯），False 表示不豁免（需要 deny）
-
-    Example:
-        if is_exempt_path_on_protected_branch(".claude/pm-rules/decision-tree.md"):
-            print("Allowed to edit .claude/ files on main")
+        bool: True 表示豁免（允許編輯），False 表示不豁免
     """
-    # 豁免的路徑字首
+    host_root = get_project_root(cwd=cwd)
+    same_repo = _is_same_repo(target_repo, host_root)
+
+    if not same_repo:
+        # 跨專案：使用通用豁免清單（不套用 .claude/、docs/ 等本專案約定）
+        # 計算相對於目標 repo 的路徑
+        if target_repo and file_path.startswith(target_repo):
+            normalized = file_path[len(target_repo):].lstrip("/")
+        else:
+            normalized = file_path.lstrip("/") if file_path.startswith("/") else file_path
+        return normalized in GENERIC_EXEMPT_EXACT
+
+    # Same repo：使用本專案豁免清單
     exempt_prefixes = [
         ".claude/",
         "docs/",
         "scripts/experiments/",  # 實驗一次性腳本（W15-023，對應 docs/experiments/ 報告）
     ]
-
-    # 豁免的精確路徑
     exempt_exact = [
         "CLAUDE.md",
         "README.md",
         "CHANGELOG.md",
-        ".gitignore",  # repo 層級忽略清單：保護分支放行主線程直接補 runtime artifact / lock（W10-033）
-        ".gitattributes",  # repo 層級檔案屬性：保護分支放行主線程維護 eol/binary 規範（W10-054.1.1）
+        ".gitignore",  # repo 層級忽略清單（W10-033）
+        ".gitattributes",  # repo 層級檔案屬性（W10-054.1.1）
     ]
 
-    project_root = get_project_root(cwd=cwd)
-
-    # 檢查 file_path 是否為絕對路徑且不在專案根目錄下
-    # 非專案檔案（如 auto-memory）不受保護分支限制，直接豁免
-    if file_path.startswith("/") and not file_path.startswith(project_root):
+    # 非專案檔案（不在 host_root 內）一律豁免（保留原行為）
+    if file_path.startswith("/") and not file_path.startswith(host_root):
         return True
 
-    # 正規化路徑：將絕對路徑轉為相對於專案根目錄的路徑
-    # Edit 工具傳入絕對路徑（如 /Users/.../project/.claude/rules/...），
-    # 需轉為相對路徑（.claude/rules/...）才能正確比對豁免前綴
-    if file_path.startswith(project_root):
-        normalized = file_path[len(project_root):].lstrip("/")
+    if file_path.startswith(host_root):
+        normalized = file_path[len(host_root):].lstrip("/")
     else:
-        # file_path 已是相對路徑或其他格式，直接使用
         normalized = file_path.lstrip("/")
 
-    # 檢查字首
     for prefix in exempt_prefixes:
         if normalized.startswith(prefix):
             return True
+    return normalized in exempt_exact
 
-    # 檢查精確匹配
-    if normalized in exempt_exact:
-        return True
 
-    return False
+def build_cross_repo_deny_message(
+    file_path: str,
+    target_repo: str,
+    target_branch: str,
+    suggested_branch: str = "feat/cross-repo-edit",
+) -> str:
+    """W17-149: 跨專案保護分支 deny 訊息，附目標 repo 切換指令。"""
+    return f"""保護分支編輯被阻止（跨專案）
+
+目標檔案位於外部 repo，且該 repo 當前在保護分支：
+- 檔案路徑：{file_path}
+- 目標 repo：{target_repo}
+- 目標 branch：{target_branch}
+
+跨專案豁免清單僅含通用文件（README.md / CHANGELOG.md / .gitignore / .gitattributes），
+此檔案不在豁免清單內，需先切換到 feature 分支再編輯。
+
+複製以下指令切換目標 repo 分支（在另一個 terminal 執行）：
+
+  cd {target_repo}
+  git status
+  git checkout -b {suggested_branch}
+
+完成切換後即可重試本次編輯。"""
 
 
 def main() -> int:
@@ -198,8 +238,16 @@ def main() -> int:
     if is_protected_branch(current_branch):
         file_path = tool_input.get("file_path", "unknown")
 
+        # W17-149: 偵測目標 repo，判斷是否跨專案
+        target_repo = find_target_repo(file_path) if file_path and file_path.startswith("/") else None
+        host_root = get_project_root()
+        is_cross_repo = (
+            target_repo is not None
+            and os.path.realpath(target_repo) != os.path.realpath(host_root)
+        )
+
         # 檢查是否為豁免路徑（在保護分支上允許編輯）
-        if is_exempt_path_on_protected_branch(file_path, cwd=file_dir):
+        if is_exempt_path_on_protected_branch(file_path, cwd=file_dir, target_repo=target_repo):
             logger.info(f"在保護分支 '{current_branch}' 上編輯豁免路徑 {file_path}，允許")
             output = create_pretooluse_output(
                 "allow",
@@ -208,11 +256,22 @@ def main() -> int:
             write_hook_output(output)
             return 0
 
-        # 判斷是否為專案檔案
-        project_root = get_project_root(cwd=file_dir)
-        is_project_file = file_path.startswith(project_root) if file_path.startswith("/") else True
+        logger.info(f"在保護分支 '{current_branch}' 上嘗試編輯非豁免檔案 {file_path}，操作已阻止 (cross_repo={is_cross_repo})")
 
-        logger.info(f"在保護分支 '{current_branch}' 上嘗試編輯非豁免檔案 {file_path}，操作已阻止")
+        if is_cross_repo:
+            # W17-149: 跨專案保護分支：附目標 repo 切換指令
+            deny_message = build_cross_repo_deny_message(
+                file_path=file_path,
+                target_repo=target_repo,
+                target_branch=current_branch,
+            )
+            output = create_pretooluse_output("deny", deny_message)
+            write_hook_output(output)
+            return 0
+
+        # 同 repo 路徑判斷
+        project_root = host_root
+        is_project_file = file_path.startswith(project_root) if file_path.startswith("/") else True
 
         if is_project_file:
             # 專案內的檔案

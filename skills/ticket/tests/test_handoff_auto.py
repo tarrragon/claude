@@ -247,17 +247,21 @@ def test_auto_passes_through_empty_chain(temp_project):
     assert data["chain"] == {}
 
 
-def test_auto_supports_to_source_direction(temp_project):
+def test_auto_rejects_to_source_direction(temp_project, capsys):
+    """W17-163 L1-B: to-source 從 _VALID_AUTO_DIRECTIONS 移除後應被拒絕。
+
+    理由：to-source 不在 constants 任一 direction 組（TASK_CHAIN / NON_CHAIN），
+    語意矛盾（from_ticket completed 時 source 已無可操作性），且無自動化流程使用。
+    """
     root, tickets_dir = temp_project
     _create_ticket(tickets_dir, "0.18.0-W17-005")
 
     args = _make_args(from_ticket_id="0.18.0-W17-005", direction="to-source")
     rc = _execute_auto_handoff(args)
-    assert rc == 0
-    data = json.loads(
-        (root / ".claude" / "handoff" / "pending" / "0.18.0-W17-005.json").read_text()
-    )
-    assert data["direction"] == "to-source"
+    assert rc == 1
+    assert "--direction 無效" in capsys.readouterr().err
+    # 不應產生 handoff 檔
+    assert not (root / ".claude" / "handoff" / "pending" / "0.18.0-W17-005.json").exists()
 
 
 def test_auto_supports_context_refresh_direction(temp_project):
@@ -399,3 +403,52 @@ def test_auto_overwrites_existing_file(temp_project):
         (root / ".claude" / "handoff" / "pending" / "0.18.0-W17-030.json").read_text()
     )
     assert data["direction"] == "to-parent"
+
+
+# ----------------------------------------------------------------------------
+# W17-163 L1-C: terminal status + 非任務鏈 direction 防護
+# ----------------------------------------------------------------------------
+
+def test_auto_rejects_terminal_completed_with_context_refresh(temp_project):
+    """L1-C: terminal completed ticket + context-refresh → ValueError。
+
+    語意：completed ticket 的非任務鏈 handoff 無消費者（SessionStart/Stop hook
+    會視為孤兒），形成孤兒 JSON。
+    """
+    from ticket_system.lib.constants import STATUS_COMPLETED
+
+    root, tickets_dir = temp_project
+    _create_ticket(tickets_dir, "0.18.0-W17-100", status=STATUS_COMPLETED)
+
+    args = _make_args(from_ticket_id="0.18.0-W17-100", direction="context-refresh")
+    with pytest.raises(ValueError, match="terminal ticket"):
+        _execute_auto_handoff(args)
+
+    # 不應產生 handoff 檔
+    assert not (root / ".claude" / "handoff" / "pending" / "0.18.0-W17-100.json").exists()
+
+
+def test_auto_allows_terminal_completed_with_task_chain(temp_project):
+    """L1-C: terminal completed + 任務鏈 direction 仍允許（chain handoff 有下游目標）。"""
+    from ticket_system.lib.constants import STATUS_COMPLETED
+
+    root, tickets_dir = temp_project
+    _create_ticket(tickets_dir, "0.18.0-W17-101", status=STATUS_COMPLETED)
+
+    args = _make_args(
+        from_ticket_id="0.18.0-W17-101",
+        direction="to-sibling:0.18.0-W17-102",
+    )
+    rc = _execute_auto_handoff(args)
+    assert rc == 0
+    assert (root / ".claude" / "handoff" / "pending" / "0.18.0-W17-101.json").exists()
+
+
+def test_auto_allows_in_progress_with_context_refresh(temp_project):
+    """L1-C: 非 terminal status + 非任務鏈仍允許（既有 context-refresh 場景）。"""
+    root, tickets_dir = temp_project
+    _create_ticket(tickets_dir, "0.18.0-W17-103", status=STATUS_IN_PROGRESS)
+
+    args = _make_args(from_ticket_id="0.18.0-W17-103", direction="context-refresh")
+    rc = _execute_auto_handoff(args)
+    assert rc == 0

@@ -67,17 +67,21 @@
 
 | 層級 | 措施 | 狀態 |
 |------|------|------|
-| Hook | 新增 Hook 偵測 PM 回覆文字含選項 pattern（A./B.、「要選哪個」等）並輸出提醒 | 建議實施 |
-| 規則 | pm-role.md「行為循環（精簡）」AUQ 觸發速查 + pm-rules/behavior-loop-details.md AUQ 強制觸發章節 | 已實施 |
-| CLAUDE.md | 頂部加入 AUQ 強制使用顯眼提醒（自動載入最終防線） | 建議實施 |
+| Hook | 新增 Hook 偵測 PM 回覆文字含選項 pattern（A./B.、「要選哪個」等）並輸出提醒 | 已實施（auq-option-pattern-detector-hook；表格選項偵測待 W17-174.2.1 落地） |
+| 規則 | pm-role.md「行為循環（精簡）」AUQ 觸發速查 + pm-rules/behavior-loop-details.md AUQ 強制觸發章節 + askuserquestion-rules.md §具體觸發訊號（S1-S6） | 已實施（W17-174.3 升級 askuserquestion-rules.md 加入 W17-174.1 共同特徵落地） |
+| CLAUDE.md | 頂部加入 AUQ 強制使用顯眼提醒（自動載入最終防線） | 已實施（CLAUDE.md §1.1 PM 強制原則） |
 | Memory | 原則保留 memory 作為跨 session 索引 | 已實施 |
 | 自我檢查 | 每次準備列選項時自問：「是否需用戶做決策？」是 → 先 ToolSearch select:AskUserQuestion → 用 AUQ | 行為準則 |
 
 ### 檢查清單（PM 對話回覆前自我檢查）
 
+> **權威版**：完整三明示版位於 `.claude/pm-rules/behavior-loop-details.md`「PM 對話回覆前自檢 checklist」章節（W17-174.4 落地）。本處為簡化版供 PC-064 查閱者直接看到。
+
 - [ ] 本回覆是否列出 2 個以上供用戶選擇的選項？ → 是 → 必用 AUQ
 - [ ] 本回覆是否以「要繼續嗎？」「先做 X 還是 Y？」等問句結尾？ → 是 → 必用 AUQ
 - [ ] 本回覆是否等待用戶回應決定方向？ → 是 → 必用 AUQ
+- [ ] 是否剛收到代理人完成回報？（W17-174.1 F1：違規高發場景） → 是 → 強制重跑上述三題
+- [ ] 是否傾向用「快速確認」「決策不重要」豁免？（W17-174.1 F3：低 stakes 違規藉口） → 是 → 不豁免，仍須 AUQ
 - [ ] 以上任一為「是」，是否已執行 `ToolSearch("select:AskUserQuestion")`？ → 否 → 先載入再使用
 
 ### 教訓

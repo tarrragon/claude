@@ -1,6 +1,6 @@
 # PyYAML 替代評估報告
 
-**評估時間**: 2026-03-12T03:05:47.471731
+**評估時間**: 2026-05-11T12:49:07.993711
 
 ## 評估摘要
 
@@ -17,8 +17,8 @@
 
 ## 依賴整合影響
 
-- **使用 parse_ticket_frontmatter() 的 Hook 數量**: 6
-- **受影響 Hook**: handoff-auto-resume-stop-hook.py, handoff-prompt-reminder-hook.py, version-consistency-guard-hook.py, creation-acceptance-gate-hook.py, acceptance-gate-hook.py, parallel-suggestion-hook.py
+- **使用 parse_ticket_frontmatter() 的 Hook 數量**: 15
+- **受影響 Hook**: session-start-scheduler-hint-hook.py, session-experience-persistence-reminder-hook.py, handoff-auto-resume-stop-hook.py, stop-worklog-handoff-sync-check-hook.py, wrap-decision-tripwire-hook.py, handoff-prompt-reminder-hook.py, tech-debt-reminder.py, version-consistency-guard-hook.py, creation-acceptance-gate-hook.py, post-git-commit-hook.py, parallel-dispatch-verification-hook.py, acceptance-gate-hook.py, file-ownership-guard-hook.py, parallel-suggestion-hook.py, process-skip-guard-hook.py
 - **修改複雜度**: 簡單（僅需新增 dependencies 宣告）
 
 ## 最終建議

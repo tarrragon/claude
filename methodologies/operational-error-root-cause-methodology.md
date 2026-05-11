@@ -153,6 +153,42 @@
 
 ---
 
+## ANA 驗證共用函式正確性的範圍要求（PC-136 強制）
+
+> **來源**：PC-136 — W17-179 ANA false negative 案例：ANA 驗證 stop hook L361 自身函式正確，誤判「整個問題已解決」，未追蹤 callees / 同名實作 / callers，導致 lib `handoff_utils.is_ticket_completed` 漏修，數週內從另一處重爆。
+>
+> **觸發時機**：ANA / 重啟調查驗證「函式 A 是否正確」時。
+
+ANA 驗證函式正確性時，**範圍不可只到「直接被問的函式」本體**，必須追蹤呼叫鏈至少一層。
+
+**強制驗證範圍清單**：
+
+| 驗證對象 | 必查 | 動作 |
+|---------|------|------|
+| 函式 A 本體 | 是 | 讀 A 程式碼 + 驗證行為 |
+| A 的 callees（A 呼叫的函式） | 至少一層 | 對每個 callee 確認是否也已正確修正 |
+| A 的同名實作（grep `def A` / `function A`） | 全部 | grep 全 codebase，逐一比對是否同步修法 |
+| A 的 callers | 抽樣 | 檢查是否假設一致 |
+
+**ANA false negative 防護**：
+
+| 反模式 | 正確做法 |
+|-------|---------|
+| 只驗證「直接被問的函式」 | 追蹤 callees 至少一層、同名實作全查 |
+| 「修了一處」即結論「整個問題已解決」 | 在結論章節明示「已驗證 N 處同名實作 / M 處 callees」 |
+| 假設 lib SSOT 必然被所有 caller 走 | grep all callers + 逐一驗證 import chain |
+
+**驗證後必須在 ANA 結論記錄**：
+
+- 已 grep 的關鍵字與命中位置數
+- 已驗證的同名實作清單
+- 已追蹤的 callees 清單（至少一層）
+- 未驗證的 callers（抽樣或全量）說明
+
+> 完整錯誤模式、ARCH-020 三次重爆軌跡、W17-179 案例：.claude/error-patterns/process-compliance/PC-136-structural-fix-incomplete-caller-scan.md
+
+---
+
 ## 與 incident-response.md 的整合
 
 本方法論在 `incident-response.md` 的「操作失誤根因分析」章節中被引用。
@@ -171,6 +207,8 @@
 
 ---
 
-**Last Updated**: 2026-03-07
+**Last Updated**: 2026-05-10
+**Version**: 1.1.0 — 新增「ANA 驗證共用函式正確性的範圍要求」章節（PC-136 落地）：強制追蹤 callees 至少一層 + 同名實作全查 + ANA false negative 防護表 + 結論章節記錄要求
+
 **Version**: 1.0.0
-**Source**: 來自 PC-005、PC-007 等操作失誤模式的提煉
+**Source**: 來自 PC-005、PC-007 等操作失誤模式的提煉；1.1.0 來自 PC-136（W17-182 retrospective ANA）

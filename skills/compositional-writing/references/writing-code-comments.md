@@ -392,19 +392,19 @@ class DbOrderSearcher implements OrderSearcher {
 
 ## 多輪 Re-read Pass（multi-pass refinement）
 
-寫完上方自檢還不是 done — 自檢是「同 frame 的最後一掃」、不是 multi-pass。Multi-pass 要求每輪用**不同 frame** catch 不同層的錯（[#82](principles/literal-interception-vs-behavioral-refinement.md) / [#83](principles/writing-multi-pass-review.md)）。
+寫完上方自檢還不是 done — 自檢是「同 frame 的最後一掃」、不是 multi-pass。Multi-pass 要求每輪用**不同 frame** catch 不同層的錯（[literal-interception-vs-behavioral-refinement](principles/literal-interception-vs-behavioral-refinement.md) / [writing-multi-pass-review](principles/writing-multi-pass-review.md)）。
 
 註解用的核心三輪 + 兩輪程式碼專屬：
 
 | 輪  | Frame                                                              | 程式碼註解專用 checklist                                                     |
 | --- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | 1   | 生成                                                               | 把「為什麼」寫出來、預期語句不順                                             |
-| 2   | 對意圖（[#67](principles/ease-of-writing-vs-intent-alignment.md)） | 寫的是「為什麼這樣做」嗎、不是「程式在做什麼」？業務需求 vs 語法選擇分清楚？ |
+| 2   | 對意圖（[ease-of-writing-vs-intent-alignment](principles/ease-of-writing-vs-intent-alignment.md)） | 寫的是「為什麼這樣做」嗎、不是「程式在做什麼」？業務需求 vs 語法選擇分清楚？ |
 | 3   | 機會成本語氣                                                       | 「必須」「不可」翻成「在 X 情境下選擇 A 因為 ⋯⋯」                            |
 | 4'  | 介面 vs 實作分層                                                   | doc comment 不洩漏 impl、inline comment 講 why 不講 what、抽象層對齊嗎？     |
 | 5'  | 時間軸 robust                                                      | 5 個月後讀還看得懂嗎？依賴的 ticket / 連結還活著嗎？                         |
 
-### Naming 子場景：四輪 review（[#84](principles/naming-as-iterated-artifact.md)）
+### Naming 子場景：四輪 review（[naming-as-iterated-artifact](principles/naming-as-iterated-artifact.md)）
 
 註解寫完該 review 一次「這段程式碼涉及的命名」。命名是 iterated artifact、第一版幾乎不對：
 
@@ -422,7 +422,7 @@ class DbOrderSearcher implements OrderSearcher {
 - 跨 team API / DB schema：每輪都跑、跑兩遍
 - Production-facing URL / endpoint：不可跳
 
-詳見 [#84](principles/naming-as-iterated-artifact.md)。
+詳見 [naming-as-iterated-artifact](principles/naming-as-iterated-artifact.md)。
 
 ---
 

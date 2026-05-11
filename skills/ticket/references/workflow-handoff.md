@@ -10,27 +10,43 @@
 [交接流程]
     |
     v
-┌─ 知道方向? ─┐
-│             │
-否            是
-│             │
-v             v
-/ticket       ┌─ 交接方向? ────────────────┐
-handoff       │                            │
-(自動判斷)    父任務        子任務        兄弟任務
-              │             │             │
-              v             v             v
-         /ticket        /ticket       /ticket
-         handoff        handoff       handoff
-         --to-parent    --to-child    --to-sibling
-                        <id>          <id>
-                            │
-                            v
-                     [產生 Handoff 檔案]
-                            │
-                            v
-                     [等待恢復]
+┌─ 已知下個 target ticket id? ─┐
+│                              │
+是（絕對指向，W17-164）         否
+│                              │
+v                              v
+/ticket handoff                ┌─ 知道方向? ─┐
+  --next <target-id>           │             │
+  --from-ticket-id <src>       否            是
+       │                       │             │
+       │                       v             v
+       │                   /ticket           ┌─ 交接方向? ────────────────┐
+       │                   handoff           │                            │
+       │                   (自動判斷)        父任務        子任務        兄弟任務
+       │                                     │             │             │
+       │                                     v             v             v
+       │                                /ticket        /ticket       /ticket
+       │                                handoff        handoff       handoff
+       │                                --to-parent    --to-child    --to-sibling
+       │                                               <id>          <id>
+       │                                                                  │
+       └──────────────────────────────────────────────────────────────────┤
+                                                                          v
+                                                                   [產生 Handoff 檔案]
+                                                                          │
+                                                                          v
+                                                                   [等待恢復]
 ```
+
+**絕對指向 vs 相對方向**（W17-164 / L2-A）：
+
+| 模式 | 旗標 | 寫入欄位 | 適用情境 |
+|------|------|---------|---------|
+| 絕對指向 | `--next <target-id>` | `target_ticket_id` 直填 | PM 已知下 session 該做的 ticket id（含跨任務鏈、跨 Wave） |
+| 相對方向 | `--to-parent` / `--to-child <id>` / `--to-sibling <id>` | `direction` 欄位 + (可選) `target_ticket_id` 後綴 | 仍在任務鏈內，依血緣關係指向 |
+| 自動判斷 | 無旗標 | 由 CLI 推導 | 任務鏈線性繼續 |
+
+讀取端（GC / SessionStart hint / Stop hook / resume）統一透過 `handoff_utils.resolve_target(record)` 解析：優先 `target_ticket_id` > fallback `direction` 後綴。詳見 `references/handoff-command.md`「指向語意：source vs target」。
 
 **覆蓋指令**：
 
@@ -38,6 +54,7 @@ handoff       │                            │
 - [x] `/ticket handoff --to-parent` - 返回父任務
 - [x] `/ticket handoff --to-child <id>` - 切換到子任務
 - [x] `/ticket handoff --to-sibling <id>` - 切換到兄弟任務
+- [x] `/ticket handoff --next <target-id>` - 絕對指向下 session 該做的 ticket（W17-164）
 - [x] `/ticket handoff --status` - 查看交接狀態
 
 ## 狀態-命令映射規則
@@ -105,3 +122,9 @@ v           [載入 Context]
 
 - [x] `/ticket resume <id>` - 恢復特定任務
 - [x] `/ticket resume --list` - 列出待恢復任務
+
+---
+
+**Last Updated**: 2026-05-08
+**Version**: 1.1.0 — 同步 W17-164：交接決策樹新增「絕對指向（target_ticket_id）」分支，加入 `--next` 模式對比表與覆蓋指令
+**Source**: 0.18.0-W17-164

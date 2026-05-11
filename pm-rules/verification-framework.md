@@ -103,6 +103,71 @@ Level 1 入口層 → Level 2 執行層 → Level 3 完成層 → Level 4 驗收
 
 ---
 
+## ANA 專屬驗收 checklist：Solution spawn 一致性（Level 4 延伸）
+
+> **核心定位**：本章節是 Level 4 驗收層的 ANA 專屬延伸，補強 PM 在 ANA complete 前對 Solution 規劃 vs 實際 spawned ticket 的一致性檢查。**作為 hook 強制層（acceptance-gate-hook 整合 ana_spawn_consistency_checker）+ 規則自律層（quality-baseline 規則 5）之外的第三道行為層防護**。
+>
+> 來源：W17-167 ANA L4 結論。落地基線：W17-162 ANA 暴露 ANA Solution 規劃 spawn 但未實際建 ticket，acceptance 勾選只檢文字產出，靜默放行。
+
+### 適用範圍
+
+| 觸發條件 | 是否啟用 |
+|---------|---------|
+| ANA 類 ticket complete 前驗收 | 是 |
+| Solution 內含 spawn 規劃表格（IMP/DOC 清單） | 是 |
+| ANA 結論為「無需 spawn」且已顯性標註 | 例外豁免（Q3） |
+| IMP / DOC 類 ticket | 否（不適用） |
+
+### 三題 Checklist（PM 驗收 ANA 時逐題核對）
+
+#### Q1：Solution spawn 規劃表格的每一項，是否都已建對應 ticket？
+
+**Why**：Solution 寫了規劃不等於建了 ticket。acceptance 條目「產出 spawned IMP/DOC 清單」勾選只代表 Solution 章節文字產出存在，與「實際 `ticket track create` 建檔」是兩件事。
+
+**Consequence**：未建 ticket 的規劃會在 ANA complete 後靜默遺忘——觸發 PC-093（無 trigger 延後決策累積）模式，且違反 quality-baseline 規則 5（所有發現必須追蹤）。歷史 W17-162 / W11-003.6 等案例證實此漏洞反覆發生。
+
+**Action**：逐項比對 Solution 表格 vs frontmatter `spawned_tickets` / `children`，缺漏立即執行 `ticket track create` 補建並追加至 frontmatter。
+
+#### Q2：frontmatter `spawned_tickets` + `children` 數量是否 >= Solution 規劃數量？
+
+**Why**：數量不一致代表至少有一項規劃漏建。Q1 的逐項比對若有遺漏（如表格項目較多時人工比對失準），數量門檻提供第二層防護。
+
+**Consequence**：部分規劃遺忘會導致後續 Wave 排程缺料；ANA L1-L4 多層防護中，若 L4 行為層未檢，hook + 規則層的設計意圖無法在「PM 主動驗收」場景閉環。
+
+**Action**：以 `len(spawned_tickets) + len(children) >= Solution 表格列數` 為門檻；數量不足時逐行回查 Solution 表格，補建遺漏 ticket，並在 ticket frontmatter `spawned_tickets` 補入新建 ticket ID。
+
+#### Q3：若合法不 spawn，Solution 是否有顯性否定標記？
+
+**Why**：合法不 spawn 的情境確實存在（如 ANA 結論為「現有方案足夠，無需新 ticket」）。顯性否定標記讓 hook 偵測到 spawn 規劃不一致時可豁免，且讓後人理解決策理由——避免誤判為漏建。
+
+**Consequence**：無否定標記時，ana_spawn_consistency_checker 會阻擋 complete（誤判為漏建）；後人接手 ANA 時也會誤以為是漏建而重新建 ticket，造成重工。
+
+**Action**：在 Solution 章節以下列任一格式顯性標註：
+- `「無需建 ticket：[具體理由，如：現有 Wave X 已涵蓋 / 等待外部依賴 Y / 經多視角審查確認屬 over-engineering]」`
+- 對應 hook 偵測模式由 `ana_spawn_consistency_checker` 規格定義（W17-167 spawned IMP #1 落地）。
+
+### 與既有驗收條目的關係
+
+| 既有條目 | 本 checklist 補強點 |
+|---------|------------------|
+| Level 4 驗收條件（acceptance-auditor） | 本 checklist 為 PM 操作層延伸，acceptance-auditor 仍為主驗收者 |
+| Level 3「驗收條件主動勾選」 | Q1-Q3 是「驗收條件」內容的具體化（針對 ANA 類 ticket） |
+| quality-baseline 規則 5（所有發現必須追蹤） | Q1 是規則 5 在 ANA Solution 場景的具體化執行步驟 |
+
+### PM 操作流程整合
+
+ANA complete 前，PM 在主線程依序執行：
+
+1. `ticket track show <ana-id>` 取得 frontmatter `spawned_tickets` / `children` 與 Solution 章節
+2. 逐題執行 Q1 / Q2 / Q3
+3. 若 Q1 / Q2 不通過，立即 `ticket track create` 補建並更新 frontmatter
+4. 若 Q3 適用，在 Solution 補上顯性否定標記
+5. 執行 `ticket track check-acceptance --all <ana-id>` + `ticket track complete <ana-id>`
+
+> 三層防護銜接：本 checklist（L4 行為層）失守時，acceptance-gate-hook 整合的 `ana_spawn_consistency_checker`（L2 hook 強制層）會阻擋 complete；hook 規格詳見 W17-167 spawned IMP #1。
+
+---
+
 ## 相關文件
 
 - @.claude/pm-rules/decision-tree.md - 主線程決策樹
@@ -128,12 +193,13 @@ Level 1 入口層 → Level 2 執行層 → Level 3 完成層 → Level 4 驗收
 
 ---
 
-**Last Updated**: 2026-03-27
-**Version**: 1.8.0 - 新增品質不達標重做決策
+**Last Updated**: 2026-05-08
+**Version**: 1.9.0 - 新增「ANA 專屬驗收 checklist：Solution spawn 一致性」（Level 4 延伸，三題三明示，源自 W17-167 ANA L4 結論）
 **Status**: Active
 **Responsible**: rosemary-project-manager, acceptance-auditor, Hook 系統
 
 **Change Log**:
+- v1.9.0 (2026-05-08): 新增 ANA 專屬驗收 checklist（Q1 規劃 vs ticket / Q2 數量比對 / Q3 否定標記），每題附 Why/Consequence/Action 三明示；作為 hook 強制層 + 規則自律層之外的第三道行為層防護（W17-170，源 W17-167）
 - v1.8.0 (2026-03-27): 新增品質不達標重做決策
 - v1.7.0 (2026-03-13): Level 3 新增「驗收條件主動勾選」驗證項目
 - v1.5.0 (2026-03-04): Level 1 新增建立後品質審核

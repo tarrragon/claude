@@ -6,7 +6,7 @@
 # 同步檢查：doc-sync-check-hook 擴充或 consistency-check-hook（follow-up ticket）
 
 version: "1.2.0"
-last_updated: "2026-04-18"
+last_updated: "2026-05-11"
 source_of_truth_note: |
   本檔案為 wrap-decision-tripwire-hook.py 的唯一觸發條件來源。
   禁止在 Hook Python 程式碼中硬編碼 triggers / keywords / thresholds。
@@ -67,6 +67,19 @@ signals:
     match_mode: "substring"
     case_sensitive: false
     min_prompt_length: 20
+    # W10-058.1.1.2：context-aware filter（黑名單版）
+    # 觸發詞前後 window 字內含 words 任一者 → 視為技術語境陳述，suppress signal。
+    # 用途：降低 hit 4 型誤報（技術陳述如「Stop 事件不可能每 turn fire」中「不可能」非 PM 限制性主張）。
+    context_blacklist:
+      window: 20
+      words:
+        - hook
+        - 訊號
+        - 偵測
+        - 事件
+        - 機制
+        - 觸發
+        - fire
     reset_conditions:
       - manual_wrap_invocation
     message_template: |

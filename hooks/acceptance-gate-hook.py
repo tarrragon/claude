@@ -77,6 +77,8 @@ from acceptance_checkers import (
     check_multi_view_status,
     filter_error_patterns_by_ticket_scope,
     check_custom_h2_sections,
+    check_self_check_visibility,
+    check_ana_spawn_consistency,
 )
 # W17-120.2 / PC-091: ana_spawned_checker 退場
 # ANA complete 阻擋判斷統一收斂到 children_checker（PC-091 路線：
@@ -122,6 +124,8 @@ class AcceptanceCheckResult(NamedTuple):
     spawned_non_terminal_warning: Optional[str] = None
     # W17-072：非 Schema H2 章節清單（偵測 agent 自定義 H2 違規，warning 不阻擋）
     custom_h2_sections: List[str] = []
+    # W17-064：Layer 1 自檢可觀測性 warning（缺 `### 自檢結果` 時非 None，warning 不阻擋）
+    self_check_warning: Optional[str] = None
 
 
 # ============================================================================
@@ -154,6 +158,10 @@ CUSTOM_H2_WARNING = (
     "如需子結構請使用 H3（`### 子標題`）組織。\n"
     "建議：complete 前搬移自定義 H2 內容到對應 Schema 章節並降為 H3。"
 )
+
+
+# W17-064：Layer 1 自檢可觀測性 warning 訊息由 checker 直接組裝（含 ticket type 條件性說明），
+# 此處不另定義模板，warning 字串透過 `check_self_check_visibility` 回傳。
 
 
 # ============================================================================
@@ -238,6 +246,24 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
         # spawned_tickets 對 ANA 為弱 metadata，不阻擋父 complete。
         spawned_non_terminal_warning: Optional[str] = None  # 保留欄位向後相容
 
+        # 步驟 2.5.2：ANA Solution spawn 規劃 vs spawned+children 一致性檢查（W17-168）
+        # 對應 W17-167 ANA L2 設計：解析 Solution spawn 規劃表格（IMP/DOC/ANA + P0-P3），
+        # 與 frontmatter spawned_tickets + children 比對。N>0 且 S+C==0 → 阻擋；
+        # N>0 且 S+C<N → warning；含豁免標記（「無需建 ticket」「不 spawn」）→ 跳過。
+        if is_ana_type(frontmatter.get("type")):
+            spawn_should_block, spawn_msg = check_ana_spawn_consistency(
+                content, frontmatter, logger
+            )
+            if spawn_should_block:
+                return AcceptanceCheckResult(
+                    True, False, spawn_msg, False, [], [], "", "", [], [], False
+                )
+            if spawn_msg:
+                if warning_msg:
+                    warning_msg = warning_msg + "\n\n" + spawn_msg
+                else:
+                    warning_msg = spawn_msg
+
         # 步驟 2.6：ANA Ticket Solution 必須含 multi_view_status 標註（W10-051）
         multi_view_warning: Optional[str] = None
         if is_ana_type(frontmatter.get("type")):
@@ -297,6 +323,11 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
         # 步驟 7：檢查自定義 H2 章節（W17-072，warning 不阻擋）
         custom_h2 = check_custom_h2_sections(content, logger)
 
+        # 步驟 8：檢查 Layer 1 自檢可觀測性（W17-064，warning 不阻擋）
+        self_check_warning = check_self_check_visibility(
+            content, frontmatter.get("type", ""), logger
+        )
+
         task_type = frontmatter.get("type", "")
         priority = frontmatter.get("priority", "")
 
@@ -315,6 +346,7 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
             multi_view_warning=multi_view_warning,
             spawned_non_terminal_warning=spawned_non_terminal_warning,
             custom_h2_sections=custom_h2,
+            self_check_warning=self_check_warning,
         )
 
     except Exception as e:
@@ -407,6 +439,17 @@ def generate_hook_output(
     else:
         checklist_items.append("[x] 7. body 僅使用 Schema 章節")
 
+    # 項目 8: Layer 1 自檢可觀測性（W17-064，僅對 IMP/ANA/DOC 顯示）
+    if ticket_type_upper_for_checklist in ("IMP", "ANA", "DOC"):
+        if check_result.self_check_warning:
+            checklist_items.append(
+                "[WARNING] 8. Solution 缺 ### 自檢結果 子章節（Layer 1）"
+            )
+        else:
+            checklist_items.append("[x] 8. Layer 1 自檢結果已記錄")
+    else:
+        checklist_items.append("[--] 8. Layer 1 自檢(非 IMP/ANA/DOC，不適用)")
+
     checklist_text = "[Complete 清單]\n" + "\n".join(checklist_items)
     context_parts.append(checklist_text)
 
@@ -450,6 +493,11 @@ def generate_hook_output(
         logger.info(
             f"新增自定義 H2 警告，違規章節數: {len(check_result.custom_h2_sections)}"
         )
+
+    # 優先級 2.7：Layer 1 自檢可觀測性 warning（W17-064，WARNING 不阻擋）
+    if check_result.self_check_warning:
+        context_parts.append(check_result.self_check_warning)
+        logger.info("新增 Layer 1 自檢可觀測性 warning")
 
     # 優先級 3：Handoff 方向選擇 場景 #9（無訊息時，sibling >= 2）
     if (
@@ -568,6 +616,19 @@ def main() -> int:
 
         # 步驟 1: 解析驗證輸入
         input_data = read_json_from_stdin(logger)
+
+        # 降級 fast-path（W10-047.1）：
+        # ANA W10-035.3 觀察 3d 觸發 1667 次僅 36 Action（2.2%）。
+        # 在執行 subagent 偵測 / 完整輸入驗證 / Ticket 提取 / 驗收檢查等
+        # 重操作前，先以最低成本判斷命令是否為 ticket track complete；
+        # 不是即直接放行，避免每次 Bash 命令都跑完整流程。
+        if input_data is not None:
+            _fp_tool_input = input_data.get("tool_input") or {}
+            _fp_command = _fp_tool_input.get("command", "") if isinstance(_fp_tool_input, dict) else ""
+            if input_data.get("tool_name") != "Bash" or not is_complete_command(_fp_command):
+                logger.debug("Fast-path skip: 非 ticket track complete 命令")
+                _output_allow_json()
+                return EXIT_SUCCESS
 
         if is_subagent_environment(input_data):
             logger.info("偵測到 subagent 環境（agent_id=%s），跳過 AskUserQuestion 提醒", input_data.get("agent_id"))

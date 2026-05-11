@@ -14,11 +14,27 @@ trigger_conditions:
   file_extension: ".md"
 
   # Ticket 路徑關鍵字
+  # W10-100：移除過寬的 substring（-ticket-/-task-）。歷史上這兩個 keyword 會誤命中
+  # .claude/error-patterns/ 下含「ticket」字眼的 PC 檔（如 PC-098-...current-ticket-id.md），
+  # 改用具父目錄錨點的路徑模式，限定真實 ticket 檔案位置。
   ticket_path_keywords:
     - "docs/work-logs/"
     - "docs/tickets/"
-    - "-ticket-"
-    - "-task-"
+    - "/tickets/"
+
+  # Ticket 路徑黑名單（W10-100）
+  # 黑名單優先於 keyword 檢查；命中即跳過品質檢測。
+  # 用於排除 .claude/ 框架資產（error-patterns / methodologies / rules 等），
+  # 即使檔名或內容意外命中 keyword/structure marker，也不應觸發 ticket C2/C3 檢測。
+  ticket_path_excludes:
+    - ".claude/error-patterns/"
+    - ".claude/methodologies/"
+    - ".claude/rules/"
+    - ".claude/references/"
+    - ".claude/pm-rules/"
+    - ".claude/skills/"
+    - ".claude/hooks/"
+    - ".claude/agents/"
 
   # Ticket 結構標記
   ticket_structure_markers:

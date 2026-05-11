@@ -30,13 +30,30 @@
 | (a) 已決策 | 含結論的最終決定 | 「採方案 A」「無需重構」「Phase 4 評估結論：保持現狀」 |
 | (b) 明確 trigger 延後 | 等 ticket X 完成後執行 | 「`<follow-up-ticket-id>` 完成後處理 X 實作」 |
 
-**禁止**：無 trigger 延後（「Phase X 再決定」「以後再評估」「之後處理」「暫緩」「baseline 顯示需要再做」「待後續觀察」）。
+**禁止**：無 trigger 延後（「Phase X 再決定」「以後再評估」「之後處理」「將來」「暫緩」「baseline 顯示需要再做」「待後續觀察」）。
 
 **Why**：無 trigger 延後在「以後」與「永不」之間沒有可驗證邊界，必然累積為死議題（PC-093 的根源）。
 
 **Consequence**：違反此規則的延後表述會在執行階段成為灰色地帶，驗收沒有完成定義，後人接手不知該不該補做。
 
 **Action**：撰寫前自問「這個決策現在能不能下結論？」能 → 寫結論（狀態 a）；不能 → 建 follow-up ticket 並引用 ID（狀態 b）。
+
+### 規則 1.5：適用邊界——程式碼/文件 vs worklog/ticket
+
+決策狀態的嚴格度依載體區分：
+
+| 載體 | 可述未來考量？ | 必須綁 ticket trigger？ | 範例 |
+|------|--------------|---------------------|------|
+| 程式碼註解（架構討論） | 是 | 否（情境陳述） | 「未來若加入 X 模組，此處需改為 Y」（屬設計筆記，非延後決策） |
+| 規則 / 方法論 / 提案 | 是 | 否（原則陳述） | 「未來擴展點：可加入 Z」（屬擴充性說明） |
+| Worklog / Ticket body | 否 | 是（必須是狀態 a 或 b） | 任何「下週處理」「之後再說」「下版本再做」均違規 |
+| Phase 4 評估結論 | 否 | 是 | 必填明確結論，禁止「Phase 5 再決定」 |
+
+**Why**：程式碼/文件的「未來考量」是設計脈絡傳遞，幫助後人理解決策空間；worklog/ticket 是執行追蹤單位，「未來」若無 ticket 錨點即等於遺失。摩擦力方法論（`.claude/methodologies/friction-management-methodology.md`）核心：所有任務都有排程權重，只是輕重緩急不同；難題反而應優先（大石頭先放），時間（一週後/一個月後）不是任務權重的合法衡量單位。
+
+**Consequence**：worklog 中以時間為延後依據（「下週處理」「下個月再做」）會在繁忙期系統性失效——時間到了沒人記得評估，且無 acceptance 可勾選；該決策在「以後」與「永不」之間沒有可驗證邊界。
+
+**Action**：寫 worklog / ticket 時，若想表達「之後再處理」，先問「這是排程問題還是決策問題？」排程問題 → 改用 ticket 計數或版本錨點 trigger（規則 2 替代方案表新增兩列）；決策問題 → 立刻決策（狀態 a）或建 follow-up ticket（狀態 b）。
 
 ### 規則 2：合法 trigger 限 ticket ID
 
@@ -48,6 +65,8 @@
 | 等外部版本發布 | 「外部版本 vN 發布後處理」 | 建追蹤 ticket，本決策標 `blockedBy` |
 | 等指定日期重評 | 「YYYY-MM-DD 重新評估」 | 建排定 ticket，本決策標 `blockedBy` |
 | 等用戶反饋累積 | 「累積 10+ 案例後評估」 | 建監測 ticket，本決策標 `blockedBy` |
+| 等執行 N 個 ticket 後重評 | 「跑一週看看再說」 | 「執行 N 個同類 ticket 後重評」+ 建監測 ticket 計數 |
+| 下一版本再處理 | 「下個月再做」 | 「v0.X+1 開版時新增重評 ticket」+ 建版本錨點 ticket |
 
 **Why**：ticket 是專案唯一統一追蹤單位，含 acceptance / status / 派發機制 / scheduler runqueue。其他 trigger 形式無自動推進，會在「未綁 ticket 但說有 trigger」的灰區累積。
 
@@ -67,7 +86,7 @@
 
 | 違規類型 | 偵測時機 | 行為 |
 |---------|---------|------|
-| Ticket / 規則 / 規格中含「之後」「再決定」「以後」「暫緩」「Phase X 再」字面，且 frontmatter 無 `spawned_tickets` / `blockedBy` 連結，內文也無有效 ticket ID 格式引用 | 寫入時驗證機制 | 警告 + 提示寫法（不阻擋；驗證機制偵測自由文字含 ticket 引用有限度） |
+| Ticket / 規則 / 規格中含「之後」「再決定」「以後」「將來」「暫緩」「Phase X 再」「下週」「下個月」字面，且 frontmatter 無 `spawned_tickets` / `blockedBy` 連結，內文也無有效 ticket ID 格式引用 | 寫入時驗證機制 | 警告 + 提示寫法（不阻擋；驗證機制偵測自由文字含 ticket 引用有限度） |
 | Phase 4 評估結論為空或含「Phase 5 再決定」 | complete 前驗證機制 | 阻擋（quality-baseline 規則 2 已強制） |
 
 ---
@@ -97,6 +116,7 @@
 | `PC-093-yagni-deferred-decision-accumulation.md` | 反模式描述 | 本規則為正向 prescriptive guidance（PC-093 描述問題，本規則開藥方） |
 | `document-writing-style.md` | 三明示原則 | 互補：本規則處理「決策狀態明示」，document-writing-style 處理「論述明示」 |
 | `pm-rules/execution-discovery-rules.md`「遇到問題的閉環流程」 | 流程層 | 本規則是聲明（禁止無 trigger 延後），閉環流程是執行（不能立刻決策時的合法 5 step：識別 → 建 ANA/DOC → Solution 規劃 spawned 驗證/實驗 → 執行 → 釐清結案）。兩者互補形成完整閉環 |
+| `methodologies/friction-management-methodology.md` | 摩擦力 / 排程權重理論 | 本規則延伸：所有任務都有排程權重，時間（週 / 月）不是合法權重單位；難題優先排（大石頭先放）；改用 ticket 計數或版本錨點作 trigger |
 
 ---
 
@@ -104,13 +124,15 @@
 
 撰寫 ticket / 規則 / 規格 / commit / 註解前自問：
 
-- [ ] 內容含「之後」「再決定」「以後」「暫緩」「Phase X 再」「待後續」等表述？
+- [ ] 內容含「之後」「再決定」「以後」「將來」「暫緩」「Phase X 再」「待後續」「下週」「下個月」等表述？
+- [ ] 載體屬 worklog / ticket / Phase 4 結論？若是，必須為狀態 (a) 或狀態 (b)，不可述「未來考量」（規則 1.5）
 - [ ] 若有，已建立對應 follow-up ticket 並標 `spawned_tickets` / `blockedBy` 連結，或內文有 `W\d+-\d+` 格式 ticket ID 引用？
 - [ ] 若無 follow-up ticket，是否能立刻下結論（狀態 a）？
 - [ ] Phase 4 評估結論是否為明確結論（「無需重構」「採方案 A」），而非「Phase 5 再決定」？
 
 ---
 
-**Last Updated**: 2026-05-02
+**Last Updated**: 2026-05-04
+**Version**: 1.1.0 — 新增規則 1.5「適用邊界：程式碼/文件 vs worklog/ticket」；規則 1 禁止詞表加入「將來」；規則 2 替代方案表新增「ticket 計數」「版本錨點」兩列非時間 trigger；規則 4 違規偵測 + 檢查清單同步加「將來」「下週」「下個月」；引用 friction-management-methodology.md 解釋時間非權重單位。
 **Version**: 1.0.0 — 從用戶原則「不應該在任何時候使用延後決策」+ WRAP 完整模式分析（D + A + E 三層落地，trigger 限 ticket ID only，不設探索性例外）建立。
 **Source**: PC-093 反模式描述的正向 prescriptive 替代框架；hook 精度誤判的合法 Phase 4 結論案例觸發本次反思。

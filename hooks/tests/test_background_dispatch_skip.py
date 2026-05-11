@@ -54,6 +54,13 @@ def test_is_background_dispatch_helper():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skip(
+    reason="W10-067 將 agent-commit-verification-hook 從 PostToolUse(Agent) 遷移至 "
+    "SubagentStop，原 W10-060 的 background 派發 short-circuit 已不適用。"
+    "新事件模型下，hook 只在代理人真正停止（SubagentStop）時觸發，"
+    "PM 派發瞬間（PostToolUse）不再執行 commit-verification。"
+    "W17-197 自檢：此測試對應的 hook 行為已不存在，標記為 obsolete。"
+)
 def test_agent_commit_verification_skips_background_dispatch(monkeypatch, capsys):
     """background 派發時輸出 DEFAULT_OUTPUT，不執行代理人完成檢查（uncommitted/worktree/branch）。"""
     hook = _load_hook(
@@ -100,6 +107,11 @@ def test_agent_commit_verification_skips_background_dispatch(monkeypatch, capsys
     assert out == hook.DEFAULT_OUTPUT
 
 
+@pytest.mark.skip(
+    reason="W10-067 將 agent-commit-verification-hook 從 PostToolUse(Agent) 遷移至 "
+    "SubagentStop，foreground/background 區分已不在 Agent 派發時點生效。"
+    "W17-197 自檢：此測試對應的 hook 行為已不存在，標記為 obsolete。"
+)
 def test_agent_commit_verification_still_runs_for_foreground(monkeypatch, capsys):
     """foreground 派發仍執行完整檢查邏輯（未跳過）。"""
     hook = _load_hook(
@@ -222,8 +234,11 @@ def test_dispatch_count_guard_counts_background_dispatch(monkeypatch, tmp_path):
     state_file = tmp_path / "batch-state.json"
     monkeypatch.setattr(hook, "get_batch_state_file", lambda: state_file)
 
+    # W17-197: dispatch-count-guard-hook 內部讀取 `hook_event_name`（snake_case），
+    # 原測試誤用 camelCase `hookEventName` 導致進入 unknown event 分支，
+    # 不執行 handle_post_tool_use，state_file 不會被建立。
     payload = {
-        "hookEventName": "PostToolUse",
+        "hook_event_name": "PostToolUse",
         "tool_name": "Agent",
         "tool_input": {
             "description": "多視角分析 agent",

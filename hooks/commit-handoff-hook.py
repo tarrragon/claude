@@ -35,6 +35,7 @@ from hook_utils import (
     get_project_root,
     get_current_version_from_todolist,
     is_subagent_environment,
+    scan_ticket_files_by_version,
 )
 from lib.hook_messages import AskUserQuestionMessages, CoreMessages
 from lib.ask_user_question_reminders import AskUserQuestionReminders
@@ -170,17 +171,17 @@ def scan_wave_tickets(
     Returns:
         list - [{wave, status}] 清單，其中 wave 和 status 可能為 None
     """
-    tickets_dir = project_dir / "docs" / "work-logs" / f"v{version}" / "tickets"
+    # 使用共用 helper 支援雙結構（flat + hierarchical），W17-188 修復
+    ticket_files = scan_ticket_files_by_version(project_dir, version, logger)
 
-    if not tickets_dir.exists():
-        logger.debug(f"Ticket 目錄不存在: {tickets_dir}")
+    if not ticket_files:
+        logger.debug(f"Ticket 目錄不存在或無 ticket 檔案: v{version}")
         return []
 
     tickets = []
 
     try:
-        ticket_files = list(tickets_dir.glob("*.md"))
-        logger.debug(f"在 {tickets_dir} 找到 {len(ticket_files)} 個 Ticket 檔案")
+        logger.debug(f"從版本 v{version} 找到 {len(ticket_files)} 個 Ticket 檔案")
 
         for ticket_file in ticket_files:
             try:

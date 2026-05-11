@@ -216,21 +216,21 @@ class TestExtractTicketId:
     def test_extract_from_target_id(self):
         """提取 toolInput.target_id"""
         input_data = {
-            "toolInput": {"target_id": "0.1.2-W2-003"}
+            "tool_input": {"target_id": "0.1.2-W2-003"}
         }
         assert extract_ticket_id(input_data) == "0.1.2-W2-003"
 
     def test_extract_from_ticket_id(self):
         """提取 toolInput.ticket_id"""
         input_data = {
-            "toolInput": {"ticket_id": "0.1.2-W2-001"}
+            "tool_input": {"ticket_id": "0.1.2-W2-001"}
         }
         assert extract_ticket_id(input_data) == "0.1.2-W2-001"
 
     def test_reject_invalid_format(self):
         """拒絕非法 Ticket ID 格式"""
         input_data = {
-            "toolInput": {"target_id": "invalid-id"}
+            "tool_input": {"target_id": "invalid-id"}
         }
         assert extract_ticket_id(input_data) is None
 
@@ -255,24 +255,24 @@ class TestIsValidTrigger:
     def test_valid_trigger(self):
         """PreToolUse + Agent"""
         input_data = {
-            "hookEventName": "PreToolUse",
-            "toolName": "Agent",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Agent",
         }
         assert is_valid_trigger(input_data) is True
 
     def test_invalid_event_name(self):
         """事件名稱不符"""
         input_data = {
-            "hookEventName": "PostToolUse",
-            "toolName": "Agent",
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Agent",
         }
         assert is_valid_trigger(input_data) is False
 
     def test_invalid_tool_name(self):
         """工具名稱不符"""
         input_data = {
-            "hookEventName": "PreToolUse",
-            "toolName": "Bash",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
         }
         assert is_valid_trigger(input_data) is False
 
@@ -527,9 +527,9 @@ class TestHookIntegration:
             mock_setup_logging.return_value = mock_logger
 
             mock_read_stdin.return_value = {
-                "hookEventName": "PreToolUse",
-                "toolName": "Agent",
-                "toolInput": {"target_id": "0.1.2-W2-001"},
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Agent",
+                "tool_input": {"target_id": "0.1.2-W2-001"},
             }
 
             mock_get_root.return_value = temp_project_root
@@ -565,8 +565,8 @@ where:
             mock_setup_logging.return_value = mock_logger
 
             mock_read_stdin.return_value = {
-                "hookEventName": "PostToolUse",  # 不是 PreToolUse
-                "toolName": "Agent",
+                "hook_event_name": "PostToolUse",  # 不是 PreToolUse
+                "tool_name": "Agent",
             }
 
             result = main()

@@ -72,7 +72,7 @@ def test_execute_runqueue_resume_no_handoff_pending(monkeypatch, capsys):
         track_runqueue, "list_tickets", lambda version: tickets
     )
     monkeypatch.setattr(
-        track_runqueue, "_get_pending_handoff_ticket_ids", lambda: set()
+        track_runqueue, "_get_pending_handoff_info", lambda: {}
     )
 
     ns = argparse.Namespace(
@@ -104,3 +104,136 @@ def test_execute_runqueue_no_context_empty_uses_default_message(
     out = capsys.readouterr().out
     assert "blockedBy 全非空或 status 非 pending" in out
     assert "無 resume 候選" not in out
+
+
+# ---------------------------------------------------------------------------
+# W17-146: _apply_context_resume 解析 direction 取出 target
+# ---------------------------------------------------------------------------
+
+def _apply_with_handoff(monkeypatch, tickets, handoff_info):
+    monkeypatch.setattr(
+        track_runqueue, "_get_pending_handoff_info", lambda: handoff_info
+    )
+    return track_runqueue._apply_context_resume(tickets, "resume")
+
+
+def test_apply_context_resume_to_sibling_with_target(monkeypatch):
+    """T1: to-sibling:T → 候選含 T（target），不含 source。"""
+    tickets = [
+        _mk("0.18.0-W17-110.1", status="completed"),
+        _mk("0.18.0-W17-110.3", status="pending"),
+    ]
+    handoff = {
+        "0.18.0-W17-110.1": {
+            "ticket_id": "0.18.0-W17-110.1",
+            "direction": "to-sibling:0.18.0-W17-110.3",
+        }
+    }
+    out = _apply_with_handoff(monkeypatch, tickets, handoff)
+    ids = {t["id"] for t in out}
+    assert "0.18.0-W17-110.3" in ids
+
+
+def test_apply_context_resume_to_parent_with_target(monkeypatch):
+    """T2: to-parent:T → 候選含 T。"""
+    tickets = [
+        _mk("0.18.0-W17-200", status="pending"),
+    ]
+    handoff = {
+        "0.18.0-W17-200.1": {
+            "ticket_id": "0.18.0-W17-200.1",
+            "direction": "to-parent:0.18.0-W17-200",
+        }
+    }
+    out = _apply_with_handoff(monkeypatch, tickets, handoff)
+    assert {t["id"] for t in out} == {"0.18.0-W17-200"}
+
+
+def test_apply_context_resume_to_child_with_target(monkeypatch):
+    """T3: to-child:T → 候選含 T。"""
+    tickets = [
+        _mk("0.18.0-W17-300.1", status="pending"),
+    ]
+    handoff = {
+        "0.18.0-W17-300": {
+            "ticket_id": "0.18.0-W17-300",
+            "direction": "to-child:0.18.0-W17-300.1",
+        }
+    }
+    out = _apply_with_handoff(monkeypatch, tickets, handoff)
+    assert {t["id"] for t in out} == {"0.18.0-W17-300.1"}
+
+
+def test_apply_context_resume_context_refresh_uses_source(monkeypatch):
+    """T4: context-refresh → 候選為 source ticket_id。"""
+    tickets = [
+        _mk("0.18.0-W17-400", status="in_progress"),
+    ]
+    handoff = {
+        "0.18.0-W17-400": {
+            "ticket_id": "0.18.0-W17-400",
+            "direction": "context-refresh",
+        }
+    }
+    out = _apply_with_handoff(monkeypatch, tickets, handoff)
+    assert {t["id"] for t in out} == {"0.18.0-W17-400"}
+
+
+def test_apply_context_resume_next_wave_uses_source(monkeypatch):
+    """T5: next-wave → 候選為 source ticket_id。"""
+    tickets = [
+        _mk("0.18.0-W17-500", status="in_progress"),
+    ]
+    handoff = {
+        "0.18.0-W17-500": {
+            "ticket_id": "0.18.0-W17-500",
+            "direction": "next-wave",
+        }
+    }
+    out = _apply_with_handoff(monkeypatch, tickets, handoff)
+    assert {t["id"] for t in out} == {"0.18.0-W17-500"}
+
+
+def test_apply_context_resume_empty_direction_falls_back_to_source(monkeypatch):
+    """T6 邊界: direction 空字串 → fallback 到 source ticket_id，不 crash。"""
+    tickets = [
+        _mk("0.18.0-W17-600", status="in_progress"),
+    ]
+    handoff = {
+        "0.18.0-W17-600": {
+            "ticket_id": "0.18.0-W17-600",
+            "direction": "",
+        }
+    }
+    out = _apply_with_handoff(monkeypatch, tickets, handoff)
+    assert {t["id"] for t in out} == {"0.18.0-W17-600"}
+
+
+def test_apply_context_resume_unknown_direction_falls_back_to_source(monkeypatch):
+    """T7 邊界: direction 格式錯誤 → fallback 到 source ticket_id。"""
+    tickets = [
+        _mk("0.18.0-W17-700", status="in_progress"),
+    ]
+    handoff = {
+        "0.18.0-W17-700": {
+            "ticket_id": "0.18.0-W17-700",
+            "direction": "foobar",
+        }
+    }
+    out = _apply_with_handoff(monkeypatch, tickets, handoff)
+    assert {t["id"] for t in out} == {"0.18.0-W17-700"}
+
+
+def test_apply_context_resume_task_chain_no_target_falls_back(monkeypatch):
+    """to-sibling 無 :target → fallback source ticket_id。"""
+    tickets = [
+        _mk("0.18.0-W17-800", status="in_progress"),
+    ]
+    handoff = {
+        "0.18.0-W17-800": {
+            "ticket_id": "0.18.0-W17-800",
+            "direction": "to-sibling",
+        }
+    }
+    out = _apply_with_handoff(monkeypatch, tickets, handoff)
+    assert {t["id"] for t in out} == {"0.18.0-W17-800"}

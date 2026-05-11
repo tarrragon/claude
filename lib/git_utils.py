@@ -21,6 +21,7 @@ import fnmatch
 import os
 import sys
 import subprocess
+from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
 
@@ -169,6 +170,50 @@ def get_current_branch(cwd: Optional[str] = None) -> Optional[str]:
     """
     success, output = run_git_command(["branch", "--show-current"], cwd=cwd)
     return output if success and output else None
+
+
+def find_target_repo(file_path: str) -> Optional[str]:
+    """
+    從檔案路徑往上搜尋所屬 git repo 根目錄
+
+    沿著父目錄走訪，遇到 `.git`（目錄或檔案，後者為 worktree）即視為 repo 根目錄。
+    對絕對路徑與已存在的相對路徑均適用；找不到則回傳 None。
+
+    Args:
+        file_path: 目標檔案路徑（絕對或相對）
+
+    Returns:
+        str | None: 該檔案所屬 repo 根目錄（絕對路徑），找不到則 None
+
+    Example:
+        repo = find_target_repo("/Users/foo/project_a/src/x.py")
+        # 若 /Users/foo/project_a/.git 存在，回傳 "/Users/foo/project_a"
+
+    Notes:
+        - worktree 環境下 `.git` 為一個檔案（內含 gitdir 指標），仍視為 repo 根
+        - 不依賴 `git` CLI，純檔案系統查找，效能較快且離線可用
+    """
+    if not file_path:
+        return None
+
+    try:
+        path = Path(file_path).resolve()
+    except (OSError, RuntimeError):
+        return None
+
+    # 起始點：若 file_path 指向檔案則從父目錄開始；目錄則從本身開始
+    start = path if path.is_dir() else path.parent
+
+    current = start
+    # 走到根目錄為止
+    while True:
+        git_marker = current / ".git"
+        if git_marker.exists():
+            return str(current)
+        if current.parent == current:
+            # 到達檔案系統根目錄
+            return None
+        current = current.parent
 
 
 def get_project_root(cwd: Optional[str] = None) -> str:

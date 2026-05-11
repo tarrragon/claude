@@ -6,6 +6,7 @@ Handoff 共用判斷函式模組
 """
 
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
@@ -15,12 +16,39 @@ from ticket_system.lib.constants import (
     STATUS_IN_PROGRESS,
     TASK_CHAIN_DIRECTION_TYPES,
     NON_CHAIN_DIRECTION_TYPES,
+    TERMINAL_STATUSES,
     HANDOFF_DIR,
     HANDOFF_PENDING_SUBDIR,
 )
 from ticket_system.lib.paths import get_project_root
-from ticket_system.lib.ticket_ops import load_and_validate_ticket
-from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
+
+
+# W17-181.1: 真 SSOT delegate 至 hook_utils.hook_ticket
+# lib 不再持有 ticket 路徑解析責任，直接 delegate 至 find_ticket_file（單一來源）。
+# 子進程環境（如 stop hook subprocess）下 cwd / fallback 路徑解析失誤的根因消除。
+# Why: ARCH-020 跨進程同構邏輯反模式；先前 load_and_validate_ticket 走 paths.get_tickets_dir
+# 在子進程環境下若 CLAUDE_PROJECT_DIR 未傳遞會 fallback 至 cwd 而錯誤。
+def _ensure_hook_utils_path() -> None:
+    """將 .claude/hooks/ 加入 sys.path 以可 import hook_utils.hook_ticket。
+    從 lib 檔案位置（…/.claude/skills/ticket/ticket_system/lib/handoff_utils.py）
+    向上 4 層至 .claude/，再進入 hooks/。
+    """
+    hooks_dir = Path(__file__).resolve().parents[4] / "hooks"
+    hooks_dir_str = str(hooks_dir)
+    if hooks_dir_str not in sys.path:
+        sys.path.insert(0, hooks_dir_str)
+
+
+_ensure_hook_utils_path()
+
+try:
+    from hook_utils.hook_ticket import (
+        find_ticket_file as _find_ticket_file,
+        parse_ticket_frontmatter as _parse_ticket_frontmatter,
+    )
+except Exception:  # pragma: no cover - 防禦性 fallback；正常環境下永遠應載入成功
+    _find_ticket_file = None  # type: ignore
+    _parse_ticket_frontmatter = None  # type: ignore
 
 # 所有已知的 direction 值（從 constants 衍生，確保單一來源）
 _KNOWN_DIRECTION_VALUES = {"auto"} | set(TASK_CHAIN_DIRECTION_TYPES) | set(NON_CHAIN_DIRECTION_TYPES)
@@ -46,29 +74,83 @@ class ParsedHandoff:
     schema_error: Optional[str] = None  # 必填欄位缺失
 
 
-def is_ticket_completed(ticket_id: str) -> bool:
+def _load_ticket_status(
+    ticket_id: str,
+    project_root: Optional[Path] = None,
+) -> Optional[str]:
+    """W17-181.1：透過 hook_utils.find_ticket_file + parse_ticket_frontmatter
+    取得 ticket status（單一 SSOT 路徑解析來源）。
+
+    Args:
+        ticket_id: Ticket ID
+        project_root: 專案根目錄；None 時 fallback 至 get_project_root()
+
+    Returns:
+        Optional[str]: ticket status 字串；若無法定位或解析失敗回 None
+    """
+    if _find_ticket_file is None or _parse_ticket_frontmatter is None:
+        return None
+
+    root = project_root if project_root is not None else get_project_root()
+    ticket_path = _find_ticket_file(ticket_id, root)
+    if ticket_path is None:
+        return None
+
+    frontmatter = _parse_ticket_frontmatter(ticket_path)
+    if not frontmatter:
+        return None
+
+    status = frontmatter.get("status")
+    return status if isinstance(status, str) else None
+
+
+def is_ticket_completed(
+    ticket_id: str,
+    project_root: Optional[Path] = None,
+) -> bool:
     """
     檢查 Ticket 是否已 completed。
 
-    從 ticket_id 提取版本後載入 ticket 檢查狀態。
+    W17-181.1：改用 hook_utils.find_ticket_file + parse_ticket_frontmatter（單一 SSOT），
+    並接受顯式 project_root，消除子進程環境下 cwd 推導錯誤的根因（ARCH-020 同構修復）。
+
     若無法載入（不存在或格式錯誤），返回 False（保守策略：不確定時顯示）。
 
     Args:
         ticket_id: Ticket ID，格式如 "0.31.1-W5-004"
+        project_root: 專案根目錄；None 時 fallback 至 get_project_root()（CLI 場景）
 
     Returns:
         bool: True 表示已完成，False 表示未完成或無法判斷
     """
     try:
-        version = extract_version_from_ticket_id(ticket_id)
-        if version is None:
-            return False
+        status = _load_ticket_status(ticket_id, project_root)
+        return status == STATUS_COMPLETED
+    except Exception:
+        return False  # 保守策略：無法判斷時顯示
 
-        ticket, error = load_and_validate_ticket(version, ticket_id, auto_print_error=False)
-        if error:
-            return False
 
-        return ticket.get("status") == STATUS_COMPLETED
+def is_ticket_terminal(
+    ticket_id: str,
+    project_root: Optional[Path] = None,
+) -> bool:
+    """
+    檢查 Ticket 是否處於 terminal 狀態（completed 或 closed）。
+
+    W17-181.2：將 stop hook 自定義的 terminal 判定上移至 lib，消除
+    跨進程同構邏輯（ARCH-020）。stop hook 的 GC / handoff 過濾路徑使用，
+    避免 closed 的 ticket 對應 handoff JSON 被誤報為「待恢復」阻止退出。
+
+    Args:
+        ticket_id: Ticket ID
+        project_root: 專案根目錄；None 時 fallback 至 get_project_root()
+
+    Returns:
+        bool: True 表示處於 terminal 狀態，False 表示否或無法判斷
+    """
+    try:
+        status = _load_ticket_status(ticket_id, project_root)
+        return status in TERMINAL_STATUSES
     except Exception:
         return False  # 保守策略：無法判斷時顯示
 
@@ -99,9 +181,15 @@ def is_task_chain_direction(direction: str) -> bool:
     return direction_type in TASK_CHAIN_DIRECTION_TYPES
 
 
-def is_ticket_in_progress_or_completed(ticket_id: str) -> bool:
+def is_ticket_in_progress_or_completed(
+    ticket_id: str,
+    project_root: Optional[Path] = None,
+) -> bool:
     """
     檢查 Ticket 是否已 in_progress 或 completed。
+
+    W17-181.1：改用 hook_utils.find_ticket_file + parse_ticket_frontmatter（單一 SSOT），
+    並接受顯式 project_root，消除子進程環境下 cwd 推導錯誤的根因（ARCH-020 同構修復）。
 
     用於判斷任務鏈 handoff 的目標 ticket 是否已啟動。
     若目標已啟動，表示此 handoff 已被接手，應過濾為 stale。
@@ -110,20 +198,14 @@ def is_ticket_in_progress_or_completed(ticket_id: str) -> bool:
 
     Args:
         ticket_id: Ticket ID，格式如 "0.31.1-W5-004"
+        project_root: 專案根目錄；None 時 fallback 至 get_project_root()（CLI 場景）
 
     Returns:
         bool: True 表示已啟動（in_progress 或 completed），False 表示未啟動或無法判斷
     """
     try:
-        version = extract_version_from_ticket_id(ticket_id)
-        if version is None:
-            return False
-
-        ticket, error = load_and_validate_ticket(version, ticket_id, auto_print_error=False)
-        if error:
-            return False
-
-        return ticket.get("status") in (STATUS_IN_PROGRESS, STATUS_COMPLETED)
+        status = _load_ticket_status(ticket_id, project_root)
+        return status in (STATUS_IN_PROGRESS, STATUS_COMPLETED)
     except Exception:
         return False  # 保守策略：無法判斷時顯示
 
@@ -177,11 +259,48 @@ def is_valid_direction(direction: str) -> bool:
     return direction_type in _KNOWN_DIRECTION_VALUES
 
 
-def is_handoff_stale(record: dict) -> tuple[bool, str]:
+def resolve_target(record: dict) -> Optional[str]:
+    """
+    統一解析 handoff record 的 target ticket id（W17-164 / L2-A）。
+
+    讀取優先序：
+    1. 顯式 target_ticket_id 欄位（非空字串）
+    2. fallback: 從 direction 後綴提取（既有行為）
+
+    Why：handoff 設計初衷是讓下 session 找到「該做的 ticket」（target），
+    但既有 schema 以 from_ticket（source）+ direction（相對方向）間接表達。
+    新增 target_ticket_id 欄位讓指向絕對化；本 helper 統一讀取邏輯，
+    使所有讀取端（GC / SessionStart / Stop / resume hint）共用單一解析來源。
+
+    Consequence：跳過此 helper 而各自實作會重蹈 ARCH-020（跨進程同構邏輯）覆轍，
+    造成欄位優先序漂移。
+
+    Args:
+        record: handoff JSON dict，預期含 direction 與 / 或 target_ticket_id 欄位
+
+    Returns:
+        Optional[str]: 解析得到的 target ticket id；若兩個來源都無法解析則 None
+    """
+    explicit_target = record.get("target_ticket_id")
+    if explicit_target:
+        return explicit_target
+
+    direction = record.get("direction", "") or ""
+    return extract_direction_target_id(direction)
+
+
+def is_handoff_stale(
+    record: dict,
+    project_root: Optional[Path] = None,
+) -> tuple[bool, str]:
     """判斷 handoff record 是否為 stale。
 
     收斂三套消費者（reminder-hook / stop-hook / handoff_gc）對 stale 的判斷規則於單一函式，
     避免規則漂移（W17-095 根因）。
+
+    W17-181.1：新增 project_root 參數，傳遞給 is_ticket_completed /
+    is_ticket_in_progress_or_completed 與內部 status 探測，確保子進程環境下
+    路徑解析正確（ARCH-020 同構修復）。
 
     判斷規則（依序檢查）：
     1. 任務鏈方向（to-sibling/to-parent/to-child）且目標 ticket 已 in_progress/completed
@@ -197,6 +316,7 @@ def is_handoff_stale(record: dict) -> tuple[bool, str]:
         record: 從 handoff/pending/*.json 載入的 dict，預期含
             from_ticket / ticket_id / direction / from_status 等欄位。
             ticket_id 與 from_ticket 二擇一，優先使用 from_ticket（向後相容 ticket_id）。
+        project_root: 專案根目錄；None 時 fallback 至 get_project_root()（CLI 場景）
 
     Returns:
         tuple[bool, str]: (is_stale, reason)
@@ -209,28 +329,15 @@ def is_handoff_stale(record: dict) -> tuple[bool, str]:
     # 情境 1：任務鏈目標已啟動
     if is_task_chain_direction(direction):
         target_id = extract_direction_target_id(direction)
-        if target_id and is_ticket_in_progress_or_completed(target_id):
+        if target_id and is_ticket_in_progress_or_completed(target_id, project_root):
             # 取得 target 實際狀態以填入 reason（in_progress / completed）
-            try:
-                version = extract_version_from_ticket_id(target_id)
-                if version is not None:
-                    ticket, error = load_and_validate_ticket(
-                        version, target_id, auto_print_error=False
-                    )
-                    if not error:
-                        status = ticket.get("status", "in_progress")
-                    else:
-                        status = "in_progress"
-                else:
-                    status = "in_progress"
-            except Exception:
-                status = "in_progress"
+            status = _load_ticket_status(target_id, project_root) or "in_progress"
             return True, f"任務鏈目標 {target_id} 已 {status}"
         # 任務鏈但目標未啟動：不 stale
         return False, ""
 
     # 情境 2：非任務鏈且來源 ticket 已 completed
-    if from_ticket and is_ticket_completed(from_ticket):
+    if from_ticket and is_ticket_completed(from_ticket, project_root):
         return True, f"來源 ticket {from_ticket} 已 completed"
 
     # 情境 3：非任務鏈且 from_status 已標記 completed

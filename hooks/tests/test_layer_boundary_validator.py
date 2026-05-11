@@ -385,9 +385,15 @@ class TestFileIdentification:
     """T9 - Layer 1 檔案識別測試"""
 
     def test_rules_core_identified_as_layer1(self, mock_logger):
-        """T9.1: .claude/rules/core/ 檔案識別"""
+        """T9.1: .claude/rules/core/ 檔案識別
+
+        W17-197 修法：原測試誤用 `.claude/pm-rules/decision-tree.md`，
+        但 framework-paths.yaml layer1_paths 僅含 rules/core/、rules/flows/、
+        rules/guides/、rules/forbidden/，不含 pm-rules/。
+        修正為符合測試名稱意圖的 rules/core/ 路徑。
+        """
         assert hook_module.is_layer1_file(
-            ".claude/pm-rules/decision-tree.md", mock_logger
+            ".claude/rules/core/decision-tree.md", mock_logger
         )
 
     def test_rules_flows_identified_as_layer1(self, mock_logger):

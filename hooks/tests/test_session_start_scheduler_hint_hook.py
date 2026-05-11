@@ -205,8 +205,8 @@ def test_build_output_only_spawned_section():
     assert out.get("suppressOutput") is False
     ac = out["hookSpecificOutput"]["additionalContext"]
     assert "Spawned 推進清單" in ac
-    # 不含排程提示區塊
-    assert "## 排程提示" not in ac
+    # 不含排程提示區塊（W17-165 L2-B：標題改為「下 session 建議項目」，副標保留 scheduler hint）
+    assert "## 下 session 建議項目" not in ac
 
 
 # ---------------------------------------------------------------------------
@@ -228,10 +228,11 @@ def test_build_output_both_sections_visible():
     section = "## Spawned 推進清單（來源為 completed ANA...）\n\n- item"
     out = hook.build_hook_output(sched, section)
     ac = out["hookSpecificOutput"]["additionalContext"]
-    assert "## 排程提示" in ac
+    # W17-165 L2-B：標題從「排程提示」改為「下 session 建議項目」
+    assert "## 下 session 建議項目" in ac
     assert "## Spawned 推進清單" in ac
-    # 排程提示位於 spawned 之前
-    assert ac.index("## 排程提示") < ac.index("## Spawned 推進清單")
+    # scheduler hint 區塊位於 spawned 之前
+    assert ac.index("## 下 session 建議項目") < ac.index("## Spawned 推進清單")
 
 
 # ---------------------------------------------------------------------------
@@ -544,11 +545,16 @@ def test_build_output_three_sections_in_order():
         "## NeedsContext 警示\n\n- b",
     )
     ac = out["hookSpecificOutput"]["additionalContext"]
-    assert "## 排程提示" in ac
+    # W17-165 L2-B：標題從「排程提示」改為「下 session 建議項目」
+    assert "## 下 session 建議項目" in ac
     assert "## Spawned 推進清單" in ac
     assert "## NeedsContext 警示" in ac
-    # 順序：排程 < spawned < needs_context
-    assert ac.index("## 排程提示") < ac.index("## Spawned 推進清單") < ac.index("## NeedsContext 警示")
+    # 順序：scheduler hint < spawned < needs_context
+    assert (
+        ac.index("## 下 session 建議項目")
+        < ac.index("## Spawned 推進清單")
+        < ac.index("## NeedsContext 警示")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -560,7 +566,8 @@ def test_build_output_only_needs_context_section():
     assert out.get("suppressOutput") is False
     ac = out["hookSpecificOutput"]["additionalContext"]
     assert "NeedsContext 警示" in ac
-    assert "## 排程提示" not in ac
+    # W17-165 L2-B：scheduler hint 區塊缺席（標題改為「下 session 建議項目」）
+    assert "## 下 session 建議項目" not in ac
 
 
 # ---------------------------------------------------------------------------

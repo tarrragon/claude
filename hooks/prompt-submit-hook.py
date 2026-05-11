@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely, run_git, is_subagent_environment, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, run_git, is_subagent_environment, read_json_from_stdin, find_ticket_file
 from lib.hook_messages import WorkflowMessages, CoreMessages, AskUserQuestionMessages, format_message
 
 
@@ -181,21 +181,21 @@ TICKET_ID_PATTERNS = [
 
 def resolve_ticket_path(project_root: Path, ticket_id: str) -> Optional[Path]:
     """
-    從 ticket_id 解析版本號並組合 Ticket 檔案路徑
+    從 ticket_id 尋找 Ticket 檔案路徑（W17-188 修復：改用共用 helper 支援雙結構）
+
+    使用 hook_utils.find_ticket_file 支援：
+    - 舊扁平結構：docs/work-logs/v{version}/tickets/
+    - 新三層結構：docs/work-logs/v{major}/v{major}.{minor}/v{version}/tickets/
 
     Args:
         project_root: 專案根目錄
         ticket_id: Ticket ID (格式：version-Wwave-seq)
 
     Returns:
-        Path - Ticket 檔案路徑，若格式無效則回傳 None
+        Path - Ticket 檔案存在則回傳路徑，否則回傳 None
     """
     try:
-        parts = ticket_id.split('-')
-        if len(parts) >= 1:
-            version = parts[0]
-            return project_root / "docs" / "work-logs" / f"v{version}" / "tickets" / f"{ticket_id}.md"
-        return None
+        return find_ticket_file(ticket_id, project_root)
     except Exception:
         return None
 
@@ -336,9 +336,11 @@ def check_skill_suggestion(prompt: str) -> Optional[tuple]:
         if match:
             ticket_id = match.group()
             # 只對完整格式（含版本號）的 Ticket ID 進行存在性驗證
+            # W17-188 修復：resolve_ticket_path 已透過 find_ticket_file 支援雙結構
+            # 回傳 None 即代表 Ticket 不存在
             if '-W' in ticket_id and '.' in ticket_id.split('-')[0]:
                 ticket_path = resolve_ticket_path(project_root, ticket_id)
-                if ticket_path and not ticket_path.exists():
+                if ticket_path is None:
                     continue  # 跳過不存在的 Ticket
             return (f"/ticket track query {ticket_id}", "query")
 

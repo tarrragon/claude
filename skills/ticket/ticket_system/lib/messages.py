@@ -168,7 +168,7 @@ class SectionHeaders:
     TASK_CHAIN_INFO = "[任務鏈資訊]"
     FULL_CONTENT = "[完整內容]"
     TICKET_SYSTEM_INFO = "[Ticket 系統資訊]"
-    PENDING_RESUME_LIST = "[待恢復任務清單]"
+    PENDING_RESUME_LIST = "[下 session 建議項目清單]"
     COMPLETION = "[完成]"
     CREATION_CHECKLIST = "[建立檢查清單]"
     TDD_SEQUENCE_SUGGESTION = "[TDD 順序建議]"

@@ -520,7 +520,7 @@ def _execute_list() -> int:
             print(f"   時間: {timestamp}")
         print()
 
-    print(f"總計: {len(handoffs)} 個待恢復任務")
+    print(f"總計: {len(handoffs)} 個下 session 建議項目")
     # W4-002: 顯示 stale 過濾計數（有結果時也提示是否有被過濾）
     if stale_count > 0:
         print(f"[提示] 另有 {stale_count} 個 stale handoff 已自動過濾（執行 ticket handoff gc --dry-run 查看）")

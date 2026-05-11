@@ -6,16 +6,16 @@
 
 ## 收錄欄位
 
-| 欄位             | 責任                            |
-| ---------------- | ------------------------------- |
-| Case title       | 一句話說明事件                  |
-| Situation        | 當時要完成的目標                |
-| Trigger          | 為什麼需要 WRAP                 |
-| Faulty path      | 原本自動駕駛的路徑              |
-| WRAP observation | WRAP 揭露了什麼選項、證據或成本 |
-| Better path      | 調整後的做法                    |
-| Guardrail        | 後續新增的檢查、規則或提醒      |
-| Reuse signal     | 未來遇到什麼情境要重讀本案例    |
+| 欄位                     | 責任                            |
+| ------------------------ | ------------------------------- |
+| 案例標題（Case title）   | 一句話說明事件                  |
+| Situation                | 當時要完成的目標                |
+| Trigger                  | 為什麼需要 WRAP                 |
+| 錯誤路徑（Faulty path）  | 原本自動駕駛的路徑              |
+| WRAP observation         | WRAP 揭露了什麼選項、證據或成本 |
+| 改善路徑（Better path）  | 調整後的做法                    |
+| 防護欄（Guardrail）      | 後續新增的檢查、規則或提醒      |
+| 重用訊號（Reuse signal） | 未來遇到什麼情境要重讀本案例    |
 
 ---
 
@@ -36,25 +36,25 @@
 
 **Situation**：...
 **Trigger**：...
-**Faulty path**：...
+**錯誤路徑（Faulty path）**：...
 **WRAP observation**：...
-**Better path**：...
-**Guardrail**：...
-**Reuse signal**：...
+**改善路徑（Better path）**：...
+**防護欄（Guardrail）**：...
+**重用訊號（Reuse signal）**：...
 ```
 
 ---
 
 ## 常見案例類型
 
-| 類型                  | 典型教訓                     |
-| --------------------- | ---------------------------- |
-| Premature convergence | 過早相信第一個根因           |
-| Pseudo widen          | 多個選項仍指向同一假設       |
-| Source hallucination  | 清單項目未逐項核對來源       |
-| Toolification         | 把新增工具當成預設答案       |
-| Paternalism paradox   | 為保護使用者而過度限制使用者 |
-| Tripwire fatigue      | 提醒太頻繁導致被忽略         |
+| 類型                                | 典型教訓                     |
+| ----------------------------------- | ---------------------------- |
+| 過早收斂（Premature convergence）   | 過早相信第一個根因           |
+| 偽擴增選項（Pseudo widen）          | 多個選項仍指向同一假設       |
+| 來源幻覺（Source hallucination）    | 清單項目未逐項核對來源       |
+| 工具化偏誤（Toolification）         | 把新增工具當成預設答案       |
+| 家長主義悖論（Paternalism paradox） | 為保護使用者而過度限制使用者 |
+| 絆腳索疲乏（Tripwire fatigue）      | 提醒太頻繁導致被忽略         |
 
 ---
 

@@ -75,6 +75,26 @@ Stop hook 的設計目的是阻擋 stop 行為或執行清理，`hookSpecificOut
 
 理由：覆蓋 askuserquestion-rules 通用觸發原則問題 2「二元確認問句」。
 
+### 3.4-bis Markdown 表格選項偵測（W17-174.2.1 落地）
+
+第三條偵測路徑，補齊 PM 以 Markdown 表格列選項的覆蓋缺口。**必須同時滿足**兩條件才算命中：
+
+| 條件 | 規則 |
+|------|------|
+| (A) 表格資料列 ≥ 3 | `len(TABLE_DATA_ROW_RE) - len(TABLE_SEPARATOR_RE) - header_count >= 3`，其中 `header_count = min(1, separator_count)` |
+| (B) 結尾選項語境 | 複用 `has_question_ending()`（結尾 400 字含選項問句關鍵字或問號） |
+
+**Regex 定義**：
+
+```python
+TABLE_DATA_ROW_RE = re.compile(r"^\|[^|\n]+\|", re.MULTILINE)
+TABLE_SEPARATOR_RE = re.compile(r"^\|[\s:~\-|]+\|\s*$", re.MULTILINE)
+```
+
+**E3 範圍限定**：豁免規則 E3（pattern 落在 Markdown table cell 豁免）僅適用於 §3.2 路徑。表格路徑的目標即偵測表格本身，自豁免無意義（程式碼層尚未實作 E3，此為文件層約束，未來新增 E3 時必須加路徑限定）。
+
+**新增豁免 E6**：見 §4 表格。
+
 ### 3.4 Code Block 排除
 
 偵測前**移除**所有 fenced code block（\`\`\`…\`\`\`）與 inline code（`…`）。選項列在程式碼範例中不算違規。
@@ -92,8 +112,9 @@ Stop hook 的設計目的是阻擋 stop 行為或執行清理，`hookSpecificOut
 | E3 | 程式碼 / 表格註解 | pattern 全部落在 Markdown table cell（`\|…\|` 行）或位於 HTML 註解 `<!-- … -->` 內 | 表格文件化選項 |
 | E4 | Hook/規則文件寫作場景 | 訊息含「.claude/」+「.md」路徑字串且佔比 > 10% | 正在編輯規則文件 |
 | E5 | 代理人產出內容 | input_data 含 `agent_id`（subagent 環境）→ 直接跳過，不進 pattern 偵測 | 代理人回報內容 |
+| E6 | 純資料表格（W17-174.2.1） | 第一個表格的標題列**不含**任何選項關鍵字（選項/方案/策略/Option/推薦/Recommended/建議/候選），僅在「只有」§3.4-bis 表格路徑命中時生效 | 測試結果、效能指標表 |
 
-**豁免判斷順序**：E5（subagent）> E4（規則寫作）> E1（引用）> E2（歷史）> E3（表格/註解）。
+**豁免判斷順序**：E5（subagent）> E4（規則寫作）> E1（引用）> E2（歷史）> E3（表格/註解，僅 §3.2）> E6（純資料表，僅 §3.4-bis 單獨命中時）。
 
 **設計原則**：**寧可漏報不可誤報**。誤報會訓練 PM 忽略提醒，漏報只是少一次提醒（其他防護層仍會接住）。
 

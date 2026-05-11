@@ -69,7 +69,7 @@ parallel-evaluation 的常駐委員分兩類，加入規則與 opt-out 條件不
 
 ## Worth-It Filter 快速判斷
 
-> **核心原則**：Worth-It Filter 只決定「是否立即執行」，不決定「是否追蹤」。所有發現都必須建 Ticket 或寫入 todolist。發現技術債是一個問題，修復成本是否值得是另一個問題 — 兩者不在同一時刻決策。
+**核心原則**：Worth-It Filter 只決定「是否立即執行」，不決定「是否追蹤」。所有發現都必須建 Ticket 或寫入 todolist。發現技術債是一個問題，修復成本是否值得是另一個問題——兩者不在同一時刻決策。
 
 | 改善幅度 | 風險低 | 風險高 | 追蹤方式 |
 |---------|--------|--------|---------|
@@ -78,9 +78,11 @@ parallel-evaluation 的常駐委員分兩類，加入規則與 opt-out 條件不
 | 中（維護性） | 立即執行 | 延後執行 | 建 Ticket（P2） |
 | 低（風格） | 延後執行 | 延後執行 | 建 Ticket（P2） |
 
-**原則**: 執行有疑慮就延後，但追蹤不可省略。
+**Why**：本表的「延後執行」是合法狀態（b）——延後決策必須綁 ticket trigger（見 `.claude/rules/core/decision-trigger-binding.md` 規則 1 / 1.5）。表格右欄的「建 Ticket」就是 trigger 綁定，缺一即退化為無 trigger 延後。
 
-**強制規則**：「延後執行」不等於「不建 Ticket」。Phase 3 產出報告前，必須對所有延後項目執行 `ticket create`，並在報告表格的 Ticket 欄填入實際 ID。**禁止行為**：報告中出現「延後」但 Ticket 欄為空。
+**Consequence**：報告中出現「延後」但 Ticket 欄為空，等同未追蹤；該發現會在「以後」與「永不」之間累積為死議題（PC-093 反模式）。
+
+**Action**：執行有疑慮就延後，但追蹤不可省略。Phase 3 產出報告前，必須對所有延後項目執行 `ticket create`，並在報告表格的 Ticket 欄填入實際 ID。**禁止行為**：報告中出現「延後」但 Ticket 欄為空。
 
 > 量化標準和案例: references/worth-it-filter-details.md
 
@@ -158,5 +160,7 @@ Phase 3: 任一視角發現問題 → 回到分析階段補充
 
 ---
 
-**Last Updated**: 2026-04-24
+**Last Updated**: 2026-05-04
+**Version**: 1.2.0 — 套用 compositional-writing 改寫（W17-135）：Worth-It Filter 段「核心原則 / 強制規則」改寫為三明示 Why / Consequence / Action，明示連結至 `.claude/rules/core/decision-trigger-binding.md` 規則 1 / 1.5；負向「禁止行為」保留並加正向錨點
+
 **Version**: 1.1.0 - 新增 basil-writing-critic 常駐委員機制（情境 C/D/F/G 預設加入）+ `--skip-basil` opt-out 機制 + 常駐委員概念拆分（universal_lens / default_lens_per_scenario）（W17-069 / W17-066 R-3）

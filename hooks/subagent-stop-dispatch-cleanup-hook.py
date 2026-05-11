@@ -8,7 +8,8 @@ SubagentStop Dispatch Cleanup Hook
 
 功能: 代理人真正完成時精準清理 dispatch-active.json 記錄 + 完成廣播。
 觸發時機: SubagentStop（CC runtime 保證代理人真正停止才觸發）
-行為: 不阻擋（exit 0），在 additionalContext 輸出 [OK]/[WAIT] 狀態
+行為: 不阻擋（exit 0），在 top-level systemMessage 輸出 [OK]/[WAIT] 狀態
+       （SubagentStop event schema 不允許 hookSpecificOutput.additionalContext，W17-159）
 
 來源: W10-066 — 從 PostToolUse(Agent) 遷移清理和廣播職責到 SubagentStop
 """
@@ -101,12 +102,9 @@ def main() -> int:
         return 0
 
     context = " | ".join(messages)
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "SubagentStop",
-            "additionalContext": context,
-        }
-    }))
+    # SubagentStop event schema 不允許 hookSpecificOutput.additionalContext；
+    # 改用 top-level systemMessage（同 Stop event 處置，W17-158 / W17-159）
+    print(json.dumps({"systemMessage": context}, ensure_ascii=False))
 
     return 0
 

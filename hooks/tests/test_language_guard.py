@@ -46,8 +46,24 @@ HOOK_PATH = HOOK_DIR / "language-guard-hook.py"
 # ============================================================================
 
 
+def _prime_sampling_counter():
+    """將抽樣計數器設為 SAMPLING_N - 1，確保下一次 hook 執行命中完整檢查。
+
+    W17-197 修法：hook 採抽樣降級（每 N 次執行 1 次完整檢查，N=10），
+    子行程測試需先 prime counter，否則 stderr 警告會因抽樣略過而為空。
+    """
+    counter_file = hook_module.SAMPLING_COUNTER_FILE
+    sampling_n = hook_module.SAMPLING_N
+    counter_file.parent.mkdir(parents=True, exist_ok=True)
+    counter_file.write_text(str(sampling_n - 1))
+
+
 def _run_hook(payload: dict) -> tuple:
-    """以子行程方式執行 hook，回傳 (exit_code, stdout, stderr)。"""
+    """以子行程方式執行 hook，回傳 (exit_code, stdout, stderr)。
+
+    每次執行前 prime 抽樣計數器，避免警告被抽樣略過。
+    """
+    _prime_sampling_counter()
     proc = subprocess.run(
         ["python3", str(HOOK_PATH)],
         input=_json.dumps(payload),

@@ -37,6 +37,10 @@ from ticket_system.lib.critical_path import (
     CriticalPathAnalyzer,
     CriticalPathResult,
 )
+from ticket_system.lib.handoff_utils import (
+    extract_direction_target_id,
+    is_task_chain_direction,
+)
 from ticket_system.lib.ticket_loader import list_tickets, load_ticket
 from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.section_locator import find_section
@@ -247,13 +251,26 @@ def _compute_readiness(
 def _apply_context_resume(
     tickets: List[Dict], context: Optional[str]
 ) -> List[Dict]:
-    """context=resume：與 handoff pending 交集。"""
+    """context=resume：與 handoff pending 交集。
+
+    W17-146 修復：解析 handoff JSON 的 direction 欄位取出真正的 target ticket id。
+    任務鏈 direction（to-sibling/to-parent/to-child）含 target 時取 target；
+    非任務鏈或無 target / 未知格式時 fallback 到 source ticket_id。
+    """
     if context != "resume":
         return tickets
-    pending_ids = _get_pending_handoff_ticket_ids()
-    if not pending_ids:
+    handoff_info = _get_pending_handoff_info()
+    if not handoff_info:
         return []
-    return [t for t in tickets if t.get("id") in pending_ids]
+    candidate_ids: Set[str] = set()
+    for source_id, info in handoff_info.items():
+        direction = ((info or {}).get("direction") or "") if isinstance(info, dict) else ""
+        if is_task_chain_direction(direction):
+            target = extract_direction_target_id(direction)
+            candidate_ids.add(target if target else source_id)
+        else:
+            candidate_ids.add(source_id)
+    return [t for t in tickets if t.get("id") in candidate_ids]
 
 
 # ---------------------------------------------------------------------------

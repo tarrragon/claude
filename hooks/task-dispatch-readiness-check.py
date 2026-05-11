@@ -85,9 +85,11 @@ def detect_task_type(prompt: str, config: Dict, logger) -> str:
         (r'\[Phase 4[^\]]*\]', "Phase 4 重構"),
     ]
 
-    prompt_head = prompt[:500]
+    # W10-043.3 P1 修復：僅掃 prompt 第一行（意圖宣告行），避免誤命中 Context Bundle 引用的上游 Phase 標記
+    # 觸發劇本：派發 cinnamon Phase 4，prompt 第一行為 Phase 4，但 Context Bundle 含上游 [Phase 3b] 文字
+    prompt_first_line = prompt.split('\n', 1)[0]
     for pattern, task_type in explicit_phase_patterns:
-        if re.search(pattern, prompt_head, re.IGNORECASE):
+        if re.search(pattern, prompt_first_line, re.IGNORECASE):
             logger.info(f"檢測到明確 Phase 標記：{task_type}")
             return task_type
 

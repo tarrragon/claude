@@ -35,6 +35,7 @@ from hook_utils import (
     get_current_version_from_todolist,
     is_subagent_environment,
     parse_ticket_frontmatter,
+    scan_ticket_files_by_version,
 )
 from lib.hook_messages import AskUserQuestionMessages
 from lib.ask_user_question_reminders import AskUserQuestionReminders
@@ -173,14 +174,14 @@ def _extract_commit_type(command: str) -> str:
 def _scan_wave_tickets(
     project_dir: Path, version: str, logger
 ) -> List[Dict[str, Optional[str]]]:
-    """掃描版本目錄中的 Ticket 檔案。"""
-    tickets_dir = project_dir / "docs" / "work-logs" / f"v{version}" / "tickets"
-    if not tickets_dir.exists():
+    """掃描版本目錄中的 Ticket 檔案（W17-188 修復：改用共用 helper 支援雙結構）。"""
+    ticket_files = scan_ticket_files_by_version(project_dir, version, logger)
+    if not ticket_files:
         return []
 
     tickets = []
     try:
-        for ticket_file in sorted(tickets_dir.glob("*.md")):
+        for ticket_file in sorted(ticket_files):
             fm = parse_ticket_frontmatter(ticket_file, logger)
             tickets.append({
                 "wave": str(fm.get("wave", "")) or None,

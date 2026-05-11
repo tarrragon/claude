@@ -130,6 +130,37 @@ PM 主線程生成 `AskUserQuestion` 工具呼叫的 JSON payload 時，在 `que
 
 ---
 
+## 真根因確認：H3 假設（W17-144.1.1.1.1 收斂 + 外部佐證）
+
+W17-144 系列五層 ANA 鏈經實證收斂於 **H3 假設**：
+
+> **模型在生成 AUQ JSON 時切換到「結構化資料 mode」，繁體 prime 被簡體中文網站 / SaaS 訓練樣本稀釋，短 label 中 token 預測偶爾挑簡體形。**
+
+### 本專案實證（W17-144.1.1.1.1）
+
+| 載體 | 簡體字命中率 |
+|------|-----------|
+| 對話正文 / commit message | ≈ 0%（本 session 12 commit msg 0 命中）|
+| AUQ payload | ≈ 60-70%（本 session 9 次嘗試 18 處污染）|
+
+差異 100x+，完全證實 AUQ-specific 機制（非普遍 token 偶發）。
+
+### 外部佐證：Anthropic 已知 bug（同構現象）
+
+| 來源 | 內容 | 對 H3 的支持 |
+|------|------|------------|
+| [anthropic/claude-code#46846](https://github.com/anthropics/claude-code/issues/46846)（OPEN, labels: area:model, bug）| Tool call（git/gh）後 Claude 切換到日文/韓文/簡中，違反 CLAUDE.md 繁體指示 | 直接同構：tool call 周邊 context 稀釋目標語言 prime |
+| [#34779](https://github.com/anthropics/claude-code/issues/34779) / [#39502](https://github.com/anthropics/claude-code/issues/39502) / [#19471](https://github.com/anthropics/claude-code/issues/19471) | 同類 duplicate（廣泛現象，非單一用戶）| 證明 H3 機制涵蓋整個漢字家族（繁/簡/日/韓漢字）|
+| Issue #46846 marlvinvu 評論 | 「Claude has a problem with pattern-matching ... confusion around language when classifying languages that belong to the **logographic script family**」| 揭示物理機制 — 漢字系統家族 pattern-matching 混淆，與 PC-085 codepoint 鄰近性同源 |
+
+**結論**：H3 從「外部黑盒推論」升級為「Anthropic OPEN bug + 廣泛現象 + 已知物理機制」。本專案防護策略（hook 攔截 + detector + memory feedback）為已知機制下的最佳工程實踐，無法從專案層消除根因（屬模型內部）。
+
+### Follow-up 追蹤
+
+由 W17-144.2（本檔對應 follow-up tracker ticket）追蹤 Anthropic 修復進度。Issue 修復前本 PC 持續適用。
+
+---
+
 ## 象限歸類
 
 本模式的防護屬 **摩擦力管理 C 象限（增加摩擦）**：生成 AUQ payload 前多一步自檢增加摩擦，換取下游不需用戶反覆糾正。代價（自檢成本）遠低於收益（避免用戶信任損耗）。
@@ -148,6 +179,7 @@ PM 主線程生成 `AskUserQuestion` 工具呼叫的 JSON payload 時，在 `que
 
 ---
 
-**Last Updated**: 2026-04-17
+**Last Updated**: 2026-05-05
+**Version**: 1.2.0 — W17-144 五層 ANA 鏈收斂於 H3 假設「AUQ JSON 結構化資料 mode 繁體 prime 弱化」+ 外部佐證 Anthropic Issue #46846 / 3 duplicate（已知 OPEN bug，logographic script family pattern-matching confusion）；新增 W17-144.2 follow-up tracker
 **Version**: 1.1.0 — 新增 W12-001 完結 session 再現紀錄（隶/遗 兩字元），檢查清單補充常見簡體字
 **Source**: 用戶即時指出 session 中 AUQ payload 的簡體字「独立」與 emoji「⚡扯」失誤

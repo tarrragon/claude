@@ -15,7 +15,8 @@ Agent Commit Verification Hook - SubagentStop
   5. 掃描 hook-logs 輸出 hook error 摘要。
 
 觸發時機: SubagentStop（CC runtime 代理人真正停止時觸發，W10-067 遷移自 PostToolUse）
-行為: 不阻擋（exit 0），僅在 additionalContext 輸出警告
+行為: 不阻擋（exit 0），有警告時以 top-level systemMessage 輸出（W17-160：SubagentStop event
+  schema 不允許 hookSpecificOutput.additionalContext，改用 systemMessage；同 W17-158/W17-159 處置）
 
 來源:
   - PC-024 — 代理人完成實作但跳過 git commit，變更未持久化
@@ -48,11 +49,9 @@ HOOK_NAME = "agent-commit-verification-hook"
 EXIT_SUCCESS = 0
 
 # 預設輸出格式（靜默通過）
-DEFAULT_OUTPUT = {
-    "hookSpecificOutput": {
-        "hookEventName": "SubagentStop"
-    }
-}
+# W17-160: 原 DEFAULT_OUTPUT（hookSpecificOutput 殼）已移除——
+# SubagentStop event schema 不允許 hookSpecificOutput.additionalContext；
+# 無內容時靜默退出（不輸出任何 JSON）即可。
 
 # Git 命令超時（秒）
 GIT_STATUS_TIMEOUT = 5
@@ -556,14 +555,13 @@ def main() -> None:
 
     if not input_data:
         logger.debug("no input data")
-        print(json.dumps(DEFAULT_OUTPUT))
+        # W17-160: SubagentStop schema — 無內容時靜默退出，不輸出 hookSpecificOutput 殼
         sys.exit(EXIT_SUCCESS)
 
     # SubagentStop input 含 agent_id（CC runtime 保證）
     agent_id = input_data.get("agent_id", "")
     if not agent_id:
         logger.debug("no agent_id in SubagentStop input, skip")
-        print(json.dumps(DEFAULT_OUTPUT))
         sys.exit(EXIT_SUCCESS)
 
     # 取得專案根目錄
@@ -646,15 +644,11 @@ def main() -> None:
             first_unmerged_branch,
         ))
 
-    combined_message = "\n\n".join(messages)
-
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "SubagentStop",
-            "additionalContext": combined_message,
-        }
-    }
-    print(json.dumps(output))
+    # W17-160: SubagentStop event schema 不允許 hookSpecificOutput.additionalContext，
+    # 改用 top-level systemMessage（同 W17-158/W17-159 處置）。無訊息時靜默不輸出。
+    if messages:
+        combined_message = "\n\n".join(messages)
+        print(json.dumps({"systemMessage": combined_message}, ensure_ascii=False))
     sys.exit(EXIT_SUCCESS)
 
 

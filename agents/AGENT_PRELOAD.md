@@ -200,6 +200,24 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 > **來源**：PC-088（LLM 工具選擇偏誤）；W17-088（thyme early stop 失敗案例：serena 被拒 → 錯誤泛化 → Edit 未嘗試）
 
+#### 程式碼大檔讀取（read-only）
+
+> **適用對象**：程式碼類 subagent（parsley-flutter-developer / fennel-go-developer / thyme-python-developer / cinnamon-refactor-owl / clove-security-reviewer）。
+
+> **Why**：對 >200 行 `.py` / `.dart` / `.go` / `.js` / `.ts` 檔案直接 Read 全檔耗 token 5-10×。`mcp__serena__get_symbols_overview` 先取結構（class/function 清單），再以 `mcp__serena__find_symbol` 精準讀取目標符號，可大幅降低 context 占用。
+
+> **Action**：派發程式碼類 subagent 任務涉及 >200 行原始碼檔案探查時，prompt 應明示優先序：
+
+| 步驟 | 工具 | 用途 |
+|------|------|------|
+| 1 | `mcp__serena__get_symbols_overview` | 取得檔案符號結構（class、function） |
+| 2 | `mcp__serena__find_symbol` | 精準讀取目標符號內容 |
+| 3 | `Read`（fallback） | 結構不適用 serena（純資料檔、設定檔）或需逐行查找時 |
+
+`mcp__serena__*` read-only 工具不受規則 7 寫入限制影響，subagent 環境可正常呼叫。
+
+> **來源**：W17-093 ANA 方案 2 限縮版（W17-091 觀察期：serena read-only 工具對程式碼大檔的 token ROI 顯著但 PM/subagent 心智模型未建立）。
+
 ---
 
 ## 執行檢查清單
@@ -217,6 +235,7 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 - [ ] 報告結構清晰（5W1H）
 - [ ] .md 修改使用 Edit / Write，非 mcp__serena__replace_content 等 MCP 寫入工具（規則 7）
 - [ ] MCP 工具被拒時已嘗試 Edit 降級，未 self-imposed early stop（規則 7 Fallback）
+- [ ] （程式碼類 subagent）讀 >200 行原始碼前優先用 `mcp__serena__get_symbols_overview`（規則 7 程式碼大檔讀取）
 - [ ] **任務完成後執行 `ticket track check-acceptance --all <id>` + `ticket track complete <id>`（規則 2.4）**
 
 ---
@@ -238,7 +257,8 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 ---
 
-**Last Updated**: 2026-04-30
+**Last Updated**: 2026-05-04
+**Version**: 1.8.0 - 規則 7 新增「程式碼大檔讀取」子節：程式碼類 subagent (parsley/fennel/thyme/cinnamon/clove) 讀 >200 行原始碼前優先用 `mcp__serena__get_symbols_overview` + `find_symbol`，Read 為 fallback；檢查清單同步補項（W17-136 / 源 W17-093 ANA 方案 2 限縮）
 **Version**: 1.7.0 - 新增規則 2.4「收尾責任：自律 complete」+ 2.3 表格「任務完成」列 + 檢查清單 complete 項：實作類 agent commit/body 填寫完成後主動執行 check-acceptance --all + complete，acceptance-gate-hook 為安全網（W17-033 / 源 W17-022）
 **Version**: 1.6.0 - 新增規則 7「工具選擇規則（MCP 寫入工具優先序）」：一般 .md 修改用 Edit/Write，serena MCP 限於符號級重構；MCP 被拒時必須 fallback Edit，禁 self-imposed early stop（PC-088 / W17-088）
 **Purpose**: 確保所有代理人遵守核心規則

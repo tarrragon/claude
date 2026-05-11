@@ -127,6 +127,25 @@
 
 **適用場景**：Ticket 執行中發現技術債/bug/回歸、多視角分析結論、Phase 4 技術債務、incident 分析、SA 審查發現、任何代理人分析報告
 
+**ANA Solution 內 spawn 規劃（W17-167 延伸）**：
+
+ANA Solution 章節含 IMP/DOC/ANA spawn 規劃表格時，規劃項目本身即屬「發現」，必須在 complete 前轉為實際 ticket（寫入 `spawned_tickets` 或 `children`），或在 Solution 中顯性標註豁免理由。acceptance 勾選「產出 spawned 清單」只代表 Solution 寫了表格，不等於 ticket 已實際建立。
+
+**Why**：W17-162 / W17-167 案例證明「寫表格 = 完成 acceptance」與「ticket 已建立」是兩件事；ANA complete 後若無人主動回顧 Solution 表格，延伸任務會永久遺忘（PC-093 無 trigger 延後決策累積模式）。
+
+**Consequence**：跳過 spawn 落地會讓 ANA 結論成為「只診斷不開藥」的孤兒文件；歷史審計（W17-167 L1）已發現 W11-003.6 等實際漏建案例。
+
+**Action**：
+
+| 情境 | 必要動作 |
+|------|---------|
+| Solution 含 spawn 規劃表格 | complete 前建立對應 ticket，回填 `spawned_tickets` 或 `children` |
+| 規劃項目經評估後不需建立 ticket | 在 Solution 顯性標註「無需建 ticket：[具體理由]」 |
+| ANA 由分析代理人執行（saffron 等無 ticket create 權限） | complete 後 PM 立即驗收 spawn 一致性，缺漏立即補建 |
+
+> **強制層**：acceptance-gate-hook Step 2.5.2（W17-168 落地）將自動偵測 Solution spawn 規劃 vs `spawned_tickets + children` 數量一致性，缺漏阻擋 complete。本條款是規則層自律防護，與 hook 強制層互補。
+> **Schema 層**：ticket-body-schema.md ANA Solution 章節新增「Spawn 落地確認」子節 checklist；ticket-lifecycle.md ANA complete 條件追加。
+
 ### 規則 6：失敗案例學習原則
 
 **發現疏失時，對流程瑕疵不回退既成工作；提煉教訓、建 Ticket、固化為規則。產出有害者另依規則 3 / skip-gate 處理。**
@@ -201,7 +220,9 @@
 
 ---
 
-**Last Updated**: 2026-04-17
+**Last Updated**: 2026-05-08
+**Version**: 2.3.0 - 規則 5 新增「ANA Solution 內 spawn 規劃」適用場景條款（W17-167 L3 落地，含 Why/Consequence/Action 三明示 + 強制/Schema 層交叉引用，配合 W17-168 hook + W17-169 lifecycle/schema 同步修訂）
+
 **Version**: 2.2.0 - 新增規則 6 失敗案例學習原則（從派發越界事件學習提煉；流程瑕疵不回退，產出有害走規則 3 / skip-gate）
 
 **Version**: 2.1.0 - 品質檢查清單新增 AC 漂移偵測項目（PC-055 / PROP-010 防護落地）

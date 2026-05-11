@@ -465,3 +465,71 @@ ticket track claim: error: the following arguments are required: ticket_id
 - 業務邏輯錯誤（如 ticket id 不存在）：由各 command 自行用 `format_error` 產出，不經 argparse 路徑
 - `commands/create.py` argparse 客製：W17-008.5.3 處理
 - Hook 補充邏輯：W17-008.5.5 處理
+
+---
+
+## track stale-list 子命令（W17-200）
+
+列舉 pending 且建立日期超過閾值的 ticket 明細，補 `list` 命令僅顯示彙總計數而無法定位個別 stale ticket 的缺口。
+
+### 用法
+
+```bash
+ticket track stale-list [--threshold {info,warning,critical,all}] \
+                        [--wave N] [--version V] [--all] \
+                        [--format {table,ids,yaml}]
+```
+
+### Flag 說明
+
+| Flag | 預設 | 說明 |
+|------|------|------|
+| `--threshold` | `warning` | `warning`=warning+critical / `info`=三級 / `all`=同 info / `critical`=僅 critical |
+| `--wave` | None | 僅列出指定 wave |
+| `--version` | None | 指定版本（覆蓋自動偵測 active 版本） |
+| `--all` | False | 跨所有 active 版本掃描 |
+| `--format` | `table` | `table` / `ids`（每行一個 ID，適合 pipe） / `yaml` |
+
+### 閾值定義
+
+複用 `lib/staleness.py` 常數（依 frontmatter `created` 計算）：
+
+| 等級 | 天數 |
+|------|------|
+| info | >= 7 天 |
+| warning | >= 14 天 |
+| critical | >= 30 天 |
+
+### 輸出格式（table）
+
+```
+------------------------------------------------------------
+Stale pending tickets (threshold=warning)
+------------------------------------------------------------
+0.18.0-W17-AAA | [critical] | 45 天 | 標題 A
+0.18.0-W17-BBB | [warning]  | 15 天 | 標題 B
+```
+
+依 days 降序排序；無符合條件時輸出「（無符合條件的 stale ticket）」。
+
+### 範例
+
+```bash
+# 預設：列出 warning + critical
+ticket track stale-list
+
+# 含 info 級
+ticket track stale-list --threshold info
+
+# 只看 critical（>= 30 天）
+ticket track stale-list --threshold critical
+
+# 拿 ID 串接其他命令
+ticket track stale-list --threshold critical --format ids | xargs -I{} ticket track show {}
+```
+
+### 設計約束
+
+- 僅列 `status=pending` ticket（in_progress 走 `is_stale_in_progress` 已由 runqueue 涵蓋）
+- version-agnostic（註冊於 `_create_version_agnostic_handlers()`）
+- 復用 `calculate_stale_level`，不重定義閾值或判定邏輯

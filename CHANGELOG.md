@@ -1,3 +1,150 @@
+## [1.31.0] - 2026-05-12
+
+### Summary
+feat: 新增 chrome-extension-mcp-debug SKILL; feat: 新增 ticket track stale-list 子命令列舉 stale ticket 明細; feat: framework-rule-edit hook 補 edit metrics log (+134 more)
+
+Changes: 35 feat, 5 refactor, 25 fix, 59 docs, 13 chore
+
+- feat: 新增 chrome-extension-mcp-debug SKILL
+- feat: 新增 ticket track stale-list 子命令列舉 stale ticket 明細
+- feat: framework-rule-edit hook 補 edit metrics log
+- feat: humanize PC-093 hook invalid exempt marker output
+- feat: hook-completeness-check 支援雙層 hook 架構掃描
+- feat: wrap-tripwire context-aware blacklist filter (.1.1.2)
+- feat: wrap-tripwire pytest 環境豁免 (.1.1.1)
+- feat: 建立 .claude/hooks/pyproject.toml + CLAUDE.md §5
+- feat: PC-115 重啟調查收斂 + 並行派發 ≤ 2 防護落地
+- feat: PC-115 trigger 計數機制設計落地
+- feat: 擴充 ana_spawn_consistency_checker 支援 heading-based spawn 偵測
+- feat: auq-option-pattern-detector 新增 §3.4-bis 表格選項偵測 + E6 豁免
+- feat: handoff --next CLI 與 target_ticket_id 欄位（L2-A）
+- feat: SessionStart 提示語改寫 + Stop hook terminal 過濾
+- feat: 實作 ana_spawn_consistency_checker + acceptance-gate-hook Step 2.5.2 整合
+- feat: basil-writing-critic Layer 3 升級加入 zhtw-mcp 機械層審查
+- feat: 新增 acceptance-gate-hook Layer 1 自檢可觀測性 checker
+- feat: hook 註冊 + SOP/SKILL.md 引用 + follow-up
+- feat: 實作 handoff --from-worklog CLI + Stop hook 雙軌同步偵測
+- feat: S1 lib/worklog_parser.py + 12 RED tests 全綠
+- feat: branch-verify-hook 跨專案豁免清單退化 + deny 切換指令
+- feat: main-thread hook 跨專案編輯放行
+- feat: wrap-tripwire hook S2 log 補 matched_keyword/prompt_excerpt
+- feat: 建立 Hook 降級觀察期方法論與快速恢復機制
+- feat: ANA 5/5 + Method 6 落地（hook log 反推 12 簡體字）
+- feat: ANA 5/5 完成 + detector self-test 第五層落地
+- feat: codepoint-aware 污染偵測工具落地，實證 推論
+- feat: acceptance-gate 純文件 IMP 訊息差異化
+- feat: 新增 wrap-skill-yaml-consistency-hook + 雙向映射檔
+- feat: 整合 zhtw-mcp 跨專案可用性檢查（hook + sync 排除）
+- feat: proposal-evaluation-gate PreToolUse Hook 落地
+- feat: PROP 模板新增 Reality Test 必填章節
+- feat: 實作兄弟 blockedBy 4 條件違規偵測 Hook
+- feat: 新增 cognitive-load.md 3b 派發前閾值章節
+- feat: hook-completeness-check 自動 commit chmod 修正
+- refactor: hook is_ticket_completed delegate 至 lib SSOT
+- refactor: branch-verify-hook 改用 git_utils.find_target_repo
+- refactor: 降級 Phase 3b P3 五 Hook（worklog-format / utf8-integrity / language-guard / comment-qa / file-type-permission）
+- refactor: 降級 Phase 3b P1 三 Hook（parallel-dispatch / bash-edit-guard / acceptance-gate）
+- refactor: zhtw-mcp hook 探測機制改為 file-based 三層 scope
+- fix: commit-msg-layer2-marker-check-hook 補 uv-run shebang + pep723 pyyaml dep
+- fix: 移除 TestK_DocSync test_k2/k3 對齊 / 解耦
+- fix: 4 檔測試 assert 對齊（Group 4+5+6+7 共 11 failures）
+- fix: stop hook 測試對齊現行 API（Group 2+3 共 18 failures）
+- fix: test_ticket_tracker.py 廢棄 CSV tracker 整檔 skip
+- fix: test_analytics.py stale module reference 整檔 skip
+- fix: tech-debt-reminder 改用 hook_utils.parse_ticket_frontmatter
+- fix: 5 hook 改用 hook_utils helper 支援 ticket 雙結構
+- fix: 三 handoff hook silent fallback 改 noisy（PC-135 防護落地）
+- fix: 補 pyyaml dep 修 .1 regression
+- fix: lib handoff_utils SSOT delegate find_ticket_file 修子進程環境 stale GC
+- fix: handoff-prompt-reminder 路徑解析改用 find_ticket_file 支援三層階層
+- fix: 修復 stop-worklog-handoff-sync-check-hook 三根因
+- fix: handoff 機制 L1 三項同步修復（GC delegate + 移除 to-source + terminal 防護）
+- fix: stop-worklog-handoff-sync-check-hook 加 _extract_handoff_section helper（SOT-mirror）修 false positive
+- fix: 修復 agent-commit-verification-hook SubagentStop schema 違反
+- fix: 修復 subagent-stop-dispatch-cleanup-hook SubagentStop event schema 違反
+- fix: stop-worklog-handoff-sync-check-hook 改用 top-level systemMessage
+- fix: runqueue --context=resume 解析 direction 取出 target
+- fix: handoff stop hook 計數前 stale 過濾 + 剛建豁免窗口
+- fix: phase-completion-gate-hook 排除 ticket md 與 worklog 主檔
+- fix: ticket-quality-gate keyword 縮緊 + 路徑黑名單
+- fix: hook stdin field naming camelCase → snake_case
+- fix: layer-boundary-validator + doc-sync-check 補 pyyaml uv script 依賴
+- fix: 縮窄 detect_task_type explicit phase 掃描至第一行
+- docs: 補修整檔 emoji 違規（language-constraints 規則 3）
+- docs: 套用 Layer 2 審查修正——SKILL Workflow C 三明示與分類完整性
+- docs: MCP E2E 驗證 checklist 落地 readmoo.md + SKILL 書庫類範例
+- docs: 建立 docs/bookstores/ 書城測試目標 reference 架構
+- docs: 套用 Layer 2 P2 修正——SKILL 三明示與結構一致性
+- docs: Layer 2 補修 §3 三明示 (Why/Consequence/Action)
+- docs: framework-asset-separation §3 Skill Hook 雙層架構規範
+- docs: 執行 方案 D 混合策略遷移
+- docs: 建立 PC-139 index.lock GUI app fork 為衝突來源 error-pattern
+- docs: ARCH-020 Layer 2 P1 修正
+- docs: ARCH-020 補測試檔 script header 反模式變體條款
+- docs: 修正 PC-138/IMP-071 Layer 2 P1 違規
+- docs: 新增 TEST-007 archived 模組測試處理 idiom
+- docs: 新增 PC-138 + IMP-071 ( 雙通道記錄)
+- docs: ANA complete + spawn / (yaml deps gap)
+- docs: 清理 hook-downgrade-observation.md 22 處 W10-* 引用
+- docs: 清理 hook-downgrade-observation.md 8 處 / ticket ID 引用
+- docs: cognitive-load.md §3b 章節 ticket ID 引用抽象化
+- docs: hook-downgrade-observation 加入兩類機制定義與 Extended 觀察數據
+- docs: 新增 PC-137 並行派發 .claude/ Edit deny 反模式
+- docs: ANA retrospective complete + PC-136 落地 + W17 ticket 鏈收尾
+- docs: 落地 PC-136 規則層三層升級（quality-common §1.2.6 + ANA 方法論 callees + 派發模板）
+- docs: PC-135 子代理人 pytest 通過 vs hook 子進程環境失準
+- docs: 升級 handoff 純指針設計原則至框架方法論層
+- docs: 落地 AUQ S1-S6 訊號 + 三明示自檢 checklist
+- docs: sync handoff --next / target_ticket_id to SKILL references
+- docs: 改寫 ticket_system 4 處「待恢復任務」對齊 L2-B 設計
+- docs: 建立 PC-134 ANA-self-reference-irony error-pattern
+- docs: 三份規則文件同步修訂——ANA Solution spawn 規劃落地強制條款
+- docs: 新增 PM ANA 驗收 checklist 三明示問題（Solution spawn 一致性）
+- docs: bay-quality-auditor 審計 Phase 3b Hook 削減比 57.8% vs 預估 85% 差距 27.2 ppt + spawn
+- docs: PC-133 代理人對同性質任務接受/拒絕不一致
+- docs: Layer 2 P1+P2 修正 + trigger 計數機制 spawn
+- docs: PC-115 真根因收斂為候選 1 transient runtime（4 子實驗閉環）
+- docs: cognitive-load.md 跨進程同步修復豁免條款落地（ ANA 收斂）
+- docs: 整合 hindsight + multi-pass 顆粒度
+- docs: 案例 2 三明示形式對稱化（Layer 2 P2 建議落地）
+- docs: 擴充案例 2 — PM append-log 違反
+- docs: 外部佐證落地 + Anthropic Issue 監測 tracker
+- docs: 新增 — Hook self-check 警示是被忽視的反推資料源
+- docs: 新增 — 外部工具權威性預設質疑
+- docs: 新增「動態驗證取代靜態維護」根本性解法章節
+- docs: 撰寫 PC-130 規範性文字 dogfooding 違規 error-pattern
+- docs: 新增 ARCH-022 hook 用 CLI 探測產生跨界隱性副作用
+- docs: 釐清 ANA 路線方法論補強
+- docs: 新建 IMP-070 error-pattern hook stdin 欄位命名混淆
+- docs: 新增 uv script transitive 依賴未宣告 — `lib/` 共用模組引入 yaml 不自動安裝
+- docs: 新增 規則存在但 agent 行為層未遵守 — agent-definition-standard 規範與實際輸出落差
+- docs: P2 雙 hook 改善 — checklist 補強 + deny 訊息現況驗證
+- docs: WRAP_SKILL_TRIGGER 訊息 Layer 2 殘留違規精緻化
+- docs: agent-dispatch-template Layer 2 剩餘違規批次修正
+- docs: AGENT_PRELOAD 規則 7 新增程式碼大檔讀取子節
+- docs: 解決 ARCH-010 編號衝突，重編號 module-assembly-omission 為 ARCH-021
+- docs: SKILL 外部依賴追蹤規則降級執行
+- docs: 補 #11 前置條件三明示完整化
+- docs: 新增 /clear 前 main 未提交變更強制檢查規則
+- docs: sync compositional-writing and wrap-decision
+- docs: 套用 compositional-writing 改寫 parallel-evaluation 5 檔
+- docs: 擴充 decision-trigger-binding 涵蓋將來/以後 + worklog 排程原則
+- chore: 建立父+5子 ticket 收斂 Chrome Extension MCP 實機驗證後續
+- chore: 補齊 6 個 hook 檔案執行權限（IMP-054）
+- chore: 累積 handoff archive 清理權限（.4 stale handoff JSON）
+- chore: 累積本機 Bash 權限（worklog/handoff/git lock cleanup）
+- chore: 補上測試檔執行權限 (IMP-054)
+- chore: session 2+3 base rate 完成 — 6/6 Edit success, deny 0%
+- chore: session 1 base rate 數據點 — 2/2 Edit success
+- chore: ticket complete + tests exec bit 補齊
+- chore: 同步 hook 自動產出 — .4 結案 ticket md + main worklog 條目 + pyyaml 評估報告刷新
+- chore: 拆分 11 PROP 子 ticket — 5 standard + 6 heavy
+- chore: ticket complete + hook 設可執行
+- chore: hook-completeness-check 自動修正 exec bit (IMP-054)
+- chore: auto-fix executable permissions for hook files (IMP-054)
+
+---
+
 ## [1.30.0] - 2026-05-04
 
 ### Summary

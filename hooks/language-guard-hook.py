@@ -42,6 +42,32 @@ from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
 # 常數定義
 # ============================================================================
 
+# W10-047.2 抽樣降級：每 N 次觸發 1 次完整檢查（中頻 Hook，候選 3）
+# 來源 ANA：W10-035.3（Phase 3b P3 五 Hook，0% Action 比）
+SAMPLING_N = 10
+SAMPLING_COUNTER_FILE = Path(__file__).parent.parent / "hook-logs" / "_sampling" / "language-guard-hook.count"
+
+
+def should_sample_run(logger) -> bool:
+    """抽樣判斷：每 SAMPLING_N 次觸發 1 次完整檢查。失敗時保守執行。"""
+    try:
+        SAMPLING_COUNTER_FILE.parent.mkdir(parents=True, exist_ok=True)
+        count = 0
+        if SAMPLING_COUNTER_FILE.exists():
+            try:
+                count = int(SAMPLING_COUNTER_FILE.read_text().strip() or "0")
+            except (ValueError, OSError):
+                count = 0
+        count += 1
+        SAMPLING_COUNTER_FILE.write_text(str(count))
+        run = (count % SAMPLING_N == 0)
+        logger.debug("抽樣計數=%d, 本次%s", count, "執行" if run else "跳過")
+        return run
+    except Exception as exc:
+        logger.info("抽樣計數失敗，保守執行: %s", exc)
+        return True
+
+
 # Unicode 範圍：韓文（Hangul Syllables）
 KOREAN_RANGE_START = 0xAC00
 KOREAN_RANGE_END = 0xD7AF
@@ -244,6 +270,10 @@ def main() -> int:
         # 若無輸入，直接返回成功
         if hook_input is None:
             logger.debug("無 Hook 輸入（empty stdin），靜默通過")
+            return 0
+
+        # W10-047.2 抽樣降級：每 N 次觸發 1 次完整檢查
+        if not should_sample_run(logger):
             return 0
 
         logger.debug("接收到 Hook 輸入")

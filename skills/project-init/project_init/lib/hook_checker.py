@@ -114,8 +114,55 @@ def scan_hooks_directory(
     return hook_files
 
 
+def scan_skill_hooks(
+    skills_dir: Path, exact_excludes: set[str], patterns: set[str]
+) -> set[str]:
+    """掃描 .claude/skills/<skill>/hooks/ 目錄找到所有 .py 檔案.
+
+    支援雙層 Hook 架構（W10-091）：除主 .claude/hooks/ 外，每個 skill 可在
+    自身 hooks/ 子目錄維護私有 Hook。本函式回傳相對於 skills_dir 的路徑形式
+    （`<skill>/hooks/<file>.py`），以便與主 hook 集合於命名空間上區分。
+
+    跳過 __pycache__、.venv、node_modules 等非必要目錄。
+
+    Args:
+        skills_dir: Skills 根目錄路徑（通常為 .claude/skills/）。
+        exact_excludes: 確切檔名集合（要排除的，沿用主 hook 之 exclude 規則）。
+        patterns: 模式集合（要排除的）。
+
+    Returns:
+        set[str]: skill hook 相對路徑集合，例如 `{"test-async-guardian/hooks/pre-test-scan.py"}`。
+    """
+    skill_hook_files: set[str] = set()
+
+    if not skills_dir.exists():
+        return skill_hook_files
+
+    _skip_dirs = ("__pycache__", ".venv", "node_modules", ".git")
+
+    for skill_dir in sorted(skills_dir.iterdir()):
+        if not skill_dir.is_dir():
+            continue
+        hooks_subdir = skill_dir / "hooks"
+        if not hooks_subdir.is_dir():
+            continue
+
+        for file_path in hooks_subdir.rglob("*.py"):
+            # 跳過 venv / cache 等
+            rel_parts = file_path.relative_to(skills_dir).parts
+            if any(p in _skip_dirs for p in rel_parts):
+                continue
+            if should_exclude_file(file_path.name, exact_excludes, patterns):
+                continue
+            # 統一以 POSIX 形式存放，避免 Windows 路徑分隔符差異
+            rel = file_path.relative_to(skills_dir).as_posix()
+            skill_hook_files.add(rel)
+
+    return skill_hook_files
+
+
 def extract_registered_hooks(settings: dict) -> set[str]:
-    """從 settings.json 提取所有已登記的 Hook 檔名.
+    """從 settings.json 提取所有已登記的 .claude/hooks/ Hook 檔名.
 
     掃描 hooks 配置中所有事件類型（PreToolUse、PostToolUse 等），
     從 command 欄位提取 .claude/hooks/ 後的檔名。
@@ -124,7 +171,7 @@ def extract_registered_hooks(settings: dict) -> set[str]:
         settings: settings.json 解析後的 dict。
 
     Returns:
-        set[str]: 已登記的 Hook 檔名集合。
+        set[str]: 已登記的主層 Hook 檔名集合。
     """
     registered: set[str] = set()
     hooks_config = settings.get("hooks", {})
@@ -144,5 +191,50 @@ def extract_registered_hooks(settings: dict) -> set[str]:
                                 filename = filename.split()[0] if filename else ""
                                 if filename.endswith(".py"):
                                     registered.add(filename)
+
+    return registered
+
+
+def extract_registered_skill_hooks(settings: dict) -> set[str]:
+    """從 settings.json 提取所有已登記的 .claude/skills/<skill>/hooks/ Hook 路徑.
+
+    支援雙層 Hook 架構（W10-091）。回傳相對 `.claude/skills/` 的路徑形式
+    （`<skill>/hooks/<file>.py`），對齊 :func:`scan_skill_hooks` 的回傳格式。
+
+    Args:
+        settings: settings.json 解析後的 dict。
+
+    Returns:
+        set[str]: 已登記的 skill Hook 相對路徑集合。
+    """
+    registered: set[str] = set()
+    hooks_config = settings.get("hooks", {})
+
+    _marker = ".claude/skills/"
+
+    for _event_type, event_hooks in hooks_config.items():
+        if not isinstance(event_hooks, list):
+            continue
+        for hook_group in event_hooks:
+            if not isinstance(hook_group, dict):
+                continue
+            for hook in hook_group.get("hooks", []):
+                if not isinstance(hook, dict):
+                    continue
+                command = hook.get("command", "")
+                if _marker not in command:
+                    continue
+                tail = command.split(_marker, 1)[1]
+                # 移除尾部參數（取第一個 whitespace 前）
+                tail = tail.split()[0] if tail else ""
+                # 僅收 <skill>/hooks/<file>.py 形式；
+                # 其他如 strategic-compact/suggest-compact.py（非 hooks/ 子目錄）不算 skill hook
+                parts = tail.split("/")
+                if (
+                    len(parts) >= 3
+                    and parts[1] == "hooks"
+                    and parts[-1].endswith(".py")
+                ):
+                    registered.add(tail)
 
     return registered

@@ -20,6 +20,58 @@ from acceptance_checkers.ticket_parser import (
 )
 
 
+# W10-072.2: 純文件路徑前綴（用於識別 doc-only IMP）
+# 命中以下前綴或副檔名 .md 視為純文件路徑
+_DOC_PATH_PREFIXES = (
+    ".claude/rules/",
+    ".claude/methodologies/",
+    ".claude/pm-rules/",
+    ".claude/references/",
+    ".claude/error-patterns/",
+    ".claude/agents/",
+    ".claude/hook-specs/",
+    ".claude/handoff/",
+    ".claude/skills/",  # SKILL.md 等說明文件
+    "docs/",
+)
+# W10-072.2: 純文件路徑門檻（≥ 80% 視為 doc-only）
+_DOC_ONLY_THRESHOLD = 0.8
+
+
+def _is_doc_path(path: str) -> bool:
+    """判定單一路徑是否屬純文件路徑前綴或 .md 檔。"""
+    if not isinstance(path, str):
+        return False
+    p = path.strip().lstrip("./")
+    if not p:
+        return False
+    if p.endswith(".md"):
+        return True
+    return any(p.startswith(prefix) for prefix in _DOC_PATH_PREFIXES)
+
+
+def is_doc_only_imp(frontmatter: Optional[dict]) -> bool:
+    """判定是否為純文件 IMP（where.files ≥ 80% 屬純文件路徑）。
+
+    Args:
+        frontmatter: Ticket frontmatter 結構
+
+    Returns:
+        bool: True 表示應使用 doc-only 訊息（手動驗收）；False 表示一般 IMP
+    """
+    if not frontmatter:
+        return False
+    where = frontmatter.get("where") or {}
+    files = where.get("files") if isinstance(where, dict) else None
+    if not files or not isinstance(files, list):
+        return False
+    valid_files = [f for f in files if isinstance(f, str) and f.strip()]
+    if not valid_files:
+        return False
+    doc_count = sum(1 for f in valid_files if _is_doc_path(f))
+    return (doc_count / len(valid_files)) >= _DOC_ONLY_THRESHOLD
+
+
 def _all_acceptance_items_checked(acceptance_list) -> bool:
     """判定 frontmatter acceptance list 是否全部項目以 [x] 開頭（勾選完成）。
 
@@ -127,13 +179,19 @@ def verify_acceptance_record(
     has_accept = has_acceptance_record(ticket_content, logger, frontmatter=frontmatter)
 
     if should_check_acceptance and not has_accept:
+        # W10-072.2: 純文件 IMP（where.files ≥ 80% 屬純文件路徑）使用差異化訊息
+        if is_doc_only_imp(frontmatter):
+            template = GateMessages.ACCEPTANCE_RECORD_DOC_ONLY_HINT
+            logger.info(f"Ticket {ticket_id} 識別為純文件 IMP - 輸出手動驗收建議")
+        else:
+            template = GateMessages.ACCEPTANCE_RECORD_MISSING_WARNING
+            logger.warning(f"Ticket {ticket_id} 未找到驗收記錄 - 輸出警告")
         warning_msg = format_message(
-            GateMessages.ACCEPTANCE_RECORD_MISSING_WARNING,
+            template,
             ticket_id=ticket_id,
             ticket_type=ticket_type,
             title=title,
         )
-        logger.warning(f"Ticket {ticket_id} 未找到驗收記錄 - 輸出警告")
         return False, warning_msg, should_check_acceptance, has_accept
 
     logger.info(f"Ticket {ticket_id} 驗收檢查通過")

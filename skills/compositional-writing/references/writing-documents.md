@@ -71,6 +71,8 @@ Given many atomic documents, how does a reader find the right one?
 
 ### Cross-reference format
 
+<!-- example: Example column contains literal string samples wrapped in backticks (inline code). Paths like ./validation.md are placeholders, not real links. -->
+
 | Reference type                                            | Format                                 | Example                                                               |
 | --------------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------- |
 | Same-directory sibling                                    | Relative path + intent                 | `See [validation rules](./validation.md) for acceptable field values` |
@@ -394,14 +396,14 @@ When the document is an experience-sharing write-up (not a methodology), six add
 
 ## Multi-pass Re-read（refinement protocol）
 
-The checklist above is a single-frame final sweep — not multi-pass. Multi-pass requires each round to use a **different frame** to catch errors at different layers ([#82](principles/literal-interception-vs-behavioral-refinement.md) / [#83](principles/writing-multi-pass-review.md)).
+The checklist above is a single-frame final sweep — not multi-pass. Multi-pass requires each round to use a **different frame** to catch errors at different layers ([literal-interception-vs-behavioral-refinement](principles/literal-interception-vs-behavioral-refinement.md) / [writing-multi-pass-review](principles/writing-multi-pass-review.md)).
 
 For documents (worklog / spec / methodology / error-pattern):
 
 | Round | Frame                                                             | Document-specific checklist                                                                 |
 | ----- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | 1     | Generation                                                        | Get content end-to-end; expect rough phrasing                                               |
-| 2     | Intent ([#67](principles/ease-of-writing-vs-intent-alignment.md)) | Does the document type match the structure used? Spec / process / methodology not mixed?    |
+| 2     | Intent ([ease-of-writing-vs-intent-alignment](principles/ease-of-writing-vs-intent-alignment.md)) | Does the document type match the structure used? Spec / process / methodology not mixed?    |
 | 3     | Opportunity-cost tone                                             | Grep "must / should / always / never" — translate absolutes to "A in scenario X / B in Y"   |
 | 4     | Grep-ability / naming                                             | Headings contain concept keywords (not "Overview"); cross-references explain *why* to click |
 | 5     | Counter-cases / boundaries                                        | "When not to apply" section present? Examples cover edge cases not just happy path?         |

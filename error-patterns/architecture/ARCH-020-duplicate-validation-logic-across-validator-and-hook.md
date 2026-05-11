@@ -90,6 +90,80 @@ def _is_placeholder(text: str) -> bool:
 | 跨語言實作（如 Dart + Python） | 不適用（無法共用模組） |
 | 意圖不同的相似名稱函式 | 不適用（非重複實作） |
 
+## 延伸案例：ticket 路徑解析 SSOT（2026-05-10 升級）
+
+本案例將 ARCH-020 從「驗證邏輯重寫」延伸至「pure predicate 跨進程多份實作」的更廣模式。
+
+### 模式描述
+
+`is_ticket_completed(ticket_id) -> bool` 屬 pure predicate（同輸入必同輸出，無副作用）。此類函式在 lib + hook 多進程環境下若各自實作，會出現「同名 predicate 多處實作」的高風險訊號：
+
+- **同名 predicate 多處實作即 ARCH-020 高風險訊號**——應升 lib 層 SSOT，不應允許「lib 一份 + hook 各一份」並存
+- 三 caller 應全部 delegate 至 lib 唯一入口，禁止自定義同義函式
+
+### 三次重爆軌跡（W17-181 三視角審查）
+
+`is_ticket_completed` 在 stop hook / prompt-reminder hook / lib `handoff_utils` 三處各自實作，連續三次同病灶重爆：
+
+| 事件 | 日期 | 修復範圍 | 遺漏 |
+|------|------|---------|------|
+| W17-165 | 2026-05-08 | stop hook 自定義版改用 `find_ticket_file` | 未同步 prompt-reminder hook、未同步 lib 層 |
+| W17-176.2.1 | 2026-05-09 | prompt-reminder hook 自定義版改用 `find_ticket_file`（commit fdc3ee3e）| 未同步 lib 層 |
+| W17-181 | 2026-05-10 | lib `handoff_utils.is_ticket_completed`（L49）/ `is_ticket_in_progress_or_completed`（L102）仍走 `load_and_validate_ticket` 舊路徑，子進程 cwd 非專案根 + `CLAUDE_PROJECT_DIR` 缺失時靜默回 False，導致 stale handoff 未被 GC | — |
+
+### W17-181 三視角審查結論（共識）
+
+| 視角 | 關鍵結論 |
+|------|---------|
+| Evidence | 根因 100% 坐實：lib L49 走 `get_project_root()` 無參數版，子進程環境路徑解析失敗回保守 False |
+| Scope | 影響 8 個消費者路徑（lib 三處 + hook 三處 + CLI 兩處），lib 層 bug 透過 `is_handoff_stale` 傳染至三套 hook |
+| linux universal | 「ticket completed?」pure predicate 有 3 份實作就是在邀請 ARCH-020 反覆發作。W17-165 修一處、W17-176.2.1 修一處、W17-181 又發現一處——非巧合，是缺 SSOT |
+
+### 升級後的判別準則
+
+新增「同名 pure predicate 多處實作」為 ARCH-020 高風險訊號：
+
+| 訊號 | 是否觸發 ARCH-020 升 SSOT |
+|------|----------------------|
+| 同名 predicate（如 `is_X`、`has_Y`、`can_Z`）跨 lib + hook 多進程各有實作 | 是（核心新增訊號） |
+| pure predicate 簽章不一致（如 `is_ticket_completed(ticket_id)` vs `is_ticket_completed(project_root, ticket_id, logger)`）並存 | 是（簽章漂移即實作漂移前兆） |
+| lib 提供函式但 hook 自定義同義函式 | 是（必 delegate 至 lib，禁自定義） |
+| 測試檔 UV script header 自行宣告 pytest deps（pytest 不解析 header，header 失效且跨檔漂移） | 是（必須升至 pyproject.toml `[dependency-groups.dev]` 集中宣告） |
+
+## 延伸案例：測試檔 UV script header 宣告 pytest deps 反模式變體（2026-05-11 升級）
+
+本案例將 ARCH-020 從「邏輯重寫」延伸至「**deps 宣告跨檔散落**」的同構模式：測試 deps 散落在每個測試檔的 UV script header，與「同名 predicate 多處實作」屬同類風險，差別僅在散落物件從「程式邏輯」換成「依賴宣告」。
+
+### 模式描述
+
+UV script header（`# /// script ... ///`）僅在 `uv run --script foo.py` 直接執行時生效。當 pytest 載入測試檔為 module 時，header 完全不被解析，導致：
+
+- **deps 宣告失效**：測試檔自行宣告 `pyyaml>=6.0` 不會在 pytest 環境下生效
+- **跨檔不一致**：每個測試檔各自宣告 deps 版本範圍，散落 N 份漂移風險
+- **同步成本**：任一 deps 升級需在 N 個測試檔同步修改，與 ARCH-020 主案例「修一處漏 N-1 處」同構
+
+### 根因引用（W17-190 ANA）
+
+W17-190 ANA 重現實驗評估三方案：
+
+| 方案 | 評估 |
+|------|------|
+| A. pyproject.toml `[dependency-groups.dev]` 集中宣告 | 推薦（單一 SSOT）|
+| B. 個別測試檔直接 import yaml | 部分可行（測試碼侵入） |
+| C. 測試檔 UV script header 補 deps | **不可行**：pytest 不解析 header，header 失效 |
+
+方案 C 標為「不可行」的原因即本變體核心：UV script header 屬執行時宣告，pytest 載入測試屬模組宣告，兩種執行模型不相容。
+
+### 升級結論
+
+W17-191 落地方案 A（pyproject.toml 集中宣告）+ `npm run test:hooks` 統一入口，從架構層解決 ARCH-020 變體：
+
+- W17-191.1：建立 `.claude/hooks/pyproject.toml` 含 `[dependency-groups.dev]`（pytest + pyyaml）
+- W17-191.2：`package.json` 加 `test:hooks` script 透過 `uv run --project .claude/hooks pytest .claude/hooks/tests/`
+- W17-191.3（本 ticket）：補 ARCH-020 條款收斂規則層
+
+「為何不在每個測試檔加 header」未來再被提議時，本案例可作為直接駁回依據。
+
 ## 相關事件與 Ticket
 
 | 事件 | 日期 | 說明 |
@@ -99,6 +173,14 @@ def _is_placeholder(text: str) -> bool:
 | W17-070 | 2026-04-24 | ANA 雙根因分析，saffron 重現實驗發現 hook 端同構 bug |
 | W17-071 | 2026-04-24 | IMP-1 症狀修復（必須同步改兩處） |
 | PC-110 | 2026-04-24 | body-check false negative 具體 bug 記錄 |
+| W17-165 | 2026-05-08 | `is_ticket_completed` 第一次重爆（stop hook）|
+| W17-176.2.1 | 2026-05-09 | `is_ticket_completed` 第二次重爆（prompt-reminder hook，commit fdc3ee3e）|
+| W17-181 | 2026-05-10 | `is_ticket_completed` 第三次重爆（lib 層）；三視角審查確認需升 SSOT；spawn W17-181.1（lib SSOT）/ W17-181.2（hook delegate）/ W17-181.3（本次規則升級）/ W17-182（retrospective ANA）|
+| W17-190 | 2026-05-11 | ANA 評估三方案解 PC-124 transitive deps gap；確認方案 C（測試檔 UV script header）技術不可行，推薦方案 A（pyproject.toml 集中）|
+| W17-191 | 2026-05-11 | IMP 父 ticket：建立 `.claude/hooks/pyproject.toml` + `npm run test:hooks` 統一執行入口 |
+| W17-191.1 | 2026-05-11 | 建立 `.claude/hooks/pyproject.toml` 含 `[dependency-groups.dev]`（pytest + pyyaml）+ 更新 CLAUDE.md §5 |
+| W17-191.2 | 2026-05-11 | `package.json` 新增 `test:hooks` script（commit a996432b / merge bd490f04）|
+| W17-191.3 | 2026-05-11 | ARCH-020 補「測試檔 UV script header 宣告 pytest deps 反模式變體」條款（本次升級）|
 
 ## 相關文件
 
@@ -109,5 +191,7 @@ def _is_placeholder(text: str) -> bool:
 
 ---
 
-**Last Updated**: 2026-04-24
+**Last Updated**: 2026-05-11
+**Version**: 1.2.0 — 新增「測試檔 UV script header 宣告 pytest deps 反模式變體」延伸案例：將模式從「邏輯/predicate 多處實作」延伸至「deps 宣告跨檔散落」；判別準則新增「測試檔 script header 自行宣告 pytest deps」訊號；補 W17-190 / W17-191（含 .1 / .2 / .3）相關事件記錄（W17-191.3 落地，PM 前台執行 PC-114 fallback）
+**Version**: 1.1.0 — 新增「ticket 路徑解析 SSOT」延伸案例：將模式從「驗證邏輯重寫」延伸至「pure predicate 跨進程多份實作」；新增「同名 predicate 多處實作即 ARCH-020 高風險訊號」判別準則；補 W17-165 / W17-176.2.1 / W17-181 三次重爆軌跡與三視角審查結論（W17-181.3 落地）
 **Version**: 1.0.0 — 初版；source W17-070 ANA（saffron-system-analyst）

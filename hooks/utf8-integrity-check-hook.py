@@ -50,6 +50,11 @@ REPLACEMENT_CHAR = "\ufffd"
 # 每個檔案最多報告的損壞位置數
 MAX_REPORTED_LOCATIONS = 5
 
+# W10-047.2 抽樣降級：每 N 次觸發 1 次完整檢查（中頻 Hook，候選 3）
+# 來源 ANA：W10-035.3（Phase 3b P3 五 Hook，0% Action 比）
+SAMPLING_N = 10
+SAMPLING_COUNTER_FILE = Path(__file__).parent.parent / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
+
 # 忽略的檔案類型（二進位或非文字檔案）
 BINARY_EXTENSIONS = frozenset({
     ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg",
@@ -65,6 +70,29 @@ BINARY_EXTENSIONS = frozenset({
 # ============================================================================
 # 核心邏輯
 # ============================================================================
+
+def should_sample_run(logger) -> bool:
+    """抽樣判斷：每 SAMPLING_N 次觸發 1 次完整檢查。
+
+    使用持久計數檔案；讀寫失敗時保守執行（return True）。
+    """
+    try:
+        SAMPLING_COUNTER_FILE.parent.mkdir(parents=True, exist_ok=True)
+        count = 0
+        if SAMPLING_COUNTER_FILE.exists():
+            try:
+                count = int(SAMPLING_COUNTER_FILE.read_text().strip() or "0")
+            except (ValueError, OSError):
+                count = 0
+        count += 1
+        SAMPLING_COUNTER_FILE.write_text(str(count))
+        run = (count % SAMPLING_N == 0)
+        logger.debug("抽樣計數=%d, 本次%s", count, "執行" if run else "跳過")
+        return run
+    except Exception as exc:
+        logger.info("抽樣計數失敗，保守執行: %s", exc)
+        return True
+
 
 def extract_file_paths(tool_input: dict) -> list:
     """從 tool_input 提取被操作的檔案路徑
@@ -158,6 +186,11 @@ def main() -> int:
 
     file_paths = extract_file_paths(tool_input)
     if not file_paths:
+        emit_hook_output(HOOK_EVENT)
+        return 0
+
+    # W10-047.2 抽樣降級：每 N 次觸發 1 次完整檢查
+    if not should_sample_run(logger):
         emit_hook_output(HOOK_EVENT)
         return 0
 

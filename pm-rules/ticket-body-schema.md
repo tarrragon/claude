@@ -37,6 +37,35 @@
 - `Problem Analysis` + `重現實驗結果` + `Solution` 為三大必填，構成「問題→實驗→結論」完整鏈路。
 - `Test Results` 僅在有實驗輸出時填寫；樣本顯示 ANA 普遍無獨立測試輸出（4/4 missing），故列選填。
 
+#### Solution 章節：Spawn 落地確認（W17-167 強制）
+
+ANA Solution 章節若含 IMP/DOC/ANA spawn 規劃表格，必須在 complete 前確認以下子節（被 acceptance-gate-hook Step 2.5.2 自動偵測）：
+
+```markdown
+### Spawn 落地確認
+
+- [ ] 所有規劃項目已建 ticket（`spawned_tickets` 或 `children` 已記錄對應 ID）
+- [ ] 或在本章節顯性標註「無需建 ticket：[具體理由]」
+```
+
+**Why**：acceptance 勾選「產出 spawned 清單」只檢文字產出，不檢 ticket 是否實際建立；Solution 寫了表格但未建 ticket = 無 trigger 延後決策（PC-093 模式）。
+
+**Consequence**：缺此 checklist，分析代理人 complete 時 frontmatter 為空也能放行，spawn 規劃靜默丟失（W17-167 元層級反例已證明）。
+
+**Action**：
+
+| 情境 | 填寫方式 |
+|------|---------|
+| 全部已建 ticket | 勾選第一項，列出對應 ticket ID 清單 |
+| 部分未建 | complete 前先補建（PM 接手 ticket create 職責） |
+| 評估後不需建 | 勾選第二項，標註「無需建 ticket：[理由]」 |
+
+**交叉引用**：
+
+- 規則層：`.claude/rules/core/quality-baseline.md` 規則 5「ANA Solution 內 spawn 規劃」
+- Lifecycle 層：`.claude/pm-rules/ticket-lifecycle.md`「ANA Solution Spawn 規劃落地（強制）」
+- 強制層：acceptance-gate-hook Step 2.5.2（W17-168 落地）
+
 ### IMP（Implementation）
 
 **核心價值**：commit SHA + 測試輸出 + 實機驗證作為 proof。
@@ -74,7 +103,8 @@
 
 | 版本 | 日期 | 變更 |
 |------|------|------|
+| 1.1.0 | 2026-05-08 | ANA Solution 章節新增「Spawn 落地確認」子節 checklist（W17-167 L3 落地，配合 W17-168 hook + W17-169 quality-baseline / ticket-lifecycle 同步修訂） |
 | 1.0.0 | 2026-04-20 | 初版（W17-016.2 落地 W17-016.1 盤點結論） |
 
-**Last Updated**: 2026-04-20
-**Version**: 1.0.0
+**Last Updated**: 2026-05-08
+**Version**: 1.1.0

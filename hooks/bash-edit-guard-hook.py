@@ -36,48 +36,35 @@ from lib.hook_messages import ValidationMessages, format_message
 
 def _detect_bash_edit_patterns(command: str) -> bool:
     """
-    檢測是否為編輯操作
+    檢測是否為高風險原地編輯操作（白名單降級版本）
 
-    檢測模式:
-    1. sed -i 或 sed --in-place
-    2. sed 配合管道輸出到檔案 (| tee / > file)
-    3. awk 輸出到檔案（>）
-    4. perl -pi
-    5. 輸出重定向到程式碼檔案 (>.dart, >.arb, >.json)
+    降級策略（W10-047.1）：
+    原始 6 個 pattern 中保留 2 個高風險原地編輯模式（sed -i / perl -pi），
+    移除 4 個噪音模式（輸出重定向 / awk 重定向 / 通用 > 檔案）。
+    依據 W10-035.3 ANA：3d 觸發 1662 次 Action ~0%；
+    保留的兩個 pattern 才是真正的原地編輯不可逆風險。
+
+    保留模式:
+    1. sed -i 或 sed --in-place（原地編輯，不可逆）
+    2. perl -pi 或 perl -i.bak（原地編輯，不可逆）
+
+    移除模式（觀察期 W10-047.3 起）:
+    - sed/awk + > file 重定向（多為合法產出）
+    - 通用命令 > 程式碼檔（多為合法產出，誤報率高）
 
     Args:
         command: Bash 命令
 
     Returns:
-        bool - 是否偵測到編輯模式
+        bool - 是否偵測到高風險原地編輯模式
     """
-    # 模式 1: sed -i 或 sed --in-place
+    # 模式 1: sed -i 或 sed --in-place（原地編輯）
     if re.search(r'sed\s+(-i|--in-place)', command):
         return True
 
-    # 模式 2: sed 配合輸出重定向 (> file)
-    if re.search(r'sed\s+.*[>].*\.dart|sed\s+.*[>].*\.arb|sed\s+.*[>].*\.json', command):
-        return True
-
-    # 模式 3: sed 配合管道輸出到檔案 (| tee / > file)
-    if re.search(r'sed\s+.*[|]\s*(tee|cat)', command) and re.search(r'[>]\s*\S+\.(dart|arb|json)', command):
-        return True
-
-    # 模式 4: awk 輸出到檔案
-    if re.search(r'awk\s+.*[>].*\.dart|awk\s+.*[>].*\.arb|awk\s+.*[>].*\.json', command):
-        return True
-
-    # 模式 5: perl -pi (原地編輯)
+    # 模式 2: perl -pi 或 perl -i.bak（原地編輯）
     if re.search(r'perl\s+(-pi|-i\.bak)', command):
         return True
-
-    # 模式 6: 通用輸出重定向到程式碼檔案（任何命令 > *.dart/arb/json）
-    if re.search(r'[>]\s*\S+\.(dart|arb|json|md|txt|yaml|yml)', command):
-        # 排除某些已知的安全操作（如註解、日誌等）
-        if not any(pattern in command for pattern in ['echo', 'printf', '#', 'comment', 'log']):
-            # 檢查是否為明確的程式碼編輯操作
-            if any(pattern in command for pattern in ['sed', 'awk', 'perl', 'tr', 'cut']):
-                return True
 
     return False
 

@@ -328,7 +328,7 @@ def main() -> int:
             return EXIT_SUCCESS
 
         # 判斷觸發時機
-        hook_event_name = input_data.get("hookEventName", "")
+        hook_event_name = input_data.get("hook_event_name", "")
 
         if hook_event_name == "PostToolUse":
             logger.debug("PostToolUse 觸發")

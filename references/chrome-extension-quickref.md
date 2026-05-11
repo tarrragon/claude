@@ -1,8 +1,8 @@
 # Chrome Extension 開發規範速查
 
-> **用途**：本檔案從 CLAUDE.md §7.3 lazy-load 引入，載入時機為寫 Chrome Extension 程式碼前。關鍵限制與測試環境差異速查表。
+> **用途**：本檔案供 Chrome Extension 專案的 `CLAUDE.md` lazy-load 引入，載入時機為寫 Chrome Extension 程式碼前。內容為 Manifest V3 Chrome Extension 通用關鍵限制與測試環境差異速查，不含特定專案資訊。
 >
-> **完整規範**：`docs/chrome-extension-dev-guide.md`
+> **完整規範**：各專案應於自家 `docs/` 維護專屬 Chrome Extension 開發指南（本檔為跨專案通用速查）。
 
 ---
 
@@ -29,8 +29,8 @@ Chrome Extension 環境有多項與 Node.js 不同的限制，開發和修改程
 | Jest 用 jsdom，非真實 Chrome 環境 | Chrome API（storage/runtime/tabs）需 mock |
 | CJS/ESM 雙模式 | 模組需同時支援 `module.exports` 和 `export` |
 | `performance.now` mock | 遞增值需手動管理，否則 OOM |
-| DOM 選擇器 | Readmoo 頁面結構會變更，選擇器需多層 fallback |
+| DOM 選擇器 | 目標網站 DOM 結構可能變更，選擇器需多層 fallback |
 
 ---
 
-**來源**：從 CLAUDE.md §7.3 外移（W10-077.1 實施 W10-073.3 骨架設計）
+**設計目的**：跨專案共用的 Chrome Extension Manifest V3 通用技術速查；專案專屬資訊不寫入本檔。

@@ -29,12 +29,11 @@ Ticket: 0.18.0-W10-082
 Pattern: PC-093
 """
 
-import os
 import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 # 加入 hooks/ 到 sys.path 以便 import hook_utils package
 sys.path.insert(0, str(Path(__file__).parent))
@@ -85,6 +84,31 @@ EXEMPT_PROXIMITY_LINES = 1
 #     hook_self_reference: phase4-decision-enforcement
 #   或 list 形式含此值時，整檔豁免偵測（hook 自身設計/測試/實作 ticket）。
 SELF_REFERENCE_HOOK_ID = "phase4-decision-enforcement"
+
+# Exempt marker 驗證失敗的人類可讀訊息對照表（W17-085 / quality-baseline 規則 4）
+# 每項 = (humanized 描述, 修復範例/提示)；保留 err code 作 grep 訊號（向後相容）
+ERR_MESSAGE_MAP: Dict[str, Tuple[str, str]] = {
+    "format-error": (
+        "Exempt marker 格式錯誤（需 <!-- PC-093-exempt: 類別:理由 -->）",
+        "範例：<!-- PC-093-exempt: ticket-tracked:W17-085 hook 訊息改善 -->",
+    ),
+    "category-whitelist": (
+        "Exempt category 不在白名單",
+        "合法 category: " + ", ".join(sorted(EXEMPT_CATEGORIES)),
+    ),
+    "reason-too-short": (
+        "Exempt reason 太短（< {} 字元）".format(REASON_MIN_LEN),
+        "請補充足夠的延後理由說明（至少 {} 字元）".format(REASON_MIN_LEN),
+    ),
+    "baseline-need-number": (
+        "baseline-gated 類別的 reason 必須含數字（量化基線）",
+        "範例：<!-- PC-093-exempt: baseline-gated:測量結果 84ms，低於 100ms AC 故無需快取 -->",
+    ),
+    "ticket-tracked-need-id": (
+        "ticket-tracked 類別的 reason 必須含 W{wave}-{seq} 格式 ticket ID",
+        "範例：<!-- PC-093-exempt: ticket-tracked:W17-085 hook 訊息改善 -->",
+    ),
+}
 
 
 # ============================================================================
@@ -506,8 +530,13 @@ def format_warn_info_message(
                 ref.line_no, ref.marker.category, ref.marker.reason
             ))
         for ref in invalid_exempts:
-            err_msg = ref.err or "format-error"
-            lines.append("  line {}: [INVALID: {}]".format(ref.line_no, err_msg))
+            err_code = ref.err or "format-error"
+            title, hint = ERR_MESSAGE_MAP.get(
+                err_code,
+                ("Exempt marker 驗證失敗", "請檢查 marker 格式"),
+            )
+            lines.append("  line {}: [INVALID: {}] {}".format(ref.line_no, err_code, title))
+            lines.append("    修復提示: {}".format(hint))
         if valid_exempts:
             lines.append("")
             lines.append("Phase 4 結束前必須清償（改執行或移除），剩餘豁免於 complete 時 WARN。")

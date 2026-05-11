@@ -75,6 +75,15 @@ def _now() -> datetime:
 # ============================================================================
 
 @dataclass
+class ContextBlacklist:
+    """S2 context-aware filter（W10-058.1.1.2）：keyword match 後，
+    若觸發詞前後 window 字內含 words 任一者，視為技術語境陳述，suppress signal。
+    """
+    window: int = 20
+    words: List[str] = field(default_factory=list)
+
+
+@dataclass
 class SignalDef:
     id: str
     # category 區分訊號語意分類（W15-018）：
@@ -94,6 +103,8 @@ class SignalDef:
     ticket_type_filter: Optional[str] = None
     reset_conditions: List[str] = field(default_factory=list)
     message_template: str = ""
+    # W10-058.1.1.2：context-aware filter（黑名單版）。None 表示未啟用。
+    context_blacklist: Optional[ContextBlacklist] = None
     raw: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -174,6 +185,19 @@ def _parse_signals(signals_raw: Any, logger) -> List[SignalDef]:
         sd.ticket_type_filter = item.get("ticket_type_filter")
         sd.reset_conditions = list(item.get("reset_conditions", []))
         sd.message_template = item.get("message_template", "")
+        # W10-058.1.1.2：解析 context_blacklist（選填）
+        cb_raw = item.get("context_blacklist")
+        if isinstance(cb_raw, dict):
+            words = cb_raw.get("words") or []
+            if isinstance(words, list) and words:
+                try:
+                    window = int(cb_raw.get("window", 20))
+                except (TypeError, ValueError):
+                    window = 20
+                sd.context_blacklist = ContextBlacklist(
+                    window=window,
+                    words=[str(w) for w in words],
+                )
         sd.raw = item
 
         if not sd.message_template:
@@ -495,7 +519,43 @@ class RestrictiveKeywordsStrategy:
                 break
         if matched is None:
             return DetectResult(hit=False, signal_id=sd.id)
+        # W10-058.1.1.2：context-aware filter（黑名單版）。
+        # 觸發詞前後 window 字內含 blacklist 詞 → 視為技術語境陳述，suppress signal。
+        if sd.context_blacklist is not None and self._check_context_blacklist(
+            prompt, matched, sd.context_blacklist.window, sd.context_blacklist.words,
+            sd.case_sensitive,
+        ):
+            logger.info(
+                "signal %s context_blacklist matched; suppressing (keyword=%s)",
+                sd.id, matched,
+            )
+            return DetectResult(hit=False, log_reason="context_blacklist", signal_id=sd.id)
         return DetectResult(hit=True, matched_keyword=matched, should_warn=True, signal_id=sd.id)
+
+    @staticmethod
+    def _check_context_blacklist(
+        prompt: str, keyword: str, window: int, blacklist: List[str],
+        case_sensitive: bool = False,
+    ) -> bool:
+        """檢查觸發詞前後 window 字內是否含 blacklist 任一詞。
+
+        回傳 True 表示應 suppress signal。case_sensitive=False 時比對採大小寫不敏感
+        （與 keyword 匹配邏輯一致）。
+        """
+        haystack = prompt if case_sensitive else prompt.lower()
+        needle = keyword if case_sensitive else keyword.lower()
+        idx = haystack.find(needle)
+        if idx < 0:
+            return False
+        start = max(0, idx - window)
+        end = min(len(prompt), idx + len(keyword) + window)
+        excerpt = prompt[start:end]
+        excerpt_cmp = excerpt if case_sensitive else excerpt.lower()
+        for bl in blacklist:
+            bl_cmp = bl if case_sensitive else bl.lower()
+            if bl_cmp and bl_cmp in excerpt_cmp:
+                return True
+        return False
 
     def apply(self, state: Dict[str, Any], result: DetectResult,
               current_ticket: Optional[str]) -> Dict[str, Any]:
@@ -642,6 +702,38 @@ def render_message(sd: SignalDef, result: DetectResult,
 
 
 # ============================================================================
+# Log 觀測欄位輔助（W10-101）
+# ============================================================================
+
+# excerpt 半徑：以 matched keyword 在 prompt 中的位置為中心，向前後各取 N 字。
+# 50 為 ticket Problem Analysis 指定值，避免單行 log 過長。
+_EXCERPT_RADIUS = 50
+
+
+def _build_prompt_excerpt(prompt: str, matched_keyword: Optional[str]) -> str:
+    """從 prompt 抽取以 matched_keyword 為中心的前後 50 字 excerpt。
+
+    無 prompt 或無關鍵字時返回 "-"（log 欄位佔位）。
+    換行字元統一替換為空格，並 strip 兩端 whitespace。
+    keyword 比對採大小寫不敏感（與 RestrictiveKeywordsStrategy 一致）。
+    若 keyword 不在 prompt 中（例如非 S2 訊號），返回 "-"。
+    """
+    if not prompt or not matched_keyword:
+        return "-"
+    haystack = prompt.lower()
+    needle = matched_keyword.lower()
+    idx = haystack.find(needle)
+    if idx < 0:
+        return "-"
+    start = max(0, idx - _EXCERPT_RADIUS)
+    end = min(len(prompt), idx + len(matched_keyword) + _EXCERPT_RADIUS)
+    excerpt = prompt[start:end]
+    # 換行轉空格，避免 plain text log 多行錯位
+    excerpt = excerpt.replace("\n", " ").replace("\r", " ").strip()
+    return excerpt
+
+
+# ============================================================================
 # 主流程
 # ============================================================================
 
@@ -678,16 +770,51 @@ def _process_signals(
             msg = render_message(sd, result, current_ticket)
             warnings.append(msg)
             state = mark_warned(state, sd.id)
+            # 保留原訊息行（向後相容既有 grep / 掃描工具）
             logger.info("signal %s triggered; warning emitted", sd.id)
+            # W10-101：附加觀測欄位（matched_keyword + prompt_excerpt），供
+            # 未來 S2 誤報率重評時依關鍵字 / 上下文分類樣本。S1/S3 等無 keyword
+            # 或無 prompt 的 signal 填 "-"。
+            kw = result.matched_keyword or "-"
+            prompt = str(event.get("prompt", "") or "")
+            excerpt = _build_prompt_excerpt(prompt, result.matched_keyword)
+            logger.info(
+                "signal %s observability matched_keyword=%s prompt_excerpt=%s",
+                sd.id, kw, excerpt,
+            )
         elif result.should_warn:
             logger.info("signal %s in cooldown; warning suppressed", sd.id)
     return warnings
+
+
+def is_pytest_environment() -> bool:
+    """偵測是否在 pytest 測試環境（W10-058.1.1.1 MVP）。
+
+    觸發條件（任一成立即視為 pytest 環境）：
+      - PYTEST_CURRENT_TEST env var 存在（pytest 主流程自動注入）
+      - 當前工作目錄路徑含 'pytest-of-'（pytest tmp_path fixture 慣例）
+
+    用途：避免 hook 在自身的 unit test 中觸發 detection（hit 2 fixture 字串污染）。
+    """
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return True
+    try:
+        cwd_str = str(Path.cwd())
+    except (FileNotFoundError, OSError):
+        return False
+    if "pytest-of-" in cwd_str:
+        return True
+    return False
 
 
 def main() -> int:
     logger = setup_hook_logging(HOOK_NAME)
     event = read_json_from_stdin(logger)
     if event is None:
+        return 0
+
+    if is_pytest_environment():
+        logger.debug("pytest environment detected, skipping detection")
         return 0
 
     project_root = get_project_root()

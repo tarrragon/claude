@@ -19,6 +19,15 @@ from pathlib import Path
 import pytest
 
 
+# W17-195：ticket-tracker.py（CSV 式 tracker）已被 ticket_system/ 取代，
+# 整檔 skip 以避免 13 個 exit-code-2 failures（argparse unrecognized arguments）。
+# 恢復條件：CSV tracker 重新啟用時，移除 pytestmark 並更新測試對應新 CLI。
+# 相關 ticket: W14-021 ANA / W17-195 IMP；idiom 參考 W17-192 / TEST-007。
+pytestmark = pytest.mark.skip(
+    reason="ticket-tracker.py CSV tracker 已廢棄，被 ticket_system/ 取代（W17-195）"
+)
+
+
 # 取得腳本路徑
 SCRIPT_PATH = Path(__file__).parent.parent / "ticket-tracker.py"
 

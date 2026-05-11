@@ -191,6 +191,18 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 1.0.0-W28-0
 >
 > 新 session 啟動時 `session-start-scheduler-hint-hook` 自動呼叫 `runqueue --context=resume`，結果以 hook additionalContext 顯示。PM 迷失方向時優先執行，免靠記憶判斷先後順序。詳見 `references/track-command.md`「track runqueue 子命令」章節。
 
+> **Stale ticket 明細 — `stale-list`**（W17-200）：列舉 pending 且建立日期超過閾值的 ticket，補 `list` 命令僅顯示彙總計數無法定位個別 ticket 的缺口。
+>
+> ```bash
+> ticket track stale-list                           # 預設 --threshold warning（warning + critical）
+> ticket track stale-list --threshold info          # 三級全收（info + warning + critical）
+> ticket track stale-list --threshold all           # 同 info
+> ticket track stale-list --threshold critical      # 僅 critical
+> ticket track stale-list --wave 17 --format ids    # 僅輸出 ID（適合 pipe）
+> ```
+>
+> 閾值複用 `lib/staleness.py`：info ≥ 7 天 / warning ≥ 14 天 / critical ≥ 30 天。輸出依 days 降序。詳見 `references/track-command.md`「track stale-list 子命令」章節。
+
 > **注意**：5W1H 欄位由 `set-who` ~ `set-how` 6 個命令更新。`blockedBy` 用 `set-blocked-by`、`relatedTo` 用 `set-related-to`（均支援 `--add`/`--remove`）。`priority` 等欄位無 CLI 命令，需手動編輯 frontmatter。完整對照表見 `references/track-command.md`。
 >
 > **注意**：`append-log` 必須加上 `--section` 必填參數：`ticket track append-log <id> --section "Problem Analysis" "內容"`。有效區段值：`Problem Analysis`、`Context Bundle`、`Solution`、`Test Results`、`Execution Log`、`NeedsContext`、`Exit Status`。`Context Bundle` 用於派發前寫入 PCB（PC-040）；`NeedsContext`/`Exit Status` 用於代理人結束狀態協議（W17-010）。
@@ -229,6 +241,22 @@ ticket show W17-015 -P         # 停用分頁
 ### handoff - 任務鏈管理與 Context 交接
 
 支援自動判斷方向、指定交接到父/子/兄弟任務。五種交接情境。
+
+> **設計原則**：handoff = 純指針，禁含任務描述 / acceptance / 5W1H（這些屬 ticket md 範圍）。完整原則見 `.claude/methodologies/handoff-design-principle-methodology.md`。
+
+`--next <target-ticket-id>` 子旗標（W17-164 / L2-A）：以**絕對指向**語意建立 handoff，直接寫入 `target_ticket_id` 欄位，讓下 session 從「該做的 ticket」（target）讀取，而非從 source + direction 間接推導。
+
+```bash
+ticket handoff --next <target-ticket-id> --from-ticket-id <source-id>
+```
+
+`--next` 與 `--auto` 互斥；產生的 JSON `direction="context-refresh"`、`auto_generated=False`。讀取端（GC / SessionStart hint / Stop hook / resume）優先讀 `target_ticket_id`，缺則 fallback 至 direction 後綴解析（向後相容，舊 JSON 不破）。
+
+新增 `--from-worklog` 子命令（W17-083.2）：解析 worklog 最新交接段，提取 ticket ID 並批次補建 `.claude/handoff/pending/<id>.json`，修復「worklog 寫了但未執行 CLI」雙軌不同步缺口。搭配 `stop-worklog-handoff-sync-check-hook`（Stop event 偵測）形成自動防護。
+
+```bash
+ticket handoff --from-worklog [--worklog-path PATH] [--dry-run]
+```
 
 > 決策樹：Read `references/workflow-handoff.md`
 > 詳細用法：Read `references/handoff-command.md`
@@ -292,12 +320,17 @@ ticket show W17-015 -P         # 停用分頁
 
 ---
 
-**Version**: 2.4.0
-**Last Updated**: 2026-04-21
+**Version**: 2.5.1
+**Last Updated**: 2026-05-10
 **Status**: Completed
 
 **Change Log**:
 
+- v2.5.1 (2026-05-10): handoff 章節新增「設計原則」引用指向 `handoff-design-principle-methodology.md`（W17-175 落地）
+- v2.5.0 (2026-05-08): handoff 章節同步 W17-164 落地的 `--next` CLI 與 `target_ticket_id` 欄位
+  - 新增 `--next <target-ticket-id>` 用法說明（絕對指向語意）
+  - 註明與 `--auto` 互斥、direction 預設 `context-refresh`
+  - 註明讀取端優先序：target_ticket_id > direction fallback（向後相容）
 - v2.4.0 (2026-04-21): `/ticket` 裸指令入口切換為 scheduler 接手建議
   - 流程步驟 1 從 `ticket resume --list` 改為 `ticket track runqueue --context=resume --top 3`
   - AskUserQuestion 選項順序改反映 runqueue scheduler 排序

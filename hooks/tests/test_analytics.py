@@ -21,19 +21,33 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
 
+# W17-192：agent_dispatch_analytics 模組已移至 .claude/hooks/archived/，
+# 整檔 skip 以避免 collection error。恢復條件：模組重新啟用時，
+# 移除 pytestmark 並修正 import path。
+# 相關 ticket: W17-190 ANA / W17-192 IMP。
+pytestmark = pytest.mark.skip(
+    reason="agent_dispatch_analytics 模組已 archived（W17-192）；測試保留作為未來恢復參考"
+)
+
 # 假設分析工具模組可直接導入
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agent_dispatch_analytics import (
-    CorrectionRecord,
-    WarningRecord,
-    PatternAnalyzer,
-    RootCauseAnalyzer,
-    ImprovementSuggester,
-    TrendTracker,
-    generate_report,
-)
+# 用 try/except 包住 import 以避免模組層 ModuleNotFoundError 阻擋 pytest collection。
+# pytestmark 會 skip 所有測試，故 import 失敗後不影響執行行為。
+try:
+    from agent_dispatch_analytics import (  # type: ignore[import-not-found]
+        CorrectionRecord,
+        WarningRecord,
+        PatternAnalyzer,
+        RootCauseAnalyzer,
+        ImprovementSuggester,
+        TrendTracker,
+        generate_report,
+    )
+except ImportError:
+    # 模組已 archived，符合預期；pytestmark.skip 將阻止測試實際執行
+    pass
 
 
 # ===== 測試數據準備 =====

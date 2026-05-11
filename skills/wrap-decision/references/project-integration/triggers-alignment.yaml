@@ -1,0 +1,59 @@
+# triggers-alignment.yaml
+# SKILL.md ↔ wrap-triggers.yaml 雙向映射表
+#
+# 消費者：.claude/hooks/wrap-skill-yaml-consistency-hook.py
+# 來源規格：W10-055.1 ANA Solution（雙向映射 Schema 設計）
+#
+# Schema:
+#   - signal_to_skill_triggers: { yaml_signal_id: [skill_situation_label, ...] }
+#       一致性約束：YAML signals[].id 必須在此映射中至少對應 1 個 SKILL 觸發情境
+#   - keyword_to_trigger_category: { yaml_keyword: skill_description_trigger_category }
+#       一致性約束：YAML signals[].keywords[] 與 failure_detection.keywords[] 中的每個詞
+#                   必須能歸屬到 SKILL description Triggers 段的某個類別
+#
+# Last Updated: 2026-05-05
+# Version: 1.0.0
+
+version: "1.0.0"
+
+# Signal → SKILL 觸發情境映射（N:1，YAML 不可有 orphan signal）
+signal_to_skill_triggers:
+  consecutive_failures:
+    - "連續失敗"
+  restrictive_keywords:
+    - "被困住"
+  ana_claim:
+    - "分析任務"
+  reflection_depth_challenge:
+    - "根因深度反思"
+    - "反思深度質疑"
+
+# Keyword → SKILL description Trigger 類別歸屬
+# 每個 YAML 中出現的 keyword 必須在此處有 belongs_to 類別
+keyword_to_trigger_category:
+  # restrictive_keywords signal（match_mode: substring, case_sensitive: false）
+  "做不到": "限制性解法"
+  "沒辦法": "限制性解法"
+  "無法": "限制性解法"
+  "不支援": "限制性解法"
+  "CLI 不支援": "限制性解法"
+  "禁止": "限制性解法"
+  "不可能": "限制性解法"
+  "impossible": "限制性解法"
+  "限制性解法": "限制性解法"
+
+  # consecutive_failures.failure_detection.keywords
+  "error": "stuck"
+  "exception": "stuck"
+  "failed": "stuck"
+  "timeout": "stuck"
+
+  # reflection_depth_challenge keywords
+  "太表層": "debug"
+  "不夠深": "debug"
+  "再想想": "debug"
+  "這解釋不了": "debug"
+  "為何不是": "debug"
+  "更深一層": "debug"
+  "還有其他可能嗎": "debug"
+  "introspection": "debug"

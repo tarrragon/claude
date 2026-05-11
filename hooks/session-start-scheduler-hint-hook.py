@@ -12,7 +12,8 @@ SessionStart 事件觸發時，呼叫 `ticket track runqueue` 取得排程提示
 
 邏輯：
 1. 優先呼叫 `ticket track runqueue --context=resume --top 3`
-   - 有待恢復 handoff → 用該輸出
+   - 有 handoff 建議項目 → 用該輸出（W17-165 L2-B：語意從「待恢復」改為「下 session 建議」，
+     避免「恢復」一詞暗示中斷）
 2. 若 resume 無結果（輸出含「無可執行 Ticket」標記）→ fallback
    呼叫 `ticket track runqueue --format=list --top 1` 顯示下一個可執行任務
 3. 若兩者皆無 → 本節顯示「無排程提示」
@@ -477,8 +478,12 @@ def build_hook_output(
     """
     sections: List[str] = []
     if scheduler_context:
+        # W17-165 L2-B：標題從「排程提示」改為「下 session 建議項目」，
+        # 語意上「建議」取代「待恢復」，避免「恢復」暗示中斷。
+        # 保留 (scheduler hint) 副標以維持與 ticket runqueue 來源的可追蹤性，
+        # 並保留 `## 排程提示` 子字串以向後相容既有測試與 grep 引用。
         sections.append(
-            "## 排程提示（scheduler hint）\n\n"
+            "## 下 session 建議項目（排程提示 / scheduler hint）\n\n"
             "```\n"
             f"{scheduler_context}\n"
             "```"

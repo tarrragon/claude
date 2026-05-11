@@ -20,6 +20,8 @@
 
 每輪用「跟前一輪不同的眼睛」看同一份文字 — 才能 catch 不同層的問題。**第 1 輪的 frame 不可能同時 catch 所有層**（見 [literal-interception-vs-behavioral-refinement](./literal-interception-vs-behavioral-refinement.md) 字面 vs 行為的 ceiling）。
 
+Multi-pass review 還需要 surface inventory。Frame 定義每輪看什麼品質；surface inventory 定義每輪掃哪些文字位置。當產物包含 title、description、heading、link label、MOC / index entry 時，這些 metadata / navigation surface 要跟正文跑同一輪 review。細節見 [metadata-surface-in-writing-review](./metadata-surface-in-writing-review.md)。
+
 ---
 
 ## 為什麼一輪寫不出全部維度
@@ -84,6 +86,14 @@
 - **輪 6**：跨卡 cross-link 健康度（單向引用 vs 雙向）
 - **輪 7**：放回索引條描述對應到內容嗎
 
+**Production 教學文章再追加（catch 字句層問題、跑 N 輪後仍漏同類問題時觸發）**：
+
+- **輪 8**：keyword bank 比對（換工具）— 跑 grep 比對固定 keyword list（口語修辭 / 廢話前綴 / 地區漂移 / 依賴 code）、不靠 reviewer 記憶
+- **輪 9**：reader simulation（換視角）— 拿掉所有 code block 重讀、跳到段落中間直接讀、catch reviewer 的「fill in 上下文」盲點
+- **輪 10**：self-criticism（換層次）— 跑「我這份規則本身在這個情境是否夠細、有沒有 miss 的 frame」、反向審視 framework 本身覆蓋度
+
+跳輪規則：短文 / 即時 note 跳 4-7 + 8-10、production 教學文章在輪 5 後仍系統性漏同類問題時 opt-in 8-10。詳見 [multi-pass-review-frame-granularity](./multi-pass-review-frame-granularity.md)。
+
 ### 程式註解（doc comment / inline）
 
 跑 1-3 輪 + 額外：
@@ -101,6 +111,76 @@
 
 - **輪 4''**：模糊指令 — 「對齊」「靠近」這類詞翻成具體數字 / 條件
 - **輪 5''**：「邊界 case 預期行為」明示了嗎
+
+---
+
+## Stakes-conditional 追加輪：Epistemic Rigor
+
+5 輪基本 frame 是 frame 軸（生成 / 意圖 / 語氣 / grep / 反例）；**高 stakes 內容**（reader 照做後錯誤不可逆 / 系統層 / 不可分批 ship 修正）追加 stakes 軸的 **輪 E：epistemic rigor**——比照學術 peer review 的 claim / evidence / method / threats / citation 五個 sub-check、確認論述強度足以承擔 reader 直接 implement 的下游風險。
+
+### 啟動條件（opt-in、不污染預設）
+
+| 內容類型                                       | 是否跑輪 E     |
+| ---------------------------------------------- | -------------- |
+| 一般技術文章（layout / refactor / debug 教學） | 不跑（5 輪夠） |
+| 資安 / cryptography / 防護 mitigation 教學     | **跑**         |
+| Concurrency 正確性 / memory model claims       | **跑**         |
+| Distributed consistency / consensus 演算法     | **跑**         |
+| Financial 計算 / accounting / settlement       | **跑**         |
+| Medical / safety-critical 計算                 | **跑**         |
+| 任何「reader 照做後錯誤不可逆 / 系統層」的內容 | **跑**         |
+
+判別啟動的核心問題：「**reader 照這段實作會不會在生產系統留 silent gap、且不能靠後續 ship 修補**？」——會 → 跑輪 E、不會 → 5 輪即可。
+
+### 輪 E：Epistemic Rigor 的 5 個 sub-check
+
+```text
+E.1 Claim：每個結論可拆 falsifiable 子句嗎？
+    - reader 讀完能說「在 X 條件下 Y 成立、Z 條件失效」嗎？
+    - 不能拆 = false sense of security 產地、補 boundary
+
+E.2 Evidence：claim → evidence 推論鏈完整嗎？
+    - 跳步驟的地方在哪？
+    - 「業界常用」「最佳實踐」當論證 = appeal to convention、不是 evidence
+    - 補 mechanism / 前提鏈
+
+E.3 Method：reader 照 method 做能反向驗證嗎？
+    - 「使用 X」單一 control 名稱 = 字面層 mitigation
+    - 補 mechanism + deployment 條件 + 失效訊號
+
+E.4 Threats（含 context-dependence）：什麼前提失效會 invalidate？
+    - 哪些 deployment 條件改變方法有效性？
+    - 在 5 輪輪 5（反例）的基礎上、specific 化到「條件變數」維度
+
+E.5 Citation：版本 / 句意 / current best practice 都對嗎？
+    - 引用標準有無標版本 / 年份？
+    - 原文 quote 跟轉述是否語意一致（conditional → unconditional drift）？
+    - 引用內容仍是 current best practice、還是已 deprecated？
+```
+
+### 輪 E 的產出格式
+
+跑完輪 E、每個 weakness 對應到一個 dimension + tier（accept / minor revise / major revise / **withdraw**）：
+
+- **Accept**：該段沒 weakness 或在容忍範圍
+- **Minor revise**：補 boundary / contrast / 版本標記類小改、不阻擋 ship
+- **Major revise**：結構性 false sense、需重寫、ship 前必須修
+- **Withdraw**：教錯主動誤導 reader（過時 crypto 沒標 deprecated / 扭曲 citation 反向違反現行標準 / defense theater 當示範），保留 = 增加生產系統 risk、必須移除或全換
+
+withdraw tier 是高 stakes 內容跟一般內容的關鍵差異——一般內容 review 沒有「保留 = 增加 risk」的硬決策、高 stakes 必須有。
+
+### 跟 5 輪基本 frame 的分工
+
+| 軸       | 5 輪基本 frame                         | 輪 E（高 stakes 追加）                                                   |
+| -------- | -------------------------------------- | ------------------------------------------------------------------------ |
+| 軸定位   | Frame 軸：每輪換一個寫作品質視角       | Stakes 軸：論述強度檢查                                                  |
+| 觸發     | 預設全跑（依 output 類型可跳少數輪）   | 高 stakes 內容才 opt-in                                                  |
+| 找的問題 | typo / 偏題 / 絕對主義 / grep / 邊界缺 | claim 空降 / 對位失效 / context 缺 / citation 過時 / withdraw-level 教錯 |
+| 失敗後果 | 文字品質低、reader 用力讀              | reader 照做後實作出生產破口、silent failure                              |
+
+兩軸正交、不取代——高 stakes 內容兩軸都跑（5 輪 frame + 輪 E stakes）、一般內容只跑 5 輪。輪 E 不在 5 輪裡是因為：把 epistemic rigor 設為預設會讓一般文章 over-audit、稀釋 review 紀律；設為 conditional opt-in 才能讓高 stakes 場景拉到學術級而不污染日常寫作。
+
+→ 詳細的維度展開（threat model 對稱 / mitigation 對位 mechanism / context-dependence / citation 時效）跟 audit recommendation tier 判準、見 [auditing-articles](../auditing-articles.md) reference。
 
 ---
 
@@ -141,6 +221,12 @@
 | [literal-interception-vs-behavioral-refinement](./literal-interception-vs-behavioral-refinement.md) | 本卡是該卡在「寫」這個動作的具體實例 — review 是 multi-pass、不是 hook               |
 | [naming-as-iterated-artifact](./naming-as-iterated-artifact.md)                                     | 本卡的輪 4 在 naming 場景的特化                                                      |
 | [methodology-multi-pass-embedding](./methodology-multi-pass-embedding.md)                           | 本卡的 5 輪設計就是 compositional-writing 該 embed 為核心原則的內容、不該塞 appendix |
+| [metadata-surface-in-writing-review](./metadata-surface-in-writing-review.md)                       | 本卡定義 frame 軸，該卡補 surface 軸                                                 |
+| [multi-pass-review-frame-granularity](./multi-pass-review-frame-granularity.md)                     | 本卡的延伸—frame 顆粒度盲點、補 keyword bank / reader simulation / self-criticism 三機制處理「跑 N 輪仍漏」字句層問題 |
+| [colloquial-rhetoric-erodes-technical-precision](./colloquial-rhetoric-erodes-technical-precision.md) | 輪 8 keyword bank 的具體展開—口語修辭 keyword 清單                                  |
+| [prose-self-contained-without-code-reference](./prose-self-contained-without-code-reference.md)     | 輪 9 reader simulation 的具體展開—拿掉 code 重讀的自測                              |
+| [regional-terminology-alignment](./regional-terminology-alignment.md)                               | 輪 8 keyword bank 的另一具體展開—地區漂移 keyword                                   |
+| [design-flaw-by-current-axes-not-hindsight](./design-flaw-by-current-axes-not-hindsight.md)         | 輪 5 反例 / 邊界的進階—設計檢討類文章避免 hindsight 論述汙染                        |
 
 ---
 

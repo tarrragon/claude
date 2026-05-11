@@ -161,6 +161,102 @@ class TestFalsePositiveExempt:
 
 
 # ============================================================================
+# 3.2-bis Markdown 表格選項偵測（W17-174.2 §3.4-bis / W17-174.2.1）
+# ============================================================================
+
+
+class TestTablePathTruePositive:
+    """§3.4-bis 真陽性：表格列選項應觸發提醒。"""
+
+    def test_TP4_table_with_option_header_and_question(self, hook_input):
+        text = (
+            "三個方案如下：\n\n"
+            "| 方案 | 說明 |\n"
+            "|------|------|\n"
+            "| A 繼續 | 直接推進 |\n"
+            "| B 暫停 | 先做分析 |\n"
+            "| C 回退 | 重新設計 |\n\n"
+            "要選哪個？"
+        )
+        out = run_detect(hook_input(text), text)
+        assert has_reminder(out)
+
+    def test_TP5_table_with_recommended_column_and_question_mark(self, hook_input):
+        text = (
+            "下一步候選：\n\n"
+            "| 候選 | 說明 | 推薦 |\n"
+            "|------|------|------|\n"
+            "| 派 thyme | 實作 hook | Recommended |\n"
+            "| 派 basil | 重構架構 |  |\n"
+            "| PM 前台 | 直接寫 |  |\n\n"
+            "你決定哪個？"
+        )
+        out = run_detect(hook_input(text), text)
+        assert has_reminder(out)
+
+    def test_TP6_table_with_strategy_header_and_four_rows(self, hook_input):
+        text = (
+            "策略選擇：\n\n"
+            "| 策略 | 摩擦力 | 預估時間 | 風險 |\n"
+            "|------|--------|----------|------|\n"
+            "| 全量重寫 | 高 | 2h | 中 |\n"
+            "| 局部修補 | 中 | 30m | 低 |\n"
+            "| 維持現狀 | 無 | 0 | 高 |\n"
+            "| 延後處理 | 低 | 0 | 中 |\n\n"
+            "要選哪個策略？"
+        )
+        out = run_detect(hook_input(text), text)
+        assert has_reminder(out)
+
+
+class TestTablePathFalsePositiveExempt:
+    """§3.4-bis 假陽性豁免：純資料表 / 不足列數 / code block 內表格。"""
+
+    def test_FP4_pure_data_table_no_option_keyword_no_question(self, hook_input):
+        text = (
+            "測試結果如下：\n\n"
+            "| 模組 | 通過 | 失敗 | 覆蓋率 |\n"
+            "|------|------|------|--------|\n"
+            "| Auth | 42 | 0 | 95% |\n"
+            "| Storage | 31 | 0 | 91% |\n"
+            "| Export | 28 | 0 | 88% |\n"
+            "| UI | 55 | 0 | 82% |\n\n"
+            "全綠通過。"
+        )
+        out = run_detect(hook_input(text), text)
+        assert not has_reminder(out)
+
+    def test_FP5_table_with_only_two_data_rows(self, hook_input):
+        text = (
+            "兩個方案：\n\n"
+            "| 方案 | 說明 |\n"
+            "|------|------|\n"
+            "| A 做 | 立即執行 |\n"
+            "| B 不做 | 延後 |\n\n"
+            "要哪個？"
+        )
+        # 資料列僅 2 列（不足 §3.4-bis 閾值 3）→ 不應命中表格路徑
+        out = run_detect(hook_input(text), text)
+        assert not has_reminder(out)
+
+    def test_FP6_table_inside_fenced_code_block(self, hook_input):
+        text = (
+            "規格範例：\n\n"
+            "```markdown\n"
+            "| 方案 | 說明 |\n"
+            "|------|------|\n"
+            "| A 繼續 | 推進 |\n"
+            "| B 暫停 | 等待 |\n"
+            "| C 回退 | 重設 |\n"
+            "```\n\n"
+            "你決定哪個？"
+        )
+        # code block 內表格在 strip_code_blocks 後消失 → 不命中
+        out = run_detect(hook_input(text), text)
+        assert not has_reminder(out)
+
+
+# ============================================================================
 # 3.3 邊界測試（B）
 # ============================================================================
 

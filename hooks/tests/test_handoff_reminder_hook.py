@@ -51,7 +51,7 @@ def _make_record(
 def _scan(hook, project_root: Path, stale_map: dict):
     """以 stale_map（檔名 stem -> (is_stale, reason)）替身呼叫 scan。"""
 
-    def fake_is_stale(record):
+    def fake_is_stale(record, project_root=None):
         ticket_id = record.get("ticket_id") or record.get("from_ticket") or ""
         return stale_map.get(ticket_id, (False, ""))
 

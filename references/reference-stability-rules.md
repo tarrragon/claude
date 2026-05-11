@@ -114,6 +114,59 @@
 
 ---
 
+## CLAUDE.md 章節外移決策樹
+
+**Why**：縮減 `CLAUDE.md` 體量時，章節外移目標必須依「內容是否含專案層級識別符」決定，誤將專案內容外移到 `.claude/references/`（跨專案 sync 範圍）會觸發規則 8 違反；誤將通用內容外移到 `docs/`（專案內部）則喪失跨專案知識複用。
+
+**Consequence**：外移目標選錯會讓 `.claude/` sync 機制把專案專屬內容（如 `src/` 路徑、產品名稱）擴散到其他專案，造成跨專案誤導；或讓跨專案通用知識被困在單一專案 `docs/` 失去複用機會。
+
+**Action**：執行 `CLAUDE.md` 章節外移前依下方決策樹判定目標，外移後執行檢查清單驗證合規。
+
+### 觸發條件
+
+| 訊號 | 處理 |
+|------|------|
+| `CLAUDE.md` 單檔行數 > 200（或某章節 > 50 行） | 評估外移 |
+| 章節內容只在特定情境（如寫程式碼前）才需要 | 評估外移為 lazy-load reference |
+| 章節含具體實作細節（命名清單、檔案位置表） | 評估外移以保持 `CLAUDE.md` 抽象層級 |
+
+### 外移目標選擇決策樹
+
+依序回答以下問題：
+
+| 步驟 | 問題 | 是 → 目標 | 否 → 下一步 |
+|------|------|----------|------------|
+| 1 | 章節是否含**專案層級識別符**（`src/` 路徑、產品名稱、專案 ticket ID、專案 commit hash、專案 worklog 路徑）？ | `docs/<descriptive-name>.md` | 進入步驟 2 |
+| 2 | 章節是否含**跨專案可複用的通用知識**（如 Chrome Extension 限制、Manifest V3 行為、Python 通用規範）？ | `.claude/references/<descriptive-name>.md` | 進入步驟 3 |
+| 3 | 章節是否為**混合內容**（部分專案、部分通用）？ | 拆檔：專案部分放 `docs/`、通用部分泛化後放 `.claude/references/` | 留在 `CLAUDE.md`（無法外移） |
+
+### 目錄性質對照表
+
+| 目錄 | sync 範圍 | 可含專案識別符？ | 適用情境 |
+|------|----------|---------------|---------|
+| `docs/` | 專案內部，不 sync | 是 | 專案專屬規範、架構說明、需求/規格 |
+| `.claude/references/` | 跨專案 sync | 否（規則 8） | 跨專案技術速查、通用 lazy-load 參考 |
+| `CLAUDE.md` | 專案入口，不 sync | 是 | 高層概覽 + lazy-load 指引 |
+
+### 外移後檢查清單
+
+- [ ] 新檔目標目錄符合決策樹結論（`docs/` vs `.claude/references/`）
+- [ ] `CLAUDE.md` 引用路徑已更新（`@docs/<檔名>.md` 或 `@.claude/references/<檔名>.md`）
+- [ ] 原檔案已刪除（外移而非複製）
+- [ ] 若放 `.claude/references/`，內容已通過規則 8 自檢（無 `src/` 路徑、無產品名稱、無專案 ticket ID）
+- [ ] 若放 `docs/`，已在新檔頂部說明「存放位置原因」（避免後續誤搬回 `.claude/`）
+- [ ] 執行 `grep -rn "<新檔關鍵字>" .claude/ docs/` 確認無殘留舊路徑引用
+
+### 範例對照
+
+| 章節性質 | 外移目標 | 範例 |
+|---------|---------|------|
+| 專案錯誤處理體系（含 `src/core/errors/` 路徑） | `docs/project-conventions.md` | 含 `src/` 路徑與專案 enum 清單，屬步驟 1 命中 |
+| Chrome Extension Manifest V3 通用限制 | `.claude/references/chrome-extension-quickref.md` | 通用限制速查表（require/global/Storage API），泛化後保留 |
+| Flutter 專案的命名規範 + 通用 Dart 風格 | 拆檔：專案命名放 `docs/flutter-naming-conventions.md`、通用 Dart 風格放 `.claude/references/dart-style-quickref.md` | 混合內容拆檔範例 |
+
+---
+
 ## 補充檢查清單（搭配 document-format-rules.md 主檢查清單使用）
 
 編輯規格文件或 `.claude/` 框架檔案時，額外確認：

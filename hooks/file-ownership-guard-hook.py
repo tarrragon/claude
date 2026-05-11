@@ -30,6 +30,7 @@ from hook_utils.hook_ticket import (
     parse_ticket_frontmatter,
     find_ticket_file,
     extract_where_files_from_frontmatter,
+    scan_ticket_files_by_version,
 )
 
 
@@ -253,7 +254,7 @@ def extract_ticket_id(input_data: dict) -> Optional[str]:
     if not input_data:
         return None
 
-    tool_input = input_data.get("toolInput", {})
+    tool_input = input_data.get("tool_input", {})
     if not isinstance(tool_input, dict):
         return None
 
@@ -290,8 +291,8 @@ def is_valid_trigger(input_data: dict) -> bool:
     if not input_data:
         return False
 
-    hook_event = input_data.get("hookEventName")
-    tool_name = input_data.get("toolName")
+    hook_event = input_data.get("hook_event_name")
+    tool_name = input_data.get("tool_name")
 
     return hook_event == "PreToolUse" and tool_name == "Agent"
 
@@ -449,16 +450,16 @@ def get_active_tickets(
         logger.warning("無法從 %s 提取版本和 Wave", target_ticket_id)
         return []
 
-    # 掃描 Ticket 目錄
-    tickets_dir = project_root / "docs" / "work-logs" / f"v{target_version}" / "tickets"
-    if not tickets_dir.exists():
-        logger.debug("Ticket 目錄不存在: %s", tickets_dir)
+    # 掃描 Ticket 檔案清單（W17-188 修復：改用共用 helper 支援雙結構）
+    ticket_files = scan_ticket_files_by_version(project_root, target_version, logger)
+    if not ticket_files:
+        logger.debug("Ticket 目錄不存在或無 ticket 檔案: v%s", target_version)
         return []
 
     active_tickets = []
 
     try:
-        for ticket_file in tickets_dir.glob("*.md"):
+        for ticket_file in ticket_files:
             ticket_info = _process_ticket_file(
                 ticket_file,
                 target_ticket_id,

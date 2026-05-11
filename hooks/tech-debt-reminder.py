@@ -11,7 +11,9 @@
 
 功能:
 1. 從 docs/todolist.yaml 取得當前版本（專案類型無關）
-2. 掃描 docs/work-logs/v{version}/tickets/ 目錄
+2. 掃描 ticket 目錄（透過 hook_utils.scan_ticket_files_by_version 支援雙結構：
+   舊扁平 docs/work-logs/v{version}/tickets/ 與
+   新三層 docs/work-logs/v{major}/v{major}.{minor}/v{version}/tickets/）
 3. 檢查所有 TD Ticket 的 frontmatter status
 4. 若有 pending 的 TD → 顯示警告
 
@@ -29,7 +31,6 @@
 
 import sys
 import json
-import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
@@ -42,45 +43,48 @@ from hook_utils import (
     read_json_from_stdin,
     get_project_root,
     get_current_version_from_todolist,
+    scan_ticket_files_by_version,
+    parse_ticket_frontmatter,
 )
 
 # 全域常數
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 
-def find_tickets_directory(
+def find_ticket_files_for_version(
     project_root: Path,
     version: str,
     logger
-) -> Optional[Path]:
+) -> List[Path]:
     """
-    尋找版本的 tickets 目錄
+    尋找版本的 Ticket 檔案清單（W17-188 修復：改用共用 helper 支援雙結構）
+
+    使用 hook_utils.scan_ticket_files_by_version 支援：
+    - 舊扁平結構：docs/work-logs/v{version}/tickets/
+    - 新三層結構：docs/work-logs/v{major}/v{major}.{minor}/v{version}/tickets/
 
     Args:
         project_root: 專案根目錄
         version: 版本號（如 "0.2.0"）
 
     Returns:
-        Path - tickets 目錄路徑，若找不到則回傳 None
+        List[Path] - Ticket 檔案路徑清單，若找不到則回傳空列表
     """
-    work_logs_dir = project_root / "docs" / "work-logs"
+    ticket_files = scan_ticket_files_by_version(project_root, version, logger)
 
-    if not work_logs_dir.exists():
-        logger.info(f"work-logs 目錄不存在: {work_logs_dir}")
-        return None
+    if ticket_files:
+        logger.info(f"找到 {len(ticket_files)} 個 Ticket 檔案（v{version}）")
+    else:
+        logger.info(f"無 Ticket 檔案（v{version}）")
 
-    tickets_dir = work_logs_dir / f"v{version}" / "tickets"
-
-    if tickets_dir.exists() and tickets_dir.is_dir():
-        logger.info(f"找到 tickets 目錄: {tickets_dir}")
-        return tickets_dir
-
-    logger.info(f"tickets 目錄不存在: {tickets_dir}")
-    return None
+    return ticket_files
 
 def extract_frontmatter(file_path: Path, logger) -> Optional[Dict[str, Any]]:
     """
     從 Markdown 檔案提取 frontmatter
+
+    W17-189 修復：原版本使用 yaml.safe_load 但未 import yaml，所有呼叫靜默 return None。
+    改用 hook_utils.parse_ticket_frontmatter（W17-188 同方向，DRY 對齊 hook_utils 既有 helper）。
 
     格式:
     ---
@@ -92,33 +96,26 @@ def extract_frontmatter(file_path: Path, logger) -> Optional[Dict[str, Any]]:
 
     Args:
         file_path: Markdown 檔案路徑
+        logger: 日誌物件
 
     Returns:
-        dict - Frontmatter 內容，若失敗則回傳 None
+        dict - Frontmatter 內容；無 frontmatter 或解析失敗回傳 None（保留原 API 契約）
     """
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        # 提取 frontmatter (--- ... ---)
-        match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
-        if not match:
-            logger.debug(f"檔案不包含 frontmatter: {file_path.name}")
+        frontmatter = parse_ticket_frontmatter(file_path, logger)
+        # parse_ticket_frontmatter 失敗或無 frontmatter 時返回空 dict；
+        # 保留原 None 契約讓 caller `if not frontmatter` 語義一致
+        if not frontmatter:
+            logger.debug(f"檔案不包含 frontmatter 或解析失敗: {file_path.name}")
             return None
-
-        frontmatter_text = match.group(1)
-
-        # 解析 YAML
-        frontmatter = yaml.safe_load(frontmatter_text)
         return frontmatter
-
     except Exception as e:
         logger.warning(f"提取 frontmatter 失敗 ({file_path.name}): {e}")
         return None
 
-def scan_tech_debt_tickets(tickets_dir: Path, logger) -> List[Dict[str, Any]]:
+def scan_tech_debt_tickets(ticket_files: List[Path], logger) -> List[Dict[str, Any]]:
     """
-    掃描目錄中的所有 Tech Debt Ticket
+    掃描 Ticket 檔案清單中的 Tech Debt Ticket（W17-188 修復：改接受檔案清單）
 
     過濾條件:
     1. 檔案副檔名為 .md
@@ -127,18 +124,18 @@ def scan_tech_debt_tickets(tickets_dir: Path, logger) -> List[Dict[str, Any]]:
     4. frontmatter 中 status == "pending"
 
     Args:
-        tickets_dir: Tickets 目錄
+        ticket_files: Ticket 檔案路徑清單
 
     Returns:
         list - 符合條件的 TD Ticket 列表
     """
     pending_tickets = []
 
-    if not tickets_dir.exists():
-        logger.info(f"tickets 目錄不存在: {tickets_dir}")
+    if not ticket_files:
+        logger.info("無 Ticket 檔案可掃描")
         return pending_tickets
 
-    for file_path in sorted(tickets_dir.glob("*.md")):
+    for file_path in sorted(ticket_files):
         # 檔案名稱檢查
         if "TD" not in file_path.name:
             continue
@@ -293,15 +290,15 @@ def main() -> int:
             print(suppress_json)
             return EXIT_SUCCESS
 
-        # 步驟 5: 尋找 tickets 目錄
-        tickets_dir = find_tickets_directory(project_root, version, logger)
-        if not tickets_dir:
-            logger.info("tickets 目錄不存在，靜默跳過")
+        # 步驟 5: 尋找 ticket 檔案清單（W17-188 修復：支援雙結構）
+        ticket_files = find_ticket_files_for_version(project_root, version, logger)
+        if not ticket_files:
+            logger.info("無 ticket 檔案，靜默跳過")
             print(suppress_json)
             return EXIT_SUCCESS
 
         # 步驟 6: 掃描 pending TD Ticket
-        pending_tickets = scan_tech_debt_tickets(tickets_dir, logger)
+        pending_tickets = scan_tech_debt_tickets(ticket_files, logger)
 
         # 步驟 7: 產生 Hook 輸出
         hook_output = generate_hook_output(pending_tickets, version, logger)

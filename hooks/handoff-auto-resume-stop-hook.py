@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.10"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 
 """
@@ -90,14 +90,37 @@ for _p in (_TICKET_SKILL_PATH, _TICKET_LIB_PATH):
 
 try:
     from handoff_utils import is_handoff_stale  # type: ignore
-except Exception:  # pragma: no cover - fallback：lib 不可用時退化為原邏輯（保留任務鏈）
-    def is_handoff_stale(record):  # type: ignore
+except Exception as _import_err:  # pragma: no cover - fallback：lib 不可用時退化為原邏輯（保留任務鏈）
+    # PC-135 防護：silent fallback 改 noisy。lib import 失敗代表 hook 子進程環境
+    # 缺少必要依賴（如 pyyaml 經 ticket_system.lib.__init__ → ticket_loader 鏈），
+    # 退化邏輯會讓 stale 判定永遠回 False，造成 GC 行為靜默退化。
+    # 寫 stderr 讓 PM/開發者立即看到，不要讓退化路徑長時間生效。
+    sys.stderr.write(
+        f"[handoff-auto-resume-stop-hook][PC-135] handoff_utils import failed, "
+        f"using degraded is_handoff_stale fallback (always returns False). "
+        f"Cause: {type(_import_err).__name__}: {_import_err}\n"
+    )
+    def is_handoff_stale(record, project_root=None):  # type: ignore
         direction = (record or {}).get("direction", "") or ""
         direction_type = direction.split(":")[0]
         # 任務鏈方向預設不視為 stale（保留語義與原 should_preserve_pending_json 一致）
         if direction_type in {"to-sibling", "to-parent", "to-child"}:
             return False, ""
         return False, ""
+
+# W17-181.2: delegate is_ticket_terminal 至 lib SSOT，消除跨進程同構邏輯（ARCH-020）。
+try:
+    from handoff_utils import is_ticket_terminal as _lib_is_ticket_terminal  # type: ignore
+except Exception as _import_err:  # pragma: no cover
+    # PC-135 防護：silent fallback 改 noisy。退化為「永遠非 terminal」會讓 GC 保留所有 pending
+    # （偏安全側），但仍須讓 PM 立即看見以便診斷 lib 不可達根因。
+    sys.stderr.write(
+        f"[handoff-auto-resume-stop-hook][PC-135] handoff_utils.is_ticket_terminal import failed, "
+        f"using degraded fallback (always returns False; pending will not be GC'd by terminal check). "
+        f"Cause: {type(_import_err).__name__}: {_import_err}\n"
+    )
+    def _lib_is_ticket_terminal(ticket_id, project_root=None):  # type: ignore
+        return False
 
 EXIT_SUCCESS = 0
 
@@ -111,7 +134,10 @@ LOG_FILE_PREFIX = "stop-hook"
 WORK_LOGS_DIR_NAME = "docs/work-logs"
 TODOLIST_FILE_NAME = "docs/todolist.yaml"
 RECENT_TASK_THRESHOLD_MINUTES = 30  # 30 分鐘內視為「最近任務」（可能有代理人正在執行）
+RECENT_HANDOFF_WINDOW_SECONDS = 300  # W17-118: 最近 N 秒內建立的 handoff 視為下 session 接手點，不計入 pending
 
+# W17-181.2: Terminal 狀態集合已上移至 lib `handoff_utils.is_ticket_terminal`
+# （透過 ticket_system.constants.TERMINAL_STATUSES 引用），消除跨進程同構邏輯（ARCH-020）。
 
 def get_session_stop_flag() -> Path:
     """
@@ -354,30 +380,23 @@ def is_ticket_recently_started(project_root: Path, ticket_id: str, logger) -> bo
 
 def is_ticket_completed(project_root: Path, ticket_id: str, logger) -> bool:
     """
-    檢查 Ticket 是否已完成（status: completed）
+    檢查 Ticket 是否處於 terminal 狀態（completed 或 closed）。
+
+    W17-181.2：delegate 至 lib `handoff_utils.is_ticket_terminal`（單一 SSOT），
+    消除 ARCH-020 跨進程同構邏輯。函式名保持 is_ticket_completed 以維持
+    呼叫端 (project_root, ticket_id, logger) 簽名相容；語義為 terminal
+    狀態判定（W17-165 L2-C 既有設計）。
 
     Args:
         project_root: 專案根目錄
         ticket_id: Ticket ID
-        logger: 日誌記錄器
+        logger: 日誌記錄器（保留參數，異常時記錄）
 
     Returns:
-        bool - 是否已完成
+        bool - 是否處於 terminal 狀態
     """
     try:
-        # 使用 find_ticket_file 支援三層階層與舊扁平結構
-        ticket_path = find_ticket_file(ticket_id, project_root, logger)
-        if not ticket_path:
-            return False
-
-        # 解析 frontmatter
-        frontmatter = parse_ticket_frontmatter(ticket_path, logger)
-        if not frontmatter:
-            return False
-
-        status = frontmatter.get('status', '').lower()
-        return status == 'completed'
-
+        return _lib_is_ticket_terminal(ticket_id, project_root)
     except Exception as e:
         logger.warning(f"檢查 Ticket 完成狀態失敗 ({ticket_id}): {e}")
         return False
@@ -403,7 +422,7 @@ def scan_in_progress_tickets(project_root: Path, logger) -> list:
     return []
 
 
-def should_preserve_pending_json(record: dict, logger) -> bool:
+def should_preserve_pending_json(record: dict, logger, project_root: Optional[Path] = None) -> bool:
     """
     判斷是否應保留 pending JSON，即使來源 Ticket 已完成。
 
@@ -425,13 +444,47 @@ def should_preserve_pending_json(record: dict, logger) -> bool:
     Returns:
         bool - 是否應保留 pending JSON（True=保留，False=GC）
     """
-    is_stale, reason = is_handoff_stale(record or {})
+    is_stale, reason = is_handoff_stale(record or {}, project_root)
     direction = (record or {}).get("direction", "") or ""
     if is_stale:
         logger.debug(f"handoff direction='{direction}' 視為 stale（{reason}），不保留")
         return False
     logger.debug(f"handoff direction='{direction}' 非 stale，保留 pending JSON")
     return True
+
+
+def is_handoff_recently_created(record: dict, logger) -> bool:
+    """
+    判斷 handoff record 是否在 RECENT_HANDOFF_WINDOW_SECONDS 內建立（W17-118）
+
+    剛建立的 handoff 為「下 session 接手點」，當前 session Stop hook 不應將其
+    視為待恢復任務阻塞退出。timestamp 欄位由 /ticket handoff CLI 寫入，格式為
+    `datetime.now().isoformat()`。
+
+    Args:
+        record: handoff/pending/*.json 載入的 dict
+        logger: 日誌記錄器
+
+    Returns:
+        bool - 是否在豁免窗口內。timestamp 缺失或解析失敗時保守回傳 False
+               （走原路徑，視為非剛建）。
+    """
+    timestamp_str = (record or {}).get("timestamp")
+    if not timestamp_str:
+        return False
+    try:
+        created_at = datetime.fromisoformat(timestamp_str)
+        elapsed = (datetime.now() - created_at).total_seconds()
+        is_recent = 0 <= elapsed < RECENT_HANDOFF_WINDOW_SECONDS
+        if is_recent:
+            logger.debug(
+                f"handoff timestamp={timestamp_str} 在 {elapsed:.1f}s 前建立 "
+                f"(< {RECENT_HANDOFF_WINDOW_SECONDS}s)，視為下 session 接手點"
+            )
+        return is_recent
+    except (ValueError, TypeError) as e:
+        logger.warning(f"解析 handoff timestamp 失敗 ({timestamp_str}): {e}")
+        return False
 
 
 def scan_pending_handoff_tasks(project_root: Path, logger) -> tuple:
@@ -484,10 +537,40 @@ def scan_pending_handoff_tasks(project_root: Path, logger) -> tuple:
                     title = data.get("title", "無標題")
                     direction = data.get("direction", "unknown")
 
+                    # W17-118 Phase 2: 剛建 handoff 視為下 session 接手點，不阻塞
+                    # 即使 stale (任務鏈目標已啟動) 也不在當前 session 阻擋退出
+                    recently_created = is_handoff_recently_created(data, logger)
+                    if recently_created:
+                        recent_tasks.append({
+                            "ticket_id": ticket_id,
+                            "title": title,
+                            "direction": direction,
+                        })
+                        logger.info(
+                            f"剛建 handoff (< {RECENT_HANDOFF_WINDOW_SECONDS}s)，"
+                            f"視為下 session 接手點不阻塞: {ticket_id}"
+                        )
+                        continue
+
+                    # W17-118 Phase 1: 計數前先 stale 過濾（與 ticket resume --list 對齊）
+                    # stale 條件包含「任務鏈目標已啟動 / 已完成」「來源 ticket 已 completed」
+                    # 對齊既有 GC 行為：刪除檔案不計入 pending_tasks
+                    is_stale, stale_reason = is_handoff_stale(data, project_root)
+                    if is_stale:
+                        try:
+                            file_path.unlink()
+                            logger.info(
+                                f"GC: 刪除 stale handoff pending JSON "
+                                f"({ticket_id}, direction={direction}, reason={stale_reason})"
+                            )
+                        except Exception as e:
+                            logger.warning(f"刪除 stale handoff JSON 失敗 ({file_path.name}): {e}")
+                        continue
+
                     # 檢查對應 Ticket 是否已完成
                     if is_ticket_completed(project_root, ticket_id, logger):
                         # GC：檢查 direction，判斷是否應保留
-                        if should_preserve_pending_json(data, logger):
+                        if should_preserve_pending_json(data, logger, project_root):
                             pending_tasks.append({
                                 "ticket_id": ticket_id,
                                 "title": title,

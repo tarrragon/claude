@@ -137,6 +137,11 @@ from .track_stuck_anas import (
     execute_stuck_anas,
     register_stuck_anas,
 )
+# stale-list 列舉 stale pending ticket 明細（W17-200）
+from .track_stale_list import (
+    execute_stale_list,
+    register_stale_list,
+)
 # 導入版本審計命令模組
 from .audit_version import (
     execute_audit_version,
@@ -181,6 +186,7 @@ def _create_version_agnostic_handlers() -> dict:
         "checkpoint-status": execute_checkpoint_status,
         "dispatch-check": execute_dispatch_check,
         "stuck-anas": execute_stuck_anas,
+        "stale-list": execute_stale_list,
     }
 
 
@@ -792,6 +798,7 @@ def _register_all_subcommands(
     _register_global_state_commands(track_subparsers)
     register_runqueue(track_subparsers)
     register_stuck_anas(track_subparsers)
+    register_stale_list(track_subparsers)
 
 
 def _register_global_state_commands(

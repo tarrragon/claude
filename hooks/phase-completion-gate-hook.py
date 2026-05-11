@@ -67,6 +67,15 @@ WORKLOG_PATTERNS = [
     r"docs/work-logs/",
 ]
 
+# 路徑黑名單（排除非 phase 報告的 worklog 檔案）
+# 1. tickets/ 子目錄：ticket md 不是 phase 完成報告（W10-072.1）
+# 2. worklog 主檔：v{major}.{minor}.{patch}.md 命名模式（如 v0.18.0.md）
+WORKLOG_EXCLUSION_DIR_PATTERNS = [
+    "/tickets/",
+]
+# basename 命中即排除（patch 級 worklog 主檔）
+WORKLOG_MAIN_FILE_REGEX = re.compile(r"^v\d+\.\d+\.\d+\.md$")
+
 # Exit Code
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
@@ -102,13 +111,31 @@ def is_worklog_write_operation(tool_name: str, tool_input: Dict[str, Any], logge
         return False
 
     # 檢查是否為 worklog 檔案
+    matched = False
     for pattern in WORKLOG_PATTERNS:
         if pattern in file_path:
-            logger.info(f"識別到 worklog 寫入操作: {file_path}")
-            return True
+            matched = True
+            break
 
-    logger.debug(f"檔案路徑不符合 worklog 模式: {file_path}")
-    return False
+    if not matched:
+        logger.debug(f"檔案路徑不符合 worklog 模式: {file_path}")
+        return False
+
+    # 路徑黑名單排除（W10-072.1）：
+    # 1. tickets/ 子目錄：ticket md 引用 Phase 字樣不代表是 phase 報告
+    for excl in WORKLOG_EXCLUSION_DIR_PATTERNS:
+        if excl in file_path:
+            logger.info(f"路徑命中黑名單 ({excl})，跳過 phase 報告檢查: {file_path}")
+            return False
+
+    # 2. worklog 主檔（patch 級）：v{major}.{minor}.{patch}.md 進度索引非 phase 報告
+    basename = os.path.basename(file_path)
+    if WORKLOG_MAIN_FILE_REGEX.match(basename):
+        logger.info(f"識別為 worklog 主檔（{basename}），跳過 phase 報告檢查")
+        return False
+
+    logger.info(f"識別到 worklog 寫入操作: {file_path}")
+    return True
 
 def extract_file_content_from_input(tool_input: Dict[str, Any], logger) -> Optional[str]:
     """

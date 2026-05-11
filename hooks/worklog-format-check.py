@@ -109,6 +109,35 @@ def format_warning(file_path: str, issues: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# W10-047.2 抽樣降級：每 N 次觸發 1 次完整檢查（高頻 Hook，候選 3）
+# 來源 ANA：W10-035.3（Phase 3b P3 五 Hook，0% Action 比、連續 5 次無錯）
+SAMPLING_N = 10
+SAMPLING_COUNTER_FILE = Path(__file__).parent.parent / "hook-logs" / "_sampling" / "worklog-format-check.count"
+
+
+def should_sample_run(logger) -> bool:
+    """抽樣判斷：每 SAMPLING_N 次觸發 1 次完整檢查。
+
+    使用持久計數檔案，避免抽樣偏差；讀寫失敗時保守執行（return True）。
+    """
+    try:
+        SAMPLING_COUNTER_FILE.parent.mkdir(parents=True, exist_ok=True)
+        count = 0
+        if SAMPLING_COUNTER_FILE.exists():
+            try:
+                count = int(SAMPLING_COUNTER_FILE.read_text().strip() or "0")
+            except (ValueError, OSError):
+                count = 0
+        count += 1
+        SAMPLING_COUNTER_FILE.write_text(str(count))
+        run = (count % SAMPLING_N == 0)
+        logger.debug("抽樣計數=%d, 本次%s", count, "執行" if run else "跳過")
+        return run
+    except Exception as exc:
+        logger.info("抽樣計數失敗，保守執行: %s", exc)
+        return True
+
+
 def main():
     logger = setup_hook_logging("worklog-format-check")
     """主函式"""
@@ -130,6 +159,10 @@ def main():
 
     # 檢查是否為工作日誌檔案
     if not is_worklog_file(file_path):
+        return 0
+
+    # W10-047.2 抽樣降級：每 N 次觸發 1 次完整檢查
+    if not should_sample_run(logger):
         return 0
 
     # 檢查檔案內容

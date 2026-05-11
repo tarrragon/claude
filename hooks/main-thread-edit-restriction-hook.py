@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
 from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin, is_subagent_environment, emit_hook_output
-from git_utils import get_current_branch, is_allowed_branch
+from git_utils import get_current_branch, is_allowed_branch, find_target_repo
 from lib.hook_messages import GateMessages
 from lib.dispatch_tracker import is_file_under_dispatch
 from lib.path_permission import check_file_permission
@@ -117,6 +117,24 @@ def main() -> int:
         if current_branch and is_allowed_branch(current_branch):
             logger.info(f"開發分支 '{current_branch}' 上，跳過主線程編輯限制")
             return _allow_and_exit(logger, f"開發分支 '{current_branch}' 不受主線程編輯限制")
+
+        # 跨專案放行：path_permission 是本專案內部約定（保護 src/ 等）
+        # 對外部 repo 套用語意不合理；branch-verify-hook 仍會獨立檢查目標 repo 分支
+        if file_path and file_path.startswith("/"):
+            target_repo = find_target_repo(file_path)
+            try:
+                current_root = str(Path(get_project_root()).resolve())
+            except Exception:
+                current_root = get_project_root()
+            if target_repo and target_repo != current_root:
+                logger.info(
+                    f"跨專案編輯（target_repo={target_repo} != current={current_root}），"
+                    f"skip path_permission 檢查"
+                )
+                return _allow_and_exit(
+                    logger,
+                    f"跨專案編輯（{target_repo}），不適用本專案 path_permission",
+                )
 
         # 檢查編輯權限
         is_allowed, reason = check_file_permission(file_path, logger)

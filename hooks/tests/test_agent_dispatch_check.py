@@ -398,6 +398,41 @@ def test_task_type_detection_keyword(prompt: str, expected_type: str, config, lo
     assert detected == expected_type, f"檢測失敗: {prompt} -> {detected} (期望: {expected_type})"
 
 
+# ===== W10-043.3: explicit phase pattern 掃描範圍縮窄至第一行 =====
+
+def test_explicit_phase_only_scans_first_line_phase4_with_phase3b_in_context(config, logger) -> None:
+    """W10-043.3 P1 修復觸發劇本：
+
+    PM 派發 cinnamon-refactor-owl 執行 Phase 4 重構，prompt 第一行為意圖宣告（Phase 4），
+    Context Bundle 引用上游 ticket 含 [Phase 3b] 字樣（在前 500 字內）。
+    Hook 應僅掃 prompt 第一行，判別為 Phase 4，不被 Context Bundle 中的 [Phase 3b] 誤命中。
+    """
+    prompt = """[Phase 4] 重構評估 W10-043.3 phase pattern fix
+
+Context Bundle:
+- 來源 ticket: 0.18.0-W10-043.1
+- 上游 [Phase 3b] 實作完成的 hook 修改範圍評估
+- 父 ticket 引用 [Phase 3b] 完成記錄
+
+執行 Phase 4 重構分析，不涉及 Phase 3b 實作。"""
+    detected = detect_task_type(prompt, config, logger)
+    assert detected == "Phase 4 重構", (
+        f"應判別為 Phase 4 重構（依第一行意圖宣告），實際判別為 {detected}；"
+        f"Context Bundle 中的 [Phase 3b] 不應誤命中"
+    )
+
+
+def test_explicit_phase_first_line_priority_over_body(config, logger) -> None:
+    """第一行 Phase 標記優先於 body 中其他 Phase 標記"""
+    prompt = "[Phase 1] 功能設計\n\n參考: [Phase 2] 測試設計\n[Phase 3a] 策略規劃"
+    detected = detect_task_type(prompt, config, logger)
+    assert detected == "Phase 1 設計", (
+        f"應判別為第一行 Phase 1 設計，實際判別為 {detected}"
+    )
+
+
+
+
 # ===== 補充測試：錯誤訊息品質 =====
 
 def test_error_message_contains_required_elements(config_keyword_only, logger) -> None:

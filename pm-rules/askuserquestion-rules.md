@@ -26,6 +26,45 @@
 
 ---
 
+## 具體觸發訊號（W17-174.1 共同特徵落地）
+
+> **來源**：W17-174.1 L1 審計提煉本 session 5 違規共同特徵。本節將抽象觸發條件具體化為可自檢的表面 pattern，補強通用觸發原則。
+
+| 訊號 | Pattern 描述 | 違規範例 | 處理 |
+|------|------------|---------|------|
+| S1 | Markdown 列表選項（`- A方案` / `1. 方案A` / `* A方案` 等） | 「下一步可以：- A 派 thyme  - B 等待  - C 收尾」 | 必觸發 AUQ |
+| S2 | Markdown 表格選項（≥3 資料列含選項/方案/策略類欄位） | 「\| 方案 \| 說明 \|<br>\| A \| ... \|<br>\| B \| ... \|<br>要選哪個？」 | 必觸發 AUQ |
+| S3 | 顯式 Recommended 標記 | 「A 直接派發 (Recommended)」「B 先 WRAP」 | 必觸發 AUQ；參規則 6 |
+| S4 | 隱性推薦語氣 | 「建議 A，但 B 也可以」「我覺得 A 比較好，要用 A 嗎？」 | 必觸發 AUQ |
+| S5 | 問句結尾（「要怎麼做？」「哪個方案？」「現在做嗎？」） | 任何回覆結尾為決策性問句 | 必觸發 AUQ |
+| S6 | 純文字 A./B./C. 列舉 | 「A. 推進  B. 暫緩  C. 重做」 | 必觸發 AUQ |
+
+### 不因 stakes 高低豁免（F3 訊號）
+
+**Why**：W17-174.1 F3 證實低 stakes 感知是 PM 主要違規藉口（「這只是快速確認，純文字比較方便」）。
+
+**Consequence**：低 stakes 豁免會讓 AUQ 規則的實際覆蓋率遠低於名義覆蓋率，且大量低 stakes 違規會訓練 PM 把列選項變成預設行為，連高 stakes 場景也跟著省略。
+
+**Action**：S1-S6 任一命中即必觸發 AUQ，不因「快速確認」「決策不重要」「選項顯而易見」豁免。stakes 高低不是觸發條件的合法考量。
+
+### 不因呈現形式豁免（F5 訊號）
+
+**Why**：W17-174.1 F5 證實 hook 偵測盲區在觸發條件層而非 pattern 解析層；表格 / 列表 / 隱性建議等多種呈現形式同樣需 AUQ。
+
+**Consequence**：若以「我用的是表格不是列表」「我用的是隱性建議不是顯式選項」為由豁免，會在 hook 強制層擴充前持續累積違規。
+
+**Action**：S1-S6 涵蓋的所有呈現形式同等適用 AUQ 觸發。新增呈現形式（如 ASCII 對齊欄、emoji 標記列）若實質為「向用戶呈現選擇」，仍適用通用觸發原則。
+
+### 自檢觸發點：代理人完成回報後（F1 訊號）
+
+**Why**：W17-174.1 F1 證實 5/5 違規均發生在「代理人完成回報後」的 PM 回覆，此為 PM 最高頻決策點。
+
+**Consequence**：若此場景系統性繞過 AUQ，AUQ 規則在 PM 最常用情境形同失效。
+
+**Action**：每次代理人完成通知後，PM 撰寫第一回覆前**強制重跑通用觸發原則三問**（規則 1 開頭三題）；命中 S1-S6 任一即必呼叫 AUQ。
+
+---
+
 ## 背景
 
 PM 用開放式提問時，用戶的自然語言回答可能被 Hook 系統誤判為開發命令。使用 AskUserQuestion 工具可消除此風險。
@@ -223,8 +262,8 @@ PM 用 AUQ 前的自檢：這是哪種題型？
 | 8 | 執行方向確認 | 並行/序列、先後順序 | 決策樹第負一層 | prompt-submit-hook |
 | 9 | Handoff 方向選擇 | 多個兄弟/子任務可選 | ticket-lifecycle 完成階段 | - |
 | 10 | 開始/收尾確認 | 確認是否開始執行 | 決策樹第負一層 | - |
-| 11a | Commit 後 Context 刷新 Handoff（情境 A） | ticket 仍 in_progress | 決策樹第八層 Checkpoint 2 | commit-handoff-hook |
-| 11b | Commit 後任務切換 Handoff（情境 B） | ticket completed + 同 Wave 有 pending | 決策樹第八層 Checkpoint 2 | commit-handoff-hook |
+| 11a | Commit 後 Context 刷新 Handoff（情境 A） | ticket 仍 in_progress；**前置：main 必須 clean**（見下方「#11 /clear 前置條件」） | 決策樹第八層 Checkpoint 2 | commit-handoff-hook |
+| 11b | Commit 後任務切換 Handoff（情境 B） | ticket completed + 同 Wave 有 pending；**前置：main 必須 clean** | 決策樹第八層 Checkpoint 2 | commit-handoff-hook |
 | 12 | 流程省略確認 | 省略意圖偵測 | 決策樹第八層 | process-skip-guard-hook |
 | 13 | 後續任務路由確認 | Phase 3b 完成且豁免條件不符時、Phase 4b（豁免）/4c 完成、版本完成（C2）、incident 或分析完成後有多個後續路由可選（Phase 1/2/3a 全自動不觸發；Phase 3b 豁免條件符合時自動進入 4b 不觸發） | 決策樹第八層 | phase-completion-gate（擴充） |
 | 14 | parallel-evaluation 觸發確認 | 階段完成後 | 決策樹第八層 | phase-completion-gate（擴充） |
@@ -254,6 +293,24 @@ PM 用 AUQ 前的自檢：這是哪種題型？
 ---
 
 > 各場景完整操作細節、選項配置、工具能力說明：.claude/references/askuserquestion-scene-details.md
+
+## #11 /clear 前置條件（強制）
+
+> **來源**：W10-014。session 結束前 main 未提交變更若隨 /clear 丟失 context，後人僅見檔案不知決策理由；強制將 #11 Handoff 選項的觸發前提綁到「main clean」上，避免 PM 為了快點 /clear 跳過 commit。
+>
+> **Why**：#11 Handoff 是 /clear 進入路徑最近的上游節點；前置條件綁在這裡能在「呈現選項」階段就攔截 dirty main，無需等到 /clear 觸發後再補救。
+>
+> **Consequence**：缺前置檢查時 PM 在 main dirty 狀態仍可呈現 #11，用戶選 Handoff 後 context 已退場，commit 機會永久失去。
+>
+> **Action**：產出 #11 AUQ 選項前先執行 `git rev-parse --abbrev-ref HEAD` + `git status --short`；若位於 main 且有未提交變更，**從 AUQ 移除 /clear 相關選項**，改先提 commit 引導；commit 完成後再次評估是否呈現 #11。
+
+| 前置檢查 | 通過條件 | 不通過時動作 |
+|---------|---------|------------|
+| 主倉庫 + main 分支 + 有未提交變更 | 先 `git add` + `git commit`（commit message 含決策理由）才能呈現 #11 | **不得**呈現 #11 AUQ；改為先引導用戶 commit |
+| Worktree（feature 分支）+ 有未提交變更 | 提示用戶但不阻擋 | 仍可呈現 #11；description 註明「worktree 有未提交，由 worktree owner 後續處理」 |
+| 所有變更皆已 commit | 通過 | 直接呈現 #11 |
+
+> 完整 main vs worktree 差別對待規則：`.claude/pm-rules/session-switching-sop.md`「main vs worktree 差別對待（強制）」章節。
 
 ## 選項前提檢查（強制）
 
@@ -317,7 +374,9 @@ PM 用 AUQ 前的自檢：這是哪種題型？
 
 ---
 
-**Last Updated**: 2026-04-18
+**Last Updated**: 2026-05-09
+**Version**: 3.13.0 — 新增「具體觸發訊號（W17-174.1 共同特徵落地）」章節：S1-S6 六訊號表 + stakes 不豁免（F3）+ 呈現形式不豁免（F5）+ 代理人完成回報後強制重跑觸發原則（F1）。三明示 Why/Consequence/Action，引用 W17-174.1 L1 審計輸出
+**Version**: 3.12.0 — 新增「#11 /clear 前置條件」章節 + 場景表 #11a/#11b 加註 main clean 前置（W10-014）：main 未提交變更強制先 commit 才能呈現 #11；worktree 有未提交僅提示不阻擋
 **Version**: 3.11.0 — 新增題型判別輔助章節 + PC-064 適用邊界子章節（Phase A / W14-025 / 019.4 方案 G）：決策題/釐清題/混合題三類判別表 + 釐清題不適用 PC-064 的邊界條款（兩處均含反濫用警告）
 **Version**: 3.10.0 — 規則 6 新增 Recommended 標籤分級（Phase A / W14-023 / 019.3 方案 G）：ANA/重大決策/Session 關鍵分歧情境下 `(Recommended)` 依證據強度分級為 `(Recommended by WRAP)`、`(Recommended by 多視角)` 或 `(My current guess)`
 **Version**: 3.9.0 — 新增規則 6：預設選項設計規則（PC-066 防護），重大決策/ANA/Session 路由的 Recommended 必須為 WRAP/多視角，禁止「跳過評估」

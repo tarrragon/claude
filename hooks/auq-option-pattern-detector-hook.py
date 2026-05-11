@@ -104,6 +104,25 @@ E2_HISTORY_KEYWORDS = (
 )
 E2_HISTORY_TICKET_RE = re.compile(r"W\d+-\d+")
 
+# §3.4-bis Markdown 表格選項偵測（W17-174.2 Solution §1）
+# 資料列：行首 | 後至少一個非 | 字元，再接 |
+TABLE_DATA_ROW_RE = re.compile(r"^\|[^|\n]+\|", re.MULTILINE)
+# 分隔列：只含 -、:、~、空白
+TABLE_SEPARATOR_RE = re.compile(r"^\|[\s:~\-|]+\|\s*$", re.MULTILINE)
+
+# 表格標題列含選項關鍵字才視為「選項表」（E6 反向判定）
+TABLE_OPTION_HEADER_KEYWORDS = (
+    "選項",
+    "方案",
+    "策略",
+    "Option",
+    "option",
+    "推薦",
+    "Recommended",
+    "建議",
+    "候選",
+)
+
 
 def strip_code_blocks(text: str) -> str:
     """移除 fenced code block 與 inline code。"""
@@ -154,6 +173,46 @@ def is_exempt_history(text: str) -> bool:
     return has_kw and has_ticket
 
 
+def has_table_options(text: str) -> bool:
+    """§3.4-bis：判斷是否為 Markdown 表格選項列（W17-174.2 Solution §1）。
+
+    必須同時滿足：
+    (A) 至少 3 個資料列（資料列總數 - 分隔列數 - 標題列數 >= 3）
+    (B) 結尾出現選項問句語境（複用 has_question_ending）
+
+    其中 header_count = min(1, separator_count)（有分隔列才扣 1 行作為標題）。
+    """
+    total_pipes = len(TABLE_DATA_ROW_RE.findall(text))
+    separator = len(TABLE_SEPARATOR_RE.findall(text))
+    header = 1 if separator >= 1 else 0
+    data_rows = total_pipes - separator - header
+    return data_rows >= 3 and has_question_ending(text)
+
+
+def _extract_first_table_header(text: str) -> str:
+    """取出文字中第一個 Markdown 表格的標題列（行首 |...| 第一行）。"""
+    match = TABLE_DATA_ROW_RE.search(text)
+    if not match:
+        return ""
+    line_start = text.rfind("\n", 0, match.start()) + 1
+    line_end = text.find("\n", match.start())
+    if line_end == -1:
+        line_end = len(text)
+    return text[line_start:line_end]
+
+
+def is_exempt_pure_data_table(text: str) -> bool:
+    """E6：純資料表格豁免（W17-174.2 Solution §2）。
+
+    若表格標題列不含任何選項關鍵字（選項/方案/策略/Option/推薦 等），
+    視為純資料表（測試結果、效能指標等），不應觸發提醒。
+    """
+    header_line = _extract_first_table_header(text)
+    if not header_line:
+        return False
+    return not any(kw in header_line for kw in TABLE_OPTION_HEADER_KEYWORDS)
+
+
 def is_exempt_rule_writing(text: str) -> bool:
     """E4：規則文件寫作場景豁免（含 .claude/*.md 路徑佔比 > 10%）。"""
     # 找所有 .claude/...md 路徑字串
@@ -194,19 +253,23 @@ def detect_and_build_output(
     # Code block 預處理
     cleaned = strip_code_blocks(transcript_text)
 
-    # 偵測雙路徑
+    # 偵測三路徑（W17-174.2 Solution §1：新增 §3.4-bis 表格路徑）
     hit_option_path = has_option_markers(cleaned) and has_question_ending(cleaned)
     hit_binary_path = is_binary_question(cleaned)
+    hit_table_path = has_table_options(cleaned)
 
-    if not (hit_option_path or hit_binary_path):
+    if not (hit_option_path or hit_binary_path or hit_table_path):
         return base_output
 
-    # 豁免順序：E4（規則寫作）> E1（引用）> E2（歷史）
+    # 豁免順序：E4（規則寫作）> E1（引用）> E2（歷史）> E6（純資料表，僅表格路徑適用）
     if is_exempt_rule_writing(cleaned):
         return base_output
     if is_exempt_citation(cleaned):
         return base_output
     if is_exempt_history(cleaned):
+        return base_output
+    # E6 僅在「只有」表格路徑命中時適用；若同時命中 option/binary 路徑，仍走原有偵測
+    if hit_table_path and not (hit_option_path or hit_binary_path) and is_exempt_pure_data_table(cleaned):
         return base_output
 
     # 命中且未豁免 - 注入提醒

@@ -223,6 +223,41 @@
 
 ---
 
+### 1.2.6 共用函式修復範圍防護（修共用 bug 時強制）
+
+> **來源**：PC-136 — 修復共用邏輯（predicate / utility / shared module）的 bug 時，只修「最近一次發現的 caller」，未掃所有 callers / 同名實作，導致同 bug 在數週至數月後從另一處重爆（ARCH-020 三次重爆軌跡 W17-165 → W17-176.2.1 → W17-181）。
+>
+> **觸發時機**：修復共用函式 / predicate / shared utility 的 bug 時（IMP 修共用 bug + ANA 驗證共用函式正確性，皆強制）。
+
+**強制檢查清單**（修復共用邏輯前必須完成）：
+
+| 步驟 | 動作 | 驗證方式 |
+|------|------|---------|
+| 1 | 找所有同名實作 + 所有 caller | `grep -rn "<函式名>" .claude/ src/ lib/ tests/` |
+| 2 | 對每處實作確認是否同病灶 | 逐檔閱讀 |
+| 3 | 對每處 caller 確認是否依賴本次修復 | 逐 caller 檢查使用假設 |
+| 4 | 同步修正所有同名實作（或改 delegate 至 SSOT） | 修改 + commit |
+| 5 | 在 ticket Problem Analysis 記錄完整 grep 清單 | append-log Problem Analysis |
+
+**心智模型對照**：
+
+| 錯誤心智模型 | 正確心智模型 |
+|------------|------------|
+| 「我修了觸發 bug 的那個檔案」 | 「我修了所有使用這個 predicate / 共用邏輯的檔案」 |
+| 範圍 = bug 重現路徑（被動修復） | 範圍 = 結構搜尋 grep all callers（主動防禦） |
+
+**禁止行為**：
+
+| 禁止行為 | 原因 |
+|---------|------|
+| 只修觸發 bug 的單一 caller | 同名實作 / 其他 caller 持續隱藏同 bug，數週後重爆 |
+| 認定「lib 有就 hook 必走 lib」未 grep 驗證 | Hook 為避免 import 開銷常自定義同邏輯，產生 SSOT 漂移 |
+| pytest 修一處綠燈即 commit | 環境異質導致其他 caller 在 production 仍紅燈（PC-135） |
+
+> 完整錯誤模式、案例、與 ARCH-020 / PC-135 關係：.claude/error-patterns/process-compliance/PC-136-structural-fix-incomplete-caller-scan.md
+
+---
+
 ### 1.3 常數管理（禁止硬編碼）
 
 > **核心原則**：所有非程式邏輯本身的字面值都必須提取為具名常數。
@@ -396,6 +431,7 @@
 - [ ] 認知負擔指數 < 10
 - [ ] 作用域變更已完成影響範圍分析（1.2.1）
 - [ ] 多模式函式的 guard clause 已逐模式交叉驗證（1.2.5）
+- [ ] 修復共用函式時已 grep all callers 並同步修正所有同名實作（1.2.6）
 
 ### 常數管理
 
@@ -419,5 +455,7 @@
 
 ---
 
-**Last Updated**: 2026-04-16
+**Last Updated**: 2026-05-10
+**Version**: 1.6.0 — 新增 §1.2.6「共用函式修復範圍防護」（PC-136 落地）：強制檢查清單（grep all callers + 同步修正所有同名實作）、心智模型對照、禁止行為；§2 結構檢查清單同步補項
+
 **Version**: 1.5.0 - 從 rules/core/ 完全外移至 references/（W10-076.1，保留 378 行完整內容）

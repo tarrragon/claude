@@ -207,14 +207,14 @@ class LifecycleMessages:
 class ResumeMessages:
     """resume.py 相關訊息"""
 
-    # 沒有待恢復任務
-    NO_PENDING_RESUMPTIONS = "沒有待恢復的任務"
+    # 沒有下 session 建議項目
+    NO_PENDING_RESUMPTIONS = "沒有下 session 建議項目"
 
     # 恢復說明
     RESUME_INSTRUCTIONS = "使用以下命令恢復："
     RESUME_USAGE = "用法:"
     RESUME_EXAMPLES = "範例:"
-    AVAILABLE_RESUMPTIONS = "可用的待恢復任務："
+    AVAILABLE_RESUMPTIONS = "可用的下 session 建議項目："
 
     # 恢復命令範例
     RESUME_EXAMPLE_CMD = "   /ticket resume <ticket_id>"

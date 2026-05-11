@@ -58,6 +58,18 @@ Auto-memory 位於 `~/.claude/projects/<project>/memory/`，**依專案隔離儲
 | 我寫了 `docs/work-logs/` 路徑？ | 是 | 改引用對應的 spec 或框架文件 |
 | 我把重要原則只寫入 memory？ | 是 | 追加到 rules 或 error-pattern |
 
+### CLAUDE.md 章節外移時的目標選擇
+
+縮減 `CLAUDE.md` 體量時，外移目標誤選 `.claude/references/`（跨專案 sync 範圍）會觸發本 error-pattern 的延伸子模式：原意是「縮減 `CLAUDE.md` 不違反任何規則」，但因外移目標放錯範圍，反而新增規則 8 違反。完整決策樹見 `.claude/references/reference-stability-rules.md` §「CLAUDE.md 章節外移決策樹」。
+
+**簡化規則**：
+
+| 章節內容性質 | 外移目標 |
+|------------|---------|
+| 含 `src/` 路徑、產品名稱、專案 ticket ID | `docs/<檔名>.md`（專案內部，不 sync） |
+| 純技術速查、跨專案可複用 | `.claude/references/<檔名>.md`（並通過規則 8 自檢） |
+| 混合內容 | 拆檔處理，禁止打包混放 |
+
 ### 允許的例外
 
 | 允許保留 | 原因 |
@@ -81,6 +93,7 @@ Auto-memory 位於 `~/.claude/projects/<project>/memory/`，**依專案隔離儲
 | 日期 | 模式 | 規模 |
 |------|------|------|
 | 2026-04-13 | PM 修改 pm-role.md + PC-050 + 新建 pm-agent-observability.md 時加入 ~18 處 ticket 引用 | 3 檔案 × 6 平均引用 |
+| 2026-05-11 | 縮減 CLAUDE.md 時將專案規範（含 `src/core/errors/` 路徑、產品名稱）誤外移到 `.claude/references/project-specific-conventions.md`，並將含產品名稱的 Chrome Extension 速查放在 `.claude/references/chrome-extension-quickref.md`；後修正：強違反檔遷移至 `docs/project-conventions.md`、弱違反檔泛化保留並引用「CLAUDE.md 章節外移決策樹」 | 2 檔案違反規則 8（強 + 弱各 1） |
 
 ## 檢測方式
 
