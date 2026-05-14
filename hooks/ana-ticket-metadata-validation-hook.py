@@ -35,7 +35,7 @@ from typing import Optional, Dict, Any, List, Tuple
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level
 
 try:
     import yaml
@@ -298,6 +298,13 @@ def main() -> int:
     input_data = read_json_from_stdin(logger)
     if input_data is None:
         return 0
+
+    # Effort 感知（v2.1.133+，W14-037）：low effort 短路放行
+    effort = get_effort_level(input_data)
+    if effort == "low":
+        logger.info("effort=low，ana-ticket-metadata-validation 短路放行")
+        return 0
+    logger.info("effort=%s，執行完整 ANA metadata 驗證", effort)
 
     tool_input = input_data.get("tool_input", {})
     file_path_str = tool_input.get("file_path")

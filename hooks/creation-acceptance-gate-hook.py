@@ -50,7 +50,7 @@ if _hooks_dir not in [p for p in sys.path if Path(p) == _hooks_dir]:
 from hook_utils import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin,
     parse_ticket_frontmatter, get_project_root, save_check_log,
-    validate_hook_input
+    validate_hook_input, get_effort_level
 )
 from hook_utils.hook_ticket import find_ticket_file
 from lib.hook_messages import GateMessages, CoreMessages, format_message
@@ -265,6 +265,16 @@ def main() -> int:
 
         # 步驟 2: 讀取 JSON 輸入
         input_data = read_json_from_stdin(logger)
+
+        # Effort 感知（v2.1.133+，W14-037）：low effort 短路放行
+        effort = get_effort_level(input_data)
+        if effort == "low":
+            logger.info("effort=low，creation-acceptance-gate 短路放行")
+            print(json.dumps({
+                "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}
+            }, ensure_ascii=False, indent=2))
+            return EXIT_SUCCESS
+        logger.info("effort=%s，執行完整 creation-acceptance 驗證", effort)
 
         # 步驟 3: 驗證輸入格式
         if not validate_hook_input(input_data, logger, ("prompt",)):

@@ -1,3 +1,25 @@
+## [1.33.0] - 2026-05-14
+
+### Summary
+feat: 6 個中頻 strict-validator hook 加 effort 感知; feat: 類別 A 剩餘 6 hook 加 effort 感知; feat: hook 系統 effort 感知（類別 A 高頻 4 hook） (+9 more)
+
+Changes: 4 feat, 4 refactor, 2 fix, 1 docs, 1 chore
+
+- feat: 6 個中頻 strict-validator hook 加 effort 感知
+- feat: 類別 A 剩餘 6 hook 加 effort 感知
+- feat: hook 系統 effort 感知（類別 A 高頻 4 hook）
+- feat: dispatch-active GC + TTL 降為 1h
+- refactor: 補齊 _update_ticket_id_references 六欄位 + 收斂 monkeypatch + 降低 local import
+- refactor: test_migrate_reverse_refs.py Phase 4 三項共識重構
+- refactor: process-skip-guard-hook 三項細節改善
+- refactor: 統一 hook active ticket 解析機制
+- fix: 修復 create.py child_info/new_ticket where 字串格式防護
+- fix: ticket create 對 parent ticket 字串格式 where/who 防護
+- docs: 固化「事實判斷必擋 + effort 解耦」設計鐵則為 hook 設計指引
+- chore: 遷移 settings.json hook command 至 args 陣列形式
+
+---
+
 ## [1.32.0] - 2026-05-14
 
 ### Summary

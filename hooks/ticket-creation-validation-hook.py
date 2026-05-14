@@ -41,6 +41,17 @@ try:
 except ImportError:
     yaml = None
 
+# 加入 hook_utils 路徑（W14-037 effort 感知）
+_hooks_dir = Path(__file__).parent
+if str(_hooks_dir) not in sys.path:
+    sys.path.insert(0, str(_hooks_dir))
+
+try:
+    from hook_utils import get_effort_level
+except ImportError:
+    def get_effort_level(payload, default="medium"):
+        return default
+
 
 # 日誌配置
 def setup_logging() -> logging.Logger:
@@ -246,6 +257,13 @@ def main() -> int:
         if not isinstance(hook_input, dict):
             logger.error(f"Expected dict, got {type(hook_input).__name__}")
             return 0
+
+        # Effort 感知（v2.1.133+，W14-037）：low effort 短路放行
+        effort = get_effort_level(hook_input)
+        if effort == "low":
+            logger.info("effort=low，ticket-creation-validation 短路放行")
+            return 0
+        logger.info(f"effort={effort}，執行完整 ticket-creation 驗證")
 
         # 提取 Write 工具的輸入
         tool_input = hook_input.get("tool_input", {})

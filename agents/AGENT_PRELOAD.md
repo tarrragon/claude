@@ -220,6 +220,48 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 ---
 
+### 8. 規劃既有資源名稱前必須驗證存在性（PC-143）
+
+> **Why**：spec 和 ANA 規劃文件中對既有資源（CLI flag、hook 檔名、模組路徑）的描述屬於「事實陳述」，不是設計選擇。若以「語意推測」取代「grep/ls 驗證」，錯誤名稱會傳入 spawn IMP ticket 的 `where.files`，直到 Phase 3b 實作時才發現，回溯成本隨 Phase 推進而上升。
+
+> **Consequence**：已記錄兩次跨 agent 重現（W10-115 lavender CLI flag、W14-036 basil ANA hook 名稱），說明此模式不受 agent 類型限制，是規劃框架未強制驗證步驟的系統性缺口。
+
+> **Action**：任何 agent 在 spec / ANA Solution 中描述「既有資源名稱」前，必須先執行驗證並在文件中標註來源。
+
+#### 觸發條件
+
+| 情境 | 必須驗證 |
+|------|---------|
+| lavender Phase 1 spec 描述既有 CLI flag/format/subcommand | 是 |
+| basil / saffron ANA Solution 列 `where.files`（hook/模組名稱） | 是 |
+| 任何 agent spec / Solution 含「既有命令 / 既有 hook / 既有模組」的名稱引用 | 是 |
+| 設計全新命令 / 全新 hook（不引用既有資源） | 否 |
+
+#### 驗證指令速查
+
+```bash
+# CLI flag 驗證
+grep -n "choices\|add_argument" <cli_source_file>
+
+# Hook 名稱驗證
+ls .claude/hooks/ | grep -i "<功能關鍵字>"
+
+# 模組路徑驗證
+ls <目標目錄>/<預期檔名>
+```
+
+#### 文件標註格式
+
+| 資源類型 | 標註格式 |
+|---------|---------|
+| CLI flag 既有值 | `（依 <file>:<line> 既有定義）` |
+| Hook 檔名 | `（依 ls .claude/hooks/ 確認）` |
+| 模組路徑 | `（依 ls <dir> 確認）` |
+
+> 完整案例與根因分析：`.claude/error-patterns/process-compliance/PC-143-lavender-cli-assumption-not-verified.md`
+
+---
+
 ## 執行檢查清單
 
 代理人在開始任務前，自我確認：
@@ -236,6 +278,7 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 - [ ] .md 修改使用 Edit / Write，非 mcp__serena__replace_content 等 MCP 寫入工具（規則 7）
 - [ ] MCP 工具被拒時已嘗試 Edit 降級，未 self-imposed early stop（規則 7 Fallback）
 - [ ] （程式碼類 subagent）讀 >200 行原始碼前優先用 `mcp__serena__get_symbols_overview`（規則 7 程式碼大檔讀取）
+- [ ] （spec/ANA 規劃含既有資源名稱）已 grep/ls 驗證名稱存在性並標註來源（規則 8）
 - [ ] **任務完成後執行 `ticket track check-acceptance --all <id>` + `ticket track complete <id>`（規則 2.4）**
 
 ---

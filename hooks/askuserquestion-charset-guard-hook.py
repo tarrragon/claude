@@ -34,7 +34,7 @@ W17-068 增補（PC-085 字形混淆防護）：
 import json
 import sys
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level
 from hook_utils.hook_io import emit_hook_output
 
 HOOK_NAME = "askuserquestion-charset-guard"
@@ -346,6 +346,12 @@ def main() -> int:
 
     if not input_data:
         return 0
+
+    # Effort 感知（v2.1.133+，W14-037）：
+    # PC-074/PC-131 防護不可削弱 — 字元集偵測（scan_payload）為事實判斷，
+    # 必擋邏輯與 effort 無關。此處僅記錄 effort 供後續觀測。
+    effort = get_effort_level(input_data)
+    logger.info("effort=%s，charset 偵測無條件執行（PC-074/PC-131）", effort)
 
     tool_name = input_data.get("tool_name", "")
     if tool_name != "AskUserQuestion":

@@ -64,19 +64,41 @@ def _update_ticket_id_references(ticket: Dict[str, Any], old_id: str, new_id: st
         old_id: 舊 Ticket ID
         new_id: 新 Ticket ID
     """
-    # 更新 blockedBy 引用
+    # 更新 blockedBy 引用（list of string）
     if "blockedBy" in ticket and ticket["blockedBy"]:
         ticket["blockedBy"] = [new_id if ref == old_id else ref for ref in ticket["blockedBy"]]
 
-    # 更新 children 中的 ID
-    if "children" in ticket and ticket["children"]:
-        for child in ticket["children"]:
-            if isinstance(child, dict) and "id" in child and child["id"] == old_id:
-                child["id"] = new_id
+    # 更新 relatedTo 引用（list of string）
+    if "relatedTo" in ticket and ticket["relatedTo"]:
+        ticket["relatedTo"] = [new_id if ref == old_id else ref for ref in ticket["relatedTo"]]
 
-    # 更新 source_ticket
+    # 更新 spawned_tickets 引用（list of string）
+    if "spawned_tickets" in ticket and ticket["spawned_tickets"]:
+        ticket["spawned_tickets"] = [
+            new_id if ref == old_id else ref for ref in ticket["spawned_tickets"]
+        ]
+
+    # 更新 children 中的 ID（同時支援 string 與 dict 兩種形式，與 _update_cross_references 一致）
+    if "children" in ticket and ticket["children"]:
+        new_children = []
+        for child in ticket["children"]:
+            if isinstance(child, str):
+                new_children.append(new_id if child == old_id else child)
+            elif isinstance(child, dict):
+                if child.get("id") == old_id:
+                    child["id"] = new_id
+                new_children.append(child)
+            else:
+                new_children.append(child)
+        ticket["children"] = new_children
+
+    # 更新 source_ticket（scalar string）
     if "source_ticket" in ticket and ticket["source_ticket"] == old_id:
         ticket["source_ticket"] = new_id
+
+    # 更新 parent_id（scalar string）
+    if "parent_id" in ticket and ticket["parent_id"] == old_id:
+        ticket["parent_id"] = new_id
 
 
 def _update_cross_references(old_id: str, new_id: str) -> int:

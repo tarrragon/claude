@@ -614,6 +614,57 @@ def _resolve_ticket_id_and_wave(args: argparse.Namespace, version: str) -> Optio
     return (version, ticket_id, wave)
 
 
+def _inherit_parent_who(parent_ticket: Optional[Dict[str, Any]]) -> str:
+    """從 parent ticket 取 who.current，相容舊字串格式。
+
+    W11-003.7: 舊 ticket（v0.16/v0.17 早期）who 為字串；新格式為 dict {current, history}。
+    型別防護策略：dict 走 .get("current")、str 直接使用、None/缺失 fallback "pending"。
+    """
+    if not parent_ticket:
+        return "pending"
+    who = parent_ticket.get("who")
+    if isinstance(who, dict):
+        return who.get("current") or "pending"
+    if isinstance(who, str) and who:
+        return who
+    return "pending"
+
+
+def _inherit_parent_where_layer(parent_ticket: Optional[Dict[str, Any]]) -> str:
+    """從 parent ticket 取 where.layer，相容舊字串格式。
+
+    W11-003.7: 舊 ticket where 為字串（即 layer 描述），新格式為 dict {layer, files}。
+    型別防護策略：dict 走 .get("layer")、str 直接使用、None/缺失 fallback DEFAULT_UNDEFINED_VALUE。
+    """
+    if not parent_ticket:
+        return DEFAULT_UNDEFINED_VALUE
+    where = parent_ticket.get("where")
+    if isinstance(where, dict):
+        return where.get("layer") or DEFAULT_UNDEFINED_VALUE
+    if isinstance(where, str) and where:
+        return where
+    return DEFAULT_UNDEFINED_VALUE
+
+
+def _extract_where_files(ticket_data: Optional[Dict[str, Any]]) -> List[str]:
+    """從 ticket dict 取 where.files，相容舊字串格式。
+
+    W11-026: 舊 ticket where 為字串（即 layer 描述，無 files 概念），新格式為 dict {layer, files}。
+    型別防護策略：dict 走 .get("files", [])、str / None / 缺失皆回空 list。
+
+    與 _inherit_parent_where_layer 同模式但取 files（list 而非 str）。
+    本 helper 可重用於任何包含 where 欄位的 ticket dict（parent / child / new_ticket）。
+    """
+    if not ticket_data:
+        return []
+    where = ticket_data.get("where")
+    if isinstance(where, dict):
+        files = where.get("files")
+        return files if isinstance(files, list) else []
+    # str / None / 其他型別：舊格式無 files 概念
+    return []
+
+
 def _parse_cli_args_to_config(
     args: argparse.Namespace,
     version: str,
@@ -691,10 +742,10 @@ def _parse_cli_args_to_config(
         "title": args.title or f"{args.action} {args.target}",
         "ticket_type": ticket_type,
         "priority": args.priority or DEFAULT_PRIORITY,
-        "who": args.who or (parent_ticket.get("who", {}).get("current") if parent_ticket else "pending"),
+        "who": args.who or _inherit_parent_who(parent_ticket),
         "what": args.what or f"{args.action} {args.target}",
         "when": args.when or DEFAULT_UNDEFINED_VALUE,
-        "where_layer": args.where_layer or (parent_ticket.get("where", {}).get("layer") if parent_ticket else DEFAULT_UNDEFINED_VALUE),
+        "where_layer": args.where_layer or _inherit_parent_where_layer(parent_ticket),
         "where_files": where_files,
         "why": why_value,
         "how_task_type": args.how_type or DEFAULT_HOW_TASK_TYPE,
@@ -1370,7 +1421,7 @@ def _print_parallel_analysis_result(
 
         task = {
             "task_id": child_id,
-            "where_files": child_info.get("where", {}).get("files", []),
+            "where_files": _extract_where_files(child_info),
             "blockedBy": child_info.get("blockedBy", []),
             "title": child_info.get("title", ""),
         }
@@ -1421,7 +1472,7 @@ def _print_cognitive_load_assessment(
     if not new_ticket:
         return
 
-    where_files = new_ticket.get("where", {}).get("files") or []
+    where_files = _extract_where_files(new_ticket)
 
     # 若 where_files 為空或「待定義」
     if not where_files or where_files == [DEFAULT_UNDEFINED_VALUE]:

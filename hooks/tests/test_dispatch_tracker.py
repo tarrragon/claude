@@ -142,6 +142,47 @@ class TestCleanupExpired:
         removed = cleanup_expired(project_root)
         assert removed == 0
 
+    def test_cleanup_default_ttl_is_1h(self, project_root: Path):
+        """default max_age_hours=1：90 分鐘前的記錄會被清理（W11-024）"""
+        old_time = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
+        state = {
+            "dispatches": [
+                {
+                    "agent_description": "90min ago task",
+                    "ticket_id": "",
+                    "files": [],
+                    "dispatched_at": old_time,
+                },
+            ]
+        }
+        state_file = get_state_file_path(project_root)
+        state_file.write_text(json.dumps(state), encoding="utf-8")
+
+        # 不傳參數，使用 default
+        removed = cleanup_expired(project_root)
+        assert removed == 1
+        assert len(get_active_dispatches(project_root)) == 0
+
+    def test_cleanup_1h_keeps_recent(self, project_root: Path):
+        """default 1h TTL 下，30 分鐘前的記錄保留（W11-024）"""
+        recent_time = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+        state = {
+            "dispatches": [
+                {
+                    "agent_description": "30min ago task",
+                    "ticket_id": "",
+                    "files": [],
+                    "dispatched_at": recent_time,
+                },
+            ]
+        }
+        state_file = get_state_file_path(project_root)
+        state_file.write_text(json.dumps(state), encoding="utf-8")
+
+        removed = cleanup_expired(project_root)
+        assert removed == 0
+        assert len(get_active_dispatches(project_root)) == 1
+
 
 class TestDetectOrphanBranches:
     def test_detect_orphan_branches(self, project_root: Path):

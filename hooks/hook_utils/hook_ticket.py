@@ -1039,3 +1039,82 @@ def validate_ticket_unified(
     if logger:
         logger.info("Ticket {} 驗證通過".format(ticket_id))
     return True, None
+
+
+# ============================================================================
+# Active In-Progress Ticket 共用入口（W11-021）
+# ============================================================================
+
+# Ticket md 掃描的排除路徑片段（archive / backup 目錄統一排除）
+_EXCLUDED_PATH_SEGMENTS = ("archive", "archived", "backup", "backups")
+
+
+def _is_excluded_ticket_path(path: Path) -> bool:
+    """判斷 ticket md 路徑是否落在 archive/backup 目錄。
+
+    比對採用 case-insensitive 完整路徑片段；只要任一 parent 目錄名
+    匹配 _EXCLUDED_PATH_SEGMENTS 即視為排除。
+    """
+    for part in path.parts:
+        if part.lower() in _EXCLUDED_PATH_SEGMENTS:
+            return True
+    return False
+
+
+def find_active_in_progress_ticket(
+    project_root: Optional[Path] = None,
+    logger: Optional[logging.Logger] = None,
+) -> Optional[dict]:
+    """掃描 docs/work-logs/ 找出最新一筆 in_progress ticket 的 frontmatter dict。
+
+    W11-021 統一入口：
+    - process-skip-guard / commit-handoff / file-ownership-guard 共用此函式
+    - 使用 hook_utils.get_project_root（支援 worktree / CLAUDE_PROJECT_DIR）
+    - glob pattern 限定 docs/work-logs/v*/**/tickets/*.md 並排除 archive/backup
+    - 依 mtime 由新到舊排序，遇第一個 in_progress 立即返回（hot path 命中第一個 << 100ms）
+
+    Args:
+        project_root: 專案根目錄；None 時呼叫 get_project_root()
+        logger: 可選 Logger 實例
+
+    Returns:
+        frontmatter dict（含 status / type / current_phase / wave 等欄位）
+        或 None（無 in_progress / 掃描失敗）
+    """
+    if project_root is None:
+        try:
+            project_root = get_project_root()
+        except Exception as e:
+            if logger:
+                logger.warning("無法取得 project_root: {}".format(e))
+            return None
+
+    work_logs_dir = project_root / "docs" / "work-logs"
+    if not work_logs_dir.exists():
+        if logger:
+            logger.debug("work-logs 目錄不存在: {}".format(work_logs_dir))
+        return None
+
+    try:
+        # glob 限定 docs/work-logs/v*/**/tickets/*.md（thyme 視角：排除非版本目錄）
+        candidates = [
+            p for p in work_logs_dir.glob("v*/**/tickets/*.md")
+            if not _is_excluded_ticket_path(p)
+        ]
+        # 依 mtime 由新到舊排序，命中第一個 in_progress 即返回
+        paths = sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True)
+    except OSError as e:
+        if logger:
+            logger.warning("掃描 ticket 目錄失敗: {}".format(e))
+        return None
+
+    for path in paths:
+        fm = parse_ticket_frontmatter(path, logger)
+        if fm and fm.get("status") == "in_progress":
+            if logger:
+                logger.debug("找到 in_progress ticket: {}".format(path.name))
+            return fm
+
+    if logger:
+        logger.debug("未找到 in_progress ticket")
+    return None

@@ -25,8 +25,9 @@ Hook 類型: UserPromptSubmit
 
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple, TypedDict
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -36,13 +37,14 @@ from hook_utils import (
     is_subagent_environment,
     generate_hook_output,
     read_json_from_stdin,
+    get_project_root,
+    find_active_in_progress_ticket,
 )
 from lib.hook_messages import (
     AskUserQuestionMessages,
     ProcessSkipMessages,
     format_message,
 )
-from lib.frontmatter_parser import parse_frontmatter
 
 # Type/phase guard 規則：SKIP_SA_REVIEW 在以下 ticket 上下文應靜音
 # - DOC / ANA type：全面靜音（非實作任務無 SA 前置審查需求）
@@ -52,11 +54,28 @@ SA_GUARD_IMP_SILENCE_PHASE = "Phase 4"
 
 EXIT_SUCCESS = 0
 
+
+# ============================================================================
+# 型別定義（W11-022 thyme 視角）：pattern_info 抽 TypedDict
+# ============================================================================
+
+class SkipPatternInfo(TypedDict):
+    """SKIP_PATTERNS 字典值結構。
+
+    - pairs: 兩個關鍵字 pair 列表；兩字皆出現於 user_input 時視為命中
+    - description: 提醒訊息中描述此省略類型的短句
+    - full_process: 提醒訊息中描述完整流程要求的長句
+    """
+    pairs: List[Tuple[str, str]]
+    description: str
+    full_process: str
+
+
 # ============================================================================
 # 省略模式定義：6 類流程省略意圖
 # ============================================================================
 
-SKIP_PATTERNS = {
+SKIP_PATTERNS: dict[str, SkipPatternInfo] = {
     # 優先級 1：最具體的 Phase 4 模式
     "SKIP_PHASE4": {
         "pairs": [
@@ -106,13 +125,13 @@ SKIP_PATTERNS = {
         "full_process": ProcessSkipMessages.SKIP_ACCEPTANCE_FULL_PROCESS,
     },
     # 優先級 5：並行評估
+    # 註：移除 ("不用","評估") — 與 ("不需要","評估") 語意重複（同為「否定+評估」結構，W11-022）
     "SKIP_PARALLEL_EVAL": {
         "pairs": [
             ("跳過", "審核"),
             ("不需要", "評估"),
             ("跳過", "parallel"),
             ("直接", "派發"),
-            ("不用", "評估"),
         ],
         "description": ProcessSkipMessages.SKIP_PARALLEL_EVAL_DESCRIPTION,
         "full_process": ProcessSkipMessages.SKIP_PARALLEL_EVAL_FULL_PROCESS,
@@ -132,7 +151,7 @@ SKIP_PATTERNS = {
 }
 
 
-def detect_skip_intent(user_input: str) -> Tuple[Optional[str], Optional[dict]]:
+def detect_skip_intent(user_input: str) -> Tuple[Optional[str], Optional[SkipPatternInfo]]:
     """
     偵測流程省略意圖
 
@@ -167,9 +186,7 @@ def has_active_dispatch() -> bool:
         True 若有 active dispatch；False 若檔案缺失/損毀/dispatches 空
     """
     try:
-        root = _find_repo_root()
-        if root is None:
-            return False
+        root = get_project_root()
         path = root / ".claude" / "dispatch-active.json"
         if not path.exists():
             return False
@@ -177,7 +194,7 @@ def has_active_dispatch() -> bool:
         if isinstance(data, dict):
             dispatches = data.get("dispatches", [])
         elif isinstance(data, list):
-            # 兼容舊格式（裸陣列）
+            # 兼容舊格式(裸陣列)
             dispatches = data
         else:
             return False
@@ -187,54 +204,56 @@ def has_active_dispatch() -> bool:
         return False
 
 
-def _find_repo_root() -> Optional[Path]:
-    """向上尋找含 docs/work-logs 的祖先目錄（hook 隨 worktree/主 repo 走皆成立）"""
-    for parent in Path(__file__).resolve().parents:
-        if (parent / "docs" / "work-logs").exists():
-            return parent
-    return None
+def _started_at_sort_key(value) -> Tuple[int, object]:
+    """ISO 8601 started_at 排序鍵（fromisoformat fallback）。
 
+    W11-022 linux 視角：原始 W11-004.2 spec 採 started_at 字串排序，雖然
+    ISO 8601 字串字典序與時序大致一致，但遇到非 ISO 格式（舊資料 / 手動編輯
+    錯誤 / 缺欄位）字串排序會給出未定義結果。本 helper 統一語意：
 
-def _parse_ticket_frontmatter(path: Path) -> Optional[dict]:
-    """讀取單一 ticket 檔的 frontmatter，失敗回 None（不影響整體掃描）"""
+    - 可解析 ISO 8601 → (0, datetime)：優先以時序排序
+    - 不可解析 / 空 / None → (1, str(value))：退化至字串排序保留原行為
+
+    tuple 首元素確保「可解析」永遠優於「不可解析」項；同類內部仍可比較。
+
+    本函式為防禦性 helper：W11-021 改採 mtime 排序後 hot path 不再依賴
+    started_at 字串排序，但保留此 helper 供未來 tie-break / 校驗用途，並
+    記錄不可解析情況以利偵測異常資料。
+    """
+    if not value:
+        return (1, "")
     try:
-        return parse_frontmatter(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
+        return (0, datetime.fromisoformat(str(value)))
+    except (TypeError, ValueError):
+        return (1, str(value))
 
 
 def get_active_in_progress_ticket() -> Optional[dict]:
     """
-    找出最新 in_progress ticket（依 mtime 由新到舊掃描，遇第一個即返回）
+    找出最新 in_progress ticket（W11-021 統一入口包裝）
+
+    委派至 hook_utils.find_active_in_progress_ticket（共用 helper，含 archive/backup
+    排除與 get_project_root worktree 支援），並投影為本 hook 所需欄位。
+
+    W11-022：對返回 ticket 的 started_at 套用 _started_at_sort_key 驗證；
+    不可解析時記錄訊息但不改變返回值（避免影響 type/phase guard 行為）。
 
     Returns:
         {"type": ..., "current_phase": ...} 若找到；None 若無或讀取失敗
 
     Performance:
-        Phase 4 實測 999 ticket 全掃 1052ms；short-circuit + mtime 排序使 hot path
-        命中第一個 in_progress 即 return，cold path 延遲 << 100ms（W11-019）
+        共用 helper 採 mtime 排序 + short-circuit；hot path 命中第一個 in_progress
+        即 return，cold path 延遲 << 100ms（W11-019）
     """
-    root = _find_repo_root()
-    if root is None:
+    fm = find_active_in_progress_ticket()
+    if not fm:
         return None
-
-    try:
-        paths = sorted(
-            root.glob("docs/work-logs/**/tickets/*.md"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-    except OSError:
-        return None
-
-    for path in paths:
-        fm = _parse_ticket_frontmatter(path)
-        if fm and fm.get("status") == "in_progress":
-            return {
-                "type": fm.get("type"),
-                "current_phase": fm.get("current_phase"),
-            }
-    return None
+    # 防禦性驗證 started_at：不可解析時 sort_key 返回 (1, ...) tier，不阻擋返回
+    _started_at_sort_key(fm.get("started_at"))
+    return {
+        "type": fm.get("type"),
+        "current_phase": fm.get("current_phase"),
+    }
 
 
 def _should_silence_sa_review(active_ticket: Optional[dict]) -> bool:
@@ -250,7 +269,7 @@ def _should_silence_sa_review(active_ticket: Optional[dict]) -> bool:
     return False
 
 
-def generate_skip_reminder(skip_type: str, pattern_info: dict) -> str:
+def generate_skip_reminder(skip_type: str, pattern_info: SkipPatternInfo) -> str:
     """
     生成流程省略提醒訊息
 

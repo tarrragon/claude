@@ -46,6 +46,7 @@ from hook_utils import (
     save_check_log,
     validate_hook_input,
     is_subagent_environment,
+    get_effort_level,
 )
 
 # W17-127.1：Layer 1 路徑改由 framework_paths SSOT 提供
@@ -511,6 +512,14 @@ def main() -> int:
         if not input_data:
             _output_success()
             return EXIT_SUCCESS
+
+        # Effort 感知（v2.1.133+，W14-036）：low effort 短路放行
+        effort = get_effort_level(input_data)
+        if effort == "low":
+            logger.info("effort=low，layer-boundary-validator 短路放行")
+            _output_success()
+            return EXIT_SUCCESS
+        logger.info("effort=%s，執行完整 layer-boundary 驗證", effort)
 
         # 檢測 subagent 環境
         if is_subagent_environment(input_data):

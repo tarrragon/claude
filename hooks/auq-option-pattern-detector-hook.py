@@ -26,7 +26,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).parent))
 
 try:
-    from hook_utils import setup_hook_logging, is_subagent_environment, read_json_from_stdin, run_hook_safely
+    from hook_utils import setup_hook_logging, is_subagent_environment, read_json_from_stdin, run_hook_safely, get_effort_level
     from lib.hook_messages import AUQOptionPatternMessages
     from lib.transcript_tail_reader import read_last_assistant_text as _shared_read_last_assistant_text
 except ImportError as e:
@@ -299,6 +299,12 @@ def main() -> int:
             ensure_ascii=False,
         ))
         return 0
+
+    # Effort 感知（v2.1.133+，W14-037）：
+    # PC-064 防護不可削弱 — AUQ 選項 pattern 偵測為事實判斷，
+    # 必擋邏輯與 effort 無關。此處僅記錄 effort 供後續觀測。
+    effort = get_effort_level(input_data)
+    logger.info("effort=%s，AUQ pattern 偵測無條件執行（PC-064）", effort)
 
     transcript_path = input_data.get("transcript_path")
     transcript_text = read_last_assistant_text(transcript_path, logger)

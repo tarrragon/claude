@@ -52,6 +52,7 @@ from hook_utils import (
     setup_hook_logging,
     run_hook_safely,
     read_json_from_stdin,
+    get_effort_level,
     extract_tool_input,
     parse_ticket_frontmatter,
     check_error_patterns_changed,
@@ -616,6 +617,14 @@ def main() -> int:
 
         # 步驟 1: 解析驗證輸入
         input_data = read_json_from_stdin(logger)
+
+        # Effort 感知（v2.1.133+，W14-034）：low effort 短路放行
+        effort = get_effort_level(input_data)
+        if effort == "low":
+            logger.info("effort=low，acceptance-gate 短路放行")
+            _output_allow_json()
+            return EXIT_SUCCESS
+        logger.info("effort=%s，執行完整 acceptance 驗證", effort)
 
         # 降級 fast-path（W10-047.1）：
         # ANA W10-035.3 觀察 3d 觸發 1667 次僅 36 Action（2.2%）。

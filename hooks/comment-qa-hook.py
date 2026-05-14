@@ -57,7 +57,7 @@ from dataclasses import dataclass
 from typing import Optional, List, Dict, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level
 from lib.hook_messages import QualityMessages, CoreMessages, format_message
 
 # 專案根目錄
@@ -687,6 +687,13 @@ def main():
         input_data = read_json_from_stdin(logger)
         if not input_data:
             return 0
+
+        # Effort 感知（v2.1.133+，W14-037）：low effort 短路放行
+        effort = get_effort_level(input_data)
+        if effort == "low":
+            log_message(logger, "effort=low，comment-qa-hook 短路放行")
+            return 0
+        log_message(logger, f"effort={effort}，執行完整 comment-qa 檢查")
 
         # 3. 提取工具資訊
         tool_name = input_data.get("tool_name", "")

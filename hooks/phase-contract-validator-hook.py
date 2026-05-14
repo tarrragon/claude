@@ -41,7 +41,12 @@ from pathlib import Path
 lib_path = Path(__file__).parent.parent / "lib"
 sys.path.insert(0, str(lib_path))
 
+# 添加 .claude/hooks 到 Python path 以便導入 hook_utils
+hooks_path = Path(__file__).parent
+sys.path.insert(0, str(hooks_path))
+
 from phase_contract_validator import PhaseContractValidator, ValidationResult
+from hook_utils import setup_hook_logging, get_effort_level
 
 
 def format_validation_result(result) -> str:
@@ -66,6 +71,15 @@ if __name__ == "__main__":
     ticket_id = sys.argv[1]
     phase = sys.argv[2]
     ticket_dir = sys.argv[3]
+
+    # Effort 感知（v2.1.133+，W14-036）：CLI 模式僅看 $CLAUDE_EFFORT；low effort 短路放行
+    _logger = setup_hook_logging("phase-contract-validator")
+    _effort = get_effort_level(None)
+    if _effort == "low":
+        _logger.info("effort=low，phase-contract-validator 短路放行 (ticket=%s phase=%s)", ticket_id, phase)
+        print("[effort=low] 短路放行（不執行 contract 驗證）")
+        sys.exit(0)
+    _logger.info("effort=%s，執行完整 phase contract 驗證 (ticket=%s phase=%s)", _effort, ticket_id, phase)
 
     validator = PhaseContractValidator()
     result = validator.validate(ticket_id, phase, ticket_dir)

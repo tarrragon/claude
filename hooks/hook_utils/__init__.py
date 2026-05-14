@@ -22,6 +22,7 @@ from .hook_logging import (
 from .hook_io import (
     run_git,
     read_json_from_stdin,
+    get_effort_level,
     extract_tool_input,
     extract_tool_response,
     is_handoff_recovery_mode,
@@ -48,6 +49,7 @@ from .hook_ticket import (
     extract_wave_from_ticket_id,
     validate_ticket_has_decision_tree,
     validate_ticket_unified,
+    find_active_in_progress_ticket,
 )
 
 __all__ = [
@@ -58,6 +60,7 @@ __all__ = [
     "run_hook_safely",
     "run_git",
     "read_json_from_stdin",
+    "get_effort_level",
     "extract_tool_input",
     "extract_tool_response",
     "is_handoff_recovery_mode",
@@ -82,4 +85,5 @@ __all__ = [
     "extract_wave_from_ticket_id",
     "validate_ticket_has_decision_tree",
     "validate_ticket_unified",
+    "find_active_in_progress_ticket",
 ]

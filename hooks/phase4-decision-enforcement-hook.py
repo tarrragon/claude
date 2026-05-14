@@ -43,6 +43,7 @@ from hook_utils import (  # noqa: E402
     setup_hook_logging,
     run_hook_safely,
     read_json_from_stdin,
+    get_effort_level,
     extract_tool_input,
     find_ticket_file,
     emit_hook_output,
@@ -642,6 +643,13 @@ def main() -> int:
     if input_data is None:
         return 0
 
+    # Effort 感知（v2.1.133+，W14-034）：
+    # PC-093 偵測屬「事實判斷」（quality-baseline 規則 2 強制），
+    # 必擋邏輯與 effort 無關 — 不論 effort 為何，blocked 一律阻擋。
+    # low effort 僅抑制 warn/info audit 輸出以省 tokens。
+    effort = get_effort_level(input_data)
+    logger.info("effort=%s，phase4-decision-enforcement 啟動（blocked 始終阻擋）", effort)
+
     event_name = input_data.get("hook_event_name") or input_data.get("hookEventName") or ""
     tool_input = extract_tool_input(input_data)
     command = tool_input.get("command", "") if isinstance(tool_input, dict) else ""
@@ -701,9 +709,17 @@ def main() -> int:
         msg = format_block_message(ticket_id, blocked, exempted_hits)
         sys.stderr.write(msg + "\n")
         sys.stderr.flush()
+        logger.info("blocked=%d，effort=%s 仍強制阻擋（PC-093 規則 2）", len(blocked), effort)
         return 2
 
     # WARN/INFO/exempt audit → stdout (hook JSON)
+    # low effort 抑制 warn/info audit 以省 tokens（blocked 已在上方處理）
+    if effort == "low":
+        if warned or info or markers:
+            logger.info("effort=low，抑制 warn/info audit 輸出（warned=%d info=%d markers=%d）",
+                        len(warned), len(info), len(markers))
+        return 0
+
     if warned or info or markers:
         msg = format_warn_info_message(warned, info, markers)
         if msg:

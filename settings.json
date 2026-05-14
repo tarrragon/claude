@@ -422,7 +422,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/style-guardian-hook.py \"$CLAUDE_FILE_PATH\""
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/style-guardian-hook.py $CLAUDE_FILE_PATH"
           },
           {
             "type": "command",
@@ -464,7 +464,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/style-guardian-hook.py \"$CLAUDE_FILE_PATH\""
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/style-guardian-hook.py $CLAUDE_FILE_PATH"
           },
           {
             "type": "command",

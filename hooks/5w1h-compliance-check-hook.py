@@ -30,7 +30,7 @@ from typing import Dict, Any, Optional, List
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level
 
 # Who 欄位正則模式
 # 格式 1（代理人執行）: "{agent} (執行者) | {dispatcher} (分派者)"
@@ -574,6 +574,14 @@ def main() -> int:
         if not input_data:
             return 0
         logger.debug(f"接收到 Hook 輸入: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
+
+        # Effort 感知（v2.1.133+，W14-036）：low effort 短路放行
+        effort = get_effort_level(input_data)
+        if effort == "low":
+            logger.info("effort=low，5w1h-compliance-check 短路放行")
+            print(json.dumps({"decision": "allow", "reason": "effort=low 短路放行"}, ensure_ascii=False, indent=2))
+            return 0
+        logger.info("effort=%s，執行完整 5W1H 驗證", effort)
 
         # 提取工具資訊
         tool_name = input_data.get("tool_name")

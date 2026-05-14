@@ -16,10 +16,14 @@ Hook I/O 操作模組
 
 import json
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any
+
+
+_VALID_EFFORT_LEVELS = ("low", "medium", "high")
 
 from .hook_base import get_project_root
 
@@ -171,6 +175,41 @@ def read_json_from_stdin(logger: logging.Logger) -> Optional[dict]:
     except Exception as e:
         logger.info("讀取 stdin 跳過: {}".format(e))
         return None
+
+
+def get_effort_level(
+    payload: "dict | None" = None,
+    default: str = "medium",
+) -> str:
+    """取得當前 effort level（v2.1.133+ effort 感知）
+
+    優先序：payload['effort']['level'] > $CLAUDE_EFFORT > default
+
+    回傳值正規化為 low / medium / high，未知值降為 default。
+
+    Args:
+        payload: hook stdin JSON payload（可為 None）
+        default: 預設值，當無訊號時使用
+
+    Returns:
+        str: "low" / "medium" / "high"
+    """
+    level: Optional[str] = None
+    if isinstance(payload, dict):
+        effort = payload.get("effort")
+        if isinstance(effort, dict):
+            raw = effort.get("level")
+            if isinstance(raw, str) and raw.strip():
+                level = raw.strip().lower()
+
+    if level is None:
+        env_val = os.environ.get("CLAUDE_EFFORT")
+        if env_val and env_val.strip():
+            level = env_val.strip().lower()
+
+    if level not in _VALID_EFFORT_LEVELS:
+        return default if default in _VALID_EFFORT_LEVELS else "medium"
+    return level
 
 
 def extract_tool_input(

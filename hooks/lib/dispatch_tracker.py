@@ -322,7 +322,7 @@ def _is_dispatch_expired(dispatch: Dict, now: datetime, max_age_hours: int) -> b
         return True
 
 
-def cleanup_expired(project_root: Path, max_age_hours: int = 4) -> int:
+def cleanup_expired(project_root: Path, max_age_hours: int = 1) -> int:
     """清理超時的派發記錄（防止遺留）。
 
     Args:

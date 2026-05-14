@@ -48,6 +48,7 @@ from hook_utils import (
     get_project_root,
     parse_ticket_frontmatter,
     find_ticket_file,
+    get_effort_level,
 )
 
 
@@ -816,6 +817,11 @@ def main() -> int:
     if is_pytest_environment():
         logger.debug("pytest environment detected, skipping detection")
         return 0
+
+    # Effort 感知（v2.1.133+，W14-036）：本 hook 為 advisory WRAP 訊號偵測（PC-066/PC-093）
+    # 屬「事實判斷」核心訊號，low effort 下仍必須提醒，不短路放行（quality-baseline 規則 6 防護）
+    effort = get_effort_level(event)
+    logger.info("effort=%s，wrap-decision-tripwire 維持完整偵測（advisory，不依 effort 放行）", effort)
 
     project_root = get_project_root()
     config_path = project_root / CONFIG_REL_PATH

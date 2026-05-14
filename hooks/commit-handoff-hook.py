@@ -36,6 +36,7 @@ from hook_utils import (
     get_current_version_from_todolist,
     is_subagent_environment,
     scan_ticket_files_by_version,
+    parse_ticket_frontmatter,
 )
 from lib.hook_messages import AskUserQuestionMessages, CoreMessages
 from lib.ask_user_question_reminders import AskUserQuestionReminders
@@ -185,25 +186,15 @@ def scan_wave_tickets(
 
         for ticket_file in ticket_files:
             try:
-                content = ticket_file.read_text(encoding="utf-8")
+                # W11-021：改用統一 frontmatter 解析（PyYAML 透過 hook_utils），
+                # 取代原本 regex 手刻路徑。frontmatter 欄位轉字串以保持向後相容
+                # （原 regex 解出 wave 為 "11" 而非 int 11）。
+                frontmatter = parse_ticket_frontmatter(ticket_file, logger)
+                wave_raw = frontmatter.get("wave") if frontmatter else None
+                status_raw = frontmatter.get("status") if frontmatter else None
 
-                # 解析 YAML frontmatter
-                wave = None
-                status = None
-
-                if content.startswith("---"):
-                    frontmatter_end = content.find("---", 3)
-                    if frontmatter_end > 0:
-                        frontmatter = content[:frontmatter_end]
-
-                        # 提取 wave: 和 status: 欄位
-                        wave_match = re.search(r"wave:\s*(\d+)", frontmatter)
-                        if wave_match:
-                            wave = wave_match.group(1)
-
-                        status_match = re.search(r"status:\s*(\S+)", frontmatter)
-                        if status_match:
-                            status = status_match.group(1)
+                wave = str(wave_raw) if wave_raw is not None and wave_raw != "" else None
+                status = str(status_raw) if status_raw is not None and status_raw != "" else None
 
                 tickets.append({"wave": wave, "status": status, "file": ticket_file.name})
             except Exception as e:

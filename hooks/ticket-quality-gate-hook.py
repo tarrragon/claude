@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
 from hook_utils import (
-    setup_hook_logging, run_hook_safely, read_json_from_stdin,
+    setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level,
     get_project_root, validate_hook_input, validate_tool_input
 )
 from lib.hook_messages import QualityMessages, CoreMessages, format_message
@@ -528,6 +528,17 @@ def main() -> int:
 
         # 步驟 2: 讀取 JSON 輸入
         input_data = read_json_from_stdin(logger)
+
+        # Effort 感知（v2.1.133+，W14-034）：low effort 短路放行
+        effort = get_effort_level(input_data)
+        if effort == "low":
+            logger.info("effort=low，ticket-quality-gate 短路放行")
+            print(json.dumps({
+                "decision": "allow",
+                "reason": "effort=low，跳過品質閘檢測"
+            }, ensure_ascii=False, indent=2))
+            return EXIT_SUCCESS
+        logger.info("effort=%s，執行完整品質閘檢測", effort)
 
         # 步驟 3: 驗證輸入格式
         if not validate_input(input_data, logger):

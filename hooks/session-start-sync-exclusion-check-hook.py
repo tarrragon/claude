@@ -37,6 +37,9 @@ from hook_utils import (  # noqa: E402
     get_project_root,
 )
 
+sys.path.insert(0, str(Path(__file__).parent / "lib"))
+from dispatch_tracker import cleanup_expired  # noqa: E402
+
 EXIT_SUCCESS = 0
 
 # 已知必須排除的 .claude/ 根目錄檔案名稱（與 sync-claude-push.py 對齊）
@@ -158,6 +161,15 @@ def main() -> int:
         logger.error("取得 project_root 失敗，降級為靜默: %s", e)
         print(json.dumps({"suppressOutput": True}, ensure_ascii=False))
         return EXIT_SUCCESS
+
+    # Housekeeping: GC dispatch-active.json 殘留記錄（TTL 1h）
+    # 失敗降級為 logger.warning，不阻塞 session 啟動（W11-024）
+    try:
+        expired_count = cleanup_expired(project_root, max_age_hours=1)
+        if expired_count > 0:
+            logger.info("session-start: 已清理 %d 筆超時 dispatch 記錄", expired_count)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("session-start: dispatch cleanup 失敗（忽略）: %s", e)
 
     claude_dir = project_root / ".claude"
     unexcluded = scan_unexcluded_files(claude_dir, logger)
