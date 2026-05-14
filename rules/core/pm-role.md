@@ -90,10 +90,4 @@
 
 ---
 
-**Last Updated**: 2026-05-03
-**Version**: 4.1.1 — W17-123 Layer 2 審查後微調：標題與首句改正向「派發 / 拆分 / 排序以價值與容量為依據」；估時話術降為段末邊界澄清，保留 grep 訊號詞但不再首句宣告禁令（compositional-writing 原則 3 機會成本語氣）
-
-**Version**: 4.1.0 — 核心原則表格下方新增「禁止以估時為決策依據」交叉引用，指向 `ai-communication-rules.md` 規則 6（W17-060 / W17-051 落地）
-
-**Version**: 4.0.0 — 拆分重構（W10-076.2）：拆出 3 SOP 到 pm-rules/；本檔從 346 行精簡至 <90 行。核心禁令 + 場景路由 + Re-center 保留 auto-load。
-**Source**: manager Skill v2.0.0 遷移 + PC-045 + PC-064 + W10-061 + W10-073.2 WRAP 拆分分析
+**Last Updated**: 2026-05-03 | **Version**: 4.1.1 — 核心禁令 + 場景路由 + Re-center；以價值/容量/優先級為決策依據（規則 6 交叉引用）。歷史 4.0–4.1.0 版見 git log。**Source**: PC-045 / PC-064 / W10-061。

@@ -17,6 +17,10 @@ from .ticket_loader import load_ticket, resolve_version, get_project_root, get_t
 from .parser import parse_frontmatter
 from .checkbox_utils import strip_checkbox_prefix
 from .constants import STATUS_COMPLETED, TERMINAL_STATUSES, VAGUE_ACCEPTANCE_WORDS, SRP_WHAT_CONJUNCTIONS, SRP_ACCEPTANCE_MODULE_THRESHOLD
+# W10-125：consolidate _is_placeholder 共用 ticket_validator 實作（ARCH-020 治本）
+# 原本 acceptance_auditor 內有平行版本（簡單 regex，無 word boundary / 表格豁免），
+# 與 ticket_validator 版本邏輯漂移；W10-125 起統一使用 ticket_validator 版本。
+from .ticket_validator import _is_placeholder as _shared_is_placeholder
 
 
 # ============================================================
@@ -312,31 +316,18 @@ def validate_children_completed(ticket: Dict[str, Any], version: str) -> Tuple[b
 
 def _is_placeholder(text: str) -> bool:
     """
-    判斷文字是否為佔位符
+    判斷文字是否為佔位符（W10-125 起共用 ticket_validator 實作）。
 
-    佔位符模式：
-    - HTML 註解：<!-- ... -->
-    - 待填寫標記：(pending), TBD, TODO, N/A
-    - 空白或僅有換行
+    W10-125 重構：原本 acceptance_auditor 有平行的簡化版本（HTML 註解命中即 True、
+    無 word boundary、無表格豁免），與 ticket_validator 版本邏輯漂移（ARCH-020 模式）。
+    現統一 delegate 到 ticket_validator._is_placeholder，獲得：
+    - HTML 註解 + 實質內容不誤判（W17-032）
+    - markdown 分隔符剝除（W17-071）
+    - word boundary（W17-094 / PC-113）
+    - 表格 cell N/A / TODO / TBD 豁免（W10-125 / PC-138 / PC-144）
+    - 中文佔位符判定
     """
-    if not text or not isinstance(text, str):
-        return True
-
-    stripped = text.strip()
-
-    # 空白或僅有換行
-    if not stripped:
-        return True
-
-    # HTML 註解
-    if re.search(r"<!--.*?-->", stripped, re.DOTALL):
-        return True
-
-    # 待填寫標記
-    if re.search(r"\(pending\)|TBD|TODO|N/A", stripped, re.IGNORECASE):
-        return True
-
-    return False
+    return _shared_is_placeholder(text)
 
 
 def validate_execution_log_completeness(body: str) -> Tuple[bool, List[str]]:

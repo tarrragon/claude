@@ -313,22 +313,27 @@ def _is_placeholder(text: str) -> bool:
     """
     判斷文字是否為佔位符。
 
-    判斷策略（W17-071 修復後）：
+    判斷策略（W10-125 修復後）：
     1. 先剝除所有 HTML 註解（W17-032）。
-    2. 再剝除 markdown 分隔符（`---+` 行首行尾獨立一行；W17-071）——
-       分隔符本身是結構裝飾，不是實質內容。
-    3. 剩餘內容為空 → placeholder（例如只有 HTML 註解 + 分隔符的空殼章節）。
-    4. 剩餘內容含英文佔位符 `(pending)/TBD/TODO/N/A` → placeholder。
-    5. 剩餘內容扣掉所有「（待填寫：...）/（必填：...）」後為空 → placeholder。
-    6. 否則非 placeholder（視為已有實質內容）。
+    2. 再剝除 markdown 分隔符（`---+` 行首行尾獨立一行；W17-071）。
+    3. W10-125：剝除 markdown 表格行（行首行尾為 `|` 的整行）。表格內的 keyword
+       屬合法「不適用」/「待辦項目參考」標示（PC-138 / PC-144 共同治本）。
+       - 剝除後仍有非表格文字：用 keyword 檢查該文字（表格外的 TODO/TBD/N/A 仍判 placeholder）
+       - 剝除後為空且原本有表格：作者寫表格即實質內容，視為非 placeholder
+    4. 剩餘內容為空 → placeholder（例如只有 HTML 註解 + 分隔符的空殼章節）。
+    5. 剩餘內容含英文佔位符 `(pending)/TBD/TODO/N/A` → placeholder。
+    6. 剩餘內容扣掉所有「（待填寫：...）/（必填：...）」後為空 → placeholder。
+    7. 否則非 placeholder（視為已有實質內容）。
 
     W17-032 修復重點：`<!--.*?-->` 命中即回 True 會誤判
     「body schema 範本的 Schema 標註註解 + 實質內容」為 placeholder。
 
-    W17-071 修復重點（root cause A）：HTML 註解剝除後若剩下 markdown 分隔符
-    `---`（ticket body schema 章節間的水平分隔），`_is_placeholder` 原先回傳
-    False，導致空殼章節（只有 schema note + `---`）被放行。增加分隔符剝除
-    堵住此 false negative 路徑。
+    W17-071 修復重點：HTML 註解剝除後若剩下 markdown 分隔符 `---`
+    （ticket body schema 章節間的水平分隔），`_is_placeholder` 原先回傳 False，
+    導致空殼章節（只有 schema note + `---`）被放行。
+
+    W10-125 修復重點（PC-138 / PC-144 治本）：表格 cell 內的 N/A / TODO / TBD
+    為合法標示，剝除表格行後再做 keyword 檢查避免誤判。
 
     此函式與 acceptance_auditor.py 中的同名函式功能一致，
     用於統一驗證邏輯。
@@ -363,19 +368,34 @@ def _is_placeholder(text: str) -> bool:
     if not content_no_separator:
         return True
 
-    # 待填寫標記（含英文/中文佔位符）— 對剝除 HTML 註解 + 分隔符後的內容檢查
+    # W10-125：剝除 markdown 表格行（PC-138 / PC-144 治本）。
+    # 表格 cell 中的 N/A / TODO / TBD 屬合法標示（不適用 / 待辦項目參考），不應誤判。
+    # 策略：剝除完整 table 行後檢查剩餘非表格內容。
+    # - 若剝除後仍有實質非表格內容：以剩餘內容作 keyword 檢查
+    # - 若剝除後為空且原本有表格：作者寫表格即實質內容，視為非 placeholder
+    table_row_pattern = r"^\s*\|.*\|\s*$"
+    has_table = bool(re.search(table_row_pattern, content_no_separator, re.MULTILINE))
+    content_no_tables = re.sub(
+        table_row_pattern, "", content_no_separator, flags=re.MULTILINE
+    ).strip()
+    if not content_no_tables and has_table:
+        # 全部都是表格內容，作者寫表格 = 有實質內容
+        return False
+
+    # 待填寫標記（含英文/中文佔位符）— 對剝除 HTML 註解 + 分隔符 + 表格後的內容檢查
     # - 英文：(pending), TBD, TODO, N/A
     # - 中文：（待填寫：...）、（必填：...）——template 預設佔位符
     # W17-094：加 \b 字邊界避免 substring 誤判（如 TodoList 內的 Todo）。
-    # 同 W17-072 / W17-074 false positive 家族：pattern 過寬導致 schema section 誤判。
-    if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", content_no_separator, re.IGNORECASE):
+    # W10-125：表格 cell 已先剝除，避免合法 N/A / TODO / TBD 標示誤判（PC-138 / PC-144）。
+    target_content = content_no_tables if has_table else content_no_separator
+    if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", target_content, re.IGNORECASE):
         return True
-    if re.search(r"（待填寫[：:][^）]*）|（必填[：:][^）]*）", content_no_separator):
+    if re.search(r"（待填寫[：:][^）]*）|（必填[：:][^）]*）", target_content):
         return True
 
     # 判定「整段只由中文佔位符組成」：移除所有已知中文佔位符 + 空白後為空
     no_cn_placeholders = re.sub(
-        r"（(?:待填寫|必填)[：:][^）]*）", "", content_no_separator
+        r"（(?:待填寫|必填)[：:][^）]*）", "", target_content
     ).strip()
     if not no_cn_placeholders:
         return True

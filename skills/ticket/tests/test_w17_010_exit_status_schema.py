@@ -41,8 +41,9 @@ class TestValidSectionsExpanded:
                         "Test Results", "Execution Log"]:
             assert section in TrackAcceptanceMessages.VALID_SECTIONS
 
-    def test_total_seven_sections(self):
-        assert len(TrackAcceptanceMessages.VALID_SECTIONS) == 7
+    def test_total_eight_sections(self):
+        # W10-107: 對齊 ticket-body-schema.md 後新增「重現實驗結果」，總數 8
+        assert len(TrackAcceptanceMessages.VALID_SECTIONS) == 8
 
 
 class TestTicketTemplateSections:

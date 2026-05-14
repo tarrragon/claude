@@ -107,6 +107,52 @@
 
 ---
 
+## Hook 引用豁免機制（W10-126 補強）
+
+phase4-decision-enforcement-hook 對「Phase X 再決定」「延後評估」等字面強制偵測，但合法情境（規則引用、source ticket 歷史 context 引用）需用 `<!-- PC-093-exempt: <category>:<reason> -->` 標記豁免。
+
+### 合法豁免類別
+
+| Category | 適用情境 | reason 要求 |
+|---------|---------|------------|
+| `rule-quote` | 引用 `.claude/rules/` 或 `.claude/pm-rules/` 規則名稱 | reason 須含 `.claude/rules/` 或 `.claude/pm-rules/` 路徑 |
+| `ticket-tracked` | 引用既有 ticket ID（如 source ticket why 含歷史延後話術描述） | reason 須含 `W\d+-\d+` 格式 ticket ID |
+| `baseline-gated` | 量化基線觸發條件（如「baseline > 100ms 則重啟」） | reason 須含數字 |
+| `tdd-transition` | TDD phase 轉換的合法延後 | 一般說明 ≥ 10 字 |
+| `user-override` | 用戶明確授權的延後 | 一般說明 ≥ 10 字 |
+
+### 標記位置規則（PC-146 / EXEMPT_PROXIMITY_LINES=1）
+
+marker 必須**緊鄰命中行**：同一行行尾，或命中行上方一行（中間不可有空行 / 標題等元素）。
+
+正確：
+
+```markdown
+<!-- PC-093-exempt: ticket-tracked:本段為 W10-118 source ticket why 引用 -->
+- 0.18.0-W10-118 why: ...「Phase 5 再決定」...
+```
+
+或：
+
+```markdown
+- 0.18.0-W10-118 why: ...「Phase 5 再決定」... <!-- PC-093-exempt: ticket-tracked:W10-118 引用 -->
+```
+
+錯誤（marker 與命中行物理分離）：
+
+```markdown
+- 0.18.0-W10-118 why: ...「Phase 5 再決定」...
+
+### Hook 引用豁免章節                                ← marker 與命中行隔了空行 + 標題
+<!-- PC-093-exempt: ... -->
+```
+
+### 多命中行情境
+
+每個命中行各加一個 marker，不可共用一個（hook 行級獨立判定）。
+
+詳見 PC-146（exempt marker 位置誤用 + 三層防護）。
+
 ## 與其他規則的邊界
 
 | 規則 | 聚焦 | 與本規則差異 |
@@ -132,7 +178,4 @@
 
 ---
 
-**Last Updated**: 2026-05-04
-**Version**: 1.1.0 — 新增規則 1.5「適用邊界：程式碼/文件 vs worklog/ticket」；規則 1 禁止詞表加入「將來」；規則 2 替代方案表新增「ticket 計數」「版本錨點」兩列非時間 trigger；規則 4 違規偵測 + 檢查清單同步加「將來」「下週」「下個月」；引用 friction-management-methodology.md 解釋時間非權重單位。
-**Version**: 1.0.0 — 從用戶原則「不應該在任何時候使用延後決策」+ WRAP 完整模式分析（D + A + E 三層落地，trigger 限 ticket ID only，不設探索性例外）建立。
-**Source**: PC-093 反模式描述的正向 prescriptive 替代框架；hook 精度誤判的合法 Phase 4 結論案例觸發本次反思。
+**Last Updated**: 2026-05-13 | **Version**: 1.2.0 — 兩種合法狀態 + 適用邊界（程式碼/文件 vs worklog）+ Hook 引用豁免機制（PC-146 防護）。歷史 1.0–1.1 版見 git log。**Source**: PC-093 / PC-146。

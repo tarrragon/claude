@@ -134,6 +134,8 @@ Put the conclusion first. A reader who stops after the opening paragraph should 
 
 Documents that touch business concepts must describe the *why*, not the *what of the syntax*.
 
+<!-- Rule 8 exemption (reference-stability-rules.md / DOC-010): "Readmoo" in the table below serves as a concrete business-name example contrasting business intent vs. syntax translation. A concrete product name lends the example credibility; abstracting to "Product X" would dilute the teaching contrast. Exemption retained after cross-file evaluation. -->
+
 | Description style                                                       | Fits                     | Fails                                                   |
 | ----------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------- |
 | "Readmoo extractor falls back to alternate selector when primary fails" | Business / design intent | —                                                       |

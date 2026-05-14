@@ -168,6 +168,21 @@ def should_trigger_check(input_data: Dict[str, Any], logger) -> bool:
         logger.info("檔案內容不符合 Ticket 結構")
         return False
 
+    # 條件 5: type-aware 過濾（W10-123 / W10-118 ANA Case B 修復）
+    # c2/c3 檢查源自 Flutter Bloc 風格實作 ticket（test/*.dart 路徑 + Layer 標示），
+    # 對 ANA（分析）/ DOC（文件）類型 ticket 不適用，會產生大量 false positive。
+    # 缺 type frontmatter → fallback 觸發（向後相容既有 ticket）。
+    import re
+    type_excludes = trigger_config.get("type_excludes", ["ANA", "DOC"])
+    type_match = re.search(r"^type:\s*(\w+)\s*$", content, re.MULTILINE)
+    if type_match:
+        ticket_type = type_match.group(1).strip()
+        if ticket_type in type_excludes:
+            logger.info(
+                f"Ticket type={ticket_type} 不適用 c2/c3 檢查（W10-123 type-aware skip）"
+            )
+            return False
+
     logger.info(f"觸發條件檢查通過: {file_path}")
     return True
 

@@ -36,6 +36,32 @@
 
 ---
 
+## 關卡三：派發前假設驗證（ANA → IMP 轉換時觸發）
+
+ANA 結論落地為 IMP 派發前，若任一條件成立，必須執行假設驗證：
+
+| 觸發條件 | 範例 |
+|---------|------|
+| ANA 結論依賴未驗證事實宣稱 | 「Hook 已強制 X」「函式 F 已存在」「規則已涵蓋 Y」 |
+| 動作不可逆且影響範圍 > 單檔 | 刪除 `.claude/rules/` 內檔案、修改 auto-load 入口 |
+| 觸碰 auto-load 層 | 任何 `.claude/rules/core/` 修改、CLAUDE.md 引用變更 |
+| ANA 含 dissenting view 警告 | devil's advocate 對某假設提出疑慮 |
+
+**驗證動作**：
+
+| 假設類型 | 驗證指令 |
+|---------|---------|
+| Hook 強制狀態 | `grep -A 10 "exit\|behavior" .claude/hooks/<hook>.py` |
+| 檔案 / 函式存在 | `ls / grep / wc` 直接確認 |
+| 規則涵蓋場景 | `grep -rn "Y" .claude/rules/ .claude/pm-rules/` |
+
+驗證失敗或結論修正 → 在 IMP ticket Problem Analysis 補「主線程驗證後的範圍調整」段。
+
+> 完整案例集 + Tripwire 設計：`.claude/references/dispatch-pre-validation-cases.md`
+> 設計來源：W10-140 第四輪 4 視角分析（W10-137 為首例案例）
+
+---
+
 ## 並行化判斷
 
 兩道關卡通過後，評估並行可行性：

@@ -100,6 +100,8 @@ function validateBookTitle(title) {
 
 **對應 reference**：`writing-documents.md`
 
+<!-- 規則 8 豁免（reference-stability-rules.md / DOC-010）：以下任務描述中的「Readmoo 書庫管理器」「Readmoo 平台」作為 dry-run 測試的具體任務情境設定。測試人員需具體系統名稱才能模擬撰寫情境；改為「系統 X」會失去場景感，違反 SKILL 設計目的。本豁免經跨檔評估後保留。 -->
+
 **任務描述（給測試人員的指示）**
 
 你需要為一份「書庫同步錯誤處理設計」文件撰寫開頭章節（Introduction 或 Overview）。

@@ -49,6 +49,8 @@ from ticket_system.lib.handoff_utils import (
 )
 from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
+# 跨 sibling-module 存取 track_runqueue 的私有 helper，與 track_dashboard 共用 priority
+# 排序語意。當第 3 consumer 出現時，依 W10-119 結論抽出至 lib/runqueue_helpers.py。
 from ticket_system.commands.track_runqueue import _priority_rank
 from ticket_system.lib.ticket_ops import load_and_validate_ticket
 

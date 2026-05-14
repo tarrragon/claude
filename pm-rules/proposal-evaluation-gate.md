@@ -26,9 +26,13 @@
 
 | 分級 | 判定條件（滿足任一） | 評估摩擦力 |
 |------|-------------------|----------|
-| 輕量（light） | spec 盤點批次建立 / 拼字修正 / 格式調整 / 重命名 | 低 |
+| 輕量（light） | 拼字修正 / 格式調整 / 重命名（純語意調整，無新內容） | 低 |
 | 標準（standard） | 單版本影響 / 1-2 UC 變動 / 功能新增但不改架構 | 中 |
 | 重量（heavy） | 跨版本（跨 2 個以上大版本） / 跨專案（APP / Extension / CLI 任兩者以上） / framework 類（變更規則或方法論） / 3+ UC 結構性變動 / 架構層級改動 | 高 |
+
+**Light 純語意收斂（W10-099 落地）**：light 從原本「spec 盤點批次建立 / 拼字 / 格式 / 重命名」收斂為「純語意調整」。**Why**：W10-099 重現實驗（11/11 PROP）證實 light 100% 承載 grandfather 妥協（draft 章節未完整），0% 用於設計目的（純拼字）。**Consequence**：未收斂會讓 light 持續成為 draft 探索期的規避手段，PROP 真實強度與 evaluation_level 脫節，promote 時遺漏重評。**Action**：探索期 PROP 改用 `status: draft` 搭配實際強度的 `evaluation_level`（standard/heavy），由 hook 自動豁免章節檢查（豁免優先序 P2，見規則 2.5）；light 只保留純語意調整用例。
+
+> **Deprecation trigger**：light 機制是否完全取消，待 ANA-C（規則精簡 follow-up，源 W10-099）評估後決定，本規則暫保留以維持向後相容。
 
 ### 分級強制
 
@@ -50,6 +54,42 @@ PROP frontmatter 必須標示 `evaluation_level: light | standard | heavy`。未
 ## 規則 2：各級評估要求
 
 不同分級對應不同評估深度。evaluation_level 必須符合下列要求才能從 draft → discussing → confirmed。
+
+### 2.0 Draft 階段豁免（W10-109 新增）
+
+PROP 處於 `status: draft` 階段時，由 hook 自動豁免下列檢查：
+
+| 規則 | 豁免狀態 |
+|------|---------|
+| 規則 1（evaluation_level 必填且合法） | **不豁免**（draft 仍須標示實際強度，避免促 promote 時遺漏） |
+| 規則 2 章節必填（standard / heavy） | **全豁免** |
+| 規則 3 Reality Test 章節 | **豁免**（探索期不要求實證） |
+| 規則 4 ticket_refs 綁定 | **豁免**（僅對 confirmed/approved 強制） |
+
+**Why**：Draft 屬探索期，章節通常未完整；強制完整章節會阻擋創意 brainstorming，違反 draft 設計目的，並讓提案者改用 light 規避（W10-099 重現實驗證實的 grandfather 模式）。
+
+**Consequence**：未明示 draft 豁免會讓 light 機制持續被誤用為 draft 暫設手段，long-term 治理上 PROP level 與真實強度脫節。
+
+**Action**：探索期 PROP 維持 `status: draft` + 實際強度 `evaluation_level`；準備收斂時改 `status: discussing`，hook 自動切走嚴格路徑（P4），此時補充章節即可通過。
+
+### 2.5 豁免優先序總覽
+
+Hook `proposal-evaluation-gate-hook.py` 依下列優先序判定豁免（高優先序先觸發，低優先序為 fall-through）：
+
+| 優先序 | 觸發條件 | 豁免範圍 | hook 觸發點 |
+|-------|---------|---------|------------|
+| P1 | Edit/MultiEdit 改動 < 30 字元（MICRO_EDIT_THRESHOLD） | 整檔豁免章節檢查 | `is_micro_edit` 早 return |
+| P2 | `status: draft`（任何 level） | 章節檢查 + Reality Test + ticket_refs | `check_prop_content` status=draft 分支 |
+| P3 | `evaluation_level: light`（任何 status） | 章節檢查 + Reality Test | `check_prop_content` level=light 分支 |
+| P4 | status≠draft 且 level=standard/heavy | 嚴格章節檢查 | fall-through 預設路徑 |
+
+**Why**：多重豁免機制需明示優先序，避免讀者混淆「draft + light」「draft + heavy」「discussing + light」等組合的判定結果。
+
+**Consequence**：未明示優先序會讓 PROP 作者在 promote 時誤判（如「status=discussing + level=heavy 還能豁免嗎？」），導致非預期阻擋或誤通過。
+
+**Action**：撰寫 PROP 時對照本表確認所在優先序層級；promote 跨層級時 hook 自動切換判定路徑，無需手動處理。
+
+**互斥保證**：P1 在 `is_micro_edit` 階段早 return（不進入 `check_prop_content`）；P2/P3 在 `check_prop_content` 內各為獨立分支；P4 是 fall-through 預設路徑。物理上 P2 與 P3 為 OR 關係（兩條獨立早 return path），規則層敘述採 P2 先於 P3 順序對齊「狀態優先於分級」的語意。
 
 ### 輕量（light）
 
@@ -221,5 +261,6 @@ PM 建立 PROP 時，使用 AskUserQuestion 引導分級和評估強度：
 
 ---
 
-**Last Updated**: 2026-04-14
+**Last Updated**: 2026-05-13
+**Version**: 1.1.0 — W10-099 多視角審查仲裁採方案 D 落地（W10-109）：規則 1 light 收斂為純語意（移除 spec 盤點批次 / 拼字 / 格式 / 重命名以外用例，僅保留純語意調整）；規則 2 新增 2.0 Draft 階段豁免（status=draft 自動豁免章節 + Reality Test + ticket_refs）與 2.5 豁免優先序總覽（P1 micro_edit / P2 draft / P3 light / P4 嚴格路徑）；hook check_prop_content 同步新增 P2 分支與測試 13 case
 **Version**: 1.0.0 — 初始建立，基於開發流程摩擦力配置倒置結構性問題分析產出

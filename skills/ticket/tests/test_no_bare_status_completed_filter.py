@@ -38,7 +38,7 @@ HARDCODE_PATTERN = re.compile(r'!=\s*[\'"]completed[\'"]')
 ALLOWED_FILTER_SITES: dict[str, str] = {
     # resume.py: from_status != "completed" 是 handoff record 的快照狀態，
     # 表達「非任務鏈交接」語意，與 ticket terminal 狀態正交，不應改 TERMINAL_STATUSES
-    "commands/resume.py:193": "from_status 語意 (handoff snapshot)",
+    "commands/resume.py:195": "from_status 語意 (handoff snapshot)",
     # W17-163 L1-A: handoff_gc.py:79 站點已隨 _collect_stale_handoffs delegate
     # 至 handoff_utils.is_handoff_stale 而消除（ARCH-020 同構修復）
 }

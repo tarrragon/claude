@@ -158,8 +158,19 @@ def check_prop_content(content: str, logger) -> Tuple[bool, str]:
         )
 
     if level == "light":
-        logger.info("PROP 為 light 級，跳過章節檢查")
+        logger.info("PROP 為 light 級，跳過章節檢查（豁免優先序 P3）")
         return False, ""
+
+    # 豁免優先序 P2：status=draft 探索期豁免章節檢查
+    # 設計理由：draft 為探索期 PROP，章節通常未完整；強制章節會阻擋創意 brainstorming。
+    # 規則 1 仍生效（evaluation_level 必填且必須為合法值，已於上方檢查）。
+    # 規格：.claude/pm-rules/proposal-evaluation-gate.md 規則 2.0 + 2.5
+    status_raw = fm.get("status")
+    if status_raw is not None:
+        status = str(status_raw).lower().strip()
+        if status == "draft":
+            logger.info("PROP status=draft，跳過章節檢查（豁免優先序 P2）")
+            return False, ""
 
     # 取得 body 部分
     parts = content.split("---", 2)

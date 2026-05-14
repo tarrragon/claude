@@ -29,8 +29,16 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 
-# PC ID 正規表達式（如 PC-099、IMP-055、ARCH-019）
-_PATTERN_ID_RE = re.compile(r"\b(?:PC|IMP|ARCH|ANA|REF|DOC)-\d+\b", re.IGNORECASE)
+# Pattern ID 正規表達式
+# 涵蓋 .claude/error-patterns/ 既有子目錄前綴：
+#   - PC (process-compliance), IMP (implementation), ARCH (architecture)
+#   - DOC (documentation), CQ (code-quality), PROC (process), TEST (test)
+# 額外保留：ANA / REF（ticket 類型 / 跨檔引用慣例，防衛性涵蓋）
+# 新增前綴時請同步擴充本清單與 .claude/error-patterns/README.md。
+_PATTERN_ID_RE = re.compile(
+    r"\b(?:PC|IMP|ARCH|ANA|REF|DOC|CQ|PROC|TEST)-\d+\b",
+    re.IGNORECASE,
+)
 
 # YAML frontmatter 開頭結尾標記
 _FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.DOTALL)
@@ -40,6 +48,10 @@ def _parse_pc_frontmatter_source_ticket(
     pc_content: str, logger=None
 ) -> Tuple[bool, Optional[str]]:
     """解析 PC 檔案的 YAML frontmatter `source_ticket` 欄位。
+
+    僅支援扁平 key: value 形式（PC frontmatter 慣例），不解析巢狀結構、
+    清單、anchors 等完整 YAML 特性。若日後 PC frontmatter 需要更複雜結構，
+    應改用 PyYAML 並更新此函式契約。
 
     Returns:
         (has_frontmatter, source_ticket_value)
@@ -56,13 +68,15 @@ def _parse_pc_frontmatter_source_ticket(
         stripped = line.strip()
         if stripped.startswith("source_ticket:"):
             value = stripped.split(":", 1)[1].strip()
-            # 去除引號
+            # 去除引號（支援 "..." 與 '...' 兩種引號變體）
             if (value.startswith('"') and value.endswith('"')) or (
                 value.startswith("'") and value.endswith("'")
             ):
                 value = value[1:-1]
             # null / 空值視為 None
             if not value or value.lower() in ("null", "~", "none"):
+                if logger:
+                    logger.debug("source_ticket 為空/null，回退至引用檢查")
                 return True, None
             return True, value
 
@@ -126,9 +140,11 @@ def filter_error_patterns_by_ticket_scope(
             continue
 
         # 步驟 1：frontmatter source_ticket 優先
-        has_fm, source_ticket = _parse_pc_frontmatter_source_ticket(pc_content, logger)
+        has_frontmatter, source_ticket = _parse_pc_frontmatter_source_ticket(
+            pc_content, logger
+        )
 
-        if has_fm and source_ticket is not None:
+        if has_frontmatter and source_ticket is not None:
             if source_ticket == current_ticket_id:
                 if logger:
                     logger.info(

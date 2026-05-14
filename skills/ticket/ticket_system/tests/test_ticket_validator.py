@@ -139,6 +139,69 @@ class TestIsPlaceholderLegacyBehavior:
         assert _is_placeholder("TBD") is True
         assert _is_placeholder("N/A") is True
 
+    # W10-125：表格情境豁免（PC-138 / PC-144 治本）
+    def test_table_cell_na_is_not_placeholder(self):
+        """Markdown 表格 cell 中的 N/A 屬合法「不適用」標示，不應誤判整章節為 placeholder（PC-138 治本）。"""
+        text = (
+            "| 方案 | 成本 | 風險 |\n"
+            "|------|------|------|\n"
+            "| A | 中 | 低 |\n"
+            "| B | N/A | 不可行 |\n"
+        )
+        assert _is_placeholder(text) is False
+
+    def test_table_cell_todo_is_not_placeholder(self):
+        """Markdown 表格 cell 中描述 TODO 標記不應誤判為 placeholder（PC-144 治本）。"""
+        text = (
+            "| 動作 | 內容 |\n"
+            "|------|------|\n"
+            "| 1 | 加 TODO trigger 註解 |\n"
+            "| 2 | 等下個 consumer 出現 |\n"
+        )
+        assert _is_placeholder(text) is False
+
+    def test_table_cell_tbd_is_not_placeholder(self):
+        """Markdown 表格 cell 中的 TBD 屬合法「待定」標示，不應誤判為 placeholder。"""
+        text = (
+            "| 項目 | 狀態 |\n"
+            "|------|------|\n"
+            "| 估時 | TBD |\n"
+            "| 範圍 | 已定義 |\n"
+        )
+        assert _is_placeholder(text) is False
+
+    def test_table_with_outside_placeholder_is_placeholder(self):
+        """表格外有 placeholder 標記時仍應判為 placeholder（混合情境）。"""
+        text = (
+            "TODO\n"
+            "\n"
+            "| 方案 | 成本 |\n"
+            "|------|------|\n"
+            "| A | 低 |\n"
+        )
+        assert _is_placeholder(text) is True
+
+    def test_table_with_outside_real_content_and_na_inside_is_not_placeholder(self):
+        """表格內 N/A + 表格外實質內容（無 placeholder 關鍵字）→ 不是 placeholder。"""
+        text = (
+            "我們選擇方案 A，理由如下。\n"
+            "\n"
+            "| 方案 | 成本 | 風險 |\n"
+            "|------|------|------|\n"
+            "| A | 低 | 已驗證 |\n"
+            "| B | N/A | 不適用 |\n"
+        )
+        assert _is_placeholder(text) is False
+
+    def test_pure_table_only_is_not_placeholder(self):
+        """純表格章節（無周邊文字）→ 不是 placeholder（作者寫表格即實質內容）。"""
+        text = (
+            "| Header | Value |\n"
+            "|--------|-------|\n"
+            "| key | data |\n"
+        )
+        assert _is_placeholder(text) is False
+
 
 class TestValidateExecutionLogIntegration:
     """validate_execution_log 整合測試：HTML 註解 + 內容不應被擋"""

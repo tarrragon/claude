@@ -268,6 +268,17 @@ def generate_skip_reminder(skip_type: str, pattern_info: dict) -> str:
     )
 
 
+def _emit_basic() -> int:
+    """輸出無提醒的基本 Hook 協定 JSON 並回傳 EXIT_SUCCESS。
+
+    收斂 main() 中 7 處重複的 `print(json.dumps(generate_hook_output(...))) + return`
+    模式（W11-020 重構）。特殊 reminder emit（含 reminder payload）保留於 main 內
+    直接輸出，不經此 helper。
+    """
+    print(json.dumps(generate_hook_output("UserPromptSubmit"), ensure_ascii=False, indent=2))
+    return EXIT_SUCCESS
+
+
 def main() -> int:
     """
     Hook 主函式
@@ -288,26 +299,21 @@ def main() -> int:
         input_data = read_json_from_stdin(logger)
     except (json.JSONDecodeError, Exception):
         # 輸入解析失敗，輸出基本 JSON
-        print(json.dumps(generate_hook_output("UserPromptSubmit"), ensure_ascii=False, indent=2))
-        return EXIT_SUCCESS
+        return _emit_basic()
 
     if input_data is None:
-        print(json.dumps(generate_hook_output("UserPromptSubmit"), ensure_ascii=False, indent=2))
-        return EXIT_SUCCESS
+        return _emit_basic()
 
     # 偵測 subagent 環境：agent_id 僅在 subagent 中出現
     if is_subagent_environment(input_data):
         logger.info("偵測到 subagent 環境（agent_id=%s），跳過流程省略提醒", input_data.get("agent_id"))
-        # 輸出基本 JSON（無省略意圖）
-        print(json.dumps(generate_hook_output("UserPromptSubmit"), ensure_ascii=False, indent=2))
-        return EXIT_SUCCESS
+        return _emit_basic()
 
     user_input = input_data.get("prompt", "")
 
     if not user_input:
         # 無使用者輸入，輸出基本 JSON
-        print(json.dumps(generate_hook_output("UserPromptSubmit"), ensure_ascii=False, indent=2))
-        return EXIT_SUCCESS
+        return _emit_basic()
 
     skip_type, pattern_info = detect_skip_intent(user_input)
 
@@ -317,8 +323,7 @@ def main() -> int:
         try:
             if has_active_dispatch():
                 logger.info(f"偵測到 active dispatch，靜音 {skip_type} 提醒")
-                print(json.dumps(generate_hook_output("UserPromptSubmit"), ensure_ascii=False, indent=2))
-                return EXIT_SUCCESS
+                return _emit_basic()
         except Exception as exc:
             logger.warning(f"has_active_dispatch 失敗，回退原行為: {exc}")
 
@@ -336,25 +341,24 @@ def main() -> int:
                 f"SKIP_SA_REVIEW 因 ticket type={active_ticket.get('type')}/"
                 f"phase={active_ticket.get('current_phase')} 靜音"
             )
-            print(json.dumps(generate_hook_output("UserPromptSubmit"), ensure_ascii=False, indent=2))
-            return EXIT_SUCCESS
+            return _emit_basic()
 
     if skip_type and pattern_info:
         logger.info(f"偵測到流程省略意圖: {skip_type}")
         reminder = generate_skip_reminder(skip_type, pattern_info)
 
         # 輸出 Hook 協定 JSON 到 stdout（包含提醒訊息）
+        # 此處為特殊 reminder emit，含 reminder payload，不經 _emit_basic() 以保留語意
         hook_output = generate_hook_output("UserPromptSubmit", reminder)
         print(json.dumps(hook_output, ensure_ascii=False, indent=2))
 
         # 同時輸出提醒訊息到 stderr（雙通道要求）
         print(reminder, file=sys.stderr)
         logger.info(f"省略意圖詳情: {pattern_info['description']}")
-    else:
-        # 未偵測到省略意圖，輸出基本 JSON
-        print(json.dumps(generate_hook_output("UserPromptSubmit"), ensure_ascii=False, indent=2))
+        return EXIT_SUCCESS
 
-    return EXIT_SUCCESS
+    # 未偵測到省略意圖，輸出基本 JSON
+    return _emit_basic()
 
 
 if __name__ == "__main__":

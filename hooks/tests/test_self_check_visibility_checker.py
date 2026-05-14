@@ -178,3 +178,52 @@ class TestNonApplicableType:
             _ticket_without_self_check(), "imp", _logger()
         )
         assert result is not None
+
+
+# ----------------------------------------------------------------------------
+# 場景 4：H3 補充說明前綴匹配（W10-124 / W10-118 Case C）
+# ----------------------------------------------------------------------------
+
+def _ticket_with_self_check_heading(heading: str) -> str:
+    return f"""---
+id: test
+type: IMP
+---
+
+## Solution
+
+### 修復摘要
+X。
+
+{heading}
+- [x] 命名規範
+
+## Test Results
+通過。
+"""
+
+
+class TestSelfCheckHeadingPrefixMatch:
+    def test_heading_with_parenthetical_supplement_matches(self):
+        """### 自檢結果（PC-093 H3 補充） → 仍視為存在"""
+        content = _ticket_with_self_check_heading("### 自檢結果（PC-093 H3 補充）")
+        result = check_self_check_visibility(content, "IMP", _logger())
+        assert result is None
+
+    def test_heading_plain_still_matches(self):
+        """### 自檢結果 → 向後相容仍匹配"""
+        content = _ticket_with_self_check_heading("### 自檢結果")
+        result = check_self_check_visibility(content, "IMP", _logger())
+        assert result is None
+
+    def test_heading_with_different_suffix_does_not_match(self):
+        """### 自檢結果摘要 → 異義保護不匹配（無空白分隔）"""
+        content = _ticket_with_self_check_heading("### 自檢結果摘要")
+        result = check_self_check_visibility(content, "IMP", _logger())
+        assert result is not None
+
+    def test_heading_with_ticket_annotation_matches(self):
+        """### 自檢結果 (W10-118) → 匹配"""
+        content = _ticket_with_self_check_heading("### 自檢結果 (W10-118)")
+        result = check_self_check_visibility(content, "IMP", _logger())
+        assert result is None

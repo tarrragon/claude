@@ -17,6 +17,8 @@
 - 測試失敗原因難以定位
 - 組件修改會破壞不相關的測試
 
+<!-- 規則 8 豁免（reference-stability-rules.md / DOC-010）：以下測試反例中的 `platform_icon_readmoo` Widget Key 命名是反例事件的真實 Key 名稱。事件分析記錄真實事件特徵；改為 `platform_icon_xxx` 會降低反例真實性。本豁免經跨檔評估後保留。 -->
+
 ```dart
 // Import Widget 測試
 test('should complete import flow', () async {

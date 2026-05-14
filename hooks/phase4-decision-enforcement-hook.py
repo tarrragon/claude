@@ -22,8 +22,9 @@ Hook 類型：
 豁免語法：
   <!-- PC-093-exempt: <category>:<reason> -->
   於命中 phrase 同行或前 1 行內生效。
-  category: tdd-transition | baseline-gated | ticket-tracked | user-override
-  reason: ≥10 字元；baseline-gated 需含數字；ticket-tracked 需含 ticket id
+  category: tdd-transition | baseline-gated | ticket-tracked | user-override | rule-quote
+  reason: ≥10 字元；baseline-gated 需含數字；ticket-tracked 需含 ticket id；
+          rule-quote 需含 .claude/rules/ 或 .claude/pm-rules/ 路徑
 
 Ticket: 0.18.0-W10-082
 Pattern: PC-093
@@ -57,12 +58,17 @@ EXEMPT_CATEGORIES = frozenset({
     "baseline-gated",
     "ticket-tracked",
     "user-override",
+    "rule-quote",
 })
 
 REASON_MIN_LEN = 10
 
 # Ticket ID 通用格式：W{wave}-{seq} 或 {version}-W{wave}-{seq}
 TICKET_ID_PATTERN = re.compile(r"\bW\d+-\d+")
+
+# Rule-quote 類別：reason 必須含 .claude/rules/ 或 .claude/pm-rules/ 路徑
+# 用途：PM 在 acceptance / Solution 引用規則名稱（如「禁止 Phase 5 再決定」）時豁免
+RULE_PATH_PATTERN = re.compile(r"\.claude/(?:rules|pm-rules)/")
 
 # 觸發命令偵測
 MAIN_GATE_CMD = re.compile(r"ticket\s+track\s+phase\s+(\S+)\s+phase4\b")
@@ -75,6 +81,24 @@ EXEMPT_MARKER = re.compile(
 
 # 豁免 marker 剔除（掃描 phrase 前移除，避免 marker 內含 phrase 誤判）
 EXEMPT_MARKER_STRIP = re.compile(r"<!--\s*PC-093-exempt[^>]*-->")
+
+# Context Bundle 自動抽取的 [ref] 行豁免（W10-127）：
+# ticket-loader 抽取 source ticket 的 acceptance / rationale 時，會將每行加上
+# `[ref]` 前綴標記。這些行是「引用其他 ticket 的內容」，不是本 ticket 的延後
+# 決策。常見模式：
+#   - [ref] [ ] Phase 4 評估結論明確（無需重構 / ...，禁止 Phase 5 再決定）
+# 屬於 PC-142 case 4 漏網案例（W10-122 rule-quote 豁免未涵蓋 ref 行模式）。
+# 行級豁免（trim 後以 `- [ref]` 或 `[ref]` 開頭）— 採方向 A：簡單精準。
+REF_LINE_PATTERN = re.compile(r"^\s*-?\s*\[ref\]")
+
+# W10-130: Schema placeholder template 區塊起點。
+# Ticket body schema 採 `<!-- Schema[<type>/<section>]: <note> -->` 標記。
+# 該區塊內的 `<!-- PC-093-exempt: cat:reason -->` 屬範例文字（template note 內
+# 示意 marker 格式），非實際豁免宣告。應整段跳過 phrase 掃描與 marker 蒐集。
+SCHEMA_PLACEHOLDER_START = re.compile(r"<!--\s*Schema\[[^\]]+\]\s*:")
+# 區塊邊界：下個 H2（## ）或 `---` 水平分隔符（trim 後完全相符）。
+SCHEMA_PLACEHOLDER_END_H2 = re.compile(r"^\s*##\s")
+SCHEMA_PLACEHOLDER_END_HR = re.compile(r"^\s*---\s*$")
 
 # 豁免 proximity（marker 同行或前 1 行生效）
 EXEMPT_PROXIMITY_LINES = 1
@@ -107,6 +131,10 @@ ERR_MESSAGE_MAP: Dict[str, Tuple[str, str]] = {
     "ticket-tracked-need-id": (
         "ticket-tracked 類別的 reason 必須含 W{wave}-{seq} 格式 ticket ID",
         "範例：<!-- PC-093-exempt: ticket-tracked:W17-085 hook 訊息改善 -->",
+    ),
+    "rule-quote-need-path": (
+        "rule-quote 類別的 reason 必須含規則檔案路徑（.claude/rules/ 或 .claude/pm-rules/）",
+        "範例：<!-- PC-093-exempt: rule-quote:引用 .claude/rules/core/decision-trigger-binding.md 規則 1.5 -->",
     ),
 }
 
@@ -243,6 +271,31 @@ def build_regex_table() -> List[PhraseRule]:
 # F2: 逐行掃描 phrase
 # ============================================================================
 
+def compute_schema_placeholder_lines(lines: List[str]) -> set:
+    """W10-130: 計算 Schema placeholder template 區塊的 1-based 行號集合。
+
+    起點：含 `<!-- Schema[<type>/<section>]: ... -->` 的行（含該行）。
+    終點：下個 H2（`## `）或 `---` 水平分隔符（不含該邊界行）。
+
+    回傳：所有屬於 placeholder 區塊的行號集合。phrase 掃描與 marker 蒐集均跳過。
+    """
+    placeholder_lines: set = set()
+    in_block = False
+    for idx, raw in enumerate(lines, start=1):
+        if in_block:
+            if SCHEMA_PLACEHOLDER_END_H2.match(raw) or SCHEMA_PLACEHOLDER_END_HR.match(raw):
+                in_block = False
+                # 邊界行不屬 placeholder
+                continue
+            placeholder_lines.add(idx)
+            # 同一行可能再次出現 Schema 標記（連續 placeholder），仍視為 in_block
+            continue
+        if SCHEMA_PLACEHOLDER_START.search(raw):
+            in_block = True
+            placeholder_lines.add(idx)
+    return placeholder_lines
+
+
 def scan_lines_for_phrases(
     lines: List[str],
     table: List[PhraseRule],
@@ -251,9 +304,18 @@ def scan_lines_for_phrases(
 
     - 掃前移除 EXEMPT_MARKER_STRIP 避 marker 內含 phrase 誤判。
     - 同行可多規則命中，不去重；豁免狀態由 F7 處理。
+    - W10-130: Schema placeholder template 區塊整段跳過。
     """
+    placeholder_lines = compute_schema_placeholder_lines(lines)
     hits: List[Hit] = []
     for idx, raw in enumerate(lines, start=1):
+        # W10-130: Schema placeholder template 區塊跳過（範例文字非實際內容）
+        if idx in placeholder_lines:
+            continue
+        # W10-127: Context Bundle 自動抽取的 [ref] 行豁免（行級 short-circuit）。
+        # 這些行屬 source ticket 引用，非本 ticket 延後決策。
+        if REF_LINE_PATTERN.match(raw):
+            continue
         stripped = EXEMPT_MARKER_STRIP.sub("", raw)
         for rule in table:
             for match in rule.pattern.finditer(stripped):
@@ -296,6 +358,8 @@ def validate_exempt_fields(marker: ExemptMarker) -> Tuple[bool, Optional[str]]:
         return (False, "baseline-need-number")
     if marker.category == "ticket-tracked" and not TICKET_ID_PATTERN.search(marker.reason):
         return (False, "ticket-tracked-need-id")
+    if marker.category == "rule-quote" and not RULE_PATH_PATTERN.search(marker.reason):
+        return (False, "rule-quote-need-path")
     return (True, None)
 
 
@@ -304,9 +368,16 @@ def validate_exempt_fields(marker: ExemptMarker) -> Tuple[bool, Optional[str]]:
 # ============================================================================
 
 def collect_exempt_markers(lines: List[str]) -> List[ExemptRef]:
-    """掃全文蒐集 marker 位置 + 解析結果。"""
+    """掃全文蒐集 marker 位置 + 解析結果。
+
+    W10-130: Schema placeholder template 區塊內的 marker 屬範例文字（如
+    `<!-- PC-093-exempt: cat:reason -->`），整段跳過避免誤判為 INVALID。
+    """
+    placeholder_lines = compute_schema_placeholder_lines(lines)
     refs: List[ExemptRef] = []
     for idx, raw in enumerate(lines, start=1):
+        if idx in placeholder_lines:
+            continue
         marker = parse_exempt_marker(raw)
         if marker is None:
             # 若行內含 PC-093-exempt 文字但格式不符（EX-N5/EX-N8）
@@ -465,9 +536,17 @@ def format_block_message(
     blocked: List[Hit],
     exempted: List[Hit],
 ) -> str:
-    """組 §4.1 stderr block 訊息 + AUQ 骨架。"""
+    """組 §4.1 stderr block 訊息 + AUQ 骨架。
+
+    W10-108: 訊息開頭主動提示「優先嘗試 inline 標記」+ 列出白名單完整 category 清單
+    （含適用情境），引導 agent 走 inline 路徑而非字串繞過（PC-093 同精神反模式）。
+    """
     lines = []
     lines.append("[PC-093 Phase 4 強制決斷] 偵測到延後話術，禁止遞迴延後")
+    lines.append("")
+    lines.append("優先嘗試 inline 標記（不要改寫文字繞過偵測）:")
+    lines.append("  在命中行同行或前 1 行加 <!-- PC-093-exempt: <category>:<reason> -->")
+    lines.append("  若屬合法延後情境，這是最低成本的解法；改寫文字 = PC-093 同精神反模式。")
     lines.append("")
     lines.append("Ticket: {}".format(ticket_id))
     lines.append("命中:")
@@ -477,10 +556,18 @@ def format_block_message(
     lines.append("根因: PC-093 YAGNI 累積反模式")
     lines.append("  詳見: .claude/error-patterns/process-compliance/PC-093-yagni-deferred-decision-accumulation.md")
     lines.append("")
-    lines.append("要求對每項做出二選一:")
+    lines.append("合法豁免 category 白名單（共 {} 項）:".format(len(EXEMPT_CATEGORIES)))
+    lines.append("  - tdd-transition  — TDD phase 轉換的合法延後（Phase 1→2→3 規格性過渡）")
+    lines.append("  - baseline-gated  — 量化基線觸發條件（reason 須含數字，如『baseline > 100ms 重啟』）")
+    lines.append("  - ticket-tracked  — 引用既有 ticket ID（reason 須含 W{wave}-{seq}，如 source ticket 歷史引用）")
+    lines.append("  - user-override   — 用戶明確授權的延後（一般說明 ≥ 10 字）")
+    lines.append("  - rule-quote      — 引用 .claude/rules/ 或 .claude/pm-rules/ 規則名稱（reason 須含規則路徑）")
+    lines.append("  詳見 .claude/rules/core/decision-trigger-binding.md「Hook 引用豁免機制」章節")
+    lines.append("")
+    lines.append("要求對每項做出三選一:")
     lines.append("  1. 執行 — 立即實作，附 use case + AC")
     lines.append("  2. 移除 — 刪除預留 + dead code，記錄理由")
-    lines.append("  3. 豁免 — 符合合法延後條件，加 <!-- PC-093-exempt: cat:reason --> 標記")
+    lines.append("  3. 豁免 — 符合上述白名單條件，加 <!-- PC-093-exempt: cat:reason --> 標記")
     lines.append("")
     lines.append("修復後重新 ticket track phase {} phase4。".format(ticket_id))
     lines.append("")

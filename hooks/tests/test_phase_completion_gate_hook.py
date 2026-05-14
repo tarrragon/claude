@@ -124,3 +124,102 @@ def test_minor_version_worklog_not_excluded_as_main_file():
         "Edit", {"file_path": file_path}, _logger()
     )
     assert result is True
+
+
+# ----------------------------------------------------------------------------
+# W11-017：三層 guard 精度修正（status / 章節位置 / ticket frontmatter）
+# ----------------------------------------------------------------------------
+
+# 模擬 pending ticket 的內容（含「Phase 4」字串，但只是文本引用）
+_PENDING_TICKET_CONTENT = """---
+id: 0.18.0-W11-099
+title: 範例 ticket
+type: IMP
+status: pending
+---
+
+# Execution Log
+
+## Problem Analysis
+
+修復策略：Phase 4 評估時需注意 X。文中提到 Phase 4 屬於文本引用，
+不應被視為「自身的 Phase 4 完成報告」。
+
+## Solution
+
+<!-- To be filled by executing agent -->
+"""
+
+# 模擬 in_progress ticket 真正寫 Phase 4 章節，但 Solution 空
+_INPROGRESS_TICKET_PHASE4_EMPTY_SOLUTION = """---
+id: 0.18.0-W11-100
+title: 真實 Phase 4 評估
+type: IMP
+status: in_progress
+---
+
+# Execution Log
+
+## Phase 4 評估
+
+實作已重構完成。
+
+## Solution
+
+<!-- To be filled by executing agent -->
+"""
+
+# 獨立 phase 完成報告檔（無 frontmatter id，路徑亦非 tickets/）
+_STANDALONE_PHASE_REPORT_CONTENT = """# Phase 4 評估報告
+
+## Problem Analysis
+
+評估範圍 ...
+"""
+
+
+def test_pending_ticket_with_phase4_string_not_identified_as_completion():
+    """pending ticket 含「Phase 4」字串（文本引用）不應被識別為 phase 完成報告"""
+    file_path = "docs/work-logs/v0.18.0/tickets/0.18.0-W11-099.md"
+    is_completion, _ = module.is_phase_completion_report(
+        file_path, _PENDING_TICKET_CONTENT, _logger()
+    )
+    assert is_completion is False, "pending ticket 內文引用 Phase 4 不應被識別為完成報告"
+
+
+def test_inprogress_ticket_real_phase4_section_still_identified():
+    """in_progress ticket 真正寫 ## Phase 4 章節仍應被識別為 phase 完成報告"""
+    file_path = "docs/work-logs/v0.18.0/tickets/0.18.0-W11-100.md"
+    is_completion, phase_type = module.is_phase_completion_report(
+        file_path, _INPROGRESS_TICKET_PHASE4_EMPTY_SOLUTION, _logger()
+    )
+    assert is_completion is True, "真實的 ## Phase 4 章節應被識別"
+    assert phase_type is not None
+
+
+def test_standalone_phase_report_still_identified():
+    """獨立 phase 完成報告檔（非 ticket md）行為維持不變（向後相容）"""
+    file_path = "docs/work-logs/v0.18.0/phase4-evaluation.md"
+    is_completion, phase_type = module.is_phase_completion_report(
+        file_path, _STANDALONE_PHASE_REPORT_CONTENT, _logger()
+    )
+    assert is_completion is True, "獨立 phase 報告檔應維持觸發"
+    assert phase_type is not None
+
+
+def test_pending_ticket_phase4_string_in_strategy_text_no_warning():
+    """ticket strategy 含「Phase 4 評估」純引用文字不應觸發完成識別"""
+    file_path = "docs/work-logs/v0.18.0/tickets/0.18.0-W11-099.md"
+    content = """---
+id: 0.18.0-W11-099
+status: pending
+---
+
+## Problem Analysis
+
+修復策略對齊 Phase 4 評估流程；案例 2 提到 Phase 4 結論「無需重構」。
+"""
+    is_completion, _ = module.is_phase_completion_report(
+        file_path, content, _logger()
+    )
+    assert is_completion is False

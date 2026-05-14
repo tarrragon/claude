@@ -215,6 +215,22 @@ Phase 1 功能規格完成後**強制執行**，無豁免。
 | Phase 4b 重構執行 | cinnamon-refactor-owl | 重構程式碼、債務記錄 |
 | Phase 4c 多視角再審核 | /parallel-evaluation A | 審核報告 |
 
+**Phase 4 派發前預檢（強制）：TD 清單校準（td-status）**
+
+Phase 4a 或 Phase 4b（豁免時）派發前，PM 必須執行 TD 清單校準，確認已完成項不浪費多視角 token：
+
+```bash
+ticket track td-status <ticket-id>
+```
+
+| 輸出狀態 | PM 動作 |
+|---------|---------|
+| 無 pending TD 或 pending 皆符合預期（本 Phase 待處理） | 直接進行派發 |
+| pending TD 實際已處理但未標記 | 先於 body 補標「已處理：[原因]」再派發 |
+| pending TD 確認無需處理 | 先於 body 補標「無需處理：[原因]」再派發 |
+
+> **Why**：Phase 3a/3b 演進中已修正的 TD 若未更新清單，多視角分析會在已完成項上消耗 token，降低 Phase 4 審查效能（PC-094 W10-017.8 案例教訓）。完整校準規則見 `.claude/pm-rules/tech-debt.md`「TD 清單即時校準（td-status）」章節。
+
 **Phase 4 豁免條件（可簡化為單步驟，直接 Phase 4b，跳過 4a/4c）**：
 
 | 豁免情況 | 說明 |
@@ -367,6 +383,7 @@ SA 否決不可繞過 — 必須解決否決原因後重新審查。
 
 ---
 
-**Last Updated**: 2026-04-18
+**Last Updated**: 2026-05-12
+**Version**: 2.17.0 — Phase 4 派發前新增「TD 清單校準（td-status）」預檢步驟（W10-083 / PC-094 落地，防止多視角浪費 token 在已完成 TD 項）
 **Version**: 2.16.0 - Phase 4 新增強制 Checkpoint：重構評估前執行 WRAP Phase 2 檢驗（W15-019，防止重構根因分析太表層）
 **Version**: 2.15.0 - 新增 Phase 1.5 規格多視角審查（單一視角必然有盲點，規格完成後強制多視角審查）

@@ -61,6 +61,57 @@ PHASE_COMPLETION_KEYWORDS = [
     "評估報告"
 ]
 
+# W11-017 三層 guard：
+# Layer 1 狀態 guard — frontmatter status 非完成態時跳過 content 識別
+# Layer 2 章節位置 guard — phase 關鍵字必須出現在 H2/H3 標題行
+# Layer 3 ticket frontmatter id guard — 含 id 欄位的檔案視為 ticket md（非獨立 phase 報告）
+
+# 非完成狀態：在這些狀態下，ticket md 中含 Phase 4 字串視為文本引用
+_NON_COMPLETED_TICKET_STATUSES = {"pending", "in_progress", "blocked", "draft"}
+
+# H2/H3 章節中 phase 關鍵字（必須在標題行才視為 phase 報告章節）
+_PHASE_SECTION_KEYWORDS = ("Phase 3b", "Phase 4", "Phase 完成")
+
+_FRONTMATTER_BLOCK_RE = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
+_FRONTMATTER_STATUS_RE = re.compile(r"^status:\s*(\S+)", re.MULTILINE)
+_FRONTMATTER_ID_RE = re.compile(r"^id:\s*(\S+)", re.MULTILINE)
+
+
+def _parse_frontmatter(content: str) -> Tuple[Optional[str], Optional[str]]:
+    """從 ticket md frontmatter 提取 status 與 id。
+
+    Returns:
+        (status, ticket_id) — 兩者皆可能為 None。
+    """
+    if not content:
+        return None, None
+    m = _FRONTMATTER_BLOCK_RE.match(content)
+    if not m:
+        return None, None
+    block = m.group(1)
+    status_m = _FRONTMATTER_STATUS_RE.search(block)
+    id_m = _FRONTMATTER_ID_RE.search(block)
+    status = status_m.group(1).strip().strip('"\'') if status_m else None
+    ticket_id = id_m.group(1).strip().strip('"\'') if id_m else None
+    return status, ticket_id
+
+
+def _has_phase_section_heading(content: str) -> Optional[str]:
+    """檢查內容是否含 H2/H3 標題行為 phase 章節（如 `## Phase 4 評估`）。
+
+    Returns:
+        命中的 phase 關鍵字，否則 None。
+    """
+    # 標題行匹配：行首 ## 或 ###，後接 phase 關鍵字（容許空白與評估/完成/報告等後綴）
+    title_re = re.compile(
+        r"^#{2,3}\s+(Phase\s+(?:3b|4)|Phase\s+完成)\b",
+        re.MULTILINE | re.IGNORECASE,
+    )
+    m = title_re.search(content)
+    if m:
+        return m.group(1)
+    return None
+
 # worklog 相關路徑
 WORKLOG_PATTERNS = [
     r"docs/work-logs/v[\d.]+",
@@ -166,6 +217,8 @@ def is_phase_completion_report(file_path: str, content: Optional[str], logger) -
     """
     判斷是否為 Phase 完成報告
 
+    W11-017 三層 guard：避免「ticket md 含 Phase 4 文本引用」被誤判為完成報告。
+
     Args:
         file_path: 檔案路徑
         content: 檔案內容（如果可用）
@@ -180,24 +233,63 @@ def is_phase_completion_report(file_path: str, content: Optional[str], logger) -
             logger.info(f"從檔案名稱識別 Phase 完成: {keyword}")
             return True, keyword
 
-    # 如果提供了內容，檢查內容中的 Phase 標記
-    if content:
-        for keyword in PHASE_COMPLETION_KEYWORDS:
-            if keyword.lower() in content.lower():
-                logger.info(f"從內容識別 Phase 完成: {keyword}")
-                return True, keyword
+    if not content:
+        logger.debug(f"未識別為 Phase 完成報告（無內容）: {file_path}")
+        return False, None
 
-        # 檢查標題中是否包含評估或完成相關詞彙
-        title_patterns = [
-            r"## Phase \d+ 評估",
-            r"## Phase 完成",
-            r"## 重構評估",
-            r"## 實作執行結果",
-        ]
-        for pattern in title_patterns:
-            if re.search(pattern, content, re.IGNORECASE):
-                logger.info(f"從內容模式識別 Phase 完成: {pattern}")
-                return True, "Phase Complete"
+    # W11-017 Layer 3：ticket frontmatter id guard
+    # 若內容含 frontmatter `id:` 欄位，視為 ticket md（而非獨立 phase 報告）。
+    # ticket md 必須通過更嚴格的 Layer 1 + Layer 2 判定。
+    status, ticket_id = _parse_frontmatter(content)
+    is_ticket_md = ticket_id is not None
+
+    if is_ticket_md:
+        # W11-017 Layer 1：狀態 guard
+        # ticket 處於非完成態（pending / in_progress / blocked / draft）時，
+        # 內文 phase 關鍵字視為文本引用（如修復策略中提到 Phase 4），不觸發。
+        if status in _NON_COMPLETED_TICKET_STATUSES:
+            # 但若 ticket 真的寫了 ## Phase X 章節（Layer 2），仍需識別
+            section_kw = _has_phase_section_heading(content)
+            if section_kw:
+                logger.info(
+                    "Ticket md (status=%s) 含 phase 章節標題 %s，仍識別為 phase 報告",
+                    status, section_kw,
+                )
+                return True, section_kw
+            logger.info(
+                "Ticket md (id=%s, status=%s) 內文含 phase 關鍵字但無章節標題，視為文本引用，跳過",
+                ticket_id, status,
+            )
+            return False, None
+
+        # ticket 已 completed 或無 status：套用 Layer 2 章節位置判定
+        section_kw = _has_phase_section_heading(content)
+        if section_kw:
+            logger.info(f"Ticket md 含 phase 章節標題: {section_kw}")
+            return True, section_kw
+        # 不再對 ticket md 套用任意位置 keyword 命中（避免誤判）
+        logger.debug(
+            "Ticket md (id=%s) 無 phase 章節標題，未識別為完成報告", ticket_id,
+        )
+        return False, None
+
+    # 非 ticket md（獨立 phase 完成報告檔等）：維持既有寬鬆識別（向後相容）
+    for keyword in PHASE_COMPLETION_KEYWORDS:
+        if keyword.lower() in content.lower():
+            logger.info(f"從內容識別 Phase 完成: {keyword}")
+            return True, keyword
+
+    # 檢查標題中是否包含評估或完成相關詞彙
+    title_patterns = [
+        r"## Phase \d+ 評估",
+        r"## Phase 完成",
+        r"## 重構評估",
+        r"## 實作執行結果",
+    ]
+    for pattern in title_patterns:
+        if re.search(pattern, content, re.IGNORECASE):
+            logger.info(f"從內容模式識別 Phase 完成: {pattern}")
+            return True, "Phase Complete"
 
     logger.debug(f"未識別為 Phase 完成報告: {file_path}")
     return False, None

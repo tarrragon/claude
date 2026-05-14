@@ -180,7 +180,7 @@ thyme-extension-engineer 在以下情況下應該被觸發：
 
 ## 實戰知識庫
 
-本專案（Readmoo 書庫管理器）是 Chrome Extension (Manifest V3) 專案。
+本專案是 Chrome Extension (Manifest V3) 專案。
 
 ### 必讀文件
 

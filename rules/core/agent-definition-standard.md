@@ -186,8 +186,4 @@ acceptance-gate-hook 在 complete 觸發前自動驗證，無論由 agent 或 PM
 
 ---
 
-**Last Updated**: 2026-04-30
-**Version**: 1.3.0 — 新增「執行責任：Ticket 完成（收尾）」章節：實作類 agent commit + body 填寫後自律執行 check-acceptance --all + complete，acceptance-gate-hook 為安全網；補違規偵測表（W17-033 / 源 W17-022）
-**Version**: 1.2.0 — 新增「章節結構規則」：禁止自定義 H2，實作內容必須寫在 Schema 章節下可用 H3 子章節組織；違規偵測表分層（阻擋 vs 警告）
-**Version**: 1.1.0 — 新增「執行責任：Ticket body 填寫」章節，明示實作類 agent 的 body 填寫時機、方式、違規偵測
-**Source**: W5-001 派發越界根因 A + body 空白系統性缺口 + PC-110 根因 B（agent 自定義 H2 切斷 Schema section）+ W17-033 收尾責任落地
+**Last Updated**: 2026-04-30 | **Version**: 1.3.0 — 三大區塊（允許產出 / 禁止行為 / 適用情境）+ 執行責任（body 填寫 + 收尾 + 章節結構規則）。歷史 1.1–1.2 版見 git log。**Source**: W5-001 派發越界根因 A + PC-110 + W17-033。

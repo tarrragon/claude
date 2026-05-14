@@ -596,6 +596,7 @@ class TicketLifecycle:
         ticket_id: str,
         yes_spawned: bool = False,
         skip_body_check: bool = False,
+        force: bool = False,
     ) -> int:
         """
         完成 Ticket - 使用「先查後做」驗證流程
@@ -696,6 +697,13 @@ class TicketLifecycle:
         spawned_exit = _handle_ana_spawned_confirmation(ticket, self.version, yes_spawned)
         if spawned_exit is not None:
             return spawned_exit
+
+        # Step 3.7：pending children blocking（W11-003.2）
+        # 父 ticket 含未完成（非 terminal）children 時阻擋 complete；--force 旁路（警告但成功）。
+        # W5-019 cascade 解鎖在通過此 step 後（含 --force 路徑）仍會執行。
+        children_exit = _handle_pending_children_block(ticket, self.version, force)
+        if children_exit is not None:
+            return children_exit
 
         # Step 4：執行完成操作
         ticket["status"] = STATUS_COMPLETED
@@ -1509,6 +1517,95 @@ def _handle_ana_spawned_confirmation(
     return 2
 
 
+def _collect_pending_children(
+    children_ids: List[str], version: str
+) -> List[Tuple[str, str]]:
+    """查詢 children 清單中非 terminal（pending / in_progress / blocked）的項目。
+
+    Args:
+        children_ids: children 欄位 ID 清單
+        version: 版本字串
+
+    Returns:
+        List[(ticket_id, status)] — 非 terminal 項目。
+        找不到的 ticket 以 status="not_found" 回報。
+    """
+    if not children_ids:
+        return []
+
+    all_tickets = list_tickets(version)
+    ticket_map: Dict[str, Any] = {t.get("id"): t for t in all_tickets}
+
+    pending: List[Tuple[str, str]] = []
+    for cid in children_ids:
+        child = ticket_map.get(cid)
+        if child is None:
+            pending.append((cid, "not_found"))
+            continue
+        status = child.get("status", "unknown")
+        if status not in TERMINAL_STATUSES:
+            pending.append((cid, status))
+    return pending
+
+
+def _handle_pending_children_block(
+    ticket: Dict[str, Any], version: str, force: bool
+) -> Optional[int]:
+    """檢查 ticket 的 children 狀態，必要時阻擋 complete（W11-003.2）。
+
+    流程：
+      1. children 空 → 跳過（返回 None）
+      2. children 全 terminal → 跳過
+      3. 含非 terminal：
+         - force=True → stderr 警告但繼續（返回 None）
+         - force=False → stderr 列出 + 引導 --force，返回 1
+
+    Args:
+        ticket: 當前 Ticket dict
+        version: 版本字串
+        force: CLI --force flag
+
+    Returns:
+        None — 通過檢查，繼續 complete
+        int  — exit code（1 表示阻擋）
+    """
+    children_ids = ticket.get("children") or []
+    if not children_ids:
+        return None
+
+    pending = _collect_pending_children(children_ids, version)
+    if not pending:
+        return None
+
+    ticket_id = ticket.get("id", "未知")
+    count = len(pending)
+
+    if force:
+        print(
+            f"[Warning] {ticket_id} 有 {count} 個未完成 children，--force 旁路強制完成：",
+            file=sys.stderr,
+        )
+        for cid, status in pending:
+            print(f"  - {cid}: {status}", file=sys.stderr)
+        return None
+
+    print(
+        f"[Error] {ticket_id} 有 {count} 個未完成 children，阻擋 complete：",
+        file=sys.stderr,
+    )
+    for cid, status in pending:
+        print(f"  - {cid}: {status}", file=sys.stderr)
+    print(
+        f"  建議：先完成上述 children，或使用 --force 旁路（會記錄警告）",
+        file=sys.stderr,
+    )
+    print(
+        f"  用法: ticket track complete {ticket_id} --force",
+        file=sys.stderr,
+    )
+    return 1
+
+
 def _post_complete_cascade(
     parent_ticket: Dict[str, Any],
     version: str,
@@ -1844,10 +1941,12 @@ def execute_complete(args: argparse.Namespace, version: str) -> int:
     lifecycle = TicketLifecycle(version)
     yes_spawned = bool(getattr(args, "yes_spawned", False))
     skip_body_check = bool(getattr(args, "skip_body_check", False))
+    force = bool(getattr(args, "force", False))
     return lifecycle.complete(
         args.ticket_id,
         yes_spawned=yes_spawned,
         skip_body_check=skip_body_check,
+        force=force,
     )
 
 

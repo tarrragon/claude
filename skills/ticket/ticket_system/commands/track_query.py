@@ -600,6 +600,67 @@ def execute_list(args: argparse.Namespace, version: str) -> int:
     return _execute_list_single_version(args, version, wave_value)
 
 
+DEFAULT_TOP = 10
+
+
+def _normalize_priority(value: Any) -> str:
+    """Normalize priority value to one of P0/P1/P2/P3, else P9 (sorts last).
+
+    W10-115: 缺欄位 / None / 空字串 / 非標準值（如 'X1' / 'P9'）一律歸 P9。
+
+    W10-121 註：本函式為 str 變體（"P0".."P3"/"P9"）；track_runqueue._priority_rank
+    為 int 變體（0..3/99）。兩者共享 priority schema 但介面分歧（caller 偏好不同）。
+    若 W10-119 trigger 觸發抽 lib/runqueue_helpers.py 時，順便將本函式納入 SSOT。
+    """
+    if not isinstance(value, str):
+        return "P9"
+    cleaned = value.strip().upper()
+    if cleaned in {"P0", "P1", "P2", "P3"}:
+        return cleaned
+    return "P9"
+
+
+def _sort_tickets_by_priority(tickets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sort tickets by (priority_norm, created, id) ascending → P0 first，舊者在前，id 字典序末位。
+
+    Pure function; returns new list, does not mutate input.
+    """
+    def _key(t: Dict[str, Any]):
+        p_norm = _normalize_priority(t.get("priority"))
+        created = t.get("created") or ""
+        tid = t.get("id") or t.get("ticket_id") or ""
+        return (p_norm, created, tid)
+
+    return sorted(tickets, key=_key)
+
+
+def _resolve_top_conflict(args: argparse.Namespace):
+    """Resolve --top / --all conflict.
+
+    Returns: (effective_top: Optional[int], warning: Optional[str])
+      - --all 勝出時 effective_top = None（不限制），若用戶顯式指定 --top 則回 warning
+      - --all 未指定時，args.top is None → 套預設 DEFAULT_TOP；否則用用戶值
+    """
+    list_all = getattr(args, "list_all", False)
+    top_value = getattr(args, "top", None)
+    if list_all:
+        if top_value is not None:
+            return (None, "[WARN] --all overrides --top")
+        return (None, None)
+    if top_value is None:
+        return (DEFAULT_TOP, None)
+    return (top_value, None)
+
+
+def _apply_top_limit(tickets: List[Dict[str, Any]], top: Optional[int]) -> List[Dict[str, Any]]:
+    """Apply top limit. None = no limit (--all); 0 = empty; N = first N."""
+    if top is None:
+        return list(tickets)
+    if top == 0:
+        return []
+    return tickets[:top]
+
+
 def _execute_list_all_versions(args: argparse.Namespace) -> int:
     """跨所有版本列出 Tickets（--version all，W9-002）"""
     from ticket_system.lib.version import get_active_versions
@@ -614,6 +675,14 @@ def _execute_list_all_versions(args: argparse.Namespace) -> int:
     output_format = getattr(args, "format", "table")
     found_any = False
 
+    # W10-115: 先決定 top 限制（跨版本 aggregate 適用）
+    effective_top, top_warning = _resolve_top_conflict(args)
+    if top_warning:
+        sys.stderr.write(top_warning + "\n")
+
+    # 聚合所有版本的篩選結果，統一排序 + 限制
+    aggregated = []
+    version_map = {}  # id -> ver_clean，輸出時依版本分組
     for ver in sorted(active_versions):
         ver_clean = ver.lstrip("v")
         all_tickets = list_tickets(ver_clean)
@@ -626,9 +695,20 @@ def _execute_list_all_versions(args: argparse.Namespace) -> int:
         if wave_value is not None:
             filtered = [t for t in filtered if t.get("wave") == wave_value]
 
-        if filtered:
+        for t in filtered:
+            aggregated.append(t)
+            version_map[t.get("id") or t.get("ticket_id") or id(t)] = ver_clean
+
+    sorted_tickets = _sort_tickets_by_priority(aggregated)
+    limited = _apply_top_limit(sorted_tickets, effective_top)
+
+    # 依版本分組輸出，保留既有 per-version section 行為
+    for ver in sorted(active_versions):
+        ver_clean = ver.lstrip("v")
+        per_ver = [t for t in limited if version_map.get(t.get("id") or t.get("ticket_id") or id(t)) == ver_clean]
+        if per_ver:
             found_any = True
-            _output_tickets(filtered, ver_clean, output_format)
+            _output_tickets(per_ver, ver_clean, output_format)
 
     if not found_any:
         print(format_warning(WarningMessages.NO_TICKETS))
@@ -664,10 +744,21 @@ def _execute_list_cross_version(
             all_filtered.extend(filtered)
             matched_versions.append(ver)
 
-    if all_filtered:
+    # W10-115: 排序 + 限制
+    effective_top, top_warning = _resolve_top_conflict(args)
+    if top_warning:
+        sys.stderr.write(top_warning + "\n")
+    sorted_tickets = _sort_tickets_by_priority(all_filtered)
+    limited = _apply_top_limit(sorted_tickets, effective_top)
+
+    if limited:
         output_format = getattr(args, "format", "table")
         display_version = ", ".join(matched_versions) if matched_versions else default_version
-        return _output_tickets(all_filtered, display_version, output_format)
+        return _output_tickets(limited, display_version, output_format)
+
+    if effective_top == 0:
+        # --top 0 視為合法空集合，不報 NO_TICKETS
+        return 0
 
     print(format_warning(WarningMessages.NO_TICKETS))
     return 0
@@ -694,13 +785,24 @@ def _execute_list_single_version(
     if wave_value is not None:
         filtered_tickets = [t for t in filtered_tickets if t.get("wave") == wave_value]
 
-    if not filtered_tickets:
+    # W10-115: 排序 + 限制（執行順序：篩選 → 排序 → 限制）
+    effective_top, top_warning = _resolve_top_conflict(args)
+    if top_warning:
+        sys.stderr.write(top_warning + "\n")
+    sorted_tickets = _sort_tickets_by_priority(filtered_tickets)
+    limited_tickets = _apply_top_limit(sorted_tickets, effective_top)
+
+    if not limited_tickets:
+        if effective_top == 0:
+            # --top 0 合法空集合，不報 NO_TICKETS
+            _print_cross_version_warning(version)
+            return 0
         print(format_warning(WarningMessages.NO_TICKETS))
         return 0
 
     # 根據格式輸出
     output_format = getattr(args, "format", "table")
-    result = _output_tickets(filtered_tickets, version, output_format)
+    result = _output_tickets(limited_tickets, version, output_format)
     _print_cross_version_warning(version)
     return result
 

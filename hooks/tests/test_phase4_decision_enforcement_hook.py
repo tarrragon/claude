@@ -346,6 +346,70 @@ def test_ex_n4_ticket_tracked_缺_ticket_id():
     assert valid is False and err == "ticket-tracked-need-id"
 
 
+# ---- W10-127: Context Bundle [ref] 行豁免（PC-142 case 4 漏網案例） ----
+
+def test_w10_127_ref_line_phase4_不命中():
+    """`- [ref] [ ] Phase 4 評估` 行屬 source ticket 引用，不應命中。"""
+    text = "- [ref] [ ] Phase 4 評估結論明確（禁止 Phase 5 再決定）  # from 0.18.0-W10-113"
+    hits = _scan_text(text)
+    assert hits == [], "ref 行不應產生任何命中，實際: {}".format(hits)
+
+
+def test_w10_127_一般_phase4_仍命中():
+    """非 [ref] 行的「Phase 4 再決定」仍應命中（保留既有偵測能力）。"""
+    text = "Phase 4 再決定是否保留 use_cache"
+    hits = _scan_text(text)
+    assert len(_hits_by_rule(hits, "M1")) == 1
+
+
+def test_w10_127_ref_inline_含其他延後話術也豁免():
+    """`[ref]` 開頭行即使 inline 含其他延後話術也整行豁免（trim 後判斷）。"""
+    text = "  [ref] 之後再決定處理方式"
+    hits = _scan_text(text)
+    assert hits == []
+
+
+def test_w10_127_w10_116_line_186_真實案例():
+    """W10-116 line 186 真實命中案例：修復後不應再報 hit。"""
+    text = (
+        "- [ref] [ ] Phase 4 評估結論明確（無需重構 / 採方案 X / "
+        "spawn N 個 IMP ticket，禁止 Phase 5 再決定）  # from 0.18.0-W10-113"
+    )
+    hits = _scan_text(text)
+    assert hits == [], "W10-116 line 186 真實案例不應命中，實際: {}".format(hits)
+
+
+# ---- W10-122: rule-quote 類別豁免（PC-142 治本） ----
+
+def test_ex_p5_rule_quote_valid_含規則路徑():
+    """合法引用：reason 含 .claude/rules/ 路徑，應豁免「Phase 5 再決定」字面誤判。"""
+    m = parse_exempt_marker(
+        "<!-- PC-093-exempt: rule-quote:引用 .claude/rules/core/decision-trigger-binding.md 規則 1.5 -->"
+    )
+    assert m is not None and m.category == "rule-quote"
+    valid, err = validate_exempt_fields(m)
+    assert valid is True and err is None
+
+
+def test_ex_p6_rule_quote_valid_含_pm_rules_路徑():
+    """合法引用：reason 含 .claude/pm-rules/ 路徑也應通過。"""
+    m = parse_exempt_marker(
+        "<!-- PC-093-exempt: rule-quote:對照 .claude/pm-rules/skip-gate.md 條款 -->"
+    )
+    valid, err = validate_exempt_fields(m)
+    assert valid is True and err is None
+
+
+def test_ex_n9_rule_quote_缺路徑():
+    """非法：rule-quote reason 不含規則路徑，應 invalid 並產出 rule-quote-need-path。"""
+    m = parse_exempt_marker(
+        "<!-- PC-093-exempt: rule-quote:這是規則引用但沒附路徑說明 -->"
+    )
+    assert m is not None and m.category == "rule-quote"
+    valid, err = validate_exempt_fields(m)
+    assert valid is False and err == "rule-quote-need-path"
+
+
 def test_ex_n5_格式錯誤_missing_colon_reason():
     m = parse_exempt_marker("<!-- PC-093-exempt: missing-reason -->")
     assert m is None
@@ -837,3 +901,139 @@ def test_format_warn_info_humanizes_format_error():
     # humanized 範例含正確 marker 格式
     assert "<!-- PC-093-exempt:" in msg
     assert "修復提示" in msg
+
+
+# ============================================================================
+# W10-108 — Block 訊息可達性（白名單清單 + inline 提示）
+# ============================================================================
+
+def test_w10_108_block_message_lists_all_exempt_categories():
+    """拒絕訊息必須完整列出 5 個合法 category（避免 agent 因不知道路徑而走字串繞過）。"""
+    hits = [Hit(line_no=10, rule_id="M1", level="BLOCK", text="Phase 5 再決定")]
+    msg = format_block_message("0.18.0-W10-108", hits, exempted=[])
+    for category in ("tdd-transition", "baseline-gated", "ticket-tracked",
+                     "user-override", "rule-quote"):
+        assert category in msg, "白名單必含 category: {}".format(category)
+
+
+def test_w10_108_block_message_starts_with_inline_hint():
+    """訊息開頭（標題後）必須含「優先嘗試 inline」提示，引導 agent 走 inline 路徑。"""
+    hits = [Hit(line_no=10, rule_id="M1", level="BLOCK", text="Phase 5 再決定")]
+    msg = format_block_message("0.18.0-W10-108", hits, exempted=[])
+    # 提示文字存在
+    assert "優先嘗試 inline" in msg
+    # 位置：在「命中」清單之前（標題行之後第一個實質提示）
+    inline_pos = msg.index("優先嘗試 inline")
+    hit_pos = msg.index("命中:")
+    assert inline_pos < hit_pos, "inline 提示必須在命中清單之前"
+
+
+def test_w10_108_block_message_categories_have_use_case():
+    """每個 category 後附『適用情境』一行說明（非僅列名稱）。"""
+    hits = [Hit(line_no=10, rule_id="M1", level="BLOCK", text="Phase 5 再決定")]
+    msg = format_block_message("0.18.0-W10-108", hits, exempted=[])
+    # 每個 category 行格式包含「— 」說明分隔符
+    for category in ("tdd-transition", "baseline-gated", "ticket-tracked",
+                     "user-override", "rule-quote"):
+        # 找該 category 所在行
+        for line in msg.split("\n"):
+            if category in line and "—" in line:
+                break
+        else:
+            raise AssertionError("category {} 缺『—』適用情境說明".format(category))
+
+
+def test_w10_108_block_message_references_decision_trigger_binding_rule():
+    """訊息應指向權威規則路徑，讓 agent 知道完整規格何處查詢。"""
+    hits = [Hit(line_no=10, rule_id="M1", level="BLOCK", text="Phase 5 再決定")]
+    msg = format_block_message("0.18.0-W10-108", hits, exempted=[])
+    assert "decision-trigger-binding" in msg
+
+
+# ============================================================================
+# W10-130 — Placeholder template 區塊內 PC-093-exempt 範例字串豁免
+# ============================================================================
+
+def test_w10_130_schema_placeholder_block_skips_example_exempt_marker():
+    """<!-- Schema[...]: ... --> placeholder 區塊內的 PC-093-exempt 範例字串
+    不應被解析為實際 marker（避免誤判 cat:reason 為 INVALID category-whitelist）。"""
+    lines = [
+        "## Problem Analysis",
+        "<!-- Schema[IMP/Problem Analysis]: 選填 -->",
+        "",
+        "範例: <!-- PC-093-exempt: cat:reason -->",
+        "另一範例: <!-- PC-093-exempt: <category>:<reason> -->",
+        "",
+        "---",
+        "",
+        "## Solution",
+        "實際內容",
+    ]
+    refs = collect_exempt_markers(lines)
+    # placeholder 區塊內的範例字串不應被收集為 marker
+    assert len(refs) == 0, (
+        "placeholder 區塊內的 PC-093-exempt 範例應被跳過，"
+        "但收到 {} markers: {}".format(len(refs), refs)
+    )
+
+
+def test_w10_130_schema_placeholder_block_terminates_at_next_h2():
+    """placeholder 區塊在下個 H2（## ）處結束；之後的 marker 仍應被解析。"""
+    lines = [
+        "<!-- Schema[IMP/Problem Analysis]: 選填 -->",
+        "<!-- PC-093-exempt: cat:reason -->",  # 範例（區塊內）— 跳過
+        "## Solution",
+        "<!-- PC-093-exempt: ticket-tracked:W10-130 hook 修復 -->",  # 區塊外 — 解析
+    ]
+    refs = collect_exempt_markers(lines)
+    # 只剩第 4 行的真實 marker
+    assert len(refs) == 1
+    assert refs[0].line_no == 4
+    assert refs[0].valid is True
+
+
+def test_w10_130_schema_placeholder_block_terminates_at_hr_separator():
+    """placeholder 區塊在 `---` 分隔符處結束；之後的 marker 仍應被解析。"""
+    lines = [
+        "<!-- Schema[IMP/Problem Analysis]: 選填 -->",
+        "<!-- PC-093-exempt: cat:reason -->",  # 範例 — 跳過
+        "",
+        "---",
+        "",
+        "<!-- PC-093-exempt: ticket-tracked:W10-130 真實 marker -->",  # 解析
+    ]
+    refs = collect_exempt_markers(lines)
+    assert len(refs) == 1
+    assert refs[0].line_no == 6
+    assert refs[0].valid is True
+
+
+def test_w10_130_no_schema_placeholder_normal_marker_still_works():
+    """無 Schema placeholder 區塊時，正常 marker 行為不變（regression guard）。"""
+    lines = [
+        "## Solution",
+        "<!-- PC-093-exempt: ticket-tracked:W10-130 hook 修復說明 -->",
+    ]
+    refs = collect_exempt_markers(lines)
+    assert len(refs) == 1
+    assert refs[0].valid is True
+
+
+def test_w10_130_schema_placeholder_also_skips_phrase_scanning():
+    """placeholder 區塊內的延後話術（若有）也應跳過，避免範例字串觸發誤判。"""
+    lines = [
+        "<!-- Schema[IMP/Problem Analysis]: 範例：填入根因，例如 Phase 5 再決定的問題 -->",
+        "<!-- PC-093-exempt: cat:reason -->",  # 範例 marker
+        "",
+        "---",
+        "",
+        "## Solution",
+        "正常內容",
+    ]
+    table = build_regex_table()
+    hits = scan_lines_for_phrases(lines, table)
+    markers = collect_exempt_markers(lines)
+    blocked, warned, info, exempted = partition_hits(hits, markers)
+    # placeholder 區塊內即使 Schema note 含「Phase 5 再決定」字樣也應跳過
+    assert len(blocked) == 0
+    assert len(warned) == 0

@@ -220,11 +220,4 @@ ANA Solution 章節含 IMP/DOC/ANA spawn 規劃表格時，規劃項目本身即
 
 ---
 
-**Last Updated**: 2026-05-08
-**Version**: 2.3.0 - 規則 5 新增「ANA Solution 內 spawn 規劃」適用場景條款（W17-167 L3 落地，含 Why/Consequence/Action 三明示 + 強制/Schema 層交叉引用，配合 W17-168 hook + W17-169 lifecycle/schema 同步修訂）
-
-**Version**: 2.2.0 - 新增規則 6 失敗案例學習原則（從派發越界事件學習提煉；流程瑕疵不回退，產出有害走規則 3 / skip-gate）
-
-**Version**: 2.1.0 - 品質檢查清單新增 AC 漂移偵測項目（PC-055 / PROP-010 防護落地）
-
-**Version**: 2.0.0 - 規則 6-7 外移至 `.claude/pm-rules/pm-quality-baseline.md`，本檔僅保留通用品質底線規則 1-5（對應 0.18.0-W10-073.4 WRAP 選項 B、0.18.0-W10-077.2 實作）
+**Last Updated**: 2026-05-08 | **Version**: 2.3.0 — 規則 1-6 通用品質底線（PM 情境規則 6-7 外移至 `pm-rules/pm-quality-baseline.md`）。歷史 2.0–2.2 版見 git log。

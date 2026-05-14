@@ -52,8 +52,15 @@ def _extract_solution_section(body: str) -> Optional[str]:
 
 
 def _has_self_check_subsection(solution_text: str) -> bool:
-    """檢查 Solution 章節文字中是否含 `### 自檢結果` 子章節（H3）。"""
-    pattern = rf"^### {re.escape(_SELF_CHECK_HEADING)}\s*$"
+    """
+    檢查 Solution 章節文字中是否含 `### 自檢結果` 子章節（H3）。
+
+    前綴匹配（W10-124 / W10-118 Case C）：標題後允許接補充說明，但補充說明必須
+    以分隔符（whitespace / 全形或半形括號）開始，避免 `### 自檢結果摘要` 等異義
+    標題誤匹配。
+    """
+    # 標題後需為 end-of-line，或接 whitespace / `（` / `(` 後跟任意字元
+    pattern = rf"^### {re.escape(_SELF_CHECK_HEADING)}(?:[\s（(].*)?$"
     return bool(re.search(pattern, solution_text, flags=re.MULTILINE))
 
 

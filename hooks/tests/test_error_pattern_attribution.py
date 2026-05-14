@@ -69,6 +69,28 @@ def test_frontmatter_source_ticket_matches_current(tmp_path, logger):
     assert result == [rel]
 
 
+@pytest.mark.parametrize(
+    "quoted_value",
+    [
+        f'"{CURRENT_TICKET}"',
+        f"'{CURRENT_TICKET}'",
+    ],
+    ids=["double_quoted", "single_quoted"],
+)
+def test_frontmatter_source_ticket_with_quotes(tmp_path, logger, quoted_value):
+    """source_ticket 值含引號變體（"..." / '...'）應正確去引號並匹配。"""
+    rel = ".claude/error-patterns/process-compliance/PC-q-quoted.md"
+    _write_pc(
+        tmp_path,
+        rel,
+        f"---\nsource_ticket: {quoted_value}\n---\n\n# PC-q\n",
+    )
+    result = filter_error_patterns_by_ticket_scope(
+        [rel], CURRENT_TICKET, "ticket body", tmp_path, logger
+    )
+    assert result == [rel]
+
+
 def test_frontmatter_source_ticket_points_to_other(tmp_path, logger):
     rel = ".claude/error-patterns/process-compliance/PC-101-b.md"
     _write_pc(

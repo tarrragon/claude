@@ -1974,3 +1974,97 @@ def test_resolve_symlink_in_ticket_where_files_not_expanded(
     # 即使該路徑「實際上」可能是 symlink 指回主 repo，hook 不展開
     assert result[1] is True, "外部絕對 .claude/ 字串 → has_external（不展開 symlink）"
     assert result[0] is False, "不應誤判為主 repo .claude/"
+
+
+# ----------------------------------------------------------------------------
+# W10-084：審查模式豁免 worktree 強制
+# ----------------------------------------------------------------------------
+#
+# 設計：multi-view review 派發實作代理人擔任「審查/掃描/評估」角色時，
+# 即使 prompt 含 src/ 路徑也不會寫入，worktree 強制阻擋反成阻礙。
+# Hook 偵測 prompt 含「審查/review/掃描/scan/評估/evaluate」任一關鍵字
+# 即豁免 worktree 強制（但外部 .claude/ 仍阻擋）。
+
+
+class TestReviewModeExemption:
+    """W10-084：審查模式關鍵字命中時，實作代理人豁免 worktree 強制。"""
+
+    @pytest.mark.parametrize(
+        "keyword_in_prompt",
+        ["審查", "review", "Review", "REVIEW",
+         "掃描", "scan", "Scan",
+         "評估", "evaluate", "Evaluate"],
+    )
+    def test_review_keyword_allows_implementation_agent_without_worktree(
+        self, monkeypatch, capsys, keyword_in_prompt
+    ):
+        """5+ 關鍵字命中：實作代理人 + 非 .claude/ 路徑 + 無 worktree → 放行。"""
+        prompt = (
+            f"請對 src/widgets/book_card.dart 進行 {keyword_in_prompt}，"
+            f"確認命名規範符合 Linux 風格。"
+        )
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "thyme-python-developer",
+                "prompt": prompt,
+            },
+        )
+        assert exit_code == 0, (
+            f"關鍵字 '{keyword_in_prompt}' 應觸發審查模式豁免 worktree"
+        )
+
+    def test_regression_implementation_dispatch_still_blocked_without_worktree(
+        self, monkeypatch, capsys
+    ):
+        """Regression：一般實作派發（無審查關鍵字）仍應強制 worktree。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "parsley-flutter-developer",
+                "prompt": "實作 src/widgets/book_card.dart 並寫對應 tests/unit/book_card_test.dart",
+            },
+        )
+        assert exit_code == 2, "一般實作派發（無審查關鍵字）仍應阻擋"
+        err = capsys.readouterr().err
+        assert "必須使用 isolation" in err
+
+    def test_review_keyword_does_not_bypass_external_claude_block(
+        self, monkeypatch, capsys
+    ):
+        """審查模式不豁免外部 .claude/ 阻擋（runtime 必拒，邊界守護）。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "thyme-python-developer",
+                "prompt": "請審查 /tmp/other-repo/.claude/hooks/foo.py 的設計品質",
+            },
+        )
+        assert exit_code == 2, "外部 .claude/ 不受審查豁免，仍阻擋"
+
+    def test_review_keyword_with_worktree_still_passes(
+        self, monkeypatch, capsys
+    ):
+        """審查關鍵字 + worktree → 維持放行（兩條件皆滿足，無衝突）。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "thyme-python-developer",
+                "isolation": "worktree",
+                "prompt": "對 src/api/foo.py 執行 code review",
+            },
+        )
+        assert exit_code == 0
+
+    def test_is_review_mode_prompt_empty_returns_false(self):
+        """空 prompt 應回傳 False。"""
+        assert _hook._is_review_mode_prompt("") is False
+        assert _hook._is_review_mode_prompt(None) is False
+
+    def test_is_review_mode_prompt_no_keyword_returns_false(self):
+        """無關鍵字 prompt 應回傳 False（regression：避免泛化誤判）。"""
+        assert _hook._is_review_mode_prompt("實作 src/foo.py 並寫測試") is False

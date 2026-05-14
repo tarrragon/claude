@@ -22,7 +22,20 @@ name: {agent-name-kebab-case}
 description: {一句話描述核心職責和觸發條件，50-100 字}
 tools: {工具列表，逗號分隔}
 color: {顏色名稱}
-model: {haiku|sonnet|opus}
+model: {haiku|sonnet|opus|claude-opus-4-6[1m]|inherit}
+permissionMode: {bypassPermissions|acceptEdits|auto|dontAsk|plan}
+# 以下欄位選填，依代理人需求決定是否保留
+# effort: {low|medium|high}         # 預設 low；複雜架構決策用 medium/high
+# maxTurns: {整數}                   # 安全網，防止輪數截斷；建議值：機械任務 20-30、實作 50-80、分析 30-40
+# background: {true|false}          # true = 派發後立刻釋放主線程；長任務建議設 true
+# initialPrompt: {啟動時自動提交的首輪文字}  # 例："Read .claude/agents/AGENT_PRELOAD.md 後開始執行"
+# disallowedTools: {禁用工具列表}    # 唯讀/安全型代理人用：disallowedTools: Edit, Write
+# hooks:
+#   Stop:
+#     - matcher: ""
+#       hooks:
+#         - type: command
+#           command: {停止時執行的命令}
 ---
 
 # {代理人中文名稱} ({Agent English Name})
@@ -182,15 +195,29 @@ You are a {role description in English}. Your core mission is {mission statement
 
 ## 必要章節說明
 
-### Frontmatter（必要）
+### Frontmatter（必要欄位 + 選填欄位）
+
+**必填欄位**：
 
 | 欄位 | 說明 | 範例 |
 |------|------|------|
-| name | 代理人識別名稱（kebab-case） | `incident-responder` |
-| description | 核心職責描述（50-100 字） | 見下方說明 |
-| tools | 允許使用的工具 | `Read, Grep, Glob, LS, Bash` |
-| color | 代理人顏色標記 | `orange`, `gold`, `green` |
-| model | 使用的模型 | `haiku`, `sonnet`, `opus` |
+| `name` | 代理人識別名稱（kebab-case） | `incident-responder` |
+| `description` | 核心職責描述（50-100 字） | 見下方說明 |
+| `tools` | 允許使用的工具 | `Read, Grep, Glob, LS, Bash` |
+| `color` | 代理人顏色標記 | `orange`, `gold`, `green` |
+| `model` | 使用的模型 | `haiku`, `sonnet`, `opus` |
+| `permissionMode` | 代理人含 Edit/Write 時必填 | `bypassPermissions`（實作類）、`acceptEdits`（cwd 限定） |
+
+**選填欄位**（依代理人需求決定）：
+
+| 欄位 | 說明 | 建議使用時機 |
+|------|------|------------|
+| `effort` | 推理深度（low/medium/high） | 預設 low；複雜架構決策或系統設計用 medium/high |
+| `maxTurns` | 最大工具呼叫輪數（整數） | 機械性任務 20-30；複雜實作 50-80；分析型 30-40 |
+| `background` | 強制背景執行（true/false） | 長時間任務（> 30 秒）、並行派發時設 true |
+| `initialPrompt` | 啟動時自動提交的首輪文字 | 代理人有固定前置讀取需求時（如必讀規格文件） |
+| `disallowedTools` | 明確禁用工具（優先於 tools 清單） | 唯讀代理人（禁 Edit/Write）、安全審查類（防意外寫入） |
+| `hooks` | 代理人生命週期 Hook | 需要自動觸發 complete ticket、寫 worklog 等 Stop 動作時 |
 
 ### Description 撰寫指南
 
@@ -239,8 +266,13 @@ You are a {role description in English}. Your core mission is {mission statement
 ### Frontmatter 檢查
 - [ ] name 使用 kebab-case
 - [ ] description 在 50-100 字之間
-- [ ] tools 列表完整
-- [ ] model 選擇適當（haiku/sonnet/opus）
+- [ ] tools 使用標準格式（非 allowed-tools）
+- [ ] model 選擇適當（haiku/sonnet/opus/claude-opus-4-6[1m]）
+- [ ] permissionMode 設定：代理人含 Edit/Write 時必填（建議 bypassPermissions）
+- [ ] effort 已評估（預設 low 是否足夠；複雜任務考慮 medium/high）
+- [ ] maxTurns 已評估（長任務或複雜任務是否需要設安全網）
+- [ ] background 已評估（長時間任務是否需要設 true）
+- [ ] disallowedTools 已評估（唯讀/安全類代理人是否需要明確禁用寫入工具）
 
 ### 內容檢查
 - [ ] 有英文角色定義
@@ -325,5 +357,6 @@ You are a {role description in English}. Your core mission is {mission statement
 
 ---
 
-**Last Updated**: 2026-01-28
+**Last Updated**: 2026-05-13
+**Version**: 1.2.0 — 新增 8 個 CC 2.1.x frontmatter 欄位（permissionMode/effort/maxTurns/background/initialPrompt/disallowedTools/hooks/memory），範本 frontmatter 補入選填欄位佔位符；Frontmatter 必要章節說明拆為「必填/選填」雙表；範本檢查清單補入新欄位檢查項目（0.18.0-W6-005）
 **Version**: 1.1.0

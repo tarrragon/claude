@@ -25,6 +25,8 @@
 
 ### 根本原因 (5 Why 分析)
 
+<!-- 規則 8 豁免（reference-stability-rules.md / DOC-010）：以下 5 Whys 中的 `readmoo_books` storage key 是真實事件的 storage key 名稱。事件分析記錄真實事件特徵；改為 `xxx_books` 違反「事件分析記錄真實事件」原則。本豁免經跨檔評估後保留。 -->
+
 1. Why 1: 書庫頁面沒有書籍資料
 2. Why 2: `chrome.storage` 中無 `readmoo_books` 資料
 3. Why 3: `EXTRACTION.COMPLETED` 事件監聽器未註冊，書籍資料未寫入 storage

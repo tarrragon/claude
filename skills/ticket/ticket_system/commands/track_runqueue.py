@@ -70,10 +70,21 @@ _TAGGED_EXIT_STATUSES: Set[str] = {
 
 # ---------------------------------------------------------------------------
 # 內部工具：ticket 過濾 / 排序 / handoff 掃描
+#
+# TODO(W10-119 trigger): 以下 helper 已有 2 個跨模組 consumer
+# （commands/resume.py 用 _priority_rank、commands/track_dashboard.py 用 5 個）。
+# 當第 3 個 cross-module consumer 出現時（rule of three），依 W10-119 結論
+# 抽出至 lib/runqueue_helpers.py 共用模組。
 # ---------------------------------------------------------------------------
 
 def _priority_rank(ticket: Dict) -> int:
-    """取得 priority 的排序鍵，未知值排最後。"""
+    """取得 priority 的排序鍵，未知值排最後。
+
+    W10-121 註：本函式為 int 變體（0..3/99）；track_query._normalize_priority
+    為 str 變體（"P0".."P3"/"P9"）。兩者共享 priority schema 但介面分歧。
+    若 trigger 觸發抽 lib/runqueue_helpers.py 時，順便將 _normalize_priority
+    納入 SSOT（見 W10-121 結論）。
+    """
     raw = (ticket.get("priority") or "").strip().upper()
     return _PRIORITY_ORDER.get(raw, _DEFAULT_PRIORITY_RANK)
 

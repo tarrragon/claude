@@ -44,6 +44,33 @@ from hook_utils import (
 # W17-127.1：framework 類別清單改由 SSOT 提供（避免與 layer-boundary 雙寫漂移）
 from lib.framework_paths import get_categories as _get_framework_categories
 
+# W10-084：審查模式關鍵字（命中時對實作代理人豁免 worktree 強制）
+#
+# 設計理由：multi-view review 派發實作代理人擔任「審查/掃描/評估」角色時，
+# prompt 雖含 src/ tests/ 等路徑（屬被審查目標的引用），但代理人僅讀不寫，
+# 不會污染 .git/HEAD。worktree 強制反而阻擋合法審查派發。
+#
+# 觸發條件：prompt 含下列任一關鍵字（大小寫不敏感），且為實作代理人派發。
+# 邊界：外部 .claude/ 仍阻擋（runtime 必拒，與審查模式無關）。
+REVIEW_MODE_KEYWORDS: Tuple[str, ...] = (
+    "審查", "review", "掃描", "scan", "評估", "evaluate",
+)
+
+
+def _is_review_mode_prompt(prompt: str) -> bool:
+    """偵測 prompt 是否為審查模式（含審查/review/掃描/scan/評估/evaluate）。
+
+    大小寫不敏感比對；任一命中即為 True。
+    """
+    if not prompt:
+        return False
+    lowered = prompt.lower()
+    for kw in REVIEW_MODE_KEYWORDS:
+        if kw.lower() in lowered:
+            return True
+    return False
+
+
 # 需要 worktree 隔離的實作代理人
 IMPLEMENTATION_AGENTS = frozenset({
     "parsley-flutter-developer",
@@ -1195,6 +1222,18 @@ def main() -> int:
         return 2
 
     isolation = tool_input.get("isolation", "")
+
+    # (1.5) W10-084：審查模式豁免 worktree 強制
+    #       條件：prompt 含審查/review/掃描/scan/評估/evaluate 等關鍵字
+    #       理由：multi-view review 派發實作代理人擔任審查角色僅讀不寫，
+    #            不會污染 .git/HEAD；worktree 強制反而阻擋合法審查派發。
+    #       邊界：外部 .claude/（已於 (1) 阻擋）不受本豁免影響。
+    if _is_review_mode_prompt(prompt):
+        logger.info(
+            "放行：%s 偵測到審查模式關鍵字（W10-084 豁免 worktree 強制）",
+            subagent_type,
+        )
+        return 0
 
     # (2) 僅主 repo .claude/ 且無其他路徑 → 放行（ARCH-015 豁免 worktree）
     #     條件：has_main_repo_claude=True 且 has_other=False

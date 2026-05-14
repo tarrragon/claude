@@ -1,3 +1,64 @@
+## [1.32.0] - 2026-05-14
+
+### Summary
+feat: 派發前假設驗證機制 Phase A 落地; feat: cognitive-load.md 新增監測校準框架章節 + 結案; feat: proposal-evaluation-gate hook 新增 status=draft 豁免 + 規則 light 收斂純語意 (+48 more)
+
+Changes: 9 feat, 5 refactor, 11 fix, 23 docs, 3 chore
+
+- feat: 派發前假設驗證機制 Phase A 落地
+- feat: cognitive-load.md 新增監測校準框架章節 + 結案
+- feat: proposal-evaluation-gate hook 新增 status=draft 豁免 + 規則 light 收斂純語意
+- feat: ticket complete 加入 pending children blocking + --force 豁免
+- feat: Phase 3b 實作完成 — ticket track list --top 10 + --all
+- feat: 新增 ticket track dashboard 聚合視圖（Phase 3b）
+- feat: 新增 ticket track td-status 子命令（PC-094 TD 清單校準）
+- feat: 審查模式關鍵字豁免 worktree 強制
+- feat: build staleness check SessionStart hook
+- refactor: process-skip-guard main emit 點收斂
+- refactor: Phase A 精準裁剪，總 token 減 ~5.5K
+- refactor: is_stale_in_progress 改為 compute_stale_minutes 薄包裝（DRY）
+- refactor: 遷移泛化 3 個 .claude/ 違反規則 8 檔案
+- refactor: error_pattern_attribution 6 項低優整理
+- fix: phase-completion-gate 三層 guard 過濾 ticket md 文本引用誤判
+- fix: sync ALLOWED_FILTER_SITES resume.py 193 to 195
+- fix: 對齊 VALID_SECTIONS 與 ticket-body-schema.md 補入「重現實驗結果」
+- fix: phase4-hook 跳過 Schema placeholder 區塊內 PC-093-exempt 範例字串
+- fix: phase4-hook 拒絕訊息加白名單清單 + inline 提示
+- fix: self_check_visibility_checker 改前綴匹配支援 H3 補充說明
+- fix: ticket-quality-gate-hook type-aware 觸發 + 移除 Flutter 硬編碼
+- fix: _is_placeholder 表格情境豁免 + acceptance_auditor consolidate (PC-138 / PC-144 治本)
+- fix: 泛化 thyme-extension-engineer 與 oregano-data-miner 移除產品名稱與書城列舉
+- fix: phase4-hook 新增 [ref] 行豁免修復 Context Bundle 誤判
+- fix: phase4-hook 新增 rule-quote 豁免類別（PC-093 治本）
+- docs: 規則文件收斂 //PC-146 修復對應
+- docs: 新增 PC-146 PC-093 exempt marker 位置誤用
+- docs: 新增 PC-145 Stale CLI install 偽裝 validator bug
+- docs: priority normalization 介面評估結論採方案 C（維持 + cross-ref）
+- docs: 新增 PC-144 validator TODO/TBD 字面誤判 placeholder
+- docs: 跨模組 _ private import 評估結論採方案 B（rule of three 未達）
+- docs: cognitive-load.md 補三明示缺口（Layer 2 follow-up）
+- docs: Layer 2 修正 claude-code-tools-reference.md
+- docs: 補 initialPrompt/memory 節三明示（二次審查修正）
+- docs: 補充代理人 frontmatter 撰寫指南（8 新欄位 + 升級建議清單）
+- docs: 新增 Claude Code 進階工具參考索引
+- docs: 補 reference-stability-rules.md 規則 8 豁免機制章節
+- docs: ANA 評估 7 個 .claude/ 規則 8 違反 + B 類 5 檔加豁免註解 + spawn /
+- docs: 補 ticket SKILL.md dashboard + list 預設行為文件
+- docs: 補入案例 4 ( complete) + 跨 session 重現警示
+- docs: 補 /080 遷移成果記錄與路徑修正
+- docs: 新增 PC-143 lavender Phase 1 spec 對既有 CLI 行為假設未驗證
+- docs: 新增 PC-142 phase4-hook 字面抓觸發詞誤判規則引用
+- docs: 新增 PC-141 監測類 ANA acceptance 未預先區分訊號類型
+- docs: 新增 PC-140 + IMP-072 記錄本 session 兩個 framework bug
+- docs: 補 SKILL.md td-status 同步 + ticket completed 收尾
+- docs: Layer 2 修正（P2 違規）
+- docs: 同步 td-status 子命令到決策層文件
+- chore: test_ticket_quality_gate_type_aware.py +x 權限修正
+- chore: 補 漏帶的 chmod +x
+- chore: 補齊 test_build_staleness_check_hook 測試檔執行權限
+
+---
+
 ## [1.31.0] - 2026-05-12
 
 ### Summary

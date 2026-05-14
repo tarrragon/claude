@@ -94,6 +94,37 @@ def _parse_started_at(started_at: Any) -> Optional[datetime]:
     return None
 
 
+def compute_stale_minutes(
+    ticket: dict, now: Optional[datetime] = None
+) -> Optional[int]:
+    """
+    計算 in_progress ticket 自 started_at 起經過的分鐘數（W10-114 dashboard）。
+
+    純函式：不執行 stale 判定，僅回傳分鐘數（caller 自行套門檻）。
+    解析失敗（缺 started_at / 格式錯誤）→ 回傳 None。
+
+    Args:
+        ticket: ticket frontmatter dict
+        now: 當前時間（測試可注入）；預設 datetime.now()
+
+    Returns:
+        int 分鐘數（>= 0），或 None
+    """
+    started = _parse_started_at(ticket.get("started_at"))
+    if started is None:
+        return None
+    reference = now or datetime.now()
+    # 兼容 timezone-aware / naive：兩者只要其中一邊 aware 就轉同 naive
+    if started.tzinfo is not None and reference.tzinfo is None:
+        started = started.replace(tzinfo=None)
+    elif started.tzinfo is None and reference.tzinfo is not None:
+        reference = reference.replace(tzinfo=None)
+    elapsed = (reference - started).total_seconds() / 60
+    if elapsed < 0:
+        return 0
+    return int(elapsed)
+
+
 def is_stale_in_progress(
     ticket: dict, now: Optional[datetime] = None
 ) -> bool:
@@ -103,9 +134,12 @@ def is_stale_in_progress(
     條件：
     - status == "in_progress"
     - completed_at 為 None / 缺欄位
-    - started_at 距今 >= STALE_IN_PROGRESS_HOURS
+    - compute_stale_minutes >= STALE_IN_PROGRESS_HOURS * 60
 
     解析失敗（缺 started_at / 格式錯誤）→ False（fail-open，不誤標）。
+
+    W10-120 重構：原獨立邏輯改為呼叫 compute_stale_minutes，消除時區處理
+    與 started_at 解析的雙函式重複（DRY）。語意不變。
 
     Args:
         ticket: ticket frontmatter dict
@@ -118,19 +152,10 @@ def is_stale_in_progress(
         return False
     if ticket.get("completed_at"):
         return False
-    started = _parse_started_at(ticket.get("started_at"))
-    if started is None:
+    minutes = compute_stale_minutes(ticket, now)
+    if minutes is None:
         return False
-
-    reference = now or datetime.now()
-    # 兼容 timezone-aware / naive：兩者只要其中一邊 aware 就轉同 naive
-    if started.tzinfo is not None and reference.tzinfo is None:
-        started = started.replace(tzinfo=None)
-    elif started.tzinfo is None and reference.tzinfo is not None:
-        reference = reference.replace(tzinfo=None)
-
-    elapsed_hours = (reference - started).total_seconds() / 3600
-    return elapsed_hours >= STALE_IN_PROGRESS_HOURS
+    return minutes >= STALE_IN_PROGRESS_HOURS * 60
 
 
 def _ticket_age_days(ticket: dict, today: date) -> Optional[int]:

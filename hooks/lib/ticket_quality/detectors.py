@@ -184,7 +184,8 @@ def _generate_incomplete_recommendations(elements: dict) -> List[str]:
     if "acceptance_criteria" in elements["missing"]:
         recs.append("新增「### 驗收條件」章節，至少包含 3 個可驗證的驗收項目")
     if "test_plan" in elements["missing"]:
-        recs.append("規劃測試檔案，至少包含 1 個測試檔案路徑（test/.../*.dart）")
+        # W10-123：移除 *.dart 硬編碼，改用專案語言無感建議
+        recs.append("規劃測試檔案，至少包含 1 個測試檔案路徑（test/.../<語言對應檔>）")
     if "work_log" in elements["missing"]:
         recs.append("規劃工作日誌檔案，格式: docs/work-logs/vX.Y.Z-feature-name.md")
     if "references" in elements["missing"]:

@@ -178,17 +178,4 @@
 
 ---
 
-**Last Updated**: 2026-05-03
-**Version**: 1.5.1 — W17-123 Layer 2 審查（basil-writing-critic）後微調：(1) 規則 6 標題改正向「以價值 / 容量 / 優先級為決策依據（取代估時驅動）」+ 副標保留 grep 訊號層；(2) 邊界說明段移除雙重否定，改正向描述合法情境；(3) 對話品質檢查清單規則 6 項改正向句型；(4) Why 段「等於用雜訊」改情境限定詞「接近於」。修正 3 條 P1 + 1 條 P2 違規（compositional-writing 原則 3 機會成本語氣）
-
-**Version**: 1.5.0 — 新增規則 6「禁止以估時為決策依據」（W17-060 / W17-051 ANA Solution 落地）：含 Why / Consequence / Action 三段式、禁止/替代句型對照表、邊界說明、Hotpath 補強對照表（Wave 容量判斷 / 代理人 context 上限 / PM 派發優先級，由 ginger 視角審查補強）、與規則 5 §5.6 雙向銜接交叉引用（compositional-writing 視角補強）；對話品質檢查清單與反模式速查同步補列規則 6 對應項
-
-**Version**: 1.4.0 — 規則 5 主文（§5.0–§5.12）外移至 `.claude/references/power-asymmetry-rules.md` 按需讀取，本檔保留標題 + 觸發情境表 + 授權邊界 + 設計者自我警示（auto-load context 降約 5K tokens/session）
-
-**Version**: 1.3.0 — §5.4 Layer 4 新增訊號偵測/觸發閾值/PM 降權三表，落地 parasocial 防護（Phase A / W14-027 / 019.6）
-
-**Version**: 1.2.0 — §5.11 抽象條款替換為具體監測機制摘要（監測指標 M1-M8/Q1-Q3、四級觀察週期、5 條退出條件；詳版引用 W14-019.5，W14-026）
-
-**Version**: 1.1.0 — 新增規則 5「權力不對等下的對話品質」（§5.0-§5.12，含 §16.4 修正清單套用，W14-019.2）
-
-**Version**: 1.0.0 — 從 compositional-writing/writing-prompts.md 提煉通用對話規範，升級為框架級 auto-load 規則
+**Last Updated**: 2026-05-03 | **Version**: 1.5.1 — 規則 5 主文外移至 `references/power-asymmetry-rules.md`；規則 6「以價值 / 容量 / 優先級為決策依據」加入（W17-060 / W17-123）。歷史 1.0–1.4.x 版見 git log。

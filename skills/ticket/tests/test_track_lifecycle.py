@@ -832,25 +832,27 @@ class TestCompleteCascadeSaveOrderContract:
 
         assert result == 0
 
-        # 找出 parent save 與第一次 list_tickets 在 call_log 中的索引
+        # 找出 parent save 與 cascade list_tickets 在 call_log 中的索引。
+        # W11-003.2：Step 3.7 pending-children 檢查也會呼叫 list_tickets()，
+        # 但它在 parent save 之前；契約僅要求 cascade 用的 list_tickets
+        # （即 parent save 之後的那次）必須讀到 disk 上 completed 的 parent。
         parent_save_idx = next(
             (i for i, (k, tid) in enumerate(call_log) if k == "save" and tid == "P0"),
             None,
         )
-        first_list_idx = next(
-            (i for i, (k, _) in enumerate(call_log) if k == "list"), None
-        )
-
         assert parent_save_idx is not None, (
             f"parent (P0) 應被 save_ticket，實際 call_log: {call_log}"
         )
-        assert first_list_idx is not None, (
-            f"應呼叫 list_tickets（cascade 載入 ticket_map），實際 call_log: {call_log}"
+        cascade_list_idx = next(
+            (
+                i for i, (k, _) in enumerate(call_log)
+                if k == "list" and i > parent_save_idx
+            ),
+            None,
         )
-        assert parent_save_idx < first_list_idx, (
-            f"save_ticket(parent) 必須先於 list_tickets()，"
-            f"實際順序：parent_save@{parent_save_idx}, first_list@{first_list_idx}, "
-            f"call_log={call_log}"
+        assert cascade_list_idx is not None, (
+            f"parent save 後應再呼叫 list_tickets（cascade 載入 ticket_map），"
+            f"實際 call_log: {call_log}"
         )
 
 
@@ -1553,3 +1555,179 @@ class TestCloseReasonEnum:
         }
         assert set(CLOSE_REASONS) == expected
         assert len(CLOSE_REASONS) == 6
+
+
+# ============================================================================
+# TestCompletePendingChildrenBlocking：父 complete 時未完成 children 阻擋 + --force
+# （W11-003.2）
+# ============================================================================
+
+
+def _make_parent_ticket(children_ids, ticket_id="0.18.0-W99-100"):
+    """建立含 children 的父 Ticket dict（AC 全勾、body 通過 schema）。"""
+    return {
+        "id": ticket_id,
+        "type": "IMP",
+        "status": "in_progress",
+        "title": "Test Parent Ticket",
+        "acceptance": ["[x] AC1"],
+        "children": list(children_ids),
+        "spawned_tickets": [],
+        "_path": "/test/path",
+        "_body": "## Problem Analysis\n內容\n## Solution\n內容\n## Test Results\n內容",
+    }
+
+
+@pytest.fixture
+def pending_children_env(monkeypatch):
+    """封裝 children blocking check complete() 執行所需的 mock bundle。"""
+    env = SimpleNamespace()
+
+    env.save_ticket = MagicMock(return_value=None)
+    env.validate_completable_status = MagicMock(return_value=(True, "", False))
+    env.validate_acceptance_criteria = MagicMock(return_value=(True, []))
+    env.append_worklog_progress = MagicMock(return_value=None)
+    env.auto_handoff = MagicMock(return_value=None)
+    env.validate_execution_log = MagicMock(return_value=(True, []))
+    env.validate_execution_log_by_type = MagicMock(return_value=(True, []))
+    env.list_tickets = MagicMock(return_value=[])
+    env.load_and_validate = MagicMock()
+
+    def set_scenario(ticket, child_status_map):
+        env.load_and_validate.return_value = (ticket, None)
+        all_tickets = [ticket]
+        for cid, status in child_status_map.items():
+            all_tickets.append({
+                "id": cid,
+                "status": status,
+                "title": f"Child {cid}",
+                "blockedBy": [],
+                "children": [],
+            })
+        env.list_tickets.return_value = all_tickets
+
+    env.set_scenario = set_scenario
+
+    monkeypatch.setattr(
+        "ticket_system.commands.lifecycle.load_and_validate_ticket",
+        env.load_and_validate,
+    )
+    monkeypatch.setattr(
+        "ticket_system.commands.lifecycle.save_ticket",
+        env.save_ticket,
+    )
+    monkeypatch.setattr(
+        "ticket_system.commands.lifecycle.validate_completable_status",
+        env.validate_completable_status,
+    )
+    monkeypatch.setattr(
+        "ticket_system.commands.lifecycle.validate_acceptance_criteria",
+        env.validate_acceptance_criteria,
+    )
+    monkeypatch.setattr(
+        "ticket_system.commands.lifecycle.validate_execution_log",
+        env.validate_execution_log,
+    )
+    monkeypatch.setattr(
+        "ticket_system.commands.lifecycle.validate_execution_log_by_type",
+        env.validate_execution_log_by_type,
+    )
+    monkeypatch.setattr(
+        "ticket_system.commands.lifecycle.list_tickets",
+        env.list_tickets,
+    )
+    monkeypatch.setattr(
+        "ticket_system.commands.lifecycle.append_worklog_progress",
+        env.append_worklog_progress,
+    )
+    monkeypatch.setattr(
+        "ticket_system.commands.lifecycle._auto_handoff_if_needed",
+        env.auto_handoff,
+    )
+
+    return env
+
+
+class TestCompletePendingChildrenBlocking:
+    """父 complete 時未完成 children 阻擋 + --force 豁免測試（W11-003.2）"""
+
+    def test_all_children_completed_completes_normally(
+        self, pending_children_env, capsys
+    ):
+        """場景 (a)：全 child completed → complete 成功。"""
+        ticket = _make_parent_ticket(["C1", "C2"])
+        pending_children_env.set_scenario(
+            ticket, {"C1": "completed", "C2": "closed"}
+        )
+
+        args = Mock()
+        args.ticket_id = "0.18.0-W99-100"
+        args.yes_spawned = False
+        args.skip_body_check = False
+        args.force = False
+
+        result = execute_complete(args, "0.18.0")
+
+        err = capsys.readouterr().err
+        assert result == 0
+        assert "未完成 children" not in err
+        saved_statuses = _saved_statuses_for(
+            pending_children_env.save_ticket, "0.18.0-W99-100"
+        )
+        assert "completed" in saved_statuses
+
+    def test_pending_child_without_force_blocks(
+        self, pending_children_env, capsys
+    ):
+        """場景 (b)：有 pending child 且無 --force → 阻擋 + exit 1。"""
+        ticket = _make_parent_ticket(["C1", "C2"])
+        pending_children_env.set_scenario(
+            ticket, {"C1": "pending", "C2": "completed"}
+        )
+
+        args = Mock()
+        args.ticket_id = "0.18.0-W99-100"
+        args.yes_spawned = False
+        args.skip_body_check = False
+        args.force = False
+
+        result = execute_complete(args, "0.18.0")
+
+        err = capsys.readouterr().err
+        assert result == 1
+        assert "未完成 children" in err
+        assert "C1: pending" in err
+        assert "C2" not in err.split("阻擋")[1] if "阻擋" in err else True
+        assert "--force" in err
+        # main ticket 未被 save 為 completed
+        saved_statuses = _saved_statuses_for(
+            pending_children_env.save_ticket, "0.18.0-W99-100"
+        )
+        assert "completed" not in saved_statuses
+
+    def test_pending_child_with_force_completes_with_warning(
+        self, pending_children_env, capsys
+    ):
+        """場景 (c)：有 pending child + --force → 警告但成功。"""
+        ticket = _make_parent_ticket(["C1", "C2"])
+        pending_children_env.set_scenario(
+            ticket, {"C1": "in_progress", "C2": "completed"}
+        )
+
+        args = Mock()
+        args.ticket_id = "0.18.0-W99-100"
+        args.yes_spawned = False
+        args.skip_body_check = False
+        args.force = True
+
+        result = execute_complete(args, "0.18.0")
+
+        err = capsys.readouterr().err
+        assert result == 0
+        assert "--force 旁路強制完成" in err
+        assert "C1: in_progress" in err
+        # main ticket 被 save 為 completed
+        saved_statuses = _saved_statuses_for(
+            pending_children_env.save_ticket, "0.18.0-W99-100"
+        )
+        assert "completed" in saved_statuses

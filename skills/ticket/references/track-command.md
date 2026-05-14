@@ -37,8 +37,16 @@
 # 可用 section：Problem Analysis / Context Bundle / Solution / Test Results / Execution Log
 /ticket track log <id> --section "<Section Name>"
 
-# 列出 Tickets
-/ticket track list [--pending|--in-progress|--completed|--blocked]
+# 列出 Tickets（W10-115：預設 --top 10 by priority；詳見「track list 子命令」）
+/ticket track list [--pending|--in-progress|--completed|--blocked] \
+                   [--wave <wave>] [--status STATUS [STATUS ...]] \
+                   [--format {table,ids,yaml}] [--top N] [--all] \
+                   [--version VERSION]
+
+# Dashboard 聚合視圖（W10-114：PM 接手新 session；詳見「track dashboard 子命令」）
+/ticket track dashboard [--top N] [--wave N] [--no-stale] \
+                        [--stale-threshold MIN] [--format {text,json}] \
+                        [--version V]
 
 # 看板視圖（樹狀未完成任務總覽）
 /ticket track board [--wave <wave>] [--all]
@@ -533,3 +541,143 @@ ticket track stale-list --threshold critical --format ids | xargs -I{} ticket tr
 - 僅列 `status=pending` ticket（in_progress 走 `is_stale_in_progress` 已由 runqueue 涵蓋）
 - version-agnostic（註冊於 `_create_version_agnostic_handlers()`）
 - 復用 `calculate_stale_level`，不重定義閾值或判定邏輯
+
+---
+
+## track dashboard 子命令（W10-114 / W10-113 M1+M4'）
+
+PM 接手新 session 的聚合視圖。一次回傳 in_progress + top N ready + stale 三章節，Ready 章節含可直接 claim 的編號（`[1]` `[2]` `[3]`），免拼 ID 即可 claim。
+
+### 用法
+
+```bash
+ticket track dashboard [--top N] [--wave N] [--no-stale] \
+                       [--stale-threshold MIN] [--format {text,json}] \
+                       [--version V]
+```
+
+### Flag 說明
+
+| Flag | 預設 | 說明 |
+|------|------|------|
+| `--top` | `5` | Ready 章節列數上限 |
+| `--wave` | None | 過濾 wave 範圍（None=全部 wave） |
+| `--no-stale` | False | 隱藏 `[Stale Warning]` 章節 |
+| `--stale-threshold` | `60` | stale 判定門檻（**分鐘**；in_progress ticket 超過此時長視為 stale） |
+| `--format` | `text` | `text`（預設，含編號顯示）/ `json`（自動化用） |
+| `--version` | None | 指定版本（預設自動偵測 active 版本） |
+
+### 輸出格式（text）
+
+```
+=== Dashboard (wave=all, version=0.18.0) ===
+
+[In Progress] 1 ticket(s)
+  - 0.18.0-W10-116  更新 ticket SKILL.md 補 format 可選值 list 預設行為 dashboard 命令說明  (started_at: 2026-05-13T09:32:20, agent: rosemary-project-manager)
+
+[Ready Top 5]  priority 排序，可直接 claim
+  [1] [P2] [ready] 0.18.0-W10-103  評估 7 個 .claude/ 可能違反規則 8 檔案
+  [2] [P2] [ready] 0.18.0-W10-109  修補 proposal-evaluation-gate-hook
+  [3] [P2] [ready] 0.18.0-W10-111  重啟 W10-030 設計評估
+  [4] [P2] [ready] 0.18.0-W10-112  監測 ANA WRAP 執行落差
+  [5] [P2] [ready] 0.18.0-W10-119  重構 track_dashboard 跨模組私有函式
+
+[Stale Warning] 0 ticket(s) over 60min
+  (none)
+
+Hint: ticket track claim <id>
+```
+
+### 設計目的
+
+W10-113 ANA 量測：原 `/ticket` 裸命令流程從入口到顯示待辦需 **7 個 tool call**（含 1 次 `--format` 試錯與 5 次可消除的重複呼叫）。Dashboard 將此降至 **3 個 tool call**（dashboard + claim by number + 後續動作），符合 `/ticket` 與 resume 系統「加速 PM 接手」的原始設計目的。
+
+### 與其他視圖的差異
+
+| 命令 | 視角 | 主要消費者 |
+|------|------|-----------|
+| `dashboard` | 整合（in_progress + ready + stale） | PM 接手新 session（**首選**） |
+| `runqueue` | 純可執行清單（blockedBy=[]） | 「下一個該做哪個」 scheduler 決策 |
+| `list` | 通用 ticket 篩選 | grep / 自動化腳本 / 細部過濾 |
+| `stale-list` | 純 stale 列舉（pending 依 created 天數） | stale ticket 清理批次 |
+
+### 設計約束
+
+- 內部複用 `track_runqueue` 的排序與 unblocked 判定（`_priority_rank` / `_is_unblocked_pending` / `_filter_by_wave` / `_compute_readiness`），不重複實作
+- stale 判定複用 `lib/staleness.is_stale_in_progress`（in_progress 分鐘粒度），與 `stale-list` 的 pending 天數粒度互補不衝突
+- 編號 `[1] [2] [3]` 僅出現在 Ready 章節，避免與 in_progress 章節混淆
+
+---
+
+## track list 子命令（W10-115 / W10-113 M3）
+
+通用 ticket 篩選命令。W10-115 起預設加入 `--top 10` 與 priority 排序，避免 dump 67+ 筆全量造成 PM 認知負擔。
+
+### 用法
+
+```bash
+ticket track list [--pending|--in-progress|--completed|--blocked] \
+                  [--wave <wave>] [--status STATUS [STATUS ...]] \
+                  [--format {table,ids,yaml}] [--top N] [--all] \
+                  [--version VERSION]
+```
+
+### Flag 說明
+
+| Flag | 預設 | 說明 |
+|------|------|------|
+| `--pending` / `--in-progress` / `--completed` / `--blocked` | False | 單一狀態快捷篩選（互斥用法） |
+| `--status` | None | 多狀態篩選（如 `--status pending in_progress`，等同 `--pending`+`--in-progress`） |
+| `--wave` | None | 僅顯示指定 wave |
+| `--format` | `table` | 三選值：`table`（人類閱讀）/ `ids`（每行一個 ID，適合 pipe 到 `xargs`）/ `yaml`（結構化資料） |
+| `--top` | `10` | 限制最多 N 筆，依 `priority(P0>P1>P2>P3) → created → id` 排序 |
+| `--all` | False | 取全量（覆蓋 `--top`；與 `--top` 共存時 `--all` 優先並 emit warning） |
+| `--version` | None | 指定版本（預設自動偵測 active） |
+
+### 排序規則
+
+W10-115 引入的預設排序：
+
+1. **priority 排序**：P0 > P1 > P2 > P3（未指定 priority 視為 P3）
+2. **created 排序**：同 priority 內 ISO 8601 時間升序（早建立的優先）
+3. **id 排序**：同 created 時間內字典序（穩定排序）
+
+`--all` 旗標跳過排序與限制，輸出純粹按檔案系統載入順序。
+
+### 範例
+
+```bash
+# 預設行為：top 10 by priority
+ticket track list
+
+# 擴大列數至 30
+ticket track list --top 30
+
+# 取全量（過去行為）— 會 emit warning 提醒已不是預設
+ticket track list --all
+
+# 篩選 pending + in_progress 各取 top 10
+ticket track list --status pending in_progress --top 10
+
+# 純 ID 輸出 pipe 到 ticket show
+ticket track list --status pending --top 5 --format ids | xargs -I{} ticket track show {}
+
+# YAML 輸出供腳本解析
+ticket track list --completed --format yaml --version 0.18.0
+```
+
+### 設計約束
+
+- 預設 `--top 10` 與 priority 排序為**行為變更**（W10-115）；既有腳本若依賴全量輸出需顯式加 `--all`
+- `--top` 與 `--all` 共存時 `--all` 優先並 emit warning（破壞性低；不報錯避免 CI 中斷）
+- `--format` 三選值對齊 `stale-list`（`table/ids/yaml`），保持 list-class 命令一致性
+- 跨版本聚合（`--version=all` 或省略 + 多版本場景）依各版本內排序後合併
+
+### 與 dashboard 的差異
+
+| 場景 | 推薦命令 | 原因 |
+|------|---------|------|
+| PM 新 session 接手 | `dashboard` | 一次看到 in_progress + ready + stale 三章節 |
+| 細部篩選（特定 wave/status/format） | `list` | flag 組合彈性高 |
+| 自動化腳本（pipe 到其他命令） | `list --format ids` | 純 ID 輸出無裝飾 |
+| 「下一個該做哪個」決策 | `runqueue` | 含關鍵路徑 / DAG 視圖

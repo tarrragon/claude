@@ -23,6 +23,20 @@ def _parse_wave_arg(value: str) -> int:
         return int(stripped[1:])
     return int(value)
 
+
+def _parse_top_arg(value: str) -> int:
+    """Parse --top argument: 非負整數。
+
+    負值或非整數會 raise argparse.ArgumentTypeError（argparse 自動轉 exit 2）。
+    """
+    try:
+        n = int(value)
+    except (ValueError, TypeError):
+        raise argparse.ArgumentTypeError("--top must be integer")
+    if n < 0:
+        raise argparse.ArgumentTypeError("--top must be >= 0")
+    return n
+
 from ticket_system.lib.ticket_loader import (
     resolve_version,
     require_version,
@@ -132,6 +146,11 @@ from .track_runqueue import (
     execute_runqueue,
     register_runqueue,
 )
+# dashboard 聚合視圖（W10-114 / W10-113 ANA Solution M1+M4'）
+from .track_dashboard import (
+    execute_dashboard,
+    register_dashboard,
+)
 # stuck-anas 列出卡住的 ANA（W17-008.15 方案 D）
 from .track_stuck_anas import (
     execute_stuck_anas,
@@ -141,6 +160,11 @@ from .track_stuck_anas import (
 from .track_stale_list import (
     execute_stale_list,
     register_stale_list,
+)
+# td-status 校準 TD 清單（W10-083 / PC-094）
+from .track_td_status import (
+    execute_td_status,
+    register_td_status,
 )
 # 導入版本審計命令模組
 from .audit_version import (
@@ -251,6 +275,10 @@ def _create_command_handlers() -> dict:
         "board": execute_board,
         # W17-011.1 / W17-009 統一 scheduler CLI
         "runqueue": execute_runqueue,
+        # W10-114 聚合 dashboard 視圖（in_progress + top N ready + stale）
+        "dashboard": execute_dashboard,
+        # W10-083 / PC-094 TD 清單校準
+        "td-status": execute_td_status,
     }
 
 
@@ -365,6 +393,12 @@ def _register_lifecycle_commands(
         action="store_true",
         help="逃生閥：跳過 type-aware body schema 必填章節驗證（W17-016.3；需於 Completion Info 附理由）",
     )
+    p_complete.add_argument(
+        "--force",
+        dest="force",
+        action="store_true",
+        help="逃生閥：父 ticket 有未完成 children 時旁路阻擋強制完成（W11-003.2；會輸出警告）",
+    )
 
     # close 操作（W15-027 / PC-090：--reason 枚舉必填）
     from ticket_system.constants import CLOSE_REASONS, CLOSE_REASON_RETROSPECTIVE_UNKNOWN
@@ -423,6 +457,19 @@ def _register_query_commands(
     p_list.add_argument("--status", nargs='+', help=TrackMessages.ARG_STATUS)
     p_list.add_argument("--format", choices=["table", "ids", "yaml"], default="table", help=TrackMessages.ARG_FORMAT)
     p_list.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    # W10-115: 預設限制 top 10 + priority 排序，--all 取得全量
+    p_list.add_argument(
+        "--top",
+        type=_parse_top_arg,
+        default=None,
+        help="限制輸出最多 N 筆（預設 10），依 priority(P0>P1>P2>P3) → created → id 排序",
+    )
+    p_list.add_argument(
+        "--all",
+        dest="list_all",
+        action="store_true",
+        help="取得全量輸出（覆蓋 --top；與 --top 共存時 --all 優先並 emit warning）",
+    )
 
     # search 操作（W9-002: 跨維度查詢）
     p_search = subparsers.add_parser("search", help="搜尋 Tickets（依 UC/Spec/Prop 引用或檔案路徑）")
@@ -797,8 +844,10 @@ def _register_all_subcommands(
     _register_board_commands(track_subparsers)
     _register_global_state_commands(track_subparsers)
     register_runqueue(track_subparsers)
+    register_dashboard(track_subparsers)
     register_stuck_anas(track_subparsers)
     register_stale_list(track_subparsers)
+    register_td_status(track_subparsers)
 
 
 def _register_global_state_commands(
