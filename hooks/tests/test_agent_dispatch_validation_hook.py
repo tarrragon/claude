@@ -75,6 +75,31 @@ def test_classify_absolute_path_external_is_external_claude():
     assert main_repo is False
 
 
+def test_classify_absolute_path_with_nested_claude_in_main_repo(monkeypatch):
+    """W11-016 案例 A：主 repo 絕對路徑中段含巢狀 .claude 目錄 → 仍應分類為 main_repo=True, external=False。
+
+    重現 bug：_ABSOLUTE_CLAUDE_PATTERN 用 finditer 對含雙層 .claude/ 的路徑會產生多重匹配，
+    第二次以後的 match 只截取後半段而丟失絕對路徑前綴，誤判為 external。
+    """
+    prompt = f"修改 {_PROJECT_ROOT}/.claude/skills/foo/.claude/bar.py"
+    main_repo, external, other = _classify_prompt_paths(prompt)
+    assert main_repo is True
+    assert external is False, (
+        "巢狀 .claude/ 不應因 finditer 多重匹配誤判為 external"
+    )
+
+
+def test_classify_absolute_path_with_nested_claude_external(monkeypatch):
+    """W11-016 案例 B：外部絕對路徑含巢狀 .claude 目錄 → 應分類為 main_repo=False, external=True。
+
+    確保修法不會把所有「含 .claude/」的絕對路徑都當作 main_repo。
+    """
+    prompt = "修改 /Users/foo/.claude/projects/p/.claude/hooks/bar.py"
+    main_repo, external, other = _classify_prompt_paths(prompt)
+    assert main_repo is False
+    assert external is True
+
+
 def test_classify_tmp_worktree_claude_is_external():
     """/tmp/ 下的 worktree 內 .claude/ → has_external_claude。"""
     prompt = "在 /tmp/worktree-xyz/.claude/hooks/bar.py 加入邏輯"

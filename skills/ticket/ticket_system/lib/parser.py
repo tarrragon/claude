@@ -11,6 +11,10 @@ import yaml
 
 from .ui_constants import FRONTMATTER_SPLIT_COUNT
 from .paths import get_ticket_path
+# Backward-compat alias：原 _file_lock 已搬至 lib/file_lock.py 並 rename 為
+# public file_lock。保留此 re-export 避免破壞既有 import；新 caller 應改用
+# `from ticket_system.lib.file_lock import file_lock`。
+from .file_lock import file_lock as _file_lock  # noqa: F401
 
 
 # ============================================================================

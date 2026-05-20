@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --quiet --script
 # /// script
-# requires-python = ">=3.9"
-# dependencies = []
+# requires-python = ">=3.11"
+# dependencies = ["pyyaml"]
 # ///
 """
 Agent Dispatch Validation Hook - PreToolUse Hook
@@ -86,7 +86,9 @@ _RELATIVE_CLAUDE_PATTERN = re.compile(r"(?<![/\w])\.claude/")
 
 # 偵測 prompt 中絕對路徑 .claude/（/xxx/.../.claude/）
 # 用於區分主 repo 內外：比對匹配字串是否以主 repo root 為前綴
-_ABSOLUTE_CLAUDE_PATTERN = re.compile(r"(/[^\s]+?)/\.claude/")
+# W11-016: 加 lookbehind 限定 match 起點為「絕對路徑開頭」（前面非路徑字元），
+# 避免 finditer 對含巢狀 .claude/ 的路徑產生多重匹配導致誤判 external。
+_ABSOLUTE_CLAUDE_PATTERN = re.compile(r"(?<![\w./-])(/[^\s]+?)/\.claude/")
 
 # 偵測 prompt 中非 .claude/ 的實作目標路徑
 # 策略：匹配常見專案路徑開頭（避免誤判 `.claude/docs` 這類巢狀路徑為 docs/）

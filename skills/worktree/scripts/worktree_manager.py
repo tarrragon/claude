@@ -17,21 +17,37 @@ from pathlib import Path
 from typing import Optional
 import subprocess
 
-from constants import (
-    FEAT_PREFIX,
-    FEAT_PREFIX_LEN,
-    TICKET_ID_PATTERN,
-    WORKTREE_STATUS_OUTPUT_WIDTH,
-    DEFAULT_BASE_BRANCH,
-    TICKET_QUERY_TIMEOUT,
-    TICKET_COMPLETED_STATUS,
-    CLEANUP_OUTPUT_WIDTH,
-    BRANCH_FORCE_DELETE_FLAG,
-)
-from messages import MergeMessages, CleanupMessages, CommonMessages, CreateMessages
+try:
+    from .constants import (
+        FEAT_PREFIX,
+        FEAT_PREFIX_LEN,
+        TICKET_ID_PATTERN,
+        WORKTREE_STATUS_OUTPUT_WIDTH,
+        DEFAULT_BASE_BRANCH,
+        TICKET_QUERY_TIMEOUT,
+        TICKET_COMPLETED_STATUS,
+        CLEANUP_OUTPUT_WIDTH,
+        BRANCH_FORCE_DELETE_FLAG,
+    )
+    from .messages import MergeMessages, CleanupMessages, CommonMessages, CreateMessages
+except ImportError:
+    # Fallback when running with scripts/ on sys.path (test 與直接執行情境)
+    from constants import (
+        FEAT_PREFIX,
+        FEAT_PREFIX_LEN,
+        TICKET_ID_PATTERN,
+        WORKTREE_STATUS_OUTPUT_WIDTH,
+        DEFAULT_BASE_BRANCH,
+        TICKET_QUERY_TIMEOUT,
+        TICKET_COMPLETED_STATUS,
+        CLEANUP_OUTPUT_WIDTH,
+        BRANCH_FORCE_DELETE_FLAG,
+    )
+    from messages import MergeMessages, CleanupMessages, CommonMessages, CreateMessages
 
 # 動態新增 .claude/lib 到 Python 路徑
-project_root = Path(__file__).resolve().parent.parent.parent.parent
+# 路徑層級：worktree_manager.py -> scripts -> worktree -> skills -> .claude -> <project_root>
+project_root = Path(__file__).resolve().parent.parent.parent.parent.parent
 sys.path.insert(0, str(project_root / ".claude" / "lib"))
 
 try:

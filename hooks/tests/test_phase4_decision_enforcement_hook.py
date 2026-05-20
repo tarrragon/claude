@@ -410,6 +410,46 @@ def test_ex_n9_rule_quote_缺路徑():
     assert valid is False and err == "rule-quote-need-path"
 
 
+# ---- W11-023: history 類別豁免（引用已完成歷史 / 動機脈絡） ----
+
+def test_ex_p7_history_valid_含_ticket_id():
+    """合法引用：reason 含 ticket ID 作歷史錨點，應通過驗證。"""
+    m = parse_exempt_marker(
+        "<!-- PC-093-exempt: history:本段引用 parent W11-004.7 多視角審查發現作動機脈絡 -->"
+    )
+    assert m is not None and m.category == "history"
+    valid, err = validate_exempt_fields(m)
+    assert valid is True and err is None
+
+
+def test_ex_p8_history_valid_含_versioned_ticket_id():
+    """合法引用：reason 含 versioned ticket ID（0.18.0-W11-004 含 W11-004 子字串）也應通過。"""
+    m = parse_exempt_marker(
+        "<!-- PC-093-exempt: history:引用 0.18.0-W11-004.7.1 的 Problem Analysis 作背景 -->"
+    )
+    valid, err = validate_exempt_fields(m)
+    assert valid is True and err is None
+
+
+def test_ex_n10_history_缺_ticket_id():
+    """非法：history reason 不含 ticket ID 錨點，應 invalid 並產出 history-need-anchor。"""
+    m = parse_exempt_marker(
+        "<!-- PC-093-exempt: history:這是歷史脈絡但沒有票號錨點的說明 -->"
+    )
+    assert m is not None and m.category == "history"
+    valid, err = validate_exempt_fields(m)
+    assert valid is False and err == "history-need-anchor"
+
+
+def test_ex_n11_history_invalid_message_contains_anchor_hint():
+    """history-need-anchor 訊息應在 ERR_MESSAGE_MAP 中，含修復範例。"""
+    err_map = _hook.ERR_MESSAGE_MAP
+    assert "history-need-anchor" in err_map
+    title, hint = err_map["history-need-anchor"]
+    assert "history" in title
+    assert "W" in hint  # 範例含 W{wave}-{seq} 格式
+
+
 def test_ex_n5_格式錯誤_missing_colon_reason():
     m = parse_exempt_marker("<!-- PC-093-exempt: missing-reason -->")
     assert m is None
@@ -729,10 +769,12 @@ def test_b5_marker_內含_phrase_不誤判():
 
 
 def test_b6_phrase_在程式碼區塊內仍命中():
+    # W11-018: 此測試在 GREEN 階段需更新為「不命中」（fenced block 豁免）
+    # 暫保留為 RED 紀錄，Phase 3b 實作後改為 assert == 0
     text = "```\nPhase 4 再決定 cache\n```"
     hits = _scan_text(text)
-    # 保守偵測：仍命中
-    assert len(_hits_by_rule(hits, "M1")) == 1
+    # W11-018 後預期：fenced block 內豁免，M1 不命中
+    assert len(_hits_by_rule(hits, "M1")) == 0, "W11-018: fenced block 內應豁免"
 
 
 def test_b7_同行多_phrase():
@@ -908,11 +950,11 @@ def test_format_warn_info_humanizes_format_error():
 # ============================================================================
 
 def test_w10_108_block_message_lists_all_exempt_categories():
-    """拒絕訊息必須完整列出 5 個合法 category（避免 agent 因不知道路徑而走字串繞過）。"""
+    """拒絕訊息必須完整列出 6 個合法 category（避免 agent 因不知道路徑而走字串繞過）。"""
     hits = [Hit(line_no=10, rule_id="M1", level="BLOCK", text="Phase 5 再決定")]
     msg = format_block_message("0.18.0-W10-108", hits, exempted=[])
     for category in ("tdd-transition", "baseline-gated", "ticket-tracked",
-                     "user-override", "rule-quote"):
+                     "user-override", "rule-quote", "history"):
         assert category in msg, "白名單必含 category: {}".format(category)
 
 
@@ -934,7 +976,7 @@ def test_w10_108_block_message_categories_have_use_case():
     msg = format_block_message("0.18.0-W10-108", hits, exempted=[])
     # 每個 category 行格式包含「— 」說明分隔符
     for category in ("tdd-transition", "baseline-gated", "ticket-tracked",
-                     "user-override", "rule-quote"):
+                     "user-override", "rule-quote", "history"):
         # 找該 category 所在行
         for line in msg.split("\n"):
             if category in line and "—" in line:
@@ -1037,3 +1079,389 @@ def test_w10_130_schema_placeholder_also_skips_phrase_scanning():
     # placeholder 區塊內即使 Schema note 含「Phase 5 再決定」字樣也應跳過
     assert len(blocked) == 0
     assert len(warned) == 0
+
+
+# ============================================================================
+# W11-018 — Fenced Code Block 範例語境豁免（Phase 2 RED 測試骨架）
+#
+# 對應 Phase 1 規格 §2.1 FENCE-1~7 / §2.2 豁免效果 / §2.5 EDGE-1~12 / §3 AC1-13
+# 函式 compute_fenced_block_lines() 在 Phase 3b 實作前不存在 → 整段 RED。
+#
+# 分組：
+#   FENCE-CORE   核心邊界規則（FENCE-1~7） — 純函式單元測試
+#   FENCE-EDGE   邊界條件（EDGE-1~12） — 純函式單元測試
+#   FENCE-INTEG  整合（scan_lines + collect_markers + partition + main）
+#   FENCE-AC     AC1~AC13 對應驗收（含 regression 防護）
+# ============================================================================
+
+# 取得 compute_fenced_block_lines（Phase 3b 實作後存在；當前 AttributeError → RED）
+def _get_fenced_fn():
+    """延遲讀取，避免 module import 時整檔 fail。"""
+    return getattr(_hook, "compute_fenced_block_lines", None)
+
+
+# ---------- FENCE-CORE: 核心邊界規則（FENCE-1~7） ----------
+
+def test_fence_1_basic_backtick_fence():
+    """FENCE-1: 3+ backtick 起始 fence 識別。"""
+    fn = _get_fenced_fn()
+    assert fn is not None, "compute_fenced_block_lines 未實作（RED 預期）"
+    lines = ["```", "content", "```"]
+    result = fn(lines)
+    assert result == {1, 2, 3}, "起始/結束 fence 與內容皆屬區塊"
+
+
+def test_fence_1_tilde_fence():
+    """FENCE-1: 3+ tilde 等效處理。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["~~~", "content", "~~~"]
+    assert fn(lines) == {1, 2, 3}
+
+
+def test_fence_2_close_must_match_char():
+    """FENCE-2: backtick 不可被 tilde 閉合。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["```", "content", "~~~", "still in"]
+    # 未閉合 → 至檔尾
+    assert fn(lines) == {1, 2, 3, 4}
+
+
+def test_fence_2_close_length_must_ge_open():
+    """FENCE-2: 結束 fence 長度必須 >= 起始長度。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["````", "content", "```", "still in", "````"]
+    # 4-backtick 起始，3-backtick 不閉合（< 起始長度），4-backtick 閉合
+    assert fn(lines) == {1, 2, 3, 4, 5}
+
+
+def test_fence_3_language_hint_ignored():
+    """FENCE-3: info string 不影響邊界。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["```python", "code", "```"]
+    assert fn(lines) == {1, 2, 3}
+
+
+def test_fence_4_fence_lines_included():
+    """FENCE-4: fence 起始與結束行自身屬區塊範圍。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["```", "x", "```"]
+    result = fn(lines)
+    assert 1 in result and 3 in result
+
+
+def test_fence_5_unclosed_to_eof():
+    """FENCE-5: 未閉合 fence 視為至檔尾。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["```", "line2", "line3"]
+    assert fn(lines) == {1, 2, 3}
+
+
+def test_fence_6_indented_3_spaces_still_valid():
+    """FENCE-6: indent <= 3 空格的 fence 仍有效。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["   ```", "x", "   ```"]
+    assert fn(lines) == {1, 2, 3}
+
+
+def test_fence_6_indented_4_spaces_not_fence():
+    """FENCE-6: indent >= 4 空格屬 indented code block（不啟用 fenced 豁免）。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["    ```", "x", "    ```"]
+    assert fn(lines) == set(), "4 空格縮排不視為 fenced block"
+
+
+def test_fence_7_nested_smaller_inner_stays_content():
+    """FENCE-7: 內層相同字元 fence 長度 < 外層起始長度，仍屬內容。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["````", "```", "inner", "```", "````"]
+    assert fn(lines) == {1, 2, 3, 4, 5}
+
+
+# ---------- FENCE-EDGE: EDGE-1~12 邊界條件 ----------
+
+def test_edge_1_empty_fenced_block():
+    """EDGE-1: 空 fenced block。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["```", "```"]
+    assert fn(lines) == {1, 2}
+
+
+def test_edge_2_language_hint_boundary():
+    """EDGE-2: language hint 起始行屬區塊。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["```python", "x", "```"]
+    assert 1 in fn(lines)
+
+
+def test_edge_3_tilde_fence_equivalent():
+    """EDGE-3 / AC5: tilde fence 與 backtick 等效。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["~~~", "Phase 5 再決定", "~~~"]
+    fenced = fn(lines)
+    table = build_regex_table()
+    hits = scan_lines_for_phrases(lines, table)
+    assert hits == [], "tilde fence 內 phrase 應豁免"
+    assert 2 in fenced
+
+
+def test_edge_4_4backtick_outer_3backtick_inner_content():
+    """EDGE-4: 4-backtick 外層，內部 3-backtick 視為內容。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["````", "```", "Phase 5 再決定", "```", "````"]
+    fenced = fn(lines)
+    assert fenced == {1, 2, 3, 4, 5}
+
+
+def test_edge_5_unclosed_to_eof():
+    """EDGE-5 / AC7: 未閉合 fence 至檔尾。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["```", "Phase 5 再決定 unclosed", "後續行"]
+    assert fn(lines) == {1, 2, 3}
+
+
+def test_edge_6_backtick_tilde_mixed_unclosed():
+    """EDGE-6: backtick 起 + tilde 終 視為不閉合。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["```", "x", "~~~", "y"]
+    # tilde 不閉合 backtick → 至檔尾
+    assert fn(lines) == {1, 2, 3, 4}
+
+
+def test_edge_7_indented_fence_not_in_scope():
+    """EDGE-7 / AC8: indented fence (>= 4 空格) 不啟用，正常掃描。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["    ```", "    Phase 5 再決定", "    ```"]
+    assert fn(lines) == set()
+    # phrase 仍命中
+    table = build_regex_table()
+    hits = scan_lines_for_phrases(lines, table)
+    assert len(_hits_by_rule(hits, "M1")) == 1
+
+
+def test_edge_8_tab_indent_not_fence():
+    """EDGE-8 / AC8: Tab 視為 4 空格，不視為 fence。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["\t```", "x", "\t```"]
+    assert fn(lines) == set()
+
+
+def test_edge_9_two_blocks_one_blank_line_between():
+    """EDGE-9: 兩個 fenced block 間空行不屬任一區塊。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["```", "a", "```", "", "```", "b", "```"]
+    result = fn(lines)
+    assert 4 not in result
+    assert result == {1, 2, 3, 5, 6, 7}
+
+
+def test_edge_10_inline_backtick_not_handled():
+    """EDGE-10 / AC9: inline backtick 不在範圍，行內延後話術仍命中。"""
+    fn = _get_fenced_fn()
+    assert fn is not None
+    lines = ["這是 inline `Phase 5 再決定` 仍命中"]
+    assert fn(lines) == set()
+    table = build_regex_table()
+    hits = scan_lines_for_phrases(lines, table)
+    assert len(_hits_by_rule(hits, "M1")) == 1
+
+
+def test_edge_11_fenced_exempt_marker_not_collected():
+    """EDGE-11 / AC4: fenced block 內 PC-093-exempt 範例不收集為 marker。"""
+    lines = [
+        "```",
+        "<!-- PC-093-exempt: cat:reason -->",
+        "<!-- PC-093-exempt: <category>:<reason> -->",
+        "```",
+    ]
+    refs = collect_exempt_markers(lines)
+    assert refs == [], "fenced 內範例 marker 不應蒐集，實際: {}".format(refs)
+
+
+def test_edge_12_fenced_m1_phrase_not_hit():
+    """EDGE-12 / AC1: fenced 內 M1 phrase 不命中。"""
+    lines = ["```", "Phase 5 再決定", "```"]
+    table = build_regex_table()
+    hits = scan_lines_for_phrases(lines, table)
+    assert hits == [], "fenced 內 M1 phrase 應整行豁免"
+
+
+# ---------- FENCE-AC: AC1~AC13 對應驗收 ----------
+
+def test_ac1_m1_m2_m3_all_exempted_in_fence():
+    """AC1: fenced 內 M1/M2/M3 三條 BLOCK 規則全豁免。"""
+    lines = [
+        "```",
+        "Phase 5 再決定",  # M1
+        "之後再決定處理",  # M2
+        "保留 cache 以防萬一",  # M3
+        "```",
+    ]
+    table = build_regex_table()
+    hits = scan_lines_for_phrases(lines, table)
+    assert hits == []
+
+
+def test_ac2_w1_w2_w3_all_exempted_in_fence():
+    """AC2: fenced 內 W1/W2/W3 三條 WARN 規則全豁免。"""
+    lines = [
+        "```",
+        "視 baseline 結果再決定",  # W1
+        "未來可能需要 cache",  # W2
+        "先保留再說",  # W3
+        "```",
+    ]
+    table = build_regex_table()
+    hits = scan_lines_for_phrases(lines, table)
+    assert hits == []
+
+
+def test_ac3_i1_i2_all_exempted_in_fence():
+    """AC3: fenced 內 I1/I2 兩條 INFO 規則全豁免。"""
+    lines = [
+        "```",
+        "TODO: Phase 4 決定",  # I1
+        "保留擴展彈性",  # I2
+        "```",
+    ]
+    table = build_regex_table()
+    hits = scan_lines_for_phrases(lines, table)
+    assert hits == []
+
+
+def test_ac4_invalid_marker_in_fence_not_audit():
+    """AC4: fenced 內格式不符的 PC-093-exempt 範例不誤報 INVALID。"""
+    lines = [
+        "```",
+        "<!-- PC-093-exempt -->",  # 缺 cat:reason
+        "<!-- PC-093-exempt: unknown-cat:short -->",  # 非白名單 + 太短
+        "```",
+    ]
+    refs = collect_exempt_markers(lines)
+    assert refs == []
+
+
+def test_ac10_regression_outside_fence_still_hits():
+    """AC10 regression: fenced block 外的命中正常運作。"""
+    content = _read_fixture("ticket_fenced_basic.md")
+    lines = content.split("\n")
+    table = build_regex_table()
+    hits = scan_lines_for_phrases(lines, table)
+    # Section D "Phase 5 再決定真實命中" 必中
+    m1_hits = _hits_by_rule(hits, "M1")
+    assert any("真實命中" in h.text or h.line_no >= 20 for h in m1_hits), (
+        "區塊外實際命中應保留"
+    )
+
+
+def test_ac11_regression_outside_fence_marker_collected():
+    """AC11 regression: fenced block 外實際 exempt marker 正常蒐集。"""
+    content = _read_fixture("ticket_fenced_basic.md")
+    lines = content.split("\n")
+    refs = collect_exempt_markers(lines)
+    valid = [r for r in refs if r.valid]
+    assert len(valid) >= 1, "Section E 的真實 marker 應被收集"
+
+
+def test_ac12_integration_multi_mechanism_coexist():
+    """AC12: fenced + Schema + REF + 真實命中共存無互相干擾。"""
+    content = _read_fixture("ticket_fenced_integration.md")
+    lines = content.split("\n")
+    table = build_regex_table()
+    hits = scan_lines_for_phrases(lines, table)
+    markers = collect_exempt_markers(lines)
+    blocked, warned, info, exempted = partition_hits(hits, markers)
+    # 應有「之後再決定 real-hit」殘留為 blocked
+    # Hit.text 為 regex 命中片段（中文 phrase），real-hit 為 fixture 行內 marker
+    # 採與 test_ac10 同模式：line_no 或 text 任一含 marker 即可（PC-093 fixture 慣例）
+    real_hit_line = next(
+        (i for i, l in enumerate(lines, start=1) if "real-hit" in l), None
+    )
+    assert real_hit_line is not None, "fixture 應含 real-hit 標記行"
+    assert any(
+        h.line_no == real_hit_line or "real-hit" in h.text for h in blocked
+    ), "fenced/schema/ref 機制不應誤豁免實際命中 (real-hit 行)"
+    # 不應有 fenced 內範例命中（fenced-example marker 行不應出現任一 hit）
+    fenced_example_lines = {
+        i for i, l in enumerate(lines, start=1) if "fenced-example" in l
+    }
+    for h in hits:
+        assert h.line_no not in fenced_example_lines, (
+            "fenced 內範例不應命中（line {} 應屬 fenced 豁免）".format(h.line_no)
+        )
+
+
+def test_ac13_fence_self_line_not_phrase_hit():
+    """AC13: fence 起始行（含 language hint）與結束行不被 phrase 掃描誤判。"""
+    lines = ["```python", "code", "```"]
+    table = build_regex_table()
+    hits = scan_lines_for_phrases(lines, table)
+    # fence 自身行不含 phrase（無 Phase X / 之後 等），本來就不會命中
+    # 此測試確保 fence 行被 fenced_lines 涵蓋（即使將來 phrase regex 擴張也安全）
+    assert hits == []
+
+
+# ---------- FENCE-INTEG: main() 整合 ----------
+
+def test_integ_fenced_only_block_main_exit_0(monkeypatch, capsys, mock_find_ticket):
+    """fenced block 內含 BLOCK phrase 範例 + 區塊外無命中 → main exit 0。"""
+    mock_find_ticket("ticket_fenced_basic.md")
+    # 但 ticket_fenced_basic.md 區塊外有 Section D "真實命中" → 應 exit 2
+    # 改用獨立 fixture：只有 fenced 範例，無區塊外命中
+    pass  # 此測試由下方 ac12 整合替代
+
+
+def test_integ_fenced_unclosed_exempts_to_eof(monkeypatch, capsys, mock_find_ticket):
+    """EDGE-5 整合：未閉合 fence 至檔尾豁免，main exit 0。"""
+    mock_find_ticket("ticket_fenced_unclosed.md")
+    rc, out, err = _run_main_with_stdin(
+        _payload("PostToolUse", "ticket track phase TST-001 phase4"),
+        monkeypatch, capsys,
+    )
+    assert rc == 0, "未閉合 fence 內全部豁免，不應觸發 BLOCK"
+    assert err == ""
+
+
+def test_integ_fenced_integration_main_blocks_real_hit(monkeypatch, capsys, mock_find_ticket):
+    """AC12 整合：fenced/schema/ref 共存時，僅實際命中觸發 BLOCK。"""
+    mock_find_ticket("ticket_fenced_integration.md")
+    rc, out, err = _run_main_with_stdin(
+        _payload("PostToolUse", "ticket track phase TST-001 phase4"),
+        monkeypatch, capsys,
+    )
+    assert rc == 2, "real-hit 應觸發 BLOCK"
+    # err 包含命中 line_no；驗證 real-hit 行有出現於 block 訊息（line {n} 格式）
+    content = _read_fixture("ticket_fenced_integration.md")
+    fixture_lines = content.split("\n")
+    real_hit_line = next(
+        (i for i, l in enumerate(fixture_lines, start=1) if "real-hit" in l), None
+    )
+    assert real_hit_line is not None
+    assert "line {}".format(real_hit_line) in err, (
+        "real-hit 行（line {}）應出現於 BLOCK 訊息".format(real_hit_line)
+    )
+    # fenced 範例（fenced-example marker 所在行）不應出現於錯誤訊息
+    fenced_example_lines = [
+        i for i, l in enumerate(fixture_lines, start=1) if "fenced-example" in l
+    ]
+    for ln in fenced_example_lines:
+        assert "line {}".format(ln) not in err, (
+            "fenced 範例行 {} 不應出現於 BLOCK 訊息".format(ln)
+        )

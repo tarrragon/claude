@@ -22,8 +22,8 @@ Hook 類型：
 豁免語法：
   <!-- PC-093-exempt: <category>:<reason> -->
   於命中 phrase 同行或前 1 行內生效。
-  category: tdd-transition | baseline-gated | ticket-tracked | user-override | rule-quote
-  reason: ≥10 字元；baseline-gated 需含數字；ticket-tracked 需含 ticket id；
+  category: tdd-transition | baseline-gated | ticket-tracked | user-override | rule-quote | history
+  reason: ≥10 字元；baseline-gated 需含數字；ticket-tracked / history 需含 ticket id；
           rule-quote 需含 .claude/rules/ 或 .claude/pm-rules/ 路徑
 
 Ticket: 0.18.0-W10-082
@@ -60,6 +60,7 @@ EXEMPT_CATEGORIES = frozenset({
     "ticket-tracked",
     "user-override",
     "rule-quote",
+    "history",
 })
 
 REASON_MIN_LEN = 10
@@ -101,6 +102,21 @@ SCHEMA_PLACEHOLDER_START = re.compile(r"<!--\s*Schema\[[^\]]+\]\s*:")
 SCHEMA_PLACEHOLDER_END_H2 = re.compile(r"^\s*##\s")
 SCHEMA_PLACEHOLDER_END_HR = re.compile(r"^\s*---\s*$")
 
+# W11-018: Fenced code block 範例語境豁免
+# Markdown fenced code block 內的延後話術與 PC-093-exempt marker 屬「範例展示」，
+# 非實際延後決策或豁免宣告。整段跳過 phrase 掃描與 marker 蒐集。
+# 規則：採 CommonMark 0.31 fenced code block 子集
+# - 起始 fence: 行首 0-3 空格 indent + 3+ 連續 backtick 或 3+ 連續 tilde
+# - 結束 fence: 同字元 + 長度 >= 起始 + 行內僅尾部空白
+# - 未閉合 fence: 視為至檔尾（容錯）
+# - 不支援 indented fence（indent >= 4 空格 / Tab=4）與 nested fence
+FENCED_BLOCK_START_PATTERN = re.compile(
+    r"^(?P<indent> {0,3})(?P<fence>`{3,}|~{3,})(?P<info>.*)$"
+)
+FENCED_BLOCK_CLOSE_PATTERN = re.compile(
+    r"^(?P<indent> {0,3})(?P<fence>`{3,}|~{3,})\s*$"
+)
+
 # 豁免 proximity（marker 同行或前 1 行生效）
 EXEMPT_PROXIMITY_LINES = 1
 
@@ -136,6 +152,10 @@ ERR_MESSAGE_MAP: Dict[str, Tuple[str, str]] = {
     "rule-quote-need-path": (
         "rule-quote 類別的 reason 必須含規則檔案路徑（.claude/rules/ 或 .claude/pm-rules/）",
         "範例：<!-- PC-093-exempt: rule-quote:引用 .claude/rules/core/decision-trigger-binding.md 規則 1.5 -->",
+    ),
+    "history-need-anchor": (
+        "history 類別的 reason 必須含 W{wave}-{seq} 格式 ticket ID 作歷史錨點",
+        "範例：<!-- PC-093-exempt: history:本段引用 parent W11-004.7 多視角審查發現作動機脈絡 -->",
     ),
 }
 
@@ -297,6 +317,71 @@ def compute_schema_placeholder_lines(lines: List[str]) -> set:
     return placeholder_lines
 
 
+def compute_fenced_block_lines(lines: List[str]) -> set:
+    """W11-018: 計算 fenced code block 內的 1-based 行號集合（含 fence 自身行）。
+
+    規則（CommonMark 0.31 子集）：
+    - FENCE-1: 起始 fence = 行首 0-3 空格 + 3+ 連續 backtick 或 tilde
+    - FENCE-2: 結束 fence = 同字元 + 長度 >= 起始 + 行內僅尾部空白
+    - FENCE-3: info string（language hint）不影響邊界
+    - FENCE-4: fence 起始與結束行自身屬區塊範圍
+    - FENCE-5: 未閉合 fence 視為至檔尾（容錯）
+    - FENCE-6: indent >= 4 空格不啟用（Tab 視為 4 空格）
+    - FENCE-7: 不支援 nested fence；內層字元數 < 外層起始長度則視為內容
+
+    單次線性掃描 O(n)；in_block 期間先 add 後判 close（保 FENCE-4）。
+    """
+    def _visual_indent(text: str) -> int:
+        """Tab 視為 4 空格（EDGE-8 / CommonMark）。"""
+        width = 0
+        for ch in text:
+            if ch == "\t":
+                width += 4
+            elif ch == " ":
+                width += 1
+            else:
+                break
+        return width
+
+    fenced_lines: set = set()
+    in_block = False
+    open_char: Optional[str] = None
+    open_len = 0
+
+    for idx, raw in enumerate(lines, start=1):
+        if not in_block:
+            # 先檢查 leading Tab / 大量空白（visual indent >= 4 不視為 fence）
+            # 取出 raw 開頭非空白前的部分，計算 visual width
+            leading = raw[: len(raw) - len(raw.lstrip(" \t"))]
+            if "\t" in leading and _visual_indent(leading) > 3:
+                continue
+            m = FENCED_BLOCK_START_PATTERN.match(raw)
+            if not m:
+                continue
+            # FENCE-6: indent ≤ 3 才視為 fence（regex 已限制 ≤ 3 純空格；Tab 已上方排除）
+            fence = m.group("fence")
+            info = m.group("info") or ""
+            # backtick fence 的 info string 不可含 backtick（CommonMark）
+            if fence[0] == "`" and "`" in info:
+                continue
+            in_block = True
+            open_char = fence[0]
+            open_len = len(fence)
+            fenced_lines.add(idx)
+        else:
+            # 已在區塊中：先加入再判 close（FENCE-4）
+            fenced_lines.add(idx)
+            cm = FENCED_BLOCK_CLOSE_PATTERN.match(raw)
+            if cm:
+                cfence = cm.group("fence")
+                if cfence[0] == open_char and len(cfence) >= open_len:
+                    in_block = False
+                    open_char = None
+                    open_len = 0
+    # FENCE-5: 未閉合 fence — 因迴圈內 in_block 期間每行已 add，自然涵蓋至檔尾
+    return fenced_lines
+
+
 def scan_lines_for_phrases(
     lines: List[str],
     table: List[PhraseRule],
@@ -307,9 +392,13 @@ def scan_lines_for_phrases(
     - 同行可多規則命中，不去重；豁免狀態由 F7 處理。
     - W10-130: Schema placeholder template 區塊整段跳過。
     """
+    fenced_lines = compute_fenced_block_lines(lines)
     placeholder_lines = compute_schema_placeholder_lines(lines)
     hits: List[Hit] = []
     for idx, raw in enumerate(lines, start=1):
+        # W11-018: Fenced code block 範例語境豁免（行級 short-circuit，最先檢查）
+        if idx in fenced_lines:
+            continue
         # W10-130: Schema placeholder template 區塊跳過（範例文字非實際內容）
         if idx in placeholder_lines:
             continue
@@ -361,6 +450,12 @@ def validate_exempt_fields(marker: ExemptMarker) -> Tuple[bool, Optional[str]]:
         return (False, "ticket-tracked-need-id")
     if marker.category == "rule-quote" and not RULE_PATH_PATTERN.search(marker.reason):
         return (False, "rule-quote-need-path")
+    # W11-023: history 類別 reason 必須含 ticket ID 作歷史錨點，
+    # 避免「歷史脈絡」變成自由文字逃生閥。語意上 history 描述「引用已完成的
+    # 歷史 / 動機脈絡」（如 parent ANA 審查發現），與 ticket-tracked（等待
+    # 該 ticket 完成）語意不同。
+    if marker.category == "history" and not TICKET_ID_PATTERN.search(marker.reason):
+        return (False, "history-need-anchor")
     return (True, None)
 
 
@@ -374,9 +469,13 @@ def collect_exempt_markers(lines: List[str]) -> List[ExemptRef]:
     W10-130: Schema placeholder template 區塊內的 marker 屬範例文字（如
     `<!-- PC-093-exempt: cat:reason -->`），整段跳過避免誤判為 INVALID。
     """
+    fenced_lines = compute_fenced_block_lines(lines)
     placeholder_lines = compute_schema_placeholder_lines(lines)
     refs: List[ExemptRef] = []
     for idx, raw in enumerate(lines, start=1):
+        # W11-018: Fenced code block 範例語境豁免（範例 marker 不蒐集）
+        if idx in fenced_lines:
+            continue
         if idx in placeholder_lines:
             continue
         marker = parse_exempt_marker(raw)
@@ -563,6 +662,7 @@ def format_block_message(
     lines.append("  - ticket-tracked  — 引用既有 ticket ID（reason 須含 W{wave}-{seq}，如 source ticket 歷史引用）")
     lines.append("  - user-override   — 用戶明確授權的延後（一般說明 ≥ 10 字）")
     lines.append("  - rule-quote      — 引用 .claude/rules/ 或 .claude/pm-rules/ 規則名稱（reason 須含規則路徑）")
+    lines.append("  - history         — 引用已完成歷史 / 動機脈絡（reason 須含 W{wave}-{seq} ticket ID 作錨點）")
     lines.append("  詳見 .claude/rules/core/decision-trigger-binding.md「Hook 引用豁免機制」章節")
     lines.append("")
     lines.append("要求對每項做出三選一:")

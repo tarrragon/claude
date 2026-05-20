@@ -18,6 +18,8 @@ import pytest
 
 
 _HOOKS_DIR = Path(__file__).parent.parent
+# W10-092: 部分 ticket-skill hook 已遷至 .claude/skills/ticket/hooks/
+ticket_skill_hooks_path = _HOOKS_DIR.parent / "skills" / "ticket" / "hooks"
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 
@@ -27,7 +29,7 @@ def hook_module():
     """動態載入 ana-ticket-metadata-validation-hook 模組（檔名含連字號）"""
     spec = importlib.util.spec_from_file_location(
         "ana_ticket_metadata_validation_hook",
-        _HOOKS_DIR / "ana-ticket-metadata-validation-hook.py",
+        ticket_skill_hooks_path / "ana-ticket-metadata-validation-hook.py",
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

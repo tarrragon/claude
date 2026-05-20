@@ -161,6 +161,60 @@ Layer 1 寫入 `## Solution` 的子章節；Layer 2 委員報告寫入 `## Test 
 
 ---
 
+## PM 預寫策略與 Solution 職責邊界
+
+> **來源**：W17-206 ANA 根因 b+c（PM 預寫 Solution H2 違規 + 雙寫重複，W17-205 案例）。落地方案 D+C：規則明示 + Context Bundle 改寫。
+
+### 條款 1：PM 預寫實作策略放 Context Bundle，不放 Solution
+
+PM 派發前若需預寫實作策略（PC-040 反推情境：先分析確認代理人執行路徑），應將策略寫入 Context Bundle 的 H3 子節，而非寫入 `## Solution`。
+
+**Why**：`## Solution` 章節設計為 agent 執行結果的記錄載體；PM 預寫會產生 H2 違規（W17-072）且與後續 agent 填寫的 Solution 高度重疊（雙寫），造成 ticket 歷史混淆。
+
+**Consequence**：PM 寫入 `## Solution` 的內容若觸發 W17-072 自訂 H2 警告，代理人補寫時又會形成結構衝突，PM 需要額外整理，增加不必要成本。
+
+**Action**：預寫策略使用 `### 實作策略（PM 預寫）` 子節，與 `### Context Bundle` 同為 H3 層級（邏輯上同屬 CB 區段），緊接在 Context Bundle 內容之後，例如：
+
+```markdown
+### Context Bundle
+
+**需求摘要**: 修改 X 模組的 Y 邏輯
+
+### 實作策略（PM 預寫）
+- 優先修改 A 檔案的 B 函式
+- 注意 C 依賴關係，不動 D 介面
+```
+
+此結構中，`### 實作策略（PM 預寫）` 在文件標題層次上與 `### Context Bundle` 同級，但內容上屬於 CB 的補充子節，不屬於 `## Solution` 範圍。
+
+### 條款 2：Solution 章節為 agent 專屬，PM 不寫入
+
+`## Solution` 內容由執行 agent 填寫。PM 若需補強 Solution（如記錄派發決策背景），應使用 H3 子節（`### PM 補充`）寄生於既有 `## Solution` 而非建立新 H2。
+
+**Why**：H2 章節由 Schema 定義（`.claude/pm-rules/ticket-body-schema.md`），自訂 H2 會切斷 validator 的 section 擷取範圍（W17-072 規則）。H3 子節在 Schema 章節內自由組織，不受此限制。
+
+**Consequence**：PM 在 `## Solution` 下直接用 `ticket track append-log --section Solution` 寫入 `## 實作策略` 等自訂 H2，觸發 W17-072 警告，agent complete 時 hook 可能誤判章節邊界。
+
+**Action**：PM 確認需補充時，改用 `--section Solution` + 內容以 `### ` 開頭的 H3 子節；或使用條款 1 的 Context Bundle 路徑。
+
+### 條款 3：PM vs agent Solution 填寫職責邊界
+
+| 角色 | 填寫位置 | 內容類型 |
+|------|---------|---------|
+| PM（派發前） | `### Context Bundle` 的 H3 子節 | 前置策略、執行指引、背景分析 |
+| Agent（執行後） | `## Solution` 的 H3 子節 | 執行結果、決策記錄、產出摘要 |
+| PM（驗收後補充） | `## Solution` 的 `### PM 補充` H3 | 驗收決策、後續規劃（限 H3） |
+
+**場景辨識**：「PM 派發前」= ticket 尚未 claim 或 agent 尚未開始執行；「PM 驗收後補充」= agent complete 後 PM 需追記決策背景或後續規劃。遇到此兩情境，對照上表選擇正確填寫位置。
+
+**核心原則**：Context Bundle = PM 派發前情境準備；Solution = agent 執行結果。兩者載體分離，職責不重疊。
+
+**交叉引用**：
+- `.claude/rules/core/agent-definition-standard.md`「執行責任：Ticket body 填寫」— agent 填 Solution 的主責定義
+- `.claude/pm-rules/ticket-body-schema.md` Solution 章節 — H2/H3 章節結構規則（W17-072）
+
+---
+
 ## 禁止行為
 
 | 禁止 | 原因 |
@@ -169,6 +223,8 @@ Layer 1 寫入 `## Solution` 的子章節；Layer 2 委員報告寫入 `## Test 
 | 要求代理人「自行探索」 | 浪費 50%+ tool calls |
 | 跳過 Context Bundle 直接派發 | subagent ~20 tool calls 預算，探索就耗盡 |
 | 將 context 嵌入 Agent prompt 而非 Ticket | Prompt 是 ephemeral 載體，agent 失敗後 context 不可重用（PC-040） |
+| PM 在 `## Solution` 寫入自訂 H2 預寫策略 | 違反 W17-072；與 agent Solution 雙寫重複（W17-206 根因 b+c） |
+| PM 用 append-log 寫 `## 實作策略` 等自訂 H2 | 切斷 Schema section 擷取，應改用 H3 子節或 Context Bundle（條款 1/2） |
 
 ---
 
@@ -181,7 +237,9 @@ Layer 1 寫入 `## Solution` 的子章節；Layer 2 委員報告寫入 `## Test 
 
 ---
 
-**Last Updated**: 2026-05-04
+**Last Updated**: 2026-05-17
+**Version**: 2.4.0 — 新增「PM 預寫策略與 Solution 職責邊界」章節（W17-207）：三條款落地（預寫策略放 CB / Solution agent 專屬 / PM vs agent 職責邊界表）+ 禁止行為補列兩項（W17-206 根因 b+c）
+
 **Version**: 2.3.0 — 新增「Layer 1 自檢」章節（W17-061）：觸發時機表、觸發方式、寫入位置、與 Layer 2 委員的邊界分工
 
 **Version**: 2.2.0 — 新增代理人中間進度更新規範

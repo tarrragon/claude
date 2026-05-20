@@ -91,7 +91,7 @@ def create_ticket_file(
     if frontmatter_version is None:
         frontmatter_version = version
 
-    tickets_dir = project_root / "docs" / "work-logs" / f"v{version}" / "tickets"
+    tickets_dir = project_root / "docs" / "work-logs" / f"v{version.split('.')[0]}" / f"v{'.'.join(version.split('.')[:2])}" / f"v{version}" / "tickets"
     tickets_dir.mkdir(parents=True, exist_ok=True)
 
     file_path = tickets_dir / f"{ticket_id}.md"

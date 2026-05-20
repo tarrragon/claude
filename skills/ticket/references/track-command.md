@@ -385,7 +385,7 @@ from ticket_system.lib.messages import ErrorEnvelope, format_error
 env = ErrorEnvelope(
     component="track",         # CLI 子命令或模組名
     action="claim",            # 操作動詞
-    errno="TICKET_NOT_FOUND",  # 錯誤分類代碼
+    errno="TICKET_NOT_FOUND",  # 錯誤分類代號
     hint="ticket track list",  # 修復建議（可選）
 )
 print(format_error(env))
@@ -681,3 +681,136 @@ ticket track list --completed --format yaml --version 0.18.0
 | 細部篩選（特定 wave/status/format） | `list` | flag 組合彈性高 |
 | 自動化腳本（pipe 到其他命令） | `list --format ids` | 純 ID 輸出無裝飾 |
 | 「下一個該做哪個」決策 | `runqueue` | 含關鍵路徑 / DAG 視圖
+
+---
+
+## track dispatch-validate 子命令（W17-003）
+
+對 target ticket 的 Context Bundle 自動填料結果做合理性檢查，作為 C 方案
+（`context_bundle_extractor` 自動抽取）的第二道防線。**與 W10-017.2 的
+`dispatch-check`（活躍派發狀態查詢）職責正交**，獨立子命令不互相干擾。
+
+**Why**：C 方案自動抽取可能產出「填料成功但內容空殼」的失敗模式（規則 1 hard fail / 規則 2-4 soft warn 即為此設計），需要 lightweight 檢查層攔截，避免空殼 Context Bundle 派發給 agent。
+
+### 用法
+
+```bash
+ticket track dispatch-validate <ticket_id>
+```
+
+### 合理性檢查規則
+
+| 規則 | 內容 | 違反後果 |
+|------|------|---------|
+| 1 | Context Bundle section 存在且 content 非全空白 | 硬性失敗 → exit 2 |
+| 2 | Context Bundle content 長度 ≥ 50 字元（避免空殼填料） | 軟性警告 → exit 1 |
+| 3 | frontmatter `where.files` 列出的檔案在檔案系統存在 | 軟性警告 → exit 1 |
+| 4 | acceptance ≥ 3 項（4V 原則） | 軟性警告 → exit 1 |
+| 5 | （保留）LLM 審查 Context Bundle 是否真能讓 agent 上手 | 本 ticket 不實作 |
+
+### Exit code
+
+| code | 意義 |
+|------|------|
+| 0 | 全部規則通過 |
+| 1 | 軟性警告（規則 2/3/4 至少一項違反） |
+| 2 | 硬性失敗（規則 1 違反、ticket 不存在、IO/YAML 錯誤） |
+
+### 設計邊界
+
+- **不**修改 ticket，僅輸出診斷
+- **不**取代 hook / scheduler 的執行控制
+- **不**負責產生 dispatch-plan、也**不**實作 batch dispatch CLI（與 W17-029 邊界）
+- where.files 為空時規則 3 視為通過（DOC 類 ticket 常見情形）
+
+### 範例
+
+```bash
+$ ticket track dispatch-validate 0.18.0-W17-003
+dispatch-validate 0.18.0-W17-003:
+  [PASS] 規則 1 欄位非空: Context Bundle section 存在且非空
+  [PASS] 規則 2 內容長度: Context Bundle 內容長度 596 >= 50
+  [PASS] 規則 3 檔案存在: where.files 3 個檔案皆存在
+  [PASS] 規則 4 acceptance 項數: acceptance 5 項 >= 3
+[PASS] 全部規則通過
+```
+
+---
+
+## track dispatch-readiness 子命令（W17-053）
+
+派發前認知負擔閾值與綜合就緒度檢查。讀取 ticket frontmatter `where.files`
+與 Context Bundle section 自動計算三項核心指標，輸出 pass/warn/fail 與
+建議。**與 `dispatch-check`（活躍派發狀態，W10-017.2）和 `dispatch-validate`
+（CB 合理性，W17-003）職責正交**，獨立子命令不互相干擾。
+
+**Why**：派發前缺乏統一 CLI 入口檢查 ticket 是否符合認知負擔閾值，PM 需
+手動對照 `.claude/rules/core/cognitive-load.md` 與 `cognitive-load-execution-details.md`
+判斷拆分需求，違反摩擦力方法論執行階段減摩擦原則（W17-049 ANA linux 視角）。
+
+**Consequence**：缺少自動化檢查會讓 PM 偶爾遺漏拆分判斷，將過大任務派
+給代理人；3b 派發後常見症狀包含代理人 commit 遺漏部分職責、回合耗盡前
+只完成一半、跨檔不一致導致測試失敗。
+
+**Action**：派發 3b 實作 ticket 前以本命令自檢；exit 0 直接派發、exit 1
+評估是否豁免（如跨進程同步修復條款）、exit 2 必須拆分後重新派發。
+
+### 用法
+
+```bash
+ticket track dispatch-readiness <ticket_id>
+```
+
+### 三項閾值
+
+| 閾值 | 取得方式 | 軟上限 | 強制拆分 |
+|------|---------|-------|---------|
+| 1. 功能職責數（以 acceptance 條目近似） | `acceptance` 欄位計數 | > 2 | > 4 |
+| 2. 修改檔案數 | `where.files` 欄位計數 | > 5 | > 10 |
+| 3. Context Bundle tokens（以 chars/4 近似） | Context Bundle section 字元數 | > 3000 | > 5000 |
+
+> **閾值來源**：`.claude/references/cognitive-load-execution-details.md`「3b
+> 派發前閾值」三項核心指標。閾值 1「功能職責數」CLI 無法精確自動推導，
+> 沿用 acceptance 條目作為近似訊號，最終由 PM 判定。
+>
+> **近似性警告（W17-213）**：acceptance 若含「跑測試」「補文件」「執行驗證」
+> 等驗證類條目，會讓 acceptance 條目數高於實際功能職責數（高估）；反之，若
+> 多個職責被合併寫成單一 acceptance（低估），也會偏離真值。CLI 僅作近似訊號，
+> 達 WARN/FAIL 時 PM 應手動覆核 acceptance 是否反映真實職責數，再決定是否拆分。
+
+### Exit code
+
+| code | 意義 |
+|------|------|
+| 0 | 三項閾值全數通過 |
+| 1 | 軟性警告（任一項超軟上限但未達強制拆分） |
+| 2 | 硬性失敗（任一項超強制拆分閾值 / ticket 不存在 / IO/YAML 錯誤） |
+
+**重要**：本命令 exit code 語意**不與** `dispatch-check`（W10-017.2，exit
+1 = 有活躍派發）和 `dispatch-validate`（W17-003，exit 1 = CB 軟警告）共享；
+呼叫端必須以命令名稱判別語意，禁止以 exit code 跨命令解讀。
+
+### 設計邊界
+
+- **不**修改 ticket，僅輸出診斷
+- **不**取代 hook / scheduler 的執行控制
+- **不**觸碰既有 `dispatch-check`（W10-017.2）與 `dispatch-validate`（W17-003）
+- 閾值 1 為近似訊號（acceptance 條目 ≠ 功能職責數），最終拆分判斷由 PM 決定
+- Context Bundle section 不存在時閾值 3 視為 0 tokens 通過
+
+### 跨進程同步修復豁免
+
+若 ticket 符合「跨進程同步修復」全部 5 特徵（見 `cognitive-load-execution-details.md`
+「跨進程同步修復豁免條款」），可豁免閾值 1，本命令僅供 PM 參考，不應視
+為強制阻擋訊號。
+
+### 範例
+
+```bash
+$ ticket track dispatch-readiness 0.18.0-W17-053
+dispatch-readiness 0.18.0-W17-053:
+  [WARN] 閾值 1 功能職責數（acceptance 近似）: acceptance 條目 3 > 2（軟警告；建議拆分為多個 ticket）
+  [PASS] 閾值 2 修改檔案數（where.files）: where.files 3 ≤ 5
+  [PASS] 閾值 3 Context Bundle tokens: Context Bundle ~250 tokens ≤ 3000
+[WARN] 軟性警告：建議審視拆分必要性
+```

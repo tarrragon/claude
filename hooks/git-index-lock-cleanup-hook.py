@@ -82,9 +82,18 @@ def check_and_cleanup_index_lock(logger: logging.Logger) -> str | None:
             return msg
     else:
         # lock 很新，可能有正在進行的 git 操作
+        # PC-139: 外部 GUI app（Fork / GitKraken / SourceTree / VS Code Git）
+        # 週期性 fork git status/diff 子進程也會短暫持有 index.lock，
+        # 非自家 hook/Bash 串接所致；訊息提示 PM 同時檢查外部進程，避免誤判方向白等 lock 自清。
         msg = (
             f"[WARNING] .git/index.lock 存在（{lock_age:.0f} 秒），"
-            f"可能有其他 git 操作進行中，不自動移除"
+            f"可能有其他 git 操作進行中，不自動移除。\n"
+            f"來源排查：\n"
+            f"  1. 自家 hook/Bash 串接 git 寫入（拆分為獨立呼叫，見 bash-tool-usage-rules.md 規則三）\n"
+            f"  2. 外部 GUI app fork 子進程（Fork / GitKraken / SourceTree / VS Code Git）— PC-139\n"
+            f"     偵測指令：ps aux | grep -iE \"(Fork|GitKraken|SourceTree)\\.app|VS.Code.*git\" | grep -v grep\n"
+            f"  3. 確認無自家操作進行中後，可安全執行：rm .git/index.lock\n"
+            f"參見 .claude/error-patterns/process-compliance/PC-139-git-index-lock-source-misattribution-gui-app-fork.md"
         )
         logger.warning(msg)
         return msg

@@ -55,7 +55,7 @@ class TestIsInWorktree:
 class TestIsExemptPathOnProtectedBranch:
     """路徑豁免判定函式測試（#6 修復：補充實質性測試）"""
 
-    @patch('worktree_manager.run_git_command')
+    @patch('git_utils.run_git_command')
     def test_worktree_list_empty(self, mock_run_git):
         """場景 12.1：無 git 環境"""
         # 模擬 git 命令失敗（非 git 倉庫）
@@ -64,7 +64,7 @@ class TestIsExemptPathOnProtectedBranch:
         worktrees = get_worktree_list()
         assert worktrees == []
 
-    @patch('worktree_manager.run_git_command')
+    @patch('git_utils.run_git_command')
     def test_worktree_list_malformed_output(self, mock_run_git):
         """場景 12.2：格式化輸出異常"""
         # 模擬異常的 worktree list 輸出

@@ -29,6 +29,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from ticket_system.lib.file_lock import file_lock
 from ticket_system.lib.ticket_loader import (
     get_ticket_path,
     load_ticket,
@@ -288,37 +289,44 @@ def execute_check_acceptance(args: argparse.Namespace, version: str) -> int:
     use_all = getattr(args, "all", False)
     index_arg = getattr(args, "index", None)
 
+    # 用戶輸入錯誤路徑均為業務拒絕（return 2），詳見 cli-exit-code-rules.md 規則 2
     if use_all and index_arg is not None:
         print(format_error(ErrorMessages.CHECK_ACCEPTANCE_ALL_WITH_INDEX))
-        return 1
+        return 2
 
     if not use_all and index_arg is None:
         print(format_error(ErrorMessages.CHECK_ACCEPTANCE_MISSING_INDEX))
-        return 1
+        return 2
 
-    # 載入 Ticket
-    ticket, error = load_and_validate_ticket(version, args.ticket_id)
-    if error:
-        return 1
+    # W14-045: file_lock 包圍 load → modify → save，消除 logical race。
+    # Lock 範圍涵蓋 _execute_single_check_acceptance / _execute_batch_check_acceptance
+    # 內部的 save_ticket 呼叫。
+    lock_target = Path(get_ticket_path(version, args.ticket_id))
+    with file_lock(lock_target):
+        # 載入 Ticket（找不到 ticket 為用戶輸入錯誤 → return 2）
+        ticket, error = load_and_validate_ticket(version, args.ticket_id)
+        if error:
+            return 2
 
-    # 取得 acceptance 列表（來自 frontmatter）
-    acceptance_list = ticket.get("acceptance", [])
-    if not acceptance_list:
-        print(format_error(ErrorMessages.ACCEPTANCE_CRITERIA_NOT_FOUND, ticket_id=args.ticket_id))
-        return 1
+        # 取得 acceptance 列表（來自 frontmatter）
+        acceptance_list = ticket.get("acceptance", [])
+        if not acceptance_list:
+            # 業務拒絕：ticket 無 acceptance 條件可勾選
+            print(format_error(ErrorMessages.ACCEPTANCE_CRITERIA_NOT_FOUND, ticket_id=args.ticket_id))
+            return 2
 
-    uncheck = getattr(args, "uncheck", False)
+        uncheck = getattr(args, "uncheck", False)
 
-    if use_all:
-        # 批量操作
-        return _execute_batch_check_acceptance(
-            args, version, ticket, acceptance_list, uncheck
-        )
-    else:
-        # 單一操作
-        return _execute_single_check_acceptance(
-            args, version, ticket, acceptance_list, index_arg, uncheck
-        )
+        if use_all:
+            # 批量操作
+            return _execute_batch_check_acceptance(
+                args, version, ticket, acceptance_list, uncheck
+            )
+        else:
+            # 單一操作
+            return _execute_single_check_acceptance(
+                args, version, ticket, acceptance_list, index_arg, uncheck
+            )
 
 
 def _execute_single_check_acceptance(
@@ -333,8 +341,9 @@ def _execute_single_check_acceptance(
     # 解析 index 參數（支援三種格式）
     success, msg, index = _parse_acceptance_index(index_arg, acceptance_list)
     if not success:
+        # 業務拒絕：用戶輸入的 index 無法解析（不存在或格式錯誤）
         print(msg)
-        return 1
+        return 2
 
     # 取得目標項目
     target_item = acceptance_list[index - 1]
@@ -478,29 +487,32 @@ def execute_accept_creation(args: argparse.Namespace, version: str) -> int:
     將 frontmatter 中的 creation_accepted 欄位設為 true。
     既有 Ticket 缺少此欄位時視為 false。
     """
-    ticket = load_ticket(version, args.ticket_id)
-    if not ticket:
-        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
-        return 1
+    # W14-045: file_lock 包圍 load → modify → save
+    lock_target = Path(get_ticket_path(version, args.ticket_id))
+    with file_lock(lock_target):
+        ticket = load_ticket(version, args.ticket_id)
+        if not ticket:
+            print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
+            return 1
 
-    # 取得當前 creation_accepted 狀態（預設為 false）
-    creation_accepted = ticket.get("creation_accepted", False)
+        # 取得當前 creation_accepted 狀態（預設為 false）
+        creation_accepted = ticket.get("creation_accepted", False)
 
-    if creation_accepted:
-        # 已經通過驗收
-        msg = format_msg(
-            TrackAcceptanceMessages.ACCEPT_CREATION_ALREADY_ACCEPTED_FORMAT,
-            ticket_id=args.ticket_id
-        )
-        print(msg)
-        return 0
+        if creation_accepted:
+            # 已經通過驗收
+            msg = format_msg(
+                TrackAcceptanceMessages.ACCEPT_CREATION_ALREADY_ACCEPTED_FORMAT,
+                ticket_id=args.ticket_id
+            )
+            print(msg)
+            return 0
 
-    # 標記建立後驗收已通過
-    ticket["creation_accepted"] = True
+        # 標記建立後驗收已通過
+        ticket["creation_accepted"] = True
 
-    # 保存
-    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
-    save_ticket(ticket, ticket_path)
+        # 保存
+        ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+        save_ticket(ticket, ticket_path)
 
     # 輸出結果
     msg = format_msg(
@@ -510,6 +522,83 @@ def execute_accept_creation(args: argparse.Namespace, version: str) -> int:
     print(msg)
 
     return 0
+
+
+def _replace_or_append_section_content(
+    *,
+    section_text: str,
+    section_content: str,
+    new_entry: str,
+) -> str:
+    """W3-035: Schema 章節含 placeholder 時替換，否則正常 append。
+
+    Why: 4/9 W3 ANA saffron 都遇到 append-log 不替換 placeholder 導致
+    body-schema-checker false positive 阻擋 complete，被迫用 --skip-body-check。
+
+    策略：
+    1. 用 ticket_validator._is_placeholder 偵測 section_content 是否僅含 placeholder
+       （已內建剝除 HTML 註解 / 分隔符 / 表格的邏輯，與 body-schema-checker 一致）
+    2. 是 placeholder：保留 section header + Schema HTML 註解，移除待填寫文字，
+       再 append new_entry
+    3. 否：正常 section_text + new_entry
+
+    Args:
+        section_text: 完整 section（含 header + content）
+        section_content: section content only（不含 header）
+        new_entry: 要追加的新內容（已含開頭換行）
+
+    Returns:
+        重組後的完整 section 文字
+    """
+    from ticket_system.lib.ticket_validator import _is_placeholder
+
+    if not _is_placeholder(section_content):
+        # 已有實質內容，正常 append
+        return section_text + new_entry
+
+    # placeholder-only：保留 header + Schema HTML 註解，移除其他 placeholder 文字
+    # section_text 結構：`## Header\n[content_with_placeholders]`
+    # 提取 header line
+    header_end = section_text.find("\n")
+    if header_end == -1:
+        # 不可能發生（find_section 保證有 header），保守處理
+        return section_text + new_entry
+
+    header_line = section_text[: header_end + 1]  # 含換行
+    content_part = section_text[header_end + 1 :]
+
+    # 保留 Schema 註解行（`<!-- Schema[...]: ... -->`），可能跨多行
+    preserved_lines = []
+    schema_pattern = re.compile(r"<!--\s*Schema\[[^\]]+\]:")
+    # 逐行處理：保留 Schema 註解（含其多行延續）；丟棄其他 placeholder 文字
+    lines = content_part.splitlines(keepends=True)
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if schema_pattern.search(line):
+            # 收集此 Schema 註解（可能跨多行直到 `-->`）
+            preserved_lines.append(line)
+            if "-->" not in line:
+                # 多行 Schema 註解：繼續收集直到 -->
+                j = i + 1
+                while j < len(lines):
+                    preserved_lines.append(lines[j])
+                    if "-->" in lines[j]:
+                        break
+                    j += 1
+                i = j + 1
+            else:
+                i += 1
+            continue
+        # 其他行（placeholder 文字 / 空行 / 一般 HTML 註解）一律丟棄
+        i += 1
+
+    preserved_content = "".join(preserved_lines).rstrip()
+    if preserved_content:
+        # header + Schema 註解 + 新內容
+        return header_line + preserved_content + "\n" + new_entry.lstrip("\n") + "\n"
+    # 無 Schema 註解：純 header + 新內容
+    return header_line + new_entry.lstrip("\n") + "\n"
 
 
 def execute_append_log(args: argparse.Namespace, version: str) -> int:
@@ -522,6 +611,15 @@ def execute_append_log(args: argparse.Namespace, version: str) -> int:
     - ticket track append-log <id> --section "Test Results" "內容"
     - ticket track append-log <id> --section "Execution Log" "內容"
     """
+    # W14-045: file_lock 包圍 load → modify → save，消除 logical race。
+    # append-log 為高頻並發 caller（PM/agent 持續寫入），race 風險最高。
+    lock_target = Path(get_ticket_path(version, args.ticket_id))
+    with file_lock(lock_target):
+        return _execute_append_log_locked(args, version)
+
+
+def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
+    """append-log 主邏輯（已位於 file_lock 內）。"""
     ticket = load_ticket(version, args.ticket_id)
     if not ticket:
         print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
@@ -537,6 +635,20 @@ def execute_append_log(args: argparse.Namespace, version: str) -> int:
 
     # 取得內容
     content = args.content
+
+    # W17-208: 偵測寫入 Schema 章節時內容含 ## H2 標題，stderr warning 不阻擋
+    # 動機：append-log 寫入應為既有章節 H3 子節；H2 會切斷 Schema 章節範圍（W17-072）
+    schema_sections_for_h2_check = {
+        "Solution", "Test Results", "Problem Analysis",
+        "Context Bundle", "NeedsContext", "Exit Status", "Completion Info",
+    }
+    if section in schema_sections_for_h2_check and content:
+        if re.search(r'(?m)^## ', content):
+            import sys as _sys
+            _sys.stderr.write(
+                "[append-log] WARNING: 偵測到內容含 H2 標題；append-log 寫入應為既有章節的 "
+                "H3 子節，避免切斷 Schema 章節範圍（W17-072）。建議改用 ### 子標題。\n"
+            )
 
     # 獲取 Ticket 內容
     body = ticket.get("_body", "")
@@ -576,8 +688,18 @@ def execute_append_log(args: argparse.Namespace, version: str) -> int:
         # 其他區段直接追加
         new_entry = f"\n{content}"
 
-    # 追加內容
-    updated_section = section_text + new_entry
+    # W3-035: 若 section_content 為 placeholder-only（含 Schema 註解 + 待填寫文字），
+    # 改用 new_entry 替換 placeholder 而非 append，避免 placeholder 殘留導致
+    # body-schema-checker false positive 阻擋 complete。
+    # Execution Log 維持 append 語意（每筆 log 都是新事件）。
+    if section != "Execution Log":
+        updated_section = _replace_or_append_section_content(
+            section_text=section_text,
+            section_content=section_content,
+            new_entry=new_entry,
+        )
+    else:
+        updated_section = section_text + new_entry
 
     # 更新 body
     new_body = body[:section_start] + updated_section + body[section_end:]

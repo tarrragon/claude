@@ -131,6 +131,8 @@ VERSION_BUMP_WEIGHTS = {
     "style": "patch",
     "test": "patch",
     "perf": "minor",
+    # revert 視為回退性變更，最低 patch；若同批含 feat/refactor 自動升 minor
+    "revert": "patch",
 }
 
 
@@ -296,11 +298,65 @@ def parse_commit_type(subject: str) -> tuple[str, str]:
 
     Returns (type, description) where type is feat/fix/refactor/docs/chore/etc.
     If no conventional prefix, returns ("other", full_subject).
+
+    Special handling: git 原生 `Revert "..."` 格式（無 conventional prefix）
+    一律歸類為 "revert" type，description 為被 revert 的原 subject 內容。
     """
+    # git 原生 revert message: `Revert "<original subject>"`
+    revert_match = re.match(r'^Revert\s+"(.+)"\s*$', subject)
+    if revert_match:
+        return "revert", revert_match.group(1).strip()
+
     match = re.match(r"^(\w+)(?:\([^)]*\))?:\s*(.+)", subject)
     if match:
         return match.group(1).lower(), match.group(2).strip()
     return "other", subject.strip()
+
+
+def parse_revert_info(subject: str) -> tuple[str, str] | None:
+    """Parse revert commit subject and return (original_subject, original_ref).
+
+    支援三種 revert 格式：
+      1. `revert(scope): <original subject>` — conventional revert
+      2. `revert: <original subject>` — conventional revert without scope
+      3. `Revert "<original subject>"` — git default revert message
+
+    傳回 (original_subject, original_ref)：
+      - original_subject: 被 revert 的原 commit subject（已 strip 引號）
+      - original_ref: 從原 subject 萃取的引用（W14-xxx 或裸 hash 或 ""）
+
+    若 subject 非 revert 格式則回傳 None。
+    """
+    original = None
+
+    # 格式 3: git default `Revert "<subject>"`
+    m = re.match(r'^Revert\s+"(.+)"\s*$', subject)
+    if m:
+        original = m.group(1).strip()
+    else:
+        # 格式 1/2: conventional revert
+        m = re.match(r"^revert(?:\([^)]*\))?:\s*(.+)", subject)
+        if m:
+            original = m.group(1).strip()
+            # 若內層仍包 quotes，剝一層
+            inner = re.match(r'^"(.+)"\s*$', original)
+            if inner:
+                original = inner.group(1).strip()
+
+    if original is None:
+        return None
+
+    # 萃取引用：優先 Ticket ID（含 Wave 編號），其次 7+ hex 短 hash
+    ref = ""
+    ticket_match = re.search(r"\b(\d+\.\d+\.\d+-W\d+-\d+|W\d+-\d+)\b", original)
+    if ticket_match:
+        ref = ticket_match.group(1)
+    else:
+        hash_match = re.search(r"\b([0-9a-f]{7,40})\b", original)
+        if hash_match:
+            ref = hash_match.group(1)
+
+    return original, ref
 
 
 def get_last_sync_timestamp(remote_repo_dir: str) -> str | None:
@@ -332,17 +388,70 @@ def collect_claude_commits(project_root: str, since: str | None) -> list[str]:
     return [line for line in result.stdout.strip().split("\n") if line.strip()]
 
 
+def _normalize_subject_for_match(subject: str) -> str:
+    """正規化 commit subject 用於 revert 配對比對。
+
+    移除 conventional prefix（type(scope):）後 strip + lower，
+    讓 `chore(W14-031): migrate X` 與 `revert(W14-031): migrate X`
+    的 description 可正確配對。
+    """
+    # 剝 conventional prefix
+    m = re.match(r"^\w+(?:\([^)]*\))?:\s*(.+)", subject)
+    body = m.group(1).strip() if m else subject.strip()
+    # 剝外圍引號
+    inner = re.match(r'^"(.+)"\s*$', body)
+    if inner:
+        body = inner.group(1).strip()
+    return body.lower()
+
+
 def categorize_commits(subjects: list[str]) -> dict[str, list[str]]:
     """Categorize commit subjects by conventional commit type.
 
+    淨效應邏輯：若同批 commits 同時含 X 與 revert(X)（X 為任意 type），
+    則 X 不列入 categories（被 revert 抵銷），僅保留 revert 行並在
+    description 末尾標註被撤回的原 commit。
+
     Returns dict mapping type -> list of descriptions.
     """
-    categories: dict[str, list[str]] = defaultdict(list)
+    # Step 1: 先掃描所有 revert，建立 (normalized_original) -> revert_index map
+    reverted_originals: dict[str, str] = {}  # normalized_subject -> original_ref
+    revert_entries: list[tuple[str, str, str]] = []  # (original_subject, original_ref, raw_subject)
+    non_revert_subjects: list[tuple[str, str]] = []  # (commit_type, description) for non-revert
+
     for subject in subjects:
-        commit_type, description = parse_commit_type(subject)
+        info = parse_revert_info(subject)
+        if info is not None:
+            original_subject, original_ref = info
+            revert_entries.append((original_subject, original_ref, subject))
+            reverted_originals[_normalize_subject_for_match(original_subject)] = original_ref
+        else:
+            commit_type, description = parse_commit_type(subject)
+            non_revert_subjects.append((commit_type, description))
+
+    categories: dict[str, list[str]] = defaultdict(list)
+
+    # Step 2: 加入 non-revert，跳過被 revert 抵銷的
+    for commit_type, description in non_revert_subjects:
+        norm = _normalize_subject_for_match(f"{commit_type}: {description}")
+        if norm in reverted_originals:
+            # 被同批 revert 抵銷，跳過
+            continue
         cleaned = strip_project_specific_info(description)
         if cleaned:
             categories[commit_type].append(cleaned)
+
+    # Step 3: 加入 revert 行，附註原 commit ref
+    for original_subject, original_ref, _raw in revert_entries:
+        cleaned_original = strip_project_specific_info(original_subject)
+        # original_ref 通常是專案特定（W14-xxx），strip 後可能為空，
+        # 但 revert 摘要需保留 ref 以利追溯，故 ref 不經 strip
+        if original_ref:
+            desc = f"{cleaned_original} (原 commit: {original_ref})" if cleaned_original else f"revert {original_ref}"
+        else:
+            desc = cleaned_original if cleaned_original else "revert (原 commit 細節省略)"
+        categories["revert"].append(desc)
+
     return dict(categories)
 
 
@@ -367,7 +476,7 @@ def generate_commit_summary(categories: dict[str, list[str]], bump_suggestion: s
     The first line is always a descriptive summary suitable for git commit subject.
     Additional detail lines follow after a blank line.
     """
-    display_order = ["feat", "refactor", "fix", "docs", "chore", "style", "test", "perf", "other"]
+    display_order = ["revert", "feat", "refactor", "fix", "docs", "chore", "style", "test", "perf", "other"]
 
     # Collect all unique descriptions with their types, preserving order
     all_items: list[tuple[str, str]] = []
@@ -581,7 +690,48 @@ def clean_stale_files(temp_dir: Path, claude_dir: Path) -> int:
     return deleted_count
 
 
+def run_dry_run() -> None:
+    """Dry-run 模式：只分析自上次推送以來的 commits 並輸出 auto-generated commit
+    message，不 clone、不 push、不修改 VERSION/CHANGELOG。
+
+    用於本地驗證分類邏輯（特別是 revert 處理）。
+    依然需要 clone 遠端以取得 last-sync timestamp，但失敗時 fallback 至全歷史。
+    """
+    print_color("[DRY-RUN] 僅生成 commit message，不執行 push", "yellow")
+    project_root = find_project_root()
+    last_sync: str | None = None
+    temp_dir = Path(tempfile.mkdtemp())
+    try:
+        clone_result = run_git(["clone", "--depth=1", REPO_URL, str(temp_dir)], check=False)
+        if clone_result.returncode == 0:
+            last_sync = get_last_sync_timestamp(str(temp_dir))
+            print_color(f"   上次推送時間: {last_sync}", "green")
+        else:
+            print_color("   clone 失敗，使用全歷史", "yellow")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    subjects = collect_claude_commits(str(project_root), last_sync)
+    print_color(f"   找到 {len(subjects)} 個相關 commit", "green")
+    if not subjects:
+        print_color("   無 commit 可分析", "yellow")
+        return
+    categories = categorize_commits(subjects)
+    bump_suggestion = suggest_version_bump(categories)
+    commit_message = generate_commit_summary(categories, bump_suggestion)
+    print_color("--- 自動生成的 commit 摘要 ---")
+    print(commit_message)
+    print_color("--- 摘要結束 ---")
+    print_color(f"建議版本 bump: {bump_suggestion}", "green")
+
+
 def main() -> None:
+    # 解析 --dry-run：只生成 commit message 不 push
+    if "--dry-run" in sys.argv:
+        sys.argv.remove("--dry-run")
+        run_dry_run()
+        return
+
     # 解析 --clean 參數：啟用時清理遠端過時檔案
     clean_mode = "--clean" in sys.argv
     if clean_mode:

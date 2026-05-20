@@ -165,7 +165,7 @@ class TestPhaseCompletionGateEffort:
 class TestWrapDecisionTripwireEffort:
     """關鍵測試：WRAP 訊號偵測屬「事實判斷」核心訊號，low effort 下仍必須完整執行（quality-baseline 規則 6）"""
 
-    HOOK = HOOKS_DIR / "wrap-decision-tripwire-hook.py"
+    HOOK = HOOKS_DIR.parent / "skills" / "wrap-decision" / "hooks" / "wrap-decision-tripwire-hook.py"
 
     def test_low_effort_does_not_short_circuit(self):
         # low effort 仍須執行完整偵測；hook 為 advisory（永遠 exit 0）

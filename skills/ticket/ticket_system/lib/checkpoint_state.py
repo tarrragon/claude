@@ -328,7 +328,7 @@ def SAFE_CALL(
 # ---------------------------------------------------------------------------
 
 # Phase 1 §3 資料來源路徑規範（相對於 project_root）
-_DISPATCH_ACTIVE_RELPATH = Path(".claude/state/dispatch-active.json")
+_DISPATCH_ACTIVE_RELPATH = Path(".claude/dispatch-active.json")
 _HANDOFF_PENDING_RELDIR = Path(".claude/handoffs/pending")
 
 
@@ -399,13 +399,13 @@ def _read_git_status(project_root: Optional[Path] = None) -> int:
 def _read_dispatch_active(
     project_root: Optional[Path] = None,
 ) -> Tuple[int, Dict[str, Any]]:
-    """讀取 .claude/state/dispatch-active.json，回傳 (active_agents, raw_dict)。
+    """讀取 .claude/dispatch-active.json，回傳 (active_agents, raw_dict)。
 
     語意：dispatches 欄位中未完成（status != "completed"）的項目數。
     Phase 1 §3：缺檔時 active_agents=0（由 SAFE_CALL 捕 FileNotFoundError 走 fallback）。
 
     Raises:
-        FileNotFoundError: 檔案或目錄不存在（含 .claude/state/ 整個目錄不存在）。
+        FileNotFoundError: 檔案不存在。
         PermissionError: 權限拒絕。
         json.JSONDecodeError: JSON 毀損。
     """

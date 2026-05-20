@@ -29,6 +29,7 @@ from ticket_system.lib.constants import (
     STATUS_COMPLETED,
     STATUS_BLOCKED,
 )
+from ticket_system.lib.file_lock import file_lock
 from ticket_system.lib.messages import (
     ErrorMessages,
     InfoMessages,
@@ -38,6 +39,7 @@ from ticket_system.lib.messages import (
 from ticket_system.lib.command_lifecycle_messages import (
     FieldsMessages,
 )
+from ticket_system.lib.ticket_loader import get_ticket_path
 from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
     resolve_ticket_path,
@@ -162,34 +164,38 @@ def execute_set_field(
         - ticket track set-why <ticket-id> <value>
         - ticket track set-how <ticket-id> <value>
     """
-    ticket, error = load_and_validate_ticket(version, args.ticket_id)
-    if error:
-        return 1
+    # W14-045: file_lock 包圍 load → modify → save，消除 logical race。
+    # Lock target 用 get_ticket_path 計算路徑（不依賴 load 後的 _path）。
+    lock_target = Path(get_ticket_path(version, args.ticket_id))
+    with file_lock(lock_target):
+        ticket, error = load_and_validate_ticket(version, args.ticket_id)
+        if error:
+            return 1
 
-    # 決定欄位名稱（優先使用參數傳入，否則從 args 中取得）
-    actual_field_name = field_name or getattr(args, "field", None)
-    if not actual_field_name:
-        print(format_error(ErrorMessages.MISSING_FIELD_NAME))
-        return 1
+        # 決定欄位名稱（優先使用參數傳入，否則從 args 中取得）
+        actual_field_name = field_name or getattr(args, "field", None)
+        if not actual_field_name:
+            print(format_error(ErrorMessages.MISSING_FIELD_NAME))
+            return 1
 
-    # 取得新值
-    new_value = args.value
+        # 取得新值
+        new_value = args.value
 
-    # 更新欄位：dict 型欄位僅更新子欄位（W10-086 修復，防止壓扁 dict 為 string）
-    if actual_field_name in DICT_FIELD_SUBKEY:
-        subkey = DICT_FIELD_SUBKEY[actual_field_name]
-        existing = ticket.get(actual_field_name)
-        if isinstance(existing, dict):
-            existing[subkey] = new_value
-            ticket[actual_field_name] = existing
+        # 更新欄位：dict 型欄位僅更新子欄位（W10-086 修復，防止壓扁 dict 為 string）
+        if actual_field_name in DICT_FIELD_SUBKEY:
+            subkey = DICT_FIELD_SUBKEY[actual_field_name]
+            existing = ticket.get(actual_field_name)
+            if isinstance(existing, dict):
+                existing[subkey] = new_value
+                ticket[actual_field_name] = existing
+            else:
+                ticket[actual_field_name] = _build_dict_field(actual_field_name, subkey, new_value)
         else:
-            ticket[actual_field_name] = _build_dict_field(actual_field_name, subkey, new_value)
-    else:
-        ticket[actual_field_name] = new_value
+            ticket[actual_field_name] = new_value
 
-    # 儲存
-    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
-    ticket_loader.save_ticket(ticket, ticket_path)
+        # 儲存
+        ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+        ticket_loader.save_ticket(ticket, ticket_path)
 
     print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name=actual_field_name))
     print(f"   新值: {new_value}")
@@ -269,17 +275,20 @@ def execute_set_priority(args: argparse.Namespace, version: str) -> int:
 
 def execute_add_acceptance(args: argparse.Namespace, version: str) -> int:
     """追加驗收條件到 Ticket"""
-    ticket, error = load_and_validate_ticket(version, args.ticket_id)
-    if error:
-        return 1
+    # W14-045: file_lock 包圍 load → modify → save
+    lock_target = Path(get_ticket_path(version, args.ticket_id))
+    with file_lock(lock_target):
+        ticket, error = load_and_validate_ticket(version, args.ticket_id)
+        if error:
+            return 1
 
-    acceptance = ticket.get("acceptance") or []
-    new_item = f"[ ] {args.value}"
-    acceptance.append(new_item)
-    ticket["acceptance"] = acceptance
+        acceptance = ticket.get("acceptance") or []
+        new_item = f"[ ] {args.value}"
+        acceptance.append(new_item)
+        ticket["acceptance"] = acceptance
 
-    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
-    ticket_loader.save_ticket(ticket, ticket_path)
+        ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+        ticket_loader.save_ticket(ticket, ticket_path)
 
     print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="acceptance"))
     print(f"   新增: {new_item}")
@@ -291,22 +300,25 @@ def execute_remove_acceptance(args: argparse.Namespace, version: str) -> int:
     """移除驗收條件（按 index，從 1 開始）"""
     import sys
 
-    ticket, error = load_and_validate_ticket(version, args.ticket_id)
-    if error:
-        return 1
+    # W14-045: file_lock 包圍 load → modify → save
+    lock_target = Path(get_ticket_path(version, args.ticket_id))
+    with file_lock(lock_target):
+        ticket, error = load_and_validate_ticket(version, args.ticket_id)
+        if error:
+            return 1
 
-    acceptance = ticket.get("acceptance") or []
-    index = args.index - 1
+        acceptance = ticket.get("acceptance") or []
+        index = args.index - 1
 
-    if index < 0 or index >= len(acceptance):
-        print(format_error(f"索引超出範圍：{args.index}（共 {len(acceptance)} 項）"), file=sys.stderr)
-        return 1
+        if index < 0 or index >= len(acceptance):
+            print(format_error(f"索引超出範圍：{args.index}（共 {len(acceptance)} 項）"), file=sys.stderr)
+            return 1
 
-    removed = acceptance.pop(index)
-    ticket["acceptance"] = acceptance
+        removed = acceptance.pop(index)
+        ticket["acceptance"] = acceptance
 
-    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
-    ticket_loader.save_ticket(ticket, ticket_path)
+        ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+        ticket_loader.save_ticket(ticket, ticket_path)
 
     print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="acceptance"))
     print(f"   移除: {removed}")
@@ -316,27 +328,30 @@ def execute_remove_acceptance(args: argparse.Namespace, version: str) -> int:
 
 def execute_add_spawned(args: argparse.Namespace, version: str) -> int:
     """追加 spawned_tickets 項目（支援多 ID，對齊 Unix 慣例）"""
-    ticket, error = load_and_validate_ticket(version, args.ticket_id)
-    if error:
-        return 1
+    # W14-045: file_lock 包圍 load → modify → save
+    lock_target = Path(get_ticket_path(version, args.ticket_id))
+    with file_lock(lock_target):
+        ticket, error = load_and_validate_ticket(version, args.ticket_id)
+        if error:
+            return 1
 
-    # args.value 為 list（nargs='+'），可能含 1 至多個 ID
-    values = args.value if isinstance(args.value, list) else [args.value]
+        # args.value 為 list（nargs='+'），可能含 1 至多個 ID
+        values = args.value if isinstance(args.value, list) else [args.value]
 
-    spawned = ticket.get("spawned_tickets") or []
-    added: list[str] = []
-    skipped: list[str] = []
-    for value in values:
-        if value in spawned:
-            skipped.append(value)
-            continue
-        spawned.append(value)
-        added.append(value)
+        spawned = ticket.get("spawned_tickets") or []
+        added: list[str] = []
+        skipped: list[str] = []
+        for value in values:
+            if value in spawned:
+                skipped.append(value)
+                continue
+            spawned.append(value)
+            added.append(value)
 
-    ticket["spawned_tickets"] = spawned
+        ticket["spawned_tickets"] = spawned
 
-    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
-    ticket_loader.save_ticket(ticket, ticket_path)
+        ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+        ticket_loader.save_ticket(ticket, ticket_path)
 
     print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="spawned_tickets"))
     if added:
@@ -349,22 +364,25 @@ def execute_add_spawned(args: argparse.Namespace, version: str) -> int:
 
 def execute_set_decision_tree(args: argparse.Namespace, version: str) -> int:
     """設定 Ticket 的 decision_tree_path 欄位（3 個子欄位）"""
-    ticket, error = load_and_validate_ticket(version, args.ticket_id)
-    if error:
-        return 1
+    # W14-045: file_lock 包圍 load → modify → save
+    lock_target = Path(get_ticket_path(version, args.ticket_id))
+    with file_lock(lock_target):
+        ticket, error = load_and_validate_ticket(version, args.ticket_id)
+        if error:
+            return 1
 
-    dt = ticket.get("decision_tree_path") or {}
-    if args.entry:
-        dt["entry_point"] = args.entry
-    if args.decision:
-        dt["final_decision"] = args.decision
-    if args.rationale:
-        dt["rationale"] = args.rationale
+        dt = ticket.get("decision_tree_path") or {}
+        if args.entry:
+            dt["entry_point"] = args.entry
+        if args.decision:
+            dt["final_decision"] = args.decision
+        if args.rationale:
+            dt["rationale"] = args.rationale
 
-    ticket["decision_tree_path"] = dt
+        ticket["decision_tree_path"] = dt
 
-    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
-    ticket_loader.save_ticket(ticket, ticket_path)
+        ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+        ticket_loader.save_ticket(ticket, ticket_path)
 
     print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="decision_tree_path"))
     for key, val in dt.items():

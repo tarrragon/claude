@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 
-HOOK_PATH = Path(__file__).parent.parent / "handoff-prompt-reminder-hook.py"
+HOOK_PATH = Path(__file__).parent.parent.parent / "skills" / "ticket" / "hooks" / "handoff-prompt-reminder-hook.py"
 
 
 def load_hook_module():

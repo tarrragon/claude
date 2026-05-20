@@ -12,6 +12,8 @@ from unittest.mock import patch, MagicMock
 
 # 加入 Hook 模組路徑
 hooks_path = Path(__file__).parent.parent
+# W10-092: 部分 ticket-skill hook 已遷至 .claude/skills/ticket/hooks/
+ticket_skill_hooks_path = hooks_path.parent / "skills" / "ticket" / "hooks"
 sys.path.insert(0, str(hooks_path))
 
 import pytest
@@ -23,7 +25,7 @@ def ticket_validator_module():
     import importlib.util
     spec = importlib.util.spec_from_file_location(
         "ticket_id_validator_hook",
-        hooks_path / "ticket-id-validator-hook.py"
+        ticket_skill_hooks_path / "ticket-id-validator-hook.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

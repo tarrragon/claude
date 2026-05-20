@@ -17,7 +17,9 @@ from unittest.mock import patch
 
 # 動態導入（檔名含 dash）
 hooks_path = Path(__file__).parent.parent
-hook_file = hooks_path / "ticket-skill-sync-check-hook.py"
+# W10-092: ticket-skill-sync-check-hook 已遷至 .claude/skills/ticket/hooks/
+ticket_skill_hooks_path = hooks_path.parent / "skills" / "ticket" / "hooks"
+hook_file = ticket_skill_hooks_path / "ticket-skill-sync-check-hook.py"
 spec = importlib.util.spec_from_file_location("ticket_skill_sync_check_hook", hook_file)
 hook = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(hook)
@@ -88,7 +90,7 @@ def test_has_sync_exempt_change_negative():
 
 
 def test_is_meta_self_only_positive():
-    assert hook.is_meta_self_only([".claude/hooks/ticket-skill-sync-check-hook.py"]) is True
+    assert hook.is_meta_self_only([".claude/skills/ticket/hooks/ticket-skill-sync-check-hook.py"]) is True
 
 
 def test_is_meta_self_only_negative():
@@ -167,7 +169,7 @@ def test_scenario_4_meta_self_reference_exempt(capsys):
         'git commit -m "feat: add ticket-skill-sync-check-hook"',
         "1 file changed, 200 insertions(+)",
     )
-    files = [".claude/hooks/ticket-skill-sync-check-hook.py"]
+    files = [".claude/skills/ticket/hooks/ticket-skill-sync-check-hook.py"]
     rc, out = _run_main(stdin, files, capsys)
     assert rc == 0
     payload = json.loads(out)

@@ -35,6 +35,7 @@ from ticket_system.lib.constants import (
     STATUS_CLOSED,
     STATUS_SUPERSEDED,
 )
+from ticket_system.lib.file_lock import file_lock
 from ticket_system.lib.ticket_loader import (
     get_ticket_path,
     list_tickets,
@@ -158,42 +159,47 @@ def _execute_set_relation_field(
     """
     target_id = args.ticket_id
 
-    # Step 1：驗證並載入目標 Ticket
-    target_ticket, success = validate_ticket_exists(version, target_id)
-    if not success:
-        return 1
+    # W14-045: file_lock 包圍 target ticket 的 load → modify → save。
+    # 被引用 ticket 的 validate_ticket_exists 為 read-only（只 load 檢查存在），
+    # 但為簡化邏輯統一在 lock 內執行（同一 lock 內 read 其他 ticket 安全）。
+    lock_target = Path(get_ticket_path(version, target_id))
+    with file_lock(lock_target):
+        # Step 1：驗證並載入目標 Ticket
+        target_ticket, success = validate_ticket_exists(version, target_id)
+        if not success:
+            return 1
 
-    # 解析被引用的 Ticket ID 清單
-    value_str = args.value if hasattr(args, "value") else ""
-    referenced_ids = [id_str.strip() for id_str in value_str.split() if id_str.strip()]
+        # 解析被引用的 Ticket ID 清單
+        value_str = args.value if hasattr(args, "value") else ""
+        referenced_ids = [id_str.strip() for id_str in value_str.split() if id_str.strip()]
 
-    # Step 2：驗證被引用 Ticket 存在（--remove 除外）
-    is_remove_mode = getattr(args, "remove", False)
-    if not is_remove_mode:
-        for ref_id in referenced_ids:
-            _, success = validate_ticket_exists(version, ref_id)
-            if not success:
-                return 1
+        # Step 2：驗證被引用 Ticket 存在（--remove 除外）
+        is_remove_mode = getattr(args, "remove", False)
+        if not is_remove_mode:
+            for ref_id in referenced_ids:
+                _, success = validate_ticket_exists(version, ref_id)
+                if not success:
+                    return 1
 
-    # Step 3：取得並標準化目前欄位值
-    current_value = target_ticket.get(field_name, [])
-    current_list = _normalize_ticket_id_list(current_value)
+        # Step 3：取得並標準化目前欄位值
+        current_value = target_ticket.get(field_name, [])
+        current_list = _normalize_ticket_id_list(current_value)
 
-    # Step 4：根據模式更新欄位值
-    is_add_mode = getattr(args, "add", False)
+        # Step 4：根據模式更新欄位值
+        is_add_mode = getattr(args, "add", False)
 
-    if is_remove_mode:
-        new_value = _execute_set_relation_field_remove(current_list, referenced_ids)
-    elif is_add_mode:
-        new_value = _execute_set_relation_field_add(current_list, referenced_ids)
-    else:
-        new_value = _execute_set_relation_field_replace(referenced_ids)
+        if is_remove_mode:
+            new_value = _execute_set_relation_field_remove(current_list, referenced_ids)
+        elif is_add_mode:
+            new_value = _execute_set_relation_field_add(current_list, referenced_ids)
+        else:
+            new_value = _execute_set_relation_field_replace(referenced_ids)
 
-    # Step 5：更新 Ticket 並保存
-    target_ticket[field_name] = new_value
+        # Step 5：更新 Ticket 並保存
+        target_ticket[field_name] = new_value
 
-    ticket_path = resolve_ticket_path(target_ticket, version, target_id)
-    save_ticket(target_ticket, ticket_path)
+        ticket_path = resolve_ticket_path(target_ticket, version, target_id)
+        save_ticket(target_ticket, ticket_path)
 
     # Step 6：輸出成功訊息
     print(format_info(
@@ -256,53 +262,60 @@ def execute_add_child(args: argparse.Namespace, version: str) -> int:
     parent_id = args.parent_id
     child_id = args.child_id
 
-    # Step 1：驗證父 Ticket
-    parent_ticket, success = validate_ticket_exists(version, parent_id)
-    if not success:
-        return 1
+    # W14-045: file_lock 包圍 parent + child 的 load → modify → save。
+    # 兩個不同 ticket file 採用嵌套順序 (parent first → child second)；
+    # 由於 path 不同不會 self-block。固定順序避免將來其他 caller 反向加鎖
+    # 導致 deadlock。
+    parent_lock = Path(get_ticket_path(version, parent_id))
+    child_lock = Path(get_ticket_path(version, child_id))
+    with file_lock(parent_lock), file_lock(child_lock):
+        # Step 1：驗證父 Ticket
+        parent_ticket, success = validate_ticket_exists(version, parent_id)
+        if not success:
+            return 1
 
-    # Step 2：驗證子 Ticket
-    child_ticket, success = validate_ticket_exists(version, child_id)
-    if not success:
-        return 1
+        # Step 2：驗證子 Ticket
+        child_ticket, success = validate_ticket_exists(version, child_id)
+        if not success:
+            return 1
 
-    # Step 3：檢查是否已經是子 Ticket（避免重複）
-    children = parent_ticket.get("children", [])
-    if child_id in children:
-        print(format_msg(TrackRelationsMessages.CHILD_ALREADY_EXISTS_FORMAT, child_id=child_id, parent_id=parent_id))
-        return 0
+        # Step 3：檢查是否已經是子 Ticket（避免重複）
+        children = parent_ticket.get("children", [])
+        if child_id in children:
+            print(format_msg(TrackRelationsMessages.CHILD_ALREADY_EXISTS_FORMAT, child_id=child_id, parent_id=parent_id))
+            return 0
 
-    # Step 4：更新父 Ticket 的 children 陣列
-    if "children" not in parent_ticket:
-        parent_ticket["children"] = []
-    parent_ticket["children"].append(child_id)
+        # Step 4：更新父 Ticket 的 children 陣列
+        if "children" not in parent_ticket:
+            parent_ticket["children"] = []
+        parent_ticket["children"].append(child_id)
 
-    # Step 5：更新子 Ticket 的 parent_id 欄位
-    old_parent = child_ticket.get("parent_id")
-    child_ticket["parent_id"] = parent_id
+        # Step 5：更新子 Ticket 的 parent_id 欄位
+        old_parent = child_ticket.get("parent_id")
+        child_ticket["parent_id"] = parent_id
 
-    # Step 6：更新 chain 欄位（如果存在）
-    if "chain" not in child_ticket:
-        child_ticket["chain"] = {}
+        # Step 6：更新 chain 欄位（如果存在）
+        if "chain" not in child_ticket:
+            child_ticket["chain"] = {}
 
-    chain_info = child_ticket.get("chain", {})
-    chain_info["parent"] = parent_id
+        chain_info = child_ticket.get("chain", {})
+        chain_info["parent"] = parent_id
 
-    # 如果子 Ticket 有 root，維持不變；否則使用父的 root
-    if "root" not in chain_info:
-        parent_chain = parent_ticket.get("chain", {})
-        parent_root = parent_chain.get("root", parent_id)
-        chain_info["root"] = parent_root
+        # 如果子 Ticket 有 root，維持不變；否則使用父的 root
+        if "root" not in chain_info:
+            parent_chain = parent_ticket.get("chain", {})
+            parent_root = parent_chain.get("root", parent_id)
+            chain_info["root"] = parent_root
 
-    child_ticket["chain"] = chain_info
+        child_ticket["chain"] = chain_info
 
-    # Step 7：保存父 Ticket
-    parent_path = resolve_ticket_path(parent_ticket, version, parent_id)
-    save_ticket(parent_ticket, parent_path)
+        # Step 7：保存父 Ticket
+        parent_path = resolve_ticket_path(parent_ticket, version, parent_id)
+        save_ticket(parent_ticket, parent_path)
 
-    # Step 8：保存子 Ticket
-    child_path = resolve_ticket_path(child_ticket, version, child_id)
-    save_ticket(child_ticket, child_path)
+        # Step 8：保存子 Ticket
+        child_path = resolve_ticket_path(child_ticket, version, child_id)
+        save_ticket(child_ticket, child_path)
 
     # Step 9：輸出成功訊息
     print(format_info(InfoMessages.CHILD_RELATION_CREATED))
@@ -337,25 +350,28 @@ def execute_phase(args: argparse.Namespace, version: str) -> int:
     # 有效的 Phase 值
     VALID_PHASES = TrackRelationsMessages.VALID_PHASES
 
-    # 驗證 Ticket 存在
-    ticket, success = validate_ticket_exists(version, args.ticket_id)
-    if not success:
-        return 1
+    # W14-045: file_lock 包圍 load → modify → save
+    lock_target = Path(get_ticket_path(version, args.ticket_id))
+    with file_lock(lock_target):
+        # 驗證 Ticket 存在
+        ticket, success = validate_ticket_exists(version, args.ticket_id)
+        if not success:
+            return 1
 
-    # 正規化並驗證 phase 參數
-    phase = _normalize_phase_input(args.phase)
-    if phase not in VALID_PHASES:
-        print(format_error(ErrorMessages.INVALID_PHASE_VALUE, phase=args.phase))
-        print(f"{TrackRelationsMessages.PHASE_VALID_VALUES_PREFIX} {', '.join(VALID_PHASES)}")
-        print("  也接受簡寫格式: phase0, phase1, phase2, phase3a, phase3b, phase4")
-        return 1
+        # 正規化並驗證 phase 參數
+        phase = _normalize_phase_input(args.phase)
+        if phase not in VALID_PHASES:
+            print(format_error(ErrorMessages.INVALID_PHASE_VALUE, phase=args.phase))
+            print(f"{TrackRelationsMessages.PHASE_VALID_VALUES_PREFIX} {', '.join(VALID_PHASES)}")
+            print("  也接受簡寫格式: phase0, phase1, phase2, phase3a, phase3b, phase4")
+            return 1
 
-    # 更新 Ticket 欄位
-    ticket["current_phase"] = phase
-    ticket["assignee"] = args.agent
+        # 更新 Ticket 欄位
+        ticket["current_phase"] = phase
+        ticket["assignee"] = args.agent
 
-    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
-    save_ticket(ticket, ticket_path)
+        ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+        save_ticket(ticket, ticket_path)
 
     print(format_info(InfoMessages.PHASE_UPDATED, ticket_id=args.ticket_id))
     print(f"{TrackRelationsMessages.PHASE_PREFIX} {phase}")

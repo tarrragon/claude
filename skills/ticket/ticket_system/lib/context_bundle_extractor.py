@@ -33,6 +33,7 @@ from ..constants import (
     CONTEXT_BUNDLE_SKIP_REASONS,
     CONTEXT_BUNDLE_SOURCE_KINDS,
 )
+from .file_lock import file_lock
 from .parser import load_ticket, save_ticket
 from .paths import get_ticket_path
 from .ticket_validator import extract_version_from_ticket_id
@@ -848,37 +849,41 @@ def extract_and_write_context_bundle(
           （W17-002.1 acceptance #5）。原先直接透出原始例外類別（yaml.YAMLError 等）
           導致 caller 難以 except，改為統一專屬 Exception 並保留原因鏈。
     """
-    try:
-        target = load_ticket(version, ticket_id)
-    except Exception as exc:
-        raise ContextBundleExtractionError(
-            f"load target ticket {ticket_id} 失敗：{exc}"
-        ) from exc
-
-    if target is None:
-        result = ExtractResult(status="no_source", target_ticket_id=ticket_id)
-        result.warnings.append(f"target ticket {ticket_id} 不存在")
-        return result, []
-
-    result = extract_context_bundle(target)
-    rendered = render_context_bundle_markdown(result)
-    notes: list = []
-    if not rendered:
-        return result, notes
-
-    body = target.get("_body", "") or ""
-    existing_section = _read_section_body(body, CONTEXT_BUNDLE_SECTION_HEADING)
-    merged_section, notes = merge_auto_extracted_block(existing_section, rendered)
-    if "no_change_idempotent" in notes:
-        return result, notes
-
-    new_body = _replace_section_body(
-        body, CONTEXT_BUNDLE_SECTION_HEADING, merged_section
-    )
-    target["_body"] = new_body
+    # W14-043: file_lock 包圍 load → modify → save 完整序列，消除 logical
+    # read-modify-write race（同 W14-042 ticket_builder.update_* 模式）。
+    # ticket_path 必須在 lock 之前計算（用於決定 lock file 位置）。
     ticket_path = get_ticket_path(version, ticket_id)
-    save_ticket(target, ticket_path)
-    return result, notes
+    with file_lock(ticket_path):
+        try:
+            target = load_ticket(version, ticket_id)
+        except Exception as exc:
+            raise ContextBundleExtractionError(
+                f"load target ticket {ticket_id} 失敗：{exc}"
+            ) from exc
+
+        if target is None:
+            result = ExtractResult(status="no_source", target_ticket_id=ticket_id)
+            result.warnings.append(f"target ticket {ticket_id} 不存在")
+            return result, []
+
+        result = extract_context_bundle(target)
+        rendered = render_context_bundle_markdown(result)
+        notes: list = []
+        if not rendered:
+            return result, notes
+
+        body = target.get("_body", "") or ""
+        existing_section = _read_section_body(body, CONTEXT_BUNDLE_SECTION_HEADING)
+        merged_section, notes = merge_auto_extracted_block(existing_section, rendered)
+        if "no_change_idempotent" in notes:
+            return result, notes
+
+        new_body = _replace_section_body(
+            body, CONTEXT_BUNDLE_SECTION_HEADING, merged_section
+        )
+        target["_body"] = new_body
+        save_ticket(target, ticket_path)
+        return result, notes
 
 
 # ============================================================================

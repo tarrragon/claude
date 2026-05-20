@@ -35,7 +35,7 @@ def _write_ticket(
 
     frontmatter_yaml 為已序列化的 YAML 字串（含 `---` 分隔符外層）。
     """
-    tickets_dir = project_root / "docs" / "work-logs" / f"v{version}" / "tickets"
+    tickets_dir = project_root / "docs" / "work-logs" / f"v{version.split('.')[0]}" / f"v{'.'.join(version.split('.')[:2])}" / f"v{version}" / "tickets"
     tickets_dir.mkdir(parents=True, exist_ok=True)
     ticket_path = tickets_dir / f"{ticket_id}.md"
     content = f"---\n{frontmatter_yaml.strip()}\n---\n\n{body}\n"

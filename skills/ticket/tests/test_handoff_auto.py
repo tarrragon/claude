@@ -34,7 +34,7 @@ def temp_project():
     """建立臨時專案根目錄與 ticket 檔案。"""
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
-        tickets_dir = root / "docs" / "work-logs" / "v0.18.0" / "tickets"
+        tickets_dir = root / "docs" / "work-logs" / "v0" / "v0.18" / "v0.18.0" / "tickets"
         tickets_dir.mkdir(parents=True, exist_ok=True)
         (root / "pubspec.yaml").touch()
 

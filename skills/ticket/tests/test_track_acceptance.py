@@ -82,7 +82,10 @@ class TestCheckAcceptance:
         """
         Given: Ticket 沒有定義任何驗收條件
         When: 執行 check-acceptance 操作
-        Then: 應返回 1，提示無驗收條件
+        Then: 應返回 2（業務拒絕），提示無驗收條件
+
+        依 .claude/references/cli-exit-code-rules.md 規則 2：
+        用戶輸入錯誤路徑（包含 ticket 無 acceptance 可勾選）均為業務拒絕（return 2）。
         """
         args = Mock()
         args.ticket_id = "0.31.0-W4-001"
@@ -103,13 +106,15 @@ class TestCheckAcceptance:
 
             result = execute_check_acceptance(args, "0.31.0")
 
-            assert result == 1
+            assert result == 2
 
     def test_check_acceptance_nonexistent_ticket(self):
         """
         Given: Ticket ID 不存在
         When: 執行 check-acceptance 操作
-        Then: 應返回錯誤代碼 1
+        Then: 應返回 2（業務拒絕：用戶輸入錯誤路徑）
+
+        依 cli-exit-code-rules.md 規則 2：ticket 不存在屬用戶輸入錯誤 → return 2。
         """
         args = Mock()
         args.ticket_id = "0.31.0-W4-999"
@@ -123,7 +128,7 @@ class TestCheckAcceptance:
 
             result = execute_check_acceptance(args, "0.31.0")
 
-            assert result == 1
+            assert result == 2
 
     def test_check_acceptance_shows_progress(self):
         """
@@ -218,7 +223,9 @@ class TestCheckAcceptance:
         """
         Given: 同時提供 --all 和 index 參數
         When: 執行 check-acceptance <id> <index> --all
-        Then: 應返回 1，報錯互斥參數
+        Then: 應返回 2（業務拒絕：互斥參數同時提供）
+
+        依 cli-exit-code-rules.md 規則 2：互斥參數衝突屬用戶輸入錯誤 → return 2。
         """
         args = Mock()
         args.ticket_id = "0.31.0-W4-001"
@@ -238,14 +245,16 @@ class TestCheckAcceptance:
 
             result = execute_check_acceptance(args, "0.31.0")
 
-            # 應返回 1，錯誤代碼
-            assert result == 1
+            # 應返回 2（業務拒絕）
+            assert result == 2
 
     def test_check_acceptance_missing_index_and_all(self):
         """
         Given: 未提供 --all，也未提供 index 參數
         When: 執行 check-acceptance <id>
-        Then: 應返回 1，報錯缺少參數
+        Then: 應返回 2（業務拒絕：缺少必填參數）
+
+        依 cli-exit-code-rules.md 規則 2：缺少必填參數屬用戶輸入錯誤 → return 2。
         """
         args = Mock()
         args.ticket_id = "0.31.0-W4-001"
@@ -265,8 +274,8 @@ class TestCheckAcceptance:
 
             result = execute_check_acceptance(args, "0.31.0")
 
-            # 應返回 1，錯誤代碼
-            assert result == 1
+            # 應返回 2（業務拒絕）
+            assert result == 2
 
 
 class TestAppendLog:
@@ -438,6 +447,45 @@ class TestAppendLog:
 
                     assert result == 0
                     mock_save.assert_called_once()
+
+
+class TestAppendLogH2Warning:
+    """W17-208: append-log 寫入 Schema 章節時內容含 ## H2 → stderr warning（不阻擋）"""
+
+    def _run(self, section: str, content: str, capsys):
+        args = Mock()
+        args.ticket_id = "0.31.0-W4-001"
+        args.version = "0.31.0"
+        args.section = section
+        args.content = content
+        body = f"## {section}\n\n（佔位）\n"
+        mock_ticket = {"id": args.ticket_id, "_path": "/p/t.md", "_body": body}
+        with patch('ticket_system.commands.track_acceptance.load_ticket') as mock_load:
+            mock_load.return_value = mock_ticket
+            with patch('ticket_system.commands.track_acceptance.get_ticket_path'):
+                with patch('ticket_system.commands.track_acceptance.save_ticket') as mock_save:
+                    result = execute_append_log(args, "0.31.0")
+        captured = capsys.readouterr()
+        return result, captured, mock_save
+
+    def test_h2_in_solution_triggers_warning(self, capsys):
+        result, captured, mock_save = self._run("Solution", "## 實作策略\n內文", capsys)
+        assert result == 0
+        assert "WARNING" in captured.err
+        assert "H2" in captured.err
+        mock_save.assert_called_once()
+
+    def test_h3_in_solution_no_warning(self, capsys):
+        result, captured, mock_save = self._run("Solution", "### 子節\n內文", capsys)
+        assert result == 0
+        assert "WARNING" not in captured.err
+        mock_save.assert_called_once()
+
+    def test_execution_log_h2_skipped(self, capsys):
+        # Execution Log 不在 schema check 範圍
+        result, captured, _ = self._run("Execution Log", "## 任何", capsys)
+        assert result == 0
+        assert "WARNING" not in captured.err
 
 
 class TestAppendLogSectionMatching:

@@ -60,6 +60,7 @@ def _patch_get_project_root(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(migrate_mod, "get_project_root", lambda: tmp_path)
     monkeypatch.setattr(loader_mod, "get_project_root", lambda: tmp_path)
 
+    # ImportError 預期 fallback：舊版 ticket_system 未抽出 lib/paths.py，import 失敗時跳過 monkeypatch 不影響其他兩個模組的 patch
     try:
         import ticket_system.lib.paths as paths_mod  # type: ignore
 
@@ -108,7 +109,7 @@ def project_with_tickets(tmp_path, monkeypatch):
     Returns:
         (tmp_path, tickets_dir) — 用於後續寫入測試 ticket
     """
-    work_logs = tmp_path / "docs" / "work-logs" / "v0.18.0" / "tickets"
+    work_logs = tmp_path / "docs" / "work-logs" / "v0" / "v0.18" / "v0.18.0" / "tickets"
     work_logs.mkdir(parents=True)
 
     _patch_get_project_root(monkeypatch, tmp_path)

@@ -119,8 +119,11 @@ def execute_audit(args: argparse.Namespace, version: str) -> int:
         version: 版本號
 
     Returns:
-        0: 驗收通過
-        1: 驗收失敗或發生錯誤
+        0: 驗收通過（GO / SUCCESS）
+        1: 內部錯誤（exception / 程式 bug）
+        2: 業務拒絕（驗收未通過，NO-GO）
+
+    詳見 .claude/references/cli-exit-code-rules.md
     """
     ticket_id = args.ticket_id
 
@@ -135,7 +138,8 @@ def execute_audit(args: argparse.Namespace, version: str) -> int:
         if report.overall_passed:
             return 0
         else:
-            return 1
+            # 業務拒絕：驗收未通過（NO-GO），呼叫方依拒絕原因處理
+            return 2
 
     except ValueError as e:
         print(format_error(f"{TrackAuditMessages.AUDIT_CHECK_FAILED_PREFIX}{str(e)}"))

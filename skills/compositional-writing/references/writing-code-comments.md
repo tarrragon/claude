@@ -157,8 +157,6 @@ void saveBook(Book book) { /* ... */ }
 
 #### 正例：業務情境驅動
 
-<!-- 規則 8 豁免（reference-stability-rules.md / DOC-010）：以下程式碼註解範例中的「Readmoo」作為「業務情境驅動」教學的具體業務名詞。業務情境驅動的精髓在「具體業務名詞」；改為「外部 API」會降低正例可信度。本豁免經跨檔評估後保留。 -->
-
 ```dart
 /// 【需求】UC-002 離線書庫
 /// 使用者關閉 app 後重開仍能看到書庫清單（不需重新從 Readmoo 抓取）。
@@ -398,13 +396,13 @@ class DbOrderSearcher implements OrderSearcher {
 
 註解用的核心三輪 + 兩輪程式碼專屬：
 
-| 輪  | Frame                                                              | 程式碼註解專用 checklist                                                     |
-| --- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| 1   | 生成                                                               | 把「為什麼」寫出來、預期語句不順                                             |
+| 輪  | Frame                                                                                              | 程式碼註解專用 checklist                                                     |
+| --- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 1   | 生成                                                                                               | 把「為什麼」寫出來、預期語句不順                                             |
 | 2   | 對意圖（[ease-of-writing-vs-intent-alignment](principles/ease-of-writing-vs-intent-alignment.md)） | 寫的是「為什麼這樣做」嗎、不是「程式在做什麼」？業務需求 vs 語法選擇分清楚？ |
-| 3   | 機會成本語氣                                                       | 「必須」「不可」翻成「在 X 情境下選擇 A 因為 ⋯⋯」                            |
-| 4'  | 介面 vs 實作分層                                                   | doc comment 不洩漏 impl、inline comment 講 why 不講 what、抽象層對齊嗎？     |
-| 5'  | 時間軸 robust                                                      | 5 個月後讀還看得懂嗎？依賴的 ticket / 連結還活著嗎？                         |
+| 3   | 機會成本語氣                                                                                       | 「必須」「不可」翻成「在 X 情境下選擇 A 因為 ⋯⋯」                            |
+| 4'  | 介面 vs 實作分層                                                                                   | doc comment 不洩漏 impl、inline comment 講 why 不講 what、抽象層對齊嗎？     |
+| 5'  | 時間軸 robust                                                                                      | 5 個月後讀還看得懂嗎？依賴的 ticket / 連結還活著嗎？                         |
 
 ### Naming 子場景：四輪 review（[naming-as-iterated-artifact](principles/naming-as-iterated-artifact.md)）
 

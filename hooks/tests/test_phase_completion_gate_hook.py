@@ -118,12 +118,70 @@ def test_non_write_tool_not_triggered():
 
 def test_minor_version_worklog_not_excluded_as_main_file():
     """非 patch 級命名（如 v0.18.md）不命中 main file 排除規則"""
-    # v0.18.md 不符合 v\d+\.\d+\.\d+\.md，故不被當主檔排除
+    # v0.18.md 不符合主檔 regex（無 -main / -work-log suffix 且非 3-component），故不被當主檔排除
     file_path = "docs/work-logs/v0.18/v0.18.md"
     result = module.is_worklog_write_operation(
         "Edit", {"file_path": file_path}, _logger()
     )
     assert result is True
+
+
+# ----------------------------------------------------------------------------
+# W17-217.1：擴充主檔 regex 涵蓋 -main / -work-log suffix 變體
+# ----------------------------------------------------------------------------
+
+def test_minor_main_suffix_excluded():
+    """v0.18-main.md 應被當作 worklog 主檔排除"""
+    file_path = "docs/work-logs/v0/v0.18/v0.18-main.md"
+    result = module.is_worklog_write_operation(
+        "Edit", {"file_path": file_path}, _logger()
+    )
+    assert result is False, "v0.18-main.md 應被排除"
+
+
+def test_patch_main_suffix_excluded():
+    """v0.18.0-main.md 應被當作 worklog 主檔排除（本 session 三次誤判主檔）"""
+    file_path = "docs/work-logs/v0/v0.18/v0.18.0/v0.18.0-main.md"
+    result = module.is_worklog_write_operation(
+        "Edit", {"file_path": file_path}, _logger()
+    )
+    assert result is False, "v0.18.0-main.md 應被排除"
+
+
+def test_work_log_suffix_excluded():
+    """v0.18.0-work-log.md 應被當作 worklog 主檔排除"""
+    file_path = "docs/work-logs/v0.18.0/v0.18.0-work-log.md"
+    result = module.is_worklog_write_operation(
+        "Write", {"file_path": file_path}, _logger()
+    )
+    assert result is False, "v0.18.0-work-log.md 應被排除"
+
+
+def test_phase_completion_suffix_still_triggered():
+    """v0.18.0-phase-completion.md 不應命中主檔排除（仍走 Phase 報告檢查）"""
+    file_path = "docs/work-logs/v0.18.0/v0.18.0-phase-completion.md"
+    result = module.is_worklog_write_operation(
+        "Edit", {"file_path": file_path}, _logger()
+    )
+    assert result is True, "phase-completion 後綴應仍走檢查"
+
+
+def test_ticket_named_md_not_main_excluded():
+    """v0.18.0-W6-007.md 不應命中主檔 regex（即使在 worklog 目錄，仍走檢查；ticket md 由 /tickets/ 路徑排除）"""
+    file_path = "docs/work-logs/v0.18.0/v0.18.0-W6-007.md"
+    result = module.is_worklog_write_operation(
+        "Edit", {"file_path": file_path}, _logger()
+    )
+    assert result is True, "ticket 命名不應命中主檔 regex"
+
+
+def test_refactor_suffix_still_triggered():
+    """v0.18.0-refactor.md 不應命中主檔排除（仍走 Phase 報告檢查）"""
+    file_path = "docs/work-logs/v0.18.0/v0.18.0-refactor.md"
+    result = module.is_worklog_write_operation(
+        "Write", {"file_path": file_path}, _logger()
+    )
+    assert result is True, "refactor 後綴應仍走檢查"
 
 
 # ----------------------------------------------------------------------------

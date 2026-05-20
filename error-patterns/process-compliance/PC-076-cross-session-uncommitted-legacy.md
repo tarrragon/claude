@@ -86,8 +86,8 @@
 
 | 層級 | 措施 | 狀態 |
 |------|------|------|
-| Hook | branch-status-reminder 改為列出所有 tracked-modified 與 untracked（或給出「共 N 項」後附加詳細清單檔案路徑） | 建議實施 |
-| 流程 | PM session-start 後主動執行 `git status --porcelain \| wc -l` 並與 Hook 訊息對照；若數字不符展開詳列 | 行為準則 |
+| Hook | branch-status-reminder 改為列出所有 tracked-modified 與 untracked（分組 staged/modified/untracked，上限 50 + 完整清單提示，雙通道 stderr + logger.warning） | **已升級至 Hook（W13-011 落地，v1.3.0）** |
+| 規則 | PM session-start 全量清點 SOP（讀 Hook 輸出 + `git status --porcelain --untracked=all` 雙重驗證 + 來源判定 + 遺留入 Ticket） | **已升級至 `.claude/rules/core/pm-role.md` Session-start 全量清點章節（W13-011 落地）** |
 | 流程 | Commit 前再次 `git status` 清點，將無關變更拆為獨立 commit 並標明「前 session 遺留」 | 行為準則 |
 | 流程 | Session 結束前強制執行完整 commit cycle；未完成實作留在工作區必須於該 session 內整合處理 | 建議實施（W10-014 相關） |
 
@@ -136,6 +136,6 @@
 
 ---
 
-**Last Updated**: 2026-04-17
-**Version**: 1.1.0 — 追加 W14-013 session 案例（含 untracked 新檔、ticket md 多 session 接力、/ticket 預設流程未檢查 in_progress 程式碼變更觀察）
+**Last Updated**: 2026-05-19
+**Version**: 1.2.0 — Hook 層 + 規則層防護已落地（W13-011）：branch-status-reminder v1.3.0 列全量 + 分組 + 雙通道；pm-role.md v4.2.0 加 Session-start 全量清點章節
 **Source**: 2026-04-17 W12-001 完結 session 與 W14-013 session，連續兩次 commit 前 git status 揭露前 session 遺留實作

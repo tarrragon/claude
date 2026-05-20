@@ -120,6 +120,14 @@ phase4-decision-enforcement-hook 對「Phase X 再決定」「延後評估」等
 | `baseline-gated` | 量化基線觸發條件（如「baseline > 100ms 則重啟」） | reason 須含數字 |
 | `tdd-transition` | TDD phase 轉換的合法延後 | 一般說明 ≥ 10 字 |
 | `user-override` | 用戶明確授權的延後 | 一般說明 ≥ 10 字 |
+| `history` | 引用已完成歷史 / 動機脈絡（如 IMP ticket 開頭引用 parent ANA 多視角審查發現作 Problem Analysis 背景） | reason 須含 `W\d+-\d+` 格式 ticket ID 作歷史錨點 |
+
+**`history` vs `ticket-tracked` 語意區分**：
+
+| Category | 語意 | 典型情境 |
+|---------|------|---------|
+| `ticket-tracked` | 「等待該 ticket 完成後處理」（延後決策有 trigger） | source ticket why 含歷史延後話術描述、引用尚未 complete 的 follow-up ticket |
+| `history` | 「引用已完成歷史 / 動機脈絡」（非延後，是事實陳述） | IMP Problem Analysis 開頭引用 parent ANA 審查發現、回顧已 complete ticket 的決策歷程 |
 
 ### 標記位置規則（PC-146 / EXEMPT_PROXIMITY_LINES=1）
 
@@ -178,4 +186,4 @@ marker 必須**緊鄰命中行**：同一行行尾，或命中行上方一行（
 
 ---
 
-**Last Updated**: 2026-05-13 | **Version**: 1.2.0 — 兩種合法狀態 + 適用邊界（程式碼/文件 vs worklog）+ Hook 引用豁免機制（PC-146 防護）。歷史 1.0–1.1 版見 git log。**Source**: PC-093 / PC-146。
+**Last Updated**: 2026-05-18 | **Version**: 1.3.0 — 新增 `history` 豁免類別（reason 須含 ticket ID 作歷史錨點）+ `history` vs `ticket-tracked` 語意區分表（W11-023）。歷史 1.0–1.2 版見 git log。**Source**: PC-093 / PC-146 / W11-023。

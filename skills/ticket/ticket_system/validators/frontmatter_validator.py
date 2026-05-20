@@ -7,7 +7,7 @@
 - who: 必為 object 含 `current` 欄位（非 plain string）
 
 使用者：
-- .claude/hooks/ticket-frontmatter-validator-hook.py (PostToolUse 事後警告)
+- .claude/skills/ticket/hooks/ticket-frontmatter-validator-hook.py (PostToolUse 事後警告)
 - ticket_system CLI 子命令 
 
 設計原則：

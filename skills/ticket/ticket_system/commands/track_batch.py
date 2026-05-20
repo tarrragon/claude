@@ -295,7 +295,11 @@ def _execute_batch_operation(
         processor: 處理單一 Ticket 的函式
 
     Returns:
-        int: 結束碼 (0 成功, 1 失敗)
+        int: 結束碼
+            0: 全部或部分成功（success_count > 0）
+            1: 內部錯誤（保留給未捕獲 exception；目前未使用）
+            2: 業務拒絕（無有效 ticket ID、批量全部失敗）
+        詳見 .claude/references/cli-exit-code-rules.md
     """
     _validate_operation_type(operation)
 
@@ -303,8 +307,9 @@ def _execute_batch_operation(
     ticket_ids = _parse_ticket_ids(args.ticket_ids)
 
     if not ticket_ids:
+        # 業務拒絕：用戶輸入無有效 ticket ID
         print(format_error(ErrorMessages.NO_VALID_TICKETS))
-        return 1
+        return 2
 
     # 檢查 dry-run 模式（僅在 complete 操作且明確設定才啟用）
     is_dry_run = operation == "complete" and hasattr(args, "dry_run") and args.dry_run is True
@@ -352,7 +357,8 @@ def _execute_batch_operation(
     print()
     print(format_info(result_message_key, success=success_count, total=len(ticket_ids)))
 
-    return 0 if success_count > 0 else 1
+    # 批量全失敗為業務拒絕（每筆 ticket 處理已個別 print error，不是 internal error）
+    return 0 if success_count > 0 else 2
 
 
 def execute_batch_claim(args: argparse.Namespace, version: str) -> int:
@@ -380,7 +386,8 @@ def execute_batch_complete(args: argparse.Namespace, version: str) -> int:
     # 解析 Ticket ID（支援 --wave, --parent, 或逗號分隔）
     ticket_ids = _resolve_ticket_ids_for_complete(args, version)
     if ticket_ids is None:
-        return 1
+        # 業務拒絕：用戶輸入無法解析為有效 ticket id（wave/parent 查無結果或格式錯誤）
+        return 2
 
     args.ticket_ids = ticket_ids
 

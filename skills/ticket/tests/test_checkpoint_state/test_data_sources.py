@@ -7,7 +7,7 @@
 - B{N}.2 異常：I/O 類例外 → SAFE_CALL 走 fallback + errors/pending 記錄
 - B{N}.3 邊界：空回傳 → 預設值
 - B{N}.4 中斷：多來源同時失敗（串聯 test）
-- B{N}.5 邊界：.claude/state/ 或 .claude/handoffs/ 目錄不存在
+- B{N}.5 邊界：.claude/dispatch-active.json 或 .claude/handoffs/ 不存在
 """
 
 from __future__ import annotations
@@ -148,9 +148,9 @@ def test_B2_3_dispatch_active_empty_dispatches_returns_zero(
 def test_B2_2_dispatch_active_malformed_json_raises(
     tmp_path: Path,
 ):
-    state_dir = tmp_path / ".claude" / "state"
-    state_dir.mkdir(parents=True)
-    (state_dir / "dispatch-active.json").write_text("{not json", encoding="utf-8")
+    claude_dir = tmp_path / ".claude"
+    claude_dir.mkdir(parents=True)
+    (claude_dir / "dispatch-active.json").write_text("{not json", encoding="utf-8")
     with pytest.raises(json.JSONDecodeError):
         _read_dispatch_active(tmp_path)
 
@@ -158,8 +158,8 @@ def test_B2_2_dispatch_active_malformed_json_raises(
 def test_B2_5_dispatch_active_state_dir_missing_raises_filenotfounderror(
     tmp_path: Path,
 ):
-    """.claude/state/ 整個目錄不存在（Phase 2 §B.5）。"""
-    # 連 .claude/state/ 都沒有
+    """.claude/dispatch-active.json 不存在（Phase 2 §B.5）。"""
+    # 連 .claude/ 都沒有 dispatch-active.json
     with pytest.raises(FileNotFoundError):
         _read_dispatch_active(tmp_path)
 

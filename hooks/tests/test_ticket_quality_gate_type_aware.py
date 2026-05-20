@@ -18,6 +18,8 @@ from pathlib import Path
 import pytest
 
 _hooks_dir = Path(__file__).parent.parent
+# W10-092: 部分 ticket-skill hook 已遷至 .claude/skills/ticket/hooks/
+ticket_skill_hooks_path = _hooks_dir.parent / "skills" / "ticket" / "hooks"
 _lib_dir = _hooks_dir.parent / "lib"
 for p in (str(_hooks_dir), str(_lib_dir)):
     if p not in sys.path:
@@ -25,7 +27,7 @@ for p in (str(_hooks_dir), str(_lib_dir)):
 
 
 def _load_hook_module():
-    hook_path = _hooks_dir / "ticket-quality-gate-hook.py"
+    hook_path = ticket_skill_hooks_path / "ticket-quality-gate-hook.py"
     spec = importlib.util.spec_from_file_location(
         "ticket_quality_gate_hook", hook_path
     )

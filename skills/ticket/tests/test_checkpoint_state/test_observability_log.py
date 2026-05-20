@@ -259,7 +259,7 @@ def test_D7_data_source_errors_list_of_string(tmp_path: Path):
     state = _make_state()
     errors = {
         "git-status": "ok",
-        "dispatch-active": "FileNotFoundError: .claude/state/dispatch-active.json",
+        "dispatch-active": "FileNotFoundError: .claude/dispatch-active.json",
         "handoff-pending": "PermissionError: denied",
     }
     _write_metrics_log(state, "snapshot", 12.5, errors, project_root=tmp_path)

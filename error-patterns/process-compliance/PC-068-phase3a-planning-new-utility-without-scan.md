@@ -73,6 +73,7 @@ grep -rn "def parse_\|def read_\|def load_\|class TicketData" <lang-root>/lib/ <
 ## 類似案例
 
 - **0.18.0-W10-009 Phase 3a**：規劃 `.claude/hooks/lib/ticket_frontmatter.py` 自寫 parser，但 hooks 目錄已存在 `hook_utils/hook_ticket.py:parse_ticket_frontmatter()`（10+ hooks 使用）和 `lib/frontmatter_parser.py`（含 TicketData dataclass）。三委員（linux + thyme-python + code-explorer）審查識破，Context Bundle 強制修正為「重用 hook_utils」。
+- **0.18.0-W13-008 ANA 階段（2026-05-19）**：本 PC 的 ANA 階段延伸案例。basil-hook-architect 規劃 spawned IMP-2 為「新增 SessionStart hook hook-health-reporter」，但 `.claude/hooks/hook-health-monitor.py` 已是 SessionStart hook + 動態解析 settings.json + stderr 報告。saffron-system-analyst 多視角審查抓到重複造輪 critical，IMP-2 scope 修訂為「擴充既有 hook-health-monitor.py」。意義：PC-068 不限 Phase 3a 實作階段；ANA 規劃 spawned IMP 為新建資產時，同樣必須先掃描既有同職責資產。memory 索引 [[ana-spawn-imp-pre-scan]]。
 
 ## 相關文件
 

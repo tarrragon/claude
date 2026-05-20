@@ -670,3 +670,94 @@ class TestValidateExecutionLogByType:
         assert passed is False
         assert "Problem Analysis" in unfilled
         assert "Solution" in unfilled
+
+
+# ============================================================
+# W10-133: 非表格描述性 N/A 字面豁免（PC-138 / PC-144 家族延伸）
+# ============================================================
+
+
+class TestDescriptiveNAExemption:
+    """`Layer N: N/A` / `Phase X N/A` 等描述性標記不應誤判 placeholder。
+
+    對應 ticket 0.18.0-W10-133：W10-125（PC-138）已修表格 cell N/A 誤判主場景；
+    本測試覆蓋「非表格描述性 N/A 字面」家族延伸。
+    """
+
+    def _import_is_placeholder(self):
+        from ticket_system.lib.ticket_validator import _is_placeholder
+        return _is_placeholder
+
+    # ---------- 既有行為 regression 守護 ----------
+
+    def test_table_cell_na_not_placeholder(self):
+        """W10-125 regression：表格 cell 內 N/A 仍視為實質內容（非 placeholder）"""
+        _is_placeholder = self._import_is_placeholder()
+        body = """| Layer | 結論 |
+| --- | --- |
+| Layer 1 | OK |
+| Layer 2 | N/A |
+"""
+        assert _is_placeholder(body) is False
+
+    def test_bare_na_still_placeholder(self):
+        """無描述性前綴的 bare N/A 仍視為 placeholder（規避豁免擴散）"""
+        _is_placeholder = self._import_is_placeholder()
+        assert _is_placeholder("N/A") is True
+        assert _is_placeholder("Found the root cause: N/A") is True
+
+    def test_bare_todo_still_placeholder(self):
+        """TODO 不在豁免範圍"""
+        _is_placeholder = self._import_is_placeholder()
+        assert _is_placeholder("TODO") is True
+
+    # ---------- W10-133 新增豁免案例 ----------
+
+    def test_descriptive_layer_na_not_placeholder(self):
+        """`Layer 2: N/A` 描述性標記為合法 ANA 多視角表述，不應判 placeholder"""
+        _is_placeholder = self._import_is_placeholder()
+        content = """多視角審查結論：
+
+- Layer 1: 已覆蓋
+- Layer 2: N/A
+- Layer 3: 已覆蓋
+"""
+        assert _is_placeholder(content) is False
+
+    def test_descriptive_phase_na_not_placeholder(self):
+        """`Phase 4 N/A` 描述性標記為合法 TDD 階段表述，不應判 placeholder"""
+        _is_placeholder = self._import_is_placeholder()
+        content = """TDD 流程記錄：
+
+Phase 3b: 已實作
+Phase 4 N/A
+"""
+        assert _is_placeholder(content) is False
+
+    def test_only_descriptive_na_lines_not_placeholder(self):
+        """章節內容僅由描述性 N/A 行組成（作者明示各層皆不適用），不應判 placeholder"""
+        _is_placeholder = self._import_is_placeholder()
+        content = """Layer 1: N/A
+Layer 2: N/A
+Layer 3: N/A
+"""
+        assert _is_placeholder(content) is False
+
+    # ---------- 防豁免擴散：混合情境 ----------
+
+    def test_descriptive_layer_with_todo_still_placeholder(self):
+        """`Layer 2: TODO N/A` 含 TODO 仍判 placeholder（豁免不擴散）"""
+        _is_placeholder = self._import_is_placeholder()
+        # Layer X: N/A 行剝除後仍剩 TODO 行 → 真實 placeholder
+        content = """Layer 1: TODO
+Layer 2: N/A
+"""
+        assert _is_placeholder(content) is True
+
+    def test_descriptive_na_mixed_with_bare_na_still_placeholder(self):
+        """描述性 N/A 行旁邊有 bare N/A 仍判 placeholder（保守設計）"""
+        _is_placeholder = self._import_is_placeholder()
+        content = """Layer 1: N/A
+這段需要實作: N/A
+"""
+        assert _is_placeholder(content) is True

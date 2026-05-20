@@ -387,15 +387,32 @@ def _is_placeholder(text: str) -> bool:
     # - 中文：（待填寫：...）、（必填：...）——template 預設佔位符
     # W17-094：加 \b 字邊界避免 substring 誤判（如 TodoList 內的 Todo）。
     # W10-125：表格 cell 已先剝除，避免合法 N/A / TODO / TBD 標示誤判（PC-138 / PC-144）。
+    # W10-133（PC-138 家族延伸）：剝除非表格描述性 `Layer N: N/A` / `Layer X N/A` /
+    #   `Phase X N/A` 行。這類描述性標記在 ANA / IMP body 中為合法「該層級不適用」
+    #   標示（如多視角審查表述 Layer 2: N/A），不應觸發 placeholder 誤判。
+    #   保守設計：僅剝除整行 keyword 為 N/A 的情境；含 TODO/TBD 的混合行不豁免，
+    #   避免「Layer 2: TODO N/A」這類真正 placeholder 被誤放行。
     target_content = content_no_tables if has_table else content_no_separator
-    if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", target_content, re.IGNORECASE):
+    descriptive_na_line = re.compile(
+        r"^[\s\-\*\+>]*(?:Layer\s+\w+|Phase\s+\w+)\s*[:：]?\s*N/A\s*\.?\s*$",
+        re.MULTILINE | re.IGNORECASE,
+    )
+    target_after_descriptive = descriptive_na_line.sub("", target_content).strip()
+    # 若描述性 N/A 行剝除後仍有 N/A keyword，視為真實 placeholder；
+    # 若剝除後不再含 N/A，但其他 keyword（TBD/TODO/pending）仍命中，照樣判 placeholder。
+    if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", target_after_descriptive, re.IGNORECASE):
         return True
-    if re.search(r"（待填寫[：:][^）]*）|（必填[：:][^）]*）", target_content):
+    # 若剝除描述性 N/A 行後內容變空（且原本只由描述性 N/A 行組成），
+    # 視為作者明示「該章節各層級皆不適用」，視為非 placeholder 直接返回。
+    if not target_after_descriptive and descriptive_na_line.search(target_content):
+        return False
+
+    if re.search(r"（待填寫[：:][^）]*）|（必填[：:][^）]*）", target_after_descriptive):
         return True
 
     # 判定「整段只由中文佔位符組成」：移除所有已知中文佔位符 + 空白後為空
     no_cn_placeholders = re.sub(
-        r"（(?:待填寫|必填)[：:][^）]*）", "", target_content
+        r"（(?:待填寫|必填)[：:][^）]*）", "", target_after_descriptive
     ).strip()
     if not no_cn_placeholders:
         return True

@@ -134,8 +134,6 @@ Put the conclusion first. A reader who stops after the opening paragraph should 
 
 Documents that touch business concepts must describe the *why*, not the *what of the syntax*.
 
-<!-- Rule 8 exemption (reference-stability-rules.md / DOC-010): "Readmoo" in the table below serves as a concrete business-name example contrasting business intent vs. syntax translation. A concrete product name lends the example credibility; abstracting to "Product X" would dilute the teaching contrast. Exemption retained after cross-file evaluation. -->
-
 | Description style                                                       | Fits                     | Fails                                                   |
 | ----------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------- |
 | "Readmoo extractor falls back to alternate selector when primary fails" | Business / design intent | —                                                       |
@@ -402,15 +400,15 @@ The checklist above is a single-frame final sweep — not multi-pass. Multi-pass
 
 For documents (worklog / spec / methodology / error-pattern):
 
-| Round | Frame                                                             | Document-specific checklist                                                                 |
-| ----- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 1     | Generation                                                        | Get content end-to-end; expect rough phrasing                                               |
+| Round | Frame                                                                                             | Document-specific checklist                                                                 |
+| ----- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| 1     | Generation                                                                                        | Get content end-to-end; expect rough phrasing                                               |
 | 2     | Intent ([ease-of-writing-vs-intent-alignment](principles/ease-of-writing-vs-intent-alignment.md)) | Does the document type match the structure used? Spec / process / methodology not mixed?    |
-| 3     | Opportunity-cost tone                                             | Grep "must / should / always / never" — translate absolutes to "A in scenario X / B in Y"   |
-| 4     | Grep-ability / naming                                             | Headings contain concept keywords (not "Overview"); cross-references explain *why* to click |
-| 5     | Counter-cases / boundaries                                        | "When not to apply" section present? Examples cover edge cases not just happy path?         |
-| 6'    | Stability layer                                                   | If this is a stable document (spec/methodology), are ticket IDs / commit hashes scrubbed?   |
-| 7'    | Atomic check                                                      | < 500 lines OR single concept despite length? Sections each answer one question?            |
+| 3     | Opportunity-cost tone                                                                             | Grep "must / should / always / never" — translate absolutes to "A in scenario X / B in Y"   |
+| 4     | Grep-ability / naming                                                                             | Headings contain concept keywords (not "Overview"); cross-references explain *why* to click |
+| 5     | Counter-cases / boundaries                                                                        | "When not to apply" section present? Examples cover edge cases not just happy path?         |
+| 6'    | Stability layer                                                                                   | If this is a stable document (spec/methodology), are ticket IDs / commit hashes scrubbed?   |
+| 7'    | Atomic check                                                                                      | < 500 lines OR single concept despite length? Sections each answer one question?            |
 
 Skip rules: quick worklog notes can skip rounds 4-7'; stable specs / methodology should run all rounds twice.
 

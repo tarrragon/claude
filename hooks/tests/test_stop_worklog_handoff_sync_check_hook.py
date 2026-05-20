@@ -25,7 +25,7 @@ from unittest.mock import MagicMock
 import pytest
 
 
-HOOK_PATH = Path(__file__).parent.parent / "stop-worklog-handoff-sync-check-hook.py"
+HOOK_PATH = Path(__file__).parent.parent.parent / "skills" / "ticket" / "hooks" / "stop-worklog-handoff-sync-check-hook.py"
 
 
 def _load_hook_module():
@@ -498,3 +498,206 @@ class TestPendingDirTerminalFilter:
         (pending_dir / "0.18.0-W17-996.json").write_text("not-json", encoding="utf-8")
         ids = hook_mod._scan_pending_dir(root)
         assert ids == {"0.18.0-W17-996"}
+
+
+# ---------------------------------------------------------------------------
+# W3-026.3: background_tasks 整合（v2.1.145）
+# ---------------------------------------------------------------------------
+
+
+# Part A: _has_background_agents 弱依賴測試
+# mirror sibling .claude/hooks/tests/test_handoff_auto_resume_stop_hook.py:480-518
+
+
+class TestHasBackgroundAgents:
+    """W3-026.3 Part A：_has_background_agents 弱依賴策略驗證。
+
+    mirror sibling W3-026.1 has_background_agents 測試模式。只判斷 list
+    非空，欄位不存在 / 非 list / 空 list 皆 fallback False。
+    """
+
+    def test_has_background_agents_with_non_empty_list_returns_true(self, hook_mod):
+        """background_tasks 非空 list → 視為有背景代理人。"""
+        input_data = {"background_tasks": [{"id": "agent-1"}]}
+        assert hook_mod._has_background_agents(input_data, MagicMock()) is True
+
+    def test_has_background_agents_with_empty_list_returns_false(self, hook_mod):
+        """background_tasks 為空 list → 無背景代理人。"""
+        input_data = {"background_tasks": []}
+        assert hook_mod._has_background_agents(input_data, MagicMock()) is False
+
+    def test_has_background_agents_missing_field_returns_false(self, hook_mod):
+        """欄位不存在（舊版 CC）→ 回 False 觸發 fallback。"""
+        assert hook_mod._has_background_agents({}, MagicMock()) is False
+
+    def test_has_background_agents_non_list_type_returns_false(self, hook_mod):
+        """background_tasks 為非 list 型別（schema 異常）→ 安全回 False。"""
+        assert hook_mod._has_background_agents(
+            {"background_tasks": "not-a-list"}, MagicMock()
+        ) is False
+        assert hook_mod._has_background_agents(
+            {"background_tasks": {"key": "value"}}, MagicMock()
+        ) is False
+
+
+# Part B: detect_sync_drift 整合測試
+
+
+class TestDetectSyncDriftWithBackgroundTasks:
+    """W3-026.3 Part B：detect_sync_drift 第三道防護整合測試。
+
+    hook_mod fixture 已 monkeypatch _has_in_progress_ticket /
+    _is_blocked_this_session 為 False，故主邏輯路徑可達；本套件再驗證
+    background_tasks 第三道防護的行為與 fallback。
+    """
+
+    def test_detect_sync_drift_skipped_when_background_tasks_active(
+        self, tmp_path, hook_mod
+    ):
+        """有 sync drift + input_data 含非空 background_tasks → 跳過（None）。"""
+        root, _ = make_project_root(
+            tmp_path,
+            worklog_content="## Handoff Context\n\nW17-079 待處理\n",
+            pending_ticket_ids=set(),
+            ticket_status_map={"0.18.0-W17-079": "pending"},
+        )
+        input_data = {"background_tasks": [{"id": "bg-1"}]}
+        result = hook_mod.detect_sync_drift(
+            root, 0.0, MagicMock(), input_data=input_data
+        )
+        assert result is None, "background_tasks 非空時應跳過 sync drift 檢查"
+
+    def test_detect_sync_drift_proceeds_when_background_tasks_empty(
+        self, tmp_path, hook_mod
+    ):
+        """有 sync drift + input_data 含空 list background_tasks → 不跳過，正常輸出警告。"""
+        root, _ = make_project_root(
+            tmp_path,
+            worklog_content="## Handoff Context\n\nW17-079 待處理\n",
+            pending_ticket_ids=set(),
+            ticket_status_map={"0.18.0-W17-079": "pending"},
+        )
+        input_data = {"background_tasks": []}
+        result = hook_mod.detect_sync_drift(
+            root, 0.0, MagicMock(), input_data=input_data
+        )
+        assert result is not None, "background_tasks 空 list 不應跳過"
+        assert "0.18.0-W17-079" in result
+
+    def test_detect_sync_drift_proceeds_when_input_data_none(
+        self, tmp_path, hook_mod
+    ):
+        """input_data=None（向後相容）→ fallback 為 {}，不跳過。"""
+        root, _ = make_project_root(
+            tmp_path,
+            worklog_content="## Handoff Context\n\nW17-079 待處理\n",
+            pending_ticket_ids=set(),
+            ticket_status_map={"0.18.0-W17-079": "pending"},
+        )
+        # 不傳 input_data 參數（用 default None）
+        result = hook_mod.detect_sync_drift(root, 0.0, MagicMock())
+        assert result is not None, "input_data 預設 None 應 fallback {} 並執行主檢查"
+        assert "0.18.0-W17-079" in result
+
+
+# Part C: main() stdin 4 路徑整合測試
+# mirror sibling commit a6d5cc16 W3-037 _FakeStdin pattern
+
+
+import io as _io_mod
+
+
+class _FakeStdin(_io_mod.StringIO):
+    """StringIO 包裝，提供 isatty() 介面以模擬 sys.stdin（mirror W3-037）。"""
+
+    def __init__(self, content: str = "", tty: bool = False):
+        super().__init__(content)
+        self._tty = tty
+
+    def isatty(self) -> bool:
+        return self._tty
+
+
+class TestMainStdinIntegration:
+    """W3-026.3 Part C：main() stdin 4 路徑整合測試。
+
+    mirror W3-037 commit a6d5cc16 sibling pattern：用 _FakeStdin 覆寫
+    isatty() 模擬 tty/pipe 模式，monkeypatch detect_sync_drift 攔截
+    input_data 驗證傳遞正確性。
+    """
+
+    def _patch_main_dependencies(self, monkeypatch, hook_mod, captured: dict):
+        """mock detect_sync_drift 攔截 input_data 並回傳 None（避免實際輸出）。"""
+
+        def fake_detect_sync_drift(
+            project_root, session_start, logger, input_data=None
+        ):
+            captured["input_data"] = input_data
+            captured["session_start"] = session_start
+            return None
+
+        monkeypatch.setattr(hook_mod, "detect_sync_drift", fake_detect_sync_drift)
+        monkeypatch.setattr(hook_mod, "get_project_root", lambda: Path("/tmp/_fake"))
+
+    def test_main_with_background_agents_stdin_short_circuits(
+        self, monkeypatch, hook_mod, capsys
+    ):
+        """路徑 4：stdin 含 background_tasks 時完整 payload 傳遞至 detect_sync_drift。"""
+        captured: dict = {}
+        self._patch_main_dependencies(monkeypatch, hook_mod, captured)
+        payload = {
+            "background_tasks": [{"id": "bg-1", "status": "running"}],
+            "session_start_timestamp": 1234.5,
+        }
+        monkeypatch.setattr(
+            hook_mod.sys, "stdin", _FakeStdin(json.dumps(payload), tty=False)
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            hook_mod.main()
+        assert exc_info.value.code == 0
+        assert captured["input_data"] == payload
+        assert captured["input_data"]["background_tasks"] == [
+            {"id": "bg-1", "status": "running"}
+        ]
+
+    def test_main_with_tty_falls_back(self, monkeypatch, hook_mod, capsys):
+        """路徑 1：tty 互動模式時不讀 stdin，event 維持空 dict。"""
+        captured: dict = {}
+        self._patch_main_dependencies(monkeypatch, hook_mod, captured)
+        monkeypatch.setattr(hook_mod.sys, "stdin", _FakeStdin("", tty=True))
+
+        with pytest.raises(SystemExit) as exc_info:
+            hook_mod.main()
+        assert exc_info.value.code == 0
+        assert captured["input_data"] == {}, "tty 模式不應讀取 stdin"
+
+    def test_main_with_json_decode_error_falls_back(
+        self, monkeypatch, hook_mod, capsys
+    ):
+        """路徑 2：stdin 為非 JSON 字串 → fallback + warning log，input_data={}。"""
+        captured: dict = {}
+        self._patch_main_dependencies(monkeypatch, hook_mod, captured)
+        monkeypatch.setattr(
+            hook_mod.sys, "stdin", _FakeStdin("not a valid json {{{", tty=False)
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            hook_mod.main()
+        assert exc_info.value.code == 0
+        assert captured["input_data"] == {}, "JSONDecodeError 應 fallback 至空 dict"
+
+    def test_main_with_non_dict_stdin_falls_back(
+        self, monkeypatch, hook_mod, capsys
+    ):
+        """路徑 3：stdin 為 JSON list（非 dict）→ fallback + warning log。"""
+        captured: dict = {}
+        self._patch_main_dependencies(monkeypatch, hook_mod, captured)
+        monkeypatch.setattr(
+            hook_mod.sys, "stdin", _FakeStdin('[1, 2, 3]', tty=False)
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            hook_mod.main()
+        assert exc_info.value.code == 0
+        assert captured["input_data"] == {}, "non-dict JSON 應 fallback 至空 dict"

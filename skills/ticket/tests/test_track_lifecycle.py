@@ -912,10 +912,10 @@ class TestCascadeRealDiskRoundtrip:
         # 隔離至 tmp_path，避免污染真實 repo
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(temp_project_dir))
 
-        # 建立版本 0.99.0 的 tickets 目錄（使用 flat 結構，避免階層 fallback）
+        # 建立版本 0.99.0 的 tickets 目錄（三層結構 v0/v0.99/v0.99.0）
         version = "0.99.0"
         tickets_dir = (
-            temp_project_dir / "docs" / "work-logs" / f"v{version}" / "tickets"
+            temp_project_dir / "docs" / "work-logs" / "v0" / "v0.99" / f"v{version}" / "tickets"
         )
         tickets_dir.mkdir(parents=True, exist_ok=True)
 
@@ -986,7 +986,7 @@ class TestCascadeRealDiskRoundtrip:
 
         version = "0.99.0"
         tickets_dir = (
-            temp_project_dir / "docs" / "work-logs" / f"v{version}" / "tickets"
+            temp_project_dir / "docs" / "work-logs" / "v0" / "v0.99" / f"v{version}" / "tickets"
         )
         tickets_dir.mkdir(parents=True, exist_ok=True)
 

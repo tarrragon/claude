@@ -502,7 +502,38 @@ class MigrateMessages:
     ARG_DRY_RUN = "預覽遷移結果，不實際執行"
     ARG_BACKUP = "遷移前備份（預設啟用）"
     ARG_NO_BACKUP = "停用備份"
+    ARG_FORCE_OVERWRITE = "明示授權覆寫目標 ID 既有 Ticket（預設拒絕；會記錄至 audit log）"
     HELP_MIGRATE = "遷移 Ticket ID（支援單一和批量遷移）"
+
+    # Collision detection 訊息（W14-048）
+    # dry-run 階段警告：目標已存在會被覆寫
+    WARN_MIGRATE_TARGET_EXISTS = (
+        "[WARNING] 目標 Ticket 已存在，實際執行時將被覆寫:\n"
+        "  目標路徑: {target_path}\n"
+        "  既有標題: {existing_title}\n"
+        "  既有狀態: {existing_status}\n"
+        "  若確認覆寫請執行時加上 --force-overwrite"
+    )
+    # 實際執行階段拒絕覆寫
+    ERROR_MIGRATE_TARGET_EXISTS = (
+        "[ERROR] 拒絕覆寫既有 Ticket: {target_id}\n"
+        "  目標路徑: {target_path}\n"
+        "  既有標題: {existing_title}\n"
+        "  既有狀態: {existing_status}\n"
+        "  如確認覆寫，請加上 --force-overwrite 旗標明示授權"
+    )
+    # 批量遷移 fail-fast
+    ERROR_BATCH_COLLISION = (
+        "[ERROR] 批量遷移偵測到目標 ID 撞既有 Ticket，已 fail-fast 不執行任何遷移:\n"
+        "{collisions}\n"
+        "  如確認全部覆寫，請加上 --force-overwrite 旗標"
+    )
+    # --force-overwrite audit log
+    INFO_FORCE_OVERWRITE = (
+        "[AUDIT] --force-overwrite 已啟用，覆寫既有 Ticket: {target_id}\n"
+        "  覆寫時間: {timestamp}\n"
+        "  既有標題: {existing_title}"
+    )
 
 
 # ============================================================================

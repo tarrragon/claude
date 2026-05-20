@@ -248,15 +248,20 @@ def dashboard_main(args: argparse.Namespace, version: Optional[str]) -> int:
 
     Returns:
         0: 正常輸出
-        1: 無 active version / ticket index 載入失敗
+        1: 內部錯誤（ticket index 載入時拋出 exception）
+        2: 業務拒絕（無 active version，查無資料可供呈現）
+
+    詳見 .claude/references/cli-exit-code-rules.md
     """
     if version is None:
+        # 業務拒絕：查無 active version（資料源無資料），呼叫方應依拒絕原因處理
         sys.stderr.write("No active version detected\n")
-        return 1
+        return 2
 
     try:
         all_tickets = list_tickets(version) or []
     except Exception as exc:
+        # 內部錯誤：ticket index 載入拋出 exception
         sys.stderr.write(f"Failed to load ticket index: {exc}\n")
         return 1
 

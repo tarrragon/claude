@@ -115,5 +115,47 @@ handoff_utils 應改用 `ticket_system.constants`（top-level package，無 yaml
 
 ---
 
-**Last Updated**: 2026-05-10
-**Version**: 1.0.0 — 從 W17-181.1 → c87e0aee 補丁案例提煉
+## 案例追加 #2（2026-05-14，commit 1bc42b70）
+
+### 重現
+
+W17-127.1（commit 20041166）抽出 `.claude/hooks/lib/framework_paths.py` 共用模組（含 `import yaml`）。4 個 caller 中：
+
+| Caller | 修復狀態 |
+|--------|---------|
+| `commit-msg-layer2-marker-check-hook.py` | 同 commit 已改 shebang + 加 pyyaml |
+| `framework-rule-edit-skill-trigger-hook.py` | 同 commit 已改 shebang + 加 pyyaml |
+| `layer-boundary-validator-hook.py` | 同 commit 已改 shebang + 加 pyyaml |
+| **`agent-dispatch-validation-hook.py`** | **漏改**：shebang 仍 `#!/usr/bin/env python3`，`dependencies = []` |
+
+### 隱患期間
+
+從 W17-127.1（2026-05-XX）到 2026-05-14 commit 1bc42b70，每次 PreToolUse:Agent 觸發都 import 階段 `ModuleNotFoundError: No module named 'yaml'`，因 hook 失敗 non-blocking，traceback 只在 UI 一閃，dispatch 仍放行。
+
+期間所有 Agent 派發都缺：
+- ARCH-015 worktree 強制檢查
+- target-based 路徑分類（`.claude/` vs 非 `.claude/`）
+- ARCH-019/032 防護點
+
+### 為何抽 lib 時漏掉 1/4
+
+W17-127.1 修改清單可能依「grep import framework_paths」找出 caller，但 caller 的 shebang/PEP723 deps 修改是**獨立的另一個動作**——若用「修改 import statement」作為清單，會自動覆蓋；若用「修改 dep 宣告」作為清單，需另開 grep。兩個動作的 checklist 不對齊就會漏。
+
+### 閾值升級訊號
+
+PC-135 觀測閾值「3+ 次同類補丁」已達標：
+- 案例 #1：c87e0aee（2026-05-10，handoff_utils → lib.constants → yaml）
+- 案例 #2：1bc42b70（2026-05-14，agent-dispatch-validation → lib.framework_paths → yaml）
+- 累積：2 次（觀測單位為「分立 caller 漏 sync」），若再現第 3 次需強制 hook 檢查
+
+### 強制檢查設計（待 ticket）
+
+| 防護層 | 設計 |
+|--------|------|
+| PreCommit hook | 偵測 `import yaml` / `import <非標準 lib>` 在 `.claude/hooks/**/*.py`，掃描 PEP723 deps，缺失即阻擋 |
+| Lib refactor checklist | 抽 lib 時必須產出「所有 caller × shebang × deps × import」四欄對照表，PR description 強制附 |
+| Dispatch validation 自檢 | hook 啟動時可選地把自己加入 `dispatch-active.json` 健康度欄位，PM 接手新 session 時可查 |
+
+---
+
+**Last Updated**: 2026-05-14 | **Version**: 1.1.0 — 追加案例 #2（agent-dispatch-validation-hook 漏 sync）+ 強制檢查設計待 ticket | **Source**: W17-181.1 c87e0aee + W14 post-revert commit 1bc42b70

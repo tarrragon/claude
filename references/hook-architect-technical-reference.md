@@ -7,6 +7,23 @@
 
 ---
 
+## v2.1.139-145 變更總覽
+
+以下表格彙整 Claude Code v2.1.139-2.1.145 與 hook 系統相關的變更，供後續開發者快速定位各章節說明。已覆蓋的變更標示引用位置；未覆蓋的新增說明章節。
+
+| 變更 | 引入版本 | 性質 | 影響 hook 數 | 說明章節 |
+|------|---------|------|------------|---------|
+| args exec form 不需引號 | v2.1.139 | API 簡化 | 0（現有寫法已兼容） | Hook 設定 Schema → Command handler → Exec form |
+| PostToolUse continueOnBlock | v2.1.139 | 新能力 | 0（純機會，無須強制） | Hook 類型深度理解 → PostToolUse |
+| hooks 無 terminal access | v2.1.139 | 行為限制 | 0（stderr 仍有效） | 環境變數與 effort 感知 → v2.1.139+ 終端存取限制 |
+| MCP stdio 收到 CLAUDE_PROJECT_DIR | v2.1.139 | 配置擴充 | 0（hooks 不受影響） | 環境變數與 effort 感知（欄位表格） |
+| terminalSequence 通知 | v2.1.141 | 新 API | 0（可整合機會） | JSON 處理 → terminalSequence 通知 |
+| Stop 8-block cap | v2.1.143 | 行為限制 | 5（Stop hook 評估通過） | Hook 類型深度理解 → Stop → v2.1.143 Stop 8-block cap |
+| Stop/SubagentStop background_tasks | v2.1.145 | 新欄位 | 2（Stop + SubagentStop） | Hook 類型深度理解 → v2.1.145 Stop/SubagentStop input 新欄位 |
+| Stop/SubagentStop session_crons | v2.1.145 | 新欄位 | 0（本專案未啟用） | 同上 |
+
+---
+
 ## Hook 類型深度理解
 
 ### Event 快速索引
@@ -67,13 +84,21 @@
 
 ### Stop
 - **用途**: 主線程停止時的後處理（檢查未完成工作、強制完成檢查清單等）
-- **輸入**: session_id, transcript_path, stop_hook_active
+- **輸入**: session_id, transcript_path, stop_hook_active, **background_tasks**（v2.1.145+）, **session_crons**（v2.1.145+）
 - **輸出**: decision (block), reason
 - **特點**: 觸發於主線程結束，**非代理人**結束。可阻擋停止以要求完成特定工作。
 
+**v2.1.143 Stop 8-block cap**：Stop 後 Claude 最多連續處理 **8 個 blocks**（tool use rounds）。若多個 Stop hook 均阻擋（block）並要求繼續工作，Claude 處理這些 block 的輪次受此上限約束。本專案目前有 5 個 Stop hook（evaluate-session、handoff-auto-resume-stop-hook、session-experience-persistence-reminder、worktree-auto-commit、stop-worklog-handoff-sync-check），各佔 1 block，合計 5 blocks < 8，**在安全範圍內**。
+
+**Why**：多 Stop hook 並行阻擋可能導致 Claude 進入無窮 block-continue 循環；v2.1.143 以 8-block 上限截斷，保護 session 不無止境延後退出。
+
+**Consequence**：若未來新增 Stop hook 且啟用 block 決策，需重新評估各 hook 輸出量（8 blocks 非行數限制，而是 tool use block 計數），避免達到上限後 Claude 強制中斷尚未完成的收尾邏輯。
+
+**Action**：新增 Stop hook 前，先清點現有 Stop hook 數量 × block 行為，確認合計不超過 7（保留 1 個緩衝）。輸出量大的 hook（如 evaluate-session）應實測確認在 1 block 內完成。
+
 ### SubagentStop
 - **用途**: **代理人（subagent）真正完成時觸發**，提供代理人完成訊號源（清理派發記錄、驗證 commit、廣播完成、handoff 提醒等）
-- **輸入**: session_id, transcript_path, stop_hook_active, **agent_id**, **agent_type**, **agent_transcript_path**, last_assistant_message (optional)
+- **輸入**: session_id, transcript_path, stop_hook_active, **agent_id**, **agent_type**, **agent_transcript_path**, last_assistant_message (optional), **background_tasks**（v2.1.145+）, **session_crons**（v2.1.145+）
 - **輸出**: decision (block), reason
 - **特點**:
   - 涵蓋前台與 `run_in_background: true` 派發兩種模式
@@ -81,6 +106,38 @@
   - **與 PostToolUse(Agent) 區別**：PostToolUse(Agent) 在 background 派發時於**啟動時**觸發（非完成），SubagentStop 才是真完成訊號
 
 > **重要**：「代理人完成」相關 Hook（清理派發、驗證 commit、廣播狀態、handoff 提醒等）一律使用 SubagentStop，**禁止使用 PostToolUse(Agent)**（時機錯位，詳見 ARCH-019）。
+
+### v2.1.145 Stop/SubagentStop input 新欄位：background_tasks / session_crons
+
+v2.1.145 起，Stop 與 SubagentStop 的 stdin JSON 新增兩個頂層欄位：
+
+| 欄位 | 型別 | 觸發 event | 用途 |
+|------|------|-----------|------|
+| `background_tasks` | `list[dict]` | Stop, SubagentStop | 目前仍在執行的背景任務清單（每項為一個 task dict） |
+| `session_crons` | `list[dict]` | Stop, SubagentStop | session 內排程的 cron 任務清單（本專案目前未啟用 CC session cron） |
+
+**background_tasks 弱依賴策略**：
+
+`background_tasks` 的 task dict 內部 schema 尚未正式文件化，且可能隨版本演進。本專案採**弱依賴策略**——只判斷 list 是否非空（代表有背景代理人執行中），不依賴 task dict 的內部欄位：
+
+```python
+def has_background_agents(input_data: dict, logger) -> bool:
+    """只判斷 background_tasks list 非空，不讀 task dict 內部欄位。"""
+    bg_tasks = input_data.get("background_tasks")
+    if not isinstance(bg_tasks, list):
+        return False
+    return len(bg_tasks) > 0
+```
+
+**Why**：`background_tasks` 可直接取代過去依賴 `started_at` 時間戳推斷「30 分鐘內有無背景代理人」的魔術數字邏輯，提供更可靠的訊號。
+
+**Consequence**：若 hook 不讀 `background_tasks` 而僅依賴 `started_at` 推斷，在背景代理人執行中時仍可能觸發誤報（如 stop-worklog-handoff-sync-check-hook 過去的誤報）。
+
+**Action**：在 Stop / SubagentStop hook 需要判斷「是否有背景代理人執行中」時，優先讀 `background_tasks`；欄位不存在（舊版 CC）或空 list 時 fallback 到既有本地推斷邏輯。參考實作：`.claude/skills/ticket/hooks/handoff-auto-resume-stop-hook.py` 的 `has_background_agents()`（W3-026.1 落地）。
+
+**session_crons**：
+
+本專案目前**未啟用** Claude Code session cron 功能，`session_crons` 預計為空 list。列為已知能力，未來若啟用 session cron 需評估是否讀取此欄位做排程感知。
 
 ### SubagentStart
 - **用途**: subagent spawn 時記錄派發、驗證 prompt、建立觀測狀態
@@ -287,6 +344,24 @@ def main() -> int:
 ```
 
 `effort` 讓 hook 在低成本模式下放行、高成本模式下加嚴；同一 hook 可依 effort 動態調整驗證深度，避免高頻情境被阻塞。
+
+### v2.1.139+ 終端存取限制
+
+v2.1.139 起，hook process **無法直接存取宿主終端**（raw terminal file descriptor，如 `/dev/tty`）。此限制影響試圖繞過 stdout/stderr 直接操控終端的場景，但**不影響 stderr pipe**。
+
+**Why**：理解此限制對正確詮釋規則 4（Hook 失敗必須可見）至關重要。若誤解為「stderr 被丟棄」，可能錯誤地認為規則 4 的 stderr 雙通道要求已失效。
+
+**精確語意區分**：
+
+| 場景 | 是否受限 | 說明 |
+|------|---------|------|
+| `sys.stderr.write(...)` / `print(..., file=sys.stderr)` | **不受限** | stderr pipe 由 Claude Code 讀取，仍呈現為 hook error 訊息（UI 可見，IMP-048 確認） |
+| `/dev/tty` 直接寫入 | **受限** | hook process 無此 fd 存取權，無法直接操控宿主終端 |
+| `terminalSequence` JSON 欄位 | **可用** | 透過 hookSpecificOutput 欄位傳遞終端通知，不依賴 terminal fd（v2.1.141+，詳見下方 terminalSequence 章節） |
+
+**Consequence**：本專案所有 hook 均透過 `sys.stderr` 寫入（不直接操控終端 fd），規則 4 的「stderr 可見性機制」在 v2.1.139+ 下**仍然有效**，不需修訂規則 4 本體。
+
+**Action**：hook 開發中若需要讓用戶在「非錯誤但需注意」情境下看到提示（而非僅 error-level 的 stderr），可使用 `terminalSequence` 欄位（v2.1.141+）作為第二可見通道，與 stderr 錯誤通道明確分工。禁止試圖直接寫入 `/dev/tty`，在 v2.1.139+ 下會靜默失敗。
 
 ### 設計鐵則：事實判斷型 hook 必擋 + effort 解耦
 
@@ -697,5 +772,12 @@ if __name__ == "__main__":
 
 ---
 
-**Last Updated**: 2026-05-14
-**Source**: basil-hook-architect.md v2.1.0 精簡外移；2026-05-14 同步 Claude Code v2.1.130-2.1.141 hook 系統能力（`args` exec 形式、`continueOnBlock`、`effort.level` payload、`$CLAUDE_EFFORT` / `$CLAUDE_CODE_SESSION_ID` env、`terminalSequence` 通知、MCP stdio `CLAUDE_PROJECT_DIR` 注入）
+**Last Updated**: 2026-05-21
+**Source**: basil-hook-architect.md v2.1.0 精簡外移；2026-05-14 同步 Claude Code v2.1.130-2.1.141 hook 系統能力（`args` exec 形式、`continueOnBlock`、`effort.level` payload、`$CLAUDE_EFFORT` / `$CLAUDE_CODE_SESSION_ID` env、`terminalSequence` 通知、MCP stdio `CLAUDE_PROJECT_DIR` 注入）；2026-05-21 同步 v2.1.142-2.1.145 新增能力（W3-026 + W3-031 ANA 結論落地）：
+
+| 版本範圍 | 新增章節 | 內容 |
+|---------|---------|------|
+| v2.1.139-145 | v2.1.139-145 變更總覽 | 8 項變更彙整索引表，快速定位各章節說明 |
+| v2.1.139 | v2.1.139+ 終端存取限制 | stderr vs raw terminal fd 區別；規則 4 仍有效釋疑 |
+| v2.1.143 | Stop → v2.1.143 Stop 8-block cap | Stop hook 最多 8 blocks；本專案 5 個 Stop hook 安全評估 |
+| v2.1.145 | v2.1.145 Stop/SubagentStop input 新欄位 | background_tasks / session_crons schema；弱依賴策略；參考實作 |

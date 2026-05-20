@@ -11,7 +11,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
 
 
-HOOK_PATH = Path(__file__).parent.parent / "handoff-reminder-hook.py"
+HOOK_PATH = Path(__file__).parent.parent.parent / "skills" / "ticket" / "hooks" / "handoff-reminder-hook.py"
 
 
 def load_hook_module():

@@ -20,6 +20,8 @@ import pytest
 
 # 確保可 import hook_utils
 HOOKS_DIR = Path(__file__).parent.parent
+# W10-092: 部分 ticket-skill hook 已遷至 .claude/skills/ticket/hooks/
+ticket_skill_hooks_path = HOOKS_DIR.parent / "skills" / "ticket" / "hooks"
 sys.path.insert(0, str(HOOKS_DIR))
 
 from hook_utils import get_effort_level
@@ -112,7 +114,7 @@ def _run_hook(script_path: Path, payload: dict, env: dict = None):
 # ============================================================================
 
 class TestAcceptanceGateEffort:
-    HOOK = HOOKS_DIR / "acceptance-gate-hook.py"
+    HOOK = ticket_skill_hooks_path / "acceptance-gate-hook.py"
 
     def test_low_effort_short_circuits(self):
         payload = {
@@ -150,7 +152,7 @@ class TestAcceptanceGateEffort:
 # ============================================================================
 
 class TestTicketQualityGateEffort:
-    HOOK = HOOKS_DIR / "ticket-quality-gate-hook.py"
+    HOOK = ticket_skill_hooks_path / "ticket-quality-gate-hook.py"
 
     def test_low_effort_short_circuits(self):
         payload = {
@@ -181,7 +183,7 @@ class TestTicketQualityGateEffort:
 # ============================================================================
 
 class TestTicketFrontmatterValidatorEffort:
-    HOOK = HOOKS_DIR / "ticket-frontmatter-validator-hook.py"
+    HOOK = ticket_skill_hooks_path / "ticket-frontmatter-validator-hook.py"
 
     def test_low_effort_short_circuits(self):
         payload = {
@@ -251,7 +253,7 @@ class TestPhase4EffortAlwaysBlocks:
 # ============================================================================
 
 class TestCreationAcceptanceGateEffort:
-    HOOK = HOOKS_DIR / "creation-acceptance-gate-hook.py"
+    HOOK = ticket_skill_hooks_path / "creation-acceptance-gate-hook.py"
 
     def test_low_effort_short_circuits(self):
         payload = {
@@ -280,7 +282,7 @@ class TestCreationAcceptanceGateEffort:
 
 
 class TestAnaTicketMetadataValidationEffort:
-    HOOK = HOOKS_DIR / "ana-ticket-metadata-validation-hook.py"
+    HOOK = ticket_skill_hooks_path / "ana-ticket-metadata-validation-hook.py"
 
     def test_low_effort_short_circuits(self):
         payload = {
@@ -314,7 +316,7 @@ class TestAnaTicketMetadataValidationEffort:
 
 
 class TestTicketCreationValidationEffort:
-    HOOK = HOOKS_DIR / "ticket-creation-validation-hook.py"
+    HOOK = ticket_skill_hooks_path / "ticket-creation-validation-hook.py"
 
     def test_low_effort_short_circuits(self):
         payload = {

@@ -352,9 +352,10 @@ def test_D5_json_no_stale_null(monkeypatch, capsys):
 
 
 def test_D6_no_active_version(monkeypatch, capsys):
+    # W15-028.2: 無 active version 屬業務拒絕（查無資料），exit code 2
     rc = track_dashboard.dashboard_main(_ns(), None)
     err = capsys.readouterr().err
-    assert rc == 1
+    assert rc == 2
     assert "No active version detected" in err
 
 

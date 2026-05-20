@@ -6,6 +6,7 @@ Ticket lifecycle 操作模組
 
 import argparse
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime
@@ -22,6 +23,7 @@ from ticket_system.lib.constants import (
     CLOSE_REASONS,
     CLOSE_REASON_RETROSPECTIVE_UNKNOWN,
 )
+from ticket_system.lib.file_lock import file_lock
 from ticket_system.lib.ticket_loader import (
     get_project_root,
     get_ticket_path,
@@ -60,7 +62,19 @@ from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
     resolve_ticket_path,
 )
-from ticket_system.lib.worklog_appender import append_worklog_progress
+from ticket_system.lib.worklog_appender import (
+    append_worklog_progress,
+    _build_worklog_path,
+)
+
+
+def _build_worklog_path_for_stage(version: str) -> str:
+    """W11-035：取得 worklog 絕對路徑供 git add 使用。
+
+    薄封裝 `_build_worklog_path`，回傳 str 並隔離測試替身（test 可 patch
+    此 symbol 而不影響 worklog_appender 內部呼叫）。
+    """
+    return str(_build_worklog_path(version))
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 from ticket_system.lib.project_root import resolve_project_cwd
 from ticket_system.commands.claim_verification import (
@@ -432,49 +446,54 @@ class TicketLifecycle:
         Returns:
             0 表示成功，非 0 表示失敗
         """
-        ticket, error = load_and_validate_ticket(self.version, ticket_id)
-        if error:
-            return 1
+        # W14-044: file_lock 包圍 load → modify → save，消除 logical race
+        # （W14-005 同類型 pattern 重現實驗 lost rate 55.6%~71.9%）。
+        # Lock target 用 get_ticket_path 計算路徑（不依賴 load 後的 _path）。
+        lock_target = Path(get_ticket_path(self.version, ticket_id))
+        with file_lock(lock_target):
+            ticket, error = load_and_validate_ticket(self.version, ticket_id)
+            if error:
+                return 1
 
-        status = ticket.get("status", STATUS_PENDING)
+            status = ticket.get("status", STATUS_PENDING)
 
-        # 驗證是否可認領
-        can_claim, error_msg = validate_claimable_status(ticket_id, status)
-        if not can_claim:
-            print(f"[Warning] {error_msg}")
-            return 1
+            # 驗證是否可認領
+            can_claim, error_msg = validate_claimable_status(ticket_id, status)
+            if not can_claim:
+                print(f"[Warning] {error_msg}")
+                return 1
 
-        # 檢查 Phase 前置條件（若 Ticket 有 tdd_phase 欄位）
-        tdd_phase = ticket.get("tdd_phase", "")
-        if tdd_phase:
-            # 正規化 Phase 名稱
-            normalized_phase = _normalize_phase_name(tdd_phase)
+            # 檢查 Phase 前置條件（若 Ticket 有 tdd_phase 欄位）
+            tdd_phase = ticket.get("tdd_phase", "")
+            if tdd_phase:
+                # 正規化 Phase 名稱
+                normalized_phase = _normalize_phase_name(tdd_phase)
 
-            # 取得同任務鏈中已完成的 Phase
-            completed_phases = _get_completed_phases_in_chain(ticket, self.version)
+                # 取得同任務鏈中已完成的 Phase
+                completed_phases = _get_completed_phases_in_chain(ticket, self.version)
 
-            # 驗證前置條件
-            validation_result = validate_phase_prerequisite(
-                normalized_phase,
-                completed_phases
-            )
-
-            # 若前置條件未滿足，顯示警告
-            if not validation_result.valid:
-                _print_phase_prerequisite_warning(
-                    ticket_id,
+                # 驗證前置條件
+                validation_result = validate_phase_prerequisite(
                     normalized_phase,
-                    validation_result.missing_prerequisites,
-                    self.version,
+                    completed_phases
                 )
 
-        # 更新 Ticket 狀態
-        ticket["status"] = STATUS_IN_PROGRESS
-        ticket["assigned"] = True
-        ticket["started_at"] = datetime.now().isoformat(timespec="seconds")
+                # 若前置條件未滿足，顯示警告
+                if not validation_result.valid:
+                    _print_phase_prerequisite_warning(
+                        ticket_id,
+                        normalized_phase,
+                        validation_result.missing_prerequisites,
+                        self.version,
+                    )
 
-        ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
-        save_ticket(ticket, ticket_path)
+            # 更新 Ticket 狀態
+            ticket["status"] = STATUS_IN_PROGRESS
+            ticket["assigned"] = True
+            ticket["started_at"] = datetime.now().isoformat(timespec="seconds")
+
+            ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
+            save_ticket(ticket, ticket_path)
 
         print(format_info(InfoMessages.TICKET_CLAIMED, ticket_id=ticket_id))
         print(f"   開始時間: {ticket['started_at']}")
@@ -597,6 +616,7 @@ class TicketLifecycle:
         yes_spawned: bool = False,
         skip_body_check: bool = False,
         force: bool = False,
+        no_stage: bool = False,
     ) -> int:
         """
         完成 Ticket - 使用「先查後做」驗證流程
@@ -616,122 +636,128 @@ class TicketLifecycle:
         Returns:
             0 表示成功，2 表示 spawned 阻擋/取消，其他非 0 表示失敗
         """
-        # Step 1：載入 Ticket
-        ticket, error = load_and_validate_ticket(self.version, ticket_id)
-        if error:
-            return 1
-
-        # Step 2：驗證狀態
-        status = ticket.get("status", STATUS_PENDING)
-        completed_at = ticket.get("completed_at")
-
-        can_complete, status_msg, is_already_complete = validate_completable_status(
-            ticket_id,
-            status,
-            completed_at
-        )
-
-        # 若已完成，顯示友好訊息並返回 0
-        if is_already_complete:
-            print(format_info(status_msg))
-            return 0
-
-        # 若不可完成，阻止操作
-        if not can_complete:
-            print(f"[Error] {status_msg}")
-            return 1
-
-        # Step 3：驗證驗收條件
-        acceptance_list = ticket.get("acceptance")
-        criteria_complete, incomplete_items = validate_acceptance_criteria(
-            ticket_id,
-            acceptance_list
-        )
-
-        # 若有未完成的驗收條件，列出並阻止
-        if not criteria_complete:
-            print(f"[Error] {ticket_id} 有未完成的驗收條件")
-            print()
-            print("   未完成項:")
-            for item in incomplete_items:
-                print(f"   {item}")
-            print()
-            print("   請完成所有驗收條件後再執行 complete")
-            return 1
-
-        # Step 3.5：type-aware body schema 驗證（W17-016.3 hard block + escape valve）
-        # 對照 .claude/pm-rules/ticket-body-schema.md 各 type 必填章節；含佔位符則阻擋。
-        body = ticket.get("_body", "")
-        ticket_type = ticket.get("type", "")
-        if body and not skip_body_check:
-            typed_passed, typed_unfilled = validate_execution_log_by_type(ticket_type, body)
-            if not typed_passed:
-                print()
-                print(f"[Error] {ticket_id} body 未依 {ticket_type} schema 填寫必填章節")
-                print()
-                print("   未填寫的必填章節：")
-                for section in typed_unfilled:
-                    print(f"   - {section}")
-                print()
-                print("   依 .claude/pm-rules/ticket-body-schema.md，此 type 以下章節為必填且須替換佔位符：")
-                for section in typed_unfilled:
-                    print(
-                        f'   ticket track append-log {ticket_id} "內容" --section "{section}"'
-                    )
-                print()
-                print("   逃生閥：--skip-body-check（需附理由於 Completion Info）")
+        # W14-044: file_lock 包圍 load → 驗證 → modify → save 全段，消除 logical race。
+        # 互動 prompt（_handle_ana_spawned_confirmation）持鎖屬可接受設計（complete
+        # 本身互斥；非互動環境鎖持有 < 1 秒）。Cascade 在 save 後（鎖外）執行，
+        # 操作 children 不同檔，無巢狀風險。
+        lock_target = Path(get_ticket_path(self.version, ticket_id))
+        with file_lock(lock_target):
+            # Step 1：載入 Ticket
+            ticket, error = load_and_validate_ticket(self.version, ticket_id)
+            if error:
                 return 1
-        elif body and skip_body_check:
-            # 逃生閥啟用：仍執行舊 soft check 作為可見提醒
-            log_filled, unfilled_sections = validate_execution_log(ticket_id, body)
-            if not log_filled:
-                print()
-                print(format_warning(WarningMessages.EXECUTION_LOG_NOT_FILLED))
-                for section in unfilled_sections:
-                    print(f"   - {section}")
-                print()
-                print("   --skip-body-check 已啟用，強制完成；請於 Completion Info 記錄理由")
-                print()
 
-        # Step 3.6：ANA spawned 非 terminal blocking confirmation（W12-005 / PC-075 Phase 2）
-        spawned_exit = _handle_ana_spawned_confirmation(ticket, self.version, yes_spawned)
-        if spawned_exit is not None:
-            return spawned_exit
+            # Step 2：驗證狀態
+            status = ticket.get("status", STATUS_PENDING)
+            completed_at = ticket.get("completed_at")
 
-        # Step 3.7：pending children blocking（W11-003.2）
-        # 父 ticket 含未完成（非 terminal）children 時阻擋 complete；--force 旁路（警告但成功）。
-        # W5-019 cascade 解鎖在通過此 step 後（含 --force 路徑）仍會執行。
-        children_exit = _handle_pending_children_block(ticket, self.version, force)
-        if children_exit is not None:
-            return children_exit
-
-        # Step 4：執行完成操作
-        ticket["status"] = STATUS_COMPLETED
-        ticket["completed_at"] = datetime.now().isoformat(timespec="seconds")
-
-        # W17-016.4：同步 completed_at / Executing Agent 寫回 body
-        existing_body = ticket.get("_body", "")
-        if existing_body:
-            who = ticket.get("who") or {}
-            executing_agent = who.get("current") if isinstance(who, dict) else ""
-            new_body = sync_completion_body_fields(
-                existing_body,
-                ticket["completed_at"],
-                executing_agent or "",
+            can_complete, status_msg, is_already_complete = validate_completable_status(
+                ticket_id,
+                status,
+                completed_at
             )
-            # W11-003.3 Layer 2：complete 寫回 body 前 idempotent dedupe Schema H2
-            try:
-                from ticket_system.lib.ticket_builder import dedupe_schema_sections
-                new_body = dedupe_schema_sections(new_body)
-            except Exception as exc:
-                import sys as _sys
-                _sys.stderr.write(
-                    f"[complete] dedupe_schema_sections skipped: {exc}\n"
-                )
-            ticket["_body"] = new_body
 
-        ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
-        save_ticket(ticket, ticket_path)
+            # 若已完成，顯示友好訊息並返回 0
+            if is_already_complete:
+                print(format_info(status_msg))
+                return 0
+
+            # 若不可完成，阻止操作
+            if not can_complete:
+                print(f"[Error] {status_msg}")
+                return 1
+
+            # Step 3：驗證驗收條件
+            acceptance_list = ticket.get("acceptance")
+            criteria_complete, incomplete_items = validate_acceptance_criteria(
+                ticket_id,
+                acceptance_list
+            )
+
+            # 若有未完成的驗收條件，列出並阻止
+            if not criteria_complete:
+                print(f"[Error] {ticket_id} 有未完成的驗收條件")
+                print()
+                print("   未完成項:")
+                for item in incomplete_items:
+                    print(f"   {item}")
+                print()
+                print("   請完成所有驗收條件後再執行 complete")
+                return 1
+
+            # Step 3.5：type-aware body schema 驗證（W17-016.3 hard block + escape valve）
+            # 對照 .claude/pm-rules/ticket-body-schema.md 各 type 必填章節；含佔位符則阻擋。
+            body = ticket.get("_body", "")
+            ticket_type = ticket.get("type", "")
+            if body and not skip_body_check:
+                typed_passed, typed_unfilled = validate_execution_log_by_type(ticket_type, body)
+                if not typed_passed:
+                    print()
+                    print(f"[Error] {ticket_id} body 未依 {ticket_type} schema 填寫必填章節")
+                    print()
+                    print("   未填寫的必填章節：")
+                    for section in typed_unfilled:
+                        print(f"   - {section}")
+                    print()
+                    print("   依 .claude/pm-rules/ticket-body-schema.md，此 type 以下章節為必填且須替換佔位符：")
+                    for section in typed_unfilled:
+                        print(
+                            f'   ticket track append-log {ticket_id} "內容" --section "{section}"'
+                        )
+                    print()
+                    print("   逃生閥：--skip-body-check（需附理由於 Completion Info）")
+                    return 1
+            elif body and skip_body_check:
+                # 逃生閥啟用：仍執行舊 soft check 作為可見提醒
+                log_filled, unfilled_sections = validate_execution_log(ticket_id, body)
+                if not log_filled:
+                    print()
+                    print(format_warning(WarningMessages.EXECUTION_LOG_NOT_FILLED))
+                    for section in unfilled_sections:
+                        print(f"   - {section}")
+                    print()
+                    print("   --skip-body-check 已啟用，強制完成；請於 Completion Info 記錄理由")
+                    print()
+
+            # Step 3.6：ANA spawned 非 terminal blocking confirmation（W12-005 / PC-075 Phase 2）
+            spawned_exit = _handle_ana_spawned_confirmation(ticket, self.version, yes_spawned)
+            if spawned_exit is not None:
+                return spawned_exit
+
+            # Step 3.7：pending children blocking（W11-003.2）
+            # 父 ticket 含未完成（非 terminal）children 時阻擋 complete；--force 旁路（警告但成功）。
+            # W5-019 cascade 解鎖在通過此 step 後（含 --force 路徑）仍會執行。
+            children_exit = _handle_pending_children_block(ticket, self.version, force)
+            if children_exit is not None:
+                return children_exit
+
+            # Step 4：執行完成操作
+            ticket["status"] = STATUS_COMPLETED
+            ticket["completed_at"] = datetime.now().isoformat(timespec="seconds")
+
+            # W17-016.4：同步 completed_at / Executing Agent 寫回 body
+            existing_body = ticket.get("_body", "")
+            if existing_body:
+                who = ticket.get("who") or {}
+                executing_agent = who.get("current") if isinstance(who, dict) else ""
+                new_body = sync_completion_body_fields(
+                    existing_body,
+                    ticket["completed_at"],
+                    executing_agent or "",
+                )
+                # W11-003.3 Layer 2：complete 寫回 body 前 idempotent dedupe Schema H2
+                try:
+                    from ticket_system.lib.ticket_builder import dedupe_schema_sections
+                    new_body = dedupe_schema_sections(new_body)
+                except Exception as exc:
+                    import sys as _sys
+                    _sys.stderr.write(
+                        f"[complete] dedupe_schema_sections skipped: {exc}\n"
+                    )
+                ticket["_body"] = new_body
+
+            ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
+            save_ticket(ticket, ticket_path)
 
         print(format_info(InfoMessages.TICKET_COMPLETED, ticket_id=ticket_id))
 
@@ -767,13 +793,42 @@ class TicketLifecycle:
 
         # W5-019：父 complete → 子 cascade 解鎖 + 未完成 children 警告
         # 置於 _auto_handoff_if_needed 之前，讓解鎖後的子狀態可影響 handoff 建議
-        _post_complete_cascade(ticket, self.version, ticket_map)
+        # W11-035：捕獲 unblocked 清單以便 auto-stage 收集 children md 路徑
+        unblocked_children = _post_complete_cascade(ticket, self.version, ticket_map) or []
 
         # W17-008.15 方案 D：IMP complete 後檢查 source ANA 是否可 complete
         _print_source_ana_complete_hint(ticket, self.version)
 
         # 自動 handoff：若有後續任務，自動建立 handoff 檔案
         _auto_handoff_if_needed(ticket, analysis, self.version)
+
+        # W11-035：自動 git add 已知 modified 路徑 + 提示 commit 指令
+        if not no_stage:
+            modified_paths: List[str] = []
+            try:
+                modified_paths.append(str(ticket_path))
+            except Exception:
+                pass
+            try:
+                modified_paths.append(_build_worklog_path_for_stage(self.version))
+            except Exception as exc:
+                sys.stderr.write(
+                    f"[auto-stage] worklog 路徑解析失敗（略過）：{exc}\n"
+                )
+            for child in unblocked_children:
+                cid = child.get("id") if isinstance(child, dict) else None
+                if not cid:
+                    continue
+                child_dict = ticket_map.get(cid) or {"id": cid}
+                try:
+                    modified_paths.append(
+                        str(resolve_ticket_path(child_dict, self.version, cid))
+                    )
+                except Exception as exc:
+                    sys.stderr.write(
+                        f"[auto-stage] child {cid} 路徑解析失敗（略過）：{exc}\n"
+                    )
+            _auto_stage_completion_files(ticket_id, modified_paths)
 
         return 0
 
@@ -787,30 +842,33 @@ class TicketLifecycle:
         Returns:
             0 表示成功，非 0 表示失敗
         """
-        ticket, error = load_and_validate_ticket(self.version, ticket_id)
-        if error:
-            return 1
+        # W14-044: file_lock 包圍 load → modify → save
+        lock_target = Path(get_ticket_path(self.version, ticket_id))
+        with file_lock(lock_target):
+            ticket, error = load_and_validate_ticket(self.version, ticket_id)
+            if error:
+                return 1
 
-        status = ticket.get("status", STATUS_PENDING)
+            status = ticket.get("status", STATUS_PENDING)
 
-        # 只有進行中的 Ticket 可以釋放
-        if status == STATUS_PENDING:
-            print(f"[Warning] {ticket_id} 尚未被接手，無法釋放")
-            return 1
-        if status == STATUS_COMPLETED:
-            print(f"[Warning] {ticket_id} 已完成，無法釋放")
-            return 1
-        if status == STATUS_BLOCKED:
-            print(f"[Warning] {ticket_id} 已被阻塞，無法釋放")
-            return 1
+            # 只有進行中的 Ticket 可以釋放
+            if status == STATUS_PENDING:
+                print(f"[Warning] {ticket_id} 尚未被接手，無法釋放")
+                return 1
+            if status == STATUS_COMPLETED:
+                print(f"[Warning] {ticket_id} 已完成，無法釋放")
+                return 1
+            if status == STATUS_BLOCKED:
+                print(f"[Warning] {ticket_id} 已被阻塞，無法釋放")
+                return 1
 
-        # 釋放 Ticket
-        ticket["status"] = STATUS_BLOCKED
-        ticket["assigned"] = False
-        ticket["started_at"] = None
+            # 釋放 Ticket
+            ticket["status"] = STATUS_BLOCKED
+            ticket["assigned"] = False
+            ticket["started_at"] = None
 
-        ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
-        save_ticket(ticket, ticket_path)
+            ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
+            save_ticket(ticket, ticket_path)
 
         print(format_info(InfoMessages.TICKET_RELEASED, ticket_id=ticket_id))
         print(f"   狀態: 被阻塞")
@@ -860,39 +918,42 @@ class TicketLifecycle:
             )
             return 1
 
-        # Step 1：載入 Ticket
-        ticket, error = load_and_validate_ticket(self.version, ticket_id)
-        if error:
-            return 1
+        # W14-044: file_lock 包圍 load → modify → save
+        lock_target = Path(get_ticket_path(self.version, ticket_id))
+        with file_lock(lock_target):
+            # Step 1：載入 Ticket
+            ticket, error = load_and_validate_ticket(self.version, ticket_id)
+            if error:
+                return 1
 
-        # Step 2：驗證狀態
-        status = ticket.get("status", STATUS_PENDING)
+            # Step 2：驗證狀態
+            status = ticket.get("status", STATUS_PENDING)
 
-        if status == STATUS_CLOSED:
-            print(format_error(
-                ErrorMessages.CLOSE_ALREADY_CLOSED, ticket_id=ticket_id
-            ))
-            return 1
+            if status == STATUS_CLOSED:
+                print(format_error(
+                    ErrorMessages.CLOSE_ALREADY_CLOSED, ticket_id=ticket_id
+                ))
+                return 1
 
-        # completed 可轉為 closed（事後發現應為 close 而非 complete）
-        if status == STATUS_COMPLETED:
-            print(f"[INFO] {ticket_id} 從 completed 轉為 closed")
-            ticket.pop("completed_at", None)
+            # completed 可轉為 closed（事後發現應為 close 而非 complete）
+            if status == STATUS_COMPLETED:
+                print(f"[INFO] {ticket_id} 從 completed 轉為 closed")
+                ticket.pop("completed_at", None)
 
-        # Step 3：執行關閉操作
-        default_note = f"已在 {resolved_by} 一併解決"
-        close_note = reason_note if reason_note else default_note
+            # Step 3：執行關閉操作
+            default_note = f"已在 {resolved_by} 一併解決"
+            close_note = reason_note if reason_note else default_note
 
-        ticket["status"] = STATUS_CLOSED
-        ticket["closed_at"] = datetime.now().isoformat(timespec="seconds")
-        ticket["closed_by"] = resolved_by
-        ticket["close_reason"] = reason_code
-        ticket["close_reason_note"] = close_note
-        if retrospective:
-            ticket["retrospective"] = True
+            ticket["status"] = STATUS_CLOSED
+            ticket["closed_at"] = datetime.now().isoformat(timespec="seconds")
+            ticket["closed_by"] = resolved_by
+            ticket["close_reason"] = reason_code
+            ticket["close_reason_note"] = close_note
+            if retrospective:
+                ticket["retrospective"] = True
 
-        ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
-        save_ticket(ticket, ticket_path)
+            ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
+            save_ticket(ticket, ticket_path)
 
         print(format_info(InfoMessages.TICKET_CLOSED, ticket_id=ticket_id))
         print(f"   解決者: {resolved_by}")
@@ -1606,25 +1667,80 @@ def _handle_pending_children_block(
     return 1
 
 
+def _auto_stage_git_add(paths: List[str]) -> None:
+    """W11-035：薄封裝 subprocess.run 以便測試替身 patch 此 symbol，
+    避免污染全域 subprocess.run（會影響 get_project_root 等 git 呼叫）。
+    """
+    subprocess.run(
+        ["git", "add", *paths],
+        capture_output=True,
+        check=False,
+    )
+
+
+def _auto_stage_completion_files(
+    ticket_id: str,
+    modified_paths: List[str],
+) -> None:
+    """W11-035 方案 D：complete 後自動 git add 已知 modified 路徑 + stdout 提示。
+
+    精確路徑 add（無 ./、-A、--all），不夾帶 WIP；subprocess 失敗 degrade
+    gracefully（stderr 警告 + 不中斷 complete 流程）。
+
+    Args:
+        ticket_id: 主 ticket id（用於 commit 訊息提示）
+        modified_paths: complete 流程實際寫入的檔案路徑清單
+    """
+    # 去重 + 過濾空字串，保留順序
+    seen: set = set()
+    deduped: List[str] = []
+    for p in modified_paths:
+        if not p or p in seen:
+            continue
+        seen.add(p)
+        deduped.append(p)
+
+    if not deduped:
+        return
+
+    try:
+        _auto_stage_git_add(deduped)
+    except Exception as exc:
+        sys.stderr.write(
+            f"[auto-stage] git add 失敗（非致命）：{exc}\n"
+        )
+        return
+
+    print()
+    print(f"  [Auto-stage] 已 staged {len(deduped)} 個 metadata 檔案")
+    print(
+        f"  建議 commit: git commit -m \"chore({ticket_id}): metadata sync post-completion\""
+    )
+
+
 def _post_complete_cascade(
     parent_ticket: Dict[str, Any],
     version: str,
     ticket_map: Dict[str, Any],
-) -> None:
+) -> List[Dict[str, Any]]:
     """
     complete() 後處理：cascade 解鎖子 Ticket + 印出解鎖/警告訊息。
 
     W11-002.1 從 complete() 抽出，讓 complete() 主體只做編排。
-    若 parent 無 children，直接 no-op。
+    W11-035：回傳 unblocked 清單供 auto-stage 取得 children 路徑（先前無回傳）。
+    若 parent 無 children，回傳空 list。
 
     Args:
         parent_ticket: 已完成的父 Ticket dict
         version: 版本字串
         ticket_map: 預先載入的 {ticket_id: ticket_dict} map（complete 流程已載入）
+
+    Returns:
+        unblocked list of {id, title}（與 _cascade_unblock_children 第一回傳值同型）
     """
     children_ids = parent_ticket.get("children", [])
     if not children_ids:
-        return
+        return []
 
     unblocked, pending = _cascade_unblock_children(
         parent_ticket, version, ticket_map=ticket_map
@@ -1633,6 +1749,7 @@ def _post_complete_cascade(
         _print_cascade_unblocked(unblocked)
     if pending:
         _print_children_warnings(pending)
+    return unblocked
 
 
 ChildOutcomeKind = Literal[
@@ -1942,11 +2059,13 @@ def execute_complete(args: argparse.Namespace, version: str) -> int:
     yes_spawned = bool(getattr(args, "yes_spawned", False))
     skip_body_check = bool(getattr(args, "skip_body_check", False))
     force = bool(getattr(args, "force", False))
+    no_stage = bool(getattr(args, "no_stage", False))
     return lifecycle.complete(
         args.ticket_id,
         yes_spawned=yes_spawned,
         skip_body_check=skip_body_check,
         force=force,
+        no_stage=no_stage,
     )
 
 

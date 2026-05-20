@@ -141,6 +141,21 @@ from .track_dispatch_check import (
     execute_dispatch_check,
     register_dispatch_check,
 )
+# Context Bundle 合理性檢查（W17-003 落地，獨立於 dispatch-check）
+from .track_dispatch_validate import (
+    execute_dispatch_validate,
+    register_dispatch_validate,
+)
+# 派發前認知負擔閾值檢查（W17-053 落地，獨立於 dispatch-check / dispatch-validate）
+from .track_dispatch_readiness import (
+    execute_dispatch_readiness,
+    register_dispatch_readiness,
+)
+# parallel-check 子任務衝突偵測（W17-203.1 落地）
+from .track_parallel_check import (
+    execute_parallel_check,
+    register_parallel_check,
+)
 # 統一 scheduler CLI（W17-011.1 / W17-009 落地）
 from .track_runqueue import (
     execute_runqueue,
@@ -160,6 +175,11 @@ from .track_stuck_anas import (
 from .track_stale_list import (
     execute_stale_list,
     register_stale_list,
+)
+# hook-health 掃描 .claude/hook-logs/ 評估觸發頻率（W13-018，源自 W13-008 IMP-3）
+from .track_hook_health import (
+    execute_hook_health,
+    register_hook_health,
 )
 # td-status 校準 TD 清單（W10-083 / PC-094）
 from .track_td_status import (
@@ -211,6 +231,8 @@ def _create_version_agnostic_handlers() -> dict:
         "dispatch-check": execute_dispatch_check,
         "stuck-anas": execute_stuck_anas,
         "stale-list": execute_stale_list,
+        "parallel-check": execute_parallel_check,
+        "hook-health": execute_hook_health,
     }
 
 
@@ -279,6 +301,10 @@ def _create_command_handlers() -> dict:
         "dashboard": execute_dashboard,
         # W10-083 / PC-094 TD 清單校準
         "td-status": execute_td_status,
+        # W17-003 Context Bundle 合理性檢查（version-aware：需讀取 ticket md）
+        "dispatch-validate": execute_dispatch_validate,
+        # W17-053 派發前認知負擔閾值檢查（version-aware：需讀取 ticket md）
+        "dispatch-readiness": execute_dispatch_readiness,
     }
 
 
@@ -398,6 +424,12 @@ def _register_lifecycle_commands(
         dest="force",
         action="store_true",
         help="逃生閥：父 ticket 有未完成 children 時旁路阻擋強制完成（W11-003.2；會輸出警告）",
+    )
+    p_complete.add_argument(
+        "--no-stage",
+        dest="no_stage",
+        action="store_true",
+        help="跳過 complete 後自動 git add metadata 檔案（W11-035 方案 D opt-out）",
     )
 
     # close 操作（W15-027 / PC-090：--reason 枚舉必填）
@@ -848,6 +880,9 @@ def _register_all_subcommands(
     register_stuck_anas(track_subparsers)
     register_stale_list(track_subparsers)
     register_td_status(track_subparsers)
+    register_hook_health(track_subparsers)
+    register_dispatch_validate(track_subparsers)
+    register_dispatch_readiness(track_subparsers)
 
 
 def _register_global_state_commands(
@@ -863,6 +898,7 @@ def _register_global_state_commands(
     register_handoff_ready(subparsers)
     register_checkpoint_status(subparsers)
     register_dispatch_check(subparsers)
+    register_parallel_check(subparsers)
 
 
 def _register_snapshot_commands(

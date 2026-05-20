@@ -125,7 +125,10 @@ def _update_cross_references(old_id: str, new_id: str) -> int:
     work_logs_root = get_project_root() / "docs" / "work-logs"
 
     # 掃描所有版本目錄下的 tickets 資料夾
-    for tickets_dir in sorted(work_logs_root.glob("v*/tickets")):
+    # 支援 flat (v{ver}/tickets) 與三層 (v{major}/v{major.minor}/v{ver}/tickets)
+    flat_dirs = list(work_logs_root.glob("v*/tickets"))
+    hierarchical_dirs = list(work_logs_root.glob("v*/v*/v*/tickets"))
+    for tickets_dir in sorted(set(flat_dirs + hierarchical_dirs)):
         for ticket_file in sorted(tickets_dir.glob("*.md")):
             # 跳過剛遷移的 Ticket 本身（來源：0.18.0-W10-037 Bug 2）
             # 原本使用 startswith 會誤跳過子 Ticket（檔名以 new_id 開頭），
@@ -257,12 +260,39 @@ def _backup_ticket(version: str, ticket_id: str) -> Optional[Path]:
         return None
 
 
+def _check_target_collision(target_id: str, version: str) -> Optional[Dict[str, Any]]:
+    """
+    檢查目標 ID 是否與既有 Ticket 撞檔（W14-048 collision detection）。
+
+    Args:
+        target_id: 目標 Ticket ID
+        version: fallback 版本號（若 target_id 無法解析版本時使用）
+
+    Returns:
+        Dict 包含 path/title/status；若無 collision 則回傳 None。
+    """
+    target_components = extract_id_components(target_id)
+    target_version = target_components["version"] if target_components else version
+    target_path = get_ticket_path(target_version, target_id)
+
+    if not target_path.exists():
+        return None
+
+    existing = _load_ticket_from_path(target_path)
+    return {
+        "path": target_path,
+        "title": (existing or {}).get("title", "N/A"),
+        "status": (existing or {}).get("status", "N/A"),
+    }
+
+
 def _migrate_single_ticket(
     version: str,
     source_id: str,
     target_id: str,
     dry_run: bool = False,
     backup: bool = True,
+    force_overwrite: bool = False,
 ) -> int:
     """
     遷移單一 Ticket
@@ -273,6 +303,7 @@ def _migrate_single_ticket(
         target_id: 目標 Ticket ID
         dry_run: 預覽模式
         backup: 是否備份
+        force_overwrite: 明示授權覆寫目標 ID 既有 Ticket（W14-048）
 
     Returns:
         int: exit code (0 成功, 1 失敗, 2 來源 Ticket 不存在)
@@ -286,17 +317,56 @@ def _migrate_single_ticket(
     source_components = extract_id_components(source_id)
     source_version = source_components["version"] if source_components else version
 
+    # W14-048: 在 load_and_validate_ticket 之前先檢查實體檔案存在
+    # （load_ticket 有 process-scoped cache，可能在檔案已刪除後仍命中快取，
+    #  導致冪等性 re-run 場景誤判 source 仍存在）
+    source_path_check = get_ticket_path(source_version, source_id)
+    if not source_path_check.exists():
+        return 2
+
     # 載入來源 Ticket
     ticket, error = load_and_validate_ticket(source_version, source_id)
     if error:
         return 2
+
+    # W14-048: collision detection（target 已存在）
+    # 例外：source == target（同 ID rename，等同 in-place 更新）不視為 collision
+    collision = None
+    if source_id != target_id:
+        collision = _check_target_collision(target_id, version)
 
     # 預覽模式
     if dry_run:
         print(format_info(MigrateMessages.DRY_RUN_HEADER, source_id=source_id, target_id=target_id))
         print(f"{MigrateMessages.DRY_RUN_TITLE_PREFIX} {ticket.get('title', 'N/A')}")
         print(f"{MigrateMessages.DRY_RUN_STATUS_PREFIX} {ticket.get('status', 'N/A')}")
+        if collision:
+            print(format_warning(
+                MigrateMessages.WARN_MIGRATE_TARGET_EXISTS,
+                target_path=str(collision["path"]),
+                existing_title=collision["title"],
+                existing_status=collision["status"],
+            ))
         return 0
+
+    # W14-048: 實際執行階段，預設拒絕覆寫；--force-overwrite 旗標時記錄 audit log 繼續
+    if collision:
+        if not force_overwrite:
+            print(format_error(
+                MigrateMessages.ERROR_MIGRATE_TARGET_EXISTS,
+                target_id=target_id,
+                target_path=str(collision["path"]),
+                existing_title=collision["title"],
+                existing_status=collision["status"],
+            ))
+            return 1
+        # force_overwrite=True：記錄 audit log 後繼續執行
+        print(format_info(
+            MigrateMessages.INFO_FORCE_OVERWRITE,
+            target_id=target_id,
+            timestamp=datetime.now().isoformat(),
+            existing_title=collision["title"],
+        ))
 
     # 執行備份
     backup_path = None
@@ -411,6 +481,7 @@ def _batch_migrate(
     config_file: str,
     dry_run: bool = False,
     backup: bool = True,
+    force_overwrite: bool = False,
 ) -> int:
     """
     批量遷移 Tickets
@@ -420,6 +491,7 @@ def _batch_migrate(
         config_file: 配置檔案路徑
         dry_run: 預覽模式
         backup: 是否備份
+        force_overwrite: 明示授權覆寫目標 ID 既有 Ticket（W14-048）
 
     Returns:
         int: exit code (0 全部成功, 1 部分失敗, 2 全部失敗)
@@ -429,6 +501,41 @@ def _batch_migrate(
         return 1
 
     print(format_info(MigrationMessages.LOAD_MIGRATIONS, count=len(migrations)))
+
+    # W14-048: 預掃描所有目標 ID 的 collision，任一撞 ID 即 fail-fast 不執行任何 migration
+    # 例外：
+    # - force_overwrite=True 時跳過 pre-scan，由個別 _migrate_single_ticket 記錄 audit log
+    # - source 不存在時跳過（_migrate_single_ticket 會 return 2 並由 skip_count 計入），
+    #   讓 idempotent re-run 不會誤判 collision（test_w11_reorganization_idempotency）
+    if not dry_run and not force_overwrite:
+        collisions = []
+        for migration in migrations:
+            if not isinstance(migration, dict):
+                continue
+            source_id = migration.get("from")
+            target_id = migration.get("to")
+            if not source_id or not target_id:
+                continue
+            # source == target 不視為 collision（in-place rename）
+            if source_id == target_id:
+                continue
+            # source 不存在則交由個別執行 skip，不在 pre-scan 算 collision
+            source_components = extract_id_components(source_id)
+            source_version = source_components["version"] if source_components else version
+            source_path = get_ticket_path(source_version, source_id)
+            if not source_path.exists():
+                continue
+            collision = _check_target_collision(target_id, version)
+            if collision:
+                collisions.append(
+                    f"  - {source_id} → {target_id}（既有: {collision['title']} / {collision['status']}）"
+                )
+        if collisions:
+            print(format_error(
+                MigrateMessages.ERROR_BATCH_COLLISION,
+                collisions="\n".join(collisions),
+            ))
+            return 1
 
     success_count = 0
     fail_count = 0
@@ -449,7 +556,9 @@ def _batch_migrate(
             continue
 
         print()
-        result = _migrate_single_ticket(version, source_id, target_id, dry_run, backup)
+        result = _migrate_single_ticket(
+            version, source_id, target_id, dry_run, backup, force_overwrite
+        )
 
         if result == 0:
             success_count += 1
@@ -484,7 +593,8 @@ def execute(args: argparse.Namespace) -> int:
     if getattr(args, "config", None):
         dry_run = getattr(args, "dry_run", False)
         backup = not getattr(args, "no_backup", False)
-        return _batch_migrate(version, args.config, dry_run, backup)
+        force_overwrite = getattr(args, "force_overwrite", False)
+        return _batch_migrate(version, args.config, dry_run, backup, force_overwrite)
 
     # 單一 Ticket 遷移
     source_id = getattr(args, "source_id", None)
@@ -496,8 +606,11 @@ def execute(args: argparse.Namespace) -> int:
 
     dry_run = getattr(args, "dry_run", False)
     backup = not getattr(args, "no_backup", False)
+    force_overwrite = getattr(args, "force_overwrite", False)
 
-    return _migrate_single_ticket(version, source_id, target_id, dry_run, backup)
+    return _migrate_single_ticket(
+        version, source_id, target_id, dry_run, backup, force_overwrite
+    )
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -544,6 +657,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--no-backup",
         action="store_true",
         help=MigrateMessages.ARG_NO_BACKUP
+    )
+    parser.add_argument(
+        "--force-overwrite",
+        action="store_true",
+        default=False,
+        help=MigrateMessages.ARG_FORCE_OVERWRITE
     )
 
     parser.set_defaults(func=execute)

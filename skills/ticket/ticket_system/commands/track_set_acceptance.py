@@ -22,8 +22,10 @@ if __name__ == "__main__":
 
 
 import argparse
+from pathlib import Path
 
-from ticket_system.lib.ticket_loader import save_ticket
+from ticket_system.lib.file_lock import file_lock
+from ticket_system.lib.ticket_loader import get_ticket_path, save_ticket
 from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
     resolve_ticket_path,
@@ -128,32 +130,35 @@ def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
         print(format_error(ErrorMessages.INVALID_OPERATION, operation=err) if hasattr(ErrorMessages, "INVALID_OPERATION") else f"[ERROR] {err}")
         return 1
 
-    ticket, load_err = load_and_validate_ticket(version, args.ticket_id)
-    if load_err:
-        return 1
-
-    acceptance_list = ticket.get("acceptance", [])
-    if not acceptance_list:
-        print(format_error(ErrorMessages.ACCEPTANCE_CRITERIA_NOT_FOUND, ticket_id=args.ticket_id))
-        return 1
-
-    # 解析 index（僅 check/uncheck 需要）
-    indices: list[int] = []
-    if mode in ("check", "uncheck"):
-        raw_indices = getattr(args, mode, None) or []
-        if not raw_indices:
-            print(f"[ERROR] --{mode.replace('_', '-')} 需要至少一個 index")
-            return 1
-        indices, perr = _parse_indices(raw_indices, acceptance_list)
-        if perr:
-            print(f"[ERROR] {perr}")
+    # W14-045: file_lock 包圍 load → modify → save，消除 logical race
+    lock_target = Path(get_ticket_path(version, args.ticket_id))
+    with file_lock(lock_target):
+        ticket, load_err = load_and_validate_ticket(version, args.ticket_id)
+        if load_err:
             return 1
 
-    changed, total = _apply_mode_to_list(acceptance_list, mode, indices)
+        acceptance_list = ticket.get("acceptance", [])
+        if not acceptance_list:
+            print(format_error(ErrorMessages.ACCEPTANCE_CRITERIA_NOT_FOUND, ticket_id=args.ticket_id))
+            return 1
 
-    ticket["acceptance"] = acceptance_list
-    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
-    save_ticket(ticket, ticket_path)
+        # 解析 index（僅 check/uncheck 需要）
+        indices: list[int] = []
+        if mode in ("check", "uncheck"):
+            raw_indices = getattr(args, mode, None) or []
+            if not raw_indices:
+                print(f"[ERROR] --{mode.replace('_', '-')} 需要至少一個 index")
+                return 1
+            indices, perr = _parse_indices(raw_indices, acceptance_list)
+            if perr:
+                print(f"[ERROR] {perr}")
+                return 1
+
+        changed, total = _apply_mode_to_list(acceptance_list, mode, indices)
+
+        ticket["acceptance"] = acceptance_list
+        ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+        save_ticket(ticket, ticket_path)
 
     action = "勾選" if mode in ("check", "all_check") else "取消勾選"
     scope = f"全部 ({changed}/{total})" if mode.startswith("all_") else f"index {indices}"

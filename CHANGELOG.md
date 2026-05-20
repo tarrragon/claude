@@ -1,3 +1,104 @@
+## [1.34.0] - 2026-05-21
+
+### Summary
+feat: stop-worklog-handoff-sync-check-hook 整合 background_tasks 降級誤報; feat: handoff-auto-resume hook 整合 background_tasks 取代 started_at 推斷; feat: pm-role.md caveat 區塊信號判讀規則 + PC-153 新建 (+88 more)
+
+Changes: 29 feat, 3 refactor, 16 fix, 29 docs, 8 chore, 6 test
+
+- feat: stop-worklog-handoff-sync-check-hook 整合 background_tasks 降級誤報
+- feat: handoff-auto-resume hook 整合 background_tasks 取代 started_at 推斷
+- feat: pm-role.md caveat 區塊信號判讀規則 + PC-153 新建
+- feat: 遷移 worktree skill 專用 hook (7 個) 至 .claude/skills/worktree/hooks/
+- feat: 遷移 wrap-decision-tripwire-hook 至 .claude/skills/wrap-decision/hooks/
+- feat: 遷移 ticket skill 專用 hook (20 個) 至 .claude/skills/ticket/hooks/
+- feat: uv-tool-staleness-check-hook 偵測 7 skill source vs installed 漂移
+- feat: branch-status-reminder 列全量 + PC-076 防護落地
+- feat: 實作 ticket track hook-health CLI 子命令
+- feat: 擴充 hook-health-monitor 加觸發頻率掃描與 session marker
+- feat: hook_health 核心引擎（scan/classify/evaluate/marker）
+- feat: ticket migrate collision detection (dry-run warn + default reject + --force-overwrite)
+- feat: ticket complete 自動 git add metadata + 提示 commit 指令（方案 D）
+- feat: PC-093 exempt 白名單納入 history 類別
+- feat: commands/ 下 4 檔批量加 file_lock 保護
+- feat: lifecycle.py 4 處 load→save 加 file_lock
+- feat: file_lock 包圍 extract_and_write_context_bundle load→modify→save
+- feat: fcntl Windows conditional import + explicit NotImplementedError fallback
+- feat: Phase 3 GREEN — 注入 _file_lock 於 update_* 消除 logical race
+- feat: worktree merge reminder cleanup + SessionStart audit (PC-149)
+- feat: enhance git-index-lock-cleanup hook with GUI app detection hint
+- feat: add ticket track dispatch-readiness CLI (pending review)
+- feat: complete dispatch-validate CLI (linux+basil reviewed)
+- feat: add ticket track dispatch-validate CLI (Context Bundle sanity check)
+- feat: add CLI append-log H2 content warning
+- feat: add PreCommit homoglyph guard hook (PC-150 protection)
+- feat: phase4-decision-enforcement-hook fenced code block 豁免
+- feat: ticket track parallel-check 子命令偵測子任務衝突
+- feat: sync-claude-push 改善 revert commit 分類與淨效應摘要
+- refactor: 抽 lib/file_lock.py + _append_unique_to_list_field helper
+- refactor: improve dispatch-readiness code quality
+- refactor: improve dispatch-validate code quality
+- fix: ticket track append-log 替換 Schema 章節 placeholder
+- fix: 修正 pm-role.md + PC-153 共 13 處「信號→訊號」跨海峽用語
+- fix: get_tickets_dir 移除存在性檢查，v1+ 主版本三層化
+- fix: _ABSOLUTE_CLAUDE_PATTERN 加 lookbehind 防雙層 .claude/ 多重匹配誤判
+- fix: 修 test_track_batch 3 個 stale exit code 期望（1→2）+ PC-151 basil 修訂
+- fix: 修 test_track_acceptance 4 個 stale exit code 期望（1→2）
+- fix: 擴充 phase-completion-gate-hook 主檔 regex 涵蓋 -main/-work-log suffix
+- fix: dedupe ticket frontmatter I/O in handoff stop hook
+- fix: align ticket CLI exit codes to three-value contract
+- fix: correct dispatch-active.json path in checkpoint_state
+- fix: worktree skill path/import mismatch
+- fix: runqueue --context=resume 優先讀 target_ticket_id
+- fix: 移除 settings.local.json PreToolUse:Agent 重複註冊
+- fix: 修復 mint 形似字混淆「汲染」→「汙染」3 處
+- fix: validator _is_placeholder 對非表格描述性 N/A 字面豁免（PC-138/PC-144 家族延伸）
+- fix: agent-dispatch-validation-hook 補 pyyaml dep 修 ModuleNotFoundError
+- docs: hook-architect-technical-reference 補 + -143 缺口
+- docs: 追加 案例（acceptance 列表中文描述 inline N/A）
+- docs: PC-068 擴充 ANA 階段案例
+- docs: migrate-command.md 加入「前置檢查（強制）」章節
+- docs: sync migrate-command.md with --force-overwrite flag and collision detection behavior
+- docs: 落地 PC-152 ticket migrate 撞既有目標 ID 靜默覆寫
+- docs: 同步 ticket complete --no-stage flag 至 SKILL.md / ticket-lifecycle.md
+- docs: 新增 stale test exit code 期望飄移錯誤模式
+- docs: Phase 4 評估完成 — 三視角共識無阻擋性重構，4 項延後追蹤建 spawned tickets
+- docs: 啟用 Claude Code worktree.bgIsolation:none 設定
+- docs: neutralize ticket ID references in single-source-io rules
+- docs: add single-source I/O collection rules SSOT
+- docs: neutralize ticket ID references in cli-exit-code-rules
+- docs: add CLI exit code layering spec + complete parent ticket
+- docs: add 3b dispatch-readiness check section to task-splitting.md
+- docs: fix language-constraints violation in track-command.md
+- docs: 修正 basil Layer 2 審查發現（H3 層級說明 + 場景辨識訊號）
+- docs: 新增 PM 預寫策略放 Context Bundle 三條款規範
+- docs: add normalize whitelist and grep verification to mint agent
+- docs: merged worktree no post-complete cleanup + fix
+- docs: IMP-074 + ticket H2→H3 schema fix
+- docs: askuserquestion-rules 新增規則 7 多子任務必含平行派發選項
+- docs: 新增 IMP-073 Logger 方法解構導致 this 遺失 + promise hang error-pattern
+- docs: PC-148 Layer 2 修正 + complete
+- docs: 建立 PC-148 hook 雙重註冊 error-pattern
+- docs: 修正 compositional-writing Layer 2 C 段 5 類風格建議
+- docs: 補 fixture ImportError 靜默 fallback 註解
+- docs: 新增 2 原則卡 + 3-reviewer 33 issue 修正
+- docs: 追加案例 #2 agent-dispatch-validation-hook 漏 sync
+- chore: chmod +x 6 個 hook lib/tests 檔案
+- chore: 修正 hook tests 執行權限（IMP-054 自動套用）
+- chore: sync pre-existing W17 ticket metadata and worklog updates
+- chore: commit orphaned complete metadata + settings allow Skill(error-pattern)
+- chore: 完成 ticket（status=completed）
+- chore: complete ANA ticket pair + spawn 4 children
+- chore: 收尾 /041 ticket md 與 effort test 檔 exec mode 修正
+- chore: l10n-sync-verification-hook 加 continueOnBlock:true
+- test: handoff-auto-resume hook main stdin 整合測試 4 路徑
+- test: 補實作檔案（fork mode assert）
+- test: Phase 2 RED v2 — 模擬 update_* race 確認真紅
+- test: Phase 2 RED 7 測試實作 全紅 baseline
+- test: Phase 2 RED 測試 — worktree merge reminder + SessionStart audit
+- test: 新增 conftest autouse fixture mock track_snapshot 檔案系統掃描
+
+---
+
 ## [1.33.0] - 2026-05-14
 
 ### Summary

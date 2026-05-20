@@ -40,7 +40,7 @@ import yaml
 # ============================================================================
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-HOOK_PATH = REPO_ROOT / ".claude" / "hooks" / "wrap-decision-tripwire-hook.py"
+HOOK_PATH = REPO_ROOT / ".claude" / "skills" / "wrap-decision" / "hooks" / "wrap-decision-tripwire-hook.py"
 CONFIG_PATH = REPO_ROOT / ".claude" / "config" / "wrap-triggers.yaml"
 SETTINGS_PATH = REPO_ROOT / ".claude" / "settings.json"
 SKILL_PATH = REPO_ROOT / ".claude" / "skills" / "wrap-decision" / "SKILL.md"

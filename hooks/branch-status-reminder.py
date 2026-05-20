@@ -11,6 +11,12 @@ Branch Status Reminder - SessionStart Hook 用於顯示分支狀態
 
 Hook Event: SessionStart
 
+改進 (v1.3.0, W13-011):
+- PC-076 防護落地：列出全部 tracked-modified + untracked
+- 分組顯示（staged / modified / untracked），上限提升至 50 + 完整清單提示
+- 雙通道輸出（stderr + logger.warning），避免 PM 誤認工作區乾淨
+- 情況 1/2/3/4 皆呼叫 _report_uncommitted_changes（修復前僅情況 1）
+
 改進 (v1.2.0):
 - 使用 get_uncommitted_files() 高階 API
 - 遷移離開原始的 porcelain 格式解析
@@ -18,15 +24,6 @@ Hook Event: SessionStart
 改進 (v1.1.0):
 - 使用 common_functions 統一 logging 和 output
 - 避免 stderr 污染
-
-重構紀錄 (v0.28.0):
-- 使用 .claude/lib/git_utils 共用模組
-- 消除重複程式碼
-
-修改紀錄:
-- 改為靜默條件判斷（正確 worktree 環境時完全靜默）
-- 新增 is_in_worktree 和 is_allowed_branch 的判斷
-- 僅在異常情況時輸出提醒
 """
 
 import sys
@@ -50,9 +47,7 @@ try:
     )
 except ImportError as e:
     # #11 修復：ImportError 不應 exit(1) 阻斷整個 session
-    # 應該優雅降級為靜默（Hook 失敗應記錄但不阻塞主程式）
     print(f"[Hook Import Warning] {Path(__file__).name}: {e}", file=sys.stderr)
-    # 定義最小化的 fallback 函式以支援優雅降級
     def setup_hook_logging(name):
         import logging
         return logging.getLogger(name)
@@ -69,41 +64,96 @@ except ImportError as e:
     def run_git_command(args, cwd=None, timeout=10):
         return False, "git_utils not available"
     def get_uncommitted_files():
-        return []  # 無法查詢時回傳空列表，功能降級
+        return []
 
 
 # 顯示設定常數
-MAX_UNCOMMITTED_FILES_DISPLAY = 10  # 未提交變更顯示上限，超過則折疊顯示
+# W13-011：上限提升至 50（PC-076 防護全量列出），超過則提示用 git status 取完整清單
+MAX_UNCOMMITTED_FILES_DISPLAY = 50
 
 
-def _report_uncommitted_changes() -> None:
+def _classify_files(files):
     """
-    偵測並報告未提交的變更
+    將 FileStatus 列表依 staged / modified / untracked 分組。
 
-    使用 get_uncommitted_files() 取得未提交變更的結構化資訊，
-    如果超過 MAX_UNCOMMITTED_FILES_DISPLAY 個檔案，只顯示前 N 個並提示還有多少個。
-    如果沒有未提交變更，則不輸出任何內容。
+    分組規則（PC-076 防護）：
+    - staged：is_staged 且非 untracked（X 位置含 M/A/D/R/C）
+    - modified：非 staged 且非 untracked（Y 位置含 M），常為前 session 遺留
+    - untracked：?? 狀態
+
+    Returns:
+        dict: {"staged": [...], "modified": [...], "untracked": [...]}
+    """
+    staged, modified, untracked = [], [], []
+    for f in files:
+        if f.is_untracked:
+            untracked.append(f)
+        elif f.is_staged:
+            staged.append(f)
+        else:
+            modified.append(f)
+    return {"staged": staged, "modified": modified, "untracked": untracked}
+
+
+def _report_uncommitted_changes(logger) -> None:
+    """
+    偵測並報告未提交的變更（W13-011 改寫，PC-076 防護落地）。
+
+    變更：
+    1. 列出全部 tracked-modified + untracked，分組（staged / modified / untracked）
+    2. 上限 50；超過則顯示「完整清單請執行 git status」提示
+    3. 雙通道：hook_output（用戶可見）+ stderr（避免被遮蔽）+ logger.warning（持久化）
     """
     files = get_uncommitted_files()
-
     if not files:
         return
 
-    total_changes = len(files)
+    groups = _classify_files(files)
+    total = len(files)
 
-    # 輸出未提交變更摘要
-    hook_output(f"[branch-status-reminder] 偵測到 {total_changes} 個未提交變更：", "info")
+    # 摘要標頭（含分組計數）
+    summary = (
+        f"[branch-status-reminder] 偵測到 {total} 個未提交變更："
+        f"staged={len(groups['staged'])}, "
+        f"modified={len(groups['modified'])}, "
+        f"untracked={len(groups['untracked'])}"
+    )
+    hook_output(summary, "info")
+    # 雙通道：stderr（避免 hook_output 走 stdout 被介面截斷）+ logger.warning
+    print(summary, file=sys.stderr)
+    logger.warning(
+        f"uncommitted changes detected: total={total}, "
+        f"staged={len(groups['staged'])}, modified={len(groups['modified'])}, "
+        f"untracked={len(groups['untracked'])}"
+    )
 
-    # 列出前 N 個變更
-    for file in files[:MAX_UNCOMMITTED_FILES_DISPLAY]:
-        hook_output(f"   {file}", "info")
+    # 分組列出（每組獨立計數，避免單一上限把某一組壓縮為 0）
+    listed = 0
+    truncated = False
+    for label, items in (
+        ("staged", groups["staged"]),
+        ("modified", groups["modified"]),
+        ("untracked", groups["untracked"]),
+    ):
+        if not items:
+            continue
+        hook_output(f"  [{label}] ({len(items)})", "info")
+        for f in items:
+            if listed >= MAX_UNCOMMITTED_FILES_DISPLAY:
+                truncated = True
+                break
+            hook_output(f"    {f}", "info")
+            listed += 1
+        if truncated:
+            break
 
-    # 如果超過上限，顯示還有多少個
-    if total_changes > MAX_UNCOMMITTED_FILES_DISPLAY:
-        remaining = total_changes - MAX_UNCOMMITTED_FILES_DISPLAY
-        hook_output(f"   ...還有 {remaining} 個", "info")
+    if truncated:
+        remaining = total - listed
+        hint = f"   ...還有 {remaining} 個未列出；完整清單請執行 git status --porcelain"
+        hook_output(hint, "info")
+        print(hint, file=sys.stderr)
 
-    hook_output("[提示] 這些變更可能來自其他 session，建議先確認後再開始工作", "info")
+    hook_output("[提示] 這些變更可能來自前 session 遺留或其他並行 session，commit 前請全量清點（PC-076）", "info")
     hook_output("", "info")
 
 
@@ -114,14 +164,11 @@ def main():
     current_branch = get_current_branch()
     if not current_branch:
         logger.warning("Unable to get current branch")
-        # 靜默：無法取得分支時保守預設為不輸出
         return 0
 
     # 檢查是否在正確的 worktree 環境中
-    # 靜默條件：在 worktree 中 AND 分支符合 allowed pattern
     if is_in_worktree() and is_allowed_branch(current_branch):
         logger.debug(f"正確 worktree 環境：{current_branch}，靜默")
-        # 完全靜默，不輸出任何內容
         return 0
 
     # 異常情況：以下任一情況時輸出提醒
@@ -136,8 +183,7 @@ def main():
         hook_output(f"[branch-status-reminder] 警告：當前在主倉庫的保護分支 '{current_branch}' 上", "warning")
         hook_output("", "info")
 
-        # 偵測未提交變更
-        _report_uncommitted_changes()
+        _report_uncommitted_changes(logger)
 
         hook_output("建議操作：", "info")
         hook_output("  建立 feature worktree 進行開發：", "info")
@@ -152,6 +198,10 @@ def main():
     elif not is_in_worktree() and is_allowed_branch(current_branch):
         hook_output(f"[branch-status-reminder] 提示：當前在主倉庫的開發分支 '{current_branch}'", "info")
         hook_output("", "info")
+
+        # W13-011：情況 2 也須列未提交變更（PC-076 防護）
+        _report_uncommitted_changes(logger)
+
         hook_output("建議使用 worktree 保持環境隔離：", "info")
         hook_output("  /worktree create <ticket-id>", "info")
         hook_output("", "info")
@@ -162,12 +212,20 @@ def main():
         hook_output("[branch-status-reminder] 警告：worktree 分支異常", "warning")
         hook_output(f"當前分支：{current_branch}（detached 或不是預期分支）", "info")
         hook_output("", "info")
+
+        # W13-011：情況 3 也須列未提交變更（PC-076 防護）
+        _report_uncommitted_changes(logger)
+
         logger.warning(f"Worktree branch anomaly detected: {current_branch}")
 
     # 情況 4：其他異常（通常不會發生）
     else:
         hook_output(f"[branch-status-reminder] 提示：當前在 {current_branch}", "info")
         hook_output("", "info")
+
+        # W13-011：情況 4 也須列未提交變更（PC-076 防護）
+        _report_uncommitted_changes(logger)
+
         logger.debug(f"Current branch: {current_branch}")
 
     hook_output("=" * 60, "info")

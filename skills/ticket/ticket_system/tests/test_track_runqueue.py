@@ -237,3 +237,116 @@ def test_apply_context_resume_task_chain_no_target_falls_back(monkeypatch):
     }
     out = _apply_with_handoff(monkeypatch, tickets, handoff)
     assert {t["id"] for t in out} == {"0.18.0-W17-800"}
+
+
+# ---------------------------------------------------------------------------
+# W6-022: _apply_context_resume 優先讀 target_ticket_id（W17-164 絕對指向）
+# ---------------------------------------------------------------------------
+
+def test_apply_context_resume_context_refresh_with_target_ticket_id(monkeypatch):
+    """W6-022 regression: direction=context-refresh + target_ticket_id 存在
+    → 候選為 target，而非 source（避免 completed source 被 _is_listable 濾掉）。
+    """
+    tickets = [
+        _mk("0.18.0-W6-012", status="completed"),
+        _mk("0.18.0-W13-001", status="pending"),
+    ]
+    handoff = {
+        "0.18.0-W6-012": {
+            "ticket_id": "0.18.0-W6-012",
+            "direction": "context-refresh",
+            "target_ticket_id": "0.18.0-W13-001",
+            "from_status": "completed",
+        }
+    }
+    out = _apply_with_handoff(monkeypatch, tickets, handoff)
+    assert {t["id"] for t in out} == {"0.18.0-W13-001"}
+
+
+def test_apply_context_resume_target_ticket_id_overrides_direction(monkeypatch):
+    """W6-022: target_ticket_id 優先於 direction 解析（即使 direction 為任務鏈格式）。"""
+    tickets = [
+        _mk("0.18.0-W17-901", status="pending"),
+        _mk("0.18.0-W17-902", status="pending"),
+    ]
+    handoff = {
+        "0.18.0-W17-900": {
+            "ticket_id": "0.18.0-W17-900",
+            "direction": "to-sibling:0.18.0-W17-901",
+            "target_ticket_id": "0.18.0-W17-902",
+        }
+    }
+    out = _apply_with_handoff(monkeypatch, tickets, handoff)
+    assert {t["id"] for t in out} == {"0.18.0-W17-902"}
+
+
+def test_apply_context_resume_empty_target_ticket_id_falls_back(monkeypatch):
+    """W6-022 邊界: target_ticket_id 為空字串 → fallback 既有 direction 邏輯。"""
+    tickets = [
+        _mk("0.18.0-W17-910", status="in_progress"),
+    ]
+    handoff = {
+        "0.18.0-W17-910": {
+            "ticket_id": "0.18.0-W17-910",
+            "direction": "context-refresh",
+            "target_ticket_id": "",
+        }
+    }
+    out = _apply_with_handoff(monkeypatch, tickets, handoff)
+    assert {t["id"] for t in out} == {"0.18.0-W17-910"}
+
+
+def test_apply_context_resume_non_string_target_ticket_id_falls_back(monkeypatch):
+    """W6-022 邊界: target_ticket_id 非字串 → fallback 既有 direction 邏輯。"""
+    tickets = [
+        _mk("0.18.0-W17-920", status="in_progress"),
+    ]
+    handoff = {
+        "0.18.0-W17-920": {
+            "ticket_id": "0.18.0-W17-920",
+            "direction": "context-refresh",
+            "target_ticket_id": None,
+        }
+    }
+    out = _apply_with_handoff(monkeypatch, tickets, handoff)
+    assert {t["id"] for t in out} == {"0.18.0-W17-920"}
+
+
+# ---------------------------------------------------------------------------
+# W6-022: cross-command 一致性（runqueue --context=resume vs resume --list）
+# ---------------------------------------------------------------------------
+
+def test_cross_command_consistency_context_refresh_target_ticket_id(monkeypatch):
+    """W6-022: runqueue --context=resume 應呈現 resume --list 同樣的 target ticket。
+
+    建構 fixture：source=completed + target=pending + direction=context-refresh
+    + target_ticket_id 存在。
+    - resume --list 直接列舉 handoff JSON，回傳 target_ticket_id 集合。
+    - runqueue --context=resume 過 _apply_context_resume → 應回傳同樣的 target。
+    兩者結果集必須相等（修復前不相等：runqueue 落 source 被 _is_listable 濾掉）。
+    """
+    tickets = [
+        _mk("0.18.0-W6-012", status="completed"),
+        _mk("0.18.0-W13-001", status="pending"),
+    ]
+    handoff = {
+        "0.18.0-W6-012": {
+            "ticket_id": "0.18.0-W6-012",
+            "direction": "context-refresh",
+            "target_ticket_id": "0.18.0-W13-001",
+        }
+    }
+
+    # runqueue --context=resume 結果集
+    runqueue_out = _apply_with_handoff(monkeypatch, tickets, handoff)
+    runqueue_ids = {t["id"] for t in runqueue_out}
+
+    # resume --list 等價結果集：handoff JSON 之 target_ticket_id（W17-164 語意）
+    resume_list_ids = {
+        info["target_ticket_id"]
+        for info in handoff.values()
+        if info.get("target_ticket_id")
+    }
+
+    assert runqueue_ids == resume_list_ids
+    assert "0.18.0-W13-001" in runqueue_ids

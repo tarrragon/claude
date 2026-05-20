@@ -20,6 +20,8 @@ import pytest
 
 # 將 .claude/hooks 加入 sys.path，讓測試能 import acceptance_checkers
 _hooks_dir = Path(__file__).parent.parent
+# W10-092: 部分 ticket-skill hook 已遷至 .claude/skills/ticket/hooks/
+ticket_skill_hooks_path = _hooks_dir.parent / "skills" / "ticket" / "hooks"
 if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 
@@ -554,7 +556,7 @@ def _check_ana_via_orchestrator(project_dir: Path, ticket_id: str, logger):
     """
     # 動態 import 避免 module-level 失敗
     import importlib.util
-    hook_path = _hooks_dir / "acceptance-gate-hook.py"
+    hook_path = ticket_skill_hooks_path / "acceptance-gate-hook.py"
     spec = importlib.util.spec_from_file_location("acceptance_gate_hook", hook_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

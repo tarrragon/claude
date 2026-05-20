@@ -22,7 +22,7 @@ from ticket_system.commands.fields import (
 
 def _create_ticket_file(tmp_path, ticket_id, version, **extra_fields):
     """建立測試用 Ticket 檔案，回傳 (version, tickets_dir)。"""
-    tickets_dir = tmp_path / "docs" / "work-logs" / f"v{version}" / "tickets"
+    tickets_dir = tmp_path / "docs" / "work-logs" / f"v{version.split('.')[0]}" / f"v{'.'.join(version.split('.')[:2])}" / f"v{version}" / "tickets"
     tickets_dir.mkdir(parents=True)
 
     frontmatter = {

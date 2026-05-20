@@ -76,9 +76,9 @@ def mock_dispatch_active(tmp_path: Path) -> Callable[..., Path]:
         content: Optional[Dict[str, Any]] = None,
     ) -> Path:
         root = project_root or tmp_path
-        state_dir = root / ".claude" / "state"
-        state_dir.mkdir(parents=True, exist_ok=True)
-        path = state_dir / "dispatch-active.json"
+        claude_dir = root / ".claude"
+        claude_dir.mkdir(parents=True, exist_ok=True)
+        path = claude_dir / "dispatch-active.json"
 
         if content is not None:
             payload = content

@@ -14,7 +14,7 @@ from io import StringIO
 
 
 # 載入 Stop hook 模組
-STOP_HOOK_PATH = Path(__file__).parent.parent / "handoff-auto-resume-stop-hook.py"
+STOP_HOOK_PATH = Path(__file__).parent.parent.parent / "skills" / "ticket" / "hooks" / "handoff-auto-resume-stop-hook.py"
 
 
 def load_stop_hook_module():
@@ -511,7 +511,7 @@ class TestAutoDirectionHandling:
         def mock_completed(project_root, ticket_id, logger):
             return False
 
-        def mock_recently_started(project_root, ticket_id, logger):
+        def mock_recently_started(project_root, ticket_id, logger, cache=None):
             # 只有非 auto 才會進入此判斷，回傳 False 模擬超時
             return False
 

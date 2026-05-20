@@ -302,6 +302,34 @@ $ ticket track claim 0.18.0-W10-042
 
 ---
 
+## Complete 後 cleanup checklist（W11-033 / W11-035 / PC-149）
+
+> **Why**：`ticket track complete` 自 W11-035 起會 auto-stage 已 modified 的 ticket md / worklog md / cascade children（精準路徑，不夾帶 WIP），並在 stdout 提示 `git commit -m ...` 指令；但**仍不會自動 commit，也不會清理已合併的 worktree**。session 邊界處長期累積會造成兩類缺口（W11-018 審計發現 8 個 worktree 殘留，最久 35 天）。
+>
+> **Consequence**：未執行提示的 commit 會讓 staged metadata 累積；未清理 worktree 會造成 disk / 視圖污染。
+>
+> **Action**：complete 後依下表逐項處理。Hook 層已有對應提醒，本 checklist 是規則層雙保險。
+
+| 步驟 | 動作 | Hook 對應提醒 |
+|------|------|--------------|
+| 1 | 執行 complete 後 stdout 提示的 `git commit -m "chore(<version>-<id>): metadata sync post-completion"` 指令（W11-035 auto-stage 已完成 add） | complete CLI stdout 直接輸出建議指令 |
+| 2 | 若不希望 auto-stage（如已自行精挑 stage 範圍），改用 `ticket track complete <id> --no-stage` 跳過 | `--no-stage` flag 保留 W11-035 前的純 frontmatter 更新行為 |
+| 3 | 若 ticket 用 worktree 開發：合併後執行 `git worktree remove <path>` 清理目錄 | `worktree-merge-reminder-hook.py` PostToolUse 階段（W11-033 擴充）會輸出 cleanup 建議 |
+| 4 | dirty worktree（含未提交變更）先處理變更再移除（或 `--force` 強制移除已備份檔案） | 同 #3 hook 會額外提示 `dirty` 狀態 |
+| 5 | 確認 metadata commit 已落地（避免 orphan ticket md） | `session-start-merged-worktree-audit-hook.py` 下次 session 啟動會列出 orphan ticket |
+
+### --no-stage 使用時機
+
+| 情境 | 建議 |
+|------|------|
+| 一般 ticket complete（僅 metadata + body 變更） | 不加 flag，使用 auto-stage 預設行為 |
+| Complete 與其他 WIP 變更交錯且已手動 `git add` 精選範圍 | 加 `--no-stage` 避免覆蓋既有 staging area 規劃 |
+| Hook / lib 修改需與 complete 拆成多 commit | 加 `--no-stage`，手動分階段 commit |
+
+**驗證**：下次 session 啟動時 `session-start-merged-worktree-audit-hook.py` 兩 section 皆 `suppressOutput=true` 代表已乾淨。
+
+---
+
 ## 父 Ticket complete 前置檢查（強制）
 
 > **來源**：`.claude/methodologies/atomic-ticket-methodology.md` 「任務鏈核心哲學 — 父子責任傳遞」+ `.claude/methodologies/ticket-lifecycle-management-methodology.md` 「父 complete 前置條件」。

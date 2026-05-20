@@ -42,8 +42,10 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 HOOKS_DIR = PROJECT_ROOT / ".claude" / "hooks"
-STOP_HOOK_PATH = HOOKS_DIR / "handoff-auto-resume-stop-hook.py"
-REMINDER_HOOK_PATH = HOOKS_DIR / "handoff-reminder-hook.py"
+# W10-092: handoff-auto-resume-stop-hook 與 handoff-reminder-hook 已遷至 .claude/skills/ticket/hooks/
+TICKET_SKILL_HOOKS_DIR = PROJECT_ROOT / ".claude" / "skills" / "ticket" / "hooks"
+STOP_HOOK_PATH = TICKET_SKILL_HOOKS_DIR / "handoff-auto-resume-stop-hook.py"
+REMINDER_HOOK_PATH = TICKET_SKILL_HOOKS_DIR / "handoff-reminder-hook.py"
 
 
 # ---------------------------------------------------------------------------

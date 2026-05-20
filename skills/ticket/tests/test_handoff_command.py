@@ -30,7 +30,7 @@ def temp_version_tickets() -> Path:
     """建立臨時版本的 Tickets 目錄"""
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
-        tickets_dir = project_root / "docs" / "work-logs" / "v0.31.0" / "tickets"
+        tickets_dir = project_root / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets"
         tickets_dir.mkdir(parents=True, exist_ok=True)
 
         # 建立 pubspec.yaml 標記為專案根目錄
@@ -547,7 +547,7 @@ class TestVerifyHandoffDependencies:
         project_root, tickets_dir = temp_version_tickets
 
         # 建立第二個版本目錄 v0.17.4，放入已完成的依賴
-        other_tickets_dir = project_root / "docs" / "work-logs" / "v0.17.4" / "tickets"
+        other_tickets_dir = project_root / "docs" / "work-logs" / "v0" / "v0.17" / "v0.17.4" / "tickets"
         other_tickets_dir.mkdir(parents=True, exist_ok=True)
         _create_ticket_file(other_tickets_dir, "0.17.4-W1-002", STATUS_COMPLETED, "Cross-version Dep")
 
@@ -566,7 +566,7 @@ class TestVerifyHandoffDependencies:
         project_root, tickets_dir = temp_version_tickets
 
         # 建立第二個版本目錄 v0.17.4，放入未完成的依賴
-        other_tickets_dir = project_root / "docs" / "work-logs" / "v0.17.4" / "tickets"
+        other_tickets_dir = project_root / "docs" / "work-logs" / "v0" / "v0.17" / "v0.17.4" / "tickets"
         other_tickets_dir.mkdir(parents=True, exist_ok=True)
         _create_ticket_file(other_tickets_dir, "0.17.4-W1-002", STATUS_IN_PROGRESS, "Cross-version Dep")
 
@@ -587,7 +587,7 @@ class TestVerifyHandoffDependencies:
         project_root, tickets_dir = temp_version_tickets
 
         # 建立 v0.17.4 目錄但不放入依賴檔案
-        other_tickets_dir = project_root / "docs" / "work-logs" / "v0.17.4" / "tickets"
+        other_tickets_dir = project_root / "docs" / "work-logs" / "v0" / "v0.17" / "v0.17.4" / "tickets"
         other_tickets_dir.mkdir(parents=True, exist_ok=True)
 
         ticket = {

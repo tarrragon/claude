@@ -62,7 +62,7 @@ class TestGetCurrentVersion:
         """測試找到有效的版本目錄"""
         # 建立多個版本目錄（注意 fixture 已建立 v0.31.0）
         (temp_project_dir / "docs" / "work-logs" / "v0.30.0").mkdir(parents=True, exist_ok=True)
-        (temp_project_dir / "docs" / "work-logs" / "v0.31.0").mkdir(parents=True, exist_ok=True)
+        (temp_project_dir / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0").mkdir(parents=True, exist_ok=True)
         (temp_project_dir / "docs" / "work-logs" / "v0.31.1").mkdir(parents=True, exist_ok=True)
 
         old_env = os.environ.get("CLAUDE_PROJECT_DIR")
@@ -106,7 +106,7 @@ class TestGetTicketsDir:
         try:
             os.environ["CLAUDE_PROJECT_DIR"] = str(temp_project_dir)
             result = get_tickets_dir("v0.31.0")
-            expected = temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets"
+            expected = temp_project_dir / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets"
             assert result == expected
         finally:
             if old_env:
@@ -120,7 +120,7 @@ class TestGetTicketsDir:
         try:
             os.environ["CLAUDE_PROJECT_DIR"] = str(temp_project_dir)
             result = get_tickets_dir("0.31.0")
-            expected = temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets"
+            expected = temp_project_dir / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets"
             assert result == expected
         finally:
             if old_env:
@@ -137,7 +137,7 @@ class TestGetTicketPath:
         old_env = os.environ.get("CLAUDE_PROJECT_DIR")
         try:
             os.environ["CLAUDE_PROJECT_DIR"] = str(temp_project_dir)
-            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets"
+            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets"
             tickets_dir.mkdir(parents=True, exist_ok=True)
 
             # 建立 .md 檔案
@@ -158,7 +158,7 @@ class TestGetTicketPath:
         old_env = os.environ.get("CLAUDE_PROJECT_DIR")
         try:
             os.environ["CLAUDE_PROJECT_DIR"] = str(temp_project_dir)
-            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets"
+            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets"
             tickets_dir.mkdir(parents=True, exist_ok=True)
 
             # 只建立 .yaml 檔案
@@ -246,7 +246,7 @@ class TestLoadTicket:
         old_env = os.environ.get("CLAUDE_PROJECT_DIR")
         try:
             os.environ["CLAUDE_PROJECT_DIR"] = str(temp_project_dir)
-            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets"
+            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets"
             tickets_dir.mkdir(parents=True, exist_ok=True)
 
             # 寫入 Ticket 檔案
@@ -271,7 +271,7 @@ class TestLoadTicket:
         old_env = os.environ.get("CLAUDE_PROJECT_DIR")
         try:
             os.environ["CLAUDE_PROJECT_DIR"] = str(temp_project_dir)
-            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets"
+            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets"
             tickets_dir.mkdir(parents=True, exist_ok=True)
 
             # 寫入 YAML Ticket 檔案
@@ -315,7 +315,7 @@ class TestSaveTicket:
             ticket["_body"] = "Test body content"
 
             ticket_path = (
-                temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets" / "test.md"
+                temp_project_dir / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets" / "test.md"
             )
 
             save_ticket(ticket, ticket_path)
@@ -339,7 +339,7 @@ class TestSaveTicket:
             ticket = valid_ticket_data.copy()
 
             ticket_path = (
-                temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets" / "test.yaml"
+                temp_project_dir / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets" / "test.yaml"
             )
 
             save_ticket(ticket, ticket_path)
@@ -377,7 +377,7 @@ class TestSaveTicket:
             ]
 
             ticket_path = (
-                temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets" / "checkbox-test.md"
+                temp_project_dir / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets" / "checkbox-test.md"
             )
 
             # 儲存 Ticket
@@ -419,7 +419,7 @@ class TestLoadTicketCache:
         old_env = os.environ.get("CLAUDE_PROJECT_DIR")
         try:
             os.environ["CLAUDE_PROJECT_DIR"] = str(temp_project_dir)
-            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets"
+            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets"
             tickets_dir.mkdir(parents=True, exist_ok=True)
 
             # 寫入 Ticket 檔案
@@ -457,7 +457,7 @@ class TestLoadTicketCache:
         old_env = os.environ.get("CLAUDE_PROJECT_DIR")
         try:
             os.environ["CLAUDE_PROJECT_DIR"] = str(temp_project_dir)
-            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets"
+            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets"
             tickets_dir.mkdir(parents=True, exist_ok=True)
 
             # 寫入 Ticket 檔案
@@ -495,7 +495,7 @@ class TestLoadTicketCache:
         old_env = os.environ.get("CLAUDE_PROJECT_DIR")
         try:
             os.environ["CLAUDE_PROJECT_DIR"] = str(temp_project_dir)
-            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets"
+            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets"
             tickets_dir.mkdir(parents=True, exist_ok=True)
 
             # 寫入初始 Ticket 檔案
@@ -539,7 +539,7 @@ class TestLoadTicketCache:
         old_env = os.environ.get("CLAUDE_PROJECT_DIR")
         try:
             os.environ["CLAUDE_PROJECT_DIR"] = str(temp_project_dir)
-            (temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets").mkdir(
+            (temp_project_dir / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets").mkdir(
                 parents=True, exist_ok=True
             )
 
@@ -573,7 +573,7 @@ class TestListTickets:
         old_env = os.environ.get("CLAUDE_PROJECT_DIR")
         try:
             os.environ["CLAUDE_PROJECT_DIR"] = str(temp_project_dir)
-            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0.31.0" / "tickets"
+            tickets_dir = temp_project_dir / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets"
             tickets_dir.mkdir(parents=True, exist_ok=True)
 
             # 建立多個 Ticket

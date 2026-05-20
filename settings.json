@@ -27,7 +27,7 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/acceptance-gate-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/acceptance-gate-hook.py"
           },
           {
             "type": "command",
@@ -39,12 +39,16 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-branch-check-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-branch-check-hook.py"
           },
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/phase4-decision-enforcement-hook.py",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/homoglyph-guard-hook.py"
           }
         ]
       },
@@ -97,7 +101,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-file-access-guard-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-file-access-guard-hook.py"
           }
         ]
       },
@@ -106,11 +110,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-path-guard-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-path-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-file-access-guard-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-file-access-guard-hook.py"
           },
           {
             "type": "command",
@@ -147,11 +151,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-path-guard-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-path-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-file-access-guard-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-file-access-guard-hook.py"
           },
           {
             "type": "command",
@@ -184,7 +188,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/agent-ticket-validation-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/agent-ticket-validation-hook.py"
           },
           {
             "type": "command",
@@ -206,11 +210,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-commit-before-dispatch-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-commit-before-dispatch-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-base-distance-check-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-base-distance-check-hook.py",
             "timeout": 15000
           },
           {
@@ -271,7 +275,7 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-reinstall-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-reinstall-hook.py"
           },
           {
             "type": "command",
@@ -291,11 +295,15 @@
           },
           {
             "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/session-start-merged-worktree-audit-hook.py"
+          },
+          {
+            "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/output-style-check.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/handoff-reminder-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/handoff-reminder-hook.py"
           },
           {
             "type": "command",
@@ -316,6 +324,11 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/project-init-env-check-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uv-tool-staleness-check-hook.py",
+            "timeout": 10000
           },
           {
             "type": "command",
@@ -345,7 +358,7 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-zombie-cleanup-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-zombie-cleanup-hook.py",
             "timeout": 15000
           }
         ]
@@ -362,7 +375,7 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/handoff-cleanup-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/handoff-cleanup-hook.py",
             "timeout": 5000
           },
           {
@@ -377,7 +390,7 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-merge-reminder-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-merge-reminder-hook.py",
             "timeout": 10000
           },
           {
@@ -387,7 +400,7 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-ticket-lifecycle-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/post-ticket-lifecycle-hook.py",
             "timeout": 5000
           },
           {
@@ -397,12 +410,12 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/needs-context-listener-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/needs-context-listener-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-skill-sync-check-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-skill-sync-check-hook.py",
             "timeout": 5000
           }
         ]
@@ -438,7 +451,8 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/l10n-sync-verification-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/l10n-sync-verification-hook.py",
+            "continueOnBlock": true
           },
           {
             "type": "command",
@@ -454,7 +468,7 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-frontmatter-validator-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-frontmatter-validator-hook.py",
             "timeout": 5000
           }
         ]
@@ -472,7 +486,7 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-id-validator-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-id-validator-hook.py"
           },
           {
             "type": "command",
@@ -484,20 +498,21 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/l10n-sync-verification-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/l10n-sync-verification-hook.py",
+            "continueOnBlock": true
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-creation-validation-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-creation-validation-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ana-ticket-metadata-validation-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ana-ticket-metadata-validation-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-quality-gate-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-quality-gate-hook.py"
           },
           {
             "type": "command",
@@ -517,7 +532,7 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ticket-frontmatter-validator-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-frontmatter-validator-hook.py",
             "timeout": 5000
           }
         ]
@@ -546,7 +561,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/wrap-decision-tripwire-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/wrap-decision/hooks/wrap-decision-tripwire-hook.py",
             "timeout": 5000
           }
         ]
@@ -562,7 +577,7 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/creation-acceptance-gate-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/creation-acceptance-gate-hook.py",
             "timeout": 5000
           },
           {
@@ -576,7 +591,7 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/handoff-prompt-reminder-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/handoff-prompt-reminder-hook.py",
             "timeout": 5000
           },
           {
@@ -601,7 +616,7 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/wrap-decision-tripwire-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/wrap-decision/hooks/wrap-decision-tripwire-hook.py",
             "timeout": 5000
           }
         ]
@@ -632,7 +647,7 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/handoff-auto-resume-stop-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/handoff-auto-resume-stop-hook.py"
           },
           {
             "type": "command",
@@ -640,12 +655,12 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/worktree-auto-commit-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-auto-commit-hook.py",
             "timeout": 15000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/stop-worklog-handoff-sync-check-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/stop-worklog-handoff-sync-check-hook.py",
             "timeout": 10000
           }
         ]

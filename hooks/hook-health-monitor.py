@@ -37,9 +37,9 @@ Exit Code:
 import json
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict
 
 # 添加 lib 目錄到路徑（M-003 標準化）
 sys.path.insert(0, str(Path(__file__).parent))
@@ -47,6 +47,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 try:
     from hook_utils import setup_hook_logging
     from lib.common_functions import get_project_root, hook_output
+    from lib import hook_health
 except ImportError as e:
     print(json.dumps({"result": "continue"}))
     print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
@@ -58,6 +59,12 @@ except ImportError as e:
 
 WARNING_THRESHOLD_HOURS = 24  # 發出警告的時間閾值
 CRITICAL_THRESHOLD_HOURS = 48  # 發出嚴重警告的時間閾值
+
+# W13-017: 觸發頻率掃描使用「7 天 baseline」(W13-008 量化標準)
+FREQUENCY_SCAN_WINDOW_DAYS = 7
+
+# W13-017: marker file 相對於 project_root 的路徑
+SESSION_MARKER_RELPATH = (".claude", "state", "last-session-start.marker")
 
 
 # ============================================================================
@@ -256,6 +263,136 @@ def _output_health_report(
     hook_output("=" * 70, "info")
 
 
+def write_session_marker(project_root: Path, now: Optional[datetime] = None) -> Path:
+    """W13-017: SessionStart 時寫入 last-session-start.marker (ISO timestamp)
+
+    供後續 hook-health 掃描判定「本 session 觸發」邊界，取代 timestamp gap heuristic
+    (W13-008 §Session 邊界)。
+
+    Args:
+        project_root: 專案根目錄
+        now: 注入點供測試覆蓋；預設為 datetime.now()
+
+    Returns:
+        marker 檔案路徑（已寫入）
+    """
+    marker_path = project_root.joinpath(*SESSION_MARKER_RELPATH)
+    marker_path.parent.mkdir(parents=True, exist_ok=True)
+    ts = (now or datetime.now()).isoformat(timespec="seconds")
+    marker_path.write_text(ts, encoding="utf-8")
+    return marker_path
+
+
+def _load_settings(settings_path: Path) -> Dict:
+    """讀取 settings.json；錯誤時回 {} (W13-017 內部工具)"""
+    if not settings_path.exists():
+        return {}
+    try:
+        with open(settings_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return {}
+
+
+def _today_str(now: Optional[datetime] = None) -> str:
+    return (now or datetime.now()).strftime("%Y-%m-%d")
+
+
+def _compute_baseline(per_day: Dict[str, int], window_days: int = FREQUENCY_SCAN_WINDOW_DAYS) -> float:
+    """W13-008 量化標準：baseline = sum(last_7_days) / 7
+
+    使用 scan_logs 取得的 per_day 字典；不足 7 天時除以實際天數可能膨脹基線，
+    故除以固定 window_days 以保持保守 (under-trigger 優於 over-trigger)。
+    """
+    total = sum(per_day.values())
+    return total / float(window_days) if window_days > 0 else 0.0
+
+
+def run_frequency_scan(
+    project_root: Path,
+    logger: logging.Logger,
+    now: Optional[datetime] = None,
+    logs_root: Optional[Path] = None,
+) -> List[Tuple[str, "hook_health.Verdict"]]:
+    """W13-017: 掃描全部 hooks 的觸發頻率並產出 stderr 摘要
+
+    Scope 從原 SessionStart hooks 擴大為「全部出現在 hook-logs/ 的 hooks」
+    (W13-008 IMP-2 acceptance)。
+
+    步驟：
+      1. scan_logs(since=7d) → 每 hook 的 total/per_day
+      2. recent = today 的 per_day 計數
+      3. baseline = sum(per_day) / 7
+      4. classify_hook → high_freq_ok / low_freq_expected
+      5. evaluate → Verdict(normal | warning | critical)
+      6. critical / warning 輸出 stderr 摘要（不阻擋，不建 ticket）
+
+    Args:
+        project_root: 專案根目錄
+        logger: 日誌物件
+        now: 注入點供測試覆蓋
+        logs_root: 注入點供測試覆蓋
+
+    Returns:
+        [(hook_name, Verdict)] 全部命中 warning/critical 的 hook，供呼叫端
+        二次使用或測試斷言。
+    """
+    now = now or datetime.now()
+    since = now - timedelta(days=FREQUENCY_SCAN_WINDOW_DAYS)
+    settings = _load_settings(project_root / ".claude" / "settings.json")
+
+    stats_by_hook = hook_health.scan_logs(since=since, logs_root=logs_root)
+    today = _today_str(now)
+
+    flagged: List[Tuple[str, hook_health.Verdict]] = []
+
+    for hook_name, stats in sorted(stats_by_hook.items()):
+        per_day = stats.get("per_day", {})
+        recent = per_day.get(today, 0)
+        baseline = _compute_baseline(per_day)
+        hook_type = hook_health.classify_hook(hook_name, settings)
+
+        verdict = hook_health.evaluate(
+            stats={"total": stats.get("total", 0), "recent": recent, "per_day": per_day},
+            hook_type=hook_type,
+            baseline=baseline,
+        )
+
+        if verdict.status == "normal":
+            continue
+
+        flagged.append((hook_name, verdict))
+
+        # W13-008 Solution §自動建 Ticket 流程：純 stderr 提醒，不自動建 ticket
+        threshold = baseline * verdict.multiplier if not verdict.bootstrap else None
+        if verdict.bootstrap:
+            stderr_msg = (
+                "[hook-health] {lvl}: {h} 今日觸發 {r} 次 (bootstrap, 無 7 天 baseline)"
+            ).format(lvl=verdict.status.upper(), h=hook_name, r=recent)
+        else:
+            stderr_msg = (
+                "[hook-health] {lvl}: {h} 今日觸發 {r} 次 > 基線 {b:.1f} × {n}"
+            ).format(
+                lvl=verdict.status.upper(),
+                h=hook_name,
+                r=recent,
+                b=baseline,
+                n=verdict.multiplier,
+            )
+        print(stderr_msg, file=sys.stderr)
+        if verdict.reasons:
+            print("  reasons: " + "; ".join(verdict.reasons), file=sys.stderr)
+        logger.warning(stderr_msg)
+
+    if flagged:
+        print(
+            "建議：手動建 ANA 排查（ticket track create --type ANA --who basil-hook-architect ...）",
+            file=sys.stderr,
+        )
+
+    return flagged
+
+
 def main() -> int:
     """主函式"""
     logger = setup_hook_logging("hook-health-monitor")
@@ -264,6 +401,21 @@ def main() -> int:
     if not project_root:
         hook_output("Error: Cannot find project root", "error")
         return 1
+
+    # W13-017 (1): SessionStart marker — 給後續掃描判定 session 邊界
+    try:
+        write_session_marker(project_root)
+    except OSError as e:
+        # marker 寫入失敗不應阻擋既有健康檢查；輸出 stderr + log warning
+        logger.warning("Failed to write session marker: {}".format(e))
+        print("[hook-health] WARN: failed to write session marker: {}".format(e), file=sys.stderr)
+
+    # W13-017 (2): 觸發頻率掃描（全部 hooks）— 純 stderr 提醒，不阻擋既有邏輯
+    try:
+        run_frequency_scan(project_root, logger)
+    except Exception as e:  # noqa: BLE001 — 監測本身禁止讓既有健康檢查降級
+        logger.warning("Frequency scan failed: {}".format(e))
+        print("[hook-health] WARN: frequency scan failed: {}".format(e), file=sys.stderr)
 
     settings_path = project_root / ".claude" / "settings.json"
     hook_filenames = load_sessionstart_hooks_from_settings(settings_path)

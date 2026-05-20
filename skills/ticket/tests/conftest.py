@@ -53,7 +53,7 @@ def temp_project_dir() -> Path:
         project_root = Path(tmpdir)
 
         # 建立目錄結構
-        work_logs_dir = project_root / "docs" / "work-logs" / "v0.31.0" / "tickets"
+        work_logs_dir = project_root / "docs" / "work-logs" / "v0" / "v0.31" / "v0.31.0" / "tickets"
         work_logs_dir.mkdir(parents=True, exist_ok=True)
 
         claude_tickets_dir = project_root / ".claude" / "tickets"

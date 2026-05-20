@@ -15,7 +15,7 @@ import pytest
 
 
 # 動態載入帶連字號的 hook 檔
-HOOK_PATH = Path(__file__).resolve().parent.parent / "worktree-zombie-cleanup-hook.py"
+HOOK_PATH = Path(__file__).resolve().parents[2] / "skills" / "worktree" / "hooks" / "worktree-zombie-cleanup-hook.py"
 
 
 @pytest.fixture(scope="module")

@@ -73,7 +73,10 @@ class TestBatchClaim:
         """
         Given: 空的 Ticket ID 列表
         When: 執行 batch-claim 操作
-        Then: 應返回錯誤代碼 1，提示無有效 ID
+        Then: 應返回 2（業務拒絕：無有效 ID 屬用戶輸入錯誤）
+
+        依 .claude/references/cli-exit-code-rules.md 規則 2：
+        用戶輸入錯誤路徑（含空列表）均為業務拒絕（return 2）。
         """
         args = Mock()
         args.ticket_ids = ""
@@ -81,7 +84,7 @@ class TestBatchClaim:
 
         result = execute_batch_claim(args, "0.31.0")
 
-        assert result == 1
+        assert result == 2
 
     def test_batch_claim_with_whitespace(self):
         """
@@ -238,7 +241,10 @@ class TestBatchComplete:
         """
         Given: Ticket ID 格式不正確
         When: 執行 batch-complete 操作
-        Then: 應返回 1，提示 ID 格式錯誤
+        Then: 應返回 2（業務拒絕：無 ticket 處理成功）
+
+        依 cli-exit-code-rules.md 規則 2：批次操作全失敗屬用戶輸入錯誤 → 2。
+        當前實作（track_batch.py:361）：success_count > 0 → 0，否則 → 2。
         """
         args = Mock()
         args.ticket_ids = "invalid-id-1,invalid-id-2"
@@ -247,8 +253,8 @@ class TestBatchComplete:
         with patch('ticket_system.commands.track_batch.save_ticket'):
             result = execute_batch_complete(args, "0.31.0")
 
-            # 應該返回錯誤或 0（取決於實現）
-            assert result in [0, 1]
+            # 全部 ID 無效 → success_count=0 → return 2
+            assert result == 2
 
     def test_batch_complete_duplicate_ids(self):
         """
@@ -456,7 +462,9 @@ class TestBatchCompleteEnhanced:
         """
         Given: 使用 --wave 參數但找不到符合條件的 Ticket
         When: 執行 batch-complete --wave 99
-        Then: 應返回 1 並提示找不到 Ticket
+        Then: 應返回 2（業務拒絕：搜尋條件下無匹配 Ticket）
+
+        依 cli-exit-code-rules.md 規則 2：搜尋無結果屬用戶輸入錯誤路徑 → 2。
         """
         args = Mock()
         args.ticket_ids = ""
@@ -478,4 +486,4 @@ class TestBatchCompleteEnhanced:
                 with patch('ticket_system.commands.track_batch.save_ticket'):
                     result = execute_batch_complete(args, "0.31.0")
 
-                    assert result == 1
+                    assert result == 2

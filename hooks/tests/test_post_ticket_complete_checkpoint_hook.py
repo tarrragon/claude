@@ -18,11 +18,13 @@ import importlib.util
 
 # 設定路徑
 hooks_path = Path(__file__).parent.parent
+# W10-092: post-ticket-complete-checkpoint-hook 已遷至 .claude/skills/ticket/hooks/
+ticket_skill_hooks_path = hooks_path.parent / "skills" / "ticket" / "hooks"
 
 from lib.hook_messages import AskUserQuestionMessages
 
 # 動態導入 post-ticket-complete-checkpoint-hook（檔案名含 dash，需用 importlib）
-hook_file = hooks_path / "post-ticket-complete-checkpoint-hook.py"
+hook_file = ticket_skill_hooks_path / "post-ticket-complete-checkpoint-hook.py"
 spec = importlib.util.spec_from_file_location("post_ticket_complete_checkpoint_hook", hook_file)
 post_ticket_complete_checkpoint_hook = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(post_ticket_complete_checkpoint_hook)

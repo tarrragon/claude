@@ -16,7 +16,8 @@ def test_hook_ticket_id_regex_matches_pattern() -> None:
     from ticket_system.lib.constants import TICKET_ID_PATTERN
 
     # 從 Hook 檔案讀取正則（Hook 位於 .claude/hooks/）
-    hook_file = Path(__file__).parent.parent.parent.parent / "hooks" / "ticket-id-validator-hook.py"
+    # W10-092: ticket-id-validator-hook 已遷至 .claude/skills/ticket/hooks/
+    hook_file = Path(__file__).parent.parent / "hooks" / "ticket-id-validator-hook.py"
     with open(hook_file, "r", encoding="utf-8") as f:
         hook_content = f.read()
 
@@ -38,7 +39,8 @@ def test_hook_known_suffixes_matches_constants() -> None:
     from ticket_system.lib.constants import KNOWN_TICKET_SUFFIXES
 
     # 從 Hook 檔案讀取後綴清單（Hook 位於 .claude/hooks/）
-    hook_file = Path(__file__).parent.parent.parent.parent / "hooks" / "ticket-id-validator-hook.py"
+    # W10-092: ticket-id-validator-hook 已遷至 .claude/skills/ticket/hooks/
+    hook_file = Path(__file__).parent.parent / "hooks" / "ticket-id-validator-hook.py"
     with open(hook_file, "r", encoding="utf-8") as f:
         hook_content = f.read()
 

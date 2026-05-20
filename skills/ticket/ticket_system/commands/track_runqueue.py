@@ -267,6 +267,12 @@ def _apply_context_resume(
     W17-146 修復：解析 handoff JSON 的 direction 欄位取出真正的 target ticket id。
     任務鏈 direction（to-sibling/to-parent/to-child）含 target 時取 target；
     非任務鏈或無 target / 未知格式時 fallback 到 source ticket_id。
+
+    W6-022 修復：優先讀取 handoff JSON 頂層 `target_ticket_id` 欄位（W17-164
+    落地的絕對指向）。當 direction=context-refresh 但 handoff 已寫入
+    target_ticket_id 時，原本 fallback 到 source ticket_id 會被
+    `_is_listable` 過濾掉（source 多為 completed），導致 runqueue
+    回報「無 resume 候選」但 `resume --list` 卻能正確顯示，兩命令結果不一致。
     """
     if context != "resume":
         return tickets
@@ -275,7 +281,12 @@ def _apply_context_resume(
         return []
     candidate_ids: Set[str] = set()
     for source_id, info in handoff_info.items():
-        direction = ((info or {}).get("direction") or "") if isinstance(info, dict) else ""
+        info_dict = info if isinstance(info, dict) else {}
+        target_explicit = info_dict.get("target_ticket_id")
+        if isinstance(target_explicit, str) and target_explicit:
+            candidate_ids.add(target_explicit)
+            continue
+        direction = (info_dict.get("direction") or "")
         if is_task_chain_direction(direction):
             target = extract_direction_target_id(direction)
             candidate_ids.add(target if target else source_id)

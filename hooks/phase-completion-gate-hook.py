@@ -120,12 +120,21 @@ WORKLOG_PATTERNS = [
 
 # 路徑黑名單（排除非 phase 報告的 worklog 檔案）
 # 1. tickets/ 子目錄：ticket md 不是 phase 完成報告（W10-072.1）
-# 2. worklog 主檔：v{major}.{minor}.{patch}.md 命名模式（如 v0.18.0.md）
+# 2. worklog 主檔（W10-072.1 + W17-217.1）：以下命名模式視為主檔，不觸發 phase 報告檢查
+#    - v{major}.{minor}.{patch}.md         （如 v0.18.0.md）
+#    - v{major}.{minor}.{patch}-main.md    （如 v0.18.0-main.md）
+#    - v{major}.{minor}-main.md            （如 v0.18-main.md）
+#    - v{major}.{minor}.{patch}-work-log.md（如 v0.18.0-work-log.md）
+#    其他 suffix（-phase-completion / -refactor / 含 ticket ID 等）不命中，仍走檢查
 WORKLOG_EXCLUSION_DIR_PATTERNS = [
     "/tickets/",
 ]
-# basename 命中即排除（patch 級 worklog 主檔）
-WORKLOG_MAIN_FILE_REGEX = re.compile(r"^v\d+\.\d+\.\d+\.md$")
+# basename 命中即排除（worklog 主檔變體）
+# 兩個 alternation：(a) 3-component 版本（可選 -main / -work-log suffix）；(b) 2-component 版本必含 -main / -work-log suffix
+WORKLOG_MAIN_FILE_REGEX = re.compile(
+    r"^v\d+\.\d+\.\d+(-(main|work-log))?\.md$"
+    r"|^v\d+\.\d+-(main|work-log)\.md$"
+)
 
 # Exit Code
 EXIT_SUCCESS = 0

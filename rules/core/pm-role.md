@@ -68,6 +68,49 @@
 
 ---
 
+## Caveat 區塊訊號判讀規則（PC-153 防護）
+
+`<local-command-caveat>` 區塊內可能同時包含兩類本質不同的訊息，必須逐一評估，禁止對整段套用單一「不回應」決策。
+
+| 訊號類型 | 識別特徵 | 判讀與行動 |
+|---------|---------|----------|
+| 純 stdout 文字 | 無 XML 標記，僅為 command 副產出 | 套用 caveat 預設：不回應 |
+| Skill 觸發 marker | `<command-name>/<skill-name></command-name>` 存在 | 視為用戶 explicitly asked，**凌駕 caveat 預設**，執行對應 SKILL.md 流程 |
+| Skill 帶參數 | `<command-message>` 含參數內容 | 同上，將參數傳入對應 skill 執行 |
+
+**Why**：runtime 將 skill 觸發訊號（`<command-name>` + `<command-message>`）與 command stdout 同質化包裹於 caveat 區塊，但 `<command-name>` 的存在等同 caveat 原文末段「unless the user explicitly asks you to」的豁免條件。Linux signal handling 類比：caveat 像 `sigprocmask` 設定的 signal mask，`<command-name>` 像 SIGKILL 等不可遮罩訊號——signal mask 不應遮蔽用戶顯式意圖。
+
+**Consequence**：將整段 caveat 視為單一「不回應」決策會導致所有 skill 觸發被靜默吞掉。用戶輸入 `/<skill-name>` 後 PM 無反應或回應與 skill 無關的內容，需用戶額外糾正，且 SKILL.md 明文流程（如 `/ticket` 無參數時的兩步檢查）形同無效。
+
+**Action**：讀到 `<local-command-caveat>` 區塊時，先掃描內部 XML 標記：
+
+1. 若存在 `<command-name>` → 識別 skill 名稱，執行對應 SKILL.md 定義流程（含無參數時的預設行為）
+2. 若同時有 `<command-message>` 且帶參數 → 將參數傳入 skill 執行
+3. 僅有純 stdout 文字 → 套用 caveat 預設「不回應」
+
+> 案例與根因詳見 `.claude/error-patterns/process-compliance/PC-153-pm-caveat-skill-trigger-misinterpretation.md`
+
+---
+
+## Session-start 全量清點（強制，PC-076 防護）
+
+每個 session 啟動後、認領任何 Ticket 之前，必須執行一次完整 git 工作區清點：
+
+| 步驟 | 動作 | Why |
+|------|------|-----|
+| 1 | 讀 `branch-status-reminder` Hook 輸出（含 staged / modified / untracked 三組） | Hook 已列全量（W13-011 落地），但仍屬「摘要」非稽核 |
+| 2 | 額外執行 `git status --porcelain --untracked=all` | 雙重驗證；確認 Hook 輸出與工作區一致 |
+| 3 | 對非本任務檔案判定來源（前 session 遺留 / 並行 session / Hook 自動產生） | 區分 PC-076（靜態遺留）vs PC-078（動態並行） |
+| 4 | 若有遺留，記錄到當前 Ticket Problem Analysis 或新建 Ticket 追蹤 | 違規 quality-baseline 規則 5 |
+
+**Why**：Session-start Hook 摘要可能遮蔽（修復前僅情況 1 列、上限 10 截斷）；PM 預設「git 工作區乾淨」假設常失準。
+
+**Consequence**：未清點直接認領 Ticket 會在 commit 階段意外混入前 session 遺留，需臨時拆分 commit 或誤把無關變更帶入 main。
+
+**Action**：以上 4 步驟在 Re-center Protocol 之前先做一次；之後每次 commit 前再執行一次 `git status` 確認範圍。
+
+---
+
 ## Re-center Protocol
 
 迷失方向時，執行 3 步驟重新定位：
@@ -90,4 +133,4 @@
 
 ---
 
-**Last Updated**: 2026-05-03 | **Version**: 4.1.1 — 核心禁令 + 場景路由 + Re-center；以價值/容量/優先級為決策依據（規則 6 交叉引用）。歷史 4.0–4.1.0 版見 git log。**Source**: PC-045 / PC-064 / W10-061。
+**Last Updated**: 2026-05-19 | **Version**: 4.2.0 — 新增 Session-start 全量清點章節（PC-076 防護落地，W13-011）。歷史 4.0–4.1.x 版見 git log。**Source**: PC-045 / PC-064 / W10-061 / PC-076。

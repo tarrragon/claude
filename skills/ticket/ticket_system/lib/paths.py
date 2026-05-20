@@ -90,20 +90,17 @@ def get_tickets_dir(version: str) -> Path:
     versioned = f"{VERSION_PREFIX}{bare_version}"
 
     # 解析 major.minor 用於階層路徑
+    # W14-052：可解析 major.minor 時一律回傳三層階層路徑，
+    # 不依賴目錄存在性檢查；避免未存在主版本 fallback 至 flat
+    # 結構造成跨專案殘留 + 與三層規則不一致。
     parts = bare_version.split(".")
     if len(parts) >= 2:
         major = parts[0]
         minor = f"{parts[0]}.{parts[1]}"
-        major_dir = root / WORK_LOGS_DIR / f"v{major}"
-        hierarchical = major_dir / f"v{minor}" / versioned / TICKETS_DIR
-        if hierarchical.exists() or (hierarchical.parent.exists()):
-            return hierarchical
-        # 階層結構的 major 目錄存在但此版本不存在 → 仍使用階層路徑
-        # 防止 fallback 到平行結構建立跨專案殘留目錄
-        if major_dir.exists():
-            return hierarchical
+        hierarchical = root / WORK_LOGS_DIR / f"v{major}" / f"v{minor}" / versioned / TICKETS_DIR
+        return hierarchical
 
-    # 向後相容：舊式平行結構（僅在無階層結構時使用）
+    # 最終 safety net：版本字串無法解析 major.minor 時使用 flat 結構
     flat = root / WORK_LOGS_DIR / versioned / TICKETS_DIR
     return flat
 
