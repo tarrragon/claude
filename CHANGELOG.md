@@ -1,3 +1,94 @@
+## [1.35.0] - 2026-05-27
+
+### Summary
+feat: 升級 skill-cli-error-feedback-hook 加入系統功能缺失分類; feat: 並行受控實驗 + PC-137/ARCH-015 規則升級; feat: 建立 pm-rules/ticket-handoff-archaeology.md（接手考古 SOP） (+78 more)
+
+Changes: 19 feat, 4 refactor, 6 fix, 37 docs, 10 chore, 5 test
+
+- feat: 升級 skill-cli-error-feedback-hook 加入系統功能缺失分類
+- feat: 並行受控實驗 + PC-137/ARCH-015 規則升級
+- feat: 建立 pm-rules/ticket-handoff-archaeology.md（接手考古 SOP）
+- feat: 新增 install-guide-edit-reminder-hook (PC-159 Hook 層)
+- feat: 升級至 hook-system-methodology § 6 觀察類工具雙重身份設計
+- feat: SessionStart source diagnostic hook 用於 bg session resume 觀察
+- feat: 為 3 hook 啟用 continueOnBlock（4 處註冊）
+- feat: handoff gc 新增 --force 清理 task-chain handoff
+- feat: resume 擴充 target_ticket_id 反向查找
+- feat: inline pyproject_scanner API 消除 CLI sys.path hack
+- feat: claim 預設不執行 AC verification + complete 並行安全分析
+- feat: cbm + codegraph MCP detector 整合 project-init check
+- feat: S6 wire complete status precondition (B11/B13/B15 green)
+- feat: S5 wire set-acceptance status precondition (B6-B10 + E2 green)
+- feat: S3 wire append-log status precondition (B1-B5 + E1 green)
+- feat: S1 add require_in_progress helper (status precondition)
+- feat: append-log CLI 自動降級 H2 → H3（ 方案 B 落地）
+- feat: ticket create ID 掃描改用 main ref 聯集（B3 GREEN）
+- feat: 建立 test-assertion-design skill
+- refactor: charset guard find_violations 重構為 CATEGORY_MAP 統一 lookup
+- refactor: 刪除 handoff hook dead code get_active_version
+- refactor: 部分拆分 handoff-auto-resume-stop-hook 抽出 session 管理模組
+- refactor: has_background_agents 提升出 scan 迴圈為一次性 bool
+- fix: 清理 衍生：substring 比對 + cache 殘留 + sync-preserve 過時 + schema PC 引用
+- fix: post-test-hook 加 ticket body 寫入豁免
+- fix: 移除 SKILL.md 3 個 ✓ emoji 違反規則 3
+- fix: 修復 install + runtime path 兩個 framework bug
+- fix: 修正 .mcp.json --load-extension 路徑（採方案 B）
+- fix: 縮窄 post-test-hook ANALYZER_WARNING_PATTERNS 避免誤報 jest console.warn
+- docs: basil Layer 2 補審查回應 - 補三明示 Consequence/Action + 表格 OR 說明
+- docs: ticket-body-schema.md IMP 安裝指令 acceptance 條件補強 (PC-159 三層防護收尾)
+- docs: Layer 2 補修 basil 審查 2W+2I 回饋
+- docs: 升級 worktree-operations 與 parallel-dispatch 為策略 C
+- docs: parallel-dispatch.md 新增 bgIsolation:none 並行安全警告
+- docs: worktree-operations.md 新增 bgIsolation 策略選擇章節
+- docs: 錯誤學習雙通道 + 衍生 追蹤建立
+- docs: 對齊 CC plugin 管理機制
+- docs: 新增 /goal × acceptance 邊界章節
+- docs: PC-092 v2 案例補強（/ 並行 commit）+ PM 自評
+- docs: 鏡像 memory 升級四問檢查至 auto-load + pm-role 路由補強
+- docs: ANA 驗收修正 + PC-161 固化 + .1 closed
+- docs: PC-160 PM 跳過升級評估閘門直接寫 memory 處理 session 浮現洞察
+- docs: .2 實機驗證落地 + SessionStart source 對照表
+- docs: footer 描述移除具體 ticket ID 純粹符合 PC-083
+- docs: session-switching-sop 補充 /resume bg session 場景
+- docs: 新增 claude agents --json 速查附錄段落
+- docs: 整併 acceptance 反模式表 DRY + Why 欄 + Action 步驟
+- docs: Layer 2 修正反模式範例英文混入
+- docs: 遷移既有 acceptance 「npm test 100%」為 complete-time 語義 + 文件規範完善
+- docs: Layer 2 微調收尾責任段落
+- docs: 補強 mint-format-specialist 收尾責任段落
+- docs: PC-074 補升級備註指向 language-constraints 規則 5
+- docs: language-constraints 新增規則 5 字元集子集動態驗證
+- docs: 文件落地三 MCP 路由與 cbm 限制（方案 B 改良）
+- docs: 建立 PC-159 安裝指令未在 fresh shell 驗證
+- docs: 新增 PC-158 — mint-format-specialist 視覺標記場景 emoji 違規
+- docs: 新增三 MCP 設計對照表與三刀流工作流決策樹至 search-tools-guide skill
+- docs: 新增 IMP-077 測試 helper 設計反模式
+- docs: 新增 IMP-076 skill packaging install/runtime 二態盲點（ 衍生）
+- docs: 新增 PC-157 + IMP-075（.2 衍生）
+- docs: language-constraints 規則 3 補規格文件 emoji 豁免條款
+- docs: 修正 PC-115 既有 6 處「數據」→「資料」 + Session 總結 worklog
+- docs: Layer 2 basil 審查修補 + PC-115 deadlock 變體章節 + spawn
+- docs: PM cwd auto-switch 到 agent worktree 錯誤模式記錄
+- docs: 新增 PC-155 auto-stage × worktree 並行編輯同檔造成 merge conflict
+- docs: 落地 worktree 派發防護方案 A1+B1
+- chore: gitignore 擴大 hook-logs 覆蓋嵌套 skill 目錄 + 接受 IMP-054 auto exec bit
+- chore: allow ZIP install verification commands (.2 leftover)
+- chore: 補 test_post_test_hook.py exec bit
+- chore: spawn ticket 落地 + dispatch plan 註記
+- chore: 正規化版本發布時的權限需求變更檢查
+- chore: 固化 worktree 派發失敗為 PC-154 error-pattern
+- chore: 補提交 .2 第二次中斷紀錄 + 修正 handoff gitignore
+- chore: 收斂 test-assertion 設計檔為 skill stub
+- chore: compositional-writing 多輪審查第 2 輪修正 + complete
+- chore: 套用第 1 輪審查 F1-F7 修正到 test-assertion-design skill
+- test: test_mcp_detector 9 情境覆蓋 success/missing/index
+- test: S7 add precondition × file_lock safety tests (D1-D2)
+- test: S4 add force-usage logging tests (C1-C4 complete)
+- test: S2 add conftest precondition fixtures
+- test: TDD Phase 1-2 — B3 ID 掃描 main ref 功能設計 + RED 測試
+
+---
+
 ## [1.34.0] - 2026-05-21
 
 ### Summary

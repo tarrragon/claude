@@ -23,7 +23,150 @@ Fixture 設計（最小 mock 原則）：
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+
+
+# ============================================================
+# W3-044 — precondition fixtures
+# ============================================================
+#
+# 為 body-op precondition 測試（append-log / set-acceptance / complete）提供
+# 共享 fixture。fixture 直接 mutate ticket md（繞 claim CLI），避免 W1-054
+# claim 持久化 bug 干擾 precondition 測試（隔離測試關注點）。
+
+
+def _write_minimal_ticket_md(path: Path, ticket_id: str, status: str, **extra) -> None:
+    """寫入最小可解析 ticket md（含 frontmatter + 基本章節）。"""
+    fm_lines = [
+        "---",
+        f"id: {ticket_id}",
+        "title: test ticket",
+        "type: IMP",
+        f"status: {status}",
+        "assigned: true",
+        "tdd_phase: phase3b",
+        "children: []",
+        "blockedBy: []",
+        "spawned_tickets: []",
+    ]
+    acceptance = extra.get("acceptance", ["[ ] dummy acceptance item"])
+    fm_lines.append("acceptance:")
+    for item in acceptance:
+        fm_lines.append(f"  - '{item}'")
+    fm_lines.append("---")
+    fm = "\n".join(fm_lines) + "\n\n"
+
+    body = (
+        "# Execution Log\n\n"
+        "## Task Summary\n\n"
+        "Test task.\n\n"
+        "## Problem Analysis\n\n"
+        "Test analysis.\n\n"
+        "## Solution\n\n"
+        "Test solution.\n\n"
+        "## Test Results\n\n"
+        "Test results.\n\n"
+        "## Completion Info\n\n"
+        "**Review Status**: pending\n"
+    )
+    path.write_text(fm + body, encoding="utf-8")
+
+
+@pytest.fixture
+def precondition_tmp_dir(tmp_path: Path) -> Path:
+    """提供 precondition 測試的 ticket 暫存目錄。"""
+    d = tmp_path / "tickets"
+    d.mkdir()
+    return d
+
+
+@pytest.fixture
+def precondition_hook_logs_dir(tmp_path: Path, monkeypatch) -> Path:
+    """為 precondition 測試隔離 hook-logs 目錄。"""
+    logs_dir = tmp_path / "hook-logs"
+    monkeypatch.setenv("HOOK_LOGS_DIR", str(logs_dir))
+    return logs_dir
+
+
+@pytest.fixture
+def tmp_ticket_factory(precondition_tmp_dir, precondition_hook_logs_dir, monkeypatch):
+    """產生指定 status 的 tmp ticket md，回傳 ticket_id；自動 patch loader/saver。"""
+    from ticket_system.commands import track_acceptance as ta_mod
+    from ticket_system.commands import track_set_acceptance as tsa_mod
+    from ticket_system.lib import ticket_loader as loader_mod
+    from ticket_system.lib import ticket_ops as ops_mod
+
+    def _fake_get_ticket_path(version: str, ticket_id: str) -> Path:
+        return precondition_tmp_dir / f"{ticket_id}.md"
+
+    def _fake_load_ticket(version: str, ticket_id: str):
+        from ticket_system.lib.parser import parse_frontmatter
+
+        path = precondition_tmp_dir / f"{ticket_id}.md"
+        if not path.exists():
+            return None
+        try:
+            fm, body = parse_frontmatter(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        if not fm:
+            return None
+        fm["_body"] = body
+        fm["_path"] = str(path)
+        return fm
+
+    def _fake_load_and_validate_ticket(version: str, ticket_id: str):
+        ticket = _fake_load_ticket(version, ticket_id)
+        if ticket is None:
+            return None, f"ticket not found: {ticket_id}"
+        return ticket, None
+
+    # Patch 各模組命名空間
+    for mod in (loader_mod, ta_mod, tsa_mod):
+        monkeypatch.setattr(mod, "get_ticket_path", _fake_get_ticket_path, raising=False)
+        monkeypatch.setattr(mod, "load_ticket", _fake_load_ticket, raising=False)
+
+    monkeypatch.setattr(
+        ops_mod, "load_and_validate_ticket", _fake_load_and_validate_ticket, raising=False
+    )
+    monkeypatch.setattr(
+        tsa_mod, "load_and_validate_ticket", _fake_load_and_validate_ticket, raising=False
+    )
+
+    def factory(status: str = "pending", ticket_id: str | None = None, **extra) -> str:
+        tid = ticket_id or f"0.0.0-W0-{status.upper()}"
+        path = precondition_tmp_dir / f"{tid}.md"
+        _write_minimal_ticket_md(path, tid, status, **extra)
+        return tid
+
+    return factory
+
+
+@pytest.fixture
+def pending_ticket(tmp_ticket_factory) -> str:
+    return tmp_ticket_factory(status="pending", ticket_id="0.0.0-W0-PENDING")
+
+
+@pytest.fixture
+def in_progress_ticket(tmp_ticket_factory) -> str:
+    return tmp_ticket_factory(status="in_progress", ticket_id="0.0.0-W0-INPROG")
+
+
+@pytest.fixture
+def completed_ticket(tmp_ticket_factory) -> str:
+    return tmp_ticket_factory(status="completed", ticket_id="0.0.0-W0-COMPLETED")
+
+
+@pytest.fixture
+def blocked_ticket(tmp_ticket_factory) -> str:
+    return tmp_ticket_factory(status="blocked", ticket_id="0.0.0-W0-BLOCKED")
+
+
+# ============================================================
+# 既有 autouse fixture（W11-015）
+# ============================================================
 
 
 @pytest.fixture(autouse=True)

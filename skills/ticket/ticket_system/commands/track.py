@@ -372,17 +372,28 @@ def _register_lifecycle_commands(
     p_claim.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_claim.add_argument("--version", help=TrackMessages.ARG_VERSION)
     p_claim.add_argument(
+        "--verify",
+        dest="verify",
+        action="store_true",
+        help=(
+            "W3-046: 明示啟用 AC 自動驗證（預設關閉，避免 npm test 全套件副作用 / "
+            "PC-078 並行衝突）。僅供除錯場景使用"
+        ),
+    )
+    p_claim.add_argument(
         "--skip-verify",
         dest="skip_verify",
         action="store_true",
-        help="跳過 AC 自動驗證（逃生閥），直接進入既有 claim 流程",
+        help=(
+            "W3-046: 已預設不執行 AC 驗證，此旗標保留為 no-op（向後相容）"
+        ),
     )
     p_claim.add_argument(
         "--yes",
         "-y",
         dest="yes",
         action="store_true",
-        help="非互動模式：AC 驗證仍執行，但自動選 y 繼續 claim",
+        help="非互動模式：AC 驗證（若以 --verify 啟用）自動選 y 繼續 claim",
     )
     p_claim.add_argument(
         "--quiet",
@@ -780,6 +791,12 @@ def _register_acceptance_commands(
         help="取消勾選全部驗收條件"
     )
     p_set_acceptance.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    p_set_acceptance.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="W3-044 逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+    )
 
     # validate 操作
     p_validate = subparsers.add_parser(
@@ -802,6 +819,12 @@ def _register_acceptance_commands(
     )
     p_append_log.add_argument("content", help=TrackMessages.ARG_CONTENT)
     p_append_log.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    p_append_log.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="W3-044 逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+    )
 
     # accept-creation 操作
     p_accept_creation = subparsers.add_parser(

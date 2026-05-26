@@ -34,7 +34,7 @@ from ticket_system.lib.handoff_utils import (
 )
 
 
-def _collect_stale_handoffs() -> List[Tuple[Path, str, str]]:
+def _collect_stale_handoffs(force: bool = False) -> List[Tuple[Path, str, str]]:
     """
     掃描 pending/ 目錄，收集所有 stale handoff 檔案。
 
@@ -43,6 +43,11 @@ def _collect_stale_handoffs() -> List[Tuple[Path, str, str]]:
 
     Markdown 格式 handoff 因無 direction 資訊，沿用原行為：
     來源 ticket 已 completed 即視為 stale。
+
+    Args:
+        force: True 時跳過 task-chain 保護（is_handoff_stale），改用
+               is_ticket_completed(source_ticket) 統一判定；False 時保持
+               現有行為（向後相容）。W3-018.2 新增。
 
     Returns:
         List of (file_path, ticket_id, reason) tuples
@@ -60,14 +65,24 @@ def _collect_stale_handoffs() -> List[Tuple[Path, str, str]]:
             if not ticket_id:
                 continue
 
-            # W17-163 L1-A: delegate 至 is_handoff_stale（單一 stale 判定來源）
-            is_stale, reason = is_handoff_stale(record.data)
-            if is_stale:
-                stale.append((record.file_path, ticket_id, reason))
+            if force:
+                # W3-018.2: --force 模式跳過 task-chain 保護，
+                # 來源 ticket 已 completed 即視為 stale
+                if is_ticket_completed(ticket_id):
+                    reason = (
+                        f"來源 ticket {ticket_id} 已完成 "
+                        f"(--force 模式跳過 task-chain 保護)"
+                    )
+                    stale.append((record.file_path, ticket_id, reason))
+            else:
+                # W17-163 L1-A: delegate 至 is_handoff_stale（單一 stale 判定來源）
+                is_stale, reason = is_handoff_stale(record.data)
+                if is_stale:
+                    stale.append((record.file_path, ticket_id, reason))
 
         elif record.format == "markdown":
             # Markdown 格式無 direction 資訊，沿用原行為：
-            # 來源 ticket 已 completed → stale
+            # 來源 ticket 已 completed → stale（不受 force 影響）
             ticket_id = record.ticket_id
             if ticket_id and is_ticket_completed(ticket_id):
                 reason = f"來源 ticket {ticket_id} 已完成（Markdown 格式）"
@@ -76,17 +91,18 @@ def _collect_stale_handoffs() -> List[Tuple[Path, str, str]]:
     return stale
 
 
-def execute_gc(dry_run: bool = True) -> int:
+def execute_gc(dry_run: bool = True, force: bool = False) -> int:
     """
     執行 handoff GC 清理。
 
     Args:
         dry_run: True 時僅預覽，False 時實際移動至 archive/
+        force: True 時跳過 task-chain 保護（W3-018.2）
 
     Returns:
         int: 退出碼（0 成功）
     """
-    stale = _collect_stale_handoffs()
+    stale = _collect_stale_handoffs(force=force)
 
     if not stale:
         print("[GC] 無 stale handoff，pending 目錄已清潔。")
@@ -96,7 +112,8 @@ def execute_gc(dry_run: bool = True) -> int:
     archive_dir = root / HANDOFF_DIR / HANDOFF_ARCHIVE_SUBDIR
 
     mode = "[DRY-RUN]" if dry_run else "[執行]"
-    print(f"{mode} 發現 {len(stale)} 個 stale handoff：")
+    force_tag = " [--force]" if force else ""
+    print(f"{mode}{force_tag} 發現 {len(stale)} 個 stale handoff：")
     print()
 
     for file_path, ticket_id, reason in stale:

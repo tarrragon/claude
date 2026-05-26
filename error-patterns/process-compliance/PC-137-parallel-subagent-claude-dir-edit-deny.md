@@ -71,5 +71,34 @@ PC-115「Deny 事件累積」表持續追蹤；若 ≤ 2 並行仍出現 `.claud
 
 ---
 
-**Last Updated**: 2026-05-11
+## bgIsolation: none 例外（受控實驗驗證）
+
+並行 ≤ 2 規則為 bgIsolation: worktree（預設）模式下的觀察結論。bgIsolation: none 模式下的並行行為已透過受控實驗驗證為不同模式。
+
+**並行受控實驗結果**：bgIsolation: none + 並行 3 subagent + `.claude/` Edit → **3/3 success**，0/3 deny。 <!-- PC-093-exempt: history:0.19.0-W3-034.4 為實驗驗證歷史錨點 -->
+
+**新規則**：
+
+| 模式 | 並行 `.claude/` 修改限制 |
+|------|----------------------|
+| bgIsolation: worktree（預設） | **≤ 2**（原規則維持，W17-097.1-.4 + W17-174.2.1/.3/.4 7/7 deny 證據） |
+| bgIsolation: none | **未受並行數限制**（單一 + 並行 3 已驗證 success），但仍受 git index 競爭風險限制 |
+
+**未驗證情境（仍需謹慎）**：
+
+- bgIsolation: none + 並行 + git add / commit（PC-092 共享 index 風險未測）
+- bgIsolation: none + 並行 5+ subagent（更高並行度未測）
+
+**Action 更新**：
+
+| 並行數 | bgIsolation: worktree | bgIsolation: none |
+|-------|----------------------|------------------|
+| 1 | 序列派發，無限制 | 序列派發，無限制 |
+| 2 | 允許並行；確認檔案邊界互斥 | 允許並行；同左 |
+| 3+ | 拆 batch（每批 ≤ 2）或改序列 | 允許並行 Edit；但 commit 仍需精準 staging |
+
+---
+
+**Last Updated**: 2026-05-26
+**Version**: 1.1.0 — 並行受控實驗驗證 bgIsolation: none 模式下並行限制例外（W3-034.4 落地） <!-- PC-093-exempt: history:0.19.0-W3-034.4 為實驗驗證歷史錨點 -->
 **Version**: 1.0.0 — 從 W17-177 saffron ANA 收斂落地（W17-177.1 IMP 防護的反模式描述層）

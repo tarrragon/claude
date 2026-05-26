@@ -1085,8 +1085,9 @@ def _execute_gc(args: argparse.Namespace) -> int:
     from ticket_system.commands.handoff_gc import execute_gc
     dry_run = getattr(args, "dry_run", False)
     execute_mode = getattr(args, "execute", False)
+    force = getattr(args, "force", False)
     # 預設為 dry-run（dry_run=True），除非明確指定 --execute
-    return execute_gc(dry_run=(dry_run or not execute_mode))
+    return execute_gc(dry_run=(dry_run or not execute_mode), force=force)
 
 
 # ============================================================================
@@ -1111,6 +1112,7 @@ def _build_handoff_namespace(ticket_id: str) -> argparse.Namespace:
         gc=False,
         dry_run=False,
         execute=False,
+        force=False,
         auto=False,
         from_ticket_id=None,
         direction=None,
@@ -1753,6 +1755,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--execute",
         action="store_true",
         help="（搭配 --gc）執行清理，將 stale handoff 移至 archive/"
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="（搭配 --gc）跳過 task-chain 保護，清理所有來源 ticket 已 completed 的 handoff（含 to-sibling/to-parent/to-child）"
     )
     parser.add_argument(
         "--version",

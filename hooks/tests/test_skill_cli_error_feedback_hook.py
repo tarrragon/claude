@@ -143,3 +143,109 @@ def test_case_5_no_pattern_match_skips(capsys):
     assert rc == 0
     payload = json.loads(out)
     assert "additionalContext" not in payload["hookSpecificOutput"]
+
+
+# ----------------------------------------------------------------------------
+# W3-073: 三類分類測試
+# ----------------------------------------------------------------------------
+
+
+def test_classify_user_typo_for_business_logic_error():
+    """業務邏輯錯誤（exclusion 清單命中）→ user_typo。"""
+    result = hook.classify_error(
+        "ticket track claim 0.99.0-W1-999",
+        "ticket not found: 0.99.0-W1-999",
+        "",
+    )
+    assert result == hook.CLASSIFICATION_USER_TYPO
+
+
+def test_classify_system_gap_for_set_where_layer():
+    """W3-072 reference case: set-where --layer → system_functional_gap。"""
+    result = hook.classify_error(
+        "ticket track set-where 0.19.0-W3-071 --layer 'Framework Rules'",
+        "ticket: error: unrecognized arguments: --layer Framework Rules",
+        "",
+    )
+    assert result == hook.CLASSIFICATION_SYSTEM_GAP
+
+
+def test_classify_system_gap_for_set_who_current():
+    """擴展案例: set-who --current → system_functional_gap。"""
+    result = hook.classify_error(
+        "ticket track set-who 0.19.0-W3-073 --current thyme-python-developer",
+        "ticket: error: unrecognized arguments: --current thyme-python-developer",
+        "",
+    )
+    assert result == hook.CLASSIFICATION_SYSTEM_GAP
+
+
+def test_classify_skill_doc_for_unknown_subcommand():
+    """未知子命令但非 dict 子欄位 → skill_documentation_gap。"""
+    result = hook.classify_error(
+        "ticket track frobnicate --bogus x",
+        "ticket: error: unrecognized arguments: --bogus x",
+        "",
+    )
+    assert result == hook.CLASSIFICATION_SKILL_DOC
+
+
+def test_detect_system_gap_returns_none_without_unrecognized_error():
+    """無 unrecognized arguments 訊號 → detect_system_gap 返回 None。"""
+    result = hook.detect_system_gap(
+        "ticket track set-where 0.19.0-W3-071 --layer x",
+        "some other error",
+        "",
+    )
+    assert result is None
+
+
+def test_detect_system_gap_returns_signal_on_match():
+    """命中 set-where --layer → 返回完整 signal dict。"""
+    result = hook.detect_system_gap(
+        "ticket track set-where 0.19.0-W3-071 --layer 'Framework Rules'",
+        "ticket: error: unrecognized arguments: --layer",
+        "",
+    )
+    assert result is not None
+    assert result["subcommand"] == "set-where"
+    assert result["flag"] == "layer"
+    assert "layer" in result["known_subfields"]
+    assert "files" in result["known_subfields"]
+
+
+# ----------------------------------------------------------------------------
+# 主流程整合：系統功能缺失輸出 ANA 骨架
+# ----------------------------------------------------------------------------
+
+
+def test_main_emits_system_gap_feedback_for_set_where_layer(capsys):
+    """W3-072 reference case 端到端：輸出含 ticket create --type ANA 骨架。"""
+    stdin = _make_input(
+        "ticket track set-where 0.19.0-W3-071 --layer 'Framework Rules'",
+        stderr="ticket: error: unrecognized arguments: --layer Framework Rules",
+    )
+    rc, out = _run_main(stdin, capsys)
+    assert rc == 0
+    payload = json.loads(out)
+    additional = payload["hookSpecificOutput"].get("additionalContext", "")
+    assert "[系統功能缺失評估]" in additional
+    assert "ticket track create --type ANA" in additional
+    assert "set-where" in additional
+    assert "--layer" in additional
+    # 既有 SKILL 文檔回饋路徑不應同時觸發
+    assert "[SKILL 引導品質回饋]" not in additional
+
+
+def test_main_preserves_skill_doc_feedback_for_non_dict_field_error(capsys):
+    """非 dict 子欄位的 unrecognized arguments 仍走既有 SKILL 文檔路徑（向後相容）。"""
+    stdin = _make_input(
+        "ticket track claim --bogus-flag x",
+        stderr="ticket: error: unrecognized arguments: --bogus-flag x",
+    )
+    rc, out = _run_main(stdin, capsys)
+    assert rc == 0
+    payload = json.loads(out)
+    additional = payload["hookSpecificOutput"].get("additionalContext", "")
+    assert "[SKILL 引導品質回饋]" in additional
+    assert "[系統功能缺失評估]" not in additional

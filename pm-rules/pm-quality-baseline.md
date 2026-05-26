@@ -134,7 +134,9 @@
 以下兩項為 PM 專屬檢查（規則 1-5 的通用清單見 `quality-baseline.md`）：
 
 - [ ] 發現框架可改善時，是否已在當前 Wave 建立 Ticket？（規則 6）
-- [ ] 寫入 feedback memory 時已執行四問升級檢查？（規則 7，PC-061）
+- [ ] 寫入 feedback memory 時已執行四問升級檢查？（規則 7，PC-061 / PC-160）
+
+> **Auto-load 鏡像**：規則 7 的四問檢查項已鏡像至 `.claude/rules/core/quality-baseline.md` 通用檢查清單末端（W3-060），確保 PM auto-load context 含此檢查項。本檔為完整四問定義的權威來源；auto-load 層僅含指向本檔的提醒項。修改本規則時必須同步檢查 quality-baseline.md 鏡像項是否需更新。
 
 ---
 

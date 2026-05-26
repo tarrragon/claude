@@ -360,6 +360,11 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-zombie-cleanup-hook.py",
             "timeout": 15000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-source-diagnostic-hook.py",
+            "timeout": 5000
           }
         ]
       }
@@ -443,7 +448,8 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/phase-completion-gate-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/phase-completion-gate-hook.py",
+            "continueOnBlock": true
           },
           {
             "type": "command",
@@ -470,6 +476,11 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-frontmatter-validator-hook.py",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/install-guide-edit-reminder-hook.py",
+            "timeout": 5000
           }
         ]
       },
@@ -486,11 +497,13 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-id-validator-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-id-validator-hook.py",
+            "continueOnBlock": true
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/phase-completion-gate-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/phase-completion-gate-hook.py",
+            "continueOnBlock": true
           },
           {
             "type": "command",
@@ -512,7 +525,8 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-quality-gate-hook.py"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-quality-gate-hook.py",
+            "continueOnBlock": true
           },
           {
             "type": "command",
@@ -533,6 +547,11 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-frontmatter-validator-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/install-guide-edit-reminder-hook.py",
             "timeout": 5000
           }
         ]

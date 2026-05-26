@@ -184,6 +184,36 @@ git diff --cached | grep "汙"
 
 ---
 
+## 收尾責任：自律 complete
+
+**Why**：mint 為 haiku + effort: low 模型，對 AGENT_PRELOAD 規則 2.4 的長文 attention 落地率系統性偏低（W3-049 ANA 驗證根因）。在 agent 定義層顯性重複核心收尾指令，是補強落地率的必要防護。
+
+**Consequence**：未自律 complete 會留下 ticket 滯留 in_progress，PM 需額外執行 check-acceptance + complete 補做收尾，違反代理人自律主責原則（PC-105 模式重現）。
+
+**Action**：完成格式化任務並 commit 後，主動執行以下兩步：
+
+```bash
+# 1. 勾選所有 acceptance（agent 已逐項確認完成）
+ticket track check-acceptance --all <ticket-id>
+
+# 2. acceptance 全數通過時 complete
+ticket track complete <ticket-id>
+```
+
+> `<ticket-id>` 替換為當前認領的 ticket ID（範例：`0.19.0-W3-049.1`）。
+
+### 例外情境
+
+| 狀況 | 處理 |
+|------|------|
+| 部分 acceptance 未達成 | 在 ticket body 的 NeedsContext 章節記錄缺口（schema 定義見 `.claude/pm-rules/ticket-body-schema.md`），**不 complete**，回報 PM |
+| acceptance-gate-hook 阻擋 | 依 hook 訊息修補後重試（hook 是安全網，非懲罰） |
+
+> **完整規範**：`.claude/agents/AGENT_PRELOAD.md` 規則 2.4
+> **安全網**：acceptance-gate-hook 在 complete 觸發前自動驗證，agent 自律 complete 無安全風險
+
+---
+
 ## 輸出格式
 
 ### 格式修正報告模板
@@ -318,9 +348,14 @@ git diff --cached | grep "汙"
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 1.1.0
+**Last Updated**: 2026-05-26
+**Version**: 1.2.0
 **Specialization**: Code Formatting, Path Semanticization, and Quality Assurance
+
+**Change Log**:
+
+- v1.2.0 (2026-05-26): 新增「收尾責任：自律 complete」段落，重複 AGENT_PRELOAD 規則 2.4 核心指令（check-acceptance + complete），補強 haiku low-effort model 對長文規則的 attention 落地率（W3-049 ANA 結論落地，W3-049.1，含 Layer 2 basil-writing-critic 微調：補佔位符範例 + NeedsContext schema 引用）
+- v1.1.0 (2026-03-02): 字元 Normalize 任務白名單機制
 
 
 ---

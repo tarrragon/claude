@@ -182,8 +182,28 @@ def parse_ticket_frontmatter(content: str) -> Optional[str]:
 
 
 def get_project_root() -> Path:
-    """取得專案根目錄"""
-    return Path(__file__).parent.parent.parent.parent.parent
+    """取得專案根目錄。
+
+    優先順序：
+    1. cwd 本身為 git repo root（含 .git 或 package.json）→ 用 cwd
+    2. cwd parents 向上找到 .git → 用該 ancestor
+    3. dev mode fallback：__file__ 上溯（假設 source 在 .claude/skills/version-release/scripts/）
+    4. 最後 fallback：cwd（後續檔案存取會自然 fail 並回報明確錯誤）
+
+    Why: 原版用 Path(__file__).parent x5，假設 source tree 結構；
+    uv tool install 後 __file__ 位於 site-packages，parent x5 進入 ~/.local/share/ 上層
+    導致 docs/todolist.yaml / package.json 等檔案存取失敗。
+    """
+    cwd = Path.cwd()
+    if (cwd / ".git").exists() or (cwd / "package.json").exists():
+        return cwd
+    for parent in cwd.parents:
+        if (parent / ".git").exists():
+            return parent
+    dev_fallback = Path(__file__).parent.parent.parent.parent.parent
+    if (dev_fallback / ".git").exists() or (dev_fallback / "package.json").exists():
+        return dev_fallback
+    return cwd
 
 
 def detect_version_files(root: Path) -> List[Tuple[Path, str]]:

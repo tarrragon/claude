@@ -99,6 +99,36 @@ ANA / IMP Solution 章節支援 H3 子標題組織內容（如「### WRAP 完整
 - `Test Results` 必填：至少記錄執行指令與通過數（或 commit SHA）。
 - `Problem Analysis` / `Solution` 選填：小型 IMP 以 frontmatter how/acceptance 已足；大型 IMP 建議補充決策理由。
 
+#### 安裝指令 IMP 額外 acceptance（PC-159 防護）
+
+IMP ticket 含安裝指令時，acceptance 必須補上 fresh shell 驗證條件，避免 PM / agent 既有環境通過驗證但 fresh shell 失敗的系統性風險（PC-159 / W3-050 codegraph placeholder package、W3-051 sys.path hack 案例）。
+
+**觸發條件**（任一成立即須補強）：
+
+- ticket `what` / `how` 含安裝動詞：`npm install` / `pip install` / `brew install` / `uv tool install` / `cargo install`
+- ticket `where.files` 含 `docs/development-setup.md` / `docs/environment-recovery-guide.md` / 等價的環境安裝指南檔案
+
+**必填 acceptance**（觸發後至少一項勾選）：
+
+| # | 驗證條件 | 適用情境 |
+|---|---------|---------|
+| 1 | 安裝指令在 fresh shell（新 terminal、無 `.bashrc` / `.zshrc` 以外環境變數）執行通過 | 任何安裝指令均適用 |
+| 2 | package name 為完整 scoped name（`@scope/pkg-name`）或完整 registry URL，無短名 placeholder squat 風險 | npm / PyPI 公開 registry |
+| 3 | 附 package registry 驗證輸出（`npm info <pkg>` / `pip show <pkg>` / `cargo search <pkg>`） | 已知 squat 風險或內部 mirror |
+
+表格三項為 OR 關係，任一勾選即滿足 PC-159 acceptance 閘門；多項並列僅為冗餘保護，無加分效果。
+
+**Why**：規則 5（所有發現必須追蹤）+ PC-159 三層防護（規則層 / Hook 層 / 文件層）的 Acceptance Schema 層落地。Hook 層（W3-052.1 `install-guide-edit-reminder-hook`）僅提供 reminder，acceptance schema 層提供 complete-time 強制驗證閘門。
+
+**Consequence**：未補強 acceptance 的 IMP 可在 PM / agent 既有環境通過 complete，但其他用戶 fresh shell 安裝即失敗（PC-159 重現模式：W3-050 codegraph placeholder package、W3-051 sys.path hack 在 uv tool install 後失效）；此時責任歸屬不清，需事後重新復現。
+
+**Action**：IMP claim 後若觸發條件成立，依上方表格至少勾選一項並在 ticket Test Results 附驗證輸出；若三項皆不適用（如離線環境、自訂 registry），於 acceptance 增列豁免條件並明示理由（避免規則 1.5 無 trigger 延後）。
+
+**參考**：
+
+- `.claude/error-patterns/process-compliance/PC-159-install-command-not-verified-in-fresh-shell.md`
+- 設計來源：`docs/work-logs/v0/v0.19/v0.19.0/tickets/0.19.0-W3-052.md` Solution 方案 (b)
+
 ### DOC（Documentation）
 
 **核心價值**：變更摘要 + 引用的檔案清單。
@@ -106,6 +136,61 @@ ANA / IMP Solution 章節支援 H3 子標題組織內容（如「### WRAP 完整
 - `Completion Info` 必填，需附「變更摘要」（哪些文件 / 章節更新）。
 - `Solution` / `Test Results` 免填（文件變更本身即為產出）。
 - `Problem Analysis` 選填：若 DOC 起因於某缺陷或盤點結論，可記錄背景。
+
+---
+
+## Acceptance 欄位設計指引（L3-b 後）
+
+### 語義基礎：Complete-Time Verification
+
+ticket track claim 不再執行 AC verification（W3-046 L3-b 實作），所有驗收測試（包括 npm test）延遲到 complete 階段。Acceptance 欄位應以此為前提進行撰寫。
+
+### 撰寫原則
+
+| 原則 | 為何 | 示例 |
+|------|------|------|
+| 包含測試 acceptance → 明示驗收時機 | L3-b 後 claim 不跑測試，未明示時機讀者無法判定何時驗收 | `complete 時驗收：npm test 100% 通過` |
+| 包含工作產出 acceptance → 明示產出清單 | 文件 / 規範類產出無「測試」概念，需有可數產出對應 | `3 個 .md 文件已更新（見 Solution 章節）` |
+| 明示驗收範圍 → 避免假設全套件 | 全套件驗收與並行 claim 衝突（PC-078 根因） | `相關檔案測試 (src/utils/*.test.js) 通過` |
+| 避免歧義標記 → 禁止「npm test」單獨出現 | 單獨出現的 `npm test` 無法區分 claim/complete 時機 | 改為「complete 時驗收 npm test exit 0」|
+
+### 反模式與修正（單一權威源）
+
+> 本表為全專案 acceptance 反模式的單一權威源；`.claude/pm-rules/ticket-lifecycle.md` 反向引用本表，避免雙處維護漂移（W3-057 整併）
+
+| 反模式 | 問題 | 修正 |
+|-------|------|------|
+| `npm test 100% 通過` | 驗收時機不明（claim vs complete） | 改為「complete 時驗收：npm test 100% 通過」 |
+| `npm test 不引入新失敗` | 同上 | 改為「complete 時驗收：npm test 不引入新失敗」 |
+| `全套件測試通過` / `全套件測試無回歸` | 並行 claim 會衝突（PC-078 根因）+ 時機不明 | 改為「相關檔案測試（X 個檔案）通過」或「complete 時驗收 npm test 0 failed」 |
+| `測試通過率 100%` | 過於抽象 + 驗收時機不明 | 改為「complete 時驗收：npm test exit 0 無 failed tests」 |
+| `lint 0 warning` / `npm run lint 無問題` | 缺少具體指標（error vs warning） | 改為「complete 時驗收：npm run lint 0 errors / 0 warnings」 |
+
+### 有效 Acceptance 範例
+
+**IMP Ticket（功能實作）**：
+```yaml
+acceptance:
+- '[x] 修復後檔案無 linter error'
+- '[x] complete 時驗收：npm test --testPathPattern=modified-file 全通過'
+- '[x] 相關功能測試（5 個 test.js）無回歸'
+```
+
+**DOC Ticket（文件更新）**：
+```yaml
+acceptance:
+- '[x] 3 個 markdown 檔案已更新（見 Solution 變更摘要）'
+- '[x] 交叉連結驗證（所有引用路徑有效）'
+- '[x] 內容一致性檢查（相同概念同義表述）'
+```
+
+**ANA Ticket（分析任務）**：
+```yaml
+acceptance:
+- '[x] 三層方案定位與優先序已明確'
+- '[x] 包含至少 3 個歷史案例驗證'
+- '[x] Spawn 規劃表已落地為實際 ticket'
+```
 
 ---
 

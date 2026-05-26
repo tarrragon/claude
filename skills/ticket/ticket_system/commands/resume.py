@@ -121,6 +121,12 @@ def _find_handoff_file(ticket_id: str, subdir: str = HANDOFF_PENDING_SUBDIR) -> 
             if direction and extract_direction_target_id(direction) == ticket_id:
                 return (json_candidate, "json")
 
+            # target_ticket_id 頂層欄位匹配（支援 handoff --next 模式：
+            # direction="context-refresh" 無後綴，target 存於 target_ticket_id 欄位）
+            target_tid = data.get("target_ticket_id")
+            if target_tid and target_tid == ticket_id:
+                return (json_candidate, "json")
+
             # ticket_id 欄位匹配（兼容 legacy 命名格式）
             if data.get("ticket_id") == ticket_id:
                 return (json_candidate, "json")

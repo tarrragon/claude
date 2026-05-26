@@ -185,6 +185,7 @@ ANA Solution 章節含 IMP/DOC/ANA spawn 規劃表格時，規劃項目本身即
 - [ ] 引用一致性已確認？（`grep -rl "修改的概念" .claude/` 確認所有引用已同步更新）
 - [ ] 修改有對應 Ticket？（rules/pm-rules/skills 修改必須有 Ticket 追蹤，PC-053）
 - [ ] claim 前已處理 AC 漂移偵測輸出？（S3/S4 外溢已決策繼續/取消/轉 complete；CRITICAL stale 已評估；PC-055 / PROP-010）
+- [ ] 寫入 feedback memory 時已執行四問升級檢查？（PM 專屬，PC-061 / PC-160；完整四問見 `.claude/pm-rules/pm-quality-baseline.md` 規則 7）
 
 > PM 角色另需檢查 `.claude/pm-rules/pm-quality-baseline.md` 的 PM 專屬清單（框架優先、memory 升級四問）。
 

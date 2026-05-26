@@ -283,9 +283,10 @@ class TestAppendLogRace:
                 f"id: {ticket_id}\n"
                 "title: race target\n"
                 "type: IMP\n"
-                "status: pending\n"
-                "assigned: false\n"
-                "tdd_phase: phase1\n"
+                # W3-044: append-log 需 status=in_progress（precondition）
+                "status: in_progress\n"
+                "assigned: true\n"
+                "tdd_phase: phase3b\n"
                 "children: []\n"
                 "blockedBy: []\n"
                 "acceptance: []\n"

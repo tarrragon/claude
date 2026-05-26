@@ -691,6 +691,38 @@ def test_scan_background_tasks_priority_over_started_at(monkeypatch, tmp_path):
     )
 
 
+# ===== W3-036: has_background_agents 迴圈外提（loop-invariant code motion）=====
+
+
+def test_scan_calls_has_background_agents_once_per_scan(monkeypatch, tmp_path):
+    """has_background_agents 屬 loop-invariant，每次 scan 只應呼叫一次。
+
+    輸入 >= 2 筆 pending JSON（皆為非建議性方向、未完成），驗證外提後
+    has_background_agents 不再隨迴圈每筆重複呼叫，call_count == 1。
+    """
+    pending_dir = tmp_path / "pending"
+    for ticket_id in ("W3-036-A", "W3-036-B", "W3-036-C"):
+        _write_handoff(
+            pending_dir, ticket_id,
+            direction="context_refresh",
+            timestamp=datetime.now() - timedelta(hours=1),
+        )
+    hook = _setup_scan(monkeypatch, tmp_path, recent_started=False)
+
+    mock_has_bg = MagicMock(return_value=False)
+    monkeypatch.setattr(hook, "has_background_agents", mock_has_bg)
+
+    hook.scan_pending_handoff_tasks(
+        tmp_path, MagicMock(),
+        input_data={"background_tasks": []},
+    )
+
+    assert mock_has_bg.call_count == 1, (
+        f"has_background_agents 屬 loop-invariant，每次 scan 只應呼叫一次，"
+        f"實際呼叫 {mock_has_bg.call_count} 次（3 筆 pending JSON）"
+    )
+
+
 # ===== main() stdin 整合測試（W3-037，承接 W3-026.1 commit 7f2ec9e6）=====
 # 驗證 main() 的 stdin 讀取四路徑：
 #   1. tty 互動模式 → input_data={}，fallback

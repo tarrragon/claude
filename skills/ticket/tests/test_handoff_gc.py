@@ -327,3 +327,55 @@ class TestExecuteGcExecute:
         assert not md_file.exists()
         assert (archive / "0.1.0-W7-001.json").exists()
         assert (archive / "0.1.0-W7-002.md").exists()
+
+
+class TestForceFlagW3_018_2:
+    """W3-018.2: --force 旗標跳過 task-chain 保護的測試"""
+
+    @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
+    def test_gc_force_clears_task_chain(self, mock_completed, temp_gc_env):
+        """force=True 時，task-chain handoff (to-sibling) 來源已 completed 應被標 stale"""
+        project_root, pending, archive = temp_gc_env
+        mock_completed.return_value = True
+        _write_handoff(pending, "0.1.0-W6-001", "to-sibling:0.1.0-W6-002", from_status="completed")
+        result = _collect_stale_handoffs(force=True)
+        assert len(result) == 1
+        assert result[0][1] == "0.1.0-W6-001"
+        assert "--force" in result[0][2]
+
+    @patch("ticket_system.lib.handoff_utils.is_ticket_in_progress_or_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
+    def test_gc_no_force_preserves_task_chain(
+        self, mock_completed, mock_target_started, temp_gc_env
+    ):
+        """force=False 時，task-chain handoff 目標未啟動則不標 stale（向後相容）"""
+        project_root, pending, archive = temp_gc_env
+        mock_completed.return_value = True
+        mock_target_started.return_value = False
+        _write_handoff(pending, "0.1.0-W6-001", "to-sibling:0.1.0-W6-002", from_status="completed")
+        result = _collect_stale_handoffs(force=False)
+        assert len(result) == 0
+
+    @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
+    def test_gc_force_no_op_when_source_not_completed(self, mock_completed, temp_gc_env):
+        """force=True 但來源 ticket 仍 pending/in_progress 時不應標 stale"""
+        project_root, pending, archive = temp_gc_env
+        mock_completed.return_value = False
+        _write_handoff(pending, "0.1.0-W6-001", "to-sibling:0.1.0-W6-002", from_status="in_progress")
+        _write_handoff(pending, "0.1.0-W6-003", "to-parent", from_status="in_progress")
+        _write_handoff(pending, "0.1.0-W6-004", "to-child:0.1.0-W6-005", from_status="in_progress")
+        result = _collect_stale_handoffs(force=True)
+        assert len(result) == 0
+
+    @patch("ticket_system.commands.handoff_gc.is_ticket_completed")
+    def test_gc_force_clears_all_task_chain_directions(self, mock_completed, temp_gc_env):
+        """force=True 應清理 to-sibling/to-parent/to-child 三種 task-chain direction"""
+        project_root, pending, archive = temp_gc_env
+        mock_completed.return_value = True
+        _write_handoff(pending, "0.1.0-W6-001", "to-sibling:0.1.0-W6-002", from_status="completed")
+        _write_handoff(pending, "0.1.0-W6-003", "to-parent", from_status="completed")
+        _write_handoff(pending, "0.1.0-W6-004", "to-child:0.1.0-W6-005", from_status="completed")
+        result = _collect_stale_handoffs(force=True)
+        assert len(result) == 3
+        ticket_ids = {r[1] for r in result}
+        assert ticket_ids == {"0.1.0-W6-001", "0.1.0-W6-003", "0.1.0-W6-004"}

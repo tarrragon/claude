@@ -1,6 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "version-release"
 version = "1.0.0"
 description = "Version Release Tool for Monorepo"
+readme = "SKILL.md"
 requires-python = ">=3.10"
 dependencies = ["pyyaml>=5.0"]
+license = {text = "MIT"}
+
+[project.scripts]
+version-release = "version_release:main"
+
+[tool.hatch.build.targets.wheel]
+sources = ["scripts"]
+only-include = ["scripts/version_release.py"]

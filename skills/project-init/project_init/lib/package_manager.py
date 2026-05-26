@@ -8,21 +8,125 @@ import hashlib
 import shutil
 import subprocess
 import sys
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
-# 導入共用掃描模組
-_lib_path = Path(__file__).parent.parent.parent.parent.parent / 'lib'
-sys.path.insert(0, str(_lib_path))
+# TOML 解析：tomllib (Python 3.11+) 或 fallback 到 tomli
+try:
+    import tomllib
+except ImportError:
+    try:
+        import tomli as tomllib  # type: ignore
+    except ImportError:
+        tomllib = None  # type: ignore
 
-from pyproject_scanner import (
-    scan_skills_directory,
-    extract_version_from_pyproject,
-    extract_package_name_from_pyproject,
-    extract_cli_name_from_pyproject,
-)
+
+# ============================================================================
+# Inlined pyproject_scanner API (W3-051)
+#
+# 從 .claude/lib/pyproject_scanner.py inline 進來，消除 CLI sys.path hack。
+# uv tool install 後 __file__ 路徑無法解析至專案 .claude/lib/，故 inline
+# 為唯一可靠路徑。hook side 的 .claude/lib/pyproject_scanner.py 仍保留供
+# .claude/hooks/package-version-sync-hook.py 使用（hook 以 main repo cwd
+# 執行，sys.path 可解析）。
+#
+# 若 .claude/lib/pyproject_scanner.py API 變更，請同步更新本檔。
+# ============================================================================
+
+SKILLS_DIR_NAME = ".claude/skills"
+PYPROJECT_FILENAME = "pyproject.toml"
+
+
+def load_pyproject_toml(pyproject_path: Path) -> Optional[Dict]:
+    """Load and parse a pyproject.toml file. Returns None on failure."""
+    if tomllib is None:
+        return None
+    try:
+        with open(pyproject_path, "rb") as f:
+            return tomllib.load(f)
+    except Exception:
+        return None
+
+
+def extract_version_from_pyproject(pyproject_path: Path) -> Optional[str]:
+    """Extract [project].version. Returns None if not found."""
+    data = load_pyproject_toml(pyproject_path)
+    if data is None:
+        return None
+    try:
+        return data.get("project", {}).get("version")
+    except Exception:
+        return None
+
+
+def extract_package_name_from_pyproject(pyproject_path: Path) -> Optional[str]:
+    """Extract [project].name. Returns None if not found."""
+    data = load_pyproject_toml(pyproject_path)
+    if data is None:
+        return None
+    try:
+        return data.get("project", {}).get("name")
+    except Exception:
+        return None
+
+
+def extract_cli_name_from_pyproject(pyproject_path: Path) -> Optional[str]:
+    """Extract first key from [project.scripts]. Returns None if not found."""
+    data = load_pyproject_toml(pyproject_path)
+    if data is None:
+        return None
+    try:
+        scripts = data.get("project", {}).get("scripts", {})
+        if scripts:
+            return next(iter(scripts.keys()))
+    except Exception:
+        return None
+    return None
+
+
+def scan_skills_directory(project_root: Path) -> Dict[str, Dict[str, str]]:
+    """Scan .claude/skills/ and return packages with [project.scripts] defined.
+
+    Returns:
+        Dict mapping package name → {"path": relative_path, "version": version_str}.
+    """
+    packages: Dict[str, Dict[str, str]] = {}
+    skills_dir = project_root / SKILLS_DIR_NAME
+
+    if not skills_dir.exists():
+        return packages
+
+    try:
+        for skill_dir in skills_dir.iterdir():
+            if not skill_dir.is_dir():
+                continue
+
+            pyproject_path = skill_dir / PYPROJECT_FILENAME
+            if not pyproject_path.exists():
+                continue
+
+            try:
+                pkg_name = extract_package_name_from_pyproject(pyproject_path)
+                version = extract_version_from_pyproject(pyproject_path)
+                cli_name = extract_cli_name_from_pyproject(pyproject_path)
+
+                if pkg_name and version and cli_name:
+                    packages[pkg_name] = {
+                        "path": str(skill_dir.relative_to(project_root)),
+                        "version": version,
+                    }
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    return packages
+
+
+# ============================================================================
+# Package management dataclasses & functions
+# ============================================================================
 
 
 @dataclass

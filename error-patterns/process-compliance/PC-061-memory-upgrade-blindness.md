@@ -127,8 +127,14 @@ Memory 升級案例中，相當比例是「用戶指正後 PM 才升級」。PM 
 - **相關規則**：`.claude/pm-rules/pm-quality-baseline.md` 規則 7（Memory 寫入必須評估跨專案升級，原 quality-baseline v1.9.0 規則 7，2026-04-16 外移）
 - **相關模式**：PC-010（待辦應建 Ticket 不寫 memory，聚焦任務追蹤；本模式聚焦原則類 memory）
 - **相關模式**：PC-060（Meta-tool 發現盲點，同類「原則建立當下未擴充檢查清單」結構）
+- **相關模式**：[PC-160](PC-160-pm-skip-upgrade-gate-direct-memory-write.md)（本 PC 的 v2 實證案例 + session 內浮現洞察情境 specific 防護五步驟；W3-028.2 → W3-058 ANA 結論確認為同模式擴展，cross-reference 而非合併）
 - **相關 Skill**：`.claude/skills/continuous-learning/`（後續新增升級評估決策樹）
 - **相關 Hook**：`memory-upgrade-reminder-hook.py`（後續新增自動提示）
+- **相關方法論**：[`.claude/methodologies/hook-system-methodology.md`](../../methodologies/hook-system-methodology.md) § 6「觀察類工具的雙重身份設計」（W3-028.2 → W3-058 → W3-059 升級落地案例，本 PC 防護五步驟的成功應用範例）
+
+### v2 案例延伸（PC-160）
+
+PC-160 補充 PC-061 未涵蓋的情境差異：本 PC 案例 1-2 聚焦「原則類 memory 識別正確但升級延遲」，PC-160 聚焦「session 內浮現洞察的第一動作即跳過評估閘門直接寫 memory」。W3-058 ANA 評估結論：兩者為同一錯誤模式的不同切片，PC-160 保留為 PC-061 v2 實證案例 + session 浮現洞察的 specific 五步驟防護，不合併以避免更新 PC-061 既有多處引用點。
 
 ---
 

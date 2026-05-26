@@ -4,6 +4,7 @@ track_acceptance 模組測試
 測試驗收相關的 Ticket 操作：check-acceptance, append-log
 """
 
+import re
 from typing import Dict, Any, List
 from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
@@ -486,6 +487,58 @@ class TestAppendLogH2Warning:
         result, captured, _ = self._run("Execution Log", "## 任何", capsys)
         assert result == 0
         assert "WARNING" not in captured.err
+
+    # W1-068（W1-038 方案 B）: 自動降級 H2 → H3 規範化測試
+
+    def test_h2_auto_downgraded_to_h3(self, capsys):
+        """W1-068 方案 B：H2 自動降級為 H3，warning 文案明示降級
+
+        斷言用行首 regex（^## ）避免 substring 誤觸：`### 第一` 字串包含 `## 第一`
+        """
+        result, captured, mock_save = self._run(
+            "Solution", "## 第一 H2\n內文\n## 第二 H2\n更多", capsys
+        )
+        assert result == 0
+        assert "WARNING" in captured.err
+        assert "自動降級" in captured.err
+        mock_save.assert_called_once()
+        saved_ticket = mock_save.call_args[0][0]
+        saved_body = saved_ticket["_body"]
+        # 行首檢查：## 第一 H2 與 ## 第二 H2 已不存在（已被降級為 ###）
+        assert re.search(r'(?m)^## 第一 H2', saved_body) is None
+        assert re.search(r'(?m)^## 第二 H2', saved_body) is None
+        # 行首檢查：### 第一 H2 與 ### 第二 H2 存在
+        assert re.search(r'(?m)^### 第一 H2', saved_body) is not None
+        assert re.search(r'(?m)^### 第二 H2', saved_body) is not None
+
+    def test_pure_text_unchanged(self, capsys):
+        """W1-068 方案 B：純文字無 H2，不觸發降級也無 warning"""
+        result, captured, mock_save = self._run(
+            "Solution", "純文字內容\n更多內容", capsys
+        )
+        assert result == 0
+        assert "WARNING" not in captured.err
+        mock_save.assert_called_once()
+        saved_ticket = mock_save.call_args[0][0]
+        saved_body = saved_ticket["_body"]
+        assert "純文字內容" in saved_body
+
+    def test_existing_h3_h4_unaffected(self, capsys):
+        """W1-068 方案 B：已含 H3/H4 不受影響（只匹配行首 H2）"""
+        result, captured, mock_save = self._run(
+            "Solution", "### 已 H3\n內文\n#### 已 H4\n更多", capsys
+        )
+        assert result == 0
+        assert "WARNING" not in captured.err
+        mock_save.assert_called_once()
+        saved_ticket = mock_save.call_args[0][0]
+        saved_body = saved_ticket["_body"]
+        # 行首檢查：### 已 H3 與 #### 已 H4 保留（regex 行首匹配）
+        assert re.search(r'(?m)^### 已 H3', saved_body) is not None
+        assert re.search(r'(?m)^#### 已 H4', saved_body) is not None
+        # 行首檢查：無誤升為 ## 或誤降為 ##### 的情況
+        assert re.search(r'(?m)^## 已 H3', saved_body) is None
+        assert re.search(r'(?m)^##### 已 H4', saved_body) is None
 
 
 class TestAppendLogSectionMatching:

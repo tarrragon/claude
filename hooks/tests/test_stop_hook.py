@@ -25,6 +25,14 @@ def load_stop_hook_module():
     return module
 
 
+def load_session_mgmt_module():
+    """載入 W3-039 抽出的 session 管理模組（STOP_FLAG_FILE 等常數的新家）"""
+    # 先載入 hook 模組以確保 sys.path 已含 skills/ticket/hooks 與 .claude/hooks
+    load_stop_hook_module()
+    import handoff_session_mgmt
+    return handoff_session_mgmt
+
+
 class TestStopHookSessionFlag:
     """Session flag 相關測試"""
 
@@ -53,7 +61,8 @@ class TestStopHookSessionFlag:
         flag_path.unlink(missing_ok=True)
 
         # 模擬第一次呼叫後建立的 flag（使用帶時間戳的 JSON 格式）
-        flag_file = tmp_project_root / hook_module.STOP_FLAG_FILE
+        # W3-039：STOP_FLAG_FILE 已隨 session 管理 domain 移至 handoff_session_mgmt
+        flag_file = tmp_project_root / load_session_mgmt_module().STOP_FLAG_FILE
         flag_file.parent.mkdir(parents=True, exist_ok=True)
         import json as _json
         from datetime import datetime as _dt

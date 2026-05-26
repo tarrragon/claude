@@ -25,6 +25,7 @@ import argparse
 from pathlib import Path
 
 from ticket_system.lib.file_lock import file_lock
+from ticket_system.lib.precondition import require_in_progress
 from ticket_system.lib.ticket_loader import get_ticket_path, save_ticket
 from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
@@ -136,6 +137,20 @@ def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
         ticket, load_err = load_and_validate_ticket(version, args.ticket_id)
         if load_err:
             return 1
+
+        # W3-044: body-op precondition（set-acceptance 不允許 completed）
+        import sys as _sys
+        force = bool(getattr(args, "force", False))
+        ok, error_msg = require_in_progress(
+            ticket,
+            args.ticket_id,
+            "set-acceptance",
+            allow_completed=False,
+            force=force,
+        )
+        if not ok:
+            _sys.stderr.write(error_msg + "\n")
+            return 2
 
         acceptance_list = ticket.get("acceptance", [])
         if not acceptance_list:

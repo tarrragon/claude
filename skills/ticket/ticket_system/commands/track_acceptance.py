@@ -47,6 +47,7 @@ from ticket_system.lib.command_tracking_messages import (
     TrackAcceptanceMessages,
     format_msg,
 )
+from ticket_system.lib.precondition import require_in_progress
 from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
     resolve_ticket_path,
@@ -620,10 +621,25 @@ def execute_append_log(args: argparse.Namespace, version: str) -> int:
 
 def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
     """append-log 主邏輯（已位於 file_lock 內）。"""
+    import sys as _sys
+
     ticket = load_ticket(version, args.ticket_id)
     if not ticket:
         print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
         return 1
+
+    # W3-044: body-op precondition 檢查（status 必須 in_progress 或 completed-allow）
+    force = bool(getattr(args, "force", False))
+    ok, error_msg = require_in_progress(
+        ticket,
+        args.ticket_id,
+        "append-log",
+        allow_completed=True,  # append-log 支援 completed 補 review
+        force=force,
+    )
+    if not ok:
+        _sys.stderr.write(error_msg + "\n")
+        return 2
 
     # 驗證 section 參數
     valid_sections = TrackAcceptanceMessages.VALID_SECTIONS
@@ -636,8 +652,13 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
     # 取得內容
     content = args.content
 
-    # W17-208: 偵測寫入 Schema 章節時內容含 ## H2 標題，stderr warning 不阻擋
+    # W17-208 + W1-068: 偵測寫入 Schema 章節時內容含 ## H2 標題
+    # W17-208 (stderr warning) + W1-068 方案 B（自動降級 H2 → H3 源頭阻斷）
     # 動機：append-log 寫入應為既有章節 H3 子節；H2 會切斷 Schema 章節範圍（W17-072）
+    # W1-038 ANA 結論：source code 規範化（re.sub）比事後偵測更可靠，
+    # 避免 W1-037 三 agent 連續違規 + PM 批次降級連帶 H4 false negative 鏈
+    # 修改注意：移除 re.sub 自動降級前須評估 W17-072 complete 層是否獨立足夠，
+    # 並更新 .claude/pm-rules/context-bundle-spec.md 條款 2「雙層防護」表格。
     schema_sections_for_h2_check = {
         "Solution", "Test Results", "Problem Analysis",
         "Context Bundle", "NeedsContext", "Exit Status", "Completion Info",
@@ -647,8 +668,11 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
             import sys as _sys
             _sys.stderr.write(
                 "[append-log] WARNING: 偵測到內容含 H2 標題；append-log 寫入應為既有章節的 "
-                "H3 子節，避免切斷 Schema 章節範圍（W17-072）。建議改用 ### 子標題。\n"
+                "H3 子節，避免切斷 Schema 章節範圍（W17-072）。"
+                "已自動降級 H2 → H3（W1-068 方案 B：源頭阻斷）。\n"
             )
+            # W1-068（W1-038 方案 B）: 自動降級 H2 → H3 規範化（只匹配行首 H2，不影響 H3+）
+            content = re.sub(r'(?m)^## ', '### ', content)
 
     # 獲取 Ticket 內容
     body = ticket.get("_body", "")

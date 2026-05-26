@@ -285,7 +285,50 @@ ticket track full <ticket-id>
 
 ---
 
-**Last Updated**: 2026-04-20
+## 附錄：外部觀察工具速查（補充，非取代既有五工具）
+
+### `claude agents --json`（v2.1.145+）
+
+Claude Code CLI 提供的外部觀察指令，列出當前機器上所有活躍 Claude Code sessions。
+
+**Why 補充非取代**：粒度為 session 級（非 agent/dispatch 級），無法區分同一 session 內的多個 subagent。既有五工具（dispatch-active.json / TaskOutput / agent-commit-verification / SubagentStop / transcript_tail_reader）涵蓋 agent 級觀察，此指令僅作為 session 存活性外部驗證。
+
+**輸出 schema**：
+
+| 欄位 | 類型 | 說明 |
+|------|------|------|
+| `pid` | int | Process ID（可用於 OS 層存活性驗證） |
+| `cwd` | string | Session 工作目錄 |
+| `kind` | enum | `interactive` / `background` |
+| `startedAt` | int (ms) | Session 啟動 timestamp |
+| `sessionId` | UUID | Session 唯一識別 |
+| `name` | string (optional) | Session 名稱（背景 session 常有） |
+| `status` | string (optional) | 觀察值：`idle` / `busy` |
+
+**適用情境**：
+
+| 情境 | 用途 | 與五工具關係 |
+|------|------|-------------|
+| Session 存活性檢查 | `claude agents --json` + pid 比對，確認 session 還活著 | 補強 PC-070 的 hook 訊號可靠度 |
+| Orphan dispatch 偵測 | 若 dispatch-active.json 有記錄但 `claude agents --json` 無對應 pid，視為 orphan 主動清理 | 補強 dispatch-active.json 的清理機制（未實作） |
+| 跨 session 並行觀察 | 看是否有其他 session 在同一 cwd 工作 | 補強 PC-076 / PC-078 並行污染診斷 |
+
+**不適用情境**：
+
+| 情境 | 限制 | 替代工具 |
+|------|------|---------|
+| 判斷特定 subagent 是否完成 | 不列出 subagent | TaskOutput |
+| 讀取 agent 最後訊息 | 無 transcript 內容 | transcript_tail_reader |
+| 判斷 agent 是否 commit | 無 git 證據 | agent-commit-verification-hook |
+| 取代既有五工具 | 粒度不匹配（session vs agent） | 仍使用五工具 |
+
+> **未來升級重評觸發條件**：Claude Code 後續版本若擴充 subagent 級 JSON 輸出（含 agent_id / task / files），需重新評估是否整合進五工具體系（建 IMP ticket）。
+
+---
+
+**Last Updated**: 2026-05-26
+**Version**: 1.3.0 - 新增「附錄：外部觀察工具速查」段落，記錄 `claude agents --json` (v2.1.145+) schema 與適用 / 不適用情境（W3-027 ANA 方案 D 落地，W3-027.1）
+
 **Version**: 1.2.0 - 新增「代理人結束狀態協議」（W17-010 三 IMP 合併：NeedsContext section + Exit Status YAML schema + needs-context-listener-hook）
 
 **Version**: 1.1.0 - 新增 Hook 廣播訊號可靠度表 + 派發時間閾值規則（PC-050 模式 E / PC-070 防護）；常見錯誤模式新增 Hook 訊號誤判條目

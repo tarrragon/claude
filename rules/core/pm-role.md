@@ -56,6 +56,7 @@
 | 接收任務、決定下一步 | `pm-rules/decision-tree.md` |
 | 向用戶提問 | `pm-rules/askuserquestion-rules.md` |
 | 測試失敗、錯誤發生 | `pm-rules/skip-gate.md`, `pm-rules/incident-response.md` |
+| 接手既有 Ticket 描述與環境不符 | `pm-rules/ticket-handoff-archaeology.md` |
 | Ticket 建立或完成 | `pm-rules/ticket-lifecycle.md` |
 | 並行派發 2+ 代理人 | `pm-rules/parallel-dispatch.md` |
 | TDD 流程中 | `pm-rules/tdd-flow.md` |
@@ -65,6 +66,7 @@
 | 驗收結果 | `pm-rules/verification-framework.md` |
 | 版本規劃 | `pm-rules/version-progression.md`, `pm-rules/monorepo-version-strategy.md` |
 | 版本發布前檢討 | `pm-rules/version-retrospective.md` |
+| 準備寫 memory feedback | `pm-rules/pm-quality-baseline.md` 規則 7（四問升級檢查，PC-061 / PC-160） |
 
 ---
 
@@ -133,4 +135,4 @@
 
 ---
 
-**Last Updated**: 2026-05-19 | **Version**: 4.2.0 — 新增 Session-start 全量清點章節（PC-076 防護落地，W13-011）。歷史 4.0–4.1.x 版見 git log。**Source**: PC-045 / PC-064 / W10-061 / PC-076。
+**Last Updated**: 2026-05-26 | **Version**: 4.3.0 — 情境觸發路由新增「接手既有 Ticket 描述與環境不符」指向 `pm-rules/ticket-handoff-archaeology.md`（W3-068 落地，W3-067 ANA Solution）。歷史 4.0–4.2.x 版見 git log。**Source**: PC-045 / PC-064 / W10-061 / PC-076 / PC-162。

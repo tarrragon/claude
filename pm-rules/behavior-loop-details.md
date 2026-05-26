@@ -24,6 +24,18 @@
 
 ---
 
+## 派發前檢查：worktree base 同步（W1-035）
+
+PM 用 `isolation: "worktree"` 派發 agent 前，先執行 `git status --porcelain` 確認有無 pending changes，有則先 commit 到 main 再派發。
+
+**Why**：cc runtime 的 `isolation: "worktree"` 在 `git worktree add` 瞬間快照當下 main HEAD 作為 worktree base，之後不再同步。派發後 PM 若繼續 commit，worktree base 與 main 的落差只增不減。
+
+**Consequence**：base 落後會讓 agent 讀不到派發後新增的 ticket 檔、ticket create 因掃描不到新 ticket 而誤分配碰撞 ID、worktree 分支因歷史分叉無法 fast-forward 回 main（W1-035 症狀 1/2/3）。落差越大，收尾時手動整合的成本越高。
+
+**Action**：派發 `isolation:worktree` agent 前執行一次 `git status --porcelain`，非空則先 commit。此防護成本為一次狀態檢查，與 agent 端的執行中防護（見 `.claude/references/agent-dispatch-template.md`「worktree 派發 base 同步指引」）互補——派發前 commit 縮小初始落差，agent 端 merge 補平殘餘落差。
+
+---
+
 ## 派發後行為
 
 所有實作型任務使用 `run_in_background: true` 派發。PM 派發後**立刻切換**到其他 Ticket 的前置工作（Context Bundle 準備、規格分析、規劃），不等代理人完成。

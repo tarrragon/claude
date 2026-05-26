@@ -7,7 +7,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from project_init.lib import (
+    INDEX_MCP_MANAGED,
+    INDEX_MISSING,
+    INDEX_OK,
     CheckMessages,
+    CodebaseMemoryMcpMessages,
+    CodegraphMessages,
     PackageMessages,
     PythonMessages,
     RemediationGuidance,
@@ -15,11 +20,13 @@ from project_init.lib import (
     UVMessages,
     check_installed_version,
     compare_versions,
-    resolve_source_module_dir,
+    detect_codebase_memory_mcp,
+    detect_codegraph,
     detect_os,
     detect_python,
     detect_ripgrep,
     detect_uv,
+    resolve_source_module_dir,
     scan_custom_packages,
     verify_hooks_system,
     verify_pep723_execution,
@@ -99,6 +106,8 @@ def _collect_all_sections(project_root: Path) -> list[SectionResult]:
         _check_python(detect_python()),
         _check_uv(detect_uv()),
         _check_ripgrep(detect_ripgrep()),
+        _check_codebase_memory_mcp(detect_codebase_memory_mcp()),
+        _check_codegraph(detect_codegraph(project_root)),
         _check_hooks_system(project_root),
         _check_custom_packages(project_root),
     ]
@@ -214,6 +223,76 @@ def _check_ripgrep(ripgrep_info) -> SectionResult:
             f"版本: {ripgrep_info.version}",
             f"路徑: {ripgrep_info.path}",
         ],
+    )
+
+
+def _check_codebase_memory_mcp(mcp_info) -> SectionResult:
+    """檢查 codebase-memory-mcp MCP server."""
+    if not mcp_info.is_available:
+        details = [
+            CodebaseMemoryMcpMessages.NOT_INSTALLED,
+            CodebaseMemoryMcpMessages.NOT_INSTALLED_STATUS,
+        ]
+        if mcp_info.failure_reason:
+            details.append(f"原因: {mcp_info.failure_reason}")
+        details.extend(["", "修復步驟:"])
+        details.extend(RemediationGuidance.get_cbm_install_steps())
+        return SectionResult(
+            name="codebase-memory-mcp",
+            status=STATUS_MISSING,
+            details=details,
+        )
+
+    details = [
+        f"版本: {mcp_info.version}",
+        f"路徑: {mcp_info.path}",
+    ]
+    if mcp_info.index_status == INDEX_MCP_MANAGED:
+        details.append(CodebaseMemoryMcpMessages.INDEX_MCP_MANAGED)
+    return SectionResult(
+        name="codebase-memory-mcp",
+        status=STATUS_OK,
+        details=details,
+    )
+
+
+def _check_codegraph(mcp_info) -> SectionResult:
+    """檢查 codegraph (@astudioplus/codegraph-mcp) MCP server。"""
+    if not mcp_info.is_available:
+        details = [
+            CodegraphMessages.NOT_INSTALLED,
+            CodegraphMessages.NOT_INSTALLED_STATUS,
+        ]
+        if mcp_info.failure_reason:
+            details.append(f"原因: {mcp_info.failure_reason}")
+        details.extend(["", "修復步驟:"])
+        details.extend(RemediationGuidance.get_codegraph_install_steps())
+        return SectionResult(
+            name="codegraph",
+            status=STATUS_MISSING,
+            details=details,
+        )
+
+    details = [
+        f"版本: {mcp_info.version}",
+        f"路徑: {mcp_info.path}",
+    ]
+    if mcp_info.index_status == INDEX_OK:
+        details.append(CodegraphMessages.INDEX_OK)
+        status = STATUS_OK
+    elif mcp_info.index_status == INDEX_MISSING:
+        details.append(CodegraphMessages.INDEX_MISSING)
+        details.extend(["", "重建索引步驟:"])
+        details.extend(RemediationGuidance.get_codegraph_reindex_steps())
+        status = STATUS_OUTDATED
+    else:
+        details.append(CodegraphMessages.INDEX_UNKNOWN)
+        status = STATUS_OK
+
+    return SectionResult(
+        name="codegraph",
+        status=status,
+        details=details,
     )
 
 

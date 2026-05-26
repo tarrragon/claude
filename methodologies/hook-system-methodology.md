@@ -621,3 +621,30 @@ subprocess.run(
 ---
 
 這個 Hook 系統是專案品質保證的核心基礎設施，確保每個開發決策都符合專案的高品質標準。
+
+---
+
+## 6. 觀察類工具的雙重身份設計（diagnostic hook / telemetry / monitor）
+
+設計觀察類 Hook（diagnostic hook、telemetry collector、性能 monitor）時，應主動讓工具能在「日常使用」中持續產出資料，而非只在「實驗模式」下啟動。觀察類工具預設長期 telemetry 身份，非實驗一次性身份。
+
+**Why**：實驗模式下的觀察只覆蓋設計者預期的場景；日常使用觸發提供「非預期但真實」的對照基底。W3-028.2 案例：diagnostic hook 在實驗開始前的當下 session `/clear` 啟動時就被觸發（11:44 source=clear，session_id=60a6a197），這筆「非實驗目的」紀錄證實了 hook 對工作流的零侵入性——後續 PM 大量 Edit/Bash/Read 操作未受影響。實驗者原本只設計觀察 bg session resume 場景，卻意外取得正常工作流的對照基底。
+
+**Consequence 不遵守**：實驗工具僅在實驗模式啟動會：(a) 失去日常情境對照（無法判斷實驗結果是否與正常工作流一致）；(b) 工具被視為「一次性」累積為技術債（實驗結束即廢棄）；(c) 無法驗證工具本身對工作流的侵入性（沒在生產環境跑過）。
+
+### How to apply
+
+| 設計階段 | 動作 |
+|---------|------|
+| Hook event registration | 不設「only experiment mode」flag，全域註冊到所有相關 event |
+| 副作用控制 | 工具設計為「純觀察 0 副作用」（exit 0、不阻擋、append-only log），避免日常觸發造成性能或行為干擾 |
+| 報告書寫 | 實驗報告明示「日常 vs 實驗」資料來源差異，提升證據透明度 |
+| 工具命名 | 名稱透露「diagnostic / telemetry」而非「experiment / test」，暗示長期身份 |
+| 移除策略 | 默認保留為長期資產（除非有具體成本），不在實驗結束自動移除 |
+
+### Related
+
+- W3-028.2：實驗工具自指涉觀察的 source 案例（diagnostic hook 在 session `/clear` 被觸發）
+- W3-058：ANA 評估升級路徑、W3-059：本章節落地 ticket
+- 失敗案例學習原則（`.claude/rules/core/quality-baseline.md` 規則 6）的反面：成功的副產品也應主動捕捉
+- memory `feedback_experiment_tool_self_observation.md`：本章節的 source memory（已升級至本 § 6）

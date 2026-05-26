@@ -530,6 +530,58 @@ class TestFindHandoffFile:
         file_path, _ = result
         assert file_path.name == "0.31.0-W9-001.json"
 
+    def test_find_by_target_ticket_id_field_next_mode(self, temp_handoff_env):
+        """測試 handoff --next 模式透過 target_ticket_id 頂層欄位反向查找（W3-018.1）
+
+        場景：handoff --next TARGET --from-ticket-id SOURCE 產出的 JSON
+        direction="context-refresh"（無 :TARGET 後綴），target 存於頂層 target_ticket_id。
+        舊版 _find_handoff_file 三層 fallback（direct/direction-suffix/ticket_id）皆失敗，
+        resume TARGET 因此 Exit 1。本測試驗證新增的 target_ticket_id 匹配可正確找到。
+        """
+        project_root, handoff_dir = temp_handoff_env
+
+        source_id = "0.19.0-W3-100"
+        target_id = "0.19.0-W3-200"
+        handoff_file = handoff_dir / f"{source_id}.json"
+        handoff_data = {
+            "ticket_id": source_id,
+            "target_ticket_id": target_id,
+            "direction": "context-refresh",
+            "timestamp": "2026-05-26T00:00:00",
+            "from_status": "in_progress",
+            "title": "Next mode handoff",
+        }
+        with open(handoff_file, "w", encoding="utf-8") as f:
+            json.dump(handoff_data, f, ensure_ascii=False, indent=2)
+
+        result = _find_handoff_file(target_id, "pending")
+
+        assert result is not None, "--next 模式 handoff 應能透過 target_ticket_id 欄位找到"
+        file_path, file_format = result
+        assert file_path.name == f"{source_id}.json"
+        assert file_format == "json"
+
+    def test_target_ticket_id_match_not_applied_in_archive(self, temp_handoff_env):
+        """測試 archive 子目錄不執行 target_ticket_id 反向匹配（與其他 fallback 一致）"""
+        project_root, handoff_dir = temp_handoff_env
+        archive_dir = project_root / ".claude" / "handoff" / "archive"
+
+        source_id = "0.19.0-W3-100"
+        target_id = "0.19.0-W3-200"
+        handoff_file = archive_dir / f"{source_id}.json"
+        handoff_data = {
+            "ticket_id": source_id,
+            "target_ticket_id": target_id,
+            "direction": "context-refresh",
+            "timestamp": "2026-05-26T00:00:00",
+        }
+        with open(handoff_file, "w", encoding="utf-8") as f:
+            json.dump(handoff_data, f, ensure_ascii=False, indent=2)
+
+        result = _find_handoff_file(target_id, "archive")
+
+        assert result is None
+
     def test_find_by_ticket_id_field_with_legacy_filename(self, temp_handoff_env):
         """測試 legacy 命名（v{id}-handoff.json）透過 ticket_id 欄位匹配找到
 

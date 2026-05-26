@@ -11,8 +11,18 @@ Project Init 環境檢查 Hook
 Hook Event: SessionStart
 
 Purpose:
-    檢查開發環境狀態（Python、UV、ripgrep、Hook 系統、自製套件）。
-    如果偵測到問題，輸出結構化的引導訊息供用戶參考。
+    檢查開發環境狀態（Python、UV、ripgrep、codebase-memory-mcp、
+    codegraph、Hook 系統、自製套件）。如果偵測到問題，輸出結構化
+    的引導訊息供用戶參考。
+
+    MCP server sections（W6-001.2）：
+        - codebase-memory-mcp：偵測 binary + version；索引由 MCP
+          工具管理（CLI 不暴露 index_status）
+        - codegraph (@astudioplus/codegraph-mcp 0.16.6+)：偵測
+          codegraph-mcp binary + version，並判定 .codegraph/ 目錄
+          存在性作為索引狀態
+        - 兩 section 由 project-init check 自動承接（subprocess
+          已 invoke），新 session 啟動時報告含三 MCP 狀態
 
 Exit codes:
     0 - Always (不阻塊 session)

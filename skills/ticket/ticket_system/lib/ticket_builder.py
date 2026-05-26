@@ -16,12 +16,14 @@ Ticket 建構模組
 """
 
 import re
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from ticket_system.lib.constants import STATUS_PENDING
+from ticket_system.lib.paths import GIT_TOPLEVEL_TIMEOUT, get_project_root
 from ticket_system.lib.ticket_loader import (
     get_tickets_dir,
     save_ticket,
@@ -30,6 +32,71 @@ from ticket_system.lib.ticket_loader import (
 )
 from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
 from ticket_system.lib.file_lock import file_lock
+
+# git ls-tree 候選 ref，依序嘗試（PM 決策 2026-05-22：main → master）
+_MAIN_REF_CANDIDATES: Tuple[str, ...] = ("main", "master")
+
+
+def list_ticket_files_from_main(
+    version: str, ref_candidates: Tuple[str, ...] = _MAIN_REF_CANDIDATES
+) -> Optional[List[str]]:
+    """列舉 git ref（預設 main，失敗試 master）上指定版本 tickets 目錄的檔案。
+
+    B3 方案（0.19.0-W1-037）核心輔助函式：補足 worktree 從 stale base 分叉時
+    本地工作樹掃描不到 main 上已存在 ticket 的缺口。回傳 main ref 上的 ticket
+    檔路徑清單，供 get_next_seq / _scan_child_files_max_seq 與本地 glob 取聯集。
+
+    Args:
+        version: 版本號（如 "0.19.0"，可帶或不帶 v 前綴）。
+        ref_candidates: 依序嘗試的 git ref 名稱；任一成功即回傳。
+
+    Returns:
+        成功：main ref 上 tickets 目錄的檔案路徑清單（相對 repo root 的路徑字串）。
+        失敗（非 git 環境、main/master 皆不存在、git 不存在、ls-tree 逾時）：None。
+        失敗時 caller 應 fallback 為純本地掃描（聯集設計確保不比現況差）。
+    """
+    project_root = get_project_root()
+    tickets_dir = get_tickets_dir(version)
+    try:
+        rel_tickets_dir = tickets_dir.relative_to(project_root)
+    except ValueError:
+        # tickets_dir 不在 project_root 之下（測試以外少見）；無法構造 ls-tree pathspec
+        return None
+
+    for ref in ref_candidates:
+        try:
+            result = subprocess.run(
+                [
+                    "git",
+                    "ls-tree",
+                    "-r",
+                    "--name-only",
+                    ref,
+                    "--",
+                    str(rel_tickets_dir),
+                ],
+                cwd=str(project_root),
+                capture_output=True,
+                text=True,
+                timeout=GIT_TOPLEVEL_TIMEOUT,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+            # git 不存在或逾時：記錄後 fallback 純本地掃描（規則 4：異常可觀測）
+            sys.stderr.write(
+                f"[WARNING] list_ticket_files_from_main: git ls-tree {ref} "
+                f"失敗（{type(exc).__name__}），fallback 純本地掃描\n"
+            )
+            return None
+        if result.returncode == 0:
+            return [
+                line.strip()
+                for line in result.stdout.splitlines()
+                if line.strip()
+            ]
+        # returncode != 0：該 ref 不存在，續試下一候選
+
+    # 所有候選 ref 皆無法解析（非 git 環境或無 main/master）→ fallback 純本地
+    return None
 
 
 # 預設驗收條件（依 Ticket 類型）
@@ -224,41 +291,65 @@ def get_next_seq(version: str, wave: int) -> int:
 
     Implementation:
         1. 取得 tickets_dir（透過 get_tickets_dir(version)）
-        2. 若目錄不存在，返回 1
-        3. glob 尋找 *-W{wave}-*.md 檔案
-        4. 解析所有檔案名，取得最大序號
-        5. 返回 max_seq + 1
+        2. glob 本地工作樹的 *-W{wave}-*.md 檔案
+        3. list_ticket_files_from_main 取得 main ref 上的 ticket 檔（B3 方案）
+        4. 兩來源取聯集後解析所有檔名，取得最大序號
+        5. 返回 max_seq + 1（無任何來源檔案時返回 1）
 
     注意:
         - 只計算根任務序號（不包含子任務的點號部分）
         - 如 0.31.0-W5-001.1.md 只取 001
+        - main ref 掃描失敗（非 git / 無 main / 逾時）時降級為純本地掃描
     """
     tickets_dir = get_tickets_dir(version)
-    if not tickets_dir.exists():
-        return 1
 
-    pattern = f"*-W{wave}-*.md"
-    existing = list(tickets_dir.glob(pattern))
+    # 來源 1：本地工作樹 glob
+    local_stems: List[str] = []
+    if tickets_dir.exists():
+        local_stems = [f.stem for f in tickets_dir.glob(f"*-W{wave}-*.md")]
 
-    if not existing:
-        return 1
+    # 來源 2：main ref（B3 方案，補足 stale base worktree 掃不到的 ticket）
+    main_stems: List[str] = []
+    main_files = list_ticket_files_from_main(version)
+    if main_files is not None:
+        main_stems = [
+            Path(p).stem for p in main_files if Path(p).name.endswith(".md")
+        ]
 
+    # 聯集解析最大根任務序號
     max_seq = 0
-    for f in existing:
-        try:
-            # 格式：{version}-W{wave}-{seq}.md 或 {version}-W{wave}-{seq}.{child}.md
-            parts = f.stem.split("-W")
-            if len(parts) == 2:
-                wave_seq = parts[1].split("-", 1)
-                if len(wave_seq) == 2:
-                    # 只取根任務的序號（不含子任務部分）
-                    seq_part = wave_seq[1].split(".")[0]
-                    seq = int(seq_part)
-                    max_seq = max(max_seq, seq)
-        except (ValueError, IndexError):
-            continue
+    for stem in set(local_stems) | set(main_stems):
+        seq = _parse_root_seq(stem, wave)
+        if seq is not None:
+            max_seq = max(max_seq, seq)
 
     return max_seq + 1
+
+
+def _parse_root_seq(stem: str, wave: int) -> Optional[int]:
+    """從 ticket 檔名 stem 解析指定 wave 的根任務序號。
+
+    Args:
+        stem: ticket 檔名（不含副檔名），如 "0.31.0-W5-001" 或 "0.31.0-W5-001.1"。
+        wave: 目標 Wave 編號；stem 的 wave 不符時回傳 None。
+
+    Returns:
+        根任務序號（忽略子任務點號部分），無法解析或 wave 不符時回傳 None。
+    """
+    try:
+        # 格式：{version}-W{wave}-{seq}.md 或 {version}-W{wave}-{seq}.{child}.md
+        parts = stem.split("-W")
+        if len(parts) != 2:
+            return None
+        wave_seq = parts[1].split("-", 1)
+        if len(wave_seq) != 2:
+            return None
+        if int(wave_seq[0]) != wave:
+            return None
+        # 只取根任務的序號（不含子任務部分）
+        return int(wave_seq[1].split(".")[0])
+    except (ValueError, IndexError):
+        return None
 
 
 def _extract_direct_child_seq(child_id: str, parent_id: str) -> Optional[int]:
@@ -288,10 +379,12 @@ def _extract_direct_child_seq(child_id: str, parent_id: str) -> Optional[int]:
 
 
 def _scan_child_files_max_seq(tickets_dir: Path, parent_id: str) -> int:
-    """掃描檔案系統中已存在的子 Ticket 檔案，找出最大直接子任務序號。
+    """掃描子 Ticket 檔案找出最大直接子任務序號（本地工作樹 ∪ main ref）。
 
     這是防止父 Ticket 的 children 欄位未同步時的安全機制，
-    確保不會覆蓋已存在的子 Ticket 檔案。
+    確保不會覆蓋已存在的子 Ticket 檔案。B3 方案（0.19.0-W1-037）擴增資料來源：
+    除本地工作樹 glob 外，併入 main ref 上的子 ticket 檔，避免 stale base
+    worktree 掃不到 main 已建立的子 ticket 而分配碰撞序號。
 
     Args:
         tickets_dir: Ticket 檔案目錄
@@ -300,14 +393,29 @@ def _scan_child_files_max_seq(tickets_dir: Path, parent_id: str) -> int:
     Returns:
         最大直接子任務序號，無子 Ticket 檔案時返回 0
     """
-    if not tickets_dir.exists():
-        return 0
+    # 來源 1：本地工作樹 glob
+    local_stems: List[str] = []
+    if tickets_dir.exists():
+        local_stems = [f.stem for f in tickets_dir.glob(f"{parent_id}.*.md")]
 
+    # 來源 2：main ref（B3 方案）；version 由 parent_id 解析
+    main_stems: List[str] = []
+    version = extract_version_from_ticket_id(parent_id)
+    if version is not None:
+        main_files = list_ticket_files_from_main(version)
+        if main_files is not None:
+            child_prefix = f"{parent_id}."
+            main_stems = [
+                Path(p).stem
+                for p in main_files
+                if Path(p).name.endswith(".md")
+                and Path(p).stem.startswith(child_prefix)
+            ]
+
+    # 聯集解析最大直接子任務序號
     max_seq = 0
-    # 掃描 {parent_id}.*.md 檔案
-    pattern = f"{parent_id}.*.md"
-    for f in tickets_dir.glob(pattern):
-        seq = _extract_direct_child_seq(f.stem, parent_id)
+    for stem in set(local_stems) | set(main_stems):
+        seq = _extract_direct_child_seq(stem, parent_id)
         if seq is not None:
             max_seq = max(max_seq, seq)
     return max_seq
@@ -647,7 +755,7 @@ def create_ticket_body(what: str, who: str, ticket_type: str = "") -> str:
 搜尋指令：grep -rn "pattern" path/ --include="*.py"
 確認的位置：
 - file1.py:123
-注意：接手者應獨立重新驗證數量/範圍（PC-007）
+注意：接手者應獨立重新驗證數量/範圍（PC-162）
 -->
 
 ---

@@ -793,5 +793,51 @@ class TestConfusablePairsConsistency:
         # info list 可為空或含漏網提示，不影響 critical
 
 
+# ============================================================================
+# CATEGORY_MAP 建表正確性測試（W3-019.1）
+# ============================================================================
+
+
+class TestCategoryMapConstruction:
+    """驗證 CATEGORY_MAP 涵蓋三類別且優先序正確（先入者贏）。"""
+
+    def test_category_map_contains_all_simplified_chars(self):
+        """CATEGORY_MAP 必須包含 SIMPLIFIED_CHARS 全部字元，分類為 '簡體字'。"""
+        category_map = hook_module.CATEGORY_MAP
+        for char in SIMPLIFIED_CHARS:
+            assert category_map.get(char) == "簡體字", (
+                f"簡體字 '{char}' (U+{ord(char):04X}) 應在 CATEGORY_MAP 且分類為簡體字"
+            )
+
+    def test_category_map_contains_all_japanese_only(self):
+        """CATEGORY_MAP 必須包含 JAPANESE_ONLY 全部字元，分類為 '日文漢字'。"""
+        category_map = hook_module.CATEGORY_MAP
+        for char in JAPANESE_ONLY:
+            assert category_map.get(char) == "日文漢字", (
+                f"日文漢字 '{char}' (U+{ord(char):04X}) 應在 CATEGORY_MAP 且分類為日文漢字"
+            )
+
+    def test_category_map_contains_emoji_range_samples(self):
+        """CATEGORY_MAP 必須涵蓋 EMOJI_RANGES 展開的 codepoints，分類為 'emoji'。"""
+        category_map = hook_module.CATEGORY_MAP
+        EMOJI_RANGES = hook_module.EMOJI_RANGES
+        # 對每個 range 驗證起始 / 結束 / 中間三個 codepoint
+        for range_start, range_end in EMOJI_RANGES:
+            for code in (range_start, range_end, (range_start + range_end) // 2):
+                char = chr(code)
+                assert category_map.get(char) == "emoji", (
+                    f"emoji U+{code:04X} 應在 CATEGORY_MAP 且分類為 emoji"
+                )
+
+    def test_category_map_returns_none_for_traditional_chinese(self):
+        """CATEGORY_MAP.get 對純繁體字應回傳 None（非違規）。"""
+        category_map = hook_module.CATEGORY_MAP
+        # 取常見繁體字（與簡體不同形）
+        for char in "獨違決關為與實發應該認識運動說話聽讀寫":
+            assert category_map.get(char) is None, (
+                f"繁體字 '{char}' (U+{ord(char):04X}) 不應在 CATEGORY_MAP"
+            )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

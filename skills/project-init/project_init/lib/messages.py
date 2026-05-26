@@ -50,6 +50,31 @@ class HookSystemMessages:
     ALL_OK = "編譯狀態: 全部通過"
 
 
+# ========== codebase-memory-mcp 訊息 ==========
+class CodebaseMemoryMcpMessages:
+    """codebase-memory-mcp MCP server 相關訊息."""
+
+    NOT_INSTALLED = "版本: 未安裝"
+    NOT_INSTALLED_STATUS = "狀態: codebase-memory-mcp 是建議安裝的 MCP server（概念搜尋 + ADR 管理）"
+    INSTALL_GUIDANCE = "安裝指令: npm install -g codebase-memory-mcp"
+    INDEX_MCP_MANAGED = "索引: 由 MCP 工具管理（CLI 不暴露 index_status，需在 Claude Code session 內查詢）"
+
+
+# ========== codegraph 訊息 ==========
+class CodegraphMessages:
+    """codegraph (@astudioplus/codegraph-mcp) MCP server 相關訊息."""
+
+    NOT_INSTALLED = "版本: 未安裝"
+    NOT_INSTALLED_STATUS = (
+        "狀態: codegraph (@astudioplus/codegraph-mcp) 是建議安裝的 MCP server"
+        "（Tree-sitter callers/callees/impact）"
+    )
+    INSTALL_GUIDANCE = "安裝指令: npm install -g @astudioplus/codegraph-mcp"
+    INDEX_OK = "索引: 已建立 (.codegraph/ 目錄存在)"
+    INDEX_MISSING = "索引: 未建立 (.codegraph/ 目錄不存在)"
+    INDEX_UNKNOWN = "索引: 狀態未知"
+
+
 # ========== 自製套件訊息 ==========
 class PackageMessages:
     """自製套件相關訊息."""
@@ -189,3 +214,43 @@ class RemediationGuidance:
                 "驗證安裝: rg --version",
                 "重新執行 project-init check",
             ]
+
+    @staticmethod
+    def get_cbm_install_steps() -> list[str]:
+        """取得 codebase-memory-mcp 安裝步驟（npm scoped name 全名）."""
+        return [
+            "確保已安裝 Node.js 與 npm",
+            "執行: npm install -g codebase-memory-mcp",
+            "驗證安裝: codebase-memory-mcp --version",
+            "重新啟動 Claude Code session 讓 MCP 載入",
+        ]
+
+    @staticmethod
+    def get_codegraph_install_steps() -> list[str]:
+        """取得 codegraph 安裝步驟（@astudioplus/codegraph-mcp scoped name）。
+
+        Note:
+            npm registry 上的短名 `codegraph` 為 469B placeholder package（無 bin），
+            必須用 scoped name @astudioplus/codegraph-mcp（PC-159 防護）。
+        """
+        return [
+            "確保已安裝 Node.js 與 npm",
+            "執行: npm install -g @astudioplus/codegraph-mcp",
+            "驗證安裝: codegraph-mcp --info",
+            "重新啟動 Claude Code session 讓 MCP 載入",
+        ]
+
+    @staticmethod
+    def get_codegraph_reindex_steps() -> list[str]:
+        """取得 codegraph 重建索引步驟。
+
+        Note:
+            codegraph-mcp 0.16.6+ 內建 file watcher 自動 sync（debounce ~500ms），
+            通常無需手動重建索引；若需強制重建，移除 .codegraph/ 目錄後重啟 MCP server。
+        """
+        return [
+            "確認 codegraph-mcp 0.16.6+ 已自動處理檔案變更（debounce ~500ms）",
+            "如需強制重建索引: rm -rf .codegraph/",
+            "重新啟動 Claude Code session 讓 codegraph-mcp 重新索引",
+            "驗證: mcp__codegraph__codegraph_status 在 session 內回報 nodes/edges 數",
+        ]

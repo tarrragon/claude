@@ -14,16 +14,17 @@
 
 ## 1. 安裝前評估清單
 
-安裝任何 plugin 前，逐項回答以下 6 題，**任一項答否即應暫緩安裝**，改採替代方案。
+安裝任何 plugin 前，逐項回答以下 7 題，**任一項答否即應暫緩安裝**，改採替代方案。
 
 | # | 評估項 | 判定標準 | 如果答否 |
 |---|-------|---------|---------|
 | 1 | 功能對齊 | 是否解決當前專案的具體需求？ | 暫緩安裝，等需求明確 |
 | 2 | 重複性檢查 | 是否已有同名或同類 skill/命令/工具？（查 `.claude/skills/` 與已安裝 plugin） | 不裝；使用現有工具 |
 | 3 | 本專案使用頻率預估 | 預期每週使用 >= 1 次？ | 改為 local scope 或不裝 |
-| 4 | Token 成本評估 | 注入的 skill 數量與平均描述長度是否可接受？（skills 多 = context 成本高） | 改用 command 或 hook 形式的 plugin |
+| 4 | Projected context cost 評估 | 安裝前執行 `claude plugin info <name>` 確認 projected context cost 是否可接受？（skills 多 = cost 高） | 改用 command 或 hook 形式的 plugin |
 | 5 | 可逆性 | 卸載流程是否單純（一行指令）？ | 確認後再裝 |
 | 6 | 逃生路線 | 卸載後是否有替代手段完成原任務？ | 先準備替代，再決定是否安裝 |
+| 7 | 依賴性檢查 | 此 plugin 是否依賴其他尚未安裝的 plugin（v2.1.143 dependency enforcement）？ | 確認依賴鏈完整後再安裝，或改用無依賴的替代 plugin |
 
 **評估執行指令**：
 
@@ -34,7 +35,7 @@ cat ~/.claude/plugins/installed_plugins.json | jq 'keys'
 # 查專案內建 skills，對照是否重複
 ls .claude/skills/
 
-# 查 plugin 原始 marketplace 描述（安裝前）
+# 查 plugin 原始 marketplace 描述（安裝前）及 projected context cost
 claude plugin info <plugin-name>@<marketplace>
 ```
 
@@ -56,9 +57,34 @@ claude plugin info <plugin-name>@<marketplace>
 
 **判讀準則**：
 
-- Skills 型 plugin 最昂貴，必須通過第 1 章全部 6 題
+- Skills 型 plugin 最昂貴，必須通過第 1 章全部 7 題
 - MCP 型 plugin 成本低但需考慮工具發現摩擦（ToolSearch 步驟）
 - Hook 型 plugin 無注入成本，主要考慮是否與專案既有 hook 衝突
+
+**Projected context cost 查詢（v2.1.143+）**：
+
+CC v2.1.143 起，`claude plugin info` 輸出包含 projected context cost 欄位，可直接量化該 plugin 對 session token 預算的影響，取代過去靠 skill 數量人工估算的方式。
+
+```bash
+# 查詢安裝前的 projected context cost
+claude plugin info <plugin-name>@<marketplace>
+# 輸出示例：Projected context cost: ~2,400 tokens/session（14 skills）
+
+# 查詢已安裝 plugin 的成本
+claude plugin list --show-cost
+```
+
+**Dependency enforcement（v2.1.143+）**：
+
+CC v2.1.143 引入 plugin dependency enforcement 機制，改變安裝與卸載行為：
+
+| 行為 | 說明 |
+|------|------|
+| 卸載有 dependent 的 plugin | 系統拒絕卸載，提示依賴它的 plugin 清單；需先卸載 dependent plugin 才可卸載 |
+| 啟用依賴其他 plugin 的 plugin | 系統自動 force-enable 所有 transitive dependency |
+| 停用被其他 plugin 依賴的 plugin | 系統拒絕停用，提示 dependent 清單 |
+
+**Why**：dependency enforcement 防止孤兒依賴造成 plugin 功能異常，但也意味著安裝有依賴鏈的 plugin 時會自動引入額外 plugin，間接增加 context cost。安裝前須確認第 1 章第 7 題（依賴性檢查）。
 
 ---
 
@@ -112,6 +138,24 @@ claude plugin uninstall example-skills@anthropic-agent-skills
 
 3. 確認原本依賴該 plugin 的工作流是否有替代手段（第 1 章第 6 題已備）。
 
+### Dependency enforcement 下的卸載注意事項（v2.1.143+）
+
+CC v2.1.143 起，卸載 plugin 時若有其他 plugin 依賴它，系統會拒絕執行並提示依賴方清單。
+
+**卸載前確認依賴步驟**：
+
+```bash
+# 確認目標 plugin 是否被其他 plugin 依賴
+claude plugin info <plugin-name>@<marketplace>
+# 若輸出含「Required by: ...」欄位，表示有 dependent，需先卸載 dependent
+
+# 正確順序：先卸載 dependent，再卸載目標
+claude plugin uninstall <dependent-plugin>@<marketplace>
+claude plugin uninstall <target-plugin>@<marketplace>
+```
+
+**Why**：dependency enforcement 保護 plugin 依賴鏈完整性。若強制跳過（如直接刪除 JSON 欄位），可能導致剩餘 plugin 在 runtime 找不到依賴而靜默失效，難以診斷。
+
 ### 卸載前留痕
 
 卸載前建議記錄理由，避免未來重複評估：
@@ -136,7 +180,24 @@ cat ~/.claude/plugins/installed_plugins.json | jq 'keys'
 
 # 方法 C：按 scope 過濾
 cat ~/.claude/plugins/installed_plugins.json | jq 'to_entries | map(select(.value[0].scope == "user")) | map(.key)'
+
+# 方法 D：查詢已安裝的 LSP servers（v2.1.142+）
+claude plugin list --type lsp
 ```
+
+### LSP Servers 查詢（v2.1.142+）
+
+CC v2.1.142 起可直接查詢已安裝的 LSP servers，取代過去需讀 `installed_plugins.json` 再手動過濾的方式。
+
+```bash
+# 列出所有已安裝 LSP servers
+claude plugin list --type lsp
+
+# 查詢特定 LSP server 詳情
+claude plugin info <lsp-name>@<marketplace>
+```
+
+**判讀用途**：第 2 章表格中 LSP 型 plugin 列為「無 context 成本」，此指令可快速確認哪些 LSP 已安裝，在語言切換（如從 Flutter 轉 JS 專案）時評估是否需卸載不再使用的 LSP，釋放系統資源。
 
 ### 交叉比對與分類
 
@@ -195,11 +256,13 @@ ls .claude/skills/ > /tmp/local-skills.txt
 
 | 反模式 | 後果 | 正確做法 |
 |-------|------|---------|
-| 安裝前未走第 1 章評估清單，直接 install | 累積冗餘 plugin，context 膨脹 | 每次 install 前逐題回答 |
+| 安裝前未走第 1 章評估清單，直接 install | 累積冗餘 plugin，context 膨脹 | 每次 install 前逐題回答（含第 7 題依賴性檢查） |
 | 「以後可能用到」心態保留 plugin | 佔 context 且無實際效益 | 不用即卸，需要時重裝成本低 |
 | 兩個功能重疊的 plugin 並存 | 重複注入 skills | 擇一保留，另一卸載 |
 | 卸載後未更新 worklog 記錄理由 | 未來重複評估同樣的 plugin | 卸載前在 worklog 記一行理由 |
 | 在 session 裡直接抱怨「skills 太多」卻不審查 | 問題未落地 | 觸發第 3 章提前審查流程 |
+| 在專案根目錄（repo root）放置 SKILL.md 檔案 | CC v2.1.142+ 會將根目錄 SKILL.md 自動曝光為 skill，意外注入 context | Skill 定義放 `.claude/skills/<skill-name>/SKILL.md`；根目錄不放 SKILL.md |
+| 忽略 dependency enforcement 警告，強制刪除 JSON | 被依賴的 plugin 遭移除後，dependent plugin 靜默失效，難以診斷 | 依第 4 章「Dependency enforcement 下的卸載注意事項」循序操作 |
 
 ---
 
@@ -223,5 +286,5 @@ ls .claude/skills/ > /tmp/local-skills.txt
 
 ---
 
-**Last Updated**: 2026-04-20
-**Version**: 1.0.0 — 初始建立。從 skills 注入成本分析報告提煉跨專案通用的 plugin 管理準則。
+**Last Updated**: 2026-05-26
+**Version**: 1.1.0 — 對齊 CC v2.1.143：第 1 章新增第 7 題依賴性檢查、第 4 題改用 projected context cost；第 2 章補 projected cost 查詢指令與 dependency enforcement 機制說明；第 4 章補 dependency enforcement 卸載注意事項；第 5 章補 LSP servers 查詢指令；第 7 章補根目錄 SKILL.md 意外曝光與 dependency enforcement 忽略兩個反模式（W3-033 ANA 結論落地）

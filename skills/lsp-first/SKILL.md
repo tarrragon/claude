@@ -88,6 +88,29 @@ Dart MCP 和 Serena MCP 的工具列表與使用建議：`/search-tools-guide`
 
 ---
 
+## 三 MCP 工具路由（指向 search-tools-guide）
+
+> 自 W6-001 引入三 MCP（codebase-memory-mcp / codegraph / serena）後，「Serena 是唯一語意工具」的舊敘事已升級為「三刀流互補」。LSP-first 原則仍為精度錨點，但查詢入口擴展至三 MCP。
+
+### 三 MCP 角色定位
+
+| 工具 | 在 LSP-first 流程中的角色 |
+|------|--------------------------|
+| **LSP / serena** | **精度錨點**：符號定義、引用追蹤、安全重命名、call hierarchy（型別感知不可替代） |
+| **codebase-memory-mcp** | **概念查詢入口**：跨檔案語義搜尋、找「處理 X 概念的所有檔案」（BM25 + 向量混合） |
+| **codegraph** | **結構查詢入口**：caller / callee / impact 圖譜追蹤，跨語言符號關係 |
+
+### 路由原則
+
+1. **想找符號** → LSP / serena `find_symbol`
+2. **想找概念 / 範圍模糊** → cbm `search_graph`（src/、docs/）或 rg（`.claude/`）
+3. **想知道修改影響** → codegraph `impact` + serena `find_referencing_symbols` 雙重驗證
+4. **想做安全重構** → serena `rename_symbol` / `replace_symbol_body`
+
+完整三刀流決策樹、九維度對照表、命令速查、cbm 對 `.claude/` 不索引的限制：`/search-tools-guide`（含 `references/codebase-memory-tool.md`）
+
+---
+
 ## LSP 伺服器配置
 
 自建插件、官方插件市場、跨平台安裝、故障排除：`references/lsp-setup-guide.md`

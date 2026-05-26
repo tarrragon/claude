@@ -159,4 +159,6 @@ Bash 對**任何** `.claude/` 路徑（含主 repo）的寫入類命令（rm/pri
 
 ---
 
+**Last Updated**: 2026-05-26（W3-034.1 + W3-034.4 受控實驗：bgIsolation: none 下 subagent 在主 repo cwd 操作，單一 + 並行 3 對 `.claude/` Edit 皆 success。確認 deny 綁定「worktree cwd 機制」而非「subagent 身份」；bgIsolation: none 為合法例外） <!-- PC-093-exempt: history:0.19.0-W3-034.1 W3-034.4 為實驗驗證歷史錨點 -->
+
 **Last Updated**: 2026-04-18（W5-050.1/2/3 重驗後重大修正：分界線為「target 是否在主 repo 樹內」，非「.claude/ 一律被擋」。原 W10-049.4 認定的「主 repo 內 .claude/ 也被擋」被推翻）

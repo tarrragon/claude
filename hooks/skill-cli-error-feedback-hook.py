@@ -94,6 +94,21 @@ SKILL_ERROR_PATTERNS = [
 # 升級至 v2 時兩處須同改
 ENVELOPE_VERSION_MARKER = "__error_envelope_v1__"
 
+# 系統功能缺失分類訊號（W3-073）
+# 結構：set-<dict-field> 子命令 + 子欄位 flag 不被接受 → 暗示 CLI 缺子欄位寫入路徑
+# 參考案例：W3-072 暴露的 ticket track set-where --layer 缺口
+# 對應 ticket frontmatter dict 欄位 → 已知子欄位清單
+DICT_FIELD_SUBFIELDS = {
+    "set-where": ["layer", "files"],
+    "set-who": ["current", "history"],
+    "set-how": ["task_type", "strategy"],
+}
+
+# 分類結果常數
+CLASSIFICATION_SYSTEM_GAP = "system_functional_gap"
+CLASSIFICATION_SKILL_DOC = "skill_documentation_gap"
+CLASSIFICATION_USER_TYPO = "user_typo"
+
 # 排除的錯誤模式（業務邏輯錯誤，不是 SKILL 引導問題）
 EXCLUDED_ERROR_PATTERNS = [
     r"ticket not found",
@@ -116,6 +131,37 @@ DEFAULT_OUTPUT = {
         "hookEventName": "PostToolUse"
     }
 }
+
+# 訊息範本（系統功能缺失，W3-073）
+SYSTEM_GAP_FEEDBACK_TEMPLATE = """
+============================================================
+[系統功能缺失評估] CLI 子欄位寫入路徑可能缺失
+============================================================
+
+檢測到 `{subcommand}` 子命令拒絕了子欄位 flag `{flag}`，
+但該 flag 在概念上對應 ticket frontmatter 中既有的子欄位。
+
+失敗命令：{command_summary}
+偵測訊號：{subcommand} 拒絕 --{flag}（已知子欄位之一：{known_subfields}）
+
+可能原因：
+  CLI 缺少對應子欄位的寫入路徑（非單純文檔缺失），使用者
+  意圖背後反映系統功能缺口。參考案例：W3-072（set-where --layer）。
+
+建議動作：
+  1. 不要僅補 SKILL.md，先評估是否為系統功能缺口
+  2. 建立 ANA ticket 評估該子欄位寫入路徑的設計方案：
+     ticket track create --type ANA \\
+       --title "[ANA] 評估 {subcommand} 是否需支援 --{flag} 子欄位 flag" \\
+       --source-ticket <當前 ticket>
+  3. ANA 完成後決定 spawn IMP / 維持現狀 / 補 SKILL.md 三方案
+  4. Fallback：直接 Edit ticket frontmatter 對應子欄位
+
+詳見：.claude/skills/ticket/SKILL.md
+參考：W3-072 / W3-073
+
+============================================================
+"""
 
 # 訊息範本
 SKILL_CLI_ERROR_FEEDBACK_TEMPLATE = """
@@ -233,6 +279,55 @@ def extract_command_summary(command: str, stderr: str) -> tuple[str, str]:
     return command_summary, command_base
 
 
+def detect_system_gap(command: str, stderr: str, stdout: str) -> Optional[Dict[str, str]]:
+    """偵測系統功能缺失訊號（W3-073）。
+
+    判定條件（同時成立）：
+    1. 命令包含 set-where / set-who / set-how 子命令之一
+    2. stderr/stdout 含 "unrecognized arguments" 類錯誤
+    3. 錯誤訊息或命令中出現對應 dict 欄位的已知子欄位 flag（如 --layer）
+
+    Returns:
+        {"subcommand": "set-where", "flag": "layer",
+         "known_subfields": "layer, files"} 或 None
+    """
+    combined = (stderr + " " + stdout).lower()
+    # 必要訊號：unrecognized arguments 類錯誤
+    if not re.search(r"unrecognized arguments?:", combined, re.IGNORECASE):
+        return None
+
+    for subcommand, subfields in DICT_FIELD_SUBFIELDS.items():
+        if subcommand not in command:
+            continue
+        # 找命令或錯誤訊息中的 --<subfield> flag
+        for subfield in subfields:
+            flag_pattern = rf"--{re.escape(subfield)}\b"
+            if re.search(flag_pattern, command, re.IGNORECASE) or \
+               re.search(flag_pattern, stderr + stdout, re.IGNORECASE):
+                return {
+                    "subcommand": subcommand,
+                    "flag": subfield,
+                    "known_subfields": ", ".join(subfields),
+                }
+    return None
+
+
+def classify_error(command: str, stderr: str, stdout: str) -> str:
+    """三類分類（W3-073）。
+
+    - CLASSIFICATION_USER_TYPO: 業務邏輯錯誤（排除清單命中）
+    - CLASSIFICATION_SYSTEM_GAP: dict 欄位子 flag 缺寫入路徑
+    - CLASSIFICATION_SKILL_DOC: 其他 SKILL 引導缺陷（既有路徑）
+
+    呼叫者應預先處理 envelope / 空輸出 / 非 SKILL CLI 等情境。
+    """
+    if is_excluded_error(stderr, stdout):
+        return CLASSIFICATION_USER_TYPO
+    if detect_system_gap(command, stderr, stdout) is not None:
+        return CLASSIFICATION_SYSTEM_GAP
+    return CLASSIFICATION_SKILL_DOC
+
+
 def main() -> int:
     """
     主入口點
@@ -309,6 +404,27 @@ def main() -> int:
     if is_envelope_output(stderr, stdout):
         logger.debug("ErrorEnvelope 已輸出完整訊息，跳過補充: %s", command[:80])
         print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
+        return EXIT_SUCCESS
+
+    # W3-073: 系統功能缺失偵測（優先於 SKILL 文檔缺失分類）
+    system_gap = detect_system_gap(command, stderr, stdout)
+    if system_gap is not None:
+        logger.info("偵測到系統功能缺失訊號: %s --%s",
+                    system_gap["subcommand"], system_gap["flag"])
+        command_summary, _ = extract_command_summary(command, stderr)
+        feedback_message = SYSTEM_GAP_FEEDBACK_TEMPLATE.format(
+            subcommand=system_gap["subcommand"],
+            flag=system_gap["flag"],
+            known_subfields=system_gap["known_subfields"],
+            command_summary=command_summary,
+        )
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": feedback_message,
+            }
+        }
+        print(json.dumps(output, ensure_ascii=False, indent=2))
         return EXIT_SUCCESS
 
     # 偵測 SKILL 引導缺陷錯誤

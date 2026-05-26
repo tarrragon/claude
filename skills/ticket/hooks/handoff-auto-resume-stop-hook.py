@@ -62,8 +62,6 @@ v2.1.0 變更:
 
 import sys
 import json
-import os
-import re
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
@@ -78,6 +76,18 @@ from hook_utils import (
     get_project_root,
     scan_ticket_files_by_version,
     find_ticket_file,
+)
+
+# W3-039: session 管理 domain 已抽出為獨立模組（與本檔同目錄，合法識別符可直接 import）。
+# 本檔上方 sys.path.insert(.../"hooks") 已涵蓋 handoff_session_mgmt 的 hook_utils 依賴；
+# 本檔目錄因 hook 以絕對路徑執行不在 sys.path 上，故補加 __file__ 父目錄。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from handoff_session_mgmt import (  # noqa: E402
+    get_session_stop_flag,
+    get_session_state_file,
+    has_been_triggered_this_session,
+    mark_triggered_this_session,
+    read_session_state,
 )
 
 # 加入 ticket_system lib 路徑以引用 handoff_utils.is_handoff_stale（W17-095.2）
@@ -125,198 +135,16 @@ except Exception as _import_err:  # pragma: no cover
 EXIT_SUCCESS = 0
 
 # 常數定義
-STOP_FLAG_FILE = ".claude/handoff/.stop-blocked"
-STOP_FLAG_EXPIRY_SECONDS = 7200  # 2 小時過期（一個 session 的合理長度）
-STATE_FILE_TEMPLATE = "/tmp/claude-handoff-state-{ppid}.json"
+# W3-039: STOP_FLAG_FILE / STOP_FLAG_EXPIRY_SECONDS / STATE_FILE_TEMPLATE
+# 隨 session 管理 domain 一併移至 handoff_session_mgmt 模組。
 PENDING_DIR_NAME = ".claude/handoff/pending"
 LOG_DIR_NAME = ".claude/hook-logs/handoff-auto-resume"
 LOG_FILE_PREFIX = "stop-hook"
-WORK_LOGS_DIR_NAME = "docs/work-logs"
-TODOLIST_FILE_NAME = "docs/todolist.yaml"
 RECENT_TASK_THRESHOLD_MINUTES = 30  # 30 分鐘內視為「最近任務」（可能有代理人正在執行）
 RECENT_HANDOFF_WINDOW_SECONDS = 300  # W17-118: 最近 N 秒內建立的 handoff 視為下 session 接手點，不計入 pending
 
 # W17-181.2: Terminal 狀態集合已上移至 lib `handoff_utils.is_ticket_terminal`
 # （透過 ticket_system.constants.TERMINAL_STATUSES 引用），消除跨進程同構邏輯（ARCH-020）。
-
-def get_session_stop_flag() -> Path:
-    """
-    取得 session stop flag 檔案路徑
-
-    使用固定的專案內 flag 檔案，相對於專案根目錄
-
-    Returns:
-        Path - flag 檔案的絕對路徑
-    """
-    project_root = get_project_root()
-    return project_root / STOP_FLAG_FILE
-
-
-def get_session_state_file() -> Path:
-    """
-    取得 session 狀態檔案路徑
-
-    Returns:
-        Path - 狀態檔案路徑
-    """
-    ppid = os.getppid()
-    return Path(STATE_FILE_TEMPLATE.format(ppid=ppid))
-
-
-def has_been_triggered_this_session(logger) -> bool:
-    """
-    檢查此 session 是否已觸發過 Stop hook，考慮 flag 過期時間
-
-    如果 flag 檔案存在且未過期（< STOP_FLAG_EXPIRY_SECONDS），則認為已觸發
-    如果 flag 已過期，則刪除並回傳 False（視為新 session）
-
-    Returns:
-        bool - 是否已觸發（且未過期）
-    """
-    flag_file = get_session_stop_flag()
-    if not flag_file.exists():
-        return False
-
-    try:
-        with open(flag_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        created_at_str = data.get("created_at")
-        if not created_at_str:
-            # flag 格式異常，移除它
-            flag_file.unlink()
-            return False
-
-        created_at = datetime.fromisoformat(created_at_str)
-        elapsed = (datetime.now() - created_at).total_seconds()
-
-        if elapsed > STOP_FLAG_EXPIRY_SECONDS:
-            # flag 已過期，移除它
-            logger.debug(f"Stop flag 已過期 ({elapsed:.1f}s > {STOP_FLAG_EXPIRY_SECONDS}s)，刪除")
-            flag_file.unlink()
-            return False
-
-        logger.debug(f"Stop flag 仍有效 ({elapsed:.1f}s 內)")
-        return True
-
-    except Exception as e:
-        logger.warning(f"檢查 stop flag 失敗: {e}")
-        return False
-
-
-def mark_triggered_this_session(logger) -> None:
-    """
-    標記此 session 已觸發過 Stop hook，並記錄時間戳
-
-    寫入固定 flag 檔案，包含建立時間，用於之後的過期檢查
-    """
-    flag_file = get_session_stop_flag()
-    try:
-        # 確保目錄存在
-        flag_file.parent.mkdir(parents=True, exist_ok=True)
-
-        # 寫入時間戳
-        flag_data = {
-            "created_at": datetime.now().isoformat(),
-            "reason": "stop_hook_triggered"
-        }
-        with open(flag_file, 'w', encoding='utf-8') as f:
-            json.dump(flag_data, f, ensure_ascii=False)
-
-        logger.debug(f"建立 session stop flag: {flag_file}")
-    except Exception as e:
-        logger.warning(f"建立 session stop flag 失敗: {e}")
-
-
-def read_session_state(logger) -> Optional[Dict[str, Any]]:
-    """
-    讀取 session 狀態檔案
-
-    Returns:
-        dict - session 狀態，若檔案不存在則回傳 None
-    """
-    state_file = get_session_state_file()
-
-    if not state_file.exists():
-        logger.debug(f"session 狀態檔案不存在: {state_file}")
-        return None
-
-    try:
-        with open(state_file, 'r', encoding='utf-8') as f:
-            state = json.load(f)
-        logger.debug(f"讀取 session 狀態成功: {json.dumps(state)}")
-        return state
-    except json.JSONDecodeError as e:
-        logger.warning(f"解析 session 狀態 JSON 失敗: {e}")
-        return None
-    except Exception as e:
-        logger.warning(f"讀取 session 狀態檔案失敗: {e}")
-        return None
-
-
-def get_active_version(project_root: Path, logger) -> Optional[str]:
-    """
-    從 docs/todolist.yaml 取得活躍版本號
-
-    Fallback：掃描 docs/work-logs/ 目錄取最新版本號。
-
-    Args:
-        project_root: 專案根目錄
-        logger: 日誌記錄器
-
-    Returns:
-        str - 活躍版本號（如 "0.31.0"）；無法取得時回傳 None
-    """
-    todolist_file = project_root / TODOLIST_FILE_NAME
-
-    # 嘗試從 todolist.yaml 讀取
-    if todolist_file.exists():
-        try:
-            content = todolist_file.read_text(encoding='utf-8')
-            # 簡易搜尋 status: "active" 的版本
-            for line in content.split('\n'):
-                if 'version:' in line:
-                    current_version = None
-                    version_match = re.search(r'"([\d.]+)"', line)
-                    if version_match:
-                        current_version = version_match.group(1)
-                    else:
-                        version_match = re.search(r"'([\d.]+)'", line)
-                        if version_match:
-                            current_version = version_match.group(1)
-
-                    # 若未找到版本則跳過
-                    if not current_version:
-                        continue
-
-                    # 接下來檢查 status 行
-                    for next_line in content[content.index(line):].split('\n')[1:5]:
-                        if 'status:' in next_line:
-                            if 'active' in next_line:
-                                logger.debug(f"從 todolist.yaml 找到活躍版本: {current_version}")
-                                return current_version
-                            break
-
-        except Exception as e:
-            logger.warning(f"解析 todolist.yaml 失敗: {e}")
-
-    # Fallback：掃描 docs/work-logs/ 目錄
-    work_logs_dir = project_root / WORK_LOGS_DIR_NAME
-    if work_logs_dir.exists():
-        try:
-            version_dirs = sorted(
-                [d for d in work_logs_dir.iterdir() if d.is_dir() and d.name.startswith('v')],
-                reverse=True
-            )
-            if version_dirs:
-                version = version_dirs[0].name[1:]  # 移除 'v' 前綴
-                logger.debug(f"Fallback：掃描 work-logs 找到版本: {version}")
-                return version
-        except Exception as e:
-            logger.warning(f"掃描 work-logs 目錄失敗: {e}")
-
-    return None
-
 
 def _load_frontmatter_cached(
     cache: Optional[Dict[str, Optional[dict]]],
@@ -442,26 +270,6 @@ def is_ticket_completed(project_root: Path, ticket_id: str, logger) -> bool:
     except Exception as e:
         logger.warning(f"檢查 Ticket 完成狀態失敗 ({ticket_id}): {e}")
         return False
-
-
-def scan_in_progress_tickets(project_root: Path, logger) -> list:
-    """
-    [DEPRECATED] 掃描 in_progress 的 Tickets 並為其建立 pending JSON
-
-    v2.1.0 起不再由 Stop hook 呼叫。
-    原因：此函式為所有 in_progress Ticket 建立 pending JSON，
-    不分是否與當前 session 相關，導致 Stop hook 誤阻塞。
-    pending JSON 應只由 /ticket handoff 明確建立。
-
-    Args:
-        project_root: 專案根目錄
-        logger: 日誌記錄器
-
-    Returns:
-        list - 建立的 pending JSON 的 ticket_id 列表
-    """
-    # 問題 8 修正：廢棄函式縮減為空實現，僅保留 docstring
-    return []
 
 
 def should_preserve_pending_json(record: dict, logger, project_root: Optional[Path] = None) -> bool:
@@ -609,6 +417,10 @@ def scan_pending_handoff_tasks(
         logger.debug(f"pending 目錄不存在: {pending_dir}")
         return pending_tasks, recent_tasks
 
+    # W3-036：has_background_agents 屬 loop-invariant——其唯一輸入 input_data
+    # 在整個迴圈中固定不變。提升至迴圈外一次性計算，消除 O(n) 重複呼叫與重複日誌。
+    bg_active = has_background_agents(input_data or {}, logger)
+
     try:
         for file_path in sorted(pending_dir.glob("*.json")):
             try:
@@ -687,7 +499,7 @@ def scan_pending_handoff_tasks(
                             logger.info(
                                 f"建議性 handoff ({direction_type})，不阻塞退出: {ticket_id}"
                             )
-                        elif has_background_agents(input_data or {}, logger):
+                        elif bg_active:
                             # W3-026.1：v2.1.145 background_tasks 直接判斷，
                             # 優先於 started_at 30 分鐘閾值推斷
                             recent_tasks.append({
