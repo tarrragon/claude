@@ -74,6 +74,47 @@ basil-hook-architect 在以下情況下**應該被觸發**：
 
 ---
 
+## 實作完成驗證（Dogfooding）
+
+新建診斷類 Hook 完成後，必須立即對「當前專案」執行一次（dogfooding），確認 Hook 功能性並同步暴露既有殘留問題。
+
+**Why**：診斷 Hook 本職為偵測某類問題，專案在 Hook 不存在的歷史時期已可能累積該類問題。Hook 第一次執行等同對專案歷史進行一次體檢，立即驗證提供雙重價值：(1) 確認 trigger 條件與設計相符（非僅靠 pytest mock state 推論）(2) 自動暴露殘留 case，避免後續 session 反覆 WARN 累積雜訊。
+
+**Consequence**：跳過 dogfooding 直接 close 造成兩種損害：(1) 不確定 Hook 是否真能偵測（unit test 通過但 trigger 條件可能與設計不同）(2) 殘留問題被新 Hook 證實存在卻未處理，每次 session-start 反覆 WARN，使用者學會無視該訊號，Hook 設計目的失效。
+
+**Action**：依下表判別是否強制 dogfooding；強制類型須於 Hook 註冊到 settings.json 的同一 commit 範圍內執行一次，並處理輸出（既有問題同 session 修復或建 Ticket 追蹤）。
+
+### Hook 類型 dogfooding 判別表
+
+| Hook 類型 | 是否強制 dogfooding | 理由 |
+|---------|-------------------|------|
+| 診斷類（偵測既有問題） | 是 | Hook 本職為對歷史累積進行體檢；第一次執行能驗證 trigger 邏輯並暴露殘留 case |
+| 強制類（阻擋未來操作） | 否 | 僅作用於未來行為，無歷史累積可暴露 |
+| 提示類（提醒下一步） | 否 | 行為提醒非問題偵測，無殘留 case 概念 |
+
+### 執行流程
+
+| 步驟 | 動作 |
+|------|------|
+| 1 | Hook 註冊至 settings.json 後立即觸發一次（依 event 類型用對應方式：SessionStart 用 `claude` 重啟、PostToolUse 用對應工具操作） |
+| 2 | 觀察 stdout / stderr / 日誌輸出，確認 trigger 邏輯依設計分類 |
+| 3 | 若抓到既有殘留問題（排除 false positive 後）且範圍可控，同 session 處理並 commit；範圍超出時建追蹤 Ticket（規則 5） |
+| 4 | 將 dogfooding 結果記錄於 Ticket Test Results 或 commit message，提供審計軌跡 |
+
+### 反模式
+
+| 反模式 | 問題 |
+|-------|------|
+| 完成 Hook 後僅跑 pytest 即 close | pytest 採 mock state，無法暴露專案歷史累積 |
+| Dogfooding 抓到殘留但跨 session 延後處理 | 違反 quality-baseline 規則 5（所有發現必須追蹤），且每次 session-start 反覆 WARN 累積雜訊 |
+| 將 dogfooding 結果僅留 session 對話 | 缺乏審計軌跡，無法回顧 Hook 設計目的閉環 |
+
+### 典型情境
+
+某 session-start 診斷類 Hook 完成 unit test 後，首次對當前專案 dogfooding 即可能抓到「應被 .gitignore 排除但已被 git tracked」的既有檔案——這類 case 在 pytest mock state 下無法暴露。同 session 用 `git rm --cached` 移除追蹤狀態並 commit，Hook 設計目的方算閉環。此類「unit test 通過但 mock state 遮蔽歷史累積」的場景是診斷類 Hook 強制 dogfooding 的本質理由。
+
+---
+
 ## hook_utils 統一日誌規範（強制）
 
 > **背景**：W22-001 已將 44 個 hooks 統一遷移至 hook_utils 日誌模組。所有新建或修改的 Hook 必須遵循此規範。

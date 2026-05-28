@@ -1,3 +1,14 @@
+## [1.36.1] - 2026-05-29
+
+### Summary
+chore: chmod +x test_session_start_gitignore_check_hook.py
+
+Changes: 1 chore
+
+- chore: chmod +x test_session_start_gitignore_check_hook.py
+
+---
+
 ## [1.36.0] - 2026-05-28
 
 ### Summary
