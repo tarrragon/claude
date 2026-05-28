@@ -645,6 +645,60 @@ def _compute_content_hash(claude_dir: Path) -> str:
     return hashlib.sha256(combined.encode("utf-8")).hexdigest()[:16]
 
 
+def check_no_change_early_exit(
+    claude_dir: Path,
+    project_root: Path,
+) -> tuple[bool, str]:
+    """偵測 .claude/ 自上次推送後是否無實質變更，回傳是否應 early-exit。
+
+    雙重訊號設計：
+      - hash 訊號：當前 .claude/ 內容指紋與 .sync-state.json `last_push_hash` 相符
+      - commit 訊號：自 `last_push_time` 之後無新的 .claude/ commit
+
+    兩個訊號同時為「無變更」才回傳 should_exit=True（保守設計）。
+
+    邊界處理：
+      - .sync-state.json 不存在 → 首次推送 → (False, ...)
+      - JSON 解析失敗 / 欄位缺失 → 視為狀態未知，正常流程 → (False, ...)
+
+    回傳值：(should_exit, reason)
+      - should_exit=True 時 reason 為 abort 訊息
+      - should_exit=False 時 reason 為「為何不 abort」說明（含診斷資訊）
+    """
+    state_path = claude_dir / ".sync-state.json"
+    if not state_path.exists():
+        return False, "首次推送（.sync-state.json 不存在）"
+
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        return False, f".sync-state.json 解析失敗（{exc}），走正常流程"
+
+    last_hash = state.get("last_push_hash")
+    last_time = state.get("last_push_time")
+    if not last_hash or not last_time:
+        return False, ".sync-state.json 缺欄位，走正常流程"
+
+    current_hash = _compute_content_hash(claude_dir)
+    hash_unchanged = current_hash == last_hash
+
+    new_commits = collect_claude_commits(str(project_root), last_time)
+    no_new_commits = len(new_commits) == 0
+
+    if hash_unchanged and no_new_commits:
+        return True, (
+            f"無實質變更可推送（hash={current_hash} 與上次推送相同，"
+            f"自 {last_time} 以來無新 .claude/ commit）"
+        )
+
+    diag = (
+        f"hash {'相同' if hash_unchanged else '不同'}"
+        f"（current={current_hash} last={last_hash}）；"
+        f"自上次推送有 {len(new_commits)} 個新 commit"
+    )
+    return False, diag
+
+
 def clean_stale_files(temp_dir: Path, claude_dir: Path) -> int:
     """刪除 clone 目錄中存在但本地 .claude/ 沒有的過時檔案。
 
@@ -736,6 +790,10 @@ def main() -> None:
     clean_mode = "--clean" in sys.argv
     if clean_mode:
         sys.argv.remove("--clean")
+    # 解析 --force 參數：跳過 no-change early-exit 檢查
+    force_mode = "--force" in sys.argv
+    if force_mode:
+        sys.argv.remove("--force")
     # commit message is now optional - auto-generated when not provided
     user_message = sys.argv[1] if len(sys.argv) >= 2 else None
 
@@ -752,6 +810,17 @@ def main() -> None:
         print_color("警告: .claude 有未提交的變更", "red")
         print("請先提交到主專案，或使用 git add .claude")
         sys.exit(1)
+
+    # 2.5. No-change early-exit（W3-075）：避免空 commit 污染歷史
+    # 跳過條件：user 提供 commit message（明確意圖）或 --force 旗標
+    if not user_message and not force_mode:
+        should_exit, reason = check_no_change_early_exit(claude_dir, project_root)
+        if should_exit:
+            print_color(f"Early-exit: {reason}", "yellow")
+            print_color("如需強制推送，請使用 --force 旗標或提供 commit message")
+            return
+        else:
+            print_color(f"   no-change 檢查通過：{reason}", "green")
 
     # 3. Clone remote repo (preserve history)
     print_color("Clone 遠端 repo（保留歷史）...")

@@ -1,3 +1,14 @@
+## [1.35.3] - 2026-05-28
+
+### Summary
+fix: sync-push 無變更時 early-exit 避免空 commit
+
+Changes: 1 fix
+
+- fix: sync-push 無變更時 early-exit 避免空 commit
+
+---
+
 ## [1.35.2] - 2026-05-28
 
 ### Summary
