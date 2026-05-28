@@ -406,6 +406,18 @@ def _handle_package_version_check(
     return False
 
 
+def _count_outdated_packages(result: CheckResult) -> int:
+    """計算自製套件區段中 OUTDATED 項目的數量。
+
+    用於 summary 顯眼警示（W1-103 落地，PC-164 第二層防護）。
+    """
+    for section in result.sections:
+        if section.name != "自製套件":
+            continue
+        return sum(1 for detail in section.details if "[OUTDATED]" in detail)
+    return 0
+
+
 def _print_check_result(result: CheckResult) -> None:
     """輸出格式化的檢查結果到 stdout."""
     print()
@@ -424,6 +436,11 @@ def _print_check_result(result: CheckResult) -> None:
         print()
 
     print(SEPARATOR)
+    # 顯眼警示：自製套件 OUTDATED 時，summary 前加 [WARNING] 一行
+    # （W1-103，配合 PackageMessages.OUTDATED 顯眼前綴強化 stale CLI 沉默問題）
+    outdated_count = _count_outdated_packages(result)
+    if outdated_count > 0:
+        print(PackageMessages.OUTDATED_SUMMARY_WARNING.format(count=outdated_count))
     print(CheckMessages.SUMMARY_TOTAL.format(summary=result.summary))
     print(SEPARATOR)
     print()

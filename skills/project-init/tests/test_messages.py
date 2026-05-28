@@ -67,6 +67,19 @@ class TestPackageMessages:
         assert "0.0.9" in msg
         assert "[OUTDATED]" in msg
 
+    def test_outdated_eyecatching_prefix(self) -> None:
+        """OUTDATED 訊息含 STALE-CLI 顯眼前綴（W1-103 防護 PC-164 第二層沉默）."""
+        msg = PackageMessages.OUTDATED.format(name="ticket", version="0.0.9")
+        assert "[STALE-CLI]" in msg
+        assert "必須 reinstall" in msg
+
+    def test_outdated_summary_warning_format(self) -> None:
+        """OUTDATED summary 警示含套件數量與 reinstall 指令（W1-103）."""
+        msg = PackageMessages.OUTDATED_SUMMARY_WARNING.format(count=3)
+        assert "[WARNING]" in msg
+        assert "3" in msg
+        assert "uv tool install . --force --reinstall" in msg
+
 
 class TestSetupMessages:
     """測試 Setup 訊息常數."""

@@ -223,7 +223,7 @@ Acceptance 欄位表達的是 **complete 時的驗收條件**，而非 claim 時
 
 ---
 
-## AC 漂移偵測（claim 階段；W3-046 改為 --verify opt-in）
+## AC 漂移偵測（claim 階段）
 
 > **來源**：PC-055 — Ticket AC 與實況漂移未被系統偵測。PROP-010 Phase 1 MVP 透過兩項自動機制防護。
 >
@@ -315,9 +315,9 @@ $ ticket track claim 0.18.0-W10-042 --verify   # W3-046：須 opt-in
 
 | 條件 | 處理 |
 |------|------|
-| 預設（無 `--verify`） | W3-046 後新預設：跳過 AC 驗證直接 claim（避免 PC-078 並行衝突） |
-| `--verify` 旗標 | W3-046 新增：明示啟用 AC 驗證（保留除錯/AC 漂移巡檢場景） |
-| `--skip-verify` 旗標 | W3-046 後 no-op（保留向後相容；新預設已不執行驗證） |
+| 預設（無 `--verify`） | 跳過 AC 驗證直接 claim，避免 PC-078 並行衝突（W3-046 後新預設） |
+| `--verify` 旗標 | 明示啟用 AC 驗證，保留除錯/AC 漂移巡檢場景（W3-046 新增） |
+| `--skip-verify` 旗標 | No-op，保留向後相容（W3-046 後失效；新預設已不執行驗證） |
 | `--yes` 旗標 | 配合 `--verify` 使用，自動選 y 繼續；S4 仍拒絕（S4 優先於 --yes） |
 | 無可機器驗證 AC 的 Ticket | `--verify` 啟用時 CLI 輸出「無可驗證項」，不阻擋 claim |
 

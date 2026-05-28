@@ -1465,3 +1465,118 @@ def test_integ_fenced_integration_main_blocks_real_hit(monkeypatch, capsys, mock
         assert "line {}".format(ln) not in err, (
             "fenced 範例行 {} 不應出現於 BLOCK 訊息".format(ln)
         )
+
+
+# ============================================================================
+# W1-092 — YAML Frontmatter 區塊跳過（PC-142 case 5 修復）
+# ============================================================================
+
+compute_frontmatter_lines = _hook.compute_frontmatter_lines
+
+
+def test_w1_092_frontmatter_lines_basic():
+    """基本案例：第一行 `---` 起，到下一個 `---` 止，含起訖行。"""
+    lines = [
+        "---",
+        "id: 0.19.0-W1-039",
+        "title: foo",
+        "---",
+        "",
+        "## Body",
+    ]
+    fm = compute_frontmatter_lines(lines)
+    assert fm == {1, 2, 3, 4}
+
+
+def test_w1_092_frontmatter_phrase_inside_skipped():
+    """frontmatter why 含 source ticket history 引用「Phase 4 評估」「Phase 5 再決定」不應命中。"""
+    lines = [
+        "---",
+        "id: 0.19.0-W1-039",
+        "why: source ticket W1-029.1 的 Phase 4 評估發現，禁止 Phase 5 再決定",
+        "---",
+        "",
+        "## Solution",
+        "正常實作",
+    ]
+    table = build_regex_table()
+    hits = scan_lines_for_phrases(lines, table)
+    assert hits == [], (
+        "frontmatter 內 Phase 4/5 字面屬結構化元資料，不應命中，實際: {}".format(hits)
+    )
+
+
+def test_w1_092_body_phrase_outside_frontmatter_still_hits():
+    """純內文 Phase 4 / Phase 5 仍應命中（regression guard）。"""
+    lines = [
+        "---",
+        "id: 0.19.0-W1-039",
+        "title: foo",
+        "---",
+        "",
+        "## Solution",
+        "Phase 4 再決定是否保留 use_cache",
+    ]
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    m1 = _hits_by_rule(hits, "M1")
+    assert len(m1) == 1, "內文 M1 仍應命中（regression），實際: {}".format(hits)
+    assert m1[0].line_no == 7
+
+
+def test_w1_092_body_separator_dash_dash_dash_not_terminating_frontmatter():
+    """PM WRAP P 防護：邊界匹配限「行首僅有 `---` 三字元」，內文 `---` 水平分隔符
+    不應被視為 frontmatter 結束，否則內文 phrase 會被誤豁免。"""
+    lines = [
+        "---",
+        "id: 0.19.0-W1-039",
+        "---",
+        "",
+        "## Section",
+        "正常段落",
+        "",
+        "---",  # 水平分隔符
+        "",
+        "Phase 4 再決定 (內文，應命中)",
+    ]
+    fm = compute_frontmatter_lines(lines)
+    # 應為 1-3，不可延伸到 line 8
+    assert fm == {1, 2, 3}, "frontmatter 應終止於 line 3，實際: {}".format(fm)
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    m1 = _hits_by_rule(hits, "M1")
+    assert len(m1) == 1 and m1[0].line_no == 10, (
+        "內文 line 10 的 Phase 4 仍應命中，實際: {}".format(hits)
+    )
+
+
+def test_w1_092_no_frontmatter_returns_empty():
+    """檔案第一行非 `---` → 視為無 frontmatter，回傳空集合。"""
+    lines = [
+        "# Title",
+        "Phase 4 再決定",
+    ]
+    assert compute_frontmatter_lines(lines) == set()
+
+
+def test_w1_092_unclosed_frontmatter_returns_empty():
+    """未閉合 frontmatter（無第二個 `---`）→ 回傳空集合（容錯）。"""
+    lines = [
+        "---",
+        "id: foo",
+        "title: bar",
+    ]
+    assert compute_frontmatter_lines(lines) == set()
+
+
+def test_w1_092_frontmatter_exempt_marker_not_collected():
+    """frontmatter 內 PC-093-exempt 標記不應被蒐集（YAML 非豁免宣告載體）。"""
+    lines = [
+        "---",
+        "title: <!-- PC-093-exempt: ticket-tracked:W1-039 引用 -->",
+        "---",
+        "",
+        "## Body",
+        "<!-- PC-093-exempt: ticket-tracked:W1-039 真實 marker -->",
+    ]
+    refs = collect_exempt_markers(lines)
+    assert len(refs) == 1, "frontmatter 內 marker 不應蒐集，實際: {}".format(refs)
+    assert refs[0].line_no == 6

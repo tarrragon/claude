@@ -1,3 +1,21 @@
+## [1.35.1] - 2026-05-28
+
+### Summary
+fix: phase4-hook frontmatter YAML 區塊跳過 (PC-142 case 5); fix: 強化 project-init OUTDATED 警示顯眼度; fix: 修正 mcp_detector.py codegraph binary 名稱 (+5 more)
+
+Changes: 3 fix, 5 docs
+
+- fix: phase4-hook frontmatter YAML 區塊跳過 (PC-142 case 5)
+- fix: 強化 project-init OUTDATED 警示顯眼度
+- fix: 修正 mcp_detector.py codegraph binary 名稱
+- docs: ticket-lifecycle.md 三明示文字微調
+- docs: SKILL.md dashboard-first 落地（補前 session 遺留 commit）
+- docs: 新建 PC-164 MCP binary 名稱同源誤判 anti-pattern
+- docs: PC-163 Layer 2 補強 — 表格後橋接 + 防護三層適用條件
+- docs: 新建 PC-163 PM-worktree ticket md 偏離 error-pattern
+
+---
+
 ## [1.35.0] - 2026-05-27
 
 ### Summary

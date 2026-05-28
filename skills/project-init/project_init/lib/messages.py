@@ -82,8 +82,13 @@ class PackageMessages:
     NO_PACKAGES = "無自製套件"
     NOT_INSTALLED = "{name} ({version}) [MISSING]"
     NOT_INSTALLED_ACTION = "  → 需執行: uv tool install ."
-    OUTDATED = "{name} ({version}) [OUTDATED]"
+    OUTDATED = ">>> [STALE-CLI] {name} ({version}) [OUTDATED] — 必須 reinstall <<<"
     OUTDATED_ACTION = "  → 原始碼已更新，需重新安裝: uv tool install . --force --reinstall"
+    OUTDATED_SUMMARY_WARNING = (
+        "[WARNING] {count} 個自製套件 OUTDATED — 對應 CLI 為舊版，"
+        "session 內 hook/CLI 行為可能與最新原始碼不一致。"
+        "請執行: uv tool install . --force --reinstall"
+    )
 
 
 # ========== Setup 訊息 ==========

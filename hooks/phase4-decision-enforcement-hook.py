@@ -292,6 +292,34 @@ def build_regex_table() -> List[PhraseRule]:
 # F2: 逐行掃描 phrase
 # ============================================================================
 
+def compute_frontmatter_lines(lines: List[str]) -> set:
+    """W1-092: 計算 YAML frontmatter 區塊的 1-based 行號集合（含起訖 `---` 行）。
+
+    Frontmatter 定義（採嚴格規則，PM WRAP P 防護）：
+    - 必須由「檔案第一行」起始（trim 後完全等於 `---`）
+    - 結束於下一個「行首僅有 `---` 三字元的行」（trim 後完全等於 `---`）
+    - 起訖 fence 自身行屬 frontmatter 範圍
+    - 未閉合（檔案無第二個 `---`）→ 視為無 frontmatter，回傳空集合（容錯）
+    - 第一行非 `---` → 視為無 frontmatter，回傳空集合
+
+    Why: ticket md frontmatter 為結構化元資料（YAML），其 why/title/strategy 等
+    欄位可能含「Phase 4 評估」「Phase 5 再決定」等歷史引用字面，屬於 source
+    ticket history 引用而非本 ticket 延後決策論述，與 W10-130 Schema placeholder
+    + W11-018 fenced code block 同精神整段跳過。
+
+    邊界匹配限「行首僅有 `---` 三字元」避免內文 `---` 水平分隔符誤判結束。
+    """
+    if not lines or lines[0].strip() != "---":
+        return set()
+    frontmatter_lines: set = {1}
+    for idx in range(2, len(lines) + 1):
+        frontmatter_lines.add(idx)
+        if lines[idx - 1].strip() == "---":
+            return frontmatter_lines
+    # 未閉合：視為無 frontmatter（容錯，避免整檔被跳過）
+    return set()
+
+
 def compute_schema_placeholder_lines(lines: List[str]) -> set:
     """W10-130: 計算 Schema placeholder template 區塊的 1-based 行號集合。
 
@@ -394,8 +422,12 @@ def scan_lines_for_phrases(
     """
     fenced_lines = compute_fenced_block_lines(lines)
     placeholder_lines = compute_schema_placeholder_lines(lines)
+    frontmatter_lines = compute_frontmatter_lines(lines)
     hits: List[Hit] = []
     for idx, raw in enumerate(lines, start=1):
+        # W1-092: Frontmatter (YAML 區塊) 跳過 (source ticket history 引用等結構化元資料)
+        if idx in frontmatter_lines:
+            continue
         # W11-018: Fenced code block 範例語境豁免（行級 short-circuit，最先檢查）
         if idx in fenced_lines:
             continue
@@ -471,8 +503,12 @@ def collect_exempt_markers(lines: List[str]) -> List[ExemptRef]:
     """
     fenced_lines = compute_fenced_block_lines(lines)
     placeholder_lines = compute_schema_placeholder_lines(lines)
+    frontmatter_lines = compute_frontmatter_lines(lines)
     refs: List[ExemptRef] = []
     for idx, raw in enumerate(lines, start=1):
+        # W1-092: Frontmatter 內 marker 不蒐集（結構化元資料非豁免宣告載體）
+        if idx in frontmatter_lines:
+            continue
         # W11-018: Fenced code block 範例語境豁免（範例 marker 不蒐集）
         if idx in fenced_lines:
             continue

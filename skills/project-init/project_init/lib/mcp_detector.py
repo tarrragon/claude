@@ -46,7 +46,7 @@ def _detect_binary(
     Args:
         name: binary 名稱（在 PATH 中查找）。
         version_args: 取得版本的參數，預設 ['--version']。
-            對於不支援 --version 的 binary（如 codegraph-mcp），可傳 ['--info']。
+            對於不支援 --version 的 binary（如舊版 codegraph-mcp），可傳 ['--info']。
 
     Returns:
         (path, version_first_line) tuple。binary 不存在或執行失敗時回 (None, '')。
@@ -100,11 +100,11 @@ def detect_codebase_memory_mcp() -> McpInfo:
 
 
 def detect_codegraph(project_root: Optional[Path] = None) -> McpInfo:
-    """偵測 codegraph (codegraph-mcp) CLI 與本專案索引狀態。
+    """偵測 codegraph CLI 與本專案索引狀態。
 
-    @astudioplus/codegraph-mcp@0.16.6 之後 bin 名稱為 codegraph-mcp，
-    版本資訊透過 --info 取得（不支援 --version）。
-    若舊版環境仍提供 codegraph binary，亦能 fallback 偵測。
+    @colbymchenry/codegraph 提供 codegraph binary（支援 --version）。
+    若環境提供舊版 @astudioplus/codegraph-mcp（binary 名稱 codegraph-mcp，
+    使用 --info），亦能 fallback 偵測。
 
     Args:
         project_root: 專案根目錄，用於判定 .codegraph/ 索引存在性。
@@ -113,11 +113,11 @@ def detect_codegraph(project_root: Optional[Path] = None) -> McpInfo:
     Returns:
         McpInfo: 偵測結果。
     """
-    # 0.16.6+ 用 codegraph-mcp，舊版可能是 codegraph
-    path, version = _detect_binary("codegraph-mcp", version_args=["--info"])
+    # 主路徑：codegraph binary（@colbymchenry/codegraph，--version）
+    path, version = _detect_binary("codegraph", version_args=["--version"])
     if path is None:
-        # Fallback：舊版 codegraph binary
-        path, version = _detect_binary("codegraph", version_args=["--info"])
+        # Fallback：舊版 @astudioplus/codegraph-mcp（binary codegraph-mcp，--info）
+        path, version = _detect_binary("codegraph-mcp", version_args=["--info"])
 
     if path is None:
         return McpInfo(
@@ -126,8 +126,8 @@ def detect_codegraph(project_root: Optional[Path] = None) -> McpInfo:
             path=None,
             is_available=False,
             failure_reason=(
-                "codegraph-mcp 命令未在 PATH 中找到"
-                "（請安裝 @astudioplus/codegraph-mcp）"
+                "codegraph 命令未在 PATH 中找到"
+                "（請安裝 @colbymchenry/codegraph 或 @astudioplus/codegraph-mcp）"
             ),
         )
 

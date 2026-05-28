@@ -85,13 +85,96 @@ class TestCodegraphDetection:
     """測試 codegraph (@astudioplus/codegraph-mcp) 偵測與 .codegraph/ 索引判定。"""
 
     def test_codegraph_found_with_index(self, tmp_path: Path) -> None:
-        """成功偵測 codegraph-mcp + .codegraph/ 目錄存在 → INDEX_OK."""
+        """成功偵測 codegraph (primary) + .codegraph/ 目錄存在 → INDEX_OK."""
         codegraph_dir = tmp_path / ".codegraph"
         codegraph_dir.mkdir()
 
         def fake_which(name: str):
             return (
-                "/opt/homebrew/bin/codegraph-mcp"
+                "/opt/homebrew/bin/codegraph" if name == "codegraph" else None
+            )
+
+        with patch(
+            "project_init.lib.mcp_detector.shutil.which", side_effect=fake_which
+        ):
+            with patch(
+                "project_init.lib.mcp_detector.subprocess.run"
+            ) as mock_run:
+                mock_run.return_value = MagicMock(
+                    returncode=0,
+                    stdout="0.9.4\n",
+                )
+                info = detect_codegraph(project_root=tmp_path)
+                assert info.is_available is True
+                assert info.name == "codegraph"
+                assert info.version == "0.9.4"
+                assert info.path == "/opt/homebrew/bin/codegraph"
+                assert info.index_status == INDEX_OK
+                assert info.failure_reason is None
+
+    def test_codegraph_missing_cli(self) -> None:
+        """codegraph 與 fallback codegraph-mcp 都不存在 → is_available=False."""
+        with patch(
+            "project_init.lib.mcp_detector.shutil.which", return_value=None
+        ):
+            info = detect_codegraph(project_root=Path("/tmp/nonexistent"))
+            assert info.is_available is False
+            assert info.path is None
+            assert "PATH" in info.failure_reason
+            assert "codegraph" in info.failure_reason
+
+    def test_codegraph_found_but_index_missing(self, tmp_path: Path) -> None:
+        """codegraph OK 但 .codegraph/ 不存在 → INDEX_MISSING（stale 情境）."""
+
+        def fake_which(name: str):
+            return (
+                "/opt/homebrew/bin/codegraph" if name == "codegraph" else None
+            )
+
+        with patch(
+            "project_init.lib.mcp_detector.shutil.which", side_effect=fake_which
+        ):
+            with patch(
+                "project_init.lib.mcp_detector.subprocess.run"
+            ) as mock_run:
+                mock_run.return_value = MagicMock(
+                    returncode=0, stdout="0.9.4\n"
+                )
+                # tmp_path 不含 .codegraph/ 目錄
+                info = detect_codegraph(project_root=tmp_path)
+                assert info.is_available is True
+                assert info.index_status == INDEX_MISSING
+
+    def test_codegraph_index_unknown_without_project_root(self) -> None:
+        """未傳 project_root → index_status = INDEX_UNKNOWN."""
+
+        def fake_which(name: str):
+            return (
+                "/opt/homebrew/bin/codegraph" if name == "codegraph" else None
+            )
+
+        with patch(
+            "project_init.lib.mcp_detector.shutil.which", side_effect=fake_which
+        ):
+            with patch(
+                "project_init.lib.mcp_detector.subprocess.run"
+            ) as mock_run:
+                mock_run.return_value = MagicMock(
+                    returncode=0, stdout="0.9.4\n"
+                )
+                info = detect_codegraph(project_root=None)
+                assert info.is_available is True
+                assert info.index_status == INDEX_UNKNOWN
+
+    def test_codegraph_fallback_to_legacy_mcp_name(self, tmp_path: Path) -> None:
+        """codegraph 不存在但 codegraph-mcp 存在 → fallback 成功."""
+        codegraph_dir = tmp_path / ".codegraph"
+        codegraph_dir.mkdir()
+
+        def fake_which(name: str):
+            # codegraph 不存在，codegraph-mcp 存在
+            return (
+                "/usr/local/bin/codegraph-mcp"
                 if name == "codegraph-mcp"
                 else None
             )
@@ -104,93 +187,10 @@ class TestCodegraphDetection:
             ) as mock_run:
                 mock_run.return_value = MagicMock(
                     returncode=0,
-                    stdout="codegraph-server v0.16.6 (17d1417)\nAuthor: ...\n",
+                    stdout="codegraph-server v0.16.6 (17d1417)\n",
                 )
                 info = detect_codegraph(project_root=tmp_path)
                 assert info.is_available is True
-                assert info.name == "codegraph"
+                assert info.path == "/usr/local/bin/codegraph-mcp"
                 assert info.version == "codegraph-server v0.16.6 (17d1417)"
-                assert info.path == "/opt/homebrew/bin/codegraph-mcp"
-                assert info.index_status == INDEX_OK
-                assert info.failure_reason is None
-
-    def test_codegraph_missing_cli(self) -> None:
-        """codegraph-mcp 與 fallback codegraph 都不存在 → is_available=False."""
-        with patch(
-            "project_init.lib.mcp_detector.shutil.which", return_value=None
-        ):
-            info = detect_codegraph(project_root=Path("/tmp/nonexistent"))
-            assert info.is_available is False
-            assert info.path is None
-            assert "PATH" in info.failure_reason
-            assert "@astudioplus/codegraph-mcp" in info.failure_reason
-
-    def test_codegraph_found_but_index_missing(self, tmp_path: Path) -> None:
-        """codegraph-mcp OK 但 .codegraph/ 不存在 → INDEX_MISSING（stale 情境）."""
-
-        def fake_which(name: str):
-            return (
-                "/opt/homebrew/bin/codegraph-mcp"
-                if name == "codegraph-mcp"
-                else None
-            )
-
-        with patch(
-            "project_init.lib.mcp_detector.shutil.which", side_effect=fake_which
-        ):
-            with patch(
-                "project_init.lib.mcp_detector.subprocess.run"
-            ) as mock_run:
-                mock_run.return_value = MagicMock(
-                    returncode=0, stdout="codegraph-server v0.16.6\n"
-                )
-                # tmp_path 不含 .codegraph/ 目錄
-                info = detect_codegraph(project_root=tmp_path)
-                assert info.is_available is True
-                assert info.index_status == INDEX_MISSING
-
-    def test_codegraph_index_unknown_without_project_root(self) -> None:
-        """未傳 project_root → index_status = INDEX_UNKNOWN."""
-
-        def fake_which(name: str):
-            return (
-                "/opt/homebrew/bin/codegraph-mcp"
-                if name == "codegraph-mcp"
-                else None
-            )
-
-        with patch(
-            "project_init.lib.mcp_detector.shutil.which", side_effect=fake_which
-        ):
-            with patch(
-                "project_init.lib.mcp_detector.subprocess.run"
-            ) as mock_run:
-                mock_run.return_value = MagicMock(
-                    returncode=0, stdout="codegraph-server v0.16.6\n"
-                )
-                info = detect_codegraph(project_root=None)
-                assert info.is_available is True
-                assert info.index_status == INDEX_UNKNOWN
-
-    def test_codegraph_fallback_to_legacy_name(self, tmp_path: Path) -> None:
-        """codegraph-mcp 不存在但舊版 codegraph 存在 → fallback 成功."""
-        codegraph_dir = tmp_path / ".codegraph"
-        codegraph_dir.mkdir()
-
-        def fake_which(name: str):
-            # codegraph-mcp 不存在，codegraph 存在
-            return "/usr/local/bin/codegraph" if name == "codegraph" else None
-
-        with patch(
-            "project_init.lib.mcp_detector.shutil.which", side_effect=fake_which
-        ):
-            with patch(
-                "project_init.lib.mcp_detector.subprocess.run"
-            ) as mock_run:
-                mock_run.return_value = MagicMock(
-                    returncode=0, stdout="codegraph 0.12.3 (legacy)\n"
-                )
-                info = detect_codegraph(project_root=tmp_path)
-                assert info.is_available is True
-                assert info.path == "/usr/local/bin/codegraph"
                 assert info.index_status == INDEX_OK
