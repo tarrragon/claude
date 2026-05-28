@@ -1,3 +1,16 @@
+## [1.36.0] - 2026-05-28
+
+### Summary
+feat: session-start gitignore 必要 entry 檢查 hook; feat: sync-pull 自動清理超期 backup_dir; chore: untrack PM_INTERVENTION_REQUIRED runtime state
+
+Changes: 2 feat, 1 chore
+
+- feat: session-start gitignore 必要 entry 檢查 hook
+- feat: sync-pull 自動清理超期 backup_dir
+- chore: untrack PM_INTERVENTION_REQUIRED runtime state
+
+---
+
 ## [1.35.3] - 2026-05-28
 
 ### Summary

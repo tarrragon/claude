@@ -30,6 +30,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 try:
@@ -648,6 +649,64 @@ def _clone_and_backup(project_root: Path) -> tuple[Path, Path]:
     return temp_dir, backup_dir
 
 
+BACKUP_DIR_PREFIX = "claude-backup-"
+DEFAULT_BACKUP_RETENTION_DAYS = 7
+
+
+def cleanup_old_backups(retention_days: int = DEFAULT_BACKUP_RETENTION_DAYS,
+                        temp_root: Path | None = None) -> int:
+    """清理系統 temp 目錄下超過保留期的 claude-backup-* 備份目錄。
+
+    僅刪除符合 claude-backup-* 前綴且 mtime 超過 retention_days 的目錄。
+    符號連結、其他前綴目錄、rmtree 失敗皆跳過並 log warning。
+
+    參數:
+        retention_days: 保留天數（含），預設 7 天
+        temp_root: 掃描根目錄，預設 tempfile.gettempdir()
+
+    傳回:
+        已刪除的目錄數量
+    """
+    if temp_root is None:
+        temp_root = Path(tempfile.gettempdir())
+
+    if not temp_root.exists() or not temp_root.is_dir():
+        print_color(f"   系統 temp 目錄不存在或無法存取: {temp_root}", "yellow")
+        return 0
+
+    cutoff = time.time() - retention_days * 86400
+    removed_count = 0
+
+    try:
+        entries = list(temp_root.iterdir())
+    except (OSError, PermissionError) as exc:
+        print_color(f"   無法列出 temp 目錄: {exc}", "yellow")
+        return 0
+
+    for entry in entries:
+        if not entry.name.startswith(BACKUP_DIR_PREFIX):
+            continue
+        if entry.is_symlink():
+            # 安全起見不刪符號連結
+            continue
+        if not entry.is_dir():
+            continue
+        try:
+            mtime = entry.stat().st_mtime
+        except OSError as exc:
+            print_color(f"   無法讀取 mtime: {entry} ({exc})", "yellow")
+            continue
+        if mtime >= cutoff:
+            continue
+        try:
+            shutil.rmtree(entry)
+            removed_count += 1
+        except OSError as exc:
+            print_color(f"   無法刪除 {entry}: {exc}", "yellow")
+
+    return removed_count
+
+
 def _complete_sync(temp_dir: Path, project_root: Path, backup_dir: Path) -> None:
     """完成同步：更新專案模板和輸出結果。
 
@@ -660,6 +719,15 @@ def _complete_sync(temp_dir: Path, project_root: Path, backup_dir: Path) -> None
     """
     _update_project_templates(temp_dir, project_root)
     shutil.rmtree(temp_dir, ignore_errors=True)
+
+    # 清理超期 backup_dir（W3-076）
+    print_color("清理超期備份目錄...")
+    removed = cleanup_old_backups(DEFAULT_BACKUP_RETENTION_DAYS)
+    if removed > 0:
+        print_color(f"   已清理 {removed} 個超過 {DEFAULT_BACKUP_RETENTION_DAYS} 天的備份目錄", "green")
+    else:
+        print_color(f"   無超過 {DEFAULT_BACKUP_RETENTION_DAYS} 天的備份需清理", "green")
+
     _finalize_sync(backup_dir)
 
 
