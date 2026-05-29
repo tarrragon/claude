@@ -665,6 +665,75 @@ def _extract_where_files(ticket_data: Optional[Dict[str, Any]]) -> List[str]:
     return []
 
 
+_ACCEPTANCE_SEP = "|"
+
+
+def _parse_acceptance_items(raw_items: List[str]) -> tuple:
+    """解析 --acceptance 多值，支援分隔符拆條 + 反斜線跳脫 + 拆條警告。
+
+    分隔符 `|` 用於在單一 --acceptance 值內表達多條驗收條件。但當內文本身
+    需要使用該字元（如描述 shell pipe），無條件 split 會靜默拆條（W3-089）。
+
+    處理規則：
+    - `\\|`（反斜線 + 分隔符）視為跳脫，還原為字面 `|`，不拆條。
+    - 未跳脫的 `|` 才作為分隔符拆條。
+    - 單一 --acceptance 值經未跳脫分隔符拆出 > 1 段時，回傳警告供呼叫端提示，
+      讓使用者確認是否為預期行為（與 PC-079 同家族：CLI 參數含工具特殊字元）。
+
+    Args:
+        raw_items: argparse 收集的 --acceptance 值列表（可能多次指定）
+
+    Returns:
+        (acceptance, warnings) tuple：
+        - acceptance: 解析後的驗收條件列表（已去空白、去空項）
+        - warnings: 警告訊息列表（每個被拆條的原始值各一條）
+    """
+    acceptance: List[str] = []
+    warnings: List[str] = []
+    for item in raw_items:
+        segments = _split_unescaped(item, _ACCEPTANCE_SEP)
+        cleaned = [s.strip() for s in segments]
+        cleaned = [s for s in cleaned if s]
+        if len(cleaned) > 1:
+            preview = "\n".join(f"             {i + 1}. {s}" for i, s in enumerate(cleaned))
+            warnings.append(
+                format_warning(
+                    CreateMessages.ACCEPTANCE_PIPE_SPLIT_WARNING,
+                    count=len(cleaned),
+                    preview=preview,
+                )
+            )
+        acceptance.extend(cleaned)
+    return acceptance, warnings
+
+
+def _split_unescaped(text: str, sep: str) -> List[str]:
+    """以 sep 拆分 text，但反斜線跳脫的 sep 還原為字面字元不拆。
+
+    逐字元掃描：`\\sep` → 字面 sep；單獨 `\\` 後接其他字元 → 保留原樣；
+    未跳脫 sep → 切段。避免 str.split 無法區分跳脫的限制。
+    """
+    segments: List[str] = []
+    buffer: List[str] = []
+    i = 0
+    length = len(text)
+    while i < length:
+        char = text[i]
+        if char == "\\" and i + 1 < length and text[i + 1] == sep:
+            buffer.append(sep)
+            i += 2
+            continue
+        if char == sep:
+            segments.append("".join(buffer))
+            buffer = []
+            i += 1
+            continue
+        buffer.append(char)
+        i += 1
+    segments.append("".join(buffer))
+    return segments
+
+
 def _parse_cli_args_to_config(
     args: argparse.Namespace,
     version: str,
@@ -693,13 +762,12 @@ def _parse_cli_args_to_config(
     # 處理 related_to
     related_to = [r.strip() for r in args.related_to.split(",")] if args.related_to else []
 
-    # 處理 acceptance（支援多次 --acceptance 和 | 分隔）
+    # 處理 acceptance（支援多次 --acceptance 和分隔符拆條 + 反斜線跳脫 + 拆條警告）
     acceptance = None
     if args.acceptance:
-        acceptance = []
-        for item in args.acceptance:
-            acceptance.extend(a.strip() for a in item.split("|"))
-        acceptance = [a for a in acceptance if a]
+        acceptance, accept_warnings = _parse_acceptance_items(args.acceptance)
+        for warning in accept_warnings:
+            print(warning, file=sys.stderr)
 
     # 識別任務類型
     ticket_type = args.type or "IMP"

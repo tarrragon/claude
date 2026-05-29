@@ -1,3 +1,26 @@
+## [1.37.0] - 2026-05-29
+
+### Summary
+feat: 新增 uv-tool ownership-guard hook 防跨專案全域工具污染; fix: phase4-hook 跳過 Context Bundle auto-extracted 區塊; fix: --acceptance 分隔符支援反斜線跳脫 + 拆條警告 (+10 more)
+
+Changes: 1 feat, 5 fix, 6 docs, 1 chore
+
+- feat: 新增 uv-tool ownership-guard hook 防跨專案全域工具污染
+- fix: phase4-hook 跳過 Context Bundle auto-extracted 區塊
+- fix: --acceptance 分隔符支援反斜線跳脫 + 拆條警告
+- fix: 修復 no_bare_status allowlist 行號漂移並去耦合
+- fix: 修復 error_channel + hook_health 兩 pre-existing 測試失敗
+- fix: release 依 blockedBy 決定目標狀態（空回 pending 非一律 blocked）
+- docs: 套用 basil Layer 2 審查修正 PC-166
+- docs: 記錄 PM confabulation 事件並建立 PC-166 防護
+- docs: 套用 basil Layer 2 審查 Warning 修正
+- docs: PC-142 新增 case 5 frontmatter 引用 + 防護同步 修復
+- docs: 新增規則六「長背景任務可觀測性」至 bash-tool-usage-rules
+- docs: 移除 basil-hook-architect.md 殘留 ticket ID 引用（規則 8 清理）
+- chore: 固化 uv-tool ownership-guard hook 執行權限位
+
+---
+
 ## [1.36.1] - 2026-05-29
 
 ### Summary

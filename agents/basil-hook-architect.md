@@ -117,7 +117,7 @@ basil-hook-architect 在以下情況下**應該被觸發**：
 
 ## hook_utils 統一日誌規範（強制）
 
-> **背景**：W22-001 已將 44 個 hooks 統一遷移至 hook_utils 日誌模組。所有新建或修改的 Hook 必須遵循此規範。
+> **背景**：Hook 系統歷史遷移已將既有 hooks 統一遷移至 hook_utils 日誌模組。所有新建或修改的 Hook 必須遵循此規範。
 
 ### 強制要求
 
@@ -178,7 +178,7 @@ if __name__ == "__main__":
 | `run_hook_safely(main_func, hook_name)` | 頂層例外處理，crash 時自動記錄 traceback 並回傳非零退出碼 |
 | `read_json_from_stdin(logger)` | 統一 stdin JSON 解析，返回 dict 或 None（空輸入/解析失敗） |
 
-### stdin 解析規範（強制，W5-001）
+### stdin 解析規範（強制）
 
 **所有 Hook 必須使用 `read_json_from_stdin(logger)` 讀取 stdin**。禁止直接 `json.load(sys.stdin)`。
 

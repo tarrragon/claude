@@ -27,7 +27,7 @@ class MergeMessages:
 
     NO_NEW_COMMITS = "[提示] 此分支沒有超前 {base} 的新 commit（ahead = 0）。\n可能此分支已合併，或尚未進行任何開發。"
 
-    BRANCH_BEHIND_BASE = "[阻擋] 此分支落後 {base} {count} 個 commit。\n合併會覆蓋 main 上的新變更。\n\nmain 上的新 commit：\n{commit_list}\n\n請先在 worktree 中 rebase：\n  cd {worktree_path} && git rebase {base}"
+    BRANCH_BEHIND_BASE = "[提示] 此分支落後 {base} {count} 個 commit。\n建議先執行 rebase：\n  git rebase {base}"
 
     # ===== 驗證進度訊息 =====
     VERIFICATION_IN_PROGRESS = "正在驗證 Ticket 的合併前置條件..."
@@ -40,25 +40,6 @@ class MergeMessages:
     MERGE_COMMAND_HEADER = "驗證通過。執行以下指令合併分支："
 
     MERGE_COMMAND_HINT = "（合併後建議執行 /worktree cleanup {ticket_id} 清理 worktree）"
-
-    MERGE_EXECUTING = "正在合併分支 {branch} 到 {base}..."
-
-    MERGE_SUCCESS = "合併成功。\n建議執行 /worktree cleanup {ticket_id} 清理 worktree。"
-
-    MERGE_FAILED = "[錯誤] 合併失敗：{error}"
-
-
-class CreateMessages:
-    """create 子命令訊息常數"""
-
-    # blockedBy 依賴合併
-    DEPENDENCY_MERGED = "已合併依賴分支：{branch}"
-    DEPENDENCY_MERGE_FAILED = "[警告] 合併依賴分支失敗：{branch}，請手動處理"
-    DEPENDENCY_BRANCH_NOT_FOUND = "依賴分支不存在，跳過：{branch}"
-    DEPENDENCY_TICKET_NOT_COMPLETED = "依賴 Ticket {ticket_id} 狀態非 completed（{status}），跳過合併"
-    DEPENDENCY_SECTION_HEADER = "正在檢查 blockedBy 依賴分支..."
-    TICKET_FILE_NOT_FOUND = "[警告] 找不到 Ticket 檔案：{path}"
-    TICKET_FILE_PARSE_ERROR = "[警告] 解析 Ticket 檔案失敗：{error}"
 
 
 class CleanupMessages:

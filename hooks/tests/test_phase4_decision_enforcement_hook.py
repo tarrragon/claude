@@ -1580,3 +1580,123 @@ def test_w1_092_frontmatter_exempt_marker_not_collected():
     refs = collect_exempt_markers(lines)
     assert len(refs) == 1, "frontmatter 內 marker 不應蒐集，實際: {}".format(refs)
     assert refs[0].line_no == 6
+
+
+# ============================================================================
+# W1-120 — Context Bundle auto-extracted 區塊跳過（PC-142 case 5 同根因復發）
+# ============================================================================
+
+compute_context_bundle_lines = _hook.compute_context_bundle_lines
+
+
+def test_w1_120_context_bundle_phrase_inside_skipped():
+    """測試 1：Context Bundle auto-extracted 區塊含階段名稱字面不應命中（跳過）。"""
+    lines = [
+        "## Context Bundle",
+        "",
+        "<!-- auto-extracted: v1 | sources: 0.19.0-W1-093 | chars: 400 -->",
+        "",
+        "### Rationale Chain",
+        "- 0.19.0-W1-093 why: source ANA 的 Phase 4 評估發現，禁止 Phase 5 再決定",
+    ]
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    assert hits == [], (
+        "auto-extracted 區塊內 Phase 4/5 字面屬機器引用，不應命中，實際: {}".format(hits)
+    )
+
+
+def test_w1_120_body_phrase_outside_bundle_still_hits():
+    """測試 2：一般 body 內文含階段名稱字面（非 Context Bundle）仍命中（regression 防護）。"""
+    lines = [
+        "## Solution",
+        "Phase 4 再決定是否保留 use_cache",
+        "",
+        "## Context Bundle",
+        "<!-- auto-extracted: v1 | sources: 0.19.0-W1-093 | chars: 100 -->",
+        "- 0.19.0-W1-093 why: Phase 5 再決定",
+    ]
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    m1 = _hits_by_rule(hits, "M1")
+    assert len(m1) == 1, "內文 M1 仍應命中（regression），實際: {}".format(hits)
+    assert m1[0].line_no == 2
+
+
+def test_w1_120_manual_context_bundle_no_marker_still_hits():
+    """測試 3：人工撰寫 Context Bundle（無 auto-extracted marker）不跳過（人工延後論述仍攔截）。"""
+    lines = [
+        "## Context Bundle",
+        "",
+        "### Rationale Chain",
+        "Phase 4 再決定是否保留此模組",
+    ]
+    cb = compute_context_bundle_lines(lines)
+    assert cb == set(), "無 auto-extracted marker → 不跳過，實際: {}".format(cb)
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    m1 = _hits_by_rule(hits, "M1")
+    assert len(m1) == 1, "人工 body 延後論述仍應命中，實際: {}".format(hits)
+    assert m1[0].line_no == 4
+
+
+def test_w1_120_marker_to_next_h2_closes_block():
+    """測試 4：auto-extracted marker → 下個 H2 正確閉合區塊（邊界行不含）。"""
+    lines = [
+        "## Context Bundle",
+        "<!-- auto-extracted: v1 | sources: 0.19.0-W1-093 | chars: 100 -->",
+        "- why: Phase 4 評估",
+        "## Next Section",
+        "Phase 5 再決定 (內文，應命中)",
+    ]
+    cb = compute_context_bundle_lines(lines)
+    assert cb == {2, 3}, "區塊應為 line 2-3（marker 起、H2 前止），實際: {}".format(cb)
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    m1 = _hits_by_rule(hits, "M1")
+    assert len(m1) == 1 and m1[0].line_no == 5, (
+        "H2 後內文 line 5 仍應命中，實際: {}".format(hits)
+    )
+
+
+def test_w1_120_marker_to_eof_all_skipped():
+    """測試 5：auto-extracted 區塊延伸至 EOF（無後續 H2）全跳過（容錯）。"""
+    lines = [
+        "## Context Bundle",
+        "<!-- auto-extracted: v1 | sources: 0.19.0-W1-093 | chars: 100 -->",
+        "- why: Phase 4 評估",
+        "- what: Phase 5 再決定",
+    ]
+    cb = compute_context_bundle_lines(lines)
+    assert cb == {2, 3, 4}, "區塊應延伸至 EOF，實際: {}".format(cb)
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    assert hits == [], "EOF 前 auto-extracted 區塊全跳過，實際: {}".format(hits)
+
+
+def test_w1_120_context_bundle_exempt_marker_not_collected():
+    """測試 6：Context Bundle 內 exempt marker 不被 collect_exempt_markers 蒐集。"""
+    lines = [
+        "## Context Bundle",
+        "<!-- auto-extracted: v1 | sources: 0.19.0-W1-093 | chars: 100 -->",
+        "<!-- PC-093-exempt: ticket-tracked:W1-093 區塊內示意 -->",
+        "## Body",
+        "<!-- PC-093-exempt: ticket-tracked:W1-093 真實 marker -->",
+    ]
+    refs = collect_exempt_markers(lines)
+    assert len(refs) == 1, "auto-extracted 區塊內 marker 不應蒐集，實際: {}".format(refs)
+    assert refs[0].line_no == 5
+
+
+def test_w1_120_h3_inside_block_not_terminating():
+    """測試 7：區塊內 H3 子標題不誤判為終點邊界（`### ` 不匹配 `^\\s*##\\s`）。"""
+    lines = [
+        "## Context Bundle",
+        "<!-- auto-extracted: v1 | sources: 0.19.0-W1-093 | chars: 100 -->",
+        "### Rationale Chain",
+        "- why: Phase 4 評估",
+        "### Related Files",
+        "- foo.py: Phase 5 再決定",
+        "---",
+    ]
+    cb = compute_context_bundle_lines(lines)
+    assert cb == {2, 3, 4, 5, 6}, (
+        "H3 不應終止區塊，區塊應為 line 2-6（`---` 前止），實際: {}".format(cb)
+    )
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    assert hits == [], "區塊內含 H3 仍全跳過，實際: {}".format(hits)

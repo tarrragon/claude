@@ -106,6 +106,43 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 
 ---
 
+## 規則六：長背景任務需即時可觀察時使用 PYTHONUNBUFFERED + tee
+
+> 來源：0.19.0-W3-086 ANA spike 實證（buffered 全程 0 行 vs PYTHONUNBUFFERED 逐行成長）。
+
+**Why**：Bash 子行程的 stdout 在非 TTY（管道/檔案）環境下預設為 fully-buffered（4-8 KB 才 flush）。加上 `| tail` 額外等 EOF 才吐出，雙層緩衝導致長任務輸出檔全程空白，用戶與 PM 無法即時觀察進度或早期偵測卡死/失敗。
+
+**Consequence**：長任務黑箱化——用戶無法判斷任務是否存活，失敗需等全程結束才發現，信任度下降且無法早期介入。
+
+**Action**：
+
+| 場景 | 錯誤做法 | 正確做法 |
+|------|---------|---------|
+| 長時間 pytest / build 需即時觀察 | `pytest -q tests/ 2>&1 \| tail -5`（run_in_background） | `PYTHONUNBUFFERED=1 pytest -v tests/ 2>&1 \| tee /tmp/task.log`，並告知用戶 `tail -f /tmp/task.log` |
+| 長時間 Python 腳本需即時觀察 | `python script.py 2>&1 \| tail -20` | `PYTHONUNBUFFERED=1 python script.py 2>&1 \| tee /tmp/task.log` |
+| 只需最終結果（無即時需求） | — | 保留規則二的 `\| tail` / `\| head` 防淹沒，不需 tee |
+
+**三個慣例速查**：
+
+| 慣例 | 說明 |
+|------|------|
+| `PYTHONUNBUFFERED=1` | 單一環境變數強制 Python stdout 逐行 flush；不需 stdbuf（macOS LD_PRELOAD 可靠性存疑） |
+| `pytest -v`（非 `-q`） | `-q` 在非 TTY 環境不即時 flush；`-v` 逐測試輸出並保持 flush 行為 |
+| `2>&1 \| tee <logfile>` | tee 將 stdout+stderr 同時寫入 logfile 並透傳；用戶可在另一個終端 `tail -f <logfile>` 即時觀察 |
+
+**「大輸出防護」vs「即時可觀測性」的取捨說明**（與規則二的調和）：
+
+| 需求 | 使用工具 | 說明 |
+|------|---------|------|
+| 只看最終結果，不需即時追蹤 | `\| tail` / `\| head`（規則二） | 防止大輸出淹沒，最終結果截取後讀取 |
+| 需即時觀察進度（長任務存活性 / 失敗早現） | `PYTHONUNBUFFERED=1 ... \| tee <logfile>`（本規則） | logfile 逐行成長，`tail -f` 可即時追蹤 |
+
+兩者不互斥：若既需即時觀察又防終端淹沒，用 tee 寫 logfile（即時），讀取時再 `tail -n 50 <logfile>`（限制行數）。
+
+**識別特徵**：若長背景任務輸出檔全程 0 行、只在結束後一次性出現內容，確認是否使用了 `-q` + `| tail` 雙層緩衝（本規則的觸發條件）。
+
+---
+
 ## 統一檢查清單
 
 執行 Bash 命令前：
@@ -120,6 +157,9 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 - [ ] CLI 參數含 backtick？→ 改用 heredoc / 單引號 / Edit 工具（規則四）
 - [ ] 看到 `command not found` / `ModuleNotFoundError` 來源不明？→ 檢查 backtick command substitution（PC-079）
 - [ ] 準備 `Write /tmp/*.md` 作 CLI 中介？→ 改 heredoc 直傳（規則五，容量絕對夠）
+- [ ] 長背景任務且需即時觀察（存活性/失敗早現）？→ 用 `PYTHONUNBUFFERED=1 <cmd> 2>&1 | tee <logfile>`，告知用戶 `tail -f <logfile>`（規則六）
+- [ ] pytest 長任務需觀察？→ 用 `-v`（非 `-q`），配合 tee（規則六）
+- [ ] 背景任務輸出檔全程 0 行？→ 確認是否 `-q | tail` 雙層緩衝（本規則六觸發條件）
 
 ---
 
@@ -134,4 +174,4 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 
 ---
 
-**Last Updated**: 2026-04-18 | **Version**: 2.1.0 — 新增規則五 heredoc 長文字傳遞預設（W15-007 / W15-005 WRAP 方案 E） | **Source**: IMP-008、IMP-009、index.lock 競爭、PC-087
+**Last Updated**: 2026-05-29 | **Version**: 2.2.0 — 新增規則六「長背景任務可觀測性」（PYTHONUNBUFFERED=1 + tee streamable）及與規則二大輸出防護的調和說明（0.19.0-W3-086 spike 實證落地 / 0.19.0-W3-088）。歷史 2.0–2.1 版見 git log。**Source**: IMP-008、IMP-009、index.lock 競爭、PC-087、W3-086

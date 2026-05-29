@@ -142,7 +142,10 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 # 完成 Ticket
 /ticket track complete <id>
 
-# 放棄 Ticket
+# 放棄 Ticket（退回等待態）
+# 目標狀態依 blockedBy 決定（W3-082）：
+#   blockedBy=[]    → pending（trigger / 主動讓出的 ready ticket 回休眠態）
+#   blockedBy=[...] → blocked（確實被其他 ticket 擋著）
 /ticket track release <id>
 
 # 更新 Phase

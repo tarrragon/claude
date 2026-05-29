@@ -19,6 +19,7 @@ from ticket_system.lib.constants import (
     STATUS_COMPLETED,
     STATUS_BLOCKED,
     STATUS_CLOSED,
+    STATUS_LABELS,
     TERMINAL_STATUSES,
     CLOSE_REASONS,
     CLOSE_REASON_RETROSPECTIVE_UNKNOWN,
@@ -847,7 +848,13 @@ class TicketLifecycle:
 
     def release(self, ticket_id: str) -> int:
         """
-        釋放 Ticket - 將進行中的 Ticket 狀態變更為被阻塞
+        釋放 Ticket - 將進行中的 Ticket 退回等待態。
+
+        W3-082：目標狀態依 blockedBy 決定，取代先前一律設為 blocked 的語意缺口。
+        - blockedBy 為空（trigger ticket、主動讓出的 ready ticket）→ 退回 pending 休眠態。
+        - blockedBy 非空（確實被其他 ticket 擋著）→ 設為 blocked。
+        blocked 語意是「被其他 ticket 擋著」；無 blocker 卻設 blocked 會讓 dashboard
+        與後續接手者誤判該 ticket 有依賴未解。
 
         Args:
             ticket_id: Ticket ID，例如 "0.31.0-W4-001"
@@ -875,16 +882,22 @@ class TicketLifecycle:
                 print(f"[Warning] {ticket_id} 已被阻塞，無法釋放")
                 return 1
 
+            # W3-082：依 blockedBy 是否為空決定目標狀態（沿用同檔 blockedBy 慣例）
+            blocked_by = ticket.get("blockedBy") or []
+            target_status = STATUS_BLOCKED if blocked_by else STATUS_PENDING
+
             # 釋放 Ticket
-            ticket["status"] = STATUS_BLOCKED
+            ticket["status"] = target_status
             ticket["assigned"] = False
             ticket["started_at"] = None
 
             ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
             save_ticket(ticket, ticket_path)
 
+        # 狀態顯示名集中於 STATUS_LABELS（禁散落字面，W3-082）
+        status_label = STATUS_LABELS.get(target_status, target_status)
         print(format_info(InfoMessages.TICKET_RELEASED, ticket_id=ticket_id))
-        print(f"   狀態: 被阻塞")
+        print(f"   狀態: {status_label}")
         return 0
 
     def close(

@@ -258,6 +258,11 @@ class CreateMessages:
         "[WARNING] 使用預設驗收條件模板。請修改為具體、可量化的驗收標準。\n"
         "           使用 /ticket fields update <ticket-id> acceptance <criteria> 修改"
     )
+    ACCEPTANCE_PIPE_SPLIT_WARNING = (
+        "[WARNING] 單一 --acceptance 值含分隔符，已被拆成 {count} 條：\n"
+        "{preview}\n"
+        "           若分隔符屬內文（非刻意分隔多條），請改用反斜線跳脫（\\ 接分隔符）以保留原文。"
+    )
     BLOCKED_BY_CHECK = "   [ ] 是否有需要設定的 blockedBy？"
     DECISION_TREE_CHECK = "   [ ] 是否已填寫 decision_tree_path 欄位？"
     DECISION_TREE_DESC = "       （派發驗證必需）"

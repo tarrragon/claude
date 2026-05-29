@@ -17,37 +17,21 @@ from pathlib import Path
 from typing import Optional
 import subprocess
 
-try:
-    from .constants import (
-        FEAT_PREFIX,
-        FEAT_PREFIX_LEN,
-        TICKET_ID_PATTERN,
-        WORKTREE_STATUS_OUTPUT_WIDTH,
-        DEFAULT_BASE_BRANCH,
-        TICKET_QUERY_TIMEOUT,
-        TICKET_COMPLETED_STATUS,
-        CLEANUP_OUTPUT_WIDTH,
-        BRANCH_FORCE_DELETE_FLAG,
-    )
-    from .messages import MergeMessages, CleanupMessages, CommonMessages, CreateMessages
-except ImportError:
-    # Fallback when running with scripts/ on sys.path (test 與直接執行情境)
-    from constants import (
-        FEAT_PREFIX,
-        FEAT_PREFIX_LEN,
-        TICKET_ID_PATTERN,
-        WORKTREE_STATUS_OUTPUT_WIDTH,
-        DEFAULT_BASE_BRANCH,
-        TICKET_QUERY_TIMEOUT,
-        TICKET_COMPLETED_STATUS,
-        CLEANUP_OUTPUT_WIDTH,
-        BRANCH_FORCE_DELETE_FLAG,
-    )
-    from messages import MergeMessages, CleanupMessages, CommonMessages, CreateMessages
+from constants import (
+    FEAT_PREFIX,
+    FEAT_PREFIX_LEN,
+    TICKET_ID_PATTERN,
+    WORKTREE_STATUS_OUTPUT_WIDTH,
+    DEFAULT_BASE_BRANCH,
+    TICKET_QUERY_TIMEOUT,
+    TICKET_COMPLETED_STATUS,
+    CLEANUP_OUTPUT_WIDTH,
+    BRANCH_FORCE_DELETE_FLAG,
+)
+from messages import MergeMessages, CleanupMessages, CommonMessages
 
 # 動態新增 .claude/lib 到 Python 路徑
-# 路徑層級：worktree_manager.py -> scripts -> worktree -> skills -> .claude -> <project_root>
-project_root = Path(__file__).resolve().parent.parent.parent.parent.parent
+project_root = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(project_root / ".claude" / "lib"))
 
 try:
@@ -341,186 +325,6 @@ def _cmd_create_print_success(
     print(f"  cd {worktree_path}")
 
 
-def _extract_version_from_ticket_id(ticket_id: str) -> Optional[str]:
-    """
-    從 Ticket ID 提取版本號
-
-    Args:
-        ticket_id: Ticket ID（如 "0.16.2-W5-001.3"）
-
-    Returns:
-        str | None: 版本號（如 "0.16.2"），或 None
-    """
-    match = re.match(r"^(\d+\.\d+\.\d+)-W", ticket_id)
-    if match:
-        return match.group(1)
-    return None
-
-
-def _find_ticket_file(ticket_id: str) -> Optional[str]:
-    """
-    根據 Ticket ID 找到對應的 Ticket 檔案路徑
-
-    Ticket 檔案位於 docs/work-logs/v{version}/tickets/{ticket-id}.md
-
-    Args:
-        ticket_id: Ticket ID
-
-    Returns:
-        str | None: 檔案絕對路徑，或 None 表示找不到
-    """
-    version = _extract_version_from_ticket_id(ticket_id)
-    if version is None:
-        return None
-
-    ticket_path = os.path.join(
-        project_root,
-        "docs", "work-logs", f"v{version}", "tickets", f"{ticket_id}.md"
-    )
-
-    if os.path.exists(ticket_path):
-        return ticket_path
-    return None
-
-
-def _parse_ticket_blocked_by(ticket_id: str) -> list[str]:
-    """
-    解析 Ticket 檔案的 blockedBy 欄位
-
-    讀取 Ticket Markdown 的 YAML frontmatter，提取 blockedBy 列表。
-
-    Args:
-        ticket_id: Ticket ID
-
-    Returns:
-        list[str]: blockedBy Ticket ID 列表（可為空）
-    """
-    ticket_path = _find_ticket_file(ticket_id)
-    if ticket_path is None:
-        return []
-
-    try:
-        with open(ticket_path, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        # 解析 YAML frontmatter（--- 區塊）
-        if not content.startswith("---"):
-            return []
-
-        end_index = content.index("---", 3)
-        frontmatter = content[3:end_index].strip()
-
-        # 簡易 YAML 解析：找 blockedBy 欄位
-        blocked_by = []
-        in_blocked_by = False
-        for line in frontmatter.split("\n"):
-            if line.startswith("blockedBy:"):
-                # 檢查行內列表格式：blockedBy: [a, b]
-                value = line[len("blockedBy:"):].strip()
-                if value.startswith("["):
-                    # 行內列表
-                    inner = value.strip("[]").strip()
-                    if inner:
-                        blocked_by = [item.strip().strip("'\"") for item in inner.split(",")]
-                    return blocked_by
-                # 若值為空，後續行可能是 YAML 列表項
-                in_blocked_by = True
-                continue
-
-            if in_blocked_by:
-                if line.startswith("- "):
-                    blocked_by.append(line[2:].strip())
-                else:
-                    # 遇到其他欄位，結束 blockedBy 解析
-                    break
-
-        return blocked_by
-    except Exception as e:
-        print(CreateMessages.TICKET_FILE_PARSE_ERROR.format(error=str(e)), file=sys.stderr)
-        return []
-
-
-def _merge_blocked_by_branches(ticket_id: str, worktree_path: str) -> None:
-    """
-    合併 blockedBy 依賴的 feat 分支到新建的 worktree
-
-    對每個 blockedBy ticket：
-    1. 檢查該 ticket 是否已完成（透過查詢 ticket 檔案的 status）
-    2. 檢查對應的 feat/{ticket-id} 分支是否存在
-    3. 若存在且已完成，自動執行 git merge
-
-    Args:
-        ticket_id: 當前 Ticket ID
-        worktree_path: 新建 worktree 的路徑（用於在其中執行 git merge）
-    """
-    blocked_by_ids = _parse_ticket_blocked_by(ticket_id)
-    if not blocked_by_ids:
-        return
-
-    print()
-    print(CreateMessages.DEPENDENCY_SECTION_HEADER)
-
-    for dep_id in blocked_by_ids:
-        dep_branch = derive_branch_name(dep_id)
-
-        # 檢查 feat 分支是否存在
-        if not check_branch_exists(dep_branch):
-            # 靜默跳過不存在的分支
-            continue
-
-        # 檢查依賴 Ticket 是否已完成（透過檔案 status 欄位）
-        dep_status = _query_ticket_file_status(dep_id)
-        if dep_status is not None and dep_status.lower() != TICKET_COMPLETED_STATUS:
-            print(f"  {CreateMessages.DEPENDENCY_TICKET_NOT_COMPLETED.format(ticket_id=dep_id, status=dep_status)}")
-            continue
-
-        # 執行 git merge（在 worktree 目錄下）
-        success, output = run_git_command(
-            ["merge", dep_branch, "--no-edit"],
-            cwd=worktree_path
-        )
-
-        if success:
-            print(f"  {CreateMessages.DEPENDENCY_MERGED.format(branch=dep_branch)}")
-        else:
-            print(f"  {CreateMessages.DEPENDENCY_MERGE_FAILED.format(branch=dep_branch)}")
-
-
-def _query_ticket_file_status(ticket_id: str) -> Optional[str]:
-    """
-    從 Ticket 檔案讀取 status 欄位
-
-    直接解析檔案 frontmatter，不依賴 ticket CLI。
-
-    Args:
-        ticket_id: Ticket ID
-
-    Returns:
-        str | None: status 值（如 "completed"），或 None 表示無法讀取
-    """
-    ticket_path = _find_ticket_file(ticket_id)
-    if ticket_path is None:
-        return None
-
-    try:
-        with open(ticket_path, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        if not content.startswith("---"):
-            return None
-
-        end_index = content.index("---", 3)
-        frontmatter = content[3:end_index].strip()
-
-        for line in frontmatter.split("\n"):
-            if line.startswith("status:"):
-                return line[len("status:"):].strip()
-
-        return None
-    except Exception:
-        return None
-
-
 def _cmd_create_validate_and_execute(
     ticket_id: str,
     branch_name: str,
@@ -554,10 +358,6 @@ def _cmd_create_validate_and_execute(
 
     # 成功輸出
     _cmd_create_print_success(ticket_id, branch_name, base, worktree_path)
-
-    # 自動合併 blockedBy 依賴的 feat 分支
-    _merge_blocked_by_branches(ticket_id, worktree_path)
-
     return 0
 
 
@@ -980,22 +780,6 @@ def _print_existing_worktrees() -> None:
             print(item)
 
 
-def _get_main_new_commits(branch_name: str) -> str:
-    """
-    取得 main 上比 branch 新的 commit 列表（一行一個）
-
-    Args:
-        branch_name: feature 分支名稱
-
-    Returns:
-        str: commit 列表文字，每行一個 commit
-    """
-    success, output = run_git_command(
-        ["log", "--oneline", f"{branch_name}..{DEFAULT_BASE_BRANCH}"]
-    )
-    return output.strip() if success and output.strip() else "(無法取得 commit 列表)"
-
-
 def _merge_build_warnings_list(ahead: int, behind: int, status_msg: str) -> list[str]:
     """
     根據 metrics 和狀態訊息構建警告清單
@@ -1015,6 +799,8 @@ def _merge_build_warnings_list(ahead: int, behind: int, status_msg: str) -> list
         warnings.append(status_msg)
     if ahead == 0:
         warnings.append(MergeMessages.NO_NEW_COMMITS.format(base=DEFAULT_BASE_BRANCH))
+    if behind > 0:
+        warnings.append(MergeMessages.BRANCH_BEHIND_BASE.format(base=DEFAULT_BASE_BRANCH, count=behind))
     return warnings
 
 
@@ -1132,29 +918,10 @@ def cmd_merge(ticket_id: str) -> int:
     if not passed:
         return 1
 
+    # Step 4: 輸出指令
     branch_name = worktree.get("branch", f"feat/{ticket_id}")
-
-    # Step 4: behind > 0 時阻擋合併
-    if behind > 0:
-        commit_list = _get_main_new_commits(branch_name)
-        print(MergeMessages.BRANCH_BEHIND_BASE.format(
-            base=DEFAULT_BASE_BRANCH,
-            count=behind,
-            commit_list=commit_list,
-            worktree_path=worktree["path"],
-        ))
-        return 1
-
-    # Step 5: 輸出驗證結果並執行合併
     _merge_build_output(ticket_id, branch_name, ahead, behind, warnings)
-    print()
-    print(MergeMessages.MERGE_EXECUTING.format(branch=branch_name, base=DEFAULT_BASE_BRANCH))
-    success, output = run_git_command(["merge", "--no-ff", branch_name])
-    if not success:
-        print(MergeMessages.MERGE_FAILED.format(error=output))
-        return 1
 
-    print(MergeMessages.MERGE_SUCCESS.format(ticket_id=ticket_id))
     return 0
 
 

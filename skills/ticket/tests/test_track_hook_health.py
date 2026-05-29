@@ -32,14 +32,22 @@ def _args(**overrides) -> argparse.Namespace:
 
 
 def _fake_stats() -> Dict[str, Dict]:
-    """模擬 scan_logs 回傳：兩個 hook，一個 critical 一個 normal。"""
+    """模擬 scan_logs 回傳：兩個 hook，一個 flagged（warning/critical）一個 normal。
+
+    去時間依賴設計（W3-084）：
+    - 原 fixture 寫死 2026-05-13~15 日期，且 25/22/13 在 high_freq 閾值（baseline×3）以下，
+      無法穩定產生 flagged 狀態（_evaluate_all 以「今日」取 recent，寫死日期永遠 recent=0）。
+    - 改法：wrap-decision-tripwire 的 spike 落在「執行當日」（動態 _today），count 遠高於
+      baseline×3，使 recent > threshold 穩定觸發 warning，不再依賴寫死日期。
+    """
+    _today = datetime.now().strftime("%Y-%m-%d")
     return {
         "wrap-decision-tripwire": {
-            "total": 60,
+            # 單日 spike 300 → baseline=300/7≈42.9、high_freq threshold=baseline×3≈128.6
+            # recent(今日)=300 > 128.6 穩定 warning，與「今日是哪天」無關。
+            "total": 300,
             "per_day": {
-                "2026-05-13": 25,
-                "2026-05-14": 22,
-                "2026-05-15": 13,
+                _today: 300,
             },
         },
         "phase4-decision-enforcement": {

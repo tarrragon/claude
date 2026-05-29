@@ -102,6 +102,17 @@ SCHEMA_PLACEHOLDER_START = re.compile(r"<!--\s*Schema\[[^\]]+\]\s*:")
 SCHEMA_PLACEHOLDER_END_H2 = re.compile(r"^\s*##\s")
 SCHEMA_PLACEHOLDER_END_HR = re.compile(r"^\s*---\s*$")
 
+# W1-120: Context Bundle auto-extracted 區塊起點。
+# ticket-loader 抽取 source ticket 的 what / why 寫入 `## Context Bundle` 時，
+# 以 `<!-- auto-extracted: v1 | sources: ... -->` marker 標記為機器產生的結構化
+# 元資料（逐字引用 source ticket why / what）。該區塊與 frontmatter 同類——非
+# 人類撰寫的決策論述，其中的「Phase 4 評估」「Phase 5 再決定」等字面屬 source
+# ticket history 引用，不應被誤判為本 ticket 延後決策（PC-142 case 5 同根因，
+# W1-092 frontmatter 修復的延伸）。
+# 錨定 marker 而非整個 section：人工撰寫的 Context Bundle（無 marker）仍應被攔截。
+# 區塊終點複用 SCHEMA_PLACEHOLDER_END_H2 / SCHEMA_PLACEHOLDER_END_HR。
+CONTEXT_BUNDLE_START = re.compile(r"<!--\s*auto-extracted\s*:")
+
 # W11-018: Fenced code block 範例語境豁免
 # Markdown fenced code block 內的延後話術與 PC-093-exempt marker 屬「範例展示」，
 # 非實際延後決策或豁免宣告。整段跳過 phrase 掃描與 marker 蒐集。
@@ -345,6 +356,42 @@ def compute_schema_placeholder_lines(lines: List[str]) -> set:
     return placeholder_lines
 
 
+def compute_context_bundle_lines(lines: List[str]) -> set:
+    """W1-120: 計算 Context Bundle auto-extracted 區塊的 1-based 行號集合。
+
+    起點：含 `<!-- auto-extracted: ... -->` marker 的行（含該行）。
+    終點：下個 H2（`## `）或 `---` 水平分隔符（不含該邊界行）。
+
+    Why: `## Context Bundle` 區塊由 ticket-loader 自動抽取，逐字引用 source
+    ticket 的 why / what，屬機器產生的結構化元資料（與 frontmatter 同類）。其中
+    階段名稱字面屬 source ticket history 引用而非本 ticket 延後決策，與 W1-092
+    frontmatter + W10-130 Schema placeholder + W11-018 fenced code block 同精神
+    整段跳過。
+
+    邊界：錨定 auto-extracted marker（非整個 section）。人工撰寫的 Context
+    Bundle（無 marker）不跳過——人工延後論述仍應被攔截。
+
+    注意：H3（`### `）不被誤判為終點——`^\\s*##\\s` 要求第三字元為空白，`### `
+    第三字元為 `#`，天然不匹配。
+
+    回傳：所有屬於 auto-extracted 區塊的行號集合。phrase 掃描與 marker 蒐集均跳過。
+    """
+    bundle_lines: set = set()
+    in_block = False
+    for idx, raw in enumerate(lines, start=1):
+        if in_block:
+            if SCHEMA_PLACEHOLDER_END_H2.match(raw) or SCHEMA_PLACEHOLDER_END_HR.match(raw):
+                in_block = False
+                # 邊界行不屬 bundle
+                continue
+            bundle_lines.add(idx)
+            continue
+        if CONTEXT_BUNDLE_START.search(raw):
+            in_block = True
+            bundle_lines.add(idx)
+    return bundle_lines
+
+
 def compute_fenced_block_lines(lines: List[str]) -> set:
     """W11-018: 計算 fenced code block 內的 1-based 行號集合（含 fence 自身行）。
 
@@ -423,10 +470,14 @@ def scan_lines_for_phrases(
     fenced_lines = compute_fenced_block_lines(lines)
     placeholder_lines = compute_schema_placeholder_lines(lines)
     frontmatter_lines = compute_frontmatter_lines(lines)
+    context_bundle_lines = compute_context_bundle_lines(lines)
     hits: List[Hit] = []
     for idx, raw in enumerate(lines, start=1):
         # W1-092: Frontmatter (YAML 區塊) 跳過 (source ticket history 引用等結構化元資料)
         if idx in frontmatter_lines:
+            continue
+        # W1-120: Context Bundle auto-extracted 區塊跳過（機器逐字引用 source ticket why/what）
+        if idx in context_bundle_lines:
             continue
         # W11-018: Fenced code block 範例語境豁免（行級 short-circuit，最先檢查）
         if idx in fenced_lines:
@@ -504,10 +555,14 @@ def collect_exempt_markers(lines: List[str]) -> List[ExemptRef]:
     fenced_lines = compute_fenced_block_lines(lines)
     placeholder_lines = compute_schema_placeholder_lines(lines)
     frontmatter_lines = compute_frontmatter_lines(lines)
+    context_bundle_lines = compute_context_bundle_lines(lines)
     refs: List[ExemptRef] = []
     for idx, raw in enumerate(lines, start=1):
         # W1-092: Frontmatter 內 marker 不蒐集（結構化元資料非豁免宣告載體）
         if idx in frontmatter_lines:
+            continue
+        # W1-120: Context Bundle auto-extracted 區塊內 marker 不蒐集（機器引用非豁免宣告載體）
+        if idx in context_bundle_lines:
             continue
         # W11-018: Fenced code block 範例語境豁免（範例 marker 不蒐集）
         if idx in fenced_lines:

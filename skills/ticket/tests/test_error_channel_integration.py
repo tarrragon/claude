@@ -154,6 +154,9 @@ class TestErrorChannelIntegration:
         )
         fake_ticket = {
             "id": "fake-id-for-test",
+            # W3-044 require_in_progress precondition：append-log 需 status=in_progress（否則
+            # 在 SECTION_NOT_FOUND 邏輯前即被擋下並寫 stderr，stdout 為空）。
+            "status": "in_progress",
             "_body": fake_body,
         }
 
