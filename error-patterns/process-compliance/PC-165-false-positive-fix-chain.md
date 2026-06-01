@@ -95,8 +95,9 @@ related:
 | PC-082 | regression fix direction（restore vs remove） | 共通「修復方向誤判」；本 PC 是 PC-082 在「跨 ticket 修復鏈」場景的延伸 |
 | PC-131 | external tool authority skepticism | 共通「不應盲信權威輸出」；PC-131 針對外部工具，本 PC 針對前序 ticket 綠燈結論 |
 | PC-136 | structural fix incomplete caller scan | 同源「函式簽章變更 grep caller 不全」；本 PC 含 PC-136 子集，並擴展到測試層 false positive |
+| IMP-078 | runtime API mismatch | 共通「測試環境 vs 目標環境差異」上位概念；IMP-078 聚焦跨環境部署（Node.js vs Browser API），與本 PC「修復鏈 false positive」並列存在，交集案例為 W1-047.1~.5 |
 
-**整合 advice**：未來修訂時，可考慮將 PC-028 / PC-131 / PC-165 整併為「未驗證信任」上位 PC，下分代理人回報 / 外部工具 / ticket 修復鏈三個觸發領域。
+**整合 advice**：未來修訂時，可考慮將 PC-028 / PC-131 / PC-165 整併為「未驗證信任」上位 PC，下分代理人回報 / 外部工具 / ticket 修復鏈三個觸發領域。另，IMP-078（CE-Node runtime mismatch）與本 PC 為並列關係：兩者同屬「測試綠燈但 runtime 失效」表層症狀，但根因領域正交（實作層 API 選擇 vs 流程層修復鏈），交集案例 W1-047.1~.5 同時具備兩者特徵，診斷時宜雙向對照。
 
 ---
 

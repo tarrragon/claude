@@ -212,6 +212,13 @@ def _execute_release(args: argparse.Namespace, version: str) -> int:
     return execute_release(args, version)
 
 
+def _execute_verify(args: argparse.Namespace, version: str) -> int:
+    """單獨執行 AC 驗證（W4-019：與 claim 解耦）。"""
+    from .lifecycle import TicketLifecycle
+    lifecycle = TicketLifecycle(version)
+    return lifecycle.verify_only(args.ticket_id)
+
+
 def _create_version_agnostic_handlers() -> dict:
     """
     建立不需版本資訊的命令處理器字典（W17-014 / W17-008.11 方案 B）
@@ -257,6 +264,8 @@ def _create_command_handlers() -> dict:
         "list": execute_list,
         "search": execute_search,
         "release": _execute_release,
+        # W4-019: 拆 verify 子命令（單獨執行 AC 驗證，與 claim 解耦）
+        "verify": _execute_verify,
         "chain": execute_chain,
         "deps": execute_deps,
         "full": execute_full,
@@ -380,14 +389,11 @@ def _register_lifecycle_commands(
             "PC-078 並行衝突）。僅供除錯場景使用"
         ),
     )
-    p_claim.add_argument(
-        "--skip-verify",
-        dest="skip_verify",
-        action="store_true",
-        help=(
-            "W3-046: 已預設不執行 AC 驗證，此旗標保留為 no-op（向後相容）"
-        ),
-    )
+    # W4-019: --skip-verify 旗標已移除（W3-092 + W4-015 兩輪觀察期累計
+    # 24hr / 75 commits / 5 ticket cycles 驗證：外部依賴 = 0、runtime
+    # deprecation 觸發 = 0）。如需單獨執行 AC 驗證（不 claim），改用
+    # `ticket track verify <id>`；如需跳過驗證直接 claim，不傳 --verify
+    # 即為預設行為（W3-046 後 claim 預設不驗證）。
     p_claim.add_argument(
         "--yes",
         "-y",
@@ -470,6 +476,17 @@ def _register_lifecycle_commands(
     p_release = subparsers.add_parser("release", help=TrackMessages.HELP_RELEASE)
     p_release.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_release.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # verify 操作（W4-019）：單獨執行 AC 驗證，與 claim 解耦
+    p_verify = subparsers.add_parser(
+        "verify",
+        help=(
+            "單獨執行 AC 驗證（不變更 Ticket 狀態，與 claim 解耦）。"
+            "W4-019：補足 W3-046 後 claim 預設不驗證所造成的查詢缺口"
+        ),
+    )
+    p_verify.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_verify.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
 
 def _register_query_commands(

@@ -24,6 +24,52 @@
 
 ---
 
+## `.claude/` 修改派發決策矩陣（PC-077 升級規則）
+
+**Why**：`.claude/` 目錄受 CC runtime hardcoded 保護（ARCH-015），worktree 內 `.claude/` 的 Edit/Write 被 runtime 拒絕。主 repo cwd 的 subagent 可成功 Edit `.claude/`（PC-115 實證 18/18 success；Hypothesis K 已否證 PC-077 v1.0 的「完全擋死 subagent」絕對化結論），但受並行數限制（PC-137 並行 `.claude/` Edit ≤ 2）。PM 跨 session 易誤判為「完全擋死」或「加 worktree 就行」，PC-077 至本規則升級前僅文件化於 error-pattern + memory，未形成可查的明示決策。
+
+**Consequence**：誤判導致三種派發浪費：
+
+| 誤判類型 | 場景 | 浪費 |
+|---------|------|------|
+| 全面擋死誤判 | PM 認為 subagent 完全無法 Edit `.claude/`，全部前台處理 | 低估 subagent 能力，PM 前台工作量超載 |
+| Worktree 萬能誤判 | PM 加 `isolation: worktree` 派發 `.claude/` 修改 | 通過 dispatch hook 但被 runtime 擋，subagent 回合耗盡 |
+| 拆分遺漏誤判 | 跨 `.claude/` + `src/` 的 ticket 不拆分，整包派 worktree | subagent 只完成 `src/` 部分，`.claude/` 修改靜默失敗 |
+
+**Action**：派發前依以下矩陣判斷修改目標與派發方式：
+
+| 修改目標 | 派發方式 | isolation 參數 | 並行限制 |
+|---------|---------|---------------|---------|
+| 僅 `.claude/` | subagent 主 repo cwd | 不加 `isolation: worktree` | ≤ 2 並行（PC-137） |
+| 僅 `src/` 或非 `.claude/` | subagent worktree | `isolation: worktree` | 無特殊限制 |
+| `.claude/` + `src/` 混合 | 拆分為兩個 ticket | 各依上述規則 | 分別計數 |
+| `.claude/` 且緊急 / 並行已滿 | PM 前台 | N/A | N/A |
+| 僅讀取 `.claude/`（不修改） | 任何方式皆可 | worktree 或主 repo 皆可 | 無限制 |
+
+### 邊界與既有規則的關係
+
+| 既有規則 | 覆蓋範圍 | 與本決策矩陣的關係 |
+|---------|---------|------------------|
+| `rules/core/pm-role.md` 派發位置（L40） | 自動載入一行摘要 + W17-018 fallback 補強 | 一行摘要不修改；本章節為其詳細展開 |
+| 上節「派發位置判斷（ARCH-015）」 | 高階三類判斷表 | 本章節為「含 `.claude/` 路徑」分支的細化（含並行限制 + 否證 v1.0 絕對化） |
+| `pm-rules/parallel-dispatch.md` `.claude/` 例外章節 | 並行場景的 `.claude/` 例外 | 並行限制 ≤ 2 來自 PC-137，與本矩陣對齊 |
+| ARCH-015 | runtime hardcoded 保護記錄 | runtime 保護優先級最高，本矩陣依此為硬約束 |
+| PC-115 | transient runtime fluctuation 觀察 | Hypothesis K 否證後，本矩陣採「主 repo cwd subagent 可成功」結論 |
+| PC-137 | 並行 `.claude/` Edit 限 ≤ 2 統計 | 本矩陣的並行限制依此 |
+
+### 派發前自檢清單
+
+派發涉及 `.claude/` Edit/Write 的 ticket 前自問：
+
+- [ ] 修改目標是否含 `.claude/` 路徑？（從 ticket `where.files` 確認）
+- [ ] 是否「僅 `.claude/`」、「`.claude/` + 其他混合」、或「僅其他」？
+- [ ] 若「僅 `.claude/`」：subagent 主 repo cwd 派發（不加 `isolation: worktree`），確認當前並行 `.claude/` Edit subagent 數 ≤ 1（派發後 ≤ 2）
+- [ ] 若「混合」：拆分為兩個 ticket，各依本矩陣派發
+- [ ] 若並行已滿（已 2 個 `.claude/` Edit subagent）且緊急：PM 前台執行
+- [ ] 派發 prompt 第一行為 Ticket ID（PC-065），prompt ≤ 30 行（PC-040）
+
+---
+
 ## 派發前檢查：worktree base 同步（W1-035）
 
 PM 用 `isolation: "worktree"` 派發 agent 前，先執行 `git status --porcelain` 確認有無 pending changes，有則先 commit 到 main 再派發。
@@ -140,6 +186,7 @@ Q1-Q4 任一為「是」 → 必須執行 `ToolSearch("select:AskUserQuestion")`
 
 ---
 
-**Last Updated**: 2026-05-09
+**Last Updated**: 2026-05-30
+**Version**: 1.2.0 — 新增「`.claude/` 修改派發決策矩陣（PC-077 升級規則）」章節：三明示主文 + 5 列決策表 + 既有規則邊界表 + 派發前自檢清單；PC-077/ARCH-015/PC-115/PC-137 交叉引用對齊（W3-015.1 落地）
 **Version**: 1.1.0 — 新增「PM 對話回覆前自檢 checklist（三明示版）」章節 Q1-Q4，引用 W17-174.1 共同特徵 F1/F3/F5 + askuserquestion-rules.md S1-S6 訊號表（W17-174.4 落地）
 **Version**: 1.0.0 — 從 rules/core/pm-role.md 拆出（W10-076.2 拆分；原檔 v3.7.0 L41-L107）

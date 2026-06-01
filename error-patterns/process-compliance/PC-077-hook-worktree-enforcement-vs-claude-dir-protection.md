@@ -105,15 +105,38 @@ PM 派發實作代理人（thyme-python-developer、parsley-flutter-developer、
 
 ---
 
+## 升級狀態（2026-05-30 W3-015.1 落地）
+
+本 PC 已升級為明示規則，落地於 `.claude/pm-rules/behavior-loop-details.md` 派發位置章節後新增的「`.claude/` 修改派發決策矩陣（PC-077 升級規則）」子章節。
+
+**升級內容**：
+
+| 項目 | 升級前（PC-077 v1.0） | 升級後（behavior-loop-details v1.2.0） |
+|------|---------------------|----------------------------------------|
+| 規則形式 | error-pattern + memory + pm-role 一行 + parallel-dispatch 例外段 | behavior-loop-details 三明示章節（Why / Consequence / Action）+ 5 列決策矩陣 + 派發前自檢清單 |
+| 對 subagent 結論 | 「完全擋死」（過度絕對化） | 「主 repo cwd 可成功（PC-115 18/18），並行限 ≤ 2（PC-137）」 |
+| PM 跨 session 可查性 | 需 Read error-pattern + memory | 由 pm-role.md 派發位置一行摘要路由至 behavior-loop-details 詳細章節 |
+| 邊界文件化 | 散落於多檔 | 集中於決策矩陣下方「既有規則的關係」表 |
+
+**讀取路徑**：PM 跨 session 查詢 `.claude/` 派發決策時，依 `rules/core/pm-role.md` L40 一行摘要路由至 `pm-rules/behavior-loop-details.md` 「`.claude/` 修改派發決策矩陣」子章節。
+
+**PC-077 本身狀態**：本 PC 保留為歷史記錄（首發案例 + 根因 + 教訓 + 觸發案例累積），不再作為單獨決策依據；新增 ticket 派發判斷依 behavior-loop-details 決策矩陣。
+
+---
+
 ## 相關文件
 
+- `.claude/pm-rules/behavior-loop-details.md` — **已升級至此**：`.claude/` 修改派發決策矩陣（PC-077 升級規則）章節
 - `.claude/error-patterns/architecture/ARCH-015-subagent-claude-dir-hardcoded-protection.md` — Runtime 保護記錄
+- `.claude/error-patterns/process-compliance/PC-115-subagent-claude-dir-edit-runtime-deny-without-log.md` — 否證 PC-077 v1.0「完全擋死」絕對化結論
+- `.claude/error-patterns/process-compliance/PC-137-*.md` — 並行 `.claude/` Edit ≤ 2 限制依據
 - `.claude/rules/core/pm-role.md` — PM 職責邊界（產品程式碼 src/ 禁令範圍）
 - `.claude/pm-rules/parallel-dispatch.md` — Worktree 隔離章節
 - `.claude/hooks/agent-dispatch-validation-hook.py` — Hook 實作
 
 ---
 
-**Last Updated**: 2026-04-17
+**Last Updated**: 2026-05-30
+**Version**: 1.1.0 — 補「升級狀態」章節：標註已升級至 behavior-loop-details.md v1.2.0；補 PC-115/PC-137 交叉引用；標註本 PC 不再作為單獨決策依據（W3-015.1 落地）
 **Version**: 1.0.0 — 首發記錄（W13-003 PC-072 補強派發 thyme 遭 Hook 擋）
 **Source**: 2026-04-17 W13-003 IMP 派發 thyme-python-developer 修改 `.claude/hooks/askuserquestion-charset-guard-hook.py` 被 agent-dispatch-validation-hook 擋 isolation:worktree 要求；對照 ARCH-015 確認即使加 worktree 仍被 runtime 擋

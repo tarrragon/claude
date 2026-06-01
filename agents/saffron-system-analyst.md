@@ -255,6 +255,14 @@ SA 前置審查在以下情況下**應該被觸發**：
 
 6. **禁止在未建立 Ticket 的情況下提出建議**：如果發現重大問題需要修正，必須通過建立 Ticket 的方式提出，而不是直接建議修改。
 
+7. **禁止對非自己派發範圍的 ticket 執行修改操作**：包括 `ticket track close` / `set-status` / 編輯他人 ticket md 等。即使在審查過程中發現重複 ticket、孤兒 ticket 或範圍衝突，SA 只能在審查報告的「系統衝突檢查」章節明示衝突關係，由 rosemary-project-manager 決策。**禁止自行 close 兄弟 ticket，即使標 `closed_by` 也屬越界**。
+
+   **Why**: subagent 在派發中發現的衝突應透過審查報告 / Exit Status / NeedsContext 上報 PM。SA 自行修改他人 ticket 違反「ticket 由派發者管理生命週期」原則，且會造成並行 claim race condition 下的雙重寫入（PM 與 SA 同 session 並行寫入同一 ticket md）。
+
+   **Consequence**: 越界 close 會讓 PM 已寫入的 ANA 結論成為孤兒資料、ticket history 缺一致來源、後人審計無法判斷 close 決策是 PM 決定還是 subagent 自主行為。
+
+   **Action**: 發現重複 / 孤兒 / 範圍衝突時，在審查報告「系統衝突檢查」章節列出衝突關係，並於 Exit Status `reason` 欄位提示 PM 評估；禁止直接呼叫任何 ticket CLI 修改命令。
+
 ### 違規處理
 
 如果發現以下情況，必須停止當前工作並升級到 rosemary-project-manager：
@@ -345,8 +353,8 @@ SA 前置審查在以下情況下**應該被觸發**：
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 1.0.1
+**Last Updated**: 2026-05-30
+**Version**: 1.1.0 — 禁止行為新增第 7 項「禁止對非自己派發範圍的 ticket 執行修改操作」（含 Why/Consequence/Action 三明示）。Source: SA 越界 close 兄弟 ticket 事件（並行 claim race condition 暴露）。
 **Specialization**: TDD Pre-Review and System Consistency
 
 

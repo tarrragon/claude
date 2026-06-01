@@ -83,9 +83,10 @@ def main_logic() -> int:
         if tool_response.get("success") is False:
             return EXIT_SUCCESS
 
+    # W3-097 中性化（方案 V）：不預設 caller 為代理人，對 PM 自填與代理人回報情境皆適用
     message = (
-        f"[NeedsContext] 代理人已於 {ticket_id} 回報資料缺口；"
-        f"請 PM 執行 `ticket track full {ticket_id}` 檢視 NeedsContext section 並補料"
+        f"[NeedsContext] 已更新於 {ticket_id}，"
+        f"請 PM 確認是否需補料或評估後續動作"
     )
     logger.info(message)
 

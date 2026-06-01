@@ -18,10 +18,9 @@ PreToolUse Hook（Write / Edit / MultiEdit），落地
     5. tracking.yaml 中 status=confirmed|approved 但所有 ticket_refs 皆為 ANA 類
 
 豁免（permissionDecision=allow）：
-    1. evaluation_level=light（拼字 / 格式 / 重命名類）
-    2. 非 PROP-*.md 與非 tracking.yaml 檔案
-    3. 既有檔案 diff 過小（< 30 字元）視為微調
-    4. 解析錯誤 / 異常 → allow + stderr 提示（規則 4：失敗必須可見，但不阻擋）
+    1. 非 PROP-*.md 與非 tracking.yaml 檔案
+    2. 既有檔案 diff 過小（< 30 字元）視為微調
+    3. 解析錯誤 / 異常 → allow + stderr 提示（規則 4：失敗必須可見，但不阻擋）
 
 設計原則：
     - 規則 5 第三層（Hook 強制）：對未通過評估的 PROP 寫入硬阻擋
@@ -55,7 +54,7 @@ PROPOSALS_DIR_FRAGMENT = "docs/proposals/"
 TRACKING_YAML_FRAGMENT = "docs/proposals-tracking.yaml"
 PROP_FILENAME_PATTERN = re.compile(r"PROP-\d+.*\.md$")
 
-VALID_LEVELS = {"light", "standard", "heavy"}
+VALID_LEVELS = {"standard", "heavy"}
 
 # 標準 / 重量級必填章節關鍵字（章節標題或內容必須含其一）
 # 採關鍵字陣列匹配，允許多種寫法
@@ -138,15 +137,15 @@ def check_prop_content(content: str, logger) -> Tuple[bool, str]:
         # 無 frontmatter 或解析失敗：規則 1 要求必須標示 evaluation_level
         return True, (
             "PROP 文件缺 frontmatter 或 YAML 解析失敗。"
-            "規則 1 要求所有 PROP 必須在 frontmatter 標示 `evaluation_level: light | standard | heavy`。"
+            "規則 1 要求所有 PROP 必須在 frontmatter 標示 `evaluation_level: standard | heavy`。"
         )
 
     level = fm.get("evaluation_level")
     if not level:
         return True, (
             "PROP frontmatter 缺 `evaluation_level` 欄位。"
-            "規則 1：必須明示 light / standard / heavy。"
-            "提示：拼字/格式調整類請標 light 並豁免；單版本功能標 standard；跨版本/架構級標 heavy。"
+            "規則 1：必須明示 standard / heavy。"
+            "提示：單版本功能標 standard；跨版本/架構級標 heavy。"
             "規格：.claude/pm-rules/proposal-evaluation-gate.md 規則 1。"
         )
 
@@ -154,12 +153,8 @@ def check_prop_content(content: str, logger) -> Tuple[bool, str]:
     if level not in VALID_LEVELS:
         return True, (
             f"PROP frontmatter `evaluation_level: {level}` 不是合法值。"
-            f"必須為 light / standard / heavy 之一。"
+            f"必須為 standard / heavy 之一（light 已於 2026-05-30 移除）。"
         )
-
-    if level == "light":
-        logger.info("PROP 為 light 級，跳過章節檢查（豁免優先序 P3）")
-        return False, ""
 
     # 豁免優先序 P2：status=draft 探索期豁免章節檢查
     # 設計理由：draft 為探索期 PROP，章節通常未完整；強制章節會阻擋創意 brainstorming。

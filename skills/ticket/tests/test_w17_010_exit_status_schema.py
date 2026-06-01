@@ -41,9 +41,16 @@ class TestValidSectionsExpanded:
                         "Test Results", "Execution Log"]:
             assert section in TrackAcceptanceMessages.VALID_SECTIONS
 
-    def test_total_eight_sections(self):
-        # W10-107: 對齊 ticket-body-schema.md 後新增「重現實驗結果」，總數 8
-        assert len(TrackAcceptanceMessages.VALID_SECTIONS) == 8
+    def test_total_ten_sections(self):
+        # W3-099: 補入 'Task Summary' 與 'Completion Info' 後總數 10
+        # （W10-107 對齊時遺漏的兩個三類型必填章節）
+        assert len(TrackAcceptanceMessages.VALID_SECTIONS) == 10
+
+    def test_task_summary_in_valid_sections(self):
+        assert "Task Summary" in TrackAcceptanceMessages.VALID_SECTIONS
+
+    def test_completion_info_in_valid_sections(self):
+        assert "Completion Info" in TrackAcceptanceMessages.VALID_SECTIONS
 
 
 class TestTicketTemplateSections:

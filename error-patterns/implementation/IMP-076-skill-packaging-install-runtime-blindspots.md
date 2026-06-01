@@ -158,6 +158,18 @@ def get_project_root() -> Path:
 
 ---
 
+## 抽象層級分析（必填）
+
+| 欄位 | 內容 |
+|------|------|
+| 症狀層級 | 工具層（`uv tool install` 失敗 / installed mode CLI 啟動後找不到專案資源） |
+| 根因層級 | 架構層（packaging 設計未區分 dev mode 與 installed mode 二態差異：pyproject.toml 缺明示 backend 配置；`__file__` 路徑推導假設固定 source tree 結構） |
+| 跨層路徑 | 工具層（症狀：install/runtime 失敗）→ 架構層（根因：packaging 設計缺口，向上 1 層） |
+| 防護層級 | 架構層：pyproject.toml 明示 `[build-system]` backend + packages/sources 配置；實作層：`get_project_root()` 三層 fallback（cwd 優先 + .git marker + dev fallback），落地至 `.claude/skills/` 各 skill `pyproject.toml` 與 `scripts/<entry>.py` |
+| 跨層警示 | 禁止提升至認知層（非開發者疏忽）；根因是 install/dev 環境差異沒有架構層防護，不是個人操作失誤；禁止縮減至純實作層（兩個變體的根因都是 packaging 架構設計選擇，非單純程式碼錯誤） |
+
+---
+
 ## 來源
 
 - 0.19.0-W3-042（version-release skill 兩個 bug 同時暴露）

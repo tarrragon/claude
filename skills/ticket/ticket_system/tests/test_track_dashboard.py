@@ -43,11 +43,14 @@ def _mk(
     started_at: Optional[str] = None,
     body_with_cb: bool = True,
     agent: Optional[str] = None,
+    trigger_bound: bool = False,
 ) -> Dict[str, Any]:
     """建立最小 ticket dict。
 
     body_with_cb=True 注入含 Context Bundle 區塊的 _body，使
     _compute_readiness 回傳 READY（無 handoff 時走 Context Bundle 分支）。
+
+    trigger_bound: W3-096 新增欄位，預設 False 不影響既有 Group A-F 測試。
     """
     body = ""
     if body_with_cb:
@@ -66,6 +69,7 @@ def _mk(
         "version": "0.18.0",
         "started_at": started_at,
         "who": {"current": agent} if agent else {},
+        "trigger_bound": trigger_bound,
         "_body": body,
     }
 
@@ -519,3 +523,98 @@ def test_F3_golden_with_stale(monkeypatch, capsys):
         "Hint: ticket track claim <id>\n"
     )
     assert out == expected
+
+
+# ---------------------------------------------------------------------------
+# Group G：trigger_bound 行為（5 案，W3-096 落地 W3-095 方案 B）
+#
+# 規格參考：0.19.0-W3-096 Problem Analysis Phase 1 §1-§4
+# - trigger_bound: bool frontmatter 欄位，預設 false 向後相容
+# - text 渲染：[N] [P?] [ready] [T] {id}  {title}（[T] 在 [ready] 後）
+# - 排序：(priority_rank, trigger_bound_flag, id)，同 priority 內 trigger-bound 排後段
+# - JSON：ready 物件加 trigger_bound 欄位
+# ---------------------------------------------------------------------------
+
+def test_G1_text_trigger_bound_renders_t_tag(monkeypatch, capsys):
+    """trigger_bound=true ticket 渲染含 [T] 標籤。"""
+    tickets = [
+        _mk("0.18.0-W10-201", priority="P1", trigger_bound=True, title="trig"),
+    ]
+    _patch_loader(monkeypatch, tickets)
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    # 預期格式：  [1] [P1] [ready] [T] 0.18.0-W10-201  trig
+    assert re.search(
+        r"^\s*\[\d+\]\s+\[P1\]\s+\[ready\]\s+\[T\]\s+0\.18\.0-W10-201\s+trig",
+        out, flags=re.MULTILINE,
+    ), f"未找到 [T] 標籤行於：\n{out}"
+
+
+def test_G2_text_normal_no_t_tag(monkeypatch, capsys):
+    """trigger_bound=false / 缺欄位 ticket 渲染不含 [T]。"""
+    tickets = [
+        _mk("0.18.0-W10-202", priority="P1", trigger_bound=False, title="norm"),
+    ]
+    _patch_loader(monkeypatch, tickets)
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    # Ready 區段不應出現 [T]
+    ready_section = out.split("[Ready Top 5]")[1].split("[Stale Warning]")[0]
+    assert "[T]" not in ready_section, f"[T] 不應出現於：\n{ready_section}"
+
+
+def test_G3_sort_same_priority_trigger_bound_after(monkeypatch, capsys):
+    """同 priority 內 trigger_bound=true 排在 false 之後。"""
+    tickets = [
+        # 故意把 trigger-bound 放前面，預期排序後排到後面
+        _mk("0.18.0-W10-301", priority="P1", trigger_bound=True, title="trig"),
+        _mk("0.18.0-W10-302", priority="P1", trigger_bound=False, title="norm"),
+    ]
+    _patch_loader(monkeypatch, tickets)
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    # 預期順序：W10-302 (normal) 先於 W10-301 (trigger-bound)
+    pos_normal = out.find("0.18.0-W10-302")
+    pos_trigger = out.find("0.18.0-W10-301")
+    assert 0 < pos_normal < pos_trigger, (
+        f"trigger-bound 應排後段。normal@{pos_normal}, trigger@{pos_trigger}\n"
+        f"輸出：\n{out}"
+    )
+
+
+def test_G4_json_includes_trigger_bound_field(monkeypatch, capsys):
+    """JSON 輸出 ready 陣列每物件含 trigger_bound 欄位。"""
+    tickets = [
+        _mk("0.18.0-W10-401", priority="P1", trigger_bound=True),
+        _mk("0.18.0-W10-402", priority="P1", trigger_bound=False),
+    ]
+    _patch_loader(monkeypatch, tickets)
+    track_dashboard.dashboard_main(_ns(format="json"), "0.18.0")
+    payload = json.loads(capsys.readouterr().out)
+    assert len(payload["ready"]) == 2
+    for item in payload["ready"]:
+        assert "trigger_bound" in item, f"ready 物件缺 trigger_bound 欄位: {item}"
+        assert isinstance(item["trigger_bound"], bool)
+    # 驗證值對應
+    by_id = {item["id"]: item for item in payload["ready"]}
+    assert by_id["0.18.0-W10-401"]["trigger_bound"] is True
+    assert by_id["0.18.0-W10-402"]["trigger_bound"] is False
+
+
+def test_G5_sort_cross_priority_priority_wins(monkeypatch, capsys):
+    """跨 priority 排序時 priority 優先（P1 trigger-bound 仍排在 P2 normal 前）。"""
+    tickets = [
+        # P2 normal vs P1 trigger-bound：priority 高的 P1 仍應排前
+        _mk("0.18.0-W10-501", priority="P2", trigger_bound=False, title="p2norm"),
+        _mk("0.18.0-W10-502", priority="P1", trigger_bound=True, title="p1trig"),
+    ]
+    _patch_loader(monkeypatch, tickets)
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    pos_p1_trigger = out.find("0.18.0-W10-502")
+    pos_p2_normal = out.find("0.18.0-W10-501")
+    # P1 trigger-bound 應排在 P2 normal 之前（priority 優先於 trigger_bound）
+    assert 0 < pos_p1_trigger < pos_p2_normal, (
+        f"priority 應優先：P1@{pos_p1_trigger}, P2@{pos_p2_normal}\n"
+        f"輸出：\n{out}"
+    )

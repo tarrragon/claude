@@ -37,8 +37,17 @@
 | 必含元素 | 說明 |
 |---------|------|
 | 禁止檔案類別 | 例如「禁止修改 `src/` 下產品程式碼」 |
-| 禁止操作類型 | 例如「禁止 git commit」「禁止跨 ticket 範圍編輯」 |
+| 禁止操作類型 | 例如「禁止 git commit」「禁止跨 ticket 範圍編輯程式碼」 |
 | 禁止職責越界 | 例如「禁止替代 PM 進行派發決策」 |
+| 禁止跨 ticket 物件操作 | 例如「禁止對非派發範圍的 ticket 執行 `ticket track close` / `set-status` / 編輯他人 ticket md」（即使發現重複或衝突）|
+
+**跨 ticket 物件操作禁令的依據**：subagent 在派發中發現的 ticket 衝突（重複、孤兒、範圍交叉）應透過審查報告 / Exit Status / NeedsContext 上報 PM，由 PM 統一決策。
+
+**Why**：ticket 的生命週期由派發者（PM）管理。subagent 自行修改他人 ticket 違反「ticket 派發者統一管理」原則，且會造成並行 claim race condition 下的雙重寫入（PM 寫入結論 vs subagent 寫入 close 標記）。
+
+**Consequence**：越界 close 會讓 PM 已寫入的 ANA 結論變成孤兒資料、ticket history 缺一致來源、後人審計無法判斷 close 是 PM 決定或 subagent 自主行為。
+
+**Action**：所有實質 agent 的「禁止行為」區塊必須包含此項（即使 frontmatter 無 Edit / Write 工具，agent 仍可透過 Bash 執行 `ticket track close`，純文字禁令是最後一道自律防線）。
 
 ### 區塊 3：適用情境
 
@@ -186,4 +195,4 @@ acceptance-gate-hook 在 complete 觸發前自動驗證，無論由 agent 或 PM
 
 ---
 
-**Last Updated**: 2026-04-30 | **Version**: 1.3.0 — 三大區塊（允許產出 / 禁止行為 / 適用情境）+ 執行責任（body 填寫 + 收尾 + 章節結構規則）。歷史 1.1–1.2 版見 git log。**Source**: W5-001 派發越界根因 A + PC-110 + W17-033。
+**Last Updated**: 2026-05-30 | **Version**: 1.4.0 — 區塊 2「禁止行為」新增「禁止跨 ticket 物件操作」必含元素（含 Why/Consequence/Action 三明示）。歷史 1.1–1.3 版見 git log。**Source**: W5-001 派發越界根因 A + PC-110 + W17-033 + SA 跨 ticket close 事件（並行 claim race condition 暴露）。

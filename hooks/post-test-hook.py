@@ -126,8 +126,17 @@ COMPILATION_PATTERNS = [
 
 TEST_FAILURE_PATTERNS = [
     (r"Expected:\s*(.+?)\s*Actual:", "斷言失敗: Expected {0}"),
-    (r"(\d+)\s+tests?\s+failed", "{0} 個測試失敗"),
-    (r"FAILED", "測試失敗"),
+    # W1-055: 排除「0 tests failed」/「0 failed」綠燈 summary
+    # 用 negative lookbehind 確保前面數字不是 0
+    (r"(?<![\d])([1-9]\d*)\s+tests?\s+failed\b", "{0} 個測試失敗"),
+    # W1-055: 縮窄 FAILED pattern
+    # 舊版 r"FAILED" 會誤命中：
+    #   - 「0 failed」「零 failed」綠燈 summary
+    #   - 「not failed」「FAILED-CASES」等識別符
+    #   - 「Tests: 0 failed」等 jest/vitest 綠燈摘要
+    # 縮窄為：行首或非識別符前綴 + FAILED + word boundary，且前後不能是
+    # 「0 」「not 」或 hyphen/底線連字符
+    (r"(?<![\w-])FAILED(?![\w-])(?!\s*[:=]\s*0\b)", "測試失敗"),
     (r"AssertionError", "斷言錯誤"),
 ]
 
@@ -330,6 +339,46 @@ def _is_ticket_body_write(input_data: dict, tool_input: dict) -> bool:
     return False
 
 
+# W1-055: 綠燈 summary 識別 patterns
+# 涵蓋 Jest / Vitest / Mocha / pytest / npm 標準綠燈摘要
+GREEN_SUMMARY_PATTERNS = [
+    # Jest / Vitest: "Tests: 4994 passed, 0 failed" 或 "Tests: 4994 passed"
+    re.compile(r"Tests?:\s+\d+\s+passed(?:,\s+0\s+failed)?", re.IGNORECASE),
+    # Jest summary 變體: "Tests:       N passed, N total"
+    re.compile(r"Tests?:\s+\d+\s+passed,\s+\d+\s+total", re.IGNORECASE),
+    # pytest: "===== N passed in X.XXs =====" 或 "N passed, 0 failed"
+    re.compile(r"=+\s*\d+\s+passed(?:,\s+\d+\s+\w+)*\s+in\s+[\d.]+s", re.IGNORECASE),
+    # Mocha: "N passing" without "N failing"
+    re.compile(r"^\s*\d+\s+passing\b", re.MULTILINE | re.IGNORECASE),
+    # 通用「0 failed」字面（與 passed 同段出現）
+    re.compile(r"\b0\s+failed\b", re.IGNORECASE),
+    # Go test: "PASS\nok ..." 或 "ok\t<pkg>"
+    re.compile(r"^ok\s+\S+\s+[\d.]+s", re.MULTILINE),
+]
+
+
+def _is_green_summary(output: str) -> bool:
+    """判斷輸出是否含綠燈測試摘要（W1-055）。
+
+    若 output 同時含「N passed」且明示「0 failed」（或無 failed 字面），
+    視為綠燈，跳過 TEST_FAILURE_PATTERNS 命中（防 FAILED 字面誤判）。
+
+    判定條件（任一成立）：
+    - 含明確「0 failed」字面
+    - 含 Jest/Vitest/pytest/Mocha 標準綠燈 summary
+    - 含「all tests passed」「no issues found」（既有判定，保留相容）
+    """
+    lower = output.lower()
+    if "all tests passed" in lower or "no issues found" in lower:
+        return True
+
+    for pattern in GREEN_SUMMARY_PATTERNS:
+        if pattern.search(output):
+            return True
+
+    return False
+
+
 def evaluate_test_failure(input_data: dict, tool_input: dict, logger):
     """子邏輯 2: 測試失敗評估。回傳評估訊息或 None。"""
     # W3-041: ticket body 寫入豁免（避免 thyme 寫修復描述含「FAILED」字面被誤判）
@@ -345,8 +394,9 @@ def evaluate_test_failure(input_data: dict, tool_input: dict, logger):
     output_str = str(tool_response) if not isinstance(tool_response, str) else tool_response
     output_str = _resolve_truncated_output(output_str, logger)
 
-    if "all tests passed" in output_str.lower() or "no issues found" in output_str.lower():
-        logger.debug("evaluation: 測試全部通過，跳過")
+    # W1-055: 強化綠燈識別（Jest/Vitest/pytest/Mocha summary + 0 failed 字面）
+    if _is_green_summary(output_str):
+        logger.debug("evaluation: 偵測到綠燈 summary，跳過（W1-055）")
         return None
 
     error_type, errors = _classify_errors(output_str, logger)

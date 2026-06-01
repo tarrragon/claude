@@ -198,6 +198,99 @@ def test_ticket_body_write_detected(hook_module, command):
     )
 
 
+# ---------------------------------------------------------------------------
+# W1-055：綠燈 summary 不誤觸 + 真實失敗仍觸發（雙向回歸）
+# ---------------------------------------------------------------------------
+
+GREEN_SUMMARY_SAMPLES = [
+    pytest.param(
+        "Tests: 4994 passed, 0 failed\nTime: 12.345 s",
+        id="jest-summary-0-failed",
+    ),
+    pytest.param(
+        "Tests:       4962 passed, 4962 total\nSnapshots:   0 total\nTime:        12.345 s",
+        id="jest-summary-passed-total",
+    ),
+    pytest.param(
+        "===== 100 passed in 5.43s =====",
+        id="pytest-summary-passed",
+    ),
+    pytest.param(
+        "我在 Test Results 章節寫：4994 passed / 0 failed / 零 regression",
+        id="ticket-body-0-failed-literal",
+    ),
+    pytest.param(
+        "[FAILED-CASES] none\nTests: 100 passed, 0 failed",
+        id="failed-hyphen-identifier-with-green-summary",
+    ),
+    pytest.param(
+        "  3 passing\n  0 failing",
+        id="mocha-summary-passing",
+    ),
+]
+
+
+@pytest.mark.parametrize("output", GREEN_SUMMARY_SAMPLES)
+def test_green_summary_not_misclassified_as_test_failure(hook_module, logger, output):
+    """綠燈 summary（含 0 failed / FAILED 字面）不應觸發 TEST_FAILURE 評估。"""
+    # 直接驗證 _is_green_summary 攔截
+    assert hook_module._is_green_summary(output) is True, (
+        f"綠燈 summary 未被識別：{output!r}"
+    )
+
+    # 端到端：evaluate_test_failure 回傳 None
+    input_data = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "npm test"},
+        "tool_response": output,
+    }
+    result = hook_module.evaluate_test_failure(input_data, input_data["tool_input"], logger)
+    assert result is None, (
+        f"綠燈 summary 觸發了 test failure 評估：{result!r}\n輸出：{output!r}"
+    )
+
+
+REAL_TEST_FAILURE_SAMPLES = [
+    pytest.param(
+        "Tests: 3 failed, 100 passed\nFAILED tests/foo.test.js",
+        id="jest-3-failed",
+    ),
+    pytest.param(
+        "Expected: 42\n  Actual: 0\nat Object.<anonymous>",
+        id="jest-assertion-expected-actual",
+    ),
+    pytest.param(
+        "AssertionError: expected 'a' to equal 'b'\n  at Context.<anonymous>",
+        id="raw-assertion-error",
+    ),
+    pytest.param(
+        "FAILED tests/integration/foo.test.js > should pass\n  reason: timeout",
+        id="bare-FAILED-with-context",
+    ),
+]
+
+
+@pytest.mark.parametrize("output", REAL_TEST_FAILURE_SAMPLES)
+def test_real_test_failure_still_detected(hook_module, logger, output):
+    """真實測試失敗輸出仍應被偵測為 TEST_FAILURE。"""
+    error_type, errors = hook_module._classify_errors(output, logger)
+    test_failures = [e for e in errors if e["type"] == "test_failure"]
+    assert test_failures, (
+        f"真實測試失敗未被偵測：{output!r}\n所有錯誤：{errors}"
+    )
+
+
+def test_zero_failed_pattern_not_match(hook_module, logger):
+    """『0 tests failed』不應觸發 N 個測試失敗 pattern。"""
+    output = "Result: 0 tests failed, 100 passed"
+    error_type, errors = hook_module._classify_errors(output, logger)
+    # 即使有 0 failed，N tests failed pattern 不應命中
+    count_failures = [e for e in errors if "個測試失敗" in e["description"]]
+    assert count_failures == [], (
+        f"『0 tests failed』被誤判為計數失敗：{count_failures}"
+    )
+
+
 def test_obsolete_ticket_track_create_removed(hook_module):
     """W3-066: TICKET_WRITE_COMMAND_KEYWORDS 不應再含已過時的 `ticket track create`。"""
     keywords = hook_module.TICKET_WRITE_COMMAND_KEYWORDS

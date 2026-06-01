@@ -34,6 +34,8 @@ class TestValidSectionsSchemaAlignment:
                 f"既有 section '{section}' 被誤刪"
             )
 
-    def test_total_eight_sections(self):
-        """擴增後總數為 8（原 7 + 重現實驗結果）"""
-        assert len(TrackAcceptanceMessages.VALID_SECTIONS) == 8
+    def test_total_ten_sections(self):
+        """W3-099 補入 'Task Summary' 與 'Completion Info' 後總數為 10
+        （W10-107 原為 8，本次補完成 IMP/ANA/DOC 三類型必填章節 SSOT 對齊）
+        """
+        assert len(TrackAcceptanceMessages.VALID_SECTIONS) == 10

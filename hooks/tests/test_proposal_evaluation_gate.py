@@ -145,9 +145,9 @@ class TestStrictPathConfirmed:
 # ============================================================================
 
 
-class TestLightExemptionRegression:
-    def test_confirmed_light_no_sections_still_allowed(self, hook_module, mock_logger):
-        """status=confirmed + level=light → 豁免章節（既有行為）"""
+class TestLightRemovedRegression:
+    def test_confirmed_light_now_blocked(self, hook_module, mock_logger):
+        """status=confirmed + level=light → 阻擋（light 已移除，W3-093）"""
         content = _make_prop_content(
             [
                 "id: PROP-993",
@@ -156,11 +156,12 @@ class TestLightExemptionRegression:
             ],
             body="light 級別，無章節。",
         )
-        should_block, _ = hook_module.check_prop_content(content, mock_logger)
-        assert should_block is False
+        should_block, reason = hook_module.check_prop_content(content, mock_logger)
+        assert should_block is True
+        assert "light" in reason
 
-    def test_approved_light_still_allowed(self, hook_module, mock_logger):
-        """status=approved + level=light → 豁免"""
+    def test_approved_light_now_blocked(self, hook_module, mock_logger):
+        """status=approved + level=light → 阻擋（light 已移除，W3-093）"""
         content = _make_prop_content(
             [
                 "id: PROP-992",
@@ -169,8 +170,9 @@ class TestLightExemptionRegression:
             ],
             body="",
         )
-        should_block, _ = hook_module.check_prop_content(content, mock_logger)
-        assert should_block is False
+        should_block, reason = hook_module.check_prop_content(content, mock_logger)
+        assert should_block is True
+        assert "light" in reason
 
 
 # ============================================================================

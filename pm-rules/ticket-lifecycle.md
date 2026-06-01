@@ -231,7 +231,7 @@ Acceptance 欄位表達的是 **complete 時的驗收條件**，而非 claim 時
 >
 > **Why**：claim 是狀態切換動作，不應綁全域測試副作用；同 wave 並行 claim 必然撞 Jest 暫存 / git stash 中間狀態。
 >
-> **Consequence**：原預設行為已造成多次 false test failure，PM 必須以 `--skip-verify` 繞過，反而失去 AC 漂移防護。新預設改為「不執行 verification」+「明示 --verify 啟用」，將決策權交回 PM。
+> **Consequence**：原預設行為已造成多次 false test failure。新預設改為「不執行 verification」+「明示 --verify 啟用」，將決策權交回 PM。如需單獨執行 AC 驗證（不 claim），W4-019 拆出 `ticket track verify <id>` 子命令補足查詢缺口。
 >
 > **Action**：日常 claim 直接 `ticket track claim <id>`；除錯/AC 漂移巡檢場景才用 `ticket track claim <id> --verify`。
 >
@@ -317,7 +317,7 @@ $ ticket track claim 0.18.0-W10-042 --verify   # W3-046：須 opt-in
 |------|------|
 | 預設（無 `--verify`） | 跳過 AC 驗證直接 claim，避免 PC-078 並行衝突（W3-046 後新預設） |
 | `--verify` 旗標 | 明示啟用 AC 驗證，保留除錯/AC 漂移巡檢場景（W3-046 新增） |
-| `--skip-verify` 旗標 | No-op，保留向後相容（W3-046 後失效；新預設已不執行驗證） |
+| `ticket track verify <id>` 子命令 | W4-019：單獨執行 AC 驗證，不變更 ticket 狀態（與 claim 解耦，補足查詢缺口） |
 | `--yes` 旗標 | 配合 `--verify` 使用，自動選 y 繼續；S4 仍拒絕（S4 優先於 --yes） |
 | 無可機器驗證 AC 的 Ticket | `--verify` 啟用時 CLI 輸出「無可驗證項」，不阻擋 claim |
 

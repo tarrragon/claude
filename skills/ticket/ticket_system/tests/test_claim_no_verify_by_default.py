@@ -1,13 +1,14 @@
 """W3-046: claim 預設不執行 AC verification（移除全套件副作用）。
 
 來源: W3-045 ANA Layer 3-b 策略 B 共識（linux / basil / bay 三視角）。
+W4-019: 移除 --skip-verify flag 與相關 backward-compat 測試（兩輪觀察期
+trigger 達成；外部依賴 = 0、runtime deprecation 觸發 = 0）。
 
 測試覆蓋:
 1. execute_claim 預設路徑（無 --verify 旗標）不呼叫 collect_ac_verifications /
    run_all_verifications，亦不執行 npm_test_pass 對應的 subprocess.Popen。
 2. --verify 旗標明示啟用時仍走 claim_with_verification。
-3. --skip-verify（既有逃生閥）仍可運作（向後相容）。
-4. complete 流程不依賴 subprocess 驗證（純 checkbox 檢查），確認同 wave 並行
+3. complete 流程不依賴 subprocess 驗證（純 checkbox 檢查），確認同 wave 並行
    complete 不會撞 npm test。
 """
 from __future__ import annotations
@@ -45,10 +46,9 @@ def stub_claim(monkeypatch):
 
 
 def _make_args(ticket_id: str = "0.0.0-W0-PENDING", **kwargs) -> argparse.Namespace:
-    """產生 execute_claim 期望的 argparse.Namespace。"""
+    """產生 execute_claim 期望的 argparse.Namespace（W4-019 後不含 skip_verify）。"""
     base = dict(
         ticket_id=ticket_id,
-        skip_verify=False,
         yes=False,
         verify=False,
         quiet=False,
@@ -127,10 +127,9 @@ def test_execute_claim_with_verify_flag_invokes_verification(monkeypatch):
     invoked = {"count": 0}
     direct_claim = {"count": 0}
 
-    def fake_claim_with_verification(self, ticket_id, skip_verify=False, auto_yes=False):
+    def fake_claim_with_verification(self, ticket_id, auto_yes=False):
         invoked["count"] += 1
         invoked["ticket_id"] = ticket_id
-        invoked["skip_verify"] = skip_verify
         invoked["auto_yes"] = auto_yes
         return 0
 
@@ -163,25 +162,20 @@ def test_execute_claim_with_verify_flag_invokes_verification(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Test 3: --skip-verify 向後相容（仍可運作；deprecation 警告允許但非必須）
+# Test 3 (W4-019 regression): --skip-verify 旗標已移除，傳入應引發 argparse 錯誤
 # ---------------------------------------------------------------------------
 
 
-def test_execute_claim_skip_verify_flag_still_works(monkeypatch, stub_claim):
-    """--skip-verify 仍可運作（既有逃生閥 / 向後相容）。
+def test_skip_verify_flag_removed_from_argparse():
+    """W4-019 regression：track.py argparse 不再接受 --skip-verify 旗標。"""
+    from ticket_system.commands import track as track_mod
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="operation")
+    track_mod._register_lifecycle_commands(subparsers)
 
-    新預設已不執行驗證，--skip-verify 變成 no-op 但不應報錯。
-    """
-    popen_mock = MagicMock(side_effect=AssertionError(
-        "--skip-verify 不應觸發 subprocess.Popen"
-    ))
-    monkeypatch.setattr(subprocess, "Popen", popen_mock)
-
-    args = _make_args(ticket_id="0.0.0-W0-PENDING", skip_verify=True)
-    rc = execute_claim(args, version="0.0.0")
-
-    assert rc == 0
-    assert stub_claim["count"] == 1
+    # claim 子命令不應再有 --skip-verify
+    with pytest.raises(SystemExit):
+        parser.parse_args(["claim", "0.0.0-W0-PENDING", "--skip-verify"])
 
 
 # ---------------------------------------------------------------------------

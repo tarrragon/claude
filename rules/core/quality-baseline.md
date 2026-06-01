@@ -38,6 +38,8 @@
 
 **邊界：測試綠燈不等於 Runtime 正確**：100% 通過是必要條件不是充分條件。修復「訊息系統 / 日誌系統 / 跨模組整合」類 bug 時，unit test 綠燈可能遮蔽 runtime 失效（mock 替代真實依賴 + 斷言不檢查訊息文字 + 動態語言靜默忽略多餘參數三層共振）。此類修復 acceptance 必含 runtime 層級驗證（chrome-devtools-mcp 實機 / integration 斷言訊息文字）。詳見 `.claude/error-patterns/process-compliance/PC-165-false-positive-fix-chain.md`（W1-105 / W1-106 / W1-108 事件鏈）。
 
+**邊界：少量綠燈不等於 always 綠燈**：race condition / 異步 / 環境敏感類問題的 baseline 取樣 N < 5 時，連續 GREEN 觀察可能是 30-40% flaky 環境下的幸運連勝。基於假 baseline 推導的後續決策鏈（修改 AC / 建 follow-up ticket / 判定 root cause）會連鎖崩塌。此類任務派發前 prompt 必須強制 N >= 5 取樣 + 紀錄 GREEN/RED 分佈；agent 回報「N 次 stable」且 N < 5 時 PM 不得採信。詳見 `.claude/error-patterns/process-compliance/PC-168-flaky-baseline-lucky-streak.md`（W4-005.1 二分定位實證，10/10 取樣推翻三次 PM 決策）。
+
 ### 規則 2：Phase 4 不可跳過
 
 **即使程式碼品質 A+，也必須完成 Phase 4 重構評估**
@@ -223,4 +225,4 @@ ANA Solution 章節含 IMP/DOC/ANA spawn 規劃表格時，規劃項目本身即
 
 ---
 
-**Last Updated**: 2026-05-28 | **Version**: 2.4.0 — 規則 1 加「邊界：測試綠燈不等於 Runtime 正確」路由指向 PC-165（W1-114 落地 W1-112 ANA Solution）。歷史 2.0–2.3.x 版見 git log。
+**Last Updated**: 2026-05-31 | **Version**: 2.5.0 — 規則 1 補「邊界：少量綠燈不等於 always 綠燈」路由指向 PC-168（W4-021 落地，W4-005.1 二分定位實證 + pm-quality-baseline-rule-7 四問升級）。歷史 2.0–2.4.x 版見 git log。

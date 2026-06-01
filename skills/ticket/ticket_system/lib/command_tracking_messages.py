@@ -157,7 +157,11 @@ class TrackAcceptanceMessages:
     # execute_append_log 中有效的區段清單
     # W10-107: 對齊 .claude/pm-rules/ticket-body-schema.md，補入 ANA 必填的
     # 「重現實驗結果」章節（PC-063），讓 ANA 執行者不再被迫寫到 Solution。
+    # W3-099 修正：W10-107 對齊時遺漏 'Task Summary' 與 'Completion Info' 兩個
+    # IMP/ANA/DOC 三類型必填章節，導致 complete 階段必須 Edit 直填 ticket md。
+    # 本次補完成 10 章節 SSOT 對齊（按 schema 章節順序排列）。
     VALID_SECTIONS = [
+        "Task Summary",
         "Problem Analysis",
         "Context Bundle",
         "重現實驗結果",
@@ -166,6 +170,7 @@ class TrackAcceptanceMessages:
         "Execution Log",
         "NeedsContext",
         "Exit Status",
+        "Completion Info",
     ]
 
     # execute_append_log 中的有效值提示前綴

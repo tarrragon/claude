@@ -1,3 +1,39 @@
+## [1.38.0] - 2026-06-01
+
+### Summary
+feat: 移除 --skip-verify flag + 拆 ticket track verify 子命令; feat: 擴 VALID_SECTIONS 加 Task Summary + Completion Info; feat: Phase 3 GREEN hook 訊息中性化 + Phase 4 評估 (+23 more)
+
+Changes: 6 feat, 2 refactor, 2 fix, 14 docs, 2 test
+
+- feat: 移除 --skip-verify flag + 拆 ticket track verify 子命令
+- feat: 擴 VALID_SECTIONS 加 Task Summary + Completion Info
+- feat: Phase 3 GREEN hook 訊息中性化 + Phase 4 評估
+- feat: dashboard 醒目標記 trigger-bound ticket
+- feat: saffron + agent-definition-standard 跨 ticket 物件操作禁令
+- feat: standalone --skip-verify 加 deprecation warning + AC2/AC3/AC4 評估
+- refactor: 移除 light evaluation_level enum ( 結論落地)
+- refactor: IMP-078 認知負擔重構（363→251 行 / 10→7 H2 / API SSOT 整併）
+- fix: post-test-hook 綠燈字面誤判修復
+- fix: worktree skill project_root 推導改用雙策略 fallback
+- docs: PC-166 補「情境因子 vs 根因」區分章節
+- docs: record merge interruption + --no-verify empty merge commit pattern (.3 incident)
+- docs: 建立 PC-168 flaky baseline lucky streak + quality-baseline 規則 1 邊界並列引用
+- docs: 建立 W4 session SOP 驗證 case study 並固化 8 case source data
+- docs: 新增「分析代理人 worktree 內無 commit ticket body」error pattern
+- docs: 補追 stale ticket cleanup 案例 + SOP
+- docs: Phase 4 評估結論 + load_top_ready docstring 小修
+- docs: 升級 PC-077 為 behavior-loop-details 派發決策矩陣
+- docs: Layer 2 審查修正 proposal-evaluation-gate.md
+- docs: IMP-075/076/077 補抽象層級分析章節
+- docs: IMP-078 + PC-165 並列關係雙向修訂（3 項）
+- docs: IMP-078 hot-fix（Rule 8 marker + bundle crypto + global.gc + no-restricted-imports）
+- docs: 新建 IMP-078 CE-Node 環境前提誤判 error-pattern
+- docs: PC-166 新增防護 D 區分 confabulation vs 異地真實執行
+- test: Phase 2 RED 新增 hook 訊息中性化測試
+- test: Phase 2 RED + spawn
+
+---
+
 ## [1.37.0] - 2026-05-29
 
 ### Summary

@@ -24,6 +24,20 @@ v0.18.0 觸發案例：
 
 PM claim 前跑 `npm test` 才發現 AC 已被達成，若無此警覺性，代理人會被派發去重做完成工作。
 
+v0.19.0 後續案例（2026-05-31 一次 session 收尾 3 個同模式 stale ticket）：
+
+| Ticket | AC | 建立 → claim | pending 天數 | 實際達成者 | 達成 commit |
+|--------|----|--------------|------------|----------|------------|
+| W4-013 | test_scenario_3_section_not_found 通過 | 2026-05-25 → 2026-05-31 | 6 天 | W3-084 順帶修復（fake_ticket 補 status: in_progress） | bc710aa9 (2026-05-29) |
+| W4-014 | test_table_format_renders_status_column 通過 | 2026-05-25 → 2026-05-31 | 6 天 | W3-084 同 commit（_fake_stats spike 改 _today 動態化） | bc710aa9 (2026-05-29) |
+| W4-011 | operation-result.test.js 2 個 toBeLessThan 移除 + 連跑 2 次穩定 | 2026-05-22 → 2026-05-31 | 9 天 | W1-095 批次清理（UC Error 20 檔 26 行 timing assertion） | ad438102 |
+
+三 ticket 共通模式：
+1. pre-existing 失敗/違規被另一個 ticket（修同類問題的 ANA 子任務）順帶/批次修復
+2. 該另一 ticket 的 commit message 已明示順帶範圍（W3-084: 「error_channel + hook_health 兩 pre-existing 測試失敗」；W1-095: 「UC Error 20 檔 26 行 timing assertion 違規」）
+3. 但 stale ticket 沒被 close，停留 pending 等待原派 agent 認領
+4. PM 接手時若不先 grep + git log 驗證，會派 agent 「重做已完成工作」
+
 ## 根因
 
 1. **AC 是靜態標記**：Ticket 的 `[ ]` 僅為 frontmatter 字串，無自動驗證機制
@@ -65,6 +79,18 @@ ticket track query {ticket-id}
 # 若 AC 可機器驗證，手動驗證一次
 npm test / npm run lint / 其他 AC 對應指令
 ```
+
+**stale ticket cleanup SOP（v0.19.0 案例落地）**：
+
+對 pre-existing failure / 修復類 stale ticket，依以下三步快速判定是否被外溢修復：
+
+| 步驟 | 指令 | 判定條件 |
+|------|------|---------|
+| 1 grep 目標 | `grep -n "<關鍵 token>" <target file>` | 若關鍵 token（如違規斷言 `toBeLessThan` 或 fixture 寫死值）已不在 → 進步驟 2 |
+| 2 git log 追溯 | `git log --since="<ticket create date>" --oneline -- <target file>` | 若有同期 commit touch 該檔且 message 含「pre-existing」「順帶」「批次」「修復」字樣 → 進步驟 3 |
+| 3 跑單測+全套件 | 對應 acceptance 指令連跑 N 次 | 確認穩定通過後走 PM bookkeeping 路徑（claim → fill body → check-acceptance → complete → metadata commit） |
+
+三步全通過 → PM 前台 bookkeeping（無需派 agent，無 src 變更）。任一步失敗 → 派原指派 agent 走實作流程。
 
 ### 系統層面（PROP-010 實作後自動化）
 

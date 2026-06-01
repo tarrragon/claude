@@ -354,25 +354,8 @@ class TestClaimWithVerification:
         assert rc == 1
         mock_claim.assert_not_called()
 
-    def test_h7_s5_skip_verify_bypasses(self, capsys):
-        """H7：--skip-verify → 不跑 subprocess，直接 claim。"""
-        lifecycle = self._lifecycle()
-        with patch.object(lifecycle, "claim", return_value=0) as mock_claim, \
-            patch(
-                "ticket_system.commands.lifecycle.collect_ac_verifications"
-            ) as mock_collect, \
-            patch(
-                "ticket_system.commands.lifecycle.run_all_verifications"
-            ) as mock_run:
-            rc = lifecycle.claim_with_verification(
-                "0.18.0-W5-002", skip_verify=True
-            )
-        assert rc == 0
-        mock_claim.assert_called_once()
-        mock_collect.assert_not_called()
-        mock_run.assert_not_called()
-        captured = capsys.readouterr()
-        assert "已跳過" in captured.out
+    # W4-019: H7（--skip-verify bypasses）已移除——flag 不再存在。
+    # 對應的 verify-only 路徑由 `ticket track verify` 子命令處理（與 claim 解耦）。
 
     def test_h8_s6_keyboard_interrupt_returns_130(self, capsys):
         """H8：S6 Ctrl-C → stderr 訊息 + return 130。"""
@@ -426,28 +409,9 @@ class TestClaimWithVerification:
         assert rc == 0
         mock_claim.assert_called_once()
 
-    def test_h10_flag1_skip_plus_yes_warns(self, capsys):
-        """H10：P2-flag1 --skip-verify + --yes → stderr warning + 跳過 + return 0。"""
-        lifecycle = self._lifecycle()
-        with patch.object(lifecycle, "claim", return_value=0) as mock_claim:
-            rc = lifecycle.claim_with_verification(
-                "0.18.0-W5-002", skip_verify=True, auto_yes=True
-            )
-        assert rc == 0
-        mock_claim.assert_called_once()
-        captured = capsys.readouterr()
-        assert "--yes 已被忽略" in captured.err
-        assert "已跳過" in captured.out
-
-    def test_h11_flag2_only_skip_no_warning(self, capsys):
-        """H11：P2-flag2 僅 --skip-verify → stderr 無 warning。"""
-        lifecycle = self._lifecycle()
-        with patch.object(lifecycle, "claim", return_value=0):
-            lifecycle.claim_with_verification(
-                "0.18.0-W5-002", skip_verify=True, auto_yes=False
-            )
-        captured = capsys.readouterr()
-        assert "--yes 已被忽略" not in captured.err
+    # W4-019: H10 / H11（--skip-verify + --yes / 僅 --skip-verify）已移除——
+    # --skip-verify flag 不再存在；對應雙旗標衝突分支已從 claim_with_verification
+    # 中拆除。
 
     def test_h12_flag3_only_yes_no_warning(self, capsys):
         """H12：P2-flag3 僅 --yes → stderr 無 flag 衝突 warning。"""
@@ -466,7 +430,7 @@ class TestClaimWithVerification:
                 return_value="/fake",
             ), patch("sys.stdin.isatty", return_value=True):
             lifecycle.claim_with_verification(
-                "0.18.0-W5-002", skip_verify=False, auto_yes=True
+                "0.18.0-W5-002", auto_yes=True
             )
         captured = capsys.readouterr()
         assert "--yes 已被忽略" not in captured.err
@@ -495,13 +459,13 @@ class TestErrorBoundaries:
         assert "AC 解析失敗" in captured.err
 
     def test_k3_non_tty_without_flags_rejects(self, capsys):
-        """K3：非 tty 無 --yes 無 --skip-verify → stderr 警告 + return 1。"""
+        """K3：非 tty 無 --yes → stderr 警告 + return 1（W4-019：--skip-verify 已移除）。"""
         lifecycle = TicketLifecycle(version="0.18.0")
         with patch.object(lifecycle, "claim") as mock_claim, patch(
             "sys.stdin.isatty", return_value=False
         ):
             rc = lifecycle.claim_with_verification(
-                "0.18.0-W5-002", skip_verify=False, auto_yes=False
+                "0.18.0-W5-002", auto_yes=False
             )
         assert rc == 1
         mock_claim.assert_not_called()

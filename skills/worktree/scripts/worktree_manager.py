@@ -45,10 +45,61 @@ except ImportError:
     )
     from messages import MergeMessages, CleanupMessages, CommonMessages, CreateMessages
 
-# 動態新增 .claude/lib 到 Python 路徑
-# 路徑層級：worktree_manager.py -> scripts -> worktree -> skills -> .claude -> <project_root>
-project_root = Path(__file__).resolve().parent.parent.parent.parent.parent
-sys.path.insert(0, str(project_root / ".claude" / "lib"))
+# 動態定位專案根目錄（W1-118 修復：方案 D 雙策略 fallback）
+#
+# 背景：worktree skill 安裝為 uv tool 後，__file__ 位於 uv tool venv，
+#       原本的 `Path(__file__).parent * 5` 推導會指向 uv tool root 而非專案根目錄，
+#       導致 git_utils 找不到、所有 git 操作失敗、誤判「基礎分支不存在 main」。
+#
+# 策略：
+#   1. 優先讀 CLAUDE_PROJECT_DIR 環境變數（Claude Code 慣例）
+#   2. Fallback：subprocess git rev-parse --show-toplevel 從 cwd 上溯
+#   3. 雙雙失敗才報錯（保留明確錯誤訊息）
+def _resolve_project_root() -> Path:
+    """雙策略定位專案根目錄。
+
+    Returns:
+        Path: 專案根目錄絕對路徑
+
+    Raises:
+        RuntimeError: 環境變數未設且 git rev-parse 失敗
+    """
+    # 策略 1：CLAUDE_PROJECT_DIR 環境變數
+    env_root = os.environ.get("CLAUDE_PROJECT_DIR")
+    if env_root:
+        candidate = Path(env_root).resolve()
+        if candidate.exists():
+            return candidate
+
+    # 策略 2：git rev-parse --show-toplevel 從 cwd 上溯
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            cwd=os.getcwd(),
+            timeout=5,
+        )
+        if result.returncode == 0:
+            toplevel = result.stdout.strip()
+            if toplevel:
+                return Path(toplevel).resolve()
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        print(f"[Warning] git rev-parse --show-toplevel 失敗: {e}", file=sys.stderr)
+
+    raise RuntimeError(
+        "無法定位專案根目錄。請設定環境變數 CLAUDE_PROJECT_DIR，"
+        "或在 git 工作目錄中執行 worktree 命令。"
+    )
+
+
+try:
+    project_root = _resolve_project_root()
+    sys.path.insert(0, str(project_root / ".claude" / "lib"))
+except RuntimeError as e:
+    print(f"[Warning] {e}", file=sys.stderr)
+    print("[Warning] Worktree SKILL may not function properly", file=sys.stderr)
+    project_root = Path(os.getcwd())  # 保底，後續 git_utils import 也會 fallback
 
 try:
     from git_utils import (

@@ -98,10 +98,10 @@ class TestW3_001RegressionACDrift:
     def _claim_args(self) -> argparse.Namespace:
         return argparse.Namespace(
             ticket_id=_W3_001_ID,
-            skip_verify=False,
             yes=False,
             # W3-046: 預設不執行 AC verification；本回歸測試對應 W11-001.1
             # 「AC 漂移自動偵測」屬除錯場景，須明示 --verify 才啟用。
+            # W4-019: --skip-verify 旗標已移除（兩輪觀察期 trigger 達成）。
             verify=True,
         )
 

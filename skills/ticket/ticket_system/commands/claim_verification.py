@@ -485,10 +485,10 @@ def collect_ac_verifications(
 # 互動式 prompt 文字
 _PROMPT_TEXT = "continue claim? [y] continue / [n] cancel (default: y): "
 
-# 非 tty 環境警告訊息
+# 非 tty 環境警告訊息（W4-019：--skip-verify 已移除）
 _NON_TTY_WARNING = (
     "[AC verification] non-interactive environment, cancelled; "
-    "use --yes or --skip-verify to override"
+    "use --yes to override"
 )
 
 # 無效輸入最大重試次數
