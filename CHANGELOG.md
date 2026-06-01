@@ -1,3 +1,15 @@
+## [1.38.1] - 2026-06-01
+
+### Summary
+fix: 修復 command-entrance-gate-hook 三層誤判（組合 F）; fix: migrate 反向引用更新保留被引用 ticket body
+
+Changes: 2 fix
+
+- fix: 修復 command-entrance-gate-hook 三層誤判（組合 F）
+- fix: migrate 反向引用更新保留被引用 ticket body
+
+---
+
 ## [1.38.0] - 2026-06-01
 
 ### Summary

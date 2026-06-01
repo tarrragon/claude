@@ -224,7 +224,11 @@ def _load_ticket_from_path(ticket_path: Path) -> Optional[Dict[str, Any]]:
         with open(ticket_path, "r", encoding="utf-8") as f:
             content = f.read()
         # parse_frontmatter 返回 (frontmatter_dict, body_text)
-        ticket, _ = parse_frontmatter(content)
+        # W4-025：保留 body 至 ticket["_body"]，否則 save_ticket 寫回時
+        # body 預設空字串 → 截斷被引用 ticket 的整個 Execution Log（資料損壞）
+        ticket, body = parse_frontmatter(content)
+        if ticket:
+            ticket["_body"] = body
         return ticket if ticket else None
     except Exception:
         # 捕獲所有異常，包括 YAMLParseError 和其他解析錯誤

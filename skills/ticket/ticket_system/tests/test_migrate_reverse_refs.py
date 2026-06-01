@@ -70,11 +70,17 @@ def _patch_get_project_root(monkeypatch, tmp_path: Path) -> None:
         pass
 
 
-def _write_ticket(tickets_dir: Path, ticket_id: str, extra_fields: dict) -> Path:
+def _write_ticket(
+    tickets_dir: Path, ticket_id: str, extra_fields: dict, body: str = "# Body"
+) -> Path:
     """寫入最小化 Ticket 檔案（含 frontmatter + body）。
 
     使用 yaml.safe_dump 序列化 frontmatter，自然支援純值 / list of string /
     list of dict 三種欄位形式，無需手寫分支邏輯。
+
+    Args:
+        body: ticket body（frontmatter 後的內容）；預設 "# Body"。
+              W4-025 回歸測試傳入非空多行 body 驗證反向引用更新後完整保留。
     """
     path = tickets_dir / f"{ticket_id}.md"
 
@@ -89,10 +95,18 @@ def _write_ticket(tickets_dir: Path, ticket_id: str, extra_fields: dict) -> Path
     content = (
         "---\n"
         + yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True)
-        + "---\n\n# Body"
+        + "---\n\n"
+        + body
     )
     path.write_text(content, encoding="utf-8")
     return path
+
+
+def _read_body(path: Path) -> str:
+    """讀取 ticket body（frontmatter 後的內容）。"""
+    content = path.read_text(encoding="utf-8")
+    _, body = parse_frontmatter(content)
+    return body
 
 
 def _read_frontmatter(path: Path) -> dict:
@@ -318,6 +332,61 @@ class TestAC2_ExternalReferencesUpdated:
         assert fm["source_ticket"] == new_id
         assert fm["spawned_tickets"] == [new_id]
         assert updated == 1
+
+
+# ---------------------------------------------------------------------------
+# W4-025：反向引用更新後被引用 ticket 的 body 完整保留（資料損壞回歸）
+# ---------------------------------------------------------------------------
+
+
+class TestW4_025_BodyPreservedOnReverseRefUpdate:
+    """W4-025：`_update_cross_references` 更新被引用 ticket 的 frontmatter 時，
+    禁止截斷其 body（Execution Log）。
+
+    根因：migrate 私有 loader `_load_ticket_from_path` 丟棄 body，未設
+    `ticket["_body"]`；`save_ticket` 在 `_body` 缺失時預設空字串 → body 全毀。
+    （IMP-061 / ARCH-020 家族反向引用變體，資料損壞級）
+    """
+
+    def test_body_preserved_verbatim_after_reverse_ref_update(
+        self, project_with_tickets
+    ):
+        """
+        Given: 被引用 ticket E.spawned_tickets = [old_id]，且含非空多行 body
+        When: 對 old_id → new_id 呼叫 _update_cross_references
+        Then: (a) E.spawned_tickets 已更新為 [new_id]
+              (b) E 的 body 逐字完整保留（含多行 Execution Log）
+        """
+
+        _, tickets_dir = project_with_tickets
+        old_id, new_id = "0.18.0-W5-001", "0.18.0-W11-001"
+
+        body = (
+            "# Execution Log\n\n"
+            "## Task Summary\n\n"
+            "這是一段非空 body，反向引用更新後必須逐字保留。\n\n"
+            "## Problem Analysis\n\n"
+            "多行內容第二段，含中文與符號 `code` 及 --- 分隔。\n\n"
+            "---\n\n"
+            "## Solution\n\n"
+            "最後一段。\n"
+        )
+
+        path = _write_ticket(
+            tickets_dir, "0.18.0-W11-EXT", {"spawned_tickets": [old_id]}, body=body
+        )
+
+        updated = _update_cross_references(old_id, new_id)
+
+        # (a) 引用 ID 已更新
+        fm = _read_frontmatter(path)
+        assert fm["spawned_tickets"] == [new_id]
+        assert updated == 1
+
+        # (b) body 完整保留（與 parse_frontmatter 既有 round-trip 契約對齊：
+        #     parser.py:155 對 body 執行 .strip()，故比對 body.strip()。
+        #     資料損壞 bug 會使讀回 body 為空字串 ''，此斷言可明確攔截）
+        assert _read_body(path) == body.strip()
 
 
 # ---------------------------------------------------------------------------
