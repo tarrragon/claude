@@ -1,3 +1,14 @@
+## [1.39.2] - 2026-06-03
+
+### Summary
+chore: 更新 sync-state（sync-push bookkeeping）
+
+Changes: 1 chore
+
+- chore: 更新 sync-state（sync-push bookkeeping）
+
+---
+
 ## [1.39.1] - 2026-06-03
 
 ### Summary
