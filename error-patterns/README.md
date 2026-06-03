@@ -354,6 +354,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-105 | PM 對 SKILL CLI 語法的 autopilot 假設（同 session 多次撞 hook 警告後仍嘗試相似變體） | 中 | v0.18.0 |
 | PC-154 | 派發 worktree agent 前未驗證兩項前置條件（worktree base 完整性 + ticket 已 claim） | 中 | v0.19.0 |
 | PC-162 | Ticket 描述含過時環境狀態 + schema 註解 PC 引用語意錯誤 | 中 | v0.19.0 |
+| PC-165 | AUQ 派發類選項未先驗 blockedBy readiness（假選項） | 中 | v0.31.1 |
 
 ---
 

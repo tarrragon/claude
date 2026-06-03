@@ -1,3 +1,16 @@
+## [1.39.1] - 2026-06-03
+
+### Summary
+fix: app shell 新增資料管理導航入口; chore: sync-pull .claude framework 更新（claude.git）; chore: 移除誤入的 worktree gitlink
+
+Changes: 1 fix, 2 chore
+
+- fix: app shell 新增資料管理導航入口
+- chore: sync-pull .claude framework 更新（claude.git）
+- chore: 移除誤入的 worktree gitlink
+
+---
+
 ## [1.39.0] - 2026-06-03
 
 ### Summary
