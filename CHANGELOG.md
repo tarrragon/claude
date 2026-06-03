@@ -1,3 +1,27 @@
+## [1.40.0] - 2026-06-03
+
+### Summary
+feat: session-start hook gitignore↔manifest 交叉驗證; feat: sync-pull import-time PC 編號撞號偵測與自動重編號; feat: push git-archive 改造（C1+K）取代磁碟 copy_filtered (+11 more)
+
+Changes: 5 feat, 1 refactor, 5 fix, 3 docs
+
+- feat: session-start hook gitignore↔manifest 交叉驗證
+- feat: sync-pull import-time PC 編號撞號偵測與自動重編號
+- feat: push git-archive 改造（C1+K）取代磁碟 copy_filtered
+- feat: pull 三方合併改造（A3+L+M）取代全量 overlay
+- feat: sync-state 加單一 last_synced_base_sha + status 顯示
+- refactor: 建 sync 排除分類 SSOT manifest，根治 push/status 漂移
+- fix: pull robustness — preserve fail-loud (H) + 備份排除工具產物 (Q)
+- fix: exec-bit 還原遞迴覆蓋 skills/*/hooks/（缺陷 G）
+- fix: push clean-check 改 should_exclude 過濾 porcelain + .gitignore 補齊漂移項
+- fix: push 機密洩漏防護 abort gitignored/untracked .claude 檔
+- fix: 修復 track list priority 排序 datetime.date vs str 混型 TypeError
+- docs: D2 PC 編號區段 policy + sync README base snapshot 更新
+- docs: 修正 README-subtree-sync.md 與程式碼對齊三處矛盾
+- docs: 新增 PC-171（上游 PC-165 重編號避免本地撞號）
+
+---
+
 ## [1.39.2] - 2026-06-03
 
 ### Summary

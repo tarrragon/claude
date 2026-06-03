@@ -33,6 +33,7 @@ if __name__ == "__main__":
 
 
 import argparse
+import datetime
 import re
 import sys
 from pathlib import Path
@@ -627,7 +628,15 @@ def _sort_tickets_by_priority(tickets: List[Dict[str, Any]]) -> List[Dict[str, A
     """
     def _key(t: Dict[str, Any]):
         p_norm = _normalize_priority(t.get("priority"))
-        created = t.get("created") or ""
+        # created 正規化：YAML unquoted date 會被解析為 datetime.date，
+        # quoted / 缺欄位則為 str。混型在同一 p_norm 下比較 tuple 第 2 元素時
+        # 拋 TypeError（date vs str 不可比較），故統一轉為 ISO 字串。
+        # datetime.datetime 為 datetime.date 子類，isinstance 一併涵蓋。
+        raw = t.get("created")
+        if isinstance(raw, datetime.date):
+            created = raw.isoformat()
+        else:
+            created = str(raw) if raw else ""
         tid = t.get("id") or t.get("ticket_id") or ""
         return (p_norm, created, tid)
 

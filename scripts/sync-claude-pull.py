@@ -25,6 +25,7 @@ Safety net:
 """
 
 import filecmp
+import json
 import os
 import shutil
 import subprocess
@@ -38,6 +39,12 @@ try:
 except ImportError:
     yaml = None
 
+# 排除分類與 should_exclude 由 SSOT manifest 統一提供（ARCH-020，W1-027）。
+# pull 端的三方合併用 should_exclude 過濾 LOCAL_ONLY / 憑證檔，避免本地 runtime
+# state 被遠端 delta 蓋掉，與 push/status 端共用同一判定避免漂移。
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks" / "lib"))
+from sync_exclude_manifest import should_exclude  # noqa: E402
+
 # ============================================================================
 # Constants
 # ============================================================================
@@ -45,7 +52,16 @@ except ImportError:
 REPO_URL = "https://github.com/tarrragon/claude.git"
 
 # Git clone timeout protection (in seconds)
-GIT_CLONE_TIMEOUT_SECONDS = 120
+# L1：三方合併需完整 git 歷史（git diff BASE HEAD / git show BASE:path），
+# shallow clone 取不到 base commit；改用較寬的 300s timeout 容納 full / blob:none clone。
+GIT_CLONE_TIMEOUT_SECONDS = 300
+
+# 同步狀態檔與 base SHA 欄位（與 status 端 SSOT 一致，W1-025 schema）。
+SYNC_STATE_FILENAME = ".sync-state.json"
+BASE_SHA_FIELD = "last_synced_base_sha"
+
+# 三方合併衝突暫存目錄（M3：local-only，不推送）。
+SYNC_CONFLICTS_DIR = ".sync-conflicts"
 GIT_HTTP_LOW_SPEED_LIMIT_BYTES = "1000"
 GIT_HTTP_LOW_SPEED_TIME_SECONDS = "30"
 
@@ -91,22 +107,57 @@ LOCAL_ONLY = frozenset({
 # 同步時跳過的所有路徑（合併使用）
 SKIP_DURING_SYNC = REMOTE_ONLY | LOCAL_ONLY
 
-# 同步後強制還原 executable bit 的子目錄（convention-based safety net）
+# Q（0.19.1-W1-021）：備份 .claude 時排除的工具產物，避免備份 bloat / 變慢
+# / 遇 broken symlink 拋例外。主同步本身已排除這些，備份須一致。
+BACKUP_IGNORE_PATTERNS = ("__pycache__", ".pytest_cache", ".venv")
+
+# 同步後強制還原 executable bit 的目錄名（convention-based safety net）
 # 上游 repo 的 mode 可能已損壞（push 端未保留 100755），
 # pull 後需對這些目錄下的 .py 強制 chmod +x 確保 Hook 可執行。
-EXECUTABLE_PY_SUBDIRS = ("hooks",)
+# 注意：以「目錄名」遞迴比對，覆蓋頂層 .claude/hooks/ 與 W10-092 遷移後的
+# skills/<name>/hooks/（缺陷 G）。
+EXECUTABLE_HOOK_DIR_NAMES = ("hooks",)
+
+
+def iter_executable_hook_dirs(root: Path):
+    """遞迴 yield root 下所有名稱屬 EXECUTABLE_HOOK_DIR_NAMES 的目錄。
+
+    取代舊 `root / subdir` 單層查找，使 skills/<name>/hooks/ 也被涵蓋。
+    跳過 symlink 目錄避免循環。
+
+    參數:
+        root: 起始掃描根目錄（.claude 或其暫存樹）
+
+    產出:
+        Path: 每個符合名稱的目錄
+    """
+    if not root.is_dir():
+        return
+    for dirpath, dirnames, _filenames in os.walk(root):
+        # 跳過 symlink 指向的子目錄（os.walk 預設 followlinks=False，已安全）
+        for name in dirnames:
+            if name in EXECUTABLE_HOOK_DIR_NAMES:
+                yield Path(dirpath) / name
 
 
 def load_preserve_list(claude_dir: Path) -> set[str]:
     """讀取 sync-preserve.yaml 中的本地特化檔案清單。
 
-    若檔案不存在或無法解析，回傳空集合（向下相容）。
+    若檔案不存在，回傳空集合（合法情境：專案未定義 preserve 清單）。
+    若檔案存在但解析失敗，fail-loud（stderr 警告 + raise），不靜默回空集合。
+
+    H（0.19.1-W1-021）：靜默回空集合會關閉全部 preserve 保護，導致本地
+    特化檔案（settings.local.json 等）被遠端覆蓋。違反 quality-baseline
+    規則 4（禁止靜默失敗），故 malformed preserve 改為 fail-loud。
 
     參數:
         claude_dir: .claude 目錄路徑
 
     傳回:
         set[str]: 需要保留的相對路徑集合（相對於 .claude/）
+
+    例外:
+        Exception: sync-preserve.yaml 存在但無法解析時拋出（fail-loud）。
     """
     preserve_file = claude_dir / "sync-preserve.yaml"
     if not preserve_file.exists():
@@ -118,11 +169,26 @@ def load_preserve_list(claude_dir: Path) -> set[str]:
     if yaml is not None:
         try:
             data = yaml.safe_load(content)
-            if isinstance(data, dict) and isinstance(data.get("preserve"), list):
-                return set(data["preserve"])
-        except Exception:
-            pass
-        return set()
+        except Exception as exc:
+            # fail-loud：雙通道可觀測性（stderr + raise），禁止靜默回空集合
+            sys.stderr.write(
+                f"[sync-pull] preserve 清單解析失敗，sync 中止以避免關閉全部 "
+                f"preserve 保護: {preserve_file}: {exc}\n"
+            )
+            raise
+        if isinstance(data, dict) and isinstance(data.get("preserve"), list):
+            return set(data["preserve"])
+        # 結構不符（非 dict 或 preserve 非 list）：可能 YAML 合法但格式錯誤
+        if data is None:
+            return set()
+        sys.stderr.write(
+            f"[sync-pull] preserve 清單格式錯誤（預期 dict 含 preserve list）"
+            f"，sync 中止以避免關閉全部 preserve 保護: {preserve_file}\n"
+        )
+        raise ValueError(
+            f"sync-preserve.yaml 格式錯誤：預期 'preserve:' 為 list，"
+            f"實際得到 {type(data).__name__}"
+        )
 
     # 簡易 fallback 解析：讀取 "- path" 格式的行
     paths: set[str] = set()
@@ -238,8 +304,10 @@ def check_uncommitted_changes(project_root: Path) -> None:
 def clone_repo(temp_dir: Path) -> None:
     """從遠端 repo 克隆最新版本到臨時目錄。
 
-    使用淺層克隆（--depth 1）並設定超時保護和低速限制。
-    若克隆失敗則輸出錯誤訊息並終止程式。
+    L1：三方合併需要 base commit 可達（git diff BASE HEAD / git show BASE:path），
+    淺層 clone（--depth 1）取不到歷史。改用 --filter=blob:none 的 partial clone：
+    保留完整 commit graph（base commit 可達），blob 按需 lazy fetch，兼顧速度與可達性。
+    若 partial clone 不被遠端支援，降級為 full clone。timeout 拉寬至 300s。
 
     參數:
         temp_dir: 臨時目錄路徑，克隆內容將放置於此
@@ -252,16 +320,269 @@ def clone_repo(temp_dir: Path) -> None:
     env["GIT_HTTP_LOW_SPEED_LIMIT"] = GIT_HTTP_LOW_SPEED_LIMIT_BYTES
     env["GIT_HTTP_LOW_SPEED_TIME"] = GIT_HTTP_LOW_SPEED_TIME_SECONDS
 
+    # 先嘗試 blob:none partial clone（保留 commit graph，blob lazy fetch）
     result = subprocess.run(
-        ["git", "clone", "--depth", "1", REPO_URL, str(temp_dir)],
+        ["git", "clone", "--filter=blob:none", REPO_URL, str(temp_dir)],
         capture_output=True,
         text=True,
         env=env,
         timeout=GIT_CLONE_TIMEOUT_SECONDS,
     )
     if result.returncode != 0:
-        print_color(f"git clone 失敗: {result.stderr}", "red")
-        sys.exit(1)
+        # 降級為 full clone（partial clone 不被遠端支援時）
+        print_color("   partial clone 失敗，降級為 full clone...", "yellow")
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        result = subprocess.run(
+            ["git", "clone", REPO_URL, str(temp_dir)],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=GIT_CLONE_TIMEOUT_SECONDS,
+        )
+        if result.returncode != 0:
+            print_color(f"git clone 失敗: {result.stderr}", "red")
+            sys.exit(1)
+
+
+# ============================================================================
+# 三方合併核心（A3+L+M）：base snapshot delta + 逐檔三方合併 + 原子套用
+# ============================================================================
+
+
+def read_base_sha(claude_dir: Path) -> str | None:
+    """讀取 .sync-state.json 中的 last_synced_base_sha（W1-025 schema）。
+
+    無檔案 / 無欄位 / 解析失敗皆回傳 None（向後相容：觸發全量 overlay fallback）。
+
+    參數:
+        claude_dir: .claude 目錄路徑
+
+    傳回:
+        str | None: 上次同步的上游 base commit SHA，無則 None
+    """
+    state_file = claude_dir / SYNC_STATE_FILENAME
+    if not state_file.exists():
+        return None
+    try:
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    sha = data.get(BASE_SHA_FIELD)
+    return sha if isinstance(sha, str) and sha else None
+
+
+def write_base_sha(claude_dir: Path, base_sha: str) -> None:
+    """同步成功後，將上游 HEAD SHA 寫入 .sync-state.json 的 last_synced_base_sha。
+
+    保留既有欄位（如 last_push_hash），僅覆寫 base SHA 單一欄位（H1：禁雙欄位）。
+
+    參數:
+        claude_dir: .claude 目錄路徑
+        base_sha: 本次同步上游 HEAD 的 commit SHA
+    """
+    state_file = claude_dir / SYNC_STATE_FILENAME
+    data: dict = {}
+    if state_file.exists():
+        try:
+            data = json.loads(state_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            data = {}
+    data[BASE_SHA_FIELD] = base_sha
+    state_file.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def is_base_reachable(temp_dir: Path, base_sha: str) -> bool:
+    """驗證 base_sha 在上游 clone 中可達為 commit 物件（H4）。
+
+    用 git cat-file -e <sha>^{commit}：物件存在且可解析為 commit 才回 True。
+    不可達（上游 force-push / GC / partial clone 未抓到）回 False，呼叫端降級全量 overlay。
+
+    參數:
+        temp_dir: 上游 repo clone 路徑
+        base_sha: 待驗證的 base commit SHA
+
+    傳回:
+        bool: base commit 可達為 True
+    """
+    if not base_sha:
+        return False
+    result = run_git(
+        ["cat-file", "-e", f"{base_sha}^{{commit}}"], cwd=str(temp_dir)
+    )
+    return result.returncode == 0
+
+
+def compute_upstream_delta(temp_dir: Path, base_sha: str) -> dict[str, str]:
+    """計算上游從 base_sha 到 HEAD 的檔案變更 delta（H3）。
+
+    用 git diff --name-status --no-renames base HEAD：
+      - --no-renames 使 rename 退化為 D(舊路徑) + A(新路徑)，避免 rename 偵測的
+        路徑對應複雜度，三方合併端只需處理 A/M/D 三種狀態。
+      - 輸出每行格式 "<status>\\t<path>"，以 split('\\t') 解析並斷言欄位數，
+        防止含空白路徑被空白切割誤判。
+
+    參數:
+        temp_dir: 上游 repo clone 路徑
+        base_sha: base commit SHA
+
+    傳回:
+        dict[str, str]: {相對 repo root 的路徑: 狀態字母}，狀態 ∈ {A, M, D}
+    """
+    result = run_git(
+        ["diff", "--name-status", "--no-renames", base_sha, "HEAD"],
+        cwd=str(temp_dir),
+    )
+    delta: dict[str, str] = {}
+    if result.returncode != 0:
+        return delta
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        fields = line.split("\t")
+        # --no-renames 保證恰為 [status, path] 兩欄（無 rename 的 status\told\tnew）
+        assert len(fields) == 2, f"非預期的 diff 行格式（含 rename？）: {line!r}"
+        status, path = fields[0].strip(), fields[1].strip()
+        # 只取狀態首字母（A/M/D），忽略 score 後綴
+        delta[path] = status[:1]
+    return delta
+
+
+def _read_upstream_blob(temp_dir: Path, sha: str, rel_path: str) -> bytes | None:
+    """讀取上游 repo 在 sha 版本下指定路徑的檔案內容（git show sha:path）。
+
+    路徑不存在於該版本時回 None（例如 A 狀態檔在 base 無內容）。
+
+    參數:
+        temp_dir: 上游 repo clone 路徑
+        sha: commit SHA
+        rel_path: 相對 repo root 的路徑
+
+    傳回:
+        bytes | None: 檔案內容，不存在回 None
+    """
+    result = subprocess.run(
+        ["git", "show", f"{sha}:{rel_path}"],
+        cwd=str(temp_dir),
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def three_way_merge_file(
+    base_content: bytes | None,
+    local_path: Path | None,
+    upstream_path: Path | None,
+    local_deleted: bool = False,
+) -> tuple[bytes | None, bool]:
+    """對單一檔案執行三方合併。
+
+    回傳 (merged_content, conflict)：
+      - merged_content is None 表示「此檔不應寫入本地」（本地刪除優先保留）
+      - conflict True 表示 local 與 upstream 各自修改同一處，需人工處理
+
+    合併規則：
+      - 本地已刪除（local_deleted）：保留刪除，回 (None, False)（W10-092 遷移天然保留）
+      - upstream 新增（base 無、local 無）：直接採 upstream
+      - 三方齊備：用 git merge-file 做標準三方合併，衝突回 (..., True)
+      - 純二進位差異無法 merge 時退化為衝突標記
+
+    參數:
+        base_content: base 版本內容（None 表 base 無此檔）
+        local_path: 本地檔案路徑（None 表本地無此檔）
+        upstream_path: 上游檔案路徑（None 表上游刪除此檔）
+        local_deleted: 本地是否已主動刪除此檔
+
+    傳回:
+        tuple[bytes | None, bool]: (合併後內容或 None, 是否衝突)
+    """
+    # 本地刪除優先：不論上游如何，保留本地刪除
+    if local_deleted:
+        return None, False
+
+    upstream_content = (
+        upstream_path.read_bytes() if upstream_path and upstream_path.exists() else None
+    )
+    local_content = (
+        local_path.read_bytes() if local_path and local_path.exists() else None
+    )
+
+    # upstream 刪除此檔
+    if upstream_content is None:
+        # 上游刪除：若本地未修改（local == base）則跟著刪，否則保留本地
+        if local_content is None or local_content == base_content:
+            return None, False
+        return local_content, False
+
+    # 本地無此檔（upstream 新增）→ 直接採 upstream
+    if local_content is None:
+        return upstream_content, False
+
+    # 本地與 upstream 內容相同 → 無需合併
+    if local_content == upstream_content:
+        return upstream_content, False
+
+    # base 無此檔但 local/upstream 皆有且不同 → add/add 衝突
+    if base_content is None:
+        return upstream_content, True
+
+    # local 未改（== base）→ 採 upstream
+    if local_content == base_content:
+        return upstream_content, False
+
+    # upstream 未改（== base）→ 採 local（理論上不會進到此函式，防禦性處理）
+    if upstream_content == base_content:
+        return local_content, False
+
+    # 三方皆不同 → git merge-file 標準三方合併
+    return _git_merge_three_files(base_content, local_content, upstream_content)
+
+
+def _git_merge_three_files(
+    base_content: bytes, local_content: bytes, upstream_content: bytes
+) -> tuple[bytes | None, bool]:
+    """用 git merge-file 對三份內容做三方合併，回 (merged, conflict)。"""
+    with tempfile.TemporaryDirectory(prefix="claude-merge-") as td:
+        tdir = Path(td)
+        local_f = tdir / "local"
+        base_f = tdir / "base"
+        upstream_f = tdir / "upstream"
+        local_f.write_bytes(local_content)
+        base_f.write_bytes(base_content)
+        upstream_f.write_bytes(upstream_content)
+        # git merge-file <current> <base> <other>；結果寫回 <current>
+        result = subprocess.run(
+            ["git", "merge-file", "-p", str(local_f), str(base_f), str(upstream_f)],
+            capture_output=True,
+        )
+        # returncode: 0 = 乾淨合併；>0 = 衝突數；<0 = 錯誤
+        merged = result.stdout
+        conflict = result.returncode != 0
+        return merged, conflict
+
+
+def should_use_full_overlay(claude_dir: Path, base_reachable: bool) -> bool:
+    """判定是否走全量 overlay fallback（H4 向後相容）。
+
+    當無 base SHA 或 base 不可達時，無法做三方合併 → 走舊版全量 overlay 路徑。
+
+    參數:
+        claude_dir: .claude 目錄路徑
+        base_reachable: base commit 是否在上游 clone 可達
+
+    傳回:
+        bool: True 表應走全量 overlay；False 表可走三方合併
+    """
+    base_sha = read_base_sha(claude_dir)
+    if base_sha is None:
+        return True
+    return not base_reachable
 
 
 def _files_differ(src: Path, dst: Path) -> bool:
@@ -347,14 +668,15 @@ def sync_directory(
 
 
 def restore_executable_bits(claude_dir: Path) -> int:
-    """對 .claude/hooks/ 下所有 .py 檔案強制加入 executable bit。
+    """對所有 hooks/ 目錄下的 .py 檔案強制加入 executable bit。
 
     背景：上游 tarrragon/claude.git 的 mode 已損壞（Python 檔案多為 100644），
     shutil.copy2 雖保留來源 mode，但來源本身就錯。Hook 系統（Stop、SessionStart 等）
     需要檔案有 +x 才能由 shell 直接執行，否則 Permission denied。
 
-    本函式作 convention-based safety net：EXECUTABLE_PY_SUBDIRS 列出的子目錄下
-    所有 .py 無條件加 +x（u/g/o 均加），獨立於上游 mode 狀態。
+    本函式作 convention-based safety net：遞迴掃描 claude_dir 下所有名為 hooks/ 的
+    目錄（頂層 .claude/hooks/ 與 W10-092 遷移後的 skills/<name>/hooks/，缺陷 G），
+    對其下所有 .py 無條件加 +x（u/g/o 均加），獨立於上游 mode 狀態。
 
     不處理 .claude/scripts/ 下檔案，因該目錄有 644/755 混合（如 sync 腳本本身），
     精細處理屬另一範疇。
@@ -366,10 +688,7 @@ def restore_executable_bits(claude_dir: Path) -> int:
         int: 實際變更 mode 的檔案數（已是可執行者不計）
     """
     count = 0
-    for subdir in EXECUTABLE_PY_SUBDIRS:
-        target_dir = claude_dir / subdir
-        if not target_dir.is_dir():
-            continue
+    for target_dir in iter_executable_hook_dirs(claude_dir):
         for py_file in target_dir.rglob("*.py"):
             if not py_file.is_file():
                 continue
@@ -460,6 +779,405 @@ def cleanup_stale_files(
     return removed
 
 
+def _ensure_conflicts_dir(claude_dir: Path) -> Path:
+    """建立 .sync-conflicts/ 目錄與 .gitignore（M3：local-only，不推送）。
+
+    .gitignore 內容 `*`：整個衝突目錄不納入版控也不被 sync 推送
+    （目錄名 .sync-conflicts 非 LOCAL_ONLY 段，但內容皆為衝突暫存，靠 .gitignore 隔離）。
+
+    傳回:
+        Path: .sync-conflicts/ 目錄路徑
+    """
+    conflicts_dir = claude_dir / SYNC_CONFLICTS_DIR
+    conflicts_dir.mkdir(parents=True, exist_ok=True)
+    gitignore = conflicts_dir / ".gitignore"
+    if not gitignore.exists():
+        gitignore.write_text("*\n", encoding="utf-8")
+    return conflicts_dir
+
+
+def _rel_under_claude(repo_rel_path: str) -> str | None:
+    """將上游 repo root 相對路徑轉為 .claude/ 內相對路徑。
+
+    上游獨立 repo 的 root 直接對應本地 .claude/（如 repo 的 "rules/x.md" →
+    本地 ".claude/rules/x.md"）。repo root 的 REMOTE_ONLY 項（project-templates、
+    .git）不屬 .claude/ 同步範疇，由 _update_project_templates 另行處理，回 None 跳過。
+    """
+    top_segment = repo_rel_path.split("/", 1)[0]
+    if top_segment in REMOTE_ONLY:
+        return None
+    return repo_rel_path
+
+
+# ============================================================================
+# PC 編號撞號偵測與自動重編號（瑕疵 D / D3 import-time）
+#
+# 背景：上游框架 repo 與本專案各自獨立累積 error-pattern PC 編號。pull 把上游
+# PC 檔帶入時，同一 PC 號可能已被本地不同 pattern 佔用（如上游 PC-165 auq-dispatch
+# vs 本地 PC-165 false-positive-fix-chain）。本 session 手動以 PC-171 重編號處置，
+# 此處將該流程自動化為 import-time 強制層（W1-014 瑕疵 D）。
+# ============================================================================
+
+import re as _re  # noqa: E402
+
+_PC_FILENAME_RE = _re.compile(r"^PC-(\d+)-(.+)\.md$")
+# 溯源註記內辨識上游號（與重編號寫入的註記字面對稱）
+_PROVENANCE_UPSTREAM_RE = _re.compile(r"編號溯源.*?編號為\s*PC-(\d+)", _re.DOTALL)
+
+
+def parse_pc_filename(repo_rel: str) -> tuple[int, str] | None:
+    """解析 error-patterns 下 PC 檔的 (編號, slug)。
+
+    僅匹配 error-patterns/ 範圍內、檔名形如 PC-<NNN>-<slug>.md 者。
+    非 PC（README、IMP/TEST/ARCH 等其他前綴）回 None。
+    """
+    parts = repo_rel.split("/")
+    if len(parts) < 2 or parts[0] != "error-patterns":
+        return None
+    m = _PC_FILENAME_RE.match(parts[-1])
+    if not m:
+        return None
+    return int(m.group(1)), m.group(2)
+
+
+def build_local_pc_index(claude_dir: Path) -> dict:
+    """掃描本地 error-patterns/ 建立 PC 索引。
+
+    回傳:
+        {
+          "numbers": {編號: slug, ...},           # 本地已佔用的 PC 號 → slug
+          "provenance": {(上游號, slug): 本地號},  # 已重編過的溯源映射（去重用）
+        }
+
+    provenance 由本地檔內的「編號溯源」註記解析：若某本地 PC 檔記載「上游編號為
+    PC-X」，即建立 (X, 該檔 slug) → 該檔本地號 的映射，供 dedup 辨識上游帶回的
+    同一 pattern。
+    """
+    numbers: dict[int, str] = {}
+    provenance: dict[tuple[int, str], int] = {}
+    ep_root = claude_dir / "error-patterns"
+    if not ep_root.is_dir():
+        return {"numbers": numbers, "provenance": provenance}
+
+    for path in ep_root.rglob("PC-*.md"):
+        m = _PC_FILENAME_RE.match(path.name)
+        if not m:
+            continue
+        local_num = int(m.group(1))
+        slug = m.group(2)
+        numbers[local_num] = slug
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        prov = _PROVENANCE_UPSTREAM_RE.search(text)
+        if prov:
+            upstream_num = int(prov.group(1))
+            provenance[(upstream_num, slug)] = local_num
+    return {"numbers": numbers, "provenance": provenance}
+
+
+def _next_available_pc_number(numbers: dict[int, str], start: int) -> int:
+    """從 start 起找第一個未被本地佔用的 PC 號。"""
+    candidate = max(numbers, default=start - 1) + 1
+    candidate = max(candidate, start + 1)
+    while candidate in numbers:
+        candidate += 1
+    return candidate
+
+
+def _build_provenance_note(upstream_num: int, local_num: int) -> str:
+    """產生與本 session 手動格式對稱的溯源註記行。"""
+    return (
+        f"> **編號溯源**：本 pattern 在上游框架 repo（tarrragon/claude.git）"
+        f"編號為 PC-{upstream_num}。因本專案 PC-{upstream_num} 已被既有 pattern 佔用，"
+        f"於本專案重新編號為 PC-{local_num}。下次 sync-pull 仍會帶回上游 "
+        f"PC-{upstream_num}，屆時應辨識為同一 pattern 並去重。\n"
+    )
+
+
+def resolve_pc_collision(
+    repo_rel: str,
+    upstream_content: bytes,
+    local_index: dict,
+) -> tuple[str, bytes, str]:
+    """偵測上游 PC 檔是否與本地撞號並決定處置。
+
+    回傳 (new_repo_rel, new_content, action)，action 枚舉：
+      - "none"        無衝突（或同號同 slug 屬同一檔），原樣交三方合併
+      - "dedup_skip"  上游帶回的是先前已重編過的同一 pattern，跳過不匯入
+      - "renumber"    撞號（同號不同 slug），重編為本地可用號 + 注入溯源註記
+
+    僅處理 error-patterns 下 PC 檔；其餘一律回 "none"。
+    """
+    parsed = parse_pc_filename(repo_rel)
+    if parsed is None:
+        return repo_rel, upstream_content, "none"
+
+    upstream_num, slug = parsed
+    numbers: dict[int, str] = local_index.get("numbers", {})
+    provenance: dict[tuple[int, str], int] = local_index.get("provenance", {})
+
+    # dedup：上游號 + slug 已在本地以重編號收錄 → 同一 pattern，跳過
+    if (upstream_num, slug) in provenance:
+        return repo_rel, upstream_content, "dedup_skip"
+
+    existing_slug = numbers.get(upstream_num)
+    # 無人佔用該號 → 無衝突
+    if existing_slug is None:
+        return repo_rel, upstream_content, "none"
+    # 同號同 slug → 本就是同一檔，正常三方合併
+    if existing_slug == slug:
+        return repo_rel, upstream_content, "none"
+
+    # 撞號（同號不同 slug）：重編號
+    new_num = _next_available_pc_number(numbers, upstream_num)
+    prefix = repo_rel.rsplit("/", 1)[0]
+    new_repo_rel = f"{prefix}/PC-{new_num}-{slug}.md"
+    new_content = _renumber_pc_content(
+        upstream_content, upstream_num, new_num
+    )
+    return new_repo_rel, new_content, "renumber"
+
+
+def _renumber_pc_content(content: bytes, upstream_num: int, local_num: int) -> bytes:
+    """更新 PC 檔內容：frontmatter id 改為新號 + 插入溯源註記。
+
+    溯源註記插在 frontmatter 結束（第二個 `---`）後第一個空行處；若無 frontmatter
+    則插在檔首。frontmatter / H1 內的 PC-<upstream> 字面不全域替換，避免破壞其他
+    對該編號的合法引用。
+    """
+    text = content.decode("utf-8")
+    note = _build_provenance_note(upstream_num, local_num)
+
+    lines = text.split("\n")
+    # 更新 frontmatter id 欄位
+    in_fm = False
+    fm_end_idx: int | None = None
+    for i, line in enumerate(lines):
+        if i == 0 and line.strip() == "---":
+            in_fm = True
+            continue
+        if in_fm and line.strip() == "---":
+            fm_end_idx = i
+            break
+        if in_fm and line.startswith("id:"):
+            lines[i] = _re.sub(
+                rf"PC-{upstream_num}\b", f"PC-{local_num}", line
+            )
+
+    if fm_end_idx is not None:
+        insert_at = fm_end_idx + 1
+        # 跳過 frontmatter 後緊接的空行
+        while insert_at < len(lines) and lines[insert_at].strip() == "":
+            insert_at += 1
+        lines.insert(insert_at, "")
+        lines.insert(insert_at + 1, note.rstrip("\n"))
+        lines.insert(insert_at + 2, "")
+    else:
+        lines.insert(0, note.rstrip("\n"))
+        lines.insert(1, "")
+
+    return "\n".join(lines).encode("utf-8")
+
+
+def _apply_renumbered_pc(
+    claude_dir: Path,
+    new_repo_rel: str,
+    new_content: bytes,
+    local_pc_index: dict,
+    rollback_log: list,
+) -> int:
+    """原子寫入重編號後的 PC 檔，並更新索引避免後續同號再撞。
+
+    重編後的新號視為已佔用，且其溯源映射納入 provenance，使同批 delta 內後續
+    若再帶回同 pattern 也能被 dedup。回傳寫入檔數（恆為 1）。
+    """
+    parsed = parse_pc_filename(new_repo_rel)
+    local_file = claude_dir / new_repo_rel
+    _atomic_write(local_file, new_content, rollback_log)
+    if parsed is not None:
+        new_num, slug = parsed
+        local_pc_index.setdefault("numbers", {})[new_num] = slug
+        prov = _PROVENANCE_UPSTREAM_RE.search(new_content.decode("utf-8"))
+        if prov:
+            upstream_num = int(prov.group(1))
+            local_pc_index.setdefault("provenance", {})[(upstream_num, slug)] = new_num
+    return 1
+
+
+def apply_upstream_delta(
+    project_root: Path,
+    temp_dir: Path,
+    base_sha: str,
+    preserve: set[str] | None = None,
+) -> tuple[int, list[str]]:
+    """以三方合併方式套用上游 delta，原子置換只搬 delta 涉及的檔案（H2）。
+
+    流程：
+      1. compute_upstream_delta 取 .claude/ 範圍的 A/M/D 變更
+      2. 過濾 should_exclude（LOCAL_ONLY / 憑證）與 preserve 清單（M4）
+      3. 逐檔三方合併（base=上游 base 版本 / local=本地 / upstream=上游 HEAD 版本）
+      4. 衝突檔寫入 .sync-conflicts/ 並保留本地原檔（M3）
+      5. 原子套用：先寫 staging 檔再 os.replace 置換（rename 級，跨 fs fallback copy）
+      6. 任一步失敗自動回滾已置換的檔案
+
+    參數:
+        project_root: 專案根目錄
+        temp_dir: 上游 repo clone 路徑
+        base_sha: 上游 base commit SHA
+        preserve: sync-preserve.yaml 的 preserve 清單（相對 .claude/）
+
+    傳回:
+        tuple[int, list[str]]: (套用成功檔數, 衝突檔清單)
+    """
+    if preserve is None:
+        preserve = set()
+    claude_dir = project_root / ".claude"
+    # 上游獨立 repo 的 root 直接對應本地 .claude/（repo 無 .claude/ 前綴）
+    delta = compute_upstream_delta(temp_dir, base_sha)
+
+    applied = 0
+    conflicts: list[str] = []
+    # 回滾記錄：(目標路徑, 備份路徑 or None 表原本不存在)
+    rollback_log: list[tuple[Path, Path | None]] = []
+    # PC 撞號偵測索引（瑕疵 D）：合併前一次性掃描本地 error-patterns。
+    local_pc_index = build_local_pc_index(claude_dir)
+
+    try:
+        for repo_rel, status in sorted(delta.items()):
+            # 瑕疵 D：error-patterns PC 檔在套用前先偵測撞號 / dedup / 重編號。
+            # 僅對 A/M（上游新增或修改）的 PC 檔生效；D（上游刪除）不改名。
+            if status in ("A", "M"):
+                pc_upstream_path = temp_dir / repo_rel
+                pc_content = (
+                    pc_upstream_path.read_bytes()
+                    if pc_upstream_path.exists() else None
+                )
+                if pc_content is not None:
+                    new_rel, new_content, pc_action = resolve_pc_collision(
+                        repo_rel, pc_content, local_pc_index
+                    )
+                    if pc_action == "dedup_skip":
+                        print_color(
+                            f"   PC 去重（上游帶回先前已重編 pattern）: {repo_rel}",
+                            "green",
+                        )
+                        continue
+                    if pc_action == "renumber":
+                        applied += _apply_renumbered_pc(
+                            claude_dir, new_rel, new_content,
+                            local_pc_index, rollback_log,
+                        )
+                        print_color(
+                            f"   PC 撞號自動重編: {repo_rel} → {new_rel}",
+                            "yellow",
+                        )
+                        continue
+
+            claude_rel = _rel_under_claude(repo_rel)
+            if claude_rel is None:
+                continue  # 非 .claude/ 檔，跳過
+            rel_path = Path(claude_rel)
+            # M4：preserve 與 LOCAL_ONLY / 憑證在合併前先過濾，完全跳過判定
+            if should_exclude(rel_path):
+                continue
+            if claude_rel in preserve:
+                print_color(f"   保留本地特化檔案（跳過 delta）: {claude_rel}", "green")
+                continue
+
+            local_file = claude_dir / rel_path
+            local_exists = local_file.exists()
+            # 本地刪除：上游有但本地無，且 base 有（曾存在後被本地刪除）
+            base_content = _read_upstream_blob(temp_dir, base_sha, repo_rel)
+            local_deleted = (not local_exists) and (base_content is not None) and (status != "A")
+
+            upstream_file = temp_dir / repo_rel  # 上游 repo root 直接對應 .claude/
+            upstream_path = upstream_file if status in ("A", "M") else None
+
+            merged, conflict = three_way_merge_file(
+                base_content=base_content,
+                local_path=local_file if local_exists else None,
+                upstream_path=upstream_path,
+                local_deleted=local_deleted,
+            )
+
+            if conflict:
+                # M3：衝突檔寫 .sync-conflicts/，保留本地原檔不動
+                conflicts_dir = _ensure_conflicts_dir(claude_dir)
+                conflict_target = conflicts_dir / rel_path
+                conflict_target.parent.mkdir(parents=True, exist_ok=True)
+                conflict_target.write_bytes(merged if merged is not None else b"")
+                conflicts.append(claude_rel)
+                print_color(f"   衝突: {claude_rel}（已存 {SYNC_CONFLICTS_DIR}/，本地原檔保留）", "red")
+                continue
+
+            if merged is None:
+                # 本地刪除優先 or 雙方刪除 → 確保本地不存在
+                if local_exists:
+                    _atomic_remove(local_file, rollback_log)
+                    applied += 1
+                continue
+
+            # 原子套用：staging → os.replace
+            _atomic_write(local_file, merged, rollback_log)
+            applied += 1
+
+    except Exception as exc:  # noqa: BLE001
+        print_color(f"   套用 delta 失敗，回滾中: {exc}", "red")
+        _rollback(rollback_log)
+        # 同步寫 stderr 確保可見（quality-baseline 規則 4）
+        sys.stderr.write(f"apply_upstream_delta 失敗已回滾: {exc}\n")
+        raise
+
+    return applied, conflicts
+
+
+def _atomic_write(target: Path, content: bytes, rollback_log: list) -> None:
+    """原子寫入：先寫 .tmp 同目錄檔再 os.replace，跨 fs 失敗時 fallback copy。
+
+    置換前先把原檔備份到 rollback_log，供失敗時回滾。
+    """
+    target.parent.mkdir(parents=True, exist_ok=True)
+    backup: Path | None = None
+    if target.exists():
+        backup = Path(tempfile.mktemp(prefix="claude-rb-"))
+        shutil.copy2(target, backup)
+    rollback_log.append((target, backup))
+
+    tmp = target.with_suffix(target.suffix + ".sync-tmp")
+    tmp.write_bytes(content)
+    try:
+        os.replace(tmp, target)
+    except OSError:
+        # 跨檔案系統 fallback：copy + unlink tmp
+        shutil.copy2(tmp, target)
+        tmp.unlink(missing_ok=True)
+
+
+def _atomic_remove(target: Path, rollback_log: list) -> None:
+    """移除檔案並記錄回滾資訊（保留本地刪除時用）。"""
+    backup = Path(tempfile.mktemp(prefix="claude-rb-"))
+    shutil.copy2(target, backup)
+    rollback_log.append((target, backup))
+    target.unlink()
+
+
+def _rollback(rollback_log: list) -> None:
+    """回滾所有已套用的變更（反序還原）。"""
+    for target, backup in reversed(rollback_log):
+        try:
+            if backup is None:
+                # 原本不存在 → 刪除新寫入的檔
+                if target.exists():
+                    target.unlink()
+            else:
+                shutil.copy2(backup, target)
+        except OSError as exc:
+            sys.stderr.write(f"回滾 {target} 失敗: {exc}\n")
+            print_color(f"   警告: 回滾 {target} 失敗: {exc}", "red")
+
+
 def detect_changed_packages(project_root: Path) -> None:
     """偵測 .claude/skills/*/pyproject.toml 的變更檔案。
 
@@ -513,6 +1231,25 @@ def detect_changed_packages(project_root: Path) -> None:
     print_color("   套件將在下次 SessionStart 自動重新安裝", "green")
 
 
+def backup_claude_dir(claude_dir: Path, dest: Path) -> None:
+    """備份 .claude 目錄至 dest，排除工具產物（Q，0.19.1-W1-021）。
+
+    使用 shutil.ignore_patterns 排除 __pycache__/.pytest_cache/.venv，
+    避免備份 bloat / 變慢 / 遇 broken symlink 拋例外。symlinks=False
+    沿用主同步行為（複製 symlink 指向的內容而非連結本身）。
+
+    參數:
+        claude_dir: 來源 .claude 目錄
+        dest: 備份目標路徑（例如 backup_dir / ".claude"）
+    """
+    shutil.copytree(
+        claude_dir,
+        dest,
+        symlinks=False,
+        ignore=shutil.ignore_patterns(*BACKUP_IGNORE_PATTERNS),
+    )
+
+
 def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
     """執行備份和同步操作。
 
@@ -531,7 +1268,7 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
     # 備份當前配置
     print_color("備份當前配置...")
     backup_dir = Path(tempfile.mkdtemp(prefix="claude-backup-"))
-    shutil.copytree(claude_dir, backup_dir / ".claude")
+    backup_claude_dir(claude_dir, backup_dir / ".claude")
     flutter_md = project_root / "FLUTTER.md"
     if flutter_md.exists():
         shutil.copy2(flutter_md, backup_dir / "FLUTTER.md")
@@ -545,20 +1282,55 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
             if not full_path.exists():
                 print_color(f"   警告: preserve 清單中的檔案不存在: {rel_path}", "yellow")
 
-    # 同步 .claude 目錄
-    print_color("更新 .claude 資料夾...")
-    remote_files = collect_remote_files(temp_dir)
-    file_count = sync_directory(temp_dir, claude_dir, preserve)
-    print_color(f"   已更新 {file_count} 個檔案", "green")
+    # 決定同步策略：三方合併（有可達 base）或全量 overlay（向後相容 fallback）
+    base_sha = read_base_sha(claude_dir)
+    base_reachable = (
+        is_base_reachable(temp_dir, base_sha) if base_sha else False
+    )
+    use_full_overlay = should_use_full_overlay(claude_dir, base_reachable)
 
-    # 清理過時檔案
-    removed = cleanup_stale_files(claude_dir, remote_files, preserve)
-    if removed:
-        print_color(f"   已清理 {len(removed)} 個過時檔案:", "green")
-        for r in removed:
-            print_color(f"     - {r}")
+    if use_full_overlay:
+        # H4 fallback：無 base SHA 或 base 不可達 → 全量 overlay（舊版行為）
+        if base_sha and not base_reachable:
+            print_color(
+                f"   警告: base SHA {base_sha[:12]} 在上游不可達（force-push/GC？），"
+                "降級為全量 overlay", "yellow"
+            )
+        print_color("更新 .claude 資料夾（全量 overlay）...")
+        remote_files = collect_remote_files(temp_dir)
+        file_count = sync_directory(temp_dir, claude_dir, preserve)
+        print_color(f"   已更新 {file_count} 個檔案", "green")
+
+        removed = cleanup_stale_files(claude_dir, remote_files, preserve)
+        if removed:
+            print_color(f"   已清理 {len(removed)} 個過時檔案:", "green")
+            for r in removed:
+                print_color(f"     - {r}")
+        else:
+            print_color("   無過時檔案需清理", "green")
     else:
-        print_color("   無過時檔案需清理", "green")
+        # A3 三方合併：只搬 base→HEAD delta 涉及的檔案，保留本地刪除與 runtime state
+        print_color("更新 .claude 資料夾（三方合併）...")
+        applied, conflicts = apply_upstream_delta(
+            project_root, temp_dir, base_sha, preserve
+        )
+        print_color(f"   已套用 {applied} 個 delta 變更", "green")
+        if conflicts:
+            print_color(
+                f"   {len(conflicts)} 個檔案衝突，已存入 {SYNC_CONFLICTS_DIR}/（本地原檔保留）:",
+                "red",
+            )
+            for c in conflicts:
+                print_color(f"     - {c}")
+        else:
+            print_color("   無衝突", "green")
+
+    # 同步成功後寫入新的 base SHA（上游 HEAD）
+    head_result = run_git(["rev-parse", "HEAD"], cwd=str(temp_dir))
+    if head_result.returncode == 0:
+        new_base = head_result.stdout.strip()
+        write_base_sha(claude_dir, new_base)
+        print_color(f"   已記錄 base SHA: {new_base[:12]}", "green")
 
     # 還原 hook 檔案的 executable bit（上游 mode 損壞的 safety net）
     restored = restore_executable_bits(claude_dir)

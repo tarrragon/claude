@@ -39,33 +39,96 @@ from hook_utils import (  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 from dispatch_tracker import cleanup_expired  # noqa: E402
+from sync_exclude_manifest import (  # noqa: E402
+    LOCAL_ONLY_PATTERNS,
+    GITIGNORE_EXPECTED,
+)
 
 EXIT_SUCCESS = 0
 
-# 已知必須排除的 .claude/ 根目錄檔案名稱（與 sync-claude-push.py 對齊）
+# 掃描 .claude/ 根目錄 .json/.yaml 時略過不警告的檔名集合。
 #
-# 類型 A - Runtime state（本 session 執行期狀態）
-#   dispatch-active.json, pm-status.json
+# local-only 名稱（類型 A Runtime state + 類型 B Local-only settings）直接取自
+# SSOT manifest 的 LOCAL_ONLY_PATTERNS（ARCH-020：避免硬編副本與 push 端漂移）。
 #
-# 類型 B - Local-only settings（各專案個別設定）
-#   settings.local.json, .sync-state.json, sync-preserve.yaml
-#
-# 類型 X - Framework config（正常 sync，不警告）
-#   settings.json（框架 Hook 註冊表，跨專案共用）
-KNOWN_EXCLUDED = {
-    # 類型 A - Runtime state
-    "dispatch-active.json",
-    "pm-status.json",
-    # 類型 B - Local-only settings
-    "settings.local.json",
-    ".sync-state.json",
-    "sync-preserve.yaml",
-    # 類型 X - Framework config（需正常 sync，加入此集合代表掃描時略過不警告）
-    "settings.json",
-}
+# 類型 X - Framework config（正常 sync，不警告）：settings.json 為框架 Hook 註冊表，
+# 跨專案共用，不屬 local-only，故額外併入 allowlist。
+_FRAMEWORK_CONFIG = frozenset({"settings.json"})
+KNOWN_EXCLUDED = LOCAL_ONLY_PATTERNS | _FRAMEWORK_CONFIG
 
 # 掃描副檔名清單
 SCAN_SUFFIXES = {".json", ".yaml", ".yml"}
+
+
+def _normalize_gitignore_entry(raw_line: str) -> str:
+    """將單一 .gitignore 行正規化為可與 GITIGNORE_EXPECTED 名稱比對的裸名（M2）。
+
+    正規化規則（消除 glob / 目錄 / 檔名三形式的表面差異，避免 false positive）：
+      1. 去除前後空白；註解（# 開頭）與空行回傳空字串（呼叫端過濾）
+      2. 去除前綴否定符 `!`（gitignore re-include 語法，名稱本體仍須比對）
+      3. 去除 `.claude/` 前綴與 `**/` glob 前綴（兩者皆指向 .claude 內同名項）
+      4. 去除尾端 `/`（目錄形式 `hook-state/` 與裸名 `hook-state` 視為等效）
+
+    回傳裸名（如 "hook-state"、"pm-status.json"）；無法正規化的行回傳空字串。
+    """
+    line = raw_line.strip()
+    if not line or line.startswith("#"):
+        return ""
+    if line.startswith("!"):
+        line = line[1:]
+    if line.startswith("**/"):
+        line = line[len("**/"):]
+    if line.startswith(".claude/"):
+        line = line[len(".claude/"):]
+    return line.rstrip("/")
+
+
+def parse_gitignore_entries(content: str) -> set:
+    """解析 .gitignore 內容為正規化裸名集合（忽略註解、空行）。"""
+    entries = set()
+    for raw_line in content.splitlines():
+        normalized = _normalize_gitignore_entry(raw_line)
+        if normalized:
+            entries.add(normalized)
+    return entries
+
+
+def find_gitignore_drift(gitignore_path: Path) -> List[str]:
+    """交叉驗證 .gitignore 是否涵蓋 manifest 的 GITIGNORE_EXPECTED。
+
+    回傳未被 .gitignore 涵蓋的 local-only 名稱（已排序）。
+    .gitignore 不存在或讀取失敗時，視為全部缺項（保守警告）。
+    """
+    try:
+        content = gitignore_path.read_text(encoding="utf-8")
+    except OSError:
+        return sorted(GITIGNORE_EXPECTED)
+    covered = parse_gitignore_entries(content)
+    return sorted(GITIGNORE_EXPECTED - covered)
+
+
+def build_gitignore_drift_section(drift: List[str]) -> str:
+    """將 gitignore 漂移缺項格式化為 markdown 警告區塊。"""
+    lines: List[str] = [
+        "## Sync gitignore↔manifest 交叉驗證（gitignore-drift）",
+        "",
+        "偵測到 `.gitignore` 未涵蓋 sync manifest 的 local-only 名稱"
+        "（`GITIGNORE_EXPECTED`）。",
+        "未列入 gitignore 的本地檔會被 push 端 clean-check 判為未追蹤而 abort"
+        "（W1-024 缺陷 T）。",
+        "",
+    ]
+    for name in drift:
+        lines.append(
+            f"- [WARNING] gitignore-drift: `{name}` 在 sync manifest 但未被 "
+            "`.gitignore` 涵蓋 → 請補上 `.claude/" + name + "` 規則"
+        )
+    lines.append("")
+    lines.append(
+        "建議動作：編輯專案根 `.gitignore`，依 `sync_exclude_manifest."
+        "GITIGNORE_EXPECTED` 補齊上列名稱（glob / 目錄 / 裸名三形式皆可）。"
+    )
+    return "\n".join(lines)
 
 
 def scan_unexcluded_files(claude_dir: Path, logger) -> List[str]:
@@ -126,20 +189,28 @@ def build_warning_section(unexcluded: List[str]) -> str:
     return "\n".join(lines)
 
 
-def build_hook_output(unexcluded: List[str]) -> Dict[str, Any]:
+def build_hook_output(
+    unexcluded: List[str], gitignore_drift: List[str] = None
+) -> Dict[str, Any]:
     """組裝 SessionStart hook 的 JSON 輸出。
 
-    無未排除檔案時回傳 suppressOutput=True（靜默）；
-    有未排除檔案時輸出 additionalContext 警告區塊。
+    無任何異常（未排除檔案 + gitignore 漂移皆空）時回傳 suppressOutput=True（靜默）；
+    任一異常存在時輸出對應 additionalContext 警告區塊（兩區塊可並存）。
     """
-    if not unexcluded:
+    gitignore_drift = gitignore_drift or []
+    if not unexcluded and not gitignore_drift:
         return {"suppressOutput": True}
 
-    section = build_warning_section(unexcluded)
+    sections: List[str] = []
+    if unexcluded:
+        sections.append(build_warning_section(unexcluded))
+    if gitignore_drift:
+        sections.append(build_gitignore_drift_section(gitignore_drift))
+
     return {
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
-            "additionalContext": section + "\n",
+            "additionalContext": "\n\n".join(sections) + "\n",
         },
         "suppressOutput": False,
     }
@@ -173,10 +244,20 @@ def main() -> int:
 
     claude_dir = project_root / ".claude"
     unexcluded = scan_unexcluded_files(claude_dir, logger)
-    output = build_hook_output(unexcluded)
+
+    # gitignore↔manifest 交叉驗證（W1-031）：偵測 .gitignore 漏列 local-only 名稱
+    try:
+        gitignore_drift = find_gitignore_drift(project_root / ".gitignore")
+    except Exception as e:  # noqa: BLE001 — 交叉驗證失敗降級不阻塞 session
+        logger.warning("gitignore 交叉驗證失敗（忽略）: %s", e)
+        gitignore_drift = []
+
+    output = build_hook_output(unexcluded, gitignore_drift)
     print(json.dumps(output, ensure_ascii=False, indent=2))
     logger.info(
-        "sync-exclusion-check hook 完成（unexcluded_count=%d）", len(unexcluded)
+        "sync-exclusion-check hook 完成（unexcluded_count=%d, gitignore_drift=%d）",
+        len(unexcluded),
+        len(gitignore_drift),
     )
     return EXIT_SUCCESS
 
