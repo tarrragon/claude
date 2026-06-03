@@ -51,6 +51,24 @@ ticket track complete 1.0.0-W4-001 --force            # 強制完成（旁路未
 ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"  # 建立
 ```
 
+### subagent 派發時 claim 推薦用法
+
+被派發的 subagent 認領自身 ticket 時，**推薦使用裸 `ticket track claim <id>`（不加任何旗標）**。
+
+**Why**：裸 `claim` 走預設路徑，不執行 AC 驗證、不讀 stdin、不偵測 TTY，metadata 寫入在 `file_lock` 保護下為單一原子操作（load → modify → save），不存在「部分寫入」的中間狀態。subagent 無 TTY 的互動環境受限對裸 `claim` 完全無影響。
+
+**Consequence**：若 subagent 改用 `--verify`（明示啟用 AC 自動驗證，僅供除錯場景），在無 TTY 環境下會觸發 fail-closed：未加 `--yes` 時直接 return 1 並印出「非互動環境且未指定 --yes，已取消」，subagent 可能誤判 ticket 未 claim 而重試或放棄。`--verify` 還會在 claim 時跑 AC 對應的驗證指令（如 npm test 全套件），造成同 wave 並行 claim 衝突（PC-078）。
+
+**Action**：
+
+| 場景 | 推薦命令 | 說明 |
+|------|---------|------|
+| subagent 認領被派發的 ticket（常態） | `ticket track claim <id>` | 預設不驗證，原子寫入，無半成功風險 |
+| 除錯時想 claim 並同時跑 AC 驗證 | `ticket track claim <id> --verify --yes` | `--yes` 在非互動環境短路驗證 prompt 為 y，避免 fail-closed |
+| 只想看 AC 驗證結果不 claim | `ticket track verify <id>` | 與 claim 解耦（W4-019 後 `--skip-verify` 已移除，改用此子命令） |
+
+> **半成功歷史背景**：早期 `claim --yes` 在 subagent 無 TTY 環境曾因互動受限出現 metadata 部分寫入、需 `--skip-verify` 二次嘗試確認的半成功狀態（W1-048.4.1 觀察）。此 root cause 已由 W3-046（claim 預設不驗證）+ W4-019（移除 `--skip-verify`）兩階段修正消除；現行裸 `claim` 路徑無此問題。
+
 ---
 
 ## 無子命令時的預設行為（dashboard-first，v2.7.0 起）

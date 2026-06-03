@@ -1,0 +1,22 @@
+# version-release CLI 專案配置（0.19.0-W1-127）
+#
+# 本專案為 all-on-main 工作流：所有變更直接 commit 到 main，無 feature 分支；
+# tag 慣例為 plain v{version}（既有 v0.18.0 / v0.17.4 皆無 -final 後綴）；
+# worklog 採巢狀路徑 docs/work-logs/v0/v0.19/v0.19.0/。
+#
+# 放於 .claude/（branch-verify 豁免路徑），使 all-on-main 工作流可直接
+# commit 到 main 而不被保護分支 hook 阻擋。version_release.py 的
+# load_version_release_config() 會在 <root> 與 <root>/.claude/ 兩處查找
+# （root 優先），故本檔位置受支援。
+#
+# 未列出的欄位（versions / sync_rules / detection / preflight_checks）
+# 由 DEFAULT_VERSION_RELEASE_CONFIG 提供預設值。
+
+# 發布工作流：trunk = all-on-main，跳過 feature-branch merge 與分支清理
+release_workflow: trunk
+
+# tag 命名：plain v{version}（無 -final 後綴）
+tag_format: "v{version}"
+
+# worklog 巢狀路徑範本（支援 {version} / {major_minor} / {major} 佔位符）
+worklog_path_pattern: "docs/work-logs/v{major}/v{major_minor}/v{version}"

@@ -212,6 +212,8 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 所有會修改檔案或執行 git 操作的代理人，必須使用 `Agent(isolation: "worktree")` 派發。
 
+> **worktree base 可能過舊**：cc runtime 以派發瞬間 main HEAD 為 worktree base，不後續同步。**Why**：base 建立後主 repo 新增 commit 不反映到 worktree。**Consequence**：agent 以過時檔案為基礎工作，產出與 main 新增 commit 不相容，需手動整合。**Action**：每次 worktree 派發 prompt 必須在開頭加 `git merge main` 指引，確保 agent 對齊最新 main。完整說明與 prompt 範本見 `.claude/references/agent-dispatch-template.md`「worktree 派發 base 同步指引（W1-035）」。
+
 | 代理人類型 | 需要 worktree |
 |-----------|--------------|
 | 實作代理人（parsley, fennel, thyme-python） | 強制 |
@@ -384,7 +386,9 @@ PC-137 並行 ≤ 2 規則為 worktree 模式下的觀察結論（W17-097.1-.4 +
 
 ---
 
-**Last Updated**: 2026-05-26
+**Last Updated**: 2026-06-02
+**Version**: 4.7.0 - Worktree 隔離章節開頭新增 worktree base 可能過舊提示，引用 agent-dispatch-template.md「worktree 派發 base 同步指引（W1-035）」交叉引用（0.19.0-W1-053）
+
 **Version**: 4.6.0 - bgIsolation: none 並行安全章節升級為策略 C 條件式採用（W3-034.4 並行受控實驗 3/3 success 落地）；風險矩陣與 Action 表分 4 場景；新增「對照 PC-137 v1.1.0」雙模式對照表
 
 **Version**: 4.5.0 - 新增 dispatch-plan 先行規則，明確區分 orchestration description 與 batch dispatch CLI（W17-044）

@@ -112,6 +112,27 @@
 
 ---
 
+## 4.5 CC 工具遙測：tool_parameters（可選增強，非強制）
+
+> **定位**：本節與 1-4 節（產品程式碼可觀測性）不同層級——記錄的是 Claude Code session 的工具呼叫遙測，可作為 dispatch 行為分析的外部資料來源。**屬可選增強，非強制要求。**
+
+CC v2.1.157 起，OpenTelemetry 的 `tool_decision` 事件可包含 `tool_parameters` 欄位（bash 指令字串、MCP / skill 名稱），需顯式設定環境變數 `OTEL_LOG_TOOL_DETAILS=1` 才記錄（預設關閉）。
+
+| 項目 | 說明 |
+|------|------|
+| 啟用方式 | 環境變數 `OTEL_LOG_TOOL_DETAILS=1`（或 settings.json `env` 區段） |
+| 記錄內容 | bash 指令、MCP server / skill 名稱 |
+| 預設狀態 | 關閉（API key / 密碼自動濾除） |
+| 潛在用途 | 與 `.claude/hooks/dispatch_stats.py` 等 dispatch 分析整合，量化工具使用分佈 |
+
+**Why**：開啟後可獲得「PM 與 subagent 實際呼叫哪些指令」的遙測，有助 dispatch 行為審計與 hotpath 分析。
+
+**Consequence（隱私成本，必須權衡）**：開啟後 bash 指令全文進遙測管道。若 OTEL collector 為外部端點，等同將指令內容外送，可能含路徑、檔名等專案資訊。**非剛需場景不應預設開啟。**
+
+**Action**：僅在有明確 dispatch 可觀測性需求且 OTEL collector 為可信（本地或受控）端點時，才設 `OTEL_LOG_TOOL_DETAILS=1`；一般開發不需開啟。本節為能力備記，不要求任何元件強制啟用。
+
+---
+
 ## 5. 可觀測性檢查清單
 
 新增或修改功能時，確認：
@@ -135,5 +156,5 @@
 
 ---
 
-**Last Updated**: 2026-04-16
-**Version**: 1.1.0 - 合併自 rules/core/observability-rules.md（W10-076.3）：納入「統一日誌工具」（2.5）與「全域錯誤處理完整性」（2.6）兩章節
+**Last Updated**: 2026-06-01
+**Version**: 1.2.0 - 新增 4.5「CC 工具遙測：tool_parameters」可選增強章節（CC v2.1.157 / W4-028.3）。歷史 1.0–1.1 版見 git log。

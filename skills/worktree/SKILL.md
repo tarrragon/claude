@@ -31,11 +31,20 @@ Claude Code 的 Agent tool 設定 `isolation: "worktree"` 派發 subagent 時，
 
 ### 殭屍問題
 
-cc runtime 在 agent 結束或 process 異常死亡時**不會自動清理** agent worktree。後果：
+cc runtime 在 agent 結束或 process 異常死亡時**不會自動 remove** agent worktree。後果：
 
-- PID 死亡後 lock 仍存在（git 看 lock 不看 PID），形成「殭屍 lock」
-- `.claude/worktrees/` 下殘留 worktree 目錄，累積占用 disk
+- 殘留目錄不會自動消失（cc 只 unlock，不 remove，見下方 lock 行為說明）
+- `.claude/worktrees/` 下殘留 worktree 目錄，累積佔用磁碟空間
 - `git worktree list` 與 statusline 顯示大量無用 entries，干擾人工判讀
+
+**Lock 行為（CC v2.1.157 起的變化）**：
+
+| agent 結束方式 | lock 狀態 | 清理路徑 |
+|---------------|----------|---------|
+| 正常結束（v2.1.157+） | 自動 unlock | 可直接 `git worktree remove` / `git worktree prune`，免 unlock 前置 |
+| process 異常死亡 | 可能殘留「殭屍 lock」（git 看 lock 不看 PID） | 仍需 `git worktree unlock` 前置（見手動清理指令第二段） |
+
+**Why**：v2.1.157 起 cc 在 agent 正常結束時主動 unlock worktree（release note：「Worktrees managed by Claude are now left unlocked when the agent finishes」），使 `git worktree remove`/`prune` 能直接清理；但異常死亡（process 被 kill / crash）來不及 unlock，仍會殘留 lock，故 unlock 前置步驟對該情境保留。
 
 **Consequence**：未清理的殭屍 worktree 會無上限累積，每次 cc session 派發 isolation:worktree subagent 都新增一個，數天內可達數十個，污染 git 視圖並佔用 GB 級空間。
 
@@ -70,14 +79,20 @@ git worktree list --porcelain | grep "^locked" | grep -oE "pid [0-9]+" | awk '{p
   ps -p $p > /dev/null 2>&1 || echo "$p dead"
 done
 
-# 強制清所有 agent worktree（謹慎使用：不檢查 dirty）
+# 路徑 1（v2.1.157+ 首選）：清理已 unlock 的殘留（正常結束的 agent worktree）
+# agent 正常結束已自動 unlock，prune 可直接回收，無需 unlock 前置
+git worktree prune
+
+# 路徑 2（異常死亡殘留 lock 時）：強制清所有 agent worktree（謹慎使用：不檢查 dirty）
 git worktree list --porcelain | grep "^worktree .*\.claude/worktrees/agent-" | awk '{print $2}' | while read wt; do
   git worktree unlock "$wt" 2>/dev/null
   git worktree remove --force "$wt"
 done
 ```
 
-**Action**：第一段指令僅列舉，可安全執行確認殭屍數量；第二段為強制清理，執行前請先用 `git worktree list` 人工確認沒有正在進行中的 agent。
+**Action**：第一段指令僅列舉，可安全執行確認殭屍數量；**路徑 1（`git worktree prune`）為 v2.1.157+ 首選**，清理正常結束（已 unlock）的殘留，安全且免 unlock 前置；路徑 2 為強制清理（含 unlock），用於異常死亡殘留 lock 的情境，執行前請先用 `git worktree list` 人工確認沒有正在進行中的 agent。
+
+> **絆腳索**：若 `git worktree prune` 實測仍因 lock 無法清理某 worktree，表示該 worktree 屬異常死亡殘留 lock，改走路徑 2（unlock + remove --force）。
 
 ### 與人工 /worktree create 的區別
 
@@ -94,6 +109,24 @@ done
 | 殭屍風險 | 高（無自動清） | 低（使用者主動管理） |
 
 **Action**：判斷某個 worktree 屬哪一類，看路徑前綴即可（`.claude/worktrees/agent-` vs `../ccsession-`）；自動 GC hook 僅處理前者，後者請使用本 SKILL 的人工流程管理。
+
+### EnterWorktree mid-session 切換（CC v2.1.157）
+
+CC v2.1.157 起 `EnterWorktree` 工具支援**在 session 中途切換** Claude-managed worktree（不必重啟 session），前一個 worktree 的工作狀態保留。
+
+**Why**：可在同一 session 於多個工作目錄間切換（例如特性開發中途切到緊急 bugfix worktree），免去重啟成本。
+
+**Consequence（查核必要性反而上升）**：mid-session 切換使 cwd 落點更易在無感知下改變。若不確認當前所在 worktree 就 commit / merge，變更可能落到非預期分支（與既有「PM cwd 被 runtime 自動切進 agent worktree」風險同源）。
+
+**Action**：
+
+| 時機 | 強制查核 |
+|------|---------|
+| 派發 isolation:worktree agent 後 | `git branch --show-current` + `pwd` 確認 cwd 落點 |
+| 接收 agent task-notification 後 | 同上，確認 commit/merge 目標分支 |
+| 主動 EnterWorktree 切換後 | 同上，切換完成立即確認新 worktree 身份 |
+
+切換後 commit/merge 前未查核 → 變更落點不可信，須先 `git branch --show-current` + `pwd` 對齊預期再操作。
 
 ---
 

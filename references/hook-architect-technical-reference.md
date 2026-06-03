@@ -320,6 +320,9 @@ Hook 進程可從以下環境變數和 JSON payload 欄位取得 session/runtime
 | env | `$CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN` | v2.1.132+ | `=1` 時 opt-out 全螢幕渲染（影響終端型 hook 行為） |
 | stdin payload | `effort.level` | v2.1.133+ | hook JSON 輸入新增頂層欄位 |
 | MCP stdio server env | `CLAUDE_PROJECT_DIR` | v2.1.139+ | MCP stdio server 子進程現可取得 |
+| MCP stdio server env | `CLAUDE_CODE_SESSION_ID` / `CLAUDECODE` | v2.1.154+ | MCP stdio server 子進程現可取得 session id 與 `CLAUDECODE=1` 標記，可用於將工具呼叫遙測關聯到特定 session（如 dispatch_stats / 日誌） |
+
+> **可選增強（非強制）**：上述 MCP session 關聯能力為可選用途。hook / MCP 不必使用 session id；僅在需要把工具呼叫遙測關聯到特定 session 時採用。預設不依賴此能力即可正常運作。
 
 **effort 感知範例**：
 

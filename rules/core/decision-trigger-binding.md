@@ -161,6 +161,24 @@ marker 必須**緊鄰命中行**：同一行行尾，或命中行上方一行（
 
 詳見 PC-146（exempt marker 位置誤用 + 三層防護）。
 
+### Frontmatter 場景：不需 exempt marker（W1-092 起）
+
+ticket frontmatter（YAML 區塊，`when` / `why` / `strategy` 等欄位）內出現「Phase 4 評估」「Phase 5 再決定」等歷史字面時，**不需要**加 `PC-093-exempt` marker。
+
+**Why**：phase4-decision-enforcement-hook 自 W1-092（PC-142 case 5 修復）起，透過 `compute_frontmatter_lines` 將整個 frontmatter 區塊（含起訖 `---`）排除於 phrase 掃描與 marker 蒐集範圍之外。frontmatter 為結構化元資料，其欄位常含 source ticket history 引用字面，本質與 Context Bundle auto-extracted、Schema placeholder、fenced code block 同類——非人類撰寫的當下延後決策論述，故整段跳過。
+
+**Consequence**：若仍在 frontmatter 欄位內加 `PC-093-exempt` marker，會造成兩層問題：(1) marker 對 hook 無作用（該區塊不被掃描，marker 也不被蒐集），屬冗餘標記；(2) ticket CLI complete 後的 metadata sync 會以 PyYAML round-trip 重新序列化 frontmatter，行內 markdown 註解形式的 marker 不被當 YAML 註解而是 scalar 值的一部分，序列化後可能位置漂移或被移除，產生「marker 一加就消失」的錯覺。W1-048.3（2026-05-23）即為此模式：sage 在 hook 修復前加 marker 才能 complete，complete 後 metadata sync 移除 marker——但因 W1-092 已讓 hook 不掃 frontmatter，marker 的存廢不再影響 complete。
+
+**Action**：
+
+| 字面所在位置 | 是否需 marker | 理由 |
+|------------|-------------|------|
+| frontmatter（`---` 區塊內的 YAML 欄位） | 否 | hook 整段跳過（W1-092），加 marker 冗餘且會被 metadata sync 移除 |
+| body 一般論述（`## Solution` 等章節文字） | 是 | hook 行級掃描，命中需 marker 豁免 |
+| body 內 fenced code block / Schema placeholder / Context Bundle auto-extracted | 否 | hook 各自整段跳過（W11-018 / W10-130 / W1-120） |
+
+**判別準則**：marker 只在「hook 會掃描且會命中」的 body 論述行才有意義。frontmatter 與上述三類整段豁免區塊內，移除 marker 不會造成 hook 阻擋，無需保留。
+
 ## 與其他規則的邊界
 
 | 規則 | 聚焦 | 與本規則差異 |
@@ -186,4 +204,4 @@ marker 必須**緊鄰命中行**：同一行行尾，或命中行上方一行（
 
 ---
 
-**Last Updated**: 2026-05-18 | **Version**: 1.3.0 — 新增 `history` 豁免類別（reason 須含 ticket ID 作歷史錨點）+ `history` vs `ticket-tracked` 語意區分表（W11-023）。歷史 1.0–1.2 版見 git log。**Source**: PC-093 / PC-146 / W11-023。
+**Last Updated**: 2026-06-02 | **Version**: 1.4.0 — 新增「Frontmatter 場景：不需 exempt marker」章節，釐清 phase4-hook 自 W1-092 起整段跳過 frontmatter，marker 在 frontmatter 內冗餘且會被 metadata sync 移除（W1-052）。歷史 1.0–1.3 版見 git log。**Source**: PC-093 / PC-146 / W11-023 / W1-092。

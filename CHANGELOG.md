@@ -1,3 +1,32 @@
+## [1.39.0] - 2026-06-03
+
+### Summary
+feat: vendoring impeccable 設計 skill 至框架（納入 sync）; feat: config 化 version-release CLI 硬編碼假設支援 all-on-main; feat: 新增 parallel-claim-audit-hook 記錄 claim 時同 wave 快照（非阻擋） (+16 more)
+
+Changes: 4 feat, 13 docs, 2 chore
+
+- feat: vendoring impeccable 設計 skill 至框架（納入 sync）
+- feat: config 化 version-release CLI 硬編碼假設支援 all-on-main
+- feat: 新增 parallel-claim-audit-hook 記錄 claim 時同 wave 快照（非阻擋）
+- feat: 新增 cc-release-impact-review skill
+- docs: ARCH-015 整合四測矩陣 + 選項 3 決策落地
+- docs: ARCH-015 實測回填 — CC 2.1.161 #15 解鎖 worktree 內 .claude/ 編輯
+- docs: CC 2.1.161 框架影響評估 + 三衍生落地
+- docs: 標註 CC 2.1.161 #18 修復（subagent 卡 running 已消解）
+- docs: 更新 ARCH-015 標註 CC 2.1.161 #15 修復資訊（worktree 背景編輯解鎖）
+- docs: 第三方 CC skill vendoring 四陷阱（process-compliance）
+- docs: 文件化 subagent claim 推薦用法（半成功 root cause 已治本，不需 code fix）
+- docs: Layer 2 修正 — 三明示補全與正向錨點前置
+- docs: SOP 化 cc runtime worktree base 過舊處理流程
+- docs: 釐清 frontmatter exempt marker 不一致（ 已消解）
+- docs: 收尾 workflow 評估（不引入）+ MCP env 補記
+- docs: AUQ 規則新增維度 A 前置關卡（對齊 CC ）
+- docs: 落地 框架調整（worktree 清理 SOP + PC-059 釐清 + OTEL 補記）
+- chore: 提交遺留 mode 變更 test_parallel_claim_audit_hook.py (644->755)
+- chore: 推進 last-reviewed 至 2.1.160
+
+---
+
 ## [1.38.1] - 2026-06-01
 
 ### Summary

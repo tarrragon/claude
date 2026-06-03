@@ -193,6 +193,22 @@ PM 派發需要編輯的代理人前，確認：
 - **PC-058**（ANA Ticket metadata 漂移）：在 Ticket 層級缺少設定；本 pattern 在工具權限層級缺少設定。都是「宣告 vs 實際」落差。
 - **IMP-050**（hook_utils 是 Package 非檔案）：相似概念——代理人 prompt 提及的資源（import path / tool name）與實際環境不一致。
 
+## 範圍界定：本 pattern 是「權限模式」問題，非「身份選擇」問題（W4-028.2）
+
+本 pattern 處理的是 subagent 的**權限模式**（能不能 Edit），由 `permissionMode` 控制。它與「派發哪個 agent」（身份選擇）是不同層級，切勿混淆：
+
+| 層級 | 機制 | 控制什麼 | 本專案是否使用 |
+|------|------|---------|--------------|
+| 身份選擇（dispatched session） | `settings.json` 的 `agent` 欄位 / `--agent <name>` flag（CC v2.1.157） | `claude agents` 或 `--agent` 啟動的獨立 session 預設用哪個 agent | 否——本專案不走 dispatched-session 路徑 |
+| 身份選擇（in-session subagent） | `Agent(subagent_type=...)` 工具參數 | 主 session 內 spawn 的 subagent 用哪個 agent | 是——本專案派發一律用此工具，身份已明確指定 |
+| 權限模式（本 pattern） | 代理人 frontmatter `permissionMode` | subagent 能否自動 Edit/Write（不問批准） | 是——PC-059 的核心 |
+
+**Why**：CC v2.1.157 新增 `settings.json` 的 `agent` 欄位（dispatched session 預設 agent）。它與本 pattern 的 `permissionMode` 容易被混為一談（都含「agent」「權限」字眼），但前者解決「派發哪個身份」、後者解決「該身份能否寫檔」。
+
+**Consequence**：誤把 `settings.json` 的 `agent` 欄位當成 PC-059 的解方，會在本專案造成無效設定——本專案以 `Agent(subagent_type)` 工具派發 in-session subagent，根本不觸發 dispatched-session 的 `agent` 欄位路徑，設了也不生效，且無助於解決 subagent Edit 被拒（那仍是 `permissionMode` + `.claude/` hardcoded 保護的問題，見 retry6）。
+
+**Action**：遇到 subagent Edit `.claude/` 被拒，依本 pattern retry6 結論——PM 前台直接 Edit；不要嘗試以 `settings.json` 的 `agent` 欄位「指定一個有權限的 agent」來繞過（該路徑對 in-session subagent 不適用）。
+
 ## 檢測方式
 
 代理人回報包含以下字串時：
