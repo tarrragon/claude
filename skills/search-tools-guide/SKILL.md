@@ -430,11 +430,11 @@ rg "error" lib/ --glob '!lib/l10n/' --glob '!*.g.dart'
 
 | 命令 | 用途 | 典型用途 | 輸出 |
 |------|------|---------|------|
-| `mcp__codegraph__codegraph_status` | 索引狀態檢查 | 確認索引就緒（files/nodes/edges 統計） | `{"project": "...", "index": "up to date", "nodes": 24432, "edges": 52772}` |
-| `mcp__codegraph__search_node` | 符號搜尋 | 找 `BookRepository` 定義（跨語言） | `{"matches": [{"name": "BookRepository", "kind": "class", "file": "...", "line": 10}]}` |
-| `mcp__codegraph__callers` | 呼叫者追蹤 | 「deleteBook 被誰呼叫」 | 清單所有 caller（含檔案、行號、完整呼叫堆疊） |
-| `mcp__codegraph__callees` | 被呼叫者 | 「deleteBook 呼叫了誰」 | 清單 deleteBook 調用的所有函式 |
-| `mcp__codegraph__impact` | 影響分析 | 修改某符號的 blast radius | 關聯的所有符號列表（按依賴級別排序） |
+| `mcp__codegraph__codegraph_reindex_workspace` | 索引重建 / 就緒確認 | 確認索引就緒（回報已索引檔數；codegraph 無專屬 status 工具，以 reindex 回報替代） | `{"files_indexed": 750, "files_parsed": 750, "files_skipped": 0, "status": "success"}` |
+| `mcp__codegraph__codegraph_symbol_search` | 符號搜尋 | 找 `BookRepository` 定義（跨語言） | `{"matches": [{"name": "BookRepository", "kind": "class", "file": "...", "line": 10}]}` |
+| `mcp__codegraph__codegraph_get_callers` | 呼叫者追蹤 | 「deleteBook 被誰呼叫」 | 清單所有 caller（含檔案、行號、完整呼叫堆疊） |
+| `mcp__codegraph__codegraph_get_callees` | 被呼叫者 | 「deleteBook 呼叫了誰」 | 清單 deleteBook 調用的所有函式 |
+| `mcp__codegraph__codegraph_analyze_impact` | 影響分析 | 修改某符號的 blast radius | 關聯的所有符號列表（按依賴級別排序） |
 
 ### codebase-memory-mcp（語義搜尋 + 概念檢索）
 
@@ -442,20 +442,20 @@ rg "error" lib/ --glob '!lib/l10n/' --glob '!*.g.dart'
 |------|------|---------|------|
 | `mcp__codebase-memory-mcp__index_repository` | 建立 / 更新索引 | 首次 `index_repository(repo_path="/path/to/book_overview_v1", mode="moderate")` 建立向量 + BM25 索引 | `{"status": "indexed", "nodes": 10033, "edges": 31705, "project": "..."}` |
 | `mcp__codebase-memory-mcp__index_status` | 索引狀態 | 確認 cbm 已索引當前 repo | `{"project": "...", "status": "ready", "nodes": 10033}` |
-| `mcp__codebase-memory-mcp__search` | 語義搜尋 | `search_graph(project="...", query="error handling patterns")` 找相似概念 | 向量相似度排序結果，含檔案片段 + 相似度分數 |
+| `mcp__codebase-memory-mcp__search_graph` | 語義搜尋 | `search_graph(project="...", query="error handling patterns")` 找相似概念（程式碼片段檢索可用 `search_code`） | 向量相似度排序結果，含檔案片段 + 相似度分數 |
 | `mcp__codebase-memory-mcp__list_projects` | 列出索引的所有 projects | 檢視已管理的 repo 清單 | `{"projects": ["Users-mac-eric-project-book_overview_v1", ...]}` |
 
 ### Serena（LSP 符號操作 + 型別感知）
 
 | 命令 | 用途 | 典型用途 | 輸出 |
 |------|------|---------|------|
-| `mcp__plugin_serena_serena__find_symbol` | 符號定義搜尋 | `find_symbol(symbol_name="BookRepository")` 精確定位（Dart 優先） | `{"file": "src/storage/repository.dart", "line": 45, "kind": "class"}` |
-| `mcp__plugin_serena_serena__find_referencing_symbols` | 引用追蹤 | 「BookRepository 被引用在哪些地方」 | 完整引用清單（含行號、檔案路徑） |
-| `mcp__plugin_serena_serena__rename_symbol` | 安全重命名 | `rename_symbol(old_name="fetchBooks", new_name="fetchUserBooks")` 自動更新所有引用 | 修改後檔案 SHA / 變更摘要 |
-| `mcp__plugin_serena_serena__replace_symbol_body` | 符號實作替換 | 精確替換函式實作（不含簽章） | 修改後程式碼片段 + 驗證 |
-| `mcp__plugin_serena_serena__get_symbols_overview` | 檔案符號總覽 | 理解檔案結構（類別、方法、變數） | 清單化檔案符號樹，無需讀全檔 |
+| `mcp__serena__find_symbol` | 符號定義搜尋 | `find_symbol(symbol_name="BookRepository")` 精確定位（Dart 優先） | `{"file": "src/storage/repository.dart", "line": 45, "kind": "class"}` |
+| `mcp__serena__find_referencing_symbols` | 引用追蹤 | 「BookRepository 被引用在哪些地方」 | 完整引用清單（含行號、檔案路徑） |
+| `mcp__serena__rename_symbol` | 安全重命名 | `rename_symbol(old_name="fetchBooks", new_name="fetchUserBooks")` 自動更新所有引用 | 修改後檔案 SHA / 變更摘要 |
+| `mcp__serena__replace_symbol_body` | 符號實作替換 | 精確替換函式實作（不含簽章） | 修改後程式碼片段 + 驗證 |
+| `mcp__serena__get_symbols_overview` | 檔案符號總覽 | 理解檔案結構（類別、方法、變數） | 清單化檔案符號樹，無需讀全檔 |
 
-**使用方式**：透過 `ToolSearch(query="select:codegraph_status,codebase-memory-mcp__search,plugin_serena_serena__find_symbol")` 一次載入多工具 schema，再按需呼叫。
+**使用方式**：透過 `ToolSearch(query="select:mcp__codegraph__codegraph_symbol_search,mcp__codebase-memory-mcp__search_graph,mcp__serena__find_symbol")` 一次載入多工具 schema，再按需呼叫。
 
 **cbm 深度參考**：CLI 用法、`.claude/` 不索引限制、cbm vs codegraph vs serena 分工速查 → `references/codebase-memory-tool.md`
 

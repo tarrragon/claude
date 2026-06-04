@@ -1,3 +1,19 @@
+## [1.40.1] - 2026-06-04
+
+### Summary
+fix: 統一 settings template serena MCP 權限前綴; docs: 新增 PC-173 框架 MCP 工具名與實機暴露漂移; docs: 修正 project-init/search-tools-guide MCP 工具名漂移 (+3 more)
+
+Changes: 1 fix, 3 docs, 2 chore
+
+- fix: 統一 settings template serena MCP 權限前綴
+- docs: 新增 PC-173 框架 MCP 工具名與實機暴露漂移
+- docs: 修正 project-init/search-tools-guide MCP 工具名漂移
+- docs: 新增 PC-172 wrapper command 參數推斷未經 runtime 驗證
+- chore: 對齊 .gitignore handoff 規則與 sync manifest GITIGNORE_EXPECTED
+- chore: 修正 sync_exclude_manifest.py + test 檔執行權限為 755
+
+---
+
 ## [1.40.0] - 2026-06-03
 
 ### Summary

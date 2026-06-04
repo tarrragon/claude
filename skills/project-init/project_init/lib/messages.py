@@ -257,5 +257,5 @@ class RemediationGuidance:
             "確認 codegraph-mcp 0.16.6+ 已自動處理檔案變更（debounce ~500ms）",
             "如需強制重建索引: rm -rf .codegraph/",
             "重新啟動 Claude Code session 讓 codegraph-mcp 重新索引",
-            "驗證: mcp__codegraph__codegraph_status 在 session 內回報 nodes/edges 數",
+            "驗證: 在 session 內呼叫 codegraph 的 reindex/summary 類工具（如 reindex_workspace 回報 files_indexed，或 get_module_summary 回報檔案/函式統計）確認索引就緒",
         ]
