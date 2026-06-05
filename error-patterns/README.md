@@ -256,6 +256,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | IMP-053 | 一刀切修改忽略程式碼執行路徑差異 | 中 | v0.17.3 |
 | IMP-070 | Hook stdin 欄位命名規範混淆（input snake_case vs output camelCase） | 高 | v0.18.0 |
 | IMP-078 | CE-Node 環境前提誤判 — Jest 測試綠燈但 CE Runtime 崩潰 | 高 | v0.19.0 |
+| IMP-079 | 批次替換工具誤傷偵測目標字面 — regex/meta-test 內嵌待測字元被盲目轉換後語意塌縮 | 中 | v0.19.1 |
 
 ### 流程合規 (PC)
 
@@ -356,6 +357,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-162 | Ticket 描述含過時環境狀態 + schema 註解 PC 引用語意錯誤 | 中 | v0.19.0 |
 | PC-171 | AUQ 派發類選項未先驗 blockedBy readiness（假選項；上游 PC-165 在本專案重編號） | 中 | v0.19.1 |
 | PC-172 | Wrapper command 參數推斷未經 runtime 驗證（只讀底層 binary --help，忽略 wrapper 自動注入參數） | 中 | v0.19.1 |
+| PC-176 | 跨環境設定不一致時歸因「環境差異」而非驗證被 git 同步的共用設定本身（便利假設掩蓋一份錯設定的單點根因） | 中 | v0.19.1 |
 
 ---
 

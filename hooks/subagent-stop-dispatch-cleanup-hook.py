@@ -8,10 +8,14 @@ SubagentStop Dispatch Cleanup Hook
 
 功能: 代理人真正完成時精準清理 dispatch-active.json 記錄 + 完成廣播。
 觸發時機: SubagentStop（CC runtime 保證代理人真正停止才觸發）
-行為: 不阻擋（exit 0），在 top-level systemMessage 輸出 [OK]/[WAIT] 狀態
-       （SubagentStop event schema 不允許 hookSpecificOutput.additionalContext，W17-159）
+行為: 不阻擋（exit 0），在 hookSpecificOutput.additionalContext 輸出 [OK]/[WAIT] 狀態
+       （CC 2.1.163 #4 已解除 SubagentStop event schema 對 additionalContext 的限制，
+       取代 W17-159 當時被迫採用的 top-level systemMessage workaround；< 2.1.163 的
+       runtime 透過 build_subagent_stop_output 自動 graceful fallback 回 systemMessage）
 
-來源: W10-066 — 從 PostToolUse(Agent) 遷移清理和廣播職責到 SubagentStop
+來源:
+  - W10-066 — 從 PostToolUse(Agent) 遷移清理和廣播職責到 SubagentStop
+  - 0.19.1-W1-046 — CC 2.1.163 解禁後改回 additionalContext + 版本相容 fallback
 """
 
 import json
@@ -20,7 +24,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import (
+    setup_hook_logging,
+    run_hook_safely,
+    read_json_from_stdin,
+    build_subagent_stop_output,
+)
 
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 from dispatch_tracker import (
@@ -102,9 +111,10 @@ def main() -> int:
         return 0
 
     context = " | ".join(messages)
-    # SubagentStop event schema 不允許 hookSpecificOutput.additionalContext；
-    # 改用 top-level systemMessage（同 Stop event 處置，W17-158 / W17-159）
-    print(json.dumps({"systemMessage": context}, ensure_ascii=False))
+    # CC 2.1.163 #4 解禁後改用 hookSpecificOutput.additionalContext（正確機制）；
+    # build_subagent_stop_output 於 < 2.1.163 的 runtime 自動 graceful fallback
+    # 回 top-level systemMessage（0.19.1-W1-046）。
+    print(json.dumps(build_subagent_stop_output(context, logger), ensure_ascii=False))
 
     return 0
 

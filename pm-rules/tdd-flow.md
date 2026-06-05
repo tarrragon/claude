@@ -113,6 +113,82 @@ PM 派發 Phase 代理人時可立即查表確認允許/禁止產出，防止職
 
 ---
 
+## ANA 全量 grep/regex 範圍驗證完整性規範
+
+> **適用範圍**：所有 ANA Ticket 中涉及「全量 grep/regex 範圍判定」的 Solution——即 ANA 結論中含「某字元集/字串集於整個 codebase 中的覆蓋範圍」判定，且結論影響後續 IMP acceptance 設計者。
+
+**Why**：ANA 若以手工列舉 Unicode 區段作為「已知全量」依據，遺漏的區段會讓後續 IMP ticket 的 acceptance 建立在錯誤基礎上。W1-005 ANA 案例：AC-4「直接斷言依賴=0」僅用 `rg 'Popup Script 載入完成' tests/` 單一關鍵字驗證，未掃描 tests/ 下所有 emoji 字面，致誤判「無斷言依賴」（實際 12 檔 48+ 處）；加上 emoji 偵測範圍靠手工列舉 U+1F000-1FFFF + U+2600-27BF 兩區段，漏 U+2139-25B6 區段 9 種 + FE0F 336 處，造成範圍二度誤判。
+
+**Consequence**：ANA 範圍判定失準會導致：(a) IMP acceptance 建立在錯誤覆蓋假設上；(b) IMP 執行期才發現範圍不足，需新增 patch ticket；(c) 每次範圍修訂都讓前後 ticket 的驗收條件不一致，後人難以追蹤正確基準。
+
+**Action**：ANA Solution 中含「全量 grep/regex 範圍判定」時，必須在 Solution 明示以下三項：
+
+### 1. 驗證方法涵蓋完整性聲明（必填）
+
+| 驗證方法 | 適用場景 | 已知盲區 |
+|---------|---------|---------|
+| **區段列舉法**（手工列 Unicode block） | 已知目標字元屬特定 block，block 數量少（≤5） | 遺漏未列舉的 block；FE0F 等修飾符跨 block 不會被涵蓋 |
+| **全字元集掃描法**（Python `unicodedata` + `rg` 搭配）| 不確定目標字元分佈，或需要完整 codebase 掃描 | 需安裝 Python 依賴；regex 語法需正確覆蓋多字節 |
+| **直接 rg regex 法**（單一 pattern 掃描）| 目標字元有明確唯一 regex 模式 | Pattern 不完整會遺漏邊際字元；依賴作者對字元集的完整認識 |
+
+Solution 必須明示使用哪種驗證方法，並說明「此方法的已知盲區」及「為什麼認為此盲區不影響本 ANA 結論」。
+
+**三種方法的組合使用（推薦）**：
+
+若範圍判定屬高風險（後續 IMP 範圍直接從 ANA 繼承），建議「全字元集掃描 + rg 交叉驗證」：
+
+```bash
+# Step 1：Python 全字元集掃描，取得完整字元清單
+python3 -c "
+import subprocess, unicodedata
+result = subprocess.run(['rg', '--no-filename', '-o', '.', 'path/'], capture_output=True, text=True)
+chars = set(result.stdout.replace('\n', ''))
+targets = {c for c in chars if unicodedata.category(c).startswith('S') or unicodedata.category(c) == 'So'}
+print(sorted(hex(ord(c)) for c in targets))
+"
+
+# Step 2：rg 驗證特定字元在測試檔的依賴關係
+rg -rn '[\xf0-\xf4][\x80-\xbf]{3}|[\xe2-\xe3][\x80-\xbf]{2}' tests/ --count-matches
+```
+
+### 2. 覆蓋完整性聲明格式
+
+ANA Solution 涉及全量 grep/regex 範圍判定時，必須包含以下格式的聲明（置於 Solution 結論前）：
+
+```markdown
+**範圍驗證方法**：[列舉法 / 全字元集掃描法 / rg regex 法 / 組合]
+**驗證指令**：（附上實際執行的指令或腳本）
+**已知盲區**：（說明此方法無法偵測什麼）
+**盲區影響評估**：（說明為何盲區不影響本結論，或盲區已另行驗證）
+```
+
+**強制觸發條件**：ANA Solution 中若出現以下任一句型，即視為「全量 grep/regex 範圍判定」，必須補上上方聲明：
+
+| 句型 | 說明 |
+|------|------|
+| 「X 在 codebase 中共有 N 處」 | 數量斷言 |
+| 「無任何 X 依賴」「X 依賴 = 0」 | 零依賴斷言 |
+| 「X 僅出現於 [路徑]」 | 路徑範圍斷言 |
+| 「所有 X 已覆蓋 Unicode 區段 U+XXXX-YYYY」 | 字元集覆蓋斷言 |
+
+### 3. AC 設計連動要求
+
+ANA 的覆蓋完整性聲明必須直接體現在後續 IMP 的 acceptance 設計中：
+
+| ANA 結論 | IMP acceptance 要求 |
+|---------|-------------------|
+| 「依賴 = 0（驗證方法：rg regex 全路徑）」 | acceptance 必須含與 ANA 相同 rg 指令的重新驗證 |
+| 「依賴 = N 處（驗證方法：全字元集掃描）」 | acceptance 含「執行相同掃描腳本確認 = 0 後」通過 |
+| 「覆蓋區段 U+XXXX-YYYY」 | acceptance 含「全字元集掃描確認無遺漏後」通過 |
+
+**禁止**：IMP acceptance 僅驗 build/lint 通過而不重新驗證 ANA 所聲明的範圍（W1-005.2 根因）。
+
+> **觸發案例**：W1-005 ANA AC-4 二度誤判（單關鍵字 rg 替代全量掃描 + 手工區段列舉漏 FE0F）→ 兩個 patch ticket + 48+ 處隱性測試回歸（W1-007 ANA 教訓 1）
+>
+> **相關 Error Pattern**：本規範與 `.claude/error-patterns/process-compliance/PC-161-ana-grep-scope-misjudgment-collapses-precedent-argument.md` 互補。PC-161 聚焦「ANA 以 grep 結果支撐強論證但範圍有誤」；本規範聚焦「ANA 涉及 Unicode/字元集覆蓋判定的完整性聲明要求」。兩者同屬 ANA grep 驗證品質家族，防護不同面向。
+
+---
+
 ## Phase 0-L：Legacy Code 評估
 
 ### 觸發條件
@@ -383,7 +459,8 @@ SA 否決不可繞過 — 必須解決否決原因後重新審查。
 
 ---
 
-**Last Updated**: 2026-05-12
+**Last Updated**: 2026-06-04
+**Version**: 2.18.0 — 新增「ANA 全量 grep/regex 範圍驗證完整性規範」獨立章節：三層強制要求（驗證方法涵蓋完整性聲明、覆蓋完整性聲明格式、AC 設計連動），觸發案例 W1-005 ANA AC-4 二度誤判（0.19.1-W1-039）
 **Version**: 2.17.0 — Phase 4 派發前新增「TD 清單校準（td-status）」預檢步驟（W10-083 / PC-094 落地，防止多視角浪費 token 在已完成 TD 項）
 **Version**: 2.16.0 - Phase 4 新增強制 Checkpoint：重構評估前執行 WRAP Phase 2 檢驗（W15-019，防止重構根因分析太表層）
 **Version**: 2.15.0 - 新增 Phase 1.5 規格多視角審查（單一視角必然有盲點，規格完成後強制多視角審查）

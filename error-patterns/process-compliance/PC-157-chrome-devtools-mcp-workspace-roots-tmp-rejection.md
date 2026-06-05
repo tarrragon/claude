@@ -33,8 +33,8 @@ workspace roots [{"uri":"file:///Users/<user>/project/<proj>"},{"uri":"file:///v
 | 場景 | 正確做法 |
 |------|---------|
 | 解壓 extension ZIP 給 mcp install | 用 `$TMPDIR/<dir>`（macOS = `/var/folders/.../T/`），或專案內路徑（如 `dist/extracted/`） |
-| 取得正確 TMPDIR 路徑 | Bash `echo "$TMPDIR"` 取得絕對路徑；mkdir 與後續操作用 absolute path（zsh 的 globbing 對相對路徑變數展開有時失敗） |
-| 撞到 access denied 錯誤 | 第一步讀錯誤訊息的 `workspace roots [...]` 清單，從中挑路徑，不要重試 /tmp 變體 |
+| 取得正確 TMPDIR 路徑 | Bash `echo "$TMPDIR"` 取得絕對路徑；mkdir 與後續操作用 absolute path（zsh 的 globbing 對相對路徑變數展開有時失敗）。**版本註記**：CC ≥ 2.1.163 此步驟可靠（`$TMPDIR` 解析回真實系統 temp = MCP workspace root `temp`）；CC 2.1.154–2.1.162 因 regression 將 `$TMPDIR` 覆寫為 `/tmp/claude-{uid}`（在 /tmp 下），此窗口期 `echo $TMPDIR` 返回的路徑會被 install_extension 拒，改以下列「讀錯誤訊息 workspace roots」為權威來源（2.1.163 #9 已修復 regression，0.19.1-W1-045 驗證） |
+| 撞到 access denied 錯誤 | 第一步讀錯誤訊息的 `workspace roots [...]` 清單，從中挑路徑，不要重試 /tmp 變體（此法版本無關，最可靠） |
 
 ## 觸發條件
 

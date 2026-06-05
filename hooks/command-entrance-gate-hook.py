@@ -56,9 +56,9 @@ HOOK_METADATA (JSON):
 {
   "event_type": "UserPromptSubmit",
   "timeout": 5000,
-  "description": "命令入口閘門 - 驗證開發命令的 Ticket 前置條件",
+  "description": "命令入口閘門 - 驗證開發命令的 Ticket 前置條件（v3.6.0 引導式：無 Ticket 放行 + 注入 AskUserQuestion 引導）",
   "dependencies": [],
-  "version": "3.5.0"
+  "version": "3.6.0"
 }
 """
 
@@ -174,6 +174,10 @@ MANAGEMENT_PATTERNS = [
     "提交",    # 中文 commit（git 提交）
     "git",     # Git 操作前綴（push, pull, status 等）
     "push",    # git push
+    "合併",    # git merge（合併分支，非開發命令；W1-036 補白名單）
+    "merge",   # git merge（英文）
+    "pull",    # git pull
+    "rebase",  # git rebase
     # 查詢和摘要操作
     "查詢",    # 查詢操作（非開發）
     "摘要",    # 摘要操作（非開發）
@@ -247,6 +251,23 @@ LONG_TEXT_THRESHOLD = 50
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_BLOCK = 2
+
+# 引導式互動訊息（W1-036）：開發命令無對應 Ticket 時，改為放行 + 注入此 context，
+# 指示主線程用 AskUserQuestion 詢問下一步，取代硬阻擋（exit 2）。
+# Why: UserPromptSubmit hook 無法直接呼叫 AskUserQuestion tool（hook 只能 exit / 注入 context），
+#      故以「放行 + 注入引導指令」間接達成「引導式閘門」效果。
+GUIDANCE_NO_TICKET = (
+    "[command-entrance-gate] 偵測到開發/調整類命令，但目前沒有對應的 in_progress "
+    "或顯式引用的 Ticket。\n"
+    "\n"
+    "請勿直接執行開發動作。改用 AskUserQuestion 工具詢問用戶下一步"
+    "（先 ToolSearch(\"select:AskUserQuestion\") 載入 schema），提供以下選項：\n"
+    "- 建立新 Ticket（引導進入 /ticket create 流程）\n"
+    "- 認領現有 Ticket（先 `ticket track list --status pending` 查詢再 `ticket track claim <id>`）\n"
+    "- 此為描述 / 討論而非開發命令，直接繼續\n"
+    "\n"
+    "（引導式閘門 v3.6.0：無 Ticket 時放行並引導，取代硬阻擋）"
+)
 
 # validate_input 已遷移至 hook_utils.validate_hook_input
 
@@ -404,6 +425,11 @@ def is_development_command(prompt: str, logger) -> bool:
 # 例：「新增的功能」「重構過的模組」中的開發詞不是命令動詞
 _DESCRIPTIVE_SUFFIXES = ("的", "過", "了的")
 
+# 描述性前綴標記：開發詞緊接於以下過去式 / 完成態標記之後視為狀態陳述（非命令意圖）
+# 例：「已經修復」「現在已修復」「剛剛重構」中的開發詞描述「已完成的狀態」，不是「去做」的命令
+# W1-036：補 _DESCRIPTIVE_SUFFIXES 漏掉的「描述性前綴」維度，與後綴規則對稱。
+_DESCRIPTIVE_PREFIXES = ("已經", "已", "現已", "剛剛", "剛", "都已")
+
 
 def _is_command_keyword_occurrence(
     prompt_stripped_lower: str, kw_lower: str, idx_in_full: int, prompt_lower: str
@@ -412,6 +438,7 @@ def _is_command_keyword_occurrence(
 
     判定規則（保守，傾向保留防護）：
     1. 句首出現（去除前後空白後 prompt 以該關鍵字開頭）→ 視為命令。
+    1.5. 關鍵字緊接描述性前綴（「已經」「已」等完成態標記）→ 視為狀態陳述，非命令。
     2. 關鍵字緊接描述性後綴（「的」「過」等修飾標記）→ 視為描述，非命令。
     3. 其餘出現位置 → 視為命令（防護不喪失）。
 
@@ -427,6 +454,13 @@ def _is_command_keyword_occurrence(
     # 規則 1：句首即命令式開發詞 → 命令
     if prompt_stripped_lower.startswith(kw_lower):
         return True
+
+    # 規則 1.5：緊接描述性前綴（已經 / 已 / 現已 等完成態標記）→ 狀態陳述，非命令
+    # 例：「已經修復」「現在已修復」描述已完成狀態，非「去修復」的命令意圖。
+    before = prompt_lower[:idx_in_full]
+    for prefix in _DESCRIPTIVE_PREFIXES:
+        if before.endswith(prefix):
+            return False
 
     # 規則 2：緊接描述性後綴 → 描述性語境，非命令
     after_idx = idx_in_full + len(kw_lower)
@@ -805,7 +839,9 @@ def generate_hook_output(
     is_valid: bool,
     error_msg: Optional[str],
     ticket_id: Optional[str],
-    relevance_warning: Optional[str] = None
+    relevance_warning: Optional[str] = None,
+    is_guidance: bool = False,
+    guidance_msg: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     生成 Hook 輸出
@@ -817,12 +853,14 @@ def generate_hook_output(
         error_msg: 如果驗證失敗，提供的錯誤訊息
         ticket_id: Ticket ID
         relevance_warning: 關聯性檢查警告（soft check，不阻塊）
+        is_guidance: 是否為引導式情境（無 Ticket → 放行 + 注入引導 context，不阻擋；W1-036）
+        guidance_msg: 引導訊息（is_guidance=True 時注入 additionalContext，取代 error_msg）
 
     Returns:
         dict - Hook 輸出 JSON
     """
-    # 決定是否阻止
-    should_block = is_dev_cmd and not is_valid
+    # 決定是否阻止：引導式情境放行（不阻擋），僅注入引導 context
+    should_block = is_dev_cmd and not is_valid and not is_guidance
 
     output = {
         "hookSpecificOutput": {
@@ -831,8 +869,11 @@ def generate_hook_output(
     }
 
     # 添加額外上下文
+    # 引導式情境注入 guidance_msg（取代硬阻擋的 error_msg）；其餘沿用 error_msg
     context_parts = []
-    if error_msg:
+    if is_guidance and guidance_msg:
+        context_parts.append(guidance_msg)
+    elif error_msg:
         context_parts.append(error_msg)
     if relevance_warning:
         context_parts.append(relevance_warning)
@@ -846,6 +887,7 @@ def generate_hook_output(
         "ticket_validation_passed": is_valid,
         "ticket_id": ticket_id,
         "should_block": should_block,
+        "is_guidance": is_guidance,
         "has_relevance_warning": relevance_warning is not None,
         "exit_code": "EXIT_BLOCK" if should_block else "EXIT_SUCCESS",
         "timestamp": datetime.now().isoformat()
@@ -923,14 +965,23 @@ def main() -> int:
             is_valid, error_msg, ticket_id, relevance_warning = check_ticket_status(prompt, logger)
             logger.info(f"Ticket 驗證結果: is_valid={is_valid}, ticket_id={ticket_id}, has_warning={relevance_warning is not None}")
 
+        # 步驟 5.5: 判別引導式情境（W1-036）
+        # 無對應 Ticket（驗證失敗且 ticket_id 為 None）→ 引導式放行；
+        # Ticket 存在但畸形 / 未認領（ticket_id 非 None）→ 維持硬阻擋。
+        is_guidance = is_dev_cmd and not is_valid and ticket_id is None
+        guidance_msg = GUIDANCE_NO_TICKET if is_guidance else None
+        if is_guidance:
+            logger.info("無對應 Ticket，改為引導式放行（注入 AskUserQuestion 引導 context）")
+
         # 步驟 6: 生成 Hook 輸出
         hook_output = generate_hook_output(
-            prompt, is_dev_cmd, is_valid, error_msg, ticket_id, relevance_warning
+            prompt, is_dev_cmd, is_valid, error_msg, ticket_id, relevance_warning,
+            is_guidance=is_guidance, guidance_msg=guidance_msg
         )
         print(json.dumps(hook_output, ensure_ascii=False, indent=2))
 
         # 步驟 7: 儲存日誌
-        should_block = is_dev_cmd and not is_valid
+        should_block = is_dev_cmd and not is_valid and not is_guidance
         status = "BLOCKED" if should_block else "ALLOWED"
         warning_status = "WITH_WARNING" if relevance_warning is not None else "OK"
         log_entry = f"""[{datetime.now().isoformat()}]
@@ -944,8 +995,10 @@ def main() -> int:
 """
         save_check_log("command-entrance-gate", log_entry, logger)
 
-        # 步驟 8: 決定 exit code（阻塞式）
-        if is_dev_cmd and not is_valid:
+        # 步驟 8: 決定 exit code
+        # 阻擋僅限「Ticket 存在但畸形 / 未認領」（is_guidance=False）；
+        # 無 Ticket 的引導式情境（is_guidance=True）放行（exit 0），引導 context 已注入 stdout。
+        if should_block:
             logger.warning(GateMessages.COMMAND_GATE_BLOCKED)
             # 將錯誤訊息寫到 stderr，讓 Claude Code 能正確顯示阻擋原因
             if error_msg:

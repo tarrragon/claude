@@ -578,3 +578,104 @@ def emit_hook_output(
         permission_decision, permission_decision_reason,
     )
     print(json.dumps(output, ensure_ascii=False))
+
+
+# ============================================================================
+# SubagentStop additionalContext 輸出（含版本相容 graceful fallback）
+# ============================================================================
+
+# CC 2.1.163 #4 解除 SubagentStop event schema 對
+# hookSpecificOutput.additionalContext 的限制（W17-159 / W17-160 當時被迫
+# 改用 top-level systemMessage）。低於此版本的 runtime 仍會拒絕
+# additionalContext，故以版本偵測決定輸出 shape，舊版 graceful fallback
+# 回 systemMessage。
+SUBAGENT_STOP_ADDITIONAL_CONTEXT_MIN_VERSION = (2, 1, 163)
+
+# 偵測結果快取（單次 hook 進程內只解析一次，避免重複 subprocess）。
+_cc_version_cache: "Optional[Tuple[int, ...]]" = None
+_cc_version_resolved = False
+
+
+def _parse_version_tuple(raw: str) -> "Optional[Tuple[int, ...]]":
+    """從 `claude --version` 輸出解析 (major, minor, patch) 整數 tuple。
+
+    範例輸入: "2.1.163 (Claude Code)" -> (2, 1, 163)
+    無法解析時回 None。
+    """
+    import re
+
+    match = re.search(r"(\d+)\.(\d+)\.(\d+)", raw or "")
+    if not match:
+        return None
+    return tuple(int(part) for part in match.groups())
+
+
+def get_claude_code_version(
+    logger: "Optional[logging.Logger]" = None,
+) -> "Optional[Tuple[int, ...]]":
+    """偵測當前 Claude Code runtime 版本，回 (major, minor, patch) tuple。
+
+    透過 `claude --version` 取得；偵測失敗（binary 不在 PATH、subprocess
+    逾時、輸出格式異常）時回 None，由呼叫端決定 fallback 行為。
+    結果於進程內快取。
+    """
+    global _cc_version_cache, _cc_version_resolved
+    if _cc_version_resolved:
+        return _cc_version_cache
+
+    _cc_version_resolved = True
+    try:
+        result = subprocess.run(
+            ["claude", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        _cc_version_cache = _parse_version_tuple(result.stdout)
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+        if logger:
+            logger.debug("無法偵測 Claude Code 版本（fallback）: %s", exc)
+        _cc_version_cache = None
+    return _cc_version_cache
+
+
+def supports_subagent_stop_additional_context(
+    logger: "Optional[logging.Logger]" = None,
+) -> bool:
+    """判定當前 runtime 是否支援 SubagentStop additionalContext。
+
+    版本 >= 2.1.163 回 True；低於則回 False。
+    版本偵測失敗時採「樂觀預設」回 True——CC 2.1.163 為向後新基線，
+    偵測失敗多發生於 sandbox/測試環境，採新 schema 可避免長期沿用
+    過時 workaround；舊版實際拒絕時僅退化為一次 hook error（非致命）。
+    """
+    version = get_claude_code_version(logger)
+    if version is None:
+        return True
+    return version >= SUBAGENT_STOP_ADDITIONAL_CONTEXT_MIN_VERSION
+
+
+def build_subagent_stop_output(
+    context: str,
+    logger: "Optional[logging.Logger]" = None,
+) -> dict:
+    """為 SubagentStop event 建構輸出 JSON，含版本相容 graceful fallback。
+
+    - CC >= 2.1.163: hookSpecificOutput.additionalContext（正確機制）
+    - CC < 2.1.163 : top-level systemMessage（降級 workaround）
+
+    Args:
+        context: 要注入 PM 主線程的訊息文字。
+        logger: 可選 logger，用於記錄版本偵測 fallback。
+
+    Returns:
+        dict: 對應 runtime 版本的輸出結構。
+    """
+    if supports_subagent_stop_additional_context(logger):
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "SubagentStop",
+                "additionalContext": context,
+            }
+        }
+    return {"systemMessage": context}

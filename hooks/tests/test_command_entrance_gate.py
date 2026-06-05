@@ -568,14 +568,18 @@ class TestMainFunction:
         assert result == 0
 
     def test_dev_command_blocked(self):
-        """測試開發命令被阻擋"""
+        """測試開發命令被阻擋（Ticket 存在但畸形 / 未認領，ticket_id 非 None）
+
+        W1-036 後：硬阻擋僅適用「Ticket 存在但驗證失敗」情境（ticket_id 非 None）。
+        「無 Ticket」情境改為引導式放行，見 TestW1036GuidedNoTicket。
+        """
         hook_module = load_hook_module()
 
         with patch.object(hook_module, 'read_json_from_stdin',
                          return_value={"prompt": "實作新功能"}):
             with patch.object(hook_module, 'is_development_command', return_value=True):
                 with patch.object(hook_module, 'check_ticket_status',
-                                 return_value=(False, "Ticket 未找到", None, None)):
+                                 return_value=(False, "Ticket 決策樹缺失", "0.19.1-W1-099", None)):
                     with patch('sys.stdout', new_callable=io.StringIO):
                         with patch('sys.stderr', new_callable=io.StringIO):
                             result = hook_module.main()
@@ -624,7 +628,7 @@ class TestBoundaryScenarios:
                          return_value={"prompt": "0.1.0-W39-001 0.1.0-W39-002 實作新功能"}):
             with patch.object(hook_module, 'is_development_command', return_value=True):
                 with patch.object(hook_module, 'check_ticket_status',
-                                 return_value=(False, "錯誤", None, None)):
+                                 return_value=(False, "錯誤", "0.1.0-W39-001", None)):
                     with patch('sys.stdout', new_callable=io.StringIO):
                         with patch('sys.stderr', new_callable=io.StringIO):
                             result = hook_module.main()
@@ -846,3 +850,130 @@ class TestW4027IntegrationReproCase:
                         result = hook_module.main()
 
         assert result == 2  # EXIT_BLOCK
+
+
+# ============================================================================
+# W1-036：引導式互動 + 描述性前綴 / merge 白名單誤判修補
+# ============================================================================
+
+class TestW1036DescriptivePrefix:
+    """描述性前綴（已經 / 已 / 現已 等完成態標記）不應判為開發命令
+
+    觸發案例：「這個分支現在已經修復，可以合併」中的「修復」屬狀態陳述，
+    非「去修復」命令意圖，不應觸發 Ticket 閘門。
+    """
+
+    @pytest.mark.parametrize("prompt", [
+        "已經修復",
+        "已修復登入問題",
+        "現在已修復登入問題",
+        "這個分支現在已經修復",
+        "剛剛重構完成",
+        "都已新增完畢",
+    ])
+    def test_descriptive_prefix_not_dev(self, prompt):
+        """緊接完成態前綴的開發詞不應判為開發命令"""
+        hook_module = load_hook_module()
+        logger = MagicMock()
+        assert hook_module.is_development_command(prompt, logger) is False
+
+    @pytest.mark.parametrize("prompt", [
+        "修復登入問題",
+        "重構 UC-06",
+        "新增使用者登入流程",
+    ])
+    def test_imperative_without_prefix_still_dev(self, prompt):
+        """無完成態前綴的命令式開發詞仍判為開發命令（防護不喪失）"""
+        hook_module = load_hook_module()
+        logger = MagicMock()
+        assert hook_module.is_development_command(prompt, logger) is True
+
+
+class TestW1036MergeWhitelist:
+    """合併 / merge 等 git 操作納入 management 白名單，不被當開發命令阻擋"""
+
+    @pytest.mark.parametrize("prompt", [
+        "這個分支可以合併回主線",
+        "可以合併了",
+        "merge this branch into main",
+        "幫我 pull 最新的 main",
+        "需要 rebase 到 main",
+    ])
+    def test_git_ops_are_management(self, prompt):
+        """git 合併 / merge / pull / rebase 屬管理操作（永遠放行）"""
+        hook_module = load_hook_module()
+        logger = MagicMock()
+        assert hook_module.is_management_operation(prompt, logger) is True
+
+
+class TestW1036GuidedNoTicket:
+    """無對應 Ticket 時引導式放行（exit 0 + 注入 AskUserQuestion 引導 context），取代硬阻擋"""
+
+    def test_generate_output_guidance_not_blocking(self):
+        """generate_hook_output 引導式情境：should_block=False 且注入 guidance_msg"""
+        hook_module = load_hook_module()
+
+        output = hook_module.generate_hook_output(
+            prompt="實作新功能",
+            is_dev_cmd=True,
+            is_valid=False,
+            error_msg="未找到 Ticket",
+            ticket_id=None,
+            relevance_warning=None,
+            is_guidance=True,
+            guidance_msg=hook_module.GUIDANCE_NO_TICKET,
+        )
+
+        assert output["check_result"]["should_block"] is False
+        assert output["check_result"]["is_guidance"] is True
+        assert output["check_result"]["exit_code"] == "EXIT_SUCCESS"
+        context = output["hookSpecificOutput"].get("additionalContext", "")
+        assert "AskUserQuestion" in context
+
+    def test_main_dev_command_no_ticket_guided_not_blocked(self):
+        """main：開發命令 + 無 Ticket（ticket_id=None）→ exit 0（引導），非 exit 2"""
+        hook_module = load_hook_module()
+
+        captured = io.StringIO()
+        with patch.object(hook_module, 'read_json_from_stdin',
+                         return_value={"prompt": "實作新功能"}):
+            with patch.object(hook_module, 'is_development_command', return_value=True):
+                with patch.object(hook_module, 'check_ticket_status',
+                                 return_value=(False, "未找到 Ticket", None, None)):
+                    with patch('sys.stdout', captured):
+                        with patch('sys.stderr', new_callable=io.StringIO):
+                            result = hook_module.main()
+
+        assert result == 0  # EXIT_SUCCESS（引導式放行）
+        assert "AskUserQuestion" in captured.getvalue()
+
+    def test_main_dev_command_malformed_ticket_still_blocked(self):
+        """main：開發命令 + Ticket 存在但畸形（ticket_id 非 None）→ 仍 exit 2（阻擋不退化）"""
+        hook_module = load_hook_module()
+
+        with patch.object(hook_module, 'read_json_from_stdin',
+                         return_value={"prompt": "實作新功能"}):
+            with patch.object(hook_module, 'is_development_command', return_value=True):
+                with patch.object(hook_module, 'check_ticket_status',
+                                 return_value=(False, "決策樹缺失", "0.19.1-W1-099", None)):
+                    with patch('sys.stdout', new_callable=io.StringIO):
+                        with patch('sys.stderr', new_callable=io.StringIO):
+                            result = hook_module.main()
+
+        assert result == 2  # EXIT_BLOCK
+
+    def test_full_repro_already_fixed_can_merge_not_blocked(self):
+        """完整重現：『這個分支現在已經修復，可以合併』→ 不阻擋（exit 0）
+
+        雙重防護：『已經修復』描述性前綴 + 『合併』management 白名單，
+        任一機制即可放行，不需 mock check_ticket_status。
+        """
+        hook_module = load_hook_module()
+
+        with patch.object(hook_module, 'read_json_from_stdin',
+                         return_value={"prompt": "這個分支現在已經修復，可以合併"}):
+            with patch('sys.stdout', new_callable=io.StringIO):
+                with patch('sys.stderr', new_callable=io.StringIO):
+                    result = hook_module.main()
+
+        assert result == 0

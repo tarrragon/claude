@@ -4,14 +4,15 @@
 
 ## last-reviewed
 
-**2.1.161**
+**2.1.163**
 
-（下次觸發時，只評估 2.1.161 之後的新版本）
+（下次觸發時，只評估 2.1.163 之後的新版本）
 
 ## 評估歷史
 
 | 版本區間 | 評估 ticket | 主要結論 |
 |---------|------------|---------|
+| 2.1.162 / 2.1.163 | 0.19.1-W1-043 | 44 項中無影響 30 / 不適用 8 / 需評估 5 / 有幫助 1。唯一高價值採用項 2.1.163 #4（Stop/SubagentStop hook 可回傳 additionalContext 給 Claude 回饋且不算 hook error），觸及框架 5 Stop + 2 SubagentStop hook。建 ANA 統籌：子 ANA 0.19.1-W1-044（#4 逐 hook 適用性 + 風險 + 含 #1 版本釘選）、DOC 0.19.1-W1-045（#9 $TMPDIR/PC-157 驗證）。#12 顯性豁免（平台自動受益，PC-104）。2.1.162 全為 claude agents dashboard UX/截斷修復，採用項 0 |
 | 2.1.161 | 0.19.1-W1-008 | 22 項中無影響 9 / 不適用 4 / 需評估 6 / 有幫助 3。建 ANA 評估三項與既有痛點共振的平台修復：#15 worktree 背景 session 編輯修復（關聯 ARCH-015/PC-114）、#18 完成 subagent 卡 running 修復（關聯 PM 狀態歸因 PC-104）、#4 並行 Bash 失敗隔離（關聯並行派發設計）。#14 mcp secret 遮蔽自動受益；#1/#13 OTEL 低優先 |
 | 2.1.157 | 0.19.0-W4-028 | 採用 worktree 解鎖清理 SOP + EnterWorktree mid-session 補註；OTEL tool_parameters 可選；agent 欄位不適用；plugin 三項不採用 |
 | 2.1.154 / 2.1.156 / 2.1.158 / 2.1.159 | 0.19.0-W4-029 | 建 release-note skill（本 skill）；AUQ 規則對齊（交用戶決策）；workflow 納入派發評估；MCP env 補記；2.1.156/158/159 無影響或不適用 |

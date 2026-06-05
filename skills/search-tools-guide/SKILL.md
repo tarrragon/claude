@@ -424,38 +424,34 @@ rg "error" lib/ --glob '!lib/l10n/' --glob '!*.g.dart'
 
 ---
 
-## 三 MCP 核心命令速查表
+## 三 MCP 核心能力速查表（版本無關）
 
-### CodeGraph（代碼圖譜索引 + 呼叫圖追蹤）
+> **為何不列具體工具動詞名**：MCP server 跨版本會改名 / 增刪工具，安裝方式也決定 server 前綴（PC-173 三層漂移）。硬編碼工具動詞名必然與實機暴露漂移，讀者照抄會呼叫到不存在的工具而浪費回合。本速查表只列「server 前綴 + 能力分類」；**確切工具動詞名以 `ToolSearch` 當下發現為準**——session 啟動時 system-reminder 列出的 deferred tools 清單是唯一 ground truth。
 
-| 命令 | 用途 | 典型用途 | 輸出 |
-|------|------|---------|------|
-| `mcp__codegraph__codegraph_reindex_workspace` | 索引重建 / 就緒確認 | 確認索引就緒（回報已索引檔數；codegraph 無專屬 status 工具，以 reindex 回報替代） | `{"files_indexed": 750, "files_parsed": 750, "files_skipped": 0, "status": "success"}` |
-| `mcp__codegraph__codegraph_symbol_search` | 符號搜尋 | 找 `BookRepository` 定義（跨語言） | `{"matches": [{"name": "BookRepository", "kind": "class", "file": "...", "line": 10}]}` |
-| `mcp__codegraph__codegraph_get_callers` | 呼叫者追蹤 | 「deleteBook 被誰呼叫」 | 清單所有 caller（含檔案、行號、完整呼叫堆疊） |
-| `mcp__codegraph__codegraph_get_callees` | 被呼叫者 | 「deleteBook 呼叫了誰」 | 清單 deleteBook 調用的所有函式 |
-| `mcp__codegraph__codegraph_analyze_impact` | 影響分析 | 修改某符號的 blast radius | 關聯的所有符號列表（按依賴級別排序） |
+### server 前綴對照
 
-### codebase-memory-mcp（語義搜尋 + 概念檢索）
+| MCP server | 本專案 server 前綴 | 安裝方式註記 |
+|-----------|------------------|-------------|
+| CodeGraph | `mcp__codegraph__*` | 專案層級 `.mcp.json` |
+| codebase-memory-mcp (cbm) | `mcp__codebase-memory-mcp__*` | 專案層級 `.mcp.json`（注意前綴含連字號，非底線） |
+| Serena | user-level 安裝為 `mcp__serena__*`；plugin marketplace 安裝為 `mcp__plugin_serena_serena__*` | 前綴依安裝方式而定，兩者工具子集不完全相同（部分工具僅 plugin 版有） |
 
-| 命令 | 用途 | 典型用途 | 輸出 |
-|------|------|---------|------|
-| `mcp__codebase-memory-mcp__index_repository` | 建立 / 更新索引 | 首次 `index_repository(repo_path="/path/to/book_overview_v1", mode="moderate")` 建立向量 + BM25 索引 | `{"status": "indexed", "nodes": 10033, "edges": 31705, "project": "..."}` |
-| `mcp__codebase-memory-mcp__index_status` | 索引狀態 | 確認 cbm 已索引當前 repo | `{"project": "...", "status": "ready", "nodes": 10033}` |
-| `mcp__codebase-memory-mcp__search_graph` | 語義搜尋 | `search_graph(project="...", query="error handling patterns")` 找相似概念（程式碼片段檢索可用 `search_code`） | 向量相似度排序結果，含檔案片段 + 相似度分數 |
-| `mcp__codebase-memory-mcp__list_projects` | 列出索引的所有 projects | 檢視已管理的 repo 清單 | `{"projects": ["Users-mac-eric-project-book_overview_v1", ...]}` |
+### 能力 → server 對照（動詞名請 ToolSearch 發現）
 
-### Serena（LSP 符號操作 + 型別感知）
+| 能力 | 首選 server | 發現方式（取代硬編碼名） |
+|------|-----------|----------------------|
+| 索引就緒確認 / 重建 | CodeGraph | `ToolSearch(query="codegraph status index")` 取當前名 |
+| 符號定義搜尋（跨語言精確） | CodeGraph / Serena | `ToolSearch(query="codegraph search")` / `ToolSearch(query="serena find symbol")` |
+| 呼叫者 / 被呼叫者追蹤 | CodeGraph | `ToolSearch(query="codegraph callers callees")` |
+| 影響分析（blast radius） | CodeGraph / Serena | `ToolSearch(query="codegraph impact")` |
+| 語義 / 概念搜尋（模糊召回） | cbm | `ToolSearch(query="codebase memory search graph")` |
+| 索引狀態 / 建立 | cbm | `ToolSearch(query="codebase memory index")` |
+| 安全重命名 / symbol 編輯 | Serena [唯一] | `ToolSearch(query="serena rename replace symbol")` |
+| 檔案符號總覽 | Serena | `ToolSearch(query="serena symbols overview")` |
 
-| 命令 | 用途 | 典型用途 | 輸出 |
-|------|------|---------|------|
-| `mcp__serena__find_symbol` | 符號定義搜尋 | `find_symbol(symbol_name="BookRepository")` 精確定位（Dart 優先） | `{"file": "src/storage/repository.dart", "line": 45, "kind": "class"}` |
-| `mcp__serena__find_referencing_symbols` | 引用追蹤 | 「BookRepository 被引用在哪些地方」 | 完整引用清單（含行號、檔案路徑） |
-| `mcp__serena__rename_symbol` | 安全重命名 | `rename_symbol(old_name="fetchBooks", new_name="fetchUserBooks")` 自動更新所有引用 | 修改後檔案 SHA / 變更摘要 |
-| `mcp__serena__replace_symbol_body` | 符號實作替換 | 精確替換函式實作（不含簽章） | 修改後程式碼片段 + 驗證 |
-| `mcp__serena__get_symbols_overview` | 檔案符號總覽 | 理解檔案結構（類別、方法、變數） | 清單化檔案符號樹，無需讀全檔 |
+**使用方式**：先用能力關鍵字 `ToolSearch` 發現當前確切工具名（或直接查 session system-reminder 的 deferred tools 清單），再以 `ToolSearch(query="select:<發現到的完整工具名>")` 載入 schema 後呼叫。**禁止從本文件複製硬編碼工具動詞名直接呼叫**——本表刻意不列動詞名以杜絕漂移。
 
-**使用方式**：透過 `ToolSearch(query="select:mcp__codegraph__codegraph_symbol_search,mcp__codebase-memory-mcp__search_graph,mcp__serena__find_symbol")` 一次載入多工具 schema，再按需呼叫。
+> **終端 redaction 提醒**（PC-173）：bash `grep` / `rg` 輸出會把實機可呼叫的 MCP 工具名替換為 `n`（如 `mcp__codegraph__n`）。驗證 MCP 工具名引用時改用 Read 工具，勿單憑 bash grep 輸出判讀。
 
 **cbm 深度參考**：CLI 用法、`.claude/` 不索引限制、cbm vs codegraph vs serena 分工速查 → `references/codebase-memory-tool.md`
 
@@ -530,7 +526,7 @@ rg --version
 
 | 限制 | 影響 | Workaround |
 |------|------|----------|
-| cbm MCP namespace 未在 ToolSearch deferred 曝光（v0.6.1） | `mcp__codebase_memory__*` 找不到 | 改用 CLI：`codebase-memory-mcp cli <tool> '<json>'`（詳見 `references/codebase-memory-tool.md` §1） |
+| cbm MCP namespace 在某些版本未於 ToolSearch deferred 曝光 | `ToolSearch(query="codebase memory")` 找不到時 | 改用 CLI：`codebase-memory-mcp cli <tool> '<json>'`（詳見 `references/codebase-memory-tool.md` §1）。前綴以實機 deferred 清單為準（正確形含連字號 `mcp__codebase-memory-mcp__`，非底線） |
 | cbm 對 `.claude/` 不索引（v0.6.1 hardcoded） | `.claude/` 範圍搜尋 cbm 結果為空 | `.claude/` 範圍改用 `rg` + 必要時 serena（詳見 `references/codebase-memory-tool.md` §2） |
 | codegraph 冷啟動需載 embedding model | fresh subprocess 30-60s 不可用 | 用 CC runtime 內已暖機的 `mcp__codegraph__*` deferred tools |
 
@@ -550,5 +546,5 @@ rg --version
 
 ---
 
-**Last Updated**: 2026-05-25
-**Version**: 5.0.0 - W6-001.3：新增三 MCP 設計對照表（九維度）、三刀流工作流決策樹（5 情境）、JS Chrome Extension 場景最佳組合、三 MCP 核心命令速查表
+**Last Updated**: 2026-06-04
+**Version**: 5.1.0 - 三 MCP 核心命令速查表改為版本無關形式（server 前綴對照 + 能力分類 + ToolSearch 發現指引），消除 codegraph/cbm 硬編碼工具動詞名漂移源（PC-173 / W1-035 收斂方案落地）。歷史 5.0 版見 git log。

@@ -1,3 +1,27 @@
+## [1.41.0] - 2026-06-05
+
+### Summary
+feat: SubagentStop hook 改用 additionalContext + 版本相容 fallback; feat: command-entrance-gate-hook 引導式互動 + 描述性前綴/merge 誤判修補; fix: 移除過時 Flutter-monorepo 測試解除 collection error (+11 more)
+
+Changes: 2 feat, 2 fix, 8 docs, 2 chore
+
+- feat: SubagentStop hook 改用 additionalContext + 版本相容 fallback
+- feat: command-entrance-gate-hook 引導式互動 + 描述性前綴/merge 誤判修補
+- fix: 移除過時 Flutter-monorepo 測試解除 collection error
+- fix: version-release release 收尾完整性（CHANGELOG finalize + todolist 自動 completed）
+- docs: 新增 PC-176 + 補強 PC-172（codegraph 跨電腦乒乓兩個錯誤學習）
+- docs: src 字串輸出變更 acceptance 必含測試套件規則
+- docs: ANA 全量 grep/regex 範圍驗證完整性規範
+- docs: 新增 IMP-079 批次替換工具誤傷偵測目標字面 error-pattern
+- docs: 新增 PC-175 框架跨 sync 攜帶來源專案類型專屬資產
+- docs: search-tools-guide 速查表版本無關化，杜絕 MCP 工具名漂移
+- docs: PC-174 根因段補顯式 Consequence
+- docs: 新增 PC-174 命令閘門誤判描述性陳述 + 硬阻擋應改引導式
+- chore: #9 PC-157 $TMPDIR workaround 驗證 + 版本註記
+- chore: CC 2.1.162/2.1.163 release 影響評估 ANA
+
+---
+
 ## [1.40.1] - 2026-06-04
 
 ### Summary

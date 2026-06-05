@@ -1310,11 +1310,34 @@ def update_changelog(version: str, dry_run: bool = False) -> bool:
 
 """
 
-        # 幂等性檢查：若版本已存在則跳過
-        if f"## [{version}]" in changelog_content:
+        # finalize 優先：偵測既有 In-Development 區段（header 改發布日期 + 保留人寫內容）
+        # 開發期 header 慣例為 "## [v{version}] - In Development" 或 "## [{version}] - In Development"
+        finalize_pattern = re.compile(
+            r"^## \[v?" + re.escape(version) + r"\] - In Development\s*$",
+            re.MULTILINE,
+        )
+        finalize_match = finalize_pattern.search(changelog_content)
+        if finalize_match:
+            finalized_header = f"## [{version}] - {today}"
+            updated_content = (
+                changelog_content[: finalize_match.start()]
+                + finalized_header
+                + changelog_content[finalize_match.end():]
+            )
+
+            if not dry_run:
+                with open(changelog_path, "w", encoding="utf-8") as f:
+                    f.write(updated_content)
+
+            print_success(f"CHANGELOG.md 已 finalize In-Development 區段為 {version}")
+            return True
+
+        # 幂等性檢查：若版本已 finalize（header 帶日期）則跳過，不重複插入
+        if f"## [{version}]" in changelog_content or f"## [v{version}]" in changelog_content:
             print_warning(f"CHANGELOG.md 已包含 v{version} 條目，跳過插入")
             return True
 
+        # 無 In-Development 區段且版本未存在：維持原有插入模板行為（向後相容）
         # 插入到 "## [" 之前（在 "格式基於" 之後）
         insert_pos = changelog_content.find("## [")
         if insert_pos > 0:
@@ -1567,6 +1590,86 @@ def insert_version_to_todolist(
     else:
         with open(todolist_path, "w", encoding="utf-8") as f:
             f.write(new_content)
+
+    return True
+
+
+def mark_version_completed(
+    todolist_path: Path,
+    version: str,
+    dry_run: bool = False,
+) -> bool:
+    """將 todolist.yaml 中對應版本的 status 標記為 completed（字串操作，保留格式）。
+
+    release 成功後呼叫，將發布版本由 active 轉為 completed，避免後續 start
+    下一版被前版本驗證（find_last_completed_version）阻擋。
+
+    Args:
+        todolist_path: todolist.yaml 路徑
+        version: 要標記為 completed 的版本號
+        dry_run: 預覽模式
+
+    Returns:
+        True 如果成功（含已是 completed 的冪等情況），False 如果找不到版本
+    """
+    if not todolist_path.exists():
+        print_error(f"找不到 {todolist_path}")
+        return False
+
+    with open(todolist_path, encoding="utf-8") as f:
+        content = f.read()
+
+    # 定位版本條目：- version: "X" 後續行的 status: 欄位
+    major_minor = extract_major_minor(version)
+    candidates = [version, major_minor]
+    entry_start = -1
+    for ver_str in candidates:
+        marker = f'version: "{ver_str}"'
+        pos = content.find(f"- {marker}")
+        if pos != -1:
+            entry_start = pos
+            break
+
+    if entry_start == -1:
+        print_error(f"在 todolist.yaml 中找不到版本 {version}")
+        return False
+
+    # 找到該條目範圍內第一個 status: 行（下一個 "- version:" 之前）
+    next_entry = content.find("- version:", entry_start + 1)
+    search_end = next_entry if next_entry != -1 else len(content)
+    status_match = re.search(
+        r"^(\s*status:\s*)(\S+)",
+        content[entry_start:search_end],
+        re.MULTILINE,
+    )
+    if not status_match:
+        print_error(f"版本 {version} 條目缺少 status 欄位")
+        return False
+
+    current_status = status_match.group(2)
+    if current_status == "completed":
+        print_info(f"版本 {version} 已為 completed，跳過")
+        return True
+
+    abs_start = entry_start + status_match.start()
+    abs_end = entry_start + status_match.end()
+    new_content = content[:abs_start] + status_match.group(1) + "completed" + content[abs_end:]
+
+    # 更新 last_updated
+    today = datetime.now().strftime("%Y-%m-%d")
+    new_content = re.sub(
+        r'(last_updated: ")[^"]*(")',
+        rf"\g<1>{today}\2",
+        new_content,
+        count=1,
+    )
+
+    if dry_run:
+        print_info(f"[DRY RUN] 將標記 todolist.yaml 版本 {version}: {current_status} → completed")
+    else:
+        with open(todolist_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+        print_success(f"todolist.yaml 版本 {version} 已標記 completed")
 
     return True
 
@@ -2404,6 +2507,15 @@ def main():
             if not ok:
                 print_error("\nGit 操作失敗，發布已中止")
                 return 1
+
+            # 標記 todolist 版本狀態 active → completed（避免後續 start 被前版本驗證阻擋）
+            print_section("Step: Mark Version Completed")
+            todolist_path = get_project_root() / "docs" / "todolist.yaml"
+            completed_ok = mark_version_completed(todolist_path, version, dry_run)
+            if not completed_ok:
+                print_warning(
+                    f"todolist.yaml 版本 {version} 標記 completed 失敗（不中止發布，請手動確認）"
+                )
 
             # 打印摘要
             print_summary(version, ok, dry_run)

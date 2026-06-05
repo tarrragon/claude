@@ -2,13 +2,13 @@
 
 > **定位**：cbm 是三 MCP 之一，定位為「跨檔案概念 / 語義搜尋入口」，搭配 BM25 + 向量索引提供 11-signal 排序。本檔記錄 CLI 用法、實機限制與 workaround，供 `search-tools-guide` 主檔 lazy-load。
 >
-> **何時讀本檔**：(1) 派發前需要選擇 cbm vs codegraph vs serena；(2) 對 `.claude/` 範圍做搜尋發現 cbm 結果為空；(3) ToolSearch 找不到 `mcp__codebase_memory__*` 工具想知道是否可用。
+> **何時讀本檔**：(1) 派發前需要選擇 cbm vs codegraph vs serena；(2) 對 `.claude/` 範圍做搜尋發現 cbm 結果為空；(3) ToolSearch 找不到 `mcp__codebase-memory-mcp__*` 工具想知道是否可用。
 
 ---
 
 ## 1. CLI 用法（MCP namespace 缺口 workaround）
 
-**現況**：`claude mcp list` 顯示 `codebase-memory-mcp: ✓ Connected`，但 `ToolSearch(query="select:mcp__codebase_memory__*")` 回傳 "No matching deferred tools found"（W6-001.4 實證）。需以 CLI 模式呼叫。
+**現況**：`claude mcp list` 顯示 `codebase-memory-mcp: ✓ Connected`，但 `ToolSearch(query="select:mcp__codebase-memory-mcp__*")` 回傳 "No matching deferred tools found"（W6-001.4 實證）。需以 CLI 模式呼叫。
 
 **CLI 統一格式**：
 
@@ -117,7 +117,7 @@ cbm v0.6.1 對 `.claude/` 目錄存在 **hardcoded skip**：
 
 | 情境 | Workaround |
 |------|-----------|
-| ToolSearch 找不到 `mcp__codebase_memory__*` | 改用 CLI 模式 `codebase-memory-mcp cli <tool> '<json>'` |
+| ToolSearch 找不到 `mcp__codebase-memory-mcp__*` | 改用 CLI 模式 `codebase-memory-mcp cli <tool> '<json>'` |
 | 想對 `.claude/` 做概念搜尋 | 改用 `rg -i "<keyword>" .claude/` + 必要時 serena 補符號級 |
 | cbm 索引後仍找不到結果 | (1) 確認 project ID 拼寫；(2) `delete_project` + clean reindex；(3) 改 `mode:"deep"` |
 | codegraph 索引耗時長 | 首次冷啟動需 embedding model 載入（BGE-Small-EN-v1.5，約 30-60s）；後續走快取 |

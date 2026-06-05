@@ -15,12 +15,15 @@ Agent Commit Verification Hook - SubagentStop
   5. 掃描 hook-logs 輸出 hook error 摘要。
 
 觸發時機: SubagentStop（CC runtime 代理人真正停止時觸發，W10-067 遷移自 PostToolUse）
-行為: 不阻擋（exit 0），有警告時以 top-level systemMessage 輸出（W17-160：SubagentStop event
-  schema 不允許 hookSpecificOutput.additionalContext，改用 systemMessage；同 W17-158/W17-159 處置）
+行為: 不阻擋（exit 0），有警告時以 hookSpecificOutput.additionalContext 輸出（CC 2.1.163 #4
+  已解除 SubagentStop event schema 對 additionalContext 的限制，取代 W17-160 當時被迫採用的
+  top-level systemMessage workaround；< 2.1.163 的 runtime 透過 build_subagent_stop_output
+  自動 graceful fallback 回 systemMessage）。無內容時靜默退出。
 
 來源:
   - PC-024 — 代理人完成實作但跳過 git commit，變更未持久化
   - W10-067 — 從 PostToolUse 遷移至 SubagentStop，解決 background 啟動誤觸發
+  - 0.19.1-W1-046 — CC 2.1.163 解禁後改回 additionalContext + 版本相容 fallback
 """
 
 import json
@@ -36,6 +39,7 @@ from hook_utils import (
     setup_hook_logging,
     read_json_from_stdin,
     get_project_root,
+    build_subagent_stop_output,
 )
 
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
@@ -49,9 +53,10 @@ HOOK_NAME = "agent-commit-verification-hook"
 EXIT_SUCCESS = 0
 
 # 預設輸出格式（靜默通過）
-# W17-160: 原 DEFAULT_OUTPUT（hookSpecificOutput 殼）已移除——
-# SubagentStop event schema 不允許 hookSpecificOutput.additionalContext；
-# 無內容時靜默退出（不輸出任何 JSON）即可。
+# 0.19.1-W1-046: 無內容時靜默退出（不輸出任何 JSON）；有警告時改用
+# hookSpecificOutput.additionalContext（CC 2.1.163 #4 解禁，取代 W17-160
+# 當時的 systemMessage workaround），由 build_subagent_stop_output 處理
+# 版本相容 fallback。
 
 # Git 命令超時（秒）
 GIT_STATUS_TIMEOUT = 5
@@ -644,11 +649,15 @@ def main() -> None:
             first_unmerged_branch,
         ))
 
-    # W17-160: SubagentStop event schema 不允許 hookSpecificOutput.additionalContext，
-    # 改用 top-level systemMessage（同 W17-158/W17-159 處置）。無訊息時靜默不輸出。
+    # 0.19.1-W1-046: CC 2.1.163 #4 解禁後改用 hookSpecificOutput.additionalContext；
+    # build_subagent_stop_output 於 < 2.1.163 的 runtime 自動 graceful fallback 回
+    # top-level systemMessage。無訊息時靜默不輸出（不送空殼）。
     if messages:
         combined_message = "\n\n".join(messages)
-        print(json.dumps({"systemMessage": combined_message}, ensure_ascii=False))
+        print(json.dumps(
+            build_subagent_stop_output(combined_message, logger),
+            ensure_ascii=False,
+        ))
     sys.exit(EXIT_SUCCESS)
 
 

@@ -38,6 +38,10 @@ error: the argument '--mcp' cannot be used multiple times
 
 讀 wrapper 原始碼才發現 wrapper 已自動注入 `--mcp`，正確 args 為 `[]`（與同檔 `codebase-memory-mcp` 的 `args: []` 一致）。錯誤的原始設定 `args: ["serve", "--mcp"]` 中 `serve` 亦非合法子命令，同樣是只憑推斷未實機驗證的產物。
 
+### 跨環境 git 同步的放大效應（2026-06-04 重演）
+
+當錯誤設定所在的檔案被 git 追蹤並跨多環境（多機器 / CI）同步，PC-172 的單機誤判會被放大為**乒乓循環**：一環境實機驗證修對後 push，另一環境未驗證又憑推斷改回猜測版覆蓋，正確修復永遠無法收斂。codegraph `.mcp.json` 即在兩台電腦間於「驗證版 `codegraph-mcp`（commit `ffb31a9f` / `61b0c006`）」與「猜測版 `codegraph serve --mcp`（commit `c9fc6bcd` / `850d85b0`）」反覆覆蓋，用戶每天手動修同一問題。根因可追溯至初次引入（commit `c0319bad`）就用未驗證的猜測命令。2026-06-04 定版為 `command: codegraph-mcp, args: []`（commit `3281c1fe`），兩環境通用。診斷端為何漏掉「設定本身一直是錯的」而誤歸因「環境差異」，見 PC-176。
+
 ## 防護（四步診斷流程）
 
 | 步驟 | 動作 | 目的 |

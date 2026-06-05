@@ -129,6 +129,35 @@ IMP ticket 含安裝指令時，acceptance 必須補上 fresh shell 驗證條件
 - `.claude/error-patterns/process-compliance/PC-159-install-command-not-verified-in-fresh-shell.md`
 - 設計來源：`docs/work-logs/v0/v0.19/v0.19.0/tickets/0.19.0-W3-052.md` Solution 方案 (b)
 
+#### src 字串輸出變更額外 acceptance（W1-005.2 / W1-040 防護）
+
+IMP ticket 修改 `src/` 字串輸出字面時，acceptance 必須補上 `npm test`（或對應測試套件）驗證，不可只驗 `npm run build:dev`。
+
+**觸發條件**（任一成立即須補強）：
+
+- ticket `what` / `how` 含 log 前綴變更、錯誤訊息改寫、UI 文案替換等字串字面修改
+- ticket `where.files` 含 `src/` 下任何輸出字串（`console.log` / `console.warn` / `console.error` 前綴、`throw new Error(...)` 訊息、UI label 等）的修改
+
+**必填 acceptance**（觸發後必須勾選）：
+
+| # | 驗證條件 | 說明 |
+|---|---------|------|
+| 1 | complete 時驗收：`npm test` exit 0，0 failed tests | 確認 tests/ 斷言期待值與 src 新字串字面一致 |
+
+**Why**：`tests/` 斷言（`toHaveBeenCalledWith` / `toContain` / `toEqual`）與 `src/` 字串輸出同源。`npm run build:dev` 只驗編譯可通過，不驗斷言期待值是否與新字串一致。修改 src 字面後 tests/ 若未同步更新，兩者靜默不一致，build 綠燈掩蓋隱性回歸。
+
+**Consequence**：未補強的 IMP 可通過 build 驗收，但 tests/ 斷言期待值仍含舊字串字面，進入 in_progress 的其他 ticket 執行 `npm test` 時爆發——回溯根因成本遠高於修改時同步驗證（W1-005.2 → W1-005.3 案例：12 檔 48+ 處斷言需補修）。
+
+**Action**：IMP claim 後若觸發條件成立，在 acceptance 補列「complete 時驗收：`npm test` exit 0」；若同時修改 tests/ 斷言（正確做法），在 Test Results 附執行輸出；若未修改 tests/ 但 `npm test` 仍通過，說明無斷言依賴（可加注）。
+
+**觸發案例**：
+
+- `docs/work-logs/v0/v0.19/v0.19.1/tickets/0.19.1-W1-005.2.md`（acceptance 僅驗 build:dev，致 12 檔 48+ 處隱性回歸，W1-005.3 補修）
+
+**交叉引用**：
+
+- `.claude/rules/core/test-assertion-design-rules.md`「延伸路由：src 字串輸出變更 acceptance 設計」章節
+
 ### DOC（Documentation）
 
 **核心價值**：變更摘要 + 引用的檔案清單。
@@ -165,6 +194,7 @@ ticket track claim 不再執行 AC verification（W3-046 L3-b 實作），所有
 | `全套件測試通過` / `全套件測試無回歸` | 並行 claim 會衝突（PC-078 根因）+ 時機不明 | 改為「相關檔案測試（X 個檔案）通過」或「complete 時驗收 npm test 0 failed」 |
 | `測試通過率 100%` | 過於抽象 + 驗收時機不明 | 改為「complete 時驗收：npm test exit 0 無 failed tests」 |
 | `lint 0 warning` / `npm run lint 無問題` | 缺少具體指標（error vs warning） | 改為「complete 時驗收：npm run lint 0 errors / 0 warnings」 |
+| 修改 src/ 字串字面只驗 `npm run build:dev` | build 不覆蓋 tests/ 斷言期待值一致性（W1-005.2 隱性回歸） | 改為「complete 時驗收：`npm test` exit 0」（IMP 修改 src/ 字串字面類必填） |
 
 ### 有效 Acceptance 範例
 
@@ -214,9 +244,10 @@ acceptance:
 
 | 版本 | 日期 | 變更 |
 |------|------|------|
+| 1.3.0 | 2026-06-04 | IMP 區塊新增「src 字串輸出變更額外 acceptance」段落；反模式表補充 build-only 驗收反模式（W1-005.2 / W1-040） |
 | 1.2.0 | 2026-05-13 | 新增「Solution 章節：H3 子標題與表格使用慣例」+「Type-aware Quality Gate」兩段（W10-123 / W10-124 / W10-125 規則收斂；W10-126 落地） |
 | 1.1.0 | 2026-05-08 | ANA Solution 章節新增「Spawn 落地確認」子節 checklist（W17-167 L3 落地，配合 W17-168 hook + W17-169 quality-baseline / ticket-lifecycle 同步修訂） |
 | 1.0.0 | 2026-04-20 | 初版（W17-016.2 落地 W17-016.1 盤點結論） |
 
-**Last Updated**: 2026-05-13
-**Version**: 1.2.0
+**Last Updated**: 2026-06-04
+**Version**: 1.3.0 — IMP 新增 src 字串輸出變更 acceptance 規則（必含 npm test，禁止只驗 build:dev）+ 反模式表補充（W1-005.2 / 0.19.1-W1-040）

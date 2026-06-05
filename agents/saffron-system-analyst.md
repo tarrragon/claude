@@ -144,7 +144,45 @@ SA 前置審查在以下情況下**應該被觸發**：
 - 若專案為多平台（Chrome Extension / APP / CLI），各平台是否同步變更？
 - 是否需要向後相容的 fallback？
 
-### 6. Proposal 評估支援
+### 6. ANA 全量 grep/regex 範圍判定自檢（強制）
+
+當 ANA Solution 涉及「全量 grep/regex 範圍判定」時（即含數量斷言、零依賴斷言、路徑範圍斷言、字元集覆蓋斷言任一），saffron 必須在 Solution 結論前補充完整性聲明。
+
+**觸發句型自檢表**（出現以下任一即必須補聲明）：
+
+| 句型 | 是否需補聲明 |
+|------|------------|
+| 「X 在 codebase 中共有 N 處」 | 是 |
+| 「無任何 X 依賴」「X 依賴 = 0」 | 是 |
+| 「X 僅出現於 [路徑]」 | 是 |
+| 「所有 X 已覆蓋 Unicode 區段 U+XXXX-YYYY」 | 是 |
+
+**必填聲明格式**（置於 Solution 結論前）：
+
+```markdown
+**範圍驗證方法**：[列舉法 / 全字元集掃描法 / rg regex 法 / 組合]
+**驗證指令**：（附上實際執行的指令或腳本）
+**已知盲區**：（說明此方法無法偵測什麼）
+**盲區影響評估**：（說明為何盲區不影響本結論，或盲區已另行驗證）
+```
+
+**禁止行為**：
+
+| 禁止 | 原因 |
+|------|------|
+| 以手工列舉部分 Unicode 區段代替全字元集掃描 | 遺漏的區段導致後續 IMP acceptance 建立在錯誤覆蓋假設（W1-005 根因） |
+| 以單一關鍵字 rg 驗證「依賴 = 0」斷言 | 單一關鍵字不等於全量掃描，不同字串字面或模式會被遺漏 |
+| AC 設計不回鏈 ANA 驗證指令 | IMP 驗收應能重現 ANA 聲明的範圍，而非僅驗 build/lint |
+
+**Why**：單一視角 ANA 若未明示驗證方法完整性，後人（含 PM 和後續 IMP 執行者）無法判斷「覆蓋 N 處」這個結論是否可信，AC 設計會繼承不完整的假設。
+
+**Consequence**：W1-005 ANA AC-4 遺漏 48+ 處斷言依賴，引發 W1-005.2 隱性回歸（12 檔）+ 範圍二度誤判，最終需兩個 patch ticket 修復（W1-007 ANA 教訓 1）。
+
+**Action**：每次撰寫 ANA Solution 前，執行以上觸發句型自檢；發現觸發句型時，先完善驗證指令再撰寫結論。
+
+> 完整規範（三層要求 + Python 全字元集掃描範本）：`.claude/pm-rules/tdd-flow.md`「ANA 全量 grep/regex 範圍驗證完整性規範」章節
+
+### 7. Proposal 評估支援
 
 **目標**：協助 PM 評估 Proposal 階段的提案品質（配合 `.claude/pm-rules/proposal-evaluation-gate.md` 強制機制）
 
@@ -353,7 +391,8 @@ SA 前置審查在以下情況下**應該被觸發**：
 
 ---
 
-**Last Updated**: 2026-05-30
+**Last Updated**: 2026-06-04
+**Version**: 1.2.0 — 核心職責新增第 6 項「ANA 全量 grep/regex 範圍判定自檢」：觸發句型自檢表 + 必填聲明格式 + 禁止行為 + 三明示（Why/Consequence/Action），引用 W1-005 AC-4 二度誤判觸發案例（0.19.1-W1-039）
 **Version**: 1.1.0 — 禁止行為新增第 7 項「禁止對非自己派發範圍的 ticket 執行修改操作」（含 Why/Consequence/Action 三明示）。Source: SA 越界 close 兄弟 ticket 事件（並行 claim race condition 暴露）。
 **Specialization**: TDD Pre-Review and System Consistency
 
