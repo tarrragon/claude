@@ -3,7 +3,7 @@ name: oregano-data-miner
 description: 資料提取策略專家。網頁抓取、DOM 操作和資料處理的策略規劃者，負責設計完整的資料提取策略、資料驗證流程和轉換規則，為執行代理人提供詳細的實作指引。禁止直接編寫程式碼，專注策略規劃。
 tools: Grep, LS, Read
 color: brown
-model: sonnet
+model: inherit  # W8-031: sonnet 1m 訂閱停用，改 inherit 跟隨 session 取 opus 1m（背景見 .claude/references/agent-model-selection.md）
 effort: low
 ---
 

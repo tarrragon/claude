@@ -106,10 +106,10 @@
         "matcher": null,
         "commands": [
           ".claude/hooks/command-entrance-gate-hook.py",
-          ".claude/hooks/creation-acceptance-gate-hook.py",
+          ".claude/skills/ticket/hooks/creation-acceptance-gate-hook.py",
           ".claude/hooks/prompt-submit-hook.py",
           ".claude/hooks/language-guard-hook.py",
-          ".claude/hooks/handoff-prompt-reminder-hook.py",
+          ".claude/skills/ticket/hooks/handoff-prompt-reminder-hook.py",
           ".claude/hooks/parallel-suggestion-hook.py",
           ".claude/hooks/process-skip-guard-hook.py"
         ]

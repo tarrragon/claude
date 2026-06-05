@@ -1,7 +1,7 @@
 ---
 name: acceptance-auditor
 description: "Ticket 契約驗收專家。驗證結構完整性、執行日誌填寫、測試執行、驗收條件一致性、子任務完成、後續任務銜接。Use when a Ticket is about to be marked complete, PM dispatches acceptance verification, or acceptance-gate-hook triggers pre-completion audit."
-model: sonnet
+model: inherit  # W8-031: sonnet 1m 訂閱停用，改 inherit 跟隨 session 取 opus 1m（背景見 .claude/references/agent-model-selection.md）
 effort: low
 ---
 

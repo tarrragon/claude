@@ -1,3 +1,15 @@
+## [1.42.0] - 2026-06-05
+
+### Summary
+feat: 7 過載代理人 model sonnet→inherit（sonnet 1m 訂閱停用）; chore: sync-pull 同步框架配置（base 138bf04e，27 delta 無衝突）
+
+Changes: 1 feat, 1 chore
+
+- feat: 7 過載代理人 model sonnet→inherit（sonnet 1m 訂閱停用）
+- chore: sync-pull 同步框架配置（base 138bf04e，27 delta 無衝突）
+
+---
+
 ## [1.41.0] - 2026-06-05
 
 ### Summary
