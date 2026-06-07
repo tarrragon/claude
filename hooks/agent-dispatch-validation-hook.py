@@ -28,6 +28,7 @@ Hook 類型：PreToolUse
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 import logging
@@ -1155,6 +1156,77 @@ def _emit_keyword_conflict_warning_if_any(
     return "warn"
 
 
+# W8-040：stale-origin 警示
+#
+# 動機（PC-040 變體）：harness Agent isolation:"worktree" 的 fork base = origin/main
+# （W8-034/W8-038 實證）。若 local main 領先 origin/main（本 session 未 push），
+# 即將建立的 worktree 會 fork 自 stale origin/main，缺本地未推 commit
+# （Context Bundle 對 worktree agent 不可見、完成後分支分歧）。
+#
+# 本警示在 dispatch-time（worktree 放行前）偵測未 push commit 並 stderr 提示，
+# 為 W8-039 push-before-dispatch SOP 的強制層補強。非阻擋（仍 return 0）。
+#
+# 與 worktree-base-distance-check-hook 分工（正交）：
+#   - 本 hook：local main vs origin/main（即將建立的 worktree fork 源 stale）
+#   - 該 hook：既有 worktree HEAD vs local main HEAD（既有 worktree 基於舊 commit）
+# 兩者檢查對象不同、git 指令不同、警示問題不同，無重複噪音。
+
+STALE_ORIGIN_WARNING_TEMPLATE = """[警示] dispatch stale-origin：local main 領先 origin/main {count} 個未 push commit。
+  harness isolation:"worktree" 的 worktree 會 fork 自 origin/main（W8-034/W8-038 實證），
+  將缺少這 {count} 個本地 commit（Context Bundle 可能對 worktree agent 不可見、完成後分支分歧）。
+  建議派發前先：git push origin main（W8-039 push-before-dispatch SOP）
+  此為警示非阻擋，派發仍會繼續。"""
+
+
+def _count_unpushed_commits(logger: logging.Logger) -> Optional[int]:
+    """偵測 local main 領先 origin/main 的未 push commit 數。
+
+    回傳：
+      int  - 未 push commit 數（>= 0）
+      None - git 指令失敗（無 origin remote / 非 git repo / 逾時等）→ 呼叫端應靜默不警示
+
+    設計：偵測失敗時回傳 None 而非拋例外，確保不因偵測失敗阻擋合法派發。
+    依 observability 規則於失敗時記錄 logger.warning（不寫 stderr 避免噪音）。
+    """
+    try:
+        cwd = str(get_project_root())
+        result = subprocess.run(
+            ["git", "rev-list", "--count", "origin/main..main"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            cwd=cwd,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.warning("stale-origin 偵測：git 執行失敗（%s），靜默不警示", exc)
+        return None
+
+    if result.returncode != 0:
+        logger.warning(
+            "stale-origin 偵測：git rev-list 非零退出（%s），靜默不警示",
+            (result.stderr or "").strip(),
+        )
+        return None
+
+    try:
+        return int(result.stdout.strip())
+    except ValueError:
+        logger.warning(
+            "stale-origin 偵測：git 輸出非整數（%r），靜默不警示",
+            result.stdout,
+        )
+        return None
+
+
+def _emit_stale_origin_warning_if_any(logger: logging.Logger) -> None:
+    """worktree 放行前偵測 stale origin/main，若有未 push commit 則 stderr 警示（非阻擋）。"""
+    count = _count_unpushed_commits(logger)
+    if count is None or count <= 0:
+        return
+    print(STALE_ORIGIN_WARNING_TEMPLATE.format(count=count), file=sys.stderr)
+    logger.warning("stale-origin 警示：local main 領先 origin/main %d 個未 push commit", count)
+
+
 def main() -> int:
     """Hook 主邏輯。"""
     logger = setup_hook_logging("agent-dispatch-validation")
@@ -1250,6 +1322,8 @@ def main() -> int:
     #     涵蓋：主 repo .claude/ + 非 .claude/ + worktree（W5-050 新發現）
     #           僅非 .claude/ + worktree
     if isolation == "worktree":
+        # W8-040：worktree 放行前偵測 stale origin/main（非阻擋警示）
+        _emit_stale_origin_warning_if_any(logger)
         logger.info("通過：%s 使用 worktree 隔離", subagent_type)
         return 0
 

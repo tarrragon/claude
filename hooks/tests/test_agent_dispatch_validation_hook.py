@@ -1616,10 +1616,39 @@ def test_extract_ticket_ids_no_match_for_bare_short_id():
     assert ids == []
 
 
-def test_load_ticket_where_files_returns_paths_for_w17_015_2():
-    """W17-015.2 ticket md 存在時，應讀出 where.files。"""
-    files = _hook._load_ticket_where_files("0.18.0-W17-015.2")
-    # 此 ticket 已存在且 where 含 .claude/ 路徑
+def test_load_ticket_where_files_returns_paths_from_temp_fixture(
+    tmp_path, monkeypatch
+):
+    """ticket md 存在且含 .claude/ where.files 時，應讀出路徑清單。
+
+    解耦設計（W8-041）：原測試硬編碼真實 ticket 0.18.0-W17-015.2，會隨歸檔消失。
+    改用 tmp_path 寫入最小 ticket md，並讓 _load_ticket_where_files 內部的
+    extract_where_files 以 tmp_path 為 project_root 解析，保留真實檔案讀取 +
+    frontmatter 解析的覆蓋率，不依賴 docs/work-logs/ 任何外部檔案。
+    """
+    from hook_utils.hook_ticket import extract_where_files as _real_extract
+
+    # 寫入舊位置相容路徑（find_ticket_files 會 glob 掃描 .claude/tickets/）
+    fixture_ticket_id = "9.9.9-W99-100"
+    ticket_dir = tmp_path / ".claude" / "tickets"
+    ticket_dir.mkdir(parents=True, exist_ok=True)
+    (ticket_dir / "{}.md".format(fixture_ticket_id)).write_text(
+        "---\n"
+        "id: {}\n".format(fixture_ticket_id)
+        + "where:\n  files:\n"
+        "  - .claude/skills/ticket/SKILL.md\n"
+        "---\n\n# fixture\n",
+        encoding="utf-8",
+    )
+
+    # 讓 _load_ticket_where_files 以 tmp_path 為 project_root 解析（真實讀檔）
+    monkeypatch.setattr(
+        _hook,
+        "extract_where_files",
+        lambda tid, **kw: _real_extract(tid, project_root=tmp_path),
+    )
+
+    files = _hook._load_ticket_where_files(fixture_ticket_id)
     assert any(".claude/skills/ticket" in f for f in files)
 
 
@@ -1633,16 +1662,26 @@ def test_hook_fallback_to_ticket_when_prompt_has_no_paths(
     monkeypatch, capsys
 ):
     """W17-018 關鍵：prompt 無路徑線索但含 ticket ID 指向 .claude/ 任務時，
-    應從 ticket where.files 補分類為主 repo .claude/，放行無 worktree。"""
+    應從 ticket where.files 補分類為主 repo .claude/，放行無 worktree。
+
+    解耦設計（W8-041）：mock _load_ticket_where_files 回傳純 .claude/ 路徑，
+    隔離對真實 ticket md 的依賴。"""
+    monkeypatch.setattr(
+        _hook,
+        "_load_ticket_where_files",
+        lambda tid: [".claude/skills/ticket/SKILL.md"]
+        if tid == "9.9.9-W99-101"
+        else [],
+    )
     exit_code = _run_hook(
         monkeypatch,
         capsys,
         tool_input={
             "subagent_type": "thyme-python-developer",
-            "prompt": "Ticket: 0.18.0-W17-015.2\nRead ticket md 依規格實作。",
+            "prompt": "Ticket: 9.9.9-W99-101\nRead ticket md 依規格實作。",
         },
     )
-    # W17-015.2 where.files 為 .claude/skills/ticket/... → 全主 repo .claude/
+    # where.files 為 .claude/skills/ticket/... → 全主 repo .claude/
     # → 豁免 worktree 放行
     assert exit_code == 0
 
@@ -1681,14 +1720,24 @@ def test_resolve_pure_claude_prompt_only(_resolve_helper):
     assert result == (True, False, False)
 
 
-def test_resolve_pure_claude_via_ticket_fallback(_resolve_helper):
+def test_resolve_pure_claude_via_ticket_fallback(_resolve_helper, monkeypatch):
     """L2：prompt 無路徑線索，ticket where.files 全為 .claude/。
-    預期：(True, False, False) 由 fallback 補分類後回傳。"""
-    result = _resolve_helper(
-        prompt="Ticket: 0.18.0-W17-015.2\nRead ticket md 依規格實作。",
-        ticket_ids=["0.18.0-W17-015.2"],
+    預期：(True, False, False) 由 fallback 補分類後回傳。
+
+    解耦設計（W8-041）：mock _load_ticket_where_files 回傳純 .claude/ 路徑，
+    隔離對真實 ticket md 的依賴。"""
+    monkeypatch.setattr(
+        _hook,
+        "_load_ticket_where_files",
+        lambda tid: [".claude/skills/ticket/SKILL.md"]
+        if tid == "9.9.9-W99-102"
+        else [],
     )
-    # W17-015.2 where.files 為 .claude/skills/ticket/...
+    result = _resolve_helper(
+        prompt="Ticket: 9.9.9-W99-102\nRead ticket md 依規格實作。",
+        ticket_ids=["9.9.9-W99-102"],
+    )
+    # mock where.files 為 .claude/skills/ticket/...
     assert result[0] is True, "應補分類為主 repo .claude/"
     assert result[1] is False, "不應誤判為外部 .claude/"
     assert result[2] is False, "純 .claude/ ticket 不應有 has_other"
@@ -1832,13 +1881,23 @@ def test_main_uses_resolver_for_pure_claude_ticket(monkeypatch, capsys):
 
     與既有 test_hook_fallback_to_ticket_when_prompt_has_no_paths 相同行為，
     但本測試確認在 helper 抽取後仍維持。
+
+    解耦設計（W8-041）：mock _load_ticket_where_files 回傳純 .claude/ 路徑，
+    隔離對真實 ticket md 的依賴。
     """
+    monkeypatch.setattr(
+        _hook,
+        "_load_ticket_where_files",
+        lambda tid: [".claude/skills/ticket/SKILL.md"]
+        if tid == "9.9.9-W99-103"
+        else [],
+    )
     exit_code = _run_hook(
         monkeypatch,
         capsys,
         tool_input={
             "subagent_type": "thyme-python-developer",
-            "prompt": "Ticket: 0.18.0-W17-015.2\nRead ticket md 依規格實作。",
+            "prompt": "Ticket: 9.9.9-W99-103\nRead ticket md 依規格實作。",
         },
     )
     assert exit_code == 0
@@ -2093,3 +2152,104 @@ class TestReviewModeExemption:
     def test_is_review_mode_prompt_no_keyword_returns_false(self):
         """無關鍵字 prompt 應回傳 False（regression：避免泛化誤判）。"""
         assert _hook._is_review_mode_prompt("實作 src/foo.py 並寫測試") is False
+
+
+# ============================================================================
+# W8-040: dispatch stale-origin 警示（local main 領先 origin/main 時提示，非阻擋）
+# ============================================================================
+
+
+class TestStaleOriginWarning:
+    """worktree 派發放行前偵測未 push commit 並 stderr 警示（仍 return 0）。"""
+
+    @staticmethod
+    def _mock_git_count(monkeypatch, *, returncode=0, stdout="0", raise_exc=None):
+        """只攔截 git rev-list --count origin/main..main，其餘 subprocess 呼叫委派真實實作。
+
+        避免全域 mock 破壞 get_project_root() 等其他 subprocess 使用。
+        """
+        real_run = _hook.subprocess.run
+
+        def fake_run(cmd, *args, **kwargs):
+            is_target = (
+                isinstance(cmd, (list, tuple))
+                and "rev-list" in cmd
+                and "origin/main..main" in cmd
+            )
+            if not is_target:
+                return real_run(cmd, *args, **kwargs)
+            if raise_exc is not None:
+                raise raise_exc
+            class _R:
+                pass
+            r = _R()
+            r.returncode = returncode
+            r.stdout = stdout
+            r.stderr = ""
+            return r
+        monkeypatch.setattr(_hook.subprocess, "run", fake_run)
+
+    def test_warns_when_local_ahead_of_origin(self, monkeypatch, capsys):
+        """(a) local 領先 origin（count>0）→ stderr 警示且仍放行（return 0）。"""
+        self._mock_git_count(monkeypatch, returncode=0, stdout="3\n")
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "thyme-python-developer",
+                "isolation": "worktree",
+                "prompt": "edit src/foo.py",
+            },
+        )
+        assert exit_code == 0, "stale-origin 為警示非阻擋，仍放行"
+        err = capsys.readouterr().err
+        assert "stale-origin" in err
+        assert "3" in err
+
+    def test_no_warning_when_in_sync(self, monkeypatch, capsys):
+        """(b) local == origin（count==0）→ 不警示，放行。"""
+        self._mock_git_count(monkeypatch, returncode=0, stdout="0\n")
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "thyme-python-developer",
+                "isolation": "worktree",
+                "prompt": "edit src/foo.py",
+            },
+        )
+        assert exit_code == 0
+        err = capsys.readouterr().err
+        assert "stale-origin" not in err
+
+    def test_review_mode_not_subject_to_stale_origin(self, monkeypatch, capsys):
+        """(c) 審查模式 prompt 走 (1.5) 提前 return，不進 worktree 分支 → 不偵測不警示。"""
+        # 即使 git 會回報未 push，審查派發也不應觸發 stale-origin 警示
+        self._mock_git_count(monkeypatch, returncode=0, stdout="5\n")
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "thyme-python-developer",
+                "prompt": "請審查 src/foo.py 的實作品質",
+            },
+        )
+        assert exit_code == 0
+        err = capsys.readouterr().err
+        assert "stale-origin" not in err
+
+    def test_git_failure_silent_no_block(self, monkeypatch, capsys):
+        """(d) git 指令失敗（拋例外）→ 靜默不警示、不誤擋（仍放行）。"""
+        self._mock_git_count(monkeypatch, raise_exc=OSError("git not found"))
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "thyme-python-developer",
+                "isolation": "worktree",
+                "prompt": "edit src/foo.py",
+            },
+        )
+        assert exit_code == 0, "git 偵測失敗不可阻擋合法派發"
+        err = capsys.readouterr().err
+        assert "stale-origin" not in err

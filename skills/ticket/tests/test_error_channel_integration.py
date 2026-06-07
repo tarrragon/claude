@@ -83,28 +83,56 @@ def _combined_output(result: subprocess.CompletedProcess) -> str:
 class TestErrorChannelIntegration:
     """W17-008.5.6.1：5 個錯誤通道整合場景端到端驗證。"""
 
-    def test_scenario_1_invalid_section(self):
+    def test_scenario_1_invalid_section(self, monkeypatch):
         """場景 1：invalid-section（legacy str 路徑）。
 
-        Given: ticket track append-log <existing-id> --section "NotAValidSection" "..."
-        When: 透過 CLI 執行
+        Given: append-log <existing-in_progress-id> --section "NotAValidSection" "..."
+        When: 直接呼叫 execute_append_log（in-process；monkeypatch load_ticket 回傳
+              status=in_progress 的 fixture ticket，使流程進入 section 驗證分支）
         Then: exit code != 0、輸出含「無效的 section」與「有效值」清單；
               此路徑為 legacy str（W17-008.5.2 雙路徑保留向後相容），
               不含 ErrorEnvelope 標記。
+
+        W8-047 修復：原測試使用不存在的硬編碼 ticket id（0.18.0-W17-008.5.6.1），
+        CLI 先檢查 ticket 存在性 → 回傳 TICKET_NOT_FOUND 而非 INVALID_SECTION，
+        斷言不符。改採 scenario 3 同款 in-process + monkeypatch load_ticket，
+        建立 in_progress fixture ticket 後再以無效 section 觸發 INVALID_SECTION 路徑。
         """
-        # 使用本 ticket 自身（必定存在）作為 target
-        result = _run_ticket(
-            "track", "append-log", "0.18.0-W17-008.5.6.1",
-            "--section", "NotAValidSection", "dummy-content",
+        import argparse
+        import io
+        from ticket_system.commands import track_acceptance
+
+        # W3-044 require_in_progress precondition：append-log 需 status=in_progress
+        # 否則在 section 驗證前即被擋下。fixture ticket 必須存在且 in_progress。
+        fake_ticket = {
+            "id": "fake-id-for-test",
+            "status": "in_progress",
+            "_body": "# Test Ticket\n\n## Problem Analysis\nsome content\n",
+        }
+        monkeypatch.setattr(
+            "ticket_system.commands.track_acceptance.load_ticket",
+            lambda v, tid: fake_ticket,
         )
 
-        assert result.returncode != 0, f"預期非零 exit，實際 rc={result.returncode}"
-        combined = _combined_output(result)
+        captured = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", captured)
+
+        args = argparse.Namespace(
+            ticket_id="fake-id-for-test",
+            section="NotAValidSection",
+            content="dummy-content",
+        )
+        rc = track_acceptance.execute_append_log(args, "0.18.0")
+
+        combined = captured.getvalue()
+        assert rc != 0, f"預期非零 rc，實際 rc={rc}"
         # legacy str 路徑訊號：INVALID_SECTION 訊息 + 有效值列出
         assert "無效的 section" in combined or "INVALID_SECTION" in combined
         assert "NotAValidSection" in combined
         # 提示用戶有效 section 清單
         assert "有效值" in combined or "valid" in combined.lower()
+        # legacy 路徑不含 ErrorEnvelope 標記
+        assert ERROR_ENVELOPE_VERSION_MARKER not in combined
 
     def test_scenario_2_unrecognized_args(self):
         """場景 2：unrecognized-args（argparse 預設 POSIX 路徑）。

@@ -214,6 +214,39 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 > **worktree base 可能過舊**：cc runtime 以派發瞬間 main HEAD 為 worktree base，不後續同步。**Why**：base 建立後主 repo 新增 commit 不反映到 worktree。**Consequence**：agent 以過時檔案為基礎工作，產出與 main 新增 commit 不相容，需手動整合。**Action**：每次 worktree 派發 prompt 必須在開頭加 `git merge main` 指引，確保 agent 對齊最新 main。完整說明與 prompt 範本見 `.claude/references/agent-dispatch-template.md`「worktree 派發 base 同步指引（W1-035）」。
 
+### worktree 派發前置：push-before-dispatch（強制，W8-038）
+
+> **核心事實（W8-038 實證）**：harness `Agent isolation:"worktree"` 的 fork base = **`origin/main`**（遠端追蹤分支 HEAD），不是 session 起始快照、也不是 current local main HEAD。探針 commit `77f1cb5b` parent = `617aa650` = origin/main，並排除「session 快照」與「local HEAD」兩假設（git merge-base 反推證據鏈閉合）。
+
+**Why**：fork base = origin/main 意味著任何只 commit 在 local main 而未 push 的內容（含 ticket 的 Context Bundle commit），worktree 一律看不到。W8-001.3/.4 兩次實證即此模式——worktree 缺本地未 push 的 commit，PM 須手動外科整合。上一節「worktree 共享 git object store 可 `git merge main`」的假設只在 local main 已 push 到 origin 時成立；origin 落後時 worktree 內並無對應 object，merge 無法補回。
+
+**Consequence**：略過此前置會讓 worktree fork 自 stale origin/main：(1) agent 看不到 Context Bundle 與最新規格，依舊檔案工作；(2) 完成後分支與 local main 分歧、無法 ff-merge；(3) PM 誤以為已派發成功，回收時才發現缺工作，浪費整次派發。
+
+**Action**：派發任一 implementation agent（`isolation:"worktree"`）前，PM 依序執行：
+
+| 步驟 | 動作 | 判定 |
+|------|------|------|
+| 1 | `git rev-list --count origin/main..main` | == 0 → origin/main 已最新，可派發；非 0 → 進入步驟 2 |
+| 2 | `git push origin main` | 成功 → 回到步驟 1 複查（應得 0）後派發；失敗 → 進入「push 失敗 = 中止派發」 |
+| 3 | **每次派發前都重跑步驟 1**（非一 session 檢查一次） | 派發之間若 PM 又在 local main land 新 commit 卻未 push，下一個 agent 又 fork stale；逐次重跑才能保證每個 worktree 都 fork 自最新 origin/main |
+
+**顯式前置：Context Bundle commit 必須先 land main 並 push**
+
+`git rev-list --count origin/main..main` 只看 main 分支。若 ticket 的 Context Bundle commit 留在 feat 分支（W8-001.3 觀察 1 正是此場景），`push origin main` 不會帶上 feat HEAD 的 commit，worktree fork main 仍看不到 Context Bundle。**Action**：派發前確認 Context Bundle commit 已 (1) merge / land 到 local main，(2) push 到 origin/main——兩步缺一，observation 1 的洞（Context Bundle 在 feat、worktree fork main 看不到）會原封重演。
+
+**push 失敗 = 中止派發（不可降級續派）**
+
+push 失敗（網路斷、認證過期、遠端 reject）時，A 方案的整個正確性失守——worktree 會繼續 fork 自 stale origin/main，且 PM 以為已修好。**Action**：
+
+| 情境 | 正確處理 | 禁止 |
+|------|---------|------|
+| `git push origin main` 失敗 | **中止派發**，先排除 push 障礙（修網路 / 換認證 / 解 reject）後重試前置流程 | 降級為「先派再說」continue 派發 |
+| push 障礙短期無解 | 改走外科抽取（PM 手動 `git checkout <branch> -- <檔>` 整合 agent 產出），或改採 Solution B（PM 預建本地 fork worktree，見 W8-038 Solution「不在本 ticket 範圍」） | 在 origin 落後狀態下硬派 worktree agent |
+
+push 是 A 方案的單點故障；靜默失敗的成本（整次派發作廢 + 誤判已修好）遠高於中止後重試的成本。
+
+> 完整 fork-base 實驗證據與 Solution A/B 取捨見 ticket `0.31.1-W8-038`（重現實驗結果 + Solution + 多視角審查結果 linux）。
+
 | 代理人類型 | 需要 worktree |
 |-----------|--------------|
 | 實作代理人（parsley, fennel, thyme-python） | 強制 |
@@ -386,7 +419,9 @@ PC-137 並行 ≤ 2 規則為 worktree 模式下的觀察結論（W17-097.1-.4 +
 
 ---
 
-**Last Updated**: 2026-06-02
+**Last Updated**: 2026-06-07
+**Version**: 4.8.0 - Worktree 隔離章節新增「worktree 派發前置：push-before-dispatch（強制，W8-038）」子章節：fork base = origin/main 實證事實、rev-list 檢查 + push + 每次派發前重跑、Context Bundle 先 land main 並 push 顯式前置、push 失敗 = 中止派發（指向外科抽取或 Solution B）（0.31.1-W8-039，source W8-038）
+
 **Version**: 4.7.0 - Worktree 隔離章節開頭新增 worktree base 可能過舊提示，引用 agent-dispatch-template.md「worktree 派發 base 同步指引（W1-035）」交叉引用（0.19.0-W1-053）
 
 **Version**: 4.6.0 - bgIsolation: none 並行安全章節升級為策略 C 條件式採用（W3-034.4 並行受控實驗 3/3 success 落地）；風險矩陣與 Action 表分 4 場景；新增「對照 PC-137 v1.1.0」雙模式對照表

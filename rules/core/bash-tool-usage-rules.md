@@ -44,6 +44,25 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 | Grep | 使用 `head_limit` 限制回傳行數 |
 | Read | 使用 `offset` + `limit` 分頁讀取 |
 
+**有界列舉命令禁截斷（carve-out）**：
+
+大輸出防護針對「可能巨量 / 串流的輸出」（test log、build log、大檔 `cat`、`find` 大樹、`grep` 大範圍）。對「輸出為決策關鍵的有界列舉命令」**禁止**用 `head` / `tail` 截斷；要確認筆數改用 `wc -l`。
+
+| 有界列舉命令 | 截斷風險 | 正確做法 |
+|------------|---------|---------|
+| `git remote -v` | 截掉某 remote → 推錯目標 | 完整讀；算筆數用 `git remote -v \| wc -l` |
+| `git branch -a` / `git branch --show-current` | 隱藏分支 → 誤判當前 / 可用分支 | 完整讀；算筆數用 `wc -l` |
+| `git status --porcelain` | 隱藏變更檔 → 誤判工作區乾淨（與 PC-076 session 清點共振） | 完整讀；算筆數用 `wc -l` |
+| `git tag` / `git stash list` | 隱藏標籤 / 暫存 | 完整讀；算筆數用 `wc -l` |
+| `git config --list` / `git remote get-url` | 隱藏設定鍵 | 完整讀；算筆數用 `wc -l` |
+| `ls` / `ls -la` | 隱藏目錄項 | 完整讀；算筆數用 `wc -l` |
+
+**Why**：大輸出防護的心智模型是「防洪」（防巨量輸出淹沒 context），但有界列舉命令的每一行都是決策關鍵（少一個 remote = 推錯目標）。對小型有界清單套用截斷會反向造成決策關鍵資訊遺失，且截斷砍掉哪幾行與輸出順序耦合（如 `git remote -v` 字母序使 `origin` 排在 `claude-shared` 之後，`head -2` 剛好砍掉 `origin`），不可預測。
+
+**Consequence**：對有界列舉誤用截斷會隱藏決策關鍵行，導致基於殘缺清單的錯誤判斷（推錯 remote、誤判工作區乾淨、誤判當前分支）。截斷本身是為情境 A（巨量輸出）設計的防護手段，無差別套到情境 B（有界列舉）時，防護手段反而成為新失效源（PC-177）。
+
+**Action**：判別輸出是否「可能巨量 / 串流」——是則用 `head` / `tail` 防洪；否（有界列舉，每行皆決策關鍵）則完整讀，要算筆數改用 `wc -l`，禁止 `head` / `tail` 截斷。
+
 ---
 
 ## 規則三：禁止串接多個 git 寫入操作
@@ -150,6 +169,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 - [ ] 命令含 `cd`？→ 改用子 shell `()` 或 `uv -d`
 - [ ] 多步驟序列？→ 第一步加絕對路徑 `cd /project/root &&`
 - [ ] 輸出可能很大？→ 提前加 `head` / `tail`
+- [ ] 對有界列舉命令（`git remote -v` / `git branch -a` / `git status --porcelain` / `git tag` / `git config` / `ls`）加 `head` / `tail`？→ 禁止截斷，完整讀；算筆數改用 `wc -l`（規則二 carve-out，PC-177）
 - [ ] `run_in_background: true`？→ 用 `TaskOutput(taskId)`
 - [ ] 輸出含「Full output saved to」？→ 用 `Read(file_path)`
 - [ ] 串接多個 git 寫入（commit/merge/rebase/push）？→ 拆成獨立呼叫
@@ -170,8 +190,9 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 - `.claude/error-patterns/implementation/IMP-008-bash-working-directory-pollution.md`、`IMP-009-taskoutput-confusion.md`
 - `.claude/error-patterns/process-compliance/PC-079-bash-backtick-command-substitution-in-cli-args.md` — 規則四的完整案例與根因
 - `.claude/error-patterns/process-compliance/PC-087-pm-tmp-detour-for-long-text.md` — 規則五的觸發案例
+- `.claude/error-patterns/process-compliance/PC-177-defensive-rule-mechanical-overapplication.md` — 規則二「有界列舉命令禁截斷」carve-out 的觸發案例與根因（防護規則機械套用反噬）
 - CLAUDE.md — 專案開發規範
 
 ---
 
-**Last Updated**: 2026-05-29 | **Version**: 2.2.0 — 新增規則六「長背景任務可觀測性」（PYTHONUNBUFFERED=1 + tee streamable）及與規則二大輸出防護的調和說明（0.19.0-W3-086 spike 實證落地 / 0.19.0-W3-088）。歷史 2.0–2.1 版見 git log。**Source**: IMP-008、IMP-009、index.lock 競爭、PC-087、W3-086
+**Last Updated**: 2026-06-08 | **Version**: 2.3.0 — 規則二新增「有界列舉命令禁截斷（carve-out）」（git remote -v / branch -a / status --porcelain 等決策關鍵有界輸出禁用 head/tail，算筆數用 wc -l）+ 統一檢查清單對應條目，固化為 PC-177「防護規則機械套用反噬」（0.31.1-W8-032 ANA near-miss 實證 git remote -v | head -2 隱藏 origin / 0.31.1-W8-033）。歷史 2.0–2.2 版見 git log。**Source**: IMP-008、IMP-009、index.lock 競爭、PC-087、PC-177、W3-086、W8-032

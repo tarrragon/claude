@@ -1,15 +1,22 @@
 ---
 id: PC-148
-title: Hook 雙重註冊：settings.local.json python3 直呼繞過 shebang pep723 deps
+title: Hook 雙重註冊：settings.local.json 與 settings.json 衝突/過時註冊（shebang bypass、搬移後舊路徑兩變體）
 category: process-compliance
 severity: medium
 source_case: 0.18.0-W11-030
 created: 2026-05-16
+updated: 2026-06-07
 ---
 
-# PC-148: Hook 雙重註冊 shebang bypass
+# PC-148: Hook 雙重註冊（settings.local.json 與 settings.json 衝突/過時註冊）
+
+> **核心模式**：同一 hook 在 `settings.json` 與 `settings.local.json` 並存註冊，且 `settings.local.json` 那筆形式錯誤或路徑過時，造成 UI 非阻斷錯誤但 hook 功能實際仍由 `settings.json` 那筆運作。已知兩變體：
+> - **變體 A（shebang bypass）**：`settings.local.json` 用 `python3 ...` 直呼繞過 shebang / pep723 deps → `ModuleNotFoundError`（原始案例，下方 症狀～修正動作）。
+> - **變體 B（搬移後舊路徑）**：hook 檔搬移後 `settings.local.json` 殘留舊路徑（本機設定未隨同步更新）→ `No such file or directory`（見「變體 B」章節）。
 
 ## 症狀
+
+派發 Agent / 觸發 Hook 事件時，UI 出現以下並存訊號：
 
 派發 Agent / 觸發 Hook 事件時，UI 出現以下並存訊號：
 
@@ -43,6 +50,27 @@ created: 2026-05-16
 
 「hook log 顯示成功」與「stderr 吐 traceback」並存是雙重註冊的指紋。
 
+## 變體 B：檔案搬移後 settings.local.json 殘留舊路徑（file-not-found，2026-06-07）
+
+同根模式（settings.local.json vs settings.json 重複註冊），但失敗形式與觸發不同：
+
+| 維度 | 變體 A（shebang bypass） | 變體 B（搬移後舊路徑） |
+|------|------------------------|----------------------|
+| settings.local.json 註冊 | `python3 .../foo-hook.py`（路徑存在，invocation 錯） | `.../.claude/hooks/foo-hook.py`（路徑過時，檔案不存在） |
+| 錯誤訊息 | `ModuleNotFoundError`（traceback） | `No such file or directory`（`/bin/sh: ...: No such file or directory`） |
+| 觸發 | local 用強制 python3 繞 shebang | hook 檔搬移（如 `.claude/hooks/` → `.claude/skills/<skill>/hooks/`）後，settings.json 更新但 settings.local.json 未同步 |
+
+**根因（變體 B）**：hook 檔案隨 skill 化重構搬移到 `.claude/skills/<skill>/hooks/`，`settings.json` 已改指新路徑，但 `settings.local.json`（本機專屬、不納入 `.claude` 同步，故跨機器 / 跨重構不會被批次更新）殘留搬移前的舊路徑 `.claude/hooks/foo-hook.py`。runtime 對兩處註冊逐一執行（見上方根因），故舊路徑那筆每次事件觸發即報 file-not-found；功能由 settings.json 那筆正常運作，屬純噪音但污染 UI 與信任。
+
+**修正動作（變體 B）**：
+
+1. 比對兩檔對同 hook 的註冊路徑，確認 settings.json 指向實際存在的檔案（`ls` 驗證）。
+2. 從 settings.local.json 移除路徑過時的重複條目（不要改成新路徑——會讓同一 hook 跑兩次，可能雙重副作用如雙重 auto-resume）。
+3. 驗證 JSON 語法（`python3 -c "import json; json.load(open('.claude/settings.local.json'))"`）。
+4. settings.local.json 為 gitignored 本機設定，修改不需 commit；下個 SessionStart 重讀生效（當前 session 已載入記憶體，結尾可能仍報一次）。
+
+**案例**：0.31.1-W8-026.13 session 結尾 Stop hook 報 `handoff-auto-resume-stop-hook.py: No such file or directory`。該 hook 已搬至 `.claude/skills/ticket/hooks/`（settings.json:683 正確），但 settings.local.json:161 殘留舊路徑 `.claude/hooks/`。屬「本機 / 遠端狀態漂移」家族（與 worktree fork base 落後 origin 同類，見 0.31.1-W8-034 ANA）。
+
 ## 與相鄰 PC 模式區分
 
 | 模式 | 觸發 | 本案區別 |
@@ -74,12 +102,14 @@ created: 2026-05-16
 
 ## 自我檢查清單
 
-**適用時機**：派發 agent 或觸發任意 hook event 後，UI 出現 traceback 但對應 hook log 顯示 INFO 時對照本清單。
+**適用時機**：派發 agent 或觸發任意 hook event 後，UI 出現 hook error（`traceback` 變體 A／`No such file or directory` 變體 B），但對應 hook log 顯示 INFO 或功能正常時對照本清單。
 
 - [ ] 同一 hook 是否在 settings.json + settings.local.json 都註冊？
-- [ ] 兩處註冊形式是否一致（都走 shebang）？
-- [ ] settings.local.json 是否有 `python3` 或其他語言直接呼叫 hook 的字串？
-- [ ] hook log 顯示成功時，UI 是否仍出現 traceback？
+- [ ] 兩處註冊形式是否一致（都走 shebang、路徑相同）？
+- [ ] settings.local.json 是否有 `python3` 或其他語言直接呼叫 hook 的字串？（變體 A）
+- [ ] settings.local.json 註冊的 hook 路徑是否實際存在（`ls` 驗證）？檔案搬移後 local 設定易殘留舊路徑。（變體 B）
+- [ ] UI 出現 `No such file or directory` 時，是否為搬移後舊路徑殘留？（變體 B 指紋）
+- [ ] hook log 顯示成功 / 功能正常時，UI 是否仍出現 hook error？
 
 ## 案例
 

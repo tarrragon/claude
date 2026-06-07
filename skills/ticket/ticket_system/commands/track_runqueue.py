@@ -33,6 +33,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Literal, Optional, Set
 
+from ticket_system.lib.blocker_resolution import is_fully_unblocked
 from ticket_system.lib.critical_path import (
     CriticalPathAnalyzer,
     CriticalPathResult,
@@ -89,22 +90,38 @@ def _priority_rank(ticket: Dict) -> int:
     return _PRIORITY_ORDER.get(raw, _DEFAULT_PRIORITY_RANK)
 
 
-def _is_unblocked_pending(ticket: Dict) -> bool:
-    """list 視圖規則：status=pending 且 blockedBy=[]。"""
+def _is_unblocked_pending(
+    ticket: Dict, ticket_map: Optional[Dict[str, Dict]] = None
+) -> bool:
+    """list 視圖規則：status=pending 且所有 blocker 皆已解除。
+
+    W8-043：原以字面 `len(blockedBy)==0` 判定，遺漏 blocker 已完成但
+    blockedBy 欄位未清理的 ticket（W8-001.5 / W8-027 實證）。改為解析 blocker
+    實際 status，與 lifecycle cascade 一致採 AND 語義 +
+    `include_closed_as_resolved=True`（completed/closed blocker 視為已解除）。
+    ticket_map 缺省（未提供）時退回字面 len==0 判定，維持舊呼叫端相容。
+    """
     if ticket.get("status") != "pending":
         return False
-    blocked_by = ticket.get("blockedBy") or []
-    return len(blocked_by) == 0
+    if ticket_map is None:
+        return len(ticket.get("blockedBy") or []) == 0
+    return is_fully_unblocked(
+        ticket, ticket_map, include_closed_as_resolved=True
+    )
 
 
-def _is_listable(ticket: Dict) -> bool:
+def _is_listable(
+    ticket: Dict, ticket_map: Optional[Dict[str, Dict]] = None
+) -> bool:
     """W17-031.4: list 視圖納入條件 = unblocked pending OR stale in_progress。
 
     stale in_progress 加入 list 是為了讓 PM 在 runqueue 看見遺留 ticket
     並人工介入（評估 agent 真停滯還是長任務）。W17-033 自律 + acceptance-gate-hook
     無法覆蓋 agent 中斷案例（agent 已不在）。
+
+    W8-043：ticket_map 傳入後，unblocked pending 判定改解析 blocker 實際 status。
     """
-    if _is_unblocked_pending(ticket):
+    if _is_unblocked_pending(ticket, ticket_map):
         return True
     if is_stale_in_progress(ticket):
         return True
@@ -305,8 +322,9 @@ def _render_list(
     wave: Optional[int],
     context: Optional[str] = None,
     handoff_info: Optional[Dict[str, Dict]] = None,
+    ticket_map: Optional[Dict[str, Dict]] = None,
 ) -> str:
-    runnable = [t for t in tickets if _is_listable(t)]
+    runnable = [t for t in tickets if _is_listable(t, ticket_map)]
     runnable.sort(
         key=lambda t: (_priority_rank(t), str(t.get("id", "")))
     )
@@ -488,7 +506,12 @@ def render_runqueue(args: argparse.Namespace, version: str) -> str:
     )
 
     if fmt == FORMAT_LIST:
-        return _render_list(scoped, top, wave, context, handoff_info)
+        # W8-043：以全版本 ticket 建 map（非 wave 過濾後的 scoped），使跨 wave
+        # blocker 也能正確解析完成狀態。
+        ticket_map = {t["id"]: t for t in all_tickets if t.get("id")}
+        return _render_list(
+            scoped, top, wave, context, handoff_info, ticket_map
+        )
     elif fmt == FORMAT_DAG:
         # dag 忽略 --top（呈現完整 DAG）
         return _render_dag(scoped)

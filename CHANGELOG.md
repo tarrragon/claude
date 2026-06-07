@@ -1,3 +1,26 @@
+## [1.43.0] - 2026-06-08
+
+### Summary
+feat: dispatch hook 新增 stale-origin 警示（非阻擋）; fix: 修復 test_scenario_1_invalid_section fixture 設計缺陷; fix: 修復 ticket-skill 測試基礎設施 G1+G2+G3 (+10 more)
+
+Changes: 1 feat, 5 fix, 5 docs, 2 chore
+
+- feat: dispatch hook 新增 stale-origin 警示（非阻擋）
+- fix: 修復 test_scenario_1_invalid_section fixture 設計缺陷
+- fix: 修復 ticket-skill 測試基礎設施 G1+G2+G3
+- fix: cascade 解鎖擴展至 blocker→dependents
+- fix: runqueue 動態解析 blocker 完成狀態（修正 B）
+- fix: 解耦 dispatch-validation hook 測試對已移除 ticket md 的依賴
+- docs: 新增 PC-179 worktree agent 完成後 cwd 污染致 merge 誤判
+- docs: 補強 bash 規則二有界列舉禁截斷 carve-out + 新建 PC-177
+- docs: 派發 SOP 加入 push-before-dispatch + agent-writes-to-ticket
+- docs: PC-148 擴充變體 B（hook 搬移後 settings.local.json 殘留舊路徑）
+- docs: 新增 PC-178 UI 功能測試綠但 runtime 不可達
+- chore: 移除 632 MagicMock 測試污染 + scoped gitignore（G3 repo-hygiene）
+- chore: 授予 suggest-compact.py 執行權限（用戶請求）
+
+---
+
 ## [1.42.0] - 2026-06-05
 
 ### Summary
