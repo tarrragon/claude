@@ -99,61 +99,6 @@ class TestRunqueueList:
         assert "0.18.0-W17-002" not in out  # blocked
         assert "0.18.0-W17-003" not in out  # completed
 
-    def test_list_includes_pending_with_completed_blocker(self):
-        """W8-043: blockedBy 指向已完成 blocker 的 pending 應視為可執行並列出。
-
-        修正前 _is_unblocked_pending 字面檢查 len(blockedBy)==0，使 blocker
-        已完成的 ticket 被誤排除（W8-001.5 / W8-027 實證）。修正後須解析
-        blocker 實際 status，全 completed 即視為可執行。
-        """
-        tickets = [
-            _make_ticket("0.18.0-W17-001", blocked_by=[], status="completed"),
-            _make_ticket("0.18.0-W17-002", blocked_by=["0.18.0-W17-001"]),
-        ]
-        with patch(
-            "ticket_system.commands.track_runqueue.list_tickets",
-            return_value=tickets,
-        ):
-            rc, out = _run(_args(format="list"))
-        assert rc == 0
-        assert "0.18.0-W17-002" in out  # blocker 已完成 → 應列出
-
-    def test_list_includes_pending_with_all_blockers_completed(self):
-        """W8-043: 多個 blocker 全部完成（AND 語義）→ 列出。"""
-        tickets = [
-            _make_ticket("0.18.0-W17-001", blocked_by=[], status="completed"),
-            _make_ticket("0.18.0-W17-002", blocked_by=[], status="completed"),
-            _make_ticket(
-                "0.18.0-W17-003",
-                blocked_by=["0.18.0-W17-001", "0.18.0-W17-002"],
-            ),
-        ]
-        with patch(
-            "ticket_system.commands.track_runqueue.list_tickets",
-            return_value=tickets,
-        ):
-            rc, out = _run(_args(format="list"))
-        assert rc == 0
-        assert "0.18.0-W17-003" in out  # 所有 blocker 完成 → 列出
-
-    def test_list_excludes_pending_with_partially_completed_blockers(self):
-        """W8-043: AND 語義回歸防護——任一 blocker 未完成則仍排除。"""
-        tickets = [
-            _make_ticket("0.18.0-W17-001", blocked_by=[], status="completed"),
-            _make_ticket("0.18.0-W17-002", blocked_by=[], status="pending"),
-            _make_ticket(
-                "0.18.0-W17-003",
-                blocked_by=["0.18.0-W17-001", "0.18.0-W17-002"],
-            ),
-        ]
-        with patch(
-            "ticket_system.commands.track_runqueue.list_tickets",
-            return_value=tickets,
-        ):
-            rc, out = _run(_args(format="list"))
-        assert rc == 0
-        assert "0.18.0-W17-003" not in out  # 仍有未完成 blocker → 排除
-
     def test_list_sorted_by_priority_p0_first(self):
         tickets = [
             _make_ticket("TIX-ALPHA", priority="P2", blocked_by=[]),

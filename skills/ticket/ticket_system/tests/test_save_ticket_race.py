@@ -278,23 +278,14 @@ class TestConfiguration:
     """配置層 acceptance（A1 / A4）：與 race 行為解耦的契約檢查。"""
 
     def test_gitignore_contains_lock_pattern(self):
-        """A4: .gitignore 含 scoped MagicMock 污染忽略 pattern。
-
-        修正版（0.31.1-W8-046）：原斷言要求 blanket `*.lock` pattern，但會讓未來
-        新位置的 uv.lock / pubspec.lock 等合法 lock 檔被誤忽略（collateral）。
-        改為斷言 scoped pattern `.claude/skills/ticket/MagicMock/`，保留「測試污染
-        須被 gitignore」的原意，同時避免誤傷合法 lock 檔。
-        """
+        """A4: .gitignore 含 generic *.lock pattern。"""
         project_root = Path(parser.__file__).resolve().parents[5]
         gitignore = project_root / ".gitignore"
         assert gitignore.exists(), f"gitignore not found at {gitignore}"
         content = gitignore.read_text(encoding="utf-8")
         import re
-        m = re.search(
-            r"^\.claude/skills/ticket/MagicMock/\s*$", content, re.MULTILINE
-        )
-        assert m is not None, \
-            ".gitignore missing scoped pattern '.claude/skills/ticket/MagicMock/'"
+        m = re.search(r"^\*+(?:/\*+)?\.lock\s*$", content, re.MULTILINE)
+        assert m is not None, ".gitignore missing generic *.lock pattern"
 
     def test_save_ticket_signature_unchanged(self):
         """A1: save_ticket signature 不變（修正版 spec 不改 save_ticket）。"""

@@ -139,7 +139,7 @@ def load_alignment(project_root: Path, logger) -> Tuple[Optional[Dict[str, Any]]
     """載入映射檔。返回 (data, error_message)。error_message 非 None 時應阻擋。"""
     path = project_root / ALIGNMENT_REL_PATH
     if not path.exists():
-        msg = f"映射檔不存在：{ALIGNMENT_REL_PATH}（請依 W10-055 規格新建）"
+        msg = f"映射檔不存在：{ALIGNMENT_REL_PATH}（請依映射檔規格新建，見 SKILL.md）"
         logger.error(msg)
         return None, msg
     try:

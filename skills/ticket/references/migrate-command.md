@@ -86,7 +86,7 @@ ls .claude/migration-backups/
 cp .claude/migration-backups/<timestamp>/<被覆寫 ticket>.md docs/work-logs/v<目標版本>/tickets/
 ```
 
-**參考**：W14-047 ANA（L1+L2 根因分析）、PC-152（本事件完整 timeline 與識別模板）、W14-048 IMP（L2 工具層 collision detection 修復）
+**參考**：PC-152（本事件完整 timeline、L1+L2 根因分析、識別模板，含 L2 工具層 collision detection 修復脈絡）
 
 ---
 

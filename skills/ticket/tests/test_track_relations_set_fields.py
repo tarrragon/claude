@@ -11,9 +11,16 @@
 """
 
 import argparse
+import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import pytest
+
+# W1-018.1: 真實 tmp lock target。command 內為 lock_target = Path(get_ticket_path(...))；
+# 若 get_ticket_path 被 patch 成無 return_value 的 MagicMock，Path(MagicMock) 會經
+# os.fspath 合成出 "MagicMock/get_ticket_path()/<id>" 真實垃圾路徑，再由 file_lock 寫出
+# .lock 檔污染 cwd。patch 一律回傳真實 tmp target，使 .lock 落在 tmp 並由 OS 清理。
+_LOCK_TARGET = Path(tempfile.gettempdir()) / "w1018_test_lock_target.md"
 
 
 @pytest.fixture
@@ -76,7 +83,7 @@ class TestSetBlockedBy:
 
         with patch("ticket_system.commands.track_relations.load_ticket") as mock_load:
             with patch("ticket_system.commands.track_relations.save_ticket") as mock_save:
-                with patch("ticket_system.commands.track_relations.get_ticket_path"):
+                with patch("ticket_system.commands.track_relations.get_ticket_path", return_value=_LOCK_TARGET):
                     mock_load.side_effect = mock_load_ticket_side_effect
 
                     result = _execute_set_relation_field(args, "0.1.0", "blockedBy")
@@ -110,7 +117,7 @@ class TestSetBlockedBy:
 
         with patch("ticket_system.commands.track_relations.load_ticket") as mock_load:
             with patch("ticket_system.commands.track_relations.save_ticket") as mock_save:
-                with patch("ticket_system.commands.track_relations.get_ticket_path"):
+                with patch("ticket_system.commands.track_relations.get_ticket_path", return_value=_LOCK_TARGET):
                     mock_load.side_effect = mock_load_ticket_side_effect
 
                     result = _execute_set_relation_field(args, "0.1.0", "blockedBy")
@@ -149,7 +156,7 @@ class TestSetBlockedBy:
 
         with patch("ticket_system.commands.track_relations.load_ticket") as mock_load:
             with patch("ticket_system.commands.track_relations.save_ticket") as mock_save:
-                with patch("ticket_system.commands.track_relations.get_ticket_path"):
+                with patch("ticket_system.commands.track_relations.get_ticket_path", return_value=_LOCK_TARGET):
                     mock_load.side_effect = mock_load_ticket_side_effect
 
                     result = _execute_set_relation_field(args, "0.1.0", "blockedBy")
@@ -212,7 +219,7 @@ class TestSetBlockedBy:
 
         with patch("ticket_system.commands.track_relations.load_ticket") as mock_load:
             with patch("ticket_system.commands.track_relations.save_ticket") as mock_save:
-                with patch("ticket_system.commands.track_relations.get_ticket_path"):
+                with patch("ticket_system.commands.track_relations.get_ticket_path", return_value=_LOCK_TARGET):
                     mock_load.side_effect = mock_load_ticket_side_effect
 
                     result = _execute_set_relation_field(args, "0.1.0", "blockedBy")
@@ -249,7 +256,7 @@ class TestSetRelatedTo:
 
         with patch("ticket_system.commands.track_relations.load_ticket") as mock_load:
             with patch("ticket_system.commands.track_relations.save_ticket") as mock_save:
-                with patch("ticket_system.commands.track_relations.get_ticket_path"):
+                with patch("ticket_system.commands.track_relations.get_ticket_path", return_value=_LOCK_TARGET):
                     mock_load.side_effect = mock_load_ticket_side_effect
 
                     result = _execute_set_relation_field(args, "0.1.0", "relatedTo")

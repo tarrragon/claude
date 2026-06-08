@@ -261,3 +261,177 @@ pytest all green.
 """
         is_empty = check_execution_log_filled(content, self._logger())
         assert is_empty is False
+
+
+class TestIsSectionEmptyH3SkeletonStrip:
+    """W8-007 Root cause：H3 子標題骨架 +（必填：...）placeholder 應被剝除"""
+
+    def test_section_with_only_h3_headings_is_empty(self):
+        """只有 H3 骨架標題（無實質內容）→ empty"""
+        content = """## 重現實驗結果
+
+### 實驗方法
+
+### 實驗結果
+
+### 結論
+
+## Solution
+解法。
+"""
+        assert _is_section_empty(content, "重現實驗結果") is True
+
+    def test_section_with_h3_and_required_placeholder_is_empty(self):
+        """H3 骨架 +（必填：...）placeholder → empty"""
+        content = """## 重現實驗結果
+
+### 實驗方法
+
+（必填：描述如何重現問題）
+
+### 實驗結果
+
+（必填：實際觀察到的行為）
+
+## Solution
+解法。
+"""
+        assert _is_section_empty(content, "重現實驗結果") is True
+
+    def test_required_placeholder_stripped(self):
+        """（必填：...）與（待填寫...）同等剝除"""
+        content = """## Solution
+
+（必填：解法設計）
+
+## Test Results
+pytest.
+"""
+        assert _is_section_empty(content, "Solution") is True
+
+    def test_h3_with_real_content_not_empty(self):
+        """H3 標題下有實質內容 → not empty（不過度剝除）"""
+        content = """## 重現實驗結果
+
+### 實驗方法
+
+執行 acceptance-gate-hook，輸入空殼 ANA ticket。
+
+### 實驗結果
+
+complete 被放行（漏偵測）。
+
+## Solution
+解法。
+"""
+        assert _is_section_empty(content, "重現實驗結果") is False
+
+
+class TestCheckExecutionLogAnaReproduction:
+    """W8-007：ANA type ticket 須額外檢查「重現實驗結果」章節"""
+
+    def _logger(self):
+        logger = logging.getLogger("test_execution_log_checker_ana")
+        logger.addHandler(logging.NullHandler())
+        return logger
+
+    def test_ana_empty_reproduction_shell_detected(self):
+        """ANA：重現實驗結果為 H3 骨架空殼 → 視為未填寫（True）"""
+        content = """## Problem Analysis
+分析內容充足。
+
+## 重現實驗結果
+
+### 實驗方法
+
+（必填：描述如何重現問題）
+
+### 實驗結果
+
+（必填：實際觀察）
+
+## Solution
+結論已寫。
+
+## Test Results
+N/A（ANA）。
+"""
+        is_empty = check_execution_log_filled(
+            content, self._logger(), ticket_type="ANA"
+        )
+        assert is_empty is True
+
+    def test_ana_filled_reproduction_not_empty(self):
+        """ANA：重現實驗結果有實質內容 + Solution 有內容 → not empty"""
+        content = """## Problem Analysis
+分析內容。
+
+## 重現實驗結果
+
+### 實驗方法
+
+執行 hook，輸入空殼 ticket。
+
+### 實驗結果
+
+complete 放行，確認漏洞。
+
+## Solution
+結論：spawn IMP 修 hook。
+
+## Test Results
+N/A。
+"""
+        is_empty = check_execution_log_filled(
+            content, self._logger(), ticket_type="ANA"
+        )
+        assert is_empty is False
+
+    def test_non_ana_does_not_require_reproduction(self):
+        """非 ANA（IMP）：缺重現實驗結果但 Solution/Test Results 有內容 → not empty"""
+        content = """## Solution
+實際解法。
+
+## Test Results
+pytest all green.
+"""
+        is_empty = check_execution_log_filled(
+            content, self._logger(), ticket_type="IMP"
+        )
+        assert is_empty is False
+
+    def test_ana_empty_reproduction_but_solution_filled_still_flagged(self):
+        """ANA：Solution 有內容但重現實驗結果空殼 → 仍視為未填寫（True）
+
+        ANA 的核心產出之一是重現實驗，空殼不應放行。
+        """
+        content = """## Problem Analysis
+分析。
+
+## 重現實驗結果
+
+### 實驗方法
+
+（必填：待補）
+
+## Solution
+結論已寫得很完整。
+
+## Test Results
+N/A。
+"""
+        is_empty = check_execution_log_filled(
+            content, self._logger(), ticket_type="ANA"
+        )
+        assert is_empty is True
+
+    def test_backward_compat_no_ticket_type(self):
+        """向後相容：不傳 ticket_type 時行為與舊版一致（只查 Solution/Test Results）"""
+        content = """## Solution
+實際解法。
+
+## Test Results
+pytest all green.
+"""
+        is_empty = check_execution_log_filled(content, self._logger())
+        assert is_empty is False

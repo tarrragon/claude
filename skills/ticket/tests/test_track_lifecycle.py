@@ -591,17 +591,10 @@ class TestCompleteCascadeChildren:
         assert _saved_statuses_for(complete_env.save_ticket, "GC1") == []
         assert "GC1" not in out
 
-    def test_orphan_parent_id_unlocked_via_dependents_cascade(
+    def test_orphan_parent_id_not_scanned(
         self, make_parent_child_tickets, complete_env, capsys
     ):
-        """TC-B2（W8-044 契約修訂）：parent_id 對 children cascade 仍不反向掃描，
-        但 blockedBy=[P0] 的反向依賴改由 dependents cascade 解鎖（§6.2 + W8-044 修正 A）。
-
-        修訂前（W8-044 之前）：C_orphan 不在 P0.children，cascade 不掃 blockedBy
-        反向引用，故 C_orphan 永久 stale blocked（即 W8-042 ANA 揭露的缺陷）。
-        修訂後：_post_complete_cascade_dependents 掃描 blockedBy 反向引用，
-        C_orphan 應被解鎖為 pending。
-        """
+        """TC-B2：parent_id 單向權威，不反向掃描（§6.2）。"""
         c_orphan = {
             "id": "C_orphan",
             "status": "blocked",
@@ -620,9 +613,9 @@ class TestCompleteCascadeChildren:
 
         out = capsys.readouterr().out
         assert result == 0
-        assert "pending" in _saved_statuses_for(
-            complete_env.save_ticket, "C_orphan"
-        )
+        assert _saved_statuses_for(complete_env.save_ticket, "C_orphan") == []
+        assert "[Cascade]" not in out
+        assert "[Warning] 父 Ticket 完成時尚有未完成的子 Ticket" not in out
 
     def test_empty_children(
         self, make_parent_child_tickets, complete_env, capsys
@@ -818,116 +811,6 @@ class TestCompleteCascadeChildren:
         assert "   - C1 [pending]: 子任務 C1" in out
         assert "   - C2 [in_progress]: 子任務 C2" in out
         assert "父 complete 不阻止" in out
-
-
-class TestCompleteCascadeDependents:
-    """blocker complete → dependents（blockedBy 反向引用）自動解鎖（W8-044 修正 A）。
-
-    W8-042 ANA 結論：cascade 解鎖原僅作用 parent→children，sibling/cross
-    blockedBy 關係不在作用域內，導致 blocker complete 後 dependents 永久
-    stale blocked。本區塊驗證新增的 _post_complete_cascade_dependents 掃描
-    blockedBy 反向引用並以 AND 語義（is_fully_unblocked）解鎖。
-    """
-
-    def test_cross_sibling_blocked_dependent_unlocked(
-        self, make_parent_child_tickets, complete_env, capsys
-    ):
-        """核心場景：B.blockedBy=[A]，B 非 A 的 child → complete A → B 轉 pending。"""
-        b_ticket = {
-            "id": "B",
-            "status": "blocked",
-            "blockedBy": ["A"],
-            "title": "sibling B",
-        }
-        # A 為被 complete 的 ticket（無 children），B 為純 blockedBy 反向依賴
-        parent, children, all_tickets = make_parent_child_tickets(
-            "A", [], extras=[b_ticket]
-        )
-        complete_env.set_tickets(parent, all_tickets)
-
-        args = Mock()
-        args.ticket_id = "A"
-        result = execute_complete(args, "0.18.0")
-
-        out = capsys.readouterr().out
-        assert result == 0
-        b_statuses = _saved_statuses_for(complete_env.save_ticket, "B")
-        assert "pending" in b_statuses, f"B 應被 save 為 pending，實際: {b_statuses}"
-        assert "B" in out
-
-    def test_dependent_with_unfinished_other_blocker_not_unlocked(
-        self, make_parent_child_tickets, complete_env, capsys
-    ):
-        """AND 回歸：B.blockedBy=[A, X]，X 未完成 → complete A → B 仍 blocked。"""
-        x_ticket = {
-            "id": "X",
-            "status": "in_progress",
-            "blockedBy": [],
-            "title": "外部 X",
-        }
-        b_ticket = {
-            "id": "B",
-            "status": "blocked",
-            "blockedBy": ["A", "X"],
-            "title": "sibling B",
-        }
-        parent, children, all_tickets = make_parent_child_tickets(
-            "A", [], extras=[x_ticket, b_ticket]
-        )
-        complete_env.set_tickets(parent, all_tickets)
-
-        args = Mock()
-        args.ticket_id = "A"
-        result = execute_complete(args, "0.18.0")
-
-        out = capsys.readouterr().out
-        assert result == 0
-        assert "pending" not in _saved_statuses_for(complete_env.save_ticket, "B")
-
-    def test_dependent_that_is_also_child_not_double_processed(
-        self, make_parent_child_tickets, complete_env, capsys
-    ):
-        """冪等：C1 同時是 A 的 child 與 blockedBy=[A] 的 dependent → 只解鎖一次。"""
-        # C1 既在 A.children（被 _post_complete_cascade 處理），其 blockedBy 也含 A
-        parent, children, all_tickets = make_parent_child_tickets(
-            "A", [("C1", "blocked", ["A"])]
-        )
-        complete_env.set_tickets(parent, all_tickets)
-
-        args = Mock()
-        args.ticket_id = "A"
-        result = execute_complete(args, "0.18.0")
-
-        out = capsys.readouterr().out
-        assert result == 0
-        c1_statuses = _saved_statuses_for(complete_env.save_ticket, "C1")
-        # children cascade 已解鎖一次；dependents cascade 不得重複 save
-        assert c1_statuses.count("pending") == 1, (
-            f"C1 應只被解鎖一次（冪等），實際: {c1_statuses}"
-        )
-
-    def test_non_blocked_dependent_not_touched(
-        self, make_parent_child_tickets, complete_env, capsys
-    ):
-        """已是 pending 的 dependent（非 blocked）→ 不改狀態。"""
-        b_ticket = {
-            "id": "B",
-            "status": "pending",
-            "blockedBy": ["A"],
-            "title": "已 pending B",
-        }
-        parent, children, all_tickets = make_parent_child_tickets(
-            "A", [], extras=[b_ticket]
-        )
-        complete_env.set_tickets(parent, all_tickets)
-
-        args = Mock()
-        args.ticket_id = "A"
-        result = execute_complete(args, "0.18.0")
-
-        out = capsys.readouterr().out
-        assert result == 0
-        assert _saved_statuses_for(complete_env.save_ticket, "B") == []
 
 
 # ============================================================================

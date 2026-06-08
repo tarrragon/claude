@@ -179,7 +179,7 @@ def should_trigger_check(input_data: Dict[str, Any], logger) -> bool:
         ticket_type = type_match.group(1).strip()
         if ticket_type in type_excludes:
             logger.info(
-                f"Ticket type={ticket_type} 不適用 c2/c3 檢查（W10-123 type-aware skip）"
+                f"Ticket type={ticket_type} 不適用 c2/c3 檢查（type-aware skip）"
             )
             return False
 

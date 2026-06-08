@@ -498,11 +498,6 @@ test = [
     { name = "pytest-mock" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "pytest-mock" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "freezegun", marker = "extra == 'test'", specifier = ">=1.0" },
@@ -512,9 +507,6 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=5.0" },
 ]
 provides-extras = ["test"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest-mock", specifier = ">=3.10" }]
 
 [[package]]
 name = "tomli"

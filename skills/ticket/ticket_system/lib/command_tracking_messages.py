@@ -782,7 +782,7 @@ class ClaimWrapMessages:
         "    故建議 Read .claude/skills/compositional-writing/SKILL.md。\n"
         "    （同 session 已 Read 過、或本次 Edit 屬純格式調整時可省略以下成本對照）\n"
         "    成本對照：Read 約 2-3K token 換取首次撰寫品質；\n"
-        "    跳過則事後 Layer 2 委員補修約 5-10K token（估算依 W17-122 ginger ROI 實測）。"
+        "    跳過則事後 Layer 2 委員補修約 5-10K token（估算值）。"
     )
 
     # ANA 類型專屬第四問（PC-063 防護 4/4）

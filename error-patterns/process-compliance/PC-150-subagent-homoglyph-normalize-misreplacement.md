@@ -78,5 +78,5 @@ LLM（haiku model）在處理字形相近的水部字（污 U+6C61 / 汙 U+6C59 
 ---
 
 **Last Updated**: 2026-05-17
-**Version**: 1.0.0 — 初始建立（W17-202 ANA 產出）
+**Version**: 1.0.0 — 初始建立：subagent 形似字 normalize 誤替換正常字元的防護（W17-202 ANA）
 **Source**: 0.18.0-W17-202 / 0.18.0-W11-028

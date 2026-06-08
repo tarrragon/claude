@@ -82,4 +82,4 @@ who:
 ---
 
 **Last Updated**: 2026-04-18
-**Version**: 1.0.0 — 初版（來源：W14-024 Phase A IMP-2，W14-029 實作）
+**Version**: 1.0.0 — 初版建立 ticket frontmatter YAML 強制欄位格式規則（W14-029 實作）

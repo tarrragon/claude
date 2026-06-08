@@ -318,8 +318,10 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
         # 步驟 5：檢查 5W1H 完整性
         incomplete_5w1h = check_5w1h_completeness(frontmatter, logger)
 
-        # 步驟 6：檢查 execution log 填寫
-        has_empty_log = check_execution_log_filled(content, logger)
+        # 步驟 6：檢查 execution log 填寫（W8-007：ANA type 額外查重現實驗結果）
+        has_empty_log = check_execution_log_filled(
+            content, logger, ticket_type=frontmatter.get("type", "")
+        )
 
         # 步驟 7：檢查自定義 H2 章節（W17-072，warning 不阻擋）
         custom_h2 = check_custom_h2_sections(content, logger)

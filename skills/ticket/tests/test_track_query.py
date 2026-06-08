@@ -184,11 +184,7 @@ class TestTree:
             }
             mock_load.return_value = mock_ticket
 
-            # 注意：execute_tree 透過 `from ...ticket_formatter import format_ticket_tree`
-            # 將該函式綁定到 track_query 命名空間，故須 patch 命令層的綁定名稱，
-            # patch ticket_formatter 模組本身對 execute_tree 的呼叫無效（且會讓真實遞迴
-            # 與被 patch 的模組屬性共振，導致 join MagicMock TypeError）。
-            with patch('ticket_system.commands.track_query.format_ticket_tree'):
+            with patch('ticket_system.lib.ticket_formatter.format_ticket_tree'):
                 result = execute_tree(args, "0.31.0")
 
                 assert result == 0
@@ -214,8 +210,7 @@ class TestTree:
             }
             mock_load.return_value = mock_ticket
 
-            # 同 test_tree_single_ticket：patch 命令層綁定名稱
-            with patch('ticket_system.commands.track_query.format_ticket_tree'):
+            with patch('ticket_system.lib.ticket_formatter.format_ticket_tree'):
                 result = execute_tree(args, "0.31.0")
 
                 assert result == 0

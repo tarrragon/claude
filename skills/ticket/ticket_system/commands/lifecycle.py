@@ -24,7 +24,6 @@ from ticket_system.lib.constants import (
     CLOSE_REASONS,
     CLOSE_REASON_RETROSPECTIVE_UNKNOWN,
 )
-from ticket_system.lib.blocker_resolution import is_fully_unblocked
 from ticket_system.lib.file_lock import file_lock
 from ticket_system.lib.precondition import require_in_progress
 from ticket_system.lib.ticket_loader import (
@@ -853,17 +852,6 @@ class TicketLifecycle:
         # W11-035：捕獲 unblocked 清單以便 auto-stage 收集 children md 路徑
         unblocked_children = _post_complete_cascade(ticket, self.version, ticket_map) or []
 
-        # W8-044 修正 A：cascade 擴展至 blocker→dependents（blockedBy 反向引用）。
-        # 處理 sibling / cross blockedBy 關係——非 children 但 blockedBy 含本 ticket
-        # 的 dependents 在本 ticket complete 後自動解鎖。傳入 children cascade 已
-        # 解鎖的 id 集合確保冪等（dependent 同時是 child 時不重複 save）。
-        already_unblocked_ids = {
-            c.get("id") for c in unblocked_children if isinstance(c, dict)
-        }
-        unblocked_dependents = _post_complete_cascade_dependents(
-            ticket, self.version, ticket_map, already_unblocked_ids
-        ) or []
-
         # W17-008.15 方案 D：IMP complete 後檢查 source ANA 是否可 complete
         _print_source_ana_complete_hint(ticket, self.version)
 
@@ -883,13 +871,8 @@ class TicketLifecycle:
                 sys.stderr.write(
                     f"[auto-stage] worklog 路徑解析失敗（略過）：{exc}\n"
                 )
-            # W8-044：children + dependents 兩路 cascade 解鎖的 ticket 皆納入 auto-stage
-            for unblocked_item in (*unblocked_children, *unblocked_dependents):
-                cid = (
-                    unblocked_item.get("id")
-                    if isinstance(unblocked_item, dict)
-                    else None
-                )
+            for child in unblocked_children:
+                cid = child.get("id") if isinstance(child, dict) else None
                 if not cid:
                     continue
                 child_dict = ticket_map.get(cid) or {"id": cid}
@@ -899,7 +882,7 @@ class TicketLifecycle:
                     )
                 except Exception as exc:
                     sys.stderr.write(
-                        f"[auto-stage] cascade {cid} 路徑解析失敗（略過）：{exc}\n"
+                        f"[auto-stage] child {cid} 路徑解析失敗（略過）：{exc}\n"
                     )
             _auto_stage_completion_files(ticket_id, modified_paths)
 
@@ -1113,16 +1096,22 @@ def _is_fully_unblocked(
 
     Returns:
         True 表示所有 blocker 皆已解除。
-
-    W8-043 註：實作已抽至 `lib/blocker_resolution.is_fully_unblocked`，本函式
-    保留為薄 wrapper 維持既有呼叫端（`_check_unblocked_tickets` /
-    `_can_cascade_unblock`）與 docstring 引用不變。
     """
-    return is_fully_unblocked(
-        ticket,
-        ticket_map,
-        include_closed_as_resolved=include_closed_as_resolved,
+    blocked_by = ticket.get("blockedBy") or []
+    if not blocked_by:
+        return True
+    resolved_statuses = (
+        (STATUS_COMPLETED, STATUS_CLOSED)
+        if include_closed_as_resolved
+        else (STATUS_COMPLETED,)
     )
+    for blocker_id in blocked_by:
+        blocker = ticket_map.get(blocker_id)
+        if blocker is None:
+            return False
+        if blocker.get("status") not in resolved_statuses:
+            return False
+    return True
 
 
 def _check_unblocked_tickets(
@@ -1749,11 +1738,16 @@ def _handle_pending_children_block(
 def _auto_stage_git_add(paths: List[str]) -> None:
     """W11-035：薄封裝 subprocess.run 以便測試替身 patch 此 symbol，
     避免污染全域 subprocess.run（會影響 get_project_root 等 git 呼叫）。
+
+    W7-003.1：加 5s timeout，git hang（等認證 / index.lock）時不無限等待。
+    逾時拋 subprocess.TimeoutExpired，由呼叫端 ``_auto_stage_completion_files``
+    的 except 涵蓋（graceful degrade，不中斷 complete 流程）。
     """
     subprocess.run(
         ["git", "add", *paths],
         capture_output=True,
         check=False,
+        timeout=5,
     )
 
 
@@ -1828,84 +1822,6 @@ def _post_complete_cascade(
         _print_cascade_unblocked(unblocked)
     if pending:
         _print_children_warnings(pending)
-    return unblocked
-
-
-def _post_complete_cascade_dependents(
-    completed_ticket: Dict[str, Any],
-    version: str,
-    ticket_map: Dict[str, Any],
-    already_unblocked_ids: Optional[set] = None,
-) -> List[Dict[str, Any]]:
-    """complete() 後處理：解鎖 blockedBy 反向引用的 dependents（W8-044 修正 A）。
-
-    與 ``_post_complete_cascade`` 互補：後者只處理 parent→children（依
-    ``ticket.children``），本函式掃描 ``ticket_map`` 找 blockedBy 含
-    completed_ticket id 的 ticket（blocker→dependents 反向引用），解決 sibling /
-    cross blockedBy 關係在 blocker complete 後永久 stale blocked 的缺陷
-    （W8-042 ANA）。
-
-    判定語義沿用 ``is_fully_unblocked``（AND）：dependent 的所有 blocker 皆
-    completed/closed 才解鎖。只改 ``status`` 為 pending、不清理 blockedBy 欄位，
-    與 ``_cascade_unblock_children`` 一致——runqueue 可見性由 W8-043 動態解析
-    負責，不靠清 blockedBy。
-
-    冪等性（acceptance 3）：dependent 可能同時是 parent 的 child（已被
-    ``_post_complete_cascade`` 解鎖並 save）。透過 ``already_unblocked_ids`` skip
-    已處理 id，避免重複 save / 重複印訊息。
-
-    呼叫契約：caller 須先 ``save_ticket(completed_ticket)`` 落盤再呼叫本函式
-    （execute_complete 既有契約），確保 ``is_fully_unblocked`` 讀到 completed
-    狀態。
-
-    Args:
-        completed_ticket: 已完成並落盤的 ticket dict。
-        version: 版本字串。
-        ticket_map: 預先載入的 {ticket_id: ticket_dict} map。
-        already_unblocked_ids: 本次 complete 已由 children cascade 解鎖的 id 集合
-            （冪等 skip 用）；None 視為空集。
-
-    Returns:
-        unblocked list of {id, title}（與 ``_post_complete_cascade`` 同型）。
-    """
-    completed_id = completed_ticket.get("id")
-    if not completed_id:
-        return []
-
-    skip_ids = already_unblocked_ids or set()
-    unblocked: List[Dict[str, Any]] = []
-
-    for dep_id, dep in ticket_map.items():
-        if dep_id == completed_id or dep_id in skip_ids:
-            continue
-        if not isinstance(dep, dict):
-            continue
-        blocked_by = dep.get("blockedBy") or []
-        if completed_id not in blocked_by:
-            continue
-        if dep.get("status") != STATUS_BLOCKED:
-            continue
-        if not is_fully_unblocked(
-            dep, ticket_map, include_closed_as_resolved=True
-        ):
-            continue
-
-        dep["status"] = STATUS_PENDING
-        try:
-            save_ticket(dep, resolve_ticket_path(dep, version, dep_id))
-            unblocked.append({"id": dep_id, "title": dep.get("title", "")})
-        except Exception as err:
-            # 沿用 _cascade_unblock_children §6.7 non-fail-fast 模式
-            print(format_warning(
-                format_msg(
-                    LifecycleMessages.CASCADE_SAVE_FAILED,
-                    ticket_id=dep_id,
-                    error=err,
-                )
-            ))
-
-    if unblocked:
-        _print_cascade_unblocked(unblocked)
     return unblocked
 
 

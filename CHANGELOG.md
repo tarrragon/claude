@@ -1,3 +1,17 @@
+## [1.44.0] - 2026-06-08
+
+### Summary
+feat: 新增未 commit ticket md 偵測 hook（ 方案 4）; feat: auto-commit index.lock retry（sleep 1s 重試一次）; fix: execution_log_checker 偵測 ANA 重現實驗結果空殼 (+1 more)
+
+Changes: 2 feat, 1 fix, 1 test
+
+- feat: 新增未 commit ticket md 偵測 hook（ 方案 4）
+- feat: auto-commit index.lock retry（sleep 1s 重試一次）
+- fix: execution_log_checker 偵測 ANA 重現實驗結果空殼
+- test: 添加 uncommitted-ticket-md-reminder-hook 測試套件
+
+---
+
 ## [1.43.0] - 2026-06-08
 
 ### Summary

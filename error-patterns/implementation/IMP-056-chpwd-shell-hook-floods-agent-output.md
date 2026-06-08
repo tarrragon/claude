@@ -56,7 +56,28 @@ cd /path/to/worktree && git status
 
 # 正確：子 shell 隔離
 (cd /path/to/worktree && git status)
+
+# 更佳（git 專用）：用 -C 完全不換目錄、不觸發 chpwd
+git -C /path/to/worktree status
 ```
+
+## 變體：chpwd 輸出被捕獲進 redirect 致下游處理拿到假數據（W1-018 near-miss）
+
+**症狀**：`(cd "$DIR" && cmd | sort) > file.txt` 後，`file.txt` 開頭混入該目錄的 `ls` 列表（chpwd 在 cd 當下印出），使檔案**非完全排序**；後續 `comm -23 file.txt other.txt` 因 comm 要求輸入嚴格排序而產生大量假差異。
+
+**根因**：即使用子 shell `()` 隔離工作目錄，chpwd hook 仍在子 shell 內的 cd 當下執行 `ls`，其 stdout 與後續命令的 stdout 一起被 `>` 重導向**捕獲進檔案**。子 shell 只隔離 cwd 變更，不抑制 chpwd 的副作用輸出。
+
+**Consequence（為何嚴重）**：這不是「輸出變吵」而是「資料被靜默污染」。W1-018 實證：孤兒比對 `comm` 得到假的 2610 筆（實為 751），PM 差點據此向用戶誤報「sync-push --clean 會災難性刪除 2610 檔」。被污染的中介檔讓錯誤結論看似有憑據。
+
+**Action（防護）**：
+
+| 情境 | 錯誤 | 正確 |
+|------|------|------|
+| 需在某目錄跑 git 並捕獲輸出 | `(cd "$D" && git ls-files \| sort) > f` | `git -C "$D" ls-files \| sort > f`（不 cd，不觸發 chpwd） |
+| 必須 cd 且要捕獲 | 直接 `>` 捕獲 | 先確認輸出無 chpwd 污染（`head` 檢視），或在子 shell 內 `unfunction chpwd` |
+| 用 comm 前 | 假設「sort 過就排序正確」 | 確認排序檔無前置雜訊；用 `sort -c f` 驗證已排序 |
+
+**識別信號**：comm/diff 結果數量遠超預期（near-100% 差異）、排序檔開頭出現不屬於命令輸出的目錄列表 → 優先懷疑 chpwd 污染。
 
 ## 相關
 
@@ -65,4 +86,4 @@ cd /path/to/worktree && git status
 
 ---
 
-**Last Updated**: 2026-04-11
+**Last Updated**: 2026-06-07 — 新增「變體：chpwd 輸出被捕獲進 redirect 致 comm 假數據」（W1-018 near-miss：假 2610 孤兒差點誤報災難性刪除，實為 751）+ `git -C` 正確做法。

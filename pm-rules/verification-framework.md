@@ -164,7 +164,7 @@ ANA complete 前，PM 在主線程依序執行：
 4. 若 Q3 適用，在 Solution 補上顯性否定標記
 5. 執行 `ticket track check-acceptance --all <ana-id>` + `ticket track complete <ana-id>`
 
-> 三層防護銜接：本 checklist（L4 行為層）失守時，acceptance-gate-hook 整合的 `ana_spawn_consistency_checker`（L2 hook 強制層）會阻擋 complete；hook 規格詳見 W17-167 spawned IMP #1。
+> 三層防護銜接：本 checklist（L4 行為層）失守時，acceptance-gate-hook 整合的 `ana_spawn_consistency_checker`（L2 hook 強制層）會阻擋 complete；hook 規格見 `.claude/hooks/acceptance_checkers/ana_spawn_consistency_checker.py`。
 
 ---
 

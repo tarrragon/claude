@@ -63,6 +63,8 @@ LOCAL_ONLY_PATTERNS = frozenset({
     # 類型 A - Runtime state
     "pm-status.json",
     "dispatch-active.json",
+    "dispatch-active.lock",    # W1-018.2: dispatch tracker advisory lock（.json 已排除，.lock 補齊）
+    "scheduled_tasks.lock",    # W1-018.2: scheduled tasks runtime lock（session-local）
     "hook-state",
     # 工具產物（Python 快取，無跨專案共用價值）
     "__pycache__",
@@ -74,6 +76,27 @@ LOCAL_ONLY_PATTERNS = frozenset({
     ".sync-conflicts",         # 三方合併衝突暫存目錄（pull/push 皆不同步，本地手動解決）
     "settings.local.json",
     ".zhtw-mcp-skip",          # 各專案 opt-out 繁中檢查的 flag，per-project 決定
+})
+
+# 僅 .claude/ 根層的 local-only 目錄（W1-018.2）。
+#
+# 與 LOCAL_ONLY_PATTERNS 的差異：這些名稱（logs / state）過於通用，作為 part-level
+# 黑名單會誤殺 skill 內部的同名 live 目錄（例：
+# skills/cc-release-impact-review/state/last-reviewed.md 是 skill 維護的去重狀態
+# 真實 tracked 檔，非 runtime 污染）。故僅在「相對 claude_dir 路徑的第一段」命中時
+# 排除，避免 false positive 阻斷 live 內容同步或被 --clean 誤刪。
+#
+# 對應 .gitignore 以 root-anchored 形式宣告（.claude/logs/ 與 .claude/state/）。
+LOCAL_ONLY_ROOT_DIRS = frozenset({
+    "logs",     # 類型 C - session log 根目錄（曾外洩遠端，補入防再洩）
+    "state",    # 類型 A - session state markers 根目錄（runtime，曾外洩遠端）
+    # 類型 A - agent worktree 根目錄（runtime，本地 agent worktree 產物；曾誤推遠端為
+    # 6 個 gitlink 160000 垃圾）。採 root-anchored 而非 part-level：worktrees 雖為
+    # 具名（無已知 skill 內部同名巢狀目錄，目前 part-level 不會誤殺），但語意上
+    # .claude/worktrees/ 必為根層 runtime 產物，root-anchored 對未來新增的巢狀
+    # worktrees/ 目錄天然免疫（與 logs / state 同策略）。對應 .gitignore 既有
+    # root-anchored 宣告 .claude/worktrees/。來源：W1-018.3。
+    "worktrees",
 })
 
 # 類型 D - 敏感憑證（嚴禁推送至公開 repo；含密鑰/token/環境變數，外流即安全事故）
@@ -119,10 +142,13 @@ SYNC_EXCLUDE_ALL = PUSH_EXCLUDE
 #
 # 不含 CREDENTIAL_PATTERNS：憑證的 gitignore 涵蓋由 .env / secret 等專用 glob
 # 規則處理（且部分為目錄層級），語意與 local-only 名稱比對不同，故分開不混入。
-GITIGNORE_EXPECTED = LOCAL_ONLY_PATTERNS
+# 含 LOCAL_ONLY_ROOT_DIRS：logs / state 同須在 .gitignore 宣告（root-anchored 形式），
+# 故併入交叉驗證基準。
+GITIGNORE_EXPECTED = LOCAL_ONLY_PATTERNS | LOCAL_ONLY_ROOT_DIRS
 
 # 預計算小寫版本，避免每次呼叫 should_exclude 重複計算
 _PUSH_EXCLUDE_LOWER = frozenset(p.lower() for p in PUSH_EXCLUDE)
+_LOCAL_ONLY_ROOT_DIRS_LOWER = frozenset(p.lower() for p in LOCAL_ONLY_ROOT_DIRS)
 _EXCLUDE_SUFFIXES_LOWER = frozenset(s.lower() for s in EXCLUDE_SUFFIXES)
 _EXCLUDE_NAME_PREFIXES_LOWER = frozenset(p.lower() for p in EXCLUDE_NAME_PREFIXES)
 
@@ -143,6 +169,8 @@ def should_exclude(path: Path) -> bool:
       2. 副檔名命中 EXCLUDE_SUFFIXES（含 .pem/.key 等憑證副檔名）
       3. 檔名前綴命中 EXCLUDE_NAME_PREFIXES（.env. / secret 變體）
       4. 路徑任一目錄段命中名稱黑名單（排除整個 hook-state/ secrets/ 目錄）
+      5. 路徑第一段命中 LOCAL_ONLY_ROOT_DIRS（僅 root-anchored，避免誤殺 skill
+         內部同名目錄如 skills/*/state/）（W1-018.2）
     """
     assert not path.is_absolute(), (
         f"should_exclude 要求相對 claude_dir 的路徑，收到絕對路徑：{path}"
@@ -154,7 +182,11 @@ def should_exclude(path: Path) -> bool:
         return True
     if any(name_lower.startswith(prefix) for prefix in _EXCLUDE_NAME_PREFIXES_LOWER):
         return True
-    return any(part.lower() in _PUSH_EXCLUDE_LOWER for part in path.parts)
+    if any(part.lower() in _PUSH_EXCLUDE_LOWER for part in path.parts):
+        return True
+    # root-anchored：僅第一段命中才排除（logs / state 通用名只在 .claude/ 根層為 runtime）
+    parts = path.parts
+    return bool(parts) and parts[0].lower() in _LOCAL_ONLY_ROOT_DIRS_LOWER
 
 
 def compute_content_hash(claude_dir: Path) -> str:

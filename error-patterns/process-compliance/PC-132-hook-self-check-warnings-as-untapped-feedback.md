@@ -133,5 +133,5 @@ grep "self-check\|漏網\|missing" .claude/hook-logs/<related-hook>/*.log | head
 ---
 
 **Last Updated**: 2026-05-05
-**Version**: 1.0.0 — 初始建立（W17-144.1.1.1 落地）
+**Version**: 1.0.0 — 初始建立：Hook self-check 警示是被忽視的反推資料源（W17-144.1.1.1）
 **Source**: 用戶質疑「還有沒有別的方法判斷污染源」+ 即時實證 Hook log 反推 12 簡體字 + 意識到此資料源已被忽視至少 1 週

@@ -727,32 +727,69 @@ def collect_remote_files(src: Path, prefix: Path = Path()) -> set[Path]:
     return files
 
 
+def _is_git_tracked(rel_under_root: str, project_root: Path) -> bool:
+    """判斷相對 project_root 的路徑是否受 git 追蹤。
+
+    用 git ls-files --error-unmatch <path>：受追蹤回 returncode 0。
+    非 git 環境或路徑未追蹤回 False，呼叫端視為可刪除的 runtime/stale 檔。
+
+    參數:
+        rel_under_root: 相對 git repo root 的路徑（如 .claude/error-patterns/PC-x.md）
+        project_root: git repo root 路徑
+
+    傳回:
+        bool: 受 git 追蹤為 True
+    """
+    result = run_git(
+        ["ls-files", "--error-unmatch", rel_under_root], cwd=str(project_root)
+    )
+    return result.returncode == 0
+
+
 def cleanup_stale_files(
     claude_dir: Path,
     remote_files: set[Path],
     preserve: set[str] | None = None,
-) -> list[str]:
-    """移除本地有但遠端 repo 中不存在的過時檔案。
+    project_root: Path | None = None,
+) -> tuple[list[str], list[str]]:
+    """移除本地有但遠端 repo 中不存在的過時檔案（git 追蹤感知）。
 
-    在 preserve 清單中的檔案不會被刪除。
+    git 追蹤感知：受 git 追蹤的本地獨有檔（= 本地累積、上游 repo 無）
+    不靜默刪除，改移至 .sync-conflicts/ 並計入 preserved_as_conflict；僅非追蹤檔
+    （runtime / 真 stale）維持原 unlink。preserve 清單中的檔案不刪也不移。
+
+    背景：full overlay fallback 下本函式曾誤刪上游 repo 不存在但本地累積的防護檔
+    （未列於 sync-preserve.yaml）。git 追蹤狀態是「本地有意保留內容」的可靠訊號，
+    比手動維護的 preserve 清單更不易遺漏。
+
+    參數:
+        claude_dir: .claude 目錄路徑
+        remote_files: 遠端 repo 檔案相對路徑集合
+        preserve: 本地特化檔案相對路徑集合（不動）
+        project_root: git repo root，預設 claude_dir.parent（git ls-files 判定基準）
 
     傳回:
-        list[str]: 已移除的檔案路徑清單（相對於 claude_dir）
+        tuple[list[str], list[str]]:
+          (removed, preserved_as_conflict)
+          removed = 真正刪除（非 git 追蹤）的相對路徑清單
+          preserved_as_conflict = git 追蹤而移至 .sync-conflicts 的相對路徑清單
     """
     if preserve is None:
         preserve = set()
+    if project_root is None:
+        project_root = claude_dir.parent
     removed: list[str] = []
+    preserved_as_conflict: list[str] = []
+    conflicts_dir: Path | None = None
 
     def _walk(directory: Path, prefix: Path = Path()) -> None:
-        """遞迴走訪目錄，移除不存在於遠端 repo 中的過時檔案。
+        """遞迴走訪目錄，處理不存在於遠端 repo 中的過時檔案。
 
         跳過排除清單中的項目、符號連結和 preserve 清單中的檔案。
+        受 git 追蹤的本地獨有檔移至 .sync-conflicts/（不刪）；其餘 unlink。
         對於空目錄在清理後自動刪除。
-
-        參數:
-            directory: 目前走訪的目錄路徑
-            prefix: 相對於 claude_dir 的路徑前綴
         """
+        nonlocal conflicts_dir
         if not directory.exists():
             return
         for item in sorted(directory.iterdir()):
@@ -772,11 +809,82 @@ def cleanup_stale_files(
                 if rel_str in preserve:
                     print_color(f"   保留本地特化檔案: {rel_str}", "green")
                     continue
-                item.unlink()
-                removed.append(str(rel))
+                if _is_git_tracked(f".claude/{rel_str}", project_root):
+                    # 本地累積內容：移至 .sync-conflicts，不靜默刪除
+                    if conflicts_dir is None:
+                        conflicts_dir = _ensure_conflicts_dir(claude_dir)
+                    dest = conflicts_dir / rel_str.replace("/", "__")
+                    shutil.move(str(item), str(dest))
+                    preserved_as_conflict.append(rel_str)
+                    print_color(
+                        f"   本地獨有 git 追蹤檔不刪，移至 {SYNC_CONFLICTS_DIR}/: {rel_str}",
+                        "yellow",
+                    )
+                else:
+                    item.unlink()
+                    removed.append(str(rel))
 
     _walk(claude_dir)
-    return removed
+    return removed, preserved_as_conflict
+
+
+def preview_overlay_changes(
+    temp_dir: Path,
+    claude_dir: Path,
+    remote_files: set[Path],
+    preserve: set[str] | None = None,
+    project_root: Path | None = None,
+) -> tuple[list[str], list[tuple[str, bool]]]:
+    """full overlay 前的 dry-run 預覽。
+
+    在實際 sync_directory + cleanup_stale_files 前，收集本次 overlay 的影響清單，
+    讓使用者在覆蓋發生前看見將被覆蓋與將被刪除（含 git 追蹤標記）的檔案。
+
+    參數:
+        temp_dir: 上游 repo clone 路徑
+        claude_dir: .claude 目錄路徑
+        remote_files: 遠端 repo 檔案相對路徑集合
+        preserve: 本地特化檔案相對路徑集合（不計入預覽）
+        project_root: git repo root，預設 claude_dir.parent
+
+    傳回:
+        tuple[list[str], list[tuple[str, bool]]]:
+          (will_overwrite, will_delete)
+          will_overwrite = 本地存在且與遠端內容不同的相對路徑（會被覆蓋）
+          will_delete = [(rel, is_tracked)] 本地有遠端無的檔；is_tracked True 者
+                        將轉存 .sync-conflicts（非真刪），False 者真刪
+    """
+    if preserve is None:
+        preserve = set()
+    if project_root is None:
+        project_root = claude_dir.parent
+    will_overwrite: list[str] = []
+    will_delete: list[tuple[str, bool]] = []
+
+    def _walk(directory: Path, prefix: Path = Path()) -> None:
+        if not directory.exists():
+            return
+        for item in sorted(directory.iterdir()):
+            if item.name in SKIP_DURING_SYNC or item.is_symlink():
+                continue
+            rel = prefix / item.name
+            if item.is_dir():
+                _walk(item, rel)
+                continue
+            rel_str = str(rel).replace("\\", "/")
+            if rel_str in preserve:
+                continue
+            if rel not in remote_files:
+                will_delete.append(
+                    (rel_str, _is_git_tracked(f".claude/{rel_str}", project_root))
+                )
+            else:
+                upstream_item = temp_dir / rel
+                if upstream_item.exists() and _files_differ(upstream_item, item):
+                    will_overwrite.append(rel_str)
+
+    _walk(claude_dir)
+    return will_overwrite, will_delete
 
 
 def _ensure_conflicts_dir(claude_dir: Path) -> Path:
@@ -1298,16 +1406,47 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
             )
         print_color("更新 .claude 資料夾（全量 overlay）...")
         remote_files = collect_remote_files(temp_dir)
+
+        # full overlay 前 dry-run 預覽（讓覆蓋/刪除在發生前可見）
+        will_overwrite, will_delete = preview_overlay_changes(
+            temp_dir, claude_dir, remote_files, preserve
+        )
+        if will_overwrite:
+            print_color(f"   [dry-run] 將覆蓋 {len(will_overwrite)} 個本地檔案", "yellow")
+            for w in will_overwrite[:50]:
+                print_color(f"     ~ {w}")
+        if will_delete:
+            tracked = [r for r, t in will_delete if t]
+            untracked = [r for r, t in will_delete if not t]
+            print_color(
+                f"   [dry-run] {len(will_delete)} 個本地獨有檔："
+                f"{len(tracked)} 個 git 追蹤將轉 {SYNC_CONFLICTS_DIR}/、"
+                f"{len(untracked)} 個非追蹤將刪除", "yellow"
+            )
+            for r in tracked[:50]:
+                print_color(f"     -> conflict: {r}")
+            for r in untracked[:50]:
+                print_color(f"     - delete: {r}")
+
         file_count = sync_directory(temp_dir, claude_dir, preserve)
         print_color(f"   已更新 {file_count} 個檔案", "green")
 
-        removed = cleanup_stale_files(claude_dir, remote_files, preserve)
+        removed, preserved_conflicts = cleanup_stale_files(
+            claude_dir, remote_files, preserve
+        )
         if removed:
             print_color(f"   已清理 {len(removed)} 個過時檔案:", "green")
             for r in removed:
                 print_color(f"     - {r}")
         else:
             print_color("   無過時檔案需清理", "green")
+        if preserved_conflicts:
+            print_color(
+                f"   {len(preserved_conflicts)} 個本地獨有 git 追蹤檔已轉存 "
+                f"{SYNC_CONFLICTS_DIR}/（非刪除）:", "yellow"
+            )
+            for p in preserved_conflicts:
+                print_color(f"     -> {p}")
     else:
         # A3 三方合併：只搬 base→HEAD delta 涉及的檔案，保留本地刪除與 runtime state
         print_color("更新 .claude 資料夾（三方合併）...")

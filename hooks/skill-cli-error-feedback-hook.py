@@ -146,7 +146,7 @@ SYSTEM_GAP_FEEDBACK_TEMPLATE = """
 
 可能原因：
   CLI 缺少對應子欄位的寫入路徑（非單純文檔缺失），使用者
-  意圖背後反映系統功能缺口。參考案例：W3-072（set-where --layer）。
+  意圖背後反映系統功能缺口（如 set-where --layer 類缺口）。
 
 建議動作：
   1. 不要僅補 SKILL.md，先評估是否為系統功能缺口
@@ -158,7 +158,6 @@ SYSTEM_GAP_FEEDBACK_TEMPLATE = """
   4. Fallback：直接 Edit ticket frontmatter 對應子欄位
 
 詳見：.claude/skills/ticket/SKILL.md
-參考：W3-072 / W3-073
 
 ============================================================
 """

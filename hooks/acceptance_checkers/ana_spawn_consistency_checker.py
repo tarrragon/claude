@@ -209,7 +209,7 @@ def _format_block_message(ticket_id: str, n_planned: int) -> str:
         f"  2. 若不需 spawn，在 Solution 顯性標註豁免理由，例如：\n"
         f"     「無需建 ticket：[具體理由]」\n"
         f"\n"
-        f"參考：W17-167 ANA / W17-162 案例 / quality-baseline.md 規則 5\n"
+        f"參考：quality-baseline.md 規則 5\n"
     )
 
 
