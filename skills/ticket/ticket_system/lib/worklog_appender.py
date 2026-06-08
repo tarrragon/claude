@@ -105,6 +105,11 @@ def append_worklog_progress(version: str, ticket_id: str, title: str) -> None:
         # 移除 keepends 用於搜尋，保留原始行用於寫回
         search_lines = content.splitlines()
 
+        # 冪等性：若該 ticket 的完成行已存在則跳過，避免重複 append（W8-048）
+        completion_marker = f"{ticket_id} 完成"
+        if any(completion_marker in line for line in search_lines):
+            return
+
         insert_at = _find_last_date_section_end(search_lines)
         if insert_at is None:
             print("[WARNING] worklog 中找不到日期標題區段，跳過進度追加")

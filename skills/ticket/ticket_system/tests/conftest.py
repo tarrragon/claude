@@ -165,6 +165,30 @@ def blocked_ticket(tmp_ticket_factory) -> str:
 
 
 # ============================================================
+# W9-008 — hook-logs 預設隔離（autouse）
+# ============================================================
+
+
+@pytest.fixture(autouse=True)
+def _isolate_hook_logs_dir(tmp_path_factory, monkeypatch):
+    """Autouse fixture: 將 HOOK_LOGS_DIR 預設導向 tmp，避免巢狀污染。
+
+    Why（W9-008）：`precondition._resolve_hook_logs_dir()` 預設用 cwd-relative
+    `.claude/hook-logs`。從 skill cwd（`.claude/skills/ticket/`）執行 pytest 且
+    測試未自設 HOOK_LOGS_DIR 時，force-usage log 寫入
+    `.claude/skills/ticket/.claude/hook-logs/`，造成 git untracked 巢狀污染，
+    干擾 session-start 清點。
+
+    設計（提供 default，個別測試可 override）：
+    - autouse 在每個 test 前注入 HOOK_LOGS_DIR 指向獨立 tmp 目錄
+    - 個別測試／fixture（如 precondition_hook_logs_dir、test_force_usage_logging）
+      仍可 monkeypatch.setenv 覆蓋；後注入者勝出，不影響其既有斷言
+    """
+    logs_dir = tmp_path_factory.mktemp("hook-logs-default")
+    monkeypatch.setenv("HOOK_LOGS_DIR", str(logs_dir))
+
+
+# ============================================================
 # 既有 autouse fixture（W11-015）
 # ============================================================
 

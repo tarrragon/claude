@@ -27,6 +27,7 @@ Safety net:
 import filecmp
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -138,6 +139,55 @@ def iter_executable_hook_dirs(root: Path):
         for name in dirnames:
             if name in EXECUTABLE_HOOK_DIR_NAMES:
                 yield Path(dirpath) / name
+
+
+# settings.json 中提取 hook command 內 .py 路徑的正則（容錯 shell 包裝）
+# 匹配 .claude/skills/.../xxx.py（不論前綴有 uv run / $CLAUDE_PROJECT_DIR 等）
+_SKILL_SCRIPT_RE = re.compile(r"\.claude/(skills/[^\s'\"]+?\.py)")
+
+
+def collect_registered_skill_scripts(claude_dir: Path) -> set[Path]:
+    """從 settings.json 反查被註冊為 hook command 直接執行的 skill 根目錄 .py。
+
+    背景（W9-007）：exec-bit 還原以「目錄名 hooks」為邊界，未涵蓋位於 skill
+    根目錄（非 hooks/ 子目錄）但被 settings.json 註冊為執行的腳本，如
+    skills/continuous-learning/evaluate-session.py。這類腳本 sync 後失去
+    exec bit 會觸發 Permission denied。
+
+    採策略 C（settings.json 反查）而非純 shebang 偵測：command 是「被註冊為
+    執行」的權威來源，可精準命中且不會誤判未註冊的 shebang 腳本（如
+    skills/ticket/test_migration_dryrun.py）。
+
+    只解析 settings.json（settings.local.json 不 sync 故忽略）。command 可能含
+    shell 包裝（uv run、$CLAUDE_PROJECT_DIR 變數），以正則容錯提取 .py 路徑。
+    已落在 hooks/ 目錄者由 iter_executable_hook_dirs 涵蓋，此處只保留非 hooks/ 路徑
+    以避免重複。
+
+    參數:
+        claude_dir: .claude 目錄的絕對路徑
+
+    傳回:
+        set[Path]: 存在於 claude_dir 下、被註冊執行且非 hooks/ 路徑的 .py 絕對路徑
+    """
+    settings_path = claude_dir / "settings.json"
+    if not settings_path.is_file():
+        return set()
+    try:
+        text = settings_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        print_color(f"   警告: 無法讀取 settings.json: {exc}", "yellow")
+        return set()
+
+    scripts: set[Path] = set()
+    for match in _SKILL_SCRIPT_RE.finditer(text):
+        rel = match.group(1)  # skills/<name>/.../xxx.py
+        # hooks/ 目錄下的已由 iter_executable_hook_dirs 涵蓋，避免重複
+        if "/hooks/" in rel:
+            continue
+        candidate = claude_dir / rel
+        if candidate.is_file():
+            scripts.add(candidate)
+    return scripts
 
 
 def load_preserve_list(claude_dir: Path) -> set[str]:
@@ -688,15 +738,19 @@ def restore_executable_bits(claude_dir: Path) -> int:
         int: 實際變更 mode 的檔案數（已是可執行者不計）
     """
     count = 0
+    targets: set[Path] = set()
     for target_dir in iter_executable_hook_dirs(claude_dir):
         for py_file in target_dir.rglob("*.py"):
-            if not py_file.is_file():
-                continue
-            mode = py_file.stat().st_mode
-            new_mode = mode | 0o111
-            if new_mode != mode:
-                py_file.chmod(new_mode)
-                count += 1
+            if py_file.is_file():
+                targets.add(py_file)
+    # W9-007：settings.json 註冊的 skill 根目錄執行檔（非 hooks/ 路徑）
+    targets |= collect_registered_skill_scripts(claude_dir)
+    for py_file in targets:
+        mode = py_file.stat().st_mode
+        new_mode = mode | 0o111
+        if new_mode != mode:
+            py_file.chmod(new_mode)
+            count += 1
     return count
 
 

@@ -1,3 +1,18 @@
+## [1.44.2] - 2026-06-09
+
+### Summary
+fix: 修復 ticket skill 4 個既有測試失敗; fix: conftest autouse fixture 隔離 HOOK_LOGS_DIR 杜絕巢狀 hook-logs 污染; fix: sync exec-bit 還原涵蓋 settings.json 註冊的 skill 根目錄執行檔 (+2 more)
+
+Changes: 4 fix, 1 chore
+
+- fix: 修復 ticket skill 4 個既有測試失敗
+- fix: conftest autouse fixture 隔離 HOOK_LOGS_DIR 杜絕巢狀 hook-logs 污染
+- fix: sync exec-bit 還原涵蓋 settings.json 註冊的 skill 根目錄執行檔
+- fix: 修復 evaluate-session.py exec bit + 建 ticket 追蹤 sync 邊界遺漏
+- chore: pull .claude 框架改進（PC-180 + sync-push SOP + PC-162 延伸）
+
+---
+
 ## [1.44.1] - 2026-06-08
 
 ### Summary

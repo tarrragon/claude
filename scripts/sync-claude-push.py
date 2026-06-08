@@ -360,6 +360,52 @@ def copy_filtered_from_staging(src: Path, dst: Path) -> int:
     return count
 
 
+# settings.json 中提取 hook command 內 .py 路徑的正則（容錯 shell 包裝）
+_SKILL_SCRIPT_RE = re.compile(r"\.claude/(skills/[^\s'\"]+?\.py)")
+
+
+def collect_registered_skill_scripts(root: Path) -> set[Path]:
+    """從 settings.json 反查被註冊為 hook command 直接執行的 skill 根目錄 .py。
+
+    與 sync-claude-pull.py::collect_registered_skill_scripts 對稱（W9-007）。
+
+    背景：exec-bit 還原以「目錄名 hooks」為邊界，未涵蓋位於 skill 根目錄（非
+    hooks/ 子目錄）但被 settings.json 註冊為執行的腳本，如
+    skills/continuous-learning/evaluate-session.py。push 端若不還原，推上去的
+    git index mode 會是 100644，下游 pull 拿到 644 → Permission denied。
+
+    採策略 C（settings.json 反查）：command 是「被註冊為執行」的權威來源，可精準
+    命中且不誤判未註冊的 shebang 腳本（如 skills/ticket/test_migration_dryrun.py）。
+
+    只解析 settings.json（settings.local.json 不 sync）。command 可能含 shell 包裝，
+    以正則容錯提取 .py 路徑。hooks/ 路徑由 iter_executable_hook_dirs 涵蓋，此處排除避重複。
+
+    參數:
+        root: 遠端 repo 的本地暫存根目錄（temp_dir），須含 settings.json
+
+    傳回:
+        set[Path]: 存在、被註冊執行且非 hooks/ 路徑的 .py 絕對路徑
+    """
+    settings_path = root / "settings.json"
+    if not settings_path.is_file():
+        return set()
+    try:
+        text = settings_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        print_color(f"   警告: 無法讀取 settings.json: {exc}", "yellow")
+        return set()
+
+    scripts: set[Path] = set()
+    for match in _SKILL_SCRIPT_RE.finditer(text):
+        rel = match.group(1)
+        if "/hooks/" in rel:
+            continue
+        candidate = root / rel
+        if candidate.is_file():
+            scripts.add(candidate)
+    return scripts
+
+
 def restore_executable_bits(root: Path) -> int:
     """對所有 hooks/ 目錄下的 .py 檔案強制加入 filesystem executable bit。
 
@@ -380,15 +426,19 @@ def restore_executable_bits(root: Path) -> int:
         int: 實際變更 mode 的檔案數
     """
     count = 0
+    targets: set[Path] = set()
     for target_dir in iter_executable_hook_dirs(root):
         for py_file in target_dir.rglob("*.py"):
-            if not py_file.is_file():
-                continue
-            mode = py_file.stat().st_mode
-            new_mode = mode | 0o111
-            if new_mode != mode:
-                py_file.chmod(new_mode)
-                count += 1
+            if py_file.is_file():
+                targets.add(py_file)
+    # W9-007：settings.json 註冊的 skill 根目錄執行檔（非 hooks/ 路徑）
+    targets |= collect_registered_skill_scripts(root)
+    for py_file in targets:
+        mode = py_file.stat().st_mode
+        new_mode = mode | 0o111
+        if new_mode != mode:
+            py_file.chmod(new_mode)
+            count += 1
     return count
 
 
@@ -416,18 +466,22 @@ def git_update_index_chmod(root: Path) -> int:
         int: 成功設定 mode 的檔案數
     """
     count = 0
+    targets: set[Path] = set()
     for target_dir in iter_executable_hook_dirs(root):
         for py_file in target_dir.rglob("*.py"):
-            if not py_file.is_file():
-                continue
-            rel = py_file.relative_to(root).as_posix()
-            result = run_git(
-                ["update-index", "--chmod=+x", rel],
-                cwd=str(root),
-                check=False,
-            )
-            if result.returncode == 0:
-                count += 1
+            if py_file.is_file():
+                targets.add(py_file)
+    # W9-007：settings.json 註冊的 skill 根目錄執行檔（非 hooks/ 路徑）
+    targets |= collect_registered_skill_scripts(root)
+    for py_file in targets:
+        rel = py_file.relative_to(root).as_posix()
+        result = run_git(
+            ["update-index", "--chmod=+x", rel],
+            cwd=str(root),
+            check=False,
+        )
+        if result.returncode == 0:
+            count += 1
     return count
 
 
