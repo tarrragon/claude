@@ -1,3 +1,14 @@
+## [1.44.3] - 2026-06-09
+
+### Summary
+fix: .gitignore generic **/hook-logs/ 根治巢狀涵蓋缺口
+
+Changes: 1 fix
+
+- fix: .gitignore generic **/hook-logs/ 根治巢狀涵蓋缺口
+
+---
+
 ## [1.44.2] - 2026-06-09
 
 ### Summary

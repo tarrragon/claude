@@ -287,6 +287,19 @@ class TestConfiguration:
         m = re.search(r"^\*+(?:/\*+)?\.lock\s*$", content, re.MULTILINE)
         assert m is not None, ".gitignore missing generic *.lock pattern"
 
+    def test_gitignore_covers_nested_hook_logs(self):
+        """W9-010: .gitignore 含 generic **/hook-logs/ pattern，涵蓋任意深度巢狀。
+
+        驗證 .claude/hooks/hook-logs/ 等深度巢狀 runtime state 被 gitignore 涵蓋，
+        避免被 git 判 untracked 干擾 session-start 清點。
+        """
+        project_root = Path(parser.__file__).resolve().parents[5]
+        gitignore = project_root / ".gitignore"
+        content = gitignore.read_text(encoding="utf-8")
+        import re
+        m = re.search(r"^\*\*/hook-logs/\s*$", content, re.MULTILINE)
+        assert m is not None, ".gitignore missing generic **/hook-logs/ pattern"
+
     def test_save_ticket_signature_unchanged(self):
         """A1: save_ticket signature 不變（修正版 spec 不改 save_ticket）。"""
         sig = inspect.signature(parser.save_ticket)
