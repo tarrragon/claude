@@ -133,6 +133,22 @@ grep "title:" .claude/error-patterns/<category>/PC-<NNN>*.md
 
 未來可加入 hook 在 ticket create 時掃描 where.files 路徑存在性 + PC 引用語意對應，但成本中等需獨立 ticket 評估。
 
+## 延伸：ANA reality-check 只覆蓋預設執行路徑、漏看 opt-in 分支致 ticket acceptance 失準（W1-009）
+
+**Why**：ANA 做 reality-check 驗證程式碼行為時，若只讀「預設執行路徑」的說明、未驗證「opt-in / 條件分支」的實際行為，產出的 ticket acceptance 會建立在不完整的事證上。`--clean` 這類 opt-in 模式（預設不啟用）的副作用範圍，無法從預設路徑的程式碼說明推斷。
+
+**Consequence**：W1-016 ANA reality-check 比對 `hooks/*.py` 確認 28 個遷移孤兒，但只讀 `clean_stale_files` 的函式 docstring，未驗證 `--clean` opt-in 分支的 repo-wide 行為（遍歷整個 temp_dir 對齊 git tracked 樹）。據此寫的 W1-009 acceptance「核對與 27 孤兒一致則 push」無法機械執行——實測 `--clean` 範圍 = 755（28 倍偏差），執行期被迫暫停重新界定範圍。
+
+**Action**：
+
+| 情境 | 必要動作 |
+|------|---------|
+| ANA reality-check 涉及帶條件分支（opt-in flag / 環境變數 / 模式切換）的程式碼 | 不可只讀預設路徑說明，須對每個分支獨立驗證實際行為 |
+| ticket acceptance 含具體數字（孤兒數 / 影響檔數） | 標註數字為「估算，以執行時實測為準」，避免機械比對失效 |
+| 接手 ticket 發現 acceptance 數字與實況巨大偏差 | 暫停執行、回報 PM 重新界定範圍，不強行對齊失準的 acceptance |
+
+**與本 PC 主體關係**：同屬「ticket 內容失準」家族——主體是描述含過時環境，本延伸是 acceptance 估算因 ANA 讀碼覆蓋不全而失準。共同 Action：接手 ticket 前驗證描述 / acceptance 的事證基礎。
+
 ## 相關規則 / 經驗
 
 - PC-007（Command 引導與腳本實作行為不符，**本 PC schema 模板誤引用 PC-007**）

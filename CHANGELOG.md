@@ -1,3 +1,16 @@
+## [1.44.1] - 2026-06-08
+
+### Summary
+chore: round-trip 驗證收尾 + SOP/PC-162 DOC + spawn; other: 新增 PC-180：雙專案 sync 混淆共享納入與本地保留範圍; other: 採納跨專案 ticket 系統共用 predicate 與 worklog 冪等測試
+
+Changes: 1 chore, 2 other
+
+- chore: round-trip 驗證收尾 + SOP/PC-162 DOC + spawn
+- other: 新增 PC-180：雙專案 sync 混淆共享納入與本地保留範圍
+- other: 採納跨專案 ticket 系統共用 predicate 與 worklog 冪等測試
+
+---
+
 ## [1.44.0] - 2026-06-08
 
 ### Summary

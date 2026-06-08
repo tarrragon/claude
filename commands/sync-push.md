@@ -55,6 +55,20 @@ description: 推送 .claude 配置到獨立 repo (https://github.com/tarrragon/c
 | 修正規則檔案路徑偵測 | v0.2.0 修復 |
 | 重構規則系統為分層架構 | Wave 5 重構成果 |
 
+## skill / hook 遷移後須跑 --clean 傳播刪除（防復發）
+
+**Why**：`clean_stale_files`（刪除傳播）是 `--clean` opt-in 模式（預設不啟用）。將扁平 `hooks/*.py` 重組為 skill 自包含 `skills/*/hooks/`、或刪除任何 tracked 檔後，若後續 push 未帶 `--clean`，遠端會殘留舊路徑的孤兒，與新結構分叉，每次 full overlay sync 都複製孤兒（W1-003 議題二根因）。
+
+**Consequence**：孤兒長期累積（W1-009 實測遠端殘留 755 孤兒，含 632 MagicMock 測試垃圾 + 28 遷移 hooks），且 full overlay 路徑的下游專案會反覆收到應已刪除的檔。
+
+**Action**：
+
+| 觸發情境 | 必要動作 |
+|---------|---------|
+| skill 遷移（扁平 hooks → skills/*/hooks/） | 遷移 commit 後跑一次 `sync-push --clean` 傳播刪除 |
+| 刪除任何 tracked `.claude/` 檔 | 該批刪除 push 時帶 `--clean` |
+| runtime state / worktree gitlink 殘留（should_exclude 保護範圍外） | `--clean` 不涵蓋，需手動 clone + `git rm` + push（見 W1-009 階段 1） |
+
 ## 注意事項
 
 - 確保變更已在本專案充分測試
