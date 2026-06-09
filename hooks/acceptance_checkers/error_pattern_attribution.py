@@ -25,20 +25,21 @@ PC-099 防護：acceptance-gate-hook 場景 #17 AUQ 原本僅比對 mtime > tick
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+# Pattern ID 正規表達式收斂為單一 SSOT（1.0.0-W1-019.2 / E2 linux F3）。
+# PATTERN_ID_RE 涵蓋全 category（PC/IMP/ARCH/...）並支援 Model 1 來源前綴格式
+# （PC-V1-001）。新增 category 前綴時只需改 lib/pattern_id.py 一處。
+_hooks_dir = Path(__file__).resolve().parent.parent  # .claude/hooks
+if str(_hooks_dir) not in sys.path:
+    sys.path.insert(0, str(_hooks_dir))
 
-# Pattern ID 正規表達式
-# 涵蓋 .claude/error-patterns/ 既有子目錄前綴：
-#   - PC (process-compliance), IMP (implementation), ARCH (architecture)
-#   - DOC (documentation), CQ (code-quality), PROC (process), TEST (test)
-# 額外保留：ANA / REF（ticket 類型 / 跨檔引用慣例，防衛性涵蓋）
-# 新增前綴時請同步擴充本清單與 .claude/error-patterns/README.md。
-_PATTERN_ID_RE = re.compile(
-    r"\b(?:PC|IMP|ARCH|ANA|REF|DOC|CQ|PROC|TEST)-\d+\b",
-    re.IGNORECASE,
-)
+from lib.pattern_id import PATTERN_ID_RE as _PATTERN_ID_RE  # noqa: E402
+
+# YAML frontmatter 開頭結尾標記
+_FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
 # YAML frontmatter 開頭結尾標記
 _FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.DOTALL)

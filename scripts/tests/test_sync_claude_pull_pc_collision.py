@@ -43,6 +43,20 @@ def test_parse_pc_filename_non_pc_returns_none():
     ) is None
 
 
+def test_parse_pc_filename_prefixed_excluded_from_collision():
+    """Model 1 前綴格式（PC-V1-001）刻意排除於 flat collision 子系統（1.0.0-W1-019.2）。
+
+    前綴格式天生不參與 flat 整數撞號（各專案在自己前綴空間累加，零協調防碰撞）。
+    現值 _PC_FILENAME_RE 對前綴檔匹配失敗回 None，正是正確的排除行為。
+    """
+    assert pull.parse_pc_filename(
+        "error-patterns/process-compliance/PC-V1-001-foo.md"
+    ) is None
+    assert pull.parse_pc_filename(
+        "error-patterns/process-compliance/PC-APP-012-bar.md"
+    ) is None
+
+
 # ============================================================================
 # build_local_pc_index
 # ============================================================================

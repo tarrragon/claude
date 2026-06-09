@@ -1,0 +1,35 @@
+# Error-pattern 來源前綴 — 專案代號註冊表（SSOT）
+#
+# 用途：跨專案共用框架（.claude/ sync）下，error-pattern 新編號採來源前綴
+#       <CATEGORY>-<PROJ>-NNN（如 PC-V1-001 / IMP-APP-003），避免 N 專案併發
+#       分配同號碰撞。本檔是專案代號的唯一權威來源。
+#
+# 規則見：.claude/methodologies/error-pattern-numbering-methodology.md
+#
+# 自我識別（tooling 如何知道「我是哪個專案」）：
+#   取 `git rev-parse --show-toplevel` 的 basename，對應下方 `dir` 欄 → 得 `code`。
+#   故 tooling 不需任何 project-local 設定檔，本註冊表同時服務「全域唯一」與「自我識別」。
+
+projects:
+  - code: V1
+    dir: book_overview_v1
+    note: Chrome Extension (Manifest V3)
+  - code: APP
+    dir: book_overview_app
+    note: 配套 APP (Flutter)
+  - code: SCLK
+    dir: screen_clock
+    note: ''
+  - code: CCS
+    dir: ccsession
+    note: ''
+  - code: C2C
+    dir: c2c_website
+    note: ''
+
+# 新專案代號規則：
+#   1. 短大寫英數（2-5 字元），語意可辨識專案。
+#   2. 全域唯一——不得與本檔既有 code 重複（含已退役專案）。
+#   3. 新專案首次需新增 error-pattern 前，先於本檔登錄 code + dir，再 sync-push 傳播。
+#   4. dir 須與專案 git toplevel basename 完全一致（tooling 自我識別依賴此欄）。
+reserved_codes: []  # 已退役但保留不可重用的 code（防止 ID 指涉漂移）

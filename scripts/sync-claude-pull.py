@@ -982,6 +982,13 @@ def _rel_under_claude(repo_rel_path: str) -> str | None:
 
 import re as _re  # noqa: E402
 
+# 刻意只認 flat 凍結核心格式（PC-NNN），不拓寬至前綴格式（1.0.0-W1-019.2 決策）。
+# 本子系統是 flat 整數撞號解析（int(group(1)) + numbers: dict[int,str] +
+# _next_available_pc_number 整數遞增）。Model 1 前綴格式（PC-V1-001）天生不參與
+# flat 撞號——各專案在自己前綴空間累加，零協調防碰撞。現值 regex 對前綴檔匹配失敗
+# 回 None（'V' 非 \d），正是正確排除行為；拓寬反而會把前綴檔誤拉進整數撞號路徑
+# （int("V1-") → ValueError / group 錯位）。識別任意 ID 字串的用途請改用
+# lib/pattern_id.py 的 PATTERN_ID_RE（error_pattern_attribution 已採用）。
 _PC_FILENAME_RE = _re.compile(r"^PC-(\d+)-(.+)\.md$")
 # 溯源註記內辨識上游號（與重編號寫入的註記字面對稱）
 _PROVENANCE_UPSTREAM_RE = _re.compile(r"編號溯源.*?編號為\s*PC-(\d+)", _re.DOTALL)
