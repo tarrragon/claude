@@ -1,3 +1,10 @@
+## [1.44.6] - 2026-06-09
+
+### Summary
+docs(PC-V1-001): sync-push 無 --help 未知參數觸發真實推送 near-miss（首個來源前綴格式 error-pattern，編號體系上線）
+
+---
+
 ## [1.44.5] - 2026-06-09
 
 ### Summary
