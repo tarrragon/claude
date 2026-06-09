@@ -1,3 +1,10 @@
+## [1.44.5] - 2026-06-09
+
+### Summary
+error-pattern 來源前綴編號體系：新規方法論 + 專案代號註冊表 + PC-ID regex 拓寬 + allocator/negative-gate + V1 flat base A+B+D remediation + 跨專案 detect 腳本（補正 v1.44.4 commit 訊息）
+
+---
+
 ## [1.44.4] - 2026-06-09
 
 ### Summary
