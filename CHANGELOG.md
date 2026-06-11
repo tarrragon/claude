@@ -1,3 +1,15 @@
+## [1.45.1] - 2026-06-12
+
+### Summary
+fix: .version-release.yaml 納入 local-only 排除 + gitignore 補顯式條目; chore: 保留本地框架變更（sync-pull 前快照）
+
+Changes: 1 fix, 1 chore
+
+- fix: .version-release.yaml 納入 local-only 排除 + gitignore 補顯式條目
+- chore: 保留本地框架變更（sync-pull 前快照）
+
+---
+
 ## [1.45.0] - 2026-06-12
 
 ### Summary
