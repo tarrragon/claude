@@ -75,6 +75,33 @@ def _build_dict_field(field_name: str, subkey: str, new_value: Any) -> Dict[str,
     return result
 
 
+def _parse_where_path_entries(value: Any) -> Optional[list]:
+    """解析 set-where 輸入值為路徑清單；非路徑型輸入回傳 None（W1-078 修復）。
+
+    Why: agent-dispatch-validation-hook 以 where.files 為 scope source of truth
+    （L3 純 .claude/ 覆蓋），set-where 僅寫 where.layer 會讓 files 保留 stale 值，
+    導致 dispatch 誤擋。
+
+    路徑判定採「所有逗號分隔項目皆含 /」：
+    - 全為路徑（如 ".claude/hooks/,src/core/x.js"）→ 回傳清單，同步 where.files
+    - 含任一非路徑項目（如 "Domain Layer"）→ 回傳 None，僅更新 layer 描述，
+      避免描述性文字污染 where.files（非路徑項目會使 dispatch hook
+      has_other=True，破壞 L3 純 .claude/ 分類——與本修復同類的誤擋回歸）
+    """
+    entries = [item.strip() for item in str(value).split(",") if item.strip()]
+    if entries and all("/" in item for item in entries):
+        return entries
+    return None
+
+
+def _sync_where_files(where_dict: Dict[str, Any], new_value: Any) -> Optional[list]:
+    """路徑型 set-where 輸入同步寫入 where.files；回傳同步後清單或 None（未同步）。"""
+    path_entries = _parse_where_path_entries(new_value)
+    if path_entries is not None:
+        where_dict["files"] = path_entries
+    return path_entries
+
+
 def execute_get_field(
     args: argparse.Namespace,
     version: str,
@@ -182,6 +209,7 @@ def execute_set_field(
         new_value = args.value
 
         # 更新欄位：dict 型欄位僅更新子欄位（W10-086 修復，防止壓扁 dict 為 string）
+        synced_files: Optional[list] = None
         if actual_field_name in DICT_FIELD_SUBKEY:
             subkey = DICT_FIELD_SUBKEY[actual_field_name]
             existing = ticket.get(actual_field_name)
@@ -190,6 +218,10 @@ def execute_set_field(
                 ticket[actual_field_name] = existing
             else:
                 ticket[actual_field_name] = _build_dict_field(actual_field_name, subkey, new_value)
+            # W1-078 修復：set-where 路徑型輸入同步更新 where.files，
+            # 維持 layer/files 一致（dispatch hook 消費契約）
+            if actual_field_name == "where":
+                synced_files = _sync_where_files(ticket[actual_field_name], new_value)
         else:
             ticket[actual_field_name] = new_value
 
@@ -199,6 +231,10 @@ def execute_set_field(
 
     print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name=actual_field_name))
     print(f"   新值: {new_value}")
+    if synced_files is not None:
+        print(FieldsMessages.WHERE_FILES_SYNCED.format(count=len(synced_files)))
+        for entry in synced_files:
+            print(f"      - {entry}")
     return 0
 
 

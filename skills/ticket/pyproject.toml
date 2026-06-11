@@ -42,4 +42,9 @@ include = [
 testpaths = ["tests", "ticket_system/tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "--verbose"
+# W1-061 方案 A：計時硬門檻測試（perf 標記）預設排除，獨立以 pytest -m perf 執行，
+# 避免主套件高負載下 flaky（等效 Jest tests/perf/ 隔離原則）。
+addopts = "--verbose -m 'not perf'"
+markers = [
+    "perf: 效能測試（計時硬門檻，獨立於預設套件，以 pytest -m perf 執行）",
+]

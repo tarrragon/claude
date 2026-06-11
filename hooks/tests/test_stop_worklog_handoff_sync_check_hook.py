@@ -701,3 +701,51 @@ class TestMainStdinIntegration:
             hook_mod.main()
         assert exc_info.value.code == 0
         assert captured["input_data"] == {}, "non-dict JSON 應 fallback 至空 dict"
+
+
+# ===========================================================================
+# W1-044: subagent context 偵測 + suppressOutput（消除最終訊息劫持）
+# ===========================================================================
+
+
+class TestW1044SubagentContext:
+    """drift 存在的同一情境下，PM session 仍輸出警告 / subagent session 被 suppress。"""
+
+    def _drifting_project(self, tmp_path):
+        return make_project_root(
+            tmp_path,
+            worklog_content=(
+                "## Handoff Context\n\nW17-079 待下 session 處理\n"
+            ),
+            pending_ticket_ids=set(),
+            ticket_status_map={"0.18.0-W17-079": "in_progress"},
+        )
+
+    def test_is_subagent_context_detects_marker(self, hook_mod):
+        assert hook_mod._is_subagent_context({"agent_id": "agt-1"}, MagicMock()) is True
+        assert hook_mod._is_subagent_context({"agent_type": "thyme"}, MagicMock()) is True
+
+    def test_is_subagent_context_false_for_pm(self, hook_mod):
+        pm_stdin = {"session_id": "s-1", "background_tasks": []}
+        assert hook_mod._is_subagent_context(pm_stdin, MagicMock()) is False
+
+    def test_is_subagent_context_false_for_empty_and_non_dict(self, hook_mod):
+        assert hook_mod._is_subagent_context({"agent_id": ""}, MagicMock()) is False
+        assert hook_mod._is_subagent_context(None, MagicMock()) is False
+
+    def test_pm_session_still_warns(self, tmp_path, hook_mod):
+        """PM session（無 subagent 標記）行為不變：drift 仍輸出警告。"""
+        root, _ = self._drifting_project(tmp_path)
+        result = hook_mod.detect_sync_drift(
+            root, 0.0, MagicMock(), input_data={"session_id": "s-1", "background_tasks": []}
+        )
+        assert result is not None
+        assert "0.18.0-W17-079" in result
+
+    def test_subagent_session_suppressed(self, tmp_path, hook_mod):
+        """subagent session（含 agent_id）：同一 drift 情境被 suppress（回 None）。"""
+        root, _ = self._drifting_project(tmp_path)
+        result = hook_mod.detect_sync_drift(
+            root, 0.0, MagicMock(), input_data={"agent_id": "agt-1"}
+        )
+        assert result is None, "subagent stop 應跳過 sync check，不注入漂移警告"

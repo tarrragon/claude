@@ -45,6 +45,7 @@ from hook_utils import (  # noqa: E402
     read_json_from_stdin,
     run_git,
     get_project_root,
+    is_subagent_environment,
 )
 from lib.framework_paths import is_framework_path  # noqa: E402
 
@@ -215,6 +216,15 @@ def main() -> int:
         return EXIT_SUCCESS
 
     if input_data.get("tool_name", "") != "Bash":
+        return EXIT_SUCCESS
+
+    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現（W1-071 / PC-V1-004 入口污染防護）
+    # Layer 2 補審查屬 PM 派發決策，注入 subagent context 會誘導唯讀委員越界
+    if is_subagent_environment(input_data):
+        logger.info(
+            "偵測到 subagent 環境（agent_id=%s），跳過 Layer 2 標記提醒",
+            input_data.get("agent_id"),
+        )
         return EXIT_SUCCESS
 
     tool_input = input_data.get("tool_input") or {}

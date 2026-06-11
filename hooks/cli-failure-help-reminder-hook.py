@@ -37,7 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output
 from lib.hook_messages import WorkflowMessages
 
 # ============================================================================
@@ -185,14 +185,13 @@ def main() -> int:
     logger.info("失敗命令: %s", command[:120])
     logger.info("stderr 摘要: %s", stderr[:200])
 
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "PostToolUse",
-            "additionalContext": WorkflowMessages.CLI_FAILURE_HELP_REMINDER
-        }
-    }
-
-    print(json.dumps(output, ensure_ascii=False, indent=2))
+    # PC-005 提醒為 PM-only：統一出口過濾 subagent 觸發（PC-V1-004 防護 C）
+    emit_hook_output(
+        "PostToolUse",
+        additional_context=WorkflowMessages.CLI_FAILURE_HELP_REMINDER,
+        audience="pm_only",
+        input_data=input_data,
+    )
     return EXIT_SUCCESS
 
 

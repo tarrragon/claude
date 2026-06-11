@@ -44,6 +44,34 @@ from ticket_system.lib.ticket_loader import (
 from ticket_system.lib.constants import STATUS_PENDING
 
 
+def _patch_get_next_seq_env(monkeypatch, tickets_dir: Path) -> None:
+    """為 get_next_seq 測試補雙 namespace 一致性（W1-054，仿 test_create_auto_seq_collision）。
+
+    Why：get_next_seq 有兩條取數來源——
+    1. 本地 glob：`get_tickets_dir(version).glob(...)`
+    2. main ref：`list_ticket_files_from_main(version)` → 內部呼叫 `get_project_root()`
+
+    單 namespace mock（只 patch `ticket_builder.get_tickets_dir`）會使 glob 目標指向
+    測試 tmp，但 main-ref 探測仍經 autouse `_isolate_project_root` 的另一個 tmp
+    project root——glob 目錄與 main-ref 探測目錄分屬兩個不同 tmp（W1-053 殘餘地雷）。
+    既有測試僅因 main ref 在無 git 的預設 tmp 降級回 None 而恰好通過，非自洽隔離。
+
+    本 helper 將兩來源綁定到測試 tmp：get_tickets_dir 指向 tickets_dir，
+    list_ticket_files_from_main 回**空 list `[]`**（有效的「main 上無此 wave ticket」，
+    非 None 的降級訊號）。如此 get_next_seq 不進入降級 guard 分支（該分支才會經
+    resolve_available_seq → get_project_root 探測 autouse tmp），直接回 `max+1`，
+    glob 成為唯一且自洽的取數來源，斷言不再依賴「main ref 在預設 tmp 降級」的環境巧合。
+    """
+    monkeypatch.setattr(
+        "ticket_system.lib.ticket_builder.get_tickets_dir",
+        lambda version: tickets_dir,
+    )
+    monkeypatch.setattr(
+        "ticket_system.lib.ticket_builder.list_ticket_files_from_main",
+        lambda version: [],
+    )
+
+
 class TestFormatTicketId:
     """測試 format_ticket_id() 函式"""
 
@@ -108,11 +136,9 @@ class TestGetNextSeq:
         When: 呼叫 get_next_seq("0.31.0", 5)
         Then: 返回 1
         """
-        # 模擬 get_tickets_dir() 返回不存在的臨時目錄
-        def mock_get_tickets_dir(version):
-            return tmp_path / f"tickets_{version}"
-
-        monkeypatch.setattr("ticket_system.lib.ticket_builder.get_tickets_dir", mock_get_tickets_dir)
+        # W1-054：補雙 namespace 一致性——glob 目標與 main-ref 探測綁同一 tmp
+        # 刻意指向不存在的子目錄，驗證「無任何 ticket → 回 1」
+        _patch_get_next_seq_env(monkeypatch, tmp_path / "tickets_nonexistent")
         result = get_next_seq("0.31.0", 5)
         assert result == 1
 
@@ -129,10 +155,8 @@ class TestGetNextSeq:
         (tickets_dir / "0.31.0-W5-002.md").touch()
         (tickets_dir / "0.31.0-W5-003.md").touch()
 
-        def mock_get_tickets_dir(version):
-            return tickets_dir
-
-        monkeypatch.setattr("ticket_system.lib.ticket_builder.get_tickets_dir", mock_get_tickets_dir)
+        # W1-054：補雙 namespace 一致性
+        _patch_get_next_seq_env(monkeypatch, tickets_dir)
         result = get_next_seq("0.31.0", 5)
         assert result == 4
 
@@ -149,10 +173,8 @@ class TestGetNextSeq:
         (tickets_dir / "0.31.0-W5-001.1.md").touch()
         (tickets_dir / "0.31.0-W5-001.1.1.md").touch()
 
-        def mock_get_tickets_dir(version):
-            return tickets_dir
-
-        monkeypatch.setattr("ticket_system.lib.ticket_builder.get_tickets_dir", mock_get_tickets_dir)
+        # W1-054：補雙 namespace 一致性
+        _patch_get_next_seq_env(monkeypatch, tickets_dir)
         result = get_next_seq("0.31.0", 5)
         assert result == 2
 
@@ -169,10 +191,8 @@ class TestGetNextSeq:
         (tickets_dir / "0.31.0-W5-001.md").touch()
         (tickets_dir / "0.31.0-W6-001.md").touch()
 
-        def mock_get_tickets_dir(version):
-            return tickets_dir
-
-        monkeypatch.setattr("ticket_system.lib.ticket_builder.get_tickets_dir", mock_get_tickets_dir)
+        # W1-054：補雙 namespace 一致性
+        _patch_get_next_seq_env(monkeypatch, tickets_dir)
         result = get_next_seq("0.31.0", 5)
         assert result == 2
 

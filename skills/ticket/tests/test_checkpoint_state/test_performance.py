@@ -1,5 +1,12 @@
 """Group E：效能測試（AC6 <100ms）。
 
+效能測試聲明（test-assertion-design-rules 規則 1-2 的 Python 落地，W1-061 方案 A）：
+此測試含計時硬門檻（median <100ms / p95 <150ms），量測值受全套件機器負載、
+GC 觸發影響，在主套件高負載下有 flaky 風險（PC-168 取樣：standalone 5/5 GREEN，
+full-suite 曾觀察到 1 次 RED）。計時斷言定位為「效能退化防護」而非功能驗證，
+已標記 @pytest.mark.perf 並由 pyproject.toml addopts 預設排除（-m 'not perf'）。
+執行方式：pytest -m perf（獨立於預設套件，等效 Jest tests/perf/ 物理拆檔）。
+
 Phase 2 §3 Group E / Phase 3a §5：
 - E1: 真實 tmp git repo end-to-end 執行 30 次，中位 <100ms + p95 <150ms
 
@@ -35,6 +42,7 @@ def _seed_uncommitted_files(repo: Path, count: int = 5) -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.perf
 def test_E1_checkpoint_state_performance_median_under_100ms(
     tmp_git_repo: Path, mock_ticket_query, mock_dispatch_active, mock_handoff_pending,
 ):

@@ -42,6 +42,7 @@ from hook_utils import (
     run_hook_safely,
     read_json_from_stdin,
     get_project_root,
+    is_subagent_environment,
 )
 
 
@@ -228,6 +229,16 @@ def main() -> int:
     tool_name = input_data.get("tool_name", "")
     if tool_name != "Bash":
         logger.debug("跳過: 工具類型為 %s，非 Bash", tool_name)
+        print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
+        return EXIT_SUCCESS
+
+    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現（W1-071 / PC-V1-004 入口污染防護）
+    # 建 follow-up ticket / 掃描 pm-rules 等動作性提示屬 PM 決策，不注入 subagent context
+    if is_subagent_environment(input_data):
+        logger.info(
+            "偵測到 subagent 環境（agent_id=%s），跳過同步檢查提醒",
+            input_data.get("agent_id"),
+        )
         print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
         return EXIT_SUCCESS
 

@@ -20,14 +20,17 @@ from ticket_system.lib.ticket_builder import (
     TicketConfig,
     format_ticket_id,
     get_next_seq,
+    resolve_available_seq,
     create_ticket_frontmatter,
     create_ticket_body,
+    validate_create_checklist,
 )
 from ticket_system.lib.ticket_loader import (
     get_tickets_dir,
     get_ticket_path,
     save_ticket,
 )
+from ticket_system.lib.file_lock import create_id_allocation_lock
 from ticket_system.lib.messages import (
     ErrorMessages,
     InfoMessages,
@@ -40,6 +43,7 @@ from ticket_system.lib.command_tracking_messages import (
     BulkCreateMessages,
 )
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
+from ticket_system.commands.create import _detect_duplicate_tickets
 
 
 @dataclass
@@ -166,14 +170,28 @@ def execute(args: argparse.Namespace) -> int:
     dry_run = args.dry_run if hasattr(args, "dry_run") else False
     parent_id = args.parent if hasattr(args, "parent") else None
 
-    result = _create_batch_tickets(
-        template_defaults,
-        targets,
-        version,
-        wave,
-        dry_run=dry_run,
-        parent_id=parent_id,
-    )
+    # IMP-072 方案 A：批次配號（get_next_seq / resolve_available_seq）+ 落盤與
+    # ticket create 共用同一目錄級 lock，防止跨 process 並行 create / bulk 撞號。
+    # dry_run 不寫檔（無 race 標的），不持鎖。
+    if dry_run:
+        result = _create_batch_tickets(
+            template_defaults,
+            targets,
+            version,
+            wave,
+            dry_run=dry_run,
+            parent_id=parent_id,
+        )
+    else:
+        with create_id_allocation_lock(get_tickets_dir(version)):
+            result = _create_batch_tickets(
+                template_defaults,
+                targets,
+                version,
+                wave,
+                dry_run=dry_run,
+                parent_id=parent_id,
+            )
 
     # 顯示摘要
     _print_batch_summary(result, args.template, version, wave)
@@ -218,13 +236,16 @@ def _create_batch_tickets(
     # 迴圈建立各 Ticket
     for i, target in enumerate(targets, 1):
         try:
-            # 分配序號（使用 wave_seq_map 避免競態）
+            # 分配序號（使用 wave_seq_map 維持批次內遞增起點，避免競態）。
+            # W1-051：每個配號都經 resolve_available_seq 保證可用，消除稀疏佔用
+            # 撞號（例：起始 051 可用但 052 已被既有票佔用，批次 += 1 會撞）與
+            # 降級連鎖覆寫（R1）。dry_run 不寫檔，仍走 guard 使預演號與正式一致。
             if wave not in wave_seq_map:
-                wave_seq_map[wave] = get_next_seq(version, wave)
+                start = get_next_seq(version, wave)
             else:
-                wave_seq_map[wave] += 1
-
-            seq = wave_seq_map[wave]
+                start = wave_seq_map[wave] + 1
+            seq = resolve_available_seq(version, wave, start)
+            wave_seq_map[wave] = seq
             ticket_id = format_ticket_id(version, wave, seq)
 
             # 建立 TicketConfig
@@ -236,6 +257,29 @@ def _create_batch_tickets(
                 wave,
                 parent_id=parent_id,
             )
+
+            # Tier 1 警告層（1.0.0-W1-040.1：補齊 bulk_create 偵測缺口）
+            # 與 create 警告層共用 _detect_duplicate_tickets（僅警告不阻擋）。
+            # bulk_create 不套用 Tier 2 阻擋層——批次內部同質性高，
+            # 阻擋誤報風險大（parent W1-040 Solution 誤報率考量）。
+            _detect_duplicate_tickets(
+                version=version,
+                new_title=config.get("title", ""),
+                new_what=config.get("what", ""),
+                new_ticket_id=ticket_id,
+            )
+
+            # checklist 驗證（1.0.0-W1-027：warning 級，不阻擋）
+            # 與 create 命令層共用 validate_create_checklist，補側門缺口。
+            # 在 flat config 階段呼叫（key 與驗證函式一致），非 save 階段。
+            missing = validate_create_checklist(config, config["ticket_type"])
+            if missing:
+                result.warned.append((
+                    ticket_id,
+                    BulkCreateMessages.CHECKLIST_WARNING_FORMAT.format(
+                        fields=", ".join(missing)
+                    ),
+                ))
 
             # 產生 frontmatter 和 body
             frontmatter = create_ticket_frontmatter(config)

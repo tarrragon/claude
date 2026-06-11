@@ -164,6 +164,8 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 
 # 追加執行日誌
 # 有效 section: Problem Analysis / Context Bundle / Solution / Test Results / Execution Log / NeedsContext / Exit Status
+# Status precondition（W3-044 / W1-058）：需 status=in_progress（completed 補 review 亦放行）；
+# 派發前章節 Problem Analysis / Context Bundle 例外允許 pending 直寫（PM bookkeeping，不需 --force）
 /ticket track append-log <id> --section "Problem Analysis" "內容"
 /ticket track append-log <id> --section "Context Bundle" "PCB 內容（派發前分析結果，PC-040）"
 #
@@ -185,6 +187,13 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 /ticket track set-acceptance <id> --uncheck 1 2        # 取消勾選多個 index
 /ticket track set-acceptance <id> --all-check          # 勾選全部
 /ticket track set-acceptance <id> --all-uncheck        # 取消勾選全部
+
+# 身份申報（--as，W1-048）— complete / check-acceptance / set-acceptance 三命令通用
+/ticket track complete <id> --as thyme-python-developer        # 申報身份，與 who.current 對照不符即 deny（exit 1）
+/ticket track check-acceptance <id> --all --as thyme-python-developer
+/ticket track set-acceptance <id> --all-check --as thyme-python-developer
+/ticket track complete <id> --as rosemary-project-manager      # PM 身份一律放行（bookkeeping 豁免）
+/ticket track complete <id>                                    # 未提供 --as：僅 stderr 警告不阻擋（過渡期向後相容）
 
 # 設定阻擋關係（blockedBy 欄位）
 /ticket track set-blocked-by <id> <blocked-by-id>      # 覆寫（設定單一 blockedBy）

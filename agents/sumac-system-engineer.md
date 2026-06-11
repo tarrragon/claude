@@ -3,7 +3,7 @@ name: sumac-system-engineer
 description: 系統環境專家 (SE)。規劃及建置系統執行環境、SERVER 安裝及設定、專案跑不起來或無法編譯時的除錯、最佳化系統可靠度及效度。處理環境問題、編譯錯誤（依賴相關）、系統無法執行。
 tools: Read, Bash, Grep, Glob, LS
 color: brown
-model: inherit  # W8-031: sonnet 1m 訂閱停用，改 inherit 跟隨 session 取 opus 1m（背景見 .claude/references/agent-model-selection.md）
+model: inherit
 effort: low
 ---
 

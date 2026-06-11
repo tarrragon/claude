@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output
 from lib.hook_messages import ValidationMessages, format_message
 
 
@@ -169,15 +169,15 @@ def main():
     issues = check_file_content(file_path)
 
     if issues:
-        # 輸出警告為 JSON 格式到 stdout
+        # worklog 格式提醒為 PM-only：統一出口過濾 subagent 觸發
+        # （PC-V1-004 防護 C，避免誘導 subagent 越界寫 worklog）
         warning = format_warning(file_path, issues)
-        output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "additionalContext": warning
-            }
-        }
-        print(json.dumps(output, ensure_ascii=False, indent=2))
+        emit_hook_output(
+            "PostToolUse",
+            additional_context=warning,
+            audience="pm_only",
+            input_data=hook_input,
+        )
 
     # 總是返回成功（非阻擋式 Hook）
     return 0

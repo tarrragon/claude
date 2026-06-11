@@ -37,6 +37,11 @@ spec / ANA 規劃者的預設工作流是「閱讀 Context Bundle 設計目標 +
 |------|--------|--------|------------|--------|--------|-------------|
 | 1 | W10-115 | lavender（Phase 1 spec） | CLI `--format` 可選值 | `table/json/list` | `table/ids/yaml` | pepper Phase 3a |
 | 2 | W14-036 | basil（W14-032 ANA spawn IMP 規劃） | hook 檔名 | `decision-quality-guard-hook.py` | `wrap-decision-tripwire-hook.py` | basil 執行 W14-036 時（Phase 3b 實作前 agent 自律對齊） |
+| 3 | 1.0.0-W1-056.12 | saffron（1.0.0-W1-056.1 ANA Solution 方案 B） | model ID | `claude-sonnet-4-5-20250514[1m]` | `claude-sonnet-4-5`（20250514 為 Sonnet 4 日期戳，dated ID 屬拼接） | PM 執行 spawn IMP 時（寫入 settings 前比對日期戳） |
+
+### 1.0.0-W1-056.12 案例細節
+
+ANA 規劃 fallbackModel 設定值時，將 Sonnet 4.5 的名稱與 Sonnet 4（`claude-sonnet-4-20250514`）的日期戳拼接成不存在的 dated ID。此類偏差比檔名錯誤更危險：fallbackModel 含無效 ID 不必然立即報錯，可能在 API 過載真正觸發 fallback 時才靜默失效（防護功能形同虛設）。執行端防護：寫入 model ID 前比對日期戳與已知 model 家族，無法驗證時改用無日期 alias（如 `claude-sonnet-4-5[1m]`），並在 spawn IMP 的 Solution 記錄偏離。
 
 ### W14-036 案例細節
 

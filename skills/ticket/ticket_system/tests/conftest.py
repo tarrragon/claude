@@ -165,6 +165,15 @@ def blocked_ticket(tmp_ticket_factory) -> str:
 
 
 # ============================================================
+# W1-050 — project root 預設隔離（autouse）
+# ============================================================
+#
+# W1-054：`_isolate_project_root`（autouse）與 `real_repo_root`（opt-out）已上提至
+# skill-root `.claude/skills/ticket/conftest.py`，兩測試樹共享單一副本（DRY 收斂）。
+# pytest rootdir = skill root + testpaths 含本樹，故 skill-root autouse 對本樹生效。
+
+
+# ============================================================
 # W9-008 — hook-logs 預設隔離（autouse）
 # ============================================================
 

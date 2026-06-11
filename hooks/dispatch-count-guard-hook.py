@@ -51,7 +51,7 @@ from typing import Dict, Optional, Any
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output
 from lib.constants import (
     DISPATCH_MULTI_KEYWORDS,
     DISPATCH_BATCH_STATE_TEMPLATE,
@@ -294,13 +294,13 @@ def handle_user_prompt_submit(input_data: Dict[str, Any], logger) -> int:
         sys.stderr.write(warning + "\n")
         logger.warning(f"派發計數不一致: {actual}/{expected} (關鍵字: {keywords})")
 
-        output = {
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": warning
-            }
-        }
-        print(json.dumps(output, ensure_ascii=False, indent=2))
+        # 派發計數警告為 PM-only：統一出口過濾 subagent 觸發（PC-V1-004 防護 C）
+        emit_hook_output(
+            "UserPromptSubmit",
+            additional_context=warning,
+            audience="pm_only",
+            input_data=input_data,
+        )
     else:
         logger.info(f"派發計數驗證通過: {actual}/{expected}")
 

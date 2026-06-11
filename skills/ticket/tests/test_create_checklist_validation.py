@@ -5,7 +5,10 @@
 
 import pytest
 
-from ticket_system.commands.create import _validate_create_checklist
+from ticket_system.commands.create import (
+    _enforce_create_checklist,
+    _validate_create_checklist,
+)
 from ticket_system.lib.constants import DEFAULT_UNDEFINED_VALUE
 
 
@@ -181,3 +184,47 @@ class TestValidateCreateChecklist:
         config["what"] = ""
         result = _validate_create_checklist(config, "IMP")
         assert "what" in result
+
+
+class TestEnforceCreateChecklistForce:
+    """_enforce_create_checklist 的 --force 豁免分支測試（1.0.0-W1-038）。
+
+    背景：1.0.0-W1-024.1 將 why 從「不可豁免」改為「可由 --force 豁免」（刻意決策），
+    但既有測試全部 force=False，豁免路徑零覆蓋。本群組補上 force=True 分支，
+    確保「缺 why + --force」不阻擋建立（不呼叫 sys.exit），且印出 WARNING。
+    """
+
+    def test_no_missing_returns_without_action(self, capsys):
+        """無缺失欄位 → 直接 return，不阻擋也不印 WARNING。"""
+        _enforce_create_checklist([], force=False)
+        out = capsys.readouterr().out
+        assert "已 --force 跳過阻擋" not in out
+        assert "CHECKLIST_VALIDATION_FAILED" not in out
+
+    def test_missing_why_without_force_blocks(self):
+        """缺 why + 未 --force → 阻擋建立（sys.exit(1)）。"""
+        with pytest.raises(SystemExit) as exc_info:
+            _enforce_create_checklist(["why"], force=False)
+        assert exc_info.value.code == 1
+
+    def test_missing_why_with_force_allows(self, capsys):
+        """缺 why + --force → 放行（不 raise SystemExit），印 WARNING 並列出 why。
+
+        驗證 1.0.0-W1-024.1 的 --force why 豁免語意：why 可由 --force 跳過阻擋。
+        """
+        # 不應 raise SystemExit
+        _enforce_create_checklist(["why"], force=True)
+        out = capsys.readouterr().out
+        assert "已 --force 跳過阻擋" in out
+        assert "why" in out
+        # 豁免路徑不應輸出阻擋用的錯誤 errno
+        assert "CHECKLIST_VALIDATION_FAILED" not in out
+
+    def test_multiple_missing_with_force_allows(self, capsys):
+        """多欄位缺失（含 why）+ --force → 放行並列出所有缺失欄位。"""
+        _enforce_create_checklist(["when", "why", "how_strategy"], force=True)
+        out = capsys.readouterr().out
+        assert "已 --force 跳過阻擋" in out
+        assert "why" in out
+        assert "when" in out
+        assert "how_strategy" in out

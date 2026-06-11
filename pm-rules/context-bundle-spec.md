@@ -8,6 +8,8 @@
 
 **Context Bundle** 是 Ticket 執行日誌中的一個區段。PM 在派發代理人前，透過 `ticket track append-log --section "Execution Log" "### Context Bundle\n..."` 寫入下一階段代理人所需的前置資訊。
 
+> **pending 直寫（W1-058）**：派發前章節 `Problem Analysis` / `Context Bundle` 允許在 ticket `status=pending` 時直接 `append-log` 寫入，不需先 claim、不需 `--force`。**Why**：PM bookkeeping（create 後立即寫入派發 context）屬合法路徑，常態化 `--force` 會稀釋逃生閥警示價值。其餘章節（Solution / Test Results 等執行產出）維持 `in_progress` 限制。缺失章節由 CLI 自動補建（W1-025），無需手動 Edit 插入。
+
 ---
 
 ## 核心原則

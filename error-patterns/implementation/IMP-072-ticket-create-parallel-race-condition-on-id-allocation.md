@@ -99,6 +99,17 @@ PM 在單一 session 中並行執行 2+ 個 `ticket create` 命令（如 backgro
 - **驗證新建 ticket 存在性**：每次 create 後 `ls -t .../tickets/*.md | head -1` 確認新檔
 - **避免 background bash 並行 ticket create**：用 foreground bash 序列執行
 
+### 頻率升級案例：跨 session 同日二度撞號（2026-06-11）
+
+原始案例為「同 session 並行派發」撞號；本案例為**跨 session**（兩個獨立 terminal 各自 create）撞號，且同日二度發生：
+
+| 撞號 | 雙方 ticket | 處置 |
+|------|------------|------|
+| 第一次 | telemetry IMP（並行 session，源 W1-049）vs bookkeeping IMP（主 session） | 主 session 的票遷移為 W1-058 |
+| 第二次 | auto-commit-hook ANA（並行 session）vs hook 注入污染 ANA（主 session） | 主 session 的票遷移為 W1-060 |
+
+**升級訊號**：並行 session 工作模式（PC-078）常態化後，跨 session create 的撞號機率與 session 活躍度成正比，不再是低頻事件。**Consequence**：撞號後的遷移處置會遺失 frontmatter 關聯欄位（relatedTo / spawned_tickets，IMP-061 已知），且後建方的內容存在被靜默覆寫的時間窗。**Action**：方案 A（fcntl file lock）優先級由「修補方向」升為「待排程」——已超過單日 2 次的頻率門檻；排程前 PM workaround 增加一條：跨 session 並行期間，create 後立即以 `grep -c "<自己的 title>" <新檔>` 確認內容歸屬，不只確認檔案存在。
+
 ---
 
 ## 與其他 race condition 的差異
@@ -111,6 +122,8 @@ PM 在單一 session 中並行執行 2+ 個 `ticket create` 命令（如 backgro
 
 ---
 
-**Last Updated**: 2026-05-12
+**Last Updated**: 2026-06-11
+**Version**: 1.1.0 — 新增「頻率升級案例：跨 session 同日二度撞號」；方案 A 升為待排程（trigger 綁修補 ticket）；PM workaround 增加 create 後內容歸屬確認
+
 **Version**: 1.0.0
 **Source**: W10-105 ANA 收尾時並行派發 2 個 ticket create 撞 ID（bi43cud13 vs b6uyaczhp），實際只建出 W10-107（後者內容），前者內容遺失需 serial 重建為 W10-108

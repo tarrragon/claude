@@ -29,14 +29,12 @@ HOOK_METADATA (JSON):
 }
 """
 
-import json
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, read_json_from_stdin, emit_hook_output
 from lib.hook_messages import ValidationMessages
 
 
@@ -118,21 +116,25 @@ def main():
     for warning in dep_warnings:
         issues.append(f"[WARNING] {warning}")
 
-    # 輸出結果
-    # 單一 JSON 輸出：合併警告和 permissionDecision
-    hook_output = {
-        "hookEventName": "PreToolUse",
-        "permissionDecision": "allow",
-        "permissionDecisionReason": (
-            f"{ValidationMessages.PRE_TEST_ENV_CHECK_PREFIX}{len(issues)}{ValidationMessages.PRE_TEST_ENV_CHECK_SUFFIX}" if issues else ValidationMessages.PRE_TEST_ENV_READY
-        ),
-    }
+    # 輸出結果：emit_hook_output 統一出口（合併警告和 permissionDecision）
+    decision_reason = (
+        f"{ValidationMessages.PRE_TEST_ENV_CHECK_PREFIX}{len(issues)}{ValidationMessages.PRE_TEST_ENV_CHECK_SUFFIX}"
+        if issues else ValidationMessages.PRE_TEST_ENV_READY
+    )
+    additional_context = None
     if issues:
         warning_text = "\n".join(issues)
-        hook_output["additionalContext"] = f"{ValidationMessages.PRE_TEST_CHECK_HEADER}\n{warning_text}"
+        additional_context = f"{ValidationMessages.PRE_TEST_CHECK_HEADER}\n{warning_text}"
 
-    result = {"hookSpecificOutput": hook_output}
-    print(json.dumps(result, ensure_ascii=False))
+    # 環境警告為 PM-only（subagent 觸發時過濾訊息，allow 決策不受影響）
+    emit_hook_output(
+        "PreToolUse",
+        additional_context=additional_context,
+        permission_decision="allow",
+        permission_decision_reason=decision_reason,
+        audience="pm_only",
+        input_data=input_data,
+    )
     return 0
 
 

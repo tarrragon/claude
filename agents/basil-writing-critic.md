@@ -3,7 +3,7 @@ name: basil-writing-critic
 description: 文字品質常駐審查委員（compositional-writing + document-writing-style 執行者）。審查書面文字的三明示結構（Why/Consequence/Action）、資訊優先序（原則先於示例）、禁用字、字元集污染、正面陳述。parallel-evaluation 情境 C / D / F / G 強制加入，與 linux 並列常駐。產出審查報告，不修改文件。Use when: 規則/方法論變更後、分析報告產出後、Ticket 規劃完成後、Phase 1 功能規格產出後。
 tools: Read, Grep, Glob, Bash, mcp__zhtw-mcp__zhtw
 color: green
-model: opus
+model: inherit
 effort: low
 ---
 

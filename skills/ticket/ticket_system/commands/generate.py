@@ -72,6 +72,9 @@ def execute(args: argparse.Namespace) -> int:
     # 顯示生成摘要
     _print_generation_summary(gen_result, plan_file)
 
+    # 顯示 checklist 缺欄位警告（1.0.0-W1-027：warning 級，不阻擋）
+    _print_checklist_warnings(gen_result)
+
     # 若非預演模式，保存 Tickets
     if not dry_run:
         saved_count = _save_tickets(gen_result, version)
@@ -109,6 +112,31 @@ def _print_generation_summary(gen_result, plan_file: Path) -> None:
             print(f"{GenerateMessages.SUMMARY_TICKET_FORMAT.format(id=ticket.id, title=ticket.title)}")
             print(f"{GenerateMessages.SUMMARY_TICKET_DETAILS_FORMAT.format(wave=ticket.wave, phases=phases_str)}")
         print()
+
+
+def _print_checklist_warnings(gen_result) -> None:
+    """印出缺必填欄位的 Ticket 警告（1.0.0-W1-027，warning 級不阻擋）。
+
+    與 create / batch-create 共用 validate_create_checklist 的結果
+    （lib 層已寫入 GeneratedTicket.missing_fields）。generate 路徑
+    補側門缺口：缺欄位時列全並警告，但 Ticket 仍照常生成。
+
+    Args:
+        gen_result: GenerationResult 物件
+    """
+    flawed = [t for t in gen_result.tickets if t.missing_fields]
+    if not flawed:
+        return
+
+    print()
+    print(format_warning(GenerateMessages.CHECKLIST_WARNING_TITLE))
+    for ticket in flawed:
+        print(
+            GenerateMessages.CHECKLIST_WARNING_ITEM.format(
+                id=ticket.id,
+                fields=", ".join(ticket.missing_fields),
+            )
+        )
 
 
 def _save_tickets(gen_result, version: str) -> int:

@@ -15,22 +15,31 @@ Agent Commit Verification Hook - SubagentStop
   5. 掃描 hook-logs 輸出 hook error 摘要。
 
 觸發時機: SubagentStop（CC runtime 代理人真正停止時觸發，W10-067 遷移自 PostToolUse）
-行為: 不阻擋（exit 0），有警告時以 hookSpecificOutput.additionalContext 輸出（CC 2.1.163 #4
-  已解除 SubagentStop event schema 對 additionalContext 的限制，取代 W17-160 當時被迫採用的
-  top-level systemMessage workaround；< 2.1.163 的 runtime 透過 build_subagent_stop_output
-  自動 graceful fallback 回 systemMessage）。無內容時靜默退出。
+行為: 不阻擋（exit 0），有警告時以 top-level systemMessage（純顯示通道）輸出。
+  無內容時靜默退出。
+  自激迴圈防護（1.0.0-W1-055.1）：
+  1. stop_hook_active=true（runtime 因 stop hook 而繼續）時靜默 exit 0（CC hook
+     規格的防迴圈欄位）。
+  2. Hook error 摘要以錯誤記錄 fingerprint 做 TTL 去重，相同錯誤集合在 TTL 內
+     不重複播報（W1-074/075/076 觀測的重播症狀）。
+  3. 輸出通道自 hookSpecificOutput.additionalContext 回退 systemMessage：W1-055
+     ANA 活體確證 additionalContext 投遞對象是「停止中的 subagent」（注入其對話
+     並令其繼續，H1 confidence 0.95），與本 hook「通知 PM 主線程」意圖不符。
 
 來源:
   - PC-024 — 代理人完成實作但跳過 git commit，變更未持久化
   - W10-067 — 從 PostToolUse 遷移至 SubagentStop，解決 background 啟動誤觸發
-  - 0.19.1-W1-046 — CC 2.1.163 解禁後改回 additionalContext + 版本相容 fallback
+  - 0.19.1-W1-046 — CC 2.1.163 解禁後曾改用 additionalContext（已由 W1-055.1 回退）
+  - 1.0.0-W1-055.1 — 自激迴圈斷路器 + hook error fingerprint dedup + 通道回退
 """
 
+import hashlib
 import json
 import logging
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -39,7 +48,6 @@ from hook_utils import (
     setup_hook_logging,
     read_json_from_stdin,
     get_project_root,
-    build_subagent_stop_output,
 )
 
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
@@ -53,10 +61,9 @@ HOOK_NAME = "agent-commit-verification-hook"
 EXIT_SUCCESS = 0
 
 # 預設輸出格式（靜默通過）
-# 0.19.1-W1-046: 無內容時靜默退出（不輸出任何 JSON）；有警告時改用
-# hookSpecificOutput.additionalContext（CC 2.1.163 #4 解禁，取代 W17-160
-# 當時的 systemMessage workaround），由 build_subagent_stop_output 處理
-# 版本相容 fallback。
+# 無內容時靜默退出（不輸出任何 JSON）；有警告時以 top-level systemMessage
+# （純顯示通道）輸出。1.0.0-W1-055.1 自 additionalContext 回退：該欄位會注入
+# 停止中的 subagent 並令其繼續（自激迴圈），與通知 PM 的意圖不符。
 
 # Git 命令超時（秒）
 GIT_STATUS_TIMEOUT = 5
@@ -115,6 +122,10 @@ FEATURE_BRANCH_PREFIXES = ("feat/", "feature/", "fix/", "refactor/")
 
 # Hook error 摘要
 HOOK_ERROR_SCAN_MINUTES = 5
+# Hook error 摘要去重 TTL（1.0.0-W1-055.1 修復 2）：相同錯誤集合（fingerprint）
+# 在 TTL 內只播報一次。TTL 取掃描視窗（5 分鐘）的兩倍，確保同一批錯誤記錄
+# 在其可見視窗內不會二次播報；新錯誤出現會改變 fingerprint、立即播報。
+HOOK_ERROR_DEDUP_TTL_SECONDS = HOOK_ERROR_SCAN_MINUTES * 60 * 2
 # Log level 精確匹配：`[timestamp] LEVEL - message` 格式，僅 ERROR/CRITICAL/FATAL 視為錯誤
 # 使用 regex 避免純字串匹配造成誤報（例如用戶命令字串含 "ERROR"/"FAIL"/"Exception" 關鍵字）
 HOOK_ERROR_LOG_LEVEL_RE = re.compile(r"\] (ERROR|CRITICAL|FATAL) -")
@@ -156,7 +167,13 @@ def get_uncommitted_files(project_root: str, logger: logging.Logger) -> list[str
             return []
 
         files = []
-        for line in result.stdout.strip().splitlines():
+        # 禁止對 stdout 整體 strip：porcelain 格式為「XY filename」（X=index、
+        # Y=worktree 兩個狀態字元），worktree-modified 的 X 為前導空白；整體
+        # strip 會剝除第一行的前導空白，使 line[3:] 多切一個路徑首字元
+        # （.claude/ 變 claude/），進而繞過 EXCLUDED_PATH_PREFIXES 豁免。
+        for line in result.stdout.splitlines():
+            if not line.strip():
+                continue
             if len(line) < 4:
                 continue
             # git status --porcelain 格式: XY filename
@@ -530,6 +547,74 @@ def build_hook_error_message(hook_errors: list[tuple[str, int]]) -> str:
     return "\n".join(lines)
 
 
+def _get_error_dedup_state_file(project_root) -> Path:
+    """Hook error 摘要去重 state 檔路徑（hook-logs 已被 .gitignore 排除）。"""
+    return (
+        Path(project_root) / ".claude" / "hook-logs" / HOOK_NAME
+        / "hook-error-broadcast-dedup.json"
+    )
+
+
+def build_error_fingerprint(hook_errors: list[tuple[str, int]]) -> str:
+    """以排序後的（hook 名稱, 錯誤數）清單計算 fingerprint。
+
+    相同錯誤集合 → 相同 fingerprint → TTL 內去重；任一 hook 新增錯誤記錄
+    會改變計數 → fingerprint 變化 → 立即播報（新事件不被舊播報遮蔽）。
+    """
+    canonical = json.dumps(sorted(hook_errors), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def check_and_record_broadcast(
+    state_file: Path,
+    key: str,
+    ttl_seconds: int,
+    logger: logging.Logger,
+    now: float | None = None,
+) -> bool:
+    """檢查同 key 是否在 TTL 內已播報過；未播報過則記錄本次播報。
+
+    Returns:
+        bool: True 表示 TTL 內已播報過（呼叫端應跳過輸出）；False 表示
+              首次播報（已記錄 timestamp）。
+
+    state 檔損毀或 IO 失敗時 fail-open（回 False 照常播報）：dedup 層異常
+    寧可重複通知，不可吞掉真實通知（quality-baseline 規則 4 可觀測性）。
+
+    註：與 subagent-stop-dispatch-cleanup-hook.py 的同名函式刻意重複——
+    hook 檔名含 hyphen 無法互相 import，且 1.0.0-W1-055.1 約束僅允許修改
+    兩個 hook 本體；抽共用 lib 屬範圍外決策。
+    """
+    if now is None:
+        now = time.time()
+
+    state: dict = {}
+    try:
+        if state_file.exists():
+            raw = json.loads(state_file.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                # 載入時順手剪除過期 entry，state 檔不無限成長
+                state = {
+                    k: v
+                    for k, v in raw.items()
+                    if isinstance(v, (int, float)) and now - v < ttl_seconds
+                }
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        logger.debug("dedup state 讀取失敗（fail-open 照常播報）: %s", e)
+        state = {}
+
+    if key in state:
+        return True
+
+    state[key] = now
+    try:
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text(json.dumps(state), encoding="utf-8")
+    except OSError as e:
+        logger.debug("dedup state 寫入失敗（fail-open 照常播報）: %s", e)
+    return False
+
+
 def _lookup_agent_info(project_root, agent_id, logger):
     """從 dispatch-active.json 查詢代理人的 description 和 worktree 資訊。
 
@@ -567,6 +652,15 @@ def main() -> None:
     agent_id = input_data.get("agent_id", "")
     if not agent_id:
         logger.debug("no agent_id in SubagentStop input, skip")
+        sys.exit(EXIT_SUCCESS)
+
+    # 自激迴圈斷路器（1.0.0-W1-055.1 修復 1）：stop_hook_active=true 表示本次
+    # 停止是「上一輪 stop hook 輸出令 agent 繼續」的結果，任何輸出都會再度
+    # 延續迴圈 —— 靜默退出。
+    if input_data.get("stop_hook_active"):
+        logger.debug(
+            "stop_hook_active=true（stop hook 引發的繼續），靜默退出避免自激迴圈"
+        )
         sys.exit(EXIT_SUCCESS)
 
     # 取得專案根目錄
@@ -634,10 +728,22 @@ def main() -> None:
     else:
         logger.debug("cwd restore reminder skipped (non-worktree agent)")
 
-    # Hook error 摘要
+    # Hook error 摘要（1.0.0-W1-055.1 修復 2：fingerprint 去重，相同錯誤集合
+    # 在 TTL 內不重複播報）
     hook_errors = scan_hook_errors(str(project_root), HOOK_ERROR_SCAN_MINUTES, logger)
     if hook_errors:
-        messages.append(build_hook_error_message(hook_errors))
+        fingerprint = build_error_fingerprint(hook_errors)
+        if check_and_record_broadcast(
+            _get_error_dedup_state_file(project_root),
+            fingerprint,
+            HOOK_ERROR_DEDUP_TTL_SECONDS,
+            logger,
+        ):
+            logger.info(
+                "hook error 摘要 dedup 命中（TTL 內已播報相同 fingerprint），跳過"
+            )
+        else:
+            messages.append(build_hook_error_message(hook_errors))
 
     # PM 立即動作摘要
     if has_uncommitted or has_unmerged_worktrees or has_unmerged_branches:
@@ -649,15 +755,13 @@ def main() -> None:
             first_unmerged_branch,
         ))
 
-    # 0.19.1-W1-046: CC 2.1.163 #4 解禁後改用 hookSpecificOutput.additionalContext；
-    # build_subagent_stop_output 於 < 2.1.163 的 runtime 自動 graceful fallback 回
-    # top-level systemMessage。無訊息時靜默不輸出（不送空殼）。
+    # 1.0.0-W1-055.1 修復 4：通道回退 top-level systemMessage（純顯示）。
+    # additionalContext 經 W1-055 活體確證會注入「停止中的 subagent」並令其
+    # 繼續（自激迴圈核心），與「通知 PM 主線程」意圖不符。
+    # 無訊息時靜默不輸出（不送空殼）。
     if messages:
         combined_message = "\n\n".join(messages)
-        print(json.dumps(
-            build_subagent_stop_output(combined_message, logger),
-            ensure_ascii=False,
-        ))
+        print(json.dumps({"systemMessage": combined_message}, ensure_ascii=False))
     sys.exit(EXIT_SUCCESS)
 
 

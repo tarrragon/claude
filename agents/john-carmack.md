@@ -1,7 +1,7 @@
 ---
 name: john-carmack
 description: "[DEPRECATED] 已合併至 ginger-performance-tuner。效能系統架構分析、熱路徑優化、控制流簡化、狀態管理設計等能力已整合到 ginger-performance-tuner v2.0.0。"
-model: sonnet  # W8-031 豁免: DEPRECATED 已併入 ginger-performance-tuner，不再派發故不需升級 1m
+model: sonnet
 ---
 
 # john-carmack [DEPRECATED]

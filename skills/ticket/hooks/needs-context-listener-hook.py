@@ -36,6 +36,7 @@ from hook_utils import (
     read_json_from_stdin,
     extract_tool_input,
     run_hook_safely,
+    is_subagent_environment,
 )
 
 HOOK_NAME = "needs-context-listener-hook"
@@ -69,6 +70,16 @@ def extract_ticket_id(command: str) -> str | None:
 def main_logic() -> int:
     logger = setup_hook_logging(HOOK_NAME)
     payload = read_json_from_stdin(logger)
+
+    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現（W1-071 / PC-V1-004 入口污染防護）
+    # 「請 PM 確認補料」屬 PM-only 訊息，注入 subagent context 無作用且污染其報告 token
+    if is_subagent_environment(payload):
+        logger.debug(
+            "偵測到 subagent 環境（agent_id=%s），跳過 NeedsContext 提醒",
+            payload.get("agent_id") if isinstance(payload, dict) else None,
+        )
+        return EXIT_SUCCESS
+
     tool_input = extract_tool_input(payload)
     command = tool_input.get("command", "") if isinstance(tool_input, dict) else ""
 

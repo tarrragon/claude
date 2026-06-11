@@ -48,6 +48,12 @@ Shell 環境警告：此 shell 的 chpwd hook 會在 cd 時自動輸出 ls。
 - 子 shell: (cd /path && command)
 ```
 
+### 主線程 PM 自身同樣適用（受眾擴展）
+
+本 pattern 防護易被讀成「PM 提醒 subagent 不要 cd」，但**主線程 PM 自己裸 cd 同樣觸發 chpwd 淹沒**——PM 不在「安全位置提醒別人」，而是同等暴露。
+
+**chpwd 淹沒發生後的正確反應**：停手重發乾淨命令（`git -C`／子 shell），**不是**把淹沒的輸出當「正常但吵」接受、更不是用預期填補續寫。後者是 confabulation 觸發鏈（輸出淹沒 → result 邊界模糊 → 同訊息腦補），見 PC-166 + `tool-output-trust-rules` 規則 1/4。
+
 ## 正確做法
 
 ```bash
@@ -61,7 +67,7 @@ cd /path/to/worktree && git status
 git -C /path/to/worktree status
 ```
 
-## 變體：chpwd 輸出被捕獲進 redirect 致下游處理拿到假數據（W1-018 near-miss）
+## 變體：chpwd 輸出被捕獲進 redirect 致下游處理拿到假資料（W1-018 near-miss）
 
 **症狀**：`(cd "$DIR" && cmd | sort) > file.txt` 後，`file.txt` 開頭混入該目錄的 `ls` 列表（chpwd 在 cd 當下印出），使檔案**非完全排序**；後續 `comm -23 file.txt other.txt` 因 comm 要求輸入嚴格排序而產生大量假差異。
 
@@ -86,4 +92,6 @@ git -C /path/to/worktree status
 
 ---
 
-**Last Updated**: 2026-06-07 — 新增「變體：chpwd 輸出被捕獲進 redirect 致 comm 假數據」（W1-018 near-miss：假 2610 孤兒差點誤報災難性刪除，實為 751）+ `git -C` 正確做法。
+**Last Updated**: 2026-06-10 — 禁用詞修正：變體標題與本 footer 共 2 處用詞改為「假資料」+ 自稱「本 PC」→「本 pattern」（IMP 類非 PC 類）（W1-032 文件交叉引用稽核）。
+
+**Last Updated**: 2026-06-07 — 新增「變體：chpwd 輸出被捕獲進 redirect 致 comm 假資料」（W1-018 near-miss：假 2610 孤兒差點誤報災難性刪除，實為 751）+ `git -C` 正確做法。

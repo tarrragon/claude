@@ -42,6 +42,7 @@ from ticket_system.lib.ticket_loader import (
     require_version,
 )
 from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
+from ticket_system.lib.ambiguous_prefix import register_ambiguous_prefix
 from ticket_system.lib.messages import (
     ArgparseFormatErrorParser,
     ErrorMessages,
@@ -151,6 +152,11 @@ from .track_dispatch_readiness import (
     execute_dispatch_readiness,
     register_dispatch_readiness,
 )
+# 嵌套深度查詢（W1-056.8 落地，協議 v2 D3 層級自覺）
+from .track_depth import (
+    execute_depth,
+    register_depth,
+)
 # parallel-check 子任務衝突偵測（W17-203.1 落地）
 from .track_parallel_check import (
     execute_parallel_check,
@@ -199,6 +205,14 @@ def _execute_claim(args: argparse.Namespace, version: str) -> int:  # type: igno
 
 def _execute_complete(args: argparse.Namespace, version: str) -> int:
     """標記完成 - 包裝生命週期模組"""
+    # W1-048: --as 身份申報對照（純前置檢查，deny 不寫入任何狀態）
+    # W1-083: 傳入 command 名稱，使 telemetry 可做 per-command 歸因
+    from ticket_system.lib.identity_guard import check_identity
+    deny = check_identity(
+        version, args.ticket_id, getattr(args, "as_agent", None), command="complete"
+    )
+    if deny is not None:
+        return deny
     return execute_complete(args, version)
 
 
@@ -257,6 +271,8 @@ def _create_command_handlers() -> dict:
     return {
         "summary": execute_summary,
         "query": execute_query,
+        # W1-056.8 嵌套深度查詢（協議 v2 D3）
+        "depth": execute_depth,
         "claim": _execute_claim,
         "complete": _execute_complete,
         "close": _execute_close,
@@ -447,6 +463,13 @@ def _register_lifecycle_commands(
         dest="no_stage",
         action="store_true",
         help="跳過 complete 後自動 git add metadata 檔案（W11-035 方案 D opt-out）",
+    )
+    p_complete.add_argument(
+        "--as",
+        dest="as_agent",
+        default=None,
+        metavar="AGENT_NAME",
+        help="申報執行身份，與 who.current 對照不符即 deny（W1-048；未提供僅警告）",
     )
 
     # close 操作（W15-027 / PC-090：--reason 枚舉必填）
@@ -784,6 +807,13 @@ def _register_acceptance_commands(
         help=TrackMessages.ARG_CHECK_ACCEPTANCE_ALL
     )
     p_check_acceptance.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    p_check_acceptance.add_argument(
+        "--as",
+        dest="as_agent",
+        default=None,
+        metavar="AGENT_NAME",
+        help="申報執行身份，與 who.current 對照不符即 deny（W1-048；未提供僅警告）",
+    )
 
     # set-acceptance 操作
     p_set_acceptance = subparsers.add_parser(
@@ -799,6 +829,16 @@ def _register_acceptance_commands(
         "--uncheck", nargs="+", metavar="INDEX",
         help="取消勾選指定 1-based index（可多個）"
     )
+    # --all 攔截：撞 --all-check/--all-uncheck（1.0.0-W1-028）。作用域 scoped 至
+    # set-acceptance subparser，不影響 list/stale-list/td-status/stuck-anas 的合法
+    # --all（約束 1）。
+    register_ambiguous_prefix(
+        p_set_acceptance,
+        "--all",
+        "--all 不是有效旗標，請使用完整旗標名："
+        "--all-check（勾選全部驗收條件）"
+        "或 --all-uncheck（取消勾選全部驗收條件）",
+    )
     p_set_acceptance.add_argument(
         "--all-check", dest="all_check", action="store_true",
         help="勾選全部驗收條件"
@@ -813,6 +853,13 @@ def _register_acceptance_commands(
         action="store_true",
         default=False,
         help="W3-044 逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+    )
+    p_set_acceptance.add_argument(
+        "--as",
+        dest="as_agent",
+        default=None,
+        metavar="AGENT_NAME",
+        help="申報執行身份，與 who.current 對照不符即 deny（W1-048；未提供僅警告）",
     )
 
     # validate 操作
@@ -923,6 +970,7 @@ def _register_all_subcommands(
     register_hook_health(track_subparsers)
     register_dispatch_validate(track_subparsers)
     register_dispatch_readiness(track_subparsers)
+    register_depth(track_subparsers)
 
 
 def _register_global_state_commands(

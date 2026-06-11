@@ -210,7 +210,13 @@ def main() -> int:
 
     if all_warnings:
         combined = "\n\n".join(all_warnings)
-        emit_hook_output(HOOK_EVENT, additional_context=combined)
+        # UTF-8 損壞警告為 PM-only：統一出口過濾 subagent 觸發（PC-V1-004 防護 C）
+        emit_hook_output(
+            HOOK_EVENT,
+            additional_context=combined,
+            audience="pm_only",
+            input_data=input_data,
+        )
     else:
         emit_hook_output(HOOK_EVENT)
 

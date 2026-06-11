@@ -1,4 +1,5 @@
 {
+  "fallbackModel": ["claude-sonnet-4-5[1m]"],
   "permissions": {
     "allow": [
       "Edit",
@@ -151,6 +152,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/wrap-skill-yaml-consistency-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/error-pattern/hooks/error-pattern-flat-gate-hook.py"
           }
         ]
       },
@@ -188,6 +193,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/wrap-skill-yaml-consistency-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/error-pattern/hooks/error-pattern-flat-gate-hook.py"
           }
         ]
       },

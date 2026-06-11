@@ -57,7 +57,7 @@ from dataclasses import dataclass
 from typing import Optional, List, Dict, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level, emit_hook_output
 from lib.hook_messages import QualityMessages, CoreMessages, format_message
 
 # 專案根目錄
@@ -677,6 +677,7 @@ def save_report(report_content: str) -> Path:
 def main():
     """主要邏輯"""
     logger = setup_hook_logging("comment-qa-hook")
+    input_data = None  # 提前初始化：except 區塊輸出時需傳入統一出口判定受眾
     try:
         log_message(logger, QualityMessages.COMMENT_QA_CHECK)
 
@@ -807,38 +808,36 @@ def main():
         output += f"詳細報告已儲存: {report_path.relative_to(PROJECT_ROOT)}\n\n"
         output += "[DOC] 註解規範: .claude/skills/compositional-writing/references/writing-code-comments.md\n"
 
-        json_output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "additionalContext": output
-            }
-        }
-        print(json.dumps(json_output, ensure_ascii=False, indent=2))
+        # 註解品質建議為 PM-only：統一出口過濾 subagent 觸發（PC-V1-004 防護 C）
+        emit_hook_output(
+            "PostToolUse",
+            additional_context=output,
+            audience="pm_only",
+            input_data=input_data,
+        )
         log_message(logger, "Comment QA Hook v3.0: 執行完成")
         return 0
 
     except json.JSONDecodeError as e:
         log_message(logger, format_message(QualityMessages.COMMENT_QA_ERROR, error=f"JSON 解析失敗 - {e}"))
-        error_output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "additionalContext": "Comment QA Hook 錯誤: JSON 輸入格式錯誤"
-            }
-        }
-        print(json.dumps(error_output, ensure_ascii=False, indent=2))
+        emit_hook_output(
+            "PostToolUse",
+            additional_context="Comment QA Hook 錯誤: JSON 輸入格式錯誤",
+            audience="pm_only",
+            input_data=input_data,
+        )
         return 1
 
     except Exception as e:
         log_message(logger, format_message(QualityMessages.COMMENT_QA_ERROR, error=f"Hook 執行失敗 - {e}"))
         import traceback
         log_message(logger, f"Traceback: {traceback.format_exc()}")
-        error_output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "additionalContext": f"Comment QA Hook 錯誤: {e}"
-            }
-        }
-        print(json.dumps(error_output, ensure_ascii=False, indent=2))
+        emit_hook_output(
+            "PostToolUse",
+            additional_context=f"Comment QA Hook 錯誤: {e}",
+            audience="pm_only",
+            input_data=input_data,
+        )
         return 1
 
 

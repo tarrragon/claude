@@ -68,6 +68,15 @@ EXIT_SUCCESS = 0
 EXIT_ERROR = 1
 EXIT_BLOCK = 2
 
+# Tool-aware schema（W1-074）：PostToolUse 各工具的 tool_input 形狀不同，
+# 誤用單一 Write schema 會對 Edit/MultiEdit/Read 等輸入產生
+# 「缺少必要欄位: content」ERROR 噪音。
+TOOL_REQUIRED_FIELDS: Dict[str, tuple] = {
+    "Write": ("file_path", "content"),
+    "Edit": ("file_path", "old_string", "new_string"),
+    "MultiEdit": ("file_path", "edits"),
+}
+
 # 全域配置快取
 _quality_config: Optional[Dict[str, Any]] = None
 
@@ -81,7 +90,12 @@ def get_quality_config() -> Dict[str, Any]:
 
 def validate_input(input_data: Dict[str, Any], logger) -> bool:
     """
-    驗證輸入格式 - 由 hook_utils 提供統一驗證
+    驗證輸入格式 - 依 tool_name 套用對應 schema（W1-074）
+
+    先依 tool_name 分流再驗證 schema（修正原「Write schema 先於
+    tool_name 分流」的順序顛倒缺陷）。非本 hook 處理範圍的工具
+    （如 Read）不套用 schema，交由 should_trigger_check 的
+    allowed_tools 檢查靜默跳過。
 
     Args:
         input_data: Hook 輸入資料
@@ -94,12 +108,47 @@ def validate_input(input_data: Dict[str, Any], logger) -> bool:
     if not validate_hook_input(input_data, logger, ("tool_name", "tool_input")):
         return False
 
-    # tool_input 子欄位驗證（委派給 hook_utils）
+    tool_name = input_data["tool_name"]
+    required_fields = TOOL_REQUIRED_FIELDS.get(tool_name)
+    if required_fields is None:
+        logger.info(f"工具 {tool_name} 不適用 schema 驗證，交由觸發條件分流")
+        return True
+
+    # tool_input 子欄位驗證（委派給 hook_utils，使用該工具專屬 schema）
     tool_input = input_data["tool_input"]
-    if not validate_tool_input(tool_input, logger, ("file_path", "content")):
+    if not validate_tool_input(tool_input, logger, required_fields):
+        logger.error(
+            f"tool_input 不符 {tool_name} 工具 schema"
+            f"（必要欄位: {', '.join(required_fields)}）"
+        )
         return False
 
     return True
+
+
+def resolve_ticket_content(
+    tool_name: str, tool_input: Dict[str, Any], logger
+) -> Optional[str]:
+    """
+    取得 ticket 全文內容（tool-aware，W1-074）
+
+    Write 工具 tool_input 自帶全文；Edit/MultiEdit 僅有差分無法重建全文，
+    但本 hook 為 PostToolUse（檔案已寫入磁碟），改讀 file_path 取得全文。
+
+    Returns:
+        Optional[str] - 全文內容；無法取得時回傳 None（呼叫端應跳過檢測）
+    """
+    if tool_name == "Write":
+        return tool_input.get("content")
+
+    file_path = tool_input.get("file_path", "")
+    try:
+        return Path(file_path).read_text(encoding="utf-8")
+    except OSError as e:
+        logger.warning(
+            f"無法讀取檔案內容（tool={tool_name}, path={file_path}）: {e}"
+        )
+        return None
 
 def should_trigger_check(input_data: Dict[str, Any], logger) -> bool:
     """
@@ -156,8 +205,11 @@ def should_trigger_check(input_data: Dict[str, Any], logger) -> bool:
         logger.info(f"檔案路徑不符合 Ticket 格式: {file_path}")
         return False
 
-    # 條件 4: 檔案內容結構檢查
-    content = input_data["tool_input"]["content"]
+    # 條件 4: 檔案內容結構檢查（tool-aware 內容取得，W1-074）
+    content = resolve_ticket_content(tool_name, input_data["tool_input"], logger)
+    if content is None:
+        logger.info(f"無法取得檔案內容（tool={tool_name}），跳過檢測")
+        return False
     ticket_structure_markers = trigger_config.get("ticket_structure_markers", [
         "## 實作步驟",
         "## 驗收條件",
@@ -540,9 +592,13 @@ def main() -> int:
             return EXIT_SUCCESS
         logger.info("effort=%s，執行完整品質閘檢測", effort)
 
-        # 步驟 3: 驗證輸入格式
+        # 步驟 3: 驗證輸入格式（tool-aware schema，W1-074）
         if not validate_input(input_data, logger):
-            logger.error("輸入格式錯誤")
+            tool_name = (
+                input_data.get("tool_name", "unknown")
+                if isinstance(input_data, dict) else "unknown"
+            )
+            logger.error(f"輸入格式錯誤（tool_name={tool_name}）")
             print(json.dumps({
                 "decision": "allow",
                 "reason": "Hook 輸入格式錯誤，允許操作繼續"
@@ -554,9 +610,15 @@ def main() -> int:
             logger.info("不符合觸發條件，跳過檢測")
             return EXIT_SUCCESS
 
-        # 步驟 5: 提取檔案內容並執行檢測
+        # 步驟 5: 提取檔案內容並執行檢測（tool-aware 內容取得，W1-074）
         file_path = input_data["tool_input"]["file_path"]
-        ticket_content = input_data["tool_input"]["content"]
+        tool_name = input_data["tool_name"]
+        ticket_content = resolve_ticket_content(
+            tool_name, input_data["tool_input"], logger
+        )
+        if ticket_content is None:
+            logger.info(f"無法取得檔案內容（tool={tool_name}），跳過檢測")
+            return EXIT_SUCCESS
         # 計算檔案 hash 用於偵測格式變化（留作未來使用）
         file_hash = calculate_file_hash(ticket_content)
 

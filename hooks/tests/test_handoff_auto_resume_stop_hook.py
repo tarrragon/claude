@@ -819,3 +819,84 @@ def test_main_stdin_with_background_tasks(monkeypatch, capsys):
     assert captured["input_data"]["background_tasks"] == [
         {"id": "bg-1", "status": "running"}
     ]
+
+
+# ===== W1-044: subagent context 偵測 + suppressOutput =====
+
+
+def test_is_subagent_context_detects_agent_id():
+    """stdin 含非空 agent_id → 視為 subagent context。"""
+    hook = load_hook_module()
+    assert hook.is_subagent_context({"agent_id": "agt-123"}, MagicMock()) is True
+
+
+def test_is_subagent_context_detects_agent_type():
+    """stdin 含非空 agent_type → 視為 subagent context。"""
+    hook = load_hook_module()
+    assert hook.is_subagent_context({"agent_type": "thyme"}, MagicMock()) is True
+
+
+def test_is_subagent_context_false_for_pm_stop():
+    """PM Stop event stdin（無 agent_id/agent_type）→ 非 subagent context。"""
+    hook = load_hook_module()
+    pm_stdin = {
+        "session_id": "s-1",
+        "transcript_path": "/tmp/t.jsonl",
+        "stop_hook_active": False,
+        "background_tasks": [],
+    }
+    assert hook.is_subagent_context(pm_stdin, MagicMock()) is False
+
+
+def test_is_subagent_context_false_for_empty_marker():
+    """agent_id 為空字串 → 不視為 subagent（避免空值誤判）。"""
+    hook = load_hook_module()
+    assert hook.is_subagent_context({"agent_id": "", "agent_type": ""}, MagicMock()) is False
+
+
+def test_is_subagent_context_false_for_non_dict():
+    """非 dict 輸入 → False（防禦）。"""
+    hook = load_hook_module()
+    assert hook.is_subagent_context(None, MagicMock()) is False
+    assert hook.is_subagent_context([], MagicMock()) is False
+
+
+def test_generate_hook_output_suppresses_in_subagent_context(monkeypatch):
+    """subagent context 下 generate_hook_output 直接回 suppressOutput，
+    不觸發 pending 掃描（不注入 decision:block）。"""
+    hook = load_hook_module()
+
+    # 若誤入掃描路徑，scan_pending_handoff_tasks 被呼叫即視為失敗
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("subagent context 不應掃描 pending（不應注入恢復指令）")
+
+    monkeypatch.setattr(hook, "scan_pending_handoff_tasks", _should_not_be_called)
+    monkeypatch.setattr(hook, "read_session_state", lambda logger: None)
+
+    output = hook.generate_hook_output(MagicMock(), input_data={"agent_id": "agt-1"})
+
+    assert output == {"suppressOutput": True}, (
+        "subagent stop 應 suppressOutput，消除最終訊息劫持"
+    )
+
+
+def test_generate_hook_output_pm_session_behavior_unchanged(monkeypatch):
+    """PM session（無 subagent 標記）行為不變：仍走原掃描路徑。
+    無任何 pending/recent 任務時回 suppressOutput（4c 分支）。"""
+    hook = load_hook_module()
+
+    monkeypatch.setattr(hook, "has_been_triggered_this_session", lambda logger: False)
+    monkeypatch.setattr(hook, "read_session_state", lambda logger: None)
+    scan_called = {"count": 0}
+
+    def _scan(project_root, logger, input_data=None):
+        scan_called["count"] += 1
+        return ([], [])  # 無待恢復、無最近任務
+
+    monkeypatch.setattr(hook, "scan_pending_handoff_tasks", _scan)
+
+    pm_stdin = {"session_id": "s-1", "background_tasks": []}
+    output = hook.generate_hook_output(MagicMock(), input_data=pm_stdin)
+
+    assert scan_called["count"] == 1, "PM session 應正常走 pending 掃描路徑"
+    assert output == {"suppressOutput": True}

@@ -126,6 +126,18 @@ def _apply_mode_to_list(
 
 def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
     """執行 set-acceptance 命令。"""
+    # W1-048: --as 身份申報對照（純前置檢查，deny 不寫入任何狀態）
+    # W1-083: 傳入 command 名稱，使 telemetry 可做 per-command 歸因
+    from ticket_system.lib.identity_guard import check_identity
+    deny = check_identity(
+        version,
+        args.ticket_id,
+        getattr(args, "as_agent", None),
+        command="set-acceptance",
+    )
+    if deny is not None:
+        return deny
+
     mode, err = _pick_mode(args)
     if mode is None:
         print(format_error(ErrorMessages.INVALID_OPERATION, operation=err) if hasattr(ErrorMessages, "INVALID_OPERATION") else f"[ERROR] {err}")

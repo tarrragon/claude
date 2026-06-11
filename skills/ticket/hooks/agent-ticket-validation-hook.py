@@ -1,8 +1,12 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml>=5.0"]
 # ///
+#
+# 依賴說明（W1-056.9）：嵌套深度檢查複用 ticket_system.lib.depth.can_descend，
+# 該模組沿 parent_id 鏈回溯需 load_ticket（pyyaml）。dependencies 顯式宣告
+# pyyaml，避免 uv ephemeral env 不拉 transitive deps 的 PC-124 模式。
 
 """
 Agent Ticket Validation Hook
@@ -13,8 +17,10 @@ Agent Ticket Validation Hook
 - 從 prompt 中提取 Ticket ID 引用
 - 驗證 Ticket 是否存在
 - 驗證 Ticket 是否包含決策樹欄位
+- 嵌套深度檢查（W1-056.9 / 協議 v2 D3）：被引用 ticket depth 達 MAX_TICKET_DEPTH
+  時禁止再以其派發嵌套 Agent（複用 ticket_system.lib.depth.can_descend）
 - 無效時拒絕派發
-- 支援豁免機制：特定代理人類型（如 Explore）可跳過 Ticket 驗證
+- 支援豁免機制：特定代理人類型（如 Explore）可跳過 Ticket 與深度驗證
 
 豁免機制：
 - Explore 代理人：用於前置資訊蒐集，在建立 Ticket 之前執行
@@ -46,6 +52,34 @@ from hook_utils import (
     find_ticket_files, find_ticket_file, validate_ticket_has_decision_tree, save_check_log,
     is_handoff_recovery_mode, validate_hook_input, validate_ticket_unified
 )
+
+# ----------------------------------------------------------------------------
+# 嵌套深度檢查模組（W1-056.9 / 協議 v2 D3 強制層）
+#
+# 複用 ticket_system.lib.depth 的 can_descend / compute_depth（禁止平行實作，
+# ARCH-020）。MAX_TICKET_DEPTH 為深度上限 SSOT（constants.py）。
+#
+# fail-open 設計（Never break userspace）：若 depth 模組無法載入（如 ticket_system
+# 套件不在 sys.path、或環境缺 transitive deps），DEPTH_AVAILABLE = False，深度檢查
+# 整段跳過，既有 ticket 存在性驗證行為完全不變，不阻擋任何既有派發。
+# ----------------------------------------------------------------------------
+
+# 將 skill root 加入 sys.path，使 ticket_system 套件可被 import
+# __file__ = .claude/skills/ticket/hooks/agent-ticket-validation-hook.py
+# parents[1] = .claude/skills/ticket（skill root，含 ticket_system/）
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+try:
+    from ticket_system.lib.depth import can_descend, compute_depth
+    from ticket_system.constants import MAX_TICKET_DEPTH
+    DEPTH_AVAILABLE = True
+except Exception:  # pragma: no cover - 環境缺套件時的 fail-open 分支
+    # 任何 import 失敗（ModuleNotFoundError / ImportError 等）都 fail-open，
+    # 深度檢查停用但既有驗證不受影響。提供 fallback 常數供日誌輸出使用。
+    can_descend = None  # type: ignore[assignment]
+    compute_depth = None  # type: ignore[assignment]
+    MAX_TICKET_DEPTH = 3  # fallback，僅供訊息顯示；實際判斷由 DEPTH_AVAILABLE gate
+    DEPTH_AVAILABLE = False
 
 # ============================================================================
 # 常數定義
@@ -164,6 +198,55 @@ def is_exempt_agent_type(subagent_type: str, logger) -> bool:
         logger.info(f"代理人類型 '{subagent_type}' 豁免 Ticket 驗證（用於前置資訊蒐集）")
     return is_exempt
 
+def check_depth_descend(ticket_id: str, logger) -> Tuple[bool, Optional[str]]:
+    """
+    檢查以 ticket_id 派發嵌套 Agent 是否未超出深度上限（協議 v2 D3）。
+
+    判準（D2 條件 D-3 / D3 機制）：
+        每層 agent 從 ticket depth 推算層級。被引用 ticket 的 depth 達 MAX_TICKET_DEPTH
+        時，代表它已處框架允許的最深層（can_descend = False），不應再以其派發嵌套
+        Agent（會嘗試 descend 到超限深度）。此時 deny 並輸出 ascend / NeedsContext 指引。
+
+    複用 ticket_system.lib.depth.can_descend（禁止平行實作，ARCH-020）。
+
+    Args:
+        ticket_id: 被派發引用的 Ticket ID
+        logger: 日誌物件
+
+    Returns:
+        tuple - (is_ok, error_message)
+            - is_ok: True 表示深度合規（可 descend）或檢查不適用（fail-open）
+            - error_message: 超限時的 deny 指引；合規時為 None
+
+    fail-open：DEPTH_AVAILABLE = False 時直接回傳 (True, None)，不阻擋既有派發。
+    """
+    if not DEPTH_AVAILABLE:
+        logger.info("深度檢查模組不可用（DEPTH_AVAILABLE=False），跳過深度檢查（fail-open）")
+        return True, None
+
+    try:
+        if can_descend(ticket_id):
+            logger.info(f"Ticket {ticket_id} 深度合規，允許嵌套派發")
+            return True, None
+
+        depth = compute_depth(ticket_id)
+        msg = (
+            f"嵌套深度超限：Ticket {ticket_id} 深度 = {depth}，"
+            f"已達框架最大深度上限（MAX_TICKET_DEPTH = {MAX_TICKET_DEPTH}），"
+            f"不可再以其派發嵌套 Agent（會 descend 至超限深度）。\n"
+            f"建議處理方向：\n"
+            f"  1. ascend 回報：以 Exit Status (status: blocked, reason: 深度上限) 將需拆分的工作回報上層 PM\n"
+            f"  2. NeedsContext：在 ticket 的 NeedsContext 章節記錄需拆分的子任務，由 PM 在較淺層重新組織\n"
+            f"  3. 確認任務無法在本層完成時，由 PM 評估是否調整 ticket 階層結構"
+        )
+        logger.warning(f"深度超限 deny: {ticket_id} (depth={depth} >= {MAX_TICKET_DEPTH})")
+        return False, msg
+    except Exception as e:  # pragma: no cover - 深度計算異常時 fail-open
+        # 深度計算過程異常（如 ticket 載入失敗）不應阻擋既有派發，fail-open。
+        logger.info(f"深度檢查過程異常，fail-open 放行: {type(e).__name__}: {e}")
+        return True, None
+
+
 def validate_task_dispatch(tool_input: Dict[str, Any], logger) -> Tuple[bool, Optional[str], Optional[str]]:
     """
     驗證 Task 派發是否有效
@@ -183,6 +266,7 @@ def validate_task_dispatch(tool_input: Dict[str, Any], logger) -> Tuple[bool, Op
     1. 檢查是否為豁免的代理人類型（如 Explore）
     2. 從 prompt 提取 Ticket ID 引用
     3. 驗證 Ticket 是否存在且包含決策樹欄位
+    4. 嵌套深度檢查（協議 v2 D3）：被引用 ticket depth 達上限時禁止再 descend
     """
     prompt = tool_input.get("prompt", "")
     subagent_type = tool_input.get("subagent_type", "")
@@ -203,9 +287,18 @@ def validate_task_dispatch(tool_input: Dict[str, Any], logger) -> Tuple[bool, Op
         logger.error(msg)
         return False, msg, None
 
-    # 步驟 3: 驗證 Ticket
+    # 步驟 3: 驗證 Ticket（存在性 + 決策樹欄位）
     is_valid, error_msg = validate_ticket(ticket_id, logger)
-    return is_valid, error_msg, ticket_id
+    if not is_valid:
+        return is_valid, error_msg, ticket_id
+
+    # 步驟 4: 嵌套深度檢查（協議 v2 D3 強制層，W1-056.9）
+    # ticket 有效後才檢查深度；豁免型 agent 已在步驟 1 提前 return，不會抵達此處。
+    depth_ok, depth_err = check_depth_descend(ticket_id, logger)
+    if not depth_ok:
+        return False, depth_err, ticket_id
+
+    return True, None, ticket_id
 
 # ============================================================================
 # 輸出生成

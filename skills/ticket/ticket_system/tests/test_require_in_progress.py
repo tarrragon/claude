@@ -12,6 +12,7 @@ import pytest
 
 from ticket_system.lib.precondition import (
     FORCE_BYPASS_WARNING,
+    PRE_DISPATCH_SECTIONS,
     require_in_progress,
 )
 
@@ -126,6 +127,62 @@ class TestRequireInProgressPureFunction:
         assert msg is not None
         # 訊息含 empty-ticket-id 暗示語
         assert "空" in msg or "empty" in msg.lower() or "ticket_id" in msg.lower()
+
+
+class TestAllowPending:
+    """W1-058：allow_pending 參數 —— PM bookkeeping（派發前章節）pending 直寫。"""
+
+    def test_pending_with_allow_pending_passes(self, isolated_hook_logs, capsys):
+        """pending + allow_pending=True → 通過，不記 hook-logs、不發警示。"""
+        ok, msg = require_in_progress(
+            _ticket("pending"), "TID-AP-1", "append-log", allow_pending=True
+        )
+        assert ok is True
+        assert msg is None
+
+        # 不記 force log（合法路徑，非逃生閥）
+        log_file = isolated_hook_logs / "cli-force-usage.jsonl"
+        assert not log_file.exists()
+
+        # 不發任何 stderr 警示
+        captured = capsys.readouterr()
+        assert captured.err == ""
+
+    def test_pending_default_still_rejects(self, isolated_hook_logs):
+        """allow_pending 預設 False → pending 仍被擋（W3-044 行為不變）。"""
+        ok, msg = require_in_progress(_ticket("pending"), "TID-AP-2", "append-log")
+        assert ok is False
+        assert "claim" in msg
+
+    def test_blocked_with_allow_pending_still_rejects(self, isolated_hook_logs):
+        """allow_pending 僅影響 pending；blocked 仍被擋。"""
+        ok, msg = require_in_progress(
+            _ticket("blocked"), "TID-AP-3", "append-log", allow_pending=True
+        )
+        assert ok is False
+        assert "release" in msg
+
+    def test_closed_with_allow_pending_still_rejects(self, isolated_hook_logs):
+        """allow_pending 僅影響 pending；closed 仍不可變。"""
+        ok, msg = require_in_progress(
+            _ticket("closed"), "TID-AP-4", "append-log", allow_pending=True
+        )
+        assert ok is False
+        assert "closed" in msg
+
+    def test_missing_status_with_allow_pending_passes(self, isolated_hook_logs):
+        """缺 status 欄位視為 pending（A10），allow_pending=True 時通過。"""
+        ok, msg = require_in_progress(
+            _ticket(None), "TID-AP-5", "append-log", allow_pending=True
+        )
+        assert ok is True
+        assert msg is None
+
+    def test_pre_dispatch_sections_constant(self):
+        """PRE_DISPATCH_SECTIONS 僅含派發前章節，不含執行產出章節。"""
+        assert PRE_DISPATCH_SECTIONS == frozenset(
+            {"Problem Analysis", "Context Bundle"}
+        )
 
 
 class TestForceLogging:

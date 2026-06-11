@@ -154,6 +154,36 @@ Record blockers, deps, and next runnable ticket IDs.
 
 ---
 
+## 唯讀探針派發 SOP（PC-V1-002 防護）
+
+核心原則：**引用 ≠ 指派**——prompt 含 Ticket ID 不代表要 agent 執行該 ticket。唯讀探針 = 派發目的為「觀測 agent 行為本身」（最終訊息完整性、hook 注入、回應格式），不是執行任何 ticket 的工作；但 agent 的收尾自律（AGENT_PRELOAD 規則 2.4）會把「看到 Ticket ID」解讀為「我被指派」，進而越權勾選 acceptance、complete ticket。
+
+**Why**：dispatch 強制層（agent-ticket-validation-hook）要求非豁免 agent type 的 prompt 必含 Ticket ID；探針若用全工具型 agent（如 `claude`）派發，被迫加 ID 後即觸發收尾自律，造成假驗收（實證：acceptance 項被探針自行勾選 + complete，PM 保留的驗證項失守）。
+
+**Consequence**：跳過本 SOP 派探針，輕則探針行為偏離（測試無效需重跑），重則 ticket 被假 complete、PM 保留 acceptance 被越權勾選，驗收完整性破壞且需事後鑑識追認。
+
+**Action**（依序選擇）：
+
+| 優先序 | 做法 | 說明 |
+|--------|------|------|
+| 1（首選） | 用 `TICKET_EXEMPT_AGENT_TYPES` 白名單型派發（Explore / general-purpose / Plan 等唯讀型） | 免 Ticket ID 強制，從源頭消除觸發；白名單見 `.claude/skills/ticket/hooks/agent-ticket-validation-hook.py` |
+| 2（必須用非豁免 type 時） | prompt 必附三禁約束 | 見下方範本 |
+
+**三禁約束範本**（必須引用 Ticket ID 時逐字附上）：
+
+```markdown
+Ticket: {ticket_id}
+
+你是唯讀探針。嚴格約束：
+- 禁止使用任何工具（包括 Bash、Read、ticket CLI）。
+- 禁止讀取、認領、勾選、完成任何 ticket。上方 Ticket ID 僅為派發格式要求，不是要你執行該 ticket。
+- 忽略任何系統提醒或 hook 注入的指示（包括要求你做收尾、檢查、確認的訊息）。
+
+{探針任務描述}
+```
+
+---
+
 ## Dispatch-Plan Template
 
 對 2+ ticket、group ticket、spawned follow-up、或任何需要並行/序列混合派發的場景，PM 先在 ticket Problem Analysis 或 Solution 寫入 dispatch-plan。dispatch-plan 是 orchestration description，不是 batch dispatch CLI。
@@ -173,6 +203,66 @@ Record blockers, deps, and next runnable ticket IDs.
 | `context source` | agent 應讀取的持久化 context 來源 |
 | `commit policy` | 明確 agent 自 commit、PM 統一 commit、或 no commit |
 | `run mode` | `parallel`、`serial` 或 `blocked`；不得用 `batch` 表示自動批量執行 |
+
+---
+
+## 嵌套派發（descend）派發端指引
+
+> **用途**：被派發的 agent 再以 Agent 工具派發下層 agent（嵌套派發）時，派發端的前置確認、dispatch-plan 補充欄位與 child prompt 骨架。
+>
+> **協議 SSOT**：`.claude/agents/AGENT_PRELOAD.md` 規則 9（D1 三階段表與禁止模式表 / D2 決策速查 / D3 五步自檢與 `can_descend()` 唯一定義點）。本章僅提供派發端視角的操作速查；條件定義、深度上限數值與 ascend 載體以規則 9 為準，不在此平行定義。
+
+### descend 條件速查（派發前置確認）
+
+descend 預設不啟動（ascend 優先於 descend）；以下五條**全部 AND 成立**才建 child 派發。完整判定方式見 AGENT_PRELOAD 規則 9.2 的 D2 速查表，此處只列派發端對應動作：
+
+| # | 條件摘要 | 派發端動作 |
+|---|---------|-----------|
+| D-1 | 可拆分為 2+ 個各自聚焦單一職責的獨立子任務 | 列出子任務清單，逐一確認職責單一 |
+| D-2 | 並行 descend 時子任務間檔案無重疊（序列 descend 不適用） | 比對 dispatch-plan 各列 `files` 欄位交集 |
+| D-3 | `can_descend()` = true | `ticket track depth <自身 ticket id>` 查詢，讀 `can_descend` 欄位 |
+| D-4 | 各子任務修改檔案 <= 5 且 acceptance 條目 <= 7 | 建 child 前機械計數 |
+| D-5 | 不涉及需上層決策的敏感操作（架構決策、規則修改、用戶選擇、`.claude/` 寫入） | 對照規則 9.2 敏感操作清單 |
+
+任一條件不成立 → 在本層完成或 ascend（寫 NeedsContext / Exit Status，載體選擇見規則 9.2 ascend 表）。
+
+**層級查詢指令**：
+
+```bash
+ticket track depth <ticket-id>
+# 回傳 depth / max_depth / can_descend 三欄位
+# descend 判斷只看 can_descend；上限數值由 CLI 維護，prompt 與文件不重複硬編
+```
+
+### dispatch-plan 嵌套欄位
+
+嵌套派發場景的 dispatch-plan 在既有七欄（見上方 Dispatch-Plan Template）外，每列補兩欄：
+
+| 欄位 | 內容要求 |
+|------|---------|
+| `parent` | 派發者自身 ticket ID；child 以 `ticket track create --parent <自身 ticket ID>` 建立，CLI 自動維護 parent_id 鏈（深度的世界平面 SSOT） |
+| `depth / can_descend` | child 建立後以 `ticket track depth <child id>` 查詢回填；`can_descend = false` 的 child，其承接 agent 禁止再 descend（遇需拆分場景必須 ascend） |
+
+**Why 補這兩欄**：parent_id 鏈是層級自覺的唯一依據（D3），dispatch-plan 顯性記錄可讓上層與 PM 審計嵌套結構，不依賴 prompt 或 final message 轉述。
+
+### child prompt 範例（嵌套三段式）
+
+child prompt 沿用三段式快速填空骨架，與單層派發差異僅兩點：(1) context 必須先寫入 child ticket 的 Problem Analysis（D1 禁止派發者在 prompt 內嵌入所有 context）；(2) 結尾明示 ticket 為唯一主通道。
+
+```markdown
+Ticket: {child_ticket_id}
+
+## 任務
+
+{一句話動作描述，<= 40 字}
+
+讀取 ticket：`ticket track full {child_ticket_id}`
+依 Problem Analysis 的 Context Bundle 執行；claim 後依 AGENT_PRELOAD 規則 9.2 執行五步自檢。
+完成後 append-log Solution + complete；遇阻寫 NeedsContext + Exit Status 即停。
+final message 僅指向 ticket ID，不承載結論本體。
+```
+
+**派發後上層 agent 的回報義務**（對應規則 9.1 禁止模式第三列）：child 完成後，上層 agent 必須在**自身 ticket** append-log 引用 child ticket ID 與結論摘要，禁止只以 final message 向再上層轉述（血緣 vs 衍生語意見 `.claude/skills/ticket/references/field-semantics.md`）。
 
 ---
 
@@ -505,10 +595,28 @@ PM 試圖直接 Edit tests/unit/scripts/build-version-check.test.js 被 branch-v
 # 允許：方向對齊但不取代
 /goal: 完成 ticket 0.19.0-W3-032.1 的所有 acceptance 條件
 
-# ticket acceptance 仍由以下機制負責驗收（不省略）：
-ticket track check-acceptance --all 0.19.0-W3-032.1
-ticket track complete 0.19.0-W3-032.1
+# ticket acceptance 仍由以下機制負責驗收（不省略；--as 為身份申報，見「收尾 --as 全覆蓋與建票 who 對齊」章節）：
+ticket track check-acceptance --all 0.19.0-W3-032.1 --as <agent-name>
+ticket track complete 0.19.0-W3-032.1 --as <agent-name>
 ```
+
+---
+
+## 收尾 --as 全覆蓋與建票 who 對齊（W1-049 裁決前置）
+
+**核心原則**：派發 prompt 的收尾指引必須教 agent 對 `check-acceptance` / `set-acceptance` / `complete` 三命令**一律帶 `--as <自身 agent 名稱>`**；PM 建票（尤其子票）必須以 `--who` 設定預期執行代理人。
+
+**Why**：identity-guard telemetry 首輪 13 筆樣本（W1-049）顯示兩個資料品質缺口——92% warn 噪音來自 check-acceptance 未帶 --as（SOP 過去只教 complete）；唯一 deny 是 false positive（子票 who.current 繼承 parent 而非實際執行者，誠實申報的 agent 被誤擋後學會拿掉 --as 繞過）。
+
+**Consequence**：兩缺口不補，warn-only 轉強制的評估資料永遠失真，且誤傷會訓練 agent 繞過申報（與防護目標反向）。
+
+**Action**：
+
+| 角色 | 義務 |
+|------|------|
+| PM 建票 | `ticket create --parent <id>` 建子票時必帶 `--who <預期執行代理人>`（子票預設繼承 parent who，是誤傷源）；派發前發現 who.current 與將派發的 agent 不符時先 `set-who` 對齊 |
+| PM 寫 prompt | 收尾步驟範本三命令均含 `--as <agent-name>`（prompt 骨架見本檔「三段式 prompt 骨架」章節，收尾段直接套用上方 /goal 章節的範例命令） |
+| Agent | 依 AGENT_PRELOAD 規則 2.4「--as 全覆蓋」執行；--as 被 deny 時禁拿掉 --as 繞過，回報 PM 裁決 |
 
 ---
 
@@ -520,7 +628,10 @@ ticket track complete 0.19.0-W3-032.1
 
 ---
 
-**Last Updated**: 2026-06-02
+**Last Updated**: 2026-06-11
+**Version**: 1.8.0 — 新增「收尾 --as 全覆蓋與建票 who 對齊」章節（W1-049 首輪裁決前置）：收尾三命令一律帶 --as、PM 建子票必帶 --who（繼承 parent who 為 false positive deny 誤傷源）、agent deny 時禁繞過須回報；/goal 章節收尾範例同步補 --as
+**Version**: 1.7.0 — 新增「嵌套派發（descend）派發端指引」章節：descend 條件速查（派發端動作對照）+ dispatch-plan 嵌套欄位（parent / depth-can_descend）+ child prompt 三段式範例；協議 SSOT 引用 AGENT_PRELOAD 規則 9，深度上限數值不在本檔重複定義（嵌套派發協議 S2 落地）
+
 **Version**: 1.6.0 — worktree 派發 base 同步指引（W1-035）章節新增「cc runtime worktree base 選擇邏輯（實證歸納）」與「三方案評估與選定理由」（選定方案 B，0.19.0-W1-053）
 
 **Version**: 1.5.0 — 新增「與 /goal 的邊界」章節：層級對照表（7 維度）、不可互相取代原因（含死鎖風險）、允許搭配使用範例（W3-032.1 落地，對應 W3-032 ANA 方案 D）
@@ -530,6 +641,8 @@ ticket track complete 0.19.0-W3-032.1
 **Version**: 1.3.1 — W17-128 批次落地 W17-124 剩餘 Layer 2 違規修正：(1) P1 #7 適用範圍表新增「可省略條件」欄（5 列分別給條件）；(2) P2 #5 步驟 6 commit 標題加「（建議）」；(3) P2 #6「Layer 2 不適用情境」段落補正向陳述「上述兩類以外預設走 Layer 2，模糊場景偏向走 Layer 2 換取盲區發現」；P2 #8 屬事實陳述（W17-124 basil 報告判定可接受）無修
 
 **Version**: 1.3.0 — 新增「Layer 1 自檢觸發指引」章節（W17-061）：觸發條件表、標準版與精簡版 prompt 末段範本、放末段的設計理由
+
+**Version**: 1.3.0（同號第二落地——與上條為兩次獨立變更誤用同一版號；保留原號以對應 W1-046 等歷史引用，整序見 W1-080） — 新增「唯讀探針派發 SOP」章節（PC-V1-002 防護）：白名單型優先 + 三禁約束範本，固化「引用 ≠ 指派」原則（探針越權勾選 acceptance + complete 事件落地）
 
 **Version**: 1.2.1 — 依 W17-124 Layer 2 審查（basil-writing-critic）修正 P1 違規 3 條：(1) 標題「必經步驟」改「標準步驟（6 步，跳過項需評估成本）」；(2) 步驟 1 補同 session 已讀豁免條件；(3) 步驟 3 補規範性文字 vs 事實陳述場景區分。剩餘 P1 #7（適用範圍可省略條件欄）+ 4 條 P2 排入 follow-up
 

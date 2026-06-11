@@ -86,3 +86,94 @@ class TestAppendLogPrecondition:
         assert record["ticket_id"] == pending_ticket
         assert record["operation"] == "append-log"
         assert record["status_at_time"] == "pending"
+
+
+class TestAppendLogPreDispatchSections:
+    """W1-058：派發前章節（Problem Analysis / Context Bundle）pending 直寫。"""
+
+    def test_pending_problem_analysis_passes_without_force(
+        self, pending_ticket, precondition_tmp_dir, precondition_hook_logs_dir, capsys
+    ):
+        """pending + Problem Analysis → 不需 --force 即可寫入（既有章節 append）。"""
+        rc = _call_append_log(
+            pending_ticket, section="Problem Analysis", content="派發前根因分析"
+        )
+        assert rc == 0
+        body = (precondition_tmp_dir / f"{pending_ticket}.md").read_text(encoding="utf-8")
+        assert "派發前根因分析" in body
+
+        # 不發 status 阻擋訊息、不記 force log（合法 bookkeeping 路徑）
+        captured = capsys.readouterr()
+        assert "status=pending" not in captured.err
+        assert "--force" not in captured.err
+        assert not (precondition_hook_logs_dir / "cli-force-usage.jsonl").exists()
+
+    def test_pending_context_bundle_passes_with_autocreate(
+        self, pending_ticket, precondition_tmp_dir, precondition_hook_logs_dir, capsys
+    ):
+        """pending + Context Bundle → 通過且觸發 W1-025 缺失章節自動補建。"""
+        rc = _call_append_log(
+            pending_ticket, section="Context Bundle", content="### 派發前置資訊"
+        )
+        assert rc == 0
+        body = (precondition_tmp_dir / f"{pending_ticket}.md").read_text(encoding="utf-8")
+        assert "## Context Bundle" in body
+        assert "### 派發前置資訊" in body
+        assert not (precondition_hook_logs_dir / "cli-force-usage.jsonl").exists()
+
+    def test_pending_solution_still_rejects(
+        self, pending_ticket, precondition_tmp_dir, capsys
+    ):
+        """執行產出章節（Solution）維持 in_progress 限制（W3-044 不變）。"""
+        rc = _call_append_log(pending_ticket, section="Solution", content="不應寫入")
+        assert rc == 2
+        body = (precondition_tmp_dir / f"{pending_ticket}.md").read_text(encoding="utf-8")
+        assert "不應寫入" not in body
+        captured = capsys.readouterr()
+        assert "claim" in captured.err
+
+    def test_pending_test_results_still_rejects(self, pending_ticket, capsys):
+        """執行產出章節（Test Results）維持 in_progress 限制。"""
+        rc = _call_append_log(pending_ticket, section="Test Results", content="x")
+        assert rc == 2
+        captured = capsys.readouterr()
+        assert "status=pending" in captured.err
+
+    def test_pending_pre_dispatch_with_force_still_logs(
+        self, pending_ticket, precondition_hook_logs_dir, capsys
+    ):
+        """既有 --force 行為不變：即使章節屬派發前章節，帶 --force 仍記 audit。"""
+        rc = _call_append_log(
+            pending_ticket,
+            section="Problem Analysis",
+            content="force 路徑",
+            force=True,
+        )
+        assert rc == 0
+        log_file = precondition_hook_logs_dir / "cli-force-usage.jsonl"
+        assert log_file.exists()
+        record = json.loads(log_file.read_text(encoding="utf-8").strip())
+        assert record["operation"] == "append-log"
+        assert record["status_at_time"] == "pending"
+        captured = capsys.readouterr()
+        assert "--force" in captured.err
+
+    def test_in_progress_pre_dispatch_passes(
+        self, in_progress_ticket, precondition_tmp_dir
+    ):
+        """in_progress + 派發前章節 → 照常通過（回歸防護）。"""
+        rc = _call_append_log(
+            in_progress_ticket, section="Problem Analysis", content="執行中補充分析"
+        )
+        assert rc == 0
+        body = (precondition_tmp_dir / f"{in_progress_ticket}.md").read_text(
+            encoding="utf-8"
+        )
+        assert "執行中補充分析" in body
+
+    def test_blocked_pre_dispatch_still_rejects(self, blocked_ticket, capsys):
+        """blocked + 派發前章節 → 仍被擋（allow_pending 僅放行 pending）。"""
+        rc = _call_append_log(blocked_ticket, section="Context Bundle", content="x")
+        assert rc == 2
+        captured = capsys.readouterr()
+        assert "release" in captured.err

@@ -21,6 +21,7 @@ from typing import Any, Dict, Optional
 
 import yaml
 
+from ticket_system.lib.ambiguous_prefix import register_ambiguous_prefix
 from ticket_system.lib.constants import (
     STATUS_IN_PROGRESS,
     STATUS_COMPLETED,
@@ -1715,6 +1716,23 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         nargs="?",
         default=None,
         help=HandoffMessages.ARG_TICKET_ID_HELP
+    )
+    # --to 攔截：撞 --to-parent/--to-child/--to-sibling（1.0.0-W1-028）
+    register_ambiguous_prefix(
+        parser,
+        "--to",
+        "--to 不是有效旗標，請使用完整旗標名："
+        "--to-parent（交接給父 Ticket）、"
+        "--to-child（交接給子 Ticket）"
+        "或 --to-sibling（交接給兄弟 Ticket）",
+    )
+    # --from 攔截：撞 --from-ticket-id/--from-worklog（1.0.0-W1-028）
+    register_ambiguous_prefix(
+        parser,
+        "--from",
+        "--from 不是有效旗標，請使用完整旗標名："
+        "--from-ticket-id（搭配 --auto 的來源 Ticket ID）"
+        "或 --from-worklog（從 worklog 偵測 handoff 段落）",
     )
     parser.add_argument(
         "--to-parent",

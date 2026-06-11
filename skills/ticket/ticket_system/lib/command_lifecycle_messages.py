@@ -391,6 +391,21 @@ class CreateMessages:
     DUPLICATE_STATUS_LABEL_IN_PROGRESS = "進行中"
     DUPLICATE_STATUS_LABEL_COMPLETED = "已完成"
 
+    # Tier 2 阻擋層訊息（1.0.0-W1-040.1）
+    DUPLICATE_BLOCK_HEADER = (
+        "[ERROR] 偵測到同窗口高相似度 Ticket，已阻擋建立（冪等防護）："
+    )
+    DUPLICATE_BLOCK_ITEM = (
+        "   - {ticket_id}: {title} [{status_label}] (相似度 {similarity:.3f})"
+    )
+    DUPLICATE_BLOCK_SUGGESTION = (
+        "   若確定要建立，請加上 --allow-duplicate 旁路本防護；"
+        "否則建議沿用或 migrate 既有 Ticket"
+    )
+    DUPLICATE_BLOCK_BYPASSED = (
+        "[INFO] --allow-duplicate 已啟用，略過同窗口高相似度阻擋"
+    )
+
     # 問題 4 新增常數（0.1.2-W4-001.1）
     EXEMPTED_PARTIAL_PARAMS_ERROR = (
         "[ERROR] 豁免條件下三個參數必須全部提供或全部省略"
@@ -453,6 +468,9 @@ class FieldsMessages:
     # Fields 的實際值顯示
     FIELD_VALUE_SEPARATOR = ": "
     NO_FIELDS_FOUND = "未找到任何欄位"
+
+    # set-where 路徑型輸入同步 where.files（W1-078 修復）
+    WHERE_FILES_SYNCED = "   where.files 已同步（{count} 項）:"
 
 
 def format_msg(template: str, **kwargs) -> str:

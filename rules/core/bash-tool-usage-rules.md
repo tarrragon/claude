@@ -15,15 +15,33 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 | uv 指定目錄 | `cd .claude/skills/ticket && uv run ...` | `uv -d .claude/skills/ticket run ...` |
 | 工作目錄已污染 | 無操作 | `cd /your/project/root && ...` |
 
-**三種安全做法速查**：
+**四種安全做法速查**：
 
 | 方法 | 指令形式 | 適用情境 |
 |------|---------|---------|
-| 子 shell（推薦） | `(cd path && command)` | 任何命令，通用最廣 |
+| git -C（git 操作首選） | `git -C path <subcommand>` | git 操作，完全不換 cwd、不觸發 chpwd |
+| 子 shell | `(cd path && command)` | 非 git 命令，通用最廣 |
 | uv -d 參數 | `uv -d path run ...` | 僅限 uv 指令 |
 | 絕對路徑還原 | `cd /project/root && ...` | 污染後補救 |
 
-> **chpwd 警告**：本環境 zsh 有 `chpwd` hook，裸 `cd` 觸發 `ls` 淹沒工具結果。必須用子 shell `()`。
+> **chpwd 警告**：本環境 zsh 有 `chpwd` hook，裸 `cd` 觸發 `ls` 淹沒工具結果。git 操作用 `git -C`（首選，完全不觸發 chpwd），其餘用子 shell `()`。**裸 cd 是 confabulation 觸發鏈第 1 環**（輸出淹沒 → result 邊界模糊 → 同訊息腦補）：見 `tool-output-trust-rules` 規則 4 + PC-166。
+
+### 輸出可疑/被淹沒當下的即時協議（confabulation 防護）
+
+工具輸出出現「無法定位本次命令真實 result」（chpwd ls 淹沒、輸出交錯、夾帶 markdown 旁白）時，依序執行：
+
+| 步驟 | 動作 |
+|------|------|
+| 1 停手 | 不在同訊息續寫「預期輸出」（confabulation 點火動作，`tool-output-trust-rules` 規則 1） |
+| 2 重發乾淨原子命令 | 用 `git -C`／子 shell 避免 chpwd，命令極簡單一目的 |
+| 3 只信 raw stdout | 帶旁白／markdown 修飾的「輸出」視為自生雜訊（`tool-output-trust-rules` 規則 2） |
+| 4 固定值驗證 | 關鍵事實用 hash／二元 grep／整數計數確認（`tool-output-trust-rules` 規則 3） |
+
+**Why**：規則二教「事前」預防大輸出（加 head／tail），但 chpwd 淹沒是 shell hook 副作用，head／tail 無效（IMP-056 變體）。「淹沒已發生」的當下若無協議，預設行為退化成「用預期填補」（confabulation）。
+
+**Consequence**：缺即時協議時，PM 在淹沒當下傾向把混入的 chpwd ls 當「正常但吵」接受並續寫，滑入 confabulation。
+
+**Action**：見上表四步；核心是「停手重發」而非「帶疑推進」。
 
 ---
 
@@ -174,4 +192,6 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 
 ---
 
-**Last Updated**: 2026-05-29 | **Version**: 2.2.0 — 新增規則六「長背景任務可觀測性」（PYTHONUNBUFFERED=1 + tee streamable）及與規則二大輸出防護的調和說明（0.19.0-W3-086 spike 實證落地 / 0.19.0-W3-088）。歷史 2.0–2.1 版見 git log。**Source**: IMP-008、IMP-009、index.lock 競爭、PC-087、W3-086
+**Last Updated**: 2026-06-10 | **Version**: 2.3.0 — 規則一新增「輸出可疑/被淹沒當下的即時協議」子節（confabulation 防護，chpwd 淹沒已發生時的停手重發四步）補 footer（前次新增整節未 bump）。歷史 2.0–2.2 版見 git log。**Source**: IMP-008、IMP-009、index.lock 競爭、PC-087、W3-086、PC-166
+
+**Version**: 2.2.0 — 新增規則六「長背景任務可觀測性」（PYTHONUNBUFFERED=1 + tee streamable）及與規則二大輸出防護的調和說明（0.19.0-W3-086 spike 實證落地 / 0.19.0-W3-088）。

@@ -94,9 +94,10 @@ def load_top_ready(
     - id 為穩定排序鍵
     """
     handoff_info = handoff_info or {}
+    ticket_map = {t.get("id"): t for t in tickets if t.get("id")}
     candidates = []
     for t in tickets:
-        if not _is_unblocked_pending(t):
+        if not _is_unblocked_pending(t, ticket_map):
             continue
         readiness = _compute_readiness(t, handoff_info)
         if readiness != "READY":

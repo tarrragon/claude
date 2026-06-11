@@ -45,6 +45,7 @@ from hook_utils import (  # noqa: E402
     get_project_root,
     scan_ticket_files_by_version,
     parse_ticket_frontmatter,
+    PM_ONLY_PREFIX,
 )
 from datetime import datetime  # noqa: E402
 
@@ -351,6 +352,35 @@ def _mark_blocked_this_session(project_root: Path, logger) -> None:
         logger.warning("建立 stop flag 失敗: %s", e)
 
 
+def _is_subagent_context(input_data: dict, logger) -> bool:
+    """判斷 stdin 是否帶 subagent context 標記（W1-044）。
+
+    Why：本 hook 註冊於 Stop event（主線程停止）。CC hook input schema
+    （.claude/references/hook-architect-technical-reference.md）中 SubagentStop
+    才帶 agent_id / agent_type，Stop 不帶。若 stdin 出現 agent_id / agent_type，
+    代表本次觸發實際處於 subagent context，此時注入 systemMessage 漂移警告會
+    劫持 agent 最終訊息（W1-030 判定 worklog-sync-check 為「中」劫持潛力來源）。
+
+    Consequence：subagent context 下不偵測會把雙軌漂移警告注入 agent 回傳值。
+
+    Action：caller（detect_sync_drift）在最前面呼叫；True 時 return None 跳過偵測。
+    採 documented schema 欄位（agent_id/agent_type）判別，不用 transcript heuristic。
+
+    SOT: .claude/skills/ticket/hooks/handoff-auto-resume-stop-hook.py:is_subagent_context
+    任一處更新需同步另一處（ARCH-020 同構雙寫，PEP 723 隔離無法 import lib）。
+    """
+    if not isinstance(input_data, dict):
+        return False
+    has_marker = bool(input_data.get("agent_id")) or bool(input_data.get("agent_type"))
+    if has_marker:
+        logger.info(
+            "偵測到 subagent context（agent_id=%s, agent_type=%s），跳過 sync check",
+            input_data.get("agent_id"),
+            input_data.get("agent_type"),
+        )
+    return has_marker
+
+
 def _has_background_agents(input_data: dict, logger) -> bool:
     """判斷 input_data 是否有背景代理人正在執行（W3-026.3）。
 
@@ -468,6 +498,11 @@ def detect_sync_drift(
 
     input_data 參數設為 Optional 以保持向後相容（caller 不傳時等同 {} fallback）。
     """
+    # W1-044：subagent context 偵測。subagent stop 時跳過 sync check，避免
+    # systemMessage 漂移警告劫持 agent 最終訊息（W1-030）。置於所有偵測最前面。
+    if _is_subagent_context(input_data or {}, logger):
+        return None
+
     # W17-176 根因 1：stop flag 防重複觸發
     if _is_blocked_this_session(project_root, logger):
         return None
@@ -560,8 +595,11 @@ def main():
         if warning:
             # Stop event schema 不允許 hookSpecificOutput.additionalContext；
             # 改用 top-level systemMessage（W17-158）。
+            # 受眾標記（PC-V1-004 防護 C）：Stop event 無 agent_id，程式層無法
+            # 過濾 subagent；加 PM-only 前綴讓 AGENT_PRELOAD 忽略規則補位，
+            # 與既有 subagent context 偵測（W1-030 / W1-044）互補形成雙層。
             output = {
-                "systemMessage": warning,
+                "systemMessage": PM_ONLY_PREFIX + warning,
             }
             print(json.dumps(output, ensure_ascii=False))
             # W17-176 根因 1：成功輸出 warning 後標記 stop flag，後續本 session

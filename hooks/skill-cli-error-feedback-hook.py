@@ -54,7 +54,7 @@ from typing import Dict, Any, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output
 
 # ============================================================================
 # 常數定義
@@ -417,13 +417,13 @@ def main() -> int:
             known_subfields=system_gap["known_subfields"],
             command_summary=command_summary,
         )
-        output = {
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "additionalContext": feedback_message,
-            }
-        }
-        print(json.dumps(output, ensure_ascii=False, indent=2))
+        # 系統功能缺失回饋為 PM-only：統一出口過濾 subagent 觸發（PC-V1-004 防護 C）
+        emit_hook_output(
+            "PostToolUse",
+            additional_context=feedback_message,
+            audience="pm_only",
+            input_data=input_data,
+        )
         return EXIT_SUCCESS
 
     # 偵測 SKILL 引導缺陷錯誤
@@ -447,14 +447,13 @@ def main() -> int:
         command_base=command_base,
     )
 
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "PostToolUse",
-            "additionalContext": feedback_message
-        }
-    }
-
-    print(json.dumps(output, ensure_ascii=False, indent=2))
+    # SKILL 引導缺陷回饋為 PM-only：統一出口過濾 subagent 觸發（PC-V1-004 防護 C）
+    emit_hook_output(
+        "PostToolUse",
+        additional_context=feedback_message,
+        audience="pm_only",
+        input_data=input_data,
+    )
     return EXIT_SUCCESS
 
 

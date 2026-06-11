@@ -45,6 +45,7 @@ from ticket_system.lib.ticket_loader import list_tickets, load_ticket
 from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.section_locator import find_section
 from ticket_system.lib.staleness import is_stale_in_progress
+from ticket_system.lib.blocker_resolution import is_fully_unblocked
 
 
 # ---------------------------------------------------------------------------
@@ -89,22 +90,32 @@ def _priority_rank(ticket: Dict) -> int:
     return _PRIORITY_ORDER.get(raw, _DEFAULT_PRIORITY_RANK)
 
 
-def _is_unblocked_pending(ticket: Dict) -> bool:
-    """list 視圖規則：status=pending 且 blockedBy=[]。"""
+def _is_unblocked_pending(
+    ticket: Dict, ticket_map: Optional[Dict[str, Dict]] = None
+) -> bool:
+    """list 視圖規則：status=pending 且所有 blocker 皆已解除。
+
+    W1-020：blocker 已 completed/closed 但 blockedBy 欄位未清理時，字面
+    `len(blockedBy)==0` 會誤判為 blocked（W8-042 缺陷）。改用共用 predicate
+    `is_fully_unblocked`（scheduler 場景 include_closed_as_resolved=True）。
+
+    ticket_map 為 None 時退回字面判定（向後相容無法提供全集的呼叫端）。
+    """
     if ticket.get("status") != "pending":
         return False
-    blocked_by = ticket.get("blockedBy") or []
-    return len(blocked_by) == 0
+    if ticket_map is None:
+        return len(ticket.get("blockedBy") or []) == 0
+    return is_fully_unblocked(ticket, ticket_map, include_closed_as_resolved=True)
 
 
-def _is_listable(ticket: Dict) -> bool:
+def _is_listable(ticket: Dict, ticket_map: Optional[Dict[str, Dict]] = None) -> bool:
     """W17-031.4: list 視圖納入條件 = unblocked pending OR stale in_progress。
 
     stale in_progress 加入 list 是為了讓 PM 在 runqueue 看見遺留 ticket
     並人工介入（評估 agent 真停滯還是長任務）。W17-033 自律 + acceptance-gate-hook
     無法覆蓋 agent 中斷案例（agent 已不在）。
     """
-    if _is_unblocked_pending(ticket):
+    if _is_unblocked_pending(ticket, ticket_map):
         return True
     if is_stale_in_progress(ticket):
         return True
@@ -306,7 +317,8 @@ def _render_list(
     context: Optional[str] = None,
     handoff_info: Optional[Dict[str, Dict]] = None,
 ) -> str:
-    runnable = [t for t in tickets if _is_listable(t)]
+    ticket_map = {t.get("id"): t for t in tickets if t.get("id")}
+    runnable = [t for t in tickets if _is_listable(t, ticket_map)]
     runnable.sort(
         key=lambda t: (_priority_rank(t), str(t.get("id", "")))
     )

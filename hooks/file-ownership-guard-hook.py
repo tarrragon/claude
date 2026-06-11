@@ -25,7 +25,7 @@ from typing import Optional
 
 from hook_utils.hook_base import get_project_root
 from hook_utils.hook_logging import setup_hook_logging
-from hook_utils.hook_io import read_json_from_stdin
+from hook_utils.hook_io import read_json_from_stdin, emit_hook_output
 from hook_utils.hook_ticket import (
     parse_ticket_frontmatter,
     find_ticket_file,
@@ -794,36 +794,37 @@ def _validate_input(
     return target_ticket_id
 
 
-def _generate_output(
+def _emit_output(
     target_ticket_id: str,
     actionable_conflicts: list[ConflictInfo],
+    input_data: dict,
     logger: logging.Logger
-) -> dict:
-    """根據衝突結果產生 Hook 輸出
+) -> None:
+    """根據衝突結果輸出 Hook JSON（emit_hook_output 統一出口）
+
+    衝突警告為 PM 派發決策參考，標 audience=pm_only：
+    subagent 觸發時由統一出口過濾（PC-V1-004 防護 C）。
 
     Args:
         target_ticket_id: 派發目標 Ticket ID
         actionable_conflicts: 可操作衝突清單
+        input_data: Hook stdin JSON（供統一出口判定觸發方）
         logger: 日誌物件
-
-    Returns:
-        dict: Hook 輸出 JSON
     """
     if actionable_conflicts:
         warning_msg = format_conflict_warning(
             target_ticket_id, actionable_conflicts
         )
         logger.warning(warning_msg)
-
-        return {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "additionalContext": warning_msg
-            }
-        }
+        emit_hook_output(
+            "PreToolUse",
+            additional_context=warning_msg,
+            audience="pm_only",
+            input_data=input_data,
+        )
     else:
         logger.debug("無衝突，靜默通過")
-        return DEFAULT_OUTPUT
+        emit_hook_output("PreToolUse")
 
 
 def main() -> int:
@@ -861,8 +862,7 @@ def main() -> int:
             c for c in conflicts if not c.is_parent_child
         ]
 
-        output = _generate_output(target_ticket_id, actionable_conflicts, logger)
-        print(json.dumps(output, ensure_ascii=False))
+        _emit_output(target_ticket_id, actionable_conflicts, input_data, logger)
         return 0
 
     except Exception as e:

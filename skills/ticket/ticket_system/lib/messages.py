@@ -115,6 +115,11 @@ class WarningMessages:
     BLOCKED_DEPENDENCIES = "[WARNING] 此 Ticket 有阻塞依賴:"
     CLAIMABLE_STATUS_WARNING = "[Warning] {error_msg}"
     SEQ_IGNORED_WITH_PARENT = "[提示] --seq {seq} 在子任務模式下被忽略，自動使用序號 {child_seq}"
+    DEPTH_LIMIT_REACHED = (
+        "[Warning] 新子任務 {ticket_id} 深度為 {depth}，已達/超過嵌套上限 MAX_TICKET_DEPTH={max_depth}\n"
+        "   嵌套派發深度上限為平台保留邊距（W1-056.5 協議 v2 D3）；此 ticket 不應再往下派發子任務\n"
+        "   查詢深度：ticket track depth {ticket_id}"
+    )
     EXECUTION_LOG_NOT_FILLED = "[WARNING] 以下執行日誌區段尚未填寫:"
     EXECUTION_LOG_SUGGESTION = "建議使用以下命令填寫:"
     COMPLETED_NO_DIRECTION = "[Warning] {ticket_id} 已完成但無交接方向，請確認 handoff 設定"

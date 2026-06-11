@@ -31,6 +31,7 @@ from hook_utils import (
     run_hook_safely,
     read_json_from_stdin,
     get_project_root,
+    is_subagent_environment,
 )
 
 try:
@@ -433,6 +434,15 @@ def main() -> int:
 
     input_data = read_json_from_stdin(logger)
     if input_data is None:
+        return EXIT_SUCCESS
+
+    # 偵測 subagent 環境：agent_id 僅在 subagent 中出現（W1-071 / PC-V1-004 入口污染防護）
+    # 開 Ticket / 派發代理人等動作性提示屬 PM 決策，注入 subagent context 會誘導越界
+    if is_subagent_environment(input_data):
+        logger.debug(
+            "偵測到 subagent 環境（agent_id=%s），跳過測試後置提醒",
+            input_data.get("agent_id"),
+        )
         return EXIT_SUCCESS
 
     if not _is_test_command(input_data):

@@ -557,22 +557,80 @@ def generate_hook_output(
     return output
 
 
+_VALID_AUDIENCES = ("all", "pm_only")
+"""emit_hook_output 的合法受眾枚舉：all（雙方可見）/ pm_only（僅 PM 主線程）"""
+
+
+PM_ONLY_PREFIX = "[PM-ONLY] "
+"""PM 專屬 hook 注入訊息的受眾標記前綴（PC-V1-004 防護 C 規則層契約）。
+
+單一來源（ARCH-020）：所有 PM-only 注入訊息的前綴一律引用本常數，
+禁止各 hook 自行複製字串字面，避免拼字漂移使 AGENT_PRELOAD 的
+忽略規則失去比對錨點。
+
+用途分兩層：
+1. emit_hook_output(audience="pm_only")：主線程觸發時自動加前綴（本模組單點實作）
+2. Stop 類 hook（systemMessage / decision-reason 等 emit_hook_output 無法
+   覆蓋的輸出 shape）：import 本常數自行前置。Stop event 無 agent_id，
+   程式層無法過濾，前綴是該盲區唯一的受眾標記手段，
+   由 AGENT_PRELOAD 規則層教 subagent 忽略。
+"""
+
+
 def emit_hook_output(
     hook_event_name: str,
     additional_context: Optional[str] = None,
     permission_decision: Optional[str] = None,
     permission_decision_reason: Optional[str] = None,
+    *,
+    audience: str = "all",
+    input_data: "dict | None" = None,
 ) -> None:
-    """一步完成 Hook JSON stdout 輸出 — 防止遺漏 json.dumps 格式
+    """一步完成 Hook JSON stdout 輸出 — 統一格式 + 受眾過濾單點（ARCH-V1-001）
 
     組合 generate_hook_output + json.dumps + print，確保輸出格式正確。
+
+    受眾過濾（PC-V1-004 防護 C）：audience="pm_only" 且觸發方為 subagent
+    （input_data 含 agent_id）時，丟棄 additional_context，輸出退化為
+    無訊息的基本結構（沿用 W1-071 既有跳過慣例）。過濾邏輯只存在於
+    本函式，各 hook 禁止自行複製判斷（ARCH-020）。
+
+    受眾標記前綴（PC-V1-004 防護 C 規則層）：audience="pm_only" 且觸發方為
+    主線程時，additional_context 自動加上 PM_ONLY_PREFIX，供 AGENT_PRELOAD
+    忽略規則比對。
+
+    已知盲區：Stop event 無 agent_id（CC runtime 硬約束），
+    is_subagent_environment 對其永遠返回 False；該盲區由
+    [PM-ONLY] 前綴 + AGENT_PRELOAD 忽略規則補位。
 
     Args:
         hook_event_name: Hook 事件名稱
         additional_context: 可選的額外上下文訊息
         permission_decision: 可選的權限決策
         permission_decision_reason: 可選的權限決策理由
+        audience: 訊息受眾，"all"（預設，向後相容既有呼叫）或 "pm_only"
+        input_data: Hook stdin JSON；audience="pm_only" 時應傳入，
+                    供 is_subagent_environment 判定觸發方（None 視為 PM）
+
+    Raises:
+        ValueError: audience 不在合法枚舉內（開發期錯誤，測試階段即暴露，
+                    避免拼字錯誤造成 PM-only 訊息靜默洩漏給 subagent）
     """
+    if audience not in _VALID_AUDIENCES:
+        raise ValueError(
+            "audience 必須為 {} 之一，收到: {!r}".format(
+                "/".join(_VALID_AUDIENCES), audience
+            )
+        )
+
+    if audience == "pm_only" and is_subagent_environment(input_data):
+        # subagent 觸發：丟棄 PM-only 訊息；permission 欄位屬功能性決策不過濾
+        additional_context = None
+    elif audience == "pm_only" and additional_context:
+        # 主線程觸發：加受眾標記前綴（PC-V1-004 防護 C）。程式層過濾涵蓋不到的
+        # 環境（如 Stop event 無 agent_id）由 AGENT_PRELOAD 忽略規則依此前綴補位。
+        additional_context = PM_ONLY_PREFIX + additional_context
+
     output = generate_hook_output(
         hook_event_name, additional_context,
         permission_decision, permission_decision_reason,

@@ -11,6 +11,10 @@ from typing import Dict, Any
 import pytest
 import yaml
 
+# W1-054：`_isolate_project_root`（autouse）與 `real_repo_root`（opt-out）已上提至
+# skill-root `.claude/skills/ticket/conftest.py`，兩測試樹共享單一副本（DRY 收斂）。
+# 本檔僅保留與此目錄耦合（parents[4] 相對路徑）或僅本樹消費的 fixture。
+
 
 @pytest.fixture(scope="session", autouse=True)
 def _assert_no_repo_pollution():

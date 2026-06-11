@@ -4,7 +4,7 @@ description: Claude Code Hook System Design and Implementation Expert. Designs a
 tools: Write, Read, Edit, Grep, LS, Bash, Glob, mcp__serena__*
 permissionMode: bypassPermissions
 color: blue
-model: opus
+model: inherit
 effort: low
 ---
 
@@ -252,6 +252,7 @@ def get_version() -> Optional[str]:  # 不要寫 str | None
 | 3 | 若完成時且涉及代理人 → **必用 SubagentStop**，禁用 PostToolUse(Agent) |
 | 4 | 查 `.claude/references/hook-architect-technical-reference.md` 確認選用 event 在 `run_in_background: true` 模式的真實觸發時機（不憑名稱推論） |
 | 5 | 狀態檔案匹配 → **必用 source of truth 識別碼**（如 SubagentStop input 的 `agent_id`），禁用易碰撞的字串（如 `agent_description`） |
+| 6 | 輸出 `additionalContext` / `systemMessage` → 依 `.claude/references/hook-architect-technical-reference.md`「受眾評估 checklist」評估 subagent 受眾適切性；PM-only 訊息必加 `is_subagent_environment()` 早期跳過（PC-V1-004） |
 
 ### Event 選擇對照表
 
@@ -436,12 +437,13 @@ rosemary-project-manager (驗收和部署)
 
 ---
 
-**Last Updated**: 2026-02-25
-**Version**: 3.0.0 (精簡重寫：1231→~380 行，外移技術參考)
+**Last Updated**: 2026-06-11
+**Version**: 3.1.0 (強制檢查清單新增步驟 6：additionalContext / systemMessage 受眾評估指引列)
 **Specialization**: Claude Code Hook System Design and Implementation
 **Status**: Active
 
 **Change Log**:
+- v3.1.0 (2026-06-11): Hook event 選擇規則強制檢查清單新增步驟 6，引用 technical-reference「受眾評估 checklist」（PC-V1-004 防護 B：PM-only 訊息加 `is_subagent_environment()` 早期跳過）
 - v3.0.0 (2026-02-25): 精簡重寫
   - 刪除重複段落（工作流程x2、價值主張x2、品質指標x2、輸出模板x2）
   - 外移詳細技術參考到 .claude/references/hook-architect-technical-reference.md

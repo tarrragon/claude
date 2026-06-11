@@ -376,7 +376,14 @@ class TestCreateBatchTickets:
                     ]
 
                     with patch("ticket_system.commands.bulk_create._create_ticket_config") as mock_config:
-                        mock_config.return_value = {"parent_id": parent_id}
+                        # mock config 須含 ticket_type（checklist 驗證 line 244 依賴），
+                        # 否則迴圈內 config["ticket_type"] KeyError 被捕捉為 failed（W1-040.1 修復）
+                        mock_config.return_value = {
+                            "parent_id": parent_id,
+                            "ticket_type": "IMP",
+                            "title": "子任務",
+                            "what": "目標",
+                        }
 
                         with patch("ticket_system.commands.bulk_create.create_ticket_frontmatter"):
                             with patch("ticket_system.commands.bulk_create.create_ticket_body"):

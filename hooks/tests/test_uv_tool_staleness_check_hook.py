@@ -68,6 +68,48 @@ def make_installed(tmp_path):
 
 
 # ----------------------------------------------------------------------------
+# 佈局感知 helper（目錄模組 vs 單檔模組共用）
+# ----------------------------------------------------------------------------
+def _write_source_for_skill(fake_root: Path, skill, files: dict) -> None:
+    """
+    依 skill 佈局在 fake_root 建立 source。
+
+    - 單檔模組（single_file=True）：module_subpath 指向單一 .py 檔，取 files 第一個值寫入該檔。
+    - 目錄模組：module_subpath 為目錄，files 內每個 rel 寫成子檔。
+    """
+    target = fake_root / skill.module_subpath
+    if getattr(skill, "single_file", False):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        content = next(iter(files.values()))
+        target.write_text(content if isinstance(content, str) else content.decode())
+    else:
+        target.mkdir(parents=True, exist_ok=True)
+        for rel, content in files.items():
+            p = target / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content if isinstance(content, str) else content.decode())
+
+
+def _make_installed_for_skill(make_installed, tmp_path, skill, files: dict) -> Path:
+    """
+    依 skill 佈局建立 installed，回傳 find_installed_module_dir 應回傳的路徑。
+
+    - 單檔模組：建立 site-packages 目錄含單一 .py 檔，回傳「site-packages 目錄」
+      （hook 內以 package_dir_name="." 取 site-packages 後再拼檔名定位單檔）。
+    - 目錄模組：建立模組目錄含子檔，回傳該模組目錄。
+    """
+    if getattr(skill, "single_file", False):
+        site_dir = tmp_path / "installed_sp" / skill.cli_name
+        site_dir.mkdir(parents=True, exist_ok=True)
+        content = next(iter(files.values()))
+        (site_dir / skill.package_dir_name).write_text(
+            content if isinstance(content, str) else content.decode()
+        )
+        return site_dir
+    return make_installed(skill.package_dir_name, files)
+
+
+# ----------------------------------------------------------------------------
 # T01 (AC1): hook file exists and is registered in settings.json
 # ----------------------------------------------------------------------------
 def test_hook_file_exists_and_registered_in_settings():
@@ -97,12 +139,13 @@ def test_hook_file_exists_and_registered_in_settings():
 # ----------------------------------------------------------------------------
 # T02 (AC2): SKILLS 涵蓋 7 個 skill
 # ----------------------------------------------------------------------------
-def test_skills_constant_covers_seven_skills(hook_module):
+def test_skills_constant_covers_six_uv_tool_skills(hook_module):
+    """1.0.0-W1-068：branch-worktree-guardian（非 uv tool）已移除，剩 6 個真 uv tool。"""
     skills = hook_module.SKILLS
-    assert len(skills) == 7
+    assert len(skills) == 6
     expected_cli = {
         "ticket", "doc", "version-release", "mermaid-ascii",
-        "worktree", "branch-worktree-guardian", "project-init",
+        "worktree", "project-init",
     }
     assert {s.cli_name for s in skills} == expected_cli
     for s in skills:
@@ -110,6 +153,25 @@ def test_skills_constant_covers_seven_skills(hook_module):
                      "package_dir_name", "cli_name"):
             assert hasattr(s, attr)
             assert getattr(s, attr)
+        # single_file 旗標存在且為 bool（候選 A：SkillEntry 增 single_file 支援）
+        assert hasattr(s, "single_file")
+        assert isinstance(s.single_file, bool)
+
+
+def test_branch_worktree_guardian_not_in_registry(hook_module):
+    """1.0.0-W1-068 AC1：非 uv tool entry 已移除，不再被掃描（不誤報 source dir missing）。"""
+    cli_names = {s.cli_name for s in hook_module.SKILLS}
+    assert "branch-worktree-guardian" not in cli_names
+    pkg_names = {s.package_name for s in hook_module.SKILLS}
+    assert "branch-worktree-guardian" not in pkg_names
+
+
+def test_version_release_marked_single_file(hook_module):
+    """1.0.0-W1-068：version-release 為單檔模組，single_file=True。"""
+    vr = next(s for s in hook_module.SKILLS if s.cli_name == "version-release")
+    assert vr.single_file is True
+    assert vr.module_subpath.endswith(".py"), "單檔模組 module_subpath 應指向單一 .py 檔"
+    assert vr.package_dir_name == "version_release.py"
 
 
 # ----------------------------------------------------------------------------
@@ -205,20 +267,20 @@ def test_all_synced_produces_concise_message(
     fake_root = tmp_path / "repo"
     inst_map = {}
     for skill in hook_module.SKILLS:
-        src = fake_root / skill.module_subpath
-        src.mkdir(parents=True, exist_ok=True)
-        (src / "a.py").write_text("x")
-        inst_map[skill.package_dir_name] = make_installed(skill.package_dir_name, {"a.py": "x"})
+        _write_source_for_skill(fake_root, skill, {"a.py": "x"})
+        inst_map[skill.cli_name] = _make_installed_for_skill(
+            make_installed, tmp_path, skill, {"a.py": "x"}
+        )
 
     def fake_find(cli, pkg, logger):
-        return inst_map.get(pkg)
+        return inst_map.get(cli)
 
     monkeypatch.setattr(hook_module, "get_project_root", lambda: fake_root)
     monkeypatch.setattr(hook_module, "find_installed_module_dir", fake_find)
 
     _, payload = _run_main(hook_module, capsys)
     msg = payload["hookSpecificOutput"]["additionalContext"]
-    assert msg == "[UV Tool Staleness] 全部 7 個 uv tool skill 已同步"
+    assert msg == "[UV Tool Staleness] 全部 6 個 uv tool skill 已同步"
 
 
 # ----------------------------------------------------------------------------
@@ -229,8 +291,7 @@ def test_missing_skill_produces_missing_line_and_exit_0(
 ):
     fake_root = tmp_path / "repo"
     for skill in hook_module.SKILLS:
-        (fake_root / skill.module_subpath).mkdir(parents=True, exist_ok=True)
-        (fake_root / skill.module_subpath / "a.py").write_text("x")
+        _write_source_for_skill(fake_root, skill, {"a.py": "x"})
 
     monkeypatch.setattr(hook_module, "get_project_root", lambda: fake_root)
     monkeypatch.setattr(
@@ -251,11 +312,8 @@ def test_installed_dir_no_py_files_treated_as_missing(
     hook_module, monkeypatch, tmp_path, capsys
 ):
     fake_root = tmp_path / "repo"
-    src = fake_root / hook_module.SKILLS[0].module_subpath
-    src.mkdir(parents=True)
-    (src / "a.py").write_text("x")
-    for skill in hook_module.SKILLS[1:]:
-        (fake_root / skill.module_subpath).mkdir(parents=True, exist_ok=True)
+    for skill in hook_module.SKILLS:
+        _write_source_for_skill(fake_root, skill, {"a.py": "x"})
 
     empty_installed = tmp_path / "empty_installed"
     empty_installed.mkdir()
@@ -279,12 +337,13 @@ def test_installed_dir_no_py_files_treated_as_missing(
 def test_hook_exits_0_on_internal_error(hook_module, monkeypatch, tmp_path, capsys):
     fake_root = tmp_path / "repo"
     for skill in hook_module.SKILLS:
-        (fake_root / skill.module_subpath).mkdir(parents=True, exist_ok=True)
-        (fake_root / skill.module_subpath / "a.py").write_text("x")
+        _write_source_for_skill(fake_root, skill, {"a.py": "x"})
 
     installed = tmp_path / "inst"
     installed.mkdir()
     (installed / "a.py").write_text("x")
+    # 單檔模組安裝點：site-packages 內含 version_release.py
+    (installed / "version_release.py").write_text("x")
 
     monkeypatch.setattr(hook_module, "get_project_root", lambda: fake_root)
     monkeypatch.setattr(
@@ -295,6 +354,8 @@ def test_hook_exits_0_on_internal_error(hook_module, monkeypatch, tmp_path, caps
         raise IOError("disk error")
 
     monkeypatch.setattr(hook_module, "compute_file_hashes", boom)
+    # 單檔模組走 _compute_single_file_hash，亦需失敗測試覆蓋（不阻塊 exit 0）
+    monkeypatch.setattr(hook_module, "_compute_single_file_hash", boom)
     code, payload = _run_main(hook_module, capsys)
     assert code == 0
 
@@ -321,17 +382,15 @@ def test_no_outdated_when_source_installed_identical(
     fake_root = tmp_path / "repo"
     inst_map = {}
     for skill in hook_module.SKILLS:
-        src = fake_root / skill.module_subpath
-        src.mkdir(parents=True, exist_ok=True)
-        (src / "core.py").write_text("identical")
-        inst_map[skill.package_dir_name] = make_installed(
-            skill.package_dir_name, {"core.py": "identical"}
+        _write_source_for_skill(fake_root, skill, {"core.py": "identical"})
+        inst_map[skill.cli_name] = _make_installed_for_skill(
+            make_installed, tmp_path, skill, {"core.py": "identical"}
         )
 
     monkeypatch.setattr(hook_module, "get_project_root", lambda: fake_root)
     monkeypatch.setattr(
         hook_module, "find_installed_module_dir",
-        lambda cli, pkg, logger: inst_map.get(pkg),
+        lambda cli, pkg, logger: inst_map.get(cli),
     )
     _, payload = _run_main(hook_module, capsys)
     msg = payload["hookSpecificOutput"]["additionalContext"]
@@ -352,7 +411,7 @@ def _setup_one_skill_diff(hook_module, monkeypatch, tmp_path, make_installed,
         (src / k).write_text(v)
     inst = make_installed(target.package_dir_name, inst_files)
     for skill in hook_module.SKILLS[1:]:
-        (fake_root / skill.module_subpath).mkdir(parents=True, exist_ok=True)
+        _write_source_for_skill(fake_root, skill, {"a.py": "x"})
 
     def fake_find(cli, pkg, logger):
         return inst if pkg == target.package_dir_name else None
@@ -405,7 +464,7 @@ def test_skill_md_files_contain_reinstall_warning():
     skills_dir = PROJECT_ROOT / ".claude" / "skills"
     skill_names = [
         "ticket", "doc", "version-release", "mermaid-ascii",
-        "worktree", "branch-worktree-guardian", "project-init",
+        "worktree", "project-init",
     ]
     for name in skill_names:
         md = skills_dir / name / "SKILL.md"
@@ -425,17 +484,16 @@ def test_hook_execution_under_5_seconds(
     fake_root = tmp_path / "repo"
     inst_map = {}
     for skill in hook_module.SKILLS:
-        src = fake_root / skill.module_subpath
-        src.mkdir(parents=True, exist_ok=True)
         files = {f"f{i}.py": f"content-{i}-{'x' * 200}" for i in range(50)}
-        for k, v in files.items():
-            (src / k).write_text(v)
-        inst_map[skill.package_dir_name] = make_installed(skill.package_dir_name, files)
+        _write_source_for_skill(fake_root, skill, files)
+        inst_map[skill.cli_name] = _make_installed_for_skill(
+            make_installed, tmp_path, skill, files
+        )
 
     monkeypatch.setattr(hook_module, "get_project_root", lambda: fake_root)
     monkeypatch.setattr(
         hook_module, "find_installed_module_dir",
-        lambda cli, pkg, logger: inst_map.get(pkg),
+        lambda cli, pkg, logger: inst_map.get(cli),
     )
 
     t0 = time.perf_counter()
@@ -443,3 +501,111 @@ def test_hook_execution_under_5_seconds(
     capsys.readouterr()
     elapsed = time.perf_counter() - t0
     assert elapsed < 5.0, f"Hook 執行 {elapsed:.2f}s 超過 5s 上限"
+
+
+# ----------------------------------------------------------------------------
+# 1.0.0-W1-068：單檔模組（version-release）回歸測試
+# ----------------------------------------------------------------------------
+def _vr_skill(hook_module):
+    return next(s for s in hook_module.SKILLS if s.cli_name == "version-release")
+
+
+def test_single_file_skill_synced_is_ok(
+    hook_module, monkeypatch, tmp_path, capsys
+):
+    """AC1：單檔模組 source==installed 時為 OK，不誤報 source dir missing / OUTDATED。"""
+    fake_root = tmp_path / "repo"
+    vr = _vr_skill(hook_module)
+    # 建 source 單檔
+    src_file = fake_root / vr.module_subpath
+    src_file.parent.mkdir(parents=True, exist_ok=True)
+    src_file.write_text("VERSION = '1.0.0'")
+    # 建 installed site-packages 單檔（內容相同）
+    site_dir = tmp_path / "sp"
+    site_dir.mkdir()
+    (site_dir / vr.package_dir_name).write_text("VERSION = '1.0.0'")
+    # 其餘 skill 設為 MISSING（不干擾）
+    for skill in hook_module.SKILLS:
+        if skill.cli_name != "version-release":
+            _write_source_for_skill(fake_root, skill, {"a.py": "x"})
+
+    def fake_find(cli, pkg, logger):
+        return site_dir if cli == "version-release" else None
+
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: fake_root)
+    monkeypatch.setattr(hook_module, "find_installed_module_dir", fake_find)
+
+    results = [
+        hook_module.check_single_skill(s, fake_root, _DummyLogger())
+        for s in hook_module.SKILLS
+    ]
+    vr_result = next(r for r in results if r.skill.cli_name == "version-release")
+    assert vr_result.status == "OK"
+    _, payload = _run_main(hook_module, capsys)
+    msg = payload["hookSpecificOutput"]["additionalContext"]
+    assert "version-release [OUTDATED]" not in msg
+    assert "source dir missing" not in msg
+    assert "source file missing" not in msg
+
+
+def test_single_file_skill_stale_is_outdated(
+    hook_module, monkeypatch, tmp_path, capsys
+):
+    """AC2：單檔模組 source != installed 時正確偵測 OUTDATED + 修復指令。"""
+    fake_root = tmp_path / "repo"
+    vr = _vr_skill(hook_module)
+    src_file = fake_root / vr.module_subpath
+    src_file.parent.mkdir(parents=True, exist_ok=True)
+    src_file.write_text("VERSION = '2.0.0'")  # source 新
+    site_dir = tmp_path / "sp"
+    site_dir.mkdir()
+    (site_dir / vr.package_dir_name).write_text("VERSION = '1.0.0'")  # installed 舊
+    for skill in hook_module.SKILLS:
+        if skill.cli_name != "version-release":
+            _write_source_for_skill(fake_root, skill, {"a.py": "x"})
+
+    def fake_find(cli, pkg, logger):
+        return site_dir if cli == "version-release" else None
+
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: fake_root)
+    monkeypatch.setattr(hook_module, "find_installed_module_dir", fake_find)
+
+    code, payload = _run_main(hook_module, capsys)
+    assert code == 0
+    msg = payload["hookSpecificOutput"]["additionalContext"]
+    assert "version-release [OUTDATED]" in msg
+    assert "cd .claude/skills/version-release && uv tool install . --force --reinstall" in msg
+
+
+def test_single_file_skill_missing_installed_is_missing(
+    hook_module, monkeypatch, tmp_path, capsys
+):
+    """單檔模組 installed 不存在時為 MISSING（非 ERROR）。"""
+    fake_root = tmp_path / "repo"
+    vr = _vr_skill(hook_module)
+    src_file = fake_root / vr.module_subpath
+    src_file.parent.mkdir(parents=True, exist_ok=True)
+    src_file.write_text("VERSION = '1.0.0'")
+    for skill in hook_module.SKILLS:
+        if skill.cli_name != "version-release":
+            _write_source_for_skill(fake_root, skill, {"a.py": "x"})
+
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: fake_root)
+    monkeypatch.setattr(
+        hook_module, "find_installed_module_dir", lambda *a, **k: None
+    )
+
+    results = [
+        hook_module.check_single_skill(s, fake_root, _DummyLogger())
+        for s in hook_module.SKILLS
+    ]
+    vr_result = next(r for r in results if r.skill.cli_name == "version-release")
+    assert vr_result.status == "MISSING"
+
+
+class _DummyLogger:
+    def warning(self, *a, **k): pass
+    def error(self, *a, **k): pass
+    def debug(self, *a, **k): pass
+    def info(self, *a, **k): pass
+    def critical(self, *a, **k): pass

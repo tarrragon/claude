@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
-from ticket_system.lib.constants import STATUS_PENDING
+from ticket_system.lib.constants import STATUS_PENDING, DEFAULT_UNDEFINED_VALUE
 from ticket_system.lib.paths import GIT_TOPLEVEL_TIMEOUT, get_project_root
 from ticket_system.lib.ticket_loader import (
     get_tickets_dir,
@@ -216,6 +216,80 @@ def get_default_acceptance_criteria(ticket_type: str) -> List[str]:
     )
 
 
+def validate_create_checklist(
+    config: TicketConfig,
+    ticket_type: str,
+) -> List[str]:
+    """PROP-009 清單式欄位驗證（三建票路徑共用）。
+
+    建立前檢查必填欄位，回傳缺失欄位名稱清單。本函式為純驗證，
+    不阻擋、不 print；由呼叫端決定 warning 或阻擋行為：
+    - create 命令層：缺失 + 未 --force 時阻擋（W11-003.5）
+    - batch-create / generate 路徑：warning 級不阻擋（1.0.0-W1-027）
+
+    讀取的是 flat config key（who/why/where_files 等），非經
+    create_ticket_frontmatter 轉換後的巢狀 frontmatter。呼叫端
+    必須在 flat config 階段呼叫，否則 key 不符會全部誤判。
+
+    Args:
+        config: Ticket 配置（flat key 形態）
+        ticket_type: Ticket 類型（IMP, ANA, DOC 等）
+
+    Returns:
+        缺失欄位名稱的清單，空清單表示全部通過
+    """
+    missing: List[str] = []
+
+    # where.files 至少 1 個
+    if not config.get("where_files"):
+        missing.append("where.files")
+
+    # acceptance 至少 1 項
+    if not config.get("acceptance"):
+        missing.append("acceptance")
+
+    # decision_tree_path 三個子欄位都非空（DOC 類型和子任務豁免）
+    is_exempt_from_decision_tree = (
+        ticket_type == "DOC" or config.get("parent_id")
+    )
+    if not is_exempt_from_decision_tree:
+        dt = config.get("decision_tree_path") or {}
+        has_complete_path = (
+            dt.get("entry_point")
+            and dt.get("final_decision")
+            and dt.get("rationale")
+        )
+        if not has_complete_path:
+            missing.append("decision_tree_path")
+
+    # when 非「待定義」
+    if config.get("when") == DEFAULT_UNDEFINED_VALUE:
+        missing.append("when")
+
+    # W11-003.5: 5W1H 全欄位必填擴充
+    # who 不可為空、"pending" 或「待定義」
+    who_value = config.get("who")
+    if not who_value or who_value in ("pending", DEFAULT_UNDEFINED_VALUE):
+        missing.append("who")
+
+    # what 不可為空（CLI argparse 已強制 --action/--target，此處為防禦性檢查）
+    if not config.get("what"):
+        missing.append("what")
+
+    # why 非空且非「待定義」（DOC 類型豁免；1.0.0-W1-043 補空字串漏判）
+    if ticket_type != "DOC":
+        why_value = config.get("why")
+        if not why_value or why_value == DEFAULT_UNDEFINED_VALUE:
+            missing.append("why")
+
+    # how_strategy 非空且非「待定義」（1.0.0-W1-043 補空字串漏判）
+    how_strategy_value = config.get("how_strategy")
+    if not how_strategy_value or how_strategy_value == DEFAULT_UNDEFINED_VALUE:
+        missing.append("how_strategy")
+
+    return missing
+
+
 def format_ticket_id(version: str, wave: int, seq: int) -> str:
     """格式化根任務 Ticket ID。
 
@@ -303,6 +377,12 @@ def get_next_seq(version: str, wave: int) -> int:
     """
     tickets_dir = get_tickets_dir(version)
 
+    # 掃描邊界（W1-052）：正常路徑的「max+1 天然不撞」論證只認 .md ——
+    # local glob 限 `*-W{wave}-*.md`，main ref 也只收 endswith(".md") 的 stem。
+    # .yaml-only ticket（無對應 .md）不在此掃描集合，理論上是「max+1 不撞」的洞。
+    # 現實風險 ~0（系統只產 .md、repo 現存 0 個 .yaml ticket），故不為此修碼；
+    # 降級分支的 resolve_available_seq 經 get_ticket_path 探測會同時覆蓋 .md/.yaml，
+    # 是 .yaml 撞號的實際防線。此處僅顯性標註正常路徑的邊界。
     # 來源 1：本地工作樹 glob
     local_stems: List[str] = []
     if tickets_dir.exists():
@@ -323,7 +403,59 @@ def get_next_seq(version: str, wave: int) -> int:
         if seq is not None:
             max_seq = max(max_seq, seq)
 
-    return max_seq + 1
+    candidate = max_seq + 1
+
+    # 降級可觀測 + 內聚 collision guard（W1-042 / W1-051 / quality-baseline 規則 4）：
+    # 本地 glob 為空且 main ref 掃描降級（回 None，非有效空清單）時，
+    # 兩來源同時掃空會回傳 candidate=1，可能誤配已存在 ID（W1-039 撞號事件）。
+    #
+    # linux caveat（W1-051）：正常路徑（任一來源有效）的 candidate = max+1 對
+    # 已掃描集合天然不撞，故不在正常路徑做逐一 .exists() 探測；guard 緊貼降級
+    # 分支——僅當降級偵測成立時，才以檔案系統探測推進至真正可用 seq，使
+    # get_next_seq 回傳值內部保證可用（消除 create.py caller 層 while-loop 外洩）。
+    if not local_stems and main_files is None:
+        resolved = resolve_available_seq(version, wave, candidate)
+        # W1-052 措辭收斂：FS 探測看不到 main-only 檔（main ref 已降級），故
+        # collision guard 僅保證「本地檔案系統可用」，對 main-only 撞號無保證；
+        # 不過度承諾「已推進至可用序號」。
+        sys.stderr.write(
+            f"[WARNING] get_next_seq: 本地工作樹與 main ref 同時掃描不到 "
+            f"{version} W{wave} 的 ticket（main ref 降級），初始配號回退為 "
+            f"{candidate}；collision guard 已推進至本地檔案系統可用序號 {resolved}"
+            f"（僅保證本地 FS 可用，無法保證 main-only 票不撞）\n"
+        )
+        return resolved
+
+    return candidate
+
+
+def resolve_available_seq(version: str, wave: int, start_seq: int) -> int:
+    """從 start_seq 起遞增，回傳第一個檔案系統上不存在的根任務序號。
+
+    W1-051 內聚 collision guard 的共用 helper：把「可用性保證」收斂到單一
+    權威點，供 get_next_seq 降級分支與 bulk_create 批次配號共享，消除 caller
+    層各自實作 while-loop 的特例外洩（L1）與 bulk 無 guard 的連鎖覆寫風險（R1）。
+
+    可用性判定用 get_ticket_path(...).exists()——該函式對 .md 與 .yaml 皆探測
+    （優先回存在者），故同時覆蓋 .md / .yaml 兩種落盤格式的撞號（W1-051 .yaml 缺口）。
+
+    Args:
+        version: 版本號（如 "1.0.0"）。
+        wave: Wave 編號。
+        start_seq: 起始候選序號（呼叫端通常傳 max_seq + 1 或批次當前 seq）。
+
+    Returns:
+        第一個 get_ticket_path 探測不存在的序號（>= start_seq）。
+
+    Examples:
+        若 1.0.0-W1-001.md 存在、W1-002 不存在：
+        >>> resolve_available_seq("1.0.0", 1, 1)
+        2
+    """
+    seq = start_seq
+    while get_ticket_path(version, format_ticket_id(version, wave, seq)).exists():
+        seq += 1
+    return seq
 
 
 def _parse_root_seq(stem: str, wave: int) -> Optional[int]:
@@ -393,6 +525,10 @@ def _scan_child_files_max_seq(tickets_dir: Path, parent_id: str) -> int:
     Returns:
         最大直接子任務序號，無子 Ticket 檔案時返回 0
     """
+    # 掃描邊界（W1-052 對齊 root 路徑標註）：glob 限 `{parent_id}.*.md`，
+    # .yaml-only 子票不在掃描集合——與 get_next_seq 正常路徑的 .md-only 邊界
+    # 同構。現實風險 ~0（系統只產 .md），children 欄位為另一獨立來源可兜底，
+    # 故不為此修碼，僅顯性標註。
     # 來源 1：本地工作樹 glob
     local_stems: List[str] = []
     if tickets_dir.exists():
@@ -1144,3 +1280,59 @@ def dedupe_schema_sections(body: str) -> str:
         rebuilt.append(appended_text)
 
     return "".join(rebuilt)
+
+
+def insert_missing_schema_section(
+    body: str,
+    section: str,
+    content: str,
+    ticket_type: str = "",
+) -> Optional[str]:
+    """於 canonical 順序位置插入缺失的 Schema H2 章節（含首筆內容）。
+
+    背景：create 模板僅預生成部分 Schema 章節（如 IMP 模板無 Context Bundle），
+    append-log 對「白名單合法但 body 缺失」的章節原本回報 SECTION_NOT_FOUND，
+    呼叫端（PM 派發前寫 Context Bundle）被迫繞道手動 Edit ticket md。
+    本函式讓缺失章節依 SCHEMA_H2_SECTIONS 的 canonical 順序自動補建，
+    消除「目標章節不存在導致 append-log 失敗」的派發前摩擦。
+
+    Args:
+        body: Ticket body markdown 字串。
+        section: 章節名稱，必須屬於 SCHEMA_H2_SECTIONS（Execution Log 等
+            非 Schema 章節不在自動補建範圍，呼叫端應走既有錯誤路徑）。
+        content: 首筆寫入內容（呼叫端已完成 H2 → H3 降級等前處理）。
+        ticket_type: Ticket 類型（用於補 type-aware Schema 標註註解；
+            未定義 type/章節組合時無標註，向後相容）。
+
+    Returns:
+        插入後的新 body；section 不在 SCHEMA_H2_SECTIONS 時回傳 None
+        （呼叫端 fallback 既有 SECTION_NOT_FOUND 錯誤路徑）。
+
+    插入規則：
+        1. 錨點 = body 中第一個 canonical 順序晚於目標章節的既有 Schema H2，
+           新章節插在錨點之前（維持 schema 章節相對順序）。
+        2. 非 Schema 自定義 H2 不作為錨點（位置語意不明，跳過）。
+        3. 無更晚章節時附加於 body 末尾（補 --- 分隔線維持章節邊界格式）。
+    """
+    if section not in SCHEMA_H2_SECTIONS:
+        return None
+
+    canonical_index = SCHEMA_H2_SECTIONS.index(section)
+    marker = _schema_marker(ticket_type, section)
+    new_block = f"## {section}{marker}\n\n{content}\n\n---\n\n"
+
+    for header_match in re.finditer(r"^##\s+(.+?)\s*$", body, re.MULTILINE):
+        title = header_match.group(1).strip()
+        if (
+            title in SCHEMA_H2_SECTIONS
+            and SCHEMA_H2_SECTIONS.index(title) > canonical_index
+        ):
+            insert_at = header_match.start()
+            return body[:insert_at] + new_block + body[insert_at:]
+
+    # 無 canonical 順序更晚的章節 → 附加於 body 末尾
+    trimmed = body.rstrip("\n")
+    if not trimmed:
+        return new_block.rstrip("\n") + "\n"
+    separator = "\n\n" if trimmed.endswith("---") else "\n\n---\n\n"
+    return trimmed + separator + new_block.rstrip("\n") + "\n"

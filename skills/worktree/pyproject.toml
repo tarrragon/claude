@@ -16,7 +16,10 @@ worktree = "scripts.worktree_manager:main"
 [tool.setuptools.packages.find]
 include = ["scripts*"]
 
-[project.optional-dependencies]
+# PC-124 修復（1.0.0-W1-064）：dev deps 改用 PEP 735 dependency-groups 宣告。
+# uv run --project . 預設安裝 dev group；原 optional-dependencies extras 不會被預設安裝，
+# 導致 fresh 環境 pytest Failed to spawn（比照 .claude/hooks/pyproject.toml 慣例）。
+[dependency-groups]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",

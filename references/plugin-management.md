@@ -136,6 +136,19 @@ claude plugin uninstall example-skills@anthropic-agent-skills
 
 2. 開新 session，觀察 SessionStart system-reminder 中 skills 清單是否已縮短。
 
+### 已評估不需要清單（防復裝）
+
+**Why**：歷史上曾卸載的 plugin 因 marketplace 重裝或環境同步而復裝（document-skills 即一例：首次卸載後復裝，七個月零使用持續佔用 context）。本清單記錄「已正式評估為不需要」的 plugin，重裝前必須先推翻原評估結論。
+
+**Consequence**：缺此清單時，復裝的 plugin 會無聲恢復 context 佔用，且後人無從得知它曾被評估過，重複評估成本反覆發生。
+
+**Action**：安裝 plugin 前先查本表；表內項目若要重裝，須以新證據（實際使用需求）推翻評估依據並更新本表。
+
+| Plugin | 評估結論 | 量化依據 | 評估時間 |
+|--------|---------|---------|---------|
+| `document-skills@anthropic-agent-skills` | 不需要，已卸載 | 七個月（18+ Wave）零實際使用；佔 skills 清單 ~5K tokens/session 的主要部分 | 2026-06-11（量測分析見對應 ANA ticket） |
+| `example-skills@anthropic-agent-skills` | 不需要，已卸載 | 與 document-skills 內容重複的範例集，零使用 | 2026-06-11（同上） |
+
 3. 確認原本依賴該 plugin 的工作流是否有替代手段（第 1 章第 6 題已備）。
 
 ### Dependency enforcement 下的卸載注意事項（v2.1.143+）
@@ -286,5 +299,7 @@ ls .claude/skills/ > /tmp/local-skills.txt
 
 ---
 
-**Last Updated**: 2026-05-26
+**Last Updated**: 2026-06-11
+**Version**: 1.2.0 — 第 4 章新增「已評估不需要清單（防復裝）」：記錄已正式評估為不需要的 plugin 與量化依據，重裝前須推翻原評估（document-skills 復裝事件教訓）
+
 **Version**: 1.1.0 — 對齊 CC v2.1.143：第 1 章新增第 7 題依賴性檢查、第 4 題改用 projected context cost；第 2 章補 projected cost 查詢指令與 dependency enforcement 機制說明；第 4 章補 dependency enforcement 卸載注意事項；第 5 章補 LSP servers 查詢指令；第 7 章補根目錄 SKILL.md 意外曝光與 dependency enforcement 忽略兩個反模式（W3-033 ANA 結論落地）

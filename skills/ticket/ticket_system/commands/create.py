@@ -11,6 +11,7 @@ if __name__ == "__main__":
 
 
 import argparse
+import os
 import re
 import sys
 import traceback
@@ -45,6 +46,7 @@ from ticket_system.lib.command_lifecycle_messages import (
     format_msg,
 )
 from ticket_system.lib.command_tracking_messages import TrackMessages
+from ticket_system.lib.ambiguous_prefix import register_ambiguous_prefix
 from datetime import datetime, timedelta
 from ticket_system.lib.constants import (
     COGNITIVE_LOAD_FILE_THRESHOLD,
@@ -53,11 +55,15 @@ from ticket_system.lib.constants import (
     STATUS_COMPLETED,
     DUPLICATE_DETECTION_THRESHOLD,
     DUPLICATE_DETECTION_COMPLETED_WINDOW_DAYS,
+    DUPLICATE_BLOCK_THRESHOLD,
+    DUPLICATE_BLOCK_WINDOW_MINUTES,
     DEFAULT_PRIORITY,
     DEFAULT_HOW_TASK_TYPE,
     DEFAULT_UNDEFINED_VALUE,
     TDD_PHASE_DISPLAY,
+    MAX_TICKET_DEPTH,
 )
+from ticket_system.lib.depth import compute_depth
 from ticket_system.lib.parallel_analyzer import ParallelAnalyzer
 from ticket_system.lib.tdd_sequence import suggest_tdd_sequence
 from ticket_system.lib.ticket_builder import (
@@ -70,8 +76,10 @@ from ticket_system.lib.ticket_builder import (
     create_ticket_body,
     update_parent_children,
     update_source_spawned_tickets,
+    validate_create_checklist,
 )
 from ticket_system.lib.acceptance_auditor import detect_vague_acceptance, detect_srp_violations
+from ticket_system.lib.file_lock import create_id_allocation_lock
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 
 
@@ -175,9 +183,10 @@ def _build_decision_tree_path(
     2. 豁免時無參數 → 返回 None
     3. 豁免時有完整參數 → 返回字典（驗證後）
     4. 豁免時部分參數 → raise ValueError（拒絕）
-    5. 非豁免時無參數 → raise ValueError（拒絕）
+    5. 非豁免時無參數 → 返回 None（不提前退出，交 _validate_create_checklist
+       與其他必填欄位一次列全，W1-029 A2 同手法）
     6. 非豁免時有完整參數 → 返回字典（驗證後）
-    7. 非豁免時部分參數 → raise ValueError（拒絕）
+    7. 非豁免時部分參數 → raise ValueError（拒絕，保留參數級精確 hint）
 
     Args:
         entry: --decision-tree-entry 參數值
@@ -202,17 +211,12 @@ def _build_decision_tree_path(
 
     # 使用 early return 簡化邏輯
     if provided_count == 0:
-        # 無參數
-        if is_exempted:
-            return None
-        else:
-            print(format_error(ErrorEnvelope(
-                component="create",
-                action="build_decision_tree",
-                errno="DECISION_TREE_MISSING_ALL",
-                hint="非子任務且非 DOC 類型必須提供 --decision-tree-entry/--decision-tree-decision/--decision-tree-rationale 三參數",
-            )))
-            raise ValueError("決策樹參數缺失")
+        # 無參數：豁免或非豁免皆 return None，不在此提前退出。
+        # 非豁免全缺交給 _validate_create_checklist 的 decision_tree_path
+        # 完整性檢查，與 when/who/how_strategy 等必填一次列全，避免跨階段
+        # 分批報錯造成多輪試錯（W1-029，A2 同手法，對齊本檔 why 修復 796-799）。
+        # PARTIAL（provided_count 1-2）與 EMPTY_VALUE 仍即時精確報錯，不退化。
+        return None
 
     if provided_count == 3:
         # 完整三參數 - 驗證後返回字典
@@ -500,6 +504,148 @@ def _detect_duplicate_tickets(
         sys.stderr.write(f"[DEBUG] 重複偵測異常 ({type(e).__name__}): {e}\n")
 
 
+def _get_ticket_creation_time(version: str, ticket_id: str) -> Optional[datetime]:
+    """取得候選 Ticket 的建立時間（用於 Tier 2 短窗口判定）。
+
+    frontmatter 的 `created` 僅日期粒度，無法支撐 60 分鐘級窗口判定，
+    故改用 ticket md 檔案的 birth time（無則 fallback mtime）作為實際
+    建立時間估計——ghost 雙執行流同 turn 數分鐘內 spawn 的場景下，
+    檔案時間戳是最貼近真實建立時刻的可得訊號（Phase 1 決策，見 ticket）。
+
+    Args:
+        version: 版本號
+        ticket_id: 候選 Ticket ID
+
+    Returns:
+        建立時間 datetime；無法取得時返回 None（視為不在窗口內）
+    """
+    try:
+        path = get_ticket_path(version, ticket_id)
+        stat = os.stat(path)
+        # macOS 提供 st_birthtime；其他平台 fallback st_mtime
+        ts = getattr(stat, "st_birthtime", None) or stat.st_mtime
+        return datetime.fromtimestamp(ts)
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def _find_blocking_duplicate(
+    version: str,
+    new_title: str,
+    new_what: str,
+    new_ticket_id: str,
+) -> Optional[tuple]:
+    """Tier 2 阻擋層偵測：尋找同窗口高相似度的 pending/in_progress 候選票。
+
+    阻擋條件（三者交集）：
+    1. 候選為同版本 pending 或 in_progress（不含 completed——重建已完成票
+       屬合法重做，交 Tier 1 警告即可）
+    2. 相似度 >= DUPLICATE_BLOCK_THRESHOLD（高相似）
+    3. 候選建立時間在 DUPLICATE_BLOCK_WINDOW_MINUTES 內（短窗口）
+
+    Args:
+        version: 目標版本號
+        new_title: 即將建立的標題
+        new_what: 即將建立的目標描述
+        new_ticket_id: 即將建立的 Ticket ID（用於排除自身與 parent）
+
+    Returns:
+        命中時返回 (ticket_id, title, status, similarity)；無命中返回 None。
+        內部異常一律返回 None（不阻斷建立，與 Tier 1 容錯設計一致）。
+    """
+    try:
+        if not new_title and not new_what:
+            return None
+
+        all_tickets = list_tickets(version)
+
+        exclude_ids = {new_ticket_id}
+        seq_part = new_ticket_id.rsplit("-", 1)[-1]
+        if "." in seq_part:
+            parent_id = new_ticket_id.rsplit(".", 1)[0]
+            exclude_ids.add(parent_id)
+
+        window_start = datetime.now() - timedelta(
+            minutes=DUPLICATE_BLOCK_WINDOW_MINUTES
+        )
+        new_combined = f"{new_title} {new_what}"
+
+        for ticket in all_tickets:
+            ticket_id = ticket.get("id", "")
+            if ticket_id in exclude_ids:
+                continue
+            # 條件 1：僅 pending / in_progress
+            if ticket.get("status") not in (STATUS_PENDING, STATUS_IN_PROGRESS):
+                continue
+            # 條件 2：高相似度
+            candidate_combined = (
+                f"{ticket.get('title', '')} {ticket.get('what', '')}"
+            )
+            try:
+                similarity = _calculate_jaccard_similarity(
+                    new_combined, candidate_combined
+                )
+            except Exception:
+                continue
+            if similarity < DUPLICATE_BLOCK_THRESHOLD:
+                continue
+            # 條件 3：短窗口內建立
+            created_time = _get_ticket_creation_time(version, ticket_id)
+            if created_time is None or created_time < window_start:
+                continue
+            return (ticket_id, ticket.get("title", ""), ticket.get("status", ""), similarity)
+
+        return None
+
+    except Exception as e:
+        sys.stderr.write(f"[DEBUG] 阻擋層偵測異常 ({type(e).__name__}): {e}\n")
+        return None
+
+
+def _enforce_blocking_duplicate(
+    version: str,
+    new_title: str,
+    new_what: str,
+    new_ticket_id: str,
+    allow_duplicate: bool,
+) -> bool:
+    """Tier 2 阻擋層強制：命中時輸出阻擋訊息，回傳是否放行。
+
+    Args:
+        version: 版本號
+        new_title: 即將建立的標題
+        new_what: 即將建立的目標描述
+        new_ticket_id: 即將建立的 Ticket ID
+        allow_duplicate: 是否啟用 --allow-duplicate 旁路
+
+    Returns:
+        True 表示放行（無命中或已旁路）；False 表示阻擋（呼叫端應 exit 1）
+    """
+    hit = _find_blocking_duplicate(version, new_title, new_what, new_ticket_id)
+    if hit is None:
+        return True
+
+    ticket_id, title, status, similarity = hit
+
+    if allow_duplicate:
+        print(format_msg(CreateMessages.DUPLICATE_BLOCK_BYPASSED))
+        return True
+
+    lines = [
+        format_msg(CreateMessages.DUPLICATE_BLOCK_HEADER),
+        format_msg(
+            CreateMessages.DUPLICATE_BLOCK_ITEM,
+            ticket_id=ticket_id,
+            title=title,
+            status_label=_get_status_label(status) or status,
+            similarity=similarity,
+        ),
+        format_msg(CreateMessages.DUPLICATE_BLOCK_SUGGESTION),
+    ]
+    print("\n".join(lines))
+    return False
+
+
 def _detect_in_progress_groups(
     version: str, wave: Optional[int]
 ) -> List[Dict[str, Any]]:
@@ -583,6 +729,18 @@ def _resolve_ticket_id_and_wave(args: argparse.Namespace, version: str) -> Optio
             ))
         ticket_id = format_child_ticket_id(args.parent, child_seq)
 
+        # 深度上限檢查（W1-056.5 協議 v2 D3）：沿 parent_id 鏈計算新子任務深度，
+        # 達/超過 MAX_TICKET_DEPTH 時 warn（不硬擋，留旁路）。深度沿 parent_id 鏈
+        # 而非 ID 字串數點（linux F1 fatal 教訓）。
+        new_depth = compute_depth(args.parent, version) + 1
+        if new_depth >= MAX_TICKET_DEPTH:
+            print(format_warning(
+                WarningMessages.DEPTH_LIMIT_REACHED,
+                ticket_id=ticket_id,
+                depth=new_depth,
+                max_depth=MAX_TICKET_DEPTH,
+            ))
+
         # 從 parent_id 中提取 wave
         extracted_wave = extract_wave_from_ticket_id(args.parent)
         if extracted_wave is not None:
@@ -598,8 +756,30 @@ def _resolve_ticket_id_and_wave(args: argparse.Namespace, version: str) -> Optio
             )))
             return None
 
-        seq = get_next_seq(version, wave) if args.seq is None else args.seq
-        ticket_id = format_ticket_id(version, wave, seq)
+        if args.seq is None:
+            # auto-seq 模式：get_next_seq 回傳值已內部保證可用（W1-051 內聚
+            # collision guard 至 get_next_seq 降級分支），caller 不再兜底。
+            # 防護 W1-042：兩來源（本地 glob + main ref）同時掃空降級時，
+            # get_next_seq 內的 resolve_available_seq 推進至本地檔案系統可用
+            # 序號——僅保證本地 FS 可用，main-only 票不在保證範圍（W1-052 措辭
+            # 對齊；PC-152 collision 家族；消除 caller while-loop 特例外洩）。
+            seq = get_next_seq(version, wave)
+            ticket_id = format_ticket_id(version, wave, seq)
+        else:
+            # 顯式 --seq 模式：尊重用戶意圖，撞號報錯退出（不覆寫、不自動跳號）。
+            seq = args.seq
+            ticket_id = format_ticket_id(version, wave, seq)
+            if get_ticket_path(version, ticket_id).exists():
+                print(format_error(ErrorEnvelope(
+                    component="create",
+                    action="resolve_ticket_id",
+                    errno="TICKET_ID_ALREADY_EXISTS",
+                    hint=(
+                        f"顯式 --seq {seq} 對應的 Ticket ID 已存在: {ticket_id}。"
+                        f"請改用其他 --seq，或省略 --seq 由系統自動配下一個可用序號"
+                    ),
+                )))
+                return None
 
     # 驗證 Ticket ID
     if not validate_ticket_id(ticket_id):
@@ -792,16 +972,10 @@ def _parse_cli_args_to_config(
     # 若有 TDD Phase 順序，取第一個 Phase 作為初始階段
     tdd_phase = tdd_result.phases[0] if tdd_result.phases else None
 
-    # PC-018: why 必填驗證（DOC 類型豁免）
+    # PC-018: why 必填（DOC 類型豁免）。不在此提前退出——統一交給
+    # _validate_create_checklist 與 when/who/how_strategy 等缺漏一次列全，
+    # 避免分批報錯造成多輪試錯（1.0.0-W1-024.1 A2）
     why_value = args.why or (parent_ticket.get("why") if parent_ticket else DEFAULT_UNDEFINED_VALUE)
-    if why_value == DEFAULT_UNDEFINED_VALUE and ticket_type != "DOC":
-        sys.stderr.write(format_error(ErrorEnvelope(
-            component="create",
-            action="parse_cli_args",
-            errno="WHY_REQUIRED",
-            hint=f"--why 為必填欄位（type={ticket_type}）。範例: --why '匯出功能需支援 v2 格式'",
-        )) + "\n")
-        sys.exit(1)
 
     return {
         "ticket_id": ticket_id,
@@ -833,17 +1007,20 @@ def _validate_before_persist(
     version: str,
     ticket_id: str,
     config: TicketConfig,
+    allow_duplicate: bool = False,
 ) -> bool:
     """驗證層：執行持久化前的所有驗證。
 
     負責：
     1. 驗證 blockedBy 存在性和循環依賴
-    2. 重複偵測
+    2. Tier 2 阻擋層：同窗口高相似度冪等防護（命中且未旁路時阻擋）
+    3. Tier 1 警告層：重複偵測（僅警告不阻擋）
 
     Args:
         version: 版本號
         ticket_id: Ticket ID
         config: Ticket 配置
+        allow_duplicate: --allow-duplicate 旁路 Tier 2 阻擋層
 
     Returns:
         True 表示驗證通過，False 表示驗證失敗
@@ -854,7 +1031,17 @@ def _validate_before_persist(
     if not _validate_blocked_by_references(version, ticket_id, blocked_by):
         return False
 
-    # 重複偵測
+    # Tier 2 阻擋層（W1-040.1 冪等防護）：命中且未旁路 → 阻擋
+    if not _enforce_blocking_duplicate(
+        version=version,
+        new_title=config["title"],
+        new_what=config["what"],
+        new_ticket_id=ticket_id,
+        allow_duplicate=allow_duplicate,
+    ):
+        return False
+
+    # Tier 1 警告層：重複偵測（僅警告不阻擋）
     _detect_duplicate_tickets(
         version=version,
         new_title=config["title"],
@@ -865,69 +1052,10 @@ def _validate_before_persist(
     return True
 
 
-def _validate_create_checklist(
-    config: TicketConfig,
-    ticket_type: str,
-) -> List[str]:
-    """PROP-009 清單式欄位驗證。
-
-    建立前檢查建議填寫的欄位，回傳缺失欄位名稱清單。
-    此驗證為 WARNING 層級，不阻擋建立。
-
-    Args:
-        config: Ticket 配置
-        ticket_type: Ticket 類型（IMP, ANA, DOC 等）
-
-    Returns:
-        缺失欄位名稱的清單，空清單表示全部通過
-    """
-    missing: List[str] = []
-
-    # where.files 至少 1 個
-    if not config.get("where_files"):
-        missing.append("where.files")
-
-    # acceptance 至少 1 項
-    if not config.get("acceptance"):
-        missing.append("acceptance")
-
-    # decision_tree_path 三個子欄位都非空（DOC 類型和子任務豁免）
-    is_exempt_from_decision_tree = (
-        ticket_type == "DOC" or config.get("parent_id")
-    )
-    if not is_exempt_from_decision_tree:
-        dt = config.get("decision_tree_path") or {}
-        has_complete_path = (
-            dt.get("entry_point")
-            and dt.get("final_decision")
-            and dt.get("rationale")
-        )
-        if not has_complete_path:
-            missing.append("decision_tree_path")
-
-    # when 非「待定義」
-    if config.get("when") == DEFAULT_UNDEFINED_VALUE:
-        missing.append("when")
-
-    # W11-003.5: 5W1H 全欄位必填擴充
-    # who 不可為空、"pending" 或「待定義」
-    who_value = config.get("who")
-    if not who_value or who_value in ("pending", DEFAULT_UNDEFINED_VALUE):
-        missing.append("who")
-
-    # what 不可為空（CLI argparse 已強制 --action/--target，此處為防禦性檢查）
-    if not config.get("what"):
-        missing.append("what")
-
-    # why 非「待定義」（DOC 類型豁免；CLI 端已對 IMP/ANA/ADJ 做必填驗證，此處為清單一致性）
-    if ticket_type != "DOC" and config.get("why") == DEFAULT_UNDEFINED_VALUE:
-        missing.append("why")
-
-    # how_strategy 非「待定義」
-    if config.get("how_strategy") == DEFAULT_UNDEFINED_VALUE:
-        missing.append("how_strategy")
-
-    return missing
+# _validate_create_checklist 已下沉至 lib/ticket_builder.py（1.0.0-W1-027，
+# 三建票路徑共用驗證邏輯，根除散落漂移 ARCH-020）。保留私有別名以向後相容
+# 既有 import（tests/test_create_ux_merged_validation.py）與本檔呼叫鏈。
+_validate_create_checklist = validate_create_checklist
 
 
 def _enforce_create_checklist(missing: List[str], force: bool) -> None:
@@ -1006,6 +1134,18 @@ def _build_and_save_ticket(
     tickets_dir.mkdir(parents=True, exist_ok=True)
     ticket_path = get_ticket_path(version, ticket_id)
     save_ticket(ticket, ticket_path)
+
+    # 落盤後驗證（W1-042）：確認檔案確實寫入預期路徑。
+    # W1-039 事件中出現「記錄平面幻影但世界平面無檔案落盤」，此驗證使
+    # 落盤失敗成為顯性錯誤而非靜默成功（規則 4：異常可觀測）。
+    if not ticket_path.exists():
+        sys.stderr.write(
+            f"[ERROR] _build_and_save_ticket: ticket {ticket_id} save_ticket 後 "
+            f"檔案不存在於預期路徑 {ticket_path}（落盤驗證失敗）\n"
+        )
+        raise FileNotFoundError(
+            f"Ticket {ticket_id} 落盤驗證失敗：{ticket_path} 不存在"
+        )
 
     return ticket
 
@@ -1114,7 +1254,8 @@ def _persist_and_report(
         0（成功）或 1（失敗）
     """
     # 步驟 1：驗證
-    if not _validate_before_persist(version, ticket_id, config):
+    allow_duplicate = bool(getattr(args, "allow_duplicate", False))
+    if not _validate_before_persist(version, ticket_id, config, allow_duplicate):
         return 1
 
     # 步驟 1.5：PROP-009 清單式欄位驗證（W11-003.5 升級為阻擋；--force 可豁免）
@@ -1302,28 +1443,33 @@ def execute(args: argparse.Namespace) -> int:
         )))
         return 1
 
-    # Step 1: 解析版本和 Ticket ID
-    resolved = _resolve_ticket_id_and_wave(args, version)
-    if resolved is None:
-        return 1
-    version, ticket_id, wave = resolved
+    # IMP-072 方案 A：Step 1（ID 分配）到 Step 3（落盤）之間原本無鎖，跨
+    # process / 跨 session 並行 create 會同讀相同 max seq 配出同一 ID，後寫者
+    # 靜默覆寫前者。目錄級 fcntl lock 將整段臨界區序列化；lock 取得失敗時
+    # graceful degradation（stderr warn + 無鎖續行），不阻斷單 process create。
+    with create_id_allocation_lock(get_tickets_dir(version)):
+        # Step 1: 解析版本和 Ticket ID
+        resolved = _resolve_ticket_id_and_wave(args, version)
+        if resolved is None:
+            return 1
+        version, ticket_id, wave = resolved
 
-    # Step 1.5: --source-ticket 前置驗證（PC-073）
-    # 順序：互斥 → 格式 → 存在 → 狀態
-    if not _validate_source_ticket_arg(args):
-        return 1
+        # Step 1.5: --source-ticket 前置驗證（PC-073）
+        # 順序：互斥 → 格式 → 存在 → 狀態
+        if not _validate_source_ticket_arg(args):
+            return 1
 
-    # 識別任務類型並取得 TDD 順序建議（需要在 Step 2 使用）
-    ticket_type = args.type or "IMP"
-    tdd_result = suggest_tdd_sequence(task_type=ticket_type)
+        # 識別任務類型並取得 TDD 順序建議（需要在 Step 2 使用）
+        ticket_type = args.type or "IMP"
+        tdd_result = suggest_tdd_sequence(task_type=ticket_type)
 
-    # Step 2: CLI 參數轉換為 TicketConfig
-    config = _parse_cli_args_to_config(args, version, ticket_id, wave, tdd_result)
-    if config is None:
-        return 1
+        # Step 2: CLI 參數轉換為 TicketConfig
+        config = _parse_cli_args_to_config(args, version, ticket_id, wave, tdd_result)
+        if config is None:
+            return 1
 
-    # Step 3: 驗證 blockedBy + 重複偵測 + 持久化 + 輸出
-    rc = _persist_and_report(args, config, version, ticket_id, tdd_result)
+        # Step 3: 驗證 blockedBy + 重複偵測 + 持久化 + 輸出
+        rc = _persist_and_report(args, config, version, ticket_id, tdd_result)
 
     # Step 4 (W17-002.2)：Context Bundle 自動抽取（post-persist enhancement）
     if rc == 0:
@@ -1581,6 +1727,15 @@ def _print_strategy_completeness_check(
         )
 
 
+# 1.0.0-W1-028: 縮寫歧義攔截已抽為共用 helper，泛化原 _AmbiguousHowAction。
+# 共用 hint 文字常數，供 --how / --ho 等更短前綴共用同一提示（DRY）。
+_HOW_AMBIGUOUS_HINT = (
+    "--how 不是有效旗標，請使用完整旗標名："
+    "--how-type（任務類型，如 Implementation / Analysis）"
+    "或 --how-strategy（實作策略）"
+)
+
+
 def register(subparsers: argparse._SubParsersAction) -> None:
     """註冊 create 子命令"""
     parser = subparsers.add_parser(
@@ -1618,6 +1773,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     parser.add_argument("--where", "--where-files", dest="where_files", help="影響檔案（逗號分隔，如 'file1.py,file2.py'）")
     parser.add_argument("--why", help="需求依據（IMP/ANA/ADJ 類型必填）")
+    # --how / --ho 攔截：exact match 優先於縮寫展開，給友善提示
+    # （1.0.0-W1-024.1 A3 + 1.0.0-W1-028 模式化）。--ho 為更短前綴同類誤打，
+    # 共用同一中文提示（約束 2 落地：攔截而非懸而未決）。
+    register_ambiguous_prefix(parser, "--how", _HOW_AMBIGUOUS_HINT)
+    register_ambiguous_prefix(parser, "--ho", _HOW_AMBIGUOUS_HINT)
     parser.add_argument("--how-type", help="Task Type: Implementation, Analysis, etc.")
     parser.add_argument("--how-strategy", help="實作策略")
     parser.add_argument("--parent", help="父 Ticket ID（子任務序號自動產生，勿指定 --seq）")
@@ -1632,6 +1792,15 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     parser.add_argument("--blocked-by", help="依賴的 Ticket IDs（逗號分隔，如 'ID1,ID2'）")
     parser.add_argument("--related-to", help="相關的 Ticket IDs（逗號分隔，如 'ID1,ID2'）")
     parser.add_argument("--acceptance", action="append", help="驗收條件（多次 --acceptance 或 | 分隔，如 '條件A|條件B'）")
+    # --decision-tree 攔截：撞 --decision-tree-entry/-decision/-rationale（1.0.0-W1-028）
+    register_ambiguous_prefix(
+        parser,
+        "--decision-tree",
+        "--decision-tree 不是有效旗標，請使用完整旗標名："
+        "--decision-tree-entry（進入決策樹的層級）、"
+        "--decision-tree-decision（做出的決策）"
+        "或 --decision-tree-rationale（決策理由）",
+    )
     parser.add_argument("--decision-tree-entry", help="進入決策樹的層級")
     parser.add_argument("--decision-tree-decision", help="做出的決策")
     parser.add_argument("--decision-tree-rationale", help="決策理由")
@@ -1660,6 +1829,16 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help=(
             "跳過 PROP-009 清單式欄位驗證（5W1H/acceptance/decision_tree_path）"
             "的阻擋（W11-003.5 逃生閥；不建議用於正式 Ticket）"
+        ),
+    )
+
+    parser.add_argument(
+        "--allow-duplicate",
+        dest="allow_duplicate",
+        action="store_true",
+        help=(
+            "旁路 Tier 2 同窗口高相似度阻擋層（W1-040.1 冪等防護逃生閥）；"
+            "用於失誤後刻意重建近似 Ticket 的合法情境"
         ),
     )
 

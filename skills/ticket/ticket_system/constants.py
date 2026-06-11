@@ -39,6 +39,8 @@ __all__ = [
     "TICKET_ID_PATTERN",
     "TICKET_ID_RE",
     "KNOWN_TICKET_SUFFIXES",
+    # 嵌套深度上限（W1-056.5 協議 v2 D3）
+    "MAX_TICKET_DEPTH",
     # 路徑
     "WORK_LOGS_DIR",
     "TICKETS_DIR",
@@ -81,6 +83,8 @@ __all__ = [
     # 重複偵測
     "DUPLICATE_DETECTION_THRESHOLD",
     "DUPLICATE_DETECTION_COMPLETED_WINDOW_DAYS",
+    "DUPLICATE_BLOCK_THRESHOLD",
+    "DUPLICATE_BLOCK_WINDOW_MINUTES",
     # Protocol version
     "PROTOCOL_VERSION_CURRENT",
     "PROTOCOL_VERSION_DEFAULT",
@@ -153,6 +157,14 @@ CLOSE_REASON_RETROSPECTIVE_UNKNOWN: str = "unknown"
 
 TICKET_ID_PATTERN: str = r"^(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)(-[a-z0-9][a-z0-9-]{0,59})?$"
 TICKET_ID_RE = re.compile(TICKET_ID_PATTERN)
+
+# ============================================================
+# 嵌套派發深度上限（W1-056.5 協議 v2 D3）
+# ============================================================
+# 深度 = 沿 parent_id 鏈回溯到根的邊數 + 1（根 = depth 1）。
+# 保守設計：平台 5 層 - 1 層 PM - 1 層安全邊距 = 3 層 agent 可用。
+# 此常數為 can_descend() 的唯一深度判準來源（DRY，linux F2 修正）。
+MAX_TICKET_DEPTH: int = 3
 
 # ============================================================
 # 已知的描述性後綴模式
@@ -355,6 +367,24 @@ SRP_ACCEPTANCE_MODULE_THRESHOLD: int = 2
 
 DUPLICATE_DETECTION_THRESHOLD: float = 0.3
 DUPLICATE_DETECTION_COMPLETED_WINDOW_DAYS: int = 7
+
+# Tier 2 阻擋層常數（1.0.0-W1-040.1）
+#
+# 阻擋層在 Tier 1 警告層之上加「高相似 + 短窗口」雙條件交集，鎖定 ghost
+# 雙執行流同 turn（數分鐘內）重複 spawn 同語意票的簽名。
+#
+# 量測依據（parent 1.0.0-W1-040 重現實驗，五場景 Jaccard 實測）：
+#   TP 逐字相同 1.000 / TP 近似改寫 0.688（阻擋目標）
+#   FP 兄弟票真實標題 0.031 / 0.069（不阻擋）
+#   FP batch 同質模板 0.400（不阻擋，僅 Tier 1 警告）
+# TP 下界 0.688 與最高 FP 0.400 之間有 0.28 分隔帶，0.6 可分離兩者。
+# 0.6 為工程判斷；若後續樣本顯示分隔帶不足，可調整本值並同步更新本註解。
+DUPLICATE_BLOCK_THRESHOLD: float = 0.6
+
+# 短時間窗（分鐘）：候選票建立時間在此窗口內才納入阻擋判定。
+# 60 分鐘對應 ghost 同 turn 重複 spawn 的時間尺度（數分鐘級），
+# 同時排除「長存 pending 與新票偶然高相似」的合法情境。
+DUPLICATE_BLOCK_WINDOW_MINUTES: int = 60
 
 # ============================================================
 # Protocol Version 常數

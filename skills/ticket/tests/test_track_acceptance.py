@@ -580,17 +580,32 @@ class TestAppendLogSectionMatching:
         assert self._run(args, ticket) == 0
 
     def test_solutions_does_not_falsely_match_solution(self):
+        # W1-025: Solution 屬 Schema 章節，缺失時自動補建（rc 0）；
+        # 防護重點不變——不得誤匹配進 ## Solutions，新內容應落在獨立的 ## Solution
         args, ticket = self._build_args("## Solutions\n\n內容\n", section="Solution")
-        assert self._run(args, ticket) == 1
+        assert self._run(args, ticket) == 0
+        new_body = ticket["_body"]
+        # 既有 Solutions 區段未被汙染（內容原樣保留）
+        assert "## Solutions\n\n內容" in new_body
+        # 新內容落在自動補建的獨立 ## Solution 章節
+        assert re.search(r"(?m)^## Solution$", new_body) is not None
+        assert "新內容" in new_body
 
     def test_solution_alt_does_not_falsely_match(self):
+        # W1-025: 同上——「## Solution alt」不得被誤匹配，改走自動補建路徑
         args, ticket = self._build_args("## Solution alt\n\n內容\n", section="Solution")
-        assert self._run(args, ticket) == 1
+        assert self._run(args, ticket) == 0
+        new_body = ticket["_body"]
+        assert "## Solution alt\n\n內容" in new_body
+        assert re.search(r"(?m)^## Solution$", new_body) is not None
+        assert "新內容" in new_body
 
     def test_error_message_lists_existing_headers(self, capsys):
+        # W1-025: Schema 章節缺失改自動補建，SECTION_NOT_FOUND 的 H2 標題列舉
+        # 引導改以非 Schema 章節（Execution Log）驗證
         args, ticket = self._build_args(
             "## Problem Analysis\n內容\n## Test Results\n內容\n",
-            section="Solution"
+            section="Execution Log"
         )
         assert self._run(args, ticket) == 1
         out = capsys.readouterr().out

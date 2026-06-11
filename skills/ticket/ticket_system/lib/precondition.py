@@ -38,6 +38,14 @@ FORCE_BYPASS_WARNING = (
     "[Warning] --force 旁路 status precondition 檢查；使用已記入 hook-logs"
 )
 
+# W1-058: PM bookkeeping（派發前）章節 —— pending 狀態允許 append-log 直寫。
+# Why: PC-040 / PC-100 要求 PM 於 create 後（status=pending）立即將派發 context
+# 寫入 Problem Analysis / Context Bundle；原 in_progress 限制迫使 PM 常態化
+# --force（2026-06-11 單日 4 次），稀釋逃生閥警示價值並累積審計噪音。
+# 其餘章節（Solution / Test Results / Execution Log 等執行產出）維持
+# in_progress 限制，保留「未認領不得寫執行紀錄」的協議防護（W3-044 原意）。
+PRE_DISPATCH_SECTIONS = frozenset({"Problem Analysis", "Context Bundle"})
+
 
 # --- Helpers -----------------------------------------------------------------
 
@@ -114,6 +122,7 @@ def require_in_progress(
     operation: str,
     *,
     allow_completed: bool = False,
+    allow_pending: bool = False,
     force: bool = False,
 ) -> Tuple[bool, Optional[str]]:
     """檢查 body 操作的 status precondition。
@@ -123,6 +132,8 @@ def require_in_progress(
         ticket_id: ticket ID，用於錯誤訊息與 hook-logs 記錄
         operation: 呼叫端操作名稱（"append-log" / "set-acceptance" / "complete"）
         allow_completed: 是否允許 status=completed（True 用於 append-log 補 review）
+        allow_pending: 是否允許 status=pending（True 用於 append-log 寫入
+            PRE_DISPATCH_SECTIONS 派發前章節，W1-058 PM bookkeeping 路徑）
         force: 是否旁路檢查（記錄到 hook-logs，returns (True, None)）
 
     Returns:
@@ -164,6 +175,10 @@ def require_in_progress(
             return (True, None)
         return (False, _build_error_msg(ticket_id, operation, status, "reopen"))
     if status == STATUS_PENDING:
+        # W1-058: 派發前章節（PRE_DISPATCH_SECTIONS）允許 pending 直寫，
+        # 屬合法 PM bookkeeping 路徑，不記 hook-logs、不發警示。
+        if allow_pending:
+            return (True, None)
         return (False, _build_error_msg(ticket_id, operation, status, "claim"))
     if status == STATUS_BLOCKED:
         return (False, _build_error_msg(ticket_id, operation, status, "release"))

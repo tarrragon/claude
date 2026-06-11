@@ -47,7 +47,10 @@ from ticket_system.lib.command_tracking_messages import (
     TrackAcceptanceMessages,
     format_msg,
 )
-from ticket_system.lib.precondition import require_in_progress
+from ticket_system.lib.precondition import (
+    PRE_DISPATCH_SECTIONS,
+    require_in_progress,
+)
 from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
     resolve_ticket_path,
@@ -286,6 +289,18 @@ def execute_check_acceptance(args: argparse.Namespace, version: str) -> int:
     - 0-based 整數："0", "1", "2"（自動換算為 1-based）
     - 文字搜尋："任務實作完成"（模糊比對驗收條件文字）
     """
+    # W1-048: --as 身份申報對照（純前置檢查，deny 不寫入任何狀態）
+    # W1-083: 傳入 command 名稱，使 telemetry 可做 per-command 歸因
+    from ticket_system.lib.identity_guard import check_identity
+    deny = check_identity(
+        version,
+        args.ticket_id,
+        getattr(args, "as_agent", None),
+        command="check-acceptance",
+    )
+    if deny is not None:
+        return deny
+
     # 驗證參數互斥性
     use_all = getattr(args, "all", False)
     index_arg = getattr(args, "index", None)
@@ -623,31 +638,69 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
     """append-log 主邏輯（已位於 file_lock 內）。"""
     import sys as _sys
 
+    from ticket_system.lib.section_locator import find_section
+    from ticket_system.lib.ticket_builder import (
+        SCHEMA_H2_SECTIONS,
+        insert_missing_schema_section,
+    )
+
     ticket = load_ticket(version, args.ticket_id)
     if not ticket:
         print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
         return 1
 
+    # W1-025: 前置檢核聚合 —— status / section 白名單 / 章節存在性三項一次評估、
+    # 一次列全失敗原因（取代逐項 fail-fast 的三輪往返）。
+    # 動機：append-log 為高頻命令，fail-fast 時呼叫端需修一項重跑一次才看到
+    # 下一項失敗；聚合後單次呼叫即得完整修復清單（W1-024 adversarial 複審發現）。
+    # 各失敗訊息維持既有輸出通道（status → stderr；section 類 → stdout），
+    # exit code 維持既有契約（status 失敗 = 2，其餘 = 1）。
+
     # W3-044: body-op precondition 檢查（status 必須 in_progress 或 completed-allow）
+    # W1-058: 派發前章節（Problem Analysis / Context Bundle）額外允許 pending
+    # 直寫——PM 依 PC-040 / PC-100 於 create 後立即寫入派發 context 屬合法
+    # bookkeeping，不應消耗 --force 逃生閥（保留其警示價值）。其餘章節維持
+    # in_progress 限制（W3-044 協議防護不變）。
     force = bool(getattr(args, "force", False))
-    ok, error_msg = require_in_progress(
+    status_ok, status_error = require_in_progress(
         ticket,
         args.ticket_id,
         "append-log",
         allow_completed=True,  # append-log 支援 completed 補 review
+        allow_pending=args.section in PRE_DISPATCH_SECTIONS,
         force=force,
     )
-    if not ok:
-        _sys.stderr.write(error_msg + "\n")
-        return 2
+    if not status_ok:
+        _sys.stderr.write(status_error + "\n")
 
-    # 驗證 section 參數
+    # 驗證 section 參數（白名單）
     valid_sections = TrackAcceptanceMessages.VALID_SECTIONS
     section = args.section
-    if section not in valid_sections:
+    section_valid = section in valid_sections
+    if not section_valid:
         print(format_error(ErrorMessages.INVALID_SECTION, section=section))
         print(f"{TrackAcceptanceMessages.VALID_VALUES_PREFIX} {', '.join(valid_sections)}")
-        return 1
+
+    # 章節存在性（W17-117.1: 統一 section_locator helper）。
+    # W1-025: 缺失章節僅在「非 Schema 章節」（如 Execution Log）時視為失敗；
+    # Schema 章節缺失改走寫入階段的自動補建，不再構成錯誤。
+    body = ticket.get("_body", "")
+    match = find_section(body, section) if (section_valid and body) else None
+    section_missing = (
+        match is not None and not match.found and section not in SCHEMA_H2_SECTIONS
+    )
+    if section_missing:
+        # 列出該 ticket md 所有 ^## 標題引導用戶（W17-008.9 B 方案）
+        print(format_error(ErrorMessages.SECTION_NOT_FOUND, ticket_id=args.ticket_id, section=section))
+        if match.all_headers:
+            print(f"  該 ticket 現有 ## 標題：")
+            for header in match.all_headers:
+                print(f"    - {header}")
+        else:
+            print(f"  該 ticket md 無任何 ## 標題")
+
+    if not status_ok or not section_valid or section_missing:
+        return 2 if not status_ok else 1
 
     # 取得內容
     content = args.content
@@ -674,33 +727,10 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
             # W1-068（W1-038 方案 B）: 自動降級 H2 → H3 規範化（只匹配行首 H2，不影響 H3+）
             content = re.sub(r'(?m)^## ', '### ', content)
 
-    # 獲取 Ticket 內容
-    body = ticket.get("_body", "")
+    # 獲取 Ticket 內容（body 已於前置檢核載入）
     if not body:
         print(format_error(ErrorMessages.BODY_CONTENT_NOT_FOUND, ticket_id=args.ticket_id))
         return 1
-
-    # 尋找對應的區段標題（W17-117.1: 統一抽至 section_locator helper）
-    from ticket_system.lib.section_locator import find_section
-    match = find_section(body, section)
-
-    if not match.found:
-        # 列出該 ticket md 所有 ^## 標題引導用戶（W17-008.9 B 方案）
-        print(format_error(ErrorMessages.SECTION_NOT_FOUND, ticket_id=args.ticket_id, section=section))
-        if match.all_headers:
-            print(f"  該 ticket 現有 ## 標題：")
-            for header in match.all_headers:
-                print(f"    - {header}")
-        else:
-            print(f"  該 ticket md 無任何 ## 標題")
-        return 1
-
-    # 擷取整個 section 範圍（從標題行到下一個 ## 或文件結尾）
-    section_start = match.start
-    content_start = match.content_start
-    section_end = match.end
-    section_text = match.text
-    section_content = match.content
 
     # 生成時間戳
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -712,21 +742,43 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
         # 其他區段直接追加
         new_entry = f"\n{content}"
 
-    # W3-035: 若 section_content 為 placeholder-only（含 Schema 註解 + 待填寫文字），
-    # 改用 new_entry 替換 placeholder 而非 append，避免 placeholder 殘留導致
-    # body-schema-checker false positive 阻擋 complete。
-    # Execution Log 維持 append 語意（每筆 log 都是新事件）。
-    if section != "Execution Log":
-        updated_section = _replace_or_append_section_content(
-            section_text=section_text,
-            section_content=section_content,
-            new_entry=new_entry,
+    if match is None or not match.found:
+        # W1-025: 白名單合法但 body 缺失的 Schema 章節 → 於 canonical 順序位置
+        # 自動補建（含首筆內容一次寫入）。動機：IMP create 模板未預生成
+        # Context Bundle 等章節，append-log 原回報 SECTION_NOT_FOUND，呼叫端
+        # 被迫繞道手動 Edit。非 Schema 章節缺失已於前置檢核擋下，此處必為
+        # SCHEMA_H2_SECTIONS 成員。
+        new_body = insert_missing_schema_section(
+            body, section, content, ticket_type=str(ticket.get("type", "") or "")
         )
+        if new_body is None:
+            # 防禦：理論上前置檢核已排除非 Schema 章節缺失（不可達路徑），
+            # 保守回退既有 SECTION_NOT_FOUND 錯誤
+            print(format_error(ErrorMessages.SECTION_NOT_FOUND, ticket_id=args.ticket_id, section=section))
+            return 1
+        print(format_msg(TrackAcceptanceMessages.SECTION_AUTO_CREATED_FORMAT, section=section))
     else:
-        updated_section = section_text + new_entry
+        # 擷取整個 section 範圍（從標題行到下一個 ## 或文件結尾）
+        section_start = match.start
+        section_end = match.end
+        section_text = match.text
+        section_content = match.content
 
-    # 更新 body
-    new_body = body[:section_start] + updated_section + body[section_end:]
+        # W3-035: 若 section_content 為 placeholder-only（含 Schema 註解 + 待填寫文字），
+        # 改用 new_entry 替換 placeholder 而非 append，避免 placeholder 殘留導致
+        # body-schema-checker false positive 阻擋 complete。
+        # Execution Log 維持 append 語意（每筆 log 都是新事件）。
+        if section != "Execution Log":
+            updated_section = _replace_or_append_section_content(
+                section_text=section_text,
+                section_content=section_content,
+                new_entry=new_entry,
+            )
+        else:
+            updated_section = section_text + new_entry
+
+        # 更新 body
+        new_body = body[:section_start] + updated_section + body[section_end:]
 
     # W11-003.3 Layer 2：寫回前 idempotent dedupe 重複 Schema H2，避免歷史殘留 placeholder
     # 與當前內容並存造成 acceptance-auditor 誤報（PC-110 同源防護）

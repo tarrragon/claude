@@ -677,6 +677,16 @@ class ValidationMessages:
 
 詳情: 參考 .claude/analyses/archived/agent-collaboration.md 的「工具使用強制規範」"""
 
+    BARE_CD_WARNING = """[Bash Edit Guard] 提示: 偵測到裸 cd（改變持久工作目錄）
+
+檢測到的命令:
+  {command}
+
+建議: 改用 git -C <abs>（git 操作首選，完全不換 cwd）或子 shell (cd ... && ...)
+
+理由: 本環境 zsh 有 chpwd hook，裸 cd 觸發 ls 淹沒工具結果，是 confabulation 觸發鏈第 1 環
+詳情: 參考 .claude/rules/core/bash-tool-usage-rules.md 規則一"""
+
     # ========================================================================
     # Other Hooks
     # ========================================================================

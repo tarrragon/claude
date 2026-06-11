@@ -76,6 +76,7 @@ from hook_utils import (
     get_project_root,
     scan_ticket_files_by_version,
     find_ticket_file,
+    PM_ONLY_PREFIX,
 )
 
 # W3-039: session 管理 domain 已抽出為獨立模組（與本檔同目錄，合法識別符可直接 import）。
@@ -335,6 +336,36 @@ def is_handoff_recently_created(record: dict, logger) -> bool:
     except (ValueError, TypeError) as e:
         logger.warning(f"解析 handoff timestamp 失敗 ({timestamp_str}): {e}")
         return False
+
+
+def is_subagent_context(input_data: Dict[str, Any], logger) -> bool:
+    """判斷 stdin 是否帶 subagent context 標記（W1-044）。
+
+    Why：本 hook 註冊於 Stop event（主線程停止）。CC hook input schema
+    （.claude/references/hook-architect-technical-reference.md）中 SubagentStop
+    才帶 agent_id / agent_type，Stop 不帶。若 stdin 出現 agent_id / agent_type，
+    代表本次觸發實際處於 subagent context（CC 版本路由變更或誤註冊 SubagentStop），
+    此時注入 decision:block + 恢復指令會劫持 agent 最終訊息（W1-024 / W1-030 證實）。
+
+    Consequence：subagent context 下不偵測會把 PM 用的恢復指令注入 agent 回傳值，
+    覆寫 agent 真實最終訊息（W1-024 實證 basil 回傳值遺失）。
+
+    Action：caller 在 generate_hook_output 開頭呼叫；True 時回 {"suppressOutput": True}
+    跳過所有注入。採 documented schema 欄位（agent_id/agent_type）判別，
+    不用 transcript 長度等不可靠 heuristic（ticket W1-044 防護要求）。
+
+    與 subagent-stop-dispatch-cleanup-hook.py 的 agent_id 依賴形成一致慣例。
+    """
+    if not isinstance(input_data, dict):
+        return False
+    has_marker = bool(input_data.get("agent_id")) or bool(input_data.get("agent_type"))
+    if has_marker:
+        logger.info(
+            "偵測到 subagent context（agent_id=%s, agent_type=%s），跳過 handoff 注入",
+            input_data.get("agent_id"),
+            input_data.get("agent_type"),
+        )
+    return has_marker
 
 
 def has_background_agents(input_data: Dict[str, Any], logger) -> bool:
@@ -602,6 +633,11 @@ def generate_hook_output(
         dict - Hook 輸出 JSON
     """
     try:
+        # Step 0: subagent context 偵測（W1-044）。subagent stop 時跳過所有注入，
+        # 避免恢復指令劫持 agent 最終訊息（W1-024 / W1-030）。
+        if is_subagent_context(input_data or {}, logger):
+            return {"suppressOutput": True}
+
         # Step 1: 防重複觸發
         if has_been_triggered_this_session(logger):
             logger.info("此 session 已觸發過 Stop hook，跳過")
@@ -641,10 +677,13 @@ def generate_hook_output(
                 task = pending_tasks[0]
                 ticket_id = task.get("ticket_id")
                 logger.info(f"單任務，提示恢復: {ticket_id}")
+                # reason 會被注入給主線程 PM（恢復指令屬 PM 專屬動作）。
+                # Stop event 無 agent_id，程式層偵測（Step 0 的 W1-044 路徑）
+                # 涵蓋不到的環境由前綴 + AGENT_PRELOAD 忽略規則補位（PC-V1-004）。
                 return {
                     "decision": "block",
                     "reason": (
-                        f"[Handoff] 偵測到未完成的 handoff 任務：{ticket_id}\n"
+                        f"{PM_ONLY_PREFIX}[Handoff] 偵測到未完成的 handoff 任務：{ticket_id}\n"
                         f"請執行以下步驟：\n"
                         f"1. 檢查本 session 中是否有待辦工作尚未建立對應 Ticket（若有，先建立）\n"
                         f"2. 確認所有變更已 commit\n"
@@ -660,9 +699,10 @@ def generate_hook_output(
                 # 輸出到 stderr（exit 2）
                 print(tasks_list, file=sys.stderr)
 
+                # 同單任務路徑：reason 屬 PM 專屬注入，加受眾標記前綴（PC-V1-004）。
                 return {
                     "decision": "block",
-                    "reason": "多個待恢復任務，請選擇要恢復的任務"
+                    "reason": PM_ONLY_PREFIX + "多個待恢復任務，請選擇要恢復的任務"
                 }
         # 4b: 只有最近任務，無待恢復任務（可能有代理人在執行）
         elif recent_tasks:

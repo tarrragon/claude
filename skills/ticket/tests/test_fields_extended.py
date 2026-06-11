@@ -64,6 +64,10 @@ def ticket_env(tmp_path, monkeypatch):
     ticket_id = "0.99.0-W1-001"
     version, base_dir = _create_ticket_file(tmp_path, ticket_id, "0.99.0")
     monkeypatch.chdir(base_dir)
+    # W1-050：顯式 override autouse `_isolate_project_root` 注入的
+    # CLAUDE_PROJECT_DIR（其優先序高於 chdir），使路徑解析回到本 fixture
+    # 建立 ticket 的 base_dir，否則 get_project_root 指向空 tmp 找不到 ticket。
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(base_dir))
     return ticket_id, version
 
 

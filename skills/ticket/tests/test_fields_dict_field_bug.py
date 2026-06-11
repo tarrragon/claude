@@ -102,6 +102,9 @@ def test_scenario_1_dict_to_subkey_update(tmp_path, monkeypatch):
     )
 
     monkeypatch.chdir(tmp_path)
+    # W1-050：override autouse `_isolate_project_root` 的 CLAUDE_PROJECT_DIR
+    # （優先序高於 chdir），使路徑解析回到本測試建立 ticket 的 tmp_path。
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     args = _make_args(ticket_id, "agent-b", version)
     result = execute_set_who(args, version)
 
@@ -122,6 +125,9 @@ def test_scenario_2_squashed_string_recovery(tmp_path, monkeypatch):
     )
 
     monkeypatch.chdir(tmp_path)
+    # W1-050：override autouse `_isolate_project_root` 的 CLAUDE_PROJECT_DIR
+    # （優先序高於 chdir），使路徑解析回到本測試建立 ticket 的 tmp_path。
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     args = _make_args(ticket_id, "Domain Layer", version)
     result = execute_set_where(args, version)
 
@@ -142,6 +148,9 @@ def test_scenario_3_placeholder_string_init(tmp_path, monkeypatch):
     )
 
     monkeypatch.chdir(tmp_path)
+    # W1-050：override autouse `_isolate_project_root` 的 CLAUDE_PROJECT_DIR
+    # （優先序高於 chdir），使路徑解析回到本測試建立 ticket 的 tmp_path。
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     args = _make_args(ticket_id, "新策略說明", version)
     result = execute_set_how(args, version)
 
@@ -169,6 +178,9 @@ def test_non_dict_field_unaffected(tmp_path, monkeypatch):
     )
 
     monkeypatch.chdir(tmp_path)
+    # W1-050：override autouse `_isolate_project_root` 的 CLAUDE_PROJECT_DIR
+    # （優先序高於 chdir），使路徑解析回到本測試建立 ticket 的 tmp_path。
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     args = _make_args(ticket_id, "新標題", version)
     result = execute_set_what(args, version)
 

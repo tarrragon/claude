@@ -350,9 +350,9 @@ class TestWhereField:
 
     def test_set_where_success(self):
         """
-        Given: 設定 Ticket 的 where 欄位
+        Given: 設定 Ticket 的 where 欄位（路徑型輸入）
         When: 執行 set-where 操作
-        Then: 應返回 0，更新 where 值
+        Then: 應返回 0，更新 where.layer 並同步 where.files（W1-078 修復）
         """
         args = Mock()
         args.ticket_id = "0.31.0-W4-001"
@@ -372,9 +372,37 @@ class TestWhereField:
 
                 assert result == 0
                 saved_ticket = mock_save.call_args[0][0]
-                # set-where 僅更新 where.layer，保留 files（W10-088 修復：防止壓扁）
+                # dict 結構保留（W10-088 修復：防止壓扁）
                 assert isinstance(saved_ticket["where"], dict)
                 assert saved_ticket["where"]["layer"] == "lib/commands/"
+                # W1-078 修復：路徑型輸入同步覆寫 files（舊行為保留 stale 值
+                # 導致 dispatch hook 誤擋，W1-061.1 實證）
+                assert saved_ticket["where"]["files"] == ["lib/commands/"]
+
+    def test_set_where_descriptive_value_keeps_files(self):
+        """
+        Given: 設定 Ticket 的 where 欄位（描述性輸入，無 /）
+        When: 執行 set-where 操作
+        Then: 僅更新 where.layer，既有 files 保留（W1-078 修復的非路徑分支）
+        """
+        args = Mock()
+        args.ticket_id = "0.31.0-W4-001"
+        args.value = "Domain Layer"
+        args.version = "0.31.0"
+
+        with patch('ticket_system.lib.ticket_ops.load_ticket') as mock_load:
+            mock_ticket = {
+                "id": "0.31.0-W4-001",
+                "where": {"layer": "tests/", "files": ["tests/test_a.py"]},
+            }
+            mock_load.return_value = mock_ticket
+
+            with patch('ticket_system.lib.ticket_loader.save_ticket') as mock_save:
+                result = execute_set_where(args, "0.31.0")
+
+                assert result == 0
+                saved_ticket = mock_save.call_args[0][0]
+                assert saved_ticket["where"]["layer"] == "Domain Layer"
                 assert saved_ticket["where"]["files"] == ["tests/test_a.py"]
 
 

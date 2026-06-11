@@ -4,7 +4,7 @@ description: TDD 測試建築師。TDD Phase 2 測試設計專家，根據功能
 tools: Edit, Write, Grep, LS, Read, Bash, Glob, mcp__dart__*
 permissionMode: bypassPermissions
 color: red
-model: opus
+model: inherit
 effort: low
 ---
 

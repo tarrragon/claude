@@ -2,7 +2,7 @@
 
 > **平台機制**：Claude Code 啟動時自動載入 `CLAUDE.md` + `.claude/rules/**/*.md`。其他 `.claude/` 子目錄不會自動載入，必須主動 Read。
 
-本目錄只放**所有角色通用**的品質規則（7 檔）。PM 流程規則在 `pm-rules/`，技術參考在 `references/`。
+本目錄只放**所有角色通用**的品質規則（集中於 `core/`，現為 17 檔）。PM 流程規則在 `pm-rules/`，技術參考在 `references/`。
 
 | 目錄 | 載入方式 | 內容 |
 |------|---------|------|
@@ -21,5 +21,6 @@
 
 ---
 
-**Last Updated**: 2026-04-20
+**Last Updated**: 2026-06-10
+**Version**: 10.2.0 — 更正 `core/` 檔數（原「7 檔」stale，現 17 檔）（W1-032 文件交叉引用稽核）
 **Version**: 10.1.0 — 新增「環境管理原則」導航，指向 `references/plugin-management.md`（避免 plugin 誤裝膨脹 context）

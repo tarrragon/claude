@@ -185,6 +185,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | ARCH-019 | Hook 事件時機不匹配 | 中 | v0.18.0 |
 | ARCH-020 | validator 與 hook 重複驗證邏輯 | 中 | v0.18.0 |
 | ARCH-021 | 模組組裝遺漏導致功能鏈路靜默斷裂（原 ARCH-010 重編號） | 高 | v0.15.4 |
+| ARCH-V1-001 | 同一不變量單點執法、多入口繞過（前門裝鎖、側門敞開） | 中 | v1.0.0 |
 
 ### 程式碼品質 (CQ)
 

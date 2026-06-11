@@ -108,6 +108,31 @@ ticket create --parent 1.0.0-W2-001 --action "實作" --target "事件融合層"
 ticket create --wave 2 --action "撰寫" --target "工作日誌" --type DOC
 ```
 
+## 重複偵測（兩層防護）
+
+`create` 在持久化前對同版本既有 Ticket 做語意相似度（Jaccard）比對，分兩層防護。設計依據與量測數據見 ticket `1.0.0-W1-040`（五場景 Jaccard 實測）與 `1.0.0-W1-040.1`（實作）。
+
+| 層 | 觸發條件 | 行為 | 旁路 |
+|----|---------|------|------|
+| Tier 1 警告層 | 同版本 pending / in_progress / completed(7d) + 相似度 >= `DUPLICATE_DETECTION_THRESHOLD`（0.3） | stdout `[WARNING]`，**不阻擋** | 無需（不阻擋） |
+| Tier 2 阻擋層 | 同版本 pending / in_progress + 相似度 >= `DUPLICATE_BLOCK_THRESHOLD`（0.6） + 候選建立時間在 `DUPLICATE_BLOCK_WINDOW_MINUTES`（60 分鐘）內 | `[ERROR]` + `exit 1` 阻擋 | `--allow-duplicate` |
+
+Tier 2 設計用途：阻擋 ghost 雙執行流同 turn（數分鐘內）重複 spawn 同語意票的冪等防護。三條件交集（高相似 + 短窗口 + 未完成）鎖定 ghost 簽名，同時排除真實兄弟票（低相似）、batch 同質模板（< 0.6）、合法重做已完成票（completed 不納入）等誤報情境。
+
+候選建立時間以 ticket md 檔案 birth time（fallback mtime）判定，frontmatter `created` 僅日期粒度不足以支撐 60 分鐘級窗口。
+
+### --allow-duplicate 旁路
+
+```bash
+# 失誤後刻意重建近似 Ticket 的合法情境
+ticket create --wave 1 --action "實作" --target "XXX" --allow-duplicate \
+  --decision-tree-entry "..." --decision-tree-decision "..." --decision-tree-rationale "..."
+```
+
+使用 `--allow-duplicate` 時放行建立，並在 stdout 標註 `[INFO] --allow-duplicate 已啟用，略過同窗口高相似度阻擋`。
+
+> **bulk_create 差異**：`bulk-create` 僅套用 Tier 1 警告層，**不套用** Tier 2 阻擋層——批次內部同質性高，阻擋誤報風險大。
+
 ## --source-ticket 參數（衍生關係）
 
 `--source-ticket <SOURCE-ID>` 用於建立「衍生 Ticket」關係（spawned_tickets），典型場景為 ANA 衍生 IMP / ADJ、執行中發現的獨立技術債。

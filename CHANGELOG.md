@@ -1,3 +1,92 @@
+## [1.45.0] - 2026-06-12
+
+### Summary
+feat: identity-guard 呼叫端傳遞 command 參數（telemetry per-command 歸因）; feat: identity-guard telemetry pass/exempt 路徑落盤; feat: dispatch hook 嵌套深度感知強制層 (+76 more)
+
+Changes: 15 feat, 1 refactor, 30 fix, 21 docs, 11 chore, 1 test
+
+- feat: identity-guard 呼叫端傳遞 command 參數（telemetry per-command 歸因）
+- feat: identity-guard telemetry pass/exempt 路徑落盤
+- feat: dispatch hook 嵌套深度感知強制層
+- feat: ticket CLI 嵌套深度防護（depth 命令 + create --parent warning）
+- feat: identity-guard warn/deny telemetry 落盤
+- feat: ticket CLI 寫入命令 --as 身份申報與 who.current 對照（warn-only 過渡）
+- feat: create Tier 2 高相似度阻擋層 + bulk-create 警告層補齊
+- feat: argparse 縮寫歧義模式化治理
+- feat: create 必填欄位一次列全 + --how 縮寫歧義友善提示
+- feat: create UX — 必填欄位一次列全 + --how 友善提示
+- feat: bash-edit-guard 加裸 cd warn 偵測
+- feat: bash-rules git -C 首選 + 輸出可疑協議 + IMP-056 受眾修補
+- feat: PC-166 升級唯讀 stdout 虛構 + 反污染協議規則固化
+- feat: error-pattern flat 號 negative gate hook
+- feat: 整合 blocker_resolution 共用 predicate 至 lifecycle/runqueue
+- refactor: collision guard 內聚 get_next_seq 並覆蓋 bulk_create
+- fix: basil model 行清理（移除行內註解）+ ANA 結論與驗證票
+- fix: set-where 同步更新 where.files
+- fix: SubagentStop 自激迴圈斷路器 + WAIT 廣播 dedup
+- fix: 效能測試 pytest -m perf 標記隔離
+- fix: agent-commit-verification porcelain 首行截斷與豁免繞過
+- fix: append-log 派發前章節允許 pending 直寫，消除 PM bookkeeping --force 常態化
+- fix: 移除 handoff-auto-resume-stop-hook Stop 事件雙重註冊（PC-148）
+- fix: append-log 自動補建缺失 Schema 章節 + 前置檢核聚合
+- fix: ticket create ID 分配 fcntl file lock
+- fix: worktree skill dev deps 改用 PEP 735 dependency-groups 宣告
+- fix: ticket-quality-gate hook tool-aware 輸入驗證分流
+- fix: AGENT_PRELOAD 加 [PM-ONLY] 前綴忽略規則 + Stop 類 hook 注入訊息加前綴
+- fix: emit_hook_output 加 audience 受眾過濾 + 10 gap hook 遷移統一出口
+- fix: 4 個 PostToolUse hook 加入 subagent 偵測早期跳過
+- fix: 修復 uv-tool-staleness hook 的 registry 佈局假設
+- fix: worktree-auto-commit hook 防 race 代捕 + 訊息富化
+- fix: ticket_generator 配號改經 resolve_available_seq 補 collision guard
+- fix: conftest autouse 隔離 project root 防 ticket 測試 lock 污染真實 work-logs
+- fix: 修復 ticket create auto-seq 衝突（三層缺陷鏈）
+- fix: identity guard 僅對 str as_value 生效，修復 Mock-args 測試回歸
+- fix: Stop hook 加 subagent context 偵測消除最終訊息劫持
+- fix: 強健化 ana_spawn_consistency_checker 表格變體偵測
+- fix: error-pattern flat-gate 數字開頭描述段繞過修復
+- fix: 修復 bash-edit-guard 裸 cd 偵測五項盲區
+- fix: conftest autouse fixture 隔離 hook 測試日誌至 tmp_path
+- fix: decision-tree 全缺併入 checklist 一次列全（A2 同手法）
+- fix: checklist 驗證補空字串 why/how_strategy 漏判
+- fix: 建票路徑 checklist 執法一致性（batch-create/generate 補 warning）
+- fix: 收窄裸 cd guard 絕對路徑排除為僅 repo-root 還原
+- fix: basil Layer 2 修正（規則3補Consequence + PC-166移除inline ticket ID）
+- docs: footer 同號條目歸位標註 + PRELOAD 禁用詞摘要顯性說明（basil P2 殘項）
+- docs: 收尾 --as 全覆蓋與建票 who 對齊 SOP（PRELOAD + dispatch-template ）
+- docs: PC-V1-002 補入執行 agent 違抗決策權保留約束案例變體
+- docs: hook 開發受眾評估 checklist 規則（PC-V1-004 防護 B）
+- docs: PC-143 追加案例 3 — ANA 規劃 dated model ID 拼接錯誤
+- docs: 卸載零使用 bundled plugins + 防復裝清單
+- docs: agent-dispatch-template 新增嵌套派發派發端指引章節
+- docs: parallel-dispatch.md 新增嵌套派發整合條款
+- docs: 新增 PC-V1-003 聯想式參照個案修補消音 error-pattern
+- docs: 升級 PC-069 批量腳本衛生規範
+- docs: AGENT_PRELOAD 新增規則 9 嵌套派發資訊協議
+- docs: Phase 4 兩視角回填 + 兩處註解一致性立即修正
+- docs: PRELOAD 2.4 雙判準 — who.current 機械對照為主判準
+- docs: 探針派發防護落地 — 唯讀探針 SOP + 引用非指派邊界 + PC-V1-002
+- docs: ghost branch 宿主機制補證收斂 — 同進程同 turn 雙執行流
+- docs: confabulation 規則檔群交叉引用與版本標記稽核
+- docs: SKILL.md 標註頂層命令 vs track 子命令層級慣例
+- docs: 固化「單點執法、多入口繞過」反模式（/043/029 學習）
+- docs: tool-output-trust 新增規則 5 記錄/世界平面二相性
+- docs: PC-166 跨境用語修正（並發→並行/導出→匯出/批量→批次）
+- docs: PC-166 整合 ghost branch 鑑識判據（防護 D 延伸）
+- chore: 收編前 session 遺留的測試檔 exec bit 變更（644→755）
+- chore: 清理 23 個 agent 檔 model 行行內註解
+- chore: spawn 3 IMP children + worktree egg-info 隨 pyproject 再生成
+- chore: ticket bookkeeping — metadata sync + /070 結案 + .1 spawn + set-where 補欄
+- chore: 補上 2 個 hook 測試檔執行權限（HookCheck 自動 chmod +x, IMP-054）
+- chore: 補 commit hook 測試檔執行權限修正（HookCheck IMP-054 自動 chmod）
+- chore: ANA 完成 — PC-V1-004 落地 + 三張防護 spawn ticket
+- chore: fallbackModel 設定 + 16 agent opus 改 inherit 統一
+- chore: 跨 session 同日二度撞號案例追加 + 防護排程
+- chore: CC 2.1.164-2.1.172 release impact review 評估落地
+- chore: 測試檔執行權限修正（HookCheck IMP-054 自動 chmod +x）
+- test: 清理 create 驗證測試債（--force why 豁免覆蓋 + 死 errno 收斂）
+
+---
+
 ## [1.44.6] - 2026-06-09
 
 ### Summary

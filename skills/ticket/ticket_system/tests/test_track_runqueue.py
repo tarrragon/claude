@@ -350,3 +350,53 @@ def test_cross_command_consistency_context_refresh_target_ticket_id(monkeypatch)
 
     assert runqueue_ids == resume_list_ids
     assert "0.18.0-W13-001" in runqueue_ids
+
+
+# ---------------------------------------------------------------------------
+# W1-020: 共用 is_fully_unblocked predicate（blocker completed 但 blockedBy 未清）
+# ---------------------------------------------------------------------------
+
+def test_is_unblocked_pending_blocker_completed_but_blockedby_not_cleared():
+    """blocker 已 completed 但 blockedBy 欄位未清理 → 應視為 ready（W8-042 缺陷修復）。"""
+    blocker = _mk("0.18.0-W1-001", status="completed")
+    target = _mk("0.18.0-W1-002", status="pending", blocked=["0.18.0-W1-001"])
+    ticket_map = {t["id"]: t for t in (blocker, target)}
+    assert track_runqueue._is_unblocked_pending(target, ticket_map) is True
+
+
+def test_is_unblocked_pending_blocker_closed_treated_as_resolved():
+    """blocker closed 在 scheduler 場景（include_closed_as_resolved=True）視為已解除。"""
+    blocker = _mk("0.18.0-W1-001", status="closed")
+    target = _mk("0.18.0-W1-002", status="pending", blocked=["0.18.0-W1-001"])
+    ticket_map = {t["id"]: t for t in (blocker, target)}
+    assert track_runqueue._is_unblocked_pending(target, ticket_map) is True
+
+
+def test_is_unblocked_pending_blocker_still_in_progress_stays_blocked():
+    """blocker 仍 in_progress → 仍視為 blocked。"""
+    blocker = _mk("0.18.0-W1-001", status="in_progress")
+    target = _mk("0.18.0-W1-002", status="pending", blocked=["0.18.0-W1-001"])
+    ticket_map = {t["id"]: t for t in (blocker, target)}
+    assert track_runqueue._is_unblocked_pending(target, ticket_map) is False
+
+
+def test_is_unblocked_pending_empty_blockedby_is_ready():
+    target = _mk("0.18.0-W1-002", status="pending", blocked=[])
+    ticket_map = {target["id"]: target}
+    assert track_runqueue._is_unblocked_pending(target, ticket_map) is True
+
+
+def test_is_unblocked_pending_non_pending_status_false():
+    target = _mk("0.18.0-W1-002", status="in_progress", blocked=[])
+    ticket_map = {target["id"]: target}
+    assert track_runqueue._is_unblocked_pending(target, ticket_map) is False
+
+
+def test_render_list_surfaces_ticket_with_completed_blocker_uncleared():
+    """端到端：blocker completed + blockedBy 未清 → runqueue list 應列出 target。"""
+    blocker = _mk("0.18.0-W1-001", status="completed", priority="P1")
+    target = _mk("0.18.0-W1-002", status="pending", blocked=["0.18.0-W1-001"], priority="P1")
+    out = track_runqueue._render_list(
+        [blocker, target], top=None, wave=None, context=None
+    )
+    assert "0.18.0-W1-002" in out
