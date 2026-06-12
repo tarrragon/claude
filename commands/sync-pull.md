@@ -87,6 +87,65 @@ description: 從獨立 repo 拉取最新 .claude 配置 (https://github.com/tarr
      ```
    - 如果偵測到根目錄無 CLAUDE.md，額外提醒從模板建立
 
+## pull 後檢查清單（強制）
+
+**Why**：pull 的 delta 檢視、衝突解決、commit 過去全靠 ad-hoc 判斷無 SOP，實證曾發生衝突殘留 `.sync-conflicts/` 多日無人處理。本清單將 pull 後的人工收尾步驟標準化。
+
+**Consequence**：跳過清單會讓未解決衝突與衝突標記殘留靜默累積——下次 pull 的新衝突與舊殘留混雜無法分辨、含 `<<<<<<<` 標記的檔案被當正常內容使用、未 commit 的 delta 汙染後續任務的變更邊界。
+
+**Action**：每次 pull 成功後依序執行以下五步。
+
+### 1. Delta 檢視
+
+```bash
+git status --porcelain -- .claude/
+git diff --stat -- .claude/
+```
+
+逐項確認變更符合預期：來源是上游 delta（合理）還是意外覆蓋本地特化檔（需還原）。
+
+### 2. 衝突解決決策表
+
+腳本對衝突的處理分兩類（stdout 已註記）：
+
+| 衝突檔案 | 腳本行為 | 人工後續 |
+|---------|---------|---------|
+| `VERSION` / `CHANGELOG.md`（版本檔） | 自動採 upstream，`.sync-conflicts/` 留對照副本 | 無需動作（本地版本檔必 stale，屬系統性衝突）；如對照副本顯示本地有應保留的內容，屬異常需人工檢視 |
+| 其他檔案 | 本地原檔保留，衝突合併結果存 `.sync-conflicts/` | 依下表三選項逐檔決策 |
+
+非版本檔衝突的三選項：
+
+| 選項 | 適用情境 | 操作 |
+|------|---------|------|
+| 採 local（保留現狀） | 本地修改是本專案特化（如專案專屬防護） | 不動本地檔；考慮將該檔加入 `sync-preserve.yaml` 避免下次再衝突 |
+| 採 upstream | 本地修改已過時或上游版本更完整 | 從 `.sync-conflicts/` 對照後，以上游內容覆蓋本地檔 |
+| 手動合併 | 雙方修改都有價值 | 開啟 `.sync-conflicts/` 中含衝突標記的合併結果，手動整合後寫回本地檔 |
+
+### 3. 衝突標記歸零驗證
+
+```bash
+grep -rn "^<<<<<<< \|^>>>>>>> " .claude/ --include="*.md" --include="*.py" --include="*.json" --include="*.yaml" | grep -v ".sync-conflicts/"
+```
+
+預期輸出為空。任何命中代表手動合併時把衝突標記寫進了正式檔案，必須立即清除。
+
+### 4. Commit 規範
+
+- 一次 pull 的 delta 集中為單一 commit，訊息格式：`chore(sync): pull .claude 更新（上游 <short-sha>）`
+- 衝突解決若涉及本地檔修改，與 delta 同 commit（同一次 pull 的完整結果）
+- 禁止與其他任務的變更混入同一 commit（變更邊界清晰，便於回溯）
+
+### 5. 清理 .sync-conflicts/
+
+完成步驟 2 的所有衝突決策後清空暫存：
+
+```bash
+ls -la .claude/.sync-conflicts/ 2>/dev/null   # 先確認內容已處理完
+rm -rf .claude/.sync-conflicts/
+```
+
+清理是步驟 2 完成的訊號：下次 pull 開始時腳本會偵測 `.sync-conflicts/` 既有殘留並警告列出（殘留 = 前次清單未走完）。
+
 ## 新專案初始化
 
 如果是新專案，需要手動建立 CLAUDE.md：

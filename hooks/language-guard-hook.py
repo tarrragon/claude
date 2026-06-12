@@ -92,7 +92,7 @@ EMOJI_RANGES = (
 )
 
 # 隱含表達 6 句型（W17-068 新增；對應 document-writing-style v1.2.0 反模式表）
-# 來源：.claude/rules/core/document-writing-style.md L115-L120
+# 來源：.claude/references/document-writing-style-details.md「反模式：人性化/隱含表達」章節（6 句型表）
 # 設計原則：警告非阻擋（語意需 basil 兜底，避免阻擋合法引用 / 規範描述本身）
 # 每組（pattern, hint）→ pattern 為偵測字串、hint 為修正方向
 IMPLICIT_EXPRESSION_PATTERNS: Tuple[Tuple[str, str], ...] = (

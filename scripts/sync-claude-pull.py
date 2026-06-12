@@ -63,6 +63,12 @@ BASE_SHA_FIELD = "last_synced_base_sha"
 
 # 三方合併衝突暫存目錄（M3：local-only，不推送）。
 SYNC_CONFLICTS_DIR = ".sync-conflicts"
+
+# 版本檔衝突自動採 upstream 的白名單（相對 .claude/ 的路徑，1.0.0-W1-084）。
+# 背景：push 腳本只 bump 遠端 repo 的 VERSION / CHANGELOG.md，本地副本永遠 stale，
+# 屬每次 pull 必重演的系統性衝突，無人工判斷價值。自動採 upstream 時仍寫
+# .sync-conflicts/ 對照副本（含衝突標記），保留人工事後檢視的依據。
+VERSION_FILES_TAKE_UPSTREAM = frozenset({"VERSION", "CHANGELOG.md"})
 GIT_HTTP_LOW_SPEED_LIMIT_BYTES = "1000"
 GIT_HTTP_LOW_SPEED_TIME_SECONDS = "30"
 
@@ -958,6 +964,67 @@ def _ensure_conflicts_dir(claude_dir: Path) -> Path:
     return conflicts_dir
 
 
+def detect_conflict_residue(
+    claude_dir: Path, before_time: float | None = None
+) -> list[str]:
+    """偵測 .sync-conflicts/ 中早於本次 pull 的既有殘留檔（1.0.0-W1-084）。
+
+    背景：前次 pull 的衝突副本若未處理即殘留，下次 pull 的新衝突會與舊殘留混雜，
+    無人能分辨哪些已處理。pull 開始時以 mtime 早於本次執行時間為判準列出殘留，
+    讓未處理衝突在新衝突寫入前可見。
+
+    參數:
+        claude_dir: .claude 目錄路徑
+        before_time: 本次 pull 起始時間戳（epoch 秒），預設取呼叫當下時間。
+                     mtime 早於此值者視為前次殘留。
+
+    傳回:
+        list[str]: 殘留檔相對 .sync-conflicts/ 的路徑清單（排除 .gitignore），已排序
+    """
+    conflicts_dir = claude_dir / SYNC_CONFLICTS_DIR
+    if not conflicts_dir.is_dir():
+        return []
+    if before_time is None:
+        before_time = time.time()
+    residue: list[str] = []
+    for item in sorted(conflicts_dir.rglob("*")):
+        if not item.is_file() or item.is_symlink() or item.name == ".gitignore":
+            continue
+        try:
+            mtime = item.stat().st_mtime
+        except OSError:
+            # 讀不到 mtime 視為殘留（寧可多警告，不靜默漏報）
+            residue.append(str(item.relative_to(conflicts_dir)))
+            continue
+        if mtime < before_time:
+            residue.append(str(item.relative_to(conflicts_dir)))
+    return residue
+
+
+def warn_conflict_residue(claude_dir: Path) -> list[str]:
+    """pull 開始時警告列出 .sync-conflicts/ 既有殘留（stdout 可見，不阻擋）。
+
+    殘留代表前次 pull 衝突未走完「pull 後檢查清單」（commands/sync-pull.md），
+    僅警告不中止：殘留不影響本次 pull 正確性，但需人工處理避免持續累積。
+
+    傳回:
+        list[str]: 殘留檔清單（同 detect_conflict_residue）
+    """
+    residue = detect_conflict_residue(claude_dir)
+    if residue:
+        print_color(
+            f"警告: {SYNC_CONFLICTS_DIR}/ 有 {len(residue)} 個前次 pull 衝突殘留未處理:",
+            "yellow",
+        )
+        for rel in residue:
+            print_color(f"   ! {rel}")
+        print_color(
+            "   請依 .claude/commands/sync-pull.md「pull 後檢查清單」處理後清空",
+            "yellow",
+        )
+    return residue
+
+
 def _rel_under_claude(repo_rel_path: str) -> str | None:
     """將上游 repo root 相對路徑轉為 .claude/ 內相對路徑。
 
@@ -1272,11 +1339,29 @@ def apply_upstream_delta(
             )
 
             if conflict:
-                # M3：衝突檔寫 .sync-conflicts/，保留本地原檔不動
+                # M3：衝突檔寫 .sync-conflicts/（含衝突標記的合併結果，供人工對照）
                 conflicts_dir = _ensure_conflicts_dir(claude_dir)
                 conflict_target = conflicts_dir / rel_path
                 conflict_target.parent.mkdir(parents=True, exist_ok=True)
                 conflict_target.write_bytes(merged if merged is not None else b"")
+
+                # 版本檔系統性衝突自動採 upstream（1.0.0-W1-084）：
+                # 本地版本檔必 stale（push 只 bump 遠端），自動以 upstream 覆蓋，
+                # .sync-conflicts/ 仍留對照副本。非版本檔維持原 local-保留路徑。
+                if (
+                    claude_rel in VERSION_FILES_TAKE_UPSTREAM
+                    and upstream_path is not None
+                    and upstream_path.exists()
+                ):
+                    _atomic_write(local_file, upstream_path.read_bytes(), rollback_log)
+                    applied += 1
+                    print_color(
+                        f"   版本檔衝突自動採 upstream: {claude_rel}"
+                        f"（對照副本已存 {SYNC_CONFLICTS_DIR}/）",
+                        "yellow",
+                    )
+                    continue
+
                 conflicts.append(claude_rel)
                 print_color(f"   衝突: {claude_rel}（已存 {SYNC_CONFLICTS_DIR}/，本地原檔保留）", "red")
                 continue
@@ -1716,6 +1801,9 @@ def main() -> None:
 
     project_root = find_project_root()
     _validate_environment(project_root)
+
+    # 偵測前次 pull 的衝突殘留（在本次新衝突寫入前列出，避免新舊混雜）
+    warn_conflict_residue(project_root / ".claude")
 
     try:
         temp_dir, backup_dir = _clone_and_backup(project_root)

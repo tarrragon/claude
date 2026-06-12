@@ -28,11 +28,9 @@
 | 新建檔案 | **Write** | — |
 | 讀取 / 查找特定符號 | `mcp__serena__find_symbol`（read-only 不受本規則限制） | — |
 
-**Why**：LLM 傾向選擇「單步高精度」工具（PC-088 工具選擇偏誤），對 `.md` / `.yaml` 等非程式碼檔誤選 serena MCP 寫入工具。serena 寫入工具設計用於 AST 符號級操作，對純文字檔語意過度且 subagent 環境常不在 allow list。
+**Why/Consequence**：LLM 傾向選「單步高精度」工具（PC-088 偏誤），對 `.md` / `.yaml` 等非程式碼檔誤選 serena MCP 寫入工具（AST 符號級設計，對純文字檔語意過度且 subagent 環境常不在 allow list）；會被 hook deny，代理人若錯誤泛化「所有寫入工具都被拒」會 self-imposed early stop（W17-088 / PC-112 根因），任務失敗且 PM 難察覺其實 Edit 可行。
 
-**Consequence**：對非程式碼檔使用 MCP 寫入工具會被 hook deny；代理人若錯誤泛化「所有寫入工具都被拒」會 self-imposed early stop（W17-088 / PC-112 根因），任務失敗且 PM 難以察覺其實 Edit 可行。
-
-**Action**：修改 `.md` / `.yaml` 等非程式碼檔時，**直接用 Edit / Write**，不嘗試 serena 寫入工具；MCP 寫入工具被拒時必須降級至 Edit，禁 self-imposed early stop。
+**Action**：修改非程式碼檔時**直接用 Edit / Write**，不嘗試 serena 寫入工具；MCP 寫入工具被拒時必須降級至 Edit，禁 self-imposed early stop。
 
 ### 規則 2：Hook 被拒時的 Fallback
 
@@ -45,22 +43,11 @@
 
 ---
 
-## 與其他規則的邊界
+## 邊界與違規偵測
 
-| 規則 | 聚焦 | 與本規則差異 |
-|------|------|------------|
-| `tool-discovery.md` | 「做不到」前的探索檢查（找 deferred tools） | 本規則處理「已知有多個工具可用時的選擇」 |
-| AGENT_PRELOAD 規則 7 | 代理人 prompt-time 提醒 | 本規則為 PM 與框架層通用陳述，hook 為強制層 |
-| `bash-tool-usage-rules.md` | Bash 命令呼叫規範 | 本規則聚焦工具選擇，非命令語法 |
+**邊界**：`tool-discovery.md` 處理「做不到」前的探索檢查（找 deferred tools），本規則處理「已知多工具可用時的選擇」；AGENT_PRELOAD 規則 7 是 subagent prompt-time 提醒；`bash-tool-usage-rules.md` 聚焦命令語法，非工具選擇。
 
----
-
-## 違規偵測
-
-| 層次 | 機制 | 行為 |
-|------|------|------|
-| 規則文件（人類可讀） | 本檔 + AGENT_PRELOAD 規則 7 | 提醒 / 自我約束 |
-| Hook 強制層 | `.claude/hooks/mcp-write-tool-on-text-file-guard-hook.py` | PreToolUse 偵測到 `mcp__serena__` 寫入工具 + 非程式碼副檔名 → exit 2 + deny message |
+**雙層防護**：規則文件（本檔 + AGENT_PRELOAD 規則 7）為自我約束層；`.claude/hooks/mcp-write-tool-on-text-file-guard-hook.py` 為強制層（PreToolUse 偵測 `mcp__serena__` 寫入工具 + 非程式碼副檔名 → exit 2 + deny）。
 
 ---
 

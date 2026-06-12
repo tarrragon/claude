@@ -2,8 +2,8 @@
 Custom H2 Checker - 自定義 H2 章節偵測（W17-072）
 
 W17-072：偵測 ticket body 中出現的非 Schema H2 章節，於 complete 時輸出 warning
-（不阻擋）。配合 `.claude/rules/core/agent-definition-standard.md` v1.2.0「禁止自定義
-H2」條款，讓 agent 違規寫入 `## 實作摘要` / `## 驗證指令與結果` 等自定義 H2 時能被
+（不阻擋）。配合 `.claude/references/agent-definition-standard-details.md`「章節結構規則
+（W17-072）」「禁止自定義 H2」條款，讓 agent 違規寫入 `## 實作摘要` / `## 驗證指令與結果` 等自定義 H2 時能被
 主線程及時察覺。
 
 設計要點：

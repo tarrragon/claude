@@ -1,3 +1,25 @@
+## [1.46.0] - 2026-06-12
+
+### Summary
+feat: file-size-guardian 擴充 auto-load 集合 token 預算量測; feat: sync-pull 衝突處理標準化; fix: 校準 file-size-guardian CHARS_PER_TOKEN 係數 3 → 1.3 (+9 more)
+
+Changes: 2 feat, 1 fix, 2 docs, 7 chore
+
+- feat: file-size-guardian 擴充 auto-load 集合 token 預算量測
+- feat: sync-pull 衝突處理標準化
+- fix: 校準 file-size-guardian CHARS_PER_TOKEN 係數 3 → 1.3
+- docs: 新增 IMP-V1-001 估算係數未經實測校準即上線 error-pattern
+- docs: 新增 PC-V1-005 acceptance 量化目標未考慮 substance 密度上限
+- chore: 測試檔執行權限修正（HookCheck IMP-054 自動 chmod +x）
+- chore: 三檔 token 收斂瘦身
+- chore: 六檔 auto-load 文件輕量修剪（減量 20.8%）
+- chore: 三檔主文外移 references/，core/ 降速查 stub
+- chore: CLAUDE.md 收斂至 149 行 + project-conventions @ 改純路徑
+- chore: test-assertion-design-rules 主文外移 references/ 降 stub
+- chore: sync-pull — .version-release.yaml 納入 local-only 排除 + VERSION/CHANGELOG 採上游解衝突
+
+---
+
 ## [1.45.1] - 2026-06-12
 
 ### Summary

@@ -258,6 +258,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | IMP-070 | Hook stdin 欄位命名規範混淆（input snake_case vs output camelCase） | 高 | v0.18.0 |
 | IMP-078 | CE-Node 環境前提誤判 — Jest 測試綠燈但 CE Runtime 崩潰 | 高 | v0.19.0 |
 | IMP-079 | 批次替換工具誤傷偵測目標字面 — regex/meta-test 內嵌待測字元被盲目轉換後語意塌縮 | 中 | v0.19.1 |
+| IMP-V1-001 | 估算係數未經實測校準即上線 — 守門機制低估真值提供假安心 | 中 | v1.0.0 |
 
 ### 流程合規 (PC)
 
@@ -360,6 +361,11 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-172 | Wrapper command 參數推斷未經 runtime 驗證（只讀底層 binary --help，忽略 wrapper 自動注入參數） | 中 | v0.19.1 |
 | PC-176 | 跨環境設定不一致時歸因「環境差異」而非驗證被 git 同步的共用設定本身（便利假設掩蓋一份錯設定的單點根因） | 中 | v0.19.1 |
 | PC-180 | 雙專案共用 sync 時混淆「共享 repo 納入範圍」與「本地保留範圍」致框架調整誤失（preserve 清單為根本解） | 中 | v1.0.0 |
+| PC-V1-001 | sync-push 無 --help，未知參數當 commit 訊息觸發真實不可逆推送 | 高 | v1.0.0 |
+| PC-V1-002 | Ticket ID 引用觸發 agent 自律收尾越權（引用 ≠ 指派缺口） | 高 | v1.0.0 |
+| PC-V1-003 | 聯想式檔案參照寫入後個案修補，跳過模式分析 | 中 | v1.0.0 |
+| PC-V1-004 | Hook 注入訊息受眾錯配（PM-only 訊息注入 Subagent Context） | 高 | v1.0.0 |
+| PC-V1-005 | Acceptance 量化目標設定未考慮 substance 密度上限 | 中 | v1.0.0 |
 
 ---
 

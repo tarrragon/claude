@@ -754,7 +754,7 @@ def format_block_message(
     lines.append("  - user-override   — 用戶明確授權的延後（一般說明 ≥ 10 字）")
     lines.append("  - rule-quote      — 引用 .claude/rules/ 或 .claude/pm-rules/ 規則名稱（reason 須含規則路徑）")
     lines.append("  - history         — 引用已完成歷史 / 動機脈絡（reason 須含 W{wave}-{seq} ticket ID 作錨點）")
-    lines.append("  詳見 .claude/rules/core/decision-trigger-binding.md「Hook 引用豁免機制」章節")
+    lines.append("  詳見 .claude/references/decision-trigger-binding-details.md「Hook 引用豁免機制」章節")
     lines.append("")
     lines.append("要求對每項做出三選一:")
     lines.append("  1. 執行 — 立即實作，附 use case + AC")

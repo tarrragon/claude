@@ -81,9 +81,7 @@
 | Skill 觸發 marker | `<command-name>/<skill-name></command-name>` 存在 | 視為用戶 explicitly asked，**凌駕 caveat 預設**，執行對應 SKILL.md 流程 |
 | Skill 帶參數 | `<command-message>` 含參數內容 | 同上，將參數傳入對應 skill 執行 |
 
-**Why**：runtime 將 skill 觸發訊號（`<command-name>` + `<command-message>`）與 command stdout 同質化包裹於 caveat 區塊，但 `<command-name>` 的存在等同 caveat 原文末段「unless the user explicitly asks you to」的豁免條件。Linux signal handling 類比：caveat 像 `sigprocmask` 設定的 signal mask，`<command-name>` 像 SIGKILL 等不可遮罩訊號——signal mask 不應遮蔽用戶顯式意圖。
-
-**Consequence**：將整段 caveat 視為單一「不回應」決策會導致所有 skill 觸發被靜默吞掉。用戶輸入 `/<skill-name>` 後 PM 無反應或回應與 skill 無關的內容，需用戶額外糾正，且 SKILL.md 明文流程（如 `/ticket` 無參數時的兩步檢查）形同無效。
+**Why/Consequence**：`<command-name>` 等同 caveat 原文「unless the user explicitly asks you to」的豁免條件，凌駕「不回應」預設。整段視為單一「不回應」會靜默吞掉所有 skill 觸發，需用戶額外糾正且 SKILL.md 明文流程失效。
 
 **Action**：讀到 `<local-command-caveat>` 區塊時，先掃描內部 XML 標記：
 
@@ -106,11 +104,7 @@
 | 3 | 對非本任務檔案判定來源（前 session 遺留 / 並行 session / Hook 自動產生） | 區分 PC-076（靜態遺留）vs PC-078（動態並行） |
 | 4 | 若有遺留，記錄到當前 Ticket Problem Analysis 或新建 Ticket 追蹤 | 違規 quality-baseline 規則 5 |
 
-**Why**：Session-start Hook 摘要可能遮蔽（修復前僅情況 1 列、上限 10 截斷）；PM 預設「git 工作區乾淨」假設常失準。
-
-**Consequence**：未清點直接認領 Ticket 會在 commit 階段意外混入前 session 遺留，需臨時拆分 commit 或誤把無關變更帶入 main。
-
-**Action**：以上 4 步驟在 Re-center Protocol 之前先做一次；之後每次 commit 前再執行一次 `git status` 確認範圍。
+**Why/Consequence**：Hook 摘要可能遮蔽（修復前僅情況 1 列、上限 10 截斷），PM 預設「git 工作區乾淨」常失準；未清點會在 commit 階段混入前 session 遺留，需臨時拆分或誤把無關變更帶入 main。**Action**：4 步驟在 Re-center Protocol 之前先做一次；之後每次 commit 前再 `git status` 確認範圍。
 
 ---
 

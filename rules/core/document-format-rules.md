@@ -6,15 +6,7 @@
 
 ## 適用範圍
 
-**交接文件定義**：用於團隊協作和知識傳遞的文件
-
-| 文件類型 | 存放位置 |
-|---------|---------|
-| 計畫文件 | `.claude/plans/` |
-| 工作日誌 | `docs/work-logs/` |
-| Ticket 文件 | `docs/work-logs/v{version}/tickets/` |
-| 錯誤模式記錄 | `.claude/error-patterns/` |
-| README 文件 | 各目錄下的 `README.md` |
+**交接文件定義**：用於團隊協作和知識傳遞的文件——計畫文件（`.claude/plans/`）、工作日誌（`docs/work-logs/`）、Ticket（`docs/work-logs/v{version}/tickets/`）、錯誤模式記錄（`.claude/error-patterns/`）、各目錄 `README.md`。
 
 ---
 
@@ -32,10 +24,7 @@
 | :bulb: | `提示：` 或 `建議：` | `建議：考慮使用 LSP` |
 | :fire: / :rocket: | 純文字描述 | `高優先級` |
 
-**理由**：
-- 確保跨平台相容性
-- 維持專業性
-- 避免渲染問題
+**理由**：確保跨平台相容性與專業性，避免渲染問題。
 
 ### 規則 2：狀態標記
 
@@ -108,9 +97,7 @@ updated: {更新日期}
 | 引用專案根目錄檔案 | 從根目錄開始 | `docs/work-logs/v{VERSION}/` |
 | CLAUDE.md 中的引用 | `@` 前綴 | `@.claude/rules/core/quality-baseline.md` |
 
-**理由**：
-- 內部引用用相對路徑，搬移 Skill 目錄時只需改外部引用
-- 跨 Skill 引用用完整路徑，避免閱讀者不知道要從哪個目錄起算
+**理由**：內部引用用相對路徑，搬移 Skill 目錄時只需改外部引用；跨 Skill 引用用完整路徑，避免閱讀者不知道從哪個目錄起算。
 
 ---
 

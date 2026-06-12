@@ -109,7 +109,7 @@
 
 ## 類別 C：Schema 與結構
 
-依 `.claude/rules/core/agent-definition-standard.md` 執行責任章節執行。
+依 `.claude/references/agent-definition-standard-details.md` 執行責任章節執行。
 
 ### C1 Ticket Body Schema 章節必填
 
@@ -185,9 +185,9 @@
 
 ## 相關文件
 
-- `.claude/rules/core/document-writing-style.md` — 三明示原則完整定義
+- `.claude/references/document-writing-style-details.md` — 三明示原則完整定義（core/ stub 含速查）
 - `.claude/rules/core/language-constraints.md` — 繁體中文與禁用詞彙規則
-- `.claude/rules/core/agent-definition-standard.md` — Schema 章節清單與章節結構規則
+- `.claude/references/agent-definition-standard-details.md` — Schema 章節清單與章節結構規則（core/ stub 含速查）
 - `.claude/references/agent-dispatch-template.md` — Layer 1 觸發指引（prompt 末段插入方式）
 - `.claude/pm-rules/context-bundle-spec.md` — Layer 1 觸發時機與寫入位置
 
