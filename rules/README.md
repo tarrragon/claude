@@ -4,7 +4,7 @@
 
 本目錄只放**所有角色通用**的品質規則（集中於 `core/`，現為 17 檔）。PM 流程規則在 `pm-rules/`，技術參考在 `references/`。
 
-**自動載入預算原則**：`core/` 每回合注入 PM 與所有代理人的 context，故只放「每回合都需遵守的行為禁令」；情境性內容（特定流程細節、語言品質規範、按需查表資料）放 `references/` 按需讀取。新增 `core/` 規則前先自問「這是否每回合都需要？」否則放 `references/`。
+**自動載入預算原則**：`core/` 每回合注入 PM 與所有代理人的 context，故只放「每回合都需遵守的行為禁令」；情境性內容（特定流程細節、語言品質規範、按需查表資料）放 `references/` 按需讀取。新增 `core/` 規則前先自問「這是否每回合都需要？」否則放 `references/`。stub 構成標準與外移 SOP（hook 錨點保全、引用鏈同步、預算驗證）→ `.claude/references/auto-load-stub-conventions.md`。
 
 | 目錄 | 載入方式 | 內容 |
 |------|---------|------|
@@ -24,6 +24,7 @@
 ---
 
 **Last Updated**: 2026-06-12
+**Version**: 10.4.0 — 預算原則補 stub 規範路由（`references/auto-load-stub-conventions.md`，W7-007）
 **Version**: 10.3.0 — 新增「自動載入預算原則」（core/ 僅放每回合行為禁令，情境性內容放 references/）；確認 `core/` 檔數 17 與實際一致
 **Version**: 10.2.0 — 更正 `core/` 檔數（原「7 檔」stale，現 17 檔）（文件交叉引用稽核）
 **Version**: 10.1.0 — 新增「環境管理原則」導航，指向 `references/plugin-management.md`（避免 plugin 誤裝膨脹 context）

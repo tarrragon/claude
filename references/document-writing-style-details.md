@@ -220,9 +220,27 @@
 
 ---
 
+## 載入層邊界（三明示的適用範圍限定）
+
+**核心主張**：三明示是「按需讀取層」的撰寫標準，不是「自動載入層」的撰寫標準。兩層的讀者情境不同——按需層讀者帶著具體問題來，需要完整論證才能獨立判斷；自動載入層讀者（PM / 代理人每回合）需要的是行為禁令本身，論證在此處是 attention 稀釋源。
+
+| 載入層 | 範圍 | 撰寫形態 | 三明示適用 |
+|--------|------|---------|-----------|
+| 自動載入層 | `rules/core/`、CLAUDE.md、`rules/README.md`、MEMORY.md | 禁令速查表 + 觸發路由（Why/Consequence 一行帶過或路由至按需層） | 否（壓縮形態） |
+| 按需讀取層 | `references/`、`methodologies/`、`error-patterns/`、`pm-rules/`、skill references | 完整三明示論證 | 是（完整形態） |
+
+**Why**：三明示讓每條規則約 3 倍 token 化（實測：bash-tool-usage 規則六一條約束 50 行，禁令本身 2 行）。自動載入層每回合注入所有角色 context，受 45k 預算約束（`rules/README.md` 自動載入預算原則 + file-size-guardian 機器量測）；三明示套用於此層是 token 收斂前 82.5k 膨脹的最大單一根因。
+
+**Consequence**：若不限定適用範圍，「依規則撰寫」與「預算約束」互相矛盾，且三明示有 basil-writing-critic 執法、預算僅事後告警——矛盾時膨脹方向獲勝，收斂成果回彈。
+
+**Action**：寫入自動載入層時改用「禁令 + 路由」形態，完整論證寫入對應 references/ 檔案；二次審查（basil-writing-critic）對自動載入層檔案改查「是否已壓縮 + 路由有效」而非「是否三明示完整」。stub 構成與外移 SOP 見 `.claude/references/auto-load-stub-conventions.md`。
+
+---
+
 ## 相關文件
 
 - `.claude/rules/core/quality-baseline.md` — 本規則的上游品質承諾（規則 5 / 6）
+- `.claude/references/auto-load-stub-conventions.md` — 載入層邊界的執行規範（stub 構成 + 外移 SOP）
 - `.claude/rules/core/ai-communication-rules.md` — 對話 / prompt 品質規則（互補）
 - `.claude/rules/core/document-format-rules.md` — Markdown 語法與狀態標記格式（互補）
 - `.claude/error-patterns/process-compliance/PC-066-decision-quality-autopilot.md` — 本規則的動機案例
@@ -230,4 +248,4 @@
 
 ---
 
-**Last Updated**: 2026-06-12 | **Version**: 1.3.0 — 主文 substance 自 `.claude/rules/core/document-writing-style.md` 外移至本檔（W7-004.2 auto-load token 收斂）；core/ 原檔降為速查 stub。歷史 1.0–1.2 版見 git log。**Source**: PC-066。
+**Last Updated**: 2026-06-12 | **Version**: 1.4.0 — 新增「載入層邊界」章（三明示僅適用按需層；自動載入層為禁令 + 路由形態，W7-007）。歷史 1.0–1.3 版見 git log。**Source**: PC-066。

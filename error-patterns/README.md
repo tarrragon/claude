@@ -366,6 +366,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-V1-003 | 聯想式檔案參照寫入後個案修補，跳過模式分析 | 中 | v1.0.0 |
 | PC-V1-004 | Hook 注入訊息受眾錯配（PM-only 訊息注入 Subagent Context） | 高 | v1.0.0 |
 | PC-V1-005 | Acceptance 量化目標設定未考慮 substance 密度上限 | 中 | v1.0.0 |
+| PC-V1-006 | 規則變更未盤點既有規則矛盾即上線（有執法者的一方勝出） | 中 | v1.0.0 |
 
 ---
 
