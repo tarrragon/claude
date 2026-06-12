@@ -1,3 +1,14 @@
+## [1.46.2] - 2026-06-12
+
+### Summary
+docs: 知識載體責任分配方法論落地 + 盤點 ticket spawn
+
+Changes: 1 docs
+
+- docs: 知識載體責任分配方法論落地 + 盤點 ticket spawn
+
+---
+
 ## [1.46.1] - 2026-06-12
 
 ### Summary
