@@ -38,10 +38,11 @@ grep -E "^## (允許產出|禁止行為|適用情境)" .claude/agents/<agent>.md
 | 情境 | 必讀章節（references 詳細版） |
 |------|------------------------------|
 | 撰寫/審查 agent 三區塊的必含元素 | 強制區塊各區塊明細 |
+| 判斷內容該不該裝（偏好 / 知識庫 vs 流程 / 案例全文） | `.claude/methodologies/knowledge-carrier-allocation-methodology.md`「代理人定義內容規範」節 |
 | 釐清跨 ticket close 禁令依據 | 區塊 2 跨 ticket 物件操作禁令論證 |
 | 實作類 agent 的 ticket body 填寫責任 | 執行責任：Ticket body 填寫（必填章節 / 時機 / 章節結構規則 W17-072） |
 | 實作類 agent 的 ticket 收尾責任 | 執行責任：Ticket 完成（收尾步驟 / 安全網 / 違規偵測） |
 
 ---
 
-**Last Updated**: 2026-06-12 | **Version**: 1.5.0 — 主文 substance 外移至 `.claude/references/agent-definition-standard-details.md`，本檔保留速查 stub（W7-004.2）。**Source**: W5-001 派發越界根因 A + PC-110 + W17-033。
+**Last Updated**: 2026-06-12 | **Version**: 1.6.0 — 觸發表補內容規範路由（結構權威與內容權威互通，W8 multi-round-review R3）。**Version**: 1.5.0 — 主文 substance 外移至 `.claude/references/agent-definition-standard-details.md`，本檔保留速查 stub（W7-004.2）。**Source**: W5-001 派發越界根因 A + PC-110 + W17-033。

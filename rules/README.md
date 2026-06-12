@@ -10,11 +10,12 @@
 |------|---------|------|
 | `rules/core/` | 自動載入 | 通用品質基線、Bash 規則、認知負擔、文件格式、語言約束、AI 對話品質 |
 | `pm-rules/` | PM 按需讀取 | 決策樹、TDD、Ticket、事件回應、Skip-gate |
-| `references/` | 代理人按需讀取 | 語言品質（dart/go/python）、Ticket ID 規範、職責分離原則 |
-| `agents/` | 派發時讀取 | 代理人定義（含技術知識庫） |
+| `references/` | PM 與代理人按需讀取 | 語言品質（dart/go/python）、Ticket ID 規範、職責分離原則 |
+| `agents/` | 派發時讀取 | 代理人定義（身份、三區塊、偏好、多方案技術知識庫；內容邊界見 knowledge-carrier-allocation） |
 
 **職責分離原則**（設計新規則 / Skill / 文件系統前請讀）：
 
+- 知識該寫進哪個載體（受眾 x 形態地圖、代理人定義內容邊界）→ `.claude/methodologies/knowledge-carrier-allocation-methodology.md`
 - 專案設定 vs 代理人知識分離、框架資產 vs 專案產物分離 → `.claude/references/framework-asset-separation.md`
 
 **環境管理原則**（安裝 / 審查 / 卸載 Claude Code plugin 前請讀）：
@@ -24,6 +25,8 @@
 ---
 
 **Last Updated**: 2026-06-12
+**Version**: 10.5.0 — 職責分離導航補知識載體地圖路由（入口讀者原僅得二分法拿不到十載體地圖）；agents 列補內容邊界路由（W8 multi-round-review R3）
+**Version**: 10.4.1 — references/ 列受眾修正為「PM 與代理人按需讀取」（PM 亦按需讀 references，原描述過窄）
 **Version**: 10.4.0 — 預算原則補 stub 規範路由（`references/auto-load-stub-conventions.md`，W7-007）
 **Version**: 10.3.0 — 新增「自動載入預算原則」（core/ 僅放每回合行為禁令，情境性內容放 references/）；確認 `core/` 檔數 17 與實際一致
 **Version**: 10.2.0 — 更正 `core/` 檔數（原「7 檔」stale，現 17 檔）（文件交叉引用稽核）

@@ -99,13 +99,14 @@
 
 > **來源**：W9-003 分析發現 PM 有 5/13（約 38%）的 feedback memory 僅存 memory 未升級，包含跨專案適用的原則（如「框架/產物分離」「Ticket 引導優先於 Hook」「/clear 前持久化」）。Memory 是**專案層級儲存**（`~/.claude/projects/<project>/memory/`），不會隨 `.claude/` sync 到其他專案；跨專案原則若僅存 memory，會在其他專案消失並可能重複踩同樣的雷。
 
-**強制四問檢查**（寫入 feedback memory 時必須回答）：
+**強制四問檢查**（寫入 feedback memory 時必須回答；目的地拿不準時先查 `.claude/methodologies/knowledge-carrier-allocation-methodology.md` 受眾 x 形態地圖）：
 
 | 檢查問題 | 回答「是」的升級路徑 |
 |---------|-------------------|
 | 此原則對其他專案也適用嗎？ | 至少升級到 `.claude/` 框架層；否則加 `project_` 前綴標示為專案特定 |
 | 此原則是通用品質或流程原則嗎？ | 預設升級至 `.claude/references/`；僅當屬「每回合都需遵守的行為禁令」且通過預算閘門（見下）時進 `rules/core/`（quality-baseline.md 加一行或速查 stub） |
 | 此原則是 PM 行為規範嗎？ | 升級至 `.claude/pm-rules/`（按需層）；pm-role.md（自動載入）僅加路由行 |
+| 此原則是單一代理人的身份 / 偏好嗎？ | 升級至 `.claude/agents/<name>.md`（內容邊界見 knowledge-carrier-allocation「代理人定義內容規範」節：偏好 / 邊界可裝，流程外移 skill） |
 | 此原則是錯誤學習嗎？ | 升級至 `.claude/error-patterns/`（PC/IMP/ARCH 對應分類） |
 | 此原則是流程方法論嗎？ | 升級至 `.claude/methodologies/` |
 | 此原則是 Skill 引導嗎？ | 升級至 `.claude/skills/<skill>/` |
@@ -162,5 +163,6 @@
 ---
 
 **Last Updated**: 2026-06-12
+**Version**: 1.2.0 - 規則 7 升級路徑表補「單一代理人身份/偏好 → agents/<name>.md」分支（原六分支對偏好類教訓無目的地，fall through 誤置）+ 表前補知識載體地圖路由（W8 multi-round-review R3）
 **Version**: 1.1.0 - 規則 7 新增「升級目的地預算閘門」（自動載入層需過「每回合都需要」自問，預設按需層）；升級後處理改「升級即搬家」（MEMORY.md 索引移除條目，修正與 W7-004.6 索引修剪實務的矛盾）（W7-007）
 **Version**: 1.0.0 - 從 quality-baseline.md v1.9.0 規則 6-7 外移；auto-load 僅保留通用品質底線（規則 1-5），PM 情境專屬規則移至此處按需讀取（對應 0.18.0-W10-073.4 WRAP 選項 B）

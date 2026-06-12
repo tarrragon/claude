@@ -159,6 +159,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | DOC-006 | 規則文件局部更新後，同檔案總覽圖與入口文件未同步 | 中 | 0.1.1 |
 | DOC-007 | append-log section 參數值大小寫不一致 | 低 | v0.1.0 |
 | DOC-008 | 同一文件內定義替換遺漏（局部替換未使用全局 replace） | 中 | v0.1.0 |
+| DOC-V1-001 | 位置編號引用隨目標文件演進靜默失效（misdirected 比 broken 難偵測） | 中 | v1.0.0 |
 
 ### 架構 (ARCH)
 

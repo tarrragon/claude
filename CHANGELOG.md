@@ -1,3 +1,20 @@
+## [1.47.0] - 2026-06-12
+
+### Summary
+feat: 回流 blog 實戰改良版寫作 skill（compositional-writing + 新增 multi-round-review）; docs: multi-round-review R4 收斂 + ANA 收口（方法論 ）; docs: multi-round-review Round 3 修正（框架側 8 檔） (+4 more)
+
+Changes: 1 feat, 6 docs
+
+- feat: 回流 blog 實戰改良版寫作 skill（compositional-writing + 新增 multi-round-review）
+- docs: multi-round-review R4 收斂 + ANA 收口（方法論 ）
+- docs: multi-round-review Round 3 修正（框架側 8 檔）
+- docs: multi-round-review Round 2 修正（框架側）
+- docs: multi-round-review Round 1 修正（框架側）
+- docs: README 註記寫作 skill 訓練上游（blog repo git URL）
+- docs: 新增 DOC-V1-001 位置編號引用靜默失效 error-pattern + 審查票
+
+---
+
 ## [1.46.2] - 2026-06-12
 
 ### Summary

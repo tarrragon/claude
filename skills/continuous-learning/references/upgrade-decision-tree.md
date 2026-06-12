@@ -29,11 +29,14 @@ Q1: 此原則對其他專案也適用嗎？
               |
               +-- 通用品質基線        → rules/core/quality-baseline.md 或新 rules/core/*.md
               +-- PM 行為規範         → rules/core/pm-role.md 或 pm-rules/
+              +-- 單一代理人身份/偏好 → agents/<name>.md（邊界見 knowledge-carrier-allocation 代理人定義內容規範）
               +-- 語言/工具品質       → references/quality-<lang>.md
               +-- 錯誤學習           → error-patterns/{category}/
               +-- 流程方法論         → methodologies/
               +-- Skill 引導         → skills/<skill>/
 ```
+
+> 目的地拿不準時，先查 `.claude/methodologies/knowledge-carrier-allocation-methodology.md`（受眾 x 形態頂層地圖）。
 
 ---
 

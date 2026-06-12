@@ -440,7 +440,7 @@ ticket track complete 已成功。下一步強制流程：
   → 確認本次 Ticket 的進度已記錄到 worklog 的「進度追蹤」區段
   → 需記錄的事件：完成、拆分、額外發現、UC 推進、阻塞
   → 格式：`- YYYY-MM-DD: [事件] -- [摘要]`
-  → 參考：.claude/skills/compositional-writing/references/writing-documents.md 第三原則
+  → 參考：.claude/skills/compositional-writing/references/writing-documents.md「Indexing by document type」Worklog 段
 
 [Checkpoint 1] 檢查未提交變更
   → 執行: git status

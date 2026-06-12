@@ -38,6 +38,8 @@
 
 ## 寫入決策速查（新知識該放哪一層）
 
+> 本表為「自動載入層判定」的快速子集；完整載體分配（受眾 x 形態十載體地圖）見 `.claude/methodologies/knowledge-carrier-allocation-methodology.md`。
+
 | 自問 | 答案 → 去處 |
 |------|------------|
 | 這是否每回合都需要遵守的行為禁令？ | 是 → `rules/core/`（禁令 + 路由形態）；否 → 下一問 |
@@ -49,6 +51,7 @@
 
 ## 相關文件
 
+- `.claude/methodologies/knowledge-carrier-allocation-methodology.md` — 知識載體頂層責任地圖（本檔為其自動載入層形態的執行規範）
 - `.claude/rules/README.md` — 自動載入預算原則（上游判準）
 - `.claude/rules/core/document-writing-style.md` + `references/document-writing-style-details.md`「載入層邊界」 — 三明示適用範圍限定
 - `.claude/pm-rules/pm-quality-baseline.md` 規則 7 — 升級目的地預算閘門 + 升級即搬家

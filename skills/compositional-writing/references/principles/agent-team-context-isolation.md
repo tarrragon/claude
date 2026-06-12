@@ -8,14 +8,14 @@
 
 ## 結論
 
-Agent team context 隔離是 LLM-era review 工具設計的核心模式 — 用 N 個獨立 reviewer instance 各自跑 background、各自寫 output file、主 context 只接精煉摘要、不被 reviewer 細節汙染。
+Agent team context 隔離是 LLM-era review 工具設計的核心模式 — 用 N 個獨立 reviewer instance 各自跑 background、各自寫 output file、主 context 只接精煉摘要、不被 reviewer 細節污染。
 
 | 設計選擇                                        | 解決的問題                                                     | 失敗模式                                                       |
 | ----------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
 | Instance 隔離（N 個 reviewer 各自獨立 context） | 維度盲點：單一 reviewer 同時看多維度容易互相干擾               | 用單一 reviewer 處理多維度 → 每個維度都看不深                  |
 | Background 平行                                 | 序列時間長：reviewer 序列跑 ~30 分鐘                           | 不平行、序列跑 → 時間 3x                                       |
-| Output file 隔離                                | Context 汙染：reviewer raw issue 列表佔滿主 context            | Reviewer 直接在 conversation 吐 issue → 主 context 被 raw 佔滿 |
-| 主 context 只讀取彙整 summary                   | Context 增量過大：直接 Read transcript 拉 raw 內容進主 context | 主 context Read reviewer transcript → 增量翻倍                 |
+| Output file 隔離                                | Context 污染：reviewer raw issue 列表佔滿主 context            | Reviewer 直接在 conversation 吐 issue → 主 context 被 raw 佔滿 |
+| 主 context 只讀彙整 summary                     | Context 增量過大：直接 Read transcript 拉 raw 內容進主 context | 主 context Read reviewer transcript → 增量翻倍                 |
 
 跟 multi-pass review 的差別：multi-pass 是 *同一 reviewer 換輪次 frame*（生成 / 對意圖 / 機會成本 / grep / 反例）；本卡是 *不同 reviewer instance 各自獨立*（規範 / 案例準確 / 跨章一致 / 文章品質等）。兩者正交、可疊加。
 
@@ -26,7 +26,7 @@ Agent team context 隔離是 LLM-era review 工具設計的核心模式 — 用 
 | 維度     | Multi-pass review（frame 軸）                | Agent team context 隔離（instance 軸、本卡）            |
 | -------- | -------------------------------------------- | ------------------------------------------------------- |
 | 軸定位   | Frame 軸（一個 reviewer N 輪不同 frame）     | Instance 軸（N 個 reviewer 各自獨立）                   |
-| 解決問題 | Working memory 限制（一輪 catch 不到所有層） | Context 汙染（單一 reviewer context 被 raw input 佔滿） |
+| 解決問題 | Working memory 限制（一輪 catch 不到所有層） | Context 污染（單一 reviewer context 被 raw input 佔滿） |
 | 適用對象 | Author / 單一 reviewer 跑多輪                | Agent team / 自動化平行 review                          |
 | 失敗模式 | 跳輪 → 某維度永遠做一半                      | Instance 數量不足 → 維度覆蓋不全                        |
 
@@ -41,12 +41,12 @@ Agent team context 隔離是 LLM-era review 工具設計的核心模式 — 用 
 Context 隔離要解兩個具體問題：單一 reviewer 同時處理多維度有兩個限制：
 
 1. **維度盲點**：一個 reviewer 同時看寫作規範 + 案例準確性 + 跨章一致性、容易維度互相干擾、最後每個維度都看不深
-2. **Context 汙染**：reviewer 讀完整 commit + 所有案例 + 所有章節後、自身 context 被佔滿、給的建議也對應主 context 跟著沉重
+2. **Context 污染**：reviewer 讀完整 commit + 所有案例 + 所有章節後、自身 context 被佔滿、給的建議也對應主 context 跟著沉重
 
 Context 隔離解這兩個問題：
 
-- 用 N 個專責 reviewer、各自只負責一個維度 → 維度深度提升
-- Reviewer 各自 background、不汙染主 context → 主 context 保留判讀空間
+- 用 N 個專責 reviewer、各自只處理一個維度 → 維度深度提升
+- Reviewer 各自 background、不污染主 context → 主 context 保留判讀空間
 - Reviewer 寫 output file、不傳 raw 內容到主 context → 主 context 增量極少
 
 ---
@@ -57,7 +57,7 @@ Reviewer 數量取決於審查對象的維度複雜度：
 
 | 審查對象                           | Reviewer 數 | 為什麼這個數                                                      |
 | ---------------------------------- | ----------- | ----------------------------------------------------------------- |
-| 跨章節案例驅動章節擴章             | 3 個        | 規範 / 案例準確性 / 跨章一致性三大正交 axis、加更多會 overlap     |
+| 跨章節案例驅動章節擴章             | 3 個        | 規範 / 案例準確性 / 跨章一致性的正交 axes、加更多會 overlap       |
 | 方法論 / 自我審查                  | 4 個        | 規範 / 三方自一致性 / 概念邊界 / 文章品質、無 case 引用 axis 需要 |
 | 一般 PR review                     | 1-2 個      | 規範 + correctness 即可、不需 case fidelity 維度                  |
 | 高 stakes 內容（資安 / financial） | 4-5 個      | 額外加 epistemic rigor reviewer（claim / evidence / threats）     |
@@ -71,7 +71,7 @@ Reviewer 數量取決於審查對象的維度複雜度：
 實作 pattern（4 個關鍵設計選擇）：
 
 1. **N 個 reviewer 各自 spawn background instance**：平行跑、不阻塞主 context
-2. **每個 reviewer 寫 output file**：報告寫到外部檔（如 `/tmp/reviewer-{id}-report.md`）、不汙染主 conversation
+2. **每個 reviewer 寫 output file**：報告寫到外部檔（如 `/tmp/reviewer-{id}-report.md`）、不污染主 conversation
 3. **主 context 不讀 reviewer transcript**：只讀通知 summary + 最後讀 output file 彙整
 4. **Reviewer prompt 含主 context 保護指令**：「報告寫進檔即可、不要在 conversation 吐 raw issue」
 
@@ -96,12 +96,12 @@ Reviewer 維度不該固定 — 跨章節案例驅動章節用「規範 / 案例
 
 | 反模式                                                      | 後果                                             |
 | ----------------------------------------------------------- | ------------------------------------------------ |
-| 單一 reviewer 處理所有維度                                  | 維度盲點 + context 汙染、品質下降                |
+| 單一 reviewer 處理所有維度                                  | 維度盲點 + context 污染、品質下降                |
 | Reviewer 不寫 output file、直接在 conversation 吐 raw issue | 主 context 被 issue 列表佔滿、修正循環沒空間     |
 | Reviewer 維度固定不變、套所有任務                           | 維度跟審查對象不對齊、漏抓關鍵風險               |
 | Reviewer 不平行、序列跑                                     | 時間成本高、序列 30 分鐘 vs 平行 10 分鐘         |
 | Reviewer prompt 沒明示 baseline                             | Reviewer 抓 5 個或 50 個都「完成」、無法判讀品質 |
-| 主 context 直接讀 reviewer transcript                       | 把 raw conversation 拉進主 context、context 汙染 |
+| 主 context 直接讀 reviewer transcript                       | 把 raw conversation 拉進主 context、context 污染 |
 
 ---
 
@@ -126,7 +126,7 @@ Reviewer 維度不該固定 — 跨章節案例驅動章節用「規範 / 案例
 
 | 訊號                                           | 該做的事                                                  |
 | ---------------------------------------------- | --------------------------------------------------------- |
-| Reviewer 給的建議「對應主 context 也沉重」     | Reviewer context 被汙染、改 background instance 隔離      |
+| Reviewer 給的建議「對應主 context 也沉重」     | Reviewer context 被污染、改 background instance 隔離      |
 | 主 context 修正循環時、不知道從哪個 issue 開始 | Reviewer 報告沒精煉、補 reviewer prompt 要求 summary 開頭 |
 | 多個 reviewer 抓到同類 issue                   | 維度設計重疊、調整 reviewer 維度分配                      |
 | Reviewer 序列跑、單次 review 30 分鐘以上       | 改平行 background、預期縮到 10 分鐘                       |
