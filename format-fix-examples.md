@@ -1086,7 +1086,6 @@ src/
 
 **📚 Reference Index**:
 - [Mint Format Specialist](./mint-format-specialist.md) - 專業格式化 sub-agent
-- [程式碼品質範例](./code-quality-examples.md) - 程式碼品質標準  
 - [檔案路徑語意規範](./../../CLAUDE.md#檔案路徑語意規範) - 路徑規範詳細說明
 
 **🔧 Tool Integration**: 此範例集與 `mint-format-specialist` sub-agent 完全整合，確保修正的一致性和標準化。

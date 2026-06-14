@@ -1567,7 +1567,7 @@ Memory類型: implementation
   - [ ] 🧠 Memory Network Builder 知識捕獲完成 (重構模式和品質改善)
 - [ ] **🚨 小版本完成即提交**: Phase 4 完成後立即執行 git commit
 
-**工作日誌品質**: 必須符合「[📚 專案文件責任明確區分](./document-responsibilities.md)」章節的文件品質標準
+**工作日誌品質**: 必須符合「專案文件責任明確區分」章節的文件品質標準
 
 **最終交付標準**:
 
@@ -1587,7 +1587,7 @@ Memory類型: implementation
 
 **🚨 每個 TDD 循環完成後的必要檢查**:
 
-**文件更新檢查**: 按照「[📚 專案文件責任明確區分](./document-responsibilities.md)」章節的要求執行：
+**文件更新檢查**: 按照「專案文件責任明確區分」章節的要求執行：
 
 - [ ] **工作日誌更新**: 符合工作日誌品質標準
 - [ ] **todolist.yaml狀態同步**: 符合todolist.yaml品質標準
@@ -1837,5 +1837,4 @@ npm run test:coverage   # 測試覆蓋率檢查
 **🔗 相關文件連結**:
 
 - [返回主指導文件](./../../CLAUDE.md)
-- [專案文件責任明確區分](./document-responsibilities.md)
 - [Agent 協作規範](./agent-collaboration.md)

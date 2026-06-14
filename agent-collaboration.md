@@ -239,7 +239,7 @@
 - **Memory分類索引**: 依據type (decision/implementation/learning/concept/issue) 自動分類
 
 **📚 文件責任合規要求**:
-所有Agent輸出必須嚴格遵循 [📚 專案文件責任明確區分](../guidelines/document-responsibilities.md) 章節的標準，特別是工作日誌品質要求。
+所有Agent輸出必須嚴格遵循「專案文件責任明確區分」章節的標準，特別是工作日誌品質要求。
 
 **🏗️ 重構Agent特殊要求**:
 cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
@@ -485,7 +485,7 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 
 **Agent 特殊要求**:
 
-- **工作日誌格式**: 必須符合 [📚 專案文件責任明確區分](../guidelines/document-responsibilities.md) 章節的工作日誌標準
+- **工作日誌格式**: 必須符合「專案文件責任明確區分」章節的工作日誌標準
 - **交接標準**: 嚴格遵循 TDD 協作流程中定義的各階段交接檢查點
 - **品質要求**: 輸出內容必須達到詳細、分析性、教學性標準
 
@@ -592,7 +592,7 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 
 ### Agent協作品質驗證
 
-**品質檢查標準**: 參考 [🤝 TDD 協作開發流程](tdd-collaboration-flow.md) 章節的「完整協作檢查清單」和 [📚 專案文件責任明確區分](../guidelines/document-responsibilities.md) 章節的品質標準。
+**品質檢查標準**: 參考 [🤝 TDD 協作開發流程](tdd-collaboration-flow.md) 章節的「完整協作檢查清單」和「專案文件責任明確區分」章節的品質標準。
 
 ## 🔍 專家審查標準格式與輸出要求
 
@@ -790,5 +790,3 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 - [返回主指導文件](../../CLAUDE.md)
 - [TDD 協作開發流程](tdd-collaboration-flow.md)
 - [錯誤修復和重構方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/error-fix-refactor-methodology.md)
-- [專案文件責任明確區分](../guidelines/document-responsibilities.md)
-- [事件驅動架構規範](../architecture/event-driven-architecture.md)
