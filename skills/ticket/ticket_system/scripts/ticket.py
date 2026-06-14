@@ -155,10 +155,28 @@ def main() -> int:
 
     # 執行對應的命令
     if hasattr(args, "func"):
-        return args.func(args)
+        rc = args.func(args)
     else:
         parser.print_help()
         return 1
+
+    # CLI 安全收尾：非阻塞收割殘留 stale *.md.lock（W8-017）
+    # active lock 永不被誤刪（reap_stale_locks 用 LOCK_NB 試鎖判定 stale）。
+    _reap_stale_locks_quietly()
+    return rc
+
+
+def _reap_stale_locks_quietly() -> None:
+    """於 CLI 收尾收割 stale lock；任何失敗皆靜默跳過（不阻斷主流程）。"""
+    try:
+        from ticket_system.lib.file_lock import reap_stale_locks
+        from ticket_system.lib.paths import get_project_root
+        from ticket_system.lib.constants import WORK_LOGS_DIR
+
+        reap_stale_locks(get_project_root() / WORK_LOGS_DIR)
+    except Exception:
+        # 收割屬清理性質，失敗不應影響已完成的主命令結果（返回碼已決定）
+        pass
 
 
 if __name__ == "__main__":

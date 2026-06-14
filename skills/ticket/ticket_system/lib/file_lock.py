@@ -88,6 +88,70 @@ def file_lock(target_path: Path) -> Iterator[None]:
 
 
 # ---------------------------------------------------------------------------
+# stale lock 收割（W8-017）
+# ---------------------------------------------------------------------------
+
+
+def reap_stale_locks(directory: Path) -> int:
+    """非阻塞收割 directory 下殘留的 stale ``*.md.lock``。
+
+    Why（與設計緣由）：
+        file_lock context manager 釋鎖後刻意保留 sentinel lock file
+        （見 file_lock docstring），每次 load-modify-save 序列殘留一個
+        0-byte ``{ticket}.md.lock``。長期累積會讓 PM 誤判有 active 操作
+        （W8-017）。本函式於 CLI 安全收尾處呼叫，收割無人持有的殘留。
+
+    安全策略（禁止天真 inline unlink）：
+        對每個 ``*.md.lock`` 嘗試 ``flock(LOCK_EX | LOCK_NB)``：
+        - 搶到（非阻塞成功）= 無人持鎖 = stale → 在持鎖狀態下 unlink。
+        - 搶不到（``BlockingIOError`` / ``OSError``）= 有人持鎖 = active
+          → 跳過，絕不誤刪。
+        非阻塞特性確保本函式不會卡在 active lock 上，亦不破壞既有
+        flock-unlink race 防護（W14-005）：active lock 永不被收割。
+
+    Args:
+        directory: 收割起點目錄；遞迴掃描其下所有 ``*.md.lock``。
+
+    Returns:
+        int: 實際收割（unlink）的 stale lock 數量。
+
+    Note:
+        無 fcntl 平台（Windows）或目錄不存在時 graceful 回傳 0，不丟例外
+        （收割屬清理性質，失敗不應阻斷主流程）。
+    """
+    if not _HAS_FCNTL or not directory.exists():
+        return 0
+
+    reaped = 0
+    for lock_path in directory.rglob("*.md.lock"):
+        if not lock_path.is_file():
+            continue
+        try:
+            fd = open(lock_path, "w")
+        except OSError:
+            # 開檔失敗（權限/競態刪除）→ 跳過，不阻斷其他收割
+            continue
+        try:
+            try:
+                fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                # 搶不到 = active lock（有人持鎖）→ 跳過不刪
+                continue
+            # 搶到鎖 = stale；在持鎖狀態下 unlink，避免 TOCTOU race
+            try:
+                lock_path.unlink()
+                reaped += 1
+            except FileNotFoundError:
+                # 已被他者收割 → 視為已處理
+                pass
+            finally:
+                fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+        finally:
+            fd.close()
+    return reaped
+
+
+# ---------------------------------------------------------------------------
 # create ID 分配序列化 lock（IMP-072 方案 A）
 # ---------------------------------------------------------------------------
 

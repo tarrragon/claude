@@ -1,3 +1,14 @@
+## [1.48.1] - 2026-06-14
+
+### Summary
+fix: 非阻塞 reap 收割殘留 stale .md.lock
+
+Changes: 1 fix
+
+- fix: 非阻塞 reap 收割殘留 stale .md.lock
+
+---
+
 ## [1.48.0] - 2026-06-14
 
 ### Summary
