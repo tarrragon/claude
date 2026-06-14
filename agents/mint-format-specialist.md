@@ -214,56 +214,6 @@ ticket track complete <ticket-id>
 
 ---
 
-## 輸出格式
-
-### 格式修正報告模板
-
-```markdown
-# 格式修正報告
-
-## 摘要
-- **修正類型**: [路徑格式化 | Lint 修復 | 文件標準化]
-- **影響範圍**: [修改的檔案數量和列表]
-- **修正時間**: [開始時間 - 結束時間]
-- **驗證狀態**: [已驗證 | 待驗證]
-
-## 修正詳情
-
-### 修正統計
-- **檔案總數**: [數字]
-- **成功修正**: [數字]
-- **需要人工審查**: [數字]
-- **未修改**: [數字]
-
-### 具體修正
-
-#### 檔案: {檔案路徑}
-```dart
-// 修改前
-{old_code}
-
-// 修改後
-{new_code}
-```
-
-**修正原因**: {說明}
-
-## 驗證結果
-- [ ] 編譯成功
-- [ ] 測試通過
-- [ ] Lint 檢查通過
-- [ ] 邏輯保持不變
-
-## 發現的模式
-- {發現的新問題類型 1}
-- {發現的新問題類型 2}
-
-## 建議
-{後續建議或發現的相關問題}
-```
-
----
-
 ## 與其他代理人的邊界
 
 | 代理人 | mint-format-specialist 負責 | 其他代理人負責 |
@@ -362,21 +312,4 @@ ticket track complete <ticket-id>
 
 ## 搜尋工具
 
-### ripgrep (rg)
-
-代理人可透過 Bash 工具使用 ripgrep 進行高效能文字搜尋。
-
-**文字搜尋預設使用 rg（透過 Bash）**，特別適合：
-- 需要 PCRE2 正則表達式（lookaround、backreference）
-- 需要搜尋壓縮檔（`-z` 參數）
-- 需要 JSON 格式輸出（`--json` 參數）
-- 需要複雜管線操作
-
-**文字搜尋優先使用 rg（透過 Bash）**，內建 Grep 工具作為備選。
-
-**完整指南**：`.claude/skills/search-tools-guide/SKILL.md`
-
-**環境要求**：需要安裝 ripgrep。未安裝時建議：
-- macOS: `brew install ripgrep`
-- Linux: `sudo apt-get install ripgrep`
-- Windows: `choco install ripgrep`
+搜尋工具選擇與 ripgrep 使用指南見 `.claude/skills/search-tools-guide/SKILL.md`。

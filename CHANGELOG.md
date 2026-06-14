@@ -1,3 +1,50 @@
+## [1.48.0] - 2026-06-14
+
+### Summary
+feat: SessionStart agent 定義標準執法掃描 hook; docs: campaign 收尾 gate broken-link 修復 + methodology-index 補齊; docs: 瘦身 five-document-system-methodology 336→202 (+34 more)
+
+Changes: 1 feat, 36 docs
+
+- feat: SessionStart agent 定義標準執法掃描 hook
+- docs: campaign 收尾 gate broken-link 修復 + methodology-index 補齊
+- docs: 瘦身 five-document-system-methodology 336→202
+- docs: 瘦身 business-layer-i18n 方法論 354->145 行 + 衛星檔
+- docs: 瘦身 personalized-consultation-methodology 431->275 + 衛星檔
+- docs: 瘦身 cognitive-load-design-methodology 419->139 + 衛星檔外移 + rule 去重
+- docs: 合併 multi-perspective(419) → parallel-evaluation 方案 A
+- docs: 整併 hook 家族 3 檔為 1 主檔 + 2 衛星檔
+- docs: 瘦身 frontmatter-ticket-tracking-methodology 561→232 行
+- docs: 瘦身 5w1h-self-awareness-methodology 605->265 行
+- docs: 瘦身 problem-awareness-evaluation-methodology 698->227
+- docs: 瘦身 acceptance-criteria-methodology 701→297 行 + 外移衛星檔
+- docs: 校準審查 B2 修正 — 衛星檔回指補 intent 情境句
+- docs: 瘦身 package-import-methodology 736→86 行 + 衛星檔外移
+- docs: 移除 thyme 品質檢查清單冗餘標題，路由併入品質標準章節
+- docs: 批 C TRIM 通用4階段骨架（thyme-ext/ginger/basil-event）
+- docs: 批 B 外移 SD/SE/DBA 輸出範本至 references/
+- docs: 批A ROUTE 三檔流程外移（thyme-doc/pepper/basil-hook）
+- docs: 外移 parsley Phase3b+Phase4 交接通用骨架至 tdd skill
+- docs: 外移 fennel Phase3b 通用骨架至 tdd/phase3-implementation skill
+- docs: 外移 cinnamon Phase4 重構流程到 tdd/phase4-refactor
+- docs: 外移 oregano 資料提取流程到 data-extraction skill
+- docs: 外移 lavender Phase1 通用六階段流程至 tdd/phase1
+- docs: 外移 sage Phase2 流程到 tdd/phase2/rules
+- docs: 建立 data-extraction skill（oregano 流程外移目標）
+- docs: 補強 malformed-tool-call-detector docstring 架構邊界說明
+- docs: 整併瘦身 group-ticket-design(156→83)+ticket-lifecycle-management(178→144)
+- docs: 整併瘦身 atomic-ticket(884→366)+ticket-design-dispatch(1168→180)
+- docs: 整併瘦身 layered-ticket 家族 4 檔 → 30 秒核心
+- docs: 去重整併 TDD/testing 家族其餘 5 檔
+- docs: 整併瘦身 tdd-collaboration-flow 完整流程外移 tdd skill
+- docs: thyme-python C3 品質清單 + C4 IMP-003 路由化
+- docs: 清理 C1 輕量 5 檔搜尋工具路由化 + DEPRECATED 2 檔確認
+- docs: 清理 oregano/sage/star-anise/sumac C1+C6
+- docs: 清理中檔 linux/saffron/mint/project-compliance/clove 的 C1/C5（linux 含 C6）
+- docs: 清理 parsley/cinnamon/lavender 重檔 C1/C5/C6 錯置
+- docs: 統一 ANA 衍生票血緣模型為 children（Option A）+ 修跨檔矛盾
+
+---
+
 ## [1.47.0] - 2026-06-12
 
 ### Summary

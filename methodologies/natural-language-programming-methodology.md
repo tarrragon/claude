@@ -147,4 +147,4 @@ validateData() → handleSuccess() / handleFailure()
 
 ## Reference
 
-- [Widget 獨立性與註解標準](../../FLUTTER.md#widget-註解標準) - Flutter 特定規範
+- 元件獨立性與註解標準：見各專案 `CLAUDE.md`「專案特定規範」節（路由至該專案的程式碼/註解規範；如 Flutter 專案的 Widget 獨立性規範）- 語言/框架特定規範

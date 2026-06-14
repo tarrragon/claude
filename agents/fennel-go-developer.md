@@ -367,29 +367,23 @@ func processLine(line string, sessionID string) (*SessionEvent, error) {
 
 ## TDD Phase 3b 執行流程
 
-### Step 1: 接收 Phase 3a 策略
+> **通用流程路由**：接收 Phase 3a 策略（交接檢查清單）、Red-Green-Refactor 骨架、進入/退出交接條件等語言無關步驟，一律依 `.claude/skills/tdd/references/phase3-implementation.md`「Phase 3b：實作執行」節執行。本章只保留 Go 特定步驟（常數/訊息結構、slog、go test/vet、硬編碼驗證、Go 品質門檻）。
 
-**從 pepper-test-implementer 接收**：
-- [ ] 虛擬碼邏輯完整且無歧義
-- [ ] 流程圖涵蓋所有關鍵路徑
-- [ ] 架構決策有明確理由
-- [ ] 技術債務標記清楚
-
-### Step 2: 確認常數和訊息結構
+### Step 1: 確認常數和訊息結構（Go 特定）
 
 在開始實作前，先確認：
 - [ ] 需要的常數已在 `constants.go` 定義（或需新增）
 - [ ] 需要的 log 訊息已在 `messages/log_messages.go` 定義
 - [ ] 需要的錯誤碼已在 `messages/api_messages.go` 定義
 
-### Step 3: 實作
+### Step 2: 實作（Go 特定）
 
 1. 從 constants.go 和 messages/ 引用常數，不在程式碼中寫字串
 2. 所有 log 使用 `slog` + 訊息常數，帶 `"layer"` 欄位
 3. 未知欄位/類型觸發 WARN（UC-011 規範）
 4. Guard Clause 優先，函式行數控制在範圍內
 
-### Step 4: 測試驗證
+### Step 3: 測試驗證（Go 特定）
 
 ```bash
 # 執行測試
@@ -402,15 +396,9 @@ func processLine(line string, sessionID string) (*SessionEvent, error) {
 grep -rn '"[A-Z]' server/ --include="*.go" | grep -v "_test.go" | grep -v "constants.go" | grep -v "messages/"
 ```
 
-### Step 5: 品質檢查清單
+### Step 4: Go 品質門檻（完成後驗證）
 
-#### 開始前
-
-- [ ] Ticket 已認領
-- [ ] `constants.go` 和 `messages/` 已確認或已更新
-- [ ] 理解了任務完整要求
-
-#### 完成後
+通用品質基準見 skill 路由的「程式碼品質基準」；以下為 Go 特定門檻：
 
 - [ ] `go build ./...` 成功
 - [ ] `go vet ./...` 0 issues
@@ -421,7 +409,7 @@ grep -rn '"[A-Z]' server/ --include="*.go" | grep -v "_test.go" | grep -v "const
 - [ ] 函式長度 <= 40 行
 - [ ] 巢狀深度 <= 3 層
 - [ ] 錯誤處理使用 sentinel error 或自訂類型
-- [ ] 長時間運行的資源有清理機制（見下方效能章節）
+- [ ] 長時間運行的資源有清理機制（見下方資源管理章節）
 
 ### 資源管理與狀態保護（即時監控場景）
 

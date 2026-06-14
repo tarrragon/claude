@@ -230,132 +230,15 @@ class DurationConstants {
 
 ## 工具權限與使用
 
-### Dart MCP 核心工具
-
-#### 開發循環工具
-```bash
-# 執行測試
-mcp__dart__run_tests
-  - 執行 Dart/Flutter 測試
-  - 提供 agent 友善的輸出格式
-  - 自動整合測試結果
-
-  [WARNING] 重要限制：
-  - 禁止不指定 paths 執行全部測試（會卡住 20+ 分鐘）
-  - 必須指定 paths 參數限制測試範圍
-  - 全量測試請改用 flutter test 或 test-summary.sh
-
-# Hot Reload（快速驗證變更）
-mcp__dart__hot_reload
-  - 即時套用程式碼變更
-  - 保持應用程式狀態
-  - 快速迭代開發
-
-# 取得 Runtime Errors
-mcp__dart__get_runtime_errors
-  - 捕獲即時執行錯誤
-  - 提供詳細的錯誤堆疊
-  - 協助快速除錯
-```
-
-#### 程式碼分析工具
-```bash
-# 分析檔案
-mcp__dart__analyze_files
-  - 完整的專案程式碼分析
-  - 識別語法和邏輯錯誤
-  - 提供修復建議
-
-# Hover 資訊
-mcp__dart__hover
-  - 取得符號的型別資訊
-  - 查看文件註解
-  - 理解 API 用法
-
-# Signature Help
-mcp__dart__signature_help
-  - 取得函式簽名資訊
-  - 理解參數需求
-  - 減少 API 誤用
-```
-
-#### Widget 開發工具
-```bash
-# 取得 Widget Tree
-mcp__dart__get_widget_tree
-  - 檢視完整的 Widget 結構
-  - 理解 UI 階層
-  - 診斷渲染問題
-
-# 取得選中的 Widget
-mcp__dart__get_selected_widget
-  - 檢視當前選中的 Widget
-  - 分析 Widget 屬性
-  - 除錯 UI 問題
-```
-
-#### 套件管理工具
-```bash
-# Pub 指令
-mcp__dart__pub
-  - add: 新增套件依賴
-  - get: 取得套件依賴
-  - upgrade: 升級套件版本
-  - remove: 移除套件依賴
-
-# 搜尋 pub.dev
-mcp__dart__pub_dev_search
-  - 搜尋可用的 Dart/Flutter 套件
-  - 查看套件描述和評分
-  - 選擇合適的第三方套件
-```
-
-### Serena 整合工具
-
-#### 符號查找與編輯
-```bash
-# 查找符號
-mcp__serena__find_symbol
-  - 精準定位類別、函式、變數
-  - 支援階層式查找
-  - 取得符號定義和位置
-
-# 替換符號內容
-mcp__serena__replace_symbol_body
-  - 替換整個函式或類別
-  - 保持程式碼結構
-  - 精準修改不影響其他部分
-
-# 插入程式碼
-mcp__serena__insert_after_symbol
-mcp__serena__insert_before_symbol
-  - 在特定位置插入程式碼
-  - 維持程式碼組織
-  - 支援階層式插入
-```
+Dart MCP（`mcp__dart__*`）與 Serena（`mcp__serena__*`）工具的完整指令清單與使用策略見 `.claude/skills/search-tools-guide/SKILL.md`。
 
 ## TDD Phase 3b 執行流程
 
-### Step 1: 接收 Phase 3a 策略規劃
-**從 pepper-test-implementer (Phase 3a) 接收**：
-- **虛擬碼**：語言無關的演算法描述
-- **流程圖**：資料流程和控制流程視覺化
-- **架構決策記錄**：設計模式選擇和理由
-- **技術債務標記**：權宜方案和改善方向
-- **測試案例引用**：連結到 Phase 2 定義的測試
+> **通用流程路由**：Phase 3a → 3b 交接條件、Red-Green-Refactor 循環、程式碼品質基準、測試通過率驗證等語言無關通用骨架見 `.claude/skills/tdd/references/phase3-implementation.md`「Phase 3b：實作執行」段。本章僅保留 Flutter/Dart MCP 特定的執行細節（Dart MCP 工具呼叫、Serena 符號操作、hot_reload、虛擬碼→Dart 轉換範例）。
 
-**Phase 3a → Phase 3b 交接檢查清單**：
-- [ ] 虛擬碼邏輯完整且無歧義
-- [ ] 流程圖涵蓋所有關鍵路徑和邊界情況
-- [ ] 架構決策有明確理由和約束條件
-- [ ] 技術債務標記清楚且有改善方向
-- [ ] 測試案例引用完整且可追溯
+### Step 1: 接收 Phase 3a 策略規劃（Flutter 特定）
 
-**如果策略不可實作**：
-- 記錄具體的技術障礙和不可行原因
-- 向 pepper 請求重新規劃策略
-- 提供 Flutter/Dart 技術限制資訊
-- 建議可替代的實作方向
+通用交接檢查清單路由至 phase3-implementation.md「接收 Phase 3a 策略」。策略不可實作時，記錄具體 Flutter/Dart 技術障礙與限制，向 pepper 請求重新規劃並建議基於 Flutter 技術特性的替代實作方向。
 
 ### Step 2: 開發環境準備
 ```bash
@@ -502,60 +385,9 @@ mcp__dart__dart_format
 
 > 命名後綴規範詳見：.claude/references/ticket-id-conventions.md（第 2.1 節 TDD Phase 後綴）
 
-### Step 5: 交接 Phase 4 重構代理人
+### Step 5: 交接 Phase 4 重構代理人（Flutter 特定）
 
-**Phase 3b → Phase 4 交接標準**：
-- [ ] **測試通過率**：所有測試 100% 通過
-- [ ] **功能正確性**：功能按照 Phase 1 設計規格正確實作
-- [ ] **程式碼分析**：`dart analyze` 0 issues
-- [ ] **Runtime Errors**：無執行時錯誤
-- [ ] **品質規範**：符合所有程式碼品質規範
-- [ ] **工作日誌**：Phase 3b 實作記錄完整
-
-**交接文件更新（工作日誌）**：
-```markdown
-## Phase 3b Flutter 實作執行記錄
-
-**實作時間**：[開始時間] - [結束時間]
-**執行代理人**：parsley-flutter-developer
-
-### Phase 3a → Phase 3b 策略轉換
-**接收內容**：
-- 虛擬碼：X 個函式/方法
-- 流程圖：Y 個關鍵流程
-- 架構決策：Z 個設計模式
-- 技術債務：W 個標記項目
-
-**轉換過程**：
-- 虛擬碼轉換為 Dart 語法
-- 通用類型對應到 Dart 強型別系統
-- 整合 Flutter SDK 和 Widget 系統
-- 應用專案程式碼品質規範
-
-### 實作成果
-- [功能A] 實作完成，測試通過
-- [功能B] 實作完成，測試通過
-- 所有測試執行結果：X/X 通過 (100%)
-
-### Dart MCP 工具使用記錄
-- `mcp__dart__run_tests`：執行 X 次
-- `mcp__dart__hot_reload`：使用 Y 次
-- `mcp__dart__get_runtime_errors`：修復 Z 個錯誤
-- `mcp__dart__analyze_files`：最終 0 issues
-
-### 程式碼品質確認
-- Dart Analyze：0 issues
-- Package 導入：100% 使用 `package:` 格式
-- 函式行數：平均 X 行（符合 5-10 行原則）
-- 需求註解：100% 覆蓋業務邏輯函式
-- 錯誤處理：100% 使用預編譯錯誤或專用異常
-
-### 技術債務記錄
-- 從 Phase 3a 接收：W 個標記項目
-- Phase 3b 新增：V 個技術限制項目
-
-**準備交接給 Phase 4 三步驟流程（4a 多視角分析 → 4b cinnamon 重構執行 → 4c 多視角再審核）**
-```
+通用 Phase 3b → Phase 4 交接標準與 4a/4b/4c 三步驟流程路由至 `.claude/skills/tdd/references/phase4-refactor.md`。Flutter 特定交接前置：`dart analyze` 0 issues + 無 Runtime Errors（`mcp__dart__get_runtime_errors`）。交接文件章節格式見 `.claude/pm-rules/ticket-body-schema.md` 與 `.claude/templates/work-log-template.md`。
 
 ## 允許產出
 
@@ -913,31 +745,7 @@ Phase 3a (pepper) 重新規劃
 
 ### 交接給 Phase 4 三步驟流程
 
-**Phase 3b → Phase 4 協作模式**：
-```text
-Phase 3b (parsley) 完成 Flutter 實作
-    ↓ 交接產物
-Phase 4a (/parallel-evaluation B) 多視角重構分析
-    ↓ 分析報告
-Phase 4b (cinnamon-refactor-owl) 重構執行（依 4a 報告）
-    ↓ 重構完成
-Phase 4c (/parallel-evaluation A) 多視角再審核
-    ↓ 發現設計問題
-Phase 1 (lavender) 設計調整（如需要）
-```
-
-**交接內容（Flutter 特定）**：
-- **工作程式碼**：100% 測試通過的 Flutter/Dart 程式碼
-- **實作記錄**：Phase 3b 完整開發過程
-- **品質指標**：程式碼分析結果和品質指標
-- **技術債務**：從 Phase 3a 接收和 Phase 3b 新增的技術債務
-
-**交接標準**：
-- [ ] **測試通過率**：100% 測試通過
-- [ ] **程式碼分析**：`dart analyze` 0 issues
-- [ ] **功能正確性**：符合 Phase 1 設計規格
-- [ ] **品質規範**：符合所有程式碼品質規範
-- [ ] **工作日誌**：Phase 3b 記錄完整
+4a 多視角分析 → 4b 重構執行 → 4c 多視角再審核的協作流程圖路由至 `.claude/skills/tdd/references/phase4-refactor.md`。交接 checklist：100% 測試通過 + `dart analyze` 0 issues + Phase 3b 工作日誌記錄完整（含從 Phase 3a 接收與 Phase 3b 新增的技術債務）。
 
 ### 與 lavender-interface-designer (Phase 1) 協作
 
@@ -1194,24 +1002,7 @@ mcp__serena__replace_symbol_body
 
 ## 搜尋工具
 
-### ripgrep (rg)
-
-代理人可透過 Bash 工具使用 ripgrep 進行高效能文字搜尋。
-
-**文字搜尋預設使用 rg（透過 Bash）**，特別適合：
-- 需要 PCRE2 正則表達式（lookaround、backreference）
-- 需要搜尋壓縮檔（`-z` 參數）
-- 需要 JSON 格式輸出（`--json` 參數）
-- 需要複雜管線操作
-
-**文字搜尋優先使用 rg（透過 Bash）**，內建 Grep 工具作為備選。
-
-**完整指南**：`.claude/skills/search-tools-guide/SKILL.md`
-
-**環境要求**：需要安裝 ripgrep。未安裝時建議：
-- macOS: `brew install ripgrep`
-- Linux: `sudo apt-get install ripgrep`
-- Windows: `choco install ripgrep`
+ripgrep（rg）、LSP/Serena 符號搜尋等工具的選擇與使用見 `.claude/skills/search-tools-guide/SKILL.md`。
 
 ---
 

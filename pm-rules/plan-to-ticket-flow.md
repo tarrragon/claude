@@ -94,16 +94,19 @@ Plan Mode 產出到 Atomic Ticket 的轉換流程。
 
 ## Ticket 創建位置決策樹（W17-008.15）
 
-> **背景**：W17-004 / W17-008 系列暴露的問題 — ANA 結論的多項修復條目散落為兄弟 ticket 失去層次感；但若硬用 `--parent {ANA_id}` 又會違反 PC-073（ANA complete 不該被 spawned 拉回）。決策樹協助 PM 在「兄弟」「子任務」「衍生」三種關係間快速定位。
+> **背景**：W17-004 / W17-008 系列暴露的問題 — ANA 結論的多項修復條目散落為兄弟 ticket 失去層次感。決策樹協助 PM 在「兄弟」「子任務」「衍生」三種關係間快速定位。
+>
+> **2026-06-13 W8-025 Option A 修正**：本決策樹原編碼舊 PC-073 模型（ANA 落地走 spawned、「ANA 自身的 child = PC-073 衝突」），在 PC-091 升格（2026-05-03，ANA 落地唯一權威＝children）時未同步，造成與 PC-091/ticket-lifecycle 矛盾。下方已對齊 PC-091：**ANA 落地 = children of ANA（`--parent <ANA-id>`）**，spawned 僅給「執行中意外發現、與當前 ticket 無因果」的工作。
 
 ```
 新發現需要建立 ticket
     │
     ▼
-是 ANA 結論的修復條目？──是──▶ 建為 group ticket 的 children
-    │                              （--parent {group_id}；保留層次感、阻擋語意）
-    │                              禁止：建為已知 group ticket 的「父任務的兄弟」
-    │                              禁止：建為 ANA 自身的 child（PC-073 衝突）
+是 ANA 結論的落地/修復條目？──是──▶ children of ANA（--parent {ANA_id}）
+    │                              防護性 ANA 保持 in_progress 直到 children 完成
+    │                              （落地條目極多需中間層時：group 為 ANA 的 child，
+    │                               落地為 group 的 child；勿建為 ANA 的兄弟）
+    │                              盤點/規劃型 ANA 的清理落地亦走此路（清理＝落地，非衍生副產品）
     │
     └─否──▶ 是當前 in_progress ticket 執行中發現？
                 │
@@ -112,7 +115,7 @@ Plan Mode 產出到 Atomic Ticket 的轉換流程。
                 │       是──▶ --parent {current_ticket_id}（子任務）
                 │       │
                 │       否──▶ --source-ticket {current_ticket_id}（衍生 / spawned）
-                │              （ANA 衍生 IMP 走此路；遵循 PC-073）
+                │              （執行中意外發現的獨立工作，如 W8-013 審查中發現 W8-015/016）
                 │
                 否──▶ 獨立 ticket（不帶 --parent / --source-ticket）
 ```
@@ -121,8 +124,8 @@ Plan Mode 產出到 Atomic Ticket 的轉換流程。
 
 | 關係 | CLI 旗標 | 適用情境 | 違反成本 |
 |------|---------|---------|---------|
-| 子任務（children） | `--parent {id}` | 因果衍生、需阻擋父 complete | 漏層次 → group 看不出 11 項目；錯掛 ANA → PC-073 |
-| 衍生（spawned） | `--source-ticket {id}` | ANA / 大 IMP 衍生獨立 ticket | 漏掛 → 失去追溯；錯用 --parent → PC-073 |
+| 子任務（children） | `--parent {id}` | **ANA 落地（含盤點/規劃型清理）**、因果衍生、需阻擋父 complete | 漏層次 → 看不出延伸鏈；建為兄弟 → PC-091 血緣斷裂 |
+| 衍生（spawned） | `--source-ticket {id}` | 執行中**意外發現**、與當前 ticket 無因果的獨立工作（非 ANA 落地） | 漏掛 → 失去追溯；**錯用於 ANA 落地 → 牴觸 PC-091/L115 children 終局** |
 | 兄弟（siblings） | 不帶 flag | 完全獨立的問題 | 應屬子卻建兄弟 → 失層次；ARCH-017 兄弟應無依賴 |
 
 ### 創建後輔助提示
@@ -136,7 +139,8 @@ Plan Mode 產出到 Atomic Ticket 的轉換流程。
 | 禁止 | 替代 |
 |------|------|
 | 建為已知 group ticket 的「父任務的兄弟」（破壞層次感） | `--parent {group_id}` |
-| ANA 結論修復條目用 `--parent {ANA_id}`（PC-073） | 建 group ticket 後 `--parent {group_id}` |
+| ANA 落地用 `--source-ticket`/spawned 或無關聯兄弟編號（PC-091 血緣斷裂 + L115 children 終局） | `--parent {ANA_id}`（ANA 落地一律 children） |
+| 把盤點/規劃型 ANA 的清理誤當衍生副產品用 spawned（W8-025 Option A） | `--parent {ANA_id}`（清理＝落地，走 children；ANA 維持 in_progress 至清理完成） |
 | 用 `--parent` 串接無因果的 ticket | 改用 `blockedBy` 或保持兄弟 |
 
 ---

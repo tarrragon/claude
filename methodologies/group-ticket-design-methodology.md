@@ -1,10 +1,10 @@
 # Group Ticket 設計方法論
 
-> 正面案例方法論——從 W17 介面基線清理實踐提煉。用於解決「父 ticket 已 complete 後仍需追蹤衍生子項」的 parent-source 語意衝突。
+> 30 秒核心：當父 ANA/IMP 已 complete 卻發現未追蹤的 N 項衍生修復時，用 Group ticket（`--source-ticket` 接原父 + `--parent` group 接 children）保留層次感且不違 PC-073。CLI 操作與六欄位語意見 ticket skill，本檔只留設計判斷。
 
 ## 適用情境
 
-當滿足以下任一條件時，考慮 Group Ticket 模式：
+滿足以下任一條件時考慮 Group Ticket 模式：
 
 | 情境 | 細節 |
 |------|------|
@@ -13,7 +13,7 @@
 | 需要「全部子項完成才算收尾」的硬性阻擋語意 | children 阻擋父 complete 正是此需求 |
 | 要保留 ANA 分析結論的獨立完成狀態 | 避免衍生追蹤干擾分析本身的 completed 狀態 |
 
-## 三選項對照
+## 三選項對照（地圖型，本表即核心）
 
 | 選項 | 關係欄位 | 阻擋語意 | 對父狀態影響 | 語意合適度 |
 |------|---------|---------|-------------|-----------|
@@ -31,115 +31,31 @@
 Group ticket（新建，pending）
     |
     | --parent（硬阻擋語意）
-    +---> children.1（待實作）
-    +---> children.2（待實作）
-    +---> children.N（待實作）
+    +---> children.1 / .2 / .N（待實作）
 ```
 
-關鍵性質：
+關鍵性質：原父不受干擾（用 `--source-ticket`，不影響已 complete）；層次感保留（children 明確屬於 group 專案）；硬阻擋正確（children 全完成才觸發 group complete）；雙向追溯（group.source_ticket → 原分析，group.children → 具體子項）。
 
-- **原父不受干擾**：Group 用 `--source-ticket`，不影響已 complete 狀態
-- **層次感保留**：Children 清楚屬於「group 修復專案」非散落
-- **硬阻擋正確**：Children 全完成才觸發 Group complete，符合 children 語意
-- **雙向追溯**：Group.source_ticket → 原分析；Group.children → 具體子項
+> CLI 建立步驟（`ticket create --parent` / `--source-ticket` 各欄位）與六欄位語意 SSOT 見 `.claude/skills/ticket/SKILL.md` 與 `.claude/skills/ticket/references/field-semantics.md`，本檔不複述。
 
-## 實踐清單
+## 設計判斷（三衍生規範）
 
-### 建 Group ticket
+| 規範 | 要求 | 違反後果 |
+|------|------|---------|
+| Group 不得有實作內容 | `how.strategy` 為「建 children → 協調 → 驗收整合」；統一修復步驟建為 children 之一 | 與 children 職責重疊，難驗收 |
+| Children 立即補 Context Bundle | 建完同一輪 append-log 寫入 PCB（原父落差編號 + 實作範圍 + 驗證方式） | 觸發 PC-100（PCB 未繼承 source）|
+| Group acceptance 枚舉 children 完成 | 逐項列 children + 「所有 N children complete」+「linux 最終審查」 | group 完成判斷無法機械化檢查 |
 
-```bash
-ticket create \
-  --action "清理" \
-  --target "<原父 ID> <主題> batch（N 項 group 協調）" \
-  --type IMP  # 或 ANA/ADJ 視內容
-  --wave <N> \
-  --priority <最高 children 優先級> \
-  --who rosemary \
-  --what "作為 group ticket 協調 <原父> 修復清單中 N 項未建 ticket 的遺漏項；逐項由 children 執行；本 group 於所有 children 完成後 complete" \
-  --source-ticket "<原父 ID>" \  # 注意：source 非 parent
-  --acceptance "children <group>.1 ...|...|所有 N children complete|linux 最終審查" \
-  --decision-tree-*
-```
-
-### 建 Children ticket
-
-```bash
-ticket create \
-  --action "..." \
-  --target "..." \
-  --type <IMP/DOC/ANA> \
-  --parent "<group ID>" \  # 注意：parent 非 source
-  --priority <Px> \
-  --who <agent> \
-  # 其餘欄位充分
-```
-
-### Group ticket 完成時機
-
-- **禁止**：所有 children 未完成前，不可手動 complete group
-- **正確**：children 全部 complete 後，group 的 acceptance 自動滿足，才 complete
-- **驗收**：group complete 前派 linux 視角最終審查，確認原父分析的修復清單已無遺漏
-
-## 衍生規範
-
-### 1. Group 本身不得有實作內容
-
-Group ticket 的 `how.strategy` 應為「step 1: 建 children；step 2: 協調；step 3: 驗收整合」，不可混入自身實作。若需要統一修復步驟，建為 children 之一。
-
-### 2. Children 必須立即補 Context Bundle（PC-100 防護）
-
-建完 children 後**同一輪** append-log 寫入 Context Bundle，引用：
-- 原父的具體落差/優先級編號
-- 實作範圍（具體檔案 + 函式/常數）
-- 驗證方式（grep / pytest / 手動）
-
-缺此步會觸發 PC-100（PCB 未繼承 source）。
-
-### 3. Group 的 acceptance 必須枚舉 children 完成
-
-```yaml
-acceptance:
-- '[ ] children X.1 (類型): 短標題'
-- '[ ] children X.2 (類型): 短標題'
-- ...
-- '[ ] 所有 N children complete'
-- '[ ] linux 最終審查 reviewed'
-```
-
-這讓 group 完成判斷可機械化檢查。
-
-## 觸發案例
-
-### W17-008：W17-004 介面基線清理 group（首次實踐）
-
-**情境**：W17-004 ANA 完成後，Solution 修復清單 P0 已建（W17-005/006），但 P1/P2/中型歧義共 11 項未轉 ticket（PC-102 首案）。用戶要求子任務語意而非兄弟。
-
-**應用**：
-- Group: W17-008（source=W17-004）
-- Children: W17-008.1-.11（11 項，parent=W17-008）
-- 類型混合：5 IMP / 3 DOC / 3 ANA
-
-**效果**：
-- W17-004 completed 狀態維持
-- 11 項明確屬於「W17-004 介面清理專案」
-- W17-008 collect 11 children 完成才 complete，有序推進
+**Group complete 時機**：所有 children complete 後 acceptance 自動滿足才 complete；禁止 children 未完成前手動 complete；complete 前派 linux 視角最終審查確認原父修復清單無遺漏。
 
 ## 反模式警示
 
 | 反模式 | 後果 | 正確做法 |
 |--------|------|---------|
-| 把 group 當「虛擬聚合」，實作內容寫 group 自己 | 與 children 職責重疊；難驗收 | Group 只協調，實作推到 children |
-| Children 用 `--source-ticket group` 而非 `--parent` | 失去硬阻擋語意，group 可能在 children 未完成前被誤 complete | Children 必用 `--parent` |
-| Group 建好就放著，children 慢慢補 | Group 缺 Context Bundle（PC-100）；children 欄位稀疏 | Build 當輪即完成 group + 全部 children 框架 |
-| 「隱形 group」——口頭說「這幾個是一組」不建 group ticket | 沒有追蹤錨點；父 complete 後無主 | 明確建 group ticket |
-
-## 相關 Pattern 與方法論
-
-| 關聯 | 類型 | 關係 |
-|------|------|------|
-| PC-073 | error-pattern | Group 模式的存在動機——ANA 衍生 IMP 應用 spawned 而非 parent |
-| PC-100 | error-pattern | Children 必須立即補 Context Bundle |
-| PC-102 | error-pattern | ROI 表未逐項轉 ticket；Group 模式是轉化的建議結構 |
+| 實作內容寫 group 自己 | 與 children 職責重疊；難驗收 | Group 只協調，實作推到 children |
+| Children 用 `--source-ticket group` 而非 `--parent` | 失去硬阻擋語意，group 可能被誤 complete | Children 必用 `--parent` |
+| Group 建好就放著，children 慢慢補 | Group 缺 PCB（PC-100）；children 欄位稀疏 | Build 當輪即完成 group + 全部 children 框架 |
+| 「隱形 group」口頭說「這幾個是一組」不建 ticket | 沒有追蹤錨點；父 complete 後無主 | 明確建 group ticket |
 
 ## 何時**不**用 Group Ticket
 
@@ -150,7 +66,18 @@ acceptance:
 | 衍生項全是 backlog 低優先 | 可列 todolist.yaml 不必建 group |
 | 父 ticket 尚未 complete 就想建衍生 | 可直接 `--parent` 父（無 PC-073 風險）|
 
+## 相關 Pattern
+
+| 關聯 | 關係 |
+|------|------|
+| PC-073 | Group 模式存在動機——ANA 衍生 IMP 應用 spawned 而非 parent |
+| PC-100 | Children 必須立即補 Context Bundle |
+| PC-102 | ROI 表未逐項轉 ticket；Group 模式是轉化的建議結構 |
+
+> 首次實踐案例：W17-008（W17-004 介面基線清理，group + 11 children，混合 5 IMP / 3 DOC / 3 ANA）。
+
 ---
 
-**Last Updated**: 2026-04-20
+**Last Updated**: 2026-06-14
+**Version**: 2.0.0 — W8-019.3 整併瘦身：156→約 95 行，CLI 建立步驟路由 ticket skill + field-semantics SSOT（原 line 50-75 命令塊去重），三選項地圖表 + 反模式 + 何時不用保留為 30 秒核心
 **Version**: 1.0.0 — 從 W17-008 group ticket 首次實踐提煉

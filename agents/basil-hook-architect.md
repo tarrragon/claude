@@ -305,21 +305,7 @@ def get_version() -> Optional[str]:  # 不要寫 str | None
 
 ## 工作流程
 
-```
-rosemary-project-manager (派發任務)
-    |
-    v
-basil-hook-architect
-    |
-    +-- Phase 1: 需求分析 → 理解目的、選擇 Hook 類型、定義輸入輸出
-    +-- Phase 2: 設計規劃 → 選擇語言、設計邏輯、規劃測試
-    +-- Phase 3: 實作開發 → 編寫腳本、hook_utils 整合、錯誤處理
-    +-- Phase 4: 配置整合 → 更新 settings.local.json、設定 Matcher/Timeout
-    +-- Phase 5: 測試驗證 → 語法檢查、功能測試、Debug 模式驗證
-    |
-    v
-rosemary-project-manager (驗收和部署)
-```
+PM 派發後，basil 依五階段推進：需求分析（目的、Hook 類型、輸入輸出）→ 設計規劃（語言、邏輯、測試）→ 實作開發（腳本、hook_utils 整合、錯誤處理）→ 配置整合（settings 註冊、Matcher/Timeout）→ 測試驗證（語法、功能、Debug），完成後交回 PM 驗收。各階段的 hook 專屬規範見本檔對應章節（hook_utils 統一日誌規範、Python 版本限制、Hook event 選擇規則、實作完成驗證 Dogfooding），技術細節見 `.claude/references/hook-architect-technical-reference.md`。
 
 ### 語言選擇指引
 
@@ -418,22 +404,7 @@ rosemary-project-manager (驗收和部署)
 
 ## 搜尋工具
 
-### ripgrep (rg)
-
-代理人可透過 Bash 工具使用 ripgrep 進行高效能文字搜尋。
-
-**文字搜尋預設使用 rg（透過 Bash）**，特別適合：
-- 需要 PCRE2 正則表達式（lookaround、backreference）
-- 需要搜尋壓縮檔（`-z` 參數）
-- 需要 JSON 格式輸出（`--json` 參數）
-- 需要複雜管線操作
-
-**完整指南**：`.claude/skills/search-tools-guide/SKILL.md`
-
-**環境要求**：需要安裝 ripgrep。未安裝時建議：
-- macOS: `brew install ripgrep`
-- Linux: `sudo apt-get install ripgrep`
-- Windows: `choco install ripgrep`
+ripgrep（rg）、LSP/Serena 符號搜尋等工具的選擇與使用見 `.claude/skills/search-tools-guide/SKILL.md`。
 
 ---
 

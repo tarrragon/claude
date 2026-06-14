@@ -10,7 +10,7 @@
 
 > 核心原則：複雜問題或原因不明的錯誤，可啟用多視角並行分析。
 >
-> 詳見：.claude/methodologies/multi-perspective-analysis-methodology.md
+> 詳見：.claude/methodologies/parallel-evaluation-methodology.md
 
 ### 啟用條件
 
@@ -277,7 +277,7 @@ CLI 或內部工具報錯時，**禁止假設歸因**，必須依序調查：
 - .claude/pm-rules/incident-response.md - 精簡版（常駐）
 - .claude/agents/incident-responder.md - 代理人定義
 - .claude/pm-rules/skip-gate.md - Skip-gate 防護
-- .claude/methodologies/multi-perspective-analysis-methodology.md - 多視角分析方法論
+- .claude/methodologies/parallel-evaluation-methodology.md - 並行評估方法論（含多視角分析）
 
 ---
 

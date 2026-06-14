@@ -136,42 +136,7 @@ flutter pub get
 
 ### 環境診斷報告格式
 
-```markdown
-# 環境診斷報告
-
-## 環境資訊
-- **Flutter 版本**: [版本]
-- **Dart 版本**: [版本]
-- **作業系統**: [OS 資訊]
-- **專案路徑**: [路徑]
-
-## 問題診斷
-
-### 錯誤訊息
-```
-[完整錯誤訊息]
-```
-
-### 問題分類
-- **類型**: [依賴/SDK/環境/其他]
-- **嚴重程度**: [高/中/低]
-
-### 根本原因分析
-[分析結果]
-
-## 解決方案
-
-### 執行步驟
-1. [步驟 1]
-2. [步驟 2]
-3. [步驟 3]
-
-### 驗證結果
-[驗證結果]
-
-## 預防建議
-[預防類似問題的建議]
-```
+完整文件模板（環境資訊/問題診斷/解決方案/預防建議）見 `.claude/references/system-engineer-templates.md`。
 
 ---
 
@@ -366,21 +331,4 @@ flutter pub get
 
 ## 搜尋工具
 
-### ripgrep (rg)
-
-代理人可透過 Bash 工具使用 ripgrep 進行高效能文字搜尋。
-
-**文字搜尋預設使用 rg（透過 Bash）**，特別適合：
-- 需要 PCRE2 正則表達式（lookaround、backreference）
-- 需要搜尋壓縮檔（`-z` 參數）
-- 需要 JSON 格式輸出（`--json` 參數）
-- 需要複雜管線操作
-
-**文字搜尋優先使用 rg（透過 Bash）**，內建 Grep 工具作為備選。
-
-**完整指南**：`.claude/skills/search-tools-guide/SKILL.md`
-
-**環境要求**：需要安裝 ripgrep。未安裝時建議：
-- macOS: `brew install ripgrep`
-- Linux: `sudo apt-get install ripgrep`
-- Windows: `choco install ripgrep`
+ripgrep（rg）、LSP/Serena 符號搜尋等工具的選擇與使用見 `.claude/skills/search-tools-guide/SKILL.md`。

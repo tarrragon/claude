@@ -42,6 +42,30 @@ retry-continuation 簽章涵蓋（W2-011.4，thyme F5）:
     形態無窮、特異性低、高誤報；且 harness in-turn retry 通常不產出半個 tag
     （要嘛完整渲染 tool-call 結構，要嘛漏前綴的完整標記）。為此類形態疊 regex
     特例的維護成本與誤報風險遠高於其涵蓋價值，故依 YAGNI 原則不實作。
+
+架構邊界——「孤兒結尾漏網路徑」屬 Stop-hook 機制邊界，非 signature 覆蓋缺口（W8-029）:
+  曾觀察到一類間歇漏網：訊息以孤兒短 token（如 court）結尾、`<invoke>` 字面已
+  被 harness 抽離，現有 5 signature 皆需後接 `<invoke` 字面故不命中。直覺反應是
+  新增「孤兒 token 結尾」signature 補洞，但 W8-029 transcript census 否證此方向的
+  前提——漏網路徑（單次 parse-failure）在持久化 transcript 層**零可掃文字**：
+
+    census（單一 PM session，121 筆 assistant 訊息）：
+      text+tooluse  = 0  本 harness 下 text block 與 tool_use block 從不並存於同一 entry
+      ends_short    = 0  無任何持久化 assistant text 訊息以孤兒短 token 結尾
+      invoke_literal_in_text = 16  double-failure 命中型（sig 1/3/4/5 正常攔截，覆蓋完整）
+
+  真因：harness 一旦把 `<invoke>` 成功解析/抽離為 tool_use 嘗試，該回合即以
+  tool_use-only 訊息持久化，孤兒前綴隨之併入該 tool 回合或丟棄；`last_assistant_text()`
+  取到的是更早的乾淨 text 訊息，不含孤兒 token。因此這條路徑在 transcript 層
+  無 hook-visible artifact——無論加什麼 signature 都掃不到不存在的文字。這是
+  Stop-hook 依賴「持久化 assistant text block」的架構邊界，不是 regex 覆蓋缺口。
+  退回純孤兒判據（孤兒 token 結尾即攔）則正常訊息以短詞結尾（完成/OK/done）大量
+  誤報，一次即讓用戶學會無視該訊號（hook 失效）。故保守不實作新 signature。
+
+  重啟 signature 設計的唯一 trigger：跨 session 累積 ≥2 反例——即另在不同 session
+  實際取樣到「孤兒結尾 text block + 後續 tool_use-only」兩段式持久化 entry（推翻
+  上述 census 的單 session 結構結論）。在此之前，新增孤兒 signature 屬攔不到目標
+  且高誤報的負價值改動。
 """
 
 import json

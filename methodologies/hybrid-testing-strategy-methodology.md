@@ -1,97 +1,34 @@
-# 混合測試策略方法論
+# 混合測試策略方法論（30 秒核心）
 
-## 核心概念
+> **本檔已瘦身（W8-018.2）**：通用測試策略選擇（測試金字塔、測試類型選擇、邊界條件、技術性必檢項目）已在 `/tdd` skill 的 `.claude/skills/tdd/references/phase2-test-design.md`。本檔僅保留本方法論的 distinct 核心：依 Clean Architecture 層級選測試方法的決策樹。需要 GWT 設計、場景覆蓋、測試案例格式時直接讀 phase2-test-design.md。
 
-混合測試策略根據 Clean Architecture 層級選擇測試方法：BDD 測試業務行為、單元測試複雜邏輯、整合測試關鍵流程。
+混合測試策略依 Clean Architecture 層級選擇測試方法：BDD 測業務行為、單元測試測複雜邏輯、整合測試測關鍵流程。核心是「不同架構層用不同測試手段」，避免整合測試做單元測試的工作。
 
-| 層級 | 測試類型 | 覆蓋率要求 |
-|-----|---------|-----------|
-| Layer 1 (UI) | 整合測試（關鍵流程） | 關鍵路徑 100% |
-| Layer 2 (Behavior) | 單元測試（複雜轉換） | 邏輯覆蓋率 100% |
-| Layer 3 (UseCase) | BDD 測試（所有場景） | 行為場景 100% |
-| Layer 4 (Interface) | 不測試 | N/A |
-| Layer 5 (Domain) | 單元測試（複雜邏輯） | 程式碼+分支 100% |
+---
 
-## 執行步驟
+## 分層測試決策樹（distinct 核心）
 
-### 分層測試決策樹
+| 層級 | 測試類型 | 覆蓋率要求 | 觸發條件 |
+|-----|---------|-----------|---------|
+| Layer 1 (UI) | 整合測試（關鍵流程） | 關鍵路徑 100% | 流程失敗影響核心業務 / 多步驟操作 / 涉及金流敏感資料 |
+| Layer 2 (Behavior) | 單元測試（複雜轉換） | 邏輯覆蓋率 100% | 含條件判斷 / 計算邏輯 / 多來源資料 / 邏輯超過 10 行 |
+| Layer 3 (UseCase) | BDD 測試（所有場景） | 行為場景 100% | 所有業務行為（Given-When-Then） |
+| Layer 4 (Interface) | 不測試 | N/A | 由實作層測試 |
+| Layer 5 (Domain) | 單元測試（複雜邏輯） | 程式碼+分支 100% | 含業務規則驗證 / 計算 / 狀態轉換 / 不變量檢查 |
 
-```
-程式碼屬於哪一層？
-│
-├─ Layer 1 (UI)
-│  └─ 關鍵互動流程？ → 是：整合測試 / 否：人工測試
-│
-├─ Layer 2 (Behavior)
-│  └─ 複雜轉換邏輯？ → 是：單元測試 / 否：依賴 UseCase 測試
-│
-├─ Layer 3 (UseCase)
-│  └─ 所有業務行為 → BDD 測試（Given-When-Then）
-│
-├─ Layer 4 (Interface)
-│  └─ 不測試（由實作層測試）
-│
-└─ Layer 5 (Domain)
-   └─ 複雜業務規則？ → 是：單元測試 / 否：依賴 UseCase 測試
-```
+**判斷流程**：先定位程式碼屬哪一層，再依該層的觸發條件決定是否需測試及測試類型。Layer 2/5 的「複雜」是觸發單元測試的門檻，不複雜則依賴 UseCase 層 BDD 測試涵蓋。
 
-### 判斷標準
+---
 
-**關鍵互動流程（Layer 1）**:
+## 路由
 
-| 條件 | 判斷 |
-|-----|------|
-| 流程失敗影響核心業務 | 關鍵流程 |
-| 需要多步驟使用者操作 | 關鍵流程 |
-| 涉及金流或敏感資料 | 關鍵流程 |
+| 需求 | 讀這裡 |
+|------|--------|
+| 測試金字塔、測試類型選擇、GWT 設計、場景覆蓋、邊界條件識別、技術性必檢項目 | `.claude/skills/tdd/references/phase2-test-design.md` |
+| BDD Given-When-Then 格式與行為鏈、前置條件驗證 | `.claude/methodologies/bdd-testing-methodology.md` |
+| Sociable vs Solitary 測試邊界選擇 | `.claude/methodologies/behavior-first-tdd-methodology.md` |
 
-**複雜轉換邏輯（Layer 2）**:
+---
 
-| 條件 | 判斷 |
-|-----|------|
-| 包含條件判斷 | 複雜轉換 |
-| 包含計算邏輯 | 複雜轉換 |
-| 涉及多個來源資料 | 複雜轉換 |
-| 邏輯超過 10 行 | 複雜轉換 |
-
-**複雜業務規則（Layer 5）**:
-
-| 條件 | 判斷 |
-|-----|------|
-| 包含業務規則驗證 | 複雜邏輯 |
-| 包含計算邏輯 | 複雜邏輯 |
-| 包含狀態轉換邏輯 | 複雜邏輯 |
-| 包含不變量檢查 | 複雜邏輯 |
-
-### 技術性測試必檢項目
-
-- Null 值處理
-- 空集合處理
-- 邊界值（0、負數、最大值）
-- 異常處理（網路、儲存、外部 API）
-- 資料驗證（格式、範圍、必填）
-
-## 檢查清單
-
-### Ticket 完成前檢查
-
-- [ ] 測試類型符合決策樹
-- [ ] UseCase 層：行為場景 100% 覆蓋
-- [ ] Domain 層（複雜邏輯）：程式碼覆蓋率 100%
-- [ ] Behavior 層（複雜轉換）：邏輯覆蓋率 100%
-- [ ] UI 層（關鍵流程）：整合測試已撰寫
-- [ ] 技術性測試必檢項目已完成
-- [ ] 新增程式碼覆蓋率 >= 80%
-
-### Code Review 檢查
-
-- [ ] BDD 測試聚焦行為（測試名稱使用業務語言）
-- [ ] Given-When-Then 結構清晰
-- [ ] 只 Mock 外層依賴（Repository, Service）
-- [ ] 沒有 Mock 內層邏輯（Domain Entity, Value Object）
-- [ ] 測試獨立可執行，不依賴執行順序
-
-## Reference
-
-- [BDD 測試方法論](./bdd-testing-methodology.md) - Given-When-Then 格式和完整範例
-- [行為優先 TDD 方法論](./behavior-first-tdd-methodology.md) - Sociable vs Solitary 詳細對比
+**Last Updated**: 2026-06-13
+**Version**: 2.0.0 — W8-018.2 整併瘦身：通用測試策略內容路由至 `/tdd` skill phase2-test-design.md，保留 distinct 的 Clean Architecture 分層決策樹為 30 秒核心 + 路由。歷史完整版見 git log。

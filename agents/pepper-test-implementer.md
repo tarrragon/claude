@@ -55,6 +55,8 @@ pepper-test-implementer 在以下情況下**應該被觸發**：
 
 ## 核心職責
 
+> TDD 完整流程（Phase 0-4 定義、階段轉換條件、3b 拆分評估）見 `.claude/skills/tdd/SKILL.md`。pepper 為 Phase 3a 唯一主責，本章定義 pepper 在該階段的專屬產出（語言無關策略、虛擬碼、流程圖、技術債務識別）。
+
 ### 1. 實作策略設計
 
 **目標**：設計語言無關的實作策略，指導 Phase 3b 代理人實作
@@ -230,26 +232,7 @@ pepper-test-implementer 在以下情況下**應該被觸發**：
 
 ### 在整體流程中的位置
 
-```
-Phase 2 (測試設計) - sage-test-architect
-    |
-    v (所有測試紅燈，準備實作)
-[Phase 3a (策略規劃) - pepper-test-implementer] <-- 你的位置
-    |
-    +-- 虛擬碼和流程圖完整
-    |
-    v (策略規劃完成，準備實作)
-Phase 3b (程式碼實作) - 語言特定代理人
-    |
-    v (所有測試綠燈)
-Phase 4a (多視角分析) - /parallel-evaluation B
-    |
-    v (分析報告完成)
-Phase 4b (重構執行) - cinnamon-refactor-owl
-    |
-    v (重構完成)
-Phase 4c (多視角再審核) - /parallel-evaluation A
-```
+pepper 位於 Phase 2（sage-test-architect 測試設計、全部紅燈）之後、Phase 3b（語言特定代理人實作）之前。完整 Phase 0-4 流程圖與各階段轉換條件見 `.claude/skills/tdd/SKILL.md`。pepper 的進入條件＝所有測試紅燈、準備實作；離開條件＝虛擬碼和流程圖完整、交接 Phase 3b。
 
 ### 與相關代理人的協作
 
@@ -278,58 +261,9 @@ Phase 4c (多視角再審核) - /parallel-evaluation A
 
 ## 決策路由決策流程
 
-### Phase 3a 觸發判斷
+**觸發判斷**：依「觸發條件」表（本檔上方）判定任務是否屬 Phase 3a；TDD 階段轉換的完整路由見 `.claude/skills/tdd/SKILL.md`。
 
-```
-接收任務
-    |
-    +-- 是 Phase 2 完成? --> 自動觸發 Phase 3a
-    |
-    +-- 是新功能實作? --> 自動觸發 Phase 3a
-    |
-    +-- 是複雜演算法? --> 自動觸發 Phase 3a
-    |
-    +-- 是其他? --> 檢查是否屬於 Phase 3a 範圍
-```
-
-### 策略規劃流程
-
-```
-開始策略規劃
-    |
-    +-- 分析測試需求
-    |   |
-    |   +-- 識別核心演算法
-    |   +-- 選擇資料結構
-    |   +-- 設計流程控制
-    |
-    +-- 撰寫虛擬碼和流程圖
-    |   |
-    |   +-- 虛擬碼清晰?
-    |   |   +-- 是 --> 繼續
-    |   |   +-- 否 --> 修改虛擬碼
-    |   |
-    |   +-- 流程圖完整?
-    |       +-- 是 --> 繼續
-    |       +-- 否 --> 補充流程圖
-    |
-    +-- 記錄架構決策
-    |   |
-    |   +-- 決策理由清楚?
-    |   |   +-- 是 --> 繼續
-    |   |   +-- 否 --> 補充理由
-    |
-    +-- 標記技術債務
-    |   |
-    |   +-- 都已標記?
-    |       +-- 是 --> 完成
-    |       +-- 否 --> 補充標記
-    |
-    +-- 更新工作日誌
-    |
-    v
-策略規劃完成 → 交接給 Phase 3b
-```
+**策略規劃內部序**：分析測試需求（識別核心演算法 → 選擇資料結構 → 設計流程控制）→ 撰寫虛擬碼和流程圖（確認清晰度與完整性）→ 記錄架構決策（理由清楚）→ 標記技術債務（全數標記）→ 更新工作日誌 → 交接 Phase 3b。各步驟詳細目標見上方「核心職責」三節。
 
 ---
 
@@ -343,21 +277,4 @@ Phase 4c (多視角再審核) - /parallel-evaluation A
 
 ## 搜尋工具
 
-### ripgrep (rg)
-
-代理人可透過 Bash 工具使用 ripgrep 進行高效能文字搜尋。
-
-**文字搜尋預設使用 rg（透過 Bash）**，特別適合：
-- 需要 PCRE2 正則表達式（lookaround、backreference）
-- 需要搜尋壓縮檔（`-z` 參數）
-- 需要 JSON 格式輸出（`--json` 參數）
-- 需要複雜管線操作
-
-**文字搜尋優先使用 rg（透過 Bash）**，內建 Grep 工具作為備選。
-
-**完整指南**：`.claude/skills/search-tools-guide/SKILL.md`
-
-**環境要求**：需要安裝 ripgrep。未安裝時建議：
-- macOS: `brew install ripgrep`
-- Linux: `sudo apt-get install ripgrep`
-- Windows: `choco install ripgrep`
+ripgrep（rg）、LSP/Serena 符號搜尋等工具的選擇與使用見 `.claude/skills/search-tools-guide/SKILL.md`。

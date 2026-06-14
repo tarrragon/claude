@@ -164,6 +164,84 @@ Phase 4c：多維度再審核
 
 > **框架整合**：Phase 4b 由重構者角色執行。完成後管理者執行 git commit，更新任務狀態。技術債務使用 `/tech-debt-capture` 建立追蹤任務。
 
+### 重構驅動的預期管理（Layer 1）
+
+重構的核心不是「執行步驟」，而是「預期管理與驗證」的思考框架。在動手改任何程式碼之前，先預測重構會如何影響測試結果，動手後再驗證預測是否正確。預期與實際的偏差本身就是發現設計問題的訊號。
+
+**為何需要預期管理**：重構若無事前預測，測試由綠轉紅時無法判斷是「預期內的合理調整」還是「破壞了行為」。預先寫下「哪些測試應該繼續通過、哪些會失敗、為什麼」，能在執行後立刻辨識異常，避免把行為破壞誤當成正常重構結果而流入後續階段。
+
+**三步驟流程**：
+
+| 步驟 | 動作 | 產出 |
+|------|------|------|
+| 1. 預期管理 | 重構前列出「預期通過 / 預期失敗 / 不確定」三類測試，並說明各自理由 | 預期清單 |
+| 2. 執行驗證 | 執行重構後跑完整測試套件，逐項對比預期與實際結果 | 對比結果 |
+| 3. 偏差處理 | 結果不符預期時，分析偏差原因再決定下一步 | 偏差分析與決策 |
+
+**重構前預期清單格式**：
+
+```markdown
+## 重構預期管理
+
+### 預期會通過的測試
+- {測試名稱}：為什麼這個測試應該繼續通過（行為未改變）
+
+### 預期會失敗的測試
+- {測試名稱}：為什麼會失敗、失敗原因、如何修正
+
+### 不確定的測試
+- {測試名稱}：為什麼不確定、需特別注意什麼
+```
+
+**執行後偏差處理**：
+
+| 對比結果 | 判斷 | 對應行動 |
+|---------|------|---------|
+| 符合預期 | 預期通過的都通過、預期失敗的都失敗且原因相符 | 記錄結果，繼續後續優化 |
+| 不符預期 | 預期通過的失敗了，或出現預期外的失敗 | 分析偏差原因，三選一：修正問題續行 / 縮小重構範圍 / 回到穩定狀態重新設計 |
+
+**測試需要修改是設計訊號**：重構只改結構不改行為，因此測試理應保持穩定。若重構內部邏輯、改演算法、調整類別結構時測試需要修改，表示測試耦合到實作而非行為，應升級為測試設計問題重新設計（對照 phase2 的 Sociable Unit Tests 原則）。例外：業務規則或可觀察行為本身改變時，測試需修改是正確的。
+
+### 程式碼重構分析指南（Code Refactoring Analysis Guide）
+
+**為何需要結構化分析步驟**：重構若無系統化的分析切入點，容易只憑直覺改動，遺漏真正高價值的改善機會，或誤改已經乾淨的程式碼引入風險。以下步驟提供「先理解、再分析、後提案」的固定順序，確保每次重構都聚焦在可驗證的具體問題上。任何角色觸發 Phase 4b 重構執行時皆適用此通用流程。
+
+When analyzing code for refactoring:
+
+1. **Initial Assessment**: First, understand the code's current functionality completely. Never suggest changes that would alter behavior. If you need clarification about the code's purpose or constraints, ask specific questions.
+
+2. **Systematic Analysis**: Examine the code for these improvement opportunities:
+   - **Duplication**: Identify repeated code blocks that can be extracted into reusable functions
+   - **Naming**: Find variables, functions, and classes with unclear or misleading names
+   - **Complexity**: Locate deeply nested conditionals, long parameter lists, or overly complex expressions
+   - **Function Size**: Identify functions doing too many things that should be broken down (recommended max 30 lines)
+   - **Design Patterns**: Recognize where established patterns could simplify the structure
+   - **Organization**: Spot code that belongs in different modules or needs better grouping
+   - **Performance**: Find obvious inefficiencies like unnecessary loops or redundant calculations
+
+3. **Refactoring Proposals**: For each suggested improvement:
+   - Show the specific code section that needs refactoring
+   - Explain WHAT the issue is (e.g., "This function has 5 levels of nesting")
+   - Explain WHY it's problematic (e.g., "Deep nesting makes the logic flow hard to follow and increases cognitive load")
+   - Provide the refactored version with clear improvements
+   - Confirm that functionality remains identical
+
+4. **Best Practices**:
+   - Preserve all existing functionality - run mental "tests" to verify behavior hasn't changed
+   - Maintain consistency with the project's existing style and conventions
+   - Consider the project context from any CLAUDE.md files
+   - Make incremental improvements rather than complete rewrites
+   - Prioritize changes that provide the most value with least risk
+
+5. **Boundaries**: You must NOT:
+   - Add new features or capabilities
+   - Change the program's external behavior or API
+   - Make assumptions about code you haven't seen
+   - Suggest theoretical improvements without concrete code examples
+   - Refactor code that is already clean and well-structured
+
+Your refactoring suggestions should make code more maintainable for future developers while respecting the original author's intent. Focus on practical improvements that reduce complexity and enhance clarity.
+
 ---
 
 ## Phase 4c：多維度再審核
@@ -256,5 +334,5 @@ Phase 4 必須記錄所有發現的技術債務，無論優先級高低。
 
 ---
 
-**Last Updated**: 2026-03-12
-**Version**: 1.0.0
+**Last Updated**: 2026-06-14
+**Version**: 1.1.0 — 納入 cinnamon 外移的「程式碼重構分析指南（Code Refactoring Analysis Guide）」通用步驟（流程與人格解耦，任何角色觸發 Phase 4b 得同一流程，W8-009.3.4）

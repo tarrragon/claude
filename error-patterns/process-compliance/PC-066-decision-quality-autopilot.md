@@ -86,7 +86,7 @@ PM 接連執行兩個關於「PM 系統性盲點」的 ANA Ticket，第二個 AN
 
 > **觸發條件權威來源**：
 > - 機器可讀（Hook 動態讀取）：`.claude/config/wrap-triggers.yaml`
-> - 本專案對應表：`.claude/skills/wrap-decision/references/project-integration/triggers-alignment.md`
+> - 本專案對應表：`.claude/skills/wrap-decision/references/integration-patterns/triggers-alignment.md`
 > - 通用原理（抽象類別）：`.claude/skills/wrap-decision/SKILL.md`「觸發條件」章節
 >
 > Hook 實作以 YAML 為 single source of truth，不在 Python 硬編碼。

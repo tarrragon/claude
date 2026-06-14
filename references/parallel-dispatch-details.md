@@ -50,7 +50,7 @@ How: [Task Type: Dispatch] 並行啟動 {代理人} x N
 
 > 核心洞察：不僅實作任務需要並行化，分析任務也應該考慮多視角並行。
 >
-> 詳見：.claude/methodologies/multi-perspective-analysis-methodology.md
+> 詳見：.claude/methodologies/parallel-evaluation-methodology.md「分析任務並行的安全特性」
 
 ### 分析任務與實作任務的差異
 
@@ -272,7 +272,7 @@ How: [Task Type: Dispatch] 並行派發 N 個分析視角
 - .claude/rules/core/pm-role.md - 管理哲學
 - .claude/pm-rules/parallel-first.md - 並行優先策略
 - .claude/pm-rules/async-mindset.md - 非同步心態
-- .claude/methodologies/multi-perspective-analysis-methodology.md - 多視角並行分析方法論
+- .claude/methodologies/parallel-evaluation-methodology.md - 並行評估方法論（含多視角並行分析）
 - .claude/skills/agent-team/SKILL.md - Agent Teams 協作派發指南
 
 ---

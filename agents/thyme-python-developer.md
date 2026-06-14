@@ -147,20 +147,7 @@ thyme-python-developer 在以下情況下**應該被派發**：
 
 ## 作用域變更防護（IMP-003）
 
-> **背景**：W24 重構將 logger 從模組級移入 main()，但 7 個 hooks 的 helper 函式未更新，導致 NameError 靜默失敗。
-
-當修正任務涉及**變數作用域變更**（如全域 → 區域、模組級 → 函式級）時，**必須先執行影響範圍分析**：
-
-| 步驟 | 操作 | 驗證方式 |
-|------|------|---------|
-| 1 | 列出所有引用該變數的函式 | `grep -n 'variable_name' file.py` 或 AST 分析 |
-| 2 | 每個函式確認：是透過參數接收還是依賴全域 | 逐一檢查函式簽名 |
-| 3 | 依賴全域的函式必須新增參數 | 更新函式定義和所有呼叫端 |
-| 4 | 驗證修改後無遺漏 | AST 分析或實際執行 |
-
-**禁止**：只移動變數定義位置而不檢查所有引用。
-
-> 完整說明：.claude/error-patterns/implementation/IMP-003-refactoring-scope-regression.md
+變數作用域變更（全域→區域、模組級→函式級）的影響範圍分析強制流程詳見 `.claude/error-patterns/implementation/IMP-003-refactoring-scope-regression.md`（亦由 quality-common §1.2.1 路由）。核心禁令：只移動變數定義位置而不檢查所有引用。
 
 ---
 
@@ -168,40 +155,9 @@ thyme-python-developer 在以下情況下**應該被派發**：
 
 > **統一品質標準**：所有品質規則定義在 @.claude/references/quality-common.md
 >
-> thyme 必須遵循：第 1 節（通用規則）+ 第 3 節（Python 補充）+ 第 4.1 節 + 第 4.3 節
-
----
-
-## 品質檢查清單
-
-### 開始工作前
-
-- [ ] Ticket 已認領
-- [ ] 理解了任務的完整要求
-- [ ] 確認是 Python 相關任務（非 Hook 設計）
-- [ ] 開發環境正常（Python 版本、依賴）
-- [ ] 認知負擔評估完成（任務複雜度合理）
-
-### 完成工作後
-
-#### 品質檢查
-- [ ] 認知負擔指數 < 10
-- [ ] 函式長度 <= 30 行（理想 10-20 行）
-- [ ] 巢狀深度 <= 3 層
-- [ ] 無魔法數字（使用具名常數）
-- [ ] 無重複程式碼（遵循 DRY）
-- [ ] 配置與程式碼分離
-
-#### 命名檢查
-- [ ] 變數名稱說明「這是什麼」
-- [ ] 函式名稱以動詞開頭
-- [ ] 布林變數以 is/has/can 開頭
-- [ ] 無縮寫或僅使用通用縮寫
-
-#### 文件檢查
-- [ ] 公開函式有文件字串
-- [ ] 複雜邏輯有註解說明
-- [ ] 型別標註完整
+> thyme 必須遵循：第 1 節（通用規則）+ 第 2 節（通用品質檢查清單）+ 第 3 節（Python 補充）+ 第 4.1 節 + 第 4.3 節；Python 型別標註與 docstring 補充見 `.claude/references/quality-python.md` 第 6 節（Python 品質檢查清單）。
+>
+> 「開始工作前」就緒檢查項（ticket 認領 / 任務理解 / 環境就緒 / 認知負擔評估）屬全體代理人通用流程，見 `.claude/agents/AGENT_PRELOAD.md` 與 `.claude/rules/core/cognitive-load.md`；Python vs Hook 分工見本檔「與 basil-hook-architect 的分工」章節。
 
 ---
 
@@ -260,21 +216,4 @@ thyme-python-developer 在以下情況下**應該被派發**：
 
 ## 搜尋工具
 
-### ripgrep (rg)
-
-代理人可透過 Bash 工具使用 ripgrep 進行高效能文字搜尋。
-
-**文字搜尋預設使用 rg（透過 Bash）**，特別適合：
-- 需要 PCRE2 正則表達式（lookaround、backreference）
-- 需要搜尋壓縮檔（`-z` 參數）
-- 需要 JSON 格式輸出（`--json` 參數）
-- 需要複雜管線操作
-
-**文字搜尋優先使用 rg（透過 Bash）**，內建 Grep 工具作為備選。
-
-**完整指南**：`.claude/skills/search-tools-guide/SKILL.md`
-
-**環境要求**：需要安裝 ripgrep。未安裝時建議：
-- macOS: `brew install ripgrep`
-- Linux: `sudo apt-get install ripgrep`
-- Windows: `choco install ripgrep`
+ripgrep（rg）、LSP/Serena 符號搜尋等工具的選擇與使用見 `.claude/skills/search-tools-guide/SKILL.md`。

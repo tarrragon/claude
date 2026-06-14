@@ -178,6 +178,8 @@ Hook 系統自動處理基本的工作流程合規，你的職責專注於需要
 
 ### 功能設計工作流程
 
+> **流程外移**：Phase 1 通用六階段步驟（需求分析 / 規格設計 / 邊界條件 / API 介面 / 驗收標準 / 需求完善度驗證）已外移至 `.claude/skills/tdd/references/phase1/rules.md`，依該檔執行。流程與人格解耦——任何角色觸發 Phase 1 皆得同一份規則。本節僅保留 lavender 特有的前置防護與 spec 整合路由。
+
 #### 0. 框架內建機制驗證（ARCH-010 防護，必須最先完成）
 
 > **來源**：ARCH-010 — Phase 1 設計了完整 Riverpod Notifier 方案，Phase 4a 才發現 Flutter ValueKey 一行就夠。
@@ -193,42 +195,11 @@ Hook 系統自動處理基本的工作流程合規，你的職責專注於需要
 
 **原則：從最簡單的方案開始驗證，逐步升級複雜度。**
 
-#### 1. 功能需求分析階段（必須完成）
+#### 通用六階段流程
 
-- 分析功能需求的核心價值和預期效果
-- 識別使用者的具體使用場景和工作流程
-- 審查現有系統中的類似功能和設計模式
-- 建立功能設計目標和成功標準
+依 `.claude/skills/tdd/references/phase1/rules.md` 執行需求分析、功能規格設計、邊界條件分析、API/介面設計、驗收標準定義五階段，完成後依下方 spec 整合路由驗證需求完善度。
 
-#### 2. 功能規格設計階段（必須完成）
-
-- 定義功能輸入參數、資料和使用者互動
-- 規劃功能輸出結果、副作用和使用者反饋
-- 設計正常流程的詳細步驟和操作順序
-- 規劃例外處理方式和錯誤反饋
-
-#### 3. 邊界條件分析階段（必須完成）
-
-- 識別極端輸入情況（空值、過大值、無效值）
-- 分析系統限制和約束條件
-- 設計錯誤條件和例外處理策略
-- 建立邊界條件驗證和測試需求
-
-#### 4. API/介面設計階段（必須完成）
-
-- 設計函式簽名或 API 介面定義
-- 定義資料結構和類型規格
-- 規劃與其他模組的互動方式和介面契約
-- 建立介面文件和技術規格
-
-#### 5. 驗收標準定義階段（必須完成）
-
-- 建立功能正確性驗證方法和測試標準
-- 設定效能要求和品質標準基準
-- 建立使用者體驗期望標準和評估指標
-- 為 sage-test-architect 準備驗收標準清單
-
-#### 6. 需求完善度驗證階段（必須完成）
+#### 需求完善度驗證（spec 整合，lavender 特有）
 
 - 依 `.claude/skills/spec/SKILL.md` validate 流程驗證規格完善度
 - 針對未回答問題補充回答，再次 validate
@@ -312,53 +283,9 @@ Hook 系統自動處理基本的工作流程合規，你的職責專注於需要
 
 > 完整 BDD 規範：.claude/methodologies/bdd-testing-methodology.md
 
-**Handoff checklist to sage-test-architect (TDD Phase 2)**:
+**交接給 sage-test-architect (TDD Phase 2) 的退出條件與檢查清單**：依 `.claude/skills/tdd/references/phase1/rules.md`「退出 Phase 1 的條件（進入 Phase 2）」執行（功能規格 / API 介面 / 驗收標準 / 行為場景 / 行為單元 / Decision Questions 等項目）。
 
-- [ ] Functional requirements clear and specific, no abstract descriptions
-- [ ] API interface definitions complete, including input/output and data structures
-- [ ] Boundary conditions and exception situations comprehensively identified
-- [ ] Acceptance criteria clearly verifiable, usable for test design
-- [ ] **行為場景已提取 (Given-When-Then 格式)**
-- [ ] 功能設計文件已建立於 `docs/work-logs/v{version}/tickets/{ticket-id}-feature-spec.md` 且符合標準
-- [ ] spec validate 已通過（無未回答問題或已達迭代上限且標記為 Phase 2 待解決）
-
-When creating functional specifications:
-
-1. **Functional Requirement Analysis**: First, understand the core problem this feature solves and the specific user scenarios.
-
-2. **Functional Specification Design**: Create comprehensive functional requirements including:
-   - **Input Definition**: Clear parameter types, data structures, and user interactions
-   - **Output Specification**: Expected results, side effects, and user feedback patterns
-   - **Process Flow Design**: Step-by-step normal operation flow and decision points
-   - **Error Handling Strategy**: Exception handling approaches and error recovery methods
-
-3. **Boundary Condition Analysis**: For each functional requirement:
-   - Identify extreme input situations (null, oversized, invalid values)
-   - Define system constraints and limitation boundaries
-   - Plan error scenarios and exception handling strategies
-   - Establish validation requirements for edge cases
-
-4. **API/Interface Design**:
-   - Define clear function signatures and API endpoint specifications
-   - Specify data structures and type definitions
-   - Plan module interaction patterns and interface contracts
-   - Create technical documentation for implementation reference
-
-5. **Acceptance Criteria Definition**:
-   - Establish functional correctness verification methods
-   - Set performance requirements and quality benchmarks
-   - Define user experience expectations and success metrics
-   - Prepare acceptance criteria checklist for test design
-
-**Phase 1 Boundaries**: You must NOT:
-
-- Skip functional requirement analysis or use abstract descriptions
-- Create specifications without clear acceptance criteria
-- Design functionality without considering error scenarios
-- Proceed without establishing complete API interface definitions
-- Violate 「 專案文件責任明確區分」standards
-
-Your design specifications should provide comprehensive user experience strategy while ensuring accessibility planning and performance-oriented design principles.
+功能規格的撰寫步驟見上方「核心職責」1-5 節；通用流程細節見 `.claude/skills/tdd/references/phase1/rules.md`；Phase 1 禁止事項見下方「禁止行為」章節。
 
 ## Flutter UI/UX 設計原則
 
@@ -447,11 +374,12 @@ Ticket: {ticket-id}
 
 ---
 
-**Last Updated**: 2026-03-27
-**Version**: 1.6.0
+**Last Updated**: 2026-06-14
+**Version**: 1.7.0
 **Specialization**: TDD Phase 1 Feature Design and API Interface Definition
 **Updates**:
 
+- v1.7.0 (2026-06-14): 外移 Phase 1 通用六階段流程至 `.claude/skills/tdd/references/phase1/rules.md`（流程與人格解耦），保留 ARCH-010 框架內建機制防護表 + spec 整合路由；Handoff 退出條件改路由至 phase1/rules.md（1.0.0-W8-009.3.3）
 - v1.6.0 (2026-03-27): 修正 Skill 引用方式 — slash command 改為 Read SKILL.md（代理人無法觸發 slash command）；新增需求不清時回報 PM 機制（W7-011）
 - v1.5.0 (2026-03-25): 整合 /spec 工具 — Phase 1 起始使用 /spec init 產出骨架，完成前使用 /spec validate 驗證需求完善度
 - v1.4.0 (2026-03-02): 移除 Chrome Extension 相關設計內容（不適用 Flutter 手機應用）
@@ -463,21 +391,4 @@ Ticket: {ticket-id}
 
 ## 搜尋工具
 
-### ripgrep (rg)
-
-代理人可透過 Bash 工具使用 ripgrep 進行高效能文字搜尋。
-
-**文字搜尋預設使用 rg（透過 Bash）**，特別適合：
-- 需要 PCRE2 正則表達式（lookaround、backreference）
-- 需要搜尋壓縮檔（`-z` 參數）
-- 需要 JSON 格式輸出（`--json` 參數）
-- 需要複雜管線操作
-
-**文字搜尋優先使用 rg（透過 Bash）**，內建 Grep 工具作為備選。
-
-**完整指南**：`.claude/skills/search-tools-guide/SKILL.md`
-
-**環境要求**：需要安裝 ripgrep。未安裝時建議：
-- macOS: `brew install ripgrep`
-- Linux: `sudo apt-get install ripgrep`
-- Windows: `choco install ripgrep`
+ripgrep（rg）、LSP/Serena 符號搜尋等工具的選擇與使用見 `.claude/skills/search-tools-guide/SKILL.md`。

@@ -1,26 +1,36 @@
-# 🚀 Hook 系統方法論
+# Hook 系統方法論
 
-## 📖 概述
+> **30 秒核心**：本專案以完全自動化的 Hook 系統執行 CLAUDE.md 定義的開發規範。每個 hook 有明確觸發條件、執行邏輯與強制機制。設計遵循三大鐵律自動執行 + 六大設計原則；Hook 密度依開發階段平衡（前期主動設計、後期降級觀察）；每個 Hook 有生命週期階段與降級條件，避免摩擦力倒置。
+>
+> **本檔保留**：系統架構、Hook catalog、六大設計原則、階段平衡 4 原則、生命週期與降級機制、觀察類工具雙重身份。
+> **衛星檔（operations 詳解）**：`.claude/references/hook-system-operations.md`（per-hook 程式碼、模組化規範、跨平台部署、完整決策樹、反模式）。
+> **衛星檔（降級追蹤）**：`.claude/references/hook-system-downgrade-tracking.md`（降級追蹤表、Rollback SOP、觀察期評估結果）。
 
-本專案採用完全自動化的 Hook 系統來執行 CLAUDE.md 中定義的所有開發規範。每個 hook 都有明確的觸發條件、執行邏輯和強制執行機制，確保開發品質和流程合規性。
+---
 
-## 🏗️ 系統架構
+## 概述
+
+Hook 系統是專案品質保證的核心基礎設施。每個 hook 在開發流程的特定時機自動觸發，將 CLAUDE.md 的開發規範從「人工記憶」轉為「自動強制」，確保每個開發決策都符合專案品質標準。
+
+---
+
+## 系統架構
 
 ### Hook 執行時機圖
 
 ```text
 SessionStart / InstructionsLoaded
-     ↓
+     |
 UserPromptSubmit
-     ↓
-PreToolUse → PermissionRequest / PermissionDenied → Tool Execution
-     ↓                                           ↓
-PostToolUse / PostToolUseFailure                 Elicitation / ElicitationResult
-     ↓
+     |
+PreToolUse -> PermissionRequest / PermissionDenied -> Tool Execution
+     |                                              |
+PostToolUse / PostToolUseFailure                    Elicitation / ElicitationResult
+     |
 SubagentStart / SubagentStop / TaskCreated / TaskCompleted
-     ↓
+     |
 Stop / StopFailure
-     ↓
+     |
 PreCompact / PostCompact / SessionEnd
 
 Standalone async events:
@@ -29,622 +39,175 @@ Notification / TeammateIdle / ConfigChange / CwdChanged / FileChanged / Worktree
 
 ### 三大鐵律自動執行
 
-1. **測試通過率鐵律** → UserPromptSubmit Hook + PreToolUse Hook
-2. **永不放棄鐵律** → Task Avoidance Detection Hook + Block Check Hook
-3. **架構債務零容忍鐵律** → Architecture Debt Detection Hook + Code Smell Detection Hook + PostToolUse Hook
-
-## 📋 Hook 清單與方法論
-
-### 🔄 SessionStart Hook
-
-**檔案**: `.claude/hooks/startup-check-hook.sh`
-
-**觸發時機**: Claude Code session 啟動時
-
-**方法論**:
-- **原則**: 確保每個開發 session 都在已知良好的狀態下開始
-- **檢查範圍**: Git 狀態、專案檔案、開發環境、版本一致性、LSP 環境
-- **失敗處理**: 提供明確的修復指引，但不阻止 session 啟動
-
-**關鍵決策邏輯**:
-1. Git 同步狀態 → 遠端領先時提示同步
-2. 檔案載入確認 → 缺失檔案時警告
-3. 開發環境檢查 → 依賴問題時建議重新安裝
-4. 工作日誌狀態 → 提供下一步開發建議
-5. LSP 環境檢查 → 缺失時顯示安裝指令
+| 鐵律 | 對應 Hook event |
+|------|----------------|
+| 測試通過率鐵律 | UserPromptSubmit Hook + PreToolUse Hook |
+| 永不放棄鐵律 | Task Avoidance Detection Hook + Block Check Hook |
+| 架構債務零容忍鐵律 | Architecture Debt Detection + Code Smell Detection + PostToolUse Hook |
 
 ---
 
-### 💬 UserPromptSubmit Hook
+## Hook 清單（Catalog）
 
-**檔案**: `.claude/hooks/prompt-submit-hook.sh` + `.claude/hooks/task-avoidance-detection-hook.sh`
+各 Hook 的觸發時機與職責摘要如下。per-hook 程式碼細節、演算法、阻止機制見衛星檔 `.claude/references/hook-system-operations.md`「Hook 清單 per-hook 詳解」章節。
 
-**觸發時機**: 用戶提交每個 prompt 時
+| Hook | event | 職責摘要 |
+|------|-------|---------|
+| SessionStart Hook | SessionStart | 確保每個 session 在已知良好狀態開始（Git 狀態、檔案載入、開發環境、版本一致性、LSP 環境）；失敗給修復指引不阻止 |
+| UserPromptSubmit Hook | UserPromptSubmit | 問題發生前攔截（ESLint 錯誤、技術債累積、任務逃避偵測）；關鍵問題記錄追蹤，逃避行為完全阻止 |
+| PreToolUse Hook | PreToolUse | 防禦性檢查（阻止狀態 -> 工具特定安全檢查 -> 允許）；任何阻止狀態完全禁止操作 |
+| PostToolUse Hook | PostToolUse | 即時品質檢查與問題追蹤（程式異味偵測、文件更新提醒）；非阻塞記錄追蹤 |
+| Stop Hook | Stop | 自動化版本推進建議（檔案變更量、工作日誌狀態、TodoList 完成度）；建議不強制 |
+| SubagentStop Hook | SubagentStop | 代理人完成時清理派發記錄、驗證 commit、廣播完成、handoff 提醒、累積執行統計 |
+| Performance Monitor Hook | PreToolUse/PostToolUse 前後 | 持續效能監控，預防 hook 系統成為瓶頸（< 1s 理想 / 2-5s 警告 / > 5s 立即優化） |
+| Auto-Documentation Update Hook | PostToolUse | 程式碼變更後主動文件同步提醒（依變更類型對應目標文件 + High/Medium/Low 優先級） |
 
-**方法論**:
-- **原則**: 在問題發生前攔截，而非事後修復
-- **檢查範圍**: ESLint 錯誤、技術債務累積、任務逃避行為
-- **強制性**: 發現關鍵問題時記錄追蹤，逃避行為時完全阻止
-
-**任務逃避偵測算法**:
-```bash
-# 1. 禁用詞彙掃描
-for 詞彙 in 工作日誌, Git提交, TodoList:
-    if 包含("太複雜", "暫時", "跳過", ...):
-        標記逃避行為
-
-# 2. 行為模式檢查
-if 跳過測試數量 > 0 OR ESLint忽略 > 5 OR 技術債務 > 15:
-    標記逃避行為
-
-# 3. 完整性檢查
-if 程式碼變更 > 0 AND 測試變更 == 0:
-    標記逃避行為
-```
-
-**阻止機制**: 建立 `$CLAUDE_PROJECT_DIR/.claude/TASK_AVOIDANCE_BLOCK` 檔案，觸發所有後續操作阻止
+> **SubagentStop 識別碼**：代理人完成 Hook 匹配狀態檔案（如 `dispatch-active.json`）時，以 `agent_id`（runtime 提供，唯一）為 source of truth，不用 PM 自填的 `agent_description`（可能碰撞）。
+> **Event 選擇強制規則**：「代理人完成」相關 Hook 一律掛 SubagentStop，禁止掛 PostToolUse(Agent)（後者在 background 派發時於啟動時觸發，與「完成」語意不符，詳見 ARCH-019）。
 
 ---
 
-### 🛡️ PreToolUse Hook
+## Hook 系統設計原則
 
-**檔案**: `.claude/hooks/task-avoidance-block-check.sh` + 工具特定檢查
+### 原則 0：Event 選擇與識別碼（強制）
 
-**觸發時機**: 任何工具使用前
+選擇 Hook event 前必須完成以下檢查，避免時機錯位（ARCH-019）：
 
-**方法論**:
-- **原則**: 防禦性檢查，確保操作在安全狀態下執行
-- **檢查順序**: 阻止狀態 → 工具特定安全檢查 → 允許執行
-- **零容忍**: 任何阻止狀態都完全禁止操作
-
-**阻止狀態檢查流程**:
-1. 檢查 `$CLAUDE_PROJECT_DIR/.claude/TASK_AVOIDANCE_BLOCK` 檔案存在性
-2. 如果存在 → 顯示詳細修復指引並退出(exit 1)
-3. 如果不存在 → 繼續執行
-
----
-
-### ✏️ PostToolUse Hook
-
-**檔案**: 複合 hook 執行鏈
-
-**觸發時機**: 檔案編輯或測試執行後
-
-**方法論**:
-- **原則**: 即時品質檢查和問題追蹤，確保變更不降低程式碼品質
-- **執行順序**: 效能監控開始 → 基礎檢查 → 程式異味偵測 → 文件更新提醒 → 效能監控結束
-- **非阻塞**: 檢查發現問題時記錄和追蹤，但不阻止開發流程
-
-#### 程式異味偵測方法論
-
-**演算法策略**:
-```bash
-# 複雜度偵測
-函數長度 > 30行 → 長函數異味
-巢狀層級 > 4層 → 深層巢狀異味
-參數數量 > 5個 → 過長參數列表異味
-
-# 維護性偵測
-重複程式碼塊 > 5處 → 程式碼重複異味
-魔術數字 > 3處 → 魔術數字異味
-類別行數 > 200行 → 大型類別異味
-
-# 架構偵測
-依賴數量 > 10個 → 高耦合異味
-方法數量 > 10個 → 神秘類別異味
-```
-
-**Agent 整合策略**:
-1. 偵測到異味 → 生成結構化報告
-2. 建立 Agent 任務檔案 (JSON 格式)
-3. 啟動背景 Agent 處理 TodoList 更新
-4. 主流程繼續，不中斷開發
-
----
-
-### 🛑 Stop Hook
-
-**檔案**: `.claude/hooks/stop-hook.sh`
-
-**觸發時機**: Claude 主要代理完成回應時
-
-**方法論**:
-- **原則**: 自動化版本推進建議，基於工作完成狀態和目標達成情況
-- **分析範圍**: 檔案變更量、工作日誌狀態、TodoList 完成度
-- **建議導向**: 提供明確的下一步行動建議，不強制執行
-
-**版本推進決策邏輯**:
-```bash
-if 檔案變更 > 0:
-    if 工作日誌標記完成:
-        if TodoList系列完成:
-            建議中版本推進
-        else:
-            建議小版本推進
-    else:
-        建議繼續開發
-```
-
----
-
-### 🤖 SubagentStop Hook
-
-**觸發時機**: 代理人（subagent）真正完成時，涵蓋前台與 `run_in_background: true` 派發兩種模式
-
-**input 關鍵欄位**:
-
-| 欄位 | 用途 |
-|------|------|
-| `agent_id` | 代理人精準識別碼，**狀態檔案匹配的 source of truth** |
-| `agent_type` | 代理人類型（如 thyme-extension-engineer） |
-| `agent_transcript_path` | 代理人對話記錄路徑 |
-| `last_assistant_message` (optional) | 代理人最後一則訊息 |
-
-**典型責任**:
-- 清理派發追蹤記錄（如 `dispatch-active.json`，依 `agent_id` 精準匹配）
-- 驗證代理人 commit（避開啟動誤觸發）
-- 廣播代理人完成狀態（broadcast）
-- handoff 提醒
-- 累積執行統計（duration、tool_use_count）
-
-**禁止用於**:
-- 啟動時邏輯（註冊派發、驗證 prompt） → 應使用 PreToolUse(Agent)
-- 主線程結束邏輯 → 應使用 Stop
-
-> **Event 選擇強制規則**：「代理人完成」相關 Hook 一律掛 SubagentStop，**禁止掛 PostToolUse(Agent)**（後者在 background 派發時於啟動時觸發，與「完成」語意不符。詳見 ARCH-019）。
-
----
-
-### ⚡ Performance Monitor Hook
-
-**檔案**: `.claude/hooks/performance-monitor-hook.sh`
-
-**觸發時機**: 其他 hook 執行前後
-
-**方法論**:
-- **原則**: 持續效能監控，預防 hook 系統本身成為開發瓶頸
-- **監控指標**: 執行時間、記憶體使用、執行頻率
-- **優化導向**: 自動生成效能優化建議
-
-**效能閾值設計**:
-- 理想: < 1秒 (正常運作)
-- 警告: 2-5秒 (建議優化)
-- 錯誤: > 5秒 (需要立即優化)
-
-**優化策略自動建議**:
-1. 檔案掃描優化 → 限制搜尋深度和範圍
-2. 快取機制 → 避免重複計算
-3. 平行處理 → 獨立檢查項目並行執行
-4. 條件執行 → 大量變更才執行完整檢查
-
----
-
-### 📚 Auto-Documentation Update Hook
-
-**檔案**: `.claude/hooks/auto-documentation-update-hook.sh`
-
-**觸發時機**: 程式碼檔案變更後
-
-**方法論**:
-- **原則**: 主動文件同步提醒，確保文件與程式碼同步更新
-- **規則比對分析**: 根據變更檔案類型自動判斷需要更新的文件
-- **優先級分級**: High/Medium/Low 優先級，指導更新順序
-
-**變更類型對應**:
-- API 變更 → `docs/api/` (High)
-- 架構變更 → `docs/domains/architecture/` (Medium)
-- 配置變更 → `README.md` (High)
-- 新功能 → `CHANGELOG.md` (Medium)
-- 測試變更 → `docs/testing/` (Low)
-
-## 🔧 Hook 系統設計原則
-
-### 0. **Event 選擇與識別碼（強制）**
-
-選擇 Hook event 前必須完成以下檢查，避免時機錯位（ARCH-019）。
-
-#### 0.1 不憑名稱推論觸發時機
-
-`PostToolUse(Agent)` 字面看像「Agent 結束後」，但在 `run_in_background: true` 派發時於**啟動時**就觸發。**必須查 hook-spec 確認真實觸發時機**，不憑名稱推論。
-
-#### 0.2 啟動 vs 完成職責分掛兩個 event
-
-| 職責 | 對應 event |
-|------|----------|
-| 啟動時邏輯（註冊派發、驗證 prompt、檢查 ticket reference） | `PreToolUse(Agent)` |
-| 完成時邏輯（清理記錄、驗證 commit、廣播完成、handoff 提醒） | `SubagentStop` |
-| 主線程結束邏輯 | `Stop` |
-| 工具執行後處理（一般工具 Read/Write/Bash 等） | `PostToolUse(<tool_name>)` |
-
-**反模式**：將啟動與完成邏輯混掛同一 event（如全部掛 `PostToolUse(Agent)`），導致 background 模式時機錯位，必須加 `if background_mode: skip` guard 繞道。
-
-#### 0.3 識別碼選擇：agent_id > agent_description
-
-代理人完成 Hook 匹配狀態檔案（如 `dispatch-active.json`）時：
-
-| 識別碼 | 來源 | 精準度 |
-|-------|------|-------|
-| `agent_id`（SubagentStop input） | runtime 提供，唯一 | **source of truth，建議使用** |
-| `agent_description` | 派發時 PM 自填字串 | 可能重複碰撞，不可靠 |
-
-#### 0.4 選 event 的決策流程
-
-```
-新增 Hook 前：
-1. 此 Hook 服務「啟動時」「完成時」還是「兩者」？
-2. 若兩者 → 拆成兩個 Hook 分掛兩個 event
-3. 若完成時且涉及代理人 → 必用 SubagentStop
-4. 若是 task 狀態變更 → TaskCreated / TaskCompleted
-5. 若是 session / compact / config / cwd / file / worktree 生命週期 → 查事件總覽選擇對應 event
-6. 查 hook-spec 確認選用 event 在 background 模式的觸發時機
-7. 確認狀態匹配使用 source of truth 識別碼（agent_id）
-```
-
-#### 0.5 Hook handler 選擇
-
-| 需求 | Handler | 原因 |
-|------|---------|------|
-| 可用 deterministic script 判斷 | `command` | 可測、可重現、成本低 |
-| 需呼叫本機或受控服務 | `http` | 將驗證集中到服務端，仍保留 JSON 決策 |
-| 需模型做語意分類 | `prompt` | 單輪判斷即可，不需工具 |
-| 需讀多檔或 grep 後再判斷 | `agent` | 可使用工具查證，但需限制 scope |
-
-**預設順序**：`command` → `http` → `prompt` → `agent`。越往右成本與不確定性越高，必須在設計中說明理由。
-
-#### 0.6 `if` 條件使用
-
-`if` 用來避免 hook handler 在不相關工具呼叫上啟動。
-
-| 情境 | 做法 |
-|------|------|
-| 只關心某種 Bash 子命令 | `if: "Bash(git *)"` |
-| 只關心特定副檔名 edit | `if: "Edit(*.ts)"` |
-| 多條件 | 拆多個 handler，不把邏輯塞進一條 `if` |
-| 非 tool event | 不使用 `if` |
-
-若條件需要讀專案狀態或跨檔判斷，不要硬塞進 `if`；用 `if` 做粗篩，詳細判斷交給 handler。
-
-> 完整錯誤模式：`.claude/error-patterns/architecture/ARCH-019-hook-event-timing-mismatch.md`
-> Event input/output 規範：`.claude/references/hook-architect-technical-reference.md`
-
----
-
-### 1. **分離關注點**
-- 每個 hook 專注於特定的檢查範圍
-- 避免單一 hook 承擔過多責任
-- 清晰的輸入輸出介面
-
-### 2. **非阻塞優先**
-- 大部分檢查採用記錄和追蹤方式
-- 只有關鍵違規才阻止操作
-- 保持開發流程的流暢性
-
-### 3. **漸進式強制**
-- 警告 → 記錄 → 追蹤 → 阻止
-- 給予開發者理解和修正的機會
-- 關鍵問題採用零容忍態度
-
-### 4. **自動化決策**
-- 基於歷史資料和趨勢分析
-- 上下文感知的檢查邏輯
-- 自動優化和調整建議
-
-### 5. **可觀測性**
-- 詳細的日誌記錄
-- 效能指標追蹤
-- 問題追蹤和報告生成
-
-## 📊 成效量化
-
-### 自動化覆蓋率
-- 環境檢查: 100%
-- 品質控制: 100%
-- 問題追蹤: 100%
-- 永不放棄鐵律: 100%
-- 程式異味偵測: 95%
-- 效能監控: 100%
-- 文件同步: 90%
-
-### 品質保證機制
-- ESLint 錯誤: 自動偵測和追蹤
-- 測試覆蓋: 強制檢查
-- 技術債務: 自動監控和限制
-- 架構債務: 自動偵測和阻止
-
-## 🔄 維護和擴展
-
-### Hook 新增流程
-1. 識別新的品質控制需求
-2. 設計檢查邏輯和閾值
-3. 實作 hook 腳本
-4. 更新 `$CLAUDE_PROJECT_DIR/.claude/settings.local.json`
-5. 建立說明文件
-6. 測試和驗證
-
-### 效能優化流程
-1. Performance Monitor Hook 自動偵測
-2. 分析效能瓶頸根因
-3. 實施優化策略
-4. 驗證改善效果
-5. 更新效能基準
-
-## 模組化開發規範
-
-### 共用模組架構（v0.28.0+）
-
-v0.28.0 重構引入了共用模組系統，所有 Hook 腳本應優先使用這些模組：
-
-```text
-.claude/lib/
-├── config_loader.py    # 配置載入（含快取）
-├── git_utils.py        # Git 操作工具
-├── hook_io.py          # I/O 標準化
-├── hook_logging.py     # 日誌系統
-└── tests/              # 單元測試
-```
-
-### 標準 Hook 腳本結構
-
-```python
-#!/usr/bin/env python3
-"""
-Hook 名稱說明
-
-觸發時機: PreToolUse/PostToolUse/...
-主要功能: 簡要說明
-"""
-
-import sys
-from pathlib import Path
-
-# 標準化導入共用模組
-sys.path.insert(0, str(Path(__file__).parent))
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
-
-def main():
-    logger = setup_hook_logging("hook-name")
-    input_data = read_json_from_stdin(logger)
-    if input_data is None:
-        return 0
-
-    # ... 處理邏輯 ...
-
-    output = create_pretooluse_output("allow", "檢查通過")
-    write_hook_output(output)
-
-if __name__ == "__main__":
-    main()
-```
-
-### 模組使用規範
-
-| 需求 | 使用模組 | 函式 |
-|------|---------|------|
-| 讀取 Hook 輸入 | hook_utils (hook_io) | `read_json_from_stdin(logger)` |
-| 輸出決策結果 | hook_io | `write_hook_output()` |
-| PreToolUse 輸出 | hook_io | `create_pretooluse_output()` |
-| PostToolUse 輸出 | hook_io | `create_posttooluse_output()` |
-| 日誌記錄 | hook_logging | `setup_hook_logging()` |
-| 載入配置 | config_loader | `load_config()` |
-| 代理人配置 | config_loader | `load_agents_config()` |
-| Git 操作 | git_utils | `run_git_command()` |
-| 分支檢查 | git_utils | `is_protected_branch()` |
-
-### 輸出規範（stderr 與 exit code）
-
-> **背景**：Claude Code 將 hook 的 stderr 輸出和 exit code 1 都視為 "hook error"（IMP-048, IMP-049）。此為 CLI 已知 bug（anthropics/claude-code#34713 等），但在 CLI 修復前 Hook 需配合。
-
-**Hook 執行路徑規則**（由 `run_hook_safely` 呼叫的程式碼）：
-
-| 規則 | 說明 |
-|------|------|
-| 禁止 `sys.exit(1)` | 改用 `return 0` 或拋出 Exception 由 `run_hook_safely` 捕獲 |
-| 避免 stderr 輸出 | StreamHandler 使用 stdout，錯誤記錄到日誌檔 |
-| ImportError 防護 | `sys.exit(0)` + stderr 報錯（ImportError 在 `run_hook_safely` 外，無法被捕獲） |
-
-**`__main__` CLI 工具規則**（不經過 Hook 系統的 CLI 測試入口）：
-
-| 規則 | 說明 |
-|------|------|
-| `sys.exit(1)` 是正確的 | CLI 用法錯誤或處理失敗應返回非零 exit code |
-| stderr 輸出是正確的 | CLI 工具的標準錯誤輸出行為 |
-
-**日誌配置標準模板**：
-
-```python
-# 正確：使用 stdout（Hook 執行路徑）
-logging.basicConfig(
-    level=log_level,
-    format="[%(asctime)s] %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(log_file),
-        logging.StreamHandler(sys.stdout)  # Hook 路徑必須用 stdout
-    ]
-)
-```
-
-**與 quality-baseline 規則 4 的關係**：
-quality-baseline 要求「異常必須寫入 stderr」，但 Hook 系統因 CLI bug 限制無法遵守。
-Hook 的替代方案：異常記錄到**日誌檔**（`.claude/hook-logs/`），不寫 stderr。
-這是 CLI bug 的已知妥協，不適用於非 Hook 的一般程式碼。
-
-### 測試要求
-
-每個 Hook 腳本必須有對應的單元測試：
-
-```text
-.claude/hooks/my-hook.py  ->  .claude/lib/tests/test_my_hook.py
-```
-
-測試執行：
-```bash
-uv run --with pytest python -m pytest .claude/lib/tests/ -v
-```
-
-Hook tests under `.claude/hooks/tests/` may include PEP 723 inline dependencies.
-Before running them, inspect the file header and follow `.claude/hooks/tests/README.md`:
-
-- PEP 723 test file: `uv run .claude/hooks/tests/<test-file>.py`
-- Ordinary pytest file: `uv run --with pytest python -m pytest .claude/hooks/tests/<test-file>.py -v`
-- Targeted selection on a PEP 723 file: mirror dependencies with `--with <package>`
-
-### 配置外部化
-
-可配置參數應放入 `.claude/config/` 目錄：
-
-- `agents.yaml` - 代理人分派規則
-- `quality_rules.yaml` - 品質檢測規則
-
-詳細 API 參考請見：[共用模組 README](../lib/README.md)
-
----
-
-## 跨平台部署規範
-
-> **核心理念**：Hook 系統必須在 macOS、Linux、Windows 三平台行為一致。任何「我的機器可以跑」的假設在跨平台都是陷阱。
-
-Hook 在 macOS/Linux 上行為正常不代表 Windows 上可用。Windows 平台有三個獨立的斷層點會讓 Hook 完全無法啟動或輸出亂碼。本章節列出必做的防護措施。
-
-### 斷層點總覽
-
-| 斷層 | 症狀 | 根因 |
-|------|------|------|
-| Python 環境 | Hook 完全不執行，顯示「Failed with non-blocking status code: No stderr output」 | Windows 11 預裝 Microsoft Store Python Stub（exit 9009，不寫任何輸出） |
-| Shebang 污染 | env 找不到命令，exit 127，無 stderr | `core.autocrlf=true` 把 `#!/usr/bin/env -S uv run` 尾端加上 `\r` |
-| Console 編碼 | 中文輸出亂碼、JSON 解析失敗、異常寫 stderr 二次失敗 | Windows console 預設 cp950（Big5）/cp936（GBK），非 UTF-8 |
-
-### 規範 1：Windows Python 環境要求
-
-Hook 作者必須在使用者文件中明確要求：
-
-| 要求 | 說明 |
-|------|------|
-| 安裝真實 Python 3.12+ | 從 python.org 下載安裝，或使用 uv 管理（`uv python install 3.12`） |
-| 關閉 Microsoft Store 別名 | 設定 → 應用程式 → 進階應用程式設定 → App 執行別名 → 關閉 python.exe 與 python3.exe |
-| 驗證 | `python --version` 必須回傳版本號且 `$LASTEXITCODE=0`（若 exit 9009 表示 stub 仍生效） |
-
-**偵測 stub 的標準命令**（可納入 session-start 檢查）：
-
-```powershell
-$result = & python --version 2>&1
-if ($LASTEXITCODE -eq 9009 -or -not $result) {
-    Write-Warning "Python 是 Microsoft Store stub，請安裝真實 Python 或關閉 App 執行別名"
-}
-```
-
-### 規範 2：Shebang 與換行符防護
-
-所有 Python Hook 的 shebang 為 `#!/usr/bin/env -S uv run --quiet --script`。此 shebang 在 Windows 下**必須**配合以下兩項措施：
-
-| 措施 | 實施位置 |
-|------|---------|
-| 專案根目錄 `.gitattributes` 強制 `*.py text eol=lf` | 防止 `core.autocrlf=true` 污染 shebang |
-| `.claude/.gitattributes` 同步設定 | 隨框架 sync 傳播到其他專案 |
-| Windows 使用者 clone 後執行 `git config core.autocrlf false` | 防止後續 commit 被污染 |
-
-**驗證方式**：
-
-```bash
-git check-attr eol .claude/hooks/<任一>.py
-# 預期輸出：eol: lf（非 unspecified）
-```
-
-### 規範 3：UTF-8 I/O 強制
-
-Hook 執行時不可依賴 locale codepage，必須在入口強制 UTF-8。三種機制擇一（建議三者並用）：
-
-#### 機制 A：Hook 入口呼叫 `ensure_utf8_io()`
-
-```python
-def ensure_utf8_io() -> None:
-    """強制 stdin/stdout/stderr 使用 UTF-8。Python 3.11+ 可用 reconfigure。"""
-    for stream in (sys.stdin, sys.stdout, sys.stderr):
-        if hasattr(stream, "reconfigure"):
-            stream.reconfigure(encoding="utf-8", errors="replace")
-
-def main() -> int:
-    ensure_utf8_io()  # 必須在 read_json_from_stdin 之前
-    ...
-```
-
-#### 機制 B：PEP 723 inline metadata 指定環境變數
-
-受限於 PEP 723 無法設定 env，此機制改由 hook launcher（CC runtime）提供 `PYTHONUTF8=1`。使用者環境需確保此變數存在。
-
-#### 機制 C：subprocess 呼叫強制 encoding
-
-```python
-# 錯誤：Windows 會用 cp950 解碼子程序輸出
-subprocess.run(["git", "log"], capture_output=True, text=True)
-
-# 正確：顯式指定 UTF-8 並處理非法字元
-subprocess.run(
-    ["git", "log"],
-    capture_output=True,
-    text=True,
-    encoding="utf-8",
-    errors="replace",
-)
-```
-
-### 規範 4：路徑分隔符
-
-`settings.json` 中的 hook command 路徑必須使用 forward slash（`/`），Windows 可正確解析。禁止使用 Windows 原生 backslash（`\`）或 escape 後 backslash（`\\`），這會在 macOS/Linux 失效。
-
-```json
-{
-  "command": ".claude/hooks/my-hook.py"  // 正確：forward slash 跨平台通用
-}
-```
-
-### 規範 5：Windows 測試要求
-
-每個新建或修改的 Hook 必須通過以下兩項跨平台驗證：
-
-| 驗證項 | 方法 |
+| 檢查項 | 要求 |
 |-------|------|
-| shebang LF | `git check-attr eol <hook.py>` 顯示 `eol: lf` |
-| UTF-8 I/O | 中文字串通過 `ensure_utf8_io()` 後輸出無亂碼 |
-| subprocess encoding | grep `subprocess\.(run|Popen|check_output)` 結果均含 `encoding="utf-8"` |
+| 不憑名稱推論觸發時機 | `PostToolUse(Agent)` 在 background 派發時於啟動時觸發；必須查 hook-spec 確認真實時機 |
+| 啟動 vs 完成分掛兩 event | 啟動邏輯用 `PreToolUse(Agent)`；完成邏輯用 `SubagentStop`；主線程結束用 `Stop` |
+| 識別碼選 source of truth | 狀態匹配用 `agent_id` 而非 `agent_description` |
+| Handler 選擇 | 預設順序 `command` -> `http` -> `prompt` -> `agent`，越右成本越高需說明理由 |
+| `if` 條件粗篩 | `if` 用於避免不相關工具觸發（如 `if: "Bash(git *)"`）；詳細判斷交給 handler，不硬塞進 `if` |
 
-### Hook 作者檢查清單
+> Event 選擇完整決策流程、handler 對照表、`if` 條件情境表見衛星檔「Event 選擇決策流程」章節。
+> 完整錯誤模式：`.claude/error-patterns/architecture/ARCH-019-hook-event-timing-mismatch.md`；Event input/output 規範：`.claude/references/hook-architect-technical-reference.md`。
 
-開發新 Hook 時，必做以下項目：
+### 原則 1-5：核心設計守則
 
-- [ ] Hook 入口呼叫 `ensure_utf8_io()`
-- [ ] 所有 `subprocess.run/Popen/check_output` 加 `encoding="utf-8", errors="replace"`
-- [ ] `settings.json` 的 command 路徑使用 forward slash
-- [ ] 測試在 cp950/cp936 locale 下輸出不亂碼（至少理論驗證）
-- [ ] 使用者文件提醒：Windows 需安裝真實 Python 並關閉 Store 別名
-- [ ] Hook 檔案無 CRLF 污染（`git check-attr eol` 驗證）
+| 原則 | 核心要求 |
+|------|---------|
+| 1. 分離關注點 | 每個 hook 專注特定檢查範圍，避免單一 hook 承擔過多責任，清晰的輸入輸出介面 |
+| 2. 非阻塞優先 | 大部分檢查採記錄追蹤；只有關鍵違規才阻止；保持開發流程流暢 |
+| 3. 漸進式強制 | 警告 -> 記錄 -> 追蹤 -> 阻止；給予理解修正機會；關鍵問題零容忍 |
+| 4. 自動化決策 | 基於歷史資料與趨勢；上下文感知的檢查邏輯；自動優化調整 |
+| 5. 可觀測性 | 詳細日誌記錄、效能指標追蹤、問題追蹤與報告生成 |
 
 ---
 
-這個 Hook 系統是專案品質保證的核心基礎設施，確保每個開發決策都符合專案的高品質標準。
+## Hook 階段平衡
+
+> **核心主張**：從「錯誤發生才補 Hook」轉為「依階段特性主動設計 Hook」。前期階段主動設計、後期階段設定降級觀察期，防止 Hook 被動累積導致摩擦力倒置。
+
+### 問題：被動防禦反射弧導致 Hook 分佈倒置
+
+Hook 系統常呈現「錯誤發生 -> 補 Hook -> 觸發頻率上升 -> 誤報累積 -> 降級延後」的反射弧。此反射弧只對「錯誤立即可見」的階段有效，對「錯誤延遲顯現」的階段無效，結果是後期執行階段 Hook 高密度累積、前期決策階段 Hook 長期缺席。依摩擦力管理方法論，理想摩擦力應前期高、後期低，但 Hook 分佈卻前期低、後期高，這是摩擦力倒置的 Hook 層落地。
+
+### 階段平衡 4 原則
+
+| 原則 | 核心要求 |
+|------|---------|
+| 1. 依階段特性主動規劃 | 每個新功能/規則納入時主動問三題：錯誤會立即可見嗎（是則 Hook 可後補）？錯誤會延遲到後續 Phase 顯現嗎（是則 Hook 必須前置設計）？這是決策點還是執行點（決策點則 Hook 優先度提升）？ |
+| 2. 前期階段 Hook 先行 | 前期（Proposal/Phase 0/Phase 1）的新增工作預設附帶 Hook 設計；反模式為「先上線，錯誤出現再補 Hook」 |
+| 3. 後期階段設降級觀察期 | 後期（Phase 3b 實作）Hook 從一開始就設降級條件（連續 N 次無錯降級為提醒、連續 Wave 無錯進入廢除評估） |
+| 4. Hook 本身受摩擦力約束 | Hook 加入/降級時依摩擦力方法論判斷象限與頻率；反模式為「Hook 疊加 Hook」（偵測誤報再加 Hook 的 Hook，無限遞迴） |
+
+### 階段 Hook 密度表
+
+| 階段 | 現況密度 | 理想密度 | 設計原則 |
+|------|---------|---------|---------|
+| Proposal 評估 | 低（近零） | 中高 | 分級檢查、章節完備、狀態綁 ticket |
+| Phase 0 SA | 低 | 中 | 衝突檢查報告驗證 |
+| Phase 1 規格 | 低 | 中高 | 規格存在、多視角審查、AC 完備 |
+| Phase 1.5 多視角 | 低 | 中 | 審查記錄驗證 |
+| Phase 2 測試 | 中 | 中 | 測試檔案存在、命名規範 |
+| Phase 3a 策略 | 中 | 中 | 虛擬碼/流程圖驗證 |
+| Phase 3b 實作 | 高（75+ Hook） | 中低 | 核心防護保留 + 連續無錯降級 |
+| Phase 4 重構 | 中高 | 中 | 多視角審查驗證 |
+
+**密度判定維度**：錯誤可逆性（不可逆/延遲顯現 -> 高密度）、錯誤放大範圍（跨 Phase/版本 -> 高密度）、決策 vs 執行（決策點 -> 高密度）、頻率 vs 嚴重（低頻高嚴重 -> 高密度）。
+
+> **何時讀衛星檔**：需要完整 Hook 設計決策樹（前期主動設計分支 + 後期被動防禦分支的 ASCII 流程圖）或 5 條反模式清單時，讀 `.claude/references/hook-system-operations.md`「Hook 設計決策樹與反模式」章節。
 
 ---
 
-## 6. 觀察類工具的雙重身份設計（diagnostic hook / telemetry / monitor）
+## Hook 生命週期與降級觀察
+
+> **核心**：每個 Hook 必須明示所處生命週期階段與降級條件。後期階段 Hook 降級後設 2 Wave 觀察期，確保未察覺風險可快速 rollback。
+
+### 生命週期階段
+
+| 階段 | 觸發行為 | 降級條件 |
+|------|---------|---------|
+| Active（活躍） | 正常攔截 | 連續 5 次無錯 -> Observing |
+| Observing（觀察中） | 正常攔截但統計觸發 | 2 Wave 無錯 -> Deprecating |
+| Deprecating（退役準備） | 降為提醒（warn -> info） | 3 Wave 無錯 -> Archived |
+| Archived（封存） | 移除但保留歷史 | 回歸事件 -> 恢復 Active |
+
+Hook 目錄下建議維護 `hook-lifecycle.yaml`，記錄各 Hook 的 stage、entered_stage_at、consecutive_no_error、downgrade_criteria。降級執行流程：自動統計（每次觸發記錄 action / no-action）-> 週期檢查（每 Wave 盤點）-> 降級決策 -> 快速恢復（觀察期發生回歸立即恢復 Active）。
+
+### 降級機制：觸發消除 vs 處理降級
+
+降級策略分為兩類，削減上限不同，預估削減比時必須分開計算。
+
+| 機制 | 定義 | 削減上限 | 適用條件 |
+|------|------|---------|---------|
+| 觸發消除 | 從 settings.json 完全移除 hook 註冊 | 100% | Action 比 = 0% 且 False-negative 風險可接受 |
+| 處理降級 | 保留註冊，內部邏輯加 fast-path / sampling / matcher 限縮 | 73-80%（實測） | Action 比 < 1% 但仍有監測價值；或完全移除的 False-negative 風險不可接受 |
+
+> **Why**：「降級 ≈ 消除」的隱含假設未區分處理降級仍需 Python 進程啟動 + log 寫入的固定成本，會系統性高估削減效果，使後續降級計畫預估失準。
+> **Action**：預估削減比用修正公式 `削減 % = Sum(觸發消除 hook 佔比 × 100% + 處理降級 hook 佔比 × 75%) / 總觸發`，觸發消除以 100%、處理降級以 75% 分別計算。
+
+### 觀察期啟動與結束標準
+
+降級後設 2 Wave 觀察期。觀察期結束時依三項判斷收斂或延長：
+
+| 判斷項 | 收斂條件 | 延長條件 |
+|--------|---------|---------|
+| False-negative 案例 | 0 件 | >= 1 件 |
+| Action 比變化 | 全 hook < baseline × 2 | 任一 hook >= baseline × 2 |
+| 用戶體感 | 無劣化回報 | >= 2 件回報 |
+
+**收斂行為**：建立降級驗證完成 ticket，標記降級為長期生效。**延長行為**：依觸發條件啟動對應 rollback SOP，建新 ticket 處理。
+
+> **何時讀衛星檔**：需要 8 Hook 降級觀察期完整追蹤表（每 Wave 觸發次數與 Action 比）、Rollback 觸發條件表、快速恢復 SOP（場景 A 整批 / B 單一 hook / C 抽樣 N 調整）或歷史觀察期評估結果時，讀 `.claude/references/hook-system-downgrade-tracking.md`。
+
+### 漸進落地
+
+本階段平衡與降級方法論自公布日起作為新 Hook 設計的前置參考。既有 75+ Hook 依降級計畫逐批處理，不要求立即全面套用；既有 Hook 納入生命週期管理需透過「Hook 分類盤點」後批次升級。
+
+---
+
+## 觀察類工具的雙重身份設計
 
 設計觀察類 Hook（diagnostic hook、telemetry collector、性能 monitor）時，應主動讓工具能在「日常使用」中持續產出資料，而非只在「實驗模式」下啟動。觀察類工具預設長期 telemetry 身份，非實驗一次性身份。
 
-**Why**：實驗模式下的觀察只覆蓋設計者預期的場景；日常使用觸發提供「非預期但真實」的對照基底。W3-028.2 案例：diagnostic hook 在實驗開始前的當下 session `/clear` 啟動時就被觸發（11:44 source=clear，session_id=60a6a197），這筆「非實驗目的」紀錄證實了 hook 對工作流的零侵入性——後續 PM 大量 Edit/Bash/Read 操作未受影響。實驗者原本只設計觀察 bg session resume 場景，卻意外取得正常工作流的對照基底。
-
-**Consequence 不遵守**：實驗工具僅在實驗模式啟動會：(a) 失去日常情境對照（無法判斷實驗結果是否與正常工作流一致）；(b) 工具被視為「一次性」累積為技術債（實驗結束即廢棄）；(c) 無法驗證工具本身對工作流的侵入性（沒在生產環境跑過）。
-
-### How to apply
+> **Why**：實驗模式下的觀察只覆蓋設計者預期的場景；日常使用觸發提供「非預期但真實」的對照基底。W3-028.2 案例：diagnostic hook 在實驗開始前的當下 session `/clear` 啟動時就被觸發，這筆「非實驗目的」紀錄證實了 hook 對工作流的零侵入性。
+> **Consequence 不遵守**：實驗工具僅在實驗模式啟動會失去日常情境對照、被視為一次性而累積為技術債、無法驗證工具本身對工作流的侵入性。
 
 | 設計階段 | 動作 |
 |---------|------|
 | Hook event registration | 不設「only experiment mode」flag，全域註冊到所有相關 event |
-| 副作用控制 | 工具設計為「純觀察 0 副作用」（exit 0、不阻擋、append-only log），避免日常觸發造成性能或行為干擾 |
+| 副作用控制 | 工具設計為「純觀察 0 副作用」（exit 0、不阻擋、append-only log），避免日常觸發造成干擾 |
 | 報告書寫 | 實驗報告明示「日常 vs 實驗」資料來源差異，提升證據透明度 |
 | 工具命名 | 名稱透露「diagnostic / telemetry」而非「experiment / test」，暗示長期身份 |
 | 移除策略 | 默認保留為長期資產（除非有具體成本），不在實驗結束自動移除 |
 
-### Related
+---
 
-- W3-028.2：實驗工具自指涉觀察的 source 案例（diagnostic hook 在 session `/clear` 被觸發）
-- W3-058：ANA 評估升級路徑、W3-059：本章節落地 ticket
-- 失敗案例學習原則（`.claude/rules/core/quality-baseline.md` 規則 6）的反面：成功的副產品也應主動捕捉
-- memory `feedback_experiment_tool_self_observation.md`：本章節的 source memory（已升級至本 § 6）
+## 相關文件
+
+| 文件 | 用途 |
+|------|------|
+| `.claude/references/hook-system-operations.md` | per-hook 程式碼詳解、模組化開發規範、跨平台部署、完整決策樹、反模式（衛星檔） |
+| `.claude/references/hook-system-downgrade-tracking.md` | 8 Hook 降級觀察追蹤表、Rollback SOP、觀察期評估結果（衛星檔） |
+| `.claude/references/hook-architect-technical-reference.md` | Hook event input/output 規範、技術參考 |
+| `.claude/methodologies/friction-management-methodology.md` | Hook 降級的上位摩擦力管理理論（開發流程階段摩擦力曲線） |
+| `.claude/error-patterns/architecture/ARCH-019-hook-event-timing-mismatch.md` | Event 時機錯位完整錯誤模式 |
+| `.claude/pm-rules/proposal-evaluation-gate.md` | 前期主動設計案例（proposal gate Hook） |
+
+---
+
+**Last Updated**: 2026-06-14
+**Version**: 2.0.0 — 整併 hook 家族 3 檔為 1 主檔 + 2 衛星檔（W8-020.6）：折入 hook-stage-balance-methodology（階段平衡 4 原則 + 密度表）與 hook-downgrade-observation（生命週期 + 降級機制 + 觀察期標準）核心；operations 詳解外移 `hook-system-operations.md`、降級追蹤外移 `hook-system-downgrade-tracking.md`；emoji 全數清理為純文字（document-format-rules 規則 1）。歷史版本見 git log

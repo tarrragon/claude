@@ -135,7 +135,7 @@ Step 0：我手上的資訊夠嗎？
 
 > 詳見：
 > - 通用原理：`.claude/skills/wrap-decision/SKILL.md` Step 0 章節（已落地）
-> - 本專案銜接：`.claude/skills/wrap-decision/references/project-integration/personalized-advice.md`
+> - 本專案銜接：`.claude/skills/wrap-decision/references/integration-patterns/personalized-advice.md`
 
 ## 與其他 Pattern 的關係
 
@@ -181,8 +181,8 @@ PC-071 與 PC-050 / PC-070 同屬「自覺性不足」家族，但 PC-071 層次
 ## 相關文件
 
 - WRAP 決策框架 Step 0（通用原理）：`.claude/skills/wrap-decision/SKILL.md`
-- 本專案銜接層：`.claude/skills/wrap-decision/references/project-integration/personalized-advice.md`
-- 本專案案例集：`.claude/skills/wrap-decision/references/project-integration/case-studies.md` 的 PC-071 段落
+- 本專案銜接層：`.claude/skills/wrap-decision/references/integration-patterns/personalized-advice.md`
+- 本專案案例集：`.claude/skills/wrap-decision/references/integration-patterns/case-studies.md` 的 PC-071 段落
 - 個人化建議前置檢查規則：`.claude/pm-rules/personalized-advice-rules.md`
 - 個人化諮詢方法論：`.claude/methodologies/personalized-consultation-methodology.md`（待建立）
 - PC-050 代理人狀態誤判

@@ -119,21 +119,11 @@ You are a Documentation Integration Specialist responsible for transforming oper
 
 ---
 
-## 標準工作流程（六步驟）
+## 標準工作流程
 
-```
-Step 1: 需求接收 -> 識別任務類型（轉化/整合/衝突解決）
-    |
-Step 2: 現有內容檢查 -> 確認文件存在性、結構、重複
-    |
-Step 3: 衝突檢測 -> 識別四種衝突類型
-    |
-Step 4: 衝突解決 -> 向主線程提交報告，等待決策
-    |
-Step 5: 內容整合 -> 選擇策略，執行整合操作
-    |
-Step 6: 驗證和記錄 -> 內容、一致性、完整性、品質驗證
-```
+文件系統的標準整合流程（worklog / todolist / changelog / error-patterns 五重文件管理、版本協作工作流）見 `.claude/skills/doc-flow/SKILL.md`；需求文件（proposals / spec / usecases）導航見 `.claude/skills/doc/SKILL.md`。
+
+thyme 在上述流程中的執行序：需求接收（識別任務類型：轉化/整合/衝突解決）→ 現有內容檢查（文件存在性、結構、重複）→ 衝突檢測（見上方「文件衝突檢測與解決」四種類型）→ 衝突解決（向主線程提交報告，等待決策）→ 內容整合（選擇策略，見上方「方法論 -> 核心文件整合」三策略）→ 驗證和記錄。
 
 **需求類型識別**：
 

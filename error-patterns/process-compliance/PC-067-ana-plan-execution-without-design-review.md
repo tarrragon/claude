@@ -130,7 +130,7 @@ ANA Ticket 完成時 Solution 區段必須註明：
 - **相關模式**：PC-063（ANA Premature Solution Convergence，本模式聚焦執行階段繼承 ANA 偏誤）
 - **相關 Skill**：`.claude/skills/parallel-evaluation/SKILL.md`（措施 1 落點）
 - **相關 Skill**：`.claude/skills/wrap-decision/SKILL.md`（執行階段觸發 WRAP 補審查）
-- **本專案整合**：`.claude/skills/wrap-decision/references/project-integration/pseudo-widen-guard.md`（偽 Widen 防護，ANA 類型強制執行）
+- **本專案整合**：`.claude/skills/wrap-decision/references/integration-patterns/pseudo-widen-guard.md`（偽 Widen 防護，ANA 類型強制執行）
 - **相關 ARCH**：ARCH-018（Hook × 架構規則衝突也屬同類「執行階段未質疑既定設計」）
 
 ---

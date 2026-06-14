@@ -1,8 +1,15 @@
-# Hook 降級觀察期方法論
+# Hook 降級觀察追蹤
 
-本方法論規範 Phase 3b Hook 降級後的 2 Wave 觀察期計畫、統計追蹤、rollback 觸發條件與快速恢復 SOP。
+> **用途**：本檔為 `.claude/methodologies/hook-system-methodology.md` 的衛星參考檔，存放 8 Hook 降級觀察期完整追蹤表、Rollback 觸發條件、快速恢復 SOP 與歷史觀察期評估結果。需要查特定 Wave 的觸發數據、執行 Hook rollback、評估觀察期收斂/延長時按需讀取。
+>
+> **核心方法論（生命週期階段 + 降級機制定義 + 觀察期啟動/結束標準）**：`.claude/methodologies/hook-system-methodology.md`「Hook 生命週期與降級觀察」章節。
+> **operations 詳解（Hook 設計決策樹 + 反模式 + 降級檢查清單）**：`.claude/references/hook-system-operations.md`。
 
-> **背景**：Phase 3b 候選 hook 量化分析（11 hook，3 天觸發頻率：4915 觸發 / 36 Action，<1%），M-3 降級計畫拆 4 子 ticket 執行；P1 + P3 兩階段已完成 8 hook 降級，預估累計削減 Phase 3b Hook 摩擦約 85%。本文件提供觀察期框架，確保降級後若有未察覺風險可快速 rollback。
+---
+
+## 背景
+
+Phase 3b 候選 hook 量化分析（11 hook，3 天觸發頻率：4915 觸發 / 36 Action，< 1%），降級計畫拆 4 子 ticket 執行；P1 + P3 兩階段已完成 8 hook 降級，預估累計削減 Phase 3b Hook 摩擦約 85%。本文件提供觀察期追蹤數據，確保降級後若有未察覺風險可快速 rollback。
 
 ---
 
@@ -17,27 +24,11 @@
 
 ---
 
-## 觸發消除 vs 處理降級：兩類機制定義
+## 降級機制驗證樣本
 
-降級策略分為兩類，削減上限不同，預估時必須分開計算。
+> 降級機制定義（觸發消除 vs 處理降級）與修正預估公式見核心方法論「降級機制」章節。本節記錄本案驗證樣本。
 
-| 機制 | 定義 | 削減上限 | 適用條件 |
-|------|------|---------|---------|
-| 觸發消除 | 從 settings.json 完全移除 hook 註冊 | 100% | Action 比 = 0% 且 False-negative 風險可接受（hook 防護的反模式已被其他機制覆蓋） |
-| 處理降級 | 保留註冊，內部邏輯加 fast-path / sampling / matcher 限縮 | 73-80%（實測） | Action 比 < 1% 但仍有監測價值；或完全移除的 False-negative 風險不可接受 |
-
-**Why**：85% 預估隱含假設「降級 ≈ 消除」，未區分處理降級仍需 Python 進程啟動 + log 寫入的固定成本，導致預估偏差 ~3 ppt。
-
-**Consequence**：不區分兩類機制會系統性高估削減效果，後續降級計畫的預估值失準。
-
-**Action**：預估削減比時使用修正公式（見下方），觸發消除以 100%、處理降級以 75% 分別計算。
-
-### 修正後預估公式
-
-- 舊公式：`削減 % = 加權(各 hook 預估移除觸發) / 總觸發`
-- 新公式：`削減 % = Sum(觸發消除 hook 佔比 × 100% + 處理降級 hook 佔比 × 75%) / 總觸發`
-
-**驗證樣本**：本案 1 hook 觸發消除（parallel-dispatch, 佔 25.6%）+ 7 hook 處理降級（佔 74.4%）→ 預估 = 25.6% × 100% + 74.4% × 75% = **81.4%**。vs 實測 **81.9%**，偏差 0.5 ppt。
+**驗證樣本**：本案 1 hook 觸發消除（parallel-dispatch, 佔 25.6%）+ 7 hook 處理降級（佔 74.4%）-> 預估 = 25.6% × 100% + 74.4% × 75% = **81.4%**。vs 實測 **81.9%**，偏差 0.5 ppt。
 
 ---
 
@@ -70,8 +61,8 @@
 | Wave +1 (2026-05-07) | 2026-05-07 | utf8-integrity-check | 68 (1.5d) / 45 日均 | 0 | 0% | -57.2% | 抽樣 counter=44 |
 | Wave +1 (2026-05-07) | 2026-05-07 | language-guard | 22 (1.5d) / 15 日均 | 0 | 0% | -34.3% | 抽樣 counter=4；觸發基數小，誤差較大 |
 | Wave +1 (2026-05-07) | 2026-05-07 | comment-qa | 68 (1.5d) / 45 日均 | 0 | 0% | -57.2% | matcher 限定生效 |
-| Wave +1 (2026-05-07) | 2026-05-07 | file-type-permission | 61 (1.5d) / 41 日均 | 5 | 5.5% | -57.2% 但 Action 比 ×7.8 | **rollback 條件命中（Action 比 > baseline×2 且 > 1%）；延長觀察期評估** |
-| Wave +1 結論 | 2026-05-07 | 加權合計 | 1298 (1.5d) / 865 日均 | 15 | — | -57.8% (vs 預估 -85%, 差距 27.2 ppt) | bay-quality-auditor 審計，信心度 0.75（觀察期 1.5d < 1 Wave）；觸發 acceptance #4 → 延長觀察期 |
+| Wave +1 (2026-05-07) | 2026-05-07 | file-type-permission | 61 (1.5d) / 41 日均 | 5 | 5.5% | -57.2% 但 Action 比 ×7.8 | rollback 條件命中（Action 比 > baseline×2 且 > 1%）；延長觀察期評估 |
+| Wave +1 結論 | 2026-05-07 | 加權合計 | 1298 (1.5d) / 865 日均 | 15 | — | -57.8% (vs 預估 -85%, 差距 27.2 ppt) | bay-quality-auditor 審計，信心度 0.75（觀察期 1.5d < 1 Wave）；觸發 acceptance #4 -> 延長觀察期 |
 | Extended | 2026-05-11 | parallel-dispatch | 0 (5.5d) / 0 日均 | 0 | 0% | -100% | 完全移除，觸發消除 |
 | Extended | 2026-05-11 | bash-edit-guard | 1163 (5.5d) / 211.5 日均 | 0 | 0% | -74.1% | 處理降級，削減收斂 |
 | Extended | 2026-05-11 | acceptance-gate | 1167 (5.5d) / 212.2 日均 | — | — | -74.0% | 處理降級，削減收斂 |
@@ -80,7 +71,7 @@
 | Extended | 2026-05-11 | language-guard | 49 (5.5d) / 8.9 日均 | 0 | 0% | -73.4% | 處理降級（抽樣），基數小 |
 | Extended | 2026-05-11 | comment-qa | 172 (5.5d) / 31.3 日均 | 0 | 0% | -80.3% | 處理降級（matcher 限定） |
 | Extended | 2026-05-11 | file-type-permission | 159 (5.5d) / 28.9 日均 | — | — | -79.7% | 處理降級；Action 比異常消退（May 8-11 TICKET/WORKLOG 命中比 6.2%） |
-| Extended 結論 | 2026-05-11 | 加權合計 | 3054 (5.5d) / 555 日均 | — | — | **-81.9%** (vs 修正預估 -81.4%, 偏差 0.5 ppt) | Extended 觀察期 ANA 落地；信心度 0.95；短期樣本偏差為主因（+24.1 ppt 修正）；file-type-permission rollback 不再命中 |
+| Extended 結論 | 2026-05-11 | 加權合計 | 3054 (5.5d) / 555 日均 | — | — | -81.9% (vs 修正預估 -81.4%, 偏差 0.5 ppt) | Extended 觀察期 ANA 落地；信心度 0.95；短期樣本偏差為主因（+24.1 ppt 修正）；file-type-permission rollback 不再命中 |
 
 > **使用方式**：每 Wave 收斂時新增資料列；超過 2 Wave 後依「觀察期結束評估標準」決定收斂或延長。
 
@@ -130,24 +121,14 @@ P1 與 P3 commit 獨立，可分別 rollback 不互相干擾。
 
 ## 觀察期結束評估標準
 
-2 Wave 結束時（觀察期啟動條件），依以下三項判斷收斂或延長：
-
-| 判斷項 | 收斂條件 | 延長條件 |
-|--------|---------|---------|
-| False-negative 案例 | 0 件 | ≥ 1 件 |
-| Action 比變化 | 全 8 hook < baseline × 2 | 任一 hook ≥ baseline × 2 |
-| 用戶體感 | 無劣化回報 | ≥ 2 件回報 |
-
-**收斂行為**：建立降級驗證完成 ticket，標記降級為長期生效；本方法論進入「歷史紀錄」狀態。
-
-**延長行為**：依觸發條件啟動對應 rollback SOP；建新 ticket 處理（如部分 rollback + 重新觀察）。
+> 收斂/延長三項判斷標準見核心方法論「觀察期啟動與結束標準」。本節記錄本案歷史評估結果。
 
 ### Wave +1 評估結果（2026-05-07）
 
 | 判斷項 | 結果 | 評估 |
 |--------|------|------|
 | False-negative 案例 | 0 件 | 收斂 |
-| Action 比變化 | file-type-permission: 0.7% → 5.5%（× 7.8 倍且 > 1%） | **延長**（rollback 條件命中 1 項） |
+| Action 比變化 | file-type-permission: 0.7% -> 5.5%（× 7.8 倍且 > 1%） | 延長（rollback 條件命中 1 項） |
 | 用戶體感 | 無劣化回報 | 收斂 |
 
 **綜合判斷**：延長觀察期。已建立延長觀察期追蹤，涵蓋三項議題：（1）預估方法論偏差（57.8% vs 85%）；（2）bash-edit-guard / acceptance-gate 進一步降級評估；（3）file-type-permission Action 比異常評估（決定 rollback / 調整 / 偶發接受）。觀察期延長至追蹤 ticket 完成後重新評估。
@@ -161,7 +142,7 @@ P1 與 P3 commit 獨立，可分別 rollback 不互相干擾。
 | 用戶體感 | 無劣化回報 | 收斂 |
 | 削減比 vs 修正預估 | 81.9% vs 81.4%（偏差 0.5 ppt） | 收斂（< 20% 門檻） |
 
-**綜合判斷**：三項判斷皆收斂。Extended 觀察期 ANA 結論：（1）預估方法論已修正（本文件新增兩類機制定義與公式）；（2）bash-edit-guard / acceptance-gate 維持現狀，不進一步降級；（3）file-type-permission 不 rollback，偶發接受。降級為長期生效。
+**綜合判斷**：三項判斷皆收斂。Extended 觀察期 ANA 結論：（1）預估方法論已修正（核心方法論新增兩類機制定義與公式）；（2）bash-edit-guard / acceptance-gate 維持現狀，不進一步降級；（3）file-type-permission 不 rollback，偶發接受。降級為長期生效。
 
 ---
 
@@ -181,14 +162,11 @@ P1 與 P3 commit 獨立，可分別 rollback 不互相干擾。
 
 ## 相關文件
 
+- `.claude/methodologies/hook-system-methodology.md` — Hook 系統核心方法論（生命週期 + 降級機制定義 + 觀察期標準）
+- `.claude/references/hook-system-operations.md` — Hook 設計決策樹、反模式、降級檢查清單
 - `.claude/methodologies/friction-management-methodology.md` — Hook 降級的上位摩擦力管理理論
-- `.claude/methodologies/hook-system-methodology.md` — Hook 系統設計原則（含降級判斷依據）
-- Hook 降級量化分析來源 — 11 個 Phase 3b 候選 hook 3 天觸發頻率統計（4915 觸發 / 36 Action）
-- 4 子 ticket 拆分結構 — P1 降級 / P3 降級 / 觀察期 / 驗證三項
 
 ---
 
-**Last Updated**: 2026-05-11
-**Version**: 1.2.0 — 新增「觸發消除 vs 處理降級」兩類機制定義表與修正預估公式；Extended 觀察期數據（May 6-11, 5.5d）填入追蹤表（實測 81.9% vs 修正預估 81.4%，偏差 0.5 ppt）；Extended 評估結果三項皆收斂，降級為長期生效（Extended 觀察期 ANA 收斂落地）
-**Version**: 1.1.0 — Wave +1 數據填入（2026-05-07）：實測 ~57.8% 削減（vs 預估 ~85%，差距 27.2 ppt）、file-type-permission Action 比 0.7% → 5.5% 命中 rollback 條件、延長觀察期決議、衍生延長觀察期追蹤三項議題
-**Version**: 1.0.0 — 8 hook 降級觀察期框架初始落地（P1 + P3 兩階段獨立 rollback、追蹤表、結束評估標準）
+**Last Updated**: 2026-06-14
+**Version**: 1.0.0 — 從 hook-downgrade-observation.md 外移（W8-020.6 hook 家族整併）：8 Hook 降級觀察期追蹤表、Rollback 觸發條件、快速恢復 SOP（場景 A/B/C）、歷史觀察期評估結果（Wave +1 + Extended）；機制定義與公式上移核心方法論，本檔保留追蹤數據與 SOP

@@ -120,7 +120,7 @@ Step 0：資料充足度檢查
 
 > 詳見：
 > - 通用原理：`.claude/skills/wrap-decision/SKILL.md` Step 0 章節
-> - 本專案銜接：`.claude/skills/wrap-decision/references/project-integration/personalized-advice.md`
+> - 本專案銜接：`.claude/skills/wrap-decision/references/integration-patterns/personalized-advice.md`
 
 ---
 
@@ -214,7 +214,7 @@ Step 0：資料充足度檢查
 
 - `.claude/error-patterns/process-compliance/PC-071-advice-without-personal-context.md` — 錯誤模式溯源
 - `.claude/skills/wrap-decision/SKILL.md` — WRAP 決策框架 Step 0（通用原理）
-- `.claude/skills/wrap-decision/references/project-integration/personalized-advice.md` — 本專案銜接層
+- `.claude/skills/wrap-decision/references/integration-patterns/personalized-advice.md` — 本專案銜接層
 - `.claude/pm-rules/askuserquestion-rules.md` — AUQ 使用規則（本規則中的關鍵變數詢問建議搭配 AUQ 執行）
 - `.claude/pm-rules/pm-quality-baseline.md` — PM 品質基線規則 6（框架修改優先於專案進度）
 

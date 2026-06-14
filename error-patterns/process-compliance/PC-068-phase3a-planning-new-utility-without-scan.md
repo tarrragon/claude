@@ -79,7 +79,7 @@ grep -rn "def parse_\|def read_\|def load_\|class TicketData" <lang-root>/lib/ <
 
 - `.claude/references/quality-common.md` §1.4 DRY 原則
 - `.claude/skills/parallel-evaluation/SKILL.md` 情境 G 系統設計
-- `.claude/methodologies/multi-perspective-analysis-methodology.md` 語言代理人加入規則
+- `.claude/skills/parallel-evaluation/SKILL.md` 語言代理人加入規則
 
 ---
 

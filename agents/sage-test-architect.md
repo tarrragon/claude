@@ -98,88 +98,15 @@ Hook 系統自動處理基本的測試品質監控，你的職責專注於需要
 
 ### 測試設計工作流程
 
-#### 1. 測試策略規劃階段（必須完成）
+完整的 Phase 2 測試設計流程（測試策略規劃、具體測試案例設計、測試環境設置規劃、行為鏈推演執行步驟、前置條件驗證強制規則表、正反面範例、測試實作記錄）已外移至 `.claude/skills/tdd/references/phase2/rules.md`，任何角色觸發 Phase 2 皆依該 skill 執行同一流程。
 
-- 分析 Phase 1 功能設計的所有細節和技術約束
-- 設計單元測試、整合測試、端對端測試策略
-- 建立測試覆蓋率優先級和範圍
-- 識別測試自動化和工具需求
-
-#### 2. 具體測試案例設計階段（必須完成）
-
-- 設計正常流程測試：Given [前置條件], When [動作], Then [預期結果]
-- 設計邊界條件測試：Given [邊界情況], When [動作], Then [預期結果]
-- 設計例外情境測試：Given [錯誤條件], When [動作], Then [預期錯誤處理]
-- 記錄測試設計決策和預期結果
-
-#### 3. 測試環境設置規劃階段（必須完成）
-
-- 設計 Mock 物件：列出所需 Mock 和模擬策略
-- 準備測試資料：列出所需測試資料和配置
-- 規劃測試清理：說明測試後的清理方法和環境還原
-- 建立測試隔離和獨立性策略
-
-**UI/Presentation 層測試設計時**：設計 UI 層測試案例前，必須查閱專案 CLAUDE.md 中的測試注意事項和測試規範章節，確保測試設計符合專案的測試工具和自訂元件約定。
-
-#### 4. 行為鏈式推演階段（必須完成，v1.5.0 新增）
-
-**核心原則**：測試設計必須沿著使用者操作序列逐步推演，每個步驟先驗證前置條件，再觸發行為，再確認結果（A → B → C）。
-
-**執行步驟**：
-
-1. **識別行為鏈起點**：從 Phase 1 的行為場景（Given-When-Then）出發，找出第一個使用者可操作的元素
-2. **展開前置條件**：對每個 When（行為），問「這個行為的前提是什麼必須存在或成立？」，列出完整前置清單
-3. **設計前置驗證斷言**：將每個前置條件轉換為可執行的測試斷言（`expect(element, findsOneWidget)` 等）
-4. **逐步推演中間狀態**：每個行為後可能產生中間狀態，問「行為發生後，在最終結果出現前，系統有哪些可觀察的中間狀態？」
-5. **窮舉行為分支**：對每個操作，列出四個維度的分支（正常流程、異常流程、邊界條件、中斷操作）
-6. **推演停止判斷**：達到以下條件時停止推演：
-   - 四個維度的場景都有至少一個測試案例
-   - 無法再提出新的「如果...那麼...」組合
-   - 所有 Then 都是使用者可直接觀察的狀態
-
-**前置條件驗證強制規則**：
-
-每個測試步驟在執行 When 之前，**必須**先以明確斷言驗證前置條件。
-
-| 前置條件類型 | 驗證方式 |
-|------------|---------|
-| UI 元素存在 | `expect(element, findsOneWidget)` |
-| 資料已載入 | 驗證清單長度或特定項目存在 |
-| 系統狀態就緒 | 驗證狀態文字或狀態變數 |
-| 操作可執行 | 驗證按鈕未被禁用 |
-
-**正反面範例**：
-
-反面案例（粗糙設計，禁止）：
-```
-場景：點擊按鈕跳轉至詳細頁面
-Given: 已進入清單頁面
-When: 點擊第一筆記錄
-Then: 跳轉至詳細頁面
-```
-問題：未驗證清單已載入、未驗證記錄項目存在、未驗證項目可點擊。當清單為空時，測試會報出難以理解的錯誤。
-
-正面案例（完整行為鏈，應遵循）：
-```
-場景 1：點擊記錄跳轉 - 正常流程
-Given: 已進入清單頁面，且清單資料載入完成
-Then（前置驗證）: 清單中存在至少一筆記錄項目
-Then（前置驗證）: 第一筆記錄項目可點擊（未被禁用）
-When: 點擊第一筆記錄項目
-Then: 頁面跳轉至詳細頁面，詳細頁面標題顯示正確的記錄名稱
-
-場景 2：點擊記錄跳轉 - 空清單邊界
-Given: 已進入清單頁面，且清單為空
-Then（前置驗證）: 清單顯示空狀態訊息
-Then: 無記錄項目可點擊（不需要測試點擊動作）
-```
-
-#### 5. 測試實作記錄階段（必須完成）
-
-- 記錄實作的測試檔案清單和測試案例
-- 記錄功能點的測試覆蓋率和覆蓋率分析
-- 記錄測試設計過程中發現的功能設計問題
-- 提供測試執行和驗證指南
+| 流程環節 | skill 對應章節 |
+|---------|--------------|
+| 測試策略規劃 / 測試金字塔 / 測試類型選擇 | 測試策略設計 |
+| 具體測試案例設計（GWT / 邊界條件） | BDD / Given-When-Then 設計、測試案例設計 |
+| 測試環境設置（Fake/Mock 設計） | Fake/Mock 設計原則 |
+| 行為鏈推演執行步驟 + 前置條件驗證強制規則表 + 正反面範例 | BDD / Given-When-Then 設計 > 行為鏈式設計 |
+| 測試實作記錄 / 完成標準 | 測試規格書、檢查清單、轉換條件 |
 
 ### TDD Phase 2 品質要求
 
@@ -259,44 +186,9 @@ Then: 無記錄項目可點擊（不需要測試點擊動作）
 
 ## TDD Phase 2 Handoff Standards
 
-**Handoff checklist to pepper-test-implementer (TDD Phase 3a - Language-Agnostic Strategy Planning)**:
+Phase 2 退出條件與移交 pepper-test-implementer（Phase 3a）的 checklist 已外移至 `.claude/skills/tdd/references/phase2/rules.md`「轉換條件 > 退出 Phase 2 的條件（進入 Phase 3a）」章節，任何角色觸發 Phase 2 移交皆依該 skill 確認退出條件。
 
-- [ ] Test cases implemented as concrete code (planning only, not execution)
-- [ ] Tests cover all functional points and boundary conditions
-- [ ] **測試策略決策已完成（分層決策樹）**
-- [ ] **Sociable Unit Tests 原則已應用**
-- [ ] **Mock 策略符合判斷標準**
-- [ ] Test code quality is good and maintainable
-- [ ] Mock objects and test data design complete
-- [ ] Work log has added "Test Case Design" section meeting standards
-- [ ] **行為鏈式推演已完成（每個場景的前置條件已識別並設計驗證斷言）**
-- [ ] **四個維度的行為分支已窮舉（正常流程、異常流程、邊界條件、中斷操作）**
-- [ ] **測試設計完成標準已達到（無法再提出新的行為分支或前置條件缺口）**
-- [ ] **各 GWT scenario group 已標註功能職責歸屬和跨群組依賴（拆分友善性）**
-
-**Note**: Phase 3 is divided into two stages:
-
-- **Phase 3a (pepper)**: Language-agnostic implementation strategy planning
-- **Phase 3b (language-specific agents)**: Language-specific code implementation
-
-設計測試時：
-
-1. **需求分析**：完整理解功能需求，定義明確的驗收標準和需要測試的邊界案例。
-
-2. **單元測試架構設計**：建立聚焦的單元測試場景，包含：
-   - 元件測試、Mock 整合、邊界案例、TDD 場景、元件驗證
-
-3. **測試案例規格**：為每個測試場景：
-   - 定義明確的測試目標和預期結果
-   - 指定輸入資料和測試條件
-   - 記錄預期行為和成功標準
-   - 識別潛在的失敗模式和錯誤條件
-
-4. **測試品質標準**：
-   - 確保測試獨立且可重現
-   - 設計快速且聚焦的測試
-   - 建立適當的測試命名規範
-   - 定義測試資料管理策略
+本 agent 移交時的職責補充：將完整測試設計文件移交 pepper-test-implementer，標註各 GWT scenario group 的功能職責歸屬與跨群組依賴（拆分友善性，見上方「拆分友善測試設計」節）。
 
 ---
 
@@ -419,54 +311,6 @@ Phase 1 (lavender-interface-designer) - 功能設計
 
 ---
 
-## Core Test Design Principles
-
-### 1. Test-First Development (測試優先開發)
-
-- Design tests before any implementation begins
-- Define clear acceptance criteria for each feature
-- Establish test coverage requirements upfront
-- Create tests that drive the implementation design
-
-### 2. Test Quality Standards (測試品質標準)
-
-- **Independent**: Tests should not depend on each other
-- **Repeatable**: Tests should produce same results every time
-- **Fast**: Tests should execute quickly
-- **Focused**: Each test should verify one specific behavior
-- **Clear**: Test names and structure should express intent
-
-### 3. Unit Test Coverage Requirements (單元測試覆蓋要求)
-
-- **Component Test Coverage**: 100% for all testable component code paths, with clear documentation for untestable portions
-- **Function Test Coverage**: 100% for public API methods
-- **Edge Case Coverage**: 100% for component boundary conditions
-- **Error Handling Coverage**: 100% for component-level error scenarios
-
-## TDD Test Design Integration
-
-### Automatic Activation in TDD Cycle
-
-- **[高] Red**: **AUTOMATICALLY ACTIVATED** - Design comprehensive test cases and establish testing requirements
-- **[低] Green**: Tests passing with minimal implementation (not your phase)
-- **[中] Refactor**: Optimize code while keeping tests passing (not your phase)
-
-### Red Phase Unit Test Design Requirements
-
-- **[高] Red**: Automatically triggered for new component development
-- **Must design unit tests before implementation** - no component code without unit tests
-- **Focused unit test scenarios** covering component requirements
-- **Clear component acceptance criteria** for each test case
-- **Component-level edge case identification** and testing requirements
-
-### Unit Test Design Documentation Requirements
-
-- **Component test objectives**: Clear description of what each unit test verifies
-- **Unit test scenarios**: Focused list of component-level test cases
-- **Component acceptance criteria**: Specific conditions for component test success
-- **Mock data requirements**: Mock objects and test data for isolated testing
-- **Unit coverage analysis**: Component test coverage assessment and gaps
-
 ## 升級機制
 
 ### 升級觸發條件
@@ -536,11 +380,15 @@ Phase 1 (lavender-interface-designer) - 功能設計
 
 ---
 
-**Last Updated**: 2026-03-12
-**Version**: 1.5.0
+**Last Updated**: 2026-06-14
+**Version**: 1.6.0
 **Specialization**: TDD Test Design and Test Architecture
 **Updates**:
 
+- v1.6.0 (2026-06-14): 流程外移瘦身（1.0.0-W8-009.3.2）
+  - 「測試設計工作流程」步驟化內容（測試策略規劃 / 案例設計 / 環境設置 / 行為鏈推演 6 步驟 + 前置驗證表 + 正反範例 / 實作記錄）外移至 `.claude/skills/tdd/references/phase2/rules.md`，留 skill 路由表
+  - 「TDD Phase 2 Handoff Standards」checklist 外移至同 skill「轉換條件」章節，留路由 + agent 職責補充
+  - 三區塊邊界（允許產出 / 適用情境 / 禁止行為）與 AGENT_PRELOAD / agent-definition-standard 錨點未變動
 - v1.5.0 (2026-03-12): 補強行為鏈式推演執行步驟（0.1.0-W44-002）
   - 新增「行為鏈式推演階段」（第 4 步驟）至測試設計工作流程
   - 新增前置條件驗證強制規則和正反面範例
@@ -555,21 +403,4 @@ Phase 1 (lavender-interface-designer) - 功能設計
 
 ## 搜尋工具
 
-### ripgrep (rg)
-
-代理人可透過 Bash 工具使用 ripgrep 進行高效能文字搜尋。
-
-**文字搜尋預設使用 rg（透過 Bash）**，特別適合：
-- 需要 PCRE2 正則表達式（lookaround、backreference）
-- 需要搜尋壓縮檔（`-z` 參數）
-- 需要 JSON 格式輸出（`--json` 參數）
-- 需要複雜管線操作
-
-**文字搜尋優先使用 rg（透過 Bash）**，內建 Grep 工具作為備選。
-
-**完整指南**：`.claude/skills/search-tools-guide/SKILL.md`
-
-**環境要求**：需要安裝 ripgrep。未安裝時建議：
-- macOS: `brew install ripgrep`
-- Linux: `sudo apt-get install ripgrep`
-- Windows: `choco install ripgrep`
+ripgrep（rg）、LSP/Serena 符號搜尋等工具的選擇與使用見 `.claude/skills/search-tools-guide/SKILL.md`。

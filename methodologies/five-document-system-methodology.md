@@ -1,30 +1,16 @@
 # 五重文件系統方法論 v1.0.0
 
 > **核心理念**：每個文件有單一職責，工程師只需讀對應文件就能理解全部
+>
+> **完整格式範例 + 工作流程逐字命令**：`.claude/references/five-document-system-examples.md`（需照抄 worklog/技術債務/error-pattern 的格式範本，或需逐字工作流程命令序列時讀）
 
 ---
 
 ## 重要規範：禁用 Emoji
 
-**所有五重文件系統中的文件禁止使用 emoji**
+**所有五重文件系統中的文件禁止使用 emoji**（理由：交接文件需專業正式；emoji 跨環境顯示不一致；CLI 處理表格內 emoji 可能導致 Rust panic）。適用範圍：CHANGELOG、todolist、worklog、ticket、error-patterns。
 
-| 原因 | 說明 |
-|------|------|
-| 專業性 | 交接文件需要專業、正式 |
-| 相容性 | emoji 在某些環境可能顯示不正確 |
-| 穩定性 | Claude Code CLI 處理 markdown 表格中的 emoji 可能導致 Rust panic |
-
-適用範圍：CHANGELOG、todolist、worklog、ticket、error-patterns
-
----
-
-## 版本資訊
-
-| 項目 | 內容 |
-|------|------|
-| 版本 | v1.0.0 |
-| 建立日期 | 2026-01-13 |
-| 前身 | 三重文件協作原則 |
+> 完整規則見 `.claude/rules/core/document-format-rules.md`。
 
 ---
 
@@ -38,15 +24,13 @@
 | todolist.yaml | 開發追蹤 | 混合已排程/未排程的任務 |
 | worklog | 詳細記錄 | 包含太多執行細節，難以快速理解大方向 |
 
-### 核心問題
-
-1. **職責重疊**：worklog 和 ticket 的邊界不清
-2. **資訊過載**：worklog 包含太多細節，難以快速還原 context
-3. **狀態混淆**：todolist.yaml 混合了「待處理」和「執行中」的項目
+**核心問題**：職責重疊（worklog 與 ticket 邊界不清）、資訊過載（worklog 細節太多難還原 context）、狀態混淆（todolist 混合「待處理」與「執行中」）。
 
 ---
 
 ## 五重文件定義
+
+每個文件回答一個核心問題，職責不重疊。各文件的完整格式範本見衛星檔。
 
 ### 1. CHANGELOG.md - 版本推進記錄
 
@@ -59,16 +43,8 @@
 | 更新時機 | 版本發布時 |
 | 更新方式 | `/version-release` 自動觸發 |
 
-**內容範圍**：
-- 新增功能
-- 架構變更
-- Bug 修復
-- 重大決策
-
-**禁止內容**：
-- 開發過程的嘗試錯誤
-- 過度詳細的實作細節
-- 內部變更（用戶不關心）
+**內容範圍**：新增功能、架構變更、Bug 修復、重大決策。
+**禁止內容**：開發過程的嘗試錯誤、過度詳細的實作細節、用戶不關心的內部變更。
 
 ### 2. todolist.yaml - 結構化版本索引
 
@@ -81,14 +57,8 @@
 | 更新時機 | 持續更新 |
 | 更新方式 | 手動 + `/tech-debt-capture` |
 
-**內容範圍**：
-- 已知但尚未排程的問題
-- 技術債務
-- 未來版本規劃
-
-**關鍵規則**：
-- **已解決 → 移除**（不是標記完成）
-- **已排程 → 移至 worklog**
+**內容範圍**：已知但尚未排程的問題、技術債務、未來版本規劃。
+**關鍵規則**：已解決 -> 移除（不是標記完成）；已排程 -> 移至 worklog。
 
 ### 3. worklog - 版本企劃
 
@@ -101,43 +71,11 @@
 | 更新時機 | 版本開始/結束 |
 | 更新方式 | `/doc-flow worklog` |
 
-**內容範圍**：
-- 版本目標（一句話描述）
-- 前情提要（為什麼需要這個版本）
-- 執行策略（Step-by-Step）
-- Ticket 總覽（連結到細節）
-- Context 還原指引
+**內容範圍**：版本目標（一句話）、前情提要、執行策略（Step-by-Step）、Ticket 總覽（連結到細節）、Context 還原指引。
+**自給自足原則**：任何工程師不需其他 context，只讀 worklog 就能理解版本目標、設計理由、執行步驟與相關 ticket 位置。
+**禁止內容**：具體程式碼變更、詳細執行日誌、問題完整分析（這些屬於 ticket）。
 
-**自給自足原則**：
-```
-任何工程師不需要其他 context，只讀 worklog 就能理解：
-- 版本目標是什麼
-- 為什麼這樣設計
-- 執行企劃的步驟
-- 相關的 ticket 在哪裡
-```
-
-**禁止內容**：
-- 具體程式碼變更
-- 詳細執行日誌
-- 問題完整分析（這些屬於 ticket）
-
-**技術債務記錄要求**：
-
-worklog 的 Phase 4 章節必須包含技術債務評估表格：
-
-```markdown
-## 技術債務評估
-
-| ID | 描述 | 風險等級 | 建議處理時機 | 影響範圍 |
-|----|------|---------|------------|---------|
-| TD-001 | [描述] | 高/中/低/極低 | [時機] | [範圍] |
-```
-
-**處理流程**：
-1. Phase 4 完成時記錄技術債務表格
-2. 執行 `/tech-debt-capture` 建立 Ticket
-3. 確認 Ticket 建立成功後才能提交版本
+> worklog 的 Phase 4 章節須包含技術債務評估表格，完成後執行 `/tech-debt-capture` 建立 Ticket，確認建立成功才提交版本。技術債務表格範本與處理流程見衛星檔。
 
 ### 4. ticket - 任務執行細節
 
@@ -150,15 +88,8 @@ worklog 的 Phase 4 章節必須包含技術債務評估表格：
 | 更新時機 | 執行過程中 |
 | 更新方式 | `/ticket create`, `/ticket track` |
 
-**內容範圍**：
-- 任務來源和目標
-- 5W1H 設計
-- 問題分析
-- 解決方案
-- 測試結果
-- 執行進度
-
-**格式**：Markdown + YAML Frontmatter
+**內容範圍**：任務來源和目標、5W1H 設計、問題分析、解決方案、測試結果、執行進度。
+**格式**：Markdown + YAML Frontmatter。
 
 ### 5. error-patterns - 經驗學習系統
 
@@ -171,18 +102,8 @@ worklog 的 Phase 4 章節必須包含技術債務評估表格：
 | 更新時機 | 執行 ticket 前後 |
 | 更新方式 | `/error-pattern` |
 
-**內容範圍**：
-- 錯誤症狀
-- 根因分析
-- 解決方案
-- 預防措施
-- 相關 Ticket
-
-**核心理念**：
-```
-犯錯是行為模式，不是單一行為。
-收集、歸檔錯誤經驗，建立安全防護措施。
-```
+**內容範圍**：錯誤症狀、根因分析、解決方案、預防措施、相關 Ticket。
+**核心理念**：犯錯是行為模式，不是單一行為；收集、歸檔錯誤經驗，建立安全防護措施。
 
 ---
 
@@ -190,40 +111,15 @@ worklog 的 Phase 4 章節必須包含技術債務評估表格：
 
 ### 1. 職責單一化
 
-```
-文件            核心問題
-─────────────────────────────────────────
-CHANGELOG     → "這個版本做了什麼改變？"
-todolist.yaml → "還有哪些問題需要處理？"
-worklog       → "這個版本要達成什麼目標？"
-ticket        → "這個任務的執行細節是什麼？"
-error-patterns → "之前遇過類似問題嗎？"
-```
-
-**判斷標準**：一個文件只回答一個核心問題。
+每個文件只回答一個核心問題：CHANGELOG（這版做了什麼改變）、todolist.yaml（還有哪些問題要處理）、worklog（這版要達成什麼目標）、ticket（這任務的執行細節）、error-patterns（之前遇過類似問題嗎）。**判斷標準**：一個文件只回答一個核心問題。
 
 ### 2. 細節下沉原則
 
-```
-層級          內容
-─────────────────────────────
-worklog      大方向、策略、目標
-   ↓
-ticket       執行細節、分析、結果
-```
-
-**規則**：
-- worklog 只記錄「要做什麼」和「為什麼」
-- ticket 記錄「怎麼做」、「進度如何」、「結果是什麼」
+worklog 記錄大方向、策略、目標（「要做什麼」和「為什麼」）；ticket 記錄執行細節、分析、結果（「怎麼做」「進度如何」「結果是什麼」）。
 
 ### 3. 經驗累積原則
 
-```
-執行 ticket 前 → /error-pattern query（查詢既有經驗）
-執行 ticket 後 → /error-pattern add（記錄新發現）
-```
-
-**目標**：每次修復都讓系統更聰明。
+執行 ticket 前 `/error-pattern query`（查詢既有經驗），執行後 `/error-pattern add`（記錄新發現）。**目標**：每次修復都讓系統更聰明。
 
 ---
 
@@ -252,43 +148,13 @@ ticket       執行細節、分析、結果
 
 ## 工作流程
 
-### 開始新版本
+三個階段的概念如下；各階段的逐字命令序列見 `.claude/references/five-document-system-examples.md`（需照抄逐字指令時讀）。
 
-```
-1. 從 todolist.yaml 識別要處理的問題
-2. /doc-flow worklog init v{VERSION}
-   - 定義版本目標
-   - 規劃執行策略
-3. /ticket create
-   - 建立具體 tickets
-4. worklog 自動索引 tickets
-```
-
-### 執行任務
-
-```
-1. /error-pattern query <關鍵字>
-   - 查詢既有經驗
-2. /ticket track claim <ticket-id>
-   - 開始執行
-3. 執行過程更新 ticket
-4. /error-pattern add
-   - 記錄新發現模式
-5. /ticket track complete <ticket-id>
-   - 完成任務
-```
-
-### 完成版本
-
-```
-1. /doc-flow worklog update
-   - 更新版本狀態
-2. /doc-flow todo resolve <已解決的問題>
-   - 移除已解決項目
-3. /version-release
-   - 發布版本
-   - 自動更新 CHANGELOG
-```
+| 階段 | 概念 |
+|------|------|
+| 開始新版本 | 從 todolist.yaml 識別問題 -> `/doc-flow worklog init`（定目標、規劃策略）-> `/ticket create` 建 tickets -> worklog 自動索引 |
+| 執行任務 | `/error-pattern query`（查既有經驗）-> `/ticket track claim` 開始 -> 過程更新 ticket -> `/error-pattern add` 記錄新發現 -> `/ticket track complete` |
+| 完成版本 | `/doc-flow worklog update`（更新狀態）-> `/doc-flow todo resolve`（移除已解決）-> `/version-release`（發布、自動更新 CHANGELOG） |
 
 ---
 
@@ -306,10 +172,7 @@ ticket       執行細節、分析、結果
 
 ## 遷移策略
 
-**決策**：只對新版本使用新格式
-
-- v0.25.1 之後：使用五重文件系統
-- 舊版本：保持原樣，不遷移
+**決策**：只對新版本使用新格式（v0.25.1 之後使用五重文件系統；舊版本保持原樣，不遷移）。
 
 ---
 
@@ -328,9 +191,12 @@ ticket       執行細節、分析、結果
 
 ## 參考文件
 
+- 完整格式範例 + 工作流程逐字命令：`.claude/references/five-document-system-examples.md`（衛星檔）
 - SKILL 定義：`.claude/skills/doc-flow/SKILL.md`
 - Worklog 模板：`.claude/skills/doc-flow/templates/worklog.md.template`
 
 ---
 
+**Last Updated**: 2026-06-14
+**Version**: 1.1.0 - 瘦身 336 -> <300 行（各文件格式範本/工作流程逐字命令外移衛星檔 five-document-system-examples.md，加雙向 intent 路由；全形箭頭改 ASCII；emoji meta 規範濃縮路由至 document-format-rules）
 *建立日期：2026-01-13*
