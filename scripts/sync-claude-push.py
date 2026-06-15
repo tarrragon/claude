@@ -940,6 +940,50 @@ def clean_stale_files(temp_dir: Path, reference_dir: Path) -> int:
     return deleted_count
 
 
+def detect_uncleaned_deletions(temp_dir: Path, reference_dir: Path) -> list[str]:
+    """偵測遠端 clone（temp_dir）存在但本地 git tracked 樹（reference_dir）已無的檔案。
+
+    這些檔在本地已 git rm（不在 staging tracked 樹），但因本次 push 未帶 --clean，
+    clean_stale_files 不會執行，遠端會殘留為孤兒。回傳這些孤兒的相對路徑清單，供
+    main 在結尾輸出 soft 警告（不阻擋、不改 --clean 預設，R2）。
+
+    判定邏輯與 clean_stale_files 對齊（同一組 CLEAN_EXCLUDE + should_exclude 過濾），
+    確保「警告的檔」恰為「--clean 會刪的檔」，不多報遠端獨有檔（CHANGELOG/VERSION）
+    或他專案推送的 local-only 檔。
+
+    Why：刪除跨專案傳播仰賴 --clean opt-in（預設關，刻意安全設計避免誤刪）。本地
+    git rm tracked .claude/ 檔後若 push 未帶 --clean，遠端殘留孤兒，full overlay
+    sync 會把孤兒複製回下游（W10-049 / W1-003 根因）。
+    Consequence：孤兒長期累積（W1-009 實測遠端殘留 755 孤兒），下游反覆收到應已
+    刪除的檔。
+    Action：本函式偵測此情境，main 結尾以 stdout soft 警告提示可考慮帶 --clean
+    重推以傳播刪除；不阻擋本次 push（避免誤刪風險）。
+
+    參數:
+        temp_dir: 遠端 repo 的本地 clone 暫存根目錄
+        reference_dir: git archive 解出的本地 tracked 樹（staging）
+
+    傳回:
+        list[str]: 遠端存在但本地 tracked 樹已無的檔案相對路徑（已排序），無則空 list
+    """
+    CLEAN_EXCLUDE = {".git", "CHANGELOG.md", "VERSION", "README.md", "LICENSE", ".gitignore"}
+    orphans: list[str] = []
+    for file_path in sorted(temp_dir.rglob("*")):
+        if not file_path.is_file():
+            continue
+        rel = file_path.relative_to(temp_dir)
+        if any(part in CLEAN_EXCLUDE for part in rel.parts):
+            continue
+        if rel.name in CLEAN_EXCLUDE:
+            continue
+        # should_exclude 命中者（local-only / 憑證，可能屬其他專案）不算孤兒
+        if should_exclude(rel):
+            continue
+        if not (reference_dir / rel).exists():
+            orphans.append(str(rel))
+    return orphans
+
+
 def run_dry_run() -> None:
     """Dry-run 模式：只分析自上次推送以來的 commits 並輸出 auto-generated commit
     message，不 clone、不 push、不修改 VERSION/CHANGELOG。
@@ -1024,6 +1068,10 @@ def main() -> None:
         else:
             print_color(f"   no-change 檢查通過：{reason}", "green")
 
+    # 偵測「本地已 git rm 但未帶 --clean」的遠端孤兒清單（R2 soft 警告用）。
+    # 預設空 list；僅 not clean_mode 時於 staging 比對後填入，push 成功後結尾警告。
+    uncleaned_deletions: list[str] = []
+
     # 3. Clone remote repo (preserve history)
     print_color("Clone 遠端 repo（保留歷史）...")
     temp_dir = Path(tempfile.mkdtemp())
@@ -1089,6 +1137,11 @@ def main() -> None:
                 print_color("清理遠端過時檔案（對齊 git tracked 樹）...")
                 deleted = clean_stale_files(temp_dir, staging_dir)
                 print_color(f"   已清理 {deleted} 個遠端過時檔案", "green")
+            else:
+                # 未帶 --clean 時偵測本地已 git rm 但遠端殘留的孤兒（R2 soft 警告，
+                # 不阻擋、不改 --clean 預設）。在 staging rmtree 前計算並暫存，
+                # 待 push 成功後於結尾輸出提醒。
+                uncleaned_deletions = detect_uncleaned_deletions(temp_dir, staging_dir)
         finally:
             shutil.rmtree(staging_dir, ignore_errors=True)
 
@@ -1210,6 +1263,26 @@ def main() -> None:
         print_color(f"Remote: {REPO_URL}", "green")
         print_color("遠端 commit 歷史已保留", "green")
         print_color("注意: 根目錄 CLAUDE.md 未被推送（專案特定配置）")
+
+        # R2 soft 警告：本次未帶 --clean，但本地已 git rm 的 tracked .claude/ 檔
+        # 在遠端殘留為孤兒。僅提醒（不阻擋、不改 --clean 預設），避免誤刪風險。
+        if uncleaned_deletions:
+            preview = uncleaned_deletions[:10]
+            more = len(uncleaned_deletions) - len(preview)
+            print_color(
+                f"[提醒] 本次 push 未帶 --clean，偵測到 {len(uncleaned_deletions)} 個"
+                "本地已刪除但遠端殘留的 tracked .claude/ 檔（孤兒）：",
+                "yellow",
+            )
+            for rel in preview:
+                print_color(f"   - {rel}", "yellow")
+            if more > 0:
+                print_color(f"   ...（另有 {more} 個）", "yellow")
+            print_color(
+                "若要將這些刪除傳播到遠端（避免 full overlay sync 把孤兒複製回下游），"
+                "請重跑：sync-push --clean",
+                "yellow",
+            )
 
     except subprocess.TimeoutExpired:
         print_color("git 操作超時，請檢查網路連線", "red")

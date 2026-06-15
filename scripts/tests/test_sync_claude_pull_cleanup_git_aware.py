@@ -116,7 +116,7 @@ def test_overlay_dryrun_lists_deletions(tmp_path: Path) -> None:
 
     temp_dir = tmp_path / "fake_upstream"  # 空遠端 → 兩檔皆 will-delete
     temp_dir.mkdir()
-    will_overwrite, will_delete = sync_mod.preview_overlay_changes(
+    will_overwrite, will_delete, _will_skip = sync_mod.preview_overlay_changes(
         temp_dir, claude, remote_files=set(), preserve=set(), project_root=root
     )
 

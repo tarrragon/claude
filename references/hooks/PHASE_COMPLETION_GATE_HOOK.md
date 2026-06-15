@@ -283,10 +283,10 @@ ls -lt /Users/tarragon/Projects/book_overview_app/.claude/hook-logs/phase-comple
 
 ## 相關文件
 
-- [TDD 流程](./../pm-rules/tdd-flow.md) - 完整 TDD 流程說明
+- [TDD 流程](../../pm-rules/tdd-flow.md) - 完整 TDD 流程說明
 - @.claude/agents/cinnamon-refactor-owl.md - Phase 4 執行指南
-- [五重文件系統](./../references/document-system.md) - 文件系統規則
-- [Ticket 0.30.0-W2-004](./../../../docs/work-logs/v0.30.0/tickets/0.30.0-W2-004.md) - 原始 Ticket
+- [五重文件系統](../document-system.md) - 文件系統規則
+- Ticket 0.30.0-W2-004 - 原始 Ticket（歷史；舊版本工作日誌路徑已隨版本目錄重構失效）
 
 ---
 

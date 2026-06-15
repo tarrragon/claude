@@ -211,7 +211,7 @@ claim 完成後（或「5W1H 補全」完成後），PM 或代理人必須回答
 2. **查詢待處理 Ticket**：檢查是否有同版本的 pending/in_progress Ticket
 3. **使用 AskUserQuestion 確認收尾動作**
 
-> AskUserQuestion 場景定義和選項模板：.claude/rules/core/askuserquestion-rules.md
+> AskUserQuestion 場景定義和選項模板：.claude/pm-rules/askuserquestion-rules.md
 
 ---
 
@@ -272,14 +272,14 @@ claim 完成後（或「5W1H 補全」完成後），PM 或代理人必須回答
 | 已有對應 Ticket | error-pattern 相關修復已在現有 Ticket 中 |
 | 延後處理 | 記錄到 todolist.yaml，後續版本排程 |
 
-> 場景定義詳見：.claude/rules/core/askuserquestion-rules.md（場景 #17）
+> 場景定義詳見：.claude/pm-rules/askuserquestion-rules.md（場景 #17）
 
 ---
 
 ## 相關文件
 
 - .claude/pm-rules/ticket-lifecycle.md - 精簡版（常駐）
-- .claude/rules/core/askuserquestion-rules.md - AskUserQuestion 規則
+- .claude/pm-rules/askuserquestion-rules.md - AskUserQuestion 規則
 - .claude/methodologies/acceptance-criteria-methodology.md - 驗收條件方法論
 - .claude/methodologies/suggestion-tracking-methodology.md - 建議追蹤方法論
 

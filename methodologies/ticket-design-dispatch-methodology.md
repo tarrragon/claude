@@ -71,7 +71,7 @@ Ticket 設計對應 Clean Architecture 三原則：
 
 Ticket 機制支援 TDD：明確的階段產出、Phase 1 後可並行執行 Phase 2-3、每完成一個 Ticket 觸發即時 review。
 
-> TDD 四階段與 Ticket 的完整對應（含 Phase 完成標準、派工準備度檢查、完成後文件更新流程）見 `.claude/methodologies/tdd-ticket-integration-methodology.md` 與 `.claude/tdd-collaboration-flow.md`。
+> TDD 四階段與 Ticket 的完整對應（含 Phase 完成標準、派工準備度檢查、完成後文件更新流程）見 `.claude/methodologies/tdd-ticket-integration-methodology.md` 與 `.claude/methodologies/tdd-collaboration-flow.md`。
 
 ---
 
@@ -171,7 +171,7 @@ Ticket 機制下的三層文件結構：
 
 - [Atomic Ticket 方法論](./atomic-ticket-methodology.md) — 單一職責原則、四大檢查、拆分範例（核心參考）
 - [敏捷重構方法論](./agile-refactor-methodology.md) — 三重文件原則、代理人協作
-- [TDD 協作開發流程](../tdd-collaboration-flow.md) — 四階段流程、測試驅動
+- [TDD 協作開發流程](./tdd-collaboration-flow.md) — 四階段流程、測試驅動
 
 ---
 

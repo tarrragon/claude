@@ -338,7 +338,7 @@ Hook 失敗時也不阻塊 Session 啟動，確保系統穩定性。
 
 ## 參考資源
 
-- [Handoff 系統設計文件](.claude/hook-specs/ticket-handoff-hook-implementation.md)
+- [Handoff 設計原則方法論](.claude/methodologies/handoff-design-principle-methodology.md)
 - [Hook 系統方法論](.claude/methodologies/hook-system-methodology.md)
 
 ---

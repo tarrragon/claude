@@ -108,7 +108,7 @@ git diff --name-only
 
 ## 相關資源
 
-- `.claude/rules/guides/parallel-dispatch.md` - 並行派發指南
+- `.claude/pm-rules/parallel-dispatch.md` - 並行派發指南
 
 ## 標籤
 

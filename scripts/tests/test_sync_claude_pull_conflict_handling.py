@@ -104,7 +104,9 @@ def test_version_file_conflict_takes_upstream(tmp_path):
     project_root, upstream, base = _setup_version_conflict(tmp_path)
     claude = project_root / ".claude"
 
-    _applied, conflicts = pull.apply_upstream_delta(project_root, upstream, base)
+    _applied, conflicts, _residue = pull.apply_upstream_delta(
+        project_root, upstream, base
+    )
 
     assert (claude / "VERSION").read_text(encoding="utf-8") == "1.2.0\n"
     assert "VERSION" not in conflicts
@@ -115,7 +117,9 @@ def test_changelog_conflict_takes_upstream(tmp_path):
     project_root, upstream, base = _setup_version_conflict(tmp_path)
     claude = project_root / ".claude"
 
-    _applied, conflicts = pull.apply_upstream_delta(project_root, upstream, base)
+    _applied, conflicts, _residue = pull.apply_upstream_delta(
+        project_root, upstream, base
+    )
 
     assert "upstream bump" in (claude / "CHANGELOG.md").read_text(encoding="utf-8")
     assert "CHANGELOG.md" not in conflicts
@@ -154,7 +158,9 @@ def test_non_version_conflict_preserves_local(tmp_path):
     project_root, upstream, base = _setup_version_conflict(tmp_path)
     claude = project_root / ".claude"
 
-    _applied, conflicts = pull.apply_upstream_delta(project_root, upstream, base)
+    _applied, conflicts, _residue = pull.apply_upstream_delta(
+        project_root, upstream, base
+    )
 
     assert "rules/other.md" in conflicts
     assert (claude / "rules" / "other.md").read_text(encoding="utf-8") == "a\nLOCAL\nc\n"

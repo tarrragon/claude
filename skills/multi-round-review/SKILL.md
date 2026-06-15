@@ -36,7 +36,7 @@ metadata:
 
 最先用「規範遵循」frame、抓 surface 層問題。**Round 1-A 寫作規範 reviewer 啟動時、必須同步 invoke `compositional-writing` skill 的字句層 grep keyword bank**（正向陳述優先 / 口語修辭 / 地區用語 / 廢話前綴 / 裝飾符號）— 寫作規範 audit 漏這層、會把字句層問題推到 Round 2 才被 catch。常見三個 reviewer 平行 background：
 
-- **A: 寫作規範 audit** — AGENTS.md / markdown-writing-spec / compositional-writing 規範遵循
+- **A: 寫作規範 audit** — 專案寫作規範（如 AGENTS.md / markdown-writing-spec）/ compositional-writing 規範遵循
   - **字句層 grep（必跑）**：
     - 正向陳述優先：`rg "不[行可是要能該支對符夠必]|無法|沒[做有]|而非|而不是" <files>` — 不主導段落的少量負向（反例對照）可保留、主要敘述要正向
     - 口語修辭（#111）：`rg "其實|實務上|真的|碰巧|立刻撞牆|沒事" <files>`
@@ -125,7 +125,7 @@ Round 3 之後是否需要 Round 4？四個停止訊號齊備、停：
 2. **整合 punch list**：列嚴重 / 建議 / 不修三層、估每項修法成本。轉述 reviewer 報告進 punch list 時、保留原報告的嚴重度與義務模態 — 「必修」在摘要裡降級成「可改」、後續的修法範圍確認就建立在失真清單上；摘要壓縮要保留模態、不只保留內容
 3. **跟用戶確認修法範圍**：「修必修 + 建議全部修 / 只修必修 / 全部 backlog」用 AskUserQuestion 取得方向
 4. **拆 commit**：按 frame 拆 2-3 個 commit（如 commit 1 處理規範 frame finding、commit 2 處理 cadence frame）
-5. **驗證 + commit**：mdtools lint / cards / fmt 跑過、各 commit 帶清楚的修法描述
+5. **驗證 + commit**：專案 markdown 工具鏈（如 mdtools lint / cards / fmt）跑過、各 commit 帶清楚的修法描述
 
 ### 跨 batch 的 finding 升級
 
@@ -139,7 +139,7 @@ Round 3 之後是否需要 Round 4？四個停止訊號齊備、停：
 
 ## 跟既有 skill 的關係
 
-- [`case-first-module-workflow`](../case-first-module-workflow/SKILL.md) 的 Stage 4 含「agent team review」但偏 case-driven 單輪。Multi-round-review 補完跨輪 frame 切換維度、可以接在 case-first 的 Stage 5 之後或同時使用。
+- `case-first-module-workflow`（若專案已採用此 skill）的 Stage 4 含「agent team review」但偏 case-driven 單輪。Multi-round-review 補完跨輪 frame 切換維度、可以接在 case-first 的 Stage 5 之後或同時使用。
 - [`compositional-writing`](../compositional-writing/SKILL.md) 提供寫作原則（intent-revealing、grep-friendly）+ 字句層 grep keyword bank（正向陳述 / 口語修辭 / 地區用語 / 廢話前綴 / 裝飾符號）。**本 skill 啟動時應同步 invoke compositional-writing** — Round 1-A 寫作規範 reviewer 必須跑 compositional-writing 的字句 grep（見上）、Round 2-A cadence reviewer 引用其 multi-pass review 第 6 原則跟 cadence-homogenization 原則卡。兩個 skill 是垂直協同：multi-round-review 給 frame 切換結構、compositional-writing 給每輪 frame 的具體檢查清單。
 - **協同觸發**：用戶說「多輪審查 / 寫作 audit / batch review」時、兩個 skill 都該 surface — multi-round-review 規劃 frame、compositional-writing 提供每 frame 的 keyword bank。單獨用 multi-round-review 容易漏字句層、單獨用 compositional-writing 容易漏跨輪 frame 規劃。
 

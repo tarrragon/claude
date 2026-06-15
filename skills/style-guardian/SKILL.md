@@ -215,7 +215,7 @@ state = state.copyWith(errorMessage: ErrorHandler.getUserMessage(exception));
 - `e.toString()` for unknown system exceptions
 - String interpolation with i18n: `context.l10n!.errorWithCode(code)`
 
-**Related**: [FLUTTER.md - ViewModel 層使用者訊息規範](../../../FLUTTER.md)
+**Related**（Flutter 專案適用）: ViewModel 層使用者訊息規範見專案根目錄 `FLUTTER.md`（僅 Flutter 專案存在；非 Flutter 專案略過 Violation 6）
 
 ---
 
@@ -245,12 +245,15 @@ The style checker is integrated into PostEdit Hook:
 
 ## Related Documentation
 
-### Project Files
-- [UI Configuration](../../../lib/core/ui/ui_config.dart)
-- [Flat Design Config](../../../lib/core/ui/flat_design_config.dart)
-- [Responsive Config](../../../lib/core/ui/responsive_config.dart)
-- [UI Design Specification](../../../docs/ui_design_specification.md)
-- [i18n Guide](../../../docs/i18n_guide.md)
+### Project Files（Flutter 專案適用）
+
+以下路徑為 Flutter 專案的設定與規格檔；非 Flutter 專案無對應檔案，請替換為自身專案的等價設定來源：
+
+- UI Configuration: `lib/core/ui/ui_config.dart`
+- Flat Design Config: `lib/core/ui/flat_design_config.dart`
+- Responsive Config: `lib/core/ui/responsive_config.dart`
+- UI Design Specification: `docs/ui_design_specification.md`
+- i18n Guide: `docs/i18n_guide.md`
 
 ### Reference Files (in this SKILL)
 - [Color System Reference](./references/color-system.md)

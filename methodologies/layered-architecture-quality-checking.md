@@ -60,15 +60,15 @@ test/
 ### 模式 1：UI 層包含業務邏輯
 
 ```dart
-// ❌ 違規：Widget 中包含業務邏輯
+// 錯誤：Widget 中包含業務邏輯（違規）
 class BookListWidget extends StatelessWidget {
   Widget build(BuildContext context) {
-    final books = _filterNewBooks(_getAllBooks());  // ❌
+    final books = _filterNewBooks(_getAllBooks());  // 錯誤
     return ListView.builder(...);
   }
 }
 
-// ✅ 正確：Widget 只負責渲染
+// 正確：Widget 只負責渲染
 class BookListWidget extends StatelessWidget {
   final BookListController controller;
   Widget build(BuildContext context) {
@@ -80,17 +80,17 @@ class BookListWidget extends StatelessWidget {
 ### 模式 2：Controller 包含業務規則
 
 ```dart
-// ❌ 違規：Controller 包含核心業務規則
+// 錯誤：Controller 包含核心業務規則（違規）
 class BookController {
   Future<void> addBook(Book book) async {
-    if (book.isbn.length != 13) {  // ❌ 業務規則
+    if (book.isbn.length != 13) {  // 錯誤：業務規則
       throw ValidationException('ISBN 必須為 13 碼');
     }
     await bookRepository.save(book);
   }
 }
 
-// ✅ 正確：Controller 只呼叫 UseCase
+// 正確：Controller 只呼叫 UseCase
 class BookController {
   final AddBookUseCase addBookUseCase;
   Future<void> addBook(Book book) async {
@@ -102,14 +102,14 @@ class BookController {
 ### 模式 3：UseCase 直接依賴具體實作
 
 ```dart
-// ❌ 違規：依賴具體實作
+// 錯誤：依賴具體實作（違規）
 class SearchBookUseCase {
-  final SqliteBookRepository repository;  // ❌
+  final SqliteBookRepository repository;  // 錯誤
 }
 
-// ✅ 正確：依賴抽象介面
+// 正確：依賴抽象介面
 class SearchBookUseCase {
-  final IBookRepository repository;  // ✅
+  final IBookRepository repository;  // 正確
 }
 ```
 
@@ -121,7 +121,7 @@ class SearchBookUseCase {
 
 ```bash
 #!/bin/bash
-echo "🔍 執行層級隔離檢查..."
+echo "[CHECK] 執行層級隔離檢查..."
 
 # 1. 檢查單層修改原則
 ./scripts/check_single_layer_modification.sh || exit 1
@@ -129,7 +129,7 @@ echo "🔍 執行層級隔離檢查..."
 # 2. 檢查測試覆蓋率
 flutter test --coverage || exit 1
 
-echo "✅ 所有檢查通過"
+echo "[OK] 所有檢查通過"
 ```
 
 ### CI/CD 整合

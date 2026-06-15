@@ -305,7 +305,7 @@ CONTINUATION_KEYWORDS = [
 
 ### 規則文檔
 - [decision-tree]($CLAUDE_PROJECT_DIR/.claude/pm-rules/decision-tree.md) - 決策樹規則
-- [parallel-dispatch]($CLAUDE_PROJECT_DIR/.claude/rules/guides/parallel-dispatch.md) - 並行派發指南
+- [parallel-dispatch]($CLAUDE_PROJECT_DIR/.claude/pm-rules/parallel-dispatch.md) - 並行派發指南
 
 ### 設計文檔
 - [parallel-suggestion-hook-design.md](#) - 詳細設計

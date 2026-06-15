@@ -143,8 +143,8 @@ python3 .claude/hooks/lib/hook_output_validator.py --verbose
 ## 相關文件
 
 - `.claude/error-patterns/implementation/IMP-055-hook-stdout-plain-text-breaks-json-validation.md` — 完整錯誤模式（含失敗變體）
-- `.claude/error-patterns/implementation/IMP-051-new-hook-registration-check-missed-silent-inactive.md` — Hook 未註冊
-- `.claude/error-patterns/implementation/IMP-054-hook-permission-not-granted.md` — Hook 權限問題
+- `.claude/error-patterns/implementation/IMP-051-new-hook-not-registered.md` — Hook 未註冊
+- `.claude/error-patterns/implementation/IMP-054-hook-missing-execute-permission.md` — Hook 權限問題
 - `.claude/hooks/hook_utils.py` — 統一日誌與例外處理工具
 - `.claude/hooks/lib/hook_output_validator.py` — 本規範的自動驗證工具
 

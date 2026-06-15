@@ -58,6 +58,20 @@ You are a {role description in English}. Your core mission is {mission statement
 
 ---
 
+## 適用情境
+
+<!-- 規範強制段（精確標題，勿改名）：對齊 .claude/references/agent-definition-standard-details.md 區塊 3。AgentDefCheck 驗證式 grep -E "^## (允許產出|禁止行為|適用情境)" 預期命中 3。 -->
+
+明列何時應派發此代理人，必含三要素：
+
+| 必含元素 | 內容 |
+|---------|------|
+| TDD Phase 標註 | Phase 0/1/2/3a/3b/4 之一或多個；獨立任務類型標 N/A |
+| 觸發條件 | {任務特徵，例「測試紅燈時」「需要多視角分析時」} |
+| 排除情境 | {何時不該派發此代理人，建議改派發誰} |
+
+---
+
 ## 核心職責
 
 ### 1. {職責1名稱}
@@ -84,7 +98,34 @@ You are a {role description in English}. Your core mission is {mission statement
 
 ---
 
+## 允許產出
+
+<!-- 規範強制段（精確標題，勿改名）：對齊 .claude/references/agent-definition-standard-details.md 區塊 1。 -->
+
+明列此代理人可產生的產出類型，必含三要素：
+
+| 必含元素 | 內容 |
+|---------|------|
+| 檔案類別 | {例 `.py` / `.md` / `tests/` 下測試檔} |
+| 操作類型 | {例 Edit / Write / 執行測試 / 產出分析報告} |
+| 路徑範圍 | {與 frontmatter 的 tools / permissionMode 對應} |
+
+> 實作類代理人須在此段或通用責任段引用「Ticket body 填寫責任」與「Ticket 完成（收尾）責任」（見 `.claude/references/agent-definition-standard-details.md`「執行責任」兩章）。
+
+---
+
 ## 禁止行為
+
+<!-- 規範強制段（精確標題，勿改名）：對齊 .claude/references/agent-definition-standard-details.md 區塊 2。 -->
+
+明列此代理人不可做的事，必含下列各類元素：
+
+| 必含元素 | 內容 |
+|---------|------|
+| 禁止檔案類別 | {例「禁止修改 `src/` 下產品程式碼」} |
+| 禁止操作類型 | {例「禁止 git commit」「禁止跨 ticket 範圍編輯程式碼」} |
+| 禁止職責越界 | {例「禁止替代 PM 進行派發決策」} |
+| 禁止跨 ticket 物件操作 | 禁止對非派發範圍的 ticket 執行 `ticket track close` / `set-status` / 編輯他人 ticket md（即使發現重複或衝突，應透過審查報告 / Exit Status / NeedsContext 上報 PM）。即使 frontmatter 無 Edit/Write 工具，此純文字禁令仍必含——代理人仍可透過 Bash 執行 `ticket track close`。 |
 
 ### 絕對禁止
 
@@ -227,23 +268,33 @@ You are a {role description in English}. Your core mission is {mission statement
 - `事件回應專家。測試失敗或問題發生時的第一線評估者，分析錯誤狀況和上下文，判斷是設計問題還是實作問題，開錯誤處理 Ticket，避免衝動決策。Skip-gate 核心解決方案。`
 - `TDD 前置審查專家。在 TDD 開始前審查系統一致性、檢視/撰寫需求文件、防止重複造輪子、確保 ticket 與大系統設計一致。負責系統級審查，不負責單一功能設計。`
 
-### 觸發條件（必要）
+### 規範強制三區塊（必要，精確標題不可改名）
 
-明確列出代理人的觸發條件，包含：
+`.claude/agents/*.md` 主文必須含以下三個精確標題的 `##` 區塊，使 PM 派發前可查表確認職責邊界，並為 Hook 解析職責提供穩定錨點。權威來源 `.claude/references/agent-definition-standard-details.md` 區塊 1/2/3。
+
+| 精確標題 | 必含元素 | 對應規範 |
+|---------|---------|---------|
+| `## 允許產出` | 檔案類別 / 操作類型 / 路徑範圍 | 區塊 1 |
+| `## 禁止行為` | 禁止檔案類別 / 禁止操作類型 / 禁止職責越界 / 禁止跨 ticket 物件操作 | 區塊 2 |
+| `## 適用情境` | TDD Phase 標註 / 觸發條件 / 排除情境 | 區塊 3 |
+
+驗證式：`grep -E "^## (允許產出|禁止行為|適用情境)" .claude/agents/<agent>.md | wc -l`，預期輸出 `3`。
+
+> 概念對應的 `## 核心職責` / `## 觸發條件` 為豐富補充段，不取代上述精確標題；W8-016 執法 hook 驗三區塊存在性，本範本確保內容到位。
+
+### 觸發條件（補充）
+
+`## 觸發條件` 為 `## 適用情境` 的豐富補充段，可包含：
 - 強制觸發情境
 - 建議觸發情境
 - 觸發關鍵字（如適用）
 
-### 核心職責（必要）
+### 核心職責（補充）
 
-描述代理人的主要職責，每個職責包含：
+`## 核心職責` 為 `## 允許產出` 的豐富補充段，描述代理人的主要職責，每個職責包含：
 - 目標說明
 - 執行步驟或流程
 - 產出物（如適用）
-
-### 禁止行為（必要）
-
-明確列出代理人不應該做的事情，防止越權。
 
 ### 輸出格式（建議）
 
@@ -277,9 +328,12 @@ You are a {role description in English}. Your core mission is {mission statement
 ### 內容檢查
 - [ ] 有英文角色定義
 - [ ] 有中文定位說明
+- [ ] 規範強制三區塊精確標題齊全（`grep -E "^## (允許產出|禁止行為|適用情境)" <agent>.md | wc -l` 輸出 3）
+- [ ] `## 允許產出` 含檔案類別 / 操作類型 / 路徑範圍
+- [ ] `## 禁止行為` 含禁止跨 ticket 物件操作（即使無 Edit/Write 工具）
+- [ ] `## 適用情境` 含 TDD Phase 標註 / 觸發條件 / 排除情境
 - [ ] 觸發條件表格完整
 - [ ] 核心職責有明確步驟
-- [ ] 禁止行為有列出
 - [ ] 與其他代理人邊界明確
 
 ### 流程檢查
@@ -330,10 +384,9 @@ You are a {role description in English}. Your core mission is {mission statement
 - 使用與 name 相同的 kebab-case
 - 範例：`saffron-system-analyst.md`
 
-### 觸發條件規則檔案
-- 位置：`.claude/rules/dispatch-rules/`
-- 命名：`{agent-name}.md`
-- 範例：`system-analyst.md`
+### 觸發條件規則
+- 位置：代理人定義主文（`.claude/agents/{name}.md`）的「適用情境」區塊
+- 說明：派發觸發條件併入單一代理人定義檔，不再使用獨立的派發規則目錄
 
 ---
 
@@ -343,17 +396,15 @@ You are a {role description in English}. Your core mission is {mission statement
 
 | 文件 | 說明 | 位置 |
 |------|------|------|
-| Task 工具版本 | 完整的代理人定義（詳細指令） | `.claude/agents/` |
-| 派發規則版本 | 精簡的派發規則摘要 | `.claude/rules/dispatch-rules/` |
-| 職責矩陣 | 更新職責邊界 | `.claude/rules/dispatch-rules/overview.md` |
+| 代理人定義 | 完整的代理人定義（含三區塊：允許產出/禁止行為/適用情境） | `.claude/agents/{name}.md` |
 | CLAUDE.md | 更新代理人列表（如適用） | `CLAUDE.md` |
 | 決策流程 | 更新派發規則（如適用） | `.claude/pm-rules/decision-tree.md` |
 
-### 雙目錄建立檢查
+### 建立檢查
 
-- [ ] `.claude/agents/{name}.md` 已建立（Task 工具版本）
-- [ ] `.claude/rules/dispatch-rules/{name}.md` 已建立（派發規則版本）
-- [ ] `.claude/rules/dispatch-rules/overview.md` 已更新
+- [ ] `.claude/agents/{name}.md` 已建立（含三區塊：允許產出/禁止行為/適用情境）
+- [ ] CLAUDE.md 代理人列表已更新（如適用）
+- [ ] `.claude/pm-rules/decision-tree.md` 派發規則已更新（如適用）
 
 ---
 

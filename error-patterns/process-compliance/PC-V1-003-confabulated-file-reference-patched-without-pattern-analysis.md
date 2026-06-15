@@ -34,7 +34,7 @@
 
 | # | 寫入位置 | 錯誤參照 | 實際檔名 | 聯想來源 | 抓到的防護 | PM 處置 |
 |---|---------|---------|---------|---------|-----------|---------|
-| 1 | ticket `where.files` | `.claude/pm-rules/pm-role-details.md` | `behavior-loop-details.md` | pm-role.md 的「詳細版」慣用命名模式 | claim 檢查清單（驗證 where.files 存在） | set-where 修正後繼續，無模式分析 |
+| 1 | ticket `where.files` | `.claude/pm-rules/pm-role-details.md` | `behavior-loop-details.md` | pm-role.md 的「詳細版」慣用命名模式 | claim 檢查清單（驗證 where.files 存在） | set-where 修正後繼續，無模式分析 <!-- broken-link-exempt: documented-error --> |
 | 2 | ticket `where` | `PC-069-batch-script-over-edit-loop.md` | `PC-069-batch-mechanical-edit-when-subagent-blocked.md` | memory slug `feedback_batch_script_over_edit_loop` 直譯 | 派發前 `ls` 驗證 | 同上——二度發生仍未觸發學習記錄，由用戶指出 |
 
 ## 防護措施

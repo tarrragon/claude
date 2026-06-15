@@ -1,6 +1,6 @@
 # AskUserQuestion 場景 1-17 詳細說明
 
-本文件為 `.claude/rules/core/askuserquestion-rules.md` 的 reference，包含各場景的完整操作細節。
+本文件為 `.claude/pm-rules/askuserquestion-rules.md` 的 reference，包含各場景的完整操作細節。
 
 ---
 
@@ -394,7 +394,7 @@ commit-handoff-hook 解析 commit message 前綴，依下表決定是否觸發 #
 
 ## 相關文件
 
-- .claude/rules/core/askuserquestion-rules.md - AskUserQuestion 規則主檔（Source of Truth）
+- .claude/pm-rules/askuserquestion-rules.md - AskUserQuestion 規則主檔（Source of Truth）
 - .claude/references/ticket-askuserquestion-templates.md - AskUserQuestion 模板
 
 ---

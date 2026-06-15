@@ -368,6 +368,8 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-V1-004 | Hook 注入訊息受眾錯配（PM-only 訊息注入 Subagent Context） | 高 | v1.0.0 |
 | PC-V1-005 | Acceptance 量化目標設定未考慮 substance 密度上限 | 中 | v1.0.0 |
 | PC-V1-006 | 規則變更未盤點既有規則矛盾即上線（有執法者的一方勝出） | 中 | v1.0.0 |
+| PC-V1-007 | 確定性 ≠ 準確性 — 量測工具確定化未驗證複現原始分析意圖 | 高 | v1.0.0 |
+| PC-V1-008 | lockfile 版本漂移修正被 auto-preserve worktree commit 孤立並險遭當噪音丟棄 | 中 | v1.0.0 |
 
 ---
 

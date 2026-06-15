@@ -117,7 +117,7 @@ W10-115（lavender CLI flag）與 W14-036（basil ANA hook 名稱）共享相同
 
 - `.claude/agents/AGENT_PRELOAD.md`（通用層防護條款，規則 8）
 - `.claude/agents/lavender-interface-designer.md`（待補強既有行為驗證規範）
-- `.claude/error-patterns/process-compliance/PC-068-phase3a-existing-utility-scan.md`（pepper Phase 3a 既有 utility 掃描，本 PC 的姊妹模式）
+- `.claude/error-patterns/process-compliance/PC-068-phase3a-planning-new-utility-without-scan.md`（pepper Phase 3a 既有 utility 掃描，本 PC 的姊妹模式）
 
 ## 學習要點
 

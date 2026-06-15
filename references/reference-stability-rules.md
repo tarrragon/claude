@@ -346,7 +346,7 @@ comment（對照，允許保留）：
 |---------|---------|------|
 | 專案錯誤處理體系（含 `src/core/errors/` 路徑） | `docs/project-conventions.md` | 含 `src/` 路徑與專案 enum 清單，屬步驟 1 命中 |
 | Chrome Extension Manifest V3 通用限制 | `.claude/references/chrome-extension-quickref.md` | 通用限制速查表（require/global/Storage API），泛化後保留 |
-| Flutter 專案的命名規範 + 通用 Dart 風格 | 拆檔：專案命名放 `docs/flutter-naming-conventions.md`、通用 Dart 風格放 `.claude/references/dart-style-quickref.md` | 混合內容拆檔範例 |
+| Flutter 專案的命名規範 + 通用 Dart 風格 | 拆檔：專案命名放 `docs/` 下 flutter-naming-conventions 檔、通用 Dart 風格放 `.claude/references/` 下 dart-style 速查檔 | 混合內容拆檔範例（路徑為示意） |
 
 ---
 

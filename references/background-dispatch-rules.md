@@ -78,7 +78,7 @@ ticket track list --status in_progress
 git diff --stat  # 驗證實際變更
 ```
 
-> 完整檢查清單：.claude/rules/guides/parallel-dispatch.md（並行派發後驗證章節）
+> 完整檢查清單：.claude/pm-rules/parallel-dispatch.md（並行派發後驗證章節）
 
 ---
 
@@ -204,7 +204,7 @@ PM 立刻切去做下一個 Ticket 的 Context Bundle 準備
 ## 相關文件
 
 - .claude/pm-rules/decision-tree.md - 派發模式選擇規則
-- .claude/rules/guides/parallel-dispatch.md - 並行派發指南
+- .claude/pm-rules/parallel-dispatch.md - 並行派發指南
 - .claude/rules/core/pm-role.md - 主線程管理哲學
 
 ---

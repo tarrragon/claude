@@ -53,7 +53,7 @@
 {
   "hookSpecificOutput": {
     "hookEventName": "UserPromptSubmit",
-    "additionalContext": "============================================================\n[並行執行建議]\n============================================================\n\n偵測到「繼續任務鏈」請求。\n\n以下 N 個任務可並行執行：\n- {Ticket-ID-1}: {標題} ({type}) [{files}]\n- {Ticket-ID-2}: {標題} ({type}) [{files}]\n\n並行安全確認：\n- [x] 檔案無重疊\n- [x] 無依賴關係\n\n建議主線程主動建議並行派發這些任務。\n\n詳見: .claude/rules/guides/parallel-dispatch.md\n============================================================\n"
+    "additionalContext": "============================================================\n[並行執行建議]\n============================================================\n\n偵測到「繼續任務鏈」請求。\n\n以下 N 個任務可並行執行：\n- {Ticket-ID-1}: {標題} ({type}) [{files}]\n- {Ticket-ID-2}: {標題} ({type}) [{files}]\n\n並行安全確認：\n- [x] 檔案無重疊\n- [x] 無依賴關係\n\n建議主線程主動建議並行派發這些任務。\n\n詳見: .claude/pm-rules/parallel-dispatch.md\n============================================================\n"
   }
 }
 ```
@@ -255,7 +255,7 @@ cat .claude/hook-logs/parallel-suggestion/analysis-$(date +%Y%m%d).log
 
 ### 規則參考
 - [decision-tree](.claude/pm-rules/decision-tree.md) - 第四層、第四層半（並行化評估）
-- [parallel-dispatch](.claude/rules/guides/parallel-dispatch.md) - 並行派發指南
+- [parallel-dispatch](.claude/pm-rules/parallel-dispatch.md) - 並行派發指南
 - [ticket-lifecycle](.claude/pm-rules/ticket-lifecycle.md) - Ticket 生命週期
 
 ### 方法論

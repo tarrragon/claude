@@ -1,538 +1,168 @@
-# 行為驅動測試方法論體系導覽
+# 方法論體系導覽
 
-> **測試是可執行的需求規格書，而非驗證實作的工具。**
-> — Kent Beck, Martin Fowler
+> **方法論 = 30 秒可複習的明確判斷標準與操作清單**
 
-## 方法論體系概覽
-
-本目錄包含三篇互補的測試方法論，共同構成完整的行為驅動測試體系。
-
-```text
-行為驅動測試體系架構
-│
-├─ 理論基礎層（WHY）
-│  └─ behavior-first-tdd-methodology.md
-│     揭示TDD痛點根源，提供歷史證據
-│
-├─ 實作格式層（HOW）
-│  └─ bdd-testing-methodology.md
-│     Given-When-Then格式規範
-│
-└─ 決策執行層（WHEN）
-   └─ hybrid-testing-strategy-methodology.md
-      分層測試決策樹，量化覆蓋率指標
-```
+本目錄包含 52 個方法論檔案，依功能家族分組導覽如下。各方法論遵循 `framework-meta-methodology` 定義：30 秒可複習（< 1 頁），提供明確判斷標準供 AI 執行。
 
 ---
 
-## 三篇方法論的角色定位
+## 1. TDD & 測試家族
 
-### 1. Behavior-First TDD 方法論（理論基礎 - WHY）
-
-**檔案**: [`behavior-first-tdd-methodology.md`](./behavior-first-tdd-methodology.md)
-
-**核心定位**：揭示TDD痛點的根本原因，說明測試應該耦合到行為而非結構。
-
-**主要內容**：
-- **TDD痛點的根本原因** - 為什麼TDD變得痛苦？
-- **歷史證據** - Kent Beck、Martin Fowler、Google的實踐經驗
-- **Sociable vs Solitary Unit Tests** - 兩種測試風格的完整對比
-- **Test-First vs Test-Last** - 反饋循環的差異分析
-
-**核心概念**：
-- **Sociable Unit Tests** - Module層級測試，只Mock外部依賴
-- **Solitary Unit Tests** - Class層級測試，Mock所有協作者
-- **Executable Specifications** - 測試是可執行的需求規格書
-- **Coupling to Behavior** - 測試耦合到行為而非結構
-
-**適合閱讀時機**：
-- 想理解「為什麼TDD會痛苦」
-- 需要說服團隊採用行為驅動測試
-- 想了解TDD的歷史演進和流派差異
-
-**關鍵引用**：
-> "Tests should be coupled to the behavior of the code and decoupled from the structure of code."
-> — Kent Beck, Test Driven Development By Example
+| 方法論 | 用途 |
+|--------|------|
+| [behavior-first-tdd-methodology](./behavior-first-tdd-methodology.md) | TDD 痛點根源與 Sociable Unit Tests 理論基礎 |
+| [bdd-testing-methodology](./bdd-testing-methodology.md) | Given-When-Then 格式規範與 Clean Architecture 整合 |
+| [hybrid-testing-strategy-methodology](./hybrid-testing-strategy-methodology.md) | 分層測試決策樹（Layer 1-5）與量化覆蓋率指標 |
+| [tdd-collaboration-flow](./tdd-collaboration-flow.md) | TDD 四階段流程（Phase 0-4）與代理人派發規範 |
+| [tdd-ticket-integration-methodology](./tdd-ticket-integration-methodology.md) | TDD 與 Ticket 生命週期整合 |
+| [three-phase-reflection-methodology](./three-phase-reflection-methodology.md) | 測試失敗三階段反思（隔離問題、重現最小案例、根因分析）|
+| [test-assertion-design-methodology](./test-assertion-design-methodology.md) | 斷言設計判斷框架（flaky 與設計品質問題識別）|
+| [legacy-code-test-rebuild-methodology](./legacy-code-test-rebuild-methodology.md) | 遺留程式碼測試重建策略 |
 
 ---
 
-### 2. BDD 測試方法論（實作格式 - HOW）
+## 2. Ticket 管理家族
 
-**檔案**: [`bdd-testing-methodology.md`](./bdd-testing-methodology.md)
-
-**核心定位**：定義Given-When-Then格式規範，整合到Clean Architecture和TDD四階段流程。
-
-**主要內容**：
-- **Given-When-Then結構** - BDD測試場景撰寫規範
-- **Clean Architecture整合** - 分層測試策略（Layer 1-5）
-- **TDD四階段整合** - Phase 1-4的BDD測試設計
-- **核心原則** - 測試行為而非實作、UseCase層BDD、Mock策略
-
-**核心概念**：
-- **Given-When-Then** - 業務場景描述格式
-- **UseCase層測試** - BDD的核心應用層
-- **Mock策略** - 只Mock外層依賴（Repository, Service）
-- **不Mock Domain** - 使用真實的Domain Entity和Value Object
-
-**適合閱讀時機**：
-- 需要撰寫BDD測試時
-- 想了解如何整合BDD到TDD流程
-- 需要學習Given-When-Then格式
-
-**關鍵章節**：
-- 第二章：BDD核心原則
-- 第三章：BDD與Clean Architecture整合
-- 第四章：BDD與TDD四階段流程整合
-- 第八章：Given-When-Then撰寫規範
-- 第九章：正反範例
+| 方法論 | 用途 |
+|--------|------|
+| [atomic-ticket-methodology](./atomic-ticket-methodology.md) | Atomic Ticket 設計原則（單一責任、可驗收、獨立）|
+| [ticket-design-dispatch-methodology](./ticket-design-dispatch-methodology.md) | Ticket 設計與派發決策樹 |
+| [layered-ticket-methodology](./layered-ticket-methodology.md) | Layered Ticket 設計方法論 |
+| [group-ticket-design-methodology](./group-ticket-design-methodology.md) | Group Ticket 設計與拆分策略 |
+| [ticket-lifecycle-management-methodology](./ticket-lifecycle-management-methodology.md) | Ticket 生命週期管理（create → complete）|
+| [csv-ticket-tracking-methodology](./csv-ticket-tracking-methodology.md) | CSV Ticket 追蹤機制（已廢棄，改用 ticket CLI）|
+| [frontmatter-ticket-tracking-methodology](./frontmatter-ticket-tracking-methodology.md) | Frontmatter Ticket 追蹤機制 |
+| [acceptance-criteria-methodology](./acceptance-criteria-methodology.md) | 驗收條件設計原則（SMART 原則、可勾選）|
+| [handoff-design-principle-methodology](./handoff-design-principle-methodology.md) | 任務交接設計原則（純指針，禁含任務描述）|
 
 ---
 
-### 3. 混合測試策略方法論（決策執行 - WHEN）
+## 3. Hook 系統家族
 
-**檔案**: [`hybrid-testing-strategy-methodology.md`](./hybrid-testing-strategy-methodology.md)
-
-**核心定位**：為每層Ticket提供明確的測試設計指引，包含分層測試決策樹和量化覆蓋率指標。
-
-**主要內容**：
-- **分層測試決策樹** - Layer 1-5測試策略判斷流程
-- **量化覆蓋率指標** - 每層的測試覆蓋率要求
-- **Ticket測試策略設計** - 整合到Ticket設計流程
-- **技術性檢查清單** - Null、空集合、邊界條件、異常處理
-
-**核心概念**：
-- **Layer 1 (UI)** - 整合測試（關鍵流程）
-- **Layer 2 (Behavior)** - 單元測試（複雜轉換）
-- **Layer 3 (UseCase)** - BDD測試（所有場景）
-- **Layer 5 (Domain)** - 單元測試（複雜邏輯）
-
-**適合閱讀時機**：
-- 規劃Ticket的測試策略時
-- 不確定該用哪種測試方法時
-- 需要量化測試覆蓋率指標時
-
-**關鍵章節**：
-- 第三章：分層測試決策樹
-- 第四章：各層測試策略詳解
-- 第五章：測試覆蓋率量化指標
-- 第六章：Ticket測試策略設計
-- 第七章：技術性測試檢查清單
+| 方法論 | 用途 |
+|--------|------|
+| [hook-system-methodology](./hook-system-methodology.md) | Hook 系統架構與設計原則 |
+| [rule-layer-ssot-before-hook-layer-methodology](./rule-layer-ssot-before-hook-layer-methodology.md) | 規則層 SSOT 優先於 Hook 層原則 |
 
 ---
 
-## 閱讀順序建議
+## 4. 品質與架構家族
 
-### 新手路徑（第一次接觸行為驅動測試）
-
-建議按照「理論 → 格式 → 決策」的順序閱讀：
-
-**Step 1: 理解痛點和原則**
-- 閱讀：[`behavior-first-tdd-methodology.md`](./behavior-first-tdd-methodology.md)
-- 重點章節：第1章（TDD痛點）、第2章（測試本質）、第3章（Sociable vs Solitary）
-- 目標：理解「為什麼測試要耦合到行為」
-
-**Step 2: 學習撰寫格式**
-- 閱讀：[`bdd-testing-methodology.md`](./bdd-testing-methodology.md)
-- 重點章節：第2章（BDD核心原則）、第8章（Given-When-Then規範）、第9章（正反範例）
-- 目標：學會撰寫Given-When-Then測試
-
-**Step 3: 應用決策指引**
-- 閱讀：[`hybrid-testing-strategy-methodology.md`](./hybrid-testing-strategy-methodology.md)
-- 重點章節：第3章（決策樹）、第4章（各層策略）、第6章（Ticket設計）
-- 目標：知道什麼時候用什麼測試方法
+| 方法論 | 用途 |
+|--------|------|
+| [cognitive-load-design-methodology](./cognitive-load-design-methodology.md) | 認知負擔設計原則（降低閱讀者負擔）|
+| [natural-language-programming-methodology](./natural-language-programming-methodology.md) | 自然語言程式設計（讓程式碼像文章）|
+| [clean-architecture-implementation-methodology](./clean-architecture-implementation-methodology.md) | Clean Architecture 實作方法論（分層依賴倒置）|
+| [layered-architecture-quality-checking](./layered-architecture-quality-checking.md) | 分層架構品質檢查清單 |
+| [comment-writing-methodology](./comment-writing-methodology.md) | 註解撰寫原則（業務情境聚焦、抽象層級貼合）|
+| [code-smell-quality-gate-methodology](./code-smell-quality-gate-methodology.md) | Code Smell 品質閘門（識別與修復）|
+| [design-driven-refactoring-methodology](./design-driven-refactoring-methodology.md) | 設計驅動重構方法論 |
+| [agile-refactor-methodology](./agile-refactor-methodology.md) | 敏捷重構方法論（增量式改善）|
+| [error-fix-refactor-methodology](./error-fix-refactor-methodology.md) | 錯誤修復重構方法論 |
+| [package-import-methodology](./package-import-methodology.md) | 套件 import 管理方法論 |
 
 ---
 
-### 老手路徑（快速參考）
+## 5. 流程與協作家族
 
-根據具體需求快速查找：
-
-| 需求場景 | 參考方法論 | 關鍵章節 |
-|---------|-----------|---------|
-| 需要理論依據說服團隊 | Behavior-First TDD | 第1章、第3章、第5章 |
-| 需要撰寫UseCase測試 | BDD測試方法論 | 第8章、第9章 |
-| 需要撰寫Domain測試 | 混合測試策略 | 第4.5節 |
-| 不確定測試類型 | 混合測試策略 | 第3章決策樹 |
-| 需要檢查測試品質 | BDD測試方法論 | 第7章 |
-| 需要設計Ticket測試 | 混合測試策略 | 第6章 |
-| 需要Code Review檢查 | 混合測試策略 | 第9章 |
+| 方法論 | 用途 |
+|--------|------|
+| [5w1h-self-awareness-methodology](./5w1h-self-awareness-methodology.md) | 5W1H 自我感知方法論（任務明確性檢查）|
+| [claude-self-check-methodology](./claude-self-check-methodology.md) | Claude 自我檢查方法論（回應前品質確認）|
+| [friction-management-methodology](./friction-management-methodology.md) | 摩擦力管理方法論（開發流程階段摩擦力曲線）|
+| [migration-methodology](./migration-methodology.md) | 資料遷移方法論 |
+| [business-layer-i18n-management-methodology](./business-layer-i18n-management-methodology.md) | 業務層 i18n 管理方法論 |
+| [lsp-first-development-methodology](./lsp-first-development-methodology.md) | LSP 優先開發方法論 |
+| [instant-review-mechanism-methodology](./instant-review-mechanism-methodology.md) | 即時審查機制方法論 |
 
 ---
 
-### 問題導向路徑
+## 6. 分析與反思家族
 
-根據遇到的問題直接查找解決方案：
-
-**問題 1: 「我不知道該測試什麼」**
-- 閱讀：`behavior-first-tdd-methodology.md` → 第2章（測試本質）
-- 答案：測試需求行為而非實作細節
-
-**問題 2: 「重構時測試總是破裂」**
-- 閱讀：`behavior-first-tdd-methodology.md` → 第3章（Sociable vs Solitary）
-- 答案：測試耦合到結構了，應該耦合到行為
-
-**問題 3: 「測試程式碼量是production code的3倍」**
-- 閱讀：`behavior-first-tdd-methodology.md` → 第3.5節（對比總結）
-- 答案：Solitary Unit Tests導致大量Mock，改用Sociable Unit Tests
-
-**問題 4: 「不知道Given-When-Then怎麼寫」**
-- 閱讀：`bdd-testing-methodology.md` → 第8章（撰寫規範）
-- 答案：完整的Given-When-Then格式規範和範例
-
-**問題 5: 「Layer 2的簡單映射要不要測試？」**
-- 閱讀：`hybrid-testing-strategy-methodology.md` → 第4.2節（Behavior層策略）
-- 答案：簡單映射不需要獨立測試，由UseCase層測試覆蓋
-
-**問題 6: 「測試覆蓋率要求是多少？」**
-- 閱讀：`hybrid-testing-strategy-methodology.md` → 第5章（量化指標）
-- 答案：UseCase 100%場景、Domain 100%程式碼、整體>=80%
-
-**問題 7: 「要不要Mock Domain Entity？」**
-- 閱讀：`bdd-testing-methodology.md` → 第3.3節（依賴倒置測試）
-- 答案：不要Mock，使用真實的Domain Entity和Value Object
+| 方法論 | 用途 |
+|--------|------|
+| [systematic-debugging-methodology](./systematic-debugging-methodology.md) | 系統化除錯方法論（問題隔離與根因分析）|
+| [operational-error-root-cause-methodology](./operational-error-root-cause-methodology.md) | 營運錯誤根因分析方法論 |
+| [parallel-evaluation-methodology](./parallel-evaluation-methodology.md) | 多視角並行評估方法論（三人組審查）|
+| [problem-awareness-evaluation-methodology](./problem-awareness-evaluation-methodology.md) | 問題意識評估方法論 |
+| [three-phase-reflection-methodology](./three-phase-reflection-methodology.md) | 三階段反思方法論（根因反思、不回退、教訓提煉）|
+| [agent-failure-debugging-sop](./agent-failure-debugging-sop.md) | Agent 失敗除錯 SOP |
+| [pm-judgment-interference-map](./pm-judgment-interference-map.md) | PM 判斷干擾地圖（決策盲點識別）|
 
 ---
 
-## 與TDD四階段流程的整合
+## 7. 框架與元方法論
 
-三篇方法論如何對應到TDD四階段：
-
-```text
-Phase 1: 功能設計（lavender-interface-designer）
-├─ 使用：BDD測試方法論
-└─ 行為場景提取（Given-When-Then）
-
-Phase 2: 測試設計（sage-test-architect）
-├─ 使用：混合測試策略方法論
-│  └─ 分層測試決策樹
-├─ 使用：BDD測試方法論
-│  └─ Given-When-Then格式
-└─ 理論基礎：Behavior-First TDD方法論
-   └─ Sociable Unit Tests原則
-
-Phase 3a: 語言無關策略（pepper-test-implementer）
-└─ 使用：混合測試策略方法論
-   └─ 技術性檢查清單
-
-Phase 3b: 程式碼實作（parsley-flutter-developer）
-└─ 使用：BDD測試方法論
-   └─ Mock策略和驗證標準
-
-Phase 4a: 多視角重構分析（/parallel-evaluation B）
-├─ 使用：Behavior-First TDD方法論
-└─ 測試穩定性檢查（測試不應破裂）
-
-Phase 4b: 重構執行（cinnamon-refactor-owl，依 4a 報告）
-└─ 使用：Behavior-First TDD方法論
-
-Phase 4c: 多視角再審核（/parallel-evaluation A）
-└─ 使用：Behavior-First TDD方法論
-   └─ 重構品質最終驗證
-```
+| 方法論 | 用途 |
+|--------|------|
+| [framework-meta-methodology](./framework-meta-methodology.md) | 框架元方法論（30 秒標準定義）|
+| [knowledge-carrier-allocation-methodology](./knowledge-carrier-allocation-methodology.md) | 知識載體責任分配（rules/agents/skills/methodologies 邊界）|
+| [methodology-writing-methodology](./methodology-writing-methodology.md) | 方法論撰寫方法論（格式與品質標準）|
+| [methodology-rewriting-methodology](./methodology-rewriting-methodology.md) | 方法論改寫方法論 |
+| [five-document-system-methodology](./five-document-system-methodology.md) | 五文件系統方法論（worklog/ticket/CHANGELOG/todolist/error-patterns）|
+| [worklog-writing-methodology](./worklog-writing-methodology.md) | 工作日誌撰寫方法論 |
+| [error-pattern-numbering-methodology](./error-pattern-numbering-methodology.md) | Error Pattern 編號方法論 |
 
 ---
 
-## 核心原則快速參考
+## 8. 其他專門方法論
 
-### 測試的本質
-
-> **Tests = Executable Requirements Specifications**
->
-> 測試不是「驗證實作的工具」，而是**用程式碼表達的需求規格書**。
-
-### 測試耦合原則
-
-| 應該耦合到 | 不應該耦合到 |
-|----------|-----------|
-| 行為（Behavior） | 結構（Structure） |
-| Module API | Class Methods |
-| 需求規格 | 實作細節 |
-| 可觀察的結果 | 內部狀態 |
-
-### Sociable Unit Tests核心
-
-| 概念 | 說明 |
-|-----|------|
-| **Unit** | Module（1個或多個類別） |
-| **Isolation** | 只隔離外部世界（Database, File System, External Services） |
-| **Mock策略** | 只Mock外層依賴，不Mock其他類別和Domain Entities |
-| **測試目標** | 透過Module API測試行為，不知道內部結構 |
-
-### 分層測試策略
-
-| 層級 | 測試類型 | 覆蓋率要求 |
-|-----|---------|----------|
-| **Layer 1 (UI)** | 整合測試（關鍵流程） | 關鍵路徑100% |
-| **Layer 2 (Behavior)** | 單元測試（複雜轉換） | 邏輯覆蓋100% |
-| **Layer 3 (UseCase)** | BDD測試（所有場景） | 行為場景100% |
-| **Layer 4 (Interface)** | 不測試 | N/A |
-| **Layer 5 (Domain)** | 單元測試（複雜邏輯） | 程式碼覆蓋100% |
-
-### Given-When-Then規範
-
-```dart
-test('使用者提交訂單成功', () async {
-  // Given: 使用者已選擇商品且填寫完整資訊
-  final order = Order(...);
-  when(mockRepository.save(any)).thenAnswer(...);
-
-  // When: 使用者點擊「提交訂單」
-  final result = await submitOrderUseCase.execute(order);
-
-  // Then: 系統確認訂單已儲存
-  expect(result.isSuccess, true);
-  expect(result.orderId, isNotEmpty);
-});
-```
-
-**規範要點**：
-- Given明確描述前置條件
-- When只有單一動作
-- Then驗證可觀察的結果
-- 使用業務語言而非技術術語
-
-### Mock策略原則
-
-| 依賴類型 | Mock策略 | 理由 |
-|---------|---------|------|
-| Repository | Mock | 外層依賴，隔離Database |
-| Service | Mock | 外層依賴，隔離External Services |
-| Event Publisher | Mock | 外層依賴，驗證事件發布 |
-| Domain Entity | 不Mock | 內層邏輯，使用真實物件 |
-| Value Object | 不Mock | 內層邏輯，使用真實物件 |
+| 方法論 | 用途 |
+|--------|------|
+| [personalized-consultation-methodology](./personalized-consultation-methodology.md) | 個人化諮詢方法論（AI 諮詢倫理，識別/分級/誠實三層機制）|
+| [suggestion-tracking-methodology](./suggestion-tracking-methodology.md) | 建議追蹤方法論 |
 
 ---
 
-## 常見場景指引
+## 使用指引
 
-### 場景 1: 撰寫UseCase測試
+### 新手路徑
 
-**推薦閱讀順序**：
-1. `bdd-testing-methodology.md` → 第4.3節（Phase 2測試設計）
-2. `bdd-testing-methodology.md` → 第8章（Given-When-Then規範）
-3. `bdd-testing-methodology.md` → 第9.1節（UseCase測試完整範例）
+1. **理解品質基線** → `cognitive-load-design-methodology`（所有設計的終極目標）
+2. **學習 TDD 流程** → `tdd-collaboration-flow`（四階段流程）→ `behavior-first-tdd-methodology`（理論基礎）
+3. **學習 Ticket 管理** → `atomic-ticket-methodology`（設計原則）→ `ticket-lifecycle-management-methodology`（生命週期）
+4. **理解架構原則** → `clean-architecture-implementation-methodology`（分層依賴倒置）
 
-**關鍵檢查清單**：
-- [ ] 使用Given-When-Then格式
-- [ ] 測試名稱使用業務語言
-- [ ] 涵蓋正常流程、異常流程、邊界條件
-- [ ] 只Mock外層依賴（Repository, Service）
-- [ ] 使用真實的Domain Entity和Value Object
+### 快速查找
 
----
-
-### 場景 2: 撰寫Domain層測試
-
-**推薦閱讀順序**：
-1. `hybrid-testing-strategy-methodology.md` → 第4.5節（Domain層策略）
-2. `bdd-testing-methodology.md` → 第9.1節（正反範例）
-
-**關鍵檢查清單**：
-- [ ] 複雜業務規則必須單元測試
-- [ ] 值物件驗證必須單元測試
-- [ ] 實體不變量必須單元測試
-- [ ] 簡單CRUD Entity依賴UseCase層測試
-- [ ] 程式碼覆蓋率100%
+| 需求場景 | 參考方法論 |
+|---------|-----------|
+| 撰寫測試 | `bdd-testing-methodology` → Given-When-Then 規範 |
+| 判斷測試類型 | `hybrid-testing-strategy-methodology` → 決策樹 |
+| 設計 Ticket | `atomic-ticket-methodology` + `ticket-design-dispatch-methodology` |
+| 任務拆分 | `layered-ticket-methodology` + `group-ticket-design-methodology` |
+| 除錯問題 | `systematic-debugging-methodology` + `operational-error-root-cause-methodology` |
+| Code Review | `parallel-evaluation-methodology` → 多視角審查 |
+| 重構評估 | `design-driven-refactoring-methodology` + `agile-refactor-methodology` |
+| 撰寫註解 | `comment-writing-methodology` + `natural-language-programming-methodology` |
+| Hook 設計 | `hook-system-methodology` + `rule-layer-ssot-before-hook-layer-methodology` |
+| 方法論撰寫 | `methodology-writing-methodology` + `framework-meta-methodology` |
 
 ---
 
-### 場景 3: 判斷是否需要獨立測試
+## 核心原則
 
-**推薦閱讀順序**：
-1. `hybrid-testing-strategy-methodology.md` → 第3章（決策樹）
-2. `hybrid-testing-strategy-methodology.md` → 第4章（各層策略詳解）
+### 方法論 = 30 秒可複習的明確判斷標準
 
-**決策流程**：
-```text
-Step 1: 識別程式碼屬於哪一層？
-→ Layer 1, 2, 3, 5
+- **不是**：完整流程說明、程式碼範例、決策表格（這些屬 skill reference）
+- **是**：明確判斷標準、操作清單、快速參考表
 
-Step 2: 根據決策樹判斷
-→ 是否為關鍵流程/複雜邏輯？
+**Why**：方法論聚焦判斷標準（< 1 頁可複習），skill reference 承載完整流程與範例（按需載入）。**Consequence**：混淆兩者會導致方法論膨脹為多頁文件失去快速參考價值。**Action**：寫方法論時問「這段是判斷依據還是執行細節」，後者移至對應 skill。
 
-Step 3: 查看對應章節
-→ 第4.1節（Layer 1）
-→ 第4.2節（Layer 2）
-→ 第4.3節（Layer 3）
-→ 第4.5節（Layer 5）
-```
+### 認知負擔最小化
 
----
+所有設計原則的終極目標：降低閱讀者的認知負擔。參考 `cognitive-load-design-methodology`。
 
-### 場景 4: 設計Ticket的測試策略
+**Consequence**：認知負擔過載使閱讀者需同時追蹤 > 7 個概念（Miller's Law），導致理解錯誤與維護成本上升。**Action**：設計時依 cognitive-load-design-methodology 量化標準（函式 ≤ 15 行 / 參數 ≤ 3 / 巢狀深度 ≤ 3）自我檢查。
 
-**推薦閱讀順序**：
-1. `hybrid-testing-strategy-methodology.md` → 第6章（Ticket測試策略設計）
-2. `hybrid-testing-strategy-methodology.md` → 第6.2節（範例）
+### 行為驅動測試
 
-**Ticket模板欄位**：
-```markdown
-### 測試策略
-- **測試類型**: BDD / 單元測試 / 整合測試 / 不需要測試
-- **測試範圍**: [列出必須測試的場景]
-- **測試工具**: [測試框架名稱]
-- **覆蓋率要求**: [具體數值或標準]
-- **依賴關係**: 獨立測試 / 依賴 [Layer X] 測試
-```
+測試應耦合到行為而非結構。重構時測試不應破裂。參考 `behavior-first-tdd-methodology`。
+
+**Why**：行為（對外可見功能）比結構（內部實作）穩定；測試耦合到行為使重構時測試不需修改。**Consequence**：耦合到結構（如測試 private 方法）會使每次重構需同步改測試，增加重構成本並降低測試對重構的保護。
 
 ---
 
-### 場景 5: Code Review測試品質
-
-**推薦閱讀順序**：
-1. `hybrid-testing-strategy-methodology.md` → 第9章（Code Review檢查項目）
-2. `bdd-testing-methodology.md` → 第7.4節（測試品質驗證）
-
-**檢查清單**：
-- [ ] 測試類型符合分層策略
-- [ ] BDD測試聚焦行為
-- [ ] Given-When-Then結構清晰
-- [ ] Mock策略正確
-- [ ] 場景完整性（正常、異常、邊界）
-- [ ] 技術性檢查清單完整
-- [ ] 測試覆蓋率達標
-
----
-
-### 場景 6: 說服團隊採用行為驅動測試
-
-**推薦閱讀順序**：
-1. `behavior-first-tdd-methodology.md` → 第1章（TDD痛點根本原因）
-2. `behavior-first-tdd-methodology.md` → 第5章（歷史證據）
-3. `behavior-first-tdd-methodology.md` → 第3.5節（對比總結）
-
-**關鍵論據**：
-- Kent Beck、Martin Fowler等TDD創始人都使用Sociable Unit Tests
-- Google實踐證明：測試行為而非實作降低維護成本
-- 量化對比：重構時測試修改從20-50%降至0-5%
-
----
-
-## 整合關係圖
-
-```text
-┌─────────────────────────────────────────────────────────┐
-│          行為驅動測試方法論體系                            │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  Behavior-First TDD（理論基礎 - WHY）                    │
-│  ┌───────────────────────────────────────────┐         │
-│  │ - TDD痛點根源                              │         │
-│  │ - Sociable vs Solitary對比                │         │
-│  │ - 歷史證據（Kent Beck, Martin Fowler）    │         │
-│  │ - Test-First vs Test-Last反饋循環        │         │
-│  └───────────────┬───────────────────────────┘         │
-│                  │ 提供理論基礎                         │
-│                  ↓                                      │
-│  BDD測試方法論（實作格式 - HOW）                         │
-│  ┌───────────────────────────────────────────┐         │
-│  │ - Given-When-Then格式規範                  │         │
-│  │ - Clean Architecture整合                   │         │
-│  │ - TDD四階段流程整合                        │         │
-│  │ - Mock策略原則                             │         │
-│  └───────────────┬───────────────────────────┘         │
-│                  │ 提供實作格式                         │
-│                  ↓                                      │
-│  混合測試策略（決策執行 - WHEN）                         │
-│  ┌───────────────────────────────────────────┐         │
-│  │ - 分層測試決策樹（Layer 1-5）              │         │
-│  │ - 量化覆蓋率指標                           │         │
-│  │ - Ticket測試策略設計                       │         │
-│  │ - Code Review檢查清單                      │         │
-│  └───────────────────────────────────────────┘         │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
-```
-
----
-
-## 重要提醒
-
-### 測試的核心原則（不可妥協）
-
-> **"Tests should be coupled to the behavior of the code and decoupled from the structure of code."**
-> — Kent Beck
-
-**這意味著**：
-1. 重構時測試不應該破裂（如果破裂，表示測試耦合到結構）
-2. 測試描述「系統做什麼」而非「系統怎麼做」
-3. 測試使用業務語言而非技術術語
-4. 測試透過Module API而非直接存取內部類別
-
-### 常見誤解
-
-**誤解 1**: 「BDD和TDD是不同的方法」
-- 錯誤：BDD創造了新的測試方法
-- 真相：BDD只是修正了TDD中「Test」這個詞造成的命名混淆
-
-**誤解 2**: 「Unit Test必須測試單一Class」
-- 錯誤：Unit = Class
-- 真相：Unit = Module（可包含多個類別）
-
-**誤解 3**: 「所有協作者都要Mock」
-- 錯誤：Solitary Unit Tests（Mock所有協作者）
-- 真相：Sociable Unit Tests（只Mock外部依賴）
-
-**誤解 4**: 「測試程式碼是production code的2-4倍很正常」
-- 錯誤：接受測試的高維護成本
-- 真相：正確的測試方法不會產生如此高的成本
-
-### 閱讀注意事項
-
-1. **不要跳過理論基礎** - `behavior-first-tdd-methodology.md`提供的歷史證據和理論基礎是理解其他兩篇的關鍵
-2. **理解WHY再學HOW** - 先理解「為什麼要測試行為」再學習「如何撰寫Given-When-Then」
-3. **決策樹是工具不是規則** - `hybrid-testing-strategy-methodology.md`的決策樹是指引，具體情況可彈性調整
-4. **範例比理論重要** - 三篇方法論都提供大量正反範例，務必仔細閱讀
-
----
-
-## 延伸閱讀
-
-### 經典書籍
-
-1. **Kent Beck - Test Driven Development By Example**
-   - TDD的原始定義和實踐方法
-   - Sociable Unit Tests的源頭
-
-2. **Martin Fowler - Refactoring: Improving the Design of Existing Code**
-   - 重構的定義和原則
-   - 測試應該保持穩定的理論基礎
-
-3. **Dan North - Introducing BDD**
-   - BDD的起源和動機
-   - Given-When-Then格式的創造過程
-
-4. **Google - Software Engineering at Google**
-   - 大規模測試實踐
-   - 測試維護成本的量化分析
-
-### 相關專案文件
-
-- [TDD 協作開發流程](./tdd-collaboration-flow.md) - TDD四階段流程
-- [Clean Architecture實作方法論](./clean-architecture-implementation-methodology.md) - 架構分層原則
-- [Ticket設計派工方法論](./ticket-design-dispatch-methodology.md) - 任務拆分和設計
-
-### 設計哲學文件
-
-- [認知負擔設計方法論](./cognitive-load-design-methodology.md) - 程式碼設計的核心哲學：所有設計原則的終極目標是降低閱讀者的認知負擔
-- [自然語言程式設計方法論](./natural-language-programming-methodology.md) - 讓程式碼像閱讀文章一樣自然
-- [個人化諮詢方法論](./personalized-consultation-methodology.md) - AI 諮詢的核心哲學：個人化建議的第一步是承認不認識當事人，三層機制（識別/分級/誠實）防止視野狹窄偏誤
-
----
-
-## 需要幫助？
-
-如果在閱讀過程中遇到問題，可以：
-
-1. **查看FAQ** - 每篇方法論的「常見問題」章節
-2. **參考範例** - 第九章或第十章的正反範例
-3. **使用決策樹** - `hybrid-testing-strategy-methodology.md`第3章
-4. **向主線程請求** - rosemary-project-manager協助
-
----
-
-**文件版本**: v1.1
-**建立日期**: 2025-10-16
-**維護者**: thyme-documentation-integrator
-**狀態**: 已啟用
-**最後更新**: 2026-03-09 - 清除 emoji 違規
+**Last Updated**: 2026-06-15
+**Version**: 2.1.0 — Layer 2 審查修正（補充 3 處三明示：方法論定義 / 認知負擔 / 行為驅動測試的 Why/Consequence/Action）
+**Maintained by**: thyme-documentation-integrator

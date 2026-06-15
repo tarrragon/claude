@@ -124,7 +124,7 @@ tests/unit/scripts/validate-manifest.test.js:29:  const createMockFsAdapter = (e
 
 - [ ] W1-079 落地時驗證子模式 A 修復路徑（標 deprecated + 評估抽出）
 - [ ] W1-080 落地時驗證子模式 B 修復路徑（命名差異化 + 共用工廠）
-- [ ] 若再有第三案例（同 session pattern）→ 升級為方法論層（`.claude/methodologies/test-helper-design-methodology.md`）
+- [ ] 若再有第三案例（同 session pattern）→ 升級為方法論層（於 methodologies/ 新增對應方法論）
 
 ---
 

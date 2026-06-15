@@ -280,7 +280,9 @@ def test_apply_delta_four_scenarios(tmp_path):
     project_root, upstream, base = _setup_upstream_and_local(tmp_path)
     claude = project_root / ".claude"
 
-    applied, conflicts = pull.apply_upstream_delta(project_root, upstream, base)
+    applied, conflicts, _residue = pull.apply_upstream_delta(
+        project_root, upstream, base
+    )
 
     # add：upstream 新增 → 本地出現
     assert (claude / "rules" / "added.md").read_text() == "brand new\n"

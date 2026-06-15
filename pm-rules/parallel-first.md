@@ -177,7 +177,7 @@
 - [SKILL.md](SKILL.md) - 管理哲學主文檔
 - [anti-patterns](anti-patterns.md) - 新手主管的錯誤
 - [async-mindset](async-mindset.md) - 非同步心態
-- [parallel-dispatch]($CLAUDE_PROJECT_DIR/.claude/rules/guides/parallel-dispatch.md) - 並行派發指南
+- [parallel-dispatch]($CLAUDE_PROJECT_DIR/.claude/pm-rules/parallel-dispatch.md) - 並行派發指南
 
 ---
 

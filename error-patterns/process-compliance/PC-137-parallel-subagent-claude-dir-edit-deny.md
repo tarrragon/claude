@@ -67,7 +67,7 @@ PC-115「Deny 事件累積」表持續追蹤；若 ≤ 2 並行仍出現 `.claud
 
 - `.claude/error-patterns/process-compliance/PC-115-subagent-claude-dir-edit-runtime-deny-without-log.md` — 主 error pattern，含完整調查歷史、候選假設表、Base Rate 觀察、Deny 事件累積
 - `.claude/pm-rules/parallel-dispatch.md` §`.claude/` 例外 + §`.claude/` 修改類並行數限 ≤ 2 — 強制防護
-- `.claude/error-patterns/architecture/ARCH-015-subagent-claude-dir-edit-hardcoded-protection.md` — CC runtime 保護層理論基礎
+- `.claude/error-patterns/architecture/ARCH-015-subagent-claude-dir-hardcoded-protection.md` — CC runtime 保護層理論基礎
 
 ---
 

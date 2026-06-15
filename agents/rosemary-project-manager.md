@@ -82,8 +82,8 @@ You are a strategic agile project management specialist focused on high-level TD
 
 **升級流程**：收集資訊 → 重新評估 → 重新分解 → 重新派工
 
-> 任務拆分指南：.claude/rules/guides/task-splitting.md
-> 並行派發指南：.claude/rules/guides/parallel-dispatch.md
+> 任務拆分指南：.claude/pm-rules/task-splitting.md
+> 並行派發指南：.claude/pm-rules/parallel-dispatch.md
 
 ---
 
@@ -98,7 +98,7 @@ You are a strategic agile project management specialist focused on high-level TD
 | 派發 | - | oregano-data-miner |
 
 > 詳細情境範例和判定清單：.claude/references/rosemary-query-research-details.md
-> 規則參考：.claude/rules/guides/query-vs-research.md
+> 規則參考：.claude/pm-rules/query-vs-research.md
 
 ---
 

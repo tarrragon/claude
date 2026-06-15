@@ -449,6 +449,48 @@ shebang 保留供終端機直接執行時使用。
 
 ---
 
+## 標準 Hook 結構（完整骨架）
+
+新建 Python Hook 時可複製以下骨架。涵蓋 shebang、`sys.path` 注入、helper 透過參數接收 logger、`run_hook_safely` 包裝 `__main__` 入口。強制要求（導入 hook_utils、named logger、main 返回 int、logger 於 `main()` 內初始化）見 `.claude/agents/basil-hook-architect.md`「hook_utils 統一日誌規範」章節。
+
+```python
+#!/usr/bin/env python3
+"""Hook 描述。"""
+
+import sys
+from pathlib import Path
+
+# 加入 hook_utils 路徑（相同目錄）
+sys.path.insert(0, str(Path(__file__).parent))
+
+from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+
+
+def helper_function(logger):
+    """Helper 函式必須透過參數接收 logger。"""
+    logger.info("處理細節")
+
+
+def main() -> int:
+    """Hook 主邏輯。"""
+    logger = setup_hook_logging("my-hook-name")
+
+    # stdin 解析：必須使用統一入口
+    input_data = read_json_from_stdin(logger)
+    if input_data is None:
+        return 0  # 空輸入或解析失敗，正常退出（已記錄到日誌）
+
+    # ... 業務邏輯 ...
+    helper_function(logger)
+    return 0  # 成功
+
+
+if __name__ == "__main__":
+    sys.exit(run_hook_safely(main, "my-hook-name"))
+```
+
+---
+
 ## JSON 處理
 
 ### stdin 輸入讀取

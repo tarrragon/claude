@@ -164,8 +164,8 @@ flowchart TD
 
 - @.claude/pm-rules/plan-to-ticket-flow.md - Plan-to-Ticket 轉換流程（主要檔案）
 - .claude/references/plan-to-ticket-mapping-details.md - 詳細映射規範
-- @.claude/rules/guides/task-splitting.md - 任務拆分指南
-- @.claude/rules/guides/parallel-dispatch.md - 並行派發指南
+- @.claude/pm-rules/task-splitting.md - 任務拆分指南
+- @.claude/pm-rules/parallel-dispatch.md - 並行派發指南
 
 ---
 

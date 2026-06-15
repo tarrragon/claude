@@ -140,6 +140,36 @@ Skill 私有 Hook **必須在 `settings.json` 註冊**才會被觸發。**Why**:
 
 ---
 
+## 4. 框架編輯紀律：刪除走上游 + `--clean` 傳播
+
+框架資產（`.claude/`）的生命週期由上游獨立 repo 管理、向多個下游專案 sync。編輯（含**刪除**）框架資產時必須走上游 push 流程，而非僅在單一消費者專案本地修改。本節規範刪除框架檔的傳播紀律。
+
+### 4.1 框架編輯走上游，不走單一消費者
+
+**Why**：框架資產是跨專案共用單一來源（SSOT），任一專案的本地修改若不 push 回上游，其他下游專案不會收到，且下次該專案 full overlay sync 會被上游版本覆蓋，本地修改遺失。
+
+**Consequence**：在單一消費者專案本地改框架檔卻不走上游，會造成兩個後果——其他專案得不到改善（框架分叉），以及本地改動在下次 sync 被靜默覆蓋（白工）。
+
+**Action**：框架資產的新增 / 修改 / 刪除一律先在本專案 commit，再以 sync-push 推回上游 repo，使變更成為下游共用基線。
+
+### 4.2 刪除 tracked `.claude/` 檔須帶 `--clean` push
+
+**Why**：sync-push 的刪除傳播（`clean_stale_files`）是 `--clean` opt-in 模式（**預設關**）。預設關是刻意的安全設計，避免誤刪遠端他專案推送的內容。但這也意味著本地 `git rm` 一個 tracked `.claude/` 檔後，若該批 push 未帶 `--clean`，遠端不會同步刪除，殘留為孤兒。
+
+**Consequence**：孤兒在上游長期累積；採 full overlay sync 的下游專案會反覆收到應已刪除的檔，甚至已刪除的舊防護被下游「復活」（刪除未傳播 → 下游 pull 拿回舊檔）。這正是 sync 復活孤兒類缺陷的根因。
+
+**Action**：
+
+| 觸發情境 | 必要動作 |
+|---------|---------|
+| 刪除任何 tracked `.claude/` 檔 | 該批刪除 push 時帶 `--clean`（`sync-push --clean`） |
+| skill / hook 路徑重組（移除舊路徑） | 遷移 commit 後跑一次 `sync-push --clean` 傳播刪除 |
+| 忘記帶 `--clean` | sync-push 結尾會輸出 soft 警告列出遠端殘留孤兒並提示重跑 `--clean`（不阻擋本次 push） |
+
+詳細紀律、孤兒累積實例與 `--clean` 涵蓋邊界（runtime state / worktree gitlink 不涵蓋，須手動 `git rm`）見 `.claude/commands/sync-push.md`「skill / hook 遷移後須跑 --clean 傳播刪除」章節（L58-71）。
+
+---
+
 ## 相關規則
 
 - `.claude/rules/README.md` - 規則系統導航（含本文件索引）
@@ -147,11 +177,13 @@ Skill 私有 Hook **必須在 `settings.json` 註冊**才會被觸發。**Why**:
 - `.claude/error-patterns/architecture/ARCH-012-agent-project-specific-hardcoding.md` - 代理人定義硬編碼專案特定內容的錯誤模式
 - `.claude/error-patterns/process-compliance/PC-061-memory-upgrade-blindness.md` - Memory 跨專案原則升級遺漏的錯誤模式
 - `.claude/hooks/hook-completeness-check.py` - 雙層 Hook 掃描器
-- `.claude/plugin-dev/hook-development/SKILL.md`（plugin-dev plugin）- Claude Code Hook 開發通用指引（事件、API）
+- plugin-dev plugin 的 `hook-development` skill（plugin 形式，非 .claude/ 內檔）- Claude Code Hook 開發通用指引（事件、API）
+- `.claude/commands/sync-push.md` - sync-push 流程與 `--clean` 刪除傳播紀律（§4 連結來源）
 
 ---
 
-**Last Updated**: 2026-05-11
+**Last Updated**: 2026-06-15
+**Version**: 1.2.0 — 新增 §4 框架編輯紀律（刪除走上游 + `--clean` 傳播 soft 警告），連結 sync-push.md L58-71（缺口 3）
 **Version**: 1.1.1 — Layer 2 補修：§3.1/3.3/3.6 補三明示（Why / Consequence / Action）；§3.2 補框架共用命名對稱理由；§3.4 原則句前置於表格
 **Version**: 1.1.0 — 新增 §3 Skill Hook 雙層架構章節（命名 / 路徑 / 註冊規範 / 掃描器行為 / 遷移指引）
 **Version**: 1.0.0 — 從 `.claude/rules/README.md` 拆出。原因：本章節屬情境觸發型知識（設計新規則/Skill/文件時才需），不符合 auto-load 原則。

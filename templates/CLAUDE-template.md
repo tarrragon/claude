@@ -26,7 +26,7 @@
 
 - dart - Dart/Flutter 開發工具
 - serena - 語意程式碼操作
-- context7 - 文檔查詢
+- context7 - 文件查詢
 
 ---
 
@@ -44,13 +44,13 @@
 
 ## 4. Skill 指令
 
-@.claude/rules/guides/skill-index.md
+@.claude/pm-rules/skill-index.md
 
 ---
 
 ## 5. 方法論參考
 
-@.claude/rules/guides/methodology-index.md
+@.claude/pm-rules/methodology-index.md
 
 ---
 

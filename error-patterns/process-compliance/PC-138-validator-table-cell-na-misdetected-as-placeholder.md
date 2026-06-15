@@ -122,7 +122,7 @@ if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", content_no_table_na, re.IG
 
 ### Layer 3：規則層（書面教學）
 
-於 `.claude/rules/core/document-format-rules.md`（或新建 `.claude/rules/core/ticket-body-style.md`）補：
+於 `.claude/rules/core/document-format-rules.md`（或新建 `.claude/pm-rules/ticket-body-schema.md`）補：
 
 - 不適用標記詞彙統一原則：固定填充內容用「不適用」「未測量」「不可行」
 - 英文 `N/A` 保留給「整段為空 / 待填」的真實 placeholder 場景

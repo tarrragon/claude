@@ -1,7 +1,7 @@
 # .claude/config/wrap-triggers.yaml
 # WRAP 絆腳索 Hook 的觸發條件配置
 # 權威來源：本檔案（機器可讀）
-# 人類可讀對應（本專案詳細對應表）：.claude/skills/wrap-decision/references/project-integration/triggers-alignment.md
+# 人類可讀對應（本專案詳細對應表）：.claude/skills/wrap-decision/references/integration-patterns/triggers-alignment.md
 # 通用原理（跨專案）：.claude/skills/wrap-decision/SKILL.md 的「觸發條件」章節與 description frontmatter
 # 同步檢查：doc-sync-check-hook 擴充或 consistency-check-hook（follow-up ticket）
 
@@ -11,7 +11,7 @@ source_of_truth_note: |
   本檔案為 wrap-decision-tripwire-hook.py 的唯一觸發條件來源。
   禁止在 Hook Python 程式碼中硬編碼 triggers / keywords / thresholds。
   若新增訊號，必須同步更新：
-    1. .claude/skills/wrap-decision/references/project-integration/triggers-alignment.md（本專案對應表）
+    1. .claude/skills/wrap-decision/references/integration-patterns/triggers-alignment.md（本專案對應表）
     2. .claude/skills/wrap-decision/SKILL.md description（若新增關鍵字）
   SKILL.md 本文（觸發條件章節）採抽象類別描述，不需同步具體關鍵字清單。
 

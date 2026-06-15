@@ -113,7 +113,7 @@ def self_test():
 - `.claude/scripts/charset-pollution-detector.py` — W17-144.1 落地，含 _ANCHORS_SEED 警告 + TAIWAN_STANDARD_WHITELIST + self-test 第五層
 - `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W17-144.1.1.md` — ANA 完整 WRAP 分析
 - `.claude/error-patterns/process-compliance/PC-074-charset-guard-hook-shared-char-false-positive.md` — 字元集共用字陷阱（姊妹模式）
-- `.claude/error-patterns/process-compliance/PC-088-llm-tool-selection-bias.md` — LLM 工具選擇偏誤（姊妹模式）
+- `.claude/error-patterns/process-compliance/PC-088-llm-tool-selection-heuristic-bias.md` — LLM 工具選擇偏誤（姊妹模式）
 
 ---
 

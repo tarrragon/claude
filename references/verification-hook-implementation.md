@@ -2,7 +2,7 @@
 
 本文件包含驗證框架 Hook 系統的實作細節和參考規範。
 
-> 主文件：@.claude/rules/core/verification-framework.md
+> 主文件：@.claude/pm-rules/verification-framework.md
 
 ---
 

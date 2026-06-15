@@ -155,5 +155,5 @@ max_items = floor(115,025 / 5,900) = 19 個
 ## 相關文件
 
 - ../SKILL.md - 主文件（快速流程和安全預設值）
-- .claude/rules/guides/parallel-dispatch.md - 並行派發指南
+- .claude/pm-rules/parallel-dispatch.md - 並行派發指南
 - .claude/rules/core/cognitive-load.md - 認知負擔設計原則

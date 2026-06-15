@@ -54,7 +54,7 @@
 ## 相關文件
 
 - `.claude/error-patterns/process-compliance/PC-112-subagent-mcp-write-tool-misselection-on-text-files.md` — 動機案例
-- `.claude/error-patterns/process-compliance/PC-088-llm-tool-selection-bias.md` — 工具選擇偏誤理論基礎
+- `.claude/error-patterns/process-compliance/PC-088-llm-tool-selection-heuristic-bias.md` — 工具選擇偏誤理論基礎
 - `.claude/agents/AGENT_PRELOAD.md` 規則 7 — subagent 層的 soft enforcement
 - `.claude/hooks/mcp-write-tool-on-text-file-guard-hook.py` — 本規則的 hard enforcement
 

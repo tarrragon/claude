@@ -187,7 +187,7 @@ const antiPatterns = [...]
 - `docs/work-logs/v0/v0.19/v0.19.1/tickets/0.19.1-W1-005.3.md` — 觸發案例（誤傷過程與手動還原記錄）
 - `docs/work-logs/v0/v0.19/v0.19.1/tickets/0.19.1-W1-007.md` — ANA 固化來源（三流程教訓 retrospective）
 - `.claude/error-patterns/process-compliance/PC-165-false-positive-fix-chain.md` — 上位 pattern（工具誤傷後 tests 仍通過的 false positive 修復鏈機制）
-- `.claude/error-patterns/process-compliance/PC-158-mint-emoji-violation-in-visual-markers.md` — 弱相關（emoji 合規，不同觸發層）
+- `.claude/error-patterns/process-compliance/PC-158-mint-format-specialist-emoji-in-visual-markers.md` — 弱相關（emoji 合規，不同觸發層）
 
 ---
 

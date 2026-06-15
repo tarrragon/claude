@@ -1,6 +1,6 @@
 # Atomic Ticket 方法論
 
-**版本**: v3.0.0
+**版本**: v3.1.0
 **核心原則**: 單一職責原則 (Single Responsibility Principle)
 
 > **30 秒核心**：Atomic Ticket = 一個 Action（動詞）+ 一個 Target（單一目標）。是否需要拆分只用「單一職責四大檢查」判斷，禁用時間/行數/檔案數/測試數等量化指標。Ticket 是任務鏈（Task Chain）的節點，責任由子 Ticket 完成履行，非父本身文件完成。
@@ -257,67 +257,17 @@ Q1: 子任務彼此真的獨立（可同時執行）？
 
 ### where.files 撰寫指引：拆分檔案配對
 
-#### 背景：骨架與實質內容的拆分架構
+本專案 `.claude/` 規則目錄採「骨架（索引，auto-load）+ 實質內容（references/，按需讀取）」雙檔架構。撰寫 where.files 的核心判準：列「實質修改會發生的位置」。
 
-本專案 `.claude/` 規則目錄採「骨架（索引）+ 實質內容（詳版）」雙檔拆分架構（自 W10-076.1 落地）：
+| 修改類型 | where.files 列法 |
+|---------|-----------------|
+| 骨架索引變更（版本號、索引表、導航連結） | 只列骨架路徑 |
+| 實質內容擴充（新增規則、修改細節） | 列 references/ 實質檔路徑 |
+| 同步變更（索引更新 + 細節同步） | 兩者都列 |
 
-- **骨架**（auto-load）：`rules/core/X.md`、`pm-rules/X.md` — 每次 session 自動載入，只含觸發指標、摘要、索引表。
-- **實質內容**（按需讀取）：`references/X.md`、`references/X-details.md` — 詳細規則、範例、深度說明。
+**判準**：問「此修改的本質是改變規則『入口索引』還是『規則本身的內容』？」骨架只是索引，承諾讀者「內容看 references/」，故擴充規則內容必然牽動 references/。僅列骨架時 agent 須自裁是否延伸，有範圍漂移風險。
 
-骨架第一行通常含「完整規則：references/X.md（按需讀取）」明示引用。
-
-**Why**：骨架只是索引——骨架的存在承諾讀者「內容看 references/」，因此擴充規則內容必然牽動 references/，而非骨架本身。忽略此結構會導致 where.files 僅列骨架，但 agent 實際修改 references/ 而產生範圍漂移。
-
-#### 規則 1：列「實質修改會發生的位置」
-
-核心問題：「此 ticket 的修改本質是改變規則『入口索引』還是『規則本身的內容』？」
-
-| 修改類型 | where.files 列法 | 判別問題 |
-|---------|-----------------|---------|
-| 骨架索引變更（版本號、索引表、導航連結） | 只列骨架路徑 | 「只改入口，不動內容」 |
-| 實質內容擴充（新增規則、修改細節） | 列 references/ 實質檔路徑 | 「改的是規則內容本身」 |
-| 同步變更（索引更新 + 細節同步） | 兩者都列 | 「入口和內容都要動」 |
-
-**Consequence**：僅列骨架時，agent 必須自裁決定是否延伸到 references/，有範圍漂移風險且缺乏明示記錄。
-
-#### 規則 2：PM 撰寫 where.files 前的拆分偵測
-
-列 where.files 時，若路徑含 `rules/core/` 或 `pm-rules/`，必須檢查是否存在對應的 references/ 拆分配對：
-
-```bash
-for path in $(echo "$where_files" | grep -E "(rules/core|pm-rules)/"); do
-  basename=$(basename "$path" .md)
-  find .claude/references -name "${basename}*.md"
-done
-```
-
-**本專案已知 10+ 組拆分對**（任何修改這些規則內容的 ticket 都有 where.files 漂移風險）：
-
-| 骨架（auto-load） | 實質內容（按需讀取） | 拆分類型 |
-|-----------------|-------------------|---------|
-| rules/core/quality-common.md | references/quality-common.md | 同名 |
-| rules/core/bash-tool-usage-rules.md | references/bash-tool-usage-details.md | -details |
-| pm-rules/askuserquestion-rules.md | references/askuserquestion-scene-details.md | -details |
-| pm-rules/decision-tree.md | references/decision-tree-checkpoint-details.md | -details |
-| pm-rules/incident-response.md | references/incident-response-details.md | -details |
-| pm-rules/parallel-dispatch.md | references/parallel-dispatch-details.md | -details |
-| pm-rules/tdd-flow.md | references/tdd-flow-details.md | -details |
-| pm-rules/verification-framework.md | references/verification-framework-details.md | -details |
-| pm-rules/version-progression.md | references/version-progression-details.md | -details |
-| pm-rules/plan-to-ticket-flow.md | references/plan-to-ticket-details.md + references/plan-to-ticket-mapping-details.md | 1-to-many |
-
-> 本規則適用於所有涉及上表拆分對的 ticket，不限於 quality-common。新增規則檔案後應同步維護上表。
-
-#### 規則 3：Agent 延伸 where.files 外檔的行為規範
-
-| 情境 | 允許行為 |
-|------|---------|
-| 延伸符合 ticket 意圖（規則實質內容落在 references/） | 允許延伸，必須 append-log：「延伸至 X.md，原因：[理由]」 |
-| 延伸超出 ticket 意圖（新增無關模組、修改非配對檔） | 禁止延伸，停止並回報 PM |
-
-**預設禁止默默擴展未記錄**。Agent 每次「延伸符合意圖」時，立即在 Solution 寫一行：`延伸至 [path]，原因：[骨架第 N 行明示引用此 references/]`。
-
-> 反例（W10-011）：where.files 僅列骨架 `quality-common.md`，遺漏 `references/quality-common.md`（實質內容在此），agent 須自裁延伸且未記錄，PM 無法追蹤實際修改範圍。正例：修改規則內容時同步列兩者，或僅改細節時只列實質檔。
+> **完整操作細節**（10+ 組已知拆分對表、PM 拆分偵測 bash script、Agent 延伸行為規範、反例 W10-011）：`.claude/references/where-files-split-pairing-rules.md`。
 
 ---
 
@@ -363,4 +313,5 @@ done
 
 **版本歷史**：
 
+- v3.1.0：W8-034.4 核心化瘦身。「where.files 撰寫指引」的操作細節（10+ 組拆分對表、PM 偵測 bash script、Agent 延伸行為規範、反例）外移至 `.claude/references/where-files-split-pairing-rules.md`，主檔保留判準摘要 + 路由（符合 methodology-writing 原則二「只放判準，不混流程」）。acceptance-auditor-details.md 三處「完整清單」引用同步改指 references 新檔。
 - v3.0.0：W8-019.2 整併瘦身。保留 30 秒核心（單一職責四大檢查 + 任務鏈哲學 + 子任務建立指引 + where.files 拆分配對 + ID/Wave 命名，皆為外部引用的 load-bearing 章節）；移除 emoji 與冗長 code 範例（符合/違反對照壓為表格），「Ticket 服務精神」「行為分離原則」「拆分範例」「版本驅動任務管理」去重至 ticket-design-dispatch 與 ticket-lifecycle 權威處。歷史 v1.0.0~v2.2.0 完整版見 git log。

@@ -62,6 +62,16 @@ cd /project/root && ./scripts/sync-push.sh
 
 ---
 
+## 觸發案例（復發紀錄）
+
+| 日期 | 情境 | 復發細節 | 教訓 |
+|------|------|---------|------|
+| 2026-06-15（W8-049 session） | PM 跑 skill 測試 + 還原 cwd | 兩次裸 cd 違反規則一：(1) `cd .../broken-link-check && python3 -m pytest`（跑測試）；(2) `cd /project/root && grep ...`（還原兼驗證）。PreToolUse `[Bash Edit Guard]` hook 兩次皆 WARN 但屬非阻擋層，cd 仍執行 → cwd 汙染使後續相對路徑 grep 假性 No such file、第二次觸發 chpwd ls 淹沒（IMP-056）干擾 git status 判讀。 | warning-only 提示不足以阻止復發——在場 WARNING 仍被忽略。連「跑測試」「還原 cwd」這類看似無害操作也須一律用子 shell `(cd ... && cmd)` 或 `uv run --project <dir>`；裸 cd 無例外豁免。 |
+
+> **Why warning-only 不夠**：本案 hook 已在 context 印出明確 WARN，PM 仍二度裸 cd。提示層對「順手 cd」的攔截力有限，根治靠子 shell 成為肌肉記憶（規則一首選方案），非依賴事後提示。
+
+---
+
 ## 相關規則
 
 - @.claude/rules/core/bash-tool-usage-rules.md - 完整防護規範

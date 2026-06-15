@@ -3,7 +3,7 @@
 本文件提供 PM 在 Ticket 生命週期中使用 AskUserQuestion 工具的標準模板。
 場景編號與 askuserquestion-rules.md 場景 #1-#17 完全對應。
 
-> 規範來源：.claude/rules/core/askuserquestion-rules.md（Source of Truth）
+> 規範來源：.claude/pm-rules/askuserquestion-rules.md（Source of Truth）
 > 決策樹定義：.claude/pm-rules/decision-tree.md
 > 場景詳細說明：.claude/references/askuserquestion-scene-details.md
 
@@ -660,7 +660,7 @@
 
 ## 相關文件
 
-- .claude/rules/core/askuserquestion-rules.md - AskUserQuestion 規則（Source of Truth，場景 #1-#17）
+- .claude/pm-rules/askuserquestion-rules.md - AskUserQuestion 規則（Source of Truth，場景 #1-#17）
 - .claude/references/askuserquestion-scene-details.md - 各場景詳細說明
 - .claude/pm-rules/ticket-lifecycle.md - Ticket 生命週期（互動規範定義）
 - .claude/pm-rules/decision-tree.md - 決策樹（AskUserQuestion 強制場景）

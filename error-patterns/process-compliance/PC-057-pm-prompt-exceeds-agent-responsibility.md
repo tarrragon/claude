@@ -51,7 +51,7 @@ first_seen: 2026-04-12
 
 | 改善點 | 說明 | 實作位置 |
 |-------|------|---------|
-| PM 派發前自檢清單 | 新增「派發前 3 問：代理人職責允許嗎？工作量在 tool call 預算內嗎？Forcing function 加入了嗎？」 | `.claude/pm-rules/agent-dispatch-checklist.md`（新） |
+| PM 派發前自檢清單 | 新增「派發前 3 問：代理人職責允許嗎？工作量在 tool call 預算內嗎？Forcing function 加入了嗎？」 | `.claude/references/agent-dispatch-template.md`（實際落地；原規劃名 agent-dispatch-checklist 未採用） |
 | Hook 自動檢查 | `agent-dispatch-validation` 新增「prompt 關鍵字 vs agent 禁止行為」的衝突掃描（例如 prompt 含 `.py` 檔案路徑 + agent 含「禁止實作程式碼」→ 警告） | `.claude/hooks/agent-dispatch-validation/` |
 | Agent definition 格式統一 | 每個 agent 的 description 強制含明文「禁止行為」區塊，供 PM 對照和 Hook 掃描 | `.claude/agents/*.md` |
 | TDD flow 文件強化 | 在 `pm-rules/tdd-flow.md` 明確標註各 Phase 代理人的「該做 / 不該做」欄位 | `.claude/pm-rules/tdd-flow.md` |

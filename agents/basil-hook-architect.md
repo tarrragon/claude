@@ -132,41 +132,7 @@ basil-hook-architect 在以下情況下**應該被觸發**：
 
 ### 標準 Hook 結構
 
-```python
-#!/usr/bin/env python3
-"""Hook 描述。"""
-
-import sys
-from pathlib import Path
-
-# 加入 hook_utils 路徑（相同目錄）
-sys.path.insert(0, str(Path(__file__).parent))
-
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
-
-
-def helper_function(logger):
-    """Helper 函式必須透過參數接收 logger。"""
-    logger.info("處理細節")
-
-
-def main() -> int:
-    """Hook 主邏輯。"""
-    logger = setup_hook_logging("my-hook-name")
-
-    # stdin 解析：必須使用統一入口
-    input_data = read_json_from_stdin(logger)
-    if input_data is None:
-        return 0  # 空輸入或解析失敗，正常退出（已記錄到日誌）
-
-    # ... 業務邏輯 ...
-    helper_function(logger)
-    return 0  # 成功
-
-
-if __name__ == "__main__":
-    sys.exit(run_hook_safely(main, "my-hook-name"))
-```
+完整可複製的 Hook 骨架範本（shebang / `sys.path` 注入 / helper 透過參數收 logger / `__main__` 入口）見 `.claude/references/hook-architect-technical-reference.md`「標準 Hook 結構（完整骨架）」章節。
 
 **重要**：`logger` 必須在 `main()` 內部初始化，並透過參數傳遞給所有 helper 函式。禁止在模組級定義 logger（避免 IMP-003 作用域迴歸）。
 

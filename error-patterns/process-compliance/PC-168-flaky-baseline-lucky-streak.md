@@ -135,7 +135,7 @@ PM 接 task-notification 時，若 agent 回報「N 次 baseline GREEN 確認 st
 
 - `docs/work-logs/v0/v0.19/v0.19.0/tickets/0.19.0-W4-005.md` — Problem Analysis 段落含三次 PM 決策誤判記錄
 - `docs/work-logs/v0/v0.19/v0.19.0/tickets/0.19.0-W4-005.1.md` — Solution + Test Results 段含 10/10 取樣實證
-- `/Users/tarragon/.claude/projects/-Users-tarragon-Projects-book-overview-v1/memory/feedback_flaky_baseline_lucky_streak.md` — 短期 memory 雙向 cross-ref
+- 專案 auto-memory `feedback_flaky_baseline_lucky_streak`（短期 memory，與本 PC 雙向 cross-ref）
 
 ---
 

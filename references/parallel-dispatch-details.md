@@ -2,7 +2,7 @@
 
 本文件包含並行派發指南的詳細規則、格式和場景。
 
-> 精簡版（常駐載入）：.claude/rules/guides/parallel-dispatch.md
+> 精簡版（常駐載入）：.claude/pm-rules/parallel-dispatch.md
 
 ---
 
@@ -268,7 +268,7 @@ How: [Task Type: Dispatch] 並行派發 N 個分析視角
 
 ## 相關文件
 
-- .claude/rules/guides/parallel-dispatch.md - 精簡版（常駐）
+- .claude/pm-rules/parallel-dispatch.md - 精簡版（常駐）
 - .claude/rules/core/pm-role.md - 管理哲學
 - .claude/pm-rules/parallel-first.md - 並行優先策略
 - .claude/pm-rules/async-mindset.md - 非同步心態

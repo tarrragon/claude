@@ -174,9 +174,7 @@ grep -c '/Users/' .claude/settings.local.json
 ├── templates/                         # 通用模板
 │   ├── CLAUDE-template.md             # CLAUDE.md 模板
 │   ├── work-log-template.md           # 工作日誌模板
-│   ├── ticket-log-template.md         # Ticket 模板
-│   ├── ticket.md.template             # Ticket Markdown 模板
-│   ├── ticket.yaml.template           # Ticket YAML 模板
+│   ├── ticket-log-template.md         # Ticket 執行日誌結構參考
 │   ├── agent-template.md              # 代理人模板
 │   └── ...                            # 其他模板
 │
@@ -377,7 +375,7 @@ grep -c '/Users/' .claude/settings.local.json
 | [natural-language-programming-methodology.md](./methodologies/natural-language-programming-methodology.md) | 命名方法論 |
 | [writing-code-comments.md](./skills/compositional-writing/references/writing-code-comments.md) | 註解撰寫規範 |
 
-> 完整方法論索引：[methodologies/README.md](./methodologies/README.md) 或 [rules/guides/methodology-index.md](./rules/guides/methodology-index.md)
+> 完整方法論索引：[methodologies/README.md](./methodologies/README.md) 或 [pm-rules/methodology-index.md](./pm-rules/methodology-index.md)
 
 ### Hook 系統
 
@@ -404,7 +402,7 @@ grep -c '/Users/' .claude/settings.local.json
 | `/tech-debt-capture` | 技術債務捕獲 |
 | `/project-init` | 新專案初始化 |
 
-> 完整 Skill 索引：[rules/guides/skill-index.md](./rules/guides/skill-index.md)
+> 完整 Skill 索引：[pm-rules/skill-index.md](./pm-rules/skill-index.md)
 
 ---
 

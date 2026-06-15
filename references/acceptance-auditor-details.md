@@ -45,7 +45,7 @@
 
 `.claude/rules/core/` 和 `.claude/pm-rules/` 等目錄採用「骨架 + references」拆分架構：骨架索引（如 `rules/core/quality-common.md`）只存觸發指標，實質內容在 `references/`（如 `references/quality-common.md`）。PM 撰寫 where.files 若只列骨架，執行代理人可能自行擴展至 references 路徑，導致與 ticket 範圍漂移。
 
-> 完整拆分對清單與規則說明：`.claude/methodologies/atomic-ticket-methodology.md` §「where.files 撰寫指引：拆分檔案配對」
+> 完整拆分對清單與規則說明：`.claude/references/where-files-split-pairing-rules.md`（判準摘要見 `.claude/methodologies/atomic-ticket-methodology.md` §「where.files 撰寫指引：拆分檔案配對」）
 
 ### 檢查規則
 
@@ -58,7 +58,7 @@
 
 ### 常見拆分對（抽樣驗證）
 
-以下為部分拆分對；完整清單見 atomic-ticket-methodology.md「where.files 撰寫指引」：
+以下為部分拆分對；完整清單見 `.claude/references/where-files-split-pairing-rules.md`：
 
 | 骨架路徑 | references 路徑 |
 |---------|----------------|
@@ -78,7 +78,7 @@ where.files 中列有骨架路徑但缺少對應 references：
 | .claude/rules/core/quality-common.md | .claude/references/quality-common.md |
 
 結論：where.files 可能遺漏實質修改目標，建議 PM 確認是否需同步補列 references 路徑。
-參考：.claude/methodologies/atomic-ticket-methodology.md §「where.files 撰寫指引：拆分檔案配對」
+參考：.claude/references/where-files-split-pairing-rules.md（完整規則）
 ```
 
 ---

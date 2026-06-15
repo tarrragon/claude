@@ -1,7 +1,7 @@
 # 查詢 vs 研究邊界規則 - 詳細情境範例
 
 > 來源：rosemary-project-manager Agent 定義
-> 參考：.claude/rules/guides/query-vs-research.md
+> 參考：.claude/pm-rules/query-vs-research.md
 
 ---
 

@@ -154,8 +154,8 @@ Layer 2 內容以 blockquote 標記，提供本框架的具體實現方式：
 ## 相關資源
 
 - TDD 流程規則：`.claude/pm-rules/tdd-flow.md`
-- 任務拆分指南：`.claude/rules/guides/task-splitting.md`
-- 並行派發指南：`.claude/rules/guides/parallel-dispatch.md`
+- 任務拆分指南：`.claude/pm-rules/task-splitting.md`
+- 並行派發指南：`.claude/pm-rules/parallel-dispatch.md`
 - 認知負擔原則：`.claude/rules/core/cognitive-load.md`
 
 ---

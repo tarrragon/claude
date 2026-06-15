@@ -291,26 +291,26 @@ updated: 2026-01-23
 ## [TARGET] TDD 階段狀態
 
 > **填寫規則**：
-> - 每個階段只能有一個狀態：[OK] 完成 / [SYNC] 進行中 / ⏸️ 待開始
+> - 每個階段只能有一個狀態：[OK] 完成 / [SYNC] 進行中 / [PENDING] 待開始
 > - 完成時間必須填寫實際時間（精確到分鐘）
 > - 備註欄記錄關鍵成果或決策
 
 | TDD 階段 | 狀態 | 完成時間 | 備註 |
 |---------|------|---------|------|
-| **Phase 1** 設計 | ⏸️ 待開始 | N/A | Ticket 建立即完成 Phase 1 |
-| **Phase 2** 測試 | ⏸️ 待開始 | N/A | 測試案例數量：X 個 |
-| **Phase 3** 實作 | ⏸️ 待開始 | N/A | 測試通過率：X/X |
-| **Phase 4** 重構 | ⏸️ 待開始 | N/A | 重構項目：X 項 / 無需重構 |
+| **Phase 1** 設計 | [PENDING] 待開始 | N/A | Ticket 建立即完成 Phase 1 |
+| **Phase 2** 測試 | [PENDING] 待開始 | N/A | 測試案例數量：X 個 |
+| **Phase 3** 實作 | [PENDING] 待開始 | N/A | 測試通過率：X/X |
+| **Phase 4** 重構 | [PENDING] 待開始 | N/A | 重構項目：X 項 / 無需重構 |
 
 ### [STATS] Ticket 狀態判定
 
 > **Ticket 生命週期狀態**（基於 ticket-lifecycle-management-methodology.md）：
-> - ⏸️ **待執行（Pending）** = Ticket 已建立，等待開發者領取
+> - [PENDING] **待執行（Pending）** = Ticket 已建立，等待開發者領取
 > - [SYNC] **進行中（In Progress）** = 開發者正在執行，TDD Phase 1-3 階段
 > - [REVIEW] **Review 中（In Review）** = 開發者認為已完成，等待驗收
 > - [OK] **已完成（Completed）** = Review 通過，所有驗收條件滿足
 
-**當前狀態**: ⏸️ 待執行
+**當前狀態**: [PENDING] 待執行
 
 **狀態說明**:
 [說明當前狀態的原因或背景]
@@ -356,7 +356,7 @@ updated: 2026-01-23
 
 ---
 
-## ⏸️ 驗收暫停點（Verification Pause Points）
+## [PAUSE] 驗收暫停點（Verification Pause Points）
 
 > **設計目標**: 明確定義何時必須停下來進行檢查
 >
@@ -366,7 +366,7 @@ updated: 2026-01-23
 
 ### 暫停點使用規則
 
-- ⏸️ 執行代理人完成階段後必須主動暫停
+- [PAUSE] 執行代理人完成階段後必須主動暫停
 - [INFO] 主線程在暫停點執行驗收檢查
 - [OK] 通過檢查後才能繼續下一階段
 - [FAIL] 未通過檢查則返回修正

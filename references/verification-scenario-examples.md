@@ -2,7 +2,7 @@
 
 本文件包含驗證框架的常見場景和處理流程範例。
 
-> 主文件：@.claude/rules/core/verification-framework.md
+> 主文件：@.claude/pm-rules/verification-framework.md
 
 ---
 

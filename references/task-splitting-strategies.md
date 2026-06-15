@@ -2,7 +2,7 @@
 
 本文件包含任務拆分的 7 個策略詳細說明和範例。
 
-> 精簡版（常駐載入）：.claude/rules/guides/task-splitting.md
+> 精簡版（常駐載入）：.claude/pm-rules/task-splitting.md
 
 ---
 
@@ -294,9 +294,9 @@ Phase 2 測試設計產出：
 
 ## 相關文件
 
-- .claude/rules/guides/task-splitting.md - 精簡版（常駐）
+- .claude/pm-rules/task-splitting.md - 精簡版（常駐）
 - .claude/rules/core/cognitive-load.md - 認知負擔設計原則
-- .claude/rules/guides/parallel-dispatch.md - 並行派發指南
+- .claude/pm-rules/parallel-dispatch.md - 並行派發指南
 
 ---
 

@@ -350,7 +350,7 @@ echo '{"prompt":"繼續"}' | ./.claude/hooks/parallel-suggestion-hook.py
 
 建議主線程主動建議並行派發。
 
-詳見: .claude/rules/guides/parallel-dispatch.md
+詳見: .claude/pm-rules/parallel-dispatch.md
 ============================================================
 ```
 

@@ -11,7 +11,7 @@ Different document types have different readers, lifespans, and structural deman
 | Worklog                       | Future self / handoff receiver  | Per version (archived) | High (appended daily)             | Record decisions and milestones, not execution details   |
 | README                        | Newcomer / marketplace visitor  | Permanent              | Low (stable)                      | Orient readers in one screen, route to deeper docs       |
 | Spec (requirement / use case) | Implementers, reviewers, QA     | Permanent (versioned)  | Medium (evolves with scope)       | Define acceptable behaviour in testable terms            |
-| Methodology                   | Framework users (cross-project) | Permanent              | Low (distilled)                   | Give experts a 30-second recall checklist                |
+| Methodology                   | Framework users (cross-project) | Permanent              | Low (distilled)                   | Give framework users and AI an explicit, directly-applicable judgment standard                |
 | Error-pattern                 | Debuggers, reviewers            | Permanent              | Low (append-only)                 | Capture root cause + prevention so it doesn't recur      |
 | Ticket                        | Executor, dispatcher            | Per task (archived)    | Medium (mutated during execution) | Carry a single atomic intent from creation to completion |
 
@@ -263,7 +263,7 @@ Angles must not overlap: preconditions are entry guards, not flows; acceptance c
 | 檢查清單  | How do I verify I did it right?           | Self-check     |
 | Reference | Where is the full implementation guide?   | Defer to SKILL |
 
-30-second rule: if a reader cannot read the whole methodology in 30 seconds, either split it or move detail into a SKILL.
+Length discipline: keep only judgment criteria and core rules in the methodology; move operational flows, code examples, and error-handling to a SKILL. Length is whatever makes the criteria explicit and directly applicable — it is not bounded by reading time.
 
 ### Error-pattern template
 
@@ -359,9 +359,9 @@ Forbidden phrasings:
 
 Replace with description of what was done and what was observed.
 
-### 30-second elevator test
+### Length discipline: criteria stay, flows leave
 
-A methodology must be readable in 30 seconds. Everything beyond that belongs in a SKILL or reference.
+A methodology carries the framework's judgment criteria and core rules, written explicitly enough for a reader — including an AI applying them during development — to use directly. Operational detail, not the criteria themselves, belongs in a SKILL or reference.
 
 If rewriting an old verbose methodology, the test is:
 
@@ -369,9 +369,9 @@ If rewriting an old verbose methodology, the test is:
 | ---------------------------------------------------------------- | ------------------------ |
 | Does the file contain a complete operational workflow?           | Move it to a SKILL       |
 | Does it contain runnable code examples or error-handling detail? | Move to a SKILL          |
-| Does compression lose critical information?                      | Create a SKILL alongside |
+| Are the judgment criteria compressed into hint-like bullets a reader cannot apply directly? | Restore them explicitly in the methodology |
 
-Methodology remains as the 30-second recall card; SKILL holds the full walk-through.
+The methodology keeps its judgment criteria explicit and applicable; the SKILL holds the full walk-through. Never compress the criteria themselves to save length.
 
 ### Experience-sharing variant (six guidelines)
 
@@ -428,6 +428,6 @@ Skip rules: quick worklog notes can skip rounds 4-7'; stable specs / methodology
 | Write or append a worklog entry | Principle 1 + Worklog extensions                                       |
 | Start a README from scratch     | Principle 2 (indexing) + Principle 5 (README template)                 |
 | Draft a use-case spec           | Principle 3 (spec vs process) + Principle 5 (spec template)            |
-| Rewrite a bloated methodology   | Methodology extensions (30-second test) + Principle 1 (atomize)        |
+| Rewrite a bloated methodology   | Methodology extensions (length discipline) + Principle 1 (atomize)        |
 | Record a new error-pattern      | Principle 5 (error-pattern template) + Principle 4 (ID as grep anchor) |
 | Fill a ticket's fields          | Principle 5 (ticket template), then consult designing-fields.md        |

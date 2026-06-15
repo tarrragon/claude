@@ -663,6 +663,7 @@ def sync_directory(
     dst: Path,
     preserve: set[str] | None = None,
     prefix: Path = Path(),
+    project_root: Path | None = None,
 ) -> int:
     """增量同步來源目錄到目標目錄。
 
@@ -675,6 +676,7 @@ def sync_directory(
         dst: 目標目錄路徑
         preserve: 需要保留的本地特化檔案相對路徑集合
         prefix: 目前遞迴的相對路徑前綴
+        project_root: git repo root，預設 dst.parent（git-delete 復活防護判定基準）
 
     傳回:
         int: 更新或複製的檔案總數
@@ -683,10 +685,13 @@ def sync_directory(
         - 跳過 SKIP_DURING_SYNC 清單中的目錄和檔案
         - 跳過所有符號連結
         - 跳過 preserve 清單中的本地特化檔案
+        - 跳過本地刻意刪除（git 史最後事件為 D）的復活（M2）
         - 保留檔案的修改時間戳（使用 shutil.copy2）
     """
     if preserve is None:
         preserve = set()
+    if project_root is None:
+        project_root = dst.parent
     count = 0
     for item in src.iterdir():
         if item.name in SKIP_DURING_SYNC:
@@ -698,13 +703,21 @@ def sync_directory(
         dest_item = dst / item.name
         if item.is_dir():
             if dest_item.exists():
-                count += sync_directory(item, dest_item, preserve, rel)
+                count += sync_directory(item, dest_item, preserve, rel, project_root)
             else:
                 shutil.copytree(item, dest_item, symlinks=False,
                                 ignore=shutil.ignore_patterns(*SKIP_DURING_SYNC))
                 count += sum(1 for f in dest_item.rglob("*") if f.is_file())
         else:
             rel_str = str(rel).replace("\\", "/")
+            # M2：上游有、本地磁碟無、git 史最後事件為刪除 → 不復活
+            if not dest_item.exists() and _is_intentionally_deleted(
+                f".claude/{rel_str}", project_root
+            ):
+                print_color(
+                    f"   跳過復活本地刻意刪除檔: {rel_str}", "yellow"
+                )
+                continue
             if rel_str in preserve:
                 if not dest_item.exists():
                     print_color(f"   本地特化檔案不存在（可能已刪除）: {rel_str}", "yellow")
@@ -806,6 +819,48 @@ def _is_git_tracked(rel_under_root: str, project_root: Path) -> bool:
     return result.returncode == 0
 
 
+def _is_intentionally_deleted(rel_under_root: str, project_root: Path) -> bool:
+    """判斷相對 project_root 的路徑是否為「本地刻意刪除」。
+
+    full overlay 復活防護（M2）：用本地 git 史（隨 repo clone 而存在，survives
+    fresh clone）作刪除 SSOT，判定上游有但本地刻意刪除的孤兒檔不應被復活。
+
+    判定為刻意刪除須同時滿足：
+    1. 該檔目前不在本地磁碟（在磁碟者屬 overwrite 非復活，不適用）。
+    2. 本地 git 史最後一次涉及該檔的事件為刪除（D），非後續 re-add。
+
+    用 git log -1 --name-status 取最近一次涉及該檔的 commit 的 status：
+    最後事件 status 為 D（刪除）→ 刻意刪除。從未在 git 史出現（如上游新檔）
+    或最後事件為 A/M（新增/修改，re-add 後磁碟也應 present）→ 非刻意刪除。
+
+    參數:
+        rel_under_root: 相對 git repo root 的路徑（如 .claude/orphan.md）
+        project_root: git repo root 路徑
+
+    傳回:
+        bool: 為本地刻意刪除（磁碟 absent 且最後 git 事件為 D）為 True
+    """
+    # 條件 1：磁碟存在者不適用復活防護（屬 overwrite）
+    if (project_root / rel_under_root).exists():
+        return False
+    # 條件 2：最後一次涉及該檔的 git 事件 status
+    result = run_git(
+        ["log", "-1", "--name-status", "--format=", "--", rel_under_root],
+        cwd=str(project_root),
+    )
+    if result.returncode != 0:
+        return False
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        # name-status 行形如 "D\t.claude/orphan.md" 或 "R100\told\tnew"
+        status = line.split("\t", 1)[0]
+        return status.startswith("D")
+    # 無任何 commit 涉及此檔（從未在 git 史出現）→ 非刻意刪除
+    return False
+
+
 def cleanup_stale_files(
     claude_dir: Path,
     remote_files: set[Path],
@@ -894,11 +949,11 @@ def preview_overlay_changes(
     remote_files: set[Path],
     preserve: set[str] | None = None,
     project_root: Path | None = None,
-) -> tuple[list[str], list[tuple[str, bool]]]:
+) -> tuple[list[str], list[tuple[str, bool]], list[str]]:
     """full overlay 前的 dry-run 預覽。
 
     在實際 sync_directory + cleanup_stale_files 前，收集本次 overlay 的影響清單，
-    讓使用者在覆蓋發生前看見將被覆蓋與將被刪除（含 git 追蹤標記）的檔案。
+    讓使用者在覆蓋/刪除/跳過復活發生前看見受影響的檔案。
 
     參數:
         temp_dir: 上游 repo clone 路徑
@@ -908,11 +963,13 @@ def preview_overlay_changes(
         project_root: git repo root，預設 claude_dir.parent
 
     傳回:
-        tuple[list[str], list[tuple[str, bool]]]:
-          (will_overwrite, will_delete)
+        tuple[list[str], list[tuple[str, bool]], list[str]]:
+          (will_overwrite, will_delete, will_skip_resurrection)
           will_overwrite = 本地存在且與遠端內容不同的相對路徑（會被覆蓋）
           will_delete = [(rel, is_tracked)] 本地有遠端無的檔；is_tracked True 者
                         將轉存 .sync-conflicts（非真刪），False 者真刪
+          will_skip_resurrection = 上游有、本地磁碟無、git 史最後事件為刪除的相對
+                        路徑（M2 跳過復活，消除復活靜默）
     """
     if preserve is None:
         preserve = set()
@@ -920,6 +977,7 @@ def preview_overlay_changes(
         project_root = claude_dir.parent
     will_overwrite: list[str] = []
     will_delete: list[tuple[str, bool]] = []
+    will_skip_resurrection: list[str] = []
 
     def _walk(directory: Path, prefix: Path = Path()) -> None:
         if not directory.exists():
@@ -943,8 +1001,29 @@ def preview_overlay_changes(
                 if upstream_item.exists() and _files_differ(upstream_item, item):
                     will_overwrite.append(rel_str)
 
+    def _walk_upstream(directory: Path, prefix: Path = Path()) -> None:
+        """走訪上游目錄，找出本地磁碟無但屬刻意刪除的復活候選。"""
+        if not directory.exists():
+            return
+        for item in sorted(directory.iterdir()):
+            if item.name in SKIP_DURING_SYNC or item.is_symlink():
+                continue
+            rel = prefix / item.name
+            if item.is_dir():
+                _walk_upstream(item, rel)
+                continue
+            rel_str = str(rel).replace("\\", "/")
+            if rel_str in preserve:
+                continue
+            local_item = claude_dir / rel
+            if not local_item.exists() and _is_intentionally_deleted(
+                f".claude/{rel_str}", project_root
+            ):
+                will_skip_resurrection.append(rel_str)
+
     _walk(claude_dir)
-    return will_overwrite, will_delete
+    _walk_upstream(temp_dir)
+    return will_overwrite, will_delete, will_skip_resurrection
 
 
 def _ensure_conflicts_dir(claude_dir: Path) -> Path:
@@ -1023,6 +1102,34 @@ def warn_conflict_residue(claude_dir: Path) -> list[str]:
             "yellow",
         )
     return residue
+
+
+def warn_upstream_deleted_residue(residue: list[str]) -> None:
+    """pull 結尾通報「上游已刪除但本地分歧而保留」之檔（缺口 1，W8-037）。
+
+    背景：上游 delta 標記某框架檔為刪除，但本地已修改過該檔，three_way_merge_file
+    保留本地（conflict=False），不進 .sync-conflicts/，pull 原本完全無通報——客製過
+    框架檔後被上游刪除的孤兒於是靜默殘留。此處於 pull 結尾把這些案例列出（stdout
+    可見），鏡像 warn_conflict_residue 模式。
+
+    措辭刻意非阻擋（W8-037 Premortem R1）：保留的檔可能是應清理的孤兒，也可能是
+    刻意客製，腳本無法自動判別，故僅提醒不自動刪、不阻擋、不視為失敗。
+
+    參數:
+        residue: apply_upstream_delta 回傳的上游已刪保留檔清單（相對 .claude/）
+    """
+    if not residue:
+        return
+    print_color(
+        f"提醒: {len(residue)} 個檔案上游已刪除，但本地版本已修改而保留:",
+        "yellow",
+    )
+    for rel in sorted(residue):
+        print_color(f"   ! {rel}")
+    print_color(
+        "   若為應清理的孤兒請手動移除；若為刻意客製可忽略此提醒。",
+        "yellow",
+    )
 
 
 def _rel_under_claude(repo_rel_path: str) -> str | None:
@@ -1247,7 +1354,7 @@ def apply_upstream_delta(
     temp_dir: Path,
     base_sha: str,
     preserve: set[str] | None = None,
-) -> tuple[int, list[str]]:
+) -> tuple[int, list[str], list[str]]:
     """以三方合併方式套用上游 delta，原子置換只搬 delta 涉及的檔案（H2）。
 
     流程：
@@ -1265,7 +1372,15 @@ def apply_upstream_delta(
         preserve: sync-preserve.yaml 的 preserve 清單（相對 .claude/）
 
     傳回:
-        tuple[int, list[str]]: (套用成功檔數, 衝突檔清單)
+        tuple[int, list[str], list[str]]: (套用成功檔數, 衝突檔清單,
+            上游已刪除但本地分歧而保留之檔清單)
+
+    上游刪除但本地分歧保留（缺口 1，W8-037）：
+        上游 delta 標記某檔為 D（刪除），但本地已修改過該檔（local != base），
+        three_way_merge_file 回 (local_content, False)——保留本地、不視為衝突、
+        不進 .sync-conflicts/。此路徑使「客製過框架檔後被上游刪除」的孤兒靜默殘留，
+        pull 無任何通報。此處收集這些案例於第三個回傳值，由呼叫端 pull 結尾通報，
+        鏡像 W1-084 .sync-conflicts 殘留警告模式（非阻擋、非自動刪，僅提醒人工判斷）。
     """
     if preserve is None:
         preserve = set()
@@ -1275,6 +1390,8 @@ def apply_upstream_delta(
 
     applied = 0
     conflicts: list[str] = []
+    # 上游已刪除但本地分歧而保留（缺口 1，W8-037）：靜默殘留候選清單
+    upstream_deleted_residue: list[str] = []
     # 回滾記錄：(目標路徑, 備份路徑 or None 表原本不存在)
     rollback_log: list[tuple[Path, Path | None]] = []
     # PC 撞號偵測索引（瑕疵 D）：合併前一次性掃描本地 error-patterns。
@@ -1373,6 +1490,13 @@ def apply_upstream_delta(
                     applied += 1
                 continue
 
+            # 缺口 1（W8-037）：上游刪除（status==D → upstream_path is None）但本地
+            # 分歧而保留——three_way_merge_file 回 (local_content, False)，merged 即
+            # 本地原內容。收集為靜默殘留候選，於 pull 結尾通報供人工判斷孤兒/客製。
+            # 排除 local_deleted（本地已刪走 merged is None 路徑）與本地未改（已跟刪）。
+            if status == "D" and not local_deleted:
+                upstream_deleted_residue.append(claude_rel)
+
             # 原子套用：staging → os.replace
             _atomic_write(local_file, merged, rollback_log)
             applied += 1
@@ -1384,7 +1508,7 @@ def apply_upstream_delta(
         sys.stderr.write(f"apply_upstream_delta 失敗已回滾: {exc}\n")
         raise
 
-    return applied, conflicts
+    return applied, conflicts, upstream_deleted_residue
 
 
 def _atomic_write(target: Path, content: bytes, rollback_log: list) -> None:
@@ -1553,9 +1677,9 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
         print_color("更新 .claude 資料夾（全量 overlay）...")
         remote_files = collect_remote_files(temp_dir)
 
-        # full overlay 前 dry-run 預覽（讓覆蓋/刪除在發生前可見）
-        will_overwrite, will_delete = preview_overlay_changes(
-            temp_dir, claude_dir, remote_files, preserve
+        # full overlay 前 dry-run 預覽（讓覆蓋/刪除/跳過復活在發生前可見）
+        will_overwrite, will_delete, will_skip_resurrection = preview_overlay_changes(
+            temp_dir, claude_dir, remote_files, preserve, project_root
         )
         if will_overwrite:
             print_color(f"   [dry-run] 將覆蓋 {len(will_overwrite)} 個本地檔案", "yellow")
@@ -1573,8 +1697,15 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
                 print_color(f"     -> conflict: {r}")
             for r in untracked[:50]:
                 print_color(f"     - delete: {r}")
+        if will_skip_resurrection:
+            print_color(
+                f"   [dry-run] 將跳過復活 {len(will_skip_resurrection)} 個本地刻意刪除檔"
+                "（git 史最後事件為刪除）:", "yellow"
+            )
+            for r in will_skip_resurrection[:50]:
+                print_color(f"     x skip-resurrection: {r}")
 
-        file_count = sync_directory(temp_dir, claude_dir, preserve)
+        file_count = sync_directory(temp_dir, claude_dir, preserve, project_root=project_root)
         print_color(f"   已更新 {file_count} 個檔案", "green")
 
         removed, preserved_conflicts = cleanup_stale_files(
@@ -1596,7 +1727,7 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
     else:
         # A3 三方合併：只搬 base→HEAD delta 涉及的檔案，保留本地刪除與 runtime state
         print_color("更新 .claude 資料夾（三方合併）...")
-        applied, conflicts = apply_upstream_delta(
+        applied, conflicts, upstream_deleted_residue = apply_upstream_delta(
             project_root, temp_dir, base_sha, preserve
         )
         print_color(f"   已套用 {applied} 個 delta 變更", "green")
@@ -1609,6 +1740,8 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
                 print_color(f"     - {c}")
         else:
             print_color("   無衝突", "green")
+        # 缺口 1（W8-037）：上游已刪但本地分歧保留之檔，pull 結尾通報（非阻擋）
+        warn_upstream_deleted_residue(upstream_deleted_residue)
 
     # 同步成功後寫入新的 base SHA（上游 HEAD）
     head_result = run_git(["rev-parse", "HEAD"], cwd=str(temp_dir))
@@ -1788,6 +1921,76 @@ def _complete_sync(temp_dir: Path, project_root: Path, backup_dir: Path) -> None
     _finalize_sync(backup_dir)
 
 
+def compute_orphan_candidates(
+    claude_dir: Path,
+    upstream_dir: Path,
+    preserve: set[str] | None = None,
+) -> list[str]:
+    """列出本地 .claude/ 有但上游 HEAD 無之檔（孤兒候選，缺口 2，W8-037.3）。
+
+    主動孤兒稽核：delta 路徑（base..HEAD）只看上次同步後的窗，看不到早於 base
+    即已分歧的孤兒。本函式以「上游 HEAD 全檔集」對比「本地全檔集」做全量差集，
+    涵蓋所有「本地有上游無」之檔（含早於 base 不在 delta 窗者）。
+
+    過濾規則與同步主流程一致：collect_remote_files 已跳過 SKIP_DURING_SYNC 與
+    symlink；再排除 preserve 清單與 should_exclude（LOCAL_ONLY / 憑證），
+    避免本地特化 / runtime state 被誤列為孤兒。
+
+    措辭刻意非阻擋（W8-037 Premortem R1）：列出之檔可能是應清理的孤兒，也可能是
+    刻意本地特化，腳本無法自動判別，僅供人工判斷，不自動刪、不阻擋。
+
+    參數:
+        claude_dir: 本地 .claude 目錄路徑
+        upstream_dir: 上游 repo clone 路徑（其 root 對應本地 .claude/）
+        preserve: sync-preserve.yaml 的 preserve 清單（相對 .claude/）
+
+    傳回:
+        list[str]: 孤兒候選相對 .claude/ 的路徑清單，已排序
+    """
+    if preserve is None:
+        preserve = set()
+    local_files = collect_remote_files(claude_dir)
+    upstream_files = collect_remote_files(upstream_dir)
+    orphans: list[str] = []
+    for rel in local_files - upstream_files:
+        rel_str = str(rel).replace("\\", "/")
+        if rel_str in preserve or should_exclude(rel):
+            continue
+        orphans.append(rel_str)
+    return sorted(orphans)
+
+
+def run_audit() -> None:
+    """sync-pull --audit：唯讀稽核本地有上游無之孤兒候選（不動同步主流程）。
+
+    clone 上游 → 計算孤兒候選 → stdout 列出（非阻擋提醒）。不寫入任何本地檔，
+    不更新 base SHA，純唯讀分支。
+    """
+    print_color("孤兒稽核：比對本地 .claude/ 與上游 HEAD...", "yellow")
+    project_root = find_project_root()
+    claude_dir = project_root / ".claude"
+    temp_dir = Path(tempfile.mkdtemp())
+    try:
+        clone_repo(temp_dir)
+        preserve = load_preserve_list(claude_dir)
+        orphans = compute_orphan_candidates(claude_dir, temp_dir, preserve)
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    if not orphans:
+        print_color("   無孤兒候選（本地 .claude/ 皆存在於上游 HEAD）", "green")
+        return
+    print_color(
+        f"   {len(orphans)} 個本地有上游無之檔（孤兒候選）:", "yellow"
+    )
+    for rel in orphans:
+        print_color(f"   ! {rel}")
+    print_color(
+        "   若為應清理的孤兒請手動移除；若為刻意本地特化可忽略此提醒。",
+        "yellow",
+    )
+
+
 def main() -> None:
     """同步 .claude 配置從獨立 repo。
 
@@ -1796,7 +1999,14 @@ def main() -> None:
     2. 驗證環境和本地狀態
     3. 克隆遠端 repo 並執行備份同步
     4. 完成同步（更新模板、清理、輸出結果）
+
+    旗標：
+        --audit  唯讀孤兒稽核（列本地有上游無之檔），不執行同步主流程。
     """
+    if "--audit" in sys.argv[1:]:
+        run_audit()
+        return
+
     print_color("開始從獨立 repo 拉取 .claude 更新...")
 
     project_root = find_project_root()

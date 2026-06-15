@@ -2,7 +2,7 @@
 
 本檔案包含詳細的情境分析範例，供深入理解查詢 vs 研究的判斷邏輯。
 
-> 快速決策指南：@.claude/rules/guides/query-vs-research.md
+> 快速決策指南：@.claude/pm-rules/query-vs-research.md
 
 ---
 

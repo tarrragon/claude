@@ -145,7 +145,7 @@ Phase 1 拆分分析完成後，使用以下範本產出報告：
 - `/tdd split` 命令：`../SKILL.md`（SOLID 檢查清單和拆分流程）
 - Phase 1 設計指引：`phase1-design.md`（功能規格、API 設計、GWT 場景）
 - 可攜式設計邊界：`portable-design-boundary.md`
-- 任務拆分指南：`.claude/rules/guides/task-splitting.md`
+- 任務拆分指南：`.claude/pm-rules/task-splitting.md`
 
 ---
 

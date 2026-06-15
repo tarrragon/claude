@@ -77,9 +77,9 @@ Build time 為每種 filter mode 各建一份 source、runtime 切 mode = 切 so
 - **B + 上限 → D**：自動續抓到上限後切 D（顯示「已掃 N 筆、再掃？」）
 - **C + B 補強**：預先 index 解一般 case、B 解 index 沒覆蓋的組合
 
-並用通常比單選有效、但複雜度也最高。詳細的疊加判準（解不同層 / 沒副作用衝突 / 增量成本可接受）見 [`main-strategy-plus-supplementary.md`](./main-strategy-plus-supplementary.md) — 本表的「並用」就是該原則的具體展現。
+並用通常比單選有效、但複雜度也最高。詳細的疊加判準（解不同層 / 沒副作用衝突 / 增量成本可接受）見 [`main-strategy-plus-supplementary.md`](.claude/skills/requirement-protocol/references/principles/main-strategy-plus-supplementary.md) — 本表的「並用」就是該原則的具體展現。
 
-「先 ship 哪個策略、哪個下輪」見 [`incremental-shipping-criteria.md`](./incremental-shipping-criteria.md) — 例如 D（UX）通常先 ship、A/C（結構）下輪。
+「先 ship 哪個策略、哪個下輪」見 [`incremental-shipping-criteria.md`](.claude/skills/requirement-protocol/references/principles/incremental-shipping-criteria.md) — 例如 D（UX）通常先 ship、A/C（結構）下輪。
 
 ---
 

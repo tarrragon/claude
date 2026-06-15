@@ -131,8 +131,8 @@ hook_messages.py 被 C-001, C-002, M-004, M-005 觸及
 
 ## 相關資源
 
-- `.claude/rules/guides/task-splitting.md` - 任務拆分指南（策略 5 批量修正拆分、策略 6 檔案所有權隔離）
-- `.claude/rules/guides/parallel-dispatch.md` - 並行派發指南
+- `.claude/pm-rules/task-splitting.md` - 任務拆分指南（策略 5 批量修正拆分、策略 6 檔案所有權隔離）
+- `.claude/pm-rules/parallel-dispatch.md` - 並行派發指南
 
 ## 標籤
 
