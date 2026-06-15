@@ -1,3 +1,13 @@
+## [1.48.3] - 2026-06-15
+
+### Summary
+清理遠端孤兒：傳播過時 legacy 文件與 dead 範本之刪除
+
+移除 agent 協作規範舊副本、tdd 協作流程 legacy 副本、ticket-system 範本
+（本地已刪除，--clean 傳播至遠端避免 full overlay 復發孤兒）
+
+---
+
 ## [1.48.2] - 2026-06-15
 
 ### Summary
