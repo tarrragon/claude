@@ -65,3 +65,35 @@ class TestGetTicketsDirHierarchical:
             result = get_tickets_dir("v3.1.0")
             expected = tmp_path / "docs" / "work-logs" / "v3" / "v3.1" / "v3.1.0" / "tickets"
             assert result == expected
+
+
+class TestGetTicketsDirFlatCompat:
+    """W9-006.1 / issue #1 問題4：既有 flat 結構讀取相容（不破 W14-052 不變式）。"""
+
+    def test_existing_flat_returned_when_hierarchical_absent(self, tmp_path):
+        """既有 flat docs/work-logs/v0.1.0/tickets/ 在 hierarchical 不存在時應回 flat。
+
+        重現 issue #1 問題4：scanner 找得到 flat 但 get_tickets_dir 一律回三層
+        致 track list 讀 0 張。
+        """
+        flat = tmp_path / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        flat.mkdir(parents=True)
+        with patch("ticket_system.lib.paths.get_project_root", return_value=tmp_path):
+            assert get_tickets_dir("0.1.0") == flat
+
+    def test_hierarchical_preferred_when_both_exist(self, tmp_path):
+        """hierarchical 與 flat 同時存在時優先 hierarchical（三層為正規結構）。"""
+        flat = tmp_path / "docs" / "work-logs" / "v0.1.0" / "tickets"
+        flat.mkdir(parents=True)
+        hier = tmp_path / "docs" / "work-logs" / "v0" / "v0.1" / "v0.1.0" / "tickets"
+        hier.mkdir(parents=True)
+        with patch("ticket_system.lib.paths.get_project_root", return_value=tmp_path):
+            assert get_tickets_dir("0.1.0") == hier
+
+    def test_new_version_still_hierarchical_despite_other_flat(self, tmp_path):
+        """既有 flat v0.1.0 不影響新版本 v0.2.0 仍回三層（W14-052 不變式保全）。"""
+        (tmp_path / "docs" / "work-logs" / "v0.1.0" / "tickets").mkdir(parents=True)
+        with patch("ticket_system.lib.paths.get_project_root", return_value=tmp_path):
+            result = get_tickets_dir("0.2.0")
+            expected = tmp_path / "docs" / "work-logs" / "v0" / "v0.2" / "v0.2.0" / "tickets"
+            assert result == expected

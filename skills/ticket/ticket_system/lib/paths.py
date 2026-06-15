@@ -89,15 +89,23 @@ def get_tickets_dir(version: str) -> Path:
     bare_version = version.lstrip("v").lstrip(VERSION_PREFIX)
     versioned = f"{VERSION_PREFIX}{bare_version}"
 
-    # 解析 major.minor 用於階層路徑
-    # W14-052：可解析 major.minor 時一律回傳三層階層路徑，
-    # 不依賴目錄存在性檢查；避免未存在主版本 fallback 至 flat
-    # 結構造成跨專案殘留 + 與三層規則不一致。
+    # 解析 major.minor 用於階層路徑。
+    # W14-052：新建 ticket 一律三層（避免未存在主版本建在 flat 造成殘留 +
+    #   與三層規則不一致）。
+    # W9-006.1 / issue #1 問題4：補既有 flat 結構（docs/work-logs/v{version}/
+    #   tickets/）的「讀取」相容——hierarchical 存在用之；否則 flat 實際存在
+    #   才回 flat（讀既有）；兩者皆不存在時 default hierarchical。新版本（flat
+    #   不存在）仍一律三層，W14-052 不變式不破。
     parts = bare_version.split(".")
     if len(parts) >= 2:
         major = parts[0]
         minor = f"{parts[0]}.{parts[1]}"
         hierarchical = root / WORK_LOGS_DIR / f"v{major}" / f"v{minor}" / versioned / TICKETS_DIR
+        if hierarchical.exists():
+            return hierarchical
+        flat = root / WORK_LOGS_DIR / versioned / TICKETS_DIR
+        if flat.exists():
+            return flat
         return hierarchical
 
     # 最終 safety net：版本字串無法解析 major.minor 時使用 flat 結構

@@ -21,6 +21,7 @@ status=in_progress 並回傳 1。
 from __future__ import annotations
 
 import multiprocessing as mp
+import sys
 from pathlib import Path
 from typing import Tuple
 
@@ -28,6 +29,15 @@ import pytest
 
 from ticket_system.lib import parser, ticket_loader
 from ticket_system.lib.parser import parse_frontmatter
+
+# W9-005 / issue #1 問題6：本套件以 multiprocessing fork mode 共享 monkeypatch
+# state（spawn 下 patch 不傳遞至 child 會 false GREEN）。Windows 無 fork，於
+# collect 階段即 ValueError，故 win32 整檔 skip（鎖跨平台正確性已由
+# test_reap_stale_locks / test_precondition_lock_safety 覆蓋）。
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="fork-based race test；Windows 無 fork，monkeypatch 不傳遞至 spawn child",
+)
 
 
 @pytest.fixture(scope="module", autouse=True)

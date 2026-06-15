@@ -121,11 +121,21 @@ class TestRemediationGuidance:
     """測試修復指導."""
 
     def test_python_install_steps(self) -> None:
-        """測試 Python 安裝步驟."""
+        """測試 Python 安裝步驟（W9-001 uv 優先 + 保留手動安裝替代）."""
         steps = RemediationGuidance.get_python_install_steps()
         assert len(steps) == 4
         assert any("python.org" in step for step in steps)
         assert any("3.14" in step for step in steps)
+        assert any("uv python install" in step for step in steps)
+
+    def test_python_install_steps_os_aware_verify_cmd(self) -> None:
+        """W9-001：驗證命令依 OS 切換（Windows python / 類 Unix python3）."""
+        win_steps = RemediationGuidance.get_python_install_steps("Windows")
+        assert any("python --version" in step for step in win_steps)
+        assert not any("python3 --version" in step for step in win_steps)
+
+        unix_steps = RemediationGuidance.get_python_install_steps("Darwin")
+        assert any("python3 --version" in step for step in unix_steps)
 
     def test_uv_install_steps(self) -> None:
         """測試 UV 安裝步驟."""

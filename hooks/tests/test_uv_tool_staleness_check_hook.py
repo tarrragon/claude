@@ -255,7 +255,10 @@ def test_stale_skill_produces_outdated_line(
     assert code == 0
     msg = payload["hookSpecificOutput"]["additionalContext"]
     assert "[UV Tool Staleness] ticket-system [OUTDATED]" in msg
-    assert "cd .claude/skills/ticket && uv tool install . --force --reinstall" in msg
+    # W9-003：免 cd 絕對路徑形式（PowerShell 5.1 無 && chain operator）
+    expected_path = fake_root / ".claude" / "skills" / "ticket"
+    assert f'uv tool install "{expected_path}" --force --reinstall' in msg
+    assert "&&" not in msg
 
 
 # ----------------------------------------------------------------------------
@@ -302,7 +305,9 @@ def test_missing_skill_produces_missing_line_and_exit_0(
     assert code == 0
     msg = payload["hookSpecificOutput"]["additionalContext"]
     assert "[MISSING]" in msg
-    assert "uv tool install ." in msg
+    # W9-003：免 cd 絕對路徑形式（PowerShell 5.1 相容）
+    assert 'uv tool install "' in msg
+    assert "&&" not in msg
 
 
 # ----------------------------------------------------------------------------
@@ -574,7 +579,10 @@ def test_single_file_skill_stale_is_outdated(
     assert code == 0
     msg = payload["hookSpecificOutput"]["additionalContext"]
     assert "version-release [OUTDATED]" in msg
-    assert "cd .claude/skills/version-release && uv tool install . --force --reinstall" in msg
+    # W9-003：免 cd 絕對路徑形式（PowerShell 5.1 相容）
+    expected_path = fake_root / ".claude" / "skills" / "version-release"
+    assert f'uv tool install "{expected_path}" --force --reinstall' in msg
+    assert "&&" not in msg
 
 
 def test_single_file_skill_missing_installed_is_missing(

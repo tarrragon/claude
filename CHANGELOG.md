@@ -1,3 +1,19 @@
+## [1.48.4] - 2026-06-16
+
+### Summary
+fix: get_tickets_dir 加既有 flat 結構讀取相容（issue #1 問題4）; fix: save_ticket 保留檔尾換行 + race 測試 win32 skip（跨平台收尾）; fix: hook-completeness 新增反向檢查（幽靈註冊+跨檔重複偵測） (+3 more)
+
+Changes: 6 fix
+
+- fix: get_tickets_dir 加既有 flat 結構讀取相容（issue #1 問題4）
+- fix: save_ticket 保留檔尾換行 + race 測試 win32 skip（跨平台收尾）
+- fix: hook-completeness 新增反向檢查（幽靈註冊+跨檔重複偵測）
+- fix: uv-tool-staleness install 指令改絕對路徑免 cd（PowerShell 相容）
+- fix: project-init Python 偵測多候選+uv fallback、安裝指引 OS 感知（Windows 跨平台）
+- fix: file_lock 改用 filelock 取代 fcntl（Windows 跨平台 P0）
+
+---
+
 ## [1.48.3] - 2026-06-15
 
 ### Summary

@@ -79,48 +79,74 @@ def detect_os() -> OsInfo:
         return OsInfo(system="Unknown", version="", is_available=False)
 
 
-def detect_python() -> PythonInfo:
-    """偵測 Python 版本和路徑.
+def _query_python_version(executable: str) -> Optional[PythonInfo]:
+    """查詢單一 Python 執行檔的版本；失敗回傳 None（不丟 Timeout/OSError）。
 
-    檢查 `python3` 命令是否可用，並提取版本資訊。
+    Note:
+        部分 Python 版本將版本字串輸出至 stderr，故 stdout 為空時取 stderr。
+    """
+    try:
+        result = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    version = (result.stdout or result.stderr).strip()
+    return PythonInfo(version=version, path=executable, is_available=True)
+
+
+def detect_python() -> PythonInfo:
+    """偵測 Python 版本和路徑（OS 感知多候選 + uv fallback）。
+
+    Why（W9-001 跨平台）：原版只查 `shutil.which("python3")`，但 Windows
+    的執行檔名為 `python.exe`（無 python3），且 uv 下載的 Python 不進系統
+    PATH，導致正常 Windows 環境被誤判「未安裝」（framework issue #1 問題1）。
+    改為多候選命令（Windows: python/python3/py；類 Unix: python3/python），
+    全部 miss 時 fallback `uv python find` 以涵蓋 uv 管理但不在 PATH 的
+    Python。
 
     Returns:
         PythonInfo: Python 環境資訊。若未找到，is_available 為 False。
     """
     try:
-        python_path = shutil.which("python3")
-        if not python_path:
-            return PythonInfo(
-                version="",
-                path=None,
-                is_available=False,
-                failure_reason="python3 命令未在 PATH 中找到",
-            )
+        if platform.system() == "Windows":
+            candidates = ["python", "python3", "py"]
+        else:
+            candidates = ["python3", "python"]
+        for name in candidates:
+            resolved = shutil.which(name)
+            if not resolved:
+                continue
+            info = _query_python_version(resolved)
+            if info is not None:
+                return info
 
-        result = subprocess.run(
-            ["python3", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            return PythonInfo(
-                version="",
-                path=python_path,
-                is_available=False,
-                failure_reason="無法執行 python3 --version 命令",
-            )
+        # fallback：uv 管理的 Python 可能不在系統 PATH。
+        if shutil.which("uv"):
+            try:
+                found = subprocess.run(
+                    ["uv", "python", "find"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+            except (subprocess.TimeoutExpired, OSError):
+                found = None
+            if found is not None and found.returncode == 0 and found.stdout.strip():
+                info = _query_python_version(found.stdout.strip())
+                if info is not None:
+                    return info
 
-        version = result.stdout.strip()
-        return PythonInfo(
-            version=version, path=python_path, is_available=True
-        )
-    except subprocess.TimeoutExpired:
         return PythonInfo(
             version="",
             path=None,
             is_available=False,
-            failure_reason="執行 python3 --version 超時",
+            failure_reason="未找到 Python（已嘗試 PATH 候選與 uv 管理的 Python）",
         )
     except Exception as e:
         return PythonInfo(

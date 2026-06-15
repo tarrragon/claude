@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "Unified Ticket System for Claude Code - 整合 create/track/handoff/resume 四大功能的統一 Ticket 管理系統"
 readme = "SKILL.md"
 requires-python = ">=3.9"
-dependencies = ["pyyaml>=5.0"]
+dependencies = ["pyyaml>=5.0", "filelock>=3.12"]
 authors = [
     {name = "Claude Code", email = "claude@anthropic.com"}
 ]

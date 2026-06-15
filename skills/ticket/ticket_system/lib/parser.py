@@ -346,6 +346,13 @@ def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
                 sort_keys=False,
             )
 
+        # 保留檔尾單一換行（W9-005 / issue #1 問題5）：load 不保證 body 帶
+        # 檔尾換行，直接寫回會讓 claim/release roundtrip 吃掉檔尾換行，產生
+        # 「No newline at end of file」git diff 雜訊。僅在缺換行時補一個，
+        # 不動既有換行（避免改動帶尾換行的 body）。
+        if not content.endswith("\n"):
+            content += "\n"
+
         # 寫入檔案（UTF-8 編碼）
         with open(ticket_path, "w", encoding="utf-8") as f:
             f.write(content)

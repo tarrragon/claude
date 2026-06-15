@@ -4,6 +4,9 @@
 遵循命名規則：CONTEXT_DESCRIPTION（如 PYTHON_NOT_INSTALLED）。
 """
 
+import platform
+from typing import Optional
+
 
 # ========== OS 訊息 ==========
 class OSMessages:
@@ -168,12 +171,29 @@ class RemediationGuidance:
     """各類問題的修復步驟指導."""
 
     @staticmethod
-    def get_python_install_steps() -> list[str]:
-        """取得 Python 安裝步驟."""
+    def get_python_install_steps(os_type: Optional[str] = None) -> list[str]:
+        """取得 Python 安裝步驟（OS 感知 + uv 優先）。
+
+        Why（W9-001 跨平台）：原步驟導向 python.org 手動安裝 +
+        `python3 --version` 驗證，屬 macOS/Linux 思維；Windows 執行檔為
+        `python.exe`（無 python3），手動安裝還需自行處理 PATH。框架本就
+        硬性依賴 uv，`uv python install` 跨平台一致且免改 PATH，故改為
+        uv 優先、保留手動安裝為替代。
+
+        Args:
+            os_type: 作業系統類型（None 時自動以 platform.system() 偵測）。
+
+        Returns:
+            list[str]: 分步驟安裝指導清單。
+        """
+        if os_type is None:
+            os_type = platform.system()
+        is_windows = os_type.lower() in ("windows", "win32")
+        verify_cmd = "python --version" if is_windows else "python3 --version"
         return [
-            "訪問 https://www.python.org/downloads/ 下載 Python 3.14 或更高版本",
-            "執行安裝程式並完成安裝",
-            "驗證安裝: python3 --version",
+            "（推薦，已裝 uv）安裝指定版本: uv python install 3.14",
+            f"驗證安裝: uv run python --version  或  {verify_cmd}",
+            "（替代）手動安裝: https://www.python.org/downloads/ 下載 3.14+",
             "重新執行 project-init check",
         ]
 

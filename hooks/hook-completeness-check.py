@@ -22,7 +22,9 @@ import os
 import stat
 import subprocess
 import sys
+from collections import defaultdict
 from pathlib import Path
+from typing import List, Optional, Tuple
 
 _HOOKS_DIR = Path(__file__).parent
 _CLAUDE_DIR = _HOOKS_DIR.parent
@@ -41,6 +43,113 @@ from project_init.lib.hook_checker import (
     scan_skill_hooks,
     should_exclude_file,
 )
+
+
+# ---------------------------------------------------------------------------
+# 反向檢查：已註冊但檔案不存在的幽靈註冊 + 跨檔重複註冊（W9-004 / framework issue #2）
+# ---------------------------------------------------------------------------
+#
+# Why：正向檢查（檔存在但未註冊）抓不到「已註冊但 command 指向不存在的檔」。
+# 後者才是會造成 runtime 崩潰的類型——hook relocate 後 settings.local.json
+# 殘留舊路徑註冊，每次該事件（如 Stop）觸發都因 No such file or directory 報錯，
+# 卻無守衛。本組函式掃描所有 settings*.json 已註冊 command，解析檔路徑，對
+# 不存在者發 WARNING，並標記同一 hook 跨檔（settings.json + settings.local.json）
+# 的重複註冊（additive 關係會重複執行，auto-resume 類有副作用風險）。
+
+
+def _resolve_command_path(command: str, project_root: Path) -> Optional[Path]:
+    """從 hook command 字串解析出 .py 檔絕對路徑。
+
+    處理 $CLAUDE_PROJECT_DIR / ${CLAUDE_PROJECT_DIR} 前綴與 interpreter 前綴
+    （如 `python3 .../foo.py args`，取第一個以 .py 結尾的 token）。
+
+    Returns:
+        指向 .py 檔的絕對路徑；command 不含 .py token（inline shell 等）時回 None。
+    """
+    if not command:
+        return None
+    py_token = next(
+        (tok for tok in command.split() if tok.endswith(".py")), None
+    )
+    if py_token is None:
+        return None
+    resolved = py_token.replace("${CLAUDE_PROJECT_DIR}", str(project_root))
+    resolved = resolved.replace("$CLAUDE_PROJECT_DIR", str(project_root))
+    path = Path(resolved)
+    if not path.is_absolute():
+        path = project_root / path
+    return path
+
+
+def extract_registered_commands(settings: dict) -> List[Tuple[str, str, str]]:
+    """從 settings dict 提取所有 (event_type, matcher, command) 三元組。
+
+    保留 matcher：同一 hook 在同事件下以不同 matcher（如 Edit / Write）註冊
+    屬合法多工具覆蓋，非重複；重複偵測須以 (event, matcher, 路徑) 為鍵。
+    """
+    triples: List[Tuple[str, str, str]] = []
+    hooks_config = settings.get("hooks", {})
+    for event_type, event_hooks in hooks_config.items():
+        if isinstance(event_hooks, list):
+            for hook_group in event_hooks:
+                if isinstance(hook_group, dict):
+                    matcher = hook_group.get("matcher", "")
+                    for hook in hook_group.get("hooks", []):
+                        if isinstance(hook, dict):
+                            command = hook.get("command", "")
+                            if command:
+                                triples.append((event_type, matcher, command))
+    return triples
+
+
+def find_phantom_registrations(
+    settings_sources: List[Tuple[str, Optional[dict]]], project_root: Path
+) -> List[Tuple[str, str, str]]:
+    """找出「已註冊但 command 指向不存在的 .py 檔」的幽靈註冊。
+
+    Args:
+        settings_sources: [(來源標籤, settings dict 或 None), ...]。
+        project_root: 專案根目錄（解析 $CLAUDE_PROJECT_DIR）。
+
+    Returns:
+        [(來源標籤, event_type, 解析後不存在的路徑字串), ...]。
+    """
+    phantoms: List[Tuple[str, str, str]] = []
+    for label, settings in settings_sources:
+        if not settings:
+            continue
+        for event_type, _matcher, command in extract_registered_commands(settings):
+            path = _resolve_command_path(command, project_root)
+            if path is None:
+                continue  # 非 .py 檔 hook（inline shell 等）不檢查
+            if not path.exists():
+                phantoms.append((label, event_type, str(path)))
+    return phantoms
+
+
+def find_duplicate_registrations(
+    settings_sources: List[Tuple[str, Optional[dict]]], project_root: Path
+) -> List[Tuple[str, str, List[str]]]:
+    """找出同一 hook 檔在相同事件類型下被重複註冊（跨檔或同檔多次）。
+
+    Returns:
+        [(event_type, 解析後路徑字串, [來源標籤(可含重複), ...]), ...]，
+        僅含註冊次數 > 1 者。
+    """
+    occurrences: dict = defaultdict(list)
+    for label, settings in settings_sources:
+        if not settings:
+            continue
+        for event_type, matcher, command in extract_registered_commands(settings):
+            path = _resolve_command_path(command, project_root)
+            if path is None:
+                continue
+            occurrences[(event_type, matcher, str(path))].append(label)
+    dups: List[Tuple[str, str, List[str]]] = []
+    for (event_type, _matcher, path_str), labels in occurrences.items():
+        if len(labels) > 1:
+            dups.append((event_type, path_str, sorted(labels)))
+    return dups
 
 
 def _check_and_fix_permissions(hooks_dir, logger):
@@ -332,6 +441,42 @@ def main():
         log_output = "\n建議: 檢查這些 Skill Hook 是否需要在 settings.json 中註冊（路徑形式: $CLAUDE_PROJECT_DIR/.claude/skills/<skill>/hooks/<file>.py）"
         print(log_output)
         logger.info(log_output)
+
+    # --- 反向檢查：幽靈註冊 + 跨檔重複（W9-004 / framework issue #2）---
+    settings_local_path = project_root / '.claude' / 'settings.local.json'
+    settings_local = load_json_file(settings_local_path, logger)
+    settings_sources = [
+        ("settings.json", settings),
+        ("settings.local.json", settings_local),
+    ]
+    phantoms = find_phantom_registrations(settings_sources, project_root)
+    duplicates = find_duplicate_registrations(settings_sources, project_root)
+
+    if phantoms:
+        header = "\n[WARNING] 幽靈註冊（已註冊但 command 檔不存在，會致 runtime 崩潰）:"
+        print(header)
+        logger.warning(header)
+        sys.stderr.write(header + "\n")
+        for label, event_type, path in phantoms:
+            line = f"  - [{label}] {event_type}: {path}"
+            print(line)
+            logger.warning(line)
+            sys.stderr.write(line + "\n")
+        advice = "建議: 移除殘留註冊或修正 command 路徑（hook relocate 後常見於 settings.local.json）"
+        print(advice)
+        logger.warning(advice)
+
+    if duplicates:
+        header = "\n[WARNING] 重複註冊（同一 hook 同事件註冊多次，會重複執行）:"
+        print(header)
+        logger.warning(header)
+        for event_type, path, labels in duplicates:
+            line = f"  - {event_type}: {path}（來源: {', '.join(labels)}）"
+            print(line)
+            logger.warning(line)
+        advice = "建議: 同一 hook 僅在單一 settings 檔註冊，避免 auto-resume 類副作用重複觸發"
+        print(advice)
+        logger.warning(advice)
 
     log_output = "=" * 60
 

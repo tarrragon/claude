@@ -1,7 +1,7 @@
 """
 Per-ticket-file advisory lock 模組（W14-042）
 
-提供跨模組共用的 fcntl.flock 包裝 context manager，給 ticket_builder 等
+提供跨模組共用的檔案鎖包裝 context manager，給 ticket_builder 等
 caller 包圍 `load → modify → save` 三步驟，消除 logical race。
 
 Why（與設計緣由）：
@@ -12,30 +12,37 @@ Why（與設計緣由）：
 
     `save_ticket` 本身不加 lock：單次 f.write 對小 content 已 effectively
     atomic，且若 save_ticket 內部再加 lock 會與 caller 的外層 lock 形成
-    巢狀 LOCK_EX（同 process 同 fd 對同 file），導致 self-block。
+    巢狀鎖（同 process 對同一 file），導致 self-block。
 
-POSIX-only：fcntl 為 POSIX API；Windows 平台會在實際呼叫 file_lock 時
-丟出 NotImplementedError 並指引遷移路徑（portalocker / filelock）。
+跨平台（1.0.0-W9-001）：
+    改用 filelock 庫取代 POSIX-only 的 fcntl 直接呼叫。
+
+    Why：原版以 `fcntl.flock` 直接實作，fcntl 為 POSIX-only API，在
+    Windows 無此模組，故原 file_lock 在 Windows 直接 raise
+    NotImplementedError。後果是所有以 `with file_lock(...)` 包圍的
+    update_* 命令（claim / complete / close / release / set-* /
+    append-log / check-acceptance）在 Windows 全數崩潰，ticket 工具
+    實質淪為唯讀（framework issue #1 問題0，P0）。
+
+    解法：filelock 在 POSIX 後端同樣使用 `fcntl.flock`
+    （per-open-file-description 語義，與原實作一致，故 reap_stale_locks
+    的同 process active-lock 偵測行為不變）、Windows 後端使用
+    msvcrt.locking，跨平台語義一致。公開 API
+    （file_lock / reap_stale_locks / create_id_allocation_lock /
+    CREATE_LOCK_FILENAME）與鎖語義皆不變。
 """
 
 import sys
 from contextlib import contextmanager
 from pathlib import Path
-from typing import IO, Iterator, Optional
+from typing import Iterator, Optional
 
-# fcntl is POSIX-only; Windows lacks it. Gate the import so module load
-# succeeds cross-platform; raise NotImplementedError on actual invocation.
-try:
-    import fcntl  # type: ignore[import-not-found]
-    _HAS_FCNTL = True
-except ImportError:  # pragma: no cover - exercised only on Windows
-    fcntl = None  # type: ignore[assignment]
-    _HAS_FCNTL = False
+from filelock import FileLock, Timeout
 
 
 @contextmanager
 def file_lock(target_path: Path) -> Iterator[None]:
-    """Per-file fcntl.LOCK_EX blocking advisory lock。
+    """Per-file blocking advisory lock（filelock 後端）。
 
     使用方式::
 
@@ -46,45 +53,30 @@ def file_lock(target_path: Path) -> Iterator[None]:
 
     禁止巢狀（重要）：
         同一 process 在同一 `with file_lock(p):` 區塊內，禁止再次呼叫
-        `file_lock(p)`（同 path 或會 resolve 到同一檔的 path）。fcntl
-        在 POSIX 語義下，相同 fd 對同一檔再次 LOCK_EX 會直接 self-block
-        死鎖。caller 必須確保 file_lock 在一次 load-modify-save 序列中
-        只包圍一層。
+        `file_lock(p)`（同 path 或會 resolve 到同一檔的 path）。filelock
+        以獨立 FileLock 實例對同一檔再次取鎖，在 POSIX 下屬不同 open
+        file description，會 self-block（與原 fcntl LOCK_EX 巢狀死鎖語義
+        相同）。caller 必須確保 file_lock 在一次 load-modify-save 序列
+        中只包圍一層。
 
     Lock file:
         ``{target_path}{suffix}.lock``，例如 `foo.md` → `foo.md.lock`。
         Crash 後 OS 自動回收 fd 釋鎖；殘留 lock file 不影響後續 reuse
-        （已加入 .gitignore）。
+        （已加入 .gitignore，並由 reap_stale_locks 收割）。
 
     Args:
         target_path: 要保護的目標檔案路徑（不會被開啟，只用於決定 lock
             file 位置）。
-
-    Raises:
-        NotImplementedError: 在無 fcntl 的平台（如 Windows）呼叫時。
     """
-    if not _HAS_FCNTL:
-        # Why: fcntl is POSIX-only. On Windows the advisory-lock semantics
-        # cannot be silently dropped (would re-introduce W14-005 race) nor
-        # naively replaced (msvcrt.locking has different semantics).
-        raise NotImplementedError(
-            "file_lock requires POSIX fcntl, which is unavailable on this "
-            "platform (likely Windows). Run ticket tooling under WSL/macOS/"
-            "Linux, or migrate file_lock to a cross-platform library such "
-            "as `portalocker` or `filelock` before invoking update_* code "
-            "paths."
-        )
     lock_path = target_path.with_suffix(target_path.suffix + ".lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    fd = open(lock_path, "w")
+    # 預設 timeout=-1（blocking），語義等同原 fcntl.LOCK_EX 阻塞取鎖。
+    lock = FileLock(str(lock_path))
+    lock.acquire()
     try:
-        fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
         yield
     finally:
-        try:
-            fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
-        finally:
-            fd.close()
+        lock.release()
 
 
 # ---------------------------------------------------------------------------
@@ -96,16 +88,16 @@ def reap_stale_locks(directory: Path) -> int:
     """非阻塞收割 directory 下殘留的 stale ``*.md.lock``。
 
     Why（與設計緣由）：
-        file_lock context manager 釋鎖後刻意保留 sentinel lock file
-        （見 file_lock docstring），每次 load-modify-save 序列殘留一個
+        file_lock context manager 釋鎖後可能保留 sentinel lock file
+        （POSIX 後端），每次 load-modify-save 序列殘留一個
         0-byte ``{ticket}.md.lock``。長期累積會讓 PM 誤判有 active 操作
         （W8-017）。本函式於 CLI 安全收尾處呼叫，收割無人持有的殘留。
 
     安全策略（禁止天真 inline unlink）：
-        對每個 ``*.md.lock`` 嘗試 ``flock(LOCK_EX | LOCK_NB)``：
-        - 搶到（非阻塞成功）= 無人持鎖 = stale → 在持鎖狀態下 unlink。
-        - 搶不到（``BlockingIOError`` / ``OSError``）= 有人持鎖 = active
-          → 跳過，絕不誤刪。
+        對每個 ``*.md.lock`` 嘗試 ``FileLock(timeout=0).acquire()``：
+        - 搶到（非阻塞成功）= 無人持鎖 = stale → 計數並在持鎖狀態下
+          unlink。
+        - 搶不到（``Timeout``）= 有人持鎖 = active → 跳過，絕不誤刪。
         非阻塞特性確保本函式不會卡在 active lock 上，亦不破壞既有
         flock-unlink race 防護（W14-005）：active lock 永不被收割。
 
@@ -113,41 +105,39 @@ def reap_stale_locks(directory: Path) -> int:
         directory: 收割起點目錄；遞迴掃描其下所有 ``*.md.lock``。
 
     Returns:
-        int: 實際收割（unlink）的 stale lock 數量。
+        int: 實際收割的 stale lock 數量（綁定「搶鎖成功」事件，非
+            unlink 成功；Windows 後端釋鎖時可能已自行移除 sentinel，
+            綁 unlink 會漏計）。
 
     Note:
-        無 fcntl 平台（Windows）或目錄不存在時 graceful 回傳 0，不丟例外
-        （收割屬清理性質，失敗不應阻斷主流程）。
+        目錄不存在時 graceful 回傳 0，不丟例外（收割屬清理性質，失敗
+        不應阻斷主流程）。
     """
-    if not _HAS_FCNTL or not directory.exists():
+    if not directory.exists():
         return 0
 
     reaped = 0
     for lock_path in directory.rglob("*.md.lock"):
         if not lock_path.is_file():
             continue
+        lock = FileLock(str(lock_path), timeout=0)
         try:
-            fd = open(lock_path, "w")
-        except OSError:
-            # 開檔失敗（權限/競態刪除）→ 跳過，不阻斷其他收割
+            lock.acquire()
+        except (Timeout, OSError):
+            # Timeout = active（有人持鎖）；OSError = 開檔失敗（權限 / 競態
+            # 刪除）→ 皆跳過，不誤刪、不阻斷其他收割。
             continue
+        # 搶到鎖 = stale；計數綁定搶鎖成功事件，再 best-effort unlink。
+        reaped += 1
         try:
-            try:
-                fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except OSError:
-                # 搶不到 = active lock（有人持鎖）→ 跳過不刪
-                continue
-            # 搶到鎖 = stale；在持鎖狀態下 unlink，避免 TOCTOU race
-            try:
-                lock_path.unlink()
-                reaped += 1
-            except FileNotFoundError:
-                # 已被他者收割 → 視為已處理
-                pass
-            finally:
-                fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+            lock_path.unlink()
+        except OSError:
+            # Windows 對開啟中 handle 的 unlink 可能 PermissionError，或
+            # 已被他者收割（FileNotFoundError）→ best-effort 跳過，計數已
+            # 綁搶鎖成功不受影響。
+            pass
         finally:
-            fd.close()
+            lock.release()
     return reaped
 
 
@@ -167,31 +157,31 @@ def _warn_create_lock_degraded(reason: str) -> None:
     )
 
 
-def _try_acquire_create_lock(tickets_dir: Path) -> Optional[IO[str]]:
+def _try_acquire_create_lock(tickets_dir: Path) -> Optional[FileLock]:
     """嘗試取得 create 序列化 lock；任何失敗皆降級回傳 None（不丟例外）。
 
-    與 file_lock 的平台策略差異：file_lock 在無 fcntl 平台 raise
-    NotImplementedError（靜默放行會重新引入 W14-005 lost-update）；本 lock
-    改為 warn + 降級，因為單 process create 本身無 race，不應因平台差異
-    阻斷基本建票功能（acceptance：不阻斷單 process create）。
+    與 file_lock 的策略差異：file_lock 取鎖失敗會讓 caller 阻塞等待；本
+    lock 改為 warn + 降級，因為單 process create 本身無 race，不應因環境
+    異常（lock file 無法建立）阻斷基本建票功能（acceptance：不阻斷單
+    process create）。
+
+    跨平台（W9-001）：改用 filelock 後不再有「無 fcntl 平台」降級分支
+    （filelock 在 Windows 亦提供有效鎖）；僅在 lock file 無法建立 / 取得
+    時降級。
     """
-    if not _HAS_FCNTL:
-        _warn_create_lock_degraded("此平台無 fcntl（可能為 Windows）")
-        return None
     lock_path = tickets_dir / CREATE_LOCK_FILENAME
     try:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_file = open(lock_path, "w")
     except OSError as exc:
         _warn_create_lock_degraded(f"lock file 開啟失敗（{exc}）")
         return None
+    lock = FileLock(str(lock_path))
     try:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-    except OSError as exc:
-        lock_file.close()
+        lock.acquire()
+    except (OSError, Timeout) as exc:
         _warn_create_lock_degraded(f"flock 取得失敗（{exc}）")
         return None
-    return lock_file
+    return lock
 
 
 @contextmanager
@@ -206,7 +196,7 @@ def create_id_allocation_lock(tickets_dir: Path) -> Iterator[None]:
     與 file_lock 的差異：
     - file_lock 是 per-ticket-file lock（保護單一 ticket 的 load-modify-save）；
       本 lock 是 per-tickets-dir lock（同版本目錄下所有 create 互斥）。
-    - file_lock 無 fcntl 平台 raise；本 lock graceful degradation
+    - file_lock 取鎖失敗阻塞等待；本 lock graceful degradation
       （stderr warn + 無鎖續行），理由見 _try_acquire_create_lock docstring。
 
     Lock file：``{tickets_dir}/.ticket-create.lock``（`*.lock` 已在 .gitignore；
@@ -222,17 +212,14 @@ def create_id_allocation_lock(tickets_dir: Path) -> Iterator[None]:
     禁止巢狀：同 process 在本 lock 區塊內再呼叫 create_id_allocation_lock
     （同 tickets_dir）會 self-block，語意同 file_lock 的巢狀禁令。
     """
-    lock_file = _try_acquire_create_lock(tickets_dir)
-    if lock_file is None:
+    lock = _try_acquire_create_lock(tickets_dir)
+    if lock is None:
         yield
         return
     try:
         yield
     finally:
-        try:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-        finally:
-            lock_file.close()
+        lock.release()
 
 
 if __name__ == "__main__":
