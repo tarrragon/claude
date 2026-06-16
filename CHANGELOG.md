@@ -1,3 +1,14 @@
+## [1.49.1] - 2026-06-16
+
+### Summary
+docs: 修正 README stale PC-018 引用為 PC-183
+
+Changes: 1 docs
+
+- docs: 修正 README stale PC-018 引用為 PC-183
+
+---
+
 ## [1.49.0] - 2026-06-16
 
 ### Summary

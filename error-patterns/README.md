@@ -283,7 +283,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-015 | 錯誤提示靜默繞過 | 中 | v0.1.1 |
 | PC-016 | Hook 阻止後使用 Bash 工具繞過保護機制 | 高 | v0.1.1 |
 | PC-017 | ANA 完成後缺少實作 Ticket | 中 | v0.1.1 |
-| PC-018 | 並行代理人重複建立後續 Ticket | 中 | v0.1.1 |
+| PC-183 | 並行代理人重複建立後續 Ticket（原 PC-018 上游重編號） | 中 | v0.1.1 |
 | PC-019 | 設計決策只存 memory 未建 Ticket | 中 | v0.1.1 |
 | PC-020 | Plan 派發與實際執行不一致 | 中 | v0.1.2 |
 | PC-021 | Worktree 隔離失敗導致跨 Wave 交叉污染 | 高 | v0.1.2 |
