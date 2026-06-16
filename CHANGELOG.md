@@ -1,3 +1,14 @@
+## [1.52.2] - 2026-06-17
+
+### Summary
+fix: 允許 PM 編輯任意層級 README.md
+
+Changes: 1 fix
+
+- fix: 允許 PM 編輯任意層級 README.md
+
+---
+
 ## [1.52.1] - 2026-06-17
 
 ### Summary

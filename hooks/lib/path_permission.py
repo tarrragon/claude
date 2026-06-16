@@ -45,6 +45,7 @@ ALLOWED_PATTERNS = [
     r"^\.gitignore$",  # repo 層級忽略清單：主線程可直接補 runtime artifact / lock（W10-033）
     r"^\.gitattributes$",  # repo 層級檔案屬性：主線程可直接維護 eol/binary 規範（W10-054.1.1）
     r"^\.claude/\.gitattributes$",  # 框架層級檔案屬性：隨 sync 傳播到其他專案
+    r"(^|.*/)README\.md$",  # 任意層級 README.md：專案文件，PM 可直接維護
 ]
 
 # 禁止的檔案路徑模式（正則）
