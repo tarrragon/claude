@@ -370,6 +370,8 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-V1-006 | 規則變更未盤點既有規則矛盾即上線（有執法者的一方勝出） | 中 | v1.0.0 |
 | PC-V1-007 | 確定性 ≠ 準確性 — 量測工具確定化未驗證複現原始分析意圖 | 高 | v1.0.0 |
 | PC-V1-008 | lockfile 版本漂移修正被 auto-preserve worktree commit 孤立並險遭當噪音丟棄 | 中 | v1.0.0 |
+| PC-APP-001 | 延後決策綁定的 trigger ticket 引用未查證 scope 一致性（trigger 名存實亡） | 中 | v0.32.0 |
+| PC-APP-002 | sync-pull 孤兒清理超出宣稱範圍刪除，preserve 機制未生效致專案特化檔遺失 | 高 | v0.32.0 |
 
 ---
 

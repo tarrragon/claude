@@ -943,6 +943,60 @@ def cleanup_stale_files(
     return removed, preserved_as_conflict
 
 
+def reconcile_declared_deletions(
+    declared_count: int,
+    actual_removed: list[str],
+) -> tuple[bool, list[str]]:
+    """對帳「宣稱刪除數」與「實際刪除清單」，不符時於 stdout 列出超出宣稱的檔。
+
+    PC-APP-002 防護 (b)：c014eccf 的孤兒清理 commit 訊息宣稱「清 16 孤兒」，
+    實際 diff-filter=D 刪 30，超出宣稱的 14 個含 preserve 標記的專案特化檔被靜默
+    誤刪。宣稱數遮蔽實際刪除數是三因素之一——審查者核對訊息即放行，無從察覺超刪。
+
+    本函式在孤兒清理結束後比對宣稱與實際刪除數：
+      - 數量相符 → 對帳通過，回 (True, [])。
+      - 實際 > 宣稱 → 取實際清單超過宣稱數的尾段為「超出清單」，stdout 完整逐一列出
+        （不可只給數字），回 (False, 超出清單）。
+      - 實際 < 宣稱 → 仍視為不符（宣稱與現實脫節），但無超出檔可列，回 (False, [])。
+
+    僅報告不阻擋（鏡像 warn_conflict_residue / warn_upstream_deleted_residue 模式）：
+    對帳的價值在於讓「宣稱與實際的落差」對人可見，由人判斷誤刪，腳本不自動回滾。
+
+    參數:
+        declared_count: 本次孤兒清理「宣稱」要刪除的檔數（如 dry-run 預覽預測值）。
+        actual_removed: cleanup_stale_files 回傳的實際刪除相對路徑清單。
+
+    傳回:
+        tuple[bool, list[str]]:
+          (matched, excess)
+          matched = 宣稱數與實際刪除數是否相符
+          excess = 超出宣稱的檔清單（actual_removed 超過 declared_count 的尾段）；
+                   實際 <= 宣稱時為空清單
+    """
+    actual_count = len(actual_removed)
+    if actual_count == declared_count:
+        return True, []
+
+    excess = actual_removed[declared_count:] if actual_count > declared_count else []
+    print_color(
+        f"   [刪除對帳] 宣稱刪除 {declared_count} 個，實際刪除 {actual_count} 個，數量不符",
+        "red",
+    )
+    if excess:
+        print_color(
+            f"   超出宣稱的 {len(excess)} 個檔（請確認是否誤刪專案特化內容，"
+            f"可從刪除 commit 父版復原）:",
+            "red",
+        )
+        for rel in excess:
+            print_color(f"     ! {rel}")
+    else:
+        print_color(
+            "   實際刪除少於宣稱數（無超出檔可列）；請確認宣稱來源是否高估", "yellow"
+        )
+    return False, excess
+
+
 def preview_overlay_changes(
     temp_dir: Path,
     claude_dir: Path,
@@ -1708,6 +1762,11 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
         file_count = sync_directory(temp_dir, claude_dir, preserve, project_root=project_root)
         print_color(f"   已更新 {file_count} 個檔案", "green")
 
+        # PC-APP-002 防護 (b)：以 dry-run 預覽的「非追蹤真刪」數為宣稱數，孤兒清理
+        # 後與實際刪除清單對帳。預覽（刪除前的全量差集預測）與實際（cleanup 後）若
+        # 脫節，列出超出宣稱的檔，消除「宣稱遮蔽實際刪除」的盲區。
+        declared_delete_count = sum(1 for _rel, is_tracked in will_delete if not is_tracked)
+
         removed, preserved_conflicts = cleanup_stale_files(
             claude_dir, remote_files, preserve
         )
@@ -1717,6 +1776,8 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
                 print_color(f"     - {r}")
         else:
             print_color("   無過時檔案需清理", "green")
+
+        reconcile_declared_deletions(declared_delete_count, removed)
         if preserved_conflicts:
             print_color(
                 f"   {len(preserved_conflicts)} 個本地獨有 git 追蹤檔已轉存 "

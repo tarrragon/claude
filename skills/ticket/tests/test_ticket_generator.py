@@ -2,7 +2,47 @@
 Ticket 生成模組單元測試
 """
 
+import os
+import tempfile
+from pathlib import Path
+
 import pytest
+
+
+def _assert_tickets_dir_in_tmp(tickets_dir):
+    """寫檔前驗證解析出的 tickets_dir 確實落在 tmp（隔離沙箱），而非真 repo。
+
+    背景（0.32.0-W3-012）：寫「既有票」假票的 fixture 完全依賴 conftest autouse
+    `_isolate_project_root` 把 CLAUDE_PROJECT_DIR 導向 tmp。一旦 paths.py 路徑解析
+    異常（如 W3-010 buggy show-toplevel 判據）使 get_project_root 繞過 tmp 重導、
+    回傳真 repo，fixture 會把假票寫進真 docs/work-logs/ 覆蓋 completed ticket。
+
+    此守衛 fail fast：解析路徑不在 CLAUDE_PROJECT_DIR（且 tmp 前綴）下即 pytest.fail，
+    拒絕靜默污染真 repo。
+    """
+    resolved = Path(tickets_dir).resolve()
+    project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
+    tmp_prefix = Path(tempfile.gettempdir()).resolve()
+
+    if not project_dir:
+        pytest.fail(
+            "路徑解析異常，拒絕污染真 repo：CLAUDE_PROJECT_DIR 未設定，"
+            "conftest autouse 隔離沙箱失效。"
+            f" 解析出的 tickets_dir={resolved}"
+        )
+
+    project_root = Path(project_dir).resolve()
+    in_sandbox = resolved == project_root or project_root in resolved.parents
+    in_tmp = resolved == tmp_prefix or tmp_prefix in resolved.parents
+
+    if not (in_sandbox and in_tmp):
+        pytest.fail(
+            "路徑解析異常，拒絕污染真 repo："
+            "fixture 解析出的 tickets_dir 不在 tmp 隔離沙箱內。"
+            " 可能 paths.py get_project_root 繞過 CLAUDE_PROJECT_DIR 重導回真 repo（W3-010 類錯誤）。"
+            f" 解析出的 tickets_dir={resolved}；"
+            f"CLAUDE_PROJECT_DIR={project_root}；tmp 前綴={tmp_prefix}"
+        )
 from ticket_system.lib.plan_parser import PlanParseResult, PlanTask
 from ticket_system.lib.ticket_generator import (
     generate,

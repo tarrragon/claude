@@ -12,15 +12,22 @@ PreToolUse Hook（Write / Edit / MultiEdit），落地
 阻擋條件（permissionDecision=deny）：
     1. PROP-*.md frontmatter 缺 evaluation_level 欄位（standard 預設不適用，
        未明示視為違規以避免靜默降級）
-    2. evaluation_level=standard 缺必填章節（替代方案 / 失敗防護 / Reality Test）
-    3. evaluation_level=heavy 缺必填章節（多視角審查 / 機會成本 / Reality Test）
+    2. 升級轉換時 evaluation_level=standard 缺必填章節（替代方案 / 失敗防護 / Reality Test）
+    3. 升級轉換時 evaluation_level=heavy 缺必填章節（多視角審查 / 機會成本 / Reality Test）
     4. tracking.yaml 中 status=confirmed|approved 但 ticket_refs 為空
     5. tracking.yaml 中 status=confirmed|approved 但所有 ticket_refs 皆為 ANA 類
 
+章節檢查為「升級閘門」（W2-025）：
+    僅在 status 由非 confirmed/approved 升級為 confirmed/approved 時觸發章節檢查
+    （含新建檔直接 confirmed/approved）。confirmed→confirmed 維護編輯豁免章節檢查，
+    避免凍結 pre-existing 缺章節的 confirmed PROP（W2-024 §7 維護被擋實證）。
+    規格：.claude/pm-rules/proposal-evaluation-gate.md 規則 2.-1 / 2.5。
+
 豁免（permissionDecision=allow）：
     1. 非 PROP-*.md 與非 tracking.yaml 檔案
-    2. 既有檔案 diff 過小（< 30 字元）視為微調
-    3. 解析錯誤 / 異常 → allow + stderr 提示（規則 4：失敗必須可見，但不阻擋）
+    2. 既有檔案 diff 過小（< 30 字元）視為微調（升級轉換不適用此豁免）
+    3. 非升級轉換的 PROP 編輯（維護 confirmed→confirmed、降級、status 非 confirmed/approved）
+    4. 解析錯誤 / 異常 → allow + stderr 提示（規則 4：失敗必須可見，但不阻擋）
 
 設計原則：
     - 規則 5 第三層（Hook 強制）：對未通過評估的 PROP 寫入硬阻擋
@@ -126,8 +133,45 @@ def has_section(body: str, keywords: Tuple[str, ...]) -> bool:
     return any(kw.lower() in body_lower for kw in keywords)
 
 
-def check_prop_content(content: str, logger) -> Tuple[bool, str]:
+# 升級閘門：視為「已升級」的目標狀態集合
+UPGRADED_STATUSES = {"confirmed", "approved"}
+
+
+def normalize_status(status_raw: Any) -> str:
+    """將 frontmatter status 正規化為小寫去空白字串（None → 空字串）。"""
+    if status_raw is None:
+        return ""
+    return str(status_raw).lower().strip()
+
+
+def is_upgrade_transition(old_status: Optional[str], new_status: str) -> bool:
+    """判斷是否為「升級轉換」（章節檢查觸發時機）。
+
+    定義：new_status 屬 confirmed/approved，且 old_status 不屬 confirmed/approved。
+    - Edit/MultiEdit：old_status 來自編輯前的檔案 frontmatter。
+    - Write 新建檔（old_status=None）：若新檔直接 confirmed/approved 視為升級。
+    - confirmed→confirmed / approved→approved 等維護編輯：非升級，豁免章節檢查。
+
+    Why：章節完備度是「升級閘門」（draft→confirmed/approved 把關），非「維護閘門」。
+    對 confirmed PROP 每次編輯都掃章節會凍結 pre-existing 缺章節的 confirmed PROP（W2-024 實證）。
+    規格：.claude/pm-rules/proposal-evaluation-gate.md 規則 2。
+    """
+    if new_status not in UPGRADED_STATUSES:
+        return False
+    old_norm = old_status or ""
+    return old_norm not in UPGRADED_STATUSES
+
+
+def check_prop_content(
+    content: str,
+    logger,
+    old_status: Optional[str] = None,
+) -> Tuple[bool, str]:
     """檢查 PROP-*.md 內容。
+
+    參數:
+        content: 編輯後完整內容
+        old_status: 編輯前的 frontmatter status（None = 新建檔，無前態）
 
     回傳:
         (should_block, reason)
@@ -160,12 +204,23 @@ def check_prop_content(content: str, logger) -> Tuple[bool, str]:
     # 設計理由：draft 為探索期 PROP，章節通常未完整；強制章節會阻擋創意 brainstorming。
     # 規則 1 仍生效（evaluation_level 必填且必須為合法值，已於上方檢查）。
     # 規格：.claude/pm-rules/proposal-evaluation-gate.md 規則 2.0 + 2.5
-    status_raw = fm.get("status")
-    if status_raw is not None:
-        status = str(status_raw).lower().strip()
-        if status == "draft":
-            logger.info("PROP status=draft，跳過章節檢查（豁免優先序 P2）")
-            return False, ""
+    new_status = normalize_status(fm.get("status"))
+    if new_status == "draft":
+        logger.info("PROP status=draft，跳過章節檢查（豁免優先序 P2）")
+        return False, ""
+
+    # 升級閘門：章節檢查僅在「升級轉換」時觸發（draft/discussing→confirmed/approved，
+    # 或新建檔直接 confirmed/approved）。confirmed→confirmed 等維護編輯豁免章節檢查。
+    # Why：章節完備度是升級閘門，非維護閘門。對 confirmed PROP 每次編輯都掃章節會
+    #     凍結 pre-existing 缺章節的 confirmed PROP（W2-024 §7 維護被擋實證）。
+    # 規格：.claude/pm-rules/proposal-evaluation-gate.md 規則 2。
+    if not is_upgrade_transition(old_status, new_status):
+        logger.info(
+            "PROP 非升級轉換（old=%s → new=%s），跳過章節檢查（升級閘門豁免）",
+            old_status if old_status is not None else "<new-file>",
+            new_status or "<empty>",
+        )
+        return False, ""
 
     # 取得 body 部分
     parts = content.split("---", 2)
@@ -176,8 +231,9 @@ def check_prop_content(content: str, logger) -> Tuple[bool, str]:
 
     if missing:
         return True, (
-            f"PROP evaluation_level={level} 但缺以下必填章節：{', '.join(missing)}。"
-            f"規則 2：{level} 級需含完整評估章節。"
+            f"PROP 升級至 {new_status}（evaluation_level={level}）但缺以下必填章節："
+            f"{', '.join(missing)}。"
+            f"規則 2：{level} 級升級為 confirmed/approved 需含完整評估章節。"
             f"規格：.claude/pm-rules/proposal-evaluation-gate.md 規則 2。"
         )
 
@@ -282,6 +338,29 @@ def get_full_content(tool_name: str, tool_input: Dict[str, Any], file_path: str)
     return None
 
 
+def get_old_status(tool_name: str, tool_input: Dict[str, Any], file_path: str) -> Optional[str]:
+    """取得「編輯前」的 PROP frontmatter status（升級閘門判定用）。
+
+    回傳:
+        - 既有檔：編輯前 frontmatter 的正規化 status（可能為空字串）
+        - 新建檔 / 讀檔失敗 / 無 frontmatter：None（視為無前態）
+
+    Write 新建與 Edit 皆讀「目標檔案當前磁碟內容」作為編輯前狀態；
+    若檔案不存在（Write 新建），回 None。
+    """
+    try:
+        path = Path(file_path)
+        if not path.exists():
+            return None
+        current = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    fm = parse_frontmatter(current)
+    if fm is None:
+        return None
+    return normalize_status(fm.get("status"))
+
+
 # ============================================================================
 # 主入口
 # ============================================================================
@@ -320,21 +399,36 @@ def main() -> int:
 
     logger.info("攔截 %s on %s (target=%s)", tool_name, file_path, target)
 
-    # 微調豁免（Edit/MultiEdit 小幅修改）
-    if tool_name in ("Edit", "MultiEdit") and is_micro_edit(tool_input):
-        logger.info("豁免：微調（< %d 字元差異）", MICRO_EDIT_THRESHOLD)
-        return 0
-
-    # 取得寫入後完整內容
+    # 取得寫入後完整內容（升級判定需先取得編輯後 status，故提前於微調豁免之前）
     content = get_full_content(tool_name, tool_input, file_path)
     if content is None:
         # 無法取得內容（可能是新建 Edit 或讀檔失敗），不阻擋
         logger.warning("無法取得完整內容，allow（避免誤擋）")
         return 0
 
+    # 升級轉換偵測：對 PROP 檔，若本次編輯使 status 由非 confirmed/approved 升級為
+    # confirmed/approved，即使字元差異 < MICRO_EDIT_THRESHOLD 也不套用微調豁免——
+    # 升級閘門必須在升級當下把關（一行 status flip 即升級，屬語意重大變更非格式微調）。
+    is_prop_upgrade = False
+    old_status = None
+    if target == "prop":
+        old_status = get_old_status(tool_name, tool_input, file_path)
+        fm_new = parse_frontmatter(content)
+        new_status = normalize_status(fm_new.get("status")) if fm_new else ""
+        is_prop_upgrade = is_upgrade_transition(old_status, new_status)
+
+    # 微調豁免（Edit/MultiEdit 小幅修改）；升級轉換不適用微調豁免
+    if (
+        tool_name in ("Edit", "MultiEdit")
+        and is_micro_edit(tool_input)
+        and not is_prop_upgrade
+    ):
+        logger.info("豁免：微調（< %d 字元差異）", MICRO_EDIT_THRESHOLD)
+        return 0
+
     # 依檔案類型分派檢查
     if target == "prop":
-        should_block, reason = check_prop_content(content, logger)
+        should_block, reason = check_prop_content(content, logger, old_status)
     else:  # tracking
         should_block, reason = check_tracking_yaml(content, logger)
 

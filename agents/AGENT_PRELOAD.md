@@ -186,6 +186,21 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 如需在獨立分支工作，PM 會使用 `Agent(isolation: "worktree")` 派發，代理人無需自行建立分支。
 
+#### worktree 隔離派發時禁用 dart MCP 寫入工具（強制，W3-008）
+
+> **Why**：worktree 隔離對 daemon-rooted 寫入工具不生效。dart MCP daemon 的 analysis root 在 session 啟動時綁定主 repo，worktree 派發只改 shell cwd，無法切換 daemon root；dart MCP 寫入會繞過隔離邊界洩漏污染主 repo 工作樹。
+
+> **Consequence**：未遵守時實作 agent 的 `dart_fix` / `dart_format` 變更靜默寫入主 repo（非自己的 worktree），造成資料遺失或混淆，且 PM 驗收以 worktree commit 為權威時無法察覺。
+
+> **Action**：在 worktree 隔離環境執行時，禁用 dart MCP 寫入工具，改用尊重 agent cwd 的替代工具：
+
+| 禁用（洩漏主 repo） | 改用（尊重 worktree cwd） |
+|--------------------|--------------------------|
+| dart MCP `dart_fix` / `dart_format` | Bash `dart fix` / `dart format` |
+| dart MCP 其他寫入工具 | Bash 對應命令 或 Edit |
+
+> **來源**：W3-008（worktree 隔離對 daemon-rooted dart MCP 寫入工具不生效）。PM 端對應規則見 `.claude/pm-rules/parallel-dispatch.md`「worktree 實作 agent 禁用 dart MCP 寫入工具」；根因機制見 `.claude/skills/worktree/SKILL.md`「Base ref 與隔離邊界」章節。
+
 ---
 
 ### 7. 工具選擇規則（MCP 寫入工具優先序）

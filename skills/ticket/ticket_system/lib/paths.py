@@ -15,32 +15,16 @@ from .ui_constants import VERSION_PREFIX, VERSION_PREFIX_LENGTH
 GIT_TOPLEVEL_TIMEOUT = 5
 
 
-def get_project_root() -> Path:
+def _git_toplevel() -> Path | None:
     """
-    取得專案根目錄
+    執行 git rev-parse --show-toplevel 取得當前 cwd 所屬的 git 工作樹根目錄。
 
-    搜尋優先級：
-    1. CLAUDE_PROJECT_DIR 環境變數
-    2. git rev-parse --show-toplevel（git-native，支援 worktree 環境）
-    3. 向上搜尋 CLAUDE.md（通用框架標準入口，支援 Go/混合型專案）
-    4. 向上搜尋 go.mod（Go 專案）
-    5. 向上搜尋 pubspec.yaml（Flutter 專案）
-    6. fallback: Path.cwd()
+    在 worktree 環境下回傳 worktree 自己的根目錄（git 標準行為），
+    供 get_project_root() 偵測「當前是否在 worktree 中」。
 
     Returns:
-        Path: 專案根目錄路徑
-
-    Examples:
-        >>> root = get_project_root()
-        >>> (root / "CLAUDE.md").exists() or (root / "go.mod").exists() or (root / "pubspec.yaml").exists()
-        True
+        Path | None: git 工作樹根目錄；git 不可用 / 超時 / 失敗時回傳 None
     """
-    # 1. 環境變數優先
-    claude_project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
-    if claude_project_dir:
-        return Path(claude_project_dir)
-
-    # 2. git rev-parse --show-toplevel（git-native，支援 worktree）
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
@@ -51,10 +35,95 @@ def get_project_root() -> Path:
         if result.returncode == 0:
             return Path(result.stdout.strip())
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        # git 命令不存在或超時，進入 fallback
+        # git 命令不存在或超時，視為無法取得 git root
         pass
+    return None
 
-    # 3-5. 向上搜尋標記檔案（依通用性排序）
+
+def _linked_worktree_root() -> Path | None:
+    """
+    偵測當前 cwd 是否位於 git 的「linked worktree」（git worktree add 建立），
+    若是則回傳該 worktree 的根目錄；否則回傳 None。
+
+    判據（git-native）：linked worktree 的 `--git-dir`（worktree 私有 .git 目錄）
+    與 `--git-common-dir`（主 repo 共享 .git）不同；主 repo 本身兩者相同。
+    此判據精確區分「真的在 worktree 中」與「只是 cwd 在主 repo」，
+    避免誤把主 repo 當 worktree 而覆蓋 CLAUDE_PROJECT_DIR（W3-008 根因 1 修復，
+    且不破壞「CLAUDE_PROJECT_DIR 為主 repo 內測試 fixture」的既有契約）。
+
+    Returns:
+        Path | None: linked worktree 根目錄；非 worktree / git 不可用時回傳 None
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-dir", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            timeout=GIT_TOPLEVEL_TIMEOUT
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        # git 不可用 / 超時：無法判斷，視為非 worktree
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    lines = result.stdout.strip().split("\n")
+    if len(lines) < 2:
+        return None
+
+    # git 可能一個回絕對路徑、另一個回相對路徑（取決於 cwd 在 repo 的深度），
+    # 兩者可能指向同一目錄。必須 resolve 為真實絕對路徑再比較，否則
+    # 主 repo 子目錄會因字串不同被誤判為 linked worktree（W3-010 實證）。
+    git_dir = Path(lines[0].strip()).resolve()
+    git_common_dir = Path(lines[1].strip()).resolve()
+    # 主 repo：git_dir == git_common_dir；linked worktree：兩者不同
+    if git_dir == git_common_dir:
+        return None
+
+    return _git_toplevel()
+
+
+def get_project_root() -> Path:
+    """
+    取得專案根目錄
+
+    搜尋優先級：
+    1. worktree 感知：當前位於 git linked worktree（git worktree add 建立）時，
+       優先用該 worktree 的根目錄。避免 worktree 內的 ticket CRUD / append-log /
+       auto-commit 因 CLAUDE_PROJECT_DIR 恆指向主 repo 而洩漏到主 repo（W3-008 根因 1）。
+    2. CLAUDE_PROJECT_DIR 環境變數（非 worktree 場景，維持原行為）
+    3. git rev-parse --show-toplevel（git-native，未設環境變數時）
+    4. 向上搜尋 CLAUDE.md（通用框架標準入口，支援 Go/混合型專案）
+    5. 向上搜尋 go.mod（Go 專案）
+    6. 向上搜尋 pubspec.yaml（Flutter 專案）
+    7. fallback: Path.cwd()
+
+    Returns:
+        Path: 專案根目錄路徑
+
+    Examples:
+        >>> root = get_project_root()
+        >>> (root / "CLAUDE.md").exists() or (root / "go.mod").exists() or (root / "pubspec.yaml").exists()
+        True
+    """
+    # 1. worktree 感知（優先於 CLAUDE_PROJECT_DIR）：
+    #    僅在「git linked worktree」中才覆蓋，主 repo（即使 cwd 在主 repo）不觸發。
+    worktree_root = _linked_worktree_root()
+    if worktree_root is not None:
+        return worktree_root
+
+    # 2. 環境變數優先（非 worktree 場景，維持原行為）
+    claude_project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
+    if claude_project_dir:
+        return Path(claude_project_dir)
+
+    # 3. git rev-parse --show-toplevel（git-native，支援 worktree）
+    git_root = _git_toplevel()
+    if git_root is not None:
+        return git_root
+
+    # 向上搜尋標記檔案（依通用性排序）
     markers = ["CLAUDE.md", "go.mod", "pubspec.yaml"]
     current = Path.cwd()
     while current != current.parent:
