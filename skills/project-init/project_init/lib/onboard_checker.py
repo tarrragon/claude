@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 import json
+import subprocess
 import yaml
 import stat
 
@@ -617,6 +618,36 @@ def _has_gitignore_rule(content: str, pattern: str) -> bool:
     return False
 
 
+def _is_path_ignored_by_git(project_root: Path, relative_path: str) -> Optional[bool]:
+    """用 git check-ignore 判定路徑是否被 .gitignore 忽略（gitignore 語意正確）.
+
+    相較 _has_gitignore_rule 的字面比對，git check-ignore 由 git 引擎判定，正確處理
+    萬用字元（**）、根錨定（/）、具體檔名等所有 gitignore 語法，消除字面匹配的 false positive。
+
+    Args:
+        project_root: 專案根目錄（需為 git repo 才能判定）。
+        relative_path: 相對 project_root 的代表路徑（pattern matching 不需實際存在）。
+
+    Returns:
+        True: 被忽略；False: 未被忽略；None: 無法判定（git 不可用 / 非 git repo），
+        呼叫端應 fallback 至字面匹配。
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(project_root), "check-ignore", "-q", relative_path],
+            capture_output=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        # git 不在 PATH / 逾時 / 其他 OS 錯誤 → 無法判定，交由呼叫端 fallback
+        return None
+    if result.returncode == 0:
+        return True  # 被忽略
+    if result.returncode == 1:
+        return False  # 未被忽略
+    return None  # 128（非 git repo）或其他錯誤 → fallback
+
+
 def _create_missing_gitignore_result(exists: bool = False) -> GitignoreCheckInfo:
     """建立 .gitignore 缺失或無法讀取的結果.
 
@@ -633,6 +664,7 @@ def _create_missing_gitignore_result(exists: bool = False) -> GitignoreCheckInfo
         has_worktrees_rule=False,
         has_tool_results_rule=False,
         has_handoff_rule=False,
+        has_dispatch_active_rule=False,
         has_pycache_rule=False,
         all_required_complete=False,
         missing_rules=[
@@ -642,6 +674,7 @@ def _create_missing_gitignore_result(exists: bool = False) -> GitignoreCheckInfo
             ".claude/worktrees/",
             ".claude/tool-results/",
             ".claude/handoff/",
+            ".claude/dispatch-active*",
             "__pycache__/",
         ],
     )
@@ -669,14 +702,23 @@ def check_gitignore_completeness(project_root: Path) -> GitignoreCheckInfo:
     except (OSError, UnicodeDecodeError):
         return _create_missing_gitignore_result(exists=True)
 
-    # 檢查每個必須規則
-    has_coverage = _has_gitignore_rule(content, "coverage") or _has_gitignore_rule(content, "htmlcov")
-    has_hook_logs = _has_gitignore_rule(content, ".claude/hook-logs")
-    has_worktrees = _has_gitignore_rule(content, ".claude/worktrees")
-    has_tool_results = _has_gitignore_rule(content, ".claude/tool-results")
-    has_handoff = _has_gitignore_rule(content, ".claude/handoff")
-    has_dispatch_active = _has_gitignore_rule(content, ".claude/dispatch-active")
-    has_pycache = _has_gitignore_rule(content, "__pycache__")
+    # 檢查每個必須規則：優先用 git check-ignore 語意判定（正確處理萬用字元 /
+    # 根錨定 / 具體檔名等所有 gitignore 語法），無 git / 非 git repo 時 fallback 字面匹配
+    def _rule_satisfied(probe_path: str, *patterns: str) -> bool:
+        ignored = _is_path_ignored_by_git(project_root, probe_path)
+        if ignored is not None:
+            return ignored
+        return any(_has_gitignore_rule(content, p) for p in patterns)
+
+    has_coverage = _rule_satisfied("coverage/_probe", "coverage") or _rule_satisfied(
+        "htmlcov/_probe", "htmlcov"
+    )
+    has_hook_logs = _rule_satisfied(".claude/hook-logs/_probe", ".claude/hook-logs")
+    has_worktrees = _rule_satisfied(".claude/worktrees/_probe", ".claude/worktrees")
+    has_tool_results = _rule_satisfied(".claude/tool-results/_probe", ".claude/tool-results")
+    has_handoff = _rule_satisfied(".claude/handoff/_probe", ".claude/handoff")
+    has_dispatch_active = _rule_satisfied(".claude/dispatch-active.json", ".claude/dispatch-active")
+    has_pycache = _rule_satisfied("__pycache__/_probe", "__pycache__")
 
     # 彙整缺失的規則
     missing = []
@@ -691,7 +733,7 @@ def check_gitignore_completeness(project_root: Path) -> GitignoreCheckInfo:
     if not has_handoff:
         missing.append(".claude/handoff/")
     if not has_dispatch_active:
-        missing.append(".claude/dispatch-active.json")
+        missing.append(".claude/dispatch-active*")
     if not has_pycache:
         missing.append("__pycache__/")
 

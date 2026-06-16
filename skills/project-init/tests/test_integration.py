@@ -69,48 +69,57 @@ class TestCheckCommandOutput:
 
     def test_check_with_all_ok(self, capsys, tmp_path: Path) -> None:
         """測試所有工具都正常時的輸出."""
-        with patch("project_init.commands.check.detect_python") as mock_python:
-            with patch("project_init.commands.check.detect_os") as mock_os:
-                with patch("project_init.commands.check.detect_uv") as mock_uv:
-                    with patch("project_init.commands.check.detect_ripgrep") as mock_rg:
-                        with patch("project_init.commands.check.verify_hooks_system") as mock_hooks:
-                            with patch("project_init.commands.check.scan_custom_packages") as mock_packages:
-                                # 所有工具都正常
-                                mock_python.return_value = PythonInfo(
-                                    version="Python 3.14.13",
-                                    path="/usr/bin/python3",
-                                    is_available=True
-                                )
-                                mock_os.return_value = OsInfo(
-                                    system="Darwin",
-                                    version="24.3.0",
-                                    is_available=True
-                                )
-                                mock_uv.return_value = UvInfo(
-                                    version="uv 0.4.0",
-                                    path="/usr/local/bin/uv",
-                                    is_available=True
-                                )
-                                mock_rg.return_value = RipgrepInfo(
-                                    version="ripgrep 13.0.0",
-                                    path="/usr/local/bin/rg",
-                                    is_available=True
-                                )
-                                mock_hooks.return_value.all_compilable = True
-                                mock_hooks.return_value.hook_count = 0
-                                mock_hooks.return_value.errors = []
-                                mock_packages.return_value = []
+        # check 現檢查 8 個項目：os/python/uv/ripgrep/codebase-memory-mcp/codegraph/hooks/packages
+        # 8 個 mock 改用並列 context manager，避免巢狀過深
+        with (
+            patch("project_init.commands.check.detect_python") as mock_python,
+            patch("project_init.commands.check.detect_os") as mock_os,
+            patch("project_init.commands.check.detect_uv") as mock_uv,
+            patch("project_init.commands.check.detect_ripgrep") as mock_rg,
+            patch("project_init.commands.check.detect_codebase_memory_mcp") as mock_cbm,
+            patch("project_init.commands.check.detect_codegraph") as mock_codegraph,
+            patch("project_init.commands.check.verify_hooks_system") as mock_hooks,
+            patch("project_init.commands.check.scan_custom_packages") as mock_packages,
+        ):
+            # 所有工具都正常
+            mock_python.return_value = PythonInfo(
+                version="Python 3.14.13",
+                path="/usr/bin/python3",
+                is_available=True
+            )
+            mock_os.return_value = OsInfo(
+                system="Darwin",
+                version="24.3.0",
+                is_available=True
+            )
+            mock_uv.return_value = UvInfo(
+                version="uv 0.4.0",
+                path="/usr/local/bin/uv",
+                is_available=True
+            )
+            mock_rg.return_value = RipgrepInfo(
+                version="ripgrep 13.0.0",
+                path="/usr/local/bin/rg",
+                is_available=True
+            )
+            # codebase-memory-mcp 與 codegraph：is_available=True 即判定 OK
+            mock_cbm.return_value.is_available = True
+            mock_codegraph.return_value.is_available = True
+            mock_hooks.return_value.all_compilable = True
+            mock_hooks.return_value.hook_count = 0
+            mock_hooks.return_value.errors = []
+            mock_packages.return_value = []
 
-                                # 執行 check
-                                result = run_check(tmp_path)
+            # 執行 check
+            result = run_check(tmp_path)
 
-                                # 驗證結果
-                                assert result.all_ok
-                                captured = capsys.readouterr()
+            # 驗證結果
+            assert result.all_ok
+            captured = capsys.readouterr()
 
-                                # 驗證輸出格式
-                                assert "project-init check" in captured.out
-                                assert "6/6 項目正常" in captured.out
+            # 驗證輸出格式
+            assert "project-init check" in captured.out
+            assert "8/8 項目正常" in captured.out
 
 
 class TestExceptionUsageExample:

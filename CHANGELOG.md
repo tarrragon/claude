@@ -1,3 +1,17 @@
+## [1.48.5] - 2026-06-16
+
+### Summary
+fix: check_gitignore_completeness 改 git check-ignore 混合語意消除 false positive; fix: dispatch-active missing 建議字面改 .claude/dispatch-active*; fix: 同步 project-init gitignore/check 測試斷言並修 _create_missing_gitignore_result 漏列 dispatch-active (+1 more)
+
+Changes: 3 fix, 1 chore
+
+- fix: check_gitignore_completeness 改 git check-ignore 混合語意消除 false positive
+- fix: dispatch-active missing 建議字面改 .claude/dispatch-active*
+- fix: 同步 project-init gitignore/check 測試斷言並修 _create_missing_gitignore_result 漏列 dispatch-active
+- chore: test_hook_completeness_reverse_check.py 執行權限對齊 100755
+
+---
+
 ## [1.48.4] - 2026-06-16
 
 ### Summary
