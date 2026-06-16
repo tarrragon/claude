@@ -1,3 +1,14 @@
+## [1.50.0] - 2026-06-16
+
+### Summary
+feat: ticket create --where 驗證並拒絕非路徑 token 防 where.files 髒值
+
+Changes: 1 feat
+
+- feat: ticket create --where 驗證並拒絕非路徑 token 防 where.files 髒值
+
+---
+
 ## [1.49.1] - 2026-06-16
 
 ### Summary

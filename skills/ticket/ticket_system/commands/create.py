@@ -845,6 +845,58 @@ def _extract_where_files(ticket_data: Optional[Dict[str, Any]]) -> List[str]:
     return []
 
 
+def _validate_where_file_token(token: str) -> tuple:
+    """驗證單一 --where 路徑 token 是否為合法檔案路徑。
+
+    防護 where.files 髒值：曾出現將 'key=value' 形式（如 src=.claude/x、
+    layer=core）誤當路徑傳入 --where，髒值寫進 where.files 後致下游路徑
+    分類器誤判（含前綴的 token 被當非框架路徑），級聯成派發誤診。
+
+    判定規則：取路徑「第一段」（首個 '/' 之前的字串），若其中含 '='，
+    視為 key=value 前綴髒值並 reject。'=' 出現在第一段之後（路徑中段或
+    檔名）屬合法檔名字元，放行。空字串由上游過濾，此處視為合法。
+
+    Args:
+        token: 單一路徑 token
+
+    Returns:
+        (is_valid, hint) tuple：
+        - is_valid: True 表示合法路徑；False 表示髒值
+        - hint: 髒值時的修正提示（含剝除前綴後的建議路徑）；合法時為空字串
+    """
+    if not token:
+        return True, ""
+
+    first_segment = token.split("/", 1)[0]
+    if "=" not in first_segment:
+        return True, ""
+
+    # 第一段含 '='：視為 key=value 前綴髒值，提供剝除前綴的修正建議
+    stripped = token.split("=", 1)[1]
+    hint = (
+        f"路徑 token 含非路徑前綴（'='）於首段: '{token}'。"
+        f"請改用純路徑，例如剝除前綴後的 '{stripped}'"
+    )
+    return False, hint
+
+
+def _validate_where_files(tokens: List[str]) -> List[str]:
+    """批次驗證 --where 路徑 token，收集所有髒值錯誤訊息。
+
+    Args:
+        tokens: 已 strip 的路徑 token 列表
+
+    Returns:
+        錯誤訊息列表（每個髒值 token 一條）；全部合法時回空 list
+    """
+    errors: List[str] = []
+    for token in tokens:
+        is_valid, hint = _validate_where_file_token(token)
+        if not is_valid:
+            errors.append(hint)
+    return errors
+
+
 _ACCEPTANCE_SEP = "|"
 
 
@@ -935,6 +987,19 @@ def _parse_cli_args_to_config(
     """
     # 處理 where_files
     where_files = [f.strip() for f in args.where_files.split(",")] if args.where_files else []
+
+    # 驗證路徑 token：reject 非路徑髒值（如 src=.claude/x、layer=core）。
+    # 髒值若寫入 where.files 會致下游派發路徑分類誤判，故前置攔下。
+    where_errors = _validate_where_files(where_files)
+    if where_errors:
+        print(format_error(ErrorEnvelope(
+            component="create",
+            action="validate_where_files",
+            errno="INVALID_WHERE_FILE_TOKEN",
+            hint="--where 含非路徑 token（key=value 前綴髒值），請改用純路徑：\n"
+            + "\n".join(f"  - {e}" for e in where_errors),
+        )))
+        return None
 
     # 處理 blocked_by
     blocked_by = [b.strip() for b in args.blocked_by.split(",")] if args.blocked_by else []
