@@ -218,6 +218,139 @@ comment（對照，允許保留）：
 |------|---------|------|
 | `# 此防護源於某次 global 未定義崩潰事件（W-xxx）` | 移除後決策說明完整 | 歷史錨點型，保留（僅開發者可見） |
 
+### 框架 code 邏輯註解的識別符衛生
+
+> **本章節定位**：前述「引用性質判準」與「功能字串子類」處理「ticket ID 引用是否該保留」的判定。本章節進一步降低框架 code（`.claude/hooks/`、`.claude/scripts/` 等）**邏輯註解**對 project-local ticket ID 的依賴——即使某處 ticket ID 通過移除測試屬歷史錨點型可保留，框架 code 邏輯註解仍應優先以**自足 WHY** 或**結構化溯源載體**取代，將 ticket ID 完全移出邏輯註解。本章節是文件慣例（降級為慣例，不上 regex hard hook，理由見下「為何不上 hard hook」）。
+
+**Why**：框架 code 經 sync 跨專案共用，邏輯註解內的 project-local ticket ID 在其他專案斷源（該 ticket 不存在）或偽源（編號巧合對應到別的 ticket）。歷史錨點型雖通過移除測試（移除後句子完整），但留著 ticket ID 對讀者無操作價值——讀者無法在自己專案查到該編號，反而誤以為是有效引用。自足 WHY 把「為什麼這樣寫」的決策依據直接寫進註解，不依賴外部 ticket 即可理解，是更穩定的設計脈絡記錄方式。
+
+**Consequence**：邏輯註解保留 ticket ID（即使屬歷史錨點型）會在 sync 後讓其他專案的讀碼開發者面對死編號——查無此 ticket，無法追溯設計脈絡，反而比沒有註解更困惑（誤以為脈絡可查卻查不到）。當設計脈絡需要可追溯的中央錨點時，缺結構化溯源載體會迫使開發者把追溯責任塞回 ticket ID，回到斷源/偽源問題。
+
+**Action**：框架 code 邏輯註解禁嵌 project-local ticket ID。改以下兩條路徑取代：
+
+| 取代路徑 | 適用情境 | 形式 |
+|---------|---------|------|
+| 自足 WHY | 設計依據可直接用一兩句話說清，不需外部追溯 | 註解直接寫「為什麼這樣寫」的決策依據，不含任何 ticket ID |
+| 結構化溯源載體 | 設計脈絡需可追溯的中央錨點（跨 consumer 共享） | frontmatter provenance 欄或 commit trailer 引 `claude#NN`（見下「frontmatter provenance 欄與 commit trailer 溯源慣例」） |
+
+**自足 WHY 正反範例**：
+
+反例（邏輯註解嵌 project ticket ID，禁止）：
+
+```python
+# 此處改用 globalThis 取代 global（W-xxx）
+target = globalThis
+```
+
+```python
+# 依 W-xxx 的分析，這裡要先檢查 None 再 dispatch
+if payload is None:
+    return
+```
+
+正例（自足 WHY，移除 ticket ID 並把決策依據內聯）：
+
+```python
+# Service Worker 環境無 global，改用 globalThis 確保跨環境可用
+target = globalThis
+```
+
+```python
+# payload 為 None 時 dispatch 會拋 AttributeError 中斷 hook，先擋掉
+if payload is None:
+    return
+```
+
+正例（需中央錨點時，改引結構化溯源載體）：
+
+```python
+# 此防護源於 Service Worker 全域物件缺失崩潰；跨 consumer 修復追蹤見 provenance
+# Provenance: claude#42
+target = globalThis
+```
+
+**判別準則**：問「移除 ticket ID 後，這條邏輯註解是否已說清『為什麼這樣寫』？」
+
+- 已說清 → 註解本身即自足 WHY，無需任何溯源載體
+- 未說清（ticket ID 是唯一的脈絡來源） → 把決策依據內聯為自足 WHY；若脈絡需跨 consumer 共享追溯，補結構化溯源載體（`claude#NN`），而非留 project ticket ID
+
+### frontmatter provenance 欄與 commit trailer 溯源慣例
+
+> **本章節定位**：定義兩個結構化溯源載體——frontmatter `provenance` 欄（檔案層級）與 commit trailer（提交層級）——作為框架 code 邏輯註解移除 ticket ID 後的替代追溯錨點。兩者共同目標是把溯源資訊移出邏輯註解，改用跨專案穩定的錨點（GitHub Issues `claude#NN`）。
+
+**Why**：框架變更（含 code 與 doc）需要可追溯的設計脈絡，但 project-local ticket ID 跨專案 sync 後失效（規則 8 主傷害模型）。關聯決策（issue tracker 三重用途設計）定框架採 GitHub Issues 作 canonical 錨點——issue 編號由 server 原子分配，跨 consumer 唯一且持久，是比 project ticket ID 更穩定的 provenance 載體。frontmatter 欄與 commit trailer 把這個錨點放在「不污染邏輯註解、機器可解析」的位置。
+
+**Consequence**：缺結構化溯源載體慣例，開發者要記錄跨 consumer 設計脈絡時只能塞回邏輯註解的 ticket ID（斷源/偽源）或散落在 commit message 正文（不可機器解析、難以聚合追蹤）。有統一慣例則溯源資訊集中於可預期欄位，升格/跨 consumer 修復追蹤時可批量查詢。
+
+**Action**：依載體類型採以下慣例。`claude#NN` 形式（如 `tarrragon/claude#42`）為首選，對齊框架 GitHub Issues canonical 決策。
+
+**慣例 1：frontmatter provenance 欄（檔案層級）**
+
+適用於有 YAML frontmatter 的框架檔案（error-pattern、methodology 等）需標注設計脈絡來源時。欄位為**可選**——零摩擦捕獲時不填，升格或需跨 consumer 追蹤時才 stamp。
+
+| 欄位 | 性質 | 值形式 | 說明 |
+|------|------|-------|------|
+| `provenance` | 可選 | `claude#NN` 或 `owner/repo#NN` | 通用設計脈絡錨點，適用任意 code/doc 變更 |
+| `canonical_issue` | 可選 | `owner/repo#NN`（如 `tarrragon/claude#42`） | error-pattern 專屬：指向 canonical 去重身份的 framework issue |
+
+範例 1（error-pattern frontmatter 引 canonical issue）：
+
+```yaml
+---
+id: PC-112
+title: subagent 對非程式碼檔誤選 MCP 寫入工具
+canonical_issue: tarrragon/claude#42
+---
+```
+
+範例 2（methodology frontmatter 標通用 provenance）：
+
+```yaml
+---
+title: knowledge-carrier-allocation-methodology
+provenance: tarrragon/claude#57
+---
+```
+
+**慣例 2：commit trailer（提交層級）**
+
+適用於框架 code/doc 變更需在提交層級標注溯源，取代「邏輯註解嵌 ticket ID」。trailer 置於 commit message 末尾，鍵值對形式，機器可解析。
+
+| trailer 鍵 | 值形式 | 說明 |
+|-----------|-------|------|
+| `Provenance` | `claude#NN` 或 `owner/repo#NN` | 此變更的設計脈絡錨點 |
+
+範例 1（框架 code 變更 commit trailer）：
+
+```
+fix(hooks): Service Worker 環境改用 globalThis 取代 global
+
+global 在 Service Worker 不存在，導致 hook 啟動崩潰。改用 globalThis
+確保跨環境可用。
+
+Provenance: tarrragon/claude#42
+```
+
+範例 2（框架 doc 變更 commit trailer）：
+
+```
+docs(references): 規則 8 補框架 code 註解識別符衛生條款
+
+Provenance: claude#58
+```
+
+**邊界**：本慣例的 `provenance` / `canonical_issue` 載體存放於 frontmatter 與 commit trailer，**不存放於邏輯註解**——邏輯註解仍依上節「框架 code 邏輯註解的識別符衛生」要求自足。功能字串（運行時輸出）一律不嵌任何溯源識別符（含 `claude#NN`），維持運行時輸出對最終用戶無誤導。
+
+### 為何不上 regex hard hook（降級為文件慣例的理由）
+
+> **本章節定位**：說明識別符衛生（含本章新增的邏輯註解條款、溯源載體慣例）為何降級為**文件慣例**而非 regex 強制層（hard hook）。
+
+**Why**：對「框架文件含 project ticket ID」做 naive regex 偵測的誤報面過大。實測 grep 掃描 ticket ID pattern 全域命中 8686 處，其中 322 處為 `source_ticket` 等合法引用（如 ticket frontmatter 的 `source_ticket` 欄、規則 7 允許的變更歷史來源標注、本檔判準章節的歷史錨點型範例）。naive regex 無法區分「依賴型違規引用」與「合法 source_ticket / 歷史錨點型 / 規則正文舉例」，會把這 322 處（及其他合法命中）全部誤殺。
+
+**Consequence**：誤報率過高的 hard hook 必然被繞過而失效——開發者面對大量 false positive 阻擋會養成 `--no-verify` 或忽略 hook 的習慣，連帶讓真正的違規也流過（守衛因狼來了效應失效）。且 hard hook 阻擋合法的 `source_ticket` 欄會直接破壞 ticket 系統運作（frontmatter 必填欄被擋）。
+
+**Action**：識別符衛生維持為**文件慣例**（本規則 8 各條款 + 撰寫前檢查清單 + code review 人工判定），不上 regex 強制層。判定依賴「移除測試」等需語意理解的操作判準，由撰寫者與 reviewer 執行；機器層僅在已有明確結構（如 frontmatter 特定欄）做窄範圍輔助，不做全域 regex 阻擋。
+
 ### 豁免機制
 
 某些情境下，框架文件確實需要保留產品名稱或專案層級識別符作為情境舉例（例如測試任務的具體系統名稱、業務情境驅動的程式碼註解正例、5 Whys 真實事件分析）。完全禁止會破壞寫作教學的可讀性或事件記錄真實性。豁免機制提供合法的「具體舉例」保留路徑。
@@ -373,6 +506,7 @@ comment（對照，允許保留）：
 
 ---
 
-**Last Updated**: 2026-06-07
+**Last Updated**: 2026-06-16
+**Version**: 1.3.0 — 規則 8 新增三章節：(1)「框架 code 邏輯註解的識別符衛生」（邏輯註解禁嵌 project ticket ID，改自足 WHY 或結構化溯源載體，含正反範例）；(2)「frontmatter provenance 欄與 commit trailer 溯源慣例」（定義 `provenance` / `canonical_issue` 欄與 `Provenance` trailer，首選 `claude#NN` 形式對齊框架 GitHub Issues canonical 決策，至少 2 範例）；(3)「為何不上 regex hard hook」（識別符衛生降級為文件慣例，引 8686 處全域命中 / 322 處 source_ticket 誤殺的誤報量測）。
 **Version**: 1.2.0 — 引用性質判準新增「功能字串（運行時輸出）子類」：功能字串內 ticket ID 即使屬歷史錨點型仍應清理（運行時誤導其他專案所有用戶，誤導面比 comment 廣）+ 載體處置差異表 + 正反範例。歷史 1.0–1.1 版見 git log。
 **Version**: 1.1.0 — 規則 8 新增「引用性質判準」章節（依賴型禁止 vs 歷史錨點 / 設計脈絡型允許，操作判準＝移除 ticket ID 後可否理解），對齊 PC-093 `history` 豁免 + comment-writing 方法論 + 規則 7 來源標注例外，消除三方衝突。

@@ -1,3 +1,24 @@
+## [1.49.0] - 2026-06-16
+
+### Summary
+feat: sync-push 前框架 import smoke test 閘門（C1 生產閘）; feat: sync tagged-release + pin-aware pull; feat: framework-issue fix-status 跨 consumer 修復矩陣（軸 C） (+8 more)
+
+Changes: 5 feat, 2 fix, 3 docs, 1 chore
+
+- feat: sync-push 前框架 import smoke test 閘門（C1 生產閘）
+- feat: sync tagged-release + pin-aware pull
+- feat: framework-issue fix-status 跨 consumer 修復矩陣（軸 C）
+- feat: framework-issue link 命令 + canonical_issue stamp
+- feat: 建立 /framework-issue SKILL（create/list + scaffold）
+- fix: sync-pull preserve fallback parser fail-loud on malformed YAML
+- fix: 去重 file_lock.py 重複函式定義（死碼 shadow 活碼）
+- docs: 新增 PC-V1-010 + 補 PC-V1-009/ARCH-V1-002 索引缺漏
+- docs: 規則 8 補框架 code 註解識別符衛生 + frontmatter/trailer 溯源慣例
+- docs: 框架治理 ANA 評估產物 — 2 error-pattern + 4 spawn ticket
+- chore: pull .claude 更新（上游 a883d6e321b9）
+
+---
+
 ## [1.48.8] - 2026-06-16
 
 ### Summary

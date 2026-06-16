@@ -73,6 +73,17 @@
 
 **Action**：當某 staging 教訓被識別為通用且穩定，可**升格**——於凍結 base 賦予一個 canonical alias（或在共享 repo 將其視為 canonical），前綴版標註指向 canonical。升格屬低頻、刻意動作，不是每筆 staging 都需升格。
 
+### 升格時可建框架 issue 並 link（issue 作升格產出錨點）
+
+升格時可在框架 repo（`tarrragon/claude`）建立一個 framework issue 作 canonical 錨點，並以 `framework-issue link` 把該 issue ref stamp 回 error-pattern：
+
+1. 用 `framework-issue list --search "<關鍵字>"` 查既有 canonical issue 避免重複；無則 `framework-issue create` 建立。
+2. 用 `framework-issue link <error-pattern-id> <issue-ref>` 把 `| canonical_issue | <issue-ref> |` 寫入該 error-pattern 的「## 分類資訊」表格。
+
+**Why（issue 是升格產出，非捕獲前置）**：framework issue 在此作升格產出的 canonical 錨點（軸 B link + provenance），而非新增 error-pattern 的前置條件。捕獲新教訓時零摩擦不需任何 issue；只有在「升格為 canonical」這個低頻刻意動作時才介入 issue，避免 issue-first 強制前置殺死無摩擦捕獲（對齊 PC-V1-009）。canonical_issue 為可選欄，未升格的 staging pattern 不填。
+
+詳見 `.claude/skills/framework-issue/SKILL.md`。
+
 ---
 
 ## dedup：偵測「異號同義」

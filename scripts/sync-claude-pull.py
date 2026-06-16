@@ -247,15 +247,41 @@ def load_preserve_list(claude_dir: Path) -> set[str]:
         )
 
     # 簡易 fallback 解析：讀取 "- path" 格式的行
+    #
+    # fail-loud：簡易解析器只支援「preserve: 後接 '- path' 區塊清單」這一種
+    # 格式。遇到無法可靠解析的結構（tab 縮排、inline flow 清單 'preserve: [...'）
+    # 時，必須 fail-loud（stderr 警告 + raise），不可靜默回空集合——靜默回空
+    # 會關閉全部 preserve 保護，導致本地特化檔案被遠端覆蓋（違反 quality-baseline
+    # 規則 4，禁止靜默失敗）。
     paths: set[str] = set()
     in_preserve = False
     for line in content.splitlines():
+        if "\t" in line:
+            # tab 縮排是 YAML 語法錯誤，簡易解析器無法可靠處理
+            sys.stderr.write(
+                f"[sync-pull] preserve 清單含 tab 縮排，簡易解析器無法可靠解析，"
+                f"sync 中止以避免關閉全部 preserve 保護: {preserve_file}\n"
+            )
+            raise ValueError(
+                f"sync-preserve.yaml 含 tab 縮排，無法在無 PyYAML 環境下安全解析："
+                f"{preserve_file}"
+            )
         stripped = line.strip()
         if stripped.startswith("#") or not stripped:
             continue
         if stripped == "preserve:":
             in_preserve = True
             continue
+        if stripped.startswith("preserve:"):
+            # 'preserve: [...]' 等 inline flow 清單，簡易解析器無法處理
+            sys.stderr.write(
+                f"[sync-pull] preserve 清單使用 inline flow 格式，簡易解析器無法"
+                f"可靠解析，sync 中止以避免關閉全部 preserve 保護: {preserve_file}\n"
+            )
+            raise ValueError(
+                f"sync-preserve.yaml 使用 inline flow 清單，無法在無 PyYAML 環境下"
+                f"安全解析：{preserve_file}"
+            )
         if in_preserve and stripped.startswith("- "):
             paths.add(stripped[2:].strip())
         elif stripped and not stripped.startswith("#"):
@@ -446,6 +472,106 @@ def write_base_sha(claude_dir: Path, base_sha: str) -> None:
         except (json.JSONDecodeError, OSError):
             data = {}
     data[BASE_SHA_FIELD] = base_sha
+    state_file.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+# 版本 pin 欄位（與 .sync-state.json 其他欄位共存）。值為 "latest" 或 "vX.Y.Z"
+# （亦接受無 v 前綴的 X.Y.Z）。未設或 "latest" 時 target = 上游 HEAD（向後相容）。
+PINNED_VERSION_FIELD = "pinned_version"
+PIN_LATEST = "latest"
+
+
+def read_pinned_version(claude_dir: Path) -> str | None:
+    """讀取 .sync-state.json 中的 pinned_version（pin-aware pull）。
+
+    無檔案 / 無欄位 / 解析失敗皆回傳 None。None 與 "latest" 在 resolve_target_ref
+    皆解析為上游 HEAD（向後相容：未設 pin 的既有 consumer 行為不變）。
+
+    參數:
+        claude_dir: .claude 目錄路徑
+
+    傳回:
+        str | None: pin 值（"latest" 或版本字串），未設則 None
+    """
+    state_file = claude_dir / SYNC_STATE_FILENAME
+    if not state_file.exists():
+        return None
+    try:
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    value = data.get(PINNED_VERSION_FIELD)
+    return value if isinstance(value, str) and value else None
+
+
+def resolve_target_ref(temp_dir: Path, pinned_version: str | None) -> str:
+    """將 pinned_version 解析為上游 clone 中的目標 commit SHA。
+
+    向後相容核心：pinned_version 為 None 或 "latest" 時回傳上游 HEAD 的 SHA，
+    與現行（pull 永遠對齊 HEAD）行為完全一致，不破既有 consumer。
+
+    pin 特定版時，正規化為 v<X.Y.Z> tag（接受帶或不帶 v 前綴的輸入）並解析該
+    tag 指向的 commit。tag 不存在時 fail-loud（sys.exit）——pin 至不存在版本是
+    使用者明確錯誤，靜默退回 HEAD 會讓 consumer 誤以為 pin 生效（違反 quality-
+    baseline 規則 4：禁靜默失敗）。
+
+    參數:
+        temp_dir: 上游 repo clone 路徑
+        pinned_version: pin 值（None / "latest" / 版本字串）
+
+    傳回:
+        str: 目標 commit SHA
+
+    例外:
+        SystemExit: pin 特定版但對應 tag 不存在 / HEAD 無法解析時終止。
+    """
+    if pinned_version is None or pinned_version == PIN_LATEST:
+        result = run_git(["rev-parse", "HEAD"], cwd=str(temp_dir))
+        if result.returncode != 0 or not result.stdout.strip():
+            print_color("無法解析上游 HEAD，pull 中止", "red")
+            sys.exit(1)
+        return result.stdout.strip()
+
+    tag_name = pinned_version if pinned_version.startswith("v") else f"v{pinned_version}"
+    result = run_git(
+        ["rev-list", "-n", "1", f"refs/tags/{tag_name}"], cwd=str(temp_dir)
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        print_color(
+            f"pin 版本 {tag_name} 在上游不存在（無對應 tag），pull 中止。"
+            f"請確認 pinned_version 正確或改用 --bump latest。",
+            "red",
+        )
+        sys.stderr.write(
+            f"[sync-pull] pinned_version {tag_name} 對應 tag 不存在於上游\n"
+        )
+        sys.exit(1)
+    return result.stdout.strip()
+
+
+def update_pinned_version(claude_dir: Path, version: str | None) -> None:
+    """--bump：更新 .sync-state.json 的 pinned_version 欄位。
+
+    version 為 None 時設為 "latest"（bump 至最新）；否則設為指定版本字串。
+    保留既有欄位（last_synced_base_sha 等），僅覆寫 pinned_version 單一欄位。
+    無 .sync-state.json 時建立新檔。
+
+    參數:
+        claude_dir: .claude 目錄路徑
+        version: 目標 pin 版本；None 表示 "latest"
+    """
+    state_file = claude_dir / SYNC_STATE_FILENAME
+    data: dict = {}
+    if state_file.exists():
+        try:
+            data = json.loads(state_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            data = {}
+    data[PINNED_VERSION_FIELD] = version if version else PIN_LATEST
+    state_file.parent.mkdir(parents=True, exist_ok=True)
     state_file.write_text(
         json.dumps(data, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -1714,6 +1840,26 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
             if not full_path.exists():
                 print_color(f"   警告: preserve 清單中的檔案不存在: {rel_path}", "yellow")
 
+    # pin-aware：解析目標 commit（pin 特定版 = tag commit；latest/未設 = HEAD）。
+    # pin 特定版時 checkout 該 commit，使後續流程（diff/show/rev-parse HEAD）皆對齊
+    # pinned target 而非上游最新 HEAD，收斂壞變更爆炸半徑。latest/未設時 target ==
+    # HEAD，不 checkout，行為與現行完全一致（向後相容硬約束）。
+    pinned_version = read_pinned_version(claude_dir)
+    target_sha = resolve_target_ref(temp_dir, pinned_version)
+    head_sha = run_git(["rev-parse", "HEAD"], cwd=str(temp_dir)).stdout.strip()
+    if target_sha != head_sha:
+        print_color(
+            f"   版本 pin：{pinned_version} → 對齊上游 {target_sha[:12]}（非最新 HEAD）",
+            "green",
+        )
+        checkout = run_git(["checkout", "--detach", target_sha], cwd=str(temp_dir))
+        if checkout.returncode != 0:
+            print_color(
+                f"   無法 checkout pin 目標 {target_sha[:12]}: {checkout.stderr.strip()}",
+                "red",
+            )
+            sys.exit(1)
+
     # 決定同步策略：三方合併（有可達 base）或全量 overlay（向後相容 fallback）
     base_sha = read_base_sha(claude_dir)
     base_reachable = (
@@ -2062,11 +2208,30 @@ def main() -> None:
     4. 完成同步（更新模板、清理、輸出結果）
 
     旗標：
-        --audit  唯讀孤兒稽核（列本地有上游無之檔），不執行同步主流程。
+        --audit         唯讀孤兒稽核（列本地有上游無之檔），不執行同步主流程。
+        --bump [版本]   更新 .sync-state.json 的 pinned_version 後重跑同步。
+                        無參數 = bump 至 latest；帶版本（如 v1.2.0）= pin 至該版。
     """
-    if "--audit" in sys.argv[1:]:
+    argv = sys.argv[1:]
+    if "--audit" in argv:
         run_audit()
         return
+
+    # --bump [版本]：先更新 pin，再走正常同步流程套用新 pin 目標。
+    if "--bump" in argv:
+        idx = argv.index("--bump")
+        # --bump 後的下一個非旗標參數視為目標版本；缺省則 latest。
+        target_version: str | None = None
+        if idx + 1 < len(argv) and not argv[idx + 1].startswith("-"):
+            target_version = argv[idx + 1]
+        bump_root = find_project_root()
+        update_pinned_version(
+            bump_root / ".claude", target_version
+        )
+        print_color(
+            f"已更新 pinned_version 為 {target_version or PIN_LATEST}，重跑同步...",
+            "green",
+        )
 
     print_color("開始從獨立 repo 拉取 .claude 更新...")
 

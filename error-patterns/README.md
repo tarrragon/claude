@@ -187,6 +187,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | ARCH-020 | validator 與 hook 重複驗證邏輯 | 中 | v0.18.0 |
 | ARCH-021 | 模組組裝遺漏導致功能鏈路靜默斷裂（原 ARCH-010 重編號） | 高 | v0.15.4 |
 | ARCH-V1-001 | 同一不變量單點執法、多入口繞過（前門裝鎖、側門敞開） | 中 | v1.0.0 |
+| ARCH-V1-002 | 雙向 overlay sync 製造重複 top-level 定義（死碼 shadow 活 bug） | 高 | v1.0.0 |
 
 ### 程式碼品質 (CQ)
 
@@ -370,6 +371,8 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-V1-006 | 規則變更未盤點既有規則矛盾即上線（有執法者的一方勝出） | 中 | v1.0.0 |
 | PC-V1-007 | 確定性 ≠ 準確性 — 量測工具確定化未驗證複現原始分析意圖 | 高 | v1.0.0 |
 | PC-V1-008 | lockfile 版本漂移修正被 auto-preserve worktree commit 孤立並險遭當噪音丟棄 | 中 | v1.0.0 |
+| PC-V1-009 | 機械缺陷誤診為流程缺陷（import 殘留可由 smoke test 消除卻誤上人工 PR 審查） | 高 | v1.0.0 |
+| PC-V1-010 | 子代理人完成摘要把測試總數誤報為通過數，遮蔽紅燈（PM 須獨立重跑讀實跑行） | 高 | v1.0.0 |
 | PC-APP-001 | 延後決策綁定的 trigger ticket 引用未查證 scope 一致性（trigger 名存實亡） | 中 | v0.32.0 |
 | PC-APP-002 | sync-pull 孤兒清理超出宣稱範圍刪除，preserve 機制未生效致專案特化檔遺失 | 高 | v0.32.0 |
 
