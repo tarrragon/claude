@@ -1,3 +1,14 @@
+## [1.52.0] - 2026-06-17
+
+### Summary
+feat: saas↔doc 雙向銜接 + CLAUDE.md 瘦身（決策記錄移交為代謝機制）
+
+Changes: 1 feat
+
+- feat: saas↔doc 雙向銜接 + CLAUDE.md 瘦身（決策記錄移交為代謝機制）
+
+---
+
 ## [1.51.3] - 2026-06-16
 
 ### Summary

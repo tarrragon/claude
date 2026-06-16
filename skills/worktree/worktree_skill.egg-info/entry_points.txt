@@ -1,0 +1,2 @@
+[console_scripts]
+worktree = scripts.worktree_manager:main

@@ -56,6 +56,15 @@
 | Event | 來源 domain | Payload contract | 訂閱者 | 失敗語意（可丟 / 不可丟） |
 | ----- | ----------- | ---------------- | ------ | ------------------------- |
 
+### 介面契約（無 event 流時必填）
+
+透明轉發、反向代理、或無領域事件流的架構、契約不藏在 event payload 裡（Event Catalog 為空或不適用）— 此時本段補記 client ⇄ server 共用的介面契約、否則下游 spec 的「資料模型 / 介面規格」章節會無源、得手動重述（這是「伺服器但非架站」場景的常見缺口）。
+
+| 契約項 | 形態（payload schema / 子協議 / 資料模型） | 雙方（誰產生、誰消費） | 版本標記 |
+| ------ | ------------------------------------------ | ---------------------- | -------- |
+
+（有完整 event 流的架構、契約已在 Event Catalog 的 Payload contract 欄表達、本段標「N/A — 契約在 event payload」即可。）
+
 ## 3. 技術維度決策
 
 （每個展開過的維度一段、未展開維度收在本段最後；每段的需求判讀要回指使用者操作與風險表、以及 event catalog）
@@ -103,6 +112,7 @@
 2. **次選項要留名字**：未來重評時、被淘汰的選項是第一批回看對象；淘汰原因消失（例：團隊長出維運能力）就是重評入口。
 3. **每項選型三欄齊備**：理由、防護狀態、tripwire 缺一不可 — 缺理由的決策無法重評、缺防護狀態的決策藏著沉默缺口、缺 tripwire 的決策會超期服役。
 4. **使用者的原話值得保留**：需求判讀欄引用使用者在訪談中的具體說法（「重複扣款絕對不行」）、比轉述（「一致性要求高」）更能讓未來讀者還原當時的權重。
+5. **§1 操作風險表、§2 Domain Map 是強制段、不可空白交付**：只填 §3 技術維度、跳過 §1 / §2 的決策記錄、是「訪談沒走完 Stage 1 / Stage 2」的半成品 — §3 的需求判讀無從回指（填寫規則 1 失效）、下游 doc 系統長不出 usecase（§1 為空）與 domain spec（§2 為空）、未來重評也讀不到當初的操作與領域權重。§1 / §2 任一為空時、回頭補完 Stage 1 / 2、不得進入 scaffold 建議或交付決策記錄。
 
 ---
 
@@ -129,3 +139,25 @@
 
 - **Scaffold 範圍止於「決策的直接執行」**：業務邏輯、資料 model、UI 不在 scaffold 範圍；scaffold 完成時 repo 應該是「防護底線就位、第一個 feature 可以開始寫」的狀態。
 - **決策改、scaffold 跟著重生**：使用者中途改決策（換 DB、換部署平台）時、回到決策記錄改對應段落、再重出受影響的 scaffold 項、不直接在舊 scaffold 上手改出漂移。
+
+---
+
+## 銜接 doc 系統（專案有 doc skill 時）
+
+決策記錄是 saas 的終點、也是 doc 需求文件系統的起點 — 它已含 doc 需要的全部原料、銜接只做格式移交、不重新訪談。偵測 `.claude/skills/doc/` 存在時、依下表把決策記錄各段移交為 doc 文件。
+
+**前置檢查（先過閘門再移交）**：移交前確認 §1 操作風險表、§2 Domain Map 非空（填寫規則 5）。任一為空＝訪談沒走完 Stage 1 / 2、此時 doc 的 usecase / spec 無源可長 — 回頭補盤點、不可硬生半成品文件。
+
+| 決策記錄段落 | → doc 文件 | 映射 |
+| --- | --- | --- |
+| §1 操作風險表（BDD） | usecase（每個操作主體一個 UC） | 操作→用例、主情境→主成功場景、失敗情境→例外場景、風險 + 前端引導 + 後端防護→驗收條件 |
+| §2 Domain Map | spec（每個自建 domain 一份）的 domain 邊界 + 責任 | domain→spec 目錄、責任→概述、command→FR（與 §3 雙源） |
+| §3 技術維度決策 | spec 的 FR / NFR（與 §2 雙源）+ proposal 的技術決策 | 需求判讀→FR、選型 / 防護→NFR + proposal 決策依據 |
+| §2 介面契約段 | spec 的資料模型 + 介面規格章節 | payload schema / 子協議 / 資料模型→spec 介面規格 |
+| §0 定錨 + 交付形態 gate + §4 / 5 底線 / tripwire | proposal | 定錨 + gate→需求來源 / 範圍界定、防護底線→驗收條件、tripwire→Out-of-Scope |
+
+spec 的 FR 是雙源：§2 Domain Map 給 domain 邊界與責任、§3 技術維度給技術性 FR / NFR — 兩段都要回看、缺一則 spec 不完整。
+
+移交步驟：(1) 先生成 proposal（綁範圍）、(2) 再依 domain map 生成各 spec、(3) 再依操作表生成各 usecase、(4) 補雙向交叉引用（proposal 的 spec_refs / usecase_refs、spec 的 related_usecases、usecase 的 related_specs）、(5) CLAUDE.md 瘦身 — 需求文件結構化落地到 docs/ 後、CLAUDE.md 中的完整技術規格替換為路由索引表（只留決策編號 + 維度 + 選型一行摘要 + 指向 `docs/tech-decisions.md` 的路徑）、auto-load token 隨之下降。doc 端的接手細節見 doc skill 的「與 saas-tech-selection 的銜接」節。
+
+買掉（外包 vendor）的 domain：在 spec 標整合邊界、不展開內部 FR；其 reliability 第三方依賴訪談結論進 spec 的設計約束。

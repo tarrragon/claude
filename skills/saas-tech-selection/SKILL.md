@@ -63,6 +63,15 @@ metadata:
 
 依 `references/decision-record-template.md` 產出設計決策記錄：操作風險表、domain map、event catalog、每項技術選型（理由 / 防護狀態 / tripwire）、防護底線總表、規模 tripwire 總表。決策記錄經使用者確認後、才產出 scaffold 建議；scaffold 是決策的下游、修改決策時 scaffold 跟著重生。
 
+### Stage 6：銜接 doc 需求文件系統（條件式、專案有 doc skill 才執行）
+
+決策記錄產出後、偵測專案是否載入 doc skill（檢查 `.claude/skills/doc/` 是否存在）：
+
+- **有 doc skill** — 決策記錄不只進 `docs/tech-decisions.md`、還移交 doc 系統長成需求文件：操作風險表（BDD）轉 usecase、domain map + 介面契約（DDD）轉 spec、定錨 + 交付形態 gate + 技術決策轉 proposal。移交前先過閘門：§1 / §2 任一為空即回補 Stage 1 / 2、不可硬生半成品。映射細節與移交步驟見 `references/decision-record-template.md` 的「銜接 doc 系統」節。
+- **無 doc skill** — 維持現狀、決策記錄獨立產出（saas 單獨運作、不依賴 doc）。
+
+這一步是「需求確認（saas）」到「需求文件化（doc）」的接點：saas 已產出 doc 需要的全部原料、此處只做格式移交、不重新訪談。
+
 ---
 
 ## 訪談互動原則
@@ -94,6 +103,7 @@ metadata:
 | 使用者問「之後長大怎麼辦」、或要寫 tripwire 總表                                            | `references/scale-stage-triggers.md`                                                            |
 | 防護底線逐項確認、或使用者要求跳過某條底線                                                  | `references/baseline-protections.md`                                                            |
 | 訪談收斂、要產出決策文件與 scaffold 建議                                                    | `references/decision-record-template.md`                                                        |
+| 決策記錄產出後、專案有 doc skill、要移交需求文件                                            | `references/decision-record-template.md`（銜接 doc 系統節）                                     |
 
 每份 reference 自包含：以該階段或維度為核心、把訪談問題、判準、防護底線與 tripwire 收在同一檔。閱讀任一 reference 不需要回來看其他 reference。
 

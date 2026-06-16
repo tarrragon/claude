@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: branch-worktree-guardian
+Version: 0.1.0
+Summary: Create feature worktree utility
+Requires-Python: >=3.10
+Provides-Extra: test
+Requires-Dist: pytest>=7.0; extra == "test"
+Requires-Dist: pytest-mock>=3.10; extra == "test"

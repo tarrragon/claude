@@ -4,7 +4,8 @@
     "allow": [
       "Edit",
       "Write"
-    ]
+    ],
+    "additionalDirectories": []
   },
   "hooks": {
     "PreToolUse": [
