@@ -48,6 +48,7 @@ Windows 使用者特別注意:
   完整說明與除錯指南詳見 WINDOWS-NOTES.md。
 """
 
+import argparse
 import io
 import json
 import os
@@ -75,6 +76,10 @@ REPO_URL = "https://github.com/tarrragon/claude.git"
 # 禁雙欄位（H1：對 commit SHA 用 max 會選錯共同祖先）。與 sync-claude-pull.py 對稱。
 SYNC_STATE_FILENAME = ".sync-state.json"
 BASE_SHA_FIELD = "last_synced_base_sha"
+
+# 專案特化檔清單檔名（與 sync-claude-pull.py 對稱）。push 端讀此清單，使
+# preserve-listed 的 APP 特化檔不被推上共享框架 repo（v1.48.6 誤推根因）。
+PRESERVE_FILENAME = "sync-preserve.yaml"
 
 # Push 前強制還原 executable bit 的目錄名（與 sync-claude-pull.py 對稱）
 # 確保推上去的 git index mode 為 100755，避免下游 pull 拿到 644。
@@ -331,27 +336,81 @@ def stage_tracked_tree(project_root: Path, staging_dir: Path) -> int:
     return count
 
 
-def copy_filtered_from_staging(src: Path, dst: Path) -> int:
-    """從 staging（git tracked 樹）複製到遠端 temp_dir，施加 should_exclude 過濾（M1）。
+def load_preserve_list(claude_dir: Path) -> set[str]:
+    """讀取 sync-preserve.yaml 中的本地特化檔案清單（與 sync-claude-pull.py 對稱）。
+
+    Why：push 用 git archive HEAD 全樹 overlay，僅靠 should_exclude（manifest）
+    過濾。但 APP 專案特化檔（skills/wrap-decision/references/project-integration/*
+    等）不在 manifest 排除清單，會被推上共享框架 repo（v1.48.6 誤推實證）。
+    pull 端已以 sync-preserve.yaml 原地保留這些檔，push 端須對稱地排除，否則
+    「保留」與「推送」兩端不一致，本地特化內容反向污染框架。
+
+    Consequence：若不讀 preserve，push 把專案特化檔推上框架，其他專案 pull 後
+    收到不屬於自己的特化內容。
+
+    Action：本函式讀清單，由 copy_filtered_from_staging / clean_stale_files /
+    detect_uncleaned_deletions 在過濾階段排除。
+
+    無 sync-preserve.yaml 時回傳空集合（合法：專案未定義 preserve）。本環境無
+    PyYAML（與 pull 端 fallback 一致），採行掃描解析 "- path" 格式。
+
+    參數:
+        claude_dir: .claude 目錄路徑
+
+    傳回:
+        set[str]: 需保留（不推送）的相對路徑集合（相對於 .claude/）
+    """
+    preserve_file = claude_dir / PRESERVE_FILENAME
+    if not preserve_file.exists():
+        return set()
+    content = preserve_file.read_text(encoding="utf-8")
+    paths: set[str] = set()
+    in_preserve = False
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#") or not stripped:
+            continue
+        if stripped == "preserve:":
+            in_preserve = True
+            continue
+        if in_preserve and stripped.startswith("- "):
+            paths.add(stripped[2:].strip())
+        elif stripped and not stripped.startswith("#"):
+            # 非空、非註解行關閉 preserve 區塊
+            in_preserve = False
+    return paths
+
+
+def copy_filtered_from_staging(
+    src: Path, dst: Path, preserve: set[str] | None = None
+) -> int:
+    """從 staging（git tracked 樹）複製到遠端 temp_dir，施加 should_exclude + preserve 過濾（M1）。
 
     git archive 取的是 tracked 全部；tracked 但屬 local-only / 憑證者（如誤被
     commit 的 settings.local.json）仍須在此被 should_exclude 擋下，避免外洩至
     公開 repo。should_exclude 契約要求相對 claude_dir 的路徑，故傳 item 相對
     src 的路徑判定。
 
+    preserve（0.32.0-W1-008）：sync-preserve.yaml 列出的 APP 專案特化檔不推上
+    共享框架，與 pull 端原地保留對稱。
+
     參數:
         src: staging_dir（已 strip .claude/ 前綴，內容對應 .claude/）
         dst: 遠端 repo 本地暫存根目錄（temp_dir）
+        preserve: 不推送的相對路徑集合（None 視為空集合，向後相容）
 
     傳回:
         int: 實際複製的檔案數
     """
+    preserve = preserve or set()
     count = 0
     for item in sorted(src.rglob("*")):
         if not item.is_file():
             continue
         rel = item.relative_to(src)  # 相對 .claude/ 的路徑
         if should_exclude(rel):
+            continue
+        if rel.as_posix() in preserve:
             continue
         dest_item = dst / rel
         dest_item.parent.mkdir(parents=True, exist_ok=True)
@@ -886,7 +945,9 @@ def check_no_change_early_exit(
     return False, diag
 
 
-def clean_stale_files(temp_dir: Path, reference_dir: Path) -> int:
+def clean_stale_files(
+    temp_dir: Path, reference_dir: Path, preserve: set[str] | None = None
+) -> int:
     """刪除 clone 目錄中存在但 reference_dir（git tracked 樹 staging）沒有的過時檔案。
 
     C1 後 reference_dir 改為 git archive 解出的 tracked 樹（staging），而非本地磁碟
@@ -897,8 +958,13 @@ def clean_stale_files(temp_dir: Path, reference_dir: Path) -> int:
     命中的檔（local-only / 憑證）不刪除（這類檔本就不該被本腳本管理，可能是其他
     專案推送內容）。
 
+    preserve（0.32.0-W1-008）：sync-preserve.yaml 列出的專案特化檔不刪除。push
+    端不推這些檔（copy_filtered_from_staging 已排除），故它們不在 staging；若不
+    在此一併排除，--clean 會把遠端既有的 preserve 副本（可能屬其他專案）誤刪。
+
     回傳已刪除的檔案數量。
     """
+    preserve = preserve or set()
     CLEAN_EXCLUDE = {".git", "CHANGELOG.md", "VERSION", "README.md", "LICENSE", ".gitignore"}
     deleted_count = 0
 
@@ -913,6 +979,9 @@ def clean_stale_files(temp_dir: Path, reference_dir: Path) -> int:
             continue
         # should_exclude 命中者不刪除（local-only / 憑證，可能屬其他專案）
         if should_exclude(rel):
+            continue
+        # preserve-listed 檔不刪除（專案特化，push 端刻意不推也不刪）
+        if rel.as_posix() in preserve:
             continue
         # 檢查 tracked 樹 staging 是否有對應檔案
         if not (reference_dir / rel).exists():
@@ -940,7 +1009,9 @@ def clean_stale_files(temp_dir: Path, reference_dir: Path) -> int:
     return deleted_count
 
 
-def detect_uncleaned_deletions(temp_dir: Path, reference_dir: Path) -> list[str]:
+def detect_uncleaned_deletions(
+    temp_dir: Path, reference_dir: Path, preserve: set[str] | None = None
+) -> list[str]:
     """偵測遠端 clone（temp_dir）存在但本地 git tracked 樹（reference_dir）已無的檔案。
 
     這些檔在本地已 git rm（不在 staging tracked 樹），但因本次 push 未帶 --clean，
@@ -966,6 +1037,7 @@ def detect_uncleaned_deletions(temp_dir: Path, reference_dir: Path) -> list[str]
     傳回:
         list[str]: 遠端存在但本地 tracked 樹已無的檔案相對路徑（已排序），無則空 list
     """
+    preserve = preserve or set()
     CLEAN_EXCLUDE = {".git", "CHANGELOG.md", "VERSION", "README.md", "LICENSE", ".gitignore"}
     orphans: list[str] = []
     for file_path in sorted(temp_dir.rglob("*")):
@@ -978,6 +1050,9 @@ def detect_uncleaned_deletions(temp_dir: Path, reference_dir: Path) -> list[str]
             continue
         # should_exclude 命中者（local-only / 憑證，可能屬其他專案）不算孤兒
         if should_exclude(rel):
+            continue
+        # preserve-listed 檔（push 端刻意不推）不算孤兒，與 clean_stale_files 對齊
+        if rel.as_posix() in preserve:
             continue
         if not (reference_dir / rel).exists():
             orphans.append(str(rel))
@@ -1019,23 +1094,63 @@ def run_dry_run() -> None:
     print_color(f"建議版本 bump: {bump_suggestion}", "green")
 
 
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    """以 argparse 解析命令列參數（0.32.0-W1-008，PC-V1-001 防護）。
+
+    Why：舊版手動 `sys.argv[1]` 把任何位置參數當 commit 訊息，導致 --help /
+    未知旗標被誤認為 commit message 而觸發真實不可逆推送（v1.48.6 誤推實證）。
+    argparse 對 --help 自動 exit 0、對未知旗標 exit 2，兩者都在解析階段中止，
+    不進入 clone / push 流程。
+
+    Consequence：缺此防護時，使用者敲 `sync-push --help` 期望看用法，實際推出
+    一次以「--help」為 commit 訊息的不可逆框架更新。
+
+    Action：main 改呼叫本函式取結構化參數；--help / 未知旗標經 argparse 攔截。
+
+    參數:
+        argv: 不含程式名的參數列（通常為 sys.argv[1:]）
+
+    傳回:
+        argparse.Namespace: 含 message / clean / force / dry_run 欄位
+
+    例外:
+        SystemExit: --help（code 0）或未知旗標 / 參數錯誤（code 2）時由
+            argparse 拋出，呼叫端不應吞掉，使其終止於解析階段不觸發推送。
+    """
+    parser = argparse.ArgumentParser(
+        prog="sync-push",
+        description=".claude 資料夾推送到獨立框架 repo（git archive HEAD overlay）",
+    )
+    parser.add_argument(
+        "message",
+        nargs="?",
+        default=None,
+        help="commit 訊息（省略時自動分析 .claude/ commit 生成摘要）",
+    )
+    parser.add_argument(
+        "--clean", action="store_true", help="清理遠端過時檔案（傳播本地刪除）"
+    )
+    parser.add_argument(
+        "--force", action="store_true", help="跳過 no-change early-exit 檢查"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="只生成 commit message，不 clone / push"
+    )
+    return parser.parse_args(argv)
+
+
 def main() -> None:
-    # 解析 --dry-run：只生成 commit message 不 push
-    if "--dry-run" in sys.argv:
-        sys.argv.remove("--dry-run")
+    args = parse_args(sys.argv[1:])
+
+    # --dry-run：只生成 commit message 不 push
+    if args.dry_run:
         run_dry_run()
         return
 
-    # 解析 --clean 參數：啟用時清理遠端過時檔案
-    clean_mode = "--clean" in sys.argv
-    if clean_mode:
-        sys.argv.remove("--clean")
-    # 解析 --force 參數：跳過 no-change early-exit 檢查
-    force_mode = "--force" in sys.argv
-    if force_mode:
-        sys.argv.remove("--force")
+    clean_mode = args.clean
+    force_mode = args.force
     # commit message is now optional - auto-generated when not provided
-    user_message = sys.argv[1] if len(sys.argv) >= 2 else None
+    user_message = args.message
 
     print_color("開始推送 .claude 資料夾到獨立 repo...")
 
@@ -1127,21 +1242,31 @@ def main() -> None:
         try:
             staged_count = stage_tracked_tree(project_root, staging_dir)
             print_color(f"   git archive 取得 {staged_count} 個 tracked 檔案", "green")
-            file_count = copy_filtered_from_staging(staging_dir, temp_dir)
-            print_color(f"   過濾後複製 {file_count} 個檔案（should_exclude 已套用）", "green")
+            # 載入 preserve 清單（0.32.0-W1-008）：APP 專案特化檔不推上共享框架，
+            # 與 pull 端原地保留對稱。傳入 copy / clean / detect 全程一致排除。
+            preserve = load_preserve_list(claude_dir)
+            if preserve:
+                print_color(f"   preserve 清單：{len(preserve)} 個專案特化檔不推送", "green")
+            file_count = copy_filtered_from_staging(staging_dir, temp_dir, preserve)
+            print_color(
+                f"   過濾後複製 {file_count} 個檔案（should_exclude + preserve 已套用）",
+                "green",
+            )
             print_color("   注意: CLAUDE.md 不再同步（專案特定配置）")
 
             # 7.5. 清理遠端過時檔案（僅 --clean 模式）。
             # 以 staging（tracked 樹）為基準：git rm 的檔不在 staging → 從遠端刪除（K）。
             if clean_mode:
                 print_color("清理遠端過時檔案（對齊 git tracked 樹）...")
-                deleted = clean_stale_files(temp_dir, staging_dir)
+                deleted = clean_stale_files(temp_dir, staging_dir, preserve)
                 print_color(f"   已清理 {deleted} 個遠端過時檔案", "green")
             else:
                 # 未帶 --clean 時偵測本地已 git rm 但遠端殘留的孤兒（R2 soft 警告，
                 # 不阻擋、不改 --clean 預設）。在 staging rmtree 前計算並暫存，
                 # 待 push 成功後於結尾輸出提醒。
-                uncleaned_deletions = detect_uncleaned_deletions(temp_dir, staging_dir)
+                uncleaned_deletions = detect_uncleaned_deletions(
+                    temp_dir, staging_dir, preserve
+                )
         finally:
             shutil.rmtree(staging_dir, ignore_errors=True)
 
