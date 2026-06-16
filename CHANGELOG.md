@@ -1,3 +1,15 @@
+## [1.51.1] - 2026-06-16
+
+### Summary
+chore: 整理 settings.json 共用層權限; chore: 移除原作者專案產物殘留並補齊 sync/gitignore 排除
+
+Changes: 2 chore
+
+- chore: 整理 settings.json 共用層權限
+- chore: 移除原作者專案產物殘留並補齊 sync/gitignore 排除
+
+---
+
 ## [1.51.0] - 2026-06-16
 
 ### Summary

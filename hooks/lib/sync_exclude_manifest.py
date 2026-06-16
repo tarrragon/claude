@@ -100,6 +100,12 @@ LOCAL_ONLY_ROOT_DIRS = frozenset({
     # worktrees/ 目錄天然免疫（與 logs / state 同策略）。對應 .gitignore 既有
     # root-anchored 宣告 .claude/worktrees/。來源：W1-018.3。
     "worktrees",
+    # 專案產物（非框架資產）：以下三者為 per-project 工作產物，框架定義目錄結構但
+    # 目錄內的實例屬各專案私有，跨專案 sync 會把他專案的 ticket 備份 / 分析 / 計畫
+    # 推進公開框架 repo 造成污染（root-anchored，對應 .gitignore 同名宣告）。
+    "migration-backups",  # ticket migrate 自動產生的 ticket md 備份
+    "analyses",           # 專案分析報告產物
+    "plans",              # 專案計畫 / 設計 / 遷移文件
 })
 
 # 類型 D - 敏感憑證（嚴禁推送至公開 repo；含密鑰/token/環境變數，外流即安全事故）

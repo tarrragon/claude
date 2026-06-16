@@ -4,9 +4,6 @@
     "allow": [
       "Edit",
       "Write"
-    ],
-    "additionalDirectories": [
-      "/Users/mac-eric/project/book_overview_v1-*"
     ]
   },
   "hooks": {
