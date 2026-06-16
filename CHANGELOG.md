@@ -1,3 +1,18 @@
+## [1.48.7] - 2026-06-16
+
+### Summary
+fix: 移除 v1.48.6 誤推的專案特化檔（PC-177/178 + wrap-decision project-integration 7 檔）
+
+v1.48.6 由 consumer 專案 sync-push 全樹 overlay 誤推上來的 project-specific 內容。
+push 端 preserve-aware 排除已落地（防未來復發），本次外科手術移除已推副本。
+保留 PC-APP-001/002（staging error-pattern，跨專案適用）。
+
+Changes: 1 fix
+
+- fix: 移除 9 個誤推的專案特化檔（preserve-listed），framework 回歸通用內容
+
+---
+
 ## [1.48.6] - 2026-06-16
 
 ### Summary
