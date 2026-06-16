@@ -1,3 +1,14 @@
+## [1.51.0] - 2026-06-16
+
+### Summary
+feat: 導入 saas-tech-selection 選型訪談 skill（上游來源 blog repo）
+
+Changes: 1 feat
+
+- feat: 導入 saas-tech-selection 選型訪談 skill（上游來源 blog repo）
+
+---
+
 ## [1.50.0] - 2026-06-16
 
 ### Summary

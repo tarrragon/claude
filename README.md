@@ -300,6 +300,19 @@ grep -c '/Users/' .claude/settings.local.json
 | 本地修改警示 | 框架端對這些 skill 的內容修改會在下次回流時被覆蓋；措辭調整、原則增補、跨專案適配需求一律到上游 repo 處理 |
 | 框架端允許動作 | 檢視回流變更、驗證框架引用錨點未斷（hooks / rules 引用路徑）、commit 與同步 |
 
+### 選型 skill 訓練上游
+
+選型訪談 skill（`skills/saas-tech-selection/`）的內容 SSOT 在 blog repo，不在本框架。
+
+**訓練上游 Repo**：https://github.com/tarrragon/blog.git
+
+| 項目 | 說明 |
+|------|------|
+| 訓練方式 | 上游以實際選型訪談情境與多輪檢討（multi-round review）持續迭代此 skill |
+| 回流方向 | 上游改良版定期複製回本框架，覆蓋既有版本後 commit + sync-push |
+| 本地修改警示 | 框架端對此 skill 的內容修改會在下次回流時被覆蓋；訪談維度增補、防護底線調整、跨專案適配需求一律到上游 repo 處理 |
+| 框架端允許動作 | 檢視回流變更、驗證框架引用錨點未斷（hooks / rules 引用路徑）、commit 與同步 |
+
 ---
 
 ## 代理人職責說明
@@ -430,7 +443,8 @@ Claude Code 的權限與 Hook 配置文件，包含以下區塊：
 
 ---
 
-**最後更新**: 2026-06-12
+**最後更新**: 2026-06-16
+**版本**: 2.2.0 - 新增「選型 skill 訓練上游」：saas-tech-selection 的 SSOT 在 blog repo（git URL），與寫作 skill 同屬回流覆蓋模式
 **版本**: 2.1.0 - 同步機制章節新增「寫作 skill 訓練上游」：compositional-writing / multi-round-review 的 SSOT 在 blog repo（git URL），框架端修改會被回流覆蓋
 **版本**: 2.0.0 - 全面重寫：更新目錄結構、移除 Emoji、統一快速開始流程、修正死連結
 **維護者**: [@tarrragon](https://github.com/tarrragon)
