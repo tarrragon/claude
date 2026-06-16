@@ -1,3 +1,16 @@
+## [1.51.2] - 2026-06-16
+
+### Summary
+fix: _is_placeholder 補行尾空殼偵測修 行首語意回歸; chore: pull .claude 更新（上游 2c3d77f7）; chore: .claude 框架同步 + 還原至 docs/analyses
+
+Changes: 1 fix, 2 chore
+
+- fix: _is_placeholder 補行尾空殼偵測修 行首語意回歸
+- chore: pull .claude 更新（上游 2c3d77f7）
+- chore: .claude 框架同步 + 還原至 docs/analyses
+
+---
+
 ## [1.51.1] - 2026-06-16
 
 ### Summary

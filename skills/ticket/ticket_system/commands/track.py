@@ -435,6 +435,14 @@ def _register_lifecycle_commands(
         action="store_true",
         help="Context Bundle 抽取結果以 JSON 結構化輸出（W17-002.1）",
     )
+    p_claim.add_argument(
+        "--as",
+        dest="as_agent",
+        default=None,
+        metavar="AGENT_NAME",
+        help="認領時申報執行身份，寫入 who.current（與後續 complete --as 對稱，"
+        "免 set-who 繞過；--as 與 --verify 正交，W2-018）",
+    )
 
     # complete 操作
     p_complete = subparsers.add_parser("complete", help=TrackMessages.HELP_COMPLETE)

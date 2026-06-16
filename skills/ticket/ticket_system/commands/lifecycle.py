@@ -431,7 +431,7 @@ class TicketLifecycle:
         """
         self.version = version
 
-    def claim(self, ticket_id: str) -> int:
+    def claim(self, ticket_id: str, as_agent: Optional[str] = None) -> int:
         """
         認領 Ticket - 將狀態從 pending 變更為 in_progress
 
@@ -440,11 +440,15 @@ class TicketLifecycle:
         2. 驗證狀態（是否可認領）
         3. 若有 tdd_phase，驗證前置 Phase 條件
         4. 若前置條件未滿足，顯示警告但允許使用者決定是否繼續
-        5. 更新 Ticket 狀態
+        5. 更新 Ticket 狀態（含 as_agent 申報時寫入 who.current）
         6. 顯示認領檢查清單
 
         Args:
             ticket_id: Ticket ID，例如 "0.31.0-W4-001"
+            as_agent: 認領時申報的執行身份（W2-018）。非空時寫入 who.current，
+                使後續 ``complete --as <self>`` 對稱通過 identity-guard，無需
+                set-who 繞過。None / 空字串時維持現行為（不碰 who.current，
+                向後相容）。
 
         Returns:
             0 表示成功，非 0 表示失敗
@@ -495,6 +499,9 @@ class TicketLifecycle:
             ticket["assigned"] = True
             ticket["started_at"] = datetime.now().isoformat(timespec="seconds")
 
+            # W2-018：申報執行身份時寫入 who.current（與 complete --as 對稱）
+            _apply_claim_identity(ticket, as_agent)
+
             ticket_path = resolve_ticket_path(ticket, self.version, ticket_id)
             save_ticket(ticket, ticket_path)
 
@@ -510,6 +517,7 @@ class TicketLifecycle:
         self,
         ticket_id: str,
         auto_yes: bool = False,
+        as_agent: Optional[str] = None,
     ) -> int:
         """整合 AC 自動驗證的 claim 主流程入口（PROP-010 方案 2）。
 
@@ -553,11 +561,11 @@ class TicketLifecycle:
                 f"[Warning] AC 解析失敗：{err}；降級為直接 claim",
                 file=sys.stderr,
             )
-            return self.claim(ticket_id)
+            return self.claim(ticket_id, as_agent=as_agent)
 
         # S1：無 AC
         if not pairs:
-            return self.claim(ticket_id)
+            return self.claim(ticket_id, as_agent=as_agent)
 
         # 執行驗證
         cwd = resolve_project_cwd()
@@ -578,7 +586,7 @@ class TicketLifecycle:
                 f"[AC verification] Ticket {ticket_id}：{summary.total} 項 AC "
                 f"皆無法自動驗證（跳過驗證，直接 claim）"
             )
-            return self.claim(ticket_id)
+            return self.claim(ticket_id, as_agent=as_agent)
 
         # S4：全部可驗證 AC 已達成 → 拒絕 claim
         if summary.status == "all_passed":
@@ -600,7 +608,7 @@ class TicketLifecycle:
             print(rendered)
         decision = prompt_user_decision(summary, auto_yes)
         if decision == "y":
-            return self.claim(ticket_id)
+            return self.claim(ticket_id, as_agent=as_agent)
         return 1
 
     def verify_only(self, ticket_id: str) -> int:
@@ -1986,6 +1994,28 @@ def _print_children_warnings(pending: List[Dict[str, Any]]) -> None:
 # 核心生命週期函式（導出給外部使用）
 # ============================================================================
 
+def _apply_claim_identity(ticket: Dict[str, Any], as_agent: Optional[str]) -> None:
+    """W2-018：認領時將申報身份寫入 ticket who.current。
+
+    as_agent 為 None / 空字串時不做任何事（維持現行為，向後相容）。
+    防禦 who 可能為 legacy string 格式（v0.16/v0.17 早期）或缺失：
+    dict → 原地更新 current 並保留 history；str / 缺失 → 重建為 dict。
+
+    Args:
+        ticket: 已載入的 ticket frontmatter（原地修改）。
+        as_agent: claim --as 申報的執行身份。
+    """
+    if not as_agent or not as_agent.strip():
+        return
+
+    who = ticket.get("who")
+    if isinstance(who, dict):
+        who["current"] = as_agent
+        who.setdefault("history", {})
+    else:
+        ticket["who"] = {"current": as_agent, "history": {}}
+
+
 def execute_claim(args: argparse.Namespace, version: str) -> int:
     """
     認領 Ticket - 函式包裝層（向後相容）
@@ -2013,6 +2043,7 @@ def execute_claim(args: argparse.Namespace, version: str) -> int:
     lifecycle = TicketLifecycle(version)
     auto_yes = bool(getattr(args, "yes", False))
     verify_opt_in = bool(getattr(args, "verify", False))
+    as_agent = getattr(args, "as_agent", None)  # W2-018
 
     # W3-046 (Strategy B): 預設不執行 AC verification，避免 claim 觸發 npm test
     # 全套件造成同 wave 並行 claim 衝突（PC-078 根本解）。--verify 旗標明示啟用
@@ -2021,10 +2052,10 @@ def execute_claim(args: argparse.Namespace, version: str) -> int:
     # 請改用 ticket track verify 子命令（與 claim 解耦）。
     if verify_opt_in:
         rc = lifecycle.claim_with_verification(
-            args.ticket_id, auto_yes=auto_yes
+            args.ticket_id, auto_yes=auto_yes, as_agent=as_agent
         )
     else:
-        rc = lifecycle.claim(args.ticket_id)
+        rc = lifecycle.claim(args.ticket_id, as_agent=as_agent)
 
     # W17-002.2：claim 成功後自動抽取 Context Bundle（異常降級；idempotent merge 自然防止重複）
     if rc == 0:

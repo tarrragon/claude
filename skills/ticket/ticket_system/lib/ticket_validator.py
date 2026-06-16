@@ -398,9 +398,32 @@ def _is_placeholder(text: str) -> bool:
         re.MULTILINE | re.IGNORECASE,
     )
     target_after_descriptive = descriptive_na_line.sub("", target_content).strip()
-    # 若描述性 N/A 行剝除後仍有 N/A keyword，視為真實 placeholder；
-    # 若剝除後不再含 N/A，但其他 keyword（TBD/TODO/pending）仍命中，照樣判 placeholder。
-    if re.search(r"\(pending\)|\bTBD\b|\bTODO\b|\bN/A\b", target_after_descriptive, re.IGNORECASE):
+    # W2-028：英文佔位符改採「行首佔位標記」語意（對齊中文佔位符的 strip-and-check 精神）。
+    # 真實佔位符 / 模板標記必為「行首關鍵字」（如 `TODO`、`TODO: 待處理`、`# TODO: implement`、
+    # `(pending)`、`N/A`、`N/A.`），中段提及（如 Test Results 描述「修正內文字面 TODO 誤判」）
+    # 屬合法正文，不應誤擋 complete。
+    # 規則：keyword 必須位於行首（容許 markdown bullet `-*+` / heading `#` / 引用 `>` 前綴），
+    # 其後僅接行尾、空白後跟非英數內容（如冒號 / 中文說明 / 標點），不允許接「英文單字延續」。
+    # 保守設計：誤擋合法 complete（false-positive）比漏放空殼章節傷害大，本檢查刻意偏向少誤擋。
+    placeholder_marker = re.compile(
+        r"^[\s\-\*\+>#]*(?:\(pending\)|(?:TBD|TODO|N/A)\b)",
+        re.MULTILINE | re.IGNORECASE,
+    )
+    # W2-036：補「行尾空殼」偵測，修 W2-028 僅行首語意造成的回歸。
+    # W2-028 改為「僅行首 keyword」後，會放行「label: keyword<行尾>」這類空殼
+    #（如 `Found the root cause: N/A`、`Layer 1: TODO`、`這段需要實作: N/A`——
+    # 看似填了值，實際值為 N/A/TODO 等於沒填），導致 4 個保護測試紅燈。
+    # 精確區分點：W2-028 prose 案例 keyword 後皆有內容延續（`N/A，因...`、`TODO 誤判...bug`），
+    # 4 測試 shell 案例 keyword 為行尾最末 token（其後僅容許空白 + 至多一個尾標點 . / 。）。
+    # 規則：keyword 出現在「行首」或「冒號標籤後」，且其後到行尾僅有空白 + 至多一個尾標點。
+    # 兩者 OR 命中即判 placeholder；placeholder_marker 保留 W2-028 行首語意不破壞。
+    shell_end_marker = re.compile(
+        r"(?:^|[:：]\s*)(?:\(pending\)|(?:TBD|TODO|N/A))[ \t]*[.。]?[ \t]*$",
+        re.MULTILINE | re.IGNORECASE,
+    )
+    if placeholder_marker.search(target_after_descriptive) or shell_end_marker.search(
+        target_after_descriptive
+    ):
         return True
     # 若剝除描述性 N/A 行後內容變空（且原本只由描述性 N/A 行組成），
     # 視為作者明示「該章節各層級皆不適用」，視為非 placeholder 直接返回。

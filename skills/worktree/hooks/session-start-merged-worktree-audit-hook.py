@@ -16,6 +16,11 @@ Section 2 — Metadata orphan audit
   列出 `status: completed` 但 ticket md 仍 modified（git status `M` / `A`）的孤兒。
   in_progress ticket md modified 屬正常狀態（agent 還在寫），不列入。
 
+Section 3 — Orphan worktree-agent branch audit（W3-021）
+  列出無對應 worktree 的孤兒 `worktree-agent-*` 分支。
+  worktree 已被 zombie-cleanup GC 但分支殘留（git worktree remove 不刪分支）。
+  ahead=0 列為可安全刪除（git branch -d）；ahead>0 標記含未落地 commit 需人工確認。
+
 Hook 類型：SessionStart
 退出碼：永遠 0（SessionStart 不阻擋 session 啟動）
 輸出格式：
@@ -120,6 +125,72 @@ def collect_merged_user_worktrees(logger) -> List[Tuple[str, str]]:
     return merged
 
 
+# ---------- orphan worktree-agent branch audit (W3-021) ----------
+
+def list_agent_branches(logger) -> List[str]:
+    """列出所有 worktree-agent-* 分支名稱。"""
+    try:
+        result = subprocess.run(
+            ["git", "branch", "--list", "worktree-agent-*", "--format=%(refname:short)"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        logger.warning("git branch --list worktree-agent-* 執行失敗")
+        return []
+
+    if result.returncode != 0:
+        logger.debug("git branch --list 非零退出碼: %d", result.returncode)
+        return []
+
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def list_worktree_branches(logger) -> List[str]:
+    """列出 git worktree list 中所有仍存在的分支（含 main / cc runtime）。"""
+    try:
+        result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        logger.warning("git worktree list 執行失敗")
+        return []
+
+    if result.returncode != 0:
+        logger.debug("git worktree list 非零退出碼: %d", result.returncode)
+        return []
+
+    branches: List[str] = []
+    for line in result.stdout.splitlines():
+        if line.startswith("branch "):
+            ref = line[len("branch "):]
+            branches.append(ref.replace("refs/heads/", ""))
+    return branches
+
+
+def collect_orphan_agent_branches(logger) -> List[Tuple[str, bool]]:
+    """收集無對應 worktree 的孤兒 worktree-agent-* 分支。
+
+    worktree 已被 zombie-cleanup GC 但分支殘留（git worktree remove 不刪分支）。
+
+    Returns:
+        List of (branch_name, has_unmerged_commits)
+        has_unmerged_commits=False（ahead=0）→ 可安全刪除
+        has_unmerged_commits=True（ahead>0）→ 含未落地 commit，需人工確認
+    """
+    agent_branches = list_agent_branches(logger)
+    active_branches = set(list_worktree_branches(logger))
+
+    orphans: List[Tuple[str, bool]] = []
+    for branch in agent_branches:
+        if branch in active_branches:
+            # 仍有對應 worktree，由 zombie-cleanup 處理，不重複
+            continue
+        has_unmerged = bool(get_unmerged_commits(branch, logger))
+        orphans.append((branch, has_unmerged))
+    return orphans
+
+
 # ---------- metadata orphan audit ----------
 
 def collect_modified_ticket_paths(project_root: Path, logger) -> List[str]:
@@ -178,8 +249,10 @@ def collect_orphan_tickets(project_root: Path, logger) -> List[Tuple[str, str]]:
 def build_message(
     merged_worktrees: List[Tuple[str, str]],
     orphan_tickets: List[Tuple[str, str]],
+    orphan_branches: Optional[List[Tuple[str, bool]]] = None,
 ) -> str:
-    """組裝兩個 section 的合併訊息。"""
+    """組裝三個 section 的合併訊息。"""
+    orphan_branches = orphan_branches or []
     lines: List[str] = []
 
     if merged_worktrees:
@@ -200,6 +273,20 @@ def build_message(
             lines.append(f"  - {ticket_id}  ({rel_path})")
         lines.append("")
         lines.append("建議：git add <ticket-md> && git commit -m \"chore: sync ticket metadata\"")
+        if orphan_branches:
+            lines.append("")
+
+    if orphan_branches:
+        lines.append(f"[SessionStart Audit] 發現 {len(orphan_branches)} 個無對應 worktree 的孤兒 worktree-agent-* 分支：")
+        lines.append("")
+        for branch, has_unmerged in orphan_branches:
+            if has_unmerged:
+                lines.append(f"  - {branch}  [含未落地 commit（ahead>0），需人工確認後再刪]")
+            else:
+                lines.append(f"  - {branch}  [ahead=0 可安全刪除]")
+                lines.append(f"    清理: git branch -d {branch}")
+        lines.append("")
+        lines.append("W3-021：git worktree remove 不刪分支，孤兒分支殘留會污染分支清單（quality-baseline 規則 5）。")
 
     return "\n".join(lines)
 
@@ -226,12 +313,18 @@ def main() -> int:
         logger.warning("collect_orphan_tickets 失敗: %s", exc)
         orphan_tickets = []
 
-    if not merged_worktrees and not orphan_tickets:
-        # 兩 section 皆空：suppressOutput
+    try:
+        orphan_branches = collect_orphan_agent_branches(logger)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("collect_orphan_agent_branches 失敗: %s", exc)
+        orphan_branches = []
+
+    if not merged_worktrees and not orphan_tickets and not orphan_branches:
+        # 三 section 皆空：suppressOutput
         print(json.dumps({"suppressOutput": True}, ensure_ascii=False))
         return 0
 
-    message = build_message(merged_worktrees, orphan_tickets)
+    message = build_message(merged_worktrees, orphan_tickets, orphan_branches)
     output = {
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
@@ -240,8 +333,8 @@ def main() -> int:
     }
     print(json.dumps(output, ensure_ascii=False))
     logger.info(
-        "audit 結果：merged_worktrees=%d orphan_tickets=%d",
-        len(merged_worktrees), len(orphan_tickets),
+        "audit 結果：merged_worktrees=%d orphan_tickets=%d orphan_branches=%d",
+        len(merged_worktrees), len(orphan_tickets), len(orphan_branches),
     )
     return 0
 
