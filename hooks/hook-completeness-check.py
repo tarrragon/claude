@@ -152,6 +152,28 @@ def find_duplicate_registrations(
     return dups
 
 
+def find_local_hook_registrations(
+    settings_local: Optional[dict], project_root: Path
+) -> List[Tuple[str, str]]:
+    """找出 settings.local.json 內的任何 hook 註冊（latent ghost 預防）。
+
+    單一註冊來源原則：hook 註冊一律歸 settings.json，settings.local.json
+    僅放 permissions / env / mcp / outputStyle。即使 local 層的註冊目前
+    合法（檔案存在、未重複），一旦該 hook relocate，local 副本即成幽靈，
+    而 sync 排除 local 檔無法自癒。故在註冊「尚未出事」時即示警，把偵測
+    時機從 relocate 後提前到註冊當下（對應 hook relocate phantom 根因）。
+
+    Returns:
+        [(event_type, command 字串), ...]，settings.local.json 內每個 hook 註冊一筆。
+    """
+    registrations: List[Tuple[str, str]] = []
+    if not settings_local:
+        return registrations
+    for event_type, _matcher, command in extract_registered_commands(settings_local):
+        registrations.append((event_type, command))
+    return registrations
+
+
 def _check_and_fix_permissions(hooks_dir, logger):
     """Check execute permissions for all .py files under hooks_dir and auto-fix.
 
@@ -475,6 +497,26 @@ def main():
             print(line)
             logger.warning(line)
         advice = "建議: 同一 hook 僅在單一 settings 檔註冊，避免 auto-resume 類副作用重複觸發"
+        print(advice)
+        logger.warning(advice)
+
+    # latent ghost 預防：settings.local.json 不該註冊 hook（單一註冊來源原則）
+    local_hook_regs = find_local_hook_registrations(settings_local, project_root)
+    if local_hook_regs:
+        header = (
+            "\n[WARNING] settings.local.json 內含 hook 註冊"
+            "（違反單一註冊來源原則，relocate 後會變幽靈）:"
+        )
+        print(header)
+        logger.warning(header)
+        for event_type, command in local_hook_regs:
+            line = f"  - {event_type}: {command}"
+            print(line)
+            logger.warning(line)
+        advice = (
+            "建議: hook 註冊一律移至 settings.json；"
+            "settings.local.json 僅放 permissions / env / mcp / outputStyle"
+        )
         print(advice)
         logger.warning(advice)
 

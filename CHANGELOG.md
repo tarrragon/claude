@@ -1,3 +1,15 @@
+## [1.52.4] - 2026-06-17
+
+### Summary
+fix: 固化 hook 註冊單一來源原則 + 偵測 local 層 latent ghost; chore: pull .claude 更新（上游 d2424984）
+
+Changes: 1 fix, 1 chore
+
+- fix: 固化 hook 註冊單一來源原則 + 偵測 local 層 latent ghost
+- chore: pull .claude 更新（上游 d2424984）
+
+---
+
 ## [1.52.3] - 2026-06-17
 
 ### Summary
