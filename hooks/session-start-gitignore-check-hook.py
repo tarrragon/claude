@@ -39,35 +39,33 @@ from hook_utils import (  # noqa: E402
     get_project_root,
 )
 
+# 加入 lib 路徑以 import sync 排除 SOT manifest
+sys.path.insert(0, str(Path(__file__).parent / "lib"))
+from sync_exclude_manifest import GITIGNORE_EXPECTED  # noqa: E402
+
 EXIT_SUCCESS = 0
 
-# 必要 .gitignore entry 清單（.claude/ runtime state + logs + coverage）
-REQUIRED_GITIGNORE_ENTRIES = {
-    # Runtime state markers
-    ".claude/ARCHITECTURE_REVIEW_REQUIRED",
-    ".claude/TASK_AVOIDANCE_FIX_MODE",
-    ".claude/PM_INTERVENTION_REQUIRED",
-    # Runtime state files
-    ".claude/pm-status.json",
-    ".claude/dispatch-active.json",
-    ".claude/dispatch-active.lock",
-    # Runtime state dirs
-    ".claude/hook-state/",
-    ".claude/state/",
-    # logs / coverage
-    ".claude/logs/",
-    "coverage/",
-}
+# .claude/ runtime state 必要 gitignore 名稱直接 derive 自 sync manifest 的
+# GITIGNORE_EXPECTED（SOT），消除「manifest vs 本 hook 各維護一份」的雙 SOT 漂移
+# （TASK_AVOIDANCE_FIX_MODE 曾只進本 hook REQUIRED 未進 manifest，即此漂移的實例）。
+# 格式：每個裸名加 `.claude/` 前綴，不加目錄尾斜線——check_missing_entries 以正規化
+# 裸名比對，`.claude/state` 與 `.claude/state/` 等價，且無斜線版為更寬鬆的合法規則。
+_MANIFEST_REQUIRED = frozenset(f".claude/{name}" for name in GITIGNORE_EXPECTED)
 
-# 等效 broader pattern：若 gitignore 含這些 pattern，視為已覆蓋對應的必要 entry。
-# git pattern 不以 / 開頭、結尾斜線會匹配任何層級的同名目錄。
-EQUIVALENT_PATTERNS: Dict[str, Set[str]] = {
-    ".claude/logs/": {"logs/", "**/logs/"},
-    ".claude/hook-logs/": {"hook-logs/", "**/hook-logs/"},
-    ".claude/dispatch-active.lock": {"*.lock"},
-}
+# 非 .claude/ 範疇、不屬 sync manifest 的本機產物（專案根層測試覆蓋率報告）。
+# 不在 manifest 內故顯式補入，與 derive 來源分離標示。
+_EXTRA_REQUIRED = frozenset({"coverage/"})
 
-# 偵測「應該 ignore 但已被 tracked」的檔案 pattern（substring 匹配於 git ls-files 輸出）
+REQUIRED_GITIGNORE_ENTRIES = _MANIFEST_REQUIRED | _EXTRA_REQUIRED
+
+# 偵測「應 ignore 但已被 git tracked」的純 runtime state（前綴/精確匹配 git ls-files）。
+#
+# [刻意不 derive 自 GITIGNORE_EXPECTED] manifest 的 sync 排除集是「禁止 git track」的
+# 超集：analyses/ migration-backups/ plans/ .version-release.yaml 雖排除 sync，卻在
+# 專案 repo 內正常 tracked（專案產物 / 歷史）。若由完整 GITIGNORE_EXPECTED derive，
+# 會把這些合法 tracked 檔誤報為「應 ignore 卻被 track」（實測 91 個 false positive）。
+# 故本清單為 manifest 的真子集，只列「既不 sync 也絕不該 track」的純 runtime state，
+# 與 REQUIRED_GITIGNORE_ENTRIES 是不同概念，刻意手動維護。
 TRACKED_DETECTION_PATTERNS = [
     ".claude/pm-status.json",
     ".claude/dispatch-active.json",
@@ -100,14 +98,38 @@ def parse_gitignore(gitignore_path: Path, logger) -> Set[str]:
     return entries
 
 
+def _normalize_ignore_token(token: str) -> str:
+    """正規化 gitignore 行 / required entry 為可比對裸名。
+
+    去前導 `.claude/` 或 `/`、去 `**/` 前綴、去尾隨 `/`，使
+    `.claude/state/`、`state/`、`**/state/`、`.claude/state` 視為等價，
+    自動涵蓋舊 EQUIVALENT_PATTERNS 的 logs/ hook-logs/ 寬鬆比對。
+    """
+    t = token.strip()
+    if t.startswith(".claude/"):
+        t = t[len(".claude/"):]
+    elif t.startswith("/"):
+        t = t[1:]
+    if t.startswith("**/"):
+        t = t[len("**/"):]
+    return t.rstrip("/")
+
+
 def check_missing_entries(gitignore_entries: Set[str], logger) -> List[str]:
-    """對 REQUIRED 逐項檢查；缺失且無等效 broader pattern → 加入缺失清單。"""
+    """對 REQUIRED 逐項檢查；正規化後仍未覆蓋 → 加入缺失清單。
+
+    比對採正規化裸名（_normalize_ignore_token），故 .gitignore 用
+    `.claude/state/`、`state/`、`**/state/` 任一形式皆視為覆蓋；
+    額外保留 `*.lock` 萬用字元等效（normalize 無法收斂 glob）。
+    """
+    normalized = {_normalize_ignore_token(e) for e in gitignore_entries}
+    has_lock_wildcard = "*.lock" in gitignore_entries
     missing: List[str] = []
     for required in sorted(REQUIRED_GITIGNORE_ENTRIES):
-        if required in gitignore_entries:
+        norm = _normalize_ignore_token(required)
+        if norm in normalized:
             continue
-        equivalents = EQUIVALENT_PATTERNS.get(required, set())
-        if equivalents & gitignore_entries:
+        if norm.endswith(".lock") and has_lock_wildcard:
             continue
         missing.append(required)
     logger.info("gitignore-check: missing %d entry(ies)", len(missing))

@@ -1,3 +1,14 @@
+## [1.53.0] - 2026-06-17
+
+### Summary
+refactor: REQUIRED 清單 derive 自 manifest GITIGNORE_EXPECTED
+
+Changes: 1 refactor
+
+- refactor: REQUIRED 清單 derive 自 manifest GITIGNORE_EXPECTED
+
+---
+
 ## [1.52.6] - 2026-06-17
 
 ### Summary

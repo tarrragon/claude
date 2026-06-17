@@ -87,16 +87,17 @@ def test_missing_entry_warns(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# 3. 等效 broader pattern（logs/ 取代 .claude/logs/）→ 視為已覆蓋
+# 3. 等效 broader pattern（logs/ 取代 .claude/logs）→ 正規化後視為已覆蓋
 # ---------------------------------------------------------------------------
 def test_equivalent_broader_pattern_passes(tmp_path):
     hook = load_hook_module()
-    entries = sorted(hook.REQUIRED_GITIGNORE_ENTRIES - {".claude/logs/"})
+    # derive 後 REQUIRED 為無斜線格式 `.claude/logs`；移除後改用 broader `logs/` 覆蓋
+    entries = sorted(hook.REQUIRED_GITIGNORE_ENTRIES - {".claude/logs"})
     content = "\n".join(entries) + "\nlogs/\n"
     _make_gitignore(tmp_path, content)
     with patch.object(hook.subprocess, "run", return_value=_mk_ls_files("")):
         missing, _, _ = hook.run_checks(tmp_path, MagicMock())
-    assert ".claude/logs/" not in missing
+    assert ".claude/logs" not in missing
 
 
 # ---------------------------------------------------------------------------
@@ -177,3 +178,23 @@ def test_output_is_valid_json_with_session_start_event(tmp_path):
     parsed = json.loads(serialized)
     assert parsed["hookSpecificOutput"]["hookEventName"] == "SessionStart"
     assert isinstance(parsed["hookSpecificOutput"]["additionalContext"], str)
+
+
+# ---------------------------------------------------------------------------
+# 8. REQUIRED 直接 derive 自 manifest GITIGNORE_EXPECTED（單一 SOT，防雙清單漂移）
+# ---------------------------------------------------------------------------
+def test_required_derived_from_manifest_sot():
+    hook = load_hook_module()
+    import sys
+    sys.path.insert(0, str(HOOK_PATH.parent.parent / "lib"))
+    from sync_exclude_manifest import GITIGNORE_EXPECTED
+
+    # manifest 每個裸名都應以 `.claude/<name>` 形式出現在 REQUIRED
+    for name in GITIGNORE_EXPECTED:
+        assert f".claude/{name}" in hook.REQUIRED_GITIGNORE_ENTRIES, (
+            f"manifest 名稱 {name} 未被 derive 進 REQUIRED（雙 SOT 漂移）"
+        )
+    # 反向：REQUIRED 中 .claude/ 範疇者必源自 manifest（coverage/ 等非 .claude extra 除外）
+    manifest_derived = {f".claude/{n}" for n in GITIGNORE_EXPECTED}
+    claude_scoped = {e for e in hook.REQUIRED_GITIGNORE_ENTRIES if e.startswith(".claude/")}
+    assert claude_scoped == manifest_derived
