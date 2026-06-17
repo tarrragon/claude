@@ -5,7 +5,7 @@ description: "Creates and lists framework issues on the canonical framework repo
 
 # Framework Issue
 
-於框架 canonical repo（`tarrragon/claude.git`）標準化建立與查詢 framework
+於框架 canonical repo（`tarrragon/claude`）標準化建立與查詢 framework
 issue。framework issue 三重用途：provenance 錨點、error-pattern canonical
 去重 key、跨 consumer 修復追蹤。本 skill 僅包 `gh` CLI，所有不可用狀態優雅降級。
 
@@ -13,10 +13,10 @@ issue。framework issue 三重用途：provenance 錨點、error-pattern canonic
 
 | 命令 | 包裝 | 用途 |
 |------|------|------|
-| create | `gh issue create --repo tarrragon/claude.git` | 建立 framework issue |
-| list | `gh issue list --repo tarrragon/claude.git` | 列出 / 去重查詢 framework issue |
+| create | `gh issue create --repo tarrragon/claude` | 建立 framework issue |
+| list | `gh issue list --repo tarrragon/claude` | 列出 / 去重查詢 framework issue |
 | link | 寫本地 error-pattern 檔 | 把 canonical_issue stamp 進 error-pattern 分類資訊表格 |
-| fix-status | `gh issue view/edit --repo tarrragon/claude.git` | 查 / 更新 issue body 內跨 consumer 修復矩陣（軸 C） |
+| fix-status | `gh issue view/edit --repo tarrragon/claude` | 查 / 更新 issue body 內跨 consumer 修復矩陣（軸 C） |
 
 > 範圍：本 skill 含 create / list / link / fix-status，四命令齊備。
 

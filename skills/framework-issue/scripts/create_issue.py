@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """framework-issue create：包裝 `gh issue create` 於框架 canonical repo。
 
-用途：在框架 repo（tarrragon/claude.git）建立標準化 framework issue，作為
+用途：在框架 repo（tarrragon/claude）建立標準化 framework issue，作為
 provenance 錨點 / error-pattern canonical key / 跨 consumer 修復追蹤源頭。
 """
 

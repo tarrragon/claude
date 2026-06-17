@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """framework-issue list：包裝 `gh issue list` 於框架 canonical repo。
 
-用途：列出框架 repo（tarrragon/claude.git）的 framework issue，供查詢既有
+用途：列出框架 repo（tarrragon/claude）的 framework issue，供查詢既有
 canonical issue 是否已存在（去重）或追蹤修復狀態。
 """
 

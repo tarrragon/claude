@@ -1,3 +1,14 @@
+## [1.53.2] - 2026-06-17
+
+### Summary
+fix: 移除 repo 常數 .git 後綴致 gh --repo 解析失敗
+
+Changes: 1 fix
+
+- fix: 移除 repo 常數 .git 後綴致 gh --repo 解析失敗
+
+---
+
 ## [1.53.1] - 2026-06-17
 
 ### Summary

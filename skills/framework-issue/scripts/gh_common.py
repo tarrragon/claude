@@ -10,8 +10,10 @@ import shutil
 import subprocess
 import sys
 
-# 框架 canonical repo（所有 consumer 專案的 issue 集中於此）
-FRAMEWORK_REPO = "tarrragon/claude.git"
+# 框架 canonical repo（所有 consumer 專案的 issue 集中於此）。
+# 注意：gh `--repo` 需 OWNER/REPO 格式，不含 .git 後綴；帶 .git 會觸發
+# GraphQL "Could not resolve to a Repository" 失敗（issue #3 附帶發現）。
+FRAMEWORK_REPO = "tarrragon/claude"
 
 # 降級時的 exit code（與一般失敗 1 區分，便於測試與上層判讀）
 EXIT_DEGRADED = 3
