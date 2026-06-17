@@ -60,6 +60,8 @@ LOCAL_ONLY_PATTERNS = frozenset({
     "hook-logs",
     "PM_INTERVENTION_REQUIRED",
     "ARCHITECTURE_REVIEW_REQUIRED",
+    "TASK_AVOIDANCE_FIX_MODE",  # PM task-avoidance fix-mode flag（與上述兩 flag 同族 runtime；
+                               # 曾僅進 gitignore-check REQUIRED 未進 manifest，雙 SOT 漂移補齊）
     # 類型 A - Runtime state
     "pm-status.json",
     "dispatch-active.json",

@@ -1,3 +1,14 @@
+## [1.52.6] - 2026-06-17
+
+### Summary
+fix: 補 TASK_AVOIDANCE_FIX_MODE 入 sync 排除清單
+
+Changes: 1 fix
+
+- fix: 補 TASK_AVOIDANCE_FIX_MODE 入 sync 排除清單
+
+---
+
 ## [1.52.5] - 2026-06-17
 
 ### Summary
