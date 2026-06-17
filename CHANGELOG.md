@@ -1,3 +1,10 @@
+## [1.54.1] - 2026-06-17
+
+### Summary
+chore: 傳播刪除 test_monorepo_version_sync.py 孤兒
+
+---
+
 ## [1.54.0] - 2026-06-17
 
 ### Summary
