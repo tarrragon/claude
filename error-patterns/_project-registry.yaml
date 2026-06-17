@@ -26,6 +26,9 @@ projects:
   - code: C2C
     dir: c2c_website
     note: ''
+  - code: TUNL
+    dir: app_tunnel
+    note: 手機遠端終端機（Flutter app + Go proxy + Tailscale）
 
 # 新專案代號規則：
 #   1. 短大寫英數（2-5 字元），語意可辨識專案。

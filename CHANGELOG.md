@@ -1,3 +1,14 @@
+## [1.52.5] - 2026-06-17
+
+### Summary
+docs: 新增 ARCH-TUNL-001 local settings hook 註冊幽靈 + 登錄 TUNL 專案代號
+
+Changes: 1 docs
+
+- docs: 新增 ARCH-TUNL-001 local settings hook 註冊幽靈 + 登錄 TUNL 專案代號
+
+---
+
 ## [1.52.4] - 2026-06-17
 
 ### Summary
