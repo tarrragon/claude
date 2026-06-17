@@ -1,3 +1,14 @@
+## [1.52.3] - 2026-06-17
+
+### Summary
+chore: pull .claude 更新（上游 d2424984）
+
+Changes: 1 chore
+
+- chore: pull .claude 更新（上游 d2424984）
+
+---
+
 ## [1.52.2] - 2026-06-17
 
 ### Summary
