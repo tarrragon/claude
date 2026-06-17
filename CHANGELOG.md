@@ -1,3 +1,15 @@
+## [1.53.1] - 2026-06-17
+
+### Summary
+docs: 新增 Behavioral Core Principle 行為核心準則; chore: pull .claude 更新（上游 aa4f0038）
+
+Changes: 1 docs, 1 chore
+
+- docs: 新增 Behavioral Core Principle 行為核心準則
+- chore: pull .claude 更新（上游 aa4f0038）
+
+---
+
 ## [1.53.0] - 2026-06-17
 
 ### Summary

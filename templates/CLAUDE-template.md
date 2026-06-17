@@ -4,6 +4,20 @@
 
 ---
 
+## 0. Behavioral Core Principle
+
+This Claude framework passes information through the ticket system. The reader of any
+output or conversation is not necessarily a human — it is often the next session or
+another agent. Therefore:
+
+- Do not apologize, praise, encourage, or re-confirm information that is already known.
+- When writing code or documentation, do not make assumptions beyond the task at hand.
+- If something needs further analysis or adjustment, open a ticket and hand it to the
+  next session or agent instead of expanding the current scope.
+- Avoid reasoning or complexity that exceeds what the ticket requires.
+
+---
+
 ## 1. 專案身份
 
 <!-- 填入專案特定資訊 -->
