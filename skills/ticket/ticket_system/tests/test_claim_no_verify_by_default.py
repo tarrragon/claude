@@ -28,7 +28,7 @@ def stub_claim(monkeypatch):
     """Stub TicketLifecycle.claim 回傳 0，並追蹤是否被呼叫。"""
     calls = {"count": 0, "ticket_ids": []}
 
-    def fake_claim(self, ticket_id):
+    def fake_claim(self, ticket_id, as_agent=None):
         calls["count"] += 1
         calls["ticket_ids"].append(ticket_id)
         return 0
@@ -127,13 +127,13 @@ def test_execute_claim_with_verify_flag_invokes_verification(monkeypatch):
     invoked = {"count": 0}
     direct_claim = {"count": 0}
 
-    def fake_claim_with_verification(self, ticket_id, auto_yes=False):
+    def fake_claim_with_verification(self, ticket_id, auto_yes=False, as_agent=None):
         invoked["count"] += 1
         invoked["ticket_id"] = ticket_id
         invoked["auto_yes"] = auto_yes
         return 0
 
-    def fake_claim(self, ticket_id):
+    def fake_claim(self, ticket_id, as_agent=None):
         direct_claim["count"] += 1
         return 0
 

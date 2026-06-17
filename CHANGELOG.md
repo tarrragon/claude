@@ -1,3 +1,16 @@
+## [1.54.2] - 2026-06-17
+
+### Summary
+docs: 新增變體 B（PM append-log 觸發）及預防方案; docs: 新增 ARCH-TUNL-001 local settings hook 註冊幽靈模式; chore: pull .claude 更新（上游 beaca2e2ec36）
+
+Changes: 2 docs, 1 chore
+
+- docs: 新增變體 B（PM append-log 觸發）及預防方案
+- docs: 新增 ARCH-TUNL-001 local settings hook 註冊幽靈模式
+- chore: pull .claude 更新（上游 beaca2e2ec36）
+
+---
+
 ## [1.54.1] - 2026-06-17
 
 ### Summary

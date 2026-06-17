@@ -126,6 +126,91 @@ def is_worktree_dirty(worktree_path: Path) -> bool:
     return bool((result.stdout or "").strip())
 
 
+def get_worktree_branch(project_root: Path, worktree_path: Path) -> Optional[str]:
+    """從 git worktree list --porcelain 取得 worktree 對應的確切 branch 名稱。
+
+    必須在 worktree 移除前呼叫；回傳如 "worktree-agent-xxx"（去除 refs/heads/ 前綴）。
+    找不到對應 worktree 或處於 detached HEAD 時回傳 None（不純字串拼接分支名）。
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(project_root), "worktree", "list", "--porcelain"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    target = str(worktree_path.resolve())
+    current_path: Optional[str] = None
+    for line in (result.stdout or "").splitlines():
+        if line.startswith("worktree "):
+            raw = line[len("worktree "):].strip()
+            try:
+                current_path = str(Path(raw).resolve())
+            except OSError:
+                current_path = raw
+        elif line.startswith("branch ") and current_path == target:
+            ref = line[len("branch "):].strip()
+            if ref.startswith("refs/heads/"):
+                return ref[len("refs/heads/"):]
+            return ref
+    return None
+
+
+def is_branch_merged(project_root: Path, branch: str, base: str = "main") -> bool:
+    """分支是否已併入 base（git log base..branch 為空表示 ahead=0）。
+
+    失敗時保守視為未併入（False），避免誤刪含未落地工作的分支。
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(project_root), "log", f"{base}..{branch}", "--oneline"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        return False
+
+    if result.returncode != 0:
+        return False
+    return not bool((result.stdout or "").strip())
+
+
+def delete_branch_if_merged(project_root: Path, branch: str, name: str, logger) -> bool:
+    """worktree 移除後刪除已併入的對應分支。
+
+    ahead=0（已併入 main）→ git branch -d 並回傳 True；
+    ahead>0 → 保留並 logger.warning，回傳 False；
+    branch 為 None 或刪除失敗 → logger.error/warning + 回傳 False（非致命）。
+    """
+    if not branch:
+        return False
+    if not is_branch_merged(project_root, branch):
+        logger.warning("[%s] 分支 %s ahead>0（含未併入 main 的提交），保留不刪", name, branch)
+        return False
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(project_root), "branch", "-d", branch],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError, OSError) as exc:
+        logger.error("[%s] 刪除分支 %s 執行失敗: %s", name, branch, exc)
+        return False
+    if result.returncode != 0:
+        logger.error("[%s] 刪除分支 %s 失敗: %s", name, branch, (result.stderr or "").strip())
+        return False
+    logger.info("[%s] 已刪除已併入分支 %s", name, branch)
+    return True
+
+
 def remove_worktree(project_root: Path, worktree_path: Path, name: str, logger) -> bool:
     """執行 git worktree unlock + remove --force。回傳是否成功。"""
     for cmd in (
@@ -221,10 +306,13 @@ def process_worktree(project_root: Path, worktree_dir: Path, now: float, logger)
     }
 
     if action == "clean":
+        # 移除前先讀取確切 branch ref（移除後 worktree list 即無此條目）
+        branch = get_worktree_branch(project_root, worktree_dir)
         success = remove_worktree(project_root, worktree_dir, name, logger)
         result["success"] = success
         if success:
             logger.info("[%s] 清理成功: %s", name, reason)
+            result["branch_deleted"] = delete_branch_if_merged(project_root, branch, name, logger)
         else:
             logger.error("[%s] 清理失敗: %s", name, reason)
     elif action == "warn-dirty":
@@ -244,6 +332,9 @@ def summarize(results: List[Dict[str, Any]]) -> str:
     lines = [f"[worktree-zombie-cleanup] 掃描 {len(results)} 個 agent worktree:"]
     if cleaned:
         lines.append(f"  - 已清理: {len(cleaned)} 個")
+        branch_deleted = [r for r in cleaned if r.get("branch_deleted")]
+        if branch_deleted:
+            lines.append(f"  - 已刪分支: {len(branch_deleted)} 個")
     if dirty:
         lines.append(f"  - 殭屍但 dirty 保留: {len(dirty)} 個")
         for r in dirty:

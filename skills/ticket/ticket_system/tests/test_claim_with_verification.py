@@ -241,7 +241,8 @@ class TestClaimWithVerification:
             ), patch("sys.stdin.isatty", return_value=True):
             rc = lifecycle.claim_with_verification("0.18.0-W5-002")
         assert rc == 0
-        mock_claim.assert_called_once_with("0.18.0-W5-002")
+        # W2-018：claim 簽章新增 as_agent（預設 None，向後相容）
+        mock_claim.assert_called_once_with("0.18.0-W5-002", as_agent=None)
 
     def test_h2_s2_all_unverifiable_direct_claim(self, capsys):
         """H2：S2 全部 unverifiable → 顯示摘要 + 直接 claim。"""

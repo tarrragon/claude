@@ -131,6 +131,33 @@ class TestIsPlaceholderLegacyBehavior:
         assert _is_placeholder("# TODO: implement") is True
         assert _is_placeholder("TODO 待實作") is True
 
+    # W2-028：正文字面 TODO / TBD / N/A 不應誤判為 placeholder
+    def test_prose_mentioning_todo_is_not_placeholder(self):
+        """實質正文中段提及 TODO（非行首佔位標記）不應誤判為 placeholder（W2-028）。
+
+        原 regex 對英文關鍵字採「出現即判定」，使任何提及 TODO 的正文
+        （如 Test Results 描述「修正內文字面 TODO 誤判」）被誤擋 complete。
+        """
+        text = (
+            "修正 _is_placeholder 將正文字面 TODO 誤判為佔位符的 bug。"
+            "執行 pytest 全綠，45 passed。"
+        )
+        assert _is_placeholder(text) is False
+
+    def test_prose_mentioning_tbd_na_is_not_placeholder(self):
+        """正文中段提及 TBD / N/A / (pending) 不應誤判為 placeholder（W2-028）。"""
+        assert _is_placeholder("此項估時 TBD 由後續 Wave 決定，已完成主要實作。") is False
+        assert _is_placeholder("效能影響 N/A，因本變更僅調整文字判定邏輯。") is False
+        assert _is_placeholder("狀態 (pending) 的舊欄位已移除，改用新流程。") is False
+
+    def test_plain_na_and_pending_still_placeholder(self):
+        """裸關鍵字 / 模板佔位符仍應判為 placeholder（W2-028 回歸保護）。"""
+        assert _is_placeholder("(pending)") is True
+        assert _is_placeholder("N/A") is True
+        assert _is_placeholder("To be filled by executing agent") is False
+        # 標點邊界：N/A. 剝除後僅剩標點，仍視為 placeholder
+        assert _is_placeholder("N/A.") is True
+
     def test_tbd_and_na_substring_is_not_placeholder(self):
         """TBD / N/A 加字邊界後 substring 不應誤判（W17-094）。"""
         # 不應誤判：TBDay（虛構但驗證字邊界）、Banana（含 N/A 的 substring 不可能但驗證 \b 邏輯一致）
