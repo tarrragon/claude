@@ -28,6 +28,9 @@ spec.loader.exec_module(process_skip_guard_hook)
 detect_skip_intent = process_skip_guard_hook.detect_skip_intent
 generate_skip_reminder = process_skip_guard_hook.generate_skip_reminder
 main = process_skip_guard_hook.main
+_should_suppress_sa_review_reference = (
+    process_skip_guard_hook._should_suppress_sa_review_reference
+)
 
 # 從 hook_utils 匯入 generate_hook_output
 from hook_utils import generate_hook_output
@@ -95,6 +98,159 @@ class TestDetectSkipIntent:
         user_input = "自行處理，不派發"
         skip_type, pattern_info = detect_skip_intent(user_input)
         assert skip_type == "SKIP_AGENT_DISPATCH"
+
+
+class TestSaReviewReferenceSuppression:
+    """測試 SKIP_SA_REVIEW 引用/討論抑制（W1-005）
+
+    方向強制保守：只在「明確引用/討論」時抑制，絕不可漏放真正跳過意圖。
+    """
+
+    # --- 抑制成立：引用 span ---
+
+    def test_suppress_quote_prefix_line(self):
+        """命中關鍵字落在引用行（行首 >）→ detect 觸發但 suppress 抑制"""
+        user_input = "> 跳過 SA 前置審查"
+        skip_type, _ = detect_skip_intent(user_input)
+        assert skip_type == "SKIP_SA_REVIEW"
+        assert _should_suppress_sa_review_reference(user_input) is True
+
+    def test_suppress_quote_prefix_fullwidth(self):
+        """全形 ▎ quote 前綴亦視為引用行"""
+        user_input = "▎ 不需要 SA 審查"
+        skip_type, _ = detect_skip_intent(user_input)
+        assert skip_type == "SKIP_SA_REVIEW"
+        assert _should_suppress_sa_review_reference(user_input) is True
+
+    def test_suppress_system_reminder_region(self):
+        """命中關鍵字落在 system-reminder 區段 → 抑制"""
+        user_input = (
+            "<system-reminder>\n"
+            "規則範例：跳過 SA 前置審查屬違規\n"
+            "</system-reminder>"
+        )
+        skip_type, _ = detect_skip_intent(user_input)
+        assert skip_type == "SKIP_SA_REVIEW"
+        assert _should_suppress_sa_review_reference(user_input) is True
+
+    # --- 抑制成立：meta 討論詞共現 ---
+
+    def test_suppress_meta_false_positive_zh(self):
+        """與「假陽性 / 誤觸」共現 → 判為討論 hook 本身，抑制"""
+        user_input = "這個跳過 SA 的誤觸是假陽性，要怎麼修"
+        skip_type, _ = detect_skip_intent(user_input)
+        assert skip_type == "SKIP_SA_REVIEW"
+        assert _should_suppress_sa_review_reference(user_input) is True
+
+    def test_suppress_meta_false_positive_en(self):
+        """與英文 false positive 共現 → 抑制"""
+        user_input = "the 跳過 SA detection is a false positive"
+        skip_type, _ = detect_skip_intent(user_input)
+        assert skip_type == "SKIP_SA_REVIEW"
+        assert _should_suppress_sa_review_reference(user_input) is True
+
+    def test_suppress_meta_boundary_discussion(self):
+        """討論「邊界 / 固化」hook 提示 → 抑制"""
+        user_input = "固化跳過 SA 提醒的假陽性邊界"
+        skip_type, _ = detect_skip_intent(user_input)
+        assert skip_type == "SKIP_SA_REVIEW"
+        assert _should_suppress_sa_review_reference(user_input) is True
+
+    # --- false-negative 防回歸：真意圖仍觸發，禁止抑制 ---
+
+    def test_no_suppress_true_intent_plain(self):
+        """真正跳過意圖（無引用/meta 語境）→ 不抑制（false-negative 防回歸）"""
+        user_input = "這次直接跳過 SA 審查不派 saffron"
+        skip_type, _ = detect_skip_intent(user_input)
+        assert skip_type == "SKIP_SA_REVIEW"
+        assert _should_suppress_sa_review_reference(user_input) is False
+
+    def test_no_suppress_intent_outside_quote(self):
+        """引用行外仍有命中關鍵字 → 不抑制（保守，維持觸發）
+
+        即使輸入含一段引用，只要引用之外用戶仍表達跳過意圖，必須觸發。
+        """
+        user_input = (
+            "> 規則說 SA 前置審查很重要\n"
+            "但這次跳過 SA 審查吧"
+        )
+        skip_type, _ = detect_skip_intent(user_input)
+        assert skip_type == "SKIP_SA_REVIEW"
+        assert _should_suppress_sa_review_reference(user_input) is False
+
+    def test_no_suppress_partial_keyword_in_quote(self):
+        """部分關鍵字在引用、部分在正文 → 不抑制
+
+        keyword_a（跳過）在引用行，keyword_b（sa）在正文行，
+        代表正文行單獨持有命中關鍵字 → 維持觸發。
+        """
+        user_input = (
+            "> 範例：跳過\n"
+            "我要跳過 SA 審查"
+        )
+        skip_type, _ = detect_skip_intent(user_input)
+        assert skip_type == "SKIP_SA_REVIEW"
+        # 第二行同時持有「跳過」與「sa」→ 非引用行有命中 → 不抑制
+        assert _should_suppress_sa_review_reference(user_input) is False
+
+    def test_main_suppressed_outputs_basic_json(self):
+        """main：引用/討論語境的 SKIP_SA_REVIEW 不輸出提醒（整合測試）"""
+        input_data = json.dumps({
+            "prompt": "這個跳過 SA 的誤觸是假陽性，hook 要修"
+        })
+
+        with patch("sys.stdin", StringIO(input_data)):
+            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+                with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+                    with patch.object(process_skip_guard_hook, "setup_hook_logging"):
+                        with patch.object(process_skip_guard_hook, "is_subagent_environment", return_value=False):
+                            with patch.object(
+                                process_skip_guard_hook,
+                                "has_active_dispatch",
+                                return_value=False,
+                                create=True,
+                            ):
+                                exit_code = main()
+
+        assert exit_code == 0
+        stdout_output = mock_stdout.getvalue()
+        parsed_output = json.loads(stdout_output)
+        assert "additionalContext" not in parsed_output["hookSpecificOutput"]
+        # stderr 無提醒
+        assert not mock_stderr.getvalue().strip()
+
+    def test_main_true_intent_still_triggers(self):
+        """main：真意圖（無引用/meta）仍觸發提醒（false-negative 防回歸整合測試）"""
+        input_data = json.dumps({
+            "prompt": "這次直接跳過 SA 審查不派 saffron"
+        })
+
+        with patch("sys.stdin", StringIO(input_data)):
+            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+                with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+                    with patch.object(process_skip_guard_hook, "setup_hook_logging"):
+                        with patch.object(process_skip_guard_hook, "is_subagent_environment", return_value=False):
+                            with patch.object(
+                                process_skip_guard_hook,
+                                "has_active_dispatch",
+                                return_value=False,
+                                create=True,
+                            ):
+                                # 無 in_progress ticket → type/phase guard 不靜音
+                                with patch.object(
+                                    process_skip_guard_hook,
+                                    "get_active_in_progress_ticket",
+                                    return_value=None,
+                                    create=True,
+                                ):
+                                    exit_code = main()
+
+        assert exit_code == 0
+        stdout_output = mock_stdout.getvalue()
+        parsed_output = json.loads(stdout_output)
+        assert "additionalContext" in parsed_output["hookSpecificOutput"]
+        # stderr 有提醒
+        assert mock_stderr.getvalue().strip()
 
 
 class TestGenerateHookOutput:

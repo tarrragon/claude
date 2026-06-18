@@ -52,6 +52,31 @@ from lib.hook_messages import (
 SA_GUARD_SILENCE_TYPES = {"DOC", "ANA"}
 SA_GUARD_IMP_SILENCE_PHASE = "Phase 4"
 
+# 引用/討論抑制（W1-005）：僅作用於 SKIP_SA_REVIEW 的 lexical 假陽性
+#
+# 設計方向強制保守：只在「明確是引用/討論」時抑制，絕不可漏放真正跳過意圖
+# （false negative 比 false positive 危險得多）。不確定時維持觸發。
+#
+# (a) 引用 span：命中的 SKIP_SA_REVIEW 關鍵字若全部落在引用行（行首 > 或 ▎
+#     等 quote 前綴）或 echo/system-reminder 區段內，視為引用非意圖 → 抑制。
+#     僅當「所有命中關鍵字」都在引用 span 才抑制；任一關鍵字落在非引用行
+#     （代表用戶在引用之外仍表達跳過意圖）即維持觸發。
+# (b) meta 討論詞共現：輸入含強 meta 討論詞時判為討論 hook 本身 → 抑制。
+QUOTE_LINE_PREFIXES = (">", "▎", "｜", "|")
+SYSTEM_REMINDER_MARKERS = ("<system-reminder>", "</system-reminder>")
+# 強 meta 討論詞：出現代表在「討論偵測/防護機制本身」而非「執行跳過」
+SA_REVIEW_META_DISCUSSION_TERMS = (
+    "假陽性",
+    "誤觸",
+    "固化",
+    "邊界",
+    "hook 提示",
+    "hook提示",
+    "false positive",
+    "false-positive",
+    "spurious",
+)
+
 EXIT_SUCCESS = 0
 
 
@@ -174,6 +199,94 @@ def detect_skip_intent(user_input: str) -> Tuple[Optional[str], Optional[SkipPat
                 return skip_type, pattern_info
 
     return None, None
+
+
+def _is_quote_line(line: str) -> bool:
+    """判斷單行是否為引用行（行首去除空白後以 quote 前綴起始）。"""
+    stripped = line.lstrip()
+    return stripped.startswith(QUOTE_LINE_PREFIXES)
+
+
+def _all_hits_in_quote_or_reminder(user_input: str, matched_pairs: List[Tuple[str, str]]) -> bool:
+    """判斷 matched_pairs 的所有關鍵字是否「皆只」出現於引用行 / system-reminder 區段。
+
+    保守判定：對每個命中關鍵字，只要它在「任一非引用、非 reminder 的行」出現過，
+    即視為用戶在引用之外仍表達該關鍵字 → 不抑制（回傳 False，維持觸發）。
+    僅當所有命中關鍵字的每次出現都落在引用 span 內才回傳 True。
+
+    Args:
+        user_input: 原始（未轉小寫）使用者輸入
+        matched_pairs: 觸發 SKIP_SA_REVIEW 的 (keyword_a, keyword_b)
+
+    Returns:
+        True 若所有命中關鍵字僅出現於引用 span（可抑制）；否則 False（維持觸發）
+    """
+    lines = user_input.split("\n")
+    in_reminder = False
+    # 收集所有需驗證的關鍵字（小寫）
+    keywords = set()
+    for keyword_a, keyword_b in matched_pairs:
+        keywords.add(keyword_a.lower())
+        keywords.add(keyword_b.lower())
+
+    for line in lines:
+        line_lower = line.lower()
+        # system-reminder 區段邊界追蹤
+        if SYSTEM_REMINDER_MARKERS[0] in line_lower:
+            in_reminder = True
+        is_quoted = in_reminder or _is_quote_line(line)
+        if SYSTEM_REMINDER_MARKERS[1] in line_lower:
+            in_reminder = False
+
+        if is_quoted:
+            continue
+        # 此行非引用：若含任一命中關鍵字，代表引用之外仍出現意圖 → 不可抑制
+        for kw in keywords:
+            if kw in line_lower:
+                return False
+    return True
+
+
+def _has_meta_discussion_term(user_input_lower: str) -> bool:
+    """判斷輸入是否含強 meta 討論詞（討論 hook/偵測機制本身）。"""
+    return any(term in user_input_lower for term in SA_REVIEW_META_DISCUSSION_TERMS)
+
+
+def _matched_sa_review_pairs(user_input_lower: str) -> List[Tuple[str, str]]:
+    """回傳所有觸發 SKIP_SA_REVIEW 的關鍵字 pair（供引用 span 抑制判定）。"""
+    pairs = SKIP_PATTERNS["SKIP_SA_REVIEW"]["pairs"]
+    return [
+        (a, b)
+        for a, b in pairs
+        if a in user_input_lower and b in user_input_lower
+    ]
+
+
+def _should_suppress_sa_review_reference(user_input: str) -> bool:
+    """SKIP_SA_REVIEW 引用/討論抑制判定（W1-005，方向保守）。
+
+    僅在以下「明確引用/討論」情境抑制，避免漏放真正跳過意圖：
+    (a) 所有命中關鍵字皆落在引用 span（quote 前綴行 / system-reminder 區）
+    (b) 輸入含強 meta 討論詞共現（討論 hook 本身而非執行跳過）
+
+    Args:
+        user_input: 原始使用者輸入（未轉小寫）
+
+    Returns:
+        True 若應抑制（判為引用/討論）；False 則維持觸發
+    """
+    user_input_lower = user_input.lower()
+
+    # (b) meta 討論詞共現
+    if _has_meta_discussion_term(user_input_lower):
+        return True
+
+    # (a) 引用 span：所有命中關鍵字皆在引用 / reminder 區
+    matched_pairs = _matched_sa_review_pairs(user_input_lower)
+    if matched_pairs and _all_hits_in_quote_or_reminder(user_input, matched_pairs):
+        return True
+
+    return False
 
 
 def has_active_dispatch() -> bool:
@@ -345,6 +458,12 @@ def main() -> int:
                 return _emit_basic()
         except Exception as exc:
             logger.warning(f"has_active_dispatch 失敗，回退原行為: {exc}")
+
+    # SKIP_SA_REVIEW 引用/討論抑制（W1-005，cold path：純 lexical 無 IO）
+    # 命中關鍵字落在引用 span 或與強 meta 討論詞共現時，判為引用/討論非意圖 → 靜音
+    if skip_type == "SKIP_SA_REVIEW" and _should_suppress_sa_review_reference(user_input):
+        logger.info("SKIP_SA_REVIEW 因引用/討論語境（quote span 或 meta 詞共現）抑制")
+        return _emit_basic()
 
     # SKIP_SA_REVIEW type/phase guard（cold path：僅在偵測到 skip intent 時查詢）
     if skip_type == "SKIP_SA_REVIEW":
