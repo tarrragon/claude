@@ -24,8 +24,12 @@ Bash Edit Guard Hook - PreToolUse Hook
   - 排除 git -C / uv -d（不含 cd 指令，天然不命中）
   - 排除還原至專案根 cd /<repo-root>（污染後補救的合法用途）
 
-行為: 輸出警告訊息（permission_decision=allow），允許命令繼續執行 (exit code 0)
-      warn 不 deny，誤判成本低（裸 cd 本就該避免）。
+行為:
+  - 模式 A（sed/perl 原地編輯）: 輸出警告訊息（permission_decision=allow），允許繼續執行。
+  - 模式 B（裸 cd / pushd）: permission_decision=deny（IMP-008 三度復發後根治）。
+    命令送出當下擋下，cwd 永不汙染；reason 附 git -C / 子 shell / uv -d 替代指引。
+    cd + edit 同時命中以 deny 為準。
+    FP 抑制：heredoc body 與單/雙引號字串內的字面 cd 不算裸 cd，避免擋掉合法 script 撰寫。
 """
 
 import json
@@ -86,6 +90,87 @@ _BARE_CD_PATTERN = re.compile(
 )
 
 
+def _literal_offset_ranges(command: str):
+    """
+    回傳命令中「字面文字區段」的 offset 範圍清單 [(start, end), ...]，
+    供 DENY 升級後抑制誤擋——落在這些區段內的 cd/pushd 是腳本內容而非
+    真正執行的裸 cd（避免擋掉合法 script 撰寫）。
+
+    涵蓋兩類字面區段：
+    1. heredoc body：`<< [-] [']DELIM['] ... \nDELIM`（含 <<- 與 quoted delim）
+       body 區段為 heredoc 標頭該行換行後起點，到結束 delimiter 行起點。
+    2. 單/雙引號字串：成對 ' 或 " 之間（含引號本身）。
+
+    務實邊界（PreToolUse 只見 raw 字串、無完整 shell parse）：
+    - heredoc 偵測以行為單位掃描；結束 delimiter 比照常見用法（行首可選空白
+      + delimiter 單獨成行）。
+    - quote 偵測不處理 shell 跳脫（\\' 等罕見於 cd 引數場景），務實取捨。
+    這些區段僅用於「抑制 DENY」，誤判方向偏保守（少抑制 → 維持 DENY），
+    不會把真正的裸 cd 漏放。
+
+    Returns:
+        list[tuple[int, int]] - 字面區段的 [start, end) offset 範圍
+    """
+    ranges = []
+
+    # --- heredoc body 範圍（以行為單位掃描）---
+    # 標頭樣式：<< 或 <<- 後可選空白，delimiter 可被單/雙引號包住
+    heredoc_header = re.compile(r'<<-?\s*([\'"]?)([A-Za-z_][A-Za-z0-9_]*)\1')
+    pos = 0
+    length = len(command)
+    while pos < length:
+        # 找到目前行
+        nl = command.find('\n', pos)
+        line_end = length if nl == -1 else nl
+        line = command[pos:line_end]
+        header = heredoc_header.search(line)
+        if header:
+            delim = header.group(2)
+            # body 從本行換行後起算
+            if nl == -1:
+                # 標頭後無換行 → 無 body 內容
+                break
+            body_start = nl + 1
+            # 尋找結束 delimiter 行（行首可選空白 + delimiter 單獨成行）
+            end_delim_re = re.compile(
+                r'(?m)^[ \t]*' + re.escape(delim) + r'[ \t]*$'
+            )
+            end_match = end_delim_re.search(command, body_start)
+            if end_match:
+                ranges.append((body_start, end_match.start()))
+                pos = end_match.end()
+                continue
+            else:
+                # 無結束 delimiter → 視為 body 延伸至命令結尾
+                ranges.append((body_start, length))
+                break
+        pos = line_end + 1
+
+    # --- 單/雙引號字串範圍 ---
+    # 簡化掃描：不處理跳脫，逐字尋找成對引號。
+    i = 0
+    while i < length:
+        ch = command[i]
+        if ch in ("'", '"'):
+            close = command.find(ch, i + 1)
+            if close == -1:
+                break
+            ranges.append((i, close + 1))
+            i = close + 1
+        else:
+            i += 1
+
+    return ranges
+
+
+def _offset_in_literal(offset: int, literal_ranges) -> bool:
+    """offset 是否落在任一字面區段內（用於抑制 DENY）。"""
+    for start, end in literal_ranges:
+        if start <= offset < end:
+            return True
+    return False
+
+
 def _find_bare_cd_target(command: str) -> str | None:
     """
     掃描命令，回傳第一個構成「裸 cd / pushd」的命中 target，無命中回傳 None。
@@ -126,8 +211,16 @@ def _find_bare_cd_target(command: str) -> str | None:
     if project_root:
         project_root = project_root.rstrip('/')
 
+    # FP 抑制（DENY 升級配套）：heredoc body 與單/雙引號字串內的字面 cd 是
+    # 腳本內容而非真正執行的裸 cd，命中點落在這些區段一律 skip。
+    literal_ranges = _literal_offset_ranges(command)
+
     for match in _BARE_CD_PATTERN.finditer(command):
         target = match.group(3)
+
+        # 排除 0: 命中的 cd/pushd 關鍵字落在字面區段（heredoc/quoted）內 → 非裸 cd
+        if _offset_in_literal(match.start(2), literal_ranges):
+            continue
 
         # 排除 1: 子 shell 內的 cd / pushd — 關鍵字落在未閉合括號內則排除。
         # 以「cd/pushd 關鍵字起點」之前的括號淨深度判定（含 connector 的左括號）：
@@ -189,6 +282,29 @@ def _bare_cd_warning_message(command: str) -> str:
     )
 
 
+def _bare_cd_deny_reason(target: str) -> str:
+    """
+    產生裸 cd DENY 的 permission_decision_reason（含命中 target + 替代指引）。
+
+    DENY 在命令送出當下擋下，cwd 永不汙染（IMP-008 三度復發後根治）。
+    reason 提供 git -C / 子 shell / uv -d 三種合法替代，使用者可立即改寫。
+
+    Args:
+        target: 命中的裸 cd/pushd target 路徑
+
+    Returns:
+        str - DENY reason 文字
+    """
+    return (
+        "偵測到裸 cd/pushd（target={}），會改變持久 cwd 並觸發 chpwd ls 淹沒"
+        "（IMP-008）。請改用以下合法替代：\n"
+        "  - git 操作：git -C <abs> <cmd>（首選，完全不換 cwd）\n"
+        "  - 一般命令：子 shell (cd <dir> && <cmd>)\n"
+        "  - uv 專案：uv -d <dir> run <cmd>\n"
+        "詳見 .claude/rules/core/bash-tool-usage-rules.md 規則一"
+    ).format(target)
+
+
 def main() -> int:
     """主入口點"""
     logger = setup_hook_logging("bash-edit-guard")
@@ -233,7 +349,18 @@ def main() -> int:
             logger.info("允許: 正常 Bash 命令")
             return 0
 
-        # 合併警告為單一 JSON 輸出，permission_decision=allow（warn 不 deny）
+        # bare cd 命中 → DENY（命令送出當下擋下，cwd 永不汙染，IMP-008 三度復發後根治）。
+        # sed/perl 原地編輯維持 warn（allow）。cd + edit 同時命中以 deny 為準。
+        if bare_cd_target is not None:
+            emit_hook_output(
+                "PreToolUse",
+                additional_context="\n\n".join(warnings),
+                permission_decision="deny",
+                permission_decision_reason=_bare_cd_deny_reason(bare_cd_target),
+            )
+            return 0
+
+        # 僅 sed/perl 原地編輯 → warn（allow，誤判成本低）
         emit_hook_output(
             "PreToolUse",
             additional_context="\n\n".join(warnings),
