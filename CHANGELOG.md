@@ -1,3 +1,14 @@
+## [1.54.3] - 2026-06-18
+
+### Summary
+fix: dashboard 漏報 NO-CB pending ticket + list --status 逗號語法錯誤
+
+Changes: 1 fix
+
+- fix: dashboard 漏報 NO-CB pending ticket + list --status 逗號語法錯誤
+
+---
+
 ## [1.54.2] - 2026-06-17
 
 ### Summary

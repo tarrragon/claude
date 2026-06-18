@@ -32,6 +32,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from ticket_system.commands.track_runqueue import (
+    READINESS_NO_CB,
+    READINESS_READY,
     _compute_readiness,
     _filter_by_wave,
     _get_pending_handoff_info,
@@ -82,17 +84,20 @@ def load_top_ready(
     top: int,
     handoff_info: Optional[Dict[str, Dict]] = None,
 ) -> List[Dict[str, Any]]:
-    """收集 top N ready，按 (priority, trigger_bound, id) 排序。
+    """收集 top N actionable ticket，按 (readiness_rank, priority, trigger_bound, id) 排序。
 
-    僅 readiness == 'READY' 列入；handoff_info 用於 _compute_readiness。
+    READY 排前、NO-CB 排後；其他 readiness（NEEDS-CTX/BLOCKED/FAILED）不列入。
     top <= 0 回傳 []。
 
-    排序鍵語意（W3-096）：
-    - priority 為首要鍵（_priority_rank）；跨 priority 仍按 priority 排序
-    - trigger_bound 為次要鍵（false=0 / true=1）；同 priority 內 trigger-bound
-      排在 normal 之後，避免 trigger-bound ticket 佔 Top N 位置
+    排序鍵語意（W3-096 + dashboard NO-CB 修復）：
+    - readiness_rank 為最高鍵（READY=0, NO-CB=1）；READY 優先於 NO-CB
+    - priority 為次要鍵（_priority_rank）
+    - trigger_bound 為第三鍵（false=0 / true=1）
     - id 為穩定排序鍵
     """
+    _ACTIONABLE = {READINESS_READY, READINESS_NO_CB}
+    _READINESS_RANK = {READINESS_READY: 0, READINESS_NO_CB: 1}
+
     handoff_info = handoff_info or {}
     ticket_map = {t.get("id"): t for t in tickets if t.get("id")}
     candidates = []
@@ -100,10 +105,11 @@ def load_top_ready(
         if not _is_unblocked_pending(t, ticket_map):
             continue
         readiness = _compute_readiness(t, handoff_info)
-        if readiness != "READY":
+        if readiness not in _ACTIONABLE:
             continue
         candidates.append((t, readiness))
     candidates.sort(key=lambda pair: (
+        _READINESS_RANK.get(pair[1], 99),
         _priority_rank(pair[0]),
         1 if pair[0].get("trigger_bound") else 0,
         str(pair[0].get("id") or ""),
@@ -186,7 +192,7 @@ def render_text(
         lines.append("  (none)")
     else:
         for index, item in enumerate(ready, start=1):
-            readiness_label = "ready"
+            readiness_label = item.get("readiness", "ready").lower()
             trigger_tag = " [T]" if item.get("trigger_bound") else ""
             lines.append(
                 f"  [{index}] [{item['priority']}] [{readiness_label}]{trigger_tag} "
@@ -241,7 +247,7 @@ def render_json(
                 "index": i + 1,
                 "id": item["id"],
                 "priority": item["priority"],
-                "readiness": "ready",
+                "readiness": item.get("readiness", "READY").lower(),
                 "title": item["title"],
                 "trigger_bound": bool(item.get("trigger_bound")),
             }
