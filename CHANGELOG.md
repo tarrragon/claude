@@ -1,3 +1,14 @@
+## [1.54.8] - 2026-06-18
+
+### Summary
+chore: pull .claude 更新（上游 c389f9a，含 PR #7 merge）
+
+Changes: 1 chore
+
+- chore: pull .claude 更新（上游 c389f9a，含 PR #7 merge）
+
+---
+
 ## [1.54.7] - 2026-06-18
 
 ### Summary
