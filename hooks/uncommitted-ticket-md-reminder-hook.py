@@ -127,7 +127,7 @@ def build_warning_message(ticket_md_paths: list[str]) -> str:
     lines = [
         "[未 commit ticket md 提醒]",
         "偵測到以下 ticket md 已修改但尚未納入此次 commit，",
-        "若手動 Edit 後未一併提交，body 內容可能在後續 git 還原時遺失（PC-178）：",
+        "若手動 Edit 後未一併提交，body 內容可能在後續 git 還原時遺失（PC-185）：",
     ]
     for path in ticket_md_paths:
         lines.append(f"  - {path}")

@@ -417,6 +417,84 @@ def extract_version_from_file(file_path: Path, parser_type: str) -> Optional[str
     return None
 
 
+def strip_build_metadata(version: Optional[str]) -> Optional[str]:
+    """
+    剝離語義版本號的 build metadata 後綴。
+
+    Flutter pubspec.yaml 慣用 `X.Y.Z+build`（如 `1.1.0+2`，+2 為 build number），
+    SemVer 亦允許 `X.Y.Z-pre+meta`。版本比較與 int 解析只需 `X.Y.Z` 核心，
+    後綴若混入會在 `int("0+2")` 等拆分解析點崩潰。
+
+    Args:
+        version: 原始版本字串（可能含 `+build` / `-pre` 後綴），或 None
+
+    Returns:
+        剝除 `+...` 與 `-...` 後綴的核心版本字串；None 原樣回傳
+
+    Examples:
+        >>> strip_build_metadata("1.1.0+2")
+        '1.1.0'
+        >>> strip_build_metadata("1.2.0")
+        '1.2.0'
+        >>> strip_build_metadata("1.0.0-rc1+5")
+        '1.0.0'
+        >>> strip_build_metadata(None) is None
+        True
+    """
+    if not version:
+        return version
+    # 先切 build metadata（+），再切 pre-release（-）
+    core = version.split("+", 1)[0]
+    core = core.split("-", 1)[0]
+    return core.strip()
+
+
+def detect_indev_worklog_version(root: Path, pattern: str) -> Optional[str]:
+    """
+    從 worklog 目錄偵測開發中（in-dev）的最高版本。
+
+    monorepo 場景下版本源檔（如 pubspec.yaml 的 build-number 版）可能落後實際
+    開發中的版本——worklog 目錄已建立 v{version} 子目錄但版本檔尚未 bump。
+    此時應以 worklog 偵測到的最高版本為目標，而非誤採落後的版本檔。
+
+    掃描策略：依 worklog_path_pattern 推導 work-logs 根，遞迴尋找符合
+    `vX.Y.Z` 命名的最深層版本目錄，取語義排序最高者。
+
+    Args:
+        root: 專案根目錄
+        pattern: worklog_path_pattern（決定 work-logs 根位置）
+
+    Returns:
+        最高 in-dev 版本字串（`X.Y.Z`），無則 None
+    """
+    # pattern 形如 "docs/work-logs/v{major}/v{major_minor}/v{version}"
+    # 取第一個含佔位符之前的固定前綴作為 work-logs 根
+    base_parts: List[str] = []
+    for seg in pattern.split("/"):
+        if "{" in seg:
+            break
+        base_parts.append(seg)
+    worklog_root = root.joinpath(*base_parts) if base_parts else root / "docs" / "work-logs"
+    if not worklog_root.exists():
+        return None
+
+    version_dir_pattern = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+    best: Optional[Tuple[int, int, int]] = None
+    # 遞迴掃描（巢狀或扁平結構皆涵蓋）
+    for path in worklog_root.rglob("v*"):
+        if not path.is_dir():
+            continue
+        match = version_dir_pattern.match(path.name)
+        if not match:
+            continue
+        parts = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+        if best is None or parts > best:
+            best = parts
+    if best is None:
+        return None
+    return f"{best[0]}.{best[1]}.{best[2]}"
+
+
 def detect_version() -> Optional[str]:
     """自動偵測版本號"""
     root = get_project_root()
@@ -443,10 +521,39 @@ def detect_version() -> Optional[str]:
     #        fallback 至 root 掃描，使 monorepo 子目錄版本檔可被偵測
     config = load_version_release_config(root)
     version_files = resolve_sync_version_files(root, config)
+    file_version: Optional[str] = None
     for file_path, parser_type in version_files:
-        version = extract_version_from_file(file_path, parser_type)
-        if version:
-            return version
+        raw = extract_version_from_file(file_path, parser_type)
+        if raw:
+            # 剝離 Flutter pubspec 的 +build 後綴（如 1.1.0+2 → 1.1.0），
+            # 避免後綴混入版本比較 / int 解析造成崩潰
+            file_version = strip_build_metadata(raw)
+            break
+
+    # monorepo：版本源檔可能落後開發中版本（worklog 已建 v{version} 子目錄、
+    # 版本檔尚未 bump）。若 worklog 偵測到更高的 in-dev 版本，優先採之。
+    pattern = config.get(
+        "worklog_path_pattern",
+        DEFAULT_VERSION_RELEASE_CONFIG["worklog_path_pattern"],
+    )
+    indev_version = detect_indev_worklog_version(root, pattern)
+    if indev_version and file_version:
+        try:
+            indev_parts = tuple(int(p) for p in indev_version.split("."))
+            file_parts = tuple(int(p) for p in file_version.split("."))
+            if indev_parts > file_parts:
+                print(
+                    f"[INFO] 版本源 {file_version} 落後開發中 worklog 版本 "
+                    f"{indev_version}，採用 worklog 版本",
+                    file=sys.stderr,
+                )
+                return indev_version
+        except (ValueError, TypeError):
+            pass
+    if file_version:
+        return file_version
+    if indev_version:
+        return indev_version
 
     # 3. 嘗試從 git tag 偵測
     try:
@@ -475,6 +582,9 @@ def normalize_version(version: Optional[str]) -> str:
         if not detected:
             raise ValueError("無法自動偵測版本號，請使用 --version 指定")
         version = detected
+
+    # 剝離 build metadata 後綴（如 --version 1.1.0+2），確保下游拆分解析不崩潰
+    version = strip_build_metadata(version)
 
     # 確保版本格式正確
     parts = version.split(".")
@@ -770,7 +880,8 @@ def check_previous_versions_completed(version: str) -> Tuple[bool, List[str]]:
         return True, []
 
     version_pattern = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
-    current_parts = tuple(int(p) for p in version.split("."))
+    # 防禦性剝離 build metadata（如 1.1.0+2），避免 int("0+2") 崩潰
+    current_parts = tuple(int(p) for p in strip_build_metadata(version).split("."))
 
     for version_dir in sorted(worklog_dir.iterdir()):
         if not version_dir.is_dir():
@@ -972,8 +1083,9 @@ def compare_semantic_versions(v1: str, v2: str) -> int:
         -1 (v1<v2), 0 (v1=v2), 1 (v1>v2)
     """
     try:
-        parts1 = [int(x) for x in v1.split(".")[:3]]
-        parts2 = [int(x) for x in v2.split(".")[:3]]
+        # 剝離 build metadata 後綴（如 1.1.0+2），確保 int 解析不崩潰
+        parts1 = [int(x) for x in strip_build_metadata(v1).split(".")[:3]]
+        parts2 = [int(x) for x in strip_build_metadata(v2).split(".")[:3]]
 
         # 補齊缺漏部分（如 "0.1" → [0, 1, 0]）
         while len(parts1) < 3:

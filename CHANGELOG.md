@@ -1,3 +1,17 @@
+## [1.56.0] - 2026-06-19
+
+### Summary
+feat: renumber native intruder PC-177/178→184/185 + lineage-aware 孤兒守衛; feat: sync-push 補撞號對稱（鏡像 pull）+ 首跑對帳辨識上游 mess; fix: 修正 +build 後綴崩潰與 monorepo in-dev 版本偵測 (+1 more)
+
+Changes: 2 feat, 2 fix
+
+- feat: renumber native intruder PC-177/178→184/185 + lineage-aware 孤兒守衛
+- feat: sync-push 補撞號對稱（鏡像 pull）+ 首跑對帳辨識上游 mess
+- fix: 修正 +build 後綴崩潰與 monorepo in-dev 版本偵測
+- fix: PC-183 lineage typo PC-18→PC-018 + H1 對齊 183（修 038 parser 誤判隱因）
+
+---
+
 ## [1.55.0] - 2026-06-18
 
 ### Summary

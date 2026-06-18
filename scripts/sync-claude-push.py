@@ -1003,7 +1003,10 @@ def check_no_change_early_exit(
 
 
 def clean_stale_files(
-    temp_dir: Path, reference_dir: Path, preserve: set[str] | None = None
+    temp_dir: Path,
+    reference_dir: Path,
+    preserve: set[str] | None = None,
+    lineage_claimed: set[str] | None = None,
 ) -> int:
     """刪除 clone 目錄中存在但 reference_dir（git tracked 樹 staging）沒有的過時檔案。
 
@@ -1022,6 +1025,7 @@ def clean_stale_files(
     回傳已刪除的檔案數量。
     """
     preserve = preserve or set()
+    lineage_claimed = lineage_claimed or set()
     CLEAN_EXCLUDE = {".git", "CHANGELOG.md", "VERSION", "README.md", "LICENSE", ".gitignore"}
     deleted_count = 0
 
@@ -1039,6 +1043,11 @@ def clean_stale_files(
             continue
         # preserve-listed 檔不刪除（專案特化，push 端刻意不推也不刪）
         if rel.as_posix() in preserve:
+            continue
+        # 被本地 lineage 重編號檔認領的上游 canonical 不刪除（PC-APP-002 / W1-039）：
+        # 本地把上游 PC-<N> 重編為 PC-<M> 後，上游 PC-<N>-<slug> 在本地無同名檔會被
+        # 誤列孤兒；其溯源註解明說上游應保留原號供下次 pull 去重，故排除於 --clean。
+        if rel.as_posix() in lineage_claimed:
             continue
         # 檢查 tracked 樹 staging 是否有對應檔案
         if not (reference_dir / rel).exists():
@@ -1067,7 +1076,10 @@ def clean_stale_files(
 
 
 def detect_uncleaned_deletions(
-    temp_dir: Path, reference_dir: Path, preserve: set[str] | None = None
+    temp_dir: Path,
+    reference_dir: Path,
+    preserve: set[str] | None = None,
+    lineage_claimed: set[str] | None = None,
 ) -> list[str]:
     """偵測遠端 clone（temp_dir）存在但本地 git tracked 樹（reference_dir）已無的檔案。
 
@@ -1095,6 +1107,7 @@ def detect_uncleaned_deletions(
         list[str]: 遠端存在但本地 tracked 樹已無的檔案相對路徑（已排序），無則空 list
     """
     preserve = preserve or set()
+    lineage_claimed = lineage_claimed or set()
     CLEAN_EXCLUDE = {".git", "CHANGELOG.md", "VERSION", "README.md", "LICENSE", ".gitignore"}
     orphans: list[str] = []
     for file_path in sorted(temp_dir.rglob("*")):
@@ -1111,9 +1124,103 @@ def detect_uncleaned_deletions(
         # preserve-listed 檔（push 端刻意不推）不算孤兒，與 clean_stale_files 對齊
         if rel.as_posix() in preserve:
             continue
+        # 被本地 lineage 重編號檔認領的上游 canonical 不算孤兒（PC-APP-002 / W1-039）：
+        # 與 clean_stale_files 對齊，確保「警告/可刪的檔」恰為「真孤兒」（含讓位後的
+        # native intruder），不誤報受 lineage 保護的上游 canonical。
+        if rel.as_posix() in lineage_claimed:
+            continue
         if not (reference_dir / rel).exists():
             orphans.append(str(rel))
     return orphans
+
+
+def _dry_run_report_pc_collision(claude_dir: Path, upstream_clone: Path) -> None:
+    """dry-run 階段列印 PC 撞號對帳計畫，不寫任何檔（規則 3 驗證入口）。
+
+    流程：
+      1. snapshot 上游 PC 純態 → plan_upstream_mess_reconciliation 列既存 mess。
+      2. 掃本地 error-patterns，對每個 bare PC 檔跑 plan_push_pc_action，分類列出
+         排除（artifact）/ 賦 canonical / 原樣推送，模擬實際 push 處置。
+
+    純讀取：只讀檔不寫檔，可安全反覆執行驗證辨識正確性。
+    """
+    upstream_index = build_upstream_pc_index(upstream_clone)
+    reconciliation = plan_upstream_mess_reconciliation(upstream_index)
+    print_color("--- PC 撞號對帳預覽（規則 3，dry-run）---", "yellow")
+    if reconciliation:
+        print_color(f"   上游既存 mess（同 slug 重複號）：{len(reconciliation)} 項")
+        for item in reconciliation:
+            print_color(
+                f"     [重複] slug={item['slug']}"
+                f" canonical=PC-{item['canonical_num']}"
+                f" / 誤推鏡像=PC-{item['duplicate_num']}（高號該移除）"
+            )
+    else:
+        print_color("   上游無既存 PC mess", "green")
+
+    ep_root = claude_dir / "error-patterns"
+    excluded = renumbered = untouched = 0
+    reserved: set[int] = set()
+    if ep_root.is_dir():
+        for path in sorted(ep_root.rglob("PC-*.md")):
+            repo_rel = path.relative_to(claude_dir).as_posix()
+            if parse_pc_filename(repo_rel) is None:
+                continue
+            try:
+                content = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            plan = plan_push_pc_action(repo_rel, content, upstream_index, reserved)
+            if plan["action"] == "exclude_lineage_artifact":
+                excluded += 1
+                print_color(
+                    f"     [排除] {repo_rel}"
+                    f"（lineage 上游 PC-{plan['upstream_num']}"
+                    f" / 本地 PC-{plan['local_num']}，不外推）"
+                )
+            elif plan["action"] == "assign_canonical":
+                renumbered += 1
+                print_color(
+                    f"     [賦號] PC-{plan['old_num']} -> PC-{plan['new_num']}"
+                    f"（slug={plan['slug']}）"
+                )
+            else:
+                untouched += 1
+    print_color(
+        f"   本地 PC 處置模擬：排除 {excluded} / 賦 canonical {renumbered}"
+        f" / 原樣推送 {untouched}",
+        "green",
+    )
+
+    # 孤兒辨識預覽（PC-APP-002 / W1-039）：列出「上游有、本地 PC 重編後已無同名檔」
+    # 的上游 PC 檔，並標明哪些受 lineage 認領保護（不清）、哪些為真孤兒（讓位後的
+    # native intruder，可清）。純讀取，供 step-4 驗證辨識正確性。
+    lineage_claimed = compute_lineage_claimed_upstream_files(claude_dir)
+    local_pc_rel: set[str] = set()
+    if ep_root.is_dir():
+        for path in ep_root.rglob("PC-*.md"):
+            rel = path.relative_to(claude_dir).as_posix()
+            if parse_pc_filename(rel) is not None:
+                local_pc_rel.add(rel)
+    up_ep = upstream_clone / "error-patterns"
+    protected = true_orphans = 0
+    if up_ep.is_dir():
+        print_color("   上游 PC 孤兒辨識（本地重編後上游殘留）：")
+        for path in sorted(up_ep.rglob("PC-*.md")):
+            rel = path.relative_to(upstream_clone).as_posix()
+            if parse_pc_filename(rel) is None or rel in local_pc_rel:
+                continue
+            if rel in lineage_claimed:
+                protected += 1
+                print_color(f"     [保留] {rel}（lineage 認領的框架 canonical）", "green")
+            else:
+                true_orphans += 1
+                print_color(f"     [真孤兒] {rel}（無人認領，--clean 可清）", "yellow")
+        print_color(
+            f"   孤兒辨識：受 lineage 保護 {protected} / 真孤兒可清 {true_orphans}",
+            "green",
+        )
+    print_color("--- PC 撞號對帳預覽結束 ---", "yellow")
 
 
 def run_dry_run() -> None:
@@ -1125,6 +1232,7 @@ def run_dry_run() -> None:
     """
     print_color("[DRY-RUN] 僅生成 commit message，不執行 push", "yellow")
     project_root = find_project_root()
+    claude_dir = project_root / ".claude"
     last_sync: str | None = None
     temp_dir = Path(tempfile.mkdtemp())
     try:
@@ -1132,6 +1240,9 @@ def run_dry_run() -> None:
         if clone_result.returncode == 0:
             last_sync = get_last_sync_timestamp(str(temp_dir))
             print_color(f"   上次推送時間: {last_sync}", "green")
+            # PC 撞號對帳預覽（規則 3，1.2.0-W1-038）：snapshot 上游 PC 純態 →
+            # 列既存 mess 修正計畫；再對本地 PC 檔模擬 push 處置（不寫任何檔）。
+            _dry_run_report_pc_collision(claude_dir, temp_dir)
         else:
             print_color("   clone 失敗，使用全歷史", "yellow")
     finally:
@@ -1286,6 +1397,412 @@ def run_framework_smoke_test(staging_dir: Path) -> None:
     print_color("   smoke test 通過：框架核心套件全模組可 import", "green")
 
 
+# ============================================================================
+# PC 編號撞號對稱（push 端，鏡像 sync-claude-pull.py 行 1329+ 的撞號邏輯）
+#
+# 背景（1.2.0-W1-037 根因）：sync-pull 已有「PC 撞號偵測 + 自動重編號」
+# （_next_available_pc_number），把上游 PC 撞本地時重編並注入 lineage 註記。
+# sync-push 卻無對稱邏輯——full-overlay 推全部，把本地原生 PC（bare 號）+ pull
+# 重編 artifact（含 lineage 的 181/182）一併推上 canonical 上游，製造撞號 + 重複
+# mess（GitHub API 實證：上游 PC-177×2 / 178×2 / 181 / 182 共 6 檔）。
+#
+# 本模組補三規則，方向與 PC-APP-002「於 sync-push 由框架賦予 canonical 編號」一致：
+#   1. 辨識 pull 重編 artifact（含 lineage 標記）不外推——canonical 版已在上游。
+#   2. 本地原生 bare PC 若號已被上游不同 slug 佔用 → 賦 next-available canonical
+#      號、回寫本地 + 注入 lineage 標記（與 pull 重編對稱）。
+#   3. 首跑對帳：辨識並修正當前上游既存 mess。
+#
+# 設計刻意只認 flat 凍結核心格式（PC-NNN），不拓寬至前綴格式（PC-V1-/PC-APP-/
+# PC-TUNL-）——前綴格式各專案在自己命名空間累加，天生不參與 flat 整數撞號。
+# 與 pull 端 _PC_FILENAME_RE 決策一致（1.0.0-W1-019.2）。
+# ============================================================================
+
+# 與 pull 端 _PC_FILENAME_RE 對稱：只匹配 bare PC-<NNN>-<slug>.md（前綴格式回 None）
+_PUSH_PC_FILENAME_RE = re.compile(r"^PC-(\d+)-(.+)\.md$")
+# 解析本地 lineage 註記（與 pull 的 _build_provenance_note 寫入字面對稱）：
+# 「...編號為 PC-<上游號>...重新編號為 PC-<本地號>」。同時抓上游號與本地號。
+_PUSH_LINEAGE_RE = re.compile(
+    r"編號溯源.*?編號為\s*PC-(\d+).*?重新編號為\s*PC-(\d+)",
+    re.DOTALL,
+)
+
+
+def parse_pc_filename(repo_rel: str) -> tuple[int, str] | None:
+    """解析 error-patterns 下 bare PC 檔的 (編號, slug)；與 pull 端對稱。
+
+    僅匹配 error-patterns/ 範圍內、檔名形如 PC-<NNN>-<slug>.md 者。
+    前綴格式（PC-V1-/PC-APP-/PC-TUNL-）與非 PC 檔（README、IMP/TEST/ARCH）回 None
+    ——刻意排除於 flat 撞號子系統（前綴空間各專案獨立累加，零協調防碰撞）。
+    """
+    parts = repo_rel.split("/")
+    if len(parts) < 2 or parts[0] != "error-patterns":
+        return None
+    m = _PUSH_PC_FILENAME_RE.match(parts[-1])
+    if not m:
+        return None
+    return int(m.group(1)), m.group(2)
+
+
+def parse_local_lineage(content: str) -> tuple[int, int] | None:
+    """從本地 PC 檔內容解析 lineage 標記，回 (上游號, 本地號)；無標記回 None。
+
+    lineage 標記由 sync-pull 撞號重編時注入（_build_provenance_note）。其存在
+    即代表此檔是「pull 端撞號產物」——canonical 版本已在上游以「上游號」存在，
+    本地版只是重編號的鏡像，push 時不應外推（規則 1）。
+    """
+    m = _PUSH_LINEAGE_RE.search(content)
+    if m is None:
+        return None
+    return int(m.group(1)), int(m.group(2))
+
+
+def compute_lineage_claimed_upstream_files(claude_dir: Path) -> set[str]:
+    """掃描本地 error-patterns，回傳「被本地 lineage 重編號檔以溯源註解認領」的
+    上游 repo 相對路徑集合（form: error-patterns/.../PC-<上游號>-<slug>.md）。
+
+    Why（PC-APP-002 + 1.2.0-W1-039）：detect_uncleaned_deletions / clean_stale_files
+    以純檔名比對判孤兒（上游有、本地 tracked 樹無 → 孤兒）。但本地把上游 canonical
+    PC-<N> 重編為 PC-<M>（注入 lineage 註解，保留 slug）後，上游的 PC-<N>-<slug>
+    在本地已無同名檔，會被誤列孤兒——若帶 --clean 會刪掉上游 canonical（PC-APP-002
+    近失）。本函式重建「本地 lineage 檔認領了哪些上游 (號, slug)」，供孤兒偵測排除，
+    使框架 canonical 受保護。
+
+    Consequence（不做）：renumber native intruder 讓位後，--clean 無法區分
+    「上游 canonical（被 lineage 認領，應保留）」與「上游 native intruder（無人認領，
+    應清）」，兩者同列孤兒——保守起見只能整批不清（intruder 永留），或誤刪 canonical。
+
+    Action：對每個本地 bare PC 檔，若含 lineage 註解（上游號, 本地號）且檔名 slug 與
+    本地號一致，則認領上游 `error-patterns/<同子目錄>/PC-<上游號>-<slug>.md`。回傳這些
+    上游路徑集合。native intruder（如 PC-184-malformed，lineage None）不認領任何上游檔，
+    故上游殘留的 PC-177-malformed 仍為真孤兒可清——這正是讓位後欲達成的辨識。
+
+    純讀取：只讀本地檔，不碰網路 / 上游。
+    """
+    claimed: set[str] = set()
+    ep_root = claude_dir / "error-patterns"
+    if not ep_root.is_dir():
+        return claimed
+    for path in sorted(ep_root.rglob("PC-*.md")):
+        repo_rel = path.relative_to(claude_dir).as_posix()
+        parsed = parse_pc_filename(repo_rel)
+        if parsed is None:
+            continue
+        _local_num, slug = parsed
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        lineage = parse_local_lineage(content)
+        if lineage is None:
+            continue
+        upstream_num, _ln = lineage
+        prefix = repo_rel.rsplit("/", 1)[0]
+        claimed.add(f"{prefix}/PC-{upstream_num}-{slug}.md")
+    return claimed
+
+
+def build_upstream_pc_index(upstream_root: Path) -> dict:
+    """掃描 clone 下來的上游 error-patterns/ 建立 PC 佔用索引。
+
+    上游現況可能本身有 mess（同號多 slug），故 numbers 對每個號收 slug 集合，
+    不假設一號一 slug（與 pull 的 numbers: dict[int,str] 差異——pull 假設本地
+    乾淨，push 端面對的上游可能已被先前誤推弄髒，須容納 mess 才能正確對帳）。
+
+    必須在 copy_filtered_from_staging 把本地檔覆蓋上去之前呼叫，否則拿到的是
+    覆蓋後的混合樹而非上游純態。
+
+    回傳:
+        {
+          "numbers": {編號: set(slug, ...)},        # 上游已佔用號 → slug 集合
+          "by_slug": {(編號, slug): repo_rel},       # 反查 repo 相對路徑
+        }
+    """
+    numbers: dict[int, set[str]] = defaultdict(set)
+    by_slug: dict[tuple[int, str], str] = {}
+    ep_root = upstream_root / "error-patterns"
+    if not ep_root.is_dir():
+        return {"numbers": {}, "by_slug": by_slug}
+    for path in ep_root.rglob("PC-*.md"):
+        m = _PUSH_PC_FILENAME_RE.match(path.name)
+        if not m:
+            continue
+        num = int(m.group(1))
+        slug = m.group(2)
+        numbers[num].add(slug)
+        rel = path.relative_to(upstream_root).as_posix()
+        by_slug[(num, slug)] = rel
+    return {"numbers": dict(numbers), "by_slug": by_slug}
+
+
+def _next_available_canonical_number(
+    upstream_numbers: dict, start: int, reserved: set[int] | None = None
+) -> int:
+    """從 start 起找第一個上游未佔用、且未被本輪 reserved 的 PC 號。
+
+    鏡像 pull 的 _next_available_pc_number，並加上 reserved 集合避免同輪多檔
+    撞同一新號。候選取 max(已佔用號 ∪ reserved)+1 與 start+1 的較大者，再往上
+    找同時不在 upstream_numbers 與 reserved 的空號。
+    upstream_numbers 為 {號: set(slug)}（push 端容納 mess 的形態）。
+    """
+    reserved = reserved or set()
+    occupied = set(upstream_numbers) | reserved
+    candidate = max(occupied, default=start - 1) + 1
+    candidate = max(candidate, start + 1)
+    while candidate in occupied:
+        candidate += 1
+    return candidate
+
+
+def _build_push_lineage_note(upstream_num: int, local_num: int) -> str:
+    """產生 lineage 註記行（與 pull 的 _build_provenance_note 字面對稱）。
+
+    push 端賦 canonical 號後回寫本地時注入，使本地保留「我重編過」的記憶，
+    下次 push 即被規則 1 辨識為 artifact 不再外推（與 pull dedup 對稱）。
+    """
+    return (
+        f"> **編號溯源**：本 pattern 在上游框架 repo（tarrragon/claude.git）"
+        f"編號為 PC-{upstream_num}。因本專案 PC-{upstream_num} 已被既有 pattern 佔用，"
+        f"於本專案重新編號為 PC-{local_num}。下次 sync-pull 仍會帶回上游 "
+        f"PC-{upstream_num}，屆時應辨識為同一 pattern 並去重。\n"
+    )
+
+
+def _inject_lineage_into_local(content: str, upstream_num: int, local_num: int) -> str:
+    """把 lineage 註記插入本地 PC 檔內容首行（若尚無 lineage）。
+
+    push 端賦 canonical 號的 local_num 即上游配給的新號；upstream_num 在此語境
+    指「本地原檔名的舊號」（被上游佔用而需讓位者）。回寫後本地檔名改為 local_num，
+    內文記「曾以 upstream_num 存在、現重編 local_num」，與 pull 重編記憶對稱。
+    """
+    if _PUSH_LINEAGE_RE.search(content):
+        return content
+    note = _build_push_lineage_note(upstream_num, local_num)
+    return note + "\n" + content
+
+
+def plan_push_pc_action(
+    repo_rel: str,
+    local_content: str,
+    upstream_index: dict,
+    reserved: set[int] | None = None,
+) -> dict:
+    """對單一本地 PC 檔決定 push 處置（規則 1 + 規則 2）。
+
+    reserved（選填）：本輪已賦給其他撞號檔的新 canonical 號集合。多個本地原生
+    撞號同輪賦號時必須傳入，否則每個都算到同一 next-available 號（全部撞 PC-184）。
+    本函式賦號後會把新號加入 reserved（就地 mutate），供下一檔避開。
+
+    回傳 dict（action 枚舉）：
+      - {"action": "none"}                    非 PC / 無撞號，原樣推送
+      - {"action": "exclude_lineage_artifact",
+         "upstream_num": int, "local_num": int}
+            含 lineage（pull 重編產物）→ 不外推（canonical 版已在上游）
+      - {"action": "assign_canonical",
+         "old_num": int, "slug": str,
+         "new_num": int, "old_repo_rel": str,
+         "new_repo_rel": str, "new_content": str}
+            本地原生 bare 號被上游不同 slug 佔用 → 賦 next-available canonical 號
+
+    純函式：不碰檔案系統，便於單元測試。實際 IO（改檔名、回寫本地、排除複製）
+    由 apply_push_pc_collision orchestrator 依本計畫執行。
+    """
+    parsed = parse_pc_filename(repo_rel)
+    if parsed is None:
+        return {"action": "none"}
+    num, slug = parsed
+
+    # 規則 1：含 lineage = pull 重編 artifact，canonical 版已在上游 → 不外推
+    lineage = parse_local_lineage(local_content)
+    if lineage is not None:
+        upstream_num, local_num = lineage
+        return {
+            "action": "exclude_lineage_artifact",
+            "upstream_num": upstream_num,
+            "local_num": local_num,
+        }
+
+    # 規則 2：本地原生 bare 號。檢查上游此號的佔用狀況。
+    upstream_numbers: dict = upstream_index.get("numbers", {})
+    occupant_slugs = upstream_numbers.get(num, set())
+    # 上游無此號 → 本地此 pattern 是該號的 canonical，正常推送。
+    if not occupant_slugs:
+        return {"action": "none"}
+    # 本地 slug 已在上游此號的佔用集合中 → 同一 pattern 已在上游 canonical
+    # （含「同號合法多 pattern」設計態：上游 PC-010 兩 slug 與本地兩 slug 一致）。
+    # 不視為撞號，原樣推送交三方合併（Never break userspace——不動既有合法配號）。
+    if slug in occupant_slugs:
+        return {"action": "none"}
+    # 上游此號只被「別的 slug」佔、本地此 slug 不在其中 → 真撞號，本地讓位賦新號。
+    new_num = _next_available_canonical_number(upstream_numbers, num, reserved)
+    if reserved is not None:
+        reserved.add(new_num)
+    prefix = repo_rel.rsplit("/", 1)[0]
+    new_repo_rel = f"{prefix}/PC-{new_num}-{slug}.md"
+    new_content = _inject_lineage_into_local(local_content, num, new_num)
+    return {
+        "action": "assign_canonical",
+        "old_num": num,
+        "slug": slug,
+        "new_num": new_num,
+        "old_repo_rel": repo_rel,
+        "new_repo_rel": new_repo_rel,
+        "new_content": new_content,
+    }
+
+
+def plan_upstream_mess_reconciliation(upstream_index: dict) -> list[dict]:
+    """首跑對帳：辨識上游既存 mess 並產出修正計畫（規則 3）。
+
+    mess 的可操作定義（精準，不誤報合法態）：**同一 slug 在上游同時以兩個以上不同
+    PC 號存在**——這只可能來自「sync-push 把本地 pull 重編 artifact（如 PC-181=
+    上游 PC-177 的重編鏡像）誤推上游」，使同一 pattern 在上游既有 canonical 低號、
+    又多一份高號鏡像。高號份應移除（canonical 是低號）。
+
+    刻意**不**把「同一號被多個不同 slug 佔用」列為 mess：上游本就允許同號合法承載
+    多個不同 pattern（如 PC-010 同時有 task-tracking-in-memory 與 pm-skipped-...，
+    兩者皆 canonical、設計如此）。把它列為 mess 會對合法配號誤報（PC-010/019/020/
+    030/105 即此類），故排除。本地原生撞號（本地 slug 不在上游此號）的讓位由 push
+    規則 2 per-file 處理，不需在對帳階段重複列舉。
+
+    已知限制（native-already-pushed 模糊性）：若先前不對稱 push 已把本地原生 PC
+    （如 PC-177-malformed）推上一個本由框架 canonical 佔用的號，上游此號變成
+    「foreign canonical + native intruder」兩 slug。單看上游無法判別哪個是 native
+    intruder（需與本地全索引對照才能斷定），故本函式不自動讓位這類已誤推的 native。
+    可操作的去重訊號（同 slug 重複號，如 181/182）仍被精準辨識並由規則 1 排除
+    本地 artifact + overlay/unlink 移除上游重複份；剩餘 foreign+native 並存的兩
+    slug 待人工或後續 ticket 以本地索引對照解（避免誤刪框架 canonical）。
+
+    回傳修正項目 list，每項：
+      {"kind": "duplicate_renumbered_slug", "slug": str,
+       "canonical_num": int, "duplicate_num": int,
+       "canonical_repo_rel": str, "duplicate_repo_rel": str}
+
+    純函式：只讀 upstream_index，不碰網路 / 檔案。輸出供 dry-run 列印與審查。
+    """
+    plan: list[dict] = []
+    by_slug: dict = upstream_index.get("by_slug", {})
+
+    # 偵測同 slug 重複（canonical 低號 + 誤推高號鏡像）——唯一可操作的 mess 訊號
+    slug_to_nums: dict[str, list[int]] = defaultdict(list)
+    for (num, slug) in by_slug:
+        slug_to_nums[slug].append(num)
+    for slug, nums in slug_to_nums.items():
+        if len(nums) < 2:
+            continue
+        nums_sorted = sorted(nums)
+        canonical_num = nums_sorted[0]
+        for dup_num in nums_sorted[1:]:
+            plan.append({
+                "kind": "duplicate_renumbered_slug",
+                "slug": slug,
+                "canonical_num": canonical_num,
+                "duplicate_num": dup_num,
+                "canonical_repo_rel": by_slug[(canonical_num, slug)],
+                "duplicate_repo_rel": by_slug[(dup_num, slug)],
+            })
+    return plan
+
+
+def apply_push_pc_collision(
+    remote_dir: Path,
+    upstream_index: dict,
+    dry_run: bool = False,
+) -> dict:
+    """orchestrator：依 plan_push_pc_action 對 remote_dir 內已複製的本地 PC 檔
+    施加撞號對稱（規則 1 + 2）。
+
+    時機：copy_filtered_from_staging 之後、git add 之前。此時 remote_dir 含
+    上游 clone + 已覆蓋的本地檔；upstream_index 須為 copy 之前快照的上游純態。
+
+    動作（僅作用於 remote_dir，即將推上游的樹）：
+      - exclude_lineage_artifact：從 remote_dir 移除該檔（不外推 artifact）
+      - assign_canonical：把舊號檔改名為新 canonical 號 + 寫入新內容（含 lineage）
+
+    本地 working tree 的回寫（讓本地檔保留 lineage 記憶）不在此處——由 main 在
+    push 成功後依本函式回傳的 renumbered 計畫另行套用至 claude_dir，避免 dry-run
+    或 push 失敗時污染本地源（規則 1.5：世界副作用 at-least-once，記憶寫入須晚於
+    確認推送成功）。
+
+    回傳統計 dict：{"excluded": [...], "renumbered": [...], "untouched": int}。
+    每個 renumbered 項含完整 plan，供 main 套回 working tree。
+
+    注意：本函式只動 error-patterns 下 bare PC 檔；其餘檔案完全不碰
+    （Never break userspace——既有 push 行為對非 PC 檔零變更）。
+    """
+    excluded: list[dict] = []
+    renumbered: list[dict] = []
+    untouched = 0
+    reserved: set[int] = set()  # 本輪已賦的新號，避免多檔撞同一 next-available
+
+    ep_root = remote_dir / "error-patterns"
+    if not ep_root.is_dir():
+        return {"excluded": excluded, "renumbered": renumbered, "untouched": 0}
+
+    # 收集 remote_dir 內所有 bare PC 檔（這些是「本地剛覆蓋上去的」候選）
+    for path in sorted(ep_root.rglob("PC-*.md")):
+        repo_rel = path.relative_to(remote_dir).as_posix()
+        if parse_pc_filename(repo_rel) is None:
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            untouched += 1
+            continue
+        plan = plan_push_pc_action(repo_rel, content, upstream_index, reserved)
+        action = plan["action"]
+        if action == "none":
+            untouched += 1
+            continue
+        if action == "exclude_lineage_artifact":
+            # artifact 不外推：從 remote 樹移除（canonical 已在上游）
+            if not dry_run:
+                path.unlink(missing_ok=True)
+            excluded.append({
+                "repo_rel": repo_rel,
+                "upstream_num": plan["upstream_num"],
+                "local_num": plan["local_num"],
+            })
+            continue
+        if action == "assign_canonical":
+            new_path = remote_dir / plan["new_repo_rel"]
+            if not dry_run:
+                # remote：移除舊號檔、寫入新 canonical 號檔（含 lineage）
+                path.unlink(missing_ok=True)
+                new_path.parent.mkdir(parents=True, exist_ok=True)
+                new_path.write_text(plan["new_content"], encoding="utf-8")
+            # 完整 plan 帶回，供 push 成功後套回本地 working tree
+            renumbered.append(dict(plan))
+    return {
+        "excluded": excluded,
+        "renumbered": renumbered,
+        "untouched": untouched,
+    }
+
+
+def writeback_local_canonical_assignments(
+    claude_dir: Path, renumbered: list[dict]
+) -> int:
+    """push 成功後把賦 canonical 號的結果套回本地 working tree。
+
+    對每個 assign_canonical 項：刪本地舊號檔、寫新號檔（含 lineage 註記），使
+    本地源保留「已重編」記憶——下次 push 即被規則 1（exclude_lineage_artifact）
+    辨識為 artifact 不再外推，達成自癒收斂。
+
+    僅在 push 成功後呼叫（規則 1.5：記憶寫入 at-most-once，須晚於確認世界副作用）。
+    回傳實際回寫的檔案數。
+    """
+    written = 0
+    for plan in renumbered:
+        old_local = claude_dir / plan["old_repo_rel"]
+        new_local = claude_dir / plan["new_repo_rel"]
+        if old_local.exists():
+            old_local.unlink()
+        new_local.parent.mkdir(parents=True, exist_ok=True)
+        new_local.write_text(plan["new_content"], encoding="utf-8")
+        written += 1
+    return written
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     """以 argparse 解析命令列參數（0.32.0-W1-008，PC-V1-001 防護）。
 
@@ -1385,6 +1902,22 @@ def main() -> None:
     try:
         run_git(["clone", REPO_URL, str(temp_dir)])
 
+        # 4.0 快照上游 PC 純態（copy 覆蓋前）+ 首跑對帳計畫（規則 3）。
+        # 必須在 copy_filtered_from_staging 之前——之後 temp_dir 已被本地覆蓋，
+        # 拿到的是混合樹而非上游純態。
+        upstream_pc_index = build_upstream_pc_index(temp_dir)
+        reconciliation_plan = plan_upstream_mess_reconciliation(upstream_pc_index)
+        if reconciliation_plan:
+            print_color(
+                f"偵測上游既存 PC mess（同 slug 重複號）：{len(reconciliation_plan)} 項待對帳",
+                "yellow",
+            )
+            for item in reconciliation_plan:
+                print_color(
+                    f"   [重複] slug={item['slug']} canonical=PC-{item['canonical_num']}"
+                    f" 誤推鏡像=PC-{item['duplicate_num']}（高號該移除）"
+                )
+
         # 4. Read remote version
         print_color("讀取遠端版本號...")
         version_file = temp_dir / "VERSION"
@@ -1449,21 +1982,61 @@ def main() -> None:
             )
             print_color("   注意: CLAUDE.md 不再同步（專案特定配置）")
 
+            # 孤兒偵測前重建 lineage 認領集（PC-APP-002 / W1-039）：本地 lineage
+            # 重編號檔認領的上游 canonical（如 PC-181 認領上游 PC-177-defensive）不算
+            # 孤兒，避免 --clean 誤刪框架 canonical。讓位後的 native intruder（PC-184
+            # 等，無 lineage）不認領上游，故上游殘留 PC-177-malformed 仍為真孤兒可清。
+            lineage_claimed = compute_lineage_claimed_upstream_files(claude_dir)
+            if lineage_claimed:
+                print_color(
+                    f"   lineage 認領上游 canonical：{len(lineage_claimed)} 個（孤兒偵測排除）",
+                    "green",
+                )
+
             # 7.5. 清理遠端過時檔案（僅 --clean 模式）。
             # 以 staging（tracked 樹）為基準：git rm 的檔不在 staging → 從遠端刪除（K）。
             if clean_mode:
                 print_color("清理遠端過時檔案（對齊 git tracked 樹）...")
-                deleted = clean_stale_files(temp_dir, staging_dir, preserve)
+                deleted = clean_stale_files(
+                    temp_dir, staging_dir, preserve, lineage_claimed
+                )
                 print_color(f"   已清理 {deleted} 個遠端過時檔案", "green")
             else:
                 # 未帶 --clean 時偵測本地已 git rm 但遠端殘留的孤兒（R2 soft 警告，
                 # 不阻擋、不改 --clean 預設）。在 staging rmtree 前計算並暫存，
                 # 待 push 成功後於結尾輸出提醒。
                 uncleaned_deletions = detect_uncleaned_deletions(
-                    temp_dir, staging_dir, preserve
+                    temp_dir, staging_dir, preserve, lineage_claimed
                 )
         finally:
             shutil.rmtree(staging_dir, ignore_errors=True)
+
+        # 7.55. PC 編號撞號對稱（規則 1 + 2，1.2.0-W1-038）：對 temp_dir 內剛覆蓋
+        # 的本地 PC 檔施加 push 端撞號處置——排除 lineage artifact、本地原生撞號
+        # 賦 canonical 號。upstream_pc_index 為 copy 之前快照的上游純態。
+        pc_collision_result = apply_push_pc_collision(
+            temp_dir, upstream_pc_index, dry_run=False
+        )
+        if pc_collision_result["excluded"]:
+            print_color(
+                f"   排除 {len(pc_collision_result['excluded'])} 個 pull 重編 artifact"
+                "（不外推，canonical 已在上游）",
+                "green",
+            )
+            for item in pc_collision_result["excluded"]:
+                print_color(
+                    f"     - {item['repo_rel']}"
+                    f"（lineage: 上游 PC-{item['upstream_num']} / 本地 PC-{item['local_num']}）"
+                )
+        if pc_collision_result["renumbered"]:
+            print_color(
+                f"   {len(pc_collision_result['renumbered'])} 個本地原生撞號賦 canonical 號",
+                "green",
+            )
+            for item in pc_collision_result["renumbered"]:
+                print_color(
+                    f"     - PC-{item['old_num']} -> PC-{item['new_num']}（slug={item['slug']}）"
+                )
 
         # 7.6. 還原 hook 檔案 executable bit（防止 push 出損壞 mode 到遠端）
         restored = restore_executable_bits(temp_dir)
@@ -1543,6 +2116,19 @@ def main() -> None:
             else:
                 print_color(f"推送失敗: {push_result.stderr}", "red")
             sys.exit(1)
+
+        # PC 撞號賦 canonical 後，push 成功才把結果套回本地 working tree（規則 1.5：
+        # 記憶寫入須晚於確認世界副作用，避免 push 失敗時本地殘留未實際外推的重編）。
+        if pc_collision_result["renumbered"]:
+            written = writeback_local_canonical_assignments(
+                claude_dir, pc_collision_result["renumbered"]
+            )
+            if written:
+                print_color(
+                    f"   已回寫 {written} 個本地 PC 檔（賦 canonical 號 + lineage 記憶），"
+                    "請 git add .claude && git commit 持久化",
+                    "yellow",
+                )
 
         # tagged-release：push 成功後對本版打 git tag（remote 可見），供下游 pin 特定版。
         create_and_push_version_tag(temp_dir, new_version)

@@ -55,4 +55,4 @@ CI 設定檔常在某張「單端」ticket 內順手誕生（例：server 硬化
 ## 相關
 
 - `.claude/rules/core/quality-baseline.md` 規則 1（測試綠燈 ≠ Runtime 正確 / 少量綠燈 ≠ always 綠燈）
-- `.claude/error-patterns/process-compliance/PC-178-ticket-body-uncommitted-git-restore-overwrite.md`（單環境綠燈遮蔽類）
+- `.claude/error-patterns/process-compliance/PC-182-ui-test-green-but-runtime-unreachable.md`（單環境綠燈遮蔽類）
