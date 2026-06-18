@@ -55,6 +55,8 @@ metadata:
 
 **Case 引用段落的三段式結構**：三段式是案例引用段落的順序紀律 — 把「概念 → 案例 → 操作」三層分開承擔（段首給概念定義、case 引用居中、通用工程知識展開）、讓段落結構跟讀者學習新概念的認知順序對齊。LLM 從 case 反推內容容易把 case 揭露當概念出發點、實證觀察 11/12 段都犯這個錯。詳見 [case-citation-three-part-structure](references/principles/case-citation-three-part-structure.md)。
 
+**原子筆記要有向上的議題入口**：承載知識的原子筆記（Zettelkasten 卡 / glossary / 術語條目）不是字典條目 — 字典答「這個詞是什麼」、承載知識答「你在討論什麼、撞到什麼問題、才需要這知識」。撰寫者有預設情境讀者沒有、所以每張卡（或其上層）要從情境進入而非劈頭給定義：建議題 hub（以讀者遇到的問題為題）討論再分流到原子卡、卡頂回指議題、讓搜尋直接落地者也有回路。沒這層卡淪字典、讀者沒有觸發點、不知何時用。詳見 [atomic-note-needs-situational-entry](references/principles/atomic-note-needs-situational-entry.md)。
+
 ### 4. 可查詢性（Searchability）
 
 關鍵字前置、使用可 grep 的分隔符（`:` `|` `→` `==`）、欄位名稱使用 regex 友善格式。命名讓 AI 能以單次 grep 命中，不需要語意推理。

@@ -59,9 +59,12 @@ metadata:
 
 - **A: Cadence + 字句層** — 句型同骨化（per [#122 cadence 同質化](references/principles/cadence-homogenization.md)）、廢話前綴、口語修辭、地區用語
 - **B: Reader simulation 旅程審查** — 假裝特定讀者類型（如「剛從入門影片進來的開發者」）、實際走學習路線、看入口判讀 / 內容門檻 / 跳出訊號
+- **B′: 冷讀 / 零脈絡單卡落地審查** — 假裝讀者**經搜尋或直連落在單一篇章**、毫無 section 與前後文脈絡，逐篇冷讀。專抓「洩漏撰寫者預設前提的行話」（如未定義就出現的「家族」「上述框架」「如前所述」）與「缺『為何讀這篇 / 何時會用到』的進入動機」。與 B 的關鍵差別：**B 是讀完全部、走路線的知情讀者，會自動腦補脈絡而看不見行話洩漏；B′ 是零脈絡冷讀者，才會立刻問「這裡突然冒出的 X 是什麼」**。原子化 / Zettelkasten / glossary / 任何可被直連或搜尋單獨抵達的內容，B′ 為必備 frame，不可只靠 B。
 - **C: Title commitment + cross-surface** — body 是否對齊 title 承諾、跨 surface（章節 ↔ report 卡 ↔ knowledge card）三角對齊
 
-預期 finding 類型：cadence 同骨化（多篇同位置同句型）、影片詞彙橋斷裂、enumeration 模板化。
+預期 finding 類型：cadence 同骨化（多篇同位置同句型）、影片詞彙橋斷裂、enumeration 模板化、**行話洩漏（預設脈絡未對冷讀者交代）、單篇缺進入動機**。
+
+> **B vs B′ 盲點（til/terms 實證）**：一組 14 張互連術語卡，知情 reviewer（讀完全部）判讀「讀者旅程」全 A，卻沒抓到每張卡都用「連到家族 / 概念家族」這個只有撰寫者懂的詞——冷讀者落在單卡會立刻卡住。教訓：知情 reviewer 的腦補正是盲點來源；原子內容必跑 B′ 冷讀 frame。
 
 ### Round 3：Self-application / Steelman / Outbound frame
 

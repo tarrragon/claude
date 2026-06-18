@@ -1,3 +1,15 @@
+## [1.54.9] - 2026-06-18
+
+### Summary
+docs: 回饋 report #169 — 新增「原子筆記要有議題入口」principle（）; docs: 補「冷讀/零脈絡單卡落地」frame（）
+
+Changes: 2 docs
+
+- docs: 回饋 report #169 — 新增「原子筆記要有議題入口」principle（）
+- docs: 補「冷讀/零脈絡單卡落地」frame（）
+
+---
+
 ## [1.54.8] - 2026-06-18
 
 ### Summary
