@@ -158,6 +158,29 @@ IMP ticket 修改 `src/` 字串輸出字面時，acceptance 必須補上 `npm te
 
 - `.claude/rules/core/test-assertion-design-rules.md`「延伸路由：src 字串輸出變更 acceptance 設計」章節
 
+#### 含 UI 的 IMP 額外 acceptance：集中化（1.2.0-W1-015 防護）
+
+含 UI 產出的 IMP ticket，acceptance 必須補上集中化驗收條目。
+
+**觸發條件**（任一成立即須補強）：
+
+- ticket `what` / `how` 含新增/修改畫面、widget、樣式、user-facing 文字
+- ticket `where.files` 含 UI 層檔案（screen / widget / theme / renderer 等）
+
+**必填 acceptance**（觸發後必須勾選）：
+
+| # | 驗證條件 | 說明 |
+|---|---------|------|
+| 1 | 本功能 user-facing 文字→i18n key、顏色→theme token、魔術數字→具名常數，無新增裸 `Color()` / 字面字串 / 字面尺寸 | grep 變更碼確認 |
+
+**Why**：1.2.0-W1-015 根因——既有 hook（l10n-sync / style-guardian）對「應有設施缺席」失明，只在設施已存在時生效。升為 per-feature acceptance gate，不依賴 greenfield 是否 bootstrap。
+**Consequence**：未補此維度的 UI IMP 可在無 i18n/theme 的專案通過驗收，硬編碼暢行至 1.0（v1.0 實證：app 21 文字 / 19 數字 / 18 顏色全程未攔）。
+**Action**：IMP claim 後若觸發，acceptance 補列集中化條目；純後端/CLI（Go server log）依語言慣例可標註豁免理由。
+
+**交叉引用**：
+
+- `.claude/methodologies/acceptance-criteria-methodology.md`「強制驗收維度：集中化」章節
+
 ### DOC（Documentation）
 
 **核心價值**：變更摘要 + 引用的檔案清單。

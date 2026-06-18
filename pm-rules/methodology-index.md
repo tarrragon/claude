@@ -64,6 +64,7 @@
 | systematic-debugging-methodology.md | 系統性除錯（程式碼層次 unused 警告） |
 | error-fix-refactor-methodology.md | 錯誤修復重構 |
 | operational-error-root-cause-methodology.md | 操作錯誤三層根因分析（操作行為失誤） |
+| empirical-decision-axis-discovery-methodology.md | 實證決策軸發現（從累積錯誤語料七軸分類推導主導軸、F判斷協議/D機械閘門分流、定期重新校準，核心判準） |
 
 ## 工具與系統
 

@@ -186,6 +186,12 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 如需在獨立分支工作，PM 會使用 `Agent(isolation: "worktree")` 派發，代理人無需自行建立分支。
 
+#### worktree 隔離派發時必須 commit 產品碼進 worktree 分支（強制，1.2.0-W1-028 事故一）
+
+> **Why**：worktree 隔離時，未提交工作樹只存在於該 worktree，PM 在主 repo `git status` 看不到，且 `ticket track complete` 只 auto-commit ticket metadata（frontmatter/log），不 commit 產品碼。
+> **Consequence**：實作 agent 若只建檔+跑測試卻未 commit 產品碼，worktree 分支上只有 metadata commit；PM `worktree remove --force` 即永久刪除未提交產品碼（git fsck 無 unreachable，無法復原），交付物遺失需重做整個 ticket。此為 1.2.0-W1-028 事故一實發根因。
+> **Action**：worktree 隔離派發時，回報完成前必須 `git add <where.files> && git commit -m "<描述>"` 將產品碼 commit 進 worktree 分支（僅 commit 不 push，未違反 PC-024 的 push 禁令）。此規則凌駕上表「Phase 3b+ 禁止 git commit」——worktree 隔離場景中 commit 進隔離分支是交付物可見性的前提，非主 repo 提交。
+
 #### worktree 隔離派發時禁用 dart MCP 寫入工具（強制，W3-008）
 
 > **Why**：worktree 隔離對 daemon-rooted 寫入工具不生效。dart MCP daemon 的 analysis root 在 session 啟動時綁定主 repo，worktree 派發只改 shell cwd，無法切換 daemon root；dart MCP 寫入會繞過隔離邊界洩漏污染主 repo 工作樹。

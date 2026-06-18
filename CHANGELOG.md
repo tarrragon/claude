@@ -1,3 +1,23 @@
+## [1.55.0] - 2026-06-18
+
+### Summary
+feat: 泛化 presence-detection hook 為 language-pluggable; feat: worktree 守護 hook + 規則（固化兩起事故）; feat: presence-detection hook（偵測應有設施缺席） (+7 more)
+
+Changes: 5 feat, 1 fix, 4 docs
+
+- feat: 泛化 presence-detection hook 為 language-pluggable
+- feat: worktree 守護 hook + 規則（固化兩起事故）
+- feat: presence-detection hook（偵測應有設施缺席）
+- feat: 落地集中化 acceptance 維度（prevention gate）
+- feat: 落地決策閘門預算+退場 meta 規則 + 並行層搬遷 pilot
+- fix: presence hook skip 對齊 sink 命名 + 排除 dev 訊息
+- docs: 補 see-also（linux 審查 should-fix）— 釐清 D 軸對帳與並行 session 層職責分工
+- docs: 落地 F+D 認知接地雙層 + 軸登錄協議（）
+- docs: 方法論修 basil 兩 Warning（G 軸語意化 + F 子軸可重跑邊界）
+- docs: 實證決策軸發現方法論
+
+---
+
 ## [1.54.9] - 2026-06-18
 
 ### Summary

@@ -43,6 +43,18 @@
 
 ---
 
+## 強制驗收維度：集中化（i18n / 常數 / token）
+
+**適用**：任何含 UI 產出的 IMP ticket（新增/修改畫面、widget、樣式、user-facing 文字）。
+
+含 UI 的 IMP 完成前，acceptance 必含一條集中化驗收：本 ticket 引入的 user-facing 文字、顏色、魔術數字皆已集中（i18n key / theme token / 具名常數），無新增裸 `Color()` / 字面字串 / 字面尺寸。
+
+- **Why**：1.2.0-W1-015 根因——框架既有 hook（l10n-sync / style-guardian）對「應有設施缺席」失明，edit-time 強制依賴設施存在才生效。升為 per-feature acceptance gate，使每個功能在驗收時被強制檢查，不再依賴 greenfield 是否 bootstrap 設施。
+- **Consequence**（不設此維度）：硬編碼在無 i18n/theme 的專案可暢行至 1.0（v1.0 實證：app 21 文字 / 19 數字 / 18 顏色全程未攔）。
+- **Action**：建含 UI 的 IMP 時，acceptance 加一條「集中化：本功能 user-facing 文字→i18n、顏色→token、魔術數字→常數，無新增裸值」，驗收以 grep 確認變更碼無裸 `Color()` / 字面字串。豁免：純後端 / CLI（如 Go server log）依語言慣例可標註豁免理由。
+
+---
+
 ## 確認方法矩陣
 
 ### 情境 x 確認方法對應表

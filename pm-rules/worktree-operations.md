@@ -144,6 +144,8 @@ Commit your changes on the worktree branch before reporting completion.
 - 若 ticket 是剛建立或剛更新，除 commit 外，prompt 必須附 ticket 絕對路徑，避免 IMP-066 的「worktree 看不到新 ticket」問題。
 - agent 回報完成後，不可只看主 repo `git status`；先查 `git worktree list` 和 `git log main..{branch}`。
 
+**實作 agent commit 紀律（強制，來源 1.2.0-W1-028 事故一）**：派發 worktree 實作 agent 的 prompt 必須明示「回報完成前，先 `git add <where.files> && git commit` 產品碼進 worktree 分支；ticket CLI 只 commit metadata，不代為 commit 產品碼」。PM 收到回報後用階段 2/3 的 `git log main..{branch}` + Guard A 驗證交付物確已 commit。完整論證（為何 ticket CLI 不 commit 產品碼、與 PC-024 push 禁令的邊界）見 `.claude/agents/AGENT_PRELOAD.md` 規則 6「worktree 隔離派發時必須 commit 產品碼進 worktree 分支」。
+
 ### `worktree.sparsePaths`
 
 大型或檔案所有權明確的任務可設定 sparse checkout 範圍，讓 worktree 只暴露必要路徑：
@@ -192,8 +194,10 @@ ticket_id, worktree_path, branch, base_commit, created_at, removed_at
 
 | 觸發時機 | 檢查內容 | 防護機制 |
 |---------|---------|---------|
+| **派發 worktree 前**（Guard B） | 主 repo HEAD 是否漂移離開 main | worktree-pre-dispatch-branch-drift-hook（阻擋 exit 2） |
 | **Agent 完成後**（最重要） | worktree 未合併 commit | agent-commit-verification-hook（自動提醒）+ PM 主動合併 |
 | **ticket complete 前** | 所有 worktree 合併狀態 | worktree-merge-reminder-hook（自動提醒）+ Checkpoint 1.9 |
+| **worktree remove 前**（Guard A） | 分支是否有未 merge 進 main 的交付物 | worktree-remove-deliverable-check-hook（阻擋 exit 2）+ PM 固定值驗證硬規則 |
 | **切換 Ticket 前** | 殘留 worktree | PM 主動執行 `git worktree list` |
 | **handoff/session 結束前** | 所有 worktree + 未提交 | PM 主動檢查 |
 | **push 前** | 確認所有 worktree 已合併 | worktree-branch-check-hook（自動提醒） |
@@ -231,6 +235,20 @@ git branch -d {branch}
 
 **禁止**：main 上有未提交變更時派發 worktree agent。
 
+#### Guard B 前置：派發前確認主 repo 未漂移（來源 1.2.0-W1-028 事故二）
+
+> **Why**：cwd 污染後主 repo HEAD 可能漂移到 feat 分支（如 `feat/<ticket>-...`）。在漂移基底上派發 worktree，後續 `git -C <main> merge` 會落在誤切分支而非 main，`push` 顯示 up-to-date 但 `git log main` 查無交付物，工作落錯位置難以察覺。
+> **Consequence**：交付物 merge 進 feat 分支而非 main，PM 誤以為已完成，實際 main 無變更。
+> **Action**：每次 worktree 派發前，用世界平面固定值確認主 repo 分支：
+
+```bash
+git -C <project-root> branch --show-current   # 必須回 main/master
+```
+
+非 main/master 時，先 `git checkout main` 校正再派發。`worktree-pre-dispatch-branch-drift-hook` 在 `isolation: worktree` 派發時自動檢查並阻擋漂移（exit 2）。
+
+**禁止**：用 cwd-relative 查詢（裸 `git status`、`git branch`）推斷主 repo 狀態——cwd 在 worktree 內時會回 worktree 分支狀態，騙過判斷（tool-output-trust 規則 3：關鍵事實一律用固定值/明示 ref）。
+
 ### 階段 2：合併時（Post-agent）
 
 | 步驟 | 動作 | 原因 |
@@ -254,10 +272,27 @@ git branch -d {branch}
 
 | 步驟 | 動作 | 原因 |
 |------|------|------|
-| 1 | 確認產出物已在 main 上且測試通過 | 清理前驗證 |
-| 2 | `git worktree remove .claude/worktrees/agent-{id} --force` | 移除 worktree |
-| 3 | `git branch -D worktree-agent-{id}` | 刪除對應分支 |
-| 4 | 確認 `git worktree list` 無殘留 | 驗證清理完成 |
+| 1 | **Guard A：用固定值驗證 ticket 交付物確在 main**（見下） | **強制**，防 1.2.0-W1-028 事故一資料遺失 |
+| 2 | 確認產出物已在 main 上且測試通過 | 清理前驗證 |
+| 3 | `git worktree remove .claude/worktrees/agent-{id} --force` | 移除 worktree |
+| 4 | `git branch -D worktree-agent-{id}` | 刪除對應分支 |
+| 5 | 確認 `git worktree list` 無殘留 | 驗證清理完成 |
+
+#### Guard A：remove 前必須驗證交付物已落地 main（PM 硬規則，來源 1.2.0-W1-028 事故一）
+
+> **Why**：實作 agent 在 worktree 建檔+測試通過但只 ticket CLI auto-commit metadata、未 git commit 產品碼時，PM merge 僅得 metadata（merge stat「1 file changed」是紅旗）。此時 `worktree remove --force` 會永久刪除未提交工作樹，`git fsck` 無 unreachable，產品碼無法復原。
+> **Consequence**：ticket 交付物（產品碼）永久遺失，需重做整個 ticket。
+> **Action**：`git worktree remove` 前，對每個 `where.files` 用世界平面固定值（非 cwd-relative 推斷）確認確在 main：
+
+```bash
+# 擇一，皆以 main ref 為準（固定值，tool-output-trust 規則 3）
+git show main:<where.files> | head        # 有內容才代表已落地
+git ls-tree -r main --name-only | grep <file>   # 命中才代表已落地
+```
+
+任一交付物在 main 查無內容 → **禁止 remove**，先 merge/cherry-pick 該 worktree 分支。
+
+**自動防護**：`worktree-remove-deliverable-check-hook`（PreToolUse:Bash）偵測 `git worktree remove`，若該 worktree 分支有未 merge 進 main 的 commit（`git log main..<branch>` 觸及檔案）→ 阻擋（exit 2）。`--force` 不繞過此檢查（檢查在 hook 層，先於 git 執行）。
 
 **批量清理**：
 
@@ -373,9 +408,10 @@ subagent 在任何 cwd 都可 Read worktree 內的 `.claude/` 檔案。可用於
 ### 派發前
 - [ ] main 上 `git status` 為 clean？
 - [ ] Ticket 狀態已更新且 committed？
+- [ ] **Guard B：`git -C <project-root> branch --show-current` 確認主 repo 在 main/master（未漂移）？**
 - [ ] 已選擇 `--worktree` / `-w` 人工 session 或 `isolation: worktree` subagent？
 - [ ] 若使用 `worktree.sparsePaths`，是否包含 source / tests / fixtures / ticket？
-- [ ] Agent prompt 包含 `Ticket: {id}`？
+- [ ] Agent prompt 包含 `Ticket: {id}` + **commit 紀律提示（回報前 commit 產品碼進 worktree 分支）**？
 - [ ] 若 prompt 提及 `.claude/` 路徑 Edit/Write，cwd 為**主 repo**（非 worktree）？（ARCH-015）
 
 ### 合併時
@@ -386,6 +422,7 @@ subagent 在任何 cwd 都可 Read worktree 內的 `.claude/` 檔案。可用於
 - [ ] 合併到 main 後測試通過？
 
 ### 清理後
+- [ ] **Guard A：每個 `where.files` 已用 `git show main:<file>` / `git ls-tree -r main` 固定值驗證確在 main？**
 - [ ] 產出物已 commit 到 main？
 - [ ] Worktree 和分支已刪除？
 - [ ] `WorktreeRemove` 事件或等效紀錄已可追溯？
@@ -428,10 +465,15 @@ subagent 在任何 cwd 都可 Read worktree 內的 `.claude/` 檔案。可用於
 - .claude/pm-rules/command-routing.md - DOC/ANA/IMP/TST 分工路由
 - .claude/pm-rules/decision-tree.md - Checkpoint 1.9 Worktree 合併
 - .claude/rules/core/bash-tool-usage-rules.md - 禁止 cd 污染
+- .claude/rules/core/tool-output-trust-rules.md - 規則 3：關鍵事實用固定值驗證（Guard A/B 信任層依據）
+- .claude/skills/worktree/hooks/worktree-remove-deliverable-check-hook.py - Guard A 強制層
+- .claude/skills/worktree/hooks/worktree-pre-dispatch-branch-drift-hook.py - Guard B 強制層
 
 ---
 
-**Last Updated**: 2026-05-26
+**Last Updated**: 2026-06-18
+**Version**: 2.4.0 - 落地 1.2.0-W1-028 兩守護：Guard A（階段 3 remove 前固定值驗證交付物在 main + remove-deliverable-check-hook 強制層 + 實作 agent commit 紀律）防未提交碼遺失；Guard B（階段 1 派發前主 repo 分支漂移檢查 + pre-dispatch-branch-drift-hook 強制層）防 cwd 污染致 merge 落錯處；觸發點表與派發前/清理後檢查清單同步補列
+
 **Version**: 2.3.0 - 「目前建議」章節升級為策略 C 條件式採用（W3-034.4 並行受控實驗 3/3 success 落地）；新增 Action 表分 5 場景對應 bgIsolation 設定 + 未驗證情境表 + 不採策略 B 理由
 
 **Version**: 2.2.0 - 補充 CC worktree 入口、sparsePaths、Hook events 與 stale cleanup
