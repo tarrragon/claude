@@ -290,8 +290,8 @@ class TestMainBehavior:
         assert exit_code == 0
         assert out.strip() == "" or "BARE_CD" not in out
 
-    def test_bare_cd_emits_allow_not_deny(self, monkeypatch, capsys):
-        """裸 cd 命中 emit warn，permission_decision=allow（不 deny）。"""
+    def test_bare_cd_emits_deny(self, monkeypatch, capsys):
+        """裸 cd 命中 → permission_decision=deny（IMP-008 升級），reason 含指引。"""
         import json
 
         exit_code, out = self._run_main(
@@ -305,11 +305,14 @@ class TestMainBehavior:
         assert exit_code == 0
         assert out.strip() != ""
         payload = json.loads(out)
-        decision = (
-            payload.get("hookSpecificOutput", {}).get("permissionDecision")
-        )
-        assert decision == "allow"
-        assert "git -C" in out
+        hso = payload.get("hookSpecificOutput", {})
+        assert hso.get("permissionDecision") == "deny"
+        reason = hso.get("permissionDecisionReason", "")
+        # reason 含命中 target + 三種替代指引
+        assert "subdir" in reason
+        assert "git -C" in reason
+        assert "uv -d" in reason
+        assert "cd <dir>" in reason or "(cd" in reason
 
     def test_clean_command_no_warning(self, monkeypatch, capsys):
         """合法命令（git -C）無警告輸出。"""
@@ -342,6 +345,150 @@ class TestMainBehavior:
         # 命中日誌應包含完整命令（含被截斷區段尾端的特徵）
         joined = "\n".join(rec.getMessage() for rec in caplog.records)
         assert long_target in joined
+
+
+# ============================================================================
+# DENY 升級行為（1.2.0-W1-003）：bare cd 各 connector → deny
+# ============================================================================
+
+_literal_offset_ranges = hook_module._literal_offset_ranges
+_offset_in_literal = hook_module._offset_in_literal
+
+
+def _run_main_local(monkeypatch, capsys, command):
+    import io
+    import json
+
+    monkeypatch.setattr(
+        "sys.stdin",
+        io.StringIO(json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})),
+    )
+    exit_code = hook_module.main()
+    out = capsys.readouterr().out
+    return exit_code, out
+
+
+def _decision(out):
+    import json
+
+    if not out.strip():
+        return None
+    return json.loads(out).get("hookSpecificOutput", {}).get("permissionDecision")
+
+
+class TestBareCdDenyBehavior:
+    """bare cd 各命中形式 → permission_decision == deny。"""
+
+    def test_leading_cd_deny(self, monkeypatch, capsys):
+        _, out = _run_main_local(monkeypatch, capsys, "cd subdir")
+        assert _decision(out) == "deny"
+
+    def test_and_chained_cd_deny(self, monkeypatch, capsys):
+        _, out = _run_main_local(monkeypatch, capsys, "git status && cd subdir")
+        assert _decision(out) == "deny"
+
+    def test_semicolon_chained_cd_deny(self, monkeypatch, capsys):
+        _, out = _run_main_local(monkeypatch, capsys, "echo x; cd subdir")
+        assert _decision(out) == "deny"
+
+    def test_or_chained_cd_deny(self, monkeypatch, capsys):
+        _, out = _run_main_local(monkeypatch, capsys, "test -d x || cd fallback")
+        assert _decision(out) == "deny"
+
+    def test_pushd_deny(self, monkeypatch, capsys):
+        _, out = _run_main_local(monkeypatch, capsys, "pushd subdir")
+        assert _decision(out) == "deny"
+
+    def test_subshell_cd_not_deny(self, monkeypatch, capsys):
+        """子 shell 內 cd 不 deny（無輸出 = allow）。"""
+        _, out = _run_main_local(monkeypatch, capsys, "(cd subdir && ls)")
+        assert _decision(out) is None
+
+
+class TestSedPerlStillWarn:
+    """sed/perl 原地編輯維持 warn（allow），未被 deny 波及。"""
+
+    def test_sed_inplace_allow(self, monkeypatch, capsys):
+        _, out = _run_main_local(monkeypatch, capsys, "sed -i 's/a/b/' f.txt")
+        assert _decision(out) == "allow"
+
+    def test_perl_pi_allow(self, monkeypatch, capsys):
+        _, out = _run_main_local(monkeypatch, capsys, "perl -pi -e 's/a/b/' f.txt")
+        assert _decision(out) == "allow"
+
+    def test_cd_plus_edit_deny_wins(self, monkeypatch, capsys):
+        """cd + sed 同時命中 → 以 deny 為準。"""
+        _, out = _run_main_local(
+            monkeypatch, capsys, "cd subdir && sed -i 's/a/b/' f.txt"
+        )
+        assert _decision(out) == "deny"
+
+
+# ============================================================================
+# FP 抑制（1.2.0-W1-003）：heredoc body / quoted 字串內的字面 cd 不算裸 cd
+# ============================================================================
+
+
+class TestLiteralCdSuppression:
+    """heredoc/quoted 內字面 cd 不命中 → 不 deny（_detect_bare_cd False）。"""
+
+    def test_heredoc_body_cd_not_hit(self):
+        cmd = "cat <<EOF > script.sh\ncd /x\nrun\nEOF"
+        assert _detect_bare_cd(cmd) is False
+
+    def test_heredoc_dash_body_cd_not_hit(self):
+        cmd = "cat <<-EOF\n\tcd /x\nEOF"
+        assert _detect_bare_cd(cmd) is False
+
+    def test_heredoc_quoted_delim_cd_not_hit(self):
+        cmd = "cat <<'EOF'\ncd /x\nEOF"
+        assert _detect_bare_cd(cmd) is False
+
+    def test_single_quoted_cd_not_hit(self):
+        assert _detect_bare_cd("echo 'cd /x'") is False
+
+    def test_double_quoted_cd_not_hit(self):
+        assert _detect_bare_cd('echo "cd /x"') is False
+
+    def test_heredoc_body_cd_not_deny(self, monkeypatch, capsys):
+        cmd = "cat <<EOF > s.sh\ncd /x\nEOF"
+        _, out = _run_main_local(monkeypatch, capsys, cmd)
+        assert _decision(out) is None
+
+    def test_quoted_cd_not_deny(self, monkeypatch, capsys):
+        _, out = _run_main_local(monkeypatch, capsys, "echo 'cd /x'")
+        assert _decision(out) is None
+
+    def test_real_cd_outside_heredoc_still_hit(self):
+        """heredoc 之外的真正裸 cd 仍命中（抑制不過度）。"""
+        cmd = "cd /real\ncat <<EOF\ncd /x\nEOF"
+        assert _detect_bare_cd(cmd) is True
+
+    def test_real_cd_after_quoted_still_hit(self):
+        """quoted 之後的真正裸 cd 仍命中。"""
+        assert _detect_bare_cd("echo 'cd /x' && cd /real") is True
+
+
+class TestLiteralOffsetRanges:
+    """字面區段 offset 計算單元測試。"""
+
+    def test_quote_range(self):
+        cmd = "echo 'cd /x'"
+        ranges = _literal_offset_ranges(cmd)
+        # 找出 cd 的 offset，應落在某區段內
+        idx = cmd.index("cd")
+        assert _offset_in_literal(idx, ranges) is True
+
+    def test_heredoc_range(self):
+        cmd = "cat <<EOF\ncd /x\nEOF"
+        ranges = _literal_offset_ranges(cmd)
+        idx = cmd.index("cd /x")
+        assert _offset_in_literal(idx, ranges) is True
+
+    def test_outside_literal(self):
+        cmd = "cd /x"
+        ranges = _literal_offset_ranges(cmd)
+        assert _offset_in_literal(0, ranges) is False
 
 
 if __name__ == "__main__":
