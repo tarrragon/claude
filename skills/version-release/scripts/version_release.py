@@ -439,7 +439,10 @@ def detect_version() -> Optional[str]:
         pass
 
     # 2. 嘗試從版本檔案偵測（語言感知）
-    version_files = detect_version_files(root)
+    # Gap 2：優先採 resolve_version_source（honor version_source.primary，含子目錄），
+    #        fallback 至 root 掃描，使 monorepo 子目錄版本檔可被偵測
+    config = load_version_release_config(root)
+    version_files = resolve_sync_version_files(root, config)
     for file_path, parser_type in version_files:
         version = extract_version_from_file(file_path, parser_type)
         if version:
@@ -577,7 +580,14 @@ def check_worklog_completed(version: str) -> Tuple[bool, List[str]]:
     # 優先檢查版本子目錄中的主工作日誌
     main_worklog = version_subdir / f"v{version}-main.md"
     if not main_worklog.exists():
-        # fallback：檢查根目錄（舊結構）
+        # Gap 5 fallback 1：版本子目錄內任一 v{version}*.md 視為主日誌
+        #   （並非所有專案都用 -main.md 命名慣例；放寬避免誤 FAIL）
+        if version_subdir.exists():
+            candidates = sorted(version_subdir.glob(f"v{version}*.md"))
+            if candidates:
+                main_worklog = candidates[0]
+    if not main_worklog.exists():
+        # fallback 2：檢查根目錄（舊結構）
         main_worklog = worklog_dir / f"v{major_minor}.0-main.md"
 
     if main_worklog.exists():
@@ -1231,19 +1241,48 @@ def print_version_sync_report(sync_result: dict):
     print()
 
 
+def resolve_sync_version_files(
+    root: Path, config: dict
+) -> List[Tuple[Path, str]]:
+    """決定版本同步/驗證時要檢查的版本檔清單。
+
+    優先採 resolve_version_source（honor config.version_source.primary，
+    含 monorepo 子目錄版本檔如 app/pubspec.yaml），fallback 至
+    detect_version_files（只掃 root）以維持向後相容。
+
+    Gap 2（unified-monorepo enabler）：使 project_type:monorepo + 頂層
+    version_source（無 subprojects）的子目錄版本檔能被偵測、報告、驗證。
+
+    Args:
+        root: 專案根目錄
+        config: load_version_release_config() 回傳的配置字典
+
+    Returns:
+        [(absolute_path, parser_type), ...]；空 list 表示走 git-tag 或無版本檔
+    """
+    primary_path, parser_type = resolve_version_source(root, config)
+    if primary_path is not None:
+        return [(primary_path, parser_type)]
+    # primary 為 None：git-tag 策略或無 version_source，fallback 至 root 掃描
+    return detect_version_files(root)
+
+
 def check_version_sync(version: str) -> Tuple[bool, List[str]]:
-    """檢查版本號同步（package.json + manifest.json）"""
+    """檢查版本號同步（依 project_type 報告對應版本源）"""
     root = get_project_root()
     errors = []
 
-    # 檢查 Chrome Extension 雙版本同步
     print_info("  檢查版本同步...")
     config = load_version_release_config(root)
-    sync_result = check_version_sync_dual(version, config)
-    print_version_sync_report(sync_result)
+    project_type = config.get("project_type") or detect_project_type(root)
 
-    # 偵測版本檔案（動態，語言感知）
-    version_files = detect_version_files(root)
+    # Gap 1：僅 chrome-ext 印雙版本來源 dual report，其餘印對應版本源摘要
+    if project_type == PROJECT_TYPE_CHROME_EXT:
+        sync_result = check_version_sync_dual(version, config)
+        print_version_sync_report(sync_result)
+
+    # Gap 2：優先採 resolve_version_source（honor version_source.primary，含子目錄）
+    version_files = resolve_sync_version_files(root, config)
 
     if version_files:
         # 檢查所有偵測到的版本檔（僅警告，不阻塞）
@@ -1263,29 +1302,34 @@ def check_version_sync(version: str) -> Tuple[bool, List[str]]:
             except Exception as e:
                 print_warning(f"讀取 {file_path.name} 失敗: {e}")
     else:
-        # 沒有找到版本檔（純規格版本或其他情況）
-        print_warning("未偵測到版本檔案（package.json/manifest.json）")
-        print_info("  請確認專案根目錄下有 package.json 和 manifest.json")
+        # 沒有找到版本檔（純規格版本 / git-tag 策略 / 其他情況）
+        print_warning("未偵測到版本檔案")
+        print_info("  請確認 .version-release.yaml 的 version_source 設定或專案根目錄版本檔")
 
     # 檢查當前分支（僅警告，不同專案可能有不同分支命名慣例）
-    try:
-        result = subprocess.run(
-            ["git", "branch", "--show-current"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0:
-            current_branch = result.stdout.strip()
-            major_minor = extract_major_minor(version)
-            expected_branch = f"feature/v{major_minor}"
-            if current_branch != expected_branch:
-                print_warning(
-                    f"當前分支: {current_branch} (慣例為 {expected_branch})"
-                )
-    except Exception as e:
-        print_warning(f"檢查 git 分支失敗: {e}")
+    # Gap 3：trunk 工作流（all-on-main）無 feature 分支慣例，跳過此警告
+    release_workflow = config.get(
+        "release_workflow", DEFAULT_VERSION_RELEASE_CONFIG["release_workflow"]
+    )
+    if release_workflow != "trunk":
+        try:
+            result = subprocess.run(
+                ["git", "branch", "--show-current"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                current_branch = result.stdout.strip()
+                major_minor = extract_major_minor(version)
+                expected_branch = f"feature/v{major_minor}"
+                if current_branch != expected_branch:
+                    print_warning(
+                        f"當前分支: {current_branch} (慣例為 {expected_branch})"
+                    )
+        except Exception as e:
+            print_warning(f"檢查 git 分支失敗: {e}")
 
     # 檢查工作目錄是否乾淨
     try:
@@ -2353,11 +2397,13 @@ def update_todolist(version: str, dry_run: bool = False) -> bool:
 def verify_version_files(version: str) -> bool:
     """驗證所有版本檔"""
     root = get_project_root()
-    version_files = detect_version_files(root)
+    # Gap 2：優先採 resolve_version_source（honor version_source.primary，含子目錄）
+    config = load_version_release_config(root)
+    version_files = resolve_sync_version_files(root, config)
 
     if not version_files:
-        print_warning("未偵測到版本檔案（package.json/manifest.json）")
-        print_info("  請確認專案根目錄下有 package.json 和 manifest.json", 1)
+        print_warning("未偵測到版本檔案")
+        print_info("  請確認 .version-release.yaml 的 version_source 設定或專案根目錄版本檔", 1)
         return True  # 不阻塞發布流程
 
     for file_path, parser_type in version_files:
