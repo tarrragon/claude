@@ -1,3 +1,14 @@
+## [1.56.2] - 2026-06-19
+
+### Summary
+chore: pull .claude 更新（上游 73a76fb4866a）
+
+Changes: 1 chore
+
+- chore: pull .claude 更新（上游 73a76fb4866a）
+
+---
+
 ## [1.56.1] - 2026-06-19
 
 ### Summary
