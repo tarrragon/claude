@@ -1,3 +1,14 @@
+## [1.54.6] - 2026-06-18
+
+### Summary
+chore: pull .claude 更新（上游 9e734b9，含 PR #5/#6 merge）
+
+Changes: 1 chore
+
+- chore: pull .claude 更新（上游 9e734b9，含 PR #5/#6 merge）
+
+---
+
 ## [1.54.5] - 2026-06-18
 
 ### Summary

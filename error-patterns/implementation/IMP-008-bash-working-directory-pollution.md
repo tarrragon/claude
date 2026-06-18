@@ -67,8 +67,9 @@ cd /project/root && ./scripts/sync-push.sh
 | 日期 | 情境 | 復發細節 | 教訓 |
 |------|------|---------|------|
 | 2026-06-15（W8-049 session） | PM 跑 skill 測試 + 還原 cwd | 兩次裸 cd 違反規則一：(1) `cd .../broken-link-check && python3 -m pytest`（跑測試）；(2) `cd /project/root && grep ...`（還原兼驗證）。PreToolUse `[Bash Edit Guard]` hook 兩次皆 WARN 但屬非阻擋層，cd 仍執行 → cwd 汙染使後續相對路徑 grep 假性 No such file、第二次觸發 chpwd ls 淹沒（IMP-056）干擾 git status 判讀。 | warning-only 提示不足以阻止復發——在場 WARNING 仍被忽略。連「跑測試」「還原 cwd」這類看似無害操作也須一律用子 shell `(cd ... && cmd)` 或 `uv run --project <dir>`；裸 cd 無例外豁免。 |
+| 2026-06-18（app_tunnel v1.2.0） | PM 跑診斷散落多次裸 cd（`cd .../skills/ticket`、`cd /project/app_tunnel; ...`） | cwd 停在 `.claude/skills/ticket` 後，**安裝版 `ticket` CLI 的 `get_project_root()` 從錯誤 cwd 解析**，`ticket track list/complete` 回「沒有 Tickets / 找不到 Ticket」——但 ticket md 與索引皆正常。PM 未先察覺 cwd 汙染，**連環提出三個錯誤假設**（sync-pull 的 track.py 回歸、frontmatter 損壞、.version-release.yaml config 破壞）並逐一查證，耗費多輪。最終 `cd /project/app_tunnel` 還原 cwd 後一切正常。多次 `[Bash Edit Guard]` WARN 全程在場被忽略。 | 新症狀類：cwd 汙染不只使相對路徑失敗，更使**下游工具 `get_project_root()` 解析到錯誤 root → 假性「找不到資源」false negative → 連環錯誤假設瀑布**。「工具回報找不到」時，**第一順位排查 cwd**（`pwd`）而非懷疑工具/資料損壞（對齊 tool-output-trust 規則 5：記錄/工具回報非 ground truth，世界平面以 cwd-correct 重查為準）。warning-only 已三度被忽略 → 升級為 DENY（見下）。 |
 
-> **Why warning-only 不夠**：本案 hook 已在 context 印出明確 WARN，PM 仍二度裸 cd。提示層對「順手 cd」的攔截力有限，根治靠子 shell 成為肌肉記憶（規則一首選方案），非依賴事後提示。
+> **Why warning-only 不夠（已三度復發）**：hook 每次都在 context 印出明確 WARN，PM 仍重複裸 cd。提示層對「順手 cd」攔截力不足。**根治升級**：既然依設計（子 shell / `git -C` / `uv -d` / 絕對路徑）從不需要持久 cd，bare cd 永遠是錯誤 → `bash-edit-guard-hook` 由 WARN 升級為 **DENY**（在命令送出當下擋下，cwd 永不被汙染），並補 heredoc/quoted 內字面 cd 的 FP 抑制（上游 PR，framework hook）。預防 > 事後提示。
 
 ---
 
