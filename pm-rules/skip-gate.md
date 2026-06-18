@@ -160,6 +160,20 @@ incident-responder 分析和分類
 | 格式化問題 | 縮排、空格 | 使用 lint 工具自動修復、記錄到日誌 |
 | 文件更新 | 非程式碼修改 | 不影響功能、記錄到日誌 |
 
+### SA 前置審查提醒的假陽性邊界
+
+`process-skip-guard` hook 偵測到「跳過 SA 前置審查」意圖時會發 AskUserQuestion 提醒。此提醒為**關鍵字偵測**，下列情境屬假陽性（PM 可 judge-past，但**須在回應或 ticket 記錄 rationale**，不可靜默跳過）：
+
+| 假陽性情境 | 為何 moot | 判據 |
+|-----------|----------|------|
+| 任務已完成（post-hoc 觸發） | SA 前置審查是 **pre-implementation** gate；任務已完成時無「前置」可言，結構性 moot | ticket 已 complete / 工作已交付 |
+| 修復形態 + 外部 review | hook 訊息自承「修復類可能不需要」；bug-fix 變更且已走 PR review（同等或更強的外部審查）時，SA 前置審查非必要 | 非新功能/架構變更 AND 已有 PR review |
+| 僅討論 / 引用 skip-gate | hook 對「討論或引用」skip-gate 字樣（如本規則、回顧、引文）誤觸，非「意圖跳過」 | 訊息語意為描述/引用而非執行跳過 |
+
+**必須 honor（不可 judge-past）**：**新功能或架構變更的 pre-implementation 階段**——此時 SA 前置審查是實質防護，須派發 saffron-system-analyst。
+
+**Why/Consequence**：關鍵字偵測無法區分「意圖跳過」與「結構上不適用 / 僅討論」；不明訂邊界則 PM 每次臨場判斷，或誤 honor 一個對已完成任務 moot 的 SA 審查（浪費回合），或對真正的新功能 pre-implementation 誤判為假陽性而跳過實質防護。**Action**：對照上表判定；判定為假陽性時記 rationale；落入「必須 honor」則執行完整 SA 前置審查流程。
+
 ### 規則 5：主線程編輯限制（Level 3）
 
 主線程（rosemary-project-manager）只能編輯以下檔案範圍：
