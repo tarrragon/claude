@@ -7,6 +7,7 @@ tests/test_branch_extraction.py
 tests/test_git_utils_extensions.py
 tests/test_helper_functions.py
 tests/test_hook_integration.py
+tests/test_orphan_agent_branch_audit.py
 tests/test_path_resolution.py
 tests/test_ticket_id_parsing.py
 tests/test_worktree_auto_commit_hook.py
@@ -14,6 +15,7 @@ tests/test_worktree_cleanup.py
 tests/test_worktree_creation.py
 tests/test_worktree_merge.py
 tests/test_worktree_status.py
+tests/test_worktree_zombie_branch_cleanup.py
 worktree_skill.egg-info/PKG-INFO
 worktree_skill.egg-info/SOURCES.txt
 worktree_skill.egg-info/dependency_links.txt

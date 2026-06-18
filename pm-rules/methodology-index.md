@@ -47,6 +47,7 @@
 | ticket-design-dispatch-methodology.md | Ticket 設計與派發 |
 | tdd-ticket-integration-methodology.md | TDD 與 Ticket 整合 |
 | .claude/skills/compositional-writing/references/writing-documents.md | 工作日誌撰寫 |
+| .claude/skills/version-release/references/monorepo-versioning-strategy.md | monorepo 單一版本 vs 子專案獨立版本取捨判準（交叉指標） |
 | suggestion-tracking-methodology.md | 建議追蹤 |
 
 ## 分析與決策
