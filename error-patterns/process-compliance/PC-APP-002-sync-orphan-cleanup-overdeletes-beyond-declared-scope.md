@@ -52,6 +52,24 @@ c014eccf「.claude 框架追平至 ce0dcd7（清 16 孤兒 + 框架演進）」c
 
 **Action**：sync 孤兒清理刪除前以 preserve 清單過濾候選；commit 前對帳宣稱與實際刪除數；見 preserve「檔案不存在」警告時用 git 全歷史追溯刪除點，確認誤刪後從刪除 commit 父版復原並還原 hook 登記與執行權限。
 
+## push 側變體：--clean 過刪「本地重編號的上游 canonical」
+
+孤兒過刪不只發生在 pull 側。`sync-push` 的 `--clean` 以「本地 tracked 有無此檔名」判定遠端孤兒，缺「此遠端檔是否為本地已重編號的同一 canonical」這條維度，會把**上游 canonical 原始 pattern 誤判為可刪孤兒**。
+
+**機制**：當上游 flat 號（如 `PC-177`）的檔名在本地不存在——因為本地 flat 177 早被別的 pattern 佔用，sync-pull 把上游 PC-177 重編為 `PC-181`（同 slug，附「上游編號 PC-177」溯源註解）——`sync-push` 偵測到「遠端有 `PC-177-<slug>`、本地無同檔名」即列為孤兒，提示 `--clean`。照跑會刪掉遠端 canonical PC-177。
+
+**Consequence**：刪遠端 canonical 後，本地 PC-181 溯源註解指向的上游錨點消失、其他 consumer 引用的 canonical PC-177 被刪、且破壞「pull 時重編去重」的設計（溯源註解明說遠端應保留原號供下次 pull 去重）。內容雖活在本地重編號檔（PC-181），但 canonical 錨點與跨 consumer 引用受害。此為 pull 側過刪的鏡像——同樣是孤兒判定缺正交維度，只是方向相反。
+
+**Action（--clean 前必查溯源）**：
+
+| 步驟 | 動作 | 目的 |
+|------|------|------|
+| 1 | sync-push 提示孤兒時，對每個孤兒檔取其 slug，於本地 `error-patterns/` 搜同 slug 的重編號檔（`grep -rl "<slug>"`） | 辨識「重編號的 canonical」vs「真孤兒」 |
+| 2 | 命中同 slug 重編號檔，且其開頭有「上游編號 PC-NNN」溯源註解 → 該孤兒是 canonical，**不可 --clean** | 攔下過刪 canonical |
+| 3 | 確認無同 slug、無溯源指向 → 才是真孤兒，可 --clean 傳播刪除 | 保留真正的清理能力 |
+
+**判別準則**：孤兒檔名的 flat 號是否在本地被「同 slug + 溯源註解」的重編號檔認領。認領＝canonical 假陽性（保留）；未認領＝真孤兒（可刪）。
+
 ## 相關
 
 - `.claude/rules/core/tool-output-trust-rules.md` 規則 5「記錄平面不是 ground truth」——commit 訊息（宣稱）vs git 實際刪除（世界平面）的對帳即此規則的應用。
@@ -61,4 +79,4 @@ c014eccf「.claude 框架追平至 ce0dcd7（清 16 孤兒 + 框架演進）」c
 
 ---
 
-**Last Updated**: 2026-06-16 | **Version**: 1.1.0 — 標記框架級（canonical-bound）+ 防護內建 sync 腳本路由（0.32.0-W1-006）；補根因三因素疊加機制句（basil-writing-critic 審查建議）。**Version**: 1.0.0 — 初始建立（c014eccf 宣稱清 16 實刪 30，誤刪 10 個 preserve 標記專案特化檔，2026-06-16 sync-pull 警告揭露 + c014eccf^ 復原）。**Source**: sync-pull 第二輪 preserve 警告 git 考古。
+**Last Updated**: 2026-06-18 | **Version**: 1.2.0 — 新增「push 側變體：--clean 過刪本地重編號的上游 canonical」章節（pull 側過刪的鏡像；--clean 前必查孤兒 slug 是否被本地重編號檔以溯源註解認領）。**Source**: app_tunnel v1.2.0 sync-push 提示刪 PC-177/178 canonical 近失。**Version**: 1.1.0 — 標記框架級（canonical-bound）+ 防護內建 sync 腳本路由（0.32.0-W1-006）；補根因三因素疊加機制句（basil-writing-critic 審查建議）。**Version**: 1.0.0 — 初始建立（c014eccf 宣稱清 16 實刪 30，誤刪 10 個 preserve 標記專案特化檔，2026-06-16 sync-pull 警告揭露 + c014eccf^ 復原）。**Source**: sync-pull 第二輪 preserve 警告 git 考古。
