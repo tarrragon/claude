@@ -1,3 +1,15 @@
+## [1.56.4] - 2026-06-19
+
+### Summary
+chore: CC 2.1.173-2.1.183 release impact review; chore: pull .claude 更新（上游 ac320f3501e3）
+
+Changes: 2 chore
+
+- chore: CC 2.1.173-2.1.183 release impact review
+- chore: pull .claude 更新（上游 ac320f3501e3）
+
+---
+
 ## [1.56.3] - 2026-06-19
 
 ### Summary
