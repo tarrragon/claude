@@ -1,3 +1,14 @@
+## [1.56.6] - 2026-06-20
+
+### Summary
+fix: release 後自動推進下一個 planned 版本為 active
+
+Changes: 1 fix
+
+- fix: release 後自動推進下一個 planned 版本為 active
+
+---
+
 ## [1.56.5] - 2026-06-19
 
 ### Summary

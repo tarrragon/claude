@@ -107,6 +107,11 @@ def git_merge_and_push(version: str, dry_run: bool = False):
     3.7 刪除本地和遠端 feature 分支
         git branch -d feature/v{VERSION}
         git push origin --delete feature/v{VERSION}
+
+    3.8 推進下一版本為 active
+        讀取 todolist.yaml，找第一個 status: planned 的版本
+        將其 status 改為 active（保留引號格式）
+        若無 planned 版本，跳過（非錯誤）
     """
 ```
 

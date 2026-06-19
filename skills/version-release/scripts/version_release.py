@@ -1973,6 +1973,61 @@ def mark_version_completed(
     return True
 
 
+def activate_next_planned_version(
+    todolist_path: Path, completed_version: str, dry_run: bool = False
+) -> bool:
+    """release 後自動將下一個 planned 版本推進為 active。
+
+    掃描 todolist.yaml versions 清單，找到第一個 status 為 planned 的版本並設為 active。
+    若無 planned 版本，印提示並回傳 True（非錯誤）。
+
+    Args:
+        todolist_path: todolist.yaml 路徑
+        completed_version: 剛完成的版本號（用於日誌訊息）
+        dry_run: 預覽模式
+
+    Returns:
+        True 如果成功或無 planned 版本，False 如果 IO 錯誤
+    """
+    if not todolist_path.exists():
+        return False
+
+    with open(todolist_path, encoding="utf-8") as f:
+        content = f.read()
+
+    pattern = re.compile(
+        r'(- version: "([^"]+)".*?)(status:\s*)("planned"|planned)(?=\s|$)',
+        re.DOTALL,
+    )
+    match = pattern.search(content)
+    if not match:
+        print_info("todolist.yaml 無 planned 版本可推進，跳過")
+        return True
+
+    next_version = match.group(2)
+    was_quoted = match.group(4).startswith('"')
+    active_value = '"active"' if was_quoted else "active"
+
+    if dry_run:
+        print_info(
+            f"[DRY RUN] 將推進 todolist.yaml 版本 {next_version}: planned → active"
+        )
+    else:
+        new_content = (
+            content[: match.start(3)]
+            + match.group(3)
+            + active_value
+            + content[match.end() :]
+        )
+        with open(todolist_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+        print_success(
+            f"todolist.yaml 版本 {next_version} 已推進 active（接續 {completed_version}）"
+        )
+
+    return True
+
+
 def create_worklog_structure(
     version: str, description: str, dry_run: bool = False,
     worklog_path_pattern: Optional[str] = None,
@@ -2994,6 +3049,14 @@ def main():
             if not completed_ok:
                 print_warning(
                     f"todolist.yaml 版本 {version} 標記 completed 失敗（不中止發布，請手動確認）"
+                )
+
+            # 自動推進下一個 planned 版本為 active
+            print_section("Step: Activate Next Version")
+            activate_ok = activate_next_planned_version(todolist_path, version, dry_run)
+            if not activate_ok:
+                print_warning(
+                    "下一版本自動推進失敗（不中止發布，請手動設定 todolist.yaml active 版本）"
                 )
 
             # 打印摘要
