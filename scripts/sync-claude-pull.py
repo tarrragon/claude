@@ -1950,6 +1950,16 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
         # 缺口 1（W8-037）：上游已刪但本地分歧保留之檔，pull 結尾通報（非阻擋）
         warn_upstream_deleted_residue(upstream_deleted_residue)
 
+    # 全量反向比對：列出上游有但本地無的遺漏檔案（W1-001）
+    reverse_orphans = compute_reverse_orphan_candidates(
+        claude_dir, temp_dir, preserve
+    )
+    if reverse_orphans:
+        print_color(f"   提醒: {len(reverse_orphans)} 個上游檔案本地缺漏:", "yellow")  # i18n-exempt
+        for rel in reverse_orphans:
+            print_color(f"   + {rel}")
+        print_color("   這些檔案存在於上游但同步後本地仍缺漏，可能需要手動補齊或檢查排除設定。", "yellow")  # i18n-exempt
+
     # 同步成功後寫入新的 base SHA（上游 HEAD）
     head_result = run_git(["rev-parse", "HEAD"], cwd=str(temp_dir))
     if head_result.returncode == 0:
@@ -2167,13 +2177,47 @@ def compute_orphan_candidates(
     return sorted(orphans)
 
 
-def run_audit() -> None:
-    """sync-pull --audit：唯讀稽核本地有上游無之孤兒候選（不動同步主流程）。
+def compute_reverse_orphan_candidates(
+    claude_dir: Path,
+    upstream_dir: Path,
+    preserve: set[str] | None = None,
+) -> list[str]:
+    """列出上游 HEAD 有但本地 .claude/ 無之檔（反向孤兒候選）。
 
-    clone 上游 → 計算孤兒候選 → stdout 列出（非阻擋提醒）。不寫入任何本地檔，
-    不更新 base SHA，純唯讀分支。
+    與 compute_orphan_candidates 互補：正向偵測「本地有上游無」，本函式偵測
+    「上游有本地無」——即本地遺漏的上游檔案。
+
+    過濾規則與正向一致：排除 preserve 清單與 should_exclude 範圍內的檔案，
+    避免刻意不同步的檔案被誤列為遺漏。
+
+    參數:
+        claude_dir: 本地 .claude 目錄路徑
+        upstream_dir: 上游 repo clone 路徑（其 root 對應本地 .claude/）
+        preserve: sync-preserve.yaml 的 preserve 清單（相對 .claude/）
+
+    傳回:
+        list[str]: 反向孤兒候選相對 .claude/ 的路徑清單，已排序
     """
-    print_color("孤兒稽核：比對本地 .claude/ 與上游 HEAD...", "yellow")
+    if preserve is None:
+        preserve = set()
+    local_files = collect_remote_files(claude_dir)
+    upstream_files = collect_remote_files(upstream_dir)
+    reverse_orphans: list[str] = []
+    for rel in upstream_files - local_files:
+        rel_str = str(rel).replace("\\", "/")
+        if rel_str in preserve or should_exclude(rel):
+            continue
+        reverse_orphans.append(rel_str)
+    return sorted(reverse_orphans)
+
+
+def run_audit() -> None:  # i18n-exempt
+    """sync-pull --audit：唯讀稽核正反向孤兒候選（不動同步主流程）。
+
+    clone 上游 → 計算正向孤兒（本地有上游無）與反向孤兒（上游有本地無）
+    → stdout 列出（非阻擋提醒）。不寫入任何本地檔，不更新 base SHA，純唯讀分支。
+    """
+    print_color("孤兒稽核：比對本地 .claude/ 與上游 HEAD...", "yellow")  # i18n-exempt
     project_root = find_project_root()
     claude_dir = project_root / ".claude"
     temp_dir = Path(tempfile.mkdtemp())
@@ -2181,21 +2225,40 @@ def run_audit() -> None:
         clone_repo(temp_dir)
         preserve = load_preserve_list(claude_dir)
         orphans = compute_orphan_candidates(claude_dir, temp_dir, preserve)
+        reverse_orphans = compute_reverse_orphan_candidates(
+            claude_dir, temp_dir, preserve
+        )
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
     if not orphans:
-        print_color("   無孤兒候選（本地 .claude/ 皆存在於上游 HEAD）", "green")
-        return
-    print_color(
-        f"   {len(orphans)} 個本地有上游無之檔（孤兒候選）:", "yellow"
-    )
-    for rel in orphans:
-        print_color(f"   ! {rel}")
-    print_color(
-        "   若為應清理的孤兒請手動移除；若為刻意本地特化可忽略此提醒。",
-        "yellow",
-    )
+        print_color("   無正向孤兒（本地 .claude/ 皆存在於上游 HEAD）", "green")  # i18n-exempt
+    else:
+        print_color(  # i18n-exempt
+            f"   {len(orphans)} 個本地有上游無之檔（正向孤兒候選）:", "yellow"
+        )
+        for rel in orphans:
+            print_color(f"   ! {rel}")
+        print_color(  # i18n-exempt
+            "   若為應清理的孤兒請手動移除；若為刻意本地特化可忽略此提醒。",
+            "yellow",
+        )
+
+    if not reverse_orphans:
+        print_color(  # i18n-exempt
+            "   無反向孤兒（本地 .claude/ 涵蓋上游 HEAD 所有檔案）", "green"
+        )
+    else:
+        print_color(  # i18n-exempt
+            f"   {len(reverse_orphans)} 個上游有本地無之檔（反向孤兒候選）:",
+            "yellow",
+        )
+        for rel in reverse_orphans:
+            print_color(f"   + {rel}")
+        print_color(  # i18n-exempt
+            "   這些檔案存在於上游但本地缺漏，可能需要 sync-pull 補齊。",
+            "yellow",
+        )
 
 
 def main() -> None:

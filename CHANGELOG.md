@@ -1,3 +1,15 @@
+## [1.56.7] - 2026-06-20
+
+### Summary
+fix: 新增反向孤兒偵測（上游有本地無）; chore: pull 補齊上游 IMP-V1-002 error-pattern + 清理本地 build artifacts
+
+Changes: 1 fix, 1 chore
+
+- fix: 新增反向孤兒偵測（上游有本地無）
+- chore: pull 補齊上游 IMP-V1-002 error-pattern + 清理本地 build artifacts
+
+---
+
 ## [1.56.6] - 2026-06-20
 
 ### Summary
