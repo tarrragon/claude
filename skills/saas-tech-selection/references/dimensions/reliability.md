@@ -19,14 +19,16 @@
 
 ## Day one 最小集
 
-| 機制           | 最小實作                                                                       |
-| -------------- | ------------------------------------------------------------------------------ |
-| CI gate        | 測試 + lint 通過才能 merge；lockfile 進 repo、CI 用鎖定版本安裝                |
-| 測試起始集     | 核心業務路徑的 happy path + 失敗路徑（權限拒絕、輸入錯誤、依賴 timeout）       |
-| 第三方呼叫紀律 | 每個外部呼叫都有 timeout、可重試的配 backoff、不可重試的記錄待對帳             |
-| Idempotency    | 不能執行兩次的操作配 idempotency key（DB unique 約束是最簡單的實作）           |
-| 回滾演練       | 部署回滾在 staging 或低風險時段實際執行過一次                                  |
-| 環境 parity    | 本地 / CI / production 用同一套 container 定義或依賴鎖定、降低「只有線上會壞」 |
+| 機制           | 最小實作                                                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| CI gate        | 測試 + lint 通過才能 merge；lockfile 進 repo、CI 用鎖定版本安裝                                                                |
+| 測試起始集     | **三層策略**：unit（mock）/ protocol integration（真實服務）/ screen state（UI），見 `principles/three-layer-test-strategy.md` |
+| 第三方呼叫紀律 | 每個外部呼叫都有 timeout、可重試的配 backoff、不可重試的記錄待對帳                                                             |
+| Idempotency    | 不能執行兩次的操作配 idempotency key（DB unique 約束是最簡單的實作）                                                           |
+| 回滾演練       | 部署回滾在 staging 或低風險時段實際執行過一次                                                                                  |
+| 環境 parity    | 本地 / CI / production 用同一套 container 定義或依賴鎖定、降低「只有線上會壞」                                                 |
+
+測試起始集的三層策略：unit test 覆蓋邏輯分支（mock 外部依賴）、protocol integration test 覆蓋真實服務互動（至少涵蓋 event catalog 中的協議路徑）、screen state test 覆蓋 UI 狀態。Unit test 的 mock 遮蔽了協議層行為 — 加更多 mock test 只增加同層覆蓋率、不會發現協議不相容或認證缺失。名稱含「integration」但依賴全用 fake 的 test 要辨識並標明真實驗證邊界。
 
 第三方依賴每接一個、決策記錄記四件事：sandbox 環境怎麼拿、失敗語意（重試 / 降級 / 報錯）、費用模型與用量上限 alert、webhook 的驗簽方式。第三方的 webhook 是入口維度之外的另一個對外面、驗簽缺席等於開了一個免認證寫入口。
 

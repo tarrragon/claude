@@ -158,6 +158,40 @@
 
 spec 的 FR 是雙源：§2 Domain Map 給 domain 邊界與責任、§3 技術維度給技術性 FR / NFR — 兩段都要回看、缺一則 spec 不完整。
 
-移交步驟：(1) 先生成 proposal（綁範圍）、(2) 再依 domain map 生成各 spec、(3) 再依操作表生成各 usecase、(4) 補雙向交叉引用（proposal 的 spec_refs / usecase_refs、spec 的 related_usecases、usecase 的 related_specs）、(5) CLAUDE.md 瘦身 — 需求文件結構化落地到 docs/ 後、CLAUDE.md 中的完整技術規格替換為路由索引表（只留決策編號 + 維度 + 選型一行摘要 + 指向 `docs/tech-decisions.md` 的路徑）、auto-load token 隨之下降。doc 端的接手細節見 doc skill 的「與 saas-tech-selection 的銜接」節。
+移交步驟：(1) 先生成 proposal（綁範圍）、(2) 再依 domain map 生成各 spec、(3) 再依操作表生成各 usecase、(4) 補雙向交叉引用（proposal 的 spec_refs / usecase_refs、spec 的 related_usecases、usecase 的 related_specs）、**(5) 推導標記審查**（見下段）、(6) CLAUDE.md 瘦身 — 需求文件結構化落地到 docs/ 後、CLAUDE.md 中的完整技術規格替換為路由索引表（只留決策編號 + 維度 + 選型一行摘要 + 指向 `docs/tech-decisions.md` 的路徑）、auto-load token 隨之下降。doc 端的接手細節見 doc skill 的「與 saas-tech-selection 的銜接」節。
+
+### 推導標記審查（Step 5）
+
+Spec 的介面規格（endpoint 路徑、參數格式、回應結構、匹配語法、資料模型 DDL）和實作策略（聚合方式、評估時機、排程頻率）通常不在訪談中逐一確認——訪談確認的是「需要什麼能力」，介面細節由 Claude 在移交時推導填補。推導的設計合理但未經用戶確認，可能和用戶心中的設計（或專案既有的設計文件）不一致。
+
+移交完成後、交付用戶 review 前，執行一輪推導標記審查：
+
+**掃描範圍**：所有 spec 的「介面規格」和「資料模型」章節。
+
+**標記規則**：
+
+| 來源 | 標記 | 說明 |
+| --- | --- | --- |
+| 訪談中用戶明確說過 | 不標記 | 有訪談原話可回溯 |
+| 決策記錄 §2 介面契約有寫 | 不標記 | 有契約可回溯 |
+| 既有設計文件（教學/RFC/ADR）有定義 | 不標記（但須比對一致性） | 有權威來源可回溯 |
+| Claude 推導填補 | 在該項目後加 `<!-- inferred -->` 註記 | 提醒用戶此項需確認 |
+
+**既有設計文件比對**：若專案有 CLAUDE.md 指向既有設計文件（教學文件、RFC、ADR），移交時必須讀取對應文件比對。推導結果與既有設計不一致時，以既有設計為準並在 spec 中引用來源。
+
+**交付格式**：Spec 交付時附一份「推導項清單」摘要，列出所有 `<!-- inferred -->` 標記的項目，讓用戶一眼看到哪些需要確認。推導項清單是暫時性產物——用戶確認後移除 `<!-- inferred -->` 註記。
+
+### 關鍵介面主動確認（Step 5 附屬）
+
+推導標記審查中，以下類型的介面決策因影響範圍大（改動需同步多個消費端），應主動向用戶確認而非僅標記：
+
+| 介面類型 | 確認內容 | 原因 |
+| --- | --- | --- |
+| HTTP endpoint 路徑 | 資源命名（`/events`）vs 操作命名（`/query`）、版本前綴（`/v1/`） | 路徑是 SDK 和文件的穩定錨點，改動成本高 |
+| 資料模型 DDL | 表結構、索引策略、欄位拆分方式 | 影響查詢效能和 migration 路徑 |
+| 聚合/保留策略 | 聚合摘要表 vs 原始事件保留、保留期限分層 | 影響儲存架構和查詢 API 設計 |
+| 查詢參數語法 | 萬用字元（`*`）、正規表達式、前綴匹配的語意定義 | 影響 SDK 端的 API 使用方式 |
+
+確認方式：用 AskUserQuestion 逐項列出推導的設計和替代方案，讓用戶選擇或提供自己的設計。
 
 買掉（外包 vendor）的 domain：在 spec 標整合邊界、不展開內部 FR；其 reliability 第三方依賴訪談結論進 spec 的設計約束。

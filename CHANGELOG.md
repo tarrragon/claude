@@ -1,3 +1,16 @@
+## [1.57.0] - 2026-06-22
+
+### Summary
+feat: teaching-sync skill v2.0 + CLAUDE.md 教學互補流程; docs: Spec/UC review — 對齊教學設計 + SaaS skill 推導標記機制; chore: pull .claude 更新（上游 7f24696）
+
+Changes: 1 feat, 1 docs, 1 chore
+
+- feat: teaching-sync skill v2.0 + CLAUDE.md 教學互補流程
+- docs: Spec/UC review — 對齊教學設計 + SaaS skill 推導標記機制
+- chore: pull .claude 更新（上游 7f24696）
+
+---
+
 ## [1.56.7] - 2026-06-20
 
 ### Summary

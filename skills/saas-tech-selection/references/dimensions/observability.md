@@ -33,6 +33,22 @@
 
 ---
 
+## Observability 工具的自我監控（bootstrapping problem）
+
+產品本身是 observability 工具（監控 SDK、collector、log 聚合器）時，會遇到 bootstrapping 問題：如果 monitor 掛了，誰監控 monitor？用自己監控自己會形成循環依賴 — monitor 掛掉時它自己的告警也跟著掛。
+
+解法是**外部層級隔離**：用一個結構上獨立於 monitor 的機制監控 monitor 本身。
+
+| 機制                    | 做法                                                         |
+| ----------------------- | ------------------------------------------------------------ |
+| 外部 uptime check       | cron + curl health endpoint、失敗時用系統通知（mail / ntfy） |
+| Collector 的 stderr log | collector 自己的錯誤寫 stderr、systemd journal 收            |
+| Process 存活監控        | systemd watchdog / supervisor 重啟                           |
+
+原則：monitor 不用自己的 SDK 監控自己的 collector。Health endpoint + process supervisor + 系統級 log 是三層獨立的自我監控、不依賴 monitor 的事件收集管線。
+
+---
+
 ## 防護底線（non-negotiable）
 
 1. **掛了有人知道**：uptime 監控 + 會吵醒人的通知管道。使用者比團隊先發現停機、每次都在消耗信任。
@@ -55,6 +71,20 @@ Tracing 與 metrics 延後的前提是 request log 欄位齊全 — duration 與
 
 ---
 
+## Client-Side Observability（觸發展開）
+
+產品有 mobile app、SPA、desktop app 等 client-side 元件時觸發。純 API 服務不需要。
+
+Client-side 的監控資料分四類：event（使用者操作）、error（例外和非預期狀態）、metric（frame rate / 回應時間）、lifecycle（app 啟動 / 前後景切換 / 連線斷開）。四類各自回答不同問題、收集策略從需求推導（debug 需求、行為分析需求、效能需求、合規需求）。
+
+Day one 方案依使用者位置選擇：同網路自用工具 → 自架 HTTP endpoint + JSONL + grep（零成本）；外部使用者 < 100 人 → 商業免費額度（Sentry Developer / PostHog free）；使用者 > 1000 + 需要 funnel → 商業方案。
+
+Client-side SDK 的設計要點：離線 buffer（網路斷開時暫存）、攢批送出（降低 HTTP 次數）、redaction（敏感資料離開 client 前遮罩、見 security 維度的 PII 底線）。
+
+完整判讀見 `principles/client-side-observability.md`。
+
+---
+
 ## 決策記錄要記什麼
 
-偵測延遲目標、alert 管道與接收者、log 欄位集與 PII 遮罩位置、error tracking 服務選擇、防護底線段各條的狀態、延後項觸發條件。
+偵測延遲目標、alert 管道與接收者、log 欄位集與 PII 遮罩位置、error tracking 服務選擇、client-side observability 方案（自架 / 商業 / 無）、防護底線段各條的狀態、延後項觸發條件。
