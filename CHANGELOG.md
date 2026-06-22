@@ -1,3 +1,15 @@
+## [1.58.0] - 2026-06-22
+
+### Summary
+feat: SaaS skill state-storage 維度補 ID/主鍵選型訪談; chore: pull .claude 更新（上游 4012a25）
+
+Changes: 1 feat, 1 chore
+
+- feat: SaaS skill state-storage 維度補 ID/主鍵選型訪談
+- chore: pull .claude 更新（上游 4012a25）
+
+---
+
 ## [1.57.1] - 2026-06-22
 
 ### Summary

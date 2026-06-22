@@ -127,13 +127,15 @@ saas-tech-selection skill 做完技術選型訪談後產出「決策記錄」，
 |------|------|---------|
 | 1 操作風險表（BDD） | usecase | 每個操作主體生成一個 UC：操作轉用例、主 / 失敗情境轉主 / 例外場景、風險 + 防護轉驗收 |
 | 2 Domain Map | spec（domain 邊界） | 每個自建 domain 一份 spec：責任轉概述、command 轉 FR（與 3 雙源） |
-| 2 介面契約段 | spec（資料模型） | payload schema / 子協議 / 資料模型轉 spec 介面規格章節 |
+| 2 介面契約段 | spec（資料模型 + 介面規格） | payload schema / 子協議 / 資料模型轉 spec 介面規格章節。介面具體細節（endpoint 路徑、參數、DDL）來源優先序見 `references/spec.md`「介面規格章節指引」 |
 | 3 技術維度決策 | spec（FR / NFR）+ proposal（決策依據） | 需求判讀轉 FR、選型 / 防護轉 NFR + proposal 技術決策 |
 | 0 定錨 + gate + 4-5 決策 | proposal | 範圍界定 + 決策依據 + 驗收，spec_refs / usecase_refs 指向上面生成的 |
 
 **前置檢查**：1 操作風險表、2 Domain Map 任一為空 = saas 訪談沒走完 Stage 1 / 2，doc 無源可長 usecase / spec — 回頭請 saas 補完盤點，不可硬生半成品。
 
 接手順序：proposal（綁範圍） -> spec（依 domain map） -> usecase（依操作表） -> 補雙向交叉引用 -> **CLAUDE.md 瘦身**。saas 側的移交規格見 saas skill 的 `references/decision-record-template.md`「銜接 doc 系統」節。doc 單獨使用（無 saas）時此節不觸發、照常從模板建立。
+
+**Spec→ticket 轉換與三方比對（需求文件完成後）**：需求文件（proposal + spec + usecase）完成後，進入 ticket 拆分前，必須執行三方交叉比對驗證——每個 Spec FR 至少被一個 ticket 覆蓋、每個 UC 場景有 ticket 對應、每項 Proposal 驗收條件有 ticket 對應。比對規範見 `references/spec.md`「Spec → Ticket 轉換指引」。
 
 **CLAUDE.md 瘦身（移交最後一步）**：需求文件結構化落地到 docs/ 後，CLAUDE.md 中的完整技術規格（理由 / 防護 / tripwire 全文）替換為路由索引表——只留決策編號、維度、選型一行摘要 + 指向 `docs/tech-decisions.md` 的路徑。需求文件同理：只留文件類型 + 位置 + 一行說明的索引表，不在 CLAUDE.md 重述內容。移交是 CLAUDE.md 的代謝機制——規格搬進 docs/ 按需讀取，auto-load 的 CLAUDE.md 只保留路由，token 預算隨之下降。
 
