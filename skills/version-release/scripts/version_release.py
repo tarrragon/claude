@@ -516,6 +516,19 @@ def detect_version() -> Optional[str]:
     except Exception:
         pass
 
+    # 1.5 嘗試從 todolist.yaml active 版本偵測（與 ticket CLI 共用 SSOT）
+    todolist_path = root / "docs" / "todolist.yaml"
+    if todolist_path.exists():
+        try:
+            import yaml
+            with open(todolist_path, encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+            for v in data.get("versions", []):
+                if v.get("status") == "active":
+                    return str(v["version"])
+        except Exception:
+            pass
+
     # 2. 嘗試從版本檔案偵測（語言感知）
     # Gap 2：優先採 resolve_version_source（honor version_source.primary，含子目錄），
     #        fallback 至 root 掃描，使 monorepo 子目錄版本檔可被偵測
@@ -3036,13 +3049,13 @@ def main():
                 return 1
 
             # Git 操作
-            ok = git_merge_and_push(version, dry_run)
+            git_ok = git_merge_and_push(version, dry_run)
 
-            if not ok:
-                print_error("\nGit 操作失敗，發布已中止")
-                return 1
+            if not git_ok:
+                print_error("\nGit 操作失敗（todolist 狀態更新仍會繼續）")
 
             # 標記 todolist 版本狀態 active → completed（避免後續 start 被前版本驗證阻擋）
+            # 即使 git 操作失敗也執行：todolist 狀態應反映版本意圖，git 可手動重試
             print_section("Step: Mark Version Completed")
             todolist_path = get_project_root() / "docs" / "todolist.yaml"
             completed_ok = mark_version_completed(todolist_path, version, dry_run)
@@ -3060,7 +3073,13 @@ def main():
                 )
 
             # 打印摘要
-            print_summary(version, ok, dry_run)
+            print_summary(version, git_ok, dry_run)
+
+            if not git_ok:
+                print_warning(
+                    "Git 操作失敗但 todolist 狀態已更新。請手動執行 git commit + push + tag。"
+                )
+                return 1
 
         else:
             parser.print_help()

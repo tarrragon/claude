@@ -1,3 +1,16 @@
+## [1.57.1] - 2026-06-22
+
+### Summary
+fix: detect_version reads todolist active + decouple activate from git (/004); chore: add ARCH-APP-001 version detection desync error pattern; chore: pull .claude 更新（上游 627ed412d54b）
+
+Changes: 1 fix, 2 chore
+
+- fix: detect_version reads todolist active + decouple activate from git (/004)
+- chore: add ARCH-APP-001 version detection desync error pattern
+- chore: pull .claude 更新（上游 627ed412d54b）
+
+---
+
 ## [1.57.0] - 2026-06-22
 
 ### Summary
