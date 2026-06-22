@@ -144,6 +144,8 @@ def is_exempt_path_on_protected_branch(
         "CLAUDE.md",
         "README.md",
         "CHANGELOG.md",
+        "package.json",
+        "manifest.json",
         ".gitignore",  # repo 層級忽略清單（W10-033）
         ".gitattributes",  # repo 層級檔案屬性（W10-054.1.1）
     ]

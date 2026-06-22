@@ -1,3 +1,15 @@
+## [1.58.1] - 2026-06-22
+
+### Summary
+chore: add PC-V1-011 error pattern + complete ANA; chore: pull .claude 更新（上游 b3aadb8ff140）
+
+Changes: 2 chore
+
+- chore: add PC-V1-011 error pattern + complete ANA
+- chore: pull .claude 更新（上游 b3aadb8ff140）
+
+---
+
 ## [1.58.0] - 2026-06-22
 
 ### Summary

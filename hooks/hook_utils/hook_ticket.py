@@ -52,6 +52,7 @@ def clear_error_pattern_mtime_cache() -> None:
 
 # 決策樹欄位識別標記（統一版本，合併 command-entrance-gate-hook 和 agent-ticket-validation-hook）
 DECISION_TREE_MARKERS = [
+    "decision_tree:",
     "decision_tree_path:",
     "## 決策樹路徑",
     "decision_nodes:",

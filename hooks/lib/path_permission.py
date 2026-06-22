@@ -42,6 +42,8 @@ ALLOWED_PATTERNS = [
     r"^docs/.*",
     r"^CLAUDE\.md$",
     r"^CHANGELOG\.md$",
+    r"^package\.json$",  # 版本發布 bump
+    r"^manifest\.json$",  # Chrome Extension manifest 版本發布 bump
     r"^\.gitignore$",  # repo 層級忽略清單：主線程可直接補 runtime artifact / lock（W10-033）
     r"^\.gitattributes$",  # repo 層級檔案屬性：主線程可直接維護 eol/binary 規範（W10-054.1.1）
     r"^\.claude/\.gitattributes$",  # 框架層級檔案屬性：隨 sync 傳播到其他專案
