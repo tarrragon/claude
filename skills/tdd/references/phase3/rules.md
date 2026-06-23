@@ -12,6 +12,38 @@ Phase 3 分為兩個子階段：
 
 ---
 
+## 存根策略（紅燈可執行的前提）
+
+靜態語言（Go/Dart）的紅燈測試必須編譯通過才能執行。測試引用的 type/interface/function 在實作前不存在，需要建立最小存根讓「go test / flutter test 編譯通過但邏輯 FAIL」。
+
+### 存根定義
+
+| 存根類型 | 適用語言 | 範例 |
+|---------|---------|------|
+| 空 function（return nil/error） | Go | `func Validate(raw json.RawMessage) error { return nil }` |
+| 空 struct + interface | Go | `type Storage interface { Store(events []json.RawMessage) error }` |
+| 拋 NotImplementedError | Python | `raise NotImplementedError` |
+| 拋 UnimplementedError | Dart | `throw UnimplementedError()` |
+| 回傳 501 Not Implemented | HTTP handler | `http.Error(w, "not implemented", 501)` |
+
+### 存根放置時機
+
+| 階段 | 動作 |
+|------|------|
+| 紅燈 ticket 撰寫時（Phase 2→3 之間） | 建立最小存根讓測試可編譯 |
+| 實作 ticket（Phase 3b） | 用真實邏輯替換存根，測試從紅變綠 |
+
+### 動態語言 vs 靜態語言
+
+| 語言類型 | 是否需要存根 | 原因 |
+|---------|------------|------|
+| Go / Dart / TypeScript | 需要 | 編譯時期型別檢查，引用不存在的 type 會編譯失敗 |
+| Python / JavaScript | 通常不需要 | 執行時期才報錯，import 失敗即為紅燈 |
+
+**注意**：Python 雖然不需存根讓測試「編譯」，但若測試 import 的模組完全不存在會 ImportError 而非測試 FAIL。建議仍建立最小存根（拋 NotImplementedError），使紅燈是「測試邏輯 FAIL」而非「import 失敗」。
+
+---
+
 ## Phase 3a：策略規劃
 
 ### 產出（Layer 1）
@@ -275,6 +307,41 @@ BookSchemaV2.js 第 12 行 `require('src/core/errors/ErrorCodes')` — 未使用
 
 ---
 
+## Ticket 涵蓋處理（Phase 3b）
+
+代理人完成的實作範圍可能涵蓋其他 pending ticket——這通常不是代理人「超額」，而是**拆分邊界未對齊測試變綠驗收點**的症狀（見 `task-granularity-rules.md`「實作 Ticket 拆分邊界判讀」）。
+
+### 判斷流程
+
+```
+代理人完成回報
+    │
+    v
+PM 比對實作範圍 vs 其他 pending ticket 的 acceptance
+    │
+    ├─ acceptance 全覆蓋 → 直接 complete 被涵蓋 ticket
+    │   └─ Solution 標註「由 {source-ticket} 涵蓋」
+    │   └─ 記錄拆分教訓：為何這些 ticket 不該分開拆？
+    │
+    └─ 部分覆蓋 → 獨立完成剩餘 acceptance
+```
+
+### 處理步驟
+
+| 步驟 | 動作 |
+|------|------|
+| 1 | 跑被涵蓋 ticket 對應的測試，確認 GREEN |
+| 2 | 逐項比對 acceptance，確認每項都有測試覆蓋 |
+| 3 | 勾選 acceptance、填 Solution + Test Results |
+| 4 | complete 並標註來源 |
+| 5 | **回顧拆分**：用判讀三問（task-granularity-rules.md）檢查被涵蓋的 ticket 是否本來就不該獨立拆 |
+
+### 識別訊號
+
+代理人完成的實作範圍涵蓋其他 pending ticket 時，回顧拆分判讀（`task-granularity-rules.md`「判讀三問」）：被涵蓋的 ticket 是否本來就不該獨立拆？若判讀結果為「不應獨立拆」，涵蓋是拆分設計的自然修正，不是代理人行為異常。
+
+---
+
 ## 轉換條件
 
 ### 進入 Phase 3a 的條件
@@ -318,4 +385,4 @@ BookSchemaV2.js 第 12 行 `require('src/core/errors/ErrorCodes')` — 未使用
 ---
 
 **Last Updated**: 2026-04-04
-**Version**: 2.1.0 - 新增單一 Ticket 粒度閾值（驗收 <= 2、檔案 <= 2、目標 3-7 min）+ 2 個粒度案例（v0.17.0 回顧）
+**Version**: 3.0.0 - 新增存根策略 + Ticket 涵蓋處理 + 追溯矩陣 gap 掃描；移除專案特定引用

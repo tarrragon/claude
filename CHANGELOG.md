@@ -1,3 +1,15 @@
+## [1.60.2] - 2026-06-23
+
+### Summary
+fix: 恢復 sync-pull 覆蓋的 TDD/Doc/Ticket Skill 更新; chore: pull .claude 更新（上游框架 skill 庫分離）
+
+Changes: 1 fix, 1 chore
+
+- fix: 恢復 sync-pull 覆蓋的 TDD/Doc/Ticket Skill 更新
+- chore: pull .claude 更新（上游框架 skill 庫分離）
+
+---
+
 ## [1.60.1] - 2026-06-23
 
 ### Summary

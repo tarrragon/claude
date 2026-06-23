@@ -1,6 +1,6 @@
 ---
 name: ticket
-description: 'Use this skill whenever the user wants to create, track, query, or manage tickets. Triggers include: creating new tickets, claiming or releasing tickets, checking ticket status or progress, completing tickets, handing off work between agents, resuming interrupted tasks, migrating tickets between versions, converting plans to tickets, or any mention of /ticket, task tracking, or ticket lifecycle operations.'
+description: 'Use this skill whenever the user wants to create, track, query, or manage tickets. Triggers include: creating new tickets, claiming or releasing tickets, checking ticket status or progress, completing tickets, handing off work between agents, resuming interrupted tasks, migrating tickets between versions, converting plans to tickets, splitting tickets into subtasks, evaluating ticket granularity, or any mention of /ticket, task tracking, ticket lifecycle operations, or ticket splitting. 拆分相關：當用戶問「ticket 怎麼拆」「拆分粒度」時，建立/拆分 ticket 用本 skill，拆分邊界判讀（測試變綠驗收點）見 /tdd skill 的 task-granularity-rules。'
 argument-hint: '<subcommand> [args]'
 allowed-tools: Bash(ticket *), Read, Write, Edit, Grep, Glob
 ---
