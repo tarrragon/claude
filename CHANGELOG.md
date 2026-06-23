@@ -1,3 +1,10 @@
+## [2.1.4] - 2026-06-24
+
+### Summary
+fix(tests): 追蹤 dispatch stats 測試 fixture sample_events.jsonl（修正 *.jsonl 規則誤殺）
+
+---
+
 ## [2.1.3] - 2026-06-24
 
 ### Summary
