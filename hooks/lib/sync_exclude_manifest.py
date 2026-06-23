@@ -31,6 +31,7 @@
 from __future__ import annotations
 
 import hashlib
+import sys
 from pathlib import Path
 
 # ============================================================================
@@ -50,6 +51,11 @@ from pathlib import Path
 # 類型 C - Session-bound log（本地產生的日誌/交接檔案）
 #   特徵：只對本機 session 有意義，無跨專案共用價值
 #   範例：hook-logs/、handoff/、PM_INTERVENTION_REQUIRED、ARCHITECTURE_REVIEW_REQUIRED
+#
+# 類型 E - Push-only exclude（git tracked 但不跨專案同步的內容）
+#   特徵：在專案 git 中 track，但 sync-push 時不推到框架/skills repo
+#   與類型 A/B/C 差異：A/B/C 不 git track（在 .gitignore 中）；E 要 git track
+#   範例：skills/*/references/project-integration/（per-project 落地層）
 #
 # 新增機制時的 checklist 與決策流程見 .claude/references/sync-exclusion-guide.md
 
@@ -73,6 +79,7 @@ LOCAL_ONLY_PATTERNS = frozenset({
     ".pytest_cache",
     ".venv",
     # 類型 B - Local-only settings
+    "sync-skills.yaml",    # 各專案選擇性 skill 同步設定（mode/include/private）
     "sync-preserve.yaml",
     ".sync-state.json",
     # version-release CLI 專案配置（release workflow / tag 格式 / worklog 路徑
@@ -132,6 +139,13 @@ CREDENTIAL_PATTERNS = frozenset({
     ".keys",
 })
 
+# 類型 E - Push-only exclude（git tracked 但不跨專案同步）
+# 這些名稱在 sync push/pull 時排除，但不加入 .gitignore（專案要 git track）。
+# 與 LOCAL_ONLY_PATTERNS 差異：LOCAL_ONLY 同時要求 .gitignore 涵蓋；本集合不要求。
+PUSH_ONLY_EXCLUDE_PATTERNS = frozenset({
+    "project-integration",  # 各 skill 的專案落地層（per-project 案例/Hook 對齊/CLI 接線）
+})
+
 # 副檔名排除（含憑證副檔名 .pem/.key/.p12/.pfx/.jks，類型 D 最高風險維度）
 EXCLUDE_SUFFIXES = frozenset({".pyc", ".pem", ".key", ".p12", ".pfx", ".jks"})
 
@@ -145,8 +159,8 @@ EXCLUDE_NAME_PREFIXES = frozenset({
 # 組合集合（具名常數 + 單行理由，組合語意顯性化）
 # ============================================================================
 
-# push / status 端的名稱黑名單：local-only 與敏感憑證皆須排除（避免外洩至公開 repo）
-PUSH_EXCLUDE = LOCAL_ONLY_PATTERNS | CREDENTIAL_PATTERNS
+# push / status 端的名稱黑名單：local-only + 敏感憑證 + push-only 皆須排除
+PUSH_EXCLUDE = LOCAL_ONLY_PATTERNS | CREDENTIAL_PATTERNS | PUSH_ONLY_EXCLUDE_PATTERNS
 
 # content hash 與 copy 共用的完整名稱黑名單（與 PUSH_EXCLUDE 同義，供語意檢索）
 SYNC_EXCLUDE_ALL = PUSH_EXCLUDE
@@ -174,6 +188,116 @@ _EXCLUDE_NAME_PREFIXES_LOWER = frozenset(p.lower() for p in EXCLUDE_NAME_PREFIXE
 # ============================================================================
 # 唯一實作（should_exclude / compute_content_hash）
 # ============================================================================
+
+SYNC_SKILLS_FILENAME = "sync-skills.yaml"
+
+
+def load_sync_skills_config(claude_dir: Path) -> dict:
+    """讀取 .claude/sync-skills.yaml 並回傳結構化設定。
+
+    無檔案時回傳 mode=all 預設值（向後相容：未定義時同步全部 skills）。
+    檔案存在但解析失敗時 fail-loud（stderr + raise），不靜默回預設——
+    靜默回 all 會繞過使用者刻意設定的 select/none 限制。
+
+    回傳:
+        {"mode": "all"|"select"|"none",
+         "include": list[str],
+         "private": list[str]}
+    """
+    default = {"mode": "all", "include": [], "private": []}
+    config_file = claude_dir / SYNC_SKILLS_FILENAME
+    if not config_file.exists():
+        return default
+
+    content = config_file.read_text(encoding="utf-8")
+
+    # 簡易行掃描解析（push/pull 環境無 PyYAML 依賴）
+    mode = "all"
+    include: list[str] = []
+    private: list[str] = []
+    current_key: str | None = None
+
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("mode:"):
+            val = stripped.split(":", 1)[1].strip()
+            if val in ("all", "select", "none"):
+                mode = val
+            else:
+                sys.stderr.write(
+                    f"[sync] sync-skills.yaml mode 值無效: {val!r}，"
+                    f"合法值為 all/select/none\n"
+                )
+                raise ValueError(f"sync-skills.yaml mode 無效: {val!r}")
+            current_key = None
+            continue
+        if stripped == "include:":
+            current_key = "include"
+            continue
+        if stripped == "private:":
+            current_key = "private"
+            continue
+        if current_key and stripped.startswith("- "):
+            item = stripped[2:].strip()
+            if item:
+                if current_key == "include":
+                    include.append(item)
+                elif current_key == "private":
+                    private.append(item)
+        elif stripped and not stripped.startswith("#"):
+            current_key = None
+
+    return {"mode": mode, "include": include, "private": private}
+
+
+def should_exclude_skill(skill_name: str, config: dict, direction: str) -> bool:
+    """判斷特定 skill 是否應排除於 sync（push 或 pull）。
+
+    參數:
+        skill_name: skill 目錄名（如 "wrap-decision"）
+        config: load_sync_skills_config 回傳值
+        direction: "push" 或 "pull"
+
+    行為矩陣:
+        mode=all:    push 排除 private；pull 拉全部
+        mode=select: push/pull 只含 include 清單（push 額外排除 private）
+        mode=none:   push/pull 都排除全部 skills
+
+    回傳:
+        bool: True 表應排除
+    """
+    mode = config.get("mode", "all")
+    include_list = config.get("include", [])
+    private_list = config.get("private", [])
+
+    if mode == "none":
+        return True
+
+    if mode == "select":
+        if skill_name not in include_list:
+            return True
+        if direction == "push" and skill_name in private_list:
+            return True
+        return False
+
+    # mode == "all"
+    if direction == "push" and skill_name in private_list:
+        return True
+    return False
+
+
+def _is_skill_path(rel_path: Path) -> str | None:
+    """從相對路徑提取 skill 名稱（第一段為 skills/ 時）。
+
+    回傳 skill 名稱或 None（非 skill 路徑）。
+    """
+    parts = rel_path.parts
+    if len(parts) >= 2 and parts[0] == "skills":
+        return parts[1]
+    return None
+
 
 def should_exclude(path: Path) -> bool:
     """檢查相對路徑是否應排除在 sync / hash 之外（大小寫不敏感）。

@@ -70,6 +70,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks" / "lib"))
 from sync_exclude_manifest import (  # noqa: E402
     should_exclude,
+    should_exclude_skill,
+    _is_skill_path,
+    load_sync_skills_config,
     compute_content_hash as _compute_content_hash,
 )
 
@@ -385,9 +388,10 @@ def load_preserve_list(claude_dir: Path) -> set[str]:
 
 
 def copy_filtered_from_staging(
-    src: Path, dst: Path, preserve: set[str] | None = None
+    src: Path, dst: Path, preserve: set[str] | None = None,
+    skills_config: dict | None = None,
 ) -> int:
-    """從 staging（git tracked 樹）複製到遠端 temp_dir，施加 should_exclude + preserve 過濾（M1）。
+    """從 staging（git tracked 樹）複製到遠端 temp_dir，施加 should_exclude + preserve + skills 過濾（M1）。
 
     git archive 取的是 tracked 全部；tracked 但屬 local-only / 憑證者（如誤被
     commit 的 settings.local.json）仍須在此被 should_exclude 擋下，避免外洩至
@@ -397,10 +401,14 @@ def copy_filtered_from_staging(
     preserve（0.32.0-W1-008）：sync-preserve.yaml 列出的 APP 專案特化檔不推上
     共享框架，與 pull 端原地保留對稱。
 
+    skills_config（1.3.0-W1-054）：sync-skills.yaml 設定，過濾 skills/ 目錄。
+    None 時不過濾（向後相容）。
+
     參數:
         src: staging_dir（已 strip .claude/ 前綴，內容對應 .claude/）
         dst: 遠端 repo 本地暫存根目錄（temp_dir）
         preserve: 不推送的相對路徑集合（None 視為空集合，向後相容）
+        skills_config: load_sync_skills_config 回傳值（None 不過濾）
 
     傳回:
         int: 實際複製的檔案數
@@ -415,6 +423,10 @@ def copy_filtered_from_staging(
             continue
         if rel.as_posix() in preserve:
             continue
+        if skills_config is not None:
+            skill_name = _is_skill_path(rel)
+            if skill_name is not None and should_exclude_skill(skill_name, skills_config, "push"):
+                continue
         dest_item = dst / rel
         dest_item.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(item, dest_item)
@@ -1007,6 +1019,7 @@ def clean_stale_files(
     reference_dir: Path,
     preserve: set[str] | None = None,
     lineage_claimed: set[str] | None = None,
+    skills_config: dict | None = None,
 ) -> int:
     """刪除 clone 目錄中存在但 reference_dir（git tracked 樹 staging）沒有的過時檔案。
 
@@ -1021,6 +1034,9 @@ def clean_stale_files(
     preserve（0.32.0-W1-008）：sync-preserve.yaml 列出的專案特化檔不刪除。push
     端不推這些檔（copy_filtered_from_staging 已排除），故它們不在 staging；若不
     在此一併排除，--clean 會把遠端既有的 preserve 副本（可能屬其他專案）誤刪。
+
+    skills_config（1.3.0-W1-054）：被 skills_config 排除的 skill 不視為 stale
+    （它們不在 staging 但屬其他專案推送的內容，不應刪除）。
 
     回傳已刪除的檔案數量。
     """
@@ -1049,6 +1065,11 @@ def clean_stale_files(
         # 誤列孤兒；其溯源註解明說上游應保留原號供下次 pull 去重，故排除於 --clean。
         if rel.as_posix() in lineage_claimed:
             continue
+        # skills_config 排除的 skill 不視為 stale（可能屬其他專案推送）
+        if skills_config is not None:
+            skill_name = _is_skill_path(rel)
+            if skill_name is not None and should_exclude_skill(skill_name, skills_config, "push"):
+                continue
         # 檢查 tracked 樹 staging 是否有對應檔案
         if not (reference_dir / rel).exists():
             print(f"   刪除過時檔案: {rel}")
@@ -1080,6 +1101,7 @@ def detect_uncleaned_deletions(
     reference_dir: Path,
     preserve: set[str] | None = None,
     lineage_claimed: set[str] | None = None,
+    skills_config: dict | None = None,
 ) -> list[str]:
     """偵測遠端 clone（temp_dir）存在但本地 git tracked 樹（reference_dir）已無的檔案。
 
@@ -1129,6 +1151,10 @@ def detect_uncleaned_deletions(
         # native intruder），不誤報受 lineage 保護的上游 canonical。
         if rel.as_posix() in lineage_claimed:
             continue
+        if skills_config is not None:
+            skill_name = _is_skill_path(rel)
+            if skill_name is not None and should_exclude_skill(skill_name, skills_config, "push"):
+                continue
         if not (reference_dir / rel).exists():
             orphans.append(str(rel))
     return orphans
@@ -1974,10 +2000,18 @@ def main() -> None:
             # 與 pull 端原地保留對稱。傳入 copy / clean / detect 全程一致排除。
             preserve = load_preserve_list(claude_dir)
             if preserve:
-                print_color(f"   preserve 清單：{len(preserve)} 個專案特化檔不推送", "green")
-            file_count = copy_filtered_from_staging(staging_dir, temp_dir, preserve)
-            print_color(
-                f"   過濾後複製 {file_count} 個檔案（should_exclude + preserve 已套用）",
+                print_color(f"   preserve 清單：{len(preserve)} 個專案特化檔不推送", "green")  # i18n-exempt
+            skills_config = load_sync_skills_config(claude_dir)
+            if skills_config["mode"] != "all" or skills_config["private"]:
+                print_color(  # i18n-exempt
+                    f"   sync-skills: mode={skills_config['mode']}"
+                    + (f", include={skills_config['include']}" if skills_config["mode"] == "select" else "")
+                    + (f", private={skills_config['private']}" if skills_config["private"] else ""),
+                    "green",
+                )
+            file_count = copy_filtered_from_staging(staging_dir, temp_dir, preserve, skills_config)
+            print_color(  # i18n-exempt
+                f"   過濾後複製 {file_count} 個檔案（should_exclude + preserve + skills 已套用）",
                 "green",
             )
             print_color("   注意: CLAUDE.md 不再同步（專案特定配置）")
@@ -1998,16 +2032,15 @@ def main() -> None:
             if clean_mode:
                 print_color("清理遠端過時檔案（對齊 git tracked 樹）...")
                 deleted = clean_stale_files(
-                    temp_dir, staging_dir, preserve, lineage_claimed
+                    temp_dir, staging_dir, preserve, lineage_claimed, skills_config
                 )
-                # i18n-exempt
-                print_color(f"   已清理 {deleted} 個遠端過時項目（檔案 + 空目錄）", "green")
+                print_color(f"   已清理 {deleted} 個遠端過時檔案", "green")  # i18n-exempt
             else:
                 # 未帶 --clean 時偵測本地已 git rm 但遠端殘留的孤兒（R2 soft 警告，
                 # 不阻擋、不改 --clean 預設）。在 staging rmtree 前計算並暫存，
                 # 待 push 成功後於結尾輸出提醒。
                 uncleaned_deletions = detect_uncleaned_deletions(
-                    temp_dir, staging_dir, preserve, lineage_claimed
+                    temp_dir, staging_dir, preserve, lineage_claimed, skills_config
                 )
         finally:
             shutil.rmtree(staging_dir, ignore_errors=True)

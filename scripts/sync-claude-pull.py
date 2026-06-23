@@ -44,7 +44,12 @@ except ImportError:
 # pull 端的三方合併用 should_exclude 過濾 LOCAL_ONLY / 憑證檔，避免本地 runtime
 # state 被遠端 delta 蓋掉，與 push/status 端共用同一判定避免漂移。
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks" / "lib"))
-from sync_exclude_manifest import should_exclude  # noqa: E402
+from sync_exclude_manifest import (  # noqa: E402
+    should_exclude,
+    should_exclude_skill,
+    _is_skill_path,
+    load_sync_skills_config,
+)
 
 # ============================================================================
 # Constants
@@ -790,6 +795,7 @@ def sync_directory(
     preserve: set[str] | None = None,
     prefix: Path = Path(),
     project_root: Path | None = None,
+    skills_config: dict | None = None,
 ) -> int:
     """增量同步來源目錄到目標目錄。
 
@@ -803,6 +809,7 @@ def sync_directory(
         preserve: 需要保留的本地特化檔案相對路徑集合
         prefix: 目前遞迴的相對路徑前綴
         project_root: git repo root，預設 dst.parent（git-delete 復活防護判定基準）
+        skills_config: load_sync_skills_config 回傳值（None 不過濾）
 
     傳回:
         int: 更新或複製的檔案總數
@@ -812,6 +819,7 @@ def sync_directory(
         - 跳過所有符號連結
         - 跳過 preserve 清單中的本地特化檔案
         - 跳過本地刻意刪除（git 史最後事件為 D）的復活（M2）
+        - 跳過 skills_config 排除的 skill 目錄
         - 保留檔案的修改時間戳（使用 shutil.copy2）
     """
     if preserve is None:
@@ -827,34 +835,41 @@ def sync_directory(
 
         rel = prefix / item.name
         dest_item = dst / item.name
+
+        # skills_config 過濾：在目錄層級即跳過排除的 skill
+        if skills_config is not None:
+            skill_name = _is_skill_path(rel)
+            if skill_name is not None and should_exclude_skill(skill_name, skills_config, "pull"):
+                continue
+
         if item.is_dir():
             if dest_item.exists():
-                count += sync_directory(item, dest_item, preserve, rel, project_root)
+                count += sync_directory(item, dest_item, preserve, rel, project_root, skills_config)
             else:
                 shutil.copytree(item, dest_item, symlinks=False,
                                 ignore=shutil.ignore_patterns(*SKIP_DURING_SYNC))
                 count += sum(1 for f in dest_item.rglob("*") if f.is_file())
         else:
             rel_str = str(rel).replace("\\", "/")
-            # M2：上游有、本地磁碟無、git 史最後事件為刪除 → 不復活
+            # M2：上游有、本地磁碟無、git 史最後事件為刪除 → 不復活  # i18n-exempt
             if not dest_item.exists() and _is_intentionally_deleted(
                 f".claude/{rel_str}", project_root
             ):
-                print_color(
+                print_color(  # i18n-exempt
                     f"   跳過復活本地刻意刪除檔: {rel_str}", "yellow"
                 )
                 continue
             if rel_str in preserve:
                 if not dest_item.exists():
-                    print_color(f"   本地特化檔案不存在（可能已刪除）: {rel_str}", "yellow")
+                    print_color(f"   本地特化檔案不存在（可能已刪除）: {rel_str}", "yellow")  # i18n-exempt
                 else:
                     try:
                         if _files_differ(item, dest_item):
-                            print_color(f"   本地特化檔案有遠端更新可用: {rel_str}", "yellow")
+                            print_color(f"   本地特化檔案有遠端更新可用: {rel_str}", "yellow")  # i18n-exempt
                         else:
-                            print_color(f"   保留本地特化檔案: {rel_str}", "green")
+                            print_color(f"   保留本地特化檔案: {rel_str}", "green")  # i18n-exempt
                     except (FileNotFoundError, OSError):
-                        print_color(f"   警告: 無法比對檔案 {rel_str}", "yellow")
+                        print_color(f"   警告: 無法比對檔案 {rel_str}", "yellow")  # i18n-exempt
                 continue
             dest_item.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(item, dest_item)
@@ -1534,6 +1549,7 @@ def apply_upstream_delta(
     temp_dir: Path,
     base_sha: str,
     preserve: set[str] | None = None,
+    skills_config: dict | None = None,
 ) -> tuple[int, list[str], list[str]]:
     """以三方合併方式套用上游 delta，原子置換只搬 delta 涉及的檔案（H2）。
 
@@ -1616,8 +1632,12 @@ def apply_upstream_delta(
             if should_exclude(rel_path):
                 continue
             if claude_rel in preserve:
-                print_color(f"   保留本地特化檔案（跳過 delta）: {claude_rel}", "green")
+                print_color(f"   保留本地特化檔案（跳過 delta）: {claude_rel}", "green")  # i18n-exempt
                 continue
+            if skills_config is not None:
+                skill_name = _is_skill_path(rel_path)
+                if skill_name is not None and should_exclude_skill(skill_name, skills_config, "pull"):
+                    continue
 
             local_file = claude_dir / rel_path
             local_exists = local_file.exists()
@@ -1840,6 +1860,16 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
             if not full_path.exists():
                 print_color(f"   警告: preserve 清單中的檔案不存在: {rel_path}", "yellow")
 
+    # 載入 sync-skills.yaml 選擇性同步設定
+    skills_config = load_sync_skills_config(claude_dir)
+    if skills_config["mode"] != "all" or skills_config["private"]:
+        print_color(  # i18n-exempt
+            f"   sync-skills: mode={skills_config['mode']}"
+            + (f", include={skills_config['include']}" if skills_config["mode"] == "select" else "")
+            + (f", private={skills_config['private']}" if skills_config["private"] else ""),
+            "green",
+        )
+
     # pin-aware：解析目標 commit（pin 特定版 = tag commit；latest/未設 = HEAD）。
     # pin 特定版時 checkout 該 commit，使後續流程（diff/show/rev-parse HEAD）皆對齊
     # pinned target 而非上游最新 HEAD，收斂壞變更爆炸半徑。latest/未設時 target ==
@@ -1905,7 +1935,7 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
             for r in will_skip_resurrection[:50]:
                 print_color(f"     x skip-resurrection: {r}")
 
-        file_count = sync_directory(temp_dir, claude_dir, preserve, project_root=project_root)
+        file_count = sync_directory(temp_dir, claude_dir, preserve, project_root=project_root, skills_config=skills_config)
         print_color(f"   已更新 {file_count} 個檔案", "green")
 
         # PC-APP-002 防護 (b)：以 dry-run 預覽的「非追蹤真刪」數為宣稱數，孤兒清理
@@ -1935,7 +1965,7 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
         # A3 三方合併：只搬 base→HEAD delta 涉及的檔案，保留本地刪除與 runtime state
         print_color("更新 .claude 資料夾（三方合併）...")
         applied, conflicts, upstream_deleted_residue = apply_upstream_delta(
-            project_root, temp_dir, base_sha, preserve
+            project_root, temp_dir, base_sha, preserve, skills_config
         )
         print_color(f"   已套用 {applied} 個 delta 變更", "green")
         if conflicts:

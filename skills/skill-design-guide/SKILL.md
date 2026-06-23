@@ -447,6 +447,7 @@ description: [...]
 |------|-------|
 | `references/patterns-and-troubleshooting.md` | 設計多步驟 / 條件式工作流、需要進階範本模式 |
 | `references/seeing-like-an-agent.md` | 想理解工具設計哲學與 agent 視角的演進 |
+| `.claude/references/skill-marketplace-standard.md` | 規劃 Skill Market 上架、檢查獨立性與環境解耦 |
 
 ---
 

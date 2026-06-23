@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "skill-sync"
+version = "1.0.0"
+description = "Sync Claude Code skills with a remote skills repository"
+readme = "SKILL.md"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+skill-sync = "skill_sync.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["skill_sync"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "skill_sync/**/*.py",
+    "pyproject.toml",
+    "SKILL.md",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+]
