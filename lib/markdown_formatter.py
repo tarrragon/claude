@@ -9,8 +9,11 @@ import re
 import os
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "hooks"))
-from hook_utils import setup_hook_logging, read_json_from_stdin
+# 以 lib 自身模組為依賴（避免 lib→hooks/hook_utils 反向依賴）。
+# 本檔以 script 模式執行（__main__），sys.path[0] 為 lib/；明確插入確保穩定。
+sys.path.insert(0, str(Path(__file__).parent))
+from hook_logging import setup_hook_logging
+from hook_io import read_json_from_stdin
 
 def detect_language(code):
     """Best-effort language detection from code content."""

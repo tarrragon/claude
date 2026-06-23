@@ -20,7 +20,7 @@ Why: flat base 是 V1/APP 共享凍結核心，獨立累加會再撞號（proces
   AND 目標不存在於磁碟（= 新建）           → exit 2 deny
   否則（前綴號 / 無 ID / 既有檔編輯 / 非 error-patterns）→ exit 0 allow
 
-SSOT: 複用 .claude/hooks/lib/pattern_id.py 的 extract_pattern_id，禁再造 regex（ARCH-020）。
+SSOT: 複用 .claude/lib/pattern_id.py 的 extract_pattern_id，禁再造 regex（ARCH-020）。
 對應規則: quality-baseline 規則 4（deny 訊息寫 stderr + 引導 /error-pattern add）。
 來源 ticket: 1.0.0-W1-021（source 1.0.0-W1-019.3）。
 """

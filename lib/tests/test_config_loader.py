@@ -40,7 +40,7 @@ class TestLoadAgentsConfig(unittest.TestCase):
 
     def test_default_config(self):
         """測試預設配置"""
-        with patch('config_loader.load_config', side_effect=FileNotFoundError):
+        with patch('lib.config_loader.load_config', side_effect=FileNotFoundError):
             config = load_agents_config()
             self.assertIn("known_agents", config)
             self.assertIn("agent_dispatch_rules", config)
@@ -48,7 +48,7 @@ class TestLoadAgentsConfig(unittest.TestCase):
 
     def test_config_caching(self):
         """測試配置快取"""
-        with patch('config_loader.load_config') as mock_load:
+        with patch('lib.config_loader.load_config') as mock_load:
             mock_load.return_value = {"known_agents": ["test-agent"]}
             # 第一次呼叫
             config1 = load_agents_config()
@@ -68,7 +68,7 @@ class TestLoadQualityRules(unittest.TestCase):
 
     def test_default_config(self):
         """測試預設配置"""
-        with patch('config_loader.load_config', side_effect=FileNotFoundError):
+        with patch('lib.config_loader.load_config', side_effect=FileNotFoundError):
             config = load_quality_rules()
             self.assertIn("trigger_conditions", config)
             self.assertIn("cache", config)
@@ -80,7 +80,7 @@ class TestClearConfigCache(unittest.TestCase):
 
     def test_clear_cache(self):
         """測試清除快取"""
-        with patch('config_loader.load_config') as mock_load:
+        with patch('lib.config_loader.load_config') as mock_load:
             mock_load.return_value = {"test": "value"}
             # 載入配置
             load_agents_config()

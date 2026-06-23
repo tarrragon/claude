@@ -200,6 +200,90 @@ class TestFormatStaleListSummary:
         assert msg.count("\n") <= 2
 
 
+class TestTriggerBoundExclusion:
+    """trigger_bound ticket 排除 stale 警告（W1-019）
+
+    外部監測 / trigger-bound 票的 trigger 為上游 release 或累積證據，
+    created 永不變，依日期判定 stale 屬誤報。staleness 警告應跳過這些票，
+    但純日期函式 calculate_stale_level 維持不知 trigger_bound（職責分離）。
+    """
+
+    def test_warning_none_when_trigger_bound(self):
+        """AC: format_stale_warning 對 trigger_bound=true 回 None（即使 created >= 30 天）"""
+        from ticket_system.lib.staleness import format_stale_warning
+
+        today = date(2026, 4, 16)
+        ticket = {
+            "id": "1.4.0-W1-005",
+            "created": (today - timedelta(days=45)).isoformat(),
+            "trigger_bound": True,
+        }
+        assert format_stale_warning(ticket, today=today) is None
+
+    def test_warning_shown_without_trigger_bound(self):
+        """對照：同齡票無 trigger_bound 仍正常警告（排除不誤傷一般票）"""
+        from ticket_system.lib.staleness import format_stale_warning
+
+        today = date(2026, 4, 16)
+        ticket = {
+            "id": "1.4.0-W1-099",
+            "created": (today - timedelta(days=45)).isoformat(),
+        }
+        assert format_stale_warning(ticket, today=today) is not None
+
+    def test_warning_shown_when_trigger_bound_false(self):
+        """trigger_bound 顯式 false 不等於排除（僅 is True 才排除）"""
+        from ticket_system.lib.staleness import format_stale_warning
+
+        today = date(2026, 4, 16)
+        ticket = {
+            "id": "1.4.0-W1-099",
+            "created": (today - timedelta(days=45)).isoformat(),
+            "trigger_bound": False,
+        }
+        assert format_stale_warning(ticket, today=today) is not None
+
+    def test_summary_excludes_trigger_bound(self):
+        """AC: format_stale_list_summary 不計入 trigger_bound=true ticket"""
+        from ticket_system.lib.staleness import format_stale_list_summary
+
+        today = date(2026, 4, 16)
+        tickets = [
+            {"id": "A", "created": (today - timedelta(days=8)).isoformat()},   # info
+            {"id": "B", "created": (today - timedelta(days=35)).isoformat(),
+             "trigger_bound": True},                                            # 排除
+            {"id": "C", "created": (today - timedelta(days=40)).isoformat(),
+             "trigger_bound": True},                                            # 排除
+        ]
+        msg = format_stale_list_summary(tickets, today=today)
+        assert msg is not None
+        # 僅 A 計入；critical 計數應為 0（B/C 被排除）
+        assert "info=1" in msg
+        assert "critical" not in msg
+
+    def test_summary_none_when_all_trigger_bound(self):
+        """全部為 trigger_bound 時 summary 回 None（無可警告票）"""
+        from ticket_system.lib.staleness import format_stale_list_summary
+
+        today = date(2026, 4, 16)
+        tickets = [
+            {"id": "A", "created": (today - timedelta(days=40)).isoformat(),
+             "trigger_bound": True},
+            {"id": "B", "created": (today - timedelta(days=50)).isoformat(),
+             "trigger_bound": True},
+        ]
+        assert format_stale_list_summary(tickets, today=today) is None
+
+    def test_calculate_stale_level_stays_pure(self):
+        """calculate_stale_level 維持純日期函式：簽章只收 created，不知 trigger_bound"""
+        from ticket_system.lib.staleness import calculate_stale_level
+
+        today = date(2026, 4, 16)
+        created = (today - timedelta(days=45)).isoformat()
+        # 純日期計算不受 trigger_bound 影響（它根本拿不到該欄位）
+        assert calculate_stale_level(created, today=today) == "critical"
+
+
 class TestCommandIntegration:
     """整合測試：claim/query/list 命令輸出 stale 提示"""
 

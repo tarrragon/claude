@@ -8,9 +8,9 @@
 - 列出所有 FAIL 的 Hook 與原因
 
 使用方式：
-    python3 .claude/hooks/lib/hook_output_validator.py
-    python3 .claude/hooks/lib/hook_output_validator.py --hook .claude/hooks/foo.py
-    python3 .claude/hooks/lib/hook_output_validator.py --verbose
+    python3 .claude/lib/hook_output_validator.py
+    python3 .claude/lib/hook_output_validator.py --hook .claude/hooks/foo.py
+    python3 .claude/lib/hook_output_validator.py --verbose
 
 規範來源：IMP-055 (.claude/error-patterns/implementation/IMP-055-hook-stdout-plain-text-breaks-json-validation.md)
 

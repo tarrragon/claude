@@ -268,9 +268,13 @@ def render_json(
 # 主入口
 # ---------------------------------------------------------------------------
 
-def _print_all_completed_warning(version: str) -> None:
-    """若版本所有 ticket 皆為終結狀態，印出 warning。"""
-    all_completed, next_version = check_version_all_completed(version)
+def _print_all_completed_warning(version: str, tickets: list) -> None:
+    """若版本所有 ticket 皆為終結狀態，印出 warning。
+
+    重用 dashboard_main 已載入的 tickets，避免冗餘 list_tickets 重載
+    （該重載會觸發 get_project_root → subprocess）。
+    """
+    all_completed, next_version = check_version_all_completed(version, tickets=tickets)
     if not all_completed:
         return
 
@@ -348,7 +352,7 @@ def dashboard_main(args: argparse.Namespace, version: Optional[str]) -> int:
             stale_disabled=no_stale,
         ))
 
-    _print_all_completed_warning(version)
+    _print_all_completed_warning(version, all_tickets)
     return 0
 
 

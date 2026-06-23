@@ -62,6 +62,12 @@ REPO_URL = "https://github.com/tarrragon/claude.git"
 # shallow clone 取不到 base commit；改用較寬的 300s timeout 容納 full / blob:none clone。
 GIT_CLONE_TIMEOUT_SECONDS = 300
 
+# sync-pull 完成後的 hook import 煙霧測試（issue #10 斷裂 4）。
+# py_compile 只檢查語法不執行 import，無法偵測上游 lib 重構 / 新增 dependency
+# 導致的 runtime import 斷裂；本驗證複用 W2-007 產出的 test-hook-imports.sh。
+HOOK_IMPORT_TEST_RELPATH = "scripts/test-hook-imports.sh"
+HOOK_IMPORT_TEST_TIMEOUT_SECONDS = 120
+
 # 同步狀態檔與 base SHA 欄位（與 status 端 SSOT 一致，W1-025 schema）。
 SYNC_STATE_FILENAME = ".sync-state.json"
 BASE_SHA_FIELD = "last_synced_base_sha"
@@ -2363,6 +2369,90 @@ def run_audit() -> None:  # i18n-exempt
         )
 
 
+def verify_hook_imports(project_root: Path) -> int:
+    """sync-pull 完成後執行 hook import 煙霧測試（issue #10 斷裂 4）。
+
+    py_compile 只檢查語法不執行 import，consumer sync-pull 後若上游 lib 重構或
+    新增 dependency 導致 runtime import 斷裂（ModuleNotFoundError），同步主流程
+    全綠卻在 hook 實際觸發時才崩潰。本函式呼叫 scripts/test-hook-imports.sh
+    （W2-007 產出）對所有 hook 做 import-level 煙霧測試。
+
+    腳本的失敗清單原本輸出至 stdout；本函式於非零 returncode 時將其轉發到
+    stderr，使 sync-pull 的失敗訊號集中於 stderr 並回傳非零 exit code。
+
+    腳本不存在 / 子進程無法執行（OSError / Timeout）時 log warning 並回 0，
+    不阻擋同步主流程（同步本體已完成，驗證僅為後置安全網）。
+
+    參數:
+        project_root: 專案根目錄路徑
+
+    傳回:
+        test-hook-imports.sh 的 exit code（0=全通過或 graceful skip，非零=有失敗）
+    """
+    script = project_root / ".claude" / HOOK_IMPORT_TEST_RELPATH
+    if not script.exists():
+        print_color(f"   hook import 驗證腳本不存在，跳過: {script}", "yellow")  # i18n-exempt
+        return 0
+
+    print_color("執行 hook import 煙霧測試（issue #10 runtime 驗證）...", "yellow")  # i18n-exempt
+    try:
+        result = subprocess.run(
+            ["bash", str(script)],
+            capture_output=True,
+            text=True,
+            timeout=HOOK_IMPORT_TEST_TIMEOUT_SECONDS,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        print_color(f"   hook import 煙霧測試無法執行，跳過: {exc}", "yellow")  # i18n-exempt
+        return 0
+
+    if result.returncode == 0:
+        print_color("   hook import 煙霧測試全數通過", "green")  # i18n-exempt
+        return 0
+
+    # 失敗：將腳本的失敗清單（stdout）與任何 stderr 轉發到 stderr
+    sys.stderr.write("\n[sync-pull] hook import 驗證失敗：\n")  # i18n-exempt
+    if result.stdout:
+        sys.stderr.write(result.stdout)
+    if result.stderr:
+        sys.stderr.write(result.stderr)
+    sys.stderr.write("\n")
+    return result.returncode
+
+
+def verify_local_settings_no_hooks(project_root: Path) -> None:
+    """Post-sync 告警：settings.local.json 不該含 hook 註冊（framework issue #11）。
+
+    框架 hook 一律註冊於 settings.json；settings.local.json 為 sync 排除檔
+    （local-only），框架版本遷移 / relocate 無法觸及，殘留註冊 relocate 後成幽靈
+    （ARCH-TUNL-001、PC-148 單一註冊來源原則）。本檢查於 sync-pull 完成後告警，
+    warn-only 不阻擋同步——同步本體已完成，此為後置安全網，對齊 SessionStart
+    find_local_hook_registrations 的偵測，補上「sync 端」的告警時機。
+
+    讀檔 / 解析失敗時靜默跳過（後置安全網不應因 local 檔異常中斷同步收尾）。
+    """
+    local_path = project_root / ".claude" / "settings.local.json"
+    if not local_path.is_file():
+        return
+    try:
+        data = json.loads(local_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    hooks = data.get("hooks") if isinstance(data, dict) else None
+    if not isinstance(hooks, dict) or not hooks:
+        return
+    events = ", ".join(sorted(hooks.keys()))
+    sys.stderr.write(
+        f"\n[sync-pull] 警告：settings.local.json 含 hook 註冊（事件: {events}）。\n"  # i18n-exempt
+    )
+    advice = (
+        "   框架 hook 應只註冊於 settings.json（PC-148 單一註冊來源）；"  # i18n-exempt
+        "settings.local.json 為 sync 排除檔，殘留註冊 relocate 後會成幽靈。"  # i18n-exempt
+        "修復：移至 settings.json，或執行 hook-completeness-check.py --fix 清理幽靈。"  # i18n-exempt
+    )
+    print_color(advice, "yellow")
+
+
 def main() -> None:
     """同步 .claude 配置從獨立 repo。
 
@@ -2410,8 +2500,16 @@ def main() -> None:
         temp_dir, backup_dir = _clone_and_backup(project_root)
         _complete_sync(temp_dir, project_root, backup_dir)
     except subprocess.TimeoutExpired:
-        print_color(f"git clone 超時（{GIT_CLONE_TIMEOUT_SECONDS} 秒），請檢查網路連線", "red")
+        print_color(f"git clone 超時（{GIT_CLONE_TIMEOUT_SECONDS} 秒），請檢查網路連線", "red")  # i18n-exempt
         sys.exit(1)
+
+    # post-sync 安全網：settings.local.json 不該含 hook（issue #11，warn-only）
+    verify_local_settings_no_hooks(project_root)
+
+    # post-sync runtime 驗證：偵測 py_compile 無法捕捉的 import 斷裂（issue #10）
+    import_rc = verify_hook_imports(project_root)
+    if import_rc != 0:
+        sys.exit(import_rc)
 
 
 if __name__ == "__main__":

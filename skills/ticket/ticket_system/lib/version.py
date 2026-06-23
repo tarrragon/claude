@@ -36,12 +36,17 @@ def get_current_version() -> Optional[str]:
     return _scan_worklog_directories()
 
 
-def check_version_all_completed(version: str) -> tuple[bool, Optional[str]]:
+def check_version_all_completed(
+    version: str, tickets: Optional[list] = None
+) -> tuple[bool, Optional[str]]:
     """
     檢查指定版本的所有 ticket 是否皆為終結狀態。
 
     Args:
         version: 版本號（無 v 前綴，如 "1.3.0"）
+        tickets: 已載入的 ticket 清單；None 時自行 list_tickets。
+            caller 已載入時應傳入以避免冗餘重載（同時消除 list_tickets →
+            get_project_root → subprocess 的呼叫，便於 dashboard 無 subprocess 測試）。
 
     Returns:
         tuple[bool, Optional[str]]:
@@ -49,9 +54,10 @@ def check_version_all_completed(version: str) -> tuple[bool, Optional[str]]:
             - Optional[str]: 下一個 active 版本 ID（無 v 前綴），若無則 None
     """
     from .constants import TERMINAL_STATUSES
-    from .ticket_loader import list_tickets
 
-    tickets = list_tickets(version)
+    if tickets is None:
+        from .ticket_loader import list_tickets
+        tickets = list_tickets(version)
     if not tickets:
         return (False, None)
 

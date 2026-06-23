@@ -373,6 +373,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-V1-008 | lockfile 版本漂移修正被 auto-preserve worktree commit 孤立並險遭當噪音丟棄 | 中 | v1.0.0 |
 | PC-V1-009 | 機械缺陷誤診為流程缺陷（import 殘留可由 smoke test 消除卻誤上人工 PR 審查） | 高 | v1.0.0 |
 | PC-V1-010 | 子代理人完成摘要把測試總數誤報為通過數，遮蔽紅燈（PM 須獨立重跑讀實跑行） | 高 | v1.0.0 |
+| PC-V1-012 | 防護置於便利攔截介面而非狀態變異真實源頭（攔錯攻擊面 + 行為防護冒充結構治本） | 中 | v1.0.0 |
 | PC-APP-001 | 延後決策綁定的 trigger ticket 引用未查證 scope 一致性（trigger 名存實亡） | 中 | v0.32.0 |
 | PC-APP-002 | sync-pull 孤兒清理超出宣稱範圍刪除，preserve 機制未生效致專案特化檔遺失 | 高 | v0.32.0 |
 

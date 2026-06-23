@@ -39,7 +39,8 @@ import pytest
 
 HOOKS_DIR = Path(__file__).resolve().parent.parent
 DISPATCH_STATS_PATH = HOOKS_DIR / "dispatch_stats.py"
-HOOK_PATH = HOOKS_DIR / "agent-dispatch-validation-hook.py"
+# hook 已於 a7ac4f252 遷移至 skills/ticket/hooks/（migrate 8 hooks to skill directories）
+HOOK_PATH = HOOKS_DIR.parent / "skills" / "ticket" / "hooks" / "agent-dispatch-validation-hook.py"
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
 

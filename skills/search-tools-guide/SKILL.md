@@ -526,7 +526,7 @@ rg --version
 
 | 限制 | 影響 | Workaround |
 |------|------|----------|
-| cbm MCP namespace 在某些版本未於 ToolSearch deferred 曝光 | `ToolSearch(query="codebase memory")` 找不到時 | 改用 CLI：`codebase-memory-mcp cli <tool> '<json>'`（詳見 `references/codebase-memory-tool.md` §1）。前綴以實機 deferred 清單為準（正確形含連字號 `mcp__codebase-memory-mcp__`，非底線） |
+| cbm MCP namespace（2026-06-24 W1-006 起已曝光於 ToolSearch deferred） | 預設可直接呼叫 `mcp__codebase-memory-mcp__*`；僅某些環境（fresh subprocess / headless）ToolSearch 可能找不到 | 首選 MCP deferred tools；不可用時 fallback CLI：`codebase-memory-mcp cli <tool> '<json>'`（詳見 `references/codebase-memory-tool.md` §1）。前綴以實機 deferred 清單為準（正確形含連字號 `mcp__codebase-memory-mcp__`，非底線） |
 | cbm 對 `.claude/` 不索引（v0.6.1 hardcoded） | `.claude/` 範圍搜尋 cbm 結果為空 | `.claude/` 範圍改用 `rg` + 必要時 serena（詳見 `references/codebase-memory-tool.md` §2） |
 | codegraph 冷啟動需載 embedding model | fresh subprocess 30-60s 不可用 | 用 CC runtime 內已暖機的 `mcp__codegraph__*` deferred tools |
 

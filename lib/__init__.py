@@ -27,6 +27,7 @@ from .hook_logging import setup_hook_logging
 
 from .hook_io import (
     read_hook_input,
+    read_json_from_stdin,
     write_hook_output,
     create_pretooluse_output,
     create_posttooluse_output,

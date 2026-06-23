@@ -13,6 +13,7 @@ Hook 輸入輸出處理
 """
 
 import json
+import logging
 import sys
 from typing import Any, Optional
 
@@ -35,6 +36,37 @@ def read_hook_input() -> dict:
         return {}
     except Exception:
         return {}
+
+
+def read_json_from_stdin(logger: logging.Logger) -> Optional[dict]:
+    """從 stdin 讀取 JSON 輸入（與 hook_utils.read_json_from_stdin 行為等價）。
+
+    與 read_hook_input 的差異：本函式以 logger 記錄解析失敗，並在空輸入 / 解析
+    失敗時回傳 None（read_hook_input 回傳空 dict）。供需要區分「無輸入」與「空
+    物件」的 hook script 使用（如 markdown_formatter 以 None 短路 sys.exit(0)）。
+
+    處理三種情況：
+    1. 空輸入（SessionStart 等事件無輸入）→ None
+    2. JSON 解析失敗 → logger.info + None
+    3. 有效的 JSON 物件 → dict
+
+    Args:
+        logger: Logger 實例，用於記錄解析跳過事件
+
+    Returns:
+        dict: 解析後的 JSON；空輸入或解析失敗時回傳 None
+    """
+    try:
+        input_text = sys.stdin.read().strip()
+        if not input_text:
+            return None
+        return json.loads(input_text)
+    except json.JSONDecodeError as exc:
+        logger.info("JSON 解析跳過（stdin 含控制字元）: {}".format(exc))
+        return None
+    except Exception as exc:
+        logger.info("讀取 stdin 跳過: {}".format(exc))
+        return None
 
 
 def write_hook_output(output: dict, ensure_ascii: bool = False, indent: int = 2) -> None:

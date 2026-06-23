@@ -1,7 +1,7 @@
 """
 Active Dispatch Tracker 單元測試
 
-測試 .claude/hooks/lib/dispatch_tracker.py 的所有公開 API。
+測試 .claude/lib/dispatch_tracker.py 的所有公開 API。
 """
 
 import json

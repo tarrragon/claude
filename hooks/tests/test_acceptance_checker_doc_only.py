@@ -109,7 +109,7 @@ def test_general_imp_pure_code_emits_general_warning(logger, empty_body):
     fm = _make_frontmatter(
         [
             ".claude/hooks/some_hook.py",
-            ".claude/hooks/lib/utils.py",
+            ".claude/lib/utils.py",
         ]
     )
     _, msg, _, _ = verify_acceptance_record(empty_body, fm, "test-code", logger)

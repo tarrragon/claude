@@ -1,3 +1,31 @@
+## [2.1.0] - 2026-06-24
+
+### Summary
+feat: sync-pull post-sync 告警 settings.local.json 含 hook; feat: hook-completeness --fix opt-in prune 幽靈 local hook; feat: sync-pull post-sync hook import 驗證 (+15 more)
+
+Changes: 4 feat, 2 refactor, 7 fix, 5 docs
+
+- feat: sync-pull post-sync 告警 settings.local.json 含 hook
+- feat: hook-completeness --fix opt-in prune 幽靈 local hook
+- feat: sync-pull post-sync hook import 驗證
+- feat: test-hook-imports.sh 一鍵 hook import 煙霧測試
+- refactor: lib/ 內 from hook_utils import 正規化
+- refactor: 清理 hooks/lib 文字殘留 + 刪殘留目錄
+- fix: dashboard 重用已載入 tickets 消除冗餘 subprocess
+- fix: staleness 警告排除 trigger_bound ticket
+- fix: 修 lib/tests 16 個 stale patch 目標
+- fix: 修 scripts/tests 2 個 stale 測試
+- fix: 修 test_dispatch_stats.py 38 errors（雙根因）
+- fix: .gitignore 補齊 sync-skills.yaml + git rm --cached untrack
+- fix: skill-sync SKILL.md 補齊 YAML frontmatter + 建立 issue #10 追蹤 tickets
+- docs: cbm MCP namespace 已曝光於 ToolSearch，更新工具參考
+- docs: 固化框架 hook 單一註冊來源原則於 PC-148
+- docs: 新增 PC-V1-012 防護置於便利攔截介面而非變異源頭
+- docs: hook sys.path 標準模板文件
+- docs: sync-pull breaking change consumer checklist
+
+---
+
 ## [2.0.1] - 2026-06-23
 
 ### Summary

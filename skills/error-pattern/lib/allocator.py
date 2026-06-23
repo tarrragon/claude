@@ -6,7 +6,7 @@
 - allocate_pattern_id：掃 `error-patterns/<cat-dir>/<CAT>-<PROJ>-*.md` 取既有最大號 +1，
   flat 凍結 base（`<CAT>-NNN`）不參與遞增（前綴命名空間獨立）。
 
-依賴邊界：複用 `.claude/hooks/lib/pattern_id.py` 的 `PATTERN_ID_RE`（W1-019.2 SSOT），
+依賴邊界：複用 `.claude/lib/pattern_id.py` 的 `PATTERN_ID_RE`（W1-019.2 SSOT），
 不在 skill 內複製 regex 以免破壞剛收斂的單一權威。skill 獨立上架時的依賴打包
 （pattern_id + pyyaml）屬 W1-001（SKILL 獨立上架規範）範圍。
 
@@ -19,7 +19,7 @@ from pathlib import Path
 
 import yaml
 
-# 複用 hooks/lib 的 SSOT regex（W1-019.2，E2 linux F3）解析既有 ID。
+# 複用 lib 的 SSOT regex（W1-019.2，E2 linux F3）解析既有 ID。
 _claude_dir = Path(__file__).resolve().parents[3]  # .claude
 _hooks_dir = _claude_dir / "hooks"
 if str(_hooks_dir) not in sys.path:

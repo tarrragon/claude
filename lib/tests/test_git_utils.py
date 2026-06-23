@@ -67,14 +67,14 @@ class TestRunGitCommand(unittest.TestCase):
 class TestBranchFunctions(unittest.TestCase):
     """測試分支相關函式"""
 
-    @patch('git_utils.run_git_command')
+    @patch('lib.git_utils.run_git_command')
     def test_get_current_branch_success(self, mock_run):
         """測試成功獲取當前分支"""
         mock_run.return_value = (True, "feat/new-feature")
         branch = get_current_branch()
         self.assertEqual(branch, "feat/new-feature")
 
-    @patch('git_utils.run_git_command')
+    @patch('lib.git_utils.run_git_command')
     def test_get_current_branch_failure(self, mock_run):
         """測試獲取分支失敗"""
         mock_run.return_value = (False, "error")
@@ -103,7 +103,7 @@ class TestBranchFunctions(unittest.TestCase):
 class TestWorktreeFunctions(unittest.TestCase):
     """測試 worktree 相關函式"""
 
-    @patch('git_utils.run_git_command')
+    @patch('lib.git_utils.run_git_command')
     def test_get_worktree_list(self, mock_run):
         """測試獲取 worktree 列表"""
         mock_run.return_value = (True, """worktree /path/to/repo
@@ -119,7 +119,7 @@ branch refs/heads/feat/new-feature
         self.assertEqual(worktrees[1]["path"], "/path/to/feature")
         self.assertEqual(worktrees[1]["branch"], "feat/new-feature")
 
-    @patch('git_utils.run_git_command')
+    @patch('lib.git_utils.run_git_command')
     def test_get_worktree_list_failure(self, mock_run):
         """測試獲取 worktree 列表失敗"""
         mock_run.return_value = (False, "error")
@@ -188,7 +188,7 @@ class TestFileStatus(unittest.TestCase):
 class TestUncommittedStatusLines(unittest.TestCase):
     """測試 get_uncommitted_status_lines 和相關函式"""
 
-    @patch('git_utils.run_git_command')
+    @patch('lib.git_utils.run_git_command')
     def test_has_uncommitted_changes(self, mock_run):
         """測試有未提交變更時回傳非空列表"""
         mock_run.return_value = (True, """ M file1.txt
@@ -201,21 +201,21 @@ A  file3.py
         self.assertIn("?? file2.txt", status_lines)
         self.assertIn("A  file3.py", status_lines)
 
-    @patch('git_utils.run_git_command')
+    @patch('lib.git_utils.run_git_command')
     def test_no_uncommitted_changes(self, mock_run):
         """測試無未提交變更時回傳空列表"""
         mock_run.return_value = (True, "")
         status_lines = _get_uncommitted_status_lines()
         self.assertEqual(status_lines, [])
 
-    @patch('git_utils.run_git_command')
+    @patch('lib.git_utils.run_git_command')
     def test_git_command_failure(self, mock_run):
         """測試 git 命令失敗時回傳空列表"""
         mock_run.return_value = (False, "fatal: not a git repository")
         status_lines = _get_uncommitted_status_lines()
         self.assertEqual(status_lines, [])
 
-    @patch('git_utils.run_git_command')
+    @patch('lib.git_utils.run_git_command')
     def test_porcelain_format_preserved(self, mock_run):
         """測試 porcelain 格式狀態行被保留"""
         mock_run.return_value = (True, """ M modified.txt
@@ -232,7 +232,7 @@ A  file3.py
 class TestUncommittedFiles(unittest.TestCase):
     """測試 get_uncommitted_files 高階 API"""
 
-    @patch('git_utils.run_git_command')
+    @patch('lib.git_utils.run_git_command')
     def test_get_uncommitted_files_with_changes(self, mock_run):
         """測試有未提交變更時回傳 FileStatus 列表"""
         mock_run.return_value = (True, """ M file1.txt
@@ -259,21 +259,21 @@ A  file3.py
         self.assertEqual(files[2].file_path, "file3.py")
         self.assertTrue(files[2].is_added)
 
-    @patch('git_utils.run_git_command')
+    @patch('lib.git_utils.run_git_command')
     def test_get_uncommitted_files_empty(self, mock_run):
         """測試無未提交變更時回傳空列表"""
         mock_run.return_value = (True, "")
         files = get_uncommitted_files()
         self.assertEqual(files, [])
 
-    @patch('git_utils.run_git_command')
+    @patch('lib.git_utils.run_git_command')
     def test_get_uncommitted_files_failure(self, mock_run):
         """測試 git 命令失敗時回傳空列表"""
         mock_run.return_value = (False, "fatal: not a git repository")
         files = get_uncommitted_files()
         self.assertEqual(files, [])
 
-    @patch('git_utils.run_git_command')
+    @patch('lib.git_utils.run_git_command')
     def test_get_uncommitted_files_parse_multiple_files(self, mock_run):
         """測試正確解析多個變更檔案"""
         mock_run.return_value = (True, """M  modified_staged.txt

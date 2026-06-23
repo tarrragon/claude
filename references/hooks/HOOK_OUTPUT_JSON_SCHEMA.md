@@ -94,7 +94,7 @@ Claude Code CLI 的 JSON validator 不只檢查「是否為 JSON」，還檢查*
 
 ## 驗證腳本
 
-位於 `.claude/hooks/lib/hook_output_validator.py`，會：
+位於 `.claude/lib/hook_output_validator.py`，會：
 
 1. 從 `.claude/settings.json` 解析所有 PostToolUse/PreToolUse Hook
 2. 以 dummy 輸入執行每個 Hook（`echo JSON | python3 HOOK.py`）
@@ -104,16 +104,16 @@ Claude Code CLI 的 JSON validator 不只檢查「是否為 JSON」，還檢查*
 
 ```bash
 # 掃描所有已註冊的 PostToolUse/PreToolUse Hook
-python3 .claude/hooks/lib/hook_output_validator.py
+python3 .claude/lib/hook_output_validator.py
 
 # 僅驗證單一 Hook（預設視為 PostToolUse）
-python3 .claude/hooks/lib/hook_output_validator.py --hook .claude/hooks/my-new-hook.py
+python3 .claude/lib/hook_output_validator.py --hook .claude/hooks/my-new-hook.py
 
 # 指定事件類型
-python3 .claude/hooks/lib/hook_output_validator.py --hook .claude/hooks/my-new-hook.py --event PreToolUse
+python3 .claude/lib/hook_output_validator.py --hook .claude/hooks/my-new-hook.py --event PreToolUse
 
 # 顯示每個 Hook 的 stdout/stderr 預覽
-python3 .claude/hooks/lib/hook_output_validator.py --verbose
+python3 .claude/lib/hook_output_validator.py --verbose
 ```
 
 ### 退出碼
@@ -136,7 +136,7 @@ python3 .claude/hooks/lib/hook_output_validator.py --verbose
 - [ ] 使用 `hook_utils.run_hook_safely` 包裝 main（crash 時 traceback 寫 stderr）
 - [ ] 在 `.claude/settings.json` 註冊 Hook（IMP-051）
 - [ ] 權限設定正確（IMP-054）
-- [ ] **跑過驗證腳本**：`python3 .claude/hooks/lib/hook_output_validator.py --hook <path> --event <PostToolUse|PreToolUse>`
+- [ ] **跑過驗證腳本**：`python3 .claude/lib/hook_output_validator.py --hook <path> --event <PostToolUse|PreToolUse>`
 
 ---
 
@@ -146,7 +146,7 @@ python3 .claude/hooks/lib/hook_output_validator.py --verbose
 - `.claude/error-patterns/implementation/IMP-051-new-hook-not-registered.md` — Hook 未註冊
 - `.claude/error-patterns/implementation/IMP-054-hook-missing-execute-permission.md` — Hook 權限問題
 - `.claude/hooks/hook_utils.py` — 統一日誌與例外處理工具
-- `.claude/hooks/lib/hook_output_validator.py` — 本規範的自動驗證工具
+- `.claude/lib/hook_output_validator.py` — 本規範的自動驗證工具
 
 ---
 

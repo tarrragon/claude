@@ -1,3 +1,8 @@
+---
+name: skill-sync
+description: 'Sync Claude Code skills between local .claude/skills/ and a remote skills repository. Use for: pulling skills from remote, pushing local skills to remote, listing available remote skills.'
+---
+
 # skill-sync
 
 Sync Claude Code skills between local `.claude/skills/` and a remote skills repository.

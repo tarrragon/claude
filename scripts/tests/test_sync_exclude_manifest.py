@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-# manifest 位於 .claude/hooks/lib/
+# manifest 位於 .claude/lib/
 _LIB = Path(__file__).resolve().parent.parent.parent / "lib"
 sys.path.insert(0, str(_LIB))
 import sync_exclude_manifest as manifest  # noqa: E402
@@ -48,8 +48,11 @@ def test_raw_classifications_are_frozensets():
 
 
 def test_push_exclude_is_union():
+    # PUSH_EXCLUDE 為三維度聯集：local-only + 憑證 + push-only（含 project-integration）
     assert manifest.PUSH_EXCLUDE == (
-        manifest.LOCAL_ONLY_PATTERNS | manifest.CREDENTIAL_PATTERNS
+        manifest.LOCAL_ONLY_PATTERNS
+        | manifest.CREDENTIAL_PATTERNS
+        | manifest.PUSH_ONLY_EXCLUDE_PATTERNS
     )
 
 

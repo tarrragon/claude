@@ -158,6 +158,16 @@ def is_stale_in_progress(
     return minutes >= STALE_IN_PROGRESS_HOURS * 60
 
 
+def _is_trigger_bound(ticket: dict) -> bool:
+    """判斷 ticket 是否為 trigger_bound（trigger 綁定延後）。
+
+    trigger_bound ticket 的觸發條件為上游 release 或累積證據，created 日期
+    永不變動，依日期判定 stale 屬誤報。僅 frontmatter `trigger_bound` 嚴格為
+    True 才排除（顯式 False / 缺欄位皆視為一般票，不誤傷）。
+    """
+    return ticket.get("trigger_bound") is True
+
+
 def _ticket_age_days(ticket: dict, today: date) -> Optional[int]:
     created_date = _parse_created(ticket.get("created"))
     if created_date is None:
@@ -172,8 +182,12 @@ def format_stale_warning(
     為單一 Ticket 產出 stale 警告訊息。
 
     Returns:
-        警告字串（最多 3 行）或 None（未觸發任一閾值）。
+        警告字串（最多 3 行）或 None（未觸發任一閾值，或 trigger_bound 排除）。
     """
+    # trigger_bound ticket：trigger 為外部/累積條件，依日期判 stale 屬誤報，跳過
+    if _is_trigger_bound(ticket):
+        return None
+
     reference = today or date.today()
     age = _ticket_age_days(ticket, reference)
     if age is None:
@@ -216,6 +230,9 @@ def format_stale_list_summary(
     critical_count = 0
 
     for ticket in tickets:
+        # trigger_bound ticket 不計入 stale 統計（同 format_stale_warning 排除）
+        if _is_trigger_bound(ticket):
+            continue
         level = calculate_stale_level(ticket.get("created"), today=reference)
         if level == LEVEL_INFO:
             info_count += 1

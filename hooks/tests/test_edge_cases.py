@@ -251,7 +251,7 @@ def test_c3_layer_0_infrastructure():
 - [ ] 環境 配置驗證完成
 
 ## 修改檔案
-.claude/hooks/lib/ticket_quality/detectors.py
+.claude/lib/ticket_quality/detectors.py
 """
 
     result = check_ambiguous_responsibility_automated(infrastructure_ticket)
@@ -268,7 +268,7 @@ def test_c3_layer_0_infrastructure():
 - [ ] 測試通過
 
 ## 修改檔案
-.claude/hooks/lib/ticket_quality/detectors.py
+.claude/lib/ticket_quality/detectors.py
 """
 
     result = check_ambiguous_responsibility_automated(infrastructure_ticket_without_keywords)
@@ -298,7 +298,7 @@ def test_c3_layer_0_infrastructure():
 - [ ] {sample_text}
 
 ## 修改檔案
-.claude/hooks/lib/ticket_quality/detectors.py
+.claude/lib/ticket_quality/detectors.py
 """
         result = check_ambiguous_responsibility_automated(ticket)
         assert result["details"]["acceptance_aligned"], f"C3: 應識別關鍵詞「{keyword}」在驗收條件中（{idx+1}/11）"

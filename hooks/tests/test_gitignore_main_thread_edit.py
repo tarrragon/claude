@@ -13,7 +13,7 @@ import logging
 import sys
 from pathlib import Path
 
-# 測試目錄在 .claude/hooks/tests/，target 在 .claude/hooks/ 和 .claude/hooks/lib/
+# 測試目錄在 .claude/hooks/tests/，target 在 .claude/hooks/ 和 .claude/lib/
 HOOKS_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(HOOKS_DIR))

@@ -29,8 +29,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple, Any
 
-# 導入統一的 get_project_root
-from hook_utils import get_project_root
+# 導入統一的 get_project_root（lib 自身模組，避免 lib→hooks/hook_utils 反向依賴）
+from .git_utils import get_project_root
 
 
 def setup_project_environment() -> Tuple[Path, Path, Path]:

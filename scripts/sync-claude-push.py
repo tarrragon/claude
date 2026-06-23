@@ -66,7 +66,7 @@ from datetime import datetime
 from pathlib import Path
 
 # 排除分類與 should_exclude / compute_content_hash 由 SSOT manifest 統一提供
-# （ARCH-020：消除 push/status 重複定義漂移）。manifest 位於 .claude/hooks/lib/。
+# （ARCH-020：消除 push/status 重複定義漂移）。manifest 位於 .claude/lib/。
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib.sync_exclude_manifest import (  # noqa: E402
     should_exclude,
@@ -1414,7 +1414,7 @@ def run_framework_smoke_test(staging_dir: Path) -> None:
 
     隔離：本函式以獨立 sys.path 前綴 import 並在結束後清理已 import 的核心套件
     模組，避免污染 push 腳本自身的 import 狀態（push 腳本另經 sys.path 載入
-    hooks/lib 的 manifest）。
+    lib 的 manifest）。
 
     參數:
         staging_dir: git archive 解出、已 strip .claude/ 前綴的 staging 樹根目錄

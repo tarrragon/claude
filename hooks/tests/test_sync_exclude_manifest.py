@@ -106,7 +106,7 @@ def test_worktrees_root_anchored_does_not_false_positive_on_nested():
 
 def test_should_not_exclude_unrelated_paths():
     # 防 false positive：與新 pattern 無關的路徑不應被誤排除
-    assert not should_exclude(Path("hooks/lib/sync_exclude_manifest.py"))
+    assert not should_exclude(Path("lib/sync_exclude_manifest.py"))
     assert not should_exclude(Path("rules/core/quality-baseline.md"))
 
 

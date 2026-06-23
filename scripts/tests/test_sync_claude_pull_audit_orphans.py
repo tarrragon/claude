@@ -159,7 +159,7 @@ def test_run_audit_prints_orphans(monkeypatch, tmp_path, capsys):
 
 
 def test_run_audit_silent_message_when_no_orphan(monkeypatch, tmp_path, capsys):
-    """無孤兒時 run_audit 輸出「無孤兒候選」。"""
+    """無孤兒時 run_audit 輸出「無正向孤兒」與「無反向孤兒」（W8-037.3 後雙向稽核）。"""
     project_root = tmp_path / "proj"
     claude = project_root / ".claude"
     _make_tree(claude, {"rules/a.md": "a\n"})
@@ -174,4 +174,6 @@ def test_run_audit_silent_message_when_no_orphan(monkeypatch, tmp_path, capsys):
 
     pull.run_audit()
 
-    assert "無孤兒候選" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "無正向孤兒" in out
+    assert "無反向孤兒" in out

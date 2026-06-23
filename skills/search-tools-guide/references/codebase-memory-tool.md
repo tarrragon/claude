@@ -2,15 +2,17 @@
 
 > **定位**：cbm 是三 MCP 之一，定位為「跨檔案概念 / 語義搜尋入口」，搭配 BM25 + 向量索引提供 11-signal 排序。本檔記錄 CLI 用法、實機限制與 workaround，供 `search-tools-guide` 主檔 lazy-load。
 >
-> **何時讀本檔**：(1) 派發前需要選擇 cbm vs codegraph vs serena；(2) 對 `.claude/` 範圍做搜尋發現 cbm 結果為空；(3) ToolSearch 找不到 `mcp__codebase-memory-mcp__*` 工具想知道是否可用。
+> **何時讀本檔**：(1) 派發前需要選擇 cbm vs codegraph vs serena；(2) 對 `.claude/` 範圍做搜尋發現 cbm 結果為空；(3) 需要 cbm CLI 模式（PM 前台離線驗證）語法。
 
 ---
 
-## 1. CLI 用法（MCP namespace 缺口 workaround）
+## 1. 工具呼叫方式（MCP deferred tools 已曝光）
 
-**現況**：`claude mcp list` 顯示 `codebase-memory-mcp: ✓ Connected`，但 `ToolSearch(query="select:mcp__codebase-memory-mcp__*")` 回傳 "No matching deferred tools found"（W6-001.4 實證）。需以 CLI 模式呼叫。
+**現況（2026-06-24 W1-006 驗證）**：`mcp__codebase-memory-mcp__*` 系列工具已正常曝光於 ToolSearch deferred tools，可直接呼叫。`ToolSearch(query="select:mcp__codebase-memory-mcp__list_projects")` 載入 schema 後呼叫成功（回傳已索引 project）。**MCP deferred tools 為首選呼叫路徑**，CLI 模式（§下方）保留為 PM 前台離線驗證的替代手段。
 
-**CLI 統一格式**：
+> **歷史**：W6-001.4（2026-05-25）實證當時 namespace 未曝光，需走 CLI workaround；W1-006 觀測 trigger（namespace 曝光）已於 2026-06-24 達成，缺口解除。
+
+**CLI 統一格式**（PM 前台離線驗證 / MCP 不可用時 fallback）：
 
 ```bash
 codebase-memory-mcp cli <tool_name> '<json_args>'
@@ -117,7 +119,7 @@ cbm v0.6.1 對 `.claude/` 目錄存在 **hardcoded skip**：
 
 | 情境 | Workaround |
 |------|-----------|
-| ToolSearch 找不到 `mcp__codebase-memory-mcp__*` | 改用 CLI 模式 `codebase-memory-mcp cli <tool> '<json>'` |
+| MCP deferred tools 不可用（fresh subprocess / headless） | 改用 CLI 模式 `codebase-memory-mcp cli <tool> '<json>'`（CC runtime session 內 `mcp__codebase-memory-mcp__*` 已可直接呼叫） |
 | 想對 `.claude/` 做概念搜尋 | 改用 `rg -i "<keyword>" .claude/` + 必要時 serena 補符號級 |
 | cbm 索引後仍找不到結果 | (1) 確認 project ID 拼寫；(2) `delete_project` + clean reindex；(3) 改 `mode:"deep"` |
 | codegraph 索引耗時長 | 首次冷啟動需 embedding model 載入（BGE-Small-EN-v1.5，約 30-60s）；後續走快取 |
@@ -165,9 +167,10 @@ cbm v0.6.1 對 `.claude/` 目錄存在 **hardcoded skip**：
 |-------------|------|
 | `.claude/skills/search-tools-guide/SKILL.md` | 本檔的 parent；主檔含三 MCP 章節 + 命令速查 |
 | `.claude/skills/lsp-first/SKILL.md` | 補強三 MCP 路由；LSP 為精度錨點，cbm/codegraph 為查詢入口 |
-| `.claude/rules/core/tool-discovery.md` | ToolSearch 五問檢查；cbm MCP namespace 缺口屬「規則 1 問題 5」的反例案例 |
+| `.claude/rules/core/tool-discovery.md` | ToolSearch 五問檢查；cbm MCP namespace 缺口（已於 W1-006 解除）曾為「規則 1 問題 5」的反例案例 |
 
 ---
 
-**Last Updated**: 2026-05-25
+**Last Updated**: 2026-06-24
+**Version**: 1.1.0 — W1-006 落地：cbm MCP namespace 已曝光於 ToolSearch deferred tools，§1 改為 MCP deferred tools 首選 / CLI 為 fallback；`.claude/` 不索引限制（§2，v0.6.1）維持待 W1-005 上游修復
 **Version**: 1.0.0 — 從 W6-001.4 落地：cbm CLI 用法 + `.claude/` 不索引限制 + 三 MCP 分工

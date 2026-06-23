@@ -4,7 +4,7 @@
 #       （linux 視角 SSOT 警示，W17-122 ANA 採納）。
 #
 # 消費端：
-#   - .claude/hooks/lib/framework_paths.py（提供 is_framework_path 等共用函式）
+#   - .claude/lib/framework_paths.py（提供 is_framework_path 等共用函式）
 #   - .claude/hooks/layer-boundary-validator-hook.py（透過 lib 取 layer1_paths）
 #   - .claude/hooks/agent-dispatch-validation-hook.py（透過 lib 取 categories）
 #   - 後續 W17-127.2 skill-trigger-hook、W17-126 commit-msg Layer 2 hook

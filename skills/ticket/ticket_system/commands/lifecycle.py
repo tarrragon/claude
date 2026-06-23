@@ -1334,7 +1334,7 @@ def _print_claim_checklist(ticket: Dict[str, Any]) -> None:
 def _has_framework_path(ticket: Dict[str, Any]) -> bool:
     """檢查 ticket where.files 是否任一路徑命中 framework 路徑前綴。
 
-    [Ticket 0.18.0-W17-127.2] 改用 .claude/hooks/lib/framework_paths 為唯一 SSOT，
+    [Ticket 0.18.0-W17-127.2] 改用 .claude/lib/framework_paths 為唯一 SSOT，
     移除原 _FRAMEWORK_PATH_PREFIXES inline 清單（避免 SSOT 漂移）。
     [Ticket 0.18.0-W17-132] 改用 is_framework_path_broad（strict + .claude/hooks/）：
     hook 內警告訊息屬規範性產物，編輯時亦應觸發 S 問提示讀 SKILL。
@@ -1358,7 +1358,7 @@ def _resolve_framework_path_checker():
     """取得 framework path 判定函式（lib SSOT 為主，fallback 至 inline 前綴）。
 
     Lazy import：避免 lifecycle 模組於非 hook 環境（如純 ticket CLI 單元測試）
-    強依賴 hooks/lib 與 PyYAML。失敗時降級至 inline 前綴比對，保留既有行為。
+    強依賴 lib 與 PyYAML。失敗時降級至 inline 前綴比對，保留既有行為。
     """
     try:
         # 將 .claude/hooks/ 加入 sys.path（從專案根目錄推導）
