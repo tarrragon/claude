@@ -1,3 +1,14 @@
+## [2.0.1] - 2026-06-23
+
+### Summary
+chore: VERSION bump to 2.0.0 (align with framework breaking change)
+
+Changes: 1 chore
+
+- chore: VERSION bump to 2.0.0 (align with framework breaking change)
+
+---
+
 ## [1.62.0] - 2026-06-23
 
 ### Summary
