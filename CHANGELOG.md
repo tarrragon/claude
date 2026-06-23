@@ -1,3 +1,10 @@
+## [2.1.1] - 2026-06-24
+
+### Summary
+sync .claude configuration
+
+---
+
 ## [2.1.0] - 2026-06-24
 
 ### Summary
