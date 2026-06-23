@@ -10,13 +10,13 @@
 
 **搜尋引擎的「匹配模式」是個經常被忽略的維度** — 工具的預設行為跟使用者的 mental model 不對齊時、產生 silent 失敗：使用者打字、看不到預期結果、誤以為「沒有」、不會 report bug。
 
-| 匹配模式  | 例：query「pre」會匹配                  | 典型來源                     |
-| --------- | --------------------------------------- | ---------------------------- |
-| Exact     | `pre`（不含「pre」這個 token）          | DB `=` 比較                  |
+| 匹配模式  | 例：query「pre」會匹配                  | 典型來源             |
+| --------- | --------------------------------------- | -------------------- |
+| Exact     | `pre`（不含「pre」這個 token）          | DB `=` 比較          |
 | Prefix    | `pre`、`prefix`、`prefetch`、`presence` | 多數 static site search 預設 |
-| Substring | 上面 + `backpressure`、`SuperPress`     | DB `LIKE '%pre%'`            |
-| Fuzzy     | 上面 + `prv`、`pre1`（編輯距離）        | Algolia、TypeSense           |
-| Semantic  | 上面 + `before`、`prior`（語意相近）    | Vector search / LLM          |
+| Substring | 上面 + `backpressure`、`SuperPress`     | DB `LIKE '%pre%'`    |
+| Fuzzy     | 上面 + `prv`、`pre1`（編輯距離）        | Algolia、TypeSense   |
+| Semantic  | 上面 + `before`、`prior`（語意相近）    | Vector search / LLM  |
 
 使用者被 Google / 桌面搜尋訓練、預期 **substring 或更高層級**。預設拿到 prefix 的 site search → 「pre」找不到 backpressure → 看起來像 bug 但其實是 capability 落差。
 

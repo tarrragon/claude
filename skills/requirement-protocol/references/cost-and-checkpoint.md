@@ -3,7 +3,6 @@
 兩個情境的協議合併：**對抗多層的覆寫成本告知** + **「先還原 / 先重來」類退出指令處理**。共同主軸 = 把成本攤開、讓使用者參與決策、保留可逆性。
 
 適用：
-
 - 客製需求要對抗多層（vendor CSS、framework reconciliation、browser default、UA stylesheet）
 - 收到「先還原」「先重來」「換個方向」「我們重新開始」這類指令
 
@@ -15,13 +14,13 @@
 
 ## 何時參閱本文件
 
-| 訊號                                                  | 該做的第一件事                                     |
-| ----------------------------------------------------- | -------------------------------------------------- |
-| 客製需求看似簡單但要打到 vendor / framework / UA 多層 | 在寫第一條規則前先報成本                           |
-| 即將連寫 ≥ 3 條 `!important` / 複雜 selector          | 停 — 寫成本報告、問使用者意願                      |
-| 使用者說「先還原」「先重來」「思路不對、換」          | 確認還原目標 + 是否要 commit 當前進度              |
-| 探索了一個方向、最後沒採用                            | commit 一個 checkpoint 標「explored, not adopted」 |
-| 即將執行 `git reset --hard` / `git checkout .`        | 先確認哪些工作要保留、哪些要丟                     |
+| 訊號                                                      | 該做的第一件事                            |
+| --------------------------------------------------------- | ----------------------------------------- |
+| 客製需求看似簡單但要打到 vendor / framework / UA 多層     | 在寫第一條規則前先報成本                  |
+| 即將連寫 ≥ 3 條 `!important` / 複雜 selector              | 停 — 寫成本報告、問使用者意願             |
+| 使用者說「先還原」「先重來」「思路不對、換」              | 確認還原目標 + 是否要 commit 當前進度     |
+| 探索了一個方向、最後沒採用                                | commit 一個 checkpoint 標「explored, not adopted」 |
+| 即將執行 `git reset --hard` / `git checkout .`            | 先確認哪些工作要保留、哪些要丟            |
 
 ---
 
@@ -55,12 +54,12 @@ Checkpoint 把「探索」與「採用」分開記錄、保留比較與恢復的
 
 寫第一條規則前、列出將打到哪幾層：
 
-| 層                | 對抗代價                                   |
-| ----------------- | ------------------------------------------ |
-| Browser UA 樣式   | 低 — UA 變動慢、跨瀏覽器差異是固定問題     |
-| Vendor library    | 中 — 升級時可能變、需追蹤 vendor changelog |
-| Framework runtime | 高 — reconciliation 會清掉、需在邊界外操作 |
-| 自家舊 CSS        | 低 — 完全可控                              |
+| 層                | 對抗代價                                          |
+| ----------------- | ------------------------------------------------- |
+| Browser UA 樣式   | 低 — UA 變動慢、跨瀏覽器差異是固定問題            |
+| Vendor library    | 中 — 升級時可能變、需追蹤 vendor changelog        |
+| Framework runtime | 高 — reconciliation 會清掉、需在邊界外操作        |
+| 自家舊 CSS        | 低 — 完全可控                                     |
 
 ### 步驟 2：估規則數量與風險
 
@@ -116,7 +115,6 @@ git commit -m "checkpoint: explored [方向 X], not adopted
 ```
 
 Checkpoint commit 的特徵：
-
 - 主題明確含「checkpoint」「explored」「not adopted」字樣
 - body 寫「為什麼不採用」、不只寫「做了什麼」
 - 在後續 main branch 上不會被 merge 進去（用 branch 隔離或日後 rebase 丟）
@@ -202,11 +200,11 @@ git reset --hard HEAD~4  # 或使用者指定的 target
 
 ## Checkpoint commit 的命名慣例
 
-| 前綴          | 用途                           | 範例                                           |
-| ------------- | ------------------------------ | ---------------------------------------------- |
-| `checkpoint:` | 探索成果、未採用、保留參考     | `checkpoint: explored A approach, not adopted` |
-| `wip:`        | 進行中、之後會 rebase / squash | `wip: trying scope toggle with regex`          |
-| `spike:`      | 純探索、無意採用、純驗證可行性 | `spike: pagefind perf with 5000 docs`          |
+| 前綴             | 用途                                       | 範例                                           |
+| ---------------- | ------------------------------------------ | ---------------------------------------------- |
+| `checkpoint:`    | 探索成果、未採用、保留參考                 | `checkpoint: explored A approach, not adopted` |
+| `wip:`           | 進行中、之後會 rebase / squash             | `wip: trying scope toggle with regex`          |
+| `spike:`         | 純探索、無意採用、純驗證可行性             | `spike: pagefind perf with 5000 docs`          |
 
 `checkpoint:` 是本文件主推 — 比 `wip:` 多了「不採用」的明確標記、未來 grep `git log --grep=checkpoint` 能快速找到「曾經試過但放棄的方向」。
 

@@ -11,13 +11,13 @@
 
 ## 何時參閱本文件
 
-| 訊號                                 | 該做的第一件事                |
-| ------------------------------------ | ----------------------------- |
-| 同方向第 2 次失敗                    | 停 — 用工具驗證底層假設       |
-| 內心 OS：「再試一次更小心應該就過」  | 停 — 這是沉沒成本綁住的訊號   |
-| 即將加 `!important` 解 specificity   | 停 — 切到 CSS layers 思路     |
-| 即將加第 2 條 polyfill 補跨瀏覽器    | 停 — 先回報成本、問使用者意願 |
-| 即將用 imperative JS 補宣告式 layout | 停 — 切到 CSS-first 思路      |
+| 訊號                                                      | 該做的第一件事                            |
+| --------------------------------------------------------- | ----------------------------------------- |
+| 同方向第 2 次失敗                                         | 停 — 用工具驗證底層假設                   |
+| 內心 OS：「再試一次更小心應該就過」                       | 停 — 這是沉沒成本綁住的訊號               |
+| 即將加 `!important` 解 specificity                        | 停 — 切到 CSS layers 思路                 |
+| 即將加第 2 條 polyfill 補跨瀏覽器                         | 停 — 先回報成本、問使用者意願             |
+| 即將用 imperative JS 補宣告式 layout                      | 停 — 切到 CSS-first 思路                  |
 
 ---
 
@@ -56,23 +56,23 @@
 
 ### 方法 1：用工具讀真實狀態
 
-| 假設類型       | 驗證工具                                           |
-| -------------- | -------------------------------------------------- |
-| DOM 結構       | playwright `browser_evaluate` 讀 ancestor chain    |
-| Computed style | playwright + `getComputedStyle()`                  |
-| 元素位置       | playwright + `getBoundingClientRect()`             |
-| Framework 行為 | 讀框架 source、看 reconciliation 條件              |
-| Event 觸發     | DevTools Event Listeners panel + `console.count()` |
+| 假設類型       | 驗證工具                                              |
+| -------------- | ----------------------------------------------------- |
+| DOM 結構       | playwright `browser_evaluate` 讀 ancestor chain       |
+| Computed style | playwright + `getComputedStyle()`                     |
+| 元素位置       | playwright + `getBoundingClientRect()`                |
+| Framework 行為 | 讀框架 source、看 reconciliation 條件                 |
+| Event 觸發     | DevTools Event Listeners panel + `console.count()`    |
 
 ### 方法 2：反問「如果假設錯了會怎樣」
 
 這個反思能在沒有工具的情況下測試假設。
 
-| 假設                      | 如果錯了會發生什麼                                    |
-| ------------------------- | ----------------------------------------------------- |
-| Drawer 是 form 的 sibling | 那 grid-row 完全無效（drawer 跟 form 共用 grid cell） |
-| Specificity 30 是上限     | 那 layers 才是解、不是雙寫 selector                   |
-| 元素永遠存在於 DOM        | 那 framework 重渲染後 querySelector 會回 null         |
+| 假設                      | 如果錯了會發生什麼                                  |
+| ------------------------- | --------------------------------------------------- |
+| Drawer 是 form 的 sibling | 那 grid-row 完全無效（drawer 跟 form 共用 grid cell）|
+| Specificity 30 是上限     | 那 layers 才是解、不是雙寫 selector                 |
+| 元素永遠存在於 DOM        | 那 framework 重渲染後 querySelector 會回 null       |
 
 「如果錯了會發生什麼」的答案 = 你正在看的失敗現象 → 假設可能錯。
 

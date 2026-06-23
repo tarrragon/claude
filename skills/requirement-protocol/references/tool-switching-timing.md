@@ -11,14 +11,14 @@
 
 ## 何時參閱本文件
 
-| 訊號                                           | 該做的第一件事                              |
-| ---------------------------------------------- | ------------------------------------------- |
-| 推理 ≥ 2 次失敗                                | 切到 playwright `browser_evaluate`          |
-| 視覺截圖溝通迴圈卡住、雙方對「哪裡不對」沒共識 | 切到 playwright + 量化資料（rect / style）  |
-| Layout 在某些狀態下錯、其他狀態下對            | 切到 playwright、量不同狀態的 bounding rect |
-| 改 CSS 不生效、specificity 看起來對            | 切到 playwright、量 computed style          |
-| 同一個版型 bug 第 2 次出現                     | 切到「寫成 playwright 測試」固化            |
-| 一次性確認 DOM 結構、不會重複查                | 用 DevTools 即可、不需要起 server           |
+| 訊號                                                      | 該做的第一件事                            |
+| --------------------------------------------------------- | ----------------------------------------- |
+| 推理 ≥ 2 次失敗                                            | 切到 playwright `browser_evaluate`        |
+| 視覺截圖溝通迴圈卡住、雙方對「哪裡不對」沒共識             | 切到 playwright + 量化資料（rect / style） |
+| Layout 在某些狀態下錯、其他狀態下對                        | 切到 playwright、量不同狀態的 bounding rect |
+| 改 CSS 不生效、specificity 看起來對                        | 切到 playwright、量 computed style         |
+| 同一個版型 bug 第 2 次出現                                 | 切到「寫成 playwright 測試」固化           |
+| 一次性確認 DOM 結構、不會重複查                            | 用 DevTools 即可、不需要起 server          |
 
 ---
 
@@ -143,12 +143,12 @@ Playwright MCP 提供的核心工具：
 
 當以下任一觸發、執行者要主動提：「我推理 2 次失敗了、我們起 server、用 playwright 量 live DOM 確認假設」。**不要等到第 5 次才切**。
 
-| 訊號                                          | 對外回報句式                                            |
-| --------------------------------------------- | ------------------------------------------------------- |
-| 同方向 CSS 規則改了 2 次都不生效              | 「我假設 X 是 Y、playwright 一查就知道、要起 server？」 |
-| 截圖看起來對 / 不對、但雙方對「為什麼」沒共識 | 「用 playwright 量 bounding rect、量化比較好？」        |
-| 改完 JS 後元素被還原                          | 「playwright 量 framework 重渲染週期、確認時機」        |
-| Layout 在某些 state 下錯、其他對              | 「我用 playwright 各 state 量一次 rect、做對照」        |
+| 訊號                                                | 對外回報句式                                       |
+| --------------------------------------------------- | -------------------------------------------------- |
+| 同方向 CSS 規則改了 2 次都不生效                    | 「我假設 X 是 Y、playwright 一查就知道、要起 server？」 |
+| 截圖看起來對 / 不對、但雙方對「為什麼」沒共識        | 「用 playwright 量 bounding rect、量化比較好？」    |
+| 改完 JS 後元素被還原                                | 「playwright 量 framework 重渲染週期、確認時機」    |
+| Layout 在某些 state 下錯、其他對                    | 「我用 playwright 各 state 量一次 rect、做對照」   |
 
 ---
 

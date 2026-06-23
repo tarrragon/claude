@@ -201,6 +201,69 @@ def collect_registered_skill_scripts(claude_dir: Path) -> set[Path]:
     return scripts
 
 
+def extract_skill_versions(skills_dir: Path) -> dict[str, str]:
+    """掃描 skills/*/SKILL.md 提取各 skill 的版本號。
+
+    參數:
+        skills_dir: skills 目錄路徑（如 .claude/skills/ 或 temp_dir/skills/）
+
+    傳回:
+        dict[str, str]: {skill 名稱: 版本號}，無版本號者不列入
+    """
+    versions: dict[str, str] = {}
+    if not skills_dir.is_dir():
+        return versions
+    for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
+        skill_name = skill_md.parent.name
+        try:
+            text = skill_md.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        m = re.search(r"\*\*Version\*\*:\s*(\S+)", text)
+        if not m:
+            m = re.search(r"^version:\s*(\S+)", text, re.MULTILINE)
+        if m:
+            versions[skill_name] = m.group(1)
+    return versions
+
+
+def format_skill_version_diff(
+    before: dict[str, str], after: dict[str, str]
+) -> str | None:
+    """比對前後 skill 版本，產生摘要文字。無變更時回傳 None。
+
+    參數:
+        before: 同步前的 {skill: version}
+        after: 同步後的 {skill: version}
+
+    傳回:
+        str | None: 摘要文字（含換行），無變更時 None
+    """
+    all_names = sorted(set(before) | set(after))
+    new_skills: list[str] = []
+    updated_skills: list[str] = []
+    removed_skills: list[str] = []
+    for name in all_names:
+        old_ver = before.get(name)
+        new_ver = after.get(name)
+        if old_ver is None and new_ver is not None:
+            new_skills.append(f"{name} ({new_ver})")
+        elif old_ver is not None and new_ver is None:
+            removed_skills.append(f"{name} (was {old_ver})")
+        elif old_ver != new_ver:
+            updated_skills.append(f"{name} {old_ver} -> {new_ver}")
+    if not new_skills and not updated_skills and not removed_skills:
+        return None
+    lines = ["[Skill 變更摘要]"]  # i18n-exempt
+    if new_skills:
+        lines.append(f"  新增: {', '.join(new_skills)}")  # i18n-exempt
+    if updated_skills:
+        lines.append(f"  更新: {', '.join(updated_skills)}")  # i18n-exempt
+    if removed_skills:
+        lines.append(f"  移除: {', '.join(removed_skills)}")  # i18n-exempt
+    return "\n".join(lines)
+
+
 def load_preserve_list(claude_dir: Path) -> set[str]:
     """讀取 sync-preserve.yaml 中的本地特化檔案清單。
 
@@ -1890,6 +1953,9 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
             )
             sys.exit(1)
 
+    # 快照同步前 skill 版本（W2-001：pull 尾端輸出 skill 版本 diff 摘要）
+    skill_versions_before = extract_skill_versions(claude_dir / "skills")
+
     # 決定同步策略：三方合併（有可達 base）或全量 overlay（向後相容 fallback）
     base_sha = read_base_sha(claude_dir)
     base_reachable = (
@@ -2003,8 +2069,14 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
         print_color(f"   已還原 {restored} 個 hook 檔案的執行權限", "green")
 
     # 偵測套件版本變更
-    print_color("檢查套件版本變更...")
+    print_color("檢查套件版本變更...")  # i18n-exempt
     detect_changed_packages(project_root)
+
+    # Skill 版本 diff 摘要（W2-001）
+    skill_versions_after = extract_skill_versions(claude_dir / "skills")
+    skill_diff = format_skill_version_diff(skill_versions_before, skill_versions_after)
+    if skill_diff:
+        print_color(skill_diff, "green")
 
     return backup_dir
 

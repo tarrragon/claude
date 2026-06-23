@@ -301,12 +301,12 @@ git stash && git checkout <pre-fix-commit>
 # Cherry-pick 測試 commit、build、跑
 git cherry-pick <test-commit>
 make site && npm test
-# 預期：RED
+# 預期：RED ✓
 
 # 切回修後版本
 git checkout main && git stash pop
 npm test
-# 預期：GREEN
+# 預期：GREEN ✓
 ```
 
 兩個訊號都看到 + 順序對、測試才被驗證。

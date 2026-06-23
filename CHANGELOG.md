@@ -1,3 +1,14 @@
+## [1.62.0] - 2026-06-23
+
+### Summary
+feat: sync-push/pull 新增 skill 版本 diff 摘要
+
+Changes: 1 feat
+
+- feat: sync-push/pull 新增 skill 版本 diff 摘要
+
+---
+
 ## [1.61.2] - 2026-06-23
 
 ### Summary

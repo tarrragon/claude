@@ -10,13 +10,13 @@
 
 對話中要使用者決策時、有五個獨立維度可以選擇 — 不該預設 collapse 到單一格子：
 
-| 維度     | 預設窄格（常見） | 鬆綁後（多數情境） | 對應卡                                                                                            |
-| -------- | ---------------- | ------------------ | ------------------------------------------------------------------------------------------------- |
+| 維度     | 預設窄格（常見） | 鬆綁後（多數情境） | 對應卡                                                  |
+| -------- | ---------------- | ------------------ | ------------------------------------------------------- |
 | 呈現格式 | 開放問           | 選項表 + 推薦      | [decision-presentation-options-recommendation](./decision-presentation-options-recommendation.md) |
-| 策略數   | 單選             | 主 + 補強疊加      | [main-strategy-plus-supplementary](./main-strategy-plus-supplementary.md)                         |
-| 批次邊界 | 一次做完         | 分批 ship          | [incremental-shipping-criteria](./incremental-shipping-criteria.md)                               |
-| 時間軸   | 立刻決           | 結構性延後         | [decide-later-as-valid-option](./decide-later-as-valid-option.md)                                 |
-| 選項類型 | 單選 radio       | 複選 checkbox      | [retrospective-multi-select-default](./retrospective-multi-select-default.md)                     |
+| 策略數   | 單選             | 主 + 補強疊加      | [main-strategy-plus-supplementary](./main-strategy-plus-supplementary.md) |
+| 批次邊界 | 一次做完         | 分批 ship          | [incremental-shipping-criteria](./incremental-shipping-criteria.md) |
+| 時間軸   | 立刻決           | 結構性延後         | [decide-later-as-valid-option](./decide-later-as-valid-option.md) |
+| 選項類型 | 單選 radio       | 複選 checkbox      | [retrospective-multi-select-default](./retrospective-multi-select-default.md) |
 
 **核心命題**：每個維度都是獨立的、五個維度展開後是 2^5 = 32 種組合。預設都選窄格 = 對使用者問最窄的問題、結果通常品質低。應該針對每個情境 reason about「這維度該選哪邊」、不是無腦套預設。
 
@@ -126,13 +126,13 @@ context 缺 → 延後 + 寫條件。
 
 ## 跟其他抽象層原則的關係
 
-| 原則                                                                                        | 跟本卡的關係                                                            |
-| ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| [ease-of-writing-vs-intent-alignment](./ease-of-writing-vs-intent-alignment.md)             | 五個維度的「窄格」都是「容易寫」、本卡是該原則在決策對話的具體展現      |
-| [external-trigger-for-high-roi-work](./external-trigger-for-high-roi-work.md)               | 「展開五維度」是高 ROI 但無觸發的工作（多打字、慢）、需要協議結構強制   |
-| [filter-instruction-clarification](./filter-instruction-clarification.md)                   | 篩選三問就是 agent 對使用者的決策呈現、本卡點出三問之外還有四個維度可調 |
-| [filter-source-composition-strategies](./filter-source-composition-strategies.md)           | 五策略 × 適配性表是「呈現維度」+「策略疊加維度」的展現                  |
-| [minimum-necessary-scope-is-sanity-defense](./minimum-necessary-scope-is-sanity-defense.md) | 「分批 ship」維度 = 範圍從窄起、有證據再擴張                            |
+| 原則                                                                      | 跟本卡的關係                                                          |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [ease-of-writing-vs-intent-alignment](./ease-of-writing-vs-intent-alignment.md) | 五個維度的「窄格」都是「容易寫」、本卡是該原則在決策對話的具體展現 |
+| [external-trigger-for-high-roi-work](./external-trigger-for-high-roi-work.md) | 「展開五維度」是高 ROI 但無觸發的工作（多打字、慢）、需要協議結構強制 |
+| [filter-instruction-clarification](./filter-instruction-clarification.md) | 篩選三問就是 agent 對使用者的決策呈現、本卡點出三問之外還有四個維度可調 |
+| [filter-source-composition-strategies](./filter-source-composition-strategies.md) | 五策略 × 適配性表是「呈現維度」+「策略疊加維度」的展現          |
+| [minimum-necessary-scope-is-sanity-defense](./minimum-necessary-scope-is-sanity-defense.md) | 「分批 ship」維度 = 範圍從窄起、有證據再擴張                          |
 
 ---
 

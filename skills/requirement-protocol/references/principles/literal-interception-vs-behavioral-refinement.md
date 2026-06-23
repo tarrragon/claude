@@ -82,12 +82,12 @@ Hook / lint / type checker 的本質是 **字串匹配 / structural check** — 
 
 ### 各輪的職責分工
 
-| 輪次                          | 適合 catch 什麼      | 怎麼設計                                                                                                     |
-| ----------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------ |
-| 第 1 輪：實作                 | 純執行、預期會有錯   | 不要追求 perfect、跑起來看結果                                                                               |
+| 輪次                          | 適合 catch 什麼      | 怎麼設計                                                                      |
+| ----------------------------- | -------------------- | ----------------------------------------------------------------------------- |
+| 第 1 輪：實作                 | 純執行、預期會有錯   | 不要追求 perfect、跑起來看結果                                                |
 | 第 2 輪：自查 / 對比需求      | 邏輯偏差、漏 case    | 對比原始需求、列 Checkpoint 1（[verification-timeline-checkpoints](./verification-timeline-checkpoints.md)） |
-| 第 3 輪：dogfood / production | 實際使用才浮現的問題 | 真實 user / 真實流量、看回饋                                                                                 |
-| 第 N 輪：反向自查             | 上幾輪沒看到的盲點   | 改換 frame（例如「假裝是另一個人 review」）                                                                  |
+| 第 3 輪：dogfood / production | 實際使用才浮現的問題 | 真實 user / 真實流量、看回饋                                                  |
+| 第 N 輪：反向自查             | 上幾輪沒看到的盲點   | 改換 frame（例如「假裝是另一個人 review」）                                   |
 
 每輪解上一輪沒看到的問題、不是重複同一檢查。
 
@@ -137,15 +137,15 @@ ceiling 訊號：
 
 ## 跟其他抽象層原則的關係
 
-| 原則                                                                          | 關係                                                                                      |
-| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| [two-occurrence-threshold](./two-occurrence-threshold.md)                     | 第 2 輪是 multi-pass 的最小單位、跟本卡的「多輪設計」同骨                                 |
-| [verification-timeline-checkpoints](./verification-timeline-checkpoints.md)   | 四個 checkpoint = 多輪 review 的時間軸實現                                                |
-| [test-first-red-before-green](./test-first-red-before-green.md)               | RED phase 是「testing the test」的多輪設計 — 純 hook 看不到                               |
+| 原則                                                                                     | 關係                                                                                      |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [two-occurrence-threshold](./two-occurrence-threshold.md) | 第 2 輪是 multi-pass 的最小單位、跟本卡的「多輪設計」同骨                                 |
+| [verification-timeline-checkpoints](./verification-timeline-checkpoints.md) | 四個 checkpoint = 多輪 review 的時間軸實現                                          |
+| [test-first-red-before-green](./test-first-red-before-green.md) | RED phase 是「testing the test」的多輪設計 — 純 hook 看不到                               |
 | [external-trigger-for-high-roi-work](./external-trigger-for-high-roi-work.md) | 該卡提倡 L3-L5 結構性對策、本卡是 ceiling — L5 hook 抓不到行為錯誤、需要 L4 review / pair |
-| [cards-as-living-system-iteration](./cards-as-living-system-iteration.md)     | spiral 浮現本身就是 multi-pass 的具體 case — 不靠單次「寫對」                             |
-| [decision-dialogue-dimensions](./decision-dialogue-dimensions.md)             | 「五維 collapse」是行為錯誤、hook 抓不到、要靠 reference dogfood + multi-pass review      |
-| [methodology-multi-pass-embedding](./methodology-multi-pass-embedding.md)     | 本卡在「方法論設計本身」這一層的展現 — multi-pass 升 pillar 才結構性執行                  |
+| [cards-as-living-system-iteration](./cards-as-living-system-iteration.md) | spiral 浮現本身就是 multi-pass 的具體 case — 不靠單次「寫對」                             |
+| [decision-dialogue-dimensions](./decision-dialogue-dimensions.md) | 「五維 collapse」是行為錯誤、hook 抓不到、要靠 reference dogfood + multi-pass review      |
+| [methodology-multi-pass-embedding](./methodology-multi-pass-embedding.md) | 本卡在「方法論設計本身」這一層的展現 — multi-pass 升 pillar 才結構性執行                  |
 
 本卡是 [external-trigger-for-high-roi-work](./external-trigger-for-high-roi-work.md) 的 sibling / 補強 — 該卡推 L3-L5 結構性對策最強、本卡指出 L5 也有 ceiling、不是萬能。組合解：**字面用 L5 hook、行為用 L4 pair + multi-pass**。
 
@@ -153,15 +153,15 @@ ceiling 訊號：
 
 ## 判讀徵兆
 
-| 訊號                                     | 該做的事                                                                                                     |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| 想加 hook 防某個重複出現的問題           | 先問「是字面還是行為？」、行為的話別寫 hook                                                                  |
-| 寫了 hook 規則但例外越來越多             | ceiling 到了、改 review                                                                                      |
-| 「CI 通過 = 沒事」這個信念               | 檢查 CI 範圍、行為錯誤可能漏接                                                                               |
-| 同類錯誤不斷以新形狀出現                 | 行為錯誤、hook 無解、補 multi-pass                                                                           |
-| 第 1 輪做完就 ship、沒第 2 輪            | 假設一次寫對、多半會漏行為錯誤                                                                               |
-| 多輪 review 每輪用同樣 frame             | 角度沒換、後續輪 = 重跑前輪、不會新發現                                                                      |
+| 訊號                                     | 該做的事                                                                     |
+| ---------------------------------------- | ---------------------------------------------------------------------------- |
+| 想加 hook 防某個重複出現的問題           | 先問「是字面還是行為？」、行為的話別寫 hook                                  |
+| 寫了 hook 規則但例外越來越多             | ceiling 到了、改 review                                                      |
+| 「CI 通過 = 沒事」這個信念               | 檢查 CI 範圍、行為錯誤可能漏接                                               |
+| 同類錯誤不斷以新形狀出現                 | 行為錯誤、hook 無解、補 multi-pass                                           |
+| 第 1 輪做完就 ship、沒第 2 輪            | 假設一次寫對、多半會漏行為錯誤                                               |
+| 多輪 review 每輪用同樣 frame             | 角度沒換、後續輪 = 重跑前輪、不會新發現                                      |
 | 「下次注意」當作驗證                     | L1 紀律、不是 L4 結構、跟 [external-trigger-for-high-roi-work](./external-trigger-for-high-roi-work.md) 同病 |
-| 行為錯誤反覆出現、但「再加條 hook 規則」 | 換工具、不是換規則                                                                                           |
+| 行為錯誤反覆出現、但「再加條 hook 規則」 | 換工具、不是換規則                                                           |
 
 **核心**：驗證手段的 ROI = 跟錯誤層次對齊 × 不超出 ceiling。**Hook 不會思考、所以只能擋字面**；**行為錯誤需要 multi-pass spiral、用每輪不同角度收斂、不靠單次攔截**。試圖用 hook 蓋 spiral 該做的工作 = 假裝有保護、實際比沒保護更危險。

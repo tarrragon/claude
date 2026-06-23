@@ -238,11 +238,11 @@
 
 ## 與其他原則的串連
 
-| 抽象原則                                                                                         | 跟本原則的關係                                                                    |
-| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| 抽象原則                                                                    | 跟本原則的關係                                                                    |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | [`minimum-necessary-scope-is-sanity-defense.md`](./minimum-necessary-scope-is-sanity-defense.md) | 跟外部組件合作時、客製範圍也該最小必要 — 兩者疊加                                 |
-| [`single-source-of-truth.md`](./single-source-of-truth.md)                                       | 組件提供的 hook（CSS variable）是 fact 的一個來源、自家 token 應該對齊到組件 hook |
-| [`two-occurrence-threshold.md`](./two-occurrence-threshold.md)                                   | 同一個覆寫戰打第 2 次失敗 = 該換維度（從同層對抗跳到 layers）                     |
+| [`single-source-of-truth.md`](./single-source-of-truth.md)                  | 組件提供的 hook（CSS variable）是 fact 的一個來源、自家 token 應該對齊到組件 hook |
+| [`two-occurrence-threshold.md`](./two-occurrence-threshold.md)              | 同一個覆寫戰打第 2 次失敗 = 該換維度（從同層對抗跳到 layers）                     |
 
 跟外部組件合作的設計、通常需要同時應用多條原則。
 
