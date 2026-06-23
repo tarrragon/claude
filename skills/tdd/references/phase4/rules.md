@@ -244,6 +244,18 @@ Phase 4 審查發現（4a/4b/4c 的 P0/P1/P2 清單）
 再修復原始程式碼（用改善後的流程指導修復）
 ```
 
+### 追溯矩陣 gap 掃描（Phase 4d 前置）
+
+Phase 4d 開始前，掃描 `docs/traceability.yaml` 的所有 `status: gap` entry：
+
+| gap 類型 | 動作 |
+|---------|------|
+| UC scenario gap | 建 DOC ticket 回補 UC 場景 |
+| Spec FR gap | 建 DOC ticket 回補 Spec FR |
+| boundary gap | 建 DOC ticket 回補 UC 邊界條件 + 對應 Spec |
+
+所有 gap 必須在 Phase 4d 結束前轉為 `covered` 或建立追蹤 ticket。
+
 ### 根因分類表
 
 | 根因分類 | 說明 | 改善目標 |
@@ -252,6 +264,7 @@ Phase 4 審查發現（4a/4b/4c 的 P0/P1/P2 清單）
 | 測試盲點 | Phase 2 測試設計未覆蓋的情境 | 修改 `references/phase2/rules.md` |
 | 實作品質 | Phase 3 實作中的技術問題 | 修改 `references/phase3/rules.md` |
 | 流程缺失 | 流程本身缺少的檢查點或決策問題 | 修改對應 Phase 的 rules.md |
+| 追溯缺口 | traceability.yaml 的 gap entry | 回補 UC/Spec + 更新矩陣 |
 
 ### 範例擴充機制
 

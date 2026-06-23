@@ -2000,7 +2000,8 @@ def main() -> None:
                 deleted = clean_stale_files(
                     temp_dir, staging_dir, preserve, lineage_claimed
                 )
-                print_color(f"   已清理 {deleted} 個遠端過時檔案", "green")
+                # i18n-exempt
+                print_color(f"   已清理 {deleted} 個遠端過時項目（檔案 + 空目錄）", "green")
             else:
                 # 未帶 --clean 時偵測本地已 git rm 但遠端殘留的孤兒（R2 soft 警告，
                 # 不阻擋、不改 --clean 預設）。在 staging rmtree 前計算並暫存，

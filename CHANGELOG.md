@@ -1,3 +1,22 @@
+## [1.60.0] - 2026-06-23
+
+### Summary
+feat: 建立 UC↔測試追溯矩陣 + 邊界回補流程; refactor: TDD Skill Round 2 冷讀審查修正; refactor: TDD Skill 跨專案適用性審查（移除專案特定引用） (+6 more)
+
+Changes: 1 feat, 2 refactor, 1 fix, 5 docs
+
+- feat: 建立 UC↔測試追溯矩陣 + 邊界回補流程
+- refactor: TDD Skill Round 2 冷讀審查修正
+- refactor: TDD Skill 跨專案適用性審查（移除專案特定引用）
+- fix: sync-push --clean 日誌措辭修正（檔案→項目）
+- docs: 更新 TDD/Ticket/Doc Skill 觸發關鍵字
+- docs: TDD Skill 新增拆分邊界判讀規則（測試變綠驗收點）
+- docs: TDD Skill 實證回饋（5 項調整）
+- docs: 補充防護驗證結果（ 單一 worktree 驗證通過）
+- docs: 記錄並行 worktree commit 交叉混入錯誤模式
+
+---
+
 ## [1.59.1] - 2026-06-23
 
 ### Summary
