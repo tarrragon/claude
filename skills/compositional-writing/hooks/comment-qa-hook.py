@@ -56,7 +56,9 @@ from datetime import datetime
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Tuple
 
-sys.path.insert(0, str(Path(__file__).parent))
+_FRAMEWORK_HOOKS = str(Path(__file__).resolve().parents[3] / "hooks")
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+sys.path.insert(0, _FRAMEWORK_HOOKS)
 from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level, emit_hook_output
 from lib.hook_messages import QualityMessages, CoreMessages, format_message
 
@@ -71,6 +73,7 @@ REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 # 動態載入 Parser 模組
 try:
+    sys.path.insert(0, str(PROJECT_ROOT / ".claude"))
     sys.path.insert(0, str(PROJECT_ROOT / ".claude/hooks"))
     from lib.parsers.base import Language, ParserFactory, Function
     PARSER_AVAILABLE = True

@@ -31,7 +31,9 @@ from pathlib import Path
 # 跨目錄 import：本 hook 位於 .claude/skills/error-pattern/hooks/，
 # 需指向 .claude/hooks/ 載入 hook_utils 與 lib.pattern_id（SSOT）。
 # parents[3] = .claude（hooks=[0] error-pattern=[1] skills=[2] .claude=[3]）
-_HOOKS_ROOT = Path(__file__).resolve().parents[3] / "hooks"
+_CLAUDE_ROOT = Path(__file__).resolve().parents[3]
+_HOOKS_ROOT = _CLAUDE_ROOT / "hooks"
+sys.path.insert(0, str(_CLAUDE_ROOT))
 sys.path.insert(0, str(_HOOKS_ROOT))
 
 from hook_utils import (  # noqa: E402

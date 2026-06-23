@@ -33,6 +33,9 @@ from typing import List, Optional, Tuple
 # PATTERN_ID_RE 涵蓋全 category（PC/IMP/ARCH/...）並支援 Model 1 來源前綴格式
 # （PC-V1-001）。新增 category 前綴時只需改 lib/pattern_id.py 一處。
 _hooks_dir = Path(__file__).resolve().parent.parent  # .claude/hooks
+_claude_dir = _hooks_dir.parent  # .claude/
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
 if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 

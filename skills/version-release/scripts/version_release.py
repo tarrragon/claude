@@ -2539,13 +2539,15 @@ def update_todolist(version: str, dry_run: bool = False) -> bool:
                 next_section = new_content.find('\n\n#', start)
                 block = new_content[start:next_section] if next_section != -1 else new_content[start:]
 
-            # 在區塊內替換 status
-            if 'status: "active"' in block:
-                new_block = block.replace('status: "active"', 'status: "completed"', 1)
+            # 在區塊內替換 status（支援帶引號和不帶引號兩種 YAML 格式）
+            status_pattern = re.compile(r'(status:\s*)(?:"active"|active)')
+            completed_pattern = re.compile(r'status:\s*(?:"completed"|completed)')
+            if status_pattern.search(block):
+                new_block = status_pattern.sub(r'\1completed', block, count=1)
                 new_content = new_content[:start] + new_block + new_content[start + len(block):]
                 matched_ver = ver_str
                 break
-            elif 'status: "completed"' in block:
+            elif completed_pattern.search(block):
                 print_warning(f"todolist.yaml v{ver_str} 已是 completed 狀態，跳過")
                 return True
 

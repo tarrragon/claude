@@ -56,7 +56,7 @@ def mock_run_git_command(monkeypatch):
 
     # 在主程式中進行 mock（worktree_manager 模組內）
     project_root = Path(__file__).resolve().parent.parent.parent.parent
-    sys.path.insert(0, str(project_root / ".claude" / "lib"))
+    sys.path.insert(0, str(project_root / ".claude"))
 
     # Mock worktree_manager 中的 run_git_command
     import worktree_manager
@@ -77,7 +77,7 @@ def mock_get_project_root(monkeypatch, tmp_path):
 
     # 在主程式中進行 mock
     project_root = Path(__file__).resolve().parent.parent.parent.parent
-    sys.path.insert(0, str(project_root / ".claude" / "lib"))
+    sys.path.insert(0, str(project_root / ".claude"))
 
     import worktree_manager
     monkeypatch.setattr("worktree_manager.get_project_root", _mock_get_project_root)

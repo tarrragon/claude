@@ -20,6 +20,7 @@ from datetime import datetime
 
 # 添加 hook_utils 到路徑
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
     from hook_utils import parse_ticket_frontmatter

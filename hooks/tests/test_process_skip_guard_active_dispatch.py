@@ -23,7 +23,7 @@ import pytest
 hook_path = Path(__file__).parent.parent / "process-skip-guard-hook.py"
 spec = importlib.util.spec_from_file_location("process_skip_guard_hook", hook_path)
 process_skip_guard_hook = importlib.util.module_from_spec(spec)
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 spec.loader.exec_module(process_skip_guard_hook)
 
 main = process_skip_guard_hook.main

@@ -19,12 +19,12 @@ from unittest.mock import MagicMock, patch
 from datetime import datetime
 
 # 動態載入 hook 模組
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import importlib.util
 
 spec = importlib.util.spec_from_file_location(
     "layer_boundary_validator_hook",
-    Path(__file__).parent.parent / "layer-boundary-validator-hook.py",
+    Path(__file__).parent.parent.parent / "skills" / "tdd" / "hooks" / "layer-boundary-validator-hook.py",
 )
 hook_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(hook_module)

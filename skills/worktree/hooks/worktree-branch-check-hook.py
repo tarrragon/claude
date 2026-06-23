@@ -39,8 +39,9 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Tuple, Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks" / "lib"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 try:
     from hook_utils import setup_hook_logging

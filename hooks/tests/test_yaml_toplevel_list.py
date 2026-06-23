@@ -18,7 +18,7 @@ spawned_tickets/relatedTo），導致 extract_children_from_frontmatter
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from hook_utils import parse_ticket_frontmatter
 
@@ -187,7 +187,7 @@ class TestExtractChildrenIntegration:
         """修復後：extract_children_from_frontmatter 應正確回傳 children"""
         import logging
 
-        sys.path.insert(0, str(Path(__file__).parent.parent))
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent))
         from acceptance_checkers.ticket_parser import extract_children_from_frontmatter
 
         logger = logging.getLogger("test")

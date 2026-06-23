@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Optional, Set
 
 # 加入 hook_utils 路徑
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 from hook_utils import (  # noqa: E402
     setup_hook_logging,

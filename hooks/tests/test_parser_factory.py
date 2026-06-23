@@ -19,9 +19,9 @@ import pytest
 from pathlib import Path
 
 # 加入 parsers 模組路徑
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from parsers import (
+from lib.parsers import (
     Language,
     LanguageParser,
     Function,

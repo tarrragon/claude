@@ -30,9 +30,10 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 # 加入 hook_utils 路徑（相同目錄）
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 # 加入 .claude/lib 路徑（共用模組 config_loader / hook_io）
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "lib"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from hook_utils import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level,

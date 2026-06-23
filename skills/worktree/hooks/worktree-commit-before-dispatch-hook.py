@@ -19,6 +19,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin

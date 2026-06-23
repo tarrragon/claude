@@ -63,12 +63,14 @@ def _write_telemetry(
     ticket_id: str,
     as_value: Optional[str],
     result: str,
+    caller_type: str,
 ) -> None:
     """Append 一行結構化記錄；失敗不阻斷主流程，但寫 stderr（observability 規則 4）。
 
-    欄位：timestamp / command / ticket_id / has_as（--as 有無）/ result。
+    欄位：timestamp / command / ticket_id / has_as（--as 有無）/ result / caller_type。
     result 為四值列舉（warn / exempt / pass / deny），覆蓋 check_identity 全部
     判定路徑，使「--as 使用率」分子分母皆可從 log 計算。
+    caller_type 為三值列舉（pm / agent / unknown），標註呼叫者角色類型。
     不記錄 as_value 原文，僅記其有無，避免將 agent 名稱寫入長期觀測檔。
     """
     record = {
@@ -77,6 +79,7 @@ def _write_telemetry(
         "ticket_id": ticket_id,
         "has_as": bool(isinstance(as_value, str) and as_value.strip()),
         "result": result,
+        "caller_type": caller_type,
     }
     line = json.dumps(record, ensure_ascii=False) + "\n"
 
@@ -151,6 +154,7 @@ def check_identity(
             ticket_id=ticket_id,
             as_value=as_value,
             result=RESULT_WARN,
+            caller_type="unknown",
         )
         return None
 
@@ -161,6 +165,7 @@ def check_identity(
             ticket_id=ticket_id,
             as_value=as_value,
             result=RESULT_EXEMPT,
+            caller_type="pm",
         )
         return None
 
@@ -173,6 +178,7 @@ def check_identity(
             ticket_id=ticket_id,
             as_value=as_value,
             result=RESULT_PASS,
+            caller_type="agent",
         )
         return None
 
@@ -187,5 +193,6 @@ def check_identity(
         ticket_id=ticket_id,
         as_value=as_value,
         result=RESULT_DENY,
+        caller_type="agent",
     )
     return IDENTITY_DENY_EXIT

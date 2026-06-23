@@ -13,9 +13,10 @@ Ticket：1.0.0-W1-018.2
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from sync_exclude_manifest import (  # noqa: E402
+from lib.sync_exclude_manifest import (  # noqa: E402
     GITIGNORE_EXPECTED,
     LOCAL_ONLY_PATTERNS,
     LOCAL_ONLY_ROOT_DIRS,

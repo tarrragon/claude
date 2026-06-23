@@ -15,8 +15,9 @@ from pathlib import Path
 
 # 測試目錄在 .claude/hooks/tests/，target 在 .claude/hooks/ 和 .claude/hooks/lib/
 HOOKS_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(HOOKS_DIR))
-sys.path.insert(0, str(HOOKS_DIR / "lib"))
+sys.path.insert(0, str(HOOKS_DIR.parent))
 
 
 class _SilentLogger:

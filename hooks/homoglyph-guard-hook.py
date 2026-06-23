@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from hook_utils import (  # noqa: E402
     setup_hook_logging,

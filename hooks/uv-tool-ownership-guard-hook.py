@@ -53,6 +53,7 @@ from typing import Dict, List, Optional, Tuple
 
 # 導入 hook_utils（package 形式）
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from hook_utils import (  # noqa: E402
     setup_hook_logging,
     run_hook_safely,

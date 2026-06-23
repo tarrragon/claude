@@ -36,6 +36,77 @@ def get_current_version() -> Optional[str]:
     return _scan_worklog_directories()
 
 
+def check_version_all_completed(version: str) -> tuple[bool, Optional[str]]:
+    """
+    檢查指定版本的所有 ticket 是否皆為終結狀態。
+
+    Args:
+        version: 版本號（無 v 前綴，如 "1.3.0"）
+
+    Returns:
+        tuple[bool, Optional[str]]:
+            - bool: 是否全部終結（completed / closed）
+            - Optional[str]: 下一個 active 版本 ID（無 v 前綴），若無則 None
+    """
+    from .constants import TERMINAL_STATUSES
+    from .ticket_loader import list_tickets
+
+    tickets = list_tickets(version)
+    if not tickets:
+        return (False, None)
+
+    all_terminal = all(
+        t.get("status", "pending") in TERMINAL_STATUSES
+        for t in tickets
+    )
+
+    if not all_terminal:
+        return (False, None)
+
+    next_version = _find_next_active_version(version)
+    return (True, next_version)
+
+
+def _find_next_active_version(current_version: str) -> Optional[str]:
+    """
+    從 todolist.yaml 找出排在 current_version 之後的第一個 active 版本。
+
+    Returns:
+        Optional[str]: 版本號（無 v 前綴），若無則 None
+    """
+    root = get_project_root()
+    todolist_path = root / "docs" / "todolist.yaml"
+
+    if not todolist_path.exists():
+        return None
+
+    try:
+        import yaml
+        with open(todolist_path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+
+        versions = data.get("versions", [])
+        found_current = False
+        for v in versions:
+            v_str = str(v.get("version", ""))
+            if v_str == current_version:
+                found_current = True
+                continue
+            if found_current and v.get("status") == "active":
+                return v_str
+        # current 可能排第一，往前找其他 active
+        for v in versions:
+            v_str = str(v.get("version", ""))
+            if v_str == current_version:
+                continue
+            if v.get("status") == "active":
+                return v_str
+    except Exception:
+        pass
+
+    return None
+
+
 def get_active_versions() -> list[str]:
     """
     回傳所有 status=active 的版本（支援分支並行開發）

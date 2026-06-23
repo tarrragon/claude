@@ -15,8 +15,9 @@ import sys
 from pathlib import Path
 
 HOOKS_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(HOOKS_DIR))
-sys.path.insert(0, str(HOOKS_DIR / "lib"))
+sys.path.insert(0, str(HOOKS_DIR.parent))
 
 
 class _SilentLogger:

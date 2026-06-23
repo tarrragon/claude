@@ -84,8 +84,8 @@ def scan_logs(since: datetime, logs_root: Optional[Path] = None) -> Dict[str, Di
         dict mapping hook_name -> {"total": int, "per_day": {date_str: count}}.
     """
     if logs_root is None:
-        # Default: <repo>/.claude/hook-logs (lib lives at .claude/hooks/lib/)
-        logs_root = Path(__file__).resolve().parents[2] / "hook-logs"
+        # Default: <repo>/.claude/hook-logs (lib lives at .claude/lib/)
+        logs_root = Path(__file__).resolve().parents[1] / "hook-logs"
 
     stats: Dict[str, Dict] = {}
     if not logs_root.exists():
@@ -262,7 +262,7 @@ def read_session_marker(marker_path: Optional[Path] = None) -> Optional[datetime
     """
     if marker_path is None:
         marker_path = (
-            Path(__file__).resolve().parents[2]
+            Path(__file__).resolve().parents[1]
             / "state"
             / "last-session-start.marker"
         )

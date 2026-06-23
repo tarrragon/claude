@@ -20,7 +20,7 @@
 
 ---
 
-## 四類分類定義
+## 五類分類定義
 
 ### 類型 A - Runtime state
 
@@ -70,6 +70,43 @@
 
 **辨識問題**：這個檔案被外人看到會不會造成安全風險？若會，屬類型 D。
 
+### 類型 E - Push-only exclude（git tracked 但不跨專案同步）
+
+在專案 git 中 track，但 sync-push/pull 時排除。與 A/B/C 差異：A/B/C 不 git track（在 .gitignore 中）；類型 E 要 git track。
+
+| 特徵 | 說明 |
+|------|------|
+| 生命週期 | 跨 session 保留，專案 git 正常 track |
+| 跨專案共用 | 不可，但檔案留在專案 git history 中 |
+| .gitignore | 不加入（與 A/B/C 不同） |
+| 範例 | `skills/*/references/project-integration/`（per-project 落地層） |
+
+**辨識問題**：這個檔案需要留在專案 git 中（便於團隊協作），但不應隨 sync 推到框架 repo？若是，屬類型 E。
+
+---
+
+## sync-skills.yaml — 選擇性 Skill 同步
+
+Consumer 專案可建立 `.claude/sync-skills.yaml` 控制哪些 skills 隨 sync-pull/push 同步。
+
+```yaml
+mode: select       # all (default) | select | none
+include:           # mode: select 時生效
+  - wrap-decision
+  - tdd
+  - ticket
+private:           # 任何 mode 下排除推送
+  - my-company-tool
+```
+
+| mode | Pull | Push |
+|------|------|------|
+| `all`（預設，無檔案時） | 拉全部 skills | 推全部（排除 private） |
+| `select` | 只拉 `include` 清單 | 只推 `include`（排除 private） |
+| `none` | 不拉任何 skill | 不推任何 skill |
+
+`sync-skills.yaml` 本身屬類型 B（LOCAL_ONLY_PATTERNS），不跨專案同步。
+
 ---
 
 ## 新增機制時的 4 項 Checklist
@@ -78,7 +115,7 @@
 
 ### Checklist 1：分類確認
 
-- [ ] 新檔案屬於四類（A/B/C/D）中的哪一類？
+- [ ] 新檔案屬於五類（A/B/C/D/E）中的哪一類？
 - [ ] 若都不符合，該檔案是否真的需要放在 `.claude/`？（考慮改放 `docs/` 或外部路徑）
 
 ### Checklist 2：push 端排除
@@ -121,6 +158,10 @@ Q3: 是 Hook/執行期寫出的 log 嗎？
 
 Q4: 含密鑰/token/憑證嗎？
   +-- 是 --> 類型 D (敏感憑證)
+  +-- 否 --> Q5
+
+Q5: 需要留在專案 git 但不跨專案同步嗎？
+  +-- 是 --> 類型 E (Push-only exclude，不加 .gitignore)
   +-- 否 --> 該檔案可能屬跨專案共用的規則/方法論，不需排除
              （若不確定，回 Q1 重新評估或向 PM 諮詢）
 ```

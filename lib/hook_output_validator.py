@@ -36,7 +36,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SETTINGS_PATH = PROJECT_ROOT / ".claude" / "settings.json"
 
 # Hook events whose stdout MUST be JSON with hookSpecificOutput schema

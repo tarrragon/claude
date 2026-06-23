@@ -95,7 +95,7 @@ def _resolve_project_root() -> Path:
 
 try:
     project_root = _resolve_project_root()
-    sys.path.insert(0, str(project_root / ".claude" / "lib"))
+    sys.path.insert(0, str(project_root / ".claude"))
 except RuntimeError as e:
     print(f"[Warning] {e}", file=sys.stderr)
     print("[Warning] Worktree SKILL may not function properly", file=sys.stderr)

@@ -13,9 +13,9 @@ from unittest.mock import patch
 import sys
 
 # 添加 lib 目錄到路徑
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from markdown_link_checker import (
+from lib.markdown_link_checker import (
     BrokenLink,
     LinkCheckResult,
     MarkdownLinkChecker,

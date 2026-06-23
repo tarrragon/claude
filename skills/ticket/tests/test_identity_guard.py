@@ -233,6 +233,55 @@ def test_exempt_path_writes_telemetry(monkeypatch, _isolate_identity_log):
     assert PM_AGENT_NAME not in log_path.read_text(encoding="utf-8")
 
 
+# ============================================================
+# caller_type 欄位驗證（W1-059：四情境 caller_type 映射）
+# ============================================================
+
+
+def test_warn_path_caller_type_is_unknown(monkeypatch, _isolate_identity_log):
+    """情境 1：未帶 --as → caller_type=unknown（無法判定身份）。"""
+    log_path = _isolate_identity_log
+    _patch_who(monkeypatch, "thyme-python-developer")
+
+    check_identity("1.0.0", "1.0.0-W1-059", None, command="complete")
+
+    records = _read_records(log_path)
+    assert records[0]["caller_type"] == "unknown"
+
+
+def test_exempt_path_caller_type_is_pm(monkeypatch, _isolate_identity_log):
+    """情境 2：--as = PM → caller_type=pm。"""
+    log_path = _isolate_identity_log
+    _patch_who(monkeypatch, "thyme-python-developer")
+
+    check_identity("1.0.0", "1.0.0-W1-059", PM_AGENT_NAME, command="complete")
+
+    records = _read_records(log_path)
+    assert records[0]["caller_type"] == "pm"
+
+
+def test_pass_path_caller_type_is_agent(monkeypatch, _isolate_identity_log):
+    """情境 3：--as = who.current → caller_type=agent。"""
+    log_path = _isolate_identity_log
+    _patch_who(monkeypatch, "thyme-python-developer")
+
+    check_identity("1.0.0", "1.0.0-W1-059", "thyme-python-developer", command="complete")
+
+    records = _read_records(log_path)
+    assert records[0]["caller_type"] == "agent"
+
+
+def test_deny_path_caller_type_is_agent(monkeypatch, _isolate_identity_log):
+    """情境 4：--as != who.current → caller_type=agent（身份不符但仍為代理人呼叫）。"""
+    log_path = _isolate_identity_log
+    _patch_who(monkeypatch, "thyme-python-developer")
+
+    check_identity("1.0.0", "1.0.0-W1-059", "claude", command="complete")
+
+    records = _read_records(log_path)
+    assert records[0]["caller_type"] == "agent"
+
+
 def test_telemetry_appends_multiple_records(monkeypatch, _isolate_identity_log):
     """四路徑連續觸發各 append 一行累積（append-only 語義 + 全路徑覆蓋）。"""
     log_path = _isolate_identity_log
@@ -250,6 +299,12 @@ def test_telemetry_appends_multiple_records(monkeypatch, _isolate_identity_log):
         RESULT_DENY,
         RESULT_EXEMPT,
         RESULT_PASS,
+    ]
+    assert [r["caller_type"] for r in records] == [
+        "unknown",
+        "agent",
+        "pm",
+        "agent",
     ]
 
 

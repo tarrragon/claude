@@ -42,6 +42,11 @@ from ticket_system.commands.track_runqueue import (
 )
 from ticket_system.lib.staleness import compute_stale_minutes
 from ticket_system.lib.ticket_loader import list_tickets
+from ticket_system.lib.version import check_version_all_completed
+from ticket_system.lib.command_tracking_messages import (
+    TrackQueryMessages,
+    format_msg,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +268,25 @@ def render_json(
 # 主入口
 # ---------------------------------------------------------------------------
 
+def _print_all_completed_warning(version: str) -> None:
+    """若版本所有 ticket 皆為終結狀態，印出 warning。"""
+    all_completed, next_version = check_version_all_completed(version)
+    if not all_completed:
+        return
+
+    print()
+    print(format_msg(
+        TrackQueryMessages.VERSION_ALL_COMPLETED_WARNING,
+        version=version,
+    ))
+    if next_version:
+        print(format_msg(
+            TrackQueryMessages.VERSION_ALL_COMPLETED_NEXT,
+            next_version=next_version,
+        ))
+    print(TrackQueryMessages.VERSION_ALL_COMPLETED_HINT)
+
+
 def dashboard_main(args: argparse.Namespace, version: Optional[str]) -> int:
     """執行 track dashboard 命令。
 
@@ -323,6 +347,8 @@ def dashboard_main(args: argparse.Namespace, version: Optional[str]) -> int:
             stale_threshold=stale_threshold,
             stale_disabled=no_stale,
         ))
+
+    _print_all_completed_warning(version)
     return 0
 
 

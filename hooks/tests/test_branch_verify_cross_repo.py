@@ -20,7 +20,7 @@ from pathlib import Path
 
 HOOKS_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HOOKS_DIR))
-sys.path.insert(0, str(HOOKS_DIR.parent / "lib"))
+sys.path.insert(0, str(HOOKS_DIR.parent))
 
 _spec = importlib.util.spec_from_file_location(
     "branch_verify_hook",

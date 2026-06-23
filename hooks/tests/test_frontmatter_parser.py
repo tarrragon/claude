@@ -27,8 +27,8 @@ import tempfile
 import shutil
 
 # 導入要測試的模組
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from frontmatter_parser import (
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from lib.frontmatter_parser import (
     parse_frontmatter,
     read_ticket,
     update_frontmatter,

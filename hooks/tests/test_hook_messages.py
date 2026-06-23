@@ -9,12 +9,13 @@ from pathlib import Path
 
 # 加入 lib 目錄到 Python 路徑
 hooks_dir = Path(__file__).parent.parent
-lib_dir = hooks_dir / "lib"
+lib_dir = hooks_dir.parent
 if str(lib_dir) not in sys.path:
-    sys.path.insert(0, str(lib_dir))
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(lib_dir))
 
 import pytest
-from hook_messages import (
+from lib.hook_messages import (
     CoreMessages,
     GateMessages,
     WorkflowMessages,

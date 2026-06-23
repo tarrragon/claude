@@ -40,7 +40,7 @@ def _make_gitignore(tmp_path: Path, content: str) -> Path:
 # ---------------------------------------------------------------------------
 def test_hook_imports_gitignore_expected_from_manifest():
     hook = load_hook_module()
-    from sync_exclude_manifest import GITIGNORE_EXPECTED  # noqa
+    from lib.sync_exclude_manifest import GITIGNORE_EXPECTED  # noqa
     assert hook.GITIGNORE_EXPECTED is GITIGNORE_EXPECTED
 
 

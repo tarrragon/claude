@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 # manifest 位於 .claude/hooks/lib/
-_LIB = Path(__file__).resolve().parent.parent.parent / "hooks" / "lib"
+_LIB = Path(__file__).resolve().parent.parent.parent / "lib"
 sys.path.insert(0, str(_LIB))
 import sync_exclude_manifest as manifest  # noqa: E402
 

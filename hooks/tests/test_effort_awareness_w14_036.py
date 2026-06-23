@@ -241,7 +241,7 @@ class TestSiblingBlockedbyValidatorEffort:
 # ============================================================================
 
 class TestLayerBoundaryValidatorEffort:
-    HOOK = HOOKS_DIR / "layer-boundary-validator-hook.py"
+    HOOK = HOOKS_DIR.parent / "skills" / "tdd" / "hooks" / "layer-boundary-validator-hook.py"
 
     def test_low_effort_short_circuits(self):
         payload = {

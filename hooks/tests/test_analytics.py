@@ -31,7 +31,7 @@ pytestmark = pytest.mark.skip(
 
 # 假設分析工具模組可直接導入
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # 用 try/except 包住 import 以避免模組層 ModuleNotFoundError 阻擋 pytest collection。
 # pytestmark 會 skip 所有測試，故 import 失敗後不影響執行行為。

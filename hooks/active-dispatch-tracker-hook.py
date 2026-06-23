@@ -17,11 +17,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output
 
-sys.path.insert(0, str(Path(__file__).parent / "lib"))
-from dispatch_tracker import (
+from lib.dispatch_tracker import (
     update_dispatch_agent_id,
     cleanup_expired,
     detect_orphan_branches,

@@ -37,8 +37,8 @@ import yaml
 
 
 # YAML 路徑：相對於 .claude/ 根目錄
-# 本模組位於 .claude/hooks/lib/framework_paths.py → 上溯 2 層至 .claude/
-_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "framework-paths.yaml"
+# 本模組位於 .claude/lib/framework_paths.py → 上溯 1 層至 .claude/
+_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "framework-paths.yaml"
 
 
 @lru_cache(maxsize=1)

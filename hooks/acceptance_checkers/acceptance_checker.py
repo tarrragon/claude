@@ -10,6 +10,9 @@ from typing import Optional, Tuple
 
 # 加入 hooks 目錄（acceptance_checkers 的上層）
 _hooks_dir = Path(__file__).parent.parent
+_claude_dir = _hooks_dir.parent
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
 if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 

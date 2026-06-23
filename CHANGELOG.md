@@ -1,3 +1,27 @@
+## [1.61.0] - 2026-06-23
+
+### Summary
+feat: ticket CLI 全完成版本偵測 warning; feat: TDD 紅綠燈計數改用結構化 JSON 輸出; feat: identity-guard telemetry 新增 caller_type 欄位 (+11 more)
+
+Changes: 3 feat, 2 refactor, 5 fix, 3 docs, 1 chore
+
+- feat: ticket CLI 全完成版本偵測 warning
+- feat: TDD 紅綠燈計數改用結構化 JSON 輸出
+- feat: identity-guard telemetry 新增 caller_type 欄位
+- refactor: merge hooks/lib/ into lib/
+- refactor: migrate 8 hooks to skill directories
+- fix: sync scripts import 路徑對齊 lib 合併（ 遺漏）
+- fix: update_todolist 支援不帶引號的 YAML status 格式
+- fix: 修正搬移回歸——test import 路徑 sync_exclude_manifest → lib.sync_exclude_manifest
+- fix: 修正 version-release-guard-hook sys.path（搬移後 hook_io import 失敗）
+- fix: update sys.path and test imports for migrated hooks
+- docs: --as 轉強制重評裁決——維持 warn-only（使用率 49.3% 未達 80%）
+- docs: IMP-V1-003 hook 搬移後 sys.path 指向錯誤 lib 目錄
+- docs: 更新 sync-exclusion-guide — 新增類型 E + sync-skills.yaml 說明
+- chore: pull .claude 更新（上游 36b86cc）
+
+---
+
 ## [1.60.2] - 2026-06-23
 
 ### Summary

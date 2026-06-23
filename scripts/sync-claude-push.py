@@ -67,8 +67,8 @@ from pathlib import Path
 
 # 排除分類與 should_exclude / compute_content_hash 由 SSOT manifest 統一提供
 # （ARCH-020：消除 push/status 重複定義漂移）。manifest 位於 .claude/hooks/lib/。
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks" / "lib"))
-from sync_exclude_manifest import (  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib.sync_exclude_manifest import (  # noqa: E402
     should_exclude,
     should_exclude_skill,
     _is_skill_path,

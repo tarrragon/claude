@@ -10,20 +10,20 @@ from pathlib import Path
 # 添加父目錄到 Python 路徑
 hooks_path = Path(__file__).parent.parent
 sys.path.insert(0, str(hooks_path))
-sys.path.insert(0, str(hooks_path / "lib"))
+sys.path.insert(0, str(hooks_path.parent))
 
-from ticket_quality.detectors import (
+from lib.ticket_quality.detectors import (
     check_god_ticket_automated,
     check_incomplete_ticket_automated,
     check_ambiguous_responsibility_automated
 )
-from ticket_quality.extractors import (
+from lib.ticket_quality.extractors import (
     extract_file_paths,
     extract_section,
     has_section,
     extract_acceptance_criteria
 )
-from ticket_quality.analyzers import determine_layer
+from lib.ticket_quality.analyzers import determine_layer
 
 
 def test_empty_ticket():

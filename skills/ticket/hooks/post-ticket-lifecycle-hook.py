@@ -35,6 +35,7 @@ import os
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from hook_utils import (

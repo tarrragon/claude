@@ -55,6 +55,17 @@ class TrackQueryMessages:
     CROSS_VERSION_WARNING_ITEM = "   v{version}: {pending} 個 pending, {in_progress} 個 in_progress"
     CROSS_VERSION_WARNING_HINT = "   使用 --version <version> 查看詳情"
 
+    # 版本全完成偵測 warning
+    VERSION_ALL_COMPLETED_WARNING = (
+        "[WARNING] 版本 {version} 所有 ticket 已完成"
+    )
+    VERSION_ALL_COMPLETED_NEXT = (
+        "   下一個 active 版本: {next_version}"
+    )
+    VERSION_ALL_COMPLETED_HINT = (
+        "   建議執行 version-release 或手動推進 todolist status"
+    )
+
 
 # ============================================================================
 # TrackBoardMessages - track_board.py 相關訊息

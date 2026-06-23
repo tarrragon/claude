@@ -22,7 +22,7 @@ HOOK_PATH = Path(__file__).resolve().parent.parent / "git-index-lock-cleanup-hoo
 @pytest.fixture(scope="module")
 def hook_module():
     sys.path.insert(0, str(HOOK_PATH.parent))
-    sys.path.insert(0, str(HOOK_PATH.parent.parent / "lib"))
+    sys.path.insert(0, str(HOOK_PATH.parent.parent))
     spec = importlib.util.spec_from_file_location(
         "git_index_lock_cleanup_hook", HOOK_PATH
     )

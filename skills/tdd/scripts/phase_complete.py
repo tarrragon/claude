@@ -26,9 +26,9 @@ from pathlib import Path
 
 # 正確的跨層導入：使用相對路徑而非 sys.path.insert（架構層級邊界，見 IMP-045）
 # .claude/skills/tdd/ → .claude/lib/ 導入共用驗證器
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "lib"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from phase_contract_validator import PhaseContractValidator, ValidationResult
+from lib.phase_contract_validator import PhaseContractValidator, ValidationResult
 
 
 def complete_phase(

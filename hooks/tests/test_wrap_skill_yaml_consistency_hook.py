@@ -25,7 +25,7 @@ import pytest
 # ============================================================================
 
 HOOK_PATH = (
-    Path(__file__).resolve().parents[1] / "wrap-skill-yaml-consistency-hook.py"
+    Path(__file__).resolve().parents[2] / "skills" / "wrap-decision" / "hooks" / "wrap-skill-yaml-consistency-hook.py"
 )
 
 

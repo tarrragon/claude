@@ -22,8 +22,8 @@ from unittest.mock import patch
 # 測試目錄在 .claude/hooks/tests/，target hook 在 .claude/hooks/
 HOOKS_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HOOKS_DIR))
-sys.path.insert(0, str(HOOKS_DIR / "lib"))
-sys.path.insert(0, str(HOOKS_DIR.parent / "lib"))
+sys.path.insert(0, str(HOOKS_DIR.parent))
+sys.path.insert(0, str(HOOKS_DIR.parent))
 
 
 def _load_hook_module():

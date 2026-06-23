@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from hook_utils import setup_hook_logging, run_hook_safely  # noqa: E402
 
 # 三強制區塊（agent-definition-standard.md）

@@ -91,6 +91,7 @@ from ticket_system.lib.ui_constants import (
 from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
 )
+from ticket_system.lib.version import check_version_all_completed
 
 # 狀態值映射
 STATUS_MAP = {
@@ -132,6 +133,30 @@ def _check_yaml_error(ticket: Optional[Dict[str, Any]], ticket_id: str) -> bool:
         ))
         return True
     return False
+
+
+def _print_all_completed_warning(current_version: str) -> None:
+    """
+    若當前版本所有 ticket 皆為終結狀態，印出 warning。
+
+    Args:
+        current_version: 版本號（無 v 前綴，如 "1.3.0"）
+    """
+    all_completed, next_version = check_version_all_completed(current_version)
+    if not all_completed:
+        return
+
+    print()
+    print(format_msg(
+        TrackQueryMessages.VERSION_ALL_COMPLETED_WARNING,
+        version=current_version,
+    ))
+    if next_version:
+        print(format_msg(
+            TrackQueryMessages.VERSION_ALL_COMPLETED_NEXT,
+            next_version=next_version,
+        ))
+    print(TrackQueryMessages.VERSION_ALL_COMPLETED_HINT)
 
 
 def _print_cross_version_warning(current_version: str) -> None:
@@ -272,6 +297,7 @@ def execute_summary(args: argparse.Namespace, version: str) -> int:
     if formatted:
         print(formatted)
 
+    _print_all_completed_warning(version)
     _print_cross_version_warning(version)
 
     return 0

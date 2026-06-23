@@ -32,6 +32,7 @@ from typing import List, Dict, Any, Set, Tuple
 
 # 加入 hook_utils 路徑
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from hook_utils import (  # noqa: E402
     setup_hook_logging,
     run_hook_safely,
@@ -40,8 +41,7 @@ from hook_utils import (  # noqa: E402
 )
 
 # 加入 lib 路徑以 import sync 排除 SOT manifest
-sys.path.insert(0, str(Path(__file__).parent / "lib"))
-from sync_exclude_manifest import GITIGNORE_EXPECTED  # noqa: E402
+from lib.sync_exclude_manifest import GITIGNORE_EXPECTED  # noqa: E402
 
 EXIT_SUCCESS = 0
 

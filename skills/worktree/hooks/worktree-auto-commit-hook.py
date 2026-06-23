@@ -43,8 +43,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 _CLAUDE_DIR = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(_CLAUDE_DIR))
 sys.path.insert(0, str(_CLAUDE_DIR / "hooks"))
-sys.path.insert(0, str(_CLAUDE_DIR / "hooks" / "lib"))
 
 from hook_utils import setup_hook_logging, run_hook_safely
 

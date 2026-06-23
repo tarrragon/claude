@@ -33,6 +33,10 @@ from pathlib import Path
 import logging
 from typing import Callable, Dict, List, Optional, Tuple
 
+_FRAMEWORK_HOOKS = str(Path(__file__).resolve().parents[3] / "hooks")
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+sys.path.insert(0, _FRAMEWORK_HOOKS)
+
 from hook_utils import (
     setup_hook_logging,
     run_hook_safely,

@@ -35,8 +35,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Set, Tuple
 
-# 加入 hook_utils 路徑（相同目錄）
-sys.path.insert(0, str(Path(__file__).parent))
+_FRAMEWORK_HOOKS = str(Path(__file__).resolve().parents[3] / "hooks")
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+sys.path.insert(0, _FRAMEWORK_HOOKS)
 
 from hook_utils import (
     setup_hook_logging,

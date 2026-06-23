@@ -20,7 +20,7 @@
     from sync_exclude_manifest import should_exclude, compute_content_hash
 
     # .claude/scripts/ 下的三腳本：
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks" / "lib"))
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from sync_exclude_manifest import should_exclude, compute_content_hash
 
 本模組屬框架資產，正常 sync（不在排除清單內）。

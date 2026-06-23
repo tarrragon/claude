@@ -30,7 +30,7 @@ from pathlib import Path
 
 # 加入 Hook 目錄和 lib 目錄到 Python 路徑
 HOOK_DIR = Path(__file__).parent.parent
-LIB_DIR = HOOK_DIR.parent / "lib"
+LIB_DIR = HOOK_DIR.parent
 PROJECT_ROOT = HOOK_DIR.parent.parent  # .claude/hooks -> .claude -> project root
 sys.path.insert(0, str(HOOK_DIR))
 sys.path.insert(0, str(LIB_DIR))

@@ -9,9 +9,9 @@ import sys
 from pathlib import Path
 
 # 添加 lib 目錄到路徑
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from git_utils import (
+from lib.git_utils import (
     get_current_branch,
     get_project_root,
     get_uncommitted_files,

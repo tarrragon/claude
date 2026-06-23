@@ -12,7 +12,7 @@ Hook 入口點，使用 phase_contract_validator 中的共用驗證邏輯。
 - 具體實作見：.claude/lib/phase_contract_validator.py
 
 使用方式：
-    from phase_contract_validator import PhaseContractValidator, ValidationResult
+    from lib.phase_contract_validator import PhaseContractValidator, ValidationResult
 
     validator = PhaseContractValidator(contracts_path=".claude/tdd/contracts.yaml")
     result = validator.validate(
@@ -37,15 +37,10 @@ Hook 入口點，使用 phase_contract_validator 中的共用驗證邏輯。
 import sys
 from pathlib import Path
 
-# 添加 .claude/lib 到 Python path，以便導入共用模組
-lib_path = Path(__file__).parent.parent / "lib"
-sys.path.insert(0, str(lib_path))
+sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# 添加 .claude/hooks 到 Python path 以便導入 hook_utils
-hooks_path = Path(__file__).parent
-sys.path.insert(0, str(hooks_path))
-
-from phase_contract_validator import PhaseContractValidator, ValidationResult
+from lib.phase_contract_validator import PhaseContractValidator, ValidationResult
 from hook_utils import setup_hook_logging, get_effort_level
 
 

@@ -10,9 +10,9 @@ import json
 from pathlib import Path
 
 # 添加 lib 目錄到路徑
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from config_loader import (
+from lib.config_loader import (
     load_config,
     load_agents_config,
     load_quality_rules,

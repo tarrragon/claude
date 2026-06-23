@@ -21,7 +21,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 # 動態導入（檔名含 dash）
-hooks_path = Path(__file__).parent.parent
+hooks_path = Path(__file__).parent.parent.parent / "skills" / "ticket" / "hooks"
 hook_file = hooks_path / "skill-cli-error-feedback-hook.py"
 spec = importlib.util.spec_from_file_location("skill_cli_error_feedback_hook", hook_file)
 hook = importlib.util.module_from_spec(spec)

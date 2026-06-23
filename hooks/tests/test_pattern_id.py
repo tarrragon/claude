@@ -13,7 +13,8 @@ from pathlib import Path
 
 _hooks_dir = Path(__file__).resolve().parent.parent  # .claude/hooks
 if str(_hooks_dir) not in sys.path:
-    sys.path.insert(0, str(_hooks_dir))
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(_hooks_dir))
 
 from lib.pattern_id import PATTERN_ID_RE, extract_pattern_id  # noqa: E402
 

@@ -9,7 +9,7 @@ import re
 import os
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "hooks"))
 from hook_utils import setup_hook_logging, read_json_from_stdin
 
 def detect_language(code):

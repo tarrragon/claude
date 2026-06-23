@@ -23,12 +23,13 @@ import pytest
 
 # 動態載入 hook module（檔名含連字號，無法直接 import）
 _HOOKS_DIR = Path(__file__).parent.parent
-if str(_HOOKS_DIR) not in sys.path:
-    sys.path.insert(0, str(_HOOKS_DIR))
+_TICKET_HOOKS_DIR = _HOOKS_DIR.parent / "skills" / "ticket" / "hooks"
+if str(_TICKET_HOOKS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TICKET_HOOKS_DIR))
 
 _spec = importlib.util.spec_from_file_location(
     "agent_dispatch_validation_hook",
-    _HOOKS_DIR / "agent-dispatch-validation-hook.py",
+    _TICKET_HOOKS_DIR / "agent-dispatch-validation-hook.py",
 )
 _hook = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_hook)

@@ -14,8 +14,9 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 # 設定 import 路徑
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
-from dispatch_tracker import (
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from lib.dispatch_tracker import (
     get_state_file_path,
     record_dispatch,
     clear_dispatch,

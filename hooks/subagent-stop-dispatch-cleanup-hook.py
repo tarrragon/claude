@@ -33,6 +33,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from hook_utils import (
     setup_hook_logging,
@@ -40,8 +41,7 @@ from hook_utils import (
     read_json_from_stdin,
 )
 
-sys.path.insert(0, str(Path(__file__).parent / "lib"))
-from dispatch_tracker import (
+from lib.dispatch_tracker import (
     clear_dispatch_by_id,
     clear_oldest_null_agent_id_entry,
     get_active_dispatches,

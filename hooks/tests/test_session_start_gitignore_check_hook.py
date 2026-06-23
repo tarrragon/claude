@@ -186,7 +186,7 @@ def test_output_is_valid_json_with_session_start_event(tmp_path):
 def test_required_derived_from_manifest_sot():
     hook = load_hook_module()
     import sys
-    sys.path.insert(0, str(HOOK_PATH.parent.parent / "lib"))
+    sys.path.insert(0, str(HOOK_PATH.parent.parent))
     from sync_exclude_manifest import GITIGNORE_EXPECTED
 
     # manifest 每個裸名都應以 `.claude/<name>` 形式出現在 REQUIRED

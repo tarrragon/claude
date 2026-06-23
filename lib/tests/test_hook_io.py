@@ -11,9 +11,9 @@ from io import StringIO
 from pathlib import Path
 
 # 添加 lib 目錄到路徑
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from hook_io import (
+from lib.hook_io import (
     read_hook_input,
     write_hook_output,
     create_pretooluse_output,

@@ -29,6 +29,7 @@ from typing import Dict, Any, Optional, List
 
 # 加入 hook_utils 路徑（相同目錄）
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level
 

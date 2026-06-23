@@ -33,8 +33,8 @@ import re
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 # git_utils 位於 .claude/lib/（專案級共用程式庫）
-sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 
 try:
     from hook_utils import (

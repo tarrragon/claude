@@ -12,7 +12,7 @@ ticket track hook-health 命令（W13-018 落地，源自 W13-008 IMP-3）
 - --dry-run 為契約點：本命令本即不寫入 ticket / 檔案；旗標明示「禁止副作用」
 
 複用既有：
-- .claude/hooks/lib/hook_health.py（scan_logs / classify_hook / evaluate / Verdict）
+- .claude/lib/hook_health.py（scan_logs / classify_hook / evaluate / Verdict）
   經 lifecycle.py 同款 lazy sys.path.insert 模式引入
 
 不複用：
@@ -36,7 +36,7 @@ from typing import Any, Dict, List, Optional
 # 設計考量：全局 uv tool install 後，本檔位於 site-packages，
 # Path(__file__).parents[4] 不再指向 .claude/。需用以下優先序：
 #   1. $CLAUDE_PROJECT_DIR 環境變數（Claude Code runtime 提供）
-#   2. cwd 向上找含 .claude/hooks/lib/hook_health.py 的目錄
+#   2. cwd 向上找含 .claude/lib/hook_health.py 的目錄
 #   3. Path(__file__).parents[4]（dev 模式 / 局部執行 fallback）
 # 任一策略命中即將 hooks 目錄加入 sys.path 後 import。
 # 測試使用 patch("ticket_system.commands.track_hook_health.scan_logs") 覆寫，
@@ -46,24 +46,24 @@ from typing import Any, Dict, List, Optional
 _HOOK_HEALTH_MODULE = None  # 快取避免重複載入
 
 
-def _find_hooks_dir() -> Optional[Path]:
-    """依優先序定位 .claude/hooks/ 目錄。"""
+def _find_claude_dir() -> Optional[Path]:
+    """依優先序定位 .claude/ 目錄。"""
     # 1. 環境變數
     env_root = os.environ.get("CLAUDE_PROJECT_DIR")
     if env_root:
-        candidate = Path(env_root) / ".claude" / "hooks"
+        candidate = Path(env_root) / ".claude"
         if (candidate / "lib" / "hook_health.py").is_file():
             return candidate
 
     # 2. cwd 向上搜
     for d in [Path.cwd(), *Path.cwd().parents]:
-        candidate = d / ".claude" / "hooks"
+        candidate = d / ".claude"
         if (candidate / "lib" / "hook_health.py").is_file():
             return candidate
 
     # 3. 開發環境 fallback：本檔在 .claude/skills/ticket/ticket_system/commands/
     try:
-        dev_candidate = Path(__file__).resolve().parents[4] / "hooks"
+        dev_candidate = Path(__file__).resolve().parents[4]
         if (dev_candidate / "lib" / "hook_health.py").is_file():
             return dev_candidate
     except (IndexError, OSError):
@@ -73,20 +73,20 @@ def _find_hooks_dir() -> Optional[Path]:
 
 
 def _load_hook_health():
-    """Lazy 載入 .claude/hooks/lib/hook_health（首次呼叫時 import + 快取）。"""
+    """Lazy 載入 .claude/lib/hook_health（首次呼叫時 import + 快取）。"""
     global _HOOK_HEALTH_MODULE
     if _HOOK_HEALTH_MODULE is not None:
         return _HOOK_HEALTH_MODULE
 
-    hooks_dir = _find_hooks_dir()
-    if hooks_dir is None:
+    claude_dir = _find_claude_dir()
+    if claude_dir is None:
         raise RuntimeError(
-            "Cannot locate .claude/hooks/lib/hook_health.py; "
+            "Cannot locate .claude/lib/hook_health.py; "
             "set CLAUDE_PROJECT_DIR or run from within the project tree."
         )
 
-    if str(hooks_dir) not in sys.path:
-        sys.path.insert(0, str(hooks_dir))
+    if str(claude_dir) not in sys.path:
+        sys.path.insert(0, str(claude_dir))
     from lib import hook_health  # noqa: WPS433
 
     _HOOK_HEALTH_MODULE = hook_health

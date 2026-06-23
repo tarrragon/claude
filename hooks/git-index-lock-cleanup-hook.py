@@ -25,11 +25,11 @@ import time
 from pathlib import Path
 
 # 添加 lib 目錄到路徑
-sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from hook_io import read_hook_input, write_hook_output, create_simple_output
-from git_utils import get_project_root
+from lib.hook_io import read_hook_input, write_hook_output, create_simple_output
+from lib.git_utils import get_project_root
 from hook_utils import setup_hook_logging, run_hook_safely
 
 # 超過此秒數的 index.lock 視為殘留，自動移除

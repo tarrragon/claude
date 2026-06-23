@@ -10,21 +10,21 @@ from pathlib import Path
 # 加入模組路徑
 hooks_path = Path(__file__).parent.parent
 sys.path.insert(0, str(hooks_path))
-sys.path.insert(0, str(hooks_path / "lib"))
+sys.path.insert(0, str(hooks_path.parent))
 
-from ticket_quality.extractors import (
+from lib.ticket_quality.extractors import (
     has_section,
     extract_section,
     extract_acceptance_criteria,
     extract_file_paths,
     count_steps
 )
-from ticket_quality.analyzers import (
+from lib.ticket_quality.analyzers import (
     determine_layer,
     calculate_layer_span,
     estimate_hours
 )
-from ticket_quality.detectors import (
+from lib.ticket_quality.detectors import (
     check_god_ticket_automated,
     check_incomplete_ticket_automated,
     check_ambiguous_responsibility_automated

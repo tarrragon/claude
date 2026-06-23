@@ -18,7 +18,8 @@ import pytest
 # 確保 hook 內部 `from lib.uv_tool_utils import ...` 可解析
 _HOOKS_DIR = Path(__file__).parent.parent
 if str(_HOOKS_DIR) not in sys.path:
-    sys.path.insert(0, str(_HOOKS_DIR))
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(_HOOKS_DIR))
 
 HOOK_DIR = Path(__file__).parent.parent
 HOOK_FILE = HOOK_DIR / "uv-tool-staleness-check-hook.py"

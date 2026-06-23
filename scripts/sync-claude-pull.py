@@ -43,8 +43,8 @@ except ImportError:
 # 排除分類與 should_exclude 由 SSOT manifest 統一提供（ARCH-020，W1-027）。
 # pull 端的三方合併用 should_exclude 過濾 LOCAL_ONLY / 憑證檔，避免本地 runtime
 # state 被遠端 delta 蓋掉，與 push/status 端共用同一判定避免漂移。
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks" / "lib"))
-from sync_exclude_manifest import (  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib.sync_exclude_manifest import (  # noqa: E402
     should_exclude,
     should_exclude_skill,
     _is_skill_path,

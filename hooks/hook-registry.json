@@ -36,7 +36,7 @@
         "matcher": "Bash",
         "commands": [
           ".claude/hooks/test-timeout-pre.py",
-          ".claude/hooks/version-release-guard-hook.py"
+          ".claude/skills/version-release/hooks/version-release-guard-hook.py"
         ]
       },
       {
@@ -90,14 +90,14 @@
         "matcher": "Edit",
         "commands": [
           ".claude/hooks/style-guardian-hook.py",
-          ".claude/hooks/worklog-format-check.py"
+          ".claude/skills/compositional-writing/hooks/worklog-format-check.py"
         ]
       },
       {
         "matcher": "Write",
         "commands": [
           ".claude/hooks/style-guardian-hook.py",
-          ".claude/hooks/worklog-format-check.py"
+          ".claude/skills/compositional-writing/hooks/worklog-format-check.py"
         ]
       }
     ],

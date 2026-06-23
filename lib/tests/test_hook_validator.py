@@ -13,9 +13,9 @@ from unittest.mock import patch, MagicMock
 import sys
 
 # 添加 lib 目錄到路徑
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from hook_validator import (
+from lib.hook_validator import (
     HookValidator,
     ValidationIssue,
     ValidationResult,
@@ -110,7 +110,7 @@ import sys
     def test_hook_io_import_detected(self):
         """測試成功檢測 hook_io 導入"""
         content = """
-from hook_io import read_hook_input, write_hook_output
+from lib.hook_io import read_hook_input, write_hook_output
 import json
 """
         issues = self.validator.check_lib_imports(content)
@@ -137,7 +137,7 @@ from lib.hook_io import read_hook_input
     def test_missing_hook_logging_import(self):
         """測試缺少 hook_logging 導入"""
         content = """
-from hook_io import read_hook_input
+from lib.hook_io import read_hook_input
 # 沒有 hook_logging
 """
         issues = self.validator.check_lib_imports(content)
@@ -152,7 +152,7 @@ from hook_io import read_hook_input
         """測試檢測配置載入需求"""
         # 應該檢測到需要 config_loader
         content = """
-from hook_io import read_hook_input
+from lib.hook_io import read_hook_input
 
 config = load_config("agents")
 """
@@ -167,7 +167,7 @@ config = load_config("agents")
     def test_git_utils_detection(self):
         """測試檢測 Git 操作需求"""
         content = """
-from hook_io import read_hook_input
+from lib.hook_io import read_hook_input
 
 branch = get_current_branch()
 """
@@ -190,7 +190,7 @@ class TestHookValidatorOutput(unittest.TestCase):
     def test_good_output_format(self):
         """測試推薦的輸出格式"""
         content = """
-from hook_io import write_hook_output
+from lib.hook_io import write_hook_output
 
 output = create_pretooluse_output("allow", "OK")
 write_hook_output(output)
@@ -355,9 +355,9 @@ class TestHookValidatorIntegration(unittest.TestCase):
         """測試驗證合規的 Hook"""
         hook_path = self.temp_path / ".claude" / "hooks" / "check-permissions.py"
         hook_content = """#!/usr/bin/env python3
-from hook_io import read_hook_input, write_hook_output
-from hook_logging import setup_hook_logging
-from git_utils import get_current_branch
+from lib.hook_io import read_hook_input, write_hook_output
+from lib.hook_logging import setup_hook_logging
+from lib.git_utils import get_current_branch
 
 logger = setup_hook_logging("check-permissions")
 input_data = read_hook_input()

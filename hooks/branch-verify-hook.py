@@ -38,10 +38,10 @@ from pathlib import Path
 from typing import Optional
 
 # 添加 lib 目錄到路徑
-sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from git_utils import (
+from lib.git_utils import (
     get_current_branch,
     get_project_root,
     is_protected_branch,
@@ -49,7 +49,7 @@ from git_utils import (
     generate_worktree_info,
     find_target_repo,
 )
-from hook_io import (
+from lib.hook_io import (
     read_hook_input,
     write_hook_output,
     create_pretooluse_output,

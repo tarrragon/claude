@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Optional, Tuple, List, Dict, Any
 
 # 加入 hook_utils 路徑（相同目錄）
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from hook_utils import setup_hook_logging, run_hook_safely, get_project_root  # type: ignore

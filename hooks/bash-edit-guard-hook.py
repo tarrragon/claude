@@ -38,10 +38,8 @@ import sys
 import re
 from pathlib import Path
 
-# 加入 hook_utils 路徑（相同目錄）
-_hooks_dir = Path(__file__).parent
-if _hooks_dir not in [p for p in sys.path if Path(p) == _hooks_dir]:
-    sys.path.insert(0, str(_hooks_dir))
+sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output
 from lib.hook_messages import ValidationMessages, format_message

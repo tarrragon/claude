@@ -6,7 +6,7 @@ from typing import Optional
 
 import pytest
 
-from pyproject_scanner import (
+from lib.pyproject_scanner import (
     extract_cli_name_from_pyproject,
     extract_package_name_from_pyproject,
     extract_version_from_pyproject,

@@ -38,6 +38,7 @@ from typing import Dict, List, Optional, Tuple
 
 # 加入 hooks/ 到 sys.path 以便 import hook_utils package
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from hook_utils import (  # noqa: E402
     setup_hook_logging,
