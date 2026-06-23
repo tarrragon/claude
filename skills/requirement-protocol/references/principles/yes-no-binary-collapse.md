@@ -100,25 +100,25 @@ agent 容易寫的 yes/no 變種：
 
 ## 跟其他卡的關係
 
-| 卡                                                                   | 關係                                                                       |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| [decision-dialogue-dimensions](./decision-dialogue-dimensions.md) | 本卡是五維度在「最常見變種」的具體化 — yes/no 是五維全 collapse 再加 binary |
-| [decision-presentation-options-recommendation](./decision-presentation-options-recommendation.md) | yes/no 等同「給推薦但不給選項」、是該卡反模式列的延伸                     |
-| [ease-of-writing-vs-intent-alignment](./ease-of-writing-vs-intent-alignment.md) | yes/no 是「最容易寫」的格式（最少字）、跟使用者意圖對齊（多選空間）反相關  |
-| [external-trigger-for-high-roi-work](./external-trigger-for-high-roi-work.md) | 「展開 yes/no」是高 ROI 但無觸發的工作、需要 L3 結構性對策提示             |
+| 卡                                                                                                | 關係                                                                        |
+| ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| [decision-dialogue-dimensions](./decision-dialogue-dimensions.md)                                 | 本卡是五維度在「最常見變種」的具體化 — yes/no 是五維全 collapse 再加 binary |
+| [decision-presentation-options-recommendation](./decision-presentation-options-recommendation.md) | yes/no 等同「給推薦但不給選項」、是該卡反模式列的延伸                       |
+| [ease-of-writing-vs-intent-alignment](./ease-of-writing-vs-intent-alignment.md)                   | yes/no 是「最容易寫」的格式（最少字）、跟使用者意圖對齊（多選空間）反相關   |
+| [external-trigger-for-high-roi-work](./external-trigger-for-high-roi-work.md)                     | 「展開 yes/no」是高 ROI 但無觸發的工作、需要 L3 結構性對策提示              |
 
 ---
 
 ## 判讀徵兆
 
-| 訊號                                    | 該做的事                                                |
-| --------------------------------------- | ------------------------------------------------------- |
-| 寫到「需要 X 嗎？」                     | 翻成多選表                                              |
-| 寫到「要繼續嗎？」                      | 列出「改方向 / 延後 / 疊加」三選                        |
-| 「OK 嗎？」結尾                         | 檢查是否真的是 last-mile confirm、否則展開              |
-| 使用者回 "等等、先 X"                   | 你寫了 yes/no、他在破格 — 下次該預先展開                |
-| 使用者回 "順便也做 Y"                   | 你漏了疊加維度                                          |
-| 「如果 OK 我繼續」隱含「不同意 = 卡住」 | 使用者不同意有實際下一步嗎？沒有 = 變相強制同意         |
-| 一輪對話 yes/no 出現 ≥ 3 次             | 你在用 binary 取代展開、退一步看是不是五維都該展開      |
+| 訊號                                    | 該做的事                                           |
+| --------------------------------------- | -------------------------------------------------- |
+| 寫到「需要 X 嗎？」                     | 翻成多選表                                         |
+| 寫到「要繼續嗎？」                      | 列出「改方向 / 延後 / 疊加」三選                   |
+| 「OK 嗎？」結尾                         | 檢查是否真的是 last-mile confirm、否則展開         |
+| 使用者回 "等等、先 X"                   | 你寫了 yes/no、他在破格 — 下次該預先展開           |
+| 使用者回 "順便也做 Y"                   | 你漏了疊加維度                                     |
+| 「如果 OK 我繼續」隱含「不同意 = 卡住」 | 使用者不同意有實際下一步嗎？沒有 = 變相強制同意    |
+| 一輪對話 yes/no 出現 ≥ 3 次             | 你在用 binary 取代展開、退一步看是不是五維都該展開 |
 
 **核心**：Yes/No 是 1 bit、決策空間是 N bit。**用 yes/no 包裝不是「簡化」、是「藏掉維度」**。簡化是少寫某個維度；藏掉維度是把多維壓成 1 bit、讓使用者破格才能表達。前者良性、後者不良。

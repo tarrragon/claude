@@ -110,7 +110,7 @@ SKILL（自動觸發 reference）
 | 直接從對話寫 meta-卡（沒原子卡支撐） | over-fit 少數 case、新 case 不符就要重寫                             |
 | 只寫 reference 不寫卡片              | reference 是「怎麼做」、原子卡是「為什麼」、缺少 why 後續難 maintain |
 | 卡片寫完不抽 meta                    | 知識散落、跨情境無法判讀、實作中要回查多張                           |
-| Meta-卡寫太早（寫第 1-2 張就抽）     | 沒足夠 N 看出共骨、結構強加                                         |
+| Meta-卡寫太早（寫第 1-2 張就抽）     | 沒足夠 N 看出共骨、結構強加                                          |
 | 一張卡裡塞多個現象                   | 卡片該原子、混合會干擾 cross-link                                    |
 | Reference 沒對應觸發情境             | 寫了沒人看、變另一份未來才會被翻的文件                               |
 | 卡片寫完不回頭 cross-link            | 知識網不形成、留下孤兒卡                                             |
@@ -133,14 +133,14 @@ SKILL（自動觸發 reference）
 
 ## 跟其他抽象層原則的關係
 
-| 原則                                                                          | 關係                                                                                                                        |
-| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| [two-occurrence-threshold](./two-occurrence-threshold.md) | 寫 meta-卡的訊號：第 2 次看到類似結構、抽出來                                                                               |
-| [minimum-necessary-scope-is-sanity-defense](./minimum-necessary-scope-is-sanity-defense.md) | 先寫原子卡、有證據再抽 meta、跟「先窄後寬」同構                                                                             |
-| [single-source-of-truth](./single-source-of-truth.md) | meta-卡是上層 SSOT、原子卡保留 case-specific 細節、各層分工                                                                 |
-| [ease-of-writing-vs-intent-alignment](./ease-of-writing-vs-intent-alignment.md) | 「直接寫 meta」容易但會 over-fit、迭代浮現難寫但對齊真實結構                                                                |
-| [external-trigger-for-high-roi-work](./external-trigger-for-high-roi-work.md) | 「回頭抽 meta + 寫 reference」是高 ROI 但無觸發、需要協議 / pair / 對話結構驅動                                             |
-| [decision-dialogue-dimensions](./decision-dialogue-dimensions.md) | 本卡的 spiral 過程剛好就是該卡浮現的實例 — meta-卡 + reference 都是後寫                                                    |
+| 原則                                                                                                | 關係                                                                                                                        |
+| --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| [two-occurrence-threshold](./two-occurrence-threshold.md)                                           | 寫 meta-卡的訊號：第 2 次看到類似結構、抽出來                                                                               |
+| [minimum-necessary-scope-is-sanity-defense](./minimum-necessary-scope-is-sanity-defense.md)         | 先寫原子卡、有證據再抽 meta、跟「先窄後寬」同構                                                                             |
+| [single-source-of-truth](./single-source-of-truth.md)                                               | meta-卡是上層 SSOT、原子卡保留 case-specific 細節、各層分工                                                                 |
+| [ease-of-writing-vs-intent-alignment](./ease-of-writing-vs-intent-alignment.md)                     | 「直接寫 meta」容易但會 over-fit、迭代浮現難寫但對齊真實結構                                                                |
+| [external-trigger-for-high-roi-work](./external-trigger-for-high-roi-work.md)                       | 「回頭抽 meta + 寫 reference」是高 ROI 但無觸發、需要協議 / pair / 對話結構驅動                                             |
+| [decision-dialogue-dimensions](./decision-dialogue-dimensions.md)                                   | 本卡的 spiral 過程剛好就是該卡浮現的實例 — meta-卡 + reference 都是後寫                                                     |
 | [literal-interception-vs-behavioral-refinement](./literal-interception-vs-behavioral-refinement.md) | spiral 是 multi-pass refinement 的具體實現 — 卡片內容對不對、抽 meta 抽得對不對都是行為錯誤、靠 spiral 收斂、不靠 hook 攔截 |
 
 ---

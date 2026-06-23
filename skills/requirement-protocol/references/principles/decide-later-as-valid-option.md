@@ -81,14 +81,14 @@
 
 ## 反模式：把「不決定」當失敗
 
-| 反模式                       | 為什麼不好                                               | 修法                             |
-| ---------------------------- | -------------------------------------------------------- | -------------------------------- |
-| 隱式假設「問了就要答」       | 使用者沒被告知有延後選項                                 | 主動列入選項                     |
-| 把「我先想想」當拖延、加壓   | 使用者被迫在不足下決策                                   | 接受延後、問「需要先補什麼」     |
+| 反模式                       | 為什麼不好                                                                                         | 修法                             |
+| ---------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------- |
+| 隱式假設「問了就要答」       | 使用者沒被告知有延後選項                                                                           | 主動列入選項                     |
+| 把「我先想想」當拖延、加壓   | 使用者被迫在不足下決策                                                                             | 接受延後、問「需要先補什麼」     |
 | 延後沒寫條件、變「之後再說」 | 相關概念：[external-trigger-for-high-roi-work](./external-trigger-for-high-roi-work.md) 結構性跳過 | 延後條件具體化、寫成 trigger     |
-| 「不決定 = 不負責」道德判斷  | 阻止使用者用合理選項                                     | 區分「逃避決策」vs「結構性延後」 |
-| 一直 retry「那你決定了嗎？」 | 對方沒能力決也催不出來                                   | 改問「現在缺什麼？要不要先補 X」 |
-| 延後選項只給自己、不給使用者 | 雙標、使用者沒同等權利                                   | 互相對等、雙向皆可延後           |
+| 「不決定 = 不負責」道德判斷  | 阻止使用者用合理選項                                                                               | 區分「逃避決策」vs「結構性延後」 |
+| 一直 retry「那你決定了嗎？」 | 對方沒能力決也催不出來                                                                             | 改問「現在缺什麼？要不要先補 X」 |
+| 延後選項只給自己、不給使用者 | 雙標、使用者沒同等權利                                                                             | 互相對等、雙向皆可延後           |
 
 ---
 
@@ -108,14 +108,14 @@
 
 ## 跟其他卡的關係
 
-| 卡                                                                   | 關係                                                           |
-| -------------------------------------------------------------------- | -------------------------------------------------------------- |
-| [filter-instruction-clarification](./filter-instruction-clarification.md) | 篩選三問之一就是「現在做 vs 等更多資訊」、本卡是這個維度的展開 |
-| [decision-presentation-options-recommendation](./decision-presentation-options-recommendation.md) | 三層格式中「選項列表」應包含「延後」這個選項                   |
-| [external-trigger-for-high-roi-work](./external-trigger-for-high-roi-work.md) | 延後若沒 trigger 會變「結構性跳過」、必須寫條件                |
-| [verification-timeline-checkpoints](./verification-timeline-checkpoints.md) | Checkpoint 1（寫之前）有時候答案就是「還不能寫、先補 context」 |
-| [two-occurrence-threshold](./two-occurrence-threshold.md) | 失敗 2 次後常該延後決策、回頭驗證假設                          |
-| [decision-dialogue-dimensions](./decision-dialogue-dimensions.md) | 本卡是決策對話五維度中「時間軸」維度的展開 — 立刻決 vs 結構性延後 |
+| 卡                                                                                                | 關係                                                              |
+| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [filter-instruction-clarification](./filter-instruction-clarification.md)                         | 篩選三問之一就是「現在做 vs 等更多資訊」、本卡是這個維度的展開    |
+| [decision-presentation-options-recommendation](./decision-presentation-options-recommendation.md) | 三層格式中「選項列表」應包含「延後」這個選項                      |
+| [external-trigger-for-high-roi-work](./external-trigger-for-high-roi-work.md)                     | 延後若沒 trigger 會變「結構性跳過」、必須寫條件                   |
+| [verification-timeline-checkpoints](./verification-timeline-checkpoints.md)                       | Checkpoint 1（寫之前）有時候答案就是「還不能寫、先補 context」    |
+| [two-occurrence-threshold](./two-occurrence-threshold.md)                                         | 失敗 2 次後常該延後決策、回頭驗證假設                             |
+| [decision-dialogue-dimensions](./decision-dialogue-dimensions.md)                                 | 本卡是決策對話五維度中「時間軸」維度的展開 — 立刻決 vs 結構性延後 |
 
 ---
 

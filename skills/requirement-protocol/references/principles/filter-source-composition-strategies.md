@@ -85,14 +85,14 @@ Build time 為每種 filter mode 各建一份 source、runtime 切 mode = 切 so
 
 ## 判讀徵兆
 
-| 訊號                                                    | 該選的策略起點                  |
-| ------------------------------------------------------- | ------------------------------- |
-| Source 是 SQL / ES / indexed search 且 filter 條件已索引 | A                               |
+| 訊號                                                      | 該選的策略起點                  |
+| --------------------------------------------------------- | ------------------------------- |
+| Source 是 SQL / ES / indexed search 且 filter 條件已索引  | A                               |
 | Source 是 indexed search 且 filter 是「title vs content」 | C（重 index 兩份）              |
-| Source 不支援、預期 match 密集、要無感                  | B                               |
-| 工程量限制、能接受顯眼 UX                               | D                               |
-| 原型 / MVP、能接受語意縮小但要明示                      | E（含語意聲明）                 |
-| 使用者意圖明確要「全部命中」、source 不支援、match 稀疏 | A 或 C 重設計、不要 B（會拉爆） |
+| Source 不支援、預期 match 密集、要無感                    | B                               |
+| 工程量限制、能接受顯眼 UX                                 | D                               |
+| 原型 / MVP、能接受語意縮小但要明示                        | E（含語意聲明）                 |
+| 使用者意圖明確要「全部命中」、source 不支援、match 稀疏   | A 或 C 重設計、不要 B（會拉爆） |
 
 **核心原則**：Filter × Source 沒有最佳解、只有「對齊三變數（capabilities / 密度 / UX）的取捨」。識別三變數、選對策略 → 比寫漂亮的程式重要。
 

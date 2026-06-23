@@ -51,11 +51,11 @@ X 加上 Y 不會放大彼此副作用、不會產生新 bug。例：multi-index
 
 ### 模式一：Structural fix + UX patch
 
-| Structural                | UX                              |
-| ------------------------- | ------------------------------- |
-| Multi-index               | Honest progress UI              |
-| Query-side pushdown       | Empty state 三狀態              |
-| Build-time pre-tokenize   | 匹配模式限制提示（prefix-match hint） |
+| Structural              | UX                                    |
+| ----------------------- | ------------------------------------- |
+| Multi-index             | Honest progress UI                    |
+| Query-side pushdown     | Empty state 三狀態                    |
+| Build-time pre-tokenize | 匹配模式限制提示（prefix-match hint） |
 
 Structural 解根因、UX 解使用者當下混亂。即使 structural 還沒 ship、UX patch 可以先 ship 解眼前問題。詳細搜尋匹配模式案例見 [`search-engine-matching-mode-mismatch.md`](./search-engine-matching-mode-mismatch.md)。
 
@@ -77,12 +77,12 @@ Defensive 處理失敗、Optimistic 處理成功 — 兩個 happy path 共存、
 
 Selector 起點 pattern（document query / 元件根 / 函式參數 / closest lookup）乍看互斥（每個元件只能選一個起點）、實際在同一個 handler 內可疊加：
 
-| 元件位置                           | 適合 pattern     |
-| ---------------------------------- | ---------------- |
-| Modal / dialog 內定位元素          | 元件根變數       |
-| 跨 modal 邊界元素（toast、portal） | 全文件 query     |
-| Event target → 找最近容器          | closest          |
-| Test / 多實例                      | 函式參數         |
+| 元件位置                           | 適合 pattern |
+| ---------------------------------- | ------------ |
+| Modal / dialog 內定位元素          | 元件根變數   |
+| 跨 modal 邊界元素（toast、portal） | 全文件 query |
+| Event target → 找最近容器          | closest      |
+| Test / 多實例                      | 函式參數     |
 
 同一份 component code 可同時用多種起點（外部 portal 用 document、內部用 closest）— 解不同 selector context、不衝突、增量成本低 = 滿足三條判準。
 
@@ -92,13 +92,13 @@ Selector 起點 pattern（document query / 元件根 / 函式參數 / closest lo
 
 ## 反模式：強迫單選的代價
 
-| 反模式                          | 後果                                                                          |
-| ------------------------------- | ----------------------------------------------------------------------------- |
-| 「五選一」當預設                | 放掉 80% 互補可能                                                             |
-| 用「最佳策略」當銀彈            | 漏掉解不同層的問題                                                            |
+| 反模式                          | 後果                                                                                                                       |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 「五選一」當預設                | 放掉 80% 互補可能                                                                                                          |
+| 用「最佳策略」當銀彈            | 漏掉解不同層的問題                                                                                                         |
 | 「先做 X、Y 永遠延後」          | Y 變成高 ROI 無觸發的結構性跳過（詳見 [`external-trigger-for-high-roi-work.md`](./external-trigger-for-high-roi-work.md)） |
-| 「Y 才是真正的 fix、X 是 hack」 | 道德判斷阻止 X 的價值、使用者多受苦一段時間                                   |
-| 把 UX 補強當「掩蓋問題」        | 忽略掉「使用者預期管理」也是真實價值                                          |
+| 「Y 才是真正的 fix、X 是 hack」 | 道德判斷阻止 X 的價值、使用者多受苦一段時間                                                                                |
+| 把 UX 補強當「掩蓋問題」        | 忽略掉「使用者預期管理」也是真實價值                                                                                       |
 
 ---
 

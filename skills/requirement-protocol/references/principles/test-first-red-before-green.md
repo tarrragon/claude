@@ -148,12 +148,12 @@ Refactor **不需要** RED — 因為 behavior 沒變。如果 refactor 後變 R
 
 ## 跟其他抽象層原則的關係
 
-| 原則                                                                                               | 跟本卡的關係                                                                    |
-| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [`two-occurrence-threshold.md`](./two-occurrence-threshold.md)                                     | 一次 GREEN 是低資訊量訊號、RED → GREEN 是 2 次跑（一次 fail 一次 pass）的真訊號 |
-| 「視覺完成 ≠ 功能完成」                                                                            | 測試 PASS ≠ 測試 verified；同個「訊號需要驗證」結構                             |
-| [`ease-of-writing-vs-intent-alignment.md`](./ease-of-writing-vs-intent-alignment.md)               | 跳過 RED 是便利（不用切 branch / 不重 build）、走 RED-GREEN 是對齊              |
-| [`verification-timeline-checkpoints.md`](./verification-timeline-checkpoints.md)                   | 本卡是 Checkpoint 2「開發中」+ Checkpoint 3「Ship 前」內部的具體協議            |
+| 原則                                                                                 | 跟本卡的關係                                                                    |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| [`two-occurrence-threshold.md`](./two-occurrence-threshold.md)                       | 一次 GREEN 是低資訊量訊號、RED → GREEN 是 2 次跑（一次 fail 一次 pass）的真訊號 |
+| 「視覺完成 ≠ 功能完成」                                                              | 測試 PASS ≠ 測試 verified；同個「訊號需要驗證」結構                             |
+| [`ease-of-writing-vs-intent-alignment.md`](./ease-of-writing-vs-intent-alignment.md) | 跳過 RED 是便利（不用切 branch / 不重 build）、走 RED-GREEN 是對齊              |
+| [`verification-timeline-checkpoints.md`](./verification-timeline-checkpoints.md)     | 本卡是 Checkpoint 2「開發中」+ Checkpoint 3「Ship 前」內部的具體協議            |
 
 本卡是把「測試這個動作本身」放進驗收體系：寫測試是動作、跑測試的訊號才是驗收。動作完成 ≠ 驗收完成。
 

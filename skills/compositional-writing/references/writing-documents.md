@@ -6,14 +6,14 @@
 
 Different document types have different readers, lifespans, and structural demands. Pick the type first; the rest of this reference applies the five compositional principles to each.
 
-| Document type                 | Primary reader                  | Lifespan               | Volatility                        | Core job                                                 |
-| ----------------------------- | ------------------------------- | ---------------------- | --------------------------------- | -------------------------------------------------------- |
-| Worklog                       | Future self / handoff receiver  | Per version (archived) | High (appended daily)             | Record decisions and milestones, not execution details   |
-| README                        | Newcomer / marketplace visitor  | Permanent              | Low (stable)                      | Orient readers in one screen, route to deeper docs       |
-| Spec (requirement / use case) | Implementers, reviewers, QA     | Permanent (versioned)  | Medium (evolves with scope)       | Define acceptable behaviour in testable terms            |
-| Methodology                   | Framework users (cross-project) | Permanent              | Low (distilled)                   | Give framework users and AI an explicit, directly-applicable judgment standard                |
-| Error-pattern                 | Debuggers, reviewers            | Permanent              | Low (append-only)                 | Capture root cause + prevention so it doesn't recur      |
-| Ticket                        | Executor, dispatcher            | Per task (archived)    | Medium (mutated during execution) | Carry a single atomic intent from creation to completion |
+| Document type                 | Primary reader                  | Lifespan               | Volatility                        | Core job                                                                       |
+| ----------------------------- | ------------------------------- | ---------------------- | --------------------------------- | ------------------------------------------------------------------------------ |
+| Worklog                       | Future self / handoff receiver  | Per version (archived) | High (appended daily)             | Record decisions and milestones, not execution details                         |
+| README                        | Newcomer / marketplace visitor  | Permanent              | Low (stable)                      | Orient readers in one screen, route to deeper docs                             |
+| Spec (requirement / use case) | Implementers, reviewers, QA     | Permanent (versioned)  | Medium (evolves with scope)       | Define acceptable behaviour in testable terms                                  |
+| Methodology                   | Framework users (cross-project) | Permanent              | Low (distilled)                   | Give framework users and AI an explicit, directly-applicable judgment standard |
+| Error-pattern                 | Debuggers, reviewers            | Permanent              | Low (append-only)                 | Capture root cause + prevention so it doesn't recur                            |
+| Ticket                        | Executor, dispatcher            | Per task (archived)    | Medium (mutated during execution) | Carry a single atomic intent from creation to completion                       |
 
 Two rules follow from the table:
 
@@ -365,10 +365,10 @@ A methodology carries the framework's judgment criteria and core rules, written 
 
 If rewriting an old verbose methodology, the test is:
 
-| Check                                                            | If fail                  |
-| ---------------------------------------------------------------- | ------------------------ |
-| Does the file contain a complete operational workflow?           | Move it to a SKILL       |
-| Does it contain runnable code examples or error-handling detail? | Move to a SKILL          |
+| Check                                                                                       | If fail                                    |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Does the file contain a complete operational workflow?                                      | Move it to a SKILL                         |
+| Does it contain runnable code examples or error-handling detail?                            | Move to a SKILL                            |
 | Are the judgment criteria compressed into hint-like bullets a reader cannot apply directly? | Restore them explicitly in the methodology |
 
 The methodology keeps its judgment criteria explicit and applicable; the SKILL holds the full walk-through. Never compress the criteria themselves to save length.
@@ -428,6 +428,6 @@ Skip rules: quick worklog notes can skip rounds 4-7'; stable specs / methodology
 | Write or append a worklog entry | Principle 1 + Worklog extensions                                       |
 | Start a README from scratch     | Principle 2 (indexing) + Principle 5 (README template)                 |
 | Draft a use-case spec           | Principle 3 (spec vs process) + Principle 5 (spec template)            |
-| Rewrite a bloated methodology   | Methodology extensions (length discipline) + Principle 1 (atomize)        |
+| Rewrite a bloated methodology   | Methodology extensions (length discipline) + Principle 1 (atomize)     |
 | Record a new error-pattern      | Principle 5 (error-pattern template) + Principle 4 (ID as grep anchor) |
 | Fill a ticket's fields          | Principle 5 (ticket template), then consult designing-fields.md        |

@@ -32,13 +32,13 @@
 
 實際 methodology 文件的 pillar 應該包含 multi-pass、appendix 應該避免：
 
-| Methodology                                 | 適合的 pillar                                                        | 不適合放 appendix              |
-| ------------------------------------------- | -------------------------------------------------------------------- | ------------------------------ |
-| 寫作方法論                                  | 「Re-read Pass」原則明示輪次                                         | 「最後 review 一下」三字附帶   |
-| 需求協議                                    | Pillar「Multi-pass Refinement」明示「第 1 輪實作預期不對」           | 「失敗多次再回頭看」零散提示   |
-| 前端 + 測試協議                             | 「漸進驗證」原則中、再加「Multi-pass Review」串成系列                | TODO 註解講「之後 review」     |
-| TDD（test-driven）                          | RED-GREEN-REFACTOR 三步本身就是 multi-pass                           | 「重構是 optional」當 appendix |
-| Agile（process）                            | Sprint review / retrospective 是 pillar                              | 「有空回顧一下」當 appendix    |
+| Methodology        | 適合的 pillar                                              | 不適合放 appendix              |
+| ------------------ | ---------------------------------------------------------- | ------------------------------ |
+| 寫作方法論         | 「Re-read Pass」原則明示輪次                               | 「最後 review 一下」三字附帶   |
+| 需求協議           | Pillar「Multi-pass Refinement」明示「第 1 輪實作預期不對」 | 「失敗多次再回頭看」零散提示   |
+| 前端 + 測試協議    | 「漸進驗證」原則中、再加「Multi-pass Review」串成系列      | TODO 註解講「之後 review」     |
+| TDD（test-driven） | RED-GREEN-REFACTOR 三步本身就是 multi-pass                 | 「重構是 optional」當 appendix |
+| Agile（process）   | Sprint review / retrospective 是 pillar                    | 「有空回顧一下」當 appendix    |
 
 每個 methodology 的設計都該檢查：**multi-pass 是 pillar 還是 appendix？**
 
@@ -107,12 +107,12 @@
 
 ## 跟其他抽象層原則的關係
 
-| 原則                                                                          | 關係                                                                                                     |
-| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| [external-trigger-for-high-roi-work](./external-trigger-for-high-roi-work.md) | 本卡是該卡在 methodology 設計層的展現 — appendix-level 是 L1 紀律、pillar-level 是 L3-L5 結構           |
+| 原則                                                                                                | 關係                                                                                                     |
+| --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [external-trigger-for-high-roi-work](./external-trigger-for-high-roi-work.md)                       | 本卡是該卡在 methodology 設計層的展現 — appendix-level 是 L1 紀律、pillar-level 是 L3-L5 結構            |
 | [literal-interception-vs-behavioral-refinement](./literal-interception-vs-behavioral-refinement.md) | Methodology 設計這個動作本身就是 multi-pass 的對象 — 第一版 pillar 不對、要 review                       |
-| [ease-of-writing-vs-intent-alignment](./ease-of-writing-vs-intent-alignment.md) | 寫 methodology 時、便利的寫法是「核心 3 條 + 細節塞 appendix」、跟「使用者實際需要 multi-pass 跑」不對齊 |
-| [minimum-necessary-scope-is-sanity-defense](./minimum-necessary-scope-is-sanity-defense.md) | Pillar 不該過度膨脹、但「該升的內容沒升」是反向偏差、本卡是補該原則的另一邊                               |
+| [ease-of-writing-vs-intent-alignment](./ease-of-writing-vs-intent-alignment.md)                     | 寫 methodology 時、便利的寫法是「核心 3 條 + 細節塞 appendix」、跟「使用者實際需要 multi-pass 跑」不對齊 |
+| [minimum-necessary-scope-is-sanity-defense](./minimum-necessary-scope-is-sanity-defense.md)         | Pillar 不該過度膨脹、但「該升的內容沒升」是反向偏差、本卡是補該原則的另一邊                              |
 
 ---
 
