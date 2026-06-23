@@ -25,9 +25,8 @@ from datetime import datetime
 from typing import Dict, Any
 
 # 設置 sys.path
-sys.path.insert(0, str(Path(__file__).parent))
-sys.path.insert(0, str(Path(__file__).parent.parent))
-sys.path.insert(0, str(Path(__file__).parent.parent / "lib"))
+sys.path.insert(0, str(Path(__file__).parent))         # .claude/hooks/ (hook_utils)
+sys.path.insert(0, str(Path(__file__).parent.parent))   # .claude/       (lib.*)
 
 from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin, is_subagent_environment, emit_hook_output
 from git_utils import get_current_branch, is_allowed_branch, find_target_repo

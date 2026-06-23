@@ -1,3 +1,10 @@
+## [2.1.3] - 2026-06-24
+
+### Summary
+fix(hooks): main hook sys.path 對齊 W2010 正規化範本 + 落地 Phase 2 條件式判斷/FR↔Ticket 覆蓋矩陣/spec 維度 3a3b 框架增強
+
+---
+
 ## [2.1.2] - 2026-06-24
 
 ### Summary

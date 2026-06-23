@@ -59,6 +59,7 @@ pending → claim → in_progress → complete → completed
 
 | 步驟 | 動作 | 說明 |
 |------|------|------|
+| 0 | 建立 FR↔Ticket 覆蓋矩陣（有 source spec 時） | 列出 source spec 所有 FR 及驗收標準數，逐一標記「覆蓋 ticket ID」或「本版不覆蓋（附理由）」，確認每個 FR 驗收標準有對應 ticket AC（W1-004） |
 | 1 | 列出 ANA Solution 所有修改項 | 逐項列出，不遺漏 |
 | 2 | 合併背景代理人分析結果 | 等待通知或查閱 output |
 | 3 | 建立執行 Ticket 的 AC | 每個修改項對應一條 AC |

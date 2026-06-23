@@ -40,10 +40,9 @@ import hashlib
 from pathlib import Path
 from typing import Dict, Optional
 
-sys.path.insert(0, str(Path(__file__).parent))
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent))         # .claude/hooks/ (hook_utils)
+sys.path.insert(0, str(Path(__file__).parent.parent))   # .claude/       (lib.*)
 from hook_utils import setup_hook_logging, run_hook_safely
-sys.path.insert(0, str(Path(__file__).parent.parent / 'lib'))
 from lib.pyproject_scanner import load_pyproject_toml, scan_skills_directory
 
 # TOML 解析：試圖使用 tomllib（Python 3.11+），否則 fallback 到 tomli

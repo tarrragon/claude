@@ -339,7 +339,7 @@ Phase 4a 多視角分析報告完成後，進入 Phase 4b 前，PM 必須執行 
 |----|----|------|-----------|
 | Phase 0 | Phase 1 | SA 審查通過 | 填寫 Context Bundle（→ Phase 1） |
 | Phase 1 | Phase 1.5 | 功能規格完成 | 填寫 Context Bundle（→ 多視角審查） |
-| Phase 1.5 | Phase 2 | 多視角審查通過 | 填寫 Context Bundle（→ Phase 2） |
+| Phase 1.5 | Phase 2 | 多視角審查通過 + Phase 2 條件式強制判斷（見下方） | 填寫 Context Bundle（→ Phase 2） |
 | Phase 2 | Phase 3a | 測試案例設計完成 | 填寫 Context Bundle（→ Phase 3a） |
 | Phase 3a | 3b 拆分評估 | 策略文件完成 | 填寫 Context Bundle（→ Phase 3b） |
 | 3b 拆分評估 | Phase 3b | PM 完成拆分評估（見下方） | 各子任務填寫 Context Bundle |
@@ -349,6 +349,18 @@ Phase 4a 多視角分析報告完成後，進入 Phase 4b 前，PM 必須執行 
 | Phase 4c | 完成 | 多視角再審核報告完成 | - |
 
 > **Context Bundle**：PM 在派發下一階段代理人前，必須將該代理人所需的前置資訊寫入 Ticket。詳見 `.claude/pm-rules/context-bundle-spec.md`。
+
+### Phase 2 條件式強制判斷（Phase 1.5 通過後，W1-004）
+
+Phase 1 完成後，依 source spec 有無和 FR 驗收標準規模決定 Phase 2 形態：
+
+| 情境 | Phase 2 需求 |
+|------|-------------|
+| 有 spec 且 FR 驗收標準合計 >= 3 條 | 強制：ANA 必須產出至少一個 Phase 2 測試設計 ticket（派發 sage-test-architect） |
+| 有 spec 但 FR 驗收標準合計 < 3 條 | 建議：可在 IMP ticket 內嵌入測試設計 |
+| 無 spec（純 bug fix / 流程改善） | Phase 2 豁免 |
+
+**Why**：Phase 2 的價值在於「紅燈先行」確保 spec 驗收標準被轉化為可執行測試。小範圍 FR 可在 IMP 內同步處理；大範圍 FR 需 sage 獨立設計以避免 IMP 執行者漏蓋 spec 邊界條件。
 
 ### 3b 拆分評估（Phase 3a 完成後，強制）
 
