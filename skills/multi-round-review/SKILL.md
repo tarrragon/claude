@@ -153,3 +153,7 @@ Round 3 之後是否需要 Round 4？四個停止訊號齊備、停：
 - **跳過 frame 規劃直接派 reviewer**：「再來一輪 audit」沒指定 frame 切換、reviewer 用同方向掃同類問題、是 #114 的具體實例
 - **單跑字面 grep 修法**：修完字面層（編號、broken link）就以為到位、漏掉結構層（cadence）跟同義變體（per #147）
 - **跑臨時子集卻當成跑完整框架**：只派幾個臨時擬的 reviewer frame + 一次 grep、就回報「review 完成 / clean」—— 漏抓後容易誤判成「框架不足」（design gap）而去加 frame / keyword、實際是「沒跑完該跑的輪」（execution gap）。漏抓先分 design gap（改框架）vs execution gap（改執行、別只加 keyword）；register/stance 類（喊話 / 誇飾 / 必然）尤其要靠 reader simulation + external cold-read、不是加 keyword（per compositional-writing 的 multi-pass-review-frame-granularity 原則）
+
+---
+
+**Version**: 1.0.0

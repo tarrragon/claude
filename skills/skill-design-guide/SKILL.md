@@ -452,4 +452,5 @@ description: [...]
 ---
 
 **Last Updated**: 2026-04-30
+**Version**: 1.0.0
 **Source**: Anthropic 官方 skill-creator（`/Users/mac-eric/.claude/plugins/marketplaces/anthropic-agent-skills/skills/skill-creator/`）+ 官方平台文件 + Claude Code 擴展規範 + 本專案實踐

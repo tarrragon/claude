@@ -155,3 +155,7 @@ saas-tech-selection/
         ├── reliability.md                # CI gate、測試層次、備份演練、第三方依賴降級
         └── capacity-performance.md       # 容量假設、連線池、成本監控、高峰 readiness
 ```
+
+---
+
+**Version**: 1.0.0

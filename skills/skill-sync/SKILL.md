@@ -26,3 +26,7 @@ uv tool install --from .claude/skills/skill-sync skill-sync
 
 - `project-integration/` subdirectories are excluded from both pull and push operations
 - This tool has zero framework dependencies and works in any project
+
+---
+
+**Version**: 1.0.0

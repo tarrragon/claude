@@ -1,3 +1,14 @@
+## [1.61.2] - 2026-06-23
+
+### Summary
+chore: 補齊 8 個 skill 版本號
+
+Changes: 1 chore
+
+- chore: 補齊 8 個 skill 版本號
+
+---
+
 ## [1.61.1] - 2026-06-23
 
 ### Summary

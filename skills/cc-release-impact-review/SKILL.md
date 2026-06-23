@@ -101,3 +101,7 @@ skill 產出：
 - `.claude/skills/wrap-decision/SKILL.md` — Step 4 的 WRAP 框架
 - `.claude/pm-rules/askuserquestion-rules.md` — 敏感項交用戶決策時的提問規範
 - W4-028 / W4-029 ticket — 標準評估範例
+
+---
+
+**Version**: 1.0.0

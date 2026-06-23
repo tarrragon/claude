@@ -211,3 +211,7 @@ branch 命名：`feat/monitor-teaching-backfill-NNN`（NNN = challenge 編號）
 - `CLAUDE.md` §3「教學 × 實作互補」— 教學模組對應表和雙向工作流
 - blog repo: `content/monitoring/` — 教學文章
 - blog repo: `content/monitoring/cases/` — 由 challenge 教學化後產生的 case
+
+---
+
+**Version**: 1.0.0

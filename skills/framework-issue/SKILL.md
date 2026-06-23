@@ -108,3 +108,7 @@ uv run --project .claude/hooks pytest \
 ```
 
 測試以 mock 攔截 gh subprocess，不真打 GitHub API；涵蓋正常路徑與三種降級路徑。
+
+---
+
+**Version**: 1.0.0
