@@ -50,7 +50,7 @@ from hook_utils import setup_hook_logging, run_hook_safely
 
 # dispatch_tracker / find_ticket_files 為訊息富化與防 race 用；缺失時降級而非崩潰
 try:
-    from dispatch_tracker import get_active_dispatches, cleanup_expired
+    from lib.dispatch_tracker import get_active_dispatches, cleanup_expired
 except ImportError:  # pragma: no cover - 僅在 lib 缺失時走降級
     get_active_dispatches = None
     cleanup_expired = None

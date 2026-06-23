@@ -1361,13 +1361,12 @@ def _resolve_framework_path_checker():
     強依賴 lib 與 PyYAML。失敗時降級至 inline 前綴比對，保留既有行為。
     """
     try:
-        # 將 .claude/hooks/ 加入 sys.path（從專案根目錄推導）
+        # 將 .claude/ 加入 sys.path（從專案根目錄推導）
         # lifecycle.py: .claude/skills/ticket/ticket_system/commands/lifecycle.py
-        # → 上溯 5 層至 .claude/，再進 hooks/
+        # → 上溯 5 層至 .claude/
         claude_dir = Path(__file__).resolve().parents[4]
-        hooks_dir = claude_dir / "hooks"
-        if str(hooks_dir) not in sys.path:
-            sys.path.insert(0, str(hooks_dir))
+        if str(claude_dir) not in sys.path:
+            sys.path.insert(0, str(claude_dir))
         from lib import framework_paths  # noqa: WPS433
         return framework_paths.is_framework_path_broad
     except Exception:  # noqa: BLE001 — 任何 import 失敗皆 fallback

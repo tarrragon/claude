@@ -32,7 +32,7 @@ try:
     from .messages import MergeMessages, CleanupMessages, CommonMessages, CreateMessages
 except ImportError:
     # Fallback when running with scripts/ on sys.path (test 與直接執行情境)
-    from constants import (
+    from lib.constants import (
         FEAT_PREFIX,
         FEAT_PREFIX_LEN,
         TICKET_ID_PATTERN,

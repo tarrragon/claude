@@ -1,3 +1,15 @@
+## [2.1.2] - 2026-06-24
+
+### Summary
+fix: 修復 version.py 衝突解決遺漏的 docstring 和 import; chore: pull .claude 更新（上游 3c0445ab77b4）
+
+Changes: 1 fix, 1 chore
+
+- fix: 修復 version.py 衝突解決遺漏的 docstring 和 import
+- chore: pull .claude 更新（上游 3c0445ab77b4）
+
+---
+
 ## [2.1.1] - 2026-06-24
 
 ### Summary

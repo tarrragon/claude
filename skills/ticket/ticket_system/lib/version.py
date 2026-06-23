@@ -45,8 +45,6 @@ def check_version_all_completed(
     Args:
         version: 版本號（無 v 前綴，如 "1.3.0"）
         tickets: 已載入的 ticket 清單；None 時自行 list_tickets。
-            caller 已載入時應傳入以避免冗餘重載（同時消除 list_tickets →
-            get_project_root → subprocess 的呼叫，便於 dashboard 無 subprocess 測試）。
 
     Returns:
         tuple[bool, Optional[str]]:

@@ -21,9 +21,8 @@ import yaml
 
 # 複用 lib 的 SSOT regex（W1-019.2，E2 linux F3）解析既有 ID。
 _claude_dir = Path(__file__).resolve().parents[3]  # .claude
-_hooks_dir = _claude_dir / "hooks"
-if str(_hooks_dir) not in sys.path:
-    sys.path.insert(0, str(_hooks_dir))
+if str(_claude_dir) not in sys.path:
+    sys.path.insert(0, str(_claude_dir))
 
 from lib.pattern_id import PATTERN_ID_RE  # noqa: E402
 
