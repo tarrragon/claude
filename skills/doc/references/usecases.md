@@ -85,6 +85,10 @@
 | 例外場景 | 是 | 錯誤處理（外部依賴邊界） |
 | 驗收條件 | 是 | 功能驗收 + 邊界條件 |
 
+## 銜接 TDD 流程
+
+UC 步驟→GWT 行為場景種子、UC 資訊鏈→整合測試映射。銜接由 TDD 端消費（`/tdd start` 時偵測 doc 文件自動觸發），doc 端不需額外操作。見 `.claude/skills/tdd/references/doc-handoff.md`。
+
 ## 命名規範
 
 格式：`UC-{XX}-{簡短描述}.md`

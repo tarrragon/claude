@@ -56,8 +56,9 @@ Then: 驗證表單已提交
 | 需求 | 讀這裡 |
 |------|--------|
 | 完整 GWT 設計、場景設計原則、場景類型覆蓋、行為鏈式設計、測試案例格式、邊界條件識別 | `.claude/skills/tdd/references/phase2-test-design.md` |
+| 行為 vs 實作判別、分層 Mock、架構分層 × BDD、BDD→單元拆分判準 | `.claude/skills/tdd/references/bdd-behavior-testing.md` |
 | Sociable vs Solitary 與前置條件關係 | `.claude/methodologies/behavior-first-tdd-methodology.md` |
-| 分層測試決策樹 | `.claude/methodologies/hybrid-testing-strategy-methodology.md` |
+| 分層測試決策樹（完整版含判斷流程、覆蓋率語意、monitor 對應） | `.claude/skills/tdd/references/layered-test-strategy.md` |
 
 ---
 

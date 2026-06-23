@@ -69,6 +69,10 @@ draft → discussing → confirmed → implemented
 
 > outputs.* 三個欄位是跨文件導航（/doc nav）的核心資料來源。移除任何一個都會讓導航功能無法從 Proposal 連結到對應的 Spec/UC/Ticket。
 
+## 銜接 TDD 流程
+
+Proposal 驗收條件在 TDD 銜接中作為 Phase 0 需求完整性的判斷依據。銜接由 TDD 端消費（`/tdd start` 時偵測 doc 文件自動觸發），doc 端不需額外操作。見 `.claude/skills/tdd/references/doc-handoff.md`。
+
 ## 命名規範
 
 格式：`PROP-{NNN}-{簡短描述}.md`

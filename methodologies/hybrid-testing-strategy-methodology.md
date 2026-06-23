@@ -25,6 +25,7 @@
 | 需求 | 讀這裡 |
 |------|--------|
 | 測試金字塔、測試類型選擇、GWT 設計、場景覆蓋、邊界條件識別、技術性必檢項目 | `.claude/skills/tdd/references/phase2-test-design.md` |
+| 五層分工完整版（判斷流程、覆蓋率語意、monitor 專案對應） | `.claude/skills/tdd/references/layered-test-strategy.md` |
 | BDD Given-When-Then 格式與行為鏈、前置條件驗證 | `.claude/methodologies/bdd-testing-methodology.md` |
 | Sociable vs Solitary 測試邊界選擇 | `.claude/methodologies/behavior-first-tdd-methodology.md` |
 

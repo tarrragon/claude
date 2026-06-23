@@ -6,6 +6,8 @@
 
 **核心問題**：「這個功能是否適合現在的系統架構？有沒有類似功能已存在？」
 
+> **Doc 產出物銜接**：如有 doc 產出物（Spec/UC/Proposal），種子包已預填需求完整性、架構檢查、FR 清單。見 `references/doc-handoff.md`。
+
 ---
 
 ## 產出（Layer 1）

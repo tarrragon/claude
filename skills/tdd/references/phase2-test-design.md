@@ -89,6 +89,8 @@ Phase 2 完成後，必須產出：
 
 **原則**：測試金字塔底部穩定，不要讓整合測試做單元測試的工作。
 
+> **分層決策樹**：依 Clean Architecture 五層展開的測試方法選擇見 `references/layered-test-strategy.md`。**Protocol integration test**：被測元件直接對接外部協議（HTTP/WS/gRPC）時，mock 從結構上無法驗證協議契約，見 `references/protocol-integration-testing.md`。
+
 ### 測試類型選擇
 
 | 功能類型 | 建議測試層次 |
@@ -102,6 +104,8 @@ Phase 2 完成後，必須產出：
 ---
 
 ## BDD / Given-When-Then 設計
+
+> **BDD 深度指引**：行為 vs 實作判別法、Sociable vs Solitary 選擇框架、分層 Mock 原則見 `references/bdd-behavior-testing.md`。本章聚焦 GWT 格式和場景設計。
 
 ### GWT 格式
 
@@ -200,6 +204,8 @@ A（初始狀態）→ B（操作後狀態）→ C（進一步操作後狀態）
 | 測試檔案名稱 | `{被測試模組名稱}_test.{副檔名}` |
 | 測試函式名稱 | 描述被測試的行為，而非實作細節 |
 | 避免 | `test1`, `testMethod`, `testHappy` 等無意義名稱 |
+
+> **命名規範完整指引**：三種命名模式（state/scenario/failure-mode）、group 結構、反模式、checklist 見 `references/test-naming-conventions.md`。
 
 ### 目錄結構
 
@@ -479,6 +485,8 @@ try {
 ---
 
 ## Fake/Mock 設計原則
+
+> **Mock 策略全貌**：分層 Mock 原則（只 Mock 外層依賴 / 禁 Mock Domain Entity）見 `references/bdd-behavior-testing.md`。本章聚焦 Fake vs Mock 的實作設計。
 
 | | Fake（假實作） | Mock（模擬物件） |
 |---|--------------|----------------|

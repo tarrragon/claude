@@ -89,3 +89,7 @@ Spec 完成後轉為 ticket 時，依以下原則拆分：
 3. **Proposal 驗收條件 ↔ Ticket**：每項驗收條件都有 ticket 對應
 
 任一比對有遺漏即需補 ticket 或修 Spec。
+
+## 銜接 TDD 流程
+
+Spec/UC 轉為 TDD 流程時，見 `.claude/skills/tdd/references/doc-handoff.md`。銜接流程把 Spec FR→Phase 1 功能規格種子、UC 步驟→GWT 行為場景種子、UC 資訊鏈→整合測試映射。銜接由 TDD 端消費（`/tdd start` 時偵測 doc 文件自動觸發），doc 端不需額外操作。
