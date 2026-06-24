@@ -1,3 +1,15 @@
+## [2.2.0] - 2026-06-24
+
+### Summary
+feat: 新增 skill-sync 至 uv tool staleness 監控; chore: pull .claude 更新（上游 7df1b31）
+
+Changes: 1 feat, 1 chore
+
+- feat: 新增 skill-sync 至 uv tool staleness 監控
+- chore: pull .claude 更新（上游 7df1b31）
+
+---
+
 ## [2.1.4] - 2026-06-24
 
 ### Summary
