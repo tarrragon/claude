@@ -37,7 +37,7 @@ import pytest
 
 # 動態導入 hook_base 及相關模組
 try:
-    from hook_utils.hook_base import (
+    from lib.hook_base import (
         get_project_root,
         _find_project_root,
         ENV_PROJECT_DIR,
@@ -48,8 +48,8 @@ except ImportError:
     hook_base_available = False
 
 try:
-    from hook_utils import get_project_root as get_project_root_from_init
-    from hook_utils.hook_logging import get_project_root as get_project_root_from_logging
+    from lib import get_project_root as get_project_root_from_init
+    from lib.hook_logging import get_project_root as get_project_root_from_logging
     backward_compat_available = True
 except ImportError:
     backward_compat_available = False
@@ -190,7 +190,7 @@ class TestImportConversion:
         驗證 hook_ticket.py 能夠從 hook_base 導入 get_project_root
         """
         try:
-            from hook_utils.hook_ticket import extract_version_from_ticket_id
+            from lib.hook_ticket import extract_version_from_ticket_id
             # hook_ticket 能正常導入說明其依賴解決正確
             result = extract_version_from_ticket_id("0.1.0-W41-001")
             assert result == "0.1.0", \
@@ -204,7 +204,7 @@ class TestImportConversion:
         驗證 hook_io.py 的行內 import（第 273 行）能正常執行
         """
         try:
-            from hook_utils.hook_io import validate_hook_input
+            from lib.hook_io import validate_hook_input
             # hook_io 能正常導入說明其依賴解決正確
             # validate_hook_input 會在內部觸發 is_handoff_recovery_mode，
             # 該函式使用行內 import from hook_base
@@ -241,12 +241,12 @@ class TestBackwardCompatibility:
         # 模擬外部 Hook 的 import 方式
         try:
             # 方式 1：from hook_utils import get_project_root
-            from hook_utils import get_project_root as gpr1
+            from lib import get_project_root as gpr1
             result1 = gpr1()
             assert isinstance(result1, Path)
 
             # 方式 2：from hook_utils.hook_logging import get_project_root
-            from hook_utils.hook_logging import get_project_root as gpr2
+            from lib.hook_logging import get_project_root as gpr2
             result2 = gpr2()
             assert isinstance(result2, Path)
 
@@ -260,7 +260,7 @@ class TestBackwardCompatibility:
         """
         # 檢查 hook_base 的導入
         try:
-            import hook_utils.hook_base as hb
+            import lib.hook_base as hb
 
             # hook_base 應該只導入 os 和 pathlib
             imports_in_hook_base = []
@@ -288,7 +288,7 @@ class TestBackwardCompatibility:
         驗證 hook_base.py 的依賴最小化（只依賴 os 和 pathlib）
         """
         try:
-            import hook_utils.hook_base as hb
+            import lib.hook_base as hb
 
             # 取得 hook_base 的所有 imports
             module_source = Path(hb.__file__).read_text(encoding='utf-8')
@@ -311,7 +311,7 @@ class TestBackwardCompatibility:
         驗證 hook_logging.py 中已移除 _find_project_root 定義
         """
         try:
-            from hook_utils import hook_logging
+            from lib import hook_logging
 
             # 檢查 hook_logging 中不應再定義 _find_project_root
             # 因為它已移至 hook_base
@@ -344,15 +344,15 @@ class TestIntegration:
         # 測試各種 import 方式
         try:
             # 方式 1
-            from hook_utils import get_project_root as gpr1
+            from lib import get_project_root as gpr1
             assert gpr1() == tmp_path
 
             # 方式 2
-            from hook_utils.hook_base import get_project_root as gpr2
+            from lib.hook_base import get_project_root as gpr2
             assert gpr2() == tmp_path
 
             # 方式 3
-            from hook_utils.hook_logging import get_project_root as gpr3
+            from lib.hook_logging import get_project_root as gpr3
             assert gpr3() == tmp_path
         except Exception as e:
             pytest.fail(f"整合測試失敗: {e}")
@@ -360,8 +360,8 @@ class TestIntegration:
     def test_constants_accessible_from_all_paths(self):
         """驗證常數可以從原始位置和新位置存取"""
         try:
-            from hook_utils.hook_base import ENV_PROJECT_DIR as env1
-            from hook_utils.hook_logging import ENV_PROJECT_DIR as env2
+            from lib.hook_base import ENV_PROJECT_DIR as env1
+            from lib.hook_logging import ENV_PROJECT_DIR as env2
 
             assert env1 == env2 == "CLAUDE_PROJECT_DIR"
         except ImportError:

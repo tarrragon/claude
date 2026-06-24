@@ -21,9 +21,13 @@ External Query Guide Hook - PreToolUse Hook
 
 import json
 import sys
+from pathlib import Path
 from typing import Dict, Any
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
-from lib.hook_messages import WorkflowMessages, format_message
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # .claude/ — for `from lib import ...`
+
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin  # noqa: E402
+from lib.hook_messages import WorkflowMessages, format_message  # noqa: E402
 
 
 # ============================================================================

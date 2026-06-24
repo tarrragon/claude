@@ -47,7 +47,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from hook_utils import setup_hook_logging, run_hook_safely
+from lib import setup_hook_logging, run_hook_safely
 
 
 HOOK_NAME = "zhtw-mcp-check"

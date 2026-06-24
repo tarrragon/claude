@@ -24,7 +24,7 @@ from unittest.mock import MagicMock, patch
 # 加入模組路徑
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from hook_utils import extract_tool_input, extract_tool_response
+from lib import extract_tool_input, extract_tool_response
 
 
 # ============================================================================

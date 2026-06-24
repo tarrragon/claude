@@ -39,7 +39,7 @@ from typing import Dict, Any, List, Optional
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, parse_ticket_frontmatter, get_project_root, find_ticket_file
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, parse_ticket_frontmatter, get_project_root, find_ticket_file
 from lib.hook_messages import WorkflowMessages, CoreMessages, format_message
 
 # W17-181.2: delegate is_ticket_completed 至 lib SSOT，消除跨進程同構邏輯（ARCH-020）。

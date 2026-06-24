@@ -73,7 +73,7 @@ from typing import Dict, Any, Optional, Tuple, List
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from hook_utils import (
+from lib import (
     setup_hook_logging,
     run_hook_safely,
     read_json_from_stdin,

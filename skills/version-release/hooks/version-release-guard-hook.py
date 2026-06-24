@@ -41,7 +41,7 @@ from lib.hook_io import (
     create_simple_output,
 )
 from lib.git_utils import get_project_root
-from hook_utils import setup_hook_logging, run_hook_safely
+from lib import setup_hook_logging, run_hook_safely
 
 
 def is_version_release_commit(tool_input: dict, logger: logging.Logger) -> tuple:

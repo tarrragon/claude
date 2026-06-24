@@ -38,7 +38,7 @@ def isolate_hook_logs(tmp_path, monkeypatch):
     解析結果非 production repo，本 fixture 不介入，既有日誌路徑斷言以測試設定
     為準。
     """
-    import hook_utils.hook_logging as _hl
+    import lib.hook_logging as _hl
 
     log_root = tmp_path / "hook_log_isolation"
     log_root.mkdir(parents=True, exist_ok=True)

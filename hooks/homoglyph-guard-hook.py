@@ -41,7 +41,7 @@ from typing import Dict, List, Set, Tuple
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from hook_utils import (  # noqa: E402
+from lib import (  # noqa: E402
     setup_hook_logging,
     run_hook_safely,
     read_json_from_stdin,

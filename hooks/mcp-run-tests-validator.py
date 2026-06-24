@@ -20,8 +20,11 @@ MCP run_tests 使用規範驗證 Hook (PreToolUse)
 import json
 import sys
 from pathlib import Path
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
-from lib.hook_messages import ValidationMessages
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # .claude/ — for `from lib import ...`
+
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin  # noqa: E402
+from lib.hook_messages import ValidationMessages  # noqa: E402
 
 
 def validate_roots_parameter(roots: list) -> tuple[bool, list]:

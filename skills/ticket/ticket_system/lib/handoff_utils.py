@@ -29,20 +29,20 @@ from ticket_system.lib.paths import get_project_root
 # Why: ARCH-020 跨進程同構邏輯反模式；先前 load_and_validate_ticket 走 paths.get_tickets_dir
 # 在子進程環境下若 CLAUDE_PROJECT_DIR 未傳遞會 fallback 至 cwd 而錯誤。
 def _ensure_hook_utils_path() -> None:
-    """將 .claude/hooks/ 加入 sys.path 以可 import hook_utils.hook_ticket。
+    """將 .claude/ 加入 sys.path 以可 import lib.hook_ticket。
     從 lib 檔案位置（…/.claude/skills/ticket/ticket_system/lib/handoff_utils.py）
-    向上 4 層至 .claude/，再進入 hooks/。
+    向上 4 層至 .claude/。
     """
-    hooks_dir = Path(__file__).resolve().parents[4] / "hooks"
-    hooks_dir_str = str(hooks_dir)
-    if hooks_dir_str not in sys.path:
-        sys.path.insert(0, hooks_dir_str)
+    claude_dir = Path(__file__).resolve().parents[4]
+    claude_dir_str = str(claude_dir)
+    if claude_dir_str not in sys.path:
+        sys.path.insert(0, claude_dir_str)
 
 
 _ensure_hook_utils_path()
 
 try:
-    from hook_utils.hook_ticket import (
+    from lib.hook_ticket import (
         find_ticket_file as _find_ticket_file,
         parse_ticket_frontmatter as _parse_ticket_frontmatter,
     )

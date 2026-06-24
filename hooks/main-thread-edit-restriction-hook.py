@@ -24,12 +24,11 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
 
-# 設置 sys.path
-sys.path.insert(0, str(Path(__file__).parent))         # .claude/hooks/ (hook_utils)
+sys.path.insert(0, str(Path(__file__).parent))         # .claude/hooks/
 sys.path.insert(0, str(Path(__file__).parent.parent))   # .claude/       (lib.*)
 
-from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin, is_subagent_environment, emit_hook_output
-from git_utils import get_current_branch, is_allowed_branch, find_target_repo
+from lib import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin, is_subagent_environment, emit_hook_output
+from lib.git_utils import get_current_branch, is_allowed_branch, find_target_repo
 from lib.hook_messages import GateMessages
 from lib.dispatch_tracker import is_file_under_dispatch
 from lib.path_permission import check_file_permission

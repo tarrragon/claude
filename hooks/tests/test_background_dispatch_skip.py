@@ -39,7 +39,7 @@ def _load_hook(module_name: str, file_name: str):
 
 def test_is_background_dispatch_helper():
     """helper 正確偵測 run_in_background=true。"""
-    from hook_utils import is_background_dispatch
+    from lib import is_background_dispatch
 
     assert is_background_dispatch({"run_in_background": True}) is True
     assert is_background_dispatch({"run_in_background": False}) is False

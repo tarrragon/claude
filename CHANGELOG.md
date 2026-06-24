@@ -1,3 +1,18 @@
+## [2.3.0] - 2026-06-25
+
+### Summary
+feat: lib/ 吸收 hook_utils 獨有函式成為單一 SSOT; refactor: 全 consumer import hook_utils→lib 並移除 hook_utils/; fix: 清理 bare git_utils import 殘留 + lib script-mode sys.path (+2 more)
+
+Changes: 1 feat, 1 refactor, 2 fix, 1 docs
+
+- feat: lib/ 吸收 hook_utils 獨有函式成為單一 SSOT
+- refactor: 全 consumer import hook_utils→lib 並移除 hook_utils/
+- fix: 清理 bare git_utils import 殘留 + lib script-mode sys.path
+- fix: 修復 hook-health-monitor.py SessionStart str/Path 型別錯誤
+- docs: 新增 IMP-APP-001 get_project_root 雙實作型別分歧
+
+---
+
 ## [2.2.0] - 2026-06-24
 
 ### Summary

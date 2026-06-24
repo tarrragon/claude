@@ -39,7 +39,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root, is_subagent_environment
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root, is_subagent_environment
 
 import re
 from datetime import datetime

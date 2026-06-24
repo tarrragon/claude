@@ -50,12 +50,12 @@ if str(_claude_dir) not in sys.path:
 if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 
-from hook_utils import (
+from lib import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin,
     parse_ticket_frontmatter, get_project_root, save_check_log,
     validate_hook_input, get_effort_level
 )
-from hook_utils.hook_ticket import find_ticket_file
+from lib.hook_ticket import find_ticket_file
 from lib.hook_messages import GateMessages, CoreMessages, format_message
 
 import re

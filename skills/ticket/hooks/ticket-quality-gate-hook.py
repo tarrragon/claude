@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 # 加入 .claude/lib 路徑（共用模組 config_loader / hook_io）
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from hook_utils import (
+from lib import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level,
     get_project_root, validate_hook_input, validate_tool_input
 )

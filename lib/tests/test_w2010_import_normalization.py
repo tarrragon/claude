@@ -60,10 +60,14 @@ class TestCommonFunctionsNoHookUtils(unittest.TestCase):
         self.assertNotIn("import hook_utils", src)
 
     def test_get_project_root_callable_via_package(self):
+        from pathlib import Path
+
         from lib.common_functions import get_project_root
 
         self.assertTrue(callable(get_project_root))
-        self.assertIsInstance(get_project_root(), str)
+        # 0.37.0-W6-005：get_project_root 統一為 Path 回傳（SSOT，消除 IMP-APP-001
+        # str/Path 型別發散根因）。common_functions 經 git_utils 取得 SSOT 實作。
+        self.assertIsInstance(get_project_root(), Path)
 
 
 class TestMarkdownFormatterNoHookUtils(unittest.TestCase):

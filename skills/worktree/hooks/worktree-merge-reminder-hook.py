@@ -25,7 +25,7 @@ from typing import List, Optional, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, is_subagent_environment
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, is_subagent_environment
 
 
 def parse_worktree_list(logger) -> List[Tuple[str, str]]:

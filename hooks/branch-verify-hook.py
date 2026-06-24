@@ -54,7 +54,7 @@ from lib.hook_io import (
     write_hook_output,
     create_pretooluse_output,
 )
-from hook_utils import setup_hook_logging, run_hook_safely
+from lib import setup_hook_logging, run_hook_safely
 
 
 # 跨專案豁免清單（W17-149）：當目標檔案不在本專案 repo 時，使用通用清單
@@ -122,7 +122,8 @@ def is_exempt_path_on_protected_branch(
     Returns:
         bool: True 表示豁免（允許編輯），False 表示不豁免
     """
-    host_root = get_project_root(cwd=cwd)
+    # get_project_root 回傳 Path（SSOT），本函式後續以 str 操作（startswith/len），故轉 str
+    host_root = str(get_project_root(cwd=cwd))
     same_repo = _is_same_repo(target_repo, host_root)
 
     if not same_repo:
@@ -242,7 +243,7 @@ def main() -> int:
 
         # W17-149: 偵測目標 repo，判斷是否跨專案
         target_repo = find_target_repo(file_path) if file_path and file_path.startswith("/") else None
-        host_root = get_project_root()
+        host_root = str(get_project_root())
         is_cross_repo = (
             target_repo is not None
             and os.path.realpath(target_repo) != os.path.realpath(host_root)
@@ -273,7 +274,7 @@ def main() -> int:
 
         # 同 repo 路徑判斷
         project_root = host_root
-        is_project_file = file_path.startswith(project_root) if file_path.startswith("/") else True
+        is_project_file = file_path.startswith(str(project_root)) if file_path.startswith("/") else True
 
         if is_project_file:
             # 專案內的檔案

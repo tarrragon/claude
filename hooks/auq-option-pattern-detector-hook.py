@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from hook_utils import setup_hook_logging, is_subagent_environment, read_json_from_stdin, run_hook_safely, get_effort_level
+    from lib import setup_hook_logging, is_subagent_environment, read_json_from_stdin, run_hook_safely, get_effort_level
     from lib.hook_messages import AUQOptionPatternMessages
     from lib.transcript_tail_reader import read_last_assistant_text as _shared_read_last_assistant_text
 except ImportError as e:

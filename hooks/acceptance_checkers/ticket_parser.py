@@ -15,7 +15,7 @@ _hooks_dir = Path(__file__).parent.parent
 if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 
-from hook_utils import parse_ticket_date
+from lib import parse_ticket_date
 
 
 def extract_children_from_frontmatter(frontmatter: dict, logger) -> List[str]:

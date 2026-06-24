@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib.phase_contract_validator import PhaseContractValidator, ValidationResult
-from hook_utils import setup_hook_logging, get_effort_level
+from lib import setup_hook_logging, get_effort_level
 
 
 def format_validation_result(result) -> str:

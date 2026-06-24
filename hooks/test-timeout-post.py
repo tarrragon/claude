@@ -24,7 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, read_json_from_stdin
+from lib import setup_hook_logging, run_hook_safely, get_project_root, read_json_from_stdin
 
 # 閾值設定（秒）
 WARNING_THRESHOLD = 300    # 5 分鐘

@@ -37,12 +37,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # git_utils 位於 .claude/lib/（專案級共用程式庫）
 
 try:
-    from hook_utils import (
+    from lib import (
         setup_hook_logging,
         run_hook_safely,
         read_json_from_stdin,
     )
-    from git_utils import get_uncommitted_files
+    from lib.git_utils import get_uncommitted_files
 except ImportError as e:
     # ImportError 不應 exit(1) 阻斷流程；降級為 no-op（fail-open）
     print(f"[Hook Import Warning] {Path(__file__).name}: {e}", file=sys.stderr)

@@ -46,7 +46,7 @@ _CLAUDE_DIR = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_CLAUDE_DIR))
 sys.path.insert(0, str(_CLAUDE_DIR / "hooks"))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from lib import setup_hook_logging, run_hook_safely
 
 # dispatch_tracker / find_ticket_files 為訊息富化與防 race 用；缺失時降級而非崩潰
 try:
@@ -56,8 +56,8 @@ except ImportError:  # pragma: no cover - 僅在 lib 缺失時走降級
     cleanup_expired = None
 
 try:
-    from hook_utils import find_ticket_files, parse_ticket_frontmatter
-    from hook_utils import extract_where_files_from_frontmatter
+    from lib import find_ticket_files, parse_ticket_frontmatter
+    from lib import extract_where_files_from_frontmatter
 except ImportError:  # pragma: no cover
     find_ticket_files = None
     parse_ticket_frontmatter = None

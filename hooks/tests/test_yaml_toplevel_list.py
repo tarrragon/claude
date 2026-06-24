@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from hook_utils import parse_ticket_frontmatter
+from lib import parse_ticket_frontmatter
 
 
 def _wrap(frontmatter_body: str) -> str:

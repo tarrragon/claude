@@ -59,7 +59,7 @@ from typing import Optional, List, Dict, Tuple
 _FRAMEWORK_HOOKS = str(Path(__file__).resolve().parents[3] / "hooks")
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, _FRAMEWORK_HOOKS)
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level, emit_hook_output
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level, emit_hook_output
 from lib.hook_messages import QualityMessages, CoreMessages, format_message
 
 # 專案根目錄

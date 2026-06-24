@@ -23,10 +23,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from hook_utils.hook_base import get_project_root
-from hook_utils.hook_logging import setup_hook_logging
-from hook_utils.hook_io import read_json_from_stdin, emit_hook_output
-from hook_utils.hook_ticket import (
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # .claude/ — for `from lib.* import ...`
+
+from lib.hook_base import get_project_root  # noqa: E402
+from lib.hook_logging import setup_hook_logging  # noqa: E402
+from lib.hook_io import read_json_from_stdin, emit_hook_output
+from lib.hook_ticket import (
     parse_ticket_frontmatter,
     find_ticket_file,
     extract_where_files_from_frontmatter,

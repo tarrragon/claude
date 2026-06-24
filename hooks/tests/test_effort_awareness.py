@@ -24,7 +24,7 @@ HOOKS_DIR = Path(__file__).parent.parent
 ticket_skill_hooks_path = HOOKS_DIR.parent / "skills" / "ticket" / "hooks"
 sys.path.insert(0, str(HOOKS_DIR))
 
-from hook_utils import get_effort_level
+from lib import get_effort_level
 
 
 # ============================================================================

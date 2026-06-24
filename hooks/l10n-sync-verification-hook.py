@@ -24,7 +24,10 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, read_json_from_stdin
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # .claude/ — for `from lib import ...`
+
+from lib import setup_hook_logging, run_hook_safely, get_project_root, read_json_from_stdin  # noqa: E402
 
 
 def is_arb_file(file_path: str) -> bool:

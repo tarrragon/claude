@@ -21,7 +21,7 @@ import pytest
 
 # 動態導入 hook_utils（可能不存在）
 try:
-    from hook_utils import (
+    from lib import (
         setup_hook_logging,
         run_hook_safely,
         get_current_version_from_todolist,
@@ -109,7 +109,7 @@ def mock_env_var(monkeypatch):
 def mock_time():
     """固定時間戳以驗證檔名"""
     fixed_time = datetime(2026, 2, 25, 10, 0, 0)
-    with patch('hook_utils.datetime') as mock_dt:
+    with patch('lib.hook_logging.datetime') as mock_dt:
         mock_dt.now.return_value = fixed_time
         # 也需要能呼叫 datetime 本身的方法
         mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
@@ -1537,21 +1537,21 @@ class TestImportsAndExports:
 
     def test_import_validate_tool_input(self):
         """驗證 validate_tool_input 可從 hook_utils 匯入"""
-        from hook_utils import validate_tool_input as imported_func
+        from lib import validate_tool_input as imported_func
 
         assert callable(imported_func)
         assert imported_func.__name__ == "validate_tool_input"
 
     def test_import_validate_ticket_unified(self):
         """驗證 validate_ticket_unified 可從 hook_utils 匯入"""
-        from hook_utils import validate_ticket_unified as imported_func
+        from lib import validate_ticket_unified as imported_func
 
         assert callable(imported_func)
         assert imported_func.__name__ == "validate_ticket_unified"
 
     def test_existing_exports_still_available(self):
         """驗證既有符號仍可匯入"""
-        from hook_utils import (
+        from lib import (
             setup_hook_logging,
             run_hook_safely,
             validate_hook_input,
@@ -1585,13 +1585,13 @@ def clear_caches():
     yield
     # Teardown: 清空所有快取
     try:
-        from hook_utils import clear_handoff_recovery_cache
+        from lib import clear_handoff_recovery_cache
         clear_handoff_recovery_cache()
     except (ImportError, AttributeError):
         pass
 
     try:
-        from hook_utils import clear_error_pattern_mtime_cache
+        from lib import clear_error_pattern_mtime_cache
         clear_error_pattern_mtime_cache()
     except (ImportError, AttributeError):
         pass
@@ -1606,7 +1606,7 @@ class TestIsHandoffRecoveryModeCache:
 
     def test_cache_miss_first_call_executes_glob(self, clear_caches, tmp_path):
         """測試案例 1.1：快取未命中，首次呼叫執行 glob"""
-        from hook_utils import is_handoff_recovery_mode, clear_handoff_recovery_cache
+        from lib import is_handoff_recovery_mode, clear_handoff_recovery_cache
 
         # Setup: 建立 .claude/handoff/pending 目錄和 .json 檔案
         handoff_dir = tmp_path / ".claude" / "handoff" / "pending"
@@ -1631,7 +1631,7 @@ class TestIsHandoffRecoveryModeCache:
 
     def test_cache_hit_second_call_no_glob(self, clear_caches, tmp_path):
         """測試案例 1.2：快取命中，重複呼叫不執行 glob"""
-        from hook_utils import is_handoff_recovery_mode, clear_handoff_recovery_cache
+        from lib import is_handoff_recovery_mode, clear_handoff_recovery_cache
 
         # Setup
         handoff_dir = tmp_path / ".claude" / "handoff" / "pending"
@@ -1655,7 +1655,7 @@ class TestIsHandoffRecoveryModeCache:
 
     def test_clear_cache_forces_rescan(self, clear_caches, tmp_path):
         """測試案例 1.3：清空快取後重新掃描"""
-        from hook_utils import is_handoff_recovery_mode, clear_handoff_recovery_cache
+        from lib import is_handoff_recovery_mode, clear_handoff_recovery_cache
 
         # Setup
         handoff_dir = tmp_path / ".claude" / "handoff" / "pending"
@@ -1679,7 +1679,7 @@ class TestIsHandoffRecoveryModeCache:
 
     def test_cache_with_no_logger(self, clear_caches, tmp_path):
         """測試案例 1.4：邊界條件 - 無 logger"""
-        from hook_utils import is_handoff_recovery_mode, clear_handoff_recovery_cache
+        from lib import is_handoff_recovery_mode, clear_handoff_recovery_cache
 
         handoff_dir = tmp_path / ".claude" / "handoff" / "pending"
         handoff_dir.mkdir(parents=True, exist_ok=True)
@@ -1702,7 +1702,7 @@ class TestCheckErrorPatternsChangedCache:
 
     def test_mtime_cache_hit_no_stat_call(self, clear_caches, tmp_path):
         """測試案例 2.1：mtime 快取命中，已快取檔案不執行 stat"""
-        from hook_utils import check_error_patterns_changed, clear_error_pattern_mtime_cache
+        from lib import check_error_patterns_changed, clear_error_pattern_mtime_cache
 
         # Setup
         error_patterns_dir = tmp_path / ".claude" / "error-patterns"
@@ -1738,7 +1738,7 @@ class TestCheckErrorPatternsChangedCache:
 
     def test_new_file_triggers_stat(self, clear_caches, tmp_path):
         """測試案例 2.2：新檔案觸發 stat，舊檔案使用快取"""
-        from hook_utils import check_error_patterns_changed, clear_error_pattern_mtime_cache
+        from lib import check_error_patterns_changed, clear_error_pattern_mtime_cache
 
         error_patterns_dir = tmp_path / ".claude" / "error-patterns"
         error_patterns_dir.mkdir(parents=True, exist_ok=True)
@@ -1773,7 +1773,7 @@ class TestCheckErrorPatternsChangedCache:
 
     def test_clear_mtime_cache_forces_rescan(self, clear_caches, tmp_path):
         """測試案例 2.3：清空快取後重新掃描"""
-        from hook_utils import check_error_patterns_changed, clear_error_pattern_mtime_cache
+        from lib import check_error_patterns_changed, clear_error_pattern_mtime_cache
 
         error_patterns_dir = tmp_path / ".claude" / "error-patterns"
         error_patterns_dir.mkdir(parents=True, exist_ok=True)
@@ -1809,7 +1809,7 @@ class TestCacheFunctionalCorrectness:
 
     def test_handoff_mode_cache_correctness(self, clear_caches, tmp_path):
         """測試案例 3.1：快取不影響 is_handoff_recovery_mode() 功能"""
-        from hook_utils import is_handoff_recovery_mode, clear_handoff_recovery_cache
+        from lib import is_handoff_recovery_mode, clear_handoff_recovery_cache
 
         handoff_dir = tmp_path / ".claude" / "handoff" / "pending"
         handoff_dir.mkdir(parents=True, exist_ok=True)
@@ -1829,7 +1829,7 @@ class TestCacheFunctionalCorrectness:
 
     def test_error_patterns_cache_correctness(self, clear_caches, tmp_path):
         """測試案例 3.2：快取不影響 check_error_patterns_changed() 功能"""
-        from hook_utils import check_error_patterns_changed, clear_error_pattern_mtime_cache
+        from lib import check_error_patterns_changed, clear_error_pattern_mtime_cache
 
         error_patterns_dir = tmp_path / ".claude" / "error-patterns"
         error_patterns_dir.mkdir(parents=True, exist_ok=True)

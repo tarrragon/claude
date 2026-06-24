@@ -216,22 +216,53 @@ def find_target_repo(file_path: str) -> Optional[str]:
         current = current.parent
 
 
-def get_project_root(cwd: Optional[str] = None) -> str:
+def get_project_root(cwd: Optional[str] = None) -> Path:
     """
-    獲取專案根目錄（git 倉庫根目錄）
+    獲取專案根目錄（SSOT，4-fallback，回傳 Path）
+
+    優先順序：
+    1. 環境變數 CLAUDE_PROJECT_DIR
+    2. git rev-parse --show-toplevel（git-native，支援 worktree）
+    3. 從 cwd 向上搜尋 CLAUDE.md（最多 5 層）
+    4. Path.cwd() fallback（永不失敗）
+
+    本函式為 hook_utils.hook_base.get_project_root 的 SSOT 實作，
+    額外保留 cwd 參數以支援指定工作目錄執行 git rev-parse（branch-verify
+    跨 repo 偵測需求，thyme R1）。回傳統一為 Path，消除 IMP-APP-001 的
+    str/Path 型別發散根因。
 
     Args:
-        cwd: 執行 git 命令的工作目錄（支援 worktree 環境）
+        cwd: 執行 git rev-parse 的工作目錄（支援 worktree / 跨 repo 偵測）
 
     Returns:
-        str: 專案根目錄路徑，如果無法獲取則返回當前工作目錄
+        Path: 專案根目錄路徑，所有失敗情況均有 fallback（永不拋例外）
 
     Example:
         root = get_project_root()
-        config_path = os.path.join(root, ".claude", "config.json")
+        config_path = root / ".claude" / "config.json"
     """
+    # 優先級 1：環境變數
+    env_dir = os.getenv("CLAUDE_PROJECT_DIR")
+    if env_dir:
+        return Path(env_dir)
+
+    # 優先級 2：git rev-parse --show-toplevel（worktree / 跨 repo 偵測關鍵）
     success, output = run_git_command(["rev-parse", "--show-toplevel"], cwd=cwd)
-    return output if success else os.getcwd()
+    if success and output:
+        return Path(output)
+
+    # 優先級 3：從 cwd 向上搜尋 CLAUDE.md（最多 5 層）
+    current_dir = Path(cwd) if cwd else Path.cwd()
+    for _ in range(5):
+        if (current_dir / "CLAUDE.md").exists():
+            return current_dir
+        parent = current_dir.parent
+        if parent == current_dir:
+            break
+        current_dir = parent
+
+    # 優先級 4：Fallback 到 cwd
+    return Path(cwd) if cwd else Path.cwd()
 
 
 def get_uncommitted_files() -> list[FileStatus]:

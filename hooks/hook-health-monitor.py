@@ -46,7 +46,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from hook_utils import setup_hook_logging
+    from lib import setup_hook_logging
     from lib.common_functions import get_project_root, hook_output
     from lib import hook_health
 except ImportError as e:
@@ -398,7 +398,10 @@ def main() -> int:
     """主函式"""
     logger = setup_hook_logging("hook-health-monitor")
 
-    project_root = get_project_root()
+    # get_project_root() 回傳 str（git_utils），但本檔全函式以 Path 標註並使用
+    # `/` 與 .joinpath()，故統一包成 Path，避免 write_session_marker 等處對 str
+    # 呼叫 Path 方法拋 AttributeError（0.37.0-W6-003）。
+    project_root = Path(get_project_root())
     if not project_root:
         hook_output("Error: Cannot find project root", "error")
         return 1

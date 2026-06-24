@@ -25,7 +25,7 @@ ticket_skill_hooks_path = _hooks_dir.parent / "skills" / "ticket" / "hooks"
 if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 
-from hook_utils import parse_ticket_frontmatter
+from lib import parse_ticket_frontmatter
 from acceptance_checkers.children_checker import (
     check_children_completed_from_frontmatter,
 )

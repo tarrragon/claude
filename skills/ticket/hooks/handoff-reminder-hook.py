@@ -35,7 +35,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root
 
 # 加入 ticket_system lib 路徑以引用 handoff_utils.is_handoff_stale（W17-095.3）
 _TICKET_LIB_PATH = Path(__file__).resolve().parents[1] / "ticket_system" / "lib"

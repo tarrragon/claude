@@ -18,7 +18,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from hook_utils import hook_io  # noqa: E402
+from lib import hook_io  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

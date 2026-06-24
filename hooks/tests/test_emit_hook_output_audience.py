@@ -28,7 +28,7 @@ import pytest
 HOOKS_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HOOKS_DIR))
 
-from hook_utils import hook_io  # noqa: E402
+from lib import hook_io  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

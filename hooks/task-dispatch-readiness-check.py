@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-from hook_utils import setup_hook_logging, get_project_root, is_handoff_recovery_mode
+from lib import setup_hook_logging, get_project_root, is_handoff_recovery_mode
 from lib.hook_io import read_hook_input, write_hook_output, create_pretooluse_output
 from lib.config_loader import load_agents_config
 

@@ -35,9 +35,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # git_utils 位於 .claude/lib/（專案級共用程式庫）
 
 try:
-    from hook_utils import setup_hook_logging
+    from lib import setup_hook_logging
     from lib.common_functions import hook_output
-    from git_utils import (
+    from lib.git_utils import (
         get_current_branch,
         is_protected_branch,
         is_allowed_branch,

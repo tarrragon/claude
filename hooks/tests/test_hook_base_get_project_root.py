@@ -14,7 +14,7 @@ import subprocess
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from hook_utils.hook_base import get_project_root
+from lib.hook_base import get_project_root
 
 
 class TestGetProjectRootHookBase:

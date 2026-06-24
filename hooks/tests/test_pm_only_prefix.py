@@ -30,8 +30,8 @@ HOOKS_DIR = Path(__file__).resolve().parent.parent
 CLAUDE_DIR = HOOKS_DIR.parent
 sys.path.insert(0, str(HOOKS_DIR))
 
-from hook_utils import hook_io  # noqa: E402
-from hook_utils.hook_io import PM_ONLY_PREFIX  # noqa: E402
+from lib import hook_io  # noqa: E402
+from lib.hook_io import PM_ONLY_PREFIX  # noqa: E402
 
 
 def _load_module(key: str, path: Path):
@@ -53,10 +53,10 @@ class TestPrefixSingleSource:
         """前綴字面契約：開頭標記 + 一個空格分隔訊息本體。"""
         assert PM_ONLY_PREFIX == "[PM-ONLY] "
 
-    def test_prefix_exported_from_hook_utils_package(self):
-        """hook 端 import 入口：hook_utils 套件層 re-export。"""
-        import hook_utils
-        assert hook_utils.PM_ONLY_PREFIX is PM_ONLY_PREFIX
+    def test_prefix_exported_from_lib_package(self):
+        """hook 端 import 入口：lib 套件層 re-export。"""
+        import lib
+        assert lib.PM_ONLY_PREFIX is PM_ONLY_PREFIX
 
     def test_prefix_literal_only_defined_in_hook_io(self):
         """掃描 .claude 下生產用 .py：'[PM-ONLY]' 字面只出現在 hook_io.py。
@@ -64,14 +64,18 @@ class TestPrefixSingleSource:
         其他 hook 必須 import PM_ONLY_PREFIX，不可複製字串——
         字面漂移會使 AGENT_PRELOAD 忽略規則失去比對錨點。
         """
-        canonical = HOOKS_DIR / "hook_utils" / "hook_io.py"
+        # 0.37.0-W6-006：hook_utils/ 已移除，lib/ 為單一 SSOT，PM_ONLY_PREFIX
+        # 字面只允許定義於 lib/hook_io.py。
+        canonical = {
+            CLAUDE_DIR / "lib" / "hook_io.py",
+        }
         offenders = []
         for py_file in CLAUDE_DIR.rglob("*.py"):
             relative_parts = py_file.relative_to(CLAUDE_DIR).parts
             # 測試碼可合法引用字面（斷言期待值）；其餘生產碼禁止
             if "tests" in relative_parts or "test" in py_file.stem.split("_"):
                 continue
-            if py_file == canonical:
+            if py_file in canonical:
                 continue
             try:
                 source = py_file.read_text(encoding="utf-8")
@@ -81,7 +85,7 @@ class TestPrefixSingleSource:
                 offenders.append(str(py_file.relative_to(CLAUDE_DIR)))
         assert offenders == [], (
             "以下檔案複製了 [PM-ONLY] 字面，必須改 import "
-            f"hook_utils.PM_ONLY_PREFIX：{offenders}"
+            f"lib.PM_ONLY_PREFIX：{offenders}"
         )
 
 

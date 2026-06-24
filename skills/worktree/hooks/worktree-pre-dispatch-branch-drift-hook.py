@@ -27,7 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin, run_git
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, run_git
 
 
 EXPECTED_BRANCHES = ("main", "master")

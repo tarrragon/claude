@@ -47,7 +47,7 @@ if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 
 try:
-    from hook_utils import get_effort_level
+    from lib import get_effort_level
 except ImportError:
     def get_effort_level(payload, default="medium"):
         return default

@@ -44,7 +44,7 @@ from typing import Optional, Set, Dict, Tuple
 # 導入 hook_utils 與共用 lib
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
-from hook_utils import setup_hook_logging, run_hook_safely, get_project_root
+from lib import setup_hook_logging, run_hook_safely, get_project_root
 from lib.uv_tool_utils import (
     compute_file_hashes as _compute_file_hashes_shared,
     find_installed_module_dir,

@@ -38,7 +38,7 @@ from typing import Dict, Any, Optional, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
-from hook_utils import (
+from lib import (
     setup_hook_logging, run_hook_safely, read_json_from_stdin,
     get_project_root, save_check_log, validate_hook_input
 )

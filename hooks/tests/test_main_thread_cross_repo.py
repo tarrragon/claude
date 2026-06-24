@@ -74,7 +74,7 @@ class TestCrossRepoBypass(unittest.TestCase):
         hook = _load_hook_module()
 
         # 取本專案 root
-        from git_utils import get_project_root as _gpr
+        from lib.git_utils import get_project_root as _gpr
         project_root = _gpr()
 
         # 選一個本專案內、應被 path_permission 擋的路徑（例如 src/ 下任意檔）

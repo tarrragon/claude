@@ -102,7 +102,7 @@ except RuntimeError as e:
     project_root = Path(os.getcwd())  # 保底，後續 git_utils import 也會 fallback
 
 try:
-    from git_utils import (
+    from lib.git_utils import (
         run_git_command,
         get_project_root,
         get_current_branch,

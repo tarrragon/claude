@@ -25,6 +25,7 @@ from pathlib import Path
 
 HOOKS_DIR = Path(__file__).parent
 sys.path.insert(0, str(HOOKS_DIR))
+sys.path.insert(0, str(HOOKS_DIR.parent))  # .claude/ — for `from lib import ...`
 sys.path.insert(0, str(HOOKS_DIR.parent / "config"))
 
 import importlib.util
@@ -68,5 +69,5 @@ main = _engine.main
 
 
 if __name__ == "__main__":
-    from hook_utils import run_hook_safely
+    from lib import run_hook_safely
     sys.exit(run_hook_safely(main, "dart-presence-detection"))

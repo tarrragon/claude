@@ -36,7 +36,7 @@ _HOOKS_ROOT = _CLAUDE_ROOT / "hooks"
 sys.path.insert(0, str(_CLAUDE_ROOT))
 sys.path.insert(0, str(_HOOKS_ROOT))
 
-from hook_utils import (  # noqa: E402
+from lib import (  # noqa: E402
     setup_hook_logging,
     run_hook_safely,
     read_json_from_stdin,

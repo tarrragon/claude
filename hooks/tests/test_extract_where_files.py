@@ -16,7 +16,7 @@ _HOOKS_DIR = Path(__file__).parent.parent
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 
-from hook_utils.hook_ticket import (
+from lib.hook_ticket import (
     extract_where_files,
     extract_where_files_from_frontmatter,
 )

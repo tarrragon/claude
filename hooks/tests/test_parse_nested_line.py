@@ -15,8 +15,8 @@ from pathlib import Path
 # 加入模組路徑
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from hook_utils import parse_ticket_frontmatter
-from hook_utils.hook_ticket import _parse_nested_line, _NestedLineResult
+from lib import parse_ticket_frontmatter
+from lib.hook_ticket import _parse_nested_line, _NestedLineResult
 
 
 class TestParseNestedLine:

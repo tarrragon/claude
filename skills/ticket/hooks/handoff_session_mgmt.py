@@ -14,8 +14,8 @@ handoff-auto-resume-stop-hook session 管理模組（W3-039 部分拆分）
 這 5 個函式為原 hook 呼叫圖的葉節點（由 generate_hook_output 呼叫，彼此間
 無交叉依賴），抽出後行為完全不變；frontmatter_cache（PC-097）不涉及本模組。
 
-import 約束：本模組依賴 hook_utils.get_project_root，呼叫端（hook 主檔）
-須在 import 本模組前完成 .claude/hooks 的 sys.path 設定。
+import 約束：本模組依賴 lib.get_project_root，呼叫端（hook 主檔）
+須在 import 本模組前完成 .claude/ 的 sys.path 設定。
 """
 
 import json
@@ -24,7 +24,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-from hook_utils import get_project_root
+from lib import get_project_root
 
 # session 管理相關常數
 STOP_FLAG_FILE = ".claude/handoff/.stop-blocked"

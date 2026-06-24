@@ -40,7 +40,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from hook_utils import setup_hook_logging, run_hook_safely, run_git, get_project_root, read_json_from_stdin
+from lib import setup_hook_logging, run_hook_safely, run_git, get_project_root, read_json_from_stdin
 
 # 不需要 CHANGELOG 提醒的 commit 類型
 SKIP_PREFIXES = (

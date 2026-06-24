@@ -12,7 +12,7 @@ import subprocess
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from hook_utils.hook_base import get_project_root as get_project_root_hookbase
+from lib.hook_base import get_project_root as get_project_root_hookbase
 
 # 需要動態導入 paths.py 中的函式
 import sys
@@ -43,7 +43,7 @@ class TestProjectRootSymmetry:
         custom_path = "/custom/project/path"
         with patch.dict("os.environ", {"CLAUDE_PROJECT_DIR": custom_path}):
             # 模擬兩個模組的函式
-            with patch("hook_utils.hook_base.subprocess.run"):
+            with patch("lib.hook_base.subprocess.run"):
                 result_hook = get_project_root_hookbase()
 
             # paths.py 的環境變數優先級相同

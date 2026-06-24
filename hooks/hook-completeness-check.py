@@ -32,9 +32,10 @@ _CLAUDE_DIR = _HOOKS_DIR.parent
 _PROJECT_INIT_DIR = _CLAUDE_DIR / "skills" / "project-init"
 
 sys.path.insert(0, str(_HOOKS_DIR))
+sys.path.insert(0, str(_CLAUDE_DIR))  # for `from lib import ...`
 sys.path.insert(0, str(_PROJECT_INIT_DIR))
 
-from hook_utils import setup_hook_logging, run_hook_safely
+from lib import setup_hook_logging, run_hook_safely
 from project_init.lib.hook_checker import (
     extract_registered_hooks,
     extract_registered_skill_hooks,

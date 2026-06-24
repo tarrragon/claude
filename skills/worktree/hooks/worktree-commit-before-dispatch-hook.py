@@ -22,7 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
 
 
 BLOCK_MESSAGE = """[PC-019 防護] main 上有未 commit 的 tracked 變更，禁止派發 worktree agent

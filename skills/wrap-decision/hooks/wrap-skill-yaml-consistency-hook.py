@@ -37,7 +37,8 @@ import yaml
 
 _FRAMEWORK_HOOKS = str(Path(__file__).resolve().parents[3] / "hooks")
 sys.path.insert(0, _FRAMEWORK_HOOKS)
-from hook_utils import (
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # .claude/ — for `from lib import ...`
+from lib import (  # noqa: E402
     setup_hook_logging,
     run_hook_safely,
     read_json_from_stdin,

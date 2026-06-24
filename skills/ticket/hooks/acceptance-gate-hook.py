@@ -51,7 +51,7 @@ if str(_claude_dir) not in sys.path:
 if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 
-from hook_utils import (
+from lib import (
     setup_hook_logging,
     run_hook_safely,
     read_json_from_stdin,

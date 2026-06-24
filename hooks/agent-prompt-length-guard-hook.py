@@ -19,8 +19,11 @@ Hook 類型：PreToolUse
 
 import json
 import sys
+from pathlib import Path
 
-from hook_utils import setup_hook_logging, run_hook_safely, read_json_from_stdin
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # .claude/ — for `from lib import ...`
+
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin  # noqa: E402
 
 PROMPT_LINE_LIMIT = 30
 SOFT_HINT_THRESHOLD = 10

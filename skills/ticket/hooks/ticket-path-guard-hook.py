@@ -40,7 +40,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
-from hook_utils import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin
+from lib import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin
 from lib.hook_messages import GateMessages, CoreMessages, format_message
 
 from datetime import datetime

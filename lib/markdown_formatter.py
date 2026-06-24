@@ -11,7 +11,10 @@ from pathlib import Path
 
 # 以 lib 自身模組為依賴（避免 lib→hooks/hook_utils 反向依賴）。
 # 本檔以 script 模式執行（__main__），sys.path[0] 為 lib/；明確插入確保穩定。
+# 另插入 .claude/（parent.parent）：lib 內部模組（如 hook_logging）以
+# `from lib.xxx import` 絕對匯入彼此，script 模式需 .claude/ 在 sys.path 才能解析。
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from hook_logging import setup_hook_logging
 from hook_io import read_json_from_stdin
 

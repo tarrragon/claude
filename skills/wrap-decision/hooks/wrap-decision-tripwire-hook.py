@@ -40,12 +40,15 @@ from typing import Any, Callable, Dict, List, Optional, Protocol
 
 import yaml
 
-# 加入 hook_utils 路徑（.claude/hooks/）
-_hooks_dir = Path(__file__).resolve().parents[3] / "hooks"
+# 加入框架共用程式庫路徑：.claude/（for `from lib import ...`）+ .claude/hooks/
+_claude_dir = Path(__file__).resolve().parents[3]
+_hooks_dir = _claude_dir / "hooks"
 if _hooks_dir not in [Path(p) for p in sys.path]:
     sys.path.insert(0, str(_hooks_dir))
+if _claude_dir not in [Path(p) for p in sys.path]:
+    sys.path.insert(0, str(_claude_dir))
 
-from hook_utils import (
+from lib import (
     setup_hook_logging,
     run_hook_safely,
     read_json_from_stdin,

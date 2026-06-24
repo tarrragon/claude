@@ -44,7 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 try:
-    from hook_utils import setup_hook_logging
+    from lib import setup_hook_logging
 except ImportError as e:
     print(f"[Hook Import Warning] {Path(__file__).name}: {e}", file=sys.stderr)
     # Fallback: 最小化日誌設定

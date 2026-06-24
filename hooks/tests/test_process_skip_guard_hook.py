@@ -33,7 +33,7 @@ _should_suppress_sa_review_reference = (
 )
 
 # 從 hook_utils 匯入 generate_hook_output
-from hook_utils import generate_hook_output
+from lib import generate_hook_output
 
 
 class TestDetectSkipIntent:
