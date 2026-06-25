@@ -3,7 +3,7 @@
 import argparse
 import sys
 
-from doc_system.commands import query, list_cmd, nav, domain, status, test_map, create, update
+from doc_system.commands import query, list_cmd, nav, domain, status, test_map, create, update, batch_init
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -68,6 +68,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="spec 的 domain 子目錄（僅 spec 類型需要）",
     )
 
+    # batch-init
+    batch_init_parser = subparsers.add_parser("batch-init", help="批量建立 spec + UC + traceability 骨架")
+    batch_init_parser.add_argument("--proposals", required=True, help="提案 ID 清單（逗號分隔，如 PROP-007,PROP-008）")
+    batch_init_parser.add_argument("--domain", default=None, help="spec 的 domain 子目錄")
+
     # update
     update_parser = subparsers.add_parser("update", help="更新文件狀態")
     update_parser.add_argument("id", help="文件 ID（如 PROP-001）")
@@ -88,6 +93,7 @@ COMMAND_HANDLERS = {
     "status": status.execute,
     "test-map": test_map.execute,
     "create": create.execute,
+    "batch-init": batch_init.execute,
     "update": update.execute,
 }
 

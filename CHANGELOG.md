@@ -1,3 +1,16 @@
+## [2.4.1] - 2026-06-25
+
+### Summary
+chore: pull multi-round-review 版本號更新（1.0.0）; chore: pull 寫作 skill 更新（compositional-writing + multi-round-review）; chore: pull .claude 更新（上游 cb11e8a3）
+
+Changes: 3 chore
+
+- chore: pull multi-round-review 版本號更新（1.0.0）
+- chore: pull 寫作 skill 更新（compositional-writing + multi-round-review）
+- chore: pull .claude 更新（上游 cb11e8a3）
+
+---
+
 ## [2.4.0] - 2026-06-25
 
 ### Summary

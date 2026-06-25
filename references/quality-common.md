@@ -258,6 +258,27 @@
 
 ---
 
+### 1.2.7 新增類別欄位同步防護（新增 private/internal 欄位時強制）
+
+> **核心原則**：類別的每個 private 欄位都有一個隱含契約——「所有生命週期路徑都知道你的存在」。新增欄位時必須同步所有路徑，否則狀態洩漏。
+
+**觸發條件**：在 class/struct 中新增 private/internal 欄位。
+
+**必須同步的路徑（checklist）**：
+
+| 路徑 | 檢查內容 |
+|------|---------|
+| 初始化 | constructor / init / factory 是否設定此欄位初始值？ |
+| 重置 | reset / dispose / cleanup 方法是否歸零此欄位？ |
+| 序列化 | toJSON / serialize / snapshot 是否包含此欄位？（如適用） |
+| 測試隔離 | 測試的 beforeEach/afterEach reset 是否覆蓋此欄位？ |
+
+**Why**：v0.3.0 實證——多 agent 並行在 JS SDK Monitor class 各自新增 `retryCount`/`flushing`/`lastHeartbeat` 欄位但都沒更新 `__reset()`，導致跨 test case 狀態洩漏（W1-003 根因分析）。
+
+**推薦設計模式**：State Registry Pattern——將所有 private 欄位初始值集中宣告為常數（如 `INITIAL_STATE`），init 和 reset 都從此常數取值。新增欄位只改一處，init/reset 自動同步。
+
+---
+
 ### 1.3 常數管理（禁止硬編碼）
 
 > **核心原則**：所有非程式邏輯本身的字面值都必須提取為具名常數。

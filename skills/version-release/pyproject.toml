@@ -17,3 +17,8 @@ version-release = "version_release:main"
 [tool.hatch.build.targets.wheel]
 sources = ["scripts"]
 only-include = ["scripts/version_release.py"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

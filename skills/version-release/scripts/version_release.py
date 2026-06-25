@@ -960,6 +960,89 @@ def check_previous_versions_completed(version: str) -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
+def check_stale_active_versions(todolist_path: Optional[Path] = None) -> Tuple[bool, List[str]]:
+    """檢查 active 版本是否存在 ticket 全完成但 status 仍為 active 的情況。
+
+    遍歷 todolist.yaml 中所有 status=active 版本，掃描各版本的 ticket 目錄：
+    若所有 ticket 皆為 completed 但版本 status 仍 active，輸出 warning。
+
+    Args:
+        todolist_path: todolist.yaml 路徑（預設自動偵測）
+
+    Returns:
+        (passed, warnings): passed 永遠 True（僅警告不阻擋），warnings 為警告訊息列表
+    """
+    root = get_project_root()
+    if todolist_path is None:
+        todolist_path = root / "docs" / "todolist.yaml"
+
+    warnings: List[str] = []
+
+    if not todolist_path.exists():
+        return True, warnings
+
+    try:
+        with open(todolist_path, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except Exception:
+        return True, warnings
+
+    versions = data.get("versions", [])
+    worklog_dir = root / "docs" / "work-logs"
+
+    tdd_suffixes = (
+        "-phase1-design", "-phase2-test", "-phase3a-strategy",
+        "-phase3b-", "-phase4-", "-refactor", "-analysis",
+        "-feature-spec", "-feature-design", "-test-design",
+        "-test-case", "-execution-report", "-execution-log",
+    )
+
+    for entry in versions:
+        if entry.get("status") != "active":
+            continue
+        ver_str = str(entry.get("version", ""))
+        if not ver_str:
+            continue
+
+        # 階層式路徑：v0/v0.3/v0.3.2/tickets/
+        parts = ver_str.split(".")
+        if len(parts) != 3:
+            continue
+        major, minor = parts[0], f"{parts[0]}.{parts[1]}"
+        tickets_dir = worklog_dir / f"v{major}" / f"v{minor}" / f"v{ver_str}" / "tickets"
+
+        if not tickets_dir.exists():
+            continue
+
+        total = 0
+        completed = 0
+        for ticket_file in tickets_dir.glob("*.md"):
+            if any(s in ticket_file.stem for s in tdd_suffixes):
+                continue
+            try:
+                with open(ticket_file, encoding="utf-8") as f:
+                    content = f.read()
+                frontmatter = parse_ticket_frontmatter(content)
+                if not frontmatter:
+                    continue
+                status_match = re.search(r"status:\s+(\S+)", frontmatter)
+                if not status_match:
+                    continue
+                total += 1
+                if status_match.group(1).strip() == "completed":
+                    completed += 1
+            except Exception:
+                continue
+
+        if total > 0 and total == completed:
+            warnings.append(
+                f"v{ver_str} 所有 {total} 個 Ticket 已完成，"
+                f"但 todolist status 仍為 active（考慮標記為 completed）"
+            )
+
+    return True, warnings
+
+
 # ============================================================================
 # 新增函式 1：load_version_release_config
 # ============================================================================
@@ -1540,6 +1623,17 @@ def preflight_check(version: str) -> Tuple[bool, Dict[str, Tuple[bool, List[str]
     else:
         for error in pv_errors:
             print_error(error)
+
+    # 1.4.5 檢查 stale active 版本
+    print_info("[OK] 檢查 stale active 版本...")
+    sa_ok, sa_warnings = check_stale_active_versions()
+    results["stale_active"] = (sa_ok, sa_warnings)
+
+    if sa_warnings:
+        for warning in sa_warnings:
+            print_warning(warning)
+    else:
+        print_success("無 stale active 版本")
 
     # 1.5 檢查版本同步
     print_info("[OK] 檢查版本同步...")

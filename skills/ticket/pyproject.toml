@@ -48,3 +48,9 @@ addopts = "--verbose -m 'not perf'"
 markers = [
     "perf: 效能測試（計時硬門檻，獨立於預設套件，以 pytest -m perf 執行）",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-mock>=3.15.1",
+]

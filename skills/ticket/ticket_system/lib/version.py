@@ -386,6 +386,120 @@ def validate_version_registered(version: str) -> tuple[bool, str]:
     return (False, error_msg)
 
 
+_FEAT_ACTIONS = frozenset({"實作", "新增", "建立", "開發"})
+_PATCH_TYPES = frozenset({"ANA", "ADJ", "DOC", "RES"})
+
+
+def suggest_version_for_ticket(
+    ticket_type: str,
+    action: str,
+) -> Optional[tuple[str, str]]:
+    """根據 ticket 類型和 action 建議目標版本。
+
+    規則：
+    - 新功能（IMP + 實作/新增/建立/開發）→ 下一個大版本（0.x+1.0）
+    - 修復/改善/分析/文件 → 最新已完成版本 +1 patch（0.x.y+1）
+    - ANA/ADJ/DOC/RES 類型 → 一律 patch
+
+    Args:
+        ticket_type: Ticket 類型（IMP, ANA, DOC 等）
+        action: --action 參數值（如「實作」「修復」「分析」）
+
+    Returns:
+        (suggested_version, reason) 或 None（無法判斷）
+    """
+    root = get_project_root()
+    todolist_path = root / "docs" / "todolist.yaml"
+    if not todolist_path.exists():
+        return None
+
+    try:
+        import yaml
+        with open(todolist_path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except Exception:
+        return None
+
+    versions = data.get("versions", [])
+    if not versions:
+        return None
+
+    is_new_feature = (
+        ticket_type == "IMP" and action in _FEAT_ACTIONS
+    )
+
+    if is_new_feature or ticket_type == "INV":
+        return _suggest_next_major(versions)
+
+    if ticket_type in _PATCH_TYPES or not is_new_feature:
+        return _suggest_next_patch(versions)
+
+    return None
+
+
+def _suggest_next_patch(
+    versions: list[dict],
+) -> Optional[tuple[str, str]]:
+    """找最新已完成版本，回傳 patch +1。"""
+    completed = [
+        v for v in versions
+        if v.get("status") == "completed"
+    ]
+    if not completed:
+        return None
+
+    latest = completed[-1]
+    ver_str = str(latest.get("version", ""))
+    parts = ver_str.split(".")
+    if len(parts) != 3:
+        return None
+
+    try:
+        major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2])
+    except ValueError:
+        return None
+
+    suggested = f"{major}.{minor}.{patch + 1}"
+
+    # 若建議版本已存在（active 或 completed），直接回傳該版本
+    for v in versions:
+        if str(v.get("version", "")) == suggested:
+            return (suggested, "修復/改善/分析/文件類型歸小版本")
+
+    return (suggested, "修復/改善/分析/文件類型歸小版本（版本尚未在 todolist 註冊）")
+
+
+def _suggest_next_major(
+    versions: list[dict],
+) -> Optional[tuple[str, str]]:
+    """找最高的大版本 active，或算出下一個大版本。"""
+    active = [
+        v for v in versions
+        if v.get("status") == "active"
+    ]
+    # 找有 proposals 的 active 版本（大版本特徵）
+    for v in active:
+        if v.get("proposals"):
+            return (str(v["version"]), "新功能歸大版本")
+
+    # fallback: 取最高版本 minor+1
+    all_vers = []
+    for v in versions:
+        ver_str = str(v.get("version", ""))
+        parts = ver_str.split(".")
+        if len(parts) == 3:
+            try:
+                all_vers.append((int(parts[0]), int(parts[1]), int(parts[2])))
+            except ValueError:
+                continue
+    if not all_vers:
+        return None
+
+    max_ver = max(all_vers)
+    suggested = f"{max_ver[0]}.{max_ver[1] + 1}.0"
+    return (suggested, "新功能歸大版本")
+
+
 if __name__ == "__main__":
     from ticket_system.lib.messages import print_not_executable_and_exit
     print_not_executable_and_exit()

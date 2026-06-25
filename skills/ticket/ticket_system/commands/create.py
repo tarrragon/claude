@@ -25,6 +25,7 @@ from ticket_system.lib.ticket_loader import (
     get_ticket_path,
     list_tickets,
 )
+from ticket_system.lib.version import suggest_version_for_ticket
 from ticket_system.lib.ticket_validator import (
     validate_ticket_id,
     extract_wave_from_ticket_id,
@@ -1486,6 +1487,22 @@ def _auto_extract_context_bundle_post_create(
 
 def execute(args: argparse.Namespace) -> int:
     """執行 create 命令 — 協調四個步驟"""
+    ticket_type = args.type or "IMP"
+    action = args.action or ""
+
+    # 版本歸屬引導：根據 type + action 建議目標版本
+    suggestion = suggest_version_for_ticket(ticket_type, action)
+    user_specified_version = args.version is not None
+
+    if suggestion and not user_specified_version:
+        suggested_ver, reason = suggestion
+        print(format_info(
+            "[版本歸屬引導] 建議版本: {version}（{reason}）",
+            version=suggested_ver,
+            reason=reason,
+        ))
+        args.version = suggested_ver
+
     version = resolve_version(args.version)
     if not version:
         print(format_error(ErrorEnvelope(
@@ -1495,6 +1512,18 @@ def execute(args: argparse.Namespace) -> int:
             hint="無法自動偵測版本號，請使用 --version 明確指定（或確認 todolist.yaml 已設定 current_version）",
         )))
         return 1
+
+    # 版本歸屬 warning：用戶指定版本但與建議不符
+    if suggestion and user_specified_version:
+        suggested_ver, reason = suggestion
+        if version != suggested_ver:
+            print(format_warning(
+                "[版本歸屬引導] 指定版本 {version} 與建議版本 {suggested} 不符"
+                "（{reason}）。如有意為之請忽略此警告",
+                version=version,
+                suggested=suggested_ver,
+                reason=reason,
+            ))
 
     # 驗證版本已在 todolist.yaml 中註冊
     from ticket_system.lib.version import validate_version_registered
