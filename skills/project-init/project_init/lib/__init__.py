@@ -83,12 +83,14 @@ from .onboard_checker import (
     parse_hook_classification,
 )
 from .package_manager import (
+    SHIM_CLIS,
     InstalledInfo,
     PackageInfo,
     VersionCompareResult,
     check_installed_version,
     compare_versions,
     resolve_source_module_dir,
+    run_shim_installer,
     scan_custom_packages,
 )
 from .python_installer import (
@@ -144,10 +146,12 @@ __all__ = [
     "PackageInfo",
     "InstalledInfo",
     "VersionCompareResult",
+    "SHIM_CLIS",
     "scan_custom_packages",
     "check_installed_version",
     "compare_versions",
     "resolve_source_module_dir",
+    "run_shim_installer",
     "InstallInstructions",
     "get_install_instructions",
     "ProjectLanguageInfo",

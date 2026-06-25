@@ -37,6 +37,41 @@ except ImportError:
 SKILLS_DIR_NAME = ".claude/skills"
 PYPROJECT_FILENAME = "pyproject.toml"
 
+# cwd-resolving shim 化的 CLI（以 cli_name 判定，ARCH-APP-002 / #12）。
+# 這些 CLI 不再走 uv tool install（全域唯一 key 跨專案碰撞），改由
+# install-skill-clis.py 安裝 cwd-resolving shim。其餘 skill 維持 uv tool install。
+SHIM_CLIS = {"ticket", "doc", "worktree"}
+
+# install-skill-clis.py 相對 project_root 的路徑。
+SHIM_INSTALLER_RELPATH = ".claude/scripts/install-skill-clis.py"
+
+
+def run_shim_installer(project_root: Path) -> bool:
+    """執行 install-skill-clis.py 安裝 cwd-resolving CLI shim.
+
+    install-skill-clis.py 一次安裝 ticket/doc/worktree 三個 shim，
+    取代 uv tool install 的全域安裝（消除跨專案 package name 碰撞）。
+
+    Args:
+        project_root: 專案根目錄。
+
+    Returns:
+        bool: 是否成功（exit code 0）。
+    """
+    installer = project_root / SHIM_INSTALLER_RELPATH
+    if not installer.exists():
+        return False
+    try:
+        result = subprocess.run(
+            [sys.executable, str(installer)],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        return False
+
 
 def load_pyproject_toml(pyproject_path: Path) -> Optional[Dict]:
     """Load and parse a pyproject.toml file. Returns None on failure."""

@@ -1,3 +1,14 @@
+## [2.8.0] - 2026-06-26
+
+### Summary
+feat: project-init 對 ticket/doc/worktree 改走 shim installer
+
+Changes: 1 feat
+
+- feat: project-init 對 ticket/doc/worktree 改走 shim installer
+
+---
+
 ## [2.7.2] - 2026-06-25
 
 ### Summary

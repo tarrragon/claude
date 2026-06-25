@@ -17,21 +17,19 @@ allowed-tools: Bash(ticket *), Read, Write, Edit, Grep, Glob
 
 ### 全局安裝（推薦）
 
+`ticket` CLI 透過 cwd-resolving shim 安裝（非 `uv tool install`，ARCH-APP-002 / framework issue #12）。shim 依當前 cwd 所在專案的 git toplevel 解析 `.claude/skills/ticket` 源碼並 `uv run`，故源碼即時生效、不需 reinstall、多專案共用同名 skill 不碰撞。
+
 ```bash
-# 首次安裝
-(cd .claude/skills/ticket && uv tool install .)
+# 首次安裝（一次安裝 ticket / doc / worktree 三個 shim）
+python3 .claude/scripts/install-skill-clis.py
 
 # 之後在任何目錄執行
 ticket track summary
 ticket track claim 1.0.0-W4-001
 ```
 
-**修改原始碼後必須重新安裝**（IMP-023）：
-
-```bash
-# 必須用 --reinstall（--force 不會更新套件程式碼）
-uv tool install .claude/skills/ticket --reinstall
-```
+**修改原始碼後無需重新安裝**：shim 每次執行都 `uv run` 當前專案源碼，改動即時生效。
+（檢查是否已 shim 化：`python3 .claude/scripts/install-skill-clis.py --check`）
 
 ### 本地執行
 
@@ -476,14 +474,16 @@ ticket handoff --from-worklog [--worklog-path PATH] [--dry-run]
 
 ---
 
-## 修改 source 後必須重新安裝
+## 修改 source 後無需重新安裝（shim 化）
 
-> **重要**：本 skill 透過 `uv tool install` 安裝為獨立 CLI，source（本目錄）與 installed（`~/.local/share/uv/tools/<package>/`）是兩份獨立 Python package。修改 source 後若未 reinstall，CLI 仍使用 stale installed 版本，新增的函式會 AttributeError 或被 hasattr 包裝靜默吞掉（W11-037 根因）。
+> **重要**：本 skill 已改用 cwd-resolving shim（ARCH-APP-002 / framework issue #12），不再走 `uv tool install`。shim 每次執行都 `uv run --directory .claude/skills/ticket` 當前專案源碼，修改 source 後改動即時生效，無 stale installed 問題（取代舊 `uv-tool-staleness-check-hook` / `ticket-reinstall-hook` 機制）。
 
-**修復指令**：
+**檢查 / 安裝指令**：
 
 ```bash
-cd .claude/skills/<本 skill 目錄> && uv tool install . --force --reinstall
-```
+# 安裝 / 更新 shim（一次安裝 ticket / doc / worktree）
+python3 .claude/scripts/install-skill-clis.py
 
-**自動偵測**：每次 SessionStart 由 `uv-tool-staleness-check-hook` 比對 source vs installed SHA256，偵測 stale 時提示修復指令。對應 ticket-skill 本身另有 `ticket-reinstall-hook` 自動 reinstall。
+# 檢查是否已 shim 化（exit 0/1）
+python3 .claude/scripts/install-skill-clis.py --check
+```

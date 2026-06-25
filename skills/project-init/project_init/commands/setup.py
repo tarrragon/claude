@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from project_init.lib import (
+    SHIM_CLIS,
     PackageMessages,
     RemediationGuidance,
     SetupMessages,
@@ -20,6 +21,7 @@ from project_init.lib import (
     detect_ripgrep,
     detect_uv,
     get_install_instructions,
+    run_shim_installer,
     scan_custom_packages,
 )
 from project_init.commands.check import run_check
@@ -172,6 +174,9 @@ def _handle_missing_tools(problems: dict) -> int:
 def _handle_custom_packages(problems: dict, project_root: Path) -> int:
     """處理自製套件安裝和更新.
 
+    ticket/doc/worktree（SHIM_CLIS，以 cli_name 判定）走 install-skill-clis.py
+    安裝 cwd-resolving shim；其餘 skill 維持 uv tool install（ARCH-APP-002）。
+
     Args:
         problems: 由 _identify_problems 產生的問題字典。
         project_root: 專案根目錄。
@@ -180,14 +185,47 @@ def _handle_custom_packages(problems: dict, project_root: Path) -> int:
         int: 成功修復的套件數量。
     """
     auto_fixed = 0
+    shim_pending: list[str] = []
 
-    for package_name, action in problems["packages"].items():
-        if action == "install":
+    for package_name, record in problems["packages"].items():
+        action, cli_name = record
+        if action is None:
+            continue
+        if cli_name in SHIM_CLIS:
+            shim_pending.append(package_name)
+        elif action == "install":
             auto_fixed += _install_package(package_name, project_root)
         elif action == "update":
             auto_fixed += _update_package(package_name, project_root)
 
+    if shim_pending:
+        auto_fixed += _install_shim_clis(shim_pending, project_root)
+
     return auto_fixed
+
+
+def _install_shim_clis(package_names: list[str], project_root: Path) -> int:
+    """安裝 ticket/doc/worktree 的 cwd-resolving shim.
+
+    install-skill-clis.py 一次安裝三個 shim，故只呼叫一次。
+
+    Args:
+        package_names: 需要安裝/更新的 shim skill 名稱（供輸出顯示）。
+        project_root: 專案根目錄。
+
+    Returns:
+        int: 成功安裝的套件數量（成功則回傳清單長度，失敗回傳 0）。
+    """
+    label = ", ".join(sorted(package_names))
+    print(f"  {label}: {STATUS_MISSING} {SetupMessages.INSTALLING}")
+    success = run_shim_installer(project_root)
+    if success:
+        print(f"  → {STATUS_OK} {SetupMessages.INSTALL_SUCCESS}")
+        print()
+        return len(package_names)
+    print(f"  → {STATUS_ERROR} {SetupMessages.INSTALL_FAILED}")
+    print()
+    return 0
 
 
 def _install_package(package_name: str, project_root: Path) -> int:
@@ -268,23 +306,27 @@ def _identify_missing_tools() -> set[str]:
     return missing
 
 
-def _identify_package_problems(project_root: Path) -> dict[str, str | None]:
+def _identify_package_problems(
+    project_root: Path,
+) -> dict[str, tuple[str | None, str | None]]:
     """識別自製套件的問題.
 
     Args:
         project_root: 專案根目錄。
 
     Returns:
-        dict: {package_name: 'install'|'update'|None}
+        dict: {package_name: (action, cli_name)}，
+              action 為 'install'|'update'|None。
+              cli_name 用於 SHIM_CLIS carve-out 判定。
     """
-    packages_dict = {}
+    packages_dict: dict[str, tuple[str | None, str | None]] = {}
 
     for package in scan_custom_packages(project_root):
         lookup_name = package.package_name or package.name
         installed = check_installed_version(lookup_name, cli_name=package.cli_name)
 
         if installed is None:
-            packages_dict[package.name] = "install"
+            action: str | None = "install"
         else:
             source_module = resolve_source_module_dir(
                 package.source_path, installed.installed_path
@@ -293,7 +335,8 @@ def _identify_package_problems(project_root: Path) -> dict[str, str | None]:
                 source_module, installed.installed_path
             )
             action = "update" if not compare_result.is_up_to_date else None
-            packages_dict[package.name] = action
+
+        packages_dict[package.name] = (action, package.cli_name)
 
     return packages_dict
 
