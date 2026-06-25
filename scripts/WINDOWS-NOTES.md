@@ -131,15 +131,45 @@ find .claude/hooks -name "*.py" -exec chmod +x {} \;
 
 ---
 
+## CLI shim 的 Windows 相容性（ticket / doc / worktree）
+
+**背景**：`ticket` / `doc` / `worktree` 三個 CLI 由 `.claude/scripts/install-skill-clis.py` 安裝為 cwd-resolving shim（POSIX `#!/bin/sh`），內容為 `git rev-parse --show-toplevel` → `uv run --directory <skill> <cli>`（根治全域 namespace 碰撞，見 ARCH-APP-002 / framework issue #12）。
+
+**結論：Windows 上現有 shim 已可用，無需 `.cmd`/`.ps1` 變體。**（0.37.0-W7-004 ANA 結論）
+
+| Windows 環境 | shim 是否可用 | 說明 |
+|---|---|---|
+| 有 Git for Windows → CC 用 **Git Bash** | 可用 | Git Bash 解析 `#!/bin/sh` shebang，shim 直接執行 |
+| **WSL2** | 可用 | 完整 POSIX 環境（CC 沙箱在此完整支援） |
+| 無 git → CC 降級 **PowerShell** | 不適用（moot） | 無 git 時 shim 核心 `git rev-parse` 無法運作，且本框架所有 skill 皆強依賴 git → 整個框架本就無法運作 |
+
+**推論鏈**：本框架強依賴 git（shim、ticket 系統、worktree 皆用 git）→ Windows 使用者必然安裝 Git for Windows → CC 在有 git 的 Windows 上使用 Git Bash 作為 Bash 工具 → `#!/bin/sh` shim 被解析、直接可用。
+
+**使用者須知**：
+- Windows 使用者請安裝 **Git for Windows**（同時提供 git 與 Git Bash）。
+- 若 CC 無法自動找到 Git Bash，於 `settings.json` 設定：
+  ```json
+  { "env": { "CLAUDE_CODE_GIT_BASH_PATH": "C:\\Program Files\\Git\\bin\\bash.exe" } }
+  ```
+- 確認 `uv` 在 PATH 上（CC 不內建 uv，需自行安裝）。
+
+> **邊界**：若未來需支援「在 CC session 外、原生 PowerShell 終端」手動呼叫這三個 CLI，才需考慮 `.cmd`/`.ps1` 變體（W7-004 已設計但未實作；reopen 條件見該 ticket）。
+>
+> **來源**：CC 官方文件 https://code.claude.com/docs/en/setup.md（Windows Bash 工具 shell 選擇）。
+
+---
+
 ## 相關文件
 
 - `.claude/scripts/README-subtree-sync.md` — 同步機制總覽
 - `.claude/scripts/sync-claude-push.py` — 推送腳本（含 `restore_executable_bits`）
 - `.claude/scripts/sync-claude-pull.py` — 拉取腳本（含 `restore_executable_bits`）
+- `.claude/scripts/install-skill-clis.py` — CLI shim installer（ARCH-APP-002）
 - `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W16-004.md` — 根因分析與修復追蹤
 
 ---
 
-**Last Updated**: 2026-04-20
-**Version**: 1.0.0 — 首版；從 W16-004 根因分析提煉 Windows 使用者指南
+**Last Updated**: 2026-06-25
+**Version**: 1.1.0 — 新增「CLI shim 的 Windows 相容性」章節（0.37.0-W7-004，framework #12/#13）
+**原始版本**: 1.0.0（2026-04-20）— 從 W16-004 根因分析提煉 Windows 使用者指南
 **Source**: v1.36.2 大規模 mode 損壞事件 + W16-004 Ticket 實證分析

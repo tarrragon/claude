@@ -1,3 +1,14 @@
+## [2.7.2] - 2026-06-25
+
+### Summary
+docs: WINDOWS-NOTES 補 CLI shim Windows 相容章節
+
+Changes: 1 docs
+
+- docs: WINDOWS-NOTES 補 CLI shim Windows 相容章節
+
+---
+
 ## [2.7.1] - 2026-06-25
 
 ### Summary
