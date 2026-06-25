@@ -379,6 +379,8 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-V1-013 | acceptance 用 lenient build:dev 驗證遮蔽 production-only gate 失敗（驗證路徑 ≠ 出貨路徑） | 中 | v1.0.0 |
 | PC-APP-001 | 延後決策綁定的 trigger ticket 引用未查證 scope 一致性（trigger 名存實亡） | 中 | v0.32.0 |
 | PC-APP-002 | sync-pull 孤兒清理超出宣稱範圍刪除，preserve 機制未生效致專案特化檔遺失 | 高 | v0.32.0 |
+| PC-APP-004 | 症狀緩解累積偏誤——同一根因累積多個緩解機制而非根治 | 中 | v0.37.0 |
+| PC-APP-005 | ANA 建議方案的可行性驗證僅跑 happy path，前提與 UX 後果到 IMP 才暴露 | 中 | v0.37.0 |
 
 ---
 

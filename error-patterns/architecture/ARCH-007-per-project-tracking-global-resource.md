@@ -72,10 +72,35 @@ for pkg, info in desired.items():
 
 - `.claude/references/quality-common.md` 第 1.2.3 節（破壞性操作設計防護）中的「狀態語義一致性」原則同樣適用
 
+## 觸發時機（採用全域資源前的審查閘門）
+
+> 補強動機（0.37.0-W7-003 retrospective）：本 pattern 記錄了「作用域不匹配」的抽象模式，但**模式存在 ≠ 模式被應用**。ARCH-APP-002（uv tool install 全域 namespace 跨 consumer 碰撞）的根因可由本 pattern 直接推論，卻因無觸發機制綁到決策點而未被前置攔截。以下補執行層觸發時機。
+
+**何時必須套用本 pattern 審查**：採用任何「全域唯一 key」的資源時，包括但不限於：
+
+| 全域資源類型 | 範例 | 碰撞風險 |
+|------------|------|---------|
+| 全域 PATH CLI | `uv tool install` → `~/.local/bin/<name>` | 多 consumer 同名 package 搶占（last-write-wins） |
+| 全域 config / 狀態 | `~/.config/<app>`、`~/.local/share/<pkg>` | 跨專案共寫同一檔 |
+| 全域 daemon / port | 固定 port、單例 socket | 多專案同時啟動衝突 |
+| 全域 cache key | 以 package name 為 key 的快取 | 同名跨專案污染 |
+
+**強制檢查（採用全域資源前）**：
+
+- [ ] 本資源的 key 是否全域唯一？（package name / bin 名 / port / config 路徑）
+- [ ] 框架是 1→N consumer 拓撲——**同名 key sync 到 N 個 consumer 後是否碰撞**？
+- [ ] 若碰撞，能否改用「cwd-relative 解析」或「即時查詢實際狀態」取代全域單點？
+- [ ] 若必須全域，碰撞的實際危害是什麼（資料污染 / 版本不一致 / 啟動失敗）？是否可接受？
+
+**Consequence（不審查的後果）**：全域單點資源在 N-consumer 拓撲下必然碰撞，事後只能靠累積的緩解機制搶救（見 PC-APP-004 症狀緩解累積偏誤），維護成本遠高於採用前一次碰撞審查。
+
 ## 關聯 Ticket
 
 - 與 ARCH-006 相關：同為「配置/追蹤放錯作用域」的模式
+- 觸發案例 ARCH-APP-002：uv tool install 全域 namespace 跨 consumer 碰撞（本 pattern 可推論但未前置攔截）
+- 防護鏈 PC-APP-004：症狀緩解累積偏誤（碰撞發生後的緩解累積反模式）
 
 ---
 
-**Last Updated**: 2026-03-05
+**Last Updated**: 2026-06-25（補觸發時機章節，0.37.0-W7-003）
+**原始版本**: 2026-03-05
