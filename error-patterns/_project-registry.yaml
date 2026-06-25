@@ -29,6 +29,9 @@ projects:
   - code: TUNL
     dir: app_tunnel
     note: 手機遠端終端機（Flutter app + Go proxy + Tailscale）
+  - code: MON
+    dir: monitor
+    note: 統一監控基礎設施 monorepo（SDK + collector）
 
 # 新專案代號規則：
 #   1. 短大寫英數（2-5 字元），語意可辨識專案。

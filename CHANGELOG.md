@@ -1,3 +1,16 @@
+## [2.6.0] - 2026-06-25
+
+### Summary
+feat: push 版本比對提示 + IMP-MON-003 error-pattern; feat: pull 不帶名稱時批次更新已安裝 skill（）; fix: SKILL.md 引導更新為前綴號格式和通用類別
+
+Changes: 2 feat, 1 fix
+
+- feat: push 版本比對提示 + IMP-MON-003 error-pattern
+- feat: pull 不帶名稱時批次更新已安裝 skill（）
+- fix: SKILL.md 引導更新為前綴號格式和通用類別
+
+---
+
 ## [2.5.0] - 2026-06-25
 
 ### Summary

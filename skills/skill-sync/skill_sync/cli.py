@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import urllib.request
 from pathlib import Path
 
 DEFAULT_REPO = "https://github.com/tarrragon/claude-skills.git"
@@ -242,6 +243,11 @@ def cmd_push(args: argparse.Namespace) -> None:
 
         target = tmp / name
 
+        local_ver = _extract_single_version(source / "SKILL.md")
+        remote_ver = _extract_single_version(target / "SKILL.md") if target.is_dir() else None
+        if local_ver and remote_ver and local_ver != remote_ver:
+            print(f"\n  [Version] local {local_ver} vs remote {remote_ver}")
+
         diff = compute_diff(source, target)
         print("\n[Push Preview]")
         print_diff_preview(diff, direction="push")
@@ -283,6 +289,110 @@ def cmd_push(args: argparse.Namespace) -> None:
     print(f"\nPushed '{name}' to {repo_url}")
 
 
+def cmd_pull_all(args: argparse.Namespace) -> None:
+    """掃描本地已安裝 skill，比對 versions.json，更新有差異者。"""
+    force: bool = args.force
+    repo_url = get_repo_url()
+    skills_dir = get_skills_dir()
+
+    local_versions = _extract_local_versions(skills_dir)
+    if not local_versions:
+        print("No local skills found.")
+        return
+
+    raw_url = repo_url.replace(
+        "https://github.com/", "https://raw.githubusercontent.com/"
+    ).removesuffix(".git") + "/main/versions.json"
+
+    try:
+        req = urllib.request.Request(raw_url, headers={"User-Agent": "skill-sync"})
+        # magic-exempt
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            remote_versions: dict[str, str] = json.loads(resp.read())
+    except Exception as e:
+        print(f"Failed to fetch versions.json: {e}")
+        print("Falling back to individual pull...")
+        remote_versions = {}
+
+    if not remote_versions:
+        print("versions.json not available. Use 'skill-sync pull <name>' instead.")
+        return
+
+    outdated: list[tuple[str, str, str]] = []
+    up_to_date: list[str] = []
+    for name, local_ver in sorted(local_versions.items()):
+        remote_ver = remote_versions.get(name)
+        if remote_ver is None:
+            continue
+        if local_ver != remote_ver:
+            outdated.append((name, local_ver, remote_ver))
+        else:
+            up_to_date.append(name)
+
+    if not outdated:
+        print(f"All {len(up_to_date)} installed skills are up to date.")
+        return
+
+    print(f"[Update Check] {len(outdated)} skill(s) need update, "
+          f"{len(up_to_date)} up to date:\n")
+    for name, local_ver, remote_ver in outdated:
+        print(f"  {name}: {local_ver} -> {remote_ver}")
+
+    if not force:
+        try:
+            answer = input(f"\n  Update {len(outdated)} skill(s)? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            answer = ""
+        if answer != "y":
+            print("  Aborted.")
+            return
+
+    updated = 0
+    for name, local_ver, remote_ver in outdated:
+        print(f"\n  Pulling {name} ({local_ver} -> {remote_ver})...")
+        pull_args = argparse.Namespace(name=name, force=True)
+        try:
+            cmd_pull(pull_args)
+            updated += 1
+        except Exception as e:
+            print(f"  [FAIL] {name}: {e}")
+
+    print(f"\n[Done] Updated {updated}/{len(outdated)} skill(s)")
+
+
+def _extract_single_version(skill_md: Path) -> str | None:
+    """從單一 SKILL.md 提取版本號。"""
+    if not skill_md.is_file():
+        return None
+    try:
+        text = skill_md.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    m = re.search(r"\*\*Version\*\*:\s*(\S+)", text)
+    if not m:
+        m = re.search(r"^version:\s*(\S+)", text, re.MULTILINE)
+    return m.group(1) if m else None
+
+
+def _extract_local_versions(skills_dir: Path) -> dict[str, str]:
+    """掃描本地 skills/*/SKILL.md 提取版本號。"""
+    versions: dict[str, str] = {}
+    if not skills_dir.is_dir():
+        return versions
+    for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
+        name = skill_md.parent.name
+        try:
+            text = skill_md.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        m = re.search(r"\*\*Version\*\*:\s*(\S+)", text)
+        if not m:
+            m = re.search(r"^version:\s*(\S+)", text, re.MULTILINE)
+        if m:
+            versions[name] = m.group(1)
+    return versions
+
+
 def cmd_list(args: argparse.Namespace) -> None:
     repo_url = get_repo_url()
 
@@ -321,7 +431,8 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
 
     pull_parser = sub.add_parser("pull", help="Pull a skill from remote repo")
-    pull_parser.add_argument("name", help="Skill name to pull")
+    pull_parser.add_argument("name", nargs="?", default=None,
+                             help="Skill name to pull (omit to update all installed)")
     pull_parser.add_argument("--force", "-f", action="store_true",
                              help="Apply changes without confirmation")
 
@@ -335,12 +446,15 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    commands = {
-        "pull": cmd_pull,
-        "push": cmd_push,
-        "list": cmd_list,
-    }
-    commands[args.command](args)
+    if args.command == "pull" and args.name is None:
+        cmd_pull_all(args)
+    else:
+        commands = {
+            "pull": cmd_pull,
+            "push": cmd_push,
+            "list": cmd_list,
+        }
+        commands[args.command](args)
 
 
 if __name__ == "__main__":

@@ -415,8 +415,8 @@ def check_skill_repo_version_drift(local_skills_dir: Path) -> None:
             return
 
         raw_url = SKILL_REPO_URL.replace(
-            "github.com", "raw.githubusercontent.com"
-        ).replace(".git", "") + "/main/versions.json"
+            "https://github.com/", "https://raw.githubusercontent.com/"
+        ).removesuffix(".git") + "/main/versions.json"
         req = urllib.request.Request(raw_url, headers={"User-Agent": "sync-push"})
         # magic-exempt
         with urllib.request.urlopen(req, timeout=10) as resp:
