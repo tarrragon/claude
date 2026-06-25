@@ -10,10 +10,10 @@ from typing import Dict, Any
 from unittest.mock import patch, MagicMock
 import pytest
 
-from ticket_system.commands.create import (
+from ticket_system.lib.create_reporter import (
     _print_tdd_sequence_suggestion,
     _print_parallel_analysis_result,
-    _print_create_checklist,
+    print_create_checklist,
 )
 from ticket_system.lib.parallel_analyzer import ParallelAnalyzer
 from ticket_system.lib.tdd_sequence import suggest_tdd_sequence
@@ -133,7 +133,7 @@ class TestParallelAnalysis:
         # 少於 2 個子任務，應該沒有輸出
         assert "並行分析" not in captured.out
 
-    @patch("ticket_system.commands.create.load_ticket")
+    @patch("ticket_system.lib.create_reporter.load_ticket")
     def test_print_parallel_analysis_result_with_children(
         self, mock_load_ticket, capsys
     ):
@@ -177,9 +177,9 @@ class TestParallelAnalysis:
 class TestPrintCreateChecklist:
     """建立檢查清單功能測試"""
 
-    def test_print_create_checklist_root_task_imp(self, capsys):
+    def testprint_create_checklist_root_task_imp(self, capsys):
         """測試根任務 IMP 類型的檢查清單"""
-        _print_create_checklist(
+        print_create_checklist(
             ticket_id="0.31.0-W4-001",
             ticket_type="IMP",
             parent_id=None,
@@ -191,9 +191,9 @@ class TestPrintCreateChecklist:
         assert "拆分子任務" in captured.out
         assert "TDD 順序建議" in captured.out
 
-    def test_print_create_checklist_root_task_doc(self, capsys):
+    def testprint_create_checklist_root_task_doc(self, capsys):
         """測試根任務 DOC 類型的檢查清單"""
-        _print_create_checklist(
+        print_create_checklist(
             ticket_id="0.31.0-W4-001",
             ticket_type="DOC",
             parent_id=None,
@@ -206,9 +206,9 @@ class TestPrintCreateChecklist:
         # DOC 類型無需 TDD 流程，所以不輸出建議
         # （_print_tdd_sequence_suggestion 會直接返回）
 
-    def test_print_create_checklist_child_task(self, capsys):
+    def testprint_create_checklist_child_task(self, capsys):
         """測試子任務的檢查清單"""
-        _print_create_checklist(
+        print_create_checklist(
             ticket_id="0.31.0-W4-001.1",
             ticket_type="IMP",
             parent_id="0.31.0-W4-001",

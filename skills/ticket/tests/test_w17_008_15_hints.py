@@ -127,7 +127,7 @@ def _capture_group_hint(
 
     buf = io.StringIO()
     with patch(
-        "ticket_system.commands.create.list_tickets", return_value=tickets
+        "ticket_system.lib.duplicate_detector.list_tickets", return_value=tickets
     ), redirect_stdout(buf):
         _print_in_progress_group_hint(version, wave, new_id)
     return buf.getvalue()

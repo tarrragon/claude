@@ -2007,6 +2007,16 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
             for r in will_skip_resurrection[:50]:
                 print_color(f"     x skip-resurrection: {r}")
 
+        # 0.3.4-W2-006: overlay 有本地變更時需確認才執行
+        if will_overwrite or will_delete:
+            try:
+                answer = input("  Apply full overlay? [y/N] ").strip().lower()  # i18n-exempt
+            except (EOFError, KeyboardInterrupt):
+                answer = ""
+            if answer != "y":
+                print_color("  Aborted.", "yellow")  # i18n-exempt
+                return backup_dir
+
         file_count = sync_directory(temp_dir, claude_dir, preserve, project_root=project_root, skills_config=skills_config)
         print_color(f"   已更新 {file_count} 個檔案", "green")
 

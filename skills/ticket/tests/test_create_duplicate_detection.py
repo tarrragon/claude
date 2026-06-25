@@ -10,9 +10,9 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from datetime import datetime, timedelta
-from ticket_system.commands.create import (
+from ticket_system.lib.duplicate_detector import (
     _calculate_jaccard_similarity,
-    _detect_duplicate_tickets,
+    detect_duplicate_tickets,
     _is_in_detection_scope,
     _get_status_label,
 )
@@ -189,13 +189,13 @@ class TestDuplicateDetection:
 
         # Patch 使用端（create.py 內部 import）
         return mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=_mock_impl,
         )
 
     def test_b001_single_similar_ticket(self, mock_list_tickets, capsys):
         """B-001：發現單個相似 Ticket → 輸出 WARNING"""
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="實作 SRP 偵測功能",
             new_what="新增 SRP 自動偵測",
@@ -230,11 +230,11 @@ class TestDuplicateDetection:
             ]
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=mock_list_impl,
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="實作 SRP 偵測功能",
             new_what="自動識別 SRP 違規",
@@ -267,11 +267,11 @@ class TestDuplicateDetection:
             ]
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=mock_list_impl,
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="建立 WebSocket 路由",
             new_what="實作路由轉發邏輯",
@@ -300,11 +300,11 @@ class TestDuplicateDetection:
             ]
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=mock_list_impl,
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="實作 SRP 自動偵測",
             new_what="新增 SRP 檢查",
@@ -332,11 +332,11 @@ class TestDuplicateDetection:
             ]
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=mock_list_impl,
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="實作 SRP 自動偵測",
             new_what="SRP 檢查",
@@ -360,11 +360,11 @@ class TestDuplicateDetection:
             return []
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=mock_list_impl,
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="實作 SRP 自動偵測",
             new_what="...",
@@ -397,14 +397,14 @@ class TestDuplicateDetection:
             ]
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=mock_list_impl,
         )
 
         # 建立子任務 0.1.2-W3-001.1，與 parent 標題相似
         # 子任務含 "."，所以排除清單包含：自身 (0.1.2-W3-001.1) + 父任務 (0.1.2-W3-001)
         # 因此 parent 會被排除，不應發現相似 Ticket
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="實作 SRP 偵測部分 A",
             new_what="實作 SRP 自動檢查",
@@ -431,11 +431,11 @@ class TestDuplicateDetection:
             ]
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=mock_list_impl,
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="",
             new_what="實作 SRP 自動偵測機制",
@@ -461,11 +461,11 @@ class TestDuplicateDetection:
             ]
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=mock_list_impl,
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="實作 SRP 自動偵測機制",
             new_what="",
@@ -481,7 +481,7 @@ class TestDuplicateDetection:
         """B-010：title 和 what 均為空 → 跳過重複偵測"""
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=lambda v: [
                 {
                     "id": "0.1.2-W3-001",
@@ -492,7 +492,7 @@ class TestDuplicateDetection:
             ],
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="",
             new_what="",
@@ -509,12 +509,12 @@ class TestDuplicateDetection:
         """B-011：list_tickets() 拋出例外 → 靜默通過"""
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=FileNotFoundError("Directory not found"),
         )
 
         # 應靜默通過，無例外向上拋出
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="實作 SRP 機制",
             new_what="自動偵測",
@@ -546,13 +546,13 @@ class TestDuplicateDetection:
             ]
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=mock_list_impl,
         )
 
         # Mock _calculate_jaccard_similarity 在第二個 Ticket 時拋出異常
         original_calc = __import__(
-            "ticket_system.commands.create",
+            "ticket_system.lib.duplicate_detector",
             fromlist=["_calculate_jaccard_similarity"],
         )._calculate_jaccard_similarity
 
@@ -565,12 +565,12 @@ class TestDuplicateDetection:
             return original_calc(text_a, text_b)
 
         mocker.patch(
-            "ticket_system.commands.create._calculate_jaccard_similarity",
+            "ticket_system.lib.duplicate_detector._calculate_jaccard_similarity",
             side_effect=mock_calc,
         )
 
         # 應跳過異常 Ticket，繼續處理
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="實作 SRP 機制",
             new_what="自動偵測",
@@ -586,11 +586,11 @@ class TestDuplicateDetection:
         """B-013：pending tickets 目錄為空 → 靜默通過"""
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=lambda v: [],
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="實作 SRP 機制",
             new_what="自動偵測",
@@ -616,7 +616,7 @@ class TestExtendedScopeDetection:
         recent_time = (datetime.now() - timedelta(days=3)).isoformat()
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=lambda v: [
                 {
                     "id": "0.1.2-W2-007",
@@ -628,7 +628,7 @@ class TestExtendedScopeDetection:
             ],
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="修正 Registry 模組品質問題",
             new_what="修正技術債",
@@ -645,7 +645,7 @@ class TestExtendedScopeDetection:
         old_time = (datetime.now() - timedelta(days=10)).isoformat()
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=lambda v: [
                 {
                     "id": "0.1.2-W1-001",
@@ -657,7 +657,7 @@ class TestExtendedScopeDetection:
             ],
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="修正 Registry 模組品質問題",
             new_what="修正技術債",
@@ -673,7 +673,7 @@ class TestExtendedScopeDetection:
         boundary_time = (datetime.now() - timedelta(days=7, seconds=1)).isoformat()
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=lambda v: [
                 {
                     "id": "0.1.2-W1-001",
@@ -685,7 +685,7 @@ class TestExtendedScopeDetection:
             ],
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="修正 Registry 模組品質問題",
             new_what="修正技術債",
@@ -698,7 +698,7 @@ class TestExtendedScopeDetection:
     def test_es004_in_progress_triggers_warning(self, mocker, capsys):
         """ES-004：in_progress Ticket 觸發警告（含 [進行中] 標籤）"""
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=lambda v: [
                 {
                     "id": "0.1.2-W2-008",
@@ -709,7 +709,7 @@ class TestExtendedScopeDetection:
             ],
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="建立檔案所有權隔離自動檢查",
             new_what="where.files 檢查",
@@ -724,7 +724,7 @@ class TestExtendedScopeDetection:
     def test_es007_completed_no_completed_at_excluded(self, mocker, capsys):
         """ES-007：completed 但無 completed_at 欄位 → 排除（保守策略）"""
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=lambda v: [
                 {
                     "id": "0.1.2-W1-001",
@@ -736,7 +736,7 @@ class TestExtendedScopeDetection:
             ],
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="修正 Registry 模組品質問題",
             new_what="修正技術債",
@@ -749,7 +749,7 @@ class TestExtendedScopeDetection:
     def test_es008_completed_invalid_completed_at_excluded(self, mocker, capsys):
         """ES-008：completed_at 格式異常 → 排除（保守策略）"""
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=lambda v: [
                 {
                     "id": "0.1.2-W1-001",
@@ -761,7 +761,7 @@ class TestExtendedScopeDetection:
             ],
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="修正 Registry 模組品質問題",
             new_what="修正技術債",
@@ -774,7 +774,7 @@ class TestExtendedScopeDetection:
     def test_es009_pending_no_status_label(self, mocker, capsys):
         """ES-009：pending Ticket 不加標籤（向下相容）"""
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=lambda v: [
                 {
                     "id": "0.1.2-W3-001",
@@ -785,7 +785,7 @@ class TestExtendedScopeDetection:
             ],
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="實作 SRP 偵測功能",
             new_what="SRP 自動偵測",
@@ -861,12 +861,12 @@ class TestIntegration:
         # 此測試驗證呼叫位置，在 execute() 中進行
         # 這裡只驗證函式簽名和行為
         mock = mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=lambda v: [],
         )
 
         # 調用函式，驗證不拋出例外
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="實作",
             new_what="功能",
@@ -880,7 +880,7 @@ class TestIntegration:
         """I-002：偵測結果不影響後續儲存流程"""
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=lambda v: [
                 {
                     "id": "0.1.2-W3-001",
@@ -892,7 +892,7 @@ class TestIntegration:
         )
 
         # 即使輸出 WARNING，函式應正常返回
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="實作 SRP 機制",
             new_what="自動偵測",
@@ -907,12 +907,12 @@ class TestIntegration:
     def test_i003_parameter_passing(self, mocker):
         """I-003：參數正確傳遞"""
         mock_calc = mocker.patch(
-            "ticket_system.commands.create._calculate_jaccard_similarity",
+            "ticket_system.lib.duplicate_detector._calculate_jaccard_similarity",
             return_value=0.0,
         )
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=lambda v: [
                 {
                     "id": "0.1.2-W3-001",
@@ -923,7 +923,7 @@ class TestIntegration:
             ],
         )
 
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="新增功能",
             new_what="修復問題",
@@ -937,15 +937,15 @@ class TestIntegration:
         assert "修復問題" in call_args[0]
 
     def test_i004_exception_does_not_block_creation(self, mocker):
-        """I-004：_detect_duplicate_tickets 異常不阻斷建立"""
+        """I-004：detect_duplicate_tickets 異常不阻斷建立"""
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=RuntimeError("Unexpected error"),
         )
 
         # 應無例外拋出
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="實作",
             new_what="功能",
@@ -978,12 +978,12 @@ class TestPerformance:
         ]
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=lambda v: pending_tickets,
         )
 
         start = time.time()
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="新增功能",
             new_what="自動執行",
@@ -1009,12 +1009,12 @@ class TestPerformance:
         ]
 
         mocker.patch(
-            "ticket_system.commands.create.list_tickets",
+            "ticket_system.lib.duplicate_detector.list_tickets",
             side_effect=lambda v: pending_tickets,
         )
 
         start = time.time()
-        _detect_duplicate_tickets(
+        detect_duplicate_tickets(
             version="0.1.2",
             new_title="新增功能",
             new_what="自動執行",

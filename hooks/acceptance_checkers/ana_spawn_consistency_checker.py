@@ -31,11 +31,10 @@ Action: ANA complete 前 hook 強制比對；豁免機制讓合法不 spawn 的 
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Tuple
 
 
 # 豁免標記：Solution 含這些字樣時跳過檢查
-_EXEMPTION_MARKERS: List[str] = [
+_EXEMPTION_MARKERS: list[str] = [
     "無需建 ticket",
     "無需建ticket",
     "無需 spawn",
@@ -46,6 +45,16 @@ _EXEMPTION_MARKERS: List[str] = [
     "不需spawn",
     "no spawn needed",
     "no spawn required",
+]
+
+# 行級豁免標記：表格行含這些字樣時該行不計入 spawn 規劃數（0.3.4-W2-003）
+_ROW_EXEMPTION_MARKERS: list[str] = [
+    "無需建 ticket",
+    "無需建ticket",
+    "併入",
+    "merged into",
+    "合併實作",
+    "不建 ticket",
 ]
 
 # spawn 表格行正則：匹配 `| IMP |` / `| DOC |` / `| ANA |`，且同行含 P0-P3
@@ -84,7 +93,7 @@ _TYPE_ANNOTATED_CELL_PATTERN = re.compile(
 )
 
 
-def _extract_solution_section(content: str) -> Optional[str]:
+def _extract_solution_section(content: str) -> str | None:
     """擷取 ## Solution 區段（到下一個 ## 或檔尾為止）。"""
     pattern = r"^## Solution\s*\n(.*?)(?=^## |\Z)"
     match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
@@ -105,10 +114,19 @@ def _has_exemption_marker(section: str) -> bool:
     return False
 
 
+def _is_exempted_row(line: str) -> bool:
+    """判斷表格行是否含行級豁免標記（「無需建 ticket」「併入」等）。"""
+    lowered = line.lower()
+    return any(marker.lower() in lowered for marker in _ROW_EXEMPTION_MARKERS)
+
+
 def _count_spawn_planning_rows(section: str) -> int:
-    """計算 Solution 內 spawn 規劃表格行數（IMP/DOC/ANA + P0-P3）。"""
-    matches = _SPAWN_ROW_PATTERN.findall(section)
-    return len(matches)
+    """計算 Solution 內 spawn 規劃表格行數（IMP/DOC/ANA + P0-P3），排除行級豁免行。"""
+    count = 0
+    for line in section.split("\n"):
+        if _SPAWN_ROW_PATTERN.match(line.strip()) and not _is_exempted_row(line):
+            count += 1
+    return count
 
 
 def _count_spawn_heading_rows(section: str) -> int:
@@ -132,15 +150,15 @@ def _is_spawn_section_heading(line: str) -> bool:
     return any(token.lower() in lowered for token in _SPAWN_SECTION_HEADING_ZH)
 
 
-def _iter_spawn_section_bodies(section: str) -> List[str]:
+def _iter_spawn_section_bodies(section: str) -> list[str]:
     """擷取所有 spawn 區段的內文（從 spawn H3 標題到下一個 ### 或檔尾）。
 
     用於將 type-annotated 行偵測限縮在 spawn 語境，避免一般說明表格
     （如風險評估表含 IMP/DOC 字樣）被誤判為 spawn 規劃。
     """
-    bodies: List[str] = []
+    bodies: list[str] = []
     lines = section.split("\n")
-    current: Optional[List[str]] = None
+    current: list[str] | None = None
     for line in lines:
         if line.startswith("### "):
             if current is not None:
@@ -167,7 +185,7 @@ def _count_type_annotated_rows(section: str) -> int:
                 continue
             if set(stripped) <= set("|-: "):  # 表頭分隔行
                 continue
-            if _TYPE_ANNOTATED_CELL_PATTERN.search(line):
+            if _TYPE_ANNOTATED_CELL_PATTERN.search(line) and not _is_exempted_row(line):
                 count += 1
     return count
 
@@ -206,7 +224,7 @@ def _count_spawned_and_children(frontmatter: dict) -> int:
 
 def check_ana_spawn_consistency(
     content: str, frontmatter: dict, logger
-) -> Tuple[bool, Optional[str]]:
+) -> tuple[bool,str | None]:
     """檢查 ANA Solution spawn 規劃 vs spawned_tickets + children 一致性。
 
     Args:

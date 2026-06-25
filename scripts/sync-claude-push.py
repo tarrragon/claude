@@ -57,6 +57,7 @@ import os
 import pkgutil
 import re
 import shutil
+import urllib.request
 import subprocess
 import sys
 import tarfile
@@ -77,6 +78,7 @@ from lib.sync_exclude_manifest import (  # noqa: E402
 )
 
 REPO_URL = "https://github.com/tarrragon/claude.git"
+SKILL_REPO_URL = "https://github.com/tarrragon/claude-skills.git"
 
 # .sync-state.json schema（W1-025）：單一 base 欄位，pull/push 共用。
 # 禁雙欄位（H1：對 commit SHA 用 max 會選錯共同祖先）。與 sync-claude-pull.py 對稱。
@@ -403,6 +405,46 @@ def format_skill_version_diff(
     if removed_skills:
         lines.append(f"  移除: {', '.join(removed_skills)}")  # i18n-exempt
     return "\n".join(lines)
+
+
+def check_skill_repo_version_drift(local_skills_dir: Path) -> None:
+    """比對本地 skill 版本與 skill 庫 versions.json（單一 HTTP GET）。"""  # i18n-exempt
+    try:
+        local_versions = extract_skill_versions(local_skills_dir)
+        if not local_versions:
+            return
+
+        raw_url = SKILL_REPO_URL.replace(
+            "github.com", "raw.githubusercontent.com"
+        ).replace(".git", "") + "/main/versions.json"
+        req = urllib.request.Request(raw_url, headers={"User-Agent": "sync-push"})
+        # magic-exempt
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            remote_versions: dict[str, str] = json.loads(resp.read())
+
+        drifted: list[str] = []
+        for name, local_ver in sorted(local_versions.items()):
+            remote_ver = remote_versions.get(name)
+            if remote_ver is None:
+                continue
+            if local_ver != remote_ver:
+                drifted.append(  # i18n-exempt
+                    f"  {name}: local {local_ver} vs skill-repo {remote_ver}"
+                )
+
+        if drifted:
+            print_color(  # i18n-exempt
+                f"[Skill 庫同步提示] {len(drifted)} 個 skill 版本與 skill 庫不一致：",
+                "yellow",
+            )
+            for line in drifted:
+                print_color(line, "yellow")
+            print_color(  # i18n-exempt
+                "如需同步到 skill 庫，請執行：skill-sync push <name>",
+                "yellow",
+            )
+    except Exception:
+        pass
 
 
 def load_preserve_list(claude_dir: Path) -> set[str]:
@@ -1077,12 +1119,56 @@ def check_no_change_early_exit(
     return False, diag
 
 
+_CLEAN_EXCLUDE = {".git", "CHANGELOG.md", "VERSION", "README.md", "LICENSE", ".gitignore"}
+
+
+def _should_skip_clean_file(  # i18n-exempt
+    rel: Path,
+    preserve: set[str],
+    lineage_claimed: set[str],
+    skills_config: dict | None,
+) -> bool:
+    """clean_stale_files / detect_uncleaned_deletions shared filter."""
+    if any(part in _CLEAN_EXCLUDE for part in rel.parts):
+        return True
+    if rel.name in _CLEAN_EXCLUDE:
+        return True
+    if should_exclude(rel):
+        return True
+    if rel.as_posix() in preserve:
+        return True
+    if rel.as_posix() in lineage_claimed:
+        return True
+    if skills_config is not None:
+        skill_name = _is_skill_path(rel)
+        if skill_name is not None and should_exclude_skill(skill_name, skills_config, "push"):
+            return True
+    return False
+
+
+def _list_base_files(temp_dir: Path, base_sha: str) -> set[str]:
+    """列出 base SHA 時的所有檔案路徑（用於三方比對）。
+
+    base_sha 不可達時回傳空集合（降級為無三方比對的舊行為）。
+    """
+    result = subprocess.run(
+        ["git", "ls-tree", "-r", "--name-only", base_sha],
+        cwd=temp_dir,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return set()
+    return set(result.stdout.strip().splitlines())
+
+
 def clean_stale_files(
     temp_dir: Path,
     reference_dir: Path,
     preserve: set[str] | None = None,
     lineage_claimed: set[str] | None = None,
     skills_config: dict | None = None,
+    base_sha: str | None = None,
 ) -> int:
     """刪除 clone 目錄中存在但 reference_dir（git tracked 樹 staging）沒有的過時檔案。
 
@@ -1090,56 +1176,50 @@ def clean_stale_files(
     .claude/，使刪除傳播（K）對齊 git tracked 狀態：git rm 的檔不在 staging → 從
     遠端刪除。
 
+    三方比對（0.3.4-W2-005）：若提供 base_sha，會比對 base 時的檔案清單。
+    「base 無 + staging 無 + upstream 有」= 其他 consumer 在 base 後新增，不刪除。
+    「base 有 + staging 無 + upstream 有」= 本地 git rm，應刪除。
+    base_sha 不可達時降級為舊行為（不做三方比對）。
+
     排除 .git 目錄、CHANGELOG.md、VERSION 等遠端獨有檔案；另對 should_exclude
     命中的檔（local-only / 憑證）不刪除（這類檔本就不該被本腳本管理，可能是其他
     專案推送內容）。
 
-    preserve（0.32.0-W1-008）：sync-preserve.yaml 列出的專案特化檔不刪除。push
-    端不推這些檔（copy_filtered_from_staging 已排除），故它們不在 staging；若不
-    在此一併排除，--clean 會把遠端既有的 preserve 副本（可能屬其他專案）誤刪。
+    preserve（0.32.0-W1-008）：sync-preserve.yaml 列出的專案特化檔不刪除。
 
-    skills_config（1.3.0-W1-054）：被 skills_config 排除的 skill 不視為 stale
-    （它們不在 staging 但屬其他專案推送的內容，不應刪除）。
+    skills_config（1.3.0-W1-054）：被 skills_config 排除的 skill 不視為 stale。
 
     回傳已刪除的檔案數量。
     """
     preserve = preserve or set()
     lineage_claimed = lineage_claimed or set()
-    CLEAN_EXCLUDE = {".git", "CHANGELOG.md", "VERSION", "README.md", "LICENSE", ".gitignore"}
     deleted_count = 0
+    skipped_other_consumer = 0
+
+    base_files: set[str] = set()
+    if base_sha:
+        base_files = _list_base_files(temp_dir, base_sha)
+        if base_files:
+            print(f"   三方比對已啟用（base: {base_sha[:12]}，{len(base_files)} 個檔案）")
+        else:
+            print(f"   [WARNING] base SHA {base_sha[:12]} 不可達，降級為無三方比對")
 
     for file_path in sorted(temp_dir.rglob("*")):
         if not file_path.is_file():
             continue
         rel = file_path.relative_to(temp_dir)
-        # 排除 .git 目錄下的檔案和遠端獨有檔案
-        if any(part in CLEAN_EXCLUDE for part in rel.parts):
+        if _should_skip_clean_file(rel, preserve, lineage_claimed, skills_config):
             continue
-        if rel.name in CLEAN_EXCLUDE:
-            continue
-        # should_exclude 命中者不刪除（local-only / 憑證，可能屬其他專案）
-        if should_exclude(rel):
-            continue
-        # preserve-listed 檔不刪除（專案特化，push 端刻意不推也不刪）
-        if rel.as_posix() in preserve:
-            continue
-        # 被本地 lineage 重編號檔認領的上游 canonical 不刪除（PC-APP-002 / W1-039）：
-        # 本地把上游 PC-<N> 重編為 PC-<M> 後，上游 PC-<N>-<slug> 在本地無同名檔會被
-        # 誤列孤兒；其溯源註解明說上游應保留原號供下次 pull 去重，故排除於 --clean。
-        if rel.as_posix() in lineage_claimed:
-            continue
-        # skills_config 排除的 skill 不視為 stale（可能屬其他專案推送）
-        if skills_config is not None:
-            skill_name = _is_skill_path(rel)
-            if skill_name is not None and should_exclude_skill(skill_name, skills_config, "push"):
-                continue
-        # 檢查 tracked 樹 staging 是否有對應檔案
         if not (reference_dir / rel).exists():
+            rel_posix = rel.as_posix()
+            if base_files and rel_posix not in base_files:
+                print(f"   [保留] 其他 consumer 新增: {rel}")
+                skipped_other_consumer += 1
+                continue
             print(f"   刪除過時檔案: {rel}")
             file_path.unlink()
             deleted_count += 1
 
-    # 清理空目錄（反向排序以支援巢狀目錄）
     for dir_path in sorted(
         temp_dir.rglob("*"),
         key=lambda p: len(p.parts),
@@ -1147,7 +1227,7 @@ def clean_stale_files(
     ):
         if not dir_path.is_dir():
             continue
-        if any(part in CLEAN_EXCLUDE for part in dir_path.relative_to(temp_dir).parts):
+        if any(part in _CLEAN_EXCLUDE for part in dir_path.relative_to(temp_dir).parts):
             continue
         try:
             if not any(dir_path.iterdir()):
@@ -1155,6 +1235,9 @@ def clean_stale_files(
                 deleted_count += 1
         except OSError:
             pass
+
+    if skipped_other_consumer:
+        print(f"   [三方比對] 保留 {skipped_other_consumer} 個其他 consumer 新增的檔案")
 
     return deleted_count
 
@@ -1172,7 +1255,7 @@ def detect_uncleaned_deletions(
     clean_stale_files 不會執行，遠端會殘留為孤兒。回傳這些孤兒的相對路徑清單，供
     main 在結尾輸出 soft 警告（不阻擋、不改 --clean 預設，R2）。
 
-    判定邏輯與 clean_stale_files 對齊（同一組 CLEAN_EXCLUDE + should_exclude 過濾），
+    判定邏輯與 clean_stale_files 對齊（共用 _should_skip_clean_file 過濾），
     確保「警告的檔」恰為「--clean 會刪的檔」，不多報遠端獨有檔（CHANGELOG/VERSION）
     或他專案推送的 local-only 檔。
 
@@ -1193,31 +1276,13 @@ def detect_uncleaned_deletions(
     """
     preserve = preserve or set()
     lineage_claimed = lineage_claimed or set()
-    CLEAN_EXCLUDE = {".git", "CHANGELOG.md", "VERSION", "README.md", "LICENSE", ".gitignore"}
     orphans: list[str] = []
     for file_path in sorted(temp_dir.rglob("*")):
         if not file_path.is_file():
             continue
         rel = file_path.relative_to(temp_dir)
-        if any(part in CLEAN_EXCLUDE for part in rel.parts):
+        if _should_skip_clean_file(rel, preserve, lineage_claimed, skills_config):
             continue
-        if rel.name in CLEAN_EXCLUDE:
-            continue
-        # should_exclude 命中者（local-only / 憑證，可能屬其他專案）不算孤兒
-        if should_exclude(rel):
-            continue
-        # preserve-listed 檔（push 端刻意不推）不算孤兒，與 clean_stale_files 對齊
-        if rel.as_posix() in preserve:
-            continue
-        # 被本地 lineage 重編號檔認領的上游 canonical 不算孤兒（PC-APP-002 / W1-039）：
-        # 與 clean_stale_files 對齊，確保「警告/可刪的檔」恰為「真孤兒」（含讓位後的
-        # native intruder），不誤報受 lineage 保護的上游 canonical。
-        if rel.as_posix() in lineage_claimed:
-            continue
-        if skills_config is not None:
-            skill_name = _is_skill_path(rel)
-            if skill_name is not None and should_exclude_skill(skill_name, skills_config, "push"):
-                continue
         if not (reference_dir / rel).exists():
             orphans.append(str(rel))
     return orphans
@@ -2096,9 +2161,12 @@ def main() -> None:
             # 7.5. 清理遠端過時檔案（僅 --clean 模式）。
             # 以 staging（tracked 樹）為基準：git rm 的檔不在 staging → 從遠端刪除（K）。
             if clean_mode:
-                print_color("清理遠端過時檔案（對齊 git tracked 樹）...")
+                # 三方比對（0.3.4-W2-005）：用 base SHA 區分「本地 git rm」vs「其他 consumer 新增」
+                print_color("清理遠端過時檔案（對齊 git tracked 樹）...")  # i18n-exempt
+                sync_base_sha = read_base_sha(claude_dir)
                 deleted = clean_stale_files(
-                    temp_dir, staging_dir, preserve, lineage_claimed, skills_config
+                    temp_dir, staging_dir, preserve, lineage_claimed, skills_config,
+                    base_sha=sync_base_sha,
                 )
                 print_color(f"   已清理 {deleted} 個遠端過時檔案", "green")  # i18n-exempt
             else:
@@ -2278,6 +2346,9 @@ def main() -> None:
         skill_diff = format_skill_version_diff(skill_versions_before, skill_versions_after)
         if skill_diff:
             print_color(skill_diff, "green")
+
+        # Skill 庫版本 drift 檢查（0.3.5-W1-001）
+        check_skill_repo_version_drift(claude_dir / "skills")
 
         # R2 soft 警告：本次未帶 --clean，但本地已 git rm 的 tracked .claude/ 檔
         # 在遠端殘留為孤兒。僅提醒（不阻擋、不改 --clean 預設），避免誤刪風險。

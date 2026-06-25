@@ -60,7 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["proposal", "spec", "usecase"],
         help="文件類型",
     )
-    create_parser.add_argument("id", help="文件 ID（如 PROP-006, SPEC-009, UC-09）")
+    create_parser.add_argument("id", nargs="?", default=None, help="文件 ID（省略則自動分配下一個序號）")
     create_parser.add_argument("--title", default=None, help="文件標題")
     create_parser.add_argument(
         "--domain",

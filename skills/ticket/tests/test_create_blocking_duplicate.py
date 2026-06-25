@@ -13,9 +13,11 @@ from unittest.mock import patch
 
 import pytest
 
-from ticket_system.commands.create import (
+from ticket_system.lib.duplicate_detector import (
     _find_blocking_duplicate,
-    _enforce_blocking_duplicate,
+    enforce_blocking_duplicate,
+)
+from ticket_system.commands.create import (
     _validate_before_persist,
 )
 from ticket_system.lib.constants import (
@@ -32,7 +34,7 @@ def test_block_constants_match_design():
 
 def _patch_tickets(mocker, tickets):
     mocker.patch(
-        "ticket_system.commands.create.list_tickets",
+        "ticket_system.lib.duplicate_detector.list_tickets",
         return_value=tickets,
     )
 
@@ -41,7 +43,7 @@ def _patch_creation_time(mocker, minutes_ago):
     """patch 候選票檔案建立時間為 N 分鐘前。"""
     target = datetime.now() - timedelta(minutes=minutes_ago)
     mocker.patch(
-        "ticket_system.commands.create._get_ticket_creation_time",
+        "ticket_system.lib.duplicate_detector._get_ticket_creation_time",
         return_value=target,
     )
 
@@ -131,7 +133,7 @@ class TestFindBlockingDuplicate:
         )
         # 同質模板共享「實作/建立/元件」等 token 但任務名差異大，
         # 相似度落在 Tier 1 警告（>=0.3）與 Tier 2 阻擋（>=0.6）之間，不阻擋
-        from ticket_system.commands.create import _calculate_jaccard_similarity
+        from ticket_system.lib.duplicate_detector import _calculate_jaccard_similarity
         sim = _calculate_jaccard_similarity(
             f"{new_title} {new_what}",
             "實作搜尋篩選 Widget 建立搜尋篩選介面元件",
@@ -190,7 +192,7 @@ class TestFindBlockingDuplicate:
             },
         ])
         mocker.patch(
-            "ticket_system.commands.create._get_ticket_creation_time",
+            "ticket_system.lib.duplicate_detector._get_ticket_creation_time",
             return_value=None,
         )
 
@@ -227,10 +229,10 @@ class TestEnforceBlockingDuplicate:
     def test_block_outputs_error_and_returns_false(self, mocker, capsys):
         """命中且未旁路 → 輸出阻擋訊息 + 回傳 False"""
         mocker.patch(
-            "ticket_system.commands.create._find_blocking_duplicate",
+            "ticket_system.lib.duplicate_detector._find_blocking_duplicate",
             return_value=("0.1.2-W1-001", "實作 SRP 偵測機制", "pending", 0.95),
         )
-        result = _enforce_blocking_duplicate(
+        result = enforce_blocking_duplicate(
             version="0.1.2",
             new_title="實作 SRP 偵測機制",
             new_what="自動偵測 SRP 違規",
@@ -247,10 +249,10 @@ class TestEnforceBlockingDuplicate:
     def test_bypass_outputs_info_and_returns_true(self, mocker, capsys):
         """命中但 --allow-duplicate → 輸出 INFO + 回傳 True（放行）"""
         mocker.patch(
-            "ticket_system.commands.create._find_blocking_duplicate",
+            "ticket_system.lib.duplicate_detector._find_blocking_duplicate",
             return_value=("0.1.2-W1-001", "實作 SRP 偵測機制", "pending", 0.95),
         )
-        result = _enforce_blocking_duplicate(
+        result = enforce_blocking_duplicate(
             version="0.1.2",
             new_title="實作 SRP 偵測機制",
             new_what="自動偵測 SRP 違規",
@@ -265,10 +267,10 @@ class TestEnforceBlockingDuplicate:
     def test_no_hit_returns_true_silently(self, mocker, capsys):
         """無命中 → 回傳 True，無阻擋訊息"""
         mocker.patch(
-            "ticket_system.commands.create._find_blocking_duplicate",
+            "ticket_system.lib.duplicate_detector._find_blocking_duplicate",
             return_value=None,
         )
-        result = _enforce_blocking_duplicate(
+        result = enforce_blocking_duplicate(
             version="0.1.2",
             new_title="任意標題",
             new_what="任意描述",
@@ -288,7 +290,7 @@ class TestValidateBeforePersistIntegration:
             return_value=True,
         )
         mocker.patch(
-            "ticket_system.commands.create._enforce_blocking_duplicate",
+            "ticket_system.commands.create.enforce_blocking_duplicate",
             return_value=False,
         )
         config = {"title": "t", "what": "w", "blocked_by": None}
@@ -304,11 +306,11 @@ class TestValidateBeforePersistIntegration:
             return_value=True,
         )
         enforce = mocker.patch(
-            "ticket_system.commands.create._enforce_blocking_duplicate",
+            "ticket_system.commands.create.enforce_blocking_duplicate",
             return_value=True,
         )
         detect = mocker.patch(
-            "ticket_system.commands.create._detect_duplicate_tickets",
+            "ticket_system.commands.create.detect_duplicate_tickets",
             return_value=None,
         )
         config = {"title": "t", "what": "w", "blocked_by": None}
@@ -324,11 +326,11 @@ class TestValidateBeforePersistIntegration:
 
 class TestBulkCreateWarningLayer:
     def test_bulk_create_invokes_warning_detection(self, mocker, tmp_path):
-        """bulk_create 補齊警告層：每筆 target 呼叫 _detect_duplicate_tickets"""
+        """bulk_create 補齊警告層：每筆 target 呼叫 detect_duplicate_tickets"""
         from ticket_system.commands import bulk_create
 
         detect = mocker.patch(
-            "ticket_system.commands.bulk_create._detect_duplicate_tickets",
+            "ticket_system.commands.bulk_create.detect_duplicate_tickets",
             return_value=None,
         )
         mocker.patch(

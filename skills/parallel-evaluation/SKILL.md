@@ -24,36 +24,24 @@ parallel-evaluation 的常駐委員分兩類，加入規則與 opt-out 條件不
 
 | 類型 | 代理人 | 加入情境 | 可 opt-out |
 |------|--------|---------|-----------|
-| `universal_lens` | linux | 所有情境（A-G）無條件加入（Good Taste / 架構複雜度為所有產出的元維度） | 否 |
-| `default_lens_per_scenario` | basil-writing-critic | 情境 C / D / F / G 預設加入（書面文字產出量最高的場景）；情境 A / B / E 不加入 | 是（`--skip-basil`） |
+| `universal_lens` | linux | 所有情境無條件加入（Good Taste / 架構複雜度為所有產出的元維度） | 否 |
+| `universal_lens` | basil-writing-critic | 所有情境無條件加入（程式碼註解、docstring、error message、commit message 皆為書面文字） | 否 |
 
 **linux 常駐說明**：linux 評分對應 Worth-It Filter：Garbage = 高幅度、Acceptable = 中幅度、Good taste = 無發現。Wave 完成審查時，除了標準的多視角代理人外，必須額外派發 linux 代理人作為常駐審查委員，與 code-reviewer（Bug/安全）和 code-explorer（架構/設計）組成固定三人組（見 parallel-dispatch.md 多視角審查固定三人組章節）。
 
-**basil opt-out 機制（`--skip-basil`）**：PM 在以下任一條件成立時可宣告 `--skip-basil`，略過本次 basil 加入：
-
-| 條件 | 判斷依據 |
-|------|---------|
-| Context 使用率 > 70% 或 session 後段 | 剩餘 token 預算不足以同時承載 basil 審查輸出 |
-| 審查標的為已知非文字密集產出 | 例如：schema 定義、YAML 設定、程式碼變更（僅情境 C/D/F/G 意外含大量程式碼） |
-| 本 session 已完成一次 basil 審查且標的無重大變更 | 同一文件短期內重複審查，邊際收益低 |
-
-**Why**：basil 在 C/D/F/G 預設加入是保護書面文字品質的必要機制；但強制無 opt-out 會在 token 緊張的 session 後段單方面增加 +33% 派發成本，違反「Never break userspace」（W17-066 linux L-W1 共識）。opt-out 讓 PM 在資源受限時能主動降低摩擦，同時保留預設強制的保護效果。
-
-**Consequence**：未宣告 `--skip-basil` 即代表 basil 必然加入情境 C/D/F/G；濫用 `--skip-basil`（在非緊急條件下略過）會使文字品質防護缺失，後期需要更高成本的人工修正。
-
-**Action**：PM 在 parallel-evaluation 情境判斷時，先確認情境屬 C/D/F/G，若是則 basil 預設加入；若任一 opt-out 條件成立，可宣告 `--skip-basil` 並在 Ticket append-log 記錄原因。
+**basil 常駐說明**：所有程式碼都包含書面文字（註解、docstring、error message、commit message），文字品質審查在任何情境都有價值。basil 與 linux 同為 `universal_lens`，所有情境無條件加入。
 
 ## 情境快速選擇
 
-| 情境 | 適用時機 | 視角 | Agent 數 | basil 預設 |
-|------|---------|------|---------|-----------|
-| A: 程式碼審查 | Phase 3b 後、PR 前 | Reuse + Quality + Efficiency | 3 | 否 |
-| B: 重構評估 | Phase 4 前、TD 清理 | Redundancy + Coupling + Complexity | 3 | 否 |
-| C: 架構評估 | SA 審查、新架構決策 | Consistency + Impact + Simplicity | 3+1 | 是（`--skip-basil` 可 opt-out）|
-| D: 功能評估 | Phase 1 後、需求確認 | Overlap + Fit + Scope | 3+1 | 是（`--skip-basil` 可 opt-out）|
-| E: 冗餘偵測 | 版本規劃、系統清理 | Duplication + State + Interface | 3 | 否 |
-| F: 結論審查 | 任何分析報告產出後 | Evidence + Alternatives + Scope | 3+1 | 是（`--skip-basil` 可 opt-out）|
-| G: 系統設計 | 規則/Skill/方法論變更後 | Consistency + Completeness + CogLoad | 3+1 | 是（`--skip-basil` 可 opt-out）|
+| 情境 | 適用時機 | 視角 | Agent 數（含常駐 linux + basil） |
+|------|---------|------|-------------------------------|
+| A: 程式碼審查 | Phase 3b 後、PR 前 | Reuse + Quality + Efficiency | 3+2 |
+| B: 重構評估 | Phase 4 前、TD 清理 | Redundancy + Coupling + Complexity | 3+2 |
+| C: 架構評估 | SA 審查、新架構決策 | Consistency + Impact + Simplicity | 3+2 |
+| D: 功能評估 | Phase 1 後、需求確認 | Overlap + Fit + Scope | 3+2 |
+| E: 冗餘偵測 | 版本規劃、系統清理 | Duplication + State + Interface | 3+2 |
+| F: 結論審查 | 任何分析報告產出後 | Evidence + Alternatives + Scope | 3+2 |
+| G: 系統設計 | 規則/Skill/方法論變更後 | Consistency + Completeness + CogLoad | 3+2 |
 
 > 各視角詳細檢查項目: references/lens-configurations.md
 
@@ -140,6 +128,8 @@ Phase 3: 任一視角發現問題 → 回到分析階段補充
 [總結]
 ```
 
+> **禁止自創「不行動/排除」類別**（0.3.4-W3-004）：報告中所有發現必須歸入「值得行動」或「延後追蹤」，沒有第三類。「評估後不立即執行」= 歸入「延後追蹤」並建 ticket，不是「排除不追蹤」。Why：PM 容易把「不值得立即做」滑坡成「不值得追蹤」，使發現退化為死議題（PC-093）。
+
 ## 與 `/bulk-evaluate` 的區別
 
 | 維度 | `/parallel-evaluation` | `/bulk-evaluate` |
@@ -160,7 +150,9 @@ Phase 3: 任一視角發現問題 → 回到分析階段補充
 
 ---
 
-**Last Updated**: 2026-05-04
+**Last Updated**: 2026-06-25
+**Version**: 1.3.0 — 移除 basil opt-out 機制（universal_lens 統一不可跳過，0.3.4-W4-003）+ 常駐委員加入情境移除冗餘列舉「（A-G）」改用「所有情境」
+
 **Version**: 1.2.0 — 套用 compositional-writing 改寫（W17-135）：Worth-It Filter 段「核心原則 / 強制規則」改寫為三明示 Why / Consequence / Action，明示連結至 `.claude/rules/core/decision-trigger-binding.md` 規則 1 / 1.5；負向「禁止行為」保留並加正向錨點
 
 **Version**: 1.1.0 - 新增 basil-writing-critic 常駐委員機制（情境 C/D/F/G 預設加入）+ `--skip-basil` opt-out 機制 + 常駐委員概念拆分（universal_lens / default_lens_per_scenario）（W17-069 / W17-066 R-3）

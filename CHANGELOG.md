@@ -1,3 +1,35 @@
+## [2.5.0] - 2026-06-25
+
+### Summary
+feat: sync-push 自動檢查 skill 庫版本 drift（）; feat: basil 升級為 universal_lens 全情境常駐; feat: create 加自動 ID 分配 + domain 推導（） (+19 more)
+
+Changes: 7 feat, 5 refactor, 8 fix, 2 chore
+
+- feat: sync-push 自動檢查 skill 庫版本 drift（）
+- feat: basil 升級為 universal_lens 全情境常駐
+- feat: create 加自動 ID 分配 + domain 推導（）
+- feat: checklist enforcement 加建議值引導（）
+- feat: full overlay 加 confirm 阻擋機制（）
+- feat: clean_stale_files 加三方比對防護（）
+- feat: rmtree 全量替換改為 overlay + diff preview（）
+- refactor: public API 去除 _ prefix（）
+- refactor: 提取 create_reporter.py 從 create.py（）
+- refactor: 提取 duplicate_detector.py 從 create.py（）
+- refactor: ana_spawn_consistency_checker typing 統一為內建泛型（）
+- refactor: 提取 _should_skip_clean_file 共用 helper（）
+- fix: 移除常駐委員加入情境的冗餘列舉（A-G）
+- fix: 移除 basil opt-out 機制（）
+- fix: 並行審查修正 — dead import 清除 + 用字修正（W4 Phase 3）
+- fix: 情境表 Agent 數更新為 3+2（含常駐 linux + basil）
+- fix: 禁止自創不行動/排除類別（）
+- fix: 並行審查修復 — 安全 bug + dead code + 簡化
+- fix: acceptance-gate spawn 計數加行級豁免（）
+- fix: 恢復被 sync-pull 誤刪的 compositional-writing hooks（1037 行）
+- chore: bump SKILL.md to
+- chore: W3 批量完成 — known-limitation 標記 + 語意差異文件化
+
+---
+
 ## [2.4.3] - 2026-06-25
 
 ### Summary

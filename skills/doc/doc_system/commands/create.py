@@ -36,6 +36,38 @@ DOC_TYPE_CONFIG = {
 VALID_PROPOSAL_STATUSES = ("draft", "discussing", "confirmed", "implemented", "withdrawn")
 
 
+def _next_id(project_root: Path, doc_type: str) -> str:
+    """掃描現有文件分配下一個序號 ID。
+
+    Known limitation: TOCTOU — no file lock, parallel calls may allocate same ID.
+    Acceptable for single-user CLI; existing ID check in execute() catches collision.
+    """
+    config = DOC_TYPE_CONFIG[doc_type]
+    prefix = config["id_prefix"]
+    target_dir = Path(project_root) / config["target_dir"]
+
+    max_num = 0
+    if target_dir.exists():
+        pattern = re.compile(rf"^{prefix}-(\d+)", re.IGNORECASE)
+        for item in target_dir.rglob("*.md"):
+            m = pattern.match(item.stem)
+            if m:
+                max_num = max(max_num, int(m.group(1)))
+
+    next_num = max_num + 1
+    return f"{prefix}-{next_num:03d}"
+
+
+def _suggest_domain_from_tracking(project_root: Path, doc_id: str) -> str | None:
+    """若 docs/spec/ 只有一個 domain 子目錄，自動選用。"""
+    spec_dir = Path(project_root) / "docs" / "spec"
+    if spec_dir.exists():
+        domains = [d.name for d in spec_dir.iterdir() if d.is_dir()]
+        if len(domains) == 1:
+            return domains[0]
+    return None
+
+
 def _slugify(title: str) -> str:
     """將標題轉為 URL-safe slug（小寫、連字號分隔）。"""
     slug = title.lower().strip()
@@ -129,7 +161,7 @@ def _add_tracking_entry(tracking_file: str, prop_id: str, title: str) -> None:
 def execute(args: argparse.Namespace) -> None:
     """建立新文件：從模板複製並替換 ID。"""
     doc_type = args.type
-    doc_id = args.id
+    doc_id = getattr(args, "id", None)
     title = getattr(args, "title", None) or ""
     domain = getattr(args, "domain", None)
 
@@ -138,12 +170,28 @@ def execute(args: argparse.Namespace) -> None:
         print(f"不支援的文件類型: {doc_type}")
         sys.exit(1)
 
-    # spec 需要 --domain
-    if config["requires_domain"] and not domain:
-        print("spec 類型必須指定 --domain 參數")
-        sys.exit(1)
-
     project_root = FileLocator.get_project_root()
+
+    # ID 自動分配（0.3.4-W2-002）
+    if not doc_id:
+        doc_id = _next_id(project_root, doc_type)
+        print(f"[自動分配] ID: {doc_id}")
+
+    # spec domain 推導（0.3.4-W2-002）
+    if config["requires_domain"] and not domain:
+        suggested = _suggest_domain_from_tracking(project_root, doc_id)
+        if suggested:
+            domain = suggested
+            print(f"[建議] domain: {domain}")
+        else:
+            spec_dir = Path(project_root) / "docs" / "spec"
+            if spec_dir.exists():
+                domains = sorted(d.name for d in spec_dir.iterdir() if d.is_dir())
+                if domains:
+                    print(f"[提示] 可用 domain: {', '.join(domains)}")
+            print("spec 類型必須指定 --domain 參數")
+            sys.exit(1)
+
     locator = FileLocator(project_root)
 
     # 檢查 ID 是否已存在
