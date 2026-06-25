@@ -1,3 +1,14 @@
+## [2.4.3] - 2026-06-25
+
+### Summary
+chore: basil-writing-critic 對齊 compositional-writing
+
+Changes: 1 chore
+
+- chore: basil-writing-critic 對齊 compositional-writing
+
+---
+
 ## [2.4.2] - 2026-06-25
 
 ### Summary
