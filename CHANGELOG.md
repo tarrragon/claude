@@ -1,3 +1,19 @@
+## [2.4.0] - 2026-06-25
+
+### Summary
+feat: sync-pull post-sync 自動登記 Hook（hook-registry.yaml）; fix: project-init onboard 三項 false positive 修正; docs: 新增 error-pattern PC-V1-013（lenient build 驗證遮蔽 prod gate） (+3 more)
+
+Changes: 1 feat, 1 fix, 2 docs, 2 chore
+
+- feat: sync-pull post-sync 自動登記 Hook（hook-registry.yaml）
+- fix: project-init onboard 三項 false positive 修正
+- docs: 新增 error-pattern PC-V1-013（lenient build 驗證遮蔽 prod gate）
+- docs: agent-dispatch-template 補 append-log 收尾持久化驗證準則
+- chore: 登記 7 個通用 Hook + 排除 3 個語言專屬 Hook
+- chore: pull .claude 更新（upstream ）
+
+---
+
 ## [2.3.0] - 2026-06-25
 
 ### Summary

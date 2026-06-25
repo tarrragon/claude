@@ -2453,6 +2453,110 @@ def verify_local_settings_no_hooks(project_root: Path) -> None:
     print_color(advice, "yellow")
 
 
+def auto_register_hooks(project_root: Path) -> int:  # i18n-exempt
+    """Post-sync: reconcile hook-registry.yaml into settings.json."""
+    claude_dir = project_root / ".claude"
+    registry_path = claude_dir / "config" / "hook-registry.yaml"
+    settings_path = claude_dir / "settings.json"
+    exclude_path = claude_dir / "hooks" / "hook-exclude-list.json"
+
+    if not registry_path.is_file() or not settings_path.is_file():
+        return 0
+    if yaml is None:
+        return 0
+
+    try:
+        registry_data = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+        settings_data = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, yaml.YAMLError):
+        return 0
+
+    excluded: set[str] = set()
+    if exclude_path.is_file():
+        try:
+            exc_data = json.loads(exclude_path.read_text(encoding="utf-8"))
+            excluded = set(exc_data.get("exclude", []))
+        except (OSError, ValueError):
+            pass
+
+    registered_cmds: set[str] = set()
+    for entries in settings_data.get("hooks", {}).values():
+        for entry in entries:
+            for hook in entry.get("hooks", []):
+                registered_cmds.add(hook.get("command", ""))
+
+    added = 0
+
+    for filename, meta in (registry_data.get("hooks") or {}).items():
+        if filename in excluded:
+            continue
+        if not (claude_dir / "hooks" / filename).is_file():
+            continue
+        cmd = f"$CLAUDE_PROJECT_DIR/.claude/hooks/{filename}"
+        if cmd in registered_cmds:
+            continue
+        event = meta.get("event", "")
+        matcher = meta.get("matcher", "")
+        timeout = meta.get("timeout")
+        if not event:
+            continue
+        _insert_hook_into_settings(settings_data, event, matcher, cmd, timeout)
+        added += 1
+
+    for key, meta in (registry_data.get("skill_hooks") or {}).items():
+        parts = key.split("/", 1)
+        if len(parts) != 2:
+            continue
+        skill_name, filename = parts
+        if not (claude_dir / "skills" / skill_name / "hooks" / filename).is_file():
+            continue
+        cmd = f"$CLAUDE_PROJECT_DIR/.claude/skills/{skill_name}/hooks/{filename}"
+        if cmd in registered_cmds:
+            continue
+        event = meta.get("event", "")
+        matcher = meta.get("matcher", "")
+        timeout = meta.get("timeout")
+        if not event:
+            continue
+        _insert_hook_into_settings(settings_data, event, matcher, cmd, timeout)
+        added += 1
+
+    if added > 0:
+        settings_path.write_text(
+            json.dumps(settings_data, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        print_color(f"   auto-registered {added} hooks into settings.json", "green")  # i18n-exempt
+    else:
+        print_color("   all hooks already registered", "green")  # i18n-exempt
+
+    return added
+
+
+def _insert_hook_into_settings(  # i18n-exempt
+    settings_data: dict, event: str, matcher: str, cmd: str, timeout: int | None
+) -> None:
+    hooks_section = settings_data.setdefault("hooks", {})
+    event_entries = hooks_section.setdefault(event, [])
+
+    target = None
+    for entry in event_entries:
+        if entry.get("matcher", "") == matcher:
+            target = entry
+            break
+
+    if target is None:
+        target = {"hooks": []}
+        if matcher:
+            target["matcher"] = matcher
+        event_entries.append(target)
+
+    hook_entry: dict = {"type": "command", "command": cmd}
+    if timeout:
+        hook_entry["timeout"] = timeout
+    target["hooks"].append(hook_entry)
+
+
 def main() -> None:
     """同步 .claude 配置從獨立 repo。
 
@@ -2502,6 +2606,10 @@ def main() -> None:
     except subprocess.TimeoutExpired:
         print_color(f"git clone 超時（{GIT_CLONE_TIMEOUT_SECONDS} 秒），請檢查網路連線", "red")  # i18n-exempt
         sys.exit(1)
+
+    # post-sync: hook-registry.yaml -> settings.json auto-registration
+    print_color("Hook 自動登記...")  # i18n-exempt
+    auto_register_hooks(project_root)
 
     # post-sync 安全網：settings.local.json 不該含 hook（issue #11，warn-only）
     verify_local_settings_no_hooks(project_root)

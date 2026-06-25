@@ -1,0 +1,359 @@
+version: 1.0.0
+description: Hook 登記清冊 — sync-pull post-sync 自動補齊 settings.json
+hooks:
+  5w1h-compliance-check-hook.py:
+    event: PreToolUse
+    matcher: TodoWrite
+  active-dispatch-tracker-hook.py:
+    event: PostToolUse
+    matcher: Agent
+    timeout: 5000
+  agent-commit-verification-hook.py:
+    event: SubagentStop
+    timeout: 10000
+  agent-definition-standard-check-hook.py:
+    event: SessionStart
+  agent-dispatch-logger-hook.py:
+    event: PostToolUse
+    matcher: Agent
+    timeout: 5000
+  agent-prompt-length-guard-hook.py:
+    event: PreToolUse
+    matcher: Agent
+    timeout: 5000
+  askuserquestion-charset-guard-hook.py:
+    event: PreToolUse
+    matcher: AskUserQuestion
+  askuserquestion-reminder-hook.py:
+    event: PreToolUse
+    matcher: Task
+  auq-option-pattern-detector-hook.py:
+    event: UserPromptSubmit
+    timeout: 5000
+  bash-edit-guard-hook.py:
+    event: PreToolUse
+    matcher: Bash
+  branch-status-reminder.py:
+    event: SessionStart
+  branch-verify-hook.py:
+    event: PreToolUse
+    matcher: Write
+  build-staleness-check-hook.py:
+    event: SessionStart
+  changelog-update-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 5000
+  cli-dependency-check.py:
+    event: SessionStart
+  cli-failure-help-reminder-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 5000
+  command-entrance-gate-hook.py:
+    event: UserPromptSubmit
+    timeout: 10000
+  commit-handoff-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 5000
+  commit-msg-layer2-marker-check-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 5000
+  context-depth-warning-hook.py:
+    event: Stop
+  deletion-residual-reference-hook.py:
+    event: PostToolUse
+    matcher: Edit
+  dispatch-count-guard-hook.py:
+    event: UserPromptSubmit
+    timeout: 5000
+  dispatch-record-hook.py:
+    event: PreToolUse
+    matcher: Agent
+    timeout: 5000
+  doc-sync-check-hook.py:
+    event: SessionStart
+  external-query-guide-hook.py:
+    event: PreToolUse
+    matcher: WebSearch
+  file-ownership-guard-hook.py:
+    event: PreToolUse
+    matcher: Agent
+    timeout: 5000
+  file-size-guardian-hook.py:
+    event: SessionStart
+  file-type-permission-hook.py:
+    event: PreToolUse
+    matcher: Edit
+  framework-rule-edit-skill-trigger-hook.py:
+    event: PreToolUse
+    matcher: Write
+  git-index-lock-cleanup-hook.py:
+    event: PreToolUse
+    matcher: Bash
+  homoglyph-guard-hook.py:
+    event: PreToolUse
+    matcher: Bash
+  hook-completeness-check.py:
+    event: SessionStart
+  hook-health-monitor.py:
+    event: SessionStart
+  install-guide-edit-reminder-hook.py:
+    event: PostToolUse
+    matcher: Write
+    timeout: 5000
+  l10n-sync-verification-hook.py:
+    event: PostToolUse
+    matcher: Write
+  language-guard-hook.py:
+    event: UserPromptSubmit
+    timeout: 5000
+  lsp-environment-check.py:
+    event: SessionStart
+  main-thread-edit-restriction-hook.py:
+    event: PreToolUse
+    matcher: Write
+  malformed-tool-call-detector-hook.py:
+    event: Stop
+  mcp-run-tests-validator.py:
+    event: PreToolUse
+    matcher: mcp__dart__run_tests
+  mcp-write-tool-on-text-file-guard-hook.py:
+    event: PreToolUse
+    matcher: mcp__serena__replace_content|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol|mcp__serena__safe_delete_symbol
+  memory-upgrade-reminder-hook.py:
+    event: PostToolUse
+    matcher: Write
+  output-style-check.py:
+    event: SessionStart
+  package-version-sync-hook.py:
+    event: SessionStart
+  parallel-claim-audit-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 5000
+  parallel-dispatch-verification-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 5000
+  parallel-suggestion-hook.py:
+    event: UserPromptSubmit
+    timeout: 10000
+  phase-completion-gate-hook.py:
+    event: PostToolUse
+    matcher: Write
+  phase4-decision-enforcement-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 5000
+  post-commit-fetch-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 5000
+  post-git-commit-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 10000
+  post-test-hook.py:
+    event: PostToolUse
+    matcher: mcp__dart__run_tests
+    timeout: 10000
+  pre-test-hook.py:
+    event: PreToolUse
+    matcher: mcp__dart__run_tests
+  presence-detection-hook.py:
+    event: PreToolUse
+    matcher: Write
+  process-skip-guard-hook.py:
+    event: UserPromptSubmit
+    timeout: 5000
+  project-init-env-check-hook.py:
+    event: SessionStart
+  prompt-submit-hook.py:
+    event: UserPromptSubmit
+  proposal-evaluation-gate-hook.py:
+    event: PreToolUse
+    matcher: Write
+  python-environment-guard-hook.py:
+    event: SessionStart
+  session-context-guard-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 5000
+  session-experience-persistence-reminder-hook.py:
+    event: Stop
+  session-source-diagnostic-hook.py:
+    event: SessionStart
+    timeout: 5000
+  session-start-gitignore-check-hook.py:
+    event: SessionStart
+    timeout: 5000
+  session-start-scheduler-hint-hook.py:
+    event: SessionStart
+    timeout: 10000
+  session-start-sync-exclusion-check-hook.py:
+    event: SessionStart
+    timeout: 5000
+  sibling-blockedby-validator-hook.py:
+    event: PreToolUse
+    matcher: Bash
+    timeout: 5000
+  skill-description-length-check-hook.py:
+    event: SessionStart
+  skill-registration-check-hook.py:
+    event: SessionStart
+  style-guardian-hook.py:
+    event: PostToolUse
+    matcher: Write
+  subagent-stop-dispatch-cleanup-hook.py:
+    event: SubagentStop
+    timeout: 10000
+  task-dispatch-readiness-check.py:
+    event: PreToolUse
+    matcher: Task
+  tech-debt-reminder.py:
+    event: SessionStart
+  test-timeout-pre.py:
+    event: PreToolUse
+    matcher: mcp__dart__run_tests
+  uncommitted-ticket-md-reminder-hook.py:
+    event: PreToolUse
+    matcher: Bash
+  utf8-integrity-check-hook.py:
+    event: PostToolUse
+    matcher: Write
+  uv-tool-ownership-guard-hook.py:
+    event: PreToolUse
+    matcher: Bash
+  uv-tool-staleness-check-hook.py:
+    event: SessionStart
+    timeout: 10000
+  version-consistency-guard-hook.py:
+    event: SessionStart
+  worklog-path-guard-hook.py:
+    event: PostToolUse
+    matcher: Write
+  zhtw-mcp-availability-check-hook.py:
+    event: SessionStart
+skill_hooks:
+  compositional-writing/comment-qa-hook.py:
+    event: PostToolUse
+    matcher: Write
+  compositional-writing/worklog-format-check.py:
+    event: PostToolUse
+    matcher: Write
+  error-pattern/error-pattern-flat-gate-hook.py:
+    event: PreToolUse
+    matcher: Write
+  tdd/layer-boundary-validator-hook.py:
+    event: PostToolUse
+    matcher: Write
+  ticket/acceptance-gate-hook.py:
+    event: PreToolUse
+    matcher: Bash
+  ticket/agent-dispatch-validation-hook.py:
+    event: PreToolUse
+    matcher: Agent
+    timeout: 5000
+  ticket/agent-ticket-validation-hook.py:
+    event: PreToolUse
+    matcher: Task
+  ticket/ana-ticket-metadata-validation-hook.py:
+    event: PostToolUse
+    matcher: Write
+    timeout: 5000
+  ticket/cli-error-feedback-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 5000
+  ticket/creation-acceptance-gate-hook.py:
+    event: UserPromptSubmit
+    timeout: 5000
+  ticket/handoff-auto-resume-stop-hook.py:
+    event: Stop
+  ticket/handoff-cleanup-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 5000
+  ticket/handoff-prompt-reminder-hook.py:
+    event: UserPromptSubmit
+    timeout: 5000
+  ticket/handoff-reminder-hook.py:
+    event: SessionStart
+  ticket/needs-context-listener-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 5000
+  ticket/post-ticket-lifecycle-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 5000
+  ticket/stop-worklog-handoff-sync-check-hook.py:
+    event: Stop
+    timeout: 10000
+  ticket/ticket-creation-validation-hook.py:
+    event: PostToolUse
+    matcher: Write
+  ticket/ticket-file-access-guard-hook.py:
+    event: PreToolUse
+    matcher: Write
+  ticket/ticket-frontmatter-validator-hook.py:
+    event: PostToolUse
+    matcher: Write
+    timeout: 5000
+  ticket/ticket-id-validator-hook.py:
+    event: PostToolUse
+    matcher: Write
+  ticket/ticket-path-guard-hook.py:
+    event: PreToolUse
+    matcher: Write
+  ticket/ticket-quality-gate-hook.py:
+    event: PostToolUse
+    matcher: Write
+  ticket/ticket-reinstall-hook.py:
+    event: SessionStart
+  ticket/ticket-skill-sync-check-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 5000
+  version-release/version-release-guard-hook.py:
+    event: PreToolUse
+    matcher: Bash
+  worktree/session-start-merged-worktree-audit-hook.py:
+    event: SessionStart
+  worktree/worktree-auto-commit-hook.py:
+    event: Stop
+    timeout: 15000
+  worktree/worktree-base-distance-check-hook.py:
+    event: PreToolUse
+    matcher: Agent
+    timeout: 15000
+  worktree/worktree-branch-check-hook.py:
+    event: PreToolUse
+    matcher: Bash
+  worktree/worktree-commit-before-dispatch-hook.py:
+    event: PreToolUse
+    matcher: Agent
+  worktree/worktree-merge-reminder-hook.py:
+    event: PostToolUse
+    matcher: Bash
+    timeout: 10000
+  worktree/worktree-pre-dispatch-branch-drift-hook.py:
+    event: PreToolUse
+    matcher: Agent
+    timeout: 10000
+  worktree/worktree-remove-deliverable-check-hook.py:
+    event: PreToolUse
+    matcher: Bash
+    timeout: 15000
+  worktree/worktree-zombie-cleanup-hook.py:
+    event: SessionStart
+    timeout: 15000
+  wrap-decision/wrap-decision-tripwire-hook.py:
+    event: UserPromptSubmit
+    timeout: 5000
+  wrap-decision/wrap-skill-yaml-consistency-hook.py:
+    event: PreToolUse
+    matcher: Write

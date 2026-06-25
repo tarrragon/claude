@@ -1,5 +1,7 @@
 {
-  "fallbackModel": ["claude-sonnet-4-5[1m]"],
+  "fallbackModel": [
+    "claude-sonnet-4-5[1m]"
+  ],
   "permissions": {
     "allow": [
       "Edit",
@@ -61,6 +63,11 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-remove-deliverable-check-hook.py",
             "timeout": 15000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/sibling-blockedby-validator-hook.py",
+            "timeout": 5000
           }
         ]
       },
@@ -469,6 +476,36 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/parallel-claim-audit-hook.py",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/cli-failure-help-reminder-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/commit-handoff-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/parallel-dispatch-verification-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-commit-fetch-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-context-guard-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/changelog-update-hook.py",
+            "timeout": 5000
           }
         ]
       },
@@ -600,6 +637,10 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/install-guide-edit-reminder-hook.py",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/style-guardian-hook.py"
           }
         ]
       },

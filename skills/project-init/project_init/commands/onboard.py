@@ -138,8 +138,8 @@ def run_onboard(project_root: Path) -> OnboardResult:
     result = _build_onboard_result(lang, todo_items)
 
     # 輸出
-    _print_onboard_result(result, lang_info, hook_class, hook_comp, docs,
-        gitignore, claude_dir, hook_cfg, cfg_dir, readme, lang_standards)
+    _print_onboard_result(result, lang_info, hook_class, hook_comp, claude_md,
+        docs, gitignore, claude_dir, hook_cfg, cfg_dir, readme, lang_standards)
 
     return result
 
@@ -345,10 +345,11 @@ def _print_core_sections(result: OnboardResult, language_info, hook_classificati
     _print_hook_completeness_section(hook_completeness)
 
 
-def _print_framework_sections(result: OnboardResult, docs_structure,
-                              gitignore_info, claude_dir_info) -> None:
+def _print_framework_sections(result: OnboardResult, claude_md_info,
+                              docs_structure, gitignore_info,
+                              claude_dir_info) -> None:
     """輸出框架檔案區段."""
-    _print_claude_md_section(result)
+    _print_claude_md_section(result, claude_md_info)
     _print_language_template_section(result)
     _print_settings_local_section(result)
     _print_docs_structure_section(docs_structure)
@@ -370,6 +371,7 @@ def _print_onboard_result(
     language_info,
     hook_classification,
     hook_completeness,
+    claude_md_info,
     docs_structure,
     gitignore_info,
     claude_dir_info,
@@ -380,7 +382,7 @@ def _print_onboard_result(
 ) -> None:
     """輸出格式化的 onboard 結果到 stdout."""
     _print_core_sections(result, language_info, hook_classification, hook_completeness)
-    _print_framework_sections(result, docs_structure, gitignore_info, claude_dir_info)
+    _print_framework_sections(result, claude_md_info, docs_structure, gitignore_info, claude_dir_info)
     _print_config_sections(hook_config_info, config_dir_info, readme_info, language_standards_info)
     _print_todolist_section(result)
 
@@ -481,12 +483,12 @@ def _print_hook_completeness_section(hook_completeness) -> None:
     print()
 
 
-def _print_claude_md_section(result: OnboardResult) -> None:
+def _print_claude_md_section(result: OnboardResult, claude_md_info) -> None:
     """輸出 CLAUDE.md 部分."""
     print(f"[{OnboardMessages.CLAUDE_MD_SECTION}]")
     if result.language == "unknown":
         print(f"  {STATUS_SKIP} 無法確認需求")
-    elif _has_todo_item(result.todo_items, "CLAUDE.md"):
+    elif not claude_md_info.exists:
         print(f"  {OnboardMessages.CLAUDE_MD_TODO}")
         print(f"  {OnboardMessages.CLAUDE_MD_COPY_HINT}")
     else:
@@ -607,9 +609,7 @@ def _print_claude_directory_section(claude_dir_info) -> None:
 def _print_hook_config_section(hook_config_info) -> None:
     """輸出 Hook 配置檔檢查部分."""
     _print_section_header("Hook 配置檔")
-    if not hook_config_info.config_dir_exists:
-        _print_status_line(STATUS_TODO, ".claude/config 目錄不存在")
-    elif hook_config_info.all_required_complete:
+    if hook_config_info.all_required_complete:
         _print_status_line(STATUS_OK, "所有配置檔都存在且格式有效")
         if hook_config_info.yaml_permission_info:
             perms = hook_config_info.yaml_permission_info

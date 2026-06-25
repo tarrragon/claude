@@ -277,6 +277,20 @@ final message 僅指向 ticket ID，不承載結論本體。
 
 ---
 
+## append-log 收尾持久化驗證
+
+被派發 agent 在 prompt 收尾段須附此驗證準則，避免 malformed heredoc 使 `ticket track append-log` 未真正執行卻被誤判為「CLI bug」。
+
+**Why/Consequence**：append-log 內容若以 heredoc 傳入而指令 malformed（delimiter 不符、未正確 pipe 到 `ticket`），shell 會把 heredoc 內容自己 echo 出來、ticket CLI 根本未執行，ticket md 無變更。agent 若把這段 shell echo 誤讀為 CLI 回應，會誤歸因為「append-log 失效」並放棄收尾章節（如 Exit Status），造成可觀測性資訊靜默遺失（實證：W1-008 ANA，subagent Exit Status 殘留 placeholder；PM 同 section 重現逐字持久化）。
+
+**Action**（收尾自律）：
+
+- 唯有 CLI 回 `[OK] 已追加日誌到 '<section>'` 才算寫入成功；輸出僅見 heredoc 內容被 echo 出來代表指令 malformed、CLI 未執行，須修正 Bash 指令重發。
+- 收尾關鍵 section（Test Results / Exit Status）後以 `grep -c "<唯一片語>" <ticket-md-path>` 確認實際持久化（固定值驗證，不信 CLI 旁白）。
+- 引用既有規則不重複定義：heredoc 傳長文字見 `bash-tool-usage-rules` 規則 5；「只信 raw stdout、帶旁白視為自身雜訊」見 `tool-output-trust-rules` 規則 2；CLI args 跳脫見 PC-079。
+
+---
+
 ## PM 自做 framework 規則編輯流程
 
 > **用途**：PM 直接編輯 framework 規則檔（`.claude/rules/`、`pm-rules/`、`references/`、`skills/`、`methodologies/`、`agents/`）的標準流程，含 Layer 1 自檢 + Layer 2 委員審查。

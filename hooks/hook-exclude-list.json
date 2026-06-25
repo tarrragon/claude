@@ -9,7 +9,10 @@
     "markdown_formatter.py",
     "parse-test-json.py",
     "eval_pyyaml.py",
-    "phase-contract-validator-hook.py"
+    "phase-contract-validator-hook.py",
+    "dart-presence-detection-hook.py",
+    "dispatch_stats.py",
+    "test-timeout-post.py"
   ],
   "exclude_patterns": [
     "*-backup.py",
@@ -24,6 +27,9 @@
     "*-backup.py": "備份檔案模式",
     "archived/*": "廢棄腳本存檔目錄 (2026-02-11 v0.31.0-W18-001.2)",
     "eval_pyyaml.py": "一次性評估腳本（PyYAML 替代評估），非 Hook",
-    "phase-contract-validator-hook.py": "CLI 工具（透過 argv 使用），非 stdin JSON Hook"
+    "phase-contract-validator-hook.py": "CLI 工具（透過 argv 使用），非 stdin JSON Hook",
+    "dart-presence-detection-hook.py": "Dart 專屬 profile 綁定，Node.js 專案不適用",
+    "dispatch_stats.py": "CLI 統計工具（透過 argv 使用），非 stdin JSON Hook",
+    "test-timeout-post.py": "flutter/dart test 專屬超時監控，Node.js 專案不適用"
   }
 }
