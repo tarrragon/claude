@@ -47,6 +47,15 @@ def logger():
     return MagicMock()
 
 
+@pytest.fixture(autouse=True)
+def _non_shim_by_default(hook, monkeypatch):
+    """既有 ownership 測試假設 CLI 非 shim；隔離 host 環境真實 which 結果，
+    避免本機 ticket/doc 已 shim 化時 is_shimmed_cli 短路提前 continue。"""
+    monkeypatch.setattr(
+        hook, "is_shimmed_cli", lambda cli, logger=None: False
+    )
+
+
 # ---------------------------------------------------------------------------
 # 命令辨識（_extract_invoked_exes）
 # ---------------------------------------------------------------------------
@@ -266,3 +275,35 @@ class TestReceiptParsing:
     def test_missing_receipt_returns_none(self, hook, logger, tmp_path, monkeypatch):
         monkeypatch.setattr(hook.Path, "home", lambda: tmp_path)
         assert hook._read_receipt_directory("nonexistent-pkg", logger) is None
+
+
+# ---------------------------------------------------------------------------
+# 0.37.0-W7-002：cwd-resolving shim 略過行為（ARCH-APP-002）
+# ---------------------------------------------------------------------------
+
+
+class TestShimSkip:
+    def test_shim_cli_not_reinstalled(self, hook, logger, monkeypatch):
+        """偵測 CLI 為 shim 時放行，不讀 receipt、不 reinstall。"""
+        project_root = Path("/Users/me/project/book_overview_v1")
+        monkeypatch.setattr(hook, "is_shimmed_cli", lambda cli, logger=None: True)
+        with patch.object(
+            hook, "_read_receipt_directory"
+        ) as m_receipt, patch.object(hook, "_reinstall") as m_reinstall:
+            hook._guard_command("ticket track list", project_root, logger)
+            m_reinstall.assert_not_called()
+            m_receipt.assert_not_called()
+
+    def test_shim_skip_selective_per_exe(self, hook, logger, monkeypatch):
+        """混合命令中僅非 shim 的 CLI 走 ownership 比對 → reinstall。"""
+        project_root = Path("/Users/me/project/book_overview_v1")
+        # ticket 為 shim（放行），doc 非 shim（receipt 缺失 → reinstall）
+        monkeypatch.setattr(
+            hook, "is_shimmed_cli", lambda cli, logger=None: cli == "ticket"
+        )
+        with patch.object(
+            hook, "_read_receipt_directory", return_value=None
+        ), patch.object(hook, "_reinstall", return_value=True) as m_reinstall:
+            hook._guard_command("doc build && ticket complete x", project_root, logger)
+            m_reinstall.assert_called_once()
+            assert m_reinstall.call_args[0][0].cli_name == "doc"

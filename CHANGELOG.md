@@ -1,3 +1,17 @@
+## [2.7.0] - 2026-06-25
+
+### Summary
+feat: guard hook 偵測 cwd-resolving shim 即略過; feat: 新增 cwd-resolving CLI shim installer（取代 uv tool install）; docs: 新增 ARCH-APP-002 uv tool install 全域 namespace 碰撞 (+1 more)
+
+Changes: 2 feat, 1 docs, 1 chore
+
+- feat: guard hook 偵測 cwd-resolving shim 即略過
+- feat: 新增 cwd-resolving CLI shim installer（取代 uv tool install）
+- docs: 新增 ARCH-APP-002 uv tool install 全域 namespace 碰撞
+- chore: pull .claude 更新（上游 62c2ee388051）
+
+---
+
 ## [2.6.0] - 2026-06-25
 
 ### Summary

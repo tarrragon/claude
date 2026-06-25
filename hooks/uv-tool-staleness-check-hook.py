@@ -47,6 +47,7 @@ from lib.uv_tool_utils import (
     compute_file_hashes,
     find_installed_module_dir,
     compare_hash_sets,
+    is_shimmed_cli,
     STALENESS_EXCLUDE_DIRS,
 )
 
@@ -102,7 +103,7 @@ SKILLS: Tuple[SkillEntry, ...] = (
 @dataclass
 class SkillResult:
     skill: SkillEntry
-    status: str              # "OK" | "OUTDATED" | "MISSING" | "ERROR"
+    status: str              # "OK" | "OUTDATED" | "MISSING" | "ERROR" | "SHIMMED"
     detail: Optional[str] = None
 
 
@@ -160,6 +161,11 @@ def _check_single_file_skill(
 
 def check_single_skill(skill: SkillEntry, project_root: Path, logger) -> SkillResult:
     """檢查單一 skill 的 source vs installed 同步狀態。"""
+    # cwd-resolving shim（ARCH-APP-002）：shim CLI 無 site-packages 安裝，
+    # 不適用 SHA 比對；回 SHIMMED 讓 reporting 略過（不報 OUTDATED/MISSING）。
+    if is_shimmed_cli(skill.cli_name, logger):
+        return SkillResult(skill, "SHIMMED")
+
     if skill.single_file:
         return _check_single_file_skill(skill, project_root, logger)
 
@@ -194,9 +200,12 @@ def format_results(results: List[SkillResult], project_root: Path) -> str:
     outdated = [r for r in results if r.status == "OUTDATED"]
     missing = [r for r in results if r.status == "MISSING"]
     errors = [r for r in results if r.status == "ERROR"]
+    # shim CLI（ARCH-APP-002）視同已同步：不報 OUTDATED/MISSING，僅併入「同步」計數。
+    shimmed = [r for r in results if r.status == "SHIMMED"]
+    synced = ok + shimmed
 
-    # AC5：全部同步簡潔訊息
-    if len(ok) == len(SKILLS):
+    # AC5：全部同步簡潔訊息（OK 與 SHIMMED 皆視為同步）
+    if len(synced) == len(SKILLS):
         return f"[UV Tool Staleness] 全部 {len(SKILLS)} 個 uv tool skill 已同步"
 
     lines: List[str] = []
@@ -214,8 +223,8 @@ def format_results(results: List[SkillResult], project_root: Path) -> str:
         lines.append(
             f"[UV Tool Staleness] {r.skill.package_name} [ERROR] {r.detail or 'unknown'}"
         )
-    if ok:
-        lines.append(f"[UV Tool Staleness] 其他 {len(ok)} skill 已同步")
+    if synced:
+        lines.append(f"[UV Tool Staleness] 其他 {len(synced)} skill 已同步")
     return "\n".join(lines)
 
 

@@ -42,6 +42,16 @@ def hook_module():
     return _load_hook_module()
 
 
+@pytest.fixture(autouse=True)
+def _non_shim_by_default(hook_module, monkeypatch):
+    """既有 staleness 測試假設 CLI 非 shim（走 SHA 比對）；隔離 host 環境真實
+    which 結果，避免本機 ticket/doc 已 shim 化時 is_shimmed_cli 短路成 SHIMMED。
+    新增的 shim 測試會在各自 test 內覆寫此 monkeypatch。"""
+    monkeypatch.setattr(
+        hook_module, "is_shimmed_cli", lambda cli, logger=None: False
+    )
+
+
 @pytest.fixture
 def make_source(tmp_path):
     def _make(skill_name: str, files: dict) -> Path:
@@ -618,3 +628,69 @@ class _DummyLogger:
     def debug(self, *a, **k): pass
     def info(self, *a, **k): pass
     def critical(self, *a, **k): pass
+
+
+# ----------------------------------------------------------------------------
+# 0.37.0-W7-002：cwd-resolving shim 略過行為（ARCH-APP-002）
+# ----------------------------------------------------------------------------
+def test_shimmed_cli_returns_shimmed_status(hook_module, monkeypatch, tmp_path):
+    """shim 化的 CLI 回 SHIMMED，不進入 SHA 比對（不報 OUTDATED/MISSING）。"""
+    fake_root = tmp_path / "repo"
+    ticket = next(s for s in hook_module.SKILLS if s.cli_name == "ticket")
+    _write_source_for_skill(fake_root, ticket, {"a.py": "x"})
+
+    # ticket 為 shim，其餘非 shim
+    monkeypatch.setattr(
+        hook_module, "is_shimmed_cli",
+        lambda cli, logger=None: cli == "ticket",
+    )
+    # 若誤入比對路徑會因 find 回 None 而成 MISSING；shim 短路應先回 SHIMMED
+    monkeypatch.setattr(
+        hook_module, "find_installed_module_dir", lambda *a, **k: None
+    )
+
+    result = hook_module.check_single_skill(ticket, fake_root, _DummyLogger())
+    assert result.status == "SHIMMED"
+
+
+def test_shimmed_cli_not_reported_outdated_or_missing(
+    hook_module, monkeypatch, tmp_path, capsys
+):
+    """全部 CLI 皆 shim 時，reporting 視同同步，不出現 OUTDATED/MISSING。"""
+    fake_root = tmp_path / "repo"
+    for skill in hook_module.SKILLS:
+        _write_source_for_skill(fake_root, skill, {"a.py": "x"})
+
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: fake_root)
+    monkeypatch.setattr(
+        hook_module, "is_shimmed_cli", lambda cli, logger=None: True
+    )
+    monkeypatch.setattr(
+        hook_module, "find_installed_module_dir", lambda *a, **k: None
+    )
+
+    code, payload = _run_main(hook_module, capsys)
+    assert code == 0
+    msg = payload["hookSpecificOutput"]["additionalContext"]
+    assert "[OUTDATED]" not in msg
+    assert "[MISSING]" not in msg
+    assert "已同步" in msg
+
+
+def test_non_shim_cli_behavior_unchanged(hook_module, monkeypatch, tmp_path):
+    """非 shim 的 CLI（is_shimmed_cli 回 False）行為不變：仍走原比對 → MISSING。"""
+    fake_root = tmp_path / "repo"
+    vr = next(s for s in hook_module.SKILLS if s.cli_name == "version-release")
+    src_file = fake_root / vr.module_subpath
+    src_file.parent.mkdir(parents=True, exist_ok=True)
+    src_file.write_text("VERSION = '1.0.0'")
+
+    monkeypatch.setattr(
+        hook_module, "is_shimmed_cli", lambda cli, logger=None: False
+    )
+    monkeypatch.setattr(
+        hook_module, "find_installed_module_dir", lambda *a, **k: None
+    )
+
+    result = hook_module.check_single_skill(vr, fake_root, _DummyLogger())
+    assert result.status == "MISSING"

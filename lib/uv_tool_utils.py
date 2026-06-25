@@ -21,6 +21,45 @@ from typing import Dict, Optional, Set, Tuple
 DEFAULT_EXCLUDE_DIRS: Set[str] = {"__pycache__", ".venv"}
 STALENESS_EXCLUDE_DIRS: Set[str] = {"__pycache__", ".venv", "tests"}
 
+# cwd-resolving shim 識別標記（ARCH-APP-002）。
+# 字面須與 .claude/scripts/install-skill-clis.py 的 SHIM_MARKER 完全一致；
+# is_shimmed_cli 與 installer --check 共用此標記辨認「這是 shim 非 uv tool bin」。
+SHIM_MARKER = "# cwd-resolving shim (ARCH-APP-002)"
+
+
+def is_shimmed_cli(cli_name: str, logger: Optional[logging.Logger] = None) -> bool:
+    """
+    判斷 PATH 上的 CLI 是否為 cwd-resolving shim（而非 uv tool install 的 bin）。
+
+    流程：`which <cli_name>` 取得 binary 路徑後，讀其內容檢查 SHIM_MARKER。
+    shim 化的 CLI 不應被 staleness / ownership / reinstall hook 視為 stale，
+    否則 uv tool reinstall 會把 shim 蓋回（ARCH-APP-002 根因）。
+
+    Args:
+        cli_name: CLI 名稱（如 "ticket" / "doc" / "worktree"）
+        logger: 可選日誌器（失敗時 debug 記錄）
+
+    Returns:
+        True 表示該 CLI 為 shim；False 表示非 shim 或無法判定（找不到 / 讀取失敗）。
+    """
+    try:
+        result = subprocess.run(
+            ["which", cli_name],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=5,  # magic-exempt: which 子程序逾時秒數，與本檔既有 which 呼叫一致
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return False
+        binary = Path(result.stdout.strip())
+        return SHIM_MARKER in binary.read_text(encoding="utf-8", errors="replace")
+    except Exception as e:
+        if logger:
+            logger.debug(f"is_shimmed_cli({cli_name}) failed: {e}")
+        return False
+
 
 def compute_file_hashes(
     directory: Path,

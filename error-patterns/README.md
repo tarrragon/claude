@@ -188,6 +188,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | ARCH-021 | 模組組裝遺漏導致功能鏈路靜默斷裂（原 ARCH-010 重編號） | 高 | v0.15.4 |
 | ARCH-V1-001 | 同一不變量單點執法、多入口繞過（前門裝鎖、側門敞開） | 中 | v1.0.0 |
 | ARCH-V1-002 | 雙向 overlay sync 製造重複 top-level 定義（死碼 shadow 活 bug） | 高 | v1.0.0 |
+| ARCH-APP-002 | uv tool install 全域同名 CLI 跨 consumer namespace 碰撞（last-write-wins） | 中 | v0.37.0 |
 
 ### 程式碼品質 (CQ)
 
