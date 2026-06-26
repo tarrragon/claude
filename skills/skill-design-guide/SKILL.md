@@ -49,6 +49,21 @@ description: "Use this skill when creating a new skill, updating an existing ski
 
 **判準**：「Claude 走錯一步會壞掉嗎？」會 → 低自由度；不會 → 高自由度。
 
+### 1.4 Opinionated Defaults — 預設路徑引導正確做法
+
+**預設假設**：使用者（尤其 AI agent）走預設路徑。如果預設路徑不引導正確做法，文件規範再完整也無效。
+
+| 設計問題 | 判準 | 行動 |
+|---------|------|------|
+| Skill 工作流有分支選擇？ | 有「多數情況下正確」的路徑嗎？ | 有 → 預設走該路徑，允許覆蓋 |
+| 需要使用者提供參數？ | 有合理預設值嗎？ | 有 → 設預設值，使用者可覆蓋 |
+| 前置條件可能不滿足？ | 能自動修正嗎？ | 能 → 自動修正 + 通知；不能 → 明確報錯，不靜默跳過 |
+| 需寫「請先做 X」提醒？ | 能改成自動檢查？ | 能 → 改 Hook / pre-flight check；每個「請先」都是設計改善信號 |
+
+**Why**：AI agent 沒有跨 session 記憶，工具即時引導是唯一可靠防線。文件說的和工具做的不一致時，工具會贏。
+
+> 完整論證、案例、反模式對照表：`.claude/references/opinionated-default-design-details.md`；通用設計原則：`.claude/rules/core/opinionated-default-design.md`。
+
 ---
 
 ## 2. Anatomy — Skill 該長什麼樣
@@ -447,10 +462,11 @@ description: [...]
 |------|-------|
 | `references/patterns-and-troubleshooting.md` | 設計多步驟 / 條件式工作流、需要進階範本模式 |
 | `references/seeing-like-an-agent.md` | 想理解工具設計哲學與 agent 視角的演進 |
+| `.claude/references/opinionated-default-design-details.md` | 設計工具預設行為、判斷何時該有 opinion |
 | `.claude/references/skill-marketplace-standard.md` | 規劃 Skill Market 上架、檢查獨立性與環境解耦 |
 
 ---
 
 **Last Updated**: 2026-04-30
-**Version**: 1.0.0
+**Version**: 1.1.0 — §1.4 新增 Opinionated Defaults 設計心法（通用原則路由 `rules/core/opinionated-default-design.md`）
 **Source**: Anthropic 官方 skill-creator（`/Users/mac-eric/.claude/plugins/marketplaces/anthropic-agent-skills/skills/skill-creator/`）+ 官方平台文件 + Claude Code 擴展規範 + 本專案實踐

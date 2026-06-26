@@ -1,3 +1,16 @@
+## [2.8.1] - 2026-06-26
+
+### Summary
+fix: skill-sync push 排除 __pycache__ 目錄; chore: skill-sync pull 自動版本比對 + 批量拉取 3 個更新 skill; chore: pull .claude 更新（上游 543ce90d）
+
+Changes: 1 fix, 2 chore
+
+- fix: skill-sync push 排除 __pycache__ 目錄
+- chore: skill-sync pull 自動版本比對 + 批量拉取 3 個更新 skill
+- chore: pull .claude 更新（上游 543ce90d）
+
+---
+
 ## [2.8.0] - 2026-06-26
 
 ### Summary

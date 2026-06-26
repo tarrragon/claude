@@ -15,7 +15,7 @@ import urllib.request
 from pathlib import Path
 
 DEFAULT_REPO = "https://github.com/tarrragon/claude-skills.git"
-EXCLUDE_DIRS = {"project-integration"}
+EXCLUDE_DIRS = {"project-integration", "__pycache__"}
 
 
 def get_repo_url() -> str:
@@ -289,9 +289,24 @@ def cmd_push(args: argparse.Namespace) -> None:
     print(f"\nPushed '{name}' to {repo_url}")
 
 
+def _parse_semver(v: str) -> tuple[int, ...]:
+    """Parse version string to comparable tuple. Non-numeric parts become 0."""
+    parts = []
+    for p in v.split("."):
+        try:
+            parts.append(int(p))
+        except ValueError:
+            parts.append(0)
+    return tuple(parts)
+
+
 def cmd_pull_all(args: argparse.Namespace) -> None:
-    """掃描本地已安裝 skill，比對 versions.json，更新有差異者。"""
-    force: bool = args.force
+    """掃描本地已安裝 skill，比對 versions.json，自動拉取遠端較新者。
+
+    - 遠端較新：自動拉取（不問確認）
+    - 本地較新：僅報告（可能是本地修改尚未 push）
+    - 版本相同：靜默跳過
+    """
     repo_url = get_repo_url()
     skills_dir = get_skills_dir()
 
@@ -306,58 +321,59 @@ def cmd_pull_all(args: argparse.Namespace) -> None:
 
     try:
         req = urllib.request.Request(raw_url, headers={"User-Agent": "skill-sync"})
-        # magic-exempt
         with urllib.request.urlopen(req, timeout=10) as resp:
             remote_versions: dict[str, str] = json.loads(resp.read())
     except Exception as e:
-        print(f"Failed to fetch versions.json: {e}")
-        print("Falling back to individual pull...")
-        remote_versions = {}
-
-    if not remote_versions:
-        print("versions.json not available. Use 'skill-sync pull <name>' instead.")
-        return
+        print(f"Failed to fetch versions.json: {e}", file=sys.stderr)
+        sys.exit(1)
 
     outdated: list[tuple[str, str, str]] = []
+    local_newer: list[tuple[str, str, str]] = []
     up_to_date: list[str] = []
+
     for name, local_ver in sorted(local_versions.items()):
         remote_ver = remote_versions.get(name)
         if remote_ver is None:
             continue
-        if local_ver != remote_ver:
+        local_t = _parse_semver(local_ver)
+        remote_t = _parse_semver(remote_ver)
+        if remote_t > local_t:
             outdated.append((name, local_ver, remote_ver))
+        elif local_t > remote_t:
+            local_newer.append((name, local_ver, remote_ver))
         else:
             up_to_date.append(name)
+
+    if local_newer:
+        print(f"[CONFLICT] {len(local_newer)} skill(s) have local version newer than remote:")
+        for name, local_ver, remote_ver in local_newer:
+            print(f"  {name}: local {local_ver} > remote {remote_ver}")
+        print()
 
     if not outdated:
         print(f"All {len(up_to_date)} installed skills are up to date.")
         return
 
-    print(f"[Update Check] {len(outdated)} skill(s) need update, "
-          f"{len(up_to_date)} up to date:\n")
-    for name, local_ver, remote_ver in outdated:
-        print(f"  {name}: {local_ver} -> {remote_ver}")
-
-    if not force:
-        try:
-            answer = input(f"\n  Update {len(outdated)} skill(s)? [y/N] ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            answer = ""
-        if answer != "y":
-            print("  Aborted.")
-            return
+    print(f"[Update] {len(outdated)} skill(s) to pull, {len(up_to_date)} up to date\n")
 
     updated = 0
+    failed: list[str] = []
     for name, local_ver, remote_ver in outdated:
-        print(f"\n  Pulling {name} ({local_ver} -> {remote_ver})...")
+        print(f"  {name}: {local_ver} -> {remote_ver} ...", end=" ", flush=True)
         pull_args = argparse.Namespace(name=name, force=True)
         try:
             cmd_pull(pull_args)
             updated += 1
+        except SystemExit:
+            failed.append(name)
+            print("[FAIL]")
         except Exception as e:
-            print(f"  [FAIL] {name}: {e}")
+            failed.append(name)
+            print(f"[FAIL] {e}")
 
     print(f"\n[Done] Updated {updated}/{len(outdated)} skill(s)")
+    if failed:
+        print(f"[FAIL] {', '.join(failed)}")
 
 
 def _extract_single_version(skill_md: Path) -> str | None:

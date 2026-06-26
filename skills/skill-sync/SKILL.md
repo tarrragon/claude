@@ -17,7 +17,8 @@ uv tool install --from .claude/skills/skill-sync skill-sync
 
 | Command | Description |
 |---------|-------------|
-| `skill-sync pull <name>` | Pull a skill from the remote repo to `.claude/skills/<name>/` |
+| `skill-sync pull` | Auto-compare all installed skills with remote versions.json, pull outdated ones automatically. Conflicts (local newer) are reported but not modified |
+| `skill-sync pull <name>` | Pull a specific skill from the remote repo to `.claude/skills/<name>/` |
 | `skill-sync push <name>` | Push a local skill to the remote repo |
 | `skill-sync list` | List all available skills in the remote repo |
 
@@ -34,4 +35,4 @@ uv tool install --from .claude/skills/skill-sync skill-sync
 
 ---
 
-**Version**: 1.0.0
+**Version**: 1.1.0
