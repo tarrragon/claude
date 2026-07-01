@@ -87,7 +87,8 @@ Proposal ──spec_refs──→ Spec
 | 模板 | 位置 | 用途 |
 |------|------|------|
 | 提案模板 | `templates/proposal-template.md` | 建立新提案 |
-| 規格模板 | `templates/spec-template.md` | 建立新規格 |
+| 規格模板 | `templates/spec-template.md` | 建立新功能規格 |
+| Design System 規格模板 | `templates/design-system-spec-template.md` | 建立 UI 設計系統規格 |
 | 用例模板 | `templates/usecase-template.md` | 建立新用例 |
 
 ### 使用方式
@@ -96,8 +97,11 @@ Proposal ──spec_refs──→ Spec
 # 建立提案
 cp .claude/skills/doc/templates/proposal-template.md docs/proposals/PROP-{NNN}-{desc}.md
 
-# 建立規格
+# 建立功能規格
 cp .claude/skills/doc/templates/spec-template.md docs/spec/{domain}/{name}.md
+
+# 建立 Design System 規格
+cp .claude/skills/doc/templates/design-system-spec-template.md docs/spec/design-system-spec.md
 
 # 建立用例
 cp .claude/skills/doc/templates/usecase-template.md docs/usecases/UC-{XX}-{desc}.md

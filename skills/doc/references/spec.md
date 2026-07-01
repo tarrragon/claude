@@ -27,9 +27,26 @@ docs/spec/{domain}/{feature}.md
 
 ## 模板
 
+### 功能規格模板（預設）
+
 模板位置：`.claude/skills/doc/templates/spec-template.md`
 
-### 必填 frontmatter
+適用於功能需求、API 規格、資料模型等一般性規格文件。
+
+### Design System 規格模板
+
+模板位置：`.claude/skills/doc/templates/design-system-spec-template.md`
+
+適用於定義專案統一視覺規格（配色、間距、圓角、陰影、字體、元件尺寸）。包含：
+- Token 表格格式：`| Token | 值 | Dart/JS 對應 | 用途 |`
+- 常數配置策略（集中 vs 分散的判斷決策表）
+- 跨語言目錄結構對照（Flutter/JS/TS/React/Vue/Electron）
+- WCAG 對比度要求
+- 跨平台對齊章節
+
+使用時機：新專案建立 UI design system 規格，或既有專案統一視覺 token 管理。
+
+### 功能規格模板必填 frontmatter
 
 | 欄位 | 說明 |
 |------|------|

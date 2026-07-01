@@ -1,3 +1,10 @@
+## [2.8.3] - 2026-07-01
+
+### Summary
+feat: 新增 design-system-spec-template.md 範本（W8-002）
+
+---
+
 ## [2.8.2] - 2026-06-29
 
 ### Summary

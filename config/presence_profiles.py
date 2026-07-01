@@ -67,6 +67,8 @@ _DART = PresenceProfile(
         r"/l10n/",
         r"/generated/",
         r"ui_config\.dart$",
+        r"/design_system/",
+        r"flat_design_config\.dart$",
         r"flat_design_config\.dart$",
         r"responsive_config\.dart$",
         r"theme\.dart$",
