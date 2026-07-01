@@ -1,3 +1,10 @@
+## [2.8.4] - 2026-07-01
+
+### Summary
+fix: 同步孤兒檔 sample_events.jsonl 測試 fixture
+
+---
+
 ## [2.8.3] - 2026-07-01
 
 ### Summary
