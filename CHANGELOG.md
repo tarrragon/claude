@@ -1,3 +1,15 @@
+## [2.8.5] - 2026-07-01
+
+### Summary
+fix: 移除 .gitignore 對 sample_events.jsonl 的錯誤排除; chore: 新增 PC-APP-006 錯誤模式（.gitignore 排除測試 fixture）
+
+Changes: 1 fix, 1 chore
+
+- fix: 移除 .gitignore 對 sample_events.jsonl 的錯誤排除
+- chore: 新增 PC-APP-006 錯誤模式（.gitignore 排除測試 fixture）
+
+---
+
 ## [2.8.4] - 2026-07-01
 
 ### Summary
