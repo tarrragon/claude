@@ -1,3 +1,15 @@
+## [2.10.1] - 2026-07-02
+
+### Summary
+fix: exec-bit 還原網補 scripts/ 缺口（install-skill-clis Permission denied）; chore: pull .claude 更新（上游 51b471b）
+
+Changes: 1 fix, 1 chore
+
+- fix: exec-bit 還原網補 scripts/ 缺口（install-skill-clis Permission denied）
+- chore: pull .claude 更新（上游 51b471b）
+
+---
+
 ## [2.10.0] - 2026-07-02
 
 ### Summary

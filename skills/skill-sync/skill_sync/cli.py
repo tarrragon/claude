@@ -15,7 +15,16 @@ import urllib.request
 from pathlib import Path
 
 DEFAULT_REPO = "https://github.com/tarrragon/claude-skills.git"
-EXCLUDE_DIRS = {"project-integration", "__pycache__"}
+EXCLUDE_DIRS = {"project-integration", ".venv", "__pycache__", ".pytest_cache", "build", ".egg-info"}
+
+
+def _should_exclude_file(rel_path: str) -> bool:
+    """Check if a file path should be excluded (covers both dir names and suffixes)."""
+    parts = Path(rel_path).parts
+    for part in parts:
+        if part in EXCLUDE_DIRS or part.endswith(".egg-info"):
+            return True
+    return False
 
 
 def get_repo_url() -> str:
@@ -82,9 +91,6 @@ def run_git(args: list[str], cwd: Path | None = None) -> subprocess.CompletedPro
     return result
 
 
-def _should_exclude(name: str) -> bool:
-    return name in EXCLUDE_DIRS
-
 
 def compute_diff(src: Path, dst: Path) -> dict[str, list[str]]:  # i18n-exempt
     """Compare src and dst directories, return categorized file lists.
@@ -106,7 +112,7 @@ def compute_diff(src: Path, dst: Path) -> dict[str, list[str]]:  # i18n-exempt
     for f in src.rglob("*"):
         if f.is_file():
             rel = str(f.relative_to(src))
-            if any(_should_exclude(part) for part in f.relative_to(src).parts):
+            if _should_exclude_file(rel):
                 continue
             src_files.add(rel)
             dst_file = dst / rel
@@ -121,7 +127,7 @@ def compute_diff(src: Path, dst: Path) -> dict[str, list[str]]:  # i18n-exempt
         for f in dst.rglob("*"):
             if f.is_file():
                 rel = str(f.relative_to(dst))
-                if any(_should_exclude(part) for part in f.relative_to(dst).parts):
+                if _should_exclude_file(rel):
                     continue
                 if rel not in src_files:
                     diff["dst_only"].append(rel)
@@ -289,24 +295,9 @@ def cmd_push(args: argparse.Namespace) -> None:
     print(f"\nPushed '{name}' to {repo_url}")
 
 
-def _parse_semver(v: str) -> tuple[int, ...]:
-    """Parse version string to comparable tuple. Non-numeric parts become 0."""
-    parts = []
-    for p in v.split("."):
-        try:
-            parts.append(int(p))
-        except ValueError:
-            parts.append(0)
-    return tuple(parts)
-
-
 def cmd_pull_all(args: argparse.Namespace) -> None:
-    """掃描本地已安裝 skill，比對 versions.json，自動拉取遠端較新者。
-
-    - 遠端較新：自動拉取（不問確認）
-    - 本地較新：僅報告（可能是本地修改尚未 push）
-    - 版本相同：靜默跳過
-    """
+    """掃描本地已安裝 skill，比對 versions.json，更新有差異者。"""
+    force: bool = args.force
     repo_url = get_repo_url()
     skills_dir = get_skills_dir()
 
@@ -321,59 +312,91 @@ def cmd_pull_all(args: argparse.Namespace) -> None:
 
     try:
         req = urllib.request.Request(raw_url, headers={"User-Agent": "skill-sync"})
+        # magic-exempt
         with urllib.request.urlopen(req, timeout=10) as resp:
             remote_versions: dict[str, str] = json.loads(resp.read())
     except Exception as e:
-        print(f"Failed to fetch versions.json: {e}", file=sys.stderr)
-        sys.exit(1)
+        print(f"Failed to fetch versions.json: {e}")
+        print("Falling back to individual pull...")
+        remote_versions = {}
+
+    if not remote_versions:
+        print("versions.json not available. Use 'skill-sync pull <name>' instead.")
+        return
 
     outdated: list[tuple[str, str, str]] = []
-    local_newer: list[tuple[str, str, str]] = []
+    newer_local: list[tuple[str, str, str]] = []
     up_to_date: list[str] = []
-
     for name, local_ver in sorted(local_versions.items()):
         remote_ver = remote_versions.get(name)
         if remote_ver is None:
             continue
-        local_t = _parse_semver(local_ver)
-        remote_t = _parse_semver(remote_ver)
-        if remote_t > local_t:
-            outdated.append((name, local_ver, remote_ver))
-        elif local_t > remote_t:
-            local_newer.append((name, local_ver, remote_ver))
-        else:
+        if local_ver == remote_ver:
             up_to_date.append(name)
+        elif _is_downgrade(local_ver, remote_ver):
+            newer_local.append((name, local_ver, remote_ver))
+        else:
+            outdated.append((name, local_ver, remote_ver))
 
-    if local_newer:
-        print(f"[CONFLICT] {len(local_newer)} skill(s) have local version newer than remote:")
-        for name, local_ver, remote_ver in local_newer:
-            print(f"  {name}: local {local_ver} > remote {remote_ver}")
-        print()
-
-    if not outdated:
+    if not outdated and not newer_local:
         print(f"All {len(up_to_date)} installed skills are up to date.")
         return
 
-    print(f"[Update] {len(outdated)} skill(s) to pull, {len(up_to_date)} up to date\n")
+    if newer_local:
+        print(f"[SKIP] {len(newer_local)} skill(s) have newer local version "
+              f"(use 'skill-sync push <name>' to update remote):\n")
+        for name, local_ver, remote_ver in newer_local:
+            print(f"  {name}: local {local_ver} > remote {remote_ver}")
+            print(f"    → skill-sync push {name}")
+
+    if not outdated:
+        if up_to_date:
+            print(f"\n{len(up_to_date)} other skill(s) are up to date.")
+        return
+
+    print(f"\n[Update Check] {len(outdated)} skill(s) need update, "
+          f"{len(up_to_date)} up to date:\n")
+    for name, local_ver, remote_ver in outdated:
+        print(f"  {name}: {local_ver} -> {remote_ver}")
+
+    if not force:
+        try:
+            answer = input(f"\n  Update {len(outdated)} skill(s)? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            answer = ""
+        if answer != "y":
+            print("  Aborted.")
+            return
 
     updated = 0
-    failed: list[str] = []
     for name, local_ver, remote_ver in outdated:
-        print(f"  {name}: {local_ver} -> {remote_ver} ...", end=" ", flush=True)
+        print(f"\n  Pulling {name} ({local_ver} -> {remote_ver})...")
         pull_args = argparse.Namespace(name=name, force=True)
         try:
             cmd_pull(pull_args)
             updated += 1
-        except SystemExit:
-            failed.append(name)
-            print("[FAIL]")
         except Exception as e:
-            failed.append(name)
-            print(f"[FAIL] {e}")
+            print(f"  [FAIL] {name}: {e}")
 
     print(f"\n[Done] Updated {updated}/{len(outdated)} skill(s)")
-    if failed:
-        print(f"[FAIL] {', '.join(failed)}")
+
+
+def _parse_semver(ver: str) -> tuple[int, ...] | None:
+    """Parse version string to comparable tuple. Returns None if not parseable."""
+    parts = ver.strip().rstrip("-").split(".")
+    try:
+        return tuple(int(p) for p in parts)
+    except ValueError:
+        return None
+
+
+def _is_downgrade(local_ver: str, remote_ver: str) -> bool:
+    """Return True if pulling remote_ver would downgrade from local_ver."""
+    local = _parse_semver(local_ver)
+    remote = _parse_semver(remote_ver)
+    if local is None or remote is None:
+        return False
+    return remote < local
 
 
 def _extract_single_version(skill_md: Path) -> str | None:

@@ -14,6 +14,7 @@ ticket 狀態（純前置檢查）。
 
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -53,7 +54,23 @@ RESULT_DENY = "deny"
 
 def _resolve_identity_log_path() -> Path:
     """解析 identity-guard usage.log 路徑；HOOK_LOGS_DIR 優先（測試隔離用）。"""
-    base = Path(os.environ.get(_HOOK_LOGS_DIR_ENV, _DEFAULT_HOOK_LOGS_DIR))
+    env_val = os.environ.get(_HOOK_LOGS_DIR_ENV)
+    if env_val:
+        base = Path(env_val)
+    else:
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                base = Path(result.stdout.strip()) / _DEFAULT_HOOK_LOGS_DIR
+            else:
+                base = Path(_DEFAULT_HOOK_LOGS_DIR)
+        except (OSError, subprocess.TimeoutExpired):
+            base = Path(_DEFAULT_HOOK_LOGS_DIR)
     return base / _IDENTITY_LOG_SUBDIR / _IDENTITY_LOG_FILENAME
 
 

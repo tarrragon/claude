@@ -160,7 +160,7 @@ def iter_executable_hook_dirs(root: Path):
 
 # settings.json 中提取 hook command 內 .py 路徑的正則（容錯 shell 包裝）
 # 匹配 .claude/skills/.../xxx.py（不論前綴有 uv run / $CLAUDE_PROJECT_DIR 等）
-_SKILL_SCRIPT_RE = re.compile(r"\.claude/(skills/[^\s'\"]+?\.py)")
+_SKILL_SCRIPT_RE = re.compile(r"\.claude/((?:skills|scripts)/[^\s'\"]+?\.py)")
 
 
 def collect_registered_skill_scripts(claude_dir: Path) -> set[Path]:
@@ -170,6 +170,9 @@ def collect_registered_skill_scripts(claude_dir: Path) -> set[Path]:
     根目錄（非 hooks/ 子目錄）但被 settings.json 註冊為執行的腳本，如
     skills/continuous-learning/evaluate-session.py。這類腳本 sync 後失去
     exec bit 會觸發 Permission denied。
+
+    擴充：涵蓋範圍含 scripts/（上游 543ce90 起將 scripts/install-skill-clis.py
+    註冊為 SessionStart hook 直呼，該路徑同樣不在 hooks/ 還原網內）。
 
     採策略 C（settings.json 反查）而非純 shebang 偵測：command 是「被註冊為
     執行」的權威來源，可精準命中且不會誤判未註冊的 shebang 腳本（如
@@ -957,8 +960,10 @@ def restore_executable_bits(claude_dir: Path) -> int:
     目錄（頂層 .claude/hooks/ 與 W10-092 遷移後的 skills/<name>/hooks/，缺陷 G），
     對其下所有 .py 無條件加 +x（u/g/o 均加），獨立於上游 mode 狀態。
 
-    不處理 .claude/scripts/ 下檔案，因該目錄有 644/755 混合（如 sync 腳本本身），
-    精細處理屬另一範疇。
+    .claude/scripts/ 不做目錄級全量處理（該目錄有 644/755 混合，如 sync 腳本本身）；
+    僅其中被 settings.json 註冊為 hook command 直呼者，由
+    collect_registered_skill_scripts 反查納入還原（settings.json 是「被註冊為執行」
+    的權威來源，精準命中不誤傷）。
 
     參數:
         claude_dir: .claude 目錄的絕對路徑
