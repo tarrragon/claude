@@ -1,3 +1,20 @@
+## [2.10.0] - 2026-07-02
+
+### Summary
+feat: 完成 CC release 全量評估主票 — .7 採用 respondToBashCommands: false; fix: settings.json Task/Agent matcher 收斂; fix: 修復 2 hook 內部 tool_name 字面守衛失效（Task→Agent 改名） (+4 more)
+
+Changes: 1 feat, 2 fix, 4 docs
+
+- feat: 完成 CC release 全量評估主票 — .7 採用 respondToBashCommands: false
+- fix: settings.json Task/Agent matcher 收斂
+- fix: 修復 2 hook 內部 tool_name 字面守衛失效（Task→Agent 改名）
+- docs: 升級 IMP-V1-004 error-pattern — hook 字面守衛 vs matcher 別名漂移
+- docs: 修正 chrome-extension-mcp-debug skill 工具名漂移
+- docs: WRAP 分析落地 — Tool(param:value) 改知識註記、.7 結論待授權
+- docs: CC release 2.1.173-2.1.198 全量影響評估與落地
+
+---
+
 ## [2.9.1] - 2026-07-02
 
 ### Summary

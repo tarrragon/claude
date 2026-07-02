@@ -534,5 +534,46 @@ def test_without_agent_to_task_map_detects_mismatch(config_keyword_only, logger)
     assert result.get("correct_agent") == "mint-format-specialist"
 
 
+# ===== [9] main() tool_name 守衛測試（1.5.0-W5-002.1 回歸測試） =====
+#
+# 背景：CC subagent 派發工具表面名已由 Task 改為 Agent（見 1.5.0-W5-002 分析）。
+# main() 內部曾以 `tool_name != "Task"` 字面守衛在任何實質邏輯前早退，
+# 導致代理人分派正確性檢查對 Agent 派發從未實際執行（功能性死亡）。
+
+def _run_main_with_tool_name(monkeypatch, tool_name: str, tool_input: dict) -> None:
+    """以 monkeypatch 模擬 stdin 輸入並執行 main()（main() 內部呼叫 sys.exit）。"""
+    payload = {"tool_name": tool_name, "tool_input": tool_input}
+    import io
+    stdin_buffer = io.StringIO(json.dumps(payload))
+    monkeypatch.setattr(sys, "stdin", stdin_buffer)
+    with pytest.raises(SystemExit) as exc_info:
+        hook_module.main()
+    return exc_info.value.code
+
+
+def test_main_accepts_agent_tool_name_reaches_prompt_check(monkeypatch, capsys) -> None:
+    """tool_name="Agent" 且缺少 prompt 應觸發 deny 輸出，證明未在守衛早退。"""
+    exit_code = _run_main_with_tool_name(monkeypatch, "Agent", {})
+    captured = capsys.readouterr()
+    assert exit_code == 0  # deny 透過 stdout JSON 表達，非 process exit code
+    assert "缺少 prompt 參數" in captured.out
+
+
+def test_main_still_accepts_task_tool_name_reaches_prompt_check(monkeypatch, capsys) -> None:
+    """既有 tool_name="Task" 行為不得 regression。"""
+    exit_code = _run_main_with_tool_name(monkeypatch, "Task", {})
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "缺少 prompt 參數" in captured.out
+
+
+def test_main_skips_unrelated_tool_name(monkeypatch, capsys) -> None:
+    """非 Agent/Task 工具仍應在守衛早退，無 deny 輸出。"""
+    exit_code = _run_main_with_tool_name(monkeypatch, "Bash", {})
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.out == ""
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

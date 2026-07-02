@@ -200,8 +200,8 @@ def main() -> None:
     tool_name = input_data.get("tool_name", "")
     tool_input = input_data.get("tool_input") or {}
 
-    # 只處理 Task 工具
-    if tool_name != "Task":
+    # 只處理 Task/Agent 工具（CC subagent 工具已由 Task 改名 Agent，見 1.5.0-W5-002 分析）
+    if tool_name not in ("Agent", "Task"):
         sys.exit(0)
 
     prompt = tool_input.get("prompt", "")

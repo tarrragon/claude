@@ -575,6 +575,8 @@ PM 試圖直接 Edit tests/unit/scripts/build-version-check.test.js 被 branch-v
 
 三層防護並存，prompt 端聲明是派發時的最後防線。
 
+> **備用第四層：`Tool(param:value)` 權限語法（CC 2.1.178+）**。permission rules 可比對工具輸入參數，如 `Agent(model:opus)` 阻擋特定模型的 subagent 派發。**現況不啟用**：本專案派發 incident 根因均為職責邊界模糊（hook 層已覆蓋），無「模型/參數錯誤派發」案例，無痛點的預防規則是維護負債且無法驗證正確性。**啟用條件（絆腳索）**：出現「代理人以錯誤模型/參數被派發且 hook 層未攔截」的實際 incident 時，以該案例寫出可驗證的規則（評估紀錄見 1.5.0-W5-001.5）。
+
 ---
 
 ## 與 /goal 的邊界

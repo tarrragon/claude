@@ -363,6 +363,10 @@ git branch -d worktree-agent-{id}
 
 只有在已確認產出無需保留、且有明確決策紀錄時，才使用 `--force` / `-D`。
 
+### 邊界註記：claude agents dashboard 的自動 commit/push/PR（CC 2.1.198+）
+
+CC 2.1.198 起，**從 `claude agents` dashboard 啟動的背景 session** 在 worktree 完成程式碼工作後會自動 commit、push 並開 draft PR，不再停下詢問。**Why**：本框架派發模式為 PM session 內 Agent tool 派發，不經 dashboard，此行為不觸發；但若未來改用 dashboard 派發程式碼工作，draft PR 會未經 PM 驗收 gate 出現在 GitHub（外部化動作）。**Action**：改用 dashboard 派發前必先重新評估此項；絆腳索——GitHub 出現 PM 未發起的 draft PR 時立即重新評估（評估紀錄見 1.5.0-W5-001.4）。
+
 ---
 
 ## .claude/ 路徑限制（強制，來源 ARCH-015）
