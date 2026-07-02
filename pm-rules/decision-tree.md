@@ -138,9 +138,49 @@ Skill 是預建的專用工具，優先於代理人派發。
 | 完成後發現 | execution-discovery-rules.md 3.5-B | completed Ticket 交付物需修正 |
 | 任務完成 | completion-checkpoint-rules.md | Checkpoint 循環（0/0.5/1/1.5/1.8/1.9/2/3/4/R） |
 | TDD 完成路由 | tdd-completion-routing.md | Checkpoint 2 情境 D（TDD Phase 完成） |
+| 多 agent 協作機制選擇 | 本檔案「Workflow vs Agent 決策路由」 | 任務需多 agent 協作時，依持久化需求 / 控制流確定性 / 視角衝突仲裁選擇四機制（W3-002 結論） |
 | 代理人管理 | agent-dispatch-enforcement.md | 觸發優先級、強制命令、違規 |
 | Ticket 進度更新（強制） | completion-checkpoint-rules.md | Checkpoint 轉換時更新 Ticket |
 | 代理人權限查詢 | agent-path-registry.md | 路徑表 Source of Truth |
+
+---
+
+## Workflow vs Agent 決策路由
+
+> **來源**：1.5.0-W3-002 ANA 結論（AC5）+ W4-001 agentType 繼承驗證。
+
+任務需要多 agent 協作時，依以下決策樹選擇機制：
+
+```
+任務需要多 agent 協作？
+├── 否 → Agent 單派發
+└── 是 →
+    ├── 結果需跨 session 持久化（ticket 追蹤）？
+    │   ├── 是 → 需多視角衝突仲裁？
+    │   │   ├── 是 → parallel-evaluation（常駐委員 + Worth-It Filter）
+    │   │   └── 否 → bulk-evaluate（N 個子 ticket + context 卸載）
+    │   └── 否 → 控制流確定性（相同操作 x N 項目）？
+    │       ├── 是 → Workflow（pipeline/parallel + schema 結構化輸出）
+    │       └── 否 → Agent 單派發（PM 逐步決策）
+    └── 特殊場景：
+        ├── 用戶說「ultracode」→ Workflow（系統自動啟用）
+        ├── 用戶說「use a workflow」→ Workflow
+        ├── 用戶指定 +Nk token 預算 → Workflow（budget 感知）
+        └── 對抗式驗證（adversarial verify）→ Workflow
+```
+
+### 四機制 uniqueness axis（不可互相取代）
+
+| 機制 | 不可取代的價值 | 典型場景 |
+|------|-------------|---------|
+| Agent 單派發 | PM 判斷介入 + ticket 生命週期 + 跨 session handoff | 異質任務、需 PM 路由決策 |
+| bulk-evaluate | Context 卸載 + 結論持久化到子 ticket | N 個獨立單位各做一次相同分析 |
+| parallel-evaluation | 常駐委員 + 衝突處理 + Worth-It Filter | N 視角 x 1 標的（審查/評估） |
+| Workflow | 確定性控制流 + 結構化聚合 + budget 感知 + resume | 同質批量 + pipeline + adversarial verify |
+
+### agentType 橋接（W4-001 已驗證）
+
+Workflow 的 `agent(prompt, {agentType: '<框架 agent>'})` 完整繼承框架 agent 定義 + AGENT_PRELOAD 規則。無 agentType 時為匿名 agent，僅繼承 CLAUDE.md + rules/core/。
 
 ---
 
@@ -179,6 +219,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 ---
 
 **Last Updated**: 2026-06-18
+**Version**: 9.8.0 — 新增「Workflow vs Agent 決策路由」章節 + 路由表一列：四機制選擇決策樹、uniqueness axis 表、agentType 橋接摘要（1.5.0-W3-002 結論 + W4-001 驗證 + W4-003 落地）
 **Version**: 9.7.0 — 新增「認知接地雙層」結構（L_ground-before F 判斷協議 + L_ground-truth D 機械閘門 + 軸登錄協議）+ 路由表一列；詳細協議 / 承載機制 / 相容對照外移 `.claude/references/cognitive-grounding-layers.md`（遵決策閘門預算原則 lazy 化）（1.2.0-W1-035 落地，1.2.0-W1-033 設計）
 
 **Version**: 9.6.0 — 新增路由：書面文字品質審查（強制：情境 C/D/F/G）→ parallel-evaluation SKILL + basil-writing-critic 委員觸發條件（W17-058 落地）

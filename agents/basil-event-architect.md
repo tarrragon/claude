@@ -4,7 +4,7 @@ description: "Event-driven architecture specialist. Designs event patterns, comm
 allowed-tools: Grep, LS, Read, Glob, mcp__dart__hover
 metadata:
   color: purple
-model: inherit
+model: sonnet
 effort: low
 ---
 

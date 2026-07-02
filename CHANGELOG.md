@@ -1,3 +1,17 @@
+## [2.9.0] - 2026-07-02
+
+### Summary
+feat: 新增同義詞擴展去重機制（issue #14 選項 A）; docs: 整合 Workflow vs Agent 決策路由到 decision-tree.md; chore: 執行類代理人模型降級 inherit → sonnet (+1 more)
+
+Changes: 1 feat, 1 docs, 2 chore
+
+- feat: 新增同義詞擴展去重機制（issue #14 選項 A）
+- docs: 整合 Workflow vs Agent 決策路由到 decision-tree.md
+- chore: 執行類代理人模型降級 inherit → sonnet
+- chore: pull .claude 更新（上游 4535e3b）
+
+---
+
 ## [2.8.5] - 2026-07-01
 
 ### Summary

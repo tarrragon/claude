@@ -1,6 +1,6 @@
 ---
 name: thyme-documentation-integrator
-model: inherit
+model: sonnet
 description: "文件結構/連結/版本一致性檢查 + 文件整合（工作日誌轉方法論、方法論整合到核心文件）+ 文件衝突解決。文字明示性（三明示/隱含表達/資訊優先序）由 basil-writing-critic 負責，thyme 不審查文字品質。Use when: 工作日誌需轉化為方法論、方法論需整合到核心文件（CLAUDE.md 等）、文件引用衝突/版本不一致/結構衝突需解決。"
 permissionMode: acceptEdits
 ---
