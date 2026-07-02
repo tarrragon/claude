@@ -1,3 +1,14 @@
+## [2.9.1] - 2026-07-02
+
+### Summary
+chore: untrack skills/*/uv.lock（已被 *.lock gitignore 涵蓋）
+
+Changes: 1 chore
+
+- chore: untrack skills/*/uv.lock（已被 *.lock gitignore 涵蓋）
+
+---
+
 ## [2.9.0] - 2026-07-02
 
 ### Summary
