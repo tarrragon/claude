@@ -1,3 +1,14 @@
+## [2.11.1] - 2026-07-03
+
+### Summary
+chore: multi-round-review 1.3.0 -> 1.4.1（skill 庫拉取，新增 minimum-three-rounds 原則文件）
+
+Changes: 1 chore
+
+- chore: multi-round-review 1.3.0 -> 1.4.1（skill 庫拉取，新增 minimum-three-rounds 原則文件）
+
+---
+
 ## [2.11.0] - 2026-07-03
 
 ### Summary
