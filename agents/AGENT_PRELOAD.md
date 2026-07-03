@@ -94,6 +94,8 @@ ticket track complete <ticket-id> --as <自身 agent 名稱>
 
 > **邊界**：本段處理 **hook 強制層的 deny**（identity-guard 對照不符即擋）；前提一是 **agent 自律層**的 who.current 事前對照（不符即零寫入）。兩層互補、觸發路徑不同——自律層在寫入前自查，強制層在寫入時攔截。
 
+> **回覆勾選不算數，frontmatter 才是 SOT（W2-003）**：final message 裡描述「acceptance 已完成」屬記錄平面，`ticket track set-acceptance` / `check-acceptance` 寫入的 frontmatter 才是世界平面 SOT（見 `tool-output-trust-rules` 規則 5）。兩者不同步時 acceptance-gate-hook 只認 frontmatter，complete 會被擋下。收尾前務必實際執行上方 CLI 指令，不可只在回覆文字宣告完成。
+
 **例外情境**：
 
 | 狀況 | 處理 |
@@ -438,7 +440,8 @@ ascend 條件（**任一 OR 成立即停止執行、上報上層**）：
 
 ---
 
-**Last Updated**: 2026-06-11
+**Last Updated**: 2026-07-03
+**Version**: 1.14.0 - 規則 2.4 補「回覆勾選不算數，frontmatter 才是 SOT」提醒：final message 屬記錄平面，`set-acceptance`/`check-acceptance` 寫入的 frontmatter 才是世界平面 SOT，兩者不同步時 acceptance-gate-hook 只認 frontmatter（0.4.1-W2-003，源 0.4.1-W1-001 摩擦 F3：0.4.0 W2-002/003 回覆勾選未動 frontmatter 二度擋 complete）
 **Version**: 1.13.0 - 規則 2.4 收尾三命令（check-acceptance / set-acceptance / complete）改為一律帶 `--as`（--as 全覆蓋），新增 deny 時禁繞過須回報 PM 條款；2.3 表格與檢查清單同步（W1-049 首輪裁決前置：92% warn 噪音源自 check-acceptance 未帶 --as）
 **Version**: 1.12.0 - 新增規則 10「忽略含 `[PM-ONLY]` 前綴的 hook 注入訊息」：Stop event 無 agent_id 致程式層 subagent 偵測失效，前綴為該盲區唯一受眾標記，subagent 須不執行、不轉述（PC-V1-004 防護 C 規則層）；檢查清單同步補項
 **Version**: 1.11.0 - 新增規則 9「嵌套派發資訊協議」：D1 ticket 為唯一主通道（三階段表 + 禁止模式表）+ D3 層級自覺（parent_id 鏈深度、can_descend() 單一判準、五步自檢流程）+ D2 決策速查（ascend 優先於 descend）；MAX_TICKET_DEPTH 數值單一定義點；檢查清單同步補項

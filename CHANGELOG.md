@@ -1,3 +1,36 @@
+## [2.11.0] - 2026-07-03
+
+### Summary
+feat: claim --as 自動推導 tdd_phase + phase 手動覆蓋保護（F4 接線）; feat: 自檢結果子章節升 CLI 層 gate 阻擋（IMP/ANA，判定邏輯與 warning 共用單一來源，F7 執法升級）; feat: version-bootstrap 跨提案依賴檢查 + 移版硬耦合盤點 SOP（ 模式固化） (+20 more)
+
+Changes: 10 feat, 4 fix, 6 docs, 3 test
+
+- feat: claim --as 自動推導 tdd_phase + phase 手動覆蓋保護（F4 接線）
+- feat: 自檢結果子章節升 CLI 層 gate 阻擋（IMP/ANA，判定邏輯與 warning 共用單一來源，F7 執法升級）
+- feat: version-bootstrap 跨提案依賴檢查 + 移版硬耦合盤點 SOP（ 模式固化）
+- feat: spec API surface 完整性檢核（啟發式提醒，SPEC-014 v1.1 缺口回歸驗證，F5 防護）
+- feat: spec 版本一致性 SessionStart hook — 抓 8 個既有漂移，spawn （F2 防護）
+- feat: 建票 SPEC 引用驗證 — traceability.yaml 對照警告（F1 防護）
+- feat: version-release check 可觀測性強化 — 配置載入揭露 + 跳過標籤名實對齊
+- feat: version-tracking guard hook 擴充第五、六類偵測
+- feat: close CLI resolved_by 驗證強化 — 依 reason 分歧驗證 + 延後語意攔截
+- feat: 新增版本追蹤一致性守衛 session-start hook
+- fix: dispatch_recommender 死路徑修復 + registry tdd_phases 補齊（fennel/thyme phase3b）+ cinnamon phase4b→phase4 對齊
+- fix: acceptance gate 同命令鏈滯後誤報 — 偵測降級標記 [--]（F6 修復，24 測綠）
+- fix: check_technical_debt_status 依 worklog_path_pattern 解析 nested 票目錄
+- fix: 修復 version-release 版本生命週期推進斷鏈
+- docs: dispatch template 收尾義務標準段（set-acceptance + 自檢子章節，F3/F7 供給側）
+- docs: IMP-V1-005 依 Layer 2 審查修正 — 偵測判據獨立成章 + IMP-046 定位措辭對齊 + 標點
+- docs: PROP-010 移 節點決策 + 建 _flags schema 定形票 + IMP-V1-005 error-pattern
+- docs: agent-dispatch-template 補 worktree 快照過舊防護 SOP
+- docs: PC-MON-002 必填不等於有效 — CLI 欄位缺格式/存在性驗證
+- docs: PC-MON-001 防護落地於可繞過執行點導致復發 + 建 守衛 hook 票
+- test: hooks 測試機械性缺陷修復 — LIB_DIR/patch target 8 檔 + CLAUDE_PROJECT_DIR fixture 補遮蔽紅燈；15f/59e → 0f/0e（3047 passed）
+- test: dispatch validation 測試 fixture mock 化 — 移除上游 ticket ID 依賴（殘留 1 處為說明註解）
+- test: stale 斷言同步現行設計 — 邊界測試改 config.json + staleness 清單移除已遷移 shim（ticket/worktree）
+
+---
+
 ## [2.10.1] - 2026-07-02
 
 ### Summary

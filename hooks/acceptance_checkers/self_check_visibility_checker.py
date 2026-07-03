@@ -64,6 +64,28 @@ def _has_self_check_subsection(solution_text: str) -> bool:
     return bool(re.search(pattern, solution_text, flags=re.MULTILINE))
 
 
+def solution_has_self_check_subsection(body: str) -> bool:
+    """
+    公開判定 API：body（不含 frontmatter）之 `## Solution` 章節是否含
+    `### 自檢結果` 子章節。
+
+    共用抽取判定（0.4.1-W2-010）：PreToolUse hook 的 warning 提示（本檔
+    `check_self_check_visibility`）與 `lifecycle.py complete()` 的 gate 阻擋
+    共用同一判定邏輯，避免雙實作漂移（規則出處不同、行為卻各自維護）。
+
+    Args:
+        body: Ticket body 文字（不含 YAML frontmatter）
+
+    Returns:
+        True：Solution 章節存在且含 `### 自檢結果` 子章節
+        False：Solution 章節不存在，或存在但缺該子章節
+    """
+    solution_text = _extract_solution_section(body)
+    if solution_text is None:
+        return False
+    return _has_self_check_subsection(solution_text)
+
+
 def check_self_check_visibility(
     content: str, ticket_type: str, logger
 ) -> Optional[str]:

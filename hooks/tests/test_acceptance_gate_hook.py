@@ -658,3 +658,139 @@ def test_fallback_parser_empty_children_returns_no_descendants(project_dir, logg
 
     assert should_block is False, "無 children 欄位時 fallback 應返回空清單 → pass"
     assert error_msg is None
+
+
+# ----------------------------------------------------------------------------
+# 0.4.1-W2-006：complete gate 讀取滯後檔案狀態的時序誤報修復
+#
+# 兩起實證（見 0.4.1-W2-006 Problem Analysis / 0.4.1-W1-001 F6）：
+#   - 0.4.0-W3-006：git merge 與 ticket track complete 串接於同一命令，
+#     gate 警告「acceptance 未全勾選 / execution log 未填寫」但檔案實際已完備
+#   - 0.4.1-W1-001：set-acceptance + append-log 補寫後同 Bash 呼叫串接
+#     complete，gate 仍報缺
+#
+# 根因：PreToolUse Hook 在整個 Bash command 字串執行前觸發一次；同鏈中
+# complete 之前的 git merge / set-acceptance / append-log 尚未真正執行，
+# Hook 讀檔當下必然是執行前（滯後）狀態。
+# ----------------------------------------------------------------------------
+
+def _check_via_orchestrator(project_dir: Path, ticket_id: str, logger, command: str):
+    """以 acceptance-gate-hook 主協調函式 check_acceptance_status 驗證行為（含 command 參數）。"""
+    import importlib.util
+    hook_path = ticket_skill_hooks_path / "acceptance-gate-hook.py"
+    spec = importlib.util.spec_from_file_location("acceptance_gate_hook_w2006", hook_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.check_acceptance_status(ticket_id, project_dir, logger, command)
+
+
+def _write_stale_imp_ticket(project_dir: Path, ticket_id: str) -> Path:
+    """建立一個「同鏈寫入前」的滯後狀態 Ticket：acceptance 未勾選、execution log 空殼。
+
+    模擬 git merge / set-acceptance / append-log 尚未真正落地時，
+    Hook 讀檔看到的內容。
+    """
+    version_part = ticket_id.split("-W")[0]
+    ticket_dir = project_dir / "docs" / "work-logs" / f"v{version_part}" / "tickets"
+    ticket_dir.mkdir(parents=True, exist_ok=True)
+    content = f"""---
+id: {ticket_id}
+title: stale-state-ticket
+type: IMP
+status: in_progress
+version: {version_part}
+children: []
+acceptance:
+- '[ ] 待驗收項目'
+---
+
+# Execution Log
+
+## Solution
+<!-- To be filled by executing agent -->
+
+## Test Results
+<!-- To be filled by executing agent -->
+"""
+    ticket_file = ticket_dir / f"{ticket_id}.md"
+    ticket_file.write_text(content, encoding="utf-8")
+    return ticket_file
+
+
+def test_merge_chained_with_complete_suppresses_false_positive(project_dir, logger):
+    """0.4.0-W3-006 重現：git merge 與 complete 串接同一命令，不應誤報 acceptance/log 缺失。"""
+    ticket_id = "0.18.0-W20-006"
+    _write_stale_imp_ticket(project_dir, ticket_id)
+
+    command = f"git merge feat/x && ticket track complete {ticket_id}"
+    result = _check_via_orchestrator(project_dir, ticket_id, logger, command)
+
+    assert result.chained_write_detected is True, "應偵測到 git merge 與 complete 同鏈"
+    assert result.message is None, "同鏈偵測時應抑制 acceptance 缺失假警告"
+    assert result.has_empty_execution_log is False, "同鏈偵測時應抑制 execution log 缺失假警告"
+
+
+def test_set_acceptance_and_append_log_chained_with_complete_suppresses_false_positive(
+    project_dir, logger
+):
+    """0.4.1-W1-001 重現：set-acceptance + append-log 補寫後同 Bash 呼叫串接 complete，不應誤報。"""
+    ticket_id = "0.18.0-W20-007"
+    _write_stale_imp_ticket(project_dir, ticket_id)
+
+    command = (
+        f"ticket track set-acceptance {ticket_id} --all-check --as thyme "
+        f"&& ticket track append-log {ticket_id} \"補寫\" --section \"Test Results\" "
+        f"&& ticket track complete {ticket_id}"
+    )
+    result = _check_via_orchestrator(project_dir, ticket_id, logger, command)
+
+    assert result.chained_write_detected is True, "應偵測到 set-acceptance/append-log 與 complete 同鏈"
+    assert result.message is None, "同鏈偵測時應抑制 acceptance 缺失假警告"
+    assert result.has_empty_execution_log is False, "同鏈偵測時應抑制 execution log 缺失假警告"
+
+
+def test_standalone_complete_without_chain_still_reports_true_state(project_dir, logger):
+    """未串接同鏈寫入操作時，仍應維持原本的真實狀態判定（回歸防護：不可過度抑制）。"""
+    ticket_id = "0.18.0-W20-008"
+    _write_stale_imp_ticket(project_dir, ticket_id)
+
+    command = f"ticket track complete {ticket_id}"
+    result = _check_via_orchestrator(project_dir, ticket_id, logger, command)
+
+    assert result.chained_write_detected is False, "無同鏈寫入操作時不應誤判為 chained"
+    assert result.message is not None, "未串接時應維持真實的 acceptance 缺失警告"
+    assert result.has_empty_execution_log is True, "未串接時應維持真實的 execution log 缺失判定"
+
+
+def test_write_after_complete_in_chain_does_not_trigger_suppression(project_dir, logger):
+    """寫入操作出現在 complete 之後（非前段）不影響本次讀檔，不應觸發抑制。"""
+    ticket_id = "0.18.0-W20-009"
+    _write_stale_imp_ticket(project_dir, ticket_id)
+
+    command = f"ticket track complete {ticket_id} && ticket track append-log {ticket_id} \"後續\""
+    result = _check_via_orchestrator(project_dir, ticket_id, logger, command)
+
+    assert result.chained_write_detected is False, "寫入操作在 complete 之後不應觸發抑制"
+
+
+def test_detect_chained_pre_complete_write_helper():
+    """detect_chained_pre_complete_write 純函式行為驗證。"""
+    import importlib.util
+    hook_path = ticket_skill_hooks_path / "acceptance-gate-hook.py"
+    spec = importlib.util.spec_from_file_location("acceptance_gate_hook_w2006_helper", hook_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module.detect_chained_pre_complete_write(
+        "git merge feat/x && ticket track complete 0.1.0-W1-001"
+    ) is True
+    assert module.detect_chained_pre_complete_write(
+        "ticket track complete 0.1.0-W1-001"
+    ) is False
+    assert module.detect_chained_pre_complete_write(
+        "ticket track complete 0.1.0-W1-001 && git merge feat/x"
+    ) is False
+    assert module.detect_chained_pre_complete_write(
+        "ticket track set-acceptance 0.1.0-W1-001 --all-check "
+        "&& ticket track batch-complete 0.1.0-W1-001"
+    ) is True

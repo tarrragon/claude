@@ -306,6 +306,10 @@
           },
           {
             "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/spec-version-consistency-check-hook.py"
+          },
+          {
+            "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/scripts/install-skill-clis.py"
           },
           {
@@ -372,6 +376,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/version-consistency-guard-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/version-tracking-consistency-guard-hook.py"
           },
           {
             "type": "command",

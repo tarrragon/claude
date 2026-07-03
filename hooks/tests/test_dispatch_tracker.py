@@ -202,7 +202,7 @@ class TestDetectOrphanBranches:
         mock_result.returncode = 0
         mock_result.stdout = porcelain_output
 
-        with patch("dispatch_tracker.subprocess.run", return_value=mock_result):
+        with patch("lib.dispatch_tracker.subprocess.run", return_value=mock_result):
             # 無 dispatch 記錄，agent- 分支應為 orphan
             orphans = detect_orphan_branches(project_root)
 
@@ -224,7 +224,7 @@ class TestDetectOrphanBranches:
         mock_result.returncode = 0
         mock_result.stdout = porcelain_output
 
-        with patch("dispatch_tracker.subprocess.run", return_value=mock_result):
+        with patch("lib.dispatch_tracker.subprocess.run", return_value=mock_result):
             orphans = detect_orphan_branches(project_root)
 
         assert len(orphans) == 0
@@ -243,7 +243,7 @@ class TestDetectOrphanBranches:
         mock_result.returncode = 0
         mock_result.stdout = porcelain_output
 
-        with patch("dispatch_tracker.subprocess.run", return_value=mock_result):
+        with patch("lib.dispatch_tracker.subprocess.run", return_value=mock_result):
             orphans = detect_orphan_branches(project_root)
 
         # 無 branch_name 的 dispatch 不會匹配任何 worktree
@@ -265,7 +265,7 @@ class TestDetectOrphanBranches:
         mock_result.returncode = 0
         mock_result.stdout = porcelain_output
 
-        with patch("dispatch_tracker.subprocess.run", return_value=mock_result):
+        with patch("lib.dispatch_tracker.subprocess.run", return_value=mock_result):
             orphans = detect_orphan_branches(project_root)
 
         # agent-fix != agent-fix-parser，精確比對不會誤判

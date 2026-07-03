@@ -57,6 +57,7 @@ from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
     resolve_ticket_path,
 )
+from ticket_system.lib.tdd_phase_inference import TDD_PHASE_SOURCE_MANUAL
 
 
 def validate_ticket_exists(version: str, ticket_id: str) -> tuple[dict | None, bool]:
@@ -369,6 +370,11 @@ def execute_phase(args: argparse.Namespace, version: str) -> int:
         # 更新 Ticket 欄位
         ticket["current_phase"] = phase
         ticket["assignee"] = args.agent
+
+        # W2-009：同步寫入 tdd_phase（緊湊格式，與 tdd_stage/claim 推導共用）
+        # 並標記為手動來源，使後續 claim --as 的自動推導不覆蓋此值。
+        ticket["tdd_phase"] = phase.lower().replace(" ", "")
+        ticket["tdd_phase_source"] = TDD_PHASE_SOURCE_MANUAL
 
         ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
         save_ticket(ticket, ticket_path)

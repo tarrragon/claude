@@ -375,6 +375,12 @@ class CreateMessages:
         "          建議：確認是否需要拆分為多個獨立 Ticket"
     )
 
+    # SPEC 引用未登錄警告（0.4.1-W2-001，F1：SPEC-008 誤植跨票傳染防護）
+    UNREGISTERED_SPEC_REFERENCE_WARNING = (
+        "[WARNING] 引用了未登錄於 docs/traceability.yaml 的 SPEC 編號：{spec_ids}\n"
+        "          請確認編號是否誤植，或先在 traceability.yaml 補登該 SPEC"
+    )
+
     # blockedBy 驗證錯誤訊息（Bug 1 修正）
     BLOCKED_BY_NOT_FOUND = "[ERROR] blockedBy 中的 {bid} 不存在，請確認 ID 是否正確"
 

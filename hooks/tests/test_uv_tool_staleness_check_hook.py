@@ -474,13 +474,16 @@ def test_detects_stale_on_modified_file(
 
 
 # ----------------------------------------------------------------------------
-# T17 (AC10): 7 個 SKILL.md 含 reinstall 警示區塊
+# T17 (AC10): SKILL.md 含 reinstall 警示區塊
+#
+# 0.4.1-W4-002：ticket / worktree 已遷移至 cwd-resolving shim（ARCH-APP-002），
+# 不再走 uv tool install，SKILL.md 已改為 shim 安裝說明，不再含此段落，
+# 從清單移除（staleness hook 執行期以 is_shimmed_cli 動態判斷，不受此文件斷言影響）。
 # ----------------------------------------------------------------------------
 def test_skill_md_files_contain_reinstall_warning():
     skills_dir = PROJECT_ROOT / ".claude" / "skills"
     skill_names = [
-        "ticket", "doc", "version-release", "mermaid-ascii",
-        "worktree", "project-init",
+        "doc", "version-release", "mermaid-ascii", "project-init",
     ]
     for name in skill_names:
         md = skills_dir / name / "SKILL.md"

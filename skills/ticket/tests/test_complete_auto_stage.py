@@ -85,6 +85,9 @@ def _run_complete(
         "ticket_system.commands.lifecycle.validate_execution_log_by_type",
         return_value=(True, []),
     ), patch(
+        "ticket_system.commands.lifecycle.validate_self_check_subsection",
+        return_value=(True, None),
+    ), patch(
         "ticket_system.commands.lifecycle.save_ticket"
     ), patch(
         "ticket_system.commands.lifecycle.resolve_ticket_path",

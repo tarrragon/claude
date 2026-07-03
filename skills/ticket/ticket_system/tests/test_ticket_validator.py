@@ -13,6 +13,7 @@ from ticket_system.lib.ticket_validator import (
     _is_placeholder,
     validate_execution_log,
     validate_execution_log_by_type,
+    validate_self_check_subsection,
 )
 
 
@@ -823,3 +824,62 @@ commit: abc1234
         passed, unfilled = validate_execution_log_by_type("IMP", body)
         assert passed is True, f"Expected pass but unfilled={unfilled}"
         assert unfilled == []
+
+
+class TestValidateSelfCheckSubsection:
+    """validate_self_check_subsection（0.4.1-W2-010：warning 升 gate）"""
+
+    def test_imp_missing_self_check_blocked(self):
+        """IMP 缺 ### 自檢結果 子章節 → 阻擋。"""
+        body = """## Solution
+內容但無自檢子章節。
+"""
+        passed, label = validate_self_check_subsection("IMP", body)
+        assert passed is False
+        assert label == "Solution > ### 自檢結果"
+
+    def test_ana_missing_self_check_blocked(self):
+        """ANA 缺 ### 自檢結果 子章節 → 阻擋。"""
+        body = """## Solution
+結論內容。
+"""
+        passed, label = validate_self_check_subsection("ANA", body)
+        assert passed is False
+        assert label == "Solution > ### 自檢結果"
+
+    def test_imp_with_self_check_passes(self):
+        """IMP 含 ### 自檢結果 子章節 → 通過。"""
+        body = """## Solution
+內容。
+
+### 自檢結果
+
+- [x] acceptance 已驗證
+"""
+        passed, label = validate_self_check_subsection("IMP", body)
+        assert passed is True
+        assert label is None
+
+    def test_doc_exempt_regardless_of_content(self):
+        """DOC 沿用免填規則，不受本檢查阻擋（即使無 Solution）。"""
+        passed, label = validate_self_check_subsection("DOC", "")
+        assert passed is True
+        assert label is None
+
+    def test_unknown_type_exempt(self):
+        """非 IMP/ANA/DOC（如 TST）不適用本檢查。"""
+        passed, label = validate_self_check_subsection("TST", "## Solution\n無自檢")
+        assert passed is True
+        assert label is None
+
+    def test_no_solution_section_blocked_for_imp(self):
+        """IMP 無 Solution 章節時亦視為缺自檢子章節（由其他 checker 另行處理 Solution 缺失）。"""
+        passed, label = validate_self_check_subsection("IMP", "## Problem Analysis\n內容")
+        assert passed is False
+        assert label == "Solution > ### 自檢結果"
+
+    def test_empty_body_blocked_for_ana(self):
+        """空 body 對 ANA 視為缺自檢子章節。"""
+        passed, label = validate_self_check_subsection("ANA", "")
+        assert passed is False
+        assert label == "Solution > ### 自檢結果"

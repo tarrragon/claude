@@ -1603,12 +1603,12 @@ class TestTieredVerdictIntegration:
 
 
 def test_extract_ticket_ids_finds_full_ids():
-    """從 prompt 擷取完整 ticket ID。"""
+    """從 prompt 擷取完整 ticket ID（純字串解析，不依賴任何真實 ticket）。"""
     ids = _hook._extract_ticket_ids(
-        "Ticket: 0.18.0-W17-015.2，依賴 0.18.0-W17-015.3"
+        "Ticket: 9.9.9-W99-011，依賴 9.9.9-W99-012"
     )
-    assert "0.18.0-W17-015.2" in ids
-    assert "0.18.0-W17-015.3" in ids
+    assert "9.9.9-W99-011" in ids
+    assert "9.9.9-W99-012" in ids
 
 
 def test_extract_ticket_ids_no_match_for_bare_short_id():
@@ -1617,10 +1617,20 @@ def test_extract_ticket_ids_no_match_for_bare_short_id():
     assert ids == []
 
 
-def test_load_ticket_where_files_returns_paths_for_w17_015_2():
-    """W17-015.2 ticket md 存在時，應讀出 where.files。"""
-    files = _hook._load_ticket_where_files("0.18.0-W17-015.2")
-    # 此 ticket 已存在且 where 含 .claude/ 路徑
+def test_load_ticket_where_files_returns_paths_for_mocked_ticket(monkeypatch):
+    """ticket md 存在時，應讀出 where.files（mock extract_where_files，不依賴真實 ticket）。
+
+    W4-003：原測試依賴上游框架專案 ticket ID 0.18.0-W17-015.2（本 repo 無此票），
+    改為 mock _hook.extract_where_files 回傳值，維持可攜性。
+    """
+    monkeypatch.setattr(
+        _hook,
+        "extract_where_files",
+        lambda tid: [".claude/skills/ticket/ticket_system/cli.py"]
+        if tid == "9.9.9-W99-010"
+        else [],
+    )
+    files = _hook._load_ticket_where_files("9.9.9-W99-010")
     assert any(".claude/skills/ticket" in f for f in files)
 
 
@@ -1634,16 +1644,25 @@ def test_hook_fallback_to_ticket_when_prompt_has_no_paths(
     monkeypatch, capsys
 ):
     """W17-018 關鍵：prompt 無路徑線索但含 ticket ID 指向 .claude/ 任務時，
-    應從 ticket where.files 補分類為主 repo .claude/，放行無 worktree。"""
+    應從 ticket where.files 補分類為主 repo .claude/，放行無 worktree。
+
+    W4-003：改用 mock _hook.extract_where_files，不依賴真實上游 ticket。"""
+    monkeypatch.setattr(
+        _hook,
+        "extract_where_files",
+        lambda tid: [".claude/skills/ticket/ticket_system/cli.py"]
+        if tid == "9.9.9-W99-010"
+        else [],
+    )
     exit_code = _run_hook(
         monkeypatch,
         capsys,
         tool_input={
             "subagent_type": "thyme-python-developer",
-            "prompt": "Ticket: 0.18.0-W17-015.2\nRead ticket md 依規格實作。",
+            "prompt": "Ticket: 9.9.9-W99-010\nRead ticket md 依規格實作。",
         },
     )
-    # W17-015.2 where.files 為 .claude/skills/ticket/... → 全主 repo .claude/
+    # where.files 為 .claude/skills/ticket/... → 全主 repo .claude/
     # → 豁免 worktree 放行
     assert exit_code == 0
 
@@ -1682,14 +1701,23 @@ def test_resolve_pure_claude_prompt_only(_resolve_helper):
     assert result == (True, False, False)
 
 
-def test_resolve_pure_claude_via_ticket_fallback(_resolve_helper):
+def test_resolve_pure_claude_via_ticket_fallback(_resolve_helper, monkeypatch):
     """L2：prompt 無路徑線索，ticket where.files 全為 .claude/。
-    預期：(True, False, False) 由 fallback 補分類後回傳。"""
-    result = _resolve_helper(
-        prompt="Ticket: 0.18.0-W17-015.2\nRead ticket md 依規格實作。",
-        ticket_ids=["0.18.0-W17-015.2"],
+    預期：(True, False, False) 由 fallback 補分類後回傳。
+
+    W4-003：改用 mock _hook.extract_where_files，不依賴真實上游 ticket。"""
+    monkeypatch.setattr(
+        _hook,
+        "extract_where_files",
+        lambda tid: [".claude/skills/ticket/ticket_system/cli.py"]
+        if tid == "9.9.9-W99-010"
+        else [],
     )
-    # W17-015.2 where.files 為 .claude/skills/ticket/...
+    result = _resolve_helper(
+        prompt="Ticket: 9.9.9-W99-010\nRead ticket md 依規格實作。",
+        ticket_ids=["9.9.9-W99-010"],
+    )
+    # where.files 為 .claude/skills/ticket/...
     assert result[0] is True, "應補分類為主 repo .claude/"
     assert result[1] is False, "不應誤判為外部 .claude/"
     assert result[2] is False, "純 .claude/ ticket 不應有 has_other"
@@ -1833,13 +1861,22 @@ def test_main_uses_resolver_for_pure_claude_ticket(monkeypatch, capsys):
 
     與既有 test_hook_fallback_to_ticket_when_prompt_has_no_paths 相同行為，
     但本測試確認在 helper 抽取後仍維持。
+
+    W4-003：改用 mock _hook.extract_where_files，不依賴真實上游 ticket。
     """
+    monkeypatch.setattr(
+        _hook,
+        "extract_where_files",
+        lambda tid: [".claude/skills/ticket/ticket_system/cli.py"]
+        if tid == "9.9.9-W99-010"
+        else [],
+    )
     exit_code = _run_hook(
         monkeypatch,
         capsys,
         tool_input={
             "subagent_type": "thyme-python-developer",
-            "prompt": "Ticket: 0.18.0-W17-015.2\nRead ticket md 依規格實作。",
+            "prompt": "Ticket: 9.9.9-W99-010\nRead ticket md 依規格實作。",
         },
     )
     assert exit_code == 0

@@ -27,6 +27,7 @@ from ticket_system.lib.command_lifecycle_messages import (
     format_msg,
 )
 from ticket_system.lib.acceptance_auditor import detect_vague_acceptance, detect_srp_violations
+from ticket_system.lib.spec_reference_checker import detect_unregistered_spec_references
 from ticket_system.lib.parallel_analyzer import ParallelAnalyzer
 from ticket_system.lib.tdd_sequence import suggest_tdd_sequence
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
@@ -98,6 +99,13 @@ def print_create_checklist(
         srp_warnings = detect_srp_violations(what_text, acceptance)
         if srp_warnings:
             for warning in srp_warnings:
+                print(format_warning(warning))
+
+    # SPEC 引用驗證（0.4.1-W2-001，F1：SPEC-008 誤植跨票傳染防護）
+    if new_ticket:
+        spec_warnings = detect_unregistered_spec_references(new_ticket)
+        if spec_warnings:
+            for warning in spec_warnings:
                 print(format_warning(warning))
 
     # 驗收條件格式提示

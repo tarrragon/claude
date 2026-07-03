@@ -249,7 +249,7 @@ agents:
         reason: "Phase 3b 和 Phase 4b 不可並行派發（共用 Dart 程式碼檔案）"
 
     tdd_phases:
-      - "phase4b"
+      - "phase4"
 
     file_patterns:
       - "ui/lib/**/*.dart"
@@ -347,7 +347,8 @@ agents:
       - type: "cannot_work_with"
         agents: ["thyme-python-developer"]
 
-    tdd_phases: []
+    tdd_phases:
+      - "phase3b"
 
     file_patterns:
       - ".claude/hooks/**/*.py"
@@ -379,7 +380,8 @@ agents:
       - type: "cannot_work_with"
         agents: ["fennel-go-developer"]
 
-    tdd_phases: []
+    tdd_phases:
+      - "phase3b"
 
     file_patterns:
       - "server/**/*.go"

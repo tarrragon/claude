@@ -190,6 +190,11 @@ def print_warning(message: str):
     print(f"{Colors.YELLOW}[WARN]️{Colors.RESET} {message}")
 
 
+def print_skip(message: str):
+    """打印跳過訊息（中性標籤，區別於成功 [OK] 與警告 [WARN]）"""
+    print(f"{Colors.CYAN}[SKIP]{Colors.RESET} {message}")
+
+
 def print_info(message: str, indent: int = 0):
     """打印資訊訊息"""
     prefix = "  " * indent
@@ -753,6 +758,7 @@ def check_technical_debt_status(version: str) -> Dict:
     Returns:
         {
             "passed": bool,
+            "skipped": bool,  # True 表示無票可查而跳過檢查（非「檢查通過」）
             "pending_count": int,
             "pending_tds": list[dict],  # 包含 ticket_id, target, status
             "message": str
@@ -762,27 +768,40 @@ def check_technical_debt_status(version: str) -> Dict:
     major_minor = extract_major_minor(version)
     version_series = f"v{major_minor}"  # v0.20
 
-    # 掃描版本系列的票目錄
-    # 修復 Bug 2b：使用完整版本號而非硬編碼 .0
-    worklog_dir = root / "docs" / "work-logs"
-    tickets_dir = worklog_dir / f"v{version}" / "tickets"
+    # 依 config worklog_path_pattern 解析版本子目錄（支援巢狀路徑，同 check_worklog_completed）
+    config = load_version_release_config(root)
+    pattern = config.get(
+        "worklog_path_pattern",
+        DEFAULT_VERSION_RELEASE_CONFIG["worklog_path_pattern"],
+    )
+    version_subdir = resolve_worklog_dir(root, version, pattern)
+    tickets_dir = version_subdir / "tickets"
+
+    # fallback：pattern 解析路徑不存在時，嘗試扁平舊結構（向後相容）
+    if not tickets_dir.exists():
+        flat_tickets_dir = root / "docs" / "work-logs" / f"v{version}" / "tickets"
+        if flat_tickets_dir.exists():
+            tickets_dir = flat_tickets_dir
 
     result = {
         "passed": True,
+        "skipped": False,
         "pending_count": 0,
         "pending_tds": [],
         "message": "",
     }
 
     if not tickets_dir.exists():
-        result["message"] = f"找不到票目錄: {tickets_dir}"
+        result["skipped"] = True
+        result["message"] = f"跳過技術債務檢查：找不到票目錄 {tickets_dir}"
         return result
 
     # 掃描所有 TD 檔案
     td_files = list(tickets_dir.glob("*-TD-*.md"))
 
     if not td_files:
-        result["message"] = f"找不到任何技術債務票 (v{major_minor}.x)"
+        result["skipped"] = True
+        result["message"] = f"跳過技術債務檢查：無技術債務票 (v{major_minor}.x)"
         return result
 
     for td_file in sorted(td_files):
@@ -1047,6 +1066,37 @@ def check_stale_active_versions(todolist_path: Optional[Path] = None) -> Tuple[b
 # 新增函式 1：load_version_release_config
 # ============================================================================
 
+def find_version_release_config_path(root: Path) -> Optional[Path]:
+    """
+    依查找順序（root 優先，.claude/ 為 fallback）尋找 .version-release.yaml 實際命中路徑。
+
+    Args:
+        root: 專案根目錄（Path 物件）
+
+    Returns:
+        實際命中的配置檔路徑；兩層皆不存在時回傳 None
+    """
+    candidate_paths = [
+        root / VERSION_RELEASE_CONFIG_FILE,
+        root / ".claude" / VERSION_RELEASE_CONFIG_FILE,
+    ]
+    return next((p for p in candidate_paths if p.exists()), None)
+
+
+def print_config_disclosure(root: Path) -> None:
+    """
+    印出本次執行實際載入的 .version-release.yaml 路徑，或未找到時印出偵測到的專案型別。
+
+    目的：讓 stale CLI 或錯誤 cwd 導致配置靜默未載入時有明確線索可查（0.4.0-W1-005）。
+    """
+    config_path = find_version_release_config_path(root)
+    if config_path is not None:
+        print_info(f"載入配置：{config_path}")
+    else:
+        project_type = detect_project_type(root)
+        print_info(f"未找到配置（使用預設，專案型別={project_type}）")
+
+
 def load_version_release_config(root: Path) -> dict:
     """
     讀取 .version-release.yaml 配置檔。
@@ -1069,11 +1119,7 @@ def load_version_release_config(root: Path) -> dict:
     - <root>/.claude/.version-release.yaml（branch-verify 豁免路徑，
       使 all-on-main 工作流可直接 commit 到 main 而不被保護分支 hook 阻擋）
     """
-    candidate_paths = [
-        root / VERSION_RELEASE_CONFIG_FILE,
-        root / ".claude" / VERSION_RELEASE_CONFIG_FILE,
-    ]
-    config_path = next((p for p in candidate_paths if p.exists()), None)
+    config_path = find_version_release_config_path(root)
 
     if config_path is None:
         return DEFAULT_VERSION_RELEASE_CONFIG
@@ -1581,7 +1627,9 @@ def preflight_check(version: str) -> Tuple[bool, Dict[str, Tuple[bool, List[str]
     td_status = check_technical_debt_status(version)
     results["tech_debt_status"] = td_status
 
-    if td_status["passed"]:
+    if td_status.get("skipped"):
+        print_skip(td_status["message"])
+    elif td_status["passed"]:
         print_success(td_status["message"])
     else:
         print_error(td_status["message"])
@@ -2080,6 +2128,94 @@ def mark_version_completed(
     return True
 
 
+def activate_existing_version(
+    todolist_path: Path,
+    version: str,
+    dry_run: bool = False,
+) -> bool:
+    """將 todolist.yaml 中已規劃版本（planned/pending）的 status 轉為 active。
+
+    start 對已規劃版本啟動時呼叫，取代重複插入新條目（避免與
+    insert_version_to_todolist 產生重複的 version 條目）。
+
+    Args:
+        todolist_path: todolist.yaml 路徑
+        version: 要啟動的版本號
+        dry_run: 預覽模式
+
+    Returns:
+        True 如果成功轉換（含已是 active 的冪等情況），False 如果找不到版本
+        或現有狀態非 planned/pending/active（例如 completed，不允許啟動）
+    """
+    if not todolist_path.exists():
+        print_error(f"找不到 {todolist_path}")
+        return False
+
+    with open(todolist_path, encoding="utf-8") as f:
+        content = f.read()
+
+    major_minor = extract_major_minor(version)
+    candidates = [version, major_minor]
+    entry_start = -1
+    for ver_str in candidates:
+        marker = f'version: "{ver_str}"'
+        pos = content.find(f"- {marker}")
+        if pos != -1:
+            entry_start = pos
+            break
+
+    if entry_start == -1:
+        print_error(f"在 todolist.yaml 中找不到版本 {version}")
+        return False
+
+    next_entry = content.find("- version:", entry_start + 1)
+    search_end = next_entry if next_entry != -1 else len(content)
+    status_match = re.search(
+        r"^(\s*status:\s*)(\S+)",
+        content[entry_start:search_end],
+        re.MULTILINE,
+    )
+    if not status_match:
+        print_error(f"版本 {version} 條目缺少 status 欄位")
+        return False
+
+    current_status = status_match.group(2).strip('"')
+    if current_status == "active":
+        print_info(f"版本 {version} 已為 active，跳過")
+        return True
+    if current_status not in ("planned", "pending"):
+        print_error(f"版本 {version} 狀態為 {current_status}，非 planned/pending，無法啟動")
+        return False
+
+    was_quoted = status_match.group(2).startswith('"')
+    new_status_value = '"active"' if was_quoted else "active"
+
+    abs_start = entry_start + status_match.start()
+    abs_end = entry_start + status_match.end()
+    new_content = (
+        content[:abs_start] + status_match.group(1) + new_status_value + content[abs_end:]
+    )
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    new_content = re.sub(
+        r'(last_updated: ")[^"]*(")',
+        rf"\g<1>{today}\2",
+        new_content,
+        count=1,
+    )
+
+    if dry_run:
+        print_info(
+            f"[DRY RUN] 將啟動 todolist.yaml 版本 {version}: {current_status} → active"
+        )
+    else:
+        with open(todolist_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+        print_success(f"todolist.yaml 版本 {version} 已啟動（{current_status} → active）")
+
+    return True
+
+
 def activate_next_planned_version(
     todolist_path: Path, completed_version: str, dry_run: bool = False
 ) -> bool:
@@ -2103,12 +2239,13 @@ def activate_next_planned_version(
         content = f.read()
 
     pattern = re.compile(
-        r'(- version: "([^"]+)".*?)(status:\s*)("planned"|planned)(?=\s|$)',
+        r'(- version: "([^"]+)".*?)(status:\s*)'
+        r'("planned"|planned|"pending"|pending)(?=\s|$)',
         re.DOTALL,
     )
     match = pattern.search(content)
     if not match:
-        print_info("todolist.yaml 無 planned 版本可推進，跳過")
+        print_info("todolist.yaml 無 planned/pending 版本可推進，跳過")
         return True
 
     next_version = match.group(2)
@@ -2484,16 +2621,30 @@ def cmd_start_version(
     worklog_pattern = _resolve_worklog_pattern(root, config, project_type)
     print_info(f"Worklog 路徑樣式: {worklog_pattern}")
 
-    # ── Step 2: 重複檢查 ──
+    # ── Step 2: 重複檢查（狀態感知：既有 planned/pending 走啟動路徑） ──
     print_section("Step 2: 重複檢查")
 
     with open(todolist_path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
+    existing_entry = None
     for entry in data.get("versions", []):
         if entry.get("version") == version:
-            print_error(f"版本 {version} 已存在於 todolist.yaml（狀態: {entry.get('status')}）")
+            existing_entry = entry
+            break
+
+    activate_existing = False
+    if existing_entry is not None:
+        existing_status = existing_entry.get("status")
+        if existing_status in ("planned", "pending"):
+            print_info(
+                f"版本 {version} 已規劃於 todolist.yaml（狀態: {existing_status}），走啟動路徑"
+            )
+            activate_existing = True
+        else:
+            print_error(f"版本 {version} 已存在於 todolist.yaml（狀態: {existing_status}）")
             return False
-    print_success("todolist.yaml 中無重複版本")
+    else:
+        print_success("todolist.yaml 中無重複版本")
 
     version_dir = resolve_worklog_dir(root, version, worklog_pattern)
     if version_dir.exists():
@@ -2504,9 +2655,12 @@ def cmd_start_version(
     # ── Step 3: 更新 todolist.yaml ──
     print_section("Step 3: 更新 todolist.yaml")
 
-    ok = insert_version_to_todolist(
-        todolist_path, version, from_version, description or "待定義", dry_run
-    )
+    if activate_existing:
+        ok = activate_existing_version(todolist_path, version, dry_run)
+    else:
+        ok = insert_version_to_todolist(
+            todolist_path, version, from_version, description or "待定義", dry_run
+        )
     if not ok:
         return False
     print_success("todolist.yaml 已更新")
@@ -3058,6 +3212,7 @@ def main():
             if args.dry_run:
                 header += " (DRY RUN)"
             print_header(header)
+            print_config_disclosure(get_project_root())
 
             if args.dry_run:
                 print_warning("預覽模式：不會寫入任何檔案\n")
@@ -3075,6 +3230,7 @@ def main():
 
         if args.command == "check":
             print_header(f"Version Release - Pre-flight Check ({version})")
+            print_config_disclosure(get_project_root())
 
             ok, results = preflight_check(version)
 
@@ -3116,6 +3272,7 @@ def main():
                 header += " (DRY RUN)"
 
             print_header(header)
+            print_config_disclosure(get_project_root())
 
             if dry_run:
                 print_warning("預覽模式：不會執行實際的 git 操作\n")

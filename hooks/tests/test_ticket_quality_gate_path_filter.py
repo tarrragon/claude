@@ -24,7 +24,7 @@ import pytest
 _hooks_dir = Path(__file__).parent.parent
 # W10-092: 部分 ticket-skill hook 已遷至 .claude/skills/ticket/hooks/
 ticket_skill_hooks_path = _hooks_dir.parent / "skills" / "ticket" / "hooks"
-_lib_dir = _hooks_dir.parent
+_lib_dir = _hooks_dir.parent / "lib"
 for p in (str(_hooks_dir), str(_lib_dir)):
     if p not in sys.path:
         sys.path.insert(0, p)
@@ -45,8 +45,14 @@ def hook_module():
 
 
 @pytest.fixture
-def reset_config_cache(hook_module):
-    """確保配置從檔案載入（清除快取）"""
+def reset_config_cache(hook_module, monkeypatch):
+    """確保配置從檔案載入（清除快取）
+
+    設定 CLAUDE_PROJECT_DIR 確保 config_loader 能找到 quality_rules.yaml
+    （config_loader.get_config_dir() 無此環境變數時 fallback 至 os.getcwd()，
+    測試若非從專案根目錄執行會誤讀空的預設配置）。
+    """
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(_hooks_dir.parent.parent))
     import config_loader
     config_loader.clear_config_cache()
     hook_module._quality_config = None

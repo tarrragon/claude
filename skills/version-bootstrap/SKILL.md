@@ -43,7 +43,15 @@ doc list proposals  # 確認提案狀態
 
 **輸出**：提案 ID + 標題 + 狀態表格。
 
-**Checkpoint**：PM 確認版本範圍——哪些提案納入本版、哪些延後。
+**跨提案依賴檢查（強制，0.4.1-W2-007 新增）**：接著執行依賴檢查腳本，偵測「本版提案依賴的提案排在更晚版本」的排序矛盾。
+
+```bash
+uv run .claude/skills/version-bootstrap/scripts/check_proposal_dependencies.py --version 0.4.0
+```
+
+腳本讀 `docs/proposals-tracking.yaml` 各提案的 `depends_on` 欄位（選填，格式見該檔案頭部註解）比對 `target_version` 排序。輸出 `[WARNING]` 時，PM 必須在本 Checkpoint 前二擇一處理：(1) 把依賴提案移入本版或更早版本一起排入，(2) 把本提案移至依賴提案完成之後的版本。**動機案例**：0.4.0 曾以 PROP-008 + PROP-010 雙提案啟動，PROP-010 依賴 PROP-011（排在 v0.5.0）卻排入 v0.4.0，矛盾拖到 W1 中段才由用戶手動發現，最終移版至 v0.5.0 與 PROP-011 同節點（詳見 0.4.1-W1-001 Solution「版本切分決策評估」）。若此檢查在 Step 1 就位，矛盾可在提案確認階段被攔截。
+
+**Checkpoint**：PM 確認版本範圍——哪些提案納入本版、哪些延後；依賴檢查腳本無 `[WARNING]` 輸出，或警告已處理（移版/補前置）。
 
 ---
 
@@ -126,6 +134,34 @@ doc batch-init --proposals PROP-007,PROP-008 --domain collector
 | 既有測試回歸 | incident-responder 分析，建 ANA/IMP ticket |
 | Spec 約束邊界發現 | 建 ANA ticket，可在 Step 2 填寫時順帶處理 |
 | 流程改善發現 | 建 ANA ticket，排入後續 Wave |
+
+---
+
+## 移版硬耦合盤點 SOP（0.4.1-W2-007 新增）
+
+提案因跨提案依賴矛盾（Step 1 檢查結果）或其他理由決定移版時，禁止整包提案原封不動搬到新版本——必須先盤點該提案在**本版**留下的 schema / DDL / 契約級殘留耦合，比照 0.4.0-W1-011 模式先行定形，斬斷後才能讓移出的主體與留在本版的部分變成獨立軌道。
+
+**動機**：0.4.0 曾規劃 PROP-008 + PROP-010 雙提案，PROP-010 因依賴 PROP-011 整體移至 v0.5.0，但其 checklist 第 1 項「Event schema `_flags` metadata 擴充」會動 `schema/event.schema.json`（契約 SOT）並牽動 PostgreSQL DDL——若放任不管、等 v0.4.0 的 PG DDL 凍結後才在 v0.5.0 定形 `_flags`，會重演 `batch_id` 式三段漂移（`docs/challenges/006-*.md` 實證）。0.4.0-W1-011 提前在 DDL 凍結前定形 `_flags` 形狀，才讓兩個提案真正解耦。
+
+**盤點步驟**：
+
+| 步驟 | 動作 | 產出 |
+|------|------|------|
+| 1. 契約掃描 | 對照移版提案的 checklist，逐項檢查是否觸及 `schema/*.schema.json`、`docs/spec/**/*.md` 的 DDL 章節、或其他跨版本共用契約檔案 | 觸及項清單 |
+| 2. 凍結時序確認 | 確認本版是否有「DDL 凍結」「schema 定案」類的既定時間點（通常在 PG/儲存實作票之前） | 凍結時間點 + 是否早於移版提案原訂完成時間 |
+| 3. 硬耦合分級 | 觸及項逐一判斷：純程式邏輯（無耦合，可整包移版）vs 契約形狀（硬耦合，需本版先定形） | 硬耦合項清單 |
+| 4. 定形票建立 | 對每個硬耦合項建立獨立 IMP ticket（比照 0.4.0-W1-011），範圍限定「只定形契約形狀，不含業務邏輯實作」 | 定形 ticket（本版 Wave 排入） |
+| 5. 教學比對 | 依 CLAUDE.md 強制操作 2，定形前讀 blog 對應模組確認欄位設計是否已有教學定義；有則優先採用，無則先在 blog 補完 | Solution 段落記錄教學比對結論 |
+| 6. Ticket 交叉標記 | 定形票 `why` 欄位引用移版提案 ID + 目標版本；移版提案的 `checklist` 對應項標記 `verified_by` 指向定形票 | 雙向可追溯 |
+
+**判斷準則（步驟 3 分級）**：
+
+| 觸及類型 | 是否硬耦合 | 處理方式 |
+|---------|-----------|---------|
+| 修改 `schema/event.schema.json` 等契約 SOT 檔案 | 是 | 建定形票，本版執行 |
+| 修改 DDL（`CREATE TABLE` 欄位定義） | 是 | 建定形票，本版執行 |
+| 純業務邏輯（middleware、演算法、UI） | 否 | 整包隨提案移版 |
+| 僅讀取既有契約、不新增欄位 | 否 | 整包隨提案移版 |
 
 ---
 

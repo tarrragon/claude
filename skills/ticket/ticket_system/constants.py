@@ -80,6 +80,8 @@ __all__ = [
     # SRP
     "SRP_WHAT_CONJUNCTIONS",
     "SRP_ACCEPTANCE_MODULE_THRESHOLD",
+    # SPEC 引用驗證（0.4.1-W2-001）
+    "SPEC_REFERENCE_PATTERN",
     # 重複偵測
     "DUPLICATE_DETECTION_THRESHOLD",
     "DUPLICATE_DETECTION_COMPLETED_WINDOW_DAYS",
@@ -360,6 +362,14 @@ SRP_WHAT_CONJUNCTIONS: List[str] = [
 ]
 
 SRP_ACCEPTANCE_MODULE_THRESHOLD: int = 2
+
+# ============================================================
+# SPEC 引用驗證常數（0.4.1-W2-001，F1：SPEC-008 誤植跨票傳染防護）
+# ============================================================
+
+# 比對 --why/--what/--where 等欄位中的 SPEC-NNN 引用；NNN 位數不限（避免
+# 未來三位數以上編號被截斷）。
+SPEC_REFERENCE_PATTERN: str = r"SPEC-\d+"
 
 # ============================================================
 # 重複偵測常數

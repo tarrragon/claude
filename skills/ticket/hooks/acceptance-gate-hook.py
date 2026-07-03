@@ -130,6 +130,10 @@ class AcceptanceCheckResult(NamedTuple):
     custom_h2_sections: List[str] = []
     # W17-064：Layer 1 自檢可觀測性 warning（缺 `### 自檢結果` 時非 None，warning 不阻擋）
     self_check_warning: Optional[str] = None
+    # 0.4.1-W2-006：complete 與 git merge / set-acceptance / append-log 等寫入操作
+    # 串接於同一 Bash 呼叫時為 True，代表 acceptance / execution log 檢查因讀檔
+    # 時序早於同鏈操作執行而略過（避免滯後誤報，見 detect_chained_pre_complete_write）
+    chained_write_detected: bool = False
 
 
 # ============================================================================
@@ -168,6 +172,20 @@ CUSTOM_H2_WARNING = (
 # 此處不另定義模板，warning 字串透過 `check_self_check_visibility` 回傳。
 
 
+# 0.4.1-W2-006：滯後讀檔誤報提示訊息模板
+# 對應 0.4.0-W3-006（merge 與 complete 同鏈）/ 0.4.1-W1-001（set-acceptance +
+# append-log 與 complete 同鏈）兩起實證：PreToolUse Hook 在整個 Bash 命令字串
+# 執行前觸發一次，若 complete 前段串接會改變驗收狀態的操作，Hook 讀檔當下這些
+# 操作尚未真正執行，讀到的必然是執行前（滯後）狀態。
+CHAINED_WRITE_INFO_NOTE = (
+    "[INFO] 偵測到同一命令鏈於 complete 前包含 git merge / set-acceptance / "
+    "append-log（0.4.1-W2-006）\n"
+    "本次 Hook 讀檔時機早於同鏈操作實際執行，acceptance / execution log 判定"
+    "已略過以避免滯後誤報（清單項目標記為 [--]）；\n"
+    "請以 `ticket track complete` 實際執行後的結果為準，不需額外二次查證。"
+)
+
+
 # ============================================================================
 # 命令識別
 # ============================================================================
@@ -192,11 +210,45 @@ def is_complete_command(command: str) -> bool:
     return "ticket track complete" in command or "ticket track batch-complete" in command
 
 
+# 0.4.1-W2-006：complete 前段串接後可能改變驗收狀態的寫入操作。
+# 命中任一 pattern 即代表「Hook 讀檔當下該操作尚未執行」，見
+# detect_chained_pre_complete_write 說明。
+_CHAINED_WRITE_TRIGGERS = (
+    re.compile(r'\bgit\s+merge\b'),
+    re.compile(r'\bticket\s+track\s+set-acceptance\b'),
+    re.compile(r'\bticket\s+track\s+append-log\b'),
+)
+
+
+def detect_chained_pre_complete_write(command: str) -> bool:
+    """偵測 complete 命令是否與可能改變驗收狀態的操作串接於同一 Bash 呼叫。
+
+    PreToolUse Hook 在整個 command 字串執行前觸發一次；若同一命令鏈在
+    complete 之前包含 git merge / set-acceptance / append-log，這些操作在
+    Hook 讀檔當下尚未真正執行（Bash 尚未開始執行任何一段），讀到的必然是
+    執行前（滯後）狀態，導致 acceptance 未勾選、execution log 未填寫等
+    warning 級誤報（0.4.0-W3-006 / 0.4.1-W1-001 實證，見 0.4.1-W2-006）。
+
+    只檢查 complete 命令「之前」的片段：出現在 complete 之後的寫入操作
+    （例如同鏈接續的收尾動作）不影響本次 complete 讀到的檔案狀態，不列入判定。
+    """
+    complete_pos = command.find("ticket track complete")
+    if complete_pos == -1:
+        complete_pos = command.find("ticket track batch-complete")
+    if complete_pos == -1:
+        return False
+
+    preceding = command[:complete_pos]
+    return any(pattern.search(preceding) for pattern in _CHAINED_WRITE_TRIGGERS)
+
+
 # ============================================================================
 # 主協調函式
 # ============================================================================
 
-def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> AcceptanceCheckResult:
+def check_acceptance_status(
+    ticket_id: str, project_dir: Path, logger, command: str = ""
+) -> AcceptanceCheckResult:
     """
     檢查 Ticket 的驗收狀態（主協調函式）
 
@@ -209,6 +261,12 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
     4. Sibling tickets 完成度檢查（場景 #9）
     5. 5W1H 完整性
     6. Execution log 填寫
+
+    Args:
+        command: 觸發本次檢查的完整 Bash 命令字串（選填）。用於偵測 complete
+            是否與 git merge / set-acceptance / append-log 串接於同一呼叫
+            （0.4.1-W2-006），偵測到時略過 acceptance / execution log 的
+            滯後誤報判定。空字串時行為與未偵測相同（向後相容）。
     """
     ticket_file = find_ticket_file(ticket_id, project_dir, logger)
 
@@ -227,10 +285,24 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
         if should_block:
             return AcceptanceCheckResult(True, False, error_msg, False, [], [], "", "", [], [], False)
 
+        # 0.4.1-W2-006：偵測 complete 是否與同鏈寫入操作串接
+        chained_write_detected = bool(command) and detect_chained_pre_complete_write(command)
+        if chained_write_detected:
+            logger.info(
+                f"Ticket {ticket_id}：偵測到 complete 與同鏈寫入操作串接，"
+                "略過 acceptance / execution log 滯後誤報判定"
+            )
+
         # 步驟 2：驗證驗收記錄
         should_block, warning_msg, should_check_acceptance, has_acceptance = verify_acceptance_record(
             content, frontmatter, ticket_id, logger
         )
+
+        # chained_write_detected 時，verify_acceptance_record 剛回傳的 warning_msg
+        # 必然只承載「驗收記錄缺失」這一段（後續步驟才會疊加其他警告），可安全歸零，
+        # 避免同鏈尚未執行的 set-acceptance 造成假警告。
+        if chained_write_detected and warning_msg:
+            warning_msg = None
 
         if not warning_msg:
             logger.info(f"Ticket {ticket_id} 驗收檢查通過")
@@ -325,6 +397,10 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
         has_empty_log = check_execution_log_filled(
             content, logger, ticket_type=frontmatter.get("type", "")
         )
+        # chained_write_detected 時同鏈的 append-log 尚未執行，本次讀到的 log
+        # 必然滯後，不視為真正「未填寫」（checklist 會改用 [--] 標記略過判定）
+        if chained_write_detected:
+            has_empty_log = False
 
         # 步驟 7：檢查自定義 H2 章節（W17-072，warning 不阻擋）
         custom_h2 = check_custom_h2_sections(content, logger)
@@ -353,6 +429,7 @@ def check_acceptance_status(ticket_id: str, project_dir: Path, logger) -> Accept
             spawned_non_terminal_warning=spawned_non_terminal_warning,
             custom_h2_sections=custom_h2,
             self_check_warning=self_check_warning,
+            chained_write_detected=chained_write_detected,
         )
 
     except Exception as e:
@@ -385,7 +462,9 @@ def generate_hook_output(
     checklist_items = []
 
     # 項目 1: acceptance
-    if check_result.has_acceptance:
+    if check_result.chained_write_detected:
+        checklist_items.append("[--] 1. acceptance（同命令鏈偵測，略過本次判定）")
+    elif check_result.has_acceptance:
         checklist_items.append("[x] 1. acceptance 已全勾選")
     else:
         checklist_items.append("[WARNING] 1. acceptance 未全勾選")
@@ -404,7 +483,9 @@ def generate_hook_output(
         checklist_items.append("[x] 3. error-pattern 無衝突")
 
     # 項目 4: execution log
-    if not check_result.has_empty_execution_log:
+    if check_result.chained_write_detected:
+        checklist_items.append("[--] 4. execution log（同命令鏈偵測，略過本次判定）")
+    elif not check_result.has_empty_execution_log:
         checklist_items.append("[x] 4. execution log 已填寫")
     else:
         checklist_items.append("[WARNING] 4. execution log 未填寫")
@@ -458,6 +539,11 @@ def generate_hook_output(
 
     checklist_text = "[Complete 清單]\n" + "\n".join(checklist_items)
     context_parts.append(checklist_text)
+
+    # 0.4.1-W2-006：同鏈寫入偵測提示（緊接清單，優先於其他訊息）
+    if check_result.chained_write_detected:
+        context_parts.append(CHAINED_WRITE_INFO_NOTE)
+        logger.info("新增同命令鏈滯後讀檔提示（0.4.1-W2-006）")
 
     # 優先級 1：錯誤或警告訊息
     if check_result.message:
@@ -660,7 +746,7 @@ def main() -> int:
 
         # 步驟 3: 檢查驗收狀態
         project_dir = get_project_root()
-        result = check_acceptance_status(ticket_id, project_dir, logger)
+        result = check_acceptance_status(ticket_id, project_dir, logger, command)
         logger.info(
             f"驗收結果: should_block={result.should_block}, "
             f"has_acceptance={result.has_acceptance}, "

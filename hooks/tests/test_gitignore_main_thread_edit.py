@@ -4,7 +4,8 @@ Test: 主線程允許編輯 .gitignore（Ticket: 0.18.0-W10-033）
 驗證：
 1. `.gitignore` 在主線程允許清單中（path_permission.check_file_permission 返回 allow）
 2. `.gitignore` 在保護分支豁免路徑中（branch-verify-hook.is_path_exempt 返回 True）
-3. 其他 root 檔案（如 package.json）仍被阻擋（邊界測試）
+3. 其他非白名單 root 檔案（如 config.json）仍被阻擋（邊界測試；package.json / manifest.json
+   已依「版本發布 bump」設計列入白名單，見 0.4.1-W4-002）
 
 來源：本 session 實戰發現 Hook 對 .gitignore 過嚴（W10-032 需編輯 .gitignore 補 scheduled_tasks.lock 被攔截）。
 """
@@ -44,12 +45,16 @@ def test_gitignore_allowed_by_path_permission():
     assert is_allowed, ".gitignore 應該被主線程允許編輯"
 
 
-def test_package_json_still_blocked_by_path_permission():
-    """package.json 等 root 檔案仍需被阻擋（邊界測試，防止過度放行）。"""
+def test_config_json_still_blocked_by_path_permission():
+    """非白名單 root 檔案仍需被阻擋（邊界測試，防止過度放行）。
+
+    package.json / manifest.json 已依「版本發布 bump」設計列入 ALLOWED_PATTERNS
+    （.claude/lib/path_permission.py），改用未被任何規則放行的 config.json 做邊界測試。
+    """
     from lib.path_permission import check_file_permission
 
-    is_allowed, _ = check_file_permission("package.json", _SilentLogger())
-    assert not is_allowed, "package.json 不應該被主線程編輯（邊界測試）"
+    is_allowed, _ = check_file_permission("config.json", _SilentLogger())
+    assert not is_allowed, "config.json 不應該被主線程編輯（邊界測試）"
 
 
 def test_random_root_file_still_blocked():
@@ -78,8 +83,12 @@ def test_gitignore_exempt_by_branch_verify():
         ".gitignore 應該在保護分支豁免清單中（相對路徑）"
 
 
-def test_package_json_not_exempt_by_branch_verify():
-    """package.json 等 root 檔案在保護分支不應被豁免。"""
+def test_config_json_not_exempt_by_branch_verify():
+    """非白名單 root 檔案在保護分支不應被豁免。
+
+    package.json / manifest.json 已依「版本發布 bump」設計列入 exempt_exact
+    （.claude/hooks/branch-verify-hook.py），改用未被任何規則豁免的 config.json 做邊界測試。
+    """
     import importlib.util
 
     hook_file = HOOKS_DIR / "branch-verify-hook.py"
@@ -89,8 +98,8 @@ def test_package_json_not_exempt_by_branch_verify():
 
     project_root = str(Path.cwd())
 
-    assert not module.is_exempt_path_on_protected_branch("package.json", cwd=project_root), \
-        "package.json 不應在保護分支豁免清單（邊界測試）"
+    assert not module.is_exempt_path_on_protected_branch("config.json", cwd=project_root), \
+        "config.json 不應在保護分支豁免清單（邊界測試）"
 
 
 def test_error_message_mentions_gitignore():

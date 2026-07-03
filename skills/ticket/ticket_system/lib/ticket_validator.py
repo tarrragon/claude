@@ -662,6 +662,88 @@ def validate_execution_log_by_type(
     return len(unfilled) == 0, unfilled
 
 
+# Layer 1 自檢子章節（`### 自檢結果`）gate 阻擋適用範圍（0.4.1-W2-010）。
+# DOC 沿用免填規則（不納入本檢查），對齊 0.4.1-W2-008 ANA 決策。
+_SELF_CHECK_GATE_TYPES = {"IMP", "ANA"}
+_SELF_CHECK_MISSING_LABEL = "Solution > ### 自檢結果"
+
+
+def _detect_self_check_subsection(body: str) -> bool:
+    """
+    偵測 body 之 Solution 章節是否含 `### 自檢結果` 子章節。
+
+    Lazy import `.claude/hooks/acceptance_checkers` 共用判定邏輯（避免與
+    PreToolUse hook 的 warning 判定雙實作漂移）；import 失敗（非 hook 環境）
+    時降級為 inline 正則判斷，維持相同行為。
+    """
+    try:
+        import sys
+        from pathlib import Path as _Path
+
+        # ticket_validator.py: .claude/skills/ticket/ticket_system/lib/ticket_validator.py
+        # → 上溯 5 層至 .claude/
+        claude_dir = _Path(__file__).resolve().parents[4]
+        hooks_dir = claude_dir / "hooks"
+        if str(hooks_dir) not in sys.path:
+            sys.path.insert(0, str(hooks_dir))
+        from acceptance_checkers.self_check_visibility_checker import (
+            solution_has_self_check_subsection,
+        )
+        return solution_has_self_check_subsection(body)
+    except Exception:  # noqa: BLE001 — import 失敗降級 inline 判斷
+        solution_match = re.search(
+            r"^## Solution\s*$(.*?)(?=^## |\Z)", body, flags=re.MULTILINE | re.DOTALL
+        )
+        if not solution_match:
+            return False
+        return bool(
+            re.search(
+                r"^### 自檢結果(?:[\s（(].*)?$",
+                solution_match.group(1),
+                flags=re.MULTILINE,
+            )
+        )
+
+
+def validate_self_check_subsection(
+    ticket_type: str,
+    body: str,
+) -> Tuple[bool, Optional[str]]:
+    """
+    驗證 IMP/ANA ticket 的 Solution 章節是否含 `### 自檢結果` 子章節（0.4.1-W2-010）。
+
+    W17-064 warning 級提示 8/8（加上 0.4.1-W1-001 共 9 次）全被忽略，
+    0.4.1-W2-008 ANA 決策供給側義務（dispatch template）落地後升級為 gate 阻擋。
+    DOC 沿用免填規則，不納入本檢查。
+
+    Args:
+        ticket_type: Ticket type（IMP/ANA/DOC/...）
+        body: Ticket body 文字（不含 frontmatter）
+
+    Returns:
+        (passed, missing_label)
+        - passed=True：不適用 type，或 Solution 已含自檢子章節
+        - missing_label：未通過時回傳可插入未填寫清單的標籤字串；否則 None
+
+    Examples:
+        >>> validate_self_check_subsection("DOC", "")
+        (True, None)
+        >>> validate_self_check_subsection("IMP", "## Solution\\n內容")
+        (False, 'Solution > ### 自檢結果')
+        >>> validate_self_check_subsection("IMP", "## Solution\\n### 自檢結果\\n- [x] 已檢視")
+        (True, None)
+    """
+    if (ticket_type or "").upper() not in _SELF_CHECK_GATE_TYPES:
+        return True, None
+
+    if not body or not isinstance(body, str):
+        return False, _SELF_CHECK_MISSING_LABEL
+
+    if _detect_self_check_subsection(body):
+        return True, None
+    return False, _SELF_CHECK_MISSING_LABEL
+
+
 def validate_acceptance_criteria(
     ticket_id: str,
     acceptance_list: Optional[List[str]] = None
