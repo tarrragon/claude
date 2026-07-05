@@ -61,6 +61,10 @@ def real_repo_root(monkeypatch):
 
     使用（統一為簽名注入，W1-054）：在依賴真實版本偵測的測試函式簽名直接加入
     `real_repo_root` 參數即可（無需 `_use_real_repo_root` 中介 autouse fixture）。
+
+    邊界（W5-006 後）：僅供「必須讀真實 repo 資產」的測試（如 dispatch registry
+    實檔載入）。create 版本偵測類測試改用 `seeded_repo_root`——綁定真實
+    todolist 會隨專案版本推進而漂移失敗（環境依賴，違反測試隔離）。
     """
     try:
         result = subprocess.run(
@@ -72,3 +76,38 @@ def real_repo_root(monkeypatch):
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", result.stdout.strip())
     except (subprocess.CalledProcessError, FileNotFoundError, OSError):
         monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+
+
+@pytest.fixture
+def seeded_repo_root(tmp_path_factory, monkeypatch):
+    """Hermetic 版本偵測 fixture：受控 todolist.yaml 取代真實 repo 依賴。
+
+    Why（W5-006）：create 的版本歸屬引導（suggest_version_for_ticket）與註冊
+    驗證（validate_version_registered）讀 `<root>/docs/todolist.yaml`。原
+    `real_repo_root` 使 create 流程測試綁定專案 todolist 的即時註冊狀態——
+    專案版本推進後（patch 建議版本未註冊）create 在待測錯誤路徑之前先觸發
+    VERSION_NOT_REGISTERED hard-fail，測試連鎖失敗。本 fixture 種入受控
+    todolist，版本偵測三函式全走確定性資料，與專案狀態解耦。
+
+    種子設計（覆蓋 patch 與 major 兩條建議路徑）：
+    - 1.0.0 completed：_suggest_next_patch 錨點 → 建議 1.0.1
+    - 1.0.1 active：patch 建議即已註冊 active 版本 → 註冊驗證通過
+    - 1.1.0 active + proposals：_suggest_next_major 首選 → feat 路徑亦確定
+    """
+    root = tmp_path_factory.mktemp("seeded-repo-root")
+    (root / "docs" / "work-logs").mkdir(parents=True, exist_ok=True)
+    (root / "CLAUDE.md").write_text("# CLAUDE.md\n", encoding="utf-8")
+    (root / "docs" / "todolist.yaml").write_text(
+        "versions:\n"
+        "  - version: 1.0.0\n"
+        "    status: completed\n"
+        "  - version: 1.0.1\n"
+        "    status: active\n"
+        "  - version: 1.1.0\n"
+        "    status: active\n"
+        "    proposals:\n"
+        "      - PROP-SEED\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
+    return root

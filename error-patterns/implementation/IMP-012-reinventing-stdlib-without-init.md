@@ -1,3 +1,10 @@
+---
+id: IMP-012
+title: 重新實作標準庫功能且遺漏初始化
+category: implementation
+severity: high
+created: 2026-03-04
+---
 # IMP-012: 重新實作標準庫功能且遺漏初始化
 
 ## 分類

@@ -4,10 +4,11 @@
 # dependencies = []
 # ///
 """
-Memory Upgrade Reminder Hook - 跨專案升級評估提醒
+Memory Upgrade Reminder Hook - 捕獲時分流補檢核提醒
 
-偵測 auto-memory feedback_*.md 新增/修改時，提示 PM 評估原則是否
-應升級至 .claude/ 框架（跨專案適用）。
+偵測 auto-memory feedback_*.md 新增/修改時，提醒 PM 確認捕獲時分流
+已執行（本 hook 為事後補檢核安全網；分流本應於落筆前完成，
+見 pm-quality-baseline 規則 7）。
 
 Hook 類型: PostToolUse (matcher: Write|Edit)
 觸發條件: tool_input.file_path 指向 memory 目錄下的 feedback_*.md
@@ -58,15 +59,14 @@ MESSAGES = {
     "TRIGGERED": "偵測到 memory 寫入：{file_path}",
     "REMINDER_TEMPLATE": (
         "\n[MemoryUpgradeReminder] 偵測到新 feedback memory: {filename}\n"
-        "請評估此原則是否跨專案適用（pm-quality-baseline 規則 7）：\n"
-        "  (1) 此原則對其他專案也適用嗎？\n"
-        "  (2) 若是，升級至以下位置之一：\n"
-        "       - .claude/rules/core/        （通用品質/流程）\n"
-        "       - .claude/rules/core/pm-role.md  （PM 行為規範）\n"
-        "       - .claude/error-patterns/     （錯誤學習）\n"
-        "       - .claude/methodologies/      （流程方法論）\n"
-        "       - .claude/skills/<skill>/     （Skill 引導）\n"
-        "  (3) 升級後在 memory 頂部加註「已升級」標註\n"
+        "請確認已執行捕獲時分流（pm-quality-baseline 規則 7）：\n"
+        "  (1) 錯誤學習類且跨專案適用、根因已過 Two-Phase Reflection？\n"
+        "       → 應直接 /error-pattern add（canonical），memory 至多留一行 pointer\n"
+        "  (2) 錯誤學習類但根因未熟？\n"
+        "       → frontmatter 標註 upgrade: deferred 與理由（發版稽核收割）\n"
+        "  (3) 非錯誤學習類跨專案原則？依規則 7 升級路徑表選目的地\n"
+        "       （拿不準查 knowledge-carrier-allocation 受眾 x 形態地圖）\n"
+        "  (4) 升級後：原檔頂部加註「已升級」+ 自 MEMORY.md 索引移除\n"
         "\n"
         "參考：.claude/pm-rules/pm-quality-baseline.md 規則 7 + PC-061\n"
         "（{throttle_minutes} 分鐘內同檔案只提示一次）\n"

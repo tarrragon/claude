@@ -22,7 +22,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
-from ticket_system.lib.constants import STATUS_PENDING, DEFAULT_UNDEFINED_VALUE
+from ticket_system.lib.constants import (
+    CANONICAL_BODY_SECTIONS,
+    DEFAULT_UNDEFINED_VALUE,
+    PROTOCOL_VERSION_CURRENT,
+    STATUS_PENDING,
+)
 from ticket_system.lib.paths import GIT_TOPLEVEL_TIMEOUT, get_project_root
 from ticket_system.lib.ticket_loader import (
     get_tickets_dir,
@@ -158,7 +163,7 @@ class TicketConfig(TypedDict, total=False):
     version: str                # 版本號（如 0.31.0）
     wave: int                   # Wave 編號（如 5）
     title: str                  # 標題（「動詞 + 目標」格式）
-    ticket_type: str            # 類型（IMP/TST/ADJ/RES/ANA/INV/DOC）
+    ticket_type: str            # 類型（正典 IMP/ADJ/ANA/DOC；TST/RES/INV 為歷史化石）
     priority: str               # 優先級（P0/P1/P2/P3）
 
     # 5W1H 資訊（7 個欄位）
@@ -192,7 +197,7 @@ def get_default_acceptance_criteria(ticket_type: str) -> List[str]:
     """取得預設驗收條件（依 Ticket 類型）。
 
     Args:
-        ticket_type: Ticket 類型（IMP, TST, ADJ, RES, ANA, INV, DOC）
+        ticket_type: Ticket 類型（正典 IMP, ADJ, ANA, DOC；TST/RES/INV 化石鍵保留供讀取容忍）
 
     Returns:
         預設驗收條件清單
@@ -740,6 +745,7 @@ def create_ticket_frontmatter(config: TicketConfig) -> Dict[str, Any]:
         "completed_at": None,
         "created": datetime.now().strftime("%Y-%m-%d"),
         "updated": datetime.now().strftime("%Y-%m-%d"),
+        "protocol_version": PROTOCOL_VERSION_CURRENT,
     }
 
 
@@ -924,7 +930,7 @@ def create_ticket_body(what: str, who: str, ticket_type: str = "") -> str:
 
 <!-- 代理人結束時以 YAML 格式回報（W17-010 schema）：
 ```yaml
-status: success        # 枚舉: success|needs_context|blocked|partial_success|failed
+exit_status: success        # 枚舉: success|needs_context|blocked|partial_success|failed
 reason: ""             # 狀態原因說明
 confidence: 1.0        # 0.0-1.0 信心度
 acceptance_met: []     # 已完成的 acceptance index 列表
@@ -934,6 +940,15 @@ context_dependencies: []  # 依賴的 context 來源
 estimated_recovery_effort: ""  # 若 needs_context/blocked，預估補料成本
 ```
 對應 exit code: success=0, partial_success=0, needs_context=2, blocked=2, failed=1 -->
+
+---
+
+## Spawn Requests
+
+<!-- agent 執行中發現應開新 ticket 的議題時，用
+`ticket track add-spawn-request <id> --what ... --why ... --type ... --priority ...`
+追加結構化請求。PM 處理後標記 status: processed（已建 ticket）或
+dismissed（評估後不建）+ reason。 -->
 
 ---
 
@@ -1113,18 +1128,9 @@ def update_source_spawned_tickets(source_ticket_id: str, new_ticket_id: str) -> 
 # 原樣以免誤刪 ANA 重現實驗或 H3 自由結構。
 # ---------------------------------------------------------------------------
 
-# Schema 章節清單（與 .claude/rules/core/agent-definition-standard.md 「章節結構規則」一致）
-SCHEMA_H2_SECTIONS: Tuple[str, ...] = (
-    "Task Summary",
-    "Problem Analysis",
-    "重現實驗結果",
-    "Solution",
-    "Test Results",
-    "Context Bundle",
-    "NeedsContext",
-    "Exit Status",
-    "Completion Info",
-)
+# Schema 章節清單：自 constants.CANONICAL_BODY_SECTIONS 衍生（單一序列來源，
+# 與 append-log 白名單同源），順序即自動補建的物理定位權威
+SCHEMA_H2_SECTIONS: Tuple[str, ...] = CANONICAL_BODY_SECTIONS
 
 # Placeholder pattern：純 frontmatter 模板殘留判定
 # 命中即視為「無實質內容」：

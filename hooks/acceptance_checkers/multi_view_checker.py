@@ -200,6 +200,10 @@ def _format_missing_warning(ticket_id: str, field_key: str, allowed: List[str]) 
         f"  - skipped:  需附 reason（跳過理由）\n"
         f"  - n_a:      需附 reason（判定不適用理由）\n"
         f"\n"
+        f"正確格式範例（flat key-value，非 nested YAML/heading）：\n"
+        f"  {field_key}: skipped\n"
+        f"  reason: <跳過理由>\n"
+        f"\n"
         f"Schema 來源：.claude/config/ana-solution-schema.yaml"
     )
 

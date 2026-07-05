@@ -1,3 +1,10 @@
+---
+id: CQ-006
+title: 純工具函式定義在 commands/ 層隱式阻礙跨模組複用
+category: code-quality
+severity: medium
+created: 2026-03-07
+---
 # CQ-006: 純工具函式定義在 commands/ 層隱式阻礙跨模組複用
 
 **發現日期**: 2026-03-07

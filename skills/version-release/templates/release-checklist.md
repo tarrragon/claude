@@ -41,6 +41,12 @@
 |-----------|------|---------|------|
 |  | | | |
 
+### Memory 升級稽核
+
+- [ ] Memory feedback 分流遵循率 100%（無未評估檔案）
+- [ ] 無 dangling pointer（error-pattern 引用存在）
+- [ ] Deferred 項目附理由且量級可控
+
 ### 版本號同步驗證
 
 - [ ] `pubspec.yaml` 版本號正確: v0.XX.X

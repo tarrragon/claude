@@ -1,3 +1,10 @@
+---
+id: CQ-005
+title: Mock 路徑未隨函式遷移同步更新
+category: code-quality
+severity: medium
+created: 2026-03-07
+---
 # CQ-005: Mock 路徑未隨函式遷移同步更新
 
 **發現日期**: 2026-03-07

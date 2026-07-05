@@ -1,3 +1,10 @@
+---
+id: ARCH-016
+title: Hook 允許清單過度限制導致工作流阻塞
+category: architecture
+severity: medium
+created: 2026-04-13
+---
 # ARCH-016: Hook 允許清單過度限制導致工作流阻塞
 
 ## 錯誤症狀

@@ -1,3 +1,10 @@
+---
+id: IMP-007
+title: 跨邊界操作的不對稱更新
+category: implementation
+severity: medium
+created: 2026-03-02
+---
 # IMP-007: 跨邊界操作的不對稱更新
 
 ## 基本資訊

@@ -1,3 +1,10 @@
+---
+id: ARCH-022
+title: Hook 用 CLI 探測產生跨界隱性副作用
+category: architecture
+severity: medium
+created: 2026-05-05
+---
 # ARCH-022: Hook 用 CLI 探測產生跨界隱性副作用
 
 ## 核心原則

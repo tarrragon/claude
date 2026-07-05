@@ -1,3 +1,10 @@
+---
+id: ARCH-018
+title: Hook 單維度強制與架構規則的交集衝突
+category: architecture
+severity: medium
+created: 2026-04-14
+---
 # ARCH-018: Hook 單維度強制與架構規則的交集衝突
 
 ## 錯誤症狀

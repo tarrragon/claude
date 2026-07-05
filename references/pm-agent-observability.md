@@ -284,7 +284,7 @@ EOF
 代理人結束時以 YAML 區塊寫入 `## Exit Status`：
 
 ```yaml
-status: needs_context    # success|needs_context|blocked|partial_success|failed
+exit_status: needs_context    # success|needs_context|blocked|partial_success|failed
 reason: "X 模組介面未定義"
 confidence: 0.8
 acceptance_met: [0, 1]

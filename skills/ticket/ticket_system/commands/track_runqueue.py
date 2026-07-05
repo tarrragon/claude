@@ -90,6 +90,20 @@ def _priority_rank(ticket: Dict) -> int:
     return _PRIORITY_ORDER.get(raw, _DEFAULT_PRIORITY_RANK)
 
 
+_TYPE_ORDER: Dict[str, int] = {"ANA": 0, "DOC": 1, "IMP": 2}
+_DEFAULT_TYPE_RANK = 1  # 未知 type fallback 為 DOC 等級（W5-005.17）
+
+
+def _type_rank(ticket: Dict) -> int:
+    """取得 type 的排序鍵，ANA < DOC < IMP，未知 type fallback 為 DOC 等級。
+
+    W5-005.15 ANA 結論：現行排序缺 type 維度，同 priority 內 ANA 應排 IMP 前
+    （PM 可優先接手可並行的分析類 ticket）。
+    """
+    raw = (ticket.get("type") or "").strip().upper()
+    return _TYPE_ORDER.get(raw, _DEFAULT_TYPE_RANK)
+
+
 def _is_unblocked_pending(
     ticket: Dict, ticket_map: Optional[Dict[str, Dict]] = None
 ) -> bool:
@@ -181,7 +195,7 @@ def _get_exit_status_tag(handoff_info: Optional[Dict]) -> Optional[str]:
     exit_status = handoff_info.get("exit_status")
     if not isinstance(exit_status, dict):
         return None
-    status = exit_status.get("status")
+    status = exit_status.get("exit_status") or exit_status.get("status")
     if isinstance(status, str) and status in _TAGGED_EXIT_STATUSES:
         return status
     return None
@@ -256,7 +270,7 @@ def _compute_readiness(
     info = handoff_info.get(ticket.get("id"))
     exit_status_obj = (info or {}).get("exit_status") if isinstance(info, dict) else None
     if isinstance(exit_status_obj, dict):
-        status = exit_status_obj.get("status")
+        status = exit_status_obj.get("exit_status") or exit_status_obj.get("status")
         if isinstance(status, str):
             mapped = _EXIT_STATUS_TO_READINESS.get(status)
             if mapped:
@@ -320,7 +334,7 @@ def _render_list(
     ticket_map = {t.get("id"): t for t in tickets if t.get("id")}
     runnable = [t for t in tickets if _is_listable(t, ticket_map)]
     runnable.sort(
-        key=lambda t: (_priority_rank(t), str(t.get("id", "")))
+        key=lambda t: (_priority_rank(t), _type_rank(t), str(t.get("id", "")))
     )
 
     if top is not None and top > 0:
@@ -350,6 +364,7 @@ def _render_list(
     for idx, ticket in enumerate(runnable, start=1):
         tid = ticket.get("id", "<unknown>")
         priority = ticket.get("priority") or "P?"
+        ticket_type = ticket.get("type") or "?"
         title = ticket.get("title") or ""
         # W17-031.1: resume 模式且有 exit_status tag → 顯示 [<status>] 取代
         # blockedBy=[] runnable 標記，避免 scheduler 誤把待補料 ticket 當可接手
@@ -362,7 +377,7 @@ def _render_list(
         # PM 看到 [STALE] → 人工介入評估（agent 真停滯 vs 長任務）
         stale_suffix = f" [{STALE_TAG}]" if is_stale_in_progress(ticket) else ""
         lines.append(
-            f"  {idx}. [{priority}] [{readiness}]{stale_suffix} {tid}  {title}  {suffix}"
+            f"  {idx}. [{priority}|{ticket_type}] [{readiness}]{stale_suffix} {tid}  {title}  {suffix}"
         )
     return "\n".join(lines)
 
@@ -419,7 +434,7 @@ def _render_dag(tickets: List[Dict]) -> str:
     for level in sorted(levels.keys()):
         bucket = sorted(
             levels[level],
-            key=lambda t: (_priority_rank(t), str(t.get("id", ""))),
+            key=lambda t: (_priority_rank(t), _type_rank(t), str(t.get("id", ""))),
         )
         lines.append(f"層級 {level}:")
         for ticket in bucket:

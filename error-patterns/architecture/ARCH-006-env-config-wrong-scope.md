@@ -1,3 +1,10 @@
+---
+id: ARCH-006
+title: 環境變數配置放錯作用域
+category: architecture
+severity: medium
+created: 2026-03-02
+---
 # ARCH-006: 環境變數配置放錯作用域
 
 ## 基本資訊

@@ -120,6 +120,10 @@ class WarningMessages:
         "   嵌套派發深度上限為平台保留邊距（W1-056.5 協議 v2 D3）；此 ticket 不應再往下派發子任務\n"
         "   查詢深度：ticket track depth {ticket_id}"
     )
+    CHILDREN_COUNT_HIGH = (
+        "[Warning] 父票 {parent_id} 已有 {count} 個子任務，超過建議閾值 {threshold}\n"
+        "   巨型父票增加認知負擔與管理成本；考慮拆分為多個獨立 group 或使用 Wave 分批"
+    )
     EXECUTION_LOG_NOT_FILLED = "[WARNING] 以下執行日誌區段尚未填寫:"
     EXECUTION_LOG_SUGGESTION = "建議使用以下命令填寫:"
     COMPLETED_NO_DIRECTION = "[Warning] {ticket_id} 已完成但無交接方向，請確認 handoff 設定"

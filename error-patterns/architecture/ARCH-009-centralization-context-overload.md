@@ -1,3 +1,10 @@
+---
+id: ARCH-009
+title: 將決策邏輯集中到單一 skill 造成 context 膨脹
+category: architecture
+severity: medium
+created: 2026-03-08
+---
 # ARCH-009: 將決策邏輯集中到單一 skill 造成 context 膨脹
 
 ## 基本資訊

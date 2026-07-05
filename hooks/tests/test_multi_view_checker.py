@@ -74,6 +74,20 @@ def test_ana_missing_multi_view_status_should_warn(project_dir, logger):
     assert "multi_view_status" in msg
 
 
+def test_ana_missing_warning_should_include_format_example(project_dir, logger):
+    """WARNING 訊息須含正確 flat key-value 格式範例（1.5.0-W5-019）。"""
+    content = _make_content("some solution without status field")
+    fm = {"id": "0.18.0-W10-999", "type": "ANA"}
+
+    should_warn, msg = check_multi_view_status(content, fm, project_dir, logger)
+
+    assert should_warn is True
+    assert msg is not None
+    assert "正確格式範例" in msg
+    assert "multi_view_status: skipped" in msg
+    assert "reason: <跳過理由>" in msg
+
+
 # ---------------------------------------------------------------------------
 # 情境 2：reviewed - 標註完整 → 通過
 # ---------------------------------------------------------------------------

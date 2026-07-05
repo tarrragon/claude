@@ -86,6 +86,12 @@
 | Runqueue 影響 | `blockedBy` 非空 → 不在 runqueue 列表 |
 | CLI 寫入 | `--blocked-by`、`set-blocked-by --add/--remove` |
 
+> **When 散文與 blockedBy 的邊界（零機制慣例，W5-005 F4/D5 量測定案）**：When 是給人讀的時機敘事，提及 ticket ID 不構成依賴宣告；任何工具（warn / auto-populate / runqueue）不得從 When 散文推斷依賴。
+>
+> 量測依據（2285 票語料、913 筆「When 含 ID 且 blockedBy 空」母體、61 筆系統抽樣）：43% 的提及屬出處/並行標記/反向依賴而非依賴；依賴語意組中 32/35 於建立當日前置已完成（follow-up 慣例，warn 無效益）；即使限定「提及票尚未 terminal 才警」，精準度仍僅 25%（3 真漏標對 9 誤警——母票 umbrella in_progress、並行標記、反向依賴為結構性誤警源，散文層無法可靠排除）。真實漏標率約 5%，已有接手端補償 SOP。
+>
+> **Action**：(1) 真依賴（需等 X 進 terminal）於建立時顯性 `--blocked-by`，禁只寫進 When 散文；(2) 出處敘事用 `--source-ticket`、弱關聯用 `--related-to`；(3) 接手 ticket 時發現 When 語意前提未被 blockedBy 編碼，人工 `set-blocked-by` 補齊（blockedBy 滿足不等於 When 意圖滿足）。
+
 ### relatedTo（陣列，array of IDs）
 
 **語意**：相關引用（弱關聯 metadata）。
@@ -191,6 +197,7 @@ Q1: 上游 ticket 的結論「要求」此 ticket 落地嗎？
 
 ---
 
-**Last Updated**: 2026-05-03
+**Last Updated**: 2026-07-05
+**Version**: 1.1.0 — blockedBy 節新增「When 散文與 blockedBy 的邊界」零機制慣例（W5-005.5 量測定案：61 筆抽樣，無條件 warn FP 約 95%、條件式 warn 精準度 25%，三選一裁定零機制；真依賴顯性 --blocked-by、出處 --source-ticket、接手端人工補齊）
 **Version**: 1.0.0 — 初版建立。提煉自 0.18.0-W17-120 ANA 多視角審查共識（linux + saffron-system-analyst + basil-hook-architect）：PC-091 路線（ANA 落地用 children）取代 PC-073，acceptance-gate hook 後續將收斂雙路徑。
 **Source**: 0.18.0-W17-120 (ANA: 釐清五欄位語意邊界) → W17-120.1 (DOC: 建立 SSOT)

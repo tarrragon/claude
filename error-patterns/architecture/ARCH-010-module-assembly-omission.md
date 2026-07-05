@@ -1,3 +1,10 @@
+---
+id: ARCH-010
+title: 模組組裝遺漏導致功能鏈路靜默斷裂
+category: architecture
+severity: medium
+created: 2026-03-29
+---
 # ARCH-010: 模組組裝遺漏導致功能鏈路靜默斷裂
 
 ## 基本資訊

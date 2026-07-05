@@ -1,6 +1,6 @@
 ---
 name: continuous-learning
-description: "Extracts reusable patterns from Claude Code sessions and captures knowledge as atomic memory units, then evaluates whether each memory should be upgraded to framework-shared rules, methodologies, or error-patterns. Use when session ends (Stop hook), when recording technical decisions, implementation insights, or lessons learned. Handles automatic pattern detection, structured memory capture with interconnected knowledge links, and post-write upgrade decision flow to prevent cross-project principles being trapped in single-project memory."
+description: "Extracts reusable patterns from Claude Code sessions and captures knowledge as atomic memory units with capture-time triage: mature cross-project error learnings go directly to framework error-patterns, immature ones stay as deferred-tagged memory, project-specific context stays local. Use when session ends (Stop hook), when recording technical decisions, implementation insights, or lessons learned. Handles automatic pattern detection, structured memory capture with interconnected knowledge links, and deferred-upgrade harvesting to prevent cross-project principles being trapped in single-project memory."
 ---
 
 # Continuous Learning
@@ -24,16 +24,17 @@ description: "Extracts reusable patterns from Claude Code sessions and captures 
 將重要技術決策、實作方案和經驗教訓記錄為原子化記憶：
 
 1. **提取核心結論**：從工作過程中識別值得記錄的結論
-2. **分類和結構化**：判斷記憶類型，設計結論式標題
-3. **建立連結**：識別與既有知識的關聯
-4. **儲存到 memory/**：按標準結構建立記憶檔案
-5. **升級評估**：判斷此原則是否需升級到框架共用層
+2. **捕獲時分流**（記錄前必答）：錯誤學習類 + 跨專案適用 + 根因已過 Two-Phase Reflection → **直接 `/error-pattern add`**（canonical 層，隨 sync 跨專案傳播），memory 至多留一行 pointer，流程結束；根因未熟 → 續走 memory 路徑並於 frontmatter 標註 `upgrade: deferred` 與理由；專案特定 → `project_` 前綴
+3. **分類和結構化**：判斷記憶類型，設計結論式標題
+4. **建立連結**：識別與既有知識的關聯
+5. **儲存到 memory/**：按標準結構建立記憶檔案（deferred 項含標註）
+6. **分流複核**：非錯誤學習類（通用品質 / PM 行為 / 方法論 / skill 引導）依升級路徑表評估目的地
 
-> **重要**：memory 寫入**不是終點**，而是升級評估的起點。寫入 `feedback_*.md` 後必須執行升級評估，否則跨專案通用原則會被困在單一專案的 memory 中（PC-061）。
+> **重要**：分流判斷在**寫入前**執行，不是寫入後補救。「寫入後補評估」的事後閉環經量化證明不執行（130 檔 feedback memory 標註率 4%，PC-061 模式的規模化實證）；deferred 積壓由發版稽核收割。
 >
-> - 升級評估規則：`.claude/pm-rules/pm-quality-baseline.md` 規則 7
+> - 分流判準權威來源：`.claude/pm-rules/pm-quality-baseline.md` 規則 7
 > - 錯誤模式參考：`.claude/error-patterns/process-compliance/PC-061-memory-upgrade-blindness.md`
-> - 完整決策樹：`references/upgrade-decision-tree.md`
+> - 完整決策樹（含捕獲時 Q0）：`references/upgrade-decision-tree.md`
 
 **適用時機**：
 
@@ -124,26 +125,24 @@ Add to `.claude/settings.json`:
 
 **參考**: `references/memory-capture-guide.md`
 
-### Step 5：升級評估（強制）
+### 分流落地與 deferred 收割（強制）
 
-完成 Step 4「儲存到 memory/」後，**禁止直接結束**。必須對寫入的 memory 執行升級評估：
+捕獲時分流（Memory Capture 步驟 2）是主路徑；本節處理兩個收尾場景：
 
-| 步驟 | 動作 | 工具/參考 |
+| 場景 | 動作 | 工具/參考 |
 |------|------|----------|
-| 5.1 | 對每個新建的 `feedback_*.md` 檔案執行四問檢查 | `.claude/pm-rules/pm-quality-baseline.md` 規則 7 |
-| 5.2 | 判斷升級目的地（六類分支） | `references/upgrade-decision-tree.md` |
-| 5.3 | 執行升級寫入（rules / pm-rules / error-patterns / methodologies / references / skills） | 對應目錄 |
-| 5.4 | 在原 memory 檔案頂部加註「已升級」標註 | 標註格式見決策樹 |
+| 直寫 canonical 後 | memory 至多留一行 pointer（不複製全文）；既有同主題 memory 依「升級後處理」三步收尾 | `.claude/pm-rules/pm-quality-baseline.md` 規則 7 |
+| deferred 收割（根因後續成熟、或發版稽核點名） | 走 Q1/Q2 決策樹判目的地 → 執行升級寫入 → 原檔頂部加註「已升級」+ 自 MEMORY.md 索引移除 | `references/upgrade-decision-tree.md`；promote 工具落地後一步完成 |
 
-**為什麼必須執行**：
+**為什麼分流在寫入前**：
 
-memory 寫入**不是終點**，而是升級評估的起點。若略過此步驟，跨專案通用的原則會被困在單一專案的 auto-memory 中，無法 sync 到其他專案，也不會被其他 session 自動載入（PC-061「Memory upgrade blindness」）。
+事後升級依賴「額外步驟」的自律，量化證據（130 檔標註率 4%、頂部標註格式合規 0）證明必然被省略；捕獲時分流讓每筆知識寫入時態即確定（canonical / deferred+理由 / 專案特定），不可觀測的「已寫入未評估」中間態不再累積（PC-061「Memory upgrade blindness」的結構性解）。
 
 **參考資源**：
 
-- 強制規則：`.claude/pm-rules/pm-quality-baseline.md` 規則 7「Memory 寫入必須評估跨專案升級」
+- 強制規則：`.claude/pm-rules/pm-quality-baseline.md` 規則 7「錯誤學習知識捕獲時分流」
 - 錯誤模式：`.claude/error-patterns/process-compliance/PC-061-memory-upgrade-blindness.md`
-- 完整決策樹：`references/upgrade-decision-tree.md`
+- 完整決策樹（含捕獲時 Q0）：`references/upgrade-decision-tree.md`
 
 ---
 
@@ -154,5 +153,6 @@ memory 寫入**不是終點**，而是升級評估的起點。若略過此步驟
 
 ---
 
-**Last Updated**: 2026-04-13
+**Last Updated**: 2026-07-05
+**Version**: 3.0.0 - Memory Capture 由「寫入後升級評估」改為「捕獲時分流」：新增步驟 2 分流判準（成熟錯誤學習直寫 error-pattern + deferred 顯式標註），原 Step 5 升級評估改為「分流落地與 deferred 收割」；依據 130 檔標註率 4% 實證事後閉環失效
 **Version**: 2.1.0 - 新增 Step 5 升級評估，將 memory 寫入串接到 framework 升級流程（防範 PC-061）

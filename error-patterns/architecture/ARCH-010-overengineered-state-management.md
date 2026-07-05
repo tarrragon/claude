@@ -1,3 +1,10 @@
+---
+id: ARCH-010
+title: 過度設計的狀態管理 — 框架機制已解決的問題不需要額外狀態層
+category: architecture
+severity: medium
+created: 2026-03-29
+---
 # ARCH-010: 過度設計的狀態管理 — 框架機制已解決的問題不需要額外狀態層
 
 ## 症狀

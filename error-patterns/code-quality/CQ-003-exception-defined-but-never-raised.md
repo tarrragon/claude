@@ -1,3 +1,10 @@
+---
+id: CQ-003
+title: Exception 定義後無實際拋出點（設計意圖未實現）
+category: code-quality
+severity: medium
+created: 2026-03-07
+---
 # CQ-003: Exception 定義後無實際拋出點（設計意圖未實現）
 
 **發現日期**: 2026-03-07

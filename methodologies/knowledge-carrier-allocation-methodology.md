@@ -26,7 +26,8 @@
 | `methodologies/` | 主動查閱者與 AI | 按需 | 框架判斷標準 / 核心規則（判準 + 步驟 + 檢查清單，明確且可直接套用） | 完整流程 / 範例 / 錯誤處理（→ skills） |
 | `references/` | 執行特定動作者 | 按需 | 技術參考、規則 substance（auto-load stub 的完整版） | 每回合禁令（→ rules/core stub） |
 | `error-patterns/` | ticket 前查詢者 | 按需 | 失敗案例（症狀 / 根因 / 解法 / 預防） | 規則正文（規則只放一行路由指向 PC/IMP） |
-| memory（專案層） | 本專案 PM | MEMORY.md 每回合 | 專案特定活教訓的單行索引 | 已固化內容（升級即搬家）、跨專案原則（四問升級後外移） |
+| memory（專案層） | 本專案 PM | MEMORY.md 每回合 | 專案特定活教訓的單行索引、根因未熟的 deferred 項（frontmatter `upgrade: deferred` 標註，發版稽核收割） | 已固化內容（升級即搬家）、成熟的跨專案錯誤學習（捕獲時分流直寫 `error-patterns/`，規則 7） |
+| `~/.claude/CLAUDE.md` + @import（user-level，CC 原生） | 本機所有專案的所有角色 | 每回合自動 | 個人操作偏好、本機環境事實（跨專案但僅限本機） | 框架規範與錯誤學習（→ `.claude/`；user-level 不隨 repo 傳播、無 git 稽核、無編號去重，協作者與新機器拿不到） |
 | `templates/`、`.claude/` root 歷史遺留檔 | （未分類） | 不自動載入 | — | 依本地圖二軸重分配（templates 內容須與對應規範同步，否則新實例從模板長出舊形態）；盤點另由 ticket 追蹤 |
 | `.claude/README.md` | 框架瀏覽者 | 不自動載入 | 框架頂層導覽：目錄結構、各載體用途、入口索引 | 規範 substance（→ rules / references）、流程方法（→ skills） |
 | `.claude/CHANGELOG.md` | 框架維護者 | 不自動載入 | 框架變更記錄（sync 歷史、版本演進） | 當前規範內容（→ 對應載體；CHANGELOG 只記「變了什麼」不記「規範是什麼」） |
@@ -68,13 +69,14 @@
 - `.claude/references/auto-load-stub-conventions.md` — 自動載入層 stub 構成 + 外移 SOP + 預算驗證
 - `.claude/rules/core/agent-definition-standard.md` — 代理人三區塊結構標準
 - `.claude/rules/README.md` — 自動載入預算原則（每回合必要性自問）
-- `.claude/pm-rules/pm-quality-baseline.md` 規則 7 — memory 升級四問 + 升級目的地預算閘門 + 升級即搬家
+- `.claude/pm-rules/pm-quality-baseline.md` 規則 7 — 錯誤學習捕獲時分流判準 + 升級目的地預算閘門 + 升級即搬家
 - `.claude/README.md`「同步機制」章 — 寫作類 skill（compositional-writing / multi-round-review）內容 SSOT 在 blog repo，框架端為回流副本；依地圖判定「寫作方法 → skills/」後，內容修改應到上游 repo 執行
 - `.claude/skills/skill-design-guide/SKILL.md` — skills 載體的細部規範（官方規格、frontmatter、漸進揭露結構）
 
 ---
 
-**Last Updated**: 2026-06-15
+**Last Updated**: 2026-07-05
+**Version**: 1.10.0 — memory 載體條目更新為捕獲時分流語意（規則 7 前移同步，裝什麼補 deferred 項、不裝什麼改「成熟跨專案錯誤學習直寫 error-patterns」）；補 user-level（`~/.claude/CLAUDE.md` @import）載體條目（原地圖對機器層無條目的系統性盲區）；Reference 規則 7 描述同步（1.5.0-W5-011.2）
 **Version**: 1.9.0 — W8-041 標籤同步：methodologies 地圖列「30 秒理念複習清單」改為「框架判斷標準 / 核心規則（明確且可直接套用）」、受眾補 AI，Reference 對 framework-meta 描述「30 秒標準」改為「方法論判斷標準定位」，對齊 W8-040 新定位
 **Version**: 1.8.0 — 「代理人定義 vs skill 歸屬判準」改寫：去除「一句話判定」總結框架，改為含明確識別測試（換一個執行者內容是否改變）的判準段落。方法論作為框架核心規則供 AI 開發時判斷，內容須明確而可套用，不採壓縮式總結（避免單句總結遮蔽判準細節導致 AI 判斷失準）
 **Version**: 1.7.0 — root 錯置檔重分配（1.0.0-W8-023.2，第 2/4 批）：4 檔（`agent-collaboration.md` 794 / `decision-workflows.md` 116 / `quick-ref-agent-dispatch-recovery.md` 202 / `thinking-process.md` 271）逐檔讀內容後**全數 flag superseded/obsolete**（campaign 規則 3，零搬移零連結手術）：`agent-collaboration` 與 `analyses/archived/` 同名 794 行副本 near-identical 且內容已被 `methodologies/tdd-collaboration-flow.md` + agent 定義覆蓋；`decision-workflows` 五情境已被 `pm-rules/skip-gate`+`incident-response`+`decision-tree` 覆蓋；`quick-ref-agent-dispatch-recovery` 所述 `agent_dispatch_recovery.py` hook 已不存在；`thinking-process` 為 2025-12-01 一次性 session 快照非知識載體。本批 0 檔搬移，故不加 map 行，留 PM follow-up 清理（inbound 連結多在 .3/.4 批檔群）

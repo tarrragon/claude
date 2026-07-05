@@ -1,3 +1,10 @@
+---
+id: ARCH-001
+title: 配置與程式碼混合
+category: architecture
+severity: medium
+created: 2026-01-19
+---
 # ARCH-001: 配置與程式碼混合
 
 ## 基本資訊

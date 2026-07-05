@@ -55,6 +55,7 @@ from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
     resolve_ticket_path,
 )
+from ticket_system.constants import VALID_TICKET_TYPES, VALID_PRIORITIES
 
 
 def _validate_acceptance_context(
@@ -827,5 +828,157 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
     print(format_info(InfoMessages.LOG_APPENDED, ticket_id=args.ticket_id, section=section))
     print(f"{TrackAcceptanceMessages.TIMESTAMP_PREFIX} {timestamp}")
     print(f"{TrackAcceptanceMessages.CONTENT_PREFIX} {content}")
+
+    # W5-014.2: self-verify — 讀回寫入後的檔案行數（opinionated-default）
+    try:
+        with open(ticket_path, "r", encoding="utf-8") as _vf:
+            line_count = sum(1 for _ in _vf)
+        print(f"[verify] ticket md: {line_count} lines after write")
+    except OSError:
+        pass
+
+    return 0
+
+
+def execute_add_spawn_request(args: argparse.Namespace, version: str) -> int:
+    """
+    追加結構化 spawn request 至 Spawn Requests 章節
+
+    仿照 append-log 模式（file_lock 包圍 load → modify → save + auto-commit）。
+    語意：agent 執行中發現應開新 ticket 的議題，寫入建議（request），
+    由 PM 讀取後決定是否建 ticket（fulfillment）。
+    """
+    lock_target = Path(get_ticket_path(version, args.ticket_id))
+    with file_lock(lock_target):
+        return _execute_add_spawn_request_locked(args, version)
+
+
+def _execute_add_spawn_request_locked(args: argparse.Namespace, version: str) -> int:
+    """add-spawn-request 主邏輯（已位於 file_lock 內）。"""
+    import sys as _sys
+
+    from ticket_system.lib.section_locator import find_section
+    from ticket_system.lib.ticket_builder import (
+        SCHEMA_H2_SECTIONS,
+        insert_missing_schema_section,
+    )
+
+    ticket = load_ticket(version, args.ticket_id)
+    if not ticket:
+        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
+        return 1
+
+    # 前置檢核聚合（W1-025 同模式）：status / 枚舉值一次評估完整回報
+    force = bool(getattr(args, "force", False))
+    status_ok, status_error = require_in_progress(
+        ticket,
+        args.ticket_id,
+        "add-spawn-request",
+        allow_completed=True,
+        allow_pending=False,
+        force=force,
+    )
+    if not status_ok:
+        _sys.stderr.write(status_error + "\n")
+
+    type_valid = args.type in VALID_TICKET_TYPES
+    if not type_valid:
+        print(format_error(ErrorMessages.INVALID_SECTION, section=args.type))
+        print(f"   有效值: {', '.join(sorted(VALID_TICKET_TYPES))}")
+
+    priority_valid = args.priority in VALID_PRIORITIES
+    if not priority_valid:
+        print(format_error(ErrorMessages.INVALID_SECTION, section=args.priority))
+        print(f"   有效值: {', '.join(sorted(VALID_PRIORITIES))}")
+
+    if not status_ok or not type_valid or not priority_valid:
+        return 2 if not status_ok else 1
+
+    body = ticket.get("_body", "")
+    if not body:
+        print(format_error(ErrorMessages.BODY_CONTENT_NOT_FOUND, ticket_id=args.ticket_id))
+        return 1
+
+    section = "Spawn Requests"
+    match = find_section(body, section)
+
+    # 自動編號：掃描既有 body 中 SR-\d+ 最大值 +1
+    existing_ids = [int(n) for n in re.findall(r"SR-(\d+)", body)]
+    next_id = max(existing_ids, default=0) + 1
+    sr_label = f"SR-{next_id}"
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    files_value = args.files if args.files else ""
+    context_value = args.context if args.context else ""
+    new_entry = (
+        f"\n- **{sr_label}** ({timestamp})\n"
+        f"  - what: {args.what}\n"
+        f"  - why: {args.why}\n"
+        f"  - suggested_type: {args.type}\n"
+        f"  - suggested_priority: {args.priority}\n"
+        f"  - related_files: {files_value}\n"
+        f"  - context: {context_value}\n"
+        f"  - status: pending\n"
+    )
+
+    if match is None or not match.found:
+        new_body = insert_missing_schema_section(
+            body, section, new_entry.lstrip("\n"), ticket_type=str(ticket.get("type", "") or "")
+        )
+        if new_body is None:
+            print(format_error(ErrorMessages.SECTION_NOT_FOUND, ticket_id=args.ticket_id, section=section))
+            return 1
+        print(format_msg(TrackAcceptanceMessages.SECTION_AUTO_CREATED_FORMAT, section=section))
+    else:
+        section_start = match.start
+        section_end = match.end
+        section_text = match.text
+        section_content = match.content
+
+        updated_section = _replace_or_append_section_content(
+            section_text=section_text,
+            section_content=section_content,
+            new_entry=new_entry,
+        )
+        new_body = body[:section_start] + updated_section + body[section_end:]
+
+    # 寫回前 idempotent dedupe 重複 Schema H2（與 append-log 同防護，PC-110）
+    try:
+        from ticket_system.lib.ticket_builder import dedupe_schema_sections
+        new_body = dedupe_schema_sections(new_body)
+    except Exception as exc:
+        _sys.stderr.write(f"[add-spawn-request] dedupe_schema_sections skipped: {exc}\n")
+
+    ticket["_body"] = new_body
+
+    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+    save_ticket(ticket, ticket_path)
+
+    # auto-commit（與 append-log 同機制；graceful degrade）
+    from ticket_system.lib import git_utils
+    try:
+        commit_status = git_utils._auto_commit_ticket_md(
+            str(ticket_path), args.ticket_id, section
+        )
+        if commit_status in ("not_git_repo", "git_failed"):
+            _sys.stderr.write(
+                f"[add-spawn-request] auto-commit skipped（{commit_status}，非致命）；"
+                f"body 已保留 working tree，可手動 git commit 持久化。\n"
+            )
+    except Exception as exc:
+        _sys.stderr.write(
+            f"[add-spawn-request] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
+        )
+
+    print(format_info(InfoMessages.LOG_APPENDED, ticket_id=args.ticket_id, section=section))
+    print(f"   編號: {sr_label}")
+    print(f"   what: {args.what}")
+
+    try:
+        with open(ticket_path, "r", encoding="utf-8") as _vf:
+            line_count = sum(1 for _ in _vf)
+        print(f"[verify] ticket md: {line_count} lines after write")
+    except OSError:
+        pass
 
     return 0

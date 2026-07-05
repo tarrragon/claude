@@ -1,3 +1,10 @@
+---
+id: IMP-006
+title: Hook 隱性故障模式
+category: implementation
+severity: medium
+created: 2026-03-02
+---
 # IMP-006: Hook 隱性故障模式
 
 ## 分類

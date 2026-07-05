@@ -1,3 +1,10 @@
+---
+id: ARCH-019
+title: Hook Event 時機錯位（啟動 vs 完成職責分掛同一 event）
+category: architecture
+severity: medium
+created: 2026-04-14
+---
 # ARCH-019: Hook Event 時機錯位（啟動 vs 完成職責分掛同一 event）
 
 ## 錯誤症狀

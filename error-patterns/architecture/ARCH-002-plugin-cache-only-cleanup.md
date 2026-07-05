@@ -1,3 +1,10 @@
+---
+id: ARCH-002
+title: Plugin 清理不完整導致反覆復發
+category: architecture
+severity: medium
+created: 2026-02-24
+---
 # ARCH-002: Plugin 清理不完整導致反覆復發
 
 ## 基本資訊

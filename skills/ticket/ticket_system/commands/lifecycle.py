@@ -858,6 +858,13 @@ class TicketLifecycle:
 
         print(format_info(InfoMessages.TICKET_COMPLETED, ticket_id=ticket_id))
 
+        # W5-014.2: self-verify — 讀回真實 status 附在 stdout（opinionated-default）
+        verified_ticket = load_ticket(self.version, ticket_id)
+        if verified_ticket:
+            v_status = verified_ticket.get("status", "unknown")
+            v_completed_at = verified_ticket.get("completed_at", "unknown")
+            print(f"[verify] status={v_status}, completed_at={v_completed_at}")
+
         # 自動追加 worklog 進度行
         ticket_title = ticket.get("title", "")
         append_worklog_progress(self.version, ticket_id, ticket_title)

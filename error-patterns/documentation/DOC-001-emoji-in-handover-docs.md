@@ -1,3 +1,10 @@
+---
+id: DOC-001
+title: 交接文件使用 emoji
+category: documentation
+severity: medium
+created: 2026-01-14
+---
 # DOC-001: 交接文件使用 emoji
 
 ## 基本資訊

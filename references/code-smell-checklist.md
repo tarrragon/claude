@@ -175,6 +175,70 @@ C. Ticket 粒度相關 Code Smells
 
 ---
 
+### 1.5 過度設計四反模式（Over-Engineering）
+
+過度設計是「用比問題所需更複雜的方案」。它的成本（認知負擔、間接層、更多檔案）立即產生，效益（宣稱的未來彈性）卻常永不到來。以下四種是最常見的過度設計反模式，各附最小正反對照。
+
+**判斷準則（核心測試）**：把碼拿給不熟專案的人看。若對方問「為什麼這裡要這樣抽象？」而答案是「以防我們之後需要……」，就是過度設計。「以防之後需要」不是需求，是對未來的猜測——缺乏證據支撐，錯誤率高於當下已驗證的需求。重複兩次再抽象——錯誤的抽象比重複昂貴得多。
+
+#### 反模式 1：過早抽象（Premature Abstraction）
+
+只有一種用途，卻建了支援多種實作的通用框架。
+
+```python
+# 壞味道：只需寄一種信，卻寫了策略模式框架
+class EmailService:
+    def __init__(self, provider: EmailProvider, template_engine: TemplateEngine): ...
+    async def send(self, template, context, recipient, **kwargs): ...
+
+# 好味道：需求就是寄一封歡迎信，寫這個就好
+async def send_welcome_email(user):
+    body = f"Welcome {user.name}! Your account is ready."
+    await send_email(to=user.email, subject="Welcome", body=body)
+```
+
+#### 反模式 2：投機性錯誤處理（Speculative Error Handling）
+
+為不可能發生的錯誤加防護；驗證自己上游已驗證過的輸入；對永不為 null 的值加 null 檢查。每一行錯誤處理都是別人要讀懂的一行。
+
+```javascript
+// 壞味道：value 來自本函式上游、已驗證、不可能為 null
+function format(value) {
+  if (value === null || value === undefined) throw new Error('unexpected null');
+  return value.trim();
+}
+// 好味道：只處理真的會發生的錯誤
+function format(value) { return value.trim(); }
+```
+
+#### 反模式 3：不必要的可配置性（Unnecessary Configurability）
+
+把永遠不會變的值做成參數 / 環境變數。每個配置項都是別人要做的一個決定、要正確設定的一個值。
+
+```python
+# 壞味道：batch_size / retry_count 從沒有第二種取值
+def process(items, batch_size=100, retry_count=3, backoff=2.0): ...
+# 好味道：需要時再參數化，先硬編碼
+def process(items):
+    BATCH_SIZE = 100  # 有真實理由要變時再提取為參數
+```
+
+#### 反模式 4：死彈性（Dead Flexibility）
+
+只有一個實作的介面、只有一個子類的抽象基底、只用一種型別實例化的泛型。這些在第二個實作真正出現前，只有成本沒有效益。
+
+```typescript
+// 壞味道：介面只有一個實作，且無測試替身需求
+interface UserRepository { findById(id: string): User }
+class PostgresUserRepository implements UserRepository { ... }  // 唯一實作
+// 好味道：直接用類別，第二個實作出現時再抽介面
+class UserRepository { findById(id: string): User { ... } }
+```
+
+> **與既有 smell 的關係**：本節聚焦「加太多」的過度設計；「未使用程式碼」的處理（既有死碼該不該刪、設計意圖溯源）見 quality-common.md §1.2.4；認知負擔量化閾值見 `.claude/rules/core/cognitive-load.md`。
+
+---
+
 ## 第二章：基於層級隔離的 Code Smell 定義
 
 ### 2.1 A 類 Code Smell（跨層級問題）

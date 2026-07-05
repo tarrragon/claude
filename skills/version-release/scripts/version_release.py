@@ -32,6 +32,16 @@ from datetime import datetime
 from typing import Optional, List, Tuple, Dict
 import yaml
 
+_memory_upgrade_scripts_dir = (
+    Path(__file__).resolve().parent.parent.parent
+    / "continuous-learning"
+    / "scripts"
+)
+if str(_memory_upgrade_scripts_dir) not in sys.path:
+    sys.path.insert(0, str(_memory_upgrade_scripts_dir))
+
+from memory_upgrade import scan_memory_dir, classify_memory  # noqa: E402
+
 
 # ============================================================================
 # 版本同步檢查（Chrome Extension 雙版本來源）
@@ -1605,6 +1615,87 @@ def check_version_sync(version: str) -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
+def _resolve_memory_dir(root: Path) -> Path:
+    """依專案根目錄推導 memory 目錄路徑（`~/.claude/projects/<slug>/memory/`）。
+
+    slug 規則：絕對路徑每個 `/` 換成 `-`（Claude Code session 目錄慣例）。
+    """
+    slug = str(root.resolve()).replace("/", "-")
+    return Path.home() / ".claude" / "projects" / slug / "memory"
+
+
+def check_memory_upgrade_status(
+    version: str,
+) -> Tuple[bool, List[str]]:
+    """稽核 memory feedback 分流遵循率（1.5.0-W5-011.4）。
+
+    復用 memory_upgrade.scan_memory_dir 分類邏輯，計算已標註 / 未評估 /
+    deferred / dangling 四類統計；unevaluated > 0 視為未通過（規則 7 要求
+    捕獲時即分流，不應累積未評估項）。
+
+    此稽核輸出同時作為「是否需要建強制層 hook」的決策 trigger
+    （decision-trigger-binding 規則 2）：若連續多次發版 unevaluated > 0，
+    代表自律層不足以維持分流遵循率，應建立強制層 hook。
+
+    Args:
+        version: 版本號（目前僅用於介面對齊，稽核範圍為全域 memory 目錄）
+
+    Returns:
+        (passed, errors)：passed 為 unevaluated == 0；errors 含統計訊息與
+        （未通過時的）決策 trigger 提示
+    """
+    _ = version  # 介面對齊 check_* 慣例，本稽核範圍非單一版本
+
+    root = get_project_root()
+    memory_dir = _resolve_memory_dir(root)
+    error_patterns_dir = root / ".claude" / "error-patterns"
+
+    scan_result = scan_memory_dir(memory_dir, error_patterns_dir)
+    unevaluated = scan_result.get("unevaluated", [])
+    deferred = scan_result.get("deferred", [])
+    dangling = scan_result.get("dangling", [])
+
+    upgraded_count, total_feedback = _count_memory_feedback(memory_dir)
+    unevaluated_count = len(unevaluated)
+
+    if total_feedback > 0:
+        compliance_rate = round(
+            (total_feedback - unevaluated_count) / total_feedback * 100
+        )
+    else:
+        compliance_rate = 100
+
+    messages = [
+        f"[Memory 升級稽核] 已標註: {upgraded_count}, 未評估: {unevaluated_count}, "
+        f"deferred: {len(deferred)}, dangling: {len(dangling)} "
+        f"(遵循率: {compliance_rate}%)"
+    ]
+
+    if unevaluated_count == 0:
+        return True, messages
+
+    messages.append(
+        "決策 trigger：unevaluated > 0（若連續多次發版皆未收斂為 0，"
+        "應建立強制層 hook，decision-trigger-binding 規則 2）"
+    )
+    for name in unevaluated:
+        messages.append(f"  - 未評估: {name}")
+    for entry in dangling:
+        messages.append(
+            f"  - dangling pointer: {entry['file']} -> {', '.join(entry['ids'])}"
+        )
+    return False, messages
+
+
+def _count_memory_feedback(memory_dir: Path) -> Tuple[int, int]:
+    """回傳 (已標註數, 總 feedback 數)，供分流遵循率計算。"""
+    if not memory_dir.is_dir():
+        return 0, 0
+    files = sorted(memory_dir.glob("feedback_*.md"))
+    upgraded = sum(1 for f in files if classify_memory(f) == "upgraded")
+    return upgraded, len(files)
+
+
 def preflight_check(version: str) -> Tuple[bool, Dict[str, Tuple[bool, List[str]]]]:
     """執行 Pre-flight 檢查"""
     print_section("Step 1: Pre-flight Check")
@@ -1694,7 +1785,18 @@ def preflight_check(version: str) -> Tuple[bool, Dict[str, Tuple[bool, List[str]
         for error in vs_errors:
             print_error(error)
 
-    all_ok = wl_ok and td_status["passed"] and td_ok and pv_ok and vs_ok
+    # 1.6 檢查 memory 升級稽核（分流遵循率）
+    print_info("[OK] 檢查 memory 升級稽核...")
+    mu_ok, mu_messages = check_memory_upgrade_status(version)
+    results["memory_upgrade"] = (mu_ok, mu_messages)
+
+    if mu_ok:
+        print_success(mu_messages[0] if mu_messages else "Memory 升級稽核通過")
+    else:
+        for message in mu_messages:
+            print_warning(message)
+
+    all_ok = wl_ok and td_status["passed"] and td_ok and pv_ok and vs_ok and mu_ok
     return all_ok, results
 
 

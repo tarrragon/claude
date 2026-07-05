@@ -1,3 +1,10 @@
+---
+id: ARCH-V1-002
+title: 雙向 overlay sync 製造重複 top-level 定義（死碼 shadow 活碼）
+category: architecture
+severity: medium
+created: 2026-06-16
+---
 # ARCH-V1-002: 雙向 overlay sync 製造重複 top-level 定義（死碼 shadow 活碼）
 
 ---

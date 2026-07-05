@@ -4,6 +4,11 @@ ticket track stale-list 命令（W17-200）
 列舉 stale ticket 明細（pending status），補 list 命令僅顯示彙總計數
 而無法定位個別 stale ticket 的缺口。
 
+1.5.0-W5-005.7 擴充（in_progress release hint）：
+table 格式追加 stale in-progress 章節（started_at 單平面判定，復用
+is_stale_in_progress），附 `ticket track release` 指令提示。ids / yaml
+格式維持 pending-only（既有 pipe 消費者語意不變，Never break userspace）。
+
 設計約束：
 - version-agnostic（可選 --version / --wave / --all 過濾）
 - 註冊於 track.py _create_version_agnostic_handlers() 字典
@@ -15,15 +20,18 @@ ticket track stale-list 命令（W17-200）
 from __future__ import annotations
 
 import argparse
-from datetime import date
+from datetime import date, datetime
 from typing import Dict, List, Optional
 
-from ticket_system.constants import STATUS_PENDING
+from ticket_system.constants import STATUS_IN_PROGRESS, STATUS_PENDING
 from ticket_system.lib.staleness import (
     LEVEL_CRITICAL,
     LEVEL_INFO,
     LEVEL_WARNING,
+    STALE_IN_PROGRESS_HOURS,
     calculate_stale_level,
+    compute_stale_minutes,
+    is_stale_in_progress,
 )
 from ticket_system.lib.ticket_loader import list_tickets
 from ticket_system.lib.version import get_active_versions
@@ -101,6 +109,34 @@ def _collect_stale(
     return rows
 
 
+def _collect_stale_in_progress(
+    tickets: List[Dict],
+    *,
+    wave: Optional[int],
+    now: Optional[datetime],
+) -> List[Dict]:
+    """過濾 stale in_progress ticket（started_at 單平面），依經過分鐘數降序。
+
+    判定完全委派 is_stale_in_progress（frontmatter started_at；不讀
+    dispatch-active.json——記錄平面另有 subagent-stop-dispatch-cleanup-hook
+    負責事件清理，本命令僅呈現 ticket 世界平面狀態）。
+    """
+    rows: List[Dict] = []
+    for ticket in tickets:
+        if ticket.get("status") != STATUS_IN_PROGRESS:
+            continue
+        if wave is not None and ticket.get("wave") != wave:
+            continue
+        if not is_stale_in_progress(ticket, now):
+            continue
+        minutes = compute_stale_minutes(ticket, now)
+        if minutes is None:
+            continue
+        rows.append({**ticket, "_minutes": minutes})
+    rows.sort(key=lambda r: r["_minutes"], reverse=True)
+    return rows
+
+
 def _gather_tickets(
     explicit_version: Optional[str], all_versions: bool
 ) -> List[Dict]:
@@ -139,6 +175,31 @@ def _render_table(rows: List[Dict], threshold: str, wave: Optional[int]) -> str:
     return "\n".join(lines)
 
 
+def _render_in_progress_section(rows: List[Dict]) -> str:
+    """渲染 stale in-progress 章節（含 release 指令提示）；無資料回空字串。"""
+    if not rows:
+        return ""
+    lines: List[str] = []
+    lines.append("─" * 60)
+    lines.append(
+        f"Stale in-progress tickets (>= {STALE_IN_PROGRESS_HOURS}h, "
+        f"依 frontmatter started_at)"
+    )
+    lines.append("─" * 60)
+    for row in rows:
+        tid = row.get("id", "<unknown>")
+        title = row.get("title") or ""
+        hours = row["_minutes"] // 60
+        who = row.get("who") or {}
+        agent = who.get("current", "?") if isinstance(who, dict) else "?"
+        lines.append(f"{tid} | in_progress {hours}h | agent={agent} | {title}")
+    lines.append(
+        "   提示：確認對照 agent 已終止後，以 `ticket track release <id>` 釋放；"
+        "進行中 agent 勿用"
+    )
+    return "\n".join(lines)
+
+
 def _render_ids(rows: List[Dict]) -> str:
     return "\n".join(r.get("id", "") for r in rows if r.get("id"))
 
@@ -169,6 +230,7 @@ def execute_stale_list(args: argparse.Namespace) -> int:
     fmt = getattr(args, "format", "table") or "table"
     today_override = getattr(args, "_today", None)  # 測試用 hook
     today = today_override or date.today()
+    now_override = getattr(args, "_now", None)  # 測試用 hook（in_progress 判定）
 
     tickets = _gather_tickets(explicit_version, all_versions)
     rows = _collect_stale(
@@ -180,7 +242,14 @@ def execute_stale_list(args: argparse.Namespace) -> int:
     elif fmt == "yaml":
         print(_render_yaml(rows))
     else:
-        print(_render_table(rows, threshold, wave))
+        # in_progress 章節僅在 table 呈現：ids/yaml 的 pipe 消費者
+        # （如 xargs close）預期 pending 集合，混入 in_progress 會誤傷
+        output = _render_table(rows, threshold, wave)
+        ip_rows = _collect_stale_in_progress(tickets, wave=wave, now=now_override)
+        ip_section = _render_in_progress_section(ip_rows)
+        if ip_section:
+            output = f"{output}\n{ip_section}"
+        print(output)
     return 0
 
 

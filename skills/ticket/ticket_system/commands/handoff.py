@@ -1383,7 +1383,7 @@ def _extract_exit_status_for_handoff(
     if not isinstance(parsed, dict):
         return None
 
-    status = parsed.get("status")
+    status = parsed.get("exit_status") or parsed.get("status")
     if not isinstance(status, str) or status not in _VALID_EXIT_STATUSES:
         # status 缺失或非合法枚舉：仍回 None（runqueue tag 設計依賴 status 合法性）
         return None

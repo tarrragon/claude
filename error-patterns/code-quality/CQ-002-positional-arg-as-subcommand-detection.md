@@ -1,3 +1,10 @@
+---
+id: CQ-002
+title: Positional Argument 作為子命令偵測導致路由不一致
+category: code-quality
+severity: medium
+created: 2026-03-07
+---
 # CQ-002: Positional Argument 作為子命令偵測導致路由不一致
 
 **發現日期**: 2026-03-07

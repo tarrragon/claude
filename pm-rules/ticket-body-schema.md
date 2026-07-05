@@ -9,6 +9,8 @@
 
 ## Schema 對照表
 
+> **type 正典**：4 型 IMP / ADJ / ANA / DOC（SSOT：`ticket_system/constants.py` 的 `TICKET_TYPES`，CLI 以 argparse choices 強制）。TST / RES / INV 為歷史化石（讀取容忍、寫入拒絕）。ADJ 未定義專屬章節要求，Hook 驗證回退通用檢查。
+
 | Section | ANA | IMP | DOC |
 |---------|-----|-----|-----|
 | Task Summary | 必填 | 必填 | 必填 |
@@ -275,14 +277,28 @@ acceptance:
 
 ---
 
+## Frontmatter protocol_version 契約
+
+自 W5-005.4 起，新建票 frontmatter 自動 emit `protocol_version` 欄位（值取自 `constants.py` 的 `PROTOCOL_VERSION_CURRENT`，當前 `"2.0"`）。
+
+| 契約 | 說明 |
+|------|------|
+| 凍結豁免 | 歷史 2285 票不回填 `protocol_version`（缺欄位視為 `"1.0"` 隱含預設） |
+| Lazy-migration | 工具讀取票時以 `frontmatter.get("protocol_version", PROTOCOL_VERSION_DEFAULT)` 取值；不主動寫回舊票 |
+| 升版觸發 | `PROTOCOL_VERSION_CURRENT` 遞增時，新票自動拿新值；舊票凍結不動 |
+| 消費者契約 | Hook/CLI 消費 protocol_version 時以 `PROTOCOL_VERSIONS_SUPPORTED` 白名單判斷是否支援 |
+
+---
+
 ## 變更紀錄
 
 | 版本 | 日期 | 變更 |
 |------|------|------|
+| 1.4.0 | 2026-07-05 | 新增「Frontmatter protocol_version 契約」段落：emit 機制 + 凍結豁免 + lazy-migration 契約（W5-005.4） |
 | 1.3.0 | 2026-06-04 | IMP 區塊新增「src 字串輸出變更額外 acceptance」段落；反模式表補充 build-only 驗收反模式（W1-005.2 / W1-040） |
 | 1.2.0 | 2026-05-13 | 新增「Solution 章節：H3 子標題與表格使用慣例」+「Type-aware Quality Gate」兩段（W10-123 / W10-124 / W10-125 規則收斂；W10-126 落地） |
 | 1.1.0 | 2026-05-08 | ANA Solution 章節新增「Spawn 落地確認」子節 checklist（W17-167 L3 落地，配合 W17-168 hook + W17-169 quality-baseline / ticket-lifecycle 同步修訂） |
 | 1.0.0 | 2026-04-20 | 初版（W17-016.2 落地 W17-016.1 盤點結論） |
 
-**Last Updated**: 2026-06-04
-**Version**: 1.3.0 — IMP 新增 src 字串輸出變更 acceptance 規則（必含 npm test，禁止只驗 build:dev）+ 反模式表補充（W1-005.2 / 0.19.1-W1-040）
+**Last Updated**: 2026-07-05
+**Version**: 1.4.0 — 新增 protocol_version 契約段落（emit + 凍結豁免 + lazy-migration，W5-005.4）

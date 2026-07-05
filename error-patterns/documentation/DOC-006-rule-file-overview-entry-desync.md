@@ -1,3 +1,10 @@
+---
+id: DOC-006
+title: 規則文件局部更新後，同檔案總覽圖與入口文件未同步
+category: documentation
+severity: medium
+created: 2026-03-07
+---
 # DOC-006: 規則文件局部更新後，同檔案總覽圖與入口文件未同步
 
 ---

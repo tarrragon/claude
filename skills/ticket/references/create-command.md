@@ -50,15 +50,16 @@
 
 ## 類型說明
 
+正典 4 型（SSOT：`ticket_system/constants.py` 的 `TICKET_TYPES`；CLI `--type` 以 argparse choices 強制）：
+
 | 類型           | 代碼 | 用途             |
 | -------------- | ---- | ---------------- |
 | Implementation | IMP  | 開發新功能       |
-| Testing        | TST  | 執行測試驗證     |
 | Adjustment     | ADJ  | 調整/修復問題    |
-| Research       | RES  | 探索未知領域     |
-| Analysis       | ANA  | 理解現狀和問題   |
-| Investigation  | INV  | 深入追蹤問題根因 |
+| Analysis       | ANA  | 理解現狀和問題（含研究/調查類任務） |
 | Documentation  | DOC  | 記錄和傳承經驗   |
+
+> 歷史化石：TST / RES / INV 已移出正典（TST 職能由 `tdd_phase` 欄位承載、RES/INV 併入 ANA）。語料既存化石票（INV 3 筆）讀取/審計容忍、不回填；新票使用化石 type 會被 CLI 拒絕。
 
 ## 決策樹路由參數
 

@@ -1,3 +1,10 @@
+---
+id: IMP-003
+title: 重構作用域迴歸
+category: implementation
+severity: medium
+created: 2026-02-26
+---
 # IMP-003: 重構作用域迴歸
 
 ## 基本資訊

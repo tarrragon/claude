@@ -1,3 +1,10 @@
+---
+id: DOC-005
+title: 新增原則時跨文件未同步更新
+category: documentation
+severity: medium
+created: 2026-03-04
+---
 # DOC-005: 新增原則時跨文件未同步更新
 
 ---

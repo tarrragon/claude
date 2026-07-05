@@ -1,3 +1,10 @@
+---
+id: DOC-V1-001
+title: 位置編號引用隨目標文件演進靜默失效
+category: documentation
+severity: medium
+created: 2026-06-12
+---
 # DOC-V1-001: 位置編號引用隨目標文件演進靜默失效
 
 **類別**: documentation

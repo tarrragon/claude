@@ -1,3 +1,10 @@
+---
+id: ARCH-015
+title: subagent .claude/ 寫入 hardcoded 保護
+category: architecture
+severity: medium
+created: 2026-04-13
+---
 # ARCH-015: subagent .claude/ 寫入 hardcoded 保護
 
 ## 基本資訊

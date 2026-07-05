@@ -1,3 +1,10 @@
+---
+id: DOC-003
+title: Skill 觸發關鍵字不足導致匹配失敗
+category: documentation
+severity: medium
+created: 2026-02-26
+---
 # DOC-003: Skill 觸發關鍵字不足導致匹配失敗
 
 ## 基本資訊

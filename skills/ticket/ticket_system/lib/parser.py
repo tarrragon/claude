@@ -4,11 +4,14 @@
 提供 Markdown frontmatter 解析、Ticket 檔案載入和儲存功能。
 支援 Markdown（含 frontmatter）和 YAML 格式。
 """
+import sys
+from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
+from ticket_system import constants as _enum_constants
 from .ui_constants import FRONTMATTER_SPLIT_COUNT
 from .paths import get_ticket_path
 # Backward-compat alias：原 _file_lock 已搬至 lib/file_lock.py 並 rename 為
@@ -33,6 +36,31 @@ class YAMLParseError(Exception):
         super().__init__(self.message)
 
 
+class EnumGateViolation(Exception):
+    """枚舉驗證閘違規（deny 模式）：非法枚舉值或非法狀態轉移被拒絕落盤。
+
+    violations 為 (field, old_value, new_value, valid_values, kind) tuple 清單
+    （kind 為 "enum" 枚舉成員違規 / "transition" 狀態轉移違規），
+    供呼叫端組錯誤訊息或測試斷言。
+    """
+
+    def __init__(self, violations: List[tuple]):
+        self.violations = violations
+        detail = "; ".join(
+            _format_violation(field, old, new, valid, kind)
+            for field, old, new, valid, kind in violations
+        )
+        super().__init__(f"枚舉驗證閘拒絕落盤：{detail}")
+
+
+def _format_violation(field, old, new, valid, kind) -> str:
+    """組單筆違規的人讀訊息（stderr / 例外共用）。"""
+    if kind == "transition":
+        allowed = ", ".join(sorted(valid)) if valid else "無（終態）"
+        return f"{field} 轉移 {old!r} -> {new!r} 非法（{old} 合法出邊：{allowed}）"
+    return f"{field} 值 {new!r} 不在正典（{', '.join(sorted(valid))}）"
+
+
 # ============================================================================
 # Process-scoped ticket cache
 # ============================================================================
@@ -44,6 +72,136 @@ _ticket_cache: Dict[str, Optional[Dict[str, Any]]] = {}
 
 # 特殊欄位常數
 SPECIAL_FIELDS = ["chain", "decision_tree_path", "created"]
+
+# 枚舉閘載入時快照欄位名（_ 前綴：僅存在於記憶體 dict，save 時剝除不序列化）
+ENUM_SNAPSHOT_FIELD = "_loaded_enum_snapshot"
+
+# 枚舉閘關注欄位（名稱固定；合法值集合於呼叫時讀 constants 模組屬性，
+# 使測試可 monkeypatch VALID_* / ENUM_GATE_MODE）
+_ENUM_GATE_FIELD_NAMES = ("type", "priority", "status")
+
+
+def _snapshot_enum_fields(data: Dict[str, Any]) -> Dict[str, Any]:
+    """擷取枚舉閘關注欄位的載入時快照（changed-fields-only 比對基準）。"""
+    return {field: data.get(field) for field in _ENUM_GATE_FIELD_NAMES}
+
+
+def _collect_enum_violations(
+    ticket: Dict[str, Any],
+    snapshot: Optional[Dict[str, Any]],
+) -> List[tuple]:
+    """收集枚舉違規：只驗「相對載入快照有變更」的欄位。
+
+    Why（化石豁免 / Never break userspace）：語料存在正典外化石值
+    （type 12 / priority 24 / status 6 筆），全票驗證會讓任何不相關寫入
+    （append-log / set-what）對化石票炸警告。以載入快照比對，欄位值未被
+    本次操作改動即跳過；無快照（新建票，未經 load_ticket）→ 全欄位驗證。
+
+    邊界：欄位缺席或為 None 不列違規——必填性屬 checklist / auditor 職責，
+    本閘只守「有值時必須是正典值」。非字串值（list/dict 誤塞）視為違規。
+
+    Returns:
+        List[tuple]: (field, old_value, new_value, valid_values, "enum")
+    """
+    gate_fields = {
+        "type": _enum_constants.VALID_TICKET_TYPES,
+        "priority": _enum_constants.VALID_PRIORITIES,
+        "status": _enum_constants.VALID_STATUSES,
+    }
+    violations = []
+    for field, valid_values in gate_fields.items():
+        if field not in ticket:
+            continue
+        new_value = ticket.get(field)
+        if new_value is None:
+            continue
+        if snapshot is not None and new_value == snapshot.get(field):
+            continue  # 未被本次操作改動 → 化石豁免
+        if not isinstance(new_value, str) or new_value not in valid_values:
+            violations.append(
+                (field, snapshot.get(field) if snapshot else None, new_value, valid_values, "enum")
+            )
+    return violations
+
+
+def _collect_transition_violations(
+    ticket: Dict[str, Any],
+    snapshot: Optional[Dict[str, Any]],
+) -> List[tuple]:
+    """收集狀態轉移違規：status 變更時查 STATUS_TRANSITIONS[old] 是否含 new。
+
+    邊界（不重複計、化石容忍）：
+    - 無快照（新建票）→ 無「轉移」概念，跳過。
+    - 舊態非正典（skipped 等化石）→ 跳過：無法從未知狀態斷言邊合法性，
+      且矯正化石票回正典狀態不應被阻擋。
+    - 新態非正典 → 跳過：已由枚舉成員違規計入，避免同一寫入雙重告警。
+
+    Returns:
+        List[tuple]: (field, old, new, allowed_targets, "transition")
+    """
+    if snapshot is None:
+        return []
+    old_value = snapshot.get("status")
+    new_value = ticket.get("status")
+    if new_value is None or new_value == old_value:
+        return []
+    transitions = getattr(_enum_constants, "STATUS_TRANSITIONS", {})
+    if not isinstance(old_value, str) or old_value not in transitions:
+        return []
+    if not isinstance(new_value, str) or new_value not in transitions:
+        return []
+    if new_value in transitions[old_value]:
+        return []
+    return [("status", old_value, new_value, transitions[old_value], "transition")]
+
+
+def _log_enum_violations(
+    violations: List[tuple],
+    ticket: Dict[str, Any],
+    ticket_path: Path,
+    mode: str,
+) -> None:
+    """違規寫入 hook-logs/enum-gate.log（warn 期誤報率量測資料源）。"""
+    try:
+        from .paths import get_project_root
+        log_dir = get_project_root() / ".claude" / "hook-logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        entry_id = ticket.get("id", ticket_path.stem)
+        with open(log_dir / "enum-gate.log", "a", encoding="utf-8") as f:
+            for field, old, new, _valid, kind in violations:
+                f.write(f"{timestamp}\t{mode}\t{kind}\t{entry_id}\t{field}\t{old!r}\t{new!r}\n")
+    except OSError as e:
+        # 量測日誌失敗不阻斷落盤主流程；stderr 保留可觀測性（雙通道要求）
+        sys.stderr.write(
+            f"[enum-gate] 日誌寫入失敗（{type(e).__name__}: {e}），僅 stderr 警告\n"
+        )
+
+
+def _enforce_enum_gate(
+    ticket: Dict[str, Any],
+    snapshot: Optional[Dict[str, Any]],
+    ticket_path: Path,
+) -> None:
+    """save_ticket 落盤前的枚舉驗證閘（31 個寫入呼叫點的單點防線）。
+
+    warn 模式：stderr 警告 + enum-gate.log 記錄後照常落盤（量測期預設）。
+    deny 模式：raise EnumGateViolation，呼叫端不落盤。
+    模式讀 constants.ENUM_GATE_MODE（切 deny 須經 warn 期誤報率量測裁定）。
+    """
+    violations = _collect_enum_violations(ticket, snapshot)
+    violations += _collect_transition_violations(ticket, snapshot)
+    if not violations:
+        return
+    mode = getattr(_enum_constants, "ENUM_GATE_MODE", "warn")
+    _log_enum_violations(violations, ticket, ticket_path, mode)
+    entry_id = ticket.get("id", ticket_path.stem)
+    for field, old, new, valid, kind in violations:
+        sys.stderr.write(
+            f"[enum-gate:{mode}] {entry_id} {_format_violation(field, old, new, valid, kind)}\n"
+        )
+    if mode == "deny":
+        raise EnumGateViolation(violations)
 
 
 def _backup_special_fields(existing_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -245,6 +403,8 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
         # 附加元資料：body 內容和檔案路徑
         frontmatter["_body"] = body
         frontmatter["_path"] = str(ticket_path)
+        # 枚舉閘載入時快照（save 時 changed-fields-only 比對基準）
+        frontmatter[ENUM_SNAPSHOT_FIELD] = _snapshot_enum_fields(frontmatter)
         # 更新快取
         _ticket_cache[cache_key] = frontmatter
         return frontmatter
@@ -265,6 +425,9 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
             if "ticket" in ticket_content:
                 ticket_content = ticket_content["ticket"]
                 ticket_content["_path"] = str(ticket_path)
+
+            # 枚舉閘載入時快照（save 時 changed-fields-only 比對基準）
+            ticket_content[ENUM_SNAPSHOT_FIELD] = _snapshot_enum_fields(ticket_content)
 
             # 更新快取
             _ticket_cache[cache_key] = ticket_content
@@ -316,6 +479,8 @@ def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
     # 備份元資料欄位（Markdown 格式需要，YAML 格式不需要儲存）
     body = ticket.pop("_body", "")
     path_str = ticket.pop("_path", None)
+    # 枚舉閘快照：剝除避免序列化進 frontmatter；deny raise 時由 finally 恢復
+    enum_snapshot = ticket.pop(ENUM_SNAPSHOT_FIELD, None)
 
     # 備份特殊欄位（需要在儲存時保留但不序列化）
     # 這些欄位代表 Ticket 的內部狀態，由系統自動管理
@@ -325,6 +490,9 @@ def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
     ticket_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
+        # 枚舉驗證閘：置於 try 內使 deny 模式 raise 時 finally 仍恢復備份欄位
+        _enforce_enum_gate(ticket, enum_snapshot, ticket_path)
+
         if ticket_path.suffix == ".md":
             # Markdown 格式：YAML frontmatter + body
             # 序列化 frontmatter 為 YAML
@@ -365,10 +533,16 @@ def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
             ticket["_body"] = body
         if path_str:
             ticket["_path"] = path_str
+        if enum_snapshot is not None:
+            ticket[ENUM_SNAPSHOT_FIELD] = enum_snapshot
 
     # 寫入成功後失效快取，確保後續讀取取得最新資料
     # 注意：這行在 try-finally 後執行，只有寫入成功才到達
     _ticket_cache.pop(str(ticket_path), None)
+
+    # 落盤成功後刷新快照為當前值：同一 dict 再次 save 時不對已持久化的
+    # 變更重複告警（快照語意 = 「相對最後一次成功落盤」）
+    ticket[ENUM_SNAPSHOT_FIELD] = _snapshot_enum_fields(ticket)
 
 
 if __name__ == "__main__":

@@ -1,3 +1,10 @@
+---
+id: IMP-009
+title: TaskOutput vs 暫存輸出檔案混淆
+category: implementation
+severity: medium
+created: 2026-03-03
+---
 # IMP-009：TaskOutput vs 暫存輸出檔案混淆
 
 **錯誤碼**: IMP-009

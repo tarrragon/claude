@@ -1,3 +1,10 @@
+---
+id: ARCH-TUNL-001
+title: settings.local.json 註冊 hook 在 relocate 後成幽靈（sync 無法自癒）
+category: architecture
+severity: medium
+created: 2026-06-17
+---
 # ARCH-TUNL-001: settings.local.json 註冊 hook 在 relocate 後成幽靈（sync 無法自癒）
 
 ## 基本資訊

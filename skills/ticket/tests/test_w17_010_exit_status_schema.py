@@ -44,7 +44,8 @@ class TestValidSectionsExpanded:
     def test_total_ten_sections(self):
         # W3-099: 補入 'Task Summary' 與 'Completion Info' 後總數 10
         # （W10-107 對齊時遺漏的兩個三類型必填章節）
-        assert len(TrackAcceptanceMessages.VALID_SECTIONS) == 10
+        # 1.5.0-W5-023: 新增 'Spawn Requests' 後總數 11
+        assert len(TrackAcceptanceMessages.VALID_SECTIONS) == 11
 
     def test_task_summary_in_valid_sections(self):
         assert "Task Summary" in TrackAcceptanceMessages.VALID_SECTIONS

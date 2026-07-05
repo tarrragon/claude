@@ -1,3 +1,10 @@
+---
+id: ARCH-013
+title: ESM/CJS 混合匯出導致 Dead Code
+category: architecture
+severity: medium
+created: 2026-04-09
+---
 # ARCH-013: ESM/CJS 混合匯出導致 Dead Code
 
 ## 基本資訊

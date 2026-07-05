@@ -16,7 +16,18 @@ from datetime import datetime
 from .ticket_loader import load_ticket, resolve_version, get_project_root, get_tickets_dir
 from .parser import parse_frontmatter
 from .checkbox_utils import strip_checkbox_prefix
-from .constants import STATUS_COMPLETED, TERMINAL_STATUSES, VAGUE_ACCEPTANCE_WORDS, SRP_WHAT_CONJUNCTIONS, SRP_ACCEPTANCE_MODULE_THRESHOLD
+from .constants import (
+    LEGACY_TICKET_TYPES,
+    PRIORITY_LEVELS,
+    SRP_ACCEPTANCE_MODULE_THRESHOLD,
+    SRP_WHAT_CONJUNCTIONS,
+    STATUS_COMPLETED,
+    TERMINAL_STATUSES,
+    VAGUE_ACCEPTANCE_WORDS,
+    VALID_PRIORITIES,
+    VALID_STATUSES,
+    VALID_TICKET_TYPES,
+)
 # W10-125：consolidate _is_placeholder 共用 ticket_validator 實作（ARCH-020 治本）
 # 原本 acceptance_auditor 內有平行版本（簡單 regex，無 word boundary / 表格豁免），
 # 與 ticket_validator 版本邏輯漂移；W10-125 起統一使用 ticket_validator 版本。
@@ -124,20 +135,20 @@ def validate_structure(ticket: Dict[str, Any]) -> Tuple[bool, List[str]]:
     if not started_at or not str(started_at).strip():
         issues.append("缺失或為空：started_at")
 
-    # 檢查有效的 type
-    valid_types = ["IMP", "TST", "ADJ", "RES", "ANA", "INV", "DOC"]
+    # 檢查有效的 type（審計為讀取路徑：正典 4 型 + 歷史化石容忍；
+    # 枚舉自 constants 衍生，消除本地硬編碼清單漂移——原清單即漂移實例）
+    valid_types = sorted(VALID_TICKET_TYPES | LEGACY_TICKET_TYPES)
     if ticket.get("type") not in valid_types:
         issues.append(f"無效的 type：{ticket.get('type')}（有效值：{', '.join(valid_types)}）")
 
-    # 檢查有效的 status
-    valid_statuses = ["pending", "in_progress", "completed", "blocked"]
+    # 檢查有效的 status（原硬編碼 4 態漏 closed/superseded，對已關閉票誤報）
+    valid_statuses = sorted(VALID_STATUSES)
     if ticket.get("status") not in valid_statuses:
         issues.append(f"無效的 status：{ticket.get('status')}（有效值：{', '.join(valid_statuses)}）")
 
     # 檢查有效的 priority
-    valid_priorities = ["P0", "P1", "P2", "P3"]
-    if ticket.get("priority") not in valid_priorities:
-        issues.append(f"無效的 priority：{ticket.get('priority')}（有效值：{', '.join(valid_priorities)}）")
+    if ticket.get("priority") not in VALID_PRIORITIES:
+        issues.append(f"無效的 priority：{ticket.get('priority')}（有效值：{', '.join(PRIORITY_LEVELS)}）")
 
     passed = len(issues) == 0
     return passed, issues

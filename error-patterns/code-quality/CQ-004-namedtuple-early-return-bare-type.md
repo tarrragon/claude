@@ -1,3 +1,10 @@
+---
+id: CQ-004
+title: namedtuple/dataclass 早退路徑返回裸型別（AttributeError 潛在 Bug）
+category: code-quality
+severity: medium
+created: 2026-03-07
+---
 # CQ-004: namedtuple/dataclass 早退路徑返回裸型別（AttributeError 潛在 Bug）
 
 **發現日期**: 2026-03-07

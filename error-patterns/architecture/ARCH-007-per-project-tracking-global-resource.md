@@ -1,3 +1,10 @@
+---
+id: ARCH-007
+title: Per-project 追蹤檔追蹤全域資源
+category: architecture
+severity: medium
+created: 2026-03-05
+---
 # ARCH-007: Per-project 追蹤檔追蹤全域資源
 
 ## 基本資訊

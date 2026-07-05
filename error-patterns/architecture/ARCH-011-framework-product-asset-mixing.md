@@ -1,3 +1,10 @@
+---
+id: ARCH-011
+title: 框架資產與專案產物混放
+category: architecture
+severity: medium
+created: 2026-01-01
+---
 # ARCH-011: 框架資產與專案產物混放
 
 ## 症狀

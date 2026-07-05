@@ -35,7 +35,8 @@ class TestValidSectionsSchemaAlignment:
             )
 
     def test_total_ten_sections(self):
-        """W3-099 補入 'Task Summary' 與 'Completion Info' 後總數為 10
+        """W3-099 補入 'Task Summary' 與 'Completion Info' 後總數為 10，
+        1.5.0-W5-023 新增 'Spawn Requests' 後總數為 11
         （W10-107 原為 8，本次補完成 IMP/ANA/DOC 三類型必填章節 SSOT 對齊）
         """
-        assert len(TrackAcceptanceMessages.VALID_SECTIONS) == 10
+        assert len(TrackAcceptanceMessages.VALID_SECTIONS) == 11

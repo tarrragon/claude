@@ -1,3 +1,10 @@
+---
+id: IMP-011
+title: 修復中引入新的格式假設錯誤
+category: implementation
+severity: medium
+created: 2026-03-04
+---
 # IMP-011: 修復中引入新的格式假設錯誤
 
 ## 基本資訊

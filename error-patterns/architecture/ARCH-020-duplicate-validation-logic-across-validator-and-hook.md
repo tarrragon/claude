@@ -1,3 +1,10 @@
+---
+id: ARCH-020
+title: 驗證邏輯在 Validator 與 Hook 兩處獨立重寫
+category: architecture
+severity: medium
+created: 2026-04-21
+---
 # ARCH-020: 驗證邏輯在 Validator 與 Hook 兩處獨立重寫
 
 ## 錯誤症狀

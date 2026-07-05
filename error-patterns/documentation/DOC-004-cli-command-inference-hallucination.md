@@ -1,3 +1,10 @@
+---
+id: DOC-004
+title: CLI 命令通配符表示導致 Agent 錯誤類推
+category: documentation
+severity: medium
+created: 2026-03-04
+---
 # DOC-004: CLI 命令通配符表示導致 Agent 錯誤類推
 
 ## 基本資訊

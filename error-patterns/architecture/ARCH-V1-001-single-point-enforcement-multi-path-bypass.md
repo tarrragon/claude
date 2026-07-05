@@ -1,3 +1,10 @@
+---
+id: ARCH-V1-001
+title: 同一不變量單點執法、多入口繞過（前門裝鎖、側門敞開）
+category: architecture
+severity: medium
+created: 2026-01-01
+---
 # ARCH-V1-001: 同一不變量單點執法、多入口繞過（前門裝鎖、側門敞開）
 
 ## 錯誤症狀

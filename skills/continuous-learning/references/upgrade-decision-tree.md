@@ -1,23 +1,40 @@
-# Memory 升級評估決策樹
+# Memory 升級評估決策樹（捕獲時分流）
 
-本文件定義 memory 寫入後的升級評估流程。memory 寫入**不是終點**，而是判斷此原則是否需要升級到框架共用層的起點。
+本文件定義知識捕獲的分流決策流程。分流判斷在**寫入前**執行（Q0）；Q1/Q2 用於 deferred 收割與既有積壓 promote。「寫入後補評估」的事後閉環經量化證明不執行（130 檔 feedback memory 標註率 4%），故決策時點前移。
 
 ---
 
 ## 使用時機
 
-寫入 `feedback_*.md` 到 auto-memory（`~/.claude/projects/<project>/memory/`）後**必須**執行本決策樹。
+| 時點 | 執行內容 |
+|------|---------|
+| 準備記錄經驗教訓時（**主路徑**） | 先走 Q0 捕獲時分流，再落筆 |
+| deferred 項收割（根因後續成熟、發版稽核點名、promote 積壓清理） | 走 Q1/Q2 判目的地 |
 
-`project_*.md` 類型的 memory 屬於專案內部 context 索引，不需執行升級評估，但需檢查命名前綴是否正確（規則 7 第一問）。
+`project_*.md` 類型的 memory 屬於專案內部 context 索引，不需執行升級評估，但需檢查命名前綴是否正確。
 
 ---
 
 ## 決策樹
 
 ```
-memory 寫入後
+記錄經驗教訓前（捕獲時）
     |
     v
+Q0: 錯誤學習類且跨專案適用嗎？
+    |
+    +-- 是 → 根因已過 Two-Phase Reflection（5+ 假設、2 層深因、WRAP 檢驗）？
+    |    |
+    |    +-- 是 → 直接 /error-pattern add（allocator 來源前綴編號，隨 sync 跨專案傳播）；
+    |    |        memory 至多留一行 pointer；流程結束
+    |    |
+    |    +-- 否 → feedback memory + frontmatter 標註 upgrade: deferred 與理由；
+    |             明顯跨專案者可另以 framework-issue create --label candidate 建 inbox 錨點；
+    |             deferred 積壓由發版稽核收割，收割時走 Q1
+    |
+    +-- 否 → Q1
+         |
+         v
 Q1: 此原則對其他專案也適用嗎？
     |
     +-- 否 → 加 project_ 前綴，保留為專案特定 context；流程結束
@@ -35,6 +52,8 @@ Q1: 此原則對其他專案也適用嗎？
               +-- 流程方法論         → methodologies/
               +-- Skill 引導         → skills/<skill>/
 ```
+
+> Q0 的「根因未熟直寫 canonical」防護理由：表層根因經 sync 傳播到所有 consumer 後，已 pull 的舊版不會自動撤回——錯知識跨專案傳播的回收成本高於對知識暫留本地。Two-Phase Reflection 見 `.claude/methodologies/three-phase-reflection-methodology.md`。
 
 > 目的地拿不準時，先查 `.claude/methodologies/knowledge-carrier-allocation-methodology.md`（受眾 x 形態頂層地圖）。
 
@@ -75,7 +94,7 @@ Q1: 此原則對其他專案也適用嗎？
 |------|------|
 | 屬於跨語言、跨角色都需遵守的品質底線 | 「測試通過率必須維持 100%」 |
 | 影響所有開發流程的決策原則 | 「Phase 4 重構評估不可跳過」 |
-| 屬於 commit/版本/文件等基礎規範 | 「Memory 寫入必須評估跨專案升級」 |
+| 屬於 commit/版本/文件等基礎規範 | 「錯誤學習知識捕獲時分流」 |
 
 **目的地**：
 
@@ -176,9 +195,9 @@ Q1: 此原則對其他專案也適用嗎？
 
 完整路徑（從 `.claude/` 開始），方便日後追溯。若同一原則升級到多個位置，全部列出。
 
-### 步驟 3：保留 memory 作為本專案 context 索引
+### 步驟 3：自 MEMORY.md 索引移除該條目
 
-不要刪除原 memory 檔案。它仍作為本專案的 context 索引，記錄此原則在本專案的觸發歷史與討論脈絡。
+MEMORY.md 每 session 自動載入，升級後保留索引行即雙重儲存（升級即搬家，非複製）。memory 單檔可保留供考古（記錄此原則在本專案的觸發歷史），但索引必須移除；對照關係記於升級 commit 或 ticket。與 `pm-quality-baseline.md` 規則 7「升級後處理」一致。
 
 ---
 
@@ -190,22 +209,23 @@ Q1: 此原則對其他專案也適用嗎？
 
 ### 情境 B：升級後仍不確定具體位置
 
-先升級到較通用的位置（如 `rules/core/quality-baseline.md`），日後若有更多同類原則出現，再評估是否抽出獨立檔案。
+先升級到較通用的位置（如 `rules/core/quality-baseline.md`），本次決策即告完成（狀態確定，非延後）。抽出獨立檔案屬「未來新原則出現」時的新決策，屆時依 `rules/README.md` 自動載入預算原則另行評估，與本次升級無未結事項。
 
 ### 情境 C：原則尚未成熟
 
-若反饋來自單一事件、缺乏跨案例驗證，可暫時保留為 `feedback_*.md`，註記「待累積案例後升級」。但需在後續 1-2 個月內回顧。
+若反饋來自單一事件、缺乏跨案例驗證（即 Q0 的「根因未熟」分支），保留為 `feedback_*.md` 並於 frontmatter 標註 `upgrade: deferred` 與理由；明顯跨專案者可另以 framework-issue `create --label candidate` 建 inbox 錨點。deferred 項由發版稽核（version-release 稽核項）點名收割，禁止無標註裸寫（無 trigger 的「待累積案例後升級」即不可觀測積壓的來源）。
 
 ---
 
 ## 關聯
 
-- `.claude/pm-rules/pm-quality-baseline.md` 規則 7 — Memory 寫入必須評估跨專案升級
+- `.claude/pm-rules/pm-quality-baseline.md` 規則 7 — 錯誤學習知識捕獲時分流（分流判準權威來源）
 - `.claude/error-patterns/process-compliance/PC-061-memory-upgrade-blindness.md` — Memory upgrade blindness 錯誤模式
 - `.claude/references/reference-stability-rules.md` 規則 8 — 框架文件禁止引用專案層級識別符
 - `references/memory-capture-guide.md` — Memory Capture 標準結構與品質檢查
 
 ---
 
-**Last Updated**: 2026-04-13
+**Last Updated**: 2026-07-05
+**Version**: 2.0.0 — 決策時點由「寫入後」前移為「捕獲時」：新增 Q0 分流（Two-Phase Reflection 成熟度門檻 + deferred 顯式標註 + framework-issue candidate 可選 inbox）；情境 C 改綁發版稽核收割（消除無 trigger 的「待回顧」積壓）；Q1/Q2 保留供 deferred 收割與積壓 promote
 **Version**: 1.0.0 — 初始建立

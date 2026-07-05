@@ -41,6 +41,8 @@ __all__ = [
     "KNOWN_TICKET_SUFFIXES",
     # 嵌套深度上限（W1-056.5 協議 v2 D3）
     "MAX_TICKET_DEPTH",
+    # 子票扇出 warning 閾值（W5-005.11 D11）
+    "MAX_CHILDREN_WARNING_THRESHOLD",
     # 路徑
     "WORK_LOGS_DIR",
     "TICKETS_DIR",
@@ -50,7 +52,18 @@ __all__ = [
     "HANDOFF_ARCHIVE_SUBDIR",
     # Ticket 類型 & 優先級
     "TICKET_TYPES",
+    "LEGACY_TICKET_TYPES",
     "PRIORITY_LEVELS",
+    # 枚舉寫入驗證白名單（寫入邊界收斂）
+    "VALID_TICKET_TYPES",
+    "VALID_PRIORITIES",
+    "VALID_STATUSES",
+    "STATUS_TRANSITIONS",
+    # Body 章節正典（單一序列來源）
+    "CANONICAL_BODY_SECTIONS",
+    "APPEND_LOG_EXTRA_SECTIONS",
+    # 枚舉驗證閘模式
+    "ENUM_GATE_MODE",
     # 預設值
     "DEFAULT_PRIORITY",
     "DEFAULT_HOW_TASK_TYPE",
@@ -134,6 +147,28 @@ STATUS_LABELS: Dict[str, str] = {
 # frozenset 保證不可變、支援 `in` 運算；與先前使用 set/tuple 的呼叫端完全相容。
 TERMINAL_STATUSES: frozenset = frozenset({STATUS_COMPLETED, STATUS_CLOSED})
 
+# 寫入驗證白名單（save 閘 / 審計消費；skipped 等語料化石不在正典，
+# 其語意由 closed + close_reason 承載）
+VALID_STATUSES: frozenset = frozenset(TICKET_STATUS.values())
+
+# 狀態轉移矩陣（lifecycle 兜底驗證消費；claim/complete/release/close 的
+# per-command guard 為語意層，本矩陣為落盤前最後防線）。
+# 邊集依現行 CLI 語意定稿：claim 接受 pending/blocked（blocked 可重新認領）、
+# complete 僅 in_progress、release 依 blockedBy 退 pending 或 blocked、
+# close 接受三個非終態。completed 唯一出邊為 superseded（被後繼票取代）——
+# 現行 CLI 無寫入 superseded 的命令（grep 實證），此邊為前瞻保留；warn 期
+# 出現其他 completed 出邊即為異常訊號。closed / superseded 為終態無出邊。
+STATUS_TRANSITIONS: Dict[str, frozenset] = {
+    STATUS_PENDING: frozenset({STATUS_IN_PROGRESS, STATUS_BLOCKED, STATUS_CLOSED}),
+    STATUS_IN_PROGRESS: frozenset(
+        {STATUS_COMPLETED, STATUS_PENDING, STATUS_BLOCKED, STATUS_CLOSED}
+    ),
+    STATUS_BLOCKED: frozenset({STATUS_PENDING, STATUS_IN_PROGRESS, STATUS_CLOSED}),
+    STATUS_COMPLETED: frozenset({STATUS_SUPERSEDED}),
+    STATUS_SUPERSEDED: frozenset(),
+    STATUS_CLOSED: frozenset(),
+}
+
 # ============================================================
 # Close reason 枚舉（PC-090 / W15-024 C1）
 # ============================================================
@@ -167,6 +202,13 @@ TICKET_ID_RE = re.compile(TICKET_ID_PATTERN)
 # 保守設計：平台 5 層 - 1 層 PM - 1 層安全邊距 = 3 層 agent 可用。
 # 此常數為 can_descend() 的唯一深度判準來源（DRY，linux F2 修正）。
 MAX_TICKET_DEPTH: int = 3
+
+# ============================================================
+# 子票扇出 warning 閾值（W5-005 F7/D11）
+# ============================================================
+# 普查分佈：巨型父票 top4 = 18/16/14/13 子；全語料 67% 無子票。
+# 閾值 10 覆蓋 top4 全部超標案例，同時不干擾一般使用。
+MAX_CHILDREN_WARNING_THRESHOLD: int = 10
 
 # ============================================================
 # 已知的描述性後綴模式
@@ -217,17 +259,24 @@ HANDOFF_ARCHIVE_SUBDIR: str = "archive"
 # Ticket 類型 & 優先級
 # ============================================================
 
+# 正典 4 型（寫入邊界收斂裁定：TST/RES 全語料零使用移除——TST 職能由
+# tdd_phase 欄位承載、RES/INV 由 ANA 承載）
 TICKET_TYPES: Dict[str, str] = {
     "IMP": "Implementation (實作)",
-    "TST": "Test (測試)",
     "ADJ": "Adjustment (調整/修復)",
-    "RES": "Research (研究)",
     "ANA": "Analysis (分析)",
-    "INV": "Investigation (調查)",
     "DOC": "Documentation (文件)",
 }
 
+# 歷史化石容忍集：讀取/審計路徑接受、寫入路徑拒絕。
+# 語料現存 type: INV 共 3 筆（TST/RES 零使用），不回填不遷移。
+LEGACY_TICKET_TYPES: frozenset = frozenset({"TST", "RES", "INV"})
+
+# 寫入驗證白名單（argparse choices / save 閘消費）
+VALID_TICKET_TYPES: frozenset = frozenset(TICKET_TYPES)
+
 PRIORITY_LEVELS: List[str] = ["P0", "P1", "P2", "P3"]
+VALID_PRIORITIES: frozenset = frozenset(PRIORITY_LEVELS)
 
 # ============================================================
 # 預設值
@@ -290,6 +339,35 @@ CONTEXT_BUNDLE_SKIP_REASONS: tuple = (
     "self_reference",
     "opt_out",
 )
+
+# ============================================================
+# Body 章節正典（單一序列來源）
+# ============================================================
+# H2 章節正典順序：ticket_builder 缺失章節自動補建定位（SCHEMA_H2_SECTIONS）
+# 與 append-log 白名單（VALID_SECTIONS）自此衍生，消除兩清單各自維護的漂移
+# （章節名漂移語料實測 77 筆的寫入端防護）。順序即 body 物理順序權威。
+CANONICAL_BODY_SECTIONS: tuple = (
+    "Task Summary",
+    "Problem Analysis",
+    "重現實驗結果",
+    "Solution",
+    "Test Results",
+    "Context Bundle",
+    "NeedsContext",
+    "Exit Status",
+    "Spawn Requests",
+    "Completion Info",
+)
+
+# Execution Log 為 body 的 H1 容器標題（非 H2 章節），僅 append-log 白名單額外接受
+APPEND_LOG_EXTRA_SECTIONS: tuple = ("Execution Log",)
+
+# ============================================================
+# 枚舉驗證閘模式
+# ============================================================
+# warn：違規寫入 stderr 警告 + enum-gate.log 記錄後照常落盤（量測期預設）
+# deny：違規拒絕落盤。切換 deny 須經 warn 期誤報率量測裁定，禁時間式延後
+ENUM_GATE_MODE: str = "deny"
 
 # ============================================================
 # Handoff Direction 常數

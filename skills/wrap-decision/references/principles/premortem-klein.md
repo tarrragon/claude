@@ -2,6 +2,7 @@
 
 > **來源**：Gary Klein, *The Power of Intuition* (2003)；Klein, "Performing a Project Premortem", *Harvard Business Review* (Sep 2007)
 > **用途**：P 階段「行前預想」方法的理論依據。修改 P 階段問題形式時參考。
+> **操作展開版**：本檔只涵蓋單一問句的理論依據；「原因並行深挖 + 綜合報告」的完整五步操作流程見 `../premortem-workflow.md`（高成本決策適用，版本規劃/提案評估/發版前）。
 
 ---
 

@@ -1,3 +1,10 @@
+---
+id: CQ-001
+title: 私有函式跨模組引用導致封裝破壞
+category: code-quality
+severity: medium
+created: 2026-03-07
+---
 # CQ-001: 私有函式跨模組引用導致封裝破壞
 
 **發現日期**: 2026-03-07

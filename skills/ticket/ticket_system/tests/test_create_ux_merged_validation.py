@@ -21,10 +21,10 @@ import pytest
 from ticket_system.commands import create as create_cmd
 
 
-# W1-054：opt-out 統一為簽名注入——本檔測試 version=None 自動偵測路徑，需真實 repo
-# todolist/work-logs；各測試函式簽名直接加入 `real_repo_root`（取代原 `_use_real_repo_root`
-# 中介 autouse fixture），覆蓋 autouse `_isolate_project_root` 的空 tmp 隔離。測試走
-# early-exit 錯誤路徑（exit 1），不抵達 file_lock，無 lock 污染風險。
+# 本檔測試 version=None 自動偵測路徑：各測試函式簽名注入 `seeded_repo_root`
+# （受控 todolist 種子，W5-006 取代原 real_repo_root——綁定真實 todolist 會隨
+# 專案版本推進漂移失敗），覆蓋 autouse `_isolate_project_root` 的空 tmp 隔離。
+# 測試走 early-exit 錯誤路徑（exit 1），不抵達 file_lock，無 lock 污染風險。
 
 
 def _make_args(**overrides):
@@ -81,7 +81,7 @@ def _capture(args):
 # ---------------------------------------------------------------------------
 
 
-def test_missing_required_fields_listed_in_single_error(real_repo_root):
+def test_missing_required_fields_listed_in_single_error(seeded_repo_root):
     """why/when/who/how_strategy 全缺 → 單一 CHECKLIST_VALIDATION_FAILED 一次列全。
 
     舊行為：WHY_REQUIRED 在 parse 階段 sys.exit(1)，其餘缺漏要再跑一次才看到
@@ -111,7 +111,7 @@ def test_missing_required_fields_listed_in_single_error(real_repo_root):
         assert field in combined, f"缺漏欄位 {field} 未出現在合併錯誤清單"
 
 
-def test_why_only_missing_still_reported_via_checklist(real_repo_root):
+def test_why_only_missing_still_reported_via_checklist(seeded_repo_root):
     """僅 why 缺漏（其餘補齊）→ 仍走 CHECKLIST_VALIDATION_FAILED，不再有 WHY_REQUIRED。"""
     args = _make_args(
         wave=99,
@@ -135,7 +135,7 @@ def test_why_only_missing_still_reported_via_checklist(real_repo_root):
     assert "why" in combined
 
 
-def test_doc_type_still_exempts_why(real_repo_root):
+def test_doc_type_still_exempts_why(seeded_repo_root):
     """DOC 類型豁免 why、IMP 不豁免（行為不變的回歸防護）。
 
     直接呼叫 _validate_create_checklist（單元層級，無持久化副作用），
@@ -173,7 +173,7 @@ def _build_parser():
     return parser
 
 
-def test_how_flag_gives_friendly_hint_with_value(real_repo_root, capsys):
+def test_how_flag_gives_friendly_hint_with_value(seeded_repo_root, capsys):
     """`--how X` → 友善提示含兩個完整旗標名與中文用途說明。"""
     parser = _build_parser()
     with pytest.raises(SystemExit):
@@ -188,7 +188,7 @@ def test_how_flag_gives_friendly_hint_with_value(real_repo_root, capsys):
     assert "實作策略" in err
 
 
-def test_how_flag_gives_friendly_hint_without_value(real_repo_root, capsys):
+def test_how_flag_gives_friendly_hint_without_value(seeded_repo_root, capsys):
     """`--how`（無值）→ 同樣觸發友善提示，不報 expected one argument。"""
     parser = _build_parser()
     with pytest.raises(SystemExit):
@@ -198,7 +198,7 @@ def test_how_flag_gives_friendly_hint_without_value(real_repo_root, capsys):
     assert "實作策略" in err
 
 
-def test_full_flags_unaffected_by_how_trap(real_repo_root):
+def test_full_flags_unaffected_by_how_trap(seeded_repo_root):
     """--how-type / --how-strategy 完整旗標不受 --how 攔截影響（回歸防護）。"""
     parser = _build_parser()
     args = parser.parse_args(

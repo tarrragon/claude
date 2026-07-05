@@ -1,3 +1,10 @@
+---
+id: ARCH-014
+title: 跨執行環境共享可變常數物件
+category: architecture
+severity: medium
+created: 2026-04-09
+---
 # ARCH-014: 跨執行環境共享可變常數物件
 
 ## 基本資訊

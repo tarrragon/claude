@@ -492,6 +492,8 @@ ticket track claim: error: the following arguments are required: ticket_id
 
 列舉 pending 且建立日期超過閾值的 ticket 明細，補 `list` 命令僅顯示彙總計數而無法定位個別 stale ticket 的缺口。
 
+**stale in-progress 章節**（1.5.0-W5-005.7）：table 格式在 pending 表格後追加 stale in_progress 明細——依 frontmatter `started_at` 單平面判定（閾值 `STALE_IN_PROGRESS_HOURS` = 24h，與 runqueue `[STALE]` tag 同源 `is_stale_in_progress`），附 `ticket track release <id>` 釋放提示。`ids` / `yaml` 格式維持 pending-only（pipe 消費者如 `xargs close` 預期 pending 集合，混入 in_progress 會誤傷）。與 `subagent-stop-dispatch-cleanup-hook` 職責分離：hook 在 SubagentStop 事件清理 dispatch-active.json 記錄平面；本命令於查詢時呈現 ticket 世界平面滯留狀態，兩者互不重疊、皆不自動 release。
+
 ### 用法
 
 ```bash
@@ -531,6 +533,16 @@ Stale pending tickets (threshold=warning)
 ```
 
 依 days 降序排序；無符合條件時輸出「（無符合條件的 stale ticket）」。
+
+存在 >= 24h 的 in_progress 票時追加章節（依經過分鐘數降序）：
+
+```
+------------------------------------------------------------
+Stale in-progress tickets (>= 24h, 依 frontmatter started_at)
+------------------------------------------------------------
+0.18.0-W17-CCC | in_progress 31h | agent=thyme-python-developer | 標題 C
+   提示：確認對照 agent 已終止後，以 `ticket track release <id>` 釋放；進行中 agent 勿用
+```
 
 ### 範例
 

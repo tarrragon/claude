@@ -1,3 +1,10 @@
+---
+id: IMP-008
+title: Bash 工作目錄污染
+category: implementation
+severity: medium
+created: 2026-03-03
+---
 # IMP-008：Bash 工作目錄污染
 
 **錯誤碼**: IMP-008

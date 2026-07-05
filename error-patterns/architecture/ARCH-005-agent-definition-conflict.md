@@ -1,3 +1,10 @@
+---
+id: ARCH-005
+title: 代理人定義衝突導致派發職責不清
+category: architecture
+severity: medium
+created: 2026-02-26
+---
 # ARCH-005: 代理人定義衝突導致派發職責不清
 
 ## 基本資訊

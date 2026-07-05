@@ -15,6 +15,11 @@ commands/ 批次 B 硬編碼字串集中化模組
 統一管理所有使用者可見的訊息字串，避免重複定義和提高可維護性。
 """
 
+from ticket_system.constants import (
+    APPEND_LOG_EXTRA_SECTIONS,
+    CANONICAL_BODY_SECTIONS,
+)
+
 
 # ============================================================================
 # TrackQueryMessages - track_query.py 相關訊息
@@ -166,23 +171,10 @@ class TrackAcceptanceMessages:
     STATUS_TEXT_UNCHECKED = "取消勾選"
 
     # execute_append_log 中有效的區段清單
-    # W10-107: 對齊 .claude/pm-rules/ticket-body-schema.md，補入 ANA 必填的
-    # 「重現實驗結果」章節（PC-063），讓 ANA 執行者不再被迫寫到 Solution。
-    # W3-099 修正：W10-107 對齊時遺漏 'Task Summary' 與 'Completion Info' 兩個
-    # IMP/ANA/DOC 三類型必填章節，導致 complete 階段必須 Edit 直填 ticket md。
-    # 本次補完成 10 章節 SSOT 對齊（按 schema 章節順序排列）。
-    VALID_SECTIONS = [
-        "Task Summary",
-        "Problem Analysis",
-        "Context Bundle",
-        "重現實驗結果",
-        "Solution",
-        "Test Results",
-        "Execution Log",
-        "NeedsContext",
-        "Exit Status",
-        "Completion Info",
-    ]
+    # 白名單自 constants.CANONICAL_BODY_SECTIONS 衍生（單一序列來源），
+    # 加上 H1 容器 Execution Log；不再獨立維護清單，消除與
+    # ticket_builder SCHEMA_H2_SECTIONS 的雙清單漂移。
+    VALID_SECTIONS = [*CANONICAL_BODY_SECTIONS, *APPEND_LOG_EXTRA_SECTIONS]
 
     # execute_append_log 中的有效值提示前綴
     VALID_VALUES_PREFIX = "   有效值:"

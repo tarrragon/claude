@@ -1,3 +1,58 @@
+## [2.12.0] - 2026-07-05
+
+### Summary
+feat: ticket CLI mutation self-verify 輸出; feat: Stop hook confabulation 事後審計; feat: batch annotate 130 memory backlog (+42 more)
+
+Changes: 16 feat, 1 refactor, 5 fix, 18 docs, 5 chore
+
+- feat: ticket CLI mutation self-verify 輸出
+- feat: Stop hook confabulation 事後審計
+- feat: batch annotate 130 memory backlog
+- feat: version-release memory 升級稽核 check
+- feat: dashboard 自動歸檔 stale pending handoff
+- feat: emit protocol_version 至新建票 frontmatter
+- feat: 新增 create --parent 時 children 數 warning
+- feat: 實作 runqueue/list type 權重排序與 type 標籤顯示
+- feat: rename Exit Status body key status → exit_status
+- feat: enum-gate 切換 deny 模式
+- feat: memory promote/scan 升級工具核心
+- feat: stale-list 追加 stale in-progress 章節與 release 提示
+- feat: 派發身份前移——dispatch hook 條件式綁定 + 模板 claim --as 強制
+- feat: lifecycle 狀態轉移矩陣接入驗證閘
+- feat: save_ticket 落盤前枚舉驗證閘
+- feat: 枚舉 SSOT 收斂 + argparse choices 封口
+- refactor: import _CATEGORY_DIRS from allocator (T1 SSOT)
+- fix: frontmatter YAML 解析 graceful 處理 malformed 資料
+- fix: main-thread-edit-restriction-hook 改用 lib import 取代已刪除的 hook_utils
+- fix: 測試套件 todolist 環境依賴隔離
+- fix: create --parent 無條件繼承父票版本
+- fix: 移除 Write matcher 內 style-guardian-hook 重複註冊
+- docs: 規則 6 補 error-pattern 記錄授權——判斷值得即做，不需請求用戶確認
+- docs: 補 .3 confabulation 案例 + 防護 F + 建 enforcement 升級評估票
+- docs: basil 審查修正——hook docstring/路徑表副本化 + 載體地圖版本行/受眾欄
+- docs: 分流語意引用點同步——載體地圖（含補 user-level 條目）+ pm-role 路由 + reminder hook 文案
+- docs: IMP-V1-006 大小寫不敏感 fs Edit 成功 vs git pathspec 失敗（捕獲時分流直寫 canonical）+ 檔名慣例追蹤票
+- docs: basil 審查修正——升級後處理對齊規則 7 升級即搬家 + 情境 B 消除延後語意
+- docs: 錯誤學習知識捕獲時分流——規則 7 語意前移 + 鏡像/skill/決策樹四檔同步
+- docs: PC-092 補 v3 案例（PM 裸 commit 掃入 subagent 暫存檔）
+- docs: 套用 Layer 2 審查修正（2 Warning）
+- docs: context 充足度閘門三機制分工邊界
+- docs: P 階段新增早期警訊條款
+- docs: 新增關鍵禁令附最小正反例手法條款
+- docs: 新增過度設計四反模式條目
+- docs: 新增依賴引入紀律
+- docs: 新增最小變更紀律（Surgical Changes）
+- docs: When 提及 vs blockedBy 誤判率量測定案——零機制慣例落 field-semantics
+- docs: SKILL.md 有效區段值對齊 10 章正典 + spawn
+- docs: ticket 系統自我描述模型修正
+- chore: 記錄 gate bypass 語意載體替換錯誤模式
+- chore: HookCheck 自動修正 test_dispatch_record_identity_binding.py 執行權限 (IMP-054)
+- chore: metadata sync post-completion
+- chore: pull .claude 更新（上游 f6b5d50bcc2d）
+- chore: 測試檔加執行權限（HookCheck 自動修正 IMP-054）
+
+---
+
 ## [2.11.1] - 2026-07-03
 
 ### Summary

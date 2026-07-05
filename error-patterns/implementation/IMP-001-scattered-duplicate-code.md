@@ -1,3 +1,10 @@
+---
+id: IMP-001
+title: 重複程式碼散落各處
+category: implementation
+severity: medium
+created: 2026-01-19
+---
 # IMP-001: 重複程式碼散落各處
 
 ## 基本資訊

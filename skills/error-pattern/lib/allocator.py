@@ -26,7 +26,7 @@ if str(_claude_dir) not in sys.path:
 
 from lib.pattern_id import PATTERN_ID_RE  # noqa: E402
 
-# Category 前綴 → 目錄（與 skills/error-pattern/skill.md 編號章節一致）。
+# Category 前綴 → 目錄（與 skills/error-pattern/SKILL.md 編號章節一致）。
 _CATEGORY_DIRS = {
     "ARCH": "architecture",
     "CQ": "code-quality",

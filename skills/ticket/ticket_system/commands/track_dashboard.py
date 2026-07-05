@@ -306,6 +306,9 @@ def dashboard_main(args: argparse.Namespace, version: Optional[str]) -> int:
         sys.stderr.write("No active version detected\n")
         return 2
 
+    # W5-005.14: 自動清理已完成 ticket 的 stale handoff（非靜默，stderr 提示）
+    _auto_gc_stale_handoffs()
+
     try:
         all_tickets = list_tickets(version) or []
     except Exception as exc:
@@ -354,6 +357,35 @@ def dashboard_main(args: argparse.Namespace, version: Optional[str]) -> int:
 
     _print_all_completed_warning(version, all_tickets)
     return 0
+
+
+def _auto_gc_stale_handoffs() -> None:
+    """自動清理已完成 ticket 的 stale handoff（W5-005.14）。
+
+    在 dashboard 載入前執行；清理結果寫 stderr（非靜默）。
+    失敗時 graceful degrade（不影響 dashboard 正常輸出）。
+    """
+    try:
+        from ticket_system.commands.handoff_gc import _collect_stale_handoffs
+        from ticket_system.lib.constants import HANDOFF_DIR, HANDOFF_ARCHIVE_SUBDIR
+        from ticket_system.lib.paths import get_project_root
+
+        stale = _collect_stale_handoffs(force=False)
+        if not stale:
+            return
+
+        root = get_project_root()
+        archive_dir = root / HANDOFF_DIR / HANDOFF_ARCHIVE_SUBDIR
+        archive_dir.mkdir(parents=True, exist_ok=True)
+
+        for file_path, ticket_id, reason in stale:
+            dest = archive_dir / file_path.name
+            file_path.rename(dest)
+            sys.stderr.write(
+                f"[handoff-gc] 已歸檔 stale handoff: {file_path.name} ({reason})\n"
+            )
+    except Exception:
+        pass
 
 
 # execute alias 對齊 track.py _create_command_handlers 命名慣例

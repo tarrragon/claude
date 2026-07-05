@@ -1,3 +1,10 @@
+---
+id: ARCH-008
+title: 依賴全域狀態推斷而非從本地資料提取
+category: architecture
+severity: medium
+created: 2026-03-05
+---
 # ARCH-008: 依賴全域狀態推斷而非從本地資料提取
 
 ## 基本資訊

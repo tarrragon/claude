@@ -54,8 +54,11 @@ Ticket: {ticket_id}
 {一句話動作描述，≤ 40 字}
 
 讀取 ticket：`ticket track full {ticket_id}`
+認領：`ticket track claim {ticket_id} --as {agent_name}`
 依 Context Bundle 執行流程。遇阻立即停下回報，禁繞過 Hook。
 ```
+
+> **claim 行必帶 `--as {agent_name}`**（派發身份前移，W5-005 F1a）：dispatch hook 已在派發時對無主票綁定 who.current，此行是 agent 端對稱綁定與 hook 失效 fallback；缺 `--as` 的裸 claim 不寫 who.current，收尾 `complete --as` 會因身份不符需 set-who 繞道。
 
 ### IMP 實戰範例（實作派發）
 
@@ -67,6 +70,7 @@ Ticket: 0.18.0-W17-046.1
 擴充 TICKET_EXEMPT_AGENT_TYPES 白名單 + 補充 Hook 判別準則註解 + 新增測試。
 
 讀取 ticket：`ticket track full 0.18.0-W17-046.1`
+認領：`ticket track claim 0.18.0-W17-046.1 --as thyme-python-developer`
 依 Problem Analysis 的 Context Bundle 規格實作 + commit + complete。
 遇阻立即停下回報，禁繞過 Hook。
 ```
@@ -81,6 +85,7 @@ Ticket: 0.18.0-W17-043
 分析 scenario-17 AskUserQuestion 提醒在 append-log 誤觸發根因。
 
 讀取 ticket：`ticket track full 0.18.0-W17-043`
+認領：`ticket track claim 0.18.0-W17-043 --as saffron-system-analyst`
 依 acceptance 產出分析報告寫入 Solution，衍生修復 ticket 後 complete。
 遇阻即停回報，禁繞過 Hook。
 ```
@@ -95,6 +100,7 @@ Ticket: 0.18.0-W17-048.3
 新增 agent-dispatch-template.md「短 prompt 三段式骨架」範例區。
 
 讀取 ticket：`ticket track full 0.18.0-W17-048.3`
+認領：`ticket track claim 0.18.0-W17-048.3 --as thyme-documentation-integrator`
 依 Context Bundle 設計文件結構，append Solution + commit + complete。
 遇阻即停回報。
 ```
@@ -105,9 +111,11 @@ Ticket: 0.18.0-W17-048.3
 
 - [ ] 第一行為 `Ticket: {id}`（Hook 強制驗證）
 - [ ] 含「讀取 ticket」指引（W17-048.2 軟提示檢查）
+- [ ] 含 `claim {id} --as {agent_name}` 認領行（派發身份前移；agent 端對稱綁定，見骨架下方說明）
 - [ ] context 已在 ticket 的 Problem Analysis / Context Bundle（不塞 prompt）
 - [ ] prompt 總行數 ≤ 15 行（遠低於 30 行硬上限）
 - [ ] 動作描述一句話可理解（不堆疊多個動詞）
+- [ ] 交付通道已確認（L3/L2: append-log+commit / L1: append-log+/tmp / L0: final message 後 PM 立即落檔）
 
 ---
 
@@ -151,6 +159,33 @@ and spawned tickets (執行中發現獨立技術債，PC-073 殘存範圍).
 Do not implement child scope or batch-dispatch agents.
 Record blockers, deps, and next runnable ticket IDs.
 ```
+
+### L0 唯讀型（Plan type）
+
+```markdown
+Ticket: {id}
+
+{agent-name}: Read ticket md and produce your analysis as your final message.
+Do NOT attempt to write files, use Bash redirects, or call ticket CLI.
+Your final message IS the deliverable — PM will archive it immediately.
+```
+
+> PM 收到 final message 後立即落檔（`ticket track append-log {id} --section "Solution" "..."`），不假設下次能取回同樣內容（W2-011 hook 劫持風險）。
+
+---
+
+## 交付通道速查（W5-005.12）
+
+| Agent 能力 | 交付通道 | PM 動作 |
+|-----------|---------|--------|
+| L3/L2（有 Edit/Write） | ticket append-log + commit 產出檔 | 標準驗收（讀 ticket + git log + 測試） |
+| L1（有 Bash 無 Edit/Write） | ticket append-log + Bash heredoc 寫 /tmp 檔 | 標準驗收 + Read /tmp 檔 |
+| L0（Plan type 唯讀） | final message（唯一通道） | 立即落檔保全（見上方 snippet） |
+
+**L0 Fallback SOP**：
+1. 派發前：prompt 明示「報告全文以最終訊息回傳，不嘗試寫檔」
+2. 收到 final message 後：PM 立即寫入 ticket Solution 或 /tmp
+3. 不等待：不假設下次還能取回（hook 劫持風險，W2-011）
 
 ---
 
@@ -257,6 +292,7 @@ Ticket: {child_ticket_id}
 {一句話動作描述，<= 40 字}
 
 讀取 ticket：`ticket track full {child_ticket_id}`
+認領：`ticket track claim {child_ticket_id} --as {agent_name}`
 依 Problem Analysis 的 Context Bundle 執行；claim 後依 AGENT_PRELOAD 規則 9.2 執行五步自檢。
 完成後 append-log Solution + complete；遇阻寫 NeedsContext + Exit Status 即停。
 final message 僅指向 ticket ID，不承載結論本體。
@@ -765,11 +801,13 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 
 ---
 
-**Last Updated**: 2026-07-03
+**Last Updated**: 2026-07-05
 **Version**: 1.11.0 — 「收尾義務標準段（W2-003）」章節擴充（0.4.1-W2-008）：新增「Solution 自檢結果子章節義務」項，收尾四塊改為含此項；引用 W17-064 warning 忽略率實證（0.4.0 十八票 + 0.4.1-W1-001 全被忽略，受眾/時點雙錯）為擴充依據
 **Version**: 1.10.0 — 新增「收尾義務標準段（W2-003）」章節：set-acceptance 指令範例（--all-check / --check index 兩型）+ ticket body 填寫義務（Solution/Test Results/Exit Status）+「回覆勾選不算數，frontmatter 才是 SOT」明示提醒；引用 0.4.1-W1-001 摩擦 F3（0.4.0 W2-002/003 回覆勾選未動 frontmatter 二度擋 complete，prompt 明示後四票收斂）為 source
 **Version**: 1.9.0 — 新增「worktree 快照過舊防護（W2-007）」章節：session 中途新 commit 後的派發，prompt 第 0 步強制 merge main + ls/grep 驗證目標檔案存在；阻塞回報後重派新 agent 優先於 SendMessage 恢復（無變更 worktree 被平台自動回收，恢復時 cwd 靜默 fallback 主 repo）；引用 0.3.6-W2-007 為 source
 **Version**: 1.8.0 — 新增「收尾 --as 全覆蓋與建票 who 對齊」章節（W1-049 首輪裁決前置）：收尾三命令一律帶 --as、PM 建子票必帶 --who（繼承 parent who 為 false positive deny 誤傷源）、agent deny 時禁繞過須回報；/goal 章節收尾範例同步補 --as
+**Version**: 1.8.0 — 派發身份前移（W5-005 F1a）：三段式骨架與三個實戰範例、嵌套 child prompt 範例均補 `claim {id} --as {agent_name}` 認領行；填空檢查清單新增對應核對項；骨架下方補 Why 說明（dispatch hook 綁定為第一道，claim --as 為 agent 端對稱綁定與 fallback）
+
 **Version**: 1.7.0 — 新增「嵌套派發（descend）派發端指引」章節：descend 條件速查（派發端動作對照）+ dispatch-plan 嵌套欄位（parent / depth-can_descend）+ child prompt 三段式範例；協議 SSOT 引用 AGENT_PRELOAD 規則 9，深度上限數值不在本檔重複定義（嵌套派發協議 S2 落地）
 
 **Version**: 1.6.0 — worktree 派發 base 同步指引（W1-035）章節新增「cc runtime worktree base 選擇邏輯（實證歸納）」與「三方案評估與選定理由」（選定方案 B，0.19.0-W1-053）

@@ -1,3 +1,10 @@
+---
+id: DOC-002
+title: 衛星文件引用不存在
+category: documentation
+severity: medium
+created: 2026-01-19
+---
 # DOC-002: 衛星文件引用不存在
 
 ## 基本資訊

@@ -11,6 +11,25 @@ allowed-tools: Bash(ticket *), Read, Write, Edit, Grep, Glob
 
 ---
 
+## 系統模型（設計自我描述）
+
+本系統的參照模型是 **issue tracker + CI runner**（batch job queue 為輔助類比），不是 OS process：
+
+| 對應 | 參照 | 含義 |
+|------|------|------|
+| ticket = issue | issue tracker（Jira/Linear/GitHub 類） | 狀態機轉移經 CLI 驗證、stale 需 triage 儀式、ID 為全域引用錨點 |
+| agent = CI runner | ephemeral runner | 身份在派發/認領時綁定（`claim --as`）、工作區以隔離 checkout 為優先、逾時由 watchdog 回收 |
+| wave = batch cohort | job queue 批次 | blockedBy DAG 之外的隱式排序層 |
+
+**兩個與 OS process 直覺相反的預設**（設計回顧確認：誤用 process 直覺是共享樹競態與身份回填缺口兩類歷史事故的共同根因）：
+
+1. **身份晚綁定**：ticket 建立時不知道執行者（submit 與 assign 分離）；身份在 claim 時以 `--as` 綁定，不是 fork 即繼承。
+2. **共享工作區**：agent 預設共享 working tree（thread 語意）而非 process 隔離；檔案變更型派發應優先採 feat branch / worktree 隔離。
+
+> scheduler 層類比（runqueue/dashboard 對應 Linux schedule()/top）仍然準確，保留使用。
+
+---
+
 ## 執行方式
 
 > **禁止直接執行 Python 檔案！** `ticket_system` 是 Python 套件，必須透過 `pyproject.toml` 定義的入口點執行。
@@ -284,7 +303,7 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 1.0.0-W28-0
 > ticket track stale-list --wave 17 --format ids    # 僅輸出 ID（適合 pipe）
 > ```
 >
-> 閾值複用 `lib/staleness.py`：info ≥ 7 天 / warning ≥ 14 天 / critical ≥ 30 天。輸出依 days 降序。詳見 `references/track-command.md`「track stale-list 子命令」章節。
+> 閾值複用 `lib/staleness.py`：info ≥ 7 天 / warning ≥ 14 天 / critical ≥ 30 天。輸出依 days 降序。table 格式另附 stale in-progress 章節（>= 24h，依 frontmatter `started_at` 單平面判定，附 `ticket track release <id>` 釋放提示）；`ids`/`yaml` 維持 pending-only 向後相容（1.5.0-W5-005.7）。詳見 `references/track-command.md`「track stale-list 子命令」章節。
 
 > **TD 清單校準 — `td-status`**（W10-083 / PC-094）：掃描指定 ticket 的 body 與 git commit 訊息，將 TD 編號分類為「已處理 / 無需處理 / 仍待處理」三狀態。用於 Phase 3a/3b/4 結束時即時校準 TD 清單，防止 Phase 4 評估時誤判已完成項（PC-094 根因）。
 >
@@ -297,9 +316,9 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 1.0.0-W28-0
 
 > **注意**：`complete` 在父 ticket 含未完成 children（非 terminal：pending / in_progress / blocked）時會以 exit 1 阻擋（W11-003.2）。提供 `--force` 旁路強制完成，會在 stderr 列出未完成 children 作為警告，cascade 解鎖機制仍會執行。建議優先完成 children 後再 complete 父 ticket。
 >
-> **注意**：5W1H 欄位由 `set-who` ~ `set-how` 6 個命令更新。`blockedBy` 用 `set-blocked-by`、`relatedTo` 用 `set-related-to`（均支援 `--add`/`--remove`）。`priority` 等欄位無 CLI 命令，需手動編輯 frontmatter。完整對照表見 `references/track-command.md`。
+> **注意**：5W1H 欄位由 `set-who` ~ `set-how` 6 個命令更新。`blockedBy` 用 `set-blocked-by`、`relatedTo` 用 `set-related-to`（均支援 `--add`/`--remove`）、`priority` 用 `set-priority`。其餘 frontmatter 欄位無 CLI 命令，需手動編輯 frontmatter。完整對照表見 `references/track-command.md`。
 >
-> **注意**：`append-log` 必須加上 `--section` 必填參數：`ticket track append-log <id> --section "Problem Analysis" "內容"`。有效區段值：`Problem Analysis`、`Context Bundle`、`重現實驗結果`、`Solution`、`Test Results`、`Execution Log`、`NeedsContext`、`Exit Status`。`重現實驗結果` 為 ANA type 必填章節（PC-063 / ticket-body-schema.md）。`Context Bundle` 用於派發前寫入 PCB（PC-040）；`NeedsContext`/`Exit Status` 用於代理人結束狀態協議（W17-010）。
+> **注意**：`append-log` 必須加上 `--section` 必填參數：`ticket track append-log <id> --section "Problem Analysis" "內容"`。有效區段值（SSOT：`ticket_system/constants.py` 的 `CANONICAL_BODY_SECTIONS` + `Execution Log`，共 10 章）：`Task Summary`、`Problem Analysis`、`重現實驗結果`、`Solution`、`Test Results`、`Context Bundle`、`NeedsContext`、`Exit Status`、`Completion Info`、`Execution Log`。body-schema 全必填章節（含 `Completion Info`）皆可經 append-log 寫入，不需 Edit 繞道。`重現實驗結果` 為 ANA type 必填章節（PC-063 / ticket-body-schema.md）。`Context Bundle` 用於派發前寫入 PCB（PC-040）；`NeedsContext`/`Exit Status` 用於代理人結束狀態協議（W17-010）。
 >
 > **Status precondition（W3-044 / W1-058）**：`append-log` 要求 ticket status 為 `in_progress`（`completed` 亦放行，補 review 場景）。**例外（W1-058）**：派發前章節 `Problem Analysis` / `Context Bundle` 允許 `pending` 直寫——PM 依 PC-040 / PC-100 於 create 後立即寫入派發 context 屬合法 bookkeeping，不需 `--force`、不記 audit。其餘章節（`Solution` / `Test Results` / `Execution Log` 等執行產出）於 pending / blocked / closed 仍阻擋（status 失敗 exit 2）；`--force` 逃生閥行為與 hook-logs audit 紀錄不變。
 >
@@ -424,12 +443,13 @@ ticket handoff --from-worklog [--worklog-path PATH] [--dry-run]
 
 ---
 
-**Version**: 2.7.0
-**Last Updated**: 2026-05-27
+**Version**: 2.8.0
+**Last Updated**: 2026-07-04
 **Status**: Completed
 
 **Change Log**:
 
+- v2.8.0 (2026-07-04): 新增「系統模型（設計自我描述）」章節——issue tracker + CI runner 為主類比、batch job queue 為輔，明示身份晚綁定與共享工作區兩個與 process 直覺相反的預設（設計回顧落地）；修正 stale 描述「priority 等欄位無 CLI 命令」（`set-priority` 已存在且完整接線，描述與 code 對齊）
 - v2.7.0 (2026-05-27): `/ticket` 裸指令預設行為改為 dashboard-first 流程（W3-013.1 落地，源於 W3-013 ANA 結論方向 a）
   - 步驟 1 從 `ticket track runqueue --context=resume --top 3` 改為 `ticket track dashboard --top 5`
   - AskUserQuestion 選項對齊 dashboard `[1] [2] [N]` 編號 + priority 標籤（用戶可直接說編號選擇）

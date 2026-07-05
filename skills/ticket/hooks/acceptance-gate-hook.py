@@ -83,6 +83,7 @@ from acceptance_checkers import (
     check_custom_h2_sections,
     check_self_check_visibility,
     check_ana_spawn_consistency,
+    check_spawn_requests,
 )
 # W17-120.2 / PC-091: ana_spawned_checker 退場
 # ANA complete 阻擋判斷統一收斂到 children_checker（PC-091 路線：
@@ -352,6 +353,16 @@ def check_acceptance_status(
                     warning_msg = warning_msg + "\n\n" + mv_msg
                 else:
                     warning_msg = mv_msg
+
+        # 步驟 2.6.1：檢查 Spawn Requests 章節是否有未處理條目（1.5.0-W5-024）
+        spawn_request_should_warn, spawn_request_msg = check_spawn_requests(
+            content, frontmatter, logger
+        )
+        if spawn_request_should_warn and spawn_request_msg:
+            if warning_msg:
+                warning_msg = warning_msg + "\n\n" + spawn_request_msg
+            else:
+                warning_msg = spawn_request_msg
 
         # 步驟 2.7：檢查修改模組與既有 error-pattern 的衝突
         error_pattern_conflicts = check_error_pattern_conflicts(frontmatter, project_dir, logger)
