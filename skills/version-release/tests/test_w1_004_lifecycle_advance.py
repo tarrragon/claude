@@ -90,6 +90,100 @@ class TestActivateNextPlannedVersionDualVocabulary:
 
 
 # ---------------------------------------------------------------------------
+# 0.38.0-W1-001：activate_next_planned_version 版本推進選擇防護
+# （semver 排序 + 跨大版本閘門）
+# ---------------------------------------------------------------------------
+class TestActivateNextPlannedVersionSelectionGuard:
+    def _write_todolist(self, tmp_path, body: str) -> Path:
+        path = tmp_path / "todolist.yaml"
+        path.write_text(body, encoding="utf-8")
+        return path
+
+    def test_selects_semver_min_over_file_order(self, tmp_path):
+        """多個同大版本 planned 候選亂序排列時，選 semver 最小者而非檔案順序第一個"""
+        todolist = self._write_todolist(
+            tmp_path,
+            'last_updated: "2026-07-01"\n\nversions:\n'
+            '  - version: "0.20.0"\n    status: completed\n'
+            '  - version: "0.23.0"\n    status: planned\n'
+            '  - version: "0.21.0"\n    status: pending\n',
+        )
+        result = vr.activate_next_planned_version(todolist, "0.20.0", dry_run=False)
+        assert result is True
+
+        data = yaml.safe_load(todolist.read_text(encoding="utf-8"))
+        statuses = {v["version"]: v["status"] for v in data["versions"]}
+        assert statuses["0.21.0"] == "active"
+        assert statuses["0.23.0"] == "planned"
+
+    def test_lower_major_same_series_preferred_over_file_order(self, tmp_path):
+        """回歸案例（v0.37.0 發布實證）：0.38.0 與 1.0.0 並存、1.0.0 排在檔案較前，
+        仍應選中大版本較低的 0.38.0，1.0.0 不被誤推進"""
+        todolist = self._write_todolist(
+            tmp_path,
+            'last_updated: "2026-07-01"\n\nversions:\n'
+            '  - version: "0.37.0"\n    status: completed\n'
+            '  - version: "1.0.0"\n    status: "planned"\n'
+            '  - version: "0.38.0"\n    status: planned\n',
+        )
+        result = vr.activate_next_planned_version(todolist, "0.37.0", dry_run=False)
+        assert result is True
+
+        data = yaml.safe_load(todolist.read_text(encoding="utf-8"))
+        statuses = {v["version"]: v["status"] for v in data["versions"]}
+        assert statuses["0.38.0"] == "active"
+        assert statuses["1.0.0"] == "planned"
+
+    def test_cross_major_only_candidate_blocked_without_force(self, tmp_path, capsys):
+        """唯一候選為跨大版本時，預設不自動推進，列出候選並保留原狀態"""
+        todolist = self._write_todolist(
+            tmp_path,
+            'last_updated: "2026-07-01"\n\nversions:\n'
+            '  - version: "0.37.0"\n    status: completed\n'
+            '  - version: "1.0.0"\n    status: "planned"\n',
+        )
+        result = vr.activate_next_planned_version(todolist, "0.37.0", dry_run=False)
+        assert result is True
+
+        data = yaml.safe_load(todolist.read_text(encoding="utf-8"))
+        statuses = {v["version"]: v["status"] for v in data["versions"]}
+        assert statuses["1.0.0"] == "planned"
+
+        captured = capsys.readouterr()
+        assert "1.0.0" in captured.out
+
+    def test_cross_major_force_flag_overrides_gate(self, tmp_path):
+        """force_cross_major=True 時允許跨大版本推進"""
+        todolist = self._write_todolist(
+            tmp_path,
+            'last_updated: "2026-07-01"\n\nversions:\n'
+            '  - version: "0.37.0"\n    status: completed\n'
+            '  - version: "1.0.0"\n    status: "planned"\n',
+        )
+        result = vr.activate_next_planned_version(
+            todolist, "0.37.0", dry_run=False, force_cross_major=True
+        )
+        assert result is True
+
+        data = yaml.safe_load(todolist.read_text(encoding="utf-8"))
+        statuses = {v["version"]: v["status"] for v in data["versions"]}
+        assert statuses["1.0.0"] == "active"
+
+    def test_dry_run_does_not_write(self, tmp_path):
+        """dry_run 模式不寫入檔案（同大版本正常路徑）"""
+        todolist = self._write_todolist(
+            tmp_path,
+            'last_updated: "2026-07-01"\n\nversions:\n'
+            '  - version: "0.37.0"\n    status: completed\n'
+            '  - version: "0.38.0"\n    status: planned\n',
+        )
+        before = todolist.read_text(encoding="utf-8")
+        result = vr.activate_next_planned_version(todolist, "0.37.0", dry_run=True)
+        assert result is True
+        assert todolist.read_text(encoding="utf-8") == before
+
+
+# ---------------------------------------------------------------------------
 # 缺陷 2：activate_existing_version（start Step 2/3 狀態感知啟動路徑）
 # ---------------------------------------------------------------------------
 class TestActivateExistingVersion:

@@ -441,6 +441,75 @@ PC-137 並行 ≤ 2 規則為 worktree 模式下的觀察結論（W17-097.1-.4 +
 
 ---
 
+## idle agent 回收 SOP（W1-008 ANA 落地）
+
+> **模型依據**：named agent（Agent tool 帶 name 參數 spawn）完工後不自動終止，進入 `idle` 態（warm runner，跑完不銷）。三態定義見 `.claude/skills/ticket/SKILL.md`「named agent 生命週期三態」章節。本節定義 PM 對 idle 通知的標準處置。
+
+**觸發條件**：PM 收到 `{"type":"idle_notification","idleReason":"available"}` 通知，或代理人完成回報後轉入 idle。
+
+### 續用 / 放生二分判準
+
+| 條件 | 判斷 | 理由 |
+|------|------|------|
+| 同 Wave 有同類型 pending ticket | 續用 | 省去重新 spawn + 載入 CLAUDE.md + rules 的冷啟動成本 |
+| 同 Wave 無同類型 pending ticket 但有後續 Wave | 放生 | 跨 Wave 續用風險高（context 累積 + blockedBy 可能變動） |
+| 同 Wave 無同類型 pending ticket | 放生 | idle 等待無確定 trigger，違反 `.claude/rules/core/decision-trigger-binding.md` 規則 1（無 trigger 延後在「以後」與「永不」間無可驗證邊界） |
+| agent context 已接近飽和 | 放生 | 續用效益隨 context 飽和遞減 |
+| 多個同類型 idle agent 同時存在 | 放生多餘的，保留最早 spawn 者（FIFO） | 避免重複資源占用 |
+
+**預設行為（無立即後續任務時）：放生。** 主動放生後若有新 ticket 再 spawn，冷啟動成本可預測且有限（約 30 秒載入 CLAUDE.md + rules）。
+
+### SOP 流程
+
+```
+收到 idle_notification / completion notification 後轉 idle
+    |
+    v
+[Step 1] 查詢同 Wave 是否有同類型 pending ticket
+    |
+    +-- 有 → [Step 2a] 續用：SendMessage 派發新任務
+    |
+    +-- 無 → [Step 2b] 放生：SendMessage shutdown_request
+```
+
+**Step 2a 續用範本**：
+
+```
+SendMessage(
+  to: "thyme-w1-005",
+  message: "Ticket: 0.38.0-W1-010\n\n執行 IMP：[任務描述]\n\n1. ticket track claim 0.38.0-W1-010 --as thyme-python-developer\n2. [執行步驟]\n3. ticket track append-log + complete"
+)
+```
+
+**Step 2b 放生範本**：
+
+```
+SendMessage(
+  to: "thyme-w1-005",
+  message: {"type": "shutdown_request", "reason": "Wave 1 同類型 ticket 已全數完成"}
+)
+```
+
+> `shutdown_request` 協議 schema、驗證記錄與限制見 `.claude/references/pm-agent-observability.md`「SendMessage shutdown_request（idle agent 放生）」章節。
+
+### idle 通知的標準處置
+
+| 通知類型 | PM 動作 | 優先級 |
+|---------|---------|--------|
+| idle_notification（首次） | 執行上述 SOP（續用或放生判斷） | 正常 |
+| idle_notification（重複，同一 agent） | 忽略（已在首次處理，或放生 request 尚在途） | 低 |
+| completion notification 後隨即轉 idle | 先處理 completion（驗收），再處理 idle（回收判斷） | completion 優先 |
+
+### Wave 收尾批次放生
+
+Wave 所有 ticket 完成後，PM 對所有仍存活的 idle agent 依序發送 `shutdown_request`。
+
+**收尾順序**：先 complete 所有 ticket → 再對所有 idle agent 發送 shutdown_request → 最後清理 `dispatch-active.json` 的 stale entries（idle 態 agent 不觸發 SubagentStop，故記錄不會自動清理，需確認放生後手動核對）。
+
+> 來源：0.38.0-W1-008 ANA（2026-07-08 Wave 1 六案例回歸驗證：thyme-w1-001/002 續用、basil-w1-004 放生、thyme-w1-005/006/007 依當時 pending 票數判斷，SOP 覆蓋全部案例）。
+
+---
+
 ## 相關文件
 
 - .claude/references/agent-dispatch-template.md - 職責邊界聲明骨架（派發 prompt 強制引用）
@@ -453,10 +522,13 @@ PC-137 並行 ≤ 2 規則為 worktree 模式下的觀察結論（W17-097.1-.4 +
 - .claude/pm-rules/task-splitting.md - 任務拆分指南
 - .claude/pm-rules/decision-tree.md - 主線程決策樹（第負一層）
 - .claude/skills/agent-team/SKILL.md - Agent Teams 操作指南
+- .claude/references/pm-agent-observability.md - PM 背景代理人觀察指南（含 SendMessage shutdown_request 協議）
 
 ---
 
-**Last Updated**: 2026-06-11
+**Last Updated**: 2026-07-08
+**Version**: 4.9.0 - 新增「idle agent 回收 SOP」章節：續用/放生二分判準表 + SendMessage 續用/shutdown_request 放生範本 + Wave 收尾批次放生流程（W1-008 ANA 落地，W1-010）
+
 **Version**: 4.8.0 - 新增「嵌套派發整合條款」章節：`.claude/` 並行數限制跨層累計口徑（常態收斂於 L0 dispatch-plan 帳本）+ 嵌套 descend staging 責任歸屬表（PC-092 延伸）+ worktree 模式與嵌套相容性（D1 不變量隔離檔案層差異）；協議權威來源引用 AGENT_PRELOAD 規則 9 與 1.0.0-W1-056.5 v2，不複寫條件表（1.0.0-W1-056.10）
 
 **Version**: 4.7.0 - Worktree 隔離章節開頭新增 worktree base 可能過舊提示，引用 agent-dispatch-template.md「worktree 派發 base 同步指引（W1-035）」交叉引用（0.19.0-W1-053）

@@ -506,3 +506,194 @@ class TestComplexFilters:
             result = execute_list(args, "0.31.0")
 
             assert result == 0
+
+
+class TestListStatsTruncation:
+    """統計與截斷顯示分離測試（0.38.0-W1-006）"""
+
+    @staticmethod
+    def _make_tickets(total: int, completed: int, wave: int = 1):
+        tickets = []
+        for i in range(completed):
+            tickets.append({
+                "id": f"0.37.0-W{wave}-{i:03d}",
+                "status": STATUS_COMPLETED,
+                "title": f"Task {i}",
+                "priority": "P1",
+                "wave": wave,
+                "created": "2026-07-01",
+            })
+        for i in range(total - completed):
+            tickets.append({
+                "id": f"0.37.0-W{wave}-p{i:03d}",
+                "status": STATUS_PENDING,
+                "title": f"Pending {i}",
+                "priority": "P1",
+                "wave": wave,
+                "created": "2026-07-01",
+            })
+        return tickets
+
+    def test_single_version_default_top_shows_full_stats(self, capsys):
+        """
+        Given: 40 張票（37 completed），未指定 --top（預設截斷前 10）
+        When: 執行 execute_list（單一版本路徑）
+        Then: 標題統計顯示 37/40（全量），且標示截斷
+        """
+        args = Mock()
+        args.pending = False
+        args.in_progress = False
+        args.completed = False
+        args.blocked = False
+        args.status = None
+        args.wave = None
+        args.format = "table"
+        args.version = "0.37.0"
+        args.top = None
+        args.list_all = False
+
+        with patch('ticket_system.commands.track_query.list_tickets') as mock_list:
+            mock_list.return_value = self._make_tickets(40, 37)
+
+            result = execute_list(args, "0.37.0")
+
+            assert result == 0
+            captured = capsys.readouterr()
+            assert "37/40" in captured.out
+            assert "顯示前 10" in captured.out
+
+    def test_single_version_all_flag_no_truncation_marker(self, capsys):
+        """
+        Given: 40 張票，使用 --all
+        When: 執行 execute_list
+        Then: 標題顯示 37/40，且不含截斷標示（未截斷）
+        """
+        args = Mock()
+        args.pending = False
+        args.in_progress = False
+        args.completed = False
+        args.blocked = False
+        args.status = None
+        args.wave = None
+        args.format = "table"
+        args.version = "0.37.0"
+        args.top = None
+        args.list_all = True
+
+        with patch('ticket_system.commands.track_query.list_tickets') as mock_list:
+            mock_list.return_value = self._make_tickets(40, 37)
+
+            result = execute_list(args, "0.37.0")
+
+            assert result == 0
+            captured = capsys.readouterr()
+            assert "37/40" in captured.out
+            assert "顯示前" not in captured.out
+
+    def test_single_version_small_result_backward_compatible(self, capsys):
+        """
+        Given: 票數（2）小於預設 top（10）
+        When: 執行 execute_list
+        Then: 統計與顯示數一致，不含截斷標示（向後相容）
+        """
+        args = Mock()
+        args.pending = False
+        args.in_progress = False
+        args.completed = False
+        args.blocked = False
+        args.status = None
+        args.wave = None
+        args.format = "table"
+        args.version = "0.31.0"
+        args.top = None
+        args.list_all = False
+
+        with patch('ticket_system.commands.track_query.list_tickets') as mock_list:
+            mock_list.return_value = [
+                {"id": "0.31.0-W1-001", "status": STATUS_COMPLETED, "title": "Task 1",
+                 "priority": "P1", "created": "2026-07-01"},
+                {"id": "0.31.0-W1-002", "status": STATUS_PENDING, "title": "Task 2",
+                 "priority": "P1", "created": "2026-07-01"},
+            ]
+
+            result = execute_list(args, "0.31.0")
+
+            assert result == 0
+            captured = capsys.readouterr()
+            assert "1/2" in captured.out
+            assert "顯示前" not in captured.out
+
+    def test_all_versions_path_shows_full_stats(self, capsys):
+        """
+        Given: --version all，單一 active 版本有 40 張票（37 completed）
+        When: 執行 execute_list（跨版本路徑 _execute_list_all_versions）
+        Then: 標題統計顯示 37/40（全量），非截斷後低估值
+        """
+        args = Mock()
+        args.pending = False
+        args.in_progress = False
+        args.completed = False
+        args.blocked = False
+        args.status = None
+        args.wave = None
+        args.format = "table"
+        args.top = None
+        args.list_all = False
+
+        with patch('ticket_system.lib.version.get_active_versions') as mock_versions, \
+                patch('ticket_system.commands.track_query.list_tickets') as mock_list:
+            mock_versions.return_value = ["v0.37.0"]
+            mock_list.return_value = self._make_tickets(40, 37)
+
+            result = execute_list(args, "all")
+
+            assert result == 0
+            captured = capsys.readouterr()
+            assert "37/40" in captured.out
+            assert "顯示前 10" in captured.out
+
+    def test_cross_version_path_shows_full_stats(self, capsys):
+        """
+        Given: --wave 1（未指定 --version），單一 active 版本有 40 張 Wave 1 票（37 completed）
+        When: 執行 execute_list（跨版本路徑 _execute_list_cross_version）
+        Then: 標題統計顯示 37/40（全量），非截斷後低估值
+        """
+        args = Mock()
+        args.pending = False
+        args.in_progress = False
+        args.completed = False
+        args.blocked = False
+        args.status = None
+        args.wave = 1
+        args.format = "table"
+        args.version = None
+        args.top = None
+        args.list_all = False
+
+        with patch('ticket_system.lib.version.get_active_versions') as mock_versions, \
+                patch('ticket_system.commands.track_query.list_tickets') as mock_list:
+            mock_versions.return_value = ["v0.37.0"]
+            mock_list.return_value = self._make_tickets(40, 37, wave=1)
+
+            result = execute_list(args, "0.37.0")
+
+            assert result == 0
+            captured = capsys.readouterr()
+            assert "37/40" in captured.out
+            assert "顯示前 10" in captured.out
+
+    def test_output_table_backward_compatible_without_total_stats(self, capsys):
+        """
+        Given: 直接呼叫 _output_table 未傳 total_stats（既有呼叫端相容性）
+        Then: fallback 使用傳入清單自行計算統計（原行為不變）
+        """
+        tickets = [
+            {"id": "X-001", "status": STATUS_COMPLETED, "title": "T",
+             "priority": "P1", "created": "2026-07-01"},
+        ]
+
+        result = _output_table(tickets, "0.31.0")
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "1/1" in captured.out

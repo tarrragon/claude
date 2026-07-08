@@ -156,9 +156,12 @@ saas-tech-selection skill 做完技術選型訪談後產出「決策記錄」，
 | 場景 | /doc 動作 | doc-flow 動作 |
 |------|----------|--------------|
 | 提案確認 | status → confirmed | 開立 ticket（/ticket create） |
+| 提案確認且 target_version 未註冊 | `doc update` 輸出 target_version 未在 todolist.yaml 註冊的提醒（不阻擋） | 於 docs/todolist.yaml 補建版本條目（status: planned） |
 | Ticket 完成 | 更新 tracking.yaml checklist | ticket 標記 complete |
 | 提案評估 | 提案 draft → discussing 時，執行 `references/proposal-evaluation-guide.md` 三關式審查 | - |
 | 所有 checklist 完成 | 提案 status → implemented | 版本 worklog 記錄 |
+
+**提案確認的 target_version 源頭引導（0.38.0-W1-004）**：`doc update <PROP-ID> confirmed` 時，若提案 target_version 已設定但未在 `docs/todolist.yaml` 註冊（不論 status），輸出提醒指引使用者補建版本條目。判定標準與 `version-tracking-consistency-guard-hook`（session-start 事後偵測層）一致，形成三層防護模型的第 1 層（源頭引導）；target_version 為 null 時不提示（不同關注點）。
 
 ### 與 /spec Skill 的關係
 

@@ -29,8 +29,21 @@ quality-baseline 規則 4）：
    0.3.6-W1-005 承接，避免重複噪音）
 6. 提案層 stale：提案 target_version 在 todolist.yaml 已 completed，
    但提案 status 仍為 draft（0.3.6-W1-004 評估結論）
+7. 提案未註冊 todolist：提案 status 為 confirmed 且 target_version 非
+   null，但 target_version 未在 todolist.yaml 中登記（任何 status 皆算
+   已登記）。缺席時 activate 版本推進看不到此候選（0.38.0-W1-002，PROP-016
+   實證：confirmed 且 target_version=v0.38.0，但提案確認流程無 todolist
+   註冊步驟，導致 activate 誤選 1.0.0）
+8. 版本目錄缺 main worklog：todolist.yaml 中 status 為 active/planned 的
+   版本，其 worklog 目錄已存在，但目錄下無 v{version}-main.md（實證：
+   v0.37.0 目錄缺 main worklog 達三個月，既有幽靈偵測只查 todolist 條目
+   缺席，未查目錄「存在但缺檔案」的維度）。僅查 active/planned 是歷史盤點
+   結論——本 repo 33 個版本目錄中 16 個為 completed 存量且無 main.md，若
+   全量檢查將重演噪音淹沒訊號（W9-003 教訓），故限縮為只查尚在進行/待辦
+   的版本
 
-來源: PC-MON-001、0.4.0-W1-003、0.3.6-W1-006、0.3.6-W1-004
+來源: PC-MON-001、0.4.0-W1-003、0.3.6-W1-006、0.3.6-W1-004、0.38.0-W1-002、
+0.38.0-W1-005
 """
 
 import re
@@ -44,8 +57,11 @@ from lib import setup_hook_logging, run_hook_safely, get_project_root, parse_tic
 
 VERSION_DIR_PATTERN = re.compile(r"^v(\d+\.\d+\.\d+)$")
 VERSION_ENTRY_PATTERN = re.compile(
-    r'-\s*version:\s*["\']?(\d+\.\d+\.\d+)["\']?\s*\n(?:.*\n)*?\s*status:\s*(\w+)'
+    r'-\s*version:\s*["\']?(\d+\.\d+\.\d+)["\']?\s*\n(?:.*\n)*?\s*status:\s*["\']?(\w+)["\']?'
 )
+# 純 semver 格式（X.Y.Z，皆為數字）。用於過濾 ticket frontmatter 中非
+# semver 的 version token（如 "0.22.x"、"可選"），避免誤列為幽靈版本。
+SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 TAG_VERSION_PATTERN = re.compile(r"^v(\d+\.\d+\.\d+)$")
 COMPLETED_TICKET_STATUSES = {"completed", "closed"}
 
@@ -75,8 +91,17 @@ KNOWN_LEGACY_CLOSED_TICKET_IDS = frozenset(
     }
 )
 
-# 漂移 6：提案層 stale 偵測用常數
-PROPOSAL_ID_PATTERN = re.compile(r"^  (PROP-\d+):\s*$", re.MULTILINE)
+# 漂移 6/7：提案層偵測用常數
+# 對應 docs/proposals-tracking.yaml 實際結構：`  - id: PROP-016`（YAML 清單項）。
+PROPOSAL_ID_PATTERN = re.compile(r"^\s*-\s*id:\s*(PROP-\d+)\s*$", re.MULTILINE)
+# 區塊邊界：任何未縮排（頂層 key，如 `usecases:`）行，避免最後一個提案的
+# 區塊解析吞噬後續頂層區塊內容。
+SECTION_BOUNDARY_PATTERN = re.compile(r"^\S", re.MULTILINE)
+
+# 漂移 8：main worklog 缺席偵測僅查此範圍內的 status。completed 版本歷史
+# 存量大量缺 main.md（33 個版本目錄中 16 個），全量檢查將重演噪音淹沒訊號
+# （W9-003 教訓），故限縮為進行中/待辦版本。
+MAIN_WORKLOG_CHECK_STATUSES = frozenset({"active", "planned"})
 
 
 def parse_todolist(todolist_path: Path, logger) -> dict:
@@ -118,7 +143,11 @@ def scan_worklog_versions(project_root: Path) -> set[str]:
 
 
 def scan_ticket_versions(project_root: Path) -> set[str]:
-    """掃描所有 ticket 檔案的 frontmatter version 欄位，回傳版本號集合。"""
+    """掃描所有 ticket 檔案的 frontmatter version 欄位，回傳版本號集合。
+
+    僅回傳純 semver 格式（X.Y.Z）token；非 semver token（如 "0.22.x"、
+    "可選" 等歷史存量 ticket 的佔位/範圍值）不視為版本，避免誤列幽靈版本。
+    """
     tickets_root = project_root / "docs" / "work-logs"
     if not tickets_root.exists():
         return set()
@@ -127,16 +156,25 @@ def scan_ticket_versions(project_root: Path) -> set[str]:
     for ticket_file in tickets_root.rglob("tickets/*.md"):
         frontmatter = parse_ticket_frontmatter(ticket_file)
         version = frontmatter.get("version")
-        if version:
-            versions.add(str(version).strip("'\""))
+        if not version:
+            continue
+        token = str(version).strip("'\"")
+        if SEMVER_PATTERN.match(token):
+            versions.add(token)
     return versions
 
 
 def get_latest_git_tag_version(project_root: Path, logger) -> str | None:
-    """取得最新（依 semver 排序）git tag 對應的版本號，取不到時回傳 None。"""
+    """取得最新（依 semver 排序）git tag 對應的版本號，取不到時回傳 None。
+
+    只認 HEAD 可達的 tags（--merged HEAD）：框架 repo（tarrragon/claude.git）
+    的版本 tags（v2.x 系列）若因 sync-pull 未加 --no-tags 而混入本地，其指向
+    的 commit 不在本 APP repo 的 HEAD 歷史內，--merged 過濾天然排除，不需
+    額外維護版本範圍白名單（0.37.0-W9-005）。
+    """
     try:
         result = subprocess.run(
-            ["git", "-C", str(project_root), "tag", "--sort=-v:refname"],
+            ["git", "-C", str(project_root), "tag", "--merged", "HEAD", "--sort=-v:refname"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -204,6 +242,30 @@ def detect_stale_active(versions: dict[str, str], project_root: Path) -> list[st
     return sorted(stale)
 
 
+def detect_missing_main_worklog(versions: dict[str, str], project_root: Path) -> list[str]:
+    """偵測漂移 8：版本目錄存在但缺 v{version}-main.md
+
+    僅查 MAIN_WORKLOG_CHECK_STATUSES（active/planned）版本，且僅在版本目錄
+    已存在時才檢查（尚未開工的版本目錄不存在，不誤報）。
+    """
+    missing = []
+    for version, status in versions.items():
+        if status not in MAIN_WORKLOG_CHECK_STATUSES:
+            continue
+        parts = version.split(".")
+        if len(parts) != 3:
+            continue
+        major_dir = f"v{parts[0]}"
+        minor_dir = f"v{parts[0]}.{parts[1]}"
+        patch_dir = f"v{version}"
+        version_dir = project_root / "docs" / "work-logs" / major_dir / minor_dir / patch_dir
+        if not version_dir.is_dir():
+            continue
+        if not (version_dir / f"v{version}-main.md").exists():
+            missing.append(version)
+    return sorted(missing)
+
+
 def detect_tag_drift(versions: dict[str, str], project_root: Path, logger) -> str | None:
     """偵測漂移 4：最新 git tag 版本在 todolist.yaml 中非 completed"""
     latest_tag_version = get_latest_git_tag_version(project_root, logger)
@@ -261,7 +323,12 @@ def detect_closed_ticket_anomalies(closed_tickets: list[dict]) -> list[str]:
 
 
 def parse_proposals(proposals_path: Path, logger) -> dict:
-    """解析 proposals-tracking.yaml，回傳 {proposal_id: {"status": str, "target_version": str}}。"""
+    """解析 proposals-tracking.yaml，回傳
+    {proposal_id: {"status": str, "target_version": str | None}}。
+
+    target_version 欄位缺席（如 PROP-007 這類尚未指定目標版本的提案）時
+    該鍵值為 None，交由呼叫端（漂移 6/7）依語意決定是否略過。
+    """
     if not proposals_path.exists():
         return {}
 
@@ -272,23 +339,26 @@ def parse_proposals(proposals_path: Path, logger) -> dict:
         return {}
 
     markers = list(PROPOSAL_ID_PATTERN.finditer(content))
+    boundaries = [m.start() for m in SECTION_BOUNDARY_PATTERN.finditer(content)]
     proposals: dict[str, dict] = {}
     for index, marker in enumerate(markers):
         proposal_id = marker.group(1)
         start = marker.end()
-        end = markers[index + 1].start() if index + 1 < len(markers) else len(content)
+        next_marker_start = markers[index + 1].start() if index + 1 < len(markers) else len(content)
+        next_boundary = next((b for b in boundaries if b > start), len(content))
+        end = min(next_marker_start, next_boundary)
         block = content[start:end]
 
         status_match = re.search(r"^\s*status:\s*(\w+)", block, re.MULTILINE)
+        if not status_match:
+            continue
         version_match = re.search(
             r'^\s*target_version:\s*["\']?v?(\d+\.\d+\.\d+)["\']?', block, re.MULTILINE
         )
-        if not status_match or not version_match:
-            continue
 
         proposals[proposal_id] = {
             "status": status_match.group(1),
-            "target_version": version_match.group(1),
+            "target_version": version_match.group(1) if version_match else None,
         }
     return proposals
 
@@ -299,10 +369,37 @@ def detect_stale_proposals(proposals: dict, versions: dict[str, str]) -> list[st
     for proposal_id, info in proposals.items():
         if info["status"] != "draft":
             continue
-        target_status = versions.get(info["target_version"])
+        target_version = info.get("target_version")
+        if not target_version:
+            continue
+        target_status = versions.get(target_version)
         if target_status == "completed":
-            stale.append(f"{proposal_id}（target_version v{info['target_version']} 已 completed）")
+            stale.append(f"{proposal_id}（target_version v{target_version} 已 completed）")
     return sorted(stale)
+
+
+def detect_unregistered_confirmed_proposals(proposals: dict, versions: dict[str, str]) -> list[str]:
+    """偵測漂移 7：confirmed 提案 target_version 未在 todolist.yaml 註冊。
+
+    對賬方向與漂移 6 相反：漂移 6 查「已註冊但收版慢半拍」，本項查
+    「提案已 confirmed 但從未進入 todolist 候選清單」——未註冊時
+    activate 版本推進邏輯看不到此候選（0.38.0-W1-002 背景：PROP-016
+    confirmed + target_version=v0.38.0，但 0.38.0 缺席 planned 清單，
+    導致 activate 誤選 1.0.0）。target_version 已在 todolist.yaml 中
+    登記即視為已知（不論 status 為 planned/active/completed）。
+    """
+    unregistered: list[str] = []
+    for proposal_id, info in proposals.items():
+        if info["status"] != "confirmed":
+            continue
+        target_version = info.get("target_version")
+        if not target_version:
+            continue
+        if target_version not in versions:
+            unregistered.append(
+                f"{proposal_id}（target_version v{target_version} 未註冊 todolist.yaml）"
+            )
+    return sorted(unregistered)
 
 
 def build_warning_lines(
@@ -313,6 +410,8 @@ def build_warning_lines(
     versions: dict[str, str],
     closed_ticket_anomalies: list[str],
     stale_proposals: list[str],
+    unregistered_confirmed_proposals: list[str],
+    missing_main_worklog: list[str],
 ) -> list[str]:
     """組裝警告訊息行。無漂移時回傳空清單（呼叫端據此判斷是否輸出）。"""
     lines: list[str] = []
@@ -343,6 +442,18 @@ def build_warning_lines(
         lines.append(
             "[提案層 stale] target_version 已 completed 但提案 status 仍 draft: "
             + ", ".join(stale_proposals)
+        )
+
+    if unregistered_confirmed_proposals:
+        lines.append(
+            "[提案未註冊 todolist] confirmed 提案 target_version 未登記，"
+            "activate 推進將看不到此候選: " + ", ".join(unregistered_confirmed_proposals)
+        )
+
+    if missing_main_worklog:
+        lines.append(
+            "[缺 main worklog] 版本目錄存在但缺 v{version}-main.md（僅查 "
+            "active/planned，避免歷史存量噪音）: " + ", ".join(missing_main_worklog)
         )
 
     return lines
@@ -396,6 +507,9 @@ def main() -> int:
         proposals_path = project_root / "docs" / "proposals-tracking.yaml"
         proposals = parse_proposals(proposals_path, logger)
         stale_proposals = detect_stale_proposals(proposals, versions)
+        unregistered_confirmed_proposals = detect_unregistered_confirmed_proposals(proposals, versions)
+
+        missing_main_worklog = detect_missing_main_worklog(versions, project_root)
 
         lines = build_warning_lines(
             multiple_active,
@@ -405,6 +519,8 @@ def main() -> int:
             versions,
             closed_ticket_anomalies,
             stale_proposals,
+            unregistered_confirmed_proposals,
+            missing_main_worklog,
         )
 
         if lines:

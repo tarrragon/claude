@@ -290,6 +290,31 @@ def _check_target_collision(target_id: str, version: str) -> Optional[Dict[str, 
     }
 
 
+def _validate_target_version(target_id: str, version: str) -> Optional[str]:
+    """
+    驗證目標 Ticket ID 的版本是否已在 todolist.yaml 中註冊（W9-002）。
+
+    僅阻擋完全未註冊的版本；planned/active/completed 皆放行，因為
+    跨版本遷移（含遷入尚未 active 的未來版本）是正當場景。
+
+    Args:
+        target_id: 目標 Ticket ID
+        version: fallback 版本號（若 target_id 無法解析版本時使用）
+
+    Returns:
+        Optional[str]: 未註冊時回傳錯誤訊息；已註冊（或無法判定）回傳 None
+    """
+    from ticket_system.lib.version import is_version_registered
+
+    target_components = extract_id_components(target_id)
+    target_version = target_components["version"] if target_components else version
+
+    if is_version_registered(target_version):
+        return None
+
+    return ErrorMessages.VERSION_NOT_REGISTERED.format(version=target_version)
+
+
 def _migrate_single_ticket(
     version: str,
     source_id: str,
@@ -315,6 +340,12 @@ def _migrate_single_ticket(
     # 驗證 ID 格式
     if not validate_ticket_id(source_id) or not validate_ticket_id(target_id):
         print(MigrateMessages.INVALID_TICKET_ID_FORMAT)
+        return 1
+
+    # W9-002: 目標版本合法性守衛（未註冊阻擋；dry-run 同樣須過守衛）
+    version_error = _validate_target_version(target_id, version)
+    if version_error:
+        print(format_error(version_error))
         return 1
 
     # 從 source_id 提取版本號，支援跨版本遷移

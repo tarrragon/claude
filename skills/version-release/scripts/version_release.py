@@ -2318,21 +2318,138 @@ def activate_existing_version(
     return True
 
 
+def _scan_todolist_planned_candidates(content: str) -> List[dict]:
+    """掃描 todolist.yaml 原始文字，找出所有 status 為 planned/pending 的版本條目。
+
+    先定位每個條目的邊界（下一個 "- version:" 出現處或檔尾），再於邊界內尋找
+    該條目自身的 status 欄位，避免跨條目誤配（例如把 A 條目的版本號誤配到
+    B 條目的 status 欄位，這是舊版單一 lazy regex 的實際缺陷）。
+
+    Args:
+        content: todolist.yaml 完整文字內容
+
+    Returns:
+        候選條目清單（依檔案出現順序，未排序），每項含：
+        - version: 版本字串
+        - entry_start: 條目起始位置（供絕對位移換算）
+        - status_match: 該條目 status 欄位的 re.Match（group(1)="status:\\s*"，
+          group(2)=狀態值，供原地替換用）
+    """
+    candidates = []
+    for entry_match in re.finditer(r'- version: "([^"]+)"', content):
+        version_str = entry_match.group(1)
+        entry_start = entry_match.start()
+        next_entry = content.find("- version:", entry_match.end())
+        search_end = next_entry if next_entry != -1 else len(content)
+        status_match = re.search(
+            r'(status:\s*)("planned"|planned|"pending"|pending)(?=\s|$)',
+            content[entry_start:search_end],
+        )
+        if status_match is None:
+            continue
+        candidates.append(
+            {
+                "version": version_str,
+                "entry_start": entry_start,
+                "status_match": status_match,
+            }
+        )
+    return candidates
+
+
+def _semver_sort_key(version: str) -> Tuple[int, int, int]:
+    """將版本字串轉為可排序的 (major, minor, patch) tuple。
+
+    解析失敗（非數字版本片段）時回傳極大值，排到候選清單最後，
+    避免格式異常的條目意外被誤選為「最小」。
+    """
+    try:
+        parts = [int(p) for p in strip_build_metadata(version).split(".")[:3]]
+        while len(parts) < 3:
+            parts.append(0)
+        return (parts[0], parts[1], parts[2])
+    except (ValueError, AttributeError):
+        return (10**9, 10**9, 10**9)
+
+
+def _print_cross_major_block_notice(
+    next_version: str,
+    completed_version: str,
+    completed_major: str,
+    selected_major: str,
+    candidates: List[dict],
+) -> None:
+    """印出跨大版本閘門攔截時的警告訊息與候選版本清單。"""
+    candidate_list = "、".join(c["version"] for c in candidates)
+    print_warning(
+        f"下一版本候選 {next_version} 與剛完成版本 {completed_version} 跨大版本"
+        f"（{completed_major}.x → {selected_major}.x），不自動推進"
+    )
+    print_info(f"候選 planned/pending 版本：{candidate_list}")
+    print_info(
+        "請人工確認後手動設定 todolist.yaml status，"
+        "或加 --force 重新執行 release 明確允許跨大版本推進"
+    )
+
+
+def _apply_version_activation(
+    todolist_path: Path,
+    content: str,
+    selected: dict,
+    completed_version: str,
+    dry_run: bool,
+) -> None:
+    """將選定候選條目的 status 欄位原地替換為 active（或 dry_run 僅印出預覽）。"""
+    next_version = selected["version"]
+    status_match = selected["status_match"]
+    entry_start = selected["entry_start"]
+    was_quoted = status_match.group(2).startswith('"')
+    active_value = '"active"' if was_quoted else "active"
+    abs_start = entry_start + status_match.start(1)
+    abs_end = entry_start + status_match.end()
+
+    if dry_run:
+        current_status = status_match.group(2).strip('"')
+        print_info(
+            f"[DRY RUN] 將推進 todolist.yaml 版本 {next_version}: "
+            f"{current_status} → active"
+        )
+        return
+
+    new_content = (
+        content[:abs_start] + status_match.group(1) + active_value + content[abs_end:]
+    )
+    with open(todolist_path, "w", encoding="utf-8") as f:
+        f.write(new_content)
+    print_success(
+        f"todolist.yaml 版本 {next_version} 已推進 active（接續 {completed_version}）"
+    )
+
+
 def activate_next_planned_version(
-    todolist_path: Path, completed_version: str, dry_run: bool = False
+    todolist_path: Path,
+    completed_version: str,
+    dry_run: bool = False,
+    force_cross_major: bool = False,
 ) -> bool:
     """release 後自動將下一個 planned 版本推進為 active。
 
-    掃描 todolist.yaml versions 清單，找到第一個 status 為 planned 的版本並設為 active。
-    若無 planned 版本，印提示並回傳 True（非錯誤）。
+    掃描 todolist.yaml versions 清單，取所有 status 為 planned/pending 的候選版本，
+    依 semver 升冪排序選最小者（而非檔案中出現順序）推進為 active。
+
+    若選中版本與剛完成版本跨大版本（major 不同），預設不自動推進——列出候選
+    版本並提示人工確認，避免大版本判斷錯誤被靜默執行（v0.37.0 發布實證：
+    0.38.0 與 1.0.0 並存時檔案順序選到 1.0.0，需人工回退 commit 356ab882）。
 
     Args:
         todolist_path: todolist.yaml 路徑
-        completed_version: 剛完成的版本號（用於日誌訊息）
+        completed_version: 剛完成的版本號（用於日誌訊息與跨大版本判斷）
         dry_run: 預覽模式
+        force_cross_major: 明確允許跨大版本推進（預設 False，安全預設為不動作）
 
     Returns:
-        True 如果成功或無 planned 版本，False 如果 IO 錯誤
+        True 如果成功推進、無候選版本、或因跨大版本安全跳過（皆非錯誤）；
+        False 如果 IO 錯誤（todolist 不存在）
     """
     if not todolist_path.exists():
         return False
@@ -2340,37 +2457,24 @@ def activate_next_planned_version(
     with open(todolist_path, encoding="utf-8") as f:
         content = f.read()
 
-    pattern = re.compile(
-        r'(- version: "([^"]+)".*?)(status:\s*)'
-        r'("planned"|planned|"pending"|pending)(?=\s|$)',
-        re.DOTALL,
-    )
-    match = pattern.search(content)
-    if not match:
+    candidates = _scan_todolist_planned_candidates(content)
+    if not candidates:
         print_info("todolist.yaml 無 planned/pending 版本可推進，跳過")
         return True
 
-    next_version = match.group(2)
-    was_quoted = match.group(4).startswith('"')
-    active_value = '"active"' if was_quoted else "active"
+    candidates.sort(key=lambda c: _semver_sort_key(c["version"]))
+    selected = candidates[0]
+    next_version = selected["version"]
+    completed_major = strip_build_metadata(completed_version).split(".")[0]
+    selected_major = strip_build_metadata(next_version).split(".")[0]
 
-    if dry_run:
-        print_info(
-            f"[DRY RUN] 將推進 todolist.yaml 版本 {next_version}: planned → active"
+    if selected_major != completed_major and not force_cross_major:
+        _print_cross_major_block_notice(
+            next_version, completed_version, completed_major, selected_major, candidates
         )
-    else:
-        new_content = (
-            content[: match.start(3)]
-            + match.group(3)
-            + active_value
-            + content[match.end() :]
-        )
-        with open(todolist_path, "w", encoding="utf-8") as f:
-            f.write(new_content)
-        print_success(
-            f"todolist.yaml 版本 {next_version} 已推進 active（接續 {completed_version}）"
-        )
+        return True
 
+    _apply_version_activation(todolist_path, content, selected, completed_version, dry_run)
     return True
 
 
@@ -3421,7 +3525,10 @@ def main():
 
             # 自動推進下一個 planned 版本為 active
             print_section("Step: Activate Next Version")
-            activate_ok = activate_next_planned_version(todolist_path, version, dry_run)
+            force_cross_major = args.force if hasattr(args, "force") else False
+            activate_ok = activate_next_planned_version(
+                todolist_path, version, dry_run, force_cross_major=force_cross_major
+            )
             if not activate_ok:
                 print_warning(
                     "下一版本自動推進失敗（不中止發布，請手動設定 todolist.yaml active 版本）"

@@ -1,3 +1,30 @@
+## [2.13.0] - 2026-07-08
+
+### Summary
+feat: 實作提案 confirmed 時 target_version 註冊 todolist 的源頭引導; feat: guard 增補版本目錄缺 main worklog 偵測; feat: guard 增補 confirmed 提案 target_version 與 todolist 註冊對賬 (+14 more)
+
+Changes: 4 feat, 6 fix, 3 docs, 4 chore
+
+- feat: 實作提案 confirmed 時 target_version 註冊 todolist 的源頭引導
+- feat: guard 增補版本目錄缺 main worklog 偵測
+- feat: guard 增補 confirmed 提案 target_version 與 todolist 註冊對賬
+- feat: ticket migrate 新增版本合法性守衛
+- fix: confirmed 欄位名對齊真實 schema confirmed_at
+- fix: _sync_tracking_yaml 相容 proposals-tracking.yaml list 結構
+- fix: list 統計與截斷顯示分離（total_stats 全量統計）
+- fix: 修復 activate_next_planned_version 版本推進選擇防護
+- fix: 阻斷框架 v2.x tags 混入 APP repo
+- fix: 修復 version-tracking-consistency-guard 幽靈版本誤報
+- docs: shutdown_request 驗證狀態升級為單層已驗證（實機 8/8）
+- docs: 落地 idle agent 三態模型與回收 SOP（ ANA 三處落地）
+- docs: 新增 IMP-APP-002 regex 解析多條目檔案未以條目邊界為先
+- chore: shutdown 8/8 直接驗證 + SR-1 轉 （IMP-APP-002 第五起）
+- chore: 驗收收尾——SR-2 轉 + IMP-APP-002 補第四起案例
+- chore: / 驗收收尾——SR-1 轉 + IMP-APP-002 補第三起案例
+- chore: pull .claude 更新（上游 6b4450666ed6）
+
+---
+
 ## [2.12.0] - 2026-07-05
 
 ### Summary

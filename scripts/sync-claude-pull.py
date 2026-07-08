@@ -489,7 +489,7 @@ def clone_repo(temp_dir: Path) -> None:
     )
     if result.returncode != 0:
         # 降級為 full clone（partial clone 不被遠端支援時）
-        print_color("   partial clone 失敗，降級為 full clone...", "yellow")
+        print_color("   partial clone 失敗，降級為 full clone...", "yellow")  # i18n-exempt
         if temp_dir.exists():
             shutil.rmtree(temp_dir, ignore_errors=True)
         temp_dir.mkdir(parents=True, exist_ok=True)

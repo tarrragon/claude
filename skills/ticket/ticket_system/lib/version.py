@@ -386,6 +386,43 @@ def validate_version_registered(version: str) -> tuple[bool, str]:
     return (False, error_msg)
 
 
+def is_version_registered(version: str) -> bool:
+    """
+    檢查版本是否已在 todolist.yaml 中註冊（不限狀態）。
+
+    與 validate_version_registered() 不同：本函式只檢查「是否存在於
+    todolist.yaml」，不檢查是否為 active。適用於 migrate 等允許遷入
+    planned/active/completed 版本的場景——這些場景合法（如提前規劃跨版本
+    遷移），只有完全未註冊的版本才需要阻擋並引導使用者先建立版本。
+
+    Args:
+        version: 版本號（無 v 前綴，如 "1.0.0"）
+
+    Returns:
+        bool: 已註冊，或 todolist.yaml 不存在（向後相容）時回傳 True；
+              版本不在 todolist.yaml 的 versions 列表中則回傳 False
+    """
+    root = get_project_root()
+    todolist_path = root / "docs" / "todolist.yaml"
+
+    if not todolist_path.exists():
+        return True
+
+    try:
+        import yaml
+        with open(todolist_path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except Exception as e:
+        logger.warning(
+            f"is_version_registered: 解析 todolist.yaml 失敗 "
+            f"({type(e).__name__}: {e})，跳過驗證"
+        )
+        return True
+
+    versions_list = data.get("versions", [])
+    return any(str(entry.get("version", "")) == version for entry in versions_list)
+
+
 _FEAT_ACTIONS = frozenset({"實作", "新增", "建立", "開發"})
 _PATCH_TYPES = frozenset({"ANA", "ADJ", "DOC", "RES"})
 

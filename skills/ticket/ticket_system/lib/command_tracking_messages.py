@@ -37,6 +37,9 @@ class TrackQueryMessages:
     # execute_list 中的標題格式
     LIST_TITLE = "[List] {version} ({completed}/{total} 完成)"
 
+    # execute_list 中截斷顯示時的標題格式（0.38.0-W1-006：統計為全量，清單為截斷後）
+    LIST_TITLE_TRUNCATED = "[List] {version} ({completed}/{total} 完成, 顯示前 {shown})"
+
     # execute_summary 中找不到 Tickets 的標題
     SUMMARY_NO_TICKETS_TITLE = "[Summary] {version} (0/0 完成)"
 
