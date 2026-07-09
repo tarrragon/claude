@@ -71,8 +71,50 @@ class TestCreateProposal:
         tracking = tmp_path / "docs" / "proposals-tracking.yaml"
         assert tracking.is_file()
         data = yaml.safe_load(tracking.read_text())
-        assert "PROP-006" in data["proposals"]
-        assert data["proposals"]["PROP-006"]["status"] == "draft"
+        assert isinstance(data["proposals"], list)
+        entry = next(e for e in data["proposals"] if e["id"] == "PROP-006")
+        assert entry["status"] == "draft"
+        assert "confirmed_at" in entry
+        # 對齊真實 proposals-tracking.yaml schema：頂層僅 proposals/usecases/specs 三區塊
+        assert "last_updated" not in data
+        assert "version" not in data
+        assert set(data.keys()) == {"proposals", "usecases", "specs"}
+
+    def test_create_proposal_against_real_list_format_tracking_file(self, tmp_path, capsys):
+        """對真實 list-based tracking.yaml 新增 proposal 不應 crash（活 bug 回歸測試）。"""
+        project_root = _setup_project(tmp_path)
+        templates_dir = tmp_path / "templates"
+
+        tracking = tmp_path / "docs" / "proposals-tracking.yaml"
+        tracking.write_text(
+            yaml.dump(
+                {
+                    "proposals": [
+                        {"id": "PROP-001", "title": "既有提案", "status": "confirmed"},
+                    ],
+                    "usecases": [],
+                    "specs": [],
+                },
+                allow_unicode=True,
+                sort_keys=False,
+            )
+        )
+
+        args = argparse.Namespace(
+            type="proposal", id="PROP-007", title="new-feature", domain=None,
+        )
+
+        with (
+            patch.object(FileLocator, "get_project_root", return_value=project_root),
+            patch("doc_system.commands.create._get_templates_dir", return_value=templates_dir),
+        ):
+            execute(args)
+
+        data = yaml.safe_load(tracking.read_text())
+        assert isinstance(data["proposals"], list)
+        ids = [e["id"] for e in data["proposals"]]
+        assert "PROP-001" in ids
+        assert "PROP-007" in ids
 
     def test_create_usecase(self, tmp_path, capsys):
         """建立 usecase 應產生檔案，不更新 tracking.yaml。"""

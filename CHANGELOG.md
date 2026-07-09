@@ -1,3 +1,23 @@
+## [2.14.0] - 2026-07-09
+
+### Summary
+feat: 建立 reference-stability 規則 8 強制 hook; feat: 建立 doc skill tracking_schema.py SSOT + conformance test; fix: test_update.py fixture 改從 SSOT 生成（list 格式） (+7 more)
+
+Changes: 2 feat, 6 fix, 2 chore
+
+- feat: 建立 reference-stability 規則 8 強制 hook
+- feat: 建立 doc skill tracking_schema.py SSOT + conformance test
+- fix: test_update.py fixture 改從 SSOT 生成（list 格式）
+- fix: hook 範例改合成 ID 避免規則8自我違反
+- fix: status.py 改 list iterate 修復對真實檔 crash
+- fix: create.py proposals dict→list + confirmed→confirmed_at + 引用 SSOT
+- fix: create.py 頂層 last_updated 鍵與真實 schema 對齊
+- fix: 移除 _sync_tracking_yaml 頂層 last_updated 鍵
+- chore: doc skill 框架碼 ticket ID 最終 sweep（reference-stability 規則 8）
+- chore: batch_init.py traceability 頂層鍵引用 TRACEABILITY_SCHEMA
+
+---
+
 ## [2.13.0] - 2026-07-08
 
 ### Summary

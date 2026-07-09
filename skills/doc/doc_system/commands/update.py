@@ -81,8 +81,6 @@ def _sync_tracking_yaml(tracking_file: str, prop_id: str, new_status: str) -> bo
     if new_status == "confirmed" and entry.get("confirmed_at") is None:
         entry["confirmed_at"] = date.today().isoformat()
 
-    data["last_updated"] = date.today().isoformat()
-
     path.write_text(
         yaml.dump(data, allow_unicode=True, default_flow_style=False, sort_keys=False),
         encoding="utf-8",

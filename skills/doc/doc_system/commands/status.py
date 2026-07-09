@@ -5,6 +5,7 @@ import argparse
 import yaml
 
 from doc_system.core.file_locator import FileLocator
+from doc_system.core.tracking_schema import PROPOSALS_TRACKING_SCHEMA
 
 
 def _load_tracking(tracking_file: str) -> dict | None:
@@ -25,14 +26,16 @@ def execute(args: argparse.Namespace) -> None:
         print(f"無法讀取追蹤檔案: {locator.tracking_file}")
         return
 
-    proposals = tracking.get("proposals", {})
+    proposals = tracking.get("proposals", [])
     if not proposals:
         print("目前沒有提案。")
         return
 
-    # 統計各狀態數量
+    # proposals 為 list-based（見 PROPOSALS_TRACKING_SCHEMA["proposals_format"]），
+    # 逐筆統計各狀態數量。
+    assert PROPOSALS_TRACKING_SCHEMA["proposals_format"] == "list"
     status_counts: dict[str, int] = {}
-    for prop_data in proposals.values():
+    for prop_data in proposals:
         if not isinstance(prop_data, dict):
             continue
         prop_status = prop_data.get("status", "unknown")

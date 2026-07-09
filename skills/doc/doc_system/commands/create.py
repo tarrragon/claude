@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 
 from doc_system.core.file_locator import FileLocator
+from doc_system.core.tracking_schema import PROPOSALS_TRACKING_SCHEMA
 
 
 # type 到模板檔名和目標子目錄的對應
@@ -123,34 +124,37 @@ def _add_tracking_entry(tracking_file: str, prop_id: str, title: str) -> None:
     """在 proposals-tracking.yaml 新增 proposal entry。"""
     path = Path(tracking_file)
     if not path.is_file():
-        # 建立基礎結構
+        # 建立基礎結構（對齊真實 proposals-tracking.yaml schema：僅 proposals/usecases/specs 三區塊）
         data = {
-            "version": "1.0",
-            "last_updated": date.today().isoformat(),
-            "proposals": {},
+            "proposals": [],
+            "usecases": [],
+            "specs": [],
         }
     else:
         raw = path.read_text(encoding="utf-8")
         data = yaml.safe_load(raw) or {}
 
-    proposals = data.setdefault("proposals", {})
-    if prop_id in proposals:
+    proposals = data.setdefault("proposals", [])
+    if any(entry.get("id") == prop_id for entry in proposals if isinstance(entry, dict)):
         # 已存在，不重複新增
         return
 
-    proposals[prop_id] = {
-        "title": title,
-        "status": "draft",
-        "proposed": date.today().isoformat(),
-        "confirmed": None,
-        "target_version": None,
-        "source": "",
-        "spec_refs": [],
-        "usecase_refs": [],
-        "ticket_refs": [],
-        "checklist": [],
-    }
-    data["last_updated"] = date.today().isoformat()
+    confirm_field = PROPOSALS_TRACKING_SCHEMA["confirm_date_field"]
+    proposals.append(
+        {
+            "id": prop_id,
+            "title": title,
+            "status": "draft",
+            "proposed": date.today().isoformat(),
+            confirm_field: None,
+            "target_version": None,
+            "source": "",
+            "spec_refs": [],
+            "usecase_refs": [],
+            "ticket_refs": [],
+            "checklist": [],
+        }
+    )
 
     path.write_text(
         yaml.dump(data, allow_unicode=True, default_flow_style=False, sort_keys=False),
@@ -172,12 +176,12 @@ def execute(args: argparse.Namespace) -> None:
 
     project_root = FileLocator.get_project_root()
 
-    # ID 自動分配（0.3.4-W2-002）
+    # ID 自動分配
     if not doc_id:
         doc_id = _next_id(project_root, doc_type)
         print(f"[自動分配] ID: {doc_id}")
 
-    # spec domain 推導（0.3.4-W2-002）
+    # spec domain 推導
     if config["requires_domain"] and not domain:
         suggested = _suggest_domain_from_tracking(project_root, doc_id)
         if suggested:

@@ -57,7 +57,7 @@ class TestNavExecute:
             "outputs": {
                 "spec_refs": ["spec/core.md"],
                 "usecase_refs": [],
-                "ticket_refs": ["W1-001"],
+                "ticket_refs": ["REF-SAMPLE-A"],
             },
             "related_proposals": [],
         }
@@ -67,7 +67,7 @@ class TestNavExecute:
         assert "spec_refs" in refs
         assert "spec/core.md" in refs["spec_refs"]
         assert "ticket_refs" in refs
-        assert "W1-001" in refs["ticket_refs"]
+        assert "REF-SAMPLE-A" in refs["ticket_refs"]
         # 空 list 不應出現
         assert "usecase_refs" not in refs
         assert "related_proposals" not in refs

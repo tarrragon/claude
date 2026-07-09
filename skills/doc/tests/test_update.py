@@ -8,10 +8,13 @@ import yaml
 
 from doc_system.commands.update import execute
 from doc_system.core.file_locator import FileLocator
+from .tracking_fixtures import find_entry, make_test_tracking
 
 
-def _setup_proposal(tmp_path, prop_id="PROP-001", status="draft"):
-    """建立 proposal 檔案和 tracking.yaml。"""
+def _setup_proposal(tmp_path, prop_id="PROP-001", status="draft", overrides=None):
+    """建立 proposal md 檔 + list-based tracking.yaml（對齊
+    docs/proposals-tracking.yaml 實際結構，經 make_test_tracking SSOT helper 生成，
+    非手寫猜測欄位）。"""
     proposals_dir = tmp_path / "docs" / "proposals"
     proposals_dir.mkdir(parents=True)
 
@@ -20,26 +23,8 @@ def _setup_proposal(tmp_path, prop_id="PROP-001", status="draft"):
         f'---\nid: {prop_id}\ntitle: "Test Proposal"\nstatus: {status}\n---\n# Content\n'
     )
 
-    # 建立 tracking.yaml
     tracking = tmp_path / "docs" / "proposals-tracking.yaml"
-    data = {
-        "version": "1.0",
-        "last_updated": "2026-03-30",
-        "proposals": {
-            prop_id: {
-                "title": "Test Proposal",
-                "status": status,
-                "proposed": "2026-03-30",
-                "confirmed_at": None,
-                "target_version": None,
-                "source": "",
-                "spec_refs": [],
-                "usecase_refs": [],
-                "ticket_refs": [],
-                "checklist": [],
-            },
-        },
-    }
+    data = make_test_tracking(prop_id, status, overrides)
     tracking.write_text(
         yaml.dump(data, allow_unicode=True, default_flow_style=False, sort_keys=False)
     )
@@ -47,37 +32,10 @@ def _setup_proposal(tmp_path, prop_id="PROP-001", status="draft"):
     return str(tmp_path)
 
 
-def _add_target_version(tmp_path, prop_id, target_version):
-    """為既有 tracking.yaml（dict-keyed 格式）補上 target_version 欄位。"""
-    tracking = tmp_path / "docs" / "proposals-tracking.yaml"
-    data = yaml.safe_load(tracking.read_text())
-    data["proposals"][prop_id]["target_version"] = target_version
-    tracking.write_text(
-        yaml.dump(data, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    )
-
-
+# 向後相容別名：既有測試沿用 list-format 命名呼叫 target_version 情境。
 def _setup_proposal_list_format(tmp_path, prop_id, status, target_version="__unset__"):
-    """建立 list-based tracking.yaml，對應 docs/proposals-tracking.yaml 實際結構
-    （`proposals:` 為清單，每項含 `id` 欄位，非 dict-keyed）。"""
-    proposals_dir = tmp_path / "docs" / "proposals"
-    proposals_dir.mkdir(parents=True)
-
-    md = proposals_dir / f"{prop_id}-test.md"
-    md.write_text(
-        f'---\nid: {prop_id}\ntitle: "Test Proposal"\nstatus: {status}\n---\n# Content\n'
-    )
-
-    entry = {"id": prop_id, "title": "Test Proposal", "status": status}
-    if target_version != "__unset__":
-        entry["target_version"] = target_version
-
-    tracking = tmp_path / "docs" / "proposals-tracking.yaml"
-    tracking.write_text(
-        yaml.dump({"proposals": [entry]}, allow_unicode=True, default_flow_style=False, sort_keys=False)
-    )
-
-    return str(tmp_path)
+    overrides = None if target_version == "__unset__" else {"target_version": target_version}
+    return _setup_proposal(tmp_path, prop_id, status, overrides)
 
 
 def _setup_todolist(tmp_path, versions):
@@ -114,7 +72,8 @@ class TestUpdateStatus:
         # 檢查 tracking.yaml 已同步
         tracking = tmp_path / "docs" / "proposals-tracking.yaml"
         data = yaml.safe_load(tracking.read_text())
-        assert data["proposals"]["PROP-001"]["status"] == "discussing"
+        entry = find_entry(data["proposals"], "PROP-001")
+        assert entry["status"] == "discussing"
 
     def test_update_nonexistent_id(self, tmp_path, capsys):
         """更新不存在的 ID 應顯示錯誤訊息。"""
@@ -149,10 +108,14 @@ class TestUpdateStatus:
         # 檢查 tracking.yaml confirmed_at 日期已填入，且不產生 confirmed 欄位
         tracking = tmp_path / "docs" / "proposals-tracking.yaml"
         data = yaml.safe_load(tracking.read_text())
-        entry = data["proposals"]["PROP-002"]
+        entry = find_entry(data["proposals"], "PROP-002")
         assert entry["status"] == "confirmed"
         assert entry["confirmed_at"] is not None
         assert "confirmed" not in entry
+
+        # 真實 schema 頂層僅 proposals/usecases/specs 三區塊，
+        # 不應憑空新增 last_updated（IMP-APP-002 同族第五起）
+        assert "last_updated" not in data
 
     def test_update_tracking_yaml_sync_list_format(self, tmp_path, capsys):
         """proposals-tracking.yaml 為 list-based 結構（實際 repo 格式）時，
@@ -203,8 +166,9 @@ class TestUpdateStatus:
 
     def test_update_registered_confirmed_target_version_no_guidance(self, tmp_path, capsys):
         """target_version 已在 todolist.yaml 註冊（不限 status）時不應觸發引導。"""
-        project_root = _setup_proposal(tmp_path, "PROP-002", "discussing")
-        _add_target_version(tmp_path, "PROP-002", "v0.38.0")
+        project_root = _setup_proposal(
+            tmp_path, "PROP-002", "discussing", overrides={"target_version": "v0.38.0"}
+        )
         _setup_todolist(tmp_path, {"0.38.0": "planned"})
         args = argparse.Namespace(id="PROP-002", status="confirmed")
 
@@ -236,7 +200,7 @@ class TestUpdateStatus:
 
 
 class TestTargetVersionRegistrationGuidance:
-    """提案 confirmed 時 target_version 註冊 todolist 的源頭引導測試（0.38.0-W1-004）。
+    """提案 confirmed 時 target_version 註冊 todolist 的源頭引導測試。
 
     判定標準與 version-tracking-consistency-guard-hook 漂移 7 一致：
     target_version 出現於 todolist.yaml 任一版本條目（不論 status）即視為已註冊。

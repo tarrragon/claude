@@ -12,6 +12,7 @@ from pathlib import Path
 import yaml
 
 from doc_system.core.file_locator import FileLocator
+from doc_system.core.tracking_schema import TRACEABILITY_SCHEMA
 from doc_system.commands.create import (
     DOC_TYPE_CONFIG,
     _read_template,
@@ -19,6 +20,13 @@ from doc_system.commands.create import (
     _replace_frontmatter_date,
     _slugify,
 )
+
+# traceability.yaml 頂層鍵一律取自 TRACEABILITY_SCHEMA（SSOT），禁止 inline 猜測。
+_TOP_LEVEL_KEYS = TRACEABILITY_SCHEMA["top_level_keys"]
+assert _TOP_LEVEL_KEYS == {"version", "mappings", "last_updated"}
+_VERSION_KEY = "version"
+_MAPPINGS_KEY = "mappings"
+_LAST_UPDATED_KEY = "last_updated"
 
 
 def _load_tracking(tracking_file: str) -> dict:
@@ -84,12 +92,13 @@ def _create_file(template_name: str, doc_id: str, title: str, target_dir: Path) 
 
 
 def _append_traceability(traceability_file: Path, spec_id: str, uc_id: str, title: str) -> None:
+    # 欄位名一律引用 TRACEABILITY_SCHEMA（SSOT），禁止 inline 猜測。
     if traceability_file.is_file():
         data = yaml.safe_load(traceability_file.read_text(encoding="utf-8")) or {}
     else:
-        data = {"version": "1.0", "mappings": []}
+        data = {_VERSION_KEY: "1.0", _MAPPINGS_KEY: []}
 
-    mappings = data.setdefault("mappings", [])
+    mappings = data.setdefault(_MAPPINGS_KEY, [])
     mappings.append({
         "spec": spec_id,
         "usecase": uc_id,
@@ -97,7 +106,7 @@ def _append_traceability(traceability_file: Path, spec_id: str, uc_id: str, titl
         "scenarios": ["TODO: 填寫場景映射"],
         "tests": [],
     })
-    data["last_updated"] = date.today().isoformat()
+    data[_LAST_UPDATED_KEY] = date.today().isoformat()
 
     traceability_file.write_text(
         yaml.dump(data, allow_unicode=True, default_flow_style=False, sort_keys=False),

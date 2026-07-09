@@ -8,16 +8,19 @@ from doc_system.core.file_locator import FileLocator
 
 
 def _create_tracking(tmp_path, proposals_data):
-    """建立 proposals-tracking.yaml。"""
+    """建立 proposals-tracking.yaml（proposals 為 list-based，見 SSOT）。"""
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir(parents=True, exist_ok=True)
     tracking = docs_dir / "proposals-tracking.yaml"
 
-    lines = ['version: "1.0"', 'last_updated: "2026-03-30"', "", "proposals:"]
-    for prop_id, prop_status in proposals_data.items():
-        lines.append(f"  {prop_id}:")
-        lines.append(f'    title: "Test {prop_id}"')
-        lines.append(f"    status: {prop_status}")
+    if proposals_data:
+        lines = ["proposals:"]
+        for prop_id, prop_status in proposals_data.items():
+            lines.append(f"  - id: {prop_id}")
+            lines.append(f'    title: "Test {prop_id}"')
+            lines.append(f"    status: {prop_status}")
+    else:
+        lines = ["proposals: []"]
 
     tracking.write_text("\n".join(lines) + "\n")
     return str(tmp_path)
