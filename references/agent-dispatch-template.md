@@ -44,6 +44,8 @@ Ticket: {ticket_id}
 
 > **用途**：PM 派發前最常用的中文對話式骨架。把 context 寫入 ticket 後，直接複製以下骨架填三個空格即可派發。prompt 控制在 **10-15 行**，穩過 Hook 30 行上限。
 
+> **機制選擇前置（0.38.0-W2-002 ANA 落地）**：呼叫 `Agent(...)` 時**預設不帶 `name` 參數**（一般 subagent）。僅當任務符合「平行派發且 Agent A 的發現會改變 Agent B 正在進行的工作」（改用 Agent Teams）或「同 Wave 有 3+ 張同類型 ticket 且預期逐一派發」（named agent 可選續用）時才加 `name`。循序一次性任務、獨立分析/實作任務一律不帶 `name`。完整選用準則決策表見 `.claude/pm-rules/parallel-dispatch.md`「派發機制選用準則」章節。
+
 ### 骨架（3 段）
 
 ```markdown
@@ -795,13 +797,16 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 
 ## 相關文件
 
-- `.claude/pm-rules/parallel-dispatch.md` — 引用本模板為強制骨架
+- `.claude/pm-rules/parallel-dispatch.md` — 引用本模板為強制骨架；「派發機制選用準則」章節定義 named agent vs 一般 subagent 選用時機
+- `.claude/skills/agent-team/SKILL.md` — Task subagent vs Agent Teams 快速決策表（上一層判斷）
 - `.claude/pm-rules/decision-tree.md` — 代理人可編輯路徑對照表
 - `.claude/rules/core/quality-baseline.md` — 規則 6 失敗案例學習原則
 
 ---
 
-**Last Updated**: 2026-07-05
+**Last Updated**: 2026-07-09
+**Version**: 1.12.0 — 「三段式快速填空骨架」章節新增「機制選擇前置」提示：預設呼叫 `Agent(...)` 不帶 `name` 參數，例外情境（Agent Teams / 同 Wave 續用）指向 `parallel-dispatch.md`「派發機制選用準則」章節；相關文件補交叉引用（0.38.0-W2-002 ANA 落地，W4-005）
+
 **Version**: 1.11.0 — 「收尾義務標準段（W2-003）」章節擴充（0.4.1-W2-008）：新增「Solution 自檢結果子章節義務」項，收尾四塊改為含此項；引用 W17-064 warning 忽略率實證（0.4.0 十八票 + 0.4.1-W1-001 全被忽略，受眾/時點雙錯）為擴充依據
 **Version**: 1.10.0 — 新增「收尾義務標準段（W2-003）」章節：set-acceptance 指令範例（--all-check / --check index 兩型）+ ticket body 填寫義務（Solution/Test Results/Exit Status）+「回覆勾選不算數，frontmatter 才是 SOT」明示提醒；引用 0.4.1-W1-001 摩擦 F3（0.4.0 W2-002/003 回覆勾選未動 frontmatter 二度擋 complete，prompt 明示後四票收斂）為 source
 **Version**: 1.9.0 — 新增「worktree 快照過舊防護（W2-007）」章節：session 中途新 commit 後的派發，prompt 第 0 步強制 merge main + ls/grep 驗證目標檔案存在；阻塞回報後重派新 agent 優先於 SendMessage 恢復（無變更 worktree 被平台自動回收，恢復時 cwd 靜默 fallback 主 repo）；引用 0.3.6-W2-007 為 source

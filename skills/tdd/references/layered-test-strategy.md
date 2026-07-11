@@ -102,7 +102,7 @@ monitor 專案非典型 Clean Architecture（monorepo 含多語言 SDK + collect
 - `references/doc-handoff.md` — doc→TDD 銜接（UC 場景的整合/單元分工判準）
 - `references/bdd-behavior-testing.md` — BDD 行為測試深度指引（Sociable/Solitary、分層 Mock）
 - `references/protocol-integration-testing.md` — Protocol integration 三層策略（Mock 遮蔽機制）
-- `.claude/methodologies/hybrid-testing-strategy-methodology.md` — 方法論 stub（30 秒核心）
+- `.claude/methodologies/hybrid-testing-strategy-methodology.md` — 方法論 stub（核心摘要）
 
 ---
 

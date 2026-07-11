@@ -193,7 +193,7 @@ worklog 記錄大方向、策略、目標（「要做什麼」和「為什麼」
 
 - 完整格式範例 + 工作流程逐字命令：`.claude/references/five-document-system-examples.md`（衛星檔）
 - SKILL 定義：`.claude/skills/doc-flow/SKILL.md`
-- Worklog 模板：`.claude/skills/doc-flow/templates/worklog.md.template`
+- Worklog 模板：`.claude/skills/doc-flow/worklog.md.template`
 
 ---
 

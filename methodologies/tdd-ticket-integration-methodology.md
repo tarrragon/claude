@@ -1,4 +1,4 @@
-# TDD-Ticket 整合方法論（30 秒核心）
+# TDD-Ticket 整合方法論
 
 > **本檔已瘦身（W8-018.2）**：3b 拆分評估（檔案數 / 認知負擔 / 跨層級觸發條件）已在 `/tdd` skill 的 `.claude/skills/tdd/references/phase3-implementation.md`「3b 拆分評估」；單一職責四大檢查的完整定義在 `.claude/methodologies/atomic-ticket-methodology.md`。本檔僅保留 distinct 核心：Phase 3a 是唯一 Ticket 決策點，以單一職責四大檢查作為唯一拆分標準。
 

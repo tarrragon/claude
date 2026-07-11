@@ -54,12 +54,12 @@ class TestScanSkillHooks:
 
     def test_scans_skill_hooks_with_relative_path(self, tmp_path):
         skills_dir = tmp_path / "skills"
-        _make_skill_hook(skills_dir, "test-async-guardian", "pre-test-scan.py")
+        _make_skill_hook(skills_dir, "dart-test-async-guardian", "pre-test-scan.py")
         _make_skill_hook(skills_dir, "another-skill", "post-action.py")
 
         result = scan_skill_hooks(skills_dir, set(), set())
         assert result == {
-            "test-async-guardian/hooks/pre-test-scan.py",
+            "dart-test-async-guardian/hooks/pre-test-scan.py",
             "another-skill/hooks/post-action.py",
         }
 
@@ -109,12 +109,12 @@ class TestExtractRegisteredSkillHooks:
     def test_extracts_skill_hook_paths(self):
         settings = _settings_with(
             [
-                "$CLAUDE_PROJECT_DIR/.claude/skills/test-async-guardian/hooks/pre-test-scan.py",
+                "$CLAUDE_PROJECT_DIR/.claude/skills/dart-test-async-guardian/hooks/pre-test-scan.py",
                 "$CLAUDE_PROJECT_DIR/.claude/hooks/agent-dispatch-logger-hook.py",
             ]
         )
         result = extract_registered_skill_hooks(settings)
-        assert result == {"test-async-guardian/hooks/pre-test-scan.py"}
+        assert result == {"dart-test-async-guardian/hooks/pre-test-scan.py"}
 
     def test_excludes_skill_files_outside_hooks_subdir(self):
         # 例如 strategic-compact/suggest-compact.py（非 hooks/ 子目錄）不算 skill hook

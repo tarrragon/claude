@@ -151,4 +151,4 @@ Phase 1 拆分分析完成後，使用以下範本產出報告：
 
 **Last Updated**: 2026-03-12
 **Version**: 1.0.0 - 從 tdd-phase1-split SKILL 遷移整合
-**Source**: .claude/skills/tdd-phase1-split/SKILL.md
+**Source**: .claude/skills/tdd/SKILL.md

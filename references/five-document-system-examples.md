@@ -2,7 +2,7 @@
 
 > **用途**：本檔為 `.claude/methodologies/five-document-system-methodology.md` 的衛星參考檔，存放五重文件各自的詳細格式範本（worklog 自給自足範本、技術債務評估表格與處理流程、error-patterns 核心理念框）以及工作流程三階段的逐字命令序列。需照抄某一格式範本，或需逐字工作流程指令時按需讀取。
 >
-> **核心方法論（五重文件職責定義 + 三大設計原則 + 文件關係圖 + 工作流程概念，30 秒核心）**：`.claude/methodologies/five-document-system-methodology.md`（需回顧各文件的核心問題、職責邊界或設計原則時讀）
+> **核心方法論（五重文件職責定義 + 三大設計原則 + 文件關係圖 + 工作流程概念，核心摘要）**：`.claude/methodologies/five-document-system-methodology.md`（需回顧各文件的核心問題、職責邊界或設計原則時讀）
 
 ---
 

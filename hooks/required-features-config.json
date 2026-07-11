@@ -57,18 +57,18 @@
       "remediation": "確認 5w1h-token-generator.sh 存在且有執行權限"
     },
     {
-      "id": "style-guardian-hook",
-      "name": "Style Guardian Hook",
+      "id": "dart-style-guardian-hook",
+      "name": "Dart Style Guardian Hook",
       "description": "統一設計系統強制檢查",
       "category": "quality-assurance",
       "check_type": "settings_hook",
       "hook_event": "PostToolUse",
       "hook_matcher": "Edit",
-      "hook_command": ".claude/hooks/style-guardian-hook.py",
+      "hook_command": ".claude/hooks/dart-style-guardian-hook.py",
       "required": false,
       "priority": 5,
       "failure_action": "warn",
-      "remediation": "將 style-guardian-hook.py 註冊到 settings.json PostToolUse/Edit"
+      "remediation": "將 dart-style-guardian-hook.py 註冊到 settings.json PostToolUse/Edit"
     },
     {
       "id": "test-timeout-hook",

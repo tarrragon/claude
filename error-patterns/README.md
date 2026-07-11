@@ -264,6 +264,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | IMP-V1-001 | 估算係數未經實測校準即上線 — 守門機制低估真值提供假安心 | 中 | v1.0.0 |
 | IMP-APP-001 | get_project_root 雙實作回傳型別分歧 — consumer 用錯 Path 方法 runtime 才爆 | 中 | v0.37.0 |
 | IMP-APP-002 | regex 解析多條目結構化檔案未以條目邊界為先 — DOTALL 跨條目誤配 + 格式漂移致解析恆空靜默失效 | 高 | v0.38.0 |
+| IMP-APP-003 | fresh checkout 缺 gitignored 生成產物導致連鎖編譯失敗，並被誤歸因為並行資源耗盡 | 高 | v0.38.0 |
 
 ### 流程合規 (PC)
 
@@ -382,6 +383,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-APP-002 | sync-pull 孤兒清理超出宣稱範圍刪除，preserve 機制未生效致專案特化檔遺失 | 高 | v0.32.0 |
 | PC-APP-004 | 症狀緩解累積偏誤——同一根因累積多個緩解機制而非根治 | 中 | v0.37.0 |
 | PC-APP-005 | ANA 建議方案的可行性驗證僅跑 happy path，前提與 UX 後果到 IMP 才暴露 | 中 | v0.37.0 |
+| PC-APP-007 | 多個 Spawn Request 合併為單票時驗收項遺失與憑空補入（標題宣稱涵蓋、acceptance 未承接） | 高 | v0.38.0 |
 | PC-MON-001 | 工具防護落地於可繞過的執行點導致復發（version-release pre-flight 防護在手動收尾路徑零次執行） | 中 | v0.3.5 |
 | PC-MON-002 | 必填不等於有效——CLI 必填欄位無格式/存在性驗證，自由文字穿透防護（resolved_by=設計決策） | 中 | v0.3.6 |
 

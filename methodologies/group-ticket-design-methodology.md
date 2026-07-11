@@ -1,6 +1,6 @@
 # Group Ticket 設計方法論
 
-> 30 秒核心：當父 ANA/IMP 已 complete 卻發現未追蹤的 N 項衍生修復時，用 Group ticket（`--source-ticket` 接原父 + `--parent` group 接 children）保留層次感且不違 PC-073。CLI 操作與六欄位語意見 ticket skill，本檔只留設計判斷。
+> 核心摘要：當父 ANA/IMP 已 complete 卻發現未追蹤的 N 項衍生修復時，用 Group ticket（`--source-ticket` 接原父 + `--parent` group 接 children）保留層次感且不違 PC-073。CLI 操作與六欄位語意見 ticket skill，本檔只留設計判斷。
 
 ## 適用情境
 

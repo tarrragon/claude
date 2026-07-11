@@ -36,7 +36,6 @@ model: sonnet
 
 以下檔案仍引用 john-carmack，應在後續版本逐步更新為 ginger-performance-tuner：
 
-- `.claude/analyses/archived/agent-collaboration.md`
 - `.claude/methodologies/tdd-collaboration-flow.md`
 
 ---

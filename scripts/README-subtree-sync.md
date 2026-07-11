@@ -2,7 +2,6 @@
 
 ## 概述
 
-本文件是同步機制技術文件，說明 `.claude` 資料夾的同步設計原理、操作方式和衝突處理。新專案首次設置請參考 [README.md](./README.md)。
 
 > **檔名與實作說明**：本檔名含 `subtree` 字樣為歷史命名，**實際實作並非標準 Git Subtree**，而是「clone 遠端 + 檔案複製（`shutil.copytree`/`copy2`）」。標準 Git Subtree 的優劣對照見下方[「與其他方案的比較」](#與其他方案的比較)。
 
@@ -133,7 +132,6 @@ python3 ./.claude/scripts/sync-claude-pull.py
 
 ## 其他專案如何使用
 
-新專案的首次設置和定期更新配置，請參考 [README.md](./README.md) 的「其他專案如何使用」章節。
 
 ## 目錄結構
 

@@ -204,7 +204,7 @@ hooks:
     event: SessionStart
   skill-registration-check-hook.py:
     event: SessionStart
-  style-guardian-hook.py:
+  dart-style-guardian-hook.py:
     event: PostToolUse
     matcher: Write
   subagent-stop-dispatch-cleanup-hook.py:

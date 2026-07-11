@@ -73,7 +73,7 @@ c014eccf「.claude 框架追平至 ce0dcd7（清 16 孤兒 + 框架演進）」c
 ## 相關
 
 - `.claude/rules/core/tool-output-trust-rules.md` 規則 5「記錄平面不是 ground truth」——commit 訊息（宣稱）vs git 實際刪除（世界平面）的對帳即此規則的應用。
-- `.claude/error-patterns/process-compliance/PC-177-defensive-rule-mechanical-overapplication.md` — 防護手段機械套用反噬上位模式（孤兒清理機械套用即其變體）。
+- PC-177-defensive-rule-mechanical-overapplication (framework repo: tarrragon/claude) — 防護手段機械套用反噬上位模式（孤兒清理機械套用即其變體）。
 - 案例 commit：誤刪 `c014eccf`、復原 `04553fd6`、hook 登記 `69e236a1`。
 - `.claude/sync-preserve.yaml`、`.claude/scripts/sync-claude-pull.py`（`--audit` 孤兒稽核）。
 

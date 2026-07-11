@@ -49,3 +49,4 @@ IMP-021（手動文字解析結構化格式）的主張是「優先用標準 par
 - 0.38.0-W1-007（同日第三起：`_sync_tracking_yaml` 假設 dict 結構、真實檔案為 list，`doc update confirmed` 從未真正同步 tracking.yaml——非 regex 但同屬「格式假設無真實資料驗證」維度，適用解決方案 2、3）
 - 0.38.0-W1-009（同日第四起：寫入欄位名 `confirmed` 與真實 schema `confirmed_at` 不符，sync 產生從未被讀取的欄位、真欄位不同步——欄位命名維度，W1-007 依預防措施 3 用真實資料驗證才揪出，證明該措施有效）
 - 0.38.0-W1-011（同日第五起：sync 寫入真實 schema 不存在的頂層 `last_updated` 鍵——同一 `_sync_tracking_yaml` 函式連續三起（結構/欄位名/頂層鍵），單點函式的格式假設應一次全面對照真實 schema 盤點，而非逐次修補）
+- 0.38.0-W3-010（第六起，維度擴展至 spec 文件層：spec §14.2 指定 tag_management_page 為 Divider 遷移試點頁，但 grep 實證該頁無任何 Divider（7 處實分佈於 library/search/version_management/sync）——「格式假設無真實資料驗證」不限程式碼 pattern，spec 撰寫時引用的程式碼現況同樣需 grep 實證，否則下游 ticket acceptance 直接繼承不可執行條件；W3-001 驗收時攔截）

@@ -65,7 +65,6 @@ mint-format-specialist 在以下情況下**應該被觸發**：
 2. **路徑轉換**：按照「Package 導入路徑語意化方法論」規則進行轉換
 3. **衝突解決**：若存在命名衝突，透過重構消除而非使用別名
 4. **批次修改**：按檔案或模組分批進行修改，每批次後驗證
-5. **文件更新**：記錄修正案例到 .claude/analyses/archived/format-fix-examples.md
 
 **驗證標準**：
 - 所有相對路徑已轉換為 `package:book_overview_app/` 格式

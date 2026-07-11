@@ -1,3 +1,48 @@
+## [2.15.0] - 2026-07-11
+
+### Summary
+feat: spawn_request_checker 區分三種未處理成因的診斷訊息; feat: 遷移 security-review 為 dart-security-review; feat: 遷移 style-guardian 為 dart-style-guardian（含 hook 配置同步） (+32 more)
+
+Changes: 5 feat, 4 refactor, 6 fix, 15 docs, 5 chore
+
+- feat: spawn_request_checker 區分三種未處理成因的診斷訊息
+- feat: 遷移 security-review 為 dart-security-review
+- feat: 遷移 style-guardian 為 dart-style-guardian（含 hook 配置同步）
+- feat: style-guardian 新增原生元件直用偵測規則（WARNING 模式）
+- feat: 掃描器新增範例佔位偵測與歷史封存排除
+- refactor: 遷移 i18n-checker 為 dart-i18n-checker
+- refactor: 遷移 test-async-guardian 為 dart-test-async-guardian
+- refactor: 補上 provider-architecture 遷移遺漏的引用更新
+- refactor: 遷移 provider-architecture 為 dart-provider-architecture
+- fix: 補回 dart-style-guardian 內容變更（並行 commit race 遺漏）
+- fix: 修正規則檔憑空引用不存在的 IMP-APP-004
+- fix: 移除框架檔案中的專案 ticket ID（reference-stability 規則 8）
+- fix: 落地 worktree gen-l10n 防護，納 lib/l10n/generated/ 入版控
+- fix: 對照實驗定案 worktree 全套件不可信 + 建 3 票 + IMP-APP-003
+- fix: 修復 .claude/ 活文件 25 筆真失效引用
+- docs: 新增 PC-APP-008 外部 API 測資虛構防護 + 規則 D5
+- docs: 建立 dart-domain-modeling skill + parsley 觸發引用
+- docs: 定義不可靠斷言判準 + Dart/Flutter 落地規則 D1-D4
+- docs: 新增 PC-APP-007 spawn request 合併缺陷
+- docs: parallel-dispatch 增補 named agent vs 一般 subagent 選用準則
+- docs: IMP-APP-002 補記第六起同族案例（spec 層格式假設無實證， 修正）
+- docs: 30 秒/1 頁 stale 定位引用全量 sweep（21 檔 29 處）
+- docs: 方法論 元件文字歸屬判準 + README 定位反轉同步
+- docs: 方法論 多輪審查 R3 修正 + outbound 接線收官
+- docs: 方法論 多輪審查 R2 修正 17 項
+- docs: 方法論 多輪審查 R1 修正 15 項
+- docs: 元件庫雙向約束框架執法三落地
+- docs: 方法論 補命名判準與形態因素先決 + saas skill 缺口票
+- docs: 元件庫雙向約束框架執法評估 + 方法論用語修正
+- docs: 元件庫雙向約束方法論 （L1 通用原則）
+- chore: complete ANA — openBD + NDL Search 日本書目 API 整合設計
+- chore: handoff → （openBD + NDL Search 日本書目 API 整合）
+- chore: Worktree 隔離從「強制」改為「風險分級」（ 方案 C 分段採納）
+- chore: 清理 parallel-dispatch.md 2 處依賴型 ticket ID 引用（ 結論落地）
+- chore: 建票修 live 測試 not-found 斷言的 429 鑑別缺陷
+
+---
+
 ## [2.14.0] - 2026-07-09
 
 ### Summary

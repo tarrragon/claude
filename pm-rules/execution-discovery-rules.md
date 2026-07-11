@@ -197,7 +197,7 @@ amendment_reason: '修正原因簡述'
 
 **Handoff 方向選擇（AskUserQuestion）**：當 handoff 有多個可能方向時，**必須**使用 AskUserQuestion 讓使用者選擇。
 
-> **Worktree 隔離**：派發會修改檔案的代理人（parsley, fennel, thyme-python, cinnamon, pepper, mint）必須使用 `Agent(isolation: "worktree")`。詳見 parallel-dispatch.md（Worktree 隔離章節）。
+> **Worktree 隔離（風險分級）**：高風險代理人（parsley, fennel, thyme-python, cinnamon, pepper, mint）必須使用 `Agent(isolation: "worktree")`；低風險代理人（ANA/DOC/唯讀）免 worktree。詳見 parallel-dispatch.md（Worktree 隔離風險分級表）。
 
 > Ticket 生命週期：.claude/pm-rules/ticket-lifecycle.md
 > 並行派發規則：.claude/pm-rules/parallel-dispatch.md

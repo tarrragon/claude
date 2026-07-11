@@ -295,7 +295,7 @@ if is_current_version and is_pending:
 
 ## 相關文檔
 
-- [Version Release README](./README.md) - 完整功能說明
+- [Version Release README](./SKILL.md) - 完整功能說明
 - [SKILL.md](./SKILL.md) - 詳細技術文件
 - 技術債務設計: `docs/work-logs/vX.Y.0/README.md`
 

@@ -787,6 +787,6 @@ cinnamon-refactor-owl必須按照「🧠 TDD 驅動重構方法論」執行：
 
 **🔗 相關文件連結**:
 
-- [返回主指導文件](../../CLAUDE.md)
+- [返回主指導文件](../CLAUDE.md)
 - [TDD 協作開發流程](tdd-collaboration-flow.md)
 - [錯誤修復和重構方法論]($CLAUDE_PROJECT_DIR/.claude/methodologies/error-fix-refactor-methodology.md)

@@ -91,7 +91,7 @@
 ## 相關文件
 
 - `.claude/skills/methodology-writing/SKILL.md` - 方法論撰寫完整實作指南
-- `.claude/skills/compositional-writing/references/writing-documents.md` - 寫作原則（含 30 秒電梯測試、六項準則）
+- `.claude/skills/compositional-writing/references/writing-documents.md` - 寫作原則（原子化 / 索引 / 意圖顯性 / 可搜尋性 / 欄位設計五大原則）
 - `.claude/methodologies/methodology-rewriting-methodology.md` - 改寫既有方法論的具體流程
 
 ---

@@ -1,6 +1,6 @@
 # 層級隔離派工方法論
 
-> **定位**：定義 Clean Architecture 五層劃分標準與單層修改原則，指導 Ticket 拆分與從外而內實作順序。受眾為 PM（拆 Ticket）、開發人員（執行單層修改）、架構師（設計審查）、Code Reviewer（檢查層級隔離）。30 秒複習清單；完整 code 範例與案例見 Reference 段。
+> **定位**：定義 Clean Architecture 五層劃分標準與單層修改原則，指導 Ticket 拆分與從外而內實作順序。受眾為 PM（拆 Ticket）、開發人員（執行單層修改）、架構師（設計審查）、Code Reviewer（檢查層級隔離）。核心摘要；完整 code 範例與案例見 Reference 段。
 
 **適用範圍**：所有遵循 Clean Architecture 的專案。
 
@@ -8,7 +8,7 @@
 
 ---
 
-## 30 秒核心
+## 核心摘要
 
 | 原則 | 一句話定義 |
 |------|-----------|

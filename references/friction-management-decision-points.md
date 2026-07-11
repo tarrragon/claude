@@ -12,7 +12,7 @@
 | 驗證類子任務派發（跑測試/lint/覆蓋率/AC 實況） | 直接建子 Ticket + 背景派發，不詢問用戶。**例外**：驗證結果決定 Ticket 是否繼續或版本發布與否時，仍須詢問 | parallel-dispatch.md 規則 5 + askuserquestion-rules.md 規則 5 |
 | `ticket track query/list/summary` 純查詢 | 直接執行，不記錄日誌 | ticket CLI 設計原則 |
 | `ticket track append-log` 進度紀錄 | 階段轉換時強制執行 | completion-checkpoint-rules Checkpoint 0.5 |
-| Worktree 建立（新開發任務） | 代理人派發時自動使用 `isolation: "worktree"`，無需預先確認 | parallel-dispatch.md Worktree 隔離強制表 |
+| Worktree 建立（新開發任務） | 高風險代理人（IMP/重構/測試實作）派發時自動使用 `isolation: "worktree"`，低風險（ANA/DOC/唯讀）免 worktree | parallel-dispatch.md Worktree 隔離風險分級表 |
 | Worktree 合併（代理人完成後） | 立即 merge，不等 ticket complete | PC-039 + completion-checkpoint Checkpoint 1.9 |
 | Context Bundle 準備（下一個 Ticket） | 派發後立即切換執行，不等代理人回來 | parallel-dispatch async-mindset |
 | 執行期間發現技術債建立 Ticket | `/ticket create` 直接建立，不詢問確認 | quality-baseline 規則 5 |

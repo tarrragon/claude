@@ -1,6 +1,6 @@
 # Frontmatter 式 Ticket 追蹤方法論
 
-> **30 秒核心**：每個 Ticket 用單一 Markdown 檔（frontmatter 存設計 + 狀態，body 存執行日誌），frontmatter 即唯一狀態來源；主線程與代理人各自直接讀寫 frontmatter，無需雙向回報。
+> **核心摘要**：每個 Ticket 用單一 Markdown 檔（frontmatter 存設計 + 狀態，body 存執行日誌），frontmatter 即唯一狀態來源；主線程與代理人各自直接讀寫 frontmatter，無需雙向回報。
 >
 > **完整命令範例 / 執行日誌範本 / 工具速查 / 舊版 CSV 相容（衛星檔）**：`.claude/references/frontmatter-ticket-tracking-operations.md`（需要逐字 bash 命令、執行日誌完整範本、命令速查表、或查詢 v0.15.x 舊版 CSV 格式時讀）
 

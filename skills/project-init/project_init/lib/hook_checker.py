@@ -131,7 +131,7 @@ def scan_skill_hooks(
         patterns: 模式集合（要排除的）。
 
     Returns:
-        set[str]: skill hook 相對路徑集合，例如 `{"test-async-guardian/hooks/pre-test-scan.py"}`。
+        set[str]: skill hook 相對路徑集合，例如 `{"dart-test-async-guardian/hooks/pre-test-scan.py"}`。
     """
     skill_hook_files: set[str] = set()
 

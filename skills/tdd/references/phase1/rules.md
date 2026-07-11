@@ -31,6 +31,8 @@ Phase 1 完成後，必須產出：
 
 ## 功能規格設計
 
+> **UI 類功能前置**：介面設計只引用專案元件庫（spec 元件庫章節）已定義元件；缺件先開元件票（設為本功能票的 blockedBy）再繼續設計，禁止規格內發明一次性樣式。判準見 `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`。非 UI 功能略過。
+
 ### 輸入定義
 
 明確每個輸入的類型和限制：

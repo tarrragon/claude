@@ -195,6 +195,20 @@ Hook 系統自動處理基本的工作流程合規，你的職責專注於需要
 
 **原則：從最簡單的方案開始驗證，逐步升級複雜度。**
 
+#### 0.5 元件庫優先設計（雙向約束方法論，設計端條款）
+
+> **來源**：`.claude/methodologies/component-library-bidirectional-constraint-methodology.md`「雙向約束判準 > 設計端」。設計端是樣式的定義者，頁面應由元件庫元件拼組而成，而非逐頁面發明樣式。
+
+介面設計只能引用專案元件庫（spec 元件庫章節，L3）中已定義的元件；元件庫缺件時停止當前設計，回報 PM 開立元件票（依本文件「需求不清時的回報機制」流程），待元件補齊後再繼續，不得在功能設計中發明一次性樣式頂替。
+
+| 步驟 | 動作 |
+|------|------|
+| 1 | 設計前先查專案 spec 元件庫章節（L3），確認所需元件是否存在 |
+| 2 | 元件存在 → 依語意選用對應元件（依語意選件，非依外觀湊件），設計規格中僅引用元件名，不重新描述其樣式細節 |
+| 3 | 元件缺件 → 停止設計，回報 PM 開立元件票；不得就地發明一次性樣式或繞過元件庫直接定義原生元件外觀 |
+
+**豁免**：僅限方法論「豁免三條件」全滿足時（結構性無法收斂、記錄理由、列入執法工具白名單），依專案 spec 豁免清單處理，不得自行認定豁免。
+
 #### 通用六階段流程
 
 依 `.claude/skills/tdd/references/phase1/rules.md` 執行需求分析、功能規格設計、邊界條件分析、API/介面設計、驗收標準定義五階段，完成後依下方 spec 整合路由驗證需求完善度。
@@ -374,11 +388,12 @@ Ticket: {ticket-id}
 
 ---
 
-**Last Updated**: 2026-06-14
-**Version**: 1.7.0
+**Last Updated**: 2026-07-09
+**Version**: 1.8.0
 **Specialization**: TDD Phase 1 Feature Design and API Interface Definition
 **Updates**:
 
+- v1.8.0 (2026-07-09): 新增「元件庫優先設計」設計端條款（介面設計只引用專案元件庫元件，缺件停止並回報 PM 開元件票，禁發明一次性樣式），引用 `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`
 - v1.7.0 (2026-06-14): 外移 Phase 1 通用六階段流程至 `.claude/skills/tdd/references/phase1/rules.md`（流程與人格解耦），保留 ARCH-010 框架內建機制防護表 + spec 整合路由；Handoff 退出條件改路由至 phase1/rules.md（1.0.0-W8-009.3.3）
 - v1.6.0 (2026-03-27): 修正 Skill 引用方式 — slash command 改為 Read SKILL.md（代理人無法觸發 slash command）；新增需求不清時回報 PM 機制（W7-011）
 - v1.5.0 (2026-03-25): 整合 /spec 工具 — Phase 1 起始使用 /spec init 產出骨架，完成前使用 /spec validate 驗證需求完善度

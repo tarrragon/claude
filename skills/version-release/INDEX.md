@@ -19,7 +19,7 @@ version-release/
 
 ### 我是新使用者，想快速上手
 
-→ 閱讀 [`README.md`](./README.md) 的「快速開始」章節
+→ 閱讀 [`README.md`](./SKILL.md) 的「快速開始」章節
 
 ### 我需要完整的功能說明
 
@@ -31,7 +31,7 @@ version-release/
 
 ### 我需要實際執行發布
 
-→ 按照 [`README.md` 的「使用流程」](./README.md#使用流程)
+→ 按照 [`README.md` 的「使用流程」](./SKILL.md#使用流程)
 
 ### 我需要發布檢查清單
 

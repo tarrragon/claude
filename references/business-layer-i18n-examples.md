@@ -2,7 +2,7 @@
 
 > **用途**：本檔為 `.claude/methodologies/business-layer-i18n-management-methodology.md` 的衛星參考檔，存放三層責任（Domain/Service、ViewModel、UI）的完整程式碼範例、參數化訊息的完整範例，以及四個反模式的正反程式碼對照。需要照抄某一層的實作骨架、或需要對照具體反模式程式碼理解違規時按需讀取。
 >
-> **核心方法論（分層責任概念 + 錯誤訊息流程 + 反模式概念 + 檢查清單，30 秒核心）**：`.claude/methodologies/business-layer-i18n-management-methodology.md`（需回顧分層責任定義、三個合法訊息來源、錯誤訊息流程或檢查清單時讀）
+> **核心方法論（分層責任概念 + 錯誤訊息流程 + 反模式概念 + 檢查清單，核心摘要）**：`.claude/methodologies/business-layer-i18n-management-methodology.md`（需回顧分層責任定義、三個合法訊息來源、錯誤訊息流程或檢查清單時讀）
 
 ---
 

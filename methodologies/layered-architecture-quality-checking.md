@@ -161,4 +161,4 @@ jobs:
 
 ## Reference
 
-- [層級隔離派工方法論](./layered-ticket-methodology.md) - 五層架構、單層修改、粒度標準（30 秒核心，含角色快速使用）
+- [層級隔離派工方法論](./layered-ticket-methodology.md) - 五層架構、單層修改、粒度標準（核心摘要，含角色快速使用）

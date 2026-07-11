@@ -19,12 +19,13 @@ import re
 import sys
 from pathlib import Path
 
-# 預設旋鈕：四排除全開啟（皆排除），可由 CLI flag 顯式覆寫納入
+# 預設旋鈕：五排除全開啟（皆排除），可由 CLI flag 顯式覆寫納入
 DEFAULT_KNOBS = {
     "include_code_block": False,
     "include_migration_backups": False,
     "include_placeholder": False,
     "include_documented": False,
+    "include_archive": False,
 }
 
 # 4 種引用前綴；http(s):// 與 #anchor 不在清單中故天然排除
@@ -41,7 +42,16 @@ PLACEHOLDER_SAMPLES = {
     ".claude/path/file.md",
     "./path/file.md",
     "../path/file.md",
+    "@.claude/path/file.md",
 }
+
+# W2-011 triage A 類：範例 skill 名 token（skill-marketplace-standard.md 等文件
+# 用具體詞彙示範「skill 引用另一 skill」的慣例寫法，非真實存在的 skill）。
+# 以路徑段精確比對（非子字串），避免誤排真實同名 skill。
+_EXAMPLE_SKILL_NAME_TOKENS = {"skill-name", "case-first", "sibling-skill"}
+_EXAMPLE_SKILL_NAME_SEGMENT = re.compile(
+    r"(?:^|/)(?:" + "|".join(re.escape(t) for t in _EXAMPLE_SKILL_NAME_TOKENS) + r")(?:/|$)"
+)
 
 # 樣式型 placeholder 偵測（W8-047 缺陷 2）：文件中的示意路徑非真實引用。
 # - glob 萬用字元 * 或 ?（如 .claude/agents/*.md、.claude/rules/**/*.md）
@@ -55,12 +65,19 @@ _BRACE_PLACEHOLDER = re.compile(r"\{[^}]*\}")
 # （如 test-helper-design-methodology.md）不視為 placeholder，避免誤排真實斷鏈。
 _XXX_TOKEN = re.compile(r"(?:^|/)xxx(?:\.md|/|$)", re.IGNORECASE)
 _TEST_TOKEN = re.compile(r"(?:^|/)TEST(?:_[A-Z0-9]+)*(?:\.md|/|$)")
+# W2-011 triage A 類：版本佔位 vX（如 vX-main.md），區別於真實版本目錄
+# （v0.13.0-... 等以數字開頭），故要求 vX 後緊接非數字字元或行尾。
+_VX_PLACEHOLDER = re.compile(r"(?:^|/)vX(?:[^0-9][^/]*)?\.md$")
+# W2-011 triage A 類：省略號縮寫（如 PC-050-...md），檔名以字面三個點直接
+# 接副檔名（無點分隔），與 ../ 相對路徑前綴（點+點+斜線）不同構。
+_ELLIPSIS_PLACEHOLDER = re.compile(r"\.\.\.md$")
 
 
 def is_placeholder_pattern(raw):
     """判定引用字串是否為樣式型 placeholder（文件示意路徑，非真實引用）。
 
-    涵蓋 glob 萬用字元、角括號佔位、大括號模板、xxx/TEST 哨兵 token。
+    涵蓋 glob 萬用字元、角括號佔位、大括號模板、xxx/TEST 哨兵 token、
+    範例 skill 名 token、版本佔位 vX、省略號縮寫檔名。
     與固定 PLACEHOLDER_SAMPLES exact-match 互補。
     """
     if _GLOB_PLACEHOLDER.search(raw):
@@ -72,6 +89,44 @@ def is_placeholder_pattern(raw):
     if _XXX_TOKEN.search(raw):
         return True
     if _TEST_TOKEN.search(raw):
+        return True
+    if _EXAMPLE_SKILL_NAME_SEGMENT.search(raw):
+        return True
+    if _VX_PLACEHOLDER.search(raw):
+        return True
+    if _ELLIPSIS_PLACEHOLDER.search(raw):
+        return True
+    return False
+
+
+# W2-011 triage D 類：歷史封存文件排除策略。以「來源檔案」整檔判定，
+# 與既有 migration-backups/ source_in_backup 排除機制對稱（W8-047 缺陷 1）。
+# 涵蓋：hook-specs 驗收報告、其在 skills/pre-fix-eval/references/ 的複本、
+# *_SUMMARY.md / *_CHECKLIST.md 命名慣例、CHANGELOG.md（含 .sync-conflicts/
+# 內複本）、skills/pre-fix-eval/INDEX.md（已封存 skill 的索引頁）。
+_ARCHIVE_BASENAME_SUFFIX = re.compile(r"_(?:SUMMARY|CHECKLIST)\.md$")
+_ARCHIVE_REPORT_BASENAMES = {
+    "pre-fix-evaluation-acceptance-report.md",
+    "pre-fix-evaluation-implementation.md",
+}
+
+
+def is_archive_source(source_posix):
+    """判定來源檔案（POSIX 相對路徑字串）是否為歷史封存文件。
+
+    歷史封存文件的引用即使目標不存在，逐筆修復也無讀者價值（已刪除的
+    歷史產物只被驗收報告/整合摘要/CHANGELOG 等歷史記錄引用）。
+    """
+    basename = source_posix.rsplit("/", 1)[-1]
+    if basename == "CHANGELOG.md":
+        return True
+    if "/.sync-conflicts/" in source_posix:
+        return True
+    if basename in _ARCHIVE_REPORT_BASENAMES:
+        return True
+    if _ARCHIVE_BASENAME_SUFFIX.search(basename):
+        return True
+    if source_posix.endswith("skills/pre-fix-eval/INDEX.md"):
         return True
     return False
 
@@ -157,6 +212,7 @@ def scan(root, knobs=None):
         "excluded_code_block": 0,
         "excluded_backup": 0,
         "excluded_documented": 0,
+        "excluded_archive": 0,
     }
     broken_entries = []
     total_refs = 0
@@ -176,6 +232,11 @@ def scan(root, knobs=None):
             "migration-backups/" in str(f).replace(os.sep, "/")
             and not knobs["include_migration_backups"]
         )
+        # W2-011 triage D 類：來源端排除——source 檔本身為歷史封存文件時，
+        # 整檔引用歸 excluded_archive（旋鈕開啟才計入，與 backup 排除同構）。
+        source_in_archive = is_archive_source(
+            _rel_to_root(f, root).replace(os.sep, "/")
+        ) and not knobs["include_archive"]
         for ref in extract_refs(text):
             total_refs += 1
             if ref["in_code_block"] and not knobs["include_code_block"]:
@@ -183,6 +244,9 @@ def scan(root, knobs=None):
                 continue
             if source_in_backup:
                 categories["excluded_backup"] += 1
+                continue
+            if source_in_archive:
+                categories["excluded_archive"] += 1
                 continue
             resolved = resolve_path(ref["raw_ref"], f, root)
             exists = Path(resolved).exists()
@@ -226,7 +290,8 @@ def _print_text_view(result):
         f"broken={cats['broken']} placeholder={cats['placeholder']} "
         f"excluded_code_block={cats['excluded_code_block']} "
         f"excluded_backup={cats['excluded_backup']} "
-        f"excluded_documented={cats['excluded_documented']}"
+        f"excluded_documented={cats['excluded_documented']} "
+        f"excluded_archive={cats['excluded_archive']}"
     )
     print("--- broken list (sorted source:line) ---")
     for e in result["broken"]:
@@ -249,6 +314,7 @@ def main(argv=None):
     parser.add_argument("--include-migration-backups", action="store_true")
     parser.add_argument("--include-placeholder", action="store_true")
     parser.add_argument("--include-documented", action="store_true")
+    parser.add_argument("--include-archive", action="store_true")
     parser.add_argument("--format", choices=["text", "json"], default="text")
     args = parser.parse_args(argv)
 
@@ -263,6 +329,7 @@ def main(argv=None):
         "include_migration_backups": args.include_migration_backups,
         "include_placeholder": args.include_placeholder,
         "include_documented": args.include_documented,
+        "include_archive": args.include_archive,
     }
     try:
         result = scan(root, knobs)

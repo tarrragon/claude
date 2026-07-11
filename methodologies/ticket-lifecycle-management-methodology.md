@@ -1,6 +1,6 @@
 # Ticket 生命週期管理方法論
 
-> 30 秒核心：Ticket 從建立到關閉的狀態流轉（待執行 → 進行中 → Review → 完成）。流程改善優先改 Ticket 引導（第一層）非 Hook 防護（第三層）；父 complete 的必要條件是「父文件完成 AND 父責任履行」（所有子全 completed/closed）。CLI 命令與技術細節見 ticket skill，本檔留生命週期概念與前置條件。
+> 核心摘要：Ticket 從建立到關閉的狀態流轉（待執行 → 進行中 → Review → 完成）。流程改善優先改 Ticket 引導（第一層）非 Hook 防護（第三層）；父 complete 的必要條件是「父文件完成 AND 父責任履行」（所有子全 completed/closed）。CLI 命令與技術細節見 ticket skill，本檔留生命週期概念與前置條件。
 
 > Ticket body 各章節範本見 `.claude/templates/ticket-log-template.md`；CLI 子命令（claim / append-log / complete 等）見 `.claude/skills/ticket/SKILL.md`，本檔不複述。
 

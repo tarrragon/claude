@@ -86,7 +86,7 @@ description: "Assertion design judgment framework for flaky and design-quality i
 |------|------|
 | `test-assertion-design` skill（本檔） | 斷言內容設計的判斷概念（驗什麼、設計是否合理），跨語言通用 |
 | `tdd` skill | TDD 流程管理（Red/Green/Refactor 階段推進） |
-| `test-async-guardian` skill | 非同步資源清理的生命週期防護（清理洩漏，非斷言設計） |
+| `dart-test-async-guardian` skill | 非同步資源清理的生命週期防護（清理洩漏，非斷言設計） |
 | `.claude/rules/core/test-assertion-design-rules.md` | 本專案（Chrome Extension/JS/Jest）專屬規則，含具體精度數字與目錄規定 |
 
 ---

@@ -35,10 +35,10 @@
 | `/error-pattern` | 錯誤模式知識庫（query/add） |
 | `/scope-confirmation` | 功能範圍確認 |
 | `/dispatch-strategy-review` | 派發策略檢討 |
-| `/security-review` | 安全審查 |
-| `/style-guardian` | Design System 規範執行 |
-| `/i18n-checker` | 硬編碼中文字串掃描 |
-| `/test-async-guardian` | 測試異步資源管理 |
+| `/dart-security-review` | 安全審查 |
+| `/dart-style-guardian` | Design System 規範執行 |
+| `/dart-i18n-checker` | 硬編碼中文字串掃描 |
+| `/dart-test-async-guardian` | 測試異步資源管理 |
 
 ## 文件與流程
 
@@ -54,7 +54,7 @@
 
 | 指令 | 用途 |
 |------|------|
-| `/provider-architecture` | Riverpod Provider 架構規範 |
+| `/dart-provider-architecture` | Riverpod Provider 架構規範 |
 | `/search-tools-guide` | 搜尋工具使用指南 |
 | `/branch-worktree-guardian` | Git 分支和 Worktree 管理 |
 | `/mermaid-ascii` | Mermaid 圖表 ASCII 渲染 |

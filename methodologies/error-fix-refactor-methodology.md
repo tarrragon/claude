@@ -73,4 +73,3 @@
 
 ## Reference
 
-- [agent-collaboration.md](../analyses/archived/agent-collaboration.md) - 代理人協作流程（歷史歸檔）

@@ -435,7 +435,7 @@ class QualityMessages:
     """品質檢查訊息 - 5 個品質 hooks 使用
 
     包含：ticket-quality-gate, phase-completion-gate, file-type-permission,
-    comment-qa, style-guardian
+    comment-qa, dart-style-guardian
     """
 
     # ========================================================================

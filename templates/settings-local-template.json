@@ -43,7 +43,7 @@
       "_COMMENT_SKILL: --- Skill 權限 ---",
       "Skill(ticket)",
       "Skill(tech-debt-capture)",
-      "Skill(test-async-guardian)",
+      "Skill(dart-test-async-guardian)",
 
       "_COMMENT_SYNC: --- 同步腳本 ---",
       "Bash(python3 ./.claude/scripts/sync-claude-push.py:*)",

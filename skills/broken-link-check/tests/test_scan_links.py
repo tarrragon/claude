@@ -264,6 +264,106 @@ class TestPlaceholderPatternDetection:
         assert cat == "broken"
 
 
+class TestW2011PlaceholderPatternDetection:
+    """0.38.0-W4-004：W2-011 triage A 類 8 筆——skill-name/vX/示範 skill 名/
+    省略號縮寫樣式納入 placeholder 偵測。"""
+
+    DEFAULT_KNOBS = {
+        "include_code_block": False,
+        "include_migration_backups": False,
+        "include_placeholder": False,
+    }
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "./../skills/skill-name/SKILL.md",  # skill-name 範本佔位
+            "../vX-main.md",  # vX 版本佔位
+            "../case-first/SKILL.md",  # 示範 skill 名
+            "../sibling-skill/references/x.md",  # 示範 skill 名
+            ".claude/error-patterns/process-compliance/PC-050-...md",  # 省略號縮寫
+        ],
+    )
+    def test_w2011_a_class_classified_placeholder(self, raw):
+        cat = scan_links.classify_ref(
+            raw, "/repo/" + raw, self.DEFAULT_KNOBS, exists=False
+        )
+        assert cat == "placeholder", f"{raw!r} 應歸 placeholder（W2-011 A 類）"
+
+    def test_vx_not_confused_with_real_version_dir(self):
+        # 反例守護：真實版本目錄（v0.13.0-... 以數字開頭）不可誤判為 vX 佔位
+        raw = ".claude/work-logs/v0.13.0-pdf-cleanup-task.md"
+        cat = scan_links.classify_ref(
+            raw, "/repo/" + raw, self.DEFAULT_KNOBS, exists=False
+        )
+        assert cat == "broken", "真實版本目錄不應誤判為 vX 佔位"
+
+    def test_ellipsis_not_confused_with_relative_prefix(self):
+        # 反例守護：../ 相對路徑前綴不可誤判為省略號縮寫
+        raw = "../real/target.md"
+        cat = scan_links.classify_ref(
+            raw, "/repo/" + raw, self.DEFAULT_KNOBS, exists=False
+        )
+        assert cat == "broken", "../ 相對路徑前綴不應誤判為省略號縮寫"
+
+
+class TestArchiveSourceExclusion:
+    """0.38.0-W4-004：W2-011 triage D 類 21 筆——歷史封存文件來源端排除
+    （hook-specs 驗收報告/複本、*_SUMMARY/*_CHECKLIST、CHANGELOG、
+    .sync-conflicts/、skills/pre-fix-eval/INDEX.md）。"""
+
+    @pytest.mark.parametrize(
+        "source_posix",
+        [
+            ".claude/hook-specs/pre-fix-evaluation-acceptance-report.md",
+            ".claude/hook-specs/pre-fix-evaluation-implementation.md",
+            ".claude/skills/pre-fix-eval/references/pre-fix-evaluation-acceptance-report.md",
+            ".claude/skills/pre-fix-eval/INTEGRATION_SUMMARY.md",
+            ".claude/skills/pre-fix-eval/VERIFICATION_CHECKLIST.md",
+            ".claude/skills/pre-fix-eval/INDEX.md",
+            ".claude/CHANGELOG.md",
+            ".claude/.sync-conflicts/CHANGELOG.md",
+        ],
+    )
+    def test_archive_basenames_classified_archive_source(self, source_posix):
+        assert scan_links.is_archive_source(source_posix) is True, (
+            f"{source_posix!r} 應判定為歷史封存來源"
+        )
+
+    def test_non_archive_source_not_classified(self):
+        assert scan_links.is_archive_source(".claude/skills/pre-fix-eval/SKILL.md") is False
+
+    @pytest.fixture
+    def archive_source_repo(self, tmp_path):
+        claude = tmp_path / ".claude"
+        (claude / "hook-specs").mkdir(parents=True)
+        (claude / "hook-specs" / "pre-fix-evaluation-acceptance-report.md").write_text(
+            "ref .claude/plans/iterative-swimming-feather.md here\n"
+        )
+        # 對照：正常檔的真實斷鏈仍須被偵測
+        (claude / "live.md").write_text("ref .claude/real/gone.md here\n")
+        return tmp_path
+
+    def test_archive_source_refs_excluded(self, archive_source_repo):
+        result = scan_links.scan(archive_source_repo, knobs=None)
+        broken = result["broken"]
+        srcs = [e["source_file"] for e in broken]
+        assert all("hook-specs/" not in s for s in srcs), (
+            "source 為歷史封存文件的引用不應計入 broken"
+        )
+        assert any("live.md" in s for s in srcs)
+        assert result["categories"]["excluded_archive"] == 1
+
+    def test_archive_source_counted_when_knob_on(self, archive_source_repo):
+        knobs = dict(scan_links.DEFAULT_KNOBS)
+        knobs["include_archive"] = True
+        result = scan_links.scan(archive_source_repo, knobs=knobs)
+        srcs = [e["source_file"] for e in result["broken"]]
+        assert any("hook-specs/" in s for s in srcs), (
+            "旋鈕開啟時 archive-source 引用應計入"
+        )
+
+
 class TestBackupSourceExclusion:
     """W8-047 缺陷 1：backup 來源端排除（source 檔在 migration-backups/）。
 

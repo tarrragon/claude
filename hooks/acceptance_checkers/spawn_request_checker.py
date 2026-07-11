@@ -34,16 +34,27 @@ status 有效值：pending（未處理）、processed（已建 ticket）、dismi
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 
 # Spawn Request 條目起始行：`- **SR-N** (timestamp)`
 _SR_ENTRY_PATTERN = re.compile(r"^\s*-\s*\*\*(SR-\d+)\*\*", re.MULTILINE)
 
-# status 欄位：`  - status: pending`
+# status 欄位（嚴格）：值只能是單一 token（`pending`/`processed`/`dismissed`）
 _STATUS_FIELD_PATTERN = re.compile(r"^\s*-\s*status\s*:\s*(\S+)\s*$", re.MULTILINE | re.IGNORECASE)
 
+# status 欄位（寬鬆）：偵測 `- status:` 行是否存在（不限值格式）
+_STATUS_LINE_LOOSE_PATTERN = re.compile(r"^\s*-\s*status\s*:\s*(.+)$", re.MULTILINE | re.IGNORECASE)
+
 _VALID_STATUSES = ("pending", "processed", "dismissed")
+
+
+@dataclass
+class _StatusParseResult:
+    kind: str  # "parsed" | "unparseable" | "missing"
+    value: Optional[str] = None
+    raw_line: Optional[str] = None
 
 
 def _extract_spawn_requests_section(content: str) -> Optional[str]:
@@ -71,11 +82,17 @@ def _split_entries(section: str) -> List[str]:
     return entries
 
 
-def _parse_status(entry: str) -> Optional[str]:
-    match = _STATUS_FIELD_PATTERN.search(entry)
-    if not match:
-        return None
-    return match.group(1).strip().strip("\"'`").lower()
+def _parse_status(entry: str) -> _StatusParseResult:
+    strict = _STATUS_FIELD_PATTERN.search(entry)
+    if strict:
+        value = strict.group(1).strip().strip("\"'`").lower()
+        return _StatusParseResult(kind="parsed", value=value)
+
+    loose = _STATUS_LINE_LOOSE_PATTERN.search(entry)
+    if loose:
+        return _StatusParseResult(kind="unparseable", raw_line=loose.group(0).strip())
+
+    return _StatusParseResult(kind="missing")
 
 
 def _parse_sr_label(entry: str) -> str:
@@ -111,46 +128,87 @@ def check_spawn_requests(
         return False, None
 
     pending_labels: List[str] = []
-    for entry in entries:
-        status = _parse_status(entry)
-        label = _parse_sr_label(entry)
-        if status is None:
-            # 缺少 status 欄位視為未處理，避免格式異常條目被靜默略過
-            pending_labels.append(label)
-            continue
-        if status not in _VALID_STATUSES:
-            logger.info(
-                "Ticket %s %s status 值非預期: %s（視為未處理）", ticket_id, label, status
-            )
-            pending_labels.append(label)
-            continue
-        if status == "pending":
-            pending_labels.append(label)
+    unparseable_entries: List[Tuple[str, str]] = []
+    missing_labels: List[str] = []
 
-    if not pending_labels:
+    for entry in entries:
+        result = _parse_status(entry)
+        label = _parse_sr_label(entry)
+
+        if result.kind == "parsed":
+            if result.value not in _VALID_STATUSES:
+                logger.info(
+                    "Ticket %s %s status 值非預期: %s（視為未處理）",
+                    ticket_id, label, result.value,
+                )
+                unparseable_entries.append((label, f"  - status: {result.value}"))
+            elif result.value == "pending":
+                pending_labels.append(label)
+        elif result.kind == "unparseable":
+            logger.info(
+                "Ticket %s %s status 行無法解析: %s", ticket_id, label, result.raw_line
+            )
+            unparseable_entries.append((label, result.raw_line or ""))
+        elif result.kind == "missing":
+            missing_labels.append(label)
+
+    all_unprocessed = (
+        pending_labels
+        + [e[0] for e in unparseable_entries]
+        + missing_labels
+    )
+    if not all_unprocessed:
         logger.info("Ticket %s Spawn Requests 全數已處理", ticket_id)
         return False, None
 
-    msg = _format_warning_message(ticket_id, pending_labels)
+    msg = _format_warning_message(
+        ticket_id, pending_labels, unparseable_entries, missing_labels
+    )
     logger.warning(
         "Ticket %s 有 %d 個未處理的 Spawn Request: %s",
         ticket_id,
-        len(pending_labels),
-        ", ".join(pending_labels),
+        len(all_unprocessed),
+        ", ".join(all_unprocessed),
     )
     return True, msg
 
 
-def _format_warning_message(ticket_id: str, pending_labels: List[str]) -> str:
-    return (
-        f"[WARNING] Acceptance Gate: Spawn Requests 尚有未處理條目\n"
-        f"\n"
-        f"Ticket: {ticket_id}\n"
-        f"未處理條目: {', '.join(pending_labels)}\n"
-        f"\n"
-        f"請評估每個 Spawn Request 是否需要建立對應 ticket：\n"
-        f"  - 需要 -> 建立 ticket 後將該條目 status 改為 processed\n"
-        f"  - 不需要 -> 將該條目 status 改為 dismissed 並附理由\n"
-        f"\n"
-        f"參考：quality-baseline.md 規則 5（所有發現必須追蹤）\n"
-    )
+def _format_warning_message(
+    ticket_id: str,
+    pending_labels: List[str],
+    unparseable_entries: List[Tuple[str, str]],
+    missing_labels: List[str],
+) -> str:
+    lines = [
+        "[WARNING] Acceptance Gate: Spawn Requests 尚有未處理條目",
+        "",
+        f"Ticket: {ticket_id}",
+    ]
+
+    if pending_labels:
+        lines.append("")
+        lines.append(f"  status: pending（未處理）: {', '.join(pending_labels)}")
+
+    if unparseable_entries:
+        lines.append("")
+        lines.append("  status 行無法解析（fail-closed 視為未處理）:")
+        for label, raw_line in unparseable_entries:
+            lines.append(f"    {label}: 實際內容 `{raw_line}`")
+        lines.append("    期望格式: `  - status: pending|processed|dismissed`")
+
+    if missing_labels:
+        lines.append("")
+        lines.append(
+            f"  status 欄位缺失（fail-closed 視為未處理）: {', '.join(missing_labels)}"
+        )
+
+    lines.extend([
+        "",
+        "請評估每個 Spawn Request 是否需要建立對應 ticket：",
+        "  - 需要 -> 建立 ticket 後將該條目 status 改為 processed",
+        "  - 不需要 -> 將該條目 status 改為 dismissed 並附理由",
+        "",
+        "參考：quality-baseline.md 規則 5（所有發現必須追蹤）",
+    ])
+
+    return "\n".join(lines) + "\n"

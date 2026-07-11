@@ -3,7 +3,7 @@
 **版本**: v3.1.0
 **核心原則**: 單一職責原則 (Single Responsibility Principle)
 
-> **30 秒核心**：Atomic Ticket = 一個 Action（動詞）+ 一個 Target（單一目標）。是否需要拆分只用「單一職責四大檢查」判斷，禁用時間/行數/檔案數/測試數等量化指標。Ticket 是任務鏈（Task Chain）的節點，責任由子 Ticket 完成履行，非父本身文件完成。
+> **核心摘要**：Atomic Ticket = 一個 Action（動詞）+ 一個 Target（單一目標）。是否需要拆分只用「單一職責四大檢查」判斷，禁用時間/行數/檔案數/測試數等量化指標。Ticket 是任務鏈（Task Chain）的節點，責任由子 Ticket 完成履行，非父本身文件完成。
 
 ---
 

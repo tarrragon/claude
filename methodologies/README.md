@@ -1,8 +1,8 @@
 # 方法論體系導覽
 
-> **方法論 = 30 秒可複習的明確判斷標準與操作清單**
+> **方法論 = 框架最高原則層：明確判斷標準與核心規則，按需載入、不限篇幅**
 
-本目錄包含 52 個方法論檔案，依功能家族分組導覽如下。各方法論遵循 `framework-meta-methodology` 定義：30 秒可複習（< 1 頁），提供明確判斷標準供 AI 執行。
+本目錄包含 55 個方法論檔案，依功能家族分組導覽如下。各方法論遵循 `framework-meta-methodology` 定義（v1.1.0 起）：框架判斷標準 / 核心規則，明確且可直接套用，供人與 AI 開發時判斷；不自動載入 context，必要時以方法論為判斷基準，篇幅以「把判準講清楚到可直接套用」為度，不設長度上限。
 
 ---
 
@@ -54,6 +54,7 @@
 | [natural-language-programming-methodology](./natural-language-programming-methodology.md) | 自然語言程式設計（讓程式碼像文章）|
 | [clean-architecture-implementation-methodology](./clean-architecture-implementation-methodology.md) | Clean Architecture 實作方法論（分層依賴倒置）|
 | [layered-architecture-quality-checking](./layered-architecture-quality-checking.md) | 分層架構品質檢查清單 |
+| [component-library-bidirectional-constraint-methodology](./component-library-bidirectional-constraint-methodology.md) | 元件庫雙向約束（設計端先元件後組合、工程端禁自製；L1/L2/L3 分層、SPEC 元件庫先行、豁免三條件、形態因素先決）|
 | [comment-writing-methodology](./comment-writing-methodology.md) | 註解撰寫原則（業務情境聚焦、抽象層級貼合）|
 | [code-smell-quality-gate-methodology](./code-smell-quality-gate-methodology.md) | Code Smell 品質閘門（識別與修復）|
 | [design-driven-refactoring-methodology](./design-driven-refactoring-methodology.md) | 設計驅動重構方法論 |
@@ -95,7 +96,7 @@
 
 | 方法論 | 用途 |
 |--------|------|
-| [framework-meta-methodology](./framework-meta-methodology.md) | 框架元方法論（30 秒標準定義）|
+| [framework-meta-methodology](./framework-meta-methodology.md) | 框架元方法論（SKILL vs 方法論分工判準）|
 | [knowledge-carrier-allocation-methodology](./knowledge-carrier-allocation-methodology.md) | 知識載體責任分配（rules/agents/skills/methodologies 邊界）|
 | [methodology-writing-methodology](./methodology-writing-methodology.md) | 方法論撰寫方法論（格式與品質標準）|
 | [methodology-rewriting-methodology](./methodology-rewriting-methodology.md) | 方法論改寫方法論 |
@@ -142,12 +143,12 @@
 
 ## 核心原則
 
-### 方法論 = 30 秒可複習的明確判斷標準
+### 方法論 = 框架最高原則層（按需載入，不限篇幅）
 
-- **不是**：完整流程說明、程式碼範例、決策表格（這些屬 skill reference）
-- **是**：明確判斷標準、操作清單、快速參考表
+- **承載**：明確判斷標準、核心規則、檢查清單——衝突時的最高判斷基準
+- **外移**：完整操作流程、程式碼範例、錯誤處理（這些屬 skill reference）
 
-**Why**：方法論聚焦判斷標準（< 1 頁可複習），skill reference 承載完整流程與範例（按需載入）。**Consequence**：混淆兩者會導致方法論膨脹為多頁文件失去快速參考價值。**Action**：寫方法論時問「這段是判斷依據還是執行細節」，後者移至對應 skill。
+**Why**：方法論是框架的原則層，不自動載入 context，故不需以壓縮換取載入成本；為壓縮犧牲判準完整性反而使 AI 開發時因細節缺失而誤判（歷史的「30 秒 / 1 頁」限制源自「原則搬進 SKILL」的舊路線，已於 framework-meta-methodology v1.1.0 反轉）。**Consequence**：混入操作流程仍會稀釋判準密度——層次分工不變。**Action**：寫方法論時問「這段是判斷依據還是執行細節」，前者寫清楚到可直接套用（不限長度），後者移至對應 skill。
 
 ### 認知負擔最小化
 

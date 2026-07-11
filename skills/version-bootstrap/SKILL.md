@@ -67,7 +67,16 @@ doc batch-init --proposals PROP-007,PROP-008 --domain collector
 
 **PM 工作**：填寫每份 spec 的 FR 列表、介面定義、約束條件。這是規劃波最耗時的人工步驟。
 
-**Checkpoint**：所有 spec FR 填寫完成。
+**UI 類提案元件庫前置檢查（強制，元件庫雙向約束方法論落地）**：Why——UI 類提案若跳過 design token 層與元件庫規劃直接進入實作，設計端與工程端會各自決定元件形狀，產生重複造輪與樣式漂移，已上線元件難以回溯套用 token 體系。Consequence——未在本步驟攔截，UI 實作票會在 Step 6 匯總建票時直接開出，等到 Phase 3b 實作階段才發現缺 token 層或元件庫章節，需回頭補規劃甚至推翻已完成的實作。Action——填寫 spec FR 時逐一判別提案是否涉及 UI/頁面/元件（FR 描述含「畫面」「頁面」「元件」「介面」「UI」等關鍵字），判為 UI 類提案者須先確認下列兩項存在，缺則先補齊才可繼續本提案的 UI 實作票規劃：
+
+| 檢查項 | 對應載體 | 缺失時動作 |
+|--------|---------|-----------|
+| design token 層 | 專案 design-system 樣式檔（顏色/間距/字體/圓角/陰影參數集中管理） | 先建立 design token 層 |
+| L3 元件庫章節 | spec 文件的元件庫章節（元件清單 + 原生元件禁用對照表 + 豁免清單） | 先建立或補齊 L3 元件庫章節 |
+
+判準與分層依據（L1/L2/L3 分層、狀態綁定判準、流程整合點）見 `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`。非 UI 類提案略過本檢查。
+
+**Checkpoint**：所有 spec FR 填寫完成；UI 類提案已完成元件庫前置檢查（design token 層與 L3 元件庫章節存在，或已補齊），非 UI 類提案略過本項。
 
 ---
 
@@ -178,5 +187,5 @@ doc batch-init --proposals PROP-007,PROP-008 --domain collector
 
 ---
 
-**Version**: 1.0.0
-**Last Updated**: 2026-06-24
+**Version**: 1.1.0 — Step 2 新增「UI 類提案元件庫前置檢查」小節：判別提案是否涉及 UI/頁面/元件，涉及則須先確認 design token 層與 L3 元件庫章節存在（缺則先補齊），才可繼續 UI 實作票規劃，落地元件庫雙向約束方法論流程整合點 1
+**Last Updated**: 2026-07-09

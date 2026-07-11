@@ -283,7 +283,7 @@ grep -r "方法論檔名" .claude/
 
 ### 相關方法論
 
-- [方法論改寫方法論](../../methodologies/methodology-rewriting-methodology.md) - 改寫流程（30 秒版）
+- [方法論改寫方法論](../../methodologies/methodology-rewriting-methodology.md) - 改寫流程
 - [框架元層管理方法論](../../methodologies/framework-meta-methodology.md) - SKILL vs 方法論分工、撰寫/改寫檢查清單
 - [Atomic Ticket 方法論](../../methodologies/atomic-ticket-methodology.md) - 精簡範本參考
 

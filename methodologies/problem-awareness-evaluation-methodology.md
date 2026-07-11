@@ -1,6 +1,6 @@
 # 問題覺察與評估方法論：全局分析優先的決策框架
 
-> **完整範例 / Hook 程式碼 / 實戰案例**：`.claude/references/problem-awareness-evaluation-examples.md`（需對照具體正反範例落實全局分析、實作 Hook 檢查邏輯，或研讀完整案例分析時按需讀取）。本檔保留 30 秒核心（三大原則定義 + 問題分類決策樹 + 決策執行流程 + 檢查清單）。
+> **完整範例 / Hook 程式碼 / 實戰案例**：`.claude/references/problem-awareness-evaluation-examples.md`（需對照具體正反範例落實全局分析、實作 Hook 檢查邏輯，或研讀完整案例分析時按需讀取）。本檔保留核心摘要（三大原則定義 + 問題分類決策樹 + 決策執行流程 + 檢查清單）。
 
 ## 方法論目的
 

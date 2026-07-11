@@ -89,14 +89,14 @@
       {
         "matcher": "Edit",
         "commands": [
-          ".claude/hooks/style-guardian-hook.py",
+          ".claude/hooks/dart-style-guardian-hook.py",
           ".claude/skills/compositional-writing/hooks/worklog-format-check.py"
         ]
       },
       {
         "matcher": "Write",
         "commands": [
-          ".claude/hooks/style-guardian-hook.py",
+          ".claude/hooks/dart-style-guardian-hook.py",
           ".claude/skills/compositional-writing/hooks/worklog-format-check.py"
         ]
       }

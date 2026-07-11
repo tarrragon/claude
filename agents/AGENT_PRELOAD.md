@@ -209,6 +209,11 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 > **來源**：W3-008（worktree 隔離對 daemon-rooted dart MCP 寫入工具不生效）。PM 端對應規則見 `.claude/pm-rules/parallel-dispatch.md`「worktree 實作 agent 禁用 dart MCP 寫入工具」；根因機制見 `.claude/skills/worktree/SKILL.md`「Base ref 與隔離邊界」章節。
 
+#### worktree 全套件測試前若遇大量編譯失敗，先查 gitignored 生成產物是否缺失
+
+> **Why**：worktree 為 fresh checkout，任何 gitignored 生成產物若未同步存在會連鎖編譯失敗，且容易被誤判為高並行編譯器資源耗盡（實證與歸因陷阱見 `IMP-APP-003`）。遇到大量編譯失敗時，勿逕自歸因並行資源耗盡，應先確認生成產物是否存在，缺失時執行對應 generation 指令（如 `flutter gen-l10n` / `dart run build_runner build`）補齊，並回報 PM 評估是否需納入版控。
+> **來源**：`IMP-APP-003` 對照實驗、`.claude/pm-rules/parallel-dispatch.md`「worktree 為 fresh checkout」章節。
+
 ---
 
 ### 7. 工具選擇規則（MCP 寫入工具優先序）
@@ -450,6 +455,8 @@ ascend 條件（**任一 OR 成立即停止執行、上報上層**）：
 ---
 
 **Last Updated**: 2026-07-03
+**Version**: 1.16.0 - 規則 6（worktree 隔離）補「全套件測試前若遇大量編譯失敗，先查 gitignored 生成產物是否缺失」提示：未來新增生成產物的判讀準則（源自 `IMP-APP-003` 對照實驗）
+
 **Version**: 1.15.0 - 新增規則 11「最小變更紀律（Surgical Changes）」（1.5.0-W5-009.1 落地，源自外部 CLAUDE.md 範例第 4/10 章）：四類越界禁令 + 三明示 + 級聯範圍失控訊號，substance 路由 quality-common §1.7；檢查清單同步補項
 **Version**: 1.14.0 - 規則 2.4 補「回覆勾選不算數，frontmatter 才是 SOT」提醒：final message 屬記錄平面，`set-acceptance`/`check-acceptance` 寫入的 frontmatter 才是世界平面 SOT，兩者不同步時 acceptance-gate-hook 只認 frontmatter（0.4.1-W2-003，源 0.4.1-W1-001 摩擦 F3：0.4.0 W2-002/003 回覆勾選未動 frontmatter 二度擋 complete）
 **Version**: 1.13.0 - 規則 2.4 收尾三命令（check-acceptance / set-acceptance / complete）改為一律帶 `--as`（--as 全覆蓋），新增 deny 時禁繞過須回報 PM 條款；2.3 表格與檢查清單同步（W1-049 首輪裁決前置：92% warn 噪音源自 check-acceptance 未帶 --as）

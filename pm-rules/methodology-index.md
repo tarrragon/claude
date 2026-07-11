@@ -11,6 +11,7 @@
 | 5w1h-self-awareness-methodology.md | 決策框架（六維度判斷標準 + 強制檢查 + 逃避識別，核心判準） |
 | .claude/references/5w1h-self-awareness-examples.md | 5W1H 六維度完整正反判斷範例 + Hook 系統整合程式碼（衛星檔） |
 | atomic-ticket-methodology.md | Ticket 設計 |
+| component-library-bidirectional-constraint-methodology.md | 元件庫雙向約束（SPEC 階段元件庫先行、設計端/工程端雙判準、L1/L2/L3 分層、豁免三條件、形態因素先決） |
 | behavior-first-tdd-methodology.md | 測試設計 |
 | agile-refactor-methodology.md | 開發流程 |
 | cognitive-load-design-methodology.md | 程式碼設計（WHY + 三種類型 + 來源機制 + SOLID 視角，核心判準） |

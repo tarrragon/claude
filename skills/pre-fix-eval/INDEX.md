@@ -283,7 +283,7 @@ Hook 腳本 (.claude/hooks/pre-fix-evaluation-hook.py)
 ## 快速鏈接
 
 - **完整 SKILL**: [SKILL.md](./SKILL.md)
-- **快速開始**: [README.md](./README.md)
+- **快速開始**: [README.md](./SKILL.md)
 - **決策矩陣**: [references/decision-matrix.md](./references/decision-matrix.md)
 - **技術細節**: [references/pre-fix-evaluation-implementation.md](./references/pre-fix-evaluation-implementation.md)
 - **驗收報告**: [references/pre-fix-evaluation-acceptance-report.md](./references/pre-fix-evaluation-acceptance-report.md)

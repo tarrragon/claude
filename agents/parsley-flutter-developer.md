@@ -150,6 +150,8 @@ List<ProcessedBook> processBooks(List<Book> books) {
 - **常數管理**：無硬編碼使用者訊息、無魔法數字
 - **多語系管理**：所有 UI 字串必須透過 ARB/l10n 系統，禁止硬編碼
 - **常數集中管理**：所有魔法數字和字串集中在 `AppConstants` 或 constants 檔案
+- **元件庫優先實作**：禁止直接建構元件庫已涵蓋的原生元件，缺件回報 PM 開元件票（詳見 5.3 節）
+- **Entity / copyWith 設計判準**：entity 不變式與 copyWith 收窄判準見 `.claude/skills/dart-domain-modeling/SKILL.md`
 
 ### 5.1 多語系（i18n）強制規範
 
@@ -227,6 +229,21 @@ class DurationConstants {
   static const Duration activeSessionThreshold = Duration(minutes: 2);
   static const Duration completedSessionThreshold = Duration(minutes: 30);
 }
+```
+
+### 5.3 元件庫優先實作（雙向約束方法論，工程端條款）
+
+> **來源**：`.claude/methodologies/component-library-bidirectional-constraint-methodology.md`「雙向約束判準 > 工程端」。工程端是樣式的使用者，實作只從元件庫取件，禁止散落自製元件。
+
+禁止直接建構被專案元件庫涵蓋的原生元件（依專案 spec 元件庫章節的原生元件禁用對照表判定）；元件庫缺件時停止當前實作，回報 PM 開立元件票，不得就地自刻頂替。
+
+| 情境 | 動作 |
+|------|------|
+| 所需元件已在元件庫定義 | 依語意選用對應元件與 variant，不依外觀湊件 |
+| 所需元件不在元件庫（且非豁免清單項目） | 停止實作，回報 PM 開立元件票；不得自行新增一次性元件或直接組裝原生元件頂替 |
+| 專案 spec 豁免清單已列該用法 | 依豁免清單使用，不需另行開票 |
+
+**豁免邊界**：僅限專案 spec 豁免清單已登記的項目（結構性無法收斂、有記錄理由、已列入執法工具白名單三條件全滿足者）；未登記的原生元件直用一律視為違規，須開元件票，不得自行認定豁免。
 
 ## 工具權限與使用
 
@@ -1014,5 +1031,5 @@ ripgrep（rg）、LSP/Serena 符號搜尋等工具的選擇與使用見 `.claude
 
 ---
 
-**Last Updated**: 2026-04-18
-**Version**: 新增 Ticket Frontmatter 格式引用（W14-029）
+**Last Updated**: 2026-07-10
+**Version**: 5 節「品質規範強制遵循」新增一行觸發引用 `.claude/skills/dart-domain-modeling/SKILL.md`（entity / copyWith 收窄判準，不展開內容）；先前版本記錄——新增 5.3「元件庫優先實作」工程端條款（禁自製元件庫已涵蓋的原生元件、缺件回報 PM 開票、豁免依 spec 豁免清單），引用 `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`；同時修正既有未閉合的 code fence（AppConstants 範例區塊）

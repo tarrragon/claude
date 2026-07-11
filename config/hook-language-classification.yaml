@@ -22,4 +22,4 @@ hooks:
   l10n-sync-verification-hook.py: flutter
 
   # --- 專案特定（需根據專案調整） ---
-  style-guardian-hook.py: project-specific
+  dart-style-guardian-hook.py: project-specific

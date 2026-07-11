@@ -47,7 +47,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 - `.claude/rules/core/tool-output-trust-rules.md` — confabulation 防護（規則一即時協議）
 - `.claude/references/quality-python.md` — Python 執行規則
 - `.claude/error-patterns/implementation/IMP-008-bash-working-directory-pollution.md`、`IMP-009-taskoutput-confusion.md`
-- `.claude/error-patterns/process-compliance/PC-079-bash-backtick-command-substitution-in-cli-args.md`、`PC-087-pm-tmp-detour-for-long-text.md`
+- `.claude/error-patterns/process-compliance/PC-079-bash-backtick-command-substitution-in-cli-args.md`、`PC-087-pm-tmp-detour-for-ticket-content.md`
 
 ---
 

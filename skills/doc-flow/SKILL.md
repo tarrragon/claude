@@ -100,7 +100,7 @@ description: "Manages project documentation system including CHANGELOG, worklog,
 2. 建立中版本主 worklog `v{MAJOR}.{MINOR}-main.md`（如不存在）
 3. 從模板建立小版本主 worklog：
    ```bash
-   cp .claude/skills/doc-flow/templates/worklog.md.template \
+   cp .claude/skills/doc-flow/worklog.md.template \
       docs/work-logs/v{MAJOR}/v{MAJOR}.{MINOR}/v{VERSION}/v{VERSION}-main.md
    ```
 4. 填入版本資訊（版本號、日期、目標）
@@ -199,7 +199,7 @@ docs/
 - 工作流程整合：`references/workflow-integration.md`
 - 方法論：`.claude/methodologies/five-document-system-methodology.md`
 - 規則：`.claude/references/document-system.md`
-- Worklog 模板：`.claude/skills/doc-flow/templates/worklog.md.template`
+- Worklog 模板：`.claude/skills/doc-flow/worklog.md.template`
 - Todolist 模板：`.claude/skills/doc-flow/templates/todolist.yaml.template`
 
 ---
