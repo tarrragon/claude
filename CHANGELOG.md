@@ -1,3 +1,21 @@
+## [2.16.0] - 2026-07-14
+
+### Summary
+feat: ux-interaction-feedback Skill 補畫面級回饋 + spinner/skeleton 判準 + 去專案化; feat: 新增 ux-interaction-feedback Skill（三層回饋模型 + 按鈕狀態 + 時間門檻）; feat: version-release check 新增佔位掃描（WARNING only） (+5 more)
+
+Changes: 3 feat, 1 fix, 3 docs, 1 chore
+
+- feat: ux-interaction-feedback Skill 補畫面級回饋 + spinner/skeleton 判準 + 去專案化
+- feat: 新增 ux-interaction-feedback Skill（三層回饋模型 + 按鈕狀態 + 時間門檻）
+- feat: version-release check 新增佔位掃描（WARNING only）
+- fix: ux-interaction-feedback Skill 三輪審查修法（9 finding）
+- docs: 新增 PC-APP-010 code 杜撰 UC- 前綴偽需求 ID
+- docs: DI 架構規格化 + 可觀測性規則 5 落地
+- docs: 發版前實機冒煙驗證清單三層結構
+- chore: manifest APP 對照對帳完成 + PC-APP-009 錯誤模式記錄
+
+---
+
 ## [2.15.1] - 2026-07-11
 
 ### Summary

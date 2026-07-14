@@ -67,23 +67,47 @@
 
 ---
 
+## 規則 5：平台互動程式碼必須自帶日誌
+
+**寫平台互動程式碼時，日誌與功能同步寫入，禁止事後補。** mock 測試環境不走真實平台 API，日誌缺失在測試階段不會被發現，實機才暴露盲區。
+
+**適用範圍**：程式碼直接或間接呼叫平台 API（權限、相機、GPS、藍牙、NFC、檔案系統、生命週期回調）的所有位置。
+
+| 互動類別 | 必須記錄的日誌點 | 日誌級別 |
+|---------|----------------|---------|
+| 權限檢查 | check 入口 + 結果（granted/denied/restricted/permanentlyDenied） | info |
+| 權限請求 | request 入口 + 結果 | info |
+| 平台 API 初始化 | controller create/start 入口 + 成功/失敗 | info |
+| 平台 API 銷毀 | controller stop/dispose 入口 | debug |
+| 生命週期回調 | didChangeAppLifecycleState 中涉及平台資源操作（暫停/恢復相機等） | debug |
+| 平台異常 | PlatformException / MissingPluginException 的 code + message | warning |
+
+**日誌內容最低要求**：操作名稱 + 元件標籤 + 結果或錯誤訊息。範例：`AppLogger.infoStatic('Camera permission status: $status', _tag);`
+
+**與規則 4 邊界**：規則 4 覆蓋「長時間運行元件的生命週期」；規則 5 覆蓋「平台 API 互動的每個決策點」。兩者可重疊（如相機 controller 同時是長時間元件也是平台 API），重疊時兩條規則皆適用。
+
+> 完整條款（含 Phase 3b 驗收檢查清單、實證事件鏈、日誌範本）見 `.claude/references/observability-rules.md` 第 6 節。
+
+---
+
 ## 檢查清單
 
 - [ ] catch 區塊有日誌或有靜默原因註解？
 - [ ] 日誌使用專案統一工具（非原生 print）？
 - [ ] 全域錯誤處理三層皆已設定？
 - [ ] 關鍵流程有啟動/錯誤/關閉日誌？
+- [ ] 平台互動程式碼自帶日誌（權限 check/request、平台 API init/dispose、生命週期回調）？
 
 ---
 
 ## 相關文件
 
-- .claude/references/observability-rules.md - 詳細可觀測性規則（生命週期、心跳、Debug Log）
+- .claude/references/observability-rules.md - 詳細可觀測性規則（生命週期、心跳、Debug Log、平台互動）
 - CLAUDE.md 6.4 節 - 專案日誌工具設定（AppLogger）
 - .claude/rules/core/quality-baseline.md - 規則 4：異常可觀測性
 - .claude/rules/core/quality-common.md - 通用品質基線
 
 ---
 
-**Last Updated**: 2026-03-31
-**Version**: 1.0.0 - 初始建立，自動載入的可觀測性通用規則
+**Last Updated**: 2026-07-13
+**Version**: 1.1.0 - 新增規則 5「平台互動程式碼必須自帶日誌」（0.38.1-W1-037，W1-030/033/035 三輪盲飛教訓）

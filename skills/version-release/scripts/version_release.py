@@ -1696,6 +1696,51 @@ def _count_memory_feedback(memory_dir: Path) -> Tuple[int, int]:
     return upgraded, len(files)
 
 
+PLACEHOLDER_PATTERNS: List[re.Pattern] = [
+    re.compile(r"ComingSoon|featureInDevelopment"),
+    re.compile(r"UnimplementedError|requires override"),
+    re.compile(r"onPressed:\s*\(\)\s*\{\}"),
+]
+
+
+def check_placeholder_implementations(
+    lib_dir: Optional[Path] = None,
+) -> Tuple[bool, List[str]]:
+    """掃描 lib/ 下的佔位實作（PC-178 模式：ComingSoon 佔位頁 / 未接線 provider /
+    空 onPressed），供 preflight 揭露避免功能單元測試綠但 UI 端不可達。
+
+    佔位可能是刻意的（功能尚在開發中），故僅回傳掃描結果供 WARNING 顯示，
+    呼叫端不得將本函式結果納入 all_ok（不阻擋發布，由 PM 人工判斷）。
+
+    Args:
+        lib_dir: lib/ 目錄路徑（預設自動偵測 <root>/lib）
+
+    Returns:
+        (passed, hits)：passed 為 True 表示無佔位命中；hits 為
+        "檔案路徑:行號:內容" 格式的命中清單
+    """
+    if lib_dir is None:
+        lib_dir = get_project_root() / "lib"
+
+    hits: List[str] = []
+
+    if not lib_dir.is_dir():
+        return True, hits
+
+    for dart_file in sorted(lib_dir.rglob("*.dart")):
+        try:
+            with open(dart_file, encoding="utf-8") as f:
+                lines = f.readlines()
+        except Exception:
+            continue
+
+        for line_no, line in enumerate(lines, start=1):
+            if any(pattern.search(line) for pattern in PLACEHOLDER_PATTERNS):
+                hits.append(f"{dart_file}:{line_no}:{line.strip()}")
+
+    return len(hits) == 0, hits
+
+
 def preflight_check(version: str) -> Tuple[bool, Dict[str, Tuple[bool, List[str]]]]:
     """執行 Pre-flight 檢查"""
     print_section("Step 1: Pre-flight Check")
@@ -1795,6 +1840,17 @@ def preflight_check(version: str) -> Tuple[bool, Dict[str, Tuple[bool, List[str]
     else:
         for message in mu_messages:
             print_warning(message)
+
+    # 1.7 檢查佔位實作（WARNING only，不阻擋發布）
+    print_info("[OK] 檢查佔位實作...")
+    ph_ok, ph_hits = check_placeholder_implementations()
+    results["placeholder_scan"] = (ph_ok, ph_hits)
+
+    if ph_ok:
+        print_success("無佔位實作")
+    else:
+        for hit in ph_hits:
+            print_warning(f"佔位實作: {hit}")
 
     all_ok = wl_ok and td_status["passed"] and td_ok and pv_ok and vs_ok and mu_ok
     return all_ok, results

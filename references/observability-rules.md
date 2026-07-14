@@ -133,6 +133,103 @@ CC v2.1.157 起，OpenTelemetry 的 `tool_decision` 事件可包含 `tool_parame
 
 ---
 
+## 6. 平台互動可觀測性（強制）
+
+> **來源**：W1-030/033/035 三輪實機盲飛教訓——掃描頁接線後無日誌，權限修復後無日誌，第三輪才補日誌開始有診斷資訊。共同根因：mock 測試環境不走真實平台 API，日誌缺失在測試階段不會被發現。
+>
+> **速查版**：`.claude/rules/core/observability-rules.md` 規則 5。
+
+### 6.1 核心原則
+
+**寫平台互動程式碼時，日誌與功能同步寫入，禁止事後補。**
+
+**Why**：平台 API（權限、相機、GPS、藍牙、NFC、檔案系統）只在實機觸發，mock 環境不跑。沒有日誌的平台互動程式碼，等同在實機上盲飛——出問題時無法遠端診斷，只能反覆部署加日誌再測試。
+
+**Consequence**：W1-030 到 W1-035 三輪迭代，每輪都是「部署 → 實機無效 → 猜原因 → 加日誌 → 再部署」，三次盲飛才開始有診斷資訊。若第一輪就帶日誌，一次部署即可定位問題。
+
+**Action**：每個平台 API 呼叫點，在寫功能程式碼的同時寫入對應日誌（見 6.2 條款表）。
+
+### 6.2 必須記錄的日誌點
+
+| 互動類別 | 日誌點 | 日誌級別 | 日誌內容 |
+|---------|--------|---------|---------|
+| 權限檢查 | `checkPermission` 入口 | debug | 操作名稱 + 元件標籤 |
+| 權限檢查 | `checkPermission` 結果 | info | 結果狀態（granted/denied/restricted/permanentlyDenied） |
+| 權限請求 | `requestPermission` 入口 | debug | 操作名稱 + 元件標籤 |
+| 權限請求 | `requestPermission` 結果 | info | 結果狀態 |
+| 平台 API 初始化 | controller create/start 入口 | info | 元件名稱 + 配置摘要 |
+| 平台 API 初始化 | controller create/start 成功 | info | 元件名稱 |
+| 平台 API 初始化 | controller create/start 失敗 | warning | 元件名稱 + 錯誤訊息 |
+| 平台 API 銷毀 | controller stop/dispose 入口 | debug | 元件名稱 |
+| 生命週期回調 | didChangeAppLifecycleState 中涉及平台資源操作 | debug | 新狀態 + 操作（暫停/恢復相機等） |
+| 平台異常 | PlatformException | warning | exception code + message + 元件名稱 |
+| 平台異常 | MissingPluginException | error | plugin 名稱 + 元件名稱 |
+
+### 6.3 日誌範本（Dart/Flutter）
+
+```dart
+// 權限檢查
+AppLogger.debugStatic('checkCameraPermission called', _tag);
+final status = await permissionService.checkPermission();
+AppLogger.infoStatic('Camera permission status: $status', _tag);
+
+// 權限請求
+AppLogger.debugStatic('requestCameraPermission called', _tag);
+final result = await permissionService.requestPermission();
+AppLogger.infoStatic('Camera permission request result: $result', _tag);
+
+// 平台 API 初始化
+AppLogger.infoStatic('Scanner starting', _tag);
+try {
+  await controller.start();
+  AppLogger.infoStatic('Scanner started', _tag);
+} catch (e) {
+  AppLogger.warningStatic('Scanner start failed: $e', _tag);
+  rethrow;
+}
+
+// 平台 API 銷毀
+AppLogger.debugStatic('Scanner disposing', _tag);
+await controller.dispose();
+
+// 生命週期回調
+AppLogger.debugStatic('AppLifecycleState changed to $state, pausing camera', _tag);
+
+// 平台異常
+catch (e) {
+  if (e is PlatformException) {
+    AppLogger.warningStatic('Platform error: code=${e.code}, message=${e.message}', _tag);
+  }
+}
+```
+
+### 6.4 與規則 4（三階段日誌）的邊界
+
+| 規則 | 覆蓋對象 | 日誌粒度 |
+|------|---------|---------|
+| 規則 4 | 長時間運行元件的生命週期（啟動/錯誤/關閉） | 元件級 |
+| 規則 5（本節） | 平台 API 互動的每個決策點 | 呼叫級 |
+
+兩者可重疊：例如相機 controller 既是長時間運行元件（規則 4），其 start/stop 也是平台 API 互動（規則 5）。重疊時兩條規則皆適用，日誌不需重複——同一個 `AppLogger.infoStatic('Scanner started', _tag)` 可同時滿足兩條規則。
+
+### 6.5 Phase 3b 驗收檢查清單
+
+代理人完成涉及平台互動的 Phase 3b 實作後，自檢以下項目：
+
+- [ ] 每個權限 check/request 呼叫有入口和結果日誌？
+- [ ] 平台 controller 的 create/start 有成功和失敗分支日誌？
+- [ ] 平台 controller 的 stop/dispose 有入口日誌？
+- [ ] 生命週期回調中涉及平台資源操作有日誌？
+- [ ] PlatformException / MissingPluginException 有 warning/error 日誌（含 code + message）？
+- [ ] 所有日誌使用 AppLogger（非 debugPrint/print）？
+- [ ] 日誌內容含操作名稱 + 元件標籤 + 結果或錯誤訊息？
+
+### 6.6 適用判斷
+
+**問「這段程式碼在 mock 測試中會被執行嗎？」** 若答案為「不會」（因為 mock 替代了平台 API），則該呼叫點必須有日誌。這是規則 5 與規則 1-4 的根本區別：規則 1-4 的日誌缺失可在測試階段被發現（測試執行路徑與生產相同），規則 5 的日誌缺失只在實機暴露。
+
+---
+
 ## 5. 可觀測性檢查清單
 
 新增或修改功能時，確認：
@@ -145,6 +242,7 @@ CC v2.1.157 起，OpenTelemetry 的 `tool_decision` 事件可包含 `tool_parame
 - [ ] 全域錯誤處理三層皆已設定（框架層/平台層/非同步層）？
 - [ ] 關鍵狀態變化有 Debug Log？
 - [ ] 關閉/停機有日誌輸出？
+- [ ] 平台互動程式碼自帶日誌（權限 check/request、平台 API init/dispose、生命週期回調）？
 
 ---
 
@@ -156,5 +254,5 @@ CC v2.1.157 起，OpenTelemetry 的 `tool_decision` 事件可包含 `tool_parame
 
 ---
 
-**Last Updated**: 2026-06-01
-**Version**: 1.2.0 - 新增 4.5「CC 工具遙測：tool_parameters」可選增強章節（CC v2.1.157 / W4-028.3）。歷史 1.0–1.1 版見 git log。
+**Last Updated**: 2026-07-13
+**Version**: 1.3.0 - 新增第 6 節「平台互動可觀測性」（0.38.1-W1-037，W1-030/033/035 三輪盲飛教訓）。歷史 1.0–1.2 版見 git log。

@@ -384,6 +384,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-APP-004 | 症狀緩解累積偏誤——同一根因累積多個緩解機制而非根治 | 中 | v0.37.0 |
 | PC-APP-005 | ANA 建議方案的可行性驗證僅跑 happy path，前提與 UX 後果到 IMP 才暴露 | 中 | v0.37.0 |
 | PC-APP-007 | 多個 Spawn Request 合併為單票時驗收項遺失與憑空補入（標題宣稱涵蓋、acceptance 未承接） | 高 | v0.38.0 |
+| PC-APP-010 | code agent 杜撰 UC- 前綴偽需求 ID——TDD 實作註解未對照 spec use case（code 38 token vs spec 10） | 中 | v0.38.1 |
 | PC-MON-001 | 工具防護落地於可繞過的執行點導致復發（version-release pre-flight 防護在手動收尾路徑零次執行） | 中 | v0.3.5 |
 | PC-MON-002 | 必填不等於有效——CLI 必填欄位無格式/存在性驗證，自由文字穿透防護（resolved_by=設計決策） | 中 | v0.3.6 |
 
