@@ -74,6 +74,11 @@ __all__ = [
     "CONTEXT_BUNDLE_MAX_ITEMS_PER_FIELD",
     "CONTEXT_BUNDLE_OPT_OUT_KEY",
     "CONTEXT_BUNDLE_OPT_OUT_VALUE_MANUAL",
+    "CONTEXT_BUNDLE_UC_INJECTION_KEY",
+    "CONTEXT_BUNDLE_UC_INJECTION_MODE_AUTO",
+    "CONTEXT_BUNDLE_UC_INJECTION_MODE_MANUAL",
+    "CONTEXT_BUNDLE_UC_INJECTION_MODE_OFF",
+    "CONTEXT_BUNDLE_UC_INJECTION_MODES",
     "CONTEXT_BUNDLE_SOURCE_KINDS",
     "CONTEXT_BUNDLE_EXTRACT_STATUSES",
     "CONTEXT_BUNDLE_SKIP_REASONS",
@@ -320,6 +325,20 @@ CONTEXT_BUNDLE_MAX_ITEMS_PER_FIELD: int = 5
 #   frontmatter 含 `context-bundle: manual` 時，自動抽取不覆寫 section，僅輸出略過訊息。
 CONTEXT_BUNDLE_OPT_OUT_KEY: str = "context_bundle"
 CONTEXT_BUNDLE_OPT_OUT_VALUE_MANUAL: str = "manual"
+
+# UC 自動注入控制開關（0.38.1-W1-066.4）：
+#   frontmatter `context_bundle_uc_injection` 控制 target ticket what/why/acceptance
+#   中 UC-XX 引用是否自動注入 UC Context 子章節。auto=偵測到就注入（預設）；
+#   manual=偵測到但略過並提示；off=靜默略過（不偵測）。
+CONTEXT_BUNDLE_UC_INJECTION_KEY: str = "context_bundle_uc_injection"
+CONTEXT_BUNDLE_UC_INJECTION_MODE_AUTO: str = "auto"
+CONTEXT_BUNDLE_UC_INJECTION_MODE_MANUAL: str = "manual"
+CONTEXT_BUNDLE_UC_INJECTION_MODE_OFF: str = "off"
+CONTEXT_BUNDLE_UC_INJECTION_MODES: tuple = (
+    CONTEXT_BUNDLE_UC_INJECTION_MODE_AUTO,
+    CONTEXT_BUNDLE_UC_INJECTION_MODE_MANUAL,
+    CONTEXT_BUNDLE_UC_INJECTION_MODE_OFF,
+)
 
 # Literal 枚舉（W17-002.1 acceptance #3：Python 慣例對齊）
 # 將 SourceKind / ExtractStatus / SkipReason 的合法值集中於 constants，

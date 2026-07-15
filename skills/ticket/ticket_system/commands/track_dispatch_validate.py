@@ -4,13 +4,13 @@
 （context_bundle_extractor 自動抽取）的第二道防線。與 W10-017.2 的
 `dispatch-check`（活躍派發狀態查詢）職責正交，獨立子命令不互相干擾。
 
-合理性檢查規則（5 項，源自 W17-003 Problem Analysis）：
+合理性檢查規則（5 項）：
 
 1. 欄位非空 — Context Bundle section 必須存在且 content 非全空白
 2. 內容長度 — Context Bundle content >= 50 字元（避免空殼填料）
 3. 檔案存在 — frontmatter `where.files` 列出的檔案在檔案系統存在
 4. acceptance >= 3 項 — 4V 原則，少於 3 項視為規格不足
-5. LLM 審查 — 未實作（不在 W17-003 範圍；未來如需加入須另起 ticket）
+5. UC 對齊 — acceptance 中 UC 引用的 SSOT 存在性與指紋漂移（0.38.1-W1-066.3，fail-open）
 
 Exit code 語意：
 
@@ -30,6 +30,8 @@ exit 2 = IO 錯誤。呼叫端必須以命令名稱判別語意，禁止以 exit
 from __future__ import annotations
 
 import argparse
+import json as _json
+import subprocess
 from pathlib import Path
 from typing import List, Tuple
 
@@ -41,6 +43,7 @@ from ticket_system.lib.section_locator import SectionMatch, find_section
 _CONTEXT_BUNDLE_SECTION = "Context Bundle"
 _MIN_CONTENT_CHARS = 50
 _MIN_ACCEPTANCE_ITEMS = 3
+_DOC_CLI_TIMEOUT_SECONDS = 15
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +119,51 @@ def check_acceptance_count(
     return True, f"acceptance {n} 項 >= {min_items}"
 
 
+def check_acceptance_uc_alignment(
+    ticket_id: str,
+) -> Tuple[bool, str]:
+    """規則 5：acceptance 中 UC 引用的存在性與指紋漂移對齊。
+
+    透過 subprocess 呼叫 ``doc uc acceptance-check --json``，fail-open：
+    doc CLI 不可用或執行失敗時回傳 (True, info)，不阻擋派發。
+    """
+    try:
+        result = subprocess.run(
+            ["doc", "uc", "acceptance-check", ticket_id, "--json"],
+            capture_output=True,
+            text=True,
+            timeout=_DOC_CLI_TIMEOUT_SECONDS,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return True, "doc CLI 不可用，UC 對齊檢查已略過"
+
+    if result.returncode == 2:
+        return True, f"UC 對齊檢查 IO 錯誤，已略過: {result.stderr.strip()}"
+
+    try:
+        data = _json.loads(result.stdout)
+    except (ValueError, _json.JSONDecodeError):
+        return True, "UC 對齊檢查輸出無法解析，已略過"
+
+    results = data.get("results", [])
+    if not results:
+        return True, "acceptance 中無 UC 引用（略過對齊檢查）"
+
+    summary = data.get("summary", {})
+    drift = summary.get("drift", 0)
+    missing = summary.get("missing", 0)
+
+    if drift > 0 or missing > 0:
+        issues = [
+            f"{r['uc_id']}={r['status']}"
+            for r in results
+            if r.get("status") in ("DRIFT", "MISSING")
+        ]
+        return False, f"acceptance 中 {len(issues)} 個 UC 對齊問題: {', '.join(issues)}"
+
+    return True, f"acceptance 中 {summary.get('pass', 0)} 個 UC 引用全部對齊"
+
+
 # ---------------------------------------------------------------------------
 # CLI 入口
 # ---------------------------------------------------------------------------
@@ -151,11 +199,15 @@ def execute_dispatch_validate(args: argparse.Namespace, version: str) -> int:
     r3_ok, r3_msg = check_where_files_exist(where_files or [], project_root=project_root)
     r4_ok, r4_msg = check_acceptance_count(acceptance)
 
+    # 規則 5：acceptance 中 UC 引用對齊（fail-open）
+    r5_ok, r5_msg = check_acceptance_uc_alignment(ticket_id)
+
     print(f"dispatch-validate {ticket_id}:")
     print(_format_result("規則 1 欄位非空", r1_ok, r1_msg))
     print(_format_result("規則 2 內容長度", r2_ok, r2_msg))
     print(_format_result("規則 3 檔案存在", r3_ok, r3_msg))
     print(_format_result("規則 4 acceptance 項數", r4_ok, r4_msg))
+    print(_format_result("規則 5 UC 對齊", r5_ok, r5_msg))
 
     # where.files 空時補 INFO 提示（避免靜默通過遮蔽 W17-002 抽取漏掉）
     if not (where_files or []):
@@ -169,11 +221,12 @@ def execute_dispatch_validate(args: argparse.Namespace, version: str) -> int:
         print("[FAIL] 規則 1 違反，視為硬性失敗")
         return 2
 
-    # 規則 2/3/4 任一違反 → 軟性警告 exit 1
+    # 規則 2/3/4/5 任一違反 → 軟性警告 exit 1
     soft_violations = [
         ("規則 2", r2_ok),
         ("規則 3", r3_ok),
         ("規則 4", r4_ok),
+        ("規則 5", r5_ok),
     ]
     failed = [name for name, ok in soft_violations if not ok]
     if failed:

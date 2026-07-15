@@ -5,6 +5,8 @@ Context Bundle 自動抽取測試（Phase 2 v2 15 場景，L1 單元 + merge 整
 Mock 邊界：load_ticket（外部 I/O）、extract_version_from_ticket_id（S19 驗證）。
 """
 
+import json
+import subprocess
 from unittest.mock import patch
 
 import pytest
@@ -32,6 +34,7 @@ LOAD_TICKET_PATH = "ticket_system.lib.context_bundle_extractor.load_ticket"
 EXTRACT_VERSION_PATH = (
     "ticket_system.lib.context_bundle_extractor.extract_version_from_ticket_id"
 )
+SUBPROCESS_RUN_PATH = "ticket_system.lib.context_bundle_extractor.subprocess.run"
 
 
 def _make_source(
@@ -775,3 +778,159 @@ class TestGroupF_P2Enhancements:
         # 單行
         assert "\n" not in out
         assert "已抽取" in out
+
+
+# ============================================================================
+# 群組 F：UC 自動注入（0.38.1-W1-066.4）
+# ============================================================================
+
+
+def _fake_uc_proc(uc_id="UC-01", title="測試標題", returncode=0, main_flow=None):
+    payload = {
+        "uc_id": uc_id,
+        "title": title,
+        "spec_path": "docs/app-use-cases.md",
+        "spec_line": 1,
+        "main_flow": main_flow if main_flow is not None else ["1. **步驟一**"],
+    }
+    return subprocess.CompletedProcess(
+        args=["doc"], returncode=returncode, stdout=json.dumps(payload), stderr=""
+    )
+
+
+class TestGroupF_UcInjection:
+    def test_detected_reference_injects_uc_context(self):
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        target["what"] = "實作 UC-01 相關功能"
+        source = _make_source("0.18.0-W17-001")
+
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            with patch(SUBPROCESS_RUN_PATH, return_value=_fake_uc_proc()):
+                result = extract_context_bundle(target)
+
+        assert len(result.uc_context) == 1
+        assert result.uc_context[0]["uc_id"] == "UC-01"
+        rendered = render_context_bundle_markdown(result)
+        assert "### UC Context" in rendered
+        assert "#### UC-01: 測試標題" in rendered
+        assert "1. **步驟一**" in rendered
+
+    def test_no_reference_skips_injection(self):
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        source = _make_source("0.18.0-W17-001")
+
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            with patch(SUBPROCESS_RUN_PATH) as mock_run:
+                result = extract_context_bundle(target)
+
+        assert result.uc_context == []
+        mock_run.assert_not_called()
+        assert "### UC Context" not in render_context_bundle_markdown(result)
+
+    def test_off_switch_silently_skips_without_scanning(self):
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        target["what"] = "實作 UC-01 相關功能"
+        target["context_bundle_uc_injection"] = "off"
+        source = _make_source("0.18.0-W17-001")
+
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            with patch(SUBPROCESS_RUN_PATH) as mock_run:
+                result = extract_context_bundle(target)
+
+        assert result.uc_context == []
+        assert result.warnings == []
+        mock_run.assert_not_called()
+
+    def test_manual_switch_skips_with_warning(self):
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        target["what"] = "實作 UC-01 相關功能"
+        target["context_bundle_uc_injection"] = "manual"
+        source = _make_source("0.18.0-W17-001")
+
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            with patch(SUBPROCESS_RUN_PATH) as mock_run:
+                result = extract_context_bundle(target)
+
+        assert result.uc_context == []
+        assert any("manual" in w for w in result.warnings)
+        mock_run.assert_not_called()
+
+    def test_doc_cli_unavailable_degrades_gracefully(self):
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        target["what"] = "實作 UC-01 相關功能"
+        source = _make_source("0.18.0-W17-001")
+
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            with patch(
+                SUBPROCESS_RUN_PATH, side_effect=FileNotFoundError("doc not found")
+            ):
+                result = extract_context_bundle(target)
+
+        assert result.uc_context == []
+        assert any("UC 摘要取得失敗" in w for w in result.warnings)
+
+    def test_doc_cli_nonzero_exit_degrades_gracefully(self):
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        target["what"] = "實作 UC-01 相關功能"
+        source = _make_source("0.18.0-W17-001")
+        fail_proc = subprocess.CompletedProcess(
+            args=["doc"], returncode=1, stdout="", stderr="not found"
+        )
+
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            with patch(SUBPROCESS_RUN_PATH, return_value=fail_proc):
+                result = extract_context_bundle(target)
+
+        assert result.uc_context == []
+        assert any("UC 摘要取得失敗" in w for w in result.warnings)
+
+    def test_doc_cli_timeout_degrades_gracefully(self):
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        target["what"] = "實作 UC-01 相關功能"
+        source = _make_source("0.18.0-W17-001")
+
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            with patch(
+                SUBPROCESS_RUN_PATH,
+                side_effect=subprocess.TimeoutExpired(cmd="doc", timeout=10),
+            ):
+                result = extract_context_bundle(target)
+
+        assert result.uc_context == []
+        assert any("UC 摘要取得失敗" in w for w in result.warnings)
+
+    def test_multiple_uc_references_deduped_in_order(self):
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        target["what"] = "整合 UC-01 和 UC-02，再次提及 UC-01"
+        source = _make_source("0.18.0-W17-001")
+
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            with patch(
+                SUBPROCESS_RUN_PATH,
+                side_effect=[_fake_uc_proc("UC-01"), _fake_uc_proc("UC-02")],
+            ):
+                result = extract_context_bundle(target)
+
+        assert [uc["uc_id"] for uc in result.uc_context] == ["UC-01", "UC-02"]
+
+    def test_acceptance_list_items_scanned_for_uc(self):
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        target["acceptance"] = ["- [ ] 對齊 UC-03 主流程"]
+        source = _make_source("0.18.0-W17-001")
+
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            with patch(SUBPROCESS_RUN_PATH, return_value=_fake_uc_proc("UC-03")):
+                result = extract_context_bundle(target)
+
+        assert [uc["uc_id"] for uc in result.uc_context] == ["UC-03"]
+
+    def test_why_field_scanned_for_uc(self):
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        target["why"] = "延伸自 UC-07 的同步準備需求"
+        source = _make_source("0.18.0-W17-001")
+
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            with patch(SUBPROCESS_RUN_PATH, return_value=_fake_uc_proc("UC-07")):
+                result = extract_context_bundle(target)
+
+        assert [uc["uc_id"] for uc in result.uc_context] == ["UC-07"]

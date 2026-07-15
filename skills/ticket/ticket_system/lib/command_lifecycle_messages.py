@@ -203,6 +203,13 @@ class LifecycleMessages:
     # Cascade save 失敗（§6.7 non-fail-fast）
     CASCADE_SAVE_FAILED = "cascade 解鎖 {ticket_id} 儲存失敗：{error}"
 
+    # blockedBy 反向掃描解鎖訊息（W1-082：complete cascade 補 blockedBy 引用者解鎖，
+    # 涵蓋未登記為 children 的兄弟 Ticket）
+    BLOCKEDBY_UNBLOCKED_HEADER = (
+        "[Cascade] 以下 blockedBy 引用者已自動解鎖（blocked → pending）："
+    )
+    BLOCKEDBY_UNBLOCKED_ITEM = "   - {id}: {title}"
+
 
 class ResumeMessages:
     """resume.py 相關訊息"""

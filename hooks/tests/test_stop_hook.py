@@ -279,33 +279,33 @@ class TestShouldPreservePendingJson:
     - 其他 → 非 stale
     """
 
-    def test_preserve_to_sibling_with_target_id_target_not_started(self):
+    def test_preserve_to_sibling_with_target_id_target_not_started(self, tmp_path):
         """to-sibling 帶目標 ID + 目標未啟動 → 保留"""
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
         record = {"direction": "to-sibling:0.31.1-W3-002", "ticket_id": "0.31.1-W3-001"}
-        result = hook_module.should_preserve_pending_json(record, logger)
+        result = hook_module.should_preserve_pending_json(record, logger, project_root=tmp_path)
 
         assert result is True
 
-    def test_preserve_to_parent_with_target_id_target_not_started(self):
+    def test_preserve_to_parent_with_target_id_target_not_started(self, tmp_path):
         """to-parent 帶目標 ID + 目標未啟動 → 保留"""
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
         record = {"direction": "to-parent:0.31.1-W3-001", "ticket_id": "0.31.1-W3-002"}
-        result = hook_module.should_preserve_pending_json(record, logger)
+        result = hook_module.should_preserve_pending_json(record, logger, project_root=tmp_path)
 
         assert result is True
 
-    def test_preserve_to_child_with_target_id_target_not_started(self):
+    def test_preserve_to_child_with_target_id_target_not_started(self, tmp_path):
         """to-child 帶目標 ID + 目標未啟動 → 保留"""
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
         record = {"direction": "to-child:0.31.1-W3-003", "ticket_id": "0.31.1-W3-001"}
-        result = hook_module.should_preserve_pending_json(record, logger)
+        result = hook_module.should_preserve_pending_json(record, logger, project_root=tmp_path)
 
         assert result is True
 
@@ -339,7 +339,7 @@ class TestShouldPreservePendingJson:
 
         assert result is True
 
-    def test_preserve_context_refresh_when_source_not_completed(self):
+    def test_preserve_context_refresh_when_source_not_completed(self, tmp_path):
         """context-refresh 且來源未 completed → 保留（W17-095.2 後語意改變）
 
         舊行為：context-refresh 一律不保留（GC）
@@ -349,7 +349,7 @@ class TestShouldPreservePendingJson:
         logger = MagicMock()
 
         record = {"direction": "context-refresh", "ticket_id": "0.31.1-W3-001"}
-        result = hook_module.should_preserve_pending_json(record, logger)
+        result = hook_module.should_preserve_pending_json(record, logger, project_root=tmp_path)
 
         assert result is True
 
@@ -367,13 +367,13 @@ class TestShouldPreservePendingJson:
 
         assert result is False
 
-    def test_preserve_continuation_when_source_not_completed(self):
+    def test_preserve_continuation_when_source_not_completed(self, tmp_path):
         """continuation 且來源未 completed → 保留（與 context-refresh 同類）"""
         hook_module = load_stop_hook_module()
         logger = MagicMock()
 
         record = {"direction": "continuation", "ticket_id": "0.31.1-W3-001"}
-        result = hook_module.should_preserve_pending_json(record, logger)
+        result = hook_module.should_preserve_pending_json(record, logger, project_root=tmp_path)
 
         assert result is True
 

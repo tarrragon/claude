@@ -724,10 +724,16 @@ class TestCompleteCascadeChildren:
         assert _saved_statuses_for(complete_env.save_ticket, "GC1") == []
         assert "GC1" not in out
 
-    def test_orphan_parent_id_not_scanned(
+    def test_orphan_parent_id_not_cascaded_via_children_path(
         self, make_parent_child_tickets, complete_env, capsys
     ):
-        """TC-B2：parent_id 單向權威，不反向掃描（§6.2）。"""
+        """TC-B2：parent_id 單向權威，children 路徑不反向掃描（§6.2）。
+
+        W1-082 補充：C_orphan 雖非 P0 的 children，但 blockedBy 含 P0，
+        會被獨立的 blockedBy 反向掃描機制解鎖（見 TestCompleteBlockedByReverseScan）。
+        本測試改為聚焦 children-based cascade 路徑本身不觸發（不列入 children
+        cascade 的 unblock 統計/訊息），而非「完全不會被任何機制解鎖」。
+        """
         c_orphan = {
             "id": "C_orphan",
             "status": "blocked",
@@ -746,9 +752,11 @@ class TestCompleteCascadeChildren:
 
         out = capsys.readouterr().out
         assert result == 0
-        assert _saved_statuses_for(complete_env.save_ticket, "C_orphan") == []
-        assert "[Cascade]" not in out
+        # children cascade 路徑本身無 children，不產生 children 專屬警告
         assert "[Warning] 父 Ticket 完成時尚有未完成的子 Ticket" not in out
+        # blockedBy 反向掃描機制解鎖 C_orphan（W1-082 新行為）
+        assert "pending" in _saved_statuses_for(complete_env.save_ticket, "C_orphan")
+        assert "[Cascade] 以下 blockedBy 引用者已自動解鎖" in out
 
     def test_empty_children(
         self, make_parent_child_tickets, complete_env, capsys
@@ -944,6 +952,161 @@ class TestCompleteCascadeChildren:
         assert "   - C1 [pending]: 子任務 C1" in out
         assert "   - C2 [in_progress]: 子任務 C2" in out
         assert "父 complete 不阻止" in out
+
+
+# ============================================================================
+# TestCompleteBlockedByReverseScan：complete cascade 反向掃描 blockedBy 引用者
+# （W1-082：修復 W1-081 根因——children 路徑遺漏未登記為 children 的兄弟票）
+# ============================================================================
+
+
+class TestCompleteBlockedByReverseScan:
+    """blockedBy 反向掃描解鎖機制測試（W1-082）。"""
+
+    def test_unlocks_sibling_referencing_blockedby_without_children_relation(
+        self, make_parent_child_tickets, complete_env, capsys
+    ):
+        """非 children 關係、僅靠 blockedBy 引用已完成 Ticket 的兄弟票會被解鎖。"""
+        sibling = {
+            "id": "S1",
+            "status": "blocked",
+            "blockedBy": ["P0"],
+            "title": "兄弟票 S1",
+        }
+        parent, children, all_tickets = make_parent_child_tickets(
+            "P0", [], extras=[sibling]
+        )
+        complete_env.set_tickets(parent, all_tickets)
+
+        args = Mock()
+        args.ticket_id = "P0"
+        result = execute_complete(args, "0.18.0")
+
+        out = capsys.readouterr().out
+        assert result == 0
+        assert "pending" in _saved_statuses_for(complete_env.save_ticket, "S1")
+        assert "[Cascade] 以下 blockedBy 引用者已自動解鎖（blocked → pending）：" in out
+        assert "   - S1: 兄弟票 S1" in out
+
+    def test_and_semantics_preserved_for_multiple_blockers(
+        self, make_parent_child_tickets, complete_env, capsys
+    ):
+        """兄弟票有其他未完成 blocker 時，AND 語義下仍保留 blocked。"""
+        other = {
+            "id": "X",
+            "status": "in_progress",
+            "blockedBy": [],
+            "title": "外部 X",
+        }
+        sibling = {
+            "id": "S1",
+            "status": "blocked",
+            "blockedBy": ["P0", "X"],
+            "title": "兄弟票 S1",
+        }
+        parent, children, all_tickets = make_parent_child_tickets(
+            "P0", [], extras=[other, sibling]
+        )
+        complete_env.set_tickets(parent, all_tickets)
+
+        args = Mock()
+        args.ticket_id = "P0"
+        result = execute_complete(args, "0.18.0")
+
+        out = capsys.readouterr().out
+        assert result == 0
+        assert _saved_statuses_for(complete_env.save_ticket, "S1") == []
+        assert "[Cascade] 以下 blockedBy 引用者已自動解鎖" not in out
+
+    def test_closed_blocker_treated_as_resolved(
+        self, make_parent_child_tickets, complete_env, capsys
+    ):
+        """include_closed_as_resolved=True：其他 blocker 為 closed 也視為解除。"""
+        other = {
+            "id": "X",
+            "status": "closed",
+            "blockedBy": [],
+            "title": "外部 X",
+        }
+        sibling = {
+            "id": "S1",
+            "status": "blocked",
+            "blockedBy": ["P0", "X"],
+            "title": "兄弟票 S1",
+        }
+        parent, children, all_tickets = make_parent_child_tickets(
+            "P0", [], extras=[other, sibling]
+        )
+        complete_env.set_tickets(parent, all_tickets)
+
+        args = Mock()
+        args.ticket_id = "P0"
+        result = execute_complete(args, "0.18.0")
+
+        out = capsys.readouterr().out
+        assert result == 0
+        assert "pending" in _saved_statuses_for(complete_env.save_ticket, "S1")
+        assert "[Cascade] 以下 blockedBy 引用者已自動解鎖" in out
+
+    def test_non_blocked_status_not_touched(
+        self, make_parent_child_tickets, complete_env, capsys
+    ):
+        """status 非 blocked（如 pending）的 blockedBy 引用者不被本機制觸碰。"""
+        sibling = {
+            "id": "S1",
+            "status": "pending",
+            "blockedBy": ["P0"],
+            "title": "兄弟票 S1",
+        }
+        parent, children, all_tickets = make_parent_child_tickets(
+            "P0", [], extras=[sibling]
+        )
+        complete_env.set_tickets(parent, all_tickets)
+
+        args = Mock()
+        args.ticket_id = "P0"
+        result = execute_complete(args, "0.18.0")
+
+        out = capsys.readouterr().out
+        assert result == 0
+        assert _saved_statuses_for(complete_env.save_ticket, "S1") == []
+        assert "[Cascade] 以下 blockedBy 引用者已自動解鎖" not in out
+
+    def test_no_duplicate_save_for_ticket_unblocked_via_children_path(
+        self, make_parent_child_tickets, complete_env, capsys
+    ):
+        """C1 同時是 children 也在 blockedBy 引用 P0：僅透過 children 路徑解鎖一次，
+        反向掃描不重複 save（ticket_map 原地 mutate 後 status 已非 blocked）。"""
+        parent, children, all_tickets = make_parent_child_tickets(
+            "P0", [("C1", "blocked", ["P0"])]
+        )
+        complete_env.set_tickets(parent, all_tickets)
+
+        args = Mock()
+        args.ticket_id = "P0"
+        result = execute_complete(args, "0.18.0")
+
+        out = capsys.readouterr().out
+        assert result == 0
+        c1_statuses = _saved_statuses_for(complete_env.save_ticket, "C1")
+        assert c1_statuses == ["pending"], f"C1 應僅被 save 一次，實際: {c1_statuses}"
+        assert "[Cascade] 以下子 Ticket 已自動解鎖（blocked → pending）：" in out
+        assert "[Cascade] 以下 blockedBy 引用者已自動解鎖" not in out
+
+    def test_empty_ticket_map_no_error(
+        self, make_parent_child_tickets, complete_env, capsys
+    ):
+        """無任何其他 Ticket 引用 blockedBy 時，反向掃描不產生訊息也不報錯。"""
+        parent, children, all_tickets = make_parent_child_tickets("P0", [])
+        complete_env.set_tickets(parent, all_tickets)
+
+        args = Mock()
+        args.ticket_id = "P0"
+        result = execute_complete(args, "0.18.0")
+
+        out = capsys.readouterr().out
+        assert result == 0
+        assert "[Cascade] 以下 blockedBy 引用者已自動解鎖" not in out
 
 
 # ============================================================================

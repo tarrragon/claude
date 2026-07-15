@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 import traceback
 from dataclasses import asdict, dataclass, field
@@ -32,6 +33,10 @@ from ..constants import (
     CONTEXT_BUNDLE_PLACEHOLDER_VALUES,
     CONTEXT_BUNDLE_SKIP_REASONS,
     CONTEXT_BUNDLE_SOURCE_KINDS,
+    CONTEXT_BUNDLE_UC_INJECTION_KEY,
+    CONTEXT_BUNDLE_UC_INJECTION_MODE_AUTO,
+    CONTEXT_BUNDLE_UC_INJECTION_MODE_MANUAL,
+    CONTEXT_BUNDLE_UC_INJECTION_MODE_OFF,
 )
 from .file_lock import file_lock
 from .parser import load_ticket, save_ticket
@@ -60,6 +65,18 @@ AUTO_EXTRACTED_BLOCK_PATTERN = re.compile(
     r"<!--\s*auto-extracted:[^>]*-->.*?(?=^## |\Z)",
     flags=re.MULTILINE | re.DOTALL,
 )
+
+# ============================================================================
+# UC 自動注入（0.38.1-W1-066.4）
+# ============================================================================
+#
+# 輕量偵測 regex：僅比對合法二位數格式，不處理大小寫/全形變體（那是
+# doc_system.core.uc_registry 的職責）。ticket_system 不可直接 import
+# doc_system（跨套件隔離），故此處僅需能觸發 subprocess 呼叫的最小偵測。
+UC_REFERENCE_RE = re.compile(r"\bUC-\d{2}\b")
+
+# doc CLI 呼叫逾時秒數（與 doc_system.commands.uc.TICKET_CLI_TIMEOUT_SECONDS 對稱慣例）
+DOC_CLI_TIMEOUT_SECONDS = 10
 
 ExtractStatus = Literal[
     "no_source",
@@ -202,6 +219,9 @@ class ExtractResult:
     sources_declared: int = 0
     sources_ok: int = 0
     total_chars_estimate: int = 0
+    # UC 自動注入結果（獨立於 EXTRACTABLE_FIELDS 映射，見 _inject_uc_context）。
+    # 每項為 doc_system.get_uc_summary() 回傳的 dict（uc_id/title/spec_path/spec_line/main_flow）。
+    uc_context: List[dict] = field(default_factory=list)
 
 
 # ============================================================================
@@ -363,6 +383,90 @@ def _apply_total_chars_limit(result: ExtractResult) -> None:
             f"抽取結果超過 MAX_TOTAL_CHARS={MAX_TOTAL_CHARS}，已截斷；{TRUNCATE_INDICATOR}"
         )
     result.total_chars_estimate = _estimate_chars(result.extracted)
+
+
+def _detect_uc_references(target: dict) -> list:
+    """掃描 target ticket 的 what/why/acceptance（list 逐項）偵測 UC-XX token。
+
+    回傳依出現順序去重的 UC ID 列表（大寫正規形式）。
+    """
+    texts: list = []
+    what = target.get("what")
+    if isinstance(what, str):
+        texts.append(what)
+    why = target.get("why")
+    if isinstance(why, str):
+        texts.append(why)
+    acceptance = target.get("acceptance")
+    if isinstance(acceptance, list):
+        texts.extend(str(x) for x in acceptance)
+
+    seen: list = []
+    for text in texts:
+        for match in UC_REFERENCE_RE.finditer(text):
+            uc_id = match.group(0).upper()
+            if uc_id not in seen:
+                seen.append(uc_id)
+    return seen
+
+
+def _fetch_uc_summary(uc_id: str) -> Optional[dict]:
+    """呼叫 `doc uc summary --json` 取得 UC 摘要。Non-raising：失敗回傳 None 並寫 stderr。"""
+    try:
+        proc = subprocess.run(
+            ["doc", "uc", "summary", uc_id, "--json"],
+            capture_output=True,
+            text=True,
+            timeout=DOC_CLI_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        sys.stderr.write(f"[Context Bundle] doc CLI 不可用，略過 UC 注入（{uc_id}）：{exc}\n")
+        return None
+
+    if proc.returncode != 0:
+        sys.stderr.write(
+            f"[Context Bundle] doc uc summary {uc_id} 失敗（exit {proc.returncode}）："
+            f"{proc.stderr.strip()}\n"
+        )
+        return None
+
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        sys.stderr.write(f"[Context Bundle] doc uc summary {uc_id} 輸出解析失敗：{exc}\n")
+        return None
+
+
+def _inject_uc_context(target_ticket: dict, result: ExtractResult) -> None:
+    """UC 自動注入：偵測 target ticket 欄位中的 UC 引用並附加摘要至 result.uc_context。
+
+    獨立於 EXTRACTABLE_FIELDS 映射（掃描對象是 target 自身欄位，非 source ticket）。
+    控制開關 CONTEXT_BUNDLE_UC_INJECTION_KEY（預設 auto）：
+        auto   → 偵測到就注入
+        manual → 偵測到但略過，記錄 warning 提示
+        off    → 靜默略過（不掃描）
+    """
+    mode = target_ticket.get(CONTEXT_BUNDLE_UC_INJECTION_KEY) or CONTEXT_BUNDLE_UC_INJECTION_MODE_AUTO
+    if mode == CONTEXT_BUNDLE_UC_INJECTION_MODE_OFF:
+        return
+
+    uc_ids = _detect_uc_references(target_ticket)
+    if not uc_ids:
+        return
+
+    if mode == CONTEXT_BUNDLE_UC_INJECTION_MODE_MANUAL:
+        result.warnings.append(
+            f"偵測到 UC 引用 {uc_ids}，但 {CONTEXT_BUNDLE_UC_INJECTION_KEY}="
+            f"{CONTEXT_BUNDLE_UC_INJECTION_MODE_MANUAL}，略過自動注入"
+        )
+        return
+
+    for uc_id in uc_ids:
+        summary = _fetch_uc_summary(uc_id)
+        if summary is None:
+            result.warnings.append(f"UC 摘要取得失敗，略過注入：{uc_id}")
+            continue
+        result.uc_context.append(summary)
 
 
 # ============================================================================
@@ -541,6 +645,7 @@ def extract_context_bundle(target_ticket: dict) -> ExtractResult:
                     )
                 )
 
+    _inject_uc_context(target_ticket, result)
     _apply_total_chars_limit(result)
 
     if result.sources_ok == 0:
@@ -582,13 +687,19 @@ def _build_metric_payload(result: ExtractResult) -> MetricEvent:
 def render_context_bundle_markdown(result: ExtractResult) -> str:
     """渲染 ExtractResult 為 markdown。
 
-    status in (no_source, self_reference, all_sources_missing, opt_out) → 回傳空字串（§v2.3 不寫入）。
+    status in (no_source, self_reference, all_sources_missing, opt_out) 且無 UC 注入
+    結果 → 回傳空字串（§v2.3 不寫入）。有 uc_context 時即使來源抽取狀態不佳仍需渲染
+    （UC 注入獨立於來源抽取，見 _inject_uc_context）。
     """
-    if result.status in (
-        "no_source",
-        "self_reference",
-        "all_sources_missing",
-        "opt_out",
+    if (
+        result.status
+        in (
+            "no_source",
+            "self_reference",
+            "all_sources_missing",
+            "opt_out",
+        )
+        and not result.uc_context
     ):
         return ""
 
@@ -616,6 +727,16 @@ def render_context_bundle_markdown(result: ExtractResult) -> str:
             if f.truncated:
                 lines.append(f"  {TRUNCATE_INDICATOR}")
         lines.append("")
+    if result.uc_context:
+        lines.append("### UC Context")
+        for uc in result.uc_context:
+            lines.append(f"#### {uc['uc_id']}: {uc['title']}")
+            lines.append(f"Spec 位置: {uc['spec_path']}:{uc['spec_line']}")
+            if uc.get("main_flow"):
+                lines.append("主要流程:")
+                for step in uc["main_flow"]:
+                    lines.append(f"  {step}")
+            lines.append("")
     return "\n".join(lines)
 
 

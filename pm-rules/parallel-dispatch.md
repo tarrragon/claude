@@ -250,6 +250,24 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 > **worktree 為 fresh checkout，gitignored 生成產物須先確認就緒**：worktree 是全新 checkout，任何 gitignored 的建置生成產物（i18n 產物、序列化程式碼、DI 註冊等）若未同步存在，會造成連鎖編譯失敗且極易被誤判為高並行編譯器資源耗盡（實證與歸因陷阱見 `IMP-APP-003`）。**Why**：gitignore 排除生成產物是常見慣例，但該慣例假設「產物可即時重新生成」，worktree 派發若未確保生成步驟已執行，假設不成立。**Consequence**：全套件測試結果不可信，數十至上百項編譯失敗會被誤歸因為環境噪音而非缺產物。**Action**：(1) 派發跑全套件的 worktree agent 前，PM 先確認該 worktree 內含當前所有必要生成產物；(2) 對每個 gitignored 生成產物，評估納入版控，或於派發 prompt 中要求 agent 先執行對應 generation 指令（如 `flutter gen-l10n` / `dart run build_runner build`）；(3) 判斷「大量編譯失敗」是否為此類根因時，先查該產物是否 gitignored 且未納版控，勿逕自歸因並行資源耗盡。
 
+### Redirect 派發反模式禁令（強制，W1-016）
+
+**禁止 `isolation: worktree` + prompt 導向另一個既有外部 worktree 的組合派發。**
+
+**Why**：`isolation: worktree` 建 auto-worktree（`.claude/worktrees/agent-*`），agent cwd 在 auto-worktree 內。若 prompt 又導向另一個外部 worktree 做檔案操作，ticket CLI（claim/append-log/Exit Status auto-commit）依 cwd 解析落在 auto-worktree 分支，code changes 落在外部 worktree 分支，形成 ghost commits——ticket metadata 與 code changes 分裂到不同分支，PM 需手動回收（W1-001/W1-003 實證：各 3 筆 ghost append-log commit 需 `-s ours` 回收）。
+
+**Consequence**：(1) main 票面停在 pending（auto-worktree 的 ticket 變更未進 main）；(2) PM 需手動比對兩個分支確認超集關係；(3) auto-worktree 分支清理後 ghost commits 可能遺失。
+
+**Action**：依需求選擇正確的單一隔離模式：
+
+| 需求 | 正確派發模式 | 說明 |
+|------|------------|------|
+| agent 需要隔離 | `isolation: worktree` 單獨使用 | agent 在 auto-worktree 工作，ticket CLI 和 code changes 都落在 auto-worktree 分支，PM merge 時一併取回 |
+| agent 需在特定分支/worktree 工作 | 不用 `isolation: worktree`，prompt 提供外部 worktree 路徑 | agent cwd 在 main repo，file ops 用絕對路徑，ticket CLI 落 main repo |
+| agent 需在特定分支 + 隔離 | `isolation: worktree` + prompt 加 `git checkout <branch>` | auto-worktree 可 checkout 任何分支（共享 git object store），不需另一個 worktree |
+
+> **根因分析**：paths.py 的 `_linked_worktree_root()` 偵測 auto-worktree 為 linked worktree 並回傳其根目錄是 W3-010 修復的**正確行為**。問題在於兩個不相容隔離機制疊加，不在路徑解析邏輯。完整分析見 0.38.1-W1-016 ANA。
+
 ### 並行場景路徑區分（`.claude/` vs `src/`）
 
 > **兩個正交維度**：代理人類型（上表）決定是否需要 worktree 的一般規則；target 路徑（本小節）決定 worktree 可否使用的實體限制。**target 路徑限制優先於代理人類型**。

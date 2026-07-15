@@ -8,6 +8,24 @@ import yaml
 FRONTMATTER_DELIMITER = "---"
 
 
+def parse_frontmatter_text(text: str) -> dict | None:
+    """解析文字內容中的 YAML frontmatter，回傳 dict 或 None。
+
+    與 parse_frontmatter 相同邏輯但接受字串而非檔案路徑，
+    供 subprocess stdout 等非檔案來源使用。
+    """
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != FRONTMATTER_DELIMITER:
+        return None
+
+    end_index = _find_closing_delimiter(lines)
+    if end_index is None:
+        return None
+
+    yaml_content = "\n".join(lines[1:end_index])
+    return _safe_parse_yaml(yaml_content)
+
+
 def parse_frontmatter(file_path: str) -> dict | None:
     """解析 Markdown 文件的 YAML frontmatter，回傳 dict 或 None。
 
@@ -22,19 +40,11 @@ def parse_frontmatter(file_path: str) -> dict | None:
         return None
 
     try:
-        lines = path.read_text(encoding="utf-8-sig").splitlines()
+        text = path.read_text(encoding="utf-8-sig")
     except OSError:
         return None
 
-    if not lines or lines[0].strip() != FRONTMATTER_DELIMITER:
-        return None
-
-    end_index = _find_closing_delimiter(lines)
-    if end_index is None:
-        return None
-
-    yaml_content = "\n".join(lines[1:end_index])
-    return _safe_parse_yaml(yaml_content)
+    return parse_frontmatter_text(text)
 
 
 def _find_closing_delimiter(lines: list[str]) -> int | None:

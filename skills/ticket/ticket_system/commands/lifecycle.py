@@ -900,6 +900,14 @@ class TicketLifecycle:
         # W11-035：捕獲 unblocked 清單以便 auto-stage 收集 children md 路徑
         unblocked_children = _post_complete_cascade(ticket, self.version, ticket_map) or []
 
+        # W1-082：children cascade 之外，反向掃描 blockedBy 引用者解鎖非 children
+        # 關係的兄弟 Ticket（W1-081 根因修復）。unblocked_siblings 併入
+        # unblocked_children 供下方 auto-stage 收集 children md 路徑。
+        unblocked_siblings = (
+            _reverse_unblock_blockedby(ticket_id, self.version, ticket_map) or []
+        )
+        unblocked_children = unblocked_children + unblocked_siblings
+
         # W17-008.15 方案 D：IMP complete 後檢查 source ANA 是否可 complete
         _print_source_ana_complete_hint(ticket, self.version)
 
@@ -2088,6 +2096,79 @@ def _cascade_unblock_children(
         })
 
     return unblocked, warnings
+
+
+def _reverse_unblock_blockedby(
+    completed_ticket_id: str,
+    version: str,
+    ticket_map: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """
+    complete() 後反向掃描 blockedBy 引用者，解鎖非 children 關係的兄弟 Ticket。
+
+    W1-082：`_post_complete_cascade` 只走 children 路徑，遺漏 blockedBy 引用
+    已完成 Ticket、但未登記為 children 的兄弟 Ticket（W1-081 根因）。本函式
+    獨立於 children 關係，全量掃描 ticket_map 找出 status=blocked 且
+    blockedBy 含 completed_ticket_id 的 Ticket，通過 is_fully_unblocked 檢查
+    （AND 語義，closed 亦視為已解除）後解鎖為 pending。
+
+    與 `_post_complete_cascade` 的呼叫順序耦合：ticket_map 中已由 children
+    路徑解鎖的 Ticket，其 status 已被原地 mutate 為 pending，本函式的
+    `status == STATUS_BLOCKED` 篩選會自然跳過，不會重複 save/印出訊息。
+
+    Args:
+        completed_ticket_id: 剛完成的 Ticket id
+        version: 版本字串
+        ticket_map: 預先載入的 {ticket_id: ticket_dict} map（可能已被
+            `_post_complete_cascade` 原地 mutate）
+
+    Returns:
+        unblocked list of {id, title}（與 `_cascade_unblock_children` 第一
+        回傳值同型）
+    """
+    unblocked: List[Dict[str, Any]] = []
+
+    for tid, candidate in ticket_map.items():
+        if tid == completed_ticket_id:
+            continue
+        if candidate.get("status") != STATUS_BLOCKED:
+            continue
+        if completed_ticket_id not in (candidate.get("blockedBy") or []):
+            continue
+        if not is_fully_unblocked(
+            candidate, ticket_map, include_closed_as_resolved=True
+        ):
+            continue
+
+        candidate["status"] = STATUS_PENDING
+        try:
+            save_ticket(candidate, resolve_ticket_path(candidate, version, tid))
+            unblocked.append({"id": tid, "title": candidate.get("title", "")})
+        except Exception as err:
+            # §6.7 non-fail-fast：列入 stderr 警告而非隱藏
+            print(format_warning(
+                format_msg(
+                    LifecycleMessages.CASCADE_SAVE_FAILED,
+                    ticket_id=tid,
+                    error=err,
+                )
+            ))
+
+    if unblocked:
+        _print_blockedby_unblocked(unblocked)
+    return unblocked
+
+
+def _print_blockedby_unblocked(unblocked: List[Dict[str, Any]]) -> None:
+    """印出 blockedBy 反向掃描解鎖訊息（W1-082）。"""
+    print()
+    print(LifecycleMessages.BLOCKEDBY_UNBLOCKED_HEADER)
+    for item in unblocked:
+        print(format_msg(
+            LifecycleMessages.BLOCKEDBY_UNBLOCKED_ITEM,
+            id=item['id'],
+            title=item.get('title', ''),
+        ))
 
 
 def _print_cascade_unblocked(unblocked: List[Dict[str, Any]]) -> None:

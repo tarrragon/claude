@@ -84,6 +84,7 @@ from acceptance_checkers import (
     check_self_check_visibility,
     check_ana_spawn_consistency,
     check_spawn_requests,
+    check_phase4_review_evidence,
 )
 # W17-120.2 / PC-091: ana_spawned_checker 退場
 # ANA complete 阻擋判斷統一收斂到 children_checker（PC-091 路線：
@@ -131,6 +132,8 @@ class AcceptanceCheckResult(NamedTuple):
     custom_h2_sections: List[str] = []
     # W17-064：Layer 1 自檢可觀測性 warning（缺 `### 自檢結果` 時非 None，warning 不阻擋）
     self_check_warning: Optional[str] = None
+    # W1-080.1：Phase 4 審查證據 warning（IMP 缺 Phase 4 證據時非 None，warning 不阻擋）
+    phase4_review_warning: Optional[str] = None
     # 0.4.1-W2-006：complete 與 git merge / set-acceptance / append-log 等寫入操作
     # 串接於同一 Bash 呼叫時為 True，代表 acceptance / execution log 檢查因讀檔
     # 時序早於同鏈操作執行而略過（避免滯後誤報，見 detect_chained_pre_complete_write）
@@ -421,6 +424,11 @@ def check_acceptance_status(
             content, frontmatter.get("type", ""), logger
         )
 
+        # 步驟 9：檢查 Phase 4 審查證據（W1-080.1，warning 不阻擋）
+        phase4_warning = check_phase4_review_evidence(
+            content, frontmatter.get("type", ""), logger
+        )
+
         task_type = frontmatter.get("type", "")
         priority = frontmatter.get("priority", "")
 
@@ -440,6 +448,7 @@ def check_acceptance_status(
             spawned_non_terminal_warning=spawned_non_terminal_warning,
             custom_h2_sections=custom_h2,
             self_check_warning=self_check_warning,
+            phase4_review_warning=phase4_warning,
             chained_write_detected=chained_write_detected,
         )
 
@@ -548,6 +557,17 @@ def generate_hook_output(
     else:
         checklist_items.append("[--] 8. Layer 1 自檢(非 IMP/ANA/DOC，不適用)")
 
+    # 項目 9: Phase 4 審查證據（W1-080.1，僅對 IMP 顯示）
+    if ticket_type_upper_for_checklist == "IMP":
+        if check_result.phase4_review_warning:
+            checklist_items.append(
+                "[WARNING] 9. Solution 缺 Phase 4 審查證據"
+            )
+        else:
+            checklist_items.append("[x] 9. Phase 4 審查證據已記錄")
+    else:
+        checklist_items.append("[--] 9. Phase 4 審查(非 IMP，不適用)")
+
     checklist_text = "[Complete 清單]\n" + "\n".join(checklist_items)
     context_parts.append(checklist_text)
 
@@ -601,6 +621,11 @@ def generate_hook_output(
     if check_result.self_check_warning:
         context_parts.append(check_result.self_check_warning)
         logger.info("新增 Layer 1 自檢可觀測性 warning")
+
+    # 優先級 2.8：Phase 4 審查證據 warning（W1-080.1，WARNING 不阻擋）
+    if check_result.phase4_review_warning:
+        context_parts.append(check_result.phase4_review_warning)
+        logger.info("新增 Phase 4 審查證據 warning")
 
     # 優先級 3：Handoff 方向選擇 場景 #9（無訊息時，sibling >= 2）
     if (
