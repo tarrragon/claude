@@ -14,9 +14,20 @@ import yaml
 from ticket_system.lib.spec_reference_checker import (
     extract_spec_references,
     load_registered_spec_ids,
+    registries_uninitialized,
     detect_unregistered_spec_references,
 )
 from ticket_system.lib.command_lifecycle_messages import CreateMessages
+
+
+def _write_proposals_tracking(tmp_path: Path, spec_ids) -> Path:
+    """在 tmp_path/docs/proposals-tracking.yaml 寫入 specs: 區段測試 fixture。"""
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    data = {"specs": [{"id": spec_id} for spec_id in spec_ids]}
+    path = docs_dir / "proposals-tracking.yaml"
+    path.write_text(yaml.dump(data, allow_unicode=True), encoding="utf-8")
+    return path
 
 
 # ============================================================
@@ -116,6 +127,49 @@ class TestLoadRegisteredSpecIds:
         registered = load_registered_spec_ids(project_root=tmp_path)
         assert registered == set()
 
+    def test_loads_spec_ids_from_proposals_tracking_only(self, tmp_path):
+        """場景 5（0.38.1-W1-107）：traceability.yaml 不存在，改讀
+        proposals-tracking.yaml 的 specs: 區段"""
+        _write_proposals_tracking(tmp_path, ["SPEC-001", "SPEC-006"])
+
+        registered = load_registered_spec_ids(project_root=tmp_path)
+
+        assert registered == {"SPEC-001", "SPEC-006"}
+
+    def test_unions_both_registries(self, tmp_path):
+        """場景 6：兩份登錄簿皆存在時取聯集"""
+        self._write_traceability(
+            tmp_path,
+            {"UC-01": {"scenarios": {"main": {"spec_frs": ["SPEC-002-FR-01"]}}}},
+        )
+        _write_proposals_tracking(tmp_path, ["SPEC-006"])
+
+        registered = load_registered_spec_ids(project_root=tmp_path)
+
+        assert registered == {"SPEC-002", "SPEC-006"}
+
+
+class TestRegistriesUninitialized:
+    """registries_uninitialized 函式測試"""
+
+    def test_both_missing_returns_true(self, tmp_path):
+        """場景 1：兩份登錄簿皆不存在"""
+        assert registries_uninitialized(project_root=tmp_path) is True
+
+    def test_only_traceability_exists_returns_false(self, tmp_path):
+        """場景 2：僅 traceability.yaml 存在"""
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        (docs_dir / "traceability.yaml").write_text("UC-01: {}", encoding="utf-8")
+
+        assert registries_uninitialized(project_root=tmp_path) is False
+
+    def test_only_proposals_tracking_exists_returns_false(self, tmp_path):
+        """場景 3：僅 proposals-tracking.yaml 存在"""
+        _write_proposals_tracking(tmp_path, ["SPEC-001"])
+
+        assert registries_uninitialized(project_root=tmp_path) is False
+
 
 # ============================================================
 # 測試 detect_unregistered_spec_references
@@ -205,12 +259,37 @@ class TestDetectUnregisteredSpecReferences:
         assert detect_unregistered_spec_references({}, project_root=tmp_path) == []
         assert detect_unregistered_spec_references(None, project_root=tmp_path) == []
 
-    def test_missing_traceability_file_still_warns(self, tmp_path):
-        """場景 7：traceability.yaml 不存在時，任何引用都視為未登錄（保守策略）"""
+    def test_both_registries_missing_emits_uninitialized_warning(self, tmp_path):
+        """場景 7（0.38.1-W1-107）：兩份登錄簿皆不存在時，輸出單一「未初始化」
+        訊息，不逐號誤報"""
         warnings = detect_unregistered_spec_references(
             {"why": "依 SPEC-001 實作", "what": "", "title": ""},
             project_root=tmp_path,
         )
 
-        assert len(warnings) == 1
-        assert "SPEC-001" in warnings[0]
+        assert warnings == [CreateMessages.SPEC_REGISTRY_UNINITIALIZED_WARNING]
+
+    def test_proposals_tracking_registered_reference_no_warning(self, tmp_path):
+        """場景 8（0.38.1-W1-107）：僅 proposals-tracking.yaml 登錄時，
+        對應引用不誤報（W1-106 動機案例：SPEC-006 已登錄卻誤報）"""
+        _write_proposals_tracking(tmp_path, ["SPEC-006"])
+
+        warnings = detect_unregistered_spec_references(
+            {"why": "依 SPEC-006 修正", "what": "", "title": ""},
+            project_root=tmp_path,
+        )
+
+        assert warnings == []
+
+    def test_union_of_both_registries_no_warning(self, tmp_path):
+        """場景 9：traceability.yaml 與 proposals-tracking.yaml 各登錄一個
+        編號，兩個引用皆不誤報（聯集驗證）"""
+        self._write_traceability(tmp_path, ["SPEC-002-FR-01"])
+        _write_proposals_tracking(tmp_path, ["SPEC-006"])
+
+        warnings = detect_unregistered_spec_references(
+            {"why": "依 SPEC-002 與 SPEC-006 實作", "what": "", "title": ""},
+            project_root=tmp_path,
+        )
+
+        assert warnings == []

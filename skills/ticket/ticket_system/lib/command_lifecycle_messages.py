@@ -384,8 +384,19 @@ class CreateMessages:
 
     # SPEC 引用未登錄警告（0.4.1-W2-001，F1：SPEC-008 誤植跨票傳染防護）
     UNREGISTERED_SPEC_REFERENCE_WARNING = (
-        "[WARNING] 引用了未登錄於 docs/traceability.yaml 的 SPEC 編號：{spec_ids}\n"
-        "          請確認編號是否誤植，或先在 traceability.yaml 補登該 SPEC"
+        "[WARNING] 引用了未登錄於 SPEC 登錄簿"
+        "（docs/traceability.yaml 或 docs/proposals-tracking.yaml）的 SPEC 編號："
+        "{spec_ids}\n"
+        "          請確認編號是否誤植，或先在其中一份登錄簿補登該 SPEC"
+    )
+
+    # SPEC 登錄簿皆未初始化警告（0.38.1-W1-107：兩簿皆缺時不逐號誤報）
+    SPEC_REGISTRY_UNINITIALIZED_WARNING = (
+        "[WARNING] SPEC 登錄簿尚未初始化"
+        "（docs/traceability.yaml 與 docs/proposals-tracking.yaml 皆不存在），"
+        "已略過 SPEC 引用檢查\n"
+        "          請執行 doc skill batch-init 產生 traceability.yaml，"
+        "或建立 proposals-tracking.yaml 登錄 SPEC 編號"
     )
 
     # blockedBy 驗證錯誤訊息（Bug 1 修正）

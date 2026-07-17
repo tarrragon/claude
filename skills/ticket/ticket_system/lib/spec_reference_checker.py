@@ -2,11 +2,18 @@
 SPEC 引用驗證模組
 
 建票時掃描 title/what/why/where.layer/how.strategy 等欄位中的 SPEC-NNN
-引用，對照 docs/traceability.yaml 已登錄編號，未登錄即輸出警告（不阻擋建立）。
+引用，對照 SPEC 登錄簿（docs/traceability.yaml + docs/proposals-tracking.yaml
+聯集）已登錄編號，未登錄即輸出警告（不阻擋建立）。
 
 動機（0.4.1-W2-001，F1）：SPEC-008 誤植跨票傳染（0.4.1-W1-001 →
 0.4.1-W2-004），建票當下即時提示未登錄編號，可在源頭攔截誤植擴散，
 不需等到後續 review 才發現。
+
+登錄簿聯集設計（0.38.1-W1-107）：doc skill 的 traceability.yaml 為按需
+建立檔（batch-init 產生），未執行過 batch-init 的專案改用
+proposals-tracking.yaml 的 `specs:` 區段登錄 SPEC 編號。兩檔皆屬框架層
+標準路徑（doc skill tracking_schema SSOT），聯集讀取兩者避免專案未初始化
+其中一份時逐號誤報。
 """
 # 防止直接執行此模組
 if __name__ == "__main__":
@@ -67,30 +74,45 @@ def _collect_spec_ids(node: Any, found: Set[str]) -> None:
             found.add(match.group(0))
 
 
-def load_registered_spec_ids(project_root: Optional[Path] = None) -> Set[str]:
-    """載入 docs/traceability.yaml 已登錄的 SPEC 編號集合。
+# SPEC 登錄簿候選路徑（框架層標準路徑，非本專案識別符；reference-stability 規則 8）
+_REGISTRY_RELATIVE_PATHS = (
+    ("docs", "traceability.yaml"),
+    ("docs", "proposals-tracking.yaml"),
+)
 
-    容錯設計：檔案不存在、無法解析或內容為空時回傳空集合，不拋出例外
-    （與 registry_loader.load_registry 同一容錯策略，呼叫端不需 try/except）。
+
+def _registry_paths(root: Path) -> List[Path]:
+    """回傳 SPEC 登錄簿候選路徑清單（依 root 展開）。"""
+    return [Path(root) / Path(*parts) for parts in _REGISTRY_RELATIVE_PATHS]
+
+
+def registries_uninitialized(project_root: Optional[Path] = None) -> bool:
+    """判斷所有 SPEC 登錄簿候選路徑是否皆不存在。
 
     Args:
         project_root: 專案根目錄（測試可覆寫；預設用 get_project_root()）
 
     Returns:
-        Set[str]: 已登錄的 SPEC 編號集合（如 {"SPEC-002", "SPEC-013"}）
+        bool: True 表示所有登錄簿皆未初始化
     """
     root = project_root if project_root is not None else get_project_root()
-    traceability_path = Path(root) / "docs" / "traceability.yaml"
+    return all(not path.exists() for path in _registry_paths(root))
 
-    if not traceability_path.exists():
+
+def _load_yaml_spec_ids(registry_path: Path) -> Set[str]:
+    """讀取單一登錄簿檔案，回傳其中出現的 SPEC 編號集合。
+
+    容錯設計：檔案不存在、無法解析或內容為空時回傳空集合，不拋出例外。
+    """
+    if not registry_path.exists():
         return set()
 
     try:
-        with open(traceability_path, "r", encoding="utf-8") as f:
+        with open(registry_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
     except Exception as e:
         sys.stderr.write(
-            f"[spec_reference_checker] 讀取 {traceability_path} 失敗"
+            f"[spec_reference_checker] 讀取 {registry_path} 失敗"
             f"（{type(e).__name__}）：{e}\n"
         )
         return set()
@@ -100,6 +122,26 @@ def load_registered_spec_ids(project_root: Optional[Path] = None) -> Set[str]:
 
     found: Set[str] = set()
     _collect_spec_ids(data, found)
+    return found
+
+
+def load_registered_spec_ids(project_root: Optional[Path] = None) -> Set[str]:
+    """載入 SPEC 登錄簿（traceability.yaml + proposals-tracking.yaml）聯集。
+
+    容錯設計：各檔案不存在、無法解析或內容為空時視為空集合，不拋出例外
+    （與 registry_loader.load_registry 同一容錯策略，呼叫端不需 try/except）。
+
+    Args:
+        project_root: 專案根目錄（測試可覆寫；預設用 get_project_root()）
+
+    Returns:
+        Set[str]: 已登錄的 SPEC 編號集合（如 {"SPEC-002", "SPEC-013"}）
+    """
+    root = project_root if project_root is not None else get_project_root()
+
+    found: Set[str] = set()
+    for registry_path in _registry_paths(root):
+        found |= _load_yaml_spec_ids(registry_path)
     return found
 
 
@@ -154,6 +196,12 @@ def detect_unregistered_spec_references(
     referenced = extract_spec_references(combined_text)
     if not referenced:
         return []
+
+    # Lazy import：避免模組載入時的循環依賴（同下方 import 手法）
+    from ticket_system.lib.command_lifecycle_messages import CreateMessages
+
+    if registries_uninitialized(project_root):
+        return [CreateMessages.SPEC_REGISTRY_UNINITIALIZED_WARNING]
 
     registered = load_registered_spec_ids(project_root)
     unregistered = sorted(

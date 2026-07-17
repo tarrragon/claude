@@ -67,6 +67,7 @@ from ticket_system.lib.tdd_phase_inference import (
     TDD_PHASE_SOURCE_AUTO,
     TDD_PHASE_SOURCE_MANUAL,
 )
+from ticket_system.lib.ticket_builder import get_schema_note
 from ticket_system.lib.ticket_ops import (
     load_and_validate_ticket,
     resolve_ticket_path,
@@ -781,7 +782,9 @@ class TicketLifecycle:
                     print()
                     print("   未填寫的必填章節：")
                     for section in unfilled_sections:
-                        print(f"   - {section}")
+                        note = get_schema_note(ticket_type, section)
+                        suffix = f"（{note}）" if note else ""
+                        print(f"   - {section}{suffix}")
                     print()
                     print("   依 .claude/pm-rules/ticket-body-schema.md，此 type 以下章節為必填且須替換佔位符：")
                     for section in typed_unfilled:

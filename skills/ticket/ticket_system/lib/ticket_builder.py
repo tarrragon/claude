@@ -777,43 +777,84 @@ def _ana_reproduction_section(ticket_type: str) -> str:
 """
 
 
+_SCHEMA_NOTES = {
+    "ANA": {
+        "Problem Analysis": "必填",
+        "Solution": "必填",
+        "Test Results": "選填（ANA 若有實驗輸出才填；無實驗可留 placeholder）",
+        "Completion Info": "必填",
+    },
+    "IMP": {
+        "Problem Analysis": "選填（小型 IMP 可留 placeholder；大型 IMP 建議填寫）",
+        "Solution": "選填",
+        "Test Results": "必填（至少記錄執行指令與通過數或 commit SHA）",
+        "Completion Info": "必填",
+    },
+    "DOC": {
+        "Problem Analysis": "選填（若 DOC 起因於缺陷或盤點結論可填）",
+        "Solution": "免填（DOC 類型以變更摘要取代）",
+        "Test Results": "免填（DOC 類型無需測試）",
+        "Completion Info": "必填（需附變更摘要：哪些文件/章節更新）",
+    },
+}
+
+
+def get_schema_note(ticket_type: str, section: str) -> str:
+    """回傳指定 type/section 的 schema note 文字。
+
+    用於 complete 阻擋訊息附加內容引導，以及 _schema_marker HTML 註解。
+    未知 type 或未定義章節回傳空字串（向後相容）。
+    """
+    return _SCHEMA_NOTES.get(ticket_type, {}).get(section, "")
+
+
 def _schema_marker(ticket_type: str, section: str) -> str:
     """回傳 Schema 標註註解（type-aware body schema）。
 
     依 .claude/pm-rules/ticket-body-schema.md 映射章節填寫要求。未知 type 或
     未定義章節回傳空字串（向後相容）。
-
-    Args:
-        ticket_type: Ticket 類型（ANA/IMP/DOC 等）
-        section: 章節名稱（Problem Analysis/Solution/Test Results/Completion Info）
-
-    Returns:
-        HTML 註解標註字串（含前綴換行）或空字串
     """
-    schema = {
-        "ANA": {
-            "Problem Analysis": "必填",
-            "Solution": "必填",
-            "Test Results": "選填（ANA 若有實驗輸出才填；無實驗可留 placeholder）",
-            "Completion Info": "必填",
-        },
-        "IMP": {
-            "Problem Analysis": "選填（小型 IMP 可留 placeholder；大型 IMP 建議填寫）",
-            "Solution": "選填",
-            "Test Results": "必填（至少記錄執行指令與通過數或 commit SHA）",
-            "Completion Info": "必填",
-        },
-        "DOC": {
-            "Problem Analysis": "選填（若 DOC 起因於缺陷或盤點結論可填）",
-            "Solution": "免填（DOC 類型以變更摘要取代）",
-            "Test Results": "免填（DOC 類型無需測試）",
-            "Completion Info": "必填（需附變更摘要：哪些文件/章節更新）",
-        },
-    }
-    note = schema.get(ticket_type, {}).get(section)
+    note = get_schema_note(ticket_type, section)
     if not note:
         return ""
     return f"\n<!-- Schema[{ticket_type}/{section}]: {note}（.claude/pm-rules/ticket-body-schema.md） -->"
+
+
+_TYPE_PLACEHOLDERS = {
+    "ANA": {
+        "pa_root_cause": "（必填：問題發生的直接原因是什麼？影響範圍有多大？）",
+        "pa_impact": "（必填：哪些檔案、模組或功能受影響？已驗證的事實 vs 仍未驗證的假設？）",
+        "pa_error_pattern": "（必填：是否有相關的已知錯誤模式？執行 /error-pattern query 確認）",
+        "solution": "（必填：分析結論、至少 2 個候選方案含利弊、Spawn 規劃表）",
+        "test_results": "（選填：若有實驗輸出才填，無實驗可留 placeholder）",
+        "completion_extra": "",
+    },
+    "IMP": {
+        "pa_root_cause": "（選填：問題如何發現？直接原因是什麼？）",
+        "pa_impact": "（選填：哪些檔案、模組或功能受影響？）",
+        "pa_error_pattern": "（選填：是否有相關的已知錯誤模式？執行 /error-pattern query 確認）",
+        "solution": "（選填：修復方式概述、修改的檔案和驗證方式）",
+        "test_results": "（必填：測試執行指令、通過數/失敗數或 commit SHA）",
+        "completion_extra": "",
+    },
+    "DOC": {
+        "pa_root_cause": "（選填：文件變更的背景和原因）",
+        "pa_impact": "（選填：哪些文件或章節受影響？）",
+        "pa_error_pattern": "（選填：是否有相關的已知錯誤模式？）",
+        "solution": "（免填：DOC 類型以 Completion Info 變更摘要取代）",
+        "test_results": "（免填：DOC 類型無需測試）",
+        "completion_extra": "\n（必填：變更摘要——哪些文件或章節更新、新增或刪除）",
+    },
+}
+
+_DEFAULT_PLACEHOLDERS = {
+    "pa_root_cause": "（待填寫：問題發生的直接原因是什麼？）",
+    "pa_impact": "（待填寫：哪些檔案、模組或功能受影響？）",
+    "pa_error_pattern": "（待填寫：是否有相關的已知錯誤模式？執行 /error-pattern query 確認）",
+    "solution": "<!-- To be filled by executing agent -->",
+    "test_results": "<!-- To be filled by executing agent -->",
+    "completion_extra": "",
+}
 
 
 def create_ticket_body(what: str, who: str, ticket_type: str = "") -> str:
@@ -871,6 +912,7 @@ def create_ticket_body(what: str, who: str, ticket_type: str = "") -> str:
     sol_marker = _schema_marker(ticket_type, "Solution")
     tr_marker = _schema_marker(ticket_type, "Test Results")
     ci_marker = _schema_marker(ticket_type, "Completion Info")
+    ph = _TYPE_PLACEHOLDERS.get(ticket_type, _DEFAULT_PLACEHOLDERS)
     return f"""# Execution Log
 
 ## Task Summary
@@ -883,15 +925,15 @@ def create_ticket_body(what: str, who: str, ticket_type: str = "") -> str:
 
 ### 問題根因
 
-（待填寫：問題發生的直接原因是什麼？）
+{ph["pa_root_cause"]}
 
 ### 影響範圍
 
-（待填寫：哪些檔案、模組或功能受影響？）
+{ph["pa_impact"]}
 
 ### 相關 Error Pattern
 
-（待填寫：是否有相關的已知錯誤模式？執行 /error-pattern query 確認）
+{ph["pa_error_pattern"]}
 
 <!-- 調查過程記錄（可選）：
 搜尋指令：grep -rn "pattern" path/ --include="*.py"
@@ -904,13 +946,13 @@ def create_ticket_body(what: str, who: str, ticket_type: str = "") -> str:
 {_ana_reproduction_section(ticket_type)}
 ## Solution{sol_marker}
 
-<!-- To be filled by executing agent -->
+{ph["solution"]}
 
 ---
 
 ## Test Results{tr_marker}
 
-<!-- To be filled by executing agent -->
+{ph["test_results"]}
 
 ---
 
@@ -956,7 +998,7 @@ dismissed（評估後不建）+ reason。 -->
 
 **Completion Time**: (pending)
 **Executing Agent**: {who}
-**Review Status**: pending
+**Review Status**: pending{ph["completion_extra"]}
 """
 
 

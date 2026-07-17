@@ -1,3 +1,16 @@
+## [2.18.0] - 2026-07-17
+
+### Summary
+feat: complete 阻擋訊息加入 type-aware 內容引導 note; feat: create placeholder 依 ticket type 差異化引導文字; fix: spec_reference_checker 改讀兩份 SPEC 登錄簿聯集
+
+Changes: 2 feat, 1 fix
+
+- feat: complete 阻擋訊息加入 type-aware 內容引導 note
+- feat: create placeholder 依 ticket type 差異化引導文字
+- fix: spec_reference_checker 改讀兩份 SPEC 登錄簿聯集
+
+---
+
 ## [2.17.0] - 2026-07-15
 
 ### Summary

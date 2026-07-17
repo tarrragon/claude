@@ -34,6 +34,7 @@ from ticket_system.lib.ticket_builder import (
     update_parent_children,
     update_source_spawned_tickets,
     get_default_acceptance_criteria,
+    get_schema_note,
     dedupe_schema_sections,
 )
 from ticket_system.lib.ticket_loader import (
@@ -672,6 +673,67 @@ class TestCreateTicketBodySchemaMarkers:
         """Schema 標註引用 pm-rules/ticket-body-schema.md 路徑"""
         body = create_ticket_body("分析", "sage-test-architect", "ANA")
         assert ".claude/pm-rules/ticket-body-schema.md" in body
+
+
+class TestGetSchemaNote:
+    """測試 get_schema_note() 公開函式（W1-090）"""
+
+    def test_returns_note_for_known_type_and_section(self):
+        """ANA/Test Results 回傳對應 note 文字"""
+        note = get_schema_note("ANA", "Test Results")
+        assert "選填" in note
+
+    def test_returns_note_for_imp_test_results(self):
+        """IMP/Test Results 回傳含「必填」的 note"""
+        note = get_schema_note("IMP", "Test Results")
+        assert "必填" in note
+        assert "執行指令" in note
+
+    def test_returns_empty_for_unknown_type(self):
+        """未知 type 回傳空字串"""
+        assert get_schema_note("UNKNOWN", "Solution") == ""
+
+    def test_returns_empty_for_unknown_section(self):
+        """已知 type 但未知 section 回傳空字串"""
+        assert get_schema_note("ANA", "Nonexistent Section") == ""
+
+    def test_returns_empty_for_empty_type(self):
+        """空字串 type 回傳空字串（向後相容）"""
+        assert get_schema_note("", "Solution") == ""
+
+
+class TestCreateTicketBodyTypeAwarePlaceholders:
+    """測試 type-aware placeholder 引導文字（W1-091）"""
+
+    def test_ana_body_has_type_specific_placeholders(self):
+        """ANA body 的 Problem Analysis 子段含「必填」、Solution 含分析結論引導"""
+        body = create_ticket_body("分析 X", "sage-test-architect", "ANA")
+        assert "（必填：問題發生的直接原因是什麼？影響範圍有多大？）" in body
+        assert "（必填：哪些檔案、模組或功能受影響？已驗證的事實 vs 仍未驗證的假設？）" in body
+        assert "（必填：分析結論、至少 2 個候選方案含利弊、Spawn 規劃表）" in body
+        assert "（選填：若有實驗輸出才填，無實驗可留 placeholder）" in body
+
+    def test_imp_body_has_type_specific_placeholders(self):
+        """IMP body 的 Problem Analysis 含「選填」、Test Results 含「必填」"""
+        body = create_ticket_body("實作 Y", "thyme-python-developer", "IMP")
+        assert "（選填：問題如何發現？直接原因是什麼？）" in body
+        assert "（選填：哪些檔案、模組或功能受影響？）" in body
+        assert "（必填：測試執行指令、通過數/失敗數或 commit SHA）" in body
+        assert "（選填：修復方式概述、修改的檔案和驗證方式）" in body
+
+    def test_doc_body_has_type_specific_placeholders(self):
+        """DOC body 的 Solution 含「免填」、Completion Info 含變更摘要引導"""
+        body = create_ticket_body("更新文件 Z", "rosemary-project-manager", "DOC")
+        assert "（免填：DOC 類型以 Completion Info 變更摘要取代）" in body
+        assert "（免填：DOC 類型無需測試）" in body
+        assert "（必填：變更摘要——哪些文件或章節更新、新增或刪除）" in body
+
+    def test_unknown_type_body_has_generic_placeholders(self):
+        """空 type 保留通用「待填寫」placeholder（向後相容）"""
+        body = create_ticket_body("任務", "agent", "")
+        assert "（待填寫：問題發生的直接原因是什麼？）" in body
+        assert "（待填寫：哪些檔案、模組或功能受影響？）" in body
+        assert "<!-- To be filled by executing agent -->" in body
 
 
 class TestUpdateParentChildren:
