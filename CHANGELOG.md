@@ -1,3 +1,19 @@
+## [2.18.1] - 2026-07-20
+
+### Summary
+fix: 新增靜默佔位偵測到 version-release 佔位掃描器; fix: 修復 version-release 下一版本候選掃描窗口越界誤傷 tech_debt; fix: 修復 version-release 安裝版 CLI 跨 skill import 斷裂 (+3 more)
+
+Changes: 4 fix, 2 chore
+
+- fix: 新增靜默佔位偵測到 version-release 佔位掃描器
+- fix: 修復 version-release 下一版本候選掃描窗口越界誤傷 tech_debt
+- fix: 修復 version-release 安裝版 CLI 跨 skill import 斷裂
+- fix: skill-sync push 排除清單補 hook-logs 目錄
+- chore: ux-interaction-feedback 升級替換為 ux-design-evaluation（skill-sync pull）
+- chore: skill-sync pull compositional-writing + multi-round-review 1.10.1
+
+---
+
 ## [2.18.0] - 2026-07-17
 
 ### Summary

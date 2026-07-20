@@ -32,15 +32,58 @@ from datetime import datetime
 from typing import Optional, List, Tuple, Dict
 import yaml
 
-_memory_upgrade_scripts_dir = (
-    Path(__file__).resolve().parent.parent.parent
-    / "continuous-learning"
-    / "scripts"
-)
-if str(_memory_upgrade_scripts_dir) not in sys.path:
-    sys.path.insert(0, str(_memory_upgrade_scripts_dir))
+def _resolve_claude_dir() -> Optional[Path]:
+    """定位專案 .claude 目錄（0.38.1-W1-114）。
 
-from memory_upgrade import scan_memory_dir, classify_memory  # noqa: E402
+    安裝版 CLI（uv tool install）的 __file__ 位於 site-packages，其
+    parent.parent.parent 不再是 .claude/skills，source layout 的相對路徑
+    推導在安裝版下失效（ModuleNotFoundError）。改依序嘗試：
+
+    1. source layout 相對路徑（開發環境直跑 scripts/version_release.py）
+    2. CLAUDE_PROJECT_DIR 環境變數（Claude Code session 內執行安裝版 CLI）
+    3. git rev-parse --show-toplevel（手動終端機執行安裝版 CLI）
+
+    Returns:
+        Path | None: 專案 .claude 目錄；找不到則 None
+    """
+    source_layout_claude_dir = Path(__file__).resolve().parent.parent.parent.parent
+    if (source_layout_claude_dir / "skills" / "continuous-learning").exists():
+        return source_layout_claude_dir
+
+    claude_project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
+    if claude_project_dir:
+        candidate = Path(claude_project_dir) / ".claude"
+        if candidate.exists():
+            return candidate
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            candidate = Path(result.stdout.strip()) / ".claude"
+            if candidate.exists():
+                return candidate
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    return None
+
+
+_claude_dir = _resolve_claude_dir()
+if _claude_dir is not None:
+    _memory_upgrade_scripts_dir = _claude_dir / "skills" / "continuous-learning" / "scripts"
+    if _memory_upgrade_scripts_dir.exists() and str(_memory_upgrade_scripts_dir) not in sys.path:
+        sys.path.insert(0, str(_memory_upgrade_scripts_dir))
+
+try:
+    from memory_upgrade import scan_memory_dir, classify_memory  # noqa: E402
+except ImportError:
+    scan_memory_dir = None  # type: ignore[assignment]
+    classify_memory = None  # type: ignore[assignment]
 
 
 # ============================================================================
@@ -1702,12 +1745,21 @@ PLACEHOLDER_PATTERNS: List[re.Pattern] = [
     re.compile(r"onPressed:\s*\(\)\s*\{\}"),
 ]
 
+_SILENT_PLACEHOLDER_COMMENT = re.compile(
+    r"//.*(?:暫時實作|暫時|佔位|placeholder|stub|dummy|temporary|TODO|FIXME)",
+    re.IGNORECASE,
+)
+_SILENT_PLACEHOLDER_RETURN = re.compile(
+    r'^\s*return\s+(\[\]|null|\{\}|\'\'|""|0|false)\s*;',
+)
+_SILENT_PLACEHOLDER_LOOKAHEAD = 3
+
 
 def check_placeholder_implementations(
     lib_dir: Optional[Path] = None,
 ) -> Tuple[bool, List[str]]:
     """掃描 lib/ 下的佔位實作（PC-178 模式：ComingSoon 佔位頁 / 未接線 provider /
-    空 onPressed），供 preflight 揭露避免功能單元測試綠但 UI 端不可達。
+    空 onPressed / 靜默空回傳），供 preflight 揭露避免功能單元測試綠但 UI 端不可達。
 
     佔位可能是刻意的（功能尚在開發中），故僅回傳掃描結果供 WARNING 顯示，
     呼叫端不得將本函式結果納入 all_ok（不阻擋發布，由 PM 人工判斷）。
@@ -1738,7 +1790,25 @@ def check_placeholder_implementations(
             if any(pattern.search(line) for pattern in PLACEHOLDER_PATTERNS):
                 hits.append(f"{dart_file}:{line_no}:{line.strip()}")
 
+        _detect_silent_placeholder(dart_file, lines, hits)
+
     return len(hits) == 0, hits
+
+
+def _detect_silent_placeholder(
+    dart_file: Path, lines: List[str], hits: List[str]
+) -> None:
+    """W1-117: 偵測「佔位關鍵字註解 + N 行內 return 空值」的靜默佔位模式。"""
+    for i, line in enumerate(lines):
+        if not _SILENT_PLACEHOLDER_COMMENT.search(line):
+            continue
+        end = min(i + 1 + _SILENT_PLACEHOLDER_LOOKAHEAD, len(lines))
+        for j in range(i + 1, end):
+            if _SILENT_PLACEHOLDER_RETURN.search(lines[j]):
+                hits.append(
+                    f"{dart_file}:{j + 1}:[silent-placeholder] {lines[j].strip()}"
+                )
+                break
 
 
 def preflight_check(version: str) -> Tuple[bool, Dict[str, Tuple[bool, List[str]]]]:
@@ -2397,6 +2467,13 @@ def _scan_todolist_planned_candidates(content: str) -> List[dict]:
         entry_start = entry_match.start()
         next_entry = content.find("- version:", entry_match.end())
         search_end = next_entry if next_entry != -1 else len(content)
+        # 頂層 section 邊界（如 "\ntech_debt:"、"\nquality_standards:"）截斷搜尋窗口，
+        # 避免版本區段最後一個條目的窗口延伸進後續 section 誤配到不相關的 status 欄位
+        section_boundary = re.search(r"\n[A-Za-z_][A-Za-z0-9_]*:", content[entry_start:])
+        if section_boundary is not None:
+            section_end = entry_start + section_boundary.start()
+            if section_end < search_end:
+                search_end = section_end
         status_match = re.search(
             r'(status:\s*)("planned"|planned|"pending"|pending)(?=\s|$)',
             content[entry_start:search_end],

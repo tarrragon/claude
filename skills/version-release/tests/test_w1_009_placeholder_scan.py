@@ -104,6 +104,94 @@ class TestCheckPlaceholderImplementations:
         assert hits == []
 
 
+class TestSilentPlaceholderDetection:
+    """W1-117: 靜默佔位偵測（佔位關鍵字註解 + return 空值）"""
+
+    def test_w1_116_regression_sample(self, tmp_path):
+        """W1-116 修復前的 _queryBooks 佔位模式應被偵測"""
+        lib_dir = tmp_path / "lib"
+        lib_dir.mkdir()
+        (lib_dir / "export_books_usecase.dart").write_text(
+            "  Future<List<Book>> _queryBooks() async {\n"
+            "    // 暫時實作：使用簡單的書籍查詢\n"
+            "    // 完整實作應根據 request.range 和 selectedSources 過濾\n"
+            "    return [];\n"
+            "  }\n",
+            encoding="utf-8",
+        )
+
+        passed, hits = vr.check_placeholder_implementations(lib_dir)
+
+        assert passed is False
+        assert len(hits) == 1
+        assert "[silent-placeholder]" in hits[0]
+        assert "return []" in hits[0]
+
+    def test_todo_with_return_null_detected(self, tmp_path):
+        """TODO 註解 + return null 組合應偵測"""
+        lib_dir = tmp_path / "lib"
+        lib_dir.mkdir()
+        (lib_dir / "service.dart").write_text(
+            "  // TODO: implement real logic\n"
+            "  return null;\n",
+            encoding="utf-8",
+        )
+
+        passed, hits = vr.check_placeholder_implementations(lib_dir)
+
+        assert passed is False
+        assert "[silent-placeholder]" in hits[0]
+
+    def test_placeholder_comment_with_return_false_detected(self, tmp_path):
+        """placeholder 註解 + return false 組合應偵測"""
+        lib_dir = tmp_path / "lib"
+        lib_dir.mkdir()
+        (lib_dir / "checker.dart").write_text(
+            "  // placeholder until auth is ready\n"
+            "  return false;\n",
+            encoding="utf-8",
+        )
+
+        passed, hits = vr.check_placeholder_implementations(lib_dir)
+
+        assert passed is False
+
+    def test_legitimate_empty_return_not_detected(self, tmp_path):
+        """合法的空回傳（無佔位關鍵字）不應誤報"""
+        lib_dir = tmp_path / "lib"
+        lib_dir.mkdir()
+        (lib_dir / "repo.dart").write_text(
+            "  Future<List<Book>> getBooks() async {\n"
+            "    // No books in cache\n"
+            "    return [];\n"
+            "  }\n",
+            encoding="utf-8",
+        )
+
+        passed, hits = vr.check_placeholder_implementations(lib_dir)
+
+        assert passed is True
+        assert hits == []
+
+    def test_comment_beyond_lookahead_not_detected(self, tmp_path):
+        """佔位註解超出 lookahead 距離（3 行）的 return 不應偵測"""
+        lib_dir = tmp_path / "lib"
+        lib_dir.mkdir()
+        (lib_dir / "service.dart").write_text(
+            "  // TODO: implement\n"
+            "  final a = 1;\n"
+            "  final b = 2;\n"
+            "  final c = 3;\n"
+            "  return [];\n",
+            encoding="utf-8",
+        )
+
+        passed, hits = vr.check_placeholder_implementations(lib_dir)
+
+        assert passed is True
+        assert hits == []
+
+
 class TestPreflightCheckPlaceholderIntegration:
     def test_placeholder_hits_do_not_block_all_ok(self, tmp_path):
         """佔位命中僅 WARNING，不影響 all_ok（不阻擋發布）"""

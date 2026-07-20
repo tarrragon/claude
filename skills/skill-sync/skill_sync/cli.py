@@ -15,11 +15,19 @@ import urllib.request
 from pathlib import Path
 
 DEFAULT_REPO = "https://github.com/tarrragon/claude-skills.git"
-EXCLUDE_DIRS = {"project-integration", ".venv", "__pycache__", ".pytest_cache", "build", ".egg-info"}
+EXCLUDE_DIRS = {
+    "project-integration",
+    ".venv",
+    "__pycache__",
+    ".pytest_cache",
+    "build",
+    ".egg-info",
+    "hook-logs",
+}
 
 
 def _should_exclude_file(rel_path: str) -> bool:
-    """Check if a file path should be excluded (covers both dir names and suffixes)."""
+    """Check if a file path should be excluded (covers dir names, incl. nested hook-logs/)."""
     parts = Path(rel_path).parts
     for part in parts:
         if part in EXCLUDE_DIRS or part.endswith(".egg-info"):
