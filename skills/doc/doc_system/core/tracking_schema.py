@@ -30,6 +30,11 @@ PROPOSALS_TRACKING_SCHEMA = {
         "checklist",
         "canonical_ssot",
         "tracking_ticket",
+        # list of str（提案 id）：本提案依賴的前置提案，供
+        # version-bootstrap/scripts/check_proposal_dependencies.py 檢查跨提案
+        # 排序矛盾（W1-017：補齊宣告，格式由消費端用法與既有測試 fixture
+        # 雙重佐證確認，非獨立文件宣告）。
+        "depends_on",
     },
     # 確認日期欄位名為 confirmed_at，非 confirmed（欄位名須對齊真實 schema）。
     "confirm_date_field": "confirmed_at",

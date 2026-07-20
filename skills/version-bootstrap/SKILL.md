@@ -49,7 +49,7 @@ doc list proposals  # 確認提案狀態
 uv run .claude/skills/version-bootstrap/scripts/check_proposal_dependencies.py --version 0.4.0
 ```
 
-腳本讀 `docs/proposals-tracking.yaml` 各提案的 `depends_on` 欄位（選填，格式見該檔案頭部註解）比對 `target_version` 排序。輸出 `[WARNING]` 時，PM 必須在本 Checkpoint 前二擇一處理：(1) 把依賴提案移入本版或更早版本一起排入，(2) 把本提案移至依賴提案完成之後的版本。**動機案例**：0.4.0 曾以 PROP-008 + PROP-010 雙提案啟動，PROP-010 依賴 PROP-011（排在 v0.5.0）卻排入 v0.4.0，矛盾拖到 W1 中段才由用戶手動發現，最終移版至 v0.5.0 與 PROP-011 同節點（詳見 0.4.1-W1-001 Solution「版本切分決策評估」）。若此檢查在 Step 1 就位，矛盾可在提案確認階段被攔截。
+腳本讀 `docs/proposals-tracking.yaml` 各提案的 `depends_on` 欄位（選填，list of str，元素為本提案依賴的前置提案 id；格式定義見 `.claude/skills/doc/doc_system/core/tracking_schema.py` 的 `PROPOSALS_TRACKING_SCHEMA["proposal_entry_optional"]`，該 schema 為權威來源，非本 yaml 檔案本身的頭部註解）比對 `target_version` 排序。輸出 `[WARNING]` 時，PM 必須在本 Checkpoint 前二擇一處理：(1) 把依賴提案移入本版或更早版本一起排入，(2) 把本提案移至依賴提案完成之後的版本。**動機案例**：0.4.0 曾以 PROP-008 + PROP-010 雙提案啟動，PROP-010 依賴 PROP-011（排在 v0.5.0）卻排入 v0.4.0，矛盾拖到 W1 中段才由用戶手動發現，最終移版至 v0.5.0 與 PROP-011 同節點（詳見 0.4.1-W1-001 Solution「版本切分決策評估」）。若此檢查在 Step 1 就位，矛盾可在提案確認階段被攔截。
 
 **Checkpoint**：PM 確認版本範圍——哪些提案納入本版、哪些延後；依賴檢查腳本無 `[WARNING]` 輸出，或警告已處理（移版/補前置）。
 

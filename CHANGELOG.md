@@ -1,3 +1,10 @@
+## [2.19.2] - 2026-07-20
+
+### Summary
+feat: depends_on schema 宣告與 version-bootstrap 權威來源修正
+
+---
+
 ## [2.19.1] - 2026-07-20
 
 ### Summary
