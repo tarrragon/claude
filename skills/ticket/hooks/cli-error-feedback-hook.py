@@ -16,6 +16,12 @@ CLI 錯誤回饋合併 Hook - PostToolUse Hook
   1. check_skill_cli_error — 優先處理 ticket/skill CLI 錯誤（更 specific）
   2. check_general_cli_failure — 處理一般 CLI 失敗（若 skill CLI 已處理則跳過）
 
+Envelope 偵測模式 (W17-008.5.5；補移植於 0.0.1-W1-005):
+- 偵測 stdout/stderr 是否含 ErrorEnvelope 版本標記 `__error_envelope_v1__`
+- 命中表示 CLI 已輸出完整結構化錯誤訊息（format_error 雙路徑），hook 不需重複補充引導
+- Marker 來源: .claude/skills/ticket/ticket_system/lib/messages.py:ERROR_ENVELOPE_VERSION_MARKER
+- 升級至 v2 時兩處須同改
+
 行為: 不阻擋（exit 0），僅在 additionalContext 輸出提醒訊息
 
 HOOK_METADATA (JSON):
@@ -93,6 +99,11 @@ EXCLUDED_ERROR_PATTERNS = [
     r"json decode error",
     r"invalid json",
 ]
+
+# ErrorEnvelope 版本標記（W17-008.5.5；移植自 skill-cli-error-feedback-hook.py，0.0.1-W1-005）
+# 與 .claude/skills/ticket/ticket_system/lib/messages.py:ERROR_ENVELOPE_VERSION_MARKER 同步
+# 升級至 v2 時兩處須同改
+ENVELOPE_VERSION_MARKER = "__error_envelope_v1__"
 
 SKILL_CLI_ERROR_FEEDBACK_TEMPLATE = """
 ============================================================
@@ -185,6 +196,15 @@ def is_excluded_error(stderr: str, stdout: str) -> bool:
     return False
 
 
+def is_envelope_output(stderr: str, stdout: str) -> bool:
+    """偵測輸出是否含 ErrorEnvelope 版本標記。
+
+    與 messages.py:ERROR_ENVELOPE_VERSION_MARKER 同步。命中表示 CLI
+    已輸出完整結構化錯誤，hook 不需重複補充引導。
+    """
+    return ENVELOPE_VERSION_MARKER in stderr or ENVELOPE_VERSION_MARKER in stdout
+
+
 def detect_skill_error_type(stderr: str, stdout: str) -> Optional[str]:
     """偵測 SKILL 引導缺陷錯誤類型"""
     combined = stderr + " " + stdout
@@ -235,6 +255,11 @@ def check_skill_cli_error(input_data: Dict[str, Any], logger) -> Optional[str]:
 
     if not stderr and not stdout:
         logger.debug("skill-cli: 無錯誤資訊，跳過")
+        return None
+
+    # 跳過 ErrorEnvelope 已輸出完整結構化訊息的情況（W17-008.5.5）
+    if is_envelope_output(stderr, stdout):
+        logger.debug("skill-cli: ErrorEnvelope 已輸出完整訊息，跳過補充: %s", command[:80])
         return None
 
     if is_excluded_error(stderr, stdout):

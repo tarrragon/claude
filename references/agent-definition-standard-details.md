@@ -146,7 +146,7 @@ grep -E "^## (允許產出|禁止行為|適用情境)" .claude/agents/<agent>.md
 | H3 子章節（`### 標題`） | 在 Schema 章節內自由組織（例：`## Solution` 下可用 `### 修復摘要` / `### 設計決策` / `### 不在本 ticket 範圍`） | — |
 | 更深層標題（`#### / #####`） | 按需使用 | — |
 
-**Schema 章節清單**（來源 `.claude/pm-rules/ticket-body-schema.md`）：`Task Summary` / `Problem Analysis` / `重現實驗結果` / `Solution` / `Test Results` / `Context Bundle` / `NeedsContext` / `Exit Status` / `Completion Info`
+**Schema 章節清單**（來源 `.claude/pm-rules/ticket-body-schema.md`）：`Task Summary` / `Problem Analysis` / `重現實驗結果` / `Solution` / `Test Results` / `Context Bundle` / `NeedsContext` / `Exit Status` / `Spawn Requests` / `Completion Info`
 
 ### 違規偵測
 

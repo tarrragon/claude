@@ -288,8 +288,9 @@ class TestEnvelopeMarkerConsistency:
     def test_marker_value_is_v1(self):
         """確保 ERROR_ENVELOPE_VERSION_MARKER 為 __error_envelope_v1__。
 
-        若升級至 v2，本測試與 skill-cli-error-feedback-hook.py:ENVELOPE_VERSION_MARKER
-        須同時更新；本斷言充當「版本錨點」防止單側升級。
+        若升級至 v2，本測試與 cli-error-feedback-hook.py:ENVELOPE_VERSION_MARKER
+        須同時更新（envelope 抑制邏輯於 0.0.1-W1-005 移植自已刪除的
+        skill-cli-error-feedback-hook.py）；本斷言充當「版本錨點」防止單側升級。
         """
         assert ERROR_ENVELOPE_VERSION_MARKER == "__error_envelope_v1__"
 

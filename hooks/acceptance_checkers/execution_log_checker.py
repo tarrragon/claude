@@ -10,6 +10,8 @@ import re
 # 擷取 section 內容時只把這些章節名當作邊界，避免 agent 自定義 H2
 # （如 `## 實作摘要`）把 schema section 範圍切斷。
 # 來源：.claude/pm-rules/ticket-body-schema.md
+# Spawn Requests 於 0.0.1-W1-011 補列（canonical 清單新增此成員後三處驗證端清單漏同步，
+# PC-BAL-001；補列為資料層修正，不改依賴方向，方案 A「驗證端 import 建立端常數」仍排除）。
 _SCHEMA_SECTION_NAMES = [
     "Task Summary",
     "Problem Analysis",
@@ -20,6 +22,7 @@ _SCHEMA_SECTION_NAMES = [
     "Exit Status",
     "重現實驗結果",
     "Context Bundle",
+    "Spawn Requests",
 ]
 
 

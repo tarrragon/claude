@@ -18,6 +18,10 @@
 | 重現實驗結果（三子節） | 必填（PC-063） | 免填 | 免填 |
 | Solution | 必填 | 選填 | 免填 |
 | Test Results | 選填（若有實驗） | 必填 | 免填 |
+| Context Bundle | 選填（auto-extracted，非人工填寫） | 選填（auto-extracted，非人工填寫） | 選填（auto-extracted，非人工填寫） |
+| NeedsContext | 選填（僅資料缺口時填寫） | 選填（僅資料缺口時填寫） | 選填（僅資料缺口時填寫） |
+| Exit Status | 選填（W17-010 協議，代理人自報） | 選填（W17-010 協議，代理人自報） | 選填（W17-010 協議，代理人自報） |
+| Spawn Requests | 選填（發現應開新 ticket 議題時填寫） | 選填（發現應開新 ticket 議題時填寫） | 選填（發現應開新 ticket 議題時填寫） |
 | Completion Info | 必填 | 必填 | 必填（附變更摘要） |
 
 **狀態定義**：

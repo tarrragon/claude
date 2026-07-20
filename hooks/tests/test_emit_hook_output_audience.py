@@ -12,6 +12,11 @@
        - audience="pm_only" + PM 主線程 → 照常輸出
     2. 10 gap hook 遷移 wiring（靜態檢查 audience 標記存在）
     3. 代表性 hook 端到端（input_data 確實接線到統一出口）
+
+註記（0.0.1-W1-005）：skill-cli-error-feedback-hook.py 已刪除（合併入
+cli-error-feedback-hook.py），故 GAP_HOOK_PATHS 現存 9 項；後繼者採不同過濾
+機制（is_subagent_environment 早期跳過，非 emit_hook_output audience 標記），
+不計入本層 wiring 檢查範圍。
 """
 
 from __future__ import annotations
@@ -154,7 +159,6 @@ GAP_HOOK_PATHS = {
     "file-ownership-guard-hook.py": HOOKS_DIR / "file-ownership-guard-hook.py",
     "pre-test-hook.py": HOOKS_DIR / "pre-test-hook.py",
     "session-context-guard-hook.py": HOOKS_DIR / "session-context-guard-hook.py",
-    "skill-cli-error-feedback-hook.py": SKILLS_DIR / "ticket" / "hooks" / "skill-cli-error-feedback-hook.py",
     "utf8-integrity-check-hook.py": HOOKS_DIR / "utf8-integrity-check-hook.py",
     "worklog-format-check.py": SKILLS_DIR / "compositional-writing" / "hooks" / "worklog-format-check.py",
 }

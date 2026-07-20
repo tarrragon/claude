@@ -20,6 +20,8 @@ from typing import List
 # W17-072：Schema 定義章節名清單（必須與 `execution_log_checker._SCHEMA_SECTION_NAMES`
 # 及 `ticket_validator._SCHEMA_SECTION_NAMES` 同步；三處將於 ARCH-020 refactor 收斂）。
 # 來源：.claude/pm-rules/ticket-body-schema.md
+# Spawn Requests 於 0.0.1-W1-011 補列（canonical 清單新增此成員後三處驗證端清單漏同步，
+# PC-BAL-001；補列為資料層修正，不改依賴方向，方案 A「驗證端 import 建立端常數」仍排除）。
 _SCHEMA_SECTION_NAMES = [
     "Task Summary",
     "Problem Analysis",
@@ -30,6 +32,7 @@ _SCHEMA_SECTION_NAMES = [
     "Exit Status",
     "重現實驗結果",
     "Context Bundle",
+    "Spawn Requests",
 ]
 
 

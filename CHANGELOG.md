@@ -1,3 +1,21 @@
+## [2.19.0] - 2026-07-20
+
+### Summary
+feat: 建立 schema 清單一致性檢查與驗證器過期判斷規則; feat: 移植 envelope 抑制邏輯至 cli-error-feedback-hook; feat: 註冊 pre-test-scan hook，刪除 superseded checkpoint hook (+5 more)
+
+Changes: 3 feat, 2 fix, 2 docs, 1 chore
+
+- feat: 建立 schema 清單一致性檢查與驗證器過期判斷規則
+- feat: 移植 envelope 抑制邏輯至 cli-error-feedback-hook
+- feat: 註冊 pre-test-scan hook，刪除 superseded checkpoint hook
+- fix: 補列三份 _SCHEMA_SECTION_NAMES 的 Spawn Requests 成員
+- fix: 改用真實檔案取代失效 mock，4 項紅燈轉綠
+- docs: 記錄越層建票模式並新增載體選擇閘門
+- docs: 記錄合併遺漏子功能但檔頭宣稱完整的錯誤模式
+- chore: 從 skill 庫拉取 compositional-writing →
+
+---
+
 ## [2.18.3] - 2026-07-20
 
 ### Summary
