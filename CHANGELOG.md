@@ -1,3 +1,10 @@
+## [2.18.3] - 2026-07-20
+
+### Summary
+docs: 新增 error-pattern 專案代號 BAL 與 PC-BAL-001（驗證端清單過期誤判 canonical 結構）
+
+---
+
 ## [2.18.2] - 2026-07-20
 
 ### Summary
