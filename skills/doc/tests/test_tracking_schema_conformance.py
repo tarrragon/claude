@@ -105,3 +105,14 @@ class TestConsumerConformance:
         assert "from doc_system.core.tracking_schema import" in source, (
             "status.py 尚未引用 tracking_schema SSOT"
         )
+
+    def test_batch_init_py_uses_list_format(self):
+        """W1-013 修復：batch_init.py 曾以 dict-keyed-by-id 查找 proposals，與 SSOT 不符。"""
+        batch_init_py = PROJECT_ROOT / ".claude" / "skills" / "doc" / "doc_system" / "commands" / "batch_init.py"
+        source = batch_init_py.read_text(encoding="utf-8")
+        assert "from doc_system.core.tracking_schema import" in source, (
+            "batch_init.py 尚未引用 tracking_schema SSOT"
+        )
+        assert "PROPOSALS_TRACKING_SCHEMA" in source, (
+            "batch_init.py 應引用 PROPOSALS_TRACKING_SCHEMA 而非 inline 猜測 proposals 格式"
+        )

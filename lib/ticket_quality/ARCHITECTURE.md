@@ -1138,10 +1138,10 @@ def test_check_over_engineered_ticket_boundary():
 
 ```bash
 # 執行新測試
-python3 -m pytest .claude/hooks/tests/test_c4_detection.py -v
+uv run --directory .claude/hooks pytest tests/test_c4_detection.py
 
 # 執行完整測試套件
-python3 -m pytest .claude/hooks/tests/ -v
+uv run --directory .claude/hooks pytest
 
 # 確認所有測試 100% 通過
 ```
@@ -1399,7 +1399,7 @@ def test_calculate_layer_span_with_layer_6():
 
 ```bash
 # 執行所有測試
-python3 -m pytest .claude/hooks/tests/ -v
+uv run --directory .claude/hooks pytest
 
 # 預期結果: 所有測試通過
 # 如果有失敗，檢查是否有測試假設層級範圍 1-5
@@ -1504,7 +1504,7 @@ def test_check_god_ticket_file_count_boundary():
 
 ```bash
 # 執行 C1 檢測測試
-python3 -m pytest .claude/hooks/tests/test_c1_detection.py -v
+uv run --directory .claude/hooks pytest tests/test_c1_detection.py
 
 # 如果有測試失敗，檢查是否有硬編碼的閾值假設
 # 更新所有測試案例使用新閾值 8

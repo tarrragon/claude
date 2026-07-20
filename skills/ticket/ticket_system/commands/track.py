@@ -656,10 +656,14 @@ def _register_field_write_commands(
     subparsers: argparse._SubParsersAction,
 ) -> None:
     """註冊欄位寫入子命令：set-who, set-what, set-when, set-where, set-why, set-how"""
-    # set-who 操作
+    # set-who 操作（value 可省略；--current 提供子欄位寫入路徑，W1-009）
     p_set_who = subparsers.add_parser("set-who", help=TrackMessages.HELP_SET_WHO)
     p_set_who.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
-    p_set_who.add_argument("value", help=TrackMessages.ARG_VALUE)
+    p_set_who.add_argument(
+        "value", nargs="?", default=None,
+        help=TrackMessages.ARG_VALUE + "（與 --current 二擇一或合併使用）",
+    )
+    p_set_who.add_argument("--current", help="僅寫入 who.current 子欄位（保留 history）")
     p_set_who.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
     # set-what 操作
@@ -674,10 +678,15 @@ def _register_field_write_commands(
     p_set_when.add_argument("value", help=TrackMessages.ARG_VALUE)
     p_set_when.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
-    # set-where 操作
+    # set-where 操作（value 可省略；--layer/--files 提供子欄位寫入路徑，W1-009）
     p_set_where = subparsers.add_parser("set-where", help=TrackMessages.HELP_SET_WHERE)
     p_set_where.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
-    p_set_where.add_argument("value", help=TrackMessages.ARG_VALUE)
+    p_set_where.add_argument(
+        "value", nargs="?", default=None,
+        help=TrackMessages.ARG_VALUE + "（與 --layer/--files 二擇一或合併使用）",
+    )
+    p_set_where.add_argument("--layer", help="僅寫入 where.layer 子欄位（保留 files）")
+    p_set_where.add_argument("--files", help="僅寫入 where.files 子欄位（逗號分隔多路徑，直接覆寫）")
     p_set_where.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
     # set-why 操作
@@ -686,10 +695,15 @@ def _register_field_write_commands(
     p_set_why.add_argument("value", help=TrackMessages.ARG_VALUE)
     p_set_why.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
-    # set-how 操作
+    # set-how 操作（value 可省略；--task-type/--strategy 提供子欄位寫入路徑，W1-009）
     p_set_how = subparsers.add_parser("set-how", help=TrackMessages.HELP_SET_HOW)
     p_set_how.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
-    p_set_how.add_argument("value", help=TrackMessages.ARG_VALUE)
+    p_set_how.add_argument(
+        "value", nargs="?", default=None,
+        help=TrackMessages.ARG_VALUE + "（與 --task-type/--strategy 二擇一或合併使用）",
+    )
+    p_set_how.add_argument("--task-type", dest="task_type", help="僅寫入 how.task_type 子欄位（保留 strategy）")
+    p_set_how.add_argument("--strategy", help="僅寫入 how.strategy 子欄位（保留 task_type）")
     p_set_how.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
     # set-priority 操作（choices 於參數層 fail-fast，寫入邊界收斂第一層）

@@ -59,6 +59,10 @@ class ErrorMessages:
     MISSING_TICKET_ID = "[Error] 未提供 Ticket ID"
     NO_VALID_TICKETS = "[Error] 未提供有效的 Ticket ID"
     MISSING_FIELD_NAME = "[Error] 未指定欄位名稱"
+    MISSING_FIELD_VALUE = (
+        "[Error] {ticket_id} 未提供 {field_name} 的新值：請提供位置參數 value，"
+        "或對應的子欄位 flag（如 --current / --layer / --files / --task-type / --strategy）"
+    )
     FIELD_NOT_FOUND = "[Error] {ticket_id} 無 '{field_name}' 欄位"
     MISSING_WAVE_PARAMETER = "[Error] 建立根任務必須指定 --wave"
     INVALID_SECTION = "[Error] 無效的 section: {section}"

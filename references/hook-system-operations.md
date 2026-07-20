@@ -299,11 +299,12 @@ logging.basicConfig(
 uv run --with pytest python -m pytest .claude/lib/tests/ -v
 ```
 
-Hook tests under `.claude/hooks/tests/` may include PEP 723 inline dependencies. Before running them, inspect the file header and follow `.claude/hooks/tests/README.md`:
+`.claude/hooks/tests/` 下的測試一律指向 `.claude/hooks` 這個 uv 專案執行，依賴由該處 `pyproject.toml` 與 `uv.lock` 提供，不需 `--with` 旗標：
 
-- PEP 723 test file: `uv run .claude/hooks/tests/<test-file>.py`
-- Ordinary pytest file: `uv run --with pytest python -m pytest .claude/hooks/tests/<test-file>.py -v`
-- Targeted selection on a PEP 723 file: mirror dependencies with `--with <package>`
+- 全量：`uv run --directory .claude/hooks pytest`
+- 單檔或單一測項：`uv run --directory .claude/hooks pytest tests/<test-file>.py`
+
+不要從 repo 根目錄以 `uv run --with pytest python -m pytest .claude/hooks/tests/` 執行——repo 根目錄無 `pyproject.toml`，uv 會改用僅含 `--with` 套件的臨時環境，導致 9 個模組出現 `ModuleNotFoundError: No module named 'yaml'` 並中斷收集。完整說明與 PEP 723 檔案的處理見 `.claude/hooks/tests/README.md`。
 
 ### 配置外部化
 

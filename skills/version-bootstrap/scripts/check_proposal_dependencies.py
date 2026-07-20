@@ -43,6 +43,27 @@ def get_version_proposals(todolist: dict, version: str) -> list[str]:
     return []
 
 
+def _find_proposal(proposals: list, prop_id: str) -> dict | None:
+    """依 id 於 list-based proposals 中線性查找（W1-016 修復）。
+
+    Why: proposals-tracking.yaml 的 proposals 為 list-based，非
+    dict-keyed-by-id（SSOT：.claude/skills/doc/doc_system/core/tracking_schema.py
+    的 PROPOSALS_TRACKING_SCHEMA["proposals_format"] == "list"，
+    doc_system/commands/{status.py,batch_init.py} 皆有對應斷言）。舊實作以
+    `proposals.get(prop_id)` 誤將其當 dict 處理，對真實 tracking 檔一律
+    AttributeError；此為 0.0.1-W1-013 於 batch_init.py 修復的同族缺陷
+    （IMP-APP-002 欄位假設家族）在 version-bootstrap 側的另一處。
+
+    本腳本為獨立 PEP 723 script（僅宣告 pyyaml 依賴），不引入 doc_system
+    套件相依以避免跨 skill 耦合；check_dependencies 改以執行期斷言驗證
+    載入的 tracking 資料實際符合 list 格式，取代靜態 import。
+    """
+    for entry in proposals:
+        if isinstance(entry, dict) and entry.get("id") == prop_id:
+            return entry
+    return None
+
+
 def check_dependencies(todolist: dict, tracking: dict, version: str) -> list[str]:
     """檢查指定版本的提案是否依賴排在更晚版本的提案。
 
@@ -51,18 +72,23 @@ def check_dependencies(todolist: dict, tracking: dict, version: str) -> list[str
     A 之前的版本，A 卻已排定）。
     """
     warnings: list[str] = []
-    proposals = tracking.get("proposals", {})
+    proposals = tracking.get("proposals") or []
+    assert isinstance(proposals, list), (
+        "proposals-tracking.yaml 的 proposals 必須為 list（非 dict-keyed-by-id）。"
+        "格式定義見 .claude/skills/doc/doc_system/core/tracking_schema.py"
+        " 的 PROPOSALS_TRACKING_SCHEMA['proposals_format']。"
+    )
     target_proposal_ids = get_version_proposals(todolist, version)
 
     for prop_id in target_proposal_ids:
-        prop = proposals.get(prop_id)
+        prop = _find_proposal(proposals, prop_id)
         if prop is None:
             warnings.append(f"{prop_id}：proposals-tracking.yaml 無此提案，無法檢查依賴")
             continue
 
         depends_on = prop.get("depends_on") or []
         for dep_id in depends_on:
-            dep = proposals.get(dep_id)
+            dep = _find_proposal(proposals, dep_id)
             if dep is None:
                 warnings.append(f"{prop_id} 依賴 {dep_id}，但 proposals-tracking.yaml 無此提案")
                 continue

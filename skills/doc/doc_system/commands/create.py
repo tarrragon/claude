@@ -79,8 +79,27 @@ def _slugify(title: str) -> str:
 
 
 def _get_templates_dir() -> Path:
-    """取得 templates/ 目錄路徑。"""
-    return Path(__file__).resolve().parent.parent.parent / "templates"
+    """取得 templates/ 目錄路徑（W1-013 修復：不依賴原始碼樹與安裝目錄的相對位置）。
+
+    依序嘗試兩個候選位置，取第一個實際存在者：
+    1. 套件內建（`doc_system/templates/`）：`uv tool install` 後由 pyproject.toml
+       的 force-include 打包進安裝版，為主要路徑
+    2. 原始碼樹（skill 根目錄下 `templates/`）：僅在直接於原始碼樹執行時存在
+       （目前 doc CLI 僅支援 `uv tool install` 安裝後使用，此為防禦性 fallback）
+
+    舊實作以 `__file__` 上溯固定 3 層推算路徑，該假設僅在原始碼樹成立；
+    安裝後 `doc_system` 落在 site-packages/ 下，同樣的相對層數指向不存在的路徑，
+    導致 doc create 全數類型皆 FileNotFoundError（W1-013 根因）。
+    """
+    package_bundled = Path(__file__).resolve().parent.parent / "templates"
+    if package_bundled.is_dir():
+        return package_bundled
+
+    source_tree = Path(__file__).resolve().parent.parent.parent / "templates"
+    if source_tree.is_dir():
+        return source_tree
+
+    return package_bundled
 
 
 def _read_template(template_name: str) -> str:

@@ -20,6 +20,15 @@ doc = "doc_system.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["doc_system"]
 
+# templates/ 物理位置維持在 skill 根目錄（供 SKILL.md / references/ 內大量 `cp
+# .claude/skills/doc/templates/...` 手動指令與文件引用沿用），未隨 doc_system
+# 套件本身打包。force-include 將其複製進 wheel 內的 doc_system/templates/，
+# 使安裝版套件自身即含模板，不依賴安裝目錄與原始碼樹的相對位置關係
+# （W1-013：原邏輯以 __file__ 上溯固定層數推算 templates/，該假設在
+# site-packages 下不成立）。
+[tool.hatch.build.targets.wheel.force-include]
+"templates" = "doc_system/templates"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

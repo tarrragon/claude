@@ -102,6 +102,69 @@ def _sync_where_files(where_dict: Dict[str, Any], new_value: Any) -> Optional[li
     return path_entries
 
 
+def _get_str_arg(args: argparse.Namespace, name: str) -> Optional[str]:
+    """安全讀取可選 CLI flag 的字串值（W1-009：子欄位寫入路徑）。
+
+    僅接受字串型別；None 與非字串（含測試替身 Mock 未顯式設定時自動生成的屬性）
+    一律視為未提供，避免誤判觸發子欄位寫入分支（讓既有以 Mock() 建構 args 的
+    測試無需逐一補設新 flag 屬性仍可通過）。
+    """
+    value = getattr(args, name, None)
+    return value if isinstance(value, str) else None
+
+
+def _parse_comma_list(value: str) -> list:
+    """將逗號分隔字串解析為去除前後空白後的清單（供 --files 明確輸入使用）。"""
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _execute_set_dict_subfields(
+    args: argparse.Namespace,
+    version: str,
+    field_name: str,
+    subfields: Dict[str, Any],
+) -> int:
+    """設定 dict 型欄位（who/where/how）的個別子欄位（W1-009：補齊子欄位寫入路徑）。
+
+    與 execute_set_field 的整體覆寫（位置參數 value）路徑互補：呼叫端偵測到至少一個
+    子欄位 flag 被提供時才呼叫本函式。若 value 同時提供，先套用至 DICT_FIELD_SUBKEY
+    定義的主要子欄位，subfields 隨後逐一覆寫（顯式 flag 優先於位置參數）。
+
+    Args:
+        subfields: 子欄位名稱 -> 使用者提供值，僅含已提供（非 None）的項目
+    """
+    value = getattr(args, "value", None)
+
+    lock_target = Path(get_ticket_path(version, args.ticket_id))
+    with file_lock(lock_target):
+        ticket, error = load_and_validate_ticket(version, args.ticket_id)
+        if error:
+            return 1
+
+        subkey = DICT_FIELD_SUBKEY[field_name]
+        existing = ticket.get(field_name)
+        working = dict(existing) if isinstance(existing, dict) else dict(_DICT_FIELD_DEFAULTS[field_name])
+
+        applied: Dict[str, Any] = {}
+        if value is not None:
+            working[subkey] = value
+            applied[subkey] = value
+        for key, val in subfields.items():
+            working[key] = val
+            applied[key] = val
+
+        ticket[field_name] = working
+
+        ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+        ticket_loader.save_ticket(ticket, ticket_path)
+
+    print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name=field_name))
+    for key, val in applied.items():
+        display = ", ".join(val) if isinstance(val, list) else val
+        print(f"   {key}: {display}")
+    return 0
+
+
 def execute_get_field(
     args: argparse.Namespace,
     version: str,
@@ -250,7 +313,17 @@ def execute_get_who(args: argparse.Namespace, version: str) -> int:
 
 
 def execute_set_who(args: argparse.Namespace, version: str) -> int:
-    """設定 Ticket 的 who 欄位"""
+    """設定 Ticket 的 who 欄位（整體覆寫 value 或子欄位 --current，W1-009）。
+
+    value 位置參數已改為可選（nargs='?'），使 --current 可獨立使用；
+    兩者皆未提供時視為呼叫錯誤，避免 value=None 誤寫入 who.current。
+    """
+    current = _get_str_arg(args, "current")
+    if current is not None:
+        return _execute_set_dict_subfields(args, version, "who", {"current": current})
+    if getattr(args, "value", None) is None:
+        print(format_error(ErrorMessages.MISSING_FIELD_VALUE, ticket_id=args.ticket_id, field_name="who"))
+        return 1
     return execute_set_field(args, version, "who")
 
 
@@ -280,8 +353,27 @@ def execute_get_where(args: argparse.Namespace, version: str) -> int:
 
 
 def execute_set_where(args: argparse.Namespace, version: str) -> int:
-    """設定 Ticket 的 where 欄位"""
-    return execute_set_field(args, version, "where")
+    """設定 Ticket 的 where 欄位（整體覆寫 value 或子欄位 --layer/--files，W1-009）。
+
+    value 位置參數已改為可選（nargs='?'），使 --layer/--files 可獨立使用；
+    三者皆未提供時視為呼叫錯誤，避免 value=None 誤寫入 where.layer。
+    子欄位路徑不套用 value 專屬的路徑型輸入同步 where.files 啟發式（該啟發式
+    僅服務位置參數場景的語意判定，--files 已是明確輸入，不需要再推斷）。
+    """
+    layer = _get_str_arg(args, "layer")
+    files_raw = _get_str_arg(args, "files")
+    if layer is None and files_raw is None:
+        if getattr(args, "value", None) is None:
+            print(format_error(ErrorMessages.MISSING_FIELD_VALUE, ticket_id=args.ticket_id, field_name="where"))
+            return 1
+        return execute_set_field(args, version, "where")
+
+    subfields: Dict[str, Any] = {}
+    if layer is not None:
+        subfields["layer"] = layer
+    if files_raw is not None:
+        subfields["files"] = _parse_comma_list(files_raw)
+    return _execute_set_dict_subfields(args, version, "where", subfields)
 
 
 def execute_get_why(args: argparse.Namespace, version: str) -> int:
@@ -300,8 +392,25 @@ def execute_get_how(args: argparse.Namespace, version: str) -> int:
 
 
 def execute_set_how(args: argparse.Namespace, version: str) -> int:
-    """設定 Ticket 的 how 欄位"""
-    return execute_set_field(args, version, "how")
+    """設定 Ticket 的 how 欄位（整體覆寫 value 或子欄位 --task-type/--strategy，W1-009）。
+
+    value 位置參數已改為可選（nargs='?'），使 --task-type/--strategy 可獨立使用；
+    三者皆未提供時視為呼叫錯誤，避免 value=None 誤寫入 how.strategy。
+    """
+    task_type = _get_str_arg(args, "task_type")
+    strategy = _get_str_arg(args, "strategy")
+    if task_type is None and strategy is None:
+        if getattr(args, "value", None) is None:
+            print(format_error(ErrorMessages.MISSING_FIELD_VALUE, ticket_id=args.ticket_id, field_name="how"))
+            return 1
+        return execute_set_field(args, version, "how")
+
+    subfields: Dict[str, Any] = {}
+    if task_type is not None:
+        subfields["task_type"] = task_type
+    if strategy is not None:
+        subfields["strategy"] = strategy
+    return _execute_set_dict_subfields(args, version, "how", subfields)
 
 
 def execute_set_priority(args: argparse.Namespace, version: str) -> int:

@@ -12,7 +12,7 @@ from pathlib import Path
 import yaml
 
 from doc_system.core.file_locator import FileLocator
-from doc_system.core.tracking_schema import TRACEABILITY_SCHEMA
+from doc_system.core.tracking_schema import PROPOSALS_TRACKING_SCHEMA, TRACEABILITY_SCHEMA
 from doc_system.commands.create import (
     DOC_TYPE_CONFIG,
     _read_template,
@@ -28,6 +28,10 @@ _VERSION_KEY = "version"
 _MAPPINGS_KEY = "mappings"
 _LAST_UPDATED_KEY = "last_updated"
 
+# proposals-tracking.yaml 的 proposals 為 list-based（PROPOSALS_TRACKING_SCHEMA SSOT），
+# 非 dict-keyed-by-id；_get_proposal_info 依此格式線性查找（IMP-APP-002 同族欄位假設修復）。
+assert PROPOSALS_TRACKING_SCHEMA["proposals_format"] == "list"
+
 
 def _load_tracking(tracking_file: str) -> dict:
     path = Path(tracking_file)
@@ -38,8 +42,18 @@ def _load_tracking(tracking_file: str) -> dict:
 
 
 def _get_proposal_info(tracking: dict, prop_id: str) -> dict | None:
-    proposals = tracking.get("proposals", {})
-    return proposals.get(prop_id)
+    """依 id 於 proposals 清單中線性查找（list-based，非 dict-keyed-by-id，W1-013 修復）。
+
+    Why: 舊實作以 `proposals.get(prop_id)` 將 proposals 當 dict 處理，與
+    PROPOSALS_TRACKING_SCHEMA SSOT（"proposals_format": "list"）及 create.py
+    的 `_add_tracking_entry` 實際寫入格式不符，對真實 tracking 檔一律
+    AttributeError；此為 doc create 模板打包修復後才被實測揭露的獨立缺陷。
+    """
+    proposals = tracking.get("proposals") or []
+    for entry in proposals:
+        if isinstance(entry, dict) and entry.get("id") == prop_id:
+            return entry
+    return None
 
 
 def _next_spec_id(project_root: str) -> str:

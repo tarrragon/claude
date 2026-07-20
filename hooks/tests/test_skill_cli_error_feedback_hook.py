@@ -18,6 +18,11 @@ cli-error-feedback-hook envelope 抑制邏輯測試套件（移植自 skill-cli-
 detect_system_gap / CLASSIFICATION_* / SYSTEM_GAP_FEEDBACK_TEMPLATE），驗證後
 確認該子功能亦未被 cli-error-feedback-hook.py 承接。依 ticket 範圍限定（僅移植
 envelope 抑制邏輯），本檔不含該部分測試；W3-073 承接與否另建 follow-up ticket。
+
+0.0.1-W1-010 補充：
+- extract_command_summary 對單一命令與複合命令兩情境的 command_base 取值
+- SKILL_CLI_ERROR_FEEDBACK_TEMPLATE 泛化後不再預設「SKILL 引導不足」為
+  唯一成因，且對任一成因皆保留建 ticket 出口
 """
 
 import importlib.util
@@ -122,7 +127,7 @@ def test_case_3_skill_error_pattern_without_envelope_emits_feedback(capsys):
     assert rc == 0
     payload = json.loads(out)
     additional = payload["hookSpecificOutput"].get("additionalContext", "")
-    assert "[SKILL 引導品質回饋]" in additional
+    assert "[CLI 錯誤偵測]" in additional
     assert "參數不存在" in additional
 
 
@@ -148,3 +153,94 @@ def test_case_5_no_pattern_match_skips(capsys):
     assert rc == 0
     payload = json.loads(out)
     assert "additionalContext" not in payload["hookSpecificOutput"]
+
+
+# ----------------------------------------------------------------------------
+# extract_command_summary（0.0.1-W1-010：command_base 取值修正）
+# ----------------------------------------------------------------------------
+
+
+def test_extract_command_summary_simple_command_returns_first_token():
+    """單一命令：command_base 為第一個 token（既有行為維持）。"""
+    _, command_base = hook.extract_command_summary("ticket track claim --bogus-flag x")
+    assert command_base == "ticket"
+
+
+def test_extract_command_summary_slash_prefixed_command_strips_slash():
+    """`/ticket` 前綴：command_base 去除斜線（既有行為維持）。"""
+    _, command_base = hook.extract_command_summary("/ticket track claim x")
+    assert command_base == "ticket"
+
+
+def test_extract_command_summary_compound_command_returns_actual_cli_segment():
+    """複合命令：command_base 取實際觸發 CLI 的片段，而非整條命令的第一個 token。
+
+    重現 0.0.1-W1-008 分析中自然觸發的真實案例：`cd <path>; ticket ...`
+    修復前會誤取 `cd`，使後續 `{command_base} --help` 建議變成無意義的
+    `cd --help`（cd 是 shell builtin，無 --help）。
+    """
+    command = (
+        "cd /Users/mac-eric/project/flutter_balance 2>/dev/null; "
+        "ticket track set-where 0.19.0-W3-071 --layer Domain"
+    )
+    _, command_base = hook.extract_command_summary(command)
+    assert command_base == "ticket"
+    assert command_base != "cd"
+
+
+def test_extract_command_summary_no_skill_cli_segment_falls_back_to_first_token():
+    """複合命令但無 ticket/skill 片段：fallback 為整條命令的第一個 token。"""
+    _, command_base = hook.extract_command_summary("ls -la; echo done")
+    assert command_base == "ls"
+
+
+def test_extract_command_summary_summary_still_truncates_at_80_chars():
+    """command_summary 截斷行為不受本次修正影響（僅 command_base 改變）。"""
+    long_command = "ticket track set-where 0.19.0-W3-071 --layer " + "x" * 60
+    command_summary, _ = hook.extract_command_summary(long_command)
+    assert len(command_summary) == 80
+
+
+# ----------------------------------------------------------------------------
+# SKILL_CLI_ERROR_FEEDBACK_TEMPLATE 泛化（0.0.1-W1-010）
+# ----------------------------------------------------------------------------
+
+
+def test_feedback_template_does_not_default_to_skill_guidance_as_sole_cause():
+    """訊息不再以「SKILL 引導不足」為唯一成因描述（僅列為多個可能成因之一）。"""
+    message = hook.SKILL_CLI_ERROR_FEEDBACK_TEMPLATE.format(
+        error_type="參數不存在",
+        command_summary="ticket track set-where 0 --layer Domain",
+        command_base="ticket",
+    )
+    assert "可能成因" in message
+    assert "功能尚未實作" in message
+    assert "SKILL 引導不足" in message  # 仍是候選成因之一，但非唯一
+
+
+def test_feedback_template_preserves_ticket_creation_exit_for_both_causes():
+    """訊息對「功能缺口」與「文件缺口」兩種成因皆保留對應的建 ticket 出口。"""
+    message = hook.SKILL_CLI_ERROR_FEEDBACK_TEMPLATE.format(
+        error_type="參數不存在",
+        command_summary="ticket track set-where 0 --layer Domain",
+        command_base="ticket",
+    )
+    assert "ticket create --type ANA" in message  # 功能缺口出口
+    assert "ticket create --type ADJ" in message  # 文件缺口出口
+
+
+def test_main_end_to_end_compound_command_suggests_actual_cli_help_not_shell_builtin(capsys):
+    """端到端重現 0.0.1-W1-008 實測案例：複合命令觸發時，建議語法為
+    `ticket --help` 而非無意義的 `cd --help`。
+    """
+    stdin = _make_input(
+        "cd /Users/mac-eric/project/flutter_balance 2>/dev/null; "
+        "ticket track set-where 0.19.0-W3-071 --layer Domain",
+        stderr="ticket: error: unrecognized arguments: --layer Domain",
+    )
+    rc, out = _run_main(stdin, capsys)
+    assert rc == 0
+    payload = json.loads(out)
+    additional = payload["hookSpecificOutput"].get("additionalContext", "")
+    assert "ticket --help" in additional
+    assert "cd --help" not in additional
