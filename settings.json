@@ -687,6 +687,10 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uc-fingerprint-drift-check-hook.py",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/dart-style-guardian-hook.py"
           }
         ]
       },

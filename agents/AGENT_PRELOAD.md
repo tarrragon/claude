@@ -209,6 +209,23 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 > **來源**：W3-008（worktree 隔離對 daemon-rooted dart MCP 寫入工具不生效）。PM 端對應規則見 `.claude/pm-rules/parallel-dispatch.md`「worktree 實作 agent 禁用 dart MCP 寫入工具」；根因機制見 `.claude/skills/worktree/SKILL.md`「Base ref 與隔離邊界」章節。
 
+#### worktree 環境禁止以 Bash/Python 直寫主 repo（強制，W2-009 / W2-021）
+
+> **Why**：worktree 隔離僅對 Edit/Write 工具生效（CC runtime 層攔截），Bash redirect（`> /path`）和 Python `open()`/`write()` 不受攔截，可繞過隔離邊界直寫主 repo 檔案——真實副作用洩漏出隔離範圍，PM 需手動 `git checkout --` 還原。
+
+> **Consequence**：worktree agent 為通過 hook 檢查（hook 讀 `CLAUDE_PROJECT_DIR` 指向主 repo），在 Edit 被攔截後改用 Bash/Python 直寫主 repo ticket 檔或框架檔，造成主 repo working tree 被污染，與 worktree 隔離設計意圖矛盾。
+
+> **Action**：worktree 環境中所有檔案寫入必須限於 worktree 工作目錄（`$PWD` 或相對路徑），禁止寫入 worktree 以外的絕對路徑：
+
+| 禁止（繞過隔離） | 正確做法 |
+|----------------|---------|
+| `echo "..." > /Users/.../project/file.md`（主 repo 絕對路徑） | `echo "..." > ./file.md`（worktree 相對路徑） |
+| `python3 -c "open('/Users/.../project/file.md','w').write(...)"` | `python3 -c "open('./file.md','w').write(...)"` |
+| `ticket track append-log`（CLI 解析 `CLAUDE_PROJECT_DIR` 指向主 repo） | 用 Edit 修改 worktree 內的 ticket md，或用 `(cd $PWD && ticket ...)` 確認 cwd |
+
+> **識別方式**：路徑含 `CLAUDE_PROJECT_DIR` 值、專案根目錄絕對路徑、或 `..` 回溯至 worktree 外 → 違規。僅限相對路徑或 `$PWD` 下的路徑 → 合規。
+> **來源**：W2-009（worktree agent 以 Python 直寫繞過隔離修改主 repo ticket 檔）。
+
 #### worktree 全套件測試前若遇大量編譯失敗，先查 gitignored 生成產物是否缺失
 
 > **Why**：worktree 為 fresh checkout，任何 gitignored 生成產物若未同步存在會連鎖編譯失敗，且容易被誤判為高並行編譯器資源耗盡（實證與歸因陷阱見 `IMP-APP-003`）。遇到大量編譯失敗時，勿逕自歸因並行資源耗盡，應先確認生成產物是否存在，缺失時執行對應 generation 指令（如 `flutter gen-l10n` / `dart run build_runner build`）補齊，並回報 PM 評估是否需納入版控。

@@ -71,7 +71,8 @@ class TestGetProjectRootPriority:
         test_path = "/test/project/root"
         monkeypatch.setenv(ENV_PROJECT_DIR, test_path)
 
-        result = get_project_root()
+        with patch("lib.hook_base._linked_worktree_root", return_value=None):
+            result = get_project_root()
         assert str(result) == test_path, f"預期 {test_path}，得到 {result}"
 
     def test_get_project_root_claude_md_search(self, tmp_path, monkeypatch):

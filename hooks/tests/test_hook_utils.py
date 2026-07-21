@@ -94,6 +94,23 @@ def project_root(tmp_path):
     return tmp_path
 
 
+@pytest.fixture(autouse=True)
+def _disable_worktree_detection_for_hermetic_tests(monkeypatch):
+    """停用 get_project_root() 的 worktree 偵測（0.38.1-W2-020）。
+
+    Why：hook_base.get_project_root() 優先偵測 linked worktree（真實
+    subprocess git 呼叫），測試若在 git worktree 環境下執行且僅用
+    monkeypatch.setenv 設定 CLAUDE_PROJECT_DIR 指向 tmp_path，worktree
+    偵測會忽略該 env var、回傳真實 worktree 根目錄，使本檔大量依賴
+    CLAUDE_PROJECT_DIR 隔離的測試斷言失敗。
+    """
+    monkeypatch.setattr(
+        "lib.hook_base._linked_worktree_root",
+        lambda: None,
+        raising=False,
+    )
+
+
 @pytest.fixture
 def mock_env_var(monkeypatch):
     """Mock 環境變數"""

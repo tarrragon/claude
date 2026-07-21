@@ -1,3 +1,14 @@
+## [2.19.3] - 2026-07-21
+
+### Summary
+chore: pull .claude 更新（上游 680073cf）
+
+Changes: 1 chore
+
+- chore: pull .claude 更新（上游 680073cf）
+
+---
+
 ## [2.19.2] - 2026-07-20
 
 ### Summary

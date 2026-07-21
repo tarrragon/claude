@@ -21,27 +21,82 @@ class TestGetProjectRootHookBase:
     """hook_base.py 的 get_project_root() 測試類別"""
 
     def test_env_var_priority(self):
-        """環境變數 CLAUDE_PROJECT_DIR 優先"""
+        """環境變數 CLAUDE_PROJECT_DIR 優先（非 worktree 場景）"""
         custom_path = "/custom/project/path"
         with patch.dict("os.environ", {"CLAUDE_PROJECT_DIR": custom_path}):
-            result = get_project_root()
-            assert result == Path(custom_path)
+            with patch("lib.hook_base._linked_worktree_root", return_value=None):
+                result = get_project_root()
+                assert result == Path(custom_path)
+
+    def test_worktree_root_overrides_env_var(self, tmp_path):
+        """位於 linked worktree 時，優先回傳 worktree 根目錄（覆蓋環境變數）"""
+        worktree_root = tmp_path / "worktree_root"
+        worktree_root.mkdir()
+        with patch.dict("os.environ", {"CLAUDE_PROJECT_DIR": "/main/repo"}):
+            with patch(
+                "lib.hook_base._linked_worktree_root",
+                return_value=worktree_root
+            ):
+                result = get_project_root()
+                assert result == worktree_root
+
+    def test_linked_worktree_root_detects_worktree(self, tmp_path):
+        """_linked_worktree_root() 於 git-dir != git-common-dir 時回傳 toplevel"""
+        from lib.hook_base import _linked_worktree_root
+
+        worktree_toplevel = tmp_path / "worktree_toplevel"
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                MagicMock(
+                    returncode=0,
+                    stdout=(
+                        f"{tmp_path / '.git-worktree-dir'}\n"
+                        f"{tmp_path / '.git-common-dir'}\n"
+                    )
+                ),
+                MagicMock(returncode=0, stdout=str(worktree_toplevel) + "\n"),
+            ]
+            result = _linked_worktree_root()
+            assert result == worktree_toplevel
+
+    def test_linked_worktree_root_returns_none_for_main_repo(self, tmp_path):
+        """_linked_worktree_root() 於主 repo（git-dir == git-common-dir）回傳 None"""
+        from lib.hook_base import _linked_worktree_root
+
+        same_dir = tmp_path / ".git"
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout=f"{same_dir}\n{same_dir}\n"
+            )
+            result = _linked_worktree_root()
+            assert result is None
+
+    def test_linked_worktree_root_returns_none_when_git_unavailable(self):
+        """_linked_worktree_root() 於 git 不可用時回傳 None（fallback CLAUDE_PROJECT_DIR）"""
+        from lib.hook_base import _linked_worktree_root
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = FileNotFoundError("git not found")
+            result = _linked_worktree_root()
+            assert result is None
 
     def test_git_revparse_success(self):
         """git rev-parse 成功時回傳 git repo 根目錄"""
         git_root = "/path/to/git/repo"
         with patch.dict("os.environ", {}, clear=True):
-            with patch("subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(
-                    returncode=0,
-                    stdout=git_root + "\n"
-                )
-                result = get_project_root()
-                assert result == Path(git_root)
-                # 驗證 subprocess 被呼叫
-                mock_run.assert_called_once()
-                call_args = mock_run.call_args
-                assert "git" in call_args[0][0]
+            with patch("lib.hook_base._linked_worktree_root", return_value=None):
+                with patch("subprocess.run") as mock_run:
+                    mock_run.return_value = MagicMock(
+                        returncode=0,
+                        stdout=git_root + "\n"
+                    )
+                    result = get_project_root()
+                    assert result == Path(git_root)
+                    # 驗證 subprocess 被呼叫
+                    mock_run.assert_called_once()
+                    call_args = mock_run.call_args
+                    assert "git" in call_args[0][0]
 
     def test_worktree_git_revparse(self, tmp_path):
         """worktree 環境下 git rev-parse 正確回傳源 repo 根目錄"""
