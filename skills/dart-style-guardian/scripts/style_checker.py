@@ -126,10 +126,9 @@ EXCLUDE_PATTERNS = [
     r'/test/',               # Test files (may have hardcoded test strings)
     r'/l10n/',               # Localization files
     r'/generated/',          # Generated code
-    r'ui_config\.dart$',     # Configuration file itself
-    r'flat_design_config\.dart$',  # Config file
-    r'responsive_config\.dart$',   # Config file
-    r'theme\.dart$',         # Theme configuration
+    r'/design_system/',      # Design system token SSOT directory (any project)
+    r'_config\.dart$',       # Config files (e.g. ui_config.dart, flat_design_config.dart)
+    r'theme\.dart$',         # Theme configuration (idiomatic Flutter naming)
 ]
 
 # Exceptions - patterns that are OK

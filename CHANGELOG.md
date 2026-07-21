@@ -1,3 +1,14 @@
+## [2.19.4] - 2026-07-21
+
+### Summary
+chore: pull .claude 更新（上游 5ec670b）
+
+Changes: 1 chore
+
+- chore: pull .claude 更新（上游 5ec670b）
+
+---
+
 ## [2.19.3] - 2026-07-21
 
 ### Summary
