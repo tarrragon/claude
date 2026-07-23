@@ -18,6 +18,7 @@ The 5W1H validation system is integrated into the Hook ecosystem:
 ### Session Token Generation
 
 The UserPromptSubmit Hook automatically:
+
 1. Generates a new session token: `5W1H-{YYYYMMDD}-{HHMMSS}-{random}`
 2. Injects it into the user's context
 3. Reminds about 5W1H format requirements
@@ -42,11 +43,11 @@ Since v0.25.1, **5W1H format is enforced at the system level** via Output Style,
 
 This dual-layer approach provides **robustness**:
 
-| Layer | Mechanism | Purpose | Robustness |
-|-------|-----------|---------|-----------|
-| **System Prompt (Output Style)** | Injected at system level | Response format structure | Consistent even if Hooks fail |
-| **PreToolUse Hook** | Validation before tool execution | Todo validation | Active verification |
-| **UserPromptSubmit Hook** | Token generation + reminder | User reminder | Contextual assistance |
+| Layer                            | Mechanism                        | Purpose                   | Robustness                    |
+| -------------------------------- | -------------------------------- | ------------------------- | ----------------------------- |
+| **System Prompt (Output Style)** | Injected at system level         | Response format structure | Consistent even if Hooks fail |
+| **PreToolUse Hook**              | Validation before tool execution | Todo validation           | Active verification           |
+| **UserPromptSubmit Hook**        | Token generation + reminder      | User reminder             | Contextual assistance         |
 
 ### Key Advantage
 
@@ -65,6 +66,7 @@ This dual-layer approach provides **robustness**:
 ```
 
 **Components**:
+
 - `5W1H`: Fixed prefix identifying framework
 - `YYYYMMDD`: Date in ISO 8601 format (e.g., 20250925)
 - `HHMMSS`: Time in 24-hour format (e.g., 191735 for 19:17:35)
@@ -112,6 +114,7 @@ The 5W1H validation system checks:
 ### Avoidance Language Detection
 
 **Blocked Keywords**:
+
 - Quality compromise: "too complex", "workaround", "temporary fix", "quick fix"
 - Simplification: "simpler approach", "easier way", "simplify"
 - Problem ignoring: "ignore for now", "skip for now", "deal with later"
@@ -122,14 +125,14 @@ The 5W1H validation system checks:
 
 **Valid Task Type vs Executor Mapping**:
 
-| Task Type | Valid Executors | Block Pattern |
-|-----------|-----------------|---------------|
+| Task Type      | Valid Executors              | Block Pattern                     |
+| -------------- | ---------------------------- | --------------------------------- |
 | Implementation | parsley, sage, pepper, thyme | rosemary executing Implementation |
-| Dispatch | rosemary | Any agent executing Dispatch |
-| Review | rosemary | Any agent executing Review |
-| Documentation | thyme, rosemary | - |
-| Analysis | lavender, rosemary | - |
-| Planning | rosemary, lavender | - |
+| Dispatch       | rosemary                     | Any agent executing Dispatch      |
+| Review         | rosemary                     | Any agent executing Review        |
+| Documentation  | thyme, rosemary              | -                                 |
+| Analysis       | lavender, rosemary           | -                                 |
+| Planning       | rosemary, lavender           | -                                 |
 
 ---
 

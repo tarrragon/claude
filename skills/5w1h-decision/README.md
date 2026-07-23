@@ -3,6 +3,7 @@
 ## Purpose
 
 Ensure systematic decision-making before creating todos by requiring:
+
 - 5W1H complete analysis (Who, What, When, Where, Why, How)
 - Executor/Dispatcher separation (Agile Refactor compliance)
 - Task Type matching
@@ -12,13 +13,14 @@ Ensure systematic decision-making before creating todos by requiring:
 
 **Three-Layer Enforcement Architecture**:
 
-| Layer | File | When Active |
-|-------|------|-------------|
+| Layer            | File                                   | When Active            |
+| ---------------- | -------------------------------------- | ---------------------- |
 | **Output Style** | `.claude/output-styles/5w1h-format.md` | Always (system prompt) |
-| **Hook** | UserPromptSubmit + PreToolUse | Each interaction |
-| **SKILL** | This document | On-demand reference |
+| **Hook**         | UserPromptSubmit + PreToolUse          | Each interaction       |
+| **SKILL**        | This document                          | On-demand reference    |
 
 **Output Style** (v0.25.1+):
+
 - System-level format enforcement
 - Injected into Claude's system prompt automatically
 - Ensures consistent 5W1H response structure
@@ -42,29 +44,29 @@ How: [Task Type: {TYPE}] {TDD strategy}
 
 ### Who - Executor/Dispatcher
 
-| Scenario | Format |
-|----------|--------|
-| Code implementation | `parsley-flutter-developer (executor) \| rosemary (dispatcher)` |
-| Task dispatch | `rosemary-project-manager (self-execute - dispatch/review)` |
-| Documentation | `thyme-documentation-integrator (executor) \| rosemary (dispatcher)` |
+| Scenario            | Format                                                               |
+| ------------------- | -------------------------------------------------------------------- |
+| Code implementation | `parsley-flutter-developer (executor) \| rosemary (dispatcher)`      |
+| Task dispatch       | `rosemary-project-manager (self-execute - dispatch/review)`          |
+| Documentation       | `thyme-documentation-integrator (executor) \| rosemary (dispatcher)` |
 
 ### How - Task Types
 
-| Type | Executor | Blocked |
-|------|----------|---------|
+| Type           | Executor              | Blocked  |
+| -------------- | --------------------- | -------- |
 | Implementation | parsley, sage, pepper | rosemary |
-| Dispatch | rosemary | agents |
-| Review | rosemary | agents |
-| Documentation | thyme, rosemary | - |
+| Dispatch       | rosemary              | agents   |
+| Review         | rosemary              | agents   |
+| Documentation  | thyme, rosemary       | -        |
 
 ### Avoidance Keywords (BLOCKED)
 
-| Category | Keywords |
-|----------|----------|
-| Escape | "too complex", "workaround", "temporary" |
-| Simplify | "simpler approach", "easier way" |
-| Defer | "for now", "later", "skip" |
-| Test | "simplify test", "basic test only" |
+| Category | Keywords                                 |
+| -------- | ---------------------------------------- |
+| Escape   | "too complex", "workaround", "temporary" |
+| Simplify | "simpler approach", "easier way"         |
+| Defer    | "for now", "later", "skip"               |
+| Test     | "simplify test", "basic test only"       |
 
 ## Validation
 
@@ -117,8 +119,8 @@ See [SKILL.md](./SKILL.md) for complete reference.
 
 ### Related Files
 
-| File | Purpose |
-|------|---------|
-| [Output Style](../../../.claude/output-styles/5w1h-format.md) | System-level format enforcement |
-| [SKILL.md](./SKILL.md) | Complete 5W1H reference |
-| [5W1H Methodology](../../../.claude/methodologies/5w1h-self-awareness-methodology.md) | Full methodology |
+| File                                                                                  | Purpose                         |
+| ------------------------------------------------------------------------------------- | ------------------------------- |
+| [Output Style](../../../.claude/output-styles/5w1h-format.md)                         | System-level format enforcement |
+| [SKILL.md](./SKILL.md)                                                                | Complete 5W1H reference         |
+| [5W1H Methodology](../../../.claude/methodologies/5w1h-self-awareness-methodology.md) | Full methodology                |

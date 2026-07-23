@@ -35,14 +35,14 @@ How: [Task Type: {TYPE}] {Strategy}
 
 ## Quick Reference
 
-| Section | Purpose | Example |
-|---------|---------|---------|
-| **Who** | Responsibility attribution | `parsley-flutter-developer (executor) \| rosemary-project-manager (dispatcher)` |
-| **What** | Single responsibility function | `validateISBN()` |
-| **When** | Trigger timing | `Book added event with ISBN` |
-| **Where** | Architecture layer | `Domain / Book Aggregate` |
-| **Why** | Requirement traceability | `UC-001 Book Addition` |
-| **How** | Implementation strategy | `[Task Type: Implementation] TDD steps` |
+| Section   | Purpose                        | Example                                                                         |
+| --------- | ------------------------------ | ------------------------------------------------------------------------------- |
+| **Who**   | Responsibility attribution     | `parsley-flutter-developer (executor) \| rosemary-project-manager (dispatcher)` |
+| **What**  | Single responsibility function | `validateISBN()`                                                                |
+| **When**  | Trigger timing                 | `Book added event with ISBN`                                                    |
+| **Where** | Architecture layer             | `Domain / Book Aggregate`                                                       |
+| **Why**   | Requirement traceability       | `UC-001 Book Addition`                                                          |
+| **How**   | Implementation strategy        | `[Task Type: Implementation] TDD steps`                                         |
 
 ## Token Generation
 

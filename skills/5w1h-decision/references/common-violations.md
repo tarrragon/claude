@@ -3,6 +3,7 @@
 ## Violation 1: Missing Executor/Dispatcher
 
 ### Problem
+
 ```markdown
 // VIOLATION
 Who: parsley-flutter-developer
@@ -12,6 +13,7 @@ Who: parsley-flutter-developer
 **Issue**: Missing executor/dispatcher identification, unclear responsibility separation.
 
 ### Solution
+
 ```markdown
 // FIXED
 Who: parsley-flutter-developer (executor) | rosemary-project-manager (dispatcher)
@@ -24,6 +26,7 @@ Who: parsley-flutter-developer (executor) | rosemary-project-manager (dispatcher
 ## Violation 2: Missing Task Type
 
 ### Problem
+
 ```markdown
 // VIOLATION
 How: TDD implementation strategy
@@ -34,6 +37,7 @@ How: TDD implementation strategy
 **Issue**: No Task Type marker, cannot validate executor appropriateness.
 
 ### Solution
+
 ```markdown
 // FIXED
 How: [Task Type: Implementation] TDD implementation strategy
@@ -48,6 +52,7 @@ How: [Task Type: Implementation] TDD implementation strategy
 ## Violation 3: Main Thread Doing Implementation
 
 ### Problem
+
 ```markdown
 // VIOLATION
 Who: rosemary-project-manager (self-execute)
@@ -57,6 +62,7 @@ How: [Task Type: Implementation] Build Domain event classes
 **Issue**: Main thread assigned to Implementation task, violates executor/dispatcher separation.
 
 ### Solution
+
 ```markdown
 // FIXED
 Who: parsley-flutter-developer (executor) | rosemary-project-manager (dispatcher)
@@ -68,6 +74,7 @@ How: [Task Type: Implementation] Build Domain event classes
 ## Violation 4: Avoidance Language
 
 ### Problem
+
 ```markdown
 // VIOLATION
 Why: Need to simplify the complex validation
@@ -77,6 +84,7 @@ Why: Need to simplify the complex validation
 **Issue**: Contains avoidance language ("simplify", "for now"), indicates quality compromise.
 
 ### Solution
+
 ```markdown
 // FIXED
 Why: UC-001 Book Addition Requirement
@@ -91,19 +99,20 @@ Why: UC-001 Book Addition Requirement
 
 ### Blocked Phrases by Category
 
-| Category | Blocked Phrases | Why Blocked |
-|----------|-----------------|------------|
-| Quality Compromise | "too complex", "workaround", "temporary fix", "quick fix" | Escaping difficulty |
-| Simplification | "simpler approach", "easier way", "simplify" | Compromising quality |
-| Problem Ignoring | "ignore for now", "skip for now", "deal with later" | Avoiding problem |
-| Test Compromise | "simplify test", "lower test standard", "basic test only" | Reducing testing quality |
-| Code Escape | "comment out", "disable", "temporarily disable" | Hiding problems |
+| Category           | Blocked Phrases                                           | Why Blocked              |
+| ------------------ | --------------------------------------------------------- | ------------------------ |
+| Quality Compromise | "too complex", "workaround", "temporary fix", "quick fix" | Escaping difficulty      |
+| Simplification     | "simpler approach", "easier way", "simplify"              | Compromising quality     |
+| Problem Ignoring   | "ignore for now", "skip for now", "deal with later"       | Avoiding problem         |
+| Test Compromise    | "simplify test", "lower test standard", "basic test only" | Reducing testing quality |
+| Code Escape        | "comment out", "disable", "temporarily disable"           | Hiding problems          |
 
 ---
 
 ## Violation 5: Missing Requirement Reference
 
 ### Problem
+
 ```markdown
 // VIOLATION
 Why: Need to validate user input
@@ -113,6 +122,7 @@ Why: Need to validate user input
 **Issue**: No requirement ID or business value, vague justification.
 
 ### Solution
+
 ```markdown
 // FIXED
 Why: UC-005 ISBN Format Validation
