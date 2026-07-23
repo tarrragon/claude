@@ -59,15 +59,27 @@ SA 前置審查在以下情況下**應該被觸發**：
 **審查項目**：
 - 命名規範一致性（類別、函式、變數）
 - 架構模式一致性（是否遵循現有設計模式）
-- 依賴方向正確性（是否違反依賴規則）
+- 依賴方向正確性（是否違反依賴規則；以 domain map §2 DAG 為權威）
 - 事件系統一致性（是否正確使用事件驅動架構）
+- Domain Map 覆蓋檢查（見下方）
+
+**Domain Map 存在性與覆蓋檢查**：
+
+| 檢查項 | 判定 |
+|--------|------|
+| `docs/domain-map.md` 存在？ | 不存在 → 報告建議建立（`/doc` domain-map 模板） |
+| 新功能涉及的 domain 概念是否已列入 Bundle 界定表？ | 未列入 → 報告建議新增 bundle 或歸入既有 bundle |
+| 依賴方向是否違反 domain map §2 DAG？ | 違反 → 標記為高嚴重度 |
+| 新增 domain 概念是否有對應不變式？ | 無不變式 → 建議補充 |
+
+> **Why**：domain map 是切層與依賴方向的權威依據（`.claude/methodologies/domain-bundle-mapping-methodology.md`）。Phase 0 若不檢查 domain map 覆蓋，新功能可能繞過 bundle 邊界破壞 DAG。
 
 **審查流程**：
 ```
 1. 閱讀需求描述
 2. 搜尋現有相關實作
-3. 檢查架構文件
-4. 驗證一致性
+3. 檢查架構文件（含 domain map）
+4. 驗證一致性（含 domain map DAG 依賴方向）
 5. 產出審查報告
 ```
 

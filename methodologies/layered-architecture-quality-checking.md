@@ -162,3 +162,4 @@ jobs:
 ## Reference
 
 - [層級隔離派工方法論](./layered-ticket-methodology.md) - 五層架構、單層修改、粒度標準（核心摘要，含角色快速使用）
+- [Domain Bundle 邊界映射](./domain-bundle-mapping-methodology.md) - domain 層的水平切面（bundle 邊界 + 依賴方向 DAG），與本方法論的垂直切面（層級隔離）正交

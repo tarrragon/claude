@@ -125,6 +125,21 @@ Hook 系統自動處理基本的測試品質監控，你的職責專注於需要
 
 ## TDD Phase 2 測試策略決策職責 (新增 v1.2.0)
 
+### Domain Map 不變式軸消費（強制輸入）
+
+Phase 2 測試設計前，必須讀取 `docs/domain-map.md`（或 `docs/spec/{domain}/domain-map.md`）的「Bundle 不變式清單」，逐條轉為 domain unit test 規格。
+
+| 步驟 | 動作 |
+|------|------|
+| 1 | 讀取 domain map「Bundle 不變式清單（per-bundle）」表 |
+| 2 | 每條不變式映射為至少一個 GWT scenario（正向）+ 邊界/異常 scenario |
+| 3 | 驗證不變式覆蓋完整性：domain map 列出的不變式 100% 有對應測試規格 |
+| 4 | 與 `traceability.yaml` 的 `domain_bundle_tests` 欄位交叉比對 |
+
+**依賴方向底線**：domain map §2「依賴方向底線」定義的 DAG 是測試隔離判準的權威來源——read-model 測試可依賴 Valuation kernel，不可互相依賴。
+
+> 方法論參考：`.claude/methodologies/domain-bundle-mapping-methodology.md`
+
 ### 測試策略決策
 
 **目標**: 根據程式碼層級選擇合適的測試策略。
@@ -132,7 +147,7 @@ Hook 系統自動處理基本的測試品質監控，你的職責專注於需要
 **分層測試決策樹**:
 
 - **Layer 3 (UseCase)** → 必須使用 BDD 測試（Given-When-Then）
-- **Layer 5 (Domain, 複雜邏輯)** → 單元測試
+- **Layer 5 (Domain, 複雜邏輯)** → 單元測試（domain map 不變式軸為必要輸入）
 - **Layer 2 (Behavior, 複雜轉換)** → 單元測試
 - **Layer 1 (UI, 關鍵流程)** → 整合測試
 

@@ -1,3 +1,31 @@
+## [2.20.0] - 2026-07-23
+
+### Summary
+feat: domain-layer import 方向 lint hook; feat: /spec validate domain 覆蓋閘門 + 收掛; feat: 測試規劃消費 domain-map 不變式（兩軸測試設計） (+15 more)
+
+Changes: 5 feat, 2 refactor, 4 fix, 4 docs, 3 chore
+
+- feat: domain-layer import 方向 lint hook
+- feat: /spec validate domain 覆蓋閘門 + 收掛
+- feat: 測試規劃消費 domain-map 不變式（兩軸測試設計）
+- feat: version-bootstrap Step 2.5 Domain 規劃 + doc saas 調和
+- feat: domain-map-template.md + doc skill 五種文件類型註冊
+- refactor: 中立化 framework 判準本體的專屬 domain 不變式
+- refactor: domain-map-template 去除專案專屬細節提升可重用性
+- fix: 校準 observability-rules AppLogger → developer.log
+- fix: phase4-hook M1 regex 不再誤傷標準章節名
+- fix: multi-round Round 3 修正 + spawn 延伸票
+- fix: multi-round Round 2 修正（含 gate 假通過致命 bug）
+- docs: 接線 domain map outbound 反向引用
+- docs: TEST-BAL-001 理想化 fixture 遮蔽 validator 假通過
+- docs: domain-bundle-mapping 方法論
+- docs: PC-BAL-005 phase4-hook 觸發詞誤傷標準章節名
+- chore: extend domain-bundle-mapping for multi-aggregate + command-side
+- chore: ARCH-BAL-001 Layer 2 潤飾（定語堆疊拆句）
+- chore: domain map 定案 + 四視角審查 + ARCH-BAL-001 + 防護票
+
+---
+
 ## [2.19.4] - 2026-07-21
 
 ### Summary

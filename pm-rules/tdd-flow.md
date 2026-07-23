@@ -339,7 +339,7 @@ Phase 4a 多視角分析報告完成後，進入 Phase 4b 前，PM 必須執行 
 |----|----|------|-----------|
 | Phase 0 | Phase 1 | SA 審查通過 | 填寫 Context Bundle（→ Phase 1） |
 | Phase 1 | Phase 1.5 | 功能規格完成 | 填寫 Context Bundle（→ 多視角審查） |
-| Phase 1.5 | Phase 2 | 多視角審查通過 + Phase 2 條件式強制判斷（見下方） | 填寫 Context Bundle（→ Phase 2） |
+| Phase 1.5 | Phase 2 | 多視角審查通過 + Phase 2 條件式強制判斷（見下方） | 填寫 Context Bundle（→ Phase 2），含 domain map 不變式軸（見下方） |
 | Phase 2 | Phase 3a | 測試案例設計完成 | 填寫 Context Bundle（→ Phase 3a） |
 | Phase 3a | 3b 拆分評估 | 策略文件完成 | 填寫 Context Bundle（→ Phase 3b） |
 | 3b 拆分評估 | Phase 3b | PM 完成拆分評估（見下方） | 各子任務填寫 Context Bundle |
@@ -361,6 +361,17 @@ Phase 1 完成後，依 source spec 有無和 FR 驗收標準規模決定 Phase 
 | 無 spec（純 bug fix / 流程改善） | Phase 2 豁免 |
 
 **Why**：Phase 2 的價值在於「紅燈先行」確保 spec 驗收標準被轉化為可執行測試。小範圍 FR 可在 IMP 內同步處理；大範圍 FR 需 sage 獨立設計以避免 IMP 執行者漏蓋 spec 邊界條件。
+
+### Phase 2 輸入：Domain Map 不變式軸（強制）
+
+PM 填寫 Phase 2 Context Bundle 時，必須將 domain map 的「Bundle 不變式清單」作為 sage 的輸入之一。
+
+| 條件 | PM 動作 |
+|------|--------|
+| `docs/domain-map.md` 存在且含不變式清單 | Context Bundle 加入不變式清單路徑引用，sage 逐條轉 domain unit test |
+| domain map 不存在 | 先建 domain map（`/doc` domain-map 模板），或在 Context Bundle 標註「無 domain map：測試設計僅依 spec FR」 |
+
+**Why**：domain map 不變式是 domain 層測試的權威輸入軸（與 spec FR 正交）。version-bootstrap 已消費此軸（Step 5），但 per-feature TDD 路徑若不內化此輸入，sage 只依 spec FR 設計測試，domain 層的行為不變式（如 carry-forward、DAG 依賴方向）會遺漏。
 
 ### 3b 拆分評估（Phase 3a 完成後，強制）
 

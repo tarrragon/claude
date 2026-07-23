@@ -146,6 +146,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | TEST-002 | 測試流程不完整 | 高 | v0.6.2 |
 | TEST-003 | 過度驗證超出責任 | 中 | v0.6.2 |
 | TEST-004 | 重構引入 Wrapper 後 Mock Patch 路徑失效 | 高 | v0.1.0 |
+| TEST-BAL-001 | 測試 fixture 用理想化格式，真實輸入格式不同致 validator 靜默假通過 | 高 | v0.1.0 |
 
 ### 文件 (DOC)
 
@@ -189,6 +190,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | ARCH-V1-001 | 同一不變量單點執法、多入口繞過（前門裝鎖、側門敞開） | 中 | v1.0.0 |
 | ARCH-V1-002 | 雙向 overlay sync 製造重複 top-level 定義（死碼 shadow 活 bug） | 高 | v1.0.0 |
 | ARCH-APP-002 | uv tool install 全域同名 CLI 跨 consumer namespace 碰撞（last-write-wins） | 中 | v0.37.0 |
+| ARCH-BAL-001 | 架構依賴方向底線未用程式碼 import 鏈驗證，導致底線與現況矛盾 | 高 | v0.1.0 |
 
 ### 程式碼品質 (CQ)
 
@@ -387,6 +389,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-APP-010 | code agent 杜撰 UC- 前綴偽需求 ID——TDD 實作註解未對照 spec use case（code 38 token vs spec 10） | 中 | v0.38.1 |
 | PC-MON-001 | 工具防護落地於可繞過的執行點導致復發（version-release pre-flight 防護在手動收尾路徑零次執行） | 中 | v0.3.5 |
 | PC-MON-002 | 必填不等於有效——CLI 必填欄位無格式/存在性驗證，自由文字穿透防護（resolved_by=設計決策） | 中 | v0.3.6 |
+| PC-BAL-005 | 決斷強制 hook 觸發詞正則誤傷標準章節名「Phase 4 重構評估」（PC-113/138/144 同家族，跨 hook 復發） | 中 | v0.1.0 |
 
 ---
 

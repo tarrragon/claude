@@ -30,6 +30,7 @@
 | code-smell-quality-gate-methodology.md | 程式碼壞味道檢測 |
 | clean-architecture-implementation-methodology.md | Clean Architecture 實作 |
 | layered-architecture-quality-checking.md | 分層架構品質檢查 |
+| domain-bundle-mapping-methodology.md | 從 spec FR 反推 DDD domain bundle 邊界（bundle 分類 aggregate/kernel/read-model、依賴方向 DAG、層→測試對應；配合 doc domain-map-template + version-bootstrap Step 2.5） |
 
 ## 測試相關
 

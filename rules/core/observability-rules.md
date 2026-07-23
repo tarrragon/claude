@@ -33,7 +33,7 @@
 | 禁止散落輸出 | 禁止直接使用 `debugPrint`、`print`、`console.log` 等原生方法 |
 | 分級輸出 | 依嚴重程度使用 error / warning / info / debug 級別 |
 
-> 本專案使用 `AppLogger`，詳見 CLAUDE.md 6.4 節。
+> 本專案使用 `dart:developer` 的 `developer.log`，搭配 `name: _tag` 標籤分級（level 900 = error）。
 
 ---
 
@@ -82,7 +82,7 @@
 | 生命週期回調 | didChangeAppLifecycleState 中涉及平台資源操作（暫停/恢復相機等） | debug |
 | 平台異常 | PlatformException / MissingPluginException 的 code + message | warning |
 
-**日誌內容最低要求**：操作名稱 + 元件標籤 + 結果或錯誤訊息。範例：`AppLogger.infoStatic('Camera permission status: $status', _tag);`
+**日誌內容最低要求**：操作名稱 + 元件標籤 + 結果或錯誤訊息。範例：`developer.log('Camera permission status: $status', name: _tag);`
 
 **與規則 4 邊界**：規則 4 覆蓋「長時間運行元件的生命週期」；規則 5 覆蓋「平台 API 互動的每個決策點」。兩者可重疊（如相機 controller 同時是長時間元件也是平台 API），重疊時兩條規則皆適用。
 
@@ -103,7 +103,7 @@
 ## 相關文件
 
 - .claude/references/observability-rules.md - 詳細可觀測性規則（生命週期、心跳、Debug Log、平台互動）
-- CLAUDE.md 6.4 節 - 專案日誌工具設定（AppLogger）
+- CLAUDE.md §6 技術選型 - 專案日誌工具為 `dart:developer developer.log`
 - .claude/rules/core/quality-baseline.md - 規則 4：異常可觀測性
 - .claude/rules/core/quality-common.md - 通用品質基線
 

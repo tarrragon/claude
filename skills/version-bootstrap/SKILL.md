@@ -83,6 +83,29 @@ doc batch-init --proposals PROP-XXX,PROP-YYY --domain <domain>
 
 ---
 
+### Step 2.5：Domain 規劃（半自動）
+
+> **Why**：spec 定義 FR（系統做什麼）、UC 定義使用者場景（誰怎麼用），兩者皆為垂直視角，不界定 domain 的水平聚合邊界——aggregate / kernel / read-model 分類、依賴方向、層測試策略。**Consequence**：跳過本步驟，domain 邊界會在實作階段臨場拍板（退化為「哪個檔案太大就拆」），依賴方向底線無文件可依，易出現 read-model 互相耦合、持久化細節混入 domain；測試設計（Step 5）也無 per-bundle 依據。需事後補 domain map（實證：flutter_balance W2-014 於實作前補建）。**Action**：spec FR 填完後、測試設計前，為每個 domain 產出或更新 domain map。
+
+**動作**：用 doc skill 的 domain-map-template 為每個 domain 產出 domain map（多 domain 專案放 domain 子目錄，單 domain 專案放 `docs/` 根層）：
+
+```bash
+# 多 domain 專案：放對應 domain 子目錄
+cp .claude/skills/doc/templates/domain-map-template.md docs/spec/{domain}/domain-map.md
+# 單 domain 專案：放 docs/ 根層
+cp .claude/skills/doc/templates/domain-map-template.md docs/domain-map.md
+```
+
+**PM 工作**：依模板從 spec FR 反推 bundle 邊界（切分判準見 `.claude/methodologies/domain-bundle-mapping-methodology.md`）——界定 aggregate / kernel / read-model 分類、依賴方向 DAG（**用實際 import 鏈驗證，不憑心智模型宣告**——如 `grep -rn "import.*<lower_layer>" lib/<domain_dir>/` 或 codegraph callers，確認 import 集合不含被禁層）、每 bundle 的目標路徑與測試層、FR→bundle 全覆蓋表。
+
+**產出或更新語意**：saas 起手的版本，saas Stage 1/2 的 DDD 切分已餵入 domain map 的產出端，本步驟將其精修為層/依賴/測試 map；非 saas 起手（提案 / handoff 起手）則從模板新建。此語意消除「domain 規劃綁死 saas 起手」——標準化為所有規劃波的通用步驟。
+
+**被誰消費**：Step 5 測試設計依 domain map 逐 bundle 決定測試層（domain unit / data repository / presentation widget）；Step 6 建票依 domain / data / presentation 分層切分。
+
+**Checkpoint**：每個 domain 有 domain map；依賴方向底線經 import 鏈驗證；spec 全部 FR 在 FR→bundle 覆蓋表有歸屬（含標為非 domain 的 presentation / data FR）。
+
+---
+
 ### Step 3：教學比對（半自動）
 
 **動作**：對每份完成的 spec 執行 `/spec validate`（Full 模式，含維度 4 教學一致性）。
@@ -132,6 +155,13 @@ doc batch-init --proposals PROP-XXX,PROP-YYY --domain <domain>
 
 多 spec 可並行派發（每個 spec 1 張子票）。派發時使用 `/tdd` Phase 2 流程，sage 產出紅燈測試規格。
 
+**消費 Step 2.5 domain map（兩軸測試設計）**：
+
+1. **層軸**：依 domain map 逐 bundle 決定測試層——domain bundle 走純函式 unit test、data 走 repository test、presentation 走 widget test（分層測試策略見 `.claude/methodologies/hybrid-testing-strategy-methodology.md`）。
+2. **不變式軸**：依 domain map 的「Bundle 不變式清單」節逐 bundle 列舉 domain 行為不變式測試（例：某項缺漏沿用前值、比率分母為 0 的定義值、依賴方向不成環等**各專案自己的** domain 不變式），**與 UC 場景測試並存去重**——UC 場景測試涵蓋垂直使用者行為，不變式測試涵蓋水平 domain 規則，兩軸交集去重、聯集為完整覆蓋。避免 domain 規則只靠「剛好出現於某 UC 場景」被動覆蓋。
+
+> sage 派發 prompt 應同時帶 spec FR / UC 場景（既有）與 domain map 的 bundle 不變式清單（新增），使兩軸都被系統列舉。traceability 的 domain-bundle→test 軸（見下）記錄不變式軸覆蓋。
+
 **PM 工作**：驗收 sage 產出——確認 FR↔AC 覆蓋矩陣（Q12）無空行。
 
 **Checkpoint**：所有 spec 的 Phase 2 完成，紅燈測試規格已提交。
@@ -149,6 +179,7 @@ doc batch-init --proposals PROP-XXX,PROP-YYY --domain <domain>
 - spec FR 列表 → IMP ticket
 - Phase 2 紅燈規格 → 確認 ticket 粒度（每張 ticket 的紅燈數）
 - UC 場景 → 整合測試 ticket
+- domain map bundle 分層 → 按 domain / data / presentation 切分實作票，並依 domain map §5「對實作票切分指引」對齊各票的層歸屬與依賴方向底線
 
 **PM 工作**：確認 Wave 分配、並行安全（共用檔案需整合票）。
 
@@ -209,6 +240,7 @@ doc batch-init --proposals PROP-XXX,PROP-YYY --domain <domain>
 
 ---
 
+**Version**: 1.3.0 — 新增 Step 2.5「Domain 規劃」於 Step 2 與 Step 3 間：spec FR 填完後、測試設計前產出/更新 domain map（doc domain-map-template），含 saas / standalone 調和語意（domain 規劃是所有規劃波通用步驟，非 saas 專屬）；Step 5 補「消費 domain map 逐 bundle 定測試層」、Step 6 建票來源補「domain map bundle 分層 → domain/data/presentation 切分」（0.1.0-W2-016.2，落地 W2-016 ANA domain 規劃整合）
 **Version**: 1.2.0 — 新增 Step 4.5「地基波（僅含 UI 提案版本）」於 Step 4 與 Step 5 間：測試設計前依 component-library 方法論〈地基波 build 順序〉編排 i18n / design-system / UX 審查 / 元件庫四塊實作（Why：測試需驗 zh/en overflow 與元件反應，依賴 i18n/元件先存在；實證地基波經指正後手動插入）；Step 2 UI 前置檢查補「design-system spec（用 design-system-spec-template）」檢查項。非 UI 版本略過
 **Version**: 1.1.0 — Step 2 新增「UI 類提案元件庫前置檢查」小節：判別提案是否涉及 UI/頁面/元件，涉及則須先確認 design token 層與 L3 元件庫章節存在（缺則先補齊），才可繼續 UI 實作票規劃，落地元件庫雙向約束方法論流程整合點 1
 **Last Updated**: 2026-07-21
