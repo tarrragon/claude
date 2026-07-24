@@ -1,3 +1,16 @@
+## [2.20.2] - 2026-07-24
+
+### Summary
+docs: domain-map 模板和 9 個既有 map 補標 bundle 實作狀態欄; docs: PC-APP-012 domain-map 未實作 bundle 衍生不可執行 ticket; chore: pull .claude 更新（上游 e41fd80）
+
+Changes: 2 docs, 1 chore
+
+- docs: domain-map 模板和 9 個既有 map 補標 bundle 實作狀態欄
+- docs: PC-APP-012 domain-map 未實作 bundle 衍生不可執行 ticket
+- chore: pull .claude 更新（上游 e41fd80）
+
+---
+
 ## [2.20.1] - 2026-07-23
 
 ### Summary

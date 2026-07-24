@@ -83,17 +83,19 @@ aggregate A  aggregate B（by-id 參照，非直接依賴）
 
 <!-- 分類軸：真 domain（aggregate/kernel/VO/read-model）vs 非 domain（cross-cutting/infrastructure，列此僅為覆蓋完整性）。 -->
 
-| Bundle | 分類 | 納入概念 | 排除 | 目標路徑 | 測試層/方法 |
-|---|---|---|---|---|---|
-| {Aggregate} | aggregate root | {實體/聚合根/核心不變式} | {衍生計算、持久化細節} | `{domain/xxx}` | unit：{斷言重點} |
-| {Kernel} | domain kernel（共享） | {共享估值/核心計算} | {各 read-model 衍生視圖} | `{domain/xxx}` | unit：{斷言重點} |
-| {Read-model A} | read-model | {衍生計算函式}（{FR}） | {其他 read-model 職責} | `{domain/xxx}` | unit：{斷言重點} |
-| {Supporting VO} | supporting VO | {值物件 + 純函式}（{FR}） | {其他屬性} | `{domain/xxx}` | unit：{邊界值} |
-| {Domain Service} | domain service | {跨 aggregate 協調邏輯}（{FR}） | aggregate 內部不變式 | `{domain/xxx}` | unit + integration |
-| {Policy} | policy / event handler | {事件驅動反應}（{FR}） | 命令協調 | `{domain/xxx}` | unit：餵 event 斷言命令 |
-| {Saga} | saga / process manager | {長期協調 + 補償}（{FR}） | 衍生計算 | `{domain/xxx}` | unit（狀態機）+ integration |
-| {Cross-cutting} | 非 domain（顯示層）| {i18n/主題/格式化}（{FR}） | 任何 domain 計算 | `{presentation/xxx}` | widget test |
-| {Infrastructure} | 非 domain（infra）| {外部服務/持久化/匯入匯出}（{FR}） | domain 計算 | `{data/xxx}` | repository test |
+<!-- 實作狀態欄填法：對 bundle 目標路徑跑 `ls lib/domains/{domain}/{bundle_dir}/` 或 grep 對應類別名，存在即「已實作」，不存在即「規劃中」。禁止憑印象填寫（PC-APP-012：曾把未接線的 PassthroughMerge 誤標已實作，導致下游產出不可執行 ticket）。 -->
+
+| Bundle | 分類 | 納入概念 | 排除 | 目標路徑 | 測試層/方法 | 實作狀態 |
+|---|---|---|---|---|---|---|
+| {Aggregate} | aggregate root | {實體/聚合根/核心不變式} | {衍生計算、持久化細節} | `{domain/xxx}` | unit：{斷言重點} | {已實作/規劃中} |
+| {Kernel} | domain kernel（共享） | {共享估值/核心計算} | {各 read-model 衍生視圖} | `{domain/xxx}` | unit：{斷言重點} | {已實作/規劃中} |
+| {Read-model A} | read-model | {衍生計算函式}（{FR}） | {其他 read-model 職責} | `{domain/xxx}` | unit：{斷言重點} | {已實作/規劃中} |
+| {Supporting VO} | supporting VO | {值物件 + 純函式}（{FR}） | {其他屬性} | `{domain/xxx}` | unit：{邊界值} | {已實作/規劃中} |
+| {Domain Service} | domain service | {跨 aggregate 協調邏輯}（{FR}） | aggregate 內部不變式 | `{domain/xxx}` | unit + integration | {已實作/規劃中} |
+| {Policy} | policy / event handler | {事件驅動反應}（{FR}） | 命令協調 | `{domain/xxx}` | unit：餵 event 斷言命令 | {已實作/規劃中} |
+| {Saga} | saga / process manager | {長期協調 + 補償}（{FR}） | 衍生計算 | `{domain/xxx}` | unit（狀態機）+ integration | {已實作/規劃中} |
+| {Cross-cutting} | 非 domain（顯示層）| {i18n/主題/格式化}（{FR}） | 任何 domain 計算 | `{presentation/xxx}` | widget test | {已實作/規劃中} |
+| {Infrastructure} | 非 domain（infra）| {外部服務/持久化/匯入匯出}（{FR}） | domain 計算 | `{data/xxx}` | repository test | {已實作/規劃中} |
 
 ### Bundle 不變式清單（per-bundle）
 
@@ -145,4 +147,5 @@ Step 5 測試設計逐條列舉為 domain unit test，不靠「剛好出現於 U
 ---
 
 **Last Updated**: YYYY-MM-DD | **Source**: {規劃波 ticket ID}
+**Template Updated**: 2026-07-24 | **Version**: 2.1.0 — §3 Bundle 界定表新增「實作狀態」欄，防止未接線概念被誤標已實作（PC-APP-012，0.38.1-W9-003）
 **Template Updated**: 2026-07-23 | **Version**: 2.0.0 — 追加多 aggregate DAG 變體 + command-side bundle 行 + DAG 底線（0.1.0-W2-021）
