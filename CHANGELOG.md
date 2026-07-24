@@ -1,3 +1,14 @@
+## [2.20.3] - 2026-07-24
+
+### Summary
+fix: doc skill + saffron agent 加 domain-map bundle 存在性驗證（PC-APP-012 防護）
+
+Changes: 1 fix
+
+- fix: doc skill + saffron agent 加 domain-map bundle 存在性驗證（PC-APP-012 防護）
+
+---
+
 ## [2.20.2] - 2026-07-24
 
 ### Summary

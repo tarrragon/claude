@@ -105,7 +105,7 @@ DomainMap ──source_specs──→ Spec
 |------|------|------|
 | 提案模板 | `templates/proposal-template.md` | 建立新提案 |
 | 規格模板 | `templates/spec-template.md` | 建立新功能規格 |
-| Domain Map 模板 | `templates/domain-map-template.md` | 建立 domain bundle 邊界地圖（DDD 水平視角） |
+| Domain Map 模板 | `templates/domain-map-template.md` | 建立 domain bundle 邊界地圖（DDD 水平視角）。§3 每個 bundle 必須 `ls`/`grep` 驗證目標路徑存在後才標「已實作」，不存在標「規劃中」（PC-APP-012 防護） |
 | Design System 規格模板 | `templates/design-system-spec-template.md` | 建立 UI 設計系統規格 |
 | 用例模板 | `templates/usecase-template.md` | 建立新用例 |
 
