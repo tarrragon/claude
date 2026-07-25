@@ -87,6 +87,8 @@ aggregate A  aggregate B（by-id 參照，非直接依賴）
 
 <!-- 資料契約文件引用連結欄填法：僅 data/infrastructure 列（承載持久化細節的 bundle）需填，連結到 doc skill data-contract-template 產出的文件（如 SPEC-010）。其餘列（domain 純函式 bundle）標「N/A」——資料層設計意圖屬 data 層 bundle 職責，不下沉 domain。判準與模板見 .claude/methodologies/data-layer-contract-methodology.md。 -->
 
+<!-- 實查約束（PC-BAL-007）：本欄陳述的持久化型態（實表/內嵌 VO/無持久化）必須以 schema 實查（讀 DDL、grep `CREATE TABLE`、ls migration 目錄）為準，禁止轉述既有 domain-map 描述或憑推論下斷言——並行文件票各自陳述同一事實時，未實查的一方曾寫入與實查結果相反的斷言（實證：W10-006 誤述 loan domain 為「無獨立持久化」，同時段 W10-003 實查確認 `book_loans` 為實表）。無法實查時，本欄標註「待 {來源票 ticket-id} 定案」，不得留空白斷言。 -->
+
 | Bundle | 分類 | 納入概念 | 排除 | 目標路徑 | 測試層/方法 | 實作狀態 | 資料契約文件引用連結 |
 |---|---|---|---|---|---|---|---|
 | {Aggregate} | aggregate root | {實體/聚合根/核心不變式} | {衍生計算、持久化細節} | `{domain/xxx}` | unit：{斷言重點} | {已實作/規劃中} | N/A |

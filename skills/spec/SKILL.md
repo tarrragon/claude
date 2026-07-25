@@ -19,6 +19,16 @@ description: "需求完善度品質閘門。Use for: (1) Phase 1 開始時初始
 
 **/spec 不是流程入口**：lavender 在 Phase 1 內部使用 /spec 產出功能規格。/tdd 不呼叫 /spec，/spec 不呼叫 /tdd。兩者完全解耦。
 
+### 適用範圍限制（防誤用聲明）
+
+`docs/spec/` 下 frontmatter 含 `subdomain: data-contract` 的文件（例：`docs/spec/balance-sheet/SPEC-002-accounts-snapshots-data-contract.md`）**不適用 `/spec validate`**。
+
+| 項目 | /spec validate 假設的 schema | data-contract 文件實際 schema |
+|------|------------------------------|-------------------------------|
+| 章節結構 | Purpose / Scenarios / Acceptance（Lite）或 6 區段（Full） | 概述 + 可攜性邊界原則 + A 區（邏輯契約）/ B 區（實作綁定） |
+
+**Why**：/spec validate 的 Layer 1 結構檢查針對 Purpose/Scenarios/Acceptance（或 Full 6 區段）比對區段標題，data-contract 文件遵循 `data-layer-contract-methodology.md` 的可攜性兩區（A/B）結構，兩套 schema 不相容。**Consequence**：對 data-contract 文件執行 `/spec validate` 會在 Layer 1 誤報「結構失敗」（找不到 Purpose/Scenarios/Acceptance 區段標題），該結果不反映文件真實品質，若被當真會誤導撰寫者修改成不必要的結構。**Action**：data-contract 文件的機械驗證改由 `doc validate` 子命令承接（`.claude/skills/doc/SKILL.md`，0.2.1-W1-008 落地前為人工依 `data-layer-contract-methodology.md` 檢查），禁止對其執行 `/spec validate`；已誤執行者，Layer 1「結構失敗」判定應忽略。
+
 ---
 
 ## 子命令總覽
@@ -187,6 +197,8 @@ domain map 定位：省略 `--domain-map` 時自動找 spec 同目錄 `domain-ma
 
 嚴重度：高（API 路徑/response format，影響 SDK 實作）、中（資料模型欄位）、低（行為策略，不影響介面契約）。教學缺口（spec 有但教學無）不算偏移，標記為缺口建議先在 blog 補完。
 
+**降級條款（無教學模組對應表時）**：步驟 1 依賴專案 CLAUDE.md 存在「教學模組對應表」章節才能定位對應教學模組。**Why**：並非所有專案都維護 blog 教學內容（如本專案 flutter_balance），CLAUDE.md 無此表時維度 4 無源可比。**Consequence**：若強行執行，會因找不到對應章節而卡住或產出誤導性的空比對結果，且不應被計入 validate 失敗。**Action**：執行維度 4 前先確認專案 CLAUDE.md 是否含「教學模組對應表」章節；不存在時跳過維度 4，於 validate 輸出標註「維度 4 skipped：無教學模組對應表」，不得視為失敗（不計入未回答問題數、不阻擋迭代上限判定）。
+
 #### 情境相關提問（Full 模式額外提示）
 
 Full 模式下，validate 完成維度 1-3 掃描後，**額外提示**以下問題供撰寫者自行考慮。這些不產出未回答問題清單，不進入迭代：
@@ -224,12 +236,20 @@ Full 模式下，validate 完成維度 1-3 掃描後，**額外提示**以下問
 
 #### 維度 4: 教學一致性（Full 模式）
 
+CLAUDE.md 有「教學模組對應表」時：
+
 | 偏移面向 | Spec 值 | 教學值 | 嚴重度 |
 |---------|---------|--------|--------|
 | {面向} | {spec 描述} | {教學描述} | 高/中/低 |
 
 教學缺口（spec 有定義但教學未涵蓋）：
 - {設計決策描述} → 建議先在 blog 補完
+
+CLAUDE.md 無「教學模組對應表」時（降級條款，見上）：
+
+```
+維度 4 skipped：無教學模組對應表
+```
 
 ### 建議
 - 必須回答：Q1, Q3（影響 GWT 設計）
@@ -271,10 +291,12 @@ Phase 1 中 lavender 如何使用 /spec 的完整流程，詳見 lavender 代理
 - .claude/pm-rules/tdd-flow.md - TDD 完整流程定義
 - references/spec-template-lite.md - Lite 模板（3 區段）
 - references/spec-template-full.md - Full 模板（6 區段）
+- .claude/methodologies/data-layer-contract-methodology.md - data-contract 文件的 A/B 兩區結構定義（`/spec validate` 不適用對象）
+- .claude/skills/doc/SKILL.md - data-contract 文件機械驗證的承接者（`doc validate`，0.2.1-W1-008）
 
 ---
 
-**Version**: 1.4.0
-**Last Updated**: 2026-07-22
+**Version**: 1.5.0
+**Last Updated**: 2026-07-26
 **Source**: Phase 3b context 耗盡案例 → 需求完善度品質閘門
-**Changes**: v1.4.0 - Layer 1 新增 domain-map 覆蓋檢核（`scripts/check_domain_coverage.py` + `tests/test_check_domain_coverage.py`，11 測試綠）：驗證 domain map 覆蓋 spec 全部 FR，FR token 支援逗號續列/範圍展開（0.1.0-W2-016.3，落地 W2-016 ANA domain 規劃整合；動機 W2-014 domain map 曾漏 FR-25/26）。v1.3.0 - Layer 1 新增 API surface 完整性檢查（Full only），`scripts/check_api_surface.py` 機械掃描 FR 段落 API 行為訊號與 endpoint 路徑定義的對應性（0.4.1-W2-005，動機：SPEC-014 FR-04 analytics endpoint 路徑缺口）。v1.2.0 - 新增維度 4 教學一致性（Full 模式），比對 spec 設計決策與教學對應模組（防護教學×實作偏移）。v1.1.0 - 三人組共識簡化：刪除核心抽象/反向提問策略、原維度 4-7 降級為提示、精簡迭代機制、init 條件簡化為 2 個
+**Changes**: v1.5.0 - 定位與分工節新增「適用範圍限制（防誤用聲明）」：`subdomain: data-contract` 文件（A/B 兩區結構）不適用 `/spec validate`，機械驗證改由 `doc validate` 承接（0.2.1-W1-008 落地前人工檢查）；維度 4 補降級條款：CLAUDE.md 無「教學模組對應表」時跳過並標註「維度 4 skipped：無教學模組對應表」，不視為失敗（0.2.1-W1-005，動機：/spec validate 對 SPEC-002 誤報結構失敗 + flutter_balance 專案無教學模組對應表）。v1.4.0 - Layer 1 新增 domain-map 覆蓋檢核（`scripts/check_domain_coverage.py` + `tests/test_check_domain_coverage.py`，11 測試綠）：驗證 domain map 覆蓋 spec 全部 FR，FR token 支援逗號續列/範圍展開（0.1.0-W2-016.3，落地 W2-016 ANA domain 規劃整合；動機 W2-014 domain map 曾漏 FR-25/26）。v1.3.0 - Layer 1 新增 API surface 完整性檢查（Full only），`scripts/check_api_surface.py` 機械掃描 FR 段落 API 行為訊號與 endpoint 路徑定義的對應性（0.4.1-W2-005，動機：SPEC-014 FR-04 analytics endpoint 路徑缺口）。v1.2.0 - 新增維度 4 教學一致性（Full 模式），比對 spec 設計決策與教學對應模組（防護教學×實作偏移）。v1.1.0 - 三人組共識簡化：刪除核心抽象/反向提問策略、原維度 4-7 降級為提示、精簡迭代機制、init 條件簡化為 2 個

@@ -113,24 +113,27 @@ DomainMap ──source_specs──→ Spec
 
 ### 使用方式
 
+`doc create` 已接線的類型（proposal / spec / usecase / data-contract）具備下列能力，優先使用而非手動 `cp`：自動編號（掃描既有檔案分配下一個序號，`--id` 可覆寫）、frontmatter 日期自動替換（`created` / `updated` / `proposed_date`）、proposal 類型自動新增 `proposals-tracking.yaml` entry。`doc next-id <type>` 可唯讀查詢下一個可分配 ID，不建立檔案。
+
 ```bash
 # 建立提案
-cp .claude/skills/doc/templates/proposal-template.md docs/proposals/PROP-{NNN}-{desc}.md
+doc create proposal --title "{提案標題}"
 
 # 建立功能規格
-cp .claude/skills/doc/templates/spec-template.md docs/spec/{domain}/{name}.md
+doc create spec --title "{規格標題}" --domain {domain}
 
-# 建立 Domain Map（多 domain 專案放 domain 子目錄；單 domain 專案放 docs/ 根層）
-cp .claude/skills/doc/templates/domain-map-template.md docs/spec/{domain}/domain-map.md
-
-# 建立資料契約（沿用 SPEC-NNN 編號體系，subdomain 固定為 data-contract）
-cp .claude/skills/doc/templates/data-contract-template.md docs/spec/{domain}/{name}-data-contract.md
-
-# 建立 Design System 規格
-cp .claude/skills/doc/templates/design-system-spec-template.md docs/spec/design-system-spec.md
+# 建立資料契約（與 spec 共用 SPEC-NNN 編號空間，subdomain 固定為 data-contract）
+doc create data-contract --title "{name}-data-contract" --domain {domain}
 
 # 建立用例
-cp .claude/skills/doc/templates/usecase-template.md docs/usecases/UC-{XX}-{desc}.md
+doc create usecase --title "{用例名稱}"
+
+# 查詢下一個可分配 ID（不建立檔案）
+doc next-id spec
+
+# 尚未接線的類型（domain-map / design-system-spec）仍用 cp
+cp .claude/skills/doc/templates/domain-map-template.md docs/spec/{domain}/domain-map.md
+cp .claude/skills/doc/templates/design-system-spec-template.md docs/spec/design-system-spec.md
 ```
 
 ---
@@ -219,6 +222,7 @@ saas-tech-selection skill 做完技術選型訪談後產出「決策記錄」，
 
 ---
 
+**Version**: 1.8.0 — data-contract 接線 doc create CLI（取代 cp 手動流程，取得自動編號/日期/tracking）+ 新增 `doc next-id` 唯讀查詢子命令（0.2.1-W1-001）
 **Version**: 1.7.0 — data contract 升為 first-class 文件類型（五種→六種）：新增 DataContract 列 + data-contract-template 模板 + 使用方式 cp 命令（PROP-002 In Scope 1，0.2.0-W2-001）
 **Version**: 1.6.0 — domain map 升為 first-class 文件類型（四種→五種）：新增 DomainMap 列 + domain-map-template 模板 + 使用方式 cp 命令（W2-016.1）；saas 銜接節補「domain map 不因無 saas 而略過」調和說明——非 saas 起手由 version-bootstrap Step 2.5 從 domain-map-template 新建（W2-016.2）
 **Version**: 1.5.0

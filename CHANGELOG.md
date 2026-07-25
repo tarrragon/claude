@@ -1,3 +1,16 @@
+## [2.20.11] - 2026-07-26
+
+### Summary
+fix: doc CLI data-contract 接線 + next-id; docs: spec data-contract 防誤用 + 維度 4 降級; docs: PC-BAL-007 實查約束落地
+
+Changes: 1 fix, 2 docs
+
+- fix: doc CLI data-contract 接線 + next-id
+- docs: spec data-contract 防誤用 + 維度 4 降級
+- docs: PC-BAL-007 實查約束落地
+
+---
+
 ## [2.20.10] - 2026-07-25
 
 ### Summary

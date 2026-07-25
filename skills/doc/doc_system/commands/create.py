@@ -32,6 +32,12 @@ DOC_TYPE_CONFIG = {
         "id_prefix": "UC",
         "requires_domain": False,
     },
+    "data-contract": {
+        "template": "data-contract-template.md",
+        "target_dir": "docs/spec",
+        "id_prefix": "SPEC",
+        "requires_domain": True,
+    },
 }
 
 VALID_PROPOSAL_STATUSES = ("draft", "discussing", "confirmed", "implemented", "withdrawn")
@@ -57,6 +63,17 @@ def _next_id(project_root: Path, doc_type: str) -> str:
 
     next_num = max_num + 1
     return f"{prefix}-{next_num:03d}"
+
+
+def execute_next_id(args: argparse.Namespace) -> None:
+    """唯讀查詢下一個可分配的 ID（不建立檔案）。"""
+    doc_type = args.type
+    if doc_type not in DOC_TYPE_CONFIG:
+        print(f"不支援的文件類型: {doc_type}")
+        sys.exit(1)
+
+    project_root = FileLocator.get_project_root()
+    print(_next_id(project_root, doc_type))
 
 
 def _suggest_domain_from_tracking(project_root: Path, doc_id: str) -> str | None:

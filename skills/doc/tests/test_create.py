@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import yaml
 
-from doc_system.commands.create import _get_templates_dir, execute
+from doc_system.commands.create import _get_templates_dir, execute, execute_next_id
 from doc_system.core.file_locator import FileLocator
 
 
@@ -32,6 +32,10 @@ def _setup_project(tmp_path):
     (templates_dir / "spec-template.md").write_text(
         '---\nid: SPEC-NNN\ntitle: "{規格標題}"\nstatus: draft\n'
         'created: "YYYY-MM-DD"\n---\n# SPEC-{NNN}\n'
+    )
+    (templates_dir / "data-contract-template.md").write_text(
+        '---\nid: SPEC-NNN\ntitle: "{資料表/契約標題}"\nstatus: draft\n'
+        'created: "YYYY-MM-DD"\n---\n# SPEC-{NNN} 資料契約\n'
     )
 
     return str(tmp_path)
@@ -213,6 +217,131 @@ class TestCreateProposal:
 
         content = created_file.read_text()
         assert "id: SPEC-009" in content
+
+
+class TestCreateDataContract:
+    """create data-contract 的測試案例（0.2.1-W1-001：接線 DOC_TYPE_CONFIG）。"""
+
+    def test_create_data_contract_with_domain(self, tmp_path, capsys):
+        """建立 data-contract 應在 docs/spec/{domain}/ 產生檔案。"""
+        project_root = _setup_project(tmp_path)
+        templates_dir = tmp_path / "templates"
+
+        args = argparse.Namespace(
+            type="data-contract", id="SPEC-010", title="accounts-data-contract", domain="balance-sheet",
+        )
+
+        with (
+            patch.object(FileLocator, "get_project_root", return_value=project_root),
+            patch("doc_system.commands.create._get_templates_dir", return_value=templates_dir),
+        ):
+            execute(args)
+
+        output = capsys.readouterr().out
+        assert "已建立" in output
+
+        created_file = tmp_path / "docs" / "spec" / "balance-sheet" / "SPEC-010-accounts-data-contract.md"
+        assert created_file.is_file()
+        content = created_file.read_text()
+        assert "id: SPEC-010" in content
+
+    def test_create_data_contract_requires_domain(self, tmp_path, capsys):
+        """建立 data-contract 時未指定 --domain 應報錯。"""
+        project_root = _setup_project(tmp_path)
+        templates_dir = tmp_path / "templates"
+
+        args = argparse.Namespace(
+            type="data-contract", id="SPEC-010", title="accounts-data-contract", domain=None,
+        )
+
+        with (
+            patch.object(FileLocator, "get_project_root", return_value=project_root),
+            patch("doc_system.commands.create._get_templates_dir", return_value=templates_dir),
+        ):
+            try:
+                execute(args)
+            except SystemExit:
+                pass
+
+        output = capsys.readouterr().out
+        assert "domain" in output.lower()
+
+    def test_data_contract_shares_spec_number_sequence(self, tmp_path, capsys):
+        """data-contract 與 spec 共用同一 SPEC-NNN 編號空間，不可各自從頭編。"""
+        project_root = _setup_project(tmp_path)
+        templates_dir = tmp_path / "templates"
+
+        # 既有一筆 spec，序號為 SPEC-009
+        existing_spec_dir = tmp_path / "docs" / "spec" / "balance-sheet"
+        existing_spec_dir.mkdir(parents=True)
+        (existing_spec_dir / "SPEC-009-existing.md").write_text("---\nid: SPEC-009\n---\n")
+
+        args = argparse.Namespace(
+            type="data-contract", id=None, title="accounts-data-contract", domain="balance-sheet",
+        )
+
+        with (
+            patch.object(FileLocator, "get_project_root", return_value=project_root),
+            patch("doc_system.commands.create._get_templates_dir", return_value=templates_dir),
+        ):
+            execute(args)
+
+        output = capsys.readouterr().out
+        assert "SPEC-010" in output
+
+        created_file = tmp_path / "docs" / "spec" / "balance-sheet" / "SPEC-010-accounts-data-contract.md"
+        assert created_file.is_file()
+
+
+class TestNextId:
+    """doc next-id 子命令測試（0.2.1-W1-001：唯讀查詢，不建立檔案）。"""
+
+    def test_next_id_returns_next_number_without_creating_file(self, tmp_path, capsys):
+        """next-id 應輸出下一個序號但不建立任何檔案。"""
+        project_root = _setup_project(tmp_path)
+
+        existing = tmp_path / "docs" / "proposals" / "PROP-006-existing.md"
+        existing.write_text("---\nid: PROP-006\n---\n")
+
+        args = argparse.Namespace(type="proposal")
+
+        with patch.object(FileLocator, "get_project_root", return_value=project_root):
+            execute_next_id(args)
+
+        output = capsys.readouterr().out.strip()
+        assert output == "PROP-007"
+        # 未建立任何新檔案
+        assert list((tmp_path / "docs" / "proposals").iterdir()) == [existing]
+
+    def test_next_id_shares_spec_sequence_with_data_contract(self, tmp_path, capsys):
+        """next-id spec 應計入既有 data-contract 檔案的編號（共用序列）。"""
+        project_root = _setup_project(tmp_path)
+
+        contract_dir = tmp_path / "docs" / "spec" / "balance-sheet"
+        contract_dir.mkdir(parents=True)
+        (contract_dir / "SPEC-010-accounts-data-contract.md").write_text("---\nid: SPEC-010\n---\n")
+
+        args = argparse.Namespace(type="spec")
+
+        with patch.object(FileLocator, "get_project_root", return_value=project_root):
+            execute_next_id(args)
+
+        output = capsys.readouterr().out.strip()
+        assert output == "SPEC-011"
+
+    def test_next_id_unsupported_type_exits(self, tmp_path, capsys):
+        """不支援的文件類型應報錯並結束。"""
+        project_root = _setup_project(tmp_path)
+        args = argparse.Namespace(type="unknown")
+
+        with patch.object(FileLocator, "get_project_root", return_value=project_root):
+            try:
+                execute_next_id(args)
+            except SystemExit:
+                pass
+
+        output = capsys.readouterr().out
+        assert "不支援" in output
 
 
 class TestGetTemplatesDir:
