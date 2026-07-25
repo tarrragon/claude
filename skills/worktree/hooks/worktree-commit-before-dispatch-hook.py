@@ -69,20 +69,19 @@ CC runtime 的 worktree 隔離以 origin/main（remote-tracking ref）為 base�
 詳見: .claude/pm-rules/parallel-dispatch.md（worktree base 與 push-first 紀律）"""
 
 
-def _check_origin_behind(logger, input_data: dict) -> bool:
-    """檢查 origin/main 是否落後 local main，依落後量分派行為矩陣。
+def _check_origin_behind(logger) -> int:
+    """純計算 origin/main 落後 local main 的 commit 數，不做任何輸出（W4-009）。
 
-    行為矩陣（W4-008）：
-      lag == 0            靜默，不輸出
-      0 < lag < 閾值       emit_hook_output additionalContext（pm_only），exit 0（不阻擋）
-      lag >= 閾值          stderr 輸出修復指令，回傳 True（呼叫端 exit 2 阻擋）
+    輸出決策（deny / emit additionalContext / stderr 併入）全部移至 main()，
+    避免 0 < lag < 閾值 時提前 emit 到 stdout，導致後續 PC-019 block（exit 2）
+    時該 JSON 被 CC runtime 丟棄（W4-009 根因）。
 
     Args:
-        logger: hook logger，供記錄檢查結果與失敗原因（可觀測性規則 4）
-        input_data: hook stdin JSON，供 emit_hook_output 判定觸發方（pm_only 過濾）
+        logger: hook logger，供記錄檢查失敗原因（可觀測性規則 4）
 
     Returns:
-        bool: True 表示應阻擋派發（lag >= LAG_DENY_THRESHOLD）
+        int: 落後的 commit 數。0 表示同步或無法判斷（git 失敗 / 無 remote /
+             無法解析），呼叫端一律視為「無需警告」。
     """
     try:
         # 計算 origin/main..main 的 commit 數（local main 領先 origin/main 的量）
@@ -94,44 +93,22 @@ def _check_origin_behind(logger, input_data: dict) -> bool:
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
         # git 不可用 / 超時：無法判斷，記錄後略過（不阻擋派發）
         logger.warning("origin/main 落後檢查失敗：%s", exc)
-        return False
+        return 0
 
     if result.returncode != 0:
         # origin/main ref 不存在（未 push 過 / 無 remote）等情況，略過
         logger.info("origin/main 落後檢查略過（git rev-list 非零退出）")
-        return False
+        return 0
 
     count_str = result.stdout.strip()
     if not count_str.isdigit():
         logger.info("origin/main 落後檢查略過（無法解析 commit 數）")
-        return False
+        return 0
 
     behind_count = int(count_str)
-
     if behind_count == 0:
         logger.info("origin/main 與 local main 同步，無需警告")
-        return False
-
-    if behind_count >= LAG_DENY_THRESHOLD:
-        message = ORIGIN_BEHIND_DENY_MESSAGE.format(
-            count=behind_count, threshold=LAG_DENY_THRESHOLD
-        )
-        print(message, file=sys.stderr)
-        logger.warning(
-            "阻擋 worktree 派發：origin/main 落後 %d 個 commit（>= 門檻 %d）",
-            behind_count, LAG_DENY_THRESHOLD,
-        )
-        return True
-
-    # 0 < behind_count < LAG_DENY_THRESHOLD：警告但不阻擋，走 additionalContext 確保 PM 可見
-    emit_hook_output(
-        "PreToolUse",
-        additional_context=ORIGIN_BEHIND_WARNING.format(count=behind_count),
-        audience="pm_only",
-        input_data=input_data,
-    )
-    logger.warning("origin/main 落後 local main %d 個 commit（additionalContext 已發出）", behind_count)
-    return False
+    return behind_count
 
 
 def main() -> int:
@@ -157,9 +134,19 @@ def main() -> int:
 
     logger.info("偵測到 worktree 派發，檢查未 commit 變更")
 
-    # W4-008：origin/main 落後檢查先於 PC-019 未 commit 變更檢查
-    # lag >= LAG_DENY_THRESHOLD 時直接阻擋（stderr，不 emit JSON）
-    if _check_origin_behind(logger, input_data):
+    # W4-008：origin/main 落後量先計算（純計算，不輸出）
+    behind_count = _check_origin_behind(logger)
+
+    # lag >= LAG_DENY_THRESHOLD：直接阻擋（stderr，不 emit JSON），與 PC-019 無關
+    if behind_count >= LAG_DENY_THRESHOLD:
+        message = ORIGIN_BEHIND_DENY_MESSAGE.format(
+            count=behind_count, threshold=LAG_DENY_THRESHOLD
+        )
+        print(message, file=sys.stderr)
+        logger.warning(
+            "阻擋 worktree 派發：origin/main 落後 %d 個 commit（>= 門檻 %d）",
+            behind_count, LAG_DENY_THRESHOLD,
+        )
         return 2
 
     # 檢查 tracked 檔案是否有未 commit 的變更
@@ -183,11 +170,32 @@ def main() -> int:
         changed_files.update(staged.stdout.strip().split("\n"))
 
     if not changed_files:
+        # W4-009：0 < lag < 閾值 且無未 commit 變更（不會 PC-019 block）
+        # 此時才 emit additionalContext，避免提前輸出後被後續 block 丟棄
+        if behind_count > 0:
+            emit_hook_output(
+                "PreToolUse",
+                additional_context=ORIGIN_BEHIND_WARNING.format(count=behind_count),
+                audience="pm_only",
+                input_data=input_data,
+            )
+            logger.warning(
+                "origin/main 落後 local main %d 個 commit（additionalContext 已發出）",
+                behind_count,
+            )
         logger.info("無未 commit 變更，放行")
         return 0
 
+    # PC-019 block：若同時有 lag 警告，併入 stderr block 訊息，避免與 additionalContext
+    # 分道而導致 stdout JSON 被 exit 2 丟棄（W4-009 根因修復）
     files_list = "\n".join(f"  - {f}" for f in sorted(changed_files))
     message = BLOCK_MESSAGE.format(files=files_list)
+    if behind_count > 0:
+        message = message + "\n\n" + ORIGIN_BEHIND_WARNING.format(count=behind_count)
+        logger.warning(
+            "PC-019 block 併發 origin/main 落後警告（%d 個 commit），警告併入 stderr",
+            behind_count,
+        )
     print(message, file=sys.stderr)
     logger.warning("阻擋 worktree 派發：%d 個未 commit 檔案", len(changed_files))
     return 2
