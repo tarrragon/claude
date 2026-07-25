@@ -106,6 +106,27 @@ cp .claude/skills/doc/templates/domain-map-template.md docs/domain-map.md
 
 ---
 
+### Step 2.6：資料契約產出（半自動）
+
+> **Why**：spec FR 定義欄位存在，不定義欄位的值域、狀態責任分層、不變式、交易邊界、錯誤語意與恢復模型；domain map §3 Bundle 界定表的 data/infrastructure 列只標「持久化細節屬 data 層」，未展開細節。**Consequence**：跳過本步驟，資料層設計意圖（為何選這個約束、哪些不變式由 DB 保證）無專屬載體，散落於 DDL 註解與 repository 程式碼各處；Step 5 測試設計對資料層契約條目無盤點依據，覆蓋缺口不可審計（見 `.claude/methodologies/data-layer-contract-methodology.md` 第 6 節）。**Action**：spec FR 與 domain map 完成後、紅燈測試設計前，依兩旗標判準決定是否產出資料契約文件。
+
+**動作**：先依 `.claude/methodologies/data-layer-contract-methodology.md` 第 2 節兩正交旗標（契約文件 / migration 治理）判定（本步驟不複寫判準內容，僅引用）。**兩旗標皆否時，僅維持 schema 約束 + DDL 註解即為合法終態，本步驟到此結束**（合法跳過文件產出，非偷懶）。任一旗標為要時，cp 模板產出：
+
+```bash
+# 沿用 SPEC-NNN 編號體系，subdomain 固定為 data-contract
+cp .claude/skills/doc/templates/data-contract-template.md docs/spec/{domain}/{name}-data-contract.md
+```
+
+**消費來源**：spec FR 列表（欄位語意/值域）+ domain map data 層（§3 Bundle 界定表 Infrastructure/data 列的「資料契約文件引用連結」欄）。
+
+**PM 工作**：依模板填寫 A 區（邏輯契約，DB-agnostic）與 B 區（實作綁定，DB-specific），完成後執行 `doc query <SPEC-ID>` 做 doc CLI 驗證——確認 frontmatter 有效、文件可被查詢發現。
+
+**被誰消費（feed Step 5）**：每條契約條目（不變式/欄位語意/邊界行為）登錄至 `docs/traceability.yaml` 第三軸 `data_contract_tests`；Step 5 派發 sage 時一併帶入此軸，供測試設計逐條盤點覆蓋缺口，避免資料層規則只靠「剛好被某測試涵蓋」被動覆蓋。
+
+**Checkpoint**：兩旗標已判定並記錄理由（含合法跳過情形）；旗標=要時，資料契約文件已產出且 `doc query` 查詢成功；`traceability.yaml` 第三軸 `data_contract_tests` 已初始化，契約條目與測試對應無 TODO 佔位。
+
+---
+
 ### Step 3：教學比對（半自動）
 
 **動作**：對每份完成的 spec 執行 `/spec validate`（Full 模式，含維度 4 教學一致性）。
@@ -240,6 +261,7 @@ cp .claude/skills/doc/templates/domain-map-template.md docs/domain-map.md
 
 ---
 
+**Version**: 1.4.0 — 新增 Step 2.6「資料契約產出」於 Step 2.5 與 Step 3 間：依兩旗標判準（引用 `data-layer-contract-methodology.md` 第 2 節，不複寫）決定是否 cp 模板產出資料契約文件；契約條目登錄 traceability 第三軸 `data_contract_tests` 供 Step 5 測試設計盤點缺口（PROP-002 In Scope 3，0.2.0-W2-003）
 **Version**: 1.3.0 — 新增 Step 2.5「Domain 規劃」於 Step 2 與 Step 3 間：spec FR 填完後、測試設計前產出/更新 domain map（doc domain-map-template），含 saas / standalone 調和語意（domain 規劃是所有規劃波通用步驟，非 saas 專屬）；Step 5 補「消費 domain map 逐 bundle 定測試層」、Step 6 建票來源補「domain map bundle 分層 → domain/data/presentation 切分」（0.1.0-W2-016.2，落地 W2-016 ANA domain 規劃整合）
 **Version**: 1.2.0 — 新增 Step 4.5「地基波（僅含 UI 提案版本）」於 Step 4 與 Step 5 間：測試設計前依 component-library 方法論〈地基波 build 順序〉編排 i18n / design-system / UX 審查 / 元件庫四塊實作（Why：測試需驗 zh/en overflow 與元件反應，依賴 i18n/元件先存在；實證地基波經指正後手動插入）；Step 2 UI 前置檢查補「design-system spec（用 design-system-spec-template）」檢查項。非 UI 版本略過
 **Version**: 1.1.0 — Step 2 新增「UI 類提案元件庫前置檢查」小節：判別提案是否涉及 UI/頁面/元件，涉及則須先確認 design token 層與 L3 元件庫章節存在（缺則先補齊），才可繼續 UI 實作票規劃，落地元件庫雙向約束方法論流程整合點 1

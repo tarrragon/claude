@@ -31,6 +31,7 @@
 | clean-architecture-implementation-methodology.md | Clean Architecture 實作 |
 | layered-architecture-quality-checking.md | 分層架構品質檢查 |
 | domain-bundle-mapping-methodology.md | 從 spec FR 反推 DDD domain bundle 邊界（bundle 分類 aggregate/kernel/read-model、依賴方向 DAG、層→測試對應；配合 doc domain-map-template + version-bootstrap Step 2.5） |
+| data-layer-contract-methodology.md | 資料層規格化（三層保護模型：schema 約束即規格 → 契約文件 → 契約對應測試；兩正交二元旗標判準取代 L1/L2/L3；CLI 化升級判準；sqflite migration 技術提示；migration 治理流程判準；契約↔測試對應 traceability 第三軸） |
 
 ## 測試相關
 
@@ -100,7 +101,8 @@
 
 ---
 
-**Last Updated**: 2026-06-15
+**Last Updated**: 2026-07-25
+**Version**: 1.9.0 - 新增 data-layer-contract-methodology.md 索引項（程式碼品質節，0.2.0-W2-002，source: PROP-002 In Scope 2）
 **Version**: 1.8.0 - W8-041 標籤同步：11 處用途欄「30 秒核心」標籤改為「核心判準」，對齊 W8-040 方法論新定位（框架判斷標準，非 30 秒壓縮）。版本註腳歷史保留原「30 秒核心」字樣
 **Version**: 1.7.0 - 補列 package-import-language-mechanisms.md 衛星檔索引項 + 主檔用途補「30 秒核心」（程式碼品質節，W8-020.1 衛星檔原未入索引，W8-020.12 campaign 收尾 gate 補齊）
 **Version**: 1.6.0 - 新增 five-document-system-examples.md 衛星檔索引項 + 主檔用途補「30 秒核心」（核心方法論節，W8-020.11 方法論瘦身校準）

@@ -11,13 +11,14 @@ description: "需求追蹤文件系統（proposals/spec/usecases）的查詢、�
 
 ---
 
-## 五種文件類型
+## 六種文件類型
 
 | 類型 | 目錄 | 核心問題 | 詳細規範 |
 |------|------|---------|---------|
 | Proposal | `docs/proposals/` | 為什麼要做？做什麼不做什麼？ | Read `references/proposals.md` |
 | Spec | `docs/spec/{domain}/` | 功能規格是什麼？ | Read `references/spec.md` |
 | DomainMap | `docs/spec/{domain}/domain-map.md`（單 domain 退化 `docs/domain-map.md`） | domain bundle 邊界、依賴方向、層測試策略？（DDD 水平視角，正交 UC）| `templates/domain-map-template.md` |
+| DataContract | `docs/spec/{domain}/`（沿用 SPEC-NNN 編號體系，`subdomain: data-contract`） | 資料層邏輯契約（DB-agnostic）與實作綁定（DB-specific）是什麼？（schema 語意、不變式、保證層歸屬） | `templates/data-contract-template.md` |
 | UseCase | `docs/usecases/` | 使用場景和驗收標準？ | Read `references/usecases.md` |
 | Tracking | `docs/proposals-tracking.yaml` | 提案進度如何？ | Read `references/tracking.md` |
 
@@ -105,7 +106,8 @@ DomainMap ──source_specs──→ Spec
 |------|------|------|
 | 提案模板 | `templates/proposal-template.md` | 建立新提案 |
 | 規格模板 | `templates/spec-template.md` | 建立新功能規格 |
-| Domain Map 模板 | `templates/domain-map-template.md` | 建立 domain bundle 邊界地圖（DDD 水平視角）。§3 每個 bundle 必須 `ls`/`grep` 驗證目標路徑存在後才標「已實作」，不存在標「規劃中」（PC-APP-012 防護） |
+| Domain Map 模板 | `templates/domain-map-template.md` | 建立 domain bundle 邊界地圖（DDD 水平視角） |
+| 資料契約模板 | `templates/data-contract-template.md` | 建立資料層邏輯契約與實作綁定文件（DB-agnostic / DB-specific 兩區） |
 | Design System 規格模板 | `templates/design-system-spec-template.md` | 建立 UI 設計系統規格 |
 | 用例模板 | `templates/usecase-template.md` | 建立新用例 |
 
@@ -120,6 +122,9 @@ cp .claude/skills/doc/templates/spec-template.md docs/spec/{domain}/{name}.md
 
 # 建立 Domain Map（多 domain 專案放 domain 子目錄；單 domain 專案放 docs/ 根層）
 cp .claude/skills/doc/templates/domain-map-template.md docs/spec/{domain}/domain-map.md
+
+# 建立資料契約（沿用 SPEC-NNN 編號體系，subdomain 固定為 data-contract）
+cp .claude/skills/doc/templates/data-contract-template.md docs/spec/{domain}/{name}-data-contract.md
 
 # 建立 Design System 規格
 cp .claude/skills/doc/templates/design-system-spec-template.md docs/spec/design-system-spec.md
@@ -214,9 +219,10 @@ saas-tech-selection skill 做完技術選型訪談後產出「決策記錄」，
 
 ---
 
+**Version**: 1.7.0 — data contract 升為 first-class 文件類型（五種→六種）：新增 DataContract 列 + data-contract-template 模板 + 使用方式 cp 命令（PROP-002 In Scope 1，0.2.0-W2-001）
 **Version**: 1.6.0 — domain map 升為 first-class 文件類型（四種→五種）：新增 DomainMap 列 + domain-map-template 模板 + 使用方式 cp 命令（W2-016.1）；saas 銜接節補「domain map 不因無 saas 而略過」調和說明——非 saas 起手由 version-bootstrap Step 2.5 從 domain-map-template 新建（W2-016.2）
 **Version**: 1.5.0
-**Last Updated**: 2026-07-22
+**Last Updated**: 2026-07-25
 
 ---
 

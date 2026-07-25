@@ -1,3 +1,18 @@
+## [2.20.4] - 2026-07-25
+
+### Summary
+fix: 警告升 additionalContext + lag 超閾值 deny; docs: version-bootstrap Step 2.6 資料契約產出 + domain-map §3 契約引用連結欄; docs: 建立 data-contract-template 模板 + doc SKILL.md 註冊 (+2 more)
+
+Changes: 1 fix, 4 docs
+
+- fix: 警告升 additionalContext + lag 超閾值 deny
+- docs: version-bootstrap Step 2.6 資料契約產出 + domain-map §3 契約引用連結欄
+- docs: 建立 data-contract-template 模板 + doc SKILL.md 註冊
+- docs: 建立 data-layer-contract-methodology 方法論 + 索引註冊
+- docs: domain-map 補標實作狀態欄 + 修正目標路徑
+
+---
+
 ## [2.20.3] - 2026-07-24
 
 ### Summary
