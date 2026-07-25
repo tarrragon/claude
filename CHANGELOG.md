@@ -1,3 +1,14 @@
+## [2.20.9] - 2026-07-25
+
+### Summary
+docs: 記錄 PC-BAL-006 chpwd ls 淹沒被誤診為 CLI 故障（ 驗收重現實證）
+
+Changes: 1 docs
+
+- docs: 記錄 PC-BAL-006 chpwd ls 淹沒被誤診為 CLI 故障（ 驗收重現實證）
+
+---
+
 ## [2.20.8] - 2026-07-25
 
 ### Summary
