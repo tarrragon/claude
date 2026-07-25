@@ -1,3 +1,16 @@
+## [2.20.13] - 2026-07-26
+
+### Summary
+fix: doc validate 子命令; fix: doc skill 既有測試紅燈修復; docs: 分冊判準 + domain 清單去專案化
+
+Changes: 2 fix, 1 docs
+
+- fix: doc validate 子命令
+- fix: doc skill 既有測試紅燈修復
+- docs: 分冊判準 + domain 清單去專案化
+
+---
+
 ## [2.20.12] - 2026-07-26
 
 ### Summary

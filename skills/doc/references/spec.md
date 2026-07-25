@@ -14,16 +14,14 @@ docs/spec/{domain}/{feature}.md
 
 ### Domain 列表
 
-| Domain | 核心責任 | 依賴 |
-|--------|---------|------|
-| core | 資料模型、錯誤處理、事件系統 | 無（基礎層） |
-| extraction | 從網頁提取書籍資料 | core, platform, messaging |
-| platform | 平台偵測、適配器管理 | core |
-| data-management | 儲存、匯入匯出、同步 | core |
-| messaging | 跨 context 通訊 | core |
-| page | 頁面偵測、Content Script | core, messaging |
-| system | 生命週期、健康監控 | core |
-| user-experience | UI、搜尋、篩選 | core, data-management |
+Domain 清單依專案而異，不在本文件固定列舉（固定列舉會綁死特定專案，違反框架資產與專案產物分離原則）。查詢當前專案實際 domain 與其下 spec：
+
+```bash
+doc domain          # 無參數：動態列出 docs/spec/ 下所有 domain 子目錄
+doc domain <name>   # 帶 domain 名稱：列出該 domain 下的 spec 清單與關聯 UC
+```
+
+domain 之間的核心責任與依賴關係屬專案知識，記錄於該專案的 `docs/domain-map.md`（單 domain）或 `docs/spec/{domain}/domain-map.md`（多 domain），非本 Skill 範疇。
 
 ## 模板
 

@@ -39,14 +39,15 @@ description: "需求追蹤文件系統（proposals/spec/usecases）的查詢、�
 | `query` | 查詢文件 | `/doc query PROP-001` 或 `/doc query UC-01` |
 | `list` | 列出文件 | `/doc list proposals` 或 `/doc list specs` |
 | `nav` | 跨文件導航 | `/doc nav UC-01` → 相關 spec/proposal/ticket |
-| `domain` | Domain 地圖 | `/doc domain extraction` |
+| `domain` | Domain 地圖 | `/doc domain {domain}`（省略 `{domain}` 動態列出當前專案所有 domain） |
 | `status` | 追蹤狀態 | `/doc status` |
 | `test-map` | UC 測試對應 | `/doc test-map UC-01` |
-| `batch-init` | 批量建置骨架 | `/doc batch-init --proposals PROP-007,PROP-008 --domain collector` |
+| `batch-init` | 批量建置骨架 | `/doc batch-init --proposals PROP-007,PROP-008 --domain {domain}` |
 | `uc list` | 列出合法 UC 編號+標題（SSOT 動態解析） | `/doc uc list` |
 | `uc verify [path]` | 驗證路徑內 UC token 白名單合規（可掛 CI） | `/doc uc verify lib`（exit 0=pass / 1=violation） |
 | `uc trace <UC-XX>` | 列出指定 UC 的 code 引用位置 | `/doc uc trace UC-01` |
 | `uc context <UC-XX\|ticket-id>` | 輸出 UC 標題+spec 位置+code 引用 top-N，供派發 Context Bundle 引用 | `/doc uc context UC-01` 或 `/doc uc context <ticket-id>` |
+| `validate <SPEC-ID>` | 依 frontmatter subdomain 分派章節 schema 驗證（目前僅 data-contract） | `/doc validate SPEC-002`（exit 0=通過 / 1=章節缺失 / 2=文件不存在或 frontmatter 不可解析） |
 
 ---
 
@@ -85,16 +86,12 @@ DomainMap ──source_specs──→ Spec
 
 ### Domain 列表
 
-| Domain | 目錄 | 說明 |
-|--------|------|------|
-| core | `spec/core/` | 資料模型、錯誤處理、事件系統 |
-| extraction | `spec/extraction/` | 資料提取 |
-| platform | `spec/platform/` | 平台管理 |
-| data-management | `spec/data-management/` | 儲存、匯出、同步 |
-| messaging | `spec/messaging/` | 跨 context 通訊 |
-| page | `spec/page/` | 頁面偵測 |
-| system | `spec/system/` | 生命週期管理 |
-| user-experience | `spec/user-experience/` | UI、搜尋 |
+Domain 清單依專案而異（`docs/spec/` 下的子目錄），非本 Skill 固定內容。查詢當前專案實際 domain：
+
+```bash
+doc domain          # 無參數：動態列出 docs/spec/ 下所有 domain 子目錄
+doc domain <name>   # 帶 domain 名稱：列出該 domain 下的 spec 清單與關聯 UC
+```
 
 ---
 
@@ -222,6 +219,8 @@ saas-tech-selection skill 做完技術選型訪談後產出「決策記錄」，
 
 ---
 
+**Version**: 1.11.0 — 新增 `validate <SPEC-ID>` 子命令：依 frontmatter subdomain 分派章節 schema 驗證（data-contract 驗可攜性邊界原則/A.1-A.6/B.1-B.3/適用判準兩旗標非空；非 data-contract 明確路由 `/spec validate`，exit 0/1/2），對應 `doc_system/commands/validate.py`（0.2.1-W1-008）
+**Version**: 1.10.0 — Domain 列表改為指引 `doc domain` 動態查詢，移除他專案（book_overview_app）的 extraction/platform/messaging 等固定清單（違反 framework-asset-separation，0.2.1-W1-007）
 **Version**: 1.9.0 — Domain Map 模板列補 §3 bundle 實作狀態驗證要求（`ls`/`grep` 驗證存在才標「已實作」，PC-APP-012 防護收編自 book_overview_app，0.2.1-W1-006）
 **Version**: 1.8.0 — data-contract 接線 doc create CLI（取代 cp 手動流程，取得自動編號/日期/tracking）+ 新增 `doc next-id` 唯讀查詢子命令（0.2.1-W1-001）
 **Version**: 1.7.0 — data contract 升為 first-class 文件類型（五種→六種）：新增 DataContract 列 + data-contract-template 模板 + 使用方式 cp 命令（PROP-002 In Scope 1，0.2.0-W2-001）

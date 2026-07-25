@@ -3,7 +3,7 @@
 import argparse
 import sys
 
-from doc_system.commands import query, list_cmd, nav, domain, status, test_map, create, update, batch_init, uc
+from doc_system.commands import query, list_cmd, nav, domain, status, test_map, create, update, batch_init, uc, validate
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -90,6 +90,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="新狀態（draft/discussing/confirmed/implemented/withdrawn）",
     )
 
+    # validate
+    validate_parser = subparsers.add_parser(
+        "validate", help="依 frontmatter subdomain 分派章節 schema 驗證"
+    )
+    validate_parser.add_argument("doc_id", help="文件 ID（如 SPEC-002）")
+
     # uc（子命令群組：list/verify/trace/context）
     uc_parser = subparsers.add_parser("uc", help="UC 編號治理：list/verify/trace/context")
     uc_subparsers = uc_parser.add_subparsers(dest="uc_command")
@@ -149,6 +155,7 @@ COMMAND_HANDLERS = {
     "batch-init": batch_init.execute,
     "update": update.execute,
     "uc": uc.execute,
+    "validate": validate.execute,
 }
 
 

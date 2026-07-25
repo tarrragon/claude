@@ -62,9 +62,8 @@ class TestSchemaConstantsWellFormed:
 class TestProposalsTrackingRealFileConformance:
     """載入真實 docs/proposals-tracking.yaml 驗證與 SSOT 一致。"""
 
-    @classmethod
     @pytest.fixture(scope="class")
-    def real_data(cls):
+    def real_data(self):
         assert PROPOSALS_TRACKING_PATH.exists(), (
             f"真實 tracking 檔不存在：{PROPOSALS_TRACKING_PATH}"
         )

@@ -7,6 +7,13 @@
 # 錯誤語意、恢復模型）。與 spec-template 資料模型章節分工：spec 聚焦功能行為
 # 所需欄位，本文件聚焦約束與邊界。方法論：
 # .claude/methodologies/data-layer-contract-methodology.md
+#
+# 分冊判準（一份契約 vs 多份契約）：
+# 1. per-domain 放置：一個 domain 至少一冊，不同 domain 不共用同一份契約檔案。
+# 2. frontmatter `domain` 為單值欄位：一冊涵蓋範圍以此單值 domain 為上限，
+#    不可用一份契約橫跨多個 domain。
+# 3. 同 domain 內若寫入者群（誰負責寫入）或錯誤語意模式（如佇列表 vs 主資料表，
+#    錯誤語意與恢復模型明顯不同）已分異，即使同屬一個 domain 也應再拆分為多份。
 
 id: SPEC-NNN
 title: "{資料表/契約標題，如 accounts / snapshots 資料契約}"
@@ -172,5 +179,6 @@ schema 凍結 vs 演進的決策；seed 資料政策。
 
 ---
 
-**Template Updated**: 2026-07-26 | **Version**: 1.1.0 — 適用判準表新增「dormant 豁免（如適用）」列，引用 data-layer-contract-methodology 第 2.1 節（0.2.1-W1-002）
+**Template Updated**: 2026-07-26 | **Version**: 1.2.0 — 檔頭補分冊判準三條（per-domain 放置/domain 單值上限/寫入者群或錯誤語意模式分異即再分冊），供撰寫者判斷一份契約應涵蓋的範圍（0.2.1-W1-007）
+**Version**: 1.1.0 — 適用判準表新增「dormant 豁免（如適用）」列，引用 data-layer-contract-methodology 第 2.1 節（0.2.1-W1-002）
 **Version**: 1.0.0 — 初始建立（PROP-002 In Scope 1，0.2.0-W2-001）
