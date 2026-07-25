@@ -1,3 +1,14 @@
+## [2.20.8] - 2026-07-25
+
+### Summary
+docs: 記錄 IMP-BAL-002 sync-pull 未知參數推進 base SHA 缺陷（framework issue #18）
+
+Changes: 1 docs
+
+- docs: 記錄 IMP-BAL-002 sync-pull 未知參數推進 base SHA 缺陷（framework issue #18）
+
+---
+
 ## [2.20.7] - 2026-07-25
 
 ### Summary
