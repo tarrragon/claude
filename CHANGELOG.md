@@ -1,3 +1,14 @@
+## [2.20.7] - 2026-07-25
+
+### Summary
+docs: 記錄 IMP-BAL-001 PreToolUse 提前 emit stdout 被 exit 2 丟棄模式
+
+Changes: 1 docs
+
+- docs: 記錄 IMP-BAL-001 PreToolUse 提前 emit stdout 被 exit 2 丟棄模式
+
+---
+
 ## [2.20.6] - 2026-07-25
 
 ### Summary
