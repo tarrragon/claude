@@ -1,3 +1,16 @@
+## [2.20.12] - 2026-07-26
+
+### Summary
+fix: TRACEABILITY_SCHEMA 三軸補齊; docs: methodology dormant 豁免 + traceability 判準成文; docs: PC-APP-012 防護收編 canonical
+
+Changes: 1 fix, 2 docs
+
+- fix: TRACEABILITY_SCHEMA 三軸補齊
+- docs: methodology dormant 豁免 + traceability 判準成文
+- docs: PC-APP-012 防護收編 canonical
+
+---
+
 ## [2.20.11] - 2026-07-26
 
 ### Summary

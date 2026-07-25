@@ -162,6 +162,7 @@ schema 凍結 vs 演進的決策；seed 資料政策。
 |------|------|------|
 | 契約文件（要/不要） | {要/不要} | {理由，如「多人或 AI 代理協作、有交接需求」} |
 | migration 治理（要/不要） | {要/不要} | {理由，通常依 B.3 Schema 演進策略決策結果而定} |
+| dormant 豁免（如適用） | {不適用 / 已豁免，見 2.1} | 表已建但無 production 觸達路徑時，可依 `data-layer-contract-methodology.md` 第 2.1 節三軸交叉驗證後豁免本文件撰寫，須記錄指令證據與綁 ticket 的重啟條件 |
 
 ## 變更歷史
 
@@ -171,4 +172,5 @@ schema 凍結 vs 演進的決策；seed 資料政策。
 
 ---
 
-**Template Updated**: 2026-07-25 | **Version**: 1.0.0 — 初始建立（PROP-002 In Scope 1，0.2.0-W2-001）
+**Template Updated**: 2026-07-26 | **Version**: 1.1.0 — 適用判準表新增「dormant 豁免（如適用）」列，引用 data-layer-contract-methodology 第 2.1 節（0.2.1-W1-002）
+**Version**: 1.0.0 — 初始建立（PROP-002 In Scope 1，0.2.0-W2-001）

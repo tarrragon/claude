@@ -71,8 +71,10 @@ SA 前置審查在以下情況下**應該被觸發**：
 | 新功能涉及的 domain 概念是否已列入 Bundle 界定表？ | 未列入 → 報告建議新增 bundle 或歸入既有 bundle |
 | 依賴方向是否違反 domain map §2 DAG？ | 違反 → 標記為高嚴重度 |
 | 新增 domain 概念是否有對應不變式？ | 無不變式 → 建議補充 |
+| §3 bundle 有「實作狀態」欄？ | 有 → 只消費「已實作」的 bundle；「規劃中」排除出分析範圍 |
+| §3 bundle 目標路徑存在？ | `ls`/`grep` 驗證；不存在 → 不納入測試缺口或 spawn 規劃（PC-APP-012） |
 
-> **Why**：domain map 是切層與依賴方向的權威依據（`.claude/methodologies/domain-bundle-mapping-methodology.md`）。Phase 0 若不檢查 domain map 覆蓋，新功能可能繞過 bundle 邊界破壞 DAG。
+> **Why**：domain map 是切層與依賴方向的權威依據（`.claude/methodologies/domain-bundle-mapping-methodology.md`）。Phase 0 若不檢查 domain map 覆蓋，新功能可能繞過 bundle 邊界破壞 DAG。消費 domain-map 前必須驗證 bundle 存在性——PC-APP-012 實證 bundle 清單含未實作概念會衍生不可執行 ticket。
 
 **審查流程**：
 ```
@@ -324,7 +326,8 @@ SA 前置審查在以下情況下**應該被觸發**：
 
 ---
 
-**Last Updated**: 2026-06-04
+**Last Updated**: 2026-07-26
+**Version**: 1.3.0 — Domain Map 覆蓋檢查新增兩列：§3 bundle「實作狀態」欄消費規則 + `ls`/`grep` 目標路徑存在性驗證；Why 段補 PC-APP-012 引用（bundle 清單含未實作概念衍生不可執行 ticket 的防護，收編自 book_overview_app，0.2.1-W1-006）
 **Version**: 1.2.0 — 核心職責新增第 6 項「ANA 全量 grep/regex 範圍判定自檢」：觸發句型自檢表 + 必填聲明格式 + 禁止行為 + 三明示（Why/Consequence/Action），引用 W1-005 AC-4 二度誤判觸發案例（0.19.1-W1-039）
 **Version**: 1.1.0 — 禁止行為新增第 7 項「禁止對非自己派發範圍的 ticket 執行修改操作」（含 Why/Consequence/Action 三明示）。Source: SA 越界 close 兄弟 ticket 事件（並行 claim race condition 暴露）。
 **Specialization**: TDD Pre-Review and System Consistency

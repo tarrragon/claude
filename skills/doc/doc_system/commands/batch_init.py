@@ -23,9 +23,21 @@ from doc_system.commands.create import (
 
 # traceability.yaml 頂層鍵一律取自 TRACEABILITY_SCHEMA（SSOT），禁止 inline 猜測。
 _TOP_LEVEL_KEYS = TRACEABILITY_SCHEMA["top_level_keys"]
-assert _TOP_LEVEL_KEYS == {"version", "mappings", "last_updated"}
+assert _TOP_LEVEL_KEYS == {
+    "version",
+    "mappings",
+    "domain_bundle_tests",
+    "data_contract_tests",
+    "last_updated",
+}
 _VERSION_KEY = "version"
 _MAPPINGS_KEY = "mappings"
+# 三軸中另外兩軸（水平 domain 規則軸 + 資料契約軸）為按需人工填寫的骨架，
+# batch-init 僅確保頂層鍵存在（避免 conformance 測試因缺鍵失敗），
+# 內容留待專案自行依 domain-map.md / SPEC 資料契約條目補齊，
+# 不跨專案抄他專案既有條目。
+_DOMAIN_BUNDLE_TESTS_KEY = "domain_bundle_tests"
+_DATA_CONTRACT_TESTS_KEY = "data_contract_tests"
 _LAST_UPDATED_KEY = "last_updated"
 
 # proposals-tracking.yaml 的 proposals 為 list-based（PROPOSALS_TRACKING_SCHEMA SSOT），
@@ -110,7 +122,24 @@ def _append_traceability(traceability_file: Path, spec_id: str, uc_id: str, titl
     if traceability_file.is_file():
         data = yaml.safe_load(traceability_file.read_text(encoding="utf-8")) or {}
     else:
-        data = {_VERSION_KEY: "1.0", _MAPPINGS_KEY: []}
+        # 新建檔案 skeleton：三軸頂層鍵一律存在（對齊 TRACEABILITY_SCHEMA）。
+        # domain_bundle_tests / data_contract_tests 為空骨架，待人工依本專案
+        # domain-map.md / SPEC 資料契約條目逐條填寫，不跨專案抄他專案內容。
+        data = {
+            _VERSION_KEY: "1.0",
+            _MAPPINGS_KEY: [],
+            # TODO: 依 docs/domain-map.md §3 bundle 清單逐條填入
+            #   {bundle, layer, invariants: [...], tests: []}
+            _DOMAIN_BUNDLE_TESTS_KEY: [],
+            # TODO: 依 SPEC 資料契約條目（INV-xx / A.x-x）逐條填入
+            #   {contract_ref, description, tests: []} 或
+            #   {contract_ref, description, no_test_needed: true, reason: "..."}
+            _DATA_CONTRACT_TESTS_KEY: [],
+        }
+
+    # 既有檔案缺三軸鍵時（歷史檔案升級路徑）補齊空骨架，確保 conformance 一致。
+    data.setdefault(_DOMAIN_BUNDLE_TESTS_KEY, [])
+    data.setdefault(_DATA_CONTRACT_TESTS_KEY, [])
 
     mappings = data.setdefault(_MAPPINGS_KEY, [])
     mappings.append({

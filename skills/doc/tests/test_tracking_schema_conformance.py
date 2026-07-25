@@ -37,6 +37,22 @@ class TestSchemaConstantsWellFormed:
         assert "mapping_entry_required" in TRACEABILITY_SCHEMA
         assert TRACEABILITY_SCHEMA["mappings_format"] == "list"
 
+    def test_traceability_schema_has_three_axes(self):
+        """三軸追溯（mappings / domain_bundle_tests / data_contract_tests）皆須存在（0.2.1-W1-003）。"""
+        assert {"mappings", "domain_bundle_tests", "data_contract_tests"} <= (
+            TRACEABILITY_SCHEMA["top_level_keys"]
+        )
+        assert TRACEABILITY_SCHEMA["domain_bundle_tests_format"] == "list"
+        assert TRACEABILITY_SCHEMA["data_contract_tests_format"] == "list"
+
+    def test_domain_bundle_entry_required_keys(self):
+        required = TRACEABILITY_SCHEMA["domain_bundle_entry_required"]
+        assert required == {"bundle", "layer", "invariants", "tests"}
+
+    def test_data_contract_entry_required_keys(self):
+        required = TRACEABILITY_SCHEMA["data_contract_entry_required"]
+        assert required == {"contract_ref", "description"}
+
     def test_schemas_are_independent(self):
         """per-file 邊界：兩個 schema 頂層鍵不應互相假設（per-file 邊界原則）。"""
         assert "last_updated" not in PROPOSALS_TRACKING_SCHEMA["top_level_keys"]
@@ -87,6 +103,34 @@ class TestTraceabilityRealFileConformance:
         with open(TRACEABILITY_PATH, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         assert set(data.keys()) == TRACEABILITY_SCHEMA["top_level_keys"]
+
+    def test_domain_bundle_tests_entries_conform_if_exists(self):
+        if not TRACEABILITY_PATH.exists():
+            pytest.skip("docs/traceability.yaml 尚未建立（按需由 batch_init 產生）")
+        with open(TRACEABILITY_PATH, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        required = TRACEABILITY_SCHEMA["domain_bundle_entry_required"]
+        for entry in data.get("domain_bundle_tests", []):
+            missing = required - set(entry.keys())
+            assert not missing, f"bundle {entry.get('bundle')} 缺少必要欄位：{missing}"
+
+    def test_data_contract_tests_entries_conform_if_exists(self):
+        if not TRACEABILITY_PATH.exists():
+            pytest.skip("docs/traceability.yaml 尚未建立（按需由 batch_init 產生）")
+        with open(TRACEABILITY_PATH, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        required = TRACEABILITY_SCHEMA["data_contract_entry_required"]
+        allowed = required | TRACEABILITY_SCHEMA["data_contract_entry_optional"]
+        for entry in data.get("data_contract_tests", []):
+            missing = required - set(entry.keys())
+            assert not missing, f"contract {entry.get('contract_ref')} 缺少必要欄位：{missing}"
+            unknown = set(entry.keys()) - allowed
+            assert not unknown, f"contract {entry.get('contract_ref')} 含未知欄位：{unknown}"
+            has_tests = bool(entry.get("tests"))
+            has_no_test_needed = entry.get("no_test_needed") is True
+            assert has_tests or has_no_test_needed, (
+                f"contract {entry.get('contract_ref')} 須有 tests 或 no_test_needed=true"
+            )
 
 
 class TestConsumerConformance:

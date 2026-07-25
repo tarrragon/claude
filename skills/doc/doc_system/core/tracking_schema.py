@@ -43,9 +43,36 @@ PROPOSALS_TRACKING_SCHEMA = {
 # docs/traceability.yaml 的權威 schema（按需由 batch_init 建立）。
 # 與 PROPOSALS_TRACKING_SCHEMA 完全獨立，last_updated 是本檔合法自洽欄位
 # （per-file schema 獨立，勿跨檔套用頂層鍵假設）。
+#
+# 三軸追溯（0.2.1-W1-003 補齊，對齊 docs/traceability.yaml v1.1 實際結構）：
+#   mappings             = FR → UC 場景 → tests（垂直：使用者行為軸，既有）
+#   domain_bundle_tests  = domain map bundle → 不變式 → tests（水平：domain 規則軸）
+#   data_contract_tests  = 資料契約條目（INV-xx / A.x-x）→ tests（第三軸）
+# 三軸各自獨立記錄覆蓋，聯集為完整覆蓋，交集去重。
 TRACEABILITY_SCHEMA = {
-    "top_level_keys": {"version", "mappings", "last_updated"},
+    "top_level_keys": {
+        "version",
+        "mappings",
+        "domain_bundle_tests",
+        "data_contract_tests",
+        "last_updated",
+    },
     "mappings_format": "list",
     "mapping_entry_required": {"spec", "usecase", "title"},
-    "mapping_entry_optional": {"scenarios", "tests"},
+    "mapping_entry_optional": {"scenarios", "alt_scenarios", "main_flow", "tests"},
+    # domain_bundle_tests：list-based，每條目代表一個 domain bundle。
+    "domain_bundle_tests_format": "list",
+    "domain_bundle_entry_required": {"bundle", "layer", "invariants", "tests"},
+    "domain_bundle_entry_optional": set(),
+    # data_contract_tests：list-based，每條目對應一個資料契約不變式/邊界。
+    # tests 與 (no_test_needed + reason) 互斥：有測試覆蓋填 tests；
+    # 明文豁免填 no_test_needed=true + reason。
+    "data_contract_tests_format": "list",
+    "data_contract_entry_required": {"contract_ref", "description"},
+    "data_contract_entry_optional": {
+        "tests",
+        "no_test_needed",
+        "reason",
+        "reason_supplement",
+    },
 }

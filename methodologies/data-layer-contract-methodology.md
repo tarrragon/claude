@@ -45,6 +45,56 @@
 
 ---
 
+## 2.1 dormant 表豁免判準
+
+**dormant 表** = schema 已建立、repository 寫入方法已實作，但無 production 觸達路徑（DI 未接線、或呼叫鏈終止於死路）的表。對 dormant 表撰寫第 2 層契約文件是負債：文件描述的是「寫入路徑的行為事實」，無 production 寫入路徑即無行為事實可承載，寫出的文件只能複述 DDL，並在首次真實接線時全文重審。本節定義何時可合法跳過契約撰寫（豁免），以及豁免必須滿足的條件。
+
+### 豁免前置：三軸交叉驗證
+
+**Why**：僅憑程式碼註解（「規劃中」「未來擴充」）或表面 grep 一次命中判定 dormant，會誤判仍有觸達路徑的表為 dormant（漏看間接呼叫鏈），或誤判已死的表為活躍（誤信過期註解）。兩種誤判都會造成契約文件缺口不被發現。
+**Consequence**：未經三軸交叉驗證即豁免，會使真正需要契約保護的表被跳過，且此類遺漏不會被後續開發自然發現（dormant 表不觸發執行期錯誤）。
+**Action**：豁免前必須依序完成三軸驗證，三軸皆須有可重放指令與命中結果佐證：
+
+| 軸 | 驗證內容 | 完成判準 |
+|---|---|---|
+| 表名軸 | 表名關鍵字反查全部程式碼，逐一判定每個命中是「寫入」還是「型別引用/stub」 | 列出全部命中檔案並逐檔標註分類，不可只看命中數量 |
+| 呼叫者軸 | repository 該表寫入方法（insert/update/delete）名稱反查全部呼叫者 | 每個寫入方法的呼叫者清單完整列出，含測試替身需標註排除 |
+| 消費鏈軸 | 對每個呼叫者，逐層上溯實例化點與 DI/provider 消費者，直至 UI 進入點或死路 | 每條鏈的終點須明確判定為「觸達 UI」或「死路」，死路須附死路成因（如 provider 無 import 者、初始化流程從未呼叫） |
+
+三軸缺一即不構成豁免依據——例如僅表名軸顯示低使用頻率，不足以判定 dormant，仍需消費鏈軸證明死路。
+
+### 指令證據記錄
+
+三軸驗證的每一步驟必須留下可重放指令與原始命中結果，寫入 Ticket 的重現實驗章節（依專案 Ticket 格式，可為「重現實驗結果」等章節），禁止以「已確認無使用」等結論轉述取代指令記錄。**Why**：口頭結論無法被後續開發者或另一 agent 重新驗證，指令記錄則可在懷疑豁免過期時直接重跑核對。
+
+指令證據範例（依實際專案調整表名/方法名，非固定命令）：
+
+```
+grep -rln "<表名>" <程式碼根目錄> --include="*.<副檔名>"          # 表名軸
+grep -rn "<insert方法>|<update方法>|<delete方法>" <程式碼根目錄>   # 呼叫者軸
+grep -rn "<providerA>|<ServiceLocatorX>" <入口檔案>                # 消費鏈軸：入口是否觸發
+```
+
+### 重啟條件必須綁 ticket（decision-trigger-binding 狀態 b）
+
+豁免不是終態，必須依 `.claude/rules/core/decision-trigger-binding.md` 規則 1 聲明何時失效，禁止「未來再評估」式的無 trigger 豁免。
+
+| 情境 | 綁定方式 |
+|---|---|
+| 已有 pending ticket 涉及該表接線 | 直接綁定該 ticket ID，豁免記錄標註 `blockedBy` 或引用該 ID |
+| 尚無任何 ticket（接線需求尚未發生） | 綁定「觸發事件描述」：聲明未來若有任何 ticket 使該表出現 production 寫入路徑，該 ticket acceptance 必須含「spawn 契約文件 ticket」動作；同時附機械可驗證的偵測條件（見下）作為判定重啟時機的客觀依據，取代主觀判斷 |
+
+**機械偵測條件示例**：豁免記錄應附至少一則可重跑、結果非 0/1 即可判定重啟是否成立的指令，例如：
+
+```
+grep -rln "<provider或DI接線點>" <程式碼根目錄> --include="*.<副檔名>" | wc -l
+# 由 0 變 >0 即重啟條件成立
+```
+
+機械偵測條件的價值在於把「是否該重啟」從記憶轉為可執行檢查——任何人（含未來 agent）可直接重跑指令得出是/否結論，不需回頭理解豁免時的完整脈絡。
+
+---
+
 ## 3. CLI 化升級判準條款
 
 契約文件的撰寫與更新目前不 CLI 化（人工撰寫 + hook 事後檢查）。是否升級為 CLI 子命令，依 `.claude/methodologies/structured-content-generation-methodology.md` 三條件判定：
@@ -100,6 +150,45 @@ SQLite/sqflite 專案在「補 CHECK 約束」決策上有三項本質限制，�
 **Consequence**：缺此軸時，契約條目與測試的對應關係只存在維護者記憶中，新成員或 AI 代理無法審計覆蓋完整性，契約腐爛（改約束忘改測試）不會被自動發現。
 **Action**：每次新增或修改契約條目時，同一 commit 內同步更新 `data_contract_tests` 軸的對應項；規劃波（version-bootstrap）在 Step 2.5 domain map 產出後、Step 5 測試設計前，檢查此軸是否已初始化。
 
+### 6.1 條目 schema
+
+`data_contract_tests` 每條條目採固定欄位，避免逐專案自創格式造成跨專案不可比對：
+
+| 欄位 | 型別 | 必要性 | 說明 |
+|------|------|--------|------|
+| contract_ref | string | 必要 | 契約條目的唯一識別碼與來源文件（如 `INV-01` + 對應契約文件路徑），可拆為 `contract_id` + `spec` 兩欄實作 |
+| description | string | 必要 | 不變式/欄位語意的一句話陳述，需可獨立閱讀，不需回查契約文件才能理解 |
+| status | enum | 必要 | `covered`（有測試直接斷言）/ `partial`（僅部分承載層有測試）/ `gap`（無對應測試）三值之一 |
+| tests | list[string] | 必要（可為空 list） | 「檔案路徑::group 或 test 名稱」格式引用，每筆引用須經 grep 實查，不可用文件轉述為據 |
+| no_test_needed | bool | 選填 | `true` 表示此條目屬第 6.3 節合法分類，無需測試；出現時 `status` 免填，`tests` 固定為空 list |
+| reason | string | `no_test_needed: true` 時必填 | 附程式碼座標佐證（檔案:行號），不可僅憑陳述無實證 |
+
+`status` 為 `partial` 或 `gap` 時，建議額外附 `note` 欄說明缺口具體內容（如「僅驗證欄位映射，未驗證唯一性」），供後續補測試時直接定位範圍。
+
+### 6.2 假覆蓋排除判準
+
+判定 `status: covered` 前，須排除以下兩類假覆蓋——測試存在但未真正驗證該不變式：
+
+| 假覆蓋類型 | 判準 | Why |
+|-----------|------|-----|
+| Mock 層測試不計入 DB 約束覆蓋 | 測試以 Mock/Fake repository 驗證的行為，只證明「服務層邏輯正確呼叫」，不證明 DB 層約束（UNIQUE/FK/CHECK）在真實寫入時生效 | Mock 層繞過真實資料庫，DB 約束是否真的擋下違反寫入完全未被測試觸及 |
+| 僅斷言存在性不計入唯一性覆蓋 | 斷言「欄位有值」或「欄位映射正確」不等於斷言「唯一性成立」（如「同一分類至多一筆」） | 存在性斷言與唯一性斷言驗證的是不同陳述，測試通過不代表唯一性不變式被檢查 |
+
+**豁免**：若不變式定義本身即為「服務層守門邏輯」（非 DB 層約束），Mock 測試可計入覆蓋——例如「建立前檢查是否已有活躍記錄」屬應用層守門，用 Mock repository 驗證守門邏輯正確觸發即成立，因守門本身就是該不變式的承載層，不需要繞過 Mock 驗證 DB。
+
+**Action**：判定 `covered` 前先問「此測試斷言的對象，是否就是不變式陳述的對象本身？」若測試斷言的是替代物（Mock 呼叫記錄、部分欄位存在）而非不變式陳述本身（DB 拒絕違反寫入、唯一性恆成立），應判為 `gap` 或 `partial` 並在 `note` 註明。
+
+### 6.3 no_test_needed 合法分類
+
+`no_test_needed: true` 僅限以下兩類，且每筆必須附 `reason` 佐證，不可作為「懶得測」的出口：
+
+| 分類 | 判準 | reason 最低要求 |
+|------|------|-----------------|
+| 型別系統承載 | 欄位型別本身即排除違反狀態成立的可能（如 non-nullable + required 建構子使 NULL 不可達） | 附程式碼座標（檔案:行號）證明型別約束確實存在 |
+| 非可程式化驗證 | 不變式描述人工判斷或跨系統協議，無法表達為自動化斷言 | 說明為何此不變式無法被程式化檢查（而非「暫時沒空寫」） |
+
+**判定流程**：標記前先問「若移除此設計約束（型別限制/建構子必要性），測試是否有機會偵測到違反？」——若移除約束後仍無法被任何合理測試偵測到（例如純語意層面的人工協議），才屬合法 `no_test_needed`；若移除約束後可被測試偵測但目前尚未寫測試，應判為 `gap`，不可歸入 `no_test_needed`。
+
 ---
 
 ## 檢查清單
@@ -113,6 +202,8 @@ SQLite/sqflite 專案在「補 CHECK 約束」決策上有三項本質限制，�
 - [ ] 若決定補 CHECK，已規劃 `onUpgrade` 12 步表重建路徑 + `PRAGMA foreign_keys OFF/ON` + migration 測試（舊 schema 升級成功路徑，非僅 onCreate）
 - [ ] migration 治理旗標=要 時，已確認狀態契約（mapping table）先行、分段可驗證、rollback 隨階段遞減三項判準
 - [ ] 每條契約條目已對應 `traceability.yaml` 第三軸 `data_contract_tests`，覆蓋缺口已盤點
+- [ ] 判定表為 dormant 前，三軸交叉驗證（表名/呼叫者/消費鏈）已完成且指令證據已記錄，重啟條件已綁 ticket 或機械偵測條件
+- [ ] `data_contract_tests` 條目已排除假覆蓋（Mock 層測試不計 DB 約束覆蓋、存在性斷言不計唯一性覆蓋），`no_test_needed` 條目均附 `reason` 佐證
 
 ---
 
@@ -122,8 +213,10 @@ SQLite/sqflite 專案在「補 CHECK 約束」決策上有三項本質限制，�
 - `.claude/methodologies/structured-content-generation-methodology.md` — CLI 化三條件判準（第 3 節引用來源）
 - `.claude/methodologies/domain-bundle-mapping-methodology.md` — domain 層 bundle 邊界判準（與資料層契約互補：domain-map 定義層與依賴方向，資料層契約定義該層資料的規格細節）
 - `docs/proposals/PROP-002-data-layer-specification-framework.md` — 本方法論的來源提案（含替代方案否決理由、疏漏查核記錄）
+- `.claude/rules/core/decision-trigger-binding.md` — 決策延後必須綁 trigger（第 2.1 節重啟條件引用來源）
 
 ---
 
-**Last Updated**: 2026-07-25
+**Last Updated**: 2026-07-26
+**Version**: 1.1.0 — 新增 2.1 節「dormant 表豁免判準」（三軸交叉驗證 + 指令證據記錄 + 重啟條件綁 ticket + 機械偵測條件）；擴充第 6 節為 6.1 條目 schema、6.2 假覆蓋排除判準、6.3 no_test_needed 合法分類（0.2.1-W1-002，source: book_overview_app 0.38.1-W10-004/W10-005 臨場設計成文，去專案化）
 **Version**: 1.0.0 — 初始建立（0.2.0-W2-002，source: PROP-002 In Scope 2）

@@ -106,7 +106,7 @@ DomainMap ──source_specs──→ Spec
 |------|------|------|
 | 提案模板 | `templates/proposal-template.md` | 建立新提案 |
 | 規格模板 | `templates/spec-template.md` | 建立新功能規格 |
-| Domain Map 模板 | `templates/domain-map-template.md` | 建立 domain bundle 邊界地圖（DDD 水平視角） |
+| Domain Map 模板 | `templates/domain-map-template.md` | 建立 domain bundle 邊界地圖（DDD 水平視角）。§3 每個 bundle 必須 `ls`/`grep` 驗證目標路徑存在後才標「已實作」，不存在標「規劃中」（PC-APP-012 防護） |
 | 資料契約模板 | `templates/data-contract-template.md` | 建立資料層邏輯契約與實作綁定文件（DB-agnostic / DB-specific 兩區） |
 | Design System 規格模板 | `templates/design-system-spec-template.md` | 建立 UI 設計系統規格 |
 | 用例模板 | `templates/usecase-template.md` | 建立新用例 |
@@ -222,11 +222,12 @@ saas-tech-selection skill 做完技術選型訪談後產出「決策記錄」，
 
 ---
 
+**Version**: 1.9.0 — Domain Map 模板列補 §3 bundle 實作狀態驗證要求（`ls`/`grep` 驗證存在才標「已實作」，PC-APP-012 防護收編自 book_overview_app，0.2.1-W1-006）
 **Version**: 1.8.0 — data-contract 接線 doc create CLI（取代 cp 手動流程，取得自動編號/日期/tracking）+ 新增 `doc next-id` 唯讀查詢子命令（0.2.1-W1-001）
 **Version**: 1.7.0 — data contract 升為 first-class 文件類型（五種→六種）：新增 DataContract 列 + data-contract-template 模板 + 使用方式 cp 命令（PROP-002 In Scope 1，0.2.0-W2-001）
 **Version**: 1.6.0 — domain map 升為 first-class 文件類型（四種→五種）：新增 DomainMap 列 + domain-map-template 模板 + 使用方式 cp 命令（W2-016.1）；saas 銜接節補「domain map 不因無 saas 而略過」調和說明——非 saas 起手由 version-bootstrap Step 2.5 從 domain-map-template 新建（W2-016.2）
 **Version**: 1.5.0
-**Last Updated**: 2026-07-25
+**Last Updated**: 2026-07-26
 
 ---
 
