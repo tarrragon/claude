@@ -1,3 +1,14 @@
+## [2.20.14] - 2026-07-26
+
+### Summary
+docs: 記錄 TEST-BAL-002 測試替身建構路徑分歧（monitor 實證）
+
+Changes: 1 docs
+
+- docs: 記錄 TEST-BAL-002 測試替身建構路徑分歧（monitor 實證）
+
+---
+
 ## [2.20.13] - 2026-07-26
 
 ### Summary
