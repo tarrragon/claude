@@ -2315,7 +2315,7 @@ def _auto_extract_context_bundle_post_claim(
     """Claim 後的 Context Bundle 自動抽取 wire-in（W17-002.2）。
 
     觸發條件：target ticket 具 source_ticket / blocked_by / related_to 其一。
-    幂等性：依賴 `merge_auto_extracted_block` 的 sources 主鍵幂等保證，
+    冪等性：依賴 `merge_auto_extracted_block` 的 sources 主鍵冪等保證，
     若 Context Bundle 已存在同 sources 的 auto block，不再重寫（no_change_idempotent）。
     異常降級：任何例外寫 stderr traceback，退出碼保 0。
 

@@ -6,7 +6,7 @@ W17-002.2 Context Bundle CLI wire-in 端到端測試。
 2. ticket track claim 後自動抽取（若尚未抽取）
 3. --quiet / --verbose flag 影響 CLI 摘要輸出
 4. 抽取異常降級不阻斷 create/claim（退出碼 0）
-5. 二次 claim 幂等（同 sources 不重複寫入）
+5. 二次 claim 冪等（同 sources 不重複寫入）
 """
 
 from __future__ import annotations
@@ -231,7 +231,7 @@ class TestClaimWireIn:
     def test_post_claim_idempotent_on_second_call(self, capsys):
         """第二次 claim：若 merge 回傳 no_change_idempotent，仍輸出摘要但不重寫。
 
-        我們只驗證 extract_and_write 被呼叫；幂等性由其內部 merge 保證（已在 extractor 測試覆蓋）。
+        我們只驗證 extract_and_write 被呼叫；冪等性由其內部 merge 保證（已在 extractor 測試覆蓋）。
         """
         from ticket_system.lib.context_bundle_extractor import ExtractResult
 

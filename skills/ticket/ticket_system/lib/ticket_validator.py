@@ -254,7 +254,7 @@ def validate_completable_status(
     返回三元組 (can_complete, message, is_already_complete)。
 
     狀態機制:
-    - completed: 已完成（返回友好訊息，用於幂等操作）
+    - completed: 已完成（返回友好訊息，用於冪等操作）
     - pending: 未認領（阻止，需先 claim）
     - blocked: 被阻塞（阻止，需先解除依賴）
     - in_progress: 可完成
@@ -270,7 +270,7 @@ def validate_completable_status(
         Tuple[bool, Optional[str], bool]: (可完成, 訊息, 已完成標誌)
         - (True, None, False): 允許完成（in_progress）
         - (False, error_message, False): 阻止完成，返回原因
-        - (True, friendly_message, True): 已完成（幂等返回）
+        - (True, friendly_message, True): 已完成（冪等返回）
 
     Examples:
         >>> validate_completable_status("0.31.0-W3-001", "in_progress")
@@ -286,7 +286,7 @@ def validate_completable_status(
     from .constants import STATUS_COMPLETED, STATUS_PENDING, STATUS_BLOCKED
 
     # Guard Clause 1：已完成的 Ticket
-    # 返回友好訊息（實現幂等操作：多次 complete 都返回 0）
+    # 返回友好訊息（實現冪等操作：多次 complete 都返回 0）
     if current_status == STATUS_COMPLETED:
         # 若提供了完成時間，包含在訊息中；否則簡短訊息
         friendly_msg = f"{ticket_id} 已完成於 {completed_at}" if completed_at else f"{ticket_id} 已完成"

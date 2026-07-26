@@ -3,7 +3,7 @@ Context Bundle 自動抽取模組
 
 從 target ticket 的 source_ticket / blocked_by / related_to 欄位
 自動抽取相關來源 ticket 的 what / why / where.files / acceptance，
-渲染為 Context Bundle markdown，並支援幂等合併。
+渲染為 Context Bundle markdown，並支援冪等合併。
 
 Linux kernel ELF loader 類比：自動載入依賴 context，降低 PM 手填成本。
 
@@ -59,7 +59,7 @@ MAX_TOTAL_CHARS: int = CONTEXT_BUNDLE_MAX_TOTAL_CHARS
 MAX_ITEMS_PER_FIELD: int = CONTEXT_BUNDLE_MAX_ITEMS_PER_FIELD
 TRUNCATE_INDICATOR: str = "... (truncated, see source ticket)"
 
-# 幂等標記
+# 冪等標記
 AUTO_MARKER_PREFIX: str = "<!-- auto-extracted:"
 AUTO_EXTRACTED_BLOCK_PATTERN = re.compile(
     r"<!--\s*auto-extracted:[^>]*-->.*?(?=^## |\Z)",
@@ -760,7 +760,7 @@ def merge_auto_extracted_block(
 ) -> Tuple[str, list]:
     """合併抽取結果到既有 Context Bundle section body。
 
-    §v3.1 regex EOF 邊界 + §v3.2 sources 主鍵幂等。
+    §v3.1 regex EOF 邊界 + §v3.2 sources 主鍵冪等。
     """
     if not new_extracted_markdown:
         return existing_section_body, ["no_change_empty_new"]

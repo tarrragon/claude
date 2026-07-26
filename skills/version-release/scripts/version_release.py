@@ -2014,7 +2014,7 @@ def update_changelog(version: str, dry_run: bool = False) -> bool:
             print_success(f"CHANGELOG.md 已 finalize In-Development 區段為 {version}")
             return True
 
-        # 幂等性檢查：若版本已 finalize（header 帶日期）則跳過，不重複插入
+        # 冪等性檢查：若版本已 finalize（header 帶日期）則跳過，不重複插入
         if f"## [{version}]" in changelog_content or f"## [v{version}]" in changelog_content:
             print_warning(f"CHANGELOG.md 已包含 v{version} 條目，跳過插入")
             return True
