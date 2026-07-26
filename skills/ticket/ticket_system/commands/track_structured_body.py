@@ -70,7 +70,13 @@ def _build_completion_info_content(args: argparse.Namespace) -> str:
 def _delegate_to_append_log(
     args: argparse.Namespace, version: str, section: str, content: str
 ) -> int:
-    """組出 append-log 相容的 args 並委派給 execute_append_log。"""
+    """組出 append-log 相容的 args 並委派給 execute_append_log。
+
+    W3-005: 帶 replace=True，使 execute_append_log 對本次寫入的固定 schema
+    章節（Exit Status / Completion Info）採取「取代既有內容」而非「追加」
+    語意——這兩個命令每次呼叫都代表該章節的最新狀態（非累積日誌），重複
+    呼叫應冪等，不應在 body 留下多筆歷史區塊。
+    """
     from ticket_system.commands.track_acceptance import execute_append_log
 
     append_args = argparse.Namespace(
@@ -79,6 +85,7 @@ def _delegate_to_append_log(
         content=content,
         version=version,
         force=bool(getattr(args, "force", False)),
+        replace=True,
     )
     return execute_append_log(append_args, version)
 

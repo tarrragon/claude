@@ -765,11 +765,19 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
         section_text = match.text
         section_content = match.content
 
+        # W3-005: replace=True（set-exit-status / set-completion-info 等固定
+        # schema 章節）採冪等取代語意——不論既有內容是 placeholder 或前次
+        # 已寫入的實質內容，一律用本次內容整段覆寫，維持 header 不變、章節
+        # 在 body 中的原位置不動。禁用於 Execution Log（每筆是新事件，需累積）。
+        if section != "Execution Log" and getattr(args, "replace", False):
+            header_end = section_text.find("\n")
+            header_line = section_text[: header_end + 1] if header_end != -1 else section_text
+            updated_section = header_line + new_entry.lstrip("\n") + "\n"
         # W3-035: 若 section_content 為 placeholder-only（含 Schema 註解 + 待填寫文字），
         # 改用 new_entry 替換 placeholder 而非 append，避免 placeholder 殘留導致
         # body-schema-checker false positive 阻擋 complete。
         # Execution Log 維持 append 語意（每筆 log 都是新事件）。
-        if section != "Execution Log":
+        elif section != "Execution Log":
             updated_section = _replace_or_append_section_content(
                 section_text=section_text,
                 section_content=section_content,

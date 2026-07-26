@@ -182,6 +182,37 @@ class TestSetExitStatus:
         rc = execute_set_exit_status(args, "0.0.0")
         assert rc == 1
 
+    def test_repeated_calls_replace_not_append(self, patch_paths_to_repo):
+        """W3-005 回歸測試：第二次呼叫必須取代第一次內容，非重複 append。"""
+        from ticket_system.commands.track_structured_body import execute_set_exit_status
+
+        def _args(status: str, reason: str) -> argparse.Namespace:
+            return argparse.Namespace(
+                ticket_id="0.0.0-W0-SB",
+                status=status,
+                reason=reason,
+                confidence="0.5",
+                acceptance_met=None,
+                acceptance_unmet=None,
+                artifacts=None,
+                force=False,
+            )
+
+        rc1 = execute_set_exit_status(_args("needs_context", "first call"), "0.0.0")
+        assert rc1 == 0
+        rc2 = execute_set_exit_status(_args("success", "second call"), "0.0.0")
+        assert rc2 == 0
+
+        text = _md_text(patch_paths_to_repo)
+        # 只有單一 Exit Status fenced YAML 區塊
+        assert text.count("```yaml") == 1
+        assert text.count("exit_status:") == 1
+        # 內容為最後一次呼叫
+        assert "exit_status: success" in text
+        assert 'reason: "second call"' in text
+        assert "exit_status: needs_context" not in text
+        assert "first call" not in text
+
 
 # ============================================================
 # set-completion-info
@@ -235,3 +266,28 @@ class TestSetCompletionInfo:
         assert rc == 0
         text = _md_text(patch_paths_to_repo)
         assert "**Review Status**: pending" in text
+
+    def test_repeated_calls_replace_not_append(self, patch_paths_to_repo):
+        """W3-005 回歸測試：第二次呼叫必須取代第一次內容，非重複 append。"""
+        from ticket_system.commands.track_structured_body import execute_set_completion_info
+
+        def _args(review_status: str, summary: str) -> argparse.Namespace:
+            return argparse.Namespace(
+                ticket_id="0.0.0-W0-SB",
+                agent="thyme-python-developer",
+                review_status=review_status,
+                summary=summary,
+                force=False,
+            )
+
+        rc1 = execute_set_completion_info(_args("pending", "first call"), "0.0.0")
+        assert rc1 == 0
+        rc2 = execute_set_completion_info(_args("reviewed", "second call"), "0.0.0")
+        assert rc2 == 0
+
+        text = _md_text(patch_paths_to_repo)
+        assert text.count("**Executing Agent**") == 1
+        assert text.count("**Review Status**") == 1
+        assert "**Review Status**: reviewed" in text
+        assert "**Summary**: second call" in text
+        assert "first call" not in text

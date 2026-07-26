@@ -1,3 +1,16 @@
+## [2.20.16] - 2026-07-26
+
+### Summary
+fix: set-exit-status 冪等取代語意; docs: 完成收尾 + PC-BAL-008 並行 index 危害 + spawn; docs: 記錄 ARCH-BAL-002 識別符雙載體工具只讀一側（book 實證）
+
+Changes: 1 fix, 2 docs
+
+- fix: set-exit-status 冪等取代語意
+- docs: 完成收尾 + PC-BAL-008 並行 index 危害 + spawn
+- docs: 記錄 ARCH-BAL-002 識別符雙載體工具只讀一側（book 實證）
+
+---
+
 ## [2.20.15] - 2026-07-26
 
 ### Summary
