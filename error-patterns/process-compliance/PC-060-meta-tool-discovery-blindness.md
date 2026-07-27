@@ -34,7 +34,7 @@ PM 遇到「讀 transcript 誤判」時，自然反應是**「禁止讀 transcri
 
 ### 成因 5：原則建立當下未擴充檢查清單
 
-PM 在遇到本模式後常會記下 memory（如 `feedback_exhaust_indirect_before_impossible.md`），但原始清單未涵蓋 CC runtime 能力。**原則正確但覆蓋不全**，下次同一 session 內遇到新類型的「找工具」需求時仍會踩雷。
+PM 在遇到本模式後常會記下初版檢查清單，但原始清單未涵蓋 CC runtime 能力。**原則正確但覆蓋不全**，下次同一 session 內遇到新類型的「找工具」需求時仍會踩雷。
 
 ## 實際案例
 
@@ -75,9 +75,9 @@ PM 在遇到本模式後常會記下 memory（如 `feedback_exhaust_indirect_bef
 - 三步工作流程
 - 反模式清單
 
-### 措施 3：五問檢查清單（來源：memory）
+### 措施 3：五問檢查清單
 
-`feedback_exhaust_indirect_before_impossible.md` 擴充為五問：
+原始檢查清單擴充為五問（現收錄於 `.claude/rules/core/tool-discovery.md` 規則 1）：
 
 1. Hook 能推送嗎？
 2. 檔案系統能追蹤嗎？
@@ -106,8 +106,7 @@ PM 在遇到本模式後常會記下 memory（如 `feedback_exhaust_indirect_bef
 ## 關聯
 
 - **相關模式**：PC-050（誤判代理人狀態）— 本模式的下游表現
-- **相關 feedback**：`feedback_exhaust_indirect_before_impossible.md`（五問檢查清單）
-- **相關規則**：`.claude/rules/core/tool-discovery.md`、`.claude/pm-rules/askuserquestion-rules.md`
+- **相關規則**：`.claude/rules/core/tool-discovery.md`（五問檢查清單）、`.claude/pm-rules/askuserquestion-rules.md`
 - **相關指南**：`.claude/skills/search-tools-guide/SKILL.md`（Claude Code Meta-Tools 章節）
 - **相關參考**：`.claude/references/pm-agent-observability.md`（TaskOutput 作為具體用例）
 

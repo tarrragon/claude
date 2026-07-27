@@ -83,7 +83,7 @@ first_seen: 2026-04-12
 | `.claude/rules/core/pm-role.md` | PM 派發規則的上位 |
 | `.claude/pm-rules/tdd-flow.md` | TDD 各 Phase 代理人分工 |
 | `.claude/pm-rules/pm-quality-baseline.md` 規則 6 | 框架優先（本 PC 為框架改善觸發案例） |
-| `memory/feedback_failure_learning_principle.md` | 本 PC 的文化背景 |
+| `.claude/rules/core/quality-baseline.md` 規則 6（失敗案例學習原則） | 本 PC 的文化背景 |
 | PC-042 | 規則文件體量上限（pm-rules 拆分導致代理人讀不完而耗盡回合） |
 | PC-045 | PM 代理人失敗時自行撰寫產品程式碼（相似的「PM 越界」模式） |
 

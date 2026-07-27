@@ -77,7 +77,7 @@ worktree base 落後、ticket 未 claim 在派發當下沒有任何警示。失�
 
 | 層級 | 機制 | 狀態 |
 |------|------|------|
-| 教訓層 | 本 PC-154 + memory `feedback_worktree_dispatch_prerequisites` | 已落地（0.19.0-W1-043） |
+| 教訓層 | 本 PC-154 | 已落地（0.19.0-W1-043） |
 | 規則層 | `.claude/rules/core/pm-role.md` 派發前檢查清單補入兩項前置驗證 | 待後續 ticket 評估 |
 | 並行派發層 | 並行派發多個 worktree agent 時，逐一驗證兩項前置條件，不可整批假設一致 | 自律 |
 

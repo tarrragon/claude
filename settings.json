@@ -187,6 +187,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uc-reference-validation-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
           }
         ]
       },
@@ -240,6 +244,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uc-reference-validation-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
           }
         ]
       },
@@ -253,6 +261,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uc-reference-validation-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
           }
         ]
       },
@@ -368,6 +380,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill-registration-check-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill-shadowing-check-hook.py"
           },
           {
             "type": "command",
@@ -598,10 +614,6 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-upgrade-reminder-hook.py"
-          },
-          {
-            "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-frontmatter-validator-hook.py",
             "timeout": 5000
           },
@@ -672,10 +684,6 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/utf8-integrity-check-hook.py"
-          },
-          {
-            "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-upgrade-reminder-hook.py"
           },
           {
             "type": "command",

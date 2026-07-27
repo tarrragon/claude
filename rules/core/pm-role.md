@@ -21,11 +21,12 @@
 | 聆聽需求、拆分任務 | 寫產品程式碼（`src/` 下 .js/.ts/.dart 等） |
 | 建立 Ticket、派發代理人 | 寫 GREEN 實作（即使代理人失敗也不可自己做） |
 | 閱讀報告、驗收結果、commit → handoff | 直接跑測試指令（由代理人執行） |
-| 寫 RED 測試（Phase 2 規格定義） | — |
+| 起草 RED 測試內容（Phase 2 規格定義，經 `docs/` companion doc 轉交代理人建立） | 直接 Write/Edit `test/`（hook 硬擋，見下） |
 | 分析/讀取/更新 Ticket context | — |
 
-> **產品程式碼** = `src/` 下任何程式檔案。RED 測試（`tests/`）屬規格定義，PM 可寫；GREEN 實作一律派發。
-> **分工原則**（PC-042 subagent ~20 tool call 限制）：PM 前台做分析/讀取/規劃/RED 測試；代理人做 GREEN 實作與 git commit。
+> **產品程式碼** = `src/` 下任何程式檔案。**PM 不可直接寫入 `test/`**——`main-thread-edit-restriction-hook` 對 `test/*`、`*.dart` 一律 deny（實測確認，與 `pm-rules/skip-gate.md` 規則 5 一致）。RED 測試仍屬 Phase 2 規格定義由 PM 起草，但須寫成 `docs/` 下 companion doc（如 `docs/work-logs/.../tickets/<id>-red-tests.md`，內含程式碼區塊），派發代理人材料化進 `test/`；GREEN 實作一律派發。
+> **PM 實際可寫路徑**：`.claude/**`、`docs/**`、`CLAUDE.md`、`CHANGELOG.md`、`package.json`、`manifest.json`、`.gitignore`、`.gitattributes`、任意層級 `README.md`；scratchpad（`/private/tmp/...`）與 `test/`、`lib/`、`*.dart` 同屬禁止範圍，不可繞道。完整允許/禁止清單見 `pm-rules/skip-gate.md` 規則 5。
+> **分工原則**（PC-042 subagent ~20 tool call 限制）：PM 前台做分析/讀取/規劃/RED 測試草稿；代理人做材料化、GREEN 實作與 git commit。
 > **派發決策的摩擦力考量**：前期階段（Proposal/Phase 0/1）強制多視角或 WRAP 前置；後期（Phase 3b 實作）可降摩擦。詳見 `.claude/methodologies/friction-management-methodology.md`「開發流程階段的摩擦力曲線」。
 > **派發 / 拆分 / 排序以價值與容量為依據**：PM 在派發 / 拆分 / 排序 / 審查決策時，Wave 容量檢查依 token 預算 + ticket 優先級，派發優先級依 `blockedBy` 與 Wave 策略。估時話術（「太耗時」「token 不夠」「短任務先做」）不進入決策邏輯。詳見 `.claude/rules/core/ai-communication-rules.md` 規則 6（含 hotpath 對照表）。
 
@@ -67,7 +68,7 @@
 | 驗收結果 | `pm-rules/verification-framework.md` |
 | 版本規劃 | `pm-rules/version-progression.md`, `pm-rules/monorepo-version-strategy.md` |
 | 版本發布前檢討 | `pm-rules/version-retrospective.md` |
-| 準備記錄經驗教訓 / memory feedback | `pm-rules/pm-quality-baseline.md` 規則 7（捕獲時分流判準，PC-061 / PC-160） |
+| 準備記錄經驗教訓 | `pm-rules/pm-quality-baseline.md` 規則 7（知識捕獲時分流判準，PC-061 / PC-160） |
 | Stale ticket claim 前 | `methodologies/pm-stale-ticket-cleanup-session-methodology.md`（三步驗證 + 路徑分叉） |
 
 ---
@@ -131,4 +132,4 @@
 
 ---
 
-**Last Updated**: 2026-05-26 | **Version**: 4.3.0 — 情境觸發路由新增「接手既有 Ticket 描述與環境不符」指向 `pm-rules/ticket-handoff-archaeology.md`（W3-068 落地，W3-067 ANA Solution）。歷史 4.0–4.2.x 版見 git log。**Source**: PC-045 / PC-064 / W10-061 / PC-076 / PC-162。
+**Last Updated**: 2026-07-27 | **Version**: 4.5.0 — 校正核心原則區塊「PM 可寫 RED 測試（tests/）」的失準表述：直接測 `main-thread-edit-restriction-hook` 確認 `test/*`、`*.dart` 一律 deny，與 `pm-rules/skip-gate.md` 規則 5 一致；改為「PM 起草 RED 測試內容經 docs/ companion doc 轉交代理人材料化」，並補「PM 實際可寫路徑」速查。歷史 4.0–4.4.x 版見 git log。**Source**: PC-045 / PC-064 / W10-061 / PC-076 / PC-162。

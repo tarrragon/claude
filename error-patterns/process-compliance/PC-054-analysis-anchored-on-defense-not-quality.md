@@ -54,4 +54,3 @@ task-splitting.md v5.0.0 已將核心目標重定位為 SRP 品質，次要目�
 ## 關聯模式
 
 - pm-quality-baseline 規則 6: 框架修改優先於專案進度 — 同屬「優先級錨定錯誤」
-- feedback_wrap_mandatory_for_analysis: ANA 必須用 WRAP — WRAP 能防護但錨點本身也需要校準

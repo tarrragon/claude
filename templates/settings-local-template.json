@@ -84,7 +84,6 @@
       "Bash(dart help:*)",
       "Bash(dart mcp-server:*)",
       "Bash(./.claude/hooks/test-timeout-pre.py:*)",
-      "Bash(./.claude/hooks/test-timeout-post.py:*)",
       "Bash($CLAUDE_PROJECT_DIR/.claude/hooks/l10n-sync-verification-hook.py:*)",
       "mcp__dart__run_tests",
       "mcp__dart__analyze_files",

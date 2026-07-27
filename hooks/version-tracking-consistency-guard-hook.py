@@ -1,8 +1,14 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml>=5.0"]
 # ///
+#
+# 依賴說明（0.2.1-W3-013）：前提驗證需 yaml.safe_load 解析 todolist.yaml。
+# 顯式宣告 pyyaml 由 uv 保證依賴可用，取代先前 subprocess 探測系統 python3
+# 路徑候選的做法——探測找不到含 PyYAML 的 python3 時會靜默跳過解析前提
+# 驗證，等於用條件性靜默降級取代 0.2.1-W3-008 原本要消除的靜默降級
+# （同 repo 先例：.claude/skills/ticket/hooks/agent-ticket-validation-hook.py）。
 """
 Version Tracking Consistency Guard Hook - 版本追蹤一致性守衛
 
@@ -42,14 +48,24 @@ quality-baseline 規則 4）：
    全量檢查將重演噪音淹沒訊號（W9-003 教訓），故限縮為只查尚在進行/待辦
    的版本
 
+前提驗證（IMP-BAL-003 判定順序，先於上述八類漂移掃描）：
+todolist.yaml 必須可被 yaml.safe_load 解析，且 versions 鍵為 list、每個
+條目含 version/status 欄位。前提不成立時（ParserError 或結構錯位）輸出
+ERROR 級雙通道警告（stderr + 日誌檔），中止後續漂移掃描——前提失敗時
+後續層級結論不具意義，不應輸出（0.2.1-W3-008，實證：0.2.1 版本條目誤插
+到 references mapping 之後造成 ParserError，舊版寬鬆 regex 對此隱形，
+只報 closed 票稽核）。
+
 來源: PC-MON-001、0.4.0-W1-003、0.3.6-W1-006、0.3.6-W1-004、0.38.0-W1-002、
-0.38.0-W1-005
+0.38.0-W1-005、0.2.1-W3-008
 """
 
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -102,6 +118,56 @@ SECTION_BOUNDARY_PATTERN = re.compile(r"^\S", re.MULTILINE)
 # 存量大量缺 main.md（33 個版本目錄中 16 個），全量檢查將重演噪音淹沒訊號
 # （W9-003 教訓），故限縮為進行中/待辦版本。
 MAIN_WORKLOG_CHECK_STATUSES = frozenset({"active", "planned"})
+
+def load_todolist_via_yaml(todolist_path: Path, logger) -> dict | None:
+    """以 PEP 723 宣告的 PyYAML 直接解析 todolist.yaml，驗證其可解析性。
+
+    取代先前 subprocess 探測系統 python3 路徑候選的做法：uv 依 PEP 723
+    header 的 dependencies 宣告保證 pyyaml 可用，不再需要探測或 fallback。
+    解析失敗時輸出 ERROR 級雙通道警告（stderr + 日誌檔，quality-baseline
+    規則 4），含 ParserError 訊息，不靜默 fallback 到寬鬆 regex 路徑。
+    回傳 None 代表解析失敗，呼叫端應中止依賴 versions 結構的後續語意
+    掃描（IMP-BAL-003 判定順序：前提失敗，後續層級結論不具意義，不應
+    輸出）。
+    """
+    if not todolist_path.exists():
+        return None
+
+    try:
+        content = todolist_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        message = f"todolist.yaml 讀取失敗: {exc}"
+        logger.error(message)
+        sys.stderr.write(f"[version-tracking-consistency-guard] ERROR: {message}\n")
+        return None
+
+    try:
+        return yaml.safe_load(content)
+    except yaml.YAMLError as exc:
+        message = f"todolist.yaml 解析失敗（yaml.safe_load ParserError）: {exc}"
+        logger.error(message)
+        sys.stderr.write(f"[version-tracking-consistency-guard] ERROR: {message}\n")
+        return None
+
+
+def validate_versions_schema(data: dict) -> list[str]:
+    """驗證 versions 鍵為 list，且每個條目含 version/status 欄位。
+
+    偵測版本條目結構錯位（如誤插到其他 mapping 之下）：正確結構下
+    versions 鍵值必為條目 dict 組成的 list；錯位或型別錯誤時回傳具體
+    錯誤訊息清單（空清單代表結構合規）。
+    """
+    errors: list[str] = []
+    versions_node = data.get("versions") if isinstance(data, dict) else None
+    if not isinstance(versions_node, list):
+        errors.append("versions 鍵非 list 或缺席")
+        return errors
+
+    for entry in versions_node:
+        if not isinstance(entry, dict) or "version" not in entry or "status" not in entry:
+            errors.append(f"versions 條目缺 version/status 欄位: {entry!r}")
+
+    return errors
 
 
 def parse_todolist(todolist_path: Path, logger) -> dict:
@@ -490,6 +556,25 @@ def main() -> int:
 
     try:
         todolist_path = project_root / "docs" / "todolist.yaml"
+
+        # 前提驗證：todolist.yaml 必須可被 yaml.safe_load 解析，且 versions
+        # 結構合規，後續語意漂移掃描才有意義（IMP-BAL-003 判定順序）。
+        # 解析失敗或結構錯位時已於 load_todolist_via_yaml /
+        # validate_versions_schema 內輸出 ERROR 級雙通道警告，此處中止
+        # 後續依賴 versions dict 的掃描，不靜默 fallback。
+        parsed_todolist = load_todolist_via_yaml(todolist_path, logger)
+        if parsed_todolist is None:
+            # 解析失敗已於 load_todolist_via_yaml 內輸出 ERROR 級雙通道
+            # 警告；前提不成立，後續語意掃描結論不具意義，中止。
+            return 0
+
+        schema_errors = validate_versions_schema(parsed_todolist)
+        if schema_errors:
+            message = "todolist.yaml versions 結構錯誤: " + "; ".join(schema_errors)
+            logger.error(message)
+            sys.stderr.write(f"[version-tracking-consistency-guard] ERROR: {message}\n")
+            return 0
+
         versions = parse_todolist(todolist_path, logger)
 
         if not versions:

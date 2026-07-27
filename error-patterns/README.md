@@ -7,20 +7,18 @@ Error Patterns 是五重文件系統的核心組件之一，用於：
 - 傳承經驗，避免重複犯錯
 - 建立可查詢的錯誤知識庫
 
-## 與 Claude Code 官方 Memory 系統的差異
+## 與 Claude Code 原生 Memory 系統的關係（排除，非互補）
 
-Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/memory/`），本專案的 Error Patterns 系統與其定位不同：
+Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory/`）。**本框架排除該系統作為知識記錄目的地**，改以 `.claude/error-patterns/` 承接其原本要處理的「值得跨 session 保存的判斷」。排除理由是以下結構性差異：
 
-| 面向 | 官方 Memory 系統 | Error Patterns 系統 |
+| 面向 | Claude Code 原生 Memory | Error Patterns 系統 |
 |------|-----------------|-------------------|
-| **儲存位置** | 用戶 home 目錄（`~/.claude/`） | 專案目錄（`.claude/error-patterns/`） |
-| **版本控制** | 不納入 git | 納入 git，隨專案版本管理 |
-| **共享範圍** | 個人，跨 session 持久化 | 團隊，所有協作者共享 |
-| **內容類型** | 用戶偏好、反饋、專案狀態 | 結構化錯誤模式（症狀/根因/解決方案/預防） |
+| **儲存位置** | 使用者 home 目錄的專案層級儲存（`~/.claude/projects/<project>/memory/`） | 專案目錄（`.claude/error-patterns/`） |
+| **版本控制** | 不納入 git，不隨 `.claude/` sync 到其他專案 | 納入 git，隨專案版本管理，可隨 `.claude/` sync 跨專案複用 |
+| **共享範圍** | 單一專案本機，個人可見 | 團隊共享，所有協作者可見，可跨專案複用 |
 | **查詢方式** | 系統自動載入相關記憶 | `/error-pattern query` 主動查詢 |
-| **適用場景** | 「記住我喜歡 X 做法」 | 「上次遇到 Y 問題的根因和防護」 |
 
-**協作關係**：兩個系統互補。Memory 記錄個人的行為反饋（如「禁止用 Bash 繞過 Hook」），Error Patterns 記錄團隊的結構化知識（如「PC-016: Hook 繞過的根因分析和防護措施」）。同一事件可能同時產生兩種記錄。
+**排除說明**：memory 不納入 git、不隨 `.claude/` sync 到其他專案，與「經驗須跨專案複用」的框架目標根本衝突——寫在 memory 的跨專案原則會在其他專案消失，導致同樣的問題被重複踩雷。因此本框架的知識記錄一律遵循**捕獲時分流判準**：框架相關內容（替換專案名稱與檔案路徑後仍成立）進 `.claude/error-patterns/` 或 `.claude/rules/`、`.claude/methodologies/`、`.claude/references/`；專案相關內容（僅本專案成立）進 `docs/` 或 `CLAUDE.md`；兩者皆非則不記錄。**memory 不是任一分支的合法目的地**。完整判準見 `.claude/pm-rules/pm-quality-baseline.md` 規則 7（`.claude/skills/continuous-learning/skill.md` 為執行工具）。
 
 ---
 
@@ -34,7 +32,8 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 ├── architecture/          # 架構相關錯誤模式
 ├── implementation/        # 實作相關錯誤模式
 ├── code-quality/          # 程式碼品質相關錯誤模式
-└── process-compliance/    # 流程合規相關錯誤模式
+├── process-compliance/    # 流程合規相關錯誤模式
+└── process/               # 流程相關錯誤模式（正向 idiom / 跨階段流程問題）
 ```
 
 ---
@@ -51,6 +50,7 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | 實作 | IMP | 程式碼實作相關 |
 | 程式碼品質 | CQ | 程式碼品質、設計模式相關 |
 | 流程合規 | PC | 流程合規相關 |
+| 流程 | PROC | 跨階段流程問題（非流程合規類） |
 
 **範例**:
 - `TEST-001-wrong-wait-mechanism.md`
@@ -147,6 +147,12 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | TEST-003 | 過度驗證超出責任 | 中 | v0.6.2 |
 | TEST-004 | 重構引入 Wrapper 後 Mock Patch 路徑失效 | 高 | v0.1.0 |
 | TEST-BAL-001 | 測試 fixture 用理想化格式，真實輸入格式不同致 validator 靜默假通過 | 高 | v0.1.0 |
+| TEST-005 | Mock 錯誤 import 路徑導致真實副作用 | — | — |
+| TEST-006 | pytest plugin fixture 使用未宣告依賴導致全類 setup error | — | — |
+| TEST-007 | Archived 模組的測試檔處理 idiom（pytestmark.skip + try/except import 雙層保護） | 低 | — |
+| TEST-BAL-002 | 測試替身走簡化建構路徑，繞過 production 裝配步驟使缺口對測試不可見 | 高 | — |
+| TEST-MON-001 | 硬編碼時間戳 fixture × 時間相對查詢窗 = clock 時間炸彈 | 高 | — |
+| TEST-MON-002 | TDD Phase 2 紅燈設計漏 handler/lifecycle 行為測試；GREEN agent confidence<1.0 是補洞訊號 | 中 | — |
 
 ### 文件 (DOC)
 
@@ -161,6 +167,8 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | DOC-007 | append-log section 參數值大小寫不一致 | 低 | v0.1.0 |
 | DOC-008 | 同一文件內定義替換遺漏（局部替換未使用全局 replace） | 中 | v0.1.0 |
 | DOC-V1-001 | 位置編號引用隨目標文件演進靜默失效（misdirected 比 broken 難偵測） | 中 | v1.0.0 |
+| DOC-009 | 「靜默處理」用語誤用 — 混淆「不記錄」與「記錄但不顯示」 | 中 | — |
+| DOC-010 | 框架文件引用專案 ticket ID 造成跨專案 sync 誤導 | 中 | — |
 
 ### 架構 (ARCH)
 
@@ -191,6 +199,15 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | ARCH-V1-002 | 雙向 overlay sync 製造重複 top-level 定義（死碼 shadow 活 bug） | 高 | v1.0.0 |
 | ARCH-APP-002 | uv tool install 全域同名 CLI 跨 consumer namespace 碰撞（last-write-wins） | 中 | v0.37.0 |
 | ARCH-BAL-001 | 架構依賴方向底線未用程式碼 import 鏈驗證，導致底線與現況矛盾 | 高 | v0.1.0 |
+| ARCH-BAL-005 | 自證式豁免——豁免決定與豁免理由在資料結構上分離，理由無消費者亦無時效 | 高 | v0.2.1 |
+| ARCH-BAL-006 | 宣告層枚舉窄於執行層判準，讀者據宣告自我豁免（靜默，無撞牆訊號） | 中 | v0.2.1 |
+| ARCH-022 | Hook 用 CLI 探測產生跨界隱性副作用 | 中 | — |
+| ARCH-APP-001 | 多工具版本偵測邏輯不同步 | 中 | — |
+| ARCH-BAL-002 | 識別符雙載體但工具只讀一側，修復動錯側使驗收假通過 | 高 | — |
+| ARCH-BAL-003 | 白名單自訂納入判準但成員未同步，判準與名單脫節 | 中 | — |
+| ARCH-BAL-004 | 參考文件範例與同檔規則矛盾，範例成為缺陷散播源 | 高 | — |
+| ARCH-MON-001 | 多 wave 票各加進同一中心檔，累積 domain 過載而無單票觸發閾值 | 中 | — |
+| ARCH-TUNL-001 | settings.local.json 註冊 hook 在 relocate 後成幽靈（sync 無法自癒） | 中 | v1.0.0（1.0.0-W9-001 ANA） |
 
 ### 程式碼品質 (CQ)
 
@@ -267,6 +284,48 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | IMP-APP-001 | get_project_root 雙實作回傳型別分歧 — consumer 用錯 Path 方法 runtime 才爆 | 中 | v0.37.0 |
 | IMP-APP-002 | regex 解析多條目結構化檔案未以條目邊界為先 — DOTALL 跨條目誤配 + 格式漂移致解析恆空靜默失效 | 高 | v0.38.0 |
 | IMP-APP-003 | fresh checkout 缺 gitignored 生成產物導致連鎖編譯失敗，並被誤歸因為並行資源耗盡 | 高 | v0.38.0 |
+| IMP-054 | Hook 腳本缺少執行權限導致靜默失敗 | 高 | — |
+| IMP-055 | PostToolUse Hook stdout 輸出純文字導致 JSON validation failed | 高 | — |
+| IMP-056 | chpwd Shell Hook 大量 ls 輸出淹沒代理人工具結果 | 中 | — |
+| IMP-057 | grep 單行比對多行 print() 語句產生誤報 | 中 | — |
+| IMP-058 | YAML frontmatter 欄位型別假設錯誤（list vs string） | 高 | — |
+| IMP-059 | Auto-compaction UTF-8 截斷導致文件中文字元損壞 | 中 | — |
+| IMP-060 | Hook error 掃描純字串匹配產生誤報循環 | 中 | — |
+| IMP-061 | ticket migrate 產生 parent_id typo 且依賴欄位未同步更新 | 中 | — |
+| IMP-062 | Windows 平台 Hook 啟動失敗與編碼斷層 | 高 | — |
+| IMP-063 | Hook 路徑分類混淆 context 引用與實作目標 | 高 | — |
+| IMP-064 | 函式體 local re-import 遮蔽 unittest.mock.patch | 高 | — |
+| IMP-065 | CLI 單檔查詢依賴檔名約定，批量掃描用 field 比對，導致 naming-drift 時靜默失敗 | 中 | — |
+| IMP-066 | subagent 在 isolation:worktree 下透過 ticket CLI 看不到主 repo 新建 ticket | 中 | — |
+| IMP-067 | Windows NTFS 無 executable bit 導致 git 對新檔 mode 降權為 100644 | 高 | — |
+| IMP-068 | sync-push 版號 bump 缺 sanity check 導致異常跳躍靜默 push | 高 | — |
+| IMP-069 | PEP 723 inline dependencies 不會從 library 模組傳遞至 entry hook | 高 | — |
+| IMP-071 | ticket track append-log 在章節已有 placeholder 時建立重複內容 | 低 | — |
+| IMP-072 | ticket create 並行執行時 ID 分配 race condition | 中 | v0.18.0 |
+| IMP-073 | Logger 方法解構導致 this 遺失 + Promise hang | 中 | v0.18.0 |
+| IMP-074 | Skill 同時用 scripts.* package 入口 + sys.path-mode 測試導致 import 雙模式衝突 | 中 | v0.18.0 |
+| IMP-075 | ticket set-acceptance --check 多個 index 參數可能只勾選最後一個 | 低（功能正確性受影響但有 workaround） | v0.19.0 |
+| IMP-076 | Skill packaging install/runtime 二態盲點（auto-discover 配置缺失 + __file__ 上溯失效） | 中 | v0.19.0 |
+| IMP-077 | 測試 helper 設計反模式（local fork 變死碼 + 同名異介面命名衝突） | 低（功能正常但維護性退化） | v0.19.0 |
+| IMP-APP-004 | 防呆判斷取 pipeline 末端命令 exit code——head/tail 恆 0 使守衛必觸發或必靜默 | 中 | — |
+| IMP-APP-005 | 驗證工具對空/無效輸入集靜默回報通過——假綠燈侵蝕驗證可信度 | 高 | — |
+| IMP-BAL-001 | Hook（PreToolUse / PostToolUse）提前 emit stdout JSON，後續分支 exit 2 時訊號被 runtime 丟棄 | 中 | — |
+| IMP-BAL-002 | sync-claude-pull.py 未知參數不報錯，推進 base SHA 卻不套 delta，破壞三方合併基準 | 高 | — |
+| IMP-BAL-003 | 稽核 hook 用寬鬆解析器讀 SSOT，對嚴格消費端會失敗的結構錯誤全盲 | 高 | — |
+| IMP-MON-001 | 批量 sys.path 修改前未盤點多重依賴導致 import 斷裂 | 中 | — |
+| IMP-MON-002 | CC worktree 隔離以遠端預設分支為 base（session 啟動快取），非 origin/main | 高 | — |
+| IMP-MON-003 | 貪婪字串替換誤中 URL 子字串 | 中 | — |
+| IMP-V1-002 | 跨 repo 交換格式 wire key 命名慣例分歧（DB snake_case 洩漏至 wire format） | 中 | — |
+| IMP-V1-003 | Hook 搬移後 sys.path 指向錯誤的 lib 目錄導致 import 失敗 | 中 | — |
+| IMP-V1-004 | Hook 內部工具名字面守衛因平台工具改名靜默早退（matcher 別名仍投遞） | 高 | — |
+| IMP-V1-005 | index.lock 競爭下 fast-forward 移動 HEAD 但 index 寫入失敗，後續 commit 靜默刪除剛合併的檔案 | 高 | — |
+| IMP-V1-006 | 大小寫不敏感檔案系統上 Edit 工具寫入成功，但 git pathspec 以不同大小寫尋址失敗 | 低 | — |
+
+### 流程 (PROC)
+
+| ID | 標題 | 風險 | 來源版本 |
+|----|------|------|---------|
+| PROC-001 | 錯誤假設執行者能靠經驗彌補文件不足 | — | — |
 
 ### 流程合規 (PC)
 
@@ -289,7 +348,6 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-015 | 錯誤提示靜默繞過 | 中 | v0.1.1 |
 | PC-016 | Hook 阻止後使用 Bash 工具繞過保護機制 | 高 | v0.1.1 |
 | PC-017 | ANA 完成後缺少實作 Ticket | 中 | v0.1.1 |
-| PC-183 | 並行代理人重複建立後續 Ticket（原 PC-018 上游重編號） | 中 | v0.1.1 |
 | PC-019 | 設計決策只存 memory 未建 Ticket | 中 | v0.1.1 |
 | PC-020 | Plan 派發與實際執行不一致 | 中 | v0.1.2 |
 | PC-021 | Worktree 隔離失敗導致跨 Wave 交叉污染 | 高 | v0.1.2 |
@@ -319,8 +377,6 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-045 | PM 代理人失敗時自行撰寫產品程式碼 | 中 | v0.17.3 |
 | PC-046 | 不必要的 cd 操作全域 CLI | 中 | v0.17.3 |
 | PC-047 | Prompt 導致代理人過度讀取 | 中 | v0.17.3 |
-| PC-048 | — | — | — |
-| PC-049 | — | — | — |
 | PC-050 | 過早判斷代理人完成 | 中 | v0.17.3 |
 | PC-051 | 過早宣稱不可能 | 中 | v0.17.3 |
 | PC-052 | 忽略既有 error-pattern 警告直接實作 | 中 | v0.17.3 |
@@ -365,7 +421,6 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-105 | PM 對 SKILL CLI 語法的 autopilot 假設（同 session 多次撞 hook 警告後仍嘗試相似變體） | 中 | v0.18.0 |
 | PC-154 | 派發 worktree agent 前未驗證兩項前置條件（worktree base 完整性 + ticket 已 claim） | 中 | v0.19.0 |
 | PC-162 | Ticket 描述含過時環境狀態 + schema 註解 PC 引用語意錯誤 | 中 | v0.19.0 |
-| PC-171 | AUQ 派發類選項未先驗 blockedBy readiness（假選項；上游 PC-165 在本專案重編號） | 中 | v0.19.1 |
 | PC-172 | Wrapper command 參數推斷未經 runtime 驗證（只讀底層 binary --help，忽略 wrapper 自動注入參數） | 中 | v0.19.1 |
 | PC-176 | 跨環境設定不一致時歸因「環境差異」而非驗證被 git 同步的共用設定本身（便利假設掩蓋一份錯設定的單點根因） | 中 | v0.19.1 |
 | PC-180 | 雙專案共用 sync 時混淆「共享 repo 納入範圍」與「本地保留範圍」致框架調整誤失（preserve 清單為根本解） | 中 | v1.0.0 |
@@ -390,6 +445,106 @@ Claude Code 內建了官方的 memory 系統（`~/.claude/projects/{project}/mem
 | PC-MON-001 | 工具防護落地於可繞過的執行點導致復發（version-release pre-flight 防護在手動收尾路徑零次執行） | 中 | v0.3.5 |
 | PC-MON-002 | 必填不等於有效——CLI 必填欄位無格式/存在性驗證，自由文字穿透防護（resolved_by=設計決策） | 中 | v0.3.6 |
 | PC-BAL-005 | 決斷強制 hook 觸發詞正則誤傷標準章節名「Phase 4 重構評估」（PC-113/138/144 同家族，跨 hook 復發） | 中 | v0.1.0 |
+| PC-BAL-010 | 驗證管道對待驗現象不敏感——檢查條件恆真或恆偽（家族層，下位含 TEST-BAL-001 / PC-MON-002 / PC-BAL-005） | 高 | v0.2.1 |
+| PC-BAL-011 | 未讀目標載體即斷言缺口存在，據以建票或決策（PC-068 同根因不同載體） | 中 | v0.2.1 |
+| PC-BAL-012 | 複合條件搜尋的加總計數遮蔽單一詞項零命中——一項證據被當成多項的覆蓋證明（PC-BAL-010 成員） | 高 | v0.2.1 |
+| PC-BAL-013 | 主線程 context 中斷被當成背景代理人已終止，據以重派造成雙寫入者（PC-166 反方向） | 高 | v0.2.1 |
+| PC-018 | PM Resume 後未檢查 5W1H 完整性即派發 | — | — |
+| PC-091 | ANA Ticket 落地下游用兄弟而非子任務（血緣斷裂） | 中 | — |
+| PC-092 | 並行代理人 git index 競爭導致 commit 邊界與訊息不對齊 | 中 | — |
+| PC-093 | YAGNI 累積反模式：推測性抽象的延後決策 | 中 | v0.18.0 |
+| PC-094 | TD 清單即時校準缺失 | 低-中 | v0.18.0 |
+| PC-095 | WRAP W 階段選項池不完備（Claude 預設「新增工具」結構性偏見） | 中（影響 ANA 方向正確性，可能導致投入錯誤類型的 IMP） | — |
+| PC-096 | CLI exit code 混淆「程式錯誤」與「業務拒絕」 | 中（影響 shell pipeline 自動化判讀，PM/Hook 無法區分「該重試」與「該停手」） | — |
+| PC-097 | 同一資料於同一請求中被兩處 I/O 重複呼叫 | 中（效能損耗 + 兩次取值間資料漂移風險，破壞單次請求內資料一致性） | — |
+| PC-098 | PM 撰寫通用規則時本能引用當下任務 ticket ID | — | — |
+| PC-099 | Meta-ticket 自我引用造成 Hook 誤報 | 中 | v0.18.0 |
+| PC-100 | ANA 衍生 IMP/ADJ 時 PCB 欄位未繼承 source ticket | 高（每次 ANA→IMP 衍生都可能踩） | — |
+| PC-101 | 並行代理人結論矛盾時 PM 必須實證仲裁 | 中（僅在並行派發多 subagent 的多視角審查情境出現） | — |
+| PC-102 | ANA Solution 修復方向表未逐項轉 spawned ticket | 高（ANA 結論看似完整實則追蹤遺漏） | — |
+| PC-103 | 大型類比框架分析時漏排比較維度 | 中（僅在用大型系統做類比分析時觸發） | — |
+| PC-104 | Agent 執行邊界誤判導致結果未落地 | 中（subagent hallucinate 系統限制導致結果流失） | — |
+| PC-106 | 規則失效跳過讀 code 直接判定規則設計錯誤 | — | — |
+| PC-107 | Phase 3b 派發前未走 cognitive-load 拆分檢查 | 高 | — |
+| PC-108 | Subagent Commit 後未主動 Complete Ticket | — | — |
+| PC-109 | .claude/ Runtime State 類型未評估 Sync 排除 | — | — |
+| PC-110 | Body-Check False Negative via Schema Separator | — | — |
+| PC-111 | PM 論述編造技術機制 + 根因淺層歸因 | — | — |
+| PC-112 | Subagent 對非程式碼檔案誤選 MCP 寫入工具導致 early stop | 高 | — |
+| PC-113 | Validator regex 缺字邊界導致 substring 誤判 placeholder | 中 | — |
+| PC-114 | .claude/ 修改任務派發雙重阻擋（hook worktree 強制 + ARCH-015 runtime 阻擋） | 中 | — |
+| PC-115 | subagent 對 .claude/ Edit 被 runtime 拒絕且無 hook 訊息 | 高 | — |
+| PC-116 | 用「偶發/transient/不可重現」當分析失敗的合理化標籤 | 中 | — |
+| PC-117 | ANA Solution multi_view_status Nested YAML 結構誤判 | — | — |
+| PC-118 | ticket skill 行為變更未同步決策層（行為層 ↔ 決策層耦合鬆散） | 中 | — |
+| PC-119 | parallel-evaluation 用法誤解 — PM 單派 linux 視角而非並行三人組 | 中 | — |
+| PC-120 | 多視角審查結論未轉換為合法決策狀態 — 「P3 / 不建立 ticket」灰區 | 中 | — |
+| PC-121 | PM 推薦框架 ticket 至未來 planned 版本（規則 6 與 version-progression 引用斷裂） | 中 | — |
+| PC-122 | 新建 error-pattern 推翻既有 PC 但未同步舊 PC，留下並存衝突源 | 中（並存期間任何 PM 觸發都是潛在 bug 來源） | — |
+| PC-123 | 規則存在但 agent 行為層未遵守 — agent-definition-standard 規範與實際輸出落差 | 中 | — |
+| PC-124 | uv script header transitive 依賴未宣告 — `lib/` 共用模組引入的 yaml 不會自動安裝 | 中 | — |
+| PC-130 | 規範性文字 dogfooding 違規（內容禁止絕對主義，形式採用絕對主義） | — | — |
+| PC-131 | 外部工具權威性預設質疑 | 中 | — |
+| PC-132 | Hook self-check 警示是被忽視的反推資料源 | 中 | — |
+| PC-133 | 代理人對同性質任務的接受/拒絕行為不一致（self-imposed scope rejection） | 中 | — |
+| PC-134 | ANA 自我指涉反諷（分析 X 反模式的 ANA 自身重蹈 X） | 高 | — |
+| PC-135 | 子代理人 pytest 環境驗證通過但實際 hook 子進程環境失準 | — | — |
+| PC-136 | 結構性修復未掃 lib callers 反模式 | — | — |
+| PC-137 | 並行派發 subagent 對 `.claude/` Edit 觸發 runtime deny | — | — |
+| PC-138 | Validator 將 trade-off 表格的 N/A cell 誤判為 placeholder（PC-113 延伸 false positive） | 中 | — |
+| PC-139 | Git index.lock 衝突來源誤判（外部 GUI app fork 漏列） | 低（時間損耗，無資料損害） | — |
+| PC-140 | Subagent commit message 與 stage 內容不一致 | 中 | v0.18.0 |
+| PC-141 | 監測類 ANA acceptance 未預先區分設計性偏差 vs 失效性訊號 | 中 | v0.18.0 |
+| PC-142 | Phase 4 Hook 字面抓觸發詞誤判規則引用為延後話術 | — | — |
+| PC-143 | Spec / ANA 規劃引用既有資源（CLI flag / Hook 名稱）未驗證存在性 | — | — |
+| PC-144 | Validator `\bTODO\b` 將合法內容中的 TODO/TBD 字面誤判為 placeholder（PC-138 同家族延伸） | 中 | — |
+| PC-145 | Stale CLI install 偽裝為 validator bug — 修改源碼後未 reinstall 導致誤判修復未生效 | 中 | — |
+| PC-146 | PC-093 exempt marker 位置誤用 — 標記置於章節下方或獨立段落而非命中行緊鄰處 | 低 | — |
+| PC-147 | Reference doc 自寫自引導致 confabulation cascade | 高 | — |
+| PC-148 | Hook 雙重註冊：settings.local.json python3 直呼繞過 shebang pep723 deps | 中 | — |
+| PC-149 | Ticket complete 後合併分支 worktree 無自動清理 | 中 | v0.18.0 |
+| PC-150 | Subagent 形似字 normalize 誤替換 | 中（靜默語意錯誤，人工抽查才能發現） | — |
+| PC-151 | Stale 測試 exit code 期望未隨 CLI exit code 規範演進同步 | 低 | — |
+| PC-152 | ticket migrate 撞既有目標 ID 後靜默覆寫 | 高 | — |
+| PC-153 | PM 對 local-command-caveat 包裹的 skill 觸發訊號過度保守解讀 | 中 | — |
+| PC-155 | ticket complete auto-stage 與 worktree append-log 並行編輯同一 ticket md 造成 merge conflict | 低 | — |
+| PC-156 | PM cwd auto-switch 到 agent worktree | — | — |
+| PC-157 | chrome-devtools-mcp install_extension 拒絕非 workspace roots 內路徑（含 /tmp） | 低 | — |
+| PC-158 | mint-format-specialist 在視覺標記場景寫入 emoji（違反規則 3） | — | — |
+| PC-159 | development-setup IMP 文件安裝指令未在 fresh shell 實機驗證 | — | — |
+| PC-160 | PM 跳過升級評估閘門直接寫 memory 處理 session 浮現洞察 | — | — |
+| PC-161 | ANA grep 範圍誤判導致「前車之鑑」強論證崩塌 | — | — |
+| PC-163 | PM-worktree ticket md 偏離 — PM 在 main repo 跑 ticket CLI 與 agent 在 worktree 作業導致雙邊不同步 | 中 | — |
+| PC-164 | MCP binary 名稱假設未實證 — `.mcp.json` 與 detector 同源誤判 | 中 | — |
+| PC-165 | False Positive 修復鏈 — 測試綠燈不等於 Runtime 正確 | 高 | — |
+| PC-166 | PM 幻覺工具執行結果（confabulated tool result）— git working tree 作為事實基準 | 高 | — |
+| PC-167 | 分析代理人 worktree 內無 commit ticket body，PM 接手須 transcribe | 中 | — |
+| PC-168 | Flaky Baseline 少量 sample 推導 stable 錯覺 | 高 | — |
+| PC-169 | Merge 中斷後以 --no-verify commit 產生 empty merge commit 丟失工作 | 高 | — |
+| PC-170 | 第三方 Claude Code skill vendoring 至框架的四個陷阱 | 中 | — |
+| PC-173 | 框架文件引用的 MCP 工具名與實機暴露漂移 | — | — |
+| PC-174 | 命令閘門 hook 將描述性陳述誤判為命令 + 缺前置條件時硬阻擋而非引導 | — | — |
+| PC-175 | 框架跨專案 sync 攜帶來源專案類型專屬資產漏入目標專案 | — | — |
+| PC-179 | worktree agent 完成後主線程 cwd 污染致 merge 誤判 | — | — |
+| PC-184 | malformed tool-call 被當文字渲染而未執行 | — | — |
+| PC-185 | ticket body append-log 寫入後未 commit 被 git 還原覆蓋 | — | — |
+| PC-APP-003 | 衝突解決以量取代設計正確性 | — | — |
+| PC-APP-006 | .gitignore 排除測試 fixture 導致新環境測試失敗 | 中 | — |
+| PC-APP-008 | 外部 API 測試使用虛構測資標籤導致錯誤結論 | 高 | — |
+| PC-APP-009 | 規範描述多載體雙寫漂移——方案變更後人工同步只掃部分載體 | 中 | — |
+| PC-APP-011 | 驗收者沿用執行者的偵測 pattern——pattern 外缺陷零覆蓋的假陰性驗收 | 高 | — |
+| PC-APP-012 | Domain map 將未實作概念列為已實作 bundle，衍生不可執行的測試 ticket | 中 | — |
+| PC-BAL-001 | 驗證端清單過期使建立端產出的 canonical 結構被判違規 | — | — |
+| PC-BAL-002 | 檔案合併遺漏子功能，但檔頭仍宣稱完整承接 | — | — |
+| PC-BAL-003 | 未來工作建為 ticket，並繞過工具守衛使其成立 | — | — |
+| PC-BAL-004 | 派發者將未查證的事實寫入 ticket context，成為執行者的錯誤前提 | — | — |
+| PC-BAL-006 | 子 shell cd 的 chpwd ls 傾印疊在 CLI 輸出前，被誤診為 CLI 故障而繞道 | 中 | — |
+| PC-BAL-007 | 並行文件票各自陳述同一事實時，未實查的一方寫入誤述 | 中 | — |
+| PC-BAL-008 | 同 repo 並行 agent 共用 git index，commit 掃入他人已 staged 檔案 | 中 | — |
+| PC-BAL-009 | 測試 fixture 用相對路徑觸及專案根資產，同一套件在不同 cwd 給出不同顏色，兩方結果不符但皆屬實 | 高 | — |
+| PC-TUNL-001 | monorepo 子端可編譯產物未納入 CI 守門（本機綠燈遮蔽 reproducibility） | 中 | v1.1.0 |
+| PC-V1-011 | PM claim 待派發 ticket 導致代理人認領失敗 | 低 | — |
+| PC-V1-014 | 為繞過 gate 而改變語意載體（children→spawned_tickets） | 中 | — |
 
 ---
 

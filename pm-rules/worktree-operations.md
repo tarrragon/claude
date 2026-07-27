@@ -267,6 +267,7 @@ git -C <project-root> branch --show-current   # 必須回 main/master
 | `cp`（推薦） | 新增檔案、覆蓋已知檔案 | 低 |
 | `git merge` | 大量變更、需保留 commit 歷史 | 中（可能衝突） |
 | `git cherry-pick` | 需要特定 commit | 中 |
+| `git checkout <ref> -- <paths>` | 跨 phase 傳遞（刻意不落 main，見下方「多階段串接派發」節） | 低（僅取程式碼路徑，不取 ticket md） |
 
 ### 階段 3：清理後（Cleanup）
 
@@ -305,6 +306,31 @@ done
 # 刪除所有 worktree 分支
 git branch | grep "worktree-agent-" | xargs git branch -D 2>/dev/null
 ```
+
+---
+
+## 多階段串接派發（Feat 分支累積器）
+
+> **適用情境**：完整 TDD 跨多個 agent 接力（如 sage 寫 RED → pepper 定策略 → parsley 寫 GREEN → cinnamon 修），且 harness `isolation: worktree` 使每個 agent 的 worktree 都 base 在 origin/main。上方三階段標準流程假設「單一 agent、產出立即落 main」；本節補充的是「N 個 agent 依序接力、main 須全程恆綠」情境，既有單 agent 流程不受影響。
+
+**Why**：把中間產出（如尚未通過的 RED 測試）直接 merge 進 main 會使 main 出現紅燈，違反 quality-baseline 規則 1（main 恆綠）。
+
+**Consequence**：不採用分支累積器、每個 phase 產出都直接 merge 進 main，會讓 main 在跨 agent 交接期間反覆紅綠，且難以回溯是哪個 phase 造成當前失敗。
+
+**Action**（四步驟）：
+
+| 步驟 | 動作 | Why |
+|------|------|-----|
+| 1 | 首個 phase（如 sage 的 RED 測試）產出推上 **feat 分支**（非 main），PM `git push origin feat/<ticket>-<phase>` | 隔離未完成產出，main 不受影響 |
+| 2 | 下游 phase（如 parsley GREEN）的 worktree base origin/main，用 `git checkout origin/feat/<ticket>-<prev-phase> -- <paths>` 只取程式碼路徑、不 merge 分支；完成後 push 為新 feat 分支供下一 phase 接手 | 只取程式碼繞開 ticket md 分歧，見下方說明 |
+| 3 | 全鏈完成、main 外測試通過後，PM 在 main 上 `git checkout <final-branch> -- <code-paths>` 並一次 commit（不 merge） | ticket md 由 PM 在 main 統一更新，不隨程式碼一併帶入 |
+| 4 | worktree 清理前先 `git merge -s ours <branches> --no-edit` | 見下方「與 Guard A 的銜接」 |
+
+**為何用 checkout-paths 而非 merge**：各 phase 代理人都會用 `ticket track append-log` 把執行紀錄寫入自己分支上的 ticket md，若用 `git merge` 落地會在 ticket md 上產生衝突（每分支版本不同）。checkout-paths 只取程式碼路徑（如 `lib/`、`test/`），繞開 ticket md 的分支間分歧；ticket md 內容由 PM 在 main 上統一維護。
+
+**與 Guard A 的銜接**：checkout-paths 落地只複製檔案內容，不會使 feat 分支的 commit 進入 main 的祖先鏈，`git log main..<branch>` 仍會顯示該分支有「未落地」的 commit，觸發本文件階段 3 Guard A 與 `worktree-remove-deliverable-check-hook` 阻擋 remove。`git merge -s ours <branches> --no-edit` 只建立一個標記已合併的 merge commit（tree 內容維持 main 現狀不變、程式碼不受影響），使該 hook 判定通過後才能安全 remove worktree 與刪除 feat 分支。
+
+**與階段 2「提取方式選擇」的關係**：本節是該表第四列 `git checkout <ref> -- <paths>` 的展開說明，適用於跨 phase 傳遞、刻意不落 main 的情境；`cp` / `git merge` / `git cherry-pick` 三法仍是單 agent 產出立即落 main 的預設選擇，不受本節影響。
 
 ---
 
@@ -475,7 +501,9 @@ subagent 在任何 cwd 都可 Read worktree 內的 `.claude/` 檔案。可用於
 
 ---
 
-**Last Updated**: 2026-06-18
+**Last Updated**: 2026-07-27
+**Version**: 2.5.0 - 新增「多階段串接派發（Feat 分支累積器）」節：跨 agent TDD phase 接力（RED→GREEN 跨多個 worktree agent）時保 main 全程恆綠的機制，含 checkout-paths 取代 merge 的理由與 Guard A 銜接說明；階段 2「提取方式選擇」表補第四列 `git checkout <ref> -- <paths>`（0.2.1-W3-095，落地自 memory multi-phase-tdd-branch-flow.md）
+
 **Version**: 2.4.0 - 落地 1.2.0-W1-028 兩守護：Guard A（階段 3 remove 前固定值驗證交付物在 main + remove-deliverable-check-hook 強制層 + 實作 agent commit 紀律）防未提交碼遺失；Guard B（階段 1 派發前主 repo 分支漂移檢查 + pre-dispatch-branch-drift-hook 強制層）防 cwd 污染致 merge 落錯處；觸發點表與派發前/清理後檢查清單同步補列
 
 **Version**: 2.3.0 - 「目前建議」章節升級為策略 C 條件式採用（W3-034.4 並行受控實驗 3/3 success 落地）；新增 Action 表分 5 場景對應 bgIsolation 設定 + 未驗證情境表 + 不採策略 B 理由

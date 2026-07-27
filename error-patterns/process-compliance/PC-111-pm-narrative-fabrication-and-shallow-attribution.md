@@ -227,7 +227,6 @@ W17-072/074 事件的「working memory 混淆」論述，素材溯源結果如�
 - `.claude/rules/core/document-writing-style.md` — 正面陳述原則、二次審查強制執行
 - `.claude/error-patterns/process-compliance/PC-066-decision-quality-autopilot.md` — 同宗：決策自檢缺失
 - `.claude/methodologies/pm-judgment-interference-map.md` — 13 因子 × 6 層 PM 判斷干擾地圖；本 PC 對應層 1 論述生成 + 層 2 歸因；R5 對應因子 1.4（素材錯置抽象層級，W17-078.2 新增）
-- Memory `feedback_pm_narrative_fabrication_and_shallow_attribution.md` — 本 PC 的 memory feedback 對應
 - `docs/work-logs/v0.18.0/tickets/0.18.0-W17-078.md` — 父 Ticket：強化 PC-111 + methodology 新增 R5 整體規劃
 - `docs/work-logs/v0.18.0/tickets/0.18.0-W17-075.md` — 上游 WRAP ANA：13 因子地圖產出、素材溯源起點
 

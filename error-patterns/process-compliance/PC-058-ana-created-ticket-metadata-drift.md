@@ -81,7 +81,3 @@ Ticket.who vs CLAUDE.md "實作代理人" 欄位
 Ticket.acceptance 每項長度 < 100 字元且無「;」分隔多條件
 Ticket.tdd_phase = {null, phase1, phase1-4} 依改動範疇
 ```
-
-## 記錄於 Memory
-
-對應 memory 項目：`feedback_ana_created_ticket_metadata_drift.md`

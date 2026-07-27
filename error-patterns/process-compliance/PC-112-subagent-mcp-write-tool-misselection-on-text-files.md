@@ -117,6 +117,4 @@ Subagent 回報以下字串時，優先懷疑本 PC：
 
 → 立即重派並 prompt 顯式限定 Edit 工具
 
-## 記錄於 Memory
-
-對應 memory 升級候選：`feedback_subagent_mcp_write_tool_misselection.md`（待 framework 規則落地後同步）
+框架規則已落地：`.claude/rules/core/tool-selection.md`。

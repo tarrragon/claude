@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from doc_system.commands.validate import execute
+from doc_system.commands.validate import execute, execute_filenames
 from doc_system.core.file_locator import FileLocator
 
 
@@ -18,6 +18,13 @@ REAL_DATA_CONTRACT = (
     / "balance-sheet"
     / "SPEC-002-accounts-snapshots-data-contract.md"
 )
+
+
+def _violations_section(output: str) -> str:
+    """從 execute_filenames 輸出中取出「驗證失敗」區段（排除 INFO 豁免清單）。"""
+    marker = "驗證失敗"
+    idx = output.find(marker)
+    return output[idx:] if idx != -1 else ""
 
 
 def _setup_spec(tmp_path, spec_id, subdomain, body):
@@ -169,3 +176,133 @@ class TestValidateDataContract:
 
         assert exc.value.code == 0
         assert "通過" in capsys.readouterr().out
+
+
+class TestValidateFilenames:
+    """檔名慣例驗證（配號器盲區防護，0.2.1-W3-006）。"""
+
+    def test_nonconforming_filename_reported(self, tmp_path, capsys):
+        """不符 {PREFIX}-數字 慣例的檔名應被列出。"""
+        spec_dir = tmp_path / "docs" / "spec" / "demo"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "資料契約-v2.md").write_text(
+            "---\nid: SPEC-200\ntitle: \"Test\"\n---\n內容\n", encoding="utf-8"
+        )
+        args = argparse.Namespace()
+
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            with pytest.raises(SystemExit) as exc:
+                execute_filenames(args)
+
+        assert exc.value.code == 1
+        output = capsys.readouterr().out
+        assert "配號器盲區" in output
+        assert "資料契約-v2.md" in output
+
+    def test_conforming_filename_not_reported(self, tmp_path, capsys):
+        """符合慣例且 frontmatter id 一致的檔名不應誤報。"""
+        spec_dir = tmp_path / "docs" / "spec" / "demo"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "SPEC-201-x.md").write_text(
+            "---\nid: SPEC-201\ntitle: \"Test\"\n---\n內容\n", encoding="utf-8"
+        )
+        args = argparse.Namespace()
+
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            with pytest.raises(SystemExit) as exc:
+                execute_filenames(args)
+
+        assert exc.value.code == 0
+        assert "通過" in capsys.readouterr().out
+
+    def test_frontmatter_id_mismatch_reported(self, tmp_path, capsys):
+        """檔名前綴 ID 與 frontmatter id 不一致時應回報。"""
+        spec_dir = tmp_path / "docs" / "spec" / "demo"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "SPEC-202-x.md").write_text(
+            "---\nid: SPEC-999\ntitle: \"Test\"\n---\n內容\n", encoding="utf-8"
+        )
+        args = argparse.Namespace()
+
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            with pytest.raises(SystemExit) as exc:
+                execute_filenames(args)
+
+        assert exc.value.code == 1
+        output = capsys.readouterr().out
+        assert "frontmatter id 與檔名不一致" in output
+        assert "SPEC-202" in output
+
+    def test_template_file_excluded(self, tmp_path, capsys):
+        """template 檔名（-template.md）不受檔名慣例約束，不應誤報。"""
+        proposal_dir = tmp_path / "docs" / "proposals"
+        proposal_dir.mkdir(parents=True)
+        (proposal_dir / "proposal-template.md").write_text(
+            "---\nid: PLACEHOLDER\n---\n內容\n", encoding="utf-8"
+        )
+        args = argparse.Namespace()
+
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            with pytest.raises(SystemExit) as exc:
+                execute_filenames(args)
+
+        assert exc.value.code == 0
+
+    def test_spec_and_data_contract_share_dedup_scan(self, tmp_path, capsys):
+        """spec 與 data-contract 共用 docs/spec + SPEC 前綴，掃描不應重複回報同一檔案。"""
+        spec_dir = tmp_path / "docs" / "spec" / "demo"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "not-conforming.md").write_text(
+            "---\nid: SPEC-300\n---\n內容\n", encoding="utf-8"
+        )
+        args = argparse.Namespace()
+
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            with pytest.raises(SystemExit) as exc:
+                execute_filenames(args)
+
+        assert exc.value.code == 1
+        output = capsys.readouterr().out
+        assert output.count("not-conforming.md") == 1
+
+    def test_fixed_name_file_exempted_and_reported_as_info(self, tmp_path, capsys):
+        """框架約定固定命名文件（有對應 template）不報違規，且以 INFO 顯性列出。"""
+        spec_dir = tmp_path / "docs" / "spec"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "design-system-spec.md").write_text(
+            "---\nid: N/A\ntitle: \"Design System\"\n---\n內容\n", encoding="utf-8"
+        )
+        args = argparse.Namespace()
+
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            with pytest.raises(SystemExit) as exc:
+                execute_filenames(args)
+
+        output = capsys.readouterr().out
+        assert exc.value.code == 0
+        assert "INFO" in output
+        assert "design-system-spec.md" in output
+        assert "配號器盲區" not in output
+
+    def test_real_project_fixed_name_files_not_violations(self, capsys):
+        """本專案實際的 component-library-spec.md / design-system-spec.md 不應被列為違規。"""
+        args = argparse.Namespace()
+
+        with patch.object(FileLocator, "get_project_root", return_value=str(PROJECT_ROOT)):
+            with pytest.raises(SystemExit) as exc:
+                execute_filenames(args)
+
+        output = capsys.readouterr().out
+        assert "component-library-spec.md" not in _violations_section(output)
+        assert "design-system-spec.md" not in _violations_section(output)
+
+    def test_real_project_scan_executes(self, capsys):
+        """對本專案實際文件目錄執行應可完成掃描（不驗證結果為 0，因既有檔案可能
+        存在歷史遺留違規，見 0.2.1-W3-006 Solution 記錄的實際發現）。"""
+        args = argparse.Namespace()
+
+        with patch.object(FileLocator, "get_project_root", return_value=str(PROJECT_ROOT)):
+            with pytest.raises(SystemExit) as exc:
+                execute_filenames(args)
+
+        assert exc.value.code in (0, 1)

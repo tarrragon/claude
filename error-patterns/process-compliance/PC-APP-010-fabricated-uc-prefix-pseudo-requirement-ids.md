@@ -56,10 +56,9 @@ grep -oE 'UC-[0-9]+' docs/app-use-cases.md | sort -u  # spec 定義
 
 1. **規則層**：明訂「`UC-` 前綴只能引用 `use-cases.md` 已定義的 UC」，實作 agent 需要標註內部需求時用區隔前綴（`FR-`/`REQ-`）。
 2. **Hook 層（建議）**：commit-time 掃 `lib/` 的 `UC-\d+` 引用，對照 spec 定義集，命中未定義編號則 WARNING。使斷裂在源頭可見，不累積到稽核。
-3. **回填前先稽核**：回填單一 spec 前全量掃描 code UC 引用比對 spec（memory `feedback_spec_backfill_audit_full_uc_references`），斷裂常非孤例。
+3. **回填前先稽核**：回填單一 spec 前全量掃描 code UC 引用比對 spec，斷裂常非孤例。
 
 ## 相關
 
-- `feedback_spec_backfill_audit_full_uc_references`（memory）——回填前全量掃描
 - PC-APP-009——規範描述多載體漂移（同屬追溯一致性家族）
 - 修復 tickets：0.38.1-W1-047（格式/改標決策 foundation）→ W1-048（偽 UC 改標）/ W1-049（spec 對齊）

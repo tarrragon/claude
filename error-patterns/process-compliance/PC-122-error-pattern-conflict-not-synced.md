@@ -67,7 +67,6 @@ PM 或 framework 維護者建立新 error-pattern 推翻既有 PC 的指引，�
 | 規則 | rules/core/quality-baseline.md 規則 5「所有發現必須追蹤」延伸：新建 PC 時必須 grep 既有 PC 索引並說明衝突處理 | 建議實施 |
 | Hook | 新建 PC commit 觸發掃描，若新 PC 未引用既有 PC（grep 既有 PC 名稱）且新 PC 內含「取代 / 推翻 / deprecated / 不可用」等關鍵字，提示確認衝突處理 | 建議實施（複雜度中） |
 | 自檢 | PC 建立 PR / commit 前自問：「這個 PC 是否與既有 PC 範圍重疊？是 → 同步在既有 PC 加 deprecated 標註並交叉引用」 | 行為準則 |
-| Memory | 原則保留 memory 作跨 session 索引（feedback_error_pattern_conflict_sync.md） | 已實施（配對本檔） |
 
 ---
 
@@ -118,4 +117,4 @@ PM 或 framework 維護者建立新 error-pattern 推翻既有 PC 的指引，�
 ---
 
 **Last Updated**: 2026-05-03
-**Version**: 1.0.0 — 從 W17-120 ANA 識別 PC-073 vs PC-091 並存衝突提煉。Source memory: `feedback_error_pattern_conflict_sync.md`
+**Version**: 1.0.0 — 從 W17-120 ANA 識別 PC-073 vs PC-091 並存衝突提煉

@@ -98,7 +98,7 @@ PM 沒使用 `--parent 0.18.0-W5-009` 參數。
 - PC-040 — Context 存 Ticket 不存 Prompt（Ticket Context Bundle）
 - PC-058 — ANA created Ticket metadata drift（ANA 建立的 Ticket 派發前必查 metadata）
 - ticket SKILL.md — `--parent` 參數說明
-- `feedback_ana_followup_completeness` — 分析結論落地必須逐項對照
+- `.claude/rules/core/quality-baseline.md` 規則 5 — 所有發現必須追蹤（分析結論落地必須逐項對照）
 
 ---
 

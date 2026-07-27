@@ -258,11 +258,7 @@ def main() -> int:
             logger.error(f"Expected dict, got {type(hook_input).__name__}")
             return 0
 
-        # Effort 感知（v2.1.133+，W14-037）：low effort 短路放行
         effort = get_effort_level(hook_input)
-        if effort == "low":
-            logger.info("effort=low，ticket-creation-validation 短路放行")
-            return 0
         logger.info(f"effort={effort}，執行完整 ticket-creation 驗證")
 
         # 提取 Write 工具的輸入

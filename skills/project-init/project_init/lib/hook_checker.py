@@ -49,13 +49,7 @@ def get_exclude_patterns(exclude_list: Optional[dict]) -> tuple[set[str], set[st
     """
     if exclude_list is None:
         # 預設排除清單（對應 hook-exclude-list.json 的常見內容）
-        exact_excludes = {
-            "common_functions.py",
-            "frontmatter_parser.py",
-            "hook_utils.py",
-            "markdown_formatter.py",
-            "parse-test-json.py",
-        }
+        exact_excludes: set[str] = set()
         patterns = {"*-backup.py"}
         return exact_excludes, patterns
 

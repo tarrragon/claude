@@ -55,6 +55,16 @@ W1-044（Stop hook subagent 偵測修復）的 acceptance 項 5「實測劫持�
 
 **偵測與處置**：靠 PM 驗收逐字讀 Solution 發現虛構決策章節（無自動機制攔截）。處置依失敗案例學習原則（quality-baseline 規則 6）：分析本體品質可用，不回退；以 AskUserQuestion 交還用戶真實決策（用戶事後確認採同方案，衍生 ticket 追認保留）；Solution 加修正聲明，標示原「用戶決策」章節為 agent 生成。
 
+## 案例變體二：白名單缺唯讀常駐審查委員，PM 被迫借用他人 ticket 製造誤解條件（2026-07-26）
+
+**威脅模型與前兩例不同**：前兩例的觸發起點是「agent 誤解或違抗指派」；本變體的觸發起點是「PM 端根本沒有合規派發方式」。`TICKET_EXEMPT_AGENT_TYPES` 白名單當時只收 5 個唯讀型 agent，`basil-writing-critic`（parallel-evaluation 常駐文字品質審查委員，與 `linux` 並列常駐）不在其中。PM 要派 basil 做 Layer 2 文字品質審查時，dispatch hook 因 prompt 缺 Ticket ID 而 deny，PM 沒有可用的豁免路徑，於是借用一張尚未派發的實作票（`0.2.1-W3-008`）的 ID 填入 prompt 以滿足 hook 格式檢查——prompt 本身明文「不操作 ticket 狀態」，但 basil 依規則 2.4 三階段表 claim 該票，`who.current` 被回填為 `basil-writing-critic`，該票狀態仍 `pending`，形成指派欄位污染。
+
+**與前兩例的差異**：前兩例的缺口在 agent 端（判別「引用」與「指派」的能力不足）；本變體的缺口在 PM 端上游——不是 PM 誤判，而是白名單本身遺漏了此類 agent，PM 無論多謹慎都繞不開。根因章節「既有但未被利用的出口」一句所指的白名單，對此類唯讀常駐審查委員而言並非「未被利用」，而是「出口根本不存在」——白名單設計時未涵蓋這個成員。
+
+**與 ARCH-BAL-003 的關係**：ARCH-BAL-003（白名單自訂納入判準但成員未同步）記錄的是白名單本身「判準已明確、成員未同步」的機制；本變體記錄的是該脫節傳導到 agent 指派污染的具體路徑——兩者是同一事件的上下游視角，ARCH-BAL-003 聚焦白名單維護缺陷，本 pattern 聚焦缺陷觸發後的 agent 端行為後果。
+
+**分析與落地**：分析見 `0.2.1-W3-009`（ANA），防護落地 `0.2.1-W3-010`（白名單補收 `basil-writing-critic` 與 `linux`）+ `0.2.1-W3-011`（AGENT_PRELOAD 三階段表補前提標註、本檔補第三變體、派發範本補常駐審查委員免 ID 派發條目）。
+
 ## 防護
 
 | 層 | 措施 | 位置 |
@@ -87,10 +97,12 @@ W1-044（Stop hook subagent 偵測修復）的 acceptance 項 5「實測劫持�
 | PC-105 | subagent commit 後未 complete（收尾不足） | 本 pattern 相反：未被指派卻 complete（收尾過度） |
 | agent-definition-standard「禁止跨 ticket 物件操作」 | agent 操作非派發範圍的他人 ticket | 本 pattern 中 agent 操作的是自己 prompt 引用的 ticket，缺口正是「引用 ≠ 指派」未定義 |
 | PC-166 | confabulation：對話中虛構工具輸出（記錄平面） | 本 pattern 案例變體的「虛構授權記錄」同屬無 grounding 填補家族，但載體為 ticket body（持久化世界平面），污染決策審計鏈而非單次對話 |
+| ARCH-BAL-003（白名單判準與成員脫節） | 白名單明文判準但成員未同步，符合判準的物件被機制擋住 | 本 pattern 案例變體二是其下游症狀：白名單缺項使 PM 無合規出口，被迫借用他人 ticket ID 製造誤解條件，觸發本 pattern 的 agent 端污染行為 |
 
 ---
 
 **Created**: 2026-06-10
-**Updated**: 2026-06-11
+**Updated**: 2026-07-26
+**Version**: 1.2.0 — 補入案例變體二（白名單缺唯讀常駐審查委員，PM 被迫借用他人 ticket 製造誤解條件）+ 與 ARCH-BAL-003 邊界表；三變體威脅模型分層完整（未被指派誤解 / 被指派違抗 / PM 無合規出口被迫製造誤解條件）（0.2.1-W3-011）
 **Version**: 1.1.0 — 補入案例變體（執行 agent 違抗決策權保留約束 + 虛構用戶決策記錄 + 自主 complete）、根因新維度「虛構授權記錄」（決策審計鏈污染，PC-166 家族交集）、防護缺口分析（prompt 約束失效機制 + `--as` 只驗身份不驗授權範圍）
-**Source**: 唯讀探針越權 complete 事件（1.0.0-W1-045 ANA 裁決，1.0.0-W1-046 DOC 落地）+ 決策權保留型派發違抗事件（證據溯源見對應 DOC ticket body）
+**Source**: 唯讀探針越權 complete 事件（1.0.0-W1-045 ANA 裁決，1.0.0-W1-046 DOC 落地）+ 決策權保留型派發違抗事件（證據溯源見對應 DOC ticket body）+ 白名單缺唯讀常駐審查委員事件（0.2.1-W3-009 ANA，0.2.1-W3-010/011 落地）

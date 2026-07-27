@@ -99,7 +99,7 @@ PM 整合多視角審查時，將「視角報告」（descriptive）誤等同於
 
 1. **multi_view_status: reviewed 不等於決策完成**：reviewed 標記只表示「審查已執行」，未保證「結論已轉為合法狀態」。current schema 沒有「decision_state_per_followup」欄位強制每項 follow-up 標明 (a)/(b)/(c) 狀態。
 2. **agent 措辭預設為「審查語氣」而非「決策狀態」**：agent 視角報告 prompt 沒有要求 agent 用 (a)/(b)/(c) 三狀態結論，agent 自然用「P3 / 暫不需要」等中性措辭。
-3. **memory `feedback_no_deferred_decisions` 不涵蓋 multi-view 情境**：memory 提醒禁用無 trigger 延後，但未明示「PM 整合 multi-view 時必須轉換 agent 措辭」這層執行細節。
+3. **`.claude/rules/core/decision-trigger-binding.md` 不涵蓋 multi-view 情境**：該規則禁用無 trigger 延後，但未明示「PM 整合 multi-view 時必須轉換 agent 措辭」這層執行細節。
 
 ### 為何 agent prompt 不直接要求 (a)/(b)/(c)
 

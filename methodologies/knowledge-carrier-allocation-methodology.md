@@ -2,9 +2,9 @@
 
 ## 核心概念
 
-知識寫入框架前，依「**受眾 x 形態**」二軸決定載體。載體錯置有兩種代價：寫進自動載入層 → token 污染（attention 稀釋 + 45k 預算耗盡）；困在專案 memory → 跨專案失傳。本方法論是頂層地圖；各載體的細部規範（如有）路由至 Reference 所列文件。
+知識寫入框架前，依「**受眾 x 形態**」二軸決定載體。載體錯置有兩種代價：寫進自動載入層 → token 污染（attention 稀釋 + 45k 預算耗盡）；框架相關內容誤落專案層文件（`docs/`）→ 跨專案失傳。本方法論是頂層地圖；各載體的細部規範（如有）路由至 Reference 所列文件。
 
-**Scope**：本地圖涵蓋 LLM context 載體（人與 AI 閱讀的知識）；專案產物層（`docs/` / `src/`）不屬本地圖，劃分見 `framework-asset-separation.md`；機器讀取層（`config/*.yaml`、hook 引用的凍結錨點）另計。memory 行由受眾軸「僅本專案」唯一決定，不需形態軸。
+**Scope**：本地圖涵蓋 LLM context 載體（人與 AI 閱讀的知識）；專案產物層（`docs/` / `src/`）不屬本地圖，劃分見 `framework-asset-separation.md`；機器讀取層（`config/*.yaml`、hook 引用的凍結錨點）另計。
 
 **代理人定義 vs skill 的歸屬判準**：一段知識可能落在代理人定義或 skill、不易區分時，以「該知識是否隨執行者改變」為判準，不憑直覺擇一。
 
@@ -18,7 +18,7 @@
 | 載體 | 受眾 | 載入時機 | 裝什麼（形態） | 不裝什麼（→ 正確去處） |
 |------|------|---------|--------|----------------------|
 | `CLAUDE.md` | 所有角色 | 每回合自動 | 專案身份、開發指令、專案級技術選型、路由 | 框架通用知識（→ `.claude/`，否則無法 sync） |
-| `rules/core/` | 所有角色 | 每回合自動 | 行為禁令速查 + 路由（與 CLAUDE.md 同屬 file-size-guardian 45k 量測集合；MEMORY.md 每回合注入但不在量測集合內） | 論證 / 流程 / 案例（→ `references/`、`error-patterns/`） |
+| `rules/core/` | 所有角色 | 每回合自動 | 行為禁令速查 + 路由（與 CLAUDE.md 同屬 file-size-guardian 45k 量測集合；MEMORY.md 每回合注入但不在量測集合內，屬 Claude Code 原生機制，非本框架載體） | 論證 / 流程 / 案例（→ `references/`、`error-patterns/`） |
 | `pm-rules/` | 僅 PM | 情境觸發按需 | 調度流程 SOP（派發、驗收、決策樹、skip-gate） | 代理人執行知識（→ agents / skills） |
 | `agents/AGENT_PRELOAD.md` | 全體代理人 | 派發時 @ 注入 | 代理人通用行為禁令（ticket 操作、git 限制、工具選擇、嵌套協議） | 單一代理人偏好（→ 各 agent 定義）、PM 流程（→ pm-rules） |
 | `agents/<name>.md` | 單一代理人 | 派發時載入 | 身份定位、三區塊（允許產出 / 禁止行為 / 適用情境）、設計偏好（命名習慣、技術手法傾向、文法語氣）、分工路由與升級條件 | → 見「代理人定義內容規範」節 |
@@ -26,7 +26,6 @@
 | `methodologies/` | 主動查閱者與 AI | 按需 | 框架判斷標準 / 核心規則（判準 + 步驟 + 檢查清單，明確且可直接套用） | 完整流程 / 範例 / 錯誤處理（→ skills） |
 | `references/` | 執行特定動作者 | 按需 | 技術參考、規則 substance（auto-load stub 的完整版） | 每回合禁令（→ rules/core stub） |
 | `error-patterns/` | ticket 前查詢者 | 按需 | 失敗案例（症狀 / 根因 / 解法 / 預防） | 規則正文（規則只放一行路由指向 PC/IMP） |
-| memory（專案層） | 本專案 PM | MEMORY.md 每回合 | 專案特定活教訓的單行索引、根因未熟的 deferred 項（frontmatter `upgrade: deferred` 標註，發版稽核收割） | 已固化內容（升級即搬家）、成熟的跨專案錯誤學習（捕獲時分流直寫 `error-patterns/`，規則 7） |
 | `~/CLAUDE.md` + @import（user-level，CC 原生） | 本機所有專案的所有角色 | 每回合自動 | 個人操作偏好、本機環境事實（跨專案但僅限本機） | 框架規範與錯誤學習（→ `.claude/`；user-level 不隨 repo 傳播、無 git 稽核、無編號去重，協作者與新機器拿不到） |
 | `templates/`、`.claude/` root 歷史遺留檔 | （未分類） | 不自動載入 | — | 依本地圖二軸重分配（templates 內容須與對應規範同步，否則新實例從模板長出舊形態）；盤點另由 ticket 追蹤 |
 | `.claude/README.md` | 框架瀏覽者 | 不自動載入 | 框架頂層導覽：目錄結構、各載體用途、入口索引 | 規範 substance（→ rules / references）、流程方法（→ skills） |
@@ -69,13 +68,14 @@
 - `.claude/references/auto-load-stub-conventions.md` — 自動載入層 stub 構成 + 外移 SOP + 預算驗證
 - `.claude/rules/core/agent-definition-standard.md` — 代理人三區塊結構標準
 - `.claude/rules/README.md` — 自動載入預算原則（每回合必要性自問）
-- `.claude/pm-rules/pm-quality-baseline.md` 規則 7 — 錯誤學習捕獲時分流判準 + 升級目的地預算閘門 + 升級即搬家
+- `.claude/pm-rules/pm-quality-baseline.md` 規則 7 — 知識捕獲時分流判準（框架相關／專案相關／兩者皆非）+ 升級目的地預算閘門
 - `.claude/README.md`「同步機制」章 — 寫作類 skill（compositional-writing / multi-round-review）內容 SSOT 在 blog repo，框架端為回流副本；依地圖判定「寫作方法 → skills/」後，內容修改應到上游 repo 執行
 - `.claude/skills/skill-design-guide/SKILL.md` — skills 載體的細部規範（官方規格、frontmatter、漸進揭露結構）
 
 ---
 
-**Last Updated**: 2026-07-05
+**Last Updated**: 2026-07-27
+**Version**: 1.11.0 — 移除 memory（專案層）載體列：memory 不再是本框架的知識載體，跨專案內容全數改落 `error-patterns/` 或 `rules/` `methodologies/` `references/`，專案特定內容落 `docs/` 或 `CLAUDE.md`（依 `pm-quality-baseline.md` 規則 7 三分流）；核心概念句「困在專案 memory」改為「框架相關內容誤落專案層文件」；Scope 句移除 memory 受眾軸說明；rules/core 列 MEMORY.md 註記為 Claude Code 原生機制、非本框架載體；Reference 規則 7 描述同步（0.2.1-W3-089，承接 0.2.1-W3-083 用戶裁示）
 **Version**: 1.10.0 — memory 載體條目更新為捕獲時分流語意（規則 7 前移同步，裝什麼補 deferred 項、不裝什麼改「成熟跨專案錯誤學習直寫 error-patterns」）；補 user-level（`~/CLAUDE.md` @import）載體條目（原地圖對機器層無條目的系統性盲區）；Reference 規則 7 描述同步（1.5.0-W5-011.2）
 **Version**: 1.9.0 — W8-041 標籤同步：methodologies 地圖列「30 秒理念複習清單」改為「框架判斷標準 / 核心規則（明確且可直接套用）」、受眾補 AI，Reference 對 framework-meta 描述「30 秒標準」改為「方法論判斷標準定位」，對齊 W8-040 新定位
 **Version**: 1.8.0 — 「代理人定義 vs skill 歸屬判準」改寫：去除「一句話判定」總結框架，改為含明確識別測試（換一個執行者內容是否改變）的判準段落。方法論作為框架核心規則供 AI 開發時判斷，內容須明確而可套用，不採壓縮式總結（避免單句總結遮蔽判準細節導致 AI 判斷失準）

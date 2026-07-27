@@ -326,6 +326,8 @@ Hook 進程可從以下環境變數和 JSON payload 欄位取得 session/runtime
 
 **effort 感知範例**：
 
+> **交叉引用（先讀這裡）**：下方範例僅示範 effort 允許的用法——控制 audit log 詳細度，**不得**用 effort 短路核心 block 邏輯。完整判準見下方「設計鐵則：事實判斷型 hook 必擋 + effort 解耦」章節；範例形態直接對應該章節案例表的 `phase4-decision-enforcement-hook`。
+
 ```python
 import os
 
@@ -337,16 +339,17 @@ def main() -> int:
 
     effort = (payload.get("effort") or {}).get("level") or os.environ.get("CLAUDE_EFFORT", "medium")
 
-    if effort == "low":
-        return 0
+    violation = check_violation(payload)  # 事實判斷：核心 block 邏輯，永不依 effort 短路
+
     if effort == "high":
-        run_full_validation(logger)
-    else:
-        run_quick_check(logger)
+        log_audit_detail(logger, payload)  # effort 只控制 audit log 詳細度，非放行與否
+
+    if violation:
+        return 2  # block 邏輯不因 effort=low 而放行
     return 0
 ```
 
-`effort` 讓 hook 在低成本模式下放行、高成本模式下加嚴；同一 hook 可依 effort 動態調整驗證深度，避免高頻情境被阻塞。
+`effort` 只允許調整 audit log 的詳細度或次要 annotation 輸出量；事實判斷型 hook 的核心 block 邏輯必須不受 effort 影響，禁止以 `if effort == "low": return 0` 形式短路放行（見下方設計鐵則）。
 
 ### v2.1.139+ 終端存取限制
 
@@ -836,7 +839,8 @@ if __name__ == "__main__":
 
 ---
 
-**Last Updated**: 2026-06-11
+**Last Updated**: 2026-07-26
+**Version**: 修正「effort 感知範例」（327-352 行）與同檔設計鐵則（369-391 行）矛盾：舊範例示範 `if effort == "low": return 0` 無條件短路，與鐵則「事實判斷型 hook 核心 block 邏輯永不依 effort 短路」相悖，為 W14-034/036/037 三批次 12 個 hook 複製此缺陷之散播源；改寫範例為 effort 僅控制 audit log 詳細度，並前置交叉引用指向鐵則章節（0.2.1-W3-021）
 **Source**: basil-hook-architect.md v2.1.0 精簡外移；2026-05-14 同步 Claude Code v2.1.130-2.1.141 hook 系統能力（`args` exec 形式、`continueOnBlock`、`effort.level` payload、`$CLAUDE_EFFORT` / `$CLAUDE_CODE_SESSION_ID` env、`terminalSequence` 通知、MCP stdio `CLAUDE_PROJECT_DIR` 注入）；2026-05-21 同步 v2.1.142-2.1.145 新增能力（W3-026 + W3-031 ANA 結論落地）：
 
 | 版本範圍 | 新增章節 | 內容 |

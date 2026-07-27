@@ -2,7 +2,7 @@
 
 > **錯誤類別**：流程合規（quality-baseline 規則 5「所有發現必須追蹤」解讀偏差）
 > **嚴重度**：中（洞察可能停留 memory 不升級為 framework 資產，跨 session 復用受限）
-> **本檔定位**：**PC-061 的 v2 實證案例 + session 浮現洞察情境的 specific 防護**。一般 memory 升級盲區的症狀、根因、防護措施請參考 PC-061；本檔僅補充 PC-061 未涵蓋的「session 內浮現洞察」情境差異與五步驟防護。
+> **本檔定位**：**PC-061 的 v2 實證案例 + session 浮現洞察情境的 specific 防護**。一般 memory 升級盲區的症狀、根因、防護措施請參考 PC-061；本檔僅補充 PC-061 未涵蓋的「session 內浮現洞察」情境差異與對應防護步驟。
 
 ---
 
@@ -10,7 +10,7 @@
 
 **主要 error-pattern**：[PC-061: Memory 寫入後未評估升級為框架規則](PC-061-memory-upgrade-blindness.md)
 
-PC-061 已完整描述「memory 寫入後未升級為框架」的症狀、四大根因（認知摩擦差 / 邊界判斷缺失 / 工具提示偏向 / 依賴用戶介入）、防護措施（規則 7 / continuous-learning skill / hook / 歷史債務清理 / 回填）與自我檢查清單。
+PC-061 已完整描述「memory 寫入後未升級為框架」的症狀與四大根因（認知摩擦差 / 邊界判斷缺失 / 工具提示偏向 / 依賴用戶介入），作為現行防護機制的設計依據。現行防護為兩層：規則層知識捕獲時三分流（`pm-quality-baseline.md` 規則 7）+ 執法層 PreToolUse 寫入攔截（`memory-write-guard-hook.py`），memory 已不在合法目的地內。
 
 **本檔差異**：PC-061 案例 1-2 聚焦「原則類 memory 升級延遲」（識別正確但升級步驟未發生）；本檔 v2 案例聚焦「session 內浮現洞察的處理路徑」——PM 在 ticket 執行過程中發現洞察時，第一動作即跳過評估閘門直接寫 memory，連「識別 → 待升級」的中間狀態都不存在。
 
@@ -30,18 +30,41 @@ PC-061 已完整描述「memory 寫入後未升級為框架」的症狀、四大
 
 ---
 
-## Session 浮現洞察的 specific 防護五步驟
+## v3 實證案例：框架落地已在飛行中仍寫 memory（2026-07-27）
 
-PC-061 防護措施聚焦「memory 寫入時的四問檢查」（跨專案適用？屬哪類？升級至哪？是否已升級？）。本檔針對「session 內浮現洞察」情境，補充五步驟流程，**填補 PC-061 自我檢查清單觸發前的「識別 → 處理」缺口**：
+| 階段 | 動作 | 評估 |
+|------|------|------|
+| 用戶裁示原則 | 「框架檔案不以 ticket ID 承載推理依據，簡單理由寫註解，重要概念先寫方法論再引用」 | 明確的跨專案框架原則 |
+| PM 已建框架落地票 | DOC 票，acceptance 明列「補『簡單理由寫註解、重要概念先寫方法論再引用』的兩層分流指引」到規則文件 | OK，正確路徑已啟動 |
+| PM 額外動作 | Write memory feedback 檔 + 更新 MEMORY.md + commit | 違反：跳過閘門，且此次為多餘動作 |
+| 用戶糾正 | 「寫入 memory 是沒有意義的，對於跨專案框架來講 memory 無法跨專案繼承，所有 claude 框架的教訓都應該變成錯誤學習記錄」 | 用戶識別出載體錯誤 |
+| 補救 | 刪除 memory 檔與索引行；原則內容全數由框架落地票承接，無資訊遺失 | 還原 |
+
+**與 v2 的差異——本例的失敗不是判斷缺失，是反射**：
+
+v2 的 PM 未評估洞察是否該升級（PC-061 成因 2「邊界判斷缺失」）。本例中 PM **已經正確判斷該原則屬框架層並已建票落地**，卻仍在同一輪追加寫 memory。也就是說：
+
+| | v2 | v3 |
+|---|---|---|
+| 是否識別為跨專案原則 | 否 | 是 |
+| 是否已有框架落地路徑 | 無 | 有，且已建票 |
+| memory 內容的資訊價值 | 唯一載體，刪除會遺失 | 與落地票重複，刪除零遺失 |
+| 失敗性質 | 判斷缺失 | 反射動作 |
+
+寫 memory 是在「正確路徑已存在」時仍被觸發的，故 PC-061 成因 2（邊界判斷缺失）與成因 3（工具提示偏向）皆無法解釋本例。可解釋的只有成因 1 的變體：寫 memory 的摩擦低到它不再是「經評估後選擇的路徑」，而是處理任何洞察的預設收尾動作——即使該洞察的正式歸屬已經確定。
+
+**這是 hook 層執法優於規則層自律的直接證據**：v3 案例中 PM 已正確判斷歸屬並建票落地，規則層的「三分流判準」本身沒有失效，失效的是「判準已通過仍會被反射動作繞過」這一層。只在寫入當下攔截（`memory-write-guard-hook.py` PreToolUse deny）才能防住反射動作；規則文字本身無法防護「已知道正確答案但反射性多做一步」的失敗形態。
+
+---
+
+## Session 浮現洞察的防護步驟（現行機制）
+
+PC-061 現行防護聚焦「知識捕獲時分流」（`pm-quality-baseline.md` 規則 7：判別問句「另一個專案的 session 讀到這段，能用嗎」，分流至框架相關 / 專案相關 / 兩者皆非三個目的地，memory 不在其中）。本檔針對「session 內浮現洞察」情境，補充以下步驟，**填補三分流判準觸發前的「識別 → 處理」缺口**：
 
 1. **寫 ticket md 章節**（OK，屬 ticket 內容固化，無需評估）
 2. **評估跨 session 適用性**：自問「下一個 session 接手任何 ticket 時，這個洞察會有用嗎？」
-3. **若跨 session 適用 → 建 ANA ticket 評估升級路徑**（含「該屬 rule / methodology / skill / memory 何者」評估）
-4. **ANA 評估結論決定歸屬**：
-   - 「memory 即可」→ 寫 memory feedback（此時才走 PC-061 四問檢查）
-   - 「升級為 rule / methodology / skill」→ spawn IMP/DOC ticket
-   - 「不需追蹤」→ 文件化評估理由後結案
-5. **禁止「跳過步驟 3-4 直接寫 memory」**（本檔的核心違規模式）
+3. **若跨 session 適用 → 依規則 7 三分流判準決定歸屬**：框架相關 → 建 ANA/DOC ticket 評估升級路徑（error-patterns / rules / methodologies / references / agents / skills 之一）；專案相關 → 落 `docs/` 或 `CLAUDE.md`；兩者皆非 → 不記錄
+4. **禁止「跳過步驟 3 直接寫 memory」**：memory 不是三分流的其中一支，而是全面排除的旁路，即使洞察歸屬已確定（已建落地票）也不得同時寫 memory 當備份——v3 案例的教訓是寫 memory 的低摩擦使它成為任何洞察的預設收尾動作，ticket md 本身即是追蹤機制，不需 memory 重複記錄
 
 ### 識別觸發條件
 
@@ -49,10 +72,11 @@ PM 在以下情境準備寫 memory 時應停下檢查：
 
 | 觸發 | 動作 |
 |------|------|
-| 想 Write 到 `.claude/projects/.../memory/feedback_*.md` 處理 session 內剛浮現的洞察 | 先問「已建 ANA 評估？」若無則停止，走步驟 3 |
-| 想 Write 到 `.claude/projects/.../memory/project_*.md` 處理 session 內剛浮現的洞察 | 同上 |
-| commit 訊息含「補 memory feedback」或「update MEMORY.md」且洞察來源是本 session | 確認是否有對應 ANA ticket 連結 |
+| 想 Write 到 memory 目錄任何檔案處理 session 內剛浮現的洞察 | 先問「已建 ANA/DOC 評估？」若無則停止，走步驟 3；`memory-write-guard-hook.py` 會在寫入當下攔截並提示三分流判準 |
+| commit 訊息含「補 memory」或「update MEMORY.md」且洞察來源是本 session | 確認是否有對應落地 ticket 連結 |
 | 用戶提問「這部份記錄了嗎？」 | 警惕：可能正觸發本模式 |
+| 該洞察已有框架落地票（rule / methodology / skill） | **不寫 memory**。載體已確定，memory 為重複而非備份（v3 案例） |
+| 想在完成框架落地票的同一輪追加寫 memory | 停止。memory 不是三分流任一支，已選升級路徑即不需要它 |
 
 ---
 
@@ -63,10 +87,14 @@ PM 在以下情境準備寫 memory 時應停下檢查：
 - **W3-028.2**：v2 source 洞察的 ticket（自指涉觀察小節）
 - **W3-061**：本檔 cross-reference 重構 ticket
 - **quality-baseline 規則 5/6**：所有發現必須追蹤 + 失敗案例學習原則
-- **continuous-learning skill**：memory 升級評估的動態觸發機制（被本 PC v2 案例識別為可繞過）
-- **memory feedback `feedback_skip_upgrade_gate_directly_writing_memory.md`**：本 PC 對應的 memory 條目
-- **相關方法論**：[`.claude/methodologies/hook-system-methodology.md`](../../methodologies/hook-system-methodology.md) § 6「觀察類工具的雙重身份設計」（W3-028.2 浮現洞察 → W3-058 ANA → W3-059 升級落地的完整鏈條，本 PC 防護五步驟的成功應用範例）
+- **pm-quality-baseline 規則 7**：知識捕獲時分流（現行機制，memory 排除）
+- **continuous-learning skill**：知識捕獲時分流已內建於 skill 流程，memory 不再列為目的地
+- **相關方法論**：[`.claude/methodologies/hook-system-methodology.md`](../../methodologies/hook-system-methodology.md) § 6「觀察類工具的雙重身份設計」
 
 ## Last Updated
+
+2026-07-27 / PC-160 v4.0（防護步驟改寫：規則 7 三分流取代原 ANA 四分支評估，步驟 4 移除已失效的「memory 即可」分支；v2/v3 案例與根因分析保留為 hook 層執法設計依據的歷史記錄）
+
+2026-07-27 / PC-160 v3.0（新增 v3 案例：框架落地票已建立仍追加寫 memory，失敗性質為反射而非判斷缺失；補步驟 4 三分支互斥判準與兩條識別觸發條件，已於 v4.0 併入新分流描述）
 
 2026-05-26 / PC-160 v2.0（改為 PC-061 v2 案例 cross-reference stub，W3-061 落地）

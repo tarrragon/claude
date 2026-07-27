@@ -71,10 +71,6 @@ PreToolUse:Bash 偵測 `git commit` 命令時，若 staged diff 含 emoji range 
 - `.claude/rules/core/document-writing-style.md` — 二次審查強制執行
 - `.claude/rules/core/agent-definition-standard.md` — 代理人禁止行為章節
 
-## 相關 Memory
-
-- `feedback_mint_emoji_violation_in_visual_markers.md`
-
 ---
 
 **Last Updated**: 2026-05-25

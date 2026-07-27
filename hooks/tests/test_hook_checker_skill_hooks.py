@@ -79,13 +79,12 @@ class TestScanSkillHooks:
 
     def test_respects_exclude_list(self, tmp_path):
         skills_dir = tmp_path / "skills"
-        _make_skill_hook(skills_dir, "skill-a", "hook_utils.py")  # exact exclude
         _make_skill_hook(skills_dir, "skill-a", "real-hook.py")
         _make_skill_hook(skills_dir, "skill-a", "old-backup.py")  # pattern exclude
 
         exact_excludes, patterns = get_exclude_patterns(None)
-        # 確認預設 exclude 含 hook_utils.py 與 *-backup.py
-        assert "hook_utils.py" in exact_excludes
+        # 確認預設排除清單無殭屍 exact entry，僅保留 *-backup.py 模式（0.2.1-W3-037）
+        assert exact_excludes == set()
         assert "*-backup.py" in patterns
 
         result = scan_skill_hooks(skills_dir, exact_excludes, patterns)

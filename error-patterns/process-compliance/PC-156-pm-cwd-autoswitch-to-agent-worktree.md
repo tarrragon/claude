@@ -60,7 +60,6 @@ cc runtime 為了讓 PM 接續處理 agent 結果（例如 merge worktree、comm
 
 - `.claude/rules/core/pm-role.md` — PM 角色行為準則（含 session-start 全量清點，但未涵蓋派發後 cwd 切換）
 - `.claude/skills/worktree/SKILL.md` — Agent isolation worktree 章節（提到殭屍清理，但未提 PM cwd 切換）
-- `feedback_pm_cwd_autoswitch_agent_worktree`（memory）
 
 ## 追蹤
 

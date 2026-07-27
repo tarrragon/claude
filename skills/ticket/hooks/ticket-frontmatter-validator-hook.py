@@ -202,12 +202,7 @@ def main() -> int:
     if input_data is None:
         return _skip("stdin 無 JSON 輸入", logger)
 
-    # Effort 感知（v2.1.133+，W14-034）：low effort 短路放行
     effort = get_effort_level(input_data)
-    if effort == "low":
-        logger.info("effort=low，ticket-frontmatter-validator 短路放行")
-        emit_allow_output(None)
-        return EXIT_SUCCESS
     logger.info("effort=%s，執行完整 frontmatter 驗證", effort)
 
     if not validate_hook_input(input_data, logger, ("tool_name", "tool_input")):

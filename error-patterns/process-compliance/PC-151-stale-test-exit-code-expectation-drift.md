@@ -65,7 +65,7 @@ E   assert 2 == 1
 
 雙線根因：
 
-- PM 端：grep 範圍不完整 → 已寫 feedback memory（pm-grep-scope-includes-skill-tests）
+- PM 端：grep 範圍不完整 → 見下方「自律層」第 2 點防護
 - 測試端：規範演進後測試期望未同步 → 本 PC
 
 ## 防護措施
@@ -101,5 +101,4 @@ E   assert 2 == 1
 ## 相關文件
 
 - `.claude/references/cli-exit-code-rules.md` — exit code 規範（規則 2：業務拒絕 = 2）
-- `feedback_pm_grep_scope_includes_skill_tests.md` — PM grep 範圍 memory（雙線根因之一）
 - W14-046 ticket / W14-046.1 ticket — 完整案例脈絡

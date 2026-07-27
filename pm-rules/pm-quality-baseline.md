@@ -93,26 +93,35 @@
 
 ---
 
-### 規則 7：錯誤學習知識捕獲時分流（寫入前分流，事後升級為收割路徑）
+### 規則 7：知識捕獲時分流（memory 排除，三分流取代原目的地表）
 
-**準備記錄經驗教訓時，先分流再落筆：跨專案適用且根因成熟的錯誤學習直接寫 `.claude/error-patterns/`（canonical 層，隨 sync 跨專案傳播），memory 僅承接專案特定 context 與根因未熟的 deferred 項**
+**準備記錄經驗教訓時，先分流再落筆：依內容性質分流到三個目的地之一，memory 不在其中**
 
-> **來源**：W9-003 分析發現 PM 有 5/13（約 38%）的 feedback memory 僅存 memory 未升級；後續全量實測 130 檔 feedback memory 的升級標註率僅 4%（依規則 7 頂部標註格式計合規 0 檔）——「寫入後補評估」的事後閉環經量化證明不執行。Memory 是**專案層級儲存**（`~/.claude/projects/<project>/memory/`），不會隨 `.claude/` sync 到其他專案；跨專案原則若僅存 memory，會在其他專案消失並可能重複踩同樣的雷。分流前移消除的是「已寫入未評估」這個不可觀測、無限積壓的中間態——寫入時態即確定（canonical / deferred+理由 / 專案特定），deferred 為顯式標註態，由發版稽核收割。
+> **來源**：W9-003 分析發現 PM 有 5/13（約 38%）的 feedback memory 僅存 memory 未升級；後續全量實測 130 檔 feedback memory 的升級標註率僅 4%（依原規則 7 頂部標註格式計合規 0 檔）——「先寫 memory、事後再升級」的閉環經量化證明不執行。`0.2.1-W3-082` 進一步裁示排除 memory：Claude Code 原生 memory 存於使用者 home 目錄的**專案層級儲存**（`~/.claude/projects/<project>/memory/`），不納入專案 git、不隨 `.claude/` sync 到其他專案，與「經驗須跨專案複用」的框架目標根本衝突；跨專案原則若僅存 memory，會在其他專案消失並重複踩同樣的雷。本框架因此自建 `.claude/error-patterns/` 取代 memory 作為跨專案錯誤學習的載體——memory 機制本身不受影響（仍是 Claude Code 原生功能），只是本框架的知識指引不再把它列為目的地。
 
-**捕獲時分流判準**（記錄前必答；CC 原生 memory 機制不變，本規則僅改變框架指引的預設目的地）：
+**捕獲時分流判準**（記錄前必答；判別問句：「另一個專案的 session 讀到這段，能用嗎」）：
+
+| 學習成果性質 | 判別 | 目的地 |
+|------------|------|--------|
+| 框架相關 | 替換專案名稱與檔案路徑後仍成立 | `.claude/error-patterns/` 或 `.claude/rules/` `.claude/methodologies/` `.claude/references/`（依內容性質見下方升級路徑表） |
+| 專案相關 | 僅在本專案成立（架構、領域規則、工具鏈） | `docs/` 或 `CLAUDE.md` |
+| 兩者皆非 | 僅在當前 session 成立 | 不記錄。ticket md 已承載執行脈絡 |
+
+**沒有第四個選項**：三分流判準與下方升級路徑表全部檢查後仍拿不定，代表資訊尚不成熟，留在 ticket 執行紀錄內待同主題再現時累積判斷，不得以「先寫 memory 保底」迴避——原「memory 即可」與「immature 暫留 memory 待升級」兩分支已隨本次改寫廢除。
+
+**框架相關內的錯誤學習需先過根因成熟度門檻**：
 
 | 情境 | 目的地 |
 |------|--------|
-| 錯誤學習類 + 跨專案適用 + 根因已過 Two-Phase Reflection（`.claude/methodologies/three-phase-reflection-methodology.md`） | 直接 `/error-pattern add`（allocator 來源前綴編號），memory 至多留一行 pointer |
-| 錯誤學習類 + 跨專案適用 + 根因未熟（單一事件、假設未驗證——直寫 canonical 會使表層根因經 sync 擴散，回收成本高於困在本地） | feedback memory + frontmatter 標註 `upgrade: deferred` 與理由；明顯跨專案者可另以 framework-issue `create --label candidate` 建 inbox 錨點；deferred 積壓由發版稽核收割 |
-| 專案特定 context | `project_` 前綴 memory（原規則不變） |
+| 錯誤學習類 + 跨專案適用 + 根因已過 Two-Phase Reflection（`.claude/methodologies/three-phase-reflection-methodology.md`） | 直接 `/error-pattern add`（allocator 來源前綴編號） |
+| 錯誤學習類 + 跨專案適用 + 根因未熟（單一事件、假設未驗證——直寫 canonical 會使表層根因經 sync 擴散，回收成本高於暫緩記錄） | 暫不記錄，續觀察同主題是否再現；明顯跨專案者可另以 framework-issue `create --label candidate` 建 inbox 錨點供後續收斂 |
 | 非錯誤學習類（通用品質 / PM 行為 / 方法論 / skill 引導） | 依下方升級路徑表選目的地 |
 
-**升級路徑表**（分流目的地路由；目的地拿不準時先查 `.claude/methodologies/knowledge-carrier-allocation-methodology.md` 受眾 x 形態地圖）：
+**升級路徑表**（框架相關內容依性質選目的地；目的地拿不準時先查 `.claude/methodologies/knowledge-carrier-allocation-methodology.md` 受眾 x 形態地圖）：
 
-| 檢查問題 | 回答「是」的升級路徑 |
+| 檢查問題 | 回答「是」的路徑 |
 |---------|-------------------|
-| 此原則對其他專案也適用嗎？ | 至少升級到 `.claude/` 框架層；否則加 `project_` 前綴標示為專案特定 |
+| 此原則對其他專案也適用嗎？ | 框架相關，進入本表；否則歸專案相關，落 `docs/` 或 `CLAUDE.md` |
 | 此原則是通用品質或流程原則嗎？ | 預設升級至 `.claude/references/`；僅當屬「每回合都需遵守的行為禁令」且通過預算閘門（見下）時進 `rules/core/`（quality-baseline.md 加一行或速查 stub） |
 | 此原則是 PM 行為規範嗎？ | 升級至 `.claude/pm-rules/`（按需層）；pm-role.md（自動載入）僅加路由行 |
 | 此原則是單一代理人的身份 / 偏好嗎？ | 升級至 `.claude/agents/<name>.md`（內容邊界見 knowledge-carrier-allocation「代理人定義內容規範」節：偏好 / 邊界可裝，流程外移 skill） |
@@ -122,22 +131,15 @@
 
 **升級目的地預算閘門**（W7-007）：升級目的地屬自動載入層（`rules/core/`、CLAUDE.md、rules/README.md、pm-role.md）時，必須先通過 `rules/README.md`「自動載入預算原則」自問——「這是否每回合都需要遵守？」答否一律改放按需層（references/ / pm-rules/ / error-patterns/），自動載入層至多加一行路由。**Why**：升級路徑若預設指向自動載入層，每次知識固化即膨脹一次，45k 預算單調耗盡（W7-004 根因「每次事故教訓傾向寫進自動載入層」的制度化版本）。寫入形態依 `document-writing-style.md`「載入層邊界」：自動載入層為禁令 + 路由，論證放按需層。
 
-**分流判準與升級路徑表全部不命中才允許僅存 memory**（代表確為專案特定 context 索引）。
-
-**升級後處理**（適用 deferred 收割與既有積壓 promote；升級即搬家，非複製——W7-004.6 索引修剪原則成文化；promote/scan 工具落地後由工具一步完成下列三步）：
-- 原 memory 檔案頂部註明「本原則已升級為框架規則」並列出升級目的地路徑
-- 自 `MEMORY.md` 索引**移除**該條目（MEMORY.md 每 session 自動載入，升級後保留索引行即雙重儲存；memory 單檔可保留供考古，對照關係記於升級 commit 或 ticket）
-- 升級完成後才能視為「原則已落地」
-
 **禁止行為**：
 
 | 禁止 | 原因 |
 |------|------|
-| 以「之後再升級」為由僅寫 memory | 升級摩擦是永久性的，下次只會更不想動；deferred 必須標註理由，不可裸寫 |
-| 記錄經驗教訓前未執行捕獲時分流判準 | 評估缺失直接導致跨專案原則流失 |
-| 將跨專案原則誤歸為「專案特定」以規避分流 | Memory 不是跨 session 知識庫，專案層級儲存不會自動傳播 |
+| 以「先寫 memory 保底」規避三分流判準 | memory 為排除的目的地，非合法選項；框架相關／專案相關／兩者皆非三分流已窮盡所有情境 |
+| 記錄經驗教訓前未執行捕獲時分流判準 | 評估缺失直接導致跨專案原則流失，或散落無主無法複用 |
+| 將跨專案原則誤歸為「專案特定」以規避升級 | 跨專案原則若僅落 `docs/`，不會隨 `.claude/` sync 傳播到其他專案 |
 
-**驗證方式**：每版本發布前執行 memory 升級稽核（version-release 稽核項：掃描未標註分流狀態的 feedback memory 與 deferred 積壓），並檢視 `MEMORY.md` 索引確認每個 feedback 項目皆已標註升級位置、deferred 理由或顯式標為專案特定。
+**驗證方式**：每版本發布前執行知識捕獲稽核（version-release 稽核項：抽查本版 ticket 的 Completion Info / Solution 中標記「發現」的內容，確認皆已依三分流落地，無殘留僅存於 ticket 文字未正規化的項目）。
 
 ---
 
@@ -157,7 +159,7 @@
 | 要求 | 說明 | 可協商 |
 |------|------|--------|
 | 框架修改優先於專案進度 | `.claude/` 改善不可因專案進度延後 | 否 |
-| 錯誤學習捕獲時分流 | 記錄前先分流：跨專案且根因成熟直接進 error-patterns；deferred 須標註理由並受發版稽核收割 | 否 |
+| 知識捕獲時分流 | 記錄前先分流：框架相關進 error-patterns／規則／方法論／references；專案相關進 docs／CLAUDE.md；兩者皆非不記錄，memory 不在目的地內 | 否 |
 
 ---
 
@@ -167,11 +169,12 @@
 - `.claude/rules/core/pm-role.md` - 主線程角色行為準則
 - `.claude/pm-rules/plan-to-ticket-flow.md` - Plan 轉 Ticket 流程
 - `.claude/error-patterns/process-compliance/PC-061-memory-upgrade-blindness.md` - 規則 7 錯誤模式來源
-- `.claude/skills/continuous-learning/SKILL.md` - Memory 升級流程 Skill
+- `.claude/skills/continuous-learning/skill.md` - 知識捕獲三分流 Skill
 
 ---
 
-**Last Updated**: 2026-07-05
+**Last Updated**: 2026-07-27
+**Version**: 2.1.0 - 規則 7 全文改寫：以三分流（框架相關／專案相關／兩者皆非）取代原「跨專案錯誤學習 + memory 承接專案特定與 deferred 項」目的地表，memory 不再列為任何分支的合法目的地；`upgrade: deferred` frontmatter 標註與「升級後處理」三步（MEMORY.md 索引移除）隨之廢除；底線要求總結與相關規則指標同步更新（0.2.1-W3-083，承接 0.2.1-W3-082 用戶裁示）。
 **Version**: 2.0.0 - 規則 7 語意由「寫入後四問評估」前移為「捕獲時分流」：新增分流判準表（Two-Phase Reflection 成熟度門檻 + `upgrade: deferred` 顯式標註 + framework-issue candidate 可選 inbox），原四問表降為分流目的地路由；升級後處理綁 promote/scan 工具與發版稽核。依據：130 檔 feedback memory 實測 4% 標註率，事後補評估閉環量化證明不執行
 **Version**: 1.2.0 - 規則 7 升級路徑表補「單一代理人身份/偏好 → agents/<name>.md」分支（原六分支對偏好類教訓無目的地，fall through 誤置）+ 表前補知識載體地圖路由（W8 multi-round-review R3）
 **Version**: 1.1.0 - 規則 7 新增「升級目的地預算閘門」（自動載入層需過「每回合都需要」自問，預設按需層）；升級後處理改「升級即搬家」（MEMORY.md 索引移除條目，修正與 W7-004.6 索引修剪實務的矛盾）（W7-007）

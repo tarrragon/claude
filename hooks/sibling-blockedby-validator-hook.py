@@ -306,11 +306,7 @@ def main() -> int:
     if input_data is None:
         return 0
 
-    # Effort 感知（v2.1.133+，W14-036）：low effort 短路放行
     effort = get_effort_level(input_data)
-    if effort == "low":
-        logger.info("effort=low，sibling-blockedby-validator 短路放行")
-        return 0
     logger.info("effort=%s，執行完整 sibling-blockedby 驗證", effort)
 
     tool_name = input_data.get("tool_name") or input_data.get("tool")

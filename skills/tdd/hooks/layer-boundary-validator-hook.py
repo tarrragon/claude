@@ -514,12 +514,7 @@ def main() -> int:
             _output_success()
             return EXIT_SUCCESS
 
-        # Effort 感知（v2.1.133+，W14-036）：low effort 短路放行
         effort = get_effort_level(input_data)
-        if effort == "low":
-            logger.info("effort=low，layer-boundary-validator 短路放行")
-            _output_success()
-            return EXIT_SUCCESS
         logger.info("effort=%s，執行完整 layer-boundary 驗證", effort)
 
         # 檢測 subagent 環境

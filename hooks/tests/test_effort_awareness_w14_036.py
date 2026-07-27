@@ -55,16 +55,17 @@ def _run_hook(script_path: Path, payload: dict, env: dict = None, args: list = N
 class Test5w1hComplianceEffort:
     HOOK = HOOKS_DIR / "5w1h-compliance-check-hook.py"
 
-    def test_low_effort_short_circuits(self):
+    def test_low_effort_does_not_short_circuit(self):
+        # content 存在但缺少 Who 欄位 → 應與 medium/high 同樣被 block（rc=1），
+        # 證明移除短路後 low effort 也執行完整 5W1H 檢查。
         payload = {
             "tool_name": "Write",
             "tool_input": {"file_path": "x.md", "content": "hi"},
             "effort": {"level": "low"},
         }
         rc, stdout, _ = _run_hook(self.HOOK, payload)
-        assert rc == 0
-        assert "allow" in stdout.lower()
-        assert "短路" in stdout or "low" in stdout.lower()
+        assert rc == 1
+        assert "block" in stdout.lower()
 
     def test_medium_effort_runs_full_path(self):
         payload = {
@@ -129,15 +130,21 @@ class TestPhaseContractValidatorEffort:
 class TestPhaseCompletionGateEffort:
     HOOK = HOOKS_DIR / "phase-completion-gate-hook.py"
 
-    def test_low_effort_short_circuits(self):
+    def test_low_effort_does_not_short_circuit(self):
+        # Phase 4 完成報告缺少必要內容 → 應輸出 additionalContext 警告，
+        # 移除短路後 low effort 應與 medium 產出相同的完整分析結果。
         payload = {
             "tool_name": "Write",
-            "tool_input": {"file_path": "docs/work-logs/v0.18.0/test.md", "content": "x"},
+            "tool_input": {
+                "file_path": "docs/work-logs/vTEST/Phase 4 完成報告.md",
+                "content": "# Phase 4",
+            },
             "effort": {"level": "low"},
         }
         rc, stdout, _ = _run_hook(self.HOOK, payload)
         assert rc == 0
-        assert "PostToolUse" in stdout
+        assert "additionalContext" in stdout
+        assert "缺少必要內容" in stdout  # 證明完整檢查邏輯確實執行，非短路的空白 PostToolUse 輸出
 
     def test_medium_effort_processes(self):
         payload = {
@@ -207,14 +214,32 @@ class TestWrapDecisionTripwireEffort:
 class TestSiblingBlockedbyValidatorEffort:
     HOOK = HOOKS_DIR / "sibling-blockedby-validator-hook.py"
 
-    def test_low_effort_short_circuits(self):
+    def test_low_effort_does_not_short_circuit(self, hook_project_env):
+        # 建立雙向 blockedBy 兄弟 fixture（條件 1+2 違反）→ 應 BLOCK（rc=2），
+        # 移除短路後 low effort 應與 medium/high 一樣阻擋，不再全面放行。
+        # cwd 無關化 + 防殘留（0.2.1-W3-027）：改用 conftest 共用的
+        # hook_project_env fixture（tmp_path 假專案根 + CLAUDE_PROJECT_DIR），
+        # 取代真實 repo 路徑，pytest 自動清理不留殘留目錄。
+        project_root, env = hook_project_env
+        fixture_dir = project_root / "docs" / "work-logs" / "v0" / "v0.2" / "v0.2.1" / "tickets"
+        fixture_dir.mkdir(parents=True, exist_ok=True)
+        sibling_a = fixture_dir / "0.2.1-W3-998.md"
+        sibling_b = fixture_dir / "0.2.1-W3-999.md"
+        sibling_a.write_text(
+            "---\nid: 0.2.1-W3-998\nparent_id: 0.2.1-W3-PARENT\nblockedBy: [0.2.1-W3-999]\n---\n# fixture\n",
+            encoding="utf-8",
+        )
+        sibling_b.write_text(
+            "---\nid: 0.2.1-W3-999\nparent_id: 0.2.1-W3-PARENT\nblockedBy: [0.2.1-W3-998]\n---\n# fixture\n",
+            encoding="utf-8",
+        )
         payload = {
             "tool_name": "Bash",
-            "tool_input": {"command": "ticket track claim 0.18.0-W14-999"},
+            "tool_input": {"command": "ticket track claim 0.2.1-W3-999"},
             "effort": {"level": "low"},
         }
-        rc, _, _ = _run_hook(self.HOOK, payload)
-        assert rc == 0
+        rc, _, _ = _run_hook(self.HOOK, payload, env=env)
+        assert rc == 2  # BLOCK：雙向依賴 + 循環依賴，low effort 不再豁免
 
     def test_medium_effort_processes(self):
         # 非 ticket track claim 命令在 medium effort 下會被 parse_bash_command 過濾，放行
@@ -243,18 +268,27 @@ class TestSiblingBlockedbyValidatorEffort:
 class TestLayerBoundaryValidatorEffort:
     HOOK = HOOKS_DIR.parent / "skills" / "tdd" / "hooks" / "layer-boundary-validator-hook.py"
 
-    def test_low_effort_short_circuits(self):
+    def test_low_effort_does_not_short_circuit(self, tmp_path):
+        # Layer 1 檔案含禁止項「/ticket track」→ 應輸出邊界違規警告，
+        # 移除短路後 low effort 應與 medium 產出相同的完整掃描結果。
+        # is_layer1_file() 僅用子字串比對（".claude/rules/core/" + .md 結尾），
+        # 讀檔用絕對路徑，故 tmp_path 下的假路徑即可滿足判定，不需真實 repo
+        # 路徑（0.2.1-W3-027 cwd 無關化 + 防殘留）。
+        fixture = tmp_path / ".claude" / "rules" / "core" / "_test_effort_fixture_layer1.md"
+        fixture.parent.mkdir(parents=True, exist_ok=True)
+        fixture.write_text("執行 /ticket track claim 來認領任務\n", encoding="utf-8")
         payload = {
             "tool_name": "Write",
             "tool_input": {
-                "file_path": ".claude/pm-rules/decision-tree.md",
-                "content": "x",
+                "file_path": str(fixture),
+                "content": "執行 /ticket track claim 來認領任務",
             },
             "effort": {"level": "low"},
         }
         rc, stdout, _ = _run_hook(self.HOOK, payload)
         assert rc == 0
-        assert "PostToolUse" in stdout
+        assert "additionalContext" in stdout
+        assert "邊界驗證警告" in stdout  # 證明完整掃描確實執行，非短路的空白 PostToolUse 輸出
 
     def test_medium_effort_processes_non_layer1(self):
         payload = {

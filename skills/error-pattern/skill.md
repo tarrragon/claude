@@ -98,9 +98,27 @@ description: "錯誤模式知識庫管理工具。Use for: (1) 查詢既有錯�
      取最大號 +1（flat 凍結 base 不參與遞增）。
    - **禁止**手動指定 flat `<CATEGORY>-NNN`（凍結 base 不再新增，見編號章節）。
 
+8. **同步 README 索引**（0.2.1-W3-099，取代舊版「手動更新 README.md 統計資訊」）
+   - 寫入新錯誤記錄檔案後，呼叫 `readme_index.sync` 做保守 upsert（只新增本次新建
+     pattern 的索引列與清掉死連結列，既有列一律不動）：
+     ```python
+     import sys; sys.path.insert(0, ".claude/skills/error-pattern/lib")
+     from readme_index import sync
+     _original, _updated, diff = sync(".claude")
+     if diff:
+         readme_path = ".claude/error-patterns/README.md"
+         with open(readme_path, "w", encoding="utf-8") as f:
+             f.write(_updated)
+     ```
+   - 或等效 CLI：`uv run .claude/skills/error-pattern/lib/readme_index.py sync --write`
+   - **禁止**手動編輯 README.md 的「現有模式」表格資料列（結構化內容由工具生成，
+     見 structured-content-generation 原則）；新增列的風險等級一律取自檔案內文
+     「基本資訊」區塊，**不取自 frontmatter `severity`**（0.2.1-W3-105/106：
+     frontmatter severity 與內文常態性分歧，尚未修復前不可信任）。
+
 **輸出**：
 - 在對應的分類檔案中以 `<CATEGORY>-<PROJ>-NNN-<slug>.md` 命名新增錯誤記錄
-- 更新 README.md 統計資訊
+- README.md 索引由步驟 8 的 `readme_index.sync` 自動同步，不需人工步驟
 
 ### `/error-pattern list`
 
@@ -189,5 +207,6 @@ category 的 error-pattern 一律使用來源前綴格式**：
 
 ---
 
-**Last Updated**: 2026-07-05
+**Last Updated**: 2026-07-27
+**Version**: 1.2.0 — add 流程新增步驟 8：README 索引同步改由 `readme_index.sync` 保守 upsert CLI 化，取代「更新 README.md 統計資訊」文字指示（0.2.1-W3-099，接線方式經 0.2.1-W3-105 更正）
 **Version**: 1.1.0 — query 增強：--category 篩選、同義詞家族 5→11、frontmatter 摘要排序、命中數計數（1.5.0-W5-016）

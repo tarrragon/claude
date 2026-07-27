@@ -10,7 +10,7 @@
 | 類別 | process-compliance |
 | 風險等級 | 低（Hook layer1/2 邊界驗證已能攔截） |
 | 首發時間 | 2026-04-17（升級 writing-prompts 為 ai-communication-rules 框架規範 session） |
-| 姊妹模式 | feedback_framework_no_ticket_references（框架禁引用專案 ticket ID）— 本模式是其 footer/metadata 子場景 |
+| 姊妹模式 | `DOC-010`（框架禁引用專案 ticket ID）— 本模式是其 footer/metadata 子場景 |
 
 ---
 
@@ -68,7 +68,7 @@ PM 建立或更新 `.claude/rules/` `.claude/references/` `.claude/skills/` 等 
    - 但 Wave/Patch 是 framework 閱讀者（其他專案）無法理解的座標
 
 3. **既有規則覆蓋盲區**：
-   - `feedback_framework_no_ticket_references` 強調「不引用 ticket ID」
+   - `DOC-010` 強調「不引用 ticket ID」
    - 但焦點在「內文引用」（`see 0.17.0-W5-003` 這類）
    - Footer 的「版本變更摘要附 ticket」是額外習慣場景
 

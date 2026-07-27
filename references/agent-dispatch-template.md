@@ -132,6 +132,7 @@ Ticket: 0.18.0-W17-048.3
 - [ ] 動作描述一句話可理解（不堆疊多個動詞）
 - [ ] 交付通道已確認（L3/L2: append-log+commit / L1: append-log+/tmp / L0: final message 後 PM 立即落檔）
 - [ ] 文件票涉及持久化/schema/接線現況陳述時，已含實查約束句（PC-BAL-007，見上節）
+- [ ] 派發對象為 `.claude/` 框架檔案修改時，代理人受 AGENT_PRELOAD 規則 12 約束（禁依賴型 ticket 引用），無需 prompt 額外重複
 
 ---
 
@@ -219,6 +220,8 @@ Your final message IS the deliverable — PM will archive it immediately.
 |--------|------|------|
 | 1（首選） | 用 `TICKET_EXEMPT_AGENT_TYPES` 白名單型派發（Explore / general-purpose / Plan 等唯讀型） | 免 Ticket ID 強制，從源頭消除觸發；白名單見 `.claude/skills/ticket/hooks/agent-ticket-validation-hook.py` |
 | 2（必須用非豁免 type 時） | prompt 必附三禁約束 | 見下方範本 |
+
+**parallel-evaluation 常駐審查委員免 Ticket ID 派發**：`basil-writing-critic` 與 `linux` 已列入 `TICKET_EXEMPT_AGENT_TYPES`（0.2.1-W3-010 落地）。派發這兩者做 Layer 2 / 常駐審查（無 ticket 寫入義務的獨立審查任務）時，直接依優先序 1 免 Ticket ID 派發，prompt 不需借用他人 ticket ID 湊格式要求——借用他人 pending ticket ID 會使該票 `who.current` 被 claim 回填、造成指派欄位污染（見 PC-V1-002 案例變體二）。
 
 **三禁約束範本**（必須引用 Ticket ID 時逐字附上）：
 
@@ -550,6 +553,12 @@ object store，可直接 merge），確認本地檔案為最新 main 後再開�
 
 A1（PM 派發前 commit gate，見 `.claude/pm-rules/behavior-loop-details.md`「派發前檢查：worktree base 同步」）與本指引（B1）為互補防護：A1 在派發前縮小 base 初始落差，B1 在 agent 端補平派發後新增的落差。A1 是一次 `git status`、B1 是 prompt 內一行 `git merge` 指引，相對於 base 落差累積後的手動整合成本，兩者投入都小；並用可覆蓋派發前與執行中兩個時間窗。
 
+### 派發前 origin 同步驗證（PC-154 前置 1 延伸）
+
+> **Why**：A1 只檢查本機有無 uncommitted 變更，未驗證本機 main 是否已 push 到 origin。PC-154 前置 1 已記錄 worktree base 在部分觀測中反映「較早的 checkpoint 或 origin/main」而非本機 main HEAD；PM 本 session 新建/修改的 ticket commit 若尚未 push，origin 落後，agent 進入 worktree 讀到舊票況會誠實回報「Ticket 不存在」——此訊息易誤診為打錯票號，實為 record-plane（agent 所見 origin 舊態）與 world-plane（本機 HEAD 有票）漂移（`tool-output-trust-rules` 規則 5）。
+>
+> **Action**：派發任何 `isolation: "worktree"` 實作 agent 前，除 A1 `git status --porcelain` 外，再執行 `git push origin main`（確認 `git rev-list --left-right --count origin/main...main` 為 `0 0`）。收到 agent 回報「Ticket 不存在」時，先查 `git log origin/main..main` 是否有未 push 的票 commit，而非直接懷疑票號打錯。完整前置條件表見 `.claude/error-patterns/process-compliance/PC-154-worktree-dispatch-prerequisites-not-verified.md`「前置 1：worktree base 含所需檔案」。
+
 ---
 
 ## tests/ 修改派發 SOP（W1-051）
@@ -820,7 +829,10 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 
 ---
 
-**Last Updated**: 2026-07-09
+**Last Updated**: 2026-07-27
+**Version**: 1.15.0 — 「與派發前 commit gate 的關係」章節新增「派發前 origin 同步驗證（PC-154 前置 1 延伸）」小節：worktree base 可能反映 origin/main 而非本機 HEAD，補派發前 `git push origin main` 驗證步驟，與 PC-154 前置 1 交叉引用（memory 搬遷落地，0.2.1-W3-085）
+**Version**: 1.14.0 — 「填空檢查清單」新增一項：派發 `.claude/` 框架檔案修改時，代理人已受 AGENT_PRELOAD 規則 12（禁依賴型 ticket 引用）約束，prompt 不需重複交代（0.2.1-W3-093）
+**Version**: 1.13.0 — 「唯讀探針派發 SOP」章節新增「parallel-evaluation 常駐審查委員免 Ticket ID 派發」條目：`basil-writing-critic` / `linux` 已列入 `TICKET_EXEMPT_AGENT_TYPES`（0.2.1-W3-010 落地），派發時直接走優先序 1，禁止借用他人 pending ticket ID 湊格式要求（PC-V1-002 案例變體二防護，0.2.1-W3-011）
 **Version**: 1.12.0 — 「三段式快速填空骨架」章節新增「機制選擇前置」提示：預設呼叫 `Agent(...)` 不帶 `name` 參數，例外情境（Agent Teams / 同 Wave 續用）指向 `parallel-dispatch.md`「派發機制選用準則」章節；相關文件補交叉引用（0.38.0-W2-002 ANA 落地，W4-005）
 
 **Version**: 1.11.0 — 「收尾義務標準段（W2-003）」章節擴充（0.4.1-W2-008）：新增「Solution 自檢結果子章節義務」項，收尾四塊改為含此項；引用 W17-064 warning 忽略率實證（0.4.0 十八票 + 0.4.1-W1-001 全被忽略，受眾/時點雙錯）為擴充依據

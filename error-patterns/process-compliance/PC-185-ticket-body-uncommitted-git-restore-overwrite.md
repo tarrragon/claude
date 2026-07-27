@@ -29,7 +29,6 @@ ticket CLI `create` 將 ticket 落盤為 `pending` + placeholder body 並 commit
 - 主防護工作流（PM/agent 行為變更）：memory append-log-auto-commit-workflow
 - 同源「git 操作覆蓋 ticket 變更」：PC-019-worktree-merge-state-loss（worktree merge stash drop 場景）
 - 根因分析雙重物證：1.0.0-W1-017 ANA
-- 補充防護的 worktree 前置：feedback_worktree_commit_before_dispatch
 
 ---
 

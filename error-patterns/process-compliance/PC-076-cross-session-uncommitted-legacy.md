@@ -10,7 +10,7 @@
 | 類別 | process-compliance |
 | 風險等級 | 中 |
 | 首發時間 | 2026-04-17（W13-003 commit 後 git status 清點發現 W12-005 遺留） |
-| 姊妹模式 | **PC-078（並行 session 狀態變化）**——PC-076 處理靜態遺留，PC-078 處理動態並行；與 Git index.lock Prevention（memory feedback_git_index_lock_prevention）同屬 git 流程紀律 |
+| 姊妹模式 | **PC-078（並行 session 狀態變化）**——PC-076 處理靜態遺留，PC-078 處理動態並行；與 `.claude/rules/core/bash-tool-usage-rules.md` 規則三（禁串接 git 寫入，index.lock 競爭防護）同屬 git 流程紀律 |
 
 ---
 

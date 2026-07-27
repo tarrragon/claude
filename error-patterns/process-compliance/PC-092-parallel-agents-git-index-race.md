@@ -82,7 +82,7 @@ PM 混合派發時，一個 subagent（.5）在共用工作樹修改 `.claude/sk
 1. **git index 是全 repo 共享狀態**：並行 worker 共用同一份 index
 2. **代理人不知道其他並行工作存在**：subagent 不能看到 sibling agent 的 file 寫入
 3. **`git add` 不檢查 ownership**：staging 任何 worktree 中的修改檔案
-4. **PM 規則只防止「並行修改同檔案」未防「並行 commit 同 repo」**：feedback_parallel_agent_conflict 只覆蓋檔案層衝突
+4. **PM 規則只防止「並行修改同檔案」未防「並行 commit 同 repo」**：`.claude/pm-rules/parallel-dispatch.md` 現行規則只覆蓋檔案層衝突
 5. **裸 `git commit` 提交整個 index，非只提交自己的檔案（v3）**：commit boundary 由 index 現況決定，不由「意圖提交哪些檔案」決定。ticket CLI 的 `complete` / `append-log` auto-stage 會在 PM 未察覺下把檔案填進 index，使 PM 對 index 內容的心智模型與實際不符——PM 以為「只有我的變更」，實際含 auto-stage + 並行 subagent 已暫存的檔案
 
 ## 正確做法
@@ -142,15 +142,12 @@ PM 不並行派發會 commit 的代理人，改為序列。
 - PC-091 — ANA 落地 Ticket 血緣關係
 - PC-068 — ANA 規劃新建資產前必須 grep 既有同職責資產（v2 案例中 PM 自己違反，原本要建 PC-162 重複造輪子）
 - PC-123 — 規則記載 ≠ 規則遵守（v2 案例核心：規則已存在但未被引用）
-- feedback_parallel_agent_conflict — 並行代理人修改同檔案會衝突
-- feedback_git_index_lock — Hook/Agent 的 git 操作與 commit 競爭
-- feedback_pm_bare_commit_sweeps_subagent_staged — v3 案例的 memory（PM 裸 commit 掃入 subagent 暫存檔）
-- feedback_pm_edit_during_agent_shared_worktree — 反方向（agent 掃 PM 未 commit 變更）
+- 反方向風險（agent 掃 PM 未 commit 變更）：尚無獨立 error-pattern，本檔為目前唯一記錄位置，待評估是否需拆分
 - PC-155 — auto-stage × worktree 並行編輯 merge conflict（ticket CLI auto-stage 交互的另一失敗面）
 - ARCH-015 — subagent 無法 Edit worktree 內 `.claude/`（v3 中 worktree 隔離不適用的根因）
 
 ---
 
 **Last Updated**: 2026-07-05
-**v3 Source**: 1.5.0-W5-010（補 v3 案例：PM 主線程裸 commit + ticket CLI auto-stage 掃入並行 subagent 暫存檔，commit b7d6d40b4 實證；源 memory feedback_pm_bare_commit_sweeps_subagent_staged / 1.5.0-W5-009 混合派發）
+**v3 Source**: 1.5.0-W5-010（補 v3 案例：PM 主線程裸 commit + ticket CLI auto-stage 掃入並行 subagent 暫存檔，commit b7d6d40b4 實證；1.5.0-W5-009 混合派發）
 **v2 Source**: 0.19.0-W3-060 commit 13ad538d + 0.19.0-W3-065 ticket（補 v2 案例 + PM PC-068/123 自評學習）

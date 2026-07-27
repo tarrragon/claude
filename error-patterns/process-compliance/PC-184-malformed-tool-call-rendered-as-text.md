@@ -24,7 +24,6 @@
 
 ## 相關
 
-- 失敗模式的個人經驗教訓與重發要點：memory feedback_malformed_tool_call_text_render
 - 偵測器實作與簽章邏輯（含 strip 範圍、內嵌 self-test、meta-context 豁免 marker）：.claude/hooks/malformed-tool-call-detector-hook.py
 
 ---

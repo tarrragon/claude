@@ -105,12 +105,17 @@ TICKET_ID_PATTERNS = [
 # - 當白名單長度 > 10 或誤用率升高（非白名單 agent 被誤擋頻率上升）時，
 #   應升級為「讀 agent definition 的 tools 欄位自動分類」的動態機制。
 # - 來源：W17-046 ANA 方案 A（白名單擴充立即解除情報蒐集類 agent 派發阻礙）。
+#
+# 現況：7/10（0.2.1-W3-010 追加 2 個唯讀常駐審查委員，超過 10 時依上述升級路徑
+# 改為讀 agent definition tools 欄位自動分類）。
 TICKET_EXEMPT_AGENT_TYPES = [
     "Explore",                    # codebase 探索：蒐集資訊以建立 Ticket（既有）
     "claude-code-guide",          # Claude Code / SDK / API 文件查詢（唯讀）
     "general-purpose",            # 複雜問題多步驟研究（唯讀）
     "Plan",                       # 架構規劃、實作計畫（唯讀）
     "feature-dev:code-explorer",  # 既有功能深度分析（唯讀）
+    "basil-writing-critic",       # parallel-evaluation 常駐審查委員，tools 純唯讀（0.2.1-W3-010）
+    "linux",                      # parallel-evaluation 常駐審查委員，tools 純唯讀（0.2.1-W3-010）
 ]
 
 # Exit Code

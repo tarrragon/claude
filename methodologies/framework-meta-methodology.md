@@ -84,7 +84,7 @@
 | 同類問題第二次出現 | 建 error-pattern（根因 + 預防） |
 | 發現可重複的決策流程 | 建 methodology（明確判準版） |
 | 發現強制底線被違反 | 強化 rules/（或補 PM 強制觸發 Hook） |
-| 跨 session 容易忘記的事 | 寫入 memory（auto-load） |
+| 跨 session 容易忘記的事 | 依知識捕獲時分流升級：框架相關且每回合必需 → `rules/core/`（過預算閘門）；框架相關但按需查閱 → `references/` 或 `methodologies/`；專案特定 → `CLAUDE.md` |
 
 ---
 
@@ -96,6 +96,7 @@
 
 ---
 
-**Last Updated**: 2026-06-15
+**Last Updated**: 2026-07-27
+**Version**: 1.2.0 - 「框架知識萃取」表「跨 session 容易忘記的事」列由「寫入 memory（auto-load）」改為依知識捕獲時分流升級路徑（rules/core 或 references/methodologies 或 CLAUDE.md），memory 不再是萃取目的地（0.2.1-W3-089，承接 0.2.1-W3-083 用戶裁示）
 **Version**: 1.1.0 - W8-040 方法論定位修訂：移除「30 秒複習清單 / < 1 頁 / 電梯測試 / ≤ 5 條要點」壓縮強制，改為「框架判斷標準 / 核心規則，明確且可直接套用（供人與 AI 開發時判斷）」；保留「操作流程外移 skill」邊界（類型表、決策樹、改寫觸發、改寫步驟、retrospective 列五處同步）
 **Version**: 1.0.0 - 從舊 methodology-writing 方法論提煉不重疊部分（SKILL vs 方法論分工、撰寫/改寫檢查清單、retrospective 敘事脈絡）建立本檔；原重疊內容已遷移至 writing-documents.md

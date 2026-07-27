@@ -7,7 +7,7 @@ AskUserQuestion 執行時指引模組 - 關鍵決策點 PM 操作提醒
 設計意圖：
 - 這些不是簡短的訊息常數（hook_messages.py 的職責）
 - 這些是執行時指引文件，幫助 PM 正確使用 AskUserQuestion 工具
-- Source of Truth 仍是 .claude/rules/core/askuserquestion-rules.md
+- Source of Truth 仍是 .claude/pm-rules/askuserquestion-rules.md
 - 當規則更新時，此模組的對應常數也應同步更新
 
 覆蓋場景：
@@ -78,7 +78,7 @@ Ticket 完成後的下一步決策（完成驗收後執行）。
 - 選項應基於當前 Wave/版本的實際狀態
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/askuserquestion-rules.md（場景 #2）
+詳見: .claude/pm-rules/askuserquestion-rules.md（場景 #2）
 ============================================================"""
 
     WAVE_WRAP_UP_REMINDER = """============================================================
@@ -177,7 +177,7 @@ PM 必須使用 AskUserQuestion 確認收尾動作。
   2. 選項中必須包含「/clear 結束 session」（清空對話，不建立 handoff）
   3. Handoff 必須是第一選項且標記 (Recommended)，繼續在此 session 為次選
 
-詳見: .claude/rules/core/askuserquestion-rules.md（場景 11/16 共通規則）
+詳見: .claude/pm-rules/askuserquestion-rules.md（場景 11/16 共通規則）
 ============================================================"""
 
     COMMIT_HANDOFF_SKIP16_REMINDER = """============================================================
@@ -207,7 +207,7 @@ commit 類型為文件/格式/維護類（docs/chore/style/revert/test/ci/build�
   2. 選項中必須包含「/clear 結束 session」（清空對話，不建立 handoff）
   3. Handoff 必須是第一選項且標記 (Recommended)，繼續在此 session 為次選
 
-詳見: .claude/rules/core/askuserquestion-rules.md（場景 11）
+詳見: .claude/pm-rules/askuserquestion-rules.md（場景 11）
 ============================================================"""
 
     # ========================================================================
@@ -263,7 +263,7 @@ commit 類型為文件/格式/維護類（docs/chore/style/revert/test/ci/build�
 
 [AskUserQuestion 規則]：
   根據「情境 C1」或「情境 C2」選擇對應的 AskUserQuestion 場景。
-  詳見: .claude/rules/core/askuserquestion-rules.md（場景 #3a 和 #13）
+  詳見: .claude/pm-rules/askuserquestion-rules.md（場景 #3a 和 #13）
 
 ============================================================"""
 
@@ -427,7 +427,7 @@ PM 必須使用 AskUserQuestion 選擇下一步：
    - 由用戶通過 AskUserQuestion 選擇下一個 ticket
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
-詳見: .claude/rules/core/askuserquestion-rules.md（場景 #9）
+詳見: .claude/pm-rules/askuserquestion-rules.md（場景 #9）
 ============================================================"""
 
     POST_TICKET_COMPLETE_CHECKPOINT_REMINDER = """============================================================

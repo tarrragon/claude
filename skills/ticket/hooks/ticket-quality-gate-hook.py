@@ -461,8 +461,8 @@ def determine_decision(check_results: Dict[str, Any]) -> tuple:
     """
     根據檢測結果決定 decision 和 reason
 
-    規則:
-    - 任何 failed 狀態 → decision: "block"
+    規則（0.2.1-W3-045 降級為 advisory）:
+    - 任何 failed 狀態 → decision: "allow"（診斷內容經 additionalContext 傳遞，非阻塞）
     - 只有 warning 狀態 → decision: "allow" + 警告訊息
     - 全部 passed → decision: "allow"
     - 錯誤 → decision: "allow"（非阻塞原則）
@@ -489,7 +489,7 @@ def determine_decision(check_results: Dict[str, Any]) -> tuple:
             if check["status"] == "failed"
         ]
         reason = format_message(QualityMessages.TICKET_QUALITY_CHECK_FAILED, reason=f"{summary['failed']} 個 Code Smell: {', '.join(failed_checks)}")
-        return "block", reason
+        return "allow", reason
 
     if summary["warnings"] > 0:
         warning_checks = [
@@ -634,13 +634,19 @@ def main() -> int:
         # 步驟 7: 儲存報告
         save_check_report(check_results, file_path, logger)
 
-        # 步驟 8: 決定 exit code
+        # 步驟 8: 決定 exit code（0.2.1-W3-045 降級為 advisory）
+        # 啟發式 code smell 偵測器不應有硬阻擋出口：exit 2 時 runtime 僅讀
+        # stderr，本 hook 診斷內容全在 stdout（實測 stderr 0 bytes），代理人
+        # 會收到無說明的失敗訊號。改為 exit 0 恆定放行，檢測結果一律經
+        # additionalContext 傳遞供代理人參考。
         if check_results["overall_status"] == "failed":
-            logger.info(f"檢測失敗，exit code = 2（通知 Claude），執行時間: {execution_time:.3f}s")
-            return EXIT_BLOCK  # 2
+            logger.info(
+                f"檢測失敗（降級為 advisory，exit code = 0，經 additionalContext 傳遞），"
+                f"執行時間: {execution_time:.3f}s"
+            )
         else:
             logger.info(f"檢測通過，exit code = 0，執行時間: {execution_time:.3f}s")
-            return EXIT_SUCCESS  # 0
+        return EXIT_SUCCESS  # 0（advisory，不再阻擋）
 
     except Exception as e:
         logger.critical(f"Hook 執行錯誤: {e}", exc_info=True)

@@ -79,11 +79,10 @@ PostToolUse:Edit / PostToolUse:Write 偵測對 `docs/development-setup.md` / `do
 | 待建 IMP | 更新 W6-001.1 development-setup.md 用 scoped package name |
 | 0.19.0-W3-049（ANA） | 共振分析：mint commit 後未 complete + 本案 W6-001.1 安裝指令未驗證，皆屬「文件 vs 實機驗證不一致」根因家族 |
 
-## 相關規則 / Memory
+## 相關規則
 
 - `.claude/rules/core/quality-baseline.md` 規則 5：所有發現必須追蹤
 - `.claude/rules/core/document-writing-style.md`：禁止模糊指引（「依官方文件」需具體化）
-- memory `feedback_failure_learning_principle`：疏失發生時提煉教訓 + 固化規則
 
 ---
 

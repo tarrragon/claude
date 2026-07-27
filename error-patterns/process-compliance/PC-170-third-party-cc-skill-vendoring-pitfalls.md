@@ -61,10 +61,9 @@ PM 經 `git clone --depth 1` 審查發現實為 1.9MB / 83 檔 / 54 腳本的重
 
 **Consequence**：跳過審查直接安裝會導致 commit 卡關、授權違規、非預期框架膨脹，且重型工具誤裝後 context 與維護成本長期累積。
 
-**Action**：依上方六步防護；關聯 memory `feedback_vendoring_third_party_cc_skill`（跨對話記憶）。
+**Action**：依上方六步防護。
 
 ## 關聯
 
 - Ticket：0.19.1-W1-006
-- Memory：`feedback_vendoring_third_party_cc_skill`
 - 相關規則：PC-053（skills 修改須 ticket）、`.claude/references/plugin-management.md`（注入成本評估）、CLAUDE.md（`--no-verify` 第三方豁免）

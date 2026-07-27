@@ -95,7 +95,7 @@ git merge --no-ff worktree-agent-<id> -m "merge: ..."
 |---------|------|
 | PC-154（worktree 派發兩前置） | 兩者皆為 worktree 工作流問題；PC-154 在派發**前**、PC-155 在合併**後** |
 | W11-035（complete auto-stage 機制） | PC-155 是該機制的副作用；W11-035 不該關閉，但 PM 需理解其與 worktree 並行的時序 |
-| `feedback_worktree_merge_after_agent` | feedback 強調「立即合併」，PC-155 補充「合併前先處理 staged」 |
+| `.claude/pm-rules/worktree-operations.md`「階段 2：合併時」 | 該階段強調「立即合併」，PC-155 補充「合併前先處理 staged」 |
 
 ## 案例
 

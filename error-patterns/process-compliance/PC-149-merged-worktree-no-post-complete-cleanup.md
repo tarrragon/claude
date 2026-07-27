@@ -110,7 +110,7 @@ git branch -d <branch>
 ## 相關案例
 
 - `worktree-zombie-cleanup-hook` 處理 cc runtime worktree（PC-149 範圍外）
-- `feedback_worktree_unmerged_invisible`（PC-039 系列）處理未合併產出不可見問題（**前一步**問題）；PC-149 是**後一步**問題
+- PC-039 系列處理未合併產出不可見問題（**前一步**問題）；PC-149 是**後一步**問題
 - W11-018 完成時 PM 因用戶提醒主動清理 → 暴露系統長期累積（trigger event）
 
 ---

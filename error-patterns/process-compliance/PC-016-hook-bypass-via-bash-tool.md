@@ -102,7 +102,7 @@ PC-001 記錄了「保護分支上 Edit 被靜默還原」的問題，催生了 
 | 額外發現 | Hook 阻擋訊息不夠清楚 — 應明確指出「在保護分支上，請建 worktree」而非只說「路徑不在白名單」 |
 | 修正 | 已用 `git checkout -- .claude/settings.json` 回滾 |
 
-**教訓**：即使已有 memory feedback（`feedback_never_bypass_hooks_with_bash.md`），多個 Hook 同時阻擋時，認知負擔增加仍可能導致復發。訊息改善是系統層防護。
+**教訓**：即使個案已記取教訓，多個 Hook 同時阻擋時，認知負擔增加仍可能導致復發。訊息改善是系統層防護。
 
 ---
 

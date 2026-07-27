@@ -1,5 +1,9 @@
 # PC-061: Memory 寫入後未評估升級為框架規則
 
+## 現況說明（2026-07-27 起）
+
+`.claude/` 已改採 hook 層執法（`memory-write-guard-hook.py`，PreToolUse deny）取代規則層自律期望——寫入 memory 目錄的操作在寫入**當下**即被攔截並改道分流，不再是本檔原描述的「先寫入、事後評估升級」模式。下方「錯誤症狀 / 根因分析 / 實際案例」記錄的是舊機制下的失敗模式，保留作為 hook 層執法設計依據的歷史記錄；「防護措施 / 自我檢查清單」已更新為現行機制，見該二節。
+
 ## 錯誤症狀
 
 PM 在 session 中發現重要原則時，反覆出現以下模式：
@@ -66,71 +70,46 @@ Memory 升級案例中，相當比例是「用戶指正後 PM 才升級」。PM 
 
 這些 memory 的共同特徵：原則識別正確、寫入即時，但**後續升級步驟未發生**。
 
-## 防護措施
+## 防護措施（現行機制）
 
-### 措施 1：quality-baseline 新增規則 7
+原措施 1-5（規則層期望 PM 自律升級、PostToolUse 事後提醒 hook、回填「已升級」標註）已由下列兩層取代：
 
-新增 `.claude/rules/core/quality-baseline.md` 規則 7「Memory 寫入必須評估跨專案升級」：
+### 規則層：知識捕獲時分流
 
-- 定義四問檢查（跨專案適用？屬於哪類原則？應升級至哪個位置？）
-- 明確升級目的地對照表（rules / pm-rules / error-patterns / methodologies / skills）
-- 禁止「之後再升級」的延後理由
-- 納入品質檢查清單與底線要求總結
+`.claude/pm-rules/pm-quality-baseline.md` 規則 7「知識捕獲時分流」——記錄經驗教訓前，先依判別問句「另一個專案的 session 讀到這段，能用嗎」分流至三個目的地之一：
 
-### 措施 2：continuous-learning skill 升級評估決策樹
+| 學習成果性質 | 目的地 |
+|------------|--------|
+| 框架相關（替換專案名稱與路徑後仍成立） | `.claude/error-patterns/` 或 `rules/` `methodologies/` `references/`（依內容性質細分） |
+| 專案相關（僅本專案成立） | `docs/` 或 `CLAUDE.md` |
+| 兩者皆非（僅本次 session 成立） | 不記錄，ticket md 已承載執行脈絡 |
 
-`.claude/skills/continuous-learning/` 新增升級評估步驟（由後續 ticket 實施）：
+memory 不在三個目的地內；三分流已窮盡所有情境，不留「先寫 memory 保底」的第四選項。
 
-- Step「儲存到 memory」後強制 Step「升級評估」
-- 提供升級決策樹 references，引導至對應框架位置
-- 降低升級摩擦，讓評估成為 skill 流程內建環節
+### 執法層：寫入攔截
 
-### 措施 3：自動提示 Hook
-
-`.claude/hooks/` 新增 `memory-upgrade-reminder-hook.py`（由後續 ticket 實施）：
-
-- 觸發：PostToolUse:Write，偵測 `feedback_*.md` 新增或修改
-- 輸出：stderr 提示（符合觀測性規則 4）列出四問檢查 + 升級目的地選項
-- 節流：同檔案 30 分鐘內只提示一次
-
-### 措施 4：歷史債務清理
-
-一次性升級既有僅存 memory 的跨專案原則案例（由後續 ticket 執行），並在 memory 檔案頂部註明升級目的地路徑。
-
-### 措施 5：升級後回填
-
-升級完成後必須在原 memory 檔案頂部註明：
-
-```markdown
----
-已升級: <框架路徑>
-升級日期: <YYYY-MM-DD>
----
-```
-
-保留 memory 作為本專案的 context 索引，但顯式標示「原則已落地框架」。
+`.claude/hooks/memory-write-guard-hook.py`（PreToolUse deny，取代已刪除的 `memory-upgrade-reminder-hook.py`）在寫入 memory 目錄的**當下**即攔截，deny 訊息直接引導至上述三分流判準，而非等寫入發生後才事後提醒。此設計呼應成因 1（認知摩擦差）——規則層的自律期望對抗不了低摩擦路徑的傾向，須由 hook 層在寫入當下攔截才有效。
 
 ## 自我檢查清單
 
-寫入 feedback memory 時，依序自問：
+準備記錄經驗教訓時，依序自問（完整判準見 `pm-quality-baseline.md` 規則 7）：
 
-- [ ] 這個原則對**其他專案**也適用嗎？（若否，加 `project_` 前綴明示）
-- [ ] 這個原則屬於哪類？（通用品質 / PM 行為 / 錯誤學習 / 流程方法論 / Skill 引導）
-- [ ] 對應的框架升級位置是什麼？
-- [ ] 我是否已在當前 session 完成升級，而非留給「下次」？
-- [ ] 升級完成後，原 memory 是否已回填「已升級」標註？
+- [ ] 這段內容替換專案名稱與檔案路徑後，另一個專案的 session 讀到還能用嗎？（能 → 框架相關，進入下一問；否則進專案相關）
+- [ ] 屬框架相關時，這是通用品質原則 / PM 行為規範 / 錯誤學習 / 流程方法論 / Skill 引導的哪一類？依此選定升級目的地
+- [ ] 屬專案相關時，落 `docs/` 或 `CLAUDE.md`
+- [ ] 兩者皆非、僅本次 session 成立？→ 不記錄
 
-任一答「否」都不可結案，必須補完後才能視為「原則已落地」。
+任一步驟拿不定，不代表可退回「先寫 memory」——代表資訊尚不成熟，留在 ticket 執行紀錄內待同主題再現時累積判斷。
 
 ## 關聯
 
-- **相關規則**：`.claude/pm-rules/pm-quality-baseline.md` 規則 7（Memory 寫入必須評估跨專案升級，原 quality-baseline v1.9.0 規則 7，2026-04-16 外移）
+- **相關規則**：`.claude/pm-rules/pm-quality-baseline.md` 規則 7「知識捕獲時分流」（現行機制，memory 排除，三分流取代原「Memory 寫入必須評估跨專案升級」）
 - **相關模式**：PC-010（待辦應建 Ticket 不寫 memory，聚焦任務追蹤；本模式聚焦原則類 memory）
 - **相關模式**：PC-060（Meta-tool 發現盲點，同類「原則建立當下未擴充檢查清單」結構）
-- **相關模式**：[PC-160](PC-160-pm-skip-upgrade-gate-direct-memory-write.md)（本 PC 的 v2 實證案例 + session 內浮現洞察情境 specific 防護五步驟；W3-028.2 → W3-058 ANA 結論確認為同模式擴展，cross-reference 而非合併）
-- **相關 Skill**：`.claude/skills/continuous-learning/`（後續新增升級評估決策樹）
-- **相關 Hook**：`memory-upgrade-reminder-hook.py`（後續新增自動提示）
-- **相關方法論**：[`.claude/methodologies/hook-system-methodology.md`](../../methodologies/hook-system-methodology.md) § 6「觀察類工具的雙重身份設計」（W3-028.2 → W3-058 → W3-059 升級落地案例，本 PC 防護五步驟的成功應用範例）
+- **相關模式**：[PC-160](PC-160-pm-skip-upgrade-gate-direct-memory-write.md)（本 PC 的 v2 實證案例 + session 內浮現洞察情境的補充案例；兩者記錄同一錯誤模式的不同切片，cross-reference 而非合併）
+- **相關 Skill**：`.claude/skills/continuous-learning/`（知識捕獲時分流已內建於 skill 流程，memory 不再列為目的地）
+- **相關 Hook**：`.claude/hooks/memory-write-guard-hook.py`（PreToolUse deny，取代已刪除的 `memory-upgrade-reminder-hook.py`）
+- **相關方法論**：[`.claude/methodologies/hook-system-methodology.md`](../../methodologies/hook-system-methodology.md) § 6「觀察類工具的雙重身份設計」
 
 ### v2 案例延伸（PC-160）
 
@@ -139,7 +118,7 @@ PC-160 補充 PC-061 未涵蓋的情境差異：本 PC 案例 1-2 聚焦「原�
 ---
 
 **Created**: 2026-04-13
-**Last Updated**: 2026-04-13
+**Last Updated**: 2026-07-27（防護章節與自我檢查清單改寫：memory 已從合法目的地排除，規則層改為知識捕獲時三分流、執法層改為 PreToolUse 寫入攔截；症狀/根因/案例章節保留為 hook 層執法設計依據的歷史記錄）
 **Category**: process-compliance
 **Severity**: P2（跨專案原則流失累積成本高，但非立即錯誤；與 PC-060 同結構）
-**Key Lesson**: Memory 是專案層級儲存，不是跨 session 知識庫。寫 feedback memory 不是知識管理的終點，而是評估升級的起點；跨專案原則必須同步升級到 `.claude/` 框架層才算落地。
+**Key Lesson**: Memory 是專案層級儲存，不是跨 session 知識庫，本框架已排除其作為知識目的地。歷史教訓（規則層自律期望對抗不了低摩擦路徑）是現行 hook 層執法設計的直接依據；跨專案原則一律直接落 `.claude/` 框架層，不經 memory 中繼。

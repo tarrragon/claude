@@ -464,6 +464,7 @@ PM 收到代理人回報後執行：
 - .claude/pm-rules/decision-tree.md - 主線程決策樹
 - .claude/pm-rules/context-bundle-spec.md - Context Bundle 規範（派發前資訊準備）
 - @.claude/rules/core/quality-baseline.md - 品質基線（Phase 4 不可跳過）
+- .claude/pm-rules/worktree-operations.md「多階段串接派發」節 - 跨 agent TDD phase 接力（RED→GREEN 跨多個 worktree agent）時的 feat 分支累積器機制，保 main 全程恆綠
 
 ---
 
@@ -482,7 +483,8 @@ SA 否決不可繞過 — 必須解決否決原因後重新審查。
 
 ---
 
-**Last Updated**: 2026-06-04
+**Last Updated**: 2026-07-27
+**Version**: 2.19.0 — 相關文件補一行路由指向 `worktree-operations.md`「多階段串接派發」節（跨 agent phase 接力的 feat 分支累積器機制，屬 git 分支操作非 TDD phase 語意，不搬機制內容）（0.2.1-W3-095）
 **Version**: 2.18.0 — 新增「ANA 全量 grep/regex 範圍驗證完整性規範」獨立章節：三層強制要求（驗證方法涵蓋完整性聲明、覆蓋完整性聲明格式、AC 設計連動），觸發案例 W1-005 ANA AC-4 二度誤判（0.19.1-W1-039）
 **Version**: 2.17.0 — Phase 4 派發前新增「TD 清單校準（td-status）」預檢步驟（W10-083 / PC-094 落地，防止多視角浪費 token 在已完成 TD 項）
 **Version**: 2.16.0 - Phase 4 新增強制 Checkpoint：重構評估前執行 WRAP Phase 2 檢驗（W15-019，防止重構根因分析太表層）

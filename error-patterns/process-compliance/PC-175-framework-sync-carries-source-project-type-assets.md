@@ -8,7 +8,7 @@
 
 - 測試 import 不存在的函式造成 pytest collection error，全套件需 `--ignore` 排除某檔（W1-038：`test_monorepo_version_sync.py` import 已被 W4-002 移除的 `get_monorepo_version`）
 - 工具使用指南 / 速查表硬編碼某語言專屬 MCP 工具名，對目標專案類型不適用（W1-035：dart MCP `l*` 引用集中於 Flutter agent，對 Chrome Extension 專案無對應 server）
-- hook / detector 內建來源框架預設（Flutter Bloc 的 `test/*.dart`、Layer 1-5），跨 sync 後對目標專案類型誤判（feedback_hook_flutter_preset_assumption）
+- hook / detector 內建來源框架預設（Flutter Bloc 的 `test/*.dart`、Layer 1-5），跨 sync 後對目標專案類型誤判
 - 同一 session 跨多個 ticket 重複遇到「Flutter 資產在非 Flutter 專案」的變體
 
 ## 根因
@@ -53,7 +53,6 @@ framework 設計目標是跨專案重用，但「重用」只對 generic 類成�
 |------|------|
 | PC-173（MCP 工具名漂移） | 本 PC 的特例（MCP 名面向）；本 PC 為通用化（涵蓋測試 / hook / 文件） |
 | PC-083（framework footer 污染） | 同源——框架資產與專案/環境耦合 |
-| memory `feedback_hook_flutter_preset_assumption` | 本 PC 的 hook 面向跨對話記憶對應 |
 | quality-baseline 規則 5 | 跨 sync 發現的死碼/誤導資產必須建 ticket 追蹤 |
 
 ## 案例文件來源

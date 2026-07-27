@@ -6,6 +6,7 @@ category: test
 source_ticket: 0.1.0-W2-016.3
 related:
  - PC-165
+ - PC-BAL-010
 ---
 
 # TEST-BAL-001：理想化測試 fixture 遮蔽 validator 假通過
@@ -46,4 +47,5 @@ related:
 ## 相關
 
 - 來源：`0.1.0-W2-016.3`；由 multi-round-review Round 2-C（可執行性 walkthrough 對真實 SPEC-001）抓出——單元測試（理想 fixture）與撰寫者手動整合驗證皆未觸及，證明「對真實輸入執行」是不可省的 frame。
+- 上位家族：`PC-BAL-010`（驗證管道對待驗現象不敏感）——本模式屬其恆真側成員，兩向樣態與判別順序見該檔。
 - 相關：`PC-165`（false-positive fix chain，mock 遮蔽 runtime）、quality-baseline 規則 1 邊界（測試綠燈 ≠ Runtime 正確）、`tool-output-trust-rules` 規則 3（固定值交叉驗證）。

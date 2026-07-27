@@ -116,7 +116,12 @@ def _run_hook(script_path: Path, payload: dict, env: dict = None):
 class TestAcceptanceGateEffort:
     HOOK = ticket_skill_hooks_path / "acceptance-gate-hook.py"
 
-    def test_low_effort_short_circuits(self):
+    def test_low_effort_does_not_short_circuit_complete(self):
+        # W3-018 移除 complete 命令的 effort 短路：low effort 下 complete
+        # 命令仍須執行完整 acceptance 驗證，不可僅回傳 fast-path 的空白 allow。
+        # 可證偽判準：完整驗證路徑會輸出 generate_hook_output 特有的
+        # "[Complete 清單]" 檢查清單標記，fast-path 短路（_output_allow_json）
+        # 則只有裸 permissionDecision JSON，不含此標記。
         payload = {
             "tool_name": "Bash",
             "tool_input": {"command": "ticket track complete 0.18.0-W14-034"},
@@ -124,8 +129,7 @@ class TestAcceptanceGateEffort:
         }
         rc, stdout, _ = _run_hook(self.HOOK, payload)
         assert rc == 0
-        # low 短路時應輸出 allow JSON
-        assert "allow" in stdout.lower() or stdout.strip() == "" or "allow" in stdout
+        assert "[Complete 清單]" in stdout  # 證明完整驗證確實執行，非短路空白放行
 
     def test_medium_effort_runs_full_path(self):
         # 非 complete 命令在 medium effort 下走 fast-path 後放行
@@ -185,18 +189,30 @@ class TestTicketQualityGateEffort:
 class TestTicketFrontmatterValidatorEffort:
     HOOK = ticket_skill_hooks_path / "ticket-frontmatter-validator-hook.py"
 
-    def test_low_effort_short_circuits(self):
+    def test_low_effort_does_not_short_circuit(self, tmp_path):
+        # 建立含違規 status 的實體 ticket 檔（hook 從磁碟讀取 frontmatter）。
+        # is_ticket_file() 僅用子字串比對（"docs/work-logs/" + "/tickets/"），
+        # parse_frontmatter() 用絕對路徑讀檔，故 tmp_path 下的假路徑即可滿足
+        # 判定，不需真實 repo 路徑（0.2.1-W3-027 cwd 無關化 + 防殘留）。
+        tickets_dir = tmp_path / "docs" / "work-logs" / "v0.2.1" / "tickets"
+        tickets_dir.mkdir(parents=True, exist_ok=True)
+        fixture = tickets_dir / "_test_effort_fixture_frontmatter.md"
+        fixture.write_text(
+            "---\nid: _test_effort_fixture_frontmatter\nstatus: not_a_valid_status\n---\n# x\n",
+            encoding="utf-8",
+        )
         payload = {
             "tool_name": "Edit",
             "tool_input": {
-                "file_path": "docs/work-logs/v0.18.0/tickets/test.md",
+                "file_path": str(fixture),
                 "old_string": "x",
                 "new_string": "y",
             },
             "effort": {"level": "low"},
         }
-        rc, _, _ = _run_hook(self.HOOK, payload)
-        assert rc == 0
+        rc, _, stderr = _run_hook(self.HOOK, payload)
+        assert rc == 0  # 此 hook 恆為 exit 0（事後警告，不阻擋）
+        assert "status" in stderr  # 但必須確實輸出違規警告，證明未短路跳過檢查
 
     def test_medium_effort_processes(self):
         payload = {
@@ -255,14 +271,27 @@ class TestPhase4EffortAlwaysBlocks:
 class TestCreationAcceptanceGateEffort:
     HOOK = ticket_skill_hooks_path / "creation-acceptance-gate-hook.py"
 
-    def test_low_effort_short_circuits(self):
+    def test_low_effort_does_not_short_circuit(self, hook_project_env):
+        # 建立 pending + creation_accepted: false 的 fixture ticket（非 in_progress，
+        # 不落入 re-claim no-op 豁免），移除短路後 low effort 應與 medium/high
+        # 一樣執行完整檢查並阻擋 claim。
+        # cwd 無關化 + 防殘留（0.2.1-W3-027）：改用 conftest 共用的 hook_project_env
+        # fixture——以 tmp_path 假專案根 + CLAUDE_PROJECT_DIR 導向 find_ticket_file()
+        # 解析，取代真實 repo 路徑，pytest 自動清理不留殘留目錄。
+        project_root, env = hook_project_env
+        fixture_dir = project_root / "docs" / "work-logs" / "v0" / "v0.2" / "v0.2.1" / "tickets"
+        fixture_dir.mkdir(parents=True, exist_ok=True)
+        fixture = fixture_dir / "0.2.1-W3-999.md"
+        fixture.write_text(
+            "---\nid: 0.2.1-W3-999\nstatus: pending\ncreation_accepted: false\n---\n# fixture\n",
+            encoding="utf-8",
+        )
         payload = {
-            "prompt": "/ticket track claim 0.18.0-W99-999",
+            "prompt": "/ticket track claim 0.2.1-W3-999",
             "effort": {"level": "low"},
         }
-        rc, stdout, _ = _run_hook(self.HOOK, payload)
-        assert rc == 0
-        assert "UserPromptSubmit" in stdout
+        rc, _, _ = _run_hook(self.HOOK, payload, env=env)
+        assert rc == 2  # EXIT_BLOCK：creation_accepted 未通過，low effort 不再豁免
 
     def test_medium_effort_processes(self):
         payload = {
@@ -284,17 +313,29 @@ class TestCreationAcceptanceGateEffort:
 class TestAnaTicketMetadataValidationEffort:
     HOOK = ticket_skill_hooks_path / "ana-ticket-metadata-validation-hook.py"
 
-    def test_low_effort_short_circuits(self):
+    def test_low_effort_does_not_short_circuit(self):
+        # source_ticket 非空 + acceptance 含 ";" 分隔違規 → 應觸發 PC-058 WARNING，
+        # 移除短路後 low effort 也應輸出 warning（不因 effort 而跳過檢查）。
+        content = (
+            "---\n"
+            "id: test\n"
+            "source_ticket: 0.1.0-W1-001\n"
+            "dispatch_reason: ANA follow-up\n"
+            "acceptance:\n"
+            "  - '完成 A; 完成 B'\n"
+            "---\n# x"
+        )
         payload = {
             "tool_name": "Write",
             "tool_input": {
                 "file_path": "docs/work-logs/v0.18.0/tickets/test.md",
-                "content": "---\nid: test\n---\n# x",
+                "content": content,
             },
             "effort": {"level": "low"},
         }
-        rc, _, _ = _run_hook(self.HOOK, payload)
-        assert rc == 0
+        rc, _, stderr = _run_hook(self.HOOK, payload)
+        assert rc == 0  # 此 hook 恆為 exit 0（WARNING-only，不阻擋）
+        assert "PC-058" in stderr  # 但必須確實輸出警告，證明未短路跳過檢查
 
     def test_medium_effort_processes(self):
         payload = {
@@ -318,17 +359,20 @@ class TestAnaTicketMetadataValidationEffort:
 class TestTicketCreationValidationEffort:
     HOOK = ticket_skill_hooks_path / "ticket-creation-validation-hook.py"
 
-    def test_low_effort_short_circuits(self):
+    def test_low_effort_does_not_short_circuit(self):
+        # 缺少 decision_tree_path 且非 DOC 類型、無 parent_id → 應觸發 WARNING，
+        # 移除短路後 low effort 也應輸出警告，證明未短路跳過檢查。
         payload = {
             "tool_name": "Write",
             "tool_input": {
                 "file_path": "docs/work-logs/v0.18.0/tickets/test.md",
-                "content": "---\nid: test\n---\n# x",
+                "content": "---\nid: test\ntype: IMP\n---\n# x",
             },
             "effort": {"level": "low"},
         }
-        rc, _, _ = _run_hook(self.HOOK, payload)
-        assert rc == 0
+        rc, _, stderr = _run_hook(self.HOOK, payload)
+        assert rc == 0  # 此 hook 恆為 exit 0（WARNING-only，不阻擋）
+        assert "decision_tree_path" in stderr  # 但必須確實輸出警告，證明未短路跳過檢查
 
     def test_medium_effort_processes(self):
         payload = {

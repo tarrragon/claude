@@ -112,7 +112,6 @@ W17-070 ANA 拆分為兩個 spawned IMP，分別處理根因 A（validator 漏�
 - `.claude/rules/core/agent-definition-standard.md` v1.1.0 — 「執行責任：Ticket body 填寫」條款
 - `.claude/pm-rules/ticket-body-schema.md` — type-aware body schema 定義
 - `.claude/rules/core/quality-baseline.md` 規則 5+6 — 所有發現必須追蹤 + 失敗案例學習原則
-- Memory `feedback_body_check_false_negative_schema_separator.md` — 本事件的 memory feedback 記錄
 
 ---
 

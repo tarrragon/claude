@@ -116,8 +116,8 @@ done
 
 - `.claude/rules/core/bash-tool-usage-rules.md` 規則 3：禁止串接多個 git 寫入操作（與本 PC 互補：本 PC 處理單一 merge 失敗的處理錯誤）
 - `CLAUDE.md` `--no-verify` 緊急豁免邊界（合規邊界基線）
-- memory `feedback_git_index_lock`（IMP-046 git index.lock 競爭模式 — 可能成因之一）
-- memory `feedback_premature_agent_verification`（並行 agent 完成後驗證模式）
+- `IMP-046`：git index.lock 競爭模式（可能成因之一）
+- `PC-037`：premature-background-agent-verification（並行 agent 完成後驗證模式）
 
 ## 識別清單
 

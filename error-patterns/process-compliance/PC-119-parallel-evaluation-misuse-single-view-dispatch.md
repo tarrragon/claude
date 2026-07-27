@@ -94,11 +94,11 @@ memory feedback `parallel_eval_needs_wrap` 已存在但未阻止本次誤判。�
 
 ---
 
-## 相關規則與 memory
+## 相關規則
 
 - `.claude/skills/parallel-evaluation/SKILL.md` — 三人組協議定義（含常駐委員 linux）
-- memory `parallel_eval_needs_wrap` — linux 強勢評分需 WRAP（使用後處理）
-- memory `feedback_parallel_agent_conflict` — 並行代理人檔案衝突防護
+- PC-056 — linux 強勢評分需 WRAP（使用後處理）
+- `.claude/pm-rules/parallel-dispatch.md` — 並行代理人檔案衝突防護
 - PC-040 — Context in Ticket not Prompt（視角專屬重點寫 Context Bundle）
 - PC-066 — Decision quality autopilot under load（PM 自律失效防護）
 

@@ -1,3 +1,65 @@
+## [2.21.0] - 2026-07-27
+
+### Summary
+feat: error-pattern README 索引改保守 upsert 並接線; feat: error-pattern README 索引全量 sync 純函式層 + CLI; feat: memory 寫入攔截改為 PreToolUse deny 加改道指引 (+49 more)
+
+Changes: 9 feat, 11 fix, 28 docs, 2 chore, 2 test
+
+- feat: error-pattern README 索引改保守 upsert 並接線
+- feat: error-pattern README 索引全量 sync 純函式層 + CLI
+- feat: memory 寫入攔截改為 PreToolUse deny 加改道指引
+- feat: 刪除 test-timeout-post.py 死碼 + config 白名單納入
+- feat: 規則 8 守衛實作依賴型 vs 歷史錨點型判別
+- feat: WRAP 觸發綁定至二元處置取捨
+- feat: version-tracking-consistency-guard-hook 新增 todolist.yaml 解析失敗偵測
+- feat: 新增 doc validate-filenames 檔名慣例驗證
+- feat: 擴充 TICKET_EXEMPT_AGENT_TYPES 收錄唯讀常駐審查委員
+- fix: skill-shadowing hook 修復 N1 context 送達與 H1/N5 目錄層級靜默失效
+- fix: skill-shadowing hook 修正 L1 大小寫偵測與 L3 版本正則
+- fix: skill-shadowing hook 改遞迴比對整個目錄
+- fix: 修復 wrap-decision/zellij 全域 skill 遮蔽專案版
+- fix: 修正 ask_user_question_reminders.py 六處失效路徑引用
+- fix: 降級 ticket-quality-gate 失敗出口為 advisory
+- fix: 移除 8 個事實判斷型 hook 的 effort=low 短路 + 同步固化測試
+- fix: acceptance-gate 誤判 create 命令引號文字為 complete 呼叫致死鎖
+- fix: acceptance-gate-hook effort=low 短路不再豁免 complete 命令
+- fix: PEP 723 依賴宣告取代 version-tracking hook 的 python3 探測
+- fix: validate-filenames 豁免框架約定固定命名文件
+- docs: PC-BAL-013 更正 team 訊息路由的事實陳述
+- docs: PC-BAL-013 context 中斷誤判為代理人終止
+- docs: error-patterns README 的 memory 定位改為排除論述
+- docs: 補齊 error-patterns README 索引 148 筆缺漏
+- docs: 修正規則 12 依賴型判準的字面矛盾
+- docs: AGENT_PRELOAD 規則 12 自我稽核，發現規則本身的字面矛盾
+- docs: 多階段分支流落地，memory 目錄清空
+- docs: PC-061 / PC-160 防護章改寫指向現行攔截機制
+- docs: 清理 error-patterns 內指向不存在 memory 檔的引用
+- docs: memory 五檔處置 4/5，餘一檔阻塞於落地位置設計
+- docs: 框架檔案禁依賴型 ticket 引用禁令上移至預設載入層
+- docs: 移除 memory-capture-guide 與死指標，記錄 PC-BAL-012
+- docs: 改寫四處剩餘 memory 目的地表述
+- docs: 改寫規則層分流表述為 memory 排除 policy
+- docs: PC-160 補 v3 案例——框架落地已在飛行仍寫 memory
+- docs: 新增 ARCH-BAL-006 宣告層窄於執行層
+- docs: PC-BAL-002 補案例二與比對維度分流
+- docs: 新增 PC-BAL-011 + 修正 Layer 2 發現 1
+- docs: Recommended 標記適用邊界對稱補述
+- docs: IMP-BAL-001 適用範圍擴充至 PostToolUse
+- docs: 新增 ARCH-BAL-005 自證式豁免 error-pattern
+- docs: 新增 PC-BAL-010 驗證管道對待驗現象不敏感（家族層）
+- docs: 新增 PC-BAL-009 測試套件顏色隨 cwd 翻轉
+- docs: 新增 ARCH-BAL-004 + spawn
+- docs: 修文件範例源頭 + 記錄 診斷修正
+- docs: 修正 AGENT_PRELOAD claim 前提衝突 + PC-V1-002 第三變體固化
+- docs: 新增 ARCH-BAL-003 白名單判準與成員脫節
+- docs: 新增 IMP-BAL-003 稽核器與消費端解析器嚴格度落差
+- chore: test_version_tracking_consistency_guard_hook_yaml_parse.py 權限 644 -> 755
+- chore: 清除 hook-exclude-list 五個殭屍條目與失效 archived 模式
+- test: hook 測試 cwd 無關化 + 防 fixture 殘留污染 repo
+- test: 修復 hook 測試三紅燈 + 一無鑑別力測試（測試側）
+
+---
+
 ## [2.20.16] - 2026-07-26
 
 ### Summary

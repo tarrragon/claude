@@ -96,6 +96,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validate_parser.add_argument("doc_id", help="文件 ID（如 SPEC-002）")
 
+    # validate-filenames
+    subparsers.add_parser(
+        "validate-filenames",
+        help="掃描各 doc type 目錄，驗證檔名是否符合配號器慣例（防重號盲區）",
+    )
+
     # uc（子命令群組：list/verify/trace/context）
     uc_parser = subparsers.add_parser("uc", help="UC 編號治理：list/verify/trace/context")
     uc_subparsers = uc_parser.add_subparsers(dest="uc_command")
@@ -156,6 +162,7 @@ COMMAND_HANDLERS = {
     "update": update.execute,
     "uc": uc.execute,
     "validate": validate.execute,
+    "validate-filenames": validate.execute_filenames,
 }
 
 

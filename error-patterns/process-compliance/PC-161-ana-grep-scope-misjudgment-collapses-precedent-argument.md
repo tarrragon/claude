@@ -96,13 +96,12 @@ PostToolUse:Agent 或 ANA ticket complete 時，掃描 ticket body / Solution �
 | 0.19.0-W3-031.1 | 受影響子 ticket：依 W3-063 修正後結論 closed（not_executable_knowledge_captured） |
 | 0.19.0-W3-031 | source ANA：spawn W3-031.1 規劃 helper 實作 |
 
-## 相關規則 / Memory
+## 相關規則
 
 - `.claude/rules/core/quality-baseline.md` 規則 1（測試通過率 = ANA 結論正確率）+ 規則 5（所有發現必須追蹤）+ 規則 6（失敗案例學習原則）
 - `.claude/error-patterns/process-compliance/PC-007-*.md` 父家族：ANA 描述需獨立驗證
 - `.claude/error-patterns/process-compliance/PC-068-*.md` 互補：ANA Spawn IMP Pre-scan
-- memory `feedback_failure_learning_principle`：流程瑕疵不回退、提煉教訓固化為規則
-- memory `feedback_pm_narrative_fabrication_and_shallow_attribution`：PM 論述編造防護（與本 PC 互補，本 PC 聚焦 ANA 代理人，前者聚焦 PM）
+- `.claude/error-patterns/process-compliance/PC-111-pm-narrative-fabrication-and-shallow-attribution.md`：PM 論述編造防護，與本 PC 互補（本 PC 聚焦 ANA 代理人，PC-111 聚焦 PM）
 
 ---
 

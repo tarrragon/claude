@@ -52,13 +52,15 @@ def mock_logger():
     return logger
 
 
-# 白名單中所有應豁免的 agent type（W17-046.1 擴充後）
+# 白名單中所有應豁免的 agent type（W17-046.1 擴充 + 0.2.1-W3-010 擴充後）
 EXEMPT_AGENT_TYPES = [
     "Explore",
     "claude-code-guide",
     "general-purpose",
     "Plan",
     "feature-dev:code-explorer",
+    "basil-writing-critic",
+    "linux",
 ]
 
 # 非白名單 agent type（應要求 Ticket ID）
@@ -78,11 +80,12 @@ NON_EXEMPT_AGENT_TYPES = [
 class TestWhitelistConstant:
     """驗證 TICKET_EXEMPT_AGENT_TYPES 常數包含預期的 agent type"""
 
-    def test_whitelist_contains_all_five_exempt_types(self, hook_module):
-        """白名單應包含 5 個情報蒐集類 agent type"""
+    def test_whitelist_contains_all_seven_exempt_types(self, hook_module):
+        """白名單應包含 7 個豁免 agent type（情報蒐集類 5 個 + 常駐審查委員 2 個）"""
         whitelist = hook_module.TICKET_EXEMPT_AGENT_TYPES
-        assert len(whitelist) == 5, (
-            "白名單應恰好包含 5 個項目（Explore + 4 個新增）；"
+        assert len(whitelist) == 7, (
+            "白名單應恰好包含 7 個項目（Explore + 4 個情報蒐集類 + "
+            "basil-writing-critic + linux）；"
             "若超過 10 應考慮升級為動態分類（見 Hook 註解）"
         )
 

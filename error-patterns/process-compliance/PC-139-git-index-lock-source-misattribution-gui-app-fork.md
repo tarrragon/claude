@@ -9,14 +9,14 @@
 | 編號 | PC-139 |
 | 類別 | process-compliance |
 | 風險等級 | 低（時間損耗，無資料損害） |
-| 首發時間 | 2026-04-01 前後（memory `feedback_git_index_lock_external_app.md` 首次記錄） |
+| 首發時間 | 2026-04-01 前後（累積觀察後首次記錄） |
 | 姊妹模式 | PC-079（Bash backtick CLI 參數）、`.claude/rules/core/bash-tool-usage-rules.md` 規則三（git 串接）同屬 Bash 與 git 操作紀律 |
 
 ---
 
 ## 症狀
 
-遇到 `fatal: Unable to create '.git/index.lock': File exists.` 錯誤時，依既有 hook 訊息與 `feedback_git_index_lock_prevention.md` 規則，第一反應為「自己串接 git 寫入操作」或「hook 與 git 競爭」。實際情境中：
+遇到 `fatal: Unable to create '.git/index.lock': File exists.` 錯誤時，依既有 hook 訊息與 `.claude/rules/core/bash-tool-usage-rules.md` 規則三，第一反應為「自己串接 git 寫入操作」或「hook 與 git 競爭」。實際情境中：
 
 1. PM 已乖乖拆分獨立 Bash 呼叫（每個 git 寫入操作獨立）
 2. 無 long-running hook 在跑 git 命令
@@ -28,7 +28,7 @@
 
 ---
 
-## 實例（memory `feedback_git_index_lock_external_app.md` 累積觀察）
+## 實例（累積觀察）
 
 PM 完成獨立 commit，準備接續下一個 git 操作時遇 lock：
 
@@ -53,9 +53,8 @@ PM 行為（誤判）：
 ### 真根因
 
 1. **既有規則覆蓋面不全**
-   - `feedback_git_index_lock_prevention.md` 僅針對「同一 Bash 串接 commit + merge/push」
-   - `.claude/rules/core/bash-tool-usage-rules.md` 規則三同此假設
-   - 兩者皆未列「外部 GUI app fork process」為合法來源
+   - `.claude/rules/core/bash-tool-usage-rules.md` 規則三僅針對「同一 Bash 串接 commit + merge/push」
+   - 未列「外部 GUI app fork process」為合法來源
 
 2. **GUI git 工具的隱性行為**
    - Fork.app / GitKraken / SourceTree 為了即時顯示倉庫狀態，背景週期性執行 `git status` / `git diff` / `git for-each-ref` 等讀取命令
@@ -70,7 +69,7 @@ PM 行為（誤判）：
 
 | 來源 | 觸發條件 | 處理方式 |
 |------|---------|---------|
-| Hook/Bash 串接 | 同一 Bash 呼叫含 `git commit && git merge`（或類似組合） | 拆分為獨立 Bash（PC 規則三 / feedback_git_index_lock_prevention.md） |
+| Hook/Bash 串接 | 同一 Bash 呼叫含 `git commit && git merge`（或類似組合） | 拆分為獨立 Bash（PC 規則三） |
 | 外部 GUI app fork | macOS Fork.app / GitKraken / SourceTree / VS Code Git 等背景 fork process | `rm .git/index.lock` 安全刪除，外部工具會自行重試 |
 | 殘留 lock（罕見） | 系統當機 / Bash 強制中斷 | `ls -la .git/index.lock` 檢查 mtime > 30s 後 `rm` |
 
@@ -92,8 +91,7 @@ PM 行為（誤判）：
 | 層級 | 措施 | 狀態 |
 |------|------|------|
 | 流程 | 遇 index.lock 失敗時，依檢查順序判別來源（見下方檢查清單） | 行為準則 |
-| 規則 | `bash-tool-usage-rules.md` 規則三維持「禁止串接」；本 PC 處理「乖乖拆分後仍失敗」剩餘情境 | 邊界澄清 |
-| 規則 | `feedback_git_index_lock_prevention.md` 維持原規則；本 PC 補充「GUI app」為另一合法來源 | 並陳 |
+| 規則 | `bash-tool-usage-rules.md` 規則三維持「禁止串接」；本 PC 處理「乖乖拆分後仍失敗」剩餘情境，補充「GUI app」為另一合法來源 | 邊界澄清 |
 | 工具 | 強化 hook 訊息加入「若已拆分仍失敗，檢查外部 git GUI app fork process」（待 W17-194 落地） | 建議實施（W17-194） |
 
 ---
@@ -103,7 +101,7 @@ PM 行為（誤判）：
 依序判別來源：
 
 - [ ] 本次 Bash 呼叫是否含 `git ... && git ...`（多 git 寫入串接）？
-  - [ ] 是 → 拆分為獨立 Bash 呼叫（PC 規則三 / feedback_git_index_lock_prevention.md）
+  - [ ] 是 → 拆分為獨立 Bash 呼叫（PC 規則三）
   - [ ] 否 → 進入下一檢查
 - [ ] `ps aux | grep -iE "fork|gitkraken|sourcetree|tower" | grep -v grep` 是否見外部 git GUI app？
   - [ ] 是 → `rm .git/index.lock` 安全動作；GUI 自動重試或 detect
@@ -127,12 +125,10 @@ PM 行為（誤判）：
 ## 相關文件
 
 - `.claude/rules/core/bash-tool-usage-rules.md` — 規則三「禁止串接多個 git 寫入操作」（hook/Bash 來源）
-- `feedback_git_index_lock_prevention.md`（memory）— PC-139 升級前的原規則描述
-- `feedback_git_index_lock_external_app.md`（memory）— PC-139 直接來源觀察
 - W17-194（pending）— 強化 hook 訊息加入 GUI app 外部進程偵測
 
 ---
 
 **Last Updated**: 2026-05-11
-**Version**: 1.0.0 — 首發記錄（W17-193 升級 memory feedback 為 framework error-pattern）
-**Source**: memory `feedback_git_index_lock_external_app.md` 累積觀察；既有規則僅涵蓋 hook/Bash 串接情境，外部 GUI app fork 屬未列出合法來源
+**Version**: 1.0.0 — 首發記錄（升級累積觀察為 framework error-pattern）
+**Source**: 累積觀察；既有規則僅涵蓋 hook/Bash 串接情境，外部 GUI app fork 屬未列出合法來源

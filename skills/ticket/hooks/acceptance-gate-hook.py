@@ -194,12 +194,28 @@ CHAINED_WRITE_INFO_NOTE = (
 # 命令識別
 # ============================================================================
 
+def _strip_quoted_spans(command: str) -> str:
+    """移除命令字串中單/雙引號包住的內容（0.2.1-W3-020）。
+
+    `ticket track create` 常帶 `--why "..."` 等長文字參數，內容可能引用
+    「ticket track complete」字面（例如描述本 Hook 行為的 why 文字）。
+    is_complete_command 若直接對整串命令做子字串比對，會把這段引號內文字
+    誤判為真正的 complete 呼叫，導致 create 命令被連帶擋下，形成死鎖
+    （PM 於 0.2.1-W3-016 / 0.2.1-W3-019 兩度實證）。
+
+    移除引號內容後再比對，可保留「真正的 complete 呼叫」偵測能力
+    （不在引號內，仍會被找到），只排除引號內的字面引用。
+    """
+    return re.sub(r'"[^"]*"|\'[^\']*\'', "", command)
+
+
 def extract_ticket_id_from_command(command: str, logger) -> Optional[str]:
     """從命令中提取 Ticket ID"""
-    if "ticket track complete" not in command and "ticket track batch-complete" not in command:
+    stripped = _strip_quoted_spans(command)
+    if "ticket track complete" not in stripped and "ticket track batch-complete" not in stripped:
         return None
 
-    match = re.search(TICKET_ID_PATTERN, command)
+    match = re.search(TICKET_ID_PATTERN, stripped)
     if match:
         ticket_id = match.group(0)
         logger.info(f"從命令中提取 Ticket ID: {ticket_id}")
@@ -210,8 +226,12 @@ def extract_ticket_id_from_command(command: str, logger) -> Optional[str]:
 
 
 def is_complete_command(command: str) -> bool:
-    """判斷是否為 ticket track complete 命令"""
-    return "ticket track complete" in command or "ticket track batch-complete" in command
+    """判斷是否為 ticket track complete 命令
+
+    引號內文字（如 --why 參數的字面引用）不列入判斷，見 _strip_quoted_spans。
+    """
+    stripped = _strip_quoted_spans(command)
+    return "ticket track complete" in stripped or "ticket track batch-complete" in stripped
 
 
 # 0.4.1-W2-006：complete 前段串接後可能改變驗收狀態的寫入操作。
@@ -745,26 +765,32 @@ def main() -> int:
         # 步驟 1: 解析驗證輸入
         input_data = read_json_from_stdin(logger)
 
-        # Effort 感知（v2.1.133+，W14-034）：low effort 短路放行
-        effort = get_effort_level(input_data)
-        if effort == "low":
-            logger.info("effort=low，acceptance-gate 短路放行")
-            _output_allow_json()
-            return EXIT_SUCCESS
-        logger.info("effort=%s，執行完整 acceptance 驗證", effort)
-
         # 降級 fast-path（W10-047.1）：
         # ANA W10-035.3 觀察 3d 觸發 1667 次僅 36 Action（2.2%）。
         # 在執行 subagent 偵測 / 完整輸入驗證 / Ticket 提取 / 驗收檢查等
         # 重操作前，先以最低成本判斷命令是否為 ticket track complete；
         # 不是即直接放行，避免每次 Bash 命令都跑完整流程。
+        # 此判斷必須先於 effort 短路（0.2.1-W3-018）：effort=low 不可豁免
+        # complete 命令的驗收檢查，否則 acceptance-gate 形同虛設
+        # （0.2.1-W3-014 實證：非法 multi_view_status 值藉此成功 complete）。
+        _fp_is_complete = False
         if input_data is not None:
             _fp_tool_input = input_data.get("tool_input") or {}
             _fp_command = _fp_tool_input.get("command", "") if isinstance(_fp_tool_input, dict) else ""
-            if input_data.get("tool_name") != "Bash" or not is_complete_command(_fp_command):
+            _fp_is_complete = (
+                input_data.get("tool_name") == "Bash" and is_complete_command(_fp_command)
+            )
+            if not _fp_is_complete:
                 logger.debug("Fast-path skip: 非 ticket track complete 命令")
                 _output_allow_json()
                 return EXIT_SUCCESS
+
+        # Effort 感知（v2.1.133+，W14-034）：僅記錄 effort 供除錯，
+        # 不再作為短路放行條件（0.2.1-W3-018）。此處已確定為
+        # ticket track complete 命令（上方 fast-path 保證），故一律
+        # 執行完整驗收檢查，effort=low 不豁免。
+        effort = get_effort_level(input_data)
+        logger.info("effort=%s，命令為 complete，執行完整 acceptance 驗證", effort)
 
         if is_subagent_environment(input_data):
             logger.info("偵測到 subagent 環境（agent_id=%s），跳過 AskUserQuestion 提醒", input_data.get("agent_id"))

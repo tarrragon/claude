@@ -82,7 +82,6 @@ parallel-evaluation 產出報告後，若結論含以下任一特徵，**強制�
 
 - PC-054: 分析視角錨定在防禦性限制而非品質目標 — 同屬 PM 分析決策偏誤
 - PC-051: 過早宣稱不可能 — 權威偏誤的近親（未檢驗替代方案）
-- feedback_wrap_mandatory_for_analysis (memory) — ANA/Debug/提案必須主動用 WRAP
 
 ## 來源案例
 

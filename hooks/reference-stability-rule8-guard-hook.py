@@ -7,7 +7,9 @@
 
 偵測 `.claude/` 框架檔案寫入內容中殘留的專案層級識別符（ticket ID），
 落實 reference-stability 規則 8（框架文件禁止引用專案層級識別符）
-的 hook 強制層。目前僅 WARNING（不硬擋），供觀察誤報率後續評估是否升級。
+的 hook 強制層。依「引用性質判準」（同檔規則 8 §引用性質判準）區分
+依賴型（dependency_ref，同行含跳轉引導詞）與歷史錨點型（不報或僅
+debug 記錄），僅對依賴型觸發 WARNING，降低對合法歷史標注的誤報。
 
 觸發時機: PreToolUse Edit / Write / MultiEdit
 掃描範圍: 目標檔案路徑位於 `.claude/` 下，且不在 `.claude/handoff/archive/`
@@ -19,10 +21,24 @@
   - 框架 error-pattern ID（PC-xxx / IMP-xxx / ARCH-xxx）與其檔名
   - 日期字串（YYYY-MM-DD）
   - Claude Code 版本號（CC 開頭 + 版本數字）
-行為: 命中且非例外 → WARNING（stderr + 日誌），exit 0（允許，不阻擋）
-      未命中 / 非掃描範圍 / 輸入異常 → 靜默放行
+  - code fence（```...```）內的內容（格式示範，非實際引用）
+引用性質判準（依 reference-stability-rules.md 移除測試操作化）:
+  - 依賴型（dependency_ref）：ticket ID 前 15 字元鄰近視窗內含跳轉引導詞
+    （詳見/參見/參閱/參考/依據/根據/來源是/相關文件）→ 觸發 WARNING
+  - 歷史錨點型（historical_anchor）：其餘情形（含括號時點標注、
+    frontmatter 欄位值、表格列舉、遠距離引導詞等裸引用，如
+    「（W9-999 教訓）」「source_ticket: 9.9.9-W9-999」）→ 不觸發 WARNING，
+    僅記錄 debug 日誌供觀察
+  實測（0.2.1-W3-057，全框架 9771 處候選）：依賴型 136 處（1.39%），
+  對齊 0.2.1-W3-056 基線（10638 處候選中 133 處，1.25%）；抽樣檢視
+  皆為真依賴（如「根據 W1-017 重構」「設計依據（1.0.0-W1-056...）」）
+行為: 依賴型命中 → WARNING（stderr + 日誌），exit 0（允許，不阻擋，
+      待觀察一段時間後再評估是否升級為阻擋）
+      歷史錨點型 / 未命中 / 非掃描範圍 / 輸入異常 → 靜默放行（歷史錨點型
+      額外寫入 debug 日誌）
 
 對應規則：.claude/references/reference-stability-rules.md 規則 8
+及其「引用性質判準」章節（依賴型 vs 歷史錨點型）
 """
 
 from __future__ import annotations
@@ -56,6 +72,14 @@ BARE_TICKET_PATTERN = re.compile(r"\bW\d+-\d+\b")
 FRAMEWORK_ERROR_PATTERN_ID = re.compile(r"\b(?:PC|IMP|ARCH)-\d+\b")
 DATE_PATTERN = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 CC_VERSION_PATTERN = re.compile(r"\bCC\s+\d+\.\d+(?:\.\d+)?\b")
+
+# Code fence（```...```，含語言標記行）：格式示範內容不視為實際引用
+CODE_FENCE_PATTERN = re.compile(r"```.*?```", re.DOTALL)
+
+# 引用性質判準（reference-stability-rules.md 規則 8 §引用性質判準）
+# 依賴型跳轉引導詞：同行與 ticket ID 並存 → 建立跳轉依賴
+# 刻意不含裸「依」「見」單字（過度常見，如「依規」「意見」會誤增依賴型誤判）
+JUMP_WORD_PATTERN = re.compile(r"詳見|參見|參閱|參考|依據|根據|來源是|相關文件")
 
 
 def is_scanned_path(file_path: str) -> bool:
@@ -110,11 +134,16 @@ def _strip_exempt_spans(text: str) -> str:
     return text
 
 
+def _strip_code_fences(text: str) -> str:
+    """挖除 code fence（```...```）區塊，格式示範內容不視為實際引用。"""
+    return CODE_FENCE_PATTERN.sub(" ", text)
+
+
 def find_ticket_id_hits(text: str) -> List[str]:
-    """在文字中找出專案 ticket ID 命中（已排除放行例外），去重保序。"""
+    """在文字中找出專案 ticket ID 命中（已排除放行例外與 code fence），去重保序。"""
     if not text:
         return []
-    cleaned = _strip_exempt_spans(text)
+    cleaned = _strip_exempt_spans(_strip_code_fences(text))
 
     hits: List[str] = []
     seen = set()
@@ -127,17 +156,77 @@ def find_ticket_id_hits(text: str) -> List[str]:
     return hits
 
 
+# 跳轉引導詞與 ticket ID 之間的最大容許字元距離（同行內）。
+# Why：長段落中引導詞與 ticket ID 可能相距甚遠且語意無關（如「...的判斷依據。
+# 需事後補 domain map（實證：W2-014 於實作前補建）」——「依據」是段落前段
+# 泛用名詞，與段落末的 ticket ID 引用無關）。窄化為鄰近視窗才能捕捉「引導詞
+# 直接導向該 ticket ID」的真實依賴語意，避免長段落遠距離詞彙誤觸發。
+JUMP_WORD_PROXIMITY_WINDOW = 15
+
+
+def classify_hit_nature(line: str, match_start: int) -> str:
+    """對單一 ticket ID 命中分類：dependency_ref / historical_anchor。
+
+    判準來源：.claude/references/reference-stability-rules.md 規則 8
+    §引用性質判準（移除測試操作化）。
+
+    - ticket ID 起始位置前 JUMP_WORD_PROXIMITY_WINDOW 字元內含跳轉引導詞
+      （詳見/參見/參閱/參考/依據/根據/來源是/相關文件）→ dependency_ref
+      （建立跳轉依賴，禁止）
+    - 其餘（含括號時點標注、frontmatter 欄位值、表格列舉、遠距離引導詞等
+      裸引用）→ historical_anchor（不建立跳轉依賴，允許）
+
+    Why 預設落在 historical_anchor 而非保守回報依賴型：
+    0.2.1-W3-056 對全框架 10638 處候選的實測顯示僅 133 處（1.3%）具
+    dependency_ref 形態；若對「無鄰近引導詞裸引用」預設回報依賴型，實測
+    命中率會暴衝至數千處，與既有基線嚴重不符——多數裸引用是 frontmatter
+    `source_ticket` 欄、表格列舉範例等既有判準下合法的用法，非真正跳轉
+    依賴。故僅在鄰近視窗內存在明確跳轉引導詞才判定為依賴型。
+    """
+    window_start = max(0, match_start - JUMP_WORD_PROXIMITY_WINDOW)
+    window = line[window_start:match_start]
+    if JUMP_WORD_PATTERN.search(window):
+        return "dependency_ref"
+    return "historical_anchor"
+
+
+def find_dependency_ref_hits(text: str) -> List[str]:
+    """在文字中找出屬「依賴型」的專案 ticket ID 命中（逐 hit 鄰近視窗分類），去重保序。
+
+    歷史錨點型命中不計入回傳，僅供呼叫端額外記錄 debug 日誌。
+    """
+    if not text:
+        return []
+    cleaned = _strip_exempt_spans(_strip_code_fences(text))
+
+    hits: List[str] = []
+    seen = set()
+    for line in cleaned.splitlines():
+        for pattern in (VERSIONED_TICKET_PATTERN, BARE_TICKET_PATTERN):
+            for match in pattern.finditer(line):
+                value = match.group(0)
+                if value in seen:
+                    continue
+                if classify_hit_nature(line, match.start()) != "dependency_ref":
+                    continue
+                seen.add(value)
+                hits.append(value)
+    return hits
+
+
 def build_warning_message(file_path: str, hits: List[str]) -> str:
     """組合 WARNING 訊息：命中清單 + 規則出處 + 抽象化建議。"""
     hits_display = "、".join(hits)
     return (
         f"[WARNING][reference-stability-rule8] 偵測到 .claude/ 框架檔案寫入內容"
-        f"疑似含專案層級識別符：{file_path}\n"
+        f"疑似含專案層級依賴型引用（dependency_ref）：{file_path}\n"
         f"命中：{hits_display}\n"
         f"依據：.claude/references/reference-stability-rules.md 規則 8"
         f"（框架文件禁止引用專案層級識別符，跨專案 sync 後會變成死連結）。\n"
         f"建議：改用抽象原則描述（如「防範 Hook error 干擾代理人判斷」），"
         f"或改引用框架內部識別符（PC-xxx / IMP-xxx / ARCH-xxx / 檔案路徑）。\n"
+        f"若此引用僅為時點標注（歷史錨點型，如「（W9-999 教訓）」），"
+        f"可忽略本提示；若為跳轉依賴（詳見/參考等），請依上述建議修正。\n"
         f"本提示僅 WARNING，不阻擋本次操作。"
     )
 
@@ -170,20 +259,33 @@ def main() -> int:
 
     all_hits: List[str] = []
     seen = set()
+    all_anchor_hits: List[str] = []
+    seen_anchor = set()
     for text in texts:
-        for hit in find_ticket_id_hits(text):
+        for hit in find_dependency_ref_hits(text):
             if hit not in seen:
                 seen.add(hit)
                 all_hits.append(hit)
+        # 全量命中（不分類）減去依賴型命中 = 歷史錨點型命中，供 debug 觀察
+        for hit in find_ticket_id_hits(text):
+            if hit not in seen and hit not in seen_anchor:
+                seen_anchor.add(hit)
+                all_anchor_hits.append(hit)
+
+    if all_anchor_hits:
+        logger.debug(
+            f"偵測到歷史錨點型 ticket ID（不觸發 WARNING）："
+            f"file={file_path} tool={tool_name} hits={all_anchor_hits}"
+        )
 
     if not all_hits:
-        logger.debug(f"未偵測到專案 ticket ID：{file_path}")
+        logger.debug(f"未偵測到依賴型專案 ticket ID：{file_path}")
         return EXIT_ALLOW
 
     message = build_warning_message(file_path, all_hits)
     sys.stderr.write(message + "\n")
     logger.warning(
-        f"偵測到專案 ticket ID：file={file_path} tool={tool_name} hits={all_hits}"
+        f"偵測到依賴型專案 ticket ID：file={file_path} tool={tool_name} hits={all_hits}"
     )
     return EXIT_ALLOW
 
@@ -232,6 +334,44 @@ if __name__ == "__main__":
             failures.append("[FAIL] docs/ 不應在掃描範圍")
         else:
             print("[PASS] docs/ 不在掃描範圍")
+
+        # 引用性質判準測試：依賴型應觸發 WARNING，歷史錨點型不應
+        dependency_cases = [
+            "詳見 W15-005 WRAP 方案 F 的完整說明。",
+            "參考 9.9.9-W9-999 的分析結論做決策。",
+            "相關文件：W10-011（擴充註解規則）。",
+        ]
+        anchor_cases = [
+            "此防護源於某次崩潰事件（W9-999 教訓）。",
+            "Version: 1.5.1 — 規則 6「以價值優先」加入（W9-999）。",
+            "本段落內容未經任何括號包裝，裸引用 W9-999。",
+            "source_ticket: 0.2.1-W3-056",
+            # 遠距離引導詞（超出鄰近視窗）不應觸發依賴型判定（W3-057 修正案例）
+            "跳過本步驟後測試設計無清楚可依據。這段填充文字用來拉開距離讓引導詞"
+            "遠離後方的識別符標注（實證：W9-999 於實作前補建）。",
+        ]
+
+        for case in dependency_cases:
+            hits = find_dependency_ref_hits(case)
+            if not hits:
+                failures.append(f"[FAIL] 依賴型未被分類為 dependency_ref: {case!r}")
+            else:
+                print(f"[PASS] 依賴型正確分類 {hits}: {case!r}")
+
+        for case in anchor_cases:
+            hits = find_dependency_ref_hits(case)
+            if hits:
+                failures.append(f"[FAIL] 歷史錨點型誤判為 dependency_ref {hits}: {case!r}")
+            else:
+                print(f"[PASS] 歷史錨點型正確排除: {case!r}")
+
+        # code fence 內容不應被視為實際引用
+        fence_case = "說明如下：\n```\n詳見 W9-999 的分析結論\n```\n本行本身無引用。"
+        fence_hits = find_dependency_ref_hits(fence_case)
+        if fence_hits:
+            failures.append(f"[FAIL] code fence 內容誤判為引用 {fence_hits}: {fence_case!r}")
+        else:
+            print("[PASS] code fence 內容已正確排除")
 
         if failures:
             print("\n".join(failures))

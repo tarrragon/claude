@@ -86,7 +86,7 @@ deny 訊息為標準 CC 模板「Permission to use Edit has been denied. IMPORTA
 ### 歷史軌跡
 
 - 2026-04-13 ARCH-015 原結論：「.claude/ 一律被擋」
-- 2026-04-18 重驗（v2.1.114）：「主 repo 樹內 .claude/ 可寫」（feedback_arch015_boundary_refinement）
+- 2026-04-18 重驗（v2.1.114）：「主 repo 樹內 .claude/ 可寫」
 - 2026-05-02 19:33 W17-097.1-.4（v2.1.126）：4 並行 thyme 全 deny（PM 該 session 從未 Edit `.claude/`）
 - 2026-05-02 20:21 W17-099 重測（同 session 50 分鐘後）：1 個 thyme 成功 Edit + revert（PM 該 session 已多次 Edit `.claude/`）
 - 2026-05-02 20:35-20:55 E1/E2/Test G 三組對照實驗，五輪結果與 Hypothesis K 全相符
@@ -192,7 +192,6 @@ W17-110 ANA 規劃 4 子實驗按 ROI 順序執行，全部 success，結論收�
 | 派發策略 | subagent 對主 repo 樹內 `.claude/` Edit **可預期 success**（W17-099 / 100 / 101 / 102 / 108 / 109 共 9 次連續 success）。例外只剩 W17-097.1-.4 那 4 次未解 deny |
 | 失敗回應 | 若實際遭遇 deny（罕見），PM 立即接手 Edit 即可——同時修復本任務 + 為記錄收集資料 |
 | 暖機建議 | **撤回**（Phase A 已否證需要暖機） |
-| 記憶更新 | feedback_arch015_boundary_refinement.md 同步否證結論 |
 
 ## 觸發案例
 

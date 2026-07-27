@@ -8,7 +8,9 @@ B.1-B.3 / 適用判準節兩旗標非空）。非 data-contract 文件明確路�
 import argparse
 import re
 import sys
+from pathlib import Path
 
+from doc_system.commands.create import DOC_TYPE_CONFIG, _get_templates_dir
 from doc_system.core.file_locator import FileLocator
 from doc_system.core.frontmatter_parser import parse_frontmatter
 
@@ -156,5 +158,112 @@ def execute(args: argparse.Namespace) -> None:
 
     print(f"驗證失敗: {doc_id} 缺少以下項目")
     for item in missing:
+        print(f"  - {item}")
+    sys.exit(1)
+
+
+def _unique_prefix_targets() -> list[tuple[str, str]]:
+    """從 DOC_TYPE_CONFIG 取出去重後的 (target_dir, id_prefix) 組合。
+
+    多個 doc type 可能共用同一 target_dir + id_prefix（如 spec 與
+    data-contract 皆為 docs/spec + SPEC），去重避免重複掃描同一檔案。
+    """
+    seen: set[tuple[str, str]] = set()
+    for config in DOC_TYPE_CONFIG.values():
+        seen.add((config["target_dir"], config["id_prefix"]))
+    return sorted(seen)
+
+
+def _fixed_name_exemptions() -> set[str]:
+    """回傳框架約定的固定命名文件檔名清單（豁免檔名慣例檢查）。
+
+    來源與 `templates/` 下的 `*-spec-template.md` 命名對應，而非另手維護
+    獨立名單——獨立名單會重演配號器 allowlist 判準與成員脫節問題
+    （見 ARCH-BAL-003）。命名規則：模板檔 `{name}-template.md` 對應的
+    固定命名文件即為 `{name}.md`（如 `component-library-spec-template.md`
+    -> `component-library-spec.md`）。
+
+    這類文件由 doc SKILL.md 明文指示以 `cp` 建立（非透過 `doc create`
+    配號流程），且被其他 SKILL.md（如 version-bootstrap）直接以固定路徑
+    引用，因此刻意不進 `{PREFIX}-{數字}` 編號空間。
+    """
+    templates_dir = _get_templates_dir()
+    if not templates_dir.is_dir():
+        return set()
+
+    exemptions = set()
+    for template_file in templates_dir.glob("*-spec-template.md"):
+        fixed_name = template_file.name.removesuffix("-template.md") + ".md"
+        exemptions.add(fixed_name)
+    return exemptions
+
+
+def _check_filename_conventions(project_root: Path) -> tuple[list[str], list[str]]:
+    """掃描各 doc type 目錄，回傳 (違規訊息清單, 已豁免檔案清單)。
+
+    配號器 `_next_id`（create.py）僅辨識以 `{PREFIX}-{數字}` 開頭的檔名，
+    不符此慣例的檔案對配號器隱形，會導致號碼重複配發（book W11-004）。
+    本檢查讓這類檔案顯性化：
+    - 檔名不符 `^{PREFIX}-\\d+` 前綴 -> 配號器盲區（框架約定固定命名文件除外）
+    - 檔名前綴 ID 與 frontmatter id 不一致 -> 潛在誤植
+
+    豁免項不可靜默略過（本命令存在的理由正是防止靜默盲區），故以第二個
+    回傳值顯性回報，由呼叫端以 INFO 級列出。
+    """
+    violations: list[str] = []
+    exempted: list[str] = []
+    fixed_name_exemptions = _fixed_name_exemptions()
+
+    for target_dir_rel, prefix in _unique_prefix_targets():
+        target_dir = Path(project_root) / target_dir_rel
+        if not target_dir.exists():
+            continue
+
+        pattern = re.compile(rf"^{prefix}-(\d+)", re.IGNORECASE)
+        for item in sorted(target_dir.rglob("*.md")):
+            if item.name.endswith("-template.md"):
+                continue
+
+            match = pattern.match(item.stem)
+            if match is None:
+                if item.name in fixed_name_exemptions:
+                    exempted.append(str(item))
+                    continue
+                violations.append(
+                    f"檔名不符慣例（配號器盲區）: {item} "
+                    f"（應以 {prefix}-數字 開頭）"
+                )
+                continue
+
+            frontmatter = parse_frontmatter(str(item))
+            if frontmatter is None:
+                continue
+            frontmatter_id = frontmatter.get("id")
+            filename_id = f"{prefix}-{match.group(1)}"
+            if frontmatter_id and str(frontmatter_id) != filename_id:
+                violations.append(
+                    f"frontmatter id 與檔名不一致: {item} "
+                    f"（檔名={filename_id}, frontmatter.id={frontmatter_id}）"
+                )
+
+    return violations, exempted
+
+
+def execute_filenames(args: argparse.Namespace) -> None:
+    """掃描 doc type 目錄，驗證檔名慣例與 frontmatter id 一致性。"""
+    project_root = FileLocator.get_project_root()
+    violations, exempted = _check_filename_conventions(project_root)
+
+    if exempted:
+        print(f"INFO: 已豁免 {len(exempted)} 項（框架約定固定命名文件）")
+        for item in exempted:
+            print(f"  - {item}")
+
+    if not violations:
+        print("通過: 所有文件檔名符合配號器慣例")
+        sys.exit(0)
+
+    print("驗證失敗: 發現檔名慣例違規")
+    for item in violations:
         print(f"  - {item}")
     sys.exit(1)

@@ -17,10 +17,7 @@ model: haiku
 | 原功能 | 新位置 |
 |--------|--------|
 | Session 學習沉澱 | continuous-learning（自動 Stop hook） |
-| 原子化記憶建立 | continuous-learning > Memory Capture |
-| 記憶格式規範 | continuous-learning/references/memory-capture-guide.md |
-| 記憶類型定義 | continuous-learning/references/memory-capture-guide.md |
-| 連結策略 | continuous-learning/references/memory-capture-guide.md |
+| 原子化記憶建立 | continuous-learning > Knowledge Capture |
 
 **保留此檔案的原因**：多處歷史文件引用 memory-network-builder，保留 deprecated 標記確保引用可追溯。
 

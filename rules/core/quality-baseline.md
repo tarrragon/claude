@@ -61,11 +61,11 @@
 
 | 場景 | 禁止行為 | 鼓勵行為 |
 |------|---------|---------|
-| 派發越界或職責違反（流程瑕疵） | 自動中止並丟棄既成工作（產出無害時） | 工作品質可用則保留，教訓建 ANA + memory |
+| 派發越界或職責違反（流程瑕疵） | 自動中止並丟棄既成工作（產出無害時） | 工作品質可用則保留，教訓建 ANA + error-pattern |
 | 設計錯誤被多視角審查發現 | 歸咎個案、不系統性追蹤 | 升級為 error-pattern 或 methodology |
 | 決策失誤事後回顧 | 以「避免犯錯」為由過度保守 | 在相關規則加註觸發案例 |
 
-**豁免邊界**：產出本身有害（資料損壞、架構違規、測試紅燈）時走規則 3 或 skip-gate。**落地通道**：規則 5（ANA/IMP Ticket）+ memory feedback 雙通道；必要時升級為 framework 規則。**error-pattern 記錄授權**：判斷某事件/模式屬跨專案可重現的結構性錯誤（替換專案名稱和檔案路徑後仍有意義）時，直接執行 `/error-pattern add` 記錄到 `.claude/error-patterns/`，不需詢問用戶確認——與規則 5「發現即建立，不詢問確認」同精神，載體從 ticket 擴展到 error-pattern。
+**豁免邊界**：產出本身有害（資料損壞、架構違規、測試紅燈）時走規則 3 或 skip-gate。**落地通道**：規則 5（ANA/IMP Ticket）+ 依捕獲時分流判準落地（框架相關進 error-patterns／規則／方法論／references；專案相關進 docs／CLAUDE.md；兩者皆非則不記錄，完整判準見 `.claude/pm-rules/pm-quality-baseline.md` 規則 7）；必要時升級為 framework 規則。**error-pattern 記錄授權**：判斷某事件/模式屬跨專案可重現的結構性錯誤（替換專案名稱和檔案路徑後仍有意義）時，直接執行 `/error-pattern add` 記錄到 `.claude/error-patterns/`，不需詢問用戶確認——與規則 5「發現即建立，不詢問確認」同精神，載體從 ticket 擴展到 error-pattern。
 
 ## 品質檢查清單
 
@@ -92,5 +92,6 @@
 - `.claude/pm-rules/ticket-body-schema.md` - 規則 5 ANA spawn 落地確認
 
 ---
-**Last Updated**: 2026-07-05 | **Version**: 3.1.0 — 品質檢查清單鏡像項「寫 feedback memory 四問升級檢查」更新為「捕獲時分流判準」（pm-quality-baseline 規則 7 語意前移的鏡像同步，該規則明文要求）。
+**Last Updated**: 2026-07-27 | **Version**: 3.2.0 — 規則 6 落地通道由「memory feedback 雙通道」改為捕獲時分流（框架相關進 error-patterns／規則／方法論／references；專案相關進 docs／CLAUDE.md；兩者皆非不記錄）；教訓落地載體由「ANA + memory」改為「ANA + error-pattern」。memory 不再列為合法目的地，判準權威來源見 `pm-quality-baseline.md` 規則 7（0.2.1-W3-083，承接 0.2.1-W3-082 用戶裁示）。
+**Version**: 3.1.0 — 品質檢查清單鏡像項「寫 feedback memory 四問升級檢查」更新為「捕獲時分流判準」（pm-quality-baseline 規則 7 語意前移的鏡像同步，該規則明文要求）。
 **Version**: 3.0.0 — token 收斂：規則 1 兩個邊界段保留主張句 + PC 路由（事件鏈敘事移至 PC-165/168）；規則 4 IMP-013 except 要求濃縮保留；規則 5 ANA spawn 章濃縮為情境動作表 + 路由 ticket-body-schema/acceptance-gate-hook。規則編號與名稱不變（hooks 引用錨點）（1.0.0-W7-004.3）。歷史 2.0–2.5.x 版見 git log。

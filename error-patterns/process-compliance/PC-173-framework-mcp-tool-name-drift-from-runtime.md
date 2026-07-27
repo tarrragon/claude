@@ -19,7 +19,7 @@
 | 工具命名 | server 改用 `<prefix>_<verb>` 命名 | `callers` → `codegraph_get_callers`、`search_node` → `codegraph_symbol_search` |
 | server 前綴 | 安裝方式決定 server id | user-level=`mcp__serena__` / plugin marketplace=`mcp__plugin_<name>_serena__` |
 
-框架文件是靜態快照，MCP 實機暴露是動態 runtime；兩者無自動同步機制，必然累積漂移。延續 PC-172 / [[feedback_wrapper_arg_injection_diagnostic]] 的核心：靜態文件 / wrapper `--help` / init hook 提示不等於 runtime 真實暴露。
+框架文件是靜態快照，MCP 實機暴露是動態 runtime；兩者無自動同步機制，必然累積漂移。延續 PC-172 的核心：靜態文件 / wrapper `--help` / init hook 提示不等於 runtime 真實暴露。
 
 ## 案例：codegraph_status 引發的三檔漂移盤點（2026-06-04）
 
@@ -68,7 +68,6 @@ bash `grep` / `rg` 輸出會把「實際可呼叫的 MCP 工具名」替換為 `
 | PC-172（wrapper 參數推斷未經 runtime 驗證） | 同源——靜態介面（help / 文件）不等於 runtime 真實行為 |
 | PC-159（安裝指令 fresh shell 驗證） | 同源——靜態推斷不足採信，需實機驗證 |
 | quality-baseline.md「測試綠燈不等於 Runtime 正確」 | 本 PC 是其在「文件 MCP 引用」面向的延伸 |
-| memory `feedback_mcp_tool_name_drift_in_framework` | 本 PC 的跨對話記憶對應（雙通道記錄） |
 
 ## 案例文件來源
 

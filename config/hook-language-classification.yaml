@@ -16,7 +16,6 @@
 hooks:
   # --- Flutter 特定（非 Flutter 專案應停用） ---
   test-timeout-pre.py: flutter
-  test-timeout-post.py: flutter
   pre-test-hook.py: flutter
   mcp-run-tests-validator.py: flutter
   l10n-sync-verification-hook.py: flutter

@@ -4,7 +4,7 @@ title: 框架文件引用專案 ticket ID 造成跨專案 sync 誤導
 category: documentation
 severity: medium
 first_seen: "2026-04-13"
-occurrences: 1
+occurrences: 6
 status: active
 related:
   - DOC-005
@@ -45,6 +45,7 @@ Auto-memory 位於 `~/.claude/projects/<project>/memory/`，**依專案隔離儲
 ### 規則（已寫入框架）
 
 - `.claude/references/reference-stability-rules.md` 規則 8：框架文件禁止引用專案層級識別符
+- `.claude/agents/AGENT_PRELOAD.md` 規則 12：規則 8 的預設載入層落地（2026-07-27）。前五次觸發後的處置僅停留於按需讀取層，代理人改框架檔案時不會讀到；規則 12 把「依賴型 / 歷史錨點型 / 功能字串」三分判準搬進每次派發都會注入的層級，取代 PM 逐次 prompt 加註的補丁模式。判準精度與規則 8 一致，不是「禁止任何 ticket ID」的一刀切版本。
 
 ### PM / 代理人自檢清單
 
@@ -96,6 +97,17 @@ Auto-memory 位於 `~/.claude/projects/<project>/memory/`，**依專案隔離儲
 | 2026-05-11 | 縮減 CLAUDE.md 時將專案規範（含 `src/core/errors/` 路徑、產品名稱）誤外移到 `.claude/references/project-specific-conventions.md`，並將含產品名稱的 Chrome Extension 速查放在 `.claude/references/chrome-extension-quickref.md`；後修正：強違反檔遷移至 `docs/project-conventions.md`、弱違反檔泛化保留並引用「CLAUDE.md 章節外移決策樹」 | 2 檔案違反規則 8（強 + 弱各 1） <!-- broken-link-exempt: documented-error --> |
 | 2026-05-12 | W10-080 grep 全掃描發現 3 個既有強違反檔（W10-077.1 前已存在）；W10-102 採同模式處理：`.claude/eslint-error-handling-rules.md`（含 `src/core/errors/` 多處）遷移至 `docs/`；`.claude/code-quality-examples.md`（含 `src/extractors/readmoo/services/`、`ReadmooCatalogService` 等）遷移至 `docs/`；`.claude/chrome-extension-specs.md`（含 `src/background/` 與 Readmoo 產品名稱）內容已被 `chrome-extension-quickref.md` + `project-conventions.md` + `language-constraints.md` 全部覆蓋故直接刪除 | 3 檔案違反規則 8（2 強遷移 + 1 內容覆蓋刪除） <!-- broken-link-exempt: documented-error --> |
 | 2026-05-13 | 對前批 grep 同類發現的 7 個產品名稱候選檔執行「角色二分」評估：A 類（框架描述性質：通用 agent 中的「本專案」聲明、跨專案 data-miner agent 中的書城列舉）spawn 新 IMP 處理泛化；B 類（具體舉例性質：寫作教學 SKILL references 中的 dry-run 測試任務情境設定 / 業務情境驅動 Dart 註解正例 / business intent vs syntax translation 文件正例表格 / 測試過度驗證反例的 Widget Key 命名 / 模組組裝遺漏 5 Whys 真實事件分析鏈中的 storage key）加 HTML 豁免註解保留；確立原則「產品名稱出現 ≠ 實質違反，需依語意角色（框架描述 vs 具體舉例）二分」 | 7 檔評估：2 強違反 spawn IMP + 5 弱舉例加豁免註解 |
+| 2026-07-27 | 同一 session 內兩個不同代理人各自復發：DOC 代理人在 skill 正文寫「處置待 PM 決定，詳見本票 NeedsContext」；hook 代理人在 Python docstring 與測試 docstring 寫「獨立封閉方案見 {ticket-id}」。兩者皆為依賴型引用。PM 對第一次復發的處置是在下一次派發的 prompt 加註禁令，第二次復發發生在**未加註該禁令的另一條派發線**——證明 prompt 層補丁不會跨派發線傳遞 | 2 代理人 × 各 1-2 處，皆於驗收攔下 |
+
+## 為何反覆復發（2026-07-27 補充）
+
+前五次觸發案例的處置都是「發現後修正 + 加強規則文字」，但規則文字所在的 `.claude/references/reference-stability-rules.md` 屬**按需讀取層**。代理人被派去修改框架檔案時，除非 prompt 明確指示，否則不會讀到該檔。
+
+**結構性缺口**：本禁令未進入代理人的預設載入層（`.claude/agents/AGENT_PRELOAD.md`）。實測 grep 該檔對「規則 8」「reference-stability」「專案層級識別符」皆無命中。因此每個新派發的代理人都從零開始，違規率不會隨修正次數下降。
+
+**PM 的補丁模式也無效**：以個別 prompt 加註禁令只覆蓋該次派發，同 session 內另一條派發線仍會復發（見上表 2026-07-27 案例）。**Action**：禁令須進入 `AGENT_PRELOAD.md` 或 dispatch 模板等每次派發都會載入的層級，而非依賴 PM 逐次記得加註。
+
+**判準精度要求**：進入預設載入層的表述須含「依賴型 vs 設計脈絡型」二分（見 `reference-stability-rules.md`「引用性質判準」章），不可寫成「禁止任何 ticket ID」——後者會使代理人清掉合法的版本註腳與設計脈絡標注，與 comment-writing 方法論衝突。
 
 ## 檢測方式
 
@@ -113,7 +125,7 @@ grep -rnE '(?:^|[^-])W[0-9]+-[0-9]{3}(?:[^0-9]|$)' .claude/ \
 
 - **相關規則**: `.claude/references/reference-stability-rules.md` 規則 7（規格文件引用穩定性）、規則 8（框架文件禁引用專案識別符）
 - **相關模式**: DOC-005（跨文件原則不同步）
-- **相關 memory**: `feedback_framework_product_separation.md` 延伸
+- **載體註記**: 本框架已排除 Claude Code 原生 memory 作為知識載體（memory 存於使用者 home、不隨 `.claude/` sync）。下方「誤解 2」保留為歷史根因記錄；現行分流判準見 `.claude/pm-rules/pm-quality-baseline.md` 規則 7
 
 ---
 

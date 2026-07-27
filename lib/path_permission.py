@@ -39,6 +39,9 @@ ALLOWED_PATTERNS = [
     r"^\.claude/templates/.*",  # 通用模板檔案（W10-049.3 引用更新需求）
     r"^\.claude/lib/.*\.md$",  # lib 目錄的 md 文件（README 等；W10-049.1 引用更新需求；.py 仍由 BLOCKED_PATTERNS 阻擋）
     r"^\.claude/output-styles/.*",  # output-style 設計檔案：主線程可直接編輯（W10-050，PC-066 ARCH-018 教訓）
+    # config 目錄含 presence_profiles.py，為 3 個 hook 的 import 目標；
+    # 修改該檔後須跑 .claude/hooks/tests/test_presence_detection_hook.py
+    r"^\.claude/config/.*",  # 框架設定資料（0.2.1-W3-069）
     r"^docs/.*",
     r"^CLAUDE\.md$",
     r"^CHANGELOG\.md$",

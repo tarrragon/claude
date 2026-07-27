@@ -55,7 +55,6 @@
 ## 關聯
 
 - **相關模式**: PC-050（代理人完成誤判）
-- **相關記憶**: feedback_search_community_before_core_fix.md
 
 ---
 

@@ -218,7 +218,3 @@ PM 派發需要編輯的代理人前，確認：
 - "tool permission denied"
 
 → 立即檢查 `settings.local.json` 的 `permissions.allow` 是否包含該工具
-
-## 記錄於 Memory
-
-對應 memory 項目：`feedback_agent_tools_runtime_permission.md`

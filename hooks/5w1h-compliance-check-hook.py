@@ -576,12 +576,7 @@ def main() -> int:
             return 0
         logger.debug(f"接收到 Hook 輸入: {json.dumps(input_data, ensure_ascii=False, indent=2)}")
 
-        # Effort 感知（v2.1.133+，W14-036）：low effort 短路放行
         effort = get_effort_level(input_data)
-        if effort == "low":
-            logger.info("effort=low，5w1h-compliance-check 短路放行")
-            print(json.dumps({"decision": "allow", "reason": "effort=low 短路放行"}, ensure_ascii=False, indent=2))
-            return 0
         logger.info("effort=%s，執行完整 5W1H 驗證", effort)
 
         # 提取工具資訊
