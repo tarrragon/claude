@@ -1,3 +1,15 @@
+## [2.22.1] - 2026-07-29
+
+### Summary
+fix: clean 豁免清單依比對維度拆集合; docs: 收尾 並記錄 clean 豁免比對維度錯置
+
+Changes: 1 fix, 1 docs
+
+- fix: clean 豁免清單依比對維度拆集合
+- docs: 收尾 並記錄 clean 豁免比對維度錯置
+
+---
+
 ## [2.22.0] - 2026-07-29
 
 ### Summary

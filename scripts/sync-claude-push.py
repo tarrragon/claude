@@ -1077,7 +1077,19 @@ def check_no_change_early_exit(
     return False, diag
 
 
-_CLEAN_EXCLUDE = {".git", "CHANGELOG.md", "VERSION", "README.md", "LICENSE", ".gitignore"}
+# 任意深度豁免的目錄名：VCS 內部目錄出現在路徑任一層都不該被清理。
+_CLEAN_EXCLUDE_DIRS = {".git"}
+
+# 僅目標 repo 根目錄豁免的 metadata 檔名。
+#
+# 這些是 canonical repo 自身的 metadata：LICENSE 與 .gitignore 在本地 .claude/
+# 並不存在，全靠本豁免避免 clean 把它們當成「本地已刪除」而傳播刪除。
+#
+# 比對必須錨定根目錄（len(rel.parts) == 1）。改用檔名比對會豁免樹中每一個同名檔，
+# 而框架幾乎每個目錄都放 README.md 作入口說明，clean 因此結構性地無法完整刪除
+# 任何目錄——每次都留下一個孤兒 README（IMP-BAL-004）。巢狀同名檔屬框架內容，
+# 需要保留者走 sync-preserve.yaml 的 preserve 機制，不由本集合涵蓋。
+_CLEAN_EXCLUDE_ROOT_FILES = {"CHANGELOG.md", "VERSION", "README.md", "LICENSE", ".gitignore"}
 
 
 def _should_skip_clean_file(  # i18n-exempt
@@ -1087,9 +1099,9 @@ def _should_skip_clean_file(  # i18n-exempt
     skills_config: dict | None,
 ) -> bool:
     """clean_stale_files / detect_uncleaned_deletions shared filter."""
-    if any(part in _CLEAN_EXCLUDE for part in rel.parts):
+    if any(part in _CLEAN_EXCLUDE_DIRS for part in rel.parts):
         return True
-    if rel.name in _CLEAN_EXCLUDE:
+    if len(rel.parts) == 1 and rel.name in _CLEAN_EXCLUDE_ROOT_FILES:
         return True
     if should_exclude(rel):
         return True
@@ -1185,7 +1197,7 @@ def clean_stale_files(
     ):
         if not dir_path.is_dir():
             continue
-        if any(part in _CLEAN_EXCLUDE for part in dir_path.relative_to(temp_dir).parts):
+        if any(part in _CLEAN_EXCLUDE_DIRS for part in dir_path.relative_to(temp_dir).parts):
             continue
         try:
             if not any(dir_path.iterdir()):
