@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import filecmp
+import hashlib
 import os
 import shutil
 import json
@@ -25,6 +26,11 @@ EXCLUDE_DIRS = {
     "hook-logs",
 }
 
+# 標記檔存在即宣告該 skill 的本地內容為刻意客製，`pull`（全量）分歧檢查略過回報
+# （0.2.1-W3-124 acceptance 4 的宣告式 local override 決策：見 update_sync_manifest
+# 與 _classify_sync_status 的 docstring）。
+SKILL_SYNC_OVERRIDE_MARKER = ".skill-sync-override"
+
 
 def _should_exclude_file(rel_path: str) -> bool:
     """Check if a file path should be excluded (covers dir names, incl. nested hook-logs/)."""
@@ -39,20 +45,74 @@ def get_repo_url() -> str:
     return os.environ.get("SKILL_SYNC_REPO", DEFAULT_REPO)
 
 
-def update_versions_json(repo_dir: Path) -> None:
-    """掃描 repo 內所有 skill 的 SKILL.md 版本，更新 versions.json 並 push。"""
-    versions: dict[str, str] = {}
+def _extract_version_string(text: str) -> str | None:
+    """從 SKILL.md 文字擷取版本字串。
+
+    僅供人類於 changelog 對照閱讀，不進入同步決策（見 update_sync_manifest）。
+    """
+    m = re.search(r"\*\*Version\*\*:\s*(\S+)", text)
+    if not m:
+        m = re.search(r"^version:\s*(\S+)", text, re.MULTILINE)
+    return m.group(1) if m else None
+
+
+def compute_content_hash(skill_dir: Path) -> str | None:
+    """依檔案內容計算 skill 目錄的確定性雜湊，取代版本字串作為內容同一性判定依據。
+
+    對 (相對路徑, 檔案位元組) 依路徑排序後逐一雜湊，雜湊值只反映內容與檔案樹結構，
+    與 mtime、掃描順序、檔案系統無關：相同內容不論何處產生都得到相同雜湊，內容不同
+    則版本字串相同也得到不同雜湊。這修正的是版本字串同時被當內容同一性與演化祖先關係
+    使用、卻兩者都擔不起的機制缺陷（0.2.1-W3-124 §11.2：blog 與 canonical 的 2.5.0
+    號碼相同、內容不同，曾被判為 up_to_date）。回傳 None 表示目錄不存在。
+    """
+    if not skill_dir.is_dir():
+        return None
+
+    rel_paths: list[str] = []
+    for f in skill_dir.rglob("*"):
+        if not f.is_file():
+            continue
+        rel = str(f.relative_to(skill_dir))
+        if f.name == SKILL_SYNC_OVERRIDE_MARKER or _should_exclude_file(rel):
+            continue
+        rel_paths.append(rel)
+    rel_paths.sort()
+
+    hasher = hashlib.sha256()
+    for rel in rel_paths:
+        hasher.update(rel.encode("utf-8"))
+        hasher.update((skill_dir / rel).read_bytes())
+    return hasher.hexdigest()
+
+
+def _has_local_override(skill_dir: Path) -> bool:
+    """標記檔存在即宣告本地內容為刻意客製，`pull`（全量）分歧檢查略過此 skill。"""
+    return (skill_dir / SKILL_SYNC_OVERRIDE_MARKER).is_file()
+
+
+def update_sync_manifest(repo_dir: Path) -> None:
+    """掃描 repo 內所有 skill，寫入版本字串（人類可讀）與內容雜湊（同步判定用）至 versions.json。
+
+    版本字串不再進入同步決策：舊實作以版本字串相等判定內容同一性、以 semver 大小
+    判定覆蓋方向，但兩個獨立演化的分支可能巧合共用同一版本號卻內容不同，semver
+    比較亦預設線性演進，對分支式分歧失準（0.2.1-W3-124 §11.2）。版本字串保留於本檔
+    供人類於 changelog 對照，內容同一性判定改用 hash 欄位。
+    """
+    manifest: dict[str, dict[str, str]] = {}
     for skill_md in sorted(repo_dir.glob("*/SKILL.md")):
         name = skill_md.parent.name
+        content_hash = compute_content_hash(skill_md.parent)
+        if content_hash is None:
+            continue
+        entry: dict[str, str] = {"hash": content_hash}
         try:
             text = skill_md.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
-            continue
-        m = re.search(r"\*\*Version\*\*:\s*(\S+)", text)
-        if not m:
-            m = re.search(r"^version:\s*(\S+)", text, re.MULTILINE)
-        if m:
-            versions[name] = m.group(1)
+            text = ""
+        version = _extract_version_string(text)
+        if version:
+            entry["version"] = version
+        manifest[name] = entry
 
     vf = repo_dir / "versions.json"
     existing = {}
@@ -62,11 +122,11 @@ def update_versions_json(repo_dir: Path) -> None:
         except (json.JSONDecodeError, OSError):
             pass
 
-    if versions == existing:
+    if manifest == existing:
         return
 
     vf.write_text(
-        json.dumps(versions, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     run_git(["add", "versions.json"], cwd=repo_dir)
@@ -298,19 +358,63 @@ def cmd_push(args: argparse.Namespace) -> None:
         run_git(["commit", "-m", message], cwd=tmp)
         run_git(["push"], cwd=tmp)
 
-        update_versions_json(tmp)
+        update_sync_manifest(tmp)
 
     print(f"\nPushed '{name}' to {repo_url}")
 
 
+def _classify_sync_status(
+    local_manifest: dict[str, dict[str, str]],
+    remote_manifest: dict,
+    skills_dir: Path,
+) -> tuple[list[str], list[tuple[str, str, str]], list[str], list[str]]:
+    """依內容雜湊分類本地 skill 相對 remote manifest 的同步狀態。
+
+    回傳 (up_to_date, diverged, overridden, skipped_no_hash)。雜湊相同 -> up_to_date；
+    雜湊不同 -> diverged（覆蓋方向未知，需人工執行 pull/push 決定，見下方 rationale）；
+    標記 SKILL_SYNC_OVERRIDE_MARKER -> overridden（略過分歧判定）；remote 尚未有 hash
+    欄位（舊格式 versions.json，需下次 push 後才會補上）-> skipped_no_hash。
+
+    不再嘗試自動判定覆蓋方向：舊實作以 semver 大小決定「該推或該拉」，但這預設了
+    線性演進，對分支式分歧（兩個獨立演化的副本巧合共用同一版本號）必定失準
+    （0.2.1-W3-124 §11.2）。內容雜湊只能證明「相同或不同」，方向留給人工判斷。
+    """
+    up_to_date: list[str] = []
+    diverged: list[tuple[str, str, str]] = []
+    overridden: list[str] = []
+    skipped_no_hash: list[str] = []
+
+    for name, local_entry in sorted(local_manifest.items()):
+        if _has_local_override(skills_dir / name):
+            overridden.append(name)
+            continue
+
+        remote_entry = remote_manifest.get(name)
+        if not isinstance(remote_entry, dict) or "hash" not in remote_entry:
+            skipped_no_hash.append(name)
+            continue
+
+        if local_entry["hash"] == remote_entry["hash"]:
+            up_to_date.append(name)
+        else:
+            local_display = local_entry.get("version") or local_entry["hash"][:8]
+            remote_display = remote_entry.get("version") or remote_entry["hash"][:8]
+            diverged.append((name, local_display, remote_display))
+
+    return up_to_date, diverged, overridden, skipped_no_hash
+
+
 def cmd_pull_all(args: argparse.Namespace) -> None:
-    """掃描本地已安裝 skill，比對 versions.json，更新有差異者。"""
-    force: bool = args.force
+    """掃描本地已安裝 skill，以內容雜湊比對 versions.json，回報分歧供人工處理。
+
+    --force 對此路徑無效：分歧不再自動套用（見 _classify_sync_status），每個分歧
+    項目一律需個別執行 `skill-sync pull <name>` 或 `skill-sync push <name>` 決定方向。
+    """
     repo_url = get_repo_url()
     skills_dir = get_skills_dir()
 
-    local_versions = _extract_local_versions(skills_dir)
-    if not local_versions:
+    local_manifest = _extract_local_manifest(skills_dir)
+    if not local_manifest:
         print("No local skills found.")
         return
 
@@ -322,122 +426,78 @@ def cmd_pull_all(args: argparse.Namespace) -> None:
         req = urllib.request.Request(raw_url, headers={"User-Agent": "skill-sync"})
         # magic-exempt
         with urllib.request.urlopen(req, timeout=10) as resp:
-            remote_versions: dict[str, str] = json.loads(resp.read())
+            remote_manifest: dict = json.loads(resp.read())
     except Exception as e:
         print(f"Failed to fetch versions.json: {e}")
         print("Falling back to individual pull...")
-        remote_versions = {}
+        remote_manifest = {}
 
-    if not remote_versions:
+    if not remote_manifest:
         print("versions.json not available. Use 'skill-sync pull <name>' instead.")
         return
 
-    outdated: list[tuple[str, str, str]] = []
-    newer_local: list[tuple[str, str, str]] = []
-    up_to_date: list[str] = []
-    for name, local_ver in sorted(local_versions.items()):
-        remote_ver = remote_versions.get(name)
-        if remote_ver is None:
-            continue
-        if local_ver == remote_ver:
-            up_to_date.append(name)
-        elif _is_downgrade(local_ver, remote_ver):
-            newer_local.append((name, local_ver, remote_ver))
-        else:
-            outdated.append((name, local_ver, remote_ver))
+    up_to_date, diverged, overridden, skipped_no_hash = _classify_sync_status(
+        local_manifest, remote_manifest, skills_dir
+    )
 
-    if not outdated and not newer_local:
-        print(f"All {len(up_to_date)} installed skills are up to date.")
+    if overridden:
+        print(f"[OVERRIDE] {len(overridden)} skill(s) declared local override "
+              f"(skipped from divergence check):")
+        for name in overridden:
+            print(f"  {name}")
+
+    if skipped_no_hash:
+        print(f"\n[SKIP] {len(skipped_no_hash)} skill(s) have no remote hash data yet "
+              f"(remote versions.json needs regenerating via next 'skill-sync push'):")
+        for name in skipped_no_hash:
+            print(f"  {name}")
+
+    if not diverged:
+        print(f"\nAll {len(up_to_date)} checked skill(s) are up to date.")
         return
 
-    if newer_local:
-        print(f"[SKIP] {len(newer_local)} skill(s) have newer local version "
-              f"(use 'skill-sync push <name>' to update remote):\n")
-        for name, local_ver, remote_ver in newer_local:
-            print(f"  {name}: local {local_ver} > remote {remote_ver}")
-            print(f"    → skill-sync push {name}")
+    print(f"\n[DIVERGED] {len(diverged)} skill(s) differ from remote by content. "
+          f"Direction unknown from hash alone — review and resolve manually:\n")
+    for name, local_display, remote_display in diverged:
+        print(f"  {name}: local({local_display}) vs remote({remote_display})")
+        print(f"    -> skill-sync pull {name}   # inspect/take remote content")
+        print(f"    -> skill-sync push {name}   # inspect/send local content")
 
-    if not outdated:
-        if up_to_date:
-            print(f"\n{len(up_to_date)} other skill(s) are up to date.")
-        return
-
-    print(f"\n[Update Check] {len(outdated)} skill(s) need update, "
-          f"{len(up_to_date)} up to date:\n")
-    for name, local_ver, remote_ver in outdated:
-        print(f"  {name}: {local_ver} -> {remote_ver}")
-
-    if not force:
-        try:
-            answer = input(f"\n  Update {len(outdated)} skill(s)? [y/N] ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            answer = ""
-        if answer != "y":
-            print("  Aborted.")
-            return
-
-    updated = 0
-    for name, local_ver, remote_ver in outdated:
-        print(f"\n  Pulling {name} ({local_ver} -> {remote_ver})...")
-        pull_args = argparse.Namespace(name=name, force=True)
-        try:
-            cmd_pull(pull_args)
-            updated += 1
-        except Exception as e:
-            print(f"  [FAIL] {name}: {e}")
-
-    print(f"\n[Done] Updated {updated}/{len(outdated)} skill(s)")
-
-
-def _parse_semver(ver: str) -> tuple[int, ...] | None:
-    """Parse version string to comparable tuple. Returns None if not parseable."""
-    parts = ver.strip().rstrip("-").split(".")
-    try:
-        return tuple(int(p) for p in parts)
-    except ValueError:
-        return None
-
-
-def _is_downgrade(local_ver: str, remote_ver: str) -> bool:
-    """Return True if pulling remote_ver would downgrade from local_ver."""
-    local = _parse_semver(local_ver)
-    remote = _parse_semver(remote_ver)
-    if local is None or remote is None:
-        return False
-    return remote < local
+    if up_to_date:
+        print(f"\n{len(up_to_date)} other skill(s) are up to date.")
 
 
 def _extract_single_version(skill_md: Path) -> str | None:
-    """從單一 SKILL.md 提取版本號。"""
+    """從單一 SKILL.md 提取版本號（僅供人類顯示，不進入同步判定）。"""
     if not skill_md.is_file():
         return None
     try:
         text = skill_md.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
-    m = re.search(r"\*\*Version\*\*:\s*(\S+)", text)
-    if not m:
-        m = re.search(r"^version:\s*(\S+)", text, re.MULTILINE)
-    return m.group(1) if m else None
+    return _extract_version_string(text)
 
 
-def _extract_local_versions(skills_dir: Path) -> dict[str, str]:
-    """掃描本地 skills/*/SKILL.md 提取版本號。"""
-    versions: dict[str, str] = {}
+def _extract_local_manifest(skills_dir: Path) -> dict[str, dict[str, str]]:
+    """掃描本地 skills/*，回傳每個 skill 的內容雜湊（同步判定用）與版本字串（人類顯示用）。"""
+    manifest: dict[str, dict[str, str]] = {}
     if not skills_dir.is_dir():
-        return versions
+        return manifest
     for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
-        name = skill_md.parent.name
+        skill_dir = skill_md.parent
+        content_hash = compute_content_hash(skill_dir)
+        if content_hash is None:
+            continue
+        entry: dict[str, str] = {"hash": content_hash}
         try:
             text = skill_md.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
-            continue
-        m = re.search(r"\*\*Version\*\*:\s*(\S+)", text)
-        if not m:
-            m = re.search(r"^version:\s*(\S+)", text, re.MULTILINE)
-        if m:
-            versions[name] = m.group(1)
-    return versions
+            text = ""
+        version = _extract_version_string(text)
+        if version:
+            entry["version"] = version
+        manifest[skill_dir.name] = entry
+    return manifest
 
 
 def cmd_list(args: argparse.Namespace) -> None:

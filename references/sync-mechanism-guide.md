@@ -140,6 +140,52 @@
 
 ---
 
+## 6. 全域覆蓋層（`~/.claude/`）的正規流程
+
+**核心原則：全域 skills 目錄（`~/.claude/skills/`）維持空置，不放置任何有 project 版的 skill。**
+
+Claude Code 的 skill 解析為同名覆蓋，且 `~/.claude/skills/`（personal）優先於 `<project>/.claude/skills/`（project）。personal 層不在本文件描述的任何同步邊上——它既不參與 §3 的三方合併，也不受 §5 的 preserve 清單管轄，其變更無版本控制、無審查、無痕跡。
+
+### 6.1 禁止的路徑
+
+**禁止從任一單一專案 `rsync` 或 `cp` 至 `~/.claude/skills/`。**
+
+**Why**：personal 層對全部專案生效。把某個專案的 skill 複製上去，等於用該專案的版本無差別覆蓋所有專案的對應 skill。若各專案的版本是分支關係而非線性關係（實務上常見），其他專案的獨有內容會在覆蓋後失效。
+
+**Consequence**：受害專案的檔案完好、內容無誤、git 歷史無任何變更紀錄，唯一的變化是它不再被載入。操作者所屬的專案一切正常（覆寫來源就是它），故無人回報異常，損害可長期潛伏。實證見 `.claude/error-patterns/architecture/ARCH-BAL-008-shared-override-layer-silently-deletes-peer-customization.md`。
+
+**Action**：發現專案版 skill 未生效時，正確處置是**移除 personal 層的同名副本**讓 project 版自然載入，而非把 project 版複製到 personal。移除的成本近零且可逆（還原為一行 `cp -r`），複製則會擴散至全部專案。
+
+### 6.2 確有跨專案共用需求時
+
+唯一正規路徑為 canonical 中轉：
+
+| 步驟 | 動作 | 理由 |
+|------|------|------|
+| 1 | 於本專案完成內容修改並 commit | 變更進入版本控制，可追溯可回退 |
+| 2 | 執行 `/sync-push` 推送至 `claude.git` | 內容入庫成為新的 base，其他專案可見 |
+| 3 | 各專案各自執行 `/sync-pull` | 走 §3 的三方合併，保留各專案本地新增而非覆蓋 |
+
+三方合併與直接複製的差別是決定性的：三方合併能同時保留上游新增與本地新增，直接複製只能保留單方。跨專案收斂必須走前者。
+
+### 6.3 判別提問
+
+寫入任何位置前先問：**「這個位置，有幾個東西會讀它？」**
+
+答案大於 1 時，寫入行為的性質從「修改」變為「發佈」，須套用發佈的審查標準——確認全部下游消費者、比對內容是包含關係還是分支關係、走版本控制路徑——而非修改的隨手標準。
+
+判斷包含或分支不可用版本號比大小。以內容特徵字串雙向交叉檢查：`grep -c <來源獨有特徵> <目標>` 與反向各一次，兩次都命中才是包含關係，否則為分支。
+
+### 6.4 生效時機
+
+Claude Code 於 session 啟動時載入 skill 註冊表並快取路徑與內容。對 `~/.claude/skills/` 或 `<project>/.claude/skills/` 的檔案系統變更，在當前 session 內不生效——同一 session 中呼叫 skill 仍會回報變更前的 Base directory 並送出變更前的內容，即使該目錄已被刪除。
+
+**Consequence**：在同一 session 內驗證 skill 檔案變更的結果會得到假陰性，看起來像變更失敗。反向亦然——剛複製上去的內容不會立即生效，故覆蓋造成的損害從受害專案的下一個 session 才開始顯現，與操作時點分離，使歸因更加困難。
+
+**Action**：skill 檔案變更後的驗證須在新 session 執行，以 Skill tool 回報的 Base directory 為判準。同 session 內只能用 `test -d` / `ls` 等檔案系統指令確認變更已落盤，不可用 Skill tool 的回報作為驗證依據。
+
+---
+
 ## 檢查清單
 
 執行 sync 前後對照：
@@ -150,6 +196,8 @@
 - [ ] pull 執行時：已詳閱覆蓋預覽與 AskUserQuestion 確認清單（§4.2）
 - [ ] pull 後：已 `git diff` 比對，確認無孤兒複製與非預期刪除（§4.3）
 - [ ] 新增本專案特有防護時，已同步登錄 `sync-preserve.yaml`（§5）
+- [ ] 未以 `rsync` / `cp` 寫入 `~/.claude/skills/`；跨專案共用改走 canonical 中轉（§6.1、§6.2）
+- [ ] skill 檔案變更後的驗證安排在新 session，未以同 session 的 Skill tool 回報作為判準（§6.4）
 
 ---
 
@@ -160,8 +208,10 @@
 - `.claude/sync-preserve.yaml` — preserve 清單
 - `.claude/commands/sync-pull.md` / `.claude/commands/sync-push.md` — 指令入口
 - `.claude/references/framework-asset-separation.md` — 框架資產 vs 專案產物分離原則（含 hook 雙層架構歸屬規則）
+- `.claude/error-patterns/architecture/ARCH-BAL-008-shared-override-layer-silently-deletes-peer-customization.md` — §6 的實證案例
 
 ---
 
-**Last Updated**: 2026-06-07
+**Last Updated**: 2026-07-28
+**Version**: 1.1.0 — 新增 §6 全域覆蓋層（`~/.claude/`）正規流程：禁止單一專案 rsync 至全域、canonical 中轉三步、消費者數判別提問、包含或分支的雙向 grep 判定、session 快取導致的生效時機落差；檢查清單補 2 項（0.2.1-W3-123，承接 0.2.1-W3-108 acceptance 4）
 **Version**: 1.0.0 — 初版：pull/push 時機、base SHA 與三方合併、full overlay fallback 風險與處理、preserve 維護時機

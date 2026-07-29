@@ -293,3 +293,172 @@ def test_merge_category_table_does_not_overwrite_existing_row_placeholder():
     ]
     merged = merge_category_table(existing_lines, new_rows)
     assert merged == existing_lines
+
+
+# --- 一 ID 對多檔（碰撞，0.2.1-W3-117） ---
+
+
+def test_extract_row_includes_slug_derived_from_filename(tmp_path):
+    """extract_row 回傳需含 slug（檔名去除 ID 前綴部分），供碰撞情境複合鍵使用。"""
+    path = tmp_path / "PC-019-design-decision-memory-only.md"
+    path.write_text("# PC-019: 標題\n", encoding="utf-8")
+    row = extract_row(path, "PC-019")
+    assert row["slug"] == "design-decision-memory-only"
+
+
+def test_scan_category_rows_collision_produces_two_rows_with_distinct_slugs(tmp_path):
+    """同一 ID 對應兩個實體檔案時，scan 結果須保留兩筆，且各自可用 slug 區辨。"""
+    claude_dir = tmp_path / ".claude"
+    _write_pattern_file(
+        claude_dir,
+        "process-compliance",
+        "PC-019-design-decision-memory-only.md",
+        "# PC-019: 設計決策只存 memory\n\n- **風險等級**: 中\n",
+    )
+    _write_pattern_file(
+        claude_dir,
+        "process-compliance",
+        "PC-019-worktree-merge-state-loss.md",
+        "# PC-019: Worktree 合併流程中 Ticket 狀態遺失\n\n- **風險等級**: 中\n",
+    )
+    rows = scan_category_rows(claude_dir / "error-patterns")
+    pc_rows = rows["PC"]
+    assert len(pc_rows) == 2
+    assert {r["id"] for r in pc_rows} == {"PC-019"}
+    assert {r["slug"] for r in pc_rows} == {
+        "design-decision-memory-only",
+        "worktree-merge-state-loss",
+    }
+
+
+def test_merge_category_table_collision_new_files_both_appended():
+    """同 ID 兩檔皆為索引原本沒有的新檔：兩列都須新增，且以 slug 區辨，不因 ID
+    相同而被去重成一列（0.2.1-W3-117 修復目標）。"""
+    new_rows = [
+        {
+            "id": "PC-019",
+            "title": "設計決策只存 memory",
+            "severity": "中",
+            "source_version": "—",
+            "slug": "design-decision-memory-only",
+        },
+        {
+            "id": "PC-019",
+            "title": "Worktree 合併流程中 Ticket 狀態遺失",
+            "severity": "中",
+            "source_version": "—",
+            "slug": "worktree-merge-state-loss",
+        },
+    ]
+    merged = merge_category_table([], new_rows)
+    assert len(merged) == 2
+    assert any("design-decision-memory-only" in line for line in merged)
+    assert any("worktree-merge-state-loss" in line for line in merged)
+    assert all(line.startswith("| PC-019 (") for line in merged)
+
+
+def test_merge_category_table_collision_idempotent_when_both_rows_exist():
+    """已含雙列（皆帶 slug 區辨）時重跑 sync 為冪等：不重複新增，也不因 ID 相同
+    而誤判其中一列為死連結。"""
+    new_rows = [
+        {
+            "id": "PC-019",
+            "title": "設計決策只存 memory",
+            "severity": "中",
+            "source_version": "—",
+            "slug": "design-decision-memory-only",
+        },
+        {
+            "id": "PC-019",
+            "title": "Worktree 合併流程中 Ticket 狀態遺失",
+            "severity": "中",
+            "source_version": "—",
+            "slug": "worktree-merge-state-loss",
+        },
+    ]
+    existing_lines = [
+        "| PC-019 (design-decision-memory-only) | 設計決策只存 memory | 中 | — |",
+        "| PC-019 (worktree-merge-state-loss) | Worktree 合併流程中 Ticket 狀態遺失 | 中 | — |",
+    ]
+    merged = merge_category_table(existing_lines, new_rows)
+    assert merged == existing_lines
+
+
+def test_merge_category_table_collision_removing_one_file_drops_only_its_row():
+    """碰撞雙方其一被刪時，只移除對應列，另一列不受影響——死連結判定須以檔案
+    實體（複合鍵）而非 ID 判定，不因同 ID 另一檔仍存在而漏刪或誤刪。"""
+    existing_lines = [
+        "| PC-019 (design-decision-memory-only) | 設計決策只存 memory | 中 | — |",
+        "| PC-019 (worktree-merge-state-loss) | Worktree 合併流程中 Ticket 狀態遺失 | 中 | — |",
+    ]
+    # worktree-merge-state-loss 檔案已刪除，掃描結果只剩 design-decision-memory-only。
+    new_rows = [
+        {
+            "id": "PC-019",
+            "title": "設計決策只存 memory",
+            "severity": "中",
+            "source_version": "—",
+            "slug": "design-decision-memory-only",
+        },
+    ]
+    merged = merge_category_table(existing_lines, new_rows)
+    assert merged == [
+        "| PC-019 (design-decision-memory-only) | 設計決策只存 memory | 中 | — |",
+    ]
+
+
+def test_merge_category_table_legacy_plain_row_preserved_when_collision_discovered():
+    """既有索引只有一筆無 slug 標記的舊格式列（現行 372 筆皆屬此類），掃描發現
+    該 ID 現有兩檔（碰撞）：舊列逐字保留（無法判定其對應哪個實體檔案，可能是
+    唯一保有一級資料的載體，不得覆寫或捨棄），另一檔以複合鍵新增為獨立列。"""
+    existing_lines = ["| PC-019 | 設計決策只存 memory 未建 Ticket | 中 | v0.1.1 |"]
+    new_rows = [
+        {
+            "id": "PC-019",
+            "title": "通用架構決策僅記錄到 Memory 未寫入框架文件",
+            "severity": "—",
+            "source_version": "—",
+            "slug": "design-decision-memory-only",
+        },
+        {
+            "id": "PC-019",
+            "title": "Worktree 合併流程中 Ticket 狀態遺失",
+            "severity": "—",
+            "source_version": "—",
+            "slug": "worktree-merge-state-loss",
+        },
+    ]
+    merged = merge_category_table(existing_lines, new_rows)
+    assert "| PC-019 | 設計決策只存 memory 未建 Ticket | 中 | v0.1.1 |" in merged
+    assert any("worktree-merge-state-loss" in line for line in merged)
+    assert any("design-decision-memory-only" in line for line in merged)
+    assert len(merged) == 3
+
+
+def test_merge_category_table_post_migration_state_is_idempotent_without_ambiguous_row():
+    """模糊列一級資料遷移完成並移除後（0.2.1-W3-119），索引只剩兩筆帶 slug 的
+    精確列：重跑須保持冪等——不重新生成任何一級資料已補齊的精確列，也不會
+    因碰撞仍存在而把已移除的模糊列加回來。"""
+    existing_lines = [
+        "| PC-019 (design-decision-memory-only) | 通用架構決策僅記錄到 Memory 未寫入框架文件 | 中 | v0.1.1 |",
+        "| PC-019 (worktree-merge-state-loss) | Worktree 合併流程中 Ticket 狀態遺失 | — | — |",
+    ]
+    new_rows = [
+        {
+            "id": "PC-019",
+            "title": "掃描出的標題（與既有列不同，驗證不覆寫）",
+            "severity": "低",
+            "source_version": "v9.9.9",
+            "slug": "design-decision-memory-only",
+        },
+        {
+            "id": "PC-019",
+            "title": "掃描出的標題二",
+            "severity": "低",
+            "source_version": "v9.9.9",
+            "slug": "worktree-merge-state-loss",
+        },
+    ]
+    merged = merge_category_table(existing_lines, new_rows)
+    assert merged == existing_lines
+    assert not any(line.strip().startswith("| PC-019 |") for line in merged)

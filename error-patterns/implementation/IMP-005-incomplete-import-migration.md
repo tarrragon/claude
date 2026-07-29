@@ -2,7 +2,7 @@
 id: IMP-005
 title: 模組遷移後 Import 路徑未同步更新
 category: implementation
-severity: medium
+severity: high
 created: 2026-02-26
 ---
 # IMP-005: 模組遷移後 Import 路徑未同步更新

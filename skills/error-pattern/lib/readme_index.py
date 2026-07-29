@@ -39,6 +39,7 @@ import argparse
 import difflib
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 
 import yaml
@@ -152,13 +153,27 @@ def _parse_frontmatter(text):
     return data, rest
 
 
+def _slug_from_stem(stem, pattern_id):
+    """從檔名 stem 去除 ID 前綴，取得可區辨同 ID 多檔的 slug。
+
+    一 ID 對多檔（碰撞，0.2.1-W3-117）時 pattern_id 本身無法唯一識別檔案，
+    slug 補上檔名中 ID 之後的描述段（如 `worktree-merge-state-loss`）。
+    """
+    if stem.upper().startswith(pattern_id.upper()):
+        return stem[len(pattern_id):].lstrip("-") or stem
+    return stem
+
+
 def extract_row(path, pattern_id):
-    """解析單一 error-pattern 檔案，回傳索引列資料（id/title/severity/source_version）。
+    """解析單一 error-pattern 檔案，回傳索引列資料（id/title/severity/source_version/slug）。
 
     風險等級刻意不讀 frontmatter `severity`——0.2.1-W3-105 查證 frontmatter
     severity 與內文「風險等級」常態性分歧且內文較準，前者於本模組視為不可信
     來源（該資料品質問題另由 0.2.1-W3-106 獨立處理）。標題不受此限，仍以
     frontmatter `title` 優先。
+
+    `slug` 取自檔名（見 `_slug_from_stem`），供 `merge_category_table` 在一 ID
+    對多檔的碰撞情境下組成複合鍵區辨各檔案（0.2.1-W3-117）。
     """
     text = path.read_text(encoding="utf-8")
     frontmatter, body = _parse_frontmatter(text)
@@ -175,6 +190,7 @@ def extract_row(path, pattern_id):
         "title": title,
         "severity": severity,
         "source_version": version,
+        "slug": _slug_from_stem(path.stem, pattern_id),
     }
 
 
@@ -202,17 +218,39 @@ def _escape_cell(text):
     return str(text).replace("|", r"\|")
 
 
-def render_row(row):
-    cells = (row["id"], row["title"], row["severity"], row["source_version"])
+def render_row(row, disambiguate=False):
+    """渲染單一資料列；`disambiguate=True` 時 ID 儲存格附帶 `(slug)` 後綴，
+    用於一 ID 對多檔的碰撞情境區辨各檔案（0.2.1-W3-117）。"""
+    id_cell = row["id"]
+    if disambiguate:
+        slug = row.get("slug", "")
+        if slug:
+            id_cell = f"{id_cell} ({slug})"
+    cells = (id_cell, row["title"], row["severity"], row["source_version"])
     return "| " + " | ".join(_escape_cell(c) for c in cells) + " |"
 
 
-def _row_id_from_line(line):
+# ID 儲存格格式：`ID` 或碰撞列的 `ID (slug)`。
+_ID_CELL_RE = re.compile(r"^([^\s(]+)(?:\s*\((.*)\))?$")
+
+
+def _row_key_from_line(line):
+    """解析既有資料列的 (id, slug) 識別鍵；非表格列或空 ID 儲存格回傳 (None, None)。
+
+    無 `(slug)` 後綴（現行索引所有既有列皆屬此類）時 slug 為 None，代表該列
+    對應哪個實體檔案無法從文字判定（模糊識別）。
+    """
     stripped = line.strip()
     if not stripped.startswith("|"):
-        return None
+        return None, None
     cells = [c.strip() for c in stripped.strip("|").split("|")]
-    return cells[0] if cells else None
+    if not cells or not cells[0]:
+        return None, None
+    match = _ID_CELL_RE.match(cells[0])
+    if not match:
+        return cells[0], None
+    pattern_id, slug = match.groups()
+    return pattern_id, (slug.strip() if slug else None)
 
 
 def _is_separator_row(line):
@@ -229,18 +267,45 @@ def merge_category_table(existing_row_lines, new_rows):
 
     既有列即使欄位為佔位符也不補齊——索引可能是唯一保有該筆一級資料
     （如來源版本）的載體，補齊/覆寫等同銷毀（見模組 docstring 0.2.1-W3-105）。
+
+    一 ID 對多檔（碰撞）以 (id, slug) 複合鍵區辨，取代舊版以 ID 建 set 的去重
+    邏輯——舊邏輯對同 ID 的第二筆 new_rows 永遠判定為「已存在」而漏補（0.2.1-
+    W3-117 修復目標）。無 `(slug)` 後綴的既有列（現行 372 筆索引皆屬此類）
+    視為模糊識別：只要該 ID 仍有任一檔案存在即保留，避免因無法判定其對應哪個
+    實體檔案而誤刪可能獨有的一級資料；帶 `(slug)` 後綴的列則以精確複合鍵判定
+    存廢，碰撞雙方其一被刪時只移除對應列，不因同 ID 另一檔仍存在而漏刪。
     """
-    file_ids = {row["id"] for row in new_rows}
-    existing_ids = set()
+    id_counts = Counter(row["id"] for row in new_rows)
+    new_composite_keys = {(row["id"], row.get("slug", "")) for row in new_rows}
+
     merged = []
+    existing_plain_ids = set()
+    existing_composite_keys = set()
     for line in existing_row_lines:
-        row_id = _row_id_from_line(line)
-        existing_ids.add(row_id)
-        if row_id in file_ids:
-            merged.append(line)  # 對應檔案仍存在：原樣保留，不重新生成
-        # row_id 不在 file_ids：對應檔案已不存在（死連結），捨棄該列
+        row_id, slug = _row_key_from_line(line)
+        if row_id is None:
+            continue
+        if slug is None:
+            existing_plain_ids.add(row_id)
+            if row_id in id_counts:
+                merged.append(line)  # 模糊識別：ID 仍有檔案存在，保守保留
+            # 否則：ID 已無任何對應檔案（死連結），捨棄該列
+        else:
+            existing_composite_keys.add((row_id, slug))
+            if (row_id, slug) in new_composite_keys:
+                merged.append(line)  # 精確識別：對應檔案仍存在，原樣保留
+            # 否則：對應檔案已不存在（死連結），捨棄該列
+
     for row in new_rows:
-        if row["id"] not in existing_ids:
+        slug = row.get("slug", "")
+        is_collision = id_counts[row["id"]] > 1
+        if is_collision:
+            if (row["id"], slug) in existing_composite_keys:
+                continue  # 已有精確對應的碰撞列
+            merged.append(render_row(row, disambiguate=True))  # 新檔案：附 slug 新增
+        else:
+            if row["id"] in existing_plain_ids or (row["id"], slug) in existing_composite_keys:
+                continue  # 非碰撞：既有列（模糊或精確）已代表此檔案
             merged.append(render_row(row))  # 新檔案：以掃描結果新增一列
     return merged
 

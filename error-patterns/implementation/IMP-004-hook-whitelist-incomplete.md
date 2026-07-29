@@ -2,7 +2,7 @@
 id: IMP-004
 title: Hook 白名單不完整導致誤攔
 category: implementation
-severity: medium
+severity: high
 created: 2026-02-26
 ---
 # IMP-004: Hook 白名單不完整導致誤攔

@@ -2,7 +2,7 @@
 id: ARCH-004
 title: 批量拆分檔案所有權重疊
 category: architecture
-severity: medium
+severity: high
 created: 2026-02-26
 ---
 # ARCH-004: 批量拆分檔案所有權重疊

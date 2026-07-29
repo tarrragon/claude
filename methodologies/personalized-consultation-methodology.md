@@ -256,7 +256,7 @@
 | `.claude/error-patterns/process-compliance/PC-071-advice-without-personal-context.md` | 錯誤模式溯源（羽球案例實證） |
 | `.claude/pm-rules/personalized-advice-rules.md` | PM 強制執行規則（含禁止行為） |
 | `.claude/skills/wrap-decision/SKILL.md` Step 0 章節 | WRAP 框架內的資料充足度檢查（通用原理） |
-| `.claude/skills/wrap-decision/references/integration-patterns/personalized-advice.md` | 本專案 Step 0 銜接說明 |
+| `.claude/skills/wrap-decision/references/project-integration/personalized-advice.md` | 本專案 Step 0 銜接說明 |
 | `.claude/pm-rules/askuserquestion-rules.md` | 結構化詢問工具規範（AUQ 使用） |
 
 ---

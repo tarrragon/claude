@@ -85,7 +85,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 > **觸發條件權威來源**：
 > - 通用原理（抽象類別）：`.claude/skills/wrap-decision/SKILL.md`「觸發條件」表格
 > - 本專案機器可讀條件（Hook/CLI 讀取）：`.claude/config/wrap-triggers.yaml`
-> - 本專案對應表（YAML/Hook/SKILL 三層映射）：`.claude/skills/wrap-decision/references/integration-patterns/triggers-alignment.md`
+> - 本專案對應表（YAML/Hook/SKILL 三層映射）：`.claude/skills/wrap-decision/references/project-integration/triggers-alignment.md`
 >
 > 本章節不複述條件以避免清單漂移（DRY 違反 → PC-066 教訓）。
 

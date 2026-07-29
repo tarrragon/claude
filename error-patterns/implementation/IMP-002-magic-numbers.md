@@ -2,7 +2,7 @@
 id: IMP-002
 title: 魔法數字
 category: implementation
-severity: medium
+severity: low
 created: 2026-01-19
 ---
 # IMP-002: 魔法數字

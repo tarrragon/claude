@@ -2,7 +2,7 @@
 id: IMP-010
 title: GC 狀態語義衝突導致有效資料誤刪
 category: implementation
-severity: medium
+severity: high
 created: 2026-03-04
 ---
 # IMP-010: GC 狀態語義衝突導致有效資料誤刪

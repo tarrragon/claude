@@ -1,3 +1,25 @@
+## [2.22.0] - 2026-07-29
+
+### Summary
+feat: 移除 personal 遮蔽副本並訂定全域覆蓋層正規流程; refactor: 刪除 wrap-decision 孤兒目錄 integration-patterns; fix: 移除 sync-claude-push 已隨 schema 變更失效的漂移檢查 (+9 more)
+
+Changes: 1 feat, 1 refactor, 5 fix, 4 docs, 1 chore
+
+- feat: 移除 personal 遮蔽副本並訂定全域覆蓋層正規流程
+- refactor: 刪除 wrap-decision 孤兒目錄 integration-patterns
+- fix: 移除 sync-claude-push 已隨 schema 變更失效的漂移檢查
+- fix: 改用內容雜湊取代 skill-sync 的版本字串比對
+- fix: 修正 error-pattern severity frontmatter/內文分歧
+- fix: 遷移 README 7 筆模糊碰撞列一級資料至精確列後移除
+- fix: readme_index 支援一 ID 對多檔複合鍵，補列 7 個隱形 pattern
+- docs: 記錄 PC-BAL-014 skill 註冊表 session 快取遮蔽檔案系統變更
+- docs: personal 覆蓋層的收斂方向與已發生損害
+- docs: 校正三項幽靈重編陳述與碰撞登記表脫節
+- docs: 記錄 ARCH-BAL-007 非唯一識別符被當主鍵
+- chore: 補上 test_error_pattern_severity_audit.py 執行權限
+
+---
+
 ## [2.21.1] - 2026-07-27
 
 ### Summary

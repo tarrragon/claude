@@ -2,7 +2,7 @@
 id: DOC-001
 title: 交接文件使用 emoji
 category: documentation
-severity: medium
+severity: low
 created: 2026-01-14
 ---
 # DOC-001: 交接文件使用 emoji

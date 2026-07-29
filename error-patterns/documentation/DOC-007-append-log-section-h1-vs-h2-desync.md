@@ -2,7 +2,7 @@
 id: DOC-007
 title: append-log 有效區段說明包含 H1 heading 導致 CLI 報錯
 category: documentation
-severity: medium
+severity: low
 created: 2026-03-07
 ---
 # DOC-007: append-log 有效區段說明包含 H1 heading 導致 CLI 報錯

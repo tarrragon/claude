@@ -183,7 +183,6 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | ARCH-007 | Per-project 追蹤檔追蹤全域資源 | 中 | v0.1.0 |
 | ARCH-008 | 依賴全域狀態推斷而非從本地資料提取 | 中 | v0.1.0 |
 | ARCH-009 | 將決策邏輯集中到單一 skill 造成 context 膨脹 | 中 | v0.1.0 |
-| ARCH-010 | 過度設計的狀態管理 | 中 | v0.1.0 |
 | ARCH-011 | 框架資產與專案產物混放 | 中 | v0.1.0 |
 | ARCH-012 | 代理人專案特定硬編碼 | 中 | v0.1.0 |
 | ARCH-013 | ESM/CJS 混合匯出導致 Dead Code | 中 | v0.1.0 |
@@ -208,6 +207,10 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | ARCH-BAL-004 | 參考文件範例與同檔規則矛盾，範例成為缺陷散播源 | 高 | — |
 | ARCH-MON-001 | 多 wave 票各加進同一中心檔，累積 domain 過載而無單票觸發閾值 | 中 | — |
 | ARCH-TUNL-001 | settings.local.json 註冊 hook 在 relocate 後成幽靈（sync 無法自癒） | 中 | v1.0.0（1.0.0-W9-001 ANA） |
+| ARCH-BAL-007 | 非唯一識別符被當主鍵，集合去重靜默丟棄同鍵資料 | 高 | v0.2.1（0.2.1-W3-110 ANA） |
+| ARCH-010 (module-assembly-omission) | 模組組裝遺漏導致功能鏈路靜默斷裂 | 高 | v0.15.4 |
+| ARCH-010 (overengineered-state-management) | 過度設計的狀態管理 — 框架機制已解決的問題不需要額外狀態層 | 中 | v0.1.0 |
+| ARCH-BAL-008 | 以單一消費者內容覆寫共用覆蓋層，靜默刪除其他消費者的獨有內容 | — | — |
 
 ### 程式碼品質 (CQ)
 
@@ -272,7 +275,6 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | IMP-046 | — | — | — |
 | IMP-047 | — | — | — |
 | IMP-048 | Hook stderr 輸出觸發 hook error 顯示 | 低 | v0.17.2 |
-| IMP-049 | hook error 顯示是 CLI 已知 Bug | 低 | v0.17.3 |
 | IMP-050 | hook_utils package 路徑誤導 | 中 | v0.17.3 |
 | IMP-051 | 新 Hook 未註冊到 settings | 中 | v0.17.3 |
 | IMP-052 | 批量遷移缺少 None guard | 中 | v0.17.3 |
@@ -320,6 +322,8 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | IMP-V1-004 | Hook 內部工具名字面守衛因平台工具改名靜默早退（matcher 別名仍投遞） | 高 | — |
 | IMP-V1-005 | index.lock 競爭下 fast-forward 移動 HEAD 但 index 寫入失敗，後續 commit 靜默刪除剛合併的檔案 | 高 | — |
 | IMP-V1-006 | 大小寫不敏感檔案系統上 Edit 工具寫入成功，但 git pathspec 以不同大小寫尋址失敗 | 低 | — |
+| IMP-049 (hook-error-display-is-cli-bug) | "hook error" 顯示是 Claude Code CLI 已知 Bug，非 Hook 程式碼問題 | 低 | v0.17.3 |
+| IMP-049 (undefined-constants-in-hook-source) | Hook 原始碼引用未定義常數 | — | — |
 
 ### 流程 (PROC)
 
@@ -340,7 +344,6 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-007 | Command 引導與腳本實作行為不符 | 中 | v0.3.0 |
 | PC-008 | Stub Ticket 驗收條件未更新 | 中 | v0.1.0 |
 | PC-009 | Handoff 對已完成 Ticket 使用錯誤 flag | 中 | v0.1.0 |
-| PC-010 | PM 跳過 Ticket 完成後 Checkpoint | 中 | v0.1.0 |
 | PC-011 | Ticket 版本歸類錯誤 | 中 | v0.1.0 |
 | PC-012 | Complete 前處理 #17 造成死鎖 | 中 | v0.1.0 |
 | PC-013 | 重複建立 Ticket 未偵測 | 中 | v0.1.0 |
@@ -348,8 +351,6 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-015 | 錯誤提示靜默繞過 | 中 | v0.1.1 |
 | PC-016 | Hook 阻止後使用 Bash 工具繞過保護機制 | 高 | v0.1.1 |
 | PC-017 | ANA 完成後缺少實作 Ticket | 中 | v0.1.1 |
-| PC-019 | 設計決策只存 memory 未建 Ticket | 中 | v0.1.1 |
-| PC-020 | Plan 派發與實際執行不一致 | 中 | v0.1.2 |
 | PC-021 | Worktree 隔離失敗導致跨 Wave 交叉污染 | 高 | v0.1.2 |
 | PC-022 | Subagent 權限不足無法編輯 Hook | 中 | v0.1.2 |
 | PC-023 | PM 繞過權限而非修復根因 | 中 | v0.1.2 |
@@ -359,7 +360,6 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-027 | Phase 3b 失敗無 Ticket 直接派發 | 中 | v0.2.0 |
 | PC-028 | 代理人報告未驗證假設 | 中 | v0.2.0 |
 | PC-029 | 並行代理人共用檔案衝突 | 中 | v0.2.0 |
-| PC-030 | 代理人定義 slash command 引用無法執行 | 中 | v0.2.0 |
 | PC-031 | error-pattern SKILL 引用錯誤的知識庫路徑 | 中 | v0.2.0 |
 | PC-032 | 版本完成後跳過 release flow | 中 | v0.2.0 |
 | PC-033 | worklog 過時阻塞 release | 中 | v0.2.0 |
@@ -418,7 +418,6 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-088 | LLM 對 tool call 路徑的步驟數估算偏誤 | 中 | v0.18.0 |
 | PC-089 | Hook 豁免路徑與 Ticket 寫入範圍不一致 | 中 | v0.18.0 |
 | PC-090 | 推延性 close 反模式 | 中 | v0.18.0 |
-| PC-105 | PM 對 SKILL CLI 語法的 autopilot 假設（同 session 多次撞 hook 警告後仍嘗試相似變體） | 中 | v0.18.0 |
 | PC-154 | 派發 worktree agent 前未驗證兩項前置條件（worktree base 完整性 + ticket 已 claim） | 中 | v0.19.0 |
 | PC-162 | Ticket 描述含過時環境狀態 + schema 註解 PC 引用語意錯誤 | 中 | v0.19.0 |
 | PC-172 | Wrapper command 參數推斷未經 runtime 驗證（只讀底層 binary --help，忽略 wrapper 自動注入參數） | 中 | v0.19.1 |
@@ -545,6 +544,17 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-TUNL-001 | monorepo 子端可編譯產物未納入 CI 守門（本機綠燈遮蔽 reproducibility） | 中 | v1.1.0 |
 | PC-V1-011 | PM claim 待派發 ticket 導致代理人認領失敗 | 低 | — |
 | PC-V1-014 | 為繞過 gate 而改變語意載體（children→spawned_tickets） | 中 | — |
+| PC-010 (pm-skipped-checkpoint-after-ticket-complete) | PM 在 ticket complete 後跳過 Checkpoint 流程 | 中 | v0.1.0 |
+| PC-010 (task-tracking-in-memory) | 將任務追蹤資訊放入 Memory 而非 Ticket | — | — |
+| PC-019 (design-decision-memory-only) | 通用架構決策僅記錄到 Memory 未寫入框架文件 | 中 | v0.1.1 |
+| PC-019 (worktree-merge-state-loss) | Worktree 合併流程中 Ticket 狀態遺失 | — | — |
+| PC-020 (fix-at-consumer-instead-of-producer) | 修復方向錯誤 — 在消費端補救而非生產端防護 | — | — |
+| PC-020 (plan-execution-dispatch-mismatch) | 計畫-執行派發不一致（敘述與實際 agent 數量不符） | 中 | v0.1.2 |
+| PC-030 (agent-slash-command-unreachable) | 代理人定義中使用 slash command 引用 Skill，但代理人無法觸發 slash command | 中 | v0.2.0 |
+| PC-030 (phase4-unused-code-incomplete-grep) | Phase 4 未使用程式碼判斷未全專案 grep 驗證 | 中 | — |
+| PC-105 (feature-implemented-without-doc-integration) | 新功能實作後缺乏文件引導整合 | — | — |
+| PC-105 (pm-cli-syntax-autopilot) | PM 對 SKILL CLI 語法的 autopilot 假設 | 中 | v0.18.0 |
+| PC-BAL-014 | Skill 註冊表 session 快取遮蔽檔案系統變更 — 同 session 驗證得出假陰性 | 中 | v0.2.1 |
 
 ---
 

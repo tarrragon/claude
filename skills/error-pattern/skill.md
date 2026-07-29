@@ -48,6 +48,14 @@ description: "錯誤模式知識庫管理工具。Use for: (1) 查詢既有錯�
 未找到相關錯誤模式。這可能是新發現的問題，請使用 /error-pattern add 記錄。
 ```
 
+**`severity` 權威來源與更新時機**（0.2.1-W3-106）：內文「基本資訊」區塊的「風險等級」／「嚴重度」欄位是第一手判斷來源（撰寫當下對症狀實際後果的人工評估）；frontmatter `severity` 是供 `query` 排序/顯示讀取的同步鏡射欄位，兩者必須一致。更新時機：
+
+- **新建立時**：撰寫「基本資訊」區塊的內文「風險等級」時，frontmatter `severity` 必須同時填入相同值，禁止 frontmatter 留預設 placeholder 或憑感覺快速填寫後不比對內文。
+- **事後修訂內文風險等級時**：必須同步更新 frontmatter `severity`，否則 `query` 排序/顯示會呈現與內文判斷不一致的等級（PC-BAL 類漂移，見 0.2.1-W3-105 診斷）。
+- **禁止**片面只改 frontmatter `severity` 而不核對內文——frontmatter 是否正確以「是否忠實反映內文判斷」為準，不是獨立來源。
+
+0.2.1-W3-106 已完成全量覆核修正：381 檔中 15 檔（皆有值可比對者）分歧，14 檔判定內文較準確並已同步更新 frontmatter；1 檔（ARCH-001）判定 frontmatter 較準確而保留原值，內文對應修正已記錄為 spawn-request（SR-1）待後續票處理。
+
 ### `/error-pattern add`
 
 互動式記錄新發現的錯誤模式。
@@ -113,8 +121,10 @@ description: "錯誤模式知識庫管理工具。Use for: (1) 查詢既有錯�
    - 或等效 CLI：`uv run .claude/skills/error-pattern/lib/readme_index.py sync --write`
    - **禁止**手動編輯 README.md 的「現有模式」表格資料列（結構化內容由工具生成，
      見 structured-content-generation 原則）；新增列的風險等級一律取自檔案內文
-     「基本資訊」區塊，**不取自 frontmatter `severity`**（0.2.1-W3-105/106：
-     frontmatter severity 與內文常態性分歧，尚未修復前不可信任）。
+     「基本資訊」區塊，**不取自 frontmatter `severity`**（0.2.1-W3-105 診斷分歧、
+     0.2.1-W3-106 全量覆核並同步兩者後，`readme_index.extract_row` 維持讀內文
+     的既有設計不變——內文是第一手來源，frontmatter 是同步鏡射，讀哪一份理論
+     上結果相同，維持讀內文可省一次「若未來又漂移」的防呆成本）。
 
 **輸出**：
 - 在對應的分類檔案中以 `<CATEGORY>-<PROJ>-NNN-<slug>.md` 命名新增錯誤記錄
@@ -207,6 +217,7 @@ category 的 error-pattern 一律使用來源前綴格式**：
 
 ---
 
-**Last Updated**: 2026-07-27
+**Last Updated**: 2026-07-28
+**Version**: 1.3.0 — 明訂 `severity` 權威來源與更新時機：內文「風險等級」為第一手來源，frontmatter 為同步鏡射；全量覆核修正 15 檔分歧中的 14 檔（0.2.1-W3-106，接續 0.2.1-W3-105 診斷）
 **Version**: 1.2.0 — add 流程新增步驟 8：README 索引同步改由 `readme_index.sync` 保守 upsert CLI 化，取代「更新 README.md 統計資訊」文字指示（0.2.1-W3-099，接線方式經 0.2.1-W3-105 更正）
 **Version**: 1.1.0 — query 增強：--category 篩選、同義詞家族 5→11、frontmatter 摘要排序、命中數計數（1.5.0-W5-016）

@@ -57,7 +57,6 @@ import os
 import pkgutil
 import re
 import shutil
-import urllib.request
 import subprocess
 import sys
 import tarfile
@@ -78,7 +77,6 @@ from lib.sync_exclude_manifest import (  # noqa: E402
 )
 
 REPO_URL = "https://github.com/tarrragon/claude.git"
-SKILL_REPO_URL = "https://github.com/tarrragon/claude-skills.git"
 
 # .sync-state.json schema（W1-025）：單一 base 欄位，pull/push 共用。
 # 禁雙欄位（H1：對 commit SHA 用 max 會選錯共同祖先）。與 sync-claude-pull.py 對稱。
@@ -405,46 +403,6 @@ def format_skill_version_diff(
     if removed_skills:
         lines.append(f"  移除: {', '.join(removed_skills)}")  # i18n-exempt
     return "\n".join(lines)
-
-
-def check_skill_repo_version_drift(local_skills_dir: Path) -> None:
-    """比對本地 skill 版本與 skill 庫 versions.json（單一 HTTP GET）。"""  # i18n-exempt
-    try:
-        local_versions = extract_skill_versions(local_skills_dir)
-        if not local_versions:
-            return
-
-        raw_url = SKILL_REPO_URL.replace(
-            "https://github.com/", "https://raw.githubusercontent.com/"
-        ).removesuffix(".git") + "/main/versions.json"
-        req = urllib.request.Request(raw_url, headers={"User-Agent": "sync-push"})
-        # magic-exempt
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            remote_versions: dict[str, str] = json.loads(resp.read())
-
-        drifted: list[str] = []
-        for name, local_ver in sorted(local_versions.items()):
-            remote_ver = remote_versions.get(name)
-            if remote_ver is None:
-                continue
-            if local_ver != remote_ver:
-                drifted.append(  # i18n-exempt
-                    f"  {name}: local {local_ver} vs skill-repo {remote_ver}"
-                )
-
-        if drifted:
-            print_color(  # i18n-exempt
-                f"[Skill 庫同步提示] {len(drifted)} 個 skill 版本與 skill 庫不一致：",
-                "yellow",
-            )
-            for line in drifted:
-                print_color(line, "yellow")
-            print_color(  # i18n-exempt
-                "如需同步到 skill 庫，請執行：skill-sync push <name>",
-                "yellow",
-            )
-    except Exception:
-        pass
 
 
 def load_preserve_list(claude_dir: Path) -> set[str]:
@@ -2347,8 +2305,19 @@ def main() -> None:
         if skill_diff:
             print_color(skill_diff, "green")
 
-        # Skill 庫版本 drift 檢查（0.3.5-W1-001）
-        check_skill_repo_version_drift(claude_dir / "skills")
+        # Skill 庫版本 drift 檢查（0.3.5-W1-001 建立，0.2.1-W3-134 移除）：
+        # 原以版本字串比對 remote versions.json，0.2.1-W3-131 將該檔改為巢狀
+        # {name: {hash, version}} 後，字串對 dict 永遠不相等，對全部 skill
+        # 誤判為漂移（且外層 except Exception 攔不下比較本身不拋例外的情形）。
+        # 正確的內容雜湊比對已存在於 skill_sync/cli.py::_classify_sync_status
+        # （涵蓋新格式 hash 比對與舊格式 skipped_no_hash 相容分支，見
+        # test_classify_sync_status_up_to_date_when_hash_matches /
+        # test_classify_sync_status_skips_remote_without_hash_field），
+        # push.py 不重複維護第二套比對邏輯，改引導使用者執行該指令。
+        print_color(  # i18n-exempt
+            "如需檢查本地 skill 與 skill 庫的內容漂移，請執行：skill-sync pull-all",
+            "yellow",
+        )
 
         # R2 soft 警告：本次未帶 --clean，但本地已 git rm 的 tracked .claude/ 檔
         # 在遠端殘留為孤兒。僅提醒（不阻擋、不改 --clean 預設），避免誤刪風險。
