@@ -58,6 +58,17 @@ ALLOWED_BRANCHES = [
     "test/*",
 ]
 
+# 跨專案豁免清單（W17-149 建立於 branch-verify-hook.py，0.2.1-W3-151 移至此處作 SSOT）：
+# 當目標檔案/檔案不在本專案 repo 時，使用通用清單，不套用 .claude/、docs/ 等本專案約定。
+# 供 branch-verify-hook.py（Edit/Write 路徑）與 bash-git-protected-branch-guard-hook.py
+# （Bash git commit 路徑）共用，避免兩條路徑各自維護清單而語意漂移。
+GENERIC_EXEMPT_EXACT = [
+    "README.md",
+    "CHANGELOG.md",
+    ".gitignore",
+    ".gitattributes",
+]
+
 
 @dataclass
 class FileStatus:

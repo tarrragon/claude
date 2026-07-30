@@ -1,3 +1,24 @@
+## [2.22.2] - 2026-07-30
+
+### Summary
+feat: sync 守衛與工具修復三輪 + wrap-decision 2.8.0
+
+守衛（跨專案保護分支）三個獨立繞道封閉：
+- 完全未掛 Bash matcher，Bash git commit 可直接寫外部 repo 保護分支
+- 讀當下 staged 而非推導本次命令會 stage 什麼，add && commit 串接可繞過
+- -C 目標含 shell 展開語法時解析失敗即 fail-open
+
+同步工具兩項 fail-open 修復：
+- sync-pull --audit 增讀 base sha，正向孤兒分為將被刪除與將保留兩組
+- sync-push 無 base 帶 --clean 時中止（三方保護依賴 base_files 非空）
+
+wrap-decision 2.8.0：移植 blog 分支獨有演化（觸發條件兩項、快速+模式
+定義、claim-quick-wrap orphan 修復、基礎設施累積型絆腳索）。
+
+新增 error-pattern PC-BAL-015 / PC-BAL-016。
+
+---
+
 ## [2.22.1] - 2026-07-29
 
 ### Summary

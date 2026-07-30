@@ -48,6 +48,7 @@ from lib.git_utils import (
     is_allowed_branch,
     generate_worktree_info,
     find_target_repo,
+    GENERIC_EXEMPT_EXACT,
 )
 from lib.hook_io import (
     read_hook_input,
@@ -55,16 +56,6 @@ from lib.hook_io import (
     create_pretooluse_output,
 )
 from lib import setup_hook_logging, run_hook_safely
-
-
-# 跨專案豁免清單（W17-149）：當目標檔案不在本專案 repo 時，使用通用清單
-# 不使用本專案約定的 .claude/、docs/ 等前綴（那是 book_overview_v1 約定，外部 repo 不適用）
-GENERIC_EXEMPT_EXACT = [
-    "README.md",
-    "CHANGELOG.md",
-    ".gitignore",
-    ".gitattributes",
-]
 
 
 def _resolve_cwd_for_branch_detection(file_path: str) -> "str | None":

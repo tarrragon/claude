@@ -2334,11 +2334,139 @@ def compute_reverse_orphan_candidates(
     return sorted(reverse_orphans)
 
 
+def _list_base_files(temp_dir: Path, base_sha: str) -> set[str] | None:
+    """列出 base_sha 版本下上游 repo 的全部檔案相對路徑（audit 刪除預測用）。
+
+    base_sha 不可達（force-push / GC / partial clone 未抓到）時回傳 None。
+    呼叫端必須將 None 視為「無法預測」並明示降級，不可誤用為空集合——
+    空集合會使所有正向孤兒被判定為「從未存在於 base」，產生「0 個將被
+    刪除」的假預覽，與本函式要修的缺陷同形（0.2.1-W3-146）。
+
+    參數:
+        temp_dir: 上游 repo clone 路徑
+        base_sha: 待列出的 base commit SHA
+
+    傳回:
+        set[str] | None: base 版本下的相對路徑集合（forward slash），
+        base 不可達或 ls-tree 失敗回 None
+    """
+    if not is_base_reachable(temp_dir, base_sha):
+        return None
+    result = run_git(["ls-tree", "-r", "--name-only", base_sha], cwd=str(temp_dir))
+    if result.returncode != 0:
+        return None
+    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+
+def classify_orphans_by_base(
+    orphans: list[str], base_files: set[str]
+) -> tuple[list[str], list[str]]:
+    """依正向孤兒是否曾存在於 base，分為「將被刪除」與「將保留」兩組。
+
+    三方合併的刪除判定依 base：base 有、上游已刪、本地未改的檔案會套用
+    刪除 delta。故曾存在於 base 的正向孤兒會被下次 pull 刪除；從未進入
+    base 者屬本地特化，pull 不會動它（0.2.1-W3-146）。
+
+    參數:
+        orphans: compute_orphan_candidates 產出的正向孤兒相對路徑清單
+        base_files: _list_base_files 產出的 base 版本相對路徑集合
+
+    傳回:
+        tuple[list[str], list[str]]: (將被刪除, 將保留)，皆已排序
+    """
+    will_delete = sorted(rel for rel in orphans if rel in base_files)
+    will_keep = sorted(rel for rel in orphans if rel not in base_files)
+    return will_delete, will_keep
+
+
+def _print_file_list(header: str, files: list[str], color: str, marker: str) -> None:
+    """列印一組檔案清單：標題行 + 逐檔案帶前綴符號的明細行。
+
+    供 _print_orphan_fallback / _print_orphan_split 共用，避免重複列印邏輯。
+    """
+    print_color(header, color)
+    for rel in files:
+        print_color(f"   {marker} {rel}")
+
+
+def _print_orphan_fallback(orphans: list[str], base_sha: str | None) -> None:
+    """base sha 缺失或不可達：明示無法預測刪除，降級為現行單一清單。
+
+    禁止靜默降級——不得省略「無法預測」措辭，避免使用者誤讀為「已確認
+    不會被刪除」（0.2.1-W3-146 acceptance 2）。
+    """
+    reason = (
+        "base sha 缺失（無 .sync-state.json 或 last_synced_base_sha 欄位）"  # i18n-exempt
+        if base_sha is None
+        else f"base sha {base_sha} 在上游不可達"  # i18n-exempt
+    )
+    _print_file_list(
+        f"   {len(orphans)} 個本地有上游無之檔（正向孤兒候選，"  # i18n-exempt
+        f"{reason}，無法預測是否會被下次 pull 刪除）:",  # i18n-exempt
+        orphans,
+        "yellow",
+        "!",
+    )
+    print_color(  # i18n-exempt
+        "   若為應清理的孤兒請手動移除；若為刻意本地特化可忽略此提醒。",
+        "yellow",
+    )
+
+
+def _print_orphan_split(orphans: list[str], base_files: set[str]) -> None:
+    """base sha 可達：依三方合併規則分「將被刪除」與「將保留」兩組列印。
+
+    分組依據見 classify_orphans_by_base（0.2.1-W3-146）。
+    """
+    will_delete, will_keep = classify_orphans_by_base(orphans, base_files)
+    if will_delete:
+        _print_file_list(
+            f"   {len(will_delete)} 個將被刪除（曾存在於 base，"  # i18n-exempt
+            "下次 pull 三方合併會套用上游刪除 delta）:",  # i18n-exempt
+            will_delete,
+            "red",
+            "!",
+        )
+    if will_keep:
+        _print_file_list(
+            f"   {len(will_keep)} 個將保留（從未存在於 base，屬本地特化）:",  # i18n-exempt
+            will_keep,
+            "yellow",
+            "+",
+        )
+    print_color(  # i18n-exempt
+        "   將被刪除者若非預期請於 pull 前手動處理；將保留者若為應清理的孤兒可手動移除。",
+        "yellow",
+    )
+
+
+def _print_orphan_audit(
+    orphans: list[str], base_sha: str | None, base_files: set[str] | None
+) -> None:
+    """輸出正向孤兒稽核結果：base 可達則分組，否則明示降級（0.2.1-W3-146）。
+
+    參數:
+        orphans: 正向孤兒相對路徑清單
+        base_sha: 讀取自 .sync-state.json 的 base commit SHA，缺失為 None
+        base_files: base 版本檔案集合，base 缺失或不可達為 None
+    """
+    if not orphans:
+        print_color("   無正向孤兒（本地 .claude/ 皆存在於上游 HEAD）", "green")  # i18n-exempt
+        return
+    if base_files is None:
+        _print_orphan_fallback(orphans, base_sha)
+        return
+    _print_orphan_split(orphans, base_files)
+
+
 def run_audit() -> None:  # i18n-exempt
     """sync-pull --audit：唯讀稽核正反向孤兒候選（不動同步主流程）。
 
     clone 上游 → 計算正向孤兒（本地有上游無）與反向孤兒（上游有本地無）
-    → stdout 列出（非阻擋提醒）。不寫入任何本地檔，不更新 base SHA，純唯讀分支。
+    → 若 base sha 可達，依三方合併規則將正向孤兒分為「將被刪除」與
+    「將保留」；base sha 缺失或不可達則明示無法預測刪除，降級為現行
+    單一清單（0.2.1-W3-146：不可讓空集合靜默通過造成假預覽）。
+    stdout 列出（非阻擋提醒）。不寫入任何本地檔，不更新 base SHA，純唯讀分支。
     """
     print_color("孤兒稽核：比對本地 .claude/ 與上游 HEAD...", "yellow")  # i18n-exempt
     project_root = find_project_root()
@@ -2351,21 +2479,12 @@ def run_audit() -> None:  # i18n-exempt
         reverse_orphans = compute_reverse_orphan_candidates(
             claude_dir, temp_dir, preserve
         )
+        base_sha = read_base_sha(claude_dir)
+        base_files = _list_base_files(temp_dir, base_sha) if base_sha else None
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-    if not orphans:
-        print_color("   無正向孤兒（本地 .claude/ 皆存在於上游 HEAD）", "green")  # i18n-exempt
-    else:
-        print_color(  # i18n-exempt
-            f"   {len(orphans)} 個本地有上游無之檔（正向孤兒候選）:", "yellow"
-        )
-        for rel in orphans:
-            print_color(f"   ! {rel}")
-        print_color(  # i18n-exempt
-            "   若為應清理的孤兒請手動移除；若為刻意本地特化可忽略此提醒。",
-            "yellow",
-        )
+    _print_orphan_audit(orphans, base_sha, base_files)
 
     if not reverse_orphans:
         print_color(  # i18n-exempt

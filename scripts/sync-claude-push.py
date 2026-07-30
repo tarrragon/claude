@@ -1120,6 +1120,11 @@ def _list_base_files(temp_dir: Path, base_sha: str) -> set[str]:
     """列出 base SHA 時的所有檔案路徑（用於三方比對）。
 
     base_sha 不可達時回傳空集合（降級為無三方比對的舊行為）。
+
+    注意（0.2.1-W3-155）：本函式的空集合同時代表「base 確實無檔案」與
+    「base 不可達」兩種語意。呼叫端若需要區分這兩種情況（例如判斷是否安全
+    執行 --clean），不應依賴本函式的回傳值推論，改用 `_is_base_sha_reachable`
+    獨立判定可達性。本函式契約維持不變（既有多個呼叫端依賴空集合語意）。
     """
     result = subprocess.run(
         ["git", "ls-tree", "-r", "--name-only", base_sha],
@@ -1130,6 +1135,112 @@ def _list_base_files(temp_dir: Path, base_sha: str) -> set[str]:
     if result.returncode != 0:
         return set()
     return set(result.stdout.strip().splitlines())
+
+
+def _is_base_sha_reachable(temp_dir: Path, base_sha: str | None) -> bool:
+    """獨立判定 base_sha 在 temp_dir（遠端 clone）內是否可達（0.2.1-W3-155）。
+
+    不依賴 `_list_base_files` 的空集合語意（該函式的空集合同時代表「base
+    確實無檔案」與「base 不可達」，兩種語意在此處必須區分——見
+    `clean_stale_files` 的三方保護 `if base_files and rel_posix not in
+    base_files`，base_files 為空時保護整條失效）。用 `git cat-file -e` 直接
+    檢查物件是否存在且為有效 commit，不受空集合歧義影響。
+
+    Args:
+        temp_dir: 遠端 repo 的本地 clone 暫存根目錄
+        base_sha: 待檢查的 commit SHA，None 或空字串視為不可達
+
+    Returns:
+        bool: True 表示 base_sha 存在且為有效 commit
+    """
+    if not base_sha:
+        return False
+    result = subprocess.run(
+        ["git", "cat-file", "-e", f"{base_sha}^{{commit}}"],
+        cwd=temp_dir,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def _estimate_clean_deletion_scale(temp_dir: Path, reference_dir: Path) -> tuple[int, int]:
+    """粗估 --clean 若在無 base 保護下執行的刪除規模（0.2.1-W3-155）。
+
+    回傳 (canonical_count, local_count)：分別為 temp_dir（遠端 canonical
+    全樹，此時已被本地檔案 overlay）與 reference_dir（本地 tracked 樹
+    staging）的檔案數。兩者差值即量級提示——未精算 `_should_skip_clean_file`
+    的排除項（.git / CHANGELOG / preserve / lineage 等），故為「預估」而非
+    `clean_stale_files` 實際刪除數的精確預測，足以讓使用者判斷風險量級。
+
+    Args:
+        temp_dir: 遠端 repo 的本地 clone 暫存根目錄（已 overlay 本地檔）
+        reference_dir: 本地 git tracked 樹 staging 目錄
+
+    Returns:
+        tuple[int, int]: (canonical 檔案數, 本地檔案數)
+    """
+    canonical_count = sum(1 for p in temp_dir.rglob("*") if p.is_file())
+    local_count = sum(1 for p in reference_dir.rglob("*") if p.is_file())
+    return canonical_count, local_count
+
+
+def _clean_requires_abort(clean_mode: bool, base_sha: str | None, temp_dir: Path) -> bool:
+    """純判斷：本次 push 是否應因「無 base 保護卻要求 --clean」而中止（0.2.1-W3-155）。
+
+    純函式（不含 print/sys.exit 副作用），供測試直接驗證判斷邏輯本身，
+    與 `_abort_clean_without_base_protection` 的實際中止動作分離。
+
+    Args:
+        clean_mode: 本次 push 是否帶 --clean
+        base_sha: `read_base_sha` 讀到的 base commit SHA（可能為 None）
+        temp_dir: 遠端 repo 的本地 clone 暫存根目錄（供可達性檢查）
+
+    Returns:
+        bool: True 表示應中止（未帶 --clean 時恆為 False，不影響既有流程）
+    """
+    if not clean_mode:
+        return False
+    return not _is_base_sha_reachable(temp_dir, base_sha)
+
+
+def _abort_clean_without_base_protection(
+    temp_dir: Path, staging_dir: Path, base_sha: str | None
+) -> None:
+    """無可達 base 卻帶 --clean 時中止 push（0.2.1-W3-155）。
+
+    三方比對（見 `clean_stale_files` docstring）是區分「其他 consumer 在
+    base 後新增」與「本地已 git rm」的唯一依據。base 不可達時
+    `_list_base_files` 回空集合，`if base_files and ...` 整條保護失效，
+    所有「canonical 有而本地無」的檔案一律視為待刪除——這與檔案是否被
+    其他專案新增或本地刻意保留無關，純粹因為保護機制本身失效
+    （0.2.1-W3-130 實測：blog 無 sync-state 時會刪除 1991 個 canonical 檔案）。
+
+    Args:
+        temp_dir: 遠端 repo 的本地 clone 暫存根目錄
+        staging_dir: 本地 git tracked 樹 staging 目錄
+        base_sha: `read_base_sha` 讀到的 base commit SHA（可能為 None，僅用於訊息顯示）
+    """
+    canonical_count, local_count = _estimate_clean_deletion_scale(temp_dir, staging_dir)
+    estimated_deletions = max(canonical_count - local_count, 0)
+
+    print_color("[中止] --clean 需要三方比對，但 base SHA 不可達，繼續執行不安全", "red")  # i18n-exempt
+    if base_sha:
+        print_color(f"   base SHA: {base_sha[:12]}（在遠端 clone 內找不到對應 commit）", "red")  # i18n-exempt
+    else:
+        print_color("   本專案無 .sync-state.json（尚未建立任何 base 記錄）", "red")  # i18n-exempt
+    print(f"   canonical 檔案數: {canonical_count}")
+    print(f"   本地檔案數: {local_count}")
+    print(f"   預估刪除規模: {estimated_deletions} 個檔案（canonical 有、本地無，未精算排除項）")
+    print()
+    print("   為何不安全：三方比對用 base 時的檔案清單區分「其他 consumer 在 base")
+    print("   後新增」與「本地已 git rm」；base 不可達時此區分機制失效，所有")
+    print("   canonical 有而本地無的檔案會被無差別視為應刪除，與檔案實際來源無關。")
+    print()
+    print("   下一步：先執行一次不帶 --clean 的 push 建立 base（寫入")
+    print("   .sync-state.json 的 last_synced_base_sha），確認後再重跑 --clean。")
+
+    sys.exit(1)
 
 
 def clean_stale_files(
@@ -2134,6 +2245,10 @@ def main() -> None:
                 # 三方比對（0.3.4-W2-005）：用 base SHA 區分「本地 git rm」vs「其他 consumer 新增」
                 print_color("清理遠端過時檔案（對齊 git tracked 樹）...")  # i18n-exempt
                 sync_base_sha = read_base_sha(claude_dir)
+                # 0.2.1-W3-155：base 不可達時三方保護整條失效，--clean 會把所有
+                # 「canonical 有而本地無」的檔案無差別刪除，先行中止而非降級繼續。
+                if _clean_requires_abort(clean_mode, sync_base_sha, temp_dir):
+                    _abort_clean_without_base_protection(temp_dir, staging_dir, sync_base_sha)
                 deleted = clean_stale_files(
                     temp_dir, staging_dir, preserve, lineage_claimed, skills_config,
                     base_sha=sync_base_sha,
