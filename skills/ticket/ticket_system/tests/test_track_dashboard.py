@@ -44,6 +44,7 @@ def _mk(
     body_with_cb: bool = True,
     agent: Optional[str] = None,
     trigger_bound: bool = False,
+    children: Optional[List[Any]] = None,
 ) -> Dict[str, Any]:
     """建立最小 ticket dict。
 
@@ -51,6 +52,7 @@ def _mk(
     _compute_readiness 回傳 READY（無 handoff 時走 Context Bundle 分支）。
 
     trigger_bound: W3-096 新增欄位，預設 False 不影響既有 Group A-F 測試。
+    children: 0.2.1-W3-261 新增欄位，預設 None（等同 []）不影響既有測試。
     """
     body = ""
     if body_with_cb:
@@ -64,6 +66,7 @@ def _mk(
         "title": title or f"title-{tid}",
         "status": status,
         "blockedBy": blocked or [],
+        "children": children or [],
         "priority": priority,
         "wave": wave,
         "version": "0.18.0",
@@ -175,12 +178,13 @@ def test_A6_empty_section_renders_none(monkeypatch, capsys):
     _patch_loader(monkeypatch, [])
     track_dashboard.dashboard_main(_ns(), "0.18.0")
     out = capsys.readouterr().out
-    # 三章節 header 出現
+    # 四章節 header 出現（0.2.1-W3-220 新增 Handoff Target）
     assert "[In Progress] 0 ticket(s)" in out
+    assert "[Handoff Target] 0 ticket(s)" in out
     assert "[Ready Top 5]" in out
     assert "[Stale Warning] 0 ticket(s) over 60min" in out
-    # 三段 (none)
-    assert out.count("(none)") == 3
+    # 四段 (none)
+    assert out.count("(none)") == 4
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +340,7 @@ def test_D3_wave_not_exist(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert rc == 0
     assert "wave=999" in out
-    assert out.count("(none)") == 3
+    assert out.count("(none)") == 4
 
 
 def test_D4_no_stale_flag(monkeypatch, capsys):
@@ -456,6 +460,9 @@ def test_F1_golden_pure_pending(monkeypatch, capsys):
         "[In Progress] 0 ticket(s)\n"
         "  (none)\n"
         "\n"
+        "[Handoff Target] 0 ticket(s)\n"
+        "  (none)\n"
+        "\n"
         "[Ready Top 5]  priority 排序，可直接 claim\n"
         "  [1] [P0] [ready] 0.18.0-W10-101  A\n"
         "  [2] [P1] [ready] 0.18.0-W10-102  B\n"
@@ -486,6 +493,9 @@ def test_F2_golden_with_in_progress(monkeypatch, capsys):
         "  - 0.18.0-W10-001  impl  "
         "(started_at: <NORMALIZED>, agent: thyme)\n"
         "\n"
+        "[Handoff Target] 0 ticket(s)\n"
+        "  (none)\n"
+        "\n"
         "[Ready Top 5]  priority 排序，可直接 claim\n"
         "  [1] [P1] [ready] 0.18.0-W10-101  X\n"
         "\n"
@@ -512,6 +522,9 @@ def test_F3_golden_with_stale(monkeypatch, capsys):
         "[In Progress] 1 ticket(s)\n"
         "  - 0.18.0-W10-001  long  "
         "(started_at: <NORMALIZED>, agent: parsley)\n"
+        "\n"
+        "[Handoff Target] 0 ticket(s)\n"
+        "  (none)\n"
         "\n"
         "[Ready Top 5]  priority 排序，可直接 claim\n"
         "  [1] [P0] [ready] 0.18.0-W10-101  P\n"
@@ -618,3 +631,232 @@ def test_G5_sort_cross_priority_priority_wins(monkeypatch, capsys):
         f"priority 應優先：P1@{pos_p1_trigger}, P2@{pos_p2_normal}\n"
         f"輸出：\n{out}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Group H：[Handoff Target] 章節（0.2.1-W3-220）
+# 涵蓋 target 票為 pending / in_progress / completed 三種狀態，
+# 驗證獨立於 Ready 的 unblocked-pending 過濾，且 text/json 一致（A4 約束）。
+# ---------------------------------------------------------------------------
+
+def _mk_handoff_info(source_id: str, target_id: str) -> Dict[str, Dict]:
+    """建立修復後 _get_pending_handoff_info() 應回傳的資料形態
+    （source key + target key 皆指向同一份 data，含 target_ticket_id 欄位）。
+    """
+    data = {"ticket_id": source_id, "target_ticket_id": target_id}
+    return {source_id: data, target_id: data}
+
+
+def test_H1_target_pending_shown(monkeypatch, capsys):
+    tickets = [_mk("0.18.0-W10-900", status="pending")]
+    _patch_loader(monkeypatch, tickets)
+    monkeypatch.setattr(
+        track_dashboard, "_get_pending_handoff_info",
+        lambda: _mk_handoff_info("0.18.0-W10-899", "0.18.0-W10-900"),
+    )
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    assert "[Handoff Target]" in out
+    assert "0.18.0-W10-900" in out.split("[Handoff Target]")[1].split("[Ready")[0]
+
+
+def test_H2_target_in_progress_shown(monkeypatch, capsys):
+    """target 票 in_progress 時，Ready 章節不收（unblocked-pending 過濾），
+    但 Handoff Target 章節須顯示（來源票 E3 實測缺口）。
+    """
+    tickets = [_mk("0.18.0-W10-901", status="in_progress",
+                    started_at=_now_iso(1), agent="thyme")]
+    _patch_loader(monkeypatch, tickets)
+    monkeypatch.setattr(
+        track_dashboard, "_get_pending_handoff_info",
+        lambda: _mk_handoff_info("0.18.0-W10-889", "0.18.0-W10-901"),
+    )
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    handoff_section = out.split("[Handoff Target]")[1].split("[Ready")[0]
+    ready_section = out.split("[Ready")[1]
+    assert "0.18.0-W10-901" in handoff_section
+    assert "0.18.0-W10-901" not in ready_section
+
+
+def test_H3_target_completed_shown(monkeypatch, capsys):
+    """target 票 completed 時，Ready 章節不收，但 Handoff Target 章節須顯示。"""
+    tickets = [_mk("0.18.0-W10-902", status="completed")]
+    _patch_loader(monkeypatch, tickets)
+    monkeypatch.setattr(
+        track_dashboard, "_get_pending_handoff_info",
+        lambda: _mk_handoff_info("0.18.0-W10-879", "0.18.0-W10-902"),
+    )
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    handoff_section = out.split("[Handoff Target]")[1].split("[Ready")[0]
+    ready_section = out.split("[Ready")[1]
+    assert "0.18.0-W10-902" in handoff_section
+    assert "0.18.0-W10-902" not in ready_section
+
+
+def test_H4_json_text_handoff_target_equivalence(monkeypatch, capsys):
+    """text 與 json 兩種格式的 Handoff Target 章節內容一致（A4 一致性約束）。"""
+    tickets = [
+        _mk("0.18.0-W10-903", status="completed"),
+        _mk("0.18.0-W10-904", status="pending", priority="P2"),
+    ]
+    _patch_loader(monkeypatch, tickets)
+    monkeypatch.setattr(
+        track_dashboard, "_get_pending_handoff_info",
+        lambda: _mk_handoff_info("0.18.0-W10-869", "0.18.0-W10-903"),
+    )
+
+    track_dashboard.dashboard_main(_ns(format="json"), "0.18.0")
+    payload = json.loads(capsys.readouterr().out)
+    assert "handoff_targets" in payload
+    json_ids = [item["id"] for item in payload["handoff_targets"]]
+
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    text_out = capsys.readouterr().out
+    handoff_section = text_out.split("[Handoff Target]")[1].split("[Ready")[0]
+
+    assert json_ids == ["0.18.0-W10-903"]
+    assert "0.18.0-W10-903" in handoff_section
+
+
+def test_H5_no_handoff_renders_none(monkeypatch, capsys):
+    """無 handoff pending 時，Handoff Target 章節顯示 0 且 (none)。"""
+    _patch_loader(monkeypatch, [])
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    assert "[Handoff Target] 0 ticket(s)" in out
+
+
+def test_H6_ready_section_not_regressed_by_handoff_target(monkeypatch, capsys):
+    """既有 Ready 章節排序與編號行為不因新增 Handoff Target 章節而回歸。"""
+    tickets = [
+        _mk("0.18.0-W10-910", priority="P0"),
+        _mk("0.18.0-W10-911", priority="P1"),
+    ]
+    _patch_loader(monkeypatch, tickets)
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    ready_section = out.split("[Ready")[1]
+    pos_1 = ready_section.find("[1]")
+    pos_2 = ready_section.find("[2]")
+    assert 0 <= pos_1 < pos_2
+    assert "0.18.0-W10-910" in ready_section.split("[2]")[0]
+
+
+# ---------------------------------------------------------------------------
+# Group I：Ready 判定同源 is_fully_unblocked + children 過濾（0.2.1-W3-261）
+#
+# 框架 issue 42 實證場景：同一 wave 中 3 張 P0 子票的 blocker 完成後，
+# runqueue 正確列為前三順位，dashboard --top 5 完全未列、第一順位反而是
+# 其父票（父票 children 未完成，complete 時會被 acceptance_auditor 阻擋）。
+# ---------------------------------------------------------------------------
+
+def test_I1_parent_with_incomplete_children_excluded(monkeypatch, capsys):
+    """父票有未完成 children 時不列入 Ready，即使自身 blockedBy 為空。"""
+    tickets = [
+        _mk("0.18.0-W10-950", priority="P0", children=["0.18.0-W10-951"]),
+        _mk("0.18.0-W10-951", priority="P1", status="pending"),
+    ]
+    _patch_loader(monkeypatch, tickets)
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    ready_section = out.split("[Ready")[1].split("[Stale")[0]
+    assert "0.18.0-W10-950" not in ready_section
+    assert "0.18.0-W10-951" in ready_section
+
+
+def test_I2_parent_with_all_children_completed_included(monkeypatch, capsys):
+    """父票 children 皆已 completed/closed 時，父票正常列入 Ready（無誤排除）。"""
+    tickets = [
+        _mk("0.18.0-W10-952", priority="P0",
+            children=["0.18.0-W10-953", "0.18.0-W10-954"]),
+        _mk("0.18.0-W10-953", status="completed"),
+        _mk("0.18.0-W10-954", status="closed"),
+    ]
+    _patch_loader(monkeypatch, tickets)
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    ready_section = out.split("[Ready")[1].split("[Stale")[0]
+    assert "0.18.0-W10-952" in ready_section
+
+
+def test_I3_child_dict_embedded_status_conservative_fallback(monkeypatch, capsys):
+    """children 為字典且嵌入未完成 status、且不在 ticket_map 中時，
+    保守 fallback 讀嵌入 status（排除父票）。
+    """
+    tickets = [
+        _mk("0.18.0-W10-955", priority="P0",
+            children=[{"id": "0.18.0-W10-956", "status": "pending"}]),
+    ]
+    _patch_loader(monkeypatch, tickets)
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    ready_section = out.split("[Ready")[1].split("[Stale")[0]
+    assert "0.18.0-W10-955" not in ready_section
+
+
+def test_I4_blockedby_pointing_to_completed_ticket_appears_in_ready(monkeypatch, capsys):
+    """blockedBy 指向已 completed ticket 的任務出現在 Ready（AC #2 回歸守護）。
+
+    Ready 判定的 blockedBy 維度自初版即同源 is_fully_unblocked
+    （經 _is_unblocked_pending 間接複用），本案為顯性回歸測試。
+    """
+    tickets = [
+        _mk("0.18.0-W10-960", status="completed"),
+        _mk("0.18.0-W10-961", priority="P0", blocked=["0.18.0-W10-960"]),
+    ]
+    _patch_loader(monkeypatch, tickets)
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    ready_section = out.split("[Ready")[1].split("[Stale")[0]
+    assert "0.18.0-W10-961" in ready_section
+
+
+def test_I5_issue_42_scenario_children_ranked_parent_excluded(monkeypatch, capsys):
+    """issue 42 實證場景回歸案例：blocker 完成後的 3 張 P0 子票排前 3 順位，
+    有未完成 children 的父票不進 Ready top 5（即使父票自身 unblocked pending）。
+    """
+    tickets = [
+        _mk("0.18.0-W10-970", status="completed"),  # blocker，已完成
+        _mk("0.18.0-W10-971", priority="P0", blocked=["0.18.0-W10-970"]),
+        _mk("0.18.0-W10-972", priority="P0", blocked=["0.18.0-W10-970"]),
+        _mk("0.18.0-W10-973", priority="P0", blocked=["0.18.0-W10-970"]),
+        _mk("0.18.0-W10-974", priority="P0",
+            children=["0.18.0-W10-971", "0.18.0-W10-972", "0.18.0-W10-973"]),
+    ]
+    _patch_loader(monkeypatch, tickets)
+    track_dashboard.dashboard_main(_ns(top=5), "0.18.0")
+    out = capsys.readouterr().out
+    ready_section = out.split("[Ready")[1].split("[Stale")[0]
+    assert "0.18.0-W10-971" in ready_section
+    assert "0.18.0-W10-972" in ready_section
+    assert "0.18.0-W10-973" in ready_section
+    assert "0.18.0-W10-974" not in ready_section
+
+
+def test_I6_dashboard_runqueue_blockedby_predicate_consistency(monkeypatch, capsys):
+    """dashboard 與 runqueue 對同一 wave 的 blockedBy 判定同源一致性測試。
+
+    兩命令共用同一 _is_unblocked_pending predicate（非各自重新實作），
+    對 blocker 已 completed 的子票應一致判定為可執行。
+    """
+    tickets = [
+        _mk("0.18.0-W10-980", status="completed", wave=20),
+        _mk("0.18.0-W10-981", priority="P0", blocked=["0.18.0-W10-980"], wave=20),
+    ]
+    ticket_map = {t["id"]: t for t in tickets}
+
+    # dashboard 路徑
+    dashboard_ready_ids = {
+        item["id"] for item in track_dashboard.load_top_ready(tickets, top=5)
+    }
+    # runqueue 路徑（同一 predicate，直接呼叫確認不各自重新實作）
+    runqueue_unblocked_ids = {
+        t["id"] for t in tickets
+        if track_dashboard._is_unblocked_pending(t, ticket_map)
+    }
+
+    assert "0.18.0-W10-981" in dashboard_ready_ids
+    assert "0.18.0-W10-981" in runqueue_unblocked_ids
+    assert dashboard_ready_ids <= runqueue_unblocked_ids

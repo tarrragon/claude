@@ -41,6 +41,10 @@
           },
           {
             "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hooks-test-gate-hook.py"
+          },
+          {
+            "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pre-test-hook.py"
           },
           {
@@ -81,6 +85,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/domain-import-lint-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/bare-commit-guard-hook.py"
           }
         ]
       },
@@ -266,6 +274,15 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uc-reference-validation-hook.py"
           },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
+          }
+        ]
+      },
+      {
+        "matcher": "NotebookEdit",
+        "hooks": [
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
@@ -478,6 +495,15 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-source-diagnostic-hook.py",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uv-tool-ownership-guard-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-dir-audit-hook.py",
+            "timeout": 5000
           }
         ]
       }
@@ -533,7 +559,7 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-skill-sync-check-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill-cli-sync-check-hook.py",
             "timeout": 5000
           },
           {
@@ -848,6 +874,11 @@
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/confabulation-audit-hook.py",
             "type": "command",
             "timeout": 15000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-dir-audit-hook.py",
+            "timeout": 5000
           }
         ]
       }

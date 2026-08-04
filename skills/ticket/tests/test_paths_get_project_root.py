@@ -15,7 +15,7 @@ import subprocess
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from ticket_system.lib.paths import get_project_root
+from ticket_system.lib.paths import get_project_root, reset_project_root_cache
 
 
 class TestGetProjectRootPaths:
@@ -221,3 +221,110 @@ class TestLinkedWorktreeRoot:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=128, stdout="")
             assert _linked_worktree_root() is None
+
+
+class TestGetProjectRootCache:
+    """get_project_root() 程序內快取（0.2.1-W3-254）。
+
+    自動載入的 `.claude/skills/ticket/conftest.py::_isolate_project_root`
+    autouse fixture 在每個 test 前呼叫 reset_project_root_cache()，故本類別
+    每個 test 開始時快取已為空，可直接測試「呼叫內」的快取行為。
+    """
+
+    def teardown_method(self):
+        # 保險：即使本類別內測試提前 raise，仍清快取避免污染後續其他測試
+        # 檔案（雙重保護，autouse fixture 已於每個 test 前處理，此為防禦層）。
+        reset_project_root_cache()
+
+    def test_second_call_uses_cache_not_new_subprocess(self):
+        """AC1：單次「呼叫」內（模擬單一 CLI process）第二次呼叫不再觸發 git subprocess。"""
+        git_root = "/path/to/git/repo"
+        with patch.dict("os.environ", {}, clear=True):
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(returncode=0, stdout=git_root + "\n")
+                first = get_project_root()
+                second = get_project_root()
+
+        assert first == second == Path(git_root)
+        # worktree 偵測（1 次）+ git rev-parse（1 次）＝ 2 次；快取生效後
+        # 第二次呼叫應完全不再觸發任何 subprocess.run。
+        assert mock_run.call_count == 2
+
+    def test_reset_forces_fresh_resolution(self):
+        """reset_project_root_cache() 後下次呼叫重新解析，不沿用舊快取值。"""
+        with patch.dict("os.environ", {}, clear=True):
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(
+                    returncode=0, stdout="/first/root\n"
+                )
+                first = get_project_root()
+
+            reset_project_root_cache()
+
+            with patch("subprocess.run") as mock_run2:
+                mock_run2.return_value = MagicMock(
+                    returncode=0, stdout="/second/root\n"
+                )
+                second = get_project_root()
+
+        assert first == Path("/first/root")
+        assert second == Path("/second/root")
+        assert first != second
+
+    def test_worktree_result_cached_correctly(self):
+        """worktree 情境：快取後第二次呼叫仍回傳同一 worktree root，且不重複偵測。
+
+        需 `patch.dict(..., clear=True)` 清除 autouse fixture 注入的
+        `TICKET_SYSTEM_TEST_ISOLATION=1`，否則測試隔離逃生艙（步驟 0）
+        會在抵達 `_linked_worktree_root` 前就短路回傳 fixture 的 tmp 目錄。
+        """
+        worktree_root = Path("/main/repo/.claude/worktrees/agent-abc")
+        with patch.dict("os.environ", {}, clear=True):
+            with patch(
+                "ticket_system.lib.paths._linked_worktree_root",
+                return_value=worktree_root,
+            ) as mock_worktree:
+                first = get_project_root()
+                second = get_project_root()
+
+        assert first == second == worktree_root
+        # 快取生效後第二次呼叫不應再呼叫 _linked_worktree_root。
+        assert mock_worktree.call_count == 1
+
+    def test_main_repo_result_cached_correctly(self):
+        """主 repo 情境（非 worktree）：快取後第二次呼叫仍回傳同一根目錄，且不重複偵測。
+
+        同上，須 clear=True 排除逃生艙旗標干擾。
+        """
+        main_repo = "/main/repo"
+        with patch.dict("os.environ", {"CLAUDE_PROJECT_DIR": main_repo}, clear=True):
+            with patch(
+                "ticket_system.lib.paths._linked_worktree_root",
+                return_value=None,
+            ) as mock_worktree:
+                first = get_project_root()
+                second = get_project_root()
+
+        assert first == second == Path(main_repo)
+        assert mock_worktree.call_count == 1
+
+    def test_autouse_fixture_reset_simulates_test_boundary_isolation(self):
+        """模擬 conftest 的 autouse fixture 行為（不依賴實際 pytest 執行順序
+        ——避免測試斷言依賴執行順序，見 test-assertion-design-rules 規則 D）：
+        先讓快取寫入某值，呼叫 reset_project_root_cache()（fixture 每個 test
+        前實際執行的動作），驗證快取確實歸零，不會洩漏給下一個呼叫者。"""
+        with patch.dict("os.environ", {}, clear=True):
+            with patch("subprocess.run") as mock_run:
+                mock_run.return_value = MagicMock(
+                    returncode=0, stdout="/boundary/test/root\n"
+                )
+                get_project_root()
+
+        from ticket_system.lib.paths import _project_root_cache as cache_after_call
+        assert cache_after_call == Path("/boundary/test/root")
+
+        # 模擬下一個 test 開始前 autouse fixture 執行的動作
+        reset_project_root_cache()
+
+        from ticket_system.lib.paths import _project_root_cache as cache_after_reset
+        assert cache_after_reset is None

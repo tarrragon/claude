@@ -126,6 +126,44 @@ branch refs/heads/feat/new-feature
         worktrees = get_worktree_list()
         self.assertEqual(worktrees, [])
 
+    @patch('lib.git_utils.run_git_command')
+    def test_get_worktree_list_forwards_cwd(self, mock_run):
+        """0.2.1-W3-286：cwd 參數轉發給 run_git_command（支援指定 worktree 路徑查詢）"""
+        mock_run.return_value = (True, "")
+        get_worktree_list(cwd="/some/worktree")
+        mock_run.assert_called_once_with(
+            ["worktree", "list", "--porcelain"], cwd="/some/worktree"
+        )
+
+    @patch('lib.git_utils.run_git_command')
+    def test_get_worktree_list_exclude_main(self, mock_run):
+        """0.2.1-W3-286：exclude_main=True 時排除 main/master，保留其他分支與 detached"""
+        mock_run.return_value = (True, """worktree /path/to/repo
+branch refs/heads/main
+
+worktree /path/to/feature
+branch refs/heads/feat/new-feature
+
+worktree /path/to/detached
+detached
+""")
+        worktrees = get_worktree_list(exclude_main=True)
+        paths = [wt["path"] for wt in worktrees]
+        self.assertNotIn("/path/to/repo", paths)
+        self.assertIn("/path/to/feature", paths)
+        # detached 項目（無 branch 值）不受 exclude_main 影響，仍保留
+        self.assertIn("/path/to/detached", paths)
+
+    @patch('lib.git_utils.run_git_command')
+    def test_get_worktree_list_exclude_main_false_keeps_all(self, mock_run):
+        """exclude_main=False（預設）時維持原本行為，main 仍在清單中"""
+        mock_run.return_value = (True, """worktree /path/to/repo
+branch refs/heads/main
+""")
+        worktrees = get_worktree_list()
+        self.assertEqual(len(worktrees), 1)
+        self.assertEqual(worktrees[0]["branch"], "main")
+
 
 class TestConstants(unittest.TestCase):
     """測試常數定義"""
@@ -217,7 +255,14 @@ A  file3.py
 
     @patch('lib.git_utils.run_git_command')
     def test_porcelain_format_preserved(self, mock_run):
-        """測試 porcelain 格式狀態行被保留"""
+        """測試 porcelain 格式狀態行被保留
+
+        注意：本測試 mock 層級為 run_git_command 本身，不涵蓋
+        run_git_command 內部對 subprocess.run 結果做 strip 的路徑，
+        故無法捕捉 IMP-BAL-007 / 0.2.1-W3-284 缺陷（整體 strip 剝除
+        首行前導空白）。該缺陷的回歸測試見
+        TestRunGitCommandSubprocessLevel（mock 點下移至 subprocess.run）。
+        """
         mock_run.return_value = (True, """ M modified.txt
 ?? untracked.txt
  D deleted.txt
@@ -227,6 +272,48 @@ A  file3.py
         self.assertTrue(any(line.startswith(" M") for line in status_lines))
         self.assertTrue(any(line.startswith("??") for line in status_lines))
         self.assertTrue(any(line.startswith(" D") for line in status_lines))
+
+
+class TestRunGitCommandSubprocessLevel(unittest.TestCase):
+    """mock 點下移至 subprocess.run，覆蓋 run_git_command 內部 strip 路徑
+
+    IMP-BAL-007 / 0.2.1-W3-284 迴歸測試：舊測試 mock run_git_command
+    本身，無法觸及其內部對 result.stdout 做 strip 的那一行。這裡改
+    mock subprocess.run，讓 run_git_command 的真實實作（含 strip 邏輯）
+    進入受測範圍。
+    """
+
+    @patch('subprocess.run')
+    def test_porcelain_leading_space_preserved(self, mock_run):
+        """porcelain 首行前導空白（worktree-modified 狀態）不應被剝除"""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=" M aaa.txt\n?? zzz-untracked.txt\n",
+            stderr="",
+        )
+        success, output = run_git_command(["status", "--porcelain"])
+        self.assertTrue(success)
+        # 首行前導空白必須保留，否則 " M aaa.txt" 會被誤剝成 "M aaa.txt"
+        self.assertEqual(output.split("\n")[0], " M aaa.txt")
+
+    @patch('subprocess.run')
+    def test_uncommitted_files_first_line_parsed_correctly(self, mock_run):
+        """get_uncommitted_files 對首行 worktree-modified 檔案的解析須正確
+
+        對應 ticket 實驗重現：整體 strip 使首行 status 由 " M" 誤判為 "M "
+        （is_staged 由 False 誤翻為 True），file_path 掉首字元。
+        """
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=" M aaa.txt\n?? zzz-untracked.txt\n",
+            stderr="",
+        )
+        files = get_uncommitted_files()
+        self.assertEqual(len(files), 2)
+        first = files[0]
+        self.assertEqual(first.status, " M")
+        self.assertEqual(first.file_path, "aaa.txt")
+        self.assertFalse(first.is_staged)
 
 
 class TestUncommittedFiles(unittest.TestCase):
@@ -265,6 +352,16 @@ A  file3.py
         mock_run.return_value = (True, "")
         files = get_uncommitted_files()
         self.assertEqual(files, [])
+
+    @patch('lib.git_utils.run_git_command')
+    def test_get_uncommitted_files_forwards_cwd(self, mock_run):
+        """0.2.1-W3-286：cwd 參數轉發，支援指定 worktree 路徑查詢（取代各
+        hook 各自 `git -C <path> status --porcelain` 的重複實作）"""
+        mock_run.return_value = (True, "")
+        get_uncommitted_files(cwd="/some/worktree")
+        mock_run.assert_called_once_with(
+            ["status", "--porcelain"], cwd="/some/worktree"
+        )
 
     @patch('lib.git_utils.run_git_command')
     def test_get_uncommitted_files_failure(self, mock_run):

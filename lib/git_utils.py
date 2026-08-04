@@ -36,6 +36,9 @@ REFS_HEADS_PREFIX = "refs/heads/"
 # Git status --porcelain 格式常數
 GIT_STATUS_CODE_LEN = 2  # porcelain 格式的狀態碼長度
 
+# worktree list 排除清單（get_worktree_list exclude_main=True 時套用）
+WORKTREE_EXCLUDED_BRANCHES = ("main", "master")
+
 # 保護分支列表（支援 glob 模式）
 PROTECTED_BRANCHES = [
     "main",
@@ -151,7 +154,10 @@ def run_git_command(
             timeout=timeout
         )
         if result.returncode == 0:
-            return True, result.stdout.strip()
+            # 只移除尾端換行，保留行首空白（porcelain 格式 X 位置可能為空白，
+            # 整體 strip() 會剝除首行前導空白，使 get_uncommitted_files 解析
+            # 偏移一格，見 IMP-BAL-007 / 0.2.1-W3-284）
+            return True, result.stdout.rstrip("\n")
         else:
             return False, result.stderr.strip()
     except subprocess.TimeoutExpired:
@@ -276,12 +282,19 @@ def get_project_root(cwd: Optional[str] = None) -> Path:
     return Path(cwd) if cwd else Path.cwd()
 
 
-def get_uncommitted_files() -> list[FileStatus]:
+def get_uncommitted_files(cwd: Optional[str] = None) -> list[FileStatus]:
     """
     獲取未提交變更的結構化資訊（高階 API）
 
     內部呼叫 git status --porcelain，將結果解析為 FileStatus 物件列表。
-    每個 FileStatus 物件包含狀態碼和檔案路徑的結構化資訊。
+    每個 FileStatus 物件包含狀態碼和檔案路徑的結構化資訊。Renamed/Copied
+    項目的箭頭格式（`old -> new`）保留於 file_path 內，不另行拆解（見
+    FileStatus docstring 的特殊限制說明），供各呼叫端統一沿用。
+
+    Args:
+        cwd: 執行 git status 的工作目錄，預設為當前目錄（0.2.1-W3-286：
+             支援指定 worktree 路徑，取代各 hook 各自 `git -C <path> status`
+             的重複實作）
 
     Returns:
         list[FileStatus]: 未提交變更的 FileStatus 物件列表，
@@ -295,12 +308,15 @@ def get_uncommitted_files() -> list[FileStatus]:
             elif file.is_untracked:
                 print(f"Untracked: {file.file_path}")
 
+        # 指定 worktree 路徑
+        wt_files = get_uncommitted_files(cwd="/path/to/worktree")
+
         # 統計未提交檔案
         total = len(files)
         untracked = sum(1 for f in files if f.is_untracked)
         print(f"Total changes: {total}, Untracked: {untracked}")
     """
-    status_lines = _get_uncommitted_status_lines()
+    status_lines = _get_uncommitted_status_lines(cwd=cwd)
 
     if not status_lines:
         return []
@@ -318,7 +334,7 @@ def get_uncommitted_files() -> list[FileStatus]:
     return files
 
 
-def _get_uncommitted_status_lines() -> list[str]:
+def _get_uncommitted_status_lines(cwd: Optional[str] = None) -> list[str]:
     """
     獲取未提交變更的狀態行（內部低階 API，已棄用）
 
@@ -327,6 +343,9 @@ def _get_uncommitted_status_lines() -> list[str]:
     空輸出或 git 命令失敗時返回空列表。
 
     注意：此函式為內部實作，建議改用 get_uncommitted_files() 高階 API。
+
+    Args:
+        cwd: 執行 git status 的工作目錄，預設為當前目錄
 
     Returns:
         list[str]: 未提交變更的狀態行列表，如果沒有變更或命令失敗則返回空列表
@@ -338,7 +357,7 @@ def _get_uncommitted_status_lines() -> list[str]:
         for line in status_lines:
             print(f"  {line}")
     """
-    success, output = run_git_command(["status", "--porcelain"])
+    success, output = run_git_command(["status", "--porcelain"], cwd=cwd)
 
     if not success or not output:
         return []
@@ -347,22 +366,41 @@ def _get_uncommitted_status_lines() -> list[str]:
     return [line for line in lines if line.strip()]
 
 
-def get_worktree_list() -> list[dict]:
+def get_worktree_list(
+    cwd: Optional[str] = None, exclude_main: bool = False
+) -> list[dict]:
     """
     獲取所有 worktree 列表
+
+    Args:
+        cwd: 執行 git worktree list 的工作目錄，預設為當前目錄（0.2.1-W3-286：
+             支援指定路徑查詢，取代各 hook 各自解析 `git worktree list
+             --porcelain` 的重複實作）
+        exclude_main: True 時排除 branch 為 main/master 的項目（收斂三個
+            hook 各自的 main/master 字面量排除判斷，見 WORKTREE_EXCLUDED_
+            BRANCHES）。detached 項目（無 branch 值）不受此旗標影響——是否
+            納入 detached 由呼叫端依需求另行過濾（如需 (path, branch)
+            tuple 的呼叫端應對 `wt.get("branch")` 做真值檢查）。
 
     Returns:
         list[dict]: worktree 資訊列表，每個元素包含:
             - path: worktree 路徑
-            - branch: 分支名稱（可選）
+            - branch: 分支名稱（可選，detached 時不存在）
             - detached: 是否為 detached HEAD（可選）
 
     Example:
         worktrees = get_worktree_list()
         for wt in worktrees:
             print(f"{wt.get('branch', 'detached')}: {wt['path']}")
+
+        # 排除 main/master，僅取有 branch 的項目
+        feature_worktrees = [
+            (wt["path"], wt["branch"])
+            for wt in get_worktree_list(exclude_main=True)
+            if wt.get("branch")
+        ]
     """
-    success, output = run_git_command(["worktree", "list", "--porcelain"])
+    success, output = run_git_command(["worktree", "list", "--porcelain"], cwd=cwd)
     if not success:
         return []
 
@@ -386,6 +424,12 @@ def get_worktree_list() -> list[dict]:
 
     if current_worktree:
         worktrees.append(current_worktree)
+
+    if exclude_main:
+        worktrees = [
+            wt for wt in worktrees
+            if wt.get("branch") not in WORKTREE_EXCLUDED_BRANCHES
+        ]
 
     return worktrees
 

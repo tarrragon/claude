@@ -1,3 +1,112 @@
+## [2.23.0] - 2026-08-05
+
+### Summary
+feat: agent-commit-verification-hook 逐 worktree 檢查未落地產品碼; feat: 實作 bare-commit-guard 並行期裸 commit 防線; feat: 保障 worktree 內 ticket create 產出的追蹤與清理防護 (+96 more)
+
+Changes: 14 feat, 8 refactor, 34 fix, 38 docs, 4 chore, 1 perf
+
+- feat: agent-commit-verification-hook 逐 worktree 檢查未落地產品碼
+- feat: 實作 bare-commit-guard 並行期裸 commit 防線
+- feat: 保障 worktree 內 ticket create 產出的追蹤與清理防護
+- feat: dispatch_mode readonly 豁免路徑（fallback 版）
+- feat: 增設 complete 別名 finish 避開 CC worktree guard 誤判
+- feat: 實作 spawn request 狀態標記 CLI 子命令
+- feat: dispatch-readiness 新增 acceptance 與寫入集一致性檢查
+- feat: 泛化 skill CLI 文件同步防護 hook 至七個 skill
+- feat: WAVE_WRAP_UP_REMINDER 觸發端實查 Wave pending 數
+- feat: 新增雙軌皆空但 session 有交接訊號的 Stop hook 偵測第 7 格
+- feat: 封閉 NotebookEdit memory 寫入路徑並誠實化 Bash 缺口
+- feat: 新增 hooks 變更目標式測試 gate
+- feat: SKILLS 清單漂移偵測落在 SessionStart
+- feat: agent-dispatch-template 交付通道補派發形態維度
+- refactor: 收斂 4 份 worktree/porcelain 重複實作至 lib.git_utils
+- refactor: Guard 表驅動 + worktree 回傳型別具名化
+- refactor: 收斂 git worktree/porcelain 重複解析至 git_utils 共用層
+- refactor: 刪除 phase-contract-validator-hook 死碼及其測試與豁免條目
+- refactor: 抽取 memory 路徑與分流訊息的單一真相來源
+- refactor: memory 稽核改 SessionStart 加 Stop 事件式偵測
+- refactor: memory 稽核 layout 表格化與 docstring 敘事收斂
+- refactor: 移除 memory 升級工作流的程式碼層殘留
+- fix: 修正 worktree hook 訊息的互斥指示與 Guard 代號撞號
+- fix: 共用 git runner 改為只 rstrip 換行，保留 porcelain 首行前導空白
+- fix: 修正 worktree hook 阻擋訊息的裸 cd 與無 pathspec commit 建議
+- fix: 補上 worktree 清理路徑對已追蹤檔未提交修改的遺失防護
+- fix: readme_index 略過原子配號的 reserved 佔位檔
+- fix: 修復 worktree skill 測試套件 collection error 與 patch target 漂移
+- fix: 封閉 error-pattern allocator 兩面配號競爭
+- fix: dashboard Ready 判定加入 children 未完成過濾
+- fix: worktree-commit-before-dispatch 阻擋訊息改用「主 repo」取代歧義的 main
+- fix: set-acceptance 補上 auto-commit 消除 worktree 靜默遺失風險
+- fix: _auto_commit_ticket_md commit 訊息不再誤標 append-log
+- fix: Context Bundle 冪等判定改為 content-aware 使 claim 時重抽生效
+- fix: worktree 派發跳過主 repo 端搶先身份綁定，消除雙寫洩漏
+- fix: runqueue list 視圖不再硬編 blockedBy=[] 後綴
+- fix: 收斂 complete auto-stage 排除 siblings 與 children 路徑
+- fix: 補 hook 與測試檔的執行權限
+- fix: 移除 hook-completeness-check.py 對已刪除 hook-registry.json 的 docstring 引用
+- fix: 修正 skill-shadowing-check-hook docstring 優先序方向與過時數量
+- fix: 校準 path_permission 白名單與拒絕訊息清單，改為機制綁定
+- fix: WAVE_WRAP_UP_REMINDER 移除偽裝偵測結果的靜態文案
+- fix: handoff --from-worklog 掃描範圍限縮至交接段落
+- fix: worktree 內測試 fixture 隔離逃生艙，消除假紅燈污染
+- fix: 修復 dashboard 的 handoff target 呈現與 key 語意錯位
+- fix: 修復 worklog 交接段偵測與本專案書寫慣例失配
+- fix: get_current_version_from_todolist 改解析 status=active
+- fix: AUDIT_MESSAGE 首句改陳述能力事實、Action 改可執行指令
+- fix: 依 shell 語意分流處理跳脫引號，消除配對錯位繞過
+- fix: 重寫字面區段掃描為單趟狀態機，消除 DENY 繞過
+- fix: 消除 bash-edit-guard 模式 A 對字面命中的誤報
+- fix: 修復 memory 稽核目錄定位失效並補可攜測試
+- fix: 收斂 hooks-test-gate 的字面提及誤觸發路徑
+- fix: 修復 uv-tool-ownership-guard 測試過期成員清單
+- fix: 場景 16 提醒改為捕獲時分流，移除 memory 雙通道殘留
+- fix: 校準 uv-tool-ownership-guard 的 SKILLS 清單
+- docs: 修正 EXCLUDED_PATH_PREFIXES 排除理由表述
+- docs: 對齊 AGENT_PRELOAD 規則 12 Version footer 表述至規則 8 現行判準
+- docs: 補 writing-code-comments 原則二框架檔案路由註
+- docs: 載明唯讀派發豁免 worktree 強制的聲明方式與適用判準
+- docs: 載明 worktree 派發的非 git 狀態前置需求機制
+- docs: error-pattern SKILL 步驟 7 改接原子配號入口
+- docs: 修訂 bash-tool-usage 規則三，index.lock 競爭因果改為 lock 本身而非串接
+- docs: 規則 8 新增實證錨點型類別，commit hash 條件允許
+- docs: 收斂 SHA 擷取為 commit 同一次呼叫內完成
+- docs: PC-BAL-008 預防措施改 SHA 錨定驗證
+- docs: 補寫系統模型章節的 type 與 instance 一對多條款
+- docs: path-limited commit 補新增檔案的 git add 前置條款
+- docs: PC-BAL-008 補實證二與工具層修法
+- docs: 補強並行 commit 防護條款納入 path-limited commit
+- docs: 修正 ARCH-001-config-code-mixing 內文風險等級由高改為中
+- docs: 修訂 language-constraints 規則 5 對齊實際防護機制
+- docs: 補齊規則 8 適用範圍表與守衛掃描範圍的落差
+- docs: 消除二元處置取捨條款在四份框架文件間的 substance 重複
+- docs: 規則 8 改寫為全禁原則加五類分類
+- docs: 校正 parallel-dispatch.md 檔尾三個 Last Updated 並存
+- docs: idle agent 回收 SOP 補檔案佔用前提與通知語意
+- docs: 關閉 並擴充 PC-BAL-022（同一 pattern 發生在派發者身上）
+- docs: 記 PC-BAL-022（因果核對取代 baseline 對照）
+- docs: PC-BAL-020 併入例四並補 PC-BAL-004 邊界
+- docs: 記 PC-BAL-021 並建兩張後續追蹤票
+- docs: Round 3 三項承重論點修正，skill 升 2.0.0
+- docs: Round 2 兩項嚴重與摘要行一組
+- docs: Round 1 兩項嚴重必修
+- docs: DOC-BAL-002 補入否定式保證的加重形態
+- docs: 新增 DOC-BAL-002 契約漂移錯誤模式
+- docs: 判定三例回報偏差並落地為兩份 error-pattern
+- docs: 記 ARCH-BAL-011 主題式命名造成的覆蓋假象
+- docs: 記 DOC-BAL-001 規則缺 Consequence 層退化為偏好
+- docs: 套用第二位審查員的獨立 finding
+- docs: 套用 Layer 2 審查的 1 Critical 與 12 Warning
+- docs: 記 ARCH-BAL-010 並補既有兩則模式的實證與症狀變體
+- docs: 記 PC-BAL-019 並追蹤場景 16 提醒的 memory 殘留
+- docs: 判定經審查推翻後重寫，記 PC-BAL-018
+- chore: Phase 4 審查落地——2 個 error-pattern + 6 張衍生票 bookkeeping
+- chore: 補 test_bare_commit_guard_hook.py 執行權限
+- chore: metadata sync post-completion
+- chore: 補提交測試檔的執行權限位
+- perf: get_project_root 加程序內快取消除重複 git subprocess
+
+---
+
 ## [2.22.2] - 2026-07-30
 
 ### Summary

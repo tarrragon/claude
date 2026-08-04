@@ -24,14 +24,25 @@ Purpose:
     每組 skill 遞迴比對**整個目錄**。分歧時輸出 WARNING，列出 skill 名稱、
     雙方版本號、差異檔案清單，使此類遮蔽在下次發生時當場可見。
 
-Coverage gap (0.2.1-W3-113 N2, 明文揭露而非隱含於讀者推論):
+Coverage gap (0.2.1-W3-113 N2, 明文揭露而非隱含於讀者推論；優先序方向經
+0.2.1-W3-115 靜態分析修正——見 0.2.1-W3-236):
     本 hook 只掃描 project 與 personal 兩層，**不掃描 managed（policy-scope）
-    與 plugin marketplace 層**——後兩者優先序等於或高於 personal，一旦與
-    project 同名碰撞會造成完全遮蔽而非僅內容分歧，且本 hook 完全看不見。
-    本機實測 plugin marketplace 層現有 49 個 skill，與本專案 55 個 project
-    skill 目前零碰撞（潛伏風險，非現行缺陷）。managed 層路徑解析與 plugin
-    marketplace 目錄結構因 marketplace 而異，非本票（W3-113）範圍，追蹤於
-    0.2.1-W3-115。
+    與 plugin marketplace 層**，但兩者相對 project 的優先序方向不同：
+
+    - managed 優先序高於 personal 與 project（合併順序 managed → personal
+      → project → plugins/legacy）。一旦與 project 同名碰撞，被遮蔽的是
+      project 版本，且本 hook 完全看不見。
+    - plugin marketplace 優先序**最低**，排在 project 之後。一旦與 project
+      同名碰撞，被遮蔽的是 plugin marketplace 版本而非 project 版本——即便
+      如此仍屬潛伏風險，因為 plugin 端修改在此情境下同樣不會生效，只是遮蔽
+      方向與 managed 相反。
+
+    plugin marketplace 層現有 skill 數量會隨安裝的 marketplace 增減而變動，
+    不綁定固定數字；可用 `find ~/.claude/plugins/marketplaces -mindepth 3
+    -maxdepth 3 -type d -path '*/skills/*'` 類指令隨時重新量測（0.2.1-W3-236
+    量測日 2026-08-04 實測 18 個，與本專案 project skill 目前零碰撞，潛伏
+    風險非現行缺陷）。managed 層路徑解析與 plugin marketplace 目錄結構因
+    marketplace 而異，非本票（W3-113）範圍，追蹤於 0.2.1-W3-115。
 
 Why soft check (never blocks):
     分歧不代表當下有 bug（可能是刻意的 personal 專屬客製，見 get_exclude_list），

@@ -208,9 +208,27 @@ def main() -> int:
 
     # 派發身份前移（1.5.0-W5-005.2）：prompt 含 Ticket ID 且指名 subagent_type
     # 時才嘗試綁定；缺任一者代表無穩定身份可綁（generic 派發），跳過
+    #
+    # 0.2.1-W3-226：worktree 隔離派發時跳過本段。本 hook 執行於 PreToolUse，
+    # 此時 worktree 尚未建立、cwd 仍是 PM 主 repo，get_project_root() 因此
+    # 解析到主 repo，寫入必落在主 repo 而非即將建立的 worktree。worktree
+    # 代理人依 dispatch 指示會自行執行 `claim --as`（cwd 已在 worktree 內，
+    # get_project_root() 的 worktree 偵測正確落在 worktree 副本），此處預先
+    # 綁定純屬多餘且有害：
+    #   - 若 Agent 呼叫隨後被其他 PreToolUse hook（如 PC-019）擋下，主 repo
+    #     上會留下 who.current 已綁但 status 仍 pending 的半套狀態
+    #   - 若未被擋下，主 repo 的 who.current 與 worktree 內 claim 寫入的
+    #     started_at 屬兩份不同副本的雙寫，合併時衝突
+    # 非 worktree（共享 working tree）派發不受影響，維持原行為。
     ticket_id = extract_ticket_id(tool_input.get("prompt", ""))
     subagent_type = (tool_input.get("subagent_type") or "").strip()
-    if ticket_id and subagent_type:
+    if ticket_id and subagent_type and isolation == "worktree":
+        logger.info(
+            "worktree 隔離派發，跳過主 repo 端身份預先綁定（0.2.1-W3-226），"
+            "交由 worktree 內 claim --as 處理: %s",
+            ticket_id,
+        )
+    elif ticket_id and subagent_type:
         try:
             bind_dispatch_identity(ticket_id, subagent_type, project_root, logger)
         except Exception as e:

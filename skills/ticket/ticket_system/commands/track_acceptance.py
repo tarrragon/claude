@@ -28,6 +28,7 @@ import argparse
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from ticket_system.lib.file_lock import file_lock
 from ticket_system.lib.ticket_loader import (
@@ -963,10 +964,11 @@ def _execute_add_spawn_request_locked(args: argparse.Namespace, version: str) ->
     save_ticket(ticket, ticket_path)
 
     # auto-commit（與 append-log 同機制；graceful degrade）
+    # 0.2.1-W3-257：傳入 operation="add-spawn-request"，commit 訊息不再誤標為 append-log
     from ticket_system.lib import git_utils
     try:
         commit_status = git_utils._auto_commit_ticket_md(
-            str(ticket_path), args.ticket_id, section
+            str(ticket_path), args.ticket_id, section, operation="add-spawn-request"
         )
         if commit_status in ("not_git_repo", "git_failed"):
             _sys.stderr.write(
@@ -981,6 +983,183 @@ def _execute_add_spawn_request_locked(args: argparse.Namespace, version: str) ->
     print(format_info(InfoMessages.LOG_APPENDED, ticket_id=args.ticket_id, section=section))
     print(f"   編號: {sr_label}")
     print(f"   what: {args.what}")
+
+    try:
+        with open(ticket_path, "r", encoding="utf-8") as _vf:
+            line_count = sum(1 for _ in _vf)
+        print(f"[verify] ticket md: {line_count} lines after write")
+    except OSError:
+        pass
+
+    return 0
+
+
+def _build_spawn_request_status_value(
+    status: str, spawned_tickets: list, reason: Optional[str]
+) -> str:
+    """組出 spawn request status 行的新值。
+
+    對齊既有手改慣用格式（全形括號說明文字，如
+    ``processed（已建 <ticket-id>）``）；processed 帶多個 spawned ticket 時
+    以「、」連接。不解析既有內容——呼叫端一律整行覆蓋（見
+    ``_execute_resolve_spawn_request_locked`` 的替換邏輯），故本函式只需
+    產生新值，不需相容舊格式。
+    """
+    if status == "processed" and spawned_tickets:
+        note = f"已建 {'、'.join(spawned_tickets)}"
+        if reason:
+            note = f"{note}，{reason}"
+        return f"processed（{note}）"
+    if reason:
+        return f"{status}（{reason}）"
+    return status
+
+
+def execute_resolve_spawn_request(args: argparse.Namespace, version: str) -> int:
+    """
+    標記指定 spawn request（SR-N）狀態為 processed 或 dismissed。
+
+    仿照 append-log / add-spawn-request 模式（file_lock 包圍 load → modify →
+    save + auto-commit，path-limited）。語意：PM 處理完 agent 提出的 spawn
+    request 建議後，用本命令收斂狀態，取代直接手改 ticket md——繞道手改會
+    失去 auto-commit 保護（body 停留於未 commit 的 working tree，可能被
+    git checkout/reset/stash 覆蓋回舊版本），高並行下標記累積量放大此風險。
+    """
+    lock_target = Path(get_ticket_path(version, args.ticket_id))
+    with file_lock(lock_target):
+        return _execute_resolve_spawn_request_locked(args, version)
+
+
+def _execute_resolve_spawn_request_locked(args: argparse.Namespace, version: str) -> int:
+    """resolve-spawn-request 主邏輯（已位於 file_lock 內）。"""
+    import sys as _sys
+
+    from ticket_system.lib.section_locator import find_section
+
+    ticket = load_ticket(version, args.ticket_id)
+    if not ticket:
+        print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
+        return 1
+
+    force = bool(getattr(args, "force", False))
+    status_ok, status_error = require_in_progress(
+        ticket,
+        args.ticket_id,
+        "resolve-spawn-request",
+        allow_completed=True,
+        allow_pending=False,
+        force=force,
+    )
+    if not status_ok:
+        _sys.stderr.write(status_error + "\n")
+        return 2
+
+    body = ticket.get("_body", "")
+    if not body:
+        print(format_error(ErrorMessages.BODY_CONTENT_NOT_FOUND, ticket_id=args.ticket_id))
+        return 1
+
+    section = "Spawn Requests"
+    match = find_section(body, section)
+    if match is None or not match.found:
+        print(format_error(ErrorMessages.SECTION_NOT_FOUND, ticket_id=args.ticket_id, section=section))
+        return 1
+
+    sr_label = args.sr_label
+
+    # 定位單一 SR 條目：從 `- **SR-N**` 行起，到下一個 `- **SR-\d+**` 行或章節結尾
+    # 為止（容忍條目內任意手改內容，包括既有全形括號說明文字，因為只需定位
+    # 條目邊界，不需解析內容）。
+    entry_pattern = re.compile(
+        rf"(^- \*\*{re.escape(sr_label)}\*\*.*?)(?=^- \*\*SR-\d+\*\*|\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+    entry_match = entry_pattern.search(match.content)
+    if entry_match is None:
+        print(
+            format_error(
+                f"[Error] {args.ticket_id} 的 Spawn Requests 章節找不到 {sr_label}"
+            )
+        )
+        return 1
+
+    entry_text = entry_match.group(1)
+    # 只定位 status 行位置並整行覆蓋，不解析行內既有內容——與既有手改格式
+    # （含括號說明文字）天然相容，不會誤判破壞。
+    status_line_pattern = re.compile(r"^(\s*-\s*status:\s*).*$", re.MULTILINE)
+    if not status_line_pattern.search(entry_text):
+        print(
+            format_error(
+                f"[Error] {sr_label} 條目缺少 status 行，格式無法辨識（未修改，未破壞既有內容）"
+            )
+        )
+        return 1
+
+    spawned_values = args.spawned_ticket or []
+    new_value = _build_spawn_request_status_value(args.status, spawned_values, args.reason)
+    new_entry_text = status_line_pattern.sub(
+        lambda m: m.group(1) + new_value, entry_text, count=1
+    )
+
+    new_content = (
+        match.content[: entry_match.start()]
+        + new_entry_text
+        + match.content[entry_match.end() :]
+    )
+    new_body = body[: match.content_start] + new_content + body[match.end :]
+
+    # 寫回前 idempotent dedupe 重複 Schema H2（與 append-log / add-spawn-request 同防護，PC-110）
+    try:
+        from ticket_system.lib.ticket_builder import dedupe_schema_sections
+        new_body = dedupe_schema_sections(new_body)
+    except Exception as exc:
+        _sys.stderr.write(f"[resolve-spawn-request] dedupe_schema_sections skipped: {exc}\n")
+
+    ticket["_body"] = new_body
+
+    # processed 帶 spawned ticket 時同步回填 spawned_tickets（與 add-spawned 同 dedupe 邏輯）
+    added: list[str] = []
+    skipped: list[str] = []
+    if args.status == "processed" and spawned_values:
+        existing = ticket.get("spawned_tickets") or []
+        for value in spawned_values:
+            if value in existing:
+                skipped.append(value)
+                continue
+            existing.append(value)
+            added.append(value)
+        ticket["spawned_tickets"] = existing
+
+    ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
+    save_ticket(ticket, ticket_path)
+
+    # auto-commit（與 append-log / add-spawn-request 同機制；graceful degrade；path-limited）
+    # 0.2.1-W3-257：傳入 operation="resolve-spawn-request"，commit 訊息不再誤標為 append-log
+    from ticket_system.lib import git_utils
+    try:
+        commit_status = git_utils._auto_commit_ticket_md(
+            str(ticket_path), args.ticket_id, section, operation="resolve-spawn-request"
+        )
+        if commit_status in ("not_git_repo", "git_failed"):
+            _sys.stderr.write(
+                f"[resolve-spawn-request] auto-commit skipped（{commit_status}，非致命）；"
+                f"body 已保留 working tree，可手動 git commit 持久化。\n"
+            )
+    except Exception as exc:
+        _sys.stderr.write(
+            f"[resolve-spawn-request] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
+        )
+
+    print(
+        format_info(
+            InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name=f"{sr_label} status"
+        )
+    )
+    print(f"   status: {new_value}")
+    if added:
+        print(f"   spawned_tickets 新增: {', '.join(added)}")
+    if skipped:
+        print(f"   spawned_tickets 已存在略過: {', '.join(skipped)}")
 
     try:
         with open(ticket_path, "r", encoding="utf-8") as _vf:

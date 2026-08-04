@@ -6,6 +6,7 @@ Ticket lifecycle 操作模組
 
 import argparse
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -900,16 +901,15 @@ class TicketLifecycle:
 
         # W5-019：父 complete → 子 cascade 解鎖 + 未完成 children 警告
         # 置於 _auto_handoff_if_needed 之前，讓解鎖後的子狀態可影響 handoff 建議
-        # W11-035：捕獲 unblocked 清單以便 auto-stage 收集 children md 路徑
-        unblocked_children = _post_complete_cascade(ticket, self.version, ticket_map) or []
+        # 0.2.1-W3-246：cascade 解鎖（frontmatter 落盤 + stdout 訊息）由下列
+        # 兩個函式呼叫本身的副作用完成，回傳值不再併入 auto-stage 範圍——
+        # children/siblings 的 frontmatter 仍正確寫入磁碟，只是不進入
+        # staging（理由見下方 auto-stage 區塊）。
+        _post_complete_cascade(ticket, self.version, ticket_map)
 
         # W1-082：children cascade 之外，反向掃描 blockedBy 引用者解鎖非 children
-        # 關係的兄弟 Ticket（W1-081 根因修復）。unblocked_siblings 併入
-        # unblocked_children 供下方 auto-stage 收集 children md 路徑。
-        unblocked_siblings = (
-            _reverse_unblock_blockedby(ticket_id, self.version, ticket_map) or []
-        )
-        unblocked_children = unblocked_children + unblocked_siblings
+        # 關係的兄弟 Ticket（W1-081 根因修復）。
+        _reverse_unblock_blockedby(ticket_id, self.version, ticket_map)
 
         # W17-008.15 方案 D：IMP complete 後檢查 source ANA 是否可 complete
         _print_source_ana_complete_hint(ticket, self.version)
@@ -918,6 +918,10 @@ class TicketLifecycle:
         _auto_handoff_if_needed(ticket, analysis, self.version)
 
         # W11-035：自動 git add 已知 modified 路徑 + 提示 commit 指令
+        # 0.2.1-W3-246：範圍收斂為本票 md + worklog index 兩類，不含 children
+        # 與 siblings 路徑。高並行下，cascade 反向解鎖可能命中另一位代理人
+        # 正在作業中的 ticket；若其 md 一併被 stage，該代理人未提交的 body
+        # 變更會被本次 complete 的 commit 誤攬（0.2.1-W3-238 ANA 定位）。
         if not no_stage:
             modified_paths: List[str] = []
             try:
@@ -930,19 +934,6 @@ class TicketLifecycle:
                 sys.stderr.write(
                     f"[auto-stage] worklog 路徑解析失敗（略過）：{exc}\n"
                 )
-            for child in unblocked_children:
-                cid = child.get("id") if isinstance(child, dict) else None
-                if not cid:
-                    continue
-                child_dict = ticket_map.get(cid) or {"id": cid}
-                try:
-                    modified_paths.append(
-                        str(resolve_ticket_path(child_dict, self.version, cid))
-                    )
-                except Exception as exc:
-                    sys.stderr.write(
-                        f"[auto-stage] child {cid} 路徑解析失敗（略過）：{exc}\n"
-                    )
             _auto_stage_completion_files(ticket_id, modified_paths)
 
         return 0
@@ -1885,9 +1876,16 @@ def _auto_stage_completion_files(
         return
 
     print()
-    print(f"  [Auto-stage] 已 staged {len(deduped)} 個 metadata 檔案")
+    print(f"  [Auto-stage] 已 staged {len(deduped)} 個 metadata 檔案：")
+    for path in deduped:
+        print(f"    - {path}")
+    # 0.2.1-W3-246：建議指令改為 path-limited（-- <paths>），路徑與本次
+    # 實際 staged 範圍一致，避免共享 index 下不帶路徑的 commit 誤攬他人
+    # 已 staged 變更。
+    quoted_paths = " ".join(shlex.quote(p) for p in deduped)
     print(
-        f"  建議 commit: git commit -m \"chore({ticket_id}): metadata sync post-completion\""
+        f"  建議 commit: git commit -m \"chore({ticket_id}): metadata sync "
+        f"post-completion\" -- {quoted_paths}"
     )
 
 
@@ -1900,7 +1898,9 @@ def _post_complete_cascade(
     complete() 後處理：cascade 解鎖子 Ticket + 印出解鎖/警告訊息。
 
     W11-002.1 從 complete() 抽出，讓 complete() 主體只做編排。
-    W11-035：回傳 unblocked 清單供 auto-stage 取得 children 路徑（先前無回傳）。
+    W11-035：回傳 unblocked 清單供呼叫端顯示或未來擴充（先前無回傳）。
+    0.2.1-W3-246：呼叫端 complete() 已不再把此回傳值併入 auto-stage 範圍
+    （children 路徑不進入 staging，僅落盤）。
     若 parent 無 children，回傳空 list。
 
     Args:

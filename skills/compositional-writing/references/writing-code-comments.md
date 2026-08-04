@@ -96,6 +96,8 @@ List<Book> searchBooks(SearchCriteria criteria) { /* ... */ }
 
 **禁止**：註解內放 ticket ID（如 `v1.2.3-W5-001`、`TKT-1234`），ticket 是臨時追蹤編號，會被搬移歸檔；需求編號（UC/BR）才是穩定索引。<!-- portability-allow: educational example of prohibited pattern -->
 
+**框架檔案例外**：`.claude/` 下框架檔案（rules / pm-rules / references / methodologies / agents / skills / hooks / error-patterns）的識別符引用另依 `.claude/references/reference-stability-rules.md` 規則 8（含五類分類與豁免路徑，處理跨專案 sync 死連結問題）；上述禁令適用於一般產品程式碼。
+
 ---
 
 ## 原則三：意圖顯性與商業邏輯 × 註解

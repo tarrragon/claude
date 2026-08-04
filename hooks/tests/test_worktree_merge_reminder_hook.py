@@ -77,29 +77,32 @@ def _mk_subprocess_side_effect(
     dirty_per_path = dirty_per_path or {}
 
     def side_effect(cmd, **kwargs):
+        # 0.2.1-W3-286：collections 改用 lib.git_utils.run_git_command，該函式
+        # 於命令前多插入 "--no-optional-locks" flag（`git --no-optional-locks
+        # worktree list ...`），原本按固定 index（cmd[1]/cmd[2]）比對的
+        # dispatch 會因偏移而失配；改用「token 是否存在於 cmd」判斷，並用
+        # kwargs["cwd"]（git_utils 以 cwd kwarg 而非 `-C` flag 指定路徑）
+        # 取代原本掃 `-C` 位置的路徑取得方式。
         result = MagicMock()
         result.returncode = 0
         result.stdout = ""
         result.stderr = ""
 
-        # ["git", "worktree", "list", "--porcelain"]
-        if len(cmd) >= 3 and cmd[0] == "git" and cmd[1] == "worktree" and cmd[2] == "list":
+        if "worktree" in cmd and "list" in cmd:
             result.stdout = worktree_porcelain
             return result
 
-        # ["git", "log", "main..<branch>", "--oneline"]
-        if len(cmd) >= 3 and cmd[0] == "git" and cmd[1] == "log":
-            spec = cmd[2]
-            if ".." in spec:
+        if "log" in cmd:
+            spec = next((tok for tok in cmd if ".." in tok), None)
+            if spec:
                 branch = spec.split("..", 1)[1]
                 commits = unmerged_per_branch.get(branch, [])
                 result.stdout = "\n".join(commits)
             return result
 
-        # ["git", "-C", <path>, "status", "--porcelain"] 或變體
-        if cmd[0] == "git" and "status" in cmd:
-            path = None
-            if "-C" in cmd:
+        if "status" in cmd:
+            path = kwargs.get("cwd")
+            if path is None and "-C" in cmd:
                 idx = cmd.index("-C")
                 path = cmd[idx + 1]
             result.stdout = dirty_per_path.get(path, "")

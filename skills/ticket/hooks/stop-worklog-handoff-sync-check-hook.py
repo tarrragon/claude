@@ -34,6 +34,7 @@ ARCH-020 同構雙寫風險：
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Optional, Set
@@ -87,6 +88,7 @@ HANDOFF_KEYWORDS = (
     "接手指引",
     "Handoff Context",
     "Session Handoff",
+    "下一站",
     # 建議式
     "下 session 優先建議",
     "下個 session 優先建議",
@@ -98,6 +100,8 @@ HANDOFF_KEYWORDS = (
     "未完成清單",
     "Spawned 推進清單",
 )
+# 0.2.1-W3-218 補「下一站」（本專案書寫慣例）。SOT-mirror，同步理由見
+# worklog_parser.py:HANDOFF_KEYWORDS docstring。
 
 TICKET_ID_FULL_PATTERN = re.compile(
     r"\b(\d+\.\d+\.\d+)-(W\d+-[\d\w]+(?:\.\d+)?)\b"
@@ -446,6 +450,167 @@ def _has_in_progress_ticket(project_root: Path, version: str, logger) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# 第 7 格偵測：雙軌皆空但 session 有交接訊號（0.2.1-W3-219）
+# 來源票 0.2.1-W3-178「可用偵測訊號與誤報風險」：S3 閘門 + S1 主訊號 + S4 反向濾除。
+# S2（commit body）/ S5（Context Bundle diff）列為後續增強，本函式不實作。
+# ---------------------------------------------------------------------------
+
+_COMMIT_CHORE_PREFIX = "chore("
+_COMMIT_HANDOFF_KEYWORD = "交接"
+
+
+def _iso_to_epoch(value: Optional[str]) -> Optional[float]:
+    """ISO 時間字串轉 epoch 秒，解析失敗回 None（fail-open）。"""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value)).timestamp()
+    except Exception:
+        return None
+
+
+def _get_session_active_tickets(
+    project_root: Path, version: str, session_start: float, logger
+) -> list[str]:
+    """S3 閘門：找出 `started_at` / `completed_at` 落在 `session_start` 之後的
+    ticket，代表本 session 有實質 ticket 活動（來源票 W3-178 訊號表 S3 列）。
+
+    只證明「有活動」不指向交接目標本身，故僅作前置條件，非交接訊號本身。
+    回傳 ticket id 清單，依 timestamp 新到舊排序（第一項作為建議的
+    `--from-ticket-id`）。
+    """
+    if session_start <= 0:
+        return []
+    try:
+        ticket_files = scan_ticket_files_by_version(project_root, version, logger)
+    except Exception as e:
+        logger.debug("S3 掃描 ticket 檔案失敗: %s", e)
+        return []
+
+    active: list[tuple[float, str]] = []
+    for ticket_path in ticket_files:
+        try:
+            fm = parse_ticket_frontmatter(ticket_path, logger)
+        except Exception:
+            continue
+        if not fm:
+            continue
+        ticket_id = fm.get("id") or ticket_path.stem
+        for field in ("completed_at", "started_at"):
+            ts = _iso_to_epoch(fm.get(field))
+            if ts is not None and ts >= session_start:
+                active.append((ts, str(ticket_id)))
+                break
+    active.sort(key=lambda item: item[0], reverse=True)
+    return [ticket_id for _, ticket_id in active]
+
+
+def _detect_handoff_commit_signal(
+    project_root: Path, session_start: float, logger
+) -> list[str]:
+    """S1 主訊號 + S4 反向濾除：掃 session 時間窗內 commit subject 的交接語意。
+
+    來源票 W3-178 E4 實測：近 9 天 1035 個 commit 中 subject 命中交接語意僅 5 次
+    （0.5%），786 筆（75.9%）為 `chore(` 前綴的 append-log auto-commit 噪音，
+    須先濾除否則訊號被淹沒。回傳命中的 commit subject 清單，無命中回空 list。
+    """
+    if session_start <= 0:
+        return []
+    since_iso = datetime.fromtimestamp(session_start).isoformat()
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "log",
+                f"--since={since_iso}",
+                "--pretty=format:%s",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except Exception as e:
+        logger.debug("S1 git log 掃描失敗: %s", e)
+        return []
+    if result.returncode != 0:
+        logger.debug("S1 git log 非零 exit: %s", result.stderr)
+        return []
+
+    hits: list[str] = []
+    for subject in result.stdout.splitlines():
+        subject = subject.strip()
+        if not subject:
+            continue
+        if subject.startswith(_COMMIT_CHORE_PREFIX):
+            continue
+        if _COMMIT_HANDOFF_KEYWORD in subject:
+            hits.append(subject)
+    return hits
+
+
+def _format_dual_empty_warning(
+    source_id: str, target_ids: list[str], commit_hits: list[str]
+) -> str:
+    """格式化第 7 格警告輸出：worklog 與 pending 雙軌皆空，但 commit 有交接語意。"""
+    lines: list[str] = []
+    lines.append("=" * 40)
+    lines.append("[Worklog-CLI Handoff Sync Check] 雙軌皆空但偵測到交接訊號")
+    lines.append("=" * 40)
+    lines.append("")
+    lines.append("worklog 無交接段、.claude/handoff/pending/ 亦無 JSON，")
+    lines.append("但本 session 的 commit 訊息含交接語意：")
+    lines.append("")
+    for subject in commit_hits:
+        lines.append(f"  - {subject}")
+    lines.append("")
+    lines.append("建議執行：")
+    if target_ids:
+        for tid in target_ids:
+            lines.append(f"  ticket handoff --next {tid} --from-ticket-id {source_id}")
+    else:
+        lines.append(
+            f"  ticket handoff --next <target-id> --from-ticket-id {source_id}"
+            "  # <target-id> 請換成實際下一站 ticket"
+        )
+    lines.append("")
+    lines.append(
+        "（0.2.1-W3-178 8 格矩陣第 7 格；session-switching-sop.md"
+        "「Worklog 交接與 CLI handoff 同步」強制規則）"
+    )
+    return "\n".join(lines)
+
+
+def _check_dual_empty_handoff_signal(
+    project_root: Path, version: str, session_start: float, logger
+) -> Optional[str]:
+    """第 7 格偵測主流程：S3 閘門 -> S1 訊號（已內含 S4 濾除）-> 輸出建議命令。
+
+    任一階段無命中即靜默回 None，維持第 8 格（確實無交接）不受影響。
+    """
+    active_tickets = _get_session_active_tickets(project_root, version, session_start, logger)
+    if not active_tickets:
+        logger.debug("S3 閘門未命中（session 無 ticket 活動），跳過第 7 格偵測")
+        return None
+
+    commit_hits = _detect_handoff_commit_signal(project_root, session_start, logger)
+    if not commit_hits:
+        logger.debug("S1 未命中交接語意 commit，跳過第 7 格偵測")
+        return None
+
+    source_id = active_tickets[0]
+    target_ids: list[str] = []
+    for subject in commit_hits:
+        for tid in _extract_ticket_ids(subject, active_version=version):
+            if tid not in target_ids:
+                target_ids.append(tid)
+
+    return _format_dual_empty_warning(source_id, target_ids, commit_hits)
+
+
+# ---------------------------------------------------------------------------
 # 主邏輯
 # ---------------------------------------------------------------------------
 
@@ -528,10 +693,14 @@ def detect_sync_drift(
         logger.debug("worklog 不存在: %s", worklog_path)
         return None
 
-    # mtime 過濾：本 session 未動 worklog → 不檢查
+    # mtime 過濾：本 session 未動 worklog → worklog 軌恆為「無交接段」（A=無）。
+    # 0.2.1-W3-219：此情形若 pending 亦空，正是第 7 格候選，須檢查交接訊號
+    # 而非直接靜默；pending 非空則維持既有 orphan 邏輯範圍外的靜默（非本票範圍）。
     if session_start > 0 and worklog_path.stat().st_mtime < session_start:
-        logger.debug("worklog mtime 早於 session_start，跳過")
-        return None
+        logger.debug("worklog mtime 早於 session_start，跳過關鍵字偵測")
+        if _scan_pending_dir(project_root):
+            return None
+        return _check_dual_empty_handoff_signal(project_root, version, session_start, logger)
 
     try:
         content = worklog_path.read_text(encoding="utf-8")
@@ -542,9 +711,10 @@ def detect_sync_drift(
     pending_ids = _scan_pending_dir(project_root)
     has_keywords = _detect_handoff_keywords(content)
 
-    # 雙軌皆無 → 不輸出
+    # 雙軌皆無 → 檢查第 7 格訊號（S3 閘門 + S1 主訊號 + S4 反向濾除，0.2.1-W3-219）；
+    # 無交接訊號時仍靜默（第 8 格：確實無交接）
     if not has_keywords and not pending_ids:
-        return None
+        return _check_dual_empty_handoff_signal(project_root, version, session_start, logger)
 
     # W17-156: 只掃 handoff 段落而非整份 worklog，避免抓到歷史 ticket 造成 false positive
     if has_keywords:

@@ -8,12 +8,15 @@ Test: memory-write-guard-hook（Ticket: 0.2.1-W3-084）
    問句、三個目的地、明示可改地方記錄
 2. 路徑正規化：`./` `../` 收斂、大小寫不敏感（macOS APFS 慣例）、legacy 形式
    僅在 home 目錄下才命中（非 home 下同名目錄不誤判，Phase 4 審查 A1-A3）
-3. 豁免：非 memory 路徑一律 allow（exit 0）；非 Write/Edit/MultiEdit 工具
-   （如 Bash）不受本 hook 管轄，一律 allow——matcher 刻意不含 Bash，
-   避免擋住 0.2.1-W3-085 的 memory 目錄清空作業（此為已知、docstring 已
-   誠實記載的豁免範圍，非測試盲區）
-4. 無節流：同檔案連續兩次寫入皆 deny（既有 hook 30 分鐘節流已移除）
-5. main() 對非預期輸入的容錯：malformed JSON、tool_input 缺 file_path 鍵
+3. 豁免：非 memory 路徑一律 allow（exit 0）；非 Write/Edit/MultiEdit/NotebookEdit
+   工具（如 Bash）不受本 hook 管轄，一律 allow——matcher 刻意不含 Bash，
+   避免擋住 0.2.1-W3-085 的 memory 目錄清空作業，Bash 的封閉方式已於
+   0.2.1-W3-092 分類處置為獨立的 PostToolUse 稽核 hook（見
+   test_memory_dir_audit.py），非本 hook 職責
+4. NotebookEdit 已於 0.2.1-W3-092 併入本 matcher：命中路徑一律 deny，
+   路徑欄位為 tool_input.notebook_path（非 file_path）
+5. 無節流：同檔案連續兩次寫入皆 deny（既有 hook 30 分鐘節流已移除）
+6. main() 對非預期輸入的容錯：malformed JSON、tool_input 缺 file_path 鍵
    皆 fail-open（allow），與三層 fail-open 設計一致
 
 注意：測試路徑一律以 `os.path.expanduser("~")` 為基底建構字串，不建立實際
@@ -202,9 +205,33 @@ class TestMainDenyBehavior(unittest.TestCase):
         }
         self.assertEqual(_run_main_with_input(hook, input_data), 0)
 
+    def test_notebookedit_to_memory_dir_denied(self):
+        """W3-092：NotebookEdit 併入本 matcher，路徑欄位為 notebook_path。"""
+        hook = _load_hook_module()
+        input_data = {
+            "tool_name": "NotebookEdit",
+            "tool_input": {
+                "notebook_path": _home_path(
+                    ".claude", "projects", "-Users-tester-demo", "memory", "notebook.ipynb"
+                )
+            },
+        }
+        self.assertEqual(_run_main_with_input(hook, input_data), 2)
+
+    def test_notebookedit_non_memory_path_allowed(self):
+        """豁免案例：NotebookEdit 對非 memory 路徑一律 allow。"""
+        hook = _load_hook_module()
+        input_data = {
+            "tool_name": "NotebookEdit",
+            "tool_input": {"notebook_path": "/Users/tester/project/flutter_balance/notebooks/a.ipynb"},
+        }
+        self.assertEqual(_run_main_with_input(hook, input_data), 0)
+
     def test_bash_tool_not_governed_by_this_hook(self):
-        """matcher 刻意不含 Bash：即使 command 涉及 memory 目錄仍放行（0.2.1-W3-085 清空作業前提；
-        此豁免範圍的獨立封閉方案另案追蹤）。"""
+        """matcher 不含 Bash：即使 command 涉及 memory 目錄仍放行（此路徑改由
+        memory-dir-audit-hook 事後稽核，0.2.1-W3-195 起改掛
+        SessionStart+Stop 而非 PostToolUse，非本 hook 職責，見
+        test_memory_dir_audit.py）。"""
         hook = _load_hook_module()
         input_data = {
             "tool_name": "Bash",

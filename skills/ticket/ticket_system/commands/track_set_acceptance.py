@@ -187,6 +187,29 @@ def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
         ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
         save_ticket(ticket, ticket_path)
 
+        # 0.2.1-W3-258: 寫入後 auto-commit ticket md，與 append-log 同保護等級
+        # （path-limited + graceful degrade）。W7-001 根因解：body 停留於未
+        # commit 的 working tree 時，git worktree remove --force 會靜默丟棄
+        # 變更（0.2.1-W3-256 實驗證實 exit 0 無警告）；set-acceptance 是代理人
+        # 收尾唯一必經的 frontmatter 寫入命令，risk 集中於此。auto-commit 置於
+        # file_lock 內（與 append-log 的 _execute_append_log_locked 一致設計），
+        # 確保 lock 釋放前 commit 已完成或已 graceful degrade，避免並發窗口。
+        from ticket_system.lib import git_utils
+        try:
+            commit_status = git_utils._auto_commit_ticket_md(
+                str(ticket_path), args.ticket_id, "Acceptance Criteria",
+                operation="set-acceptance",
+            )
+            if commit_status in ("not_git_repo", "git_failed"):
+                _sys.stderr.write(
+                    f"[set-acceptance] auto-commit skipped（{commit_status}，非致命）；"
+                    f"body 已保留 working tree，可手動 git commit 持久化。\n"
+                )
+        except Exception as exc:
+            _sys.stderr.write(
+                f"[set-acceptance] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
+            )
+
     action = "勾選" if mode in ("check", "all_check") else "取消勾選"
     scope = f"全部 ({changed}/{total})" if mode.startswith("all_") else f"index {indices}"
     print(f"[INFO] {args.ticket_id} {action} {scope}：變更 {changed} 項")

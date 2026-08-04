@@ -45,6 +45,25 @@ def _assert_no_repo_pollution():
         )
 
 
+@pytest.fixture(autouse=True)
+def _unset_test_isolation_flag_for_direct_worktree_priority_test(request, monkeypatch):
+    """0.2.1-W3-223: 與 skill-root `_isolate_project_root` 逃生艙旗標互斥處理。
+
+    Why: `_isolate_project_root`（autouse）注入 `TICKET_SYSTEM_TEST_ISOLATION=1`，
+    使 `get_project_root()` 在 worktree 環境下優先信任 `CLAUDE_PROJECT_DIR`，
+    避免測試 fixture 隔離被 worktree 偵測蓋過（見該 fixture docstring）。但
+    `test_worktree_aware_prefers_worktree_root_over_env` 直接測試
+    `get_project_root()` 本身「worktree 優先序凌駕 CLAUDE_PROJECT_DIR」的邏輯
+    契約，且刻意不 `clear=True` os.environ（故旗標會殘留），與逃生艙旗標的
+    語意互斥——兩者同時存在時逃生艙會贏，使該測試斷言恆假。
+
+    Action: 僅在此單一測試節點移除旗標，讓其驗證的優先序邏輯不受逃生艙影響；
+    不可全域移除（會使其餘測試重新暴露 0.2.1-W3-223 修復前的污染問題）。
+    """
+    if request.node.name == "test_worktree_aware_prefers_worktree_root_over_env":
+        monkeypatch.delenv("TICKET_SYSTEM_TEST_ISOLATION", raising=False)
+
+
 @pytest.fixture
 def temp_project_dir() -> Path:
     """

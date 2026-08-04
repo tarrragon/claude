@@ -6,7 +6,7 @@
 """
 Worktree Commit-Before-Dispatch Hook - PreToolUse (Agent)
 
-功能：派發 worktree agent 前，檢查 main 上是否有未 commit 的 tracked 變更。
+功能：派發 worktree agent 前，檢查主 repo 上是否有未 commit 的 tracked 變更。
 未 commit 的變更可能在 worktree 操作後因 stash/checkout 丟失（PC-019）。
 
 Hook 類型：PreToolUse
@@ -33,13 +33,13 @@ from lib import (
 # W4-008：origin/main 落後 local main 達此門檻視為高風險，改走 deny（非僅警告）
 LAG_DENY_THRESHOLD = 10
 
-BLOCK_MESSAGE = """[PC-019 防護] main 上有未 commit 的 tracked 變更，禁止派發 worktree agent
+BLOCK_MESSAGE = """[PC-019 防護] 主 repo 上有未 commit 的 tracked 變更，禁止派發 worktree agent
 
 未 commit 的檔案：
 {files}
 
 修復方式：
-  先 commit main 上的變更，再派發 worktree agent
+  先 commit 主 repo 上的變更，再派發 worktree agent
   git add <files> && git commit -m "chore: pre-dispatch commit"
 
 詳見: .claude/pm-rules/worktree-operations.md（階段 1：派發前）"""

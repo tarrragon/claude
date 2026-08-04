@@ -91,19 +91,36 @@ description: "錯誤模式知識庫管理工具。Use for: (1) 查詢既有錯�
 6. **關聯 Ticket**
    - 輸入相關 Ticket 編號
 
-7. **自動分配來源前綴 ID**（跨專案共享框架必用）
-   - 呼叫 allocator 取得下一個 `<CATEGORY>-<PROJ>-NNN`：
+7. **原子分配並保留來源前綴 ID**（跨專案共享框架必用，0.2.1-W3-271 改接原子版入口）
+   - 呼叫 allocator 的 `allocate_and_reserve_pattern_id`：在鎖保護下把「決定編號」與
+     「建立佔位檔」合併為單一原子操作。**取代**舊版 `allocate_pattern_id`（僅回傳
+     預覽字串、不建檔、不持鎖，並行呼叫下有 TOCTOU 撞號風險，見 0.2.1-W3-167）：
      ```python
      import sys; sys.path.insert(0, ".claude/skills/error-pattern/lib")
-     from allocator import identify_project_code, allocate_pattern_id
+     from allocator import identify_project_code, allocate_and_reserve_pattern_id
      proj = identify_project_code(
          ".claude/error-patterns/_project-registry.yaml",
          "<git toplevel>",  # git rev-parse --show-toplevel
      )
-     pattern_id = allocate_pattern_id("<CATEGORY>", ".claude", proj)
+     stub_path = allocate_and_reserve_pattern_id(
+         "<CATEGORY>", ".claude", proj, reserved_by="<agent-name>"
+     )
+     pattern_id = stub_path.stem  # 佔位檔檔名（無 slug）即 pattern_id
      ```
+   - **佔位檔語意**：函式回傳時，`stub_path` 指向的檔案已實際建立於磁碟（`status:
+     reserved` frontmatter + 標題 `(reserved - 內容待補)`）——編號在配號當下即被
+     佔用，非僅回傳字串。任何後續並行呼叫的掃描必然看到此佔位檔，不會配出相同編號。
+   - **接續動作**：拿到 `stub_path` 後，立即以 **Edit**（非 Write 新檔）把步驟
+     2-6 蒐集的症狀/根因/解決方案/預防措施/關聯 Ticket 內容填入該檔案，取代佔位
+     內容；填妥後可依慣例將檔名改為 `<CATEGORY>-<PROJ>-NNN-<slug>.md`（純索引可
+     讀性，非必要）。**禁止**另外 Write 建立第二個新檔——編號已綁定 `stub_path`
+     這個實體檔案，另建新檔會留下未清理的 reserved 空殼。
+   - **非 POSIX 降級**：`fcntl`（POSIX 標準庫）不可用時，鎖機制輸出 stderr 警告
+     並以無鎖模式續行配號（佔位檔仍會建立，僅失去並行防護）；此環境下應改為
+     序列執行 `/error-pattern add`，避免並行呼叫撞號。
    - allocator 自動：以 git toplevel basename 自我識別專案代號 → 掃該專案前綴空間
-     取最大號 +1（flat 凍結 base 不參與遞增）。
+     取最大號 +1（含既有檔案掃描與 pending ticket 文字引用掃描，flat 凍結 base
+     不參與遞增）。
    - **禁止**手動指定 flat `<CATEGORY>-NNN`（凍結 base 不再新增，見編號章節）。
 
 8. **同步 README 索引**（0.2.1-W3-099，取代舊版「手動更新 README.md 統計資訊」）
@@ -127,8 +144,14 @@ description: "錯誤模式知識庫管理工具。Use for: (1) 查詢既有錯�
      上結果相同，維持讀內文可省一次「若未來又漂移」的防呆成本）。
 
 **輸出**：
-- 在對應的分類檔案中以 `<CATEGORY>-<PROJ>-NNN-<slug>.md` 命名新增錯誤記錄
-- README.md 索引由步驟 8 的 `readme_index.sync` 自動同步，不需人工步驟
+- 步驟 7 已建立分類檔案（初始檔名 `<CATEGORY>-<PROJ>-NNN.md`），步驟 7 接續動作
+  以 Edit 填入實際內容，並可選擇改名為 `<CATEGORY>-<PROJ>-NNN-<slug>.md`
+- README.md 索引由步驟 8 的 `readme_index.sync` 自動同步，不需人工步驟。**與步驟
+  8 的相容性**：`readme_index.scan_category_rows` 依檔名前綴掃描分類目錄下所有
+  `.md` 檔，**不檢查 `status` frontmatter**——若佔位檔仍處於 reserved（內容未填）
+  狀態時執行步驟 8，`(reserved - 內容待補)` 的佔位標題會被同步進 README 產生
+  空殼列。正確順序：先完成步驟 7 接續動作（Edit 填入實際內容）再執行步驟 8，
+  確保 sync 讀到的是完整內容而非佔位符
 
 ### `/error-pattern list`
 
@@ -217,7 +240,8 @@ category 的 error-pattern 一律使用來源前綴格式**：
 
 ---
 
-**Last Updated**: 2026-07-28
+**Last Updated**: 2026-08-04
+**Version**: 1.4.0 — 步驟 7 改接原子版入口 `allocate_and_reserve_pattern_id`（取代舊版 `allocate_pattern_id`），補佔位檔語意、接續 Edit 動作、非 POSIX 降級說明；步驟「輸出」補與步驟 8 `readme_index.sync` 的相容性提示（reserved 狀態下同步會產生空殼列，需先完成內容填寫再同步）（0.2.1-W3-271，接續 0.2.1-W3-167 allocator 原子化）
 **Version**: 1.3.0 — 明訂 `severity` 權威來源與更新時機：內文「風險等級」為第一手來源，frontmatter 為同步鏡射；全量覆核修正 15 檔分歧中的 14 檔（0.2.1-W3-106，接續 0.2.1-W3-105 診斷）
 **Version**: 1.2.0 — add 流程新增步驟 8：README 索引同步改由 `readme_index.sync` 保守 upsert CLI 化，取代「更新 README.md 統計資訊」文字指示（0.2.1-W3-099，接線方式經 0.2.1-W3-105 更正）
 **Version**: 1.1.0 — query 增強：--category 篩選、同義詞家族 5→11、frontmatter 摘要排序、命中數計數（1.5.0-W5-016）

@@ -755,40 +755,125 @@ def _parse_sources_from_marker(marker_block: str) -> list:
     return [s.strip() for s in raw.split(",") if s.strip()]
 
 
+# marker 單行比對（不含後續內容），供定位區塊起點與偵測第二個 marker 用。
+_AUTO_MARKER_ONLY_PATTERN = re.compile(r"<!--\s*auto-extracted:[^>]*-->")
+
+# 已知自動抽取子區塊標題（EXTRACTABLE_FIELDS 的 target_subsection + UC Context）。
+# 逐行分類時，整行文字與此集合完全相符即視為 managed block 延續。
+_AUTO_SUBSECTION_HEADINGS = frozenset(
+    f"### {rule.target_subsection}" for rule in EXTRACTABLE_FIELDS
+) | {"### UC Context"}
+
+# UC Context 內部行形態（render_context_bundle_markdown 固定產出，非 bullet 形式）。
+_UC_ENTRY_HEADING_PATTERN = re.compile(r"^#### .+: .+$")   # "#### UC-01: 標題"
+_UC_SPEC_LINE_PATTERN = re.compile(r"^Spec 位置: .+$")
+_UC_MAIN_FLOW_LABEL = "主要流程:"
+_UC_STEP_LINE_PATTERN = re.compile(r"^  \S")               # 2 空白縮排延續行（含步驟與截斷標記）
+
+# chars 徽章（抽取結果字元數估算）比對正規化用：同一語意內容可能因抽取路徑
+# 差異得到不同估算值，比對冪等性時須忽略此徽章，否則產生假性 non-idempotent。
+_CHARS_BADGE_PATTERN = re.compile(r"\|\s*chars:\s*\d+\s*-->")
+
+
+def _is_auto_content_line(line: str) -> bool:
+    """判斷單行文字是否屬 render_context_bundle_markdown 可重現的行形態（0.2.1-W3-252）。
+
+    白名單：空行、已知子區塊標題、以 `- ` 開頭的 bullet 行（EXTRACTABLE_FIELDS 四種
+    format_template 皆以 `- ` 起始，故用此寬鬆前綴而非逐模板精確比對——精確比對對
+    format_template 任何未來變動皆脆弱，且會誤判測試/真實資料中省略中段文字的簡化
+    bullet；`- ` 前綴已足夠與「非 bullet 手動段落」區分）、UC Context 內部固定行形態。
+    任何不符以上形態的行視為手動內容起點。
+    """
+    if line == "" or line == _UC_MAIN_FLOW_LABEL:
+        return True
+    if line in _AUTO_SUBSECTION_HEADINGS:
+        return True
+    if line.startswith("- "):
+        return True
+    if _UC_ENTRY_HEADING_PATTERN.match(line) or _UC_SPEC_LINE_PATTERN.match(line):
+        return True
+    if _UC_STEP_LINE_PATTERN.match(line):
+        return True
+    return False
+
+
+def _find_auto_block_end(section_body: str, search_from: int) -> int:
+    """定位 auto-extracted 區塊終點（0.2.1-W3-252）。
+
+    逐行掃描，命中第一個非 `_is_auto_content_line` 的行即為終點。
+
+    與舊版「以下一個 `## ` 或字串結尾為界」的差異：舊版對「無後續 `## ` 標題」的手動
+    內容一律吞入 managed block，重抽 replace 時會整段覆蓋刪除，涵蓋兩種實測樣態：
+    (1) 手動內容自帶 H3 標題（如「### 並行派發約束」，0.2.1-W3-152 實例）；
+    (2) 手動內容為緊接在最後一個已知子區塊 bullet 之後、無任何標題或空行分隔的純段落
+    （如「[PM 派發提醒 ...]」，0.2.1-W3-171 實例）。逐行分類可同時正確處理兩種樣態，
+    純以標題判斷的邊界（僅涵蓋樣態 1）無法偵測樣態 2。
+
+    傳回終點 index（不含該行）；無命中則回傳字串結尾。
+    """
+    offset = search_from
+    for line in section_body[search_from:].splitlines(keepends=True):
+        if not _is_auto_content_line(line.rstrip("\n")):
+            return offset
+        offset += len(line)
+    return len(section_body)
+
+
+def _normalize_for_content_compare(block_text: str) -> str:
+    """正規化 auto 區塊文字供冪等性內容比對（0.2.1-W3-252）。
+
+    移除 chars 徽章（估算值，非語意內容）並收斂首尾空白。原冪等判定只比對
+    marker 中的 source ID 集合，source 未變但來源票內容已改寫（如 why 被推翻
+    重寫）時仍判定「無變更」而不更新，使 claim 時現成的重抽觸發點被短路
+    （0.2.1-W3-177 ANA 量測：254 張中 11 張漂移）。改以正規化後的內容比對取代，
+    source 集合不變但內容已變時正確觸發更新；內容無實質差異（僅 chars 估算值
+    不同）時仍判定冪等，避免空更新 commit。
+    """
+    return _CHARS_BADGE_PATTERN.sub("-->", block_text).strip()
+
+
 def merge_auto_extracted_block(
     existing_section_body: str, new_extracted_markdown: str
 ) -> Tuple[str, list]:
     """合併抽取結果到既有 Context Bundle section body。
 
-    §v3.1 regex EOF 邊界 + §v3.2 sources 主鍵冪等。
+    §v3.1 白名單子標題邊界 + §v3.2 content-aware 冪等（0.2.1-W3-252：原 source-ID-only
+    冪等 + 「下一個 `## ` 或 EOF」邊界，改為內容比對 + 已知子區塊白名單邊界）。
     """
     if not new_extracted_markdown:
         return existing_section_body, ["no_change_empty_new"]
 
-    match = AUTO_EXTRACTED_BLOCK_PATTERN.search(existing_section_body or "")
-    if match is None:
+    marker_match = _AUTO_MARKER_ONLY_PATTERN.search(existing_section_body or "")
+    if marker_match is None:
         sep = ""
         if existing_section_body and not existing_section_body.endswith("\n\n"):
             sep = "\n\n" if existing_section_body.endswith("\n") else "\n\n"
         merged = (existing_section_body or "") + sep + new_extracted_markdown
         return merged, ["appended_new_block"]
 
-    existing_sources = _parse_sources_from_marker(match.group(0))
-    new_match = AUTO_EXTRACTED_BLOCK_PATTERN.search(new_extracted_markdown)
-    new_sources = (
-        _parse_sources_from_marker(new_match.group(0)) if new_match else []
-    )
+    block_start = marker_match.start()
+    block_end = _find_auto_block_end(existing_section_body, marker_match.end())
+    existing_block = existing_section_body[block_start:block_end]
 
-    if sorted(existing_sources) == sorted(new_sources):
+    if _normalize_for_content_compare(existing_block) == _normalize_for_content_compare(
+        new_extracted_markdown
+    ):
         return existing_section_body, ["no_change_idempotent"]
 
     merged = (
-        existing_section_body[: match.start()]
+        existing_section_body[:block_start]
         + new_extracted_markdown
-        + existing_section_body[match.end() :]
+        + existing_section_body[block_end:]
     )
     notes = ["replaced_auto_block"]
-    if AUTO_EXTRACTED_BLOCK_PATTERN.search(existing_section_body, match.end()):
+    existing_sources = _parse_sources_from_marker(marker_match.group(0))
+    new_marker_match = _AUTO_MARKER_ONLY_PATTERN.search(new_extracted_markdown)
+    new_sources = (
+        _parse_sources_from_marker(new_marker_match.group(0)) if new_marker_match else []
+    )
+    if sorted(existing_sources) != sorted(new_sources):
+        notes.append(f"sources_changed: {existing_sources} -> {new_sources}")
+    if _AUTO_MARKER_ONLY_PATTERN.search(existing_section_body, block_end):
         notes.append("warning: multiple auto-extracted markers detected")
     return merged, notes
 

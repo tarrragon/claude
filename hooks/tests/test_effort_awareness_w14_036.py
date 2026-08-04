@@ -5,11 +5,10 @@
 
 涵蓋 hook：
 1. 5w1h-compliance-check-hook
-2. phase-contract-validator-hook（CLI sys.argv 模式，僅 $CLAUDE_EFFORT）
-3. phase-completion-gate-hook
-4. wrap-decision-tripwire-hook（advisory：low effort 不短路）
-5. sibling-blockedby-validator-hook
-6. layer-boundary-validator-hook
+2. phase-completion-gate-hook
+3. wrap-decision-tripwire-hook（advisory：low effort 不短路）
+4. sibling-blockedby-validator-hook
+5. layer-boundary-validator-hook
 
 每個 hook 覆蓋 low / medium / high 三路徑（依適用性調整）。
 """
@@ -89,42 +88,7 @@ class Test5w1hComplianceEffort:
 
 
 # ============================================================================
-# 2. phase-contract-validator-hook（CLI 模式）
-# ============================================================================
-
-class TestPhaseContractValidatorEffort:
-    HOOK = HOOKS_DIR / "phase-contract-validator-hook.py"
-
-    def test_low_effort_short_circuits_via_env(self):
-        # CLI 模式：透過 $CLAUDE_EFFORT 控制
-        rc, stdout, _ = _run_hook(
-            self.HOOK,
-            payload=None,
-            env={"CLAUDE_EFFORT": "low"},
-            args=["fake-ticket-id", "1", "/tmp/fake-dir"],
-        )
-        assert rc == 0
-        assert "effort=low" in stdout or "短路" in stdout
-
-    def test_no_args_returns_usage(self):
-        # 無 args 時應 exit 1（和 effort 無關）
-        rc, _, _ = _run_hook(self.HOOK, payload=None)
-        assert rc == 1
-
-    def test_medium_effort_runs_full_validation(self):
-        # medium effort 會嘗試執行完整驗證；fake ticket 應失敗，但效應不應為短路
-        rc, stdout, _ = _run_hook(
-            self.HOOK,
-            payload=None,
-            env={"CLAUDE_EFFORT": "medium"},
-            args=["fake-ticket-id", "1", "/tmp/nonexistent"],
-        )
-        # 不應為短路訊息
-        assert "短路" not in stdout
-
-
-# ============================================================================
-# 3. phase-completion-gate-hook
+# 2. phase-completion-gate-hook
 # ============================================================================
 
 class TestPhaseCompletionGateEffort:
@@ -166,7 +130,7 @@ class TestPhaseCompletionGateEffort:
 
 
 # ============================================================================
-# 4. wrap-decision-tripwire-hook（advisory；low effort 仍須完整偵測）
+# 3. wrap-decision-tripwire-hook（advisory；low effort 仍須完整偵測）
 # ============================================================================
 
 class TestWrapDecisionTripwireEffort:
@@ -208,7 +172,7 @@ class TestWrapDecisionTripwireEffort:
 
 
 # ============================================================================
-# 5. sibling-blockedby-validator-hook
+# 4. sibling-blockedby-validator-hook
 # ============================================================================
 
 class TestSiblingBlockedbyValidatorEffort:
@@ -262,7 +226,7 @@ class TestSiblingBlockedbyValidatorEffort:
 
 
 # ============================================================================
-# 6. layer-boundary-validator-hook
+# 5. layer-boundary-validator-hook
 # ============================================================================
 
 class TestLayerBoundaryValidatorEffort:

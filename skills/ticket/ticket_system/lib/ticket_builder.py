@@ -989,8 +989,13 @@ estimated_recovery_effort: ""  # 若 needs_context/blocked，預估補料成本
 
 <!-- agent 執行中發現應開新 ticket 的議題時，用
 `ticket track add-spawn-request <id> --what ... --why ... --type ... --priority ...`
-追加結構化請求。PM 處理後標記 status: processed（已建 ticket）或
-dismissed（評估後不建）+ reason。 -->
+追加結構化請求。PM 處理後用
+`ticket track resolve-spawn-request <id> SR-N --status processed --spawned-ticket <ticket-id>`
+（已建 ticket，同步回填 spawned_tickets）或
+`ticket track resolve-spawn-request <id> SR-N --status dismissed --reason "..."`
+（評估後不建）標記狀態，不要直接手改本區塊（繞道手改會失去 auto-commit
+保護，body 停留於未 commit 的 working tree 可能被 checkout/reset/stash
+覆蓋回舊版本）。 -->
 
 ---
 

@@ -8,7 +8,7 @@ Hook Completeness Check
 
 Verifies that all Python hook files in .claude/hooks/ directory are
 properly registered in settings.json. Uses a directory scan + exclude
-list mechanism instead of relying on hook-registry.json.
+list mechanism.
 
 Runs on SessionStart to catch missing configurations and help maintain
 comprehensive hook registration.
@@ -35,7 +35,7 @@ sys.path.insert(0, str(_HOOKS_DIR))
 sys.path.insert(0, str(_CLAUDE_DIR))  # for `from lib import ...`
 sys.path.insert(0, str(_PROJECT_INIT_DIR))
 
-from lib import setup_hook_logging, run_hook_safely
+from lib import setup_hook_logging, run_hook_safely, get_uncommitted_files
 from project_init.lib.hook_checker import (
     extract_registered_hooks,
     extract_registered_skill_hooks,
@@ -305,23 +305,19 @@ def _attempt_auto_commit(fixed_files, hooks_dir, project_root, logger):
         return False
 
     # 1) git status --porcelain - examine working tree
-    status = _run_git(["status", "--porcelain"], project_root, logger)
-    if status is None or status.returncode != 0:
-        msg = "[HookCheck] git status 失敗，跳過自動 commit"
+    # 改用 lib.git_utils.get_uncommitted_files 收斂 porcelain 解析
+    # （0.2.1-W3-290，沿用 0.2.1-W3-286 rename 箭頭格式結論：取 " -> " 右側新路徑）
+    try:
+        file_statuses = get_uncommitted_files(cwd=str(project_root))
+    except Exception as exc:
+        msg = f"[HookCheck] git status 失敗，跳過自動 commit: {exc}"
         print(msg)
         logger.warning(msg)
-        if status and status.stderr:
-            sys.stderr.write(status.stderr)
         return False
 
-    # Parse porcelain entries: each line "XY path"
     changed_paths = set()
-    for line in status.stdout.splitlines():
-        if not line.strip():
-            continue
-        # porcelain format: 2 status chars + space + path
-        path = line[3:].strip()
-        # Strip rename arrow if present
+    for fs in file_statuses:
+        path = fs.file_path.strip()
         if " -> " in path:
             path = path.split(" -> ", 1)[1]
         changed_paths.add(path)

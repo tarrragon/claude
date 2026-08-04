@@ -17,11 +17,49 @@
 | 情境 | 強制規則 |
 |------|---------|
 | 人工隔離 session | 使用 `claude --worktree <path>` 或 `claude -w <path>` 前，main 必須 clean 且 ticket 狀態已 commit |
-| 背景實作 subagent | 非 `.claude/` 寫入任務預設使用 `isolation: worktree` |
+| 背景實作 subagent | 非 `.claude/` 寫入任務預設使用 `isolation: worktree`；唯讀規劃/分析派發可豁免，見下方「唯讀派發豁免 worktree 強制」節 |
 | 大型或範圍明確任務 | 可設定 `worktree.sparsePaths`，但必須包含 source、test、fixture、ticket 文件 |
 | worktree 生命週期觀測 | `WorktreeCreate` / `WorktreeRemove` event 只能用於記錄、提醒與檢查，不可取代 PM 合併判斷 |
 | stale worktree | 清理前必須檢查未提交變更、未合併 commit、base 落後距離與可保留 diff |
 | `.claude/` Edit/Write | 不使用 worktree subagent，依 ARCH-015 改由主 repo cwd 處理 |
+
+---
+
+## 唯讀派發豁免 worktree 強制（0.2.1-W3-269，框架 issue 36）
+
+> **用途**：PM 派發實作代理人執行**唯讀規劃/分析階段**（如 TDD Phase 3a 只讀不寫）時，若明確宣告唯讀，可豁免上方「適用範圍與強制規則」表列的 worktree 強制，不需為純唯讀工作先建立/切換 worktree。
+>
+> **命名說明**：本節提及的三個 hook（`agent-dispatch-validation-hook.py`、`worktree-pre-dispatch-branch-drift-hook.py`、`worktree-commit-before-dispatch-hook.py`）與本文件「Worktree 狀態檢查觸發點」表的 Guard A/B 是不同語境的獨立命名，本節不沿用該表字母代號，避免與 Guard A（`worktree-remove-deliverable-check-hook`，remove 前交付物驗證，與本節主題無關）混淆；其中 `worktree-pre-dispatch-branch-drift-hook.py` 恰為該表的 Guard B，其餘兩個 hook 未在該表出現。
+
+**Why**：worktree 隔離的目的是防止並行寫入互相覆蓋（見「核心原則」），唯讀階段不產生寫入衝突，強制 worktree 隔離對此類派發只有成本沒有收益——consumer 被迫先合併 feat 分支才能派發，對純唯讀階段成本過高（框架 issue 36）。
+
+**Consequence**：未使用本豁免時，唯讀派發仍會被 `agent-dispatch-validation-hook.py` 判定為未使用 worktree 而阻擋，PM 需額外走一次不必要的 worktree 建立流程才能派發純讀取任務。
+
+**Action — 聲明方式**：prompt **首行**（strip 後第一行）逐字寫：
+
+```
+Dispatch-Mode: readonly
+```
+
+三條件 AND 判準（`_is_dispatch_mode_readonly_prompt`，`.claude/skills/ticket/hooks/agent-dispatch-validation-hook.py`）：(1) 必須是首行，非文中任意位置 (2) 以 `Dispatch-Mode:` 固定前綴開頭 (3) 值（冒號後 strip）大小寫不敏感等於 `readonly`。三條件缺一即不豁免，維持現行 worktree 強制阻擋。
+
+**適用判準（何謂唯讀階段）**：只讀不寫的規劃/分析工作，代表情境如 TDD Phase 3a（實作策略規劃，產出虛擬碼/流程圖但不動實際程式碼）、唯讀審查、純分析報告。判斷依據是**該次派發是否會產生任何檔案寫入**，不是代理人的一般職責定義——同一代理人這次派發若確實會寫入檔案，即不得宣告本豁免。
+
+**反例（不可使用本豁免的情境）**：
+
+| 情境 | 說明 |
+|------|------|
+| 任何會寫入檔案的派發 | 即使只是小改，只要有 Edit/Write 就不得宣告 `Dispatch-Mode: readonly`——宣告後 hook 即放行不建 worktree，寫入會直接落在派發當下的 cwd，可能污染主 repo 或既有 worktree |
+| 外部 `.claude/`（非本專案）路徑 | 不受本豁免影響——外部 `.claude/` 路徑在判斷序列最前一律阻擋（runtime 必拒），先於本豁免判斷 |
+| 值非 `readonly`（如 `Dispatch-Mode: review`） | 三條件不符，不豁免 |
+| 非首行宣告（如夾在 prompt 中段） | 三條件不符，不豁免 |
+| Agent 工具 `dispatch_mode` 結構化參數 | **無效**——探針實測確認 CC runtime 組 PreToolUse hook payload 時剝離 Agent tool_input 的自訂欄位，唯一有效聲明方式是 prompt 首行文字（0.2.1-W3-269 Problem Analysis 附 hook log 證據） |
+
+**與 review mode 的關係**：與既有 W10-084 審查模式豁免（prompt 全文含「審查/review/掃描/scan/評估/evaluate」等關鍵字）為 **OR 關係**——任一命中即豁免 worktree 強制，兩者判斷邏輯互相獨立、互不取代。差異：review mode 是全文關鍵字比對，本豁免是首行固定格式協議（結構化精確比對，非關鍵字掃描），issue 36 明文要求後者形式以避免關鍵字比對法的誤判風險。
+
+**其餘兩道檢查無需另外處理**：`worktree-pre-dispatch-branch-drift-hook.py`（即本文件「Worktree 狀態檢查觸發點」表的 Guard B）與 `.claude/skills/worktree/hooks/worktree-commit-before-dispatch-hook.py` 皆以 `isolation == "worktree"` 為觸發前提；本豁免路徑不設定該欄位，兩者的跳過條件自然生效，不需額外設定。
+
+**派發 prompt 骨架速查**：見 `.claude/references/agent-dispatch-template.md`「唯讀派發豁免 worktree 強制」節。
 
 ---
 
@@ -197,7 +235,7 @@ ticket_id, worktree_path, branch, base_commit, created_at, removed_at
 | **派發 worktree 前**（Guard B） | 主 repo HEAD 是否漂移離開 main | worktree-pre-dispatch-branch-drift-hook（阻擋 exit 2） |
 | **Agent 完成後**（最重要） | worktree 未合併 commit | agent-commit-verification-hook（自動提醒）+ PM 主動合併 |
 | **ticket complete 前** | 所有 worktree 合併狀態 | worktree-merge-reminder-hook（自動提醒）+ Checkpoint 1.9 |
-| **worktree remove 前**（Guard A） | 分支是否有未 merge 進 main 的交付物 | worktree-remove-deliverable-check-hook（阻擋 exit 2）+ PM 固定值驗證硬規則 |
+| **worktree remove 前**（Guard A / Guard C） | 分支是否有未 merge 進 main 的交付物（Guard A）+ target worktree 是否已 clean（Guard C） | worktree-remove-deliverable-check-hook（阻擋 exit 2）+ PM 固定值驗證硬規則 |
 | **切換 Ticket 前** | 殘留 worktree | PM 主動執行 `git worktree list` |
 | **handoff/session 結束前** | 所有 worktree + 未提交 | PM 主動檢查 |
 | **push 前** | 確認所有 worktree 已合併 | worktree-branch-check-hook（自動提醒） |
@@ -294,6 +332,22 @@ git ls-tree -r main --name-only | grep <file>   # 命中才代表已落地
 任一交付物在 main 查無內容 → **禁止 remove**，先 merge/cherry-pick 該 worktree 分支。
 
 **自動防護**：`worktree-remove-deliverable-check-hook`（PreToolUse:Bash）偵測 `git worktree remove`，若該 worktree 分支有未 merge 進 main 的 commit（`git log main..<branch>` 觸及檔案）→ 阻擋（exit 2）。`--force` 不繞過此檢查（檢查在 hook 層，先於 git 執行）。
+
+#### Guard C：remove 前必須確認 target worktree working tree 已 clean（PM 硬規則，來源 0.2.1-W3-280，issue 46 症狀四）
+
+> **命名說明**：本節代號原為「Guard B」，因與 `worktree-pre-dispatch-branch-drift-hook`（本文件「Worktree 狀態檢查觸發點」表已分配的 Guard B，派發前主 repo 分支漂移檢查）撞號，於 0.2.1-W3-285 改名為 Guard C，避免同一字母指向兩個語意無關的 hook。
+
+> **Why**：merge 完成後 Guard A 即放行，但 worktree working tree 內未提交的修改（已追蹤或未追蹤）不在 commit 歷史中，`remove --force` 會使其永久遺失。這是 1.2.0-W1-028 事故一在「merge 已完成」路徑下的變體（issue 46 症狀四）。
+> **Consequence**：代理人寫入但未 commit 的內容（或殘留的未追蹤檔案）在 remove 時被靜默丟棄，`git fsck` 無 unreachable 可查，遺失不可逆。
+> **Action**：`git worktree remove` 前，對每個目標 worktree 用固定值確認 working tree 已 clean：
+
+```bash
+git -C <path> status --porcelain   # 無輸出即代表 clean，可安全 remove
+```
+
+非空時依情況擇一處理：保留變更則 `git -C <path> add <paths> && git -C <path> commit -m "<message>" -- <paths>` 後 `git merge <branch> --no-edit`；確認可捨棄則 `git -C <path> restore .` + `git -C <path> clean -fd .`。處理完成後重跑上方 status 命令確認為空，再執行 remove。
+
+**自動防護**：`worktree-remove-deliverable-check-hook`（PreToolUse:Bash）在 Guard A 放行後，額外檢查 target worktree 的 `git status --porcelain`，非空即阻擋（exit 2），依未追蹤/已追蹤分組列出將遺失的內容並附上述逐字修復命令。`--force` 不繞過此檢查。
 
 **批量清理**：
 
@@ -453,6 +507,7 @@ subagent 在任何 cwd 都可 Read worktree 內的 `.claude/` 檔案。可用於
 
 ### 清理後
 - [ ] **Guard A：每個 `where.files` 已用 `git show main:<file>` / `git ls-tree -r main` 固定值驗證確在 main？**
+- [ ] **Guard C：目標 worktree `git -C <path> status --porcelain` 已確認為空（clean）？**
 - [ ] 產出物已 commit 到 main？
 - [ ] Worktree 和分支已刪除？
 - [ ] `WorktreeRemove` 事件或等效紀錄已可追溯？
@@ -496,12 +551,17 @@ subagent 在任何 cwd 都可 Read worktree 內的 `.claude/` 檔案。可用於
 - .claude/pm-rules/decision-tree.md - Checkpoint 1.9 Worktree 合併
 - .claude/rules/core/bash-tool-usage-rules.md - 禁止 cd 污染
 - .claude/rules/core/tool-output-trust-rules.md - 規則 3：關鍵事實用固定值驗證（Guard A/B 信任層依據）
-- .claude/skills/worktree/hooks/worktree-remove-deliverable-check-hook.py - Guard A 強制層
+- .claude/skills/worktree/hooks/worktree-remove-deliverable-check-hook.py - Guard A / Guard C 強制層
 - .claude/skills/worktree/hooks/worktree-pre-dispatch-branch-drift-hook.py - Guard B 強制層
+- .claude/skills/ticket/hooks/agent-dispatch-validation-hook.py - 「唯讀派發豁免 worktree 強制」判準強制層（`_is_dispatch_mode_readonly_prompt`）
+- .claude/skills/worktree/hooks/worktree-commit-before-dispatch-hook.py - 「唯讀派發豁免 worktree 強制」節提及，isolation != "worktree" 自然跳過
+- .claude/references/agent-dispatch-template.md - 唯讀派發 prompt 骨架速查、worktree 環境前置欄位
 
 ---
 
-**Last Updated**: 2026-07-27
+**Last Updated**: 2026-08-04
+**Version**: 2.7.0 - 修正 worktree-remove-deliverable-check-hook 的 BLOCK_MESSAGE_DIRTY 內部代號「Guard B」與本文件既有 Guard B（worktree-pre-dispatch-branch-drift-hook，派發前分支漂移）撞號：改名 Guard C 並於階段 3 新增獨立章節、同步觸發點表與清理後檢查清單；merge-reminder-hook 的 dirty 分支清理建議改為 commit 後 merge 再 remove 的導向，不再指向會被 Guard C 阻擋的 `remove --force`（0.2.1-W3-285，承接 0.2.1-W3-282 同型問題殘留）
+**Version**: 2.6.0 - 新增「唯讀派發豁免 worktree 強制（0.2.1-W3-269，框架 issue 36）」節：TDD Phase 3a 等唯讀規劃/分析派發可用 prompt 首行 `Dispatch-Mode: readonly` 豁免 worktree 強制，含三條件 AND 判準、適用判準、反例表、與 review mode 的 OR 關係；「適用範圍與強制規則」表補豁免指引；派發 prompt 骨架速查另見 `agent-dispatch-template.md`（0.2.1-W3-270，接續 0.2.1-W3-269 落地）
 **Version**: 2.5.0 - 新增「多階段串接派發（Feat 分支累積器）」節：跨 agent TDD phase 接力（RED→GREEN 跨多個 worktree agent）時保 main 全程恆綠的機制，含 checkout-paths 取代 merge 的理由與 Guard A 銜接說明；階段 2「提取方式選擇」表補第四列 `git checkout <ref> -- <paths>`（0.2.1-W3-095，落地自 memory multi-phase-tdd-branch-flow.md）
 
 **Version**: 2.4.0 - 落地 1.2.0-W1-028 兩守護：Guard A（階段 3 remove 前固定值驗證交付物在 main + remove-deliverable-check-hook 強制層 + 實作 agent commit 紀律）防未提交碼遺失；Guard B（階段 1 派發前主 repo 分支漂移檢查 + pre-dispatch-branch-drift-hook 強制層）防 cwd 污染致 merge 落錯處；觸發點表與派發前/清理後檢查清單同步補列

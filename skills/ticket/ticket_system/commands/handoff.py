@@ -1152,6 +1152,7 @@ def _execute_from_worklog(args: argparse.Namespace) -> int:
     from ticket_system.lib.version import get_current_version
     from ticket_system.lib.worklog_parser import (
         detect_handoff_keywords,
+        extract_handoff_section,
         extract_ticket_ids,
     )
 
@@ -1179,7 +1180,10 @@ def _execute_from_worklog(args: argparse.Namespace) -> int:
     active_version = get_current_version()
     if active_version:
         active_version = active_version.lstrip("v")
-    ticket_ids = extract_ticket_ids(content, active_version=active_version)
+    # W3-222: 掃描範圍限縮至交接段落（與 hook 端 detect_sync_drift 語意一致，
+    # 避免從整份 worklog 抓到歷史 ticket ID 造成大量 false positive）
+    handoff_section = extract_handoff_section(content)
+    ticket_ids = extract_ticket_ids(handoff_section, active_version=active_version)
 
     if not ticket_ids:
         print(format_info("偵測到 handoff 關鍵字但無 ticket ID"))

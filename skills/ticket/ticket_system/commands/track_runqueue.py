@@ -46,6 +46,7 @@ from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.section_locator import find_section
 from ticket_system.lib.staleness import is_stale_in_progress
 from ticket_system.lib.blocker_resolution import is_fully_unblocked
+from ticket_system.lib.constants import STATUS_COMPLETED, STATUS_CLOSED
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +123,36 @@ def _is_unblocked_pending(
     return is_fully_unblocked(ticket, ticket_map, include_closed_as_resolved=True)
 
 
+def _unresolved_blockers(
+    ticket: Dict, ticket_map: Optional[Dict[str, Dict]] = None
+) -> List[str]:
+    """回傳 ticket 尚未解除的 blocker ID 清單（AND 語義，與 is_fully_unblocked 同源）。
+
+    W3-142：list 視圖後綴原字面硬編 "blockedBy=[]"，對 stale in_progress
+    納入項（`_is_listable` 第二條件，未經 `is_fully_unblocked` 驗證）可能
+    造假——其 blockedBy 或許仍未解除。改用本函式取代硬編字面，resolved
+    判定與 `is_fully_unblocked(include_closed_as_resolved=True)` 同源
+    （completed/closed 視為已解除、找不到 blocker 視為未解除），故 unblocked
+    pending 分支（已由 `_is_unblocked_pending` 驗證全數解除）必回傳空清單，
+    維持向後相容（acceptance #2）。
+
+    ticket_map 為 None 時無法查詢 blocker 狀態，保守回傳字面 blockedBy
+    （視為皆未解除，與 `is_fully_unblocked` 的資料不一致保守原則一致）。
+    """
+    blocked_by = ticket.get("blockedBy") or []
+    if not blocked_by:
+        return []
+    if ticket_map is None:
+        return list(blocked_by)
+    resolved_statuses = (STATUS_COMPLETED, STATUS_CLOSED)
+    return [
+        blocker_id
+        for blocker_id in blocked_by
+        if ticket_map.get(blocker_id) is None
+        or ticket_map[blocker_id].get("status") not in resolved_statuses
+    ]
+
+
 def _is_listable(ticket: Dict, ticket_map: Optional[Dict[str, Dict]] = None) -> bool:
     """W17-031.4: list 視圖納入條件 = unblocked pending OR stale in_progress。
 
@@ -149,6 +180,11 @@ def _get_pending_handoff_info() -> Dict[str, Dict]:
     資料以便讀取 exit_status（W17-010 schema）。獨立函式便於測試 monkeypatch；
     不依賴 handoff_utils 完整解析流程，降低耦合。
 
+    0.2.1-W3-220 修復：同時以 `target_ticket_id`（W17-164 落地的絕對指向
+    欄位）登錄索引，使 target 票能查到自己的 handoff。以 source `ticket_id`
+    為 key 的既有項目一律優先寫入且不被覆蓋，故所有既有以 source 為 key 的
+    呼叫端行為不變；`target_ticket_id` 僅在該 key 尚未被佔用時補登錄。
+
     Returns:
         ticket_id → handoff data dict；解析失敗或無 pending 目錄時回傳 {}。
     """
@@ -170,6 +206,16 @@ def _get_pending_handoff_info() -> Dict[str, Dict]:
         ticket_id = data.get("ticket_id")
         if ticket_id:
             info[ticket_id] = data
+    # 第二輪：補登錄 target_ticket_id key（不覆蓋既有以 source ticket_id
+    # 為 key 的項目，避免破壞既有呼叫端）
+    for handoff_file in sorted(pending_dir.glob("*.json")):
+        try:
+            data = json.loads(handoff_file.read_text(encoding="utf-8"))
+        except (IOError, json.JSONDecodeError):
+            continue
+        target_ticket_id = data.get("target_ticket_id")
+        if target_ticket_id and target_ticket_id not in info:
+            info[target_ticket_id] = data
     return info
 
 
@@ -369,7 +415,19 @@ def _render_list(
         # W17-031.1: resume 模式且有 exit_status tag → 顯示 [<status>] 取代
         # blockedBy=[] runnable 標記，避免 scheduler 誤把待補料 ticket 當可接手
         tag = _get_exit_status_tag(handoff_info.get(tid)) if context == "resume" else None
-        suffix = f"[{tag}]" if tag else "blockedBy=[]"
+        if tag:
+            suffix = f"[{tag}]"
+        else:
+            # W3-142: 改由實際未解除 blocker 集合推導，而非硬編字面
+            # "blockedBy=[]"。unblocked pending 分支必回傳空清單（維持
+            # acceptance #2 向後相容）；stale in_progress 分支若仍有未解除
+            # blocker 則如實顯示，避免 PM 誤判該票可推進。
+            unresolved = _unresolved_blockers(ticket, ticket_map)
+            suffix = (
+                "blockedBy=[" + ", ".join(unresolved) + "]"
+                if unresolved
+                else "blockedBy=[]"
+            )
         # W17-031.3: readiness tag（READY / NEEDS-CTX / BLOCKED / FAILED / NO-CB）
         # 不影響排序；資訊是 PM 派發前判斷可接手與否的可視訊號
         readiness = _compute_readiness(ticket, handoff_info)

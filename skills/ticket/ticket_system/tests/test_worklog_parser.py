@@ -56,6 +56,13 @@ class TestDetectHandoffKeywords:
         content = "## 2026-04-24 工作日誌\n\n完成 W17-080 重構\n"
         assert detect_handoff_keywords(content) is False
 
+    def test_t13_next_stop_keyword(self):
+        """0.2.1-W3-218：本專案書寫慣例「下一站」須被偵測（原清單命中率為 0）"""
+        from ticket_system.lib.worklog_parser import detect_handoff_keywords
+
+        content = "**下一站**：0.2.1-W3-174 優先，其次 W3-108。\n"
+        assert detect_handoff_keywords(content) is True
+
 
 # ---------------------------------------------------------------------------
 # S1-T05 ~ S1-T09, S1-T12: extract_ticket_ids()
@@ -152,6 +159,35 @@ class TestExtractRecentContent:
         future_mtime = time.time() + 10000.0
         result = extract_recent_content(worklog_path, since_mtime=future_mtime)
         assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# 0.2.1-W3-218: extract_handoff_section() 對「下一站」格式的偵測
+# ---------------------------------------------------------------------------
+
+
+class TestNextStopHandoffSection:
+    """本專案書寫慣例「下一站」的段落擷取與 ID 提取（0.2.1-W3-218）"""
+
+    def test_extract_section_and_ids_from_next_stop(self):
+        from ticket_system.lib.worklog_parser import (
+            extract_handoff_section,
+            extract_ticket_ids,
+        )
+
+        content = (
+            "## 2026-08-01\n\n"
+            "一般工作紀錄。\n\n"
+            "**下一站**：`0.2.1-W3-174` 優先，其次 `W3-108`。\n\n"
+            "## 2026-08-02\n\n"
+            "後續內容不應被納入。\n"
+        )
+        section = extract_handoff_section(content)
+        assert "下一站" in section
+        assert "後續內容不應被納入" not in section
+
+        ids = extract_ticket_ids(section, active_version="0.2.1")
+        assert ids == ["0.2.1-W3-174", "0.2.1-W3-108"]
 
 
 if __name__ == "__main__":

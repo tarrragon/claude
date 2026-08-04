@@ -46,9 +46,11 @@ def _mock_git_status(stdout: str) -> MagicMock:
 
 
 def _patch_git(stdout: str):
-    """Patch hook 模組的 subprocess.run（動態載入的模組不在 sys.modules，
-    無法用字串路徑 patch，改以 patch.object 直接替換模組屬性）。"""
-    return patch.object(_hook.subprocess, "run", return_value=_mock_git_status(stdout))
+    """Patch lib.git_utils 模組的 subprocess.run（0.2.1-W3-286 收斂後，
+    get_uncommitted_files 改呼叫共用層 lib.git_utils.get_uncommitted_files，
+    不再直接呼叫 hook 自身的 subprocess，故 patch 對象隨之改為 git_utils）。"""
+    from lib import git_utils as _git_utils_mod
+    return patch.object(_git_utils_mod.subprocess, "run", return_value=_mock_git_status(stdout))
 
 
 # ----------------------------------------------------------------------------

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-phase-contract-validator-hook.py
+phase_contract_validator.py
 
-TDD Phase Contract 四層驗證 Hook
+TDD Phase Contract 四層驗證邏輯
 
 四層驗證邏輯：
 1. Layer 1：存在性驗證 - 必要 artifact 檔案存在
@@ -447,7 +447,7 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 4:
-        print("使用方式：python phase-contract-validator-hook.py <ticket_id> <phase> <ticket_dir>")
+        print("使用方式：python phase_contract_validator.py <ticket_id> <phase> <ticket_dir>")
         sys.exit(1)
 
     ticket_id = sys.argv[1]

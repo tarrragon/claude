@@ -84,19 +84,25 @@ def _mk_subprocess_side_effect(
         result.stdout = ""
         result.stderr = ""
 
-        if len(cmd) >= 3 and cmd[0] == "git" and cmd[1] == "worktree" and cmd[2] == "list":
+        # 0.2.1-W3-290：worktree list / status --porcelain 改經
+        # lib.git_utils.run_git_command，實際命令為
+        # ["git", "--no-optional-locks", ...]，故不依賴固定 index，
+        # 改用「是否包含子字串」判斷命令類型。
+        parts = list(cmd)
+
+        if "worktree" in parts and "list" in parts:
             result.stdout = worktree_porcelain
             return result
 
-        if len(cmd) >= 3 and cmd[0] == "git" and cmd[1] == "log":
-            spec = cmd[2]
-            if ".." in spec:
+        if "log" in parts:
+            spec = next((p for p in parts if ".." in p), None)
+            if spec:
                 branch = spec.split("..", 1)[1]
                 commits = unmerged_per_branch.get(branch, [])
                 result.stdout = "\n".join(commits)
             return result
 
-        if cmd[0] == "git" and "status" in cmd:
+        if "status" in parts:
             result.stdout = status_porcelain
             return result
 

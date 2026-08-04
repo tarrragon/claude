@@ -309,11 +309,12 @@ class TestGroupC_MergeIdempotency:
         assert "replaced_auto_block" in notes
         assert "- B what" in merged
 
-    def test_s13_h3_not_a_boundary(self):
-        """§v3.1：H3 子節為 managed block 內部，不作邊界。"""
+    def test_s13_known_auto_subsection_not_a_boundary(self):
+        """0.2.1-W3-252：已知自動抽取子節（EXTRACTABLE_FIELDS 對應標題）為 managed
+        block 內部，不作邊界，隨整塊替換。"""
         existing = (
             "<!-- auto-extracted: v1 | sources: A | chars: 50 -->\n"
-            "### Sub1\n- x\n### Sub2\n- y\n"
+            "### Task Reference\n- x\n### Rationale Chain\n- y\n"
         )
         new = (
             "<!-- auto-extracted: v1 | sources: A,B | chars: 100 -->\n"
@@ -321,9 +322,84 @@ class TestGroupC_MergeIdempotency:
         )
         merged, notes = merge_auto_extracted_block(existing, new)
         assert "replaced_auto_block" in notes
-        # 舊 H3 子節應被整塊替換（非保留）
-        assert "### Sub1" not in merged
+        # 舊已知子節應被整塊替換（非保留）
+        assert "### Rationale Chain" not in merged
         assert "### Task Reference" in merged
+        assert "- new" in merged
+
+    def test_s13_unknown_h3_after_auto_block_is_boundary_and_preserved(self):
+        """0.2.1-W3-252 核心防護：PM 手動追加的未知 H3 段落（如「並行派發約束」，
+        0.2.1-W3-152 實例）於重抽時完整保留，不隨 auto 區塊一併覆蓋刪除。
+
+        source 集合刻意保持不變（皆為 A），驗證 content-aware 冪等判定本身即會
+        因內容差異觸發更新（舊 source-ID-only 判定會誤判為 no_change_idempotent，
+        使漂移內容永不更新，即 0.2.1-W3-177 ANA 量測到的根因）。
+        """
+        existing = (
+            "<!-- auto-extracted: v1 | sources: A | chars: 50 -->\n"
+            "\n### Task Reference\n- old value\n\n"
+            "### 並行派發約束（續用派發，同輪多張並行）\n"
+            "同一輪另有其他票在別的檔案作業，檔案範圍不重疊。\n"
+        )
+        new = (
+            "<!-- auto-extracted: v1 | sources: A | chars: 80 -->\n"
+            "\n### Task Reference\n- updated value\n"
+        )
+        merged, notes = merge_auto_extracted_block(existing, new)
+        assert "replaced_auto_block" in notes
+        assert "- updated value" in merged
+        assert "- old value" not in merged
+        # 手動段落須逐字保留
+        assert "### 並行派發約束（續用派發，同輪多張並行）" in merged
+        assert "同一輪另有其他票在別的檔案作業，檔案範圍不重疊。" in merged
+
+    def test_bare_manual_paragraph_glued_after_last_bullet_is_preserved(self):
+        """0.2.1-W3-252 回歸案例：以實際漂移票（0.2.1-W3-171，source 0.2.1-W3-159）
+        的真實樣態模擬 claim 重抽——PM 手動提醒緊接在最後一個已知子區塊 bullet 之後，
+        中間無空行、無標題分隔（比 test_s13_unknown_h3_after_auto_block_is_boundary_
+        and_preserved 更嚴苛：該案例手動內容有自己的 H3 標題，本案例完全沒有）。
+
+        純以「下一個已知標題」為界的判定（本票初版設計）無法偵測此樣態，會將手動段落
+        併入 auto 區塊一併覆蓋刪除；改為逐行分類（`- ` bullet 前綴 / 已知標題 / 空行
+        以外一律視為邊界）後，此樣態亦正確保留。
+        """
+        existing = (
+            "<!-- auto-extracted: v1 | sources: 0.2.1-W3-159 | chars: 897 -->\n"
+            "\n### Rationale Chain\n"
+            "- 0.2.1-W3-159 why: 【前提已更正】舊前提文字\n\n"
+            "### Related Files\n"
+            "- .claude/skills/skill-sync/  # from 0.2.1-W3-159\n"
+            "[PM 派發提醒 2026-08-04] 本票 Context Bundle 的 auto-extracted 段抽取自"
+            "來源票後，該來源票的結論已被事後更正，凍結快照含被推翻前的前提。\n"
+        )
+        new = (
+            "<!-- auto-extracted: v1 | sources: 0.2.1-W3-159 | chars: 950 -->\n"
+            "\n### Rationale Chain\n"
+            "- 0.2.1-W3-159 why: 【本欄的前提更正已被推翻，以 Solution 為準】新前提文字\n\n"
+            "### Related Files\n"
+            "- .claude/skills/skill-sync/  # from 0.2.1-W3-159\n"
+        )
+        merged, notes = merge_auto_extracted_block(existing, new)
+        assert "replaced_auto_block" in notes
+        assert "【本欄的前提更正已被推翻，以 Solution 為準】新前提文字" in merged
+        assert "【前提已更正】舊前提文字" not in merged
+        assert "[PM 派發提醒 2026-08-04]" in merged
+        assert "凍結快照含被推翻前的前提。" in merged
+
+    def test_content_unchanged_same_sources_stays_idempotent(self):
+        """內容無實質差異（僅 chars 估算值不同）時仍走 no_change_idempotent，
+        不因改用 content-aware 判定而產生空更新 commit（acceptance 3）。"""
+        existing = (
+            "<!-- auto-extracted: v1 | sources: A | chars: 50 -->\n"
+            "\n### Task Reference\n- same value\n"
+        )
+        new = (
+            "<!-- auto-extracted: v1 | sources: A | chars: 999 -->\n"
+            "\n### Task Reference\n- same value\n"
+        )
+        merged, notes = merge_auto_extracted_block(existing, new)
+        assert notes == ["no_change_idempotent"]
+        assert merged == existing
 
 
 # ============================================================================

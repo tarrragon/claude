@@ -15,7 +15,13 @@ Hook 系統訊息常數模組 - 集中管理所有 Hook 的使用者訊息
 注意：AskUserQuestionMessages/AskUserQuestionReminders 已提取至獨立模組
   → from lib.ask_user_question_reminders import AskUserQuestionReminders
   backward-compatible alias 仍在此模組可用（見下方）
+
+MemoryTriageMessages（memory 分流指引，0.2.1-W3-196 Phase 4 第二輪修正）
+定義於獨立模組 lib/memory_triage_messages.py，三個消費端（本模組不在其
+中）平行 import，非本模組職責，故不在此 re-export。
 """
+
+from typing import List
 
 from lib.ask_user_question_reminders import (  # noqa: F401
     AskUserQuestionReminders,
@@ -244,30 +250,29 @@ ANA complete 要求所有衍生 IMP/ANA 先完成，以確保分析結論已落�
 詳見: .claude/pm-rules/skip-gate.md"""
 
     # .claude/ 非白名單路徑（防止建立未預定義子目錄）
-    EDIT_BLOCKED_CLAUDE_INVALID_PATH = """錯誤：主線程禁止寫入 .claude/ 非白名單路徑
+    #
+    # 0.2.1-W3-066：子目錄清單過去在此硬編碼，與建立端 path_permission.ALLOWED_PATTERNS
+    # 各自維護會漂移（曾缺 scripts/analyses/templates/lib/output-styles/config 等項）。
+    # 改為 build_edit_blocked_claude_invalid_path() 由呼叫端（path_permission.py）傳入
+    # 從 ALLOWED_PATTERNS 動態推導的清單，結構上不可能再漂移。
+    @staticmethod
+    def build_edit_blocked_claude_invalid_path(subdirectory_lines: List[str]) -> str:  # i18n-exempt
+        """組出「.claude/ 非白名單路徑」拒絕訊息，子目錄清單由呼叫端動態傳入。"""  # i18n-exempt
+        subdirs_block = "\n".join(subdirectory_lines)
+        return f"""錯誤：主線程禁止寫入 .claude/ 非白名單路徑
 
 為什麼阻止編輯：
   .claude/ 目錄是系統配置區域，未預定義的子目錄可能破壞系統結構。
 
 當前允許的子目錄：
-  - .claude/plans/           (計畫檔案)
-  - .claude/rules/           (規則)
-  - .claude/methodologies/   (方法論)
-  - .claude/hooks/           (Hook 系統)
-  - .claude/skills/          (Skill 工具)
-  - .claude/agents/          (代理人定義)
-  - .claude/references/      (參考檔案)
-  - .claude/pm-rules/        (PM 流程規則)
-  - .claude/error-patterns/  (錯誤模式)
-  - .claude/hook-specs/      (Hook 規格)
-  - .claude/handoff/         (交接檔案)
+{subdirs_block}
 
 建議操作：
   1. 確認目標路徑是否在允許列表中
   2. 若需要新增 .claude/ 子目錄，請聯繫 PM 更新白名單
   3. 使用 /ticket create 建立對應需求
 
-詳見: .claude/pm-rules/skip-gate.md"""
+詳見: .claude/pm-rules/skip-gate.md"""  # i18n-exempt
 
     # 其他禁止路徑（預設拒絕原則）
     EDIT_BLOCKED_DEFAULT_DENY = """錯誤：主線程禁止編輯此路徑（預設拒絕）

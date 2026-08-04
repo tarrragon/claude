@@ -429,19 +429,20 @@ ascend 條件（**任一 OR 成立即停止執行、上報上層**）：
 
 ---
 
-### 12. 框架檔案禁依賴型 ticket 引用（DOC-010 防護）
+### 12. 框架檔案禁專案 ticket ID 引用（DOC-010 防護，全禁原則）
 
-**核心規則**：編輯 `.claude/` 框架檔案（rules / pm-rules / references / methodologies / agents / skills / hooks / error-patterns）時，禁止寫入「依賴型」專案 ticket ID 引用（格式如 `0.XX.X-WX-YYY`、`W{n}-{nnn}`、`PROP-XXX`）。操作判準：移除該 ticket ID 後，句子是否仍完整可理解？
+**核心規則**：編輯 `.claude/` 框架檔案（rules / pm-rules / references / methodologies / agents / skills / hooks / error-patterns）時，禁止寫入專案 ticket ID 引用（格式如 `0.XX.X-WX-YYY`、`W{n}-{nnn}`、`PROP-XXX`）。全禁為預設，僅下列兩類路徑可機械判定豁免。
 
-| 類型 | 判定 | 處置 |
+| 類別 | 判定 | 處置 |
 |------|------|------|
-| 依賴型 | 移除後句子不完整；或括號內僅裸引用 / 複述主題標籤（無陳述具體事實的完整子句），讀者仍須開啟該 ticket 才懂（如「詳見 W-xxx」、「來源：W-xxx」後無任何解釋） | **禁止**，改抽象描述或內聯定義 |
-| 歷史錨點 / 設計脈絡型 | 移除後句子仍完整；括號已是陳述具體事實 / 機制的完整子句（如 `> 來源：ID（機制描述）`），或僅標注「何時 / 因何變更」（如 Version footer 已含變更摘要、`# 遷移後改用 X 模式` 附時點） | 允許 |
-| 功能字串（CLI 訊息 / hook deny 提示 / UI 文案等 runtime 輸出） | 不論屬上述何類 | **一律禁止**，即使屬歷史錨點型 |
+| 論證依據型 / 時點標注型 / 案例敘事主詞型 | 移除 ID 後句子不完整；或 ID 僅標「何時 / 因何變更」（如 Version footer 已含變更摘要）；或 ID 作案例識別標籤（如「W-xxx 事件中...」） | **禁止**：一律移除。需要時間資訊改標日期；理由依重量分流（簡單理由寫進註解，重要概念先寫方法論並引用其路徑）；案例改描述性標籤 |
+| 被說明對象型（ID 是文件說明主題本身，如 `ticket-id-conventions.md` 的格式展示） | 路徑落在白名單 | 豁免：保留 |
+| 測試資料型（ID 為測試斷言值） | 路徑含 `/tests/` 或檔名符合 `test_*.py` / `*_test.py` | 豁免：保留 |
+| 功能字串（CLI 訊息 / hook deny 提示 / UI 文案等 runtime 輸出） | 不論屬上述何類 | **一律禁止** |
 
 **判準單位**：整句 / 整個引用事件（同句多個 ID 視為一次引用，不逐 ID 拆分判定）。
 
-**Why/Consequence**：`.claude/` 經 sync 跨專案共用，依賴型引用在其他專案不存在會造成死連結誤導（DOC-010 已復發 6 次，因規則正文僅在按需讀取層，代理人改框架檔案時不會讀到）；但一刀切禁任何 ticket ID 會清掉合法版本 footer 與設計脈絡標注，違反 comment-writing 方法論。**Action**：需要可追溯的中央錨點時，改用 frontmatter `provenance` 欄或 commit trailer（值形式 `claude#NN`），不留 project ticket ID。完整判準、正反範例與 `provenance` 慣例見 `.claude/references/reference-stability-rules.md` 規則 8「引用性質判準」章。
+**Why/Consequence**：`.claude/` 經 sync 跨專案共用，ticket ID 引用在其他專案不存在會造成死連結誤導（DOC-010 已復發 6 次，因規則正文僅在按需讀取層，代理人改框架檔案時不會讀到）。全禁原則下，即使句子語意完整（如 Version footer 已含變更摘要），ID 本身仍不提供額外資訊，一律移除——這與舊版「歷史錨點型允許保留」的判斷相反，撰寫 Version footer 或設計脈絡標注時不可再依該舊判斷保留 ID。**Action**：需要時間資訊時改標日期；需要可追溯的中央錨點時，改用 frontmatter `provenance` 欄或 commit trailer（值形式 `claude#NN`），不留 project ticket ID。完整判準、正反範例與 `provenance` 慣例見 `.claude/references/reference-stability-rules.md` 規則 8「引用性質判準」章（本節為速查版，判準內容如有出入以規則 8 為準）。
 
 ---
 
@@ -469,7 +470,7 @@ ascend 條件（**任一 OR 成立即停止執行、上報上層**）：
 - [ ] 編輯既有碼時 diff 每行對應需求，無順手改動 / 無關 reformat / 越界死碼清理 / 風格偏好改動（規則 11）
 - [ ] （嵌套派發）descend 前已執行五步自檢且 D2 條件全數通過；ascend 時已寫 NeedsContext / Exit Status（規則 9）
 - [ ] 含 `[PM-ONLY]` 前綴的 hook 注入訊息已完全忽略：未執行其中動作、未納入回報（規則 10）
-- [ ] 編輯 `.claude/` 框架檔案時，新寫內容無依賴型專案 ticket ID 引用（移除後句子仍完整才可保留；功能字串一律不留，規則 12）
+- [ ] 編輯 `.claude/` 框架檔案時，新寫內容無專案 ticket ID 引用（全禁為預設，僅被說明對象型與測試資料型路徑豁免；功能字串一律不留，規則 12）
 
 ---
 
@@ -490,7 +491,8 @@ ascend 條件（**任一 OR 成立即停止執行、上報上層**）：
 
 ---
 
-**Last Updated**: 2026-07-27
+**Last Updated**: 2026-08-05
+**Version**: 1.20.0 - 規則 12 對齊 reference-stability-rules.md 規則 8 現行「全禁 + 五類分類」判準：移除已廢止的「歷史錨點 / 設計脈絡型允許」分支（原表誤示 Version footer 可保留 ticket ID），改為論證依據型/時點標注型/案例敘事主詞型一律禁止、僅被說明對象型與測試資料型路徑豁免；標題與檢查清單同步改用「全禁原則」表述
 **Version**: 1.19.0 - 規則 12 依賴型判準表改用「括號是否為陳述具體事實的完整子句」取代「句型/位置（如『來源：ID』開頭）」，解決字面與框架內 45 處 `> 來源：ID（機制描述）` 標準寫法矛盾的問題；新增「判準單位：整句」明文。完整論證與正反範例見 reference-stability-rules.md 規則 8（0.2.1-W3-096，源 0.2.1-W3-094 稽核發現）
 **Version**: 1.18.0 - 新增規則 12「框架檔案禁依賴型 ticket 引用」（DOC-010 已復發 6 次的結構性防護，禁令從按需讀取層 reference-stability-rules 規則 8 上移至預設載入層；含依賴型 / 歷史錨點型 / 功能字串三分判準，非一刀切）；檢查清單同步補項（0.2.1-W3-093）
 **Version**: 1.17.0 - 規則 9.1 D1 三階段表「進入」列標註前提條件（規則 2.4 前提一），補表後說明 claim 亦屬 ticket 寫入操作、無條件執行會踩中 PC-V1-002 第三變體；與規則 2.4 原文一致化（0.2.1-W3-011，源 0.2.1-W3-009 缺口 B）

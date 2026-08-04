@@ -20,6 +20,8 @@ from .git_utils import (
     run_git_command,
     get_current_branch,
     get_worktree_list,
+    get_uncommitted_files,
+    FileStatus,
     is_protected_branch,
     is_allowed_branch,
 )
@@ -89,6 +91,8 @@ __all__ = [
     "run_git_command",
     "get_current_branch",
     "get_worktree_list",
+    "get_uncommitted_files",
+    "FileStatus",
     "is_protected_branch",
     "is_allowed_branch",
     # hook_logging

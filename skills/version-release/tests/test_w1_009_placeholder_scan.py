@@ -211,8 +211,7 @@ class TestPreflightCheckPlaceholderIntegration:
              patch.object(vr, "check_technical_debt", return_value=(True, [])), \
              patch.object(vr, "check_previous_versions_completed", return_value=(True, [])), \
              patch.object(vr, "check_stale_active_versions", return_value=(True, [])), \
-             patch.object(vr, "check_version_sync", return_value=(True, [])), \
-             patch.object(vr, "check_memory_upgrade_status", return_value=(True, ["ok"])):
+             patch.object(vr, "check_version_sync", return_value=(True, [])):
             all_ok, results = vr.preflight_check("1.0.0")
 
         assert all_ok is True

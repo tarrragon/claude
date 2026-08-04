@@ -140,6 +140,29 @@ CC v2.1.157 起 `EnterWorktree` 工具支援**在 session 中途切換** Claude-
 
 ---
 
+## worktree 不含的狀態（0.2.1-W3-274，框架 issue 46）
+
+> **核心概念**：git worktree 是**版本控制層**的隔離機制，只複製 git 追蹤的內容（已 commit 或已 staged 的檔案）。任何 `.gitignore` 排除、或執行期才產生的狀態，都不會隨 worktree 建立而出現在新的工作目錄中。適用於本 SKILL 的人工 `/worktree create` 與 cc runtime 自動建立的 agent isolation worktree 兩者。
+
+### 三類典型非 git 狀態
+
+| 類別 | 說明 | 典型症狀（未補齊時） |
+|------|------|---------------------|
+| gitignore 排除的產物 | 建置或套件管理工具產生但被 `.gitignore` 排除的檔案或目錄 | 測試/建置找不到對應資源，錯誤訊息通常不直接指向「worktree 缺此目錄」這個根因 |
+| 建置快取 | 編譯器/工具鏈的中介快取（非追蹤內容，重建耗時但非必要進 git） | 首次建置變慢，或依賴快取的步驟失敗 |
+| 依賴目錄 | 套件管理器安裝的第三方依賴（通常 `.gitignore` 排除，體積大不適合進 git） | 依賴解析/引用失敗 |
+
+**Why**：worktree 共享 git object store，但各自的 working directory 是獨立生成的——`.gitignore` 排除的內容從未進入 git object store，自然不會出現在任何新建立的 worktree 中，與 base 落後 main 幾個 commit 是完全不同的機制（見上方「worktree 快照過舊防護」：該節處理「git 追蹤內容落後多少」，本節處理「git 完全不追蹤的內容從未存在」）。
+
+**Consequence**：未載明補齊方式時，代理人各自在 worktree 內摸索，成功與否取決於個別代理人是否碰巧試出正確命令，同一問題在不同代理人間重複發生而無人留下可複用記錄（框架 issue 46 症狀一實證：四個代理人三個撞牆且回報各異，有解法但不在任何文件或 prompt 中）。
+
+**Action**：具體前置命令屬於 consumer 專案知識（依語言/框架/套件管理器而異），**本 SKILL 不列舉任何專案專屬命令字面**。consumer 專案應：
+
+1. 在專案層文件（`CLAUDE.md` 對應章節或 `scripts/` 下的腳本）記錄本專案 worktree 建立後所需的前置命令
+2. 派發需在 worktree 內執行測試/建置的 agent 時，在派發 prompt 引用該文件——見 `.claude/references/agent-dispatch-template.md`「環境前置欄位」
+
+---
+
 ## 快速開始
 
 ### 建立 Worktree
@@ -393,8 +416,9 @@ git branch -d feat/1.0.0-W9-002.1
 
 ---
 
+**Version**: 1.1.0 — 新增「worktree 不含的狀態」章節（0.2.1-W3-274，框架 issue 46 症狀一框架層部分）：worktree 是 git 層隔離，gitignore 產物/建置快取/依賴目錄三類非 git 狀態不隨之而來；不列舉任何專案專屬命令，指引 consumer 於專案層文件記錄並在派發時引用 agent-dispatch-template「環境前置欄位」
 **Version**: 1.0.0
-**Last Updated**: 2026-03-18
+**Last Updated**: 2026-08-04
 **Status**: MVP (create + status 子命令)
 
 ---

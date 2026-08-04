@@ -4,7 +4,8 @@
 # dependencies = []
 # ///
 """
-Memory Write Guard Hook - PreToolUse deny，攔截 memory 目錄寫入並改道正規化路徑
+Memory Write Guard Hook - PreToolUse deny，攔截 Write/Edit 系工具對 memory
+目錄的寫入並改道正規化路徑（Bash 不在攔截範圍，見下方豁免範圍）
 
 本框架排除 Claude Code 原生 memory 作為知識載體（0.2.1-W3-082 用戶裁示）：
 memory 存於使用者 home 目錄的專案層級儲存，不納入專案 git、不隨 .claude/
@@ -17,8 +18,9 @@ feedback_*.md 檔名前綴，對現行 kebab-case slug + frontmatter type 欄位
 memory 格式命中率 0/6，且寫入已發生才提醒）。本版改為 PreToolUse deny，
 比對條件改為「路徑落在 memory 目錄」，不比對檔名，避免隨命名慣例變動失效。
 
-Hook 類型: PreToolUse (matcher: Write|Edit|MultiEdit)
-觸發條件: tool_input.file_path 正規化後落在 memory 目錄
+Hook 類型: PreToolUse (matcher: Write|Edit|MultiEdit|NotebookEdit)
+觸發條件: Write/Edit/MultiEdit 為 tool_input.file_path、NotebookEdit 為
+          tool_input.notebook_path，正規化後落在 memory 目錄
           （~/.claude/projects/<project>/memory/ 或 legacy ~/auto-memory/<project>/，
           皆錨定至使用者 home 目錄，大小寫不敏感，`./` `../` 已收斂）
 行為: 命中 → deny (exit 2) 並附三分流改道指引；未命中 → allow (exit 0)
@@ -26,13 +28,15 @@ Hook 類型: PreToolUse (matcher: Write|Edit|MultiEdit)
 節流對「提醒」合理，對「阻擋」是漏洞）。
 
 豁免範圍（誠實揭露現況，非設計目標——本 hook 不是滴水不漏的沙箱）：
-- matcher 僅涵蓋 Write/Edit/MultiEdit，不含 Bash：Bash 可用 heredoc
-  （`cat > memory/x.md <<'EOF' ... EOF`，`bash-tool-usage-rules` 規則五
+- matcher 僅涵蓋 Write/Edit/MultiEdit/NotebookEdit，不含 Bash：Bash 可用
+  heredoc（`cat > memory/x.md <<'EOF' ... EOF`，`bash-tool-usage-rules` 規則五
   明文鼓勵此寫法傳長文字）完全繞過本 hook。排除 Bash 是刻意的，為避免擋住
   0.2.1-W3-085 用 `rm`/`git rm` 清空 memory 目錄的路徑；但這個排除是全稱的，
-  同時也放行了寫入，不只放行刪除。封閉方式需獨立選型（命令內容解析 vs
-  PostToolUse 稽核），另案追蹤
-- NotebookEdit 工具未涵蓋（本框架未見對 memory 目錄的實際使用場景，暫未評估）
+  同時也放行了寫入，不只放行刪除。此缺口由 `memory-dir-audit-hook.py`
+  的 SessionStart+Stop 事後稽核承接（演變史見該檔開頭），Bash 寫入本身
+  仍不受本 hook 阻擋，但會在下一次 Stop 前被稽核偵測到
+- NotebookEdit 已於 0.2.1-W3-092 併入本 matcher（與 Write 同構：明確
+  `notebook_path` 欄位可直接比對，無命令解析風險）
 
 三層 fail-open（沿用框架既有慣例，非本 hook 專屬設計，於此明文記錄）：
 1. `lib` import 失敗 -> stderr 提示 + exit 0（放行）
@@ -63,6 +67,8 @@ try:
         run_hook_safely,
         setup_hook_logging,
     )
+    from lib.memory_triage_messages import MemoryTriageMessages
+    from lib.memory_paths import get_anchored_memory_dir_pattern
 except ImportError as e:
     print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
     sys.exit(0)
@@ -78,35 +84,28 @@ EXIT_BLOCK = 2
 # /tmp/x/auto-memory/y/z.md 或專案內 auto-memory/foo/ 皆不應命中），
 # 並以 re.IGNORECASE 涵蓋大小寫變體（macOS APFS 預設大小寫不敏感，
 # Memory/MEMORY 與 memory 是同一個實體目錄）。
+# 完整 pattern（含錨定至 home、已 escape）取自 lib/memory_paths.py
+# 的 get_anchored_memory_dir_pattern()（0.2.1-W3-196 SSOT，與
+# memory-dir-audit-hook.py 共用同一份結構知識，不共用判定邏輯）——錨定至
+# home 是結構知識的一部分，不在本 hook 內組裝。
 _HOME = os.path.expanduser("~")
 MEMORY_DIR_PATTERN = re.compile(
-    re.escape(_HOME) + r"(?:/auto-memory/[^/]+/"
-    r"|/\.claude/projects/[^/]+/memory/)",
+    get_anchored_memory_dir_pattern(_HOME),
     re.IGNORECASE,
 )
 
 # deny 訊息：權威來源為 pm-quality-baseline.md 規則 7（三分流判準 + 升級路徑
 # 表），本訊息只放判別問句 + 三個目的地摘要 + 指向權威檔的路徑，不逐字複製
 # 該檔表格——複製的副本會隨權威檔改寫而漂移（已實測發生：多一逗號、
-# 「下方」被誤植為「完整」），單一事實來源才不會漂移。
+# 「下方」被誤植為「完整」），單一事實來源才不會漂移。三分流判準本體取自
+# lib/memory_triage_messages.py 的 MemoryTriageMessages（0.2.1-W3-196 SSOT，
+# 與 memory-dir-audit-hook.py 共用；語氣前綴各自獨立不合併——本段是拒絕
+# 語氣，對應 audit 的偵測語氣）。
 DENY_REASON = (
     "[MemoryWriteGuard] 這不是不能記錄，是換個地方記錄。\n"
-    "本框架排除 Claude Code 原生 memory 作為知識載體：memory 存於使用者 "
-    "home 目錄，不隨 .claude/ sync 到其他專案，寫在這裡的跨專案經驗會在"
-    "別的專案消失。記錯地方可以搬，不記錄就永久遺失。\n"
-    "\n"
-    "判別問句：「另一個專案的 session 讀到這段，能用嗎」\n"
-    "\n"
-    "三個目的地：\n"
-    "  - 框架相關（換個專案名稱與路徑仍成立）→ 錯誤學習類直接執行 "
-    "`/error-pattern add`；其他性質（通用品質／PM 行為／方法論／Skill 引導）"
-    "依升級路徑表選 `.claude/rules/` `.claude/pm-rules/` "
-    "`.claude/methodologies/` `.claude/references/`\n"
-    "  - 專案相關（僅本專案成立：架構、領域規則、工具鏈）→ `docs/` 或 `CLAUDE.md`\n"
-    "  - 兩者皆非（僅當前 session 成立）→ 不記錄，ticket md 已承載執行脈絡\n"
-    "\n"
-    "完整分流判準（含根因成熟度門檻、升級路徑表，權威來源）見 "
-    ".claude/pm-rules/pm-quality-baseline.md 規則 7。"
+    + MemoryTriageMessages.EXCLUSION_RATIONALE
+    + "記錯地方可以搬，不記錄就永久遺失。\n"
+    "\n" + MemoryTriageMessages.THREE_WAY_GUIDANCE
 )
 
 
@@ -133,12 +132,16 @@ def main() -> int:
         return EXIT_ALLOW
 
     tool_name = input_data.get("tool_name", "")
-    if tool_name not in ("Write", "Edit", "MultiEdit"):
-        logger.debug(f"非 Write/Edit/MultiEdit 工具（{tool_name}），跳過")
+    if tool_name not in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+        logger.debug(f"非 Write/Edit/MultiEdit/NotebookEdit 工具（{tool_name}），跳過")
         return EXIT_ALLOW
 
     tool_input = input_data.get("tool_input") or {}
-    file_path = tool_input.get("file_path", "")
+    # NotebookEdit 的路徑欄位是 notebook_path，非 file_path（W3-092 併入）
+    if tool_name == "NotebookEdit":
+        file_path = tool_input.get("notebook_path", "")
+    else:
+        file_path = tool_input.get("file_path", "")
 
     if not is_memory_path(file_path):
         logger.debug(f"非 memory 路徑（{file_path}），放行")

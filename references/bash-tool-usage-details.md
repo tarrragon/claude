@@ -142,7 +142,9 @@ Bash 工具輸出：
 
 ## 規則三詳細：禁止串接多個 git 寫入操作
 
-### 根因圖解（index.lock 競爭流程）
+**前提修正（issue-34，0.2.1-W3-262）**：本節原表述隱含「唯讀 git 命令可安全併發，index.lock 只在寫入串接時才會發生」。此前提已被實驗推翻——見「情境二」。串接寫入操作仍應避免（機制見情境一），但 index.lock 本身不是「串接違規」的專屬訊號，遇到時的預設處置是短暫重試，見本節末「index.lock 錯誤的診斷」。
+
+### 情境一：寫入串接觸發 Hook 競爭（根因圖解）
 
 Claude Code 的 PostToolUse Hook 在每個 Bash 呼叫完成後觸發。Hook 內部會執行 git 命令（如 `git status`、`git log`）。
 
@@ -174,22 +176,34 @@ Bash: git push                                    ← 第三個 Bash 呼叫
 Bash: git add file.md && git commit -m "msg" && git merge feat/xxx --no-edit && git push
 ```
 
-### 為何 `git add && git commit` 允許
+### 情境二：唯讀 git 命令本身也會競爭 index.lock（issue-34 實證）
 
-| 操作 | 是否觸發 PostToolUse Hook 內的 git 競爭 |
-|------|--------------------------------------|
-| `git add` | 否（add 不改變 HEAD，Hook 內的 `git status`/`git log` 不衝突） |
-| `git commit` | 是（commit 寫入 HEAD，Hook 同時讀取 HEAD 有輕微競爭但 commit 完成後 Hook 才跑） |
+**Why**：git 唯讀子命令（`git status --porcelain`、`git diff-tree`、`git log -1` 等）在需要 refresh index stat cache 時，會透過標準 lockfile 機制短暫建立並釋放 `index.lock`——此行為與命令對使用者呈現的唯讀語意無關，純粹是 git 內部實作細節。
 
-**關鍵**：commit 之後不可再串接 merge/push/rebase。add + commit 是唯一安全的組合（add 在 commit 之前完成，不與後續 Hook 競爭）。
+**實證**（框架 issue 34，consumer `screen_clock` ticket `1.4.0-W2-030`）：背景併發執行 `git status --porcelain` / `git diff-tree` / `git log -1` 時，前景 30 次獨立 `git add` 命中 1 次 index.lock 失敗；依原規則採 `add && commit` 串接則連續三次失敗，拆開後 `git add` 仍間歇性失敗需重試。此結果與原表述「add 不觸發 Hook」矛盾——真正發生競爭的不是「add 是否觸發 Hook」，而是「任一 git 命令（含唯讀命令）refresh stat cache 時是否恰好撞上另一 git 命令持有 lock 的瞬間」，屬本質上的機率性競爭，不是串接才會出現的行為。
+
+**Consequence**：把 index.lock 錯誤逕自解讀為「一定是串接違規」會誤導排查方向——並行環境（背景任務、其他 subagent、外部 GUI app）中即使每個 git 呼叫都獨立、未串接，仍可能間歇命中 lock。IMP-046 已記錄此類 Hook 內 `git status` 與主線程 git 操作競爭的案例，本次 issue-34 補上「純唯讀命令互相競爭、與 Hook 或串接皆無關」的變體。
+
+**Action**：遇 index.lock 錯誤，先依「index.lock 錯誤的診斷」表短暫重試，不預設為串接違規；`git add && git commit` 的允許性維持不變，但理由改為「實務簡化」而非「add 不觸發 Hook 故安全」。
+
+### `git add && git commit` 為何仍維持允許（因果修正）
+
+| 操作 | 原表述（已修正） | 修正後 |
+|------|----------------|--------|
+| `git add` | 「不改變 HEAD，Hook 內的 git status/log 不衝突」 | add 與其他 git 命令一樣，在 refresh index 時仍可能間歇命中 lock（情境二），並非因「不觸發 Hook」而免疫 |
+| `git commit` | 「commit 完成後 Hook 才跑」 | 維持——commit 寫入 HEAD 後才觸發 PostToolUse Hook，情境一風險仍成立 |
+
+**關鍵**：commit 之後不可再串接 merge/push/rebase（情境一風險，寫入間的 Hook 競爭仍真實存在）。add + commit 維持允許是實務簡化——兩者間本就無先後依賴的寫入衝突，即使間歇命中 lock 也屬情境二的一般性機率問題，非串接特有，短暫重試即可，不需因此禁止 add + commit 組合。
 
 ### index.lock 錯誤的診斷
 
-看到 `fatal: Unable to create index.lock` 錯誤時，依序檢查：
+看到 `fatal: Unable to create index.lock` 錯誤時，**預設處置是短暫等待後重試同一命令**（並行環境下屬預期現象，見情境二）。若重試後仍反覆失敗，再依序檢查：
 
-1. 是否有 git 操作串接？→ 拆成獨立 Bash 呼叫
-2. 是否有殘留的 `.git/index.lock` 檔案？→ `git-index-lock-cleanup-hook.py` 會自動清理，若失敗可手動 `rm .git/index.lock`
-3. 是否有其他 process 正在使用 git？→ 檢查 `ps aux | grep git`
+1. 是否有 git 寫入操作串接（`&&` 連接 commit/merge/rebase/push）？→ 拆成獨立 Bash 呼叫（情境一）
+2. 是否有殘留的 `.git/index.lock` 檔案（非本次操作造成）？→ `git-index-lock-cleanup-hook.py` 會自動清理超過 5 秒的殘留 lock，未清理可手動 `rm .git/index.lock`
+3. 是否有其他 process 正在使用 git（含背景並行的唯讀命令、外部 GUI app）？→ 檢查 `ps aux | grep git`，另見 PC-139（外部 GUI app fork 誤判來源）
+
+**與並行派發文件的口徑一致性**：`.claude/pm-rules/parallel-dispatch.md` 與 `PC-BAL-008`（同 repo 並行 agent 共用 git index）已採「lock 競爭屬預期現象、短暫等待重試為預設」的處置方向；本節修正後與其一致，皆不再要求把每次 index.lock 都當作違規追查。
 
 ---
 
@@ -303,14 +317,20 @@ quoted delimiter (`'EOF'`) 禁用變數展開與 command substitution，內容�
 - `.claude/references/quality-python.md` — Python 執行規則（類似規範）
 - `.claude/error-patterns/implementation/IMP-008-bash-working-directory-pollution.md`
 - `.claude/error-patterns/implementation/IMP-009-taskoutput-confusion.md`
+- `.claude/error-patterns/implementation/IMP-046-git-index-lock-race-condition.md`（規則三情境一 + 情境二共同來源）
 - `.claude/error-patterns/implementation/IMP-056-chpwd-shell-hook-floods-agent-output.md`
 - `.claude/error-patterns/process-compliance/PC-046-unnecessary-cd-for-global-cli.md`
 - `.claude/error-patterns/process-compliance/PC-079-bash-backtick-command-substitution-in-cli-args.md`
 - `.claude/error-patterns/process-compliance/PC-087-pm-tmp-detour-for-ticket-content.md`
+- `.claude/error-patterns/process-compliance/PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md`（並行 commit 掃入他人檔案；口徑與規則三情境二一致：lock/index 競爭屬並行環境預期現象）
+- `.claude/error-patterns/process-compliance/PC-139-git-index-lock-source-misattribution-gui-app-fork.md`
+- `.claude/pm-rules/parallel-dispatch.md` — 並行派發 git staging / commit 紀律
+- 框架 issue 34（`tarrragon/claude`）— 規則三情境二實驗來源，consumer `screen_clock` ticket `1.4.0-W2-030`
 
 ---
 
-**Last Updated**: 2026-06-12
+**Last Updated**: 2026-08-04
+**Version**: 1.3.0 — 規則三新增「情境二：唯讀 git 命令本身也會競爭 index.lock」（issue-34 實證：30 次併發 add 命中 1 次），修正「add 不觸發 Hook」的失準因果表述；index.lock 診斷改為「預設短暫重試」優先於「排查串接違規」；補與 PC-BAL-008 / parallel-dispatch.md 的口徑一致性說明（0.2.1-W3-262）
 **Version**: 1.2.0 — 新增規則一即時協議（confabulation 防護四步）+ 規則六詳細（PYTHONUNBUFFERED + tee + 雙層緩衝根因 + 與規則二調和），自 bash-tool-usage-rules.md 主檔外移（1.0.0-W7-004.3 token 收斂）
 **Version**: 1.1.0 — 新增規則五詳細（心理障礙破除 + 後退條件 + 觸發來源）（W15-007）
-**Source**: IMP-008（cd 污染）、IMP-009（TaskOutput 混淆）、IMP-056（chpwd）、PC-046（高頻違規）、index.lock 競爭、PC-087（PM /tmp 中介）、PC-166（confabulation）、W3-086（PYTHONUNBUFFERED spike）
+**Source**: IMP-008（cd 污染）、IMP-009（TaskOutput 混淆）、IMP-046（index.lock 競爭根因，含唯讀命令變體）、IMP-056（chpwd）、PC-046（高頻違規）、PC-087（PM /tmp 中介）、PC-139、PC-166（confabulation）、PC-BAL-008、W3-086（PYTHONUNBUFFERED spike）、issue-34

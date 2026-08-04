@@ -2,8 +2,9 @@
 
 背景（PC-V1-004 入口污染）：
     commit-msg-layer2-marker-check / post-test / needs-context-listener /
-    ticket-skill-sync-check 四個 PostToolUse:Bash hook 原缺 is_subagent_environment
-    偵測，PM-only 動作性提示注入 subagent context，誘導唯讀委員越界
+    skill-cli-sync-check（前身 ticket-skill-sync-check，0.2.1-W3-239 泛化搬遷）
+    四個 PostToolUse:Bash hook 原缺 is_subagent_environment 偵測，PM-only
+    動作性提示注入 subagent context，誘導唯讀委員越界
     （W1-060 實證 Explore 執行 git merge）。
 
 驗證情境（每 hook 兩組）：
@@ -27,7 +28,7 @@ HOOK_PATHS = {
     "layer2": HOOKS_DIR / "commit-msg-layer2-marker-check-hook.py",
     "post_test": HOOKS_DIR / "post-test-hook.py",
     "needs_context": TICKET_SKILL_HOOKS_DIR / "needs-context-listener-hook.py",
-    "sync_check": TICKET_SKILL_HOOKS_DIR / "ticket-skill-sync-check-hook.py",
+    "sync_check": HOOKS_DIR / "skill-cli-sync-check-hook.py",
 }
 
 
@@ -181,7 +182,7 @@ def test_needs_context_pm_env_behavior_unchanged(needs_context_hook, test_logger
 
 
 # ---------------------------------------------------------------------------
-# 4. ticket-skill-sync-check-hook
+# 4. skill-cli-sync-check-hook（前身 ticket-skill-sync-check-hook）
 # ---------------------------------------------------------------------------
 
 SYNC_CHECK_PAYLOAD = {

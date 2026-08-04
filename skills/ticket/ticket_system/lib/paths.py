@@ -14,6 +14,13 @@ from .ui_constants import VERSION_PREFIX, VERSION_PREFIX_LENGTH
 # git rev-parse 執行超時時限（秒）
 GIT_TOPLEVEL_TIMEOUT = 5
 
+# 0.2.1-W3-254：get_project_root() 程序內快取。CLI 每次呼叫為獨立 process，
+# 快取生命週期即單次呼叫，解析結果在呼叫內為常數，語意安全（見
+# get_project_root docstring「快取語意」段）。測試需在每個 test 前呼叫
+# reset_project_root_cache() 清除，見 .claude/skills/ticket/conftest.py
+# 的 _isolate_project_root autouse fixture。
+_project_root_cache: Path | None = None
+
 
 def _git_toplevel() -> Path | None:
     """
@@ -86,9 +93,57 @@ def _linked_worktree_root() -> Path | None:
 
 def get_project_root() -> Path:
     """
-    取得專案根目錄
+    取得專案根目錄（程序內快取，0.2.1-W3-254）
+
+    快取語意：本函式的解析結果在單次 CLI 呼叫（一個 process 的生命週期）內
+    恆為常數——cwd 不會在同一 process 執行期間變更，環境變數與 git 拓樸亦然。
+    首次呼叫解析並存入 module-level cache，後續呼叫直接回傳快取值，省去
+    重複的 git subprocess 呼叫（0.2.1-W3-251 量測：264 張 ticket 的載入路徑
+    各呼叫一次、每次 2 個 git subprocess，合計 530 次佔總耗時 91.4%）。
+
+    快取生命週期不可跨 process：不同 CLI 呼叫各自是獨立 process，無共享
+    記憶體，故快取天然不會夾帶跨呼叫的過期值。測試環境同一 process 內
+    執行多個 test case，須在每個 test 前呼叫 reset_project_root_cache()
+    清除，見 `.claude/skills/ticket/conftest.py` 的 `_isolate_project_root`
+    autouse fixture。
+
+    Returns:
+        Path: 專案根目錄路徑
+
+    Examples:
+        >>> root = get_project_root()
+        >>> (root / "CLAUDE.md").exists() or (root / "go.mod").exists() or (root / "pubspec.yaml").exists()
+        True
+    """
+    global _project_root_cache
+    if _project_root_cache is not None:
+        return _project_root_cache
+    _project_root_cache = _resolve_project_root()
+    return _project_root_cache
+
+
+def reset_project_root_cache() -> None:
+    """清除 get_project_root() 的程序內快取（測試專用，0.2.1-W3-254）。
+
+    生產路徑不需呼叫——CLI 每次呼叫是獨立 process，快取隨 process 結束
+    自然失效。pytest 測試在同一 process 內執行大量 test case，且多數測試
+    仰賴 `.claude/skills/ticket/conftest.py` 的 `_isolate_project_root`
+    autouse fixture 各自注入獨立的 CLAUDE_PROJECT_DIR（tmp 目錄）以避免
+    跨測試污染真實 repo；若無此重置，第二個 test 起會沿用第一個 test 快取
+    的舊 CLAUDE_PROJECT_DIR，使測試隔離失效。
+    """
+    global _project_root_cache
+    _project_root_cache = None
+
+
+def _resolve_project_root() -> Path:
+    """實際解析專案根目錄（原 get_project_root 本體，供快取包裝呼叫）。
 
     搜尋優先級：
+    0. 測試隔離逃生艙（`TICKET_SYSTEM_TEST_ISOLATION=1` 時）：直接採用
+       CLAUDE_PROJECT_DIR，略過 worktree 偵測。僅供測試 fixture 使用（見
+       `.claude/skills/ticket/conftest.py` 的 `_isolate_project_root`），
+       生產路徑不設此旗標故不受影響（0.2.1-W3-223；PC-BAL-022）。
     1. worktree 感知：當前位於 git linked worktree（git worktree add 建立）時，
        優先用該 worktree 的根目錄。避免 worktree 內的 ticket CRUD / append-log /
        auto-commit 因 CLAUDE_PROJECT_DIR 恆指向主 repo 而洩漏到主 repo（W3-008 根因 1）。
@@ -101,12 +156,15 @@ def get_project_root() -> Path:
 
     Returns:
         Path: 專案根目錄路徑
-
-    Examples:
-        >>> root = get_project_root()
-        >>> (root / "CLAUDE.md").exists() or (root / "go.mod").exists() or (root / "pubspec.yaml").exists()
-        True
     """
+    # 0. 測試隔離逃生艙：僅供 conftest 的 autouse fixture 使用，避免 pytest
+    #    本身在 git linked worktree 內執行時，第 1 步的 worktree 偵測蓋過
+    #    測試刻意注入的 CLAUDE_PROJECT_DIR 隔離（0.2.1-W3-223 修復）。
+    if os.environ.get("TICKET_SYSTEM_TEST_ISOLATION") == "1":
+        isolated_dir = os.environ.get("CLAUDE_PROJECT_DIR")
+        if isolated_dir:
+            return Path(isolated_dir)
+
     # 1. worktree 感知（優先於 CLAUDE_PROJECT_DIR）：
     #    僅在「git linked worktree」中才覆蓋，主 repo（即使 cwd 在主 repo）不觸發。
     worktree_root = _linked_worktree_root()

@@ -44,12 +44,14 @@ def _run_git(
     )
 
 
-def _auto_commit_ticket_md(path: str, ticket_id: str, section: str) -> str:
+def _auto_commit_ticket_md(
+    path: str, ticket_id: str, section: str, operation: str = "append-log"
+) -> str:
     """精確路徑 auto-commit 單一 ticket md。
 
     設計（W7-001 新設計）：
     - 精確路徑 ``git add <path>``（無 ./、-A、--all），不夾帶 PM/agent 其他變更。
-    - commit message 格式：``chore(<ticket_id>): append-log <section>``。
+    - commit message 格式：``chore(<ticket_id>): <operation> <section>``。
     - 空 commit 防護：若 add 後 index 對該檔無變更（內容與 HEAD 相同），graceful
       skip（不產生空 commit、不報錯）。
     - 不使用 ``--no-verify``（維持 pre-commit hook 把關；ticket md 非 JS，
@@ -58,10 +60,17 @@ def _auto_commit_ticket_md(path: str, ticket_id: str, section: str) -> str:
     cwd 採 ticket md 所在目錄，讓 git 自動解析其所屬 repo（worktree 場景下
     commit 進 worktree 分支，complete merge 帶回 main）。
 
+    0.2.1-W3-257：新增 operation 參數取代原硬編 "append-log" 字面，避免
+    add-spawn-request / resolve-spawn-request 等非 append-log 呼叫端的
+    commit 訊息被誤標。預設值維持 "append-log"，既有呼叫端（未傳此參數）
+    的 commit 訊息格式逐字不變（向後相容）。
+
     Args:
         path: ticket md 絕對路徑
         ticket_id: 主 ticket id（用於 commit message）
-        section: append-log 寫入的 section 名稱（用於 commit message）
+        section: 寫入的 section 名稱（用於 commit message）
+        operation: 實際呼叫端操作名（用於 commit message，預設
+            "append-log" 保留既有呼叫端行為不變）
 
     Returns:
         其中一個狀態字串：
@@ -95,7 +104,7 @@ def _auto_commit_ticket_md(path: str, ticket_id: str, section: str) -> str:
         return "no_change"
 
     # 4. 精確路徑 commit（僅該 ticket md，避免夾帶 index 內其他 staged 變更）
-    message = f"chore({ticket_id}): append-log {section}"
+    message = f"chore({ticket_id}): {operation} {section}"
     commit_result = _run_git(
         cwd, "commit", "-m", message, "--", str(md_path),
         timeout=_COMMIT_GIT_TIMEOUT,

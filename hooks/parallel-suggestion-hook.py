@@ -194,7 +194,8 @@ def extract_ticket_info(file_path: Path, logger) -> Optional[Dict[str, Any]]:
             "blockedBy": blocked_by,
             "where_files": frontmatter.get("where_files", ""),
             "where_layer": frontmatter.get("where_layer", ""),
-            "chain": chain
+            "chain": chain,
+            "wave": frontmatter.get("wave")
         }
 
         return ticket_info
@@ -466,6 +467,64 @@ def find_latest_completed_ticket_root(all_tickets: List[Dict[str, Any]], logger)
     return None
 
 
+def count_current_wave_pending(
+    tickets_info: List[Dict[str, Any]], logger
+) -> Tuple[Optional[Any], Optional[int]]:
+    """
+    依 in_progress Ticket 判斷當前 Wave，統計同 Wave 的 pending 數
+
+    Args:
+        tickets_info: extract_ticket_info() 產出的全量 Ticket 資訊清單
+        logger: 日誌物件
+
+    Returns:
+        tuple - (current_wave, pending_count)。找不到 in_progress Ticket 時
+        回傳 (None, None)，由呼叫端降級為條件式查證指引
+    """
+    current_wave = None
+    for ticket in tickets_info:
+        if ticket.get("status") == "in_progress":
+            current_wave = ticket.get("wave")
+            break
+
+    if current_wave is None:
+        logger.debug("未找到 in_progress Ticket，無法判斷當前 Wave")
+        return None, None
+
+    pending_count = sum(
+        1 for ticket in tickets_info
+        if ticket.get("wave") == current_wave and ticket.get("status") == "pending"
+    )
+    logger.debug(f"Wave {current_wave} 中有 {pending_count} 個 pending Ticket")
+    return current_wave, pending_count
+
+
+def build_wave_wrap_up_status_line(current_wave: Optional[Any], pending_count: Optional[int]) -> str:
+    """
+    依實查結果組出 Wave 收尾提醒的狀態說明行
+
+    current_wave 與 pending_count 皆非 None 時，直接給出真實數字（斷言語氣）；
+    無法判斷當前 Wave 時，降級為條件式查證指引（維持 0.2.1-W3-061 的謹慎表述）。
+
+    Args:
+        current_wave: 當前 Wave（由 in_progress Ticket 判斷），可能為 None
+        pending_count: 同 Wave 的 pending Ticket 數，可能為 None
+
+    Returns:
+        str - 狀態說明行文字
+    """
+    if current_wave is None or pending_count is None:
+        return (
+            "Wave 是否真的無待處理任務，需自行查證，不是本訊息已偵測出的結論。\n"
+            "執行 ticket track list --wave <N> --status pending 確認 Wave 真實狀態。"
+        )
+
+    query_hint = f"（查詢指令：ticket track list --wave {current_wave} --status pending）"
+    if pending_count == 0:
+        return f"偵測到 Wave {current_wave} 已無 pending Ticket{query_hint}。"
+    return f"偵測到 Wave {current_wave} 尚有 {pending_count} 個 pending Ticket{query_hint}。"
+
+
 # ============================================================================
 # 報告生成
 # ============================================================================
@@ -716,10 +775,14 @@ def main() -> int:
         else:
             logger.info("未找到最近完成的任務鏈根")
 
-    # 步驟 6.5: 繼續請求但無並行建議時，提示 Wave 收尾
+    # 步驟 6.5: 繼續請求但無並行建議時，提示 Wave 收尾（實查同 Wave pending 數）
     if is_continuation and not parallel_suggestion:
-        parallel_suggestion = AskUserQuestionMessages.WAVE_WRAP_UP_REMINDER
-        logger.info("無並行建議，輸出 Wave 收尾提醒")
+        current_wave, wave_pending_count = count_current_wave_pending(tickets_info, logger)
+        status_line = build_wave_wrap_up_status_line(current_wave, wave_pending_count)
+        parallel_suggestion = AskUserQuestionMessages.WAVE_WRAP_UP_REMINDER.format(status_line=status_line)
+        logger.info(
+            f"無並行建議，輸出 Wave 收尾提醒（Wave={current_wave}, pending={wave_pending_count}）"
+        )
 
     # 步驟 7: 產出 Hook 輸出
     hook_output = generate_hook_output(is_continuation, parallel_suggestion)

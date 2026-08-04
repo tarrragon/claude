@@ -551,17 +551,67 @@ def check_error_patterns_changed(
 # Ticket 檔案掃描函式
 # ============================================================================
 
+def _find_active_version_in_versions_block(content: str) -> "Optional[str]":
+    """在 todolist.yaml 的 versions 清單中尋找 status=active 項目的 version 值
+
+    僅以正則逐項掃描（不引入 PyYAML），因為呼叫鏈上有以
+    `uv run --script` 執行、`dependencies = []` 的獨立 hook（如
+    error-pattern-flat-gate-hook.py），對 lib 套件的匯入不可帶入額外依賴。
+
+    掃描範圍限定為頂層 `versions:` 鍵到下一個無縮排頂層內容（下一個鍵或註解）
+    之間的區塊；區塊內以 `- version: ...` 切分項目，逐項在該項目文字範圍內找
+    `status:` 欄位。
+
+    Args:
+        content: todolist.yaml 的完整文字內容
+
+    Returns:
+        第一個 status=active 項目的 version 值（去除引號），或 None
+    """
+    versions_key_match = re.search(r"^versions:\s*$", content, re.MULTILINE)
+    if not versions_key_match:
+        return None
+
+    block_start = versions_key_match.end()
+    next_top_level = re.search(r"\n(?=\S)", content[block_start:])
+    block_end = block_start + next_top_level.start() if next_top_level else len(content)
+    block = content[block_start:block_end]
+
+    entries = list(re.finditer(r"^\s*-\s*version:\s*(.+)$", block, re.MULTILINE))
+    for idx, entry_match in enumerate(entries):
+        entry_end = entries[idx + 1].start() if idx + 1 < len(entries) else len(block)
+        entry_text = block[entry_match.start():entry_end]
+
+        status_match = re.search(r"^\s*status:\s*(\S+)", entry_text, re.MULTILINE)
+        if not status_match or status_match.group(1).strip().strip("'\"") != "active":
+            continue
+
+        version_value = entry_match.group(1).strip().strip("'\"")
+        if version_value:
+            return version_value
+
+    return None
+
+
 def get_current_version_from_todolist(
     project_root: Path, logger: "Optional[logging.Logger]" = None
 ) -> "Optional[str]":
-    """從 docs/todolist.yaml 讀取 current_version 欄位
+    """從 docs/todolist.yaml 讀取當前活躍版本號
+
+    行為契約（0.2.1-W3-213 修復）：
+    - 主要格式：解析 `versions` 清單，尋找 `status` 為 `active` 的項目，回傳其
+      `version` 欄位。此為 todolist.yaml 第 5 行註解宣告的行為，也是本 repo
+      實際採用的格式（頂層已無 current_version 欄位）
+    - 舊格式相容：若找不到 status=active 項目，回退以正則解析頂層
+      `current_version:` 欄位（供仍使用舊格式的專案）
+    - 兩者皆找不到或檔案不存在時回傳 None
 
     Args:
         project_root: 專案根目錄
         logger: 可選日誌物件
 
     Returns:
-        版本號字串（如 "0.1.0"）或 None（若讀取失敗）
+        版本號字串（如 "0.2.1"）或 None（若讀取失敗或找不到當前版本）
     """
     todolist_file = project_root / "docs" / "todolist.yaml"
 
@@ -573,17 +623,27 @@ def get_current_version_from_todolist(
     try:
         content = todolist_file.read_text(encoding="utf-8")
 
-        # 簡單正則提取 current_version: 欄位值
-        match = re.search(r"current_version:\s*(\S+)", content)
+        active_version = _find_active_version_in_versions_block(content)
+        if active_version:
+            if logger:
+                logger.info(  # i18n-exempt
+                    "從 todolist.yaml versions[status=active] 讀取版本: {}".format(active_version)
+                )
+            return active_version
+
+        # 舊格式相容：頂層 current_version: 欄位
+        match = re.search(r"^current_version:\s*(\S+)", content, re.MULTILINE)
         if match:
             version = match.group(1).strip()
             if logger:
-                logger.info("從 todolist.yaml 讀取 current_version: {}".format(version))
+                logger.info(  # i18n-exempt
+                    "從 todolist.yaml current_version 欄位讀取版本（舊格式相容）: {}".format(version)
+                )
             return version
-        else:
-            if logger:
-                logger.debug("todolist.yaml 中未找到 current_version 欄位")
-            return None
+
+        if logger:
+            logger.debug("todolist.yaml 中未找到 status=active 版本或 current_version 欄位")
+        return None
     except Exception as e:
         if logger:
             logger.warning("讀取 todolist.yaml 失敗: {}".format(e))

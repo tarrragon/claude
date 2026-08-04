@@ -169,6 +169,8 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | DOC-V1-001 | 位置編號引用隨目標文件演進靜默失效（misdirected 比 broken 難偵測） | 中 | v1.0.0 |
 | DOC-009 | 「靜默處理」用語誤用 — 混淆「不記錄」與「記錄但不顯示」 | 中 | — |
 | DOC-010 | 框架文件引用專案 ticket ID 造成跨專案 sync 誤導 | 中 | — |
+| DOC-BAL-001 | 規則只寫 Action 未寫 Consequence，讀者讀成偏好而非約束 | 高 | v0.2.1 |
+| DOC-BAL-002 | 同檔案內的行為契約隨程式碼變更漂移，因只有程式碼有自動驗證（加重形態：契約宣告不存在的否定式保證） | 高 | v0.2.1 |
 
 ### 架構 (ARCH)
 
@@ -211,6 +213,11 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | ARCH-010 (module-assembly-omission) | 模組組裝遺漏導致功能鏈路靜默斷裂 | 高 | v0.15.4 |
 | ARCH-010 (overengineered-state-management) | 過度設計的狀態管理 — 框架機制已解決的問題不需要額外狀態層 | 中 | v0.1.0 |
 | ARCH-BAL-008 | 以單一消費者內容覆寫共用覆蓋層，靜默刪除其他消費者的獨有內容 | — | — |
+| ARCH-BAL-009 | 預覽路徑各自實作執行路徑的判定邏輯，兩者必然漂移使預覽閘門失效 | — | — |
+| ARCH-BAL-010 | 可選欄位的解析成敗決定記錄是否存在，解析失敗即整筆消失且無告警 | 高 | v0.2.1 |
+| ARCH-BAL-011 | 以主題命名的機制群造成該主題已被涵蓋的假象，查證止於名稱不及職責 | 高 | v0.2.1 |
+| ARCH-BAL-012 | 同一概念的第二份實作重新推導第一份刻意迴避的假設，且未繼承其測試嚴謹度 | 高 | v0.2.1 |
+| ARCH-BAL-013 | 防護元件的處置建議未經其他防護檢驗，執行者照做即被另一道防護阻擋 | 中 | — |
 
 ### 程式碼品質 (CQ)
 
@@ -324,6 +331,9 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | IMP-V1-006 | 大小寫不敏感檔案系統上 Edit 工具寫入成功，但 git pathspec 以不同大小寫尋址失敗 | 低 | — |
 | IMP-049 (hook-error-display-is-cli-bug) | "hook error" 顯示是 Claude Code CLI 已知 Bug，非 Hook 程式碼問題 | 低 | v0.17.3 |
 | IMP-049 (undefined-constants-in-hook-source) | Hook 原始碼引用未定義常數 | — | — |
+| IMP-BAL-004 | 豁免清單以檔名比對而非路徑錨定，使樹中任意深度的同名檔全數豁免 | — | — |
+| IMP-BAL-005 | 錯誤訊號被消費為顯示而非判定——印了紅字，流程照走 | 高 | v0.2.1 |
+| IMP-BAL-007 | 共用 runner 整體 strip 破壞下游格式敏感解析，測試 mock 在 runner 層繞過缺陷點 | 高 | — |
 
 ### 流程 (PROC)
 
@@ -555,6 +565,14 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-105 (feature-implemented-without-doc-integration) | 新功能實作後缺乏文件引導整合 | — | — |
 | PC-105 (pm-cli-syntax-autopilot) | PM 對 SKILL CLI 語法的 autopilot 假設 | 中 | v0.18.0 |
 | PC-BAL-014 | Skill 註冊表 session 快取遮蔽檔案系統變更 — 同 session 驗證得出假陰性 | 中 | v0.2.1 |
+| PC-BAL-015 | idle 通知加上尚未落地的寫入被當成代理人未執行，據以前台重做 | — | — |
+| PC-BAL-016 | 以既有缺陷為範本的同類掃描繼承種子缺陷的軸，零缺陷結論被下游當成全檔無缺陷 | — | — |
+| PC-BAL-017 | 以複製作為分發手段時副本凍結於複製時點，之後的上游修復不傳播且驗證易假設已含 | — | — |
+| PC-BAL-018 | 「前提已更正」標記使後手停止驗證，錯誤更正因此獲得免疫 | 高 | v0.2.1 |
+| PC-BAL-019 | 交接內容的完整度被誤讀為交接已建立，指標從未寫入任何讀取端 | 高 | v0.2.1 |
+| PC-BAL-020 | 已查證與未查證的陳述共用同一確定語氣，讀者無從分辨哪些被看過 | 高 | v0.2.1 |
+| PC-BAL-021 | 待認領的衍生票被範圍較廣的票連帶完成，票本身零狀態變化 | 中 | v0.2.1 |
+| PC-BAL-022 | 失敗歸因以因果範圍核對取代 baseline 對照，環境造成的新失敗被判為既有 | 高 | v0.2.1 |
 
 ---
 

@@ -41,6 +41,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Callable, NamedTuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -49,6 +50,8 @@ from lib import (
     setup_hook_logging,
     read_json_from_stdin,
     get_project_root,
+    get_worktree_list as shared_get_worktree_list,
+    get_uncommitted_files as shared_get_uncommitted_files,
 )
 
 from lib.dispatch_tracker import get_active_dispatches
@@ -99,6 +102,14 @@ MSG_CWD_RESTORE_BODY = (
     "  cd {project_root} && pwd && git branch --show-current"
 )
 
+# Worktree 未提交變更警告訊息（0.2.1-W3-283，issue 46 症狀四驗收側）
+MSG_WORKTREE_UNCOMMITTED_TITLE = "[Worktree 未提交警告] 以下 worktree 有未 commit 的變更"
+MSG_WORKTREE_UNCOMMITTED_BODY = (
+    "Agent 完成後，以下 worktree 內有未提交的變更（可能是未落地的產品碼）。\n"
+    "分支 commit 歷史看不到這些內容，merge 後仍會遺漏：\n"
+)
+MSG_WORKTREE_UNCOMMITTED_SUGGESTION = "[強制] 確認內容並 commit 後才能進行 ticket complete 或驗收"
+
 # Worktree 合併提醒訊息
 MSG_WORKTREE_MERGE_TITLE = "[Worktree 合併提醒] 有未合併回 main 的 commit"
 MSG_WORKTREE_MERGE_BODY = (
@@ -138,6 +149,30 @@ MSG_HOOK_ERROR_BODY = (
 
 
 # ============================================================================
+# Worktree 回傳型別（0.2.1-W3-287：具名化取代位置解構）
+# ============================================================================
+
+
+class WorktreeInfo(NamedTuple):
+    """單一 worktree 的路徑與分支。"""
+
+    path: str
+    branch: str
+
+
+class WorktreeItems(NamedTuple):
+    """單一 worktree 附帶的項目清單（語意依呼叫端而定：未提交檔案或未合併
+    commit 摘要）。get_worktree_uncommitted_files 與 get_unmerged_worktrees
+    共用此型別——兩者形狀相同（路徑 + 分支 + 字串清單），僅 items 語意不同，
+    以泛型欄位名 items 明示，避免誤植為固定語意的 files/commits。
+    """
+
+    path: str
+    branch: str
+    items: list[str]
+
+
+# ============================================================================
 # 核心邏輯
 # ============================================================================
 
@@ -145,51 +180,27 @@ MSG_HOOK_ERROR_BODY = (
 def get_uncommitted_files(project_root: str, logger: logging.Logger) -> list[str]:
     """取得未 commit 的檔案清單（排除豁免路徑）
 
+    0.2.1-W3-286：改用 lib.git_utils.get_uncommitted_files 共用實作，取代
+    自行 subprocess + porcelain 解析。舊版整體 strip 曾剝除首行前導空白
+    致路徑截斷（IMP-BAL-007 / 0.2.1-W3-284），共用層已修復且與本 hook 原本
+    的行首空白保留邏輯一致，收斂不改變解析結果。
+
     Args:
         project_root: 專案根目錄路徑
-        logger: Logger 實例
+        logger: Logger 實例（共用層失敗時內部靜默回傳空列表，不再區分
+            timeout/not-found/非零退出碼，三者皆與「無變更」同歸空列表——
+            對本 hook 而言結果一致：無檔案清單即不觸發警告）
 
     Returns:
         list[str]: 未 commit 的檔案路徑清單
     """
-    try:
-        result = subprocess.run(
-            ["git", "--no-optional-locks", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=GIT_STATUS_TIMEOUT,
-            cwd=project_root,
-        )
-        if result.returncode != 0:
-            logger.warning("git status failed: %s", result.stderr.strip())
-            return []
-
-        files = []
-        # 禁止對 stdout 整體 strip：porcelain 格式為「XY filename」（X=index、
-        # Y=worktree 兩個狀態字元），worktree-modified 的 X 為前導空白；整體
-        # strip 會剝除第一行的前導空白，使 line[3:] 多切一個路徑首字元
-        # （.claude/ 變 claude/），進而繞過 EXCLUDED_PATH_PREFIXES 豁免。
-        for line in result.stdout.splitlines():
-            if not line.strip():
-                continue
-            if len(line) < 4:
-                continue
-            # git status --porcelain 格式: XY filename
-            file_path = line[3:].strip()
-            # 排除豁免路徑
-            if any(file_path.startswith(prefix) for prefix in EXCLUDED_PATH_PREFIXES):
-                continue
-            files.append(file_path)
-        return files
-
-    except subprocess.TimeoutExpired:
-        logger.warning("git status timeout")
-        return []
-    except FileNotFoundError:
-        logger.warning("git not found")
-        return []
+    file_statuses = shared_get_uncommitted_files(cwd=project_root)
+    files = []
+    for fs in file_statuses:
+        if any(fs.file_path.startswith(prefix) for prefix in EXCLUDED_PATH_PREFIXES):
+            continue
+        files.append(fs.file_path)
+    return files
 
 
 def build_warning_message(
@@ -237,46 +248,142 @@ def build_warning_message(
     return "\n".join(lines)
 
 
-def get_unmerged_worktrees(project_root: str, logger: logging.Logger) -> list[tuple[str, str, list[str]]]:
+def list_worktrees(project_root: str, logger: logging.Logger) -> list[WorktreeInfo]:
+    """取得所有非 main 的 worktree 清單。
+
+    0.2.1-W3-286：改用 lib.git_utils.get_worktree_list(exclude_main=True)
+    共用實作，取代自行 subprocess + porcelain 解析（原 _parse_worktree_
+    list_output，0.2.1-W3-283 從 get_unmerged_worktrees 抽出的版本）。
+    detached worktree（無 branch 值）依共用層慣例保留於原始清單，此處以
+    `wt.get("branch")` 真值過濾排除——與原行為一致（detached 因無分支可供
+    `git log main..branch` 比對，本就不出現在 WorktreeInfo 清單中）。
+
+    Args:
+        project_root: 專案根目錄路徑
+        logger: Logger 實例（保留參數維持既有呼叫端簽章相容）
+
+    Returns:
+        list[WorktreeInfo]: 具名 (path, branch) 清單；git 查詢失敗時回傳空清單
+    """
+    worktrees = shared_get_worktree_list(cwd=project_root, exclude_main=True)
+    return [WorktreeInfo(wt["path"], wt["branch"]) for wt in worktrees if wt.get("branch")]
+
+
+def get_worktree_uncommitted_files(
+    worktrees: list[WorktreeInfo], logger: logging.Logger
+) -> list[WorktreeItems]:
+    """逐 worktree 檢查未提交變更（issue 46 症狀四驗收側主防線）。
+
+    既有 get_uncommitted_files 以主 repo 為 cwd 跑 git status，看不見
+    worktree 的獨立 working tree；代理人在 worktree 完成實作但產品碼從未
+    commit 時，主 repo 檢查與 get_unmerged_worktrees（只查 commit 歷史）
+    皆為綠燈，PM 端無從得知。本函式對每個 worktree 獨立執行
+    `git -C <path> status --porcelain`，於代理人回報當下即可見未落地內容。
+
+    EXCLUDED_PATH_PREFIXES 沿用主 repo 檢查的同一份排除清單（`.claude/` /
+    `docs/`）。排除理由是工作流前提，不是資產性質：本專案框架修改
+    （`.claude/` 下的規則、方法論、hook）目前不經 worktree 派發，故此
+    路徑下的未提交變更不落在「產品碼遺失」風險範圍內。若此前提改變
+    （框架修改開始走 worktree 派發），本排除即成偵測盲區，需重新評估
+    是否仍適用。維持與主 repo 檢查一致的判準，避免同一份清單在兩處
+    產生不同語意（0.2.1-W3-288 SR-2 / 0.2.1-W3-293）。
+
+    Args:
+        worktrees: WorktreeInfo 清單（由 list_worktrees 取得）
+        logger: Logger 實例
+
+    Returns:
+        list[WorktreeItems]: (path, branch, items=未提交檔案) 清單；
+        僅含有未提交變更（過濾豁免路徑後非空）的 worktree
+    """
+    result: list[WorktreeItems] = []
+    for wt_path, branch in worktrees:
+        file_statuses = shared_get_uncommitted_files(cwd=wt_path)
+        files = [
+            fs.file_path
+            for fs in file_statuses
+            if not any(fs.file_path.startswith(prefix) for prefix in EXCLUDED_PATH_PREFIXES)
+        ]
+
+        if files:
+            result.append(WorktreeItems(wt_path, branch, files))
+
+    return result
+
+
+def _build_worktree_items_message(
+    title: str,
+    body: str,
+    worktrees: list[WorktreeItems],
+    item_label: str,
+    command_for: Callable[[WorktreeItems], str],
+    suggestion: str,
+) -> str:
+    """組裝 worktree 項目清單訊息的共用骨架（0.2.1-W3-287：合併原
+    build_worktree_uncommitted_message 與 build_worktree_merge_message，
+    截斷上限統一取 MAX_FILES_DISPLAY，取代原本各自寫死不同上限的漂移）。
+
+    Args:
+        title / body: 訊息標題與說明本文
+        worktrees: WorktreeItems 清單
+        item_label: 項目清單標頭描述（如「未提交檔案」／「commit」）
+        command_for: (WorktreeItems) -> str，產生該 worktree 的建議指令行
+        suggestion: 訊息尾端的強制動作提示
+    """
+    lines = [MSG_SEPARATOR, title, MSG_SEPARATOR, "", body]
+
+    for wt in worktrees:
+        lines.append(f"  分支: {wt.branch}")
+        lines.append(f"  路徑: {wt.path}")
+        lines.append(f"  {item_label} ({len(wt.items)} 個):")
+        display_count = min(len(wt.items), MAX_FILES_DISPLAY)
+        for item in wt.items[:display_count]:
+            lines.append(f"    - {item}")
+        remaining = len(wt.items) - display_count
+        if remaining > 0:
+            lines.append(f"    {MSG_MORE_FILES.format(remaining)}")
+        lines.append(f"  建議: {command_for(wt)}")
+        lines.append("")
+
+    lines.append(suggestion)
+    lines.append(MSG_SEPARATOR)
+    return "\n".join(lines)
+
+
+def build_worktree_uncommitted_message(
+    uncommitted: list[WorktreeItems],
+) -> str:
+    """建構 worktree 未提交變更警告訊息（與主 repo 檢查訊息區分來源）。"""
+    return _build_worktree_items_message(
+        MSG_WORKTREE_UNCOMMITTED_TITLE,
+        MSG_WORKTREE_UNCOMMITTED_BODY,
+        uncommitted,
+        "未提交檔案",
+        lambda wt: f'git -C {wt.path} add <files> && git -C {wt.path} commit -m "..." -- <files>',
+        MSG_WORKTREE_UNCOMMITTED_SUGGESTION,
+    )
+
+
+def get_unmerged_worktrees(
+    project_root: str, logger: logging.Logger, worktrees: list[WorktreeInfo] | None = None
+) -> list[WorktreeItems]:
     """取得有未合併 commit 的 worktree 清單
 
     Args:
         project_root: 專案根目錄路徑
         logger: Logger 實例
+        worktrees: 已解析的 worktree 清單（避免重複查詢，None 時自行查詢）。
+            實際呼叫端（main()）恆傳值；None 分支僅供測試單獨驗證本函式的
+            自行查詢路徑
 
     Returns:
-        list[tuple[str, str, list[str]]]: [(路徑, 分支, [commit 摘要])]
+        list[WorktreeItems]: (path, branch, items=commit 摘要) 清單
     """
-    try:
-        result = subprocess.run(
-            ["git", "worktree", "list", "--porcelain"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=GIT_STATUS_TIMEOUT,
-            cwd=project_root,
-        )
-        if result.returncode != 0:
-            return []
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return []
-
-    # 解析 worktree 清單
-    worktrees = []
-    current_path = None
-    current_branch = None
-    for line in result.stdout.splitlines():
-        if line.startswith("worktree "):
-            current_path = line[len("worktree "):]
-        elif line.startswith("branch "):
-            current_branch = line[len("branch refs/heads/"):]
-        elif line == "":
-            if current_path and current_branch and current_branch not in ("main", "master"):
-                worktrees.append((current_path, current_branch))
-            current_path = None
-            current_branch = None
-    if current_path and current_branch and current_branch not in ("main", "master"):
-        worktrees.append((current_path, current_branch))
+    if worktrees is None:
+        worktrees = list_worktrees(project_root, logger)
 
     # 檢查每個 worktree 是否有未合併 commit
-    unmerged = []
+    unmerged: list[WorktreeItems] = []
     for wt_path, branch in worktrees:
         try:
             log_result = subprocess.run(
@@ -287,7 +394,7 @@ def get_unmerged_worktrees(project_root: str, logger: logging.Logger) -> list[tu
             if log_result.returncode == 0 and log_result.stdout.strip():
                 commits = [l for l in log_result.stdout.strip().splitlines() if l]
                 if commits:
-                    unmerged.append((wt_path, branch, commits))
+                    unmerged.append(WorktreeItems(wt_path, branch, commits))
         except (subprocess.TimeoutExpired, FileNotFoundError):
             continue
 
@@ -295,30 +402,17 @@ def get_unmerged_worktrees(project_root: str, logger: logging.Logger) -> list[tu
 
 
 def build_worktree_merge_message(
-    unmerged: list[tuple[str, str, list[str]]],
+    unmerged: list[WorktreeItems],
 ) -> str:
     """建構 worktree 合併提醒訊息"""
-    lines = [
-        MSG_SEPARATOR,
+    return _build_worktree_items_message(
         MSG_WORKTREE_MERGE_TITLE,
-        MSG_SEPARATOR,
-        "",
         MSG_WORKTREE_MERGE_BODY,
-    ]
-
-    for wt_path, branch, commits in unmerged:
-        lines.append(f"  [{branch}] {len(commits)} 個 commit 待合併")
-        lines.append(f"  路徑: {wt_path}")
-        for c in commits[:5]:
-            lines.append(f"    - {c}")
-        if len(commits) > 5:
-            lines.append(f"    ... 還有 {len(commits) - 5} 個")
-        lines.append(f"  建議: git merge {branch} --no-edit")
-        lines.append("")
-
-    lines.append(MSG_WORKTREE_MERGE_SUGGESTION)
-    lines.append(MSG_SEPARATOR)
-    return "\n".join(lines)
+        unmerged,
+        "commit",
+        lambda wt: f"git merge {wt.branch} --no-edit",
+        MSG_WORKTREE_MERGE_SUGGESTION,
+    )
 
 
 def get_unmerged_feature_branches(
@@ -693,13 +787,28 @@ def main() -> None:
     else:
         logger.debug("no uncommitted files after agent completed")
 
+    # 0.2.1-W3-283：解析一次 worktree 清單，供未合併 commit 檢查與未提交
+    # 變更檢查共用，避免重複 `git worktree list` 呼叫
+    all_worktrees = list_worktrees(str(project_root), logger)
+
+    # 檢查 worktree 未提交變更（issue 46 症狀四驗收側，先於合併檢查獨立判定）
+    worktree_uncommitted = get_worktree_uncommitted_files(all_worktrees, logger)
+    has_worktree_uncommitted = bool(worktree_uncommitted)
+    if worktree_uncommitted:
+        total_wt_files = sum(len(wt.items) for wt in worktree_uncommitted)
+        logger.warning(
+            "worktree uncommitted changes detected: %d worktrees, %d files",
+            len(worktree_uncommitted), total_wt_files,
+        )
+        messages.append(build_worktree_uncommitted_message(worktree_uncommitted))
+
     # 檢查 worktree 未合併 commit
-    unmerged_worktrees = get_unmerged_worktrees(str(project_root), logger)
-    worktree_branch_names = {branch for _, branch, _ in unmerged_worktrees}
+    unmerged_worktrees = get_unmerged_worktrees(str(project_root), logger, all_worktrees)
+    worktree_branch_names = {wt.branch for wt in unmerged_worktrees}
     if unmerged_worktrees:
         has_unmerged_worktrees = True
-        first_unmerged_branch = unmerged_worktrees[0][1]
-        total_commits = sum(len(c) for _, _, c in unmerged_worktrees)
+        first_unmerged_branch = unmerged_worktrees[0].branch
+        total_commits = sum(len(wt.items) for wt in unmerged_worktrees)
         logger.warning(
             "unmerged worktrees detected: %d worktrees, %d commits",
             len(unmerged_worktrees), total_commits,
@@ -746,7 +855,7 @@ def main() -> None:
             messages.append(build_hook_error_message(hook_errors))
 
     # PM 立即動作摘要
-    if has_uncommitted or has_unmerged_worktrees or has_unmerged_branches:
+    if has_uncommitted or has_worktree_uncommitted or has_unmerged_worktrees or has_unmerged_branches:
         messages.append(build_pm_action_summary(
             str(project_root),
             has_uncommitted,

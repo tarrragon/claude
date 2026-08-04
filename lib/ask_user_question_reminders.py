@@ -23,7 +23,14 @@ AskUserQuestion 執行時指引模組 - 關鍵決策點 PM 操作提醒
 - 錯誤學習確認（場景 #17）
 - Handoff 方向選擇（場景 #9）
 - Ticket complete 後 Checkpoint 提醒
+
+Memory 分流指引訊息（判別問句、排除理由、三分流判準）定義於獨立模組
+`lib/memory_triage_messages.py`（0.2.1-W3-196 Phase 4 第二輪修正）——本模組
+自身 docstring 已宣告「這些不是簡短的訊息常數」，故不收留該類常數，改為
+import 使用，COMMIT_HANDOFF_REMINDER 直接組合其 THREE_WAY_GUIDANCE。
 """
+
+from lib.memory_triage_messages import MemoryTriageMessages  # noqa: F401
 
 
 class AskUserQuestionReminders:
@@ -86,16 +93,18 @@ Ticket 完成後的下一步決策（完成驗收後執行）。
 ============================================================
 
 [用途說明]：
-此提醒為「被動觸發」類型，在用戶主動說「繼續」時觸發。
-這是簡短的即時提醒，告知用戶 Wave 可能已完成。
-不同於 WAVE_COMPLETION_REMINDER（主動強制，含 Step 1-2 詳細指引）。
+此提醒為「被動觸發」類型，在用戶主動說「繼續」時觸發，
+觸發條件是「本次任務鏈內找不到可並行的待處理 Ticket」。
+不同於 WAVE_COMPLETION_REMINDER（主動強制，含 Step 1-2 詳細指引，
+由 commit-handoff-hook 實際查詢同 Wave pending 數後才觸發）。
 
-偵測到 Wave 可能已完成（無待處理任務）。
-PM 必須使用 AskUserQuestion 確認收尾動作。
+{status_line}
 
-收尾前步驟（必須先執行）：
+收尾前請先執行以下步驟：
 1. 列出本次修改的檔案清單
 2. 告知 git 未提交狀態
+
+PM 必須使用 AskUserQuestion 確認收尾動作。
 
 提示: ToolSearch("select:AskUserQuestion") 載入後使用。
 詳見: .claude/pm-rules/decision-tree.md
@@ -131,7 +140,7 @@ PM 必須使用 AskUserQuestion 確認收尾動作。
     # 場景 11: Commit 後 Handoff 確認
     # ========================================================================
 
-    COMMIT_HANDOFF_REMINDER = """============================================================
+    COMMIT_HANDOFF_REMINDER = f"""============================================================
 [AskUserQuestion 強制提醒] Commit 後情境感知路由
 ============================================================
 
@@ -141,22 +150,21 @@ PM 必須使用 AskUserQuestion 確認收尾動作。
   Handoff first，繼續 session 是例外，不是預設。
   Context 是有限資源，每次 Ticket 完成後 handoff 能保護下一個任務的思考品質。
 
-[強制要求] AskUserQuestion #16（錯誤學習確認）的雙通道記錄：
-  選擇「記錄錯誤學習」時，必須同時執行以下兩項，缺一不可：
-    (1) /error-pattern add — 寫入 .claude/error-patterns/（結構化知識庫）
-    (2) 更新 memory — 寫入使用者 auto-memory（跨對話記憶）
-  [WARNING] 只寫 memory 或只執行 /error-pattern add 均不符合規範
+[強制要求] AskUserQuestion #16（錯誤學習確認）的捕獲時分流：
+  選擇「記錄錯誤學習」時，依下列分流判準評估（不得省略評估直接落筆；
+  memory 不是任何分支的目的地）：
+{MemoryTriageMessages.THREE_WAY_GUIDANCE}
 
 [第一步 - 強制，不可跳過] AskUserQuestion #16（錯誤學習確認）：
   即使非 Ticket 工作，commit 後仍必須執行。無「非正式任務」豁免（規則 4）。
   → ToolSearch("select:AskUserQuestion") 載入後使用
   → 選項：無需記錄 (Recommended) / 記錄錯誤學習
-  → 選擇「記錄」→ 執行上述「強制要求」的雙通道記錄
+  → 選擇「記錄」→ 執行上述「強制要求」的捕獲時分流
   → 重新確認 #16 直到選擇「無需記錄」
 
 [第二步 - 強制] 執行查詢：
-  ticket track list --wave {n} --status pending
-  （{n} 為當前 Wave 編號，例如 30）
+  ticket track list --wave {{n}} --status pending
+  （{{n}} 為當前 Wave 編號，例如 30）
 
 [第三步] 根據查詢結果 AskUserQuestion #11：
   有 in_progress ticket → 情境 A，使用 AskUserQuestion #11a

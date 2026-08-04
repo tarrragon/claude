@@ -28,7 +28,9 @@ created: 2026-07-25
 1. 從 `.claude/.sync-state.json` 移除 `last_synced_base_sha` → 觸發全量 overlay fallback；或
 2. 淺 clone 框架 repo 作 canonical，逐檔覆蓋假衝突檔（先以 git log 鑑識該檔是否有本地客製：最後修改全是 `chore(sync)` commit 即無客製，可整檔覆蓋；有客製則以 canonical 為底重疊本地 diff），清除 `.sync-conflicts/`，將 base SHA 校正為 canonical clone 的 HEAD
 
-根本修復（框架端，見 framework issue）：sync 腳本統一改 argparse 並對未知參數 exit 非零；base SHA 寫入移到 delta 套用成功之後，失敗路徑不推進。
+根本修復（框架端）：
+1. sync 腳本統一改 argparse 並對未知參數 exit 非零（`0.2.1-W3-164` 已完成）。
+2. base SHA 寫入移到 delta 套用成功之後，失敗路徑不推進（`0.2.1-W3-165` 已完成）。查證範圍收斂：套用過程硬失敗（例外）本就安全，未曾抵達寫入點；真正成立的缺口僅三方合併「軟失敗」——衝突檔 `conflicts` 清單是已產出但未消費的診斷資訊，衝突未解仍無條件寫入 base，即本 pattern 症狀的實際觸發路徑。修復後：有未解衝突時不推進 base SHA（對齊 git merge 語意），full overlay 路徑不受影響。
 
 ## 預防措施
 

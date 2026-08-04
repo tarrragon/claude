@@ -25,6 +25,8 @@ import subprocess
 
 import pytest
 
+from ticket_system.lib.paths import reset_project_root_cache
+
 
 @pytest.fixture(autouse=True)
 def _isolate_project_root(tmp_path_factory, monkeypatch):
@@ -36,17 +38,47 @@ def _isolate_project_root(tmp_path_factory, monkeypatch):
     會落在真實 `docs/work-logs/v0/.../tickets/`（W14-042 設計不刪 lock 檔，
     產生殘留如 dummy.md.lock / 0.31.0-W4-001.md.lock）。
 
+    Why（0.2.1-W3-223 修復）：W3-008 根因 1 修復後，`get_project_root()` 的
+    「worktree 感知」判斷（`_linked_worktree_root()`）優先序高於
+    `CLAUDE_PROJECT_DIR`——當 pytest 本身在 git linked worktree（如
+    `.claude/worktrees/agent-*`）內執行時，本 fixture 注入的 tmp
+    `CLAUDE_PROJECT_DIR` 會被該 worktree 的真實根目錄整個蓋過，隔離失效。
+    後果：測試 fixture（如 `test_enum_gate.py` 寫入的 `v9.9.9-W1-00N.md`）
+    寫入 worktree 真實的 `docs/work-logs/v9/v9.9/v9.9.9/tickets/`，殘留污染
+    後續讀取 ticket 檔案 / todolist.yaml 的測試（PC-BAL-022 案例，
+    0.2.1-W3-218 / 0.2.1-W3-220 兩次假紅燈）。修復：同步注入逃生艙旗標
+    `TICKET_SYSTEM_TEST_ISOLATION=1`，使 `get_project_root()` 在此旗標存在
+    時優先直接採用 `CLAUDE_PROJECT_DIR`、略過 worktree 偵測——不透過
+    monkeypatch 覆寫 `_linked_worktree_root` 本身（該函式與 `get_project_root`
+    的既有優先序皆有獨立單元測試直接驗證其邏輯，全域覆寫會破壞這些測試契約），
+    改在 `get_project_root()` 內新增最高優先序的旗標檢查分支。`real_repo_root`
+    / `seeded_repo_root` 兩個 opt-out fixture 不需額外處理：它們設定的
+    `CLAUDE_PROJECT_DIR` 在 worktree 環境下本就等於 worktree 自身根目錄
+    （`git rev-parse --show-toplevel` 的結果），改走旗標分支後行為等價。
+
+    Why（0.2.1-W3-254 新增）：`get_project_root()` 加上程序內快取後，pytest
+    同一 process 內執行的後續 test 若不清快取，會沿用第一個呼叫過
+    `get_project_root()` 的 test 所快取的（舊）CLAUDE_PROJECT_DIR，使本
+    fixture 每個 test 各自注入獨立 tmp 目錄的隔離設計失效——第二個 test 起
+    的檔案操作實際落在第一個 test 的 tmp 目錄。故 fixture 進入時先呼叫
+    `reset_project_root_cache()`，確保快取狀態不跨 test 洩漏。
+
     設計（提供 default，個別測試可 override，opt-out 機制）：
-    - autouse 在每個 test 前注入 CLAUDE_PROJECT_DIR 指向獨立 tmp 目錄
+    - autouse 在每個 test 前先清除 get_project_root() 快取（0.2.1-W3-254），
+      再注入 CLAUDE_PROJECT_DIR 指向獨立 tmp 目錄
+    - 同步注入 `TICKET_SYSTEM_TEST_ISOLATION=1`，避免 worktree 環境下的
+      優先序覆蓋使上述隔離失效（0.2.1-W3-223）
     - 需要真實 repo 或測試 fallback 行為的測試（如 test_paths_get_project_root）
       已用 `patch.dict("os.environ", {}, clear=True)` 或顯式 setenv 覆蓋；
       後注入者勝出，不影響其既有斷言（自然 opt-out）
     - 預先建立 docs/work-logs 階層，使 lock 路徑解析有合法落點
     """
+    reset_project_root_cache()
     root = tmp_path_factory.mktemp("project-root-default")
     (root / "docs" / "work-logs").mkdir(parents=True, exist_ok=True)
     (root / "CLAUDE.md").write_text("# CLAUDE.md\n", encoding="utf-8")
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
+    monkeypatch.setenv("TICKET_SYSTEM_TEST_ISOLATION", "1")
 
 
 @pytest.fixture

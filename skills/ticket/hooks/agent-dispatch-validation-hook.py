@@ -75,6 +75,40 @@ def _is_review_mode_prompt(prompt: str) -> bool:
     return False
 
 
+# 0.2.1-W3-269：dispatch_mode=readonly 豁免 worktree 強制（框架 issue 36 落地）
+#
+# 背景：0.2.1-W3-263 ANA 裁決方案 A 為 Agent tool_input 結構化欄位
+# `dispatch_mode: "readonly"`。探針實測（W3-269 Problem Analysis 附 log 原文）
+# 確認 CC runtime 組 PreToolUse hook payload 時剝離該自訂欄位——client 端
+# 接受並成功 spawn，但 hook 收到的 tool_input 僅剩 description/prompt/
+# subagent_type/name 四個標準鍵，dispatch_mode 未 passthrough。前提不成立，
+# 改採 fallback：prompt 首行固定格式協議 `Dispatch-Mode: readonly`。
+#
+# 仍非關鍵字比對（issue 36 明文要求）：判準是「首行」+「固定前綴」+「固定值」
+# 三條件精確比對，非在全文掃描自然語言詞彙（審查/review 等關鍵字比對法的問題
+# 見 REVIEW_MODE_KEYWORDS 區塊）。PM 必須在 prompt 第一行顯式宣告，非被動推導。
+DISPATCH_MODE_PREFIX = "Dispatch-Mode:"
+DISPATCH_MODE_READONLY_VALUE = "readonly"
+
+
+def _is_dispatch_mode_readonly_prompt(prompt: str) -> bool:
+    """偵測 prompt 首行是否為 `Dispatch-Mode: readonly` 結構化宣告。
+
+    三條件 AND：(1) 首行（strip 後第一行）(2) 以 `Dispatch-Mode:` 開頭
+    (3) 值（冒號後 strip）大小寫不敏感等於 "readonly"。任一不符即 False。
+    """
+    if not prompt:
+        return False
+    stripped = prompt.strip()
+    if not stripped:
+        return False
+    first_line = stripped.splitlines()[0]
+    if not first_line.startswith(DISPATCH_MODE_PREFIX):
+        return False
+    value = first_line[len(DISPATCH_MODE_PREFIX):].strip()
+    return value.lower() == DISPATCH_MODE_READONLY_VALUE
+
+
 # 需要 worktree 隔離的實作代理人
 IMPLEMENTATION_AGENTS = frozenset({
     "parsley-flutter-developer",
@@ -1237,6 +1271,20 @@ def main() -> int:
     if _is_review_mode_prompt(prompt):
         logger.info(
             "放行：%s 偵測到審查模式關鍵字（W10-084 豁免 worktree 強制）",
+            subagent_type,
+        )
+        return 0
+
+    # (1.6) 0.2.1-W3-269：唯讀派發豁免 worktree 強制（框架 issue 36）
+    #       條件：prompt 首行為固定格式 `Dispatch-Mode: readonly`
+    #       理由：探針實測確認 CC runtime 剝離 Agent tool_input 自訂欄位，
+    #            改採 prompt 首行結構化協議（非關鍵字比對，見函式 docstring）
+    #       與 (1.5) review mode 為 OR 關係，任一命中即豁免
+    #       邊界：外部 .claude/（已於 (1) 阻擋）不受本豁免影響
+    if _is_dispatch_mode_readonly_prompt(prompt):
+        logger.info(
+            "放行：%s 偵測到 Dispatch-Mode: readonly 首行宣告"
+            "（0.2.1-W3-269 豁免 worktree 強制）",
             subagent_type,
         )
         return 0

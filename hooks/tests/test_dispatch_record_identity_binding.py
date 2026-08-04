@@ -169,6 +169,39 @@ class TestMainIntegration:
         assert mock_bind.call_args[0][0] == "1.5.0-W5-005.2"
         assert mock_bind.call_args[0][1] == "thyme-python-developer"
 
+    def test_worktree_isolation_skips_binding(self):
+        """0.2.1-W3-226：worktree 隔離派發跳過主 repo 端身份預先綁定。
+
+        本 hook 執行於 PreToolUse，worktree 尚未建立，寫入必落在主 repo；
+        worktree 代理人依 dispatch 指示會自行執行 claim --as（正確落在
+        worktree 副本）。此處預先綁定會造成 (1) 若隨後被其他 PreToolUse
+        hook 擋下，主 repo 留下半套狀態 (2) 若未被擋下，與 worktree 內
+        claim 產生雙寫合併衝突（0.2.1-W3-219/222/223 三次實證）。
+        """
+        result, mock_bind = self._run_main(
+            {
+                "prompt": "Ticket: 1.5.0-W5-005.2\nRead ticket md 依規格實作",
+                "subagent_type": "thyme-python-developer",
+                "isolation": "worktree",
+            }
+        )
+        assert result == EXIT_SUCCESS
+        mock_bind.assert_not_called()
+
+    def test_non_worktree_isolation_still_binds(self):
+        """非 worktree 隔離（共享 working tree）維持原行為，不受本次修復影響。"""
+        result, mock_bind = self._run_main(
+            {
+                "prompt": "Ticket: 1.5.0-W5-005.3\nRead ticket md 依規格實作",
+                "subagent_type": "thyme-python-developer",
+                "isolation": "",
+            }
+        )
+        assert result == EXIT_SUCCESS
+        mock_bind.assert_called_once()
+        assert mock_bind.call_args[0][0] == "1.5.0-W5-005.3"
+        assert mock_bind.call_args[0][1] == "thyme-python-developer"
+
     def test_missing_subagent_type_skips_binding(self):
         result, mock_bind = self._run_main(
             {"prompt": "Ticket: 1.5.0-W5-005.2\n實作"}

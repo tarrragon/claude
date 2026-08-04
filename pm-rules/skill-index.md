@@ -39,6 +39,8 @@
 | `/dart-style-guardian` | Design System 規範執行 |
 | `/dart-i18n-checker` | 硬編碼中文字串掃描 |
 | `/dart-test-async-guardian` | 測試異步資源管理 |
+| `/test-effectiveness` | 測試有效性驗證（覆蓋是否真實、變異測試） |
+| `/test-assertion-design` | 斷言設計判斷（flaky 與確定性） |
 
 ## 文件與流程
 

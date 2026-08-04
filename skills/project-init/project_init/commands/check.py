@@ -10,6 +10,7 @@ from project_init.lib import (
     INDEX_MCP_MANAGED,
     INDEX_MISSING,
     INDEX_OK,
+    SHIM_CLIS,
     CheckMessages,
     CodebaseMemoryMcpMessages,
     CodegraphMessages,
@@ -357,6 +358,10 @@ def _check_custom_packages(project_root: Path) -> SectionResult:
 def _check_single_package(package, details: list[str]) -> bool:
     """檢查單個套件.
 
+    ticket/doc/worktree（SHIM_CLIS，以 cli_name 判定）為 cwd-resolving shim
+    （ARCH-APP-002），每次呼叫皆從當前 repo 的 skill 目錄執行，恆等同最新
+    原始碼，不套用 uv tool staleness 判定（0.2.1-W3-116 ANA）。
+
     Args:
         package: PackageInfo 物件。
         details: 詳細訊息清單（會被修改）。
@@ -364,6 +369,9 @@ def _check_single_package(package, details: list[str]) -> bool:
     Returns:
         bool: 套件是否已是最新。
     """
+    if package.cli_name in SHIM_CLIS:
+        return _handle_shim_cli(package, details)
+
     lookup_name = package.package_name or package.name
     installed = check_installed_version(lookup_name, cli_name=package.cli_name)
 
@@ -380,6 +388,26 @@ def _check_single_package(package, details: list[str]) -> bool:
     return _handle_package_version_check(
         package, installed, compare_result, details
     )
+
+
+def _handle_shim_cli(package, details: list[str]) -> bool:
+    """處理 cwd-resolving shim 化的 CLI（SHIM_CLIS，ARCH-APP-002）.
+
+    shim 不存在 uv tool staleness 概念，故不報 OUTDATED/MISSING，
+    也不輸出 `uv tool install --force --reinstall` 修復建議
+    （該指令會覆蓋 shim，破壞 cwd-resolving 機制）。
+
+    Args:
+        package: PackageInfo 物件。
+        details: 詳細訊息清單（會被修改）。
+
+    Returns:
+        bool: 恆為 True（shim 化 CLI 不進入 OUTDATED/MISSING 判定）。
+    """
+    details.append(
+        f"{package.name} ({package.version}) {STATUS_OK} (cwd-resolving shim)"
+    )
+    return True
 
 
 def _handle_package_not_installed(package, details: list[str]) -> bool:

@@ -45,7 +45,7 @@
 - [ ] 目標檔案路徑在代理人可編輯範圍（見下方路徑權限）
 - [ ] 高風險代理人（IMP/重構/測試實作）使用 `isolation: "worktree"` 派發（見下方風險分級表）
 - [ ] **派發 prompt 已引用職責邊界聲明骨架**（見 `.claude/references/agent-dispatch-template.md`）
-- [ ] **派發 prompt 已明示精準 git staging**（並行 commit 場景，禁用 `git add .` / `git add -A`；見下方 PC-092 防護）
+- [ ] **派發 prompt 已明示精準 git staging 與 path-limited commit**（並行 commit 場景，禁用 `git add .` / `git add -A` 及不帶路徑的 `git commit`；見下方 PC-092 防護）
 ```
 
 ### Dispatch-Plan 先行（多任務 / group / spawned 場景）
@@ -91,21 +91,32 @@ dispatch-plan 欄位以 `.claude/references/agent-dispatch-template.md` 為準�
 
 > **來源**：PC-092 — 2026-04-18 W5-043 並行派發事件，四個 thyme-python-developer 代理人併發 `git add .`，導致 batch 3 的 6 個檔案被 batch 4 代理人一併 staged + commit，commit 訊息標 batch 4 但實際 diff 含 batch 3 + 4。
 
-當並行派發的代理人各自執行 `git commit` 時，prompt 必須明示精準 staging：
+當並行派發的代理人各自執行 `git commit` 時，prompt 必須明示精準 staging，且防護必須延伸到 commit 階段本身：
 
 | 要求 | 正確 | 錯誤 |
 |------|------|------|
 | staging 路徑 | 逐一列出 `where.files` 的精確路徑 | `git add .` / `git add -A` |
 | 範圍邊界 | 僅 staging 本 Ticket 的 `where.files` | 任何廣域符號 |
+| commit 階段 | path-limited commit：`git commit -m "訊息" -- <路徑清單>` | 不帶路徑的 `git commit -m "訊息"` |
+
+**為何精準 `git add` 仍不足**：共享 working tree 下 git index 亦為共享。精準 `git add` 只保證「自己這次 staging 的內容正確」，但 `git commit` 若不帶路徑，提交的是整個 index 當下的內容——其他並行代理人已 `git add`、尚未 `git commit` 的變更會被一併吸收進本次 commit。staging 階段防護與 commit 階段防護是兩個獨立環節，前者不能替代後者。
+
+**條款缺口成因（Why）**：現行防護長期只涵蓋 index.lock 競爭，因為這類失敗有明確錯誤訊息可攔——CLI 會 exit 並印出警告，使用者必然注意到。跨票 commit 吸收則是零錯誤訊息的靜默 race：commit 成功、exit 0、訊息正常，只有事後比對 diff 才看得出範圍不對。防護條款的覆蓋範圍往往跟隨「曾經被觀察到的失敗」，而靜默失敗不產生觀察事件，這正是本條款遲至跨票吸收被實測發現才補上的原因；日後新增防護條款時應主動排查是否還有其他尚未被觀察到的靜默失效模式，而非只補已發生過的案例。
 
 **範例 prompt 片段**：
 
 ```
-執行 commit 時使用：
+執行 commit 時使用 path-limited 形式（繞過 index，只提交指定路徑）：
     git add .claude/agents/sassafras.md .claude/agents/mint.md
-    git commit -m "..."
-禁止：git add . 或 git add -A（會併入其他並行代理人的修改）
+    git commit -m "..." -- .claude/agents/sassafras.md .claude/agents/mint.md
+禁止：
+- git add . 或 git add -A（會併入其他並行代理人的修改）
+- git commit -m "..." 不帶路徑（即使自己的 git add 精準，仍會提交整個 index）
 ```
+
+**新增檔案不可省略 `git add`**：path-limited commit 的 pathspec 只匹配 git 已知的路徑。對已 tracked 檔案的修改，`git commit -- <path>` 可直接提交而不需先 `git add`；對 untracked 新檔（新建 Ticket md、新增測試檔等）則會失敗並回報 `pathspec ... did not match any file(s) known to git`，必須先 `git add` 使其進入 index。**Why**：習慣性省略 `git add` 在修改既有檔案時可行，遇到新檔才失效，而該錯誤訊息容易被誤讀為「path-limited 形式不可用」而退回不帶路徑的 `git commit`，反而觸發本節要防的行為。
+
+**收尾核對步驟（並列，不取代 path-limited commit）**：commit 前執行 `git status` 或 `git diff --cached --stat` 核對 staged 範圍，出現非本 Ticket 的檔案時用 `git restore --staged <path>` 撤除。此步驟不能取代 path-limited commit——`ticket track complete` 等 CLI 的 auto-stage 行為仍可能在核對之後、commit 之前重新納入他票檔案，故兩者須並列而非二選一。
 
 **降級替代方案**（精準 staging 不可行時）：
 
@@ -249,6 +260,8 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 > **worktree base 取 origin/main（可能 stale）**：cc runtime 的 `Agent(isolation: "worktree")` 以 `origin/main`（remote-tracking ref）為 worktree base，**而非** local main HEAD（W3-007 實證）。**Why**：cc runtime 取 remote-tracking ref 作 base；當 local main 領先 origin/main（有未 push 的本地 commit）時，worktree 建在 stale 基底上，缺少最新本地 commit。**Consequence**：agent 以缺 commit 的過時基底工作，產出與 local main 不相容，需 agent 手動 recovery（W2-013 實證 parsley 手動 checkout feat 分支救回）。**Action**：(1) **派發 worktree agent 前先 `git push origin main`**，使 origin/main 對齊 local main（消除根因分歧）；`worktree-commit-before-dispatch-hook.py` 會在 origin/main 落後時 stderr 警告。(2) 派發 prompt 開頭加 `git merge main` 指引作補強（worktree 共享 `.git`，main ref 一致）。完整說明與 prompt 範本見 `.claude/references/agent-dispatch-template.md`「worktree 派發 base 同步指引（W1-035）」。
 
 > **worktree 為 fresh checkout，gitignored 生成產物須先確認就緒**：worktree 是全新 checkout，任何 gitignored 的建置生成產物（i18n 產物、序列化程式碼、DI 註冊等）若未同步存在，會造成連鎖編譯失敗且極易被誤判為高並行編譯器資源耗盡（實證與歸因陷阱見 `IMP-APP-003`）。**Why**：gitignore 排除生成產物是常見慣例，但該慣例假設「產物可即時重新生成」，worktree 派發若未確保生成步驟已執行，假設不成立。**Consequence**：全套件測試結果不可信，數十至上百項編譯失敗會被誤歸因為環境噪音而非缺產物。**Action**：(1) 派發跑全套件的 worktree agent 前，PM 先確認該 worktree 內含當前所有必要生成產物；(2) 對每個 gitignored 生成產物，評估納入版控，或於派發 prompt 中要求 agent 先執行對應 generation 指令（如 `flutter gen-l10n` / `dart run build_runner build`）；(3) 判斷「大量編譯失敗」是否為此類根因時，先查該產物是否 gitignored 且未納版控，勿逕自歸因並行資源耗盡。
+
+> **worktree 派發收尾用 `ticket track finish` 別名，避開 `complete` 誤判**：CC runtime 的 worktree isolation guard 對 argv 逐元素做 basename 比對其可處理的 shell 命令清單，`complete` 命中 bash builtin `complete`，使 `ticket track complete` 在 worktree 派發下條件性被誤判為「不可驗證的合併類操作」而阻擋（同一操作同一隔離環境下結果不穩定重現，五次派發兩擋三過）。**Why**：guard 的比對粒度是 argv 每個 token 的 basename，不區分命令位置與參數位置，故子命令名稱恰好撞上 shell builtin 名稱時才會誤判，其餘子命令（如 `claim`、`append-log`）不受影響。**Consequence**：代理人執行 `ticket track complete` 被拒時無法自行收尾，需 PM 在主 repo 代執行並代填 Layer 1 自檢，但代填的自檢在證據來源上與代理人自檢本質不同（PM 看不到代理人的執行過程）。**Action**：worktree 隔離派發的收尾指引一律使用 `ticket track finish <id> --as <agent-name>`（`finish` 為 `complete` 的別名，兩者行為完全等價，含 `--as` / `--force` 全旗標）；主 repo cwd 場景維持原名 `complete` 不變。`complete` 本身不動、不加棄用警告——它不是要被取代，只是在 worktree 環境有代稱。
 
 ### Redirect 派發反模式禁令（強制，W1-016）
 
@@ -504,11 +517,22 @@ PC-137 並行 ≤ 2 規則為 worktree 模式下的觀察結論（W17-097.1-.4 +
 
 **觸發條件**：PM 收到 `{"type":"idle_notification","idleReason":"available"}` 通知，或代理人完成回報後轉入 idle。
 
+### idle_notification 的語意
+
+**idle_notification 是狀態快照，非事實斷言。** 通知內容反映的是通知產生當下的代理人狀態；通知傳遞到 PM 讀取之間存在時序落差，讀到當下的真實狀態可能已不同（例如代理人在通知送出後、PM 讀取前又被派發了新任務，或已完成收尾）。
+
+**Why**：通知的產生與 PM 的讀取是兩個非同步事件，中間夾著訊息佇列與 PM 自身的處理順序，兩個時間點的狀態不保證一致。
+
+**Consequence**：若把通知內容當作「PM 讀到當下」的事實直接採信並據以下續用/放生決策，可能誤判代理人漏收尾、誤放生仍在工作中的代理人，或對已經不成立的狀態重複查證。
+
+**Action**：收到 idle_notification 時，將其視為「應查證」的觸發訊號，而非可直接採信的結論——以 `ticket track query`、`dispatch-active.json` 等即時狀態來源核實代理人真實狀態後，才依下方判準決定續用或放生（原則見 `.claude/rules/core/tool-output-trust-rules.md` 規則 5：記錄平面與世界平面不對稱，重大狀態轉換以世界平面為準）。
+
 ### 續用 / 放生二分判準
 
 | 條件 | 判斷 | 理由 |
 |------|------|------|
-| 同 Wave 有同類型 pending ticket | 續用 | 省去重新 spawn + 載入 CLAUDE.md + rules 的冷啟動成本 |
+| 同 Wave 有同類型 pending ticket，且其 `where.files` 與所有在途代理人的修改範圍不重疊 | 續用 | 省去重新 spawn + 載入 CLAUDE.md + rules 的冷啟動成本 |
+| 同 Wave 有同類型 pending ticket，但其 `where.files` 與在途代理人的修改範圍重疊 | 放生或等待，不可續用 | 續用會讓 idle agent 立即與在途工作產生同檔競爭編輯；「同類型 pending 存在」不等於「可派發」，須先確認目標檔案未被佔用 |
 | 同 Wave 無同類型 pending ticket 但有後續 Wave | 放生 | 跨 Wave 續用風險高（context 累積 + blockedBy 可能變動） |
 | 同 Wave 無同類型 pending ticket | 放生 | idle 等待無確定 trigger，違反 `.claude/rules/core/decision-trigger-binding.md` 規則 1（無 trigger 延後在「以後」與「永不」間無可驗證邊界） |
 | agent context 已接近飽和 | 放生 | 續用效益隨 context 飽和遞減 |
@@ -524,9 +548,13 @@ PC-137 並行 ≤ 2 規則為 worktree 模式下的觀察結論（W17-097.1-.4 +
     v
 [Step 1] 查詢同 Wave 是否有同類型 pending ticket
     |
-    +-- 有 → [Step 2a] 續用：SendMessage 派發新任務
-    |
     +-- 無 → [Step 2b] 放生：SendMessage shutdown_request
+    |
+    +-- 有 → [Step 1.5] 核對該 pending ticket 的 where.files 是否與在途代理人的修改範圍重疊
+              |
+              +-- 重疊 → [Step 2b] 放生或等待：SendMessage shutdown_request（不可續用）
+              |
+              +-- 不重疊 → [Step 2a] 續用：SendMessage 派發新任務
 ```
 
 **Step 2a 續用範本**：
@@ -583,13 +611,19 @@ Wave 所有 ticket 完成後，PM 對所有仍存活的 idle agent 依序發送 
 
 ---
 
-**Last Updated**: 2026-07-10
+**Last Updated**: 2026-08-04
+**Version**: 4.15.0 - 「worktree 派發注意事項」新增第三則條款：worktree 隔離派發的收尾指引改用 `ticket track finish`（`complete` 別名），避開 CC runtime worktree isolation guard 對 argv basename 誤判 bash builtin `complete` 而條件性阻擋收尾；`complete` 本身不動、主 repo cwd 場景維持原名
+**Version**: 4.14.0 - idle agent 回收 SOP 補兩項條款：(1) 續用/放生二分判準新增檔案佔用前提，明示同類型 pending ticket 存在不等於可派發，須先核對 `where.files` 與在途代理人修改範圍是否重疊；(2) 新增「idle_notification 的語意」小節，說明通知為狀態快照非事實斷言，正確用法是作為查證世界平面的觸發訊號。兩項條款源於實際派發過程中重複觀察到的情境（非推測）：同類型 pending 存在但目標檔案正被在途代理人佔用而無法派發；idle_notification 內容與 PM 讀取時的實際狀態存在時序落差。
+
 **Version**: 4.13.0 - Worktree 隔離章節從「強制」改為「風險分級」：新增風險分級表（低/高/中三級），低風險（ANA/DOC/唯讀）免 worktree 為既有實務明文化，高風險（IMP/重構/測試實作）維持 worktree 強制，中風險暫緩待 W5-033 實驗結論；原代理人類型表合併至風險分級表，Source of truth 註記同步更新（0.38.0-W5-034，W5-008 方案 C 分段採納落地）
 
 **Version**: 4.12.0 - 清理 2 處依賴型專案 ticket ID 引用（改抽象描述，避免框架資產 sync 至其他專案後成死連結）：嵌套派發整合條款的協議設計依據引用改指向規則本身；`.claude/` 並行數限制的重啟條件改抽象描述並改引用 PC-137（框架 error-pattern，跨專案穩定）（0.38.0-W5-030，W5-015 結論落地）
 
-**Last Updated**: 2026-07-09
 **Version**: 4.11.0 - Worktree 隔離章節新增「worktree 為 fresh checkout，gitignored 生成產物須先確認就緒」提示：訂立生成產物的納入版控評估與派發前確認 SOP（源自 `IMP-APP-003` 對照實驗）
+
+**Version**: 4.11.1 - path-limited commit 補「新增檔案不可省略 git add」條款：pathspec 僅匹配 git 已知路徑，untracked 新檔會回報 did not match any file(s) known to git，該錯誤易被誤讀為 path-limited 形式不可用而退回裸 commit（PM 實測踩坑，補於條款落地當日）
+
+**Version**: 4.11.0 - PC-092 防護延伸至 commit 階段：正確/錯誤對照表新增「commit 階段」列（path-limited commit `git commit -m ... -- <路徑>` vs 不帶路徑的 `git commit`）；新增「為何精準 git add 仍不足」機制說明（index 共享，`git commit` 不帶路徑會提交整個 index）；新增「條款缺口成因」段落（防護覆蓋跟隨曾被觀察到的失敗，index.lock 有錯誤訊息可攔而跨票 commit 吸收是零錯誤訊息的靜默 race）；新增收尾核對步驟（`git status` / `git diff --cached --stat` 核對後 `git restore --staged` 撤除非本票檔案），與 path-limited commit 並列非取代；並行安全 checklist 同步擴充精準 staging 項
 
 **Version**: 4.10.0 - 新增「派發機制選用準則（named agent vs 一般 subagent）」章節：選用準則決策表 + 兩機制差異對照 + 與 agent-team SKILL.md 快速決策表的分層關係說明；置於「idle agent 回收 SOP」之前（先講何時該用，再講用了怎麼回收），填補 W2-001 PM 誤用 named agent 的規範缺口（0.38.0-W2-002 ANA 落地，W4-005）
 

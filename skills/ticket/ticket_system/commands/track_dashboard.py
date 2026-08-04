@@ -14,13 +14,27 @@ ticket track dashboard 命令（W10-114 落地，W10-113 ANA Solution M1+M4'）
 
 複用既有：
 - track_runqueue._priority_rank / _is_unblocked_pending / _filter_by_wave
-  / _compute_readiness / _get_pending_handoff_info
+  / _compute_readiness / _get_pending_handoff_info（0.2.1-W3-220 起同時以
+  target_ticket_id 建索引，新增 [Handoff Target] 章節見 load_handoff_targets）
 - lib.staleness.compute_stale_minutes（W10-114 新增分鐘粒度純函式）
 - lib.ticket_loader.list_tickets
 
 不複用：
 - track_runqueue._render_list / _render_dag / _render_critical_path（格式不同）
 - track_stale_list._days_since_created（粒度為日，不符）
+
+0.2.1-W3-261（issue 42 修復）：
+- Ready 判定的 blockedBy 維度自初版起即同源 is_fully_unblocked（經
+  `_is_unblocked_pending` 間接複用，見 load_top_ready），與 runqueue
+  共用同一 predicate，非本次新增。
+- 本次新增 children 維度過濾：含未完成（非 completed/closed）子任務的
+  父票不列入 Ready（見 `_has_incomplete_children`）。取捨依據：父票即使
+  被 claim 也會在 complete 時被 acceptance_auditor.validate_children_completed
+  阻擋（children 未完成），列為「可直接 claim」具誤導性，故選擇排除而非
+  加標記。此過濾僅套用於 dashboard 的 Ready 章節，不回寫 runqueue——
+  runqueue 的 dag/critical-path 視圖需完整呈現 DAG（含受 children 阻塞的
+  父票）供排程判斷，兩者職責不同（各自的「同一 wave 一致性」僅指
+  blockedBy 判定同源，不含 children 過濾範圍）。
 """
 
 from __future__ import annotations
@@ -40,8 +54,10 @@ from ticket_system.commands.track_runqueue import (
     _is_unblocked_pending,
     _priority_rank,
 )
+from ticket_system.lib.constants import TERMINAL_STATUSES
 from ticket_system.lib.staleness import compute_stale_minutes
 from ticket_system.lib.ticket_loader import list_tickets
+from ticket_system.lib.ticket_ops import resolve_id_from_ref
 from ticket_system.lib.version import check_version_all_completed
 from ticket_system.lib.command_tracking_messages import (
     TrackQueryMessages,
@@ -84,6 +100,31 @@ def load_in_progress(tickets: List[Dict]) -> List[Dict[str, Any]]:
     return result
 
 
+def _has_incomplete_children(ticket: Dict, ticket_map: Dict[str, Dict]) -> bool:
+    """判斷 ticket 是否有未完成（非 completed/closed）的子任務（0.2.1-W3-261）。
+
+    children 項目可能是字串 ID 或已嵌入 status 的字典。優先信任 ticket_map
+    （同一 wave 全集、狀態即時）；找不到對應 ticket 時 fallback 讀字典內嵌
+    status，兩者皆無則保守視為未完成——呼應 `is_fully_unblocked` 對缺失
+    blocker 的保守設計（資料不一致時不建議把父票列為可直接 claim）。
+    """
+    children = ticket.get("children") or []
+    if not children:
+        return False
+    for child_ref in children:
+        child_id = resolve_id_from_ref(child_ref)
+        child = ticket_map.get(child_id) if child_id else None
+        if child is not None:
+            status = child.get("status")
+        elif isinstance(child_ref, dict):
+            status = child_ref.get("status")
+        else:
+            status = None
+        if status not in TERMINAL_STATUSES:
+            return True
+    return False
+
+
 def load_top_ready(
     tickets: List[Dict],
     top: int,
@@ -92,6 +133,7 @@ def load_top_ready(
     """收集 top N actionable ticket，按 (readiness_rank, priority, trigger_bound, id) 排序。
 
     READY 排前、NO-CB 排後；其他 readiness（NEEDS-CTX/BLOCKED/FAILED）不列入。
+    有未完成 children 的父票不列入（0.2.1-W3-261，見 `_has_incomplete_children`）。
     top <= 0 回傳 []。
 
     排序鍵語意（W3-096 + dashboard NO-CB 修復）：
@@ -108,6 +150,8 @@ def load_top_ready(
     candidates = []
     for t in tickets:
         if not _is_unblocked_pending(t, ticket_map):
+            continue
+        if _has_incomplete_children(t, ticket_map):
             continue
         readiness = _compute_readiness(t, handoff_info)
         if readiness not in _ACTIONABLE:
@@ -132,6 +176,46 @@ def load_top_ready(
         }
         for (t, readiness) in limited
     ]
+
+
+def load_handoff_targets(
+    tickets: List[Dict],
+    handoff_info: Optional[Dict[str, Dict]] = None,
+) -> List[Dict[str, Any]]:
+    """收集 handoff target_ticket_id 指向的票，獨立於 Ready 的 unblocked-pending 過濾。
+
+    0.2.1-W3-220：來源票 0.2.1-W3-178 實測，target 票若為 in_progress 或
+    completed 會完全不出現在 Ready 章節（Ready 只收 unblocked pending）。
+    本函式不套用該過濾，故 target 票任何 status 皆顯示，交接目標不再被埋。
+
+    讀 `_get_pending_handoff_info()` 修復後（同時以 target_ticket_id 建索引）
+    的結果：key 等於 data 的 target_ticket_id 才是「target 專屬項」，
+    避免誤取以 source ticket_id 為 key 的項目（該項 target_ticket_id 多半
+    指向另一張票，非自身）。
+
+    按 id 排序，回傳穩定順序。
+    """
+    handoff_info = handoff_info or {}
+    ticket_map = {t.get("id"): t for t in tickets if t.get("id")}
+    seen: set = set()
+    result: List[Dict[str, Any]] = []
+    for key, data in handoff_info.items():
+        if not isinstance(data, dict):
+            continue
+        target_id = data.get("target_ticket_id")
+        if not target_id or target_id != key or target_id in seen:
+            continue
+        seen.add(target_id)
+        ticket = ticket_map.get(target_id)
+        readiness = _compute_readiness(ticket, handoff_info) if ticket else None
+        result.append({
+            "id": target_id,
+            "title": (ticket or {}).get("title") or "",
+            "status": (ticket or {}).get("status") or "unknown",
+            "readiness": readiness,
+        })
+    result.sort(key=lambda x: str(x.get("id") or ""))
+    return result
 
 
 def load_stale_warning(
@@ -172,6 +256,7 @@ def render_text(
     top: int,
     stale_threshold: int,
     stale_disabled: bool,
+    handoff_targets: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """渲染 text 格式（PM 預設視圖）。"""
     wave_repr = wave if wave is not None else "all"
@@ -188,6 +273,21 @@ def render_text(
             lines.append(
                 f"  - {item['id']}  {item['title']}  "
                 f"(started_at: {item.get('started_at')}, agent: {item.get('agent')})"
+            )
+    lines.append("")
+
+    # --- Handoff Target 區塊（獨立於 Ready 的 unblocked-pending 過濾；
+    #     target 票 in_progress/completed 仍顯示，不編號，見 0.2.1-W3-220）---
+    targets = handoff_targets or []
+    lines.append(f"[Handoff Target] {len(targets)} ticket(s)")
+    if not targets:
+        lines.append("  (none)")
+    else:
+        for item in targets:
+            readiness_label = (item.get("readiness") or "unknown").lower()
+            lines.append(
+                f"  - {item['id']}  {item['title']}  "
+                f"(status: {item.get('status')}, readiness: {readiness_label})"
             )
     lines.append("")
 
@@ -237,16 +337,19 @@ def render_json(
     stale: Optional[List[Dict[str, Any]]],
     stale_threshold: int,
     stale_disabled: bool,
+    handoff_targets: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """渲染 JSON 格式（hook / 自動化消費）。
 
     stale_disabled=True → stale 欄位為 JSON null（None），非 []（D5）。
     ready 欄位加 index（從 1 起算），與 text Ready 章節編號一致。
+    handoff_targets 不編號（獨立於 Ready，見 0.2.1-W3-220），與 text 一致。
     """
     payload = {
         "version": version,
         "wave": wave,
         "in_progress": in_progress,
+        "handoff_targets": handoff_targets or [],
         "ready": [
             {
                 "index": i + 1,
@@ -332,6 +435,7 @@ def dashboard_main(args: argparse.Namespace, version: Optional[str]) -> int:
     in_progress = load_in_progress(scoped)
     ready = load_top_ready(scoped, top=top, handoff_info=handoff_info)
     stale = None if no_stale else load_stale_warning(scoped, threshold_min=stale_threshold)
+    handoff_targets = load_handoff_targets(scoped, handoff_info=handoff_info)
 
     if fmt == FORMAT_JSON:
         print(render_json(
@@ -342,6 +446,7 @@ def dashboard_main(args: argparse.Namespace, version: Optional[str]) -> int:
             stale=stale,
             stale_threshold=stale_threshold,
             stale_disabled=no_stale,
+            handoff_targets=handoff_targets,
         ))
     else:
         print(render_text(
@@ -353,6 +458,7 @@ def dashboard_main(args: argparse.Namespace, version: Optional[str]) -> int:
             top=top,
             stale_threshold=stale_threshold,
             stale_disabled=no_stale,
+            handoff_targets=handoff_targets,
         ))
 
     _print_all_completed_warning(version, all_tickets)

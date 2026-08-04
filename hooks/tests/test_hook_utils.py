@@ -18,6 +18,7 @@ from typing import Optional
 from unittest.mock import patch, MagicMock
 
 import pytest
+import yaml
 
 # 動態導入 hook_utils（可能不存在）
 try:
@@ -734,11 +735,45 @@ class TestExceptionHandling:
 
 
 class TestGetCurrentVersionFromTodolist:
-    """get_current_version_from_todolist() 功能測試"""
+    """get_current_version_from_todolist() 功能測試
 
-    def test_read_valid_todolist(self, project_root):
-        """成功讀取 todolist.yaml 中的 current_version"""
-        # 建立 todolist.yaml
+    0.2.1-W3-213 修復：本 repo 的 docs/todolist.yaml 早已改用 versions 清單中
+    status=active 表達當前版本（該檔第 5 行註解明寫），頂層 current_version
+    欄位已不存在。以下測試涵蓋新主要格式、舊格式向後相容，並對真實
+    docs/todolist.yaml 斷言（ARCH-BAL-012：合成檔案曾把已不存在的格式固化為規格）。
+    """
+
+    def test_read_active_version_from_versions_list(self, project_root):
+        """主要格式：versions 清單中 status=active 的項目"""
+        todolist_file = project_root / "docs" / "todolist.yaml"
+        todolist_file.write_text(
+            "versions:\n"
+            "  - version: \"0.1.0\"\n"
+            "    status: completed\n"
+            "  - version: \"0.2.0\"\n"
+            "    status: active\n"
+        )
+
+        version = get_current_version_from_todolist(project_root)
+
+        assert version == "0.2.0"
+
+    def test_active_status_takes_priority_over_legacy_field(self, project_root):
+        """主要格式與舊格式同時存在時，status=active 優先"""
+        todolist_file = project_root / "docs" / "todolist.yaml"
+        todolist_file.write_text(
+            "current_version: 0.1.0\n"
+            "versions:\n"
+            "  - version: \"0.2.0\"\n"
+            "    status: active\n"
+        )
+
+        version = get_current_version_from_todolist(project_root)
+
+        assert version == "0.2.0"
+
+    def test_legacy_current_version_field_still_supported(self, project_root):
+        """舊格式相容：無 versions 清單時回退解析頂層 current_version"""
         todolist_file = project_root / "docs" / "todolist.yaml"
         todolist_file.write_text("current_version: 0.1.0\nstatus: active\n")
 
@@ -752,8 +787,8 @@ class TestGetCurrentVersionFromTodolist:
 
         assert version is None
 
-    def test_todolist_no_version_field(self, project_root):
-        """todolist.yaml 中無 current_version 欄位時返回 None"""
+    def test_no_active_version_and_no_legacy_field_returns_none(self, project_root):
+        """無 status=active 項目、也無頂層 current_version 欄位時返回 None"""
         todolist_file = project_root / "docs" / "todolist.yaml"
         todolist_file.write_text("status: active\n")
 
@@ -780,6 +815,30 @@ class TestGetCurrentVersionFromTodolist:
         version = get_current_version_from_todolist(project_root, logger)
 
         assert version == "0.3.0"
+
+    def test_real_repo_todolist_active_version(self):
+        """對本 repo 真實 docs/todolist.yaml 斷言，不使用合成檔案（0.2.1-W3-213 acceptance 3）
+
+        ARCH-BAL-012 要求：合成測試資料曾把 status=active 格式改用前的舊
+        current_version 欄位固化為規格，本測試防止此類漂移重演——直接以
+        獨立於待測函式的 YAML 解析結果作為 oracle，斷言待測函式回傳一致。
+        """
+        repo_root = Path(__file__).resolve().parents[3]
+        todolist_file = repo_root / "docs" / "todolist.yaml"
+        assert todolist_file.exists(), "本測試依賴真實 repo 的 docs/todolist.yaml 存在"
+
+        raw = yaml.safe_load(todolist_file.read_text(encoding="utf-8"))
+        active_entries = [
+            v
+            for v in raw.get("versions", [])
+            if isinstance(v, dict) and str(v.get("status")) == "active"
+        ]
+        assert len(active_entries) == 1, "預期恰有一個 active 版本，實際: {}".format(active_entries)
+        expected_version = str(active_entries[0]["version"])
+
+        version = get_current_version_from_todolist(repo_root)
+
+        assert version == expected_version
 
 
 class TestScanTicketFilesByVersion:

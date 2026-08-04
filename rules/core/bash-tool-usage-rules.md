@@ -13,7 +13,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 |------|---------|------|
 | 一：禁裸 cd | git 操作用 `git -C path <cmd>`（首選不觸發 chpwd）；非 git 用子 shell `(cd path && cmd)`；uv 用 `uv -d path run ...`；污染後 `cd /project/root &&` 還原。裸 cd 觸發 chpwd ls 淹沒，是 confabulation 觸發鏈第 1 環 | IMP-008 / IMP-056 / PC-046 / PC-166 |
 | 二：輸出機制辨識 | `run_in_background:true` → `TaskOutput(taskId)`；輸出含「Full output saved to」→ `Read(file_path)`；其餘直讀對話。預防大輸出：測試 `2>&1 \| tail -20`、一般 `\| head -100`、Grep `head_limit`、Read `offset`+`limit` | IMP-009 |
-| 三：禁串接 git 寫入 | `git add && git commit` 允許（add 不觸發 Hook）；commit/merge/rebase/push 之間禁串接（競爭 index.lock）。每個寫入操作獨立一個 Bash 呼叫 | index.lock 競爭 |
+| 三：禁串接 git 寫入 | `git add && git commit` 允許（實務簡化，非「唯讀命令併發安全」保證）；commit/merge/rebase/push 之間禁串接。每個寫入操作獨立一個 Bash 呼叫。index.lock 競爭不限寫入串接——唯讀命令（status/diff-tree/log）refresh index stat cache 時也會短暫觸發，遇到預設短暫重試，非逕判串接違規 | IMP-046 / issue-34（30 次併發 add 命中 1 次） |
 | 四：CLI backtick 不用雙引號 | 雙引號內 backtick 被當 command substitution。改用 heredoc `cmd "$(cat <<'EOF'...EOF)"`、單引號包整參數、或 Edit 直改 ticket md。看到來源不明 `command not found` / `ModuleNotFoundError` 優先查 backtick | PC-079 |
 | 五：長文字用 heredoc | append-log / commit msg / ANA 結論直接 heredoc 傳 CLI，禁繞 `/tmp`。ARG_MAX ≥ 1 MB（macOS）/ 2 MB（Linux），80 行 markdown 約 3-8 KB 遠低於上限。> 100 KB 才考慮改 Edit 直改 ticket md | PC-087 / W15-005 |
 | 六：長背景任務即時可觀察 | 需即時觀察用 `PYTHONUNBUFFERED=1 pytest -v tests/ 2>&1 \| tee /tmp/task.log`（告知 `tail -f`）；只需最終結果保留規則二 `\| tail`。雙層緩衝（fully-buffered + `\| tail` 等 EOF）使輸出檔全程 0 行 | W3-086 spike |
@@ -31,7 +31,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 - [ ] 輸出可能很大？→ 提前加 `head` / `tail`（規則二）
 - [ ] `run_in_background:true`？→ `TaskOutput(taskId)`；含「Full output saved to」？→ `Read(file_path)`
 - [ ] 串接多個 git 寫入（commit/merge/rebase/push）？→ 拆成獨立呼叫（規則三）
-- [ ] 看到 `index.lock` 錯誤？→ 確認是否有 git 串接
+- [ ] 看到 `index.lock` 錯誤？→ 短暫重試為預設（並行環境屬預期現象，唯讀命令亦會觸發）；反覆失敗才排查串接或殘留鎖檔（規則三）
 - [ ] CLI 參數含 backtick？→ 改用 heredoc / 單引號 / Edit 工具（規則四）
 - [ ] 看到 `command not found` / `ModuleNotFoundError` 來源不明？→ 檢查 backtick command substitution（PC-079）
 - [ ] 準備 `Write /tmp/*.md` 作 CLI 中介？→ 改 heredoc 直傳（規則五）
@@ -46,9 +46,10 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 - `.claude/references/bash-tool-usage-details.md` — 各規則速查表、根因圖解、Why/Consequence、即時協議論證、規則六調和
 - `.claude/rules/core/tool-output-trust-rules.md` — confabulation 防護（規則一即時協議）
 - `.claude/references/quality-python.md` — Python 執行規則
-- `.claude/error-patterns/implementation/IMP-008-bash-working-directory-pollution.md`、`IMP-009-taskoutput-confusion.md`
-- `.claude/error-patterns/process-compliance/PC-079-bash-backtick-command-substitution-in-cli-args.md`、`PC-087-pm-tmp-detour-for-ticket-content.md`
+- `.claude/error-patterns/implementation/IMP-008-bash-working-directory-pollution.md`、`IMP-009-taskoutput-confusion.md`、`IMP-046-git-index-lock-race-condition.md`
+- `.claude/error-patterns/process-compliance/PC-079-bash-backtick-command-substitution-in-cli-args.md`、`PC-087-pm-tmp-detour-for-ticket-content.md`、`PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md`
+- `.claude/pm-rules/parallel-dispatch.md` — 並行派發 git staging / commit 紀律（index.lock 與跨票吸收防護口徑一致）
 
 ---
 
-**Last Updated**: 2026-06-12 | **Version**: 3.0.0 — token 收斂：六規則濃縮為一行速查表 + 統一檢查清單，各規則速查表 / Why / Consequence / 論證外移 `references/bash-tool-usage-details.md`（1.0.0-W7-004.3）。歷史 2.0–2.3 版見 git log。**Source**: IMP-008、IMP-009、index.lock 競爭、PC-087、W3-086、PC-166
+**Last Updated**: 2026-08-04 | **Version**: 3.1.0 — 規則三因果修正：index.lock 競爭不限寫入串接，唯讀 git 命令 refresh index stat cache 時亦會短暫觸發（issue-34 實證：30 次併發 add 命中 1 次），移除「add 不觸發 Hook」的失準表述；checklist 遇 index.lock 改為預設短暫重試而非逕判串接違規（0.2.1-W3-262）。**Version**: 3.0.0 — token 收斂：六規則濃縮為一行速查表 + 統一檢查清單，各規則速查表 / Why / Consequence / 論證外移 `references/bash-tool-usage-details.md`（1.0.0-W7-004.3）。歷史 2.0–2.3 版見 git log。**Source**: IMP-008、IMP-009、IMP-046、index.lock 競爭、PC-087、W3-086、PC-166、issue-34

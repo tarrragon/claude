@@ -28,12 +28,16 @@ from .worklog_appender import _build_worklog_path
 # 模組級常數（SOT — Single Source of Truth）
 # ---------------------------------------------------------------------------
 
-#: Handoff 意圖關鍵字清單（W17-083 Phase 1 §2 設計）
+#: Handoff 意圖關鍵字清單（W17-083 Phase 1 §2 設計；0.2.1-W3-218 補「下一站」）
 #:
 #: 任一關鍵字命中 worklog content 即視為「交接意圖」。涵蓋：
 #: - 標題式（章節標題）：「下個 Session 接手 Context」等
 #: - 建議式（句中）：「下 session 優先建議」等
 #: - 續行式（ANA complete 強制欄位）：「未完成清單」等
+#: - 本專案書寫慣例（0.2.1-W3-218）：「下一站」——0.2.1-W3-178 實測 HANDOFF_KEYWORDS
+#:   對本專案 8 份 main worklog 命中總數為 0，本專案實際慣用「下一站」（5 次皆為
+#:   交接語境）。0.2.1-W3-218 同時實測「結構判定」（粗體標題行 + 同行含 ticket ID）
+#:   對同語料的誤報率達 76%（17 命中僅 4 為真交接段），故採清單擴充而非結構判定。
 HANDOFF_KEYWORDS: tuple[str, ...] = (
     # 標題式
     "下個 Session 接手 Context",
@@ -42,6 +46,7 @@ HANDOFF_KEYWORDS: tuple[str, ...] = (
     "接手指引",
     "Handoff Context",
     "Session Handoff",
+    "下一站",
     # 建議式
     "下 session 優先建議",
     "下個 session 優先建議",

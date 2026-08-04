@@ -22,7 +22,7 @@ commit 的 placeholder 版本。根因解：append-log 寫入後 auto-commit tic
 3. body 無變更時 append-log 不產生空 commit（graceful skip）
 4. git 不可用 / index.lock 時 append-log 仍成功 exit 0 + stderr 警告
 5. commit message 格式 `chore(<id>): append-log <section>`
-6. 行為變更過 ticket-skill-sync-check（由 PM/hook 驗證，本檔不涵蓋自動化）
+6. 行為變更過 skill-cli-sync-check（由 PM/hook 驗證，本檔不涵蓋自動化）
 
 RED 預期：
 - `lib/git_utils.py` 與 `_auto_commit_ticket_md` 尚未實作 → AC1/2/3/5 相關測試應失敗。

@@ -46,7 +46,7 @@ _CLAUDE_DIR = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_CLAUDE_DIR))
 sys.path.insert(0, str(_CLAUDE_DIR / "hooks"))
 
-from lib import setup_hook_logging, run_hook_safely
+from lib import setup_hook_logging, run_hook_safely, get_uncommitted_files, FileStatus
 
 # dispatch_tracker / find_ticket_files 為訊息富化與防 race 用；缺失時降級而非崩潰
 try:
@@ -212,25 +212,17 @@ def _is_dispatch_stale(dispatch, logger) -> bool:
 
 
 def get_changed_files(logger) -> "list[str]":
-    """回傳未提交變更的檔案路徑清單（含 untracked）。"""
+    """回傳未提交變更的檔案路徑清單（含 untracked）。
+
+    改用 lib.git_utils.get_uncommitted_files 收斂 porcelain 解析（0.2.1-W3-290，
+    沿用 0.2.1-W3-286 rename 箭頭格式結論：取 " -> " 右側新路徑）；引號去除
+    （特殊字元路徑）為本 hook 特有需求，收斂後保留於此層。
+    """
     try:
-        result = subprocess.run(
-            ["git", "--no-optional-locks", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=GIT_TIMEOUT,
-        )
-        if result.returncode != 0:
-            logger.warning("git status 失敗: %s", result.stderr.strip())
-            return []
+        file_statuses = get_uncommitted_files()
         files = []
-        for line in result.stdout.splitlines():
-            if len(line) < 4:
-                continue
-            # porcelain 格式：XY <path>（rename 為 'old -> new'，取 new）
-            path = line[3:].strip()
+        for fs in file_statuses:
+            path = fs.file_path.strip()
             if " -> " in path:
                 path = path.split(" -> ", 1)[1].strip()
             # 去除可能的引號（含特殊字元路徑）

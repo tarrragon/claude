@@ -22,6 +22,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from .git_utils import get_worktree_list
+
 STATE_FILE_RELATIVE = ".claude/dispatch-active.json"
 LOCK_FILE_RELATIVE = ".claude/dispatch-active.lock"
 
@@ -349,28 +351,24 @@ def cleanup_expired(project_root: Path, max_age_hours: int = 1) -> int:
 def _parse_agent_worktree_branches(project_root: Path) -> List[str]:
     """從 git worktree list 解析 agent- 前綴的分支名稱。
 
+    改用 lib.git_utils.get_worktree_list（0.2.1-W3-290）；exclude_main 旗標
+    對本函式無意義（agent- 前綴過濾已隱含排除 main/master），故不傳
+    exclude_main，僅以 branch 前綴判斷等價於原實作。
+
     Returns:
         agent- 前綴的 worktree 分支名稱清單，失敗時回傳空清單
     """
     try:
-        result = subprocess.run(
-            ["git", "worktree", "list", "--porcelain"],
-            cwd=str(project_root),
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            return []
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        worktrees = get_worktree_list(cwd=str(project_root))
+    except Exception as e:
         print(f"[dispatch_tracker] _parse_agent_worktree_branches: git worktree list 失敗: {e}", file=sys.stderr)
         return []
 
-    branches = []
-    for line in result.stdout.splitlines():
-        if line.startswith("branch refs/heads/agent-"):
-            branches.append(line[len("branch refs/heads/"):])
-    return branches
+    return [
+        wt["branch"]
+        for wt in worktrees
+        if wt.get("branch", "").startswith("agent-")
+    ]
 
 
 def detect_orphan_branches(project_root: Path) -> List[str]:

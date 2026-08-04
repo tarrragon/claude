@@ -43,49 +43,25 @@ from lib import (
     read_json_from_stdin,
     get_project_root,
     parse_ticket_frontmatter,
+    get_worktree_list,
+    get_uncommitted_files,
 )
 
 
 # ---------- worktree audit ----------
 
 def parse_worktree_list(logger) -> List[Tuple[str, str]]:
-    """解析 git worktree list，回傳 (path, branch) 列表（排除 main / master / detached）。"""
+    """解析 git worktree list，回傳 (path, branch) 列表（排除 main / master / detached）。
+
+    改用 lib.git_utils.get_worktree_list(exclude_main=True)（0.2.1-W3-290），
+    detached 項目無 branch 值，經 `if wt.get("branch")` 過濾後與原實作等價。
+    """
     try:
-        result = subprocess.run(
-            ["git", "worktree", "list", "--porcelain"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+        worktrees = get_worktree_list(exclude_main=True)
+    except Exception:
         logger.warning("git worktree list 執行失敗")
         return []
-
-    if result.returncode != 0:
-        logger.debug("git worktree list 非零退出碼: %d", result.returncode)
-        return []
-
-    worktrees: List[Tuple[str, str]] = []
-    current_path: Optional[str] = None
-    current_branch: Optional[str] = None
-
-    def flush():
-        nonlocal current_path, current_branch
-        if current_path and current_branch and current_branch not in ("main", "master"):
-            worktrees.append((current_path, current_branch))
-        current_path = None
-        current_branch = None
-
-    for line in result.stdout.splitlines():
-        if line.startswith("worktree "):
-            # 新條目開始前先 flush 前一個
-            flush()
-            current_path = line[len("worktree "):]
-        elif line.startswith("branch "):
-            ref = line[len("branch "):]
-            current_branch = ref.replace("refs/heads/", "")
-        elif line == "":
-            flush()
-    flush()
-    return worktrees
+    return [(wt["path"], wt["branch"]) for wt in worktrees if wt.get("branch")]
 
 
 def get_unmerged_commits(branch: str, logger) -> List[str]:
@@ -147,26 +123,18 @@ def list_agent_branches(logger) -> List[str]:
 
 
 def list_worktree_branches(logger) -> List[str]:
-    """列出 git worktree list 中所有仍存在的分支（含 main / cc runtime）。"""
+    """列出 git worktree list 中所有仍存在的分支（含 main / cc runtime）。
+
+    改用 lib.git_utils.get_worktree_list（0.2.1-W3-290），不排除 main（
+    exclude_main=False，與原實作一致），detached 項目無 branch 值自然被
+    `if wt.get("branch")` 過濾。
+    """
     try:
-        result = subprocess.run(
-            ["git", "worktree", "list", "--porcelain"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+        worktrees = get_worktree_list()
+    except Exception:
         logger.warning("git worktree list 執行失敗")
         return []
-
-    if result.returncode != 0:
-        logger.debug("git worktree list 非零退出碼: %d", result.returncode)
-        return []
-
-    branches: List[str] = []
-    for line in result.stdout.splitlines():
-        if line.startswith("branch "):
-            ref = line[len("branch "):]
-            branches.append(ref.replace("refs/heads/", ""))
-    return branches
+    return [wt["branch"] for wt in worktrees if wt.get("branch")]
 
 
 def collect_orphan_agent_branches(logger) -> List[Tuple[str, bool]]:
@@ -195,29 +163,22 @@ def collect_orphan_agent_branches(logger) -> List[Tuple[str, bool]]:
 # ---------- metadata orphan audit ----------
 
 def collect_modified_ticket_paths(project_root: Path, logger) -> List[str]:
-    """從 git status --porcelain 取出所有 modified / added 的 ticket md 相對路徑。"""
+    """從 git status --porcelain 取出所有 modified / added 的 ticket md 相對路徑。
+
+    改用 lib.git_utils.get_uncommitted_files(cwd=...)（0.2.1-W3-290），
+    以 FileStatus.is_modified / is_added 取代自行判斷 status_code。
+    """
     try:
-        result = subprocess.run(
-            ["git", "-C", str(project_root), "status", "--porcelain"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+        file_statuses = get_uncommitted_files(cwd=str(project_root))
+    except Exception:
         logger.warning("git status 執行失敗")
         return []
 
-    if result.returncode != 0:
-        logger.debug("git status 非零退出碼: %d", result.returncode)
-        return []
-
     paths: List[str] = []
-    for line in result.stdout.splitlines():
-        if len(line) < 4:
-            continue
-        # porcelain 格式：XY <path>
-        status_code = line[:2]
-        rel_path = line[3:].strip()
+    for fs in file_statuses:
+        rel_path = fs.file_path.strip()
         # 偵測 M / A / MM / AM 等變更（不含 ?? 未追蹤）
-        if "M" in status_code or "A" in status_code:
+        if fs.is_modified or fs.is_added:
             # 只關心 ticket md
             if "/tickets/" in rel_path and rel_path.endswith(".md"):
                 paths.append(rel_path)

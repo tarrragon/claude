@@ -7,7 +7,8 @@
 """
 Bash Edit Guard Hook - PreToolUse Hook
 
-功能: 偵測 Bash 中的高風險操作，提示改用更安全替代方案
+功能: 偵測 Bash 中的高風險操作。兩模式處置不同——原地編輯出警告後放行，
+      裸 cd / pushd 直接擋下並指引 git -C
 
 觸發時機: 執行 Bash 工具時
 
@@ -27,7 +28,10 @@ Bash Edit Guard Hook - PreToolUse Hook
 行為:
   - 模式 A（sed/perl 原地編輯）: 輸出警告訊息（permission_decision=allow），允許繼續執行。
   - 模式 B（裸 cd / pushd）: permission_decision=deny（IMP-008 三度復發後根治）。
-    命令送出當下擋下，cwd 永不汙染；reason 附 git -C / 子 shell / uv -d 替代指引。
+    命中即在命令送出前擋下，cwd 不因該次命令改變；reason 附 git -C / 子 shell /
+    uv -d 替代指引。兩個已知放行面（皆非缺陷，但「永不改變 cwd」不成立）：
+    還原至專案根的 cd 屬刻意排除（見上）；偵測為正則掃描字面命令，
+    `bash -c 'cd x'`、`eval`、變數展開、`builtin cd` 等非字面形式不在範圍。
     cd + edit 同時命中以 deny 為準。
     FP 抑制：heredoc body 與單/雙引號字串內的字面 cd 不算裸 cd，避免擋掉合法 script 撰寫。
 """
@@ -45,7 +49,7 @@ from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_
 from lib.hook_messages import ValidationMessages, format_message
 
 
-def _detect_bash_edit_patterns(command: str) -> bool:
+def _detect_bash_edit_patterns(command: str, literal_ranges=None) -> bool:
     """
     檢測是否為高風險原地編輯操作（白名單降級版本）
 
@@ -63,19 +67,29 @@ def _detect_bash_edit_patterns(command: str) -> bool:
     - sed/awk + > file 重定向（多為合法產出）
     - 通用命令 > 程式碼檔（多為合法產出，誤報率高）
 
+    FP 抑制（0.2.1-W3-193，單趟狀態機修復見 0.2.1-W3-204）：與模式 B 共用
+    _literal_offset_ranges()，落在 heredoc body / 引號字串內的字面命中不
+    視為真正執行的原地編輯；引號外的真實命中不受影響仍會觸發。
+
     Args:
         command: Bash 命令
+        literal_ranges: 字面區段範圍清單（未提供時內部計算）
 
     Returns:
         bool - 是否偵測到高風險原地編輯模式
     """
+    if literal_ranges is None:
+        literal_ranges = _literal_offset_ranges(command)
+
     # 模式 1: sed -i 或 sed --in-place（原地編輯）
-    if re.search(r'sed\s+(-i|--in-place)', command):
-        return True
+    for match in re.finditer(r'sed\s+(-i|--in-place)', command):
+        if not _offset_in_literal(match.start(), literal_ranges):
+            return True
 
     # 模式 2: perl -pi 或 perl -i.bak（原地編輯）
-    if re.search(r'perl\s+(-pi|-i\.bak)', command):
-        return True
+    for match in re.finditer(r'perl\s+(-pi|-i\.bak)', command):
+        if not _offset_in_literal(match.start(), literal_ranges):
+            return True
 
     return False
 
@@ -88,75 +102,135 @@ _BARE_CD_PATTERN = re.compile(
 )
 
 
+# heredoc 標頭樣式：<< 或 <<- 後可選空白，delimiter 可被單/雙引號包住
+_HEREDOC_HEADER_PATTERN = re.compile(r'<<-?\s*([\'"]?)([A-Za-z_][A-Za-z0-9_]*)\1')
+
+
+def _find_closing_quote(command: str, start: int, quote_char: str) -> int:
+    """
+    從 start（開引號位置）之後尋找配對的收尾引號 offset，依 shell 語意
+    區分單雙引號的跳脫行為（0.2.1-W3-205）：
+
+    - 雙引號（quote_char == '"'）：反斜線具跳脫作用，`\\"` 不會提前收尾。
+    - 單引號：反斜線不具跳脫作用，是字面字元，遇到第一個單引號即收尾。
+
+    Returns:
+        int - 收尾引號的 offset，找不到時回傳 -1（未閉合）
+    """
+    i = start + 1
+    length = len(command)
+    while i < length:
+        ch = command[i]
+        if quote_char == '"' and ch == '\\' and i + 1 < length:
+            i += 2
+            continue
+        if ch == quote_char:
+            return i
+        i += 1
+    return -1
+
+
 def _literal_offset_ranges(command: str):
     """
     回傳命令中「字面文字區段」的 offset 範圍清單 [(start, end), ...]，
     供 DENY 升級後抑制誤擋——落在這些區段內的 cd/pushd 是腳本內容而非
     真正執行的裸 cd（避免擋掉合法 script 撰寫）。
 
-    涵蓋兩類字面區段：
-    1. heredoc body：`<< [-] [']DELIM['] ... \nDELIM`（含 <<- 與 quoted delim）
-       body 區段為 heredoc 標頭該行換行後起點，到結束 delimiter 行起點。
-    2. 單/雙引號字串：成對 ' 或 " 之間（含引號本身）。
+    單趟 left-to-right 狀態機掃描，帶引號與 heredoc 狀態（0.2.1-W3-204）：
+    1. 引號優先消耗：掃描到 ' 或 " 時，整段引號字串（含引號本身）直接記
+       為一段字面區段並跳過，區段內容不再被個別檢視——因此引號內出現的
+       `<<DELIM` 字面不會被誤判為真 heredoc 標頭（修復 0.2.1-W3-193 遺留
+       的兩趟獨立掃描互不知情問題）。
+    2. heredoc 標頭僅在引號外承認：只有在非引號消耗狀態下掃描到 `<<` 時
+       才嘗試比對 heredoc 標頭。
+    3. 未閉合 heredoc 不產生 range：標頭比對成功但找不到結束 delimiter
+       時，直接跳過標頭本身繼續掃描，不再抑制任何區段（移除舊版「延伸至
+       命令結尾」的行為，那是抑制最激進、也是漏放缺陷的根因）。
 
     務實邊界（PreToolUse 只見 raw 字串、無完整 shell parse）：
-    - heredoc 偵測以行為單位掃描；結束 delimiter 比照常見用法（行首可選空白
-      + delimiter 單獨成行）。
-    - quote 偵測不處理 shell 跳脫（\\' 等罕見於 cd 引數場景），務實取捨。
-    這些區段僅用於「抑制 DENY」，誤判方向偏保守（少抑制 → 維持 DENY），
-    不會把真正的裸 cd 漏放。
+
+    - heredoc 結束 delimiter 比照常見用法（行首可選空白 + delimiter 單
+      獨成行）。
+    - **未閉合引號 → 不足額抑制**。掃描到未配對引號即中止，其後不再產生
+      任何字面區段。呼叫端仍對整條原始命令做 regex 掃描，故未被抑制的
+      字面內容（例如 heredoc body 內的 `cd`）會被當成真實命中。後果是
+      假 DENY——擋掉合法工作。此方向刻意選擇，理由不是「比較安全」而是
+      **可觀測性不對稱**：漏放無聲無息，假 DENY 會立刻被使用者回報並修正。
+      代價須誠實計入：擋錯一次，使用者學到的是繞過本 hook。
+
+    跳脫引號處理（0.2.1-W3-205）：反斜線跳脫依 shell 語意分流處理，不採
+    「不分單雙引號一律處理」的簡化版——單雙引號跳脫語意不同（雙引號內
+    `\\"` 是跳脫、單引號內反斜線是字面字元），簡化版會在單引號含反斜線
+    的合法命令上再造成新的配對錯位，等同把一個已知漏放換成另一個。實作
+    上：引號外的反斜線一律跳脫下一字元（含引號字元本身，故 `\\"` 不會
+    被誤判為開啟一段引號）；雙引號內的反斜線依樣跳脫下一字元（`\\"` 不
+    提前收尾）；單引號內的反斜線不具跳脫作用，遇到即以一般字元處理，第
+    一個引號字元就收尾。
+
+    **仍存在的漏放（0.2.1-W3-207 追蹤）：命令替換巢狀。**本實作看不到
+    `$(...)` 內部重新開啟的引號脈絡，實測反例：
+
+        echo "$(echo "x") && cd /tmp"   → 真實裸 cd 被劃進字面區而放行
+
+    首個引號與 `$(echo "` 的引號配對，錯位後把後續真實命令吞掉。
+    `${var#"x"}`、`$((...))` 同類。方向與 0.2.1-W3-204 修掉的缺陷相同
+    （漏放、無聲）。另有兩個方向無害的失準：backtick 完全不視為引號
+    （零抑制，誤報方向）、ANSI-C quoting `$'...'` 內的反斜線按普通單引號
+    處理（收尾早一位，實測方向無害但屬測資巧合非結構保證）。
+
+    **這三者不是三個獨立 case，是同一個缺失概念——沒有引號脈絡堆疊。**
+    下次再出現引號類漏放時，禁止加第四條分支；正解是把 quote、heredoc、
+    command substitution 統一為 push/pop 的 context stack，三者會一起
+    消失（0.2.1-W3-207 記錄該解法與觸發條件）。
 
     Returns:
         list[tuple[int, int]] - 字面區段的 [start, end) offset 範圍
     """
     ranges = []
-
-    # --- heredoc body 範圍（以行為單位掃描）---
-    # 標頭樣式：<< 或 <<- 後可選空白，delimiter 可被單/雙引號包住
-    heredoc_header = re.compile(r'<<-?\s*([\'"]?)([A-Za-z_][A-Za-z0-9_]*)\1')
-    pos = 0
     length = len(command)
-    while pos < length:
-        # 找到目前行
-        nl = command.find('\n', pos)
-        line_end = length if nl == -1 else nl
-        line = command[pos:line_end]
-        header = heredoc_header.search(line)
-        if header:
-            delim = header.group(2)
-            # body 從本行換行後起算
-            if nl == -1:
-                # 標頭後無換行 → 無 body 內容
-                break
-            body_start = nl + 1
-            # 尋找結束 delimiter 行（行首可選空白 + delimiter 單獨成行）
-            end_delim_re = re.compile(
-                r'(?m)^[ \t]*' + re.escape(delim) + r'[ \t]*$'
-            )
-            end_match = end_delim_re.search(command, body_start)
-            if end_match:
-                ranges.append((body_start, end_match.start()))
-                pos = end_match.end()
-                continue
-            else:
-                # 無結束 delimiter → 視為 body 延伸至命令結尾
-                ranges.append((body_start, length))
-                break
-        pos = line_end + 1
-
-    # --- 單/雙引號字串範圍 ---
-    # 簡化掃描：不處理跳脫，逐字尋找成對引號。
     i = 0
     while i < length:
         ch = command[i]
+
+        if ch == '\\' and i + 1 < length:
+            # 引號外的跳脫：反斜線與下一字元一併跳過，避免 \" 之類的
+            # 跳脫引號被誤判為開啟一段引號（0.2.1-W3-205）
+            i += 2
+            continue
+
         if ch in ("'", '"'):
-            close = command.find(ch, i + 1)
+            close = _find_closing_quote(command, i, ch)
             if close == -1:
+                # 未閉合引號：中止掃描，不再產生後續字面區段
                 break
             ranges.append((i, close + 1))
             i = close + 1
-        else:
-            i += 1
+            continue
+
+        if ch == '<':
+            header = _HEREDOC_HEADER_PATTERN.match(command, i)
+            if header:
+                delim = header.group(2)
+                header_end = header.end()
+                nl = command.find('\n', header_end)
+                if nl == -1:
+                    # 標頭後無換行 → 無 body 內容，跳過標頭本身
+                    i = header_end
+                    continue
+                body_start = nl + 1
+                end_delim_re = re.compile(
+                    r'(?m)^[ \t]*' + re.escape(delim) + r'[ \t]*$'
+                )
+                end_match = end_delim_re.search(command, body_start)
+                if end_match:
+                    ranges.append((body_start, end_match.start()))
+                    i = end_match.end()
+                else:
+                    # 未閉合 heredoc：不產生 range，僅跳過標頭本身
+                    i = header_end
+                continue
+
+        i += 1
 
     return ranges
 
@@ -169,7 +243,7 @@ def _offset_in_literal(offset: int, literal_ranges) -> bool:
     return False
 
 
-def _find_bare_cd_target(command: str) -> str | None:
+def _find_bare_cd_target(command: str, literal_ranges=None) -> str | None:
     """
     掃描命令，回傳第一個構成「裸 cd / pushd」的命中 target，無命中回傳 None。
 
@@ -211,7 +285,8 @@ def _find_bare_cd_target(command: str) -> str | None:
 
     # FP 抑制（DENY 升級配套）：heredoc body 與單/雙引號字串內的字面 cd 是
     # 腳本內容而非真正執行的裸 cd，命中點落在這些區段一律 skip。
-    literal_ranges = _literal_offset_ranges(command)
+    if literal_ranges is None:
+        literal_ranges = _literal_offset_ranges(command)
 
     for match in _BARE_CD_PATTERN.finditer(command):
         target = match.group(3)
@@ -242,7 +317,11 @@ def _find_bare_cd_target(command: str) -> str | None:
 
 
 def _detect_bare_cd(command: str) -> bool:
-    """偵測裸 cd / pushd，回傳是否命中（細節見 _find_bare_cd_target）。"""
+    """偵測裸 cd / pushd，回傳是否命中（細節見 _find_bare_cd_target）。
+
+    test-only：main() 流程直接呼叫 _find_bare_cd_target() 取得 target 供
+    DENY reason 使用，本函式僅供測試以布林斷言簡化呼叫（0.2.1-W3-204）。
+    """
     return _find_bare_cd_target(command) is not None
 
 
@@ -284,8 +363,9 @@ def _bare_cd_deny_reason(target: str) -> str:
     """
     產生裸 cd DENY 的 permission_decision_reason（含命中 target + 替代指引）。
 
-    DENY 在命令送出當下擋下，cwd 永不汙染（IMP-008 三度復發後根治）。
-    reason 提供 git -C / 子 shell / uv -d 三種合法替代，使用者可立即改寫。
+    DENY 在命令送出前擋下，cwd 不因該次命令改變（IMP-008 三度復發後由 warn
+    升級為 DENY）。已知放行面見檔頭「行為」段——本函式不宣稱涵蓋所有改變
+    cwd 的形式。reason 提供 git -C / 子 shell / uv -d 三種合法替代。
 
     Args:
         target: 命中的裸 cd/pushd target 路徑
@@ -325,14 +405,16 @@ def main() -> int:
         command = tool_input.get("command", "")
 
         # 兩偵測獨立：原地編輯偵測 + 裸 cd 偵測，各自蒐集警告
+        # 兩者共用同一套字面區段抑制（0.2.1-W3-193），避免重複計算
         warnings = []
+        literal_ranges = _literal_offset_ranges(command)
 
-        if _detect_bash_edit_patterns(command):
+        if _detect_bash_edit_patterns(command, literal_ranges):
             # 診斷日誌記錄完整命令（不截斷）以利 FP 診斷；UI 訊息仍截短顯示
             logger.info("警告: 偵測到編輯操作 - %s", command)
             warnings.append(_print_warning_message(command))
 
-        bare_cd_target = _find_bare_cd_target(command)
+        bare_cd_target = _find_bare_cd_target(command, literal_ranges)
         if bare_cd_target is not None:
             # 診斷日誌記錄完整命令 + 命中 target（不截斷）以利 FP 診斷
             logger.info(
@@ -347,7 +429,8 @@ def main() -> int:
             logger.info("允許: 正常 Bash 命令")
             return 0
 
-        # bare cd 命中 → DENY（命令送出當下擋下，cwd 永不汙染，IMP-008 三度復發後根治）。
+        # bare cd 命中 → DENY（命令送出前擋下，cwd 不因該次命令改變；IMP-008
+        # 三度復發後由 warn 升級為 DENY。已知放行面見檔頭「行為」段）。
         # sed/perl 原地編輯維持 warn（allow）。cd + edit 同時命中以 deny 為準。
         if bare_cd_target is not None:
             emit_hook_output(

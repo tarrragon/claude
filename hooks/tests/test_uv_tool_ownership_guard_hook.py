@@ -87,19 +87,27 @@ class TestCommandRecognition:
     def test_non_tool_command_empty(self, hook):
         assert hook._extract_invoked_exes("git status && npm test") == []
 
-    def test_all_seven_skills_covered(self, hook):
-        # 對照表涵蓋 7 個 skill
-        assert len(hook.SKILLS) == 7
-        for cli in [
+    def test_exe_set_matches_expected_membership(self, hook):
+        # 雙向 set 相等：建立端新增或移除成員時，兩個方向皆會紅
+        expected = {
             "ticket",
             "doc",
             "version-release",
             "mermaid-ascii",
             "worktree",
-            "branch-worktree-guardian",
+            "skill-sync",
             "project-init",
-        ]:
-            assert cli in hook.EXE_SET
+        }
+        assert set(hook.EXE_SET) == expected
+        assert len(hook.SKILLS) == len(expected)
+
+    def test_skills_matches_filesystem_candidates(self, hook):
+        # 以 _scan_candidate_skills 的檔案系統掃描結果為 oracle，
+        # 驗證 SKILLS 常數與實際候選集合一致（非第四份硬編碼清單）
+        project_root = Path(__file__).parent.parent.parent.parent
+        candidates = hook._scan_candidate_skills(project_root)
+        listed = {s.source_subpath.rsplit("/", 1)[-1] for s in hook.SKILLS}
+        assert listed == set(candidates.keys())
 
 
 # ---------------------------------------------------------------------------

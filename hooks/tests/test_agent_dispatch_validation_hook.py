@@ -2131,3 +2131,138 @@ class TestReviewModeExemption:
     def test_is_review_mode_prompt_no_keyword_returns_false(self):
         """無關鍵字 prompt 應回傳 False（regression：避免泛化誤判）。"""
         assert _hook._is_review_mode_prompt("實作 src/foo.py 並寫測試") is False
+
+
+class TestDispatchModeReadonlyExemption:
+    """0.2.1-W3-269：prompt 首行 `Dispatch-Mode: readonly` 豁免 worktree 強制。
+
+    背景：0.2.1-W3-263 裁決方案 A（Agent tool_input.dispatch_mode 結構化欄位）
+    因探針實測確認 CC runtime 剝離該自訂欄位（未 passthrough 到 PreToolUse hook
+    payload）而不可行，改採本 fallback：prompt 首行固定格式協議。
+    """
+
+    def test_dispatch_mode_readonly_first_line_allows_implementation_agent(
+        self, monkeypatch, capsys
+    ):
+        """首行 `Dispatch-Mode: readonly` + 實作代理人 + 非 .claude/ 路徑 + 無 worktree → 放行。"""
+        prompt = (
+            "Dispatch-Mode: readonly\n\n"
+            "請讀取 src/widgets/book_card.dart 分析命名規範是否符合風格指南。"
+        )
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "thyme-python-developer",
+                "prompt": prompt,
+            },
+        )
+        assert exit_code == 0, "首行 Dispatch-Mode: readonly 應豁免 worktree 強制"
+
+    def test_dispatch_mode_readonly_case_insensitive_value(
+        self, monkeypatch, capsys
+    ):
+        """值比對大小寫不敏感（README/prompt 撰寫習慣差異）。"""
+        prompt = "Dispatch-Mode: READONLY\n請讀取 src/foo.py"
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "thyme-python-developer",
+                "prompt": prompt,
+            },
+        )
+        assert exit_code == 0
+
+    def test_regression_no_dispatch_mode_field_still_blocked(
+        self, monkeypatch, capsys
+    ):
+        """反向案例：prompt 無 Dispatch-Mode 宣告，一般實作派發仍應阻擋。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "parsley-flutter-developer",
+                "prompt": "實作 src/widgets/book_card.dart 並寫對應 tests/unit/book_card_test.dart",
+            },
+        )
+        assert exit_code == 2, "無 Dispatch-Mode 宣告時仍應強制 worktree"
+
+    def test_regression_dispatch_mode_value_not_readonly_still_blocked(
+        self, monkeypatch, capsys
+    ):
+        """反向案例：Dispatch-Mode 值非 readonly（如 write）時仍應阻擋。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "parsley-flutter-developer",
+                "prompt": "Dispatch-Mode: write\n實作 src/widgets/book_card.dart",
+            },
+        )
+        assert exit_code == 2, "Dispatch-Mode 值非 readonly 時仍應強制 worktree"
+
+    def test_regression_dispatch_mode_not_on_first_line_still_blocked(
+        self, monkeypatch, capsys
+    ):
+        """反向案例：`Dispatch-Mode: readonly` 不在首行（非結構化位置）時仍應阻擋。
+
+        防止判準退化為全文關鍵字掃描——僅接受首行固定格式宣告。
+        """
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "parsley-flutter-developer",
+                "prompt": (
+                    "實作 src/widgets/book_card.dart\n"
+                    "Dispatch-Mode: readonly"
+                ),
+            },
+        )
+        assert exit_code == 2, "非首行的 Dispatch-Mode 宣告不應觸發豁免"
+
+    def test_dispatch_mode_readonly_does_not_bypass_external_claude_block(
+        self, monkeypatch, capsys
+    ):
+        """Dispatch-Mode: readonly 不豁免外部 .claude/ 阻擋（runtime 必拒，邊界守護）。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "thyme-python-developer",
+                "prompt": (
+                    "Dispatch-Mode: readonly\n"
+                    "請讀取 /tmp/other-repo/.claude/hooks/foo.py"
+                ),
+            },
+        )
+        assert exit_code == 2, "外部 .claude/ 不受 Dispatch-Mode 豁免，仍阻擋"
+
+    def test_dispatch_mode_readonly_with_worktree_still_passes(
+        self, monkeypatch, capsys
+    ):
+        """Dispatch-Mode: readonly + worktree → 維持放行（兩條件皆滿足，無衝突）。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            capsys,
+            tool_input={
+                "subagent_type": "thyme-python-developer",
+                "isolation": "worktree",
+                "prompt": "Dispatch-Mode: readonly\n讀取 src/api/foo.py",
+            },
+        )
+        assert exit_code == 0
+
+    def test_is_dispatch_mode_readonly_prompt_empty_returns_false(self):
+        """空 prompt 應回傳 False。"""
+        assert _hook._is_dispatch_mode_readonly_prompt("") is False
+        assert _hook._is_dispatch_mode_readonly_prompt(None) is False
+
+    def test_is_dispatch_mode_readonly_prompt_no_declaration_returns_false(self):
+        """無宣告 prompt 應回傳 False（regression：避免泛化誤判）。"""
+        assert _hook._is_dispatch_mode_readonly_prompt("實作 src/foo.py 並寫測試") is False
+
+    def test_is_dispatch_mode_readonly_prompt_prefix_without_colon_returns_false(self):
+        """僅含關鍵字但非固定格式（缺冒號）應回傳 False（非關鍵字比對邊界守護）。"""
+        assert _hook._is_dispatch_mode_readonly_prompt("Dispatch-Mode readonly 請執行") is False

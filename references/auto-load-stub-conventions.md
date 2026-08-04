@@ -19,7 +19,7 @@
 
 **可刪元素**（外移或刪除，不留 stub）：Why/Consequence 多段論證、事件鏈案例敘事（改一行路由指向 PC/IMP error-pattern）、雙向重複的「與其他規則邊界」表（保留單向，另一檔路由）、多代完整版本歷史（footer 只留最新一至兩代，其餘「見 git log」）。
 
-**體量基準**：成功範本 `quality-common.md`（約 0.6k tokens，完全外移）、`ticket-skill-sync-check.md`（約 0.8k，純路由）。stub 超過 2.5k tokens 即應重檢是否殘留 substance。
+**體量基準**：成功範本 `quality-common.md`（約 0.6k tokens，完全外移）、`skill-cli-sync-check.md`（約 0.8k，純路由）。stub 超過 2.5k tokens 即應重檢是否殘留 substance。
 
 ---
 

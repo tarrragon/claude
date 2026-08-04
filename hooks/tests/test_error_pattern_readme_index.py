@@ -10,10 +10,17 @@ readme_index 程式碼自包含於 .claude/skills/error-pattern/lib/readme_index
 - sync_readme_text／merge_category_table：只動「現有模式」章節資料列，表格
   外內容原樣保留；既有列逐字保留不重新生成（即使掃描結果不同）、新檔案
   的列附加於尾端、已刪除檔案的列被捨棄
+- sync_and_write／_readme_lock：讀-算-寫的原子性保護（0.2.1-W3-272，封閉
+  併發 sync --write 的 lost-update race），含校準對照組（naive 無鎖流程
+  重現遺失）與鎖行為的直接驗證
 """
 
 import sys
+import threading
+import time
 from pathlib import Path
+
+import pytest
 
 _skill_lib = (
     Path(__file__).resolve().parent.parent.parent
@@ -25,9 +32,12 @@ if str(_skill_lib) not in sys.path:
     sys.path.insert(0, str(_skill_lib))
 
 from readme_index import (  # noqa: E402
+    _readme_lock,
     extract_row,
     merge_category_table,
     scan_category_rows,
+    sync,
+    sync_and_write,
     sync_readme_text,
 )
 
@@ -137,6 +147,64 @@ def test_h1_present_but_metadata_fields_missing(tmp_path):
     assert row["source_version"] == "—"
 
 
+# --- extract_row：reserved 佔位檔略過（0.2.1-W3-275） ---
+
+
+def test_extract_row_returns_none_for_reserved_status(tmp_path):
+    """frontmatter status: reserved 的原子配號佔位檔須回傳 None（略過標記），
+    不可解析出佔位範本文字當成正式標題。"""
+    path = tmp_path / "IMP-BAL-010.md"
+    path.write_text(
+        "---\n"
+        "id: IMP-BAL-010\n"
+        "title: (reserved - 內容待補)\n"
+        "status: reserved\n"
+        "reserved_by: tester\n"
+        "reserved_at: 2026-08-04T00:00:00+00:00\n"
+        "---\n\n"
+        "# IMP-BAL-010: (reserved - 內容待補)\n\n"
+        "此檔案由 allocate_and_reserve_pattern_id 建立。\n",
+        encoding="utf-8",
+    )
+    assert extract_row(path, "IMP-BAL-010") is None
+
+
+def test_extract_row_status_check_case_and_whitespace_insensitive(tmp_path):
+    """status 值比對大小寫不敏感、允許前後空白。"""
+    path = tmp_path / "IMP-BAL-011.md"
+    path.write_text(
+        "---\nid: IMP-BAL-011\nstatus: ' Reserved '\n---\n# IMP-BAL-011: 標題\n",
+        encoding="utf-8",
+    )
+    assert extract_row(path, "IMP-BAL-011") is None
+
+
+def test_extract_row_non_reserved_status_parses_normally(tmp_path):
+    """status 存在但非 reserved（如已填妥後改為其他值或移除）時正常解析。"""
+    path = tmp_path / "IMP-BAL-012.md"
+    path.write_text(
+        "---\nid: IMP-BAL-012\ntitle: 已填妥的標題\nstatus: active\n---\n"
+        "# IMP-BAL-012: 已填妥的標題\n\n- **風險等級**: 中\n",
+        encoding="utf-8",
+    )
+    row = extract_row(path, "IMP-BAL-012")
+    assert row is not None
+    assert row["title"] == "已填妥的標題"
+    assert row["severity"] == "中"
+
+
+def test_extract_row_no_status_field_parses_normally(tmp_path):
+    """無 status 欄位（絕大多數既有 pattern 檔）不受影響，正常解析。"""
+    path = tmp_path / "IMP-BAL-013.md"
+    path.write_text(
+        "---\nid: IMP-BAL-013\ntitle: 標題\n---\n# IMP-BAL-013: 標題\n",
+        encoding="utf-8",
+    )
+    row = extract_row(path, "IMP-BAL-013")
+    assert row is not None
+    assert row["title"] == "標題"
+
+
 # --- scan_category_rows ---
 
 
@@ -167,6 +235,92 @@ def test_scan_category_rows_groups_by_known_prefix(tmp_path):
     assert [r["id"] for r in rows["TEST"]] == ["TEST-001"]
     assert rows["IMP"][0]["severity"] == "低"
     assert rows["TEST"][0]["severity"] == "高"
+
+
+def test_scan_category_rows_skips_reserved_placeholder(tmp_path, capsys):
+    """reserved 佔位檔不產生索引列（acceptance #1），且 stderr 提示略過數量。"""
+    claude_dir = tmp_path / ".claude"
+    _write_pattern_file(
+        claude_dir,
+        "implementation",
+        "IMP-BAL-001-foo.md",
+        "---\nid: IMP-BAL-001\ntitle: 已完成的紀錄\n---\n# IMP-BAL-001: 已完成的紀錄\n",
+    )
+    _write_pattern_file(
+        claude_dir,
+        "implementation",
+        "IMP-BAL-002.md",
+        "---\nid: IMP-BAL-002\ntitle: (reserved - 內容待補)\nstatus: reserved\n---\n"
+        "# IMP-BAL-002: (reserved - 內容待補)\n",
+    )
+    rows = scan_category_rows(claude_dir / "error-patterns")
+    assert [r["id"] for r in rows["IMP"]] == ["IMP-BAL-001"]
+
+    captured = capsys.readouterr()
+    assert "1 個 reserved 佔位檔" in captured.err
+
+
+def test_scan_category_rows_no_reserved_no_stderr_message(tmp_path, capsys):
+    """無 reserved 佔位檔時不輸出略過提示（既有行為不受干擾）。"""
+    claude_dir = tmp_path / ".claude"
+    _write_pattern_file(
+        claude_dir,
+        "implementation",
+        "IMP-BAL-001-foo.md",
+        "---\nid: IMP-BAL-001\ntitle: 已完成的紀錄\n---\n# IMP-BAL-001: 已完成的紀錄\n",
+    )
+    scan_category_rows(claude_dir / "error-patterns")
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
+def test_scan_category_rows_reserved_becomes_indexed_after_filled_in(tmp_path):
+    """填妥後（status 移除／改值）正常納入（acceptance #2）：模擬同一檔案的
+    生命週期轉換，reserved 階段略過、填妥階段納入。"""
+    claude_dir = tmp_path / ".claude"
+    path = claude_dir / "error-patterns" / "implementation" / "IMP-BAL-003.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "---\nid: IMP-BAL-003\ntitle: (reserved - 內容待補)\nstatus: reserved\n---\n"
+        "# IMP-BAL-003: (reserved - 內容待補)\n",
+        encoding="utf-8",
+    )
+    rows_before = scan_category_rows(claude_dir / "error-patterns")
+    assert rows_before["IMP"] == []
+
+    # 填妥內容並移除 status（或改為非 reserved 值）。
+    path.write_text(
+        "---\nid: IMP-BAL-003\ntitle: 真正的錯誤模式標題\n---\n"
+        "# IMP-BAL-003: 真正的錯誤模式標題\n\n- **風險等級**: 高\n",
+        encoding="utf-8",
+    )
+    rows_after = scan_category_rows(claude_dir / "error-patterns")
+    assert [r["id"] for r in rows_after["IMP"]] == ["IMP-BAL-003"]
+    assert rows_after["IMP"][0]["title"] == "真正的錯誤模式標題"
+
+
+def test_sync_and_write_skips_reserved_and_no_regression_with_lock(tmp_path):
+    """端到端整合：reserved 佔位檔與正常檔案並存時，sync_and_write（0.2.1-
+    W3-272 的鎖臨界區）只把非 reserved 的列寫入 README，驗證兩票修復相容
+    （略過判定發生在鎖保護的掃描層內）。"""
+    claude_dir = _setup_claude_dir(tmp_path)
+    _write_pattern_file(
+        claude_dir,
+        "implementation",
+        "IMP-BAL-020-foo.md",
+        "---\nid: IMP-BAL-020\ntitle: 正常記錄\n---\n# IMP-BAL-020: 正常記錄\n",
+    )
+    _write_pattern_file(
+        claude_dir,
+        "implementation",
+        "IMP-BAL-021.md",
+        "---\nid: IMP-BAL-021\ntitle: (reserved - 內容待補)\nstatus: reserved\n---\n"
+        "# IMP-BAL-021: (reserved - 內容待補)\n",
+    )
+    sync_and_write(claude_dir)
+    final = (claude_dir / "error-patterns" / "README.md").read_text(encoding="utf-8")
+    assert "IMP-BAL-020" in final
+    assert "IMP-BAL-021" not in final
 
 
 # --- sync_readme_text ---
@@ -462,3 +616,138 @@ def test_merge_category_table_post_migration_state_is_idempotent_without_ambiguo
     merged = merge_category_table(existing_lines, new_rows)
     assert merged == existing_lines
     assert not any(line.strip().startswith("| PC-019 |") for line in merged)
+
+
+# --- sync_and_write／_readme_lock：併發 lost-update race（0.2.1-W3-272） ---
+
+_MINIMAL_README = """# Error Patterns 錯誤模式歸檔系統
+
+## 現有模式
+
+### 實作 (IMP)
+
+| ID | 標題 | 風險 | 來源版本 |
+|----|------|------|---------|
+"""
+
+
+def _setup_claude_dir(tmp_path: Path) -> Path:
+    claude_dir = tmp_path / ".claude"
+    ep_dir = claude_dir / "error-patterns" / "implementation"
+    ep_dir.mkdir(parents=True, exist_ok=True)
+    (claude_dir / "error-patterns" / "README.md").write_text(
+        _MINIMAL_README, encoding="utf-8"
+    )
+    return claude_dir
+
+
+def _write_new_pattern(claude_dir: Path, pattern_id: str, title: str) -> None:
+    path = claude_dir / "error-patterns" / "implementation" / f"{pattern_id}-x.md"
+    path.write_text(f"# {pattern_id}: {title}\n\n- **風險等級**: 中\n", encoding="utf-8")
+
+
+def _naive_unlocked_sync_write(claude_dir: Path, delay: float) -> None:
+    """模擬 0.2.1-W3-272 修復前的舊版流程：讀-算與寫檔分離、無鎖保護
+    （對應舊版 `main()` 的 `--write` 分支邏輯，僅用於校準對照組）。"""
+    _original, updated, diff = sync(claude_dir)
+    if delay:
+        time.sleep(delay)
+    if diff:
+        (claude_dir / "error-patterns" / "README.md").write_text(updated, encoding="utf-8")
+
+
+def test_readme_lock_provides_mutual_exclusion(tmp_path):
+    """直接驗證 `_readme_lock` 的互斥性：持鎖期間另一個嘗試（非阻塞）取鎖必須
+    失敗，釋放後才能成功——本測試不依賴檔案掃描時序，直接鎖定鎖本身的語意。"""
+    claude_dir = _setup_claude_dir(tmp_path)
+    lock_path = claude_dir / "error-patterns" / ".readme-index.lock"
+
+    holder_ready = threading.Event()
+    release_holder = threading.Event()
+
+    def _holder():
+        with _readme_lock(claude_dir):
+            holder_ready.set()
+            release_holder.wait(timeout=5)
+
+    t = threading.Thread(target=_holder)
+    t.start()
+    assert holder_ready.wait(timeout=5), "lock holder 未能在時限內取得鎖"
+
+    import fcntl
+
+    probe = open(lock_path, "a+")
+    try:
+        with pytest.raises(OSError):
+            fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    finally:
+        probe.close()
+
+    release_holder.set()
+    t.join(timeout=5)
+
+    # 釋放後，非阻塞取鎖應可成功。
+    probe2 = open(lock_path, "a+")
+    try:
+        fcntl.flock(probe2, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(probe2, fcntl.LOCK_UN)
+    finally:
+        probe2.close()
+
+
+def test_calibration_naive_unlocked_flow_loses_concurrent_row(tmp_path):
+    """校準對照組：重現修復前的行為——thread A 先讀（只看到自己的新檔），
+    延遲後才寫；期間 thread B（無延遲）建立自己的新檔並完成讀-算-寫。A 醒來
+    後用「較早、較窄」的快照覆寫，B 的列遺失。證明本測試方法能真正偵測
+    lost-update（非巧合通過），對照組見 `test_sync_and_write_...` 使用相同
+    時序但改走 `sync_and_write` 皆存活。"""
+    claude_dir = _setup_claude_dir(tmp_path)
+    _write_new_pattern(claude_dir, "IMP-010", "A 的發現")
+
+    thread_a = threading.Thread(
+        target=_naive_unlocked_sync_write, args=(claude_dir, 0.3)
+    )
+    thread_a.start()
+    time.sleep(0.05)  # 確保 A 已完成讀取（只看到 IMP-010）才建立 B 的檔案
+    _write_new_pattern(claude_dir, "IMP-011", "B 的發現")
+    _naive_unlocked_sync_write(claude_dir, 0)  # B：無延遲，搶先寫入
+    thread_a.join(timeout=5)
+
+    final = (claude_dir / "error-patterns" / "README.md").read_text(encoding="utf-8")
+    assert "IMP-010" in final
+    assert "IMP-011" not in final, "校準失敗：naive 流程理應遺失 B 的列"
+
+
+def test_sync_and_write_concurrent_upserts_both_rows_survive(tmp_path):
+    """0.2.1-W3-272 修復驗證：與校準測試相同的時序（A 延遲寫入、B 搶先），
+    改用 `sync_and_write`（鎖保護）——A 的讀取與寫入之間 B 必須等鎖，故 B 的
+    讀取會發生在 A 寫入之後，兩列皆存活（acceptance #1：兩 agent 同時各
+    upsert 一列，兩列皆存活）。"""
+    claude_dir = _setup_claude_dir(tmp_path)
+    _write_new_pattern(claude_dir, "IMP-010", "A 的發現")
+
+    thread_a = threading.Thread(
+        target=sync_and_write, args=(claude_dir,), kwargs={"_pre_write_delay": 0.3}
+    )
+    thread_a.start()
+    time.sleep(0.05)  # 確保 A 已進入臨界區（持鎖中）才讓 B 起跑
+    _write_new_pattern(claude_dir, "IMP-011", "B 的發現")
+    sync_and_write(claude_dir)  # B：會阻塞在鎖上，直到 A 釋放
+    thread_a.join(timeout=5)
+
+    final = (claude_dir / "error-patterns" / "README.md").read_text(encoding="utf-8")
+    assert "IMP-010" in final
+    assert "IMP-011" in final
+
+
+def test_sync_and_write_no_diff_skips_write(tmp_path):
+    """無變更（diff 為空）時不寫檔，與舊版 main() 行為一致。"""
+    claude_dir = _setup_claude_dir(tmp_path)
+    readme_path = claude_dir / "error-patterns" / "README.md"
+    before_mtime = readme_path.stat().st_mtime_ns
+
+    original, updated, diff = sync_and_write(claude_dir)
+
+    assert diff == ""
+    assert updated == original
+    assert readme_path.stat().st_mtime_ns == before_mtime

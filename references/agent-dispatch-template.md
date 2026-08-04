@@ -45,6 +45,8 @@ Ticket: {ticket_id}
 > **用途**：PM 派發前最常用的中文對話式骨架。把 context 寫入 ticket 後，直接複製以下骨架填三個空格即可派發。prompt 控制在 **10-15 行**，穩過 Hook 30 行上限。
 
 > **機制選擇前置（0.38.0-W2-002 ANA 落地）**：呼叫 `Agent(...)` 時**預設不帶 `name` 參數**（一般 subagent）。僅當任務符合「平行派發且 Agent A 的發現會改變 Agent B 正在進行的工作」（改用 Agent Teams）或「同 Wave 有 3+ 張同類型 ticket 且預期逐一派發」（named agent 可選續用）時才加 `name`。循序一次性任務、獨立分析/實作任務一律不帶 `name`。完整選用準則決策表見 `.claude/pm-rules/parallel-dispatch.md`「派發機制選用準則」章節。
+>
+> **帶 `name` 的代價（W3-182 實證）**：背景 named agent 的最終回覆文字**不送達主線程**，PM 只收到 `idle_notification`。唯讀型 named agent 因此既不能落檔也無 final message，產出必然遺失，除非 prompt 明寫「以 `SendMessage({to: "main"})` 送出報告本體」。此代價使「順手給個名字方便定址」成為實質的通道變更，不是命名偏好。通道對照見下方「交付通道速查」維度二。
 
 ### 骨架（3 段）
 
@@ -148,7 +150,9 @@ Ticket: {id}
 {agent-name}: Read ticket md and execute the current acceptance criteria.
 Allowed: {allowed files/actions from where.files}
 Forbidden: {out-of-scope files/actions}
-Use precise staging only: git add {exact files}
+Use precise staging + path-limited commit only:
+  git add {exact files}
+  git commit -m "..." -- {exact files}
 If context is insufficient, append NeedsContext and stop.
 ```
 
@@ -159,8 +163,9 @@ Ticket: {id}
 
 {agent-name}: Execute only this ticket from the dispatch-plan.
 Allowed: {this ticket files/actions}
-Forbidden: other parallel tickets' files and git add . / git add -A
-Commit policy: {agent commit | PM commit | no commit}
+Forbidden: other parallel tickets' files; git add . / git add -A; git commit without -- <paths>
+Commit policy: {agent commit (path-limited: git commit -m "..." -- <paths>) | PM commit | no commit}
+Before commit: git status to check staged scope; git restore --staged <path> for any non-owned file
 If blocked, report Exit Status without touching sibling scope.
 ```
 
@@ -193,16 +198,32 @@ Your final message IS the deliverable — PM will archive it immediately.
 
 ## 交付通道速查（W5-005.12）
 
+交付通道由**兩個維度**共同決定：agent 能力（有無 Edit/Write）決定能不能落檔，派發形態（有無 `name`）決定 final message 送不送得到 PM。只看能力維度會漏掉第二項。
+
+### 維度一：agent 能力
+
 | Agent 能力 | 交付通道 | PM 動作 |
 |-----------|---------|--------|
 | L3/L2（有 Edit/Write） | ticket append-log + commit 產出檔 | 標準驗收（讀 ticket + git log + 測試） |
 | L1（有 Bash 無 Edit/Write） | ticket append-log + Bash heredoc 寫 /tmp 檔 | 標準驗收 + Read /tmp 檔 |
-| L0（Plan type 唯讀） | final message（唯一通道） | 立即落檔保全（見上方 snippet） |
+| L0（Plan type 唯讀） | final message | 立即落檔保全（見上方 snippet） |
+
+### 維度二：派發形態（W3-182）
+
+| 派發形態 | final message 可達性 | 唯一可靠通道 | prompt 必寫 |
+|---------|-------------------|------------|-----------|
+| `Agent(...)` 不帶 `name`（預設） | 送達 PM | final message | 無額外要求 |
+| `Agent(..., name: "x")` 背景 named | **不送達 PM** | `SendMessage({to: "main"})` | 「報告本體須以 SendMessage 送出；產出報告與送回報告是兩件事」 |
+
+**Why**：背景 named agent 的最終回覆文字不進入主線程，PM 只會收到 `idle_notification`。該通知不足以分辨「做完了但沒送達」與「沒做」（`PC-BAL-015`），PM 因此可能誤判失聯而重派，付出全額重複成本。
+
+**兩維度交會處最易出錯**：L0 那列的 final message 對不帶 `name` 的 agent 是唯一通道，對 named agent 則是**零通道**——它既不能落檔（唯讀），final message 又送不到。此組合必須在 prompt 明寫 SendMessage 要求，否則產出必然遺失。
 
 **L0 Fallback SOP**：
-1. 派發前：prompt 明示「報告全文以最終訊息回傳，不嘗試寫檔」
+1. 派發前：prompt 明示「報告全文以最終訊息回傳，不嘗試寫檔」；若帶 `name`，改為「以 `SendMessage({to: "main"})` 送出報告本體，過長則依檔案分批送」
 2. 收到 final message 後：PM 立即寫入 ticket Solution 或 /tmp
 3. 不等待：不假設下次還能取回（hook 劫持風險，W2-011）
+4. 久無回報時：先送一則 `SendMessage` 要求以 `SendMessage` 重送報告，再判定是否失聯——`idle_notification` 不是「未執行」的證據
 
 ---
 
@@ -255,7 +276,7 @@ Ticket: {ticket_id}
 | `files` | 精確檔案 ownership；未知時先補 Context Bundle，不派發 |
 | `deps` | blockedBy / 前置 ticket；無依賴填 `none` |
 | `context source` | agent 應讀取的持久化 context 來源 |
-| `commit policy` | 明確 agent 自 commit、PM 統一 commit、或 no commit |
+| `commit policy` | 明確 agent 自 commit、PM 統一 commit、或 no commit；agent 自 commit 時採 path-limited 形式（`git commit -m "..." -- <paths>`），見 `.claude/pm-rules/parallel-dispatch.md` PC-092 防護 |
 | `run mode` | `parallel`、`serial` 或 `blocked`；不得用 `batch` 表示自動批量執行 |
 
 ---
@@ -492,6 +513,43 @@ commit 前快速掃描禁用字（數據/代碼/默認/文檔/軟件/硬件/信�
 
 ---
 
+## 唯讀派發豁免 worktree 強制（0.2.1-W3-269，框架 issue 36）
+
+> **用途**：派發實作代理人執行**唯讀規劃/分析階段**（如 TDD Phase 3a 只讀不寫）時，prompt 首行宣告 `Dispatch-Mode: readonly` 可豁免 worktree 強制，不需先建立/切換 worktree 即可派發。
+>
+> **權威來源**：完整判準（聲明方式三條件 AND、反例、與 review mode 的 OR 關係、與 Agent 工具 `dispatch_mode` 參數失效的實測結論）見 `.claude/pm-rules/worktree-operations.md`「唯讀派發豁免 worktree 強制」節；本節僅提供派發 prompt 骨架速查。
+
+**聲明方式**：prompt **首行**（strip 後第一行，非文中任意位置）逐字寫 `Dispatch-Mode: readonly`：
+
+```markdown
+Dispatch-Mode: readonly
+
+Ticket: {ticket_id}
+
+## 任務
+
+{一句話動作描述，僅唯讀規劃/分析內容}
+
+讀取 ticket：`ticket track full {ticket_id}`
+認領：`ticket track claim {ticket_id} --as {agent_name}`
+```
+
+**禁止**：本次派發若涉及任何 Edit/Write（即使小改），不得使用本宣告——宣告後 hook 判定放行、不建 worktree，若代理人實際寫入檔案，寫入會直接落在派發當下的 cwd，可能污染主 repo 或既有 worktree。
+
+**適用情境速查**：
+
+| 情境 | 是否可用 |
+|------|---------|
+| TDD Phase 3a（實作策略規劃，產出虛擬碼/流程圖，不動實際程式碼） | 可用 |
+| 唯讀審查、純分析報告 | 可用 |
+| 任何會 Edit/Write 檔案的派發 | 不可用 |
+| 外部（非本專案）`.claude/` 路徑 | 不可用（不受本豁免影響，判斷序列中先於本豁免被阻擋） |
+| Agent 工具 `dispatch_mode: "readonly"` 結構化參數 | 無效——CC runtime 剝離 Agent tool_input 自訂欄位，唯一有效聲明方式是本節的 prompt 首行文字 |
+
+**與既有審查模式豁免（W10-084）的關係**：兩者為 OR 關係，任一命中即豁免；審查模式是 prompt 全文關鍵字比對（「審查/review/掃描/scan/評估/evaluate」），本豁免是首行固定格式協議，判準互相獨立、互不取代。
+
+---
+
 ## worktree 派發 base 同步指引（W1-035）
 
 > **用途**：派發 `isolation: "worktree"` agent 時，在 prompt 加入 base 同步指引，使 agent 開始工作前先將 worktree merge 至最新 main。
@@ -549,6 +607,36 @@ commit 前快速掃描禁用字（數據/代碼/默認/文檔/軟件/硬件/信�
 object store，可直接 merge），確認本地檔案為最新 main 後再開始工作。
 ```
 
+### 環境前置欄位（0.2.1-W3-274，框架 issue 46）
+
+> **用途**：worktree 派發 prompt 補「環境前置」選填欄位，載明 worktree 是 git 層隔離、非 git 狀態不隨之而來的事實，並指引該狀態的具體補齊命令應寫在哪裡。
+
+**Why**：worktree 只複製 git 追蹤的內容；`.gitignore` 排除的建置產物、依賴目錄等執行測試/建置所需的狀態不會隨 worktree 建立出現，需另外執行專案特定的補齊命令才能還原。這類命令屬於 consumer 專案知識（依語言/框架/套件管理器而異），**框架層不寫任何具體命令字面**——寫了就只對當下這個 consumer 準確，對其他 consumer 反而失準；框架層能提供的是「標準載明位置」這個機制本身。
+
+**Consequence**：派發模板缺這個欄位時，consumer 沒有標準位置放置這類知識，代理人各自摸索補齊方式，成功與否取決於個別代理人是否碰巧試出正確命令，同一問題在不同代理人間重複發生而無人留下可複用記錄（框架 issue 46 症狀一實證：四個代理人三個撞牆且回報各異）。
+
+**Action**：worktree 派發 prompt 視需要補以下欄位：
+
+```markdown
+## 環境前置（如適用）
+
+worktree 建立後、執行測試/建置前，先依 {專案層文件路徑，如 CLAUDE.md
+對應章節或 scripts/<script-name>} 執行前置命令，補齊 gitignore 排除的
+建置狀態。
+```
+
+填寫指引：
+
+| 項目 | 要求 |
+|------|------|
+| 命令來源 | 指向專案層文件（`CLAUDE.md` 對應章節或專案 `scripts/`），不在 prompt 或本模板寫死具體命令字面 |
+| 何時填 | 該專案存在 worktree 不含但測試/建置依賴的非 git 狀態時（如依賴安裝、建置快取還原） |
+| 何時可省略 | 專案無此類前置需求，或本次派發不涉及測試/建置執行 |
+
+**consumer 落地位置**：具體命令記錄於專案層（`CLAUDE.md` 或 `scripts/`）；框架層對「worktree 不含哪些狀態」的概念說明見 `.claude/skills/worktree/SKILL.md`「worktree 不含的狀態」節。
+
+**與 base 同步指引的邊界**：本節與上方「cc runtime worktree base 選擇邏輯」處理不同層面的落差——base 同步是「git 追蹤內容落後 main 多少個 commit」（`git merge main` 可解），環境前置是「git 完全不追蹤的內容從未存在於任何 worktree」（merge 無法解，需另外執行安裝/還原命令）。兩者可能同時發生，prompt 需分別涵蓋。
+
 ### 與派發前 commit gate 的關係
 
 A1（PM 派發前 commit gate，見 `.claude/pm-rules/behavior-loop-details.md`「派發前檢查：worktree base 同步」）與本指引（B1）為互補防護：A1 在派發前縮小 base 初始落差，B1 在 agent 端補平派發後新增的落差。A1 是一次 `git status`、B1 是 prompt 內一行 `git merge` 指引，相對於 base 落差累積後的手動整合成本，兩者投入都小；並用可覆蓋派發前與執行中兩個時間窗。
@@ -558,6 +646,28 @@ A1（PM 派發前 commit gate，見 `.claude/pm-rules/behavior-loop-details.md`�
 > **Why**：A1 只檢查本機有無 uncommitted 變更，未驗證本機 main 是否已 push 到 origin。PC-154 前置 1 已記錄 worktree base 在部分觀測中反映「較早的 checkpoint 或 origin/main」而非本機 main HEAD；PM 本 session 新建/修改的 ticket commit 若尚未 push，origin 落後，agent 進入 worktree 讀到舊票況會誠實回報「Ticket 不存在」——此訊息易誤診為打錯票號，實為 record-plane（agent 所見 origin 舊態）與 world-plane（本機 HEAD 有票）漂移（`tool-output-trust-rules` 規則 5）。
 >
 > **Action**：派發任何 `isolation: "worktree"` 實作 agent 前，除 A1 `git status --porcelain` 外，再執行 `git push origin main`（確認 `git rev-list --left-right --count origin/main...main` 為 `0 0`）。收到 agent 回報「Ticket 不存在」時，先查 `git log origin/main..main` 是否有未 push 的票 commit，而非直接懷疑票號打錯。完整前置條件表見 `.claude/error-patterns/process-compliance/PC-154-worktree-dispatch-prerequisites-not-verified.md`「前置 1：worktree base 含所需檔案」。
+
+### worktree 派發收尾指引：用 `finish` 別名避開 `complete` 誤判
+
+> **用途**：worktree 隔離派發的收尾段，`ticket track complete` 改用別名 `ticket track finish`（兩者行為完全等價，共用同一實作與全部旗標），避開 CC runtime worktree isolation guard 對 `complete` 的條件性誤判。
+>
+> **設計依據**：CC runtime 的 worktree isolation guard 對 argv 逐元素做 basename 比對其可處理的 shell 命令清單，`complete` 命中 bash builtin `complete`，使 `ticket track complete` 在 worktree 派發下條件性被誤判為「不可驗證的合併類操作」而阻擋（同一操作同一隔離環境結果不穩定重現：五次 worktree 派發兩擋三過）。裁示為別名共存而非重命名——`complete` 出現在本框架 rules / pm-rules / skills / agents / hooks 過百處引用，重命名的漣漪成本與破壞相容風險遠超收益。
+
+**Why**：guard 的比對粒度是 argv 每個 token 的 basename，不區分命令在該 token 序列中是「子命令名稱」還是「參數」，故子命令名稱恰好撞上 shell builtin 名稱時才會誤判；其餘子命令（`claim` / `append-log` / `set-acceptance` 等）不受影響，只有 `complete` 命中。
+
+**Consequence**：代理人在 worktree 內執行 `ticket track complete` 被拒時無法自行收尾。PM 需在主 repo 代執行並代填 Layer 1 自檢，但代填的自檢在證據來源上與代理人自檢本質不同（PM 看不到代理人的執行過程），破壞「執行期的代理人才是自檢正確供給側」的設計原則（見上方「收尾義務標準段」章節 Why）。
+
+**Action**：worktree 隔離派發（`isolation: "worktree"`）的收尾段指令一律改用 `finish`：
+
+```bash
+# worktree 派發收尾（用 finish，避開 complete 誤判）
+ticket track finish <ticket-id> --as <自身 agent 名稱>
+
+# 主 repo cwd 派發收尾（維持原名 complete，不受影響）
+ticket track complete <ticket-id> --as <自身 agent 名稱>
+```
+
+`complete` 本身不動、不加棄用警告——它不是要被取代，只是在 worktree 環境有代稱；`--as` / `--force` / `--skip-body-check` / `--yes-spawned` / `--no-stage` 全旗標在兩名下行為完全等價，「收尾義務標準段（W2-003）」與「收尾 --as 全覆蓋」章節的範例套用時，worktree 場景把指令中的 `complete` 換成 `finish` 即可，其餘不變。
 
 ---
 
@@ -829,7 +939,11 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 
 ---
 
-**Last Updated**: 2026-07-27
+**Last Updated**: 2026-08-04
+**Version**: 1.19.0 — 新增「唯讀派發豁免 worktree 強制（0.2.1-W3-269，框架 issue 36）」章節：prompt 首行 `Dispatch-Mode: readonly` 聲明速查 + 骨架範例 + 禁止情境 + 適用情境速查表 + 與 review mode 的 OR 關係；完整判準權威來源指向 `.claude/pm-rules/worktree-operations.md`「唯讀派發豁免 worktree 強制」節，避免雙處維護漂移
+**Version**: 1.18.0 — 「worktree 派發 base 同步指引」章節新增「環境前置欄位（0.2.1-W3-274，框架 issue 46）」小節：worktree 為 git 層隔離，gitignore 排除的建置狀態不隨之而來，補派發模板「環境前置」選填欄位與填寫指引；框架層不寫任何專案專屬命令字面，指向 consumer 專案層文件；與 worktree SKILL「worktree 不含的狀態」節交叉引用
+**Version**: 1.17.0 — 「worktree 派發 base 同步指引」章節新增「worktree 派發收尾指引：用 finish 別名避開 complete 誤判」小節：CC runtime worktree isolation guard 對 argv basename 誤判 bash builtin `complete` 而條件性阻擋，收尾指令改用別名 `ticket track finish`（與 complete 行為完全等價），含正確/錯誤指令範例對照
+**Version**: 1.16.0 — 「交付通道速查」拆為兩個維度：維度一沿用既有 agent 能力三列，新增維度二派發形態（有無 `name`）——背景 named agent 的 final message 不送達主線程，唯一通道為 `SendMessage({to: "main"})`；明示兩維度交會處（唯讀 + named）為零通道組合。「機制選擇前置」補帶 `name` 的 Consequence（原僅有 Action，讀者無從評估違反成本）。L0 Fallback SOP 增第 4 步：久無回報先要求以 SendMessage 重送再判定失聯，`idle_notification` 不是未執行的證據（`PC-BAL-015`）。實證為 0.2.1-W3-174 的 Layer 2 派發（0.2.1-W3-182）
 **Version**: 1.15.0 — 「與派發前 commit gate 的關係」章節新增「派發前 origin 同步驗證（PC-154 前置 1 延伸）」小節：worktree base 可能反映 origin/main 而非本機 HEAD，補派發前 `git push origin main` 驗證步驟，與 PC-154 前置 1 交叉引用（memory 搬遷落地，0.2.1-W3-085）
 **Version**: 1.14.0 — 「填空檢查清單」新增一項：派發 `.claude/` 框架檔案修改時，代理人已受 AGENT_PRELOAD 規則 12（禁依賴型 ticket 引用）約束，prompt 不需重複交代（0.2.1-W3-093）
 **Version**: 1.13.0 — 「唯讀探針派發 SOP」章節新增「parallel-evaluation 常駐審查委員免 Ticket ID 派發」條目：`basil-writing-critic` / `linux` 已列入 `TICKET_EXEMPT_AGENT_TYPES`（0.2.1-W3-010 落地），派發時直接走優先序 1，禁止借用他人 pending ticket ID 湊格式要求（PC-V1-002 案例變體二防護，0.2.1-W3-011）
@@ -842,6 +956,8 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 **Version**: 1.8.0 — 派發身份前移（W5-005 F1a）：三段式骨架與三個實戰範例、嵌套 child prompt 範例均補 `claim {id} --as {agent_name}` 認領行；填空檢查清單新增對應核對項；骨架下方補 Why 說明（dispatch hook 綁定為第一道，claim --as 為 agent 端對稱綁定與 fallback）
 
 **Version**: 1.7.0 — 新增「嵌套派發（descend）派發端指引」章節：descend 條件速查（派發端動作對照）+ dispatch-plan 嵌套欄位（parent / depth-can_descend）+ child prompt 三段式範例；協議 SSOT 引用 AGENT_PRELOAD 規則 9，深度上限數值不在本檔重複定義（嵌套派發協議 S2 落地）
+
+**Version**: 1.7.0 — commit policy 骨架同步 PC-092 commit 階段防護：單任務與並行多任務短 prompt snippet 補 path-limited commit 形式（`git commit -m "..." -- <paths>`）與收尾 `git status` 核對步驟；dispatch-plan template `commit policy` 欄位說明補 path-limited 形式指引，交叉引用 parallel-dispatch.md PC-092 防護章節
 
 **Version**: 1.6.0 — worktree 派發 base 同步指引（W1-035）章節新增「cc runtime worktree base 選擇邏輯（實證歸納）」與「三方案評估與選定理由」（選定方案 B，0.19.0-W1-053）
 

@@ -232,21 +232,26 @@ class TestBuildCommitMessage:
 
 
 class TestGetChangedFiles:
+    """get_changed_files 已改用 lib.git_utils.get_uncommitted_files（0.2.1-W3-290），
+    直接 patch hook.get_uncommitted_files（已 import 進 hook 命名空間）。"""
+
     def test_parses_porcelain_output(self, logger):
-        proc = MagicMock(returncode=0, stdout=" M src/a.py\n?? new.txt\n", stderr="")
-        with patch.object(hook.subprocess, "run", return_value=proc):
+        statuses = [
+            hook.FileStatus(status=" M", file_path="src/a.py"),
+            hook.FileStatus(status="??", file_path="new.txt"),
+        ]
+        with patch.object(hook, "get_uncommitted_files", return_value=statuses):
             files = hook.get_changed_files(logger)
         assert files == ["src/a.py", "new.txt"]
 
     def test_parses_rename(self, logger):
-        proc = MagicMock(returncode=0, stdout="R  old.py -> new.py\n", stderr="")
-        with patch.object(hook.subprocess, "run", return_value=proc):
+        statuses = [hook.FileStatus(status="R ", file_path="old.py -> new.py")]
+        with patch.object(hook, "get_uncommitted_files", return_value=statuses):
             files = hook.get_changed_files(logger)
         assert files == ["new.py"]
 
     def test_empty_when_clean(self, logger):
-        proc = MagicMock(returncode=0, stdout="", stderr="")
-        with patch.object(hook.subprocess, "run", return_value=proc):
+        with patch.object(hook, "get_uncommitted_files", return_value=[]):
             assert hook.get_changed_files(logger) == []
 
 

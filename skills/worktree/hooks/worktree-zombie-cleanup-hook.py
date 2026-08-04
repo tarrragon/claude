@@ -37,7 +37,7 @@ from typing import Optional, Tuple, List, Dict, Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
-from lib import setup_hook_logging, run_hook_safely, get_project_root  # type: ignore
+from lib import setup_hook_logging, run_hook_safely, get_project_root, get_worktree_list  # type: ignore
 
 HOOK_NAME = "worktree-zombie-cleanup"
 
@@ -132,34 +132,23 @@ def get_worktree_branch(project_root: Path, worktree_path: Path) -> Optional[str
 
     必須在 worktree 移除前呼叫；回傳如 "worktree-agent-xxx"（去除 refs/heads/ 前綴）。
     找不到對應 worktree 或處於 detached HEAD 時回傳 None（不純字串拼接分支名）。
+
+    改用 lib.git_utils.get_worktree_list(cwd=...)（0.2.1-W3-290）；路徑比對鍵沿用
+    0.2.1-W3-286 結論——用絕對路徑（resolve）比對避免同名不同層誤配。
     """
     try:
-        result = subprocess.run(
-            ["git", "-C", str(project_root), "worktree", "list", "--porcelain"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except (subprocess.SubprocessError, FileNotFoundError, OSError):
-        return None
-
-    if result.returncode != 0:
+        worktrees = get_worktree_list(cwd=str(project_root))
+    except Exception:
         return None
 
     target = str(worktree_path.resolve())
-    current_path: Optional[str] = None
-    for line in (result.stdout or "").splitlines():
-        if line.startswith("worktree "):
-            raw = line[len("worktree "):].strip()
-            try:
-                current_path = str(Path(raw).resolve())
-            except OSError:
-                current_path = raw
-        elif line.startswith("branch ") and current_path == target:
-            ref = line[len("branch "):].strip()
-            if ref.startswith("refs/heads/"):
-                return ref[len("refs/heads/"):]
-            return ref
+    for wt in worktrees:
+        try:
+            current_path = str(Path(wt["path"]).resolve())
+        except OSError:
+            current_path = wt["path"]
+        if current_path == target:
+            return wt.get("branch")
     return None
 
 

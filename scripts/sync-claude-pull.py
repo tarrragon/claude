@@ -24,6 +24,7 @@ Safety net:
   完整背景與除錯指南詳見 WINDOWS-NOTES.md。
 """
 
+import argparse
 import filecmp
 import json
 import os
@@ -45,6 +46,7 @@ except ImportError:
 # state 被遠端 delta 蓋掉，與 push/status 端共用同一判定避免漂移。
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib.sync_exclude_manifest import (  # noqa: E402
+    LOCAL_ONLY_PATTERNS,
     should_exclude,
     should_exclude_skill,
     _is_skill_path,
@@ -94,36 +96,16 @@ REMOTE_ONLY = frozenset({".git", "project-templates"})
 
 # 本地專有：只存在於本地，同步時不刪除也不覆蓋
 #
-# 排除分類（與 sync-claude-push.py EXCLUDE_PATTERNS 對稱，詳版見
-# .claude/references/sync-exclusion-guide.md）：
-#   A - Runtime state：dispatch-active.json、hook-state/、pm-status.json
-#   B - Local-only settings：settings.local.json、sync-preserve.yaml、.sync-state.json
-#   C - Session-bound log：hook-logs/、handoff/、PM_INTERVENTION_REQUIRED、ARCHITECTURE_REVIEW_REQUIRED
-#
-# 新增機制時請對應分類並同步更新 push 端 EXCLUDE_PATTERNS，避免不對稱同步。
-LOCAL_ONLY = frozenset({
-    # 類型 C - Session-bound log
-    "hook-logs",
-    "handoff",
-    "PM_INTERVENTION_REQUIRED",
-    "ARCHITECTURE_REVIEW_REQUIRED",
-    # 類型 A - Runtime state
-    "pm-status.json",
-    "dispatch-active.json",    # 本 session 派發狀態，專案特定 runtime state
-    "hook-state",              # Hook runtime state 目錄（wrap-tripwire 等）
-    # 工具產物（Python 快取，無跨專案共用價值）
-    "__pycache__",
-    ".pytest_cache",
-    ".venv",
-    # 類型 B - Local-only settings
-    "sync-preserve.yaml",      # 各專案的 preserve 清單不同，不可被遠端覆蓋
-    ".sync-state.json",        # 本地同步狀態，不可被遠端覆蓋
-    "settings.local.json",     # 各專案個別覆蓋設定，不應被遠端同步覆蓋
-    ".zhtw-mcp-skip",          # 各專案 opt-out 繁中檢查的 flag，per-project 決定
-})
-
-# 同步時跳過的所有路徑（合併使用）
-SKIP_DURING_SYNC = REMOTE_ONLY | LOCAL_ONLY
+# 名稱集改由 manifest 的 LOCAL_ONLY_PATTERNS 推導（0.2.1-W3-240），不再本檔獨立
+# 維護第二份清單——原 SKIP_DURING_SYNC（O(1) 名稱早退，效能層）與 should_exclude
+# 消費的 LOCAL_ONLY_PATTERNS（完整路徑比對，正確性層）為雙 SOT，曾漂移 6 項
+# （.sync-conflicts / .version-release.yaml / TASK_AVOIDANCE_FIX_MODE /
+# dispatch-active.lock / scheduled_tasks.lock / sync-skills.yaml，0.2.1-W3-152）。
+# 推導後兩者結構上不可能再漂移；LOCAL_ONLY_PATTERNS 本身即名稱集，故 SKIP_DURING_SYNC
+# 仍保有 O(1) 名稱早退特性，未退化為逐項 should_exclude 路徑比對。
+# 分類定義（A - Runtime state / B - Local-only settings / C - Session-bound log）
+# 見 .claude/lib/sync_exclude_manifest.py 與 .claude/references/sync-exclusion-guide.md。
+SKIP_DURING_SYNC = REMOTE_ONLY | LOCAL_ONLY_PATTERNS
 
 # Q（0.19.1-W1-021）：備份 .claude 時排除的工具產物，避免備份 bloat / 變慢
 # / 遇 broken symlink 拋例外。主同步本身已排除這些，備份須一致。
@@ -861,6 +843,39 @@ def _files_differ(src: Path, dst: Path) -> bool:
     return not filecmp.cmp(str(src), str(dst), shallow=False)
 
 
+def _make_should_exclude_ignore(src_root: Path, base_prefix: Path):
+    """建構 shutil.copytree 用的 ignore callback，逐層套用 should_exclude（0.2.1-W3-148）。
+
+    shutil.copytree 走訪來源樹每一層時會呼叫 ignore(dir_path, names)，
+    dir_path 為當前層絕對路徑。本函式在每次呼叫時重建該層相對 .claude 的路徑
+    （base_prefix 為 src_root 本身相對 .claude 的路徑），對每個候選名稱組出
+    完整相對路徑後交給 should_exclude 判斷——與非捷徑路徑（逐項迴圈）使用
+    完全相同的判斷語意與路徑上下文（正確保留 rule 5 root-anchored 判斷所需
+    的根層資訊，不會因為只看裸名稱而誤殺巢狀同名目錄，如 skills/*/state/）。
+
+    Args:
+        src_root: 本次 copytree 的來源根目錄（絕對路徑）
+        base_prefix: src_root 相對 .claude 的路徑
+
+    Returns:
+        Callable[[str, list[str]], set[str]]: shutil.copytree 相容的 ignore callback
+    """
+
+    def _ignore(dir_path: str, names: list[str]) -> set[str]:
+        current_dir = Path(dir_path)
+        rel_dir = base_prefix / current_dir.relative_to(src_root)
+        ignored: set[str] = set()
+        for name in names:
+            if name in SKIP_DURING_SYNC:
+                ignored.add(name)
+                continue
+            if should_exclude(rel_dir / name):
+                ignored.add(name)
+        return ignored
+
+    return _ignore
+
+
 def sync_directory(
     src: Path,
     dst: Path,
@@ -908,6 +923,13 @@ def sync_directory(
         rel = prefix / item.name
         dest_item = dst / item.name
 
+        # 0.2.1-W3-148：per-project 落地層（should_exclude 命中，如
+        # project-integration/）不受上游內容覆蓋——三方合併路徑
+        # （apply_upstream_delta）已呼叫 should_exclude 跳過，full overlay
+        # 路徑須對齊，否則上游若恰好也有同名目錄/檔案會覆蓋本地落地層內容。
+        if should_exclude(rel):
+            continue
+
         # skills_config 過濾：在目錄層級即跳過排除的 skill
         if skills_config is not None:
             skill_name = _is_skill_path(rel)
@@ -918,8 +940,17 @@ def sync_directory(
             if dest_item.exists():
                 count += sync_directory(item, dest_item, preserve, rel, project_root, skills_config)
             else:
-                shutil.copytree(item, dest_item, symlinks=False,
-                                ignore=shutil.ignore_patterns(*SKIP_DURING_SYNC))
+                # 0.2.1-W3-148：shutil.copytree 為新目錄樹的整批複製捷徑，
+                # shutil.ignore_patterns 只按純名稱比對 SKIP_DURING_SYNC，不會
+                # 逐層呼叫 should_exclude——若新目錄樹內巢狀含 project-integration/
+                # 等 per-project 落地層，會被整批帶入（繞過上方逐項 should_exclude
+                # 早退）。改用 _make_should_exclude_ignore 建構的 ignore callback，
+                # 該 callback 在 copytree 走訪每一層時重建正確的相對 .claude 路徑，
+                # 與逐項迴圈使用相同的 should_exclude 判斷語意。
+                shutil.copytree(
+                    item, dest_item, symlinks=False,
+                    ignore=_make_should_exclude_ignore(item, rel),
+                )
                 count += sum(1 for f in dest_item.rglob("*") if f.is_file())
         else:
             rel_str = str(rel).replace("\\", "/")
@@ -1128,6 +1159,13 @@ def cleanup_stale_files(
             if item.is_symlink():
                 continue
             rel = prefix / item.name
+            # 0.2.1-W3-148：per-project 落地層（should_exclude 命中，如
+            # project-integration/）在三方合併路徑本就跳過（apply_upstream_delta
+            # 已呼叫 should_exclude），full overlay 路徑須對齊——完全跳過整個
+            # 項目（不遞迴、不判定 stale），而非移到 .sync-conflicts/ 或刪除。
+            # 移到 conflicts 仍會使該目錄離開原路徑，破壞 hook/skill 對其的引用。
+            if should_exclude(rel):
+                continue
             if item.is_dir():
                 _walk(item, rel)
                 # Remove empty directories after cleaning files
@@ -1248,6 +1286,10 @@ def preview_overlay_changes(
     will_delete: list[tuple[str, bool]] = []
     will_skip_resurrection: list[str] = []
 
+    # 0.2.1-W3-240：SKIP_DURING_SYNC 只做 O(1) 名稱早退，覆蓋不到 should_exclude
+    # 額外判斷的憑證副檔名 / 名稱前綴 / root-anchored 目錄（logs、state、
+    # worktrees 等）——sync_directory 等實際執行路徑皆已呼叫 should_exclude，
+    # 預覽路徑須對齊，否則會把這些本不會被刪除的項目誤列入 will_delete（C5/C6）。
     def _walk(directory: Path, prefix: Path = Path()) -> None:
         if not directory.exists():
             return
@@ -1255,6 +1297,8 @@ def preview_overlay_changes(
             if item.name in SKIP_DURING_SYNC or item.is_symlink():
                 continue
             rel = prefix / item.name
+            if should_exclude(rel):
+                continue
             if item.is_dir():
                 _walk(item, rel)
                 continue
@@ -1271,13 +1315,15 @@ def preview_overlay_changes(
                     will_overwrite.append(rel_str)
 
     def _walk_upstream(directory: Path, prefix: Path = Path()) -> None:
-        """走訪上游目錄，找出本地磁碟無但屬刻意刪除的復活候選。"""
+        """走訪上游目錄，找出本地磁碟無但屬刻意刪除的復活候選。"""  # i18n-exempt
         if not directory.exists():
             return
         for item in sorted(directory.iterdir()):
             if item.name in SKIP_DURING_SYNC or item.is_symlink():
                 continue
             rel = prefix / item.name
+            if should_exclude(rel):
+                continue
             if item.is_dir():
                 _walk_upstream(item, rel)
                 continue
@@ -1299,7 +1345,8 @@ def _ensure_conflicts_dir(claude_dir: Path) -> Path:
     """建立 .sync-conflicts/ 目錄與 .gitignore（M3：local-only，不推送）。
 
     .gitignore 內容 `*`：整個衝突目錄不納入版控也不被 sync 推送
-    （目錄名 .sync-conflicts 非 LOCAL_ONLY 段，但內容皆為衝突暫存，靠 .gitignore 隔離）。
+    （目錄名 .sync-conflicts 屬 manifest LOCAL_ONLY_PATTERNS，已由 SKIP_DURING_SYNC /
+    should_exclude 排除；.gitignore 為第二道保險，避免衝突暫存誤入版控）。
 
     傳回:
         Path: .sync-conflicts/ 目錄路徑
@@ -1974,6 +2021,11 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
     )
     use_full_overlay = should_use_full_overlay(claude_dir, base_reachable)
 
+    # W3-165：base SHA 是否可推進的判定旗標。full overlay 路徑無三方合併衝突
+    # 概念（其 preserved_conflicts 是本地獨有檔轉存，非上游內容遺失），維持
+    # 空清單即代表「無阻擋理由」；三方合併路徑於下方賦予實際衝突清單。
+    conflicts: list[str] = []
+
     if use_full_overlay:
         # H4 fallback：無 base SHA 或 base 不可達 → 全量 overlay（舊版行為）
         if base_sha and not base_reachable:
@@ -2077,12 +2129,26 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
             print_color(f"   + {rel}")
         print_color("   這些檔案存在於上游但同步後本地仍缺漏，可能需要手動補齊或檢查排除設定。", "yellow")  # i18n-exempt
 
-    # 同步成功後寫入新的 base SHA（上游 HEAD）
-    head_result = run_git(["rev-parse", "HEAD"], cwd=str(temp_dir))
-    if head_result.returncode == 0:
-        new_base = head_result.stdout.strip()
-        write_base_sha(claude_dir, new_base)
-        print_color(f"   已記錄 base SHA: {new_base[:12]}", "green")
+    # W3-165（IMP-BAL-002 根本修復第二項）：有未解衝突時不推進 base SHA，
+    # 對齊 git merge 語意——衝突未解則 HEAD 不動。base 停留舊點使下次 pull
+    # 從舊 base 重算 delta：已套用的檔此時本地已等於 upstream，三方合併對它們
+    # 為 no-op；未解的衝突會被重新提出，直到人工處理（.sync-conflicts/ 解完後
+    # 再次 pull 即可推進）。已知取捨：衝突長期未解，base 永久停留於舊點，每次
+    # pull 重算全量 delta 並重複告警（fail-visible，優於原行為的 fail-silent
+    # 永久遺失）。
+    if conflicts:
+        print_color(  # i18n-exempt
+            f"   有 {len(conflicts)} 個未解衝突，暫不推進 base SHA"  # i18n-exempt
+            f"（請人工解決 {SYNC_CONFLICTS_DIR}/ 內衝突檔後重新 pull 以推進）",  # i18n-exempt
+            "yellow",
+        )
+    else:
+        # 同步成功後寫入新的 base SHA（上游 HEAD）
+        head_result = run_git(["rev-parse", "HEAD"], cwd=str(temp_dir))
+        if head_result.returncode == 0:
+            new_base = head_result.stdout.strip()
+            write_base_sha(claude_dir, new_base)
+            print_color(f"   已記錄 base SHA: {new_base[:12]}", "green")  # i18n-exempt
 
     # 還原 hook 檔案的 executable bit（上游 mode 損壞的 safety net）
     restored = restore_executable_bits(claude_dir)
@@ -2691,6 +2757,61 @@ def _insert_hook_into_settings(  # i18n-exempt
     target["hooks"].append(hook_entry)
 
 
+# sentinel：區分「完全未帶 --bump」與「帶 --bump 但無版本值」（後者的 argparse
+# 值為 None，語意等同 bump 至 latest；兩者不可共用同一個 None）。
+_BUMP_NOT_SET = object()
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    """以 argparse 解析命令列參數（0.2.1-W3-164，PC-V1-001 / IMP-BAL-002 同家族防護）。
+
+    Why：舊版手動 argv 比對（`if "--audit" in argv` / `if "--bump" in argv`）
+    對 `--help` 與未知旗標 fail-open，兩者皆會落入正常同步主流程，觸發真實
+    不可逆 pull（PM 於 ccsession worktree 實測：`--help` 未印用法，直接輸出
+    「開始從獨立 repo 拉取 .claude 更新...」，clone / 套 delta / 寫 base SHA
+    皆會執行，僅因當次工作區有未提交變更觸發前置檢查才停下）。與 push 端
+    v1.48.6 誤推（PC-V1-001）同家族根因，push 端已用 argparse 防護
+    （`sync-claude-push.py::parse_args`），pull 端此前未套用。
+
+    Consequence：缺此防護時，使用者敲 `sync-pull --help` 期望看用法，實際
+    觸發一次真實 clone + delta 套用 + base SHA 寫入的不可逆同步。
+
+    Action：main 改呼叫本函式取結構化參數；`--help`（exit 0）/ 未知旗標
+    （exit 2）皆在解析階段中止，不進入 clone。
+
+    參數:
+        argv: 不含程式名的參數列（通常為 `sys.argv[1:]`）
+
+    傳回:
+        argparse.Namespace: 含
+          - audit（bool）：`--audit` 是否出現
+          - bump：`_BUMP_NOT_SET`（完全未帶 `--bump`）/ `None`（帶 `--bump`
+            但無版本值，代表 latest）/ 版本字串（帶 `--bump <版本>`）
+
+    例外:
+        SystemExit: `--help`（code 0）或未知旗標 / 參數錯誤（code 2）時由
+            argparse 拋出，呼叫端不應吞掉，使其終止於解析階段不觸發同步。
+    """
+    parser = argparse.ArgumentParser(
+        prog="sync-pull",
+        description="從獨立框架 repo 拉取 .claude 更新",  # i18n-exempt
+    )
+    parser.add_argument(
+        "--audit",
+        action="store_true",
+        help="唯讀孤兒稽核（列本地有上游無之檔），不執行同步主流程",  # i18n-exempt
+    )
+    parser.add_argument(
+        "--bump",
+        nargs="?",
+        const=None,
+        default=_BUMP_NOT_SET,
+        metavar="版本",  # i18n-exempt
+        help="更新 pinned_version 後重跑同步。無參數 bump 至 latest；帶版本（如 v1.2.0）pin 至該版",  # i18n-exempt
+    )
+    return parser.parse_args(argv)
+
+
 def main() -> None:
     """同步 .claude 配置從獨立 repo。
 
@@ -2704,25 +2825,26 @@ def main() -> None:
         --audit         唯讀孤兒稽核（列本地有上游無之檔），不執行同步主流程。
         --bump [版本]   更新 .sync-state.json 的 pinned_version 後重跑同步。
                         無參數 = bump 至 latest；帶版本（如 v1.2.0）= pin 至該版。
+
+    參數解析改用 argparse（0.2.1-W3-164）：--help 印用法後 exit 0、未知旗標
+    exit 2，兩者皆在解析階段中止，不落入下方同步主流程（PC-V1-001 /
+    IMP-BAL-002 同家族防護，詳見 parse_args docstring）。
     """
-    argv = sys.argv[1:]
-    if "--audit" in argv:
+    args = parse_args(sys.argv[1:])
+
+    if args.audit:
         run_audit()
         return
 
     # --bump [版本]：先更新 pin，再走正常同步流程套用新 pin 目標。
-    if "--bump" in argv:
-        idx = argv.index("--bump")
-        # --bump 後的下一個非旗標參數視為目標版本；缺省則 latest。
-        target_version: str | None = None
-        if idx + 1 < len(argv) and not argv[idx + 1].startswith("-"):
-            target_version = argv[idx + 1]
+    if args.bump is not _BUMP_NOT_SET:
+        target_version: str | None = args.bump
         bump_root = find_project_root()
         update_pinned_version(
             bump_root / ".claude", target_version
         )
         print_color(
-            f"已更新 pinned_version 為 {target_version or PIN_LATEST}，重跑同步...",
+            f"已更新 pinned_version 為 {target_version or PIN_LATEST}，重跑同步...",  # i18n-exempt
             "green",
         )
 

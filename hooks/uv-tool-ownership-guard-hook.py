@@ -4,9 +4,15 @@
 # dependencies = []
 # ///
 """
-uv tool Ownership Guard Hook（PreToolUse: Bash）
+uv tool Ownership Guard Hook（PreToolUse: Bash + SessionStart）
 
 防跨專案全域 uv tool 污染（W3-087 方案 A）。
+
+兩個事件，兩種職責：
+  - PreToolUse: Bash — mid-session ownership 防線（見下方「本 hook 的職責」）
+  - SessionStart — SKILLS 清單漂移檢查（0.2.1-W3-184）。掃描候選集合與本檔
+    SKILLS 常數比對，漏列或冗列時輸出具體差異項。放在 SessionStart 而非
+    PreToolUse 的理由見 `_check_skills_drift` docstring（成本差三個數量級）。
 
 問題背景：
   `uv tool install` 以 package name 為全域唯一 key（裝至
@@ -78,17 +84,29 @@ class SkillEntry:
 
 
 # 本專案 7 個 uv-tool skill。cli_name 為命令辨識依據，package_name 為 receipt 定位依據。
+#
+# 納入判準：`.claude/skills/<name>/pyproject.toml` 存在**且**定義 `[project.scripts]`。
+# 後半是關鍵——無 `[project.scripts]` 者不產生任何 executable，沒有可被劫持的全域 slot，
+# 列入即為幽靈項。校準指令（0.2.1-W3-181）：
+#   for d in .claude/skills/*/; do [ -f "$d/pyproject.toml" ] && \
+#     grep -q '^\[project.scripts\]' "$d/pyproject.toml" && basename "$d"; done
+#   uv tool list
+# 兩者實查（2026-07-31）皆為 7 項且成員相同，與本清單一致。
+#
+# 漏列的代價不對稱：漏列者完全不受保護且無任何告警（ARCH-BAL-003 症狀變體——名單語意為
+# 「該保護誰」時，漏列不撞牆），skill-sync 曾因此被他專案副本佔用逾一個月，期間本專案對
+# 其 source 的修改全數不生效。故新增有 CLI 入口的 skill 時必須同步此處。
+#
+# branch-worktree-guardian 曾列於本清單，實查其 pyproject.toml 無 `[project.scripts]`
+# （僅 `[project]` 與 `[project.optional-dependencies]`），不符判準且該 executable 從未
+# 存在，已於 0.2.1-W3-181 移除。
 SKILLS: Tuple[SkillEntry, ...] = (
     SkillEntry(".claude/skills/ticket", "ticket-system", "ticket"),
     SkillEntry(".claude/skills/doc", "doc-system", "doc"),
     SkillEntry(".claude/skills/version-release", "version-release", "version-release"),
     SkillEntry(".claude/skills/mermaid-ascii", "mermaid-ascii", "mermaid-ascii"),
     SkillEntry(".claude/skills/worktree", "worktree-skill", "worktree"),
-    SkillEntry(
-        ".claude/skills/branch-worktree-guardian",
-        "branch-worktree-guardian",
-        "branch-worktree-guardian",
-    ),
+    SkillEntry(".claude/skills/skill-sync", "skill-sync", "skill-sync"),
     SkillEntry(".claude/skills/project-init", "project-init", "project-init"),
 )
 
@@ -268,11 +286,77 @@ def _guard_command(command: str, project_root: Path, logger) -> None:
         _reinstall(skill, project_root, logger)
 
 
+def _scan_candidate_skills(project_root: Path) -> Dict[str, str]:
+    """掃描 `.claude/skills/` 得候選集合：有 pyproject.toml 且定義 project.scripts 者。
+
+    回傳 {skill 目錄名: package name}。判準的兩個條件缺一不可——只看 pyproject.toml
+    會納入無 CLI 入口者（其 executable 從未存在，列入即幽靈項，0.2.1-W3-181 實證）。
+    純文字比對不解析 TOML，與本 hook 其餘部分同一設計選擇（避免額外依賴）。
+    """
+    candidates: Dict[str, str] = {}
+    skills_dir = project_root / ".claude" / "skills"
+    if not skills_dir.is_dir():
+        return candidates
+
+    for pyproject in sorted(skills_dir.glob("*/pyproject.toml")):
+        try:
+            text = pyproject.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if "[project.scripts]" not in text:
+            continue
+        name_match = re.search(r'^name\s*=\s*"([^"]+)"', text, re.MULTILINE)
+        if name_match:
+            candidates[pyproject.parent.name] = name_match.group(1)
+    return candidates
+
+
+def _check_skills_drift(project_root: Path, logger) -> None:
+    """比對 SKILLS 常數與候選集合，漏列或冗列時輸出具體差異項（WARNING 不阻擋）。
+
+    Why：SKILLS 是靜態清單，新增有 CLI 入口的 skill 時若未同步，該 CLI 完全不受
+    ownership 保護且無任何告警——名單語意為「該保護誰」時漏列不撞牆（ARCH-BAL-003
+    症狀變體）。skill-sync 曾因此被他專案副本佔用逾一個月（0.2.1-W3-181）。
+
+    為何在 SessionStart 而非 PreToolUse 做：本掃描讀 8 個 pyproject.toml 約 0.4 ms，
+    PreToolUse 現行 fast-path 約 0.0002 ms，相差三個數量級；該事件跑在每個 Bash
+    命令上，設計約束要求非 uv-tool 命令 O(1) 立即返回。SessionStart 每 session 僅
+    一次，同樣成本可忽略（0.2.1-W3-184）。
+    """
+    candidates = _scan_candidate_skills(project_root)
+    listed = {s.source_subpath.rsplit("/", 1)[-1] for s in SKILLS}
+
+    missing = sorted(set(candidates) - listed)
+    extra = sorted(listed - set(candidates))
+    if not missing and not extra:
+        logger.info(f"SKILLS 清單與候選集合一致（{len(listed)} 項），無漂移")
+        return
+
+    lines = ["=" * 60, "[uv-tool Ownership Guard] SKILLS 清單漂移", "=" * 60]
+    if missing:
+        lines.append(f"漏列（有 CLI 入口但不受保護）：{', '.join(missing)}")
+        lines.append("  後果：該 CLI 的全域 slot 可被他專案副本佔用而無告警")
+    if extra:
+        lines.append(f"冗列（清單有但無 CLI 入口）：{', '.join(extra)}")
+        lines.append("  後果：幽靈項，永遠不會被命令辨識命中")
+    lines.append("修復：同步 uv-tool-ownership-guard-hook.py 的 SKILLS 常數")
+    lines.append("背景：ARCH-BAL-003 症狀變體 / 0.2.1-W3-181")
+    lines.append("=" * 60)
+    warning = "\n".join(lines)
+    print(warning, file=sys.stderr)
+    logger.warning(warning)
+
+
 def main() -> int:
     logger = setup_hook_logging(HOOK_NAME)
 
     input_data = read_json_from_stdin(logger)
     if input_data is None:
+        return 0
+
+    # SessionStart：跑清單漂移檢查（無 tool_name 欄位，與 PreToolUse 分流）
+    if input_data.get("hook_event_name") == "SessionStart":
+        _check_skills_drift(get_project_root(), logger)
         return 0
 
     if input_data.get("tool_name", "") != "Bash":

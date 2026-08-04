@@ -296,7 +296,7 @@ def run_git(
         logger: 可選日誌物件，失敗時記錄 warning
 
     Returns:
-        stdout 輸出（stripped），或 None 若執行失敗
+        stdout 輸出（僅移除尾端換行，保留行首空白），或 None 若執行失敗
     """
     try:
         result = subprocess.run(
@@ -307,7 +307,9 @@ def run_git(
             timeout=timeout,
         )
         if result.returncode == 0:
-            return result.stdout.strip()
+            # 只移除尾端換行，保留行首空白（porcelain 格式 X 位置可能為空白，
+            # 整體 strip() 會剝除首行前導空白，見 IMP-BAL-007 / 0.2.1-W3-284）
+            return result.stdout.rstrip("\n")
         else:
             if logger:
                 logger.warning("git 命令失敗: {} (exit code: {})".format(
