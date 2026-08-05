@@ -1,3 +1,30 @@
+## [2.24.1] - 2026-08-05
+
+### Summary
+feat(screen_clock): 回推 11 個 SCLK error-pattern 與三項框架層修復
+
+error-pattern（consumer screen_clock 於 v1.4.0 捕獲，上游先前無 SCLK 條目）：
+- PC-SCLK-001~008：並行 agent amend 改寫他人 commit／編碼混淆繞過 sandbox／
+  task context 指定解法形態／推測性歸因污染後續票／共享 index commit 夾帶
+  他人 staged 檔／規格散文與形式定義相反／hook 讀錯 payload 欄位靜默失效／
+  PM 分析措辭被照抄成事實
+- IMP-SCLK-001：macOS bash 3.2 在 UTF-8 locale 下裸 $VAR 緊鄰全形標點
+- CQ-SCLK-001：宣稱的保證無測試訊號
+- TEST-SCLK-001：快取建置使不存在斷言空洞
+
+程式碼修復：
+- hooks/hook-completeness-check.py：新增 extract_merge_declarations()，解析
+  hook docstring 的合併宣告，偵測已合併卻仍與合併版共同註冊的 hook
+  （screen_clock 1.4.0-W2-029 實證：三個 hook 每次 commit 重複執行）
+- skills/doc/doc_system/commands/validate.py + tests：修 _fixed_name_exemptions
+  對無對應模板之固定命名文件的推導盲區（1.4.0-W1-013）
+
+框架知識：
+- references/agent-dispatch-decision.md：新增 isolation:worktree 派發的
+  complete 收尾限制專節，含逐字阻擋原文與探針證據（1.4.0-W1-023）
+
+---
+
 ## [2.24.0] - 2026-08-05
 
 ### Summary

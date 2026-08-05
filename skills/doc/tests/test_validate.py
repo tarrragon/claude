@@ -284,6 +284,44 @@ class TestValidateFilenames:
         assert "design-system-spec.md" in output
         assert "配號器盲區" not in output
 
+    def test_domain_map_exempted_via_template_derivation(self, tmp_path, capsys):
+        """domain-map.md 有對應 domain-map-template.md，經模板推導豁免（1.4.0-W1-013）。"""
+        spec_dir = tmp_path / "docs" / "spec" / "platform"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "domain-map.md").write_text(
+            "---\nid: N/A\ntitle: \"Domain Map\"\n---\n內容\n", encoding="utf-8"
+        )
+        args = argparse.Namespace()
+
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            with pytest.raises(SystemExit) as exc:
+                execute_filenames(args)
+
+        output = capsys.readouterr().out
+        assert exc.value.code == 0
+        assert "INFO" in output
+        assert "domain-map.md" in output
+        assert "配號器盲區" not in output
+
+    def test_uc_numbering_convention_exempted_without_template(self, tmp_path, capsys):
+        """uc-numbering-convention.md 無對應模板，須靠顯式清單豁免（1.4.0-W1-013）。"""
+        spec_dir = tmp_path / "docs" / "spec"
+        spec_dir.mkdir(parents=True)
+        (spec_dir / "uc-numbering-convention.md").write_text(
+            "---\nid: N/A\ntitle: \"UC 編號慣例\"\n---\n內容\n", encoding="utf-8"
+        )
+        args = argparse.Namespace()
+
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            with pytest.raises(SystemExit) as exc:
+                execute_filenames(args)
+
+        output = capsys.readouterr().out
+        assert exc.value.code == 0
+        assert "INFO" in output
+        assert "uc-numbering-convention.md" in output
+        assert "配號器盲區" not in output
+
     def test_real_project_fixed_name_files_not_violations(self, capsys):
         """本專案實際的 component-library-spec.md / design-system-spec.md 不應被列為違規。"""
         args = argparse.Namespace()

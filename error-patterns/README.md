@@ -153,6 +153,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | TEST-BAL-002 | 測試替身走簡化建構路徑，繞過 production 裝配步驟使缺口對測試不可見 | 高 | — |
 | TEST-MON-001 | 硬編碼時間戳 fixture × 時間相對查詢窗 = clock 時間炸彈 | 高 | — |
 | TEST-MON-002 | TDD Phase 2 紅燈設計漏 handler/lifecycle 行為測試；GREEN agent confidence<1.0 是補洞訊號 | 中 | — |
+| TEST-SCLK-001 | 快取化建置使「零警告 / 無 X」類驗收成為空訊號 | — | — |
 
 ### 文件 (DOC)
 
@@ -169,8 +170,6 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | DOC-V1-001 | 位置編號引用隨目標文件演進靜默失效（misdirected 比 broken 難偵測） | 中 | v1.0.0 |
 | DOC-009 | 「靜默處理」用語誤用 — 混淆「不記錄」與「記錄但不顯示」 | 中 | — |
 | DOC-010 | 框架文件引用專案 ticket ID 造成跨專案 sync 誤導 | 中 | — |
-| DOC-BAL-001 | 規則只寫 Action 未寫 Consequence，讀者讀成偏好而非約束 | 高 | v0.2.1 |
-| DOC-BAL-002 | 同檔案內的行為契約隨程式碼變更漂移，因只有程式碼有自動驗證（加重形態：契約宣告不存在的否定式保證） | 高 | v0.2.1 |
 
 ### 架構 (ARCH)
 
@@ -213,11 +212,6 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | ARCH-010 (module-assembly-omission) | 模組組裝遺漏導致功能鏈路靜默斷裂 | 高 | v0.15.4 |
 | ARCH-010 (overengineered-state-management) | 過度設計的狀態管理 — 框架機制已解決的問題不需要額外狀態層 | 中 | v0.1.0 |
 | ARCH-BAL-008 | 以單一消費者內容覆寫共用覆蓋層，靜默刪除其他消費者的獨有內容 | — | — |
-| ARCH-BAL-009 | 預覽路徑各自實作執行路徑的判定邏輯，兩者必然漂移使預覽閘門失效 | — | — |
-| ARCH-BAL-010 | 可選欄位的解析成敗決定記錄是否存在，解析失敗即整筆消失且無告警 | 高 | v0.2.1 |
-| ARCH-BAL-011 | 以主題命名的機制群造成該主題已被涵蓋的假象，查證止於名稱不及職責 | 高 | v0.2.1 |
-| ARCH-BAL-012 | 同一概念的第二份實作重新推導第一份刻意迴避的假設，且未繼承其測試嚴謹度 | 高 | v0.2.1 |
-| ARCH-BAL-013 | 防護元件的處置建議未經其他防護檢驗，執行者照做即被另一道防護阻擋 | 中 | — |
 
 ### 程式碼品質 (CQ)
 
@@ -229,6 +223,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | CQ-004 | namedtuple 早退路徑返回裸型別 | 高 | v0.1.0 |
 | CQ-005 | Mock 路徑未隨函式遷移同步更新 | 中 | v0.1.0 |
 | CQ-006 | 純工具函式定義在 commands/ 層阻礙複用 | 中 | v0.1.0 |
+| CQ-SCLK-001 | 程式碼宣告了實際不存在的保證（註解描述未實作的行為、註解描述不存在的對應、fallback 交出孤兒物件），且該落差不產生任何測試訊號 | 中 | — |
 
 ### 實作 (IMP)
 
@@ -329,6 +324,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | IMP-V1-004 | Hook 內部工具名字面守衛因平台工具改名靜默早退（matcher 別名仍投遞） | 高 | — |
 | IMP-V1-005 | index.lock 競爭下 fast-forward 移動 HEAD 但 index 寫入失敗，後續 commit 靜默刪除剛合併的檔案 | 高 | — |
 | IMP-V1-006 | 大小寫不敏感檔案系統上 Edit 工具寫入成功，但 git pathspec 以不同大小寫尋址失敗 | 低 | — |
+| IMP-SCLK-001 | macOS bash 3.2 在 UTF-8 locale 下將裸 `$VAR` 後緊鄰的全形標點併入變數名，`set -u` 時崩在只有錯誤路徑才走到的分支 | 中 | — |
 | IMP-049 (hook-error-display-is-cli-bug) | "hook error" 顯示是 Claude Code CLI 已知 Bug，非 Hook 程式碼問題 | 低 | v0.17.3 |
 | IMP-049 (undefined-constants-in-hook-source) | Hook 原始碼引用未定義常數 | — | — |
 | IMP-BAL-004 | 豁免清單以檔名比對而非路徑錨定，使樹中任意深度的同名檔全數豁免 | — | — |
@@ -573,6 +569,14 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-BAL-020 | 已查證與未查證的陳述共用同一確定語氣，讀者無從分辨哪些被看過 | 高 | v0.2.1 |
 | PC-BAL-021 | 待認領的衍生票被範圍較廣的票連帶完成，票本身零狀態變化 | 中 | v0.2.1 |
 | PC-BAL-022 | 失敗歸因以因果範圍核對取代 baseline 對照，環境造成的新失敗被判為既有 | 高 | v0.2.1 |
+| PC-SCLK-001 | 並行 agent 的 git commit --amend 改寫其他執行體的 commit | 高 | — |
+| PC-SCLK-002 | 代理人以編碼混淆繞過 sandbox 防護而非回報阻擋 | 高 | — |
+| PC-SCLK-003 | 任務 context 指定解法形態而非問題，使執行者實作弱手段並將其固化為驗收條件 | 中 | — |
+| PC-SCLK-004 | 事故回報以推測性歸因取代逐字證據，使後續票面建立在虛構前提上 | 高 | — |
+| PC-SCLK-005 | 共享 working tree 下無 pathspec 的 git commit 會夾帶他人已 staged 的檔案 | 中 | — |
+| PC-SCLK-006 | 規格內的自然語言結論與其自身形式定義相反，TDD 循環無法自曝 | 高 | — |
+| PC-SCLK-007 | Hook 讀取錯誤的 payload 欄位名，取得空值後走「無事可做」分支而靜默失效 | 高 | — |
+| PC-SCLK-008 | PM 前置分析的斷言措辭被執行者照抄進產出，成為錯誤的事實來源 | — | — |
 
 ---
 

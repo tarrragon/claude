@@ -62,6 +62,29 @@
 | worktree 中代理人編輯 .claude/ 被拒絕 | **CC runtime hardcoded 保護**（非 hook 攔截），additionalDirectories 無法繞過（ARCH-015） | **必須**改用主 repo cwd（PM 前台或主 repo subagent），不要繼續嘗試 additionalDirectories / --add-dir |
 | 代理人修改了 Ticket scope 外的檔案 | 重試 prompt 擴大 scope（PC-050 延伸） | 重試時嚴守原 Ticket 驗收條件 |
 | Worktree 建立後缺依賴 | worktree 不自動合併 blockedBy 分支 | prompt 加 `git merge feat/{dep}` 前置步驟 |
+| isolation:worktree 代理人無法自行 `ticket track complete` 收尾 | CC runtime 的 worktree 隔離守衛判定命令字串含 `complete` token 即「透過 shell builtin complete 執行一段字串，無法驗證留在 worktree 內」而拒絕（PC-SCLK-002，1.4.0-W1-023 探針取得逐字證據證實），非本 repo 可修正 | 見下方「isolation:worktree 派發的 complete 收尾限制」專節 |
+
+---
+
+## isolation:worktree 派發的 complete 收尾限制（PC-SCLK-002，1.4.0-W1-023 探針證實）
+
+**現象**：以 `isolation: worktree` 派發的代理人，在其收尾階段自行執行 `ticket track complete <id> --as <agent>` 時會被拒絕，逐字阻擋原文：
+
+```
+This agent is isolated in the worktree <worktree-path>,
+but this command runs a string through complete, which can't be verified to stay inside the worktree;
+run the command directly instead. Refusing to run it — a worktree-isolated agent's git operations
+must target its own worktree.
+```
+
+**根因**：Claude Code runtime 的 worktree 隔離守衛偵測到命令字串含 `complete` 這個 token，判定為「透過 shell builtin `complete` 執行一段字串」而無法驗證其執行後是否仍留在 worktree 範圍內，因而拒絕。此判斷發生在 CLI 啟動之前（不存在的 ticket ID 與真實 ID 得到逐字相同的拒絕訊息即為證據），屬 runtime 層機制，**本 repo 無法修改**（`.claude/hooks/`、`.claude/skills/ticket/` 皆不涉及此邏輯）。
+
+**派發前提（必須告知代理人或於 Context Bundle 註明）**：
+
+- 以 `isolation: worktree` 派發、且任務結尾需呼叫 `ticket track complete` 的代理人，**該收尾動作必然失敗**，非代理人操作錯誤
+- 代理人應依 PC-SCLK-002 指引：**禁止**改寫命令形式規避阻擋（base64 / eval / 變數拼接等）；於 Exit Status 記錄「complete 被 worktree 隔離守衛拒絕（已知限制，非任務失敗）」並交還 PM
+- PM 收到此類回報後，於主 repo（非 worktree）執行 `ticket track complete <id> --as <agent>` 代為收尾，這是合規的標準流程，不需視為異常
+- 同樣邏輯適用其他子命令字面恰為 shell builtin 名稱的 CLI 呼叫（不限 `ticket`，`doc`/`worktree` 等 skill CLI 若有同名子命令亦會觸發）
 
 ---
 
@@ -157,5 +180,6 @@ git checkout -b feat/ticket-N
 
 ---
 
-**Last Updated**: 2026-04-13
+**Last Updated**: 2026-07-31
+**Version**: 1.1.0 - 新增「isolation:worktree 派發的 complete 收尾限制」專節與失敗模式速查列（PC-SCLK-002，1.4.0-W1-023 探針取得逐字證據證實：CC runtime worktree 隔離守衛判定 `complete` token 為 shell builtin 呼叫而拒絕，本 repo 無法修正，需 PM 代跑收尾）
 **Version**: 1.0.0 - 初版，整合 PC-059 retry5 結論建立決策表

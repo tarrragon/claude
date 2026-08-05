@@ -20,6 +20,7 @@ Exit codes:
 
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -152,6 +153,75 @@ def find_duplicate_registrations(
         if len(labels) > 1:
             dups.append((event_type, path_str, sorted(labels)))
     return dups
+
+
+_MERGE_DECL_BLOCK_RE = re.compile(
+    r'合併以下\s*\d+\s*個\s*Hook[:：]\s*\n((?:\d+\.\s*\S+\.py.*\n?)+)'
+)
+_MERGE_DECL_FILENAME_RE = re.compile(r'\d+\.\s*(\S+\.py)')
+
+
+def extract_merge_declarations(hooks_dir: Path) -> dict:
+    """解析 hook 檔案 docstring 中的合併宣告（如「合併以下 3 個 Hook：」後列舉的檔名）。
+
+    Returns:
+        {合併版檔名: [被合併檔名, ...]}，僅含有合併宣告的 hook。
+    """
+    declarations: dict = {}
+    for py_file in sorted(hooks_dir.glob('*.py')):
+        try:
+            text = py_file.read_text(encoding='utf-8')
+        except OSError:
+            continue
+        match = _MERGE_DECL_BLOCK_RE.search(text)
+        if not match:
+            continue
+        merged_files = _MERGE_DECL_FILENAME_RE.findall(match.group(1))
+        if merged_files:
+            declarations[py_file.name] = merged_files
+    return declarations
+
+
+def find_merge_declaration_violations(
+    hooks_dir: Path,
+    settings_sources: List[Tuple[str, Optional[dict]]],
+    project_root: Path,
+) -> List[Tuple[str, str, str]]:
+    """找出「合併版與被合併版並存」的語意重複註冊。
+
+    正向檢查（find_duplicate_registrations）只抓「同一檔案被註冊多次」，
+    抓不到「合併版 hook 已涵蓋被合併版的功能，但被合併版仍各自獨立註冊」
+    這種語意重複——兩者路徑不同，逐字比對不會命中，卻在同一事件下重複
+    執行相同業務邏輯（1.4.0-W2-029）。
+
+    Returns:
+        [(event_type, 合併版檔名, 被合併版檔名), ...]，僅含合併版與被合併版
+        於同一 event_type 下同時註冊者。
+    """
+    declarations = extract_merge_declarations(hooks_dir)
+    if not declarations:
+        return []
+
+    registered_by_event: dict = defaultdict(set)
+    for _label, settings in settings_sources:
+        if not settings:
+            continue
+        for event_type, _matcher, command in extract_registered_commands(settings):
+            path = _resolve_command_path(command, project_root)
+            if path is not None:
+                registered_by_event[event_type].add(path.name)
+
+    violations: List[Tuple[str, str, str]] = []
+    for merger_name, merged_names in declarations.items():
+        merger_events = [
+            evt for evt, names in registered_by_event.items()
+            if merger_name in names
+        ]
+        for merged_name in merged_names:
+            for evt in merger_events:
+                if merged_name in registered_by_event[evt]:
+                    violations.append((evt, merger_name, merged_name))
+    return violations
 
 
 def find_local_hook_registrations(
@@ -557,6 +627,26 @@ def main():
             print(line)
             logger.warning(line)
         advice = "建議: 同一 hook 僅在單一 settings 檔註冊，避免 auto-resume 類副作用重複觸發"
+        print(advice)
+        logger.warning(advice)
+
+    merge_violations = find_merge_declaration_violations(
+        hooks_dir, settings_sources, project_root
+    )
+    if merge_violations:
+        header = (
+            "\n[WARNING] 合併版與被合併版並存（docstring 宣告已合併，"
+            "但被合併版仍獨立註冊於同一事件，會重複執行）:"
+        )
+        print(header)
+        logger.warning(header)
+        sys.stderr.write(header + "\n")
+        for event_type, merger_name, merged_name in merge_violations:
+            line = f"  - {event_type}: {merger_name} 已宣告合併 {merged_name}，但兩者皆註冊"
+            print(line)
+            logger.warning(line)
+            sys.stderr.write(line + "\n")
+        advice = "建議: 從 settings.json 移除被合併版的註冊（保留檔案本身供回溯）"
         print(advice)
         logger.warning(advice)
 

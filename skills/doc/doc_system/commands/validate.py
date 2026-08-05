@@ -174,25 +174,39 @@ def _unique_prefix_targets() -> list[tuple[str, str]]:
     return sorted(seen)
 
 
+# 無對應模板的固定命名文件（doc SKILL.md 直接指名路徑，非透過模板 cp 建立）。
+# 純模板推導機制對這類檔案天生盲區——沒有模板可推導，必須顯式宣告。
+# 新增固定命名文件且無模板時，於此補上檔名（見 doc SKILL.md 文件類型定義）。
+_NON_TEMPLATE_FIXED_NAME_EXEMPTIONS: set[str] = {
+    "uc-numbering-convention.md",  # doc SKILL.md 指名 docs/spec/uc-numbering-convention.md
+}
+
+
 def _fixed_name_exemptions() -> set[str]:
     """回傳框架約定的固定命名文件檔名清單（豁免檔名慣例檢查）。
 
-    來源與 `templates/` 下的 `*-spec-template.md` 命名對應，而非另手維護
-    獨立名單——獨立名單會重演配號器 allowlist 判準與成員脫節問題
-    （見 ARCH-BAL-003）。命名規則：模板檔 `{name}-template.md` 對應的
-    固定命名文件即為 `{name}.md`（如 `component-library-spec-template.md`
-    -> `component-library-spec.md`）。
+    兩個來源聯集：
+    1. `templates/` 下 `*-template.md` 命名推導——模板檔 `{name}-template.md`
+       對應的固定命名文件即為 `{name}.md`（如 `component-library-spec-template.md`
+       -> `component-library-spec.md`、`domain-map-template.md` -> `domain-map.md`）。
+       不限 `*-spec-template.md`，涵蓋所有模板類型（DomainMap 等非 spec 命名文件）。
+    2. `_NON_TEMPLATE_FIXED_NAME_EXEMPTIONS` 顯式清單——涵蓋無對應模板、
+       純模板推導機制天生盲區的固定命名文件（如 uc-numbering-convention.md）。
 
-    這類文件由 doc SKILL.md 明文指示以 `cp` 建立（非透過 `doc create`
-    配號流程），且被其他 SKILL.md（如 version-bootstrap）直接以固定路徑
-    引用，因此刻意不進 `{PREFIX}-{數字}` 編號空間。
+    不另手維護一份完整獨立名單，避免重演配號器 allowlist 判準與成員脫節
+    問題（見 ARCH-BAL-003）；顯式清單僅補模板推導覆蓋不到的缺口。
+
+    這類文件由 doc SKILL.md 明文指示以 `cp` 建立或直接指名路徑（非透過
+    `doc create` 配號流程），且被其他 SKILL.md（如 version-bootstrap）直接
+    以固定路徑引用，因此刻意不進 `{PREFIX}-{數字}` 編號空間。
     """
     templates_dir = _get_templates_dir()
-    if not templates_dir.is_dir():
-        return set()
+    exemptions = set(_NON_TEMPLATE_FIXED_NAME_EXEMPTIONS)
 
-    exemptions = set()
-    for template_file in templates_dir.glob("*-spec-template.md"):
+    if not templates_dir.is_dir():
+        return exemptions
+
+    for template_file in templates_dir.glob("*-template.md"):
         fixed_name = template_file.name.removesuffix("-template.md") + ".md"
         exemptions.add(fixed_name)
     return exemptions
