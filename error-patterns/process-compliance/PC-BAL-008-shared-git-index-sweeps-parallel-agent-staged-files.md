@@ -3,7 +3,7 @@ id: PC-BAL-008
 title: 同 repo 並行 agent 共用 git index，commit 掃入他人已 staged 檔案
 severity: medium
 category: process-compliance
-related: [PC-BAL-007]
+related: [PC-BAL-007, PC-SCLK-005]
 created: 2026-07-26
 ---
 
@@ -83,6 +83,7 @@ created: 2026-07-26
 
 - 實證四（檔案級共用變體）：flutter_balance 0.2.1-W3-295 / W3-296（2026-08-05），詳見上方「變體：檔案級共用」章節
 - PC-BAL-007（並行文件票未交叉驗證的事實漂移）：同屬並行派發的副作用家族；該模式風險在**內容**，本模式風險在**版控狀態**
+- **姊妹模式（跨 consumer）**：PC-SCLK-005——screen_clock 專案獨立捕獲的同家族模式，兩者互不知情各自命中。PC-SCLK-005 聚焦路徑級隔離的「有效防護：commit 帶精準 pathspec」結論；本文件上方「變體：檔案級共用」章節額外實證，當兩票 `where.files` 指向同一實體檔案時，即使雙方都用精準 pathspec commit 仍會吸收對方尚未收尾的變更——pathspec 只隔離「其他路徑」，對「同一路徑被兩方疊寫」無效。讀 PC-SCLK-005 時應一併參照本文件「變體：檔案級共用」章節，避免誤判 pathspec 為充分防護
 - 實證一：flutter_balance 0.2.1-W3-003 / W3-005（2026-07-26），commit `73e4ea3` 標題為 W3-005 收尾、內容全為 W3-003 檔案；W3-005 的原始碼變更早已由其 agent 自行 commit。內容無遺失，僅訊息與內容不符，兩票已交叉記錄
 - 實證二：flutter_balance 0.2.1-W3 並行度 11 的批次（2026-08-04），同一批次內三名 agent 各自獨立命中，全數已依當時條款使用精確路徑 `git add`。此批次提供三項新資訊：
   - **污染源定位到工具建議指令**：`ticket track complete` 印出的 metadata sync 建議指令未帶 pathspec，commit `e19664a1` 的訊息逐字符合該建議格式，`git show --stat` 顯示夾帶 12 個檔案（5 張無關 ticket 的 md、4 個框架檔的刪除或改名、1 個 script 修改）。執行者確認即照該建議操作

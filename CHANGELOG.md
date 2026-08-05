@@ -1,3 +1,15 @@
+## [2.24.2] - 2026-08-05
+
+### Summary
+docs: 互鏈 PC-BAL-008 與 PC-SCLK-005 跨 consumer 姊妹模式; chore: pull .claude 更新（上游 2c488f543ddf，）
+
+Changes: 1 docs, 1 chore
+
+- docs: 互鏈 PC-BAL-008 與 PC-SCLK-005 跨 consumer 姊妹模式
+- chore: pull .claude 更新（上游 2c488f543ddf，）
+
+---
+
 ## [2.24.1] - 2026-08-05
 
 ### Summary

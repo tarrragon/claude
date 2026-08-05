@@ -16,7 +16,7 @@ severity: medium
 | 類別 | process-compliance |
 | 風險等級 | 中（範圍面：本次未造成損害，執行代理人在 commit 前自行發現並改用精準 pathspec 攔截；互斥面：命令直接失敗未觸及 index，本質安全，僅需正確復原程序） |
 | 首發時間 | 2026-07-31（範圍面：1.4.0-W2-016 修正 CursorLocatorBridge 時發現；互斥面：同日 PM 在 1.4.0-W3-002 追蹤票 commit 時撞見） |
-| 姊妹模式 | PC-SCLK-001（並行 agent 的 `--amend` 改寫他人 commit，同屬「共享 HEAD/index 心智模型失效」家族，但 001 是寫入面直接破壞、本模式是暫存面夾帶）、PC-019（worktree 派發前的未 commit 變更防護，見下方適用條件） |
+| 姊妹模式 | PC-SCLK-001（並行 agent 的 `--amend` 改寫他人 commit，同屬「共享 HEAD/index 心智模型失效」家族，但 001 是寫入面直接破壞、本模式是暫存面夾帶）、PC-019（worktree 派發前的未 commit 變更防護，見下方適用條件）、PC-BAL-008（跨 consumer 同家族：flutter_balance 專案獨立捕獲，本模式聚焦路徑級隔離「commit 帶精準 pathspec」；PC-BAL-008「變體：檔案級共用」章節實證此防護在兩票 `where.files` 指向同一實體檔案時失效，見下方「解決方案」章節補述） |
 
 ---
 
@@ -111,6 +111,8 @@ git commit -m "..." -- macos/Runner/MainFlutterWindow.swift
 
 這比「約定不要用 `git add -A` / `git add .`」更根本，因為它不依賴每個 agent 自律避免寬範圍 add——即使自己全程只 `git add <path>`，只要 commit 時漏了 pathspec，仍會被他人已 stage 的內容拖下水。`git commit -- <path>` 從 commit 這一步本身就繞過已 staged 的 index 內容，不管 index 裡還有什麼。
 
+**邊界：pathspec 是路徑級隔離，非檔案級隔離**——上述防護只確保「其他路徑」不會被夾帶進 commit，前提是兩個並行任務各自負責的路徑互斥。若兩票的 `where.files` 指向**同一實體檔案**，該檔案在共享 working tree 中會被雙方的 Edit 依序疊寫，此時任一方對這個路徑執行精準 pathspec commit，add 進 index 的仍是「當下磁碟上已疊寫兩方內容」的版本——pathspec 對此無效，因為問題不在 index 累積範圍之外的檔案，而在目標檔案本身已是共筆。**Why/Consequence**：誤把「commit 帶 pathspec」當充分防護，會在檔案級共用情境下重蹈本模式、卻找不到根因（明明已遵守本文件建議）。**Action**：派發前先做 `where.files` 交集檢查，兩票指向同一檔案時改序列派發或拆分檔案落點，不可僅靠 commit 端的 pathspec 補救。完整變體案例、根因與解決方案見 `PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md`「變體：檔案級共用」章節。
+
 ### 事前預防（agent 側）
 
 | 情境 | 措施 |
@@ -156,6 +158,7 @@ Worktree 隔離可從根本避免本模式——每個 agent 各自的 index 天
 
 - `.claude/rules/core/bash-tool-usage-rules.md` 規則三 — 禁止串接 git 寫入操作（同源於 `index.lock` 競爭，但聚焦「單一 agent 一次 Bash 呼叫內串接多個寫入指令」；本模式的互斥面聚焦「兩個獨立 agent 各自正常執行、時間點恰好重疊」，觸發條件不同但復原原則一致：重試、不手動介入鎖）
 - `.claude/error-patterns/process-compliance/PC-SCLK-001-parallel-agent-amend-rewrites-foreign-commit.md` — 姊妹模式：共享 HEAD 心智模型在並行下失效的另一種表現（寫入面直接改寫 vs 本模式的暫存面夾帶）
+- `.claude/error-patterns/process-compliance/PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md` — 跨 consumer 姊妹模式：flutter_balance 專案獨立捕獲同家族的路徑級夾帶，其「變體：檔案級共用」章節補述本模式 pathspec 防護在檔案級共用場景失效的邊界
 - `.claude/error-patterns/process-compliance/PC-019-worktree-merge-state-loss.md` — worktree 隔離的前置條件與本模式的互斥關係
 - `.claude/skills/worktree/hooks/worktree-commit-before-dispatch-hook.py` — PC-019 的 Hook 強制層，決定本模式的適用時間窗口
 - `.claude/pm-rules/parallel-dispatch.md` — 並行派發規範
