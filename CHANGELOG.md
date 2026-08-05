@@ -1,3 +1,14 @@
+## [2.23.1] - 2026-08-05
+
+### Summary
+chore: 傳播 9 個已刪除檔案的刪除，清理遠端孤兒
+
+包含 ticket-skill-sync-check 系列（已改名為 skill-cli-sync-check，繼任者
+已在位）、memory upgrade 相關腳本與測試、hook-registry.json、
+phase-contract-validator-hook。避免 full overlay sync 將死檔複製回下游。
+
+---
+
 ## [2.23.0] - 2026-08-05
 
 ### Summary
