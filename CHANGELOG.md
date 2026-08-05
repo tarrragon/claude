@@ -1,3 +1,10 @@
+## [2.24.4] - 2026-08-05
+
+### Summary
+sync .claude configuration
+
+---
+
 ## [2.24.3] - 2026-08-05
 
 ### Summary
