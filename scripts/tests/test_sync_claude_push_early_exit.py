@@ -121,3 +121,31 @@ def test_hash_mismatch_continues(
     should_exit, reason = sync_mod.check_no_change_early_exit(claude_dir, tmp_path)
     assert should_exit is False
     assert "hash 不同" in reason
+
+
+class TestShouldCheckNoChange:
+    """main() 呼叫 check_no_change_early_exit 前的旗標判斷（0.2.1-W3-303）。
+
+    涵蓋 ARCH-BAL-013 第三例：孤兒提醒建議的 `sync-push --clean` 不應被
+    early-exit 攔下，須額外追加 --force 才能完成。
+    """
+
+    def test_no_flags_runs_check(self) -> None:
+        """三個旗標皆未帶時，應執行 early-exit 檢查（既有行為不變）。"""
+        assert sync_mod._should_check_no_change(None, False, False) is True
+
+    def test_user_message_skips_check(self) -> None:
+        """提供 commit message 時應跳過檢查（既有行為不變）。"""
+        assert sync_mod._should_check_no_change("fix: x", False, False) is False
+
+    def test_force_mode_skips_check(self) -> None:
+        """帶 --force 時應跳過檢查（既有行為不變）。"""
+        assert sync_mod._should_check_no_change(None, True, False) is False
+
+    def test_clean_mode_skips_check(self) -> None:
+        """帶 --clean 時應跳過檢查（0.2.1-W3-303 新增）：刪除傳播不依賴內容 hash 變化。"""
+        assert sync_mod._should_check_no_change(None, False, True) is False
+
+    def test_clean_and_force_both_skip_check(self) -> None:
+        """--clean 與 --force 同時帶時仍應跳過檢查。"""
+        assert sync_mod._should_check_no_change(None, True, True) is False

@@ -16,20 +16,21 @@ related:
 |------|------|
 | 風險等級 | medium |
 | 發現途徑 | 文字品質審查（阻擋訊息的可執行性檢查） |
-| 復發次數 | 同一批修復內兩次（`0.2.1-W3-282` 修一處後，`W3-285` 發現同型殘留） |
+| 復發次數 | 三次（`0.2.1-W3-282` 修一處後 `W3-285` 發現同型殘留為同批兩例；`0.2.1-W3-303` 為另一 ticket 家族的獨立第三例） |
 
 ## 症狀
 
 防護元件 A 阻擋操作時，訊息附上「修復方式」；執行者照抄該命令，卻被防護元件 B 阻擋。執行者收到兩則互相矛盾的阻擋訊息，無從判斷何者為準，最終學會繞過整條防護鏈。
 
-**本案兩個實例**：
+**實證表**：
 
 | # | A 的建議 | B 的阻擋 |
 |---|---------|---------|
 | 1 | 清理提醒建議 `git add -A` 後不帶 pathspec 的 `git commit` | 並行期的裸 commit 守衛對無 pathspec 的 commit 一律拒絕 |
 | 2 | 清理提醒先印「強制移除將遺失修改內容」，緊接建議 `git worktree remove --force` | 同批新增的 dirty 守衛對任何未提交變更阻擋 remove |
+| 3 | `sync-claude-push.py` 偵測到孤兒後提示「請重跑：`sync-push --clean`」 | no-change early-exit 僅檢查 `user_message` 與 `--force`，未把 `--clean` 納入跳過條件，判定 hash 未變、無新 commit 而 abort；須再加 `--force` 才能完成刪除傳播 |
 
-實例 2 尤其明顯：同一段訊息先警告會遺失，再建議執行造成遺失的命令。
+實例 2 尤其明顯：同一段訊息先警告會遺失，再建議執行造成遺失的命令。實例 3 與前兩例不同源：early-exit 守衛與孤兒提醒分屬不同開發批次（W3-075 vs 孤兒偵測機制），驗證此模式不限「同批新增防護互撞」，跨批、跨功能的守衛也會落入同一結構性風險。
 
 ## 根因
 
@@ -63,4 +64,5 @@ related:
 ## 關聯
 
 - 來源 ticket：`0.2.1-W3-285`（修復），首次實例修於 `0.2.1-W3-282`
+- 第三例修復 ticket：`0.2.1-W3-303`（`.claude/scripts/sync-claude-push.py` no-change early-exit 加入 `--clean` 例外）
 - 相關規則：`.claude/rules/core/document-writing-style.md`（Action 可執行性）、`.claude/rules/core/bash-tool-usage-rules.md` 規則一與規則三

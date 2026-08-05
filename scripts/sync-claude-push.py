@@ -1023,6 +1023,34 @@ def update_changelog(repo_dir: Path, new_version: str, commit_message: str, old_
     changelog_path.write_text(updated, encoding="utf-8")
 
 
+def _should_check_no_change(
+    user_message: str | None, force_mode: bool, clean_mode: bool
+) -> bool:
+    """判斷本次 push 是否應執行 no-change early-exit 檢查（0.2.1-W3-303）。
+
+    三個旗標任一成立即跳過檢查：user 明確提供 commit message（既有）、--force
+    （既有）、或 --clean（本次新增）。--clean 的意圖是把本地已刪除的檔案傳播到
+    遠端；這類刪除早於本次呼叫就已反映在本地 tracked 樹與其 content hash 中，
+    --clean 要處理的是「遠端尚未同步該次刪除」，不是「本地有新變更」。換言之
+    hash 未變、無新 commit 正是 --clean 的正常前提，early-exit 的 hash 判準與
+    --clean 語意正交，繼續攔下會使孤兒提醒建議的命令本身被另一守衛擋下
+    （ARCH-BAL-013 第三例）。
+
+    Consequence（不修）：使用者依孤兒提醒執行 `sync-push --clean` 會撞上
+    early-exit，須自行推導追加 --force 才能完成刪除傳播，孤兒在此之前持續殘留，
+    可能被下次 full overlay sync 複製回下游專案。
+
+    參數:
+        user_message: 使用者提供的 commit 訊息（None 表示未提供）
+        force_mode: 是否帶 --force
+        clean_mode: 是否帶 --clean
+
+    傳回:
+        bool: True 表示應執行 early-exit 檢查；False 表示跳過（直接進入推送流程）
+    """
+    return not user_message and not force_mode and not clean_mode
+
+
 def check_no_change_early_exit(
     claude_dir: Path,
     project_root: Path,
@@ -2117,8 +2145,9 @@ def main() -> None:
     # detect_secret_leak_risk 防護（已隨 C1 移除）。
 
     # 2.5. No-change early-exit（W3-075）：避免空 commit 污染歷史
-    # 跳過條件：user 提供 commit message（明確意圖）或 --force 旗標
-    if not user_message and not force_mode:
+    # 跳過條件：user 提供 commit message（明確意圖）、--force 旗標，或 --clean 旗標
+    # （0.2.1-W3-303：--clean 的刪除傳播不依賴內容 hash 變化，見 _should_check_no_change）
+    if _should_check_no_change(user_message, force_mode, clean_mode):
         should_exit, reason = check_no_change_early_exit(claude_dir, project_root)
         if should_exit:
             print_color(f"Early-exit: {reason}", "yellow")

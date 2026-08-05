@@ -1,3 +1,14 @@
+## [2.24.5] - 2026-08-05
+
+### Summary
+fix: sync-push --clean 不再被 no-change early-exit 攔下
+
+Changes: 1 fix
+
+- fix: sync-push --clean 不再被 no-change early-exit 攔下
+
+---
+
 ## [2.24.4] - 2026-08-05
 
 ### Summary
