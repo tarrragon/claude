@@ -1,3 +1,15 @@
+## [2.24.3] - 2026-08-05
+
+### Summary
+fix: 遷移派發身份綁定至 PostToolUse 修復混合批次自我阻塞; test: 補 dispatch-record-hook.py 依命名慣例對應測試檔
+
+Changes: 1 fix, 1 test
+
+- fix: 遷移派發身份綁定至 PostToolUse 修復混合批次自我阻塞
+- test: 補 dispatch-record-hook.py 依命名慣例對應測試檔
+
+---
+
 ## [2.24.2] - 2026-08-05
 
 ### Summary

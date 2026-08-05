@@ -753,6 +753,11 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/active-dispatch-tracker-hook.py",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/dispatch-identity-bind-hook.py",
+            "timeout": 5000
           }
         ]
       },

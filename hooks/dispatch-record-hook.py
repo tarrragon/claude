@@ -14,28 +14,26 @@ Dispatch Record Hook - PreToolUse (Agent)
 
   PM 可透過 `cat .claude/dispatch-active.json` 查詢活躍派發數量。
 
-  1.5.0-W5-005.2 擴充（派發身份前移）:
-  派發時提取 prompt 首行 Ticket ID（PC-065 格式）與 subagent_type，
-  僅在 who.current 為無主態時經 ticket CLI 綁定執行者身份。
-  已綁定態不覆蓋——審查型派發（如 acceptance-auditor 對他人票）的 prompt
-  首行同樣含 Ticket ID，無條件綁定會 clobber 真執行者身份。
+  0.2.1-W3-302：派發身份綁定（who.current，原 1.5.0-W5-005.2 擴充）已遷移至
+  獨立的 PostToolUse(Agent) hook（dispatch-identity-bind-hook.py）。原因：
+  PreToolUse(Agent) matcher 下所有 hook 皆會執行、deny 為彙總結果，本 hook
+  的寫入無法感知同批次是否已被其他 PreToolUse hook（如 PC-019）拒絕，混合
+  批次（非 worktree 票 + worktree 票同訊息派發）因此仍會自我阻塞（issue 47
+  殘留缺口）。PostToolUse 只在工具實際執行後觸發，天然具備「派發已成功」
+  語意，不需在寫入端重建交易回滾。本 hook 之後僅負責 dispatch-active.json
+  記錄，不再涉及 who.current 寫入。
 
 觸發時機: Agent 工具呼叫前 (PreToolUse, matcher: Agent)
-行為: 不阻擋（exit 0），記錄派發後靜默通過；身份綁定全失敗路徑僅 log warning
+行為: 不阻擋（exit 0），記錄派發後靜默通過
 
 來源:
   - PC-050 — PM 在代理人仍在工作時誤判完成
   - dispatch-active.json 從未被寫入（缺少記錄端）
-  - W5-005 F1a — 17% completed 票身份從未回填，派發時已知身份未落 ticket
+  - 0.2.1-W3-302 — who.current 綁定遷移至 PostToolUse（issue 47 殘留缺口修復）
 """
 
-import json
-import logging
-import re
-import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -56,101 +54,6 @@ from lib.dispatch_tracker import record_dispatch
 
 HOOK_NAME = "dispatch-record-hook"
 EXIT_SUCCESS = 0
-
-# Ticket ID 格式（PC-065 prompt 首行慣例）；(?:\.\d+)* 涵蓋子票後綴（如 1.5.0-W5-005.2）
-TICKET_ID_PATTERN = re.compile(r"(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)")
-
-# who.current 無主態值：create 未指定 --who 時為字面 "pending"，
-# PM 建票模板慣用 "待派發"；execute_get_field 對缺值輸出 "?"
-UNBOUND_WHO_VALUES = {"pending", "待派發", "?", ""}
-
-# ticket CLI 逾時秒數（shim 經 uv run 解析，冷啟動可達數秒）
-TICKET_CLI_TIMEOUT = 15
-
-
-# ============================================================================
-# 派發身份前移（1.5.0-W5-005.2）
-# ============================================================================
-
-
-def extract_ticket_id(prompt: str) -> Optional[str]:
-    """從派發 prompt 首行提取 Ticket ID；非 ticket 派發（無 ID）回傳 None。"""
-    if not prompt or not prompt.strip():
-        return None
-    first_line = prompt.strip().splitlines()[0]
-    match = TICKET_ID_PATTERN.search(first_line)
-    return match.group(1) if match else None
-
-
-def _run_ticket_cli(
-    args: list, project_root: Path, logger: logging.Logger
-) -> Optional[str]:
-    """執行 ticket CLI 子命令，回傳 stdout；任何失敗回 None（非阻擋）。"""
-    cmd = ["ticket", "track"] + args
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=TICKET_CLI_TIMEOUT,
-            cwd=project_root,
-        )
-        if proc.returncode != 0:
-            logger.warning(
-                "ticket CLI 非零退出 (rc=%s, cmd=%s): %s",
-                proc.returncode,
-                " ".join(cmd),
-                proc.stderr.strip()[:200],
-            )
-            return None
-        return proc.stdout
-    except (subprocess.TimeoutExpired, OSError) as e:
-        logger.warning("ticket CLI 執行失敗 (cmd=%s): %s", " ".join(cmd), e)
-        return None
-
-
-def parse_who_value(stdout: str) -> Optional[str]:
-    """解析 `ticket track who <id>` 輸出（格式 `Who: <value>`）；解析失敗回 None。"""
-    if not stdout:
-        return None
-    for line in stdout.splitlines():
-        if line.startswith("Who:"):
-            return line[len("Who:"):].strip()
-    return None
-
-
-def bind_dispatch_identity(
-    ticket_id: str,
-    subagent_type: str,
-    project_root: Path,
-    logger: logging.Logger,
-) -> bool:
-    """無主態時將 who.current 綁定為派發的 subagent_type；回傳是否實際綁定。
-
-    讀寫皆走 ticket CLI 而非直接 parse/Edit ticket md——維持寫入路徑收斂
-    （W5-005 F3），避免 hook 成為另一個繞過驗證閘的寫入者。
-    """
-    who_stdout = _run_ticket_cli(["who", ticket_id], project_root, logger)
-    if who_stdout is None:
-        return False
-
-    current_who = parse_who_value(who_stdout)
-    if current_who is None:
-        logger.warning("無法解析 who 輸出，跳過身份綁定: %s", who_stdout.strip()[:100])
-        return False
-
-    if current_who not in UNBOUND_WHO_VALUES:
-        logger.debug("who.current 已綁定 (%s)，不覆蓋", current_who)
-        return False
-
-    set_stdout = _run_ticket_cli(
-        ["set-who", ticket_id, subagent_type], project_root, logger
-    )
-    if set_stdout is None:
-        return False
-
-    logger.info("派發身份已綁定: %s -> who.current=%s", ticket_id, subagent_type)
-    return True
 
 
 # ============================================================================
@@ -206,34 +109,8 @@ def main() -> int:
         # 記錄失敗不阻擋派發
         logger.warning("record_dispatch failed: %s", e)
 
-    # 派發身份前移（1.5.0-W5-005.2）：prompt 含 Ticket ID 且指名 subagent_type
-    # 時才嘗試綁定；缺任一者代表無穩定身份可綁（generic 派發），跳過
-    #
-    # 0.2.1-W3-226：worktree 隔離派發時跳過本段。本 hook 執行於 PreToolUse，
-    # 此時 worktree 尚未建立、cwd 仍是 PM 主 repo，get_project_root() 因此
-    # 解析到主 repo，寫入必落在主 repo 而非即將建立的 worktree。worktree
-    # 代理人依 dispatch 指示會自行執行 `claim --as`（cwd 已在 worktree 內，
-    # get_project_root() 的 worktree 偵測正確落在 worktree 副本），此處預先
-    # 綁定純屬多餘且有害：
-    #   - 若 Agent 呼叫隨後被其他 PreToolUse hook（如 PC-019）擋下，主 repo
-    #     上會留下 who.current 已綁但 status 仍 pending 的半套狀態
-    #   - 若未被擋下，主 repo 的 who.current 與 worktree 內 claim 寫入的
-    #     started_at 屬兩份不同副本的雙寫，合併時衝突
-    # 非 worktree（共享 working tree）派發不受影響，維持原行為。
-    ticket_id = extract_ticket_id(tool_input.get("prompt", ""))
-    subagent_type = (tool_input.get("subagent_type") or "").strip()
-    if ticket_id and subagent_type and isolation == "worktree":
-        logger.info(
-            "worktree 隔離派發，跳過主 repo 端身份預先綁定（0.2.1-W3-226），"
-            "交由 worktree 內 claim --as 處理: %s",
-            ticket_id,
-        )
-    elif ticket_id and subagent_type:
-        try:
-            bind_dispatch_identity(ticket_id, subagent_type, project_root, logger)
-        except Exception as e:
-            # 綁定失敗不阻擋派發（agent 端仍有 claim --as fallback）
-            logger.warning("bind_dispatch_identity failed: %s", e)
+    # 派發身份綁定（who.current）已遷移至 dispatch-identity-bind-hook.py
+    # （PostToolUse:Agent，0.2.1-W3-302）。本 hook 不再處理身份綁定。
 
     return EXIT_SUCCESS
 
