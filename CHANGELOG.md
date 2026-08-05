@@ -1,3 +1,17 @@
+## [2.24.0] - 2026-08-05
+
+### Summary
+feat: framework-issue fix-version 註記與 close 命令; feat: framework-issue create 環境資訊自動收集; docs: PC-BAL-008 增補檔案級共用跨票吸收變體 (+1 more)
+
+Changes: 2 feat, 2 docs
+
+- feat: framework-issue fix-version 註記與 close 命令
+- feat: framework-issue create 環境資訊自動收集
+- docs: PC-BAL-008 增補檔案級共用跨票吸收變體
+- docs: 建立框架問題升級與 issue 生命週期正規化流程文件
+
+---
+
 ## [2.23.1] - 2026-08-05
 
 ### Summary

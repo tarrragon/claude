@@ -34,6 +34,7 @@ from gh_common import (
     preflight,
     run_gh,
 )
+from section_table import upsert_section
 
 # 修復矩陣標記區段（issue body 內嵌；read 解析、write 替換此段）
 MATRIX_BEGIN = "<!-- fix-matrix -->"
@@ -123,12 +124,7 @@ def render_matrix(rows: dict) -> str:
 
 def upsert_matrix(body: str, rows: dict) -> str:
     """把渲染後矩陣寫回 body：既有區段整段替換，否則 append 於 body 末。"""
-    rendered = render_matrix(rows)
-    body = body or ""
-    if MATRIX_SECTION_RE.search(body):
-        return MATRIX_SECTION_RE.sub(lambda _: rendered, body, count=1)
-    separator = "\n\n" if body and not body.endswith("\n") else "\n"
-    return f"{body}{separator}{rendered}\n"
+    return upsert_section(body, MATRIX_SECTION_RE, render_matrix(rows))
 
 
 def fetch_body(issue_ref: str) -> str:

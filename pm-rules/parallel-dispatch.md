@@ -48,6 +48,23 @@
 - [ ] **派發 prompt 已明示精準 git staging 與 path-limited commit**（並行 commit 場景，禁用 `git add .` / `git add -A` 及不帶路徑的 `git commit`；見下方 PC-092 防護）
 ```
 
+### 派發前 where.files 交集檢查（強制，PC-BAL-008 檔案級共用變體防護）
+
+> **來源**：PC-BAL-008 檔案級共用變體 — W3-295/296 並行派發，兩票均遵守本文件「派發 prompt 必含精準 git staging」的明確路徑 `git add` 規範，仍因兩票 `where.files` 共用同一檔案（`.claude/skills/framework-issue/tests/test_framework_issue.py`）而發生跨票內容吸收。
+
+**Why**：本文件既有「並行安全檢查」的「檔案無重疊」項為判斷性描述，未明示比對依據；兩票規格各自撰寫、未逐項比對 `where.files` 欄位時，重疊容易被忽略。此類重疊即使兩位代理人都遵守精準 staging 規範也無法避免——路徑級隔離對「同一檔案的共同編輯」無效（見 PC-BAL-008「變體：檔案級共用」章節）。
+
+**Consequence**：兩票 commit 吸收後內容雖無損，但溯源混濁——commit 訊息與實際 diff 不符，未來考古需額外比對才能還原歸屬。
+
+**Action**：派發前逐項比對本輪待派發各票的 `where.files`，發現交集時二擇一：
+
+| 情境 | 動作 |
+|------|------|
+| 兩票 `where.files` 有交集，內容可拆分 | 拆分為互斥的檔案落點（如各自獨立測試檔，事後視需要合併） |
+| 兩票 `where.files` 有交集，內容不可拆分 | 改序列派發：待前票 commit 完成後才派後票 |
+
+完整案例與根因見 `.claude/error-patterns/process-compliance/PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md`「變體：檔案級共用」章節。
+
 ### Dispatch-Plan 先行（多任務 / group / spawned 場景）
 
 > **來源**：W17-029 / W17-035 — Linux 類比後的結論是保留單一 ticket / agent / exit status 的生命週期，用 Makefile-like dispatch-plan 描述 orchestration，不新增 batch dispatch CLI。
@@ -611,7 +628,8 @@ Wave 所有 ticket 完成後，PM 對所有仍存活的 idle agent 依序發送 
 
 ---
 
-**Last Updated**: 2026-08-04
+**Last Updated**: 2026-08-05
+**Version**: 4.16.0 - 新增「派發前 where.files 交集檢查」章節：兩票 `where.files` 共用同一檔案時的拆分/序列派發判準，防護 PC-BAL-008 檔案級共用變體（W3-295/296 實證，兩票均遵守精準 staging 規範仍發生跨票內容吸收）
 **Version**: 4.15.0 - 「worktree 派發注意事項」新增第三則條款：worktree 隔離派發的收尾指引改用 `ticket track finish`（`complete` 別名），避開 CC runtime worktree isolation guard 對 argv basename 誤判 bash builtin `complete` 而條件性阻擋收尾；`complete` 本身不動、主 repo cwd 場景維持原名
 **Version**: 4.14.0 - idle agent 回收 SOP 補兩項條款：(1) 續用/放生二分判準新增檔案佔用前提，明示同類型 pending ticket 存在不等於可派發，須先核對 `where.files` 與在途代理人修改範圍是否重疊；(2) 新增「idle_notification 的語意」小節，說明通知為狀態快照非事實斷言，正確用法是作為查證世界平面的觸發訊號。兩項條款源於實際派發過程中重複觀察到的情境（非推測）：同類型 pending 存在但目標檔案正被在途代理人佔用而無法派發；idle_notification 內容與 PM 讀取時的實際狀態存在時序落差。
 

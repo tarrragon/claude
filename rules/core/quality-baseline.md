@@ -52,6 +52,7 @@
 | Solution 含 spawn 規劃表格 | complete 前建對應 ticket，回填 `spawned_tickets` 或 `children` |
 | 規劃項目經評估不需建 ticket | Solution 顯性標註「無需建 ticket：[具體理由]」 |
 | ANA 由無 create 權限代理人執行（saffron 等） | complete 後 PM 立即驗收 spawn 一致性，缺漏立即補建 |
+| Ticket 執行中辨識為框架問題（非專案問題） | 依 `.claude/skills/framework-issue/SKILL.md`「框架問題升級流程」分流判斷，不當下修 `.claude/` 通用資產 |
 
 > **強制層**：acceptance-gate-hook Step 2.5.2 自動偵測 Solution spawn 規劃 vs `spawned_tickets + children` 數量一致性，缺漏阻擋 complete。**Schema 層**：`ticket-body-schema.md` ANA Solution「Spawn 落地確認」子節。背景與案例（W17-162 / W17-167 / PC-093）見 ticket-body-schema.md。
 
@@ -90,8 +91,10 @@
 - `.claude/pm-rules/skip-gate.md`、`.claude/pm-rules/tdd-flow.md`、`.claude/pm-rules/incident-response.md`
 - `.claude/references/observability-rules.md` - 規則 4 except 區塊 Go/Dart 要求
 - `.claude/pm-rules/ticket-body-schema.md` - 規則 5 ANA spawn 落地確認
+- `.claude/skills/framework-issue/SKILL.md` - 規則 5 框架問題升級流程（介入判斷、兩條路徑、issue 關閉協議、回報前查重 SOP）
 
 ---
-**Last Updated**: 2026-07-27 | **Version**: 3.2.0 — 規則 6 落地通道由「memory feedback 雙通道」改為捕獲時分流（框架相關進 error-patterns／規則／方法論／references；專案相關進 docs／CLAUDE.md；兩者皆非不記錄）；教訓落地載體由「ANA + memory」改為「ANA + error-pattern」。memory 不再列為合法目的地，判準權威來源見 `pm-quality-baseline.md` 規則 7（0.2.1-W3-083，承接 0.2.1-W3-082 用戶裁示）。
+**Last Updated**: 2026-08-05 | **Version**: 3.3.0 — 規則 5 補一行框架問題分流路由，指向 `framework-issue/SKILL.md`「框架問題升級流程」章節（僅路由不展開，自動載入預算原則）（0.2.1-W3-297）。
+**Version**: 3.2.0 — 規則 6 落地通道由「memory feedback 雙通道」改為捕獲時分流（框架相關進 error-patterns／規則／方法論／references；專案相關進 docs／CLAUDE.md；兩者皆非不記錄）；教訓落地載體由「ANA + memory」改為「ANA + error-pattern」。memory 不再列為合法目的地，判準權威來源見 `pm-quality-baseline.md` 規則 7（0.2.1-W3-083，承接 0.2.1-W3-082 用戶裁示）。
 **Version**: 3.1.0 — 品質檢查清單鏡像項「寫 feedback memory 四問升級檢查」更新為「捕獲時分流判準」（pm-quality-baseline 規則 7 語意前移的鏡像同步，該規則明文要求）。
 **Version**: 3.0.0 — token 收斂：規則 1 兩個邊界段保留主張句 + PC 路由（事件鏈敘事移至 PC-165/168）；規則 4 IMP-013 except 要求濃縮保留；規則 5 ANA spawn 章濃縮為情境動作表 + 路由 ticket-body-schema/acceptance-gate-hook。規則編號與名稱不變（hooks 引用錨點）（1.0.0-W7-004.3）。歷史 2.0–2.5.x 版見 git log。
