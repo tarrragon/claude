@@ -23,6 +23,8 @@ Acceptance Gate Hook - 驗收流程完整引導（Orchestrator）
 - 5W1H 完整性
 - Execution log 填寫
 - 同 Wave pending sibling tickets（場景 #9）
+- Ticket 規模（C1 移植，0.2.1-W3-052.1，警告不阻擋）
+- 檔案範圍職責邊界（C3 移植，0.2.1-W3-052.1，警告不阻擋）
 
 Exit Code：
 - 0 (EXIT_SUCCESS): 命令允許執行
@@ -85,6 +87,8 @@ from acceptance_checkers import (
     check_ana_spawn_consistency,
     check_spawn_requests,
     check_phase4_review_evidence,
+    check_god_ticket_scale,
+    check_file_scope_diversity,
 )
 # W17-120.2 / PC-091: ana_spawned_checker 退場
 # ANA complete 阻擋判斷統一收斂到 children_checker（PC-091 路線：
@@ -134,6 +138,10 @@ class AcceptanceCheckResult(NamedTuple):
     self_check_warning: Optional[str] = None
     # W1-080.1：Phase 4 審查證據 warning（IMP 缺 Phase 4 證據時非 None，warning 不阻擋）
     phase4_review_warning: Optional[str] = None
+    # 0.2.1-W3-052.1：規模判準（C1 移植）違規清單，warning 不阻擋
+    god_ticket_scale_violations: List[str] = []
+    # 0.2.1-W3-052.1：職責邊界判準（C3 移植）違規清單，warning 不阻擋
+    responsibility_scope_violations: List[str] = []
     # 0.4.1-W2-006：complete 與 git merge / set-acceptance / append-log 等寫入操作
     # 串接於同一 Bash 呼叫時為 True，代表 acceptance / execution log 檢查因讀檔
     # 時序早於同鏈操作執行而略過（避免滯後誤報，見 detect_chained_pre_complete_write）
@@ -174,6 +182,23 @@ CUSTOM_H2_WARNING = (
 
 # W17-064：Layer 1 自檢可觀測性 warning 訊息由 checker 直接組裝（含 ticket type 條件性說明），
 # 此處不另定義模板，warning 字串透過 `check_self_check_visibility` 回傳。
+
+
+# 0.2.1-W3-052.1：規模判準警告訊息模板（C1 God Ticket 移植）
+GOD_TICKET_SCALE_WARNING = (
+    "[WARNING] Ticket 規模偏大（0.2.1-W3-052.1）\n"
+    "本 Ticket 的 where.files 檔案數已超過建議拆分閾值：\n"
+    "{violation_list}\n"
+    "建議：依 `.claude/rules/core/cognitive-load.md` 任務拆分閾值評估是否拆分為子 Ticket。"
+)
+
+# 0.2.1-W3-052.1：職責邊界警告訊息模板（C3 Ambiguous Responsibility 移植）
+RESPONSIBILITY_SCOPE_WARNING = (
+    "[WARNING] Ticket 檔案範圍跨越多個 domain（0.2.1-W3-052.1）\n"
+    "本 Ticket 的 where.files 涵蓋的頂層路徑 domain 數已超過建議閾值：\n"
+    "{violation_list}\n"
+    "建議：確認是否屬單一職責，或依 domain 拆分為子 Ticket。"
+)
 
 
 # 0.4.1-W2-006：滯後讀檔誤報提示訊息模板
@@ -449,6 +474,12 @@ def check_acceptance_status(
             content, frontmatter.get("type", ""), logger
         )
 
+        # 步驟 10：檢查規模判準（0.2.1-W3-052.1，C1 移植，warning 不阻擋）
+        god_ticket_scale_violations = check_god_ticket_scale(frontmatter, logger)
+
+        # 步驟 11：檢查職責邊界判準（0.2.1-W3-052.1，C3 移植，warning 不阻擋）
+        responsibility_scope_violations = check_file_scope_diversity(frontmatter, logger)
+
         task_type = frontmatter.get("type", "")
         priority = frontmatter.get("priority", "")
 
@@ -470,6 +501,8 @@ def check_acceptance_status(
             self_check_warning=self_check_warning,
             phase4_review_warning=phase4_warning,
             chained_write_detected=chained_write_detected,
+            god_ticket_scale_violations=god_ticket_scale_violations,
+            responsibility_scope_violations=responsibility_scope_violations,
         )
 
     except Exception as e:
@@ -588,6 +621,22 @@ def generate_hook_output(
     else:
         checklist_items.append("[--] 9. Phase 4 審查(非 IMP，不適用)")
 
+    # 項目 10: 規模判準（0.2.1-W3-052.1，C1 移植，僅對 IMP/ADJ 顯示，ANA/DOC 豁免）
+    if ticket_type_upper_for_checklist in ("ANA", "DOC"):
+        checklist_items.append("[--] 10. 規模判準(ANA/DOC，不適用)")
+    elif check_result.god_ticket_scale_violations:
+        checklist_items.append("[WARNING] 10. Ticket 規模偏大（建議評估拆分）")
+    else:
+        checklist_items.append("[x] 10. Ticket 規模在建議範圍內")
+
+    # 項目 11: 職責邊界判準（0.2.1-W3-052.1，C3 移植，僅對 IMP/ADJ 顯示，ANA/DOC 豁免）
+    if ticket_type_upper_for_checklist in ("ANA", "DOC"):
+        checklist_items.append("[--] 11. 職責邊界判準(ANA/DOC，不適用)")
+    elif check_result.responsibility_scope_violations:
+        checklist_items.append("[WARNING] 11. 檔案範圍跨越多個 domain（建議確認職責邊界）")
+    else:
+        checklist_items.append("[x] 11. 檔案範圍 domain 分散度在建議範圍內")
+
     checklist_text = "[Complete 清單]\n" + "\n".join(checklist_items)
     context_parts.append(checklist_text)
 
@@ -646,6 +695,30 @@ def generate_hook_output(
     if check_result.phase4_review_warning:
         context_parts.append(check_result.phase4_review_warning)
         logger.info("新增 Phase 4 審查證據 warning")
+
+    # 優先級 2.9：規模判準 warning（0.2.1-W3-052.1，C1 移植，WARNING 不阻擋）
+    if check_result.god_ticket_scale_violations:
+        violation_list_formatted = "\n".join(
+            f"  - {v}" for v in check_result.god_ticket_scale_violations
+        )
+        context_parts.append(
+            GOD_TICKET_SCALE_WARNING.format(violation_list=violation_list_formatted)
+        )
+        logger.info(
+            f"新增規模判準 warning，違規數量: {len(check_result.god_ticket_scale_violations)}"
+        )
+
+    # 優先級 2.10：職責邊界判準 warning（0.2.1-W3-052.1，C3 移植，WARNING 不阻擋）
+    if check_result.responsibility_scope_violations:
+        scope_violation_list_formatted = "\n".join(
+            f"  - {v}" for v in check_result.responsibility_scope_violations
+        )
+        context_parts.append(
+            RESPONSIBILITY_SCOPE_WARNING.format(violation_list=scope_violation_list_formatted)
+        )
+        logger.info(
+            f"新增職責邊界判準 warning，違規數量: {len(check_result.responsibility_scope_violations)}"
+        )
 
     # 優先級 3：Handoff 方向選擇 場景 #9（無訊息時，sibling >= 2）
     if (

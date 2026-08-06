@@ -57,3 +57,9 @@ from acceptance_checkers.spawn_request_checker import (
 from acceptance_checkers.phase4_review_checker import (
     check_phase4_review_evidence,
 )
+from acceptance_checkers.god_ticket_scale_checker import (
+    check_god_ticket_scale,
+)
+from acceptance_checkers.responsibility_scope_checker import (
+    check_file_scope_diversity,
+)

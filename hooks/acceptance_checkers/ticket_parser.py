@@ -69,6 +69,68 @@ def extract_children_from_frontmatter(frontmatter: dict, logger) -> List[str]:
     return children
 
 
+# 0.2.1-W3-052.1：where.files 佔位符值（與 god_ticket_scale_checker /
+# responsibility_scope_checker 共用同一份清單，避免三處各自維護）
+_WHERE_FILES_PLACEHOLDERS = frozenset({"待定義", "TBD", "tbd"})
+
+
+def extract_where_files(frontmatter: dict, logger) -> List[str]:
+    """
+    從 frontmatter 提取 `where.files` 欄位，正規化為去重、去佔位符的
+    `list[str]`（0.2.1-W3-052.1：`god_ticket_scale_checker` /
+    `responsibility_scope_checker` 共用）。
+
+    `where.files` 在不同解析器下呈現型別不同：
+    - `list[str]`：完整 YAML 解析（如 `ticket track` CLI 內部使用的
+      ticket_system parser）
+    - 換行分隔字串：本 hook 套件內建輕量解析器
+      `lib.hook_ticket.parse_ticket_frontmatter`（`acceptance-gate-hook.py`
+      實際 runtime 使用者）對「dict 欄位內巢狀 block-style 列表」的已知限制
+      —— `where: {files: [- a, - b]}` 這種巢狀列表會被 `_parse_yaml_lines`
+      累積為單一換行字串而非 list（該函式頂層列表才會產出真正的 list；
+      dict 內巢狀列表走不同分支，見該檔案 `_parse_yaml_lines` docstring）。
+      實測驗證：runtime hook 對真實 ticket 檔案呼叫 `parse_ticket_frontmatter`
+      時，`where['files']` 為 `'.claude/a.py\\n.claude/b.py'` 字串，而非
+      `['.claude/a.py', '.claude/b.py']`；若呼叫端只用 `isinstance(x, list)`
+      判斷會靜默視為空清單，兩個新 checker 在真實 complete 流程中永遠不觸發。
+      此正規化函式即為修復此落差的單一入口，比照 `extract_children_from_frontmatter`
+      既有的「同欄位跨解析器雙型別容忍」慣例（見本檔案上方）。
+
+    Args:
+        frontmatter: Ticket frontmatter 結構
+        logger: 日誌物件
+
+    Returns:
+        List[str] - 正規化後的有效檔案路徑清單（去重、去空白、去佔位符；
+        可能為空 list）
+    """
+    where = frontmatter.get("where")
+    if not isinstance(where, dict):
+        return []
+
+    files_raw = where.get("files")
+    if isinstance(files_raw, list):
+        candidates = [f for f in files_raw if isinstance(f, str)]
+    elif isinstance(files_raw, str):
+        candidates = files_raw.split("\n")
+    else:
+        return []
+
+    seen = set()
+    result = []
+    for f in candidates:
+        stripped = f.strip()
+        if not stripped or stripped in _WHERE_FILES_PLACEHOLDERS:
+            continue
+        if stripped not in seen:
+            seen.add(stripped)
+            result.append(stripped)
+
+    if result:
+        logger.debug(f"where.files 正規化後 {len(result)} 個有效路徑")
+    return result
+
+
 def get_ticket_status(frontmatter: dict, logger) -> Optional[str]:
     """
     從 Ticket frontmatter 提取狀態

@@ -700,11 +700,6 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-quality-gate-hook.py",
-            "continueOnBlock": true
-          },
-          {
-            "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/skills/tdd/hooks/layer-boundary-validator-hook.py"
           },
           {

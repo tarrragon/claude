@@ -151,35 +151,10 @@ class TestAcceptanceGateEffort:
         assert rc == 0
 
 
-# ============================================================================
-# ticket-quality-gate-hook
-# ============================================================================
-
-class TestTicketQualityGateEffort:
-    HOOK = ticket_skill_hooks_path / "ticket-quality-gate-hook.py"
-
-    def test_low_effort_short_circuits(self):
-        payload = {
-            "tool_name": "Write",
-            "tool_input": {
-                "file_path": "docs/work-logs/v0.18.0/tickets/test.md",
-                "content": "---\nid: test\n---\n# test",
-            },
-            "effort": {"level": "low"},
-        }
-        rc, stdout, _ = _run_hook(self.HOOK, payload)
-        assert rc == 0
-        # low 短路 emit allow JSON
-        assert '"decision"' in stdout and "allow" in stdout
-
-    def test_medium_effort_processes(self):
-        payload = {
-            "tool_name": "Read",  # 不觸發 quality gate
-            "tool_input": {"file_path": "x.py"},
-            "effort": {"level": "medium"},
-        }
-        rc, _, _ = _run_hook(self.HOOK, payload)
-        assert rc == 0
+# 0.2.1-W3-052.2：TestTicketQualityGateEffort 已移除。
+# ticket-quality-gate-hook.py 已刪除（settings.json 移除註冊 + 判準移植至
+# acceptance_checkers，見 0.2.1-W3-052.1 / 0.2.1-W3-052.2），本測試類別
+# 隨檔案一併刪除，不再有對應 subprocess 可測。
 
 
 # ============================================================================

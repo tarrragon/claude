@@ -1,3 +1,15 @@
+## [2.24.9] - 2026-08-06
+
+### Summary
+fix: 移除 ticket-quality-gate 註冊並刪除已無效 hook; fix: 移植 C1/C3 判準至 acceptance_checkers 並實測誤判率
+
+Changes: 2 fix
+
+- fix: 移除 ticket-quality-gate 註冊並刪除已無效 hook
+- fix: 移植 C1/C3 判準至 acceptance_checkers 並實測誤判率
+
+---
+
 ## [2.24.8] - 2026-08-06
 
 ### Summary
