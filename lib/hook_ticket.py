@@ -117,14 +117,17 @@ def _parse_nested_line(
     line: str,
     current_key: Optional[str],
     multiline_marker: Optional[str],
-    current_nested_key: Optional[str] = None
+    current_nested_key: Optional[str] = None,
+    is_scalar_continuation: bool = False,
 ) -> _NestedLineResult:
     """處理嵌套行（以 2 個空格開頭的縮排行）
 
     嵌套行可能是：
     1. 多行字串的延續行（若 multiline_marker 已設定）
-    2. 嵌套鍵值對（若無 multiline_marker）
+    2. 嵌套鍵值對（若無 multiline_marker，且非純量延續狀態）
     3. 列表項目（以 "- " 開頭）
+    4. 多行純量（無 `|`/`>` 標記，靠 YAML plain scalar folding 換行）的
+       延續行，即使內容含冒號也不得誤判為巢狀鍵值對（0.2.1-W3-338）
 
     此函式無副作用，回傳明確的結果以供呼叫端處理。
 
@@ -133,6 +136,14 @@ def _parse_nested_line(
         current_key: 當前頂層鍵名
         multiline_marker: 多行標記（|, >, |-, >-）或 None
         current_nested_key: 當前嵌套鍵名（用於列表項目累積）
+        is_scalar_continuation: 呼叫端判定 `current_key` 是否正在累積
+            「非空純量字串」（即 result[current_key] 已是非空 str，而非
+            尚未寫入或已是 dict）。為 True 時，即使本行含冒號也不視為
+            巢狀鍵值對起點，改走純量延續路徑（0.2.1-W3-338 修復：`why:`
+            等欄位若以 plain scalar 跨行換行，延續行含 ASCII 冒號（如
+            中文技術寫作「根因是 X：Y」句型或時間戳 14:52）過去會被誤判
+            為巢狀 dict 並覆蓋已累積內容，造成資料遺失）。預設 False
+            以維持既有直接呼叫端（如單元測試）的行為不變。
 
     Returns:
         _NestedLineResult: 含有：
@@ -169,6 +180,16 @@ def _parse_nested_line(
         return _NestedLineResult(
             multiline_marker=None,
             update_action=(current_nested_key, item_content, False)
+        )
+
+    # 路徑 2.5：非空純量延續行（0.2.1-W3-338）—— current_key 已累積非空
+    # 字串內容，代表本行必為該純量欄位跨行換行的延續內容，不論是否含冒號
+    # 都不得改判為巢狀鍵值對（否則會如路徑 3 般用 dict 覆蓋已累積的字串，
+    # 造成資料遺失）。此路徑優先於路徑 3 判斷。
+    if is_scalar_continuation and current_key:
+        return _NestedLineResult(
+            multiline_marker=None,
+            update_action=(current_key, nested_line, False)
         )
 
     # 路徑 3：嵌套鍵值對
@@ -270,7 +291,22 @@ def _parse_yaml_lines(frontmatter_text: str) -> dict:
                 continue
 
             # 2 格：嵌套鍵值對、多行標記或列表項目
-            nested_result = _parse_nested_line(line, current_key, multiline_marker, current_nested_key)
+            # 0.2.1-W3-338：current_key 已累積「非空字串」代表正在跨行折疊
+            # 純量欄位（如 why: 長文字延續行），此時本行即使含冒號也不得
+            # 被誤判為巢狀鍵值對起點（見 _parse_nested_line 路徑 2.5 說明）。
+            # 已是 dict（真正巢狀欄位如 who/how/decision_tree_path）或尚未
+            # 寫入（空字串，如 who: 空值待補子欄位）則維持原判斷。
+            current_value = result.get(current_key)
+            is_scalar_continuation = (
+                isinstance(current_value, str) and current_value != ""
+            )
+            nested_result = _parse_nested_line(
+                line,
+                current_key,
+                multiline_marker,
+                current_nested_key,
+                is_scalar_continuation=is_scalar_continuation,
+            )
             multiline_marker = nested_result.multiline_marker
 
             # 根據回傳的 update_action 更新 result

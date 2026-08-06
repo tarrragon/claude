@@ -184,3 +184,47 @@ def test_is_doc_only_imp_md_extension_anywhere_counts_as_doc():
     """任意路徑 .md 結尾視為純文件"""
     fm = _make_frontmatter(["README.md", "CHANGELOG.md"])
     assert is_doc_only_imp(fm) is True
+
+
+# ----------------------------------------------------------------------------
+# 換行分隔字串型別回歸測試（0.2.1-W3-337）
+#
+# runtime hook 實際使用的輕量解析器（parse_ticket_frontmatter）對
+# where.files 這種「dict 內巢狀 block-style 列表」會產出換行分隔字串而非
+# list（0.2.1-W3-330 稽核發現：既有票 100% 命中此型別，doc-only 提示訊息
+# 修復前從未在真實 complete 流程觸發）。本節鎖定此回歸不再發生。
+# ----------------------------------------------------------------------------
+
+
+def test_is_doc_only_imp_newline_joined_string_pure_doc_returns_true(logger):
+    fm = _make_frontmatter(".claude/rules/x.md\ndocs/y.md")
+    assert is_doc_only_imp(fm, logger) is True
+
+
+def test_is_doc_only_imp_newline_joined_string_pure_code_returns_false(logger):
+    fm = _make_frontmatter(".claude/hooks/x.py\nsrc/y.js")
+    assert is_doc_only_imp(fm, logger) is False
+
+
+def test_is_doc_only_imp_without_logger_arg_still_works():
+    """logger 為選填（向後相容既有單參數呼叫端），內部 fallback 至 no-op logger"""
+    fm = _make_frontmatter(["README.md"])
+    assert is_doc_only_imp(fm) is True
+
+
+def test_doc_only_imp_newline_joined_string_emits_doc_hint_via_verify(logger, empty_body):
+    """整合測試：verify_acceptance_record 對換行字串型別 where.files 仍正確
+    輸出 doc-only 提示訊息（而非誤判為一般 IMP 缺驗收警告）"""
+    fm = {
+        "type": "IMP",
+        "title": "測試 ticket",
+        "acceptance": ["[ ] 項目一"],
+        "where": {
+            "files": ".claude/rules/core/quality-baseline.md\n"
+            ".claude/methodologies/atomic-ticket-methodology.md\n"
+            "docs/work-logs/v0.18.0/v0.18.0.md"
+        },
+    }
+    _, msg, _, _ = verify_acceptance_record(empty_body, fm, "test-doc-string", logger)
+    assert msg is not None
+    assert "純文件 IMP" in msg

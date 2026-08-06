@@ -1,3 +1,15 @@
+## [2.24.10] - 2026-08-06
+
+### Summary
+fix: 修復 why 欄位跨行冒號誤判巢狀 dict 的資料遺失; fix: 修復 where.files 型別假設死碼（error-pattern/doc-only）
+
+Changes: 2 fix
+
+- fix: 修復 why 欄位跨行冒號誤判巢狀 dict 的資料遺失
+- fix: 修復 where.files 型別假設死碼（error-pattern/doc-only）
+
+---
+
 ## [2.24.9] - 2026-08-06
 
 ### Summary

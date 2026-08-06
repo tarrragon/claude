@@ -19,8 +19,22 @@ if str(_hooks_dir) not in sys.path:
 from lib.hook_messages import GateMessages, format_message
 from acceptance_checkers.ticket_parser import (
     extract_children_from_frontmatter,
+    extract_where_files,
     is_doc_type,
 )
+
+
+class _NullLogger:
+    """no-op logger，供未傳入 logger 的呼叫端使用（維持向後相容介面）。"""
+
+    def debug(self, *args, **kwargs):
+        pass
+
+    def info(self, *args, **kwargs):
+        pass
+
+    def warning(self, *args, **kwargs):
+        pass
 
 
 # W10-072.2: 純文件路徑前綴（用於識別 doc-only IMP）
@@ -53,22 +67,24 @@ def _is_doc_path(path: str) -> bool:
     return any(p.startswith(prefix) for prefix in _DOC_PATH_PREFIXES)
 
 
-def is_doc_only_imp(frontmatter: Optional[dict]) -> bool:
+def is_doc_only_imp(frontmatter: Optional[dict], logger=None) -> bool:
     """判定是否為純文件 IMP（where.files ≥ 80% 屬純文件路徑）。
 
     Args:
         frontmatter: Ticket frontmatter 結構
+        logger: 日誌物件（可選；供 extract_where_files 正規化使用，
+            未提供時使用 no-op logger，維持向後相容的呼叫介面）
 
     Returns:
         bool: True 表示應使用 doc-only 訊息（手動驗收）；False 表示一般 IMP
     """
     if not frontmatter:
         return False
-    where = frontmatter.get("where") or {}
-    files = where.get("files") if isinstance(where, dict) else None
-    if not files or not isinstance(files, list):
-        return False
-    valid_files = [f for f in files if isinstance(f, str) and f.strip()]
+    # 0.2.1-W3-337：改用 extract_where_files 正規化，避免
+    # parse_ticket_frontmatter 對巢狀列表產出換行字串時被
+    # isinstance(files, list) 靜默判定為空（見 0.2.1-W3-330 稽核結論：
+    # 既有票 100% 命中此型別假設，doc-only 提示訊息從未在真實 runtime 觸發）
+    valid_files = extract_where_files(frontmatter, logger or _NullLogger())
     if not valid_files:
         return False
     doc_count = sum(1 for f in valid_files if _is_doc_path(f))
@@ -183,7 +199,7 @@ def verify_acceptance_record(
 
     if should_check_acceptance and not has_accept:
         # W10-072.2: 純文件 IMP（where.files ≥ 80% 屬純文件路徑）使用差異化訊息
-        if is_doc_only_imp(frontmatter):
+        if is_doc_only_imp(frontmatter, logger):
             template = GateMessages.ACCEPTANCE_RECORD_DOC_ONLY_HINT
             logger.info(f"Ticket {ticket_id} 識別為純文件 IMP - 輸出手動驗收建議")
         else:

@@ -14,6 +14,8 @@ _hooks_dir = Path(__file__).parent.parent
 if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 
+from acceptance_checkers.ticket_parser import extract_where_files
+
 # Error-pattern 衝突檢查豁免的 Ticket 類型
 ERROR_PATTERN_CONFLICT_EXEMPT_TYPES = {"DOC", "ANA", "REF"}
 
@@ -41,14 +43,11 @@ def check_error_pattern_conflicts(
         logger.debug(f"Ticket 類型 {ticket_type} 豁免 error-pattern 衝突檢查")
         return []
 
-    # 從 where.files 取得修改檔案清單
-    where = frontmatter.get("where")
-    if not isinstance(where, dict):
-        logger.debug("frontmatter 無 where 欄位，跳過衝突檢查")
-        return []
-
-    files = where.get("files")
-    if not files or not isinstance(files, list):
+    # 從 where.files 取得修改檔案清單（0.2.1-W3-337：改用 extract_where_files
+    # 正規化，避免 parse_ticket_frontmatter 對巢狀列表產出換行字串時被
+    # isinstance(files, list) 靜默判定為空，見 0.2.1-W3-330 稽核結論）
+    files = extract_where_files(frontmatter, logger)
+    if not files:
         logger.debug("where.files 為空或不存在，跳過衝突檢查")
         return []
 
