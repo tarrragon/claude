@@ -99,8 +99,10 @@ EOF
 
 - `.claude/rules/core/quality-baseline.md` - Hook 失敗必須可見規則
 - `.claude/hooks/hook-completeness-check.py` - Hook 完整性檢查（可擴充）
+- `.claude/error-patterns/architecture/ARCH-BAL-015-remediation-scan-scope-exceeds-real-need.md` - 本 pattern 衍生的自動 chmod 補救機制，其掃描軸過寬波及不需要 exec bit 的測試檔，反向產生 git mode-only 變更遺留
 
 ---
 
-**Last Updated**: 2026-03-08
+**Last Updated**: 2026-08-06
+**Version**: 1.1.0 - 補 ARCH-BAL-015 反向連結（補救機制掃描軸過寬，0.2.1-W3-319）
 **Version**: 1.0.0

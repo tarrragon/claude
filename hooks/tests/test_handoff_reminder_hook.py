@@ -116,6 +116,63 @@ def test_no_stale_returns_zero_count():
         assert len(pending) == 2
 
 
+# ===== 0.2.1-W3-308: 顯示/排序路徑統一以 target 為對象 =====
+
+
+def test_scan_source_completed_explicit_target_displays_target_id_and_title():
+    """來源已 completed + 顯式 target_ticket_id → 顯示 target 的 ID 與 title。"""
+    hook = load_hook_module()
+    with TemporaryDirectory() as tmp:
+        project_root = Path(tmp)
+        handoff_dir = project_root / ".claude" / "handoff" / "pending"
+        record = _make_record(
+            "0.2.1-W3-304", direction="next", from_status="completed",
+            title="來源票的標題",
+        )
+        record["target_ticket_id"] = "0.2.1-W3-294"
+        _write_handoff(handoff_dir, "0.2.1-W3-304", record)
+
+        fake_path = project_root / "target.md"
+        fake_path.write_text("---\ntitle: target 的標題\n---\n")
+
+        with patch.object(hook, "is_handoff_stale", return_value=(False, "")), \
+             patch.object(hook, "find_ticket_file", return_value=fake_path), \
+             patch.object(
+                 hook, "parse_ticket_frontmatter",
+                 return_value={"title": "target 的標題"},
+             ):
+            pending, stale_count = hook.scan_handoff_pending_directory(
+                project_root, MagicMock()
+            )
+
+    assert stale_count == 0
+    assert len(pending) == 1
+    assert pending[0]["ticket_id"] == "0.2.1-W3-294", "應顯示 target 而非來源票"
+    assert pending[0]["title"] == "target 的標題", "應顯示 target 的 title"
+
+
+def test_scan_direction_auto_fallback_uses_ticket_id_as_target():
+    """direction=auto 記錄的 ticket_id 欄位本身即 target，須靠 fallback 正確顯示。"""
+    hook = load_hook_module()
+    with TemporaryDirectory() as tmp:
+        project_root = Path(tmp)
+        handoff_dir = project_root / ".claude" / "handoff" / "pending"
+        _write_handoff(
+            handoff_dir, "0.2.1-W3-500",
+            _make_record("0.2.1-W3-500", direction="auto", title="auto 任務標題"),
+        )
+
+        with patch.object(hook, "is_handoff_stale", return_value=(False, "")):
+            pending, stale_count = hook.scan_handoff_pending_directory(
+                project_root, MagicMock()
+            )
+
+    assert stale_count == 0
+    assert len(pending) == 1
+    assert pending[0]["ticket_id"] == "0.2.1-W3-500"
+    assert pending[0]["title"] == "auto 任務標題"
+
+
 def test_reminder_message_includes_filtered_count():
     """情境 4：reminder 訊息含「已過濾 N 個 stale handoff」字樣"""
     hook = load_hook_module()

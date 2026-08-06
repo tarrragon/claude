@@ -1,10 +1,21 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["pyyaml"]
+# dependencies = ["pyyaml", "filelock>=3.12"]
 # ///
 
 """
+依賴說明（PC-135 復發模式）：handoff_utils 的 import 鏈為
+handoff_utils -> ticket_system.lib.constants -> lib/__init__ -> ticket_loader
+-> parser -> file_lock -> filelock，本 hook 以 `uv run`（PEP 723 script 環境）
+執行時僅按 dependencies 宣告安裝套件，缺 filelock 會使 import 落入 degraded
+fallback（is_ticket_completed 恆回 False；本 hook 的 _lib_resolve_target
+fallback 恰好仍讀 target_ticket_id 故顯示層未受影響，但 is_ticket_completed
+的 skip 判斷已失準），但 pytest 因專案 venv 已裝 filelock 而不會偵測到此缺口。
+Action：異動本檔或 handoff_utils 的 import 範圍時，須同步比對 PEP 723
+dependencies 是否涵蓋新 import 鏈的 transitive 依賴；驗收須以實際
+`uv run` 執行方式複驗，pytest 綠燈不構成本檔行為的驗收依據。
+
 Handoff 提醒 Hook — WARN 模式
 
 在用戶每次提交 Prompt 時檢查是否有待恢復的 handoff 任務。
@@ -51,7 +62,10 @@ for _p in (_TICKET_SKILL_PATH, _TICKET_LIB_PATH):
         sys.path.insert(0, str(_p))
 
 try:
-    from handoff_utils import is_ticket_completed as _lib_is_ticket_completed  # type: ignore
+    from handoff_utils import (  # type: ignore
+        is_ticket_completed as _lib_is_ticket_completed,
+        resolve_target as _lib_resolve_target,
+    )
 except Exception as _import_err:  # pragma: no cover
     # PC-135 防護：silent fallback 改 noisy。lib import 失敗時退化為「永遠視為未完成」，
     # 寫 stderr 讓 PM/開發者立即察覺 lib 不可達（避免 reminder 永遠彈出或永遠不彈）。
@@ -62,6 +76,9 @@ except Exception as _import_err:  # pragma: no cover
     )
     def _lib_is_ticket_completed(ticket_id, project_root=None):  # type: ignore
         return False
+
+    def _lib_resolve_target(record):  # type: ignore
+        return record.get("target_ticket_id")
 
 EXIT_SUCCESS = 0
 EXIT_ERROR = 1
@@ -227,26 +244,44 @@ def scan_handoff_pending_directory(project_root: Path, logger) -> List[Dict[str,
                 title = handoff_data.get("title", "無標題")
                 direction = handoff_data.get("direction", "unknown")
 
+                # 不變式：顯示/排序/判定路徑一律以
+                # `resolve_target(record) or record.get("ticket_id")` 解析出的
+                # target 為對象；不可改成「有 target 才顯示」，因為 direction=auto
+                # 記錄的 ticket_id 欄位本身就是 target（lifecycle.py 產生）。
+                # 本檔判斷「此 handoff 指向的工作是否還需要做」須以 target 為對象，
+                # 非來源票——來源票已 completed 正是 --next 類 handoff 成立的前提，
+                # 不可作為跳過判準。
+                judge_id = _lib_resolve_target(handoff_data) or ticket_id
+
                 # 前置驗證：確認 Ticket 檔案存在
-                ticket_path = resolve_ticket_path(project_root, ticket_id, logger)
+                ticket_path = resolve_ticket_path(project_root, judge_id, logger)
                 if not ticket_path or not ticket_path.exists():
-                    logger.debug(f"跳過：Ticket 檔案不存在 ({ticket_id})")
+                    logger.debug(f"跳過：Ticket 檔案不存在 ({judge_id})")
                     continue
 
                 # 檢查 Ticket 是否已完成
-                if is_ticket_completed(project_root, ticket_id, logger):
-                    logger.debug(f"跳過已完成任務: {ticket_id}")
+                if is_ticket_completed(project_root, judge_id, logger):
+                    logger.debug(f"跳過已完成任務: {judge_id}")
                     continue
 
+                # pending_tasks 的顯示/排序對象統一改為 target（judge_id），
+                # title 一併載入 target 的 title（否則會出現
+                # 「target 的 ID 配來源的標題」）。
+                display_title = title
+                if judge_id != ticket_id:
+                    target_frontmatter = parse_ticket_frontmatter(ticket_path, logger)
+                    if target_frontmatter and target_frontmatter.get("title"):
+                        display_title = target_frontmatter["title"]
+
                 pending_tasks.append({
-                    "ticket_id": ticket_id,
-                    "title": title,
+                    "ticket_id": judge_id,
+                    "title": display_title,
                     "direction": direction,
                     "file_path": str(file_path),  # 保留原始檔案路徑用於日誌
                     "ticket_path": str(ticket_path),  # 暫存 ticket_path 避免重複解析
                 })
 
-                logger.debug(f"找到待恢復任務: {ticket_id}")
+                logger.debug(f"找到待恢復任務: {judge_id}")
 
             except json.JSONDecodeError as e:
                 logger.warning(f"JSON 解析失敗 ({file_path.name}): {e}")

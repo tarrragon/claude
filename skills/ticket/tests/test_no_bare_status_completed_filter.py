@@ -45,13 +45,10 @@ HARDCODE_PATTERN = re.compile(r'!=\s*[\'"]completed[\'"]')
 # content_substring 為 strip 後行文字的穩定子串（足以唯一識別該站點）。
 # 加入新項目時需附說明，並在 ANA / IMP 文件記錄。
 ALLOWED_FILTER_SITES: dict[str, list[tuple[str, str]]] = {
-    # resume.py: from_status != "completed" 是 handoff record 的快照狀態，
-    # 表達「非任務鏈交接」語意，與 ticket terminal 狀態正交，不應改 TERMINAL_STATUSES
-    "commands/resume.py": [
-        ('record.from_status != "completed"', "from_status 語意 (handoff snapshot)"),
-    ],
     # W17-163 L1-A: handoff_gc.py:79 站點已隨 _collect_stale_handoffs delegate
     # 至 handoff_utils.is_handoff_stale 而消除（ARCH-020 同構修復）
+    # 0.2.1-W3-306: commands/resume.py 站點已隨 list_pending_handoffs 的自製
+    # stale 過濾邏輯改 delegate 至 handoff_utils.is_handoff_stale（單一 SSOT）而消除。
 }
 
 

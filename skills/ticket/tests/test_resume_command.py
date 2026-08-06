@@ -171,8 +171,8 @@ class TestListPendingHandoffs:
 
         assert len(result.handoffs) == 2
 
-    @patch("ticket_system.commands.resume.is_ticket_completed")
-    @patch("ticket_system.commands.resume.is_ticket_in_progress_or_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_in_progress_or_completed")
     def test_task_chain_handoff_filtered_when_target_in_progress(
         self, mock_target_check, mock_source_check, temp_handoff_env
     ):
@@ -192,8 +192,8 @@ class TestListPendingHandoffs:
 
         assert len(result.handoffs) == 0, "目標已啟動的任務鏈 handoff 應被過濾"
 
-    @patch("ticket_system.commands.resume.is_ticket_completed")
-    @patch("ticket_system.commands.resume.is_ticket_in_progress_or_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_in_progress_or_completed")
     def test_task_chain_handoff_filtered_when_target_completed(
         self, mock_target_check, mock_source_check, temp_handoff_env
     ):
@@ -212,8 +212,8 @@ class TestListPendingHandoffs:
 
         assert len(result.handoffs) == 0, "目標已完成的任務鏈 handoff 應被過濾"
 
-    @patch("ticket_system.commands.resume.is_ticket_completed")
-    @patch("ticket_system.commands.resume.is_ticket_in_progress_or_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_in_progress_or_completed")
     def test_task_chain_handoff_kept_when_target_pending(
         self, mock_target_check, mock_source_check, temp_handoff_env
     ):
@@ -232,7 +232,7 @@ class TestListPendingHandoffs:
 
         assert len(result.handoffs) == 1, "目標未啟動的任務鏈 handoff 應保留"
 
-    @patch("ticket_system.commands.resume.is_ticket_completed")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_completed")
     def test_task_chain_without_target_id_kept(
         self, mock_source_check, temp_handoff_env
     ):

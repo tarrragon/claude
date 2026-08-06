@@ -210,24 +210,79 @@ def extract_recent_content(worklog_path: Path, since_mtime: float) -> str:
     return worklog_path.read_text(encoding="utf-8")
 
 
+#: 行首錨定容許前綴：關鍵字前只能有 '#' / '*' / 空白，排除句中出現
+#: （0.2.1-W3-294 根因 1：rfind 未錨定行首，命中自指語料的歷史分析行）
+_ANCHOR_PREFIX_PATTERN: re.Pattern = re.compile(r"^[#*\s]*$")
+
+#: 標題式關鍵字行判定：符合 Markdown H1-H6 標題格式
+_TITLE_LINE_PATTERN: re.Pattern = re.compile(r"^#{1,6}\s")
+
+#: 行內式段落終點候選：下一個行首條列 '- '
+_INLINE_LIST_END_PATTERN: re.Pattern = re.compile(r"^- ", re.MULTILINE)
+
+#: 行內式段落終點候選：下一個 '**' 起始行
+_INLINE_BOLD_END_PATTERN: re.Pattern = re.compile(r"^\*\*", re.MULTILINE)
+
+
+def _iter_anchored_keyword_hits(content: str):
+    """找出所有「行首錨定」的 HANDOFF_KEYWORDS 命中位置。
+
+    行首錨定：關鍵字前（同行）只能有 '#' / '*' / 空白字元，排除句中出現
+    （如描述本機制的歷史分析行）。
+
+    Yields:
+        tuple[int, int]: (關鍵字起點 idx, 該行行首 idx)
+    """
+    for kw in HANDOFF_KEYWORDS:
+        start = 0
+        while True:
+            idx = content.find(kw, start)
+            if idx < 0:
+                break
+            line_start = content.rfind("\n", 0, idx) + 1
+            prefix = content[line_start:idx]
+            if _ANCHOR_PREFIX_PATTERN.match(prefix):
+                yield idx, line_start
+            start = idx + 1
+
+
 def extract_handoff_section(content: str) -> str:
     """
-    從 worklog 內容切出 handoff 相關段落（最新一筆）。
+    從 worklog 內容切出 handoff 相關段落（最新一筆，行首錨定命中）。
 
-    策略：找到 **最後一個** HANDOFF_KEYWORDS 命中位置（rfind 取最大 idx），
-    回傳該位置至下一個 H1/H2 標題前的內容；若找不到下一個標題則回傳到 EOF。
+    策略（0.2.1-W3-294 重設計）：
+    1. 只採「行首錨定」的關鍵字命中（關鍵字前僅允許 '#' / '*' / 空白），
+       排除句中出現（本專案 worklog 大量記載 handoff 機制本身的分析，
+       關鍵字會出現在描述偵測器的歷史行中，此類命中須被排除）。
+    2. 取行首錨定命中中最後一個（idx 最大，對應當前 session 寫入的 handoff）。
+    3. 依關鍵字所在行的形態分派終點界定：
+       - 形態 A 標題式（行符合 `^#{1,6}\\s`）：終點為下一個 H1/H2 標題，
+         無下一個標題則到 EOF（維持既有行為，涵蓋 HANDOFF_KEYWORDS 原設計
+         的標題式用法）。
+       - 形態 B 行內式（其餘，如本專案慣用 `**下一站**：`）：終點為下一個
+         空行、下一個行首條列 `- `、或下一個 `**` 起始行，取最先命中；
+         皆無命中則到 EOF。至少含關鍵字所在行本身。
 
-    使用 rfind 取最後位置的理由（W17-176）：
-    worklog 累積多 session 的歷史 handoff 段落（H3 ### 分隔，無法被 H1/H2 切斷），
-    若取最早關鍵字會擷取整份歷史 handoff（49K chars / 283 IDs / 12 false positive）。
-    取最後一個對應「當前 session 寫入的 handoff」，符合本函式「找出本 session
-    寫了什麼 handoff」的呼叫意圖。
+    使用行首錨定 + rfind 最後命中的理由：
+    worklog 累積多 session 的歷史 handoff 段落，且大量記載 handoff 機制
+    本身的分析（W3-178 / W3-218 / W3-221 / W3-222 皆在改 HANDOFF_KEYWORDS），
+    這些歷史行內含關鍵字但非交接段落。行首錨定過濾句中出現；取最後一個
+    對應「當前 session 寫入的 handoff」，符合本函式「找出本 session 寫了
+    什麼 handoff」的呼叫意圖。
+
+    S2 差異（僅 hook 端適用，本函式不涉及）：
+    Stop hook（`.claude/skills/ticket/hooks/stop-worklog-handoff-sync-check-hook.py`）
+    在呼叫本函式（SOT-mirror）前，另有 session 增量前置過濾（以 git diff
+    界定本 session 新增內容），縮小傳入 content 的範圍。CLI `--from-worklog`
+    與本模組其他呼叫端無 session 概念，不套用該前置過濾，直接以全文呼叫
+    本函式。此差異不構成 ARCH-020 漂移——本函式的段落界定邏輯（S1）三處
+    共用且一致，S2 前置過濾是 hook 端獨有的呼叫前處理，非本函式職責。
 
     Args:
-        content: worklog 全文內容
+        content: worklog 全文內容（或已經 S2 前置過濾的 session 增量內容）
 
     Returns:
-        str: handoff 段落內容；若無關鍵字命中回 ""
+        str: handoff 段落內容；若無行首錨定關鍵字命中回 ""
 
     Examples:
         >>> content = "## 一般\\n\\n## 下個 Session 接手 Context\\n\\nW17-079\\n"
@@ -237,26 +292,40 @@ def extract_handoff_section(content: str) -> str:
     if not content:
         return ""
 
-    # 找最後一個關鍵字命中位置（rfind 取最大 idx，對應當前 session 寫入的 handoff）
-    latest_idx = -1
-    for kw in HANDOFF_KEYWORDS:
-        idx = content.rfind(kw)
-        if idx > latest_idx:
-            latest_idx = idx
-
-    if latest_idx < 0:
+    hits = list(_iter_anchored_keyword_hits(content))
+    if not hits:
         return ""
 
-    # 從關鍵字所在行的行首開始
-    line_start = content.rfind("\n", 0, latest_idx) + 1
+    # 取最後一個行首錨定命中（idx 最大）
+    latest_idx, line_start = max(hits, key=lambda h: h[0])
 
-    # 找下一個 H1/H2 標題（# / ##）
-    section_end_pattern = re.compile(r"^(# |## )", re.MULTILINE)
-    search_from = latest_idx + 1
-    next_match = section_end_pattern.search(content, search_from)
+    line_end = content.find("\n", latest_idx)
+    if line_end == -1:
+        line_end = len(content)
+    line_text = content[line_start:line_end]
 
-    if next_match:
-        return content[line_start : next_match.start()]
+    if _TITLE_LINE_PATTERN.match(line_text):
+        # 形態 A 標題式：終點為下一個 H1/H2 標題
+        section_end_pattern = re.compile(r"^(# |## )", re.MULTILINE)
+        next_match = section_end_pattern.search(content, latest_idx + 1)
+        if next_match:
+            return content[line_start : next_match.start()]
+        return content[line_start:]
+
+    # 形態 B 行內式：終點為下一個空行 / 下一個行首條列 / 下一個 '**' 起始行，取最先
+    candidates: list[int] = []
+    blank_idx = content.find("\n\n", line_end)
+    if blank_idx != -1:
+        candidates.append(blank_idx)
+    list_match = _INLINE_LIST_END_PATTERN.search(content, line_end)
+    if list_match:
+        candidates.append(list_match.start())
+    bold_match = _INLINE_BOLD_END_PATTERN.search(content, line_end)
+    if bold_match:
+        candidates.append(bold_match.start())
+
+    if candidates:
+        return content[line_start : min(candidates)]
     return content[line_start:]
 
 

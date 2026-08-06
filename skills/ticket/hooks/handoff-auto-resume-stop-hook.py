@@ -1,10 +1,22 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["pyyaml"]
+# dependencies = ["pyyaml", "filelock>=3.12"]
 # ///
 
 """
+依賴說明（PC-135 復發模式）：handoff_utils 的 import 鏈為
+handoff_utils -> ticket_system.lib.constants -> lib/__init__ -> ticket_loader
+-> parser -> file_lock -> filelock，本 hook 以 `uv run`（PEP 723 script 環境）
+執行時僅按 dependencies 宣告安裝套件，缺 filelock 會使 import 落入 degraded
+fallback（resolve_target 恆回 None、is_handoff_stale 恆回非 stale），造成
+target 顯示與 stale 過濾在真實 runtime 環境不生效，但 pytest 因專案 venv
+已裝 filelock 而不會偵測到此缺口。
+Action：異動本檔或 handoff_utils 的 import 範圍時，須同步比對 PEP 723
+dependencies 是否涵蓋新 import 鏈的 transitive 依賴；驗收須以實際
+`uv run` 執行方式複驗（見檔尾 `main()` 呼叫方式），pytest 綠燈不構成
+本檔行為的驗收依據。
+
 Handoff 自動恢復 Stop Hook (v2.5.0)
 
 在對話終止時，檢查是否有未完成的 handoff 任務並判斷是否阻止退出。
@@ -101,7 +113,7 @@ for _p in (_TICKET_SKILL_PATH, _TICKET_LIB_PATH):
         sys.path.insert(0, str(_p))
 
 try:
-    from handoff_utils import is_handoff_stale  # type: ignore
+    from handoff_utils import is_handoff_stale, resolve_target  # type: ignore
 except Exception as _import_err:  # pragma: no cover - fallback：lib 不可用時退化為原邏輯（保留任務鏈）
     # PC-135 防護：silent fallback 改 noisy。lib import 失敗代表 hook 子進程環境
     # 缺少必要依賴（如 pyyaml 經 ticket_system.lib.__init__ → ticket_loader 鏈），
@@ -119,6 +131,11 @@ except Exception as _import_err:  # pragma: no cover - fallback：lib 不可用�
         if direction_type in {"to-sibling", "to-parent", "to-child"}:
             return False, ""
         return False, ""
+
+    def resolve_target(record):  # type: ignore
+        # 退化 fallback：無 lib 時無法解析 target_ticket_id / direction 後綴，
+        # 由呼叫端 `resolve_target(record) or record.get("ticket_id")` 自動 fallback 至來源票。
+        return None
 
 # W17-181.2: delegate is_ticket_terminal 至 lib SSOT，消除跨進程同構邏輯（ARCH-020）。
 try:
@@ -465,18 +482,33 @@ def scan_pending_handoff_tasks(
                     title = data.get("title", "無標題")
                     direction = data.get("direction", "unknown")
 
+                    # 不變式：顯示/排序/判定路徑一律以
+                    # `resolve_target(record) or record.get("ticket_id")` 解析出的
+                    # target 為對象；不可改成「有 target 才顯示」，因為 direction=auto
+                    # 記錄的 ticket_id 欄位本身就是 target（lifecycle.py 產生）。
+                    # 本檔另用 target_id 判斷 is_ticket_completed /
+                    # is_ticket_recently_started（Stop hook 專屬：是否阻塞退出）。
+                    target_id = resolve_target(data) or ticket_id
+                    display_title = title
+                    if target_id != ticket_id:
+                        target_frontmatter = _load_frontmatter_cached(
+                            frontmatter_cache, target_id, project_root, logger
+                        )
+                        if target_frontmatter and target_frontmatter.get("title"):
+                            display_title = target_frontmatter["title"]
+
                     # W17-118 Phase 2: 剛建 handoff 視為下 session 接手點，不阻塞
                     # 即使 stale (任務鏈目標已啟動) 也不在當前 session 阻擋退出
                     recently_created = is_handoff_recently_created(data, logger)
                     if recently_created:
                         recent_tasks.append({
-                            "ticket_id": ticket_id,
-                            "title": title,
+                            "ticket_id": target_id,
+                            "title": display_title,
                             "direction": direction,
                         })
                         logger.info(
                             f"剛建 handoff (< {RECENT_HANDOFF_WINDOW_SECONDS}s)，"
-                            f"視為下 session 接手點不阻塞: {ticket_id}"
+                            f"視為下 session 接手點不阻塞: {target_id}"
                         )
                         continue
 
@@ -495,25 +527,26 @@ def scan_pending_handoff_tasks(
                             logger.warning(f"刪除 stale handoff JSON 失敗 ({file_path.name}): {e}")
                         continue
 
-                    # 檢查對應 Ticket 是否已完成
-                    if is_ticket_completed(project_root, ticket_id, logger):
+                    # 檢查對應 Ticket 是否已完成（對象為 target，
+                    # 「這 handoff 指向的工作是否還需要做」問的是接手對象而非來源票）
+                    if is_ticket_completed(project_root, target_id, logger):
                         # GC：檢查 direction，判斷是否應保留
                         if should_preserve_pending_json(data, logger, project_root):
                             pending_tasks.append({
-                                "ticket_id": ticket_id,
-                                "title": title,
+                                "ticket_id": target_id,
+                                "title": display_title,
                                 "direction": direction
                             })
                             logger.debug(
                                 f"保留任務鏈類型 handoff 的 pending JSON "
-                                f"({ticket_id}, direction={direction})"
+                                f"({target_id}, direction={direction})"
                             )
                         else:
                             # 刪除已完成 Ticket 的 stale pending JSON
                             file_path.unlink()
                             logger.info(
                                 f"GC: 刪除已完成 Ticket 的 pending JSON "
-                                f"({ticket_id}, direction={direction})"
+                                f"({target_id}, direction={direction})"
                             )
                     else:
                         # Ticket 未完成，根據 direction 類型判斷分類
@@ -524,44 +557,44 @@ def scan_pending_handoff_tasks(
                         if direction_type in non_blocking_directions:
                             # 建議性 handoff，不阻塞退出
                             recent_tasks.append({
-                                "ticket_id": ticket_id,
-                                "title": title,
+                                "ticket_id": target_id,
+                                "title": display_title,
                                 "direction": direction
                             })
                             logger.info(
-                                f"建議性 handoff ({direction_type})，不阻塞退出: {ticket_id}"
+                                f"建議性 handoff ({direction_type})，不阻塞退出: {target_id}"
                             )
                         elif bg_active:
                             # W3-026.1：v2.1.145 background_tasks 直接判斷，
                             # 優先於 started_at 30 分鐘閾值推斷
                             recent_tasks.append({
-                                "ticket_id": ticket_id,
-                                "title": title,
+                                "ticket_id": target_id,
+                                "title": display_title,
                                 "direction": direction
                             })
                             logger.info(
-                                f"background_tasks 非空，視為最近任務: {ticket_id}"
+                                f"background_tasks 非空，視為最近任務: {target_id}"
                             )
                         elif is_ticket_recently_started(
-                            project_root, ticket_id, logger, frontmatter_cache
+                            project_root, target_id, logger, frontmatter_cache
                         ):
                             # Fallback：background_tasks 不可用或為空時，
                             # 退化到 started_at 30 分鐘閾值推斷
                             recent_tasks.append({
-                                "ticket_id": ticket_id,
-                                "title": title,
+                                "ticket_id": target_id,
+                                "title": display_title,
                                 "direction": direction
                             })
                             logger.info(
-                                f"找到最近執行的任務（可能有代理人正在處理）: {ticket_id}"
+                                f"找到最近執行的任務（可能有代理人正在處理）: {target_id}"
                             )
                         else:
                             pending_tasks.append({
-                                "ticket_id": ticket_id,
-                                "title": title,
+                                "ticket_id": target_id,
+                                "title": display_title,
                                 "direction": direction
                             })
-                            logger.debug(f"找到待恢復任務（可能被遺忘）: {ticket_id}")
+                            logger.debug(f"找到待恢復任務（可能被遺忘）: {target_id}")
 
             except Exception as e:
                 logger.warning(f"讀取 handoff 檔案失敗 ({file_path.name}): {e}")

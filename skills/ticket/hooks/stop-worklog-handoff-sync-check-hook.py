@@ -122,44 +122,81 @@ def _detect_handoff_keywords(content: str) -> bool:
     return any(kw in content for kw in HANDOFF_KEYWORDS)
 
 
+# 行首錨定容許前綴：關鍵字前只能有 '#' / '*' / 空白，排除句中出現
+# （0.2.1-W3-294 根因 1：rfind 未錨定行首，命中自指語料的歷史分析行）
+_ANCHOR_PREFIX_PATTERN = re.compile(r"^[#*\s]*$")
+_TITLE_LINE_PATTERN = re.compile(r"^#{1,6}\s")
+_INLINE_LIST_END_PATTERN = re.compile(r"^- ", re.MULTILINE)
+_INLINE_BOLD_END_PATTERN = re.compile(r"^\*\*", re.MULTILINE)
+
+
+def _iter_anchored_keyword_hits(content: str):
+    """找出所有「行首錨定」的 HANDOFF_KEYWORDS 命中位置（SOT-mirror）。"""
+    for kw in HANDOFF_KEYWORDS:
+        start = 0
+        while True:
+            idx = content.find(kw, start)
+            if idx < 0:
+                break
+            line_start = content.rfind("\n", 0, idx) + 1
+            prefix = content[line_start:idx]
+            if _ANCHOR_PREFIX_PATTERN.match(prefix):
+                yield idx, line_start
+            start = idx + 1
+
+
 def _extract_handoff_section(content: str) -> str:
-    """從 worklog 內容切出 handoff 相關段落（SOT-mirror）。
+    """從 worklog 內容切出 handoff 相關段落（SOT-mirror，0.2.1-W3-294 重設計）。
 
-    策略：找到 **最後一個** HANDOFF_KEYWORDS 命中位置（rfind 取最大 idx），
-    回傳該位置至下一個 H1/H2 標題前的內容；若找不到下一個標題則回傳到 EOF。
-    無關鍵字命中回 ""。
-
-    使用 rfind 取最後位置的理由（W17-176）：
-    worklog 累積多 session 的歷史 handoff 段落（H3 ### 分隔，無法被 H1/H2 切斷），
-    若取最早關鍵字會擷取整份歷史 handoff（測量值：49K chars / 283 IDs / ~12 false
-    positive）。取最後一個對應「當前 session 寫入的 handoff」，符合本函式「找出本
-    session 寫了什麼 handoff」的呼叫意圖。
+    策略：只採「行首錨定」的關鍵字命中（關鍵字前僅允許 '#' / '*' / 空白），
+    取最後一個（idx 最大）；依關鍵字所在行的形態分派終點界定——標題式
+    （`^#{1,6}\\s`）取下一個 H1/H2，行內式取下一個空行 / 行首條列 `- ` /
+    `**` 起始行三者取最先。無行首錨定命中回 ""。
 
     SOT: .claude/skills/ticket/ticket_system/lib/worklog_parser.py:extract_handoff_section
-    任一處更新需同步另一處（ARCH-020）。
+    任一處更新需同步另一處（ARCH-020）。本函式邏輯（S1 段落界定）與 SOT 完全
+    一致；hook 端另有 S2 session 增量前置過濾（見 `_extract_session_incremental_content`），
+    是呼叫本函式「前」的獨有前處理，非本函式職責差異——CLI --from-worklog 等
+    其他呼叫端無 session 概念，不套用該前置過濾，直接以全文呼叫本函式（與 SOT
+    docstring 一致）。
+
     用於 detect_sync_drift 將 ticket ID 掃描範圍限制在 handoff 段落，避免從整個
     worklog 抓到歷史 ticket 造成 false positive（W17-155 ANA / W17-156 修復）。
     """
     if not content:
         return ""
 
-    latest_idx = -1
-    for kw in HANDOFF_KEYWORDS:
-        idx = content.rfind(kw)
-        if idx > latest_idx:
-            latest_idx = idx
-
-    if latest_idx < 0:
+    hits = list(_iter_anchored_keyword_hits(content))
+    if not hits:
         return ""
 
-    line_start = content.rfind("\n", 0, latest_idx) + 1
+    latest_idx, line_start = max(hits, key=lambda h: h[0])
 
-    section_end_pattern = re.compile(r"^(# |## )", re.MULTILINE)
-    search_from = latest_idx + 1
-    next_match = section_end_pattern.search(content, search_from)
+    line_end = content.find("\n", latest_idx)
+    if line_end == -1:
+        line_end = len(content)
+    line_text = content[line_start:line_end]
 
-    if next_match:
-        return content[line_start : next_match.start()]
+    if _TITLE_LINE_PATTERN.match(line_text):
+        section_end_pattern = re.compile(r"^(# |## )", re.MULTILINE)
+        next_match = section_end_pattern.search(content, latest_idx + 1)
+        if next_match:
+            return content[line_start : next_match.start()]
+        return content[line_start:]
+
+    candidates = []
+    blank_idx = content.find("\n\n", line_end)
+    if blank_idx != -1:
+        candidates.append(blank_idx)
+    list_match = _INLINE_LIST_END_PATTERN.search(content, line_end)
+    if list_match:
+        candidates.append(list_match.start())
+    bold_match = _INLINE_BOLD_END_PATTERN.search(content, line_end)
+    if bold_match:
+        candidates.append(bold_match.start())
+
+    if candidates:
+        return content[line_start : min(candidates)]
     return content[line_start:]
 
 
@@ -450,6 +487,106 @@ def _has_in_progress_ticket(project_root: Path, version: str, logger) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# S2：session 增量前置過濾（0.2.1-W3-294，僅 hook 端適用）
+# ---------------------------------------------------------------------------
+
+
+def _resolve_git_base_commit(project_root: Path, session_start: float, logger) -> Optional[str]:
+    """找出 session_start 之前最近一個 commit（作 git diff 的 base）。
+
+    fail-open：git 不可用 / 非 git repo / subprocess 失敗 → 回 None。
+    """
+    since_iso = datetime.fromtimestamp(session_start).isoformat()
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "rev-list",
+                "-1",
+                f"--before={since_iso}",
+                "HEAD",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except Exception as e:
+        logger.debug("S2 git rev-list 失敗（fail-open 全文）: %s", e)
+        return None
+    if result.returncode != 0:
+        logger.debug("S2 git rev-list 非零 exit（fail-open 全文）: %s", result.stderr)
+        return None
+    base = result.stdout.strip()
+    return base or None
+
+
+def _extract_session_incremental_content(
+    project_root: Path, worklog_path: Path, session_start: float, logger
+) -> Optional[str]:
+    """S2：以 git diff 界定本 session 新增的 worklog 內容（僅 hook 端適用）。
+
+    Why：關鍵字定位法在自指語料必然失效（根因 1/2），但將掃描範圍先限縮到
+    本 session 實際新增的文字，可從源頭排除歷史交接段落，與 S1 段落界定
+    互補（S1 處理增量內若仍混有雜訊的界定，S2 處理跨 session 歷史雜訊）。
+
+    Consequence：不做此前置過濾時，即使 S1 修好行首錨定，仍可能命中「本
+    session 未寫但歷史仍存在」的行內式交接段落（如上個 session 遺留、尚未
+    被下一個 H1/H2 或空行截斷的舊交接行），造成非本 session 中斷卻誤報。
+
+    Action：base 取 session_start 前最近 commit，diff 取新增（`+`）行還原
+    為純文字。任一步驟失敗（git 不可用 / base 為空 / subprocess 例外 /
+    session_start<=0）回 None，caller 須 fallback 至全文讀取（維持修復前
+    行為，不因本強化而破壞既有 fail-open 承諾）。
+
+    CLI --from-worklog 無 session 概念，不套用本函式（S3 語意差異，見
+    `_extract_handoff_section` docstring 與 SOT `extract_handoff_section`
+    docstring 的 S2 差異說明段落）。
+    """
+    if session_start <= 0:
+        return None
+    base = _resolve_git_base_commit(project_root, session_start, logger)
+    if not base:
+        return None
+    try:
+        rel_path = worklog_path.relative_to(project_root)
+    except ValueError:
+        rel_path = worklog_path
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "diff",
+                "--unified=0",
+                base,
+                "--",
+                str(rel_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except Exception as e:
+        logger.debug("S2 git diff 失敗（fail-open 全文）: %s", e)
+        return None
+    if result.returncode != 0:
+        logger.debug("S2 git diff 非零 exit（fail-open 全文）: %s", result.stderr)
+        return None
+
+    added_lines = [
+        line[1:]
+        for line in result.stdout.splitlines()
+        if line.startswith("+") and not line.startswith("+++")
+    ]
+    return "\n".join(added_lines)
+
+
+# ---------------------------------------------------------------------------
 # 第 7 格偵測：雙軌皆空但 session 有交接訊號（0.2.1-W3-219）
 # 來源票 0.2.1-W3-178「可用偵測訊號與誤報風險」：S3 閘門 + S1 主訊號 + S4 反向濾除。
 # S2（commit body）/ S5（Context Bundle diff）列為後續增強，本函式不實作。
@@ -703,10 +840,17 @@ def detect_sync_drift(
         return _check_dual_empty_handoff_signal(project_root, version, session_start, logger)
 
     try:
-        content = worklog_path.read_text(encoding="utf-8")
+        full_content = worklog_path.read_text(encoding="utf-8")
     except Exception as e:
         logger.warning("讀取 worklog 失敗: %s", e)
         return None
+
+    # S2：優先以 session 增量內容偵測（縮小掃描範圍排除跨 session 歷史雜訊）；
+    # 無法界定增量時 fail-open 回退全文（維持修復前行為）
+    incremental_content = _extract_session_incremental_content(
+        project_root, worklog_path, session_start, logger
+    )
+    content = incremental_content if incremental_content is not None else full_content
 
     pending_ids = _scan_pending_dir(project_root)
     has_keywords = _detect_handoff_keywords(content)

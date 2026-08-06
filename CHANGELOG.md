@@ -1,3 +1,27 @@
+## [2.24.7] - 2026-08-06
+
+### Summary
+fix: 修復 hook 權限自動修正的掃描軸過寬與 auto-commit 永不觸發; fix: 第三輪 Phase 4 品質修復（規則 8/Action 句/不變式/事實）; fix: 三個 handoff hook PEP 723 補 filelock，修復 PC-135 復發 (+11 more)
+
+Changes: 8 fix, 4 docs, 2 chore
+
+- fix: 修復 hook 權限自動修正的掃描軸過寬與 auto-commit 永不觸發
+- fix: 第三輪 Phase 4 品質修復（規則 8/Action 句/不變式/事實）
+- fix: 三個 handoff hook PEP 723 補 filelock，修復 PC-135 復發
+- fix: 三個 handoff hook 顯示/排序/判定路徑改以 target 為對象
+- fix: 第三輪修復 Phase 4 審查發現（SSOT 合併/靜默 fallback/註解）
+- fix: resume.py 三處消費者改用 resolve_target 統一對象解析
+- fix: 統一 handoff JSON 消費者對象解析為 target/source 判準
+- fix: 修復 handoff 同步檢查的段落界定失效與交接語意錯置
+- docs: 誤差預算原則上移至框架規則層 quality-baseline
+- docs: 記錄 PC-BAL-024 規則收緊而守衛判準過期
+- docs: 記錄 ARCH-BAL-014 上游過濾修復擴大下游暴露面
+- docs: 依 Layer 2 審查修正 PC-BAL-023 兩處實質缺陷
+- chore: test_dispatch_record_hook.py 補上執行權限
+- chore: 完成框架 issue 歸屬盤點並補 PC-BAL-023
+
+---
+
 ## [2.24.6] - 2026-08-05
 
 ### Summary

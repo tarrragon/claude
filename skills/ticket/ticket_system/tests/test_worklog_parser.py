@@ -190,5 +190,91 @@ class TestNextStopHandoffSection:
         assert ids == ["0.2.1-W3-174", "0.2.1-W3-108"]
 
 
+# ---------------------------------------------------------------------------
+# 0.2.1-W3-294: extract_handoff_section() 行首錨定 + 段落界定重設計
+# ---------------------------------------------------------------------------
+
+
+class TestHandoffSectionAnchoredBoundary:
+    """段落界定失效修復（0.2.1-W3-294 根因 1/2）"""
+
+    def test_self_referential_history_line_not_misjudged(self):
+        """自指語料：句中出現關鍵字的歷史分析行不應被誤判為交接段落"""
+        from ticket_system.lib.worklog_parser import (
+            extract_handoff_section,
+            extract_ticket_ids,
+        )
+
+        history_line = (
+            "- 2026-08-03: 實際慣用的交接標題「下一站」不在清單內，"
+            "本次補上（0.2.1-W3-178 分析）\n"
+        )
+        list_lines = "".join(
+            f"- 2026-08-01: 0.2.1-W3-{100 + i} 完成\n" for i in range(30)
+        )
+        content = "## 2026-08-03\n\n" + history_line + list_lines
+
+        section = extract_handoff_section(content)
+        ids = extract_ticket_ids(section, active_version="0.2.1")
+        assert ids == []
+
+    def test_inline_style_section_ends_before_adjacent_list(self):
+        """行內式段落終點：無空行分隔的緊接條列不應被納入交接段落"""
+        from ticket_system.lib.worklog_parser import (
+            extract_handoff_section,
+            extract_ticket_ids,
+        )
+
+        content = (
+            "## 2026-08-04\n\n"
+            "**下一站**：`W3-092`（優先處理）。\n"
+            "- 2026-07-31: 0.2.1-W3-174 完成 測試修復\n"
+        )
+        section = extract_handoff_section(content)
+        assert "W3-092" in section
+        ids = extract_ticket_ids(section, active_version="0.2.1")
+        assert "0.2.1-W3-174" not in ids
+
+    def test_title_style_regression_still_passes(self):
+        """標題式回歸：既有 H1/H2 界定行為維持不變"""
+        from ticket_system.lib.worklog_parser import extract_handoff_section
+
+        content = (
+            "## 一般\n\n"
+            "## 下個 Session 接手 Context\n\n"
+            "W17-079\n\n"
+            "## 下一個章節\n\n"
+            "不應被納入\n"
+        )
+        section = extract_handoff_section(content)
+        assert "W17-079" in section
+        assert "不應被納入" not in section
+
+    def test_real_worklog_corpus_boundary_shrinks(self):
+        """真實語料整合：抽出段落大小與 ID 數應大幅收斂（現況 17103 chars / 100 IDs）"""
+        from ticket_system.lib.worklog_parser import (
+            extract_handoff_section,
+            extract_ticket_ids,
+        )
+
+        real_worklog = (
+            Path(__file__).resolve().parents[5]
+            / "docs"
+            / "work-logs"
+            / "v0"
+            / "v0.2"
+            / "v0.2.1"
+            / "v0.2.1-main.md"
+        )
+        if not real_worklog.exists():
+            pytest.skip("真實 worklog 不存在，略過整合驗證")
+
+        content = real_worklog.read_text(encoding="utf-8")
+        section = extract_handoff_section(content)
+        ids = extract_ticket_ids(section, active_version="0.2.1")
+        assert len(section) < 2000
+        assert len(set(ids)) <= 10
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

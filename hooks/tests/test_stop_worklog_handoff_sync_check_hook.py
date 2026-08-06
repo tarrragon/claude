@@ -17,6 +17,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -435,6 +436,89 @@ class TestStopWorklogHandoffSyncCheck:
         assert len(missing_lines) == 1, (
             f"修復後應只抓 1 個 ticket，實際抓到 {len(missing_lines)}：{missing_lines}"
         )
+
+
+# ---------------------------------------------------------------------------
+# 0.2.1-W3-294 S2：session 增量前置過濾（git diff）
+# ---------------------------------------------------------------------------
+
+
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, text=True)
+
+
+def _init_git_repo(root: Path) -> None:
+    _git(root, "init", "-q")
+    _git(root, "config", "user.email", "test@example.com")
+    _git(root, "config", "user.name", "Test")
+
+
+def _commit_all(root: Path, message: str) -> None:
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", message)
+
+
+class TestS2SessionIncrementalFilter:
+    """S2 session 增量前置過濾（0.2.1-W3-294 RED 5/6/7）"""
+
+    def test_no_handoff_in_session_increment_silent(self, tmp_path, hook_mod):
+        """RED 5：session 增量無交接段 → detect_sync_drift 回 None（本 session 未寫交接即靜默）"""
+        root, worklog = make_project_root(
+            tmp_path,
+            worklog_content="## 舊紀錄\n\n**下一站**：`0.18.0-W17-900`（歷史交接，session 前已存在）。\n",
+            pending_ticket_ids=set(),
+        )
+        _init_git_repo(root)
+        _commit_all(root, "baseline")
+
+        session_start = time.time()
+        # 本 session 新增一般紀錄（無交接關鍵字）
+        with worklog.open("a", encoding="utf-8") as f:
+            f.write("\n## 本次 session\n\n一般工作紀錄，無交接。\n")
+        os.utime(worklog, (session_start + 5, session_start + 5))
+
+        result = hook_mod.detect_sync_drift(root, session_start, MagicMock())
+        assert result is None
+
+    def test_handoff_in_session_increment_only_reports_new_ids(self, tmp_path, hook_mod):
+        """RED 6：session 增量含交接段且 pending 無對應 → 警告僅含交接行內的 ID（不含 baseline 歷史 ID）"""
+        root, worklog = make_project_root(
+            tmp_path,
+            worklog_content="## 舊紀錄\n\n**下一站**：`0.18.0-W17-900`（歷史交接，非本 session）。\n",
+            pending_ticket_ids=set(),
+            ticket_status_map={
+                "0.18.0-W17-900": "pending",
+                "0.18.0-W17-079": "pending",
+            },
+        )
+        _init_git_repo(root)
+        _commit_all(root, "baseline")
+
+        session_start = time.time()
+        with worklog.open("a", encoding="utf-8") as f:
+            f.write("\n**下一站**：`0.18.0-W17-079`（本 session 新交接）。\n")
+        os.utime(worklog, (session_start + 5, session_start + 5))
+
+        result = hook_mod.detect_sync_drift(root, session_start, MagicMock())
+        assert result is not None
+        assert "0.18.0-W17-079" in result
+        assert "0.18.0-W17-900" not in result
+
+    def test_git_unavailable_falls_back_to_full_content(self, tmp_path, hook_mod):
+        """RED 7：git 不可用（tmp 非 git repo）→ 不 raise，退回全文路徑"""
+        root, worklog = make_project_root(
+            tmp_path,
+            worklog_content="## Handoff Context\n\nW17-079 待處理\n",
+            pending_ticket_ids=set(),
+            ticket_status_map={"0.18.0-W17-079": "in_progress"},
+        )
+        session_start = time.time() - 10
+        os.utime(worklog, (session_start + 5, session_start + 5))
+
+        # root 非 git repo；不應 raise，且應退回全文偵測（維持修復前行為）
+        result = hook_mod.detect_sync_drift(root, session_start, MagicMock())
+        assert result is not None
+        assert "0.18.0-W17-079" in result
 
 
 # ---------------------------------------------------------------------------

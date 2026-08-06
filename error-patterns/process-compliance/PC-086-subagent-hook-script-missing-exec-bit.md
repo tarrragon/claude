@@ -68,4 +68,5 @@ Subagent 訓練傾向於「完成主任務」，不自動處理周邊系統約�
 - W14-024 ANA：subagent frontmatter bypass（同類根因分析）
 - W14-028 IMP：ticket-frontmatter-validator-hook（本 ticket 建 hook 時發生）
 - PC-064：PM 無意識繞過 AUQ（同類「系統約束缺失」）
+- ARCH-BAL-015：本 pattern 衍生的自動 chmod 補救機制掃描軸過寬，波及不需要 exec bit 的測試檔，把執行期問題轉化為版本控制問題（0.2.1-W3-319）
 - 建議後續：擴充 W14-024 Phase A IMP 範圍涵蓋 Hook 腳本驗證

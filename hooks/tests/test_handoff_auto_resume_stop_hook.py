@@ -204,7 +204,9 @@ def test_scan_recently_created_with_stale_goes_to_recent(monkeypatch, tmp_path):
         },
     )
     pending, recent = hook.scan_pending_handoff_tasks(tmp_path, MagicMock())
-    assert [t["ticket_id"] for t in recent] == ["W17-117"]
+    # 0.2.1-W3-308：顯示對象改為 target（W17-117 的 direction 為
+    # to-sibling:W17-118，resolve_target 解析出 target=W17-118）
+    assert [t["ticket_id"] for t in recent] == ["W17-118"]
     assert pending == []
     # W17-115 應被 GC 刪除
     assert not (pending_dir / "W17-115.json").exists()
@@ -721,6 +723,86 @@ def test_scan_calls_has_background_agents_once_per_scan(monkeypatch, tmp_path):
         f"has_background_agents 屬 loop-invariant，每次 scan 只應呼叫一次，"
         f"實際呼叫 {mock_has_bg.call_count} 次（3 筆 pending JSON）"
     )
+
+
+# ===== 0.2.1-W3-308: 顯示/排序/判定路徑統一以 target 為對象 =====
+
+
+def test_scan_source_completed_explicit_target_displays_target_id_and_title(
+    monkeypatch, tmp_path
+):
+    """來源已 completed + 顯式 target_ticket_id → 顯示 target 的 ID 與 title，
+    而非來源票（ARCH-BAL-014）。"""
+    pending_dir = tmp_path / "pending"
+    pending_dir.mkdir(parents=True)
+    record = {
+        "ticket_id": "0.2.1-W3-304",  # 來源票
+        "target_ticket_id": "0.2.1-W3-294",  # target
+        "direction": "next",
+        "title": "來源票的標題",
+        "timestamp": (datetime.now() - timedelta(hours=2)).isoformat(),
+        "resumed_at": None,
+    }
+    (pending_dir / "0.2.1-W3-304.json").write_text(json.dumps(record), encoding="utf-8")
+
+    hook = load_hook_module()
+    monkeypatch.setattr(hook, "PENDING_DIR_NAME", "pending")
+    monkeypatch.setattr(
+        hook, "is_handoff_stale", lambda record, project_root=None: (False, "")
+    )
+    # 來源票已 completed（--next 類 handoff 的成立前提）
+    monkeypatch.setattr(
+        hook, "is_ticket_completed",
+        lambda root, tid, log: tid == "0.2.1-W3-294",  # 只有 target 視為完成
+    )
+    monkeypatch.setattr(hook, "is_ticket_recently_started", lambda *a, **k: False)
+
+    fake_path = tmp_path / "target.md"
+    fake_path.write_text("---\ntitle: target 的標題\n---\n")
+    monkeypatch.setattr(
+        hook, "find_ticket_file",
+        lambda tid, root, log: fake_path if tid == "0.2.1-W3-294" else None,
+    )
+    monkeypatch.setattr(
+        hook, "parse_ticket_frontmatter",
+        lambda path, log: {"title": "target 的標題"},
+    )
+
+    pending, recent = hook.scan_pending_handoff_tasks(tmp_path, MagicMock())
+
+    assert len(pending) == 1
+    assert pending[0]["ticket_id"] == "0.2.1-W3-294", "應顯示 target 而非來源票"
+    assert pending[0]["title"] == "target 的標題", "應顯示 target 的 title 而非來源票的標題"
+
+
+def test_scan_direction_auto_fallback_uses_ticket_id_as_target(monkeypatch, tmp_path):
+    """direction=auto 記錄的 ticket_id 欄位本身即 target（lifecycle.py 產生），
+    無 target_ticket_id 顯式欄位時須靠 fallback 正確顯示（不可漏掉）。"""
+    pending_dir = tmp_path / "pending"
+    pending_dir.mkdir(parents=True)
+    record = {
+        "ticket_id": "0.2.1-W3-500",
+        "direction": "auto",
+        "title": "auto 任務標題",
+        "timestamp": (datetime.now() - timedelta(hours=1)).isoformat(),
+        "resumed_at": None,
+    }
+    (pending_dir / "0.2.1-W3-500.json").write_text(json.dumps(record), encoding="utf-8")
+
+    hook = load_hook_module()
+    monkeypatch.setattr(hook, "PENDING_DIR_NAME", "pending")
+    monkeypatch.setattr(
+        hook, "is_handoff_stale", lambda record, project_root=None: (False, "")
+    )
+    monkeypatch.setattr(hook, "is_ticket_completed", lambda root, tid, log: False)
+    monkeypatch.setattr(hook, "is_ticket_recently_started", lambda *a, **k: False)
+
+    pending, recent = hook.scan_pending_handoff_tasks(tmp_path, MagicMock())
+
+    # direction=auto 為建議性，不阻塞退出，進 recent_tasks
+    assert [t["ticket_id"] for t in recent] == ["0.2.1-W3-500"]
+    assert recent[0]["title"] == "auto 任務標題"
+    assert pending == []
 
 
 # ===== main() stdin 整合測試（W3-037，承接 W3-026.1 commit 7f2ec9e6）=====

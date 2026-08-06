@@ -218,6 +218,84 @@ class TestNextWritesTargetTicketId:
 
 
 # ----------------------------------------------------------------------------
+# --next 模式 context_bundle 抽取對象須為 target（0.2.1-W3-306 RED (c)）
+# ----------------------------------------------------------------------------
+
+class TestNextContextBundleTargetsTarget:
+    """--next 產生的 JSON，context_bundle 抽取對象須為 target，而非來源票。"""
+
+    def test_context_bundle_target_ticket_id_matches_top_level_target(self, temp_project):
+        """來源票已 completed，target 尚未開始：context_bundle 仍須以 target 抽取，
+        而非因來源已 completed 而得到 no_source 空 bundle（根因 2 復現）。
+        """
+        root, tickets_dir = temp_project
+        _create_ticket(
+            tickets_dir,
+            "0.18.0-W17-001",
+            status="completed",
+            what="來源票已完成的內容",
+        )
+        _create_ticket(
+            tickets_dir,
+            "0.18.0-W17-002",
+            status=STATUS_PENDING,
+            what="target 票待處理的內容",
+        )
+
+        args = _make_args(
+            next="0.18.0-W17-002",
+            from_ticket_id="0.18.0-W17-001",
+        )
+        rc = execute(args)
+        assert rc == 0
+
+        out_file = root / ".claude" / "handoff" / "pending" / "0.18.0-W17-001.json"
+        data = json.loads(out_file.read_text(encoding="utf-8"))
+
+        bundle = data.get("context_bundle")
+        assert bundle is not None, "context_bundle 不應為 None（target ticket 存在且可載入）"
+        assert bundle.get("target_ticket_id") == "0.18.0-W17-002", (
+            "context_bundle 的抽取對象須為頂層 target_ticket_id 指向的票，"
+            "而非來源票（避免來源已 completed 時得到 no_source 空 bundle）"
+        )
+
+    def test_target_load_failure_warns_and_falls_back_to_source(
+        self, temp_project, capsys
+    ):
+        """target ticket 不存在（載入失敗）時，fallback 至來源票須明示對象與原因（第三輪 PM 驗收）。
+
+        Why：靜默 fallback 正是本票根因 2 產生「看起來成功、對象是錯的」空 bundle 的
+        同一條路徑，必須有 stderr 訊號讓使用者知道 bundle 對象非 target。
+        """
+        root, tickets_dir = temp_project
+        _create_ticket(
+            tickets_dir,
+            "0.18.0-W17-011",
+            status=STATUS_IN_PROGRESS,
+            what="來源票內容",
+        )
+        # target "0.18.0-W17-999" 刻意不建立，模擬載入失敗
+
+        args = _make_args(
+            next="0.18.0-W17-999",
+            from_ticket_id="0.18.0-W17-011",
+        )
+        rc = execute(args)
+        assert rc == 0
+
+        out_file = root / ".claude" / "handoff" / "pending" / "0.18.0-W17-011.json"
+        data = json.loads(out_file.read_text(encoding="utf-8"))
+        bundle = data.get("context_bundle")
+        # fallback 至來源票抽取，target_ticket_id 應為來源票 id
+        assert bundle is not None
+        assert bundle.get("target_ticket_id") == "0.18.0-W17-011"
+
+        err = capsys.readouterr().err
+        assert "0.18.0-W17-999" in err, "警告須提及載入失敗的 target id"
+        assert "0.18.0-W17-011" in err, "警告須提及退回抽取的來源票 id"
+
+
+# ----------------------------------------------------------------------------
 # 向後相容：既有 JSON 不含 target_ticket_id 仍可解析
 # ----------------------------------------------------------------------------
 

@@ -1312,6 +1312,52 @@ def _extract_context_bundle_for_handoff(
         return None
 
 
+def _extract_context_bundle_for_target(
+    target_id: Optional[str],
+    version: str,
+    fallback_ticket: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """為 handoff 抽取 Context Bundle，優先以 target ticket 為對象。
+
+    Why：context_bundle 的消費者是要接手 target 的下 session，若以來源票抽取，
+    來源已 completed 時得到 no_source 空 bundle，真正待接手的 target 從未被抽取。
+    --next / --auto:target 產出的 JSON，其 context_bundle.target_ticket_id
+    必須指向頂層 target_ticket_id 所指的票，不可寫成來源票。
+
+    target 載入失敗時 fallback 至來源票並非靜默——這條 fallback 路徑正是上述
+    根因會產生的同一種「看起來成功、對象卻是錯的」bundle，故退回來源票時
+    必須明示對象與原因（stderr warning），避免使用者誤信 bundle 針對 target。
+
+    Args:
+        target_id: 解析出的 target ticket id（可能為 None，例如 --auto 無後綴）
+        version: from_ticket 所屬版本，作為載入 target 的預設版本
+        fallback_ticket: 無 target_id 或 target 載入失敗時使用的來源 ticket
+
+    Returns:
+        dict（成功）或 None（同 _extract_context_bundle_for_handoff）
+    """
+    if not target_id:
+        return _extract_context_bundle_for_handoff(fallback_ticket)
+
+    target_version = extract_version_from_ticket_id(target_id) or version
+    target_ticket, error = load_and_validate_ticket(
+        target_version, target_id, auto_print_error=False
+    )
+    if error or target_ticket is None:
+        fallback_id = fallback_ticket.get("id", "?")
+        # error 可能是未代入變數的原始 template 字串（load_and_validate_ticket
+        # auto_print_error=False 時直接回傳 ErrorMessages 常數，含未替換的 {}
+        # 佔位符），故不可再交給 format_warning 二次 .format()，直接串接純文字。
+        print(
+            f"[Warning] target ticket {target_id} 載入失敗，context_bundle "
+            f"退回以來源票 {fallback_id} 抽取——對象非 target，接手者須自行核對",
+            file=sys.stderr,
+        )
+        return _extract_context_bundle_for_handoff(fallback_ticket)
+
+    return _extract_context_bundle_for_handoff(target_ticket)
+
+
 # Exit Status H2 section 抽取正則：匹配 `## Exit Status` 到下一個 `## ` 或檔尾。
 # 與 context_bundle_extractor._read_section_body 同模式。
 _EXIT_STATUS_SECTION_RE = re.compile(
@@ -1495,7 +1541,9 @@ def _execute_auto_handoff(args: argparse.Namespace) -> int:
         "chain": ticket.get("chain", {}),
         "resumed_at": None,
         "auto_generated": True,
-        "context_bundle": _extract_context_bundle_for_handoff(ticket),
+        "context_bundle": _extract_context_bundle_for_target(
+            auto_target_id, version, ticket
+        ),
         "exit_status": _extract_exit_status_for_handoff(ticket),
     }
 
@@ -1579,7 +1627,9 @@ def _execute_next_handoff(args: argparse.Namespace) -> int:
         "chain": ticket.get("chain", {}),
         "resumed_at": None,
         "auto_generated": False,
-        "context_bundle": _extract_context_bundle_for_handoff(ticket),
+        "context_bundle": _extract_context_bundle_for_target(
+            target_id, version, ticket
+        ),
         "exit_status": _extract_exit_status_for_handoff(ticket),
     }
 

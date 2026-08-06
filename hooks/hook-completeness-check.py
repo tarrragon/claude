@@ -36,7 +36,7 @@ sys.path.insert(0, str(_HOOKS_DIR))
 sys.path.insert(0, str(_CLAUDE_DIR))  # for `from lib import ...`
 sys.path.insert(0, str(_PROJECT_INIT_DIR))
 
-from lib import setup_hook_logging, run_hook_safely, get_uncommitted_files
+from lib import setup_hook_logging, run_hook_safely
 from project_init.lib.hook_checker import (
     extract_registered_hooks,
     extract_registered_skill_hooks,
@@ -309,18 +309,28 @@ def prune_phantom_local_registrations(
 
 
 def _check_and_fix_permissions(hooks_dir, logger):
-    """Check execute permissions for all .py files under hooks_dir and auto-fix.
+    """為 hooks_dir 頂層的 hook 補上缺少的 exec bit。
 
-    Scans recursively, skipping __pycache__ and .venv directories.
-    Returns (fixed_count, already_ok_count).
+    Claude Code 以 `$CLAUDE_PROJECT_DIR/.claude/hooks/<name>.py` 的形式直接執行
+    hook，故只有「會被當作可執行檔啟動」的檔案需要 exec bit，而 hook 本體一律放
+    在頂層。以目錄層級界定而非解析 settings.json，是為了避開「已註冊但本輪尚未
+    chmod 就被執行」的競態——那正是 IMP-026 的原始失效。
+
+    刻意不遞迴：`tests/`、`acceptance_checkers/`、`archived/` 下的 .py 由 pytest 或
+    import 載入，從不被 shell 直接執行。對其 chmod 會產生無主的 git mode-only 變更
+    （0.2.1-W3-319）。
+
+    真要支援子目錄 hook，先決條件是本函式改回傳相對路徑——目前回傳 basename，
+    `_attempt_auto_commit` 以 `hooks_dir / name` 還原，子目錄檔案會還原到錯誤位置。
+
+    Returns:
+        (fixed_file_names, already_ok_count)
     """
     fixed = []
     already_ok = 0
 
-    for py_file in sorted(hooks_dir.rglob("*.py")):
-        # Skip non-essential directories
-        parts = py_file.relative_to(hooks_dir).parts
-        if any(p in ("__pycache__", ".venv", "node_modules") for p in parts):
+    for py_file in sorted(hooks_dir.glob("*.py")):
+        if not py_file.is_file():
             continue
 
         if os.access(py_file, os.X_OK):
@@ -350,14 +360,56 @@ def _run_git(args, cwd, logger):
         return None
 
 
-def _attempt_auto_commit(fixed_files, hooks_dir, project_root, logger):
-    """If working tree only contains the chmod mode-only changes for fixed_files,
-    auto-commit them as chore. Otherwise print a warning and skip.
+def _repo_is_safe_to_autocommit(project_root, logger):
+    """僅在 HEAD 掛在分支上、且無進行中的 merge 時，才允許自動 commit。
 
-    fixed_files: list of file names (basenames) that were chmod'd.
+    不逐一檢查 `.git/rebase-merge`、`.git/CHERRY_PICK_HEAD` 等狀態檔：那份清單會
+    隨 git 版本增長，漏一項就是一個洞；更關鍵的是 linked worktree 的 `.git` 是
+    gitfile 而非目錄，真正的狀態檔位在 `<main>/.git/worktrees/<name>/` 下，路徑存在
+    性檢查在 worktree 中必然失效——而本專案常以 worktree 開發。
+
+    改判 HEAD 是否 detached 可一次覆蓋 rebase（兩種 backend 皆 detach HEAD）、
+    bisect 與一般 detached 狀態。若在 rebase 暫停期間 commit，該 commit 會被
+    `rebase --continue` 收進 replay 序列，成為分支的永久祖先且其後所有 commit 的
+    SHA 都改變，全程無警告（0.2.1-W3-319 實測）。
+
+    merge 進行中 HEAD 仍掛在分支上，故需另行檢查 MERGE_HEAD。git 自身雖會擋下
+    partial commit，但先行判斷可省去一則對使用者無意義的 fatal 訊息。
+    """
+    head = _run_git(["symbolic-ref", "-q", "HEAD"], project_root, logger)
+    if head is None or head.returncode != 0:
+        msg = "[HookCheck] HEAD 未掛在分支上（rebase / bisect / detached），跳過自動 commit"
+        print(msg)
+        logger.info(msg)
+        return False
+
+    merge_head = _run_git(
+        ["rev-parse", "-q", "--verify", "MERGE_HEAD"], project_root, logger
+    )
+    if merge_head is not None and merge_head.returncode == 0:
+        msg = "[HookCheck] merge 進行中，跳過自動 commit"
+        print(msg)
+        logger.info(msg)
+        return False
+
+    return True
+
+
+def _attempt_auto_commit(fixed_files, hooks_dir, project_root, logger):
+    """提交本次 chmod 產生的 mode-only 變更。
+
+    工作區有其他變更時仍會提交，但範圍只涵蓋指定路徑。刻意不要求工作區乾淨——
+    SessionStart 時工作區通常已有開發中變更，舊版的「工作區恰好只含本次 chmod
+    變更」條件在真實環境幾乎不成立（0.2.1-W3-319 實證連續 4 次 chmod 全數跳過），
+    使 mode 變更淪為跨 session 無主遺留，最終在 git pull 時阻擋合併。
+
+    fixed_files: 本次 chmod 的檔名（basename，位於 hooks_dir 頂層）。
     Returns True if a commit was created, False otherwise.
     """
     if not fixed_files:
+        return False
+
+    if not _repo_is_safe_to_autocommit(project_root, logger):
         return False
 
     # Compute repo-relative paths for each fixed file
@@ -374,37 +426,14 @@ def _attempt_auto_commit(fixed_files, hooks_dir, project_root, logger):
         logger.warning(msg)
         return False
 
-    # 1) git status --porcelain - examine working tree
-    # 改用 lib.git_utils.get_uncommitted_files 收斂 porcelain 解析
-    # （0.2.1-W3-290，沿用 0.2.1-W3-286 rename 箭頭格式結論：取 " -> " 右側新路徑）
-    try:
-        file_statuses = get_uncommitted_files(cwd=str(project_root))
-    except Exception as exc:
-        msg = f"[HookCheck] git status 失敗，跳過自動 commit: {exc}"
-        print(msg)
-        logger.warning(msg)
-        return False
-
-    changed_paths = set()
-    for fs in file_statuses:
-        path = fs.file_path.strip()
-        if " -> " in path:
-            path = path.split(" -> ", 1)[1]
-        changed_paths.add(path)
-
-    if changed_paths != fixed_rel_set:
-        extra = changed_paths - fixed_rel_set
-        msg = (
-            f"[HookCheck] 偵測到其他未提交變更（{len(extra)} 項），跳過自動 commit。"
-            f" 請手動處理後再執行；或使用 git revert HEAD 不適用此情境。"
-        )
-        print(msg)
-        logger.info(msg)
-        return False
-
-    # 2) Verify each file is mode-only change (git diff <file> empty content)
+    # 1) 以 numstat 一次取得「已被追蹤、相對 HEAD 有變更、且為 mode-only」的精確集合。
+    # `0\t0\t<path>` 表示零增刪行，即純 mode 變更。基準取 HEAD 而非 index，才能涵蓋
+    # 其他 session 已將內容變更 stage 起來的情形。未被追蹤的檔案不會出現在輸出中，
+    # 因而自然被排除——新建的 hook 檔整份內容都是新的，不屬於本函式的提交範圍，
+    # 若一併提交會讓「auto-fix executable permissions」的 commit 訊息與內容不符。
+    # --no-renames 必要：純改名在 numstat 下同樣顯示為 0 0，會偽裝成 mode-only。
     diff = _run_git(
-        ["diff", "--", *sorted(fixed_rel_set)],
+        ["diff", "HEAD", "--numstat", "--no-renames", "--", *sorted(fixed_rel_set)],
         project_root,
         logger,
     )
@@ -414,26 +443,37 @@ def _attempt_auto_commit(fixed_files, hooks_dir, project_root, logger):
         logger.warning(msg)
         return False
 
-    # Mode-only changes show in `git diff` as a header with "old mode"/"new mode"
-    # but no @@ hunks. If we see any hunk markers, it's not mode-only.
-    if "@@" in diff.stdout:
-        msg = "[HookCheck] 偵測到非 mode-only 變更，跳過自動 commit"
+    committable = set()
+    for line in diff.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) == 3 and parts[0] == "0" and parts[1] == "0":
+            committable.add(parts[2])
+
+    if not committable:
+        msg = (
+            "[HookCheck] 本次 chmod 的檔案沒有可提交的 mode-only 變更"
+            "（未被追蹤、已提交或含內容變更），跳過自動 commit。"
+        )
         print(msg)
         logger.info(msg)
         return False
 
-    # 3) git add + git commit
-    add = _run_git(["add", "--", *sorted(fixed_rel_set)], project_root, logger)
-    if add is None or add.returncode != 0:
-        err = (add.stderr if add else "") or "unknown error"
-        msg = f"[HookCheck] git add 失敗，跳過自動 commit: {err}"
-        print(msg)
-        logger.warning(msg)
-        sys.stderr.write(msg + "\n")
-        return False
+    skipped = fixed_rel_set - committable
+    if skipped:
+        logger.info(
+            f"[HookCheck] {len(skipped)} 個 chmod 檔案無 mode-only 變更可提交，"
+            f"僅提交其餘 {len(committable)} 個: {', '.join(sorted(skipped))}"
+        )
 
+    # 2) git commit --only：僅提交指定路徑，不吸收其他 session 已 stage 的內容。
+    # 不先 git add——`--only` 自帶「以這些路徑為準」語意，額外的 add 會把檔案留在
+    # index 中，一旦後續 commit 失敗即污染共用 index（PC-BAL-008）。
     commit_msg = "chore: auto-fix executable permissions for hook files (IMP-054)"
-    commit = _run_git(["commit", "-m", commit_msg], project_root, logger)
+    commit = _run_git(
+        ["commit", "--only", "-m", commit_msg, "--", *sorted(committable)],
+        project_root,
+        logger,
+    )
     if commit is None or commit.returncode != 0:
         err = (commit.stderr if commit else "") or "unknown error"
         out = (commit.stdout if commit else "") or ""
@@ -444,7 +484,7 @@ def _attempt_auto_commit(fixed_files, hooks_dir, project_root, logger):
         return False
 
     success_msg = (
-        f"[HookCheck] 已自動 commit {len(fixed_rel_set)} 個權限修正檔案。"
+        f"[HookCheck] 已自動 commit {len(committable)} 個權限修正檔案。"
         f" 如需撤銷請執行: git revert HEAD"
     )
     print(success_msg)

@@ -1,10 +1,21 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["pyyaml"]
+# dependencies = ["pyyaml", "filelock>=3.12"]
 # ///
 
 """
+依賴說明（PC-135 復發模式）：handoff_utils 的 import 鏈為
+handoff_utils -> ticket_system.lib.constants -> lib/__init__ -> ticket_loader
+-> parser -> file_lock -> filelock，本 hook 以 `uv run --script`（PEP 723
+script 環境）執行時僅按 dependencies 宣告安裝套件，缺 filelock 會使 import
+落入 degraded fallback（resolve_target 恆回 None、is_handoff_stale 恆回非
+stale），造成 target 顯示與 stale 過濾在真實 runtime 環境不生效，但 pytest
+因專案 venv 已裝 filelock 而不會偵測到此缺口。
+Action：異動本檔或 handoff_utils 的 import 範圍時，須同步比對 PEP 723
+dependencies 是否涵蓋新 import 鏈的 transitive 依賴；驗收須以實際
+`uv run --script` 執行方式複驗，pytest 綠燈不構成本檔行為的驗收依據。
+
 Handoff 待恢復任務提醒 Hook
 
 在 Session 啟動時檢查是否有待恢復的 handoff 任務。
@@ -35,15 +46,27 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
-from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root
+from lib import (
+    setup_hook_logging,
+    run_hook_safely,
+    read_json_from_stdin,
+    get_project_root,
+    parse_ticket_frontmatter,
+    find_ticket_file,
+)
 
 # 加入 ticket_system lib 路徑以引用 handoff_utils.is_handoff_stale（W17-095.3）
-_TICKET_LIB_PATH = Path(__file__).resolve().parents[1] / "ticket_system" / "lib"
-if str(_TICKET_LIB_PATH) not in sys.path:
-    sys.path.insert(0, str(_TICKET_LIB_PATH))
+# 同時加入 skills/ticket 父路徑以解析 handoff_utils 內部的 `from ticket_system.lib.*`
+# import（缺此路徑會使 import 靜默降級為 ModuleNotFoundError fallback，
+# resolve_target 永遠回 None，與 handoff-auto-resume-stop-hook.py 對齊補上）。
+_TICKET_SKILL_PATH = Path(__file__).resolve().parents[1]
+_TICKET_LIB_PATH = _TICKET_SKILL_PATH / "ticket_system" / "lib"
+for _p in (_TICKET_SKILL_PATH, _TICKET_LIB_PATH):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 try:
-    from handoff_utils import is_handoff_stale  # type: ignore
+    from handoff_utils import is_handoff_stale, resolve_target  # type: ignore
 except Exception as _import_err:  # pragma: no cover - fallback：lib 不可用時不過濾，行為退化為原狀
     # PC-135 防護：silent fallback 改 noisy。退化為「全不過濾」會讓 reminder 列出已 stale 的 handoff，
     # 雖偏保守側但會干擾用戶體驗，必須立即可見。
@@ -54,6 +77,11 @@ except Exception as _import_err:  # pragma: no cover - fallback：lib 不可用�
     )
     def is_handoff_stale(record, project_root=None):  # type: ignore
         return False, ""
+
+    def resolve_target(record):  # type: ignore
+        # 退化 fallback：無 lib 時無法解析 target_ticket_id / direction 後綴，
+        # 由呼叫端 `resolve_target(record) or record.get("ticket_id")` 自動 fallback 至來源票。
+        return None
 
 import re
 from datetime import datetime
@@ -136,9 +164,24 @@ def scan_handoff_pending_directory(project_root: Path, logger) -> Tuple[List[Dic
                 title = data.get("title", "無標題")
                 direction = data.get("direction", "unknown")
 
+                # 不變式：顯示/排序/判定路徑一律以
+                # `resolve_target(record) or record.get("ticket_id")` 解析出的
+                # target 為對象；不可改成「有 target 才顯示」，因為 direction=auto
+                # 記錄的 ticket_id 欄位本身就是 target（lifecycle.py 產生）。
+                # 本檔為 SessionStart reminder，target_id 只用於待恢復清單顯示，
+                # 不涉及阻塞/GC 判斷（GC 由 is_handoff_stale 於上方獨立處理）。
+                target_id = resolve_target(data) or ticket_id
+                display_title = title
+                if target_id != ticket_id:
+                    target_path = find_ticket_file(target_id, project_root, logger)
+                    if target_path:
+                        target_frontmatter = parse_ticket_frontmatter(target_path, logger)
+                        if target_frontmatter and target_frontmatter.get("title"):
+                            display_title = target_frontmatter["title"]
+
                 pending_tasks.append({
-                    "ticket_id": ticket_id,
-                    "title": title,
+                    "ticket_id": target_id,
+                    "title": display_title,
                     "direction": direction,
                     "file_path": str(file_path),
                     "timestamp": data.get("timestamp", "unknown"),
@@ -147,7 +190,7 @@ def scan_handoff_pending_directory(project_root: Path, logger) -> Tuple[List[Dic
                     "from_status": data.get("from_status", "unknown"),
                 })
 
-                logger.debug(f"找到待恢復任務: {ticket_id} - {title}")
+                logger.debug(f"找到待恢復任務: {target_id} - {display_title}")
 
             except json.JSONDecodeError as e:
                 logger.warning(f"JSON 解析失敗 ({file_path.name}): {e}")
@@ -195,65 +238,6 @@ def mark_handoff_as_resumed(ticket_id: str, project_root: Path, logger) -> None:
         logger.info(f"已標記 Handoff 為已接手: {ticket_id}")
     except Exception as e:
         logger.warning(f"標記 Handoff 失敗 ({ticket_id}): {e}")
-
-def generate_auto_resume_message(selected_task: Dict[str, Any], all_tasks: List[Dict[str, Any]], logger) -> str:
-    """
-    生成完整的自動恢復訊息
-
-    包含任務描述、任務鏈資訊、建議動作
-
-    Args:
-        selected_task: 選定的任務
-        all_tasks: 所有待恢復任務
-        logger: 日誌物件
-
-    Returns:
-        str - 格式化的恢復訊息
-    """
-    ticket_id = selected_task.get("ticket_id", "unknown")
-    title = selected_task.get("title", "")
-    what = selected_task.get("what", "")
-    direction = selected_task.get("direction", "unknown")
-    chain = selected_task.get("chain", {})
-
-    message = "============================================================\n"
-    message += "[自動恢復任務 Context]\n"
-    message += "============================================================\n\n"
-
-    message += f"任務: {ticket_id}\n"
-    message += f"標題: {title}\n"
-    message += f"方向: {direction}\n\n"
-
-    if what:
-        message += "--- 任務描述 ---\n"
-        message += what + "\n\n"
-
-    chain_root = chain.get("root", "N/A")
-    chain_parent = chain.get("parent", "N/A")
-    chain_depth = chain.get("depth", 0)
-
-    message += "--- 任務鏈資訊 ---\n"
-    message += f"Root: {chain_root}\n"
-    message += f"Parent: {chain_parent}\n"
-    message += f"Depth: {chain_depth}\n\n"
-
-    message += "--- 建議動作 ---\n"
-    message += f"/ticket track claim {ticket_id}\n\n"
-
-    # 若有多個待恢復任務，顯示清單
-    if len(all_tasks) > 1:
-        message += "--- 其他待恢復任務 ---\n"
-        for i, task in enumerate(all_tasks[1:5], 1):  # 最多顯示 4 個其他任務
-            other_id = task.get("ticket_id", "unknown")
-            other_title = task.get("title", "")
-            message += f"  {i}. {other_id}: {other_title}\n"
-        if len(all_tasks) > 5:
-            message += f"  ... 還有 {len(all_tasks) - 5} 個任務\n"
-        message += "\n"
-
-    message += "============================================================\n"
-
-    return message
 
 def generate_reminder_message(
     pending_tasks: List[Dict[str, Any]],

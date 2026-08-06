@@ -42,9 +42,9 @@ from ticket_system.lib.command_lifecycle_messages import (
 from ticket_system.lib.handoff_utils import (
     extract_direction_target_id,
     is_ticket_completed,
-    is_task_chain_direction,
-    is_ticket_in_progress_or_completed,
+    is_handoff_stale,
     is_valid_direction,
+    resolve_target,
     scan_pending_handoffs,
 )
 from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
@@ -176,32 +176,14 @@ def list_pending_handoffs() -> HandoffListResult:
                 print(f"[WARNING] 跳過未知 direction 的 handoff：{record.file_path.name}（direction={direction!r}）", file=sys.stderr)
                 continue
 
-            # 過濾 stale handoff：
-            # Handoff 是 stale 當且僅當：
-            # 1. 來源 Ticket 已 completed（status: completed）
-            # 2. 且 Handoff 是從非 completed 狀態創建的（from_status != "completed"）
-            #
-            # 特殊情況（保留）：
-            # - 任務鏈 handoff（to-sibling/to-parent/to-child），即使 completed 也保留
-            # - Handoff 本身是從 completed 狀態創建的，不算 stale
-            if record.ticket_id and is_ticket_completed(record.ticket_id):
-                # Ticket 已 completed，檢查 handoff 狀態
-                if is_task_chain_direction(direction):
-                    # 任務鏈 handoff：進一步檢查目標 ticket 是否已啟動
-                    target_id = extract_direction_target_id(direction)
-                    if target_id and is_ticket_in_progress_or_completed(target_id):
-                        # 目標已啟動，此 handoff 為 stale（W4-002 計數）
-                        stale_count += 1
-                        continue
-                    # 目標未啟動或無 target_id，保留
-                    handoffs.append(record.data)
-                    continue
-
-                # 非任務鏈：只有當 from_status 不是 completed 時才過濾為 stale
-                if record.from_status != "completed":
-                    # Stale handoff，跳過（W4-002 計數）
-                    stale_count += 1
-                    continue
+            # 過濾 stale handoff：delegate 至 handoff_utils.is_handoff_stale（單一 SSOT），
+            # 不可自行重實作判斷邏輯——若未讀 target_ticket_id，對 --next 產生的
+            # context-refresh handoff（來源已 completed 為預期前提）會誤判為 stale。
+            # delegate 消除 ARCH-020 跨模組同構邏輯漂移風險。
+            is_stale, _reason = is_handoff_stale(record.data)
+            if is_stale:
+                stale_count += 1  # W4-002 計數
+                continue
 
             handoffs.append(record.data)
 
@@ -475,11 +457,13 @@ def _apply_runqueue_ordering(handoffs: List[Dict[str, Any]]) -> List[Dict[str, A
         List[Dict]: 依 priority + ticket_id 重新排序後的清單
     """
     def sort_key(handoff: Dict[str, Any]):
-        ticket_id = handoff.get("ticket_id", "") or ""
-        ticket = _load_ticket_for_handoff(ticket_id)
+        # 排序依據須為 target（要接手的票）的 priority，非來源票——問題本質是
+        # 「下 session 該優先做哪張」，屬 target 類判準。
+        target_id = resolve_target(handoff) or handoff.get("ticket_id", "") or ""
+        ticket = _load_ticket_for_handoff(target_id)
         # 無 ticket 視為未知 priority（_priority_rank 對空 dict 返回預設值）
         rank = _priority_rank(ticket or {})
-        return (rank, str(ticket_id))
+        return (rank, str(target_id))
 
     return sorted(handoffs, key=sort_key)
 
@@ -517,11 +501,20 @@ def _execute_list() -> int:
     print()
 
     for idx, handoff in enumerate(handoffs, 1):
-        ticket_id = handoff.get("ticket_id", "unknown")
+        # 不變式：顯示/排序/判定路徑一律以
+        # `resolve_target(record) or record.get("ticket_id")` 解析出的 target
+        # 為對象；清單標題為「下 session 建議項目」，語意是「該做哪張」，須顯示
+        # target 而非來源票。無顯式 target 時 fallback 至來源票（向後相容）。
+        source_ticket_id = handoff.get("ticket_id", "unknown")
+        target_id = resolve_target(handoff) or source_ticket_id
         title = handoff.get("title", "")
+        if target_id != source_ticket_id:
+            target_ticket = _load_ticket_for_handoff(target_id)
+            if target_ticket and target_ticket.get("title"):
+                title = target_ticket["title"]
         timestamp = handoff.get("timestamp", "")
 
-        print(f"{idx}. {ticket_id}")
+        print(f"{idx}. {target_id}")
         if title:
             print(f"   標題: {title}")
         if timestamp:
@@ -603,7 +596,11 @@ def _handle_completed_ticket_redirect(ticket_id: str, handoff: Dict[str, Any]) -
         return None
 
     direction = handoff.get("direction", "")
-    target_id = extract_direction_target_id(direction) if direction else None
+    # 須用 resolve_target 統一解析（優先讀顯式 target_ticket_id，無則 fallback
+    # 至 direction 後綴），不可只讀 direction 後綴——--next 產生的
+    # direction="context-refresh" 無後綴，只讀後綴會使 target_id 恆為 None，
+    # 導致已完成來源票的 redirect 永不觸發，使用者落在已完成的來源票。
+    target_id = resolve_target(handoff)
 
     if target_id:
         print(SEPARATOR_PRIMARY)

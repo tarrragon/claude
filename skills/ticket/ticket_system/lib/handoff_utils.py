@@ -302,12 +302,15 @@ def is_handoff_stale(
     is_ticket_in_progress_or_completed 與內部 status 探測，確保子進程環境下
     路徑解析正確（ARCH-020 同構修復）。
 
-    判斷規則（依序檢查）：
-    1. 任務鏈方向（to-sibling/to-parent/to-child）且目標 ticket 已 in_progress/completed
-       → stale，reason 為「任務鏈目標 {target_id} 已 {status}」
-    2. 非任務鏈方向且來源 ticket 已 completed
+    判斷規則（依序檢查；任務鏈方向與顯式 target_ticket_id 合併為單一 target 判準）：
+    1. 有 target（任務鏈 direction 後綴，或顯式 target_ticket_id，經 resolve_target
+       統一解析）且該 target 已 in_progress/completed
+       → stale，reason 為「目標 ticket {target_id} 已 {status}」
+       （任務鏈方向但無法解析出 target 時，視為未啟動，非 stale，不落入情境 2/3
+       以 source 誤判——任務鏈 handoff 的來源 completed 是預期狀態）
+    2. 無 target 且來源 ticket 已 completed
        → stale，reason 為「來源 ticket {ticket_id} 已 completed」
-    3. 非任務鏈方向且 from_status == "completed"
+    3. 無 target 且 from_status == "completed"
        → stale，reason 為「from_status 標記 completed」
     4. 上述皆不滿足
        → 非 stale，reason 為空字串
@@ -326,21 +329,29 @@ def is_handoff_stale(
     from_ticket = record.get("from_ticket") or record.get("ticket_id") or ""
     from_status = record.get("from_status", "") or ""
 
-    # 情境 1：任務鏈目標已啟動
-    if is_task_chain_direction(direction):
-        target_id = extract_direction_target_id(direction)
-        if target_id and is_ticket_in_progress_or_completed(target_id, project_root):
-            # 取得 target 實際狀態以填入 reason（in_progress / completed）
-            status = _load_ticket_status(target_id, project_root) or "in_progress"
-            return True, f"任務鏈目標 {target_id} 已 {status}"
-        # 任務鏈但目標未啟動：不 stale
+    # Guard：任務鏈方向但無法解析出 target（如 "to-parent" 無冒號後綴）→ 不 stale。
+    # 沒有這個 guard，任務鏈 handoff 會落入下方情境 2 以來源 completed 誤判 stale，
+    # 但任務鏈 handoff 的來源 completed 正是其成立前提（先 complete 再 handoff 下一棒）。
+    target_id = resolve_target(record)
+    if is_task_chain_direction(direction) and not target_id:
         return False, ""
 
-    # 情境 2：非任務鏈且來源 ticket 已 completed
+    # 情境 1：有 target（任務鏈後綴 or 顯式 target_ticket_id，統一經 resolve_target 解析）
+    # 且已啟動 → stale。任務鏈方向與 --next 類顯式 target 問的是同一件事「target
+    # 指向的工作是否還需要做」，差別只在 target 從哪來，而這正是 resolve_target 的
+    # 職責，不應各自重抄解析邏輯（ARCH-020：resolve_target 的 docstring 本身即
+    # 警告跳過此 helper 會重蹈覆轍）。
+    if target_id:
+        if is_ticket_in_progress_or_completed(target_id, project_root):
+            status = _load_ticket_status(target_id, project_root) or "in_progress"
+            return True, f"目標 ticket {target_id} 已 {status}"
+        return False, ""
+
+    # 情境 2：無 target 且來源 ticket 已 completed
     if from_ticket and is_ticket_completed(from_ticket, project_root):
         return True, f"來源 ticket {from_ticket} 已 completed"
 
-    # 情境 3：非任務鏈且 from_status 已標記 completed
+    # 情境 3：無 target 且 from_status 已標記 completed
     if from_status == STATUS_COMPLETED:
         return True, "from_status 標記 completed"
 

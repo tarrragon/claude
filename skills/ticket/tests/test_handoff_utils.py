@@ -34,7 +34,9 @@ class TestIsHandoffStaleTaskChainTargetStarted:
         is_stale, reason = is_handoff_stale(record)
 
         assert is_stale is True
-        assert "任務鏈目標 0.18.0-W17-002" in reason
+        # 0.2.1-W3-306 第三輪：reason 統一為「目標 ticket X 已 status」
+        # （合併原情境 1/1.5，不再區分「任務鏈目標」措辭）
+        assert "目標 ticket 0.18.0-W17-002" in reason
         assert "in_progress" in reason
 
     @patch("ticket_system.lib.handoff_utils._load_ticket_status")
@@ -107,6 +109,65 @@ class TestIsHandoffStaleNonChainFromStatusCompleted:
         assert is_stale is True
         assert "from_status" in reason
         assert "completed" in reason
+
+
+class TestIsHandoffStaleExplicitTargetTicketId:
+    """情境 1.5：非任務鏈但有顯式 target_ticket_id（--next 產生的 context-refresh，0.2.1-W3-306）"""
+
+    @patch("ticket_system.lib.handoff_utils.is_ticket_in_progress_or_completed")
+    def test_next_handoff_source_completed_target_not_started_not_stale(
+        self, mock_target_started
+    ):
+        """RED (a)：來源已 completed 且 target 尚未啟動 → 不 stale。
+        來源已完成正是 --next handoff 成立的前提，不可用來源狀態判 stale。
+        """
+        mock_target_started.return_value = False
+
+        record = {
+            "ticket_id": "0.2.1-W3-304",
+            "direction": "context-refresh",
+            "target_ticket_id": "0.2.1-W3-294",
+            "from_status": "completed",
+        }
+        is_stale, reason = is_handoff_stale(record)
+
+        assert is_stale is False
+        assert reason == ""
+
+    @patch("ticket_system.lib.handoff_utils._load_ticket_status")
+    @patch("ticket_system.lib.handoff_utils.is_ticket_in_progress_or_completed")
+    def test_next_handoff_target_already_started_is_stale(
+        self, mock_target_started, mock_load_status
+    ):
+        """RED (b)：target 已 in_progress/completed → stale（已被接手）"""
+        mock_target_started.return_value = True
+        mock_load_status.return_value = "in_progress"
+
+        record = {
+            "ticket_id": "0.2.1-W3-304",
+            "direction": "context-refresh",
+            "target_ticket_id": "0.2.1-W3-294",
+            "from_status": "completed",
+        }
+        is_stale, reason = is_handoff_stale(record)
+
+        assert is_stale is True
+        assert "0.2.1-W3-294" in reason
+        assert "in_progress" in reason
+
+    @patch("ticket_system.lib.handoff_utils.is_ticket_in_progress_or_completed")
+    def test_next_handoff_target_completed_is_stale(self, mock_target_started):
+        mock_target_started.return_value = True
+
+        record = {
+            "ticket_id": "0.2.1-W3-304",
+            "direction": "context-refresh",
+            "target_ticket_id": "0.2.1-W3-294",
+            "from_status": "completed",
+        }
+        is_stale, reason = is_handoff_stale(record)
+
+        assert is_stale is True
 
 
 class TestIsHandoffStaleNotStale:
