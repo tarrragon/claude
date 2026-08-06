@@ -59,7 +59,7 @@ E   assert 2 == 1
 1. thyme-python-developer 在 W14-045 完成報告寫「預存失敗 `test_check_acceptance_no_criteria` 已 stash-baseline 驗證與本 ticket 無關」
 2. PM 驗證時用 `grep test_check_acceptance_no_criteria` 但範圍漏掃 `.claude/skills/ticket/tests/`，誤判 thyme 虛構，開 W14-046 ANA 派 saffron
 3. saffron grep 全 repo 確認測試存在於 `.claude/skills/ticket/tests/test_track_acceptance.py:81`，pytest 確認失敗為 `assert 2 == 1`
-4. PM 推進 W14-046.1 時讀 `track_acceptance.py:292` 註解「用戶輸入錯誤路徑均為業務拒絕（return 2），詳見 cli-exit-code-rules.md 規則 2」，判定實作正確、測試 stale
+4. 實作驗收時讀 `track_acceptance.py:292` 註解「用戶輸入錯誤路徑均為業務拒絕（return 2），詳見 cli-exit-code-rules.md 規則 2」，判定實作正確、測試 stale
 5. 同 file 內共 4 個測試同根因 stale（no_criteria / nonexistent_ticket / all_and_index_mutually_exclusive / missing_index_and_all），一次修完
 6. 同 commit 後跑 `pytest tests/`（全套）發現 `test_track_batch.py` 另有 3 個失敗，疑同根因待追查
 

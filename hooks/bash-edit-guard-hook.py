@@ -53,10 +53,10 @@ def _detect_bash_edit_patterns(command: str, literal_ranges=None) -> bool:
     """
     檢測是否為高風險原地編輯操作（白名單降級版本）
 
-    降級策略（W10-047.1）：
+    降級策略：
     原始 6 個 pattern 中保留 2 個高風險原地編輯模式（sed -i / perl -pi），
     移除 4 個噪音模式（輸出重定向 / awk 重定向 / 通用 > 檔案）。
-    依據 W10-035.3 ANA：3d 觸發 1662 次 Action ~0%；
+    實測分析：3 天內 1662 次 Action 中不可逆風險佔比 ~0%；
     保留的兩個 pattern 才是真正的原地編輯不可逆風險。
 
     保留模式:

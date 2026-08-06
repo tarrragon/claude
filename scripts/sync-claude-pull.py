@@ -2482,7 +2482,7 @@ def _print_orphan_fallback(orphans: list[str], base_sha: str | None) -> None:
 def _print_orphan_split(orphans: list[str], base_files: set[str]) -> None:
     """base sha 可達：依三方合併規則分「將被刪除」與「將保留」兩組列印。
 
-    分組依據見 classify_orphans_by_base（0.2.1-W3-146）。
+    分組依據見 classify_orphans_by_base 函式實作與備註。
     """
     will_delete, will_keep = classify_orphans_by_base(orphans, base_files)
     if will_delete:

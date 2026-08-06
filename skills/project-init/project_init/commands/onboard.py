@@ -209,7 +209,7 @@ def _collect_claude_md_items(claude_md_info) -> list[TodoItem]:
 def _collect_template_items(tech_stack_info, language) -> list[TodoItem]:
     """彙整技術選型檢查項目.
 
-    根據 W1-017 重構，技術選型檢查已改為驗證 CLAUDE.md 中的技術選型 section。
+    技術選型檢查已改為驗證 CLAUDE.md 中的技術選型 section。
     """
     items = []
     if language != "unknown" and not tech_stack_info.exists:
@@ -499,7 +499,7 @@ def _print_claude_md_section(result: OnboardResult, claude_md_info) -> None:
 def _print_language_template_section(result: OnboardResult) -> None:
     """輸出技術選型 section 檢查部分.
 
-    根據 W1-017 重構，技術選型檢查已改為驗證 CLAUDE.md 中的技術選型 section。
+    技術選型檢查已改為驗證 CLAUDE.md 中的技術選型 section。
     """
     print(f"[{OnboardMessages.LANGUAGE_TEMPLATE_SECTION}]")
     if result.language == "unknown":

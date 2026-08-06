@@ -149,6 +149,6 @@ PM 執行 ANA 類型 Ticket 完成後，為其調查結論建立後續防護工�
 ---
 
 **Last Updated**: 2026-05-03
-**Version**: 2.0.0 — W17-120 多視角審查共識：ANA 衍生 IMP 段落 deprecated，本檔範圍縮限為「執行中發現獨立技術債」。新增 deprecated 標註、姊妹模式 PC-091 引用、相關文件指向 field-semantics.md SSOT。
+**Version**: 2.0.0 — 多視角審查共識結果應用：ANA 衍生 IMP 段落 deprecated，本檔範圍縮限為「執行中發現獨立技術債」。新增 deprecated 標註、姊妹模式 PC-091 引用、相關文件指向 field-semantics.md SSOT。
 **Version**: 1.0.0 — 首發記錄（W12-002 session 事發當場）
 **Source**: W12-002 建立 4 個 spawned IMP Ticket 時 CLI 誤設為 children 導致 ANA complete 被擋（v1.0）；W17-120 ANA 多視角審查（v2.0）

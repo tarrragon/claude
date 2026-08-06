@@ -80,11 +80,7 @@ marker 儲存位置：`.claude/hooks/hook-logs/memory-dir-audit-marker.json`
 3. `main()` 未預期例外 -> `run_hook_safely` 記錄完整 traceback 到日誌檔 +
    exit 1（兩事件皆無法逆轉已發生的行為，僅影響本次稽核本身是否完成）
 
-參考: 0.2.1-W3-092（選型結論）、0.2.1-W3-194（Solution 承載三輪修復史）、
-0.2.1-W3-195（matcher 由 PostToolUse:Bash 改為 SessionStart+Stop，判準由
-狀態改事件式 marker，Phase 4 第二輪再拿掉 marker 的 session 維度並移除
-死碼 `is_memory_dir_nonempty`）；memory-write-guard-hook.py（PreToolUse
-對應方案）；pm-quality-baseline 規則 7（三分流判準）
+參考相關背景決策（matcher 選擇與演進、preToolUse 對應方案、三分流判準）
 """
 
 import glob

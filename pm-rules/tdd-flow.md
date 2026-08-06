@@ -117,7 +117,7 @@ PM 派發 Phase 代理人時可立即查表確認允許/禁止產出，防止職
 
 > **適用範圍**：所有 ANA Ticket 中涉及「全量 grep/regex 範圍判定」的 Solution——即 ANA 結論中含「某字元集/字串集於整個 codebase 中的覆蓋範圍」判定，且結論影響後續 IMP acceptance 設計者。
 
-**Why**：ANA 若以手工列舉 Unicode 區段作為「已知全量」依據，遺漏的區段會讓後續 IMP ticket 的 acceptance 建立在錯誤基礎上。W1-005 ANA 案例：AC-4「直接斷言依賴=0」僅用 `rg 'Popup Script 載入完成' tests/` 單一關鍵字驗證，未掃描 tests/ 下所有 emoji 字面，致誤判「無斷言依賴」（實際 12 檔 48+ 處）；加上 emoji 偵測範圍靠手工列舉 U+1F000-1FFFF + U+2600-27BF 兩區段，漏 U+2139-25B6 區段 9 種 + FE0F 336 處，造成範圍二度誤判。
+**Why**：ANA 若以手工列舉 Unicode 區段作為「已知全量」依據，遺漏的區段會讓後續 IMP ticket 的 acceptance 建立在錯誤基礎上。過往 ANA 案例：全量判定僅用單一關鍵字驗證，未掃描完整 emoji 字面，致誤判「無斷言依賴」（實際 12 檔 48+ 處）；加上字元集偵測範圍靠手工列舉，漏掉多個 Unicode 區段和變體，造成範圍誤判。
 
 **Consequence**：ANA 範圍判定失準會導致：(a) IMP acceptance 建立在錯誤覆蓋假設上；(b) IMP 執行期才發現範圍不足，需新增 patch ticket；(c) 每次範圍修訂都讓前後 ticket 的驗收條件不一致，後人難以追蹤正確基準。
 
@@ -484,7 +484,7 @@ SA 否決不可繞過 — 必須解決否決原因後重新審查。
 ---
 
 **Last Updated**: 2026-07-27
-**Version**: 2.19.0 — 相關文件補一行路由指向 `worktree-operations.md`「多階段串接派發」節（跨 agent phase 接力的 feat 分支累積器機制，屬 git 分支操作非 TDD phase 語意，不搬機制內容）（0.2.1-W3-095）
+**Version**: 2.19.0 — 相關文件補一行路由指向 `worktree-operations.md`「多階段串接派發」節（跨 agent phase 接力的 feat 分支累積器機制，屬 git 分支操作非 TDD phase 語意，不搬機制內容）
 **Version**: 2.18.0 — 新增「ANA 全量 grep/regex 範圍驗證完整性規範」獨立章節：三層強制要求（驗證方法涵蓋完整性聲明、覆蓋完整性聲明格式、AC 設計連動），觸發案例 W1-005 ANA AC-4 二度誤判（0.19.1-W1-039）
 **Version**: 2.17.0 — Phase 4 派發前新增「TD 清單校準（td-status）」預檢步驟（W10-083 / PC-094 落地，防止多視角浪費 token 在已完成 TD 項）
 **Version**: 2.16.0 - Phase 4 新增強制 Checkpoint：重構評估前執行 WRAP Phase 2 檢驗（W15-019，防止重構根因分析太表層）

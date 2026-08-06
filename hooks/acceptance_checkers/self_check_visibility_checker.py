@@ -5,7 +5,7 @@ W17-064：偵測 IMP/ANA/DOC ticket 的 Solution 章節是否含 `### 自檢結�
 若缺少則輸出 warning（不阻擋 complete），提示代理人執行 Layer 1 自檢
 （依 `.claude/references/agent-self-check-template.md`）。
 
-設計依據（W17-064.1 ANA 三維度決策）：
+設計依據（Hook 行為 / 觸發範圍 / 豁免機制三維度決策）：
 - Hook 行為：B warning only（exit 0 + stderr，不阻擋 complete）
 - 觸發範圍：全 IMP/ANA/DOC type；非適用 type 直接 return None
 - 豁免機制：不需要（warning 已是最低強度）

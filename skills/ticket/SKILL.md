@@ -158,7 +158,7 @@ ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"  # 建�
 | `track depth`       | 查詢嵌套深度與 can_descend（W1-056.8，沿 parent_id 鏈） | `ticket track depth 1.0.0-W1-056.5`                          |
 | `track parallel-check` | 偵測子任務/兄弟 ticket 檔案衝突（W17-203.1，對齊 askuserquestion-rules 規則 7） | `ticket track parallel-check 0.18.0-W17-203` |
 | `track dispatch-validate` | Context Bundle 自動填料合理性檢查（W17-003，C 方案安全網；exit 0=pass / 1=軟警告 / 2=硬失敗或 IO 錯誤；**與 dispatch-check 的 exit code 語意不共享**，需以命令名稱判別） | `ticket track dispatch-validate 0.18.0-W17-003` |
-| `track dispatch-readiness` | 派發前認知負擔閾值檢查（W17-053；三項閾值：功能職責數 / 修改檔案數 / Context Bundle tokens；exit 0=pass / 1=軟警告 / 2=強制拆分或 IO 錯誤；**與 dispatch-check / dispatch-validate 的 exit code 語意不共享**；閾值 1 以 acceptance 條目近似，含驗證類條目時可能高估，PM 於 WARN/FAIL 應手動覆核——詳見 references/track-command.md） | `ticket track dispatch-readiness 0.18.0-W17-053` |
+| `track dispatch-readiness` | 派發前認知負擔閾值檢查（三項閾值：功能職責數 / 修改檔案數 / Context Bundle tokens；exit 0=pass / 1=軟警告 / 2=強制拆分或 IO 錯誤；**與 dispatch-check / dispatch-validate 的 exit code 語意不共享**；閾值 1 以 acceptance 條目近似，含驗證類條目時可能高估，PM 於 WARN/FAIL 應手動覆核——詳見 references/track-command.md） | `ticket track dispatch-readiness 0.18.0-W17-053` |
 | `show`              | 顯示 Ticket（含渲染）      | `ticket show W17-015` / `ticket show W17-015 -r`                           |
 | `handoff`           | 任務交接                   | `/ticket handoff 1.0.0-W1-002 --to-sibling 1.0.0-W2-003`                   |
 | `resume`            | 恢復任務                   | `/ticket resume <id>`                                                      |
@@ -175,7 +175,7 @@ ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"  # 建�
 
 建立 Atomic Ticket，支援 5W1H 引導式建立、子 Ticket 建立、版本目錄初始化（init）。
 
-> **版本歸屬引導**（0.3.3-W1-001）：create 時根據 `--type` 和 `--action` 自動建議目標版本。新功能（IMP + 實作/新增/建立/開發）→ 大版本（0.x+1.0）；修復/改善/分析/文件 → 小版本（最新已完成版本 +1 patch）。未指定 `--version` 時自動套用建議；指定但與建議不符時輸出 WARNING（不阻擋）。
+> **版本歸屬引導**：create 時根據 `--type` 和 `--action` 自動建議目標版本。新功能（IMP + 實作/新增/建立/開發）→ 大版本（0.x+1.0）；修復/改善/分析/文件 → 小版本（最新已完成版本 +1 patch）。未指定 `--version` 時自動套用建議；指定但與建議不符時輸出 WARNING（不阻擋）。
 
 > 決策樹：Read `references/workflow-create.md`
 > 詳細用法：Read `references/create-command.md`
@@ -314,7 +314,7 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 1.0.0-W28-0
 > ticket track stale-list --wave 17 --format ids    # 僅輸出 ID（適合 pipe）
 > ```
 >
-> 閾值複用 `lib/staleness.py`：info ≥ 7 天 / warning ≥ 14 天 / critical ≥ 30 天。輸出依 days 降序。table 格式另附 stale in-progress 章節（>= 24h，依 frontmatter `started_at` 單平面判定，附 `ticket track release <id>` 釋放提示）；`ids`/`yaml` 維持 pending-only 向後相容（1.5.0-W5-005.7）。詳見 `references/track-command.md`「track stale-list 子命令」章節。
+> 閾值複用 `lib/staleness.py`：info ≥ 7 天 / warning ≥ 14 天 / critical ≥ 30 天。輸出依 days 降序。table 格式另附 stale in-progress 章節（>= 24h，依 frontmatter `started_at` 單平面判定，附 `ticket track release <id>` 釋放提示）；`ids`/`yaml` 維持 pending-only 向後相容。詳見 `references/track-command.md`「track stale-list 子命令」章節。
 
 > **TD 清單校準 — `td-status`**（W10-083 / PC-094）：掃描指定 ticket 的 body 與 git commit 訊息，將 TD 編號分類為「已處理 / 無需處理 / 仍待處理」三狀態。用於 Phase 3a/3b/4 結束時即時校準 TD 清單，防止 Phase 4 評估時誤判已完成項（PC-094 根因）。
 >

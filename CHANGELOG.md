@@ -1,3 +1,20 @@
+## [2.24.8] - 2026-08-06
+
+### Summary
+fix: PM 補修 .1 漏抓的 skills 深層路徑 11 處 dependency_ref; fix: 補正 30 處第 1 類論證依據型 ticket ID 引用; fix: 複核 error-patterns/pm-rules/methodologies/rules/scripts/lib 36 行引用，修正 6 行 (+4 more)
+
+Changes: 7 fix
+
+- fix: PM 補修 .1 漏抓的 skills 深層路徑 11 處 dependency_ref
+- fix: 補正 30 處第 1 類論證依據型 ticket ID 引用
+- fix: 複核 error-patterns/pm-rules/methodologies/rules/scripts/lib 36 行引用，修正 6 行
+- fix: 複核 references/hooks 44 行引用，移除 19 行 ticket ID
+- fix: 複核 skills 目錄 ticket ID 引用並按五類分類修正
+- fix: 規則 8 守衛改全禁偵測 + 逐檔淨增量存量凍結
+- fix: agent-ticket-validation-hook 補 filelock 依賴並改 noisy fallback
+
+---
+
 ## [2.24.7] - 2026-08-06
 
 ### Summary

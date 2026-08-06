@@ -1,12 +1,15 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["pyyaml>=5.0"]
+# dependencies = ["pyyaml>=5.0", "filelock>=3.12"]
 # ///
 #
-# 依賴說明（W1-056.9）：嵌套深度檢查複用 ticket_system.lib.depth.can_descend，
-# 該模組沿 parent_id 鏈回溯需 load_ticket（pyyaml）。dependencies 顯式宣告
-# pyyaml，避免 uv ephemeral env 不拉 transitive deps 的 PC-124 模式。
+# 依賴說明（W1-056.9 / PC-135 復發模式，0.2.1-W3-314 修復）：嵌套深度檢查複用
+# ticket_system.lib.depth.can_descend，其 import 鏈為
+# depth -> lib/__init__ -> ticket_loader -> parser -> file_lock -> filelock。
+# dependencies 顯式宣告 pyyaml 與 filelock，避免 uv ephemeral env 不拉
+# transitive deps 的 PC-124 模式（修復前僅宣告 pyyaml，filelock 缺失使
+# DEPTH_AVAILABLE 恆為 False 且原 except 分支靜默無日誌）。
 
 """
 Agent Ticket Validation Hook
@@ -74,13 +77,23 @@ try:
     from ticket_system.lib.depth import can_descend, compute_depth
     from ticket_system.constants import MAX_TICKET_DEPTH
     DEPTH_AVAILABLE = True
-except Exception:  # pragma: no cover - 環境缺套件時的 fail-open 分支
-    # 任何 import 失敗（ModuleNotFoundError / ImportError 等）都 fail-open，
-    # 深度檢查停用但既有驗證不受影響。提供 fallback 常數供日誌輸出使用。
+    _DEPTH_IMPORT_ERROR: Optional[str] = None
+except Exception as _depth_import_err:  # pragma: no cover - 環境缺套件時的 fail-open 分支
+    # PC-135 防護：silent fallback 改 noisy（0.2.1-W3-314）。任何 import 失敗
+    # （ModuleNotFoundError / ImportError 等）都 fail-open，深度檢查停用但既有
+    # 驗證不受影響；MAX_TICKET_DEPTH 強制層在此 runtime 從未生效，須讓 PM/開發者
+    # 立即看見，不可靜默吞掉（quality-baseline 規則 4）。stderr 立即可見，
+    # 日誌檔寫入延後至 main() 內用已建立的 logger 補寫（見 main() 開頭）。
     can_descend = None  # type: ignore[assignment]
     compute_depth = None  # type: ignore[assignment]
     MAX_TICKET_DEPTH = 3  # fallback，僅供訊息顯示；實際判斷由 DEPTH_AVAILABLE gate
     DEPTH_AVAILABLE = False
+    _DEPTH_IMPORT_ERROR = f"{type(_depth_import_err).__name__}: {_depth_import_err}"
+    sys.stderr.write(
+        f"[agent-ticket-validation-hook][PC-135] ticket_system.lib.depth import failed, "
+        f"depth check disabled (DEPTH_AVAILABLE=False, fail-open). "
+        f"Cause: {_DEPTH_IMPORT_ERROR}\n"
+    )
 
 # ============================================================================
 # 常數定義
@@ -374,6 +387,15 @@ def main() -> int:
     try:
         # 步驟 1: 初始化日誌
         logger.info("Agent Ticket Validation Hook 啟動")
+
+        # PC-135 防護雙通道第二通道：depth 模組 import 失敗時，stderr 已在
+        # module 載入時即時寫出，此處補寫日誌檔（quality-baseline 規則 4：
+        # Hook 異常必須 stderr + 日誌檔雙通道皆可見，不可僅記 stderr）。
+        if not DEPTH_AVAILABLE:
+            logger.warning(
+                f"深度檢查模組載入失敗，深度檢查停用（fail-open，MAX_TICKET_DEPTH "
+                f"強制層不生效）: {_DEPTH_IMPORT_ERROR}"
+            )
 
         # 步驟 2: 讀取 JSON 輸入
         input_data = read_json_from_stdin(logger)

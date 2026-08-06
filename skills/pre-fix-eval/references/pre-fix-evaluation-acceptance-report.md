@@ -484,7 +484,7 @@ PostToolUse Hook 中添加配置：
 
 - **計劃**: `~/.claude/plans/iterative-swimming-feather.md`
 - **實作**: `.claude/hook-specs/pre-fix-evaluation-implementation.md`
-- **快速參考**: `.claude/skills/pre-fix-eval/`（原 `.claude/quick-ref-pre-fix-eval.md` 已於 W10-049.1 內化至本 skill）
+- **快速參考**: `.claude/skills/pre-fix-eval/`（原 `.claude/quick-ref-pre-fix-eval.md` 已內化至本 skill）
 - **Hook 腳本**: `.claude/hooks/pre-fix-evaluation-hook.py`
 - **Skill**: `.claude/commands/pre-fix-eval.md`
 

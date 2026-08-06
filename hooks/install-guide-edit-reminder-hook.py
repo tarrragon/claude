@@ -14,7 +14,7 @@ Hook 類型: PostToolUse (matcher: Edit|Write)
 節流: 同檔案 THROTTLE_MINUTES 分鐘內只提示一次
 行為: stderr 提示 + 檔案日誌（雙通道可見性，quality-baseline 規則 4）
 
-參考: PC-159 (安裝指令短名假設未驗證) + 0.19.0-W3-052 ANA Solution
+參考: PC-159（安裝指令短名假設未驗證相關 ANA 結論）
 """
 
 import json

@@ -18,7 +18,7 @@ description: "broken-link 偵測工具。掃描 .claude/ 目錄所有 Markdown �
 
 ## 權威 gate：scan_links.py CLI
 
-broken-link 計數的唯一權威來源是 `scan_links.py` 確定性 CLI，不是 LLM 手動判讀。LLM 手動 Glob/Grep 流程對同一 repo 會產出浮動計數（W8-019 實測 258 vs 155），無法作為跨框架完成 gate。CLI 以固定排除規則與穩定排序保證同一 repo 連續執行 byte-for-byte 一致，因此作為權威 gate。
+broken-link 計數的唯一權威來源是 `scan_links.py` 確定性 CLI，不是 LLM 手動判讀。LLM 手動 Glob/Grep 流程對同一 repo 會產出浮動計數（實測顯示相同專案產出 258 vs 155 的差異），無法作為跨框架完成 gate。CLI 以固定排除規則與穩定排序保證同一 repo 連續執行 byte-for-byte 一致，因此作為權威 gate。
 
 ### 立即掃描（權威）
 

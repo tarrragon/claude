@@ -6,7 +6,7 @@ PM 在 `.claude/rules/`、`.claude/methodologies/`、`.claude/error-patterns/`�
 
 典型表現：
 1. **規則內文嵌入 ticket ID**：規則段落直接寫「W10-011 為註解專項套用」「W10-011.1 落地」等
-2. **相關文件章節列 ticket ID**：「相關文件」段落列「W10-011（擴充註解規則）」「W10-011.2（驗證樣本）」
+2. **相關文件章節列 ticket ID**：「相關文件」段落列帶 ticket ID 的標籤或引用
 3. **Version footer 紀念當下 ticket**：`Version: 1.0.0 — W10-011.1 落地`
 4. **Source 章節引用 ticket 鏈**：`Source: W10-011 系列（父子銜接見...）`
 
@@ -48,7 +48,7 @@ PM 撰寫 `.claude/rules/core/document-writing-style.md`（文件撰寫明示性
 - 與其他規則邊界表格：「W10-011 為註解專項套用」「W10-011 註解規則」
 - 銜接章節：「DRY 銜接：W10-011 註解規則...」
 - quality-baseline 銜接 Action：「如 W10-011.2 之於 PC-066」
-- 相關文件章節：「W10-011（擴充 註解撰寫原則）」「W10-011.2（重寫 PC-066 作明示性驗證）」
+- 相關文件章節：註解撰寫與驗證相關規範
 - Footer：「Version: 1.0.0 — W10-011.1 落地」「Source: PC-066 + W10-011 系列」
 
 `boundary-validation hook` 攔截 10 處警告 `[WARNING] Layer 1/2 邊界驗證警告 / 禁止項：Wave/Patch 版本概念 / 內容：W10`。

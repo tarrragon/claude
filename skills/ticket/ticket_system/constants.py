@@ -480,7 +480,7 @@ DUPLICATE_DETECTION_COMPLETED_WINDOW_DAYS: int = 7
 # 阻擋層在 Tier 1 警告層之上加「高相似 + 短窗口」雙條件交集，鎖定 ghost
 # 雙執行流同 turn（數分鐘內）重複 spawn 同語意票的簽名。
 #
-# 量測依據（parent 1.0.0-W1-040 重現實驗，五場景 Jaccard 實測）：
+# 量測依據（五場景 Jaccard 相似度重現實驗）：
 #   TP 逐字相同 1.000 / TP 近似改寫 0.688（阻擋目標）
 #   FP 兄弟票真實標題 0.031 / 0.069（不阻擋）
 #   FP batch 同質模板 0.400（不阻擋，僅 Tier 1 警告）

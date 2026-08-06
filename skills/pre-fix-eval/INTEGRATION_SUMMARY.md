@@ -52,7 +52,7 @@
 - **配置檔案**: `.claude/settings.json`
   - 狀態: [WARN]️ 已修改，PostToolUse Hook 配置已更新
 
-- **原始參考檔**: `.claude/hook-specs/pre-fix-evaluation-*.md`（`.claude/quick-ref-pre-fix-eval.md` 已於 W10-049.1 移除）
+- **原始參考檔**: `.claude/hook-specs/pre-fix-evaluation-*.md`（`.claude/quick-ref-pre-fix-eval.md` 已移除）
   - 狀態: [OK] hook-specs 保留在原位置；quick-ref 內容已內化至本 skill
 
 ## 完整的目錄結構

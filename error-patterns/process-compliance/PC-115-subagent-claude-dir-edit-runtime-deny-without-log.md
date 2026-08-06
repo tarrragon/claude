@@ -23,7 +23,7 @@ subagent 派發後嘗試 Edit/Write 主 repo `.claude/` 下檔案：
 
 ## 根因（**已收斂**：候選 1 transient runtime 強支持；Hypothesis K 強形式已否證 / 候選 5、2 已否證 / 候選 3 弱否證）
 
-**狀態：已收斂為候選 1 transient runtime fluctuation**（W17-110 ANA + 4 子實驗閉環，2026-05-07）。Hypothesis K（session 級 prefix-based 權限快取需 PM 暖機）於 2026-05-02 21:00 新 session 三階段對照實驗中被決定性否證；後續 W17-110 規劃 4 子實驗（W17-110.1/.2/.3/.4）按 ROI 順序執行，累計 18/18 Edit success，候選 5/2 強否證、候選 3 弱否證、候選 1（transient runtime）強支持（base rate 0% < 5% 門檻）。W17-097.1-.4 DENY 4/4 真實根因 = transient runtime fluctuation。歷史對照詳見 `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W17-108.md`、`0.18.0-W17-109.md` 與 `0.18.0-W17-110.md`。
+**狀態：已收斂為候選 1 transient runtime fluctuation**（多輪受控實驗驗證完成，2026-05-07）。session 級快取暖機假設經三階段對照實驗決定性否證；隨後執行 4 個 ROI 排序的子實驗，累計 18/18 Edit 成功，多數候選已否證，transient runtime fluctuation 最終獲得強支持。根因分析已完成並記錄。
 
 ### Hypothesis K（已否證的工作假設，保留作歷史紀錄）
 

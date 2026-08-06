@@ -5,11 +5,24 @@
 # ///
 """reference-stability-rule8-guard — PreToolUse Hook
 
-偵測 `.claude/` 框架檔案寫入內容中殘留的專案層級識別符（ticket ID），
+偵測 `.claude/` 框架檔案寫入內容中新增的專案層級識別符（ticket ID），
 落實 reference-stability 規則 8（框架文件禁止引用專案層級識別符）
-的 hook 強制層。依「引用性質判準」（同檔規則 8 §引用性質判準）區分
-依賴型（dependency_ref，同行含跳轉引導詞）與歷史錨點型（不報或僅
-debug 記錄），僅對依賴型觸發 WARNING，降低對合法歷史標注的誤報。
+「引用性質判準：全禁原則與五類分類」的 hook 強制層。
+
+偵測策略（全禁 + 逐檔淨增量比對，0.2.1-W3-315）：
+  ticket ID 在框架文件的任何出現，除落入第 4 類（被說明對象型，白名單
+  路徑）或第 5 類（測試資料型，測試路徑）豁免，一律視為候選違規——
+  不再依「跳轉引導詞」句型判斷依賴型 vs 歷史錨點型（該判準已被
+  reference-stability-rules.md 規則 8 汰換，見同檔「與舊兩類判準的對應」）。
+
+存量凍結機制（避免對既有大量存量違規產生噪音壓力，ARCH-016 失效模式）：
+  本 hook 於 PreToolUse（編輯套用前）讀取目標檔案「編輯前」的磁碟內容作為
+  該檔的即時基準（不需另存快照檔），套用本次 Edit/Write/MultiEdit 重建
+  「編輯後」內容，比較兩者的 ticket ID 命中集合。只有編輯後集合中「編輯前
+  不存在」的新增 ID 才觸發 WARNING；既有於檔案內的舊 ID（存量）永久視為
+  已凍結，不因後續無關編輯而重複觸發。此設計以逐檔即時差異取代靜態
+  allowlist 快照，避免「整檔白名單」讓該檔案後續新增違規也被放行的漏洞
+  （同一檔案的存量與新增用內容比對區分，而非用路徑層級的全有全無豁免）。
 
 觸發時機: PreToolUse Edit / Write / MultiEdit
 掃描範圍: 目標檔案路徑位於 `.claude/` 下，且不在 `.claude/handoff/archive/`
@@ -17,28 +30,24 @@ debug 記錄），僅對依賴型觸發 WARNING，降低對合法歷史標注的
 偵測樣式:
   - 版本化 ticket ID：`\\d+\\.\\d+\\.\\d+-W\\d+-\\d+`（如 9.9.9-W9-999）
   - 裸格式 ticket ID：`W\\d+-\\d+`（如 W9-999）
-放行例外（不觸發 WARNING）:
+放行例外（不視為 ticket ID 候選）:
   - 框架 error-pattern ID（PC-xxx / IMP-xxx / ARCH-xxx）與其檔名
   - 日期字串（YYYY-MM-DD）
   - Claude Code 版本號（CC 開頭 + 版本數字）
   - code fence（```...```）內的內容（格式示範，非實際引用）
-引用性質判準（依 reference-stability-rules.md 移除測試操作化）:
-  - 依賴型（dependency_ref）：ticket ID 前 15 字元鄰近視窗內含跳轉引導詞
-    （詳見/參見/參閱/參考/依據/根據/來源是/相關文件）→ 觸發 WARNING
-  - 歷史錨點型（historical_anchor）：其餘情形（含括號時點標注、
-    frontmatter 欄位值、表格列舉、遠距離引導詞等裸引用，如
-    「（W9-999 教訓）」「source_ticket: 9.9.9-W9-999」）→ 不觸發 WARNING，
-    僅記錄 debug 日誌供觀察
-  實測（0.2.1-W3-057，全框架 9771 處候選）：依賴型 136 處（1.39%），
-  對齊 0.2.1-W3-056 基線（10638 處候選中 133 處，1.25%）；抽樣檢視
-  皆為真依賴（如「根據 W1-017 重構」「設計依據（1.0.0-W1-056...）」）
-行為: 依賴型命中 → WARNING（stderr + 日誌），exit 0（允許，不阻擋，
-      待觀察一段時間後再評估是否升級為阻擋）
-      歷史錨點型 / 未命中 / 非掃描範圍 / 輸入異常 → 靜默放行（歷史錨點型
-      額外寫入 debug 日誌）
+機械可判定豁免（reference-stability-rules.md 規則 8 §引用性質判準）:
+  - 第 4 類（被說明對象型）：路徑落在 WHITELIST_PATHS（成員上限 3，
+    目前僅 .claude/references/ticket-id-conventions.md）
+  - 第 5 類（測試資料型）：路徑含 /tests/ 目錄區段，或檔名符合
+    test_*.py / *_test.py
+行為: 命中新增 ticket ID 且非豁免路徑 → WARNING（stderr + 日誌），
+      exit 0（允許，不阻擋；改寫品質判定仍需人工，見規則 8「硬性強制
+      的範圍」章節）
+      無新增命中 / 全屬既有存量 / 非掃描範圍 / 豁免路徑 / 輸入異常
+      → 靜默放行（既有存量命中額外寫入 debug 日誌供觀察）
 
 對應規則：.claude/references/reference-stability-rules.md 規則 8
-及其「引用性質判準」章節（依賴型 vs 歷史錨點型）
+及其「引用性質判準：全禁原則與五類分類」章節
 """
 
 from __future__ import annotations
@@ -46,7 +55,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -64,6 +73,18 @@ EXIT_ALLOW = 0
 SCAN_PREFIX = ".claude/"
 EXEMPT_DIR_PREFIX = ".claude/handoff/archive/"
 
+# 第 4 類白名單（被說明對象型）。成員上限 3（reference-stability-rules.md
+# §第 4 類白名單明文規定）；超過 3 個須改用可陳述的通用條件取代逐檔列舉。
+WHITELIST_PATHS = frozenset(
+    {
+        ".claude/references/ticket-id-conventions.md",
+    }
+)
+
+# 第 5 類豁免（測試資料型）路徑樣式
+TEST_DIR_SEGMENT = "/tests/"
+TEST_FILENAME_PATTERN = re.compile(r"^(test_.+\.py|.+_test\.py)$")
+
 # 專案 ticket ID 樣式
 VERSIONED_TICKET_PATTERN = re.compile(r"\b\d+\.\d+\.\d+-W\d+-\d+\b")
 BARE_TICKET_PATTERN = re.compile(r"\bW\d+-\d+\b")
@@ -76,50 +97,47 @@ CC_VERSION_PATTERN = re.compile(r"\bCC\s+\d+\.\d+(?:\.\d+)?\b")
 # Code fence（```...```，含語言標記行）：格式示範內容不視為實際引用
 CODE_FENCE_PATTERN = re.compile(r"```.*?```", re.DOTALL)
 
-# 引用性質判準（reference-stability-rules.md 規則 8 §引用性質判準）
-# 依賴型跳轉引導詞：同行與 ticket ID 並存 → 建立跳轉依賴
-# 刻意不含裸「依」「見」單字（過度常見，如「依規」「意見」會誤增依賴型誤判）
-JUMP_WORD_PATTERN = re.compile(r"詳見|參見|參閱|參考|依據|根據|來源是|相關文件")
+
+def normalize_relpath(file_path: str) -> Optional[str]:
+    """取出檔案路徑中 .claude/ 起始的相對片段；不在 .claude/ 下回傳 None。"""
+    if not file_path:
+        return None
+    normalized = file_path.replace("\\", "/")
+    idx = normalized.find(SCAN_PREFIX)
+    if idx == -1:
+        return None
+    return normalized[idx:]
 
 
 def is_scanned_path(file_path: str) -> bool:
     """判斷檔案路徑是否落在規則 8 掃描範圍（.claude/ 下，排除 handoff/archive）。"""
-    if not file_path:
+    rel = normalize_relpath(file_path)
+    if rel is None:
         return False
-    # 正規化：只取相對路徑中 .claude/ 起始的片段做比對，容忍絕對路徑前綴
-    normalized = file_path.replace("\\", "/")
-    idx = normalized.find(SCAN_PREFIX)
-    if idx == -1:
-        return False
-    rel = normalized[idx:]
     if rel.startswith(EXEMPT_DIR_PREFIX):
         return False
     return True
 
 
-def extract_written_texts(tool_name: str, tool_input: dict) -> List[str]:
-    """依工具類型取出「新寫入內容」字串列表（不含未變動的舊內容）。"""
-    if tool_name == "Write":
-        content = tool_input.get("content")
-        return [content] if isinstance(content, str) else []
+def is_class4_whitelisted(file_path: str) -> bool:
+    """第 4 類（被說明對象型）豁免：路徑落在 WHITELIST_PATHS。"""
+    rel = normalize_relpath(file_path)
+    return rel in WHITELIST_PATHS if rel is not None else False
 
-    if tool_name == "Edit":
-        new_string = tool_input.get("new_string")
-        return [new_string] if isinstance(new_string, str) else []
 
-    if tool_name == "MultiEdit":
-        edits = tool_input.get("edits")
-        if not isinstance(edits, list):
-            return []
-        texts = []
-        for edit in edits:
-            if isinstance(edit, dict):
-                new_string = edit.get("new_string")
-                if isinstance(new_string, str):
-                    texts.append(new_string)
-        return texts
+def is_class5_test_path(file_path: str) -> bool:
+    """第 5 類（測試資料型）豁免：路徑含 /tests/ 或檔名符合 test_*.py / *_test.py。"""
+    rel = normalize_relpath(file_path)
+    if rel is None:
+        return False
+    if TEST_DIR_SEGMENT in rel:
+        return True
+    return bool(TEST_FILENAME_PATTERN.match(Path(rel).name))
 
-    return []
+
+def is_exempt_path(file_path: str) -> bool:
+    """第 4 / 5 類機械可判定豁免的合併判斷。"""
+    return is_class4_whitelisted(file_path) or is_class5_test_path(file_path)
 
 
 def _strip_exempt_spans(text: str) -> str:
@@ -140,7 +158,11 @@ def _strip_code_fences(text: str) -> str:
 
 
 def find_ticket_id_hits(text: str) -> List[str]:
-    """在文字中找出專案 ticket ID 命中（已排除放行例外與 code fence），去重保序。"""
+    """在文字中找出專案 ticket ID 候選（已排除放行例外與 code fence），去重保序。
+
+    全禁原則下本函式即為完整偵測器，不再區分依賴型 / 歷史錨點型——
+    是否觸發告警改由呼叫端以「編輯前後淨增量」判斷（見 main）。
+    """
     if not text:
         return []
     cleaned = _strip_exempt_spans(_strip_code_fences(text))
@@ -156,83 +178,114 @@ def find_ticket_id_hits(text: str) -> List[str]:
     return hits
 
 
-# 跳轉引導詞與 ticket ID 之間的最大容許字元距離（同行內）。
-# Why：長段落中引導詞與 ticket ID 可能相距甚遠且語意無關（如「...的判斷依據。
-# 需事後補 domain map（實證：W2-014 於實作前補建）」——「依據」是段落前段
-# 泛用名詞，與段落末的 ticket ID 引用無關）。窄化為鄰近視窗才能捕捉「引導詞
-# 直接導向該 ticket ID」的真實依賴語意，避免長段落遠距離詞彙誤觸發。
-JUMP_WORD_PROXIMITY_WINDOW = 15
+def _read_existing_file(file_path: str) -> str:
+    """讀取檔案編輯前的磁碟內容；不存在或無法解碼時回傳空字串（視為新檔）。"""
+    try:
+        return Path(file_path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ""
 
 
-def classify_hit_nature(line: str, match_start: int) -> str:
-    """對單一 ticket ID 命中分類：dependency_ref / historical_anchor。
+def reconstruct_pre_post_text(
+    tool_name: str, tool_input: dict, file_path: str
+) -> Tuple[str, str]:
+    """讀取編輯前檔案內容並套用本次工具呼叫，回傳 (pre_text, post_text)。
 
-    判準來源：.claude/references/reference-stability-rules.md 規則 8
-    §引用性質判準（移除測試操作化）。
+    設計目的：以「編輯前磁碟內容」作為該檔存量的即時基準，取代另存快照檔——
+    檔案既有的 ticket ID 天然落在 pre_text 中而被視為存量凍結，僅 post_text
+    相對 pre_text 新增的命中才是本次操作引入的違規。
 
-    - ticket ID 起始位置前 JUMP_WORD_PROXIMITY_WINDOW 字元內含跳轉引導詞
-      （詳見/參見/參閱/參考/依據/根據/來源是/相關文件）→ dependency_ref
-      （建立跳轉依賴，禁止）
-    - 其餘（含括號時點標注、frontmatter 欄位值、表格列舉、遠距離引導詞等
-      裸引用）→ historical_anchor（不建立跳轉依賴，允許）
-
-    Why 預設落在 historical_anchor 而非保守回報依賴型：
-    0.2.1-W3-056 對全框架 10638 處候選的實測顯示僅 133 處（1.3%）具
-    dependency_ref 形態；若對「無鄰近引導詞裸引用」預設回報依賴型，實測
-    命中率會暴衝至數千處，與既有基線嚴重不符——多數裸引用是 frontmatter
-    `source_ticket` 欄、表格列舉範例等既有判準下合法的用法，非真正跳轉
-    依賴。故僅在鄰近視窗內存在明確跳轉引導詞才判定為依賴型。
+    重建失敗時的保守退化：old_string 在 pre_text 中找不到（例如 pre_text
+    讀取失敗，或呼叫端傳入的片段與磁碟內容不一致）時，退化為
+    pre_text=""、post_text=新增片段本身，確保寧可多掃也不漏掃。
     """
-    window_start = max(0, match_start - JUMP_WORD_PROXIMITY_WINDOW)
-    window = line[window_start:match_start]
-    if JUMP_WORD_PATTERN.search(window):
-        return "dependency_ref"
-    return "historical_anchor"
+    pre_text = _read_existing_file(file_path)
+
+    if tool_name == "Write":
+        content = tool_input.get("content")
+        post_text = content if isinstance(content, str) else ""
+        return pre_text, post_text
+
+    if tool_name == "Edit":
+        old_string = tool_input.get("old_string")
+        new_string = tool_input.get("new_string")
+        if not isinstance(old_string, str) or not isinstance(new_string, str):
+            return pre_text, pre_text
+        if old_string and old_string in pre_text:
+            if tool_input.get("replace_all"):
+                post_text = pre_text.replace(old_string, new_string)
+            else:
+                post_text = pre_text.replace(old_string, new_string, 1)
+            return pre_text, post_text
+        # old_string 不在 pre_text 中（罕見）：退化為保守模式
+        return "", new_string
+
+    if tool_name == "MultiEdit":
+        edits = tool_input.get("edits")
+        if not isinstance(edits, list):
+            return pre_text, pre_text
+        post_text = pre_text
+        fallback_new_parts: List[str] = []
+        reconstruction_failed = False
+        for edit in edits:
+            if not isinstance(edit, dict):
+                continue
+            old_string = edit.get("old_string")
+            new_string = edit.get("new_string")
+            if not isinstance(old_string, str) or not isinstance(new_string, str):
+                continue
+            fallback_new_parts.append(new_string)
+            if old_string and old_string in post_text:
+                if edit.get("replace_all"):
+                    post_text = post_text.replace(old_string, new_string)
+                else:
+                    post_text = post_text.replace(old_string, new_string, 1)
+            else:
+                reconstruction_failed = True
+        if reconstruction_failed:
+            # 任一 edit 重建失敗：整體退化為保守模式，僅掃描新增片段集合
+            return "", "\n".join(fallback_new_parts)
+        return pre_text, post_text
+
+    return pre_text, pre_text
 
 
-def find_dependency_ref_hits(text: str) -> List[str]:
-    """在文字中找出屬「依賴型」的專案 ticket ID 命中（逐 hit 鄰近視窗分類），去重保序。
+def diff_new_hits(pre_text: str, post_text: str) -> List[str]:
+    """回傳 post_text 相對 pre_text 淨增量的 ticket ID 命中（去重保序）。"""
+    pre_hits = set(find_ticket_id_hits(pre_text))
+    post_hits = find_ticket_id_hits(post_text)
 
-    歷史錨點型命中不計入回傳，僅供呼叫端額外記錄 debug 日誌。
-    """
-    if not text:
-        return []
-    cleaned = _strip_exempt_spans(_strip_code_fences(text))
-
-    hits: List[str] = []
+    new_hits: List[str] = []
     seen = set()
-    for line in cleaned.splitlines():
-        for pattern in (VERSIONED_TICKET_PATTERN, BARE_TICKET_PATTERN):
-            for match in pattern.finditer(line):
-                value = match.group(0)
-                if value in seen:
-                    continue
-                if classify_hit_nature(line, match.start()) != "dependency_ref":
-                    continue
-                seen.add(value)
-                hits.append(value)
-    return hits
+    for hit in post_hits:
+        if hit in pre_hits or hit in seen:
+            continue
+        seen.add(hit)
+        new_hits.append(hit)
+    return new_hits
 
 
-def build_warning_message(file_path: str, hits: List[str]) -> str:
-    """組合 WARNING 訊息：命中清單 + 規則出處 + 抽象化建議。"""
-    hits_display = "、".join(hits)
+def build_warning_message(file_path: str, new_hits: List[str]) -> str:
+    """組合 WARNING 訊息：新增命中清單 + 規則出處 + 處置建議。"""
+    hits_display = "、".join(new_hits)
     return (
-        f"[WARNING][reference-stability-rule8] 偵測到 .claude/ 框架檔案寫入內容"
-        f"疑似含專案層級依賴型引用（dependency_ref）：{file_path}\n"
-        f"命中：{hits_display}\n"
+        f"[WARNING][reference-stability-rule8] 偵測到 .claude/ 框架檔案新增內容"
+        f"含專案層級 ticket ID 引用：{file_path}\n"
+        f"新增命中：{hits_display}\n"
         f"依據：.claude/references/reference-stability-rules.md 規則 8"
-        f"（框架文件禁止引用專案層級識別符，跨專案 sync 後會變成死連結）。\n"
-        f"建議：改用抽象原則描述（如「防範 Hook error 干擾代理人判斷」），"
-        f"或改引用框架內部識別符（PC-xxx / IMP-xxx / ARCH-xxx / 檔案路徑）。\n"
-        f"若此引用僅為時點標注（歷史錨點型，如「（W9-999 教訓）」），"
-        f"可忽略本提示；若為跳轉依賴（詳見/參考等），請依上述建議修正。\n"
+        f"「引用性質判準：全禁原則與五類分類」（框架文件禁止引用專案層級識別符，"
+        f"跨專案 sync 後會變成死連結；既有於檔案內的存量引用不重複觸發本警告）。\n"
+        f"處置：依五類分類移除該 ticket ID——論證依據型改自足 WHY 或先寫方法論"
+        f"再引用；時點標注型改標日期；案例敘事主詞型改描述性標籤。若此路徑本應屬"
+        f"第 4 類（被說明對象型）或第 5 類（測試資料型），請確認路徑落在白名單"
+        f"（.claude/references/ticket-id-conventions.md）或測試路徑（/tests/、"
+        f"test_*.py、*_test.py）。\n"
         f"本提示僅 WARNING，不阻擋本次操作。"
     )
 
 
 def main() -> int:
-    """主入口：讀取 stdin → 篩選掃描範圍 → 偵測 ticket ID → WARNING（不阻擋）。"""
+    """主入口：讀取 stdin → 篩選掃描範圍與豁免 → 重建編輯前後內容 → 淨增量比對 → WARNING（不阻擋）。"""
     logger = setup_hook_logging("reference-stability-rule8-guard")
 
     input_data = read_json_from_stdin(logger)
@@ -252,59 +305,55 @@ def main() -> int:
         logger.debug(f"路徑 {file_path} 不在規則 8 掃描範圍，跳過")
         return EXIT_ALLOW
 
-    texts = extract_written_texts(tool_name, tool_input)
-    if not texts:
-        logger.debug(f"{tool_name} 無可掃描的新寫入內容：{file_path}")
+    if is_class4_whitelisted(file_path):
+        logger.debug(f"路徑 {file_path} 屬第 4 類白名單（被說明對象型），豁免")
         return EXIT_ALLOW
 
-    all_hits: List[str] = []
-    seen = set()
-    all_anchor_hits: List[str] = []
-    seen_anchor = set()
-    for text in texts:
-        for hit in find_dependency_ref_hits(text):
-            if hit not in seen:
-                seen.add(hit)
-                all_hits.append(hit)
-        # 全量命中（不分類）減去依賴型命中 = 歷史錨點型命中，供 debug 觀察
-        for hit in find_ticket_id_hits(text):
-            if hit not in seen and hit not in seen_anchor:
-                seen_anchor.add(hit)
-                all_anchor_hits.append(hit)
-
-    if all_anchor_hits:
-        logger.debug(
-            f"偵測到歷史錨點型 ticket ID（不觸發 WARNING）："
-            f"file={file_path} tool={tool_name} hits={all_anchor_hits}"
-        )
-
-    if not all_hits:
-        logger.debug(f"未偵測到依賴型專案 ticket ID：{file_path}")
+    if is_class5_test_path(file_path):
+        logger.debug(f"路徑 {file_path} 屬第 5 類測試路徑（測試資料型），豁免")
         return EXIT_ALLOW
 
-    message = build_warning_message(file_path, all_hits)
+    pre_text, post_text = reconstruct_pre_post_text(tool_name, tool_input, file_path)
+    new_hits = diff_new_hits(pre_text, post_text)
+
+    if not new_hits:
+        existing_hits = find_ticket_id_hits(post_text)
+        if existing_hits:
+            logger.debug(
+                f"僅命中既有（凍結）ticket ID，不觸發告警："
+                f"file={file_path} tool={tool_name} hits={sorted(set(existing_hits))}"
+            )
+        else:
+            logger.debug(f"未偵測到 ticket ID 命中：{file_path}")
+        return EXIT_ALLOW
+
+    message = build_warning_message(file_path, new_hits)
     sys.stderr.write(message + "\n")
     logger.warning(
-        f"偵測到依賴型專案 ticket ID：file={file_path} tool={tool_name} hits={all_hits}"
+        f"偵測到新增專案 ticket ID 引用：file={file_path} tool={tool_name} new_hits={new_hits}"
     )
     return EXIT_ALLOW
 
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--self-test":
-        # 正例：應偵測到 ticket ID
+        import tempfile
+
+        failures: List[str] = []
+
+        # 正例：應偵測到 ticket ID 候選（find_ticket_id_hits 為全量偵測，
+        # 不再區分依賴型 / 歷史錨點型）
         positive_cases = [
             "版本化格式：本 hook 修復 9.9.9-W9-999 遺漏的問題。",
             "裸格式：詳見 W9-999 的分析結論。",
+            "無跳轉詞裸引用（0.2.1-W3-308 形態）：  # from 0.2.1-W3-308",
         ]
-        # 反例：不應誤報（框架 ID / 日期 / CC 版本）
         negative_cases = [
             "已知案例：PC-050、IMP-003、ARCH-002。",
             "此變更於 2026-07-08 完成。",
             "CC 2.1.97 新增 /agents 分頁能力。",
         ]
 
-        failures = []
         for case in positive_cases:
             hits = find_ticket_id_hits(case)
             if not hits:
@@ -335,43 +384,96 @@ if __name__ == "__main__":
         else:
             print("[PASS] docs/ 不在掃描範圍")
 
-        # 引用性質判準測試：依賴型應觸發 WARNING，歷史錨點型不應
-        dependency_cases = [
-            "詳見 W15-005 WRAP 方案 F 的完整說明。",
-            "參考 9.9.9-W9-999 的分析結論做決策。",
-            "相關文件：W10-011（擴充註解規則）。",
-        ]
-        anchor_cases = [
-            "此防護源於某次崩潰事件（W9-999 教訓）。",
-            "Version: 1.5.1 — 規則 6「以價值優先」加入（W9-999）。",
-            "本段落內容未經任何括號包裝，裸引用 W9-999。",
-            "source_ticket: 0.2.1-W3-056",
-            # 遠距離引導詞（超出鄰近視窗）不應觸發依賴型判定（W3-057 修正案例）
-            "跳過本步驟後測試設計無清楚可依據。這段填充文字用來拉開距離讓引導詞"
-            "遠離後方的識別符標注（實證：W9-999 於實作前補建）。",
-        ]
+        # 第 4 / 5 類機械可判定豁免測試
+        if not is_class4_whitelisted(".claude/references/ticket-id-conventions.md"):
+            failures.append("[FAIL] ticket-id-conventions.md 應屬第 4 類白名單")
+        else:
+            print("[PASS] 第 4 類白名單判定正確")
 
-        for case in dependency_cases:
-            hits = find_dependency_ref_hits(case)
-            if not hits:
-                failures.append(f"[FAIL] 依賴型未被分類為 dependency_ref: {case!r}")
-            else:
-                print(f"[PASS] 依賴型正確分類 {hits}: {case!r}")
+        if not is_class5_test_path(".claude/hooks/tests/test_foo_hook.py"):
+            failures.append("[FAIL] .claude/hooks/tests/ 應屬第 5 類測試路徑")
+        else:
+            print("[PASS] 第 5 類測試路徑判定正確（/tests/ 目錄）")
 
-        for case in anchor_cases:
-            hits = find_dependency_ref_hits(case)
-            if hits:
-                failures.append(f"[FAIL] 歷史錨點型誤判為 dependency_ref {hits}: {case!r}")
-            else:
-                print(f"[PASS] 歷史錨點型正確排除: {case!r}")
+        if not is_class5_test_path(".claude/scripts/foo_test.py"):
+            failures.append("[FAIL] *_test.py 檔名應屬第 5 類測試路徑")
+        else:
+            print("[PASS] 第 5 類測試路徑判定正確（*_test.py 檔名）")
+
+        if is_exempt_path(".claude/rules/core/pm-role.md"):
+            failures.append("[FAIL] 一般規則檔不應被誤判為豁免")
+        else:
+            print("[PASS] 一般規則檔未被誤判為豁免")
 
         # code fence 內容不應被視為實際引用
         fence_case = "說明如下：\n```\n詳見 W9-999 的分析結論\n```\n本行本身無引用。"
-        fence_hits = find_dependency_ref_hits(fence_case)
+        fence_hits = find_ticket_id_hits(fence_case)
         if fence_hits:
             failures.append(f"[FAIL] code fence 內容誤判為引用 {fence_hits}: {fence_case!r}")
         else:
             print("[PASS] code fence 內容已正確排除")
+
+        # 存量凍結機制：編輯前後淨增量比對（0.2.1-W3-315 acceptance 1/3）
+        with tempfile.TemporaryDirectory() as tmpdir:
+            existing_file = Path(tmpdir) / "existing.md"
+            existing_file.write_text(
+                "既有內容第一行\n舊引用（0.2.1-W3-100 教訓）\n既有內容第三行\n",
+                encoding="utf-8",
+            )
+
+            # 案例 A：Edit 僅重排既有內容，未新增任何 ticket ID → 不應告警
+            pre_a, post_a = reconstruct_pre_post_text(
+                "Edit",
+                {
+                    "file_path": str(existing_file),
+                    "old_string": "既有內容第三行",
+                    "new_string": "既有內容第三行（微調文字，仍含 0.2.1-W3-100）",
+                },
+                str(existing_file),
+            )
+            new_hits_a = diff_new_hits(pre_a, post_a)
+            if new_hits_a:
+                failures.append(f"[FAIL] 純重排既有 ticket ID 不應觸發新增命中: {new_hits_a}")
+            else:
+                print("[PASS] 存量凍結：重排既有 ticket ID 不觸發新增命中")
+
+            # 案例 B：Edit 在已有存量違規的檔案中新增一個「不同」的 ticket ID
+            # → 凍結範圍內新增命中仍應告警（acceptance 3 的關鍵情境）
+            pre_b, post_b = reconstruct_pre_post_text(
+                "Edit",
+                {
+                    "file_path": str(existing_file),
+                    "old_string": "既有內容第一行",
+                    "new_string": "既有內容第一行\n新增引用（0.2.1-W3-999 教訓）",
+                },
+                str(existing_file),
+            )
+            new_hits_b = diff_new_hits(pre_b, post_b)
+            # 版本化與裸格式樣式各自獨立匹配（沿用既有 find_ticket_id_hits 行為，
+            # 同一 ticket ID 會同時產生版本化與裸格式兩筆命中），故預期兩筆。
+            if set(new_hits_b) != {"0.2.1-W3-999", "W3-999"} or "0.2.1-W3-100" in new_hits_b:
+                failures.append(
+                    "[FAIL] 凍結範圍內新增命中應被偵測且不含既有 0.2.1-W3-100，"
+                    f"預期 {{'0.2.1-W3-999', 'W3-999'}}，實際 {new_hits_b}"
+                )
+            else:
+                print("[PASS] 凍結範圍內新增命中仍正確告警（不含既有 0.2.1-W3-100）")
+
+            # 案例 C：Write 建立全新檔案含 ticket ID（無存量基準，pre_text 為空）
+            new_file = Path(tmpdir) / "brand_new.md"
+            pre_c, post_c = reconstruct_pre_post_text(
+                "Write",
+                {
+                    "file_path": str(new_file),
+                    "content": "全新檔案，直接 # from 0.2.1-W3-308 無跳轉詞",
+                },
+                str(new_file),
+            )
+            new_hits_c = diff_new_hits(pre_c, post_c)
+            if "0.2.1-W3-308" not in new_hits_c:
+                failures.append(f"[FAIL] 新檔案含 ticket ID 應被偵測，實際 {new_hits_c}")
+            else:
+                print("[PASS] 新檔案（無存量基準）正確偵測新增 ticket ID")
 
         if failures:
             print("\n".join(failures))

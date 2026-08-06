@@ -8,8 +8,6 @@ excluded_*，輸出確定性計數 + 分類清單。純標準庫實作（pathlib
 1. md_files 掃描前先 sort
 2. broken_entries 依 (source_file, line) sort
 3. categories 為固定 key dict（插入序固定）
-
-設計依據：ticket 1.0.0-W8-030.1 Solution Phase 1 規格 + Phase 3a 策略。
 """
 
 import argparse

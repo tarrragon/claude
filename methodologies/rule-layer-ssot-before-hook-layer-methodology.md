@@ -110,7 +110,7 @@ DOC ticket 落地時必須包含：
 | 17 | W17-120.3 | DOC（選配，已 close as duplicate） | relatedTo 純 metadata 定位（被 .1 順帶完成） |
 
 實施結果：
-- DOC 階段（W17-120.1）落地後，IMP 階段（W17-120.2）派發時 prompt 直接引用「PC-091 路線（W17-120.1 已落地）」作為決策依據，thyme-python-developer 無需做設計決策
+- 規則層（DOC）落地後，實作層（IMP）派發時 prompt 直接引用「PC-091 路線（規則已確立）」作為決策依據，實作代理人無需重複做設計決策
 - create-command.md:141 在 DOC 階段明示「W15-003 升級為過渡狀態，IMP-2 後將回到不阻擋」——IMP 收斂後自然兌現此承諾
 - 4 case 回歸測試含「行為翻轉核心」case (d)，驗證 ANA 有 spawned 但無 children 不再阻擋
 

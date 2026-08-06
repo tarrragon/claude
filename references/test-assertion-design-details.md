@@ -126,7 +126,7 @@ const secondResult = service.getMapping();
 expect(secondResult).toBe(firstResult); // Object.freeze 單例，快取不重建
 ```
 
-選項 C（`toBe` 參考比較）是最強的快取驗證：若快取失效重建物件，`toBe` 必然失敗，與計時完全無關。W1-017 中 UC07 的 `toEqual → toBe` 修改即採此原則。
+選項 C（`toBe` 參考比較）是最強的快取驗證：若快取失效重建物件，`toBe` 必然失敗，與計時完全無關。性能驗證案例中採用此原則。
 
 ---
 
@@ -149,7 +149,7 @@ expect(secondResult).toBe(firstResult); // Object.freeze 單例，快取不重�
 
 **Consequence**：false positive 修復被視為「修復已生效」，後續 ticket 基於此假設推進，將表層補救移除後暴露根本未生效的修復；連鎖回溯成本高。
 
-**Action**：修復類 + 訊息 / 日誌 / 跨模組整合三標籤聯集的 IMP ticket，acceptance 必含至少 1 項 runtime 驗證項。詳見 `.claude/error-patterns/process-compliance/PC-165-false-positive-fix-chain.md`（含 W1-105 / W1-106 / W1-108 事件鏈 + 三層共振機制 + 三層防護設計）。
+**Action**：修復類 + 訊息 / 日誌 / 跨模組整合三標籤聯集的 IMP ticket，acceptance 必含至少 1 項 runtime 驗證項。詳見 `.claude/error-patterns/process-compliance/PC-165-false-positive-fix-chain.md`（含事件鏈、三層共振機制、三層防護設計）。
 
 ---
 
@@ -163,7 +163,7 @@ expect(secondResult).toBe(firstResult); // Object.freeze 單例，快取不重�
 
 **Action**：IMP ticket 修改 `src/` 字串字面時，acceptance 必須包含「complete 時驗收：`npm test` exit 0」，不可只驗 `npm run build:dev`。
 
-**參考**：`.claude/pm-rules/ticket-body-schema.md`「IMP > src 字串輸出變更額外 acceptance」、觸發案例 `0.19.1-W1-005.2`
+**參考**：`.claude/pm-rules/ticket-body-schema.md`「IMP > src 字串輸出變更額外 acceptance」章節
 
 ---
 

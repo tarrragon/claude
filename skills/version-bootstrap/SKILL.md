@@ -85,7 +85,7 @@ doc batch-init --proposals PROP-XXX,PROP-YYY --domain <domain>
 
 ### Step 2.5：Domain 規劃（半自動）
 
-> **Why**：spec 定義 FR（系統做什麼）、UC 定義使用者場景（誰怎麼用），兩者皆為垂直視角，不界定 domain 的水平聚合邊界——aggregate / kernel / read-model 分類、依賴方向、層測試策略。**Consequence**：跳過本步驟，domain 邊界會在實作階段臨場拍板（退化為「哪個檔案太大就拆」），依賴方向底線無文件可依，易出現 read-model 互相耦合、持久化細節混入 domain；測試設計（Step 5）也無 per-bundle 依據。需事後補 domain map（實證：flutter_balance W2-014 於實作前補建）。**Action**：spec FR 填完後、測試設計前，為每個 domain 產出或更新 domain map。
+> **Why**：spec 定義 FR（系統做什麼）、UC 定義使用者場景（誰怎麼用），兩者皆為垂直視角，不界定 domain 的水平聚合邊界——aggregate / kernel / read-model 分類、依賴方向、層測試策略。**Consequence**：跳過本步驟，domain 邊界會在實作階段臨場拍板（退化為「哪個檔案太大就拆」），依賴方向底線無文件可依，易出現 read-model 互相耦合、持久化細節混入 domain；測試設計（Step 5）也無 per-bundle 依據。需事後補 domain map（實證：某個移動應用實作案例中於實作前補建）。**Action**：spec FR 填完後、測試設計前，為每個 domain 產出或更新 domain map。
 
 **動作**：用 doc skill 的 domain-map-template 為每個 domain 產出 domain map（多 domain 專案放 domain 子目錄，單 domain 專案放 `docs/` 根層）：
 

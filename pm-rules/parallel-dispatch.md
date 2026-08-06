@@ -260,7 +260,7 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 派發代理人時，依任務風險等級決定隔離策略，非一律強制 worktree。
 
-> **設計依據（W5-008 方案 C 分段採納）**：低風險任務（ANA/DOC/唯讀，約 40-60%）免 worktree 是既有實務的明文化（hook 本來就不對分析/審核代理人強制 worktree）；高風險長 IMP 維持 worktree 強制。中風險短 IMP 共享 tree + PM 統一 commit 暫緩，待 W5-033 受控實驗結論。
+> **設計依據（多方案實驗結果的分段採納）**：低風險任務（ANA/DOC/唯讀，約 40-60%）免 worktree 是既有實務的明文化（hook 本來就不對分析/審核代理人強制 worktree）；高風險長 IMP 維持 worktree 強制。中風險短 IMP 共享 tree + PM 統一 commit 暫緩，待後續受控實驗結論。
 
 ### 風險分級表
 
@@ -635,7 +635,7 @@ Wave 所有 ticket 完成後，PM 對所有仍存活的 idle agent 依序發送 
 
 **Version**: 4.13.0 - Worktree 隔離章節從「強制」改為「風險分級」：新增風險分級表（低/高/中三級），低風險（ANA/DOC/唯讀）免 worktree 為既有實務明文化，高風險（IMP/重構/測試實作）維持 worktree 強制，中風險暫緩待 W5-033 實驗結論；原代理人類型表合併至風險分級表，Source of truth 註記同步更新（0.38.0-W5-034，W5-008 方案 C 分段採納落地）
 
-**Version**: 4.12.0 - 清理 2 處依賴型專案 ticket ID 引用（改抽象描述，避免框架資產 sync 至其他專案後成死連結）：嵌套派發整合條款的協議設計依據引用改指向規則本身；`.claude/` 並行數限制的重啟條件改抽象描述並改引用 PC-137（框架 error-pattern，跨專案穩定）（0.38.0-W5-030，W5-015 結論落地）
+**Version**: 4.12.0 - 清理 2 處依賴型專案 ticket ID 引用（改抽象描述，避免框架資產 sync 至其他專案後成死連結）：嵌套派發整合條款的協議設計依據引用改指向規則本身；`.claude/` 並行數限制的重啟條件改抽象描述並改引用 PC-137（框架 error-pattern，跨專案穩定）
 
 **Version**: 4.11.0 - Worktree 隔離章節新增「worktree 為 fresh checkout，gitignored 生成產物須先確認就緒」提示：訂立生成產物的納入版控評估與派發前確認 SOP（源自 `IMP-APP-003` 對照實驗）
 

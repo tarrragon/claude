@@ -371,7 +371,7 @@ final message 僅指向 ticket ID，不承載結論本體。
 
 > **用途**：PM 直接編輯 framework 規則檔（`.claude/rules/`、`pm-rules/`、`references/`、`skills/`、`methodologies/`、`agents/`）的標準流程，含 Layer 1 自檢 + Layer 2 委員審查。
 >
-> **設計依據**：W17-122 ANA Layer C 落地（與 Layer A Hook + Layer B Claim 提示三層協同）。實證來源：W17-060 落地暴露兩個流程缺口（事前未觸發 SKILL + 事後缺 Layer 2 委員），規則 6 條款違反 compositional-writing 原則 3。
+> **設計依據**：Layer C 落地（與 Layer A Hook + Layer B Claim 提示三層協同）。實證來源：框架層 SKILL 檢查與 Layer 2 委員審查缺口暴露，規則 6 條款違反 compositional-writing 原則 3。
 
 ### 標準步驟（6 步，跳過項需評估成本）
 
@@ -420,7 +420,7 @@ Layer 2 不適用 by <理由>
 
 ### 三層協同（W17-122 ANA Solution 落地後生效）
 
-本流程是 W17-122 三層防護的 Layer C（紙本約束）。Layer A（hook 自動偵測）與 Layer B（claim 提示）為事前提醒，本 Layer 為事中規範與事後追蹤的紙本依據：
+本流程是三層防護的 Layer C（紙本約束）。Layer A（hook 自動偵測）與 Layer B（claim 提示）為事前提醒，本 Layer 為事中規範與事後追蹤的紙本依據：
 
 | 時點 | 機制 | 落地 ticket |
 |------|------|-----------|
@@ -437,7 +437,7 @@ Layer 2 不適用 by <理由>
 
 > **用途**：PM 派發代理人時，在 prompt 末段插入自檢指令，使代理人在 complete 前執行一輪 Layer 1 自律審查。
 >
-> **設計依據**：W17-061（W17-051 WRAP 選項 B 階段二）— codex 實驗驗證第二步修正成本遠低於第一步生成，Layer 1 是最低成本的品質防護層。
+> **設計依據**：實驗驗證發現第二步修正成本遠低於第一步生成，Layer 1 是最低成本的品質防護層。
 
 ### 觸發條件
 
@@ -474,7 +474,7 @@ commit 前快速掃描禁用字（數據/代碼/默認/文檔/軟件/硬件/信�
 
 > **用途**：派發共用 lib / predicate / shared utility bug 修復 IMP 時，在 prompt 加註此提醒，使代理人在修復前主動 grep all callers，防止「只修觸發 bug 的單一 caller」反模式。
 >
-> **設計依據**：PC-136（W17-182 retrospective ANA）— ARCH-020 三次重爆軌跡證實，未 grep all callers 的修復會在數週內從另一處重爆。
+> **設計依據**：PC-136（多次重爆軌跡證實）— 未 grep all callers 的修復會在數週內從另一處重爆。
 
 ### 觸發條件
 
@@ -554,7 +554,7 @@ Ticket: {ticket_id}
 
 > **用途**：派發 `isolation: "worktree"` agent 時，在 prompt 加入 base 同步指引，使 agent 開始工作前先將 worktree merge 至最新 main。
 >
-> **設計依據**：W1-035 ANA — cc runtime `isolation:worktree` 以派發瞬間 main HEAD 為快照、不後續同步；worktree 共享 git object store，可在 worktree 內直接 merge main 取得最新內容。
+> **設計依據**：cc runtime `isolation:worktree` 以派發瞬間 main HEAD 為快照、不後續同步；worktree 共享 git object store，可在 worktree 內直接 merge main 取得最新內容。
 >
 > **前提**：本指引假設 agent 在 auto-worktree 內完成所有工作（file ops + ticket CLI）。禁止 `isolation: worktree` + prompt 導向另一個外部 worktree 的組合派發——該模式導致 ticket CLI 寫入與 code changes 分裂到不同分支（ghost commits）。替代方案見 `.claude/pm-rules/parallel-dispatch.md`「Redirect 派發反模式禁令（W1-016）」。
 
@@ -798,7 +798,7 @@ merge 後執行 ls <目標檔案路徑> 或 grep 確認本 ticket 相關檔案�
 
 ## 與 /goal 的邊界
 
-> **設計依據**：W3-032 ANA 結論方案 D — `/goal` 與 ticket acceptance 運作層級根本不同，不整合、平行存在。
+> **設計依據**：`/goal` 與 ticket acceptance 運作層級根本不同（設計決策方案 D），不整合、平行存在。
 
 `/goal`（Claude Code v2.1.139+ 的 session 執行工具）與 ticket `acceptance`（本專案品質閘門）看似都在定義「完成條件」，但兩者解決不同問題，**不可互相取代**。
 
@@ -857,7 +857,7 @@ ticket track complete 0.19.0-W3-032.1 --as <agent-name>
 
 > **用途**：派發 prompt 收尾段的標準模板，把「勾選 acceptance」與「填寫 ticket body」兩項收尾義務明文寫入指令，取代僅靠代理人自律（AGENT_PRELOAD 規則 2.4）記得執行。
 >
-> **設計依據**：0.4.1-W1-001 檢討摩擦 F3 — 0.4.0 W2-002 / W2-003 代理人在最終回覆文字中勾選 acceptance 項目，但未實際執行 `ticket track set-acceptance` 寫入 frontmatter，`complete` 因 acceptance 未真正勾選被二度擋下；PM 改在 prompt 明示 `ticket track set-acceptance <id> --all-check --as <agent>` 指令後，四票（W2-002/003 各兩項）全數一次收斂。
+> **設計依據**：代理人在回覆文字中勾選 acceptance 項目，但未實際執行 `ticket track set-acceptance` 寫入 frontmatter，導致 complete 被二度擋下的摩擦；PM 改在 prompt 明示指令後已有效收斂。
 >
 > **範圍擴充（0.4.1-W2-008）**：W17-064 的「Solution 缺 `### 自檢結果`」warning 對 PM 於 complete 時發出，0.4.0 十八票 + 0.4.1-W1-001 皆被忽略——受眾與時點雙錯，warning 送到 PM 手上時代理人工作已結束，PM 補寫是事後貼標籤，不是自檢本身。W2-008 決策：正確供給側是代理人執行期的 template 義務，故本標準段一併納入「### 4. Solution 自檢結果子章節義務」。
 
@@ -947,9 +947,9 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 **Version**: 1.15.0 — 「與派發前 commit gate 的關係」章節新增「派發前 origin 同步驗證（PC-154 前置 1 延伸）」小節：worktree base 可能反映 origin/main 而非本機 HEAD，補派發前 `git push origin main` 驗證步驟，與 PC-154 前置 1 交叉引用（memory 搬遷落地，0.2.1-W3-085）
 **Version**: 1.14.0 — 「填空檢查清單」新增一項：派發 `.claude/` 框架檔案修改時，代理人已受 AGENT_PRELOAD 規則 12（禁依賴型 ticket 引用）約束，prompt 不需重複交代（0.2.1-W3-093）
 **Version**: 1.13.0 — 「唯讀探針派發 SOP」章節新增「parallel-evaluation 常駐審查委員免 Ticket ID 派發」條目：`basil-writing-critic` / `linux` 已列入 `TICKET_EXEMPT_AGENT_TYPES`（0.2.1-W3-010 落地），派發時直接走優先序 1，禁止借用他人 pending ticket ID 湊格式要求（PC-V1-002 案例變體二防護，0.2.1-W3-011）
-**Version**: 1.12.0 — 「三段式快速填空骨架」章節新增「機制選擇前置」提示：預設呼叫 `Agent(...)` 不帶 `name` 參數，例外情境（Agent Teams / 同 Wave 續用）指向 `parallel-dispatch.md`「派發機制選用準則」章節；相關文件補交叉引用（0.38.0-W2-002 ANA 落地，W4-005）
+**Version**: 1.12.0 — 「三段式快速填空骨架」章節新增「機制選擇前置」提示：預設呼叫 `Agent(...)` 不帶 `name` 參數，例外情境（Agent Teams / 同 Wave 續用）指向 `parallel-dispatch.md`「派發機制選用準則」章節；相關文件補交叉引用
 
-**Version**: 1.11.0 — 「收尾義務標準段（W2-003）」章節擴充（0.4.1-W2-008）：新增「Solution 自檢結果子章節義務」項，收尾四塊改為含此項；引用 W17-064 warning 忽略率實證（0.4.0 十八票 + 0.4.1-W1-001 全被忽略，受眾/時點雙錯）為擴充依據
+**Version**: 1.11.0 — 「收尾義務標準段」章節擴充：新增「Solution 自檢結果子章節義務」項，收尾四塊改為含此項；實測發現 warning 被大量忽略（受眾/時點雙錯），為擴充依據
 **Version**: 1.10.0 — 新增「收尾義務標準段（W2-003）」章節：set-acceptance 指令範例（--all-check / --check index 兩型）+ ticket body 填寫義務（Solution/Test Results/Exit Status）+「回覆勾選不算數，frontmatter 才是 SOT」明示提醒；引用 0.4.1-W1-001 摩擦 F3（0.4.0 W2-002/003 回覆勾選未動 frontmatter 二度擋 complete，prompt 明示後四票收斂）為 source
 **Version**: 1.9.0 — 新增「worktree 快照過舊防護（W2-007）」章節：session 中途新 commit 後的派發，prompt 第 0 步強制 merge main + ls/grep 驗證目標檔案存在；阻塞回報後重派新 agent 優先於 SendMessage 恢復（無變更 worktree 被平台自動回收，恢復時 cwd 靜默 fallback 主 repo）；引用 0.3.6-W2-007 為 source
 **Version**: 1.8.0 — 新增「收尾 --as 全覆蓋與建票 who 對齊」章節（W1-049 首輪裁決前置）：收尾三命令一律帶 --as、PM 建子票必帶 --who（繼承 parent who 為 false positive deny 誤傷源）、agent deny 時禁繞過須回報；/goal 章節收尾範例同步補 --as

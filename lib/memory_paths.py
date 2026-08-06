@@ -1,7 +1,7 @@
 """Memory 目錄 layout 結構知識 SSOT（0.2.1-W3-196，Phase 4 第二輪修正）
 
 兩個 hook 各自實作了 memory 目錄的認定，已漂移出實質缺陷（slug 推錯、
-legacy 位置覆蓋不對稱，詳見 0.2.1-W3-092 Phase 4 審查）：
+legacy 位置覆蓋不對稱（框架審查發現）：
 
 - memory-write-guard-hook.py（PreToolUse deny）用正則直接判定「這個路徑是
   不是 memory 位置」——判定式，輸入路徑，回傳布林

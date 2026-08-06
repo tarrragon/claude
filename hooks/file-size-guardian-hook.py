@@ -42,7 +42,7 @@ CODE_FILE_CRITICAL = 500   # 程式碼檔案必須拆分值
 # Auto-load 集合 token 預算（來源: 1.0.0-W7-004.7，防止自動載入層回彈膨脹）
 AUTO_LOAD_BUDGET_TOKENS = 45_000
 # Token 估算係數：tokens = int(chars / CHARS_PER_TOKEN)。
-# 校準依據（2026-06-12，1.0.0-W7-006）：/context Memory files 同集合實測 38.9k tokens
+# 校準依據（2026-06-12）：/context Memory files 同集合實測 38.9k tokens
 # vs 合計 chars 50.7k → 50.7k / 38.9k ≈ 1.30 chars/token（繁中為主集合）。
 # 原值 3 為未經實測的保守假設，低估 2.3 倍（IMP-V1-001：估算係數未經實測校準即上線）。
 CHARS_PER_TOKEN = 1.3

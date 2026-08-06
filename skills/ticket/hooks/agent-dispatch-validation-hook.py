@@ -992,7 +992,7 @@ def _agent_md_path(subagent_type: str) -> Path:
 # W11-004.1.4：分層判決（high-confidence block / low-confidence warn / bypass）
 # ============================================================================
 #
-# 設計依據：W11-004.1.1 Phase A 建立 annotate/stats 機制量化誤報率。
+# 設計依據：先以 annotate/stats 機制量化誤報率，再據以調整偵測閾值。
 # 分層策略：
 #   - HIGH_CONFIDENCE_KEYWORDS（直接可執行的 git/CLI 動詞，語意明確，FP 低）
 #     → 阻擋（exit 2）

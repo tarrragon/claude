@@ -391,7 +391,7 @@ def check_claude_md(project_root: Path) -> FrameworkFileInfo:
 def check_tech_stack_section(project_root: Path) -> FrameworkFileInfo:
     """檢查 CLAUDE.md 是否包含技術選型 section.
 
-    根據 W1-017 重構，所有專案設定統一在 CLAUDE.md 的「技術選型與架構決策」section。
+    所有專案設定統一在 CLAUDE.md 的「技術選型與架構決策」section。
     本函式驗證 CLAUDE.md 是否包含相關內容。
 
     Args:
@@ -441,7 +441,7 @@ def check_language_template(
 ) -> FrameworkFileInfo:
     """檢查語言特定模板是否存在.
 
-    已棄用（根據 W1-017，模板統一改至 CLAUDE.md）。
+    已棄用（模板統一改至 CLAUDE.md）。
     此函式保留為向後相容，但始終返回不存在。
 
     Args:
@@ -1025,7 +1025,7 @@ def check_language_standards(
 ) -> LanguageStandardCheckInfo:
     """檢查語言特定的開發規範文件.
 
-    根據 W1-017 重構，獨立語言規範檔已廢止。所有技術選型和開發規範統一在 CLAUDE.md。
+    獨立語言規範檔已廢止。所有技術選型和開發規範統一在 CLAUDE.md。
     此檢查為 [SHOULD] 優先級（推薦但非必須）。
 
     Args:

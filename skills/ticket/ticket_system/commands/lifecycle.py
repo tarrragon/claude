@@ -2319,7 +2319,7 @@ def _auto_extract_context_bundle_post_claim(
     若 Context Bundle 已存在同 sources 的 auto block，不再重寫（no_change_idempotent）。
     異常降級：任何例外寫 stderr traceback，退出碼保 0。
 
-    設計依據：W17-002 Phase 1 §5.2 claim-insert 虛擬碼。
+    設計依據：claim-insert 虛擬碼規格（與 create-insert 對稱，皆為降級不拋錯）。
     """
     import traceback as _tb
     try:

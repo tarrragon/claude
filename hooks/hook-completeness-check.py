@@ -258,7 +258,7 @@ def prune_phantom_local_registrations(
 
     僅作用於 settings.local.json：該層為 sync 排除檔，relocate 後無法自癒
     （ARCH-TUNL-001）；settings.json 的幽靈由 sync overlay 自癒且屬 SSOT，不在此
-    自動改寫範圍。設計依據：1.4.0-W2-013.2 reality-test、PC-148 固化原則。
+    自動改寫範圍。設計依據：settings.local.json 為 sync 外層無法自癒機制、PC-148 固化原則。
 
     Returns:
         [(event_type, 解析後不存在的路徑字串), ...]，已移除（或 dry-run 將移除）的 entry。

@@ -795,7 +795,7 @@ class TestCheckLanguageStandards:
     """測試語言規範文件檢查（已移至 CLAUDE.md）."""
 
     def test_language_standards_always_exist(self, tmp_path: Path) -> None:
-        """測試語言規範已統一在 CLAUDE.md（根據 W1-017）."""
+        """測試語言規範已統一在 CLAUDE.md."""
         result = check_language_standards(tmp_path, "flutter")
 
         assert result.detected_language == "flutter"

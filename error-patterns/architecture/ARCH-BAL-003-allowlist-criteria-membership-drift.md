@@ -29,7 +29,7 @@ created: 2026-07-26
 - 缺口只在該物件實際受害後、且有人回頭查為何防護沒攔下時才暴露
 - 名單同時存在漏列與冗列（冗列項已不在實際集合中），顯示兩側從未被比對過
 
-實證：`uv-tool-ownership-guard-hook` 的 `SKILLS` 常數列七項，卻漏列實際安裝的 `skill-sync`、冗列已不在安裝集合的 `branch-worktree-guardian`。`skill-sync` 的全域 slot 因此長期由他專案副本佔用而無告警，本專案對其原始碼的修改全數不生效（機制詳見 `ARCH-APP-002`）。此缺陷為現在進行式，清單校準由 `0.2.1-W3-181` 承接。
+實證：`uv-tool-ownership-guard-hook` 的 `SKILLS` 常數列七項，卻漏列實際安裝的 `skill-sync`、冗列已不在安裝集合的 `branch-worktree-guardian`。`skill-sync` 的全域 slot 因此長期由他專案副本佔用而無告警，本專案對其原始碼的修改全數不生效（機制詳見 `ARCH-APP-002`）。此缺陷為持續存在的問題，清單校準需主動執行。
 
 **判別提問**（兩步，第一步定偵測成本，第二步定該走哪份 pattern）：
 
@@ -55,7 +55,7 @@ created: 2026-07-26
 
 後果鏈：PM 要派 `basil-writing-critic` 做文字品質審查 → hook 回 deny 要求 Ticket ID → PM 未察覺名單遺漏，改為借用一張尚未派發的實作票 ID → agent 依協議 claim 該票 → 該票 `who.current` 被回填為審查 agent，狀態仍是 pending → PM 若未察覺會誤判該票已派發。原本防「變更無法追溯」的機制，反而製造了「指派狀態被污染」。
 
-分析詳見 `0.2.1-W3-009`（ANA），落地 `0.2.1-W3-010`（IMP）。
+分析與落地已完成，並追蹤為 error-pattern。
 
 ## 防護
 

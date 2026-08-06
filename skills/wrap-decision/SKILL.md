@@ -501,7 +501,7 @@ WRAP 每階段之間是切割點 — 強迫問「是否繼續」：
 **Version**: 2.7.0 — 觸發條件表新增「二元處置取捨」項（入場閘門：處置類選項未經 W 階段產出即不得呈現），並補與既有結論錨定（3.2）的邊界說明——3.2 是 WRAP 內部自我檢查，本項是 WRAP 之前的入場閘門。
 **Version**: 2.6.0 — Step 0 資料充足度閘門新增「與 requirement-protocol 的分工邊界」子節：三機制（WRAP Step 0 / premortem context 閘門 / requirement-protocol）受眾與問題對照表 + 共用原則（一次一問、互為前置不重複），requirement-protocol 反向交叉引用同步（1.5.0-W5-009.7，源自外部 premortem skill context 充足度閘門）。
 **Version**: 2.5.0 — P 階段「行前預想」新增「每個預想失敗原因配早期警訊」條款：可觀測訊號（非模糊感覺）+ 需跨 session 監測時包裝為監測 ticket 綁 trigger（decision-trigger-binding 規則 2）（1.5.0-W5-009.6，源自外部 premortem skill early warning signals）。
-**Version**: 2.4.0 — 新增完整 premortem 流程（`references/premortem-workflow.md`）：failure-reason 並行深挖 + 三分綜合報告，銜接 P 階段簡化三問與理論依據 `principles/premortem-klein.md`；description 補觸發詞（premortem/事前驗屍/壓力測試計畫等）（1.5.0-W5-009.5）。
+**Version**: 2.4.0 — 新增完整 premortem 流程（`references/premortem-workflow.md`）：failure-reason 並行深挖 + 三分綜合報告，銜接 P 階段簡化三問與理論依據 `principles/premortem-klein.md`；description 補觸發詞（premortem/事前驗屍/壓力測試計畫等）。
 **Version**: 2.3.0 — 觸發條件新增 4 項決策路徑層干擾（CLI 自動駕駛（autopilot） / 既有結論錨定（Anchor） / 草率改規則 / 多步驟成功率盲點）；既有觸發條件不變動（向後相容）。
 **Version**: 2.2.0 — 觸發條件新增反思深度質疑（reflection_depth_challenge）說明，含與被困住語意的差異。
 **Version**: 2.1.0 — 新增多輪迭代查詢方法論（W）+ 反向驗證範本（R）+ 悖論識別檢查清單（A）+ 自我暴露偏好實踐（P）+ 2 個新 references（iterative-research / anti-paternalism）。

@@ -37,13 +37,13 @@
 # 可用 section：Problem Analysis / Context Bundle / Solution / Test Results / Execution Log
 /ticket track log <id> --section "<Section Name>"
 
-# 列出 Tickets（W10-115：預設 --top 10 by priority；詳見「track list 子命令」）
+# 列出 Tickets（預設 --top 10 by priority；詳見「track list 子命令」）
 /ticket track list [--pending|--in-progress|--completed|--blocked] \
                    [--wave <wave>] [--status STATUS [STATUS ...]] \
                    [--format {table,ids,yaml}] [--top N] [--all] \
                    [--version VERSION]
 
-# Dashboard 聚合視圖（W10-114：PM 接手新 session；詳見「track dashboard 子命令」）
+# Dashboard 聚合視圖（PM 接手新 session；詳見「track dashboard 子命令」）
 /ticket track dashboard [--top N] [--wave N] [--no-stale] \
                         [--stale-threshold MIN] [--format {text,json}] \
                         [--version V]

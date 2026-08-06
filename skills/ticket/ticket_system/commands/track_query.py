@@ -465,7 +465,8 @@ def execute_deps(args: argparse.Namespace, version: str) -> int:
         )
         print(f"          鏈: {chain_repr}")
         print(
-            "          建議：評估是否繼續反思或終止（參見 W15-010 Layer 2 終止條件）"
+            "          建議：評估是否繼續反思或終止（連續多層 ANA 反思代表結論"
+            "持續不落地，應轉出 IMP/DOC 或終止鏈）"
         )
 
     # Spawned tickets（遞迴樹狀）

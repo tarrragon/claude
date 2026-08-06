@@ -184,7 +184,7 @@ ticket track query <spawned-id>          # 單一 spawned 詳情（標題、prio
 
 ### 來源
 
-W17-036 軸 D 缺口分析：跨 session 遺忘 spawned 推進。詳見 `docs/work-logs/v0/v0.18/v0.18.0/tickets/0.18.0-W17-036.md` Solution 章節軸 D（Handoff 觸發條件補強）。
+跨 session 遺忘 spawned 推進問題分析結果。Handoff 觸發條件已補強（見 behavior-loop-details.md 規則詳細版）。
 
 ---
 

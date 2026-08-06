@@ -689,7 +689,7 @@ _validate_create_checklist = validate_create_checklist
 
 
 def _suggest_field_value(field: str, ticket_type: str, action: str) -> str | None:
-    """根據 ticket_type + action 推導缺失欄位的建議值（0.3.4-W2-001）。"""
+    """根據 ticket_type + action 推導缺失欄位的建議值。"""
     suggestions: dict[str, dict[str, str | None]] = {
         "who": {
             "ANA": "主線程",
@@ -1079,7 +1079,8 @@ def _auto_extract_context_bundle_post_create(
     僅當 target ticket 具備 source_ticket / blocked_by / related_to 之一時才觸發。
     異常降級：任何例外都寫入 stderr traceback，退出碼保 0（主流程不阻斷）。
 
-    設計依據：W17-002 Phase 1 §5.1 create-insert 虛擬碼 + §v2.3 Non-raising。
+    設計依據：create-insert 虛擬碼規格；驗證失敗採 Non-raising（降級不拋錯，
+    主流程不因 Context Bundle 抽取失敗而中斷）。
     """
     try:
         from ticket_system.lib.context_bundle_extractor import (

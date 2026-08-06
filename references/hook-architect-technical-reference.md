@@ -133,7 +133,7 @@ def has_background_agents(input_data: dict, logger) -> bool:
 
 **Consequence**：若 hook 不讀 `background_tasks` 而僅依賴 `started_at` 推斷，在背景代理人執行中時仍可能觸發誤報（如 stop-worklog-handoff-sync-check-hook 過去的誤報）。
 
-**Action**：在 Stop / SubagentStop hook 需要判斷「是否有背景代理人執行中」時，優先讀 `background_tasks`；欄位不存在（舊版 CC）或空 list 時 fallback 到既有本地推斷邏輯。參考實作：`.claude/skills/ticket/hooks/handoff-auto-resume-stop-hook.py` 的 `has_background_agents()`（W3-026.1 落地）。
+**Action**：在 Stop / SubagentStop hook 需要判斷「是否有背景代理人執行中」時，優先讀 `background_tasks`；欄位不存在（舊版 CC）或空 list 時 fallback 到既有本地推斷邏輯。參考實作：`.claude/skills/ticket/hooks/handoff-auto-resume-stop-hook.py` 的 `has_background_agents()` 方法。
 
 **session_crons**：
 

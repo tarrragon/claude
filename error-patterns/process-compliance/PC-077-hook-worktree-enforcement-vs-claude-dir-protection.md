@@ -137,6 +137,6 @@ PM 派發實作代理人（thyme-python-developer、parsley-flutter-developer、
 ---
 
 **Last Updated**: 2026-05-30
-**Version**: 1.1.0 — 補「升級狀態」章節：標註已升級至 behavior-loop-details.md v1.2.0；補 PC-115/PC-137 交叉引用；標註本 PC 不再作為單獨決策依據（W3-015.1 落地）
+**Version**: 1.1.0 — 補「升級狀態」章節：標註已升級至 behavior-loop-details.md v1.2.0；補 PC-115/PC-137 交叉引用；標註本 PC 不再作為單獨決策依據（相關決策已定案）
 **Version**: 1.0.0 — 首發記錄（W13-003 PC-072 補強派發 thyme 遭 Hook 擋）
 **Source**: 2026-04-17 W13-003 IMP 派發 thyme-python-developer 修改 `.claude/hooks/askuserquestion-charset-guard-hook.py` 被 agent-dispatch-validation-hook 擋 isolation:worktree 要求；對照 ARCH-015 確認即使加 worktree 仍被 runtime 擋

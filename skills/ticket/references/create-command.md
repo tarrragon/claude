@@ -111,7 +111,7 @@ ticket create --wave 2 --action "撰寫" --target "工作日誌" --type DOC
 
 ## 重複偵測（兩層防護）
 
-`create` 在持久化前對同版本既有 Ticket 做語意相似度（Jaccard）比對，分兩層防護。設計依據與量測數據見 ticket `1.0.0-W1-040`（五場景 Jaccard 實測）與 `1.0.0-W1-040.1`（實作）。
+`create` 在持久化前對同版本既有 Ticket 做語意相似度（Jaccard）比對，分兩層防護。閾值設定依據五場景 Jaccard 相似度實測定調（TP 逐字相同 / TP 近似改寫 / FP 同域不同標的等，量測數據見 `ticket_system/constants.py` 閾值常數註解）。
 
 | 層 | 觸發條件 | 行為 | 旁路 |
 |----|---------|------|------|
