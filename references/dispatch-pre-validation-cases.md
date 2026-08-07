@@ -35,7 +35,7 @@ PM 派發 IMP 前，若任一條件成立，必須執行假設驗證：
 
 **情境**（2026-05-14）：
 
-W10-134 第二輪 linux 結論建議「P0：刪除 `.claude/rules/core/ticket-skill-sync-check.md`」，理由：「對應 hook 已強制執行 + 0 PC 引用 = 安全刪除」。
+W10-134 第二輪 linux 結論建議「P0：刪除 `.claude/rules/core/ticket-skill-sync-check.md`」，理由：「對應 hook 已強制執行 + 0 PC 引用 = 安全刪除」。<!-- broken-link-exempt: 歷史引文原文，該檔現已更名為 skill-cli-sync-check.md -->
 
 **bay devil's advocate 警告**（W10-134.7）：「unknown unknowns 風險」「prose rules 同時是規範 + 教育材料」。
 

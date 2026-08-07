@@ -71,11 +71,11 @@ Given many atomic documents, how does a reader find the right one?
 
 ### Cross-reference format
 
-<!-- example: Example column contains literal string samples wrapped in backticks (inline code). Paths like ./validation.md are placeholders, not real links. -->
+<!-- broken-link-exempt: Example column contains literal string samples wrapped in backticks (inline code). Paths like ./validation.md are placeholders, not real links. -->
 
 | Reference type                                            | Format                                 | Example                                                               |
 | --------------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------- |
-| Same-directory sibling                                    | Relative path + intent                 | `See [validation rules](./validation.md) for acceptable field values` |
+| Same-directory sibling                                    | Relative path + intent                 | `See [validation rules](./validation.md) for acceptable field values`<!-- broken-link-exempt: 範例字串 --> |
 | Cross-directory                                           | Full repo-relative path                | `Detailed flow: rules/decision-tree.md`                               |
 | External (stable)                                         | URL with context                       | `Anthropic skill spec: https://...`                                   |
 | External (volatile: ticket ID, commit hash, worklog path) | **Allowed only in volatile documents** | Never in spec / methodology / error-pattern content                   |

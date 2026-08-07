@@ -64,7 +64,7 @@ metadata:
   - **正常化 EPS**：估值段如果使用了 peak-year 或 trough-year 的 EPS，是否做了正常化調整？未調整 = 估值偏差
   - **數據時效標示**：所有引用的財務數字是否標註年度/季度？文章老化後未標時效的數據會誤導讀者——「毛利率 21%」在 2025 年是事實、在 2027 年可能已過時。每個數據段至少標一次時效來源（「2025 年度財報」「2026 Q1 法說會」）
   - **N/A 處理**：維度不適用時標 N/A 並附簡短理由（如「非上市公司分析、正常化 EPS 不適用」）。N/A 代表「已評估、判定不相關」，跟「未檢查」不同
-  - 非財務分析內容不需要跑此 frame。詳見 [`business-analysis` skill](../business-analysis/SKILL.md) 的完整 7 步驟和 `references/` 操作清單。
+  - 非財務分析內容不需要跑此 frame。詳見 `business-analysis` skill 的完整 7 步驟和 `references/` 操作清單（該 skill 尚未建立於本框架，追蹤 ticket 0.2.1-W3-345）。
 
 預期 finding 類型：編號錯、broken link、案例 mis-citation、規範違反、字句層負向 / 口語 / 廢話、cadence 散點、**成本 / 時程 / 工具缺口**、**斷言支撐缺失（訴諸權威 / 無推導閾值）、模組級知識類型失配**、**分母未標示、獲利變動未拆解、基準前提未說明、關係人交易未辨識、估值未正常化**。
 
@@ -175,7 +175,7 @@ register 違規（重點後置、喊話、誇飾）的同源自審有上限（�
 - `case-first-module-workflow`（若專案已採用此 skill）的 Stage 4 含「agent team review」但偏 case-driven 單輪。Multi-round-review 補完跨輪 frame 切換維度、可以接在 case-first 的 Stage 5 之後或同時使用。
 - [`compositional-writing`](../compositional-writing/SKILL.md) 提供寫作原則（intent-revealing、grep-friendly）+ 字句層 grep keyword bank（正向陳述 / 口語修辭 / 地區用語 / 廢話前綴 / 裝飾符號）。**本 skill 啟動時應同步 invoke compositional-writing** — Round 1-A 寫作規範 reviewer 必須跑 compositional-writing 的字句 grep（見上）、Round 2-A cadence reviewer 引用其 multi-pass review 第 6 原則跟 cadence-homogenization 原則卡。兩個 skill 是垂直協同：multi-round-review 給 frame 切換結構、compositional-writing 給每輪 frame 的具體檢查清單。
 - **協同觸發**：用戶說「多輪審查 / 寫作 audit / batch review」時、兩個 skill 都該 surface — multi-round-review 規劃 frame、compositional-writing 提供每 frame 的 keyword bank。單獨用 multi-round-review 容易漏字句層、單獨用 compositional-writing 容易漏跨輪 frame 規劃。
-- [`business-analysis`](../business-analysis/SKILL.md) 提供商業分析的 7 步驟流程和 7 個分析模式（分母意識、邊際貢獻、正常化 EPS、關係人交易、三面受壓、結構性 vs 一次性、供給衝擊 vs 週期）。**審查的內容涉及財報判讀、產業比較、估值時，Round 1-F 應同步 invoke business-analysis skill** — 用其 7 步驟作為分析完整度的 checklist、用其 references/ 的判讀條件表驗證文中的分析是否到位。跟 compositional-writing 的垂直協同關係相同：multi-round-review 給 frame 結構、business-analysis 給商業分析維度的具體檢查清單。
+- `business-analysis`（skill 尚未建立於本框架，追蹤 ticket 0.2.1-W3-345）提供商業分析的 7 步驟流程和 7 個分析模式（分母意識、邊際貢獻、正常化 EPS、關係人交易、三面受壓、結構性 vs 一次性、供給衝擊 vs 週期）。**審查的內容涉及財報判讀、產業比較、估值時，Round 1-F 應同步 invoke business-analysis skill** — 用其 7 步驟作為分析完整度的 checklist、用其 references/ 的判讀條件表驗證文中的分析是否到位。跟 compositional-writing 的垂直協同關係相同：multi-round-review 給 frame 結構、business-analysis 給商業分析維度的具體檢查清單。
 
 ## 反模式
 

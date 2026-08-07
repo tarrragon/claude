@@ -219,8 +219,8 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 | 禁止（繞過隔離） | 正確做法 |
 |----------------|---------|
-| `echo "..." > /Users/.../project/file.md`（主 repo 絕對路徑） | `echo "..." > ./file.md`（worktree 相對路徑） |
-| `python3 -c "open('/Users/.../project/file.md','w').write(...)"` | `python3 -c "open('./file.md','w').write(...)"` |
+| `echo "..." > /Users/.../project/file.md`（主 repo 絕對路徑） | `echo "..." > ./file.md`（worktree 相對路徑）<!-- broken-link-exempt: 表格範例路徑，非真實引用 --> |
+| `python3 -c "open('/Users/.../project/file.md','w').write(...)"` | `python3 -c "open('./file.md','w').write(...)"`<!-- broken-link-exempt: 表格範例路徑，非真實引用 --> |
 | `ticket track append-log`（CLI 解析 `CLAUDE_PROJECT_DIR` 指向主 repo） | 用 Edit 修改 worktree 內的 ticket md，或用 `(cd $PWD && ticket ...)` 確認 cwd |
 
 > **識別方式**：路徑含 `CLAUDE_PROJECT_DIR` 值、專案根目錄絕對路徑、或 `..` 回溯至 worktree 外 → 違規。僅限相對路徑或 `$PWD` 下的路徑 → 合規。

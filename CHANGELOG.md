@@ -1,3 +1,15 @@
+## [2.24.15] - 2026-08-07
+
+### Summary
+fix: 修復 broken-link-check 既存失效連結，broken 23 處歸零; chore: 本地 VERSION 回寫至 2.24.14（issue #62 群聚收尾）
+
+Changes: 1 fix, 1 chore
+
+- fix: 修復 broken-link-check 既存失效連結，broken 23 處歸零
+- chore: 本地 VERSION 回寫至 2.24.14（issue #62 群聚收尾）
+
+---
+
 ## [2.24.14] - 2026-08-07
 
 ### Summary

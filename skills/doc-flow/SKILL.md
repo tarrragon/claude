@@ -199,7 +199,7 @@ docs/
 - 工作流程整合：`references/workflow-integration.md`
 - 方法論：`.claude/methodologies/five-document-system-methodology.md`
 - 規則：`.claude/references/document-system.md`
-- Worklog 模板：`.claude/skills/doc-flow/worklog.md.template`
+- Worklog 模板：`.claude/skills/doc-flow/templates/worklog.md.template`<!-- broken-link-exempt: 目標為 .md.template 檔，掃描器 regex 擷取至 .md 截斷誤報 -->
 - Todolist 模板：`.claude/skills/doc-flow/templates/todolist.yaml.template`
 
 ---

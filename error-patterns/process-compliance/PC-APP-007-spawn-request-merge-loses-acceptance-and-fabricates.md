@@ -95,7 +95,7 @@ grep -c "status: processed" <source-ticket>.md   # 已落地數
 - `.claude/rules/core/quality-baseline.md` 規則 5（所有發現必須追蹤；Solution 內 spawn 落地確認）與規則 1 邊界（flaky 取樣 N >= 5）
 - `.claude/pm-rules/ticket-body-schema.md`（Spawn 落地確認子節）
 - `.claude/rules/core/tool-output-trust-rules.md` 規則 3（用無法腦補的固定值交叉驗證——此處的固定值是 grep 的零命中）
-- `.claude/references/field-semantics.md`（spawned_tickets vs children 語意）
+- `.claude/skills/ticket/references/field-semantics.md`（spawned_tickets vs children 語意）
 
 ---
 

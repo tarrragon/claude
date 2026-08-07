@@ -127,7 +127,7 @@ must target its own worktree.
 ## 相關規則與方法論
 
 - `.claude/rules/core/tool-output-trust-rules.md` 規則 5（記錄平面不是 ground truth，重大狀態以世界平面為準）——本模式是規則 5 的具體案例：推測性歸因寫入 ticket（記錄平面）後被當作已驗證事實（世界平面）引用
-- `.claude/error-patterns/process-compliance/PC-166-confabulation-trigger-chain-and-guards.md`（confabulation 觸發鏈，本模式是「阻擋後生成合理但無 grounding 的歸因」的變體）
+- `.claude/error-patterns/process-compliance/PC-166-confabulated-tool-result-and-git-working-tree-ground-truth.md`（confabulation 觸發鏈，本模式是「阻擋後生成合理但無 grounding 的歸因」的變體）
 - `.claude/error-patterns/process-compliance/PC-SCLK-002-agent-obfuscation-bypass-of-sandbox-guard.md`（本模式的首次案例來源，同時也是本模式的受害者——見上方「PC-SCLK-002 交叉查核」章節的可信度分層）
 
 ---
