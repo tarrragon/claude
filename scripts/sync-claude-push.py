@@ -220,6 +220,31 @@ def write_base_sha(claude_dir: Path, base_sha: str) -> None:
     )
 
 
+def write_local_version(claude_dir: Path, new_version: str) -> bool:
+    """push 成功後將本次推送版本回寫本地 .claude/VERSION（0.2.1-W3-342）。
+
+    本地 .claude/VERSION 為 git tracked 檔，push 只 bump 遠端版本；若不回寫，
+    本地 VERSION 會停留於推送前版本直到下次 sync-pull。fix_version.py 省略
+    --version 時依 docstring 契約讀取本地 VERSION 視為「已同步版本」，缺此回寫
+    會令其註記過期版本（W3-050 收尾實測：推送 v2.24.12 後本地仍讀到 2.24.1）。
+
+    寫入失敗（如權限問題）不中止整個 push 流程——遠端 push 此時已成功，本步驟
+    僅影響本地便利性；呼叫端應以警告告知使用者手動確認並回退。
+
+    參數:
+        claude_dir: 本地 .claude 目錄路徑
+        new_version: 本次推送後的版本號（不含 v 前綴）
+
+    傳回:
+        bool: True 表示寫入成功；False 表示寫入失敗，呼叫端應警告使用者
+    """
+    try:
+        (claude_dir / "VERSION").write_text(new_version + "\n", encoding="utf-8")
+        return True
+    except OSError:
+        return False
+
+
 def ensure_committed(project_root: Path) -> bool:
     """確認 .claude/ 已全數 commit（M1 根因解，0.19.1-W1-030）。
 
@@ -2414,6 +2439,17 @@ def main() -> None:
 
         # tagged-release：push 成功後對本版打 git tag（remote 可見），供下游 pin 特定版。
         create_and_push_version_tag(temp_dir, new_version)
+
+        # 回寫本地 .claude/VERSION 為本次推送版本（0.2.1-W3-342）。此行之前若 push
+        # 失敗已 sys.exit(1)（見上方 push_result 檢查），故本段只在 push 成功後執行。
+        if write_local_version(claude_dir, new_version):
+            print_color(f"   已回寫本地 .claude/VERSION -> v{new_version}", "green")  # i18n-exempt
+        else:
+            version_warn_msg = (  # i18n-exempt
+                f"   警告: 回寫本地 .claude/VERSION 失敗，"  # i18n-exempt
+                f"請手動確認 .claude/VERSION 內容為 {new_version}"  # i18n-exempt
+            )
+            print_color(version_warn_msg, "yellow")  # i18n-exempt
 
         # 計算內容指紋並寫入 .sync-state.json（保留 last_synced_base_sha，禁覆蓋遺失）
         content_hash = _compute_content_hash(claude_dir)

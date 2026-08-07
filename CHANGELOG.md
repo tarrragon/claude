@@ -1,3 +1,14 @@
+## [2.24.13] - 2026-08-07
+
+### Summary
+fix: sync-push 成功後回寫本地 .claude/VERSION
+
+Changes: 1 fix
+
+- fix: sync-push 成功後回寫本地 .claude/VERSION
+
+---
+
 ## [2.24.12] - 2026-08-07
 
 ### Summary
