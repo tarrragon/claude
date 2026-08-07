@@ -15,8 +15,8 @@ def has_section(ticket_content: str, section_name: str) -> bool:
     支援多種章節標題格式:
     - ## 驗收條件
     - ### 驗收條件
-    - ## ✅ 驗收條件
-    - ### ✅ 驗收條件
+    - ## [PASS] 驗收條件
+    - ### [PASS] 驗收條件
 
     Args:
         ticket_content: Ticket 內容
@@ -29,8 +29,8 @@ def has_section(ticket_content: str, section_name: str) -> bool:
     patterns = [
         rf"## {re.escape(section_name)}",    # ## 驗收條件
         rf"### {re.escape(section_name)}",   # ### 驗收條件
-        rf"## .*{re.escape(section_name)}",  # ## ✅ 驗收條件
-        rf"### .*{re.escape(section_name)}"  # ### ✅ 驗收條件
+        rf"## .*{re.escape(section_name)}",  # ## [PASS] 驗收條件
+        rf"### .*{re.escape(section_name)}"  # ### [PASS] 驗收條件
     ]
 
     for pattern in patterns:

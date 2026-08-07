@@ -192,7 +192,7 @@ def _generate_incomplete_recommendations(elements: dict) -> List[str]:
         recs.append("新增「### 參考文件」章節，至少包含 1 個參考文件連結")
 
     if len(elements["missing"]) == 0:
-        recs.append("✅ 此 Ticket 符合 Incomplete Ticket 檢測標準")
+        recs.append("[PASS] 此 Ticket 符合 Incomplete Ticket 檢測標準")  # i18n-exempt: 內部 CLI 診斷輸出
 
     recs.append("參考文件: v0.12.G.2 C2 檢測標準")
 
@@ -476,7 +476,7 @@ def generate_god_ticket_recommendations(
 
     # 通過建議
     if not exceeded_metrics:
-        recommendations.append("✅ 此 Ticket 符合 God Ticket 檢測標準")
+        recommendations.append("[PASS] 此 Ticket 符合 God Ticket 檢測標準")  # i18n-exempt: 內部 CLI 診斷輸出
 
     return recommendations
 
@@ -678,7 +678,7 @@ def check_ambiguous_responsibility_automated(ticket_content: str) -> Dict[str, A
         recommendations.append("建議驗收條件使用層級相關的關鍵詞")
 
     if not is_ambiguous:
-        recommendations.append("✅ 此 Ticket 符合 Ambiguous Responsibility 檢測標準")
+        recommendations.append("[PASS] 此 Ticket 符合 Ambiguous Responsibility 檢測標準")  # i18n-exempt: 內部 CLI 診斷輸出
 
     recommendations.append("參考文件: v0.12.G.3 C3 檢測標準")
 

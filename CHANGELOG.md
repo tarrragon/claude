@@ -1,3 +1,14 @@
+## [2.24.11] - 2026-08-07
+
+### Summary
+fix: 移除 ticket_quality 產出內容中的 emoji 字面
+
+Changes: 1 fix
+
+- fix: 移除 ticket_quality 產出內容中的 emoji 字面
+
+---
+
 ## [2.24.10] - 2026-08-06
 
 ### Summary
