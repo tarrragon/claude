@@ -220,7 +220,7 @@ def write_base_sha(claude_dir: Path, base_sha: str) -> None:
     )
 
 
-def write_local_version(claude_dir: Path, new_version: str) -> bool:
+def write_local_version(claude_dir: Path, new_version: str) -> tuple[bool, str]:
     """push 成功後將本次推送版本回寫本地 .claude/VERSION（0.2.1-W3-342）。
 
     本地 .claude/VERSION 為 git tracked 檔，push 只 bump 遠端版本；若不回寫，
@@ -229,20 +229,23 @@ def write_local_version(claude_dir: Path, new_version: str) -> bool:
     會令其註記過期版本（W3-050 收尾實測：推送 v2.24.12 後本地仍讀到 2.24.1）。
 
     寫入失敗（如權限問題）不中止整個 push 流程——遠端 push 此時已成功，本步驟
-    僅影響本地便利性；呼叫端應以警告告知使用者手動確認並回退。
+    僅影響本地便利性；本函式不直接印警告（單一警告通道由呼叫端統一負責，見
+    0.2.1-W3-343），僅將原始 OSError 訊息透過回傳值往外傳遞，供呼叫端組成含
+    錯誤細節的警告內容（observability 規則 1：日誌內容最低要求為錯誤訊息 + 位置）。
 
     參數:
         claude_dir: 本地 .claude 目錄路徑
         new_version: 本次推送後的版本號（不含 v 前綴）
 
     傳回:
-        bool: True 表示寫入成功；False 表示寫入失敗，呼叫端應警告使用者
+        tuple[bool, str]: (是否寫入成功, 錯誤訊息)。成功時錯誤訊息為空字串；
+        失敗時為原始 OSError 的字串內容，呼叫端應警告使用者並附上此訊息。
     """
     try:
         (claude_dir / "VERSION").write_text(new_version + "\n", encoding="utf-8")
-        return True
-    except OSError:
-        return False
+        return True, ""
+    except OSError as exc:
+        return False, str(exc)
 
 
 def ensure_committed(project_root: Path) -> bool:
@@ -2442,11 +2445,14 @@ def main() -> None:
 
         # 回寫本地 .claude/VERSION 為本次推送版本（0.2.1-W3-342）。此行之前若 push
         # 失敗已 sys.exit(1)（見上方 push_result 檢查），故本段只在 push 成功後執行。
-        if write_local_version(claude_dir, new_version):
+        # 單一警告通道（0.2.1-W3-343）：write_local_version 只回傳結果，警告訊息
+        # 統一由此處組成並印出，避免函式內外重複輸出。
+        version_written, version_error = write_local_version(claude_dir, new_version)
+        if version_written:
             print_color(f"   已回寫本地 .claude/VERSION -> v{new_version}", "green")  # i18n-exempt
         else:
             version_warn_msg = (  # i18n-exempt
-                f"   警告: 回寫本地 .claude/VERSION 失敗，"  # i18n-exempt
+                f"   警告: 回寫本地 .claude/VERSION 失敗（{version_error}），"  # i18n-exempt
                 f"請手動確認 .claude/VERSION 內容為 {new_version}"  # i18n-exempt
             )
             print_color(version_warn_msg, "yellow")  # i18n-exempt

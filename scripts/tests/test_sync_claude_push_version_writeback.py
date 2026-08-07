@@ -27,9 +27,10 @@ def test_write_local_version_writes_new_version(tmp_path: Path):
     claude.mkdir()
     (claude / "VERSION").write_text("2.24.1\n", encoding="utf-8")
 
-    result = sync_mod.write_local_version(claude, "2.24.12")
+    success, error = sync_mod.write_local_version(claude, "2.24.12")
 
-    assert result is True
+    assert success is True
+    assert error == ""
     assert (claude / "VERSION").read_text(encoding="utf-8") == "2.24.12\n"
 
 
@@ -37,9 +38,10 @@ def test_write_local_version_creates_file_if_missing(tmp_path: Path):
     claude = tmp_path / ".claude"
     claude.mkdir()
 
-    result = sync_mod.write_local_version(claude, "1.0.1")
+    success, error = sync_mod.write_local_version(claude, "1.0.1")
 
-    assert result is True
+    assert success is True
+    assert error == ""
     assert (claude / "VERSION").read_text(encoding="utf-8") == "1.0.1\n"
 
 
@@ -66,6 +68,18 @@ def test_write_local_version_returns_false_when_path_not_writable(tmp_path: Path
     claude.mkdir()
     (claude / "VERSION").mkdir()  # 讓目標路徑成為目錄，write_text 必失敗
 
-    result = sync_mod.write_local_version(claude, "1.0.1")
+    success, error = sync_mod.write_local_version(claude, "1.0.1")
 
-    assert result is False
+    assert success is False
+
+
+def test_write_local_version_returns_original_oserror_message(tmp_path: Path):
+    """0.2.1-W3-343：失敗時回傳值需含原始 OSError 訊息，供呼叫端組成含細節的警告。"""
+    claude = tmp_path / ".claude"
+    claude.mkdir()
+    (claude / "VERSION").mkdir()  # 讓目標路徑成為目錄，write_text 必觸發 IsADirectoryError
+
+    _success, error = sync_mod.write_local_version(claude, "1.0.1")
+
+    assert error != ""
+    assert isinstance(error, str)

@@ -1,3 +1,15 @@
+## [2.24.14] - 2026-08-07
+
+### Summary
+fix: write_local_version 回傳 OSError 細節供呼叫端警告; chore: 本地 VERSION 回寫至 2.24.13（write_local_version 首次 runtime 產物）
+
+Changes: 1 fix, 1 chore
+
+- fix: write_local_version 回傳 OSError 細節供呼叫端警告
+- chore: 本地 VERSION 回寫至 2.24.13（write_local_version 首次 runtime 產物）
+
+---
+
 ## [2.24.13] - 2026-08-07
 
 ### Summary
