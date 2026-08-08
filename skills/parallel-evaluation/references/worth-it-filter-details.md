@@ -122,7 +122,7 @@
 
 ### 案例 1: 程式碼審查 — 執行
 
-**發現**: Reuse 視角發現新增的 `formatBookTitle()` 函式與 `lib/core/utils/string_utils.dart` 中的 `formatTitle()` 功能完全重複。
+**發現**: Reuse 視角發現新增的 `formatBookTitle()` 函式與 `lib/core/utils/string_utils.dart` 中的 `formatTitle()` 功能完全重複。  <!-- skill-residue-exempt: 範例情境的示意路徑，非本專案實際檔案 -->
 
 | 維度 | 判斷 |
 |------|------|

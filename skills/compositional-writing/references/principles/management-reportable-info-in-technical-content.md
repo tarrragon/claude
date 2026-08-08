@@ -36,4 +36,4 @@
 
 ## 來源
 
-從 infra 教學模組的管理層視角掃描抽出。22 篇技術文章中有 10 處缺口，集中在成本量級和時程估算。對應 report 卡 [technical-content-needs-management-reportable-info](/report/technical-content-needs-management-reportable-info/)。
+從 infra 教學模組的管理層視角掃描抽出。22 篇技術文章中有 10 處缺口，集中在成本量級和時程估算。對應的 blog report 卡 slug 是 `technical-content-needs-management-reportable-info`。

@@ -1,3 +1,31 @@
+## [2.25.0] - 2026-08-09
+
+### Summary
+feat: 規則 8 守衛升級為 exit 2 阻擋並加行內 marker 逃生閥; feat: skill 殘留偵測器與 session 警告加 push 硬擋雙層防護; feat: style_checker 專案校準設定化並讓 hook 共用同一份規則 (+15 more)
+
+Changes: 4 feat, 2 refactor, 5 fix, 3 docs, 2 chore, 2 test
+
+- feat: 規則 8 守衛升級為 exit 2 阻擋並加行內 marker 逃生閥
+- feat: skill 殘留偵測器與 session 警告加 push 硬擋雙層防護
+- feat: style_checker 專案校準設定化並讓 hook 共用同一份規則
+- feat: skill-sync push 新增 --prune 刪除傳播
+- refactor: 移除三個無工具且綁定他專案路徑的 dart skill
+- refactor: skill 庫漂移檢查收斂為 skill-sync 的 public API
+- fix: test-assertion-design 交叉引用改回 dart 前綴命名
+- fix: 收斂本地與 canonical skill 庫的 16 項內容分歧
+- fix: prune 排除範圍、cmd_push 測試覆蓋、pull/push 對稱化
+- fix: 恢復 sync-push 的 skill 庫漂移自動檢查
+- fix: 修復 3 個 skill 的 5 處失效連結並回推 canonical 庫
+- docs: 記錄 PC-BAL-026 驗證管道經快取層讀取的滯後模式
+- docs: 修正 skill-sync 文件與實際行為的四處脫節
+- docs: 記錄多視角審查產出的兩個結構性錯誤模式
+- chore: 從 canonical 庫同步 5 個過期 skill
+- chore: 本地 VERSION 回寫至 2.24.15（sync-push 收尾）
+- test: 補雙層防護 hook 的測試納入 hooks 測試 gate
+- test: 補 dart-style-guardian-hook 測試納入 hooks 測試 gate
+
+---
+
 ## [2.24.15] - 2026-08-07
 
 ### Summary

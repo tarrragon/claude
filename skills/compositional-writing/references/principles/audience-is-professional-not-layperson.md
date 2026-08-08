@@ -34,4 +34,4 @@
 
 ## 來源
 
-從 infra 教學模組的寫作 retrospective 抽出。入門層文章原稿採用宣導式框架（故事線導入、辦公室比喻、「跑得好好的」語氣），經作者 review 判定不適合目標讀者，重寫為經驗補足式框架。對應 report 卡 [audience-is-professional-not-layperson](/report/audience-is-professional-not-layperson/)。
+從 infra 教學模組的寫作 retrospective 抽出。入門層文章原稿採用宣導式框架（故事線導入、辦公室比喻、「跑得好好的」語氣），經作者 review 判定不適合目標讀者，重寫為經驗補足式框架。對應的 blog report 卡 slug 是 `audience-is-professional-not-layperson`。

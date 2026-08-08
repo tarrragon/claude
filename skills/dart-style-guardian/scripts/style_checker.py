@@ -44,6 +44,7 @@ class ScanResult:
     """Results from scanning a file or directory."""
     violations: list[Violation] = field(default_factory=list)
     files_scanned: int = 0
+    exempt_count: int = 0
 
     def add(self, violation: Violation) -> None:
         self.violations.append(violation)
@@ -65,58 +66,143 @@ class ScanResult:
 
 
 # =============================================================================
+# Project Calibration
+# =============================================================================
+
+CONFIG_RELATIVE_PATH = ".claude/config/dart-style-guardian.json"
+
+# 中性預設：不指名任何 token 類別。指名等於斷言某套命名是對的，而各專案的
+# design system 命名並不相同——把某一專案的命名寫成預設，讀者照建議動手就會
+# 寫出不存在的類別。缺設定時退回描述性敘述，讀者仍知道該往哪找。
+DEFAULT_TOKENS: dict[str, str | None] = {
+    "color": None,
+    "spacing": None,
+    "font_size": None,
+    "border_radius": None,
+}
+DEFAULT_I18N_ACCESSOR: str | None = None
+DEFAULT_I18N_COMPLIANCE_PATTERN = r"AppLocalizations\.of\(|context\.l10n"
+DEFAULT_EXEMPT_MARKERS = ["magic-exempt", "i18n-exempt"]
+
+
+@dataclass
+class StyleConfig:
+    """Project-specific calibration for token naming, i18n access, and exemptions."""
+    tokens: dict[str, str | None] = field(default_factory=lambda: dict(DEFAULT_TOKENS))
+    i18n_accessor: str | None = DEFAULT_I18N_ACCESSOR
+    i18n_compliance_pattern: str = DEFAULT_I18N_COMPLIANCE_PATTERN
+    exempt_markers: list[str] = field(default_factory=lambda: list(DEFAULT_EXEMPT_MARKERS))
+    loaded_from: Path | None = None
+
+    def token(self, kind: str, fallback: str) -> str:
+        """Return the configured token class name, or a descriptive fallback."""
+        name = self.tokens.get(kind)
+        return name if name else fallback
+
+
+def find_project_root(start: Path) -> Path | None:
+    """Walk upward looking for the directory that owns .claude/."""
+    for candidate in [start.resolve(), *start.resolve().parents]:
+        if (candidate / ".claude").is_dir():
+            return candidate
+    return None
+
+
+def load_config(start: Path | None = None) -> StyleConfig:
+    """Load project calibration, falling back to neutral defaults with a notice.
+
+    A missing config is not an error: the scanner still detects hardcoded values,
+    it just cannot name the replacement token. Staying silent would be worse than
+    the notice — the reader would take another project's naming as this project's
+    answer, which is exactly the failure this configuration exists to prevent.
+    """
+    root = find_project_root(start or Path.cwd())
+    if root is None:
+        print(
+            "[style-guardian] 找不到 .claude/ 目錄，使用中性預設（不指名 token 類別）。",
+            file=sys.stderr,
+        )
+        return StyleConfig()
+
+    config_path = root / CONFIG_RELATIVE_PATH
+    if not config_path.is_file():
+        print(
+            f"[style-guardian] 未找到 {CONFIG_RELATIVE_PATH}，使用中性預設。"
+            " 建立該檔可讓修正建議指名本專案實際的 token 類別。",
+            file=sys.stderr,
+        )
+        return StyleConfig()
+
+    try:
+        raw = json.loads(config_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        print(
+            f"[style-guardian] 讀取 {config_path} 失敗（{exc}），使用中性預設。",
+            file=sys.stderr,
+        )
+        return StyleConfig()
+
+    tokens = dict(DEFAULT_TOKENS)
+    tokens.update({k: v for k, v in raw.get("tokens", {}).items() if k in tokens})
+    i18n = raw.get("i18n", {})
+    return StyleConfig(
+        tokens=tokens,
+        i18n_accessor=i18n.get("accessor") or DEFAULT_I18N_ACCESSOR,
+        i18n_compliance_pattern=(
+            i18n.get("compliance_pattern") or DEFAULT_I18N_COMPLIANCE_PATTERN
+        ),
+        exempt_markers=raw.get("exempt_markers") or list(DEFAULT_EXEMPT_MARKERS),
+        loaded_from=config_path,
+    )
+
+
+# =============================================================================
 # Detection Patterns
 # =============================================================================
 
-# Color violations
-COLOR_PATTERNS = [
-    # Material colors
-    (r'Colors\.(blue|green|red|orange|amber|grey|white|black)(?:\[\d+\])?',
-     'Use UIColors.primary/positive/negative instead'),
-    # Hex colors
-    (r'Color\(0x[Ff][Ff][0-9A-Fa-f]{6}\)',
-     'Use UIColors constants instead of hex colors'),
-    # withOpacity (deprecated)
-    (r'\.withOpacity\(',
-     'Use .withValues(alpha:) instead of withOpacity'),
-]
 
-# Spacing violations (SizedBox)
-SIZEDBOX_PATTERNS = [
-    (r'SizedBox\s*\(\s*(?:height|width)\s*:\s*(\d+(?:\.\d+)?)\s*[,\)]',
-     'Use UISpacing.xs/sm/md/lg instead of hardcoded values'),
-]
+def build_pattern_groups(config: StyleConfig) -> dict[str, list[tuple[str, str]]]:
+    """Build detection patterns whose suggestions speak this project's vocabulary."""
+    color = config.token("color", "專案 design system 的 color token")
+    spacing = config.token("spacing", "專案 design system 的 spacing token")
+    font_size = config.token("font_size", "專案 design system 的 typography token")
+    radius = config.token("border_radius", "專案 design system 的 border radius token")
+    l10n = config.i18n_accessor or "ARB 產生的 localization 存取子（見專案 l10n.yaml）"
 
-# EdgeInsets violations
-EDGEINSETS_PATTERNS = [
-    (r'EdgeInsets\.(all|symmetric|only|fromLTRB)\s*\([^)]*\b(\d+(?:\.\d+)?)\b',
-     'Use UISpacing constants instead of hardcoded values'),
-]
-
-# Font size violations
-FONTSIZE_PATTERNS = [
-    (r'fontSize\s*:\s*(\d+(?:\.\d+)?)\s*[,\)]',
-     'Use UIFontSizes.bodyMedium/titleLarge etc instead'),
-]
-
-# Border radius violations
-BORDERRADIUS_PATTERNS = [
-    (r'BorderRadius\.circular\s*\(\s*(\d+(?:\.\d+)?)\s*\)',
-     'Use UIBorderRadius.xs/sm/md/lg instead'),
-]
-
-# i18n violations - hardcoded strings
-I18N_PATTERNS = [
-    # Text widget with literal string
-    (r"Text\s*\(\s*['\"](?!http|[A-Z_]+|v\d)[^'\"]+['\"]",
-     'Use context.l10n!.keyName instead of hardcoded text'),
-    # Title in AppBar
-    (r"title\s*:\s*Text\s*\(\s*['\"][^'\"]+['\"]",
-     'Use context.l10n!.titleKey for AppBar titles'),
-    # label/hint text
-    (r"(?:labelText|hintText)\s*:\s*['\"][^'\"]+['\"]",
-     'Use context.l10n!.key for input labels and hints'),
-]
+    return {
+        "Color": [
+            (r'Colors\.(blue|green|red|orange|amber|grey|white|black)(?:\[\d+\])?',
+             f'改用 {color}'),
+            (r'Color\(0x[Ff][Ff][0-9A-Fa-f]{6}\)',
+             f'改用 {color}，勿寫死 hex'),
+            (r'\.withOpacity\(',
+             'withOpacity 已棄用，改用 .withValues(alpha:)'),
+        ],
+        "SizedBox": [
+            (r'SizedBox\s*\(\s*(?:height|width)\s*:\s*(\d+(?:\.\d+)?)\s*[,\)]',
+             f'改用 {spacing}'),
+        ],
+        "EdgeInsets": [
+            (r'EdgeInsets\.(all|symmetric|only|fromLTRB)\s*\([^)]*\b(\d+(?:\.\d+)?)\b',
+             f'改用 {spacing}'),
+        ],
+        "FontSize": [
+            (r'fontSize\s*:\s*(\d+(?:\.\d+)?)\s*[,\)]',
+             f'改用 {font_size}'),
+        ],
+        "BorderRadius": [
+            (r'BorderRadius\.circular\s*\(\s*(\d+(?:\.\d+)?)\s*\)',
+             f'改用 {radius}'),
+        ],
+        "i18n": [
+            (r"Text\s*\(\s*['\"](?!http|[A-Z_]+|v\d)[^'\"]+['\"]",
+             f'字串移入 ARB，改用 {l10n}'),
+            (r"title\s*:\s*Text\s*\(\s*['\"][^'\"]+['\"]",
+             f'AppBar 標題移入 ARB，改用 {l10n}'),
+            (r"(?:labelText|hintText)\s*:\s*['\"][^'\"]+['\"]",
+             f'label 與 hint 移入 ARB，改用 {l10n}'),
+        ],
+    }
 
 # Files/directories to exclude
 EXCLUDE_PATTERNS = [
@@ -131,16 +217,29 @@ EXCLUDE_PATTERNS = [
     r'theme\.dart$',         # Theme configuration (idiomatic Flutter naming)
 ]
 
-# Exceptions - patterns that are OK
-EXCEPTION_PATTERNS = [
-    r'UIColors\.',           # Already using UIColors
-    r'UISpacing\.',          # Already using UISpacing
-    r'UIFontSizes\.',        # Already using UIFontSizes
-    r'UIBorderRadius\.',     # Already using UIBorderRadius
-    r'context\.l10n',        # Already using l10n
+# Line-level exceptions that hold regardless of project calibration.
+# Project-specific ones (token classes, i18n accessor, exempt markers) are
+# derived from StyleConfig in build_exception_patterns.
+BASE_EXCEPTION_PATTERNS = [
     r'//\s*OK:',             # Explicitly marked as OK
     r'//\s*ignore:',         # Explicitly ignored
 ]
+
+
+def build_exception_patterns(config: StyleConfig) -> list[str]:
+    """Patterns marking a line as already compliant for this project."""
+    patterns = list(BASE_EXCEPTION_PATTERNS)
+    patterns.append(config.i18n_compliance_pattern)
+    for name in config.tokens.values():
+        if name:
+            patterns.append(rf'{re.escape(name)}\.')
+    return patterns
+
+
+def build_exempt_pattern(config: StyleConfig) -> str | None:
+    """Regex matching any configured exemption marker, or None when unset."""
+    markers = [re.escape(m) for m in config.exempt_markers if m]
+    return "|".join(markers) if markers else None
 
 
 def should_skip_file(file_path: str) -> bool:
@@ -151,9 +250,9 @@ def should_skip_file(file_path: str) -> bool:
     return False
 
 
-def should_skip_line(line: str) -> bool:
-    """Check if line should be skipped."""
-    for pattern in EXCEPTION_PATTERNS:
+def should_skip_line(line: str, exception_patterns: list[str]) -> bool:
+    """Check if line already complies and needs no further checking."""
+    for pattern in exception_patterns:
         if re.search(pattern, line):
             return True
     return False
@@ -163,31 +262,42 @@ def check_patterns(
     content: str,
     patterns: list[tuple[str, str]],
     category: str,
-    file_path: str
-) -> Generator[Violation, None, None]:
-    """Check content against patterns and yield violations."""
+    file_path: str,
+    exception_patterns: list[str],
+    exempt_pattern: str | None,
+) -> Generator[Violation | str, None, None]:
+    """Yield violations, or the sentinel 'EXEMPT' for each suppressed match.
+
+    Exempt matches are surfaced as a count rather than dropped: a silently
+    skipped line is indistinguishable from a line the scanner cannot see, and
+    the reader has no way to tell whether the marker is doing its job or the
+    detection is broken.
+    """
     lines = content.split('\n')
 
     for line_num, line in enumerate(lines, 1):
-        if should_skip_line(line):
+        if should_skip_line(line, exception_patterns):
             continue
 
+        is_exempt = bool(exempt_pattern and re.search(exempt_pattern, line))
+
         for pattern, suggestion in patterns:
-            matches = re.finditer(pattern, line)
-            for match in matches:
-                # Double-check this line doesn't have exceptions
-                if not should_skip_line(line):
-                    yield Violation(
-                        file=file_path,
-                        line=line_num,
-                        category=category,
-                        pattern=match.group(0)[:50],  # Truncate for readability
-                        suggestion=suggestion,
-                    )
+            for match in re.finditer(pattern, line):
+                if is_exempt:
+                    yield "EXEMPT"
+                    continue
+                yield Violation(
+                    file=file_path,
+                    line=line_num,
+                    category=category,
+                    pattern=match.group(0)[:50],  # Truncate for readability
+                    suggestion=suggestion,
+                )
 
 
-def scan_file(file_path: Path) -> ScanResult:
+def scan_file(file_path: Path, config: StyleConfig | None = None) -> ScanResult:
     """Scan a single Dart file for violations."""
+    config = config or load_config(file_path.parent)
     result = ScanResult(files_scanned=1)
 
     if should_skip_file(str(file_path)):
@@ -199,35 +309,31 @@ def scan_file(file_path: Path) -> ScanResult:
         print(f"Error reading {file_path}: {e}", file=sys.stderr)
         return result
 
-    # Check all pattern categories
-    for v in check_patterns(content, COLOR_PATTERNS, "Color", str(file_path)):
-        result.add(v)
+    exception_patterns = build_exception_patterns(config)
+    exempt_pattern = build_exempt_pattern(config)
 
-    for v in check_patterns(content, SIZEDBOX_PATTERNS, "SizedBox", str(file_path)):
-        result.add(v)
-
-    for v in check_patterns(content, EDGEINSETS_PATTERNS, "EdgeInsets", str(file_path)):
-        result.add(v)
-
-    for v in check_patterns(content, FONTSIZE_PATTERNS, "FontSize", str(file_path)):
-        result.add(v)
-
-    for v in check_patterns(content, BORDERRADIUS_PATTERNS, "BorderRadius", str(file_path)):
-        result.add(v)
-
-    for v in check_patterns(content, I18N_PATTERNS, "i18n", str(file_path)):
-        result.add(v)
+    for category, patterns in build_pattern_groups(config).items():
+        for item in check_patterns(
+            content, patterns, category, str(file_path),
+            exception_patterns, exempt_pattern,
+        ):
+            if item == "EXEMPT":
+                result.exempt_count += 1
+            else:
+                result.add(item)
 
     return result
 
 
-def scan_directory(dir_path: Path) -> ScanResult:
+def scan_directory(dir_path: Path, config: StyleConfig | None = None) -> ScanResult:
     """Scan a directory recursively for Dart files."""
+    config = config or load_config(dir_path)
     result = ScanResult()
 
     for file_path in dir_path.rglob("*.dart"):
-        file_result = scan_file(file_path)
+        file_result = scan_file(file_path, config)
         result.files_scanned += file_result.files_scanned
+        result.exempt_count += file_result.exempt_count
         result.violations.extend(file_result.violations)
 
     return result
@@ -238,16 +344,24 @@ def format_violation(v: Violation) -> str:
     return f"  {v.file}:{v.line}: [{v.category}] {v.pattern}\n    -> {v.suggestion}"
 
 
+def format_exempt_line(result: ScanResult) -> str:
+    return f"Exempt (marked in source): {result.exempt_count}"
+
+
 def print_report(result: ScanResult) -> None:
     """Print a formatted report of scan results."""
     if not result.has_violations():
         print(f"No style violations found in {result.files_scanned} files.")
+        if result.exempt_count:
+            print(format_exempt_line(result))
         return
 
     print(f"\nStyle Guardian Report")
     print(f"=" * 60)
     print(f"Files scanned: {result.files_scanned}")
     print(f"Total violations: {len(result.violations)}")
+    if result.exempt_count:
+        print(format_exempt_line(result))
     print()
 
     # Summary by category
@@ -274,6 +388,7 @@ def print_json_report(result: ScanResult) -> None:
     output = {
         "files_scanned": result.files_scanned,
         "total_violations": len(result.violations),
+        "exempt_count": result.exempt_count,
         "violations": [
             {
                 "file": v.file,

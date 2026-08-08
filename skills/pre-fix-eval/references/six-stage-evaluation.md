@@ -26,7 +26,7 @@ Stage 1: 錯誤分類
 
 錯誤類型: TEST_FAILURE
 錯誤訊息: Expected: true, Actual: false
-位置: test/unit/domains/import/services/import_service_test.dart:234
+位置: test/unit/domains/import/services/import_service_test.dart:234  <!-- skill-residue-exempt: 範例情境的示意路徑，非本專案實際檔案 -->
 影響範圍: ImportService 相關功能
 ```
 
@@ -131,7 +131,7 @@ Stage 4: 根因定位
   原因類別: 依賴問題 (初始化順序)
 
 相關程式碼位置:
-  - lib/domains/import/services/import_service.dart:45
+  - lib/domains/import/services/import_service.dart:45  <!-- skill-residue-exempt: 範例情境的示意路徑，非本專案實際檔案 -->
   - 調用: eventBus.post(BookImportedEvent(...))
   - 問題: eventBus 為 null
 ```

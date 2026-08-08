@@ -357,6 +357,15 @@
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/askuserquestion-charset-guard-hook.py"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/skill-sync-push-residue-gate-hook.py"
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -504,6 +513,14 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-dir-audit-hook.py",
             "timeout": 5000
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/skill-residue-check-hook.py"
           }
         ]
       }

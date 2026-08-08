@@ -12,13 +12,13 @@
 
 ### 可用命令
 
-| 命令 | 用途 | 範例 |
-|------|------|------|
-| `analyze` | 互動式 SOLID 分析 | `uv run scripts/tdd-phase1-split.py analyze -d "實作書籍搜尋功能"` |
-| `suggest` | 產出拆分建議 | `uv run scripts/tdd-phase1-split.py suggest -d "實作書籍搜尋功能" -v 0.29.0` |
-| `create-tickets` | 建立拆分 Tickets | `uv run scripts/tdd-phase1-split.py create-tickets -d "實作書籍搜尋功能" -v 0.29.0 -w 3` |
-| `validate` | 驗證拆分合規性 | `uv run scripts/tdd-phase1-split.py validate -t 0.29.0-W3-001` |
-| `report` | 產出拆分報告 | `uv run scripts/tdd-phase1-split.py report -d "實作書籍搜尋功能" -v 0.29.0` |
+| 命令             | 用途              | 範例                                                                                     |
+| ---------------- | ----------------- | ---------------------------------------------------------------------------------------- |
+| `analyze`        | 互動式 SOLID 分析 | `uv run scripts/tdd-phase1-split.py analyze -d "實作書籍搜尋功能"`                       |
+| `suggest`        | 產出拆分建議      | `uv run scripts/tdd-phase1-split.py suggest -d "實作書籍搜尋功能" -v 0.29.0`             |
+| `create-tickets` | 建立拆分 Tickets  | `uv run scripts/tdd-phase1-split.py create-tickets -d "實作書籍搜尋功能" -v 0.29.0 -w 3` |
+| `validate`       | 驗證拆分合規性    | `uv run scripts/tdd-phase1-split.py validate -t 0.29.0-W3-001`                           |
+| `report`         | 產出拆分報告      | `uv run scripts/tdd-phase1-split.py report -d "實作書籍搜尋功能" -v 0.29.0`              |
 
 > **執行方式**：在 `.claude/skills/tdd/` 目錄下執行 `uv run scripts/tdd-phase1-split.py <command>`。
 
@@ -29,6 +29,7 @@
 ### suggest（拆分建議）
 
 根據功能描述和目標版本，自動產出拆分建議，包含：
+
 - 子功能識別（按架構層分類）
 - 版本號分配（依依賴關係）
 - 並行/序列判斷
@@ -45,29 +46,29 @@
 
 ### 分配原則
 
-| 情況 | 版本/批次分配 | 範例 |
-|------|-------------|------|
+| 情況       | 版本/批次分配      | 範例                      |
+| ---------- | ------------------ | ------------------------- |
 | 無依賴任務 | 同一批次（可並行） | Domain Entities -> 第一批 |
-| 依賴前一批 | 下一個批次 | UseCases -> 第二批 |
-| 依賴多批次 | 最後依賴的下一批 | Widget -> 第三批 |
+| 依賴前一批 | 下一個批次         | UseCases -> 第二批        |
+| 依賴多批次 | 最後依賴的下一批   | Widget -> 第三批          |
 
 ### 並行判斷
 
-| 條件 | 可並行 |
-|------|--------|
-| 同一批次 | 是 |
-| 無 blockedBy | 是 |
-| 不同架構層但無依賴 | 是 |
-| 有 blockedBy | 否 |
+| 條件               | 可並行 |
+| ------------------ | ------ |
+| 同一批次           | 是     |
+| 無 blockedBy       | 是     |
+| 不同架構層但無依賴 | 是     |
+| 有 blockedBy       | 否     |
 
 ### 架構層級執行順序
 
-| 架構層 | 執行順序 | 說明 |
-|--------|---------|------|
-| Domain | 第一批 | Entity、Value Object、介面定義（無依賴） |
-| Application | 第二批 | UseCase（依賴 Domain） |
-| Infrastructure | 第二批 | Repository 實作（依賴 Domain 介面） |
-| Presentation | 第三批 | Widget、Controller（依賴 Application） |
+| 架構層         | 執行順序 | 說明                                     |
+| -------------- | -------- | ---------------------------------------- |
+| Domain         | 第一批   | Entity、Value Object、介面定義（無依賴） |
+| Application    | 第二批   | UseCase（依賴 Domain）                   |
+| Infrastructure | 第二批   | Repository 實作（依賴 Domain 介面）      |
+| Presentation   | 第三批   | Widget、Controller（依賴 Application）   |
 
 > **框架整合**：本專案使用 Patch 版本號（如 v0.29.1 -> v0.29.2）對應批次，由 `/ticket create` 管理。
 
@@ -115,11 +116,11 @@ Phase 1 拆分分析完成後，使用以下範本產出報告：
 
 **SOLID 分析摘要**：
 
-| 原則 | 結果 |
-|------|------|
-| SRP | 識別 3 個職責：查詢建立、搜尋執行、結果呈現 |
-| OCP | 搜尋來源可能多樣（本地、API），需要抽象 |
-| DIP | UseCase 不應依賴具體 Repository |
+| 原則 | 結果                                        |
+| ---- | ------------------------------------------- |
+| SRP  | 識別 3 個職責：查詢建立、搜尋執行、結果呈現 |
+| OCP  | 搜尋來源可能多樣（本地、API），需要抽象     |
+| DIP  | UseCase 不應依賴具體 Repository             |
 
 **拆分結果**：
 
@@ -134,6 +135,7 @@ Phase 1 拆分分析完成後，使用以下範本產出報告：
 ```
 
 **執行順序**：
+
 1. 第一批（A + B + C 可並行）
 2. 第二批（D + E，D 依賴 A/B/C，E 依賴 C）
 3. 第三批（F 依賴 D）
@@ -151,4 +153,4 @@ Phase 1 拆分分析完成後，使用以下範本產出報告：
 
 **Last Updated**: 2026-03-12
 **Version**: 1.0.0 - 從 tdd-phase1-split SKILL 遷移整合
-**Source**: .claude/skills/tdd/SKILL.md
+**Source**: .claude/skills/tdd-phase1-split/SKILL.md（已併入本 skill，原檔不再存在） <!-- broken-link-exempt: 歷史遷移軌跡，記錄本文件的來源檔案 -->

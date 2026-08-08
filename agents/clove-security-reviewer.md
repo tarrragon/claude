@@ -135,32 +135,9 @@ clove-security-reviewer 在以下情況下**應該被觸發**：
 
 ---
 
-## 與 dart-security-review Skill 的分工
+## 檢查基準來源
 
-clove-security-reviewer（本 Agent）與 `dart-security-review` Skill 的定位不同，兩者互補但不可互相取代。
-
-| 維度 | clove-security-reviewer (Agent) | dart-security-review (Skill) |
-|------|-------------------------------|------------------------|
-| **定位** | 互動式安全審查執行者 | 靜態安全清單與決策框架 |
-| **能力** | 讀取程式碼、執行掃描工具、分析結果 | 提供檢查項目清單和安全模式範例 |
-| **產出** | 安全審查報告（含具體漏洞位置和修復建議） | 安全檢查清單（供開發者自行對照） |
-| **觸發時機** | PM 派發（深度審查、安全事件、版本發布前） | 開發者自行啟動（實作過程中自查） |
-| **互動性** | 需要上下文分析和判斷 | 無狀態、無互動 |
-
-### 何時用 Agent，何時用 Skill
-
-| 場景 | 使用 | 理由 |
-|------|------|------|
-| Phase 3b 完成後安全審查 | Agent | 需要讀取實作程式碼、執行掃描、產出報告 |
-| 版本發布前安全檢查 | Agent | 需要全面掃描和風險評估 |
-| incident-responder 發現安全問題 | Agent | 需要深入分析漏洞成因 |
-| 開發者實作認證功能時自查 | Skill | 開發者對照清單確認最佳實踐 |
-| Code Review 時快速安全檢查 | Skill | 檢查清單即可覆蓋 |
-| 新增 API 端點時確認安全要求 | Skill | 對照清單確認必要防護 |
-
-### 引用關係
-
-Agent 執行安全審查時，**應引用** `dart-security-review` Skill 中的安全清單作為檢查基準，避免重複維護。具體漏洞類型清單請參考：`.claude/skills/dart-security-review/SKILL.md`
+本 Agent 曾以 `dart-security-review` Skill 的清單作為檢查基準，該 skill 因內容為未綁定任何專案的通用 Flutter 安全清單、且引用的專案路徑不存在而移除。基準改為公開標準（OWASP Mobile Top 10、平台官方安全指引）加上專案實際的攻擊面盤點：先讀 `pubspec.yaml` 確認對外連線與敏感權限的實際範圍，再據此決定審查深度，不套用與專案無關的清單項目。
 
 ---
 
@@ -241,7 +218,7 @@ Phase 4 (重構) / 版本發布
 
 ## 常見漏洞檢查清單
 
-完整的安全檢查清單（OWASP Top 10、輸入驗證、認證授權、XSS、CSRF 等）請參考 `dart-security-review` Skill：`.claude/skills/dart-security-review/SKILL.md`
+通用漏洞分類（輸入驗證、認證授權、注入、敏感資料外洩）以 OWASP Mobile Top 10 為基準，不另維護框架內副本——副本與上游標準會漂移，且無專案綁定時不比公開標準提供更多資訊。下表僅列 Flutter 與 Dart 特有、公開標準未涵蓋的檢查項目。
 
 ### Flutter/Dart 特定檢查
 

@@ -52,6 +52,20 @@ from lib.sync_exclude_manifest import (  # noqa: E402
     _is_skill_path,
     load_sync_skills_config,
 )
+from lib.skill_version_diff import (  # noqa: E402
+    SKILL_DRIFT_PREVIEW_LIMIT,
+    extract_skill_versions,
+    format_skill_version_diff,
+    report_skill_repo_drift,
+)
+
+# skill-sync 是零框架依賴的獨立 uv 套件，未安裝為本腳本的 import 路徑；以 sys.path
+# 取用其 public API（與 sync-claude-push.py 對稱）。report_skill_repo_drift 內部
+# 延遲 import skill_sync.cli，須在呼叫前確保此路徑已在 sys.path（ARCH-BAL-016：
+# pull 端若各自重寫取檔與 repo 來源會與 push 端比對不同的遠端）。
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent / "skills" / "skill-sync")
+)
 
 # ============================================================================
 # Constants
@@ -192,67 +206,9 @@ def collect_registered_skill_scripts(claude_dir: Path) -> set[Path]:
     return scripts
 
 
-def extract_skill_versions(skills_dir: Path) -> dict[str, str]:
-    """掃描 skills/*/SKILL.md 提取各 skill 的版本號。
-
-    參數:
-        skills_dir: skills 目錄路徑（如 .claude/skills/ 或 temp_dir/skills/）
-
-    傳回:
-        dict[str, str]: {skill 名稱: 版本號}，無版本號者不列入
-    """
-    versions: dict[str, str] = {}
-    if not skills_dir.is_dir():
-        return versions
-    for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
-        skill_name = skill_md.parent.name
-        try:
-            text = skill_md.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            continue
-        m = re.search(r"\*\*Version\*\*:\s*(\S+)", text)
-        if not m:
-            m = re.search(r"^version:\s*(\S+)", text, re.MULTILINE)
-        if m:
-            versions[skill_name] = m.group(1)
-    return versions
-
-
-def format_skill_version_diff(
-    before: dict[str, str], after: dict[str, str]
-) -> str | None:
-    """比對前後 skill 版本，產生摘要文字。無變更時回傳 None。
-
-    參數:
-        before: 同步前的 {skill: version}
-        after: 同步後的 {skill: version}
-
-    傳回:
-        str | None: 摘要文字（含換行），無變更時 None
-    """
-    all_names = sorted(set(before) | set(after))
-    new_skills: list[str] = []
-    updated_skills: list[str] = []
-    removed_skills: list[str] = []
-    for name in all_names:
-        old_ver = before.get(name)
-        new_ver = after.get(name)
-        if old_ver is None and new_ver is not None:
-            new_skills.append(f"{name} ({new_ver})")
-        elif old_ver is not None and new_ver is None:
-            removed_skills.append(f"{name} (was {old_ver})")
-        elif old_ver != new_ver:
-            updated_skills.append(f"{name} {old_ver} -> {new_ver}")
-    if not new_skills and not updated_skills and not removed_skills:
-        return None
-    lines = ["[Skill 變更摘要]"]  # i18n-exempt
-    if new_skills:
-        lines.append(f"  新增: {', '.join(new_skills)}")  # i18n-exempt
-    if updated_skills:
-        lines.append(f"  更新: {', '.join(updated_skills)}")  # i18n-exempt
-    if removed_skills:
-        lines.append(f"  移除: {', '.join(removed_skills)}")  # i18n-exempt
-    return "\n".join(lines)
+# extract_skill_versions / format_skill_version_diff / report_skill_repo_drift /
+# SKILL_DRIFT_PREVIEW_LIMIT 已提升至 .claude/lib/skill_version_diff.py，由本檔
+# 頂部 import（0.2.1-W3-356：消除與 sync-claude-push.py 的逐字重複）。
 
 
 def load_preserve_list(claude_dir: Path) -> set[str]:
@@ -2164,6 +2120,13 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
     skill_diff = format_skill_version_diff(skill_versions_before, skill_versions_after)
     if skill_diff:
         print_color(skill_diff, "green")
+
+    # Skill 庫內容漂移檢查（0.2.1-W3-356：與 push 端對稱恢復）。pull 是本地
+    # skills 被遠端覆寫的時刻，漂移在 pull 之後產生的機率高於 push 之後，
+    # 原本只在 push 端呼叫使收尾區塊失去對稱性。比對邏輯與呈現格式與 push 端
+    # 共用同一份 .claude/lib/skill_version_diff.py::report_skill_repo_drift。
+    drift_report = report_skill_repo_drift(claude_dir)
+    print_color(drift_report, "yellow")
 
     return backup_dir
 

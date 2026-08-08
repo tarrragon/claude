@@ -16,6 +16,7 @@
 **根因分類**：實作品質
 
 **根因分析**：
+
 - 代理人在建立新模組時，習慣性加入常用 import
 - Phase 3b 完成前未執行 `npm run lint`
 - ESLint no-unused-vars 規則本可攔截此問題
@@ -40,12 +41,14 @@ BookSchemaV2 和 TagSchema 分別在獨立 worktree 實作，各自建立了結�
 **根因分類**：規格盲點
 
 **根因分析**：
+
 - W1 規格分別定義了 Book Schema、Tag Schema、Migration 的規則
 - 規格未指出驗證邏輯結構相同應共用
 - Phase 3a 策略規劃未識別跨代理人的共用元件
 - 每個 W3 代理人在獨立 worktree 各自實作，自然產生重複
 
 **防護措施**：
+
 1. 3b 拆分評估新增 Decision Question Q12：「Phase 1 的共用策略結論是什麼？是否已建立共用模組？」
 2. 3b 拆分評估新增 Decision Question Q_new5：「各 worktree 子任務之間是否有共用的常數/版本號/配置？」
 3. 拆分後並行安全檢查新增：「共用元件已就緒」

@@ -81,4 +81,4 @@ Entity completeEnrichment() {
 ## 相關文件
 
 - `.claude/error-patterns/implementation/IMP-APP-003-fresh-checkout-missing-gitignored-generated-artifacts.md` —— 「單張 ticket 裡的觀察若未升格，下一個執行者不會讀到它」，本 skill 存在的理由（跨情境的通用教訓，非該篇技術主題本身）
-- `.claude/skills/dart-provider-architecture/SKILL.md` —— 同類「介面隔離 + 語意化方法優先於直接操作狀態」判準，姊妹 skill
+- 「介面隔離 + 語意化方法優先於直接操作狀態」是本 skill 判準的上位原則。狀態管理層曾有對應的 `dart-provider-architecture` skill，因其參考範例綁定單一專案的檔案路徑而移除；需要 Riverpod 層規範時，以所在專案 `lib/core/providers`（或等價目錄）的既有慣例為準，不套用他專案的範例

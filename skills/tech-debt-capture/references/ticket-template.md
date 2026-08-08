@@ -56,8 +56,8 @@ acceptance:
 
 # === Related Files ===
 files:
-  - lib/infrastructure/database/sqlite_book_repository.dart
-  - test/integration/database_index_test.dart
+  - lib/infrastructure/database/sqlite_book_repository.dart  <!-- skill-residue-exempt: 範例情境的示意路徑，非本專案實際檔案 -->
+  - test/integration/database_index_test.dart  <!-- skill-residue-exempt: 範例情境的示意路徑，非本專案實際檔案 -->
 
 # === Dependencies ===
 dependencies: []

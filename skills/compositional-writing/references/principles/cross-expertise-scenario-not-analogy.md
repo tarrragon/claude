@@ -34,4 +34,4 @@
 
 ## 來源
 
-從 infra 教學模組的溝通層文章重寫抽出。對應 report 卡 [cross-expertise-communication-scenario-not-analogy](/report/cross-expertise-communication-scenario-not-analogy/)。
+從 infra 教學模組的溝通層文章重寫抽出。對應的 blog report 卡 slug 是 `cross-expertise-communication-scenario-not-analogy`。

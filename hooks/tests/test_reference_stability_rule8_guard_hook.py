@@ -15,18 +15,22 @@ reference-stability-rules.md 規則 8「引用性質判準：全禁原則與五�
 測試覆蓋：
 | 測試 | 場景 | 驗證 |
 |------|------|------|
-| test_full_ban_no_jump_word_detected | 0.2.1-W3-308 形態無跳轉詞裸引用 | 觸發 WARNING（acceptance 1） |
-| test_full_ban_with_jump_word_still_detected | 舊版依賴型（含跳轉詞） | 仍觸發 WARNING（回歸） |
-| test_class4_whitelist_path_exempt | ticket-id-conventions.md | 豁免，不觸發（acceptance 2） |
-| test_class5_test_dir_path_exempt | .claude/hooks/tests/ 下檔案 | 豁免，不觸發（acceptance 2） |
-| test_class5_test_filename_pattern_exempt | *_test.py 檔名 | 豁免，不觸發（acceptance 2） |
-| test_frozen_existing_hit_not_rewarned | 既有 ticket ID 原樣保留（純重排） | 不觸發（存量凍結，acceptance 3） |
-| test_new_hit_in_already_violating_file_still_warned | 已有存量違規的檔案新增另一 ticket ID | 仍觸發，且只回報新增項（acceptance 3 關鍵情境） |
-| test_new_file_write_with_ticket_id_warned | Write 建立全新檔案含 ticket ID | 觸發（無存量基準時 pre_text 視為空） |
-| test_non_scanned_path_silent | 路徑不在 .claude/ 下 | 不觸發 |
-| test_handoff_archive_exempt | .claude/handoff/archive/ | 不觸發（既有豁免回歸） |
-| test_code_fence_content_not_flagged | code fence 內容 | 不觸發（既有豁免回歸） |
-| test_date_and_framework_id_not_flagged | 日期 / PC-xxx / CC 版本 | 不觸發（既有豁免回歸） |
+| test_full_ban_no_jump_word_detected | 0.2.1-W3-308 形態無跳轉詞裸引用 | 阻擋 exit 2（acceptance 1） |
+| test_full_ban_with_jump_word_still_detected | 舊版依賴型（含跳轉詞） | 仍阻擋 exit 2（回歸） |
+| test_class4_whitelist_path_exempt | ticket-id-conventions.md | 豁免，不阻擋（acceptance 2） |
+| test_class5_test_dir_path_exempt | .claude/hooks/tests/ 下檔案 | 豁免，不阻擋（acceptance 2） |
+| test_class5_test_filename_pattern_exempt | *_test.py 檔名 | 豁免，不阻擋（acceptance 2） |
+| test_frozen_existing_hit_not_rewarned | 既有 ticket ID 原樣保留（純重排） | 不阻擋（存量凍結，acceptance 3） |
+| test_new_hit_in_already_violating_file_still_blocked | 已有存量違規的檔案新增另一 ticket ID | 仍阻擋，且只回報新增項（acceptance 3 關鍵情境） |
+| test_new_file_write_with_ticket_id_blocked | Write 建立全新檔案含 ticket ID | 阻擋（無存量基準時 pre_text 視為空） |
+| test_non_scanned_path_silent | 路徑不在 .claude/ 下 | 不阻擋 |
+| test_handoff_archive_exempt | .claude/handoff/archive/ | 不阻擋（既有豁免回歸） |
+| test_code_fence_content_not_flagged | code fence 內容 | 不阻擋（既有豁免回歸） |
+| test_date_and_framework_id_not_flagged | 日期 / PC-xxx / CC 版本 | 不阻擋（既有豁免回歸） |
+| test_marker_exempt_same_line_allows | marker 與命中同行 | 不阻擋（0.2.1-W3-063 逃生閥） |
+| test_marker_exempt_next_line_allows | marker 在命中前一行 | 不阻擋（0.2.1-W3-063 逃生閥） |
+| test_marker_invalid_category_still_blocked | marker category 不在合法清單 | 仍阻擋，訊息含格式錯誤說明 |
+| test_marker_empty_reason_still_blocked | marker reason 為空 | 仍阻擋，訊息含格式錯誤說明 |
 
 策略：
 - importlib 動態載入（檔名含 hyphen）
@@ -100,9 +104,9 @@ class TestFullBanDetection:
         rc = _run_main(hook_mod, monkeypatch, payload)
         err = capsys.readouterr().err
 
-        assert rc == 0
+        assert rc == 2
         assert "0.2.1-W3-308" in err
-        assert "WARNING" in err
+        assert "BLOCKED" in err
 
     def test_full_ban_with_jump_word_still_detected(self, hook_mod, monkeypatch, tmp_path, capsys):
         target = _claude_path(tmp_path, "rules", "core", "example.md")
@@ -119,7 +123,7 @@ class TestFullBanDetection:
         rc = _run_main(hook_mod, monkeypatch, payload)
         err = capsys.readouterr().err
 
-        assert rc == 0
+        assert rc == 2
         assert "0.2.1-W3-999" in err
 
 
@@ -180,10 +184,10 @@ class TestMechanicalExemptions:
         assert rc == 0
         assert err == ""
 
-    def test_non_exempt_path_with_same_style_id_still_warned(
+    def test_non_exempt_path_with_same_style_id_still_blocked(
         self, hook_mod, monkeypatch, tmp_path, capsys
     ):
-        """確認第 4/5 類豁免僅限指定路徑，非白名單路徑的同類引用仍應告警。"""
+        """確認第 4/5 類豁免僅限指定路徑，非白名單路徑的同類引用仍應阻擋。"""
         target = _claude_path(tmp_path, "methodologies", "example-methodology.md")
         target.write_text("原始內容\n", encoding="utf-8")
 
@@ -198,7 +202,7 @@ class TestMechanicalExemptions:
         rc = _run_main(hook_mod, monkeypatch, payload)
         err = capsys.readouterr().err
 
-        assert rc == 0
+        assert rc == 2
         assert "0.1.0-W3-001" in err
 
 
@@ -229,10 +233,10 @@ class TestFreezeMechanism:
         assert rc == 0
         assert err == ""
 
-    def test_new_hit_in_already_violating_file_still_warned(
+    def test_new_hit_in_already_violating_file_still_blocked(
         self, hook_mod, monkeypatch, tmp_path, capsys
     ):
-        """凍結範圍內新增命中仍告警：關鍵情境，防止整檔豁免漏洞。"""
+        """凍結範圍內新增命中仍阻擋：關鍵情境，防止整檔豁免漏洞。"""
         target = _claude_path(tmp_path, "pm-rules", "example2.md")
         target.write_text(
             "既有內容第一行\n舊引用（0.2.1-W3-100 教訓）\n既有內容第三行\n",
@@ -250,12 +254,12 @@ class TestFreezeMechanism:
         rc = _run_main(hook_mod, monkeypatch, payload)
         err = capsys.readouterr().err
 
-        assert rc == 0
+        assert rc == 2
         assert "0.2.1-W3-999" in err
         # 既有存量（0.2.1-W3-100）不應出現在「新增命中」清單中
         assert "0.2.1-W3-100" not in err
 
-    def test_new_file_write_with_ticket_id_warned(self, hook_mod, monkeypatch, tmp_path, capsys):
+    def test_new_file_write_with_ticket_id_blocked(self, hook_mod, monkeypatch, tmp_path, capsys):
         target = _claude_path(tmp_path, "references", "brand-new.md")
         # 檔案尚未存在（不預先寫入），模擬 Write 建立全新檔案
 
@@ -269,7 +273,7 @@ class TestFreezeMechanism:
         rc = _run_main(hook_mod, monkeypatch, payload)
         err = capsys.readouterr().err
 
-        assert rc == 0
+        assert rc == 2
         assert "0.2.1-W3-308" in err
 
     def test_multiedit_freeze_and_new_hit(self, hook_mod, monkeypatch, tmp_path, capsys):
@@ -298,9 +302,104 @@ class TestFreezeMechanism:
         rc = _run_main(hook_mod, monkeypatch, payload)
         err = capsys.readouterr().err
 
-        assert rc == 0
+        assert rc == 2
         assert "0.2.1-W3-777" in err
         assert "0.2.1-W3-100" not in err
+
+
+# ---------------------------------------------------------------------------
+# 行內 marker 逃生閥（0.2.1-W3-063）：端到端 stdin -> main() 覆蓋
+# ---------------------------------------------------------------------------
+
+
+class TestMarkerEscapeHatch:
+    def test_marker_exempt_same_line_allows(self, hook_mod, monkeypatch, tmp_path, capsys):
+        target = _claude_path(tmp_path, "pm-rules", "marker-same-line.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": (
+                    "原始內容\n"
+                    "新增引用 0.2.1-W3-321 rule8-exempt: testdata:同行 marker 測試"
+                ),
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 0
+        assert err == ""
+
+    def test_marker_exempt_next_line_allows(self, hook_mod, monkeypatch, tmp_path, capsys):
+        target = _claude_path(tmp_path, "pm-rules", "marker-next-line.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": (
+                    "原始內容\n"
+                    "rule8-exempt: illustration:下一行 marker 測試\n"
+                    "新增引用 0.2.1-W3-322"
+                ),
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 0
+        assert err == ""
+
+    def test_marker_invalid_category_still_blocked(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        target = _claude_path(tmp_path, "pm-rules", "marker-bad-category.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": (
+                    "原始內容\n"
+                    "新增引用 0.2.1-W3-323 rule8-exempt: unknown:理由存在"
+                ),
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 2
+        assert "格式錯誤" in err
+        assert "unknown" in err
+
+    def test_marker_empty_reason_still_blocked(self, hook_mod, monkeypatch, tmp_path, capsys):
+        target = _claude_path(tmp_path, "pm-rules", "marker-empty-reason.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": (
+                    "原始內容\n"
+                    "新增引用 0.2.1-W3-324 rule8-exempt: testdata:"
+                ),
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 2
+        assert "格式錯誤" in err
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +453,68 @@ class TestExistingExemptionsRegression:
                 "file_path": str(target),
                 "old_string": "原始內容",
                 "new_string": "原始內容\n```\n詳見 0.2.1-W3-308 的分析結論\n```\n",
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 0
+        assert err == ""
+
+    def test_ticket_id_on_fence_close_line_still_blocked(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """0.2.1-W3-063 Phase 4 修補：ticket ID 與 code fence 結束標記同行時，
+        find_ticket_id_hits（整段挖除，diff_new_hits 用）與
+        find_ticket_id_hits_with_lines（逐行 + 行索引排除，marker 篩選用）對
+        該行邊界的處理不同，曾造成命中進了 new_hits 卻對應不到任何行，
+        filter_marker_exempt 因此漏擋而 main() 回 exit 0。fail-closed 保底
+        修正後應阻擋（exit 2）。"""
+        target = _claude_path(tmp_path, "rules", "core", "fence-boundary.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": (
+                    "原始內容\n"
+                    "## 角色辨識\n"
+                    "示範：\n"
+                    "```\n"
+                    "some code\n"
+                    "``` 本段依 9.9.9-W9-999 的結論調整。"
+                ),
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 2
+        assert "9.9.9-W9-999" in err
+
+    def test_ticket_id_on_fence_open_line_not_flagged(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """反向情境釘住：ticket ID 與 code fence 開始標記同行時，兩路徑一致
+        排除（fence 內容不算實際引用），不應阻擋。"""
+        target = _claude_path(tmp_path, "rules", "core", "fence-open-boundary.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": (
+                    "原始內容\n"
+                    "說明如下：\n"
+                    "```示範 9.9.9-W9-999 開頭\n"
+                    "some code\n"
+                    "```\n"
+                    "本行本身無引用。"
+                ),
             },
         }
         rc = _run_main(hook_mod, monkeypatch, payload)

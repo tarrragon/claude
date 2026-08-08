@@ -118,7 +118,7 @@ Task Progress:
 
 ```markdown
 1. 執行操作
-2. 立即驗證：`python scripts/validate.py`
+2. 立即驗證：`python scripts/validate.py`  <!-- skill-residue-exempt: 範例情境的示意路徑，非本專案實際檔案 -->
 3. 如果驗證失敗：
    - 仔細閱讀錯誤訊息
    - 修正問題

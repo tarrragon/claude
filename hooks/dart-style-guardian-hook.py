@@ -45,6 +45,30 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib import setup_hook_logging, run_hook_safely
 from lib.hook_messages import QualityMessages
 
+# 偵測規則與專案校準一律取自 skill 的 style_checker，本 hook 不另維護第二套。
+# 兩套規則各自演化的結果是 hook 說「改用 UIColors」而 skill 說「改用
+# AppPalette」，讀者無從判斷哪個算數。
+_SKILL_SCRIPTS = (
+    Path(__file__).parent.parent / "skills" / "dart-style-guardian" / "scripts"
+)
+sys.path.insert(0, str(_SKILL_SCRIPTS))
+try:
+    from style_checker import (
+        build_exempt_pattern,
+        build_exception_patterns,
+        build_pattern_groups,
+        load_config,
+        should_skip_line,
+    )
+    STYLE_CHECKER_AVAILABLE = True
+except ImportError as exc:  # skill 目錄被移除或改名時降級為只檢查原生元件
+    print(
+        f"[dart-style-guardian-hook] 無法載入 style_checker（{exc}），"
+        "本次僅執行原生元件檢查，樣式與 i18n 規則略過。",
+        file=sys.stderr,
+    )
+    STYLE_CHECKER_AVAILABLE = False
+
 
 def is_presentation_file(file_path: str) -> bool:
     """Check if file is in the presentation layer."""
@@ -71,6 +95,13 @@ def should_skip_file(file_path: str) -> bool:
     return False
 
 
+def should_skip_line_safe(line: str, exception_patterns: list[str]) -> bool:
+    """Delegate to style_checker when available; degrade to no-skip otherwise."""
+    if not STYLE_CHECKER_AVAILABLE:
+        return False
+    return should_skip_line(line, exception_patterns)
+
+
 def check_file_for_violations(file_path: Path) -> list[dict]:
     """Quick check for common violations."""
     violations = []
@@ -81,16 +112,6 @@ def check_file_for_violations(file_path: Path) -> list[dict]:
         return []
 
     lines = content.split('\n')
-
-    # Patterns to check (simplified for hook performance)
-    patterns = [
-        (r'Colors\.(blue|green|red|orange|amber)', 'Color', 'Use UIColors instead'),
-        (r'Color\(0x[Ff][Ff][0-9A-Fa-f]{6}\)', 'Color', 'Use UIColors instead'),
-        (r'SizedBox\s*\(\s*(?:height|width)\s*:\s*\d+\s*[,\)]', 'Spacing', 'Use UISpacing instead'),
-        (r'EdgeInsets\.(all|symmetric)\s*\([^)]*\b\d+\b', 'Spacing', 'Use UISpacing instead'),
-        (r'fontSize\s*:\s*\d+\s*[,\)]', 'Typography', 'Use UIFontSizes instead'),
-        (r'BorderRadius\.circular\s*\(\s*\d+\s*\)', 'BorderRadius', 'Use UIBorderRadius instead'),
-    ]
 
     # Native component direct-use patterns (spec §14.3 禁用對照表)
     # word-boundary anchored to avoid matching AppCard / _buildXxxChip etc.
@@ -105,14 +126,6 @@ def check_file_for_violations(file_path: Path) -> list[dict]:
         (r'\bChoiceChip\(', 'NativeComponent', 'Use AppChip instead'),
     ]
 
-    # Exception patterns (already using config)
-    exceptions = [
-        r'UIColors\.',
-        r'UISpacing\.',
-        r'UIFontSizes\.',
-        r'UIBorderRadius\.',
-    ]
-
     # Line-level exclusions for native component patterns (spec §14.3 注意事項)
     native_exclusion_patterns = [
         r'\bApp(Card|Button|Dialog|Divider|Badge|Chip)\b',  # already migrated
@@ -121,17 +134,33 @@ def check_file_for_violations(file_path: Path) -> list[dict]:
         r'^\s*import\s',
     ]
 
+    if STYLE_CHECKER_AVAILABLE:
+        config = load_config(file_path.parent)
+        style_groups = build_pattern_groups(config)
+        exception_patterns = build_exception_patterns(config)
+        exempt_pattern = build_exempt_pattern(config)
+    else:
+        style_groups = {}
+        exception_patterns = []
+        exempt_pattern = None
+
     for line_num, line in enumerate(lines, 1):
-        # Skip lines that already use config (style patterns only)
-        if not any(re.search(e, line) for e in exceptions):
-            for pattern, category, suggestion in patterns:
-                if re.search(pattern, line):
-                    violations.append({
-                        'line': line_num,
-                        'category': category,
-                        'suggestion': suggestion,
-                    })
-                    break  # One violation per line is enough
+        line_is_exempt = bool(exempt_pattern and re.search(exempt_pattern, line))
+
+        if not line_is_exempt and not should_skip_line_safe(line, exception_patterns):
+            for category, patterns in style_groups.items():
+                matched = False
+                for pattern, suggestion in patterns:
+                    if re.search(pattern, line):
+                        violations.append({
+                            'line': line_num,
+                            'category': category,
+                            'suggestion': suggestion,
+                        })
+                        matched = True
+                        break  # One violation per category per line is enough
+                if matched:
+                    break
 
         # Native component direct-use check (independent exclusion set, WARNING mode)
         if any(re.search(e, line) for e in native_exclusion_patterns):

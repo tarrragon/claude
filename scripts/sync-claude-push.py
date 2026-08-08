@@ -68,12 +68,24 @@ from pathlib import Path
 # 排除分類與 should_exclude / compute_content_hash 由 SSOT manifest 統一提供
 # （ARCH-020：消除 push/status 重複定義漂移）。manifest 位於 .claude/lib/。
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# skill-sync 是零框架依賴的獨立 uv 套件，未安裝為本腳本的 import 路徑；以 sys.path
+# 取用其 public API（與上一行取用 lib/ 同機制）。skill 庫漂移檢查的 repo 解析、
+# 取檔、分類全在該套件內，本檔不再持有第二份（ARCH-BAL-016）。
+sys.path.insert(
+    0, str(Path(__file__).resolve().parent.parent / "skills" / "skill-sync")
+)
 from lib.sync_exclude_manifest import (  # noqa: E402
     should_exclude,
     should_exclude_skill,
     _is_skill_path,
     load_sync_skills_config,
     compute_content_hash as _compute_content_hash,
+)
+from lib.skill_version_diff import (  # noqa: E402
+    SKILL_DRIFT_PREVIEW_LIMIT,
+    extract_skill_versions,
+    format_skill_version_diff,
+    report_skill_repo_drift,
 )
 
 REPO_URL = "https://github.com/tarrragon/claude.git"
@@ -370,67 +382,9 @@ def stage_tracked_tree(project_root: Path, staging_dir: Path) -> int:
     return count
 
 
-def extract_skill_versions(skills_dir: Path) -> dict[str, str]:
-    """掃描 skills/*/SKILL.md 提取各 skill 的版本號。
-
-    參數:
-        skills_dir: skills 目錄路徑（如 temp_dir/skills/）
-
-    傳回:
-        dict[str, str]: {skill 名稱: 版本號}，無版本號者不列入
-    """
-    versions: dict[str, str] = {}
-    if not skills_dir.is_dir():
-        return versions
-    for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
-        skill_name = skill_md.parent.name
-        try:
-            text = skill_md.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            continue
-        m = re.search(r"\*\*Version\*\*:\s*(\S+)", text)
-        if not m:
-            m = re.search(r"^version:\s*(\S+)", text, re.MULTILINE)
-        if m:
-            versions[skill_name] = m.group(1)
-    return versions
-
-
-def format_skill_version_diff(
-    before: dict[str, str], after: dict[str, str]
-) -> str | None:
-    """比對前後 skill 版本，產生摘要文字。無變更時回傳 None。
-
-    參數:
-        before: 同步前的 {skill: version}
-        after: 同步後的 {skill: version}
-
-    傳回:
-        str | None: 摘要文字（含換行），無變更時 None
-    """
-    all_names = sorted(set(before) | set(after))
-    new_skills: list[str] = []
-    updated_skills: list[str] = []
-    removed_skills: list[str] = []
-    for name in all_names:
-        old_ver = before.get(name)
-        new_ver = after.get(name)
-        if old_ver is None and new_ver is not None:
-            new_skills.append(f"{name} ({new_ver})")
-        elif old_ver is not None and new_ver is None:
-            removed_skills.append(f"{name} (was {old_ver})")
-        elif old_ver != new_ver:
-            updated_skills.append(f"{name} {old_ver} -> {new_ver}")
-    if not new_skills and not updated_skills and not removed_skills:
-        return None
-    lines = ["[Skill 變更摘要]"]  # i18n-exempt
-    if new_skills:
-        lines.append(f"  新增: {', '.join(new_skills)}")  # i18n-exempt
-    if updated_skills:
-        lines.append(f"  更新: {', '.join(updated_skills)}")  # i18n-exempt
-    if removed_skills:
-        lines.append(f"  移除: {', '.join(removed_skills)}")  # i18n-exempt
-    return "\n".join(lines)
+# extract_skill_versions / format_skill_version_diff / report_skill_repo_drift /
+# SKILL_DRIFT_PREVIEW_LIMIT 已提升至 .claude/lib/skill_version_diff.py，由本檔
+# 頂部 import（0.2.1-W3-356：消除與 sync-claude-pull.py 的逐字重複）。
 
 
 def load_preserve_list(claude_dir: Path) -> set[str]:
@@ -2139,6 +2093,55 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def check_skill_residue(claude_dir: Path, force_mode: bool) -> bool:
+    """回報 skill 內指向不存在檔案的引用；有 blocking 級即回傳 False。
+
+    偵測邏輯取自 `skill_residue_detector`，與 SessionStart hook 和
+    skill-sync push gate 共用同一份判準——三個入口各寫一套的結果是同一份內容
+    在不同關卡得到不同結論，使用者無從判斷哪個算數。
+
+    本函式的輸出為開發者工具的終端訊息，不進使用者介面，故不走 i18n。
+    """
+    try:
+        from skill_residue_detector import blocking_only, format_report, scan_all
+    except ImportError as exc:
+        print_color(
+            # i18n-exempt: 開發者工具終端輸出
+            f"[提醒] 無法載入 skill 殘留偵測器（{exc}），本次略過該檢查",
+            "yellow",
+        )
+        return True
+
+    findings = blocking_only(scan_all(claude_dir / "skills", claude_dir.parent))
+    if not findings:
+        # i18n-exempt: 開發者工具終端輸出
+        print_color("   skill 殘留檢查通過", "green")
+        return True
+
+    total = sum(len(v) for v in findings.values())
+    if force_mode:
+        print_color(
+            # i18n-exempt: 開發者工具終端輸出
+            f"[提醒] 偵測到 {total} 項 skill 殘留，因 --force 仍繼續推送",
+            "yellow",
+        )
+        return True
+
+    print_color(
+        # i18n-exempt: 開發者工具終端輸出
+        f"偵測到 {total} 項 skill 引用指向本專案不存在的檔案，已中止推送：",
+        "red",
+    )
+    for line in format_report(findings):
+        print(line)
+    print()
+    print("這些內容推上 canonical 後會被其他 consumer 取走。處理方式擇一：")
+    print("  1. 修正引用，或改為不指名具體路徑的描述性敘述")
+    print("  2. 確屬示意路徑時，於該行加 `skill-residue-exempt: <理由>` 標記")
+    print("  3. 確知無妨時加 --force 旁路")
+    return False
+
+
 def main() -> None:
     args = parse_args(sys.argv[1:])
 
@@ -2171,6 +2174,13 @@ def main() -> None:
     # 安全說明（C1）：push 改以 git archive HEAD 取 tracked 樹，untracked / gitignored
     # 機密檔不在 tracked 樹中，從架構層消滅 W1-019 secret-leak 風險，故無需 interim
     # detect_secret_leak_risk 防護（已隨 C1 移除）。
+
+    # 2.4. Skill 殘留 gate：他專案的檔案路徑與腳本名隨 skill 內容流入本地後，
+    # 這一步是它們擴散回 canonical 前的最後一道關卡。只擋 blocking 級（引用的
+    # 路徑或腳本在本專案不存在）；他專案 ticket ID 屬 advisory，存量上百，
+    # 擋下來只會讓 --force 變成常態動作而使真訊號一併失效。
+    if not check_skill_residue(claude_dir, force_mode):
+        sys.exit(1)
 
     # 2.5. No-change early-exit（W3-075）：避免空 commit 污染歷史
     # 跳過條件：user 提供 commit message（明確意圖）、--force 旗標，或 --clean 旗標
@@ -2503,19 +2513,13 @@ def main() -> None:
         if skill_diff:
             print_color(skill_diff, "green")
 
-        # Skill 庫版本 drift 檢查（0.3.5-W1-001 建立，0.2.1-W3-134 移除）：
-        # 原以版本字串比對 remote versions.json，0.2.1-W3-131 將該檔改為巢狀
-        # {name: {hash, version}} 後，字串對 dict 永遠不相等，對全部 skill
-        # 誤判為漂移（且外層 except Exception 攔不下比較本身不拋例外的情形）。
-        # 正確的內容雜湊比對已存在於 skill_sync/cli.py::_classify_sync_status
-        # （涵蓋新格式 hash 比對與舊格式 skipped_no_hash 相容分支，見
-        # test_classify_sync_status_up_to_date_when_hash_matches /
-        # test_classify_sync_status_skips_remote_without_hash_field），
-        # push.py 不重複維護第二套比對邏輯，改引導使用者執行該指令。
-        print_color(  # i18n-exempt
-            "如需檢查本地 skill 與 skill 庫的內容漂移，請執行：skill-sync pull-all",
-            "yellow",
-        )
+        # Skill 庫內容漂移檢查（0.3.5-W1-001 建立，0.2.1-W3-134 移除，
+        # 0.2.1-W3-351 以重用實作的形式恢復）：比對邏輯來自
+        # skill_sync/cli.py::_classify_sync_status，本檔不維護第二套——W3-134
+        # 移除的理由是兩套實作各自隨 versions.json schema 漂移，重用即解除該
+        # 顧慮；當時改印的靜態提示則指向不存在的子命令，無自動檢查亦無可執行指引。
+        drift_report = report_skill_repo_drift(claude_dir)
+        print_color(drift_report, "yellow")
 
         # R2 soft 警告：本次未帶 --clean，但本地已 git rm 的 tracked .claude/ 檔
         # 在遠端殘留為孤兒。僅提醒（不阻擋、不改 --clean 預設），避免誤刪風險。

@@ -21,13 +21,14 @@ description: "Style Guardian - Unified Design System Enforcement Tool. Use for: 
 
 ### Key Files
 
-| File | Purpose |
-|------|---------|
-| `lib/core/ui/ui_config.dart` | Core style configuration system |
-| `lib/core/ui/flat_design_config.dart` | Flat design component configuration |
-| `lib/core/ui/responsive_config.dart` | Responsive layout configuration |
-| `lib/app/theme.dart` | Application theme (uses UIColors) |
-| `docs/ui_design_specification.md` | UI design specification document |
+檔案位置因專案而異，故以角色描述而非路徑列出——寫死某專案的路徑，其他專案讀到的就是一份指向不存在檔案的清單。實際位置見 `.claude/config/dart-style-guardian.json` 的 `tokens` 欄位所指的類別，以及專案的 `l10n.yaml`。
+
+| Role | 內容 |
+|------|------|
+| Design system tokens | 顏色、間距、字級、圓角的 SSOT；掃描器據此判定何謂「已使用 token」 |
+| Theme | 組裝 tokens 為 ThemeData 的入口 |
+| Localization 設定 | `l10n.yaml` 決定 ARB 位置與存取子形態 |
+| UI 設計規格 | 設計稿與元件規範文件（如有） |
 
 ---
 
@@ -141,9 +142,7 @@ TextStyle(fontSize: 14.sp)  // Manual scaling
 
 ## Internationalization (i18n)
 
-i18n 硬編碼檢測、ARB 工作流程、支援語言清單詳見 `/dart-i18n-checker`。
-
-**快速參考**：所有使用者可見文字必須使用 `context.l10n!.keyName`，禁止硬編碼字串。
+所有使用者可見文字必須取自 ARB 產生的 localization 類別，禁止硬編碼字串。存取方式依專案的 `l10n.yaml` 設定而定，常見兩種：`AppLocalizations.of(context).keyName`（`nullable-getter: false`）或 `context.l10n!.keyName`（專案自建 extension）。動手前先讀專案的 `l10n.yaml` 與既有呼叫點確認慣例，勿沿用他專案的寫法。
 
 ---
 
@@ -194,7 +193,7 @@ BorderRadius.circular(UIBorderRadius.sm)
 
 ### Violation 5: Hardcoded Text
 
-硬編碼文字檢測和修正詳見 `/dart-i18n-checker`。
+使用者可見文字直接寫在 widget 內，未取自 ARB。`style_checker.py scan` 以 `[i18n]` 標記回報這類違規；修正方式是把字串移入 ARB 檔並改以 localization 類別存取（存取語法見上方 Internationalization 節）。
 
 ### Violation 6: ViewModel Hardcoded User Messages
 
@@ -218,6 +217,43 @@ state = state.copyWith(errorMessage: ErrorHandler.getUserMessage(exception));
 - String interpolation with i18n: `context.l10n!.errorWithCode(code)`
 
 **Related**（Flutter 專案適用）: ViewModel 層使用者訊息規範見專案根目錄 `FLUTTER.md`（僅 Flutter 專案存在；非 Flutter 專案略過 Violation 6）
+
+---
+
+## Project Calibration
+
+偵測規則本身跨專案通用（硬編碼的顏色、間距、字級一律該進 design system），但**替代方案的名字是專案專屬的**。校準檔告訴掃描器本專案的詞彙：
+
+`.claude/config/dart-style-guardian.json`
+
+```json
+{
+  "tokens": {
+    "color": "AppPalette",
+    "spacing": "AppSpacing",
+    "font_size": "AppTypography",
+    "border_radius": "AppRadius"
+  },
+  "i18n": {
+    "accessor": "AppLocalizations.of(context).keyName",
+    "compliance_pattern": "AppLocalizations\\.of\\("
+  },
+  "exempt_markers": ["magic-exempt", "i18n-exempt"]
+}
+```
+
+| 欄位 | 作用 |
+|------|------|
+| `tokens.*` | 修正建議指名的類別；同時作為「此行已合規」的判定依據 |
+| `i18n.accessor` | i18n 建議中顯示的存取語法 |
+| `i18n.compliance_pattern` | 判定該行已使用 localization 的正則 |
+| `exempt_markers` | 行內註解含此標記即豁免，並計入報告的 exempt 計數 |
+
+**缺此檔時**：掃描器仍偵測硬編碼，但建議改為描述性敘述（「改用專案 design system 的 color token」），並在 stderr 提示。這是刻意的——指名某套命名等於斷言它是對的，而讀者照著不存在的類別動手會寫出編譯不過的程式碼。
+
+**豁免的可見性**：被標記豁免的行不列為違規，但計數會出現在報告（`Exempt (marked in source): N`）。靜默略過的行與掃描器看不見的行無法區分，讀者也就無從判斷標記是否真的生效。
+
+**單一規則來源**：PostEdit hook（`.claude/hooks/dart-style-guardian-hook.py`）匯入 `style_checker` 的規則與校準，不另維護一份。兩套規則各自演化的結果是 hook 與 skill 給出互相矛盾的建議。
 
 ---
 
@@ -247,23 +283,14 @@ The style checker is integrated into PostEdit Hook:
 
 ## Related Documentation
 
-### Project Files（Flutter 專案適用）
+### Project Files
 
-以下路徑為 Flutter 專案的設定與規格檔；非 Flutter 專案無對應檔案，請替換為自身專案的等價設定來源：
-
-- UI Configuration: `lib/core/ui/ui_config.dart`
-- Flat Design Config: `lib/core/ui/flat_design_config.dart`
-- Responsive Config: `lib/core/ui/responsive_config.dart`
-- UI Design Specification: `docs/ui_design_specification.md`
-- i18n Guide: `docs/i18n_guide.md`
+同上節，以角色而非路徑指涉：design system token 定義、theme 組裝入口、`l10n.yaml` 與其指向的 ARB、設計規格文件。要知道本專案的實際位置，讀 `.claude/config/dart-style-guardian.json` 與 `l10n.yaml`，或直接搜尋 token 類別名的定義處。
 
 ### Reference Files (in this SKILL)
 - [Color System Reference](./references/color-system.md)
 - [Spacing System Reference](./references/spacing-system.md)
 - [Typography System Reference](./references/typography-system.md)
-
-### Related Skills
-- `/dart-i18n-checker` - i18n 硬編碼全量掃描和修正工作流程
 
 ### External Resources
 - [Flat Design Explained - MasterClass](https://www.masterclass.com/articles/flat-design-explained)

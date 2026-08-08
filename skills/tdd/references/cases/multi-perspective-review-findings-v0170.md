@@ -12,11 +12,11 @@
 
 ## 整體評分
 
-| 維度 | 評分 |
-|------|------|
-| linux Good Taste | Acceptable |
-| linux 單獨 | A |
-| 程式碼品質 | A（架構分層合理，命名清晰，業務邏輯註解充分） |
+| 維度             | 評分                                          |
+| ---------------- | --------------------------------------------- |
+| linux Good Taste | Acceptable                                    |
+| linux 單獨       | A                                             |
+| 程式碼品質       | A（架構分層合理，命名清晰，業務邏輯註解充分） |
 
 ---
 
@@ -24,39 +24,39 @@
 
 ### P0 — 立即修復
 
-| # | 發現 | 位置 | 根因分類 |
-|---|------|------|---------|
-| 1 | `_buildTitleAuthorKey` 使用 `book.author` 但 Schema v2 定義為 `authors`（陣列），跨平台去重靜默失效 | overview-page-controller.js:1409 | 測試盲點 |
-| 2 | dead import: `require('src/core/errors/ErrorCodes')` 未使用且為 bare specifier，build 可能失敗 | BookSchemaV2.js:12 | 實作品質 |
+| #   | 發現                                                                                                | 位置                             | 根因分類 |
+| --- | --------------------------------------------------------------------------------------------------- | -------------------------------- | -------- |
+| 1   | `_buildTitleAuthorKey` 使用 `book.author` 但 Schema v2 定義為 `authors`（陣列），跨平台去重靜默失效 | overview-page-controller.js:1409 | 測試盲點 |
+| 2   | dead import: `require('src/core/errors/ErrorCodes')` 未使用且為 bare specifier，build 可能失敗      | BookSchemaV2.js:12               | 實作品質 |
 
 ### P1 — 本版本處理
 
-| # | 發現 | 位置 | 根因分類 |
-|---|------|------|---------|
-| 1 | 驗證框架重複（BookSchemaV2 + TagSchema），需提取共用驗證引擎 | BookSchemaV2.js:81-123, TagSchema.js:57-107 | 規格盲點 |
-| 2 | 狀態轉換邏輯重複（mapV1StatusToV2 vs migrateReadingStatus） | BookSchemaV2.js:245, v1-to-v2.js:91 | 規格盲點 |
-| 3 | tag-storage-adapter 零日誌可觀測性，所有 catch 區塊不記錄 | tag-storage-adapter.js 全檔案 | 測試盲點 |
-| 4 | Date.now() ID 生成碰撞風險 | tag-storage-adapter.js:189 | 規格盲點 |
+| #   | 發現                                                         | 位置                                        | 根因分類 |
+| --- | ------------------------------------------------------------ | ------------------------------------------- | -------- |
+| 1   | 驗證框架重複（BookSchemaV2 + TagSchema），需提取共用驗證引擎 | BookSchemaV2.js:81-123, TagSchema.js:57-107 | 規格盲點 |
+| 2   | 狀態轉換邏輯重複（mapV1StatusToV2 vs migrateReadingStatus）  | BookSchemaV2.js:245, v1-to-v2.js:91         | 規格盲點 |
+| 3   | tag-storage-adapter 零日誌可觀測性，所有 catch 區塊不記錄    | tag-storage-adapter.js 全檔案               | 測試盲點 |
+| 4   | Date.now() ID 生成碰撞風險                                   | tag-storage-adapter.js:189                  | 規格盲點 |
 
 ### P2 — 延後處理
 
-| # | 發現 | 位置 | 根因分類 |
-|---|------|------|---------|
-| 1 | migrateV1ToV2 97 行，認知指數 23，5 層巢狀 | v1-to-v2.js:208-305 | 實作品質 |
-| 2 | tag-storage-adapter 723 行需拆分模組 | tag-storage-adapter.js | 實作品質 |
-| 3 | 回滾快照重複邏輯，提取 _withAtomicRollback() | tag-storage-adapter.js:261,449 | 實作品質 |
-| 4 | 版本號 "3.0.0" 硬編碼重複 | v1-to-v2.js:21, tag-storage-adapter.js:677 | 規格盲點 |
-| 5 | _handleDuplicateBooks 64 行，認知指數 25 | overview-page-controller.js:1322 | 實作品質 |
+| #   | 發現                                         | 位置                                       | 根因分類 |
+| --- | -------------------------------------------- | ------------------------------------------ | -------- |
+| 1   | migrateV1ToV2 97 行，認知指數 23，5 層巢狀   | v1-to-v2.js:208-305                        | 實作品質 |
+| 2   | tag-storage-adapter 723 行需拆分模組         | tag-storage-adapter.js                     | 實作品質 |
+| 3   | 回滾快照重複邏輯，提取 _withAtomicRollback() | tag-storage-adapter.js:261,449             | 實作品質 |
+| 4   | 版本號 "3.0.0" 硬編碼重複                    | v1-to-v2.js:21, tag-storage-adapter.js:677 | 規格盲點 |
+| 5   | _handleDuplicateBooks 64 行，認知指數 25     | overview-page-controller.js:1322           | 實作品質 |
 
 ---
 
 ## 根因統計
 
-| 根因分類 | 發現數 | 佔比 | 問題項 |
-|---------|--------|------|--------|
-| 規格盲點 | 4 | ~36% | P1-1/2 共用策略缺失、P1-4 碰撞防護、P2-4 共用常數 |
-| 測試盲點 | 3 | ~27% | P0-1 中間步驟測試、P1-3 非功能性測試 |
-| 實作品質 | 4 | ~36% | P0-2 dead import、P2-1/2/3/5 複雜度和重複 |
+| 根因分類 | 發現數 | 佔比 | 問題項                                            |
+| -------- | ------ | ---- | ------------------------------------------------- |
+| 規格盲點 | 4      | ~36% | P1-1/2 共用策略缺失、P1-4 碰撞防護、P2-4 共用常數 |
+| 測試盲點 | 3      | ~27% | P0-1 中間步驟測試、P1-3 非功能性測試              |
+| 實作品質 | 4      | ~36% | P0-2 dead import、P2-1/2/3/5 複雜度和重複         |
 
 ### 根因分析方法示範
 
@@ -67,6 +67,7 @@
 3. **實作（Phase 3）**：代理人的實作品質是否有問題？
 
 先追溯到最上游的根因，而非只標記直接原因。例如 P0-1（`book.author` vs `authors`）：
+
 - 直接原因看似「實作品質」（寫錯欄位名）
 - 但追溯發現 Phase 2 測試資料同時殘留 `author` 和 `authors`，導致測試碰巧通過
 - 根因歸類為「測試盲點」，因為正確的測試資料會讓錯誤立即暴露
@@ -75,12 +76,12 @@
 
 ## 量化指標
 
-| 指標 | 數值 |
-|------|------|
-| 重複率 | ~18-22%（約 280-330 行可提取） |
-| 超標函式（認知指數 > 10） | 11 個 |
-| 超標函式（認知指數 > 20） | 3 個 |
-| 耦合問題 | 3 個隱式 Schema coupling + 1 個版本號重複 |
+| 指標                      | 數值                                      |
+| ------------------------- | ----------------------------------------- |
+| 重複率                    | ~18-22%（約 280-330 行可提取）            |
+| 超標函式（認知指數 > 10） | 11 個                                     |
+| 超標函式（認知指數 > 20） | 3 個                                      |
+| 耦合問題                  | 3 個隱式 Schema coupling + 1 個版本號重複 |
 
 ---
 

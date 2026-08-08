@@ -14,14 +14,14 @@
 
 ## 狀態分類
 
-| 類別 | 狀態 | 設定方式 | isManualStatus |
-|------|------|---------|---------------|
-| 自動狀態 | unread | 系統自動或手動重設 | false（若手動重設則重設為 false） |
-| 自動狀態 | reading | 系統自動或手動重設 | false（若手動重設則重設為 false） |
-| 自動狀態 | finished | 系統自動或手動重設 | false（若手動重設則重設為 false） |
-| 手動狀態 | queued | 僅手動設定 | true |
-| 手動狀態 | abandoned | 僅手動設定 | true |
-| 手動狀態 | reference | 僅手動設定 | true |
+| 類別     | 狀態      | 設定方式           | isManualStatus                    |
+| -------- | --------- | ------------------ | --------------------------------- |
+| 自動狀態 | unread    | 系統自動或手動重設 | false（若手動重設則重設為 false） |
+| 自動狀態 | reading   | 系統自動或手動重設 | false（若手動重設則重設為 false） |
+| 自動狀態 | finished  | 系統自動或手動重設 | false（若手動重設則重設為 false） |
+| 手動狀態 | queued    | 僅手動設定         | true                              |
+| 手動狀態 | abandoned | 僅手動設定         | true                              |
+| 手動狀態 | reference | 僅手動設定         | true                              |
 
 ---
 
@@ -29,40 +29,40 @@
 
 ### 自動轉換（系統觸發，僅在 isManualStatus === false 時生效）
 
-| 來源 → 目標 | 觸發條件 | isManualStatus 變化 | 合法性 |
-|------------|---------|-------------------|--------|
-| unread → reading | progress 從 0 變為 > 0 | false → false | 合法 |
-| reading → finished | progress 達到 100 | false → false | 合法 |
-| unread → finished | progress 直接跳到 100（極端情況） | false → false | 合法 |
+| 來源 → 目標        | 觸發條件                          | isManualStatus 變化 | 合法性 |
+| ------------------ | --------------------------------- | ------------------- | ------ |
+| unread → reading   | progress 從 0 變為 > 0            | false → false       | 合法   |
+| reading → finished | progress 達到 100                 | false → false       | 合法   |
+| unread → finished  | progress 直接跳到 100（極端情況） | false → false       | 合法   |
 
 **注意**：以下自動轉換不存在（系統不會自動降級）：
 
-| 來源 → 目標 | 原因 |
-|------------|------|
-| reading → unread | progress 不會自動歸零 |
+| 來源 → 目標        | 原因                     |
+| ------------------ | ------------------------ |
+| reading → unread   | progress 不會自動歸零    |
 | finished → reading | 完成後不會自動「未完成」 |
-| finished → unread | 完成後不會自動「未讀」 |
+| finished → unread  | 完成後不會自動「未讀」   |
 
 ### 手動轉換（使用者觸發）
 
-| 來源 → 目標 | isManualStatus 變化 | 合法性 | 說明 |
-|------------|-------------------|--------|------|
-| 任何 → queued | 設為 true | 合法 | 加入待讀清單 |
-| 任何 → abandoned | 設為 true | 合法 | 放棄閱讀 |
-| 任何 → reference | 設為 true | 合法 | 標記為參考書 |
-| 任何 → unread | 設為 false | 合法 | 恢復自動追蹤 |
-| 任何 → reading | 設為 false | 合法 | 恢復自動追蹤 |
-| 任何 → finished | 設為 false | 合法 | 恢復自動追蹤 |
+| 來源 → 目標      | isManualStatus 變化 | 合法性 | 說明         |
+| ---------------- | ------------------- | ------ | ------------ |
+| 任何 → queued    | 設為 true           | 合法   | 加入待讀清單 |
+| 任何 → abandoned | 設為 true           | 合法   | 放棄閱讀     |
+| 任何 → reference | 設為 true           | 合法   | 標記為參考書 |
+| 任何 → unread    | 設為 false          | 合法   | 恢復自動追蹤 |
+| 任何 → reading   | 設為 false          | 合法   | 恢復自動追蹤 |
+| 任何 → finished  | 設為 false          | 合法   | 恢復自動追蹤 |
 
 ### 自動追蹤阻斷規則
 
-| 場景 | isManualStatus | progress 變化 | 狀態是否自動轉換 |
-|------|---------------|--------------|----------------|
-| queued 的書被開始閱讀 | true | 0 → 30 | 否（保持 queued） |
-| abandoned 的書被繼續閱讀 | true | 50 → 80 | 否（保持 abandoned） |
-| reference 的書 progress 更新 | true | 任何變化 | 否（保持 reference） |
-| unread 的書被開始閱讀 | false | 0 → 10 | 是（自動轉為 reading） |
-| reading 的書讀完 | false | 90 → 100 | 是（自動轉為 finished） |
+| 場景                         | isManualStatus | progress 變化 | 狀態是否自動轉換        |
+| ---------------------------- | -------------- | ------------- | ----------------------- |
+| queued 的書被開始閱讀        | true           | 0 → 30        | 否（保持 queued）       |
+| abandoned 的書被繼續閱讀     | true           | 50 → 80       | 否（保持 abandoned）    |
+| reference 的書 progress 更新 | true           | 任何變化      | 否（保持 reference）    |
+| unread 的書被開始閱讀        | false          | 0 → 10        | 是（自動轉為 reading）  |
+| reading 的書讀完             | false          | 90 → 100      | 是（自動轉為 finished） |
 
 ---
 
@@ -90,12 +90,12 @@ queued (true) → abandoned (true) → reference (true) → unread (false)
 
 ### 4. progress 與狀態不一致
 
-| progress | 手動狀態 | 是否合法 | 說明 |
-|----------|---------|---------|------|
-| 100 | queued | 合法 | 使用者決定重讀但先排入待讀 |
-| 0 | finished | 合法 | 使用者手動標記已讀完（可能是紙本已讀） |
-| 50 | abandoned | 合法 | 讀了一半放棄 |
-| 0 | reference | 合法 | 參考書不需要閱讀進度 |
+| progress | 手動狀態  | 是否合法 | 說明                                   |
+| -------- | --------- | -------- | -------------------------------------- |
+| 100      | queued    | 合法     | 使用者決定重讀但先排入待讀             |
+| 0        | finished  | 合法     | 使用者手動標記已讀完（可能是紙本已讀） |
+| 50       | abandoned | 合法     | 讀了一半放棄                           |
+| 0        | reference | 合法     | 參考書不需要閱讀進度                   |
 
 **設計決策**：progress 欄位在任何狀態下都可獨立更新，不受 readingStatus 約束。
 
@@ -116,33 +116,33 @@ queued (true) → abandoned (true) → reference (true) → unread (false)
 
 ### 最小測試集（覆蓋關鍵路徑）
 
-| 測試 | 來源狀態 | 操作 | 預期結果 |
-|------|---------|------|---------|
-| 自動升級 | unread (false) | progress 0→50 | reading (false) |
-| 自動完成 | reading (false) | progress 90→100 | finished (false) |
-| 手動排入 | reading (false) | 手動設 queued | queued (true) |
-| 阻斷自動 | queued (true) | progress 0→50 | queued (true)，不變 |
-| 恢復追蹤 | abandoned (true) | 手動設 reading | reading (false) |
-| 恢復後自動 | reading (false)（從 abandoned 恢復） | progress 90→100 | finished (false) |
-| 同狀態重設 | reading (true) | 手動設 reading | reading (false) |
+| 測試       | 來源狀態                             | 操作            | 預期結果            |
+| ---------- | ------------------------------------ | --------------- | ------------------- |
+| 自動升級   | unread (false)                       | progress 0→50   | reading (false)     |
+| 自動完成   | reading (false)                      | progress 90→100 | finished (false)    |
+| 手動排入   | reading (false)                      | 手動設 queued   | queued (true)       |
+| 阻斷自動   | queued (true)                        | progress 0→50   | queued (true)，不變 |
+| 恢復追蹤   | abandoned (true)                     | 手動設 reading  | reading (false)     |
+| 恢復後自動 | reading (false)（從 abandoned 恢復） | progress 90→100 | finished (false)    |
+| 同狀態重設 | reading (true)                       | 手動設 reading  | reading (false)     |
 
 ### 禁止的測試假設
 
-| 假設 | 原因 |
-|------|------|
-| progress 和 readingStatus 必然一致 | 手動狀態下兩者可以不一致 |
-| isManualStatus 只在 queued/abandoned/reference 時為 true | 理論上不存在，但需防禦 |
-| 自動轉換一定會觸發 | 必須先檢查 isManualStatus |
+| 假設                                                     | 原因                      |
+| -------------------------------------------------------- | ------------------------- |
+| progress 和 readingStatus 必然一致                       | 手動狀態下兩者可以不一致  |
+| isManualStatus 只在 queued/abandoned/reference 時為 true | 理論上不存在，但需防禦    |
+| 自動轉換一定會觸發                                       | 必須先檢查 isManualStatus |
 
 ---
 
 ## 風險等級與影響範圍
 
-| 風險點 | 風險等級 | 影響範圍 |
-|-------|---------|---------|
-| 自動轉換在 isManualStatus=true 時仍觸發 | 高 | 覆蓋使用者的手動設定，使用者體驗嚴重受損 |
-| 手動設自動狀態後 isManualStatus 未重設 | 中 | 自動追蹤永久失效，使用者需手動管理所有狀態 |
-| v1 遷移後 isManualStatus 未初始化 | 中 | undefined 值導致自動轉換判斷錯誤 |
+| 風險點                                  | 風險等級 | 影響範圍                                   |
+| --------------------------------------- | -------- | ------------------------------------------ |
+| 自動轉換在 isManualStatus=true 時仍觸發 | 高       | 覆蓋使用者的手動設定，使用者體驗嚴重受損   |
+| 手動設自動狀態後 isManualStatus 未重設  | 中       | 自動追蹤永久失效，使用者需手動管理所有狀態 |
+| v1 遷移後 isManualStatus 未初始化       | 中       | undefined 值導致自動轉換判斷錯誤           |
 
 ---
 

@@ -16,15 +16,15 @@ Interchange Format v2 是 Extension 和 Flutter App 之間的資料交換格式�
 
 ### Extension → Interchange Format v2
 
-| Extension 欄位 | Interchange 欄位 | 轉換規則 |
-|---------------|-----------------|---------|
+| Extension 欄位              | Interchange 欄位                   | 轉換規則         |
+| --------------------------- | ---------------------------------- | ---------------- |
 | `progress` (0-100, integer) | `readingProgress` (0.0-1.0, float) | `progress / 100` |
-| `cover` (string URL) | `coverUrl` (string) | 僅欄位名不同 |
-| `extractedAt` (ISO string) | `createdAt` (ISO string) | 僅欄位名不同 |
-| `source` (string) | `platform` (string) | 僅欄位名不同 |
-| `readingStatus` (string) | `readingStatus` (string) | 不變 |
-| `isManualStatus` (boolean) | `isManualStatus` (boolean) | 不變 |
-| `tagIds` (array) | `tagIds` (array) | 不變 |
+| `cover` (string URL)        | `coverUrl` (string)                | 僅欄位名不同     |
+| `extractedAt` (ISO string)  | `createdAt` (ISO string)           | 僅欄位名不同     |
+| `source` (string)           | `platform` (string)                | 僅欄位名不同     |
+| `readingStatus` (string)    | `readingStatus` (string)           | 不變             |
+| `isManualStatus` (boolean)  | `isManualStatus` (boolean)         | 不變             |
+| `tagIds` (array)            | `tagIds` (array)                   | 不變             |
 
 ### tag_tree 序列化
 
@@ -49,14 +49,14 @@ Interchange Format v2 是 Extension 和 Flutter App 之間的資料交換格式�
 
 ### 1. Float 精度問題
 
-| Extension progress | 匯出 readingProgress | 匯入回 progress | 一致嗎？ |
-|-------------------|---------------------|----------------|---------|
-| 0 | 0.0 | 0 | 一致 |
-| 100 | 1.0 | 100 | 一致 |
-| 33 | 0.33 | 33 | 一致（Math.round(0.33 * 100) = 33） |
-| 67 | 0.67 | 67 | 一致（Math.round(0.67 * 100) = 67） |
-| 1 | 0.01 | 1 | 一致 |
-| 99 | 0.99 | 99 | 一致 |
+| Extension progress | 匯出 readingProgress | 匯入回 progress | 一致嗎？                            |
+| ------------------ | -------------------- | --------------- | ----------------------------------- |
+| 0                  | 0.0                  | 0               | 一致                                |
+| 100                | 1.0                  | 100             | 一致                                |
+| 33                 | 0.33                 | 33              | 一致（Math.round(0.33 * 100) = 33） |
+| 67                 | 0.67                 | 67              | 一致（Math.round(0.67 * 100) = 67） |
+| 1                  | 0.01                 | 1               | 一致                                |
+| 99                 | 0.99                 | 99              | 一致                                |
 
 **風險點**：JavaScript 浮點運算 `0.33 * 100 = 33.00000000000000.4`，必須使用 `Math.round()` 確保整數回復。
 
@@ -64,24 +64,24 @@ Interchange Format v2 是 Extension 和 Flutter App 之間的資料交換格式�
 
 ### 2. 特殊值處理
 
-| 值 | Extension 內部 | Interchange | 匯入回 | 測試重點 |
-|----|---------------|-------------|--------|---------|
-| progress = undefined | undefined | 省略或 null | undefined | 缺失值保留 |
-| progress = null | null | null | null | null 值保留 |
-| progress = 0 | 0 | 0.0 | 0 | 零值不被省略 |
-| progress = NaN | NaN | 應轉為 null 或 0 | 0 或 null | 非法值清理 |
-| isManualStatus = undefined | undefined | 省略或 false | false | v1 資料缺少此欄位 |
+| 值                         | Extension 內部 | Interchange      | 匯入回    | 測試重點          |
+| -------------------------- | -------------- | ---------------- | --------- | ----------------- |
+| progress = undefined       | undefined      | 省略或 null      | undefined | 缺失值保留        |
+| progress = null            | null           | null             | null      | null 值保留       |
+| progress = 0               | 0              | 0.0              | 0         | 零值不被省略      |
+| progress = NaN             | NaN            | 應轉為 null 或 0 | 0 或 null | 非法值清理        |
+| isManualStatus = undefined | undefined      | 省略或 false     | false     | v1 資料缺少此欄位 |
 
 ### 3. tag_tree Round-trip
 
-| 場景 | 測試重點 |
-|------|---------|
-| 空 tag_tree（無 category 和 tag） | `tag_tree: []` 匯出匯入後仍為空陣列 |
-| category 有 tag 但無書籍引用 | tag_tree 包含 tag 但 books 的 tagIds 為空 |
-| tag 被多本書共用 | 匯入時 tag 不重複建立 |
-| 匯入端已有同名但不同 ID 的 tag | ID 衝突處理策略（保留匯入端？合併？） |
-| tag 的 sortOrder 和 color 等可選欄位 | 匯出匯入後可選欄位不遺失 |
-| Unicode 字元（中文 tag 名稱） | 序列化/反序列化不亂碼 |
+| 場景                                 | 測試重點                                  |
+| ------------------------------------ | ----------------------------------------- |
+| 空 tag_tree（無 category 和 tag）    | `tag_tree: []` 匯出匯入後仍為空陣列       |
+| category 有 tag 但無書籍引用         | tag_tree 包含 tag 但 books 的 tagIds 為空 |
+| tag 被多本書共用                     | 匯入時 tag 不重複建立                     |
+| 匯入端已有同名但不同 ID 的 tag       | ID 衝突處理策略（保留匯入端？合併？）     |
+| tag 的 sortOrder 和 color 等可選欄位 | 匯出匯入後可選欄位不遺失                  |
+| Unicode 字元（中文 tag 名稱）        | 序列化/反序列化不亂碼                     |
 
 ### 4. 完整 Round-trip 驗證
 
@@ -97,21 +97,21 @@ Extension 資料（原始）
 
 **一致性檢查點**：
 
-| 檢查項 | 驗證方式 |
-|-------|---------|
-| books 陣列長度 | 完全相等 |
-| 每本書的所有欄位值 | 深度比較（忽略欄位順序） |
-| tag_tree 結構 | 深度比較（忽略陣列元素順序） |
-| format_version | 完全相等 |
-| 匯出時間戳 | 允許不同（匯出時間本來就不同） |
+| 檢查項             | 驗證方式                       |
+| ------------------ | ------------------------------ |
+| books 陣列長度     | 完全相等                       |
+| 每本書的所有欄位值 | 深度比較（忽略欄位順序）       |
+| tag_tree 結構      | 深度比較（忽略陣列元素順序）   |
+| format_version     | 完全相等                       |
+| 匯出時間戳         | 允許不同（匯出時間本來就不同） |
 
 ### 5. 格式偵測
 
-| JSON 結構 | 判定格式 | 處理方式 |
-|----------|---------|---------|
-| 頂層是 Array | v1 舊格式 | 直接作為 books 陣列匯入 |
-| 頂層是 Object，含 `format_version` | Interchange Format v2 | 解析 books + tag_tree |
-| 頂層是 Object，無 `format_version` | 未知格式 | 報錯 |
+| JSON 結構                          | 判定格式              | 處理方式                |
+| ---------------------------------- | --------------------- | ----------------------- |
+| 頂層是 Array                       | v1 舊格式             | 直接作為 books 陣列匯入 |
+| 頂層是 Object，含 `format_version` | Interchange Format v2 | 解析 books + tag_tree   |
+| 頂層是 Object，無 `format_version` | 未知格式              | 報錯                    |
 
 ---
 
@@ -149,23 +149,23 @@ assert.deepStrictEqual(
 
 ### 需要特別注意的陷阱
 
-| 陷阱 | 說明 | 防護 |
-|------|------|------|
-| JSON.stringify 的 key 排序 | 不同引擎可能產生不同的 key 順序 | 比較前排序或用深度比較 |
-| undefined vs 省略 | `{a: undefined}` 和 `{}` 在 JSON 序列化後相同 | 明確定義哪些欄位可省略 |
-| 浮點比較 | 0.33 !== 0.3300000000000004 | 使用 Math.round 轉換後比較整數 |
-| 日期格式 | ISO 8601 毫秒精度差異 | 統一為秒級或毫秒級 |
+| 陷阱                       | 說明                                          | 防護                           |
+| -------------------------- | --------------------------------------------- | ------------------------------ |
+| JSON.stringify 的 key 排序 | 不同引擎可能產生不同的 key 順序               | 比較前排序或用深度比較         |
+| undefined vs 省略          | `{a: undefined}` 和 `{}` 在 JSON 序列化後相同 | 明確定義哪些欄位可省略         |
+| 浮點比較                   | 0.33 !== 0.3300000000000004                   | 使用 Math.round 轉換後比較整數 |
+| 日期格式                   | ISO 8601 毫秒精度差異                         | 統一為秒級或毫秒級             |
 
 ---
 
 ## 風險等級與影響範圍
 
-| 風險點 | 風險等級 | 影響範圍 |
-|-------|---------|---------|
-| Float 精度導致 progress 偏移 | 高 | 所有匯出匯入操作 |
-| tag_tree 序列化不一致 | 中 | 跨裝置同步場景 |
-| 格式偵測誤判 | 中 | v1/v2 格式混用場景 |
-| 欄位名稱映射遺漏 | 高 | 新增欄位時容易漏改 |
+| 風險點                       | 風險等級 | 影響範圍           |
+| ---------------------------- | -------- | ------------------ |
+| Float 精度導致 progress 偏移 | 高       | 所有匯出匯入操作   |
+| tag_tree 序列化不一致        | 中       | 跨裝置同步場景     |
+| 格式偵測誤判                 | 中       | v1/v2 格式混用場景 |
+| 欄位名稱映射遺漏             | 高       | 新增欄位時容易漏改 |
 
 ---
 

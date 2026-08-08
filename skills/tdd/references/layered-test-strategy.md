@@ -8,13 +8,13 @@
 
 ## 五層測試分工表
 
-| Layer | 測試類型 | 覆蓋率要求 | 觸發條件（何時寫測試） | 跳過條件（何時不測） |
-|-------|---------|-----------|---------------------|-------------------|
-| 1 UI/Presentation | 整合測試 | 關鍵流程 100% | 流程失敗影響核心業務、多步驟操作、涉及金流/敏感資料 | 靜態展示頁面、簡單列表 |
-| 2 Application/Behavior | 條件單元測試 | 複雜邏輯 100% | 轉換含條件判斷、計算邏輯、多來源資料、邏輯 >10 行 | 簡單 DTO 欄位直接映射（由 UseCase 層間接覆蓋） |
-| 3 UseCase | BDD 測試 | 行為場景 100% | 所有業務場景，無例外 | 無（必測層） |
-| 4 Interface | 不測試 | 0% | — | 介面只定義合約，無可測試行為 |
-| 5 Domain Implementation | 單元測試 | 分支 100% | 業務規則驗證、計算邏輯、狀態轉換、不變量檢查 | 純資料容器 Entity |
+| Layer                   | 測試類型     | 覆蓋率要求    | 觸發條件（何時寫測試）                              | 跳過條件（何時不測）                           |
+| ----------------------- | ------------ | ------------- | --------------------------------------------------- | ---------------------------------------------- |
+| 1 UI/Presentation       | 整合測試     | 關鍵流程 100% | 流程失敗影響核心業務、多步驟操作、涉及金流/敏感資料 | 靜態展示頁面、簡單列表                         |
+| 2 Application/Behavior  | 條件單元測試 | 複雜邏輯 100% | 轉換含條件判斷、計算邏輯、多來源資料、邏輯 >10 行   | 簡單 DTO 欄位直接映射（由 UseCase 層間接覆蓋） |
+| 3 UseCase               | BDD 測試     | 行為場景 100% | 所有業務場景，無例外                                | 無（必測層）                                   |
+| 4 Interface             | 不測試       | 0%            | —                                                   | 介面只定義合約，無可測試行為                   |
+| 5 Domain Implementation | 單元測試     | 分支 100%     | 業務規則驗證、計算邏輯、狀態轉換、不變量檢查        | 純資料容器 Entity                              |
 
 UseCase 層每個 UseCase 至少涵蓋：1 個正常流程 + 2 個異常流程 + 3 個邊界條件。只 Mock 外層依賴，使用真實 Domain Entity。
 
@@ -36,11 +36,11 @@ UseCase 層每個 UseCase 至少涵蓋：1 個正常流程 + 2 個異常流程 +
 
 覆蓋率數字背後有實際語意，不是為報告好看：
 
-| 層級 | 覆蓋率指標 | 語意 |
-|------|-----------|------|
-| UseCase | 行為場景覆蓋率 100% | 所有業務場景都有測試（非程式碼行數百分比） |
-| Domain | 分支覆蓋率 100% | 每個分支代表一個業務決策，都必須驗證 |
-| 整體新增程式碼 | 80% 以上 | 扣除跳過層（Interface、簡單映射、純資料容器）後的合理基線 |
+| 層級           | 覆蓋率指標          | 語意                                                      |
+| -------------- | ------------------- | --------------------------------------------------------- |
+| UseCase        | 行為場景覆蓋率 100% | 所有業務場景都有測試（非程式碼行數百分比）                |
+| Domain         | 分支覆蓋率 100%     | 每個分支代表一個業務決策，都必須驗證                      |
+| 整體新增程式碼 | 80% 以上            | 扣除跳過層（Interface、簡單映射、純資料容器）後的合理基線 |
 
 ---
 
@@ -48,12 +48,22 @@ UseCase 層每個 UseCase 至少涵蓋：1 個正常流程 + 2 個異常流程 +
 
 測試因業務改變而失敗，代表測試在保護業務正確性——這很好。測試因重構內部實作而大量失敗，代表測試耦合了實作細節——這是設計問題。
 
-| 層級 | 穩定性預期 | 說明 |
-|------|-----------|------|
-| UseCase BDD | 高 | 關注行為，重構內部邏輯只要業務行為不變，測試不需動 |
-| Domain 單元 | 高 | 只有規則本身改變才需更新 |
-| Behavior 條件 | 中 | 只測複雜轉換邏輯，重構簡單映射不影響測試 |
-| UI 整合 | 低 | UI 變動頻繁，只測關鍵流程以控制維護成本 |
+| 層級          | 穩定性預期 | 說明                                               |
+| ------------- | ---------- | -------------------------------------------------- |
+| UseCase BDD   | 高         | 關注行為，重構內部邏輯只要業務行為不變，測試不需動 |
+| Domain 單元   | 高         | 只有規則本身改變才需更新                           |
+| Behavior 條件 | 中         | 只測複雜轉換邏輯，重構簡單映射不影響測試           |
+| UI 整合       | 低         | UI 變動頻繁，只測關鍵流程以控制維護成本            |
+
+---
+
+## 分層之外的兩個補位形態
+
+五層分工假設「假設正確、驗實作」；兩種情境跳出這個假設、需要專屬形態：
+
+**stub 盲區與語意級假後端**：bug 的成因是「我們對外部服務行為的假設錯誤」時，由測試餵資料的 stub 從結構上驗證不出來——stub 回放的就是那個假設、假設與斷言出自同一人之手，測試必然綠。補位是**有狀態的語意級假後端**——「語意級」對比「回放級」（逐請求回放預錄回應）：它持有狀態、模擬已被證實的外部行為（不是想像的行為），讓多個元件走完整互動鏈的流程測試；並與週期性的真實後端驗證測試配對，讓外部行為漂移有地方現形。判讀訊號：整合測試的「後端」沒有自己的狀態機、只在回放——它驗的是自己的假設。
+
+**characterization test（重構與 legacy 適配）**：接手零測試的纏結程式、或重構前無法先寫正確性測試時，先對現有程式跑一次、把實際輸出記錄成預期值——斷言對象是「現在的行為」而不是「正確的行為」。它是重構的安全網：拆依賴的過程紅燈代表行為改了（不一定是 bug、但影響範圍現形）；拆完、正確性測試補上後，characterization test 的歷史使命完成、視重疊程度逐步移除。與正確性測試混用會讓紅燈無法歸因。
 
 ---
 
@@ -72,13 +82,13 @@ UseCase 層每個 UseCase 至少涵蓋：1 個正常流程 + 2 個異常流程 +
 
 monitor 專案非典型 Clean Architecture（monorepo 含多語言 SDK + collector），五層對應需適配：
 
-| 五層 | monitor 對應元件 | 測試方法 |
-|------|-----------------|---------|
-| UseCase | collector handler（接收+驗證+儲存+查詢）、各 SDK 的 flush/batch 邏輯 | BDD 測試（GWT 場景） |
-| Domain | schema validator、event 建構邏輯、query 篩選邏輯 | 單元測試（分支覆蓋 100%） |
-| Behavior | SDK 的 event→JSON 序列化、collector 的 response 格式轉換 | 條件單元測試（有複雜邏輯時） |
-| Interface | `schema/event.schema.json`（契約定義） | 不測試（由 protocol integration 驗證契約實現） |
-| Transport | SDK↔collector HTTP 通訊層 | 見 `protocol-integration-testing.md`（Mock 從結構上無法驗證協議契約） |
+| 五層      | monitor 對應元件                                                     | 測試方法                                                              |
+| --------- | -------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| UseCase   | collector handler（接收+驗證+儲存+查詢）、各 SDK 的 flush/batch 邏輯 | BDD 測試（GWT 場景）                                                  |
+| Domain    | schema validator、event 建構邏輯、query 篩選邏輯                     | 單元測試（分支覆蓋 100%）                                             |
+| Behavior  | SDK 的 event→JSON 序列化、collector 的 response 格式轉換             | 條件單元測試（有複雜邏輯時）                                          |
+| Interface | `schema/event.schema.json`（契約定義）                               | 不測試（由 protocol integration 驗證契約實現）                        |
+| Transport | SDK↔collector HTTP 通訊層                                            | 見 `protocol-integration-testing.md`（Mock 從結構上無法驗證協議契約） |
 
 ---
 
@@ -102,10 +112,10 @@ monitor 專案非典型 Clean Architecture（monorepo 含多語言 SDK + collect
 - `references/doc-handoff.md` — doc→TDD 銜接（UC 場景的整合/單元分工判準）
 - `references/bdd-behavior-testing.md` — BDD 行為測試深度指引（Sociable/Solitary、分層 Mock）
 - `references/protocol-integration-testing.md` — Protocol integration 三層策略（Mock 遮蔽機制）
-- `.claude/methodologies/hybrid-testing-strategy-methodology.md` — 方法論 stub（核心摘要）
 
 ---
 
-**Last Updated**: 2026-06-22
+**Last Updated**: 2026-08-08
+**Version**: 1.1.0 — 新增「分層之外的兩個補位形態」：stub 盲區與語意級假後端（假設與斷言同源、stub 結構上驗不出假設錯誤；補位是有狀態假後端跑流程測試 + 真實後端驗證配對）、characterization test（重構與 legacy 適配、斷言現狀不斷言正確、安全網用完即退場）。同步上游 testing 教材在分層策略之後長出的內容。
 **Version**: 1.0.0 — 從 blog hybrid-testing-strategy-methodology 提煉，整合 monitor 專案對應
 **Source**: `~/Projects/blog/content/record/hybrid-testing-strategy-methodology.md`

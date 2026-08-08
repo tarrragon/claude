@@ -353,7 +353,7 @@ class TestGetUcSummary:
     def test_real_project_standard_ucs_do_not_regress(self):
         """回歸驗證：UC-01~04/07/10（標準單段結構）解析結果不受本次修復影響。
 
-        本專案（flutter_balance）docs/app-use-cases.md 目前僅有 UC-01，
+        本專案 docs/app-use-cases.md 目前僅有 UC-01，
         UC-02~10 屬其他參考專案的既有假設（0.2.1-W1-009 分流判定：測試對
         專案資料過強假設，非 src 缺陷）。專案內不存在的 UC id 一律 skip，
         僅對實際存在者做回歸斷言，避免因專案資料規模而長期紅燈。

@@ -14,29 +14,29 @@ Unit test 全綠但實機全壞——當被測元件的正確性取決於與外�
 
 mock 的遮蔽不是缺陷，而是本質——mock 的職責是讓 unit test 快速且確定性，但協議語意不在其模擬範圍內。
 
-| 層級 | 模擬什麼 | 遮蔽什麼 |
-|------|---------|---------|
-| **API Mock** | 語言 API 的呼叫契約（函式簽名、回傳型別） | 傳輸協議語意（HTTP method、content-type、status code 語意） |
-| **協議語意** | — | 序列化格式差異（JSON 欄位順序、encoding）、認證握手、batch 語意 |
-| **環境真實行為** | — | 真實服務的啟動狀態、版本差異、併發行為 |
+| 層級             | 模擬什麼                                  | 遮蔽什麼                                                        |
+| ---------------- | ----------------------------------------- | --------------------------------------------------------------- |
+| **API Mock**     | 語言 API 的呼叫契約（函式簽名、回傳型別） | 傳輸協議語意（HTTP method、content-type、status code 語意）     |
+| **協議語意**     | —                                         | 序列化格式差異（JSON 欄位順序、encoding）、認證握手、batch 語意 |
+| **環境真實行為** | —                                         | 真實服務的啟動狀態、版本差異、併發行為                          |
 
 ### Monitor 專案 mapping
 
-| 遮蔽面 | 具體風險 |
-|--------|---------|
-| HTTP transport | SDK mock HTTP client 不驗證 POST body 是否符合 `event.schema.json` 的序列化要求 |
-| Schema 驗證 | collector 的 schema validation 邏輯在 mock 環境中未被觸發——SDK 送出格式錯誤的 event，mock 不會拒絕 |
-| Batch flush | SDK 的 batch flush 在 mock 中「總是成功」，真實 collector 可能因 payload 過大或格式錯誤回傳 4xx |
+| 遮蔽面         | 具體風險                                                                                           |
+| -------------- | -------------------------------------------------------------------------------------------------- |
+| HTTP transport | SDK mock HTTP client 不驗證 POST body 是否符合 `event.schema.json` 的序列化要求                    |
+| Schema 驗證    | collector 的 schema validation 邏輯在 mock 環境中未被觸發——SDK 送出格式錯誤的 event，mock 不會拒絕 |
+| Batch flush    | SDK 的 batch flush 在 mock 中「總是成功」，真實 collector 可能因 payload 過大或格式錯誤回傳 4xx    |
 
 ---
 
 ## 三層測試策略
 
-| 層 | 職責 | 驗證什麼 | 遮蔽什麼 |
-|----|------|---------|---------|
-| **Unit（mock）** | 內部邏輯正確性 | 狀態轉換、錯誤處理、資料轉換 | 協議差異、真實服務行為 |
-| **Protocol integration** | 協議契約正確性 | HTTP method/body/status、schema 合規性、batch 語意 | UI 互動、用戶體驗 |
-| **E2E script** | 端到端資料流完整性 | 從 SDK init 到 query 回傳的完整鏈路 | 效能、併發、大規模資料 |
+| 層                       | 職責               | 驗證什麼                                           | 遮蔽什麼               |
+| ------------------------ | ------------------ | -------------------------------------------------- | ---------------------- |
+| **Unit（mock）**         | 內部邏輯正確性     | 狀態轉換、錯誤處理、資料轉換                       | 協議差異、真實服務行為 |
+| **Protocol integration** | 協議契約正確性     | HTTP method/body/status、schema 合規性、batch 語意 | UI 互動、用戶體驗      |
+| **E2E script**           | 端到端資料流完整性 | 從 SDK init 到 query 回傳的完整鏈路                | 效能、併發、大規模資料 |
 
 ### Unit test（保留既有）
 
@@ -66,13 +66,13 @@ mock 的遮蔽不是缺陷，而是本質——mock 的職責是讓 unit test �
 
 ## 何時需要 Protocol Integration Test
 
-| 條件 | 需要 protocol integration test |
-|------|------|
-| 被測元件直接對接外部協議（HTTP/WS/gRPC） | 是 |
-| Mock 和真實服務之間有協議語意差異（序列化、認證、status code） | 是 |
-| 外部服務可在本機啟動（成本低） | 強烈建議 |
-| 被測元件只做資料轉換（不碰網路） | 不需要 |
-| 外部服務只能在雲端啟動（成本高） | 用 contract test 替代 |
+| 條件                                                           | 需要 protocol integration test |
+| -------------------------------------------------------------- | ------------------------------ |
+| 被測元件直接對接外部協議（HTTP/WS/gRPC）                       | 是                             |
+| Mock 和真實服務之間有協議語意差異（序列化、認證、status code） | 是                             |
+| 外部服務可在本機啟動（成本低）                                 | 強烈建議                       |
+| 被測元件只做資料轉換（不碰網路）                               | 不需要                         |
+| 外部服務只能在雲端啟動（成本高）                               | 用 contract test 替代          |
 
 **monitor 專案優勢**：collector 是本機 Go binary，SDK 和 collector 都在同一台機器上。啟動 collector 然後跑 SDK test，成本極低但價值極高——schema 驗證、HTTP status code 語意、batch flush 行為都能在這層直接抓到。
 
@@ -82,22 +82,22 @@ mock 的遮蔽不是缺陷，而是本質——mock 的職責是讓 unit test �
 
 ### Unit（mock）——各 SDK 內部邏輯
 
-| 元件 | 測試目標 | mock 對象 |
-|------|---------|---------|
-| collector（Go） | schema validator、query 篩選、storage 寫入邏輯 | HTTP request（用 `httptest`） |
-| sdk-python | event 建構、session 管理、flush 觸發、retry | HTTP client（用 `unittest.mock`） |
-| sdk-js | event 建構、session 管理、batch queue | fetch（用 test double） |
-| sdk-flutter | event 建構、session 管理、platform channel | HTTP client（用 `MockClient`） |
+| 元件            | 測試目標                                       | mock 對象                         |
+| --------------- | ---------------------------------------------- | --------------------------------- |
+| collector（Go） | schema validator、query 篩選、storage 寫入邏輯 | HTTP request（用 `httptest`）     |
+| sdk-python      | event 建構、session 管理、flush 觸發、retry    | HTTP client（用 `unittest.mock`） |
+| sdk-js          | event 建構、session 管理、batch queue          | fetch（用 test double）           |
+| sdk-flutter     | event 建構、session 管理、platform channel     | HTTP client（用 `MockClient`）    |
 
 ### Protocol integration——SDK↔collector HTTP roundtrip
 
-| 測試路徑 | 驗證重點 |
-|---------|---------|
-| sdk-python → collector | POST body 符合 `event.schema.json`、content-type 為 `application/json`、collector 回傳 200 + accepted count |
-| sdk-js → collector | 同上（fetch API 的 body 序列化） |
-| sdk-flutter → collector | 同上（Dart http package 的序列化） |
-| collector 內部 | schema validation 拒絕不合規 event（回傳 400 + 錯誤訊息） |
-| query roundtrip | POST events → GET /v1/events 回傳正確結果 |
+| 測試路徑                | 驗證重點                                                                                                    |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
+| sdk-python → collector  | POST body 符合 `event.schema.json`、content-type 為 `application/json`、collector 回傳 200 + accepted count |
+| sdk-js → collector      | 同上（fetch API 的 body 序列化）                                                                            |
+| sdk-flutter → collector | 同上（Dart http package 的序列化）                                                                          |
+| collector 內部          | schema validation 拒絕不合規 event（回傳 400 + 錯誤訊息）                                                   |
+| query roundtrip         | POST events → GET /v1/events 回傳正確結果                                                                   |
 
 ### E2E script——完整資料鏈
 

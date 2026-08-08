@@ -27,3 +27,7 @@ Mock 模擬的是 API 層的契約（方法簽名、參數型別），不模擬�
 ## Reliability 維度的銜接
 
 reliability 維度的「測試起始集」應該明確層級：unit test 覆蓋業務邏輯分支、protocol integration test 覆蓋外部服務互動（至少涵蓋 event catalog 中跨 domain 的協議路徑）。「名義 integration test」（名稱含 integration 但全用 fake）要辨識並標明真實驗證邊界。
+
+---
+
+本卡是 skill 內的語境化版本、自成權威——與任何上游教材或外部原則卡的措辭差異不視為漂移、以本卡為準。

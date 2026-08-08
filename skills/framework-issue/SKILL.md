@@ -147,7 +147,7 @@ framework issue，而非在本地當下修復。本節定義四個環節：介�
 
 | 判準 | 說明 |
 |------|------|
-| 抽象可攜性 | 敘述替換掉本專案名稱與檔案路徑後依然成立（例如「Hook X 對某類副檔名誤判」而非「flutter_balance 的 Y 檔案有 bug」） |
+| 抽象可攜性 | 敘述替換掉本專案名稱與檔案路徑後依然成立（例如「Hook X 對某類副檔名誤判」而非「<專案名> 的 Y 檔案有 bug」） |
 | 資產範圍 | 問題根源在 `.claude/` 下的通用資產（hooks / skills / rules / methodologies / agents），非 `lib/`、`docs/` 等專案專屬產物 |
 
 **Why**：框架資產由 sync-push / sync-pull 在多個 consumer 專案間共享，本地

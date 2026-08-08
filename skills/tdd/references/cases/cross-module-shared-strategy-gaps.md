@@ -15,11 +15,11 @@ BookSchemaV2 和 TagSchema 分別在 W1 規格中定義，各自描述了驗證�
 
 ### 具體數據
 
-| 項目 | BookSchemaV2 | TagSchema |
-|------|-------------|-----------|
-| 驗證邏輯位置 | BookSchemaV2.js:81-123 | TagSchema.js:57-107 |
-| 驗證項目 | 字串長度、格式、必填 | 字串長度、格式、必填 |
-| 重複行數估計 | ~50 行 | ~50 行 |
+| 項目         | BookSchemaV2           | TagSchema            |
+| ------------ | ---------------------- | -------------------- |
+| 驗證邏輯位置 | BookSchemaV2.js:81-123 | TagSchema.js:57-107  |
+| 驗證項目     | 字串長度、格式、必填   | 字串長度、格式、必填 |
+| 重複行數估計 | ~50 行                 | ~50 行               |
 
 ### 根因
 
@@ -80,11 +80,11 @@ v1 Schema 使用 `author`（字串），v2 Schema 改為 `authors`（陣列）�
 
 Q_new1 回答：
 
-| 舊版本欄位 | 新版本欄位 | 型別變化 | 遷移邏輯 |
-|-----------|-----------|---------|---------|
-| author | authors | string -> string[] | `[book.author]` 包裝為陣列 |
-| status | readingStatus | string -> enum | 映射表見 migration spec |
-| category | tags | string -> Tag[] | 轉換為 Tag 物件陣列 |
+| 舊版本欄位 | 新版本欄位    | 型別變化           | 遷移邏輯                   |
+| ---------- | ------------- | ------------------ | -------------------------- |
+| author     | authors       | string -> string[] | `[book.author]` 包裝為陣列 |
+| status     | readingStatus | string -> enum     | 映射表見 migration spec    |
+| category   | tags          | string -> Tag[]    | 轉換為 Tag 物件陣列        |
 
 有了映射表，所有消費端程式碼都能查表確認正確的欄位名稱。
 

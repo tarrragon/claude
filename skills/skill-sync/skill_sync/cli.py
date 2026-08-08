@@ -14,8 +14,13 @@ import sys
 import tempfile
 import urllib.request
 from pathlib import Path
+from typing import NamedTuple
 
 DEFAULT_REPO = "https://github.com/tarrragon/claude-skills.git"
+
+# 取遠端 manifest 的等待上限。正常回應 0.5-1.2 秒，被防火牆黑洞時會用滿整個
+# 上限；這份資料只影響一段資訊性報告，不值得讓呼叫端多等十秒。
+REMOTE_FETCH_TIMEOUT_SECONDS = 5
 EXCLUDE_DIRS = {
     "project-integration",
     ".venv",
@@ -30,6 +35,46 @@ EXCLUDE_DIRS = {
 # （0.2.1-W3-124 acceptance 4 的宣告式 local override 決策：見 update_sync_manifest
 # 與 _classify_sync_status 的 docstring）。
 SKILL_SYNC_OVERRIDE_MARKER = ".skill-sync-override"
+
+
+class DivergedSkill(NamedTuple):
+    """One skill whose local content differs from the remote copy.
+
+    Carries its own remediation commands so consumers print what this module
+    says to run, rather than each keeping a hand-written copy that drifts from
+    the actual subcommands.
+    """
+
+    name: str
+    local: str
+    remote: str
+    pull_command: str
+    push_command: str
+
+
+class SyncStatus(NamedTuple):
+    """Outcome of comparing every installed skill against the remote manifest.
+
+    Named fields rather than a bare tuple: consumers unpack this across module
+    boundaries, and a positional tuple turns any added category into a
+    `ValueError` at the call site instead of a compatible addition.
+    """
+
+    repo_url: str
+    remote_count: int
+    up_to_date: list[str]
+    diverged: list[DivergedSkill]
+    overridden: list[str]
+    skipped_no_hash: list[str]
+
+    @property
+    def local_count(self) -> int:
+        return (
+            len(self.up_to_date)
+            + len(self.diverged)
+            + len(self.overridden)
+            + len(self.skipped_no_hash)
+        )
 
 
 def _should_exclude_file(rel_path: str) -> bool:
@@ -58,6 +103,15 @@ def _extract_version_string(text: str) -> str | None:
 
 def compute_content_hash(skill_dir: Path) -> str | None:
     """依檔案內容計算 skill 目錄的確定性雜湊，取代版本字串作為內容同一性判定依據。
+
+    與 `.claude/lib/sync_exclude_manifest.py` 的同名函式語意不相容，兩者的值
+    不可互相比較：本函式的作用域是單一 skill 目錄（該檔是整個 `.claude/`）、
+    摘要以 (路徑 bytes, 內容 bytes) 直接餵入單一 hasher（該檔先組
+    `"路徑:sha256"` 文字再雜湊）、輸出完整 64 字（該檔截斷 16 字）、目錄不存在
+    回傳 None（該檔無此語意），排除集亦不同（本函式另排除
+    SKILL_SYNC_OVERRIDE_MARKER）。本函式的雜湊值已持久化於遠端 versions.json，
+    改動摘要形式會讓全部遠端 hash 失效，故兩者不合併。
+
 
     對 (相對路徑, 檔案位元組) 依路徑排序後逐一雜湊，雜湊值只反映內容與檔案樹結構，
     與 mtime、掃描順序、檔案系統無關：相同內容不論何處產生都得到相同雜湊，內容不同
@@ -206,9 +260,22 @@ def compute_diff(src: Path, dst: Path) -> dict[str, list[str]]:  # i18n-exempt
 
 
 def print_diff_preview(diff: dict[str, list[str]], direction: str) -> None:
-    """Print a human-readable diff preview."""
+    """Print a human-readable diff preview.
+
+    The dst-only label tracks what will actually happen: a `diff`/plan whose
+    "prunable" entry is non-empty means those files get deleted, so labelling
+    them "preserved" would misreport a destructive operation as a safe one.
+    `prune` used to be a separate bool parameter that callers had to keep in
+    sync with the plan by hand; folding it into the plan (see
+    `build_push_plan`) removes that duplicate source of truth.
+    """
     has_changes = diff["added"] or diff["modified"]
-    preserve_label = "remote-only (preserved)" if direction == "push" else "local-only (preserved)"
+    if direction == "push" and diff.get("prunable"):
+        preserve_label = "PRUNE (will be deleted)"
+    else:
+        preserve_label = (
+            "remote-only (preserved)" if direction == "push" else "local-only (preserved)"
+        )
 
     if not has_changes and not diff["dst_only"]:
         print("  No changes detected.")
@@ -247,6 +314,88 @@ def overlay_copy(src: Path, dst: Path, diff: dict[str, list[str]]) -> int:
         shutil.copy2(src_file, dst_file)
         copied += 1
     return copied
+
+
+def prune_dst_only(dst: Path, diff: dict[str, list[str]]) -> int:
+    """Delete dst-only files, then drop directories the deletion left empty.
+
+    Only entries `compute_diff` classified as dst_only are touched for file
+    deletion, so EXCLUDE_DIRS content (project-integration/, hook-logs/, ...)
+    is out of reach by construction — it never enters that list. `unlink`
+    uses `missing_ok=True`: a file already gone by the time we get here (TOCTOU
+    against the earlier compute_diff snapshot) is not a failure to report,
+    just nothing left to remove.
+
+    Empty-directory cleanup is unconditional rather than limited to
+    directories this call emptied: git tracks files, not directories, so a
+    leftover empty directory is local noise that would never reach the remote
+    anyway, and scanning for "which ones did I empty" costs more than it
+    protects. That scan does apply `_should_exclude_file`, though — an
+    EXCLUDE_DIRS directory that happens to already be empty (e.g.
+    project-integration/ before any consumer has written into it) must
+    survive prune the same way its contents would, otherwise the "--prune
+    cannot reach EXCLUDE_DIRS" guarantee only holds for non-empty ones. The
+    scan also treats a symlink pointing at a directory as `is_dir()` (Python
+    follows the link), but `rmdir()` on a symlink raises `NotADirectoryError`
+    on POSIX; that and any other unexpected `OSError` (permission errors,
+    races) are swallowed here rather than propagated, because by this point
+    `overlay_copy` has already mutated the staging clone and letting an
+    empty-directory cleanup error abort the whole push would leave that clone
+    half-applied with no user-visible recovery step.
+    """
+    removed = 0
+    for rel in diff["dst_only"]:
+        target = dst / rel
+        if target.is_file() or target.is_symlink():
+            target.unlink(missing_ok=True)
+            removed += 1
+
+    if removed:
+        directories = [p for p in dst.rglob("*") if p.is_dir()]
+        for directory in sorted(directories, key=lambda p: len(p.parts), reverse=True):
+            rel = str(directory.relative_to(dst))
+            if _should_exclude_file(rel):
+                continue
+            try:
+                if not any(directory.iterdir()):
+                    directory.rmdir()
+            except OSError:
+                continue
+
+    return removed
+
+
+def build_push_plan(diff: dict[str, list[str]], prune: bool) -> dict[str, list[str]]:
+    """Fold the prune decision into the diff, producing a single plan.
+
+    `print_diff_preview` and `prune_dst_only` previously each took `prune`
+    (or a value derived from it) as a separate argument alongside `diff`,
+    which meant every caller was responsible for keeping the two in sync by
+    hand. `prunable` says exactly what will be deleted, so a caller that
+    passes the plan around no longer needs to also thread a bool through.
+    """
+    plan = dict(diff)
+    plan["prunable"] = list(diff["dst_only"]) if prune else []
+    return plan
+
+
+def _apply_prune(target: Path, plan: dict[str, list[str]]) -> int:
+    """Delete `plan`'s prunable entries and report the result.
+
+    Warns on stderr when the actual removed count diverges from what the
+    preview promised (`len(plan["prunable"])`), so a partial deletion — e.g.
+    a file the preview counted but a filesystem race already removed — is
+    surfaced instead of being reported as if the full prune succeeded.
+    """
+    prunable = plan["prunable"]
+    pruned = prune_dst_only(target, plan)
+    if pruned != len(prunable):
+        print(
+            f"  [WARNING] pruned {pruned} file(s) but preview promised {len(prunable)}",
+            file=sys.stderr,
+        )
+    print(f"  Pruned {pruned} remote-only file(s).")
+    return pruned
 
 
 def cmd_pull(args: argparse.Namespace) -> None:
@@ -299,6 +448,7 @@ def cmd_push(args: argparse.Namespace) -> None:
     name: str = args.name
     message: str = args.message or f"Update skill: {name}"
     force: bool = args.force
+    prune: bool = getattr(args, "prune", False)
     repo_url = get_repo_url()
     skills_dir = get_skills_dir()
     source = skills_dir / name
@@ -323,14 +473,21 @@ def cmd_push(args: argparse.Namespace) -> None:
             print(f"\n  [Version] local {local_ver} vs remote {remote_ver}")
 
         diff = compute_diff(source, target)
+        plan = build_push_plan(diff, prune)
         print("\n[Push Preview]")
-        print_diff_preview(diff, direction="push")
+        print_diff_preview(plan, direction="push")
 
-        if not diff["added"] and not diff["modified"]:
+        prunable = plan["prunable"]
+        # Deletions alone are a real change: without prunable in this guard,
+        # `--prune` on an otherwise-identical skill would report "nothing to
+        # push" and silently skip the deletions the flag was asked for.
+        if not diff["added"] and not diff["modified"] and not prunable:
             print("\nNo changes to push.")
             return
 
-        if diff["dst_only"]:
+        if prunable:
+            print(f"\n  Note: {len(prunable)} remote-only file(s) will be DELETED (--prune).")
+        elif diff["dst_only"]:
             print(f"\n  Note: {len(diff['dst_only'])} remote-only file(s) will be preserved (not deleted).")
 
         if not force:
@@ -344,6 +501,8 @@ def cmd_push(args: argparse.Namespace) -> None:
                 return
 
         overlay_copy(source, target, diff)
+        if prunable:
+            _apply_prune(target, plan)
 
         run_git(["add", "-A"], cwd=tmp)
 
@@ -404,67 +563,116 @@ def _classify_sync_status(
     return up_to_date, diverged, overridden, skipped_no_hash
 
 
+def fetch_remote_manifest(repo_url: str) -> object:
+    """Fetch versions.json for the given repo. Raises on network or parse failure.
+
+    The GitHub-to-raw URL rewrite lives here and nowhere else. A consumer that
+    re-derives it also re-derives the repo it points at, and then compares local
+    content against a different remote than `skill-sync` itself uses
+    (see ARCH-BAL-016).
+    """
+    raw_url = repo_url.replace(
+        "https://github.com/", "https://raw.githubusercontent.com/"
+    ).removesuffix(".git") + "/main/versions.json"
+    req = urllib.request.Request(raw_url, headers={"User-Agent": "skill-sync"})
+    # magic-exempt
+    with urllib.request.urlopen(req, timeout=REMOTE_FETCH_TIMEOUT_SECONDS) as resp:
+        return json.loads(resp.read())
+
+
+def sync_status_report(
+    skills_dir: Path, repo_url: str | None = None
+) -> SyncStatus:
+    """Compare every installed skill against the remote manifest.
+
+    This is the public entry point for consumers outside this CLI. It owns the
+    whole path — repo resolution, fetch, classification — so a consumer needs
+    exactly one call and cannot end up resolving the repo differently from the
+    CLI itself.
+
+    Raises `ValueError` when the remote manifest is not a JSON object, and
+    whatever `urlopen` raises when the remote is unreachable. Callers decide how
+    to degrade: `cmd_pull_all` reports and stops, an informational consumer may
+    downgrade to a warning. Deciding that here would force one policy on both.
+    """
+    resolved_url = repo_url or get_repo_url()
+    remote_manifest = fetch_remote_manifest(resolved_url)
+    if not isinstance(remote_manifest, dict):
+        raise ValueError(
+            f"versions.json is {type(remote_manifest).__name__}, expected an object"
+        )
+
+    local_manifest = _extract_local_manifest(skills_dir)
+    up_to_date, diverged, overridden, skipped_no_hash = _classify_sync_status(
+        local_manifest, remote_manifest, skills_dir
+    )
+    return SyncStatus(
+        repo_url=resolved_url,
+        remote_count=len(remote_manifest),
+        up_to_date=up_to_date,
+        diverged=[
+            DivergedSkill(
+                name=name,
+                local=local_display,
+                remote=remote_display,
+                pull_command=f"skill-sync pull {name}",
+                push_command=f"skill-sync push {name}",
+            )
+            for name, local_display, remote_display in diverged
+        ],
+        overridden=overridden,
+        skipped_no_hash=skipped_no_hash,
+    )
+
+
 def cmd_pull_all(args: argparse.Namespace) -> None:
     """掃描本地已安裝 skill，以內容雜湊比對 versions.json，回報分歧供人工處理。
 
     --force 對此路徑無效：分歧不再自動套用（見 _classify_sync_status），每個分歧
     項目一律需個別執行 `skill-sync pull <name>` 或 `skill-sync push <name>` 決定方向。
     """
-    repo_url = get_repo_url()
     skills_dir = get_skills_dir()
 
-    local_manifest = _extract_local_manifest(skills_dir)
-    if not local_manifest:
+    try:
+        status = sync_status_report(skills_dir)
+    except Exception as e:
+        print(f"Failed to read remote versions.json: {type(e).__name__}: {e}")
+        print("Use 'skill-sync pull <name>' to work on a single skill instead.")
+        return
+
+    if not status.local_count:
         print("No local skills found.")
         return
 
-    raw_url = repo_url.replace(
-        "https://github.com/", "https://raw.githubusercontent.com/"
-    ).removesuffix(".git") + "/main/versions.json"
-
-    try:
-        req = urllib.request.Request(raw_url, headers={"User-Agent": "skill-sync"})
-        # magic-exempt
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            remote_manifest: dict = json.loads(resp.read())
-    except Exception as e:
-        print(f"Failed to fetch versions.json: {e}")
-        print("Falling back to individual pull...")
-        remote_manifest = {}
-
-    if not remote_manifest:
-        print("versions.json not available. Use 'skill-sync pull <name>' instead.")
+    if not status.remote_count:
+        print("versions.json is empty. Use 'skill-sync pull <name>' instead.")
         return
 
-    up_to_date, diverged, overridden, skipped_no_hash = _classify_sync_status(
-        local_manifest, remote_manifest, skills_dir
-    )
-
-    if overridden:
-        print(f"[OVERRIDE] {len(overridden)} skill(s) declared local override "
+    if status.overridden:
+        print(f"[OVERRIDE] {len(status.overridden)} skill(s) declared local override "
               f"(skipped from divergence check):")
-        for name in overridden:
+        for name in status.overridden:
             print(f"  {name}")
 
-    if skipped_no_hash:
-        print(f"\n[SKIP] {len(skipped_no_hash)} skill(s) have no remote hash data yet "
+    if status.skipped_no_hash:
+        print(f"\n[SKIP] {len(status.skipped_no_hash)} skill(s) have no remote hash data yet "
               f"(remote versions.json needs regenerating via next 'skill-sync push'):")
-        for name in skipped_no_hash:
+        for name in status.skipped_no_hash:
             print(f"  {name}")
 
-    if not diverged:
-        print(f"\nAll {len(up_to_date)} checked skill(s) are up to date.")
+    if not status.diverged:
+        print(f"\nAll {len(status.up_to_date)} checked skill(s) are up to date.")
         return
 
-    print(f"\n[DIVERGED] {len(diverged)} skill(s) differ from remote by content. "
+    print(f"\n[DIVERGED] {len(status.diverged)} skill(s) differ from remote by content. "
           f"Direction unknown from hash alone — review and resolve manually:\n")
-    for name, local_display, remote_display in diverged:
-        print(f"  {name}: local({local_display}) vs remote({remote_display})")
-        print(f"    -> skill-sync pull {name}   # inspect/take remote content")
-        print(f"    -> skill-sync push {name}   # inspect/send local content")
+    for entry in status.diverged:
+        print(f"  {entry.name}: local({entry.local}) vs remote({entry.remote})")
+        print(f"    -> {entry.pull_command}   # inspect/take remote content")
+        print(f"    -> {entry.push_command}   # inspect/send local content")
 
-    if up_to_date:
-        print(f"\n{len(up_to_date)} other skill(s) are up to date.")
+    if status.up_to_date:
+        print(f"\n{len(status.up_to_date)} other skill(s) are up to date.")
 
 
 def _extract_single_version(skill_md: Path) -> str | None:
@@ -530,7 +738,15 @@ def cmd_list(args: argparse.Namespace) -> None:
             print(f"{d:<30} {desc}")
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser.
+
+    Separated from main() so callers can inspect the available subcommands and
+    flags without executing anything — consumers that print "run skill-sync X"
+    guidance can assert X exists instead of the string silently going stale
+    (0.2.1-W3-351: sync-claude-push advertised a `pull-all` subcommand that
+    never existed).
+    """
     parser = argparse.ArgumentParser(
         prog="skill-sync",
         description="Sync Claude Code skills with a remote repository.",
@@ -548,10 +764,15 @@ def main() -> None:
     push_parser.add_argument("-m", "--message", help="Commit message", default=None)
     push_parser.add_argument("--force", "-f", action="store_true",
                              help="Apply changes without confirmation")
+    push_parser.add_argument("--prune", action="store_true",
+                             help="Delete remote-only files (default: keep them)")
 
     sub.add_parser("list", help="List available skills in remote repo")
+    return parser
 
-    args = parser.parse_args()
+
+def main() -> None:
+    args = build_parser().parse_args()
 
     if args.command == "pull" and args.name is None:
         cmd_pull_all(args)

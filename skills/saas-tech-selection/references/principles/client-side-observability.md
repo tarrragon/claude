@@ -32,3 +32,7 @@ Client-side SDK 的公開 API 是 init / event / error / metric / flush / close�
 ## 和 server-side observability 的分工
 
 Server-side observability 是必展開、回答「服務掛了怎麼知道」。Client-side observability 是觸發展開、回答「使用者的裝置上發生了什麼」。兩者獨立設計但共用 correlation 機制（request ID、session ID 在 client 產生、server 端記錄）。
+
+---
+
+本卡是 skill 內的語境化版本、自成權威——與任何上游教材或外部原則卡的措辭差異不視為漂移、以本卡為準。

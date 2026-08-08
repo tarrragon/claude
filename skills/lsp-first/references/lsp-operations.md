@@ -27,7 +27,7 @@ LSP(operation="goToDefinition", filePath="lib/main.dart", line=15, character=10)
 
 **範例**：
 ```
-LSP(operation="findReferences", filePath="lib/domains/book/book.dart", line=26, character=6)
+LSP(operation="findReferences", filePath="lib/domains/book/book.dart", line=26, character=6)  <!-- skill-residue-exempt: 範例情境的示意路徑，非本專案實際檔案 -->
 ```
 
 ## 3. hover - 懸停資訊

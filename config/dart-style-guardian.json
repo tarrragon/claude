@@ -1,0 +1,17 @@
+{
+  "_comment": "style_checker.py 的專案專屬校準。缺此檔時腳本以中性預設運作並提示——預設不假設任何 token 命名，避免把他專案的慣例當成本專案的正確答案。",
+  "tokens": {
+    "color": "AppPalette",
+    "spacing": "AppSpacing",
+    "font_size": "AppTypography",
+    "border_radius": "AppRadius"
+  },
+  "i18n": {
+    "accessor": "AppLocalizations.of(context).keyName",
+    "compliance_pattern": "AppLocalizations\\.of\\("
+  },
+  "exempt_markers": [
+    "magic-exempt",
+    "i18n-exempt"
+  ]
+}

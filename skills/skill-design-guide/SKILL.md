@@ -263,7 +263,7 @@ description: [...]
 
 | 規則 | 反例 → 正例 |
 |------|------------|
-| 具體可操作 | `Validate the data before proceeding.` → `Run python scripts/validate.py --input {filename}. If exit code != 0, see references/errors.md` |
+| 具體可操作 | `Validate the data before proceeding.` → `Run python scripts/validate.py --input {filename}. If exit code != 0, see references/errors.md` |  <!-- skill-residue-exempt: 範例情境的示意路徑，非本專案實際檔案 -->
 | 包含錯誤處理 | （只寫成功路徑） → 額外加 `## Common Issues` 段 |
 | 重要指令前置 | 散落在中段 → 用 `## Important` / `## Critical` 標題 + 必要時重複 |
 | 一致術語 | 混用「endpoint / URL / route」 → 全 skill 統一一個詞 |

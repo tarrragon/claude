@@ -3,7 +3,7 @@ name: saas-tech-selection
 description: "初始化 SaaS repo 時的設計與選型訪談協議：定錨後先過交付形態 gate（託管平台 / 垂直 SaaS / 辦公生態自動化 / BaaS / 半託管 CMS / 自建）、自建成立才從使用者操作（BDD）推導功能與風險、依 SRP / OCP 切分 domain 與 event（DDD）、再把技術維度掛在領域骨架下逐項確認、每個維度附不可沉默跳過的防護底線、產出設計決策記錄與 scaffold 建議。Triggers: 初始化 repo, 新專案, 開新服務, SaaS 選型, 技術選型, tech stack, 要不要自建, 託管平台, Shopify, Wix, Firebase, WordPress, Apps Script, DDD, domain 切分, event 驅動, event storming, BDD, 行為情境, 使用者操作盤點, 選資料庫, 選 queue, 要不要 redis, 要不要 k8s, MVP 架構, repo scaffold, 專案起手, stack 評估, 選型訪談, 架構訪談."
 license: MIT
 metadata:
-  version: 0.9.0
+  version: 0.8.0
   category: selection-protocol
 ---
 
@@ -43,19 +43,6 @@ metadata:
 ### Stage 1.5：畫面狀態矩陣展開（條件式、產品有 UI 元件才執行）
 
 操作清單的「前端引導」欄只描述顯示，容易漏掉操作和退出路徑。產品有 UI 元件時，把操作清單展開成畫面狀態矩陣 — 每個畫面的每個狀態四欄（顯示 / 可用操作 / 進入條件 / 退出路徑）。退出路徑欄為空 = UX 死胡同。每個 gate 用三問展開（成功 / 失敗 / 不確定）。展開原則見 `references/principles/screen-state-matrix-expansion.md`、操作步驟在 `references/user-operations-bdd.md` 的「畫面狀態矩陣展開」段。
-
-### Stage 1.6：UX 形態因素判定（條件式，產品有 UI 元件才執行）
-
-產品有 UI 元件時，形態因素決策先於元件庫設計、屬 SPEC 階段先決——結論決定元件庫是單一響應式結構，還是分版型雙軌 builder + 獨立元件設計；晚定形回溯成本高於訪談階段多問幾題。四維決策問題（引用 `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`「形態因素先決」）：
-
-| 維度     | 決策問題                                                                     |
-| -------- | ----------------------------------------------------------------------------- |
-| 裝置光譜 | 手機 / 平板 / 桌面 / 摺疊機，各自是否為正式支援目標？                        |
-| 方向支援 | 直持 / 橫持是否皆支援？版型差異大到需獨立 builder 與獨立元件設計，或以響應式單一元件涵蓋？ |
-| 特殊表面 | 桌面 widget、懸浮視窗、畫中畫等系統表面是否需要？其尺寸約束是否需獨立元件變體？ |
-| 斷點策略 | RWD 斷點由 design token 統一定義，禁止元件各自硬編碼斷點                     |
-
-**防護底線（不可沉默跳過）**：版型拆分（雙 builder）是重大成本決策，須於 SPEC 階段決定並記錄；使用者未明文表態即預設單一響應式元件庫，不可由後續開發階段自行決定拆分。
 
 ### Stage 2：Domain / Event 切分（DDD）
 
@@ -110,7 +97,6 @@ metadata:
 | 產品是開源自架工具（開發者工具 / CLI 工具 / 自架服務、源碼公開）                            | `references/interview-core.md`（開源自架工具中間流程 + 開源替代品 check）                                                   |
 | 開始盤點功能、使用者說「我要做一個 X 的服務」                                               | `references/user-operations-bdd.md`（操作盤點）                                                                             |
 | 操作清單完成、產品有 UI 元件、要展開畫面狀態矩陣                                            | `references/user-operations-bdd.md`（Stage 1.5 畫面狀態矩陣展開）+ `references/principles/screen-state-matrix-expansion.md` |
-| 產品有 UI 元件、要判斷是否需分版型雙軌設計（裝置光譜 / 方向支援 / 特殊表面 / 斷點策略）      | 本檔 Stage 1.6（UX 形態因素判定）+ `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`「形態因素先決」 |
 | 操作清單完成、要切 domain / 定 event                                                        | `references/domain-event-modeling.md`（domain / event 切分）                                                                |
 | 判斷一塊 domain / 維度該自建還是買、或候選 vendor 一次 cover 多維度（跨能力 bundle / BaaS） | `references/principles/capability-outsourcing-depth.md`（外包深度三分層）                                                   |
 | 領域模型完成、要判讀技術需求                                                                | `references/interview-core.md`（定錨 + 核心問題）                                                                           |
@@ -172,5 +158,7 @@ saas-tech-selection/
 
 ---
 
-**Version**: 1.1.0 — 新增 Stage 1.6「UX 形態因素判定」（裝置光譜 / 方向支援 / 特殊表面 / 斷點策略四維，引用 `component-library-bidirectional-constraint-methodology.md`「形態因素先決」），附防護底線：版型拆分屬 SPEC 階段決策，未明文即預設單一響應式；觸發路由表同步新增對應列
-**Version**: 1.0.0（歷史）
+**Last Updated**: 2026-08-08
+**Version**: 1.2.0 — 多輪審查修正。鏈路實證抓到「流入 proposal 驗收條件」是缺映射列的宣稱：文件維護承諾改列入 reliability 防護底線第 5 條（搭上既有「§4/5 底線→驗收條件」移交列、鏈路在檔案層閉合、只照模板填的人也不會漏）。兩處轉述失真修正：語意級假後端改標「分層之外」（v1.1.0 誤塞進 protocol integration 層、與上游教材及同段「名稱含 integration 但依賴全 fake 要辨識」自相矛盾——該層的真實服務互動由週期性真實後端驗證承擔）；適用情境「對方行為常變」刪除（上游教材裡那是重評 tripwire、搬成適用條件是方向顛倒）、改為「已出現假設錯誤型的漏網 bug」。decision-record「中途改決策回到記錄改對應段落」改為追加補記段（修掉與 append-only 宣告的檔內矛盾）。防護型測試補定義 gloss、判準句補「答不出」分支的行動、訪談表 fmt 重排。冷讀輪另修：判準段拆兩段（判準 + 下限、後端不可控 variant）、「假設錯誤型漏網 bug」補行內 gloss、「從權威來源生成」補例、「一次性 scaffold」改「一次性產出（scaffold）」避免與 repo scaffold 語意碰撞、決策記錄模板補「## 補記」段格式示意（append-only 慣例的落地格式、免得各專案自己發明）。
+**Version**: 1.1.0 — 提案階段承接「程度決策」的補強。reliability 維度：訪談問句加「還打算把哪些文件維護到最新、誰守著」（答案決定文件分級——活文件配機制、其餘明示為一次性 scaffold 或時點記錄、流入 proposal 驗收條件）；「測試寫到什麼程度」補防護視角判準（每條測試答得出「未來哪種改壞要被擋」、程度下限是核心操作的改壞在合併前發聲）與語意級假後端選項（後端不可控時 stub 回放自己的假設、驗不出假設錯誤）；決策記錄要記什麼同步兩項。decision-record-template：明示決策記錄是 append-only 時點記錄、重評走新記錄不回改。references/principles/ 四張卡補「自成權威」宣告——它們是上游教材的語境化快照、消滅無機制的同步期待。
+**Version**: 1.0.0 — 版號基線補標（既有內容首次標版、依版號規則）。

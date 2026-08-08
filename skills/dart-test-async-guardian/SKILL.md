@@ -210,7 +210,7 @@ flutter test --reporter compact
 ```bash
 # 掃描單個測試檔案（嚴格模式）
 uv run .claude/skills/dart-test-async-guardian/scripts/async_resource_scanner.py \
-  test/unit/domains/scanner/book_query_service_test.dart
+  test/unit/domains/scanner/book_query_service_test.dart  <!-- skill-residue-exempt: 範例情境的示意路徑，非本專案實際檔案 -->
 
 # 掃描整個測試目錄
 uv run .claude/skills/dart-test-async-guardian/scripts/async_resource_scanner.py \

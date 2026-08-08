@@ -36,10 +36,9 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List, Set, Tuple
 
 _FRAMEWORK_HOOKS = str(Path(__file__).resolve().parents[3] / "hooks")
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, _FRAMEWORK_HOOKS)
 
-from lib import (
+from hook_utils import (
     setup_hook_logging,
     run_hook_safely,
     read_json_from_stdin,
@@ -514,7 +513,12 @@ def main() -> int:
             _output_success()
             return EXIT_SUCCESS
 
+        # Effort 感知（v2.1.133+，W14-036）：low effort 短路放行
         effort = get_effort_level(input_data)
+        if effort == "low":
+            logger.info("effort=low，layer-boundary-validator 短路放行")
+            _output_success()
+            return EXIT_SUCCESS
         logger.info("effort=%s，執行完整 layer-boundary 驗證", effort)
 
         # 檢測 subagent 環境

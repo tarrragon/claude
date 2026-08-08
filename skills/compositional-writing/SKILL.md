@@ -1,9 +1,9 @@
 ---
 name: compositional-writing
-description: "Composes atomic, intent-revealing, grep-friendly writing (Zettelkasten) for code comments, docs, logs, prompts, schema/ticket fields, external-analysis transformation, and long-form technical articles. Use when cognitive load and token cost matter. **Also triggers during multi-round review / batch review / 寫作 audit** — provides the keyword bank (正向陳述 / 口語修辭 / 地區用語 / 廢話前綴 / 裝飾符號 / 對讀者喊話 / 自評誇飾 / 必然性框架 / 澄清式框架) and frame-specific check lists that multi-round-review reviewer agents need. Triggers: 寫註解, 寫文件, 寫日誌, 寫 prompt, 寫文章, 技術文章, 商業分析, 外部分析文章, 經驗談轉教學, 訪談整理, 機制重建, post-mortem, 架構決策, 除錯復盤, 欄位設計, atomic, reusable, 多輪審查, multi-round review, batch review, 寫作 audit, 正向陳述, 口語修辭, 字句層 grep, SOLID, 文章拆分, 結構決策, 擴充點, 依賴方向, 讀者分流."
+description: "Composes atomic, intent-revealing, grep-friendly writing (Zettelkasten) for code comments, docs, logs, prompts, schema/ticket fields, external-analysis transformation, and long-form technical articles. Use when cognitive load and token cost matter. **Also triggers during multi-round review / batch review / 寫作 audit** — provides the keyword bank (正向陳述 / 口語修辭 / 地區用語 / 廢話前綴 / 裝飾符號 / 對讀者喊話 / 自評誇飾 / 必然性框架 / 澄清式框架 / 敘事姿態) and frame-specific check lists that multi-round-review reviewer agents need. Triggers: 寫註解, 寫文件, 寫日誌, 寫 prompt, 寫文章, 技術文章, 商業分析, 外部分析文章, 經驗談轉教學, 訪談整理, 機制重建, post-mortem, 架構決策, 除錯復盤, 檢討報告, 欄位設計, atomic, reusable, 多輪審查, multi-round review, batch review, 寫作 audit, 正向陳述, 口語修辭, 問句標題, 敘事視角, 字句層 grep, SOLID, 文章拆分, 結構決策, 擴充點, 依賴方向, 讀者分流."
 license: MIT
 metadata:
-  version: 0.30.0
+  version: 0.50.1
   category: writing-methodology
 ---
 
@@ -53,7 +53,7 @@ metadata:
 
 **選項數由議題本身的合理選項數決定**：機會成本的精神是「教思考方式」 — 議題有幾個合理選項就寫幾個（2 個寫 A/B、3 個寫 A/B/C、4 個寫 A/B/C/D）。強湊到固定數量會把「教思考」退化成「填格式」、生出「實務上幾乎不存在」的低品質假反模式。真正的反模式直接標「D：反模式 — 違反 X 原則」、給讀者明確的「為什麼這條路該避開」、保持誠實。
 
-**讀者定位聲明（生成端前置步驟）**：每個教學模組在第一篇文章生成前，顯式聲明讀者定位——一段話描述目標讀者的背景、已有能力、缺的經驗。這份聲明是後續所有生成和 review 的可檢查基準。缺少顯式聲明時，LLM 預設用「教外行人」的姿態寫教學內容，這個預設不被 review 挑戰（reviewer 共享同一個預設），導致宣導語氣通過多輪審查。per [outside-in reader frames report](/report/review-lacks-outside-in-reader-frames/)
+**讀者定位聲明（生成端前置步驟）**：每個教學模組在第一篇文章生成前，顯式聲明讀者定位——一段話描述目標讀者的背景、已有能力、缺的經驗。這份聲明是後續所有生成和 review 的可檢查基準。缺少顯式聲明時，LLM 預設用「教外行人」的姿態寫教學內容，這個預設不被 review 挑戰（reviewer 共享同一個預設），導致宣導語氣通過多輪審查。per [outside-in reader frames](references/principles/review-lacks-outside-in-reader-frames.md)
 
 **讀者定位：缺經驗的專業人士、不是外行人**：技術教材的讀者是在特定領域缺乏經驗的專業人士，不是完全不懂的外行人。寫法是補足經驗缺口（直接描述情境與操作需求），不是從零科普（故事線導入、比喻堆疊、宣導語氣）。宣導式語氣（「你可能沒注意到」「把 X 想成 Y」「跑得好好的」）預設讀者無能、降低教材可信度。詳見 [audience-is-professional-not-layperson](references/principles/audience-is-professional-not-layperson.md)。
 
@@ -61,9 +61,17 @@ metadata:
 
 **技術教材內嵌管理層可彙報的資訊**：技術段落旁嵌入成本量級、時程估算、進度指標與決策簽核點（各 1-2 句），讓讀者學完技術做法的同時拿到向上彙報的素材。成本用量級不用精確數、時程用範圍不用單點、進度用可查詢指標。詳見 [management-reportable-info-in-technical-content](references/principles/management-reportable-info-in-technical-content.md)。
 
-**知識卡建卡判準用「最不熟悉的讀者」**：知識卡的建卡判準是「目標讀者群裡最不熟悉的那端能不能理解這個術語」，不是「作者覺得夠不夠常見」。常識是相對於背景的——.htaccess 對 PHP 工程師是常識、對 Node.js 工程師完全陌生。跨背景讀者群的教材裡，幾乎所有領域特定術語都需要建卡。建卡的邊際成本低（40-50 行）、讀者缺卡的代價高（離開教材去 Google、可能找到不一致的解釋）。per [常識是相對於讀者背景的](/report/common-knowledge-is-relative-to-reader-background/)。
+**斷言清單要過重建測試、重建不了展開成讀者走查**：條列式斷言（「拆開來看有三個毛病：1、2、3」）是作者走完推導後只輸出結論；判定用重建測試——讀者只憑文中已給的材料能不能自己得出每一條，不能就展開成讀者位置的走查：把讀者放到使用產物的位置、每條斷言換成動作加材料（缺的材料補進文中、那正是清單藏住的缺口）、可重用的檢查方式放在走完之後浮現。摘要位置的條列（前文已推導、條列是回收）與每條自帶證據的清單合規。詳見 [assertion-list-needs-reader-walkthrough](references/principles/assertion-list-needs-reader-walkthrough.md)。
 
-**操作步驟帶環境專屬工具路徑**：操作型文章的每一步至少帶一條工具路徑（用什麼軟體、輸入什麼指令）。同一個動作在不同環境（container / VM / 共享主機）的工具路徑可能完全不同——「拍下現況」在 container 是 `docker commit`、在 VM 是 AMI 快照、在共享主機是 FTP mirror + phpinfo。文章涵蓋多種環境時、每一步要按環境分列工具、或標明適用環境。自測問題：「讀者坐在電腦前，下一個動作是打開什麼軟體？」答不出來就是缺口。per [操作指引要帶環境專屬工具路徑](/report/operational-how-needs-environment-specific-tooling/)。
+**教學與檢討內容的敘事姿態：寫給帶問題來的讀者**：教學與檢討內容的讀者由搜尋或路由帶來、自帶問題與動機；演講技巧（問句標題、懸念段標、三幕劇遞進、第一人稱事件敘事）服務的是注意力會流失的聽眾，搬進教學內容時代價全部落在資訊結構上——問句標題把檢索錨用來提問、懸念弧把判準壓到文末、個人時間線把可重用的判斷包在一次性經歷裡。標題與段標是承載結論的直述句；檢討內容以客觀條件視角組織（「reviewer 問了 X」改成「若對這個做法問 X 而答不出來、就該重新檢討」）、「來自實際事件」的宣告開頭一句話帶過。**修懸念不是把結論搬到開頭**：灌輸與懸念是同一個缺陷的兩個方向、都讓結論與推導脫節——未經推導的開頭結論摘要（含「觸發場景 / 整理目的 / 本文邊界」欄位組）讀者只能硬記、同樣要抽掉；分工是標題承載結論、開頭承載情境定位、判準在推導走完的位置浮現。判別線是位置：操作型自問句（判準的執行步驟）合規、標題 / 段標 / 結論位的問句是懸念型。這類問題是生成端高頻默認、審查是逆風、防線主力在生產側。詳見 [write-for-readers-not-audiences](references/principles/write-for-readers-not-audiences.md)。
+
+**檢視註解的最高原則是商業邏輯**：檢視一則註解時第一個評估是它有沒有解釋到這個行為、這個事件、或這個 flag 的商業邏輯——有、才進入文字層的修法；沒有、不修文字、先重新檢討寫它的動機。這一條決定註解該不該存在、其餘原則決定它該怎麼寫、順序顛倒會把力氣花在修一則不該存在的註解的文字上。詳見 `references/writing-code-comments.md` 的最高原則節。
+
+**註解的動機先於註解的文字**：準備寫一則程式碼註解時，先問寫它的動機是「說明這裡在做什麼」還是「怕有人改壞它」。後者不是註解問題——散文型註解不參與執行、改壞的當下不產生任何訊號，而做批次整理與自動化重構的人不會經過那一行。處置是先問那個約束能不能被消除（它通常是某個結構選擇的產物），不能消除才交給會發聲的機制；判準是問這段資訊有沒有對應的斷言（存不存在一條會紅的斷言，不是造不造得出句子），驗證是當場把約束破壞掉、跑測試、把輸出貼出來。詳見 [protective-comment-signals-missing-enforcement](references/principles/protective-comment-signals-missing-enforcement.md)。
+
+**知識卡建卡判準用「最不熟悉的讀者」**：知識卡的建卡判準是「目標讀者群裡最不熟悉的那端能不能理解這個術語」，不是「作者覺得夠不夠常見」。常識是相對於背景的——.htaccess 對 PHP 工程師是常識、對 Node.js 工程師完全陌生。跨背景讀者群的教材裡，幾乎所有領域特定術語都需要建卡。建卡的邊際成本低（40-50 行）、讀者缺卡的代價高（離開教材去 Google、可能找到不一致的解釋）。per [常識是相對於讀者背景的](references/principles/common-knowledge-is-relative-to-reader-background.md)。
+
+**操作步驟帶環境專屬工具路徑**：操作型文章的每一步至少帶一條工具路徑（用什麼軟體、輸入什麼指令）。同一個動作在不同環境（container / VM / 共享主機）的工具路徑可能完全不同——「拍下現況」在 container 是 `docker commit`、在 VM 是 AMI 快照、在共享主機是 FTP mirror + phpinfo。文章涵蓋多種環境時、每一步要按環境分列工具、或標明適用環境。自測問題：「讀者坐在電腦前，下一個動作是打開什麼軟體？」答不出來就是缺口。per [操作指引要帶環境專屬工具路徑](references/principles/operational-how-needs-environment-specific-tooling.md)。
 
 **Case 引用段落的三段式結構**：三段式是案例引用段落的順序紀律 — 把「概念 → 案例 → 操作」三層分開承擔（段首給概念定義、case 引用居中、通用工程知識展開）、讓段落結構跟讀者學習新概念的認知順序對齊。LLM 從 case 反推內容容易把 case 揭露當概念出發點、實證觀察 11/12 段都犯這個錯。詳見 [case-citation-three-part-structure](references/principles/case-citation-three-part-structure.md)。
 
@@ -129,6 +137,7 @@ Naming 是這條原則最容易跳的子場景 — 第一版命名幾乎不對�
 | 要管理多篇相關文章的結構（系列、文集、知識庫、素材庫比例、MOC、跨篇引用、何時抽抽象層 / Pattern 卡片）                                                                                | `references/managing-article-collections.md`                                                                       |
 | 要做文章 / 模組 / 系列的結構決策（該不該拆篇、擴充點設計、方法論與案例的依賴方向、多讀者分流）、或用結構原則 review 既有文集                                                          | `references/structuring-with-solid.md`                                                                             |
 | 要對既有高 stakes 內容（資安 / concurrency / distributed / financial / medical）做 reviewer-style audit、找 false sense of security / 對位失效 / context 缺 / citation 過時           | `references/auditing-articles.md`                                                                                  |
+| 要寫或檢查判讀 / 選型 / 決策類內容（回答「該怎麼判斷」那一層），或讀者提問「什麼情況會需要這個」「什麼樣的系統會這樣做」「沒有範例看不懂」                                            | `references/judgment-content-needs-scenarios.md`                                                                   |
 | 要設計 ticket 欄位 / schema frontmatter / 表單欄位                                                                                                                                    | `references/designing-fields.md`                                                                                   |
 | 想驗證寫作品質（認知負擔、獨立理解率）                                                                                                                                                | `references/meta-metrics.md`                                                                                       |
 | 要新增或修改一份 Skill reference（撰寫品質規範、結構標準）                                                                                                                            | `references/reference-authoring-standards.md`                                                                      |
@@ -168,22 +177,23 @@ Naming 是這條原則最容易跳的子場景 — 第一版命名幾乎不對�
 
 - **multi-round-review** 規劃 frame 切換結構（Round 1 compliance / Round 2 cadence / Round 3 self-application）跟跨輪 finding 整合工作流
 - **本 skill（compositional-writing）** 提供每輪 frame 的字句層 keyword bank — Round 1-A 寫作規範 reviewer 必須跑：
-  - **正向陳述優先 grep**：`rg "不[行可是要能該支對符夠必]|無法|沒[做有]|而非|而不是"`、加上**否定起手定義句**（原 pattern 漏「而是」、抓不到「不是 X、而是 Y」的後半）：`rg "不是.{0,30}而是|不是.{0,20}、是|與其.{0,20}不如|不只.{0,15}更"` — 主要敘述要正向、反例對照的少量負向可保留；判別在「核心概念第一次正面出現在句首、還是被擠到『而是』之後」
+  - **正向陳述優先 grep**：`rg "不[行可是要能該支對符夠必]|無法|沒[做有]|而非|而不是"`、加上**否定起手定義句**（原 pattern 漏「而是」、抓不到「不是 X、而是 Y」的後半）：`rg "不是.{0,30}而是|不是.{0,20}、是|不是.{0,25}，\s*是|與其.{0,20}不如|不只.{0,15}更"` — 主要敘述要正向、反例對照的少量負向可保留；判別在「核心概念第一次正面出現在句首、還是被擠到『而是』之後」
   - **口語修辭 grep**：`rg "其實|實務上|真的|碰巧|立刻撞牆|沒事"`
   - **地區用語 grep**：單詞層 `rg "集群|默認|質量|視頻|函數|文件夾|接口"`（封閉集合、掃得到）；慣用語層 `rg "拍腦袋|拍板|靠譜|給力|接地氣|一波|死磕|躺平|內卷"`（已知個案、**非窮舉**——慣用語是開放集合、grep 追不完、新個案要靠目標地區讀者冷讀，同源 reviewer 回報「地區用語 clean」對慣用語層不可當真，見 [`regional-idioms-evade-keyword-bank`](references/principles/regional-idioms-evade-keyword-bank.md)）
   - **廢話前綴 grep**：`rg "值得注意的是|需要說明的是|實際上|基本上|事實上"`
   - **裝飾符號 grep**：`rg "✅|❌|⚠️|🚨|🟡|🟢|⭐|📌|✓|✗"`
-  - **對讀者喊話 grep**：`rg "很多人|大家|不少人|你的|你在|你把|你天天|你會|你可能|先讀懂|先釐清|別搞混|別被"` — 教材中性陳述、不安撫情緒 / 不第二人稱代入 / 不祈使控制閱讀（hook / narrative 段落輕度第二人稱可留）。**裸所有格 / 主詞（你的 X / 你在 X）也算、不限「你 + 動詞」的祈使 / 預測句型**；grep 對裸『你』非窮舉、真防線是 reader-simulation 冷讀（同源 grep 抓不到 register、見 [multi-pass-review-frame-granularity](references/principles/multi-pass-review-frame-granularity.md)）
+  - **對讀者喊話 grep**：`rg "很多人|大家|不少人|你的|你在|你把|你正在|你補|你天天|你會|你可能|先讀懂|先釐清|別搞混|別被"`（**裸「你」非窮舉**：實測過 `你正在`、`你補完` 這類「你 + 一般動詞」逃過原 pattern，回報 clean 前另跑一次裸 `rg "你"` 逐處判定） — 教材中性陳述、不安撫情緒 / 不第二人稱代入 / 不祈使控制閱讀（hook / narrative 段落輕度第二人稱可留）。**裸所有格 / 主詞（你的 X / 你在 X）也算、不限「你 + 動詞」的祈使 / 預測句型**；grep 對裸『你』非窮舉、真防線是 reader-simulation 冷讀（同源 grep 抓不到 register、見 [multi-pass-review-frame-granularity](references/principles/multi-pass-review-frame-granularity.md)）
   - **自評誇飾 grep**：`rg "教科書級|堪稱|可謂|完美|經典|範本級|大師級|漂亮地|優雅地|最佳實踐|best practice"` — 品質 verdict 頂替技術理由、換成機制 / 條件
   - **必然性框架 grep**：`rg "天生|與生俱來|本質就是|本來就是|必然|唯一|註定|理所當然"` — 把設計選擇講成自然法則、還原成條件性（物理 / 法律 / 數學事實除外）
   - **澄清式框架 grep**：`rg "最容易誤|容易誤判|常見的?誤判|要點破|直覺會?帶偏|抵抗.*的直覺|你以為|會困惑|值得記"` — 把「讀者會誤解」當敘事中心是知識缺口訊號、不是澄清時機；補正向模型與機制讓誤解無從發生、不提醒讀者一個他本不需要有的困惑。界線是具體第一人稱實測敘事跟真實診斷區分（逾時 vs 被拒、症狀層 vs 根因層）保留、只有把假想誤會當主題句起手的才改；同義變體多、grep 抓不全、靠 reader-simulation 語意判定（「這段在補正向知識、還是在提醒讀者會犯錯？」）。見 [fill-knowledge-gap-not-center-misconception](references/principles/fill-knowledge-gap-not-center-misconception.md)
   - **歸因語氣 grep**：`rg "承認|暴露了|證明了失敗|被迫"` — 描述系統行為用「信號」「反映」「顯示」等中性觀測詞、避免「承認」「暴露」等責任歸因詞；「被迫」在描述外部強制約束時可保留
   - **宣導語氣 grep**：`rg "你可能沒注意|你可能不知道|想像一下|把.{1,5}想成|跑得好好的|聽起來很|其實很簡單|說穿了就是|等於拆未爆彈|乾瞪眼|延遲引爆"` — 預設讀者無知或用情緒管理取代事實陳述；讀者是專業人士、直接描述情境與後果
   - **泛用詞濫用 grep**：`rg "坑|東西|搞|弄|處理一下|情況"` — 同一個泛用詞蓋過不同具體情境時、依情境換精確詞（意外 / 陷阱 / 出問題 / 發生狀況）；命中密集且各指不同事才算違規、真泛指 / 引號引用 / 輕度 hook 合規；「坑」另有地區偏移面（某些地區高頻、某些少用）。見 [avoid-overused-generic-words](references/principles/avoid-overused-generic-words.md)
+  - **敘事姿態 grep**：問句標題 `rg "^title:.*[？?]"`、問句段標 `rg "^#{2,} .*[？?]"`、敘事轉折詞 `rg "才想清楚|還是被退|我到底|我於是"`、輔助訊號是檢討類文章的「我」密度顯著高於同類其他篇 — 教學與檢討內容寫給帶問題來的讀者、標題承載結論、判準由推導交付（不設懸念、也不把結論抽到開頭灌輸）、檢討用客觀條件視角；操作型自問句（判準的執行步驟）與「」內引用合規、標題 / 段標 / 結論位扣住答案的問句違規、未經推導的開頭結論摘要與欄位組同屬違規；這類是生成端高頻默認、審查是補位、防線主力在生產側規範與模板。見 [write-for-readers-not-audiences](references/principles/write-for-readers-not-audiences.md)
   - **用詞搭配錯位 grep**：`rg "說完的話|背後.{0,8}的話|想告訴|潛台詞|訊號很直接|訊號.{0,4}很直接"` — 把抽象概念（角度 / 框架 / 訊號 / 數字）配上不貼合屬性的謂語：擬人化錯配（角度不會「說」、數字不會「想告訴」）與形容詞錯配（訊號的可辨識度是「清晰 / 明確」不是「直接」）。無穩定關鍵詞、grep 只抓已知形態、真防線是異源冷讀（跟 register 類同屬同源盲區）。見 [word-choice-fits-concept-attributes](references/principles/word-choice-fits-concept-attributes.md)
   - **這些 grep 曝光候選、不做自動判定**：命中後要不要算違規有品味核心；且 LLM reviewer 跟作者共享文體、同源自審對 register 類（否定起手 / 喊話 / 誇飾 / 概念前置）有結構上限 ——「不是 X、而是 Y」這種 LLM 高頻自產句型最容易全員放水。grep + 同源判定只負責曝光候選、register 層的真防線是文體異源視角（human cold-read 或 prompt 採「挑剔否定起手 / 概念後置」對抗姿態的 reviewer）、同源回報的「clean」不可當真
 
-詳細各維度的判讀規則跟修法、見對應 reference（writing-articles / writing-documents 等）跟 `references/principles/` 內的 cadence-homogenization / colloquial-rhetoric / regional-terminology / decorative-symbols / multi-pass-review-frame-granularity 等卡。
+詳細各維度的判讀規則跟修法、見對應 reference（writing-articles / writing-documents 等）跟 principles 目錄內的 cadence-homogenization / colloquial-rhetoric / regional-terminology / decorative-symbols / multi-pass-review-frame-granularity 等原則卡。
 
 協同要點：
 
@@ -201,7 +211,7 @@ Naming 是這條原則最容易跳的子場景 — 第一版命名幾乎不對�
 compositional-writing/
 ├── SKILL.md                              # 本檔：核心原則速查 + 觸發路由
 └── references/
-    ├── writing-code-comments.md          # 情境 1：程式碼註解
+    ├── writing-code-comments.md          # 情境 1：程式碼註解（含「動機先於文字」前置分岔）
     ├── writing-documents.md              # 情境 2：文件撰寫
     ├── writing-logs.md                   # 情境 3：log 輸出
     ├── writing-prompts.md                # 情境 4：prompt 撰寫
@@ -210,6 +220,7 @@ compositional-writing/
     ├── translation-review.md             # 情境 5b：文章翻譯 / 轉譯的句內邏輯 review
     ├── managing-article-collections.md   # 情境 5c：跨多篇文章的結構（三層、素材庫比例、MOC、Pattern 卡片）
     ├── structuring-with-solid.md         # 情境 5d：結構決策判準（SOLID 寫作映射：拆分 / 擴充點 / 依賴方向 / 讀者分流）
+    ├── judgment-content-needs-scenarios.md # 情境 5e：判讀 / 選型類內容補情境與後果（形態 / 觸發事件 / 微案例、含正反例四組）
     ├── designing-fields.md               # 情境 6：欄位設計（含六欄位角度總表）
     ├── designing-fields-ticket-6w.md     # 六欄位詳細範例：正確 + 混淆共 12 項（按需讀取）
     ├── meta-metrics.md                   # 品質量化驗收（M1-M5）
@@ -228,7 +239,36 @@ compositional-writing/
 
 ---
 
-**Last Updated**: 2026-07-20
+**Last Updated**: 2026-08-08
+**Version**: 0.50.1 — `writing-documents.md` 的 Cross-reference format 表格：同目錄示範路徑被 broken-link 掃描判為斷鏈（原檔以自然語言註解說明「這是佔位路徑」，掃描器不解析自然語言）。改用 `broken-link-exempt` 行內 marker 顯式 opt-in 豁免（marker 僅作用於所在行），說明文字保留。
+**Version**: 0.50.0 — 兩項、皆由使用者對 v0.49.0 改寫成品的判定觸發。(1) 新增 `assertion-list-needs-reader-walkthrough` principle 卡 + 原則三「斷言清單要過重建測試」段：「三個毛病」式條列讀者只能硬記或盲信（正文沒給能重建結論的材料）、改寫成讀者位置的走查（讀者位置、動作加材料、結論後置）被判定「說得清楚非常多」、固化成寫作模式；含 before / after 對照範例、重建測試判準、審查 grep（拆開來看 / N 個毛病）。(2) `writing-code-comments.md` 頂端新增「最高原則：先評商業邏輯、再談文字」節 + 自檢清單首題：檢視註解的第一個評估是它有沒有解釋到這個行為 / 事件 / flag 的商業邏輯、沒有就不修文字、先重新檢討動機——這條決定註解該不該存在、其餘原則決定怎麼寫；SKILL.md 原則三同步加對應段。
+
+**Version**: 0.49.0 — 敘事姿態原則補「灌輸與懸念是同一個缺陷的兩個方向」：v0.48.0 立規範時把修懸念寫成「判準放開頭」、實際套用被使用者指出正是另一個方向的錯——把結論抽成開頭一段（或「觸發場景 / 整理目的 / 本文邊界」欄位組）直接給、推導擺後面、讀者沒有推導可依附只能硬記；概念要由讀者沿著推導自己長出來、不是被交付。分工修正為：標題承載結論（檢索錨）、開頭承載情境定位、判準在推導走完的位置浮現。principle 卡與 keyword bank 同步、徵兆表加「開頭有未經推導的結論摘要或欄位組」一列。同時示範性修正：把「三個毛病」式的斷言清單改成給讀者推導材料（例：「入口是自創行話」要附上實際進入點的程式碼對照、讓讀者自己看出註解與程式斷線）。
+
+**Version**: 0.48.0 — 新增 `write-for-readers-not-audiences` principle 卡、原則三加「教學與檢討內容的敘事姿態」段、keyword bank 加「敘事姿態」grep（問句標題 / 問句段標 / 敘事轉折詞 / 「我」密度）。從一篇檢討文章的事故抽出：問句標題、懸念段標、第一人稱事件敘事、判準壓在全文後半，經過多輪 reviewer audit 零 finding、由異源讀者指出。根因三層——規範缺位（規則不存在時 compliance reviewer 產生不了 finding）、frame 射程（keyword bank 枚舉不含懸念與第一人稱、persona 檢查掛在批次流程而單篇不進）、同源文風默認（問句標題與三幕劇是生成端高頻默認）。防線主力放生產側（本段與模板）、審查 grep 是補位；判別線是位置——操作型自問句合規、標題 / 段標 / 結論位扣住答案的問句違規。
+
+**Version**: 0.47.0 — 新增 `protective-comment-signals-missing-enforcement` principle 卡，並在 `writing-code-comments.md` 的自檢清單之前插入「動機先於文字」節。補的是該 reference 的結構性缺口：五條原則、十列禁止模式、八題自檢清單的問法全是「這則註解寫了什麼」，沒有一處問「為什麼要寫」——於是一行動機是防護的註解可以通過全部檢查而仍然是錯的窗口，而 skill 會把那個循環複製到每個裝了它的專案。實測來源是同一行 doc 被 review 退兩次、第二版寫的是真實存在的跨函式讀寫順序約束仍被退，兩次的判斷對象都是文字。卡片含動機判準的三個弱點（回溯建構、混合動機、防衛性回答）、二元判準掛在斷言存在性而非造句能力、破壞實測作為收斂條件與各步驟的痕跡設計、以及四條邊界。禁止模式清單加一列（防護意圖寫成註解）、自檢清單加一題（動機是說明還是防護、且排在最前）。
+
+**Version**: 0.46.0 — `judgment-content-needs-scenarios` 新增「第六種產出：共同前提沒有住址」。前五種都對單篇操作，第六種只在把幾篇並置之後才出現——同一個判斷被三篇以上當前提引用而沒有任何一篇承接。它在單篇視角下不落空（每篇都給了自己那一角、讀者當下走得下去），所以逐篇檢查看不到；前置段是最常見的藏身處，因為它確實是本篇的適用性閘門，「撞到不屬於這篇的內容」那條不觸發，辨識訊號是那一段回答的問題比本篇主題更早發生且對別篇同樣成立。含缺卡與缺章的分界（定義重複＝術語、判斷的各角重複＝缺章，因為取捨需要並置）、三篇門檻的理由、以及處置（新開一篇、各篇那一角壓成一兩句加路由留著當閘門、新篇要標明自己是誰的上游）。
+
+**Version**: 0.45.0 — 依 #245（原則層與操作層會漂移）規定的反向核對，從本 skill 出發逐條回查對應原則卡的現況，抓到兩處漂移並修正：微案例的挑選規則補「一兩個是上限而非配額、有兩個以上只寫一個要就地寫出漏選理由」（卡片 Round 1 就加了、skill 停在原版，導致實測九則微案例零套用）；出口盤點的單位從「三種」改成規則（卡片 Round 3 已改——判讀表的列、風險邊界的條、out-of-scope 每一項宣告都算，只有微案例末端要等第二階段）。兩處都是四輪十四個 reviewer 沒抓到的，因為沒有任何一輪被要求並排比對兩個 surface。
+
+**Version**: 0.44.0 — 多輪審查 Round 1 修正 `judgment-content-needs-scenarios` 的出口盤點段：原本主張「盤點要排在補範例之後、先盤會盤不出東西」，reviewer 用該段自己的定義推翻——三種盤點單位裡有兩種（判讀表每一列 / 風險邊界每一條）在任何範例存在之前就存在，只有第三種（微案例末端的止血句）依附於範例。改成**跨兩個階段各跑一次**：讓缺口現形的是換視角這個動作本身（既有維度都在驗已寫內容對不對），範例的貢獻是多出一類單位而非解鎖整個盤點。同批實測另證：七處缺口裡只有兩處依附微案例。
+
+**Version**: 0.43.0 — `judgment-content-needs-scenarios` 新增「出口盤點：補完範例之後才做得了」段，把補寫程序從三步（形態 / 觸發事件 / 微案例）延長成四步、補上閉環：補完範例後改用「讀者知道這是問題了他去哪解決」掃全文。順序不可顛倒——分析型句子不會產生「所以呢」這個追問，段落寫得越好讀者越認同問題、而認同的下一步是想知道怎麼解；沒有範例時讀者與作者都停在理解層，範例把讀者推到行動、而只有行動這一端會撞到出口不存在。檢查單位是每個被提出的問題（判讀表每一列 / 風險邊界每一條 / 微案例末端那句「補起來要……」）而非每篇文章——文末路由段回答不了段落層級的問題。四種狀態各有處置，其中「不存在且需完整推導」要明說它不存在（讀者找不到時的預設歸因是自己沒找到）。另補反模式：替換微案例前先掃第四拍，止血代價常是全篇唯一寫出止血路徑的地方、而替換理由只評估前三拍。從 7.28 / 7.29 補完範例後盤出七處缺出口的實測抽出。
+
+**Version**: 0.42.0 — `judgment-content-needs-scenarios` 新增「補形態會暴露出這一列沒有解法落點」段（逐篇檢查的第五種產出）：補形態要回答「讀者對號入座之後去哪」、而判讀表不問這個問題，缺落點的列因此在補形態時才現形；辨識訊號是同一張表的列與深化段不對稱（實測五列的表只有四列有深化段），而欄位齊全正是遮住它的原因；與「撞到錯置內容」方向相反（那是多了不該有的、這是少了該有的），處置用最小可行答案判準——能一段話加連結讓讀者繼續走就當場補判讀層那一節、需要完整推導的只登記待辦並明說目前沒有對應章節（讀者找不到時的預設歸因是自己沒找到）。從 7.2 補形態時發現「授權範圍擴張過快」五列中唯一沒有深化段的實測抽出。
+
+**Version**: 0.41.0 — 多輪審查 Round 3 回饋修正 `judgment-content-needs-scenarios`：新增「四拍要有來源」硬條款——四拍要出自親歷 / 案例庫已記形態 / 機制上必然，第三拍是唯一推不出來的那一拍、推不出來就代表無經驗的作者或生成工具只能發明它、而模板不會擋下發明，寫不出來時留白比杜撰好（編造的盲區比沒有微案例更難被後續審查推翻）；連帶排程後果「一輪之後所有章節都有微案例＝照模板填的訊號」。地基斷言從二元改成單峰：可用程度中段最高、零經驗端缺的是術語入口而非情境（單峰模型解釋得了「判定不需補時改查卡連結」那一段的存在，單調模型解釋不了）。情境與實作的分界從內容類型改成解析度（判讀層取到成本可感的粒度就停、用內容類型會把成本量級誤判成實作而裁掉）。微案例挑選補「挑選在寫之前做」。
+
+**Version**: 0.40.0 — 多輪審查 Round 1 回饋修正：H1 從「要給系統形態與觸發事件」改成「要給情境與後果」（涵蓋三種補法）；標題去計數（六步程序 → 程序、兩個修法副作用 → 修法的副作用，該檔正在擴充期、步數會變）；補母詞邊界（前兩種是情境／回答進入條件、第三種是後果的敘事化，**不合稱「三種情境」**——避免與上游卡的「情境有兩種」對撞）；第 2 步補可執行 handle（形態句的起手詞有 grep 特徵、本篇找不到樣本時取同分類另一篇）；卡連結落差補機制（絕對數量隨篇幅與術語密度變動、同分類內這兩個變因相近所以落差排除干擾項）；「必然副產物」改「常見副產物」（原句從 n=1 推必然）；四拍第三拍的「最有價值」改成可推導的「最不可省略」（其餘三拍讀者能從機制自行推得、第三拍取決於組織的監控與責任配置）；微案例長度上限兩三句改三四句（與實際試寫對齊）。keyword bank 補兩個實測 pattern 變體：否定起手的全形逗號形式（`不是 X，是 Y`）與裸「你」（`你正在`、`你補完` 這類逃過原 pattern、回報 clean 前要另跑一次裸 `rg "你"`）。
+**Version**: 0.39.0 — `judgment-content-needs-scenarios` 補第三種要補的東西：**微案例**（無身分短敘事、兩三句、不帶公司名年份帳目）。原本只有系統形態與觸發事件，兩者都是分類語言、讀者用它們定位自己；沒有經驗的讀者卡在定位之後——知道自己中了但不知道會怎樣，而有經驗的人能自己補這段，所以純分類的內容對資深讀者看起來已完整。四拍寫法（當初為什麼這樣做／什麼時候開始出問題／為什麼沒被及時發現／止血的代價），第三拍最有價值因為它解釋「為什麼不會有人提早警告你」，缺第一拍讀者會覺得是別人才會犯的蠢錯；只挑後果最不直觀的一兩個寫、長度超過兩三句就該進案例庫。與真實案例的分工：剝離身分的原則禁的是搬運帳目、不是禁具體敘事，微案例在章節內讓形態可想像、真實案例在案例庫承擔可查證。六步程序第 4 步從兩個問題改成三個。觸發路由補「沒有範例看不懂」這個讀者提問形態。對應 report 卡 #242。
+**Version**: 0.38.0 — `judgment-content-needs-scenarios` 新增「形態的軸取決於讀者當下的變數」：形態不等於架構長相，軸至少三條——**系統架構軸**（讀者已有系統、正決定要不要改）、**團隊狀態軸**（選型類，系統可能還不存在、變數是組織現況）、**關係人約束軸**（對外契約類，變數是對方的能力）；判定「缺形態」前先問這篇用的是哪條軸，只找架構軸會把用其他軸寫成的形態誤判成缺，而誤判成本高於漏抓（漏抓少補一篇、誤判會補出與既有形態並存的冗餘內容、讀者拿到兩套互不相干的分類法）；軸選錯也讓補出的內容不可用。從選型類分類的試作抽出——該篇形態早已存在、只是用團隊狀態當軸，而先前三個分類補的形態全是架構軸、框架因此隱含假設了形態等於架構。
+**Version**: 0.37.0 — `judgment-content-needs-scenarios` 新增「逐節讀會撞到錯置內容」：第 3 步逐節讀的必然副產物是發現某節不屬於這篇，辨識訊號由弱到強是「節標題主題不同 → 同分類已有更專門的落點 → **錯置內容篇幅與主體相當或更長**」（實測遇過主體三十餘行、錯置近四十行＝兩篇擠在一起）；處置三規則——標路由目的地不刪（只標「不屬於這裡」會讓修改者選最省力的刪除而非最正確的路由）、登記待辦不當場搬（搬遷要驗證兩端、尺度大於補情境，混做會破壞逐篇檢查可隨時中斷的價值）、前置條件寫明先驗證目的地涵蓋度（目的地已有同主題內容時搬過去是製造重複、比留在原地更糟）。從第三個分類試作抽出。
+**Version**: 0.36.0 — `judgment-content-needs-scenarios` 依分類級試作回饋補兩點：第 1 步「判定適用」加**讀者時刻**維度（讀者若已有系統在跑、手上有現象可觀察，給訊號就夠、補形態是冗餘；設計階段的讀者才需要形態；同分類內不同篇可落在不同時刻、逐篇判定），以及新增「判定不需補時，檢查換一個維度」一節（缺形態與缺術語入口是同一問題的兩種形式——讀者都得自己補一塊才能用；判定不需補形態時改查卡連結覆蓋，**同分類內的卡連結數落差是比絕對數量更可靠的偵測訊號**）。從一個三篇分類的完整試作抽出：三篇判定為不需補／不需補／不適用，真缺口卻出現在卡連結上（核心章節的主線術語出現 19 次、連卡 0 次、全篇卡連結數只有同分類其他篇的兩成）。
+**Version**: 0.35.0 — Portable 收尾：三張 principle 卡末尾的溯源標註從連結降為純文字 slug（`對應的 blog report 卡 slug 是 \`xxx\``）。這類標註記的是「這張卡從哪抽出來」、不是內容依賴（不點過去也能用卡），但寫成 blog 絕對路徑後複製到別的專案就是死鏈；降成 slug 文字後溯源資訊保留、portable scan 全 clean。
+**Version**: 0.34.0 — Portable 修正兩處：三個指向外部 report 路徑的連結（outside-in reader frames / 常識是相對於讀者背景的 / 操作指引要帶環境專屬工具路徑）抽成 `references/principles/` 內的原則卡改相對連結——絕對路徑複製到別的專案後是死鏈，違反 skill 的 portable 邊界，鏡像工具會把相對連結轉回 blog 的 report 路徑、所以公開鏡像不受影響；「跟 multi-round-review 的協同」段的 principles 指路改成不帶路徑的寫法：原本的 inline code 路徑會被鏡像工具的寬鬆比對命中、卻因為後面接的是卡名清單而非 `.md` 檔名而提取不到 slug，每次同步都產生一則 unresolved 警告；且該路徑在公開鏡像上不存在、對鏡像讀者是死指引。
+**Version**: 0.33.0 — 新增 `judgment-content-needs-scenarios.md`（情境 5e）：判讀 / 選型 / 決策類內容要給系統形態（服務設計階段）與觸發事件（服務維運階段），只給機制屬性時讀者必須自己補情境、而能補的人本來就會判斷了；關鍵區分是情境不等於實作（判讀層宣告不展開實作是對的、但情境屬判讀層自己）；含六步程序與四組正反例（機制屬性缺觸發事件 / 分類缺對號入座入口 / 判讀表缺系統形態 / 三種不需要補的情況），以及兩個實測到的修法副作用（補情境會引入第二人稱、原本的封閉計數會失準）；檢查單位是「內容」而非「段落」——分散在別節也算有。從兩篇判讀類章節的實作驗證抽出。同步修正 frontmatter version 欄位與末尾版本紀錄脫節（停在 0.30.0）。
 **Version**: 0.32.0 — keyword bank 新增「用詞搭配錯位」grep（擬人化謂語 + 形容詞誤搭：分析角度不會「說」、訊號的可辨識度是「清晰」不是「直接」）、新增 principle 卡 [word-choice-fits-concept-attributes](references/principles/word-choice-fits-concept-attributes.md)；從一次多輪審查中兩處搭配錯位由人類冷讀 catch（agent 同源多輪 register / cadence / 冷讀全漏）抽出，是 register 同源盲區需異源的實例
 **Version**: 0.31.0 — `writing-articles.md` 規則二後新增「分析型文章的開頭：定位問題先行、不放敘事或寫作動機」：分析文章開頭第一段直接進定位問題（對象在什麼結構位置、什麼特徵值得判讀），是規則二「商業邏輯先於 CASE」在開頭層的具體形式；抓兩種失焦——敘事性引言（創辦人故事 / 沿革當暖場、對認識有用對判讀沒用）與寫作動機框架（「我們為什麼分析」是編輯層資訊、不是內容層、洩漏編輯決策給讀者）；自檢是拿掉來歷句與動機句後開頭還能不能給出判讀錨點。從商業分析文章的多輪審查回流
 **Version**: 0.30.0 — 新增 `structuring-with-solid.md` reference（情境 5d：結構決策判準）：SOLID 五原則的寫作映射——S 一篇一變動理由（拆分測試：變動理由 / 刪除）、O 擴充點設計（管結構骨架、不管敘事內容——顯式劃界避免模板化滑坡）、L 介面承諾 vs 實作履行（title / description / index hook 對內文、同分類功能契約）、I 讀者分流三層（模組路線表 / 文章視角分段 / 術語卡外移）、D 具體依賴抽象（案例引方法論、方法論不反向依賴）；含結構同構表、每原則錯對範例、結構檢查清單（條件 → 行動）、類比邊界三聲明（review 是執行機制 / L 最弱 / 模板化滑坡）。定位在組合層、跟原子化原則分層分工（S 是兩層接縫）。從一次「個體案例 vs 跨個體比較」的實際 SRP 拆分經驗抽出。觸發詞加 SOLID / 文章拆分 / 結構決策 / 擴充點 / 依賴方向 / 讀者分流；metadata.version 同步修正漂移（0.28.0 → 0.30.0）
