@@ -513,12 +513,11 @@ def main() -> int:
             _output_success()
             return EXIT_SUCCESS
 
-        # Effort 感知（v2.1.133+，W14-036）：low effort 短路放行
+        # Effort 感知：layer boundary 違規是客觀結構事實（Layer 1
+        # 檔案含 Layer 2 專屬字面），與使用者投入深度無關，核心 block 邏輯
+        # 永不依 effort 短路（見 hook-architect-technical-reference.md「設計
+        # 鐵則：事實判斷型 hook 必擋 + effort 解耦」）。effort 僅供 log 留痕。
         effort = get_effort_level(input_data)
-        if effort == "low":
-            logger.info("effort=low，layer-boundary-validator 短路放行")
-            _output_success()
-            return EXIT_SUCCESS
         logger.info("effort=%s，執行完整 layer-boundary 驗證", effort)
 
         # 檢測 subagent 環境

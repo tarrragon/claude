@@ -172,13 +172,14 @@ def test_blog_and_canonical_2_5_0_same_version_different_content_are_diverged(tm
         }
     }
 
-    up_to_date, diverged, overridden, skipped = _classify_sync_status(
+    up_to_date, diverged, overridden, skipped, skipped_missing = _classify_sync_status(
         local_manifest, remote_manifest, tmp_path / "local"
     )
 
     assert up_to_date == []
     assert overridden == []
     assert skipped == []
+    assert skipped_missing == []
     assert len(diverged) == 1
     name, local_display, remote_display = diverged[0]
     assert name == "wrap-decision"
@@ -193,7 +194,7 @@ def test_classify_sync_status_up_to_date_when_hash_matches(tmp_path):
     local_manifest = {"foo": {"version": "1.0.0", "hash": "same-hash"}}
     remote_manifest = {"foo": {"version": "1.0.0", "hash": "same-hash"}}
 
-    up_to_date, diverged, overridden, skipped = _classify_sync_status(
+    up_to_date, diverged, overridden, skipped, skipped_missing = _classify_sync_status(
         local_manifest, remote_manifest, tmp_path
     )
 
@@ -201,6 +202,7 @@ def test_classify_sync_status_up_to_date_when_hash_matches(tmp_path):
     assert diverged == []
     assert overridden == []
     assert skipped == []
+    assert skipped_missing == []
 
 
 def test_classify_sync_status_skips_remote_without_hash_field(tmp_path):
@@ -208,11 +210,27 @@ def test_classify_sync_status_skips_remote_without_hash_field(tmp_path):
     local_manifest = {"foo": {"version": "1.0.0", "hash": "abc"}}
     remote_manifest = {"foo": "1.0.0"}  # 舊格式：純字串，無 hash 欄位
 
-    up_to_date, diverged, overridden, skipped = _classify_sync_status(
+    up_to_date, diverged, overridden, skipped, skipped_missing = _classify_sync_status(
         local_manifest, remote_manifest, tmp_path
     )
 
     assert skipped == ["foo"]
+    assert skipped_missing == []
+    assert up_to_date == []
+    assert diverged == []
+
+
+def test_classify_sync_status_skips_remote_missing_entirely(tmp_path):
+    """remote_manifest 完全沒有此 key 時歸為 skipped_remote_missing，非 skipped_no_hash。"""
+    local_manifest = {"foo": {"version": "1.0.0", "hash": "abc"}}
+    remote_manifest = {}  # 該 skill 從未被記錄過
+
+    up_to_date, diverged, overridden, skipped, skipped_missing = _classify_sync_status(
+        local_manifest, remote_manifest, tmp_path
+    )
+
+    assert skipped_missing == ["foo"]
+    assert skipped == []
     assert up_to_date == []
     assert diverged == []
 
@@ -225,7 +243,7 @@ def test_classify_sync_status_respects_local_override_marker(tmp_path):
     local_manifest = {"foo": {"version": "1.0.0", "hash": "local-hash"}}
     remote_manifest = {"foo": {"version": "2.0.0", "hash": "remote-hash"}}
 
-    up_to_date, diverged, overridden, skipped = _classify_sync_status(
+    up_to_date, diverged, overridden, skipped, skipped_missing = _classify_sync_status(
         local_manifest, remote_manifest, tmp_path
     )
 
@@ -233,6 +251,7 @@ def test_classify_sync_status_respects_local_override_marker(tmp_path):
     assert up_to_date == []
     assert diverged == []
     assert skipped == []
+    assert skipped_missing == []
 
 
 def test_has_local_override_false_when_marker_absent(tmp_path):
@@ -565,6 +584,7 @@ def test_public_contract_names_exist_for_consumers(tmp_path, monkeypatch):
         "diverged",
         "overridden",
         "skipped_no_hash",
+        "skipped_remote_missing",
     )
     assert DivergedSkill._fields == (
         "name",
@@ -648,7 +668,7 @@ def test_sync_status_report_reports_empty_remote_as_zero_entries(tmp_path, monke
     status = sync_status_report(tmp_path)
 
     assert status.remote_count == 0
-    assert status.skipped_no_hash == ["demo-skill"]
+    assert status.skipped_remote_missing == ["demo-skill"]
 
 
 def test_sync_status_report_handles_missing_skills_dir(tmp_path, monkeypatch):
@@ -658,6 +678,7 @@ def test_sync_status_report_handles_missing_skills_dir(tmp_path, monkeypatch):
 
     assert status.up_to_date == []
     assert status.skipped_no_hash == []
+    assert status.skipped_remote_missing == []
 
 
 def test_fetch_remote_manifest_builds_raw_url_from_repo_url(monkeypatch):

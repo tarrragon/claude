@@ -36,6 +36,7 @@ def _status(**overrides) -> SyncStatus:
         diverged=[],
         overridden=[],
         skipped_no_hash=[],
+        skipped_remote_missing=[],
     )
     defaults.update(overrides)
     return SyncStatus(**defaults)
@@ -153,7 +154,26 @@ def test_report_counts_each_category(tmp_path, monkeypatch):
     assert "一致 2" in report
     assert "分歧 1" in report
     assert "本地客製 1" in report
-    assert "無遠端雜湊 3" in report
+    assert "遠端有記錄無雜湊 3" in report
+    assert "遠端無記錄 0" in report
+
+
+def test_report_distinguishes_remote_missing_from_no_hash(tmp_path, monkeypatch):
+    """兩種盲區成因不同，計數與名單都要能分辨（0.2.1-W3-369）。"""
+    _stub_report(
+        monkeypatch,
+        _status(
+            skipped_no_hash=["e"],
+            skipped_remote_missing=["x", "y"],
+        ),
+    )
+
+    report = sync_mod.report_skill_repo_drift(tmp_path / ".claude")
+
+    assert "遠端有記錄無雜湊 1" in report
+    assert "遠端無記錄 2" in report
+    assert "e" in report
+    assert "x" in report and "y" in report
 
 
 def test_report_annotates_same_version_divergence(tmp_path, monkeypatch):

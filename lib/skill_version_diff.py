@@ -115,9 +115,22 @@ def report_skill_repo_drift(claude_dir: Path) -> str:
         counts = (  # i18n-exempt
             f"一致 {len(status.up_to_date)}、分歧 {len(status.diverged)}、"  # i18n-exempt
             f"本地客製 {len(status.overridden)}、"  # i18n-exempt
-            f"無遠端雜湊 {len(status.skipped_no_hash)}"  # i18n-exempt
+            f"遠端有記錄無雜湊 {len(status.skipped_no_hash)}、"  # i18n-exempt
+            f"遠端無記錄 {len(status.skipped_remote_missing)}"  # i18n-exempt
         )
         lines = [f"[skill 庫檢查] {counts}"]  # i18n-exempt
+        # 兩種盲區成因不同（前者等下次 push 自動補；後者需人工確認遠端該不該
+        # 有這個 skill），單一計數無法分辨該做什麼，故列出成因與名單。
+        if status.skipped_no_hash:
+            lines.append(  # i18n-exempt
+                "   遠端有記錄無雜湊（舊格式 manifest，下次 push 會自動補）："  # i18n-exempt
+                f"{', '.join(status.skipped_no_hash)}"
+            )
+        if status.skipped_remote_missing:
+            lines.append(  # i18n-exempt
+                "   遠端無記錄（從未被 push 記錄過，需確認遠端是否該有此 skill 後 push 或標註不推送理由）："  # i18n-exempt
+                f"{', '.join(status.skipped_remote_missing)}"
+            )
         # 逐項列出但設上限，與 sync 腳本 uncleaned_deletions 的呈現慣例一致：
         # 分歧數可達數十筆，全列會把收尾訊息淹沒，反而讓人學會略過整段。
         for entry in status.diverged[:SKILL_DRIFT_PREVIEW_LIMIT]:

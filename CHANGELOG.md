@@ -1,3 +1,16 @@
+## [2.26.3] - 2026-08-09
+
+### Summary
+fix: skill 庫檢查拆分兩類盲區並補齊 5 個缺漏的 manifest 記錄; fix: 移除 layer-boundary-validator 的 effort=low 短路; chore: 框架 repo 同步至 （ticket 掃描修復與 hook 註冊清理）
+
+Changes: 2 fix, 1 chore
+
+- fix: skill 庫檢查拆分兩類盲區並補齊 5 個缺漏的 manifest 記錄
+- fix: 移除 layer-boundary-validator 的 effort=low 短路
+- chore: 框架 repo 同步至 （ticket 掃描修復與 hook 註冊清理）
+
+---
+
 ## [2.26.2] - 2026-08-09
 
 ### Summary

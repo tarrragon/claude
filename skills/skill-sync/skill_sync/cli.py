@@ -66,6 +66,7 @@ class SyncStatus(NamedTuple):
     diverged: list[DivergedSkill]
     overridden: list[str]
     skipped_no_hash: list[str]
+    skipped_remote_missing: list[str]
 
     @property
     def local_count(self) -> int:
@@ -74,6 +75,7 @@ class SyncStatus(NamedTuple):
             + len(self.diverged)
             + len(self.overridden)
             + len(self.skipped_no_hash)
+            + len(self.skipped_remote_missing)
         )
 
 
@@ -526,13 +528,18 @@ def _classify_sync_status(
     local_manifest: dict[str, dict[str, str]],
     remote_manifest: dict,
     skills_dir: Path,
-) -> tuple[list[str], list[tuple[str, str, str]], list[str], list[str]]:
+) -> tuple[list[str], list[tuple[str, str, str]], list[str], list[str], list[str]]:
     """依內容雜湊分類本地 skill 相對 remote manifest 的同步狀態。
 
-    回傳 (up_to_date, diverged, overridden, skipped_no_hash)。雜湊相同 -> up_to_date；
-    雜湊不同 -> diverged（覆蓋方向未知，需人工執行 pull/push 決定，見下方 rationale）；
-    標記 SKILL_SYNC_OVERRIDE_MARKER -> overridden（略過分歧判定）；remote 尚未有 hash
-    欄位（舊格式 versions.json，需下次 push 後才會補上）-> skipped_no_hash。
+    回傳 (up_to_date, diverged, overridden, skipped_no_hash, skipped_remote_missing)。
+    雜湊相同 -> up_to_date；雜湊不同 -> diverged（覆蓋方向未知，需人工執行 pull/push
+    決定，見下方 rationale）；標記 SKILL_SYNC_OVERRIDE_MARKER -> overridden（略過分歧
+    判定）。remote 缺漏拆兩類，因盲區成因不同：remote_manifest 有此 key 但值不是
+    dict 或缺 hash 欄位（舊格式 versions.json，需下次 push 後才會補上）-> skipped_no_hash；
+    remote_manifest 完全沒有此 key（該 skill 從未被記錄過，可能從未 push、或以
+    非 push 途徑進入遠端目錄如手動複製）-> skipped_remote_missing。兩者對讀者
+    意味不同的下一步（前者等下次 push 自動補；後者需先確認遠端是否該有這個
+    skill，再決定 push 或標註不推送理由），合併計數會讓讀者無從分辨該做什麼。
 
     不再嘗試自動判定覆蓋方向：舊實作以 semver 大小決定「該推或該拉」，但這預設了
     線性演進，對分支式分歧（兩個獨立演化的副本巧合共用同一版本號）必定失準
@@ -542,10 +549,15 @@ def _classify_sync_status(
     diverged: list[tuple[str, str, str]] = []
     overridden: list[str] = []
     skipped_no_hash: list[str] = []
+    skipped_remote_missing: list[str] = []
 
     for name, local_entry in sorted(local_manifest.items()):
         if _has_local_override(skills_dir / name):
             overridden.append(name)
+            continue
+
+        if name not in remote_manifest:
+            skipped_remote_missing.append(name)
             continue
 
         remote_entry = remote_manifest.get(name)
@@ -560,7 +572,7 @@ def _classify_sync_status(
             remote_display = remote_entry.get("version") or remote_entry["hash"][:8]
             diverged.append((name, local_display, remote_display))
 
-    return up_to_date, diverged, overridden, skipped_no_hash
+    return up_to_date, diverged, overridden, skipped_no_hash, skipped_remote_missing
 
 
 def fetch_remote_manifest(repo_url: str) -> object:
@@ -603,8 +615,8 @@ def sync_status_report(
         )
 
     local_manifest = _extract_local_manifest(skills_dir)
-    up_to_date, diverged, overridden, skipped_no_hash = _classify_sync_status(
-        local_manifest, remote_manifest, skills_dir
+    up_to_date, diverged, overridden, skipped_no_hash, skipped_remote_missing = (
+        _classify_sync_status(local_manifest, remote_manifest, skills_dir)
     )
     return SyncStatus(
         repo_url=resolved_url,
@@ -622,6 +634,7 @@ def sync_status_report(
         ],
         overridden=overridden,
         skipped_no_hash=skipped_no_hash,
+        skipped_remote_missing=skipped_remote_missing,
     )
 
 
@@ -655,9 +668,16 @@ def cmd_pull_all(args: argparse.Namespace) -> None:
             print(f"  {name}")
 
     if status.skipped_no_hash:
-        print(f"\n[SKIP] {len(status.skipped_no_hash)} skill(s) have no remote hash data yet "
+        print(f"\n[SKIP] {len(status.skipped_no_hash)} skill(s) have a remote entry but no hash data yet "
               f"(remote versions.json needs regenerating via next 'skill-sync push'):")
         for name in status.skipped_no_hash:
+            print(f"  {name}")
+
+    if status.skipped_remote_missing:
+        print(f"\n[SKIP] {len(status.skipped_remote_missing)} skill(s) have no remote entry at all "
+              f"(never recorded in versions.json — confirm the remote should have this skill, "
+              f"then 'skill-sync push <name>' or document why not):")
+        for name in status.skipped_remote_missing:
             print(f"  {name}")
 
     if not status.diverged:
