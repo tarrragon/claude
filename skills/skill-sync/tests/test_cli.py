@@ -30,6 +30,7 @@ from skill_sync.cli import (  # noqa: E402
     sync_status_report,
     SyncStatus,
     update_sync_manifest,
+    _warn_skill_md_case_mismatch,
 )
 
 
@@ -274,6 +275,36 @@ def test_extract_local_manifest_builds_hash_and_version(tmp_path):
 
 def test_extract_local_manifest_empty_dir_returns_empty(tmp_path):
     assert _extract_local_manifest(tmp_path / "no-such-dir") == {}
+
+
+# --- _warn_skill_md_case_mismatch（0.2.1-W3-370） ----------------------------
+
+
+def test_warn_case_mismatch_emits_warning_for_lowercase_variant(tmp_path, capsys):
+    skills_dir = tmp_path / "skills"
+    skill_dir = skills_dir / "error-pattern"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "skill.md").write_text("# error-pattern\n")
+
+    _warn_skill_md_case_mismatch(skills_dir)
+
+    captured = capsys.readouterr()
+    assert "error-pattern" in captured.err
+    assert "skill.md" in captured.err
+
+
+def test_warn_case_mismatch_silent_for_correct_uppercase(tmp_path, capsys):
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "wrap-decision", "2.7.0", "body")
+
+    _warn_skill_md_case_mismatch(skills_dir)
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
+def test_warn_case_mismatch_missing_base_dir_no_error(tmp_path):
+    _warn_skill_md_case_mismatch(tmp_path / "no-such-dir")
 
 
 # --- prune_dst_only（--prune 刪除傳播，0.2.1-W3-350） ------------------------

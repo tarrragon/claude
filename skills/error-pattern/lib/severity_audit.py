@@ -8,7 +8,7 @@
 背景：0.2.1-W3-105 抽樣核對 IMP-002、DOC-001 兩例，發現 frontmatter `severity`
 與內文「風險等級／嚴重度」分歧且內文較準，`readme_index.extract_row` 據此單
 方面選定內文為權威（不讀 frontmatter severity）。但 `/error-pattern query`
-（`.claude/skills/error-pattern/skill.md`）排序與顯示仍依 frontmatter
+（`.claude/skills/error-pattern/SKILL.md`）排序與顯示仍依 frontmatter
 `severity`，故該分歧需獨立全量修正——本模組是該修正的可重跑掃描工具，非一
 次性腳本，供後續再次覆核或迴歸驗證使用。
 

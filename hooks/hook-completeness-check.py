@@ -314,7 +314,7 @@ def _check_and_fix_permissions(hooks_dir, logger):
     Claude Code 以 `$CLAUDE_PROJECT_DIR/.claude/hooks/<name>.py` 的形式直接執行
     hook，故只有「會被當作可執行檔啟動」的檔案需要 exec bit，而 hook 本體一律放
     在頂層。以目錄層級界定而非解析 settings.json，是為了避開「已註冊但本輪尚未
-    chmod 就被執行」的競態——那正是 IMP-026 的原始失效。
+    chmod 就被執行」的競態——那正是 IMP-054 的原始失效。
 
     刻意不遞迴：`tests/`、`acceptance_checkers/`、`archived/` 下的 .py 由 pytest 或
     import 載入，從不被 shell 直接執行。對其 chmod 會產生無主的 git mode-only 變更

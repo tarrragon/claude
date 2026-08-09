@@ -169,7 +169,7 @@
 - `.claude/rules/core/pm-role.md` - 主線程角色行為準則
 - `.claude/pm-rules/plan-to-ticket-flow.md` - Plan 轉 Ticket 流程
 - `.claude/error-patterns/process-compliance/PC-061-memory-upgrade-blindness.md` - 規則 7 錯誤模式來源
-- `.claude/skills/continuous-learning/skill.md` - 知識捕獲三分流 Skill
+- `.claude/skills/continuous-learning/SKILL.md` - 知識捕獲三分流 Skill
 
 ---
 

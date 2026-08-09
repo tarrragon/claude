@@ -27,6 +27,7 @@ from typing import Dict, Set, List, Tuple, Optional
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib import setup_hook_logging, run_hook_safely
+from lib.skill_case_guard import find_case_variant
 
 
 def extract_skill_dirs(skills_dir: Path) -> Set[str]:
@@ -66,10 +67,13 @@ def check_skill_registration(skill_dir: Path) -> Tuple[bool, Optional[str]]:
     # Check for SKILL.md (case-sensitive)
     skill_md = skill_dir / 'SKILL.md'
 
-    # Special case: if only skill.md exists (lowercase), it's a problem
-    skill_md_lowercase = skill_dir / 'skill.md'
-    if skill_md_lowercase.exists() and not skill_md.exists():
-        return (False, "has skill.md (lowercase) instead of SKILL.md")
+    # Special case: only a case-variant entry file exists (e.g. skill.md,
+    # Skill.md). Path.exists() cannot distinguish this on case-insensitive
+    # filesystems (macOS APFS) where it returns True for either name, so the
+    # real dirent name is read via os.scandir (see lib/skill_case_guard.py).
+    variant = find_case_variant(skill_dir)
+    if variant is not None:
+        return (False, f"has {variant} instead of SKILL.md")
 
     # Check if SKILL.md exists
     if not skill_md.exists():

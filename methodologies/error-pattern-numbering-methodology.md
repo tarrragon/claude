@@ -43,11 +43,10 @@
 
 **Consequence**：若對 legacy 碰撞執行重編，會觸發跨檔引用 churn 且各專案需同步重編才能保持一致，違反「凍結不改寫既有 flat 號」的向後相容前提。
 
-**Action**：以下 7 組（跨 category：`process-compliance` 5 組、`architecture` 1 組、`implementation` 1 組）已知重號，引用時須以 slug 區辨語意，**禁止重編**：
+**Action**：以下 6 組（跨 category：`process-compliance` 5 組、`implementation` 1 組）已知重號，引用時須以 slug 區辨語意，**禁止重編**：
 
 | Flat 號 | 教訓 A（slug） | 教訓 B（slug） |
 |---------|---------------|---------------|
-| ARCH-010 | module-assembly-omission | overengineered-state-management |
 | IMP-049 | hook-error-display-is-cli-bug | undefined-constants-in-hook-source |
 | PC-010 | pm-skipped-checkpoint-after-ticket-complete | task-tracking-in-memory |
 | PC-019 | design-decision-memory-only | worktree-merge-state-loss |
@@ -56,6 +55,8 @@
 | PC-105 | feature-implemented-without-doc-integration | pm-cli-syntax-autopilot |
 
 > **PC-018 已移除（0.2.1-W3-111 查證）**：舊版登記表列有 PC-018，但 `.claude/error-patterns/` 實測僅有 1 個 `PC-018-*.md` 檔案，非重號，已從登記表移除。
+
+> **ARCH-010 已移除（2026-08 查證）**：舊版登記表列有 ARCH-010（module-assembly-omission / overengineered-state-management），但查證發現 module-assembly-omission 側並非真正的碰撞方，而是已於 2026-05-04 在上游重編號為 `ARCH-021`、但舊檔隨初次匯入 commit `f375ae67` 一併殘留的孤兒重複檔（非本專案並行建檔產生）。孤兒檔已刪除，`architecture` category 不再有凍結重號項；ARCH-010 現僅存 overengineered-state-management 一份，非碰撞。
 
 > **PC-165 狀態為專案相對事實，非全域已完成聲明（0.2.1-W3-111 查證）**：舊版文字以完成式「auq-dispatch 已本地重編為 `PC-171`……上游遺留孤兒檔已刪除」陳述 PC-165 重號已解決。此為單一來源專案的歷史事件，經 full-overlay sync 帶入其他專案後即失真——sync 只複製文件敘述本身，不複製「已完成」的執行結果（重編後的檔案），讀者因此無從分辨陳述是否適用自己所在的專案。
 >
@@ -135,7 +136,7 @@ flat base 碰撞已存在於所有同步專案（發散狀態，63~309 檔）。
 **Action（各專案 pull 框架更新後依序執行）**：
 
 1. 跑 `.claude/scripts/detect_pc_collision.py` 取得本專案碰撞清單
-2. **共同 base 碰撞（見上「已知 legacy intra-dir 重號」表，現 7 組）**：凍結保留，不重編，引用以 slug 區辨
+2. **共同 base 碰撞（見上「已知 legacy intra-dir 重號」表，現 6 組）**：凍結保留，不重編，引用以 slug 區辨
 3. **本專案獨有未處理碰撞**：依 detect 結果逐一決定新編號並套用 canonical 重編，刪上游遺留孤兒檔，grep 更新引用。**不可直接沿用本文件過去列過的範例 ID**——舊版曾列 auq-dispatch→PC-171、defensive-rule→PC-181、ui-test-green→PC-182，經 0.2.1-W3-111 查證，三者皆非 flutter_balance 實際碰撞，`PC-171`/`PC-181`/`PC-182` 三檔本專案自匯入起從未存在（見上方 PC-165 查證註記）。每個專案的獨有碰撞集合不同，須以自身 detect 輸出為準，不得沿用其他專案的歷史範例
 4. 重編後再跑 detect 確認獨有碰撞歸零（共同 base 仍在屬正常）
 
@@ -167,5 +168,6 @@ flat base 碰撞已存在於所有同步專案（發散狀態，63~309 檔）。
 
 ---
 
-**Last Updated**: 2026-07-28
-**Version**: 1.1.0 — 校正兩組與檔案系統事實不符的陳述：(1) 碰撞登記表移除已非碰撞的 PC-018、補列 ARCH-010 與 IMP-049、範圍宣告改為跨 category（原 6 組僅 process-compliance→現 7 組跨 3 category）；(2) PC-165「已本地重編為 PC-171」與部署序列步驟 3 範例 ID（auq-dispatch→PC-171、defensive-rule→PC-181、ui-test-green→PC-182）改為查證後的專案相對陳述——三檔本專案自匯入起從未存在，且 PC-165 在本專案本非碰撞（0.2.1-W3-111，承接 0.2.1-W3-110 查證）。
+**Last Updated**: 2026-08-09
+**Version**: 1.2.0 — 移除 ARCH-010 凍結重號列：查證發現 module-assembly-omission 側非真碰撞，而是已於上游重編號為 `ARCH-021`、舊檔隨初次匯入殘留的孤兒重複檔；孤兒檔已刪除，凍結組數由 7 降為 6，`architecture` category 不再有凍結重號項，範圍宣告同步由「跨 3 category」改為「跨 2 category」。
+**Version**: 1.1.0 — 校正兩組與檔案系統事實不符的陳述：(1) 碰撞登記表移除已非碰撞的 PC-018、補列 ARCH-010 與 IMP-049、範圍宣告改為跨 category（原 6 組僅 process-compliance→現 7 組跨 3 category）；(2) PC-165「已本地重編為 PC-171」與部署序列步驟 3 範例 ID（auq-dispatch→PC-171、defensive-rule→PC-181、ui-test-green→PC-182）改為查證後的專案相對陳述——三檔本專案自匯入起從未存在，且 PC-165 在本專案本非碰撞（查證後定案）。

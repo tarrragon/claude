@@ -38,7 +38,7 @@ created: 2026-08-06
 
 ## 案例：hook 執行權限自動修正波及測試檔（2026-08-06）
 
-**背景**：`IMP-026` / `PC-086` 記錄了「hook 檔案缺少 exec bit 導致 session 啟動失敗」。補救方式是在 SessionStart 掃描 hook 目錄，對缺少 exec bit 的 `.py` 自動 `chmod +x`，並在工作區乾淨時自動 commit（IMP-054 / W17-133）。
+**背景**：`IMP-054` / `PC-086` 記錄了「hook 檔案缺少 exec bit 導致 session 啟動失敗」。補救方式是在 SessionStart 掃描 hook 目錄，對缺少 exec bit 的 `.py` 自動 `chmod +x`，並在工作區乾淨時自動 commit。
 
 **掃描軸過寬**：實作使用 `hooks_dir.rglob("*.py")` 遞迴掃描，涵蓋 `tests/`、`acceptance_checkers/`、`archived/` 三個子目錄。但 hook 是以 `$CLAUDE_PROJECT_DIR/.claude/hooks/<name>.py` 的形式被直接執行——實測 `settings.json` 中指向 `.claude/hooks/` 的 122 個註冊全部落在頂層，帶子目錄者 0 個。測試檔由 pytest import、`acceptance_checkers/` 由 `from acceptance_checkers import ...` 匯入，都不被 shell 執行，不需要 exec bit。
 
@@ -85,7 +85,7 @@ created: 2026-08-06
 
 ## 相關
 
-- `.claude/error-patterns/implementation/IMP-026-hook-file-missing-execute-permission.md` — 本補救機制的起源事故
+- `.claude/error-patterns/implementation/IMP-054-hook-missing-execute-permission.md` — 本補救機制的起源事故
 - `.claude/error-patterns/process-compliance/PC-086-subagent-hook-script-missing-exec-bit.md` — 同主題事故
 - `.claude/error-patterns/architecture/ARCH-BAL-014-upstream-filter-fix-widens-downstream-exposure.md` — 同族：修復使別處變糟；本案例的追加發現之一即為其實例
 - `.claude/error-patterns/process-compliance/PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md` — 共用 index 吸收他人變更

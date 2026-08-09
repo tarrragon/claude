@@ -38,8 +38,13 @@ error-pattern，光看前綴無從分辨，硬判會把正常的需求追溯標�
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from lib.skill_case_guard import warn_skill_md_case_mismatch
 
 EXEMPT_MARKER = "skill-residue-exempt"
 
@@ -214,10 +219,18 @@ def scan_skill(skill_dir: Path, project_root: Path) -> list[Residue]:
 
 
 def scan_all(skills_dir: Path, project_root: Path) -> dict[str, list[Residue]]:
-    """Scan every installed skill, returning only those with findings."""
+    """Scan every installed skill, returning only those with findings.
+
+    A `skill.md` (wrong case) never matches `is_reader_facing`'s exact
+    `SKILL.md` check, so its content is silently skipped by this scanner
+    regardless of filesystem case sensitivity. Warn about that blind spot
+    on stderr before scanning, so it is not read as "nothing to report".
+    """
     result: dict[str, list[Residue]] = {}
     if not skills_dir.is_dir():
         return result
+    for warning in warn_skill_md_case_mismatch(skills_dir):
+        print(f"[skill-residue-detector] {warning}", file=sys.stderr)  # i18n-exempt
     for skill_dir in sorted(d for d in skills_dir.iterdir() if d.is_dir()):
         found = scan_skill(skill_dir, project_root)
         if found:

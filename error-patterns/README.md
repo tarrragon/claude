@@ -18,7 +18,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | **共享範圍** | 單一專案本機，個人可見 | 團隊共享，所有協作者可見，可跨專案複用 |
 | **查詢方式** | 系統自動載入相關記憶 | `/error-pattern query` 主動查詢 |
 
-**排除說明**：memory 不納入 git、不隨 `.claude/` sync 到其他專案，與「經驗須跨專案複用」的框架目標根本衝突——寫在 memory 的跨專案原則會在其他專案消失，導致同樣的問題被重複踩雷。因此本框架的知識記錄一律遵循**捕獲時分流判準**：框架相關內容（替換專案名稱與檔案路徑後仍成立）進 `.claude/error-patterns/` 或 `.claude/rules/`、`.claude/methodologies/`、`.claude/references/`；專案相關內容（僅本專案成立）進 `docs/` 或 `CLAUDE.md`；兩者皆非則不記錄。**memory 不是任一分支的合法目的地**。完整判準見 `.claude/pm-rules/pm-quality-baseline.md` 規則 7（`.claude/skills/continuous-learning/skill.md` 為執行工具）。
+**排除說明**：memory 不納入 git、不隨 `.claude/` sync 到其他專案，與「經驗須跨專案複用」的框架目標根本衝突——寫在 memory 的跨專案原則會在其他專案消失，導致同樣的問題被重複踩雷。因此本框架的知識記錄一律遵循**捕獲時分流判準**：框架相關內容（替換專案名稱與檔案路徑後仍成立）進 `.claude/error-patterns/` 或 `.claude/rules/`、`.claude/methodologies/`、`.claude/references/`；專案相關內容（僅本專案成立）進 `docs/` 或 `CLAUDE.md`；兩者皆非則不記錄。**memory 不是任一分支的合法目的地**。完整判準見 `.claude/pm-rules/pm-quality-baseline.md` 規則 7（`.claude/skills/continuous-learning/SKILL.md` 為執行工具）。
 
 ---
 
@@ -211,7 +211,6 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | ARCH-MON-001 | 多 wave 票各加進同一中心檔，累積 domain 過載而無單票觸發閾值 | 中 | — |
 | ARCH-TUNL-001 | settings.local.json 註冊 hook 在 relocate 後成幽靈（sync 無法自癒） | 中 | v1.0.0（1.0.0-W9-001 ANA） |
 | ARCH-BAL-007 | 非唯一識別符被當主鍵，集合去重靜默丟棄同鍵資料 | 高 | v0.2.1（0.2.1-W3-110 ANA） |
-| ARCH-010 (module-assembly-omission) | 模組組裝遺漏導致功能鏈路靜默斷裂 | 高 | v0.15.4 |
 | ARCH-010 (overengineered-state-management) | 過度設計的狀態管理 — 框架機制已解決的問題不需要額外狀態層 | 中 | v0.1.0 |
 | ARCH-BAL-008 | 以單一消費者內容覆寫共用覆蓋層，靜默刪除其他消費者的獨有內容 | — | — |
 | ARCH-BAL-014 | 修好上游過濾層使原本被攔下的資料抵達下游，同根因的下游缺陷暴露面反而擴大 | 高 | v0.2.1（0.2.1-W3-306 Phase 4） |
@@ -264,7 +263,6 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | IMP-023 | uv tool install --force 不更新已安裝套件程式碼 | 中 | v0.3.0 |
 | IMP-024 | phase-completion-gate-hook 在編輯 tdd_phase 欄位時誤觸 Phase 3b 完成警告 | 低 | v0.1.0 |
 | IMP-025 | 新模組引入 except Exception: pass 靜默吞掉異常 | 中 | v0.1.0 |
-| IMP-026 | 新建 Hook 檔案後未設定執行權限（+x） | 高 | v0.1.1 |
 | IMP-027 | 跨 Context 函式庫與 Hook 邏輯重複 | 低 | v0.1.0 |
 | IMP-028 | Hook 提前返回與 API 簽名漂移 | 中 | v0.1.0 |
 | IMP-029 | 強制 logger 參數破壞共用工具重用性 | 中 | v0.1.0 |
@@ -592,6 +590,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-SCLK-007 | Hook 讀取錯誤的 payload 欄位名，取得空值後走「無事可做」分支而靜默失效 | 高 | — |
 | PC-SCLK-008 | PM 前置分析的斷言措辭被執行者照抄進產出，成為錯誤的事實來源 | — | — |
 | PC-BAL-026 | 驗證管道經快取層讀取，輸出滯後於待驗現象，成功操作被報為失敗 | 中 | — |
+| PC-BAL-027 | 稽核器未讀既有決策登記表，把已裁定的刻意設計持續報為缺陷 | 中 | — |
 
 ---
 

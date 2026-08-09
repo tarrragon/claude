@@ -1,3 +1,28 @@
+## [2.27.0] - 2026-08-10
+
+### Summary
+feat: 新增 error-patterns README 索引與目錄一致性檢查 Hook; feat: 抽取共用 skill.md 大小寫告警 helper 並接線四處; feat: skill-sync 對大小寫不符的 SKILL.md 輸出告警 (+12 more)
+
+Changes: 3 feat, 4 fix, 4 docs, 3 chore, 1 test
+
+- feat: 新增 error-patterns README 索引與目錄一致性檢查 Hook
+- feat: 抽取共用 skill.md 大小寫告警 helper 並接線四處
+- feat: skill-sync 對大小寫不符的 SKILL.md 輸出告警
+- fix: 索引一致性 Hook 依凍結登記表分流 ID 碰撞誤報
+- fix: skill-registration-check-hook 小寫偵測在 case-insensitive fs 上永不觸發
+- fix: 更正 IMP-V1-006 對 pathlib.glob 大小寫行為的錯誤敘述
+- fix: 本地重命名三個 skill 為大寫 SKILL.md 並同步活引用
+- docs: 整併 IMP-026 至 IMP-054，PC-086 補姊妹模式交叉引用
+- docs: ARCH-BAL-007 案例補後續更正，七組碰撞中 ARCH-010 實為孤兒重複
+- docs: 新增 PC-BAL-027 稽核器缺政策輸入把已裁定設計報為缺陷
+- docs: IMP-V1-006 補二次觸發擴充，涵蓋 case-sensitive 掃描器靜默漏樣本
+- chore: 完成全庫孤兒重複稽核，spawn 清理 IMP-026/054/PC-086
+- chore: 刪除 ARCH-010 孤兒重複檔並修正索引與凍結表
+- chore: 框架同步至 ，驗收判定 acceptance 1 未達成轉 承接
+- test: 兩份 skill.md 大小寫判準實作對照測試 + 文案更正
+
+---
+
 ## [2.26.3] - 2026-08-09
 
 ### Summary

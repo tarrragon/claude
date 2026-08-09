@@ -146,6 +146,49 @@ def _has_local_override(skill_dir: Path) -> bool:
     return (skill_dir / SKILL_SYNC_OVERRIDE_MARKER).is_file()
 
 
+def _warn_skill_md_case_mismatch(base_dir: Path) -> None:
+    """對 base_dir 下每個 skill 目錄，若無精確大寫 SKILL.md 但存在其他大小寫變體，輸出 stderr 警告。
+
+    `glob("*/SKILL.md")` 的大小寫敏感性依 Python 版本而異：3.12 及之前固定
+    case-sensitive 比對，3.13 起在省略 `case_sensitive` 時改為探測實際檔案
+    系統，在 case-insensitive 檔案系統（如 macOS APFS）上會反過來折疊命中。
+    兩個版本都不報錯，只是掃描集合不同——目錄內若只有 `skill.md`（或其他
+    大小寫變體），在較舊版本上會被靜默略過、永遠不進入 manifest。改為
+    case-insensitive glob 會讓兩種檔名長期並存並在 push 時互相覆蓋，不採用；
+    本函式只負責告警，判準仍維持 case-sensitive。
+
+    判準讀取實際目錄項名稱（`os.scandir` 的 `entry.name`），不可用
+    `Path.exists()` 或 `Path.glob()`——兩者在 case-insensitive 檔案系統上
+    都可能對小寫 `skill.md` 回傳「找到了」，會讓本判準失效。
+
+    本函式與 `.claude/lib/skill_case_guard.py` 的 `warn_skill_md_case_mismatch`
+    為同一判準的兩份實作，刻意不共用程式碼：skill-sync 以 hatchling 打包為
+    獨立 wheel（`pyproject.toml` 的 `dependencies = []`、
+    `packages = ["skill_sync"]`），安裝到其他 consumer 專案時不含 `.claude/`
+    樹，import `.claude.lib` 會在該情境下失敗。兩份實作的判準邏輯變更時須
+    同步修改。
+    """
+    if not base_dir.is_dir():
+        return
+    for entry in sorted(os.scandir(base_dir), key=lambda e: e.name):
+        if not entry.is_dir():
+            continue
+        try:
+            names = [f.name for f in os.scandir(entry.path) if f.is_file()]
+        except OSError:
+            continue
+        if "SKILL.md" in names:
+            continue
+        variant = next((n for n in names if n.lower() == "skill.md"), None)
+        if variant is not None:
+            print(
+                f"  [WARN] {entry.name}: 檔名為 '{variant}'，非精確大寫 'SKILL.md'，"
+                "不會進入 manifest 掃描（case-sensitive glob 在 Python 3.13 前恆漏，"
+                "3.13 起依檔案系統大小寫敏感性而定）",
+                file=sys.stderr,
+            )
+
+
 def update_sync_manifest(repo_dir: Path) -> None:
     """掃描 repo 內所有 skill，寫入版本字串（人類可讀）與內容雜湊（同步判定用）至 versions.json。
 
@@ -154,6 +197,7 @@ def update_sync_manifest(repo_dir: Path) -> None:
     比較亦預設線性演進，對分支式分歧失準（0.2.1-W3-124 §11.2）。版本字串保留於本檔
     供人類於 changelog 對照，內容同一性判定改用 hash 欄位。
     """
+    _warn_skill_md_case_mismatch(repo_dir)
     manifest: dict[str, dict[str, str]] = {}
     for skill_md in sorted(repo_dir.glob("*/SKILL.md")):
         name = skill_md.parent.name
@@ -711,6 +755,7 @@ def _extract_local_manifest(skills_dir: Path) -> dict[str, dict[str, str]]:
     manifest: dict[str, dict[str, str]] = {}
     if not skills_dir.is_dir():
         return manifest
+    _warn_skill_md_case_mismatch(skills_dir)
     for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
         skill_dir = skill_md.parent
         content_hash = compute_content_hash(skill_dir)

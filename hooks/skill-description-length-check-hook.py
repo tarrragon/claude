@@ -20,6 +20,7 @@ from typing import List, Tuple
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib import setup_hook_logging, run_hook_safely, get_project_root
+from lib.skill_case_guard import warn_skill_md_case_mismatch
 
 # description 長度閾值（字元數）
 WARNING_THRESHOLD = 250
@@ -97,6 +98,14 @@ def main() -> int:
     if not skills_dir.exists():
         logger.info("skills 目錄不存在，跳過檢查")
         return 0
+
+    case_warnings = warn_skill_md_case_mismatch(skills_dir)
+    if case_warnings:
+        lines = ["[SkillCheck] skill.md 大小寫警告"]
+        for w in case_warnings:
+            lines.append(f"  - {w}")
+        sys.stderr.write("\n".join(lines) + "\n")
+        logger.warning("skill.md 大小寫不符: %d 項", len(case_warnings))
 
     warnings: List[Tuple[str, int]] = []
     infos: List[Tuple[str, int]] = []

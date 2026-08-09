@@ -11,7 +11,10 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
+
+from lib.skill_case_guard import warn_skill_md_case_mismatch
 
 # 分歧清單的顯示上限。超出者以「另有 N 個」帶過，完整清單由 skill-sync 取得。
 SKILL_DRIFT_PREVIEW_LIMIT = 10
@@ -19,6 +22,11 @@ SKILL_DRIFT_PREVIEW_LIMIT = 10
 
 def extract_skill_versions(skills_dir: Path) -> dict[str, str]:
     """掃描 skills/*/SKILL.md 提取各 skill 的版本號。
+
+    `glob("*/SKILL.md")` 判準對大小寫是否敏感依 Python 版本而異（3.13 起
+    在省略 `case_sensitive` 時改為探測實際檔案系統），故本函式在掃描前先以
+    版本無關的 `os.scandir` 判準告警大小寫不符項——即使該版本的 glob 折疊
+    命中，仍讓維護者知道檔名不精確、日後換掃描實作可能再度漏收。
 
     參數:
         skills_dir: skills 目錄路徑（如 .claude/skills/ 或 temp_dir/skills/）
@@ -29,6 +37,8 @@ def extract_skill_versions(skills_dir: Path) -> dict[str, str]:
     versions: dict[str, str] = {}
     if not skills_dir.is_dir():
         return versions
+    for warning in warn_skill_md_case_mismatch(skills_dir):
+        print(f"[skill-version-diff] {warning}", file=sys.stderr)  # i18n-exempt
     for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
         skill_name = skill_md.parent.name
         try:

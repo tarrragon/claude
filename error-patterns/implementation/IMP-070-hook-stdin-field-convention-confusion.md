@@ -148,7 +148,7 @@ ginger 等 Hook 密度審計工具應計算每個 hook 的「觸發次數 vs 命
 | 檢查項 | 來源 |
 |-------|------|
 | 註冊到 settings.json | IMP-051 |
-| 設定執行權限（+x） | IMP-054 / IMP-026 / PC-086 |
+| 設定執行權限（+x） | IMP-054 / PC-086 |
 | stdout 為 JSON 格式（hookSpecificOutput camelCase） | IMP-055 |
 | **stdin 解析用 snake_case 欄位** | **IMP-070（本檔）** |
 

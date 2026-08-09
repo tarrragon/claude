@@ -170,5 +170,30 @@ class TestSkillScan:
         assert found[0].skill == "probe"
 
 
+class TestCaseMismatchWarning:
+    """`skill.md`（錯誤大小寫）不會被 is_reader_facing 的精確比對命中，掃描
+    器會靜默略過其內容；scan_all 需在掃描前另外告警，避免這種盲區被讀成
+    「無殘留」。"""
+
+    def test_scan_all_warns_lowercase_skill_md(self, tmp_path, capsys):
+        skills_dir = tmp_path / "skills"
+        skill_dir = skills_dir / "wrong-case"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "skill.md").write_text("body\n", encoding="utf-8")
+
+        scan_all(skills_dir, tmp_path)
+
+        captured = capsys.readouterr()
+        assert "wrong-case" in captured.err
+        assert "skill.md" in captured.err
+
+    def test_scan_all_silent_for_correct_uppercase(self, project, capsys):
+        root = project("見 `lib/core/gone.dart`\n")
+        scan_all(root / ".claude" / "skills", root)
+
+        captured = capsys.readouterr()
+        assert captured.err == ""
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))
