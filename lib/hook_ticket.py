@@ -708,9 +708,14 @@ def scan_ticket_files_by_version(
     if flat_dir.exists():
         try:
             ticket_files = list(flat_dir.glob("*.md"))
+            if ticket_files:
+                if logger:
+                    logger.debug("從版本 v{} 找到 {} 個 Ticket 檔案 (flat)".format(version, len(ticket_files)))
+                return ticket_files
             if logger:
-                logger.debug("從版本 v{} 找到 {} 個 Ticket 檔案 (flat)".format(version, len(ticket_files)))
-            return ticket_files
+                logger.debug(  # i18n-exempt
+                    "flat 目錄存在但為空，fallback 至 hierarchical 結構: v{}".format(version)
+                )
         except (OSError, PermissionError) as e:
             if logger:
                 logger.warning("掃描 Ticket 目錄失敗 (v{}): {}".format(version, e))

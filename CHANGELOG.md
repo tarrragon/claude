@@ -1,3 +1,16 @@
+## [2.26.2] - 2026-08-09
+
+### Summary
+fix: 移除 hook 重複註冊與被合併版並存; fix: ticket 掃描改依實際結果分派，修復九個 hook 恆掃到空; chore: 框架 repo 同步至 （本 session hook 變更）
+
+Changes: 2 fix, 1 chore
+
+- fix: 移除 hook 重複註冊與被合併版並存
+- fix: ticket 掃描改依實際結果分派，修復九個 hook 恆掃到空
+- chore: 框架 repo 同步至 （本 session hook 變更）
+
+---
+
 ## [2.26.1] - 2026-08-09
 
 ### Summary

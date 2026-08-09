@@ -598,21 +598,6 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-context-guard-hook.py",
             "timeout": 5000
-          },
-          {
-            "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/changelog-update-hook.py",
-            "timeout": 5000
-          },
-          {
-            "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/commit-handoff-hook.py",
-            "timeout": 5000
-          },
-          {
-            "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-commit-fetch-hook.py",
-            "timeout": 5000
           }
         ]
       },
@@ -741,10 +726,6 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uc-fingerprint-drift-check-hook.py",
             "timeout": 5000
-          },
-          {
-            "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/dart-style-guardian-hook.py"
           }
         ]
       },
