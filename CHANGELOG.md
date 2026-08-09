@@ -1,3 +1,14 @@
+## [2.26.1] - 2026-08-09
+
+### Summary
+chore: 框架 repo 同步至 （傳播三個 dart skill 移除）
+
+Changes: 1 chore
+
+- chore: 框架 repo 同步至 （傳播三個 dart skill 移除）
+
+---
+
 ## [2.26.0] - 2026-08-09
 
 ### Summary
