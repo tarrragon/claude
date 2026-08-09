@@ -1,3 +1,16 @@
+## [2.26.0] - 2026-08-09
+
+### Summary
+refactor: 規則 8 守衛的兩份掃描邏輯統一為單一實作; fix: layer-boundary-validator 改用 lib 套件修復測試套件收集中斷; chore: 框架 repo 同步至 ，回填 至 spawned_tickets
+
+Changes: 1 refactor, 1 fix, 1 chore
+
+- refactor: 規則 8 守衛的兩份掃描邏輯統一為單一實作
+- fix: layer-boundary-validator 改用 lib 套件修復測試套件收集中斷
+- chore: 框架 repo 同步至 ，回填 至 spawned_tickets
+
+---
+
 ## [2.25.0] - 2026-08-09
 
 ### Summary

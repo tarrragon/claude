@@ -174,13 +174,54 @@ def _strip_exempt_spans(text: str) -> str:
     return text
 
 
-def _strip_code_fences(text: str) -> str:
-    """挖除 code fence（```...```）區塊，格式示範內容不視為實際引用。"""
-    return CODE_FENCE_PATTERN.sub(" ", text)
+def _blank_match_preserving_newlines(match: "re.Match[str]") -> str:
+    """把命中片段的非換行字元換成空白、換行字元原樣保留（子函式供 re.sub 呼叫）。"""
+    return "".join("\n" if ch == "\n" else " " for ch in match.group(0))
+
+
+def _strip_code_fences_preserve_lines(text: str) -> str:
+    """挖除 code fence（```...```）內容，但保留原始換行位置與行號對應。
+
+    與逐字元替換為單一空白（會使多行 fence 併為一行、行號位移）不同，
+    本函式僅將 fence 命中片段內的非換行字元換成空白，換行字元原樣保留。
+    效果：fence 起訖標記所在行的行號不變，且 fence 結束標記 ``` 之後
+    「同一行殘留的文字」不在命中片段內，不受影響——這是 fence 標記與
+    內容同行時的唯一判定依據（曾因整段挖除與逐行行區間排除各自實作而
+    邊界不一致，導致命中在其中一份實作被排除、另一份未排除而漏擋）。
+    """
+    return CODE_FENCE_PATTERN.sub(_blank_match_preserving_newlines, text)
+
+
+def find_ticket_id_hits_with_lines(text: str) -> List[Tuple[str, int]]:
+    """逐行找出專案 ticket ID 候選，回傳 (ticket_id, line_index) list（0-based，不去重）。
+
+    單一事實來源：pattern 掃描與 code fence 排除的唯一實作，
+    find_ticket_id_hits 為其去重保序投影。
+
+    marker 逃生閥判定需要逐行結果（生效範圍以行為單位，需知道每筆命中
+    落在哪一行才能判斷該行或上一行是否有有效 marker）；fence 排除改用
+    _strip_code_fences_preserve_lines 的逐字元挖除（保留行號對應），
+    不再有第二套獨立的行區間排除邏輯與其分歧。
+    """
+    if not text:
+        return []
+    cleaned = _strip_code_fences_preserve_lines(text)
+    hits: List[Tuple[str, int]] = []
+    for idx, line in enumerate(cleaned.split("\n")):
+        cleaned_line = _strip_exempt_spans(line)
+        for pattern in (VERSIONED_TICKET_PATTERN, BARE_TICKET_PATTERN):
+            for match in pattern.finditer(cleaned_line):
+                hits.append((match.group(0), idx))
+    return hits
 
 
 def find_ticket_id_hits(text: str) -> List[str]:
     """在文字中找出專案 ticket ID 候選（已排除放行例外與 code fence），去重保序。
+
+    改為 find_ticket_id_hits_with_lines 的去重保序投影，不再自行做整段
+    pattern 掃描與 fence 挖除。兩函式對 fence 邊界的判定因此共用同一份
+    實作，結構上不可能再漂移（先前發現的「fence 結束標記與內容同行」
+    漏擋即源自兩份獨立實作邊界不一致）。
 
     全禁原則下本函式即為完整偵測器，不再區分依賴型 / 歷史錨點型——
     是否觸發阻擋改由呼叫端以「編輯前後淨增量」與「行內 marker」判斷
@@ -188,47 +229,12 @@ def find_ticket_id_hits(text: str) -> List[str]:
     """
     if not text:
         return []
-    cleaned = _strip_exempt_spans(_strip_code_fences(text))
-
     hits: List[str] = []
     seen = set()
-    for pattern in (VERSIONED_TICKET_PATTERN, BARE_TICKET_PATTERN):
-        for match in pattern.finditer(cleaned):
-            value = match.group(0)
-            if value not in seen:
-                seen.add(value)
-                hits.append(value)
-    return hits
-
-
-def _code_fence_line_ranges(text: str) -> Set[int]:
-    """回傳落在 code fence 內的行索引集合（0-based），供逐行掃描排除用。"""
-    ranges: Set[int] = set()
-    for match in CODE_FENCE_PATTERN.finditer(text):
-        start_line = text.count("\n", 0, match.start())
-        end_line = text.count("\n", 0, match.end())
-        ranges.update(range(start_line, end_line + 1))
-    return ranges
-
-
-def find_ticket_id_hits_with_lines(text: str) -> List[Tuple[str, int]]:
-    """逐行找出專案 ticket ID 候選，回傳 (ticket_id, line_index) list（0-based，不去重）。
-
-    供 marker 逃生閥判定使用：marker 生效範圍以行為單位，需知道每筆命中
-    落在哪一行才能判斷該行或上一行是否有有效 marker。code fence 內容
-    比照 find_ticket_id_hits 排除，逐行方式排除以行索引區間判斷。
-    """
-    if not text:
-        return []
-    fence_lines = _code_fence_line_ranges(text)
-    hits: List[Tuple[str, int]] = []
-    for idx, line in enumerate(text.split("\n")):
-        if idx in fence_lines:
-            continue
-        cleaned_line = _strip_exempt_spans(line)
-        for pattern in (VERSIONED_TICKET_PATTERN, BARE_TICKET_PATTERN):
-            for match in pattern.finditer(cleaned_line):
-                hits.append((match.group(0), idx))
+    for value, _line_idx in find_ticket_id_hits_with_lines(text):
+        if value not in seen:
+            seen.add(value)
+            hits.append(value)
     return hits
 
 
@@ -394,21 +400,21 @@ def filter_marker_exempt(
     若所在行或上一行有有效 marker → 豁免；若有 marker 但格式錯誤（未知
     category 或理由為空）→ 該命中仍阻擋，且產生獨立的格式錯誤訊息。
 
-    fail-closed 保底（0.2.1-W3-063 Phase 4 修補）：find_ticket_id_hits
-    （diff_new_hits 用，整段挖除 code fence）與
-    find_ticket_id_hits_with_lines（本函式用，逐行 + 行索引排除 code
-    fence）對「fence 結束標記與內容同行」的邊界處理不同，可能使某筆
-    new_hits 命中在 hits_with_lines 掃描不到對應行（例如 ticket ID 與
-    ``` 結束標記同行：整段挖除只挖到 ``` 為止、該行 ``` 之後文字仍保留
-    而進了 new_hits；逐行排除則整行連同結尾文字一併排除，該命中不出現
-    在 hits_with_lines）。找不到行代表無法判斷 marker 是否生效，一律
-    視為未豁免直接阻擋——漏擋比誤擋更傷（沒人會發現漏擋，誤擋使用者
-    會主動回報）。
+    前提（呼叫端契約）：`new_hits` 必須是針對同一份 `post_text` 呼叫
+    `find_ticket_id_hits` 得到結果的子集。此契約現由單一事實來源保證
+    成立——find_ticket_id_hits 已改為 find_ticket_id_hits_with_lines 的
+    去重投影（見該函式），故 `new_hits` 中的每個值必然能在
+    `find_ticket_id_hits_with_lines(post_text)` 找到至少一筆對應的
+    (value, line_idx)。曾經需要的「找不到對應行時 fail-closed 阻擋」
+    保底分支（因兩函式各自獨立實作 fence 排除、邊界可能不一致）已隨此
+    次重構結構性消除，不再需要，故移除。若未來任一呼叫端違反此契約
+    （傳入非源自 find_ticket_id_hits(post_text) 的 new_hits），本函式會
+    靜默忽略該值——這是新的風險面，留意 main() 為唯一生產路徑且已符合
+    契約。
     """
     marker_info = _find_marker_lines(post_text)
     new_hits_set = set(new_hits)
     hits_with_lines = find_ticket_id_hits_with_lines(post_text)
-    accounted_for: Set[str] = set()
 
     blocked: List[str] = []
     seen_blocked = set()
@@ -418,7 +424,6 @@ def filter_marker_exempt(
     for value, line_idx in hits_with_lines:
         if value not in new_hits_set:
             continue
-        accounted_for.add(value)
 
         exempted = False
         invalid_marker_line: Optional[int] = None
@@ -448,14 +453,6 @@ def filter_marker_exempt(
         if value not in seen_blocked:
             seen_blocked.add(value)
             blocked.append(value)
-
-    # fail-closed 保底：new_hits 中無法對應到任何行的殘餘命中一律阻擋
-    # （見上方 docstring「fail-closed 保底」段）。
-    for value in new_hits:
-        if value in accounted_for or value in seen_blocked:
-            continue
-        seen_blocked.add(value)
-        blocked.append(value)
 
     return blocked, format_error_messages
 

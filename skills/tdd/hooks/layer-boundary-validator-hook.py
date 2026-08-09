@@ -35,10 +35,10 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Set, Tuple
 
-_FRAMEWORK_HOOKS = str(Path(__file__).resolve().parents[3] / "hooks")
-sys.path.insert(0, _FRAMEWORK_HOOKS)
+_FRAMEWORK_ROOT = str(Path(__file__).resolve().parents[3])
+sys.path.insert(0, _FRAMEWORK_ROOT)
 
-from hook_utils import (
+from lib import (
     setup_hook_logging,
     run_hook_safely,
     read_json_from_stdin,
