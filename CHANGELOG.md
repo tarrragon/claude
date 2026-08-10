@@ -1,3 +1,15 @@
+## [2.27.3] - 2026-08-10
+
+### Summary
+docs: 校準 language-constraints.md 非 MoE 標準字; chore: 回寫框架版本號 （sync-push 產出）
+
+Changes: 1 docs, 1 chore
+
+- docs: 校準 language-constraints.md 非 MoE 標準字
+- chore: 回寫框架版本號 （sync-push 產出）
+
+---
+
 ## [2.27.2] - 2026-08-10
 
 ### Summary
