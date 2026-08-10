@@ -1,3 +1,15 @@
+## [2.27.5] - 2026-08-10
+
+### Summary
+fix: skill 庫檢查輸出標示比對遠端 repo; chore: sync-push 回寫框架版本號
+
+Changes: 1 fix, 1 chore
+
+- fix: skill 庫檢查輸出標示比對遠端 repo
+- chore: sync-push 回寫框架版本號
+
+---
+
 ## [2.27.4] - 2026-08-10
 
 ### Summary

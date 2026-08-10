@@ -114,13 +114,14 @@ def report_skill_repo_drift(claude_dir: Path) -> str:
         from skill_sync.cli import sync_status_report
 
         status = sync_status_report(claude_dir / "skills")
+        remote_line = f"[skill 庫檢查] 比對遠端：{status.repo_url}"  # i18n-exempt
 
         if not status.local_count:
-            return "[skill 庫檢查] 本地無已安裝 skill，略過"  # i18n-exempt
+            return f"{remote_line}\n本地無已安裝 skill，略過"  # i18n-exempt
         if not status.remote_count:
             # 遠端可達但 manifest 為空時，全部項目會落入「無遠端雜湊」，讀起來
             # 像檢查通過；明說沒有比對對象，避免空結果被當成一致。
-            return "[skill 庫檢查] 遠端 versions.json 無任何項目，未進行比對"  # i18n-exempt
+            return f"{remote_line}\n遠端 versions.json 無任何項目，未進行比對"  # i18n-exempt
 
         counts = (  # i18n-exempt
             f"一致 {len(status.up_to_date)}、分歧 {len(status.diverged)}、"  # i18n-exempt
@@ -128,7 +129,7 @@ def report_skill_repo_drift(claude_dir: Path) -> str:
             f"遠端有記錄無雜湊 {len(status.skipped_no_hash)}、"  # i18n-exempt
             f"遠端無記錄 {len(status.skipped_remote_missing)}"  # i18n-exempt
         )
-        lines = [f"[skill 庫檢查] {counts}"]  # i18n-exempt
+        lines = [remote_line, f"[skill 庫檢查] {counts}"]  # i18n-exempt
         # 兩種盲區成因不同（前者等下次 push 自動補；後者需人工確認遠端該不該
         # 有這個 skill），單一計數無法分辨該做什麼，故列出成因與名單。
         if status.skipped_no_hash:
@@ -158,6 +159,10 @@ def report_skill_repo_drift(claude_dir: Path) -> str:
             lines.append(  # i18n-exempt
                 "   方向需人工判斷（內容雜湊只證明不同，不證明誰較新），逐一處理："  # i18n-exempt
                 f"{first.pull_command} 或 {first.push_command}"  # i18n-exempt
+            )
+            lines.append(  # i18n-exempt
+                "   此為 skill 發佈庫，與 sync-push 目標 repo 不同；"  # i18n-exempt
+                "上方[Skill 變更摘要]是 push 前後本地快照差異，本段是本地與此發佈庫的雜湊比對，兩者指涉對象不同"  # i18n-exempt
             )
         return "\n".join(lines)
     except Exception as e:  # noqa: BLE001 - 降級為警告，見 docstring

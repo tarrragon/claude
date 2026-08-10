@@ -121,6 +121,62 @@ def test_drift_report_degrades_instead_of_raising(tmp_path, monkeypatch, failure
     assert type(failure).__name__ in report
 
 
+def test_report_prefixes_remote_url_on_all_success_paths(tmp_path, monkeypatch):
+    """成功路徑（含空手/空清單）首行都須標示比對遠端，URL 來自 status.repo_url。"""
+    _stub_report(monkeypatch, _status(repo_url="https://github.com/owner/repo.git"))
+
+    report = sync_mod.report_skill_repo_drift(tmp_path / ".claude")
+
+    assert report.startswith(
+        "[skill 庫檢查] 比對遠端：https://github.com/owner/repo.git"
+    )
+
+
+def test_report_remote_line_no_local_skills(tmp_path, monkeypatch):
+    _stub_report(
+        monkeypatch,
+        _status(repo_url="https://github.com/owner/repo.git"),
+    )
+
+    report = sync_mod.report_skill_repo_drift(tmp_path / ".claude")
+
+    assert report.startswith(
+        "[skill 庫檢查] 比對遠端：https://github.com/owner/repo.git"
+    )
+    assert "本地無已安裝 skill" in report
+
+
+def test_report_remote_line_empty_remote_manifest(tmp_path, monkeypatch):
+    _stub_report(
+        monkeypatch,
+        _status(
+            repo_url="https://github.com/owner/repo.git",
+            remote_count=0,
+            skipped_no_hash=["a"],
+        ),
+    )
+
+    report = sync_mod.report_skill_repo_drift(tmp_path / ".claude")
+
+    assert report.startswith(
+        "[skill 庫檢查] 比對遠端：https://github.com/owner/repo.git"
+    )
+    assert "未進行比對" in report
+
+
+def test_diverged_annotation_distinguishes_skill_repo_from_sync_target(
+    tmp_path, monkeypatch
+):
+    """分歧提示須說明本檢查對象是 skill 發佈庫，與 sync-push 目標 repo 不同。"""
+    _stub_report(
+        monkeypatch, _status(diverged=[_diverged("demo", "1.0.0", "0.9.0")])
+    )
+
+    report = sync_mod.report_skill_repo_drift(tmp_path / ".claude")
+
+    assert "此為 skill 發佈庫，與 sync-push 目標 repo 不同" in report
+
+
 def test_degraded_message_distinguishes_failure_kinds(tmp_path, monkeypatch):
     """網路不通與契約破損不得呈現為同一行，否則讀者無從判斷該重試還是修安裝。"""
     _stub_report(monkeypatch, OSError("unreachable"))
