@@ -35,6 +35,7 @@ from pathlib import Path
 from gh_common import (
     FRAMEWORK_REPO,
     emit_degraded,
+    normalize_issue_ref,
     preflight,
     run_gh,
 )
@@ -194,6 +195,15 @@ def main(argv=None) -> int:
     if gate != 0:
         return gate
 
+    try:
+        issue_ref = normalize_issue_ref(parsed.issue_ref)
+    except ValueError as exc:
+        return emit_degraded(
+            f"issue ref 格式錯誤：{exc}",
+            "使用 owner/repo#N、#N 或純數字格式，且 repo 需與"
+            f" {FRAMEWORK_REPO} 相符",
+        )
+
     version = parsed.version
     if not version:
         try:
@@ -206,7 +216,7 @@ def main(argv=None) -> int:
             )
 
     date = parsed.date or datetime.date.today().isoformat()
-    return mark_version(parsed.issue_ref, version, parsed.summary, date)
+    return mark_version(issue_ref, version, parsed.summary, date)
 
 
 if __name__ == "__main__":

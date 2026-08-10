@@ -24,6 +24,7 @@ from skill_sync.cli import (  # noqa: E402
     EXCLUDE_DIRS,
     DivergedSkill,
     fetch_remote_manifest,
+    get_skills_dir,
     print_diff_preview,
     prune_dst_only,
     SKILL_SYNC_OVERRIDE_MARKER,
@@ -32,6 +33,43 @@ from skill_sync.cli import (  # noqa: E402
     update_sync_manifest,
     _warn_skill_md_case_mismatch,
 )
+
+
+def test_get_skills_dir_resolves_to_git_toplevel_from_repo_root(tmp_path, monkeypatch):
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True)
+    monkeypatch.chdir(repo)
+
+    result = get_skills_dir()
+
+    assert result == repo / ".claude" / "skills"
+
+
+def test_get_skills_dir_resolves_to_git_toplevel_from_subdirectory(tmp_path, monkeypatch):
+    import subprocess
+
+    repo = tmp_path / "repo"
+    subdir = repo / ".claude" / "skills" / "skill-sync"
+    subdir.mkdir(parents=True)
+    subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True)
+    monkeypatch.chdir(subdir)
+
+    result = get_skills_dir()
+
+    assert result == repo / ".claude" / "skills"
+
+
+def test_get_skills_dir_falls_back_to_cwd_outside_git_repo(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+
+    result = get_skills_dir()
+
+    assert result == tmp_path / ".claude" / "skills"
+    captured = capsys.readouterr()
+    assert "Warning" in captured.err
 
 
 def test_hook_logs_top_level_jsonl_excluded():

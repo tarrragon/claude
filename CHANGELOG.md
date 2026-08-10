@@ -1,3 +1,16 @@
+## [2.27.6] - 2026-08-10
+
+### Summary
+fix: framework-issue scripts 統一接受三種 issue ref 形態; fix: skill-sync get_skills_dir 改以 git toplevel 解析消除 cwd 依賴; chore: sync-push 回寫框架版本號
+
+Changes: 2 fix, 1 chore
+
+- fix: framework-issue scripts 統一接受三種 issue ref 形態
+- fix: skill-sync get_skills_dir 改以 git toplevel 解析消除 cwd 依賴
+- chore: sync-push 回寫框架版本號
+
+---
+
 ## [2.27.5] - 2026-08-10
 
 ### Summary

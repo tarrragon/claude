@@ -63,6 +63,12 @@ GitHub API；issue ref 由呼叫端先以 create / list 取得。
 issue，再以 `link` 把 issue ref stamp 回 error-pattern 作 canonical 錨點。詳見
 `.claude/methodologies/error-pattern-numbering-methodology.md`「canonical 升格機制」。
 
+`<issue-ref>`（fix-status / fix-version / close 三命令共用）支援
+`owner/repo#N`、`#N`、純數字 `N` 三種形態；`owner/repo` 前綴存在時須與框架
+repo（`tarrragon/claude`）相符，否則明確報錯（exit 3）而非靜默改號——gh
+CLI 位置參數僅接受純數字或 URL，`owner/repo#N` 會被 gh 拒絕（invalid issue
+format），三命令內部先正規化為純數字再呼叫 gh。
+
 fix-status（軸 C：跨 consumer 修復追蹤）：
 
 ```bash

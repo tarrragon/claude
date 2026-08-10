@@ -15,7 +15,13 @@ import argparse
 import subprocess
 import sys
 
-from gh_common import FRAMEWORK_REPO, emit_degraded, preflight, run_gh
+from gh_common import (
+    FRAMEWORK_REPO,
+    emit_degraded,
+    normalize_issue_ref,
+    preflight,
+    run_gh,
+)
 from fix_version import fetch_body, has_fix_versions
 
 # gh issue close --reason 合法值（省略時 gh 預設為 completed）
@@ -49,25 +55,34 @@ def main(argv=None) -> int:
         return gate
 
     try:
-        body = fetch_body(parsed.issue_ref)
+        issue_ref = normalize_issue_ref(parsed.issue_ref)
+    except ValueError as exc:
+        return emit_degraded(
+            f"issue ref 格式錯誤：{exc}",
+            "使用 owner/repo#N、#N 或純數字格式，且 repo 需與"
+            f" {FRAMEWORK_REPO} 相符",
+        )
+
+    try:
+        body = fetch_body(issue_ref)
     except (OSError, subprocess.SubprocessError, RuntimeError, ValueError) as exc:
         return emit_degraded(
-            f"讀取 issue {parsed.issue_ref} 失敗：{exc}",
+            f"讀取 issue {issue_ref} 失敗：{exc}",
             "確認 issue ref 正確且 gh 可存取該 repo 後重試",
         )
 
     if not has_fix_versions(body):
         return emit_degraded(
-            f"issue {parsed.issue_ref} 尚無修復版本號註記（fix-versions 區段空或不存在）",
+            f"issue {issue_ref} 尚無修復版本號註記（fix-versions 區段空或不存在）",
             "先執行 sync-push 取得框架版本號，再用 fix-version 命令註記後重試",
         )
 
-    args = ["issue", "close", parsed.issue_ref, "--repo", FRAMEWORK_REPO]
+    args = ["issue", "close", issue_ref, "--repo", FRAMEWORK_REPO]
     if parsed.reason:
         args += ["--reason", parsed.reason]
     if parsed.comment:
         args += ["--comment", parsed.comment]
-    return run_gh(args, success_msg=f"已關閉 {parsed.issue_ref}")
+    return run_gh(args, success_msg=f"已關閉 {issue_ref}")
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@
 向使用者拋出 traceback（可觀測性規則 4：異常須對使用者可見且不 crash）。
 """
 
+import re
 import shutil
 import subprocess
 import sys
@@ -17,6 +18,43 @@ FRAMEWORK_REPO = "tarrragon/claude"
 
 # 降級時的 exit code（與一般失敗 1 區分，便於測試與上層判讀）
 EXIT_DEGRADED = 3
+
+# 三種合法 issue ref 形態：owner/repo#N、#N、純 N
+_REF_WITH_REPO_RE = re.compile(r"^(?P<repo>[^/#\s]+/[^/#\s]+)#(?P<num>\d+)$")
+_REF_WITH_HASH_RE = re.compile(r"^#(?P<num>\d+)$")
+
+
+def normalize_issue_ref(ref: str, expected_repo: str = FRAMEWORK_REPO) -> str:
+    """將 owner/repo#N、#N、純 N 三種形態正規化為 gh 接受的純數字字串。
+
+    gh CLI 的 issue-ref 位置參數僅接受純數字或 URL，不接受
+    `owner/repo#N`（會回報 invalid issue format，見 issue #64 重現）。
+    帶 owner/repo 前綴時驗證其與 expected_repo 相符，避免使用者誤傳其他
+    repo 的 issue 編號卻被靜默當成框架 repo 處理。
+
+    不符任何形態或 repo 前綴不符時拋 ValueError，交由呼叫端轉為降級提示
+    （exit 3 家族），不靜默改號。
+    """
+    match = _REF_WITH_REPO_RE.match(ref)
+    if match:
+        if match.group("repo") != expected_repo:
+            raise ValueError(
+                f"issue ref 的 repo 前綴 '{match.group('repo')}' 與目標 repo "
+                f"'{expected_repo}' 不符"
+            )
+        return match.group("num")
+
+    match = _REF_WITH_HASH_RE.match(ref)
+    if match:
+        return match.group("num")
+
+    if ref.isdigit():
+        return ref
+
+    raise ValueError(
+        f"無法識別的 issue ref 格式：'{ref}'"
+        "（支援 owner/repo#N、#N、純數字三種形態）"
+    )
 
 
 def emit_degraded(reason: str, hint: str) -> int:

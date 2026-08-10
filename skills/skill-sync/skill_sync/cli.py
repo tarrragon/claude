@@ -243,7 +243,39 @@ def update_sync_manifest(repo_dir: Path) -> None:
 
 
 def get_skills_dir() -> Path:
-    return Path.cwd() / ".claude" / "skills"
+    """解析 .claude/skills 目錄，優先以 git toplevel 為基準，消除 cwd 依賴。
+
+    在專案任意子目錄（含 skill 目錄內、`uv run --directory` 情境）執行時，
+    都應解析到專案根下的 .claude/skills，而非誤把子目錄當根目錄。
+    非 git 目錄（或 git 不可用）時 fallback 至現行 cwd 行為，並於 stderr
+    輸出警告（觀測性規則 4）。
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=Path.cwd(),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        print(
+            f"Warning: git rev-parse failed ({type(e).__name__}: {e}); "
+            "falling back to current working directory for .claude/skills resolution",
+            file=sys.stderr,
+        )
+        return Path.cwd() / ".claude" / "skills"
+
+    if result.returncode != 0:
+        print(
+            "Warning: not a git repository; "
+            "falling back to current working directory for .claude/skills resolution",
+            file=sys.stderr,
+        )
+        return Path.cwd() / ".claude" / "skills"
+
+    toplevel = result.stdout.strip()
+    return Path(toplevel) / ".claude" / "skills"
 
 
 def run_git(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:

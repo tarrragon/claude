@@ -482,7 +482,7 @@ def test_close_succeeds_when_fix_versions_present(monkeypatch):
         rc = close_issue.main(["tarrragon/claude#42"])
     assert rc == 0
     assert captured["close_args"][:3] == ["gh", "issue", "close"]
-    assert "tarrragon/claude#42" in captured["close_args"]
+    assert "42" in captured["close_args"]  # 正規化為純數字傳給 gh
 
 
 def test_close_degraded_when_no_fix_versions(monkeypatch, capsys):
@@ -531,6 +531,114 @@ def test_fix_version_still_works_after_close(monkeypatch):
     body = captured["body"]
     assert "| 2.19.0 | 2026-07-01 | 第一類徵狀 |" in body  # 既有版本保留
     assert "| 2.21.0 | 2026-08-06 | close 後發現的新徵狀 |" in body
+
+
+# --- issue ref 正規化（owner/repo#N、#N、純 N 三形態，issue #64 重現） ---
+
+
+def test_normalize_issue_ref_accepts_three_forms():
+    """owner/repo#N、#N、純 N 三種形態皆正規化為純數字字串。"""
+    assert gh_common.normalize_issue_ref("tarrragon/claude#64") == "64"
+    assert gh_common.normalize_issue_ref("#64") == "64"
+    assert gh_common.normalize_issue_ref("64") == "64"
+
+
+def test_normalize_issue_ref_rejects_mismatched_repo():
+    """owner/repo 前綴與目標 repo 不符時拋 ValueError，不靜默改號。"""
+    with pytest.raises(ValueError, match="不符"):
+        gh_common.normalize_issue_ref("other/repo#64")
+
+
+def test_normalize_issue_ref_rejects_invalid_format():
+    """三種形態皆不符時拋 ValueError。"""
+    with pytest.raises(ValueError, match="無法識別"):
+        gh_common.normalize_issue_ref("not-a-ref")
+
+
+def test_fix_version_accepts_hash_form(monkeypatch):
+    """fix-version 對 #64 形態正規化為 64 後成功執行。"""
+    _patched_fix_version_env(monkeypatch)
+    captured = {}
+    with mock.patch.object(
+        fix_version.subprocess,
+        "run",
+        side_effect=_fake_run_factory("純描述無註記", captured),
+    ):
+        rc = fix_version.main(
+            ["#64", "--version", "2.20.0", "--summary", "修正 XXX", "--date", "2026-08-05"]
+        )
+    assert rc == 0
+    assert "| 2.20.0 | 2026-08-05 | 修正 XXX |" in captured["body"]
+
+
+def test_fix_version_accepts_bare_number_form(monkeypatch):
+    """fix-version 對純數字 64 形態直接使用不需正規化。"""
+    _patched_fix_version_env(monkeypatch)
+    captured = {}
+    with mock.patch.object(
+        fix_version.subprocess,
+        "run",
+        side_effect=_fake_run_factory("純描述無註記", captured),
+    ):
+        rc = fix_version.main(
+            ["64", "--version", "2.20.0", "--summary", "修正 XXX", "--date", "2026-08-05"]
+        )
+    assert rc == 0
+    assert "| 2.20.0 | 2026-08-05 | 修正 XXX |" in captured["body"]
+
+
+def test_fix_version_degraded_when_repo_mismatched(monkeypatch, capsys):
+    """fix-version 對 owner/repo#N 但 repo 與框架不符時降級 exit 3，禁止靜默改號。"""
+    _patched_fix_version_env(monkeypatch)
+    rc = fix_version.main(
+        ["other/repo#64", "--version", "2.20.0", "--summary", "修正 XXX"]
+    )
+    assert rc == gh_common.EXIT_DEGRADED
+    assert "不符" in capsys.readouterr().err
+
+
+def test_close_accepts_hash_and_bare_number_forms(monkeypatch):
+    """close 對 #42 與純數字 42 形態皆能通過前置檢查並執行 gh issue close。"""
+    _patched_close_env(monkeypatch)
+    for ref in ("#42", "42"):
+        captured = {}
+        with mock.patch.object(
+            fix_version.subprocess,
+            "run",
+            side_effect=_fake_run_factory(_BODY_WITH_VERSIONS, captured),
+        ):
+            rc = close_issue.main([ref])
+        assert rc == 0
+        assert "42" in captured["close_args"]
+
+
+def test_close_degraded_when_repo_mismatched(monkeypatch, capsys):
+    """close 對 owner/repo#N 但 repo 與框架不符時降級 exit 3，不嘗試讀 issue。"""
+    _patched_close_env(monkeypatch)
+    rc = close_issue.main(["other/repo#42"])
+    assert rc == gh_common.EXIT_DEGRADED
+    assert "不符" in capsys.readouterr().err
+
+
+def test_fix_status_accepts_hash_and_bare_number_forms(monkeypatch, capsys):
+    """fix-status view 對 #42 與純數字 42 形態皆能正確解析矩陣。"""
+    _patched_fix_env(monkeypatch)
+    payload = '{"body": %s}' % json.dumps(_BODY_WITH_MATRIX)
+    for ref in ("#42", "42"):
+        with mock.patch.object(
+            fix_status.subprocess, "run", return_value=_completed(stdout=payload)
+        ):
+            rc = fix_status.main([ref])
+        assert rc == 0
+        assert "| V1 | fixed |" in capsys.readouterr().out
+
+
+def test_fix_status_degraded_when_repo_mismatched(monkeypatch, capsys):
+    """fix-status 對 owner/repo#N 但 repo 與框架不符時降級 exit 3。"""
+    _patched_fix_env(monkeypatch)
+    rc = fix_status.main(["other/repo#42"])
+    assert rc == gh_common.EXIT_DEGRADED
+    assert "不符" in capsys.readouterr().err
 
 
 if __name__ == "__main__":
