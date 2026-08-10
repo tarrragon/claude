@@ -1,3 +1,14 @@
+## [2.27.7] - 2026-08-10
+
+### Summary
+chore: sync-push 回寫框架版本號
+
+Changes: 1 chore
+
+- chore: sync-push 回寫框架版本號
+
+---
+
 ## [2.27.6] - 2026-08-10
 
 ### Summary
