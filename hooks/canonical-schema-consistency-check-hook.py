@@ -40,6 +40,7 @@ Canonical Schema 清單一致性檢查 Hook
 4. 逐一與基準集合比對差集，不一致時輸出警告並列出具體缺漏/多餘項
 """
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -221,7 +222,13 @@ def format_drift_warning(drifts: List[DriftResult]) -> str:
 
 
 def main() -> int:
-    """主函數"""
+    """主函數
+
+    輸出通道：exit 0 時 Claude Code 僅將 stdout 的 JSON
+    hookSpecificOutput.additionalContext 注入 SessionStart context；
+    stderr 只進 transcript/debug，不會讓使用者在啟動訊息看到警告，
+    已比照 session-start-gitignore-check-hook 的分流修正。
+    """
     logger = setup_hook_logging(HOOK_NAME)
     project_root = get_project_root()
 
@@ -229,11 +236,20 @@ def main() -> int:
 
     if not drifts:
         logger.info("Canonical schema 清單一致性檢查完成，無漂移")
+        print(json.dumps({"suppressOutput": True}, ensure_ascii=False))
         return 0
 
     warning = format_drift_warning(drifts)
-    print(warning, file=sys.stderr)
     logger.warning(warning)
+    print(warning, file=sys.stderr)  # debug 副本，非注入通道
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": warning + "\n",
+        },
+        "suppressOutput": False,
+    }
+    print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0
 
 

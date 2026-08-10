@@ -1,3 +1,18 @@
+## [2.27.4] - 2026-08-10
+
+### Summary
+fix: canonical-schema hook WARNING 改走 additionalContext 注入 session context; docs: 新增 PC-BAL-028 差集稽核對無宣稱變更的結構性盲區; docs: 有副作用取捨的選擇題強制觸發 WRAP 規則條文 (+2 more)
+
+Changes: 1 fix, 3 docs, 1 chore
+
+- fix: canonical-schema hook WARNING 改走 additionalContext 注入 session context
+- docs: 新增 PC-BAL-028 差集稽核對無宣稱變更的結構性盲區
+- docs: 有副作用取捨的選擇題強制觸發 WRAP 規則條文
+- docs: 新增驗收條件爭議兩條裁決判準
+- chore: 回寫框架版本號 （sync-push 產出）
+
+---
+
 ## [2.27.3] - 2026-08-10
 
 ### Summary
