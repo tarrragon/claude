@@ -28,7 +28,7 @@
 | 新建檔案 | **Write** | — |
 | 讀取 / 查找特定符號 | `mcp__serena__find_symbol`（read-only 不受本規則限制） | — |
 
-**Why/Consequence**：LLM 傾向選「單步高精度」工具（PC-088 偏誤），對 `.md` / `.yaml` 等非程式碼檔誤選 serena MCP 寫入工具（AST 符號級設計，對純文字檔語意過度且 subagent 環境常不在 allow list）；會被 hook deny，代理人若錯誤泛化「所有寫入工具都被拒」會 self-imposed early stop（W17-088 / PC-112 根因），任務失敗且 PM 難察覺其實 Edit 可行。
+**Why/Consequence**：LLM 傾向選「單步高精度」工具（PC-088 偏誤），對 `.md` / `.yaml` 等非程式碼檔誤選 serena MCP 寫入工具（AST 符號級設計，對純文字檔語意過度且 subagent 環境常不在 allow list）；會被 hook deny，代理人若錯誤泛化「所有寫入工具都被拒」會 self-imposed early stop（PC-112 根因），任務失敗且 PM 難察覺其實 Edit 可行。
 
 **Action**：修改非程式碼檔時**直接用 Edit / Write**，不嘗試 serena 寫入工具；MCP 寫入工具被拒時必須降級至 Edit，禁 self-imposed early stop。
 
@@ -61,4 +61,4 @@
 ---
 
 **Last Updated**: 2026-04-28
-**Version**: 1.0.0 — 從 W17-090 落地：PC-112 三層防護的 framework rule 層（PM + subagent 通用），配合 hook 強制層形成雙層閉環
+**Version**: 1.0.0 — PC-112 三層防護的 framework rule 層落地（PM + subagent 通用），配合 hook 強制層形成雙層閉環

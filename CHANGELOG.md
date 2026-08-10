@@ -1,3 +1,16 @@
+## [2.27.2] - 2026-08-10
+
+### Summary
+docs: 清理 rules 目錄 38 處 ticket ID 引用（規則 8 全禁原則階段 2 試點）; docs: 補記 error-pattern 與 skill-sync 的版本註腳; chore: .claude 同步至 （--clean 傳播兩筆刪除）
+
+Changes: 2 docs, 1 chore
+
+- docs: 清理 rules 目錄 38 處 ticket ID 引用（規則 8 全禁原則階段 2 試點）
+- docs: 補記 error-pattern 與 skill-sync 的版本註腳
+- chore: .claude 同步至 （--clean 傳播兩筆刪除）
+
+---
+
 ## [2.27.1] - 2026-08-10
 
 ### Summary

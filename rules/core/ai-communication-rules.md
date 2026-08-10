@@ -67,4 +67,4 @@
 - `.claude/skills/compositional-writing/SKILL.md` + `references/writing-prompts.md`（規則 1-4 完整對照表、Prompt 骨架、Token 深度策略）；`.claude/rules/core/language-constraints.md`、`document-format-rules.md`
 
 ---
-**Last Updated**: 2026-06-12 | **Version**: 2.0.0 — token 收斂：五原則保留；規則 1-4 濃縮為速查表（完整對照表見 writing-prompts.md）；規則 5 主文已在 power-asymmetry-rules.md，stub 刪重複僅留摘要 + 觸發指引 + 不可覆蓋授權邊界；規則 6 Why/Consequence/hotpath 外移新建 `references/estimation-driven-decision-rules.md`（1.0.0-W7-004.3）。歷史 1.0–1.5.x 版見 git log。**Source**: W17-060 / W17-123 / W16-001
+**Last Updated**: 2026-06-12 | **Version**: 2.0.0 — token 收斂：五原則保留；規則 1-4 濃縮為速查表（完整對照表見 writing-prompts.md）；規則 5 主文已在 power-asymmetry-rules.md，stub 刪重複僅留摘要 + 觸發指引 + 不可覆蓋授權邊界；規則 6 Why/Consequence/hotpath 外移新建 `references/estimation-driven-decision-rules.md`。歷史 1.0–1.5.x 版見 git log。

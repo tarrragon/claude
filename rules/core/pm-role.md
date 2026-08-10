@@ -37,8 +37,8 @@
 聆聽 → 拆分 → 分析（前台）或派發（背景）→ 收取 → 驗收 → 循環。
 
 - **分工判斷**：需讀取 > 3 個文件 → PM 前台；程式碼實作/測試 → 派發代理人。
-- **派發前必讀**（PC-040 + W17-048 實證）：寫 prompt 前先完成兩件事：(1) context（規格、檔案、實作策略、commit policy）先寫入 ticket 的 Problem Analysis / Context Bundle，禁止塞 prompt；(2) prompt 本體 ≤ 30 行（Hook 硬上限），且應含「讀取 ticket」指引關鍵字。範本：`.claude/references/agent-dispatch-template.md`（含三段式骨架）。
-- **派發位置**（ARCH-015）：prompt 含 `.claude/` Edit/Write → 主 repo cwd；僅非 `.claude/` → worktree 皆可；跨兩者 → 拆分派發。CC runtime 對 `.claude/` 有 hardcoded 保護，subagent 無法 Edit worktree 內 `.claude/`。**W17-018 補強**：若 prompt 未顯式提路徑（如短 prompt 只寫「Read ticket md 依規格實作」），dispatch hook 會 fallback 從 ticket `where.files` 補分類，避免誤擋。
+- **派發前必讀**（PC-040 實證）：寫 prompt 前先完成兩件事：(1) context（規格、檔案、實作策略、commit policy）先寫入 ticket 的 Problem Analysis / Context Bundle，禁止塞 prompt；(2) prompt 本體 ≤ 30 行（Hook 硬上限），且應含「讀取 ticket」指引關鍵字。範本：`.claude/references/agent-dispatch-template.md`（含三段式骨架）。
+- **派發位置**（ARCH-015）：prompt 含 `.claude/` Edit/Write → 主 repo cwd；僅非 `.claude/` → worktree 皆可；跨兩者 → 拆分派發。CC runtime 對 `.claude/` 有 hardcoded 保護，subagent 無法 Edit worktree 內 `.claude/`。**fallback 補強**：若 prompt 未顯式提路徑（如短 prompt 只寫「Read ticket md 依規格實作」），dispatch hook 會 fallback 從 ticket `where.files` 補分類，避免誤擋。
 - **tests/ 修改派發**：派發涉及 `tests/` Edit/Write 的代理人前，PM 先在 main 執行 `git checkout -b feat/<ticket-id>-<short-desc>`。`tests/` 不在 branch-verify-hook exempt 內（豁免清單僅 `.claude/`、`docs/`、`scripts/experiments/`），直接派發會被 deny 並浪費代理人回合。SOP 詳見 `.claude/references/agent-dispatch-template.md`「tests/ 修改派發 SOP」章節。
 - **派發後**：立即切換到下個 Ticket 前置工作（Context Bundle / 規格分析 / worklog），**禁止盯著代理人等**。
 - **AUQ 強制觸發**（列選項時必用 AskUserQuestion）：回覆含 2+ 候選項 / 以「要繼續嗎？先做 X 還是 Y？」等問句結尾 / 純文字問句讓用戶自由輸入 → 任一成立即必用。禁止用 Markdown 列表或替用戶選擇。
@@ -101,7 +101,7 @@
 
 | 步驟 | 動作 | Why |
 |------|------|-----|
-| 1 | 讀 `branch-status-reminder` Hook 輸出（含 staged / modified / untracked 三組） | Hook 已列全量（W13-011 落地），但仍屬「摘要」非稽核 |
+| 1 | 讀 `branch-status-reminder` Hook 輸出（含 staged / modified / untracked 三組） | Hook 已列全量，但仍屬「摘要」非稽核 |
 | 2 | 額外執行 `git status --porcelain --untracked=all` | 雙重驗證；確認 Hook 輸出與工作區一致 |
 | 3 | 對非本任務檔案判定來源（前 session 遺留 / 並行 session / Hook 自動產生） | 區分 PC-076（靜態遺留）vs PC-078（動態並行） |
 | 4 | 若有遺留，記錄到當前 Ticket Problem Analysis 或新建 Ticket 追蹤 | 違規 quality-baseline 規則 5 |
@@ -132,4 +132,4 @@
 
 ---
 
-**Last Updated**: 2026-07-27 | **Version**: 4.5.0 — 校正核心原則區塊「PM 可寫 RED 測試（tests/）」的失準表述：直接測 `main-thread-edit-restriction-hook` 確認 `test/*`、`*.dart` 一律 deny，與 `pm-rules/skip-gate.md` 規則 5 一致；改為「PM 起草 RED 測試內容經 docs/ companion doc 轉交代理人材料化」，並補「PM 實際可寫路徑」速查。歷史 4.0–4.4.x 版見 git log。**Source**: PC-045 / PC-064 / W10-061 / PC-076 / PC-162。
+**Last Updated**: 2026-07-27 | **Version**: 4.5.0 — 校正核心原則區塊「PM 可寫 RED 測試（tests/）」的失準表述：直接測 `main-thread-edit-restriction-hook` 確認 `test/*`、`*.dart` 一律 deny，與 `pm-rules/skip-gate.md` 規則 5 一致；改為「PM 起草 RED 測試內容經 docs/ companion doc 轉交代理人材料化」，並補「PM 實際可寫路徑」速查。歷史 4.0–4.4.x 版見 git log。**Source**: PC-045 / PC-064 / PC-076 / PC-162。

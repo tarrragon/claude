@@ -48,4 +48,4 @@ ToolSearch 是 Claude Code runtime 的**通用 deferred tools 發現入口**。�
 ---
 
 **Last Updated**: 2026-04-16
-**Version**: 1.1.0 — 瘦身執行層到 search-tools-guide skill（W10-078.1）
+**Version**: 1.1.0 — 瘦身執行層到 search-tools-guide skill

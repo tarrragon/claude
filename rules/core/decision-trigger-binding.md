@@ -43,4 +43,4 @@
 
 ---
 
-**Last Updated**: 2026-06-12 | **Version**: 1.5.0 — 主文 substance 外移至 `.claude/references/decision-trigger-binding-details.md`，本檔保留速查 stub（W7-004.2）。**Source**: PC-093 / PC-146 / W11-023 / W1-092。
+**Last Updated**: 2026-06-12 | **Version**: 1.5.0 — 主文 substance 外移至 `.claude/references/decision-trigger-binding-details.md`，本檔保留速查 stub。**Source**: PC-093 / PC-146。

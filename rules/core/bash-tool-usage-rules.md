@@ -15,8 +15,8 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 | 二：輸出機制辨識 | `run_in_background:true` → `TaskOutput(taskId)`；輸出含「Full output saved to」→ `Read(file_path)`；其餘直讀對話。預防大輸出：測試 `2>&1 \| tail -20`、一般 `\| head -100`、Grep `head_limit`、Read `offset`+`limit` | IMP-009 |
 | 三：禁串接 git 寫入 | `git add && git commit` 允許（實務簡化，非「唯讀命令併發安全」保證）；commit/merge/rebase/push 之間禁串接。每個寫入操作獨立一個 Bash 呼叫。index.lock 競爭不限寫入串接——唯讀命令（status/diff-tree/log）refresh index stat cache 時也會短暫觸發，遇到預設短暫重試，非逕判串接違規 | IMP-046 / issue-34（30 次併發 add 命中 1 次） |
 | 四：CLI backtick 不用雙引號 | 雙引號內 backtick 被當 command substitution。改用 heredoc `cmd "$(cat <<'EOF'...EOF)"`、單引號包整參數、或 Edit 直改 ticket md。看到來源不明 `command not found` / `ModuleNotFoundError` 優先查 backtick | PC-079 |
-| 五：長文字用 heredoc | append-log / commit msg / ANA 結論直接 heredoc 傳 CLI，禁繞 `/tmp`。ARG_MAX ≥ 1 MB（macOS）/ 2 MB（Linux），80 行 markdown 約 3-8 KB 遠低於上限。> 100 KB 才考慮改 Edit 直改 ticket md | PC-087 / W15-005 |
-| 六：長背景任務即時可觀察 | 需即時觀察用 `PYTHONUNBUFFERED=1 pytest -v tests/ 2>&1 \| tee /tmp/task.log`（告知 `tail -f`）；只需最終結果保留規則二 `\| tail`。雙層緩衝（fully-buffered + `\| tail` 等 EOF）使輸出檔全程 0 行 | W3-086 spike |
+| 五：長文字用 heredoc | append-log / commit msg / ANA 結論直接 heredoc 傳 CLI，禁繞 `/tmp`。ARG_MAX ≥ 1 MB（macOS）/ 2 MB（Linux），80 行 markdown 約 3-8 KB 遠低於上限。> 100 KB 才考慮改 Edit 直改 ticket md | PC-087 |
+| 六：長背景任務即時可觀察 | 需即時觀察用 `PYTHONUNBUFFERED=1 pytest -v tests/ 2>&1 \| tee /tmp/task.log`（告知 `tail -f`）；只需最終結果保留規則二 `\| tail`。雙層緩衝（fully-buffered + `\| tail` 等 EOF）使輸出檔全程 0 行 | 背景任務緩衝 spike 實驗 |
 
 > **chpwd 與即時協議**：裸 cd 觸發 zsh chpwd hook 的 ls 淹沒工具結果。輸出可疑/被淹沒當下依四步即時協議——停手 → 重發乾淨原子命令（`git -C`／子 shell）→ 只信 raw stdout → 固定值（hash／二元 grep／整數計數）驗證。論證見 details.md 規則一詳細 + `tool-output-trust-rules` 規則 1-4。
 
@@ -52,4 +52,4 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 
 ---
 
-**Last Updated**: 2026-08-04 | **Version**: 3.1.0 — 規則三因果修正：index.lock 競爭不限寫入串接，唯讀 git 命令 refresh index stat cache 時亦會短暫觸發（issue-34 實證：30 次併發 add 命中 1 次），移除「add 不觸發 Hook」的失準表述；checklist 遇 index.lock 改為預設短暫重試而非逕判串接違規（0.2.1-W3-262）。**Version**: 3.0.0 — token 收斂：六規則濃縮為一行速查表 + 統一檢查清單，各規則速查表 / Why / Consequence / 論證外移 `references/bash-tool-usage-details.md`（1.0.0-W7-004.3）。歷史 2.0–2.3 版見 git log。**Source**: IMP-008、IMP-009、IMP-046、index.lock 競爭、PC-087、W3-086、PC-166、issue-34
+**Last Updated**: 2026-08-04 | **Version**: 3.1.0 — 規則三因果修正：index.lock 競爭不限寫入串接，唯讀 git 命令 refresh index stat cache 時亦會短暫觸發（issue-34 實證：30 次併發 add 命中 1 次），移除「add 不觸發 Hook」的失準表述；checklist 遇 index.lock 改為預設短暫重試而非逕判串接違規。**Version**: 3.0.0 — token 收斂：六規則濃縮為一行速查表 + 統一檢查清單，各規則速查表 / Why / Consequence / 論證外移 `references/bash-tool-usage-details.md`。歷史 2.0–2.3 版見 git log。**Source**: IMP-008、IMP-009、IMP-046、index.lock 競爭、PC-087、PC-166、issue-34

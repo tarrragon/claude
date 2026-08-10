@@ -62,7 +62,7 @@
 | 類型 | 格式 | 範例 |
 |------|------|------|
 | 工作日誌 | `v{版本}-{描述}.md` | `v0.29.0-ticket-system-refactor.md` |
-| Ticket | `{版本}-W{波次}-{序號}.md` | `0.29.0-W1-001.md` |
+| Ticket | `{版本}-W{波次}-{序號}.md` | `0.29.0-W1-001.md` <!-- rule8-exempt: illustration:檔案命名規範的格式範例 --> |
 | 規則檔案 | `{描述}-{類型}.md` | `language-constraints.md` |
 | 方法論 | `{主題}-methodology.md` | `atomic-ticket-methodology.md` |
 

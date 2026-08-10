@@ -1,6 +1,6 @@
 # 測試斷言設計規則（速查 stub）
 
-> **完整論證與實證**：`.claude/references/test-assertion-design-details.md`（按需讀取，含各規則 Why/Consequence 全文、W1-017 / W1-018 實證數字、`tests/perf/` 檔頭範本、適用範圍表、兩個延伸路由章與 quality-baseline 交叉引用）。
+> **完整論證與實證**：`.claude/references/test-assertion-design-details.md`（按需讀取，含各規則 Why/Consequence 全文、實證數字、`tests/perf/` 檔頭範本、適用範圍表、兩個延伸路由章與 quality-baseline 交叉引用）。
 > **概念框架**：跨專案通用斷言判斷框架（9 類型斷言問題、斷言品質三問、判斷決策表）→ `.claude/skills/test-assertion-design/SKILL.md`。
 
 本文件定義測試斷言設計的品質底線，防止斷言結果依賴程式以外因素（機器負載、網路、時區等）導致 flaky。**設計前提**：效能差是設計問題，測試的職責是驗證功能正確性，不是量測執行速度。

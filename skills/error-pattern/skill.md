@@ -240,7 +240,8 @@ category 的 error-pattern 一律使用來源前綴格式**：
 
 ---
 
-**Last Updated**: 2026-08-04
+**Last Updated**: 2026-08-10
+**Version**: 1.4.1 — 本 skill 的入口檔由 `skill.md` 更名為 `SKILL.md`（原小寫檔名使各消費端以 `*/SKILL.md` 掃描的產生器與稽核器永久漏掉本 skill）；`lib/severity_audit.py` 內指向該入口檔的路徑引用同步更正。無流程或命令變更
 **Version**: 1.4.0 — 步驟 7 改接原子版入口 `allocate_and_reserve_pattern_id`（取代舊版 `allocate_pattern_id`），補佔位檔語意、接續 Edit 動作、非 POSIX 降級說明；步驟「輸出」補與步驟 8 `readme_index.sync` 的相容性提示（reserved 狀態下同步會產生空殼列，需先完成內容填寫再同步）（0.2.1-W3-271，接續 0.2.1-W3-167 allocator 原子化）
 **Version**: 1.3.0 — 明訂 `severity` 權威來源與更新時機：內文「風險等級」為第一手來源，frontmatter 為同步鏡射；全量覆核修正 15 檔分歧中的 14 檔（0.2.1-W3-106，接續 0.2.1-W3-105 診斷）
 **Version**: 1.2.0 — add 流程新增步驟 8：README 索引同步改由 `readme_index.sync` 保守 upsert CLI 化，取代「更新 README.md 統計資訊」文字指示（0.2.1-W3-099，接線方式經 0.2.1-W3-105 更正）

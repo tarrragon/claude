@@ -27,4 +27,4 @@
 
 **Last Updated**: 2026-04-19 | **Version**: 2.1.0 - 1.6 註解標準索引補列「業務情境聚焦」與「抽象層級貼合」兩條款（substance 在 references/quality-common.md §1.6 與 methodologies/comment-writing-methodology.md）
 
-**Version**: 2.0.0 - 完全外移至 references/（W10-076.1）
+**Version**: 2.0.0 - 完全外移至 references/

@@ -110,4 +110,4 @@
 
 ---
 
-**Last Updated**: 2026-05-14 | **Version**: 2.0.0 — 半化：§3b 派發前閾值 + §監測校準框架移至 `.claude/references/cognitive-load-execution-details.md`，本檔保留量化標準 + 速查 stub + 自我檢查清單 + 五原則（W10-137）
+**Last Updated**: 2026-05-14 | **Version**: 2.0.0 — 半化：§3b 派發前閾值 + §監測校準框架移至 `.claude/references/cognitive-load-execution-details.md`，本檔保留量化標準 + 速查 stub + 自我檢查清單 + 五原則

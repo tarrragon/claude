@@ -1,7 +1,7 @@
 # Skill CLI 行為變更同步檢查（路由 stub）
 
 > **完整規則**：`.claude/references/skill-cli-sync-check-rules.md`（按需讀取）。本檔僅保留觸發條件與路由。
-> **涵蓋範圍**（0.2.1-W3-239 泛化）：專案內 7 個具 CLI 入口點的 skill——ticket / doc / skill-sync / worktree / version-release / project-init / mermaid-ascii。
+> **涵蓋範圍**：專案內 7 個具 CLI 入口點的 skill——ticket / doc / skill-sync / worktree / version-release / project-init / mermaid-ascii。
 
 ## 何時讀完整規則
 
@@ -41,5 +41,5 @@
 
 ---
 
-**Last Updated**: 2026-08-04 | **Version**: 3.0.0 — 泛化涵蓋範圍由 ticket 單一 skill 擴至 7 個具 CLI 入口點的 skill（改名 + hook 搬遷至 `.claude/hooks/`，0.2.1-W3-239，承接 0.2.1-W3-136 ANA）
-**Version**: 2.0.0 — 主文外移至 references/，本檔保留路由 stub（W10-137）
+**Last Updated**: 2026-08-04 | **Version**: 3.0.0 — 泛化涵蓋範圍由 ticket 單一 skill 擴至 7 個具 CLI 入口點的 skill（改名 + hook 搬遷至 `.claude/hooks/`）
+**Version**: 2.0.0 — 主文外移至 references/，本檔保留路由 stub
