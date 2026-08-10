@@ -1,3 +1,15 @@
+## [2.27.8] - 2026-08-10
+
+### Summary
+fix: 截斷 sync-push VERSION 回寫自反饋迴路（tarrragon/claude#66）; chore: sync-push 回寫框架版本號 （零實質變更鑄版問題見 tarrragon/claude#66）
+
+Changes: 1 fix, 1 chore
+
+- fix: 截斷 sync-push VERSION 回寫自反饋迴路（tarrragon/claude#66）
+- chore: sync-push 回寫框架版本號 （零實質變更鑄版問題見 tarrragon/claude#66）
+
+---
+
 ## [2.27.7] - 2026-08-10
 
 ### Summary

@@ -715,6 +715,55 @@ def collect_claude_commits(project_root: str, since: str | None) -> list[str]:
     return [line for line in result.stdout.strip().split("\n") if line.strip()]
 
 
+def _commit_touches_only_version_file(project_root: str, commit_sha: str) -> bool:
+    """判斷單一 commit 在 .claude/ 底下變更的檔案是否僅有 VERSION（記帳 commit）。
+
+    write_local_version 只回寫檔案不 commit（見該函式 docstring）；使用者事後
+    另行 `git commit` 持久化時，該 commit 在 .claude/ 底下唯一改動的檔案就是
+    VERSION，內容也早已反映於上次 push 計算的 last_push_hash 中，屬於「記帳」
+    而非「實質」變更。
+    """
+    result = run_git(
+        ["diff-tree", "--no-commit-id", "--name-only", "-r", commit_sha, "--", ".claude/"],
+        cwd=project_root,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False
+    changed = [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
+    if not changed:
+        return False
+    return all(Path(p).name == "VERSION" for p in changed)
+
+
+def filter_out_version_only_commits(project_root: str, since: str | None) -> list[str] | None:
+    """回傳排除「僅變更 .claude/VERSION」記帳 commit 後的 commit hash 清單。
+
+    tarrragon/claude#66：VERSION 回寫後使用者提交此變更形成的記帳 commit，會被
+    collect_claude_commits 的 subject 訊號誤判為「有新變更」，使零實質變更仍
+    再次觸發版本 bump，形成回寫 -> 誤判有變更 -> 再次 bump -> 再次回寫的自反饋
+    迴路，版本永不收斂。本函式以 diff 內容（而非 commit subject）過濾此類 commit。
+
+    傳回 None 表示無法判定（例如 project_root 非 git repo或 git 指令失敗），
+    呼叫端必須 fail-safe 回退既有 subject-based 判斷，不可將 None 當作「已過濾
+    為空」處理。
+    """
+    args = ["log", "--format=%H", "--no-merges", "--", ".claude/"]
+    if since:
+        args.insert(2, f"--since={since}")
+    result = run_git(args, cwd=project_root, check=False)
+    if result.returncode != 0:
+        return None
+    if not result.stdout.strip():
+        return []
+    hashes = [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
+    return [
+        commit_sha
+        for commit_sha in hashes
+        if not _commit_touches_only_version_file(project_root, commit_sha)
+    ]
+
+
 def _normalize_subject_for_match(subject: str) -> str:
     """正規化 commit subject 用於 revert 配對比對。
 
@@ -1073,16 +1122,25 @@ def check_no_change_early_exit(
     new_commits = collect_claude_commits(str(project_root), last_time)
     no_new_commits = len(new_commits) == 0
 
+    # tarrragon/claude#66：新 commit 存在時，進一步過濾掉僅回寫 VERSION 的記帳
+    # commit——這類 commit 不代表實質變更，卻會讓上面的 no_new_commits 訊號誤判
+    # 為「有新變更」，截斷不了 VERSION 回寫的自反饋迴路。filter 傳回 None 表示
+    # 無法判定（例如非 git repo），此時 fail-safe 維持既有訊號不變。
+    if not no_new_commits:
+        substantive_commits = filter_out_version_only_commits(str(project_root), last_time)
+        if substantive_commits is not None and len(substantive_commits) == 0:
+            no_new_commits = True
+
     if hash_unchanged and no_new_commits:
         return True, (
-            f"無實質變更可推送（hash={current_hash} 與上次推送相同，"
-            f"自 {last_time} 以來無新 .claude/ commit）"
+            f"無實質變更可推送（hash={current_hash} 與上次推送相同，"  # i18n-exempt
+            f"自 {last_time} 以來無新 .claude/ commit，或僅有 VERSION 回寫記帳 commit）"  # i18n-exempt
         )
 
     diag = (
-        f"hash {'相同' if hash_unchanged else '不同'}"
-        f"（current={current_hash} last={last_hash}）；"
-        f"自上次推送有 {len(new_commits)} 個新 commit"
+        f"hash {'相同' if hash_unchanged else '不同'}"  # i18n-exempt
+        f"（current={current_hash} last={last_hash}）；"  # i18n-exempt
+        f"自上次推送有 {len(new_commits)} 個新 commit"  # i18n-exempt
     )
     return False, diag
 

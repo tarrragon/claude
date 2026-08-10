@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -121,6 +122,108 @@ def test_hash_mismatch_continues(
     should_exit, reason = sync_mod.check_no_change_early_exit(claude_dir, tmp_path)
     assert should_exit is False
     assert "hash 不同" in reason
+
+
+def _run_git(args: list[str], cwd: Path, commit_date: str | None = None) -> None:
+    """執行 git 指令；commit_date 供 commit 指令固定 author/committer 時間，
+    避免測試依賴真實牆鐘時間差（--since 邊界對同一秒內的多個 commit 不穩定）。
+    """
+    env = None
+    if commit_date is not None:
+        import os
+
+        env = {**os.environ, "GIT_AUTHOR_DATE": commit_date, "GIT_COMMITTER_DATE": commit_date}
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True, env=env)
+
+
+def _init_repo_with_claude_dir(tmp_path: Path) -> tuple[Path, str]:
+    """建立含 .claude/ 的真實 git repo，用於驗證 diff 內容過濾（tarrragon/claude#66）。
+
+    傳回 (repo, last_time)：last_time 是初始 commit 的固定 commit 時間，供
+    check_no_change_early_exit 的 --since 判斷排除初始 commit本身。
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _run_git(["init", "-q"], cwd=repo)
+    _run_git(["config", "user.email", "test@example.com"], cwd=repo)
+    _run_git(["config", "user.name", "Test"], cwd=repo)
+
+    claude_dir = repo / ".claude"
+    claude_dir.mkdir()
+    (claude_dir / "dummy.txt").write_text("content\n", encoding="utf-8")
+    (claude_dir / "VERSION").write_text("1.0.0\n", encoding="utf-8")
+    # .sync-state.json 在正式專案是 gitignore 排除的本地狀態檔（非 git tracked），
+    # 測試 repo 需同步排除，否則後續 _write_state 產生的檔案會被 `git add .`
+    # 誤納入記帳 commit，汙染「僅變更 VERSION」的判定。
+    (repo / ".gitignore").write_text(".claude/.sync-state.json\n", encoding="utf-8")
+    _run_git(["add", "."], cwd=repo)
+    initial_date = "2019-01-01T00:00:00+00:00"
+    _run_git(["commit", "-q", "-m", "chore: initial"], cwd=repo, commit_date=initial_date)
+    # since 落在初始 commit 之後、後續測試 commit（2020-01-02）之前，避免 git
+    # log --since 對邊界日期採 inclusive 語意而誤含初始 commit。
+    since_time = "2019-06-01T00:00:00+00:00"
+    return repo, since_time
+
+
+class TestVersionOnlyCommitLoop:
+    """tarrragon/claude#66：VERSION 回寫記帳 commit 不應被誤判為實質變更。"""
+
+    def test_version_only_commit_after_push_aborts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """push 後僅提交 VERSION 回寫（記帳 commit），下一輪應視為無實質變更並 abort。"""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            repo, last_time = _init_repo_with_claude_dir(tmp_path)
+            claude_dir = repo / ".claude"
+
+            # 模擬 push 完成當下：write_local_version 已把 VERSION 改為 1.1.0，
+            # last_push_hash 是「VERSION 已是 1.1.0」時的內容指紋。
+            (claude_dir / "VERSION").write_text("1.1.0\n", encoding="utf-8")
+            current_hash = sync_mod._compute_content_hash(claude_dir)
+            _write_state(claude_dir, current_hash, time_value=last_time)
+
+            # 使用者事後才 `git add && git commit` 持久化這個已經算進 hash 的
+            # VERSION 變更 -> 產生一個記帳 commit，但工作區內容（進而 hash）
+            # 完全沒有再變化。
+            _run_git(["add", "."], cwd=repo)
+            _run_git(
+                ["commit", "-q", "-m", "chore: sync VERSION to 1.1.0"],
+                cwd=repo,
+                commit_date="2020-01-02T00:00:00+00:00",
+            )
+
+            should_exit, reason = sync_mod.check_no_change_early_exit(claude_dir, repo)
+
+            assert should_exit is True
+            assert "無實質變更" in reason
+
+    def test_real_change_commit_still_proceeds(self) -> None:
+        """記帳 commit 之外仍有實質變更（改動 VERSION 以外的檔案）時，行為維持現行（不 abort）。"""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            repo, last_time = _init_repo_with_claude_dir(tmp_path)
+            claude_dir = repo / ".claude"
+
+            current_hash = sync_mod._compute_content_hash(claude_dir)
+            _write_state(claude_dir, current_hash, time_value=last_time)
+
+            (claude_dir / "dummy.txt").write_text("changed content\n", encoding="utf-8")
+            _run_git(["add", "."], cwd=repo)
+            _run_git(
+                ["commit", "-q", "-m", "feat: real change"],
+                cwd=repo,
+                commit_date="2020-01-02T00:00:00+00:00",
+            )
+
+            should_exit, reason = sync_mod.check_no_change_early_exit(claude_dir, repo)
+
+            assert should_exit is False
+            assert "1 個新 commit" in reason
 
 
 class TestShouldCheckNoChange:

@@ -69,6 +69,14 @@ description: 推送 .claude 配置到獨立 repo (https://github.com/tarrragon/c
 | 刪除任何 tracked `.claude/` 檔 | 該批刪除 push 時帶 `--clean` |
 | runtime state / worktree gitlink 殘留（should_exclude 保護範圍外） | `--clean` 不涵蓋，需手動 clone + `git rm` + push（見 W1-009 階段 1） |
 
+## 無實質變更時自動跳過推送
+
+腳本在無 `--force`／`--clean`／手動 commit 訊息時，會先比對「當前 `.claude/` 內容指紋」與「上次推送時的內容指紋」，並檢查上次推送後是否有新的 `.claude/` commit：
+
+- 兩者皆無變化（含僅有 `VERSION` 回寫記帳 commit——即 push 成功後腳本自動回寫本地 `.claude/VERSION`，使用者事後 `git add && git commit` 持久化該回寫產生的 commit）→ 印出「無實質變更可推送」並 `exit 0`，不 bump 版本、不打 tag、不寫 CHANGELOG（tarrragon/claude#66：避免 VERSION 回寫本身被誤判為新變更，形成版本永不收斂的自反饋迴路）。
+- 有其他實質變更（即使同批也含 VERSION 記帳 commit）→ 行為與現行完全一致，正常 bump/tag/CHANGELOG/回寫。
+- 帶 `--force`、`--clean` 或手動指定 commit 訊息時，一律跳過此檢查直接進入推送流程。
+
 ## 注意事項
 
 - 確保變更已在本專案充分測試
