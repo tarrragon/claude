@@ -1,3 +1,15 @@
+## [2.29.2] - 2026-08-12
+
+### Summary
+fix: 撤回虛構判定，定性為並行 working copy 的路徑不相容; chore: sync-push 回寫框架版本號 與 worklog 進度
+
+Changes: 1 fix, 1 chore
+
+- fix: 撤回虛構判定，定性為並行 working copy 的路徑不相容
+- chore: sync-push 回寫框架版本號 與 worklog 進度
+
+---
+
 ## [2.29.1] - 2026-08-12
 
 ### Summary

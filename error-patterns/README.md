@@ -597,6 +597,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-BAL-029 | ticket 以機器專屬絕對路徑記錄環境事實，換機後前提全數失效且不自我揭示 | 中 | — |
 | PC-BAL-030 | 同源自審宣稱等價於多視角審查，審查缺口被自我頒發的合格證明覆蓋 | 高 | — |
 | PC-BAL-031 | ticket why 欄位的未驗證假設經自動抽取機制傳播至衍生票 context | 中 | — |
+| PC-BAL-032 | 以單一環境的旁證推翻另一環境產生的記錄，證據為真而結論錯誤 | 高 | — |
 
 ---
 

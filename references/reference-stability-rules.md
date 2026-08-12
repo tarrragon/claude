@@ -647,9 +647,18 @@ Provenance: claude#58
 
 **校正時必須當場跑一次存在性命令，不可只做字串替換，也不可引用記憶中的實測結果**：只替換字串會產出看起來已修好、實際仍解析不到的路徑，失效形態與修正前相同，且因為標記為「已處理」而更不容易再被檢查。
 
-實證案例（2026-08-10 校正，2026-08-12 查證）：一次校正把 `/Users/<name>/project/<repo>/...` 改寫為 `~/Projects/<repo>/...`，並在記錄中寫下「本機實測 `~/project/<repo>` 不存在、`~/Projects/<repo>` 存在」「`echo $HOME` 為 `/Users/<另一個名字>`」「兩個目標檔 34k / 2.6k」。重測三項皆不成立：實際 HOME 是另一個使用者名（記錄中那個從未存在過）、`~/project/<repo>` EXISTS、`~/Projects/<repo>` MISSING。這不是量測環境差異，是未執行命令而以預期填補的產物（confabulation 形態，見 `.claude/rules/core/tool-output-trust-rules.md` 規則 1）。錯誤值隨後被當作已驗證事實升格為本檔與 PC-BAL-029 的反面舉證，使規範自身的舉證不可解析；期間五位審查委員無人重跑 `ls`，皆把「新值可解析」當既定前提沿用。
+**同一份記錄被兩個並行環境共用時，`~` 不足以修好路徑**：`~` 只換掉使用者名那一段，HOME 之下的目錄佈局差異換不掉。
 
-**Action**：校正路徑時把存在性命令的 raw stdout 貼進記錄，而非貼結論句。二元輸出（EXISTS / MISSING）與 realpath 屬無法憑先驗分布生成的固定值，是這類記錄唯一可信的形式；「實測確認 X」這種結論句無論寫得多具體都不構成證據。
+實證案例（2026-08-10 校正，2026-08-12 鑑識）：兩個 working copy 長期並行，同一個外部 repo 在一側位於 `~/Projects/<repo>`、另一側位於 `~/project/<repo>`（複數大寫 vs 單數小寫）。一次校正在前者執行，正確觀測到自身環境並把路徑寫成 `~/Projects/<repo>/...`；該值在後者 MISSING。後者接手時把它改回 `~/project/<repo>/...`，前者於是失效。兩個寫法各自在一側為真，**都不是正確答案**——把記錄從一側形式改成另一側形式只是把失效方向倒過來。
+
+鑑識依據值得一記：判別「該 session 是否在本 working copy 執行」用的不是敘述，而是 gitignored 的 hook 日誌時段分布（本機產出、不隨 commit 移動）與 harness 依 cwd 編碼的 scratchpad 目錄名。兩者皆非模型輸入，故可用來反證記錄中的環境宣稱。
+
+**Action**：
+
+1. 校正路徑時把存在性命令的 raw stdout 貼進記錄，而非貼結論句，並標註是在哪一側量的。二元輸出（EXISTS / MISSING）與 realpath 是可複驗的固定值；「實測確認 X」這種結論句無論寫得多具體都不構成證據，也不揭示它只在某一側成立。
+2. 跨 repo 引用（目標不在本專案 git 樹內，`$CLAUDE_PROJECT_DIR` 與 `git rev-parse` 都指不到）**目前沒有環境無關的正確寫法**。改記「用途 + 尋找方式」取代記路徑：說明要找的是哪個 repo 的哪類文件，讓讀者在自己環境解析，而不是給一條在對方環境會壞掉的絕對指引。
+
+<!-- 命令列的 candidate-a/b 為佔位符，實際代入兩側各自的候選路徑 -->
 
     $ for p in ~/candidate-a ~/candidate-b; do [ -e "$p" ] && echo "$p EXISTS" || echo "$p MISSING"; done
 
