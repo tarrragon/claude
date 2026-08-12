@@ -361,3 +361,95 @@ def test_run_audit_monitor_canary_regression_3_deleted_10_kept(
     out = capsys.readouterr().out
     assert "3 個將被刪除" in out
     assert "10 個將保留" in out
+
+
+# ============================================================================
+# preview_overlay_changes 對齊 should_exclude（0.2.1-W3-162）
+#
+# 背景：preview_overlay_changes 曾不呼叫 should_exclude，full overlay 互動確認
+# 預覽會把 per-project 目錄（如 project-integration/）與憑證檔（如 .env）列為
+# 將刪除或將覆蓋，實際執行路徑（sync_directory / cleanup_stale_files）卻不動
+# 它們——預覽與實際不一致。以下測試同時驗證：(a) 應排除項目不誤列（防高報）、
+# (b) 非排除的真孤兒/真差異檔仍完整列出（防低報，比高報更危險）。
+# ============================================================================
+
+def test_preview_overlay_changes_excludes_project_integration_dir(tmp_path):
+    """per-project 落地層（project-integration/）不列入 will_delete 或 will_overwrite。"""
+    project_root = tmp_path / "proj"
+    claude_dir = project_root / ".claude"
+    upstream = tmp_path / "upstream"
+
+    _write_tree(
+        claude_dir,
+        {
+            "skills/foo/references/project-integration/case.md": "local-only content",
+            "normal_orphan.md": "orphan",
+        },
+    )
+    # 上游同時存在 project-integration/ 下同名檔但內容不同（模擬會被誤判為
+    # will_overwrite 的情境）與一個 normal_orphan.md 不存在的事實（維持孤兒）
+    _write_tree(
+        upstream,
+        {"skills/foo/references/project-integration/case.md": "upstream content"},
+    )
+    remote_files = {Path("skills/foo/references/project-integration/case.md")}
+
+    will_overwrite, will_delete, _ = pull.preview_overlay_changes(
+        upstream, claude_dir, remote_files=remote_files, preserve=set(),
+        project_root=project_root,
+    )
+
+    delete_paths = [rel for rel, _tracked in will_delete]
+    assert "skills/foo/references/project-integration/case.md" not in will_overwrite
+    assert "skills/foo/references/project-integration/case.md" not in delete_paths
+    # 防低報：真孤兒仍完整出現
+    assert "normal_orphan.md" in delete_paths
+
+
+def test_preview_overlay_changes_excludes_credential_file_from_will_overwrite(tmp_path):
+    """憑證檔（.env）內容雖與上游不同，不列入 will_overwrite。"""
+    project_root = tmp_path / "proj"
+    claude_dir = project_root / ".claude"
+    upstream = tmp_path / "upstream"
+
+    _write_tree(claude_dir, {".env": "local-secret", "normal.md": "local-v1"})
+    _write_tree(upstream, {".env": "upstream-secret", "normal.md": "upstream-v2"})
+    remote_files = {Path(".env"), Path("normal.md")}
+
+    will_overwrite, will_delete, _ = pull.preview_overlay_changes(
+        upstream, claude_dir, remote_files=remote_files, preserve=set(),
+        project_root=project_root,
+    )
+
+    assert ".env" not in will_overwrite
+    # 防低報：非排除、內容確實不同的檔仍完整列出
+    assert "normal.md" in will_overwrite
+
+
+def test_preview_overlay_changes_matches_should_exclude_directly(tmp_path):
+    """should_exclude 命中的項目與 _walk 實際排除結果逐一一致（無漏判、無誤判）。"""
+    project_root = tmp_path / "proj"
+    claude_dir = project_root / ".claude"
+    upstream = tmp_path / "upstream"
+
+    tree = {
+        "project-integration/local.md": "a",   # push-only exclude（per-project）
+        ".env": "b",                            # credential 名稱黑名單
+        "secrets/token.txt": "c",               # credential 目錄黑名單
+        "keep_me.md": "d",                      # 一般孤兒，應完整出現
+    }
+    _write_tree(claude_dir, tree)
+
+    will_overwrite, will_delete, _ = pull.preview_overlay_changes(
+        upstream, claude_dir, remote_files=set(), preserve=set(),
+        project_root=project_root,
+    )
+    delete_paths = {rel for rel, _tracked in will_delete}
+
+    for rel in tree:
+        rel_path = Path(rel)
+        excluded = pull.should_exclude(rel_path)
+        assert (rel not in delete_paths) == excluded, (
+            f"{rel}: should_exclude={excluded} 與預覽 will_delete 收錄狀態不一致"
+        )
+    assert "keep_me.md" in delete_paths

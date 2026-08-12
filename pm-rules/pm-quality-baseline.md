@@ -139,7 +139,20 @@
 | 記錄經驗教訓前未執行捕獲時分流判準 | 評估缺失直接導致跨專案原則流失，或散落無主無法複用 |
 | 將跨專案原則誤歸為「專案特定」以規避升級 | 跨專案原則若僅落 `docs/`，不會隨 `.claude/` sync 傳播到其他專案 |
 
-**驗證方式**：每版本發布前執行知識捕獲稽核（version-release 稽核項：抽查本版 ticket 的 Completion Info / Solution 中標記「發現」的內容，確認皆已依三分流落地，無殘留僅存於 ticket 文字未正規化的項目）。
+**驗證方式**（如實反映現況，非宣稱已自動化）：
+
+| 子部分 | 現況 |
+|--------|------|
+| memory 排除（三分流「memory 不在目的地」） | 已機械執法：`memory-write-guard-hook.py`（PreToolUse，命中 memory 目錄路徑即 deny）+ `memory-dir-audit-hook.py`（SessionStart/Stop 快照比對告警），兩者皆已掛載於 `.claude/settings.json`。**涵蓋邊界**：PreToolUse deny 僅覆蓋 Write / Edit / MultiEdit / NotebookEdit 四項工具；Bash 路徑（含 heredoc）不在攔截範圍內，由 SessionStart/Stop 稽核事後告警承接，此邊界為 hook 自身明文的刻意設計 |
+| 三分流語意分類（框架相關／專案相關／兩者皆非） | **無機械稽核**，正確性完全依賴 PM 於版本發布前人工抽查本版 ticket 的 Completion Info / Solution，確認標記「發現」的內容皆已依三分流落地 |
+
+**Why（為何不機械化）**：三分流判準的判別問句「另一個專案的 session 讀到這段，能用嗎」本質是對內容通用性的語意評估，無法用正則/關鍵字模式比對窮盡。
+
+**Consequence（強行機械化的後果，含實測依據）**：重現實驗對累積的 400 筆 ticket md 樣本執行 `grep -l "發現"`，命中率**100%（400/400）**；抽樣檢視命中行內容，主要來源為 Spawn Requests 章節固定模板註解、Problem Analysis placeholder、「無發現需修正項」等否定敘述，而非真正待正規化的知識性發現——關鍵字比對無法區分三者，偽陽性率 100%。若照字面建置此稽核，不但不能攔截任何真實遺漏，反而製造「已有自動防護」的假象，使 PM 更可能省略人工抽查。**可攜性**：關鍵字比對無法區分三者之機制性主張可攜至其他專案；400 筆樣本數與 100% 偽陽性率為本專案實測值，`.claude/` 經 sync 後不預期在其他 consumer 專案同樣成立。
+
+**Action（實際須做的事）**：版本發布前由 PM 人工抽查本版 ticket 的 Completion Info / Solution，逐一確認標記「發現」的內容皆已依三分流落地，無殘留僅存於 ticket 文字未正規化的項目；此步驟無自動化輔助，已列入 `.claude/skills/version-release/SKILL.md`「使用流程檢查清單」對應勾選項，逐版執行，不可因「規則已寫」而預設已被稽核涵蓋。
+
+**選配資訊性掃描**：非阻擋式資訊性掃描（輔助人工抽查定位知識載體變動範圍）尚未實作，人工抽查目前無工具輔助定位範圍。
 
 ---
 
@@ -173,7 +186,9 @@
 
 ---
 
-**Last Updated**: 2026-07-27
+**Last Updated**: 2026-08-10
+**Version**: 2.3.0 - 規則 7 三處修正（文字審查發現）：Action 層原指向不存在的發版 checklist 落點，改為指向 `version-release/SKILL.md` 使用流程檢查清單新增的對應勾選項（該勾選項同一次變更中同步新增）；memory 排除列補涵蓋邊界（PreToolUse deny 僅覆蓋 Write/Edit/MultiEdit/NotebookEdit，Bash 路徑由事後稽核承接）；Consequence 補標「400 筆樣本為本專案實測，機制主張可攜但量測值不可攜」；移除「選配資訊性掃描的處置」過去式過程紀錄段落（依 spec 與 process record 分離原則，過程細節屬 ticket/worklog 範疇），改為不含過程與識別符的一句現況陳述。
+**Version**: 2.2.0 - 規則 7「驗證方式」段落改寫：移除對不存在的 version-release 稽核項的字面宣稱，改為如實描述現況（memory 排除已 hook 化；三分流語意分類無機械稽核、依賴人工抽查），並補三明示（Why 三分流本質為語意判斷 / Consequence 400 ticket 樣本關鍵字比對偽陽性率 100% 實測 / Action 版本發布前人工抽查 checklist）；新增選配資訊性掃描（方案 C）處置說明，判定不隨本次併入並已提出 follow-up spawn request，避免無 trigger 延後。
 **Version**: 2.1.0 - 規則 7 全文改寫：以三分流（框架相關／專案相關／兩者皆非）取代原「跨專案錯誤學習 + memory 承接專案特定與 deferred 項」目的地表，memory 不再列為任何分支的合法目的地；`upgrade: deferred` frontmatter 標註與「升級後處理」三步（MEMORY.md 索引移除）隨之廢除；底線要求總結與相關規則指標同步更新（0.2.1-W3-083，承接 0.2.1-W3-082 用戶裁示）。
 **Version**: 2.0.0 - 規則 7 語意由「寫入後四問評估」前移為「捕獲時分流」：新增分流判準表（Two-Phase Reflection 成熟度門檻 + `upgrade: deferred` 顯式標註 + framework-issue candidate 可選 inbox），原四問表降為分流目的地路由；升級後處理綁 promote/scan 工具與發版稽核。依據：130 檔 feedback memory 實測 4% 標註率，事後補評估閉環量化證明不執行
 **Version**: 1.2.0 - 規則 7 升級路徑表補「單一代理人身份/偏好 → agents/<name>.md」分支（原六分支對偏好類教訓無目的地，fall through 誤置）+ 表前補知識載體地圖路由（W8 multi-round-review R3）

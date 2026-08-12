@@ -425,11 +425,46 @@ def load_preserve_list(claude_dir: Path) -> set[str]:
             in_preserve = True
             continue
         if in_preserve and stripped.startswith("- "):
-            paths.add(stripped[2:].strip())
+            path = stripped[2:].strip()
+            paths.add(path)
+            _warn_if_preserve_entry_is_directory(claude_dir, path, preserve_file)
         elif stripped and not stripped.startswith("#"):
             # 非空、非註解行關閉 preserve 區塊
             in_preserve = False
     return paths
+
+
+def _warn_if_preserve_entry_is_directory(
+    claude_dir: Path, entry: str, preserve_file: Path,
+) -> None:
+    """偵測 sync-preserve.yaml 的單一項目是否為目錄，若是則發出 stderr 警告。
+
+    Why：preserve 比對維度為完整相對檔案路徑（copy_filtered_from_staging /
+    clean_stale_files / detect_uncleaned_deletions 皆為 rel.as_posix() in
+    preserve 的精確比對），且過濾迴圈只迭代檔案（跳過目錄）。使用者若寫入
+    目錄名（如 "skills/my-private-skill/"），該項在比對時永不命中，靜默無效。
+
+    Consequence：使用者以為已保護該目錄，實際整個目錄仍被推上共享框架
+    repo，且無任何錯誤或提示可察覺。
+
+    Action：偵測「以斜線結尾」或「對應本地路徑實際為目錄」兩種情況，發出
+    stderr 警告並指出替代做法（改列該目錄下的具體檔案路徑）。工具層警告比
+    僅在契約文件說明更能防止誤用延續（預設行為優於文件規範）。
+
+    參數:
+        claude_dir: .claude 目錄路徑
+        entry: sync-preserve.yaml 單一項目（已去除 "- " 前綴與前後空白）
+        preserve_file: sync-preserve.yaml 的完整路徑（用於警告訊息定位）
+    """
+    is_directory_like = entry.endswith("/") or (claude_dir / entry).is_dir()
+    if not is_directory_like:
+        return
+    example_child = f"{entry.rstrip('/')}/<檔名>"
+    sys.stderr.write(  # i18n-exempt
+        f"[sync-push] preserve 項目為目錄，不生效（preserve 比對維度為完整"  # i18n-exempt
+        f"檔案路徑，非目錄前綴）：{entry}（{preserve_file}）。"  # i18n-exempt
+        f"請改列該目錄下的具體檔案路徑，例如：{example_child}\n"  # i18n-exempt
+    )
 
 
 def copy_filtered_from_staging(

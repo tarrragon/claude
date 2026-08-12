@@ -386,6 +386,47 @@ class TestGroupC_MergeIdempotency:
         assert "[PM 派發提醒 2026-08-04]" in merged
         assert "凍結快照含被推翻前的前提。" in merged
 
+    def test_multi_paragraph_bullet_value_does_not_duplicate_trailing_subsections(self):
+        """0.2.1-W3-403 回歸案例：Rationale Chain 的 why 值含空行分隔多段落時，
+        逐行分類（0.2.1-W3-252）誤判續段落為手動內容起點，`_find_auto_block_end`
+        提早收尾，其後的 auto 內容（含整個 Related Files 子節）被誤留為「手動
+        內容」，於整塊替換後與新寫入的完整 auto 區塊並存，造成 Related Files
+        子節重複（實測命中 0.2.1-W3-392、0.2.1-W3-402、0.2.1-W3-253、
+        0.2.1-W3-382 共 4 張）。
+
+        修復後：多段落續行歸屬其所在子區塊（以「向後尋找下一個已知子區塊標題」
+        判別為續段落而非邊界），緊接其後的已知子區塊（Related Files）不重複。
+        """
+        existing = (
+            "<!-- auto-extracted: v1 | sources: A | chars: 300 -->\n"
+            "\n### Rationale Chain\n"
+            "- A why: 段落一舊文字。\n\n"
+            "段落二舊文字（續行，不以「- 」開頭）。\n\n"
+            "### Related Files\n"
+            "- old/path.py  # from A\n"
+        )
+        new = (
+            "<!-- auto-extracted: v1 | sources: A | chars: 320 -->\n"
+            "\n### Rationale Chain\n"
+            "- A why: 段落一新文字。\n\n"
+            "段落二新文字（續行，不以「- 」開頭）。\n\n"
+            "### Related Files\n"
+            "- new/path.py  # from A\n"
+        )
+        merged, notes = merge_auto_extracted_block(existing, new)
+        assert "replaced_auto_block" in notes
+        # Related Files 子節標題只應出現一次（缺陷簽名：重複出現 2 次）
+        assert merged.count("### Related Files") == 1
+        assert merged.count("### Rationale Chain") == 1
+        # 新內容完整寫入
+        assert "段落一新文字。" in merged
+        assert "段落二新文字（續行，不以「- 」開頭）。" in merged
+        assert "- new/path.py  # from A" in merged
+        # 舊內容不殘留
+        assert "段落一舊文字。" not in merged
+        assert "段落二舊文字（續行，不以「- 」開頭）。" not in merged
+        assert "old/path.py" not in merged
+
     def test_content_unchanged_same_sources_stays_idempotent(self):
         """內容無實質差異（僅 chars 估算值不同）時仍走 no_change_idempotent，
         不因改用 content-aware 判定而產生空更新 commit（acceptance 3）。"""
@@ -591,6 +632,68 @@ class TestGroupD_CLI:
             )
         assert "no_change_idempotent" in notes
         assert saved_calls == []  # 未寫入
+
+    def test_detect_duplicate_known_headings_flags_repeated_subsection(self):
+        """post-write self-check helper：已知子區塊標題重複時回傳該標題清單，
+        無重複時回傳空列表。"""
+        from ticket_system.lib.context_bundle_extractor import (
+            _detect_duplicate_known_headings,
+        )
+
+        clean = "### Task Reference\n- x\n### Related Files\n- y\n"
+        duplicated = (
+            "### Task Reference\n- x\n### Related Files\n- y\n"
+            "### Related Files\n- y again\n"
+        )
+        assert _detect_duplicate_known_headings(clean) == []
+        assert _detect_duplicate_known_headings(duplicated) == ["### Related Files"]
+
+    def test_extract_and_write_aborts_when_merge_produces_duplicate_headings(
+        self, tmp_path
+    ):
+        """post-write self-check：即使 `merge_auto_extracted_block` 因未知原因回傳
+        含重複已知標題的結果，`extract_and_write_context_bundle` 亦須偵測並中止
+        寫入，不靜默持久化損毀內容（規則 4）。以 patch 強制 merge 回傳損毀結果，
+        驗證此為獨立於 merge 邏輯本身的防禦縱深，不因單一函式的修復而永久免疫。
+        """
+        source = _make_source("0.18.0-W17-001")
+        target = {
+            "id": "0.18.0-W17-010",
+            "source_ticket": "0.18.0-W17-001",
+            "blocked_by": None,
+            "related_to": None,
+            "where": {"files": []},
+            "_body": "## Context Bundle\n\n（待自動填入）\n\n## Other\n保留\n",
+        }
+
+        def _fake_load(version, tid):
+            return target if tid == "0.18.0-W17-010" else source
+
+        saved_calls = []
+        corrupted = (
+            "<!-- auto-extracted: v1 | sources: 0.18.0-W17-001 | chars: 10 -->\n"
+            "### Related Files\n- a\n### Related Files\n- a\n"
+        )
+        with patch(
+            "ticket_system.lib.context_bundle_extractor.load_ticket",
+            side_effect=_fake_load,
+        ), patch(
+            "ticket_system.lib.context_bundle_extractor.save_ticket",
+            side_effect=lambda t, p: saved_calls.append((t, p)),
+        ), patch(
+            "ticket_system.lib.context_bundle_extractor.get_ticket_path",
+            return_value=tmp_path / "t.md",
+        ), patch(
+            "ticket_system.lib.context_bundle_extractor.merge_auto_extracted_block",
+            return_value=(corrupted, ["replaced_auto_block"]),
+        ):
+            result, notes = extract_and_write_context_bundle(
+                "0.18.0", "0.18.0-W17-010"
+            )
+
+        assert "aborted_duplicate_headings_detected" in notes
+        assert saved_calls == []
+        assert any("post-write self-check 失敗" in w for w in result.warnings)
 
     def test_s20_extraction_exception_non_raising(self, tmp_path):
         """S20：target load 失敗 → 拋 ContextBundleExtractionError（W17-002.1 #5 專屬 Exception）。

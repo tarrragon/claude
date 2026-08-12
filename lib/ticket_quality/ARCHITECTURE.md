@@ -853,7 +853,7 @@ Python Standard Library (re, json, datetime)
 **如何驗證依賴關係**:
 ```bash
 # 檢查 import 語句
-cd /Users/tarragon/Projects/book_overview_app/.claude/hooks/ticket_quality
+cd "$(git rev-parse --show-toplevel)/.claude/hooks/ticket_quality"
 grep -r "^from \." .
 
 # 預期輸出:

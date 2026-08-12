@@ -101,6 +101,12 @@ Level 1 入口層 → Level 2 執行層 → Level 3 完成層 → Level 4 驗收
 > 場景範例：.claude/references/verification-scenario-examples.md
 > Hook 實作細節：.claude/references/verification-hook-implementation.md
 
+### Runtime-surface ticket 的實機驗證 AC 要求
+
+**規則**：ticket 的 `where.files` 觸及 runtime surface（`lib/presentation/`、`lib/main.dart`、平台整合層）時，acceptance 必須含一項實機驗證——可自動化者指 on-device 測試（如 `integration_test/` 於釘住裝置執行全綠），不可自動化者（探索性、硬體相依、觀感）指 PM 手動 verify（`.claude/rules/core/pm-role.md`「實機驗證屬 PM 職責」條款）。
+
+**Why**：host 測試以替身隔離接縫，全綠仍可能實機起不來、點不到、沒回應；acceptance 缺實機項時此類失效直到發版冒煙才暴露（quality-baseline 規則 1 邊界）。**Action**：PM 建票時對照 `where.files`；漏帶時於驗收前補 AC。判準句與紅燈層級順序節的豁免判準為同一句（「場景有無可駕駛的執行面」，權威見 `.claude/skills/tdd/references/phase2/rules.md`「紅燈層級順序」節）。Hook 強制層暫不建立（決策：現階段由 PM 建票時對照攔截即足）；若發生 runtime-surface ticket 漏帶實機 AC 且未被 PM 攔截，依 quality-baseline 規則 5 當下建 ANA 評估 hook 化。
+
 ---
 
 ## ANA 專屬驗收 checklist：Solution spawn 一致性（Level 4 延伸）

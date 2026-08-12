@@ -197,7 +197,7 @@ def derive_worktree_path(ticket_id: str) -> str:
 
     Example:
         derive_worktree_path("0.1.1-W9-002.1")
-        # "/Users/mac-eric/project/ccsession-0.1.1-W9-002.1"
+        # "{worktree 父目錄}/ccsession-0.1.1-W9-002.1"
     """
     project_root = get_project_root()
     project_name = os.path.basename(project_root)

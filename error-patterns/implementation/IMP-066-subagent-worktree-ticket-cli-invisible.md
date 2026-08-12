@@ -45,7 +45,7 @@ CC isolation:worktree 建立的 subagent worktree 並非從當前 HEAD checkout�
 
 1. **Read 絕對路徑讀 ticket md**：
    ```
-   Read /Users/tarragon/Projects/book_overview_v1/docs/work-logs/v0/v0.18/v0.18.0/tickets/{ticket-id}.md
+   Read {專案根絕對路徑}/docs/work-logs/v0/v0.18/v0.18.0/tickets/{ticket-id}.md
    ```
 
 2. **結構化結果由 subagent 回傳 PM**（不派 ticket CLI 寫入）：

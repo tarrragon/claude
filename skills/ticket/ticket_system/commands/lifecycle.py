@@ -89,6 +89,7 @@ def _build_worklog_path_for_stage(version: str) -> str:
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 from ticket_system.lib.project_root import resolve_project_cwd
 from ticket_system.lib.blocker_resolution import is_fully_unblocked
+from ticket_system.lib.machine_path_detector import scan_ticket_file_for_machine_paths
 from ticket_system.commands.claim_verification import (
     collect_ac_verifications,
     prompt_user_decision,
@@ -143,6 +144,83 @@ def _print_source_ana_complete_hint(ticket: Dict[str, Any], version: str) -> Non
         f"  → Source ANA {source_id} spawned 全 completed，"
         f"可考慮 ticket track complete {source_id}"
     )
+
+
+# ============================================================================
+# where.files 重疊 pending 票提示
+# ============================================================================
+
+def _compute_file_heat(ticket_map: Dict[str, Any]) -> Dict[str, int]:
+    """計算每個 where.files 路徑跨 ticket_map 全部票（不分狀態）出現的次數。
+
+    熱度越低代表該路徑越罕見；兩票同時碰到罕見路徑比同時碰到熱門路徑
+    （如共用設定檔、共用目錄宣告）更可能是同一議題的重複，而非同子系統
+    的巧合共用。直接走訪既有 ticket_map（complete 已載入）以 Counter 累加，
+    不另發起 IO。
+    """
+    heat: Dict[str, int] = {}
+    for other in ticket_map.values():
+        for file_path in other.get("where", {}).get("files") or []:
+            heat[file_path] = heat.get(file_path, 0) + 1
+    return heat
+
+
+def _print_overlapping_pending_hint(
+    ticket: Dict[str, Any], ticket_map: Dict[str, Any]
+) -> None:
+    """complete 成功後列出 where.files 與 pending 票有交集者，依特異性排序。
+
+    介入點置於 complete：收尾者剛讀完程式碼，是全流程中對「本次變更實際
+    涵蓋範圍」資訊量最高的角色，而建票時可得的標題文字與 where.files 粒度
+    不足以支撐判定。提示為純 stdout 輸出，不改變 exit code，不阻擋 complete。
+
+    交集判定刻意使用「有交集」（`own_files & other_files != set()`）而非
+    子集測試：子集測試會漏掉宣告了自己專屬測試檔的吸收方（其檔案集合因此
+    不成為另一票的子集），且以子集結果作阻擋依據時誤攔率過高（實測涵蓋
+    三成以上的 pending backlog，多數為同檔不同議題的合法票）。觸發判準與
+    候選集合本身不因排序而改變，僅輸出順序調整——收緊判準會弄丟低出現
+    次數的真陽性樣本，故改以排序降低閱讀成本：候選依交集檔案的特異性
+    （交集中最低的檔案熱度）由低到高排序，熱度越低代表該檔案越罕見、
+    兩票同時命中它就越可疑，故排在越前面，每列並標註該數值供收尾者自行
+    判斷可信度。最終是否吸收仍由收尾者人工判定，本函式不做過濾。
+    """
+    own_id = ticket.get("id", "")
+    own_files = set(ticket.get("where", {}).get("files") or [])
+    if not own_files:
+        return
+
+    file_heat = _compute_file_heat(ticket_map)
+
+    overlapping: List[Tuple[str, str, int]] = []
+    for other_id, other in ticket_map.items():
+        if other_id == own_id:
+            continue
+        if other.get("status") != STATUS_PENDING:
+            continue
+        other_files = set(other.get("where", {}).get("files") or [])
+        intersection = own_files & other_files
+        if not intersection:
+            continue
+        specificity = min(file_heat.get(f, 0) for f in intersection)
+        overlapping.append((other_id, other.get("title", ""), specificity))
+
+    if not overlapping:
+        return
+
+    overlapping.sort(key=lambda item: item[2])
+
+    print()
+    print(
+        "  → where.files 與以下 pending 票有交集，請確認是否已吸收其範圍"
+        "（依交集特異性排序，熱度越低越前面）："
+    )
+    for other_id, other_title, specificity in overlapping:
+        print(f"     - {other_id}: {other_title}（特異性：熱度 {specificity}）")
+    print(
+        f"     若已吸收，請標記 relatedTo："
+        f"ticket track set-related-to {own_id} \"{overlapping[0][0]}\" --add"
+    )
+    print("     若無吸收，可略過此提示")
 
 
 # ============================================================================
@@ -913,6 +991,9 @@ class TicketLifecycle:
 
         # W17-008.15 方案 D：IMP complete 後檢查 source ANA 是否可 complete
         _print_source_ana_complete_hint(ticket, self.version)
+
+        # where.files 重疊 pending 票提示：純提示不阻擋，判定交由收尾者
+        _print_overlapping_pending_hint(ticket, ticket_map)
 
         # 自動 handoff：若有後續任務，自動建立 handoff 檔案
         _auto_handoff_if_needed(ticket, analysis, self.version)
@@ -2265,15 +2346,26 @@ def execute_claim(args: argparse.Namespace, version: str) -> int:
     24hr / 75 commits / 5 ticket cycles 驗證：外部依賴 = 0、runtime
     deprecation 觸發 = 0）。需單獨驗證請改用 ``ticket track verify <id>``。
     """
-    # Stale 提示（pending 超過 7 天；靜默失敗不影響 claim 主流程）
+    # claim 前的兩項提示（皆為附加資訊，任一失敗都不得阻擋 claim 主流程）
     try:
         ticket = load_ticket(version, args.ticket_id)
         if ticket:
+            # Stale 提示（pending 超過 7 天）
             warning = format_stale_warning(ticket)
             if warning:
                 print(warning)
-    except Exception as exc:  # 不可因 stale 檢查失敗阻擋 claim
-        sys.stderr.write(f"[staleness] claim 前檢查異常：{exc}\n")
+
+            # 機器專屬絕對路徑提示（PC-BAL-029 預防措施）：認領是接手者即將
+            # 照著 ticket 內路徑操作的時刻，此時提示可讓後續的「路徑不存在」
+            # 被正確歸因為跨機殘留，而非誤判為自己操作錯誤。掃全檔而非僅
+            # frontmatter——實測路徑多寫在 Problem Analysis 與 Solution 的
+            # 內文，那正是接手者要照著做的部分。
+            for path_warning in scan_ticket_file_for_machine_paths(
+                resolve_ticket_path(ticket, version, args.ticket_id)
+            ):
+                print(format_warning(path_warning))
+    except Exception as exc:  # 不可因附加提示失敗阻擋 claim
+        sys.stderr.write(f"[claim-precheck] claim 前檢查異常：{exc}\n")
 
     lifecycle = TicketLifecycle(version)
     auto_yes = bool(getattr(args, "yes", False))

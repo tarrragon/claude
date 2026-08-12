@@ -55,7 +55,9 @@
 直接發出真實 HTTP/Socket 請求的測試必須：
 1. 標記 `@Tags(['live'])`
 2. 在 `dart_test.yaml` 以 `skip: '需要網路和外部服務'` 從預設執行中排除
-3. 由專用指令 `flutter test -t live` 顯式觸發
+3. 由專用指令 `flutter test -t live --run-skipped` 顯式觸發（`dart_test.yaml` 的
+   `skip:` 對命中 tag 的測試無條件生效，單靠 `-t` 不覆蓋，須加 `--run-skipped`
+   才會真正執行，package:test 通用行為）
 
 **Why**：外部服務可用性非程式缺陷，混入主套件會使紅燈失去診斷價值——紅燈時無法分辨是程式壞了還是外部服務抖動，團隊因此學會忽略紅燈。
 

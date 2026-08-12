@@ -175,7 +175,7 @@ find_latest_completed_ticket_root(all_tickets)
 ### 3.1 完整執行流程測試
 
 ```bash
-CLAUDE_PROJECT_DIR=/Users/tarragon/Projects/book_overview_app \
+CLAUDE_PROJECT_DIR="$(git rev-parse --show-toplevel)" \
   echo '{"prompt":"繼續執行任務鏈"}' | \
   ./.claude/hooks/parallel-suggestion-hook.py
 ```
@@ -194,7 +194,7 @@ CLAUDE_PROJECT_DIR=/Users/tarragon/Projects/book_overview_app \
 ### 3.2 調試模式測試
 
 ```bash
-CLAUDE_PROJECT_DIR=/Users/tarragon/Projects/book_overview_app \
+CLAUDE_PROJECT_DIR="$(git rev-parse --show-toplevel)" \
   HOOK_DEBUG=true \
   echo '{"prompt":"繼續"}' | \
   ./.claude/hooks/parallel-suggestion-hook.py

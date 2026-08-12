@@ -425,7 +425,7 @@ def test_execute_set_who_value_only_unchanged_legacy_behavior(tmp_path, monkeypa
 
 
 def test_execute_set_where_value_only_still_syncs_files(tmp_path, monkeypatch):
-    """僅提供 value（無 --layer/--files）：延續 W1-078 路徑型輸入同步 files 行為。"""
+    """僅提供 value（無 --layer/--files）：路徑型輸入同步 files，layer 不變。"""
     version = "1.0.0"
     ticket_id = f"{version}-W1-213"
     ticket_path = _create_ticket_file(
@@ -440,7 +440,7 @@ def test_execute_set_where_value_only_still_syncs_files(tmp_path, monkeypatch):
 
     assert result == 0
     fm = _load_frontmatter(ticket_path)
-    assert fm["where"]["layer"] == value
+    assert fm["where"]["layer"] == "待定義", "路徑型輸入不寫 layer"
     assert fm["where"]["files"] == [".claude/hooks/a.py", ".claude/lib/b.py"]
 
 

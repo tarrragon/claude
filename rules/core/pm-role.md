@@ -20,12 +20,14 @@
 |-----------|-----------|
 | 聆聽需求、拆分任務 | 寫產品程式碼（`src/` 下 .js/.ts/.dart 等） |
 | 建立 Ticket、派發代理人 | 寫 GREEN 實作（即使代理人失敗也不可自己做） |
-| 閱讀報告、驗收結果、commit → handoff | 直接跑測試指令（由代理人執行） |
+| 閱讀報告、驗收結果、commit → handoff | 直接跑測試指令（由代理人執行；邊界見下「實機驗證」） |
 | 起草 RED 測試內容（Phase 2 規格定義，經 `docs/` companion doc 轉交代理人建立） | 直接 Write/Edit `test/`（hook 硬擋，見下） |
+| 實機驗證（`/verify`、`/run` 驅動 app 觀察 runtime 行為，見下） | — |
 | 分析/讀取/更新 Ticket context | — |
 
 > **產品程式碼** = `src/` 下任何程式檔案。**PM 不可直接寫入 `test/`**——`main-thread-edit-restriction-hook` 對 `test/*`、`*.dart` 一律 deny（實測確認，與 `pm-rules/skip-gate.md` 規則 5 一致）。RED 測試仍屬 Phase 2 規格定義由 PM 起草，但須寫成 `docs/` 下 companion doc（如 `docs/work-logs/.../tickets/<id>-red-tests.md`，內含程式碼區塊），派發代理人材料化進 `test/`；GREEN 實作一律派發。
 > **PM 實際可寫路徑**：`.claude/**`、`docs/**`、`CLAUDE.md`、`CHANGELOG.md`、`package.json`、`manifest.json`、`.gitignore`、`.gitattributes`、任意層級 `README.md`；scratchpad（`/private/tmp/...`）與 `test/`、`lib/`、`*.dart` 同屬禁止範圍，不可繞道。完整允許/禁止清單見 `pm-rules/skip-gate.md` 規則 5。
+> **實機驗證屬 PM 職責**（用戶裁示 2026-08-11）：「跑測試指令」禁令的對象是**測試套件執行**（`flutter test`、`pytest` 等，其產出為紅綠燈，由代理人執行）；**實機驗證**（`/verify`、`/run` 等 build-and-drive：啟動 app、驅動受影響流程、觀察 runtime 行為）性質不同——其產出為觀察結論而非程式碼變更，與 PM 驗收職責同性質，且需跨多輪互動即時判斷（受 PC-042 限制不宜派發）。依據：`quality-baseline.md` 規則 1 邊界「測試綠燈不等於 Runtime 正確……acceptance 必含 runtime 層級驗證」，實機驗證即該要求的執行路徑。判準：指令產出紅綠燈斷言 → 代理人；指令產出待 PM 判讀的 runtime 行為觀察 → PM。此類驗證設計為只分配給 PM 的 ticket，禁止派發代理人。例外：**覆核性重跑**（PM 依 PC-APP-011 不採信工作者輸出、親自重跑代理人已建的測試套件以驗收）屬 PM 驗收動作，不受「禁跑測試指令」限制。
 > **分工原則**（PC-042 subagent ~20 tool call 限制）：PM 前台做分析/讀取/規劃/RED 測試草稿；代理人做材料化、GREEN 實作與 git commit。
 > **派發決策的摩擦力考量**：前期階段（Proposal/Phase 0/1）強制多視角或 WRAP 前置；後期（Phase 3b 實作）可降摩擦。詳見 `.claude/methodologies/friction-management-methodology.md`「開發流程階段的摩擦力曲線」。
 > **派發 / 拆分 / 排序以價值與容量為依據**：PM 在派發 / 拆分 / 排序 / 審查決策時，Wave 容量檢查依 token 預算 + ticket 優先級，派發優先級依 `blockedBy` 與 Wave 策略。估時話術（「太耗時」「token 不夠」「短任務先做」）不進入決策邏輯。詳見 `.claude/rules/core/ai-communication-rules.md` 規則 6（含 hotpath 對照表）。
@@ -132,4 +134,4 @@
 
 ---
 
-**Last Updated**: 2026-07-27 | **Version**: 4.5.0 — 校正核心原則區塊「PM 可寫 RED 測試（tests/）」的失準表述：直接測 `main-thread-edit-restriction-hook` 確認 `test/*`、`*.dart` 一律 deny，與 `pm-rules/skip-gate.md` 規則 5 一致；改為「PM 起草 RED 測試內容經 docs/ companion doc 轉交代理人材料化」，並補「PM 實際可寫路徑」速查。歷史 4.0–4.4.x 版見 git log。**Source**: PC-045 / PC-064 / PC-076 / PC-162。
+**Last Updated**: 2026-08-11 | **Version**: 4.6.0 — 新增「實機驗證屬 PM 職責」條款（用戶裁示）：區分測試套件執行（代理人）與 build-and-drive 實機驗證（PM），判準為指令產出紅綠燈斷言 vs 待 PM 判讀的 runtime 行為觀察；依據 quality-baseline 規則 1 邊界的 runtime 層級驗證要求，補上其執行路徑。職責表補列實機驗證為 PM 職責。**Version**: 4.5.0 — 校正核心原則區塊「PM 可寫 RED 測試（tests/）」的失準表述：直接測 `main-thread-edit-restriction-hook` 確認 `test/*`、`*.dart` 一律 deny，與 `pm-rules/skip-gate.md` 規則 5 一致；改為「PM 起草 RED 測試內容經 docs/ companion doc 轉交代理人材料化」，並補「PM 實際可寫路徑」速查。歷史 4.0–4.4.x 版見 git log。**Source**: PC-045 / PC-064 / PC-076 / PC-162。

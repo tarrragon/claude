@@ -90,6 +90,7 @@ Phase 2 完成後，必須產出：
 **原則**：測試金字塔底部穩定，不要讓整合測試做單元測試的工作。
 
 > **分層決策樹**：依 Clean Architecture 五層展開的測試方法選擇見 `references/layered-test-strategy.md`。**Protocol integration test**：被測元件直接對接外部協議（HTTP/WS/gRPC）時，mock 從結構上無法驗證協議契約，見 `references/protocol-integration-testing.md`。
+> **紅燈層級順序（outside-in 雙迴圈）**：金字塔決定數量、順序另有規則——有 runtime surface 的場景先立外圈驗收紅燈（整合/on-device，定義 done、以 wip tag 與 gate 隔離），再寫內圈單元紅燈驅動實作；豁免與共存機制見 `references/phase2/rules.md`「紅燈層級順序」節（權威，此處不複寫）。
 
 ### 測試類型選擇
 

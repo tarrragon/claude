@@ -24,6 +24,20 @@ Purpose:
     每組 skill 遞迴比對**整個目錄**。分歧時輸出 WARNING，列出 skill 名稱、
     雙方版本號、差異檔案清單，使此類遮蔽在下次發生時當場可見。
 
+    此外執行一項獨立的政策檢查：personal skills 目錄應恆為空（2026-07-28
+    定案），非空即輸出 WARNING 列出全部 personal skill 名稱。
+
+    該約束的依據：personal 層無任何同步邊，其內容既不隨 sync-push/pull 向
+    canonical 收斂，也不對其他專案可見，卻在載入優先序上高於 project。任一
+    personal skill 因此會靜默覆蓋全部專案的同名版本——已有實例是某專案獨有
+    的規則條文被另一專案覆寫上來的版本遮蔽，該條文在其所屬專案失效且對其
+    作者不可見。
+
+    此檢查獨立於同名碰撞比對，因為碰撞比對只在兩側同名時才有輸出：personal
+    為空時交集為空集合而完全靜默，看不見「personal 從空變成非空」這個轉換，
+    而該轉換正是約束被打破的時刻。本段為該政策依據的唯一出處，
+    `_personal_policy_text_lines` 指向此處而不重述。
+
 Coverage gap (0.2.1-W3-113 N2, 明文揭露而非隱含於讀者推論；優先序方向經
 0.2.1-W3-115 靜態分析修正——見 0.2.1-W3-236):
     本 hook 只掃描 project 與 personal 兩層，**不掃描 managed（policy-scope）
@@ -150,6 +164,7 @@ class ScanResult(NamedTuple):
     excluded_diff_count: int  # 依 get_exclude_list 過濾掉的「檔案差異」數（N6：非 skill 層級）
     skipped: List[str]  # 因讀取錯誤無法下結論的 skill 名稱（M1：不可計入一致）
     divergences: List[Divergence]
+    personal_skill_names: List[str]  # personal 側全部 skill 名稱（不限同名交集，見政策檢查）
 
 
 def get_exclude_list() -> Set[str]:
@@ -159,7 +174,7 @@ def get_exclude_list() -> Set[str]:
     隔符）。粒度為單一檔案而非整個 skill（0.2.1-W3-113 N6）：若排除整個
     skill，會連帶讓該 skill 其餘內容的真實分歧永遠不再被偵測，與排除清單
     「標記已知例外」的本意相悖。過濾發生於 `_diff_skill_dirs` 之後（見
-    `find_divergent_skills`）。新增項目時請附註排除理由。目前無已知刻意
+    `scan_skills`）。新增項目時請附註排除理由。目前無已知刻意
     分歧，回傳空集合。
 
     設定位置：本檔（`.claude/hooks/skill-shadowing-check-hook.py`）。
@@ -230,15 +245,36 @@ def _list_skills(skills_root: Path, logger) -> Tuple[Dict[str, Path], List[str]]
     Optional 特例（0.2.1-W3-107 L2）。skills_root 不存在時回傳空結果
     （personal 目錄在全新安裝可能不存在），不視為錯誤。
 
+    skills_root 存在但不是目錄（被檔案佔位）時輸出一行警示後回傳空結果：
+    此情形與「目錄不存在」在回傳值上無法區分，但成因完全不同（前者是需要
+    處理的異常狀態，後者是全新安裝的正常狀態），靜默會使兩者的輸出一致。
+
+    根目錄本身不可讀時（權限不足等），`iterdir()` 的 OSError 在此接住並轉為
+    一個哨兵 failed 項，不向上傳遞：本 hook 為 soft check，例外穿到
+    run_hook_safely 會使 exit code 變為 EXIT_ERROR 且 stdout 無 JSON，
+    session 因此拿不到任何 context——連「掃描失敗」這件事都看不到。
+
     Returns:
         (可比對的 {目錄名稱: 入口檔絕對路徑}, 因讀取錯誤無法列出入口檔的
         目錄名稱清單)。後者供呼叫端計入 skipped（0.2.1-W3-113 N5）。
     """
     result: Dict[str, Path] = {}
     failed: List[str] = []
+    if skills_root.exists() and not skills_root.is_dir():
+        msg = f"[SkillShadowCheck] skills 路徑存在但不是目錄: {skills_root}"
+        logger.warning(msg)
+        sys.stderr.write(msg + "\n")
+        return result, failed
     if not skills_root.is_dir():
         return result, failed
-    for entry in sorted(skills_root.iterdir()):
+    try:
+        entries = sorted(skills_root.iterdir())
+    except OSError as exc:
+        msg = f"[SkillShadowCheck] 列出 skills 目錄失敗（{skills_root}）: {exc}"
+        logger.warning(msg)
+        sys.stderr.write(msg + "\n")
+        return result, [f"<{skills_root} 根目錄讀取失敗>"]
+    for entry in entries:
         if not entry.is_dir():
             continue
         try:
@@ -342,16 +378,27 @@ def _filter_excluded(
     return kept, len(diffs) - len(kept)
 
 
-def find_divergent_skills(
+def scan_skills(
     project_skills_root: Path, personal_skills_root: Path, logger
 ) -> ScanResult:
-    """比對 project 與 personal 兩側同名 skill 的完整目錄內容。"""
+    """掃描兩側 skills 目錄，產出同名比對結果與 personal 政策檢查結果。
+
+    回傳的 ScanResult 涵蓋兩件彼此獨立的事：同名交集的內容比對（checked_count
+    / excluded_diff_count / skipped / divergences），以及 personal 側的全部
+    skill 名稱（personal_skill_names，供政策檢查使用，與是否同名無關）。
+
+    函式名為 `scan_skills` 而非 `find_divergent_skills`：後者只描述前一件事，
+    在政策檢查加入後已不涵蓋實際職責。兩件事共用同一次目錄列舉，分開實作會
+    重複 IO，且兩次列舉之間的結果可能不一致。
+    """
     project_skills, project_failed = _list_skills(project_skills_root, logger)
     personal_skills, personal_failed = _list_skills(personal_skills_root, logger)
     shared_names = sorted(set(project_skills) & set(personal_skills))
     exclude_list = get_exclude_list()
 
     divergences: List[Divergence] = []
+    # 兩側 failed 各自不含重複（_list_skills 對同一名稱只會擇一歸類），但兩側
+    # 可能有同名的讀取失敗項，故此處的集合運算是為跨側去重，非防禦性冗餘。
     skipped: List[str] = list(set(project_failed) | set(personal_failed))
     excluded_diff_count = 0
     diff_failed_count = 0
@@ -380,7 +427,17 @@ def find_divergent_skills(
         )
 
     checked_count = len(shared_names) - diff_failed_count - len(divergences)
-    return ScanResult(checked_count, excluded_diff_count, sorted(set(skipped)), divergences)
+    # personal 側同一名稱不會同時進 personal_skills 與 personal_failed
+    # （_list_skills 在 OSError 時 continue），故此處只是合併兩組不相交的名稱，
+    # 排序後即為政策檢查的完整清單。
+    personal_names = sorted([*personal_skills, *personal_failed])
+    return ScanResult(
+        checked_count,
+        excluded_diff_count,
+        sorted(set(skipped)),
+        divergences,
+        personal_names,
+    )
 
 
 def _priority_key(diff: FileDiff) -> Tuple[int, str]:
@@ -420,6 +477,34 @@ def _divergence_text_lines(divergences: List[Divergence]) -> List[str]:
     return lines
 
 
+def _personal_policy_text_lines(names: List[str]) -> List[str]:
+    """personal skills 目錄非空時的政策 WARNING 文字。
+
+    政策依據（personal 層無同步邊、載入優先序高於 project、碰撞比對對「從空
+    變成非空」無訊號）見本檔模組 docstring，此處不重述。
+
+    零輸出是預期狀態（personal 應恆為空），不是死碼。移除本區段等於讓約束
+    退回無人看守。
+
+    邊界：只計入含入口檔的子目錄與讀取失敗的子目錄（`_list_skills` 的兩組
+    回傳值）。不含入口檔的子目錄不會被 Claude Code 載入為 skill，故不構成
+    遮蔽風險，不在此列出。
+
+    名稱逐行列出而非以 ', ' 串接：目錄名由使用者建立，含逗號或換行時串接形式
+    無法區分「一個名為 `a, b` 的 skill」與「兩個各自名為 a、b 的 skill」，
+    含換行者更會把單行 WARNING 撐成多行，破壞逐行輸出的行結構。
+    """
+    return [
+        f"[WARNING][SkillShadowCheck] personal skills 目錄非空（{len(names)} 個）:",
+        *(f"  - {name}" for name in names),
+        "  約束: 全域 skills 目錄應維持空置——personal 層無同步邊，其內容不隨 canonical "
+        "收斂，卻在載入優先序上高於全部專案的同名版本",
+        "  正規路徑: 需跨專案共用時，把內容推送至 canonical（claude.git），"
+        "再由各專案 sync-pull 以三方合併收斂；禁止從單一專案 rsync 或 cp 至全域目錄",
+        "  本檢查為警告不阻擋: 若為刻意的 personal 專屬客製，可忽略本則",
+    ]
+
+
 def _skipped_text_lines(skipped: List[str]) -> List[str]:
     return [
         f"[WARNING][SkillShadowCheck] {len(skipped)} 個 skill 因讀取錯誤無法比對，"
@@ -430,6 +515,15 @@ def _skipped_text_lines(skipped: List[str]) -> List[str]:
 def _report_divergences(divergences: List[Divergence], logger) -> str:
     """輸出 WARNING 至 stderr/logger（次要通道），回傳文字供 additionalContext 使用。"""
     lines = _divergence_text_lines(divergences)
+    for line in lines:
+        print(line, file=sys.stderr)
+        logger.warning(line)
+    return "\n".join(lines)
+
+
+def _report_personal_policy(names: List[str], logger) -> str:
+    """personal 非空的政策 WARNING，獨立於同名碰撞比對之外可見輸出。"""
+    lines = _personal_policy_text_lines(names)
     for line in lines:
         print(line, file=sys.stderr)
         logger.warning(line)
@@ -447,9 +541,14 @@ def _report_skipped(skipped: List[str], logger) -> str:
 
 def _report_ok(result: ScanResult, logger) -> None:
     """OK 狀態：僅寫日誌，不佔用 SessionStart context 預算。"""
+    # 「無可載入 skill」而非「目錄為空」：政策檢查的計入範圍是含入口檔的子目錄
+    # 與讀取失敗的子目錄（見 _personal_policy_text_lines 邊界段），不含無入口檔
+    # 的子目錄與散落檔案。personal 目錄實際有內容時宣稱「為空」，是量到 A 卻
+    # 宣告 B——正是本 hook 要消滅的「以部分結果產生假安心結論」。
     msg = (
         f"[SkillShadowCheck] OK: {result.checked_count} 個 project/personal 同名 skill "
-        f"內容一致（無遮蔽風險），排除 {result.excluded_diff_count} 個已知分歧檔案"
+        f"內容一致（無遮蔽風險），排除 {result.excluded_diff_count} 個已知分歧檔案；"
+        "personal skills 目錄無可載入 skill（符合政策）"
     )
     logger.info(msg)
 
@@ -464,6 +563,8 @@ def build_hook_output(result: ScanResult, logger) -> Dict[str, Any]:
     OK 用 suppressOutput，有內容時用 hookSpecificOutput.additionalContext。
     """
     sections: List[str] = []
+    if result.personal_skill_names:
+        sections.append(_report_personal_policy(result.personal_skill_names, logger))
     if result.skipped:
         sections.append(_report_skipped(result.skipped, logger))
     if result.divergences:
@@ -496,7 +597,7 @@ def main() -> int:
         logger.warning(msg)
         sys.stderr.write(msg + "\n")
 
-    result = find_divergent_skills(project_skills_root, personal_skills_root, logger)
+    result = scan_skills(project_skills_root, personal_skills_root, logger)
     output = build_hook_output(result, logger)
     print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0

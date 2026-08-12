@@ -75,6 +75,34 @@ def _build_dict_field(field_name: str, subkey: str, new_value: Any) -> Dict[str,
     return result
 
 
+def _has_extension(item: str) -> bool:
+    """最後一段是否帶副檔名。
+
+    點號位於段首不算（`framework/.claude` 的 `.claude` 是隱藏目錄名而非
+    `claude` 的副檔名），否則所有 dotfile 形態的層級描述都會被誤判為路徑。
+    """
+    last = item.rsplit("/", 1)[-1]
+    return "." in last[1:]
+
+
+def _exists_in_repo(item: str) -> bool:
+    """項目是否為 repo 內實際存在的檔案或目錄；解析失敗一律回 False。"""
+    try:
+        from ticket_system.lib.paths import get_project_root
+
+        return (get_project_root() / item).exists()
+    except Exception:
+        # 專案根解析失敗不得使判定崩潰——退回字面啟發式即可
+        return False
+
+
+def _looks_like_path(item: str) -> bool:
+    """單一項目是否為檔案系統路徑（非架構層級描述）。"""
+    if any(ch.isspace() for ch in item) or "/" not in item:
+        return False
+    return item.endswith("/") or _has_extension(item) or _exists_in_repo(item)
+
+
 def _parse_where_path_entries(value: Any) -> Optional[list]:
     """解析 set-where 輸入值為路徑清單；非路徑型輸入回傳 None（W1-078 修復）。
 
@@ -82,14 +110,25 @@ def _parse_where_path_entries(value: Any) -> Optional[list]:
     （L3 純 .claude/ 覆蓋），set-where 僅寫 where.layer 會讓 files 保留 stale 值，
     導致 dispatch 誤擋。
 
-    路徑判定採「所有逗號分隔項目皆含 /」：
+    路徑判定要求每個逗號分隔項目同時滿足三項：不含空白、含 `/`、且看起來
+    像檔案系統路徑（副檔名 / 尾隨 `/` / 在 repo 內實際存在其一）。
+
     - 全為路徑（如 ".claude/hooks/,src/core/x.js"）→ 回傳清單，同步 where.files
-    - 含任一非路徑項目（如 "Domain Layer"）→ 回傳 None，僅更新 layer 描述，
-      避免描述性文字污染 where.files（非路徑項目會使 dispatch hook
-      has_other=True，破壞 L3 純 .claude/ 分類——與本修復同類的誤擋回歸）
+    - 任一項不符（如 "Domain Layer"、"Presentation/UI"、"N/A"）→ 回傳 None，
+      僅更新 layer 描述
+
+    **為何只看「含 /」不夠**（2026-08-11 修正）：架構層級描述本身就可能含
+    斜線——`Presentation/UI`、`Domain/Application layer`、`N/A`、
+    `framework/.claude` 皆是。舊判定把它們當路徑，結果是 layer 完全寫不進去、
+    描述文字反而進了 where.files，正是本函式要避免的 dispatch hook
+    has_other=True 污染，只是換個方向發生。
+
+    存在性檢查用於補副檔名與尾隨 `/` 都沒有的目錄路徑（如 `.claude/hooks`）：
+    這類與 `Presentation/UI` 在字面上無法區分，只能問檔案系統。查不到時
+    退回描述型，代價是使用者需補尾隨 `/`——比誤把層級描述塞進 files 輕。
     """
     entries = [item.strip() for item in str(value).split(",") if item.strip()]
-    if entries and all("/" in item for item in entries):
+    if entries and all(_looks_like_path(item) for item in entries):
         return entries
     return None
 
@@ -276,15 +315,25 @@ def execute_set_field(
         if actual_field_name in DICT_FIELD_SUBKEY:
             subkey = DICT_FIELD_SUBKEY[actual_field_name]
             existing = ticket.get(actual_field_name)
-            if isinstance(existing, dict):
-                existing[subkey] = new_value
-                ticket[actual_field_name] = existing
-            else:
-                ticket[actual_field_name] = _build_dict_field(actual_field_name, subkey, new_value)
+            if not isinstance(existing, dict):
+                # 原值已被壓扁為 string：重建完整結構，主要子欄位先取預設值，
+                # 是否寫入 new_value 由下方路徑型判定決定。
+                existing = _build_dict_field(
+                    actual_field_name, subkey, _DICT_FIELD_DEFAULTS[actual_field_name][subkey]
+                )
             # W1-078 修復：set-where 路徑型輸入同步更新 where.files，
             # 維持 layer/files 一致（dispatch hook 消費契約）
             if actual_field_name == "where":
-                synced_files = _sync_where_files(ticket[actual_field_name], new_value)
+                synced_files = _sync_where_files(existing, new_value)
+            # 路徑型輸入只餵 files，不寫 layer（2026-08-10 定案）：layer 語意是
+            # 架構層級（Domain / Application / Infrastructure / Presentation），
+            # 塞入逗號串接的檔案清單會使該欄位失去意義，且操作者不會察覺——CLI
+            # 回報只顯示 files 已同步。既成代價：god_ticket_scale_checker 因
+            # layer 已有誤填樣本而整個放棄層級跨度指標。要設定 layer 請用
+            # --layer 子欄位旗標（execute_set_where 的子欄位路徑）。
+            if synced_files is None:
+                existing[subkey] = new_value
+            ticket[actual_field_name] = existing
         else:
             ticket[actual_field_name] = new_value
 
@@ -293,7 +342,11 @@ def execute_set_field(
         ticket_loader.save_ticket(ticket, ticket_path)
 
     print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name=actual_field_name))
-    print(f"   新值: {new_value}")
+    if synced_files is None:
+        print(f"   新值: {new_value}")
+    else:
+        # 路徑型輸入未寫 layer，印「新值」會讓操作者以為整個 where 被替換
+        print("   where.layer 未變更（路徑型輸入只同步 files；需改 layer 請用 --layer）")
     if synced_files is not None:
         print(FieldsMessages.WHERE_FILES_SYNCED.format(count=len(synced_files)))
         for entry in synced_files:

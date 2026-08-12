@@ -799,6 +799,26 @@ def _files_differ(src: Path, dst: Path) -> bool:
     return not filecmp.cmp(str(src), str(dst), shallow=False)
 
 
+def _should_skip_sync_item(item: Path, rel: Path) -> bool:
+    """判斷單一項目是否應在 sync 走訪中跳過（2026-08）。
+
+    四個獨立走訪路徑——sync_directory 的逐項迴圈、cleanup_stale_files._walk、
+    preview_overlay_changes 的 _walk / _walk_upstream——過去各自內聯相同的
+    「SKIP_DURING_SYNC 名稱早退 + 符號連結排除 + should_exclude 完整判斷」
+    三段判斷，其中一處遺漏 should_exclude 即造成預覽與實際執行行為漂移
+    （C5/C6，分次修復）。抽成單一判準函式後，四個走訪路徑呼叫同一函式，
+    結構上不再可能重演此類單點遺漏。
+
+    參數:
+        item: 目前項目的絕對路徑（用於檢查名稱與符號連結）
+        rel: 項目相對 claude_dir 的路徑（should_exclude 判斷用）
+
+    傳回:
+        bool: True 表應跳過（不遞迴、不處理）
+    """
+    return item.name in SKIP_DURING_SYNC or item.is_symlink() or should_exclude(rel)
+
+
 def _make_should_exclude_ignore(src_root: Path, base_prefix: Path):
     """建構 shutil.copytree 用的 ignore callback，逐層套用 should_exclude（0.2.1-W3-148）。
 
@@ -871,19 +891,15 @@ def sync_directory(
         project_root = dst.parent
     count = 0
     for item in src.iterdir():
-        if item.name in SKIP_DURING_SYNC:
-            continue
-        if item.is_symlink():
-            continue
-
         rel = prefix / item.name
         dest_item = dst / item.name
 
-        # 0.2.1-W3-148：per-project 落地層（should_exclude 命中，如
-        # project-integration/）不受上游內容覆蓋——三方合併路徑
-        # （apply_upstream_delta）已呼叫 should_exclude 跳過，full overlay
-        # 路徑須對齊，否則上游若恰好也有同名目錄/檔案會覆蓋本地落地層內容。
-        if should_exclude(rel):
+        # per-project 落地層（should_exclude 命中，如 project-integration/）
+        # 不受上游內容覆蓋——三方合併路徑（apply_upstream_delta）已呼叫
+        # should_exclude 跳過，full overlay 路徑須對齊，否則上游若恰好也有
+        # 同名目錄/檔案會覆蓋本地落地層內容。與 cleanup_stale_files /
+        # preview_overlay_changes 共用 _should_skip_sync_item 判準。
+        if _should_skip_sync_item(item, rel):
             continue
 
         # skills_config 過濾：在目錄層級即跳過排除的 skill
@@ -1110,17 +1126,15 @@ def cleanup_stale_files(
         if not directory.exists():
             return
         for item in sorted(directory.iterdir()):
-            if item.name in SKIP_DURING_SYNC:
-                continue
-            if item.is_symlink():
-                continue
             rel = prefix / item.name
-            # 0.2.1-W3-148：per-project 落地層（should_exclude 命中，如
-            # project-integration/）在三方合併路徑本就跳過（apply_upstream_delta
-            # 已呼叫 should_exclude），full overlay 路徑須對齊——完全跳過整個
-            # 項目（不遞迴、不判定 stale），而非移到 .sync-conflicts/ 或刪除。
-            # 移到 conflicts 仍會使該目錄離開原路徑，破壞 hook/skill 對其的引用。
-            if should_exclude(rel):
+            # per-project 落地層（should_exclude 命中，如 project-integration/）
+            # 在三方合併路徑本就跳過（apply_upstream_delta 已呼叫
+            # should_exclude），full overlay 路徑須對齊——完全跳過整個項目
+            # （不遞迴、不判定 stale），而非移到 .sync-conflicts/ 或刪除。移到
+            # conflicts 仍會使該目錄離開原路徑，破壞 hook/skill 對其的引用。
+            # 與 sync_directory / preview_overlay_changes 共用
+            # _should_skip_sync_item 判準。
+            if _should_skip_sync_item(item, rel):
                 continue
             if item.is_dir():
                 _walk(item, rel)
@@ -1242,18 +1256,18 @@ def preview_overlay_changes(
     will_delete: list[tuple[str, bool]] = []
     will_skip_resurrection: list[str] = []
 
-    # 0.2.1-W3-240：SKIP_DURING_SYNC 只做 O(1) 名稱早退，覆蓋不到 should_exclude
-    # 額外判斷的憑證副檔名 / 名稱前綴 / root-anchored 目錄（logs、state、
-    # worktrees 等）——sync_directory 等實際執行路徑皆已呼叫 should_exclude，
-    # 預覽路徑須對齊，否則會把這些本不會被刪除的項目誤列入 will_delete（C5/C6）。
+    # SKIP_DURING_SYNC 只做 O(1) 名稱早退，覆蓋不到 should_exclude 額外判斷的
+    # 憑證副檔名 / 名稱前綴 / root-anchored 目錄（logs、state、worktrees
+    # 等）——sync_directory 等實際執行路徑皆已呼叫 should_exclude，預覽路徑須
+    # 對齊，否則會把這些本不會被刪除的項目誤列入 will_delete（C5/C6）。與
+    # sync_directory / cleanup_stale_files 共用 _should_skip_sync_item 判準，
+    # 結構上消除預覽與實際執行漂移的可能。
     def _walk(directory: Path, prefix: Path = Path()) -> None:
         if not directory.exists():
             return
         for item in sorted(directory.iterdir()):
-            if item.name in SKIP_DURING_SYNC or item.is_symlink():
-                continue
             rel = prefix / item.name
-            if should_exclude(rel):
+            if _should_skip_sync_item(item, rel):
                 continue
             if item.is_dir():
                 _walk(item, rel)
@@ -1275,10 +1289,8 @@ def preview_overlay_changes(
         if not directory.exists():
             return
         for item in sorted(directory.iterdir()):
-            if item.name in SKIP_DURING_SYNC or item.is_symlink():
-                continue
             rel = prefix / item.name
-            if should_exclude(rel):
+            if _should_skip_sync_item(item, rel):
                 continue
             if item.is_dir():
                 _walk_upstream(item, rel)

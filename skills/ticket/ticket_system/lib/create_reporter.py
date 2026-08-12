@@ -27,6 +27,7 @@ from ticket_system.lib.command_lifecycle_messages import (
     format_msg,
 )
 from ticket_system.lib.acceptance_auditor import detect_vague_acceptance, detect_srp_violations
+from ticket_system.lib.machine_path_detector import detect_machine_specific_paths
 from ticket_system.lib.spec_reference_checker import detect_unregistered_spec_references
 from ticket_system.lib.parallel_analyzer import ParallelAnalyzer
 from ticket_system.lib.tdd_sequence import suggest_tdd_sequence
@@ -107,6 +108,12 @@ def print_create_checklist(
         if spec_warnings:
             for warning in spec_warnings:
                 print(format_warning(warning))
+
+    # 機器專屬絕對路徑偵測（PC-BAL-029 預防措施）：換機後這類路徑全數解析
+    # 不到，且錯誤訊息不揭示成因，建票當下提示可在源頭攔截
+    if new_ticket:
+        for warning in detect_machine_specific_paths(new_ticket):
+            print(format_warning(warning))
 
     # 驗收條件格式提示
     print(CreateMessages.ACCEPTANCE_4V_CHECK)

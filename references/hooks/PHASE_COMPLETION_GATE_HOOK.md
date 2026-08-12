@@ -229,17 +229,17 @@
 
 ```bash
 # 語法檢查
-python3 -m py_compile /Users/tarragon/Projects/book_overview_app/.claude/hooks/phase-completion-gate-hook.py
+python3 -m py_compile $CLAUDE_PROJECT_DIR/.claude/hooks/phase-completion-gate-hook.py
 
 # 手動執行測試
 export HOOK_DEBUG=true
-cat /tmp/test-input.json | python3 /Users/tarragon/Projects/book_overview_app/.claude/hooks/phase-completion-gate-hook.py
+cat /tmp/test-input.json | python3 $CLAUDE_PROJECT_DIR/.claude/hooks/phase-completion-gate-hook.py
 
 # 查看日誌
-tail -50 /Users/tarragon/Projects/book_overview_app/.claude/hook-logs/phase-completion-gate/phase-completion-gate.log
+tail -50 $CLAUDE_PROJECT_DIR/.claude/hook-logs/phase-completion-gate/phase-completion-gate.log
 
 # 查看報告
-ls -lt /Users/tarragon/Projects/book_overview_app/.claude/hook-logs/phase-completion-gate/completion-report-*.json
+ls -lt $CLAUDE_PROJECT_DIR/.claude/hook-logs/phase-completion-gate/completion-report-*.json
 ```
 
 ---

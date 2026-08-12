@@ -172,9 +172,14 @@ cp .claude/skills/doc/templates/data-contract-template.md docs/spec/{domain}/{na
 
 ### Step 5：紅燈測試設計（半自動，可並行）
 
-**動作**：對每份 spec 派發 sage-test-architect 做 Phase 2 紅燈測試設計。
+**動作**：對每份 spec 派發 sage-test-architect 做 Phase 2 紅燈測試設計，依紅燈層級順序分兩段產出：
 
-多 spec 可並行派發（每個 spec 1 張子票）。派發時使用 `/tdd` Phase 2 流程，sage 產出紅燈測試規格。
+- **5a 外圈驗收紅燈（先）**：對 `runtime_surface: yes` 的 UC 場景產出整合層測試描述，含 on-device / 端對端層級；外圈定義「什麼叫做完」，以 wip tag 與 gate 隔離。`runtime_surface: no` 的場景豁免本段（豁免判準見權威節，此處不複寫）。
+- **5b 內圈單元紅燈（後）**：規格分解的單元測試設計，驅動實作紅綠循環。
+
+順序規則、豁免判準與 wip tag 共存機制的權威定義見 `/tdd` skill `references/phase2/rules.md`「紅燈層級順序」節，此處不複寫。
+
+多 spec 可並行派發（每個 spec 1 張子票）。派發時使用 `/tdd` Phase 2 流程，sage 產出紅燈測試規格（5a + 5b 兩段皆屬同一 Phase 2 產出）。
 
 **消費 Step 2.5 domain map（兩軸測試設計）**：
 

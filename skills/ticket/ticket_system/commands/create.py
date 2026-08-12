@@ -12,6 +12,7 @@ if __name__ == "__main__":
 
 import argparse
 import os
+import re
 import sys
 import traceback
 from typing import Any, Dict, List, Optional
@@ -464,9 +465,38 @@ def _validate_where_files(tokens: List[str]) -> List[str]:
 
 _ACCEPTANCE_SEP = "|"
 
+# 編號列表行形態：可選前導空白 + 數字 + 分隔符（. 、 或 )），如「1. 」「2、」「3)」
+_ACCEPTANCE_NUMBERED_LINE = re.compile(r"^\s*\d+[.、)]")
+
+
+def _detect_numbered_list_collapse(item: str) -> Optional[str]:
+    """偵測單一 --acceptance 值是否內含 >= 2 行編號列表（將被摺疊為單一條目）。
+
+    多行編號列表（如「1. 條件一\\n2. 條件二」）以換行分隔，不受 `|` 拆條邏輯
+    處理，會被靜默摺疊成一條驗收條件，使逐項驗收語意失效。本函式僅偵測並
+    提示，不改變拆分語意（多行單條目仍合法保留，是否拆條由使用者決定）。
+
+    Args:
+        item: 單一 --acceptance 原始值（可能含換行）
+
+    Returns:
+        命中時回傳格式化警告字串；未命中回傳 None
+    """
+    numbered_lines = [
+        line.strip() for line in item.split("\n") if _ACCEPTANCE_NUMBERED_LINE.match(line)
+    ]
+    if len(numbered_lines) < 2:
+        return None
+    preview = "\n".join(f"             {line}" for line in numbered_lines)
+    return format_warning(
+        CreateMessages.ACCEPTANCE_NUMBERED_LIST_COLLAPSE_WARNING,
+        count=len(numbered_lines),
+        preview=preview,
+    )
+
 
 def _parse_acceptance_items(raw_items: List[str]) -> tuple:
-    """解析 --acceptance 多值，支援分隔符拆條 + 反斜線跳脫 + 拆條警告。
+    """解析 --acceptance 多值，支援分隔符拆條 + 反斜線跳脫 + 拆條警告 + 編號列表摺疊警告。
 
     分隔符 `|` 用於在單一 --acceptance 值內表達多條驗收條件。但當內文本身
     需要使用該字元（如描述 shell pipe），無條件 split 會靜默拆條（W3-089）。
@@ -476,6 +506,9 @@ def _parse_acceptance_items(raw_items: List[str]) -> tuple:
     - 未跳脫的 `|` 才作為分隔符拆條。
     - 單一 --acceptance 值經未跳脫分隔符拆出 > 1 段時，回傳警告供呼叫端提示，
       讓使用者確認是否為預期行為（與 PC-079 同家族：CLI 參數含工具特殊字元）。
+    - 單一 --acceptance 值含 >= 2 行編號列表形態（如「1. 」「2、」）時，回傳警告
+      提示該值會被摺疊為單一驗收條件，不會依編號自動拆條（拆分語意零變更，
+      僅偵測與提示；正確用法改多次 --acceptance 或以 | 分隔）。
 
     Args:
         raw_items: argparse 收集的 --acceptance 值列表（可能多次指定）
@@ -483,11 +516,14 @@ def _parse_acceptance_items(raw_items: List[str]) -> tuple:
     Returns:
         (acceptance, warnings) tuple：
         - acceptance: 解析後的驗收條件列表（已去空白、去空項）
-        - warnings: 警告訊息列表（每個被拆條的原始值各一條）
+        - warnings: 警告訊息列表（每個被拆條或摺疊偵測的原始值各一條）
     """
     acceptance: List[str] = []
     warnings: List[str] = []
     for item in raw_items:
+        numbered_list_warning = _detect_numbered_list_collapse(item)
+        if numbered_list_warning:
+            warnings.append(numbered_list_warning)
         segments = _split_unescaped(item, _ACCEPTANCE_SEP)
         cleaned = [s.strip() for s in segments]
         cleaned = [s for s in cleaned if s]

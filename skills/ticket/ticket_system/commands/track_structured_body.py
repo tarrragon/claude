@@ -126,4 +126,17 @@ def execute_set_completion_info(args: argparse.Namespace, version: str) -> int:
     result = _delegate_to_append_log(args, version, "Completion Info", content)
     if result == 0:
         print(f"[INFO] {args.ticket_id} Completion Info 已設定：agent={args.agent}")
+        if not (getattr(args, "summary", None) or "").strip():
+            # 提示不阻擋：Summary 有正當的省略情境（純機械同步、metadata 修正）。
+            # 但實測 completed ticket 的留空率達 46%，是「參數存在卻沒人用」的
+            # opinionated-default 信號——工具在使用點提示，比再寫一條文件規範有效。
+            print(
+                "[WARNING] Completion Info 的 Summary 欄留空。"
+                "該欄是接手者第一個讀到的收斂點（做了什麼 + 落點），"
+                "留空會使其退化為裝飾"
+            )
+            print(
+                f'   補寫：ticket track set-completion-info {args.ticket_id} '
+                f'--agent {args.agent} --summary "<做了什麼 + 落在哪>"'
+            )
     return result

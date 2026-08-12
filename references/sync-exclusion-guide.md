@@ -109,6 +109,31 @@ private:           # 任何 mode 下排除推送
 
 ---
 
+## sync-preserve.yaml — 比對維度為完整檔案路徑
+
+`sync-preserve.yaml` 的 `preserve:` 清單只接受**相對於 `.claude/` 的完整檔案路徑**，逐項與待處理項目的
+`rel.as_posix()` 做精確字串比對（push 端 `copy_filtered_from_staging` / `clean_stale_files` /
+`detect_uncleaned_deletions`，pull 端對稱七處皆同）。過濾迴圈只迭代檔案，不迭代目錄。
+
+```yaml
+preserve:
+  - skills/my-private-skill/README.md      # 正確：完整檔案路徑
+  - skills/my-private-skill/scripts/run.py # 正確：目錄下逐檔列出
+  - skills/my-private-skill/               # 錯誤：目錄項不生效，過濾迴圈不比對目錄
+```
+
+**Why**：目錄項在比對階段永遠不等於任何檔案的完整相對路徑，該項靜默無效，且過濾迴圈本身即跳過目錄
+（`if not item.is_file(): continue`），無論項目寫法如何都不會命中。
+
+**Consequence**：使用者若誤以為目錄項可保護整個子目錄，實際整個目錄仍會被推上共享框架 repo（與
+v1.48.6 誤推事故同一失效方向）。push 端 `load_preserve_list` 讀入時會對「以斜線結尾」或「對應本地路徑
+實際為目錄」的項目輸出 stderr 警告，但撰寫 `sync-preserve.yaml` 時仍應直接列出目錄下的具體檔案，不依賴
+執行期警告事後修正。
+
+**Action**：需要保留整個目錄時，逐一列出該目錄下所有需保留的檔案路徑，不要只寫目錄名。
+
+---
+
 ## 新增機制時的 4 項 Checklist
 
 新增產生上述任一類型檔案的 Hook / Skill / Script 時，提交前依序完成：

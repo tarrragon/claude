@@ -352,7 +352,7 @@ class TestWhereField:
         """
         Given: 設定 Ticket 的 where 欄位（路徑型輸入）
         When: 執行 set-where 操作
-        Then: 應返回 0，更新 where.layer 並同步 where.files（W1-078 修復）
+        Then: 應返回 0，同步 where.files 且保留既有 where.layer（2026-08-10 行為變更）
         """
         args = Mock()
         args.ticket_id = "0.31.0-W4-001"
@@ -374,7 +374,9 @@ class TestWhereField:
                 saved_ticket = mock_save.call_args[0][0]
                 # dict 結構保留（W10-088 修復：防止壓扁）
                 assert isinstance(saved_ticket["where"], dict)
-                assert saved_ticket["where"]["layer"] == "lib/commands/"
+                # 2026-08-10 行為變更：路徑型輸入不再覆寫 layer（該欄語意為架構層級，
+                # 塞入檔案清單使其失去意義且操作者不會察覺）
+                assert saved_ticket["where"]["layer"] == "tests/"
                 # W1-078 修復：路徑型輸入同步覆寫 files（舊行為保留 stale 值
                 # 導致 dispatch hook 誤擋，W1-061.1 實證）
                 assert saved_ticket["where"]["files"] == ["lib/commands/"]

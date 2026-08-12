@@ -3,6 +3,8 @@
 > **定位**：cbm 是三 MCP 之一，定位為「跨檔案概念 / 語義搜尋入口」，搭配 BM25 + 向量索引提供 11-signal 排序。本檔記錄 CLI 用法、實機限制與 workaround，供 `search-tools-guide` 主檔 lazy-load。
 >
 > **何時讀本檔**：(1) 派發前需要選擇 cbm vs codegraph vs serena；(2) 對 `.claude/` 範圍做搜尋發現 cbm 結果為空；(3) 需要 cbm CLI 模式（PM 前台離線驗證）語法。
+>
+> **量測環境**：本檔的步驟表、路徑與 log 原文取自 2026-06-24 的一次實機診斷，量測對象為 `book_overview_v1` 專案、`$HOME=/Users/tarragon`。這些絕對路徑是當時的實測值不是操作指引，套用到其他環境時請代換為自己的 repo 路徑——保留原值是為了讓 project ID 轉換示例（路徑 → `Users-...-book_overview_v1`）與實測輸出對得上。
 
 ---
 

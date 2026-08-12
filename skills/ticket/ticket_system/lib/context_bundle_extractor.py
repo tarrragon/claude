@@ -797,10 +797,40 @@ def _is_auto_content_line(line: str) -> bool:
     return False
 
 
+def _find_next_known_heading(lines: List[str], start_idx: int) -> Optional[int]:
+    """從 `lines[start_idx:]` 起找下一個已知子區塊標題（`_AUTO_SUBSECTION_HEADINGS`）
+    的 index。
+
+    用於判別 `_is_auto_content_line` 判為非 auto 的行，是否僅是已知子區塊 bullet 值
+    中以空行分隔的續段落（其後仍會接回下一個已知標題），或確為手動內容起點（直到
+    EOF、或先遇到非已知的自訂 `### ` 標題，都找不到已知標題）。
+
+    刻意不將 bullet（`- ` 前綴）納入 resync 訊號：PM 手寫段落常見自帶列點，若也作
+    resync 訊號，會把手動列點誤判為「續段落」一併吸收進 auto 範圍，於整塊替換時遭
+    覆蓋刪除，重現逐行分類設計初衷要防止的資料刪除問題。resync 僅比對已知標題的
+    精確字串。
+
+    遇到非已知的自訂 `### ` 標題時立即回傳 None（不繼續往後找）：該標題本身即是
+    手動內容邊界訊號，越過它繼續搜尋可能誤把該標題吞入 auto 範圍。
+    """
+    for j in range(start_idx, len(lines)):
+        stripped = lines[j].rstrip("\n")
+        if stripped in _AUTO_SUBSECTION_HEADINGS:
+            return j
+        if stripped.startswith("### "):
+            return None
+    return None
+
+
 def _find_auto_block_end(section_body: str, search_from: int) -> int:
     """定位 auto-extracted 區塊終點（0.2.1-W3-252）。
 
-    逐行掃描，命中第一個非 `_is_auto_content_line` 的行即為終點。
+    逐行掃描，命中第一個非 `_is_auto_content_line` 的行時，不直接判定為終點，改
+    向後尋找下一個已知子區塊標題（`_find_next_known_heading`）：找到即代表該行僅是
+    已知子區塊 bullet 值中的續段落（如 why 欄位含空行分隔的多段落文字），吸收後從
+    該標題續掃；找不到（EOF 或先遇到自訂 `### ` 標題）才判定該行即為手動內容起點。
+    純逐行分類（不含此續段落判別）會誤判續段落為手動內容起點，使其後的已知子區塊
+    （如 Related Files）在重抽時被誤留為手動內容而與新寫入的完整區塊重複並存。
 
     與舊版「以下一個 `## ` 或字串結尾為界」的差異：舊版對「無後續 `## ` 標題」的手動
     內容一律吞入 managed block，重抽 replace 時會整段覆蓋刪除，涵蓋兩種實測樣態：
@@ -811,12 +841,22 @@ def _find_auto_block_end(section_body: str, search_from: int) -> int:
 
     傳回終點 index（不含該行）；無命中則回傳字串結尾。
     """
+    lines = section_body[search_from:].splitlines(keepends=True)
     offset = search_from
-    for line in section_body[search_from:].splitlines(keepends=True):
-        if not _is_auto_content_line(line.rstrip("\n")):
+    idx = 0
+    n = len(lines)
+    while idx < n:
+        if _is_auto_content_line(lines[idx].rstrip("\n")):
+            offset += len(lines[idx])
+            idx += 1
+            continue
+        resync_idx = _find_next_known_heading(lines, idx + 1)
+        if resync_idx is None:
             return offset
-        offset += len(line)
-    return len(section_body)
+        for j in range(idx, resync_idx):
+            offset += len(lines[j])
+        idx = resync_idx
+    return offset
 
 
 def _normalize_for_content_compare(block_text: str) -> str:
@@ -830,6 +870,20 @@ def _normalize_for_content_compare(block_text: str) -> str:
     不同）時仍判定冪等，避免空更新 commit。
     """
     return _CHARS_BADGE_PATTERN.sub("-->", block_text).strip()
+
+
+def _detect_duplicate_known_headings(text: str) -> list:
+    """偵測已知子區塊標題於同一文字中是否重複出現（post-write self-check）。
+
+    有效的 auto-extracted 區塊中，每個已知子區塊標題（`_AUTO_SUBSECTION_HEADINGS`）
+    至多出現一次——`render_context_bundle_markdown` 對每個有內容的 subsection 僅
+    產出一次標題，同一 subsection 的多個來源欄位皆歸入同一標題下。出現 2 次以上
+    代表 merge 邊界判定失準導致內容重複，屬資料完整性缺陷（規則 4：不可靜默通過），
+    呼叫端應據此中止寫入而非持久化損毀結果。
+
+    傳回重複的標題清單（依字母序，無重複則為空列表）。
+    """
+    return sorted(h for h in _AUTO_SUBSECTION_HEADINGS if text.count(h) > 1)
 
 
 def merge_auto_extracted_block(
@@ -1082,6 +1136,17 @@ def extract_and_write_context_bundle(
         existing_section = _read_section_body(body, CONTEXT_BUNDLE_SECTION_HEADING)
         merged_section, notes = merge_auto_extracted_block(existing_section, rendered)
         if "no_change_idempotent" in notes:
+            return result, notes
+
+        duplicated_headings = _detect_duplicate_known_headings(merged_section)
+        if duplicated_headings:
+            msg = (
+                f"[Context Bundle] post-write self-check 失敗：{ticket_id} 合併後偵測到"
+                f"已知子區塊標題重複 {duplicated_headings}，判定 merge 結果損毀，已中止寫入"
+            )
+            sys.stderr.write(msg + "\n")
+            result.warnings.append(msg)
+            notes.append("aborted_duplicate_headings_detected")
             return result, notes
 
         new_body = _replace_section_body(

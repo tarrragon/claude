@@ -234,6 +234,25 @@ Phase 2 設計時，對照 Phase 1 的非功能性需求，推導對應測試：
 
 **原則**：測試金字塔底部穩定，不要讓整合測試做單元測試的工作。
 
+### 紅燈層級順序（outside-in 雙迴圈）
+
+測試金字塔（見上節）決定各層**數量**；本節決定紅燈的**時間順序**——兩者正交。規格變更或新功能的測試設計，依序產出兩級紅燈：
+
+1. **外圈驗收紅燈（先）**：UC 場景的整合層測試。場景有 runtime surface（可駕駛的執行面：畫面、CLI、API endpoint）時，必含 on-device / 端對端層級的測試描述。外圈定義「什麼叫做完」，全程保持紅至功能完成才轉綠。
+2. **內圈單元紅燈（後）**：規格分解出的單元測試，驅動實作的紅綠循環。
+
+**Why**：單元與 host 整合測試（host＝開發機測試進程，相對於部署目標裝置）以替身隔離接縫，編譯通過 + 全綠仍可能實機起不來、點不到、沒回應——組合點正是替身跳過的地方。外圈先紅使組合失效在開發首日顯形，而非驗收終點補救。
+
+**替身術語**（本節與下游 traceability / on-device 測試層共用的權威定義）：分類**相對於本場景要驗證的組合鏈**，不是元件的絕對屬性——**結構替身**＝替換位於驗證鏈上的組成元件（隔離了本來要驗的接縫）；**情境替身**＝替換或控制驗證鏈之外的依賴與世界狀態（如注入拋錯的外部服務模擬斷網、重置資料庫初始狀態），被驗的接縫仍是真的。同一替換在不同場景可分屬兩類：測資料接線時以 in-process DB 替代真實平台 plugin 是結構替身；測畫面導航時同一替代不在驗證鏈上、屬情境替身。on-device / 端對端層**禁結構替身、允情境替身**——判定問句：「這個替身擋掉的，是不是本測試要驗的那條接縫？」
+
+**豁免判準**：場景無 runtime surface（純 domain 計算、data contract、演算法）→ 豁免外圈，單元/契約層先紅即可。判準句：「此場景有無可駕駛的執行面（畫面、CLI、API endpoint）」——有則外圈先紅，無則豁免。
+
+**判準句的兩個套用面與強度分流**：同一判準句有兩個主語不同的套用面——**場景面**（本節外圈豁免：這個 UC 場景要驗的行為有無執行面）與 **diff 面**（verify skip 與 runtime-surface ticket 實機 AC：這次改動觸及的檔案有無執行面），兩面對同一變更可能給出不同答案（例：改 domain 公式，diff 面無執行面、但其輸出渲染於畫面，場景面有），以場景面為準補驗證。判準回答「是」只決定**需要 runtime 驗證**，不決定**驗證強度**——強度依可自動化性分流（on-device 套件 / widget test / 手動 verify），見 `.claude/pm-rules/verification-framework.md`「Runtime-surface ticket」節。
+
+**邊界（不適合外圈先紅的變更類型）**：效能類 NFR 的驗收不寫成 on-device 計時斷言（違反 test-assertion-design 規則 D1），改走 `test/performance/` 或 profile 觀察，不進 gate；依賴 / SDK 升級與純重構無規格變更、不產出新外圈紅燈，其 runtime 回歸由**既有** on-device 套件全綠承接。
+
+**外圈紅燈與 100% 綠 gate 的共存**（gate 分兩段：**host gate**＝每 commit 的預設測試指令全綠，quality-baseline 規則 1，不含 on-device 目錄；**on-device gate**＝發版檢查的 on-device 套件全綠，見 version-release 檢查清單）：開發中的外圈紅燈以 tag 隔離（Dart 為例：`@Tags(['wip-acceptance'])` + dart_test.yaml skip；他語言用等價的測試標記排除機制），顯式 `-t wip-acceptance --run-skipped` 觀察紅燈（實測確認：dart_test.yaml 的 skip 對命中 tag 的測試無條件生效，單靠 `-t` 不覆蓋，須加 `--run-skipped`）；**移除 tag 即宣告功能完成**，測試進入 on-device gate 執行範圍（實測確認：移除 tag 後測試進入預設 on-device 執行並可紅燈）。移除 tag 的 commit 應附該測試的執行輸出——防「移除 tag 同時弱化斷言或刪測試」旁路。tag 存活超過一個發布版本即為異味（稽核執行主體：version-release 發版檢查清單的 on-device 項）——外圈紅燈不該跨版本存活；發現跨版本存活的 tag 時，建實作票（IMP）於當版完成該功能並移除 tag，或將該場景退回規格規劃階段重議豁免。
+
 ### 測試類型選擇
 
 | 功能類型               | 建議測試層次                   |

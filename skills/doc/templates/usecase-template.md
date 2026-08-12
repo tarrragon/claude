@@ -18,6 +18,13 @@ secondary_actors: []             # 次要行為者
 platform: ""                     # both / app / extension
 extension_status: ""             # implemented / partial / not-applicable
 
+# 驗證面（紅燈層級順序判準，見 /tdd references/phase2/rules.md「紅燈層級順序」節）
+runtime_surface: ""              # yes / no — 場景有無可駕駛的執行面（畫面、CLI、API endpoint）。
+                                 # 必填：UC 進入紅燈測試設計（version-bootstrap Step 5）前不可留空，
+                                 # 留空不得視同 no（靜默跳過外圈正是本欄要防的盲區）。
+                                 # yes：測試設計須先立外圈驗收紅燈（整合/on-device）再寫單元紅燈；
+                                 # no（純 domain 計算、data contract、演算法）：豁免外圈，單元/契約層先紅
+
 # 關聯
 related_specs: []                # 對應的規格，如 [SPEC-001]
 related_usecases: []             # 相關的其他用例

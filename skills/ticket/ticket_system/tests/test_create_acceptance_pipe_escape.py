@@ -89,3 +89,53 @@ def test_split_unescaped_no_separator():
 def test_split_unescaped_trailing_backslash_preserved():
     # 結尾單獨反斜線（後面非分隔符）原樣保留，不誤判
     assert _split_unescaped("path\\", "|") == ["path\\"]
+
+
+# --- 編號列表摺疊偵測警告 ---
+
+
+def test_numbered_list_dot_style_triggers_warning():
+    raw = "1. 條件一\n2. 條件二\n3. 條件三"
+    acceptance, warnings = _parse_acceptance_items([raw])
+    # 拆分語意零變更：多行單條目仍合法保留為單一項
+    assert acceptance == [raw]
+    assert len(warnings) == 1
+    assert "3" in warnings[0]
+    assert "--acceptance" in warnings[0]
+
+
+def test_numbered_list_chinese_dun_style_triggers_warning():
+    raw = "1、條件一\n2、條件二"
+    acceptance, warnings = _parse_acceptance_items([raw])
+    assert acceptance == [raw]
+    assert len(warnings) == 1
+
+
+def test_numbered_list_paren_style_triggers_warning():
+    raw = "1) 條件一\n2) 條件二"
+    acceptance, warnings = _parse_acceptance_items([raw])
+    assert acceptance == [raw]
+    assert len(warnings) == 1
+
+
+def test_single_numbered_line_no_warning():
+    # 僅 1 行符合編號形態，未達摺疊風險門檻（>= 2 行）
+    raw = "1. 條件一\n補充說明"
+    acceptance, warnings = _parse_acceptance_items([raw])
+    assert acceptance == [raw]
+    assert warnings == []
+
+
+def test_non_numbered_multiline_no_false_positive():
+    # 多行但非編號列表形態，不誤報
+    raw = "第一段說明\n第二段說明\n第三段說明"
+    acceptance, warnings = _parse_acceptance_items([raw])
+    assert acceptance == [raw]
+    assert warnings == []
+
+
+def test_numbered_list_and_pipe_split_both_warn_independently():
+    # 同一值同時觸發編號列表警告與拆條警告，兩者互不影響
+    raw = f"1. 條件一\n2. 條件二{SEP}條件三"
+    acceptance, warnings = _parse_acceptance_items([raw])
+    assert len(warnings) == 2

@@ -7,6 +7,13 @@ agent-dispatch-validation-hook 以 where.files 為 scope source of truth
 修復設計：路徑型輸入（所有逗號分隔項目皆含 /）同步覆寫 where.files；
 描述性輸入（如 "Domain Layer"）僅更新 layer、不污染 files——
 非路徑項目混入 files 會使 dispatch hook has_other=True，破壞 L3 分類。
+
+2026-08-10 行為變更：路徑型輸入**不再寫入 where.layer**。原行為把逗號串接的
+檔案清單塞進 layer（語意為架構層級），使該欄位失去意義且操作者不會察覺——
+CLI 回報只顯示 files 已同步。此污染已有既成代價：god_ticket_scale_checker
+因「layer 已有樣本值為誤填（逗號分隔檔案清單）」而放棄整個層級跨度指標。
+需要設定 layer 時改用 `--layer` 子欄位旗標。本檔三處原斷言 layer 等於原始
+輸入的測試，即為該舊行為的固化，已隨本次變更更新。
 """
 
 import argparse
@@ -86,6 +93,30 @@ def test_parse_mixed_value_returns_none():
     assert _parse_where_path_entries("Domain Layer, .claude/hooks/foo.py") is None
 
 
+def test_parse_descriptive_value_containing_slash_returns_none():
+    """含斜線的架構層級描述不得判為路徑型。
+
+    原判定只要求各項含 `/`，使 `Presentation/UI`、`N/A` 這類層級描述被當成
+    路徑：layer 完全寫不進去，描述文字反而進了 where.files——正是本函式
+    docstring 說要避免的 dispatch hook has_other 污染，只是換了個方向發生。
+    """
+    assert _parse_where_path_entries("Presentation/UI") is None
+    assert _parse_where_path_entries("Domain/Application layer") is None
+    assert _parse_where_path_entries("N/A") is None
+    assert _parse_where_path_entries("framework/.claude") is None
+
+
+def test_parse_still_accepts_real_paths():
+    """收緊判定後，真實路徑形態必須維持命中（防過度收緊）。"""
+    assert _parse_where_path_entries(".claude/hooks/foo.py") == [".claude/hooks/foo.py"]
+    assert _parse_where_path_entries(".claude/skills/ticket/") == [".claude/skills/ticket/"]
+    assert _parse_where_path_entries("lib/domain/entity.dart") == ["lib/domain/entity.dart"]
+    assert _parse_where_path_entries("docs/work-logs/v0/x.md,src/a.js") == [
+        "docs/work-logs/v0/x.md",
+        "src/a.js",
+    ]
+
+
 def test_parse_empty_value_returns_none():
     """空字串 / 純逗號 → None。"""
     assert _parse_where_path_entries("") is None
@@ -98,7 +129,7 @@ def test_parse_empty_value_returns_none():
 
 
 def test_set_where_path_value_syncs_files(tmp_path, monkeypatch):
-    """路徑型輸入：layer 寫入原值，files 同步為解析後清單。"""
+    """路徑型輸入：只同步 files，layer 維持原值。"""
     version = "1.0.0"
     ticket_id = f"{version}-W1-101"
     ticket_path = _create_ticket_file(
@@ -112,9 +143,28 @@ def test_set_where_path_value_syncs_files(tmp_path, monkeypatch):
 
     assert result == 0
     fm = _load_frontmatter(ticket_path)
-    assert fm["where"]["layer"] == value, "layer 保留原始輸入字串"
+    assert fm["where"]["layer"] == "待定義", \
+        "路徑型輸入不得覆寫 layer（該欄語意為架構層級，非檔案清單）"
     assert fm["where"]["files"] == [".claude/hooks/a.py", ".claude/lib/b.py"], \
         "files 同步為解析後清單（stale 值被覆寫）"
+
+
+def test_set_where_path_value_preserves_meaningful_layer(tmp_path, monkeypatch):
+    """已填有意義 layer 的 ticket，路徑型 set-where 不得將其抹除。"""
+    version = "1.0.0"
+    ticket_id = f"{version}-W1-106"
+    ticket_path = _create_ticket_file(
+        tmp_path, ticket_id, version,
+        where={"layer": "Domain", "files": ["stale/old.py"]},
+    )
+
+    _setup_env(tmp_path, monkeypatch)
+    result = execute_set_where(_make_args(ticket_id, "lib/domain/entity.dart", version), version)
+
+    assert result == 0
+    fm = _load_frontmatter(ticket_path)
+    assert fm["where"]["layer"] == "Domain", "既有架構層級值必須保留"
+    assert fm["where"]["files"] == ["lib/domain/entity.dart"]
 
 
 def test_set_where_descriptive_value_preserves_files(tmp_path, monkeypatch):
@@ -173,7 +223,7 @@ def test_set_where_with_missing_files_key(tmp_path, monkeypatch):
     assert result == 0
     fm = _load_frontmatter(ticket_path)
     assert fm["where"]["files"] == [".claude/skills/ticket/"]
-    assert fm["where"]["layer"] == ".claude/skills/ticket/"
+    assert fm["where"]["layer"] == "待定義", "路徑型輸入不寫 layer"
 
 
 def test_set_where_squashed_string_with_path_value(tmp_path, monkeypatch):
@@ -191,5 +241,32 @@ def test_set_where_squashed_string_with_path_value(tmp_path, monkeypatch):
     assert result == 0
     fm = _load_frontmatter(ticket_path)
     assert isinstance(fm["where"], dict), "where 重建為 dict"
-    assert fm["where"]["layer"] == ".claude/hooks/foo.py"
+    assert fm["where"]["layer"] == "待定義", \
+        "降級重建時 layer 取預設值，不寫入路徑"
     assert fm["where"]["files"] == [".claude/hooks/foo.py"]
+
+
+def test_set_where_layer_flag_still_writes_layer(tmp_path, monkeypatch):
+    """--layer 子欄位旗標是設定 layer 的正規路徑，不受路徑型判定影響。
+
+    路徑型 positional value 不再寫 layer 後，需確認仍有明確管道可設定該欄位，
+    否則變更等同讓 layer 永遠停在預設值。
+    """
+    version = "1.0.0"
+    ticket_id = f"{version}-W1-107"
+    ticket_path = _create_ticket_file(
+        tmp_path, ticket_id, version,
+        where={"layer": "待定義", "files": ["keep/a.py"]},
+    )
+
+    _setup_env(tmp_path, monkeypatch)
+    args = argparse.Namespace(
+        ticket_id=ticket_id, value=None, version=version,
+        layer="Infrastructure", files=None,
+    )
+    result = execute_set_where(args, version)
+
+    assert result == 0
+    fm = _load_frontmatter(ticket_path)
+    assert fm["where"]["layer"] == "Infrastructure"
+    assert fm["where"]["files"] == ["keep/a.py"], "--layer 不動 files"

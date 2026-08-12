@@ -270,6 +270,12 @@ class CreateMessages:
         "{preview}\n"
         "           若分隔符屬內文（非刻意分隔多條），請改用反斜線跳脫（\\ 接分隔符）以保留原文。"
     )
+    ACCEPTANCE_NUMBERED_LIST_COLLAPSE_WARNING = (
+        "[WARNING] 單一 --acceptance 值含 {count} 行編號列表，已被視為單一驗收條件（未拆條）：\n"
+        "{preview}\n"
+        "           若原意是多條獨立驗收條件，請改用多次 --acceptance 或以 | 分隔，"
+        "例如：--acceptance \"條件一\" --acceptance \"條件二\"，或 --acceptance \"條件一|條件二\"。"
+    )
     BLOCKED_BY_CHECK = "   [ ] 是否有需要設定的 blockedBy？"
     DECISION_TREE_CHECK = "   [ ] 是否已填寫 decision_tree_path 欄位？"
     DECISION_TREE_DESC = "       （派發驗證必需）"

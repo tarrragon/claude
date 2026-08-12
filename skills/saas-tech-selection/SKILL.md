@@ -56,7 +56,7 @@ metadata:
 
 維度分兩層進入：
 
-- **必展開**（任何 SaaS 都逃不掉）：state-storage、deployment-platform、security、observability 底線、reliability 底線。
+- **必展開**（任何 SaaS 都逃不掉）：state-storage、deployment-platform、security、observability 底線、reliability 底線、verification-surface（實機驗證環境——改動在哪台裝置 / 哪個瀏覽器 / 哪個 runtime 被驅動與觀察；交付形態決定問哪一節，答案下游固化為專案 verify 配方）。
 - **觸發展開**（操作盤點 / domain / event 切分 / 核心問題的訊號命中才進）：cache、async-queue、capacity-performance。event catalog 中存在不可丟 event 時、async-queue 直接升級為必展開。
 
 每個維度的 reference 自帶訪談問題、候選類型差異、防護底線與 tripwire；展開時把該維度的問題錨在 domain map 與操作清單上（「Order domain 的不可丟 event 用什麼機制送」、不是抽象的「要不要 queue」）。
@@ -65,7 +65,7 @@ metadata:
 
 ### Stage 5：決策收斂（決策記錄 + scaffold 建議）
 
-依 `references/decision-record-template.md` 產出設計決策記錄：操作風險表、domain map、event catalog、每項技術選型（理由 / 防護狀態 / tripwire）、防護底線總表、規模 tripwire 總表。決策記錄經使用者確認後、才產出 scaffold 建議；scaffold 是決策的下游、修改決策時 scaffold 跟著重生。
+依 `references/decision-record-template.md` 產出設計決策記錄：操作風險表、domain map、event catalog、每項技術選型（理由 / 防護狀態 / tripwire）、防護底線總表、規模 tripwire 總表、驗證環境節（格式見 `references/dimensions/verification-surface.md`「決策記錄要記什麼」節）。決策記錄經使用者確認後、才產出 scaffold 建議；scaffold 是決策的下游、修改決策時 scaffold 跟著重生。scaffold 建議包含專案 verify 配方種子（`.claude/skills/verify/SKILL.md` 的 Build & Launch / Observe 骨架，由驗證環境節生成；配方屬專案特化資產、不隨框架 sync 推送）。
 
 ### Stage 6：銜接 doc 需求文件系統（條件式、專案有 doc skill 才執行）
 
@@ -103,6 +103,7 @@ metadata:
 | 正式狀態保存（帳號、訂單、合約、金流）                                                      | `references/dimensions/state-storage.md`（必）                                                                              |
 | 任何對外服務                                                                                | `references/dimensions/deployment-platform.md`（必）+ `references/dimensions/security.md`（必）                             |
 | 任何 production 服務                                                                        | `references/dimensions/observability.md`（必）+ `references/dimensions/reliability.md`（必）                                |
+| 任何有可執行產出的專案（app / 網站 / 服務 / CLI）、要定實機驗證環境                         | `references/dimensions/verification-surface.md`（必）                                                                       |
 | event catalog 有不可丟 event、或 request 外的可靠工作                                       | `references/dimensions/async-queue.md`                                                                                      |
 | 同一資料高頻重複讀、昂貴計算共用、session / presence                                        | `references/dimensions/cache.md`                                                                                            |
 | 產品有 client-side 元件（mobile app / SPA / desktop app）                                   | `references/dimensions/observability.md`（client-side 觸發展開段）+ `references/principles/client-side-observability.md`    |
@@ -153,7 +154,8 @@ saas-tech-selection/
         ├── deployment-platform.md        # 部署與入口：PaaS / VM / container / k8s 進入條件、回滾底線
         ├── security.md                   # 身份、租戶隔離、secret、資料保護、audit、合規
         ├── reliability.md                # CI gate、測試層次、備份演練、第三方依賴降級
-        └── capacity-performance.md       # 容量假設、連線池、成本監控、高峰 readiness
+        ├── capacity-performance.md       # 容量假設、連線池、成本監控、高峰 readiness
+        └── verification-surface.md       # 實機驗證環境：模擬器/實機、瀏覽器/URL、runtime/容器/入口層，答案固化為專案 verify 配方
 ```
 
 ---

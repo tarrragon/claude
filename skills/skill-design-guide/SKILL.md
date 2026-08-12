@@ -469,4 +469,4 @@ description: [...]
 
 **Last Updated**: 2026-04-30
 **Version**: 1.1.0 — §1.4 新增 Opinionated Defaults 設計心法（通用原則路由 `rules/core/opinionated-default-design.md`）
-**Source**: Anthropic 官方 skill-creator（`/Users/mac-eric/.claude/plugins/marketplaces/anthropic-agent-skills/skills/skill-creator/`）+ 官方平台文件 + Claude Code 擴展規範 + 本專案實踐
+**Source**: Anthropic 官方 skill-creator（`~/.claude/plugins/marketplaces/anthropic-agent-skills/skills/skill-creator/`）+ 官方平台文件 + Claude Code 擴展規範 + 本專案實踐

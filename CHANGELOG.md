@@ -1,3 +1,53 @@
+## [2.28.0] - 2026-08-12
+
+### Summary
+feat: 建立 session init 實機驗證環境確認 hook; feat: saas-tech-selection 新增 verification-surface 維度; feat: 新增 acceptance 編號列表摺疊偵測警告 (+37 more)
+
+Changes: 11 feat, 1 refactor, 12 fix, 14 docs, 2 chore
+
+- feat: 建立 session init 實機驗證環境確認 hook
+- feat: saas-tech-selection 新增 verification-surface 維度
+- feat: 新增 acceptance 編號列表摺疊偵測警告
+- feat: 建立 dart-provider-architecture skill 2.0.0
+- feat: verify 首跑產出 build-and-drive 配方 + 首個實機驗證發現
+- feat: 建立 sync-skills.yaml 專案特化 skill push 排除設定
+- feat: 重疊提示改依交集特異性排序並標註熱度
+- feat: complete 時提示 where.files 重疊的 pending 票
+- feat: Summary 留空提示與自檢表掃描手段欄
+- feat: ticket 建立與認領時掃描機器專屬絕對路徑
+- feat: skill-shadowing-check-hook 增加 personal 目錄非空政策警告
+- refactor: skill-shadowing-check-hook 命名漂移與論證重複清理
+- fix: -t <tag> 觀察指令補 --run-skipped（skip 對命中 tag 無條件生效）
+- fix: 平行審查 PM 側修正——hook UDID 穩健化 + 文件四項
+- fix: set-where 路徑判定收緊，不再吞含斜線的層級描述
+- fix: 依第二輪多視角審查修正偵測缺陷與結論錯誤
+- fix: 機器專屬路徑偵測補上散文裸家目錄形態
+- fix: set-where 路徑型輸入不再覆寫 where.layer
+- fix: 依多視角審查修正假陳述、健壯性缺口與欄位損壞
+- fix: 修正 Context Bundle auto 區塊邊界誤判致尾端內容重複
+- fix: 修正 SKILL.md 機械鏡射段的先例引用倒置與未度量量化聲明
+- fix: 修正 pm-quality-baseline 規則 7 的空 checklist 落點與涵蓋邊界
+- fix: 抽出共用判準函式對齊 preview 與執行路徑 should_exclude 判定
+- fix: sync-preserve.yaml 目錄項靜默無效補 stderr 警告
+- docs: 多輪審查 Round 3 修正——steelman 五論點 + self-app/outbound
+- docs: 多輪審查 Round 2 修正——冷讀與路由承接
+- docs: wip tag 觀察指令補 --run-skipped + SR-1 落票 447
+- docs: gate 連動三落點——traceability 第四軸 + 發版 on-device 項 + 實機 AC 規則
+- docs: 紅燈層級順序落地三 skill（outside-in 雙迴圈）
+- docs: pm-role 新增實機驗證屬 PM 職責條款
+- docs: 新增 PC-BAL-031 未驗證 why 前提經自動抽取傳播至衍生票
+- docs: 規則 8 補記守衛的實際執法邊界
+- docs: 新增規則 9 環境事實的記錄形式
+- docs: 校正 tickets 目錄以外的機器專屬絕對路徑殘留
+- docs: 新增 PC-BAL-029 機器專屬絕對路徑記錄環境事實
+- docs: 新增 IMP-BAL-009 非 UTF-8 檔案 grep 假陰性
+- docs: skill.md severity 不變式加註適用範圍與存量遷移狀態
+- docs: 修正 pm-quality-baseline 規則 7 驗證方式段落宣稱不存在的稽核能力
+- chore: 測試檔改名對齊 hooks-test-gate 命名慣例
+- chore: sync-push 回寫框架版本號
+
+---
+
 ## [2.27.8] - 2026-08-10
 
 ### Summary

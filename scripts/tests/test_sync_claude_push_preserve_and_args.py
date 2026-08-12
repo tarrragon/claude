@@ -68,6 +68,42 @@ def test_load_preserve_list_missing_file_returns_empty(tmp_path: Path):
     assert sync_mod.load_preserve_list(tmp_path) == set()
 
 
+def test_load_preserve_list_warns_on_trailing_slash_entry(tmp_path: Path, capsys):
+    """目錄項以斜線結尾時，讀入階段輸出 stderr 警告（preserve 比對維度為完整檔案路徑）。"""
+    _write_preserve(tmp_path, ["skills/my-private-skill/"])
+
+    sync_mod.load_preserve_list(tmp_path)
+
+    captured = capsys.readouterr()
+    assert "preserve 項目為目錄" in captured.err
+    assert "skills/my-private-skill/" in captured.err
+
+
+def test_load_preserve_list_warns_on_actual_directory_entry(tmp_path: Path, capsys):
+    """目錄項未以斜線結尾但本地路徑實際為目錄時，仍輸出 stderr 警告。"""
+    (tmp_path / "skills" / "my-private-skill").mkdir(parents=True)
+    _write_preserve(tmp_path, ["skills/my-private-skill"])
+
+    sync_mod.load_preserve_list(tmp_path)
+
+    captured = capsys.readouterr()
+    assert "preserve 項目為目錄" in captured.err
+    assert "skills/my-private-skill" in captured.err
+
+
+def test_load_preserve_list_no_warning_for_file_entry(tmp_path: Path, capsys):
+    """檔案項（無論是否實際存在於磁碟）不觸發目錄警告。"""
+    _write_preserve(
+        tmp_path,
+        ["skills/wrap-decision/references/project-integration/README.md"],
+    )
+
+    sync_mod.load_preserve_list(tmp_path)
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
 def test_copy_filtered_excludes_preserve_listed(tmp_path: Path):
     """preserve-listed 檔不在 copy_filtered_from_staging 過濾後的遠端集合中。"""
     src = tmp_path / "staging"

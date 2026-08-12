@@ -240,6 +240,43 @@ class TestSetCompletionInfo:
         # placeholder 應被替換而非重複 append
         assert text.count("**Executing Agent**") == 1
 
+    def test_warns_when_summary_omitted(self, patch_paths_to_repo, capsys):
+        """省略 --summary 時輸出提示：Summary 是接手者第一個讀到的收斂點。
+
+        Why 提示而非阻擋：Summary 有正當的省略情境（純機械同步、metadata
+        修正），阻擋會讓這些情境無法完成。但實測 completed ticket 的
+        Summary 留空率為 46%，顯示「有參數但沒人用」——依 opinionated-default
+        原則，這是工具該在使用點提示的信號，不是再寫一條文件規範。
+        """
+        from ticket_system.commands.track_structured_body import execute_set_completion_info
+
+        args = argparse.Namespace(
+            ticket_id="0.0.0-W0-SB",
+            agent="thyme-python-developer",
+            review_status="reviewed",
+            summary=None,
+            force=False,
+        )
+        rc = execute_set_completion_info(args, "0.0.0")
+        assert rc == 0, "提示不阻擋"
+
+        out = capsys.readouterr().out
+        assert "Summary" in out
+        assert "--summary" in out, "提示須含補寫方式，否則讀者知道缺什麼卻不知怎麼補"
+
+    def test_no_summary_warning_when_provided(self, patch_paths_to_repo, capsys):
+        from ticket_system.commands.track_structured_body import execute_set_completion_info
+
+        args = argparse.Namespace(
+            ticket_id="0.0.0-W0-SB",
+            agent="thyme-python-developer",
+            review_status="reviewed",
+            summary="已填摘要",
+            force=False,
+        )
+        assert execute_set_completion_info(args, "0.0.0") == 0
+        assert "--summary" not in capsys.readouterr().out
+
     def test_rejects_invalid_review_status_enum(self, patch_paths_to_repo):
         from ticket_system.commands.track_structured_body import execute_set_completion_info
 

@@ -159,6 +159,12 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 /ticket track set-what <id> <value>
 /ticket track set-when <id> <value>
 /ticket track set-where <id> <value>
+# set-where 的 value 依形態分流（2026-08-10 起）：
+# - 路徑型（逗號分隔且每項皆含 /）→ 只同步 where.files，where.layer 維持原值
+# - 描述型（任一項不含 /，如 "Domain Layer"）→ 只寫 where.layer，files 不動
+# 需明確設定單一子欄位時用旗標：--layer <架構層級> / --files <路徑清單>
+# Why: layer 語意為架構層級，過去路徑型輸入會把逗號串接的檔案清單寫進該欄，
+# 使其失去意義且操作者不會察覺（CLI 回報只顯示 files 已同步）
 /ticket track set-why <id> <value>
 /ticket track set-how <id> <value>
 

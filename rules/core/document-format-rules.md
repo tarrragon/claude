@@ -105,6 +105,8 @@ updated: {更新日期}
 
 編輯規格文件（`docs/spec/`、`docs/use-cases.md`、`docs/proposals/`）或 `.claude/` 框架檔案時，必須讀取 `.claude/references/reference-stability-rules.md`，內含**規則 7**（規格引用穩定性）與**規則 8**（框架禁引用專案層級識別符）。
 
+記錄環境實測結果（路徑、HOME、目錄結構）於任何文件或 ticket 時，同樣讀取該檔的**規則 9**（環境事實的記錄形式）：操作指引改 `~` 或專案相對路徑，實測記錄保留原值但標註量測環境。兩者處置相反，一律改寫會讓實測記錄宣稱量到從未量到的值。
+
 ---
 
 ## 檢查清單
@@ -119,6 +121,7 @@ updated: {更新日期}
 - [ ] 有適當的 frontmatter（如適用）
 - [ ] 跨 Skill 引用使用完整路徑
 - [ ] 引用穩定性：編輯規格文件或 `.claude/` 框架檔案時，已讀取 `.claude/references/reference-stability-rules.md` 並遵循規則 7、規則 8
+- [ ] 環境事實：內容含 `/Users/<name>/` 或 `/home/<name>/` 路徑時，已依規則 9 判定屬操作指引（改環境無關形式）或實測記錄（保留原值 + 標註量測環境）
 
 ---
 

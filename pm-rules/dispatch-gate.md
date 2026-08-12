@@ -3,6 +3,8 @@
 > 所有派發前必須通過的兩道關卡。
 >
 > 路由入口：.claude/pm-rules/decision-tree.md
+>
+> **前置例外**：任務產出為待 PM 判讀的 runtime 行為觀察（`/verify`、`/run` 等實機驗證）時**不派發**、PM 前台執行，不進本閘門——判準與依據見 `.claude/rules/core/pm-role.md`「實機驗證屬 PM 職責」。
 
 ---
 
