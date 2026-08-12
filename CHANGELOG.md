@@ -1,3 +1,15 @@
+## [2.29.1] - 2026-08-12
+
+### Summary
+fix: 校正反向的 blog 路徑結論並凍結虛構立案前提; chore: sync-push 回寫框架版本號
+
+Changes: 1 fix, 1 chore
+
+- fix: 校正反向的 blog 路徑結論並凍結虛構立案前提
+- chore: sync-push 回寫框架版本號
+
+---
+
 ## [2.29.0] - 2026-08-12
 
 ### Summary

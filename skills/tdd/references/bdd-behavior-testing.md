@@ -177,4 +177,4 @@ Phase 4 品質判斷：替換實作不讓測試失敗 = 正確；改變業務規
 
 **Last Updated**: 2026-06-22
 **Version**: 1.0.0 — 從 blog 提煉。BDD 核心判別法 + Sociable/Solitary 選擇 + 分層 Mock + BDD→單元拆分判準
-**Source**: `~/Projects/blog/content/record/bdd-testing-methodology.md`、`~/Projects/blog/content/record/behavior-first-tdd-methodology.md`
+**Source**: `~/project/blog/content/record/bdd-testing-methodology.md`、`~/project/blog/content/record/behavior-first-tdd-methodology.md`

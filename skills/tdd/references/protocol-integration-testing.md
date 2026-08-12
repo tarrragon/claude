@@ -127,4 +127,4 @@ SDK init → event/error 送出 → flush → collector 驗證 → SQLite 儲存
 
 **Last Updated**: 2026-06-22
 **Version**: 1.0.0 — 初始建立。從 blog work-log 提煉 Mock 遮蔽機制 + 三層策略，對應 monitor 專案
-**Source**: `~/Projects/blog/content/work-log/testing_three_layer_strategy.md`
+**Source**: `~/project/blog/content/work-log/testing_three_layer_strategy.md`
