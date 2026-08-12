@@ -135,4 +135,4 @@ EventCollector
 **Last Updated**: 2026-08-08
 **Version**: 1.1.0 — 兩節新增：「名稱承載意圖」（失敗輸出只給症狀、名稱回答「為什麼這是刻意的」；名稱失職時防護會被紅燈的人親手解除——改斷言遷就新行為、diff 讀起來像正常測試更新）與「名稱之外的測試文字」（reason 寫失敗後果與處置並內插變數值、skip 訊息可行動、註解只寫操作性約束、分析詞彙與開發史不入測試文字）。來源是測試文字紀律的實際 review 案例集、同步上游 testing 教材的測試註解與命名紀律。
 **Version**: 1.0.0 — 從 blog `record/test-naming-as-documentation.md` 提煉，語言無關化
-**Source**: ~/project/blog/content/record/test-naming-as-documentation.md
+**Source**: blog repo: `content/record/test-naming-as-documentation.md`

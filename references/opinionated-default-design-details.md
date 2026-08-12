@@ -130,4 +130,4 @@
 
 **Last Updated**: 2026-06-25
 **Version**: 1.0.0 — 初始建立，從版本錯置事件復盤提取通用設計原則
-**Source**: `~/project/blog/content/work-log/tool_default_behavior_shapes_user_habit.md`
+**Source**: blog repo: `content/work-log/tool_default_behavior_shapes_user_habit.md`

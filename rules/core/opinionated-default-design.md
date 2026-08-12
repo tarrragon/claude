@@ -35,4 +35,4 @@
 
 ---
 
-**Last Updated**: 2026-06-25 | **Version**: 1.0.0 — 初始建立。**Source**: 版本錯置事件復盤；`~/project/blog/content/work-log/tool_default_behavior_shapes_user_habit.md`
+**Last Updated**: 2026-06-25 | **Version**: 1.0.0 — 初始建立。**Source**: 版本錯置事件復盤；blog repo: `content/work-log/tool_default_behavior_shapes_user_habit.md`

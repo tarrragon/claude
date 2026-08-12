@@ -11,6 +11,30 @@ metadata:
 
 管理 monitor repo（實作端）和 [blog monitoring 教學系列](https://tarrragon.github.io/blog/monitoring/)（教學端）之間的知識同步。
 
+## 前置條件：`BLOG_REPO`
+
+本 skill 的命令會對 blog repo 執行 `checkout` / `commit` / `merge` / `push`，需要知道它在**你這台**的位置。該位置由 `BLOG_REPO` 提供，本檔不寫死任何路徑。
+
+執行任何 blog 操作前先確認：
+
+```bash
+git -C "${BLOG_REPO:?請先在 .claude/settings.local.json 的 env 區塊定義 BLOG_REPO}" rev-parse --show-toplevel
+```
+
+未定義時此行以非零狀態中止並指出缺什麼，後續命令不會執行。這比讓路徑靜默解析到不存在的位置安全——後者的失敗點會落在 `git commit` 或 `push`，屆時已有部分副作用。
+
+定義位置（`.claude/settings.local.json`，該檔在 gitignore 範圍內，故每台各自持有自己的值、不會互相覆蓋）：
+
+```json
+{
+  "env": {
+    "BLOG_REPO": "<你這台的 blog repo 絕對路徑>"
+  }
+}
+```
+
+**為何不寫死路徑**：同一個 blog repo 在不同 working copy 下的位置不一致（曾出現 `~/Projects/blog` 與 `~/project/blog` 兩種佈局並行）。`~` 只消去使用者名那一段，消不掉 HOME 之下的佈局差異，任一寫法都會在另一側失效。判準見 `.claude/references/reference-stability-rules.md` 規則 9。
+
 ## 核心原則
 
 教學和實作是互補關係，兩者各自承擔不同的知識生產責任：
@@ -71,7 +95,7 @@ UC / spec / proposal 設計過程中，比對教學內容發現覆蓋不足時�
 3. 讀取對應的 challenge 記錄，理解 gap 的完整背景
 4. **切 blog repo feature branch**：
    ```
-   git -C ~/project/blog checkout -b feat/monitor-teaching-backfill-NNN
+   git -C "$BLOG_REPO" checkout -b feat/monitor-teaching-backfill-NNN
    ```
 5. 讀取目標教學章節，理解現有內容結構
 6. **直接修改 blog 教學文章**——在適當位置新增或補充內容
@@ -80,14 +104,14 @@ UC / spec / proposal 設計過程中，比對教學內容發現覆蓋不足時�
    ```bash
    FILES="<modified-file-paths>"
    # 以下 grep 全部用子 shell，不裸 cd
-   (cd ~/project/blog && rg "不[行可是要能該支對符夠必]|無法|沒[做有]|而非|而不是" $FILES)      # 否定起手
-   (cd ~/project/blog && rg "其實|實務上|真的|碰巧|立刻撞牆|沒事" $FILES)                      # 口語修辭
-   (cd ~/project/blog && rg "集群|默認|質量|視頻|函數|文件夾|接口" $FILES)                      # 地區用語
-   (cd ~/project/blog && rg "值得注意的是|需要說明的是|實際上|基本上|事實上" $FILES)              # 廢話前綴
-   (cd ~/project/blog && rg "✅|❌|⚠️|🚨|🟡|🟢|⭐|📌|✓|✗" $FILES)                           # 裝飾符號
-   (cd ~/project/blog && rg "很多人|大家|不少人|你天天|你會|你可能|先讀懂|先釐清|別搞混" $FILES)  # 對讀者喊話
-   (cd ~/project/blog && rg "教科書級|堪稱|可謂|完美|經典|範本級|最佳實踐|best practice" $FILES)  # 自評誇飾
-   (cd ~/project/blog && rg "天生|與生俱來|本質就是|本來就是|必然|唯一|註定|理所當然" $FILES)      # 必然性框架
+   (cd "$BLOG_REPO" && rg "不[行可是要能該支對符夠必]|無法|沒[做有]|而非|而不是" $FILES)      # 否定起手
+   (cd "$BLOG_REPO" && rg "其實|實務上|真的|碰巧|立刻撞牆|沒事" $FILES)                      # 口語修辭
+   (cd "$BLOG_REPO" && rg "集群|默認|質量|視頻|函數|文件夾|接口" $FILES)                      # 地區用語
+   (cd "$BLOG_REPO" && rg "值得注意的是|需要說明的是|實際上|基本上|事實上" $FILES)              # 廢話前綴
+   (cd "$BLOG_REPO" && rg "✅|❌|⚠️|🚨|🟡|🟢|⭐|📌|✓|✗" $FILES)                           # 裝飾符號
+   (cd "$BLOG_REPO" && rg "很多人|大家|不少人|你天天|你會|你可能|先讀懂|先釐清|別搞混" $FILES)  # 對讀者喊話
+   (cd "$BLOG_REPO" && rg "教科書級|堪稱|可謂|完美|經典|範本級|最佳實踐|best practice" $FILES)  # 自評誇飾
+   (cd "$BLOG_REPO" && rg "天生|與生俱來|本質就是|本來就是|必然|唯一|註定|理所當然" $FILES)      # 必然性框架
    ```
    **命中是候選、不是判決**——每個命中逐一做語意判定：
    - 否定起手：核心概念在句首正面出場 → 合規；被推到「而是/不如」之後 → 修正為概念前置
@@ -97,18 +121,18 @@ UC / spec / proposal 設計過程中，比對教學內容發現覆蓋不足時�
    判定結果記錄為表格（維度 / 命中數 / 判定），違規項立即修正後 commit。
 8. **commit + merge + push**：
    ```bash
-   git -C ~/project/blog add <changed-files>
+   git -C "$BLOG_REPO" add <changed-files>
 
-   git -C ~/project/blog commit -m "docs(monitoring): 回補教學缺口 — <摘要>
+   git -C "$BLOG_REPO" commit -m "docs(monitoring): 回補教學缺口 — <摘要>
 
    來源：docs/challenges/<NNN>.md (<Gap-ID>)
 
    Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>"
 
-   git -C ~/project/blog checkout main
-   git -C ~/project/blog merge feat/monitor-teaching-backfill-NNN
-   git -C ~/project/blog push origin main
-   git -C ~/project/blog branch -d feat/monitor-teaching-backfill-NNN
+   git -C "$BLOG_REPO" checkout main
+   git -C "$BLOG_REPO" merge feat/monitor-teaching-backfill-NNN
+   git -C "$BLOG_REPO" push origin main
+   git -C "$BLOG_REPO" branch -d feat/monitor-teaching-backfill-NNN
    ```
    審查修正如有額外 commit，同樣走 feature branch → merge → push 流程。
 9. 更新 `docs/sync-pending.md`，將完成項目標記 `[x]` 並附 commit hash
@@ -175,7 +199,7 @@ UC / spec / proposal 設計過程中，比對教學內容發現覆蓋不足時�
 
 ## 跨 Repo 操作
 
-教學文章位於 `~/project/blog/content/monitoring/`。本 skill **直接修改 blog 教學文章**，完成 commit、merge、push 全流程。
+教學文章位於 blog repo 的 `content/monitoring/`。本 skill **直接修改 blog 教學文章**，完成 commit、merge、push 全流程。
 
 | 操作 | 在哪個 repo 做 | 分支要求 |
 |------|---------------|---------|

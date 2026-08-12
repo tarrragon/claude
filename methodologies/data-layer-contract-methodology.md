@@ -129,7 +129,7 @@ SQLite/sqflite 專案在「補 CHECK 約束」決策上有三項本質限制，�
 
 ## 5. migration 治理流程判準（旗標=要時適用）
 
-當第 2 節「migration 治理」旗標判定為「要」（已上線有存量資料、schema 需演進），適用以下流程判準。**本節僅引用概念，不複寫内容**——完整操作方式見用戶提供的資料庫設計文章集（`~/project/blog/content/backend/01-database/` 1.6 migration playbook、1.7 rollout evidence）。
+當第 2 節「migration 治理」旗標判定為「要」（已上線有存量資料、schema 需演進），適用以下流程判準。**本節僅引用概念，不複寫内容**——完整操作方式見用戶提供的資料庫設計文章集（blog repo 的 `content/backend/01-database/`，1.6 migration playbook、1.7 rollout evidence）。
 
 | 判準 | 概念來源 | 一句話摘要 |
 |------|---------|-----------|

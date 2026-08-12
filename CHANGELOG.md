@@ -1,3 +1,15 @@
+## [2.31.0] - 2026-08-12
+
+### Summary
+feat: 24 處跨 repo 引用遷移至環境無關形式; chore: sync-push 回寫框架版本號
+
+Changes: 1 feat, 1 chore
+
+- feat: 24 處跨 repo 引用遷移至環境無關形式
+- chore: sync-push 回寫框架版本號
+
+---
+
 ## [2.30.0] - 2026-08-12
 
 ### Summary

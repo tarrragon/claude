@@ -118,4 +118,4 @@ monitor 專案非典型 Clean Architecture（monorepo 含多語言 SDK + collect
 **Last Updated**: 2026-08-08
 **Version**: 1.1.0 — 新增「分層之外的兩個補位形態」：stub 盲區與語意級假後端（假設與斷言同源、stub 結構上驗不出假設錯誤；補位是有狀態假後端跑流程測試 + 真實後端驗證配對）、characterization test（重構與 legacy 適配、斷言現狀不斷言正確、安全網用完即退場）。同步上游 testing 教材在分層策略之後長出的內容。
 **Version**: 1.0.0 — 從 blog hybrid-testing-strategy-methodology 提煉，整合 monitor 專案對應
-**Source**: `~/project/blog/content/record/hybrid-testing-strategy-methodology.md`
+**Source**: blog repo: `content/record/hybrid-testing-strategy-methodology.md`

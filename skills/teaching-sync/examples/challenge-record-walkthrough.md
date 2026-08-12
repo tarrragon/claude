@@ -45,7 +45,7 @@
 在 blog repo 建 feature branch，寫入教學補充：
 
 ```bash
-cd ~/project/blog
+cd "$BLOG_REPO"
 git checkout -b feat/monitor-teaching-backfill-001
 # 編輯 python-platform.md 新增「短生命週期腳本」章節
 git commit -m "docs(monitoring): 短生命週期腳本 SDK 行為"
