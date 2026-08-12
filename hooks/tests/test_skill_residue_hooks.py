@@ -148,5 +148,77 @@ class TestGateDecision:
         assert gate_hook.main() == 0
 
 
+def _write_sync_skills_yaml(root: Path, private: list) -> None:
+    """在 fake_project 的 root 寫入真實 sync-skills.yaml，供 private 守衛整合測試用。"""
+    lines = ["mode: all", "include: []", "private:"]
+    lines += [f"  - {name}" for name in private]
+    (root / ".claude" / "sync-skills.yaml").write_text(
+        "\n".join(lines) + "\n", encoding="utf-8"
+    )
+
+
+class TestPrivateSkillGuard:
+    """private 守衛：sync-skills.yaml 的 private 清單命中即無條件 deny。
+
+    以 monkeypatch 隔離 `is_private_skill`（不觸碰真實 git push），只驗證
+    gate 對其回傳值的判斷分支；`test_is_private_skill_reads_real_config`
+    另外驗證該函式本身對真實 sync-skills.yaml 檔案的讀取行為。
+    """
+
+    def _run(self, command: str, monkeypatch) -> int:
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({
+            "tool_input": {"command": command}
+        })))
+        return gate_hook.main()
+
+    def test_blocks_when_target_is_private(self, fake_project, monkeypatch, capsys):
+        fake_project("內容乾淨\n")
+        monkeypatch.setattr(gate_hook, "is_private_skill", lambda target, root: True)
+        assert self._run("skill-sync push probe", monkeypatch) == 2
+        err = capsys.readouterr().err
+        assert "private" in err
+        assert "專案特化" in err
+
+    def test_force_does_not_bypass_private_guard(self, fake_project, monkeypatch):
+        """裁示：private 守衛不接受 --force 旁路，與殘留檢查的旁路行為不同。"""
+        fake_project("內容乾淨\n")
+        monkeypatch.setattr(gate_hook, "is_private_skill", lambda target, root: True)
+        assert self._run("skill-sync push probe --force", monkeypatch) == 2
+
+    def test_non_private_skill_unaffected(self, fake_project, monkeypatch):
+        """非 private skill 的推送行為不受本次變更影響，維持既有殘留檢查邏輯。"""
+        fake_project("內容乾淨\n")
+        monkeypatch.setattr(gate_hook, "is_private_skill", lambda target, root: False)
+        assert self._run("skill-sync push probe", monkeypatch) == 0
+
+    def test_non_private_skill_with_residue_still_blocked_by_residue_gate(
+        self, fake_project, monkeypatch, capsys
+    ):
+        """private 守衛不吃掉既有殘留檢查——未命中 private 時原邏輯照常運作。"""
+        fake_project("見 `lib/ghost.dart`\n")
+        monkeypatch.setattr(gate_hook, "is_private_skill", lambda target, root: False)
+        assert self._run("skill-sync push probe", monkeypatch) == 2
+        assert "lib/ghost.dart" in capsys.readouterr().err
+
+    def test_is_private_skill_reads_real_config(self, fake_project, monkeypatch):
+        """未 monkeypatch is_private_skill 本身，驗證其對真實 sync-skills.yaml 的解析。"""
+        root = fake_project("內容乾淨\n")
+        _write_sync_skills_yaml(root, private=["probe"])
+        assert gate_hook.is_private_skill("probe", root) is True
+        assert gate_hook.is_private_skill("other-skill", root) is False
+
+    def test_is_private_skill_false_when_no_config_file(self, fake_project):
+        """無 sync-skills.yaml 時 load_sync_skills_config 回預設值（private 空清單）。"""
+        root = fake_project("內容乾淨\n")
+        assert gate_hook.is_private_skill("probe", root) is False
+
+    def test_private_guard_end_to_end_with_real_config(self, fake_project, monkeypatch, capsys):
+        """端到端：真實 sync-skills.yaml + 真實 main()，不 monkeypatch is_private_skill。"""
+        root = fake_project("內容乾淨\n")
+        _write_sync_skills_yaml(root, private=["probe"])
+        assert self._run("skill-sync push probe --force", monkeypatch) == 2
+        assert "專案特化" in capsys.readouterr().err
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

@@ -211,12 +211,13 @@ def test_blog_and_canonical_2_5_0_same_version_different_content_are_diverged(tm
         }
     }
 
-    up_to_date, diverged, overridden, skipped, skipped_missing = _classify_sync_status(
-        local_manifest, remote_manifest, tmp_path / "local"
+    up_to_date, diverged, overridden, excluded, skipped, skipped_missing = (
+        _classify_sync_status(local_manifest, remote_manifest, tmp_path / "local")
     )
 
     assert up_to_date == []
     assert overridden == []
+    assert excluded == []
     assert skipped == []
     assert skipped_missing == []
     assert len(diverged) == 1
@@ -233,13 +234,14 @@ def test_classify_sync_status_up_to_date_when_hash_matches(tmp_path):
     local_manifest = {"foo": {"version": "1.0.0", "hash": "same-hash"}}
     remote_manifest = {"foo": {"version": "1.0.0", "hash": "same-hash"}}
 
-    up_to_date, diverged, overridden, skipped, skipped_missing = _classify_sync_status(
-        local_manifest, remote_manifest, tmp_path
+    up_to_date, diverged, overridden, excluded, skipped, skipped_missing = (
+        _classify_sync_status(local_manifest, remote_manifest, tmp_path)
     )
 
     assert up_to_date == ["foo"]
     assert diverged == []
     assert overridden == []
+    assert excluded == []
     assert skipped == []
     assert skipped_missing == []
 
@@ -249,14 +251,15 @@ def test_classify_sync_status_skips_remote_without_hash_field(tmp_path):
     local_manifest = {"foo": {"version": "1.0.0", "hash": "abc"}}
     remote_manifest = {"foo": "1.0.0"}  # 舊格式：純字串，無 hash 欄位
 
-    up_to_date, diverged, overridden, skipped, skipped_missing = _classify_sync_status(
-        local_manifest, remote_manifest, tmp_path
+    up_to_date, diverged, overridden, excluded, skipped, skipped_missing = (
+        _classify_sync_status(local_manifest, remote_manifest, tmp_path)
     )
 
     assert skipped == ["foo"]
     assert skipped_missing == []
     assert up_to_date == []
     assert diverged == []
+    assert excluded == []
 
 
 def test_classify_sync_status_skips_remote_missing_entirely(tmp_path):
@@ -264,14 +267,15 @@ def test_classify_sync_status_skips_remote_missing_entirely(tmp_path):
     local_manifest = {"foo": {"version": "1.0.0", "hash": "abc"}}
     remote_manifest = {}  # 該 skill 從未被記錄過
 
-    up_to_date, diverged, overridden, skipped, skipped_missing = _classify_sync_status(
-        local_manifest, remote_manifest, tmp_path
+    up_to_date, diverged, overridden, excluded, skipped, skipped_missing = (
+        _classify_sync_status(local_manifest, remote_manifest, tmp_path)
     )
 
     assert skipped_missing == ["foo"]
     assert skipped == []
     assert up_to_date == []
     assert diverged == []
+    assert excluded == []
 
 
 def test_classify_sync_status_respects_local_override_marker(tmp_path):
@@ -282,15 +286,68 @@ def test_classify_sync_status_respects_local_override_marker(tmp_path):
     local_manifest = {"foo": {"version": "1.0.0", "hash": "local-hash"}}
     remote_manifest = {"foo": {"version": "2.0.0", "hash": "remote-hash"}}
 
-    up_to_date, diverged, overridden, skipped, skipped_missing = _classify_sync_status(
-        local_manifest, remote_manifest, tmp_path
+    up_to_date, diverged, overridden, excluded, skipped, skipped_missing = (
+        _classify_sync_status(local_manifest, remote_manifest, tmp_path)
     )
 
     assert overridden == ["foo"]
     assert up_to_date == []
     assert diverged == []
+    assert excluded == []
     assert skipped == []
     assert skipped_missing == []
+
+
+def test_classify_sync_status_excludes_by_policy(tmp_path):
+    """excluded_skills 命中的名稱落入 excluded_by_policy，不落入
+    skipped_remote_missing（即使 remote_manifest 完全沒有此 key，0.2.1-W3-457）。"""
+    local_manifest = {"verify": {"version": "1.0.0", "hash": "abc"}}
+    remote_manifest = {}  # 遠端從未記錄過此 skill
+
+    up_to_date, diverged, overridden, excluded, skipped, skipped_missing = (
+        _classify_sync_status(
+            local_manifest, remote_manifest, tmp_path, excluded_skills=["verify"]
+        )
+    )
+
+    assert excluded == ["verify"]
+    assert skipped_missing == []
+    assert up_to_date == []
+    assert diverged == []
+    assert overridden == []
+
+
+def test_classify_sync_status_excluded_takes_priority_over_override_marker(tmp_path):
+    """一個名稱不會同時落入 excluded_by_policy 與 overridden——排除政策檢查排在
+    override 標記之前，即使兩個條件同時成立也只計入前者。"""
+    skill_dir = tmp_path / "verify"
+    skill_dir.mkdir()
+    (skill_dir / SKILL_SYNC_OVERRIDE_MARKER).write_text("intentional customization")
+
+    local_manifest = {"verify": {"version": "1.0.0", "hash": "abc"}}
+    remote_manifest = {"verify": {"version": "1.0.0", "hash": "xyz"}}
+
+    up_to_date, diverged, overridden, excluded, skipped, skipped_missing = (
+        _classify_sync_status(
+            local_manifest, remote_manifest, tmp_path, excluded_skills=["verify"]
+        )
+    )
+
+    assert excluded == ["verify"]
+    assert overridden == []
+
+
+def test_classify_sync_status_excluded_skills_defaults_to_empty(tmp_path):
+    """未傳 excluded_skills 時行為不變（向後相容既有呼叫端）。"""
+    local_manifest = {"foo": {"version": "1.0.0", "hash": "abc"}}
+    remote_manifest = {}
+
+    up_to_date, diverged, overridden, excluded, skipped, skipped_missing = (
+        _classify_sync_status(local_manifest, remote_manifest, tmp_path)
+    )
+
+    assert excluded == []
+    assert skipped_missing == ["foo"]
 
 
 def test_has_local_override_false_when_marker_absent(tmp_path):
@@ -652,6 +709,7 @@ def test_public_contract_names_exist_for_consumers(tmp_path, monkeypatch):
         "up_to_date",
         "diverged",
         "overridden",
+        "excluded_by_policy",
         "skipped_no_hash",
         "skipped_remote_missing",
     )
@@ -738,6 +796,18 @@ def test_sync_status_report_reports_empty_remote_as_zero_entries(tmp_path, monke
 
     assert status.remote_count == 0
     assert status.skipped_remote_missing == ["demo-skill"]
+
+
+def test_sync_status_report_passes_excluded_skills_through(tmp_path, monkeypatch):
+    """excluded_skills 由公開入口原樣傳給分類器，落入 excluded_by_policy 而非
+    skipped_remote_missing（0.2.1-W3-457：呼叫端注入排除政策）。"""
+    _write_skill(tmp_path, "verify", "1.0.0", "body")
+    _stub_manifest(monkeypatch, {})
+
+    status = sync_status_report(tmp_path, excluded_skills=["verify"])
+
+    assert status.excluded_by_policy == ["verify"]
+    assert status.skipped_remote_missing == []
 
 
 def test_sync_status_report_handles_missing_skills_dir(tmp_path, monkeypatch):

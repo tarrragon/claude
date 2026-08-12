@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+from collections.abc import Iterable
 from pathlib import Path
 from typing import NamedTuple
 
@@ -65,6 +66,7 @@ class SyncStatus(NamedTuple):
     up_to_date: list[str]
     diverged: list[DivergedSkill]
     overridden: list[str]
+    excluded_by_policy: list[str]
     skipped_no_hash: list[str]
     skipped_remote_missing: list[str]
 
@@ -74,6 +76,7 @@ class SyncStatus(NamedTuple):
             len(self.up_to_date)
             + len(self.diverged)
             + len(self.overridden)
+            + len(self.excluded_by_policy)
             + len(self.skipped_no_hash)
             + len(self.skipped_remote_missing)
         )
@@ -604,30 +607,48 @@ def _classify_sync_status(
     local_manifest: dict[str, dict[str, str]],
     remote_manifest: dict,
     skills_dir: Path,
-) -> tuple[list[str], list[tuple[str, str, str]], list[str], list[str], list[str]]:
+    excluded_skills: Iterable[str] = (),
+) -> tuple[
+    list[str], list[tuple[str, str, str]], list[str], list[str], list[str], list[str]
+]:
     """依內容雜湊分類本地 skill 相對 remote manifest 的同步狀態。
 
-    回傳 (up_to_date, diverged, overridden, skipped_no_hash, skipped_remote_missing)。
-    雜湊相同 -> up_to_date；雜湊不同 -> diverged（覆蓋方向未知，需人工執行 pull/push
-    決定，見下方 rationale）；標記 SKILL_SYNC_OVERRIDE_MARKER -> overridden（略過分歧
-    判定）。remote 缺漏拆兩類，因盲區成因不同：remote_manifest 有此 key 但值不是
-    dict 或缺 hash 欄位（舊格式 versions.json，需下次 push 後才會補上）-> skipped_no_hash；
-    remote_manifest 完全沒有此 key（該 skill 從未被記錄過，可能從未 push、或以
-    非 push 途徑進入遠端目錄如手動複製）-> skipped_remote_missing。兩者對讀者
-    意味不同的下一步（前者等下次 push 自動補；後者需先確認遠端是否該有這個
-    skill，再決定 push 或標註不推送理由），合併計數會讓讀者無從分辨該做什麼。
+    回傳 (up_to_date, diverged, overridden, excluded_by_policy, skipped_no_hash,
+    skipped_remote_missing)。雜湊相同 -> up_to_date；雜湊不同 -> diverged（覆蓋方向
+    未知，需人工執行 pull/push 決定，見下方 rationale）；標記
+    SKILL_SYNC_OVERRIDE_MARKER -> overridden（略過分歧判定）；名稱列於
+    excluded_skills -> excluded_by_policy（呼叫端宣告此 skill 設計上不進遠端；本函式
+    對專案層級的排除政策零知識，只接收呼叫端提供的一份現成清單，不自行判斷哪些
+    skill 該排除）。excluded_by_policy 不併入 overridden——override 標記代表「本地
+    內容刻意客製，遠端已有對應副本可比對」，excluded_by_policy 代表「遠端本不該有
+    這個 skill，沒有可比對的對象」，兩者語意不同，合併會讓報告誤導讀者去比對一份
+    不存在的遠端內容。remote 缺漏拆兩類，因盲區成因不同：remote_manifest 有此 key
+    但值不是 dict 或缺 hash 欄位（舊格式 versions.json，需下次 push 後才會補上）->
+    skipped_no_hash；remote_manifest 完全沒有此 key（該 skill 從未被記錄過，可能
+    從未 push、或以非 push 途徑進入遠端目錄如手動複製）-> skipped_remote_missing。
+    兩者對讀者意味不同的下一步（前者等下次 push 自動補；後者需先確認遠端是否該有
+    這個 skill，再決定 push 或標註不推送理由），合併計數會讓讀者無從分辨該做什麼。
+
+    excluded_skills 檢查排在最前面：政策排除是呼叫端的顯性宣告，優先於本模組
+    自行判定的 override 標記與 remote 缺漏，一個名稱不會同時落入兩類。
 
     不再嘗試自動判定覆蓋方向：舊實作以 semver 大小決定「該推或該拉」，但這預設了
     線性演進，對分支式分歧（兩個獨立演化的副本巧合共用同一版本號）必定失準
     （0.2.1-W3-124 §11.2）。內容雜湊只能證明「相同或不同」，方向留給人工判斷。
     """
+    excluded = frozenset(excluded_skills)
     up_to_date: list[str] = []
     diverged: list[tuple[str, str, str]] = []
     overridden: list[str] = []
+    excluded_by_policy: list[str] = []
     skipped_no_hash: list[str] = []
     skipped_remote_missing: list[str] = []
 
     for name, local_entry in sorted(local_manifest.items()):
+        if name in excluded:
+            excluded_by_policy.append(name)
+            continue
+
         if _has_local_override(skills_dir / name):
             overridden.append(name)
             continue
@@ -648,7 +669,14 @@ def _classify_sync_status(
             remote_display = remote_entry.get("version") or remote_entry["hash"][:8]
             diverged.append((name, local_display, remote_display))
 
-    return up_to_date, diverged, overridden, skipped_no_hash, skipped_remote_missing
+    return (
+        up_to_date,
+        diverged,
+        overridden,
+        excluded_by_policy,
+        skipped_no_hash,
+        skipped_remote_missing,
+    )
 
 
 def fetch_remote_manifest(repo_url: str) -> object:
@@ -669,7 +697,9 @@ def fetch_remote_manifest(repo_url: str) -> object:
 
 
 def sync_status_report(
-    skills_dir: Path, repo_url: str | None = None
+    skills_dir: Path,
+    repo_url: str | None = None,
+    excluded_skills: Iterable[str] = (),
 ) -> SyncStatus:
     """Compare every installed skill against the remote manifest.
 
@@ -677,6 +707,13 @@ def sync_status_report(
     whole path — repo resolution, fetch, classification — so a consumer needs
     exactly one call and cannot end up resolving the repo differently from the
     CLI itself.
+
+    `excluded_skills` is an optional passthrough to `_classify_sync_status`:
+    this module has no concept of a project-level "private" policy and never
+    reads one on its own (it stays a dependency-free package installable
+    outside any particular consumer's `.claude/` tree); a caller that has such
+    a policy supplies the names here so they land in `excluded_by_policy`
+    instead of `skipped_remote_missing`.
 
     Raises `ValueError` when the remote manifest is not a JSON object, and
     whatever `urlopen` raises when the remote is unreachable. Callers decide how
@@ -691,8 +728,15 @@ def sync_status_report(
         )
 
     local_manifest = _extract_local_manifest(skills_dir)
-    up_to_date, diverged, overridden, skipped_no_hash, skipped_remote_missing = (
-        _classify_sync_status(local_manifest, remote_manifest, skills_dir)
+    (
+        up_to_date,
+        diverged,
+        overridden,
+        excluded_by_policy,
+        skipped_no_hash,
+        skipped_remote_missing,
+    ) = _classify_sync_status(
+        local_manifest, remote_manifest, skills_dir, excluded_skills
     )
     return SyncStatus(
         repo_url=resolved_url,
@@ -709,6 +753,7 @@ def sync_status_report(
             for name, local_display, remote_display in diverged
         ],
         overridden=overridden,
+        excluded_by_policy=excluded_by_policy,
         skipped_no_hash=skipped_no_hash,
         skipped_remote_missing=skipped_remote_missing,
     )

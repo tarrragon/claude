@@ -1,3 +1,16 @@
+## [2.29.0] - 2026-08-12
+
+### Summary
+feat: skill 庫檢查套用 private 排除清單; feat: 阻擋 private skill 經 skill-sync push 推上公開發佈庫; chore: sync-push 回寫框架版本號
+
+Changes: 2 feat, 1 chore
+
+- feat: skill 庫檢查套用 private 排除清單
+- feat: 阻擋 private skill 經 skill-sync push 推上公開發佈庫
+- chore: sync-push 回寫框架版本號
+
+---
+
 ## [2.28.0] - 2026-08-12
 
 ### Summary

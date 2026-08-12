@@ -35,6 +35,7 @@ def _status(**overrides) -> SyncStatus:
         up_to_date=[],
         diverged=[],
         overridden=[],
+        excluded_by_policy=[],
         skipped_no_hash=[],
         skipped_remote_missing=[],
     )
@@ -56,7 +57,7 @@ def _stub_report(monkeypatch, result):
     """替換 skill-sync 的 public 入口；result 可為 SyncStatus 或要拋出的例外。"""
     import skill_sync.cli as cli_module
 
-    def _fake(skills_dir, repo_url=None):
+    def _fake(skills_dir, repo_url=None, excluded_skills=()):
         if isinstance(result, Exception):
             raise result
         return result
@@ -87,8 +88,8 @@ def test_drift_report_delegates_repo_resolution_to_skill_sync(tmp_path, monkeypa
     seen = {}
     real = cli_module.sync_status_report
 
-    def _spy(skills_dir, repo_url=None):
-        status = real(skills_dir, repo_url)
+    def _spy(skills_dir, repo_url=None, excluded_skills=()):
+        status = real(skills_dir, repo_url, excluded_skills)
         seen["repo_url"] = status.repo_url
         return status
 
@@ -232,6 +233,21 @@ def test_report_distinguishes_remote_missing_from_no_hash(tmp_path, monkeypatch)
     assert "x" in report and "y" in report
 
 
+def test_report_prints_excluded_by_policy_without_push_instruction(tmp_path, monkeypatch):
+    """excluded_by_policy 項目印為「專案特化，設計上不推送」，不附 push 指引
+    （與 skipped_remote_missing 的「需確認後 push」語氣相反，0.2.1-W3-457）。"""
+    _stub_report(
+        monkeypatch,
+        _status(excluded_by_policy=["verify"]),
+    )
+
+    report = sync_mod.report_skill_repo_drift(tmp_path / ".claude")
+
+    assert "排除（private）1" in report
+    assert "專案特化，設計上不推送（sync-skills.yaml private）：verify" in report
+    assert "需確認遠端是否該有此 skill" not in report
+
+
 def test_report_annotates_same_version_divergence(tmp_path, monkeypatch):
     """版本號相同而內容不同是最常見形態；不註明成因會被讀者當誤報略過。"""
     _stub_report(
@@ -296,6 +312,66 @@ def test_report_handles_no_local_skills(tmp_path, monkeypatch):
     report = sync_mod.report_skill_repo_drift(tmp_path / ".claude")
 
     assert "本地無已安裝 skill" in report
+
+
+# --- private 排除政策注入（0.2.1-W3-457） ------------------------------------
+
+
+def test_report_reads_private_list_from_sync_skills_yaml(tmp_path, monkeypatch):
+    """report_skill_repo_drift 從 sync-skills.yaml 的 private 清單讀取排除政策並
+    注入分類器；private skill 不再落入「遠端無記錄，需人工確認後 push」。
+
+    不經 _stub_report（那會繞過真正的分類邏輯），改真寫本地 skill 目錄與
+    sync-skills.yaml，只 stub 取遠端 manifest 這一步（唯一的網路呼叫）。
+    """
+    claude_dir = tmp_path / ".claude"
+    skill_dir = claude_dir / "skills" / "verify"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: verify\n---\n\n**Version**: 1.0.0\n", encoding="utf-8"
+    )
+    (claude_dir / "sync-skills.yaml").write_text(
+        "mode: all\nprivate:\n  - verify\n", encoding="utf-8"
+    )
+
+    import skill_sync.cli as cli_module
+
+    monkeypatch.setattr(
+        cli_module,
+        "fetch_remote_manifest",
+        lambda url: {"other-skill": {"hash": "0" * 64, "version": "1.0.0"}},
+    )
+
+    report = sync_mod.report_skill_repo_drift(claude_dir)
+
+    assert "遠端無記錄 0" in report
+    assert "需確認遠端是否該有此 skill" not in report
+    assert "專案特化，設計上不推送（sync-skills.yaml private）：verify" in report
+
+
+def test_report_no_private_list_falls_back_to_previous_behavior(tmp_path, monkeypatch):
+    """無 sync-skills.yaml（或無 private 清單）時 excluded_skills 為空，行為與
+    修復前一致——遠端未記錄的 skill 仍落入 skipped_remote_missing。"""
+    claude_dir = tmp_path / ".claude"
+    skill_dir = claude_dir / "skills" / "demo-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: demo-skill\n---\n\n**Version**: 1.0.0\n", encoding="utf-8"
+    )
+    # 刻意不建立 sync-skills.yaml
+
+    import skill_sync.cli as cli_module
+
+    monkeypatch.setattr(
+        cli_module,
+        "fetch_remote_manifest",
+        lambda url: {"other-skill": {"hash": "0" * 64, "version": "1.0.0"}},
+    )
+
+    report = sync_mod.report_skill_repo_drift(claude_dir)
+
+    assert "遠端無記錄 1" in report
+    assert "demo-skill" in report
 
 
 # --- 既有本地版本摘要功能不受影響（自 W3-134 測試檔移入） --------------------

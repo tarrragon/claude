@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 from lib.skill_case_guard import warn_skill_md_case_mismatch
+from lib.sync_exclude_manifest import load_sync_skills_config
 
 # 分歧清單的顯示上限。超出者以「另有 N 個」帶過，完整清單由 skill-sync 取得。
 SKILL_DRIFT_PREVIEW_LIMIT = 10
@@ -99,6 +100,12 @@ def report_skill_repo_drift(claude_dir: Path) -> str:
     後者因此硬編了 repo URL 而繞過 `SKILL_SYNC_REPO` 覆寫，與 skill-sync 本體
     比對不同的遠端（ARCH-BAL-016）。
 
+    排除政策（`excluded_skills`）由本函式從 `sync-skills.yaml` 的 `private` 清單
+    讀取並注入：skill-sync 是零框架依賴套件，對「private」這個概念零知識，只接收
+    呼叫端提供的一份現成清單。此清單原本只在推送過濾生效（overlay 複製與
+    `--clean` 傳播），本檢查段從未套用，導致 private skill 每次都被誤列為「遠端
+    無記錄，需人工確認後 push」——排除政策只在寫入路徑生效，報告路徑對其無知。
+
     永不拋出：本函式在 push/pull 成功之後執行，檢查失敗只代表少了一份資訊，
     不該讓已完成的同步看起來像失敗。故 try 涵蓋到最後一次消費外部資料為止，
     而非只包住取檔——僅包取檔會讓分類與解包的例外從保護外逃逸（IMP-BAL-008）。
@@ -113,7 +120,10 @@ def report_skill_repo_drift(claude_dir: Path) -> str:
     try:
         from skill_sync.cli import sync_status_report
 
-        status = sync_status_report(claude_dir / "skills")
+        private_skills = load_sync_skills_config(claude_dir)["private"]
+        status = sync_status_report(
+            claude_dir / "skills", excluded_skills=private_skills
+        )
         remote_line = f"[skill 庫檢查] 比對遠端：{status.repo_url}"  # i18n-exempt
 
         if not status.local_count:
@@ -126,10 +136,18 @@ def report_skill_repo_drift(claude_dir: Path) -> str:
         counts = (  # i18n-exempt
             f"一致 {len(status.up_to_date)}、分歧 {len(status.diverged)}、"  # i18n-exempt
             f"本地客製 {len(status.overridden)}、"  # i18n-exempt
+            f"排除（private）{len(status.excluded_by_policy)}、"  # i18n-exempt
             f"遠端有記錄無雜湊 {len(status.skipped_no_hash)}、"  # i18n-exempt
             f"遠端無記錄 {len(status.skipped_remote_missing)}"  # i18n-exempt
         )
         lines = [remote_line, f"[skill 庫檢查] {counts}"]  # i18n-exempt
+        # 專案特化 skill 設計上就不該有遠端記錄，不是待處理的缺口，故不附
+        # push 指引——與下方 skipped_remote_missing 的「需確認後 push」語氣相反。
+        if status.excluded_by_policy:
+            lines.append(  # i18n-exempt
+                "   專案特化，設計上不推送（sync-skills.yaml private）："  # i18n-exempt
+                f"{', '.join(status.excluded_by_policy)}"
+            )
         # 兩種盲區成因不同（前者等下次 push 自動補；後者需人工確認遠端該不該
         # 有這個 skill），單一計數無法分辨該做什麼，故列出成因與名單。
         if status.skipped_no_hash:
