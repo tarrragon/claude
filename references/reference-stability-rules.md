@@ -641,7 +641,7 @@ Provenance: claude#58
 | `docs/work-logs/...`（專案相對） | 是 | 不受 `$HOME` 影響 |
 | `~/.claude/skills/x` | 是 | 跨機可解析，語意是「personal 層位置」而非特定機器 |
 | `$CLAUDE_PROJECT_DIR/...`、`$(git rev-parse --show-toplevel)/...` | 是 | 由執行環境解析，跨專案亦成立 |
-| `${<REPO>_ROOT:?<提示訊息>}/...`（跨 repo，可執行命令用） | 是 | 共用資產內只留變數名，解析延後到各環境。變數定義須放不同步的本機設定（如 gitignored 的 `settings.local.json` 的 `env` 區塊），放共用檔等於把佈局假設換個地方擺。未定義時 fail-fast 優於靜默解析到錯誤路徑 |
+| `${<REPO>_REPO:?<提示訊息>}/...`（跨 repo，可執行命令用；`<REPO>` 為 repo 名大寫，如 `BLOG_REPO`） | 是 | 共用資產內只留變數名，解析延後到各環境。變數定義須放不同步的本機設定（如 gitignored 的 `settings.local.json` 的 `env` 區塊），放共用檔等於把佈局假設換個地方擺。未定義時 fail-fast 優於靜默解析到錯誤路徑 |
 | `<repo 識別>: <repo 內相對路徑>`（跨 repo，知識溯源用） | 是 | 例 `blog repo: content/record/x.md`。不含 HOME 之下任何路徑段，讀者定位 repo 根後即可解析 |
 | `~/<Dir>/<repo>/...`（跨 repo 但 HOME 相對） | 僅限單一環境內的記錄 | `~` 只消去使用者名，消不掉 HOME 之下的佈局差異。多環境並行時同一 repo 可能位於 `~/Projects/<repo>` 與 `~/project/<repo>`，此形式必於某一側失效，且「附一句實測」不足以補救——實測在哪一側做的，結果就只在哪一側成立。跨環境共用的記錄改用上面兩列 |
 | `/Users/<name>/...`、`/home/<name>/...` | 否 | 除非該路徑本身就是被討論的對象，或屬上表的實測記錄類 |

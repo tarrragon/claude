@@ -1,3 +1,15 @@
+## [2.31.1] - 2026-08-12
+
+### Summary
+docs: 統一外部 repo 變數命名並重述五張票的環境模型; chore: sync-push 回寫框架版本號 與 worklog 進度
+
+Changes: 1 docs, 1 chore
+
+- docs: 統一外部 repo 變數命名並重述五張票的環境模型
+- chore: sync-push 回寫框架版本號 與 worklog 進度
+
+---
+
 ## [2.31.0] - 2026-08-12
 
 ### Summary
