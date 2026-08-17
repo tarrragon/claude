@@ -199,6 +199,49 @@ IMP ticket 修改 `src/` 字串輸出字面時，acceptance 必須補上 `npm te
 
 - `.claude/methodologies/acceptance-criteria-methodology.md`「強制驗收維度：集中化」章節
 
+#### 防護類 hook ticket 額外 acceptance（必含項）
+
+IMP ticket 的 `where.files` 觸及 hooks 目錄時，acceptance 必須含下表各項語意——既有 session 生效策略、liveness 驗證方式、失敗語意（fail-open/fail-closed）、產生路徑盤點結果。
+
+**強制層現況**：前三項由 `.claude/hooks/acceptance_checkers/hook_protection_acceptance_checker.py` 硬擋（`acceptance-gate-hook.py` 於 complete 前呼叫）。**產生路徑盤點結果尚未進入該 checker**，其強制層待 `0.2.1-W3-525` 落地；在該票完成前，此項為自律層要求，缺漏不會被擋。
+
+> **與下方「防護類 ticket：威脅事件寫 acceptance，攔截點寫 how.strategy」節的關係**：兩節對同一張 hooks 防護票同時生效，觸發方式與強制層級不同——本節由 `where.files` 機械判定並硬擋，下方節由 ticket 目的語意判定且純自律。本節四項屬**驗收手段與覆蓋範圍宣告**（防護是否在跑、擋住幾條路徑），不受下方節的攔截點約束；下方節管的是**防護攔截點**（防護攔在哪裡、覆蓋幾條路徑）。兩者職責正交，皆須滿足。
+
+**觸發條件**（任一成立即須補強）：
+
+- ticket `where.files` 含 `.claude/hooks/` 下任何路徑（頂層本體與 `tests/`、`acceptance_checkers/` 等子目錄皆算）
+- ticket `where.files` 含任一 skill 私有 `.claude/skills/<skill>/hooks/` 下任何路徑（同屬防護面，見「hook 檔案落地監控」改造票的雙不管地帶教訓——只顧頂層會漏掉 skill hooks）
+
+**必填 acceptance**（觸發後四項皆須在 acceptance 中提及，語意關鍵詞檢查非逐字比對）：
+
+| # | 項目 | 說明 | 合格填法範例 |
+|---|------|------|-------------|
+| 1 | 既有 session 生效策略 | 本次寫入的 hook 在當前 session 是否生效、不生效如何因應 | 「本 session 不生效，下個 session 才被 runtime 載入」或「本 wave 該防護不生效，改以人工紀律承擔」（部署期政策，用戶裁示的合格填法） |
+| 2 | liveness 驗證方式 | 如何確認 hook 確實被 runtime 載入並執行 | 「以 liveness 日誌比對確認 hook 已被觸發」「實測 `git stash` 觸發後檢查對應 hook-logs 有新增紀錄」 |
+| 3 | 失敗語意 | 異常時 fail-open 或 fail-closed | 「異常時 fail-closed，回傳 exit 2」「異常時 fail-open，僅記錄不阻擋」 |
+| 4 | 產生路徑盤點表**存在於 `how.strategy`** | 本防護要擋的壞狀態有幾條產生路徑、現行攔截點覆蓋幾條、未覆蓋者在哪。**寫在 `how.strategy` 的盤點表，不在 acceptance 重複宣告數字** | 見下方 Action 第一步的表格格式 |
+
+> **第 4 項的檢查對象是正本，不是宣告**。盤點表寫在 `how.strategy`（見下方 Action 第一步），checker 直接解析該表並於 complete 時輸出「本票盤點 N 條、覆蓋 M 條、未覆蓋 K 條」。撰寫者**不需**在 acceptance 重複宣告這些數字。
+>
+> **Why 檢查正本而非宣告**：acceptance 的數字宣告是副本，正本在 `how.strategy`。對副本設閘門而正本不設，與本模式根因（acceptance 被要求承載不該由它承載的東西）同構；且宣告的價值繫於有人對照，而 IMP 的 Phase 4 消費者為 warning 級的關鍵字存在性檢查，讀者實質缺席。改由機器讀正本同時消解兩者，並移除兩處數字須一致的維護負擔。
+>
+> **作用是使缺口可見，非防止缺口**。撰寫者仍可只列一條路徑草率過關，但盤點表逐條可見、計數由機器輸出，審查者與後續接手者可據以追問。
+>
+> **強制層現況**：checker 目前檢查的是 acceptance 是否含數字宣告（上一版設計），改為解析 `how.strategy` 正本待 `0.2.1-W3-533` 落地。該票完成前，acceptance 仍需含數字宣告方能通過。行為三分（缺表阻擋／有表輸出計數／解析失敗 fail-open）以該票為準。
+
+**Why（前三項）**：這三項是機器檢查不到、只能落在 ticket 上的面向——單元測試全綠、settings.json 已註冊、實機 dogfooding 通過三項訊號都無法證明 hook 在「本次寫入的當下 session」已生效（session 中途新註冊的 hook 至該 session 重啟前不被 runtime 載入，屬結構性風險而非個案）。規則文字層級的預防措施已證明無法單靠文件落實，故用戶裁示強制層須為 acceptance 條目加 hook 硬擋。
+
+**Why（產生路徑盤點結果）**：前三項驗證的是「防護有沒有在跑」，不涵蓋「防護擋住幾條路徑」。一個確實在跑、失敗語意明確、liveness 可驗證的防護，仍可能只覆蓋壞狀態的其中一條產生路徑。此項要求把覆蓋範圍以可數形式寫下，使該面向脫離撰寫者的隱性假設。
+
+**Consequence**：未補前三項的防護類 hook ticket，撰寫者與 PM 皆會誤信防護已生效——2026-08-13 一次事故實證：一個新註冊的 guard hook 自建立起以 100644（無可執行位）存在，runtime 無法啟動它，事故當下該守衛全期零效力，全期僅一筆手動 dogfooding 日誌，此後零筆。
+
+**Action**：IMP claim 後若 `where.files` 觸及 hooks 目錄，acceptance 補列表列各項語意（合格填法見上表，不要求逐字比對，語意到位即可）。`acceptance-gate-hook.py` 於 complete 前以 `check_hook_protection_acceptance` 對**前三項**硬擋，缺任一項 exit 非零並指出缺哪項；產生路徑盤點結果項的硬擋見上方強制層現況。
+
+**參考**：
+
+- `.claude/hooks/acceptance_checkers/hook_protection_acceptance_checker.py`
+- `.claude/error-patterns/process-compliance/PC-BAL-035-acceptance-wording-locks-interception-point.md`（「硬擋形態的判準」節）
+
 ### DOC（Documentation）
 
 **核心價值**：變更摘要 + 引用的檔案清單。
@@ -214,6 +257,40 @@ IMP ticket 修改 `src/` 字串輸出字面時，acceptance 必須補上 `npm te
 ### 語義基礎：Complete-Time Verification
 
 ticket track claim 不再執行 AC verification（W3-046 L3-b 實作），所有驗收測試（包括 npm test）延遲到 complete 階段。Acceptance 欄位應以此為前提進行撰寫。
+
+### 防護類 ticket：威脅事件寫 acceptance，攔截點寫 how.strategy
+
+防護類 ticket（目的為阻止某個壞狀態出現，而非交付某個功能）的 acceptance 描述**威脅事件或最終狀態**，攔截點決策（用哪個工具、攔在哪個時機）寫在 `how.strategy` 或 Solution。兩者分屬不同欄位，不是二選一。
+
+| 欄位 | 承載 | 範例 |
+|------|------|------|
+| `acceptance` | 威脅事件不再發生 | 缺可執行位的 hook 檔案不得在任何路徑下進入生效狀態而不被偵測 |
+| `how.strategy` / Solution | 選定的攔截點、產生路徑盤點表與覆蓋結論 | 於設定檔寫入時檢查目標檔案模式；盤點表見下 |
+
+**判準**：把 acceptance 唸一遍，問「若實作把攔截點換到別處但威脅事件同樣被擋住，這條還算通過嗎？」答「不算」表示攔截點已被寫進 acceptance，須把它移到 `how.strategy`，acceptance 改寫為威脅事件。
+
+**Action（順序不可調換）**：
+
+1. **先**列產生路徑盤點表，寫入 `how.strategy` 或 Solution（欄位如下，一條路徑一列）
+2. 再依盤點結論撰寫 acceptance，以「不得 / 不應存在 / 任何路徑下」措辭寫威脅事件；涵蓋不足時以「所有路徑」措辭表達，不預先裁定攔截點
+3. 對「動作發生時檢查」型防護，另加一條 acceptance 要求驗證操作順序調換後仍有效
+
+| 產生路徑 | 是否覆蓋 | 未覆蓋原因 |
+|---------|---------|-----------|
+| 經工具正常寫入 | 是 | — |
+| 先寫註冊後建檔（順序調換） | 否 | 檢查時目標尚不存在，走 fail-open |
+| 經 VCS 合併寫入 | 否 | 未經該工具路徑 |
+
+**Why**：acceptance 是測試設計、覆核重跑、gate 勾選三層驗證的共用真值來源。攔截點一旦寫進 acceptance，就從「什麼狀態算通過」退化為「照這個做法做」，三層驗證此後共用同一份條文，其覆蓋缺口對整條驗證鏈不可見。步驟 1 必須先於步驟 2，理由見下方參考文件的「時序不可調換」段。
+
+**Consequence**：實作滿足條文、測試全綠、覆核一致，威脅事件仍可由未涵蓋路徑重現，要到 Phase 4 審查或事故復發才暴露。
+
+**邊界（兩個方向）**：
+
+- 對**上方**「防護類 hook ticket 額外 acceptance」：本節**不豁免**該節必含項的要求。該節各項（既有 session 生效策略、liveness 驗證方式、失敗語意、產生路徑盤點結果）屬**驗收手段與覆蓋範圍宣告**，照填；其中產生路徑盤點結果項與本節 Action 的第一步（列產生路徑盤點表）同源，盤點表寫 `how.strategy`，acceptance 只宣告其結果數字；本節管的是**防護攔截點**。一張 hooks 防護票同時受兩節約束。
+- 對**下方**「撰寫原則」：其他 acceptance 條目（測試通過、產出清單）仍照撰寫原則寫具體指令與時機。前者說「什麼狀態算安全」，後者說「怎麼確認做完了」。
+
+**參考**：完整論述、三列反模式對照表與判準依據見 `.claude/methodologies/acceptance-criteria-methodology.md`「防護類驗收條件：威脅事件測試」節與 `.claude/error-patterns/process-compliance/PC-BAL-035-acceptance-wording-locks-interception-point.md`。
 
 ### 撰寫原則
 
@@ -298,11 +375,17 @@ acceptance:
 
 | 版本 | 日期 | 變更 |
 |------|------|------|
+| 1.5.0 | 2026-08-17 | IMP 區塊新增「防護類 hook ticket 額外 acceptance（三項必含）」段落：where.files 觸及 hooks 目錄（含頂層與 skill hooks）時強制三項語意（session 生效策略/liveness 驗證方式/失敗語意），對應 hook 硬擋於 acceptance-gate 新增 checker |
 | 1.4.0 | 2026-07-05 | 新增「Frontmatter protocol_version 契約」段落：emit 機制 + 凍結豁免 + lazy-migration 契約（W5-005.4） |
 | 1.3.0 | 2026-06-04 | IMP 區塊新增「src 字串輸出變更額外 acceptance」段落；反模式表補充 build-only 驗收反模式（W1-005.2 / W1-040） |
 | 1.2.0 | 2026-05-13 | 新增「Solution 章節：H3 子標題與表格使用慣例」+「Type-aware Quality Gate」兩段（W10-123 / W10-124 / W10-125 規則收斂；W10-126 落地） |
 | 1.1.0 | 2026-05-08 | ANA Solution 章節新增「Spawn 落地確認」子節 checklist（W17-167 L3 落地，配合 W17-168 hook + W17-169 quality-baseline / ticket-lifecycle 同步修訂） |
 | 1.0.0 | 2026-04-20 | 初版（W17-016.2 落地 W17-016.1 盤點結論） |
 
-**Last Updated**: 2026-07-05
+**Last Updated**: 2026-08-17
+**Version**: 1.7.0 — 依 0.2.1-W3-527 完整 WRAP 裁示改採方案 F（機器讀正本）：第 4 項的檢查對象由 acceptance 的數字宣告改為 `how.strategy` 的盤點表正本，撰寫者不再需要在 acceptance 重複宣告數字；補 Why（副本 vs 正本、消費者缺席）與強制層現況（改動待 0.2.1-W3-533 落地，該票完成前 checker 仍檢查 acceptance 宣告）。
+**Version**: 1.6.2 — 依第二輪 Layer 2 審查更新：「維度型檢查」術語隨 PC-BAL-035 判準軸更換為「對外部事實可證偽」；補實作限制（判定須用 regex 不可用 substring，實測 18.0% 誤過率）。
+**Version**: 1.6.1 — 依 Layer 2 審查修正 v1.6.0 的三項失準：強制層宣稱與實作不符（產生路徑盤點結果尚未進入 checker，已補「強制層現況」段明示該項在 0.2.1-W3-525 落地前為自律層）；Why／Consequence 原僅支撐前三項卻以全節語氣陳述，已拆為「Why（前三項）」與「Why（產生路徑盤點結果）」；節標題與內文改以角色命名（「必含項」）取代數量命名，位置序數引用改語意錨點。
+**Version**: 1.6.0 — 「防護類 hook ticket 額外 acceptance」新增「產生路徑盤點結果」項（須含可數的路徑數與覆蓋數）；補該項的形態要求說明（維度型檢查，刻意不檢查 acceptance 措辭形態因其屬可空洞滿足的形式型）與作用邊界（使缺口可見而非防止缺口）；與下方攔截點分工節的雙向邊界說明同步更新。
+**Version**: 1.5.0 — 新增「防護類 ticket：威脅事件寫 acceptance，攔截點寫 how.strategy」節（欄位分工表 + 判準問句 + 三步 Action 含產生路徑盤點表欄位與範例 + 雙向邊界）；「防護類 hook ticket 額外 acceptance（三項必含）」節補與該新節的關係說明（兩節對同一張 hooks 票同時生效，前者機械判定並硬擋且屬驗收手段，後者語意判定純自律且管攔截點，職責正交）。完整論述路由至 acceptance-criteria-methodology 與 PC-BAL-035，本檔不存副本。
 **Version**: 1.4.0 — 新增 protocol_version 契約段落（emit + 凍結豁免 + lazy-migration，W5-005.4）

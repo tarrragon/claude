@@ -313,17 +313,25 @@ def _is_placeholder(text: str) -> bool:
     """
     判斷文字是否為佔位符。
 
-    判斷策略（W10-125 修復後）：
+    判斷策略：
     1. 先剝除所有 HTML 註解（W17-032）。
     2. 再剝除 markdown 分隔符（`---+` 行首行尾獨立一行；W17-071）。
-    3. W10-125：剝除 markdown 表格行（行首行尾為 `|` 的整行）。表格內的 keyword
+    3. 剝除純 markdown ATX 子標題行（`#{1,6} 標題文字`），子標題是結構標記
+       非實質內容，避免「子標題 + 純佔位符」章節因標題文字殘留而誤判為
+       非 placeholder。
+    4. W10-125：剝除 markdown 表格行（行首行尾為 `|` 的整行）。表格內的 keyword
        屬合法「不適用」/「待辦項目參考」標示（PC-138 / PC-144 共同治本）。
        - 剝除後仍有非表格文字：用 keyword 檢查該文字（表格外的 TODO/TBD/N/A 仍判 placeholder）
        - 剝除後為空且原本有表格：作者寫表格即實質內容，視為非 placeholder
-    4. 剩餘內容為空 → placeholder（例如只有 HTML 註解 + 分隔符的空殼章節）。
-    5. 剩餘內容含英文佔位符 `(pending)/TBD/TODO/N/A` → placeholder。
-    6. 剩餘內容扣掉所有「（待填寫：...）/（必填：...）」後為空 → placeholder。
-    7. 否則非 placeholder（視為已有實質內容）。
+    5. 剩餘內容為空 → placeholder（例如只有 HTML 註解 + 分隔符 + 子標題的空殼章節）。
+    6. 剩餘內容含英文佔位符 `(pending)/TBD/TODO/N/A` → placeholder。
+    7. 剩餘內容扣掉所有「（待填寫：...）/（必填：...）/（選填：...）」後為空
+       → placeholder（不論是否還有其他佔位符文字以外的殘留，一律以「扣掉後
+       是否為空」為唯一判準，不再有「文字含任一佔位符 pattern 即回 True」的
+       獨立判斷——後者對「佔位符 + 真實內容並存」的章節會誤判，觸發
+       _replace_or_append_section_content 的 REPLACE 分支把並存的真實內容
+       一併丟棄，是資料遺失而非僅視覺殘留）。
+    8. 否則非 placeholder（視為已有實質內容）。
 
     W17-032 修復重點：`<!--.*?-->` 命中即回 True 會誤判
     「body schema 範本的 Schema 標註註解 + 實質內容」為 placeholder。
@@ -368,15 +376,29 @@ def _is_placeholder(text: str) -> bool:
     if not content_no_separator:
         return True
 
+    # 剝除純 markdown ATX 子標題行（`#{1,6} 標題文字`，如 `### 問題根因`）。
+    # 子標題是結構標記非實質內容，與上方 `---` 分隔符同層次處理：否則
+    # 「子標題 + 純佔位符」的章節（如 Problem Analysis 模板的
+    # `### 問題根因\n（待填寫：...）`）會因標題文字殘留而在下方
+    # strip-then-check-empty 判準中被誤判為非 placeholder。標題行本身被
+    # 整行移除，其後若接實質內容（獨立一行）不受影響——只有「標題本身即
+    # 唯一內容、無任何後續正文」時才會連帶被視為空殼，此為已知邊界情境
+    # （見 Solution 討論），非本次要處理的範圍。
+    content_no_headers = re.sub(
+        r"^[ \t]*#{1,6}[ \t]+.*$", "", content_no_separator, flags=re.MULTILINE
+    ).strip()
+    if not content_no_headers:
+        return True
+
     # W10-125：剝除 markdown 表格行（PC-138 / PC-144 治本）。
     # 表格 cell 中的 N/A / TODO / TBD 屬合法標示（不適用 / 待辦項目參考），不應誤判。
     # 策略：剝除完整 table 行後檢查剩餘非表格內容。
     # - 若剝除後仍有實質非表格內容：以剩餘內容作 keyword 檢查
     # - 若剝除後為空且原本有表格：作者寫表格即實質內容，視為非 placeholder
     table_row_pattern = r"^\s*\|.*\|\s*$"
-    has_table = bool(re.search(table_row_pattern, content_no_separator, re.MULTILINE))
+    has_table = bool(re.search(table_row_pattern, content_no_headers, re.MULTILINE))
     content_no_tables = re.sub(
-        table_row_pattern, "", content_no_separator, flags=re.MULTILINE
+        table_row_pattern, "", content_no_headers, flags=re.MULTILINE
     ).strip()
     if not content_no_tables and has_table:
         # 全部都是表格內容，作者寫表格 = 有實質內容
@@ -392,7 +414,7 @@ def _is_placeholder(text: str) -> bool:
     #   標示（如多視角審查表述 Layer 2: N/A），不應觸發 placeholder 誤判。
     #   保守設計：僅剝除整行 keyword 為 N/A 的情境；含 TODO/TBD 的混合行不豁免，
     #   避免「Layer 2: TODO N/A」這類真正 placeholder 被誤放行。
-    target_content = content_no_tables if has_table else content_no_separator
+    target_content = content_no_tables if has_table else content_no_headers
     descriptive_na_line = re.compile(
         r"^[\s\-\*\+>]*(?:Layer\s+\w+|Phase\s+\w+)\s*[:：]?\s*N/A\s*\.?\s*$",
         re.MULTILINE | re.IGNORECASE,
@@ -430,12 +452,21 @@ def _is_placeholder(text: str) -> bool:
     if not target_after_descriptive and descriptive_na_line.search(target_content):
         return False
 
-    if re.search(r"（待填寫[：:][^）]*）|（必填[：:][^）]*）", target_after_descriptive):
-        return True
-
-    # 判定「整段只由中文佔位符組成」：移除所有已知中文佔位符 + 空白後為空
+    # 判定「整段只由中文佔位符組成」：移除所有已知中文佔位符 + 空白後為空。
+    # 加「選填」——ticket_builder.py 範本以「（選填：...）」作 optional 章節
+    # （test_results / pa_root_cause / pa_impact / pa_error_pattern / solution
+    # 等）的佔位符文字，原本只認「待填寫」「必填」漏了這個變體，導致
+    # append-log 誤判該章節「已有實質內容」而只 append、佔位符殘留在新內容
+    # 之前。
+    #
+    # 移除前一版「文字含任一中文佔位符 pattern 即直接回 True」的獨立判斷：
+    # 該判斷對「佔位符 + 真實內容並存」的章節會誤判為 placeholder-only，
+    # 使 _replace_or_append_section_content 走上 REPLACE 分支、把並存的真實
+    # 內容一併丟棄——不只是視覺殘留，是資料遺失。本函式唯一正確的判準應為
+    # 「剝除所有已知佔位符後是否還剩內容」，故該判斷本身多餘且有害，直接
+    # 刪除，只保留下方 strip-then-check-empty 邏輯。
     no_cn_placeholders = re.sub(
-        r"（(?:待填寫|必填)[：:][^）]*）", "", target_after_descriptive
+        r"（(?:待填寫|必填|選填)[：:][^）]*）", "", target_after_descriptive
     ).strip()
     if not no_cn_placeholders:
         return True

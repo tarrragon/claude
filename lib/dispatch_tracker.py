@@ -15,8 +15,10 @@ Active Dispatch Tracker 共用模組
 """
 
 import json
+import os
 import subprocess
 import sys
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -117,13 +119,36 @@ def _read_state(project_root: Path) -> Dict:
 
 
 def _write_state(project_root: Path, state: Dict) -> None:
-    """寫入狀態檔。自動建立父目錄。寫入後使快取失效。"""
+    """寫入狀態檔。自動建立父目錄。寫入後使快取失效。
+
+    寫暫存檔 + os.replace 原子替換：無鎖讀端（is_file_under_dispatch 等
+    查詢路徑）任何時刻看到的檔案內容只會是完整的舊版或完整的新版，不會
+    讀到半寫的中間狀態（torn write）。取代原先的 write_text 直寫（在同一
+    檔案系統內非原子，寫入中途崩潰或讀端時間點不巧會讀到截斷/空內容）。
+    """
     state_file = get_state_file_path(project_root)
     state_file.parent.mkdir(parents=True, exist_ok=True)
-    state_file.write_text(
-        json.dumps(state, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
+    payload = json.dumps(state, indent=2, ensure_ascii=False) + "\n"
+    tmp_path = state_file.with_name(
+        state_file.name + ".tmp." + uuid.uuid4().hex[:8]
     )
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write(payload)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except OSError:
+                pass
+        os.replace(tmp_path, state_file)
+    except OSError:
+        if tmp_path.exists():
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+        raise
+
     # 寫入後使快取失效，下次 _read_state 會重新讀取
     _state_cache["data"] = None
     _state_cache["mtime"] = 0.0
@@ -137,6 +162,8 @@ def record_dispatch(
     files: Optional[List[str]] = None,
     branch_name: str = "",
     agent_id: Optional[str] = None,
+    session_id: str = "",
+    parent_session_id: str = "",
 ) -> None:
     """記錄一個新的派發。寫入 dispatch-active.json。
 
@@ -148,6 +175,10 @@ def record_dispatch(
         files: 代理人處理的檔案清單
         branch_name: worktree 分支名稱（用於 orphan 偵測精確比對）
         agent_id: 代理人 ID（可選，通常由 PostToolUse/SubagentStop 補寫）
+        session_id: 派發者（PM）的 CC session_id（multi-PM 協調層，
+            供 pm-registry 交叉比對「哪個 PM session 派發了哪些工作」）
+        parent_session_id: 同 session_id（派發者自身），供 subagent 端
+            自我歸屬所屬 PM session；非血緣欄位，純冗餘鍵值供查詢
     """
     with _state_lock(project_root):
         state = _read_state(project_root)
@@ -159,6 +190,8 @@ def record_dispatch(
             "files": files or [],
             "branch_name": branch_name,
             "dispatched_at": datetime.now(timezone.utc).isoformat(),
+            "session_id": session_id,
+            "parent_session_id": parent_session_id,
         }
         state["dispatches"].append(entry)
         _write_state(project_root, state)

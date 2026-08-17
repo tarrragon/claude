@@ -2,7 +2,7 @@
 （0.2.1-W3-148）。
 
 問題：三方合併路徑 `apply_upstream_delta` 已呼叫 `should_exclude` 過濾
-`PUSH_ONLY_EXCLUDE_PATTERNS`（如 `project-integration/`，各 skill 的專案
+`PER_PROJECT_PATTERNS`（如 `project-integration/`，各 skill 的專案
 落地層，per-project 案例/Hook 對齊/CLI 接線，設計上不跨專案同步——
 0.2.1-W3-158 已查明雙向排除是設計意圖，非缺陷）。但 full overlay 路徑的
 `cleanup_stale_files` 與 `sync_directory` 不呼叫 `should_exclude`，使

@@ -44,6 +44,9 @@ parallel-evaluation 的常駐委員分兩類，加入規則與 opt-out 條件不
 | G: 系統設計 | 規則/Skill/方法論變更後 | Consistency + Completeness + CogLoad | 3+2 |
 
 > 各視角詳細檢查項目: references/lens-configurations.md
+> 各視角 prompt 模板: references/lens-prompts.md
+
+> **跨情境觸發**：標的為防護、守衛、閘門、檢查類產出時（不限上表情境），至少一個視角須附加 `references/lens-prompts.md`「跨情境必問：防護類標的的驗收覆蓋」的四問模板。該問題不可由標的自身的驗收條件回答（PC-BAL-035）。
 
 **語言代理人加入規則**：當審查標的涉及語言/框架專屬的基礎設施或開發流程時，將對應語言代理人作為額外審查委員加入標準三人組：
 
@@ -145,6 +148,7 @@ Phase 3: 任一視角發現問題 → 回到分析階段補充
 - .claude/methodologies/parallel-evaluation-methodology.md - 完整方法論
 - .claude/skills/bulk-evaluate/SKILL.md - 批量評估（正交工具）
 - references/lens-configurations.md - 視角配置
+- references/lens-prompts.md - 各情境視角 prompt 模板 + 防護類標的跨情境必問
 - references/worth-it-filter-details.md - 過濾標準
 - references/integration-guide.md - 整合指南
 

@@ -63,3 +63,7 @@ from acceptance_checkers.god_ticket_scale_checker import (
 from acceptance_checkers.responsibility_scope_checker import (
     check_file_scope_diversity,
 )
+from acceptance_checkers.hook_protection_acceptance_checker import (
+    check_hook_protection_acceptance,
+    touches_hook_protection_scope,
+)

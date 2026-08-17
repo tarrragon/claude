@@ -81,6 +81,17 @@ def test_detect_english_sentence_string():
     assert any(x["category"] == "i18n" for x in v)
 
 
+def test_no_cross_literal_cjk_false_positive():
+    # 0.2.1-W3-469：同行雙字面夾 CJK 文字不應被誤判為字面內容。
+    # 舊 regex 以 lookahead 從任意位置起掃，第一個字面 "." 不含 CJK 被跳過後，
+    # 其結束引號仍可與下一個字面 "" 的起始引號重新配對，把中間的 CJK 說明文字
+    # 誤判為字面內容（0.2.1-W3-143 實證：Path(".") 與 Path("") 之間的中文說明
+    # 被誤命中為 ") 與 Path(" 字面）
+    content = 'path.name 恆為 path.parts 的末元素（例外僅 Path(".") 與 Path("")，其 name 為'
+    v = detect_violations(content)
+    assert not any(x["category"] == "i18n" for x in v)
+
+
 def test_string_in_log_excluded():
     content = 'logger.info("連線建立成功")'
     v = detect_violations(content)

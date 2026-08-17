@@ -50,7 +50,7 @@ def test_nested_same_name_files_are_not_exempt():
     clean 只傳播了 7 檔，README.md 因檔名比對獲豁免而在 canonical 留成孤兒目錄。
 
     注意選例須避開其他排除機制：同層的 project-integration 目錄本身命中
-    manifest 的 PUSH_ONLY_EXCLUDE_PATTERNS，會因不同理由被排除，不能用來驗本缺陷。
+    manifest 的 PER_PROJECT_PATTERNS，會因不同理由被排除，不能用來驗本缺陷。
     """
     nested = (
         "skills/wrap-decision/references/integration-patterns/README.md",

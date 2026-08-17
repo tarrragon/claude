@@ -17,6 +17,7 @@ setup_hook_logging（入口呼叫 ensure_utf8_io），並吸收 save_check_log /
 - run_hook_safely(main_func, hook_name) -> int
 """
 
+import json
 import logging
 import os
 import sys
@@ -54,12 +55,25 @@ ENV_HOOK_DEBUG = "HOOK_DEBUG"
 
 # Exit code 常數
 EXIT_ERROR = 1
+EXIT_DENY = 2  # CC runtime PreToolUse 僅此值觸發 DENY，其餘（含 0 與 1）均放行
 
 # 日誌保留策略（天數）
 LOG_RETENTION_DAYS = 7
 
 # 日誌清理觸發間隔（秒數，預設 5 分鐘）
 CLEANUP_INTERVAL_SECONDS = 300
+
+# Liveness 索引子目錄：hook 已載入/未載入的正向訊號（見 mark_hook_entry）
+LIVENESS_SUBDIR = "_liveness"
+
+# CC runtime 曝露的 session id 環境變數，與 stdin session_id 一致
+# （見 hook-architect-technical-reference.md）。取用此 env var 可在 stdin
+# 讀取之前即取得 session_id，免除「先記進入、取得 session_id 後補綁」的
+# 兩階段設計複雜度。
+ENV_SESSION_ID = "CLAUDE_CODE_SESSION_ID"
+
+# env var 未設時的 fallback session 識別（極舊 runtime 或環境變數被清除）
+UNKNOWN_SESSION_ID = "unknown-session"
 
 
 def _sanitize_hook_name(name: str) -> str:
@@ -140,16 +154,18 @@ def _create_file_handler(log_file_path: Path) -> Optional[logging.FileHandler]:
         return None
 
 
-def _cleanup_old_logs(log_base_dir: Path, retention_days: int = LOG_RETENTION_DAYS) -> None:
+def _cleanup_old_logs(log_base_dir: Path, retention_days: int = LOG_RETENTION_DAYS,
+                       pattern: str = "*.log") -> None:
     """清理超期日誌檔案
 
     Args:
         log_base_dir: 日誌基礎目錄
         retention_days: 保留天數（預設 7 天）
+        pattern: glob pattern，預設 "*.log"；liveness 索引另傳 "*.jsonl"
     """
     try:
         cutoff_time = datetime.now() - timedelta(days=retention_days)
-        for log_file in log_base_dir.glob("*.log"):
+        for log_file in log_base_dir.glob(pattern):
             try:
                 mtime = datetime.fromtimestamp(log_file.stat().st_mtime)
                 if mtime < cutoff_time:
@@ -180,6 +196,28 @@ def _create_fallback_logger(hook_name: str) -> logging.Logger:
     return logger
 
 
+def _maybe_cleanup(log_base_dir: Path, pattern: str = "*.log") -> None:
+    """節流觸發日誌清理（基於 mtime 時間間隔，共用於 handler 建立與 liveness 索引）
+
+    Args:
+        log_base_dir: 日誌基礎目錄
+        pattern: 傳給 _cleanup_old_logs 的 glob pattern
+    """
+    cleanup_marker = log_base_dir / ".cleanup_trigger"
+    current_time = time.time()
+
+    try:
+        if cleanup_marker.exists():
+            marker_mtime = cleanup_marker.stat().st_mtime
+            if current_time - marker_mtime >= CLEANUP_INTERVAL_SECONDS:
+                _cleanup_old_logs(log_base_dir, pattern=pattern)
+                cleanup_marker.touch()
+        else:
+            cleanup_marker.touch()
+    except OSError:
+        pass
+
+
 def _setup_logger_handlers(logger: logging.Logger, log_base_dir: Path,
                            sanitized_name: str, is_debug: bool) -> None:
     """為 logger 配置 handlers
@@ -187,22 +225,7 @@ def _setup_logger_handlers(logger: logging.Logger, log_base_dir: Path,
     採用 lazy file creation 策略：只在實際寫入日誌時才建立檔案，
     避免產生空日誌檔案。使用 FileHandler 的 delay=True 參數。
     """
-    # 觸發日誌清理（基於 mtime 時間間隔）
-    cleanup_marker = log_base_dir / ".cleanup_trigger"
-    current_time = time.time()
-
-    try:
-        if cleanup_marker.exists():
-            # 檢查檔案的 mtime
-            marker_mtime = cleanup_marker.stat().st_mtime
-            if current_time - marker_mtime >= CLEANUP_INTERVAL_SECONDS:
-                _cleanup_old_logs(log_base_dir)
-                cleanup_marker.touch()
-        else:
-            # 檔案不存在，建立它
-            cleanup_marker.touch()
-    except OSError:
-        pass
+    _maybe_cleanup(log_base_dir, pattern="*.log")
 
     # 配置 FileHandler（使用 delay=True 實現 lazy file creation）
     timestamp = datetime.now().strftime(TIMESTAMP_FORMAT)
@@ -338,27 +361,93 @@ def save_check_log(
             logger.warning("儲存檢查日誌失敗: {}".format(e))
 
 
-def run_hook_safely(main_func: Callable[[], int], hook_name: str) -> int:
+def _liveness_log_dir() -> Path:
+    """回傳 liveness 索引目錄（.claude/hook-logs/_liveness/）"""
+    return get_project_root() / ".claude" / "hook-logs" / LIVENESS_SUBDIR
+
+
+def _current_session_id() -> str:
+    """取得當前 session id，取自 CC runtime 曝露的環境變數
+
+    未設定時回傳 UNKNOWN_SESSION_ID，使該筆訊號仍可被彙整為
+    「已載入但無法歸戶 session」，而非因取值失敗整筆遺失。
+    """
+    value = os.environ.get(ENV_SESSION_ID, "").strip()
+    return value if value else UNKNOWN_SESSION_ID
+
+
+def mark_hook_entry(hook_name: str, logger: Optional[logging.Logger] = None) -> None:
+    """寫入 hook liveness 進入訊號
+
+    在 hook 執行判準（main_func）之前無條件寫入一筆「已進入」訊號到
+    session-scoped 索引檔 `.claude/hook-logs/_liveness/<session_id>.jsonl`，
+    使「已載入且執行中」成為可直接查詢的事實，不需靠日誌缺席推論或依賴
+    對照組（如另一持續寫入的 hook）與即時探針。session 維度取自
+    CLAUDE_CODE_SESSION_ID 環境變數，於 stdin 讀取之前即可取得，故單次
+    寫入即完成綁定，不需「先記進入、取得 session_id 後補綁」的兩階段設計。
+
+    已知殘留缺口：本函式由 run_hook_safely 呼叫，時序上晚於 hook 檔案自身
+    的 module-level import（stdlib 之外的相依）。若 hook 在自身 import
+    階段崩潰（而非 lib 本身），run_hook_safely 從未被呼叫，本函式也不會
+    執行——此殘留情形與「從未被呼叫」同形，且無法在不修改每個 hook 檔案
+    的前提下消除，故不在本次範圍內處理。
+
+    Args:
+        hook_name: Hook 識別名稱（原始值，未經 _sanitize_hook_name 淨化；
+                   彙整入口以此值與 settings.json 註冊表比對）
+        logger: 可選 Logger，寫入失敗時額外記錄 warning（雙通道：亦寫 stderr）
+    """
+    entry = {
+        "hook": hook_name,
+        "session_id": _current_session_id(),
+        "pid": os.getpid(),
+        "ts": datetime.now().isoformat(),
+    }
+    try:
+        log_dir = _liveness_log_dir()
+        log_dir.mkdir(parents=True, exist_ok=True)
+        _maybe_cleanup(log_dir, pattern="*.jsonl")
+        log_path = log_dir / "{}.jsonl".format(entry["session_id"])
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError as e:
+        message = "liveness 訊號寫入失敗（hook={}）: {}".format(hook_name, e)
+        sys.stderr.write(message + "\n")
+        if logger:
+            logger.warning(message)
+
+
+def run_hook_safely(
+    main_func: Callable[[], int], hook_name: str, fail_closed: bool = False
+) -> int:
     """安全執行 Hook 函式，頂層例外處理
 
     功能：
     - 呼叫 setup_hook_logging 獲取 logger
     - 執行 main_func，捕獲 Exception（非 SystemExit/KeyboardInterrupt）
-    - 異常時記錄完整 traceback 到日誌檔，返回 EXIT_ERROR
+    - 異常時記錄完整 traceback 到日誌檔，返回 EXIT_ERROR 或 EXIT_DENY（依 fail_closed）
     - 記錄執行時間到日誌
 
     Args:
         main_func: Hook 主入口函式，必須返回 int
         hook_name: Hook 識別名稱
+        fail_closed: 異常時的失敗語意。False（預設）維持向後相容，回傳
+            EXIT_ERROR（1）；CC runtime PreToolUse 僅 exit 2 觸發 DENY，故
+            此值下任何執行期異常都會靜默放行。True 時回傳 EXIT_DENY（2），
+            使異常本身觸發 DENY——僅適用於資料遺失防護類與保護分支類等
+            「fail-open 代價不可逆」的守衛。預設值不可誤改為 True，否則會
+            使非防護類 hook 的執行期異常一併全域轉為 fail-closed（DENY）。
 
     Returns:
-        int: main_func 的返回值（正常），或 EXIT_ERROR（異常）
+        int: main_func 的返回值（正常），或異常時依 fail_closed 回傳
+            EXIT_ERROR（1）/ EXIT_DENY（2）
 
     Note:
         exit 1 在 CLI 中可能觸發 "hook error" 顯示（IMP-049 已知 CLI bug），
         但這是 CLI 層問題，不應在 Hook 層繞過。異常記錄到日誌檔即可。
     """
     logger = setup_hook_logging(hook_name)
+    mark_hook_entry(hook_name, logger)
     start_time = time.time()
 
     try:
@@ -381,7 +470,7 @@ def run_hook_safely(main_func: Callable[[], int], hook_name: str) -> int:
         tb_str = traceback.format_exc()
         logger.debug("Hook execution time before failure: {:.2f}s".format(elapsed_time))
         _log_exception(logger, hook_name, tb_str)
-        return EXIT_ERROR
+        return EXIT_DENY if fail_closed else EXIT_ERROR
 
 
 def get_hook_log_dir(hook_name: str) -> Path:

@@ -89,6 +89,10 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/bare-commit-guard-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/workspace-wipe-guard-hook.py"
           }
         ]
       },
@@ -521,6 +525,16 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-dir-audit-hook.py",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-liveness-summary-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-registry-start-hook.py",
+            "timeout": 5000
           }
         ]
       },
@@ -666,6 +680,10 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uc-fingerprint-drift-check-hook.py",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
           }
         ]
       },
@@ -734,6 +752,19 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uc-fingerprint-drift-check-hook.py",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
+          }
+        ]
+      },
+      {
+        "matcher": "MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
           }
         ]
       },
@@ -823,6 +854,11 @@
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/skills/wrap-decision/hooks/wrap-decision-tripwire-hook.py",
             "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-registry-heartbeat-hook.py",
+            "timeout": 5000
           }
         ]
       }
@@ -884,6 +920,11 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-dir-audit-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-registry-stop-hook.py",
             "timeout": 5000
           }
         ]

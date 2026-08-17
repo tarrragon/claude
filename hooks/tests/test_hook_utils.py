@@ -559,6 +559,77 @@ class TestRunHookSafely:
 
 
 # ============================================================================
+# TestRunHookSafelyFailClosed - run_hook_safely() fail_closed 參數測試
+# ============================================================================
+
+class TestRunHookSafelyFailClosed:
+    """run_hook_safely() fail_closed 參數行為測試"""
+
+    def test_fail_closed_default_false_pinned(self):
+        """迴歸測試：fail_closed 預設值必須是 False
+
+        防止未來重構誤改為 True 而使全域轉為 fail-closed。
+        """
+        import inspect
+
+        signature = inspect.signature(run_hook_safely)
+        assert signature.parameters["fail_closed"].default is False
+
+    def test_fail_closed_true_exception_returns_2(self, project_root, mock_env_var, reset_loggers):
+        """fail_closed=True 時，異常回傳 2（EXIT_DENY）"""
+        mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
+
+        def main_func() -> int:
+            raise ValueError("fail-closed test error")
+
+        exit_code = run_hook_safely(main_func, "test-hook-fail-closed", fail_closed=True)
+
+        assert exit_code == 2
+
+    def test_fail_closed_false_exception_returns_1(self, project_root, mock_env_var, reset_loggers):
+        """fail_closed=False（預設）時，異常回傳 1（EXIT_ERROR），維持向後相容"""
+        mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
+
+        def main_func() -> int:
+            raise ValueError("fail-open test error")
+
+        exit_code = run_hook_safely(main_func, "test-hook-fail-open", fail_closed=False)
+
+        assert exit_code == 1
+
+    def test_fail_closed_true_exception_still_logs_traceback(
+        self, project_root, mock_env_var, reset_loggers
+    ):
+        """fail_closed=True 時，異常仍完整記錄 traceback 到日誌（雙通道要求不變）"""
+        mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
+
+        def main_func() -> int:
+            raise ValueError("fail-closed traceback test")
+
+        run_hook_safely(main_func, "test-hook-fail-closed-log", fail_closed=True)
+
+        log_dir = project_root / ".claude" / "hook-logs" / "test-hook-fail-closed-log"
+        log_files = list(log_dir.glob("*.log"))
+        assert len(log_files) >= 1
+
+        log_content = log_files[-1].read_text()
+        assert "ValueError" in log_content
+        assert "fail-closed traceback test" in log_content
+
+    def test_fail_closed_true_exception_writes_stderr(self, capsys, project_root, mock_env_var, reset_loggers):
+        """fail_closed=True 時，異常仍輸出到 stderr（雙通道要求不變）"""
+        mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
+
+        def main_func() -> int:
+            raise ValueError("fail-closed stderr test")
+
+        run_hook_safely(main_func, "test-hook-fail-closed-stderr", fail_closed=True)
+
+        captured = capsys.readouterr()
+        assert "test-hook-fail-closed-stderr" in captured.err
+
+
+# ============================================================================
 # TestExceptionHandling - run_hook_safely() 異常處理與 stderr 輸出測試
 # ============================================================================
 

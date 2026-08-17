@@ -31,6 +31,10 @@ from .hook_logging import (
     save_check_log,
     run_hook_safely,
     get_hook_log_dir,
+    mark_hook_entry,
+    LIVENESS_SUBDIR,
+    ENV_SESSION_ID,
+    UNKNOWN_SESSION_ID,
 )
 
 from .hook_io import (
@@ -100,6 +104,10 @@ __all__ = [
     "save_check_log",
     "run_hook_safely",
     "get_hook_log_dir",
+    "mark_hook_entry",
+    "LIVENESS_SUBDIR",
+    "ENV_SESSION_ID",
+    "UNKNOWN_SESSION_ID",
     # hook_io
     "read_hook_input",
     "read_json_from_stdin",

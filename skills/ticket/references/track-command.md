@@ -845,3 +845,63 @@ dispatch-readiness 0.18.0-W17-053:
   [PASS] 閾值 3 Context Bundle tokens: Context Bundle ~250 tokens ≤ 3000
 [WARN] 軟性警告：建議審視拆分必要性
 ```
+
+---
+
+## track sessions 子命令（multi-PM 協調層 Phase 1，issue tarrragon/claude#77）
+
+read-only 查詢 `pm-registry.json`，列出同專案 PM session 清單（heartbeat 新鮮度 / 認領 tickets 與 files 數），供多 PM 並行時互相察知彼此範圍。
+
+### 用法
+
+```bash
+ticket track sessions [--format {table,json}]
+```
+
+### Flag 說明
+
+| Flag | 預設 | 說明 |
+|------|------|------|
+| `--format` | `table` | `table`（人閱讀）/ `json`（腳本消費，輸出 `{"sessions": [...]}`） |
+
+### Registry 位置與 Schema
+
+- 路徑：`<git rev-parse --git-common-dir>/pm-registry.json`（worktree 內亦解析回主 repo `.git/`，跨 worktree 共用單一實例）
+- 內容 schema（v1）：`sessions.<session_id>` 含 `name` / `project` / `registered_at` / `heartbeat_ts` / `tickets` / `files` / `parent_session_id`
+- 寫入端（hooks 職責）：SessionStart 註冊 + heartbeat 更新、Stop/handoff 釋放；本命令僅讀取，不寫入
+
+### 輸出格式（table）
+
+```
+=== PM Sessions ===
+  session_id  name                 age(min)  status  tickets  files
+  ------------------------------------------------------------------
+  session-a   flutter-balance-b6          5  FRESH         1      2
+```
+
+### 欄位定義
+
+| 欄位 | 說明 |
+|------|------|
+| `session_id` | CC hook 輸入 JSON 的 `session_id` |
+| `name` | session 名稱（缺省時退回 `session_id`） |
+| `age(min)` | heartbeat 與查詢當下的分鐘差（整數，捨去）；無法解析時顯示 `?` |
+| `status` | `FRESH`（heartbeat 30 分鐘內）/ `STALE`（逾 30 分鐘或無法解析） |
+| `tickets` | 該 session 認領的 ticket 數 |
+| `files` | 該 session 認領的檔案數 |
+
+### 降級行為（不阻擋工作流）
+
+| 情境 | 行為 |
+|------|------|
+| `pm-registry.json` 缺檔 | 輸出空表 + exit 0 |
+| JSON 解析失敗 | stderr 提示 + 輸出空表 + exit 0 |
+| 非 git repo / git 不可用 | 輸出空表 + exit 0 |
+| session `heartbeat_ts` 缺失或格式錯誤 | fail-open 視為 `STALE`（不可靜默呈現「新鮮」假象） |
+
+### 設計約束
+
+- version-agnostic（註冊於 `_create_version_agnostic_handlers()`），不需 active version
+- 僅列 `project` 欄位等於當前 `git rev-parse --show-toplevel` 的 session（同專案篩選；git 不可用時不篩選，保留全部）
+- stale 判定閾值固定 30 分鐘（`STALE_THRESHOLD_MINUTES`），Phase 1 僅標記不做 reclaim
+- Registry Schema 契約 v1 為 hooks 與 CLI 兩職責共同 SSOT，本命令不得自行變更 schema

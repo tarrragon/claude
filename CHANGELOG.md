@@ -1,3 +1,71 @@
+## [2.32.0] - 2026-08-17
+
+### Summary
+feat: pm-registry session lifecycle hooks + dispatch-active session/ticket/files fields; feat: 新增 ticket track sessions 子命令（multi-PM 協調層 Phase 1 CLI 職責）; feat: hook protection checker 第四項改讀 how.strategy 盤點表正本 (+55 more)
+
+Changes: 13 feat, 2 refactor, 16 fix, 22 docs, 5 chore, 1 test
+
+- feat: pm-registry session lifecycle hooks + dispatch-active session/ticket/files fields
+- feat: 新增 ticket track sessions 子命令（multi-PM 協調層 Phase 1 CLI 職責）
+- feat: hook protection checker 第四項改讀 how.strategy 盤點表正本
+- feat: hook_protection_acceptance_checker 新增產生路徑盤點宣告的第四項必含檢查
+- feat: 強制防護類 hook ticket 三項 acceptance 並加硬擋
+- feat: 改以 hook 檔案落地為監控對象，修正可執行位防護的攔截面
+- feat: 改用 branch-verify-hook 的 fail-closed 語意
+- feat: 改用 workspace-wipe-guard 的 fail-closed 語意
+- feat: 新增 run_hook_safely 的 fail_closed 參數
+- feat: 完成 AC3 跨 session 探針驗證與 Phase 4 多視角審查
+- feat: 前移 hook 可執行位檢查至 settings.json 註冊當下
+- feat: hook liveness 訊號使未載入與未命中可區分
+- feat: 並行守衛擴充涵蓋 git stash 等全工作區破壞性操作
+- refactor: 收斂 hook 註冊命令字串解析的重複實作
+- refactor: 正名方向語意為假的集合名稱
+- fix: dispatch-record-hook ticket_id extraction limited to prompt first line
+- fix: pm-registry/dispatch-active writes use tempfile + os.replace atomic swap
+- fix: frontmatter 邊界改用逐行錨定比對，修復三連減號誤判
+- fix: 修正 HANDOFF_DIRECTION_REMINDER.format 缺 next_ticket_id 參數的 KeyError
+- fix: 修正 _parse_yaml_lines 對頂層列表項目 YAML 折行延續行的靜默截斷
+- fix: 收斂 acceptance-gate-hook subagent 早退範圍至僅抑制 AskUserQuestion 提醒
+- fix: 補強 settings-registration-exec-guard 的例外可觀測性與邊界測試
+- fix: 清除 append-log 寫入章節時殘留的佔位符文字
+- fix: 補齊 workspace-wipe-guard 未涵蓋的等同風險變體
+- fix: 修復 .skill-sync-override 被 push 推上遠端的傳染性缺陷
+- fix: 補 framework 通道對無副檔名私鑰檔的排除
+- fix: 補上 skill-sync push 的憑證檔排除
+- fix: 收斂 docstring 排除樣式為行首錨定，消除三引號賦值型字串漏檢
+- fix: 補 python profile string_exclude 缺漏的 docstring 排除
+- fix: 修正 presence 字串偵測跨引號配對造成的 CJK false positive
+- fix: 補齊 presence python profile 遺漏的 .claude/lib/ 與 .claude/scripts/ 框架自身豁免
+- docs: 修正框架文件中已被證偽的 @-import 生效宣告
+- docs: 新增 PC-BAL-037 實驗證據範圍誤擴 error-pattern
+- docs: 完整 WRAP 後改採方案 F，機器讀正本取消副本宣告
+- docs: 新增 PC-BAL-036 規格宣稱與實作機制脫節錯誤模式
+- docs: 修正 schema 合格填法範例不通過自身 regex
+- docs: 換掉被推翻的判準軸，降級 cargo cult 結論為未知
+- docs: 修正 5c0fbd6b 的強制層失準宣稱與四項不一致
+- docs: 重評硬擋可行性，採維度型硬擋（用戶裁示）
+- docs: 依三視角審查修訂 PC-BAL-035 落地條文
+- docs: 落地 PC-BAL-035 三項預防措施（全採自律層）
+- docs: 修正 exec-guard docstring 自我矛盾與超前結論用語
+- docs: 補對照實證章節，prompt 禁令改變衝突處理路徑
+- docs: 補變體章節，新建 ticket 未讀兄弟票 acceptance 為同根因異載體
+- docs: 修正鑑別方法與根因 3 的自相矛盾，補 Why 與操作型判準
+- docs: 記錄注入 context 取代既有 acceptance 的靜默範圍遺失模式
+- docs: PC-BAL-033 補實測條件式陳述與第二獨立成因
+- docs: 記錄 PC-BAL-033 新註冊 hook 對既有 session 零效力
+- docs: 補充 acceptance 的框架資產交付物相容性條款
+- docs: 補 IMP-BAL-006 框架層可追溯錨點
+- docs: 記錄 IMP-BAL-006 同一排除集合的多條消費路徑處置相反
+- docs: 修正 sync_exclude_manifest 組合集合的註解宣稱
+- docs: 補充 should_exclude 規則 1 為規則 4 效能快速路徑的說明
+- chore: 測試檔更名以符合 hooks-test-gate 命名慣例
+- chore: auto-fix executable permissions for hook files (IMP-054)
+- chore: 補回 PC-BAL-033 缺可執行位成因與鑑別兩步
+- chore: sync-push 回寫框架版本號
+- test: add unit tests for session-registry-{start,heartbeat,stop} hooks
+
+---
+
 ## [2.31.1] - 2026-08-12
 
 ### Summary

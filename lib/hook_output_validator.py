@@ -31,10 +31,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shlex
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # .claude/lib/（同層 sibling import）
+
+from hook_command_resolver import hook_command_var_values, tokenize_hook_command
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SETTINGS_PATH = PROJECT_ROOT / ".claude" / "settings.json"
@@ -51,11 +54,9 @@ DUMMY_STDIN = json.dumps({
     "cwd": str(PROJECT_ROOT),
 })
 
-# 環境變數替換表（settings.json command 中的 $VAR 展開）
-ENV_SUBSTITUTIONS = {
-    "CLAUDE_PROJECT_DIR": str(PROJECT_ROOT),
-    "CLAUDE_FILE_PATH": str(PROJECT_ROOT / "CLAUDE.md"),
-}
+# 環境變數替換表（settings.json command 中的 $VAR / ${VAR} 展開；
+# 供 subprocess env 注入使用，唯一真實來源見 hook_command_resolver）
+ENV_SUBSTITUTIONS = hook_command_var_values(PROJECT_ROOT)
 
 # 頂層協議允許欄位（Claude Code 官方認可）
 ALLOWED_TOPLEVEL_FIELDS = {
@@ -70,10 +71,15 @@ ALLOWED_TOPLEVEL_FIELDS = {
 
 
 def resolve_command(cmd: str) -> list[str]:
-    """Resolve $VAR references and split into argv."""
-    for var, value in ENV_SUBSTITUTIONS.items():
-        cmd = cmd.replace(f"${var}", value)
-    return shlex.split(cmd)
+    """Resolve $VAR / ${VAR} references and split into argv.
+
+    委派 hook_command_resolver.tokenize_hook_command——本函式原本自行維護
+    一份僅支援 `$VAR`（無大括號形式）的替換邏輯，與 hook-completeness-
+    check.py 的另一份實作（支援兩種形式）語意漂移，已收斂為單一來源。
+    ValueError（shlex 引號不成對）忠實傳播，呼叫端（run_hook）既有
+    `except ValueError` 已依賴此行為回報 `[CMD PARSE ERROR]`。
+    """
+    return tokenize_hook_command(cmd, PROJECT_ROOT)
 
 
 def load_target_hooks() -> list[tuple[str, str, str]]:

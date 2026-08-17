@@ -11,7 +11,7 @@
 | 對象 | 是否適用 | 載入方式 |
 |------|---------|---------|
 | PM（主線程） | 是 | `.claude/rules/core/` 自動載入 |
-| 子代理人（subagent） | 是 | 透過 AGENT_PRELOAD 規則 7 + 本檔 |
+| 子代理人（subagent） | 是 | `.claude/rules/core/` 自動載入（已實測確認注入所有 subagent context；本檔位於該層內） |
 | Hook 強制層 | `.claude/hooks/mcp-write-tool-on-text-file-guard-hook.py` | settings.json PreToolUse 註冊 |
 
 ---
@@ -45,9 +45,9 @@
 
 ## 邊界與違規偵測
 
-**邊界**：`tool-discovery.md` 處理「做不到」前的探索檢查（找 deferred tools），本規則處理「已知多工具可用時的選擇」；AGENT_PRELOAD 規則 7 是 subagent prompt-time 提醒；`bash-tool-usage-rules.md` 聚焦命令語法，非工具選擇。
+**邊界**：`tool-discovery.md` 處理「做不到」前的探索檢查（找 deferred tools），本規則處理「已知多工具可用時的選擇」；AGENT_PRELOAD.md 規則 7 立意為 subagent prompt-time 提醒，但其所在的 `.claude/agents/*.md` 主文 `@-import` 已實測不會展開為內容，未實際送達 subagent context，本檔規則的實際生效管道是 `.claude/rules/core/` 自動載入；`bash-tool-usage-rules.md` 聚焦命令語法，非工具選擇。
 
-**雙層防護**：規則文件（本檔 + AGENT_PRELOAD 規則 7）為自我約束層；`.claude/hooks/mcp-write-tool-on-text-file-guard-hook.py` 為強制層（PreToolUse 偵測 `mcp__serena__` 寫入工具 + 非程式碼副檔名 → exit 2 + deny）。
+**雙層防護**：規則文件（本檔，經 `.claude/rules/core/` 自動載入機制注入所有 subagent context）為自我約束層；`.claude/hooks/mcp-write-tool-on-text-file-guard-hook.py` 為強制層（PreToolUse 偵測 `mcp__serena__` 寫入工具 + 非程式碼副檔名 → exit 2 + deny）。AGENT_PRELOAD.md 規則 7 未實際送達 subagent context，不構成本規則的生效路徑。
 
 ---
 

@@ -50,6 +50,16 @@ def clear_error_pattern_mtime_cache() -> None:
 # 常數定義
 # ============================================================================
 
+# Frontmatter 邊界標記：要求 --- 獨占一行（允許行尾空白），錨定於行首。
+# 舊實作用 content.find("---", 3) 純文字子字串搜尋定位邊界，frontmatter
+# 欄位值內任意位置出現連續三個減號（表格分隔列、diff hunk 標記、em-dash
+# 序列）皆會被誤判為邊界。改用逐行錨定比對後，僅獨占一行的 --- 才視為
+# 邊界，欄位值中間出現的 --- 子字串不受影響。與 ticket_system 的
+# ticket_system/lib/parser.py parse_frontmatter 為同構修法（不同程式碼
+# 路徑，個別修正）。
+_FRONTMATTER_BOUNDARY_RE = re.compile(r"^---[ \t]*(?:\r\n|\n|\Z)", re.MULTILINE)
+
+
 # 決策樹欄位識別標記（統一版本，合併 command-entrance-gate-hook 和 agent-ticket-validation-hook）
 DECISION_TREE_MARKERS = [
     "decision_tree:",
@@ -246,6 +256,34 @@ def _parse_yaml_lines(frontmatter_text: str) -> dict:
                 result[current_key].append(item)
             continue
 
+        # 頂層列表項目的 YAML 折行延續行
+        # pyyaml.dump 預設 width=80，長列表項目（如 CJK 內容約 75+ 字元）
+        # 會在項目中間折行，延續行縮排 = 該列表 dash 縮排 + 2（0 縮排列表
+        # 延續行 2 縮排；2 縮排列表延續行 4 縮排），且不再以 "- " 開頭。
+        # 修復前：此類延續行落入下方「巢狀鍵值對／多行標記／列表項目」通用
+        # 分支，因 current_key 對應值是 list（非 str），is_scalar_continuation
+        # 判定為 False，且無冒號可組成巢狀鍵值對，遂被靜默捨棄——單一驗收
+        # 條件文字因此只剩折行前的第一行，第二行起完全遺失且無任何錯誤訊息。
+        # 修復：以「current_nested_key 為 None 且 current_key 已是非空
+        # list」判定本行必為延續行（無論實際縮排 2 或 4 格皆涵蓋，故置於
+        # 縮排層級分流之前），依 YAML plain/quoted scalar 折行語意（換行 →
+        # 單一空白）併回最後一個列表項目，而非另起新項目或整段捨棄。
+        if (
+            current_key
+            and multiline_marker is None
+            and current_nested_key is None
+            and isinstance(result.get(current_key), list)
+            and result[current_key]
+            and line[:1] == ' '
+            and not line.strip().startswith('- ')
+        ):
+            continuation_text = line.strip().strip("'\"")
+            if continuation_text:
+                result[current_key][-1] = "{} {}".format(
+                    result[current_key][-1], continuation_text
+                )
+            continue
+
         # 判斷行的縮排層級
         if line.startswith('    '):
             # 4 格以上：深層嵌套（如列表項目或多層嵌套）
@@ -422,15 +460,20 @@ def parse_ticket_frontmatter(
     if content is None:
         return {}
 
-    # 步驟 2：驗證 frontmatter 標記和邊界
+    # 步驟 2：驗證 frontmatter 標記和邊界（--- 須獨占一行，錨定比對，
+    # 避免欄位值內任意位置出現的連續三個減號被誤判為邊界）
     if not content.startswith('---'):
         return {}
 
-    end_idx = content.find('---', 3)
-    if end_idx == -1:
+    start_match = _FRONTMATTER_BOUNDARY_RE.match(content)
+    if start_match is None:
         return {}
 
-    frontmatter_text = content[3:end_idx].strip()
+    end_match = _FRONTMATTER_BOUNDARY_RE.search(content, start_match.end())
+    if end_match is None:
+        return {}
+
+    frontmatter_text = content[start_match.end():end_match.start()].strip()
     if not frontmatter_text:
         return {}
 

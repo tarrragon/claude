@@ -2,7 +2,7 @@
 
 涵蓋：
   - 原始分類 frozenset 對外暴露且為 frozenset
-  - 組合集合 PUSH_EXCLUDE = LOCAL_ONLY | CREDENTIAL
+  - 組合集合 SYNC_EXCLUDE_ALL = LOCAL_ONLY | CREDENTIAL | PER_PROJECT
   - should_exclude 對相對路徑契約（assert not is_absolute）
   - should_exclude 對各分類維度（名稱 / 副檔名 / 前綴 / 目錄段）
   - 缺陷 N 回歸：push.compute_content_hash 與 status.compute_content_hash
@@ -47,12 +47,13 @@ def test_raw_classifications_are_frozensets():
     assert isinstance(manifest.EXCLUDE_NAME_PREFIXES, frozenset)
 
 
-def test_push_exclude_is_union():
-    # PUSH_EXCLUDE 為三維度聯集：local-only + 憑證 + push-only（含 project-integration）
-    assert manifest.PUSH_EXCLUDE == (
+def test_sync_exclude_all_is_union():
+    # SYNC_EXCLUDE_ALL 為三維度聯集：local-only + 憑證 + per-project tracked layer
+    # （含 project-integration）
+    assert manifest.SYNC_EXCLUDE_ALL == (
         manifest.LOCAL_ONLY_PATTERNS
         | manifest.CREDENTIAL_PATTERNS
-        | manifest.PUSH_ONLY_EXCLUDE_PATTERNS
+        | manifest.PER_PROJECT_PATTERNS
     )
 
 
@@ -93,6 +94,25 @@ def test_should_exclude_by_dir_segment():
 
 def test_should_not_exclude_normal_file():
     assert not manifest.should_exclude(Path("rules/core/quality-baseline.md"))
+
+
+def test_should_exclude_ssh_private_key_by_name():
+    # 無副檔名 SSH 私鑰慣例名稱：EXCLUDE_SUFFIXES（副檔名）與 EXCLUDE_NAME_PREFIXES
+    # （env/secret 前綴）兩維度皆不涵蓋，須靠 CREDENTIAL_PATTERNS 名稱精確比對排除。
+    for key_name in ("id_rsa", "id_ed25519", "id_ecdsa", "id_dsa"):
+        assert manifest.should_exclude(Path(f"keys/{key_name}")), (
+            f"{key_name} 應被排除（IMP-BAL-006 憑證判準缺口：無副檔名私鑰）"
+        )
+        # 大小寫不敏感契約（should_exclude docstring 明文）
+        assert manifest.should_exclude(Path(f"keys/{key_name.upper()}"))
+
+
+def test_should_not_exclude_ssh_public_key():
+    # .pub 公鑰非敏感資料（非對稱加密設計：公鑰無法反推私鑰或用於簽署/解密），
+    # 排除與否不影響安全性；保留同步以維持團隊協作可用性（如需核對 authorized_keys）。
+    # 決策見 Solution「.pub 公鑰判定」。
+    for key_name in ("id_rsa.pub", "id_ed25519.pub", "id_ecdsa.pub", "id_dsa.pub"):
+        assert not manifest.should_exclude(Path(f"keys/{key_name}"))
 
 
 # ---------- 缺陷 N 回歸：push / status hash 一致 ----------

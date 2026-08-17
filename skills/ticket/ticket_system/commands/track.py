@@ -200,6 +200,11 @@ from .track_td_status import (
     execute_td_status,
     register_td_status,
 )
+# sessions 列出同專案 pm-registry session 清單（multi-PM 協調層 Phase 1）
+from .track_sessions import (
+    execute_sessions,
+    register_sessions,
+)
 # 導入版本審計命令模組
 from .audit_version import (
     execute_audit_version,
@@ -272,6 +277,7 @@ def _create_version_agnostic_handlers() -> dict:
         "stale-list": execute_stale_list,
         "parallel-check": execute_parallel_check,
         "hook-health": execute_hook_health,
+        "sessions": execute_sessions,
     }
 
 
@@ -1142,6 +1148,7 @@ def _register_all_subcommands(
     register_dispatch_validate(track_subparsers)
     register_dispatch_readiness(track_subparsers)
     register_depth(track_subparsers)
+    register_sessions(track_subparsers)
 
 
 def _register_global_state_commands(

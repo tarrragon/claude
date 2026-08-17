@@ -89,6 +89,7 @@ from acceptance_checkers import (
     check_phase4_review_evidence,
     check_god_ticket_scale,
     check_file_scope_diversity,
+    check_hook_protection_acceptance,
 )
 # W17-120.2 / PC-091: ana_spawned_checker 退場
 # ANA complete 阻擋判斷統一收斂到 children_checker（PC-091 路線：
@@ -334,6 +335,17 @@ def check_acceptance_status(
         if should_block:
             return AcceptanceCheckResult(True, False, error_msg, False, [], [], "", "", [], [], False)
 
+        # 步驟 1.5：防護類 hook ticket 的必含項目（前三項命中 acceptance，
+        # 第四項「產生路徑盤點結果」命中 how.strategy 缺則 Solution 的盤點表
+        # 正本，需傳入 content 供 Solution fallback 讀取）
+        hook_protection_should_block, hook_protection_msg = check_hook_protection_acceptance(
+            frontmatter, logger, content
+        )
+        if hook_protection_should_block:
+            return AcceptanceCheckResult(
+                True, False, hook_protection_msg, False, [], [], "", "", [], [], False
+            )
+
         # 0.4.1-W2-006：偵測 complete 是否與同鏈寫入操作串接
         chained_write_detected = bool(command) and detect_chained_pre_complete_write(command)
         if chained_write_detected:
@@ -520,8 +532,17 @@ def generate_hook_output(
     check_result: AcceptanceCheckResult,
     project_dir: Path,
     logger,
+    is_subagent: bool = False,
 ) -> Dict[str, Any]:
-    """生成 Hook 輸出"""
+    """生成 Hook 輸出
+
+    Args:
+        is_subagent: 是否為 subagent 環境（is_subagent_environment 判定）。
+            為 True 時僅略過「PM 必須使用 AskUserQuestion」互動提醒（場景
+            #1/#2/#9/#17），should_block 語意與其他 warning（checklist、
+            error-pattern 衝突、H2、自檢、Phase 4、規模/職責判準等）不受
+            影響，維持對 subagent 生效。
+    """
     output = {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -656,13 +677,17 @@ def generate_hook_output(
         context_parts.append(check_result.spawned_non_terminal_warning)
 
     # 優先級 2：error-pattern 場景 #17 提醒（與 warning_msg 並存觸發）
-    if check_result.has_new_error_patterns:
+    # subagent 環境略過：本提醒要求「PM 必須使用 AskUserQuestion」，對
+    # subagent 不適用（is_subagent_environment docstring 原始範圍）。
+    if check_result.has_new_error_patterns and not is_subagent:
         file_list_formatted = "\n".join(f"  - {f}" for f in (check_result.new_error_pattern_files or []))
         reminder_msg = AskUserQuestionMessages.ERROR_PATTERN_REMINDER.format(
             file_list=file_list_formatted
         )
         context_parts.append(reminder_msg)
         logger.info(f"新增場景 #17 (error-pattern) 提醒")
+    elif check_result.has_new_error_patterns:
+        logger.info("subagent 環境略過場景 #17 (error-pattern) AskUserQuestion 提醒")
 
     # 優先級 2.5：error-pattern 衝突提醒（Step 2.7，WARNING 不阻擋）
     if check_result.error_pattern_conflicts:
@@ -721,9 +746,12 @@ def generate_hook_output(
         )
 
     # 優先級 3：Handoff 方向選擇 場景 #9（無訊息時，sibling >= 2）
+    # subagent 環境略過：本提醒要求「PM 必須使用 AskUserQuestion」，對
+    # subagent 不適用（is_subagent_environment docstring 原始範圍）。
     if (
         not check_result.message
         and len(check_result.pending_sibling_tickets) >= 2
+        and not is_subagent
     ):
         sibling_list_formatted = "\n".join(
             f"  - {sibling_id}"
@@ -731,15 +759,20 @@ def generate_hook_output(
         )
         reminder_msg = AskUserQuestionMessages.HANDOFF_DIRECTION_REMINDER.format(
             sibling_count=len(check_result.pending_sibling_tickets),
-            sibling_list=sibling_list_formatted
+            sibling_list=sibling_list_formatted,
+            # 模板範例指令需要一個具體建議票號；本分支已保證
+            # len(pending_sibling_tickets) >= 2，取第一個作為建議的下一張票
+            next_ticket_id=check_result.pending_sibling_tickets[0],
         )
         context_parts.append(reminder_msg)
         logger.info(f"新增場景 #9 (Handoff 方向) 提醒，sibling 數量: {len(check_result.pending_sibling_tickets)}")
 
     # 優先級 4：complete 流程提醒（驗收方式，場景 #1）
+    # subagent 環境略過理由同上。
     if (
         not check_result.message
         and len(check_result.pending_sibling_tickets) < 2
+        and not is_subagent
     ):
         ticket_type_upper = (check_result.task_type or "").upper()
         priority_upper = (check_result.priority or "").upper()
@@ -755,9 +788,12 @@ def generate_hook_output(
             )
 
     # 優先級 5：complete 後下一步提醒（路由選擇，場景 #2）
-    if not check_result.message:
+    # subagent 環境略過理由同上。
+    if not check_result.message and not is_subagent:
         context_parts.append(AskUserQuestionMessages.COMPLETE_NEXT_STEP_REMINDER)
         logger.info("新增場景 #2 (complete 後下一步) 提醒")
+    elif not check_result.message:
+        logger.info("subagent 環境略過場景 #1/#2/#9 AskUserQuestion 提醒")
 
     if context_parts:
         output["hookSpecificOutput"]["additionalContext"] = "\n\n".join(context_parts)
@@ -865,9 +901,20 @@ def main() -> int:
         effort = get_effort_level(input_data)
         logger.info("effort=%s，命令為 complete，執行完整 acceptance 驗證", effort)
 
-        if is_subagent_environment(input_data):
-            logger.info("偵測到 subagent 環境（agent_id=%s），跳過 AskUserQuestion 提醒", input_data.get("agent_id"))
-            return EXIT_SUCCESS
+        # subagent 環境僅跳過「PM 必須使用 AskUserQuestion」互動提醒文字
+        # （is_subagent_environment docstring 原始範圍），blocking checker
+        # （children_completed / hook_protection_acceptance 等）不受影響、
+        # 仍對 subagent 生效。修復前此處直接 return EXIT_SUCCESS，使整條
+        # 驗收流程（含硬擋）對 subagent 短路；subagent 是本框架絕大多數
+        # ticket 執行主體，等同 acceptance-gate 對多數 complete 呼叫從未
+        # 真正生效過（實測 hook-logs 證實）。
+        is_subagent = is_subagent_environment(input_data)
+        if is_subagent:
+            logger.info(
+                "偵測到 subagent 環境（agent_id=%s），將略過 AskUserQuestion 互動"
+                "提醒；blocking checker 與其他 warning 仍照常執行",
+                input_data.get("agent_id"),
+            )
 
         parsed = _parse_and_validate_input(input_data, logger)
         if parsed is None:
@@ -890,7 +937,7 @@ def main() -> int:
         )
 
         # 步驟 4: 生成輸出並儲存日誌
-        output = generate_hook_output(ticket_id, result, project_dir, logger)
+        output = generate_hook_output(ticket_id, result, project_dir, logger, is_subagent=is_subagent)
         print(json.dumps(output, ensure_ascii=False, indent=2))
         status = "BLOCKED" if result.should_block else "ALLOWED"
         log_entry = f"""[{datetime.now().isoformat()}]

@@ -4,6 +4,7 @@
 提供 Markdown frontmatter 解析、Ticket 檔案載入和儲存功能。
 支援 Markdown（含 frontmatter）和 YAML 格式。
 """
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -12,7 +13,6 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from ticket_system import constants as _enum_constants
-from .ui_constants import FRONTMATTER_SPLIT_COUNT
 from .paths import get_ticket_path
 # Backward-compat alias：原 _file_lock 已搬至 lib/file_lock.py 並 rename 為
 # public file_lock。保留此 re-export 避免破壞既有 import；新 caller 應改用
@@ -72,6 +72,13 @@ _ticket_cache: Dict[str, Optional[Dict[str, Any]]] = {}
 
 # 特殊欄位常數
 SPECIAL_FIELDS = ["chain", "decision_tree_path", "created"]
+
+# Frontmatter 邊界標記：要求 --- 獨占一行（允許行尾空白），錨定於行首。
+# 舊實作用純文字子字串搜尋定位邊界，frontmatter 欄位值內任意位置出現
+# 連續三個減號（表格分隔列、diff hunk 標記、em-dash 序列）皆會被誤判為
+# 邊界。改用逐行錨定比對後，僅獨占一行的 --- 才視為邊界，欄位值中間出現
+# 的 --- 子字串不受影響。
+_FRONTMATTER_BOUNDARY_RE = re.compile(r"^---[ \t]*(?:\r\n|\n|\Z)", re.MULTILINE)
 
 # 枚舉閘載入時快照欄位名（_ 前綴：僅存在於記憶體 dict，save 時剝除不序列化）
 ENUM_SNAPSHOT_FIELD = "_loaded_enum_snapshot"
@@ -265,13 +272,14 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
     """
     解析 Markdown frontmatter
 
-    分離 YAML frontmatter 和 body。Frontmatter 必須在檔案開頭，由 --- 分隔。
+    分離 YAML frontmatter 和 body。Frontmatter 必須在檔案開頭，由獨占一行
+    的 --- 分隔（欄位值內任意位置出現的 --- 子字串不影響邊界判定）。
     使用 Guard Clause 模式快速返回異常情況。
 
     演算法:
     1. 檢查內容是否以 --- 開頭，否則無 frontmatter
-    2. 以 --- 分割成三部分：[空, YAML, body]
-    3. 驗證分割結果有三部分
+    2. 以逐行錨定比對找出開頭與結尾兩條 --- 邊界線
+    3. 驗證兩條邊界線皆存在
     4. 嘗試解析 YAML，失敗時丟出 YAMLParseError
 
     Args:
@@ -298,19 +306,22 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
     if not content.startswith("---"):
         return {}, content
 
-    # 分割內容成三部分：空、YAML、body
-    # FRONTMATTER_SPLIT_COUNT=3 表示最多分割3次，得到3+1=4部分
-    frontmatter_sections = content.split("---", FRONTMATTER_SPLIT_COUNT)
+    # 找開頭邊界線（必須從檔案第一行開始）
+    start_match = _FRONTMATTER_BOUNDARY_RE.match(content)
+    if start_match is None:
+        return {}, content
 
-    # Guard Clause 2：分割不成三部分 → 格式錯誤
-    if len(frontmatter_sections) < FRONTMATTER_SPLIT_COUNT + 1:
+    # 找結尾邊界線（開頭邊界線之後第一條獨占一行的 ---）
+    end_match = _FRONTMATTER_BOUNDARY_RE.search(content, start_match.end())
+
+    # Guard Clause 2：找不到結尾邊界線 → 格式錯誤
+    if end_match is None:
         return {}, content
 
     try:
-        # 分割結果: [開頭空字串, YAML內容, body內容, ...]
-        # 索引1是 YAML frontmatter，索引2是 body
-        frontmatter = yaml.safe_load(frontmatter_sections[1])
-        body = frontmatter_sections[2].strip()
+        yaml_text = content[start_match.end():end_match.start()]
+        body = content[end_match.end():].strip()
+        frontmatter = yaml.safe_load(yaml_text)
         # 如果 YAML 解析為 None，返回空字典，否則返回解析結果
         return frontmatter or {}, body
     except yaml.YAMLError as e:

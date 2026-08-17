@@ -412,6 +412,9 @@ PM 必須使用 AskUserQuestion 選擇下一步：
 詳見: .claude/rules/flows/ticket-lifecycle.md（場景 #17）
 ============================================================"""
 
+    # 呼叫端 .format() 必須提供三個 key：sibling_count、sibling_list、
+    # next_ticket_id（範例指令 `/ticket track claim {next_ticket_id}` 所需，
+    # 曾因缺此參數導致呼叫端 KeyError，被外層 try/except 吞成 EXIT_ERROR）
     HANDOFF_DIRECTION_REMINDER = """============================================================
 [AskUserQuestion 強制提醒] Handoff 方向選擇（場景 #9）
 ============================================================

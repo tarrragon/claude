@@ -29,6 +29,7 @@ Exit Codes：
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -59,6 +60,37 @@ def _line_is_overridden(lines: list, index: int, profile) -> bool:
     return any(marker in joined for marker in profile.override_markers)
 
 
+# 字串字面 token 化：quote 語法本身跨語言通用（dart/python 皆用單引號/雙引號
+# 包字面），不屬語言專屬規則，故留在引擎而非下放各 profile（介面決策見
+# ticket Solution）。用 finditer 依序（非重疊）消耗字面，字面結束引號因此
+# 不會被重新當成下一次匹配的起點。
+_STRING_LITERAL_TOKENIZER = re.compile(r"""'[^'\n]*'|"[^"\n]*\"""")
+
+
+def _string_literal_contents(line: str) -> list:
+    """依序枚舉一行內的字串字面，回傳去除頭尾引號後的內容。
+
+    舊寫法（單一 regex 帶 lookahead 在整行任意位置找符合條件的引號區間）會讓
+    不含目標內容的第一個字面被跳過，其結束引號仍可與下一個字面的起始引號重新
+    配對，把兩個字面之間的文字誤判為字面內容本身。finditer 依序消耗字面後，
+    已匹配過的引號不會再參與下一次匹配，從根本避免跨字面誤判。
+    """
+    return [m.group(0)[1:-1] for m in _STRING_LITERAL_TOKENIZER.finditer(line)]
+
+
+def _content_detect_matches(patterns: list, line: str) -> bool:
+    """任一字面的內容（不含引號）命中任一 profile.string_detect pattern 即真。
+
+    profile.string_detect 的語意由此固定為「字面內容層級 predicate」（如 CJK
+    字元類、多字英文句子），不再是「含引號整行 pattern」——各 profile 的
+    string_detect 定義須對應調整為不含引號/backreference 的內容層級 regex。
+    """
+    return any(
+        any(p.search(content) for p in patterns)
+        for content in _string_literal_contents(line)
+    )
+
+
 def detect_violations(content: str, profile) -> list:
     """
     對「變更內容」依 profile 掃描三類缺席。
@@ -76,9 +108,9 @@ def detect_violations(content: str, profile) -> list:
         if not stripped:
             continue
 
-        # 1. user-facing 字串
+        # 1. user-facing 字串（逐字面內容比對，避免跨字面配對誤判）
         if profile.string_detect and not _matches_any(profile.string_exclude, line):
-            if _matches_any(profile.string_detect, line):
+            if _content_detect_matches(profile.string_detect, line):
                 if not _line_is_overridden(lines, idx, profile):
                     violations.append(_violation(idx, "i18n", stripped,
                         "user-facing 字串應進 i18n（或標 // i18n-exempt）"))

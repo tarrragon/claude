@@ -32,6 +32,28 @@ EXCLUDE_DIRS = {
     "hook-logs",
 }
 
+# 憑證判準（移植自 .claude/lib/sync_exclude_manifest.py 的憑證維度）。
+#
+# 只移植判準本身，不移植整份清單：manifest 作用域是整個 .claude/ 樹，本模組
+# 作用域是單一 skill 目錄，兩者要排除的目錄集合天差地遠（如 manifest 的
+# LOCAL_ONLY_PATTERNS 含 hook-state / .claude-state 等，對單一 skill 目錄
+# 無意義）；只有「憑證」這個判準——外流即安全事故——與作用域無關，跨通道
+# 應處置一致（push 目標是公開 GitHub repo，原判準只比對 EXCLUDE_DIRS 目錄
+# 名，對憑證檔零攔截）。
+_CREDENTIAL_SUFFIXES = frozenset({".pem", ".key", ".p12", ".pfx", ".jks"})
+_CREDENTIAL_NAME_PREFIXES = frozenset({".env.", "secret"})
+# 無副檔名、不以 env/secret 開頭的憑證慣例檔名，suffix/prefix 判準覆蓋不到，
+# 須精確列名：.env 本身（前綴判準只匹配 ".env." 變體，不含裸檔名）、.keys、
+# 與 SSH 私鑰的慣例俗名（framework 通道也同樣漏檢這類，另由專屬票處理）。
+_CREDENTIAL_EXACT_NAMES = frozenset({
+    ".env",
+    ".keys",
+    "id_rsa",
+    "id_dsa",
+    "id_ecdsa",
+    "id_ed25519",
+})
+
 # 標記檔存在即宣告該 skill 的本地內容為刻意客製，`pull`（全量）分歧檢查略過回報
 # （0.2.1-W3-124 acceptance 4 的宣告式 local override 決策：見 update_sync_manifest
 # 與 _classify_sync_status 的 docstring）。
@@ -83,11 +105,37 @@ class SyncStatus(NamedTuple):
 
 
 def _should_exclude_file(rel_path: str) -> bool:
-    """Check if a file path should be excluded (covers dir names, incl. nested hook-logs/)."""
-    parts = Path(rel_path).parts
-    for part in parts:
+    """Check if a file path should be excluded.
+
+    Covers dir names (incl. nested hook-logs/), credential file names, and
+    the skill-sync-override marker file.
+
+    Credentials matter here because `push` targets a public GitHub repo and
+    `--force` skips only the interactive preview, not this function (see
+    compute_diff, the sole call site feeding both overlay_copy and the
+    dst-only scan). The marker matters for the same reason via a different
+    failure mode: it is a single consumer's local declaration, and if it
+    ever reached the upstream repo, every consumer pulling afterwards would
+    have that skill silently classified `overridden`, suppressing drift
+    reports for everyone. This is the single judgment point both
+    compute_diff and compute_content_hash rely on for marker exclusion, so
+    the two paths cannot drift apart on marker handling the way they
+    previously did (compute_content_hash used to carry its own separate
+    `f.name == SKILL_SYNC_OVERRIDE_MARKER` check).
+    """
+    path = Path(rel_path)
+    if path.name == SKILL_SYNC_OVERRIDE_MARKER:
+        return True
+    for part in path.parts:
         if part in EXCLUDE_DIRS or part.endswith(".egg-info"):
             return True
+    name_lower = path.name.lower()
+    if name_lower in _CREDENTIAL_EXACT_NAMES:
+        return True
+    if path.suffix.lower() in _CREDENTIAL_SUFFIXES:
+        return True
+    if any(name_lower.startswith(prefix) for prefix in _CREDENTIAL_NAME_PREFIXES):
+        return True
     return False
 
 
@@ -132,7 +180,7 @@ def compute_content_hash(skill_dir: Path) -> str | None:
         if not f.is_file():
             continue
         rel = str(f.relative_to(skill_dir))
-        if f.name == SKILL_SYNC_OVERRIDE_MARKER or _should_exclude_file(rel):
+        if _should_exclude_file(rel):
             continue
         rel_paths.append(rel)
     rel_paths.sort()

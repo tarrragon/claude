@@ -124,9 +124,9 @@ def test_a_clean_tree_creates_autocommit(tmp_path, hook_mod, capsys, caplog):
     logger = logging.getLogger("test_w17_133_a")
 
     fixed, ok = hook_mod._check_and_fix_permissions(hooks_dir, logger)
-    assert "alpha.py" in fixed
+    assert ".claude/hooks/alpha.py" in fixed
 
-    created = hook_mod._attempt_auto_commit(fixed, hooks_dir, repo_root, logger)
+    created = hook_mod._attempt_auto_commit(fixed, repo_root, logger)
     assert created is True
 
     after = _git_log_count(repo_root)
@@ -176,10 +176,10 @@ def test_b_dirty_tree_still_commits_without_absorbing_others(tmp_path, hook_mod)
     logger = logging.getLogger("test_w3_319_b")
 
     fixed, _ = hook_mod._check_and_fix_permissions(hooks_dir, logger)
-    assert "beta.py" in fixed
+    assert ".claude/hooks/beta.py" in fixed
     assert os.access(target, os.X_OK), "chmod should still have run"
 
-    created = hook_mod._attempt_auto_commit(fixed, hooks_dir, repo_root, logger)
+    created = hook_mod._attempt_auto_commit(fixed, repo_root, logger)
     assert created is True, "dirty tree must no longer block the mode-only commit"
 
     after = _git_log_count(repo_root)
@@ -230,8 +230,8 @@ def test_d_tests_subdir_is_not_chmodded(tmp_path, hook_mod):
 
     fixed, _ = hook_mod._check_and_fix_permissions(hooks_dir, logger)
 
-    assert "gamma.py" in fixed, "top-level hook must still be fixed"
-    assert "test_gamma.py" not in fixed
+    assert ".claude/hooks/gamma.py" in fixed, "top-level hook must still be fixed"
+    assert ".claude/hooks/tests/test_gamma.py" not in fixed
     assert os.access(top_level, os.X_OK)
     assert not os.access(test_file, os.X_OK), "tests/ must keep its 644 mode"
 
@@ -258,10 +258,10 @@ def test_e_untracked_target_is_excluded_from_commit(tmp_path, hook_mod):
     logger = logging.getLogger("test_w3_319_e")
 
     fixed, _ = hook_mod._check_and_fix_permissions(hooks_dir, logger)
-    assert "newhook.py" in fixed
+    assert ".claude/hooks/newhook.py" in fixed
     assert os.access(newhook, os.X_OK), "chmod must still run on a new hook"
 
-    created = hook_mod._attempt_auto_commit(fixed, hooks_dir, repo_root, logger)
+    created = hook_mod._attempt_auto_commit(fixed, repo_root, logger)
     assert created is False
 
     assert _git_log_count(repo_root) == before
@@ -314,10 +314,10 @@ def test_f_rebase_in_progress_skips_commit(tmp_path, hook_mod):
     logger = logging.getLogger("test_w3_319_f")
 
     fixed, _ = hook_mod._check_and_fix_permissions(hooks_dir, logger)
-    assert "delta.py" in fixed
+    assert ".claude/hooks/delta.py" in fixed
     assert os.access(target, os.X_OK), "chmod should still have run"
 
-    created = hook_mod._attempt_auto_commit(fixed, hooks_dir, repo_root, logger)
+    created = hook_mod._attempt_auto_commit(fixed, repo_root, logger)
     assert created is False, "must not commit while rebase is in progress"
     assert _git_log_count(repo_root) == before
 
@@ -332,7 +332,7 @@ def test_c_commit_failure_does_not_crash(tmp_path, hook_mod, capsys):
     import logging
     logger = logging.getLogger("test_w17_133_c")
     fixed, _ = hook_mod._check_and_fix_permissions(hooks_dir, logger)
-    assert "gamma.py" in fixed
+    assert ".claude/hooks/gamma.py" in fixed
 
     real_run = subprocess.run
 
@@ -345,10 +345,107 @@ def test_c_commit_failure_does_not_crash(tmp_path, hook_mod, capsys):
         return real_run(cmd, *args, **kwargs)
 
     with patch.object(hook_mod.subprocess, "run", side_effect=fake_run):
-        created = hook_mod._attempt_auto_commit(fixed, hooks_dir, repo_root, logger)
+        created = hook_mod._attempt_auto_commit(fixed, repo_root, logger)
 
     assert created is False
 
     captured = capsys.readouterr()
     combined = captured.out + captured.err
     assert "simulated commit failure" in combined or "git commit 失敗" in combined
+
+
+# --- Scenario G: skill hooks 遞迴掃描 + 正確子目錄還原路徑（AC3） -------------
+
+def _add_skill_hook_non_exec_file(repo_root: Path, skill: str, name: str = "needs_chmod.py") -> Path:
+    """Add a tracked .py file under .claude/skills/<skill>/hooks/ committed WITHOUT
+    exec bit, so chmod +x creates a mode-only diff to commit."""
+    hooks_subdir = repo_root / ".claude" / "skills" / skill / "hooks"
+    hooks_subdir.mkdir(parents=True, exist_ok=True)
+    f = hooks_subdir / name
+    f.write_text("#!/usr/bin/env python3\nprint('x')\n")
+    f.chmod(0o644)
+    _run(["git", "add", str(f.relative_to(repo_root))], repo_root)
+    _run(["git", "commit", "-q", "-m", "add skill hook"], repo_root)
+    return f
+
+
+def test_g_skill_hook_is_recursively_chmodded_and_correctly_committed(tmp_path, hook_mod):
+    """AC3：skill hooks 目錄下的 .py 納入可執行位檢查範圍，且 auto-commit
+    以正確的子目錄相對路徑還原。
+
+    改回傳相對路徑前的舊版以 `hooks_dir / basename` 還原絕對路徑，子目錄
+    檔案會被誤還原到 `.claude/hooks/<basename>`（錯誤位置，且該路徑通常
+    未被追蹤，導致提交失敗或提交到錯誤檔案）；本測試斷言提交內容精確等於
+    skill hooks 下的原始路徑，釘住此修正。
+    """
+    repo_root = tmp_path
+    hooks_dir = _init_git_repo(repo_root)
+    skill_hook = _add_skill_hook_non_exec_file(repo_root, "myskill", "epsilon.py")
+
+    assert not os.access(skill_hook, os.X_OK), "precondition: skill hook lacks exec bit"
+    before = _git_log_count(repo_root)
+
+    import logging
+    logger = logging.getLogger("test_w3_511_g")
+
+    fixed, _ = hook_mod._check_and_fix_permissions(hooks_dir, logger)
+
+    expected_rel = ".claude/skills/myskill/hooks/epsilon.py"
+    assert expected_rel in fixed, f"expected {expected_rel} in {fixed}"
+    assert os.access(skill_hook, os.X_OK), "chmod should have run on skill hook"
+
+    created = hook_mod._attempt_auto_commit(fixed, repo_root, logger)
+    assert created is True
+
+    after = _git_log_count(repo_root)
+    assert after == before + 1
+
+    # 子目錄還原路徑斷言：commit 內容必須是 skill hooks 底下的正確路徑，
+    # 不是（舊版 basename 還原邏輯下會發生的）hooks_dir/epsilon.py 誤植
+    changed = subprocess.run(
+        ["git", "show", "--name-only", "--format=", "HEAD"],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    assert changed == [expected_rel], f"commit path mismatch: {changed}"
+    assert not (hooks_dir / "epsilon.py").exists(), "must not create a bogus top-level file"
+
+
+def test_g2_skill_hooks_pycache_not_chmodded(tmp_path, hook_mod):
+    """__pycache__ 等快取目錄不受遞迴掃描影響（略過非執行用途檔案）。"""
+    repo_root = tmp_path
+    hooks_dir = _init_git_repo(repo_root)
+    _add_skill_hook_non_exec_file(repo_root, "myskill", "zeta.py")
+
+    cache_dir = repo_root / ".claude" / "skills" / "myskill" / "hooks" / "__pycache__"
+    cache_dir.mkdir(parents=True)
+    cached = cache_dir / "zeta.cpython-312.py"  # 非典型檔名，驗證目錄層級排除即足夠
+    cached.write_text("cached")
+    cached.chmod(0o644)
+
+    import logging
+    logger = logging.getLogger("test_w3_511_g2")
+
+    fixed, _ = hook_mod._check_and_fix_permissions(hooks_dir, logger)
+
+    assert ".claude/skills/myskill/hooks/zeta.py" in fixed
+    assert not os.access(cached, os.X_OK), "__pycache__ 內容不應被 chmod"
+
+
+def test_g3_top_level_hook_still_uses_hooks_relative_path(tmp_path, hook_mod):
+    """頂層 hook 的相對路徑格式為 '.claude/hooks/<name>'（回歸防護：確保
+    改支援 skill hooks 後，頂層檔案的路徑格式未意外變動）。
+    """
+    repo_root = tmp_path
+    hooks_dir = _init_git_repo(repo_root)
+    _add_non_exec_file(hooks_dir, "eta.py")
+
+    import logging
+    logger = logging.getLogger("test_w3_511_g3")
+
+    fixed, _ = hook_mod._check_and_fix_permissions(hooks_dir, logger)
+
+    assert ".claude/hooks/eta.py" in fixed
+    assert "eta.py" not in fixed, "不應退回舊版 basename 格式"

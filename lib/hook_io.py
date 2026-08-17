@@ -607,6 +607,18 @@ def is_subagent_environment(input_data: "dict | None") -> bool:
     subagent 執行時，Hook 會在 input_data 中包含 agent_id 欄位。
     此函式用於 Hook 的早期跳過邏輯，避免在 subagent 中輸出 AskUserQuestion 提醒。
 
+    Warning:
+        僅適用「純提示、無 blocking 語意」的 Hook（advisory-only，無
+        EXIT_BLOCK / should_block 分支）。下方 Examples 的 return EXIT_SUCCESS
+        模式會短路整個呼叫端流程，若該 Hook 同時含硬擋檢查（例如
+        acceptance-gate-hook 的 children_completed / hook_protection_
+        acceptance），直接套用此模式會使硬擋對 subagent 完全失效（實證：
+        acceptance-gate-hook 曾將此函式當整條驗收流程短路開關，導致其對
+        subagent——本框架絕大多數 ticket 執行主體——的 complete 呼叫從未
+        真正生效）。含 blocking 分支的 Hook 應只讓本函式的判定結果控制
+        「是否附加 AskUserQuestion 建議文字」這一個輸出片段，其餘 blocking
+        checker 與 warning 邏輯必須照常執行。
+
     Args:
         input_data: Hook 收到的 input_data dict
 
@@ -614,10 +626,19 @@ def is_subagent_environment(input_data: "dict | None") -> bool:
         bool: 如果 input_data 包含 agent_id（非空），返回 True；否則返回 False
 
     Examples:
+        Advisory-only Hook（無 blocking 分支）可用完整早退：
+
         >>> if is_subagent_environment(input_data):
         ...     logger.info("偵測到 subagent 環境，跳過 AskUserQuestion 提醒")
         ...     print(json.dumps(DEFAULT_OUTPUT, ensure_ascii=False))
         ...     return EXIT_SUCCESS
+
+        含 blocking 分支的 Hook 應改為僅抑制提醒文字片段（其餘流程照常）：
+
+        >>> is_subagent = is_subagent_environment(input_data)
+        >>> result = run_blocking_checks(...)  # 不受 is_subagent 影響
+        >>> if not is_subagent:
+        ...     append_ask_user_question_reminder(...)
     """
     if input_data is None:
         return False

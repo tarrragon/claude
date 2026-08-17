@@ -134,6 +134,7 @@ Ticket: 0.18.0-W17-048.3
 - [ ] 動作描述一句話可理解（不堆疊多個動詞）
 - [ ] 交付通道已確認（L3/L2: append-log+commit / L1: append-log+/tmp / L0: final message 後 PM 立即落檔）
 - [ ] 文件票涉及持久化/schema/接線現況陳述時，已含實查約束句（PC-BAL-007，見上節）
+- [ ] 防護類 ticket 的產生路徑盤點表已存在於 `how.strategy` / Solution（建票時產出，此處僅確認存在，格式見 `ticket-body-schema.md` 同名節；PC-BAL-035）
 - [ ] 派發對象為 `.claude/` 框架檔案修改時，代理人受 AGENT_PRELOAD 規則 12 約束（禁依賴型 ticket 引用），無需 prompt 額外重複
 
 ---
@@ -939,7 +940,8 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 
 ---
 
-**Last Updated**: 2026-08-04
+**Last Updated**: 2026-08-17
+**Version**: 1.20.0 — 「填空檢查清單」新增一列：防護類 ticket 的產生路徑盤點表存在性確認（盤點表於建票時產出並寫入 how.strategy / Solution，本清單僅確認其存在，格式權威在 ticket-body-schema 同名節；PC-BAL-035）
 **Version**: 1.19.0 — 新增「唯讀派發豁免 worktree 強制（0.2.1-W3-269，框架 issue 36）」章節：prompt 首行 `Dispatch-Mode: readonly` 聲明速查 + 骨架範例 + 禁止情境 + 適用情境速查表 + 與 review mode 的 OR 關係；完整判準權威來源指向 `.claude/pm-rules/worktree-operations.md`「唯讀派發豁免 worktree 強制」節，避免雙處維護漂移
 **Version**: 1.18.0 — 「worktree 派發 base 同步指引」章節新增「環境前置欄位（0.2.1-W3-274，框架 issue 46）」小節：worktree 為 git 層隔離，gitignore 排除的建置狀態不隨之而來，補派發模板「環境前置」選填欄位與填寫指引；框架層不寫任何專案專屬命令字面，指向 consumer 專案層文件；與 worktree SKILL「worktree 不含的狀態」節交叉引用
 **Version**: 1.17.0 — 「worktree 派發 base 同步指引」章節新增「worktree 派發收尾指引：用 finish 別名避開 complete 誤判」小節：CC runtime worktree isolation guard 對 argv basename 誤判 bash builtin `complete` 而條件性阻擋，收尾指令改用別名 `ticket track finish`（與 complete 行為完全等價），含正確/錯誤指令範例對照

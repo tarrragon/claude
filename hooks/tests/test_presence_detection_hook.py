@@ -136,9 +136,93 @@ def test_python_profile_detects_cjk_string():
     assert any(x["category"] == "i18n" for x in v)
 
 
+def test_python_profile_no_cross_literal_cjk_false_positive():
+    # 0.2.1-W3-469：同行雙字面夾 CJK 文字不應被誤判為字面內容（0.2.1-W3-143 實證原文）
+    content = (
+        '    path.name 恆為 path.parts 的末元素（例外僅 Path(".") 與 Path("")，其 name 為\n'
+        '    空字串且不在黑名單內），故規則 1 命中必然蘊含規則 4 命中。'
+    )
+    v = detect_violations(content, PYTHON)
+    assert not any(x["category"] == "i18n" for x in v)
+
+
 def test_python_profile_excludes_comment():
     v = detect_violations('# 這是中文註解 "連線中"', PYTHON)
     assert not any(x["category"] == "i18n" for x in v)
+
+
+# ---------- docstring 排除（0.2.1-W3-472：string_exclude 原缺漏 docstring 樣式） ----------
+
+def test_python_profile_excludes_single_line_docstring():
+    content = '    """這是函式說明"""'
+    v = detect_violations(content, PYTHON)
+    assert not any(x["category"] == "i18n" for x in v)
+
+
+def test_python_profile_excludes_single_line_docstring_single_quote_form():
+    content = "    '''這是函式說明'''"
+    v = detect_violations(content, PYTHON)
+    assert not any(x["category"] == "i18n" for x in v)
+
+
+def test_python_profile_excludes_multiline_docstring_boundary_lines():
+    # 多行 docstring 的起始行（含三引號標記與內容）與結束行（僅三引號）皆排除。
+    # 中間純內容行不在此涵蓋範圍內，見下一測試（已知涵蓋範圍限制）。
+    content = (
+        '    """依序枚舉一行內的字串字面，回傳去除頭尾引號後的內容。\n'
+        '    """'
+    )
+    v = detect_violations(content, PYTHON)
+    assert not any(x["category"] == "i18n" for x in v)
+
+
+def test_python_profile_multiline_docstring_plain_middle_line_not_flagged():
+    # 多行 docstring 的純內容中間行（不含引號字元）不會被誤判——並非因為有
+    # docstring 專屬排除規則，而是 token 化偵測只看「引號配對內的內容」，
+    # 無引號字元的行本就不會產生任何 token（0.2.1-W3-469 tokenizer 設計的
+    # 副作用，非本票新增能力）。
+    content = (
+        '    """開頭說明\n'
+        '    這是中間內容行，純文字不含引號\n'
+        '    """'
+    )
+    v = detect_violations(content, PYTHON)
+    assert not any(x["category"] == "i18n" for x in v)
+
+
+def test_python_profile_multiline_docstring_middle_line_with_quotes_known_limitation():
+    # 已知涵蓋範圍限制（presence_profiles.py 第 156 行說明已顯性標註）：多行
+    # docstring 的中間行若本身含成對引號（如說明文字中引用 "某字串"），
+    # token 化偵測會將其視為獨立字串字面而誤判，因為引擎逐行掃描無跨行狀態，
+    # 無法得知這一行其實位於 docstring 內部。本測試是該限制的行為快照，
+    # 非預期改善目標——若未來此測試轉綠，須同步檢視第 156 行說明是否仍準確。
+    content = (
+        '    """開頭說明\n'
+        '    這是中間內容，程式碼片段 "範例文字" 的說明\n'
+        '    """'
+    )
+    v = detect_violations(content, PYTHON)
+    assert any(x["category"] == "i18n" for x in v)
+
+
+def test_python_profile_does_not_over_exclude_real_message_near_docstring():
+    # 防呆：docstring 排除不可連帶讓後續真實 user-facing 字面漏檢
+    content = (
+        '    """這是函式說明"""\n'
+        '    msg = "登入失敗，請重試"'
+    )
+    v = detect_violations(content, PYTHON)
+    assert any(x["category"] == "i18n" for x in v)
+
+
+def test_python_profile_detects_triple_quote_assignment():
+    # 0.2.1-W3-473：0.2.1-W3-472 的「整行含三引號即豁免」樣式過寬，把
+    # 「三引號賦值給變數的 user-facing 長文案」（Python 撰寫多行提示文字的
+    # 常見形態）也一併漏檢。docstring 排除須收斂為行首錨定（容前導空白後
+    # 緊接三引號），賦值行的三引號前有 `msg = ` 等內容，不會命中行首錨定。
+    content = 'msg = """請輸入帳號"""'
+    v = detect_violations(content, PYTHON)
+    assert any(x["category"] == "i18n" for x in v)
 
 
 def test_python_profile_excludes_logger():
@@ -189,6 +273,15 @@ def test_python_profile_skips_framework_hooks():
 def test_python_profile_skips_framework_skills_and_config():
     assert should_skip_file(".claude/skills/x/bar.py", PYTHON)
     assert should_skip_file(".claude/config/baz.py", PYTHON)
+
+
+def test_python_profile_skips_framework_lib_and_scripts():
+    # 0.2.1-W3-468：_PYTHON skip_patterns 原漏 .claude/lib/ 與 .claude/scripts/，
+    # 使兩目錄下 106 檔的開發者面 CJK 字串誤判為 application user-facing 文案
+    assert should_skip_file(".claude/lib/foo.py", PYTHON)
+    assert should_skip_file("/abs/.claude/lib/foo.py", PYTHON)
+    assert should_skip_file(".claude/scripts/bar.py", PYTHON)
+    assert should_skip_file("/abs/.claude/scripts/bar.py", PYTHON)
 
 
 def test_python_profile_does_not_skip_application_py():

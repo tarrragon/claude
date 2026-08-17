@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+session-registry-start-hook 測試套件（multi-PM 協調層 Phase 1）
+
+覆蓋：subagent 環境跳過 / session_id 缺失跳過（stdin 與環境變數皆無）/
+正常註冊呼叫 register_session / OSError 不阻擋。
+"""
+
+import importlib.util
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+hooks_path = Path(__file__).parent.parent
+hook_file = hooks_path / "session-registry-start-hook.py"
+spec = importlib.util.spec_from_file_location("session_registry_start_hook", hook_file)
+hook = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(hook)
+
+EXIT_SUCCESS = hook.EXIT_SUCCESS
+
+
+class TestResolveSessionId:
+    def test_prefers_stdin_session_id(self, monkeypatch):
+        monkeypatch.setenv(hook.ENV_SESSION_ID, "env-session")
+        assert hook.resolve_session_id({"session_id": "stdin-session"}) == "stdin-session"
+
+    def test_falls_back_to_env_var(self, monkeypatch):
+        monkeypatch.setenv(hook.ENV_SESSION_ID, "env-session")
+        assert hook.resolve_session_id({}) == "env-session"
+
+    def test_none_input_and_no_env_returns_empty(self, monkeypatch):
+        monkeypatch.delenv(hook.ENV_SESSION_ID, raising=False)
+        assert hook.resolve_session_id(None) == ""
+
+
+class TestMain:
+    def _run(self, input_data, subagent=False):
+        with patch.object(hook, "setup_hook_logging") as mock_log, patch.object(
+            hook, "read_json_from_stdin"
+        ) as mock_stdin, patch.object(
+            hook, "is_subagent_environment"
+        ) as mock_sub, patch.object(
+            hook, "get_project_root"
+        ) as mock_root, patch.object(
+            hook, "register_session"
+        ) as mock_register:
+            mock_log.return_value = MagicMock()
+            mock_stdin.return_value = input_data
+            mock_sub.return_value = subagent
+            mock_root.return_value = Path("/repo/worktree-b6")
+
+            result = hook.main()
+
+        return result, mock_register
+
+    def test_subagent_environment_skips_registration(self):
+        result, mock_register = self._run({"session_id": "s1"}, subagent=True)
+        assert result == EXIT_SUCCESS
+        mock_register.assert_not_called()
+
+    def test_missing_session_id_skips_registration(self, monkeypatch, capsys):
+        monkeypatch.delenv(hook.ENV_SESSION_ID, raising=False)
+        result, mock_register = self._run({}, subagent=False)
+        assert result == EXIT_SUCCESS
+        mock_register.assert_not_called()
+        assert "無法取得 session_id" in capsys.readouterr().err
+
+    def test_normal_registration_calls_register_session(self):
+        result, mock_register = self._run({"session_id": "pm-session-1"}, subagent=False)
+        assert result == EXIT_SUCCESS
+        mock_register.assert_called_once()
+        kwargs = mock_register.call_args.kwargs
+        assert kwargs["session_id"] == "pm-session-1"
+        assert kwargs["name"] == "worktree-b6"
+        assert kwargs["project"] == "/repo/worktree-b6"
+
+    def test_register_session_oserror_does_not_block(self, capsys):
+        with patch.object(hook, "setup_hook_logging") as mock_log, patch.object(
+            hook, "read_json_from_stdin"
+        ) as mock_stdin, patch.object(
+            hook, "is_subagent_environment"
+        ) as mock_sub, patch.object(
+            hook, "get_project_root"
+        ) as mock_root, patch.object(
+            hook, "register_session", side_effect=OSError("disk full")
+        ):
+            mock_log.return_value = MagicMock()
+            mock_stdin.return_value = {"session_id": "s1"}
+            mock_sub.return_value = False
+            mock_root.return_value = Path("/repo")
+
+            result = hook.main()
+
+        assert result == EXIT_SUCCESS
+        assert "registry 註冊失敗" in capsys.readouterr().err

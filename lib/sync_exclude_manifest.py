@@ -9,7 +9,7 @@
 設計原則：
 - 對外暴露「原始分類 frozenset」（LOCAL_ONLY_PATTERNS / CREDENTIAL_PATTERNS /
   EXCLUDE_SUFFIXES / EXCLUDE_NAME_PREFIXES），各腳本依需要組合，避免新漂移面。
-- 「組合集合」（PUSH_EXCLUDE / SYNC_EXCLUDE_ALL）以具名常數呈現並附單行理由，
+- 「組合集合」（SYNC_EXCLUDE_ALL）以具名常數呈現並附單行理由，
   讓組合語意顯性化而非散落各腳本各自拼裝。
 - should_exclude 與 compute_content_hash 為唯一實作，三腳本與 hook 一律 import。
 
@@ -52,8 +52,10 @@ from pathlib import Path
 #   特徵：只對本機 session 有意義，無跨專案共用價值
 #   範例：hook-logs/、handoff/、PM_INTERVENTION_REQUIRED、ARCHITECTURE_REVIEW_REQUIRED
 #
-# 類型 E - Push-only exclude（git tracked 但不跨專案同步的內容）
-#   特徵：在專案 git 中 track，但 sync-push 時不推到框架/skills repo
+# 類型 E - Per-project tracked layer（git tracked 但不跨專案同步的內容）
+#   特徵：在專案 git 中 track，經 should_exclude 於 push 與 pull 雙向排除——
+#         push 時不推到框架/skills repo，pull 時亦不被上游覆蓋或當 stale 刪除。
+#         per-project 落地層本就不該被任一方向的同步動作觸碰。
 #   與類型 A/B/C 差異：A/B/C 不 git track（在 .gitignore 中）；E 要 git track
 #   範例：skills/*/references/project-integration/（per-project 落地層）
 #
@@ -137,12 +139,23 @@ CREDENTIAL_PATTERNS = frozenset({
     "secrets",
     "private",
     ".keys",
+    # 無副檔名 SSH 私鑰慣例名稱：EXCLUDE_SUFFIXES（副檔名）與 EXCLUDE_NAME_PREFIXES
+    # （.env./secret 前綴）兩維度皆不涵蓋此類檔名，須以精確名稱補列（IMP-BAL-006）。
+    # 對應公鑰（*.pub）刻意不排除：公鑰非敏感資料（非對稱加密設計下無法反推私鑰或
+    # 用於簽署/解密），排除與否不影響安全性，保留同步以維持團隊協作可用性。
+    "id_rsa",
+    "id_ed25519",
+    "id_ecdsa",
+    "id_dsa",
 })
 
-# 類型 E - Push-only exclude（git tracked 但不跨專案同步）
-# 這些名稱在 sync push/pull 時排除，但不加入 .gitignore（專案要 git track）。
+# 類型 E - Per-project tracked layer（git tracked 但不跨專案同步）
+# 經 should_exclude 於 push 與 pull 雙向生效——pull 端的三方合併
+# （apply_upstream_delta）與 full overlay（cleanup_stale_files / sync_directory）
+# 皆呼叫 should_exclude，故本集合亦在 pull 側跳過同步，不會覆蓋或誤刪本地既有
+# 內容。這些名稱不加入 .gitignore（專案要 git track）。
 # 與 LOCAL_ONLY_PATTERNS 差異：LOCAL_ONLY 同時要求 .gitignore 涵蓋；本集合不要求。
-PUSH_ONLY_EXCLUDE_PATTERNS = frozenset({
+PER_PROJECT_PATTERNS = frozenset({
     "project-integration",  # 各 skill 的專案落地層（per-project 案例/Hook 對齊/CLI 接線）
 })
 
@@ -159,11 +172,13 @@ EXCLUDE_NAME_PREFIXES = frozenset({
 # 組合集合（具名常數 + 單行理由，組合語意顯性化）
 # ============================================================================
 
-# push / status 端的名稱黑名單：local-only + 敏感憑證 + push-only 皆須排除
-PUSH_EXCLUDE = LOCAL_ONLY_PATTERNS | CREDENTIAL_PATTERNS | PUSH_ONLY_EXCLUDE_PATTERNS
-
-# content hash 與 copy 共用的完整名稱黑名單（與 PUSH_EXCLUDE 同義，供語意檢索）
-SYNC_EXCLUDE_ALL = PUSH_EXCLUDE
+# content hash 與 copy 共用的完整名稱黑名單：local-only + 敏感憑證 +
+# per-project tracked layer 皆須排除。經 should_exclude 消費後於 push
+# （sync-claude-push.py / sync-claude-status.py）與 pull（sync-claude-pull.py
+# 的三方合併與 full overlay）雙向生效。三個成員集合各自的方向語意是否隨此
+# 組合保留，已個別於各自定義處註明（LOCAL_ONLY_PATTERNS/CREDENTIAL_PATTERNS
+# 本就雙向排除；PER_PROJECT_PATTERNS 見上方註解，同樣雙向）。
+SYNC_EXCLUDE_ALL = LOCAL_ONLY_PATTERNS | CREDENTIAL_PATTERNS | PER_PROJECT_PATTERNS
 
 # .gitignore 必須涵蓋的 local-only 名稱（gitignore↔manifest 交叉驗證基準）。
 #
@@ -179,7 +194,7 @@ SYNC_EXCLUDE_ALL = PUSH_EXCLUDE
 GITIGNORE_EXPECTED = LOCAL_ONLY_PATTERNS | LOCAL_ONLY_ROOT_DIRS
 
 # 預計算小寫版本，避免每次呼叫 should_exclude 重複計算
-_PUSH_EXCLUDE_LOWER = frozenset(p.lower() for p in PUSH_EXCLUDE)
+_SYNC_EXCLUDE_ALL_LOWER = frozenset(p.lower() for p in SYNC_EXCLUDE_ALL)
 _LOCAL_ONLY_ROOT_DIRS_LOWER = frozenset(p.lower() for p in LOCAL_ONLY_ROOT_DIRS)
 _EXCLUDE_SUFFIXES_LOWER = frozenset(s.lower() for s in EXCLUDE_SUFFIXES)
 _EXCLUDE_NAME_PREFIXES_LOWER = frozenset(p.lower() for p in EXCLUDE_NAME_PREFIXES)
@@ -307,24 +322,35 @@ def should_exclude(path: Path) -> bool:
     判斷的語意，故以 assert 強制此前提。
 
     判斷規則（任一命中即排除）：
-      1. 檔名命中名稱黑名單（PUSH_EXCLUDE）
+      1. 檔名命中名稱黑名單（SYNC_EXCLUDE_ALL）——規則 4 的效能快速路徑，見下方說明
       2. 副檔名命中 EXCLUDE_SUFFIXES（含 .pem/.key 等憑證副檔名）
       3. 檔名前綴命中 EXCLUDE_NAME_PREFIXES（.env. / secret 變體）
       4. 路徑任一目錄段命中名稱黑名單（排除整個 hook-state/ secrets/ 目錄）
       5. 路徑第一段命中 LOCAL_ONLY_ROOT_DIRS（僅 root-anchored，避免誤殺 skill
          內部同名目錄如 skills/*/state/）（W1-018.2）
+
+    規則 1 與規則 4 的關係：規則 1 是規則 4 的嚴格子集，不是第二種比對語意。
+    path.name 恆為 path.parts 的末元素（例外僅 Path(".")
+    與 Path("")，其 name 為空字串且不在黑名單內），故規則 1 命中必然蘊含規則 4
+    命中。保留規則 1 的理由是 O(1) set lookup 可在最常見的「檔名直接命中」
+    情境短路，免走規則 4 的 parts 逐段迴圈；移除規則 1 不改變任何判定結果，
+    只損失這段短路效能。實測依據：2026-07-29 對全量 124851 個檔案比對兩條
+    規則的判定結果，差異 0 筆。
+    維護提醒：兩條規則語意同一、僅比對範圍寬窄不同，勿誤判為「同一集合被
+    兩種語意消費」的維度混用而拆分黑名單（此類缺陷曾發生於 _CLEAN_EXCLUDE，
+    教訓見 IMP-BAL-004）。
     """
     assert not path.is_absolute(), (
         f"should_exclude 要求相對 claude_dir 的路徑，收到絕對路徑：{path}"
     )
     name_lower = path.name.lower()
-    if name_lower in _PUSH_EXCLUDE_LOWER:
+    if name_lower in _SYNC_EXCLUDE_ALL_LOWER:
         return True
     if path.suffix.lower() in _EXCLUDE_SUFFIXES_LOWER:
         return True
     if any(name_lower.startswith(prefix) for prefix in _EXCLUDE_NAME_PREFIXES_LOWER):
         return True
-    if any(part.lower() in _PUSH_EXCLUDE_LOWER for part in path.parts):
+    if any(part.lower() in _SYNC_EXCLUDE_ALL_LOWER for part in path.parts):
         return True
     # root-anchored：僅第一段命中才排除（logs / state 通用名只在 .claude/ 根層為 runtime）
     parts = path.parts

@@ -214,6 +214,48 @@ Some content
         result = parse_ticket_frontmatter(content)
         assert result == {}
 
+    def test_field_value_containing_markdown_table_separator(self):
+        """欄位值含 markdown 表格分隔列（連續三個以上減號）不應誤判為邊界"""
+        content = """---
+id: "0.1.0-W1-008"
+note: "表格 |---------|---------|"
+---
+
+# 執行日誌
+"""
+        result = parse_ticket_frontmatter(content)
+
+        assert result['id'] == "0.1.0-W1-008"
+        assert result['note'] == "表格 |---------|---------|"
+
+    def test_field_value_containing_diff_hunk_marker(self):
+        """欄位值含 diff hunk 標記（連續三個減號）不應誤判為邊界"""
+        content = """---
+id: "0.1.0-W1-009"
+note: "diff 標記 --- a/file.py"
+---
+
+# 執行日誌
+"""
+        result = parse_ticket_frontmatter(content)
+
+        assert result['id'] == "0.1.0-W1-009"
+        assert result['note'] == "diff 標記 --- a/file.py"
+
+    def test_field_value_containing_em_dash_sequence(self):
+        """欄位值含 em-dash 序列（連續三個減號）不應誤判為邊界"""
+        content = """---
+id: "0.1.0-W1-010"
+note: "重點強調---特別注意---結尾"
+---
+
+# 執行日誌
+"""
+        result = parse_ticket_frontmatter(content)
+
+        assert result['id'] == "0.1.0-W1-010"
+        assert result['note'] == "重點強調---特別注意---結尾"
+
     def test_multiline_with_different_markers(self):
         """測試不同的多行標記"""
         # 測試 |

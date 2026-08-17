@@ -209,3 +209,56 @@ class TestAppendLogPlaceholderReplace:
         assert "已完成 A、B、C 三個子任務" in new_body
         # 新內容也存在（append 而非替換）
         assert "追加：D 子任務也已完成" in new_body
+
+    def test_replaces_optional_placeholder(self, tmp_ticket_dir, patch_paths):
+        """0.2.1-W3-484 Case 5：section 僅含「（選填：...）」placeholder（
+        ticket_builder.py 範本實際使用的變體，PM 於 0.2.1-W3-471 Test Results
+        章節實測重現的形態）→ 應替換而非殘留在新內容之前。"""
+        tid = "0.0.0-W0-TEST5"
+        path = tmp_ticket_dir / f"{tid}.md"
+        body = (
+            "## Test Results\n"
+            "<!-- Schema[IMP/Test Results]: 必填 -->\n\n"
+            "（選填：若有實驗輸出才填，無實驗可留 placeholder）\n"
+        )
+        _write_ticket_with_body(path, tid, body)
+
+        rc = _call_append_log(tid, "Test Results", "pytest tests/ 全通過 (15/15)")
+        assert rc == 0
+
+        new_body = path.read_text(encoding="utf-8")
+        # 選填 placeholder 應被移除
+        assert "（選填：" not in new_body
+        # 新內容存在
+        assert "pytest tests/ 全通過 (15/15)" in new_body
+        # Schema 註解保留
+        assert "Schema[IMP/Test Results]" in new_body
+
+    def test_normal_append_when_optional_placeholder_coexists_with_real_content(
+        self, tmp_ticket_dir, patch_paths
+    ):
+        """0.2.1-W3-484 Case 6（既有殘留場景的行為快照）：section 同時有
+        「（選填：...）」placeholder 與真實內容（即 0.2.1-W3-415 / W3-426 /
+        W3-447 / W3-471 四張既有殘留票的實際形態）→ 正常 append，不得誤判為
+        placeholder-only 而清空既有真實內容（此為 append-log 本身的正確性
+        要求，非僅視覺整潔問題——修復前 _is_placeholder 對此形態會誤判為
+        True，觸發 REPLACE 分支丟棄既有真實內容，屬資料遺失）。"""
+        tid = "0.0.0-W0-TEST6"
+        path = tmp_ticket_dir / f"{tid}.md"
+        body = (
+            "## Test Results\n"
+            "<!-- Schema[IMP/Test Results]: 必填 -->\n\n"
+            "（選填：若有實驗輸出才填，無實驗可留 placeholder）\n"
+            "---\n\n"
+            "（無實驗程式碼輸出；量化調查為 Python 腳本掃描 frontmatter）\n"
+        )
+        _write_ticket_with_body(path, tid, body)
+
+        rc = _call_append_log(tid, "Test Results", "追加：補一組樣本統計")
+        assert rc == 0
+
+        new_body = path.read_text(encoding="utf-8")
+        # 既有真實內容必須保留（修復前的資料遺失風險所在）
+        assert "量化調查為 Python 腳本掃描 frontmatter" in new_body
+        # 新內容也存在（append 而非替換）
+        assert "追加：補一組樣本統計" in new_body

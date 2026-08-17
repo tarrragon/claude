@@ -70,7 +70,7 @@
 
 **辨識問題**：這個檔案被外人看到會不會造成安全風險？若會，屬類型 D。
 
-### 類型 E - Push-only exclude（git tracked 但不跨專案同步）
+### 類型 E - Per-project tracked layer（git tracked 但不跨專案同步）
 
 在專案 git 中 track，但 sync-push/pull 時排除。與 A/B/C 差異：A/B/C 不 git track（在 .gitignore 中）；類型 E 要 git track。
 
@@ -186,7 +186,7 @@ Q4: 含密鑰/token/憑證嗎？
   +-- 否 --> Q5
 
 Q5: 需要留在專案 git 但不跨專案同步嗎？
-  +-- 是 --> 類型 E (Push-only exclude，不加 .gitignore)
+  +-- 是 --> 類型 E (Per-project tracked layer，不加 .gitignore)
   +-- 否 --> 該檔案可能屬跨專案共用的規則/方法論，不需排除
              （若不確定，回 Q1 重新評估或向 PM 諮詢）
 ```

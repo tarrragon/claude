@@ -313,5 +313,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    exit_code = run_hook_safely(main, "branch-verify")
+    # fail_closed=True：本守衛防的是保護分支上直接開發，fail-open 代價為
+    # 變更已落在錯誤分支後需額外搬移成本（不可逆），執行期異常時應保守
+    # DENY（exit 2）而非放行（見 lib.hook_logging.run_hook_safely）。
+    exit_code = run_hook_safely(main, "branch-verify", fail_closed=True)
     sys.exit(exit_code)

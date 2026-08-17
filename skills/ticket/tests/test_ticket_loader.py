@@ -237,6 +237,54 @@ Body"""
         with pytest.raises(YAMLParseError):
             parse_frontmatter(content)
 
+    def test_parse_field_value_containing_markdown_table_separator(self):
+        """欄位值含 markdown 表格分隔列（連續三個以上減號）不應誤判為邊界"""
+        content = """---
+id: test-001
+how:
+  strategy: '盤點表格式 |---------|---------|'
+title: t
+---
+
+Body content"""
+
+        fm, body = parse_frontmatter(content)
+
+        assert fm["id"] == "test-001"
+        assert fm["how"]["strategy"] == "盤點表格式 |---------|---------|"
+        assert fm["title"] == "t"
+        assert body.strip() == "Body content"
+
+    def test_parse_field_value_containing_diff_hunk_marker(self):
+        """欄位值含 diff hunk 標記（連續三個減號）不應誤判為邊界"""
+        content = """---
+id: test-002
+note: 'diff 標記 --- a/file.py'
+---
+
+Body content"""
+
+        fm, body = parse_frontmatter(content)
+
+        assert fm["id"] == "test-002"
+        assert fm["note"] == "diff 標記 --- a/file.py"
+        assert body.strip() == "Body content"
+
+    def test_parse_field_value_containing_em_dash_sequence(self):
+        """欄位值含 em-dash 序列（連續三個減號）不應誤判為邊界"""
+        content = """---
+id: test-003
+note: '重點強調---特別注意---結尾'
+---
+
+Body content"""
+
+        fm, body = parse_frontmatter(content)
+
+        assert fm["id"] == "test-003"
+        assert fm["note"] == "重點強調---特別注意---結尾"
+        assert body.strip() == "Body content"
+
 
 class TestLoadTicket:
     """載入 Ticket 的測試"""

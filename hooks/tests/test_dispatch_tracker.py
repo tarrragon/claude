@@ -320,3 +320,74 @@ class TestEdgeCases:
         assert len(dispatches) == num_threads, (
             f"預期 {num_threads} 筆記錄，實際 {len(dispatches)} 筆（資料遺失）"
         )
+
+
+class TestAtomicWrite:
+    """_write_state 的 tempfile + os.replace 原子替換（0.2.1-W3-556）。"""
+
+    def test_no_temp_file_left_behind_after_success(self, project_root: Path):
+        record_dispatch(project_root, "Task A")
+        state_file = get_state_file_path(project_root)
+        siblings = [
+            p for p in state_file.parent.iterdir() if p.name != "dispatch-active.lock"
+        ]
+        assert siblings == [state_file]
+
+    def test_replace_failure_cleans_up_temp_file_and_raises(self, project_root: Path):
+        state_file = get_state_file_path(project_root)
+
+        with patch("lib.dispatch_tracker.os.replace", side_effect=OSError("disk full")):
+            with pytest.raises(OSError):
+                record_dispatch(project_root, "Task fails to persist")
+
+        leftovers = list(state_file.parent.glob("*.tmp.*"))
+        assert leftovers == []
+        assert not state_file.exists()
+
+    def test_write_failure_preserves_previous_content(self, project_root: Path):
+        """寫入失敗時，既有狀態檔內容維持原封不動（原子替換未發生）。"""
+        record_dispatch(project_root, "Task keep")
+        state_file = get_state_file_path(project_root)
+        before = state_file.read_text(encoding="utf-8")
+
+        with patch("lib.dispatch_tracker.os.replace", side_effect=OSError("disk full")):
+            with pytest.raises(OSError):
+                record_dispatch(project_root, "Task should not land")
+
+        after = state_file.read_text(encoding="utf-8")
+        assert before == after
+
+    def test_concurrent_read_during_write_never_sees_torn_content(
+        self, project_root: Path
+    ):
+        """讀端在寫入密集進行時反覆讀取，永遠看到完整可解析的 JSON（不會 torn read）。
+
+        直接讀原始檔案（非透過 get_active_dispatches，其記憶體快取層會
+        遮蔽本測試要驗證的 torn-write 問題）。
+        """
+        import threading
+
+        state_file = get_state_file_path(project_root)
+        record_dispatch(project_root, "seed")
+
+        stop_flag = threading.Event()
+        errors = []
+
+        def reader():
+            while not stop_flag.is_set():
+                if state_file.exists():
+                    try:
+                        json.loads(state_file.read_text(encoding="utf-8"))
+                    except json.JSONDecodeError as e:
+                        errors.append(e)
+
+        reader_thread = threading.Thread(target=reader)
+        reader_thread.start()
+        try:
+            for i in range(150):
+                record_dispatch(project_root, f"writer-{i}")
+        finally:
+            stop_flag.set()
+            reader_thread.join(timeout=5)
+
+        assert errors == []

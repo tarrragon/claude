@@ -114,6 +114,22 @@ class TestIsPlaceholderLegacyBehavior:
     def test_chinese_required_placeholder_is_placeholder(self):
         assert _is_placeholder("（必填：至少記錄執行指令與通過數）") is True
 
+    def test_chinese_optional_placeholder_is_placeholder(self):
+        """0.2.1-W3-484：ticket_builder.py 範本以「（選填：...）」作 optional
+        章節的佔位符文字（如 test_results / pa_root_cause / solution），
+        但 _is_placeholder 原本只認「待填寫」「必填」，「選填」漏網，導致
+        append-log 判定該章節「已有實質內容」而只 append、不 replace，佔位符
+        殘留在新內容之前。"""
+        assert _is_placeholder("（選填：若有實驗輸出才填，無實驗可留 placeholder）") is True
+        assert _is_placeholder("（選填：問題如何發現？直接原因是什麼？）") is True
+
+    def test_optional_placeholder_plus_real_content_is_not_placeholder(self):
+        """章節同時有「（選填：...）」佔位符與真實內容 → 剝除佔位符後仍非空，
+        視為已有實質內容（既有殘留場景：append-log 應維持 append 語意，不應
+        誤判為 placeholder-only 而清空既有內容）。"""
+        text = "（選填：若有實驗輸出才填，無實驗可留 placeholder）\n\n實測結果：全數通過"
+        assert _is_placeholder(text) is False
+
     def test_plain_text_is_not_placeholder(self):
         assert _is_placeholder("這是實質內容，描述問題根因。") is False
 

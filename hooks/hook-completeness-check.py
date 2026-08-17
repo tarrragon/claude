@@ -19,6 +19,7 @@ Exit codes:
 """
 
 import json
+import logging
 import os
 import re
 import stat
@@ -37,6 +38,7 @@ sys.path.insert(0, str(_CLAUDE_DIR))  # for `from lib import ...`
 sys.path.insert(0, str(_PROJECT_INIT_DIR))
 
 from lib import setup_hook_logging, run_hook_safely
+from lib.hook_command_resolver import resolve_hook_script_path
 from project_init.lib.hook_checker import (
     extract_registered_hooks,
     extract_registered_skill_hooks,
@@ -60,59 +62,64 @@ from project_init.lib.hook_checker import (
 # 的重複註冊（additive 關係會重複執行，auto-resume 類有副作用風險）。
 
 
-def _resolve_command_path(command: str, project_root: Path) -> Optional[Path]:
-    """從 hook command 字串解析出 .py 檔絕對路徑。
-
-    處理 $CLAUDE_PROJECT_DIR / ${CLAUDE_PROJECT_DIR} 前綴與 interpreter 前綴
-    （如 `python3 .../foo.py args`，取第一個以 .py 結尾的 token）。
-
-    Returns:
-        指向 .py 檔的絕對路徑；command 不含 .py token（inline shell 等）時回 None。
-    """
-    if not command:
-        return None
-    py_token = next(
-        (tok for tok in command.split() if tok.endswith(".py")), None
-    )
-    if py_token is None:
-        return None
-    resolved = py_token.replace("${CLAUDE_PROJECT_DIR}", str(project_root))
-    resolved = resolved.replace("$CLAUDE_PROJECT_DIR", str(project_root))
-    path = Path(resolved)
-    if not path.is_absolute():
-        path = project_root / path
-    return path
-
-
-def extract_registered_commands(settings: dict) -> List[Tuple[str, str, str]]:
+def extract_registered_commands(
+    settings: dict, logger: Optional[logging.Logger] = None
+) -> List[Tuple[str, str, str]]:
     """從 settings dict 提取所有 (event_type, matcher, command) 三元組。
 
     保留 matcher：同一 hook 在同事件下以不同 matcher（如 Edit / Write）註冊
     屬合法多工具覆蓋，非重複；重複偵測須以 (event, matcher, 路徑) 為鍵。
+
+    settings 結構不符預期（`hooks` 非 dict、事件區塊非 list 等）時記錄
+    WARNING 並略過該段（回傳結果不含該段），不靜默吞掉——結構異常代表
+    本次掃描結果不完整，須讓使用者知道「守衛這次沒真的檢查到」，而非讓
+    不完整的結果被誤讀為「確實沒有問題」。
     """
     triples: List[Tuple[str, str, str]] = []
     hooks_config = settings.get("hooks", {})
+    if not isinstance(hooks_config, dict):
+        msg = (
+            f"[HookCheck] settings.json 的 'hooks' 區塊非預期結構"
+            f"（型別={type(hooks_config).__name__}，應為 dict），本次掃描略過"
+        )
+        print(msg)
+        if logger:
+            logger.warning(msg)
+        return triples
+
     for event_type, event_hooks in hooks_config.items():
-        if isinstance(event_hooks, list):
-            for hook_group in event_hooks:
-                if isinstance(hook_group, dict):
-                    matcher = hook_group.get("matcher", "")
-                    for hook in hook_group.get("hooks", []):
-                        if isinstance(hook, dict):
-                            command = hook.get("command", "")
-                            if command:
-                                triples.append((event_type, matcher, command))
+        if not isinstance(event_hooks, list):
+            msg = (
+                f"[HookCheck] settings.json 的 '{event_type}' 事件區塊非預期"
+                f"結構（型別={type(event_hooks).__name__}，應為 list），略過此事件"
+            )
+            print(msg)
+            if logger:
+                logger.warning(msg)
+            continue
+        for hook_group in event_hooks:
+            if isinstance(hook_group, dict):
+                matcher = hook_group.get("matcher", "")
+                for hook in hook_group.get("hooks", []):
+                    if isinstance(hook, dict):
+                        command = hook.get("command", "")
+                        if command:
+                            triples.append((event_type, matcher, command))
     return triples
 
 
 def find_phantom_registrations(
-    settings_sources: List[Tuple[str, Optional[dict]]], project_root: Path
+    settings_sources: List[Tuple[str, Optional[dict]]],
+    project_root: Path,
+    logger: Optional[logging.Logger] = None,
 ) -> List[Tuple[str, str, str]]:
     """找出「已註冊但 command 指向不存在的 .py 檔」的幽靈註冊。
 
     Args:
         settings_sources: [(來源標籤, settings dict 或 None), ...]。
         project_root: 專案根目錄（解析 $CLAUDE_PROJECT_DIR）。
+        logger: 選填，傳入時使 extract_registered_commands 的結構異常
+            WARNING 寫入日誌檔（非僅 print stdout）。
 
     Returns:
         [(來源標籤, event_type, 解析後不存在的路徑字串), ...]。
@@ -121,17 +128,19 @@ def find_phantom_registrations(
     for label, settings in settings_sources:
         if not settings:
             continue
-        for event_type, _matcher, command in extract_registered_commands(settings):
-            path = _resolve_command_path(command, project_root)
+        for event_type, _matcher, command in extract_registered_commands(settings, logger):
+            path = resolve_hook_script_path(command, project_root)
             if path is None:
-                continue  # 非 .py 檔 hook（inline shell 等）不檢查
+                continue  # 非 .py/.sh 檔 hook（inline shell 等）不檢查
             if not path.exists():
                 phantoms.append((label, event_type, str(path)))
     return phantoms
 
 
 def find_duplicate_registrations(
-    settings_sources: List[Tuple[str, Optional[dict]]], project_root: Path
+    settings_sources: List[Tuple[str, Optional[dict]]],
+    project_root: Path,
+    logger: Optional[logging.Logger] = None,
 ) -> List[Tuple[str, str, List[str]]]:
     """找出同一 hook 檔在相同事件類型下被重複註冊（跨檔或同檔多次）。
 
@@ -143,8 +152,8 @@ def find_duplicate_registrations(
     for label, settings in settings_sources:
         if not settings:
             continue
-        for event_type, matcher, command in extract_registered_commands(settings):
-            path = _resolve_command_path(command, project_root)
+        for event_type, matcher, command in extract_registered_commands(settings, logger):
+            path = resolve_hook_script_path(command, project_root)
             if path is None:
                 continue
             occurrences[(event_type, matcher, str(path))].append(label)
@@ -186,6 +195,7 @@ def find_merge_declaration_violations(
     hooks_dir: Path,
     settings_sources: List[Tuple[str, Optional[dict]]],
     project_root: Path,
+    logger: Optional[logging.Logger] = None,
 ) -> List[Tuple[str, str, str]]:
     """找出「合併版與被合併版並存」的語意重複註冊。
 
@@ -206,8 +216,8 @@ def find_merge_declaration_violations(
     for _label, settings in settings_sources:
         if not settings:
             continue
-        for event_type, _matcher, command in extract_registered_commands(settings):
-            path = _resolve_command_path(command, project_root)
+        for event_type, _matcher, command in extract_registered_commands(settings, logger):
+            path = resolve_hook_script_path(command, project_root)
             if path is not None:
                 registered_by_event[event_type].add(path.name)
 
@@ -225,7 +235,9 @@ def find_merge_declaration_violations(
 
 
 def find_local_hook_registrations(
-    settings_local: Optional[dict], project_root: Path
+    settings_local: Optional[dict],
+    project_root: Path,
+    logger: Optional[logging.Logger] = None,
 ) -> List[Tuple[str, str]]:
     """找出 settings.local.json 內的任何 hook 註冊（latent ghost 預防）。
 
@@ -241,7 +253,7 @@ def find_local_hook_registrations(
     registrations: List[Tuple[str, str]] = []
     if not settings_local:
         return registrations
-    for event_type, _matcher, command in extract_registered_commands(settings_local):
+    for event_type, _matcher, command in extract_registered_commands(settings_local, logger):
         registrations.append((event_type, command))
     return registrations
 
@@ -283,7 +295,7 @@ def prune_phantom_local_registrations(
             kept_inner = []
             for entry in group.get("hooks", []):
                 command = entry.get("command", "") if isinstance(entry, dict) else ""
-                path = _resolve_command_path(command, project_root)
+                path = resolve_hook_script_path(command, project_root)
                 if path is not None and not path.exists():
                     removed.append((event_type, str(path)))
                     continue  # 幽靈 entry，丟棄
@@ -308,28 +320,72 @@ def prune_phantom_local_registrations(
     return removed
 
 
+_SKILL_HOOK_SKIP_DIRS = frozenset({"__pycache__", ".venv", "node_modules", ".git"})
+
+
+def _iter_skill_hook_files(skills_dir: Path):
+    """走訪 .claude/skills/<skill>/hooks/ 下所有 .py 檔案（遞迴），略過快取/
+    虛擬環境目錄。
+
+    與 project_init.lib.hook_checker.scan_skill_hooks 使用相同的目錄結構與
+    跳過清單，但回傳 Path 物件供權限操作使用（scan_skill_hooks 回傳相對路徑
+    字串集合，供註冊比對使用，兩者用途不同故不合併）。
+    """
+    if not skills_dir.exists():
+        return
+    for skill_dir in sorted(skills_dir.iterdir()):
+        if not skill_dir.is_dir():
+            continue
+        hooks_subdir = skill_dir / "hooks"
+        if not hooks_subdir.is_dir():
+            continue
+        for file_path in sorted(hooks_subdir.rglob("*.py")):
+            rel_parts = file_path.relative_to(skills_dir).parts
+            if any(part in _SKILL_HOOK_SKIP_DIRS for part in rel_parts):
+                continue
+            if not file_path.is_file():
+                continue
+            yield file_path
+
+
 def _check_and_fix_permissions(hooks_dir, logger):
-    """為 hooks_dir 頂層的 hook 補上缺少的 exec bit。
+    """為 hooks_dir 頂層與 .claude/skills/<skill>/hooks/ 下的 hook 補上缺少的
+    exec bit。
 
-    Claude Code 以 `$CLAUDE_PROJECT_DIR/.claude/hooks/<name>.py` 的形式直接執行
-    hook，故只有「會被當作可執行檔啟動」的檔案需要 exec bit，而 hook 本體一律放
-    在頂層。以目錄層級界定而非解析 settings.json，是為了避開「已註冊但本輪尚未
-    chmod 就被執行」的競態——那正是 IMP-054 的原始失效。
+    Claude Code 以 `$CLAUDE_PROJECT_DIR/.claude/hooks/<name>.py` 或
+    `$CLAUDE_PROJECT_DIR/.claude/skills/<skill>/hooks/<name>.py` 的形式直接
+    執行 hook，故只有「會被當作可執行檔啟動」的檔案需要 exec bit。以目錄
+    層級界定而非解析 settings.json，是為了避開「已註冊但本輪尚未 chmod 就
+    被執行」的競態——那正是 IMP-054 的原始失效。
 
-    刻意不遞迴：`tests/`、`acceptance_checkers/`、`archived/` 下的 .py 由 pytest 或
-    import 載入，從不被 shell 直接執行。對其 chmod 會產生無主的 git mode-only 變更
-    （0.2.1-W3-319）。
-
-    真要支援子目錄 hook，先決條件是本函式改回傳相對路徑——目前回傳 basename，
-    `_attempt_auto_commit` 以 `hooks_dir / name` 還原，子目錄檔案會還原到錯誤位置。
+    hooks_dir 頂層刻意不遞迴：`tests/`、`acceptance_checkers/`、`archived/`
+    下的 .py 由 pytest 或 import 載入，從不被 shell 直接執行。對其 chmod 會
+    產生無主的 git mode-only 變更（0.2.1-W3-319）。skills_dir 由
+    `hooks_dir.parent / "skills"` 推導（即 project_root/.claude/skills/），
+    不另加參數——與 main() 的既有推導慣例一致。skill hooks 下遞迴掃描，
+    僅略過快取/虛擬環境目錄（`_iter_skill_hook_files`），因該子樹不存在
+    tests/ 等非執行用途的子目錄。
 
     Returns:
-        (fixed_file_names, already_ok_count)
+        (fixed_relative_paths, already_ok_count)
+        fixed_relative_paths 為相對於 project_root（= hooks_dir.parent.parent）
+        的路徑字串（如 ".claude/hooks/foo.py"、".claude/skills/bar/hooks/
+        baz.py"）。改回傳相對路徑（而非先前版本的 basename）是支援 skill
+        hooks 子目錄的前提——`_attempt_auto_commit` 舊版以 `hooks_dir / name`
+        還原絕對路徑，子目錄檔案會被還原到 hooks_dir 底下的錯誤位置；改為
+        `project_root / relative_path` 後不再有此問題。
     """
+    project_root = hooks_dir.parent.parent
+    skills_dir = hooks_dir.parent / "skills"
+
     fixed = []
     already_ok = 0
 
-    for py_file in sorted(hooks_dir.glob("*.py")):
+    candidates = list(sorted(hooks_dir.glob("*.py"))) + list(
+        _iter_skill_hook_files(skills_dir)
+    )
+
+    for py_file in candidates:
         if not py_file.is_file():
             continue
 
@@ -338,10 +394,30 @@ def _check_and_fix_permissions(hooks_dir, logger):
         else:
             current_mode = py_file.stat().st_mode
             py_file.chmod(current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-            fixed.append(py_file.name)
-            logger.info(f"chmod +x: {py_file.name}")
+            rel = str(py_file.resolve().relative_to(project_root.resolve()))
+            fixed.append(rel)
+            logger.info(f"chmod +x: {rel}")
 
     return fixed, already_ok
+
+
+def _format_permission_report(ok_count: int, fixed_files: List[str]) -> List[str]:
+    """組合「權限」區塊的回報行，主計數與本次修復數分行呈現。
+
+    主計數（ok_count）只含本 session 開始前即可執行者。本次 chmod 的
+    fixed_files 不併入主計數——併入會使「權限: N 個已確認可執行」讀起來像
+    本 session 全數就緒的假訊號，而本次修正是否於本 session 生效尚未驗證：
+    runtime 解析 hook 命令集的時機是「session 啟動時一次快照」或「每次呼叫
+    時解析」，兩者對本 session 生效與否給出相反答案，目前無實驗可區分。故
+    此行只陳述已修復的數量，不對生效時點作斷言（見
+    settings-registration-exec-guard-hook.py 對同一問題的前移防護）。
+    """
+    lines = [f"權限: {ok_count} 個已確認可執行"]
+    if fixed_files:
+        lines.append(
+            f"權限: 本次修復 {len(fixed_files)} 個（本 session 內是否生效未經驗證）"
+        )
+    return lines
 
 
 def _run_git(args, cwd, logger):
@@ -395,7 +471,7 @@ def _repo_is_safe_to_autocommit(project_root, logger):
     return True
 
 
-def _attempt_auto_commit(fixed_files, hooks_dir, project_root, logger):
+def _attempt_auto_commit(fixed_files, project_root, logger):
     """提交本次 chmod 產生的 mode-only 變更。
 
     工作區有其他變更時仍會提交，但範圍只涵蓋指定路徑。刻意不要求工作區乾淨——
@@ -403,7 +479,9 @@ def _attempt_auto_commit(fixed_files, hooks_dir, project_root, logger):
     變更」條件在真實環境幾乎不成立（0.2.1-W3-319 實證連續 4 次 chmod 全數跳過），
     使 mode 變更淪為跨 session 無主遺留，最終在 git pull 時阻擋合併。
 
-    fixed_files: 本次 chmod 的檔名（basename，位於 hooks_dir 頂層）。
+    fixed_files: 本次 chmod 的相對路徑（相對 project_root，如 ".claude/hooks/
+    foo.py"、".claude/skills/bar/hooks/baz.py"；`_check_and_fix_permissions`
+    的回傳格式，見其 docstring 說明改為相對路徑的理由）。
     Returns True if a commit was created, False otherwise.
     """
     if not fixed_files:
@@ -413,7 +491,7 @@ def _attempt_auto_commit(fixed_files, hooks_dir, project_root, logger):
         return False
 
     # Compute repo-relative paths for each fixed file
-    fixed_paths_abs = [hooks_dir / name for name in fixed_files]
+    fixed_paths_abs = [project_root / rel for rel in fixed_files]
     try:
         fixed_rel_set = {
             str(p.resolve().relative_to(project_root.resolve()))
@@ -520,7 +598,7 @@ def main():
 
         # --- Auto-commit (IMP-054 / W17-133) ---
         try:
-            _attempt_auto_commit(fixed_files, hooks_dir, project_root, logger)
+            _attempt_auto_commit(fixed_files, project_root, logger)
         except Exception as exc:  # noqa: BLE001 - hook must not crash session
             err = f"[HookCheck] 自動 commit 流程發生未預期例外: {exc}"
             print(err)
@@ -582,9 +660,9 @@ def main():
     )
     print(log_output)
     logger.info(log_output)
-    log_output = f"權限: {ok_count + len(fixed_files)} 個已確認可執行" + (f" ({len(fixed_files)} 個本次修正)" if fixed_files else "")
-    print(log_output)
-    logger.info(log_output)
+    for log_output in _format_permission_report(ok_count, fixed_files):
+        print(log_output)
+        logger.info(log_output)
 
     if unregistered:
         log_output = "\n未註冊的 Hook（最多顯示 15 個）:"
@@ -641,8 +719,8 @@ def main():
         ("settings.json", settings),
         ("settings.local.json", settings_local),
     ]
-    phantoms = find_phantom_registrations(settings_sources, project_root)
-    duplicates = find_duplicate_registrations(settings_sources, project_root)
+    phantoms = find_phantom_registrations(settings_sources, project_root, logger)
+    duplicates = find_duplicate_registrations(settings_sources, project_root, logger)
 
     if phantoms:
         header = "\n[WARNING] 幽靈註冊（已註冊但 command 檔不存在，會致 runtime 崩潰）:"
@@ -671,7 +749,7 @@ def main():
         logger.warning(advice)
 
     merge_violations = find_merge_declaration_violations(
-        hooks_dir, settings_sources, project_root
+        hooks_dir, settings_sources, project_root, logger
     )
     if merge_violations:
         header = (
@@ -691,7 +769,7 @@ def main():
         logger.warning(advice)
 
     # latent ghost 預防：settings.local.json 不該註冊 hook（單一註冊來源原則）
-    local_hook_regs = find_local_hook_registrations(settings_local, project_root)
+    local_hook_regs = find_local_hook_registrations(settings_local, project_root, logger)
     if local_hook_regs:
         header = (
             "\n[WARNING] settings.local.json 內含 hook 註冊"
