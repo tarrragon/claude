@@ -9,16 +9,17 @@ dispatch-record-hook 測試套件（0.2.1-W3-302 / multi-PM 協調層 Phase 1）
 ticket CLI 寫入（who/set-who）。
 
 multi-PM 協調層 Phase 1 為 dispatch-active.json 補上 session_id /
-parent_session_id / ticket_id / files 欄位。其中 ticket_id 由本檔的
-extract_ticket_id() 以正則從 prompt/description 純文字擷取（不查詢
-ticket CLI、不做任何寫入），與舊架構「識別 ticket_id 後呼叫 who/set-who
-CLI 綁定身份」的職責邊界不同——同名函式曾因舊架構被移除，此處是為新
-（不同語意的）用途重新引入，故不違反 0.2.1-W3-302 的移除意圖。
+ticket_id / files 欄位。其中 ticket_id 由本檔的 extract_ticket_id() 以
+正則從 prompt/description 純文字擷取（不查詢 ticket CLI、不做任何
+寫入），與舊架構「識別 ticket_id 後呼叫 who/set-who CLI 綁定身份」的
+職責邊界不同——同名函式曾因舊架構被移除，此處是為新（不同語意的）用途
+重新引入，故不違反 0.2.1-W3-302 的移除意圖。registry 契約 v2 審查後另
+移除 parent_session_id（恆等 session_id 的冗餘欄位，資訊量為零）。
 
 測試覆蓋：
 - main() 基本流程：subagent 環境跳過 / 無 input 跳過 / 正常記錄
 - record_dispatch 呼叫參數（isolation 對應 branch_name；新增 session_id /
-  parent_session_id / ticket_id / files）
+  ticket_id / files）
 - record_dispatch 失敗不阻擋派發
 - tool_use_id 缺失時使用 fallback 識別符
 - extract_ticket_id：prompt 優先、缺則 description 補、皆無回 None
@@ -246,7 +247,9 @@ class TestMainBasicFlow:
             assert dispatch_record_hook.main() == EXIT_SUCCESS
 
     def test_session_and_ticket_fields_threaded_through(self, monkeypatch):
-        """multi-PM 協調層 Phase 1：session_id/parent_session_id/ticket_id/files 皆傳入 record_dispatch。"""
+        """multi-PM 協調層：session_id/ticket_id/files 皆傳入 record_dispatch
+        （parent_session_id 已於 registry 契約 v2 審查後移除，恆等 session_id
+        的冗餘欄位）。"""
         monkeypatch.delenv(dispatch_record_hook.ENV_SESSION_ID, raising=False)
         with patch.object(
             dispatch_record_hook, "setup_hook_logging"
@@ -282,7 +285,7 @@ class TestMainBasicFlow:
         assert result == EXIT_SUCCESS
         kwargs = mock_record.call_args.kwargs
         assert kwargs["session_id"] == "pm-session-abc"
-        assert kwargs["parent_session_id"] == "pm-session-abc"
+        assert "parent_session_id" not in kwargs
         assert kwargs["ticket_id"] == "0.2.1-W3-547"
         assert kwargs["files"] == [".claude/hooks/"]
 

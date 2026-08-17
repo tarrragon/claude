@@ -5,34 +5,41 @@
 # ///
 
 """
-Session Registry Heartbeat Hook - UserPromptSubmit
+Session Registry Stop Heartbeat Hook - Stop
 
 功能:
-  每次用戶提交 prompt 時，更新自身在 pm-registry.json 的 heartbeat_ts，
-  讓其他並行 PM session 能判斷本 session 是否仍存活（stale 判定由查詢端
-  `ticket track sessions` 負責，本 hook 只負責寫入新鮮的時間戳）。
+  主線程每回合停止（等待下個輸入或背景任務）時，更新自身在 pm-registry.json
+  的 heartbeat_ts。取代 v1 的 Stop 釋放邏輯（見下方「v1 到 v2 的變更」）。
 
-  Debounce >= 60 秒：距上次心跳未滿 60 秒時跳過寫入，避免高頻互動場景
-  下每個 prompt 都觸發一次 flock 保護的 read-modify-write。
+  雙心跳事件源（契約 v2 D1b 增補 3，禁止未來以「簡化」為由刪減任一方）：
+  本 hook（Stop）蓋回合結尾；session-registry-heartbeat-hook.py
+  （UserPromptSubmit）蓋回合開頭。長回合（teammate 訊息驅動、無
+  UserPromptSubmit 觸發）期間仍有心跳覆蓋——單留任一事件源會重新打開
+  觀測空洞（實測：代理協作密集的活躍 session heartbeat 停滯 55 分被
+  誤判 STALE）。
 
-  entry 缺失時（registry 曾損毀重建、或 SessionStart 註冊失敗）自我修復
-  補建，避免永久缺席直到下次 SessionStart（見 lib.pm_registry.update_
-  heartbeat 的 upsert 語意）。
+  `stop_hook_active=true`（本次 Stop 由另一個 Stop hook 的 block 決策
+  引發的自激回合，非真正回合結束）時靜默 exit 0，避免自激迴圈內重複
+  寫入（debounce 已可擋，但語意上這不是「新回合」，明確跳過更清楚）。
 
   子代理人環境（agent_id 存在於 stdin）不觸發，理由同 session-registry-
   start-hook.py。
 
-  雙心跳事件源（契約 v2 D1b 增補 3，禁止未來以「簡化」為由刪減任一方）：
-  本 hook（UserPromptSubmit）蓋回合開頭；session-registry-stop-heartbeat-
-  hook.py（Stop）蓋回合結尾。長回合（teammate 訊息驅動、無 UserPrompt
-  Submit 觸發）期間仍有心跳覆蓋——單留任一事件源會重新打開觀測空洞
-  （實測：代理協作密集的活躍 session heartbeat 停滯 55 分被誤判 STALE）。
-
   非 git 環境（`get_registry_paths` 回傳 None）跳過更新並 stderr 一次性
   提示（契約 v2 D3：不再 fallback 寫入讀端永不查詢的暫定路徑）。
 
-觸發時機: 每次用戶提交 prompt (UserPromptSubmit)
-行為: 不阻擋、無 stdout 輸出（純背景寫入，不影響 prompt 流程）
+v1 到 v2 的變更（契約 v2 D1/D1b，重現實驗與三視角審查後定案）:
+  v1 本檔（session-registry-stop-hook.py）在 Stop 時移除 registry entry
+  （graceful release），並用 `background_tasks` 守衛避免 PM 仍在協調
+  背景派發時被誤判結束。重現實驗證實 Stop 每回合觸發非 session 終結，
+  v1 設計使 debounce 淪為 dead code、Phase 2 lease 欄位（tickets/files）
+  每回合被清空重建。v2 決策：release 邏輯改掛 SessionEnd（見
+  session-registry-end-hook.py），本檔職責替換為心跳更新，
+  background_tasks 守衛隨釋放邏輯一併移除（心跳語意不需要）。檔案更名
+  （stop-hook → stop-heartbeat-hook）以符合新職責，避免檔名與行為背離。
+
+觸發時機: 主線程每回合停止時 (Stop)
+行為: 不阻擋（無 block 決策），無 stdout 輸出
 
 Registry Schema 契約：見 .claude/lib/pm_registry.py 模組 docstring（SSOT）。
 
@@ -58,7 +65,7 @@ from lib import (
 )
 from lib.pm_registry import get_registry_paths, update_heartbeat
 
-HOOK_NAME = "session-registry-heartbeat-hook"
+HOOK_NAME = "session-registry-stop-heartbeat-hook"
 EXIT_SUCCESS = 0
 
 
@@ -79,9 +86,13 @@ def main() -> int:
         logger.debug("subagent environment, skip heartbeat update")
         return EXIT_SUCCESS
 
+    if input_data and input_data.get("stop_hook_active"):
+        logger.debug("stop_hook_active=true（自激回合），跳過心跳更新")
+        return EXIT_SUCCESS
+
     session_id = resolve_session_id(input_data)
     if not session_id:
-        message = "[session-registry-heartbeat-hook] 無法取得 session_id，跳過心跳更新"
+        message = "[session-registry-stop-heartbeat-hook] 無法取得 session_id，跳過心跳更新"
         sys.stderr.write(message + "\n")
         logger.warning(message)
         return EXIT_SUCCESS
@@ -89,7 +100,7 @@ def main() -> int:
     project_root = get_project_root()
     registry_paths = get_registry_paths(cwd=str(project_root))
     if registry_paths is None:
-        message = "[session-registry-heartbeat-hook] 非 git 環境，跳過心跳更新"
+        message = "[session-registry-stop-heartbeat-hook] 非 git 環境，跳過心跳更新"
         sys.stderr.write(message + "\n")
         logger.info(message)
         return EXIT_SUCCESS
@@ -105,11 +116,11 @@ def main() -> int:
             logger=logger,
         )
         if wrote:
-            logger.info("heartbeat 已更新: session_id=%s", session_id)
+            logger.info("heartbeat 已更新（Stop）: session_id=%s", session_id)
         else:
             logger.debug("heartbeat debounce 命中，跳過寫入: session_id=%s", session_id)
     except OSError as e:
-        message = "[session-registry-heartbeat-hook] heartbeat 更新失敗: {}".format(e)
+        message = "[session-registry-stop-heartbeat-hook] heartbeat 更新失敗: {}".format(e)
         sys.stderr.write(message + "\n")
         logger.warning(message)
 

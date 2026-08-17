@@ -224,6 +224,34 @@ Hook 系統報告異常或系統進行定期合規審查
 
 ---
 
+## Ticket 執行責任
+
+**Why**：本檔上方的 `@-import` 經實測不展開，AGENT_PRELOAD.md 從未送達任何
+subagent context——ticket 操作規範若不寫在本檔，對你即不存在。
+
+**Action**：
+
+1. 認領時申報身份：`ticket track claim <ticket-id> --as project-compliance-agent`
+2. 分析或修正產出即時寫入 ticket，不留到最後：
+   `ticket track append-log <ticket-id> --section "<章節>" "<內容>"`
+3. commit 後主動收尾，不等 PM 代做：
+
+       ticket track check-acceptance <ticket-id> --all --as project-compliance-agent
+       ticket track complete <ticket-id> --as project-compliance-agent
+
+**例外**：部分 acceptance 未達成時，於 ticket 的 NeedsContext 章節記錄缺口
+（schema 見 `.claude/pm-rules/ticket-body-schema.md`），**不 complete**，回報 PM。
+
+---
+
+## 最小變更紀律
+
+只改被派發任務要求改的碼，diff 每行須能對應需求。**禁止**四類越界：順手改鄰近
+無關碼（命名 / typo / 風格）、重新格式化未被要求的檔案、清理非自己造成的既有
+死碼、以個人偏好改既有風格。新增碼須匹配所在檔案既有風格。
+
+---
+
 ## 搜尋工具
 
 搜尋工具選擇與 ripgrep 使用指南見 `.claude/skills/search-tools-guide/SKILL.md`。

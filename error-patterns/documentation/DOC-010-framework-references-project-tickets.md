@@ -45,7 +45,7 @@ Auto-memory 位於 `~/.claude/projects/<project>/memory/`，**依專案隔離儲
 ### 規則（已寫入框架）
 
 - `.claude/references/reference-stability-rules.md` 規則 8：框架文件禁止引用專案層級識別符
-- `.claude/agents/AGENT_PRELOAD.md` 規則 12：規則 8 的預設載入層落地（2026-07-27）。前五次觸發後的處置僅停留於按需讀取層，代理人改框架檔案時不會讀到；規則 12 把「依賴型 / 歷史錨點型 / 功能字串」三分判準搬進每次派發都會注入的層級，取代 PM 逐次 prompt 加註的補丁模式。判準精度與規則 8 一致，不是「禁止任何 ticket ID」的一刀切版本。
+- `.claude/agents/AGENT_PRELOAD.md` 規則 12：規則 8 的按需讀取速查版（2026-07-27），含「依賴型 / 歷史錨點型 / 功能字串」三分判準，取代 PM 逐次 prompt 加註的補丁模式。**校準（實測後）**：`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，AGENT_PRELOAD.md 並非「每次派發都會注入的層級」，代理人須主動 Read 才會取得規則 12。實際每次派發都會注入的層級是 `.claude/rules/core/document-format-rules.md`「引用穩定性規則」小節——該節已在自動載入層放置觸發式指引，於代理人改框架文件時提示須讀取 `reference-stability-rules.md`。判準精度與規則 8 一致，不是「禁止任何 ticket ID」的一刀切版本。
 
 ### PM / 代理人自檢清單
 
@@ -103,9 +103,9 @@ Auto-memory 位於 `~/.claude/projects/<project>/memory/`，**依專案隔離儲
 
 前五次觸發案例的處置都是「發現後修正 + 加強規則文字」，但規則文字所在的 `.claude/references/reference-stability-rules.md` 屬**按需讀取層**。代理人被派去修改框架檔案時，除非 prompt 明確指示，否則不會讀到該檔。
 
-**結構性缺口**：本禁令未進入代理人的預設載入層（`.claude/agents/AGENT_PRELOAD.md`）。實測 grep 該檔對「規則 8」「reference-stability」「專案層級識別符」皆無命中。因此每個新派發的代理人都從零開始，違規率不會隨修正次數下降。
+**結構性缺口**：本禁令未進入代理人的每次派發都會注入的層級（`.claude/rules/core/`）。實測 grep `.claude/rules/core/` 當時對「規則 8」「reference-stability」「專案層級識別符」皆無命中。因此每個新派發的代理人都從零開始，違規率不會隨修正次數下降。**校準（實測後）**：`.claude/agents/AGENT_PRELOAD.md` 從未是候選的自動載入層——`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，寫入 AGENT_PRELOAD.md 與寫入按需讀取層一樣需要代理人主動 Read。
 
-**PM 的補丁模式也無效**：以個別 prompt 加註禁令只覆蓋該次派發，同 session 內另一條派發線仍會復發（見上表 2026-07-27 案例）。**Action**：禁令須進入 `AGENT_PRELOAD.md` 或 dispatch 模板等每次派發都會載入的層級，而非依賴 PM 逐次記得加註。
+**PM 的補丁模式也無效**：以個別 prompt 加註禁令只覆蓋該次派發，同 session 內另一條派發線仍會復發（見上表 2026-07-27 案例）。**Action**：禁令須進入 `.claude/rules/core/` 或 dispatch 模板等已實測確認每次派發都會載入的層級，而非依賴 PM 逐次記得加註，也非寫入 `AGENT_PRELOAD.md`（該檔不會自動送達 subagent context）。
 
 **判準精度要求**：進入預設載入層的表述須含「依賴型 vs 設計脈絡型」二分（見 `reference-stability-rules.md`「引用性質判準」章），不可寫成「禁止任何 ticket ID」——後者會使代理人清掉合法的版本註腳與設計脈絡標注，與 comment-writing 方法論衝突。
 

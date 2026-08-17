@@ -57,7 +57,7 @@
 | **驗證類子任務**（跑測試/掃描/建置/打包/AC 實況驗證） | → **[強制] 建子 Ticket 背景派發，不詢問用戶** | 有明確 SOP，詢問只會阻礙主線 |
 | **執行中發現技術債/問題/回歸/超範圍需求** | → **[強制] 立即 `/ticket create`，不詢問，不中斷主線** |
 
-> **例外：實機驗證不在背景派發範圍**——`/verify`、`/run` 等 build-and-drive（驅動 app 觀察 runtime 行為）由 PM 前台執行，禁止派發代理人（需跨多輪即時判斷，受 PC-042 限制）。判準與依據見 `.claude/rules/core/pm-role.md`「實機驗證屬 PM 職責」。
+> **例外：實機驗證不在背景派發範圍**——`/verify`、`/run` 等 build-and-drive（驅動 app 觀察 runtime 行為）由 PM 前台執行，禁止派發代理人（需跨多輪即時判斷，受 PC-042 限制）。判準與依據見 `.claude/references/pm-role-details.md`「實機驗證屬 PM 職責」。
 > 驗證類子任務完整規則：.claude/pm-rules/parallel-dispatch.md（驗證類任務自動派發章節）
 > 詳細 SOP：.claude/references/background-dispatch-rules.md（驗證類任務自動派發章節）
 

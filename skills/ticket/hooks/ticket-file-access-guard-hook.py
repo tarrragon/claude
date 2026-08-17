@@ -45,7 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from lib import (
     setup_hook_logging, run_hook_safely, get_project_root, save_check_log,
-    read_json_from_stdin, is_handoff_recovery_mode, emit_hook_output
+    read_json_from_stdin, emit_hook_output
 )
 
 from datetime import datetime
@@ -90,10 +90,25 @@ FRONTMATTER_FIELD_PATTERN = r"^(id|title|type|status|version|priority|parent_id|
 # ============================================================================
 
 def normalize_path(file_path: str) -> str:
-    """正規化檔案路徑"""
+    """正規化檔案路徑為相對於專案根目錄的路徑
+
+    絕對路徑會被轉換為相對於專案根目錄的路徑，使 TICKET_PATH_PATTERNS
+    （以 ^docs/ 或 ^\\.claude/ 錨定）能正確比對。harness 系統指令要求 subagent
+    一律使用絕對路徑，若不轉換則所有絕對路徑形式的 Read/Edit/Write 都會被
+    is_ticket_file() 誤判為非 ticket 檔案而完全繞過本守衛（絕對路徑未轉換破口）。
+    既有相對路徑（含 ./ 前綴）行為不變。
+    """
     normalized = file_path.replace("\\", "/")
+
+    project_root = str(get_project_root()).replace("\\", "/")
+    if normalized.startswith(project_root):
+        normalized = normalized[len(project_root):]
+        if normalized.startswith("/"):
+            normalized = normalized[1:]
+
     if normalized.startswith("./"):
         normalized = normalized[2:]
+
     return normalized
 
 
@@ -113,7 +128,45 @@ def is_internal_call() -> bool:
     return os.getenv("TICKET_TRACKER_INTERNAL") == "1"
 
 
-# is_handoff_recovery_mode 已遷移至 hook_utils
+# 共用 lib.is_handoff_recovery_mode() 只檢查 pending 目錄有無任何 handoff，
+# 命中即對所有 ticket 全域放行，範圍過廣（未恢復 handoff 為常態非例外，見
+# Problem Analysis）。本檔改用下列兩個本地函式，將放行範圍收窄至該 handoff
+# 實際指向的 ticket。共用函式仍由 task-dispatch-readiness-check.py 和
+# agent-ticket-validation-hook.py 使用，本票不變更其行為（不處理其他 hook）。
+
+def extract_ticket_id_from_path(file_path: str) -> str:
+    """從 ticket 檔案路徑萃取 ticket ID（檔名去除副檔名）"""
+    return Path(file_path).stem
+
+
+def get_handoff_recovery_ticket_ids(logger) -> set:
+    """掃描 handoff pending 目錄，回傳目前有效恢復流程涉及的 ticket ID 集合
+
+    每筆 handoff 記錄同時納入來源 ticket_id 與 target_ticket_id：恢復流程可能
+    需要讀取來源 ticket（已完成，作為交接背景）或目標 ticket（待接手），兩者
+    都屬合法恢復範圍；範圍外的 ticket 一律視為與本次恢復無關。
+    """
+    project_root = get_project_root()
+    handoff_pending_dir = project_root / ".claude" / "handoff" / "pending"
+    ticket_ids = set()
+
+    if not handoff_pending_dir.exists() or not handoff_pending_dir.is_dir():
+        return ticket_ids
+
+    for handoff_file in handoff_pending_dir.glob("*.json"):
+        try:
+            with open(handoff_file, "r", encoding="utf-8") as f:
+                record = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning(f"讀取 handoff 檔案失敗，略過: {handoff_file.name}: {e}")
+            continue
+
+        for key in ("ticket_id", "target_ticket_id"):
+            value = record.get(key)
+            if value:
+                ticket_ids.add(value)
+
+    return ticket_ids
 
 
 def is_body_section_edit(old_string: str, logger) -> bool:
@@ -172,22 +225,24 @@ def check_read_permission(file_path: str, logger) -> Tuple[bool, str]:
     if is_internal_call():
         return True, "內部呼叫允許"
 
-    if is_handoff_recovery_mode(logger):
-        logger.debug(f"Handoff 恢復模式: 允許讀取 {file_path}")
-        return True, "Handoff 恢復模式允許"
+    if not is_ticket_file(file_path):
+        return True, "非 ticket 檔案，允許讀取"
 
-    if is_ticket_file(file_path):
-        reason = (
-            "禁止直接讀取 ticket 檔案。\n"
-            "請使用以下指令：\n"
-            "  - /ticket track query {id}  - 查詢 ticket 資訊\n"
-            "  - /ticket track full {id}   - 輸出完整 ticket 內容\n"
-            "  - /ticket track log {id}    - 輸出執行日誌"
-        )
-        logger.warning(f"阻止讀取 ticket 檔案: {file_path}")
-        return False, reason
+    ticket_id = extract_ticket_id_from_path(file_path)
+    recovery_ticket_ids = get_handoff_recovery_ticket_ids(logger)
+    if ticket_id and ticket_id in recovery_ticket_ids:
+        logger.debug(f"Handoff 恢復模式（限定 {ticket_id}）: 允許讀取 {file_path}")
+        return True, f"Handoff 恢復模式允許（限定 {ticket_id}）"
 
-    return True, "非 ticket 檔案，允許讀取"
+    reason = (
+        "禁止直接讀取 ticket 檔案。\n"
+        "請使用以下指令：\n"
+        "  - /ticket track query {id}  - 查詢 ticket 資訊\n"
+        "  - /ticket track full {id}   - 輸出完整 ticket 內容\n"
+        "  - /ticket track log {id}    - 輸出執行日誌"
+    )
+    logger.warning(f"阻止讀取 ticket 檔案: {file_path}")
+    return False, reason
 
 
 def check_edit_permission(file_path: str, old_string: str, logger) -> Tuple[bool, str]:

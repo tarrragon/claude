@@ -38,7 +38,7 @@ Hook 輸出透過 additionalContext / systemMessage 注入 LLM context，但未�
 |------|------|------|
 | A. 短期（IMP） | 缺 subagent 偵測的 PostToolUse:Bash hook 加入 `is_subagent_environment()`（hook_utils/hook_io.py）早期跳過 | spawn IMP 追蹤 |
 | B. 中期（DOC） | hook 開發 checklist 規則：任何輸出 additionalContext / systemMessage 的 hook 必須評估 subagent 受眾適切性，列入新 hook 審查強制項 | spawn DOC 追蹤 |
-| C. 長期（ANA） | 評估受眾標記機制：AGENT_PRELOAD 教 subagent 忽略 PM-only 前綴，或 CC runtime 層級方案 | spawn ANA 追蹤 |
+| C. 長期（ANA） | 評估受眾標記機制：CC runtime 層級方案，或 `.claude/rules/core/` 通用規則（已實測確認每次派發都會注入所有 subagent context）教 subagent 忽略 PM-only 前綴 | spawn ANA 追蹤（AGENT_PRELOAD.md 候選已排除：`.claude/agents/*.md` 主文 `@-import` 實測不會展開為內容，不構成 subagent 可靠受達路徑） |
 
 **識別訊號**：subagent 回報含「給 PM」「建議執行」等第三方視角指令；唯讀 agent 的 transcript 出現寫入命令；hook 原始碼有 additionalContext / systemMessage 輸出但 grep 不到 `is_subagent_environment`。
 
@@ -46,9 +46,10 @@ Hook 輸出透過 additionalContext / systemMessage 注入 LLM context，但未�
 
 - `.claude/hooks/hook_utils/hook_io.py` — `is_subagent_environment()` helper
 - `.claude/rules/core/quality-baseline.md` 規則 4 — Hook 失敗可見性（互補：本 PC 處理「成功但受眾錯配」）
-- `.claude/agents/AGENT_PRELOAD.md` — 長期防護 C 的落點候選
+- `.claude/rules/core/`（任一通用規則檔）— 長期防護 C 的落點候選；`.claude/agents/AGENT_PRELOAD.md` 已實測排除（`@-import` 不展開，無法送達 subagent context）
 
 ---
 
-**Last Updated**: 2026-06-11
+**Last Updated**: 2026-08-17
+**Version**: 1.1.0 — 「長期（ANA）」防護候選改述：三探針實測證實 `.claude/agents/*.md` 主文 `@-import` 不展開為內容，AGENT_PRELOAD.md 已排除作為受眾標記機制落點候選，改列 `.claude/rules/core/` 或 CC runtime 層級方案
 **Version**: 1.0.0 — 自 hook 注入雙向污染 ANA 結論建立（症狀/根因/案例/防護，含三層防護 spawn 對應）

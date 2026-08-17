@@ -95,9 +95,9 @@ ls <目標目錄>/<預期檔名>
 - pepper Phase 3a 接手時應例行驗證 Phase 1 spec 對既有 CLI 的描述（W10-115 案例已自然發生）
 - Phase 3b 實作者（或 ANA spawn IMP 執行者）接手時應驗證 `where.files` 中的路徑存在性，發現偏差時在 Problem Analysis 記錄並回填規劃 ticket Solution（W14-036 案例：agent 自律對齊成功，但漏回填規劃 ticket）
 
-### AGENT_PRELOAD 通用層防護
+### AGENT_PRELOAD 規則 8（非自動送達，需主動 Read）
 
-在 AGENT_PRELOAD.md 加入「規劃 hook/CLI 名稱前必須 grep/ls 驗證存在性」條款（見「相關文件」連結）。
+`AGENT_PRELOAD.md` 規則 8 已含「規劃 hook/CLI 名稱前必須 grep/ls 驗證存在性」條款（見「相關文件」連結）。**校準（實測後）**：`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，本條款不會自動送達所有 subagent context，僅在代理人主動 Read `AGENT_PRELOAD.md` 時生效；本 PC 步驟一至三列出的 prompt 層與 checklist 層防護（見上文「中期」「跨 Phase 安全網」章節）才是不依賴代理人自行閱讀的實際防護。
 
 ## 決策記錄：選 A（擴充 PC-143）vs 選 B（新建 PC）
 
@@ -115,7 +115,7 @@ W10-115（lavender CLI flag）與 W14-036（basil ANA hook 名稱）共享相同
 
 ## 相關文件
 
-- `.claude/agents/AGENT_PRELOAD.md`（通用層防護條款，規則 8）
+- `.claude/agents/AGENT_PRELOAD.md` 規則 8（條款所在，需代理人主動 Read 才生效，非自動送達）
 - `.claude/agents/lavender-interface-designer.md`（待補強既有行為驗證規範）
 - `.claude/error-patterns/process-compliance/PC-068-phase3a-planning-new-utility-without-scan.md`（pepper Phase 3a 既有 utility 掃描，本 PC 的姊妹模式）
 
@@ -131,6 +131,6 @@ W10-115（lavender CLI flag）與 W14-036（basil ANA hook 名稱）共享相同
 ---
 
 **Created**: 2026-05-12
-**Updated**: 2026-05-14（W14-040：擴充標題涵蓋 ANA 規劃情境；加入 W14-036 案例；加入 AGENT_PRELOAD 通用層防護）
+**Updated**: 2026-08-17（三探針實測證實 `.claude/agents/*.md` 主文 `@-import` 不展開為內容，「AGENT_PRELOAD 通用層防護」章節與相關文件條目改述為非自動送達，需代理人主動 Read；歷史子項見下）；2026-05-14（W14-040：擴充標題涵蓋 ANA 規劃情境；加入 W14-036 案例；加入 AGENT_PRELOAD 通用層防護）
 **Source**: W10-115 Phase 3a pepper 回報的 Spec 偏差（首例）；W14-036 basil ANA spawn IMP hook 名稱誤記（二度重現）
 **Related**: PC-068（姊妹模式：pepper Phase 3a 既有 utility 掃描）

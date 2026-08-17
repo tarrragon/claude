@@ -185,21 +185,26 @@ git diff --cached | grep "汙"
 
 ## 收尾責任：自律 complete
 
-**Why**：mint 為 haiku + effort: low 模型，對 AGENT_PRELOAD 規則 2.4 的長文 attention 落地率系統性偏低（W3-049 ANA 驗證根因）。在 agent 定義層顯性重複核心收尾指令，是補強落地率的必要防護。
+**Why**：`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，AGENT_PRELOAD.md 從未送達任何 subagent context（不限 model）。mint 為 haiku + effort: low 模型，即使 AGENT_PRELOAD.md 內容能送達，對長文 attention 落地率仍系統性偏低（W3-049 ANA 驗證根因）——兩個因素疊加，在 agent 定義層直接寫入核心收尾指令是唯一已實測確認有效的路徑。
 
 **Consequence**：未自律 complete 會留下 ticket 滯留 in_progress，PM 需額外執行 check-acceptance + complete 補做收尾，違反代理人自律主責原則（PC-105 模式重現）。
 
-**Action**：完成格式化任務並 commit 後，主動執行以下兩步：
+**Action**：
+
+1. 認領時申報身份：`ticket track claim <ticket-id> --as mint-format-specialist`
+2. 分析或修正產出即時寫入 ticket，不留到最後：
+   `ticket track append-log <ticket-id> --section "<章節>" "<內容>"`
+3. 完成格式化任務並 commit 後，主動執行以下兩步：
 
 ```bash
 # 1. 勾選所有 acceptance（agent 已逐項確認完成）
-ticket track check-acceptance --all <ticket-id>
+ticket track check-acceptance <ticket-id> --all --as mint-format-specialist
 
 # 2. acceptance 全數通過時 complete
-ticket track complete <ticket-id>
+ticket track complete <ticket-id> --as mint-format-specialist
 ```
 
-> `<ticket-id>` 替換為當前認領的 ticket ID（範例：`0.19.0-W3-049.1`）。
+> `<ticket-id>` 替換為當前認領的 ticket ID（範例：`0.19.0-W3-049.1`）。`--as` 為必要而非選用：`claim --as` 會寫入 `who.current`，使後續 `complete --as` 與 identity-guard 對稱通過。
 
 ### 例外情境
 
@@ -210,6 +215,24 @@ ticket track complete <ticket-id>
 
 > **完整規範**：`.claude/agents/AGENT_PRELOAD.md` 規則 2.4
 > **安全網**：acceptance-gate-hook 在 complete 觸發前自動驗證，agent 自律 complete 無安全風險
+
+---
+
+## 查詢範圍限制
+
+實作基於測試，不基於探索。收到任務後查詢範圍限縮於 ticket 指定檔案、其直接
+依賴、對應測試、以及 ticket 明列的參考文件。**禁止**為建立全域理解而廣泛瀏覽。
+
+**Why**：subagent 約 20 tool call 即耗盡回合（PC-042、PC-047）；讀取階段超支
+會在寫入前用完回合，任務失敗且 PM 需重派並重付一次讀取成本。
+
+---
+
+## 最小變更紀律
+
+只改被派發任務要求改的碼，diff 每行須能對應需求。**禁止**四類越界：順手改鄰近
+無關碼（命名 / typo / 風格）、重新格式化未被要求的檔案、清理非自己造成的既有
+死碼、以個人偏好改既有風格。新增碼須匹配所在檔案既有風格。
 
 ---
 
@@ -297,12 +320,13 @@ ticket track complete <ticket-id>
 
 ---
 
-**Last Updated**: 2026-05-26
-**Version**: 1.2.0
+**Last Updated**: 2026-08-17
+**Version**: 1.3.0
 **Specialization**: Code Formatting, Path Semanticization, and Quality Assurance
 
 **Change Log**:
 
+- v1.3.0 (2026-08-17): 「收尾責任：自律 complete」段落 Why 句校準：三探針實測證實 AGENT_PRELOAD.md 從未經 `@-import` 送達任何 subagent context（不限 model），原「haiku 對長文 attention 落地率偏低」表述僅描述疊加因素之一，非完整根因
 - v1.2.0 (2026-05-26): 新增「收尾責任：自律 complete」段落，重複 AGENT_PRELOAD 規則 2.4 核心指令（check-acceptance + complete），補強 haiku low-effort model 對長文規則的 attention 落地率（W3-049 ANA 結論落地，W3-049.1，含 Layer 2 basil-writing-critic 微調：補佔位符範例 + NeedsContext schema 引用）
 - v1.1.0 (2026-03-02): 字元 Normalize 任務白名單機制
 

@@ -31,8 +31,9 @@ Dispatch Record Hook - PreToolUse (Agent)
   - dispatch-active.json 從未被寫入（缺少記錄端）
   - 0.2.1-W3-302 — who.current 綁定遷移至 PostToolUse（issue 47 殘留缺口修復）
   - multi-PM 協調層 Phase 1（framework issue tarrragon/claude#77）—
-    補 session_id/parent_session_id/ticket_id/files 欄位，供 pm-registry
-    交叉比對「哪個 PM session 派發了哪些工作」
+    補 session_id/ticket_id/files 欄位，供 pm-registry 交叉比對「哪個
+    PM session 派發了哪些工作」；registry 契約 v2 審查後移除 parent_
+    session_id（恆等 session_id 的冗餘欄位，資訊量為零）
 """
 
 import os
@@ -138,10 +139,8 @@ def main() -> int:
     # 取得專案根目錄
     project_root = get_project_root()
 
-    # 派發者（PM）自身 session_id；parent_session_id 依契約與 session_id
-    # 同值（非血緣欄位，供 subagent 端自我歸屬所屬 PM session）
+    # 派發者（PM）自身 session_id
     session_id = resolve_session_id(input_data)
-    parent_session_id = session_id
 
     # Ticket ID：prompt 內 regex 提取，缺則從 description 補
     ticket_id = extract_ticket_id(tool_input.get("prompt", ""), agent_description)
@@ -164,7 +163,6 @@ def main() -> int:
             files=files,
             branch_name="worktree" if isolation == "worktree" else "",
             session_id=session_id,
-            parent_session_id=parent_session_id,
         )
         logger.info(
             "recorded dispatch: %s (isolation=%s, ticket_id=%s, files=%d, session_id=%s)",

@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-session-registry-heartbeat-hook 測試套件（multi-PM 協調層 Phase 1）
+session-registry-stop-heartbeat-hook 測試套件（registry 契約 v2 D1/D1b）
 
-覆蓋：subagent 環境跳過 / session_id 缺失跳過 / 正常呼叫 update_heartbeat
-（含 debounce 命中/未命中兩種回傳值）/ OSError 不阻擋。
+覆蓋：subagent 環境跳過 / stop_hook_active=true 跳過（自激回合）/
+session_id 缺失跳過 / 正常呼叫 update_heartbeat（含 debounce 兩種回傳值）/
+非 git 環境跳過 / OSError 不阻擋。
+
+v1 到 v2：本檔取代 session-registry-stop-hook.py（release 邏輯 +
+background_tasks 守衛，已隨契約 v2 D1 移除，release 改掛 SessionEnd，
+見 test_session_registry_end_hook.py）。
 """
 
 import importlib.util
@@ -12,9 +17,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 hooks_path = Path(__file__).parent.parent
-hook_file = hooks_path / "session-registry-heartbeat-hook.py"
+hook_file = hooks_path / "session-registry-stop-heartbeat-hook.py"
 spec = importlib.util.spec_from_file_location(
-    "session_registry_heartbeat_hook", hook_file
+    "session_registry_stop_heartbeat_hook", hook_file
 )
 hook = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(hook)
@@ -53,6 +58,21 @@ class TestMain:
         result, mock_update = self._run({"session_id": "s1"}, subagent=True)
         assert result == EXIT_SUCCESS
         mock_update.assert_not_called()
+
+    def test_stop_hook_active_true_skips_update(self):
+        """自激回合（另一個 Stop hook 的 block 決策引發）不觸發心跳寫入。"""
+        result, mock_update = self._run(
+            {"session_id": "s1", "stop_hook_active": True}, subagent=False
+        )
+        assert result == EXIT_SUCCESS
+        mock_update.assert_not_called()
+
+    def test_stop_hook_active_false_still_updates(self):
+        result, mock_update = self._run(
+            {"session_id": "pm-session-1", "stop_hook_active": False}, subagent=False
+        )
+        assert result == EXIT_SUCCESS
+        mock_update.assert_called_once()
 
     def test_missing_session_id_skips_update(self, monkeypatch, capsys):
         monkeypatch.delenv(hook.ENV_SESSION_ID, raising=False)

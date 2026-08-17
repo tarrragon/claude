@@ -335,7 +335,7 @@ effort: low
 - [ ] 代理人會被背景派發？→ 必須有 `permissionMode`（避免預設 `default` 自動拒）
 - [ ] 派發時目標路徑是否在主 repo cwd 內？→ 若否，改走 PM 直接執行或設 `additionalDirectories`
 - [ ] `name`、`description`、`tools` 三欄必填？
-- [ ] 引用 `AGENT_PRELOAD.md`？
+- [ ] 需要代理人取得 `AGENT_PRELOAD.md` 內容時，已用 `initialPrompt` 顯式指示 `Read .claude/agents/AGENT_PRELOAD.md`（見上方「使用場景」範例）？單純在主文加 `@.claude/agents/AGENT_PRELOAD.md` 引用行不會展開為內容（已實測），不構成有效載入手段
 - [ ] **唯讀分析型代理人**（不需 Ticket ID 即可派發，如 Explore/code-explorer/Plan 類型）？→ 確認是否需加入 `.claude/hooks/agent-ticket-validation-hook.py` 的 `TICKET_EXEMPT_AGENT_TYPES` 白名單，否則該代理人會因 prompt 不含 Ticket ID 被 deny（W10-043.1 audit P2 風險）
 
 ---
@@ -428,7 +428,8 @@ effort: low
 
 ---
 
-**Last Updated**: 2026-05-13
+**Last Updated**: 2026-08-17
+**Version**: 1.3.0 — 「檢查清單」的「引用 AGENT_PRELOAD.md？」項改述：單純加 `@-import` 引用行不構成有效載入（已實測不展開為內容），改要求 `initialPrompt` 顯式 `Read` 指令
 **Version**: 1.2.0 — 新增 CC 2.1.x 完整 frontmatter 欄位說明（8 欄位：initialPrompt/memory/permissionMode 確認/hooks/background/effort/maxTurns/disallowedTools，每欄位含場景範例）+ 代理人升級建議清單（13 個代理人，含優先序分級）（0.18.0-W6-005）
 **Version**: 1.1.0 — 新增 Model 選擇指南（W9-005 落地）
 **Source**: PC-059 retry5 模式調查結論 + W9-005 代理人 model 重新評估

@@ -81,11 +81,12 @@
 
 ## 相關文件
 
-- `.claude/agents/AGENT_PRELOAD.md` — 代理人共享 preamble（auto-loaded rules 的主要來源之一）
+- `.claude/agents/AGENT_PRELOAD.md` — 代理人共享 preamble；**校準（實測後）**：`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，本檔非 auto-loaded，代理人須主動 Read 才會取得。實際每次派發都會注入所有 subagent context 的層級是 `.claude/rules/core/`
 - `.claude/rules/core/cognitive-load.md` — Context Bundle token 閾值與過載判準
 - `docs/work-logs/v0/v0.31/v0.31.1/tickets/0.31.1-W8-029.md` — coriander 過載根因分析
 - `docs/work-logs/v0/v0.31/v0.31.1/tickets/0.31.1-W8-031.md` — 本次盤點與提升
 
 ---
 
-**Last Updated**: 2026-06-05 | **Version**: 1.0.0 — 初版，W8-031 落地（sonnet 1m 訂閱停用背景 + inherit/硬編碼決策原則 + 盤點分類表）
+**Last Updated**: 2026-08-17 | **Version**: 1.1.0 — 「相關文件」節 AGENT_PRELOAD.md 條目校準：三探針實測證實 `.claude/agents/*.md` 主文 `@-import` 不展開為內容，移除「auto-loaded rules 主要來源」失效宣告
+**Version**: 1.0.0 — 初版，W8-031 落地（sonnet 1m 訂閱停用背景 + inherit/硬編碼決策原則 + 盤點分類表）

@@ -38,32 +38,40 @@ def registry_paths():
 
 
 class TestGetRegistryDir:
-    def test_non_git_cwd_falls_back_to_dot_git(self):
-        """非 git 環境 fallback 至 <cwd>/.git。"""
+    def test_non_git_cwd_returns_none(self):
+        """非 git 環境回傳 None（契約 v2 D3：不再 fallback 寫入任何路徑）。"""
         with tempfile.TemporaryDirectory() as tmpdir:
             result = get_registry_dir(cwd=tmpdir)
-            assert result == Path(tmpdir) / ".git"
+            assert result is None
 
-    def test_get_registry_paths_shape(self):
+    def test_get_registry_paths_returns_none_for_non_git_cwd(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            registry_file, lock_file = get_registry_paths(cwd=tmpdir)
-            assert registry_file.name == "pm-registry.json"
-            assert lock_file.name == "pm-registry.lock"
-            assert registry_file.parent == lock_file.parent
+            result = get_registry_paths(cwd=tmpdir)
+            assert result is None
+
+    def test_get_registry_paths_shape_for_git_repo(self):
+        """真實 git repo（本專案自身）應解析出有效路徑 tuple。"""
+        project_root = str(Path(__file__).resolve().parents[3])
+        result = get_registry_paths(cwd=project_root)
+        assert result is not None
+        registry_file, lock_file = result
+        assert registry_file.name == "pm-registry.json"
+        assert lock_file.name == "pm-registry.lock"
+        assert registry_file.parent == lock_file.parent
 
 
 class TestReadRegistry:
     def test_missing_file_returns_empty_skeleton(self, registry_paths):
         registry_file, _ = registry_paths
         data = read_registry(registry_file)
-        assert data == {"schema_version": 1, "sessions": {}}
+        assert data == {"schema_version": 2, "sessions": {}}
 
     def test_corrupt_json_rebuilds_and_notifies_stderr(self, registry_paths, capsys):
         registry_file, _ = registry_paths
         registry_file.parent.mkdir(parents=True, exist_ok=True)
         registry_file.write_text("{not valid json", encoding="utf-8")
         data = read_registry(registry_file)
-        assert data == {"schema_version": 1, "sessions": {}}
+        assert data == {"schema_version": 2, "sessions": {}}
         captured = capsys.readouterr()
         assert "重建空 registry" in captured.err
 
@@ -72,13 +80,44 @@ class TestReadRegistry:
         registry_file.parent.mkdir(parents=True, exist_ok=True)
         registry_file.write_text(json.dumps({"schema_version": 1}), encoding="utf-8")
         data = read_registry(registry_file)
-        assert data == {"schema_version": 1, "sessions": {}}
+        assert data == {"schema_version": 2, "sessions": {}}
+
+    def test_v1_file_normalized_gracefully_not_rebuilt(self, registry_paths):
+        """schema_version=1 檔案（含已廢棄的 parent_session_id 欄位）不視為
+        損毀；graceful 正規化為 v2 形狀，既有 session 資料保留不遺失。"""
+        registry_file, _ = registry_paths
+        registry_file.parent.mkdir(parents=True, exist_ok=True)
+        v1_payload = {
+            "schema_version": 1,
+            "sessions": {
+                "legacy-sess": {
+                    "name": "old-name",
+                    "project": "/old/project",
+                    "registered_at": "2026-01-01T00:00:00+00:00",
+                    "heartbeat_ts": "2026-01-01T00:00:00+00:00",
+                    "tickets": ["ticket-a"],
+                    "files": ["a.py"],
+                    "parent_session_id": "legacy-sess",
+                }
+            },
+        }
+        registry_file.write_text(json.dumps(v1_payload), encoding="utf-8")
+
+        data = read_registry(registry_file)
+
+        assert data["schema_version"] == 2
+        entry = data["sessions"]["legacy-sess"]
+        assert "parent_session_id" not in entry
+        # 其餘欄位（含 lease：tickets/files）完整保留，非損毀重建
+        assert entry["tickets"] == ["ticket-a"]
+        assert entry["files"] == ["a.py"]
+        assert entry["name"] == "old-name"
 
 
 class TestWriteRegistry:
     def test_write_then_read_roundtrip(self, registry_paths):
         registry_file, _ = registry_paths
-        payload = {"schema_version": 1, "sessions": {"s1": {"name": "x"}}}
+        payload = {"schema_version": 2, "sessions": {"s1": {"name": "x"}}}
         write_registry(registry_file, payload)
         assert read_registry(registry_file) == payload
 
@@ -87,12 +126,12 @@ class TestWriteRegistry:
         registry_file, _ = registry_paths
         write_registry(
             registry_file,
-            {"schema_version": 1, "sessions": {"a": {"name": "aaaaaaaaaa"}}},
+            {"schema_version": 2, "sessions": {"a": {"name": "aaaaaaaaaa"}}},
         )
-        write_registry(registry_file, {"schema_version": 1, "sessions": {}})
+        write_registry(registry_file, {"schema_version": 2, "sessions": {}})
         raw = registry_file.read_text(encoding="utf-8")
         assert "aaaaaaaaaa" not in raw
-        assert json.loads(raw) == {"schema_version": 1, "sessions": {}}
+        assert json.loads(raw) == {"schema_version": 2, "sessions": {}}
 
 
 class TestRegisterSession:
@@ -109,15 +148,80 @@ class TestRegisterSession:
         assert entry["registered_at"] == entry["heartbeat_ts"]
         assert entry["tickets"] == []
         assert entry["files"] == []
-        assert entry["parent_session_id"] is None
+        assert "parent_session_id" not in entry
 
-    def test_register_overwrites_existing_entry(self, registry_paths):
+    def test_default_source_resets_existing_entry(self, registry_paths):
+        """未指定 source（空字串，非 "resume"）一律 reset，維持原有行為
+        （契約 v2 D4 增補 1：僅 resume 觸發 merge，其餘皆 reset）。"""
         registry_file, lock_file = registry_paths
         register_session(registry_file, lock_file, "sess-1", "old-name", "/old")
         register_session(registry_file, lock_file, "sess-1", "new-name", "/new")
         data = read_registry(registry_file)
         assert len(data["sessions"]) == 1
         assert data["sessions"]["sess-1"]["name"] == "new-name"
+
+    def test_startup_source_resets_lease(self, registry_paths):
+        """source="startup" 時重置 tickets/files/registered_at（新生 session
+        不繼承舊 lease）。"""
+        registry_file, lock_file = registry_paths
+        register_session(registry_file, lock_file, "sess-1", "n", "/p", source="startup")
+        data = read_registry(registry_file)
+        data["sessions"]["sess-1"]["tickets"] = ["ticket-a"]
+        write_registry(registry_file, data)
+        old_registered_at = data["sessions"]["sess-1"]["registered_at"]
+
+        register_session(registry_file, lock_file, "sess-1", "n", "/p", source="startup")
+
+        after = read_registry(registry_file)["sessions"]["sess-1"]
+        assert after["tickets"] == []
+        assert after["registered_at"] != old_registered_at
+
+    def test_clear_source_resets_lease(self, registry_paths):
+        """source="clear" 與 startup 同視為新生 session，重置 lease。"""
+        registry_file, lock_file = registry_paths
+        register_session(registry_file, lock_file, "sess-1", "n", "/p")
+        data = read_registry(registry_file)
+        data["sessions"]["sess-1"]["tickets"] = ["ticket-a"]
+        write_registry(registry_file, data)
+
+        register_session(registry_file, lock_file, "sess-1", "n", "/p", source="clear")
+
+        after = read_registry(registry_file)["sessions"]["sess-1"]
+        assert after["tickets"] == []
+
+    def test_resume_source_merges_and_preserves_lease(self, registry_paths):
+        """source="resume" 且既有 entry 存在時 merge：保留 tickets/files/
+        registered_at，僅更新 heartbeat_ts/name/project（契約 v2 D4 增補 1
+        核心行為：繼承既有 lease）。"""
+        registry_file, lock_file = registry_paths
+        register_session(registry_file, lock_file, "sess-1", "old-name", "/old")
+        data = read_registry(registry_file)
+        data["sessions"]["sess-1"]["tickets"] = ["ticket-a"]
+        data["sessions"]["sess-1"]["files"] = ["a.py"]
+        write_registry(registry_file, data)
+        old_registered_at = data["sessions"]["sess-1"]["registered_at"]
+
+        register_session(
+            registry_file, lock_file, "sess-1", "new-name", "/new", source="resume"
+        )
+
+        after = read_registry(registry_file)["sessions"]["sess-1"]
+        assert after["tickets"] == ["ticket-a"]
+        assert after["files"] == ["a.py"]
+        assert after["registered_at"] == old_registered_at
+        assert after["name"] == "new-name"
+        assert after["project"] == "/new"
+
+    def test_resume_source_without_existing_entry_creates_fresh(self, registry_paths):
+        """source="resume" 但 entry 不存在（首次見過的 session_id）：無可
+        merge 對象，退回建立全新 entry，非拋出例外或跳過。"""
+        registry_file, lock_file = registry_paths
+        register_session(
+            registry_file, lock_file, "sess-orphan-resume", "n", "/p", source="resume"
+        )
+        data = read_registry(registry_file)
+        assert "sess-orphan-resume" in data["sessions"]
+        assert data["sessions"]["sess-orphan-resume"]["tickets"] == []
 
 
 class TestUpdateHeartbeat:
@@ -167,6 +271,37 @@ class TestUpdateHeartbeat:
 
         wrote = update_heartbeat(registry_file, lock_file, "sess-5", "name-5", "/p")
         assert wrote is True
+
+    def test_existing_entry_merge_preserves_tickets_and_files(
+        self, registry_paths, monkeypatch
+    ):
+        """既有 entry 心跳更新一律 merge：保留 tickets/files/registered_at，
+        僅更新 heartbeat_ts/name/project（契約 v2 D4：防心跳把 Phase 2
+        lease 寫入覆蓋掉）。"""
+        registry_file, lock_file = registry_paths
+        register_session(registry_file, lock_file, "sess-7", "old-name", "/old")
+        data = read_registry(registry_file)
+        data["sessions"]["sess-7"]["tickets"] = ["ticket-a"]
+        data["sessions"]["sess-7"]["files"] = ["a.py"]
+        from datetime import datetime, timedelta, timezone
+        old_ts = (
+            datetime.now(timezone.utc)
+            - timedelta(seconds=HEARTBEAT_DEBOUNCE_SECONDS + 5)
+        ).isoformat()
+        data["sessions"]["sess-7"]["heartbeat_ts"] = old_ts
+        old_registered_at = data["sessions"]["sess-7"]["registered_at"]
+        write_registry(registry_file, data)
+
+        wrote = update_heartbeat(registry_file, lock_file, "sess-7", "new-name", "/new")
+
+        assert wrote is True
+        after = read_registry(registry_file)["sessions"]["sess-7"]
+        assert after["tickets"] == ["ticket-a"]
+        assert after["files"] == ["a.py"]
+        assert after["registered_at"] == old_registered_at
+        assert after["name"] == "new-name"
+        assert after["project"] == "/new"
+        assert after["heartbeat_ts"] != old_ts
 
 
 class TestReleaseSession:

@@ -2,7 +2,7 @@
 
 > **平台機制**：Claude Code 啟動時自動載入 `CLAUDE.md` + `.claude/rules/**/*.md`。其他 `.claude/` 子目錄不會自動載入，必須主動 Read。
 
-本目錄只放**所有角色通用**的品質規則（集中於 `core/`，現為 17 檔）。PM 流程規則在 `pm-rules/`，技術參考在 `references/`。
+本目錄只放**所有角色通用**的品質規則（集中於 `core/`，現為 19 檔）。PM 流程規則在 `pm-rules/`，技術參考在 `references/`。
 
 **自動載入預算原則**：`core/` 每回合注入 PM 與所有代理人的 context，故只放「每回合都需遵守的行為禁令」；情境性內容（特定流程細節、語言品質規範、按需查表資料）放 `references/` 按需讀取。新增 `core/` 規則前先自問「這是否每回合都需要？」否則放 `references/`。stub 構成標準與外移 SOP（hook 錨點保全、引用鏈同步、預算驗證）→ `.claude/references/auto-load-stub-conventions.md`。
 

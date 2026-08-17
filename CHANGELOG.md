@@ -1,3 +1,21 @@
+## [2.33.0] - 2026-08-18
+
+### Summary
+feat: land registry contract v2 (SessionEnd release + merge upsert); refactor: pm-role 外移與兩個 index 改按需，auto-load 降至預算內; fix: 修復 ticket 檔案存取守衛的絕對路徑與 handoff 模式兩破口 (+5 more)
+
+Changes: 1 feat, 1 refactor, 1 fix, 4 docs, 1 chore
+
+- feat: land registry contract v2 (SessionEnd release + merge upsert)
+- refactor: pm-role 外移與兩個 index 改按需，auto-load 降至預算內
+- fix: 修復 ticket 檔案存取守衛的絕對路徑與 handoff 模式兩破口
+- docs: 寫入三段受眾限定條款至 11 個實作類 agent 定義檔
+- docs: 補修 decision-tree 分支對舉並完成收尾
+- docs: 全庫掃描修正 AGENT_PRELOAD 失效宣告與失效建議
+- docs: 依 Layer 2 審查修正兩處執行期誤導並收斂自動載入層字數
+- chore: sync-push 回寫框架版本號
+
+---
+
 ## [2.32.0] - 2026-08-17
 
 ### Summary

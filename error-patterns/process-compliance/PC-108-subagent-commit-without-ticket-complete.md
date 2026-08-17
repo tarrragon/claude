@@ -58,7 +58,7 @@ Thyme agent 擴充 complete hook type-aware body 驗證與佔位符偵測並 com
 
 ### 1. Agent 自律收尾
 
-W17-033 應將以下流程寫入 `AGENT_PRELOAD.md` 與 `agent-definition-standard.md`：
+W17-033 應將以下流程寫入 `agent-definition-standard.md`（位於 `.claude/rules/core/`，該層已實測確認每次派發都會注入所有 subagent context，惟該檔為速查 stub，實質內容在 `references/agent-definition-standard-details.md`，仍需代理人依 stub 指引主動 Read）；`AGENT_PRELOAD.md` 亦含同一流程但僅供代理人主動 Read 時參考——`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，不構成自動送達路徑：
 
 ```bash
 ticket track check-acceptance --all <ticket-id>

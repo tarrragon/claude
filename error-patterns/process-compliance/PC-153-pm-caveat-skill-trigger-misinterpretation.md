@@ -85,13 +85,13 @@ Signal mask 不可遮蔽所有訊號（OS 設計），同理 caveat 不可遮蔽
 
 | 層級 | 機制 | 狀態 |
 |------|------|------|
-| 規則層 | `.claude/rules/core/pm-role.md`「Caveat 區塊訊號判讀規則」章節 | 已落地（0.19.0-W3-023） |
+| 規則層 | `.claude/references/pm-role-details.md`「Caveat 區塊訊號判讀規則」章節 | 已落地（0.19.0-W3-023） |
 | 教訓層 | 本 PC-153 | 已落地（0.19.0-W3-023） |
 | Hook 層（未來） | 偵測 PM 在 `<command-name>` 存在的 caveat 區塊內未執行對應 skill 流程，發出提示 | 未實作（後續 ticket 評估必要性） |
 
 ## 相關規則
 
-- `.claude/rules/core/pm-role.md`「Caveat 區塊訊號判讀規則」章節 —— 本 PC 的規則層落地
+- `.claude/references/pm-role-details.md`「Caveat 區塊訊號判讀規則」章節 —— 本 PC 的規則層落地
 - `.claude/skills/ticket/SKILL.md`「無子命令時的預設行為」章節 —— 案例 1 中被跳過的明文流程
 - `.claude/rules/core/decision-trigger-binding.md` 規則 1.5 —— 「適用邊界依載體區分」的同構結構
 

@@ -167,7 +167,7 @@ grep -E "^## (允許產出|禁止行為|適用情境)" .claude/agents/<agent>.md
 
 ## 執行責任：Ticket 完成（收尾）
 
-實作類 agent 完成 commit 與 body 填寫後，必須自律執行 `ticket track check-acceptance --all <id>` 與 `ticket track complete <id>`。**Why**：歷史設計將 complete 視為 PM 專屬，導致 PM 每個 ticket 需多 2-3 tool call 補做收尾（W17-020 / W17-016.3 實證）；agent 自律 + acceptance-gate-hook 安全網的組合成本最低。**Consequence**：缺收尾責任會讓 ticket 滯留 in_progress、PM 在 handoff 時才發現未 complete，違反代理人自律主責原則。**Action**：本章節必須在實作類 agent 的「執行責任」段落或 AGENT_PRELOAD.md 規則 2.4 中引用。
+實作類 agent 完成 commit 與 body 填寫後，必須自律執行 `ticket track check-acceptance --all <id>` 與 `ticket track complete <id>`。**Why**：歷史設計將 complete 視為 PM 專屬，導致 PM 每個 ticket 需多 2-3 tool call 補做收尾（W17-020 / W17-016.3 實證）；agent 自律 + acceptance-gate-hook 安全網的組合成本最低。**Consequence**：缺收尾責任會讓 ticket 滯留 in_progress、PM 在 handoff 時才發現未 complete，違反代理人自律主責原則。**Action**：本章節內容必須直接寫入實作類 agent 自身定義檔（`.claude/agents/<name>.md`）的「收尾責任」段落——這是唯一已實測確認會送達該 agent 的路徑；AGENT_PRELOAD.md 規則 2.4 僅供代理人主動 Read 時參考，`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，不構成自動送達路徑（mint-format-specialist.md 的「收尾責任：自律 complete」段落為此模式的落地範例）。
 
 ### 收尾步驟（依序執行）
 
@@ -197,4 +197,5 @@ acceptance-gate-hook 在 complete 觸發前自動驗證，無論由 agent 或 PM
 
 ---
 
-**Last Updated**: 2026-06-12 | **Version**: 1.5.0 — 主文 substance 自 `.claude/rules/core/agent-definition-standard.md` 外移至本檔（W7-004.2 auto-load token 收斂）；core/ 原檔降為速查 stub。歷史 1.1–1.4 版見 git log。**Source**: W5-001 派發越界根因 A + PC-110 + W17-033 + SA 跨 ticket close 事件（並行 claim race condition 暴露）。
+**Last Updated**: 2026-08-17 | **Version**: 1.6.0 — 「執行責任：Ticket 完成」章節 Action 句改述：三探針實測證實 `.claude/agents/*.md` 主文 `@-import` 不展開為內容，AGENT_PRELOAD.md 規則 2.4 非有效送達路徑，改要求直接寫入實作類 agent 自身定義檔主文（mint-format-specialist.md 為落地範例）
+**Version**: 1.5.0 — 主文 substance 自 `.claude/rules/core/agent-definition-standard.md` 外移至本檔（W7-004.2 auto-load token 收斂）；core/ 原檔降為速查 stub。歷史 1.1–1.4 版見 git log。**Source**: W5-001 派發越界根因 A + PC-110 + W17-033 + SA 跨 ticket close 事件（並行 claim race condition 暴露）。

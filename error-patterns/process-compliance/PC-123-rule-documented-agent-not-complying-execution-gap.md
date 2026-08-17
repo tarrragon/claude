@@ -97,7 +97,7 @@ W10-098.2 派發 thyme-documentation-integrator 補 PROP-001 frontmatter evaluat
 #### 根因分析
 
 - agent-definition-standard.md 含 W17-072 規則，但 thyme 在 dispatch prompt 中未被顯式提示
-- thyme prompt-time 載入的是 AGENT_PRELOAD.md，未載入 W17-072 主文
+- thyme prompt-time 未載入 W17-072 主文；當時記錄為「載入的是 AGENT_PRELOAD.md」，**校準（後續實測）**：`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，thyme 實際上兩者皆未取得（AGENT_PRELOAD.md 亦未送達），僅 `.claude/rules/core/` 層級的內容有確實注入
 - Dispatch prompt 內容只寫 ticket id 與步驟（claim → Edit → check-acceptance → commit → complete），未提結構約束
 - Agent 默認用直觀寫法（H2 章節「變更摘要」），結構違規但功能正確
 

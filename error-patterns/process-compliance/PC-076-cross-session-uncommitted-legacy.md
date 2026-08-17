@@ -87,7 +87,7 @@
 | 層級 | 措施 | 狀態 |
 |------|------|------|
 | Hook | branch-status-reminder 改為列出所有 tracked-modified 與 untracked（分組 staged/modified/untracked，上限 50 + 完整清單提示，雙通道 stderr + logger.warning） | **已升級至 Hook（W13-011 落地，v1.3.0）** |
-| 規則 | PM session-start 全量清點 SOP（讀 Hook 輸出 + `git status --porcelain --untracked=all` 雙重驗證 + 來源判定 + 遺留入 Ticket） | **已升級至 `.claude/rules/core/pm-role.md` Session-start 全量清點章節（W13-011 落地）** |
+| 規則 | PM session-start 全量清點 SOP（讀 Hook 輸出 + `git status --porcelain --untracked=all` 雙重驗證 + 來源判定 + 遺留入 Ticket） | **已升級至 `.claude/references/pm-role-details.md` Session-start 全量清點章節（W13-011 落地）** |
 | 流程 | Commit 前再次 `git status` 清點，將無關變更拆為獨立 commit 並標明「前 session 遺留」 | 行為準則 |
 | 流程 | Session 結束前強制執行完整 commit cycle；未完成實作留在工作區必須於該 session 內整合處理 | 建議實施（W10-014 相關） |
 

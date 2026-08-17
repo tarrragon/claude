@@ -50,7 +50,7 @@
 
 | 既有規則 | 覆蓋範圍 | 與本決策矩陣的關係 |
 |---------|---------|------------------|
-| `rules/core/pm-role.md` 派發位置（L40） | 自動載入一行摘要 + W17-018 fallback 補強 | 一行摘要不修改；本章節為其詳細展開 |
+| `references/pm-role-details.md`「派發位置（ARCH-015）」 | 按需層完整判準 + fallback 補強 | 本章節為其反模式與決策矩陣展開 |
 | 上節「派發位置判斷（ARCH-015）」 | 高階三類判斷表 | 本章節為「含 `.claude/` 路徑」分支的細化（含並行限制 + 否證 v1.0 絕對化） |
 | `pm-rules/parallel-dispatch.md` `.claude/` 例外章節 | 並行場景的 `.claude/` 例外 | 並行限制 ≤ 2 來自 PC-137，與本矩陣對齊 |
 | ARCH-015 | runtime hardcoded 保護記錄 | runtime 保護優先級最高，本矩陣依此為硬約束 |

@@ -20,7 +20,7 @@
 | `CLAUDE.md` | 所有角色 | 每回合自動 | 專案身份、開發指令、專案級技術選型、路由 | 框架通用知識（→ `.claude/`，否則無法 sync） |
 | `rules/core/` | 所有角色 | 每回合自動 | 行為禁令速查 + 路由（與 CLAUDE.md 同屬 file-size-guardian 45k 量測集合；MEMORY.md 每回合注入但不在量測集合內，屬 Claude Code 原生機制，非本框架載體） | 論證 / 流程 / 案例（→ `references/`、`error-patterns/`） |
 | `pm-rules/` | 僅 PM | 情境觸發按需 | 調度流程 SOP（派發、驗收、決策樹、skip-gate） | 代理人執行知識（→ agents / skills） |
-| `agents/AGENT_PRELOAD.md` | 全體代理人 | 派發時 @ 注入 | 代理人通用行為禁令（ticket 操作、git 限制、工具選擇、嵌套協議） | 單一代理人偏好（→ 各 agent 定義）、PM 流程（→ pm-rules） |
+| `agents/AGENT_PRELOAD.md` | 全體代理人（僅主動 Read 者） | 派發時不自動注入——三探針實測證實 `.claude/agents/*.md` 主文的 `@-import` 以字面字串留存，不展開為內容；代理人通用行為禁令需要保證全體送達時應改放 `rules/core/`（已實測確認每次派發都會注入所有 subagent context），或直接寫入各 agent 自身定義檔主文（如 mint-format-specialist.md「收尾責任」段落） | 代理人通用行為禁令（ticket 操作、git 限制、工具選擇、嵌套協議）——僅在代理人主動 Read 時生效 | 單一代理人偏好（→ 各 agent 定義）、PM 流程（→ pm-rules）、需保證全體送達的行為禁令（→ `rules/core/`） |
 | `agents/<name>.md` | 單一代理人 | 派發時載入 | 身份定位、三區塊（允許產出 / 禁止行為 / 適用情境）、設計偏好（命名習慣、技術手法傾向、文法語氣）、分工路由與升級條件 | → 見「代理人定義內容規範」節 |
 | `skills/` | 觸發者（角色無關） | 觸發時漸進揭露 | 可重複執行的工作流、方法、CLI 工具（TDD、寫作、ticket、worktree） | 身份偏好（→ agents）、專案設定（→ CLAUDE.md） |
 | `methodologies/` | 主動查閱者與 AI | 按需 | 框架判斷標準 / 核心規則（判準 + 步驟 + 檢查清單，明確且可直接套用） | 完整流程 / 範例 / 錯誤處理（→ skills） |
@@ -74,7 +74,8 @@
 
 ---
 
-**Last Updated**: 2026-07-27
+**Last Updated**: 2026-08-17
+**Version**: 1.12.0 — 修正 `agents/AGENT_PRELOAD.md` 列的「載入時機」欄：三探針實測證實 `.claude/agents/*.md` 主文的 `@-import` 不展開為內容，「派發時 @ 注入」為失效宣告；改述為需代理人主動 Read 才生效，需保證全體送達的行為禁令應改放 `rules/core/` 或直接寫入各 agent 定義主文
 **Version**: 1.11.0 — 移除 memory（專案層）載體列：memory 不再是本框架的知識載體，跨專案內容全數改落 `error-patterns/` 或 `rules/` `methodologies/` `references/`，專案特定內容落 `docs/` 或 `CLAUDE.md`（依 `pm-quality-baseline.md` 規則 7 三分流）；核心概念句「困在專案 memory」改為「框架相關內容誤落專案層文件」；Scope 句移除 memory 受眾軸說明；rules/core 列 MEMORY.md 註記為 Claude Code 原生機制、非本框架載體；Reference 規則 7 描述同步（0.2.1-W3-089，承接 0.2.1-W3-083 用戶裁示）
 **Version**: 1.10.0 — memory 載體條目更新為捕獲時分流語意（規則 7 前移同步，裝什麼補 deferred 項、不裝什麼改「成熟跨專案錯誤學習直寫 error-patterns」）；補 user-level（`~/CLAUDE.md` @import）載體條目（原地圖對機器層無條目的系統性盲區）；Reference 規則 7 描述同步（1.5.0-W5-011.2）
 **Version**: 1.9.0 — W8-041 標籤同步：methodologies 地圖列「30 秒理念複習清單」改為「框架判斷標準 / 核心規則（明確且可直接套用）」、受眾補 AI，Reference 對 framework-meta 描述「30 秒標準」改為「方法論判斷標準定位」，對齊 W8-040 新定位

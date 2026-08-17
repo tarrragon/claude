@@ -163,7 +163,6 @@ def record_dispatch(
     branch_name: str = "",
     agent_id: Optional[str] = None,
     session_id: str = "",
-    parent_session_id: str = "",
 ) -> None:
     """記錄一個新的派發。寫入 dispatch-active.json。
 
@@ -177,8 +176,11 @@ def record_dispatch(
         agent_id: 代理人 ID（可選，通常由 PostToolUse/SubagentStop 補寫）
         session_id: 派發者（PM）的 CC session_id（multi-PM 協調層，
             供 pm-registry 交叉比對「哪個 PM session 派發了哪些工作」）
-        parent_session_id: 同 session_id（派發者自身），供 subagent 端
-            自我歸屬所屬 PM session；非血緣欄位，純冗餘鍵值供查詢
+
+    Note:
+        v1 曾另有 parent_session_id 欄位（恆等 session_id 的冗餘值），
+        registry 契約 v2 審查判定其資訊量為零，已移除；nested spawn
+        語意分化時再視需要新增，不沿用舊欄位名稱與語意。
     """
     with _state_lock(project_root):
         state = _read_state(project_root)
@@ -191,7 +193,6 @@ def record_dispatch(
             "branch_name": branch_name,
             "dispatched_at": datetime.now(timezone.utc).isoformat(),
             "session_id": session_id,
-            "parent_session_id": parent_session_id,
         }
         state["dispatches"].append(entry)
         _write_state(project_root, state)

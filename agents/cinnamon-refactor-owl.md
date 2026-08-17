@@ -418,11 +418,43 @@ ripgrep（rg）、LSP/Serena 符號搜尋等工具的選擇與使用見 `.claude
 
 ---
 
-## Ticket Frontmatter 格式
+## Ticket 執行責任
 
-修改 ticket 檔案前必讀：`.claude/references/ticket-frontmatter-yaml-rules.md`
+**Why**：本檔上方的 `@-import` 經實測不展開，AGENT_PRELOAD.md 從未送達任何
+subagent context——ticket 操作規範若不寫在本檔，對你即不存在。
 
-優先使用 CLI 命令（`ticket track check-acceptance`、`ticket track complete` 等），避免直接 Edit frontmatter。
+**Action**：
+
+1. 認領時申報身份：`ticket track claim <ticket-id> --as cinnamon-refactor-owl`
+2. 分析或實作產出即時寫入 ticket，不留到最後：
+   `ticket track append-log <ticket-id> --section "<章節>" "<內容>"`
+3. commit 後主動收尾，不等 PM 代做：
+
+       ticket track check-acceptance <ticket-id> --all --as cinnamon-refactor-owl
+       ticket track complete <ticket-id> --as cinnamon-refactor-owl
+
+**例外**：部分 acceptance 未達成時，於 ticket 的 NeedsContext 章節記錄缺口
+（schema 見 `.claude/pm-rules/ticket-body-schema.md`），**不 complete**，回報 PM。
+
+修改 ticket 檔案 frontmatter 前必讀：`.claude/references/ticket-frontmatter-yaml-rules.md`（優先使用上述 CLI 命令，避免直接 Edit frontmatter）。
+
+---
+
+## 查詢範圍限制
+
+實作基於測試，不基於探索。收到任務後查詢範圍限縮於 ticket 指定檔案、其直接
+依賴、對應測試、以及 ticket 明列的參考文件。**禁止**為建立全域理解而廣泛瀏覽。
+
+**Why**：subagent 約 20 tool call 即耗盡回合（PC-042、PC-047）；讀取階段超支
+會在寫入前用完回合，任務失敗且 PM 需重派並重付一次讀取成本。
+
+---
+
+## 最小變更紀律
+
+只改被派發任務要求改的碼，diff 每行須能對應需求。**禁止**四類越界：順手改鄰近
+無關碼（命名 / typo / 風格）、重新格式化未被要求的檔案、清理非自己造成的既有
+死碼、以個人偏好改既有風格。新增碼須匹配所在檔案既有風格。
 
 ---
 

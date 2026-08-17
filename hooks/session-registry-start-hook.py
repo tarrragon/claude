@@ -17,6 +17,14 @@ Session Registry Start Hook - SessionStart
   （同一 repo 上多個獨立 worktree/branch 的主線程 PM），派發追蹤已由
   dispatch-active.json 承擔，兩者職責不重疊。
 
+  registry 契約 v2（D4 增補 1）：依 stdin 的 `source` 欄位分流——
+  `source == "resume"` 時 merge（繼承既有 lease，恢復語意）；其餘
+  （startup/clear/未知值）一律 reset（新生 session 不繼承舊 lease，
+  防 SessionEnd 漏觸發 + 同 session_id 重開時繼承 zombie lease）。
+
+  非 git 環境（`get_registry_paths` 回傳 None）跳過註冊並 stderr 一次性
+  提示（契約 v2 D3：不再 fallback 寫入讀端永不查詢的暫定路徑）。
+
 觸發時機: 每個 CC session 啟動時 (SessionStart)
 行為: 不阻擋（SessionStart 本就無 deny 機制），registry 損毀/缺檔時
       重建 + stderr 通知（雙通道可觀測性，異常不靜默）
@@ -25,6 +33,7 @@ Registry Schema 契約：見 .claude/lib/pm_registry.py 模組 docstring（SSOT�
 
 來源:
   - multi-PM 協調層 Phase 1（framework issue tarrragon/claude#77）
+  - Registry Schema 契約 v2（釋放時機/欄位/upsert 語意重議，同 issue）
 """
 
 import os
@@ -72,8 +81,16 @@ def main() -> int:
         logger.warning(message)
         return EXIT_SUCCESS
 
+    source = (input_data or {}).get("source", "")
+
     project_root = get_project_root()
-    registry_file, lock_file = get_registry_paths(cwd=str(project_root))
+    registry_paths = get_registry_paths(cwd=str(project_root))
+    if registry_paths is None:
+        message = "[session-registry-start-hook] 非 git 環境，跳過 registry 註冊"
+        sys.stderr.write(message + "\n")
+        logger.info(message)
+        return EXIT_SUCCESS
+    registry_file, lock_file = registry_paths
 
     try:
         register_session(
@@ -82,12 +99,14 @@ def main() -> int:
             session_id=session_id,
             name=project_root.name,
             project=str(project_root),
+            source=source,
             logger=logger,
         )
         logger.info(
-            "session 已註冊至 pm-registry: session_id=%s name=%s",
+            "session 已註冊至 pm-registry: session_id=%s name=%s source=%s",
             session_id,
             project_root.name,
+            source or "(empty)",
         )
     except OSError as e:
         message = "[session-registry-start-hook] registry 註冊失敗: {}".format(e)

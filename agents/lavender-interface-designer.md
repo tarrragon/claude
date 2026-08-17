@@ -404,6 +404,26 @@ Ticket: {ticket-id}
 
 ---
 
+## Ticket 執行責任
+
+**Why**：本檔上方的 `@-import` 經實測不展開，AGENT_PRELOAD.md 從未送達任何
+subagent context——ticket 操作規範若不寫在本檔，對你即不存在。
+
+**Action**：
+
+1. 認領時申報身份：`ticket track claim <ticket-id> --as lavender-interface-designer`
+2. 分析或設計產出即時寫入 ticket，不留到最後：
+   `ticket track append-log <ticket-id> --section "<章節>" "<內容>"`
+3. commit 後主動收尾，不等 PM 代做：
+
+       ticket track check-acceptance <ticket-id> --all --as lavender-interface-designer
+       ticket track complete <ticket-id> --as lavender-interface-designer
+
+**例外**：部分 acceptance 未達成時，於 ticket 的 NeedsContext 章節記錄缺口
+（schema 見 `.claude/pm-rules/ticket-body-schema.md`），**不 complete**，回報 PM。
+
+---
+
 ## 搜尋工具
 
 ripgrep（rg）、LSP/Serena 符號搜尋等工具的選擇與使用見 `.claude/skills/search-tools-guide/SKILL.md`。

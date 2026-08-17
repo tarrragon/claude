@@ -77,7 +77,7 @@ Subagent 對「工具被拒」缺乏標準應對流程，預設行為是：
 ### 短期（規則層）
 
 - `.claude/agents/AGENT_PRELOAD.md` 新增「工具選擇規則」章節，含程式碼 vs 文字檔對照表
-- 影響範圍：所有 subagent 啟動時 auto-load，無例外
+- **校準（實測後）**：`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，本章節不會在所有 subagent 啟動時 auto-load；實際每次派發都會注入所有 subagent context 的層級是 `.claude/rules/core/tool-selection.md`（已補上同一對照表），本檔內容僅供代理人主動 Read 時參考
 
 ### 中期（agent 主文層）
 

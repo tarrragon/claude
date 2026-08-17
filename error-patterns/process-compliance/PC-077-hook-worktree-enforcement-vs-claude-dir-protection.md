@@ -118,7 +118,7 @@ PM 派發實作代理人（thyme-python-developer、parsley-flutter-developer、
 | PM 跨 session 可查性 | 需 Read error-pattern + memory | 由 pm-role.md 派發位置一行摘要路由至 behavior-loop-details 詳細章節 |
 | 邊界文件化 | 散落於多檔 | 集中於決策矩陣下方「既有規則的關係」表 |
 
-**讀取路徑**：PM 跨 session 查詢 `.claude/` 派發決策時，依 `rules/core/pm-role.md` L40 一行摘要路由至 `pm-rules/behavior-loop-details.md` 「`.claude/` 修改派發決策矩陣」子章節。
+**讀取路徑**：PM 跨 session 查詢 `.claude/` 派發決策時，依 `references/pm-role-details.md`「派發位置（ARCH-015）」路由至 `pm-rules/behavior-loop-details.md` 「`.claude/` 修改派發決策矩陣」子章節。
 
 **PC-077 本身狀態**：本 PC 保留為歷史記錄（首發案例 + 根因 + 教訓 + 觸發案例累積），不再作為單獨決策依據；新增 ticket 派發判斷依 behavior-loop-details 決策矩陣。
 

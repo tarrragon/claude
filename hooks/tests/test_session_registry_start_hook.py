@@ -45,6 +45,13 @@ class TestMain:
         ) as mock_sub, patch.object(
             hook, "get_project_root"
         ) as mock_root, patch.object(
+            hook,
+            "get_registry_paths",
+            return_value=(
+                Path("/repo/.git/pm-registry.json"),
+                Path("/repo/.git/pm-registry.lock"),
+            ),
+        ), patch.object(
             hook, "register_session"
         ) as mock_register:
             mock_log.return_value = MagicMock()
@@ -76,6 +83,47 @@ class TestMain:
         assert kwargs["session_id"] == "pm-session-1"
         assert kwargs["name"] == "worktree-b6"
         assert kwargs["project"] == "/repo/worktree-b6"
+        assert kwargs["source"] == ""
+
+    def test_resume_source_passed_through(self):
+        """registry 契約 v2 D4 增補 1：source 欄位原樣傳給 register_session，
+        merge/reset 分流邏輯由 pm_registry.register_session 負責，本 hook
+        只負責傳遞。"""
+        result, mock_register = self._run(
+            {"session_id": "pm-session-1", "source": "resume"}, subagent=False
+        )
+        assert result == EXIT_SUCCESS
+        assert mock_register.call_args.kwargs["source"] == "resume"
+
+    def test_startup_source_passed_through(self):
+        result, mock_register = self._run(
+            {"session_id": "pm-session-1", "source": "startup"}, subagent=False
+        )
+        assert result == EXIT_SUCCESS
+        assert mock_register.call_args.kwargs["source"] == "startup"
+
+    def test_non_git_environment_skips_registration(self, capsys):
+        with patch.object(hook, "setup_hook_logging") as mock_log, patch.object(
+            hook, "read_json_from_stdin"
+        ) as mock_stdin, patch.object(
+            hook, "is_subagent_environment"
+        ) as mock_sub, patch.object(
+            hook, "get_project_root"
+        ) as mock_root, patch.object(
+            hook, "get_registry_paths", return_value=None
+        ), patch.object(
+            hook, "register_session"
+        ) as mock_register:
+            mock_log.return_value = MagicMock()
+            mock_stdin.return_value = {"session_id": "s1"}
+            mock_sub.return_value = False
+            mock_root.return_value = Path("/repo")
+
+            result = hook.main()
+
+        assert result == EXIT_SUCCESS
+        mock_register.assert_not_called()
+        assert "非 git 環境" in capsys.readouterr().err
 
     def test_register_session_oserror_does_not_block(self, capsys):
         with patch.object(hook, "setup_hook_logging") as mock_log, patch.object(
@@ -85,6 +133,13 @@ class TestMain:
         ) as mock_sub, patch.object(
             hook, "get_project_root"
         ) as mock_root, patch.object(
+            hook,
+            "get_registry_paths",
+            return_value=(
+                Path("/repo/.git/pm-registry.json"),
+                Path("/repo/.git/pm-registry.lock"),
+            ),
+        ), patch.object(
             hook, "register_session", side_effect=OSError("disk full")
         ):
             mock_log.return_value = MagicMock()

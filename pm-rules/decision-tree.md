@@ -180,7 +180,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 
 ### agentType 橋接（W4-001 已驗證）
 
-Workflow 的 `agent(prompt, {agentType: '<框架 agent>'})` 完整繼承框架 agent 定義檔全文（含主文中 `@-import` 宣告的原始路徑字串——該路徑經實測確認不會展開為被引用檔案的內容，僅以字面字串留存）。無 agentType 時為匿名 agent，僅繼承 CLAUDE.md + rules/core/。
+兩種情況皆繼承 CLAUDE.md + `rules/core/`。差別在於：指定 `agentType` 時額外繼承該框架 agent 的定義檔全文；未指定時為匿名 agent，只有前者。定義檔主文的 `@-import` 僅以路徑字串留存，不展開為被引用檔案的內容。
 
 ---
 
