@@ -220,6 +220,13 @@ from .track_onboard import (
     execute_onboard,
     register_onboard,
 )
+# lease claim/release 寫入 + reclaim ghost 鑑識（multi-PM 協調層 Phase 3）
+from ticket_system.lib.lease import (
+    check_release_guard,
+    claim_lease,
+    reclaim_ticket,
+    release_lease,
+)
 # 導入版本審計命令模組
 from .audit_version import (
     execute_audit_version,
@@ -227,8 +234,15 @@ from .audit_version import (
 
 
 def _execute_claim(args: argparse.Namespace, version: str) -> int:  # type: ignore
-    """認領 Ticket（包裝生命週期模組）"""
-    return execute_claim(args, version)
+    """認領 Ticket（包裝生命週期模組）
+
+    claim 成功後併同寫入 registry lease（multi-PM 協調層 Phase 3）：附加
+    動作失敗不影響已成功的 claim，見 `claim_lease` 降級語意。
+    """
+    rc = execute_claim(args, version)
+    if rc == 0:
+        claim_lease(version, args.ticket_id)
+    return rc
 
 
 def _execute_complete(args: argparse.Namespace, version: str) -> int:
@@ -237,6 +251,9 @@ def _execute_complete(args: argparse.Namespace, version: str) -> int:
     complete 與 finish 兩個子命令名共用本函式：finish 是 complete 的別名
     （worktree 派發避開 CC runtime worktree isolation guard 對 argv 逐元素
     basename 誤判 bash builtin `complete`），行為完全等價，不是各自獨立實作。
+
+    complete 成功後併同移除 registry lease（multi-PM 協調層 Phase 3，與
+    claim 對稱）。
     """
     # W1-048: --as 身份申報對照（純前置檢查，deny 不寫入任何狀態）
     # W1-083: 傳入 command 名稱，使 telemetry 可做 per-command 歸因；
@@ -251,7 +268,10 @@ def _execute_complete(args: argparse.Namespace, version: str) -> int:
     )
     if deny is not None:
         return deny
-    return execute_complete(args, version)
+    rc = execute_complete(args, version)
+    if rc == 0:
+        release_lease(version, args.ticket_id)
+    return rc
 
 
 def _execute_close(args: argparse.Namespace, version: str) -> int:
@@ -260,8 +280,35 @@ def _execute_close(args: argparse.Namespace, version: str) -> int:
 
 
 def _execute_release(args: argparse.Namespace, version: str) -> int:
-    """釋放 Ticket（包裝生命週期模組）"""
-    return execute_release(args, version)
+    """釋放 Ticket（包裝生命週期模組）
+
+    前置閘門：ticket 由「非自身」FRESH session 持有時需顯式
+    `--force-release-others` 才能繼續，防止並行 PM 誤操作清除他人存活
+    session 的 lease、繞過 reclaim 三道防線（Phase 4 High 發現）。自身
+    持有或 registry 未追蹤此票（無 lease 記錄）時行為與旁路前完全一致
+    （`check_release_guard` fail-open 降級語意）。
+
+    release 成功後併同移除 registry lease（multi-PM 協調層 Phase 3，與
+    claim 對稱）。
+    """
+    if not bool(getattr(args, "force_release_others", False)):
+        allowed, reason = check_release_guard(args.ticket_id)
+        if not allowed:
+            print(f"[Warning] {reason}")
+            return 1
+
+    rc = execute_release(args, version)
+    if rc == 0:
+        release_lease(version, args.ticket_id)
+    return rc
+
+
+def _execute_reclaim(args: argparse.Namespace, version: str) -> int:
+    """`ticket track reclaim`：僅接受 reclaimable 票，強制 ghost 鑑識三查，
+    預設 dry-run；`--confirm` 且三查全過才轉回 pending 並清 registry lease
+    （multi-PM 協調層 Phase 3，包裝 `ticket_system.lib.lease.reclaim_ticket`）。
+    """
+    return reclaim_ticket(version, args.ticket_id, confirm=bool(getattr(args, "confirm", False)))
 
 
 def _execute_verify(args: argparse.Namespace, version: str) -> int:
@@ -325,6 +372,8 @@ def _create_command_handlers() -> dict:
         "list": execute_list,
         "search": execute_search,
         "release": _execute_release,
+        # multi-PM 協調層 Phase 3：僅接受 reclaimable 票，強制 ghost 鑑識三查
+        "reclaim": _execute_reclaim,
         # W4-019: 拆 verify 子命令（單獨執行 AC 驗證，與 claim 解耦）
         "verify": _execute_verify,
         "chain": execute_chain,
@@ -573,6 +622,32 @@ def _register_lifecycle_commands(
     p_release = subparsers.add_parser("release", help=TrackMessages.HELP_RELEASE)
     p_release.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_release.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    p_release.add_argument(
+        "--force-release-others",
+        dest="force_release_others",
+        action="store_true",
+        help="逃生閥：票由其他存活中的 session（FRESH）持有時，強制釋放並清除其 "
+        "lease（會繞過 reclaim 三道防線，僅在確認對方 session 已不再工作時使用）",
+    )
+
+    # reclaim 操作（multi-PM 協調層 Phase 3）：僅接受 reclaimable 票，強制
+    # ghost 鑑識三查（未合併分支 / 髒檔交集 / 缺 Exit Status），任一命中即拒絕。
+    # 預設 dry-run 僅印鑑識報告；--confirm 且三查全過才轉回 pending 並清
+    # registry lease。
+    p_reclaim = subparsers.add_parser(
+        "reclaim",
+        help="回收 STALE session 持有的 in_progress 票（強制 ghost 鑑識三查，"
+        "預設 dry-run，--confirm 才實際執行）",
+    )
+    p_reclaim.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_reclaim.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    p_reclaim.add_argument(
+        "--confirm",
+        dest="confirm",
+        action="store_true",
+        help="三查鑑識全過才生效：轉回 pending 並清除 registry lease；"
+        "未加此旗標僅印 dry-run 報告",
+    )
 
     # verify 操作（W4-019）：單獨執行 AC 驗證，與 claim 解耦
     p_verify = subparsers.add_parser(
@@ -906,7 +981,8 @@ def _register_acceptance_commands(
     # set-acceptance 操作
     p_set_acceptance = subparsers.add_parser(
         "set-acceptance",
-        help="勾選/取消勾選驗收條件（--check/--uncheck 支援多 index，--all-check/--all-uncheck 批量）"
+        help="勾選/取消勾選驗收條件（--check/--uncheck 支援多 index，--all-check/--all-uncheck 批量；"
+             "--add/--edit/--remove 建票後修訂條目）"
     )
     p_set_acceptance.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_set_acceptance.add_argument(
@@ -918,8 +994,9 @@ def _register_acceptance_commands(
         help="取消勾選指定 1-based index（可多個）"
     )
     # --all 攔截：撞 --all-check/--all-uncheck（1.0.0-W1-028）。作用域 scoped 至
-    # set-acceptance subparser，不影響 list/stale-list/td-status/stuck-anas 的合法
-    # --all（約束 1）。
+    # set-acceptance subparser，不影響 list/stale-list/stuck-anas 的合法 --all
+    # （約束 1）；td-status 無 --all 旗標（該命令內部的 --all 是 git log 參數，
+    # 非 CLI 旗標，與本攔截無關）。
     register_ambiguous_prefix(
         p_set_acceptance,
         "--all",
@@ -934,6 +1011,18 @@ def _register_acceptance_commands(
     p_set_acceptance.add_argument(
         "--all-uncheck", dest="all_uncheck", action="store_true",
         help="取消勾選全部驗收條件"
+    )
+    p_set_acceptance.add_argument(
+        "--add", nargs="+", metavar="TEXT",
+        help="追加驗收條目（可多個，空白分隔各自加引號），預設未勾選"
+    )
+    p_set_acceptance.add_argument(
+        "--edit", nargs=2, action="append", metavar=("INDEX", "TEXT"),
+        help="覆寫指定 1-based index 的條目文字，保留原勾選狀態（可重複指定多組）"
+    )
+    p_set_acceptance.add_argument(
+        "--remove", nargs="+", metavar="INDEX",
+        help="移除指定 1-based index（可多個）；移除已勾選條目須另加 --force"
     )
     p_set_acceptance.add_argument("--version", help=TrackMessages.ARG_VERSION)
     p_set_acceptance.add_argument(

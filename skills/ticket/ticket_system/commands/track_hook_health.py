@@ -24,73 +24,36 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ticket_system.lib.claude_lib_loader import load_claude_lib
+
 # ---------------------------------------------------------------------------
-# Lib 載入：lazy import + 多策略 project root 偵測
-#
-# 設計考量：全局 uv tool install 後，本檔位於 site-packages，
-# Path(__file__).parents[4] 不再指向 .claude/。需用以下優先序：
-#   1. $CLAUDE_PROJECT_DIR 環境變數（Claude Code runtime 提供）
-#   2. cwd 向上找含 .claude/lib/hook_health.py 的目錄
-#   3. Path(__file__).parents[4]（dev 模式 / 局部執行 fallback）
-# 任一策略命中即將 hooks 目錄加入 sys.path 後 import。
-# 測試使用 patch("ticket_system.commands.track_hook_health.scan_logs") 覆寫，
-# 故 lazy resolve 不影響 unit test。
+# Lib 載入：lazy import（收斂自五處近乎相同複本，共用實作見
+# ticket_system.lib.claude_lib_loader；多策略 project root 偵測優先序 —
+# CLAUDE_PROJECT_DIR 環境變數 / cwd 向上搜尋 / Path(__file__).parents[4]
+# dev fallback — 見該模組 find_claude_dir 文件字串）。測試使用
+# patch("ticket_system.commands.track_hook_health.scan_logs") 覆寫，故
+# lazy resolve 不影響 unit test。
 # ---------------------------------------------------------------------------
-
-_HOOK_HEALTH_MODULE = None  # 快取避免重複載入
-
-
-def _find_claude_dir() -> Optional[Path]:
-    """依優先序定位 .claude/ 目錄。"""
-    # 1. 環境變數
-    env_root = os.environ.get("CLAUDE_PROJECT_DIR")
-    if env_root:
-        candidate = Path(env_root) / ".claude"
-        if (candidate / "lib" / "hook_health.py").is_file():
-            return candidate
-
-    # 2. cwd 向上搜
-    for d in [Path.cwd(), *Path.cwd().parents]:
-        candidate = d / ".claude"
-        if (candidate / "lib" / "hook_health.py").is_file():
-            return candidate
-
-    # 3. 開發環境 fallback：本檔在 .claude/skills/ticket/ticket_system/commands/
-    try:
-        dev_candidate = Path(__file__).resolve().parents[4]
-        if (dev_candidate / "lib" / "hook_health.py").is_file():
-            return dev_candidate
-    except (IndexError, OSError):
-        pass
-
-    return None
 
 
 def _load_hook_health():
-    """Lazy 載入 .claude/lib/hook_health（首次呼叫時 import + 快取）。"""
-    global _HOOK_HEALTH_MODULE
-    if _HOOK_HEALTH_MODULE is not None:
-        return _HOOK_HEALTH_MODULE
-
-    claude_dir = _find_claude_dir()
-    if claude_dir is None:
+    """Lazy 載入 .claude/lib/hook_health（收斂自五處近乎相同複本，共用
+    實作見 ticket_system.lib.claude_lib_loader；找不到時維持既有 raise
+    語意，非其餘複本的 None 降級——本命令的 scan_logs/classify_hook/
+    evaluate 皆無合理的「不可用」降級行為）。
+    """
+    module = load_claude_lib("hook_health")
+    if module is None:
         raise RuntimeError(
             "Cannot locate .claude/lib/hook_health.py; "
             "set CLAUDE_PROJECT_DIR or run from within the project tree."
         )
-
-    if str(claude_dir) not in sys.path:
-        sys.path.insert(0, str(claude_dir))
-    from lib import hook_health  # noqa: WPS433
-
-    _HOOK_HEALTH_MODULE = hook_health
-    return hook_health
+    return module
 
 
 def scan_logs(since: datetime, logs_root: Optional[Path] = None) -> Dict[str, Dict]:

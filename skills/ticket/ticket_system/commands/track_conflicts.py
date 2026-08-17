@@ -17,21 +17,26 @@ commit 超出宣告範圍，主導缺漏是「宣告實作檔、漏宣告伴生�
   4. exit code 表達判定：0 無衝突 / 1 有衝突（registry 警告不影響 exit code）
 
 registry 讀取一律經 `.claude/lib/pm_registry` 的 `get_registry_paths` +
-`read_registry`，不重寫第三份讀取路徑（比照 track_hook_health.py 的
-`_find_claude_dir()` + sys.path 模式）。
+`read_registry`，不重寫第三份讀取路徑（lazy import 經
+`ticket_system.lib.claude_lib_loader` 共用實作）。
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from datetime import datetime, timezone
-from pathlib import Path, PurePosixPath
-from typing import Any, Dict, List, Optional, Set, Tuple
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set
 
 from ticket_system.commands.track_sessions import _build_rows
+from ticket_system.lib.claude_lib_loader import (
+    current_project_root,
+    empty_registry_skeleton,
+    load_claude_lib,
+)
+from ticket_system.lib.command_tracking_messages import TrackMessages
 from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.ticket_loader import list_tickets
 from ticket_system.lib.version import get_active_versions
@@ -43,162 +48,34 @@ _CONFLICT_STATUSES = {"pending", "in_progress"}
 
 
 # ---------------------------------------------------------------------------
-# Lib 載入：lazy import `.claude/lib/pm_registry`（比照 track_hook_health.py）
+# Lib 載入：lazy import `.claude/lib/pm_registry`（收斂自五處近乎相同複本，
+# 共用實作見 ticket_system.lib.claude_lib_loader）
 # ---------------------------------------------------------------------------
-
-_PM_REGISTRY_MODULE = None
-
-
-def _find_claude_dir() -> Optional[Path]:
-    """依優先序定位 .claude/ 目錄（同 track_hook_health.py 的搜尋策略）。"""
-    env_root = os.environ.get("CLAUDE_PROJECT_DIR")
-    if env_root:
-        candidate = Path(env_root) / ".claude"
-        if (candidate / "lib" / "pm_registry.py").is_file():
-            return candidate
-
-    for d in [Path.cwd(), *Path.cwd().parents]:
-        candidate = d / ".claude"
-        if (candidate / "lib" / "pm_registry.py").is_file():
-            return candidate
-
-    try:
-        dev_candidate = Path(__file__).resolve().parents[4]
-        if (dev_candidate / "lib" / "pm_registry.py").is_file():
-            return dev_candidate
-    except (IndexError, OSError):
-        pass
-
-    return None
-
-
-def _load_pm_registry():
-    """Lazy 載入 .claude/lib/pm_registry（首次呼叫時 import + 快取）。"""
-    global _PM_REGISTRY_MODULE
-    if _PM_REGISTRY_MODULE is not None:
-        return _PM_REGISTRY_MODULE
-
-    claude_dir = _find_claude_dir()
-    if claude_dir is None:
-        return None
-
-    if str(claude_dir) not in sys.path:
-        sys.path.insert(0, str(claude_dir))
-    from lib import pm_registry  # noqa: WPS433
-
-    _PM_REGISTRY_MODULE = pm_registry
-    return pm_registry
 
 
 def load_registry() -> Dict[str, Any]:
     """讀取 pm-registry.json；不可用（非 git 環境 / 模組載入失敗）時回傳空結構。"""
-    pm_registry = _load_pm_registry()
+    pm_registry = load_claude_lib("pm_registry")
     if pm_registry is None:
-        return {"schema_version": 0, "sessions": {}}
+        return empty_registry_skeleton()
     paths = pm_registry.get_registry_paths()
     if paths is None:
-        return {"schema_version": 0, "sessions": {}}
+        return empty_registry_skeleton()
     registry_file, _lock_file = paths
     return pm_registry.read_registry(registry_file)
 
 
 # ---------------------------------------------------------------------------
-# 路徑判定
+# 路徑判定（AC-3：與 `ticket track runqueue --groups` 共用同一實作，抽至
+# `ticket_system/lib/file_conflict.py`，本檔僅直接使用其公開名稱）
 # ---------------------------------------------------------------------------
 
-def _where_files(ticket: Dict[str, Any]) -> List[str]:
-    where = ticket.get("where") or {}
-    files = where.get("files") if isinstance(where, dict) else None
-    if isinstance(files, str):
-        return [f.strip() for f in files.split(",") if f.strip()]
-    if isinstance(files, list):
-        return [str(f) for f in files]
-    return []
-
-
-def _files_intersect(path_a: str, path_b: str) -> bool:
-    """PurePosixPath 前綴比對：精確相符，或其中一者為另一者的上層目錄前綴。
-
-    非 string startswith——"lib/foo" 與 "lib/foobar.dart" 字串前綴相符但路徑
-    段不同層級，不應誤判為交集。
-    """
-    try:
-        pa = PurePosixPath(path_a.rstrip("/"))
-        pb = PurePosixPath(path_b.rstrip("/"))
-    except ValueError:
-        return path_a == path_b
-    if pa == pb:
-        return True
-    return pa in pb.parents or pb in pa.parents
-
-
-def _find_nearest_tests_dir(file_path: str, project_root: Path) -> Optional[PurePosixPath]:
-    """向上尋找最近的實際存在之 `tests/` 兄弟目錄（掃描真實檔案系統）。
-
-    本專案 `tests/` 目錄一律為套件根目錄的兄弟層（如 `ticket_system/tests/`
-    對應 `ticket_system/commands/`、`ticket_system/lib/` 等子目錄下的模組；
-    `hooks/tests/` 對應 `hooks/` 下直接放置的檔案），並非緊鄰檔案自身目錄下
-    的子目錄——本專案 14 個 `tests/` 目錄實測全數符合此結構，先前「模組同層
-    插 `tests/` 子目錄」的假設全為反例（審查實測）。
-
-    逐層往上檢查每個祖先目錄是否有 `tests` 兄弟目錄實際存在，找到最近
-    （最深）的一個即回傳；專案內找不到任何符合的 `tests/` 兄弟目錄時回傳
-    None（不猜測，寧可漏檢也不可再犯假設同層子目錄的錯誤）。
-    """
-    p = PurePosixPath(file_path.rstrip("/"))
-    current = p.parent
-    while True:
-        candidate = current / "tests"
-        if (project_root / candidate).is_dir():
-            return candidate
-        if not current.parts:
-            return None
-        current = current.parent
-
-
-def _derive_test_candidates(path: str, project_root: Optional[Path] = None) -> List[str]:
-    """impl->test 擴張啟發式：由實作檔路徑推導可能的伴生測試檔路徑。
-
-    僅覆蓋本專案已知兩種慣例，不窮舉所有語言慣例：
-      - Dart：`lib/...` -> `test/..._test.dart`
-      - Python：`.../X.py`（非 test_*.py / conftest.py）-> 實際存在的最近
-        `tests/` 兄弟目錄下 `test_X.py`（見 `_find_nearest_tests_dir`）
-
-    未命中任何慣例、或 Python 分支找不到真實存在的 `tests/` 目錄時回傳
-    空清單（不衍生候選，維持原宣告值）。`project_root` 為 None 時 Python
-    分支無法驗證真實目錄結構，同樣不猜測（寧缺勿錯）。
-    """
-    p = PurePosixPath(path.rstrip("/"))
-    candidates: List[str] = []
-
-    if p.suffix == ".dart" and p.parts and p.parts[0] == "lib":
-        rest_parts = p.parts[1:]
-        if rest_parts:
-            stem = PurePosixPath(rest_parts[-1]).stem
-            candidate = PurePosixPath("test", *rest_parts[:-1], f"{stem}_test.dart")
-            candidates.append(str(candidate))
-
-    if p.suffix == ".py" and not p.stem.startswith("test_") and p.stem != "conftest":
-        if project_root is not None:
-            tests_dir = _find_nearest_tests_dir(path, project_root)
-            if tests_dir is not None:
-                candidates.append(str(tests_dir / f"test_{p.stem}.py"))
-
-    return candidates
-
-
-def expand_files(declared: List[str], project_root: Optional[Path] = None) -> List[str]:
-    """回傳宣告清單 + 啟發式衍生候選的去重聯集（保序）。"""
-    expanded: List[str] = list(declared)
-    for f in declared:
-        expanded.extend(_derive_test_candidates(f, project_root))
-    seen: Set[str] = set()
-    result: List[str] = []
-    for f in expanded:
-        if f not in seen:
-            seen.add(f)
-            result.append(f)
-    return result
+from ticket_system.lib.file_conflict import (
+    compute_pairwise_conflicts,
+    expand_files,
+    files_intersect,
+    where_files,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -208,45 +85,14 @@ def expand_files(declared: List[str], project_root: Optional[Path] = None) -> Li
 def find_conflicts(
     tickets: List[Dict[str, Any]], project_root: Optional[Path] = None
 ) -> List[Dict[str, Any]]:
-    """兩兩比對票的 where.files（含擴張啟發式），回傳衝突對清單。
+    """篩選 pending/in_progress 票後，委派 `file_conflict.compute_pairwise_conflicts`
+    做兩兩 where.files 交集判定（含擴張啟發式）。
 
-    `project_root` 供 impl->test 啟發式驗證真實 `tests/` 目錄結構（見
-    `_derive_test_candidates`）；為 None 時該啟發式停用，僅比對原始宣告值。
+    `project_root` 供 impl->test 啟發式驗證真實 `tests/` 目錄結構；為 None
+    時該啟發式停用，僅比對原始宣告值。
     """
-    entries: List[Tuple[str, List[str], List[str]]] = []
-    for t in tickets:
-        if t.get("status") not in _CONFLICT_STATUSES:
-            continue
-        declared = _where_files(t)
-        if not declared:
-            continue
-        entries.append((t.get("id") or "", declared, expand_files(declared, project_root)))
-
-    conflicts: List[Dict[str, Any]] = []
-    for i in range(len(entries)):
-        for j in range(i + 1, len(entries)):
-            id_a, declared_a, expanded_a = entries[i]
-            id_b, declared_b, expanded_b = entries[j]
-            matched_pairs: List[Tuple[str, str]] = []
-            heuristic_only = True
-            for fa in expanded_a:
-                for fb in expanded_b:
-                    if _files_intersect(fa, fb):
-                        matched_pairs.append((fa, fb))
-                        if fa in declared_a and fb in declared_b:
-                            heuristic_only = False
-            if matched_pairs:
-                matched_display = sorted({
-                    fa if fa == fb else f"{fa} ~ {fb}" for fa, fb in matched_pairs
-                })
-                conflicts.append({
-                    "ticket_a": id_a,
-                    "ticket_b": id_b,
-                    "matched_files": matched_display,
-                    "heuristic_only": heuristic_only,
-                })
-    conflicts.sort(key=lambda c: (c["ticket_a"], c["ticket_b"]))
-    return conflicts
+    filtered = [t for t in tickets if t.get("status") in _CONFLICT_STATUSES]
+    return compute_pairwise_conflicts(filtered, project_root)
 
 
 # ---------------------------------------------------------------------------
@@ -313,14 +159,14 @@ def cross_check_registry(
         registry_files = ticket_registry_files.get(tid)
         if not registry_files:
             continue
-        declared = set(_where_files(t))
+        declared = set(where_files(t))
         if not declared:
             continue
-        if not any(_files_intersect(rf, df) for rf in registry_files for df in declared):
+        if not any(files_intersect(rf, df) for rf in registry_files for df in declared):
             warnings.append(
                 f"registry/ticket file 宣告不一致：{tid} "
                 f"registry.files={sorted(registry_files)} vs where.files={sorted(declared)}"
-                "（衝突判定僅採 where.files；請校正票面宣告或重跑 claim）"
+                f"（衝突判定僅採 where.files；請校正票面宣告或重跑 claim）"
             )
     return warnings
 
@@ -330,7 +176,7 @@ def cross_check_registry(
 # ---------------------------------------------------------------------------
 
 def _gather_tickets(
-    explicit_version: Optional[str], all_versions: bool
+    explicit_version: Optional[str],
 ) -> List[Dict[str, Any]]:
     if explicit_version:
         versions = [explicit_version]
@@ -375,16 +221,19 @@ def execute_conflicts(args: argparse.Namespace) -> int:
     """
     fmt = getattr(args, "format", FORMAT_TABLE) or FORMAT_TABLE
     explicit_version = getattr(args, "version", None)
-    all_versions = bool(getattr(args, "all", False))
 
-    tickets = _gather_tickets(explicit_version, all_versions)
+    tickets = _gather_tickets(explicit_version)
     project_root = get_project_root()
     conflicts = find_conflicts(tickets, project_root)
 
     registry = load_registry()
     now = getattr(args, "_now", None) or datetime.now(timezone.utc)
+    # registry `project` 欄位比對鍵須為純 git-toplevel 語意（同 Registry
+    # Schema 契約 v1），與上方 find_conflicts 所需的 Path 物件用途不同——
+    # 不可共用 get_project_root()（其 CLAUDE_PROJECT_DIR 優先序會使比對鍵
+    # 與其他純 git-toplevel 解析的呼叫端分歧）。
     for warning in cross_check_registry(
-        tickets, registry, project_root=str(project_root), now=now
+        tickets, registry, project_root=current_project_root(), now=now
     ):
         sys.stderr.write(f"[track conflicts] {warning}\n")
 
@@ -416,7 +265,7 @@ def register_conflicts(
         "--all",
         action="store_true",
         default=False,
-        help="相容保留旗標：預設已掃描全部 active 版本，本旗標目前與預設行為無差異",
+        help=TrackMessages.ARG_ALL_COMPAT,
     )
     p.add_argument(
         "--format",

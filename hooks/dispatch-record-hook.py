@@ -36,8 +36,6 @@ Dispatch Record Hook - PreToolUse (Agent)
     session_id（恆等 session_id 的冗餘欄位，資訊量為零）
 """
 
-import os
-import re
 import sys
 from pathlib import Path
 from typing import Optional
@@ -53,9 +51,10 @@ from lib import (
     is_subagent_environment,
     get_project_root,
     run_hook_safely,
-    ENV_SESSION_ID,
+    resolve_session_id,
 )
 from lib.dispatch_tracker import record_dispatch
+from lib.ticket_id_pattern import SEARCH_WITH_SUFFIX_RE, extract_ticket_id_anchored
 
 # ============================================================================
 # 常數定義
@@ -63,9 +62,6 @@ from lib.dispatch_tracker import record_dispatch
 
 HOOK_NAME = "dispatch-record-hook"
 EXIT_SUCCESS = 0
-
-# Ticket ID 格式（與 dispatch-identity-bind-hook.py 同 pattern）
-TICKET_ID_PATTERN = re.compile(r"(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)")
 
 
 # ============================================================================
@@ -78,34 +74,27 @@ def extract_ticket_id(prompt: str, description: str) -> Optional[str]:
 
     prompt 比對範圍限首行，與 dispatch-identity-bind-hook.py 的
     extract_ticket_id 一致（PC-065 prompt 首行慣例——派發目標票應在
-    prompt 首行）。全文搜尋會被 prompt 內文提及的前置/相關票（如 Context
-    Bundle 引用先前結論收尾用的其他票 ID）誤配對搶先命中，連帶 files 查
-    表也查到錯的票；首行沒有命中即代表本次派發未依慣例把目標票放在首
-    行，改信任 description（通常是 PM 顯式標註的短標籤）補位，而非在全
-    文亂猜。description 保留全文搜尋——其來源通常是簡短標籤，無固定位
-    置慣例。
+    prompt 首行）。首行同時含多個票號時優先信任『Ticket』標籤錨定，無
+    標籤才退回首行第一個 ID 形狀字串（見
+    lib.ticket_id_pattern.extract_ticket_id_anchored）。全文搜尋會被
+    prompt 內文提及的前置/相關票（如 Context Bundle 引用先前結論收尾用
+    的其他票 ID）誤配對搶先命中，連帶 files 查表也查到錯的票；首行沒有
+    命中即代表本次派發未依慣例把目標票放在首行，改信任 description
+    （通常是 PM 顯式標註的短標籤）補位，而非在全文亂猜。description 保
+    留全文搜尋——其來源通常是簡短標籤，無固定位置慣例。
     """
     if prompt and prompt.strip():
         first_line = prompt.strip().splitlines()[0]
-        match = TICKET_ID_PATTERN.search(first_line)
-        if match:
-            return match.group(1)
+        ticket_id = extract_ticket_id_anchored(first_line)
+        if ticket_id:
+            return ticket_id
 
     if description:
-        match = TICKET_ID_PATTERN.search(description)
+        match = SEARCH_WITH_SUFFIX_RE.search(description)
         if match:
             return match.group(1)
 
     return None
-
-
-def resolve_session_id(input_data: dict) -> str:
-    """優先取 stdin session_id，缺失時 fallback CC runtime 環境變數。"""
-    if input_data:
-        sid = input_data.get("session_id")
-        if sid:
-            return sid
-    return os.environ.get(ENV_SESSION_ID, "")
 
 
 def main() -> int:

@@ -15,6 +15,8 @@ import subprocess
 import time
 from pathlib import Path
 
+from .lease import resolve_current_session_id
+
 # 快命令（rev-parse / add / diff）預設逾時：git hang（等認證 / index.lock）時
 # 不無限等待。commit 含 pre-commit husky，呼叫端另傳較長值。
 _FAST_GIT_TIMEOUT = 5
@@ -51,7 +53,11 @@ def _auto_commit_ticket_md(
 
     設計（W7-001 新設計）：
     - 精確路徑 ``git add <path>``（無 ./、-A、--all），不夾帶 PM/agent 其他變更。
-    - commit message 格式：``chore(<ticket_id>): <operation> <section>``。
+    - commit message 格式：``chore(<ticket_id>): <operation> <section>``；
+      session_id 可解析時附加 git trailer ``Session: <id>``（空白行分隔，
+      多 PM session 協調層落地：commit author 同名無法歸屬 session，
+      trailer 提供機械可讀的歸屬欄位）。無法解析時完全省略此段，不虛構
+      session_id。``%s``（subject）不受影響，僅 body 新增此段。
     - 空 commit 防護：若 add 後 index 對該檔無變更（內容與 HEAD 相同），graceful
       skip（不產生空 commit、不報錯）。
     - 不使用 ``--no-verify``（維持 pre-commit hook 把關；ticket md 非 JS，
@@ -105,6 +111,11 @@ def _auto_commit_ticket_md(
 
     # 4. 精確路徑 commit（僅該 ticket md，避免夾帶 index 內其他 staged 變更）
     message = f"chore({ticket_id}): {operation} {section}"
+    session_id = resolve_current_session_id()
+    if session_id:
+        # git trailer 慣例：空白行 + "Key: Value"；session_id 無法解析
+        # 時完全省略此段，不虛構值（規則 4 可觀測性的反面：寧缺不假）。
+        message = f"{message}\n\nSession: {session_id}"
     commit_result = _run_git(
         cwd, "commit", "-m", message, "--", str(md_path),
         timeout=_COMMIT_GIT_TIMEOUT,

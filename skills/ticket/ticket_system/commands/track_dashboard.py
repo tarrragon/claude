@@ -267,7 +267,7 @@ def render_text(
     # --- In Progress 區塊（不編號）---
     lines.append(f"[In Progress] {len(in_progress)} ticket(s)")
     if not in_progress:
-        lines.append("  (none)")
+        lines.append("  （無 in_progress ticket）")
     else:
         for item in in_progress:
             lines.append(
@@ -281,7 +281,7 @@ def render_text(
     targets = handoff_targets or []
     lines.append(f"[Handoff Target] {len(targets)} ticket(s)")
     if not targets:
-        lines.append("  (none)")
+        lines.append("  （無 handoff target）")
     else:
         for item in targets:
             readiness_label = (item.get("readiness") or "unknown").lower()
@@ -294,7 +294,7 @@ def render_text(
     # --- Ready Top N 區塊（唯一注入 [N] 編號處）---
     lines.append(f"[Ready Top {top}]  priority 排序，可直接 claim")
     if not ready:
-        lines.append("  (none)")
+        lines.append("  （無可認領建議）")
     else:
         for index, item in enumerate(ready, start=1):
             readiness_label = item.get("readiness", "ready").lower()
@@ -312,7 +312,7 @@ def render_text(
             f"[Stale Warning] {len(stale_list)} ticket(s) over {stale_threshold}min"
         )
         if not stale_list:
-            lines.append("  (none)")
+            lines.append("  （無 stale ticket）")
         else:
             for item in stale_list:
                 lines.append(

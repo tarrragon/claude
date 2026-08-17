@@ -510,6 +510,223 @@ def test_render_list_regression_case_w3_124_pattern():
 
 
 # ---------------------------------------------------------------------------
+# multi-PM 協調層 Phase 3：registry STALE session 持票 RECLAIMABLE_TAG
+# ---------------------------------------------------------------------------
+
+
+def test_render_list_marks_reclaimable_when_lease_reclaimable(monkeypatch):
+    """is_lease_reclaimable 回傳 True 的票 → list 視圖顯示 [RECLAIMABLE] tag。"""
+    stale = _mk_stale_in_progress("0.2.1-W3-500")
+    monkeypatch.setattr(
+        track_runqueue.lease, "load_registry_snapshot", lambda: ({}, object())
+    )
+    monkeypatch.setattr(
+        track_runqueue.lease, "is_lease_reclaimable",
+        lambda registry, tid, pm_registry, now: tid == "0.2.1-W3-500",
+    )
+
+    out = track_runqueue._render_list([stale], top=None, wave=None, context=None)
+
+    target_line = next(line for line in out.splitlines() if "0.2.1-W3-500" in line)
+    assert f"[{track_runqueue.RECLAIMABLE_TAG}]" in target_line
+
+
+def test_render_list_omits_reclaimable_tag_when_not_reclaimable(monkeypatch):
+    """is_lease_reclaimable 回傳 False（如 registry 未追蹤 / session 仍 FRESH）
+    → 不顯示 [RECLAIMABLE] tag。"""
+    stale = _mk_stale_in_progress("0.2.1-W3-501")
+    monkeypatch.setattr(
+        track_runqueue.lease, "load_registry_snapshot", lambda: ({}, None)
+    )
+    monkeypatch.setattr(
+        track_runqueue.lease, "is_lease_reclaimable",
+        lambda registry, tid, pm_registry, now: False,
+    )
+
+    out = track_runqueue._render_list([stale], top=None, wave=None, context=None)
+
+    target_line = next(line for line in out.splitlines() if "0.2.1-W3-501" in line)
+    assert f"[{track_runqueue.RECLAIMABLE_TAG}]" not in target_line
+
+
+def test_render_list_reclaimable_and_stale_tags_coexist(monkeypatch):
+    """STALE_TAG（票面自身時間戳）與 RECLAIMABLE_TAG（registry heartbeat）
+    判準不同，可同時出現於同一列。"""
+    stale = _mk_stale_in_progress("0.2.1-W3-502")
+    monkeypatch.setattr(
+        track_runqueue.lease, "load_registry_snapshot", lambda: ({}, object())
+    )
+    monkeypatch.setattr(
+        track_runqueue.lease, "is_lease_reclaimable",
+        lambda registry, tid, pm_registry, now: True,
+    )
+
+    out = track_runqueue._render_list([stale], top=None, wave=None, context=None)
+
+    target_line = next(line for line in out.splitlines() if "0.2.1-W3-502" in line)
+    assert f"[{track_runqueue.STALE_TAG}]" in target_line
+    assert f"[{track_runqueue.RECLAIMABLE_TAG}]" in target_line
+
+
+def test_render_list_reclaimable_check_degrades_when_registry_unavailable(monkeypatch):
+    """registry 不可用（非 git 環境等）時 load_registry_snapshot 回傳
+    pm_registry=None，is_lease_reclaimable 對任何票一律回傳 False，不阻擋
+    list 視圖輸出（降級路徑不拋例外）。"""
+    stale = _mk_stale_in_progress("0.2.1-W3-503")
+    monkeypatch.setattr(
+        track_runqueue.lease, "load_registry_snapshot",
+        lambda: ({"schema_version": 0, "sessions": {}}, None),
+    )
+
+    out = track_runqueue._render_list([stale], top=None, wave=None, context=None)
+
+    assert "0.2.1-W3-503" in out
+    target_line = next(line for line in out.splitlines() if "0.2.1-W3-503" in line)
+    assert f"[{track_runqueue.RECLAIMABLE_TAG}]" not in target_line
+
+
+# ---------------------------------------------------------------------------
+# multi-PM 協調層 Phase 3：runqueue --groups（父票設計要點 5）
+# ---------------------------------------------------------------------------
+
+
+def _mk_with_files(tid: str, files, priority: str = "P2", status: str = "pending",
+                    blocked=None) -> Dict:
+    ticket = _mk(tid, status=status, blocked=blocked, priority=priority)
+    ticket["where"] = {"files": files}
+    return ticket
+
+
+class TestRenderGroups:
+    def test_readiness_filter_matches_list_view(self):
+        """輸入集合須與 list 視圖相同（blockedBy=[] 且 pending）：in_progress
+        與仍有未解除 blocker 的票不進入群組判定。"""
+        ready = _mk_with_files("0.2.1-W3-600", ["lib/a.dart"])
+        in_progress = _mk_with_files(
+            "0.2.1-W3-601", ["lib/b.dart"], status="in_progress"
+        )
+        still_blocked = _mk_with_files(
+            "0.2.1-W3-602", ["lib/c.dart"], blocked=["0.2.1-W3-999"]
+        )
+
+        out = track_runqueue._render_groups([ready, in_progress, still_blocked])
+
+        assert "0.2.1-W3-600" in out
+        assert "0.2.1-W3-601" not in out
+        assert "0.2.1-W3-602" not in out
+
+    def test_no_conflicts_all_in_parallel_group(self):
+        a = _mk_with_files("0.2.1-W3-610", ["lib/a.dart"])
+        b = _mk_with_files("0.2.1-W3-611", ["lib/b.dart"])
+
+        out = track_runqueue._render_groups([a, b])
+
+        assert "可並行群組" in out
+        assert "0.2.1-W3-610" in out
+        assert "0.2.1-W3-611" in out
+        assert "序列群組（0 組" in out
+
+    def test_conflicting_pair_falls_into_sequential_group_with_conflict_pair_shown(self):
+        a = _mk_with_files("0.2.1-W3-620", ["lib/shared.dart"])
+        b = _mk_with_files("0.2.1-W3-621", ["lib/shared.dart"])
+
+        out = track_runqueue._render_groups([a, b])
+
+        assert "群組 1: 0.2.1-W3-620, 0.2.1-W3-621" in out
+        assert "0.2.1-W3-620 <-> 0.2.1-W3-621" in out
+        assert "lib/shared.dart" in out
+
+    def test_priority_ordering_preserved_into_parallel_group(self):
+        """`_render_groups` 依 priority/type/id 排序後傳入
+        `compute_parallel_groups`，parallel_group 應反映此排序（P0 優先）。"""
+        low = _mk_with_files("0.2.1-W3-630", ["lib/x.dart"], priority="P3")
+        high = _mk_with_files("0.2.1-W3-631", ["lib/y.dart"], priority="P0")
+
+        out = track_runqueue._render_groups([low, high])
+
+        idx_high = out.index("0.2.1-W3-631")
+        idx_low = out.index("0.2.1-W3-630")
+        assert idx_high < idx_low
+
+    def test_empty_ready_set_shows_message(self):
+        blocked = _mk_with_files(
+            "0.2.1-W3-640", ["lib/x.dart"], blocked=["0.2.1-W3-999"]
+        )
+
+        out = track_runqueue._render_groups([blocked])
+
+        assert "無可執行 Ticket" in out
+
+
+class TestRenderRunqueueGroupsDispatch:
+    def test_groups_flag_takes_precedence_over_format(self, monkeypatch):
+        """`--groups` 優先於 `--format`（互斥，本函式不落入 list/dag 分支）。"""
+        import argparse
+
+        a = _mk_with_files("0.2.1-W3-650", ["lib/a.dart"])
+        monkeypatch.setattr(track_runqueue, "list_tickets", lambda version: [a])
+
+        ns = argparse.Namespace(
+            format="dag", top=None, context=None, wave=None, groups=True,
+        )
+        out = track_runqueue.render_runqueue(ns, "0.2.1")
+
+        assert "=== Parallel Groups ===" in out
+
+    def test_groups_false_falls_through_to_format_list(self, monkeypatch):
+        """`groups` 屬性缺失（既有呼叫端未傳）時預設 False，維持原 list 行為。"""
+        import argparse
+
+        a = _mk("0.2.1-W3-660")
+        monkeypatch.setattr(track_runqueue, "list_tickets", lambda version: [a])
+
+        ns = argparse.Namespace(format="list", top=None, context=None, wave=None)
+        out = track_runqueue.render_runqueue(ns, "0.2.1")
+
+        assert "=== Parallel Groups ===" not in out
+        assert "可執行清單" in out
+
+    def test_execute_runqueue_groups_end_to_end(self, monkeypatch, capsys):
+        import argparse
+
+        a = _mk_with_files("0.2.1-W3-670", ["lib/shared.dart"])
+        b = _mk_with_files("0.2.1-W3-671", ["lib/shared.dart"])
+        monkeypatch.setattr(track_runqueue, "list_tickets", lambda version: [a, b])
+
+        ns = argparse.Namespace(
+            format="list", top=None, context=None, wave=None, groups=True,
+        )
+        rc = track_runqueue.execute_runqueue(ns, "0.2.1")
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "序列群組（1 組" in out
+        assert "0.2.1-W3-670 <-> 0.2.1-W3-671" in out
+
+
+class TestRegisterRunqueueGroupsFlag:
+    def test_groups_flag_registered_and_defaults_false(self):
+        import argparse
+
+        parser = argparse.ArgumentParser()
+        subparsers = parser.add_subparsers(dest="operation")
+        track_runqueue.register_runqueue(subparsers)
+
+        ns = parser.parse_args(["runqueue"])
+        assert ns.groups is False
+
+    def test_groups_flag_can_be_set(self):
+        import argparse
+
+        parser = argparse.ArgumentParser()
+        subparsers = parser.add_subparsers(dest="operation")
+        track_runqueue.register_runqueue(subparsers)
+
+        ns = parser.parse_args(["runqueue", "--groups"])
+        assert ns.groups is True
+
+
+# ---------------------------------------------------------------------------
 # 0.2.1-W3-220: _get_pending_handoff_info key 語意修復
 # （target_ticket_id 同時建索引，不破壞既有以 source ticket_id 為 key 的呼叫端）
 # ---------------------------------------------------------------------------

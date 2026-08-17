@@ -70,6 +70,10 @@ import yaml
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib import setup_hook_logging, run_hook_safely, get_project_root, parse_ticket_frontmatter
+from lib.ticket_id_pattern import (
+    FULL_ANCHORED_RE as CLOSED_BY_TICKET_ID_PATTERN,
+    SEARCH_WITH_SUFFIX_AND_SLUG_RE as TICKET_ID_REF_PATTERN,
+)
 
 VERSION_DIR_PATTERN = re.compile(r"^v(\d+\.\d+\.\d+)$")
 VERSION_ENTRY_PATTERN = re.compile(
@@ -81,15 +85,10 @@ SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 TAG_VERSION_PATTERN = re.compile(r"^v(\d+\.\d+\.\d+)$")
 COMPLETED_TICKET_STATUSES = {"completed", "closed"}
 
-# 漂移 5：closed 票延後承諾稽核用常數
-# 與 ticket_system/constants.py TICKET_ID_PATTERN 同構，本 hook 不 import
-# ticket_system（避免拉入 yaml 依賴鏈，PEP 723 dependencies = []）。
-CLOSED_BY_TICKET_ID_PATTERN = re.compile(
-    r"^(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)(-[a-z0-9][a-z0-9-]{0,59})?$"
-)
-TICKET_ID_REF_PATTERN = re.compile(
-    r"\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*(?:-[a-z0-9][a-z0-9-]{0,59})?"
-)
+# 漂移 5：closed 票延後承諾稽核用常數（SSOT：lib.ticket_id_pattern，
+# import 時已別名為本檔既有名稱；與 ticket_system/constants.py
+# TICKET_ID_PATTERN 同構，本 hook 不直接 import ticket_system，避免拉入
+# PyYAML 以外更大的 ticket_system 依賴鏈）。
 DEFER_SEMANTIC_PATTERN = re.compile(r"延後|移到|後續")
 CLOSED_BY_NONE_TOKEN = "none"
 

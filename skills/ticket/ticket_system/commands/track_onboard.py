@@ -15,18 +15,17 @@ ticket track onboard 命令（multi-PM 協調層 Phase 2，issue tarrragon/claud
 
 registry 讀取一律經 `.claude/lib/pm_registry` 的 `get_registry_paths` +
 `read_registry`，不重寫第三份讀取路徑（`sessions`/`conflicts` 兩命令已各
-自獨立實作過一次 registry 讀取，第三次重寫會使三處判斷邏輯彼此漂移，改
-共用 pm_registry 的讀取原語消除此風險）；stale 判定完全交由
-`track_sessions._build_rows` 內部既有邏輯處理，本檔不重複定義任何 stale
-閾值常數（同一 30 分鐘閾值若各檔各自 hardcode 一份，未來調整閾值時容易
-漏改其中一處，造成三命令的 FRESH/STALE 判定不一致）。
+自獨立實作過一次 registry 讀取，第三次重寫會使三處讀取邏輯彼此漂移）；
+stale 判定完全交由 `track_sessions._build_rows` 內部既有邏輯處理，本檔
+不重複定義任何 stale 閾值常數（同一份 stale 閾值若各檔各自 hardcode
+一份，未來調整閾值時容易漏改其中一處，造成三命令的 FRESH/STALE 判定
+不一致）。
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -36,6 +35,11 @@ from ticket_system.commands.track_activity import list_dirty_files
 from ticket_system.commands.track_dashboard import load_top_ready
 from ticket_system.commands.track_runqueue import _get_pending_handoff_info
 from ticket_system.commands.track_sessions import _build_rows
+from ticket_system.lib.claude_lib_loader import (
+    empty_registry_skeleton,
+    load_claude_lib,
+)
+from ticket_system.lib.command_tracking_messages import TrackMessages
 from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.ticket_loader import list_tickets
 from ticket_system.lib.version import get_active_versions
@@ -47,60 +51,19 @@ DEFAULT_READY_TOP = 5
 
 
 # ---------------------------------------------------------------------------
-# Lib 載入：lazy import `.claude/lib/pm_registry`（比照 track_conflicts.py /
-# track_hook_health.py，不重複第三份讀取路徑）
+# Lib 載入：lazy import `.claude/lib/pm_registry`（收斂自五處近乎相同複本，
+# 共用實作見 ticket_system.lib.claude_lib_loader）
 # ---------------------------------------------------------------------------
-
-_PM_REGISTRY_MODULE = None
-
-
-def _find_claude_dir() -> Optional[Path]:
-    env_root = os.environ.get("CLAUDE_PROJECT_DIR")
-    if env_root:
-        candidate = Path(env_root) / ".claude"
-        if (candidate / "lib" / "pm_registry.py").is_file():
-            return candidate
-
-    for d in [Path.cwd(), *Path.cwd().parents]:
-        candidate = d / ".claude"
-        if (candidate / "lib" / "pm_registry.py").is_file():
-            return candidate
-
-    try:
-        dev_candidate = Path(__file__).resolve().parents[4]
-        if (dev_candidate / "lib" / "pm_registry.py").is_file():
-            return dev_candidate
-    except (IndexError, OSError):
-        pass
-
-    return None
-
-
-def _load_pm_registry():
-    global _PM_REGISTRY_MODULE
-    if _PM_REGISTRY_MODULE is not None:
-        return _PM_REGISTRY_MODULE
-
-    claude_dir = _find_claude_dir()
-    if claude_dir is None:
-        return None
-
-    if str(claude_dir) not in sys.path:
-        sys.path.insert(0, str(claude_dir))
-    from lib import pm_registry  # noqa: WPS433
-
-    _PM_REGISTRY_MODULE = pm_registry
-    return pm_registry
 
 
 def load_registry() -> Dict[str, Any]:
     """讀取 pm-registry.json；不可用時回傳空結構（各節皆須優雅降級）。"""
-    pm_registry = _load_pm_registry()
+    pm_registry = load_claude_lib("pm_registry")
     if pm_registry is None:
-        return {"schema_version": 0, "sessions": {}}
+        return empty_registry_skeleton()
     paths = pm_registry.get_registry_paths()
     if paths is None:
-        return {"schema_version": 0, "sessions": {}}
+        return empty_registry_skeleton()
     registry_file, _lock_file = paths
     return pm_registry.read_registry(registry_file)
 
@@ -238,7 +201,7 @@ def collect_ready_suggestions(
 
 
 def _gather_tickets(
-    explicit_version: Optional[str], all_versions: bool
+    explicit_version: Optional[str],
 ) -> List[Dict[str, Any]]:
     if explicit_version:
         versions = [explicit_version]
@@ -272,7 +235,7 @@ def _render_table(
 
     lines.append(f"[活同事] {len(colleagues)} session(s)")
     if not colleagues:
-        lines.append("  （無活躍同事）")
+        lines.append("  （無活同事）")
     else:
         for r in colleagues:
             lines.append(_render_session_row(r))
@@ -334,11 +297,10 @@ def execute_onboard(args: argparse.Namespace) -> int:
     """執行 track onboard 命令（version-agnostic，read-only，四節彙整）。"""
     fmt = getattr(args, "format", FORMAT_TABLE) or FORMAT_TABLE
     explicit_version = getattr(args, "version", None)
-    all_versions = bool(getattr(args, "all", False))
     top = getattr(args, "top", DEFAULT_READY_TOP) or DEFAULT_READY_TOP
     now = getattr(args, "_now", None)
 
-    tickets = _gather_tickets(explicit_version, all_versions)
+    tickets = _gather_tickets(explicit_version)
     project_root = get_project_root()
 
     registry = load_registry()
@@ -376,7 +338,7 @@ def register_onboard(
         "--all",
         action="store_true",
         default=False,
-        help="相容保留旗標：預設已掃描全部 active 版本，本旗標目前與預設行為無差異",
+        help=TrackMessages.ARG_ALL_COMPAT,
     )
     p.add_argument(
         "--top",

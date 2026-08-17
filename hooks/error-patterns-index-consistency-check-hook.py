@@ -41,10 +41,17 @@ CATEGORY_DIRS = [
     "process",
 ]
 
-# 檔名 ID 抽取：前綴 + 可選中段（大寫字母/數字，破折號分隔）+ 數字序號
-# 命中範例：PC-166 / PC-BAL-001 / IMP-V1-006 / PC-SCLK-004 / TEST-MON-001
+# 檔名 ID 抽取：前綴 + 可選中段（大寫字母/數字，破折號分隔）+ 數字序號。
+# ID 後須緊接 slug 分隔符「-」或直接是副檔名邊界「.md」結尾——後者對應
+# allocator.allocate_and_reserve_pattern_id 建立的無 slug 佔位檔（`{id}.md`，
+# 見該函式與 SKILL.md「佔位檔檔名（無 slug）即 pattern_id」的既有慣例，
+# 建立端為權威，見 tool-output-trust 規則 6）。無此分支時，佔位檔會被
+# extract_filename_id 判為無法辨識而歸入 UNRECOGNIZED，使其 ID 從
+# dir_ids 集合消失，讀作「README 有列出但目錄無對應檔案」的過時條目誤判
+# （PC-BAL-040 入庫實證）。
+# 命中範例：PC-166-slug.md / PC-BAL-001-slug.md / IMP-V1-006.md（無 slug）
 FILENAME_ID_PATTERN = re.compile(
-    r"^(?P<id>(?:PC|IMP|DOC|ARCH|TEST|PROC|CQ)-(?:[A-Z0-9]+-)?[0-9]+)-"
+    r"^(?P<id>(?:PC|IMP|DOC|ARCH|TEST|PROC|CQ)-(?:[A-Z0-9]+-)?[0-9]+)(?:-|\.md$)"
 )
 
 # README.md 表格列 ID 抽取：| ID | 標題 | 風險 | 來源版本 |

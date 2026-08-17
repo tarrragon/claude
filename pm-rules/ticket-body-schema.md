@@ -43,6 +43,16 @@
 - `Problem Analysis` + `重現實驗結果` + `Solution` 為三大必填，構成「問題→實驗→結論」完整鏈路。
 - `Test Results` 僅在有實驗輸出時填寫；樣本顯示 ANA 普遍無獨立測試輸出（4/4 missing），故列選填。
 
+#### 重現實驗結果章節：負面範圍聲明要求（PC-BAL-037 強制）
+
+`實驗發現` 子節除既有「已驗證事實 vs 未驗證假設」二分外，必須追加一行「本實驗不涵蓋」負面範圍聲明——逐條列出本次實驗**未量測**的失效模式。
+
+**Why**：實驗結論的自然摘要傾向以「模式安全」的粒度被記憶（如「flock 寫入 600 輪無損」在轉述中放大為「flock 寫入已驗證安全」），但實驗本身只驗證特定失效模式（如「並行寫入互相覆蓋」）不發生；缺少負面範圍聲明時，後續引用者須自行重建實驗邊界，而重建這一步沒有任何流程強制（PC-BAL-037 根因 3）。
+
+**Consequence**：實驗結論被引為設計背書時，引用者容易只核對「結論是否為真」與「實驗標的是否同一段機制」，「失效模式清單是否覆蓋本設計暴露的失效模式清單」這一問從未被問——PC-BAL-037 實際案例：並行寫入實驗（600 輪無損）被引用背書 in-place 寫入模式，實驗從未量測的 crash 中途半截檔案、無鎖讀端 race 兩條失效路徑，直到多視角審查才被發現。
+
+**Action**：`實驗發現` 子節補一行「本實驗不涵蓋：[逐條列出未測的失效模式]」，需具體列出失效模式，禁止「其餘情況未測試」等籠統帶過。引用實驗結論作設計依據前的三問檢查清單見 `.claude/references/experiment-evidence-citation-rules.md`。
+
 #### Solution 章節：Spawn 落地確認（W17-167 強制）
 
 ANA Solution 章節若含 IMP/DOC/ANA spawn 規劃表格，必須在 complete 前確認以下子節（被 acceptance-gate-hook Step 2.5.2 自動偵測）：
@@ -203,7 +213,7 @@ IMP ticket 修改 `src/` 字串輸出字面時，acceptance 必須補上 `npm te
 
 IMP ticket 的 `where.files` 觸及 hooks 目錄時，acceptance 必須含下表各項語意——既有 session 生效策略、liveness 驗證方式、失敗語意（fail-open/fail-closed）、產生路徑盤點結果。
 
-**強制層現況**：前三項由 `.claude/hooks/acceptance_checkers/hook_protection_acceptance_checker.py` 硬擋（`acceptance-gate-hook.py` 於 complete 前呼叫）。**產生路徑盤點結果尚未進入該 checker**，其強制層待 `0.2.1-W3-525` 落地；在該票完成前，此項為自律層要求，缺漏不會被擋。
+**強制層現況**：四項皆已進入 `.claude/hooks/acceptance_checkers/hook_protection_acceptance_checker.py` 硬擋範圍（`acceptance-gate-hook.py` 於 complete 前呼叫）——前三項為 acceptance 語意關鍵詞硬擋；第四項（產生路徑盤點結果）為 `how.strategy` 正本解析硬擋，機制細節見下方第 4 項說明的「強制層現況」段落。
 
 > **與下方「防護類 ticket：威脅事件寫 acceptance，攔截點寫 how.strategy」節的關係**：兩節對同一張 hooks 防護票同時生效，觸發方式與強制層級不同——本節由 `where.files` 機械判定並硬擋，下方節由 ticket 目的語意判定且純自律。本節四項屬**驗收手段與覆蓋範圍宣告**（防護是否在跑、擋住幾條路徑），不受下方節的攔截點約束；下方節管的是**防護攔截點**（防護攔在哪裡、覆蓋幾條路徑）。兩者職責正交，皆須滿足。
 
@@ -227,7 +237,7 @@ IMP ticket 的 `where.files` 觸及 hooks 目錄時，acceptance 必須含下表
 >
 > **作用是使缺口可見，非防止缺口**。撰寫者仍可只列一條路徑草率過關，但盤點表逐條可見、計數由機器輸出，審查者與後續接手者可據以追問。
 >
-> **強制層現況**：checker 目前檢查的是 acceptance 是否含數字宣告（上一版設計），改為解析 `how.strategy` 正本待 `0.2.1-W3-533` 落地。該票完成前，acceptance 仍需含數字宣告方能通過。行為三分（缺表阻擋／有表輸出計數／解析失敗 fail-open）以該票為準。
+> **強制層現況**：checker 已改為直接解析 `how.strategy`（缺則 `Solution`）的盤點表正本，不再檢查 acceptance 數字宣告。行為三分：表格缺席阻擋 complete 並提示格式範例；表格存在且解析成功則放行，`logger.info` 輸出「本票盤點 N 條、覆蓋 M 條、未覆蓋 K 條」；表格存在但解析失敗則 fail-open，僅 `logger.warning` 記錄不阻擋。
 
 **Why（前三項）**：這三項是機器檢查不到、只能落在 ticket 上的面向——單元測試全綠、settings.json 已註冊、實機 dogfooding 通過三項訊號都無法證明 hook 在「本次寫入的當下 session」已生效（session 中途新註冊的 hook 至該 session 重啟前不被 runtime 載入，屬結構性風險而非個案）。規則文字層級的預防措施已證明無法單靠文件落實，故用戶裁示強制層須為 acceptance 條目加 hook 硬擋。
 

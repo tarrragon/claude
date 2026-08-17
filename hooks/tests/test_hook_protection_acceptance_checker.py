@@ -24,6 +24,8 @@ how.strategy（缺則 Solution）的盤點表正本，行為三分（absent 阻�
 覆蓋情境（第四項「產生路徑盤點結果」，命中對象改為 how.strategy／Solution）：
   (j) how.strategy 與 Solution 皆缺席（表格完全缺席）→ block，訊息指出正本
       應寫於 how.strategy 並附格式範例
+  (j2) how.strategy 非空但不含表格（Solution 有效表格）→ block，訊息須點明
+      「非空即不 fallback」讀取優先序，並附 set-how --strategy 寫入指引
   (k) how.strategy 含有效表格 → 不阻擋，logger.info 輸出「盤點 N 條、覆蓋 M
       條、未覆蓋 K 條」三個實際數字
   (l) how.strategy 表格格式不符預期（缺覆蓋欄／儲存格非「是/否」）→
@@ -304,6 +306,40 @@ def test_inventory_table_absent_blocks_and_points_to_how_strategy(logger):
     assert "how.strategy" in msg
     assert "產生路徑" in msg
     assert "是否覆蓋" in msg
+
+
+# ---------------------------------------------------------------------------
+# (j2) how.strategy 非空但不含表格、Solution 有效表格 → block，訊息須點明
+#      「非空即不 fallback」的讀取優先序，並指引正確寫入位置（0.2.1-W3-581：
+#      566 收尾實測，執行者把表寫進 Solution 反覆不過，根因是 how.strategy
+#      已有其他策略文字擋住 fallback，原訊息未講明此優先序）
+# ---------------------------------------------------------------------------
+
+
+def test_how_strategy_non_empty_without_table_explains_no_fallback_priority(logger):
+    fm = _fm(
+        "IMP",
+        [".claude/hooks/new-guard-hook.py"],
+        [
+            "[ ] 本 session 不生效，需重啟才生效",
+            "[ ] 以 liveness 日誌比對確認 hook 已被觸發",
+            "[ ] 異常時 fail-closed，回傳 exit 2",
+        ],
+        how_strategy="改用正規表達式解析新增的設定檔格式，避免逐行字串比對。",
+    )
+    content = "---\nid: X\n---\n\n## Solution\n\n" + _VALID_INVENTORY_TABLE + "\n## Test Results\n\n"
+    should_block, msg = check_hook_protection_acceptance(fm, logger, content=content)
+
+    assert should_block is True, (
+        "how.strategy 非空（即使不含表格）不應 fallback 讀 Solution，"
+        "即使 Solution 有有效表格仍須阻擋"
+    )
+    # 訊息須明講讀取優先序：非空即不 fallback，而非「沒表格才 fallback」
+    assert "非空" in msg
+    assert "不會讀 Solution" in msg
+    # 訊息須指引正確寫入位置：既有策略文字須併入 how.strategy，附具體指令
+    assert "set-how" in msg
+    assert "--strategy" in msg
 
 
 # ---------------------------------------------------------------------------

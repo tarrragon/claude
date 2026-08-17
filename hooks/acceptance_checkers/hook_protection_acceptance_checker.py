@@ -366,7 +366,7 @@ def check_hook_protection_acceptance(
 
 def _format_block_message(ticket_id: str, missing: List[str]) -> str:
     missing_list = "\n".join(f"  - {label}" for label in missing)
-    return (
+    msg = (
         f"[ERROR] Acceptance Gate: 防護類 hook ticket 缺必含項目\n"
         f"\n"
         f"Ticket: {ticket_id}\n"
@@ -379,14 +379,35 @@ def _format_block_message(ticket_id: str, missing: List[str]) -> str:
         f"不生效，改以人工紀律承擔」（部署期政策亦屬合格填法）\n"
         f"  - liveness 驗證方式：說明如何確認 hook 確實被 runtime 載入執行\n"
         f"  - 失敗語意：說明異常時 fail-open 或 fail-closed\n"
-        f"\n"
-        f"產生路徑盤點結果：正本須寫在 how.strategy（缺則 Solution），acceptance "
-        f"不需重複宣告數字。格式為 markdown 表格（一條產生路徑一列，「是否覆蓋」欄"
-        f"僅接受「是」或「否」）：\n"
-        f"  | 產生路徑 | 是否覆蓋 | 未覆蓋原因 |\n"
-        f"  |---------|---------|-----------|\n"
-        f"  | 經工具正常寫入 | 是 | — |\n"
-        f"  | 先寫註冊後建檔（順序調換） | 否 | 檢查時目標尚不存在，走 fail-open |\n"
-        f"\n"
-        f"參考：.claude/pm-rules/ticket-body-schema.md\n"
     )
+    if _PATH_INVENTORY_LABEL in missing:
+        msg += (
+            f"\n"
+            f"產生路徑盤點結果——讀取優先序（為何會被擋）：checker 只判斷 "
+            f"how.strategy 是否『非空』，不是『是否含盤點表』——how.strategy 只要"
+            f"有任何文字（哪怕與盤點表無關），就完全不會讀 Solution；只有 "
+            f"how.strategy 為空白時才 fallback 讀 Solution。表格寫在 Solution "
+            f"卻仍被擋，通常是因為 how.strategy 已有其他策略文字擋住了 "
+            f"fallback（後果：反覆修改 Solution 也不會過，因為根本沒被讀取）。\n"
+            f"\n"
+            f"正確寫入位置（下一步）：\n"
+            f"  - how.strategy 目前完全空白 → 表格留在 Solution 或改寫入 "
+            f"how.strategy 皆可\n"
+            f"  - how.strategy 已有其他策略文字 → 表格須併入 how.strategy 本體"
+            f"（--strategy 為整欄覆寫，需連同原文字一起帶入）：\n"
+            f"      ticket track set-how {ticket_id} --strategy \"<原有策略文字>\n"
+            f"\n"
+            f"      <盤點表>\"\n"
+            f"\n"
+            f"格式為 markdown 表格（一條產生路徑一列，「是否覆蓋」欄僅接受「是」或"
+            f"「否」）：\n"
+            f"  | 產生路徑 | 是否覆蓋 | 未覆蓋原因 |\n"
+            f"  |---------|---------|-----------|\n"
+            f"  | 經工具正常寫入 | 是 | — |\n"
+            f"  | 先寫註冊後建檔（順序調換） | 否 | 檢查時目標尚不存在，走 "
+            f"fail-open |\n"
+            f"\n"
+            f"acceptance 不需重複宣告數字。\n"
+        )
+    msg += "\n參考：.claude/pm-rules/ticket-body-schema.md\n"
+    return msg

@@ -20,7 +20,7 @@ ticket track runqueue 命令（W17-011.1 / W17-009 scheduler 落地）
 - 復用 ticket_system.lib.cycle_detector.CycleDetector（經由 analyzer 間接使用）
 - 註冊於 track.py _create_command_handlers() 字典
   （不走 snapshot / dispatch-check 特殊分支雙軌）
-- 不新增 scheduler nice-flag 類參數（linux 審查：ticket 無動態 CPU share 類比）
+- 不新增 scheduler nice-flag 類參數（ticket 無動態 CPU share 類比）
 - 不自行實作拓撲 / CPM / 環檢測演算法（皆復用 lib）
 """
 
@@ -30,6 +30,7 @@ import argparse
 import json
 import re
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Literal, Optional, Set
 
@@ -47,6 +48,8 @@ from ticket_system.lib.section_locator import find_section
 from ticket_system.lib.staleness import is_stale_in_progress
 from ticket_system.lib.blocker_resolution import is_fully_unblocked
 from ticket_system.lib.constants import STATUS_COMPLETED, STATUS_CLOSED
+from ticket_system.lib import lease
+from ticket_system.lib import file_conflict
 
 
 # ---------------------------------------------------------------------------
@@ -261,6 +264,12 @@ READINESS_NO_CB = "NO-CB"
 # W17-031.4: stale in_progress 標註（與 readiness tag 並列顯示）
 STALE_TAG = "STALE"
 
+# multi-PM 協調層 Phase 3：registry 中 STALE session 持有的 in_progress 票
+# 標註（與 STALE_TAG 並列，語意不同——STALE_TAG 是票面自身時間戳判定的
+# 「久未更新」，RECLAIMABLE_TAG 是 registry heartbeat 判定的「持有者 session
+# 已死」，兩者可各自獨立出現或疊加）
+RECLAIMABLE_TAG = "RECLAIMABLE"
+
 # exit_status → readiness tag 映射（非 success / 缺欄位）
 _EXIT_STATUS_TO_READINESS: Dict[str, str] = {
     "needs_context": READINESS_NEEDS_CTX,
@@ -386,6 +395,12 @@ def _render_list(
     if top is not None and top > 0:
         runnable = runnable[:top]
 
+    # multi-PM 協調層 Phase 3：一次性載入 registry 快照供逐票判定 reclaimable，
+    # 避免每筆列各自觸發模組載入 + 檔案讀取（同 sessions 命令的降級語意，
+    # registry 不可用時 pm_registry 為 None，is_lease_reclaimable 一律回傳 False）
+    registry, pm_registry = lease.load_registry_snapshot()
+    now = datetime.now(timezone.utc)
+
     lines: List[str] = []
     header_parts = ["可執行清單"]
     if wave is not None:
@@ -434,10 +449,46 @@ def _render_list(
         # W17-031.4: stale in_progress tag（與 readiness 並列；可疊加）
         # PM 看到 [STALE] → 人工介入評估（agent 真停滯 vs 長任務）
         stale_suffix = f" [{STALE_TAG}]" if is_stale_in_progress(ticket) else ""
+        # multi-PM 協調層 Phase 3: registry STALE session 持票 tag（可與
+        # STALE_TAG 並列疊加，兩者判準不同——見 RECLAIMABLE_TAG 常數註解）
+        reclaimable_suffix = (
+            f" [{RECLAIMABLE_TAG}]"
+            if lease.is_lease_reclaimable(registry, tid, pm_registry, now)
+            else ""
+        )
         lines.append(
-            f"  {idx}. [{priority}|{ticket_type}] [{readiness}]{stale_suffix} {tid}  {title}  {suffix}"
+            f"  {idx}. [{priority}|{ticket_type}] [{readiness}]{stale_suffix}"
+            f"{reclaimable_suffix} {tid}  {title}  {suffix}"
         )
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# 視圖渲染：groups（multi-PM 協調層 Phase 3，父票設計要點 5）
+# ---------------------------------------------------------------------------
+
+def _render_groups(tickets: List[Dict]) -> str:
+    """`--groups` 旗標渲染：輸入集合與 list 視圖同（blockedBy=[] 且
+    status=pending），依 priority/type/id 排序後交由
+    `file_conflict.compute_parallel_groups` 做 where.files 交集判定與連通
+    分量分組（AC-3：與 `ticket track conflicts` 共用同一交集判定實作）。
+
+    群組輸出優先於 `--top` / `--wave` 之外的視圖切換（`--groups` 優先於
+    `--format`，`render_runqueue` 於 `--groups` 為真時提前分派，
+    不落入 --format 的 list/dag/critical-path 分支）。
+    """
+    ticket_map = {t.get("id"): t for t in tickets if t.get("id")}
+    ready = [t for t in tickets if _is_unblocked_pending(t, ticket_map)]
+    ready.sort(
+        key=lambda t: (_priority_rank(t), _type_rank(t), str(t.get("id", "")))
+    )
+
+    if not ready:
+        return "=== Parallel Groups ===\n（無可執行 Ticket；blockedBy 全非空或 status 非 pending）"
+
+    project_root = get_project_root()
+    result = file_conflict.compute_parallel_groups(ready, project_root)
+    return file_conflict.render_groups(result)
 
 
 # ---------------------------------------------------------------------------
@@ -561,10 +612,16 @@ def render_runqueue(args: argparse.Namespace, version: str) -> str:
     top = getattr(args, "top", None)
     context = getattr(args, "context", None)
     wave = getattr(args, "wave", None)
+    groups = bool(getattr(args, "groups", False))
 
     all_tickets = list_tickets(version) or []
     scoped = _filter_by_wave(all_tickets, wave)
     scoped = _apply_context_resume(scoped, context)
+
+    # multi-PM 協調層 Phase 3：--groups 優先於 --format 視圖切換（父票設計
+    # 要點 5），提前分派不落入下方 list/dag/critical-path 分支
+    if groups:
+        return _render_groups(scoped)
 
     # W17-031.1: resume 模式下載入 handoff info 供 _render_list 標 exit_status tag
     # W17-031.3: list 視圖一律載入 handoff info 供 readiness 計算（READY/NEEDS-CTX 等）
@@ -611,7 +668,7 @@ def register_runqueue(
         help=(
             "統一 scheduler CLI："
             "runqueue --format={list|dag|critical-path} [--top N] "
-            "[--context=resume] [--wave N]"
+            "[--context=resume] [--wave N] [--groups]"
         ),
     )
     p.add_argument(
@@ -621,10 +678,19 @@ def register_runqueue(
         help="輸出視圖（預設 list）",
     )
     p.add_argument(
+        "--groups",
+        action="store_true",
+        default=False,
+        help=(
+            "對可執行清單（blockedBy=[] pending）依 where.files 交集切出可"
+            "並行/序列群組（優先於 --format）"
+        ),
+    )
+    p.add_argument(
         "--top",
         type=int,
         default=None,
-        help="返回前 N 筆（僅 list / critical-path 有效，dag 忽略）",
+        help="返回前 N 筆（僅 list / critical-path 有效，dag / --groups 忽略）",
     )
     p.add_argument(
         "--context",

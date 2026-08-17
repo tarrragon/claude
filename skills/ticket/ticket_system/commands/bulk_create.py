@@ -239,7 +239,7 @@ def _create_batch_tickets(
             # 分配序號（使用 wave_seq_map 維持批次內遞增起點，避免競態）。
             # W1-051：每個配號都經 resolve_available_seq 保證可用，消除稀疏佔用
             # 撞號（例：起始 051 可用但 052 已被既有票佔用，批次 += 1 會撞）與
-            # 降級連鎖覆寫（R1）。dry_run 不寫檔，仍走 guard 使預演號與正式一致。
+            # 降級連鎖覆寫。dry_run 不寫檔，仍走 guard 使預演號與正式一致。
             if wave not in wave_seq_map:
                 start = get_next_seq(version, wave)
             else:

@@ -52,6 +52,15 @@ class TestExtractFilenameId:
         assert _hook.extract_filename_id("README.md") == ""
         assert _hook.extract_filename_id("notes.md") == ""
 
+    def test_no_slug_placeholder_file(self):
+        """allocate_and_reserve_pattern_id 建立的佔位檔無 slug（`{id}.md`），
+        建立端為權威（SKILL.md「佔位檔檔名（無 slug）即 pattern_id」），
+        本函式須正確辨識，不可歸入 UNRECOGNIZED（PC-BAL-040 入庫實證）。
+        """
+        assert _hook.extract_filename_id("PC-BAL-040.md") == "PC-BAL-040"
+        assert _hook.extract_filename_id("IMP-V1-006.md") == "IMP-V1-006"
+        assert _hook.extract_filename_id("TEST-001.md") == "TEST-001"
+
 
 # ---------------------------------------------------------------------------
 # collect_dir_id_map
@@ -110,6 +119,16 @@ class TestCollectDirIdMap:
         root = self._make_tree(tmp_path, {"test": ["not-an-id-file.md"]})
         result = _hook.collect_dir_id_map(root)
         assert any(k.startswith("UNRECOGNIZED:") for k in result)
+
+    def test_no_slug_placeholder_file_recognized_not_unrecognized(self, tmp_path):
+        """無 slug 佔位檔須被正確歸入其 ID，不落入 UNRECOGNIZED（PC-BAL-040
+        入庫實證：先前誤判會使該 ID 從 dir_ids 消失，觸發 stale 誤報）。"""
+        root = self._make_tree(
+            tmp_path, {"process-compliance": ["PC-BAL-040.md"]}
+        )
+        result = _hook.collect_dir_id_map(root)
+        assert result["PC-BAL-040"] == ["process-compliance/PC-BAL-040.md"]
+        assert not any(k.startswith("UNRECOGNIZED:") for k in result)
 
 
 # ---------------------------------------------------------------------------
@@ -453,6 +472,27 @@ class TestMainEndToEnd:
         monkeypatch.setattr(_hook, "get_project_root", lambda: str(root))
         exit_code = _hook.main()
         assert exit_code == 0
+
+    def test_main_silent_for_no_slug_placeholder_listed_in_readme(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """回歸：allocator 建立的無 slug 佔位檔（已入 README 索引）不應被
+        誤判為 stale_in_readme（PC-BAL-040 入庫實證，改名 workaround 前的
+        真實紅燈情境）。"""
+        root = self._build_fixture_repo(
+            tmp_path,
+            readme_body=(
+                "| ID | 標題 | 風險 | 來源版本 |\n"
+                "|----|----|----|----|\n"
+                "| PC-BAL-040 | 標題 | 高 | v0.2.1 |\n"
+            ),
+            files_by_category={"process-compliance": ["PC-BAL-040.md"]},
+        )
+        monkeypatch.setattr(_hook, "get_project_root", lambda: str(root))
+        exit_code = _hook.main()
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert captured.err == ""
 
 
 # ---------------------------------------------------------------------------

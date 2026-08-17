@@ -183,8 +183,11 @@ def test_A6_empty_section_renders_none(monkeypatch, capsys):
     assert "[Handoff Target] 0 ticket(s)" in out
     assert "[Ready Top 5]" in out
     assert "[Stale Warning] 0 ticket(s) over 60min" in out
-    # 四段 (none)
-    assert out.count("(none)") == 4
+    # 四段空狀態字面（0.2.1-W3-590：對齊其餘五命令的全形中文樣式）
+    assert "（無 in_progress ticket）" in out
+    assert "（無 handoff target）" in out
+    assert "（無可認領建議）" in out
+    assert "（無 stale ticket）" in out
 
 
 # ---------------------------------------------------------------------------
@@ -319,7 +322,7 @@ def test_D1_top_zero(monkeypatch, capsys):
     assert rc == 0
     assert "[Ready Top 0]" in out
     ready_section = out.split("[Ready Top 0]")[1].split("[Stale Warning]")[0]
-    assert "(none)" in ready_section
+    assert "（無可認領建議）" in ready_section
 
 
 def test_D2_top_exceeds_available(monkeypatch, capsys):
@@ -340,7 +343,10 @@ def test_D3_wave_not_exist(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert rc == 0
     assert "wave=999" in out
-    assert out.count("(none)") == 4
+    assert "（無 in_progress ticket）" in out
+    assert "（無 handoff target）" in out
+    assert "（無可認領建議）" in out
+    assert "（無 stale ticket）" in out
 
 
 def test_D4_no_stale_flag(monkeypatch, capsys):
@@ -458,10 +464,10 @@ def test_F1_golden_pure_pending(monkeypatch, capsys):
         "=== Dashboard (wave=10, version=0.18.0) ===\n"
         "\n"
         "[In Progress] 0 ticket(s)\n"
-        "  (none)\n"
+        "  （無 in_progress ticket）\n"
         "\n"
         "[Handoff Target] 0 ticket(s)\n"
-        "  (none)\n"
+        "  （無 handoff target）\n"
         "\n"
         "[Ready Top 5]  priority 排序，可直接 claim\n"
         "  [1] [P0] [ready] 0.18.0-W10-101  A\n"
@@ -469,7 +475,7 @@ def test_F1_golden_pure_pending(monkeypatch, capsys):
         "  [3] [P2] [ready] 0.18.0-W10-103  C\n"
         "\n"
         "[Stale Warning] 0 ticket(s) over 60min\n"
-        "  (none)\n"
+        "  （無 stale ticket）\n"
         "\n"
         "Hint: ticket track claim <id>\n"
     )
@@ -494,13 +500,13 @@ def test_F2_golden_with_in_progress(monkeypatch, capsys):
         "(started_at: <NORMALIZED>, agent: thyme)\n"
         "\n"
         "[Handoff Target] 0 ticket(s)\n"
-        "  (none)\n"
+        "  （無 handoff target）\n"
         "\n"
         "[Ready Top 5]  priority 排序，可直接 claim\n"
         "  [1] [P1] [ready] 0.18.0-W10-101  X\n"
         "\n"
         "[Stale Warning] 0 ticket(s) over 60min\n"
-        "  (none)\n"
+        "  （無 stale ticket）\n"
         "\n"
         "Hint: ticket track claim <id>\n"
     )
@@ -524,7 +530,7 @@ def test_F3_golden_with_stale(monkeypatch, capsys):
         "(started_at: <NORMALIZED>, agent: parsley)\n"
         "\n"
         "[Handoff Target] 0 ticket(s)\n"
-        "  (none)\n"
+        "  （無 handoff target）\n"
         "\n"
         "[Ready Top 5]  priority 排序，可直接 claim\n"
         "  [1] [P0] [ready] 0.18.0-W10-101  P\n"
@@ -721,11 +727,12 @@ def test_H4_json_text_handoff_target_equivalence(monkeypatch, capsys):
 
 
 def test_H5_no_handoff_renders_none(monkeypatch, capsys):
-    """無 handoff pending 時，Handoff Target 章節顯示 0 且 (none)。"""
+    """無 handoff pending 時，Handoff Target 章節顯示 0 且空狀態字面。"""
     _patch_loader(monkeypatch, [])
     track_dashboard.dashboard_main(_ns(), "0.18.0")
     out = capsys.readouterr().out
     assert "[Handoff Target] 0 ticket(s)" in out
+    assert "（無 handoff target）" in out
 
 
 def test_H6_ready_section_not_regressed_by_handoff_target(monkeypatch, capsys):

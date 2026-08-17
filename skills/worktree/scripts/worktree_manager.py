@@ -491,6 +491,58 @@ def _parse_ticket_blocked_by(ticket_id: str) -> list[str]:
         return []
 
 
+def _merge_main_baseline(worktree_path: str, base: str) -> bool:
+    """worktree 建立後確定性同步 main（issue #77 決議 A：治本）。
+
+    共享 .git 下 local main 為全機單一事實來源；`git worktree add` 的 base
+    解析與 worktree 實際可用之間存在時間差——其他 worktree 在此視窗內對
+    main 的併行 commit 不會反映在新 worktree 的分支起點。明確在新 worktree
+    內執行一次 `git merge main`，消除此視窗（無新變更時為 no-op fast-forward，
+    不影響正常流程）。合併目標固定為 main（非 create 的 `--base` 參數）——
+    即使以其他分支為 base 建立 worktree，仍應與 main 這個 SSOT 同步。
+
+    衝突時明確停下並輸出後果與下一步，不自動解（不執行 `git merge --abort`
+    或自動選邊）——worktree 已存在於磁碟，僅標記為需要人工介入。main 分支
+    不存在時視為無可合併對象，靜默略過（比照 `_merge_blocked_by_branches`
+    對不存在分支的降級處理）；`base == main` 時該存在性已於
+    `_cmd_create_validate_preconditions` 驗證過，不重複檢查。
+
+    Args:
+        worktree_path: 新建 worktree 的路徑（合併於此目錄下執行）
+        base: create 子命令實際使用的 base 分支（用於判斷是否需重新檢查
+            main 存在性；main 本身固定為合併目標，不受此參數影響）
+
+    Returns:
+        bool: True 表示已同步（成功合併、無新變更、或 main 不存在無需同步）；
+            False 表示衝突或合併失敗，訊息已輸出，呼叫端應中止後續流程
+            （不疊加 blockedBy 合併，避免在已衝突的 working tree 上繼續操作）。
+    """
+    if base != DEFAULT_BASE_BRANCH and not check_branch_exists(DEFAULT_BASE_BRANCH):
+        return True
+
+    print(CreateMessages.MAIN_MERGE_HEADER.format(base=DEFAULT_BASE_BRANCH))
+    success, output = run_git_command(
+        ["merge", DEFAULT_BASE_BRANCH, "--no-edit"], cwd=worktree_path
+    )
+    if success:
+        if "up to date" in output.lower() or not output.strip():
+            print(CreateMessages.MAIN_MERGE_UP_TO_DATE.format(base=DEFAULT_BASE_BRANCH))
+        else:
+            print(CreateMessages.MAIN_MERGE_SUCCESS.format(base=DEFAULT_BASE_BRANCH))
+        return True
+
+    if "conflict" in output.lower():
+        print(CreateMessages.MAIN_MERGE_CONFLICT.format(
+            base=DEFAULT_BASE_BRANCH, worktree_path=worktree_path, output=output
+        ))
+        return False
+
+    print(CreateMessages.MAIN_MERGE_FAILED.format(
+        base=DEFAULT_BASE_BRANCH, error=output, worktree_path=worktree_path
+    ))
+    return False
+
+
 def _merge_blocked_by_branches(ticket_id: str, worktree_path: str) -> None:
     """
     合併 blockedBy 依賴的 feat 分支到新建的 worktree
@@ -605,6 +657,10 @@ def _cmd_create_validate_and_execute(
 
     # 成功輸出
     _cmd_create_print_success(ticket_id, branch_name, base, worktree_path)
+
+    # 確定性同步 main（issue #77 決議 A）：衝突時中止，不疊加後續合併
+    if not _merge_main_baseline(worktree_path, base):
+        return 1
 
     # 自動合併 blockedBy 依賴的 feat 分支
     _merge_blocked_by_branches(ticket_id, worktree_path)

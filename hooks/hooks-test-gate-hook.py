@@ -200,23 +200,39 @@ def _touched_hook_filenames(command: str, host_root: str, logger) -> Set[str]:
     """回傳本次 commit 觸及的 `.claude/hooks/` 直接子層 `*.py` 檔名集合。
 
     兩來源聯集：
-      1. 當下已 staged（`git diff --cached --name-only`）
+      1. 當下已 staged（`git diff --cached --name-status`，依 status 過濾
+         已刪除路徑，見下方刪除／改名處理）
       2. 同指令內 `git add` 或 commit pathspec 參數位置字面提及的路徑
          （見 `_iter_literal_pathspec_segments`，涵蓋 `git add x && git
          commit` 串接情境，且排除非該參數位置的字面提及，如 JSON payload
          或 echo 字面；見檔頭範疇邊界）
     僅保留 `.claude/hooks/` 下不含更深層路徑分隔符（無巢狀子目錄）的
     `*.py`（與 candidate_tests 命名慣例一致，排除 tests/ 與 lib/ 子目錄）。
+
+    刪除／改名處理：`--name-status` 每行首欄為 status 字母
+    （A/M/D/R100...）。已刪除（`D`）的 hook 檔不存在於工作樹，無對應測試
+    可檢查，故略過，否則已刪除的 hook 每次都被誤判為「觸及但無對應測試」
+    產生噪音提醒（噪音累積會讓真警告被忽略）。已改名（`R`）行格式為
+    `status\told_path\tnew_path`，僅新路徑仍存在，取最後一欄
+    （`fields[-1]`）即同時涵蓋 A/M（單欄路徑）與 R（雙欄取新路徑）兩種
+    情況，舊路徑不採計。
     """
     filenames: Set[str] = set()
 
     success, output = run_git_command(
-        ["diff", "--cached", "--name-only"], cwd=host_root
+        ["diff", "--cached", "--name-status"], cwd=host_root
     )
     if success and output:
         for line in output.split("\n"):
             line = line.strip()
-            m = re.fullmatch(r"\.claude/hooks/([\w.\-]+\.py)", line)
+            if not line:
+                continue
+            fields = line.split("\t")
+            status = fields[0]
+            if status.startswith("D"):
+                continue
+            path = fields[-1].strip()
+            m = re.fullmatch(r"\.claude/hooks/([\w.\-]+\.py)", path)
             if m:
                 filenames.add(m.group(1))
     elif not success:

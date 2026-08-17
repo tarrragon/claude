@@ -16,21 +16,21 @@ L1 activity：票面進度是事件驅動更新（claim/append-log/complete）�
 
 git 呼叫一律經 `.claude/lib/git_utils.run_git_command`（已內建
 `--no-optional-locks`，避免與並行 PM session 競爭 `.git/index.lock`，
-Phase 1 審查教訓），比照 track_hook_health.py 的 `_find_claude_dir()` +
-sys.path 模式 lazy import，不重寫第三份 subprocess 呼叫路徑。
+Phase 1 審查教訓），lazy import 經 `ticket_system.lib.claude_lib_loader`
+共用實作，不重寫第三份 subprocess 呼叫路徑。
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
-import sys
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Tuple
 
+from ticket_system.lib.claude_lib_loader import load_claude_lib
+from ticket_system.lib.command_tracking_messages import TrackMessages
 from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.ticket_loader import list_tickets
 from ticket_system.lib.version import get_active_versions
@@ -45,56 +45,14 @@ NO_SIGNAL = "no-signal"
 
 
 # ---------------------------------------------------------------------------
-# Lib 載入：lazy import `.claude/lib/git_utils`（比照 track_hook_health.py）
+# Lib 載入：lazy import `.claude/lib/git_utils`（收斂自五處近乎相同複本，
+# 共用實作見 ticket_system.lib.claude_lib_loader）
 # ---------------------------------------------------------------------------
-
-_GIT_UTILS_MODULE = None
-
-
-def _find_claude_dir() -> Optional[Path]:
-    """依優先序定位 .claude/ 目錄（同 track_hook_health.py 的搜尋策略）。"""
-    env_root = os.environ.get("CLAUDE_PROJECT_DIR")
-    if env_root:
-        candidate = Path(env_root) / ".claude"
-        if (candidate / "lib" / "git_utils.py").is_file():
-            return candidate
-
-    for d in [Path.cwd(), *Path.cwd().parents]:
-        candidate = d / ".claude"
-        if (candidate / "lib" / "git_utils.py").is_file():
-            return candidate
-
-    try:
-        dev_candidate = Path(__file__).resolve().parents[4]
-        if (dev_candidate / "lib" / "git_utils.py").is_file():
-            return dev_candidate
-    except (IndexError, OSError):
-        pass
-
-    return None
-
-
-def _load_git_utils():
-    """Lazy 載入 .claude/lib/git_utils（首次呼叫時 import + 快取）。"""
-    global _GIT_UTILS_MODULE
-    if _GIT_UTILS_MODULE is not None:
-        return _GIT_UTILS_MODULE
-
-    claude_dir = _find_claude_dir()
-    if claude_dir is None:
-        return None
-
-    if str(claude_dir) not in sys.path:
-        sys.path.insert(0, str(claude_dir))
-    from lib import git_utils  # noqa: WPS433
-
-    _GIT_UTILS_MODULE = git_utils
-    return git_utils
 
 
 def run_git_command(args: List[str], cwd: Optional[str] = None) -> Tuple[bool, str]:
     """Thin wrapper：對外暴露以便測試 patch；git_utils 不可用時降級回傳失敗。"""
-    git_utils = _load_git_utils()
+    git_utils = load_claude_lib("git_utils")
     if git_utils is None:
         return False, "git_utils unavailable"
     return git_utils.run_git_command(args, cwd=cwd)
@@ -306,7 +264,7 @@ def attribute_dirty_files(
 # ---------------------------------------------------------------------------
 
 def _gather_in_progress_tickets(
-    explicit_version: Optional[str], all_versions: bool
+    explicit_version: Optional[str],
 ) -> List[Dict[str, Any]]:
     if explicit_version:
         versions = [explicit_version]
@@ -354,9 +312,8 @@ def execute_activity(args: argparse.Namespace) -> int:
     """執行 track activity 命令（version-agnostic，read-only）。"""
     fmt = getattr(args, "format", FORMAT_TABLE) or FORMAT_TABLE
     explicit_version = getattr(args, "version", None)
-    all_versions = bool(getattr(args, "all", False))
 
-    tickets = _gather_in_progress_tickets(explicit_version, all_versions)
+    tickets = _gather_in_progress_tickets(explicit_version)
     project_root = get_project_root()
     dirty_paths = list_dirty_files(cwd=str(project_root))
 
@@ -395,7 +352,7 @@ def register_activity(
         "--all",
         action="store_true",
         default=False,
-        help="相容保留旗標：預設已掃描全部 active 版本，本旗標目前與預設行為無差異",
+        help=TrackMessages.ARG_ALL_COMPAT,
     )
     p.add_argument(
         "--format",

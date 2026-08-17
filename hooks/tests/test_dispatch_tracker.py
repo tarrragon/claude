@@ -325,6 +325,25 @@ class TestEdgeCases:
 class TestAtomicWrite:
     """_write_state 的 tempfile + os.replace 原子替換（0.2.1-W3-556）。"""
 
+    def test_fsync_failure_writes_stderr_and_still_persists(
+        self, project_root: Path, capsys
+    ):
+        """fsync 失敗不阻斷寫入（os.replace 仍執行，資料正確落地），但需
+        可觀測（規則 4）：stderr 記一筆警示。"""
+        with patch(
+            "lib.dispatch_tracker.os.fsync", side_effect=OSError("fsync unsupported")
+        ):
+            record_dispatch(project_root, "Task despite fsync failure")
+
+        state_file = get_state_file_path(project_root)
+        assert state_file.exists()
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+        assert len(data["dispatches"]) == 1
+
+        err = capsys.readouterr().err
+        assert "fsync 失敗" in err
+        assert "不影響本次寫入" in err
+
     def test_no_temp_file_left_behind_after_success(self, project_root: Path):
         record_dispatch(project_root, "Task A")
         state_file = get_state_file_path(project_root)

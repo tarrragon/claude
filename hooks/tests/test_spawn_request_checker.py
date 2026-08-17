@@ -197,6 +197,59 @@ def test_unparseable_still_treated_as_unprocessed(logger):
     assert "fail-closed" in msg
 
 
+# === 0.2.1-W3-324: 校準 CLI 實際寫入格式（附全形括號附註）不誤判 ===
+# rule8-exempt: testdata:回歸樣本取自真實已完成 ticket 0.2.1-W3-319 的
+# Spawn Requests 章節內容，驗證 CLI 實際產出格式可被正確解析
+
+
+def test_processed_with_full_width_annotation_passes(logger):
+    """`resolve-spawn-request` CLI 實際寫入格式（processed 緊接全形括號
+    附註 `已建 <ticket-id>`）應被正確解析為已處理，不誤報未處理。"""
+    entry = (
+        "\n- **SR-1** (2026-07-05 12:00)\n"
+        "  - what: 補測試\n"
+        "  - status: processed（已建 0.2.1-W3-320）\n"
+    )
+    content = _build_content(entry)
+    should_warn, msg = check_spawn_requests(content, {"id": "T-1"}, logger)
+    assert should_warn is False
+    assert msg is None
+
+
+def test_dismissed_with_reason_annotation_passes(logger):
+    """dismissed 附理由的全形括號附註格式同樣應正確解析。"""
+    entry = (
+        "\n- **SR-1** (2026-07-05 12:00)\n"
+        "  - what: 補測試\n"
+        "  - status: dismissed（評估後不需要，已有既有機制涵蓋）\n"
+    )
+    content = _build_content(entry)
+    should_warn, msg = check_spawn_requests(content, {"id": "T-1"}, logger)
+    assert should_warn is False
+    assert msg is None
+
+
+def test_w3_319_three_sr_regression_sample_all_pass(logger):
+    """0.2.1-W3-319 完成時實際留下的三筆 Spawn Request（皆為
+    `resolve-spawn-request` CLI 寫入的 `processed（已建 <id>）` 格式），
+    驗證真實回歸樣本可正確解析，不觸發 gate 誤報。"""
+    entries = (
+        "\n- **SR-1** (2026-08-06 11:24)\n"
+        "  - what: 移除 settings.json 中的 hook 重複註冊與合併版並存\n"
+        "  - status: processed（已建 0.2.1-W3-320）\n"
+        "\n- **SR-2** (2026-08-06 11:24)\n"
+        "  - what: 補齊 agent-ticket-validation-hook 的唯讀代理人豁免清單\n"
+        "  - status: processed（已建 0.2.1-W3-321）\n"
+        "\n- **SR-3** (2026-08-06 11:24)\n"
+        "  - what: 決策 hook auto-commit 是否應繞過下游 repo 的 pre-commit hook\n"
+        "  - status: processed（已建 0.2.1-W3-322）\n"
+    )
+    content = _build_content(entries)
+    should_warn, msg = check_spawn_requests(content, {"id": "0.2.1-W3-319"}, logger)
+    assert should_warn is False
+    assert msg is None
+
+
 # === AC#4: three causes coverage ===
 
 def test_three_causes_all_present(logger):

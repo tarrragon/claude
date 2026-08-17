@@ -37,7 +37,6 @@ Dispatch Identity Bind Hook - PostToolUse (Agent)
 """
 
 import logging
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -54,6 +53,7 @@ from lib import (
     get_project_root,
     run_hook_safely,
 )
+from lib.ticket_id_pattern import extract_ticket_id_anchored
 
 # ============================================================================
 # 常數定義
@@ -61,9 +61,6 @@ from lib import (
 
 HOOK_NAME = "dispatch-identity-bind-hook"
 EXIT_SUCCESS = 0
-
-# Ticket ID 格式（PC-065 prompt 首行慣例）；(?:\.\d+)* 涵蓋子票後綴（如 1.5.0-W5-005.2）
-TICKET_ID_PATTERN = re.compile(r"(\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)*)")
 
 # who.current 無主態值：create 未指定 --who 時為字面 "pending"，
 # PM 建票模板慣用 "待派發"；execute_get_field 對缺值輸出 "?"
@@ -79,12 +76,15 @@ TICKET_CLI_TIMEOUT = 15
 
 
 def extract_ticket_id(prompt: str) -> Optional[str]:
-    """從派發 prompt 首行提取 Ticket ID；非 ticket 派發（無 ID）回傳 None。"""
+    """從派發 prompt 首行提取 Ticket ID；非 ticket 派發（無 ID）回傳 None。
+
+    首行同時含多個票號時優先信任『Ticket』標籤錨定，無標籤才退回首行
+    第一個 ID 形狀字串（見 lib.ticket_id_pattern.extract_ticket_id_anchored）。
+    """
     if not prompt or not prompt.strip():
         return None
     first_line = prompt.strip().splitlines()[0]
-    match = TICKET_ID_PATTERN.search(first_line)
-    return match.group(1) if match else None
+    return extract_ticket_id_anchored(first_line)
 
 
 def _run_ticket_cli(

@@ -22,8 +22,9 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import PurePosixPath
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from ticket_system.lib.file_conflict import group_by_conflict
 from ticket_system.lib.id_parser import extract_id_components
 from ticket_system.lib.ticket_loader import list_tickets
 
@@ -95,34 +96,13 @@ def _tickets_conflict(files_a: Sequence[str], files_b: Sequence[str]) -> Optiona
 
 
 # ---------------------------------------------------------------------------
-# Union-Find
-# ---------------------------------------------------------------------------
-
-class _UnionFind:
-    def __init__(self, ids: Iterable[str]) -> None:
-        self._parent: Dict[str, str] = {i: i for i in ids}
-
-    def find(self, x: str) -> str:
-        while self._parent[x] != x:
-            self._parent[x] = self._parent[self._parent[x]]
-            x = self._parent[x]
-        return x
-
-    def union(self, a: str, b: str) -> None:
-        ra, rb = self.find(a), self.find(b)
-        if ra != rb:
-            self._parent[ra] = rb
-
-    def groups(self) -> Dict[str, List[str]]:
-        out: Dict[str, List[str]] = {}
-        for k in self._parent:
-            root = self.find(k)
-            out.setdefault(root, []).append(k)
-        return out
-
-
-# ---------------------------------------------------------------------------
 # 主分析邏輯
+#
+# 連通分量切分委派 `ticket_system.lib.file_conflict.group_by_conflict`
+# （與 runqueue --groups 共用同一「衝突圖建構 + 連通分量」核心，原本各自
+# 實作 union-find / DFS 兩份圖演算法收斂為一份；衝突判準——本檔的弱衝突
+# 深度啟發式 vs file_conflict 的 impl->test 擴張——刻意不合併，各自的
+# predicate 邏輯保留在呼叫端，只把圖層邏輯抽出共用）。
 # ---------------------------------------------------------------------------
 
 def _collect_candidates(
@@ -187,28 +167,22 @@ def analyze_parallel(
     pending_by_id = {t["id"]: t for t in pending}
     files_map = {t["id"]: _extract_files(t) for t in pending}
 
-    uf = _UnionFind(pending_by_id.keys())
     reasons: Dict[Tuple[str, str], str] = {}
     ids = list(pending_by_id.keys())
+    conflict_pairs: List[Tuple[str, str]] = []
     for i in range(len(ids)):
         for j in range(i + 1, len(ids)):
             a, b = ids[i], ids[j]
             reason = _tickets_conflict(files_map[a], files_map[b])
             if reason:
-                uf.union(a, b)
+                conflict_pairs.append((a, b))
                 reasons[(a, b)] = reason
 
-    groups = uf.groups()
-    conflict_groups: List[List[str]] = []
-    parallel_ids: List[str] = []
-    for members in groups.values():
-        if len(members) >= 2:
-            conflict_groups.append(sorted(members))
-        else:
-            parallel_ids.extend(members)
-
-    conflict_groups.sort()
-    parallel_ids.sort()
+    parallel_ids, conflict_groups = group_by_conflict(ids, conflict_pairs)
+    # group_by_conflict 保留 isolated 節點的輸入序（同 file_conflict 的
+    # priority-preserving 政策）；本檔既有行為是字母序，故在此明確排序
+    # ——排序政策留在呼叫端，非共用核心的職責。
+    parallel_ids = sorted(parallel_ids)
     parallel_tickets = [pending_by_id[i] for i in parallel_ids]
 
     # PC-137：可平行集合中 .claude/ 觸及計數

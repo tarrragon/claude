@@ -41,8 +41,21 @@ from typing import List, Optional, Tuple
 # Spawn Request 條目起始行：`- **SR-N** (timestamp)`
 _SR_ENTRY_PATTERN = re.compile(r"^\s*-\s*\*\*(SR-\d+)\*\*", re.MULTILINE)
 
-# status 欄位（嚴格）：值只能是單一 token（`pending`/`processed`/`dismissed`）
-_STATUS_FIELD_PATTERN = re.compile(r"^\s*-\s*status\s*:\s*(\S+)\s*$", re.MULTILINE | re.IGNORECASE)
+# status 欄位（嚴格）：值為 `pending`/`processed`/`dismissed` 三者之一，
+# 可選緊接（無空白）全形括號附註（`resolve-spawn-request` CLI 實際寫入
+# 格式，如 `processed（已建 <ticket-id>）`，見
+# `ticket_system/commands/track_acceptance.py`
+# `_build_spawn_request_status_value`）。建立端為權威來源（tool-output-
+# trust-rules 規則 6），此正則對齊其產出格式，非反向要求 CLI 改輸出。
+#
+# 附註格式以外的裝飾（半形括號、箭頭、日期等自由文字，如
+# `processed (date) -> other-id`）刻意不匹配、維持 unparseable
+# fail-closed——這類格式代表非本 CLI 產生的手改內容，語意不明確，仍應
+# 由 PM 人工核實而非靜默放行。
+_STATUS_FIELD_PATTERN = re.compile(
+    r"^\s*-\s*status\s*:\s*(pending|processed|dismissed)(?:（.*）)?\s*$",
+    re.MULTILINE | re.IGNORECASE,
+)
 
 # status 欄位（寬鬆）：偵測 `- status:` 行是否存在（不限值格式）
 _STATUS_LINE_LOOSE_PATTERN = re.compile(r"^\s*-\s*status\s*:\s*(.+)$", re.MULTILINE | re.IGNORECASE)

@@ -85,6 +85,7 @@ from lib import (
     validate_hook_input,
 )
 from lib.hook_messages import GateMessages, CoreMessages, format_message
+from lib.ticket_id_pattern import SEARCH_BOUNDED_RE
 
 # ============================================================================
 # 常數定義
@@ -676,8 +677,8 @@ def check_ticket_relevance(prompt: str, ticket_id: str, ticket_content: str, log
     logger.warning(f"Ticket {ticket_id} 與 prompt 無關聯")
     return False, warning
 
-# Ticket ID 格式：如 0.19.0-W4-027、0.20.0-W1-013
-_TICKET_ID_PATTERN = re.compile(r"\b\d+\.\d+\.\d+-W\d+-\d+\b")
+# Ticket ID 格式（SSOT：lib.ticket_id_pattern.SEARCH_BOUNDED_RE）
+_TICKET_ID_PATTERN = SEARCH_BOUNDED_RE
 
 
 def extract_ticket_id_from_prompt(prompt: Optional[str]) -> Optional[str]:

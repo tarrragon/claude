@@ -4,7 +4,9 @@ pm-registry.json 共用模組（multi-PM 協調層 registry 基礎設施，schem
 跨 worktree 單一實例的 multi-PM session registry，落於 `git rev-parse
 --git-common-dir` 解析出的主 .git/ 目錄下，供同一 repo 上多個並行 PM
 session（各自獨立 worktree/branch）互相看見彼此的存活狀態（heartbeat）
-與認領範圍（tickets/files，本模組保留欄位，寫入邏輯留待後續階段）。
+與認領範圍（tickets/files，寫入端見本模組 `recompute_lease()`，唯一
+寫入路徑；呼叫端見 `ticket_system.lib.lease` 的 claim/complete/release/
+reclaim 生命週期事件）。
 
 Registry Schema 契約 v2（單一來源，本模組不得自行變更欄位/結構；發現
 契約不可行時回報 PM，不擅自變更）：
@@ -67,13 +69,22 @@ torn write）。兩者保護的問題面不同、缺一不可：flock 防寫入�
 
 import json
 import os
-import subprocess
 import sys
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+
+try:
+    from .git_utils import run_git_command
+except ImportError:
+    # 本模組偶被以 bare top-level import 載入（如
+    # `sys.path.insert(0, ".claude/lib")` 後直接 `import pm_registry`，
+    # 非透過 `lib.` package context），此時無 package 可供相對匯入解析。
+    # 降級為絕對匯入（呼叫端已將 .claude/lib 加入 sys.path 的情境下
+    # git_utils 為同層可直接匯入的模組）。
+    from git_utils import run_git_command  # type: ignore[no-redef]
 
 REGISTRY_FILENAME = "pm-registry.json"
 LOCK_FILENAME = "pm-registry.lock"
@@ -83,8 +94,18 @@ SCHEMA_VERSION = 2
 # 視為新生 session 觸發 reset（startup/clear/未知值，契約 v2 D4 增補 1）
 RESUME_SOURCE = "resume"
 
-# UserPromptSubmit heartbeat 更新的最小間隔（契約指定，免高頻寫入）
+# UserPromptSubmit heartbeat 更新的最小間隔（契約指定，免高頻寫入）。
+# 與下方 STALE_THRESHOLD_MINUTES 為耦合參數對：debounce 必須遠小於
+# stale 門檻（現行 60 秒 << 30 分鐘，約 30 倍餘裕），否則高頻互動場景
+# 下心跳更新間隔可能逼近甚至超過 STALE 判定窗口，使活躍 session 被誤判
+# 為 STALE。調整任一值時需同時檢視此餘裕比例是否仍合理，不可獨立調整。
 HEARTBEAT_DEBOUNCE_SECONDS = 60
+
+# Registry Schema 契約：heartbeat 逾此分鐘數視為 STALE（lease reclaim 沿用
+# 同一 TTL）。FRESH/STALE 判準唯一來源，見 `is_fresh()`；
+# ticket_system/commands/track_sessions.py 已委派呼叫 `is_fresh()`，不再
+# 自帶獨立常數（曾有獨立同值常數，已統一，見該檔模組 docstring）。
+STALE_THRESHOLD_MINUTES = 30
 
 # git rev-parse 執行逾時（秒）
 GIT_COMMON_DIR_TIMEOUT = 5
@@ -144,7 +165,7 @@ def _registry_lock(lock_file: Path):
 # ============================================================================
 
 
-def get_registry_dir(cwd: Optional[str] = None) -> Optional[Path]:
+def get_registry_dir(cwd: Optional[str] = None, logger=None) -> Optional[Path]:
     """解析 registry 落點目錄（主 .git/，跨 worktree 單一實例，契約指定）。
 
     `git rev-parse --git-common-dir`：worktree 內執行時解析回主 repo 的
@@ -157,30 +178,47 @@ def get_registry_dir(cwd: Optional[str] = None) -> Optional[Path]:
     共用的路徑解析函式，非 git 環境下沒有任何讀端會查詢一個臨時決定的
     路徑，寫入純屬寫給空氣）。呼叫端收到 None 應跳過本次 registry 操作，
     不阻擋工作（見各 hook 的 stderr 一次性提示）。
+
+    解析失敗需可觀測（規則 4）：`logger` 提供時記一筆 warning——非 git
+    環境為預期情境（不需 warning 等級），但 timeout/git 命令不存在等
+    非預期失敗可能代表 worktree registry 分裂故障（該 worktree 從此讀
+    不到共用 registry），warning 等級便於與「純粹非 git 環境」的常態
+    區分。
+
+    改走 `git_utils.run_git_command`（帶 `--no-optional-locks`）：本函式
+    原直接呼叫 `subprocess.run`，每次 heartbeat/claim 觸發的
+    `git rev-parse` 會與並行 PM session 的其他 git 操作競爭
+    `.git/index.lock`（IMP-046 同型風險）；`run_git_command` 已封裝
+    `--no-optional-locks` 避免此競爭，且為專案內同類 git rev-parse
+    實作中最新、最嚴謹的版本，本函式改為呼叫它而非各自維護一份。
     """
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--git-common-dir"],
-            capture_output=True,
-            text=True,
-            cwd=cwd,
-            timeout=GIT_COMMON_DIR_TIMEOUT,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            common_dir = Path(result.stdout.strip())
-            if not common_dir.is_absolute():
-                base = Path(cwd) if cwd else Path.cwd()
-                common_dir = (base / common_dir).resolve()
-            return common_dir
-    except (subprocess.TimeoutExpired, OSError):
-        pass
+    success, output = run_git_command(
+        ["rev-parse", "--git-common-dir"], cwd=cwd, timeout=GIT_COMMON_DIR_TIMEOUT
+    )
+    if not success:
+        if logger:
+            logger.warning(
+                "git rev-parse --git-common-dir 解析失敗（cwd=%s）: %s；"
+                "本次 registry 操作將跳過，若非預期的非 git 環境請檢查 worktree 狀態",
+                cwd, output,
+            )
+        return None
 
-    return None
+    if not output:
+        return None
+
+    common_dir = Path(output)
+    if not common_dir.is_absolute():
+        base = Path(cwd) if cwd else Path.cwd()
+        common_dir = (base / common_dir).resolve()
+    return common_dir
 
 
-def get_registry_paths(cwd: Optional[str] = None) -> Optional[Tuple[Path, Path]]:
+def get_registry_paths(
+    cwd: Optional[str] = None, logger=None
+) -> Optional[Tuple[Path, Path]]:
     """回傳 (registry_file, lock_file) 路徑 tuple；非 git 環境回傳 None。"""
-    registry_dir = get_registry_dir(cwd=cwd)
+    registry_dir = get_registry_dir(cwd=cwd, logger=logger)
     if registry_dir is None:
         return None
     return registry_dir / REGISTRY_FILENAME, registry_dir / LOCK_FILENAME
@@ -248,7 +286,7 @@ def read_registry(registry_file: Path, logger=None) -> Dict:
         return _empty_registry()
 
 
-def write_registry(registry_file: Path, data: Dict) -> None:
+def write_registry(registry_file: Path, data: Dict, logger=None) -> None:
     """寫入 registry 檔（呼叫端須已持有 `_registry_lock`）。
 
     寫暫存檔 + os.replace 原子替換：讀端（`ticket track sessions` 等無鎖
@@ -262,6 +300,11 @@ def write_registry(registry_file: Path, data: Dict) -> None:
     （register_session / update_heartbeat / release_session）已在
     `_registry_lock` 保護下呼叫，異常會沿呼叫鏈往上冒出，由 hook 主流程
     的 try/except 決定是否記錄且不阻擋（見各 hook 的 dual-channel 通知）。
+
+    fsync 失敗不阻斷寫入（os.replace 的原子替換保證仍成立，fsync 只是
+    加強持久性——斷電情境下少一層保障，非功能性錯誤），但需可觀測（規則
+    4）：`logger` 提供時記一筆 debug（非 warning，因不影響本次寫入正確
+    性，只是持久性保障降級，過度告警會製造噪音）。
     """
     registry_file.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
@@ -274,8 +317,9 @@ def write_registry(registry_file: Path, data: Dict) -> None:
             f.flush()
             try:
                 os.fsync(f.fileno())
-            except OSError:
-                pass
+            except OSError as e:
+                if logger:
+                    logger.debug("registry fsync 失敗（不影響本次寫入，僅持久性保障降級）: %s", e)
         os.replace(tmp_path, registry_file)
     except OSError:
         if tmp_path.exists():
@@ -344,7 +388,7 @@ def register_session(
         else:
             sessions[session_id] = _new_entry(name, project, now)
 
-        write_registry(registry_file, data)
+        write_registry(registry_file, data, logger=logger)
 
 
 def update_heartbeat(
@@ -378,7 +422,7 @@ def update_heartbeat(
 
         if entry is None:
             sessions[session_id] = _new_entry(name, project, now_dt.isoformat())
-            write_registry(registry_file, data)
+            write_registry(registry_file, data, logger=logger)
             return True
 
         elapsed = _elapsed_seconds_since(entry.get("heartbeat_ts", ""), now_dt)
@@ -386,7 +430,7 @@ def update_heartbeat(
             return False
 
         _merge_entry(entry, name, project, now_dt.isoformat())
-        write_registry(registry_file, data)
+        write_registry(registry_file, data, logger=logger)
         return True
 
 
@@ -411,9 +455,98 @@ def release_session(
         sessions = data.setdefault("sessions", {})
         if session_id in sessions:
             del sessions[session_id]
-            write_registry(registry_file, data)
+            write_registry(registry_file, data, logger=logger)
             return True
         return False
+
+
+def is_fresh(heartbeat_ts: Optional[str], now: Optional[datetime] = None) -> bool:
+    """判定 heartbeat 是否仍在 STALE_THRESHOLD_MINUTES 內（lease Phase 3 起
+    的正式 FRESH/STALE 判準，本模組為 Registry Schema 契約權威來源）。
+
+    heartbeat 缺失或無法解析一律視為 STALE（回傳 False），不可靜默呈現
+    「新鮮」假象（可觀測性規則 4）。ticket_system 的 track_sessions.py 已
+    改為呼叫本函式（Phase 4 審查修正 4），為 FRESH/STALE 判準唯一來源，
+    不再自帶獨立常數。
+    """
+    now = now or datetime.now(timezone.utc)
+    elapsed = _elapsed_seconds_since(heartbeat_ts or "", now)
+    if elapsed is None:
+        return False
+    return elapsed <= STALE_THRESHOLD_MINUTES * 60
+
+
+def recompute_lease(
+    registry_file: Path,
+    lock_file: Path,
+    session_id: str,
+    *,
+    add_ticket_id: Optional[str] = None,
+    remove_ticket_id: Optional[str] = None,
+    files_loader,
+    logger=None,
+) -> bool:
+    """claim/complete/release/reclaim 共用的唯一 lease 寫入路徑。
+
+    `files` 欄位不是獨立累積狀態，是 `tickets` 的推導物化值：每次呼叫皆以
+    「調整後 tickets 清單目前的 where.files 聯集」整組重算覆蓋（replace），
+    不做增量 append/merge。理由：append 語意下票面 where.files 若改窄後
+    重跑 claim，registry.files 會殘留舊路徑，使 track_conflicts 的
+    registry/票面交叉比對產生假陰性。
+
+    tickets 依 `add_ticket_id`（claim，若已在清單中不重複加入）或
+    `remove_ticket_id`（complete/release/reclaim，若在清單中則移除）調整；
+    兩者互斥語意下只需其一，皆為 None 時等同純粹重算現有 tickets 的 files
+    （不改動 tickets 本身）。
+
+    `files_loader` 由呼叫端注入（`Callable[[str], List[str]]`，輸入
+    ticket_id、輸出其 where.files）——本模組不認識 ticket md 結構，刻意
+    不耦合（同本模組 docstring 對 dispatch_tracker 的既有取捨）。在鎖內
+    呼叫以確保 tickets 快照與 files 重算之間一致，無 TOCTOU 視窗。
+
+    鎖內 IO 效能量化門檻（獨立量測分析定案，方法：scratchpad 假
+    registry + 真實票面體量 626 檔 median 9.4KB / max 27.1KB + 真實
+    `files_loader`，冷/暖快取 N=1/5/10/30/60 曲線 trials=20）：鎖內時長
+    對持票數線性，本機斜率約 1.05ms/票、審查基線保守值 2.6ms/票（機器
+    差異範圍）；門檻定為單次 p95 < 100ms（感知預算慣用值），以保守斜率
+    換算持票安全上限約 38 票；實際工作流單 session 持票數通常 < 10，
+    距門檻 3 倍以上餘裕，現狀不構成需修復的效能問題。三個緩解選項（
+    where.files 快取 / 持票硬上限 / 鎖外預載鎖內驗證）評估後均不採用：
+    快取的一致性成本（防票面改窄後 registry 殘留舊路徑的假陰性風險，見
+    上段）換取的收益（省 1-3ms/票）為負淨值；硬上限會約束合法批量工作
+    流卻無對應效能收益；鎖外預載鎖內驗證不消除 TOCTOU 視窗。若未來單
+    session 持票數逼近 38 票門檻，應以本段量測方法重新評估（可查證判
+    準，非無 trigger 延後）。
+
+    entry 不存在時回傳 False（理論上不應發生——SessionStart 已註冊該
+    session；仍防禦以符合規則 4 可觀測性，呼叫端負責 stderr 告知並跳過）。
+
+    Returns:
+        bool: 是否成功寫入（entry 存在且已更新）
+    """
+    with _registry_lock(lock_file):
+        data = read_registry(registry_file, logger=logger)
+        sessions = data.setdefault("sessions", {})
+        entry = sessions.get(session_id)
+        if entry is None:
+            return False
+
+        tickets = list(entry.get("tickets") or [])
+        if add_ticket_id and add_ticket_id not in tickets:
+            tickets.append(add_ticket_id)
+        if remove_ticket_id and remove_ticket_id in tickets:
+            tickets = [t for t in tickets if t != remove_ticket_id]
+
+        files: List[str] = []
+        for t in tickets:
+            for f in files_loader(t):
+                if f not in files:
+                    files.append(f)
+
+        entry["tickets"] = tickets
+        entry["files"] = files
+        write_registry(registry_file, data, logger=logger)
+        return True
 
 
 def _elapsed_seconds_since(ts_str: str, now_dt: datetime) -> Optional[float]:

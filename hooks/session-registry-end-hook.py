@@ -39,7 +39,6 @@ Registry Schema 契約：見 .claude/lib/pm_registry.py 模組 docstring（SSOT�
     tarrragon/claude#77）
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -52,21 +51,12 @@ from lib import (
     is_subagent_environment,
     get_project_root,
     run_hook_safely,
-    ENV_SESSION_ID,
+    resolve_session_id,
 )
 from lib.pm_registry import get_registry_paths, release_session
 
 HOOK_NAME = "session-registry-end-hook"
 EXIT_SUCCESS = 0
-
-
-def resolve_session_id(input_data) -> str:
-    """優先取 stdin session_id，缺失時 fallback CC runtime 環境變數。"""
-    if input_data:
-        sid = input_data.get("session_id")
-        if sid:
-            return sid
-    return os.environ.get(ENV_SESSION_ID, "")
 
 
 def main() -> int:
@@ -79,15 +69,22 @@ def main() -> int:
 
     session_id = resolve_session_id(input_data)
     if not session_id:
-        message = "[session-registry-end-hook] 無法取得 session_id，跳過 registry 釋放"
+        message = (
+            "[session-registry-end-hook] 無法取得 session_id，跳過 registry 釋放"
+            "（本 session 的 registry entry 若存在將殘留，逾 30 分鐘由 STALE 判定自然淘汰，"
+            "無需手動處置）"
+        )
         sys.stderr.write(message + "\n")
         logger.warning(message)
         return EXIT_SUCCESS
 
     project_root = get_project_root()
-    registry_paths = get_registry_paths(cwd=str(project_root))
+    registry_paths = get_registry_paths(cwd=str(project_root), logger=logger)
     if registry_paths is None:
-        message = "[session-registry-end-hook] 非 git 環境，跳過 registry 釋放"
+        message = (
+            "[session-registry-end-hook] 非 git 環境，跳過 registry 釋放"
+            "（跨 session 協調功能於此環境本不適用，無需處置）"
+        )
         sys.stderr.write(message + "\n")
         logger.info(message)
         return EXIT_SUCCESS
@@ -105,7 +102,11 @@ def main() -> int:
         else:
             logger.debug("registry 內無此 session entry，無需釋放: session_id=%s", session_id)
     except OSError as e:
-        message = "[session-registry-end-hook] registry 釋放失敗: {}".format(e)
+        message = (
+            "[session-registry-end-hook] registry 釋放失敗: {}"
+            "（本 session 的 registry entry 未被移除，逾 30 分鐘由 STALE 判定自然淘汰，"
+            "無需手動處置）"
+        ).format(e)
         sys.stderr.write(message + "\n")
         logger.warning(message)
 

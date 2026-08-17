@@ -33,6 +33,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from lib import ENV_SESSION_ID
+
 # 動態載入（檔名含 dash）
 hooks_path = Path(__file__).parent.parent
 hook_file = hooks_path / "dispatch-record-hook.py"
@@ -124,29 +126,16 @@ class TestExtractTicketId:
     def test_empty_strings_return_none(self):
         assert dispatch_record_hook.extract_ticket_id("", "") is None
 
+    def test_prefers_labeled_ticket_over_earlier_positional_decoy(self):
+        """首行同時含多個票號時，優先信任『Ticket:』標籤錨定的目標票，
+        而非位置在前的背景／參考票（收斂 SSOT 時一併處理的殘留缺口）。"""
+        prompt = "承接 0.2.1-W3-100 的結論，目標票 Ticket: 0.2.1-W3-547"
+        result = dispatch_record_hook.extract_ticket_id(prompt, "unused")
+        assert result == "0.2.1-W3-547"
 
-class TestResolveSessionId:
-    """multi-PM 協調層 Phase 1：優先 stdin session_id，缺則環境變數 fallback。"""
 
-    def test_prefers_stdin_session_id(self, monkeypatch):
-        monkeypatch.setenv(dispatch_record_hook.ENV_SESSION_ID, "env-session")
-        result = dispatch_record_hook.resolve_session_id({"session_id": "stdin-session"})
-        assert result == "stdin-session"
-
-    def test_falls_back_to_env_var(self, monkeypatch):
-        monkeypatch.setenv(dispatch_record_hook.ENV_SESSION_ID, "env-session")
-        result = dispatch_record_hook.resolve_session_id({})
-        assert result == "env-session"
-
-    def test_none_input_falls_back_to_env_var(self, monkeypatch):
-        monkeypatch.setenv(dispatch_record_hook.ENV_SESSION_ID, "env-session")
-        result = dispatch_record_hook.resolve_session_id(None)
-        assert result == "env-session"
-
-    def test_missing_both_returns_empty_string(self, monkeypatch):
-        monkeypatch.delenv(dispatch_record_hook.ENV_SESSION_ID, raising=False)
-        result = dispatch_record_hook.resolve_session_id({})
-        assert result == ""
+# resolve_session_id 本體測試已收斂至 lib 單一定義，見
+# test_hook_logging_session_id.py；本檔不再重複測（0.2.1-W3-560 DRY 下沉）。
 
 
 class TestMainBasicFlow:
@@ -250,7 +239,7 @@ class TestMainBasicFlow:
         """multi-PM 協調層：session_id/ticket_id/files 皆傳入 record_dispatch
         （parent_session_id 已於 registry 契約 v2 審查後移除，恆等 session_id
         的冗餘欄位）。"""
-        monkeypatch.delenv(dispatch_record_hook.ENV_SESSION_ID, raising=False)
+        monkeypatch.delenv(ENV_SESSION_ID, raising=False)
         with patch.object(
             dispatch_record_hook, "setup_hook_logging"
         ) as mock_log, patch.object(

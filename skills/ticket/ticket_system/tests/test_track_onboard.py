@@ -25,12 +25,10 @@ from unittest.mock import patch
 
 from ticket_system.commands import track_onboard
 
+from conftest import _iso  # noqa: F401 — 0.2.1-W3-585 收斂逐字複本
+
 
 NOW = datetime(2026, 8, 18, 12, 0, 0, tzinfo=timezone.utc)
-
-
-def _iso(dt: datetime) -> str:
-    return dt.isoformat()
 
 
 class TestNoStaleThresholdRedefinition:
@@ -219,7 +217,7 @@ class TestExecuteOnboard:
             rc = track_onboard.execute_onboard(args)
         assert rc == 0
         out = capsys.readouterr().out
-        assert "（無活躍同事）" in out
+        assert "（無活同事）" in out  # 0.2.1-W3-574 W5：與 [活同事] 章節標頭術語對齊
         assert "（無孤兒 entry）" in out
         assert "（無髒檔）" in out
         assert "（無可認領建議）" in out

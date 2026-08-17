@@ -49,6 +49,7 @@ from lib import (  # noqa: E402
     find_ticket_file,
     emit_hook_output,
 )
+from lib.ticket_id_pattern import BARE_START_BOUNDED_RE  # noqa: E402
 
 
 # ============================================================================
@@ -66,8 +67,8 @@ EXEMPT_CATEGORIES = frozenset({
 
 REASON_MIN_LEN = 10
 
-# Ticket ID 通用格式：W{wave}-{seq} 或 {version}-W{wave}-{seq}
-TICKET_ID_PATTERN = re.compile(r"\bW\d+-\d+")
+# Ticket ID 通用格式：W{wave}-{seq}（SSOT：lib.ticket_id_pattern.BARE_START_BOUNDED_RE）
+TICKET_ID_PATTERN = BARE_START_BOUNDED_RE
 
 # Rule-quote 類別：reason 必須含 .claude/rules/ 或 .claude/pm-rules/ 路徑
 # 用途：PM 在 acceptance / Solution 引用規則名稱（如「禁止 Phase 5 再決定」）時豁免

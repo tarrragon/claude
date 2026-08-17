@@ -13,6 +13,12 @@ resolve-spawn-request）。
 驗證設計：透過 patch `git_utils._run_git` 捕捉 commit 步驟收到的 `-m` 訊息
 參數，隔離真實 git 副作用，聚焦本票變更範圍（operation 參數對 commit
 message 組裝的影響），與 `test_git_index_lock_retry.py` 同模式。
+
+0.2.1-W3-554.2：`_auto_commit_ticket_md` 新增 session_id 可解析時附加
+`Session: <id>` trailer 的行為；本檔測項聚焦 operation 參數本身，統一
+patch `resolve_current_session_id` 回傳 None（無 trailer），避免斷言
+依賴執行環境的 `CLAUDE_CODE_SESSION_ID` 是否設定而變得不確定。trailer
+行為本身的測試見 `test_auto_commit_session_trailer.py`。
 """
 
 from __future__ import annotations
@@ -50,7 +56,8 @@ class TestOperationParamDefault:
 
     def test_default_operation_produces_append_log_message(self):
         recorder = _Recorder()
-        with patch.object(git_utils, "_run_git", side_effect=_make_run_git(recorder)):
+        with patch.object(git_utils, "_run_git", side_effect=_make_run_git(recorder)), \
+             patch.object(git_utils, "resolve_current_session_id", return_value=None):
             status = git_utils._auto_commit_ticket_md(
                 "/tmp/x.md", "0.2.1-W3-257", "Solution"
             )
@@ -65,7 +72,8 @@ class TestOperationParamDefault:
     def test_explicit_append_log_operation_matches_default(self):
         """顯式傳入 operation='append-log' 應與省略參數結果一致（預設值等價性）。"""
         recorder = _Recorder()
-        with patch.object(git_utils, "_run_git", side_effect=_make_run_git(recorder)):
+        with patch.object(git_utils, "_run_git", side_effect=_make_run_git(recorder)), \
+             patch.object(git_utils, "resolve_current_session_id", return_value=None):
             git_utils._auto_commit_ticket_md(
                 "/tmp/x.md", "0.2.1-W3-257", "Solution", operation="append-log"
             )
@@ -79,7 +87,8 @@ class TestOperationParamCustom:
 
     def test_resolve_spawn_request_operation_reflected_in_message(self):
         recorder = _Recorder()
-        with patch.object(git_utils, "_run_git", side_effect=_make_run_git(recorder)):
+        with patch.object(git_utils, "_run_git", side_effect=_make_run_git(recorder)), \
+             patch.object(git_utils, "resolve_current_session_id", return_value=None):
             status = git_utils._auto_commit_ticket_md(
                 "/tmp/x.md", "0.2.1-W3-257", "Spawn Requests",
                 operation="resolve-spawn-request",
@@ -93,7 +102,8 @@ class TestOperationParamCustom:
 
     def test_add_spawn_request_operation_reflected_in_message(self):
         recorder = _Recorder()
-        with patch.object(git_utils, "_run_git", side_effect=_make_run_git(recorder)):
+        with patch.object(git_utils, "_run_git", side_effect=_make_run_git(recorder)), \
+             patch.object(git_utils, "resolve_current_session_id", return_value=None):
             status = git_utils._auto_commit_ticket_md(
                 "/tmp/x.md", "0.2.1-W3-257", "Spawn Requests",
                 operation="add-spawn-request",

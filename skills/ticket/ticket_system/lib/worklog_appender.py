@@ -2,13 +2,25 @@
 Worklog 進度行自動追加模組
 
 在 Ticket 完成時，自動追加一行進度記錄到 main worklog。
+
+併發安全（multi-PM 協調層 Phase 4）：main worklog 是多 session 共用的
+tracked 檔案，`complete` / `batch-complete` 兩呼叫端的 read-modify-write
+序列若無鎖保護，雙 session 同時 complete 不同 ticket 時會發生 lost
+update（後寫者以自己讀到的舊內容覆寫檔案，先寫者的進度行消失；已有
+真實案例 commit a6d1e8dd 為此問題的實例）。編輯段改用
+`ticket_system.lib.file_lock.file_lock` 包圍（與 `lifecycle.py` 保護
+ticket md load-modify-save 序列同一鎖模式，見該模組 docstring），寫入
+後在鎖持有期間內重讀驗證自身行確實落地，缺行時 stderr 告警而非靜默
+（PC-092「操作後主動驗證而非被動信任已成功」原則的落地）。
 """
 
 import re
+import sys
 from datetime import date
 from pathlib import Path
 
 from .constants import WORK_LOGS_DIR
+from .file_lock import file_lock
 from .paths import get_project_root
 
 # main worklog 檔名格式
@@ -87,6 +99,10 @@ def append_worklog_progress(version: str, ticket_id: str, title: str) -> None:
 
     失敗時輸出 WARNING 但不拋出異常，不阻擋 complete 流程。
 
+    整段 read-modify-write（含冪等性檢查、插入點計算、寫入、寫後重讀
+    驗證）皆在 `file_lock(worklog_path)` 持有期間內完成，確保雙 session
+    對同一 worklog 的並行 complete 序列化執行，不發生 lost update。
+
     Args:
         version: 版本號，例如 "0.31.1"
         ticket_id: Ticket ID，例如 "0.31.1-W12-003"
@@ -98,29 +114,38 @@ def append_worklog_progress(version: str, ticket_id: str, title: str) -> None:
         print(f"[WARNING] worklog 檔案不存在，跳過進度追加：{worklog_path}")
         return
 
+    completion_marker = f"{ticket_id} 完成"
+
     try:
-        content = worklog_path.read_text(encoding="utf-8")
-        lines = content.splitlines(keepends=True)
+        with file_lock(worklog_path):
+            content = worklog_path.read_text(encoding="utf-8")
 
-        # 移除 keepends 用於搜尋，保留原始行用於寫回
-        search_lines = content.splitlines()
+            # 移除 keepends 用於搜尋，保留原始行用於寫回
+            search_lines = content.splitlines()
 
-        # 冪等性：若該 ticket 的完成行已存在則跳過，避免重複 append（W8-048）
-        completion_marker = f"{ticket_id} 完成"
-        if any(completion_marker in line for line in search_lines):
-            return
+            # 冪等性：若該 ticket 的完成行已存在則跳過，避免重複 append（W8-048）
+            if any(completion_marker in line for line in search_lines):
+                return
 
-        insert_at = _find_last_date_section_end(search_lines)
-        if insert_at is None:
-            print("[WARNING] worklog 中找不到日期標題區段，跳過進度追加")
-            return
+            insert_at = _find_last_date_section_end(search_lines)
+            if insert_at is None:
+                print("[WARNING] worklog 中找不到日期標題區段，跳過進度追加")
+                return
 
-        today = date.today().isoformat()
-        progress_line = f"- {today}: {ticket_id} 完成 -- {title}\n"
+            lines = content.splitlines(keepends=True)
+            today = date.today().isoformat()
+            progress_line = f"- {today}: {ticket_id} 完成 -- {title}\n"
+            lines.insert(insert_at, progress_line)
 
-        lines.insert(insert_at, progress_line)
+            worklog_path.write_text("".join(lines), encoding="utf-8")
 
-        worklog_path.write_text("".join(lines), encoding="utf-8")
+            # 寫後重讀驗證：自身行是否確實落地，缺行必須可見（規則 4）
+            verify_content = worklog_path.read_text(encoding="utf-8")
+            if completion_marker not in verify_content:
+                sys.stderr.write(
+                    f"[WARNING] worklog 進度行寫入後重讀驗證失敗，"
+                    f"未在檔案中找到自身行：{ticket_id}（{worklog_path}）\n"
+                )
 
     except Exception as e:
         print(f"[WARNING] worklog 進度追加失敗：{e}")

@@ -15,6 +15,8 @@ import importlib.util
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from lib import ENV_SESSION_ID
+
 hooks_path = Path(__file__).parent.parent
 hook_file = hooks_path / "session-registry-end-hook.py"
 spec = importlib.util.spec_from_file_location("session_registry_end_hook", hook_file)
@@ -57,7 +59,7 @@ class TestMain:
         mock_release.assert_not_called()
 
     def test_missing_session_id_skips_release(self, monkeypatch, capsys):
-        monkeypatch.delenv(hook.ENV_SESSION_ID, raising=False)
+        monkeypatch.delenv(ENV_SESSION_ID, raising=False)
         result, mock_release = self._run({}, subagent=False)
         assert result == EXIT_SUCCESS
         mock_release.assert_not_called()

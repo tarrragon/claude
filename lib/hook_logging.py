@@ -376,6 +376,35 @@ def _current_session_id() -> str:
     return value if value else UNKNOWN_SESSION_ID
 
 
+def resolve_session_id(input_data: Optional[dict] = None) -> str:
+    """優先取 stdin session_id，缺失時 fallback CC runtime 環境變數。
+
+    收斂自 session-registry-*-hook.py（4 支）與 dispatch-record-hook.py
+    共 5 處逐字重複定義（DRY 下沉，多 hook 共用邏輯應有單一定義）。
+
+    與 _current_session_id() 的差異（刻意不重用，非疏漏）：
+    _current_session_id() 缺環境變數時回傳 UNKNOWN_SESSION_ID 哨兵值——
+    liveness 訊號用途，需非空字串以利彙整「已載入但無法歸戶」的訊號。
+    本函式缺 stdin 與環境變數時回傳空字串，保留原 5 處呼叫端既有的
+    `if not session_id:` truthiness 判斷語意（session-registry-*-hook.py
+    藉此判斷「無法取得 session_id」以跳過 registry 寫入；若改回傳
+    UNKNOWN_SESSION_ID，該判斷恆為 False，會靜默用假值繼續寫入 registry，
+    是本次收斂時發現的行為陷阱，非本函式該解決的既有問題）。
+
+    Args:
+        input_data: PreToolUse/PostToolUse 等 hook 事件的完整 stdin JSON；
+            None 或缺 session_id 鍵時跳過此來源，直接 fallback 環境變數。
+
+    Returns:
+        str: session id；stdin 與環境變數皆無時回傳空字串。
+    """
+    if input_data:
+        sid = input_data.get("session_id")
+        if sid:
+            return sid
+    return os.environ.get(ENV_SESSION_ID, "")
+
+
 def mark_hook_entry(hook_name: str, logger: Optional[logging.Logger] = None) -> None:
     """寫入 hook liveness 進入訊號
 

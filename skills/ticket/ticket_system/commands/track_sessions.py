@@ -11,8 +11,11 @@ read-only 查詢 pm-registry.json，列出同專案 session 清單（heartbeat �
 - registry 缺檔 / JSON 解析失敗 / git 不可用：一律降級為空表 + exit 0
   （契約「損毀/缺檔處置」條款；read-only 查詢不應阻擋 PM 工作流）
 - 僅列 `project` 欄位等於當前 git toplevel 絕對路徑的 session（同專案篩選）
-- stale 判定閾值：heartbeat 逾 30 分鐘（fail-open 語意：heartbeat 缺失或
-  無法解析一律視為 STALE，不可靜默呈現「新鮮」假象，見規則 4 可觀測性）
+- stale 判定：委派 `.claude/lib/pm_registry.is_fresh`（本檔原自帶獨立
+  `STALE_THRESHOLD_MINUTES` 常數 + 整數分鐘比較，與 `pm_registry.is_fresh`
+  的秒級比較在邊界值有分歧——30.5 分鐘時前者判 FRESH、後者判 STALE，導致
+  同一票 sessions 與 runqueue 顯示矛盾。改為單一判準來源，本檔不再自帶
+  常數，Phase 4 五視角審查修正）
 """
 
 from __future__ import annotations
@@ -25,14 +28,33 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ticket_system.lib.claude_lib_loader import load_claude_lib, resolve_toplevel
+
 # git 命令逾時秒數，對齊 ticket_system/lib/paths.py GIT_TOPLEVEL_TIMEOUT 慣例
 _GIT_TIMEOUT = 5
 
-# Registry Schema 契約 v1：heartbeat 逾此分鐘數視為 STALE
-STALE_THRESHOLD_MINUTES = 30
-
 FORMAT_TABLE = "table"
 FORMAT_JSON = "json"
+
+
+# ---------------------------------------------------------------------------
+# Lib 載入：lazy import `.claude/lib/pm_registry` / `.claude/lib/git_utils`
+# （收斂自五處近乎相同複本，共用實作見 ticket_system.lib.claude_lib_loader）
+# ---------------------------------------------------------------------------
+
+
+def _load_pm_registry():
+    """Lazy 載入 `.claude/lib/pm_registry`（薄封裝，保留模組內名稱供既有
+    測試 `patch.object(track_sessions, "_load_pm_registry", ...)` 直接
+    覆寫）。"""
+    return load_claude_lib("pm_registry")
+
+
+def _load_git_utils():
+    """Lazy 載入 `.claude/lib/git_utils`（薄封裝，同 `_load_pm_registry`；
+    保留模組內名稱供既有測試 `patch.object(track_sessions, "_load_git_utils",
+    ...)` 直接覆寫）。"""
+    return load_claude_lib("git_utils")
 
 
 def _run_git(*args: str) -> Optional[str]:
@@ -40,7 +62,18 @@ def _run_git(*args: str) -> Optional[str]:
 
     薄封裝供測試 patch（見 test_track_sessions.py），單元測試不觸碰真實
     `.git/`，僅以此函式的回傳值模擬 git 拓樸。
+
+    優先透過 `git_utils.run_git_command`（帶 `--no-optional-locks`，
+    避免與並行 PM session 的其他 git 操作競爭 `.git/index.lock`，
+    IMP-046 同型風險）；`.claude/lib/` 不可用時（dev 環境結構異常）
+    降級為原生 `subprocess.run`，維持本模組不強制依賴 `.claude/lib/`
+    的既有韌性設計。
     """
+    git_utils = _load_git_utils()
+    if git_utils is not None:
+        ok, output = git_utils.run_git_command(list(args), timeout=_GIT_TIMEOUT)
+        return output.strip() if ok else None
+
     try:
         result = subprocess.run(
             ["git", *args],
@@ -70,11 +103,12 @@ def _registry_path() -> Optional[Path]:
 
 
 def _current_project_root() -> Optional[str]:
-    """取得當前 git toplevel 絕對路徑字串，供同專案篩選比對。"""
-    toplevel = _run_git("rev-parse", "--show-toplevel")
-    if not toplevel:
-        return None
-    return str(Path(toplevel).resolve())
+    """取得當前 git toplevel 絕對路徑字串，供同專案篩選比對。核心解析算法
+    （git rev-parse --show-toplevel + 路徑正規化）收斂至
+    `ticket_system.lib.claude_lib_loader.resolve_toplevel`；本檔繼續提供
+    `_run_git` 作為執行 callable，既有測試對 `_run_git` 的直接 patch 不受
+    影響。"""
+    return resolve_toplevel(_run_git)
 
 
 def _load_registry(path: Path) -> Optional[Dict[str, Any]]:
@@ -109,13 +143,25 @@ def _parse_heartbeat_age_minutes(
 
 
 def _build_rows(
-    registry: Dict[str, Any], *, project_root: Optional[str], now: datetime
+    registry: Dict[str, Any],
+    *,
+    project_root: Optional[str],
+    now: datetime,
+    pm_registry: Any = None,
 ) -> List[Dict[str, Any]]:
     """依 Registry Schema 契約 v1 建立輸出列，過濾同專案 session。
 
     `project_root` 為 None（git 不可用）時不做同專案篩選，保留全部
     session——寧可多顯示也不可因判斷不了而整批隱藏。
+
+    `pm_registry` 未提供時自行 lazy load（向後相容既有呼叫端，如
+    `track_conflicts.py` 的 `_fresh_session_ids` 未傳此參數）。FRESH/STALE
+    判定一律委派 `pm_registry.is_fresh`（單一判準來源）；模組不可用時保守
+    視為 STALE（同 `is_fresh` 的 fail 語意，不可靜默呈現新鮮假象）。
     """
+    if pm_registry is None:
+        pm_registry = _load_pm_registry()
+
     sessions = registry.get("sessions")
     if not isinstance(sessions, dict):
         return []
@@ -127,22 +173,28 @@ def _build_rows(
         if project_root is not None and data.get("project") != project_root:
             continue
 
-        age_minutes = _parse_heartbeat_age_minutes(data.get("heartbeat_ts"), now)
-        status = (
-            "STALE"
-            if age_minutes is None or age_minutes > STALE_THRESHOLD_MINUTES
-            else "FRESH"
-        )
+        heartbeat_ts = data.get("heartbeat_ts")
+        age_minutes = _parse_heartbeat_age_minutes(heartbeat_ts, now)
+        is_fresh = pm_registry.is_fresh(heartbeat_ts, now) if pm_registry is not None else False
+        status = "FRESH" if is_fresh else "STALE"
         tickets = data.get("tickets")
         files = data.get("files")
+        tickets_list = tickets if isinstance(tickets, list) else []
+
+        # multi-PM 協調層 Phase 3：STALE session 持有的全部 tickets 即為
+        # reclaimable 候選（heartbeat 逾 TTL = 該 session 對這些票的認領
+        # 不再有存活佐證，父票設計要點 2）。無需逐票額外查詢，STALE 狀態
+        # 本身即判準。
+        reclaimable_tickets = list(tickets_list) if status == "STALE" else []
 
         rows.append({
             "session_id": session_id,
             "name": data.get("name") or session_id,
             "heartbeat_age_minutes": age_minutes,
             "status": status,
-            "tickets_count": len(tickets) if isinstance(tickets, list) else 0,
+            "tickets_count": len(tickets_list),
             "files_count": len(files) if isinstance(files, list) else 0,
+            "reclaimable_tickets": reclaimable_tickets,
         })
 
     rows.sort(key=lambda r: r["session_id"])
@@ -164,7 +216,7 @@ def _render_table(rows: List[Dict[str, Any]]) -> str:
 
     header = (
         f"  {'session_id':<{col_id}}  {'name':<{col_name}}  "
-        f"{'age(min)':>8}  {'status':<6}  {'tickets':>7}  {'files':>5}"
+        f"{'age(min)':>8}  {'status':<6}  {'tickets':>7}  {'files':>5}  reclaimable"
     )
     lines.append(header)
     lines.append("  " + "-" * (col_id + col_name + 40))
@@ -172,9 +224,12 @@ def _render_table(rows: List[Dict[str, Any]]) -> str:
         age_display = (
             "?" if r["heartbeat_age_minutes"] is None else str(r["heartbeat_age_minutes"])
         )
+        reclaimable_tickets = r.get("reclaimable_tickets") or []
+        reclaimable_display = ", ".join(reclaimable_tickets) if reclaimable_tickets else "-"
         lines.append(
             f"  {r['session_id']:<{col_id}}  {r['name']:<{col_name}}  "
             f"{age_display:>8}  {r['status']:<6}  {r['tickets_count']:>7}  {r['files_count']:>5}"
+            f"  {reclaimable_display}"
         )
     return "\n".join(lines)
 

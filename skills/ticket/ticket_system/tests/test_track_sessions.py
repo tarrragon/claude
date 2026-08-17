@@ -19,27 +19,27 @@ import json
 from argparse import Namespace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from ticket_system.commands import track_sessions
+
+from conftest import _iso, seed_pm_registry  # noqa: F401 — 0.2.1-W3-585 收斂複本
 
 
 NOW = datetime(2026, 8, 17, 12, 0, 0, tzinfo=timezone.utc)
 PROJECT_ROOT = "/Users/tester/project/flutter_balance"
 
 
-def _iso(dt: datetime) -> str:
-    return dt.isoformat()
-
-
 def _write_registry(tmp_path: Path, sessions: dict) -> Path:
-    registry_dir = tmp_path / ".git"
-    registry_dir.mkdir(parents=True, exist_ok=True)
-    registry_path = registry_dir / "pm-registry.json"
-    registry_path.write_text(
-        json.dumps({"schema_version": 1, "sessions": sessions}, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    """建立 `<tmp_path>/.git/pm-registry.json`（本檔專屬的路徑推導邏輯，
+    寫入本體委派 `conftest.seed_pm_registry` 統一 schema_version 來源，
+    0.2.1-W3-585 收斂——原硬編碼 schema_version=1，已與 pm_registry 現行
+    契約版本（2）漂移）。"""
+    registry_path = tmp_path / ".git" / "pm-registry.json"
+    seed_pm_registry(registry_path, sessions)
     return registry_path
 
 
@@ -110,6 +110,38 @@ class TestDegradePaths:
         assert "無同專案 session" in out
 
 
+class TestRunGitDelegation:
+    """`_run_git` 優先透過 `git_utils.run_git_command`（帶
+    `--no-optional-locks`，避免與並行 PM session 競爭 index.lock）；
+    `.claude/lib/` 不可用時降級為原生 subprocess，維持既有韌性設計。
+    """
+
+    def test_delegates_to_git_utils_when_available(self):
+        fake_git_utils = SimpleNamespace(
+            run_git_command=lambda args, timeout=5: (True, "abc123\n")
+        )
+        with patch.object(track_sessions, "_load_git_utils", return_value=fake_git_utils):
+            result = track_sessions._run_git("rev-parse", "--git-common-dir")
+        assert result == "abc123"
+
+    def test_returns_none_when_git_utils_reports_failure(self):
+        fake_git_utils = SimpleNamespace(
+            run_git_command=lambda args, timeout=5: (False, "fatal: not a git repository")
+        )
+        with patch.object(track_sessions, "_load_git_utils", return_value=fake_git_utils):
+            result = track_sessions._run_git("rev-parse", "--git-common-dir")
+        assert result is None
+
+    def test_falls_back_to_subprocess_when_git_utils_unavailable(self, tmp_path):
+        """`.claude/lib/` 不可用（dev 環境結構異常）時，仍能以原生
+        subprocess 完成查詢，不因 lib 缺席而整支失效。"""
+        with patch.object(track_sessions, "_load_git_utils", return_value=None):
+            # 用真實 git 命令對當前 repo 查詢，僅驗證降級路徑本身可執行
+            # 且不拋例外（不斷言具體輸出內容，避免與執行環境耦合）
+            result = track_sessions._run_git("rev-parse", "--is-inside-work-tree")
+        assert result in ("true", None)
+
+
 class TestStaleJudgement:
     def test_heartbeat_over_threshold_is_stale(self, tmp_path, capsys):
         _write_registry(tmp_path, {
@@ -155,6 +187,39 @@ class TestStaleJudgement:
         with patch.object(track_sessions, "_run_git", _fake_run_git(tmp_path)):
             out = _run_sessions(capsys)
         assert "STALE" in out
+
+    def test_30_5_minutes_matches_pm_registry_is_fresh(self):
+        """Phase 4 審查修正 4 回歸案例：30.5 分鐘曾是 sessions（整數分鐘
+        `> 30`，30.5 捨為 30 判 FRESH）與 pm_registry.is_fresh（秒級
+        `<= 1800`，1830 秒判 STALE）分歧的邊界值。改為單一委派後兩者須
+        一致判 STALE，直接呼叫 `_build_rows`（不經 CLI 表格），驗證委派
+        正確落地而非僅巧合通過既有 `_run_git` 走 CLI 的整合測試。
+        """
+        pm_registry = track_sessions._load_pm_registry()
+        if pm_registry is None:
+            pytest.skip("找不到 .claude/lib/pm_registry.py（開發環境結構異常）")
+
+        registry = {
+            "sessions": {
+                "session-boundary": {
+                    "name": "boundary-session",
+                    "project": PROJECT_ROOT,
+                    "heartbeat_ts": _iso(NOW - timedelta(minutes=30, seconds=30)),
+                    "tickets": [],
+                    "files": [],
+                }
+            }
+        }
+
+        rows = track_sessions._build_rows(
+            registry, project_root=PROJECT_ROOT, now=NOW, pm_registry=pm_registry
+        )
+
+        assert len(rows) == 1
+        assert rows[0]["status"] == "STALE", (
+            "30.5 分鐘應與 pm_registry.is_fresh 一致判 STALE"
+            f"（實際：{rows[0]['status']}，舊版整數分鐘比較會誤判 FRESH）"
+        )
 
 
 class TestProjectFiltering:
@@ -204,3 +269,65 @@ class TestJsonFormat:
         assert row["tickets_count"] == 1
         assert row["files_count"] == 1
         assert row["heartbeat_age_minutes"] == 5
+
+
+class TestReclaimableMarking:
+    """multi-PM 協調層 Phase 3：heartbeat 逾 30 分之 session 持票標 reclaimable。"""
+
+    def test_stale_session_tickets_marked_reclaimable(self, tmp_path, capsys):
+        _write_registry(tmp_path, {
+            "session-stale": {
+                "name": "dead-session",
+                "project": PROJECT_ROOT,
+                "heartbeat_ts": _iso(NOW - timedelta(minutes=45)),
+                "tickets": ["0.2.1-W3-100", "0.2.1-W3-101"],
+                "files": ["lib/a.dart"],
+            }
+        })
+        with patch.object(track_sessions, "_run_git", _fake_run_git(tmp_path)):
+            out = _run_sessions(capsys)
+
+        assert "STALE" in out
+        assert "0.2.1-W3-100" in out
+        assert "0.2.1-W3-101" in out
+
+    def test_fresh_session_tickets_not_marked_reclaimable(self, tmp_path, capsys):
+        _write_registry(tmp_path, {
+            "session-alive": {
+                "name": "alive-session",
+                "project": PROJECT_ROOT,
+                "heartbeat_ts": _iso(NOW - timedelta(minutes=5)),
+                "tickets": ["0.2.1-W3-200"],
+                "files": ["lib/b.dart"],
+            }
+        })
+        with patch.object(track_sessions, "_run_git", _fake_run_git(tmp_path)):
+            out = _run_sessions(capsys)
+
+        assert "FRESH" in out
+        assert "0.2.1-W3-200" not in out
+
+    def test_json_output_includes_reclaimable_tickets_field(self, tmp_path, capsys):
+        _write_registry(tmp_path, {
+            "session-stale": {
+                "name": "dead-session",
+                "project": PROJECT_ROOT,
+                "heartbeat_ts": _iso(NOW - timedelta(minutes=45)),
+                "tickets": ["0.2.1-W3-100"],
+                "files": [],
+            },
+            "session-alive": {
+                "name": "alive-session",
+                "project": PROJECT_ROOT,
+                "heartbeat_ts": _iso(NOW - timedelta(minutes=5)),
+                "tickets": ["0.2.1-W3-200"],
+                "files": [],
+            },
+        })
+        with patch.object(track_sessions, "_run_git", _fake_run_git(tmp_path)):
+            out = _run_sessions(capsys, fmt="json")
+
+        payload = json.loads(out)
+        rows = {r["session_id"]: r for r in payload["sessions"]}
+        assert rows["session-stale"]["reclaimable_tickets"] == ["0.2.1-W3-100"]
+        assert rows["session-alive"]["reclaimable_tickets"] == []

@@ -1,3 +1,65 @@
+## [2.35.0] - 2026-08-18
+
+### Summary
+feat: set-acceptance 新增 --add/--edit/--remove 建票後修訂子操作; feat: ticket CLI auto-commit 附 Session trailer 歸屬; feat: worktree create 後確定性 merge main（issue #77 決議 A） (+49 more)
+
+Changes: 8 feat, 6 refactor, 17 fix, 19 docs, 1 chore, 1 perf
+
+- feat: set-acceptance 新增 --add/--edit/--remove 建票後修訂子操作
+- feat: ticket CLI auto-commit 附 Session trailer 歸屬
+- feat: worktree create 後確定性 merge main（issue #77 決議 A）
+- feat: 防護 release 命令對非自身 FRESH lease 的繞過閘門路徑
+- feat: AC1/2 — runqueue --groups CLI 旗標接線
+- feat: 抽取共用交集判定實作 + 並行群組切分演算法
+- feat: AC3 — sessions/runqueue 輸出標記 reclaimable
+- feat: 實作 lease claim/reclaim 生命週期（registry 寫入端 + reclaim ghost 鑑識）
+- refactor: 收斂 ticket_system 測試 fixture 複本與別名退場
+- refactor: 收斂 lease 周邊 helper 複本清理批次
+- refactor: pm_registry 整備批次（R3/R6/R1 部分 + recompute_lease 量化門檻文件化）
+- refactor: 收斂 runqueue --groups 與 parallel-check 為共用衝突圖核心
+- refactor: 收斂 resolve_session_id 五份逐字副本至 lib 單一定義
+- refactor: 收斂全 hooks 的 ticket ID regex 至 lib 單一 SSOT
+- fix: 放寬 FILENAME_ID_PATTERN 接受無 slug 佔位檔名
+- fix: acceptance-gate 補明產生路徑盤點表讀取優先序訊息
+- fix: 校準 acceptance-gate 的 Spawn Request status 解析格式
+- fix: dispatch_tracker.py fsync 靜默 catch 補 stderr 提示
+- fix: worklog 主檔編輯段包 flock 防 lost update + 寫後重讀驗證
+- fix: pm_registry.py 的 git_utils 匯入改防禦式相對/絕對匯入
+- fix: 修正三命令 docstring 自相矛盾與術語漂移批次
+- fix: 對齊 track_dashboard.py 四處空狀態字面為中文樣式
+- fix: pm_registry 靜默 catch 補日誌 + hook stderr 補後果說明
+- fix: 步驟三 — 抽出 ARG_ALL_COMPAT 常數並收斂 5 處引用
+- fix: 步驟二 — 去除 --all hedge 措辭並修正 --version 虛構互斥宣稱
+- fix: 步驟一 — 刪除 5 個 track 命令的 all_versions 死參數與死分支
+- fix: sessions FRESH/STALE 判定改委派 pm_registry.is_fresh（判準統一組 4）
+- fix: lease.py 鑑識 fail-open 修正 + 複用收斂 + 文字修正（安全語意組 1-3、6-7、9-10、12-13）
+- fix: 修正 dispatch-record-hook 回歸測試的過時存在性斷言
+- fix: hooks-test-gate 過濾已刪除/改名 hook 檔避免誤報
+- fix: registry files 欄位改為 tickets 推導物化值（整組重算覆蓋取代 append）
+- docs: 校正 ticket-body-schema.md 第四項強制層過時宣稱
+- docs: PC-BAL-041 檔名補 slug（git mv 對 untracked 檔靜默失敗的補正）
+- docs: 新增即時生效工具源碼共享樹編輯紀律 + PC-BAL-041
+- docs: 對齊 onboard 空狀態字面「（無活同事）」與源碼一致
+- docs: 校正 --all 措辭為 576 已修正的無作用旗標字面
+- docs: 校正 track_runqueue.py --groups 與 --format 關係的過期內部註解
+- docs: 補齊 SKILL.md track stuck-anas 子命令總覽列
+- docs: 同步 553 系列 CLI 行為變更至 ticket skill 文件
+- docs: 修正 pm_registry docstring 過時延後語意 + 補測試可達性註記
+- docs: 修正 track-command.md 空狀態規範範圍與 Flag 表未同步
+- docs: --groups help 文字修正（文字組修正 11）
+- docs: PC-BAL-040 依 basil Layer 2 審查修正四項
+- docs: PC-BAL-040 檔名補 slug 使 index 一致性檢查可識別
+- docs: 新增 PC-BAL-040 where.files 入口檔近似宣告缺口
+- docs: 落地 PC-BAL-037 預防面規範
+- docs: 校正 Stop hook 計數過期記載
+- docs: 記錄 PC-BAL-039 與 CQ-BAL-001 兩則清查與修正模式
+- docs: 記錄 PC-BAL-038 背景 agent 純文字產出不送達
+- docs: 記錄 TEST-BAL-003 消費端先於生產端落地
+- chore: sync-push 回寫框架版本號
+- perf: files_intersect 改 tuple 前綴比對 + lru_cache（效能組修正 5）
+
+---
+
 ## [2.34.0] - 2026-08-18
 
 ### Summary

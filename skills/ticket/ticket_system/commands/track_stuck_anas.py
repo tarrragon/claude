@@ -5,7 +5,8 @@ ticket track stuck-anas 命令（W17-008.15 方案 D 第 1 項）
 協助 PM 識別「衍生子任務全完成但 source ANA 未 complete」的卡住情境。
 
 設計約束：
-- version-agnostic（不接受 --version；可選 --wave 過濾、--all 跨版本）
+- version-agnostic（可選 --version / --wave 過濾；--all 為相容保留旗標，
+  與預設行為無差異）
 - 註冊於 track.py _create_version_agnostic_handlers() 字典
 - 復用 ticket_loader.list_tickets / get_active_versions
 """
@@ -20,6 +21,7 @@ from ticket_system.constants import (
     STATUS_COMPLETED,
     TERMINAL_STATUSES,
 )
+from ticket_system.lib.command_tracking_messages import TrackMessages
 from ticket_system.lib.ticket_loader import list_tickets
 from ticket_system.lib.version import get_active_versions
 
@@ -70,14 +72,12 @@ def _collect_stuck_anas(
 
 
 def _gather_tickets(
-    explicit_version: Optional[str], all_versions: bool
+    explicit_version: Optional[str],
 ) -> List[Dict]:
-    """依 --all / 自動偵測 active versions 收集 ticket 清單。"""
+    """依 --version / 自動偵測 active versions 收集 ticket 清單。"""
     versions: List[str]
     if explicit_version:
         versions = [explicit_version]
-    elif all_versions:
-        versions = get_active_versions() or []
     else:
         versions = get_active_versions() or []
 
@@ -125,10 +125,9 @@ def _render(stuck: List[Dict], wave: Optional[int]) -> str:
 def execute_stuck_anas(args: argparse.Namespace) -> int:
     """執行 track stuck-anas 命令（version-agnostic）。"""
     wave = getattr(args, "wave", None)
-    all_versions = bool(getattr(args, "all", False))
     explicit_version = getattr(args, "version", None)
 
-    tickets = _gather_tickets(explicit_version, all_versions)
+    tickets = _gather_tickets(explicit_version)
     stuck = _collect_stuck_anas(tickets, wave)
     print(_render(stuck, wave))
     return 0
@@ -155,12 +154,12 @@ def register_stuck_anas(
         "--all",
         action="store_true",
         default=False,
-        help="相容保留旗標：預設已掃描全部 active 版本，本旗標目前與預設行為無差異",
+        help=TrackMessages.ARG_ALL_COMPAT,
     )
     p.add_argument(
         "--version",
         default=None,
-        help="指定版本（覆蓋自動偵測；與 --all 互斥）",
+        help="指定版本（覆蓋自動偵測）",
     )
     return p
 

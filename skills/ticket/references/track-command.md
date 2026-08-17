@@ -89,6 +89,9 @@
 | `--top N`          | int                                     | 限制 N 筆（list / critical-path 有效，dag 忽略） |
 | `--context=resume` | —                                       | 交集 `.claude/handoff/pending/`                  |
 | `--wave N`         | int                                     | 過濾 wave                                        |
+| `--groups`         | —                                        | 依 `where.files` 交集切分可並行/序列群組，**優先於 `--format`**（兩者同時給出時 `--groups` 生效渲染群組視圖，非互斥錯誤；`--top` 對 `--groups` 無效，同 `dag`） |
+
+**`[RECLAIMABLE]` 標記（multi-PM 協調層 Phase 3）**：list 視圖逐票渲染時，若該票在 `pm-registry.json` 中被判定為 STALE session 持有（`lease.is_lease_reclaimable` 輕量判準：僅查 heartbeat 是否逾 TTL），於票號前加 `[RECLAIMABLE]`，可與 `[STALE]`（stale in_progress 判準，來源不同——見上方 Exit Status tag 段落與 stale-list 章節）並列疊加，兩者可各自獨立出現。`[RECLAIMABLE]` 僅為候選提示，實際能否釋放需 `ticket track reclaim` 的 ghost 鑑識三查，詳見「track reclaim 子命令」章節「與 sessions/runqueue 顯示層判定的差異」。
 
 **新 session 自動引導**：`session-start-scheduler-hint-hook.py` 在 SessionStart 時自動呼叫 `runqueue --context=resume --top 3`（若無 handoff 則 fallback `--format=list --top 1`），結果顯示為 hook additionalContext。
 
@@ -122,6 +125,32 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 2. **本 Wave 已 completed ANA 的 `spawned_tickets` 皆非 `pending`**（W17-037 落地）
 
 兩條件均滿足才算 Wave 完成。詳見 `.claude/pm-rules/completion-checkpoint-rules.md` 第八層 Checkpoint 2 情境 C。
+
+### `--groups` 並行群組切分（multi-PM 協調層 Phase 3）
+
+輸入集合與 `list` 視圖同（`blockedBy=[]` 的 pending 票，同一份 priority 排序結果），對此集合依 `where.files` 交集建無向衝突圖：節點為票 id，邊為兩兩交集命中（判定邏輯與 `track conflicts` 共用 `compute_pairwise_conflicts`，含 impl→test 擴張啟發式）。連通分量（含至少一條邊）即序列組——組內成員經由交集邊傳遞關聯，即使組內兩票本身無直接交集，仍因傳遞性須序列化；孤立節點（與任何票皆無交集）歸入單一「可並行群組」，彼此兩兩必無交集。
+
+```bash
+ticket track runqueue --wave 3 --groups
+```
+
+輸出格式：
+
+```
+=== Parallel Groups ===
+可並行群組（3 票，兩兩無交集）：
+  - 0.2.1-W3-100
+  - 0.2.1-W3-101
+  - 0.2.1-W3-102
+
+序列群組（1 組，組內須依序執行）：
+  群組 1: 0.2.1-W3-200, 0.2.1-W3-201
+
+衝突對（1 組）：
+  0.2.1-W3-200 <-> 0.2.1-W3-201 [heuristic]: test/domain/foo_test.dart  <!-- skill-residue-exempt: 命令輸出範例的示意路徑，非本專案實際檔案 -->
+```
+
+`[heuristic]` 標記代表該衝突僅由 impl→test 擴張啟發式衍生路徑觸發（票面原始宣告的 `where.files` 本身無交集），語意與 `track conflicts` 章節「衝突判定規則」的 `[heuristic]` 相同。
 
 ### 實作現況
 
@@ -194,6 +223,14 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 /ticket track set-acceptance <id> --all-check          # 勾選全部
 /ticket track set-acceptance <id> --all-uncheck        # 取消勾選全部
 
+# 建票後修訂驗收條目（set-acceptance --add/--edit/--remove）
+/ticket track set-acceptance <id> --add "新條件"                    # 追加條目，預設未勾選
+/ticket track set-acceptance <id> --add "條件二" "條件三"           # 一次追加多個
+/ticket track set-acceptance <id> --edit 2 "修訂後文字"             # 覆寫 index 2 文字，勾選狀態不變
+/ticket track set-acceptance <id> --edit 1 "文字甲" --edit 3 "文字乙"  # 一次改多組（可重複 --edit）
+/ticket track set-acceptance <id> --remove 2                       # 移除未勾選條目
+/ticket track set-acceptance <id> --remove 2 --force                # 移除已勾選條目須加 --force（防抹驗收證據）
+
 # 身份申報（--as，W1-048）— complete / check-acceptance / set-acceptance 三命令通用
 /ticket track complete <id> --as thyme-python-developer        # 申報身份，與 who.current 對照不符即 deny（exit 1）
 /ticket track check-acceptance <id> --all --as thyme-python-developer
@@ -253,6 +290,23 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 | 多項取消勾選 | `set-acceptance <id> --uncheck 1 2` | 同時取消勾選第 1/2 項 |
 | 全部勾選     | `set-acceptance <id> --all-check`   | 勾選全部驗收條件      |
 | 全部取消勾選 | `set-acceptance <id> --all-uncheck` | 取消勾選全部          |
+
+#### set-acceptance 建票後修訂組合（--add/--edit/--remove）
+
+與 check/uncheck 系列操作**勾選狀態**不同，`--add`/`--edit`/`--remove` 操作的是條目本身（新增、改文字、刪除）。三者與 check/uncheck 系列互斥，每次呼叫僅能指定一種模式。
+
+| 組合           | 指令                                               | 行為                                        |
+| -------------- | --------------------------------------------------- | ------------------------------------------- |
+| 追加單一條目   | `set-acceptance <id> --add "新條件"`                | 於清單末端新增一項，預設未勾選 `[ ]`        |
+| 追加多個條目   | `set-acceptance <id> --add "甲" "乙"`               | 一次追加多項，皆未勾選                      |
+| 覆寫單一文字   | `set-acceptance <id> --edit 2 "新文字"`             | 改寫 index 2 的文字，原勾選狀態不變         |
+| 覆寫多組文字   | `set-acceptance <id> --edit 1 "甲" --edit 3 "乙"`   | 一次改多組（`--edit` 可重複指定）           |
+| 移除未勾選條目 | `set-acceptance <id> --remove 2`                    | 直接移除，其餘 index 正確對位               |
+| 移除已勾選條目 | `set-acceptance <id> --remove 2 --force`            | 已勾選（`[x]`）條目移除須加 `--force`，防止事後抹除驗收證據；不加 `--force` 會被拒絕且內容不變 |
+
+**索引對位保證**：`--remove` 支援一次移除多個 index（如 `--remove 2 4`），實作由大到小依序刪除，確保刪除過程中前面索引的位移不會誤刪錯誤條目。
+
+**與 completed 票的關係**：`--add`/`--edit`/`--remove` 與 check/uncheck 系列共用同一個 status precondition（`require_in_progress`）——票狀態為 `completed` 時預設拒絕修訂（exit 2），需加 `--force` 才能旁路（避免事後改條件使驗收記錄失真，且會記入 hook-logs audit）。
 
 ### set vs check 決策樹
 
@@ -317,7 +371,7 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 | status                      | `claim` / `complete` / `release`                | 由生命週期命令管理，禁止手動編輯                     |
 | tdd_phase                   | `phase <id> <phase> <agent>`                    | Phase 進度更新                                       |
 | children                    | `add-child <parent> <child>`                    | 父子關係                                             |
-| acceptance                  | `check-acceptance` / `set-acceptance`           | 勾選/取消勾選驗收條件（set-acceptance 明確語意版）   |
+| acceptance                  | `check-acceptance` / `set-acceptance`           | 勾選/取消勾選用 `--check`/`--uncheck`/`--all-check`/`--all-uncheck`；新增/改文字/刪除條目用 `set-acceptance --add`/`--edit`/`--remove`（建票後修訂） |
 | frontmatter 驗證            | `validate <id>`                                 | 檢查 status/completed_at/acceptance/who 4 欄位合規性 |
 | blockedBy                   | `set-blocked-by <id> <value> [--add\|--remove]` | 建立時用 `--blocked-by`；之後用 CLI 更新             |
 | relatedTo                   | `set-related-to <id> <value> [--add\|--remove]` | 建立時用 `--related-to`；之後用 CLI 更新             |
@@ -516,7 +570,7 @@ ticket track stale-list [--threshold {info,warning,critical,all}] \
 | `--threshold` | `warning` | `warning`=warning+critical / `info`=三級 / `all`=同 info / `critical`=僅 critical |
 | `--wave` | None | 僅列出指定 wave |
 | `--version` | None | 指定版本（覆蓋自動偵測 active 版本） |
-| `--all` | False | 相容保留旗標：預設已掃描全部 active 版本，本旗標目前與預設行為無差異 |
+| `--all` | — | 無作用旗標：預設即掃描全部 active 版本；如需限縮請用 `--version` |
 | `--format` | `table` | `table` / `ids`（每行一個 ID，適合 pipe） / `yaml` |
 
 ### 閾值定義
@@ -575,6 +629,54 @@ ticket track stale-list --threshold critical --format ids | xargs -I{} ticket tr
 
 ---
 
+## track stuck-anas 子命令（W17-008.15 方案 D 第 1 項）
+
+掃描 `type=ANA` 且 `status=in_progress` 且**全部** `spawned_tickets` 已 terminal（completed 等）的 ticket，協助 PM 識別「衍生子任務全完成但 source ANA 未 complete」的卡住情境——ANA 分析已產出結論並拆出後續 ticket，但 ANA 本身忘記 complete，會使依賴其 completed 狀態的下游判定（如 runqueue 排序加權、Wave 完成判定）誤判。
+
+### 用法
+
+```bash
+ticket track stuck-anas [--wave N] [--version V] [--all]
+```
+
+### Flag 說明
+
+| Flag | 預設 | 說明 |
+|------|------|------|
+| `--wave` | None | 僅列出指定 wave 的 ANA |
+| `--version` | None | 指定版本（覆蓋自動偵測 active 版本） |
+| `--all` | — | 無作用旗標：預設即掃描全部 active 版本；如需限縮請用 `--version` |
+
+### 判定規則
+
+1. ticket `type == "ANA"` 且 `status == in_progress`
+2. `spawned_tickets` 非空（無 spawned 子項的 ANA 不算卡住，可能單純尚未拆分）
+3. 全部 `spawned_tickets` 皆存在於 ticket 索引中，且狀態皆為 terminal（spawned ID 若找不到對應票，保守判為未完成，不列入卡住清單）
+
+### 輸出格式
+
+```
+────────────────────────────────────────────────────────────
+卡住的 ANA（in_progress 且 spawned 全 completed）
+────────────────────────────────────────────────────────────
+  1. 0.2.1-W3-050  分析 XXX 根因
+      spawned=3 全 completed → 可考慮 ticket track complete 0.2.1-W3-050
+```
+
+無符合條件時輸出「（無卡住的 ANA）」，與 `activity`/`conflicts`/`onboard`/`stale-list` 同款空狀態字面樣式（見「空狀態字面規範」章節）。
+
+### Exit code
+
+固定回傳 `0`（純查詢，無業務拒絕或錯誤分支）。
+
+### 設計約束
+
+- version-agnostic（註冊於 `_create_version_agnostic_handlers()`）
+- 復用 `ticket_loader.list_tickets` / `get_active_versions`，不重寫版本聚合邏輯
+- 僅提示「可考慮 complete」，不自動執行——是否真正卡住（vs 刻意保留分析未結案）由 PM 判斷
+
+---
+
 ## track dashboard 子命令（W10-114 / W10-113 M1+M4'）
 
 PM 接手新 session 的聚合視圖。一次回傳 in_progress + top N ready + stale 三章節，Ready 章節含可直接 claim 的編號（`[1]` `[2]` `[3]`），免拼 ID 即可 claim。
@@ -614,7 +716,7 @@ ticket track dashboard [--top N] [--wave N] [--no-stale] \
   [5] [P2] [ready] 0.18.0-W10-119  重構 track_dashboard 跨模組私有函式
 
 [Stale Warning] 0 ticket(s) over 60min
-  (none)
+  （無 stale ticket）
 
 Hint: ticket track claim <id>
 ```
@@ -874,9 +976,10 @@ ticket track sessions [--format {table,json}]
 
 ```
 === PM Sessions ===
-  session_id  name                 age(min)  status  tickets  files
-  ------------------------------------------------------------------
-  session-a   flutter-balance-b6          5  FRESH         1      2
+  session_id  name                 age(min)  status  tickets  files  reclaimable
+  ---------------------------------------------------------------------------------
+  session-a   flutter-balance-b6          5  FRESH         1      2  -
+  session-b   flutter-balance-c2         45  STALE         2      3  0.2.1-W3-100, 0.2.1-W3-101
 ```
 
 ### 欄位定義
@@ -884,11 +987,12 @@ ticket track sessions [--format {table,json}]
 | 欄位 | 說明 |
 |------|------|
 | `session_id` | CC hook 輸入 JSON 的 `session_id` |
-| `name` | session 名稱（缺省時退回 `session_id`） |
+| `name` | session 名稱（未提供時退回 `session_id`） |
 | `age(min)` | heartbeat 與查詢當下的分鐘差（整數，捨去）；無法解析時顯示 `?` |
 | `status` | `FRESH`（heartbeat 30 分鐘內）/ `STALE`（逾 30 分鐘或無法解析） |
 | `tickets` | 該 session 認領的 ticket 數 |
 | `files` | 該 session 認領的檔案數 |
+| `reclaimable` | `STALE` session 持有的全部 ticket id（逗號分隔）；`FRESH` 時恆為 `-`。僅 heartbeat 新鮮度輕量判準，非「track reclaim 子命令」實際執行前的 ghost 鑑識三查結果——兩者為兩層判定，見該章節「與 sessions/runqueue 顯示層判定的差異」 |
 
 ### 降級行為（不阻擋工作流）
 
@@ -903,8 +1007,70 @@ ticket track sessions [--format {table,json}]
 
 - version-agnostic（註冊於 `_create_version_agnostic_handlers()`），不需 active version
 - 僅列 `project` 欄位等於當前 `git rev-parse --show-toplevel` 的 session（同專案篩選；git 不可用時不篩選，保留全部）
-- stale 判定閾值固定 30 分鐘（`STALE_THRESHOLD_MINUTES`），Phase 1 僅標記不做 reclaim
+- stale 判定閾值固定 30 分鐘（`STALE_THRESHOLD_MINUTES`）；`reclaimable` 欄位僅為輕量標記（heartbeat 判準），實際執行 reclaim（轉回 pending + 清 lease）另見「track reclaim 子命令」章節（multi-PM 協調層 Phase 3）
 - Registry Schema 契約 v1 為 hooks 與 CLI 兩職責共同 SSOT，本命令不得自行變更 schema
+
+---
+
+## track reclaim 子命令（multi-PM 協調層 Phase 3，issue tarrragon/claude#77）
+
+現行 `claim` 永不過期，PM session 崩潰後持票永久鎖死。`reclaim` 提供受控釋放路徑：僅接受 `in_progress` 且無 FRESH session 佐證（或 registry 未追蹤）的票，並強制執行 ghost 鑑識三查，任一命中或無法判定即拒絕。
+
+### 用法
+
+```bash
+ticket track reclaim <ticket_id> [--version V]              # dry-run：僅印鑑識報告
+ticket track reclaim <ticket_id> [--version V] --confirm    # 三查全過才實際轉回 pending
+```
+
+### Flag 說明
+
+| Flag | 預設 | 說明 |
+|------|------|------|
+| `--version` | 自動偵測 | 版本號（ticket_id 本身含版本段時可省略，CLI 自動解析） |
+| `--confirm` | False | 三查鑑識全過才生效：轉回 pending 並清除 registry lease；未加此旗標僅印 dry-run 報告 |
+
+### Ghost 鑑識三查
+
+`--confirm` 是否放行完全取決於三查結果，三查任一命中或無法判定即拒絕（與 `--confirm` 是否給出無關——`--confirm` 只決定「三查全過後是否真的落地」，不能覆蓋三查結果）：
+
+| 查 | 判定內容 | 命中條件 |
+|----|---------|---------|
+| 1. 未合併分支 | `git branch --no-merged` 是否存在含 ticket_id 的分支名 | 存在即命中 |
+| 2. 髒檔交集 | `git status --porcelain` 路徑與票面 `where.files` 是否有交集 | 有交集即命中 |
+| 3. 缺 Exit Status | 票面 `Exit Status` 章節是否仍為佔位符或未找到 | 缺失/佔位符即命中 |
+
+第 1、2 查依賴 git 查詢；查詢本身失敗（非「查到零筆」）時標記為「無法判定」，與「通過」區分對待——查詢失敗不可視為通過（防止 fail-open 誤放行）。三查任一「命中」或「無法判定」，鑑識結論即為未通過，`--confirm` 不生效。
+
+**設計取捨（精確度優先，避免文件缺失時誤判為功能故障）**：一個真正硬崩潰的 session（尚在做事時被中斷）幾乎必然同時觸發第 3 查（來不及寫 Exit Status）、且高機率觸發第 1 或第 2 查（有未合併分支或未 commit 的髒檔）。因此 `--confirm` 的典型放行場景不是「找回真正崩潰遺失的票」，而是「session 已正常寫完 Exit Status、只是 lease 未被清除」這類乾淨收尾但 registry 殘留的情形。若 `--confirm` 對某張明顯已死的 session 持票持續拒絕，這是三查刻意保守的預期行為，非 bug。
+
+### 輸出格式（dry-run 範例）
+
+```
+[reclaim] 0.2.1-W3-100: registry 未追蹤此票 lease（無 FRESH session 佐證），允許依 ghost 鑑識判定
+=== Ghost 鑑識報告: 0.2.1-W3-100 ===
+  1. 未合併分支: 通過
+  2. 髒檔交集: 通過
+  3. Exit Status 章節: 已填寫
+  結論: 鑑識通過，允許 reclaim
+[reclaim] 0.2.1-W3-100: dry-run 完成，鑑識通過；加 --confirm 執行實際 reclaim
+```
+
+### 與 sessions/runqueue 顯示層判定的差異
+
+`sessions` 的 `reclaimable` 欄與 `runqueue` 的 `[RECLAIMABLE]` 標記，兩者共用同一輕量判準（`is_lease_reclaimable`：僅檢查 registry 中持有者 session 的 heartbeat 是否逾 TTL），**不含**本命令的 ghost 鑑識三查——鑑識涉及 git 呼叫，不適合逐票渲染表格時觸發。因此「`sessions`/`runqueue` 顯示為可 reclaim 候選」與「`reclaim --confirm` 實際放行」是兩層判定，前者是列表級的粗篩提示，後者才是逐票的精確判定；粗篩顯示候選不保證 `--confirm` 會放行。
+
+### Exit code
+
+| 值 | 說明 |
+|----|------|
+| 0 | dry-run 鑑識通過 / `--confirm` 且落地成功 |
+| 1 | 找不到 ticket、票非 in_progress、有 FRESH session 佐證、鑑識未通過、或落地時票面更新失敗 |
+
+### 設計約束
+
+- 外層流程跨兩把獨立鎖，非單一原子操作：`check_reclaimable` 讀 registry（無鎖快照）→ ghost 鑑識（純讀取，無鎖）→ 落地持 ticket md 的 `file_lock` → 之後才持 registry 的 `_registry_lock` 清 lease。理論上存在窄視窗（owner session 可能在鑑識後、落地前恢復心跳），影響侷限於「STALE 誤判為短暫失聯的 session 遺失一張已無在途工作證據的票」，非資料損毀風險
+- registry 未追蹤該票 lease 時仍允許依 ghost 鑑識判定（registry 缺失非阻擋條件，同 Registry Schema 契約「損毀/缺檔處置」降級語意）
 
 ---
 
@@ -940,7 +1106,7 @@ ticket track activity [--version V] [--all] [--format {table,json}]
 
 ### 設計約束
 
-- version-agnostic，預設已掃描全部 active 版本的 `in_progress` 票；`--all` 為相容保留旗標，目前與預設行為無差異
+- version-agnostic，預設已掃描全部 active 版本的 `in_progress` 票；`--all` 為無作用旗標，預設即掃描全部 active 版本，如需限縮請用 `--version`
 - 髒檔路徑比對用 `PurePosixPath` 前綴判定，非 `string.startswith`（避免 `lib/foo` 誤命中 `lib/foobar.dart`）  <!-- skill-residue-exempt: 說明路徑比對規則的示意路徑，非本專案實際檔案 -->
 - git 呼叫一律經 `.claude/lib/git_utils.run_git_command`（已內建 `--no-optional-locks`，避免與並行 PM session 競爭 `.git/index.lock`），lazy import 比照 `track_hook_health.py` 的 `_find_claude_dir()` 模式
 - `attribute_dirty_files()` 為髒檔歸屬第三源的獨立輸出函式，供 `onboard` 命令複用，不重算最新活動時間
@@ -985,7 +1151,7 @@ ticket track conflicts [--version V] [--all] [--format {table,json}]
 
 ### 設計約束
 
-- version-agnostic，預設已掃描全部 active 版本；`--all` 為相容保留旗標，目前與預設行為無差異
+- version-agnostic，預設已掃描全部 active 版本；`--all` 為無作用旗標，預設即掃描全部 active 版本，如需限縮請用 `--version`
 - registry 讀取一律經 `.claude/lib/pm_registry` 的 `get_registry_paths` + `read_registry`，不重寫第三份讀取路徑
 - 純目錄級宣告（如 `lib/domain`）與巢狀檔案級宣告天然會被判為交集——這是已知取捨（issue #77 討論記錄：純目錄級 lease 會造成過度序列化），本命令僅負責偵測呈現，不負責治理宣告粒度
 
@@ -1021,14 +1187,17 @@ ticket track onboard [--version V] [--all] [--top N] [--format {table,json}]
 | Flag | 預設 | 說明 |
 |------|------|------|
 | `--top` | 5 | 可認領建議章節列數上限 |
-| `--version` / `--all` / `--format` | 同 `activity`/`conflicts` | 版本範圍與輸出格式 |
+| `--version` / `--format` | 同 `activity`/`conflicts` | 版本範圍與輸出格式 |
+| `--all` | — | 無作用旗標：預設即掃描全部 active 版本；如需限縮請用 `--version` |
 
 ### 設計約束
 
 - registry 讀取一律經 `.claude/lib/pm_registry` 的 `get_registry_paths` + `read_registry`，不重寫第三份讀取路徑
 - stale 判定完全交由 `track_sessions._build_rows` 內部既有邏輯處理，本命令不重新定義任何 stale 閾值常數
-- registry 缺檔/損毀時各節優雅降級（活同事顯示「（無活躍同事）」、孤兒 entry 顯示「（無孤兒 entry）」，餘二節同款樣式），不阻擋其餘三節輸出
+- registry 缺檔/損毀時各節優雅降級（活同事顯示「（無活同事）」、孤兒 entry 顯示「（無孤兒 entry）」，餘二節同款樣式），不阻擋其餘三節輸出
 
-### 空狀態字面規範（activity / conflicts / onboard 三命令統一）
+---
 
-三命令空狀態一律採全形括號包裹的中文描述句 `（無 XXX）`，不使用英文 `(none)`：`activity` 為「（無 in_progress ticket）」、`conflicts` 為「（無衝突）」、`onboard` 四節分別為「（無活躍同事）」「（無孤兒 entry）」「（無髒檔）」「（無可認領建議）」。技術術語（`in_progress`、`entry`）依語言約束規則 4 保留原文，不強制中譯。
+## 空狀態字面規範（track 系列命令通用）
+
+`activity`、`conflicts`、`onboard`、`stale-list`、`stuck-anas`、`dashboard` 六個命令的空狀態一律採全形括號包裹的中文描述句 `（無 XXX）`，不使用英文 `(none)`：`activity` 為「（無 in_progress ticket）」、`conflicts` 為「（無衝突）」、`onboard` 四節分別為「（無活同事）」「（無孤兒 entry）」「（無髒檔）」「（無可認領建議）」、`stale-list` 為「（無符合條件的 stale ticket）」、`stuck-anas` 為「（無卡住的 ANA）」、`dashboard`（In Progress / Handoff Target / Ready Top N / Stale Warning 四區塊）分別為「（無 in_progress ticket）」「（無 handoff target）」「（無可認領建議）」「（無 stale ticket）」。技術術語（`in_progress`、`entry`、`handoff target`）依語言約束規則 4 保留原文，不強制中譯。

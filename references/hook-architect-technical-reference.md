@@ -18,7 +18,7 @@
 | hooks 無 terminal access | v2.1.139 | 行為限制 | 0（stderr 仍有效） | 環境變數與 effort 感知 → v2.1.139+ 終端存取限制 |
 | MCP stdio 收到 CLAUDE_PROJECT_DIR | v2.1.139 | 配置擴充 | 0（hooks 不受影響） | 環境變數與 effort 感知（欄位表格） |
 | terminalSequence 通知 | v2.1.141 | 新 API | 0（可整合機會） | JSON 處理 → terminalSequence 通知 |
-| Stop 8-block cap | v2.1.143 | 行為限制 | 5（Stop hook 評估通過） | Hook 類型深度理解 → Stop → v2.1.143 Stop 8-block cap |
+| Stop 8-block cap | v2.1.143 | 行為限制 | 10 註冊 / 2 具 block 能力（評估通過） | Hook 類型深度理解 → Stop → v2.1.143 Stop 8-block cap |
 | Stop/SubagentStop background_tasks | v2.1.145 | 新欄位 | 2（Stop + SubagentStop） | Hook 類型深度理解 → v2.1.145 Stop/SubagentStop input 新欄位 |
 | Stop/SubagentStop session_crons | v2.1.145 | 新欄位 | 0（本專案未啟用） | 同上 |
 
@@ -88,13 +88,13 @@
 - **輸出**: decision (block), reason
 - **特點**: 觸發於主線程結束，**非代理人**結束。可阻擋停止以要求完成特定工作。
 
-**v2.1.143 Stop 8-block cap**：Stop 後 Claude 最多連續處理 **8 個 blocks**（tool use rounds）。若多個 Stop hook 均阻擋（block）並要求繼續工作，Claude 處理這些 block 的輪次受此上限約束。本專案目前有 5 個 Stop hook（evaluate-session、handoff-auto-resume-stop-hook、session-experience-persistence-reminder、worktree-auto-commit、stop-worklog-handoff-sync-check），各佔 1 block，合計 5 blocks < 8，**在安全範圍內**。
+**v2.1.143 Stop 8-block cap**：Stop 後 Claude 最多連續處理 **8 個 blocks**（tool use rounds）。若多個 Stop hook 均阻擋（block）並要求繼續工作，Claude 處理這些 block 的輪次受此上限約束。本專案 `settings.json` 目前註冊 **10 個 Stop hook**（evaluate-session、handoff-auto-resume-stop-hook、session-experience-persistence-reminder-hook、worktree-auto-commit-hook、stop-worklog-handoff-sync-check-hook、malformed-tool-call-detector-hook、context-depth-warning-hook、confabulation-audit-hook、memory-dir-audit-hook、session-registry-stop-heartbeat-hook）。逐檔確認實際輸出後，僅 **2 個具 block 能力**——handoff-auto-resume-stop-hook（輸出 `"decision": "block"`）與 malformed-tool-call-detector-hook（`return 2`，exit code 2）；其餘 8 個皆不含 block 決策（僅 `systemMessage` / 靜默 `exit 0`，含 stop-worklog-handoff-sync-check-hook 雖有 `_mark_blocked_this_session` 之類的內部旗標命名，實際仍 `sys.exit(0)` 不阻擋）。最壞情況同時觸發合計僅 2 blocks < 8，**在安全範圍內**。
 
 **Why**：多 Stop hook 並行阻擋可能導致 Claude 進入無窮 block-continue 循環；v2.1.143 以 8-block 上限截斷，保護 session 不無止境延後退出。
 
 **Consequence**：若未來新增 Stop hook 且啟用 block 決策，需重新評估各 hook 輸出量（8 blocks 非行數限制，而是 tool use block 計數），避免達到上限後 Claude 強制中斷尚未完成的收尾邏輯。
 
-**Action**：新增 Stop hook 前，先清點現有 Stop hook 數量 × block 行為，確認合計不超過 7（保留 1 個緩衝）。輸出量大的 hook（如 evaluate-session）應實測確認在 1 block 內完成。
+**Action**：新增 Stop hook 前，先清點現有 Stop hook 中**具 block 能力者**（非僅計註冊總數，見上段 2/10 之區分），確認合計不超過 7（保留 1 個緩衝）。輸出量大的 hook（如 evaluate-session）應實測確認在 1 block 內完成。
 
 ### SubagentStop
 - **用途**: **代理人（subagent）真正完成時觸發**，提供代理人完成訊號源（清理派發記錄、驗證 commit、廣播完成、handoff 提醒等）
@@ -839,15 +839,16 @@ if __name__ == "__main__":
 
 ---
 
-**Last Updated**: 2026-07-26
-**Version**: 修正「effort 感知範例」（327-352 行）與同檔設計鐵則（369-391 行）矛盾：舊範例示範 `if effort == "low": return 0` 無條件短路，與鐵則「事實判斷型 hook 核心 block 邏輯永不依 effort 短路」相悖，為 W14-034/036/037 三批次 12 個 hook 複製此缺陷之散播源；改寫範例為 effort 僅控制 audit log 詳細度，並前置交叉引用指向鐵則章節（0.2.1-W3-021）
+**Last Updated**: 2026-08-18
+**Version**: 校正 Stop 8-block cap 段落的過期計數（Hook 改造附帶發現：文件記載 5 個 Stop hook，settings.json 實際已達 10 個）。以 settings.json 為準逐檔確認實際輸出後改寫：本專案註冊 10 個 Stop hook，其中僅 2 個（handoff-auto-resume-stop-hook、malformed-tool-call-detector-hook）具 block 能力，其餘 8 個皆不含 block 決策；最壞情況合計 2 blocks < 8，結論仍在安全範圍內。同步校正變更總覽表（14-23 行）與版本異動表（846-851 行）的對應計數，並調整 Action 段落區分「註冊總數」與「具 block 能力數」
+**Version**: 修正「effort 感知範例」（327-352 行）與同檔設計鐵則（369-391 行）矛盾：舊範例示範 `if effort == "low": return 0` 無條件短路，與鐵則「事實判斷型 hook 核心 block 邏輯永不依 effort 短路」相悖，為 W14-034/036/037 三批次 12 個 hook 複製此缺陷之散播源；改寫範例為 effort 僅控制 audit log 詳細度，並前置交叉引用指向鐵則章節。
 **Source**: basil-hook-architect.md v2.1.0 精簡外移；2026-05-14 同步 Claude Code v2.1.130-2.1.141 hook 系統能力（`args` exec 形式、`continueOnBlock`、`effort.level` payload、`$CLAUDE_EFFORT` / `$CLAUDE_CODE_SESSION_ID` env、`terminalSequence` 通知、MCP stdio `CLAUDE_PROJECT_DIR` 注入）；2026-05-21 同步 v2.1.142-2.1.145 新增能力（W3-026 + W3-031 ANA 結論落地）：
 
 | 版本範圍 | 新增章節 | 內容 |
 |---------|---------|------|
 | v2.1.139-145 | v2.1.139-145 變更總覽 | 8 項變更彙整索引表，快速定位各章節說明 |
 | v2.1.139 | v2.1.139+ 終端存取限制 | stderr vs raw terminal fd 區別；規則 4 仍有效釋疑 |
-| v2.1.143 | Stop → v2.1.143 Stop 8-block cap | Stop hook 最多 8 blocks；本專案 5 個 Stop hook 安全評估 |
+| v2.1.143 | Stop → v2.1.143 Stop 8-block cap | Stop hook 最多 8 blocks；本專案 10 個註冊 Stop hook 中 2 個具 block 能力，安全評估 |
 | v2.1.145 | v2.1.145 Stop/SubagentStop input 新欄位 | background_tasks / session_crons schema；弱依賴策略；參考實作 |
 
 2026-06-11 新增「受眾評估 checklist（additionalContext / systemMessage 強制項）」章節：PC-V1-004 防護 B，輸出注入訊息的 hook 必評估 subagent 受眾適切性，PM-only 訊息加 `is_subagent_environment()` 早期跳過。

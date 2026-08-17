@@ -55,6 +55,11 @@ severity: 中
 
 多視角審查遇到「依據 X 實驗」類宣稱時，把該實驗的量測範圍當作獨立查證項，不因宣稱有實證出處而降低追問強度。
 
+## 防護措施
+
+- **實驗端規範**：ANA Ticket「重現實驗結果」章節的 `實驗發現` 子節強制附負面範圍聲明（本實驗不涵蓋哪些失效模式），見 `.claude/pm-rules/ticket-body-schema.md`「重現實驗結果章節：負面範圍聲明要求」小節。
+- **引用端規範**：引用實驗結論作設計依據前的三問檢查清單，見 `.claude/references/experiment-evidence-citation-rules.md`。
+
 ## 實際案例
 
 - consumer 專案 multi-PM 協調層 Phase 1 實作（2026-08-17）：PM 撰寫的 registry 契約引先前 flock 並行實驗（600 輪雙 process 無損）為 in-place 寫入模式背書；Phase 4 多視角審查（Quality 與 linux 雙視角獨立命中）發現 crash 原子性與讀端 race 未被實驗涵蓋，且契約同時指定的「損毀重建」容錯路徑正是為實驗未涵蓋的 torn-write 而存在——補丁的存在本身就是範圍缺口的訊號。修正方向：改 tempfile + 原子 replace，使該失效模式從結構上消失（追蹤票見該專案 worklog）。

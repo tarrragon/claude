@@ -234,7 +234,14 @@ $ /worktree create 1.0.0-W9-002.1
 
 下一步：
   cd /path/to/project-1.0.0-W9-002.1
+正在同步最新 main...
+main 無新變更，worktree 已是最新。
 ```
+
+> 建立完成後會確定性執行一次 `git merge main`（issue #77 決議 A）：共享
+> `.git` 下 local main 為全機單一事實來源，此步驟消除 base 解析與 worktree
+> 可用之間、其他 worktree 併行推進 main 的競態視窗。無新變更時為 no-op；
+> 有衝突時會停下並輸出後果與下一步（不自動解），見下方「錯誤情境」表最後一列。
 
 #### 錯誤情境
 
@@ -244,6 +251,7 @@ $ /worktree create 1.0.0-W9-002.1
 | 分支已存在 | `分支已存在：feat/1.0.0-W9-002.1` | `git branch -d feat/1.0.0-W9-002.1` |
 | Worktree 路徑已存在 | `目錄已存在：../ccsession-1.0.0-W9-002.1` | 使用其他 ticket-id 或刪除目錄 |
 | base 分支不存在 | `基礎分支不存在：develop` | 確認分支名稱，或省略 --base 使用預設 |
+| merge main 衝突（worktree 已建立） | `[阻擋] 合併 main 發生衝突，worktree 需要人工處理才能安全使用。` | `cd` 進 worktree 手動解衝突後 `git add`+`git commit`，或 `git merge --abort` 放棄本次合併 |
 
 ### status — 查看 Worktree 狀態
 

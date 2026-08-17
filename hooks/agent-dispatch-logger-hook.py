@@ -19,7 +19,6 @@ Agent Dispatch Logger Hook - PostToolUse (Agent)
 
 import json
 import os
-import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -36,6 +35,7 @@ from lib import (
     is_background_dispatch,
     get_project_root,
 )
+from lib.ticket_id_pattern import SEARCH_SINGLE_SUFFIX_RE as TICKET_ID_PATTERN
 
 # ============================================================================
 # 常數定義
@@ -61,9 +61,6 @@ FAILURE_KEYWORDS = [
     "Permission denied",
     "index.lock",
 ]
-
-# Ticket ID 正則
-TICKET_ID_PATTERN = re.compile(r"\d+\.\d+\.\d+-W\d+-\d+(?:\.\d+)?")
 
 # 預設輸出（需含 hookEventName，IMP-055）
 DEFAULT_OUTPUT = {

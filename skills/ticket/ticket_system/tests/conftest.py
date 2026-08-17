@@ -23,6 +23,7 @@ Fixture 設計（最小 mock 原則）：
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -226,3 +227,64 @@ def _mock_track_snapshot_filesystem_scan(monkeypatch):
 
     monkeypatch.setattr(mod, "_scan_all_versions", _fake_scan_all_versions, raising=False)
     monkeypatch.setattr(mod, "list_tickets", _fake_list_tickets, raising=False)
+
+
+# ============================================================
+# 0.2.1-W3-585 — 測試 fixture 收斂（DRY，reuse 視角發現逐字/近似複本）
+# ============================================================
+#
+# 以下為純函式（非 pytest fixture），供測試檔以
+# `from conftest import _ticket, _iso, seed_pm_registry` 直接匯入取代各自
+# 定義的複本。conftest.py 所在目錄本身即在 pytest sys.path 上（無
+# __init__.py 的 rootdir import mode），故可直接以模組名匯入，無需改造
+# 為 fixture 注入模式（call site 零改動，僅刪除本地定義並改 import）。
+
+
+def _ticket(tid: str, status: str, files: list) -> dict:
+    """建立最小 ticket dict（id/status/where.files）。
+
+    收斂自 test_file_conflict.py 與 test_track_conflicts.py 的逐字複本。
+    """
+    return {"id": tid, "status": status, "where": {"files": files}}
+
+
+def _iso(dt) -> str:
+    """datetime 轉 ISO8601 字串。
+
+    收斂自 test_track_onboard.py / test_track_sessions.py / test_lease.py /
+    test_track_conflicts.py 的逐字複本。
+    """
+    return dt.isoformat()
+
+
+def _pm_registry_schema_version() -> int:
+    """取得 `pm_registry.SCHEMA_VERSION`（單一權威來源）。
+
+    模組不可用時（開發環境結構異常）降級為 2（現行契約版本）；與
+    `claude_lib_loader.empty_registry_skeleton()` 的 `schema_version=0`
+    「registry 不可用」語意不同——此處是「假設環境正常但 lazy load 失敗」
+    情境下的最後防線預設值，不代表契約版本真的是 0。
+    """
+    from ticket_system.lib.claude_lib_loader import load_claude_lib
+
+    pm_registry = load_claude_lib("pm_registry")
+    return pm_registry.SCHEMA_VERSION if pm_registry is not None else 2
+
+
+def seed_pm_registry(registry_file: Path, sessions: dict) -> None:
+    """寫入 pm-registry.json，schema_version 取自 `pm_registry.SCHEMA_VERSION`
+    常數。
+
+    收斂自 test_lease.py 的 `_seed_registry`（原硬編碼 schema_version=2）
+    與 test_track_sessions.py 的 `_write_registry`（原硬編碼
+    schema_version=1）——兩者對現行契約版本的認知已漂移，取常數為單一
+    權威來源消除此漂移（0.2.1-W3-585）。
+    """
+    registry_file.parent.mkdir(parents=True, exist_ok=True)
+    registry_file.write_text(
+        json.dumps(
+            {"schema_version": _pm_registry_schema_version(), "sessions": sessions},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )

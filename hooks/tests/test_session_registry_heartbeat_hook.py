@@ -11,6 +11,8 @@ import importlib.util
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from lib import ENV_SESSION_ID
+
 hooks_path = Path(__file__).parent.parent
 hook_file = hooks_path / "session-registry-heartbeat-hook.py"
 spec = importlib.util.spec_from_file_location(
@@ -55,7 +57,7 @@ class TestMain:
         mock_update.assert_not_called()
 
     def test_missing_session_id_skips_update(self, monkeypatch, capsys):
-        monkeypatch.delenv(hook.ENV_SESSION_ID, raising=False)
+        monkeypatch.delenv(ENV_SESSION_ID, raising=False)
         result, mock_update = self._run({}, subagent=False)
         assert result == EXIT_SUCCESS
         mock_update.assert_not_called()

@@ -6,6 +6,11 @@
 3. 混合：2 互斥 + 2 衝突
 4. PC-137 觸發：5 children 全觸及 .claude/（互斥）→ warning 建議拆批
 5. 空 children：parent 無 children → exit 1 + stderr
+
+0.2.1-W3-583：連通分量切分收斂為共用
+`ticket_system.lib.file_conflict.group_by_conflict`（原自帶 `_UnionFind`
+已刪除）；上述 5 案例透過 CLI 輸出文字驗證行為不變（收斂只發生在圖層，
+本檔的弱衝突深度啟發式判準不變）。
 """
 
 from __future__ import annotations
@@ -19,6 +24,7 @@ import pytest
 
 from ticket_system.commands import track_parallel_check as mod
 from ticket_system.commands.track_parallel_check import execute_parallel_check
+from ticket_system.lib import file_conflict
 
 
 # ---------------------------------------------------------------------------
@@ -185,3 +191,37 @@ def test_invalid_ticket_id_returns_exit_2(monkeypatch):
     rc, out, err = _run(monkeypatch, [], "not-a-valid-id")
     assert rc == 2
     assert "無效的 ticket ID 格式" in err
+
+
+# ---------------------------------------------------------------------------
+# 0.2.1-W3-583：共用衝突圖核心（AC-1）
+# ---------------------------------------------------------------------------
+
+
+def test_no_longer_defines_own_union_find():
+    """`_UnionFind` 已刪除，連通分量切分改委派共用核心（AC-1：兩命令共用
+    同一連通分量核心，無兩份圖演算法）。"""
+    assert not hasattr(mod, "_UnionFind")
+
+
+def test_analyze_parallel_uses_shared_group_by_conflict(monkeypatch):
+    """直接驗證 `analyze_parallel` 實際呼叫 `file_conflict.group_by_conflict`
+    （而非僅巧合行為一致），透過 monkeypatch 替換並確認被呼叫。"""
+    calls = []
+    original = file_conflict.group_by_conflict
+
+    def _spy(ids, conflict_pairs):
+        calls.append((list(ids), list(conflict_pairs)))
+        return original(ids, conflict_pairs)
+
+    monkeypatch.setattr(mod, "group_by_conflict", _spy)
+
+    parent = _mk("0.18.0-W17-950", children=["0.18.0-W17-950.1", "0.18.0-W17-950.2"])
+    children = [
+        _mk("0.18.0-W17-950.1", files=["a.md"]),
+        _mk("0.18.0-W17-950.2", files=["b.md"]),
+    ]
+    rc, out, err = _run(monkeypatch, [parent] + children, "0.18.0-W17-950")
+
+    assert rc == 0, err
+    assert len(calls) == 1

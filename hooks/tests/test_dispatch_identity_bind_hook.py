@@ -66,6 +66,14 @@ class TestExtractTicketId:
         """ID 出現在後續行不算（PC-065 規範首行）"""
         assert extract_ticket_id("執行審查\n參考 1.5.0-W5-005.2 的結論") is None
 
+    def test_prefers_labeled_ticket_over_earlier_positional_decoy(self):
+        """首行同時含多個票號時，優先信任『Ticket:』標籤錨定的目標票，
+        而非位置在前的背景／參考票（收斂 SSOT 時一併處理的殘留缺口）。"""
+        assert (
+            extract_ticket_id("承接 0.2.1-W3-100 的結論，目標票 Ticket: 0.2.1-W3-547")
+            == "0.2.1-W3-547"
+        )
+
 
 class TestParseWhoValue:
     """`ticket track who` 輸出解析"""
@@ -329,6 +337,13 @@ class TestMixedBatchRegression:
         不再呼叫任何 ticket CLI（who/set-who）——根除「PreToolUse 無條件
         寫入、deny 為彙總結果」這條自我阻塞路徑的源頭；被 PC-019 擋下的
         worktree 派發不會因此留下 who.current 半套狀態。
+
+        不變式錨定於行為（是否呼叫 ticket CLI），非符號存在性：
+        extract_ticket_id 於 0.2.1-W3-547 以新職責（填 dispatch-active.json
+        的 ticket_id/files 欄位）合法重新引入，不再是身份綁定的殘留（W3-580
+        溯源定案），故本測試不再斷言其不存在，只斷言 bind_dispatch_identity
+        （身份綁定專責函式）不存在，並以 subprocess.run 未被呼叫直接證明
+        main() 未透過任何管道呼叫 ticket CLI。
         """
         record_hook_file = hooks_path / "dispatch-record-hook.py"
         record_spec = importlib.util.spec_from_file_location(
@@ -337,9 +352,8 @@ class TestMixedBatchRegression:
         dispatch_record_hook = importlib.util.module_from_spec(record_spec)
         record_spec.loader.exec_module(dispatch_record_hook)
 
-        # 綁定相關函式已不存在於 PreToolUse hook
+        # 身份綁定專責函式已不存在於 PreToolUse hook
         assert not hasattr(dispatch_record_hook, "bind_dispatch_identity")
-        assert not hasattr(dispatch_record_hook, "extract_ticket_id")
 
         with patch.object(
             dispatch_record_hook, "setup_hook_logging"
@@ -353,7 +367,9 @@ class TestMixedBatchRegression:
             dispatch_record_hook, "get_project_root"
         ) as mock_root, patch.object(
             dispatch_record_hook, "record_dispatch"
-        ) as mock_record:
+        ) as mock_record, patch(
+            "subprocess.run"
+        ) as mock_subprocess_run:
             mock_log.return_value = MagicMock()
             mock_stdin.return_value = {"tool_use_id": "toolu_worktree_denied"}
             mock_sub.return_value = False
@@ -368,3 +384,6 @@ class TestMixedBatchRegression:
 
         assert result == dispatch_record_hook.EXIT_SUCCESS
         mock_record.assert_called_once()
+        # 行為級不變式：main() 未透過 subprocess 呼叫任何 CLI（含 ticket
+        # track who/set-who），即使 ticket_id 可解析且 isolation=worktree
+        mock_subprocess_run.assert_not_called()

@@ -25,17 +25,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ticket_system.commands import track_conflicts
+from ticket_system.lib import file_conflict
+
+from conftest import _iso, _ticket  # noqa: F401 — 0.2.1-W3-585 收斂逐字複本
 
 
 NOW = datetime(2026, 8, 18, 12, 0, 0, tzinfo=timezone.utc)
-
-
-def _iso(dt: datetime) -> str:
-    return dt.isoformat()
-
-
-def _ticket(tid, status, files):
-    return {"id": tid, "status": status, "where": {"files": files}}
 
 
 def _fresh_registry(session_id: str, tickets: list, files: list) -> dict:
@@ -68,16 +63,16 @@ def _stale_registry(session_id: str, tickets: list, files: list) -> dict:
 
 class TestFilesIntersect:
     def test_exact_match(self):
-        assert track_conflicts._files_intersect("lib/foo.dart", "lib/foo.dart") is True
+        assert file_conflict.files_intersect("lib/foo.dart", "lib/foo.dart") is True
 
     def test_directory_prefix_matches(self):
-        assert track_conflicts._files_intersect("lib/foo", "lib/foo/bar.dart") is True
+        assert file_conflict.files_intersect("lib/foo", "lib/foo/bar.dart") is True
 
     def test_prefix_not_string_startswith(self):
-        assert track_conflicts._files_intersect("lib/foo", "lib/foobar.dart") is False
+        assert file_conflict.files_intersect("lib/foo", "lib/foobar.dart") is False
 
     def test_disjoint_paths_no_match(self):
-        assert track_conflicts._files_intersect("lib/a.dart", "lib/b.dart") is False
+        assert file_conflict.files_intersect("lib/a.dart", "lib/b.dart") is False
 
 
 class TestFindNearestTestsDir:
@@ -87,7 +82,7 @@ class TestFindNearestTestsDir:
         (tmp_path / "ticket_system" / "commands").mkdir(parents=True)
         (tmp_path / "ticket_system" / "tests").mkdir(parents=True)
 
-        result = track_conflicts._find_nearest_tests_dir(
+        result = file_conflict.find_nearest_tests_dir(
             "ticket_system/commands/track_conflicts.py", tmp_path
         )
         assert str(result) == "ticket_system/tests"
@@ -97,12 +92,12 @@ class TestFindNearestTestsDir:
         (tmp_path / "hooks").mkdir(parents=True)
         (tmp_path / "hooks" / "tests").mkdir(parents=True)
 
-        result = track_conflicts._find_nearest_tests_dir("hooks/some_hook.py", tmp_path)
+        result = file_conflict.find_nearest_tests_dir("hooks/some_hook.py", tmp_path)
         assert str(result) == "hooks/tests"
 
     def test_no_tests_dir_anywhere_returns_none(self, tmp_path):
         (tmp_path / "pkg" / "commands").mkdir(parents=True)
-        result = track_conflicts._find_nearest_tests_dir(
+        result = file_conflict.find_nearest_tests_dir(
             "pkg/commands/foo.py", tmp_path
         )
         assert result is None
@@ -110,15 +105,15 @@ class TestFindNearestTestsDir:
 
 class TestDeriveTestCandidates:
     def test_dart_lib_derives_test_dart(self):
-        candidates = track_conflicts._derive_test_candidates("lib/domain/foo.dart")
+        candidates = file_conflict.derive_test_candidates("lib/domain/foo.dart")
         assert "test/domain/foo_test.dart" in candidates
 
     def test_python_module_derives_real_package_root_tests_dir(self, tmp_path):
-        """審查修正：tests/ 是套件根兄弟層，非模組同層子目錄。"""
+        """tests/ 是套件根兄弟層，非模組同層子目錄。"""
         (tmp_path / "ticket_system" / "commands").mkdir(parents=True)
         (tmp_path / "ticket_system" / "tests").mkdir(parents=True)
 
-        candidates = track_conflicts._derive_test_candidates(
+        candidates = file_conflict.derive_test_candidates(
             "ticket_system/commands/track_conflicts.py", tmp_path
         )
         assert "ticket_system/tests/test_track_conflicts.py" in candidates
@@ -127,31 +122,31 @@ class TestDeriveTestCandidates:
 
     def test_python_module_without_project_root_no_candidate(self):
         """project_root 為 None 時無法驗證真實目錄結構，不猜測候選。"""
-        candidates = track_conflicts._derive_test_candidates(
+        candidates = file_conflict.derive_test_candidates(
             "ticket_system/commands/track_conflicts.py"
         )
         assert candidates == []
 
     def test_python_module_no_real_tests_dir_no_candidate(self, tmp_path):
         (tmp_path / "pkg" / "commands").mkdir(parents=True)
-        candidates = track_conflicts._derive_test_candidates(
+        candidates = file_conflict.derive_test_candidates(
             "pkg/commands/foo.py", tmp_path
         )
         assert candidates == []
 
     def test_existing_test_file_no_derivation(self, tmp_path):
-        candidates = track_conflicts._derive_test_candidates(
+        candidates = file_conflict.derive_test_candidates(
             "ticket_system/tests/test_track_conflicts.py", tmp_path
         )
         assert candidates == []
 
     def test_conftest_no_derivation(self, tmp_path):
-        assert track_conflicts._derive_test_candidates(
+        assert file_conflict.derive_test_candidates(
             "ticket_system/tests/conftest.py", tmp_path
         ) == []
 
     def test_unrecognized_extension_no_derivation(self):
-        assert track_conflicts._derive_test_candidates("README.md") == []
+        assert file_conflict.derive_test_candidates("README.md") == []
 
 
 class TestFindConflicts:
@@ -208,6 +203,18 @@ class TestFindConflicts:
 
 
 class TestCrossCheckRegistry:
+    """registry/票面兩源不一致的交叉比對。
+
+    `_fresh_registry()` 手工建構的 `files` 欄位對應真實 production 產生
+    路徑（`.claude/lib/pm_registry.recompute_lease()`，經 lease
+    claim/complete/release/reclaim 呼叫寫入；registry contract v2 審查
+    後改為 tickets 的 derived-union replace 物化值，非獨立累積狀態）。
+    此類別涵蓋的不一致情境（registry.files 與票面 where.files 無交集）
+    在此寫入端落地前無法在 production 出現（registry.files 恆空，本類別
+    測試的分支曾是死路徑）；落地後為真實可達路徑，已用重現實驗驗證
+    （claim -> 票面改動 -> cross_check_registry 觸發警告 -> 重跑 claim ->
+    警告消失，見 ANA 分析票）。"""
+
     def test_mismatch_produces_warning(self):
         tickets = [_ticket("A", "in_progress", ["lib/foo.dart"])]
         registry = _fresh_registry("s1", ["A"], ["lib/other.dart"])
@@ -218,7 +225,7 @@ class TestCrossCheckRegistry:
         assert "A" in warnings[0]
 
     def test_warning_includes_consequence_and_next_step(self):
-        """審查修正：stderr 警告需含後果與下一步指引，非純事實陳述。"""
+        """stderr 警告需含後果與下一步指引，非純事實陳述。"""
         tickets = [_ticket("A", "in_progress", ["lib/foo.dart"])]
         registry = _fresh_registry("s1", ["A"], ["lib/other.dart"])
         warnings = track_conflicts.cross_check_registry(
@@ -249,7 +256,7 @@ class TestCrossCheckRegistry:
         ) == []
 
     def test_stale_session_excluded_from_cross_check(self):
-        """審查修正：STALE session 的宣告不應觸發誤報。"""
+        """STALE session 的宣告不應觸發誤報。"""
         tickets = [_ticket("A", "in_progress", ["lib/foo.dart"])]
         registry = _stale_registry("s1", ["A"], ["lib/other.dart"])
         assert track_conflicts.cross_check_registry(
@@ -262,6 +269,7 @@ class TestExecuteConflicts:
         args = Namespace(version="9.9.9", all=False, format="table")
         with patch.object(track_conflicts, "_gather_tickets", return_value=[]), \
              patch.object(track_conflicts, "get_project_root", return_value=Path("/proj")), \
+             patch.object(track_conflicts, "current_project_root", return_value="/proj"), \
              patch.object(track_conflicts, "load_registry", return_value={"sessions": {}}):
             rc = track_conflicts.execute_conflicts(args)
         assert rc == 0
@@ -275,6 +283,7 @@ class TestExecuteConflicts:
         args = Namespace(version="9.9.9", all=False, format="table")
         with patch.object(track_conflicts, "_gather_tickets", return_value=tickets), \
              patch.object(track_conflicts, "get_project_root", return_value=Path("/proj")), \
+             patch.object(track_conflicts, "current_project_root", return_value="/proj"), \
              patch.object(track_conflicts, "load_registry", return_value={"sessions": {}}):
             rc = track_conflicts.execute_conflicts(args)
         assert rc == 1
@@ -287,6 +296,7 @@ class TestExecuteConflicts:
         args = Namespace(version="9.9.9", all=False, format="table", _now=NOW)
         with patch.object(track_conflicts, "_gather_tickets", return_value=tickets), \
              patch.object(track_conflicts, "get_project_root", return_value=Path("/proj")), \
+             patch.object(track_conflicts, "current_project_root", return_value="/proj"), \
              patch.object(track_conflicts, "load_registry", return_value=registry):
             rc = track_conflicts.execute_conflicts(args)
         assert rc == 0
@@ -294,12 +304,13 @@ class TestExecuteConflicts:
         assert "宣告不一致" in err
 
     def test_stale_registry_entry_produces_no_warning(self, capsys):
-        """審查修正端到端驗證：STALE session 的宣告不誤觸發 stderr 警告。"""
+        """端到端驗證：STALE session 的宣告不誤觸發 stderr 警告。"""
         tickets = [_ticket("A", "in_progress", ["lib/foo.dart"])]
         registry = _stale_registry("s1", ["A"], ["lib/other.dart"])
         args = Namespace(version="9.9.9", all=False, format="table", _now=NOW)
         with patch.object(track_conflicts, "_gather_tickets", return_value=tickets), \
              patch.object(track_conflicts, "get_project_root", return_value=Path("/proj")), \
+             patch.object(track_conflicts, "current_project_root", return_value="/proj"), \
              patch.object(track_conflicts, "load_registry", return_value=registry):
             rc = track_conflicts.execute_conflicts(args)
         assert rc == 0
@@ -313,6 +324,7 @@ class TestExecuteConflicts:
         args = Namespace(version="9.9.9", all=False, format="json")
         with patch.object(track_conflicts, "_gather_tickets", return_value=tickets), \
              patch.object(track_conflicts, "get_project_root", return_value=Path("/proj")), \
+             patch.object(track_conflicts, "current_project_root", return_value="/proj"), \
              patch.object(track_conflicts, "load_registry", return_value={"sessions": {}}):
             rc = track_conflicts.execute_conflicts(args)
         assert rc == 1
@@ -320,3 +332,23 @@ class TestExecuteConflicts:
         assert "conflicts" in payload
         assert len(payload["conflicts"]) == 1
         assert payload["conflicts"][0]["ticket_a"] == "A"
+
+    def test_registry_project_root_uses_git_toplevel_not_paths_helper(self, capsys):
+        """0.2.1-W3-584 回歸：registry 比對鍵須用 current_project_root（純
+        git-toplevel），不可與 find_conflicts 共用 get_project_root()（其
+        CLAUDE_PROJECT_DIR 優先序可能與 git toplevel 不同）。刻意讓兩者
+        回傳不同值，驗證 cross_check_registry 收到的是 current_project_root
+        的值（"/git-toplevel"），而非 get_project_root() 的值（"/env-dir"）。
+        """
+        tickets = [_ticket("A", "in_progress", ["lib/foo.dart"])]
+        registry = _fresh_registry("s1", ["A"], ["lib/other.dart"])
+        registry["sessions"]["s1"]["project"] = "/git-toplevel"
+        args = Namespace(version="9.9.9", all=False, format="table", _now=NOW)
+        with patch.object(track_conflicts, "_gather_tickets", return_value=tickets), \
+             patch.object(track_conflicts, "get_project_root", return_value=Path("/env-dir")), \
+             patch.object(track_conflicts, "current_project_root", return_value="/git-toplevel"), \
+             patch.object(track_conflicts, "load_registry", return_value=registry):
+            rc = track_conflicts.execute_conflicts(args)
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "宣告不一致" in err

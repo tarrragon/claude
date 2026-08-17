@@ -439,6 +439,11 @@ class TrackMessages:
     ARG_STATUS = "篩選狀態（pending/in_progress/completed/blocked，支援多個值）"
     ARG_FORMAT = "輸出格式（table/ids/yaml，預設 table）"
     ARG_ALL = "顯示所有任務（包含已完成）"
+    # ARG_ALL_COMPAT 與 ARG_ALL 語意不同，不可混用：ARG_ALL 是 board --all
+    # 的實際行為旗標；ARG_ALL_COMPAT 是版本聚合命令（activity/conflicts/
+    # onboard/stale-list/stuck-anas）的相容保留旗標，與預設行為（掃描全部
+    # active 版本）無差異，僅供舊呼叫端相容，本身無作用。
+    ARG_ALL_COMPAT = "無作用旗標：預設即掃描全部 active 版本；如需限縮請用 --version"
 
     # create 命令參數 help 文字
     ARG_CREATE_ACTION = (

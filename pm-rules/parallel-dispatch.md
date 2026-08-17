@@ -145,6 +145,22 @@ dispatch-plan 欄位以 `.claude/references/agent-dispatch-template.md` 為準�
 
 > 完整根因、觸發案例與方案比較：`.claude/error-patterns/process-compliance/PC-092-parallel-agents-git-index-race.md`
 
+### 即時生效工具源碼的共享樹編輯紀律（強制，PC-BAL-041）
+
+cwd-resolving 即時生效的工具（ticket/doc/worktree 等 shim CLI 套件源碼、hook 共用 lib）在共享 working tree 上被編輯時，每個未 commit 的不一致中間態都會即時暴露給全部並行執行體——暴露面沿模組載入鏈放大（CLI 入口 → 業務 lib → 底層 lib，編輯越深層影響越廣）。
+
+**Why**：此類工具無安裝版本緩衝，「import 已改、呼叫點未跟上」的跨 edit 窗口會使並行執行體的任何工具呼叫崩潰於 NameError/ImportError；且崩潰常發生在主狀態已寫入之後，非 0 exit code 誘發錯誤重試。**Consequence**：單 session 已實證兩例（不同執行體、不同模組、同一根因）。**Action**：
+
+| 條款 | 要求 |
+|------|------|
+| 原子替換節奏 | import 變更與呼叫點變更同一個 Edit 完成；跨 edit 序列的每個中間態須通過 smoke import 才可續行 |
+| 可停中繼點 | 以「測試綠燈或 smoke import 通過」為 commit / 暫停的合法節點，禁止在不可 import 態離手 |
+| 派發 prompt 必含 | 觸及此類源碼的派發，prompt 明文載入本節奏要求 |
+| 事發處置 | 編輯者最優先恢復可 import 並通知解除迴避；崩潰呼叫端以查詢命令核對主狀態，勿盲目重試 |
+| 升級 trigger | 同型事故第三例 → 「編輯即時生效工具源碼的 IMP」升級為 worktree 強制隔離（風險分級表補列） |
+
+> 完整案例與方案取捨（shim pin 不採理由）：`.claude/error-patterns/process-compliance/PC-BAL-041-live-tool-source-edit-bare-window.md`
+
 ### worktree 實作 agent 禁用 dart MCP 寫入工具（強制，W3-008）
 
 > **來源**：W3-008 — worktree 隔離對 daemon-rooted 寫入工具不生效（dart MCP daemon 的 analysis root 在 session 啟動時綁定主 repo，worktree 派發只改 shell cwd，無法切換 daemon root），dart MCP 寫入會繞過隔離邊界洩漏到主 repo。

@@ -24,6 +24,7 @@ from datetime import date, datetime
 from typing import Dict, List, Optional
 
 from ticket_system.constants import STATUS_IN_PROGRESS, STATUS_PENDING
+from ticket_system.lib.command_tracking_messages import TrackMessages
 from ticket_system.lib.staleness import (
     LEVEL_CRITICAL,
     LEVEL_INFO,
@@ -138,9 +139,9 @@ def _collect_stale_in_progress(
 
 
 def _gather_tickets(
-    explicit_version: Optional[str], all_versions: bool
+    explicit_version: Optional[str],
 ) -> List[Dict]:
-    """依 --version / --all / 自動 active 版本收集 ticket。"""
+    """依 --version / 自動 active 版本收集 ticket。"""
     if explicit_version:
         versions = [explicit_version]
     else:
@@ -225,14 +226,13 @@ def execute_stale_list(args: argparse.Namespace) -> int:
     """執行 track stale-list 命令。"""
     threshold = getattr(args, "threshold", "warning") or "warning"
     wave = getattr(args, "wave", None)
-    all_versions = bool(getattr(args, "all", False))
     explicit_version = getattr(args, "version", None)
     fmt = getattr(args, "format", "table") or "table"
     today_override = getattr(args, "_today", None)  # 測試用 hook
     today = today_override or date.today()
     now_override = getattr(args, "_now", None)  # 測試用 hook（in_progress 判定）
 
-    tickets = _gather_tickets(explicit_version, all_versions)
+    tickets = _gather_tickets(explicit_version)
     rows = _collect_stale(
         tickets, threshold=threshold, wave=wave, today=today
     )
@@ -282,12 +282,12 @@ def register_stale_list(
         "--all",
         action="store_true",
         default=False,
-        help="相容保留旗標：預設已掃描全部 active 版本，本旗標目前與預設行為無差異",
+        help=TrackMessages.ARG_ALL_COMPAT,
     )
     p.add_argument(
         "--version",
         default=None,
-        help="指定版本（覆蓋自動偵測；與 --all 互斥）",
+        help="指定版本（覆蓋自動偵測）",
     )
     p.add_argument(
         "--format",

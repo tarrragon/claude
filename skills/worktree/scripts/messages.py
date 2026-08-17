@@ -60,6 +60,29 @@ class CreateMessages:
     TICKET_FILE_NOT_FOUND = "[警告] 找不到 Ticket 檔案：{path}"
     TICKET_FILE_PARSE_ERROR = "[警告] 解析 Ticket 檔案失敗：{error}"
 
+    # main baseline 同步（issue #77 決議 A：worktree 建立後確定性 merge main，
+    # 消除 base 解析與 worktree 可用之間，其他 worktree 併行推進 main 的競態視窗）
+    MAIN_MERGE_HEADER = "正在同步最新 {base}..."
+    MAIN_MERGE_UP_TO_DATE = "{base} 無新變更，worktree 已是最新。"
+    MAIN_MERGE_SUCCESS = "已合併 {base}，worktree 為最新狀態。"
+    MAIN_MERGE_CONFLICT = (
+        "[阻擋] 合併 {base} 發生衝突，worktree 需要人工處理才能安全使用。\n\n"
+        "衝突詳情：\n{output}\n\n"
+        "請手動處理：\n"
+        "  cd {worktree_path}\n"
+        "  git status              # 檢視衝突檔案\n"
+        "  # 編輯解決衝突後：\n"
+        "  git add <file>\n"
+        "  git commit\n\n"
+        "或放棄本次合併：\n"
+        "  cd {worktree_path} && git merge --abort"
+    )
+    MAIN_MERGE_FAILED = (
+        "[警告] 合併 {base} 失敗：{error}\n"
+        "請手動檢查 worktree 狀態：\n"
+        "  cd {worktree_path} && git status"
+    )
+
 
 class CleanupMessages:
     """cleanup 子命令訊息常數"""

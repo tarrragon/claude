@@ -34,6 +34,7 @@ from lib.hook_ticket import (
     extract_where_files_from_frontmatter,
     scan_ticket_files_by_version,
 )
+from lib.ticket_id_pattern import MATCH_GROUPED_STR
 
 
 # ============================================================================
@@ -49,8 +50,8 @@ DEFAULT_OUTPUT = {
     }
 }
 
-# Ticket ID 正則表達式（符合規範格式）
-TICKET_ID_PATTERN = r"(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)"
+# Ticket ID 正則表達式（符合規範格式；SSOT：lib.ticket_id_pattern.MATCH_GROUPED_STR）
+TICKET_ID_PATTERN = MATCH_GROUPED_STR
 
 # 訊息常數
 MSG_WARNING_HEADER = "============================================================"

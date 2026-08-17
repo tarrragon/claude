@@ -125,6 +125,11 @@ def _write_state(project_root: Path, state: Dict) -> None:
     查詢路徑）任何時刻看到的檔案內容只會是完整的舊版或完整的新版，不會
     讀到半寫的中間狀態（torn write）。取代原先的 write_text 直寫（在同一
     檔案系統內非原子，寫入中途崩潰或讀端時間點不巧會讀到截斷/空內容）。
+
+    fsync 失敗不阻斷寫入（os.replace 的原子替換保證仍成立，fsync 只是
+    加強持久性——斷電情境下少一層保障，非功能性錯誤），但需可觀測（規則
+    4）：寫 stderr 一筆提示，比照本模組 `_read_state` 既有的 stderr 通知
+    慣例（本模組無 logger 參數貫穿全公開 API，不新增此依賴面）。
     """
     state_file = get_state_file_path(project_root)
     state_file.parent.mkdir(parents=True, exist_ok=True)
@@ -138,8 +143,12 @@ def _write_state(project_root: Path, state: Dict) -> None:
             f.flush()
             try:
                 os.fsync(f.fileno())
-            except OSError:
-                pass
+            except OSError as e:
+                print(
+                    f"[dispatch_tracker] _write_state: fsync 失敗（不影響本次寫入，"
+                    f"僅持久性保障降級） ({tmp_path}): {e}",
+                    file=sys.stderr,
+                )
         os.replace(tmp_path, state_file)
     except OSError:
         if tmp_path.exists():

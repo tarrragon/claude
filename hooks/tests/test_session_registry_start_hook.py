@@ -13,6 +13,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from lib import ENV_SESSION_ID
+
 hooks_path = Path(__file__).parent.parent
 hook_file = hooks_path / "session-registry-start-hook.py"
 spec = importlib.util.spec_from_file_location("session_registry_start_hook", hook_file)
@@ -21,19 +23,8 @@ spec.loader.exec_module(hook)
 
 EXIT_SUCCESS = hook.EXIT_SUCCESS
 
-
-class TestResolveSessionId:
-    def test_prefers_stdin_session_id(self, monkeypatch):
-        monkeypatch.setenv(hook.ENV_SESSION_ID, "env-session")
-        assert hook.resolve_session_id({"session_id": "stdin-session"}) == "stdin-session"
-
-    def test_falls_back_to_env_var(self, monkeypatch):
-        monkeypatch.setenv(hook.ENV_SESSION_ID, "env-session")
-        assert hook.resolve_session_id({}) == "env-session"
-
-    def test_none_input_and_no_env_returns_empty(self, monkeypatch):
-        monkeypatch.delenv(hook.ENV_SESSION_ID, raising=False)
-        assert hook.resolve_session_id(None) == ""
+# resolve_session_id 本體測試已收斂至 lib 單一定義，見
+# test_hook_logging_session_id.py；本檔不再重複測（0.2.1-W3-560 DRY 下沉）。
 
 
 class TestMain:
@@ -69,7 +60,7 @@ class TestMain:
         mock_register.assert_not_called()
 
     def test_missing_session_id_skips_registration(self, monkeypatch, capsys):
-        monkeypatch.delenv(hook.ENV_SESSION_ID, raising=False)
+        monkeypatch.delenv(ENV_SESSION_ID, raising=False)
         result, mock_register = self._run({}, subagent=False)
         assert result == EXIT_SUCCESS
         mock_register.assert_not_called()

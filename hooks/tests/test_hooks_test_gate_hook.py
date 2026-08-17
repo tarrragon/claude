@@ -91,11 +91,55 @@ class TestTouchedHookFilenames:
         monkeypatch.setattr(
             hook_module,
             "run_git_command",
-            lambda *a, **k: (True, ".claude/hooks/tests/test_foo.py\n.claude/hooks/bar-hook.py"),
+            lambda *a, **k: (
+                True,
+                "M\t.claude/hooks/tests/test_foo.py\nM\t.claude/hooks/bar-hook.py",
+            ),
         )
         logger = MagicMock()
         result = hook_module._touched_hook_filenames("git commit -m x", "/repo", logger)
         assert result == {"bar-hook.py"}
+
+    def test_deleted_hook_excluded(self, monkeypatch):
+        """已刪除（status D）的 hook 檔不存在，不採計為觸及檔案，避免對
+        已刪除路徑誤報「未受測試保護」。"""
+        monkeypatch.setattr(
+            hook_module,
+            "run_git_command",
+            lambda *a, **k: (True, "D\t.claude/hooks/removed-hook.py"),
+        )
+        logger = MagicMock()
+        result = hook_module._touched_hook_filenames("git commit -m x", "/repo", logger)
+        assert result == set()
+
+    def test_renamed_hook_uses_new_path_only(self, monkeypatch):
+        """已改名（status R）僅新路徑採計，舊路徑不出現在結果中。"""
+        monkeypatch.setattr(
+            hook_module,
+            "run_git_command",
+            lambda *a, **k: (
+                True,
+                "R100\t.claude/hooks/old-hook.py\t.claude/hooks/new-hook.py",
+            ),
+        )
+        logger = MagicMock()
+        result = hook_module._touched_hook_filenames("git commit -m x", "/repo", logger)
+        assert result == {"new-hook.py"}
+        assert "old-hook.py" not in result
+
+    def test_mixed_deleted_and_modified(self, monkeypatch):
+        """同一次 commit 混合刪除與修改：僅修改的檔案採計。"""
+        monkeypatch.setattr(
+            hook_module,
+            "run_git_command",
+            lambda *a, **k: (
+                True,
+                "D\t.claude/hooks/removed-hook.py\nM\t.claude/hooks/kept-hook.py",
+            ),
+        )
+        logger = MagicMock()
+        result = hook_module._touched_hook_filenames("git commit -m x", "/repo", logger)
+        assert result == {"kept-hook.py"}
 
     def test_literal_path_ignored_outside_add_or_pathspec_position(self, monkeypatch):
         """0.2.1-W3-191 acceptance 3：字面提及來源限定於 git add 或 commit
@@ -149,7 +193,7 @@ class TestMainIntegration:
 
     def test_commit_without_touching_hooks_allows(self, monkeypatch):
         monkeypatch.setattr(
-            hook_module, "run_git_command", lambda *a, **k: (True, "README.md")
+            hook_module, "run_git_command", lambda *a, **k: (True, "M\tREADME.md")
         )
         exit_code, captured = _run_main(
             monkeypatch,
@@ -171,7 +215,7 @@ class TestMainIntegration:
         monkeypatch.setattr(
             hook_module,
             "run_git_command",
-            lambda *a, **k: (True, ".claude/hooks/foo-hook.py"),
+            lambda *a, **k: (True, "M\t.claude/hooks/foo-hook.py"),
         )
         monkeypatch.setattr(
             hook_module, "_run_pytest", lambda test_paths, hooks_dir, logger: (True, "1 passed")
@@ -194,7 +238,7 @@ class TestMainIntegration:
         monkeypatch.setattr(
             hook_module,
             "run_git_command",
-            lambda *a, **k: (True, ".claude/hooks/foo-hook.py"),
+            lambda *a, **k: (True, "M\t.claude/hooks/foo-hook.py"),
         )
         monkeypatch.setattr(
             hook_module,
@@ -224,7 +268,7 @@ class TestMainIntegration:
         monkeypatch.setattr(
             hook_module,
             "run_git_command",
-            lambda *a, **k: (True, ".claude/hooks/untested-hook.py"),
+            lambda *a, **k: (True, "M\t.claude/hooks/untested-hook.py"),
         )
 
         exit_code, captured = _run_main(
@@ -283,13 +327,36 @@ class TestMainIntegration:
         assert captured == []
         assert called["n"] == 0  # 未真正判定為 commit，未執行 git diff
 
+    def test_commit_deleting_hook_does_not_remind(self, monkeypatch, tmp_path):
+        """已刪除的 hook 檔（`git rm` 後 staged 為 D）commit 時，不應觸發
+        「未受測試保護」提醒——該 hook 已不存在，無測試對應可言。
+        （W3-565 落地時實測誤報：session-registry-stop-hook.py 被 git rm，
+        commit 時仍誤報為觸及但無對應測試）"""
+        hooks_dir = tmp_path / ".claude" / "hooks"
+        tests_dir = hooks_dir / "tests"
+        tests_dir.mkdir(parents=True)
+
+        monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
+        monkeypatch.setattr(
+            hook_module,
+            "run_git_command",
+            lambda *a, **k: (True, "D\t.claude/hooks/removed-hook.py"),
+        )
+
+        exit_code, captured = _run_main(
+            monkeypatch,
+            {"tool_name": "Bash", "tool_input": {"command": 'git commit -m "remove"'}},
+        )
+        assert exit_code == 0
+        assert captured == []
+
     def test_cross_repo_commit_skipped(self, monkeypatch, tmp_path):
         monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
         called = {"n": 0}
 
         def _fake_run_git_command(*a, **k):
             called["n"] += 1
-            return True, ".claude/hooks/foo-hook.py"
+            return True, "M\t.claude/hooks/foo-hook.py"
 
         monkeypatch.setattr(hook_module, "run_git_command", _fake_run_git_command)
 

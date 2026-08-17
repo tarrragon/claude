@@ -155,6 +155,8 @@ ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"  # 建�
 | `track dashboard`   | PM 接手聚合視圖（W10-114） | `ticket track dashboard --top 5`                                           |
 | `track list`        | 預設 top 10 priority 排序（W10-115） | `ticket track list --status pending --top 20`                  |
 | `track td-status`   | TD 清單校準（PC-094）      | `ticket track td-status 0.18.0-W10-017`                                    |
+| `track reclaim`     | 已鎖 ticket 受控釋放（ghost 鑑識三查，multi-PM Phase 3） | `ticket track reclaim 0.2.1-W3-100 --confirm` <!-- rule8-exempt: illustration:子命令總覽表範例欄的示意 ticket ID，非本專案實際票 --> |
+| `track stuck-anas`  | 列出卡住的 ANA（in_progress 且 spawned 全 completed，W17-008.15） | `ticket track stuck-anas --wave 3`         |
 | `track depth`       | 查詢嵌套深度與 can_descend（W1-056.8，沿 parent_id 鏈） | `ticket track depth 1.0.0-W1-056.5`                          |
 | `track parallel-check` | 偵測子任務/兄弟 ticket 檔案衝突（W17-203.1，對齊 askuserquestion-rules 規則 7） | `ticket track parallel-check 0.18.0-W17-203` |
 | `track dispatch-validate` | Context Bundle 自動填料合理性檢查（W17-003，C 方案安全網；exit 0=pass / 1=軟警告 / 2=硬失敗或 IO 錯誤；**與 dispatch-check 的 exit code 語意不共享**，需以命令名稱判別） | `ticket track dispatch-validate 0.18.0-W17-003` |
@@ -259,7 +261,7 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 1.0.0-W28-0
 
 ### track - 追蹤和更新 Ticket 狀態
 
-包含 READ 操作（summary/query/version/tree/chain/deps/full/log/list/board/agent/5W1H/validate/**runqueue**/**dashboard**/stale-list/td-status）和 UPDATE 操作（claim/complete/release/set-who/set-what/set-when/set-where/set-why/set-how/phase/check-acceptance/set-acceptance/append-log/add-child/batch-claim/batch-complete/audit/accept-creation）。`list` 支援 `--wave`、`--status`、`--format`、`--top`、`--all` 篩選參數（W10-115 預設 `--top 10`，priority 排序）。
+包含 READ 操作（summary/query/version/tree/chain/deps/full/log/list/board/agent/5W1H/validate/**runqueue**/**dashboard**/stale-list/td-status/stuck-anas）和 UPDATE 操作（claim/complete/release/reclaim/set-who/set-what/set-when/set-where/set-why/set-how/phase/check-acceptance/set-acceptance/append-log/add-child/batch-claim/batch-complete/audit/accept-creation）。`list` 支援 `--wave`、`--status`、`--format`、`--top`、`--all` 篩選參數（W10-115 預設 `--top 10`，priority 排序）。
 
 > **Scheduler — `runqueue`**（W17-011.1）：回答「下一個該做哪個 ticket」。Linux schedule()/runqueue/top/ps 類比。合併原 next+schedule+resume-hint 為單一命令。
 >
@@ -267,9 +269,10 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 1.0.0-W28-0
 > ticket track runqueue --wave 17                    # 可執行清單（blockedBy=[] pending，priority 排序）
 > ticket track runqueue --wave 17 --format=dag       # 完整 DAG + 關鍵路徑高亮
 > ticket track runqueue --context=resume --top 3     # 與 handoff/pending 交集（接手建議）
+> ticket track runqueue --wave 17 --groups           # 依 where.files 交集切分可並行/序列群組（優先於 --format，multi-PM Phase 3）
 > ```
 >
-> 新 session 啟動時 `session-start-scheduler-hint-hook` 自動呼叫 `runqueue --context=resume`，結果以 hook additionalContext 顯示。PM 迷失方向時優先執行，免靠記憶判斷先後順序。詳見 `references/track-command.md`「track runqueue 子命令」章節。
+> 新 session 啟動時 `session-start-scheduler-hint-hook` 自動呼叫 `runqueue --context=resume`，結果以 hook additionalContext 顯示。PM 迷失方向時優先執行，免靠記憶判斷先後順序。清單項可能疊加 `[STALE]`（票面 `started_at` 判定久未更新）與 `[RECLAIMABLE]`（registry 判定持有者 session 已死，僅輕量 heartbeat 判準，非 `reclaim` 實際放行判定）兩種並列標記。詳見 `references/track-command.md`「track runqueue 子命令」章節。
 
 > **Dashboard — `dashboard`**（W10-114 / W10-113 M1+M4'）：PM 接手新 session 的聚合視圖。一次回傳 `[In Progress]` + `[Ready Top N]` + `[Stale Warning]` 三章節，Ready 章節含可直接 claim 的編號 `[1] [2] [3]` 與 priority 標籤，免拼 ID。
 >
@@ -325,6 +328,15 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 1.0.0-W28-0
 >
 > 輸出分三組：`[已處理]` / `[無需處理]` / `[仍待處理]`，pending TD 會附 PC-094 校準提示，建議於 body 標註或在 commit 訊息引用 TD 編號。呼叫時機：Phase 3a 策略文件完成後、Phase 3b commit 前、Phase 4 派發前。詳見 `.claude/pm-rules/tech-debt.md`「TD 清單即時校準（td-status）」章節。
 
+> **受控釋放已鎖 Ticket — `reclaim`**（multi-PM 協調層 Phase 3，issue tarrragon/claude#77）：`claim` 永不過期，PM session 崩潰後持票永久鎖死；`reclaim` 提供強制 ghost 鑑識三查（未合併分支 / 髒檔交集 / 缺 Exit Status）後的受控釋放路徑，任一查命中或無法判定即拒絕。
+>
+> ```bash
+> ticket track reclaim 0.2.1-W3-100              # dry-run：僅印鑑識報告
+> ticket track reclaim 0.2.1-W3-100 --confirm     # 三查全過才轉回 pending 並清 lease
+> ```
+>
+> **設計取捨**：真正硬崩潰的 session 幾乎必觸發三查其一（來不及寫 Exit Status），`--confirm` 對這類票持續拒絕是刻意的保守設計，非功能故障。`sessions` 的 `reclaimable` 欄與 `runqueue` 的 `[RECLAIMABLE]` 標記僅為輕量 heartbeat 判準（列表級粗篩候選），與本命令的 ghost 鑑識三查（逐票精確判定）是兩層判定，粗篩顯示候選不保證 `--confirm` 會放行。詳見 `references/track-command.md`「track reclaim 子命令」章節。
+
 > **注意**：`complete` 在父 ticket 含未完成 children（非 terminal：pending / in_progress / blocked）時會以 exit 1 阻擋（W11-003.2）。提供 `--force` 旁路強制完成，會在 stderr 列出未完成 children 作為警告，cascade 解鎖機制仍會執行。建議優先完成 children 後再 complete 父 ticket。
 >
 > **注意**：5W1H 欄位由 `set-who` ~ `set-how` 6 個命令更新。`blockedBy` 用 `set-blocked-by`、`relatedTo` 用 `set-related-to`（均支援 `--add`/`--remove`）、`priority` 用 `set-priority`。其餘 frontmatter 欄位無 CLI 命令，需手動編輯 frontmatter。完整對照表見 `references/track-command.md`。
@@ -338,6 +350,8 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 1.0.0-W28-0
 > **注意**：`check-acceptance` 只接受**單一** index（如 `1`）或 `--all`；不支援 `1 2 3` 多索引。一次勾選多項請改用 `set-acceptance --check 1 2 3`。先用 `ticket track query <id>` 查看驗收條件清單和編號。詳見 `references/track-command.md`「驗收條件操作詳解」（含決策樹 + 5 常見錯誤）。
 >
 > **注意**：`set-acceptance` 是 `check-acceptance` 的明確語意版（：`--check <index>` / `--uncheck <index>`（可多個）、`--all-check` / `--all-uncheck`。禁止 subagent 直接 Edit frontmatter 的 acceptance 欄位。
+>
+> **建票後修訂（`--add`/`--edit`/`--remove`）**：`set-acceptance` 額外支援建票後修訂 acceptance 條目本身（非僅勾選狀態）——`--add <text>`（可多個）追加條目，預設未勾選；`--edit <index> <text>`（可重複指定多組）覆寫指定 index 的文字，原勾選狀態不變；`--remove <index>`（可多個）移除條目，其餘條目依原內容正確對位不漂移。三者與 `--check`/`--uncheck`/`--all-check`/`--all-uncheck` 互斥（每次呼叫僅能指定一種模式）。**已勾選（`[x]`）條目移除須另加 `--force`**（防止事後抹除驗收證據）；`completed` 票的任一子操作同樣受既有 status precondition 保護，需 `--force` 才能修訂。
 >
 > **注意**：`validate <id>` 驗證 Ticket frontmatter 4 關鍵欄位（status/completed_at/acceptance/who）合規性，違規時給出建議修復命令。
 >

@@ -41,7 +41,6 @@ Registry Schema 契約：見 .claude/lib/pm_registry.py 模組 docstring（SSOT�
   - Registry Schema 契約 v2（釋放時機/欄位/upsert 語意重議，同 issue）
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -54,21 +53,12 @@ from lib import (
     is_subagent_environment,
     get_project_root,
     run_hook_safely,
-    ENV_SESSION_ID,
+    resolve_session_id,
 )
 from lib.pm_registry import get_registry_paths, update_heartbeat
 
 HOOK_NAME = "session-registry-heartbeat-hook"
 EXIT_SUCCESS = 0
-
-
-def resolve_session_id(input_data) -> str:
-    """優先取 stdin session_id，缺失時 fallback CC runtime 環境變數。"""
-    if input_data:
-        sid = input_data.get("session_id")
-        if sid:
-            return sid
-    return os.environ.get(ENV_SESSION_ID, "")
 
 
 def main() -> int:
@@ -81,15 +71,22 @@ def main() -> int:
 
     session_id = resolve_session_id(input_data)
     if not session_id:
-        message = "[session-registry-heartbeat-hook] 無法取得 session_id，跳過心跳更新"
+        message = (
+            "[session-registry-heartbeat-hook] 無法取得 session_id，跳過心跳更新"
+            "（若持續發生，本 session 逾 30 分鐘後會被其他 session 判定為 STALE；"
+            "請檢查 CLAUDE_CODE_SESSION_ID 環境變數是否正常）"
+        )
         sys.stderr.write(message + "\n")
         logger.warning(message)
         return EXIT_SUCCESS
 
     project_root = get_project_root()
-    registry_paths = get_registry_paths(cwd=str(project_root))
+    registry_paths = get_registry_paths(cwd=str(project_root), logger=logger)
     if registry_paths is None:
-        message = "[session-registry-heartbeat-hook] 非 git 環境，跳過心跳更新"
+        message = (
+            "[session-registry-heartbeat-hook] 非 git 環境，跳過心跳更新"
+            "（跨 session 協調功能於此環境本不適用，無需處置）"
+        )
         sys.stderr.write(message + "\n")
         logger.info(message)
         return EXIT_SUCCESS
@@ -109,7 +106,10 @@ def main() -> int:
         else:
             logger.debug("heartbeat debounce 命中，跳過寫入: session_id=%s", session_id)
     except OSError as e:
-        message = "[session-registry-heartbeat-hook] heartbeat 更新失敗: {}".format(e)
+        message = (
+            "[session-registry-heartbeat-hook] heartbeat 更新失敗: {}"
+            "（本次心跳未寫入，下次 UserPromptSubmit 觸發時會重試，單次失敗通常無需處置）"
+        ).format(e)
         sys.stderr.write(message + "\n")
         logger.warning(message)
 

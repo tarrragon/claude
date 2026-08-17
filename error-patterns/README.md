@@ -154,6 +154,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | TEST-MON-001 | 硬編碼時間戳 fixture × 時間相對查詢窗 = clock 時間炸彈 | 高 | — |
 | TEST-MON-002 | TDD Phase 2 紅燈設計漏 handler/lifecycle 行為測試；GREEN agent confidence<1.0 是補洞訊號 | 中 | — |
 | TEST-SCLK-001 | 快取化建置使「零警告 / 無 X」類驗收成為空訊號 | — | — |
+| TEST-BAL-003 | 消費端先於生產端落地，測試以 production 不可能產生的輸入為其背書 | 高 | — |
 
 ### 文件 (DOC)
 
@@ -234,6 +235,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | CQ-005 | Mock 路徑未隨函式遷移同步更新 | 中 | v0.1.0 |
 | CQ-006 | 純工具函式定義在 commands/ 層阻礙複用 | 中 | v0.1.0 |
 | CQ-SCLK-001 | 程式碼宣告了實際不存在的保證（註解描述未實作的行為、註解描述不存在的對應、fallback 交出孤兒物件），且該落差不產生任何測試訊號 | 中 | — |
+| CQ-BAL-001 | 宣告旗標為無作用時只改文案，未刪承載它的死傳遞鏈 | 中 | — |
 
 ### 實作 (IMP)
 
@@ -604,6 +606,10 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-BAL-035 | 驗收條件措辭預先鎖死攔截點，AC 全綠掩蓋威脅事件未覆蓋 | 高 | — |
 | PC-BAL-036 | 規格宣稱的檢查語意與實作機制脫節，重讀規格文字無法揭露落差 | 高 | — |
 | PC-BAL-037 | 實驗結論被引為設計依據時未核對實驗涵蓋的失效模式範圍 | 中 | — |
+| PC-BAL-038 | 背景 agent 的純文字產出不送達主線程，idle 通知被誤讀為交付完成 | 高 | — |
+| PC-BAL-039 | 清查以符號自身為 grep 錨點，漏掉其他符號的描述中對它的引用 | 中 | — |
+| PC-BAL-040 | where.files 以模組入口檔近似宣告，漏列 AC 實際承載檔案 | 中 | — |
+| PC-BAL-041 | 共享 working tree 上編輯即時生效工具源碼的裸露中間態 | 高 | — |
 
 ---
 

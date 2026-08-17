@@ -79,6 +79,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
     from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
+    from lib.ticket_id_pattern import (
+        SEARCH_BOUNDED_RE as VERSIONED_TICKET_PATTERN,
+        BARE_BOTH_BOUNDED_RE as BARE_TICKET_PATTERN,
+    )
 except ImportError as e:
     print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
     sys.exit(0)
@@ -103,9 +107,7 @@ WHITELIST_PATHS = frozenset(
 TEST_DIR_SEGMENT = "/tests/"
 TEST_FILENAME_PATTERN = re.compile(r"^(test_.+\.py|.+_test\.py)$")
 
-# 專案 ticket ID 樣式
-VERSIONED_TICKET_PATTERN = re.compile(r"\b\d+\.\d+\.\d+-W\d+-\d+\b")
-BARE_TICKET_PATTERN = re.compile(r"\bW\d+-\d+\b")
+# 專案 ticket ID 樣式（SSOT：lib.ticket_id_pattern，import 時已別名為本名稱）
 
 # 放行例外樣式（框架內部識別符 / 外部平台版本 / 日期，規則 8 明文允許）
 FRAMEWORK_ERROR_PATTERN_ID = re.compile(r"\b(?:PC|IMP|ARCH)-\d+\b")
