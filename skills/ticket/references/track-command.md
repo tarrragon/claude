@@ -516,7 +516,7 @@ ticket track stale-list [--threshold {info,warning,critical,all}] \
 | `--threshold` | `warning` | `warning`=warning+critical / `info`=三級 / `all`=同 info / `critical`=僅 critical |
 | `--wave` | None | 僅列出指定 wave |
 | `--version` | None | 指定版本（覆蓋自動偵測 active 版本） |
-| `--all` | False | 跨所有 active 版本掃描 |
+| `--all` | False | 相容保留旗標：預設已掃描全部 active 版本，本旗標目前與預設行為無差異 |
 | `--format` | `table` | `table` / `ids`（每行一個 ID，適合 pipe） / `yaml` |
 
 ### 閾值定義
@@ -905,3 +905,130 @@ ticket track sessions [--format {table,json}]
 - 僅列 `project` 欄位等於當前 `git rev-parse --show-toplevel` 的 session（同專案篩選；git 不可用時不篩選，保留全部）
 - stale 判定閾值固定 30 分鐘（`STALE_THRESHOLD_MINUTES`），Phase 1 僅標記不做 reclaim
 - Registry Schema 契約 v1 為 hooks 與 CLI 兩職責共同 SSOT，本命令不得自行變更 schema
+
+---
+
+## track activity 子命令（multi-PM 協調層 Phase 2，L1 新鮮度）
+
+票面進度是事件驅動更新（claim/append-log/complete），事件間有 27-35 分鐘常態靜默窗口，靜默本身無法判斷「在做/卡住/session 已死」。`activity` 從既有副作用機械推導每張 `in_progress` 票的最後活動時間，把靜默從歧義降為可判定狀態。
+
+### 用法
+
+```bash
+ticket track activity [--version V] [--all] [--format {table,json}]
+```
+
+### 三源（取最新者，附來源標記）
+
+| 來源標記 | 說明 |
+|---------|------|
+| `md_mtime` | ticket md 檔案的磁碟 mtime |
+| `git_commit` | `git log --grep=<id>` 最後一筆 commit 的 committer 時間 |
+| `dirty_file` | working tree 髒檔命中該票 `where.files` 的歸屬，取命中檔案的磁碟 mtime |
+| `no-signal` | 三源皆缺（非錯誤，票剛 claim 尚無任何副作用時的正常狀態） |
+
+**父子票邊界**：父票 ID 可能恰為子票 ID 的字首子字串（如父票 ID 去掉 `.N` 尾綴後即為子票 ID）。`git log --grep` 加 `--fixed-strings`（避免點號被當正規表示式萬用字元），並在 Python 端逐一驗證候選 commit 的 subject 是否為「獨立引用」（命中後緊接 `.` + 數字視為子票引用而跳過），避免父票的 `git_commit` 訊號被子票的 commit 覆蓋；全數候選皆非獨立引用時該源視為缺（`no-signal` 候選之一，不影響其餘兩源）。
+
+### 輸出格式（table）
+
+```
+=== Ticket Activity (L1) ===
+  id            last_activity              source      agent
+  ---------------------------------------------------------------
+  0.2.1-W3-001  2026-08-18T10:00:00+00:00  git_commit  thyme-python-developer
+```
+
+### 設計約束
+
+- version-agnostic，預設已掃描全部 active 版本的 `in_progress` 票；`--all` 為相容保留旗標，目前與預設行為無差異
+- 髒檔路徑比對用 `PurePosixPath` 前綴判定，非 `string.startswith`（避免 `lib/foo` 誤命中 `lib/foobar.dart`）  <!-- skill-residue-exempt: 說明路徑比對規則的示意路徑，非本專案實際檔案 -->
+- git 呼叫一律經 `.claude/lib/git_utils.run_git_command`（已內建 `--no-optional-locks`，避免與並行 PM session 競爭 `.git/index.lock`），lazy import 比照 `track_hook_health.py` 的 `_find_claude_dir()` 模式
+- `attribute_dirty_files()` 為髒檔歸屬第三源的獨立輸出函式，供 `onboard` 命令複用，不重算最新活動時間
+
+---
+
+## track conflicts 子命令（multi-PM 協調層 Phase 2，where.files 交集）
+
+盲測實證：宣告 `where.files` 吻合度僅 3/10，七成 completed 票的實際 commit 超出宣告範圍，主導缺漏是「宣告實作檔、漏宣告伴生測試檔與關聯模組」。純宣告值交集判定的錯誤方向是 false negative（宣告互斥、實際相撞），`conflicts` 因此內建 impl→test 擴張啟發式，擴大偵測面。
+
+### 用法
+
+```bash
+ticket track conflicts [--version V] [--all] [--format {table,json}]
+```
+
+### 判定規則
+
+1. 兩兩比對 `pending`/`in_progress` 票的 `where.files`（原始宣告 + 啟發式衍生）
+2. 路徑交集用 `PurePosixPath` 前綴比對（精確相符或互為上層目錄），非 `string startswith`
+3. impl→test 擴張啟發式：對每個宣告檔案路徑額外推導可能的伴生測試檔路徑一併納入交集判定；目前覆蓋兩種慣例——Dart `lib/...` → `test/..._test.dart`（不查真實檔案系統）<!-- skill-residue-exempt: 描述推導慣例的模式示意，非本專案實際檔案 -->；Python `X.py` → 掃描真實檔案系統找出最近的 `tests/` 兄弟目錄（見「Python 測試路徑推導」），找不到真實 `tests/` 目錄時不衍生候選
+4. 與 pm-registry 的 `files` 欄位交叉比對：僅採 **FRESH session**（heartbeat 未逾 30 分鐘）的宣告，`in_progress` 票若與其認領 session 的 registry files 完全無交集，輸出 stderr 警告（不影響 exit code）；STALE session 的殘留宣告排除在外，避免死 session 舊宣告誤觸發警告。警告文字附後果與下一步：「衝突判定僅採 where.files；請校正票面宣告或重跑 claim」——說明本命令的判定基準只看票面宣告（不讀 registry），並指引兩種修正路徑
+5. `[heuristic]` 標記：衝突僅由擴張啟發式衍生路徑觸發（原始宣告值本身無交集）
+
+### Python 測試路徑推導
+
+本專案 `tests/` 目錄一律為套件根目錄的兄弟層（如 `ticket_system/tests/` 對應 `ticket_system/commands/`、`ticket_system/lib/` 等子目錄下的模組；`hooks/tests/` 對應 `hooks/` 下直接放置的檔案），並非緊鄰檔案自身目錄下的子目錄。啟發式逐層往上檢查每個祖先目錄是否有 `tests` 兄弟目錄實際存在於檔案系統，取最近（最深）一個；專案內找不到任何符合的 `tests/` 兄弟目錄時不猜測、不衍生候選。
+
+### Exit code
+
+| 值 | 說明 |
+|----|------|
+| 0 | 無衝突 |
+| 1 | 偵測到至少一組衝突（registry 警告不影響此判定） |
+
+### 輸出格式（table）
+
+```
+=== File Conflicts ===
+  0.2.1-W3-001 <-> 0.2.1-W3-002 [heuristic]: test/domain/foo_test.dart  <!-- skill-residue-exempt: 命令輸出範例的示意路徑，非本專案實際檔案 -->
+```
+
+### 設計約束
+
+- version-agnostic，預設已掃描全部 active 版本；`--all` 為相容保留旗標，目前與預設行為無差異
+- registry 讀取一律經 `.claude/lib/pm_registry` 的 `get_registry_paths` + `read_registry`，不重寫第三份讀取路徑
+- 純目錄級宣告（如 `lib/domain`）與巢狀檔案級宣告天然會被判為交集——這是已知取捨（issue #77 討論記錄：純目錄級 lease 會造成過度序列化），本命令僅負責偵測呈現，不負責治理宣告粒度
+
+---
+
+## track onboard 子命令（multi-PM 協調層 Phase 2，入場四節彙整）
+
+`/clear` = session 死亡 + 新生。入場不是恢復記憶，是從世界平面重建三問：我是誰 / 同事是誰 / 我手上有什麼。session 啟動已印 30+ hook 輸出牆，`onboard` 把入場資訊收斂為單一固定值表。
+
+### 用法
+
+```bash
+ticket track onboard [--version V] [--all] [--top N] [--format {table,json}]
+```
+
+### 四節
+
+| 章節 | 資料來源 |
+|------|---------|
+| 活同事表 | 複用 `track_sessions._build_rows`（FRESH session） |
+| 孤兒 entry 表 | 同上（STALE session：heartbeat 已死但 registry entry 未回收） |
+| 髒檔歸屬 | 本檔獨立實作，僅比對 `in_progress` 票，見下方「髒檔歸屬設計」 |
+| 可認領建議 | 複用 `track_dashboard.load_top_ready`（同 dashboard Ready 章節） |
+
+### 髒檔歸屬設計
+
+呈現方向為 **file -> tickets**（PM 入場真正想知道的是「這個髒檔是誰的」，非「這張票碰了哪些髒檔」——後者在票數多、宣告目錄淺時噪音會被放大）。僅比對 `status == in_progress` 的票（completed/pending 票的髒檔歸屬對「進行式工作」章節語意無意義）。
+
+歸屬採**最長匹配前綴特異度**：精確檔案相符 > 深層目錄相符 > 淺層目錄相符，僅保留特異度最高的票。若最高特異度落在「泛目錄」層級（宣告路徑段數 <= 2，如僅宣告 `.claude/`）且命中票數 > 1，代表這些宣告本身無鑑別力，收斂為單行摘要「泛目錄宣告命中 N 票（無鑑別力）」，不逐票展開；精確檔案層級的多票 tie 是有意義的真實衝突訊號，不收斂。
+
+### Flag 說明
+
+| Flag | 預設 | 說明 |
+|------|------|------|
+| `--top` | 5 | 可認領建議章節列數上限 |
+| `--version` / `--all` / `--format` | 同 `activity`/`conflicts` | 版本範圍與輸出格式 |
+
+### 設計約束
+
+- registry 讀取一律經 `.claude/lib/pm_registry` 的 `get_registry_paths` + `read_registry`，不重寫第三份讀取路徑
+- stale 判定完全交由 `track_sessions._build_rows` 內部既有邏輯處理，本命令不重新定義任何 stale 閾值常數
+- registry 缺檔/損毀時各節優雅降級（活同事顯示「（無活躍同事）」、孤兒 entry 顯示「（無孤兒 entry）」，餘二節同款樣式），不阻擋其餘三節輸出
+
+### 空狀態字面規範（activity / conflicts / onboard 三命令統一）
+
+三命令空狀態一律採全形括號包裹的中文描述句 `（無 XXX）`，不使用英文 `(none)`：`activity` 為「（無 in_progress ticket）」、`conflicts` 為「（無衝突）」、`onboard` 四節分別為「（無活躍同事）」「（無孤兒 entry）」「（無髒檔）」「（無可認領建議）」。技術術語（`in_progress`、`entry`）依語言約束規則 4 保留原文，不強制中譯。

@@ -1,3 +1,30 @@
+## [2.34.0] - 2026-08-18
+
+### Summary
+feat: scan_links.py 新增可疊加掃描根，納入 docs/ 規劃文件; feat: 新增 ticket track onboard 命令（PM 入場四節彙整）; feat: 新增 ticket track conflicts 命令（where.files 交集 + impl-test 擴張啟發式） (+14 more)
+
+Changes: 4 feat, 4 fix, 7 docs, 1 chore, 1 test
+
+- feat: scan_links.py 新增可疊加掃描根，納入 docs/ 規劃文件
+- feat: 新增 ticket track onboard 命令（PM 入場四節彙整）
+- feat: 新增 ticket track conflicts 命令（where.files 交集 + impl-test 擴張啟發式）
+- feat: 新增 ticket track activity 命令（multi-PM 協調層 Phase 2 L1 新鮮度）
+- fix: 修正三命令文字批次與 --all 死 flag 全域清查
+- fix: 修正 conflicts 的 Python impl→test 啟發式與 registry 新鮮度過濾
+- fix: 修正 onboard 髒檔歸屬節的 status 過濾與呈現方向
+- fix: 修正 activity 的 git --grep 父子票訊號污染
+- docs: 標註 track-command.md 三處示意路徑 skill-residue-exempt
+- docs: 更正 Stop event pm_only 條款過度宣稱措辭
+- docs: 補三項 Layer 2 遺留發現，含新專案會復活的 template
+- docs: 依 Layer 2 修正 SOP 三項 Critical 與回測誠實性
+- docs: 外移 SOP 四步擴為六步，補三個實證缺口
+- docs: 依 Layer 2 修正檔頭 stale 與 relocated 檔死路由
+- docs: 建立載體 registry 並將已重分配條款替換為指標
+- chore: sync-push 回寫框架版本號
+- test: 補齊 onboard 空狀態測試四節斷言
+
+---
+
 ## [2.33.1] - 2026-08-18
 
 ### Summary

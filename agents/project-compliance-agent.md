@@ -250,6 +250,8 @@ subagent context——ticket 操作規範若不寫在本檔，對你即不存在
 無關碼（命名 / typo / 風格）、重新格式化未被要求的檔案、清理非自己造成的既有
 死碼、以個人偏好改既有風格。新增碼須匹配所在檔案既有風格。
 
+**完整條款**：見 `.claude/references/agent-preload-relocated-clauses.md` 與 `.claude/references/quality-common.md` 第 1.7 節。
+
 ---
 
 ## 搜尋工具

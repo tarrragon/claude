@@ -1053,6 +1053,8 @@ subagent context——ticket 操作規範若不寫在本檔，對你即不存在
 **Why**：subagent 約 20 tool call 即耗盡回合（PC-042、PC-047）；讀取階段超支
 會在寫入前用完回合，任務失敗且 PM 需重派並重付一次讀取成本。
 
+**完整判準**：允許與禁止查詢各四類的判準表、以及資訊不足時的處理流程，見 `.claude/references/agent-preload-relocated-clauses.md`（來源 PC-047）。
+
 ---
 
 ## 最小變更紀律
@@ -1067,3 +1069,5 @@ subagent context——ticket 操作規範若不寫在本檔，對你即不存在
 
 **Last Updated**: 2026-07-10
 **Version**: 5 節「品質規範強制遵循」新增一行觸發引用 `.claude/skills/dart-domain-modeling/SKILL.md`（entity / copyWith 收窄判準，不展開內容）；先前版本記錄——新增 5.3「元件庫優先實作」工程端條款（禁自製元件庫已涵蓋的原生元件、缺件回報 PM 開票、豁免依 spec 豁免清單），引用 `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`；同時修正既有未閉合的 code fence（AppConstants 範例區塊）
+
+**完整條款**：見 `.claude/references/agent-preload-relocated-clauses.md` 與 `.claude/references/quality-common.md` 第 1.7 節。

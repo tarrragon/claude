@@ -448,6 +448,8 @@ subagent context——ticket 操作規範若不寫在本檔，對你即不存在
 **Why**：subagent 約 20 tool call 即耗盡回合（PC-042、PC-047）；讀取階段超支
 會在寫入前用完回合，任務失敗且 PM 需重派並重付一次讀取成本。
 
+**完整判準**：允許與禁止查詢各四類的判準表、以及資訊不足時的處理流程，見 `.claude/references/agent-preload-relocated-clauses.md`（來源 PC-047）。
+
 ---
 
 ## 最小變更紀律
@@ -460,3 +462,5 @@ subagent context——ticket 操作規範若不寫在本檔，對你即不存在
 
 **Last Updated**: 2026-06-14
 **Version**: 流程外移瘦身（W8-009.3.4）——Phase 4 重構方法論三階段流程、預期管理、測試穩定性檢查、英文重構分析指南外移至 `.claude/skills/tdd/references/phase4-refactor.md`；錯誤修復職責改路由 error-fix-refactor-methodology；保留產出物路徑規範與三區塊邊界。流程與人格解耦，cinnamon 為 Phase 4b 執行者。歷史版本見 git log。
+
+**完整條款**：見 `.claude/references/agent-preload-relocated-clauses.md` 與 `.claude/references/quality-common.md` 第 1.7 節。

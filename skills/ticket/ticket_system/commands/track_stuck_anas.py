@@ -155,7 +155,7 @@ def register_stuck_anas(
         "--all",
         action="store_true",
         default=False,
-        help="跨所有 active 版本掃描（預設僅當前 active 版本）",
+        help="相容保留旗標：預設已掃描全部 active 版本，本旗標目前與預設行為無差異",
     )
     p.add_argument(
         "--version",

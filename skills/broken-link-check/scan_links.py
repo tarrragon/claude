@@ -4,6 +4,10 @@
 掃描 `<root>/.claude/**/*.md` 中的路徑引用，resolve 後判定 broken/placeholder/
 excluded_*，輸出確定性計數 + 分類清單。純標準庫實作（pathlib/re/argparse/json/sys）。
 
+掃描根預設僅 `.claude/`（向後相容，不帶參數時逐字不變）；CLI `--scan-root`
+可疊加額外子樹（如 `docs`），使規劃文件（ticket body、spec、usecases、
+proposals）一併納入偵測。
+
 確定性三保證點（GWT #3）：
 1. md_files 掃描前先 sort
 2. broken_entries 依 (source_file, line) sort
@@ -16,6 +20,10 @@ import os
 import re
 import sys
 from pathlib import Path
+
+# 預設掃描根：僅 `.claude/`。CLI `--scan-root` 可額外追加子樹（如 docs），
+# 追加為疊加（既有預設不變），不取代。
+DEFAULT_SCAN_ROOTS = (".claude",)
 
 # 預設旋鈕：五排除全開啟（皆排除），可由 CLI flag 顯式覆寫納入
 DEFAULT_KNOBS = {
@@ -198,12 +206,20 @@ def _rel_to_root(path, root):
         return str(path)
 
 
-def scan(root, knobs=None):
-    """編排 I/O：掃描 .claude/ md → 抽引用 → resolve → 分類 → 彙總。"""
+def scan(root, knobs=None, scan_roots=None):
+    """編排 I/O：掃描指定子樹的 md → 抽引用 → resolve → 分類 → 彙總。
+
+    scan_roots：相對 root 的子樹清單，預設 `DEFAULT_SCAN_ROOTS`（僅
+    `.claude`，向後相容）。呼叫端可傳入額外子樹（如 `[".claude", "docs"]`）
+    擴大掃描範圍；各子樹的檔案聯集後統一排序，確定性不受傳入順序影響。
+    """
     knobs = knobs or DEFAULT_KNOBS
+    scan_roots = scan_roots if scan_roots is not None else DEFAULT_SCAN_ROOTS
     root = Path(root)
-    md_files = sorted(root.glob(".claude/**/*.md"))
-    md_files = [f for f in md_files if "hook-logs/" not in str(f)]
+    md_files = set()
+    for subtree in scan_roots:
+        md_files.update(root.glob(f"{subtree}/**/*.md"))
+    md_files = sorted(f for f in md_files if "hook-logs/" not in str(f))
     categories = {
         "broken": 0,
         "placeholder": 0,
@@ -308,6 +324,17 @@ def main(argv=None):
         description="確定性 broken-link scanner for .claude/ markdown"
     )
     parser.add_argument("repo_root", nargs="?", default=".")
+    parser.add_argument(
+        "--scan-root",
+        action="append",
+        dest="extra_scan_roots",
+        default=None,
+        metavar="SUBTREE",
+        help=(
+            "額外掃描子樹（相對 repo_root，可重複指定），疊加於預設 "
+            "'.claude'（不取代）。例：--scan-root docs"
+        ),
+    )
     parser.add_argument("--include-code-block", action="store_true")
     parser.add_argument("--include-migration-backups", action="store_true")
     parser.add_argument("--include-placeholder", action="store_true")
@@ -329,8 +356,12 @@ def main(argv=None):
         "include_documented": args.include_documented,
         "include_archive": args.include_archive,
     }
+    scan_roots = list(DEFAULT_SCAN_ROOTS)
+    if args.extra_scan_roots:
+        scan_roots.extend(args.extra_scan_roots)
+
     try:
-        result = scan(root, knobs)
+        result = scan(root, knobs, scan_roots=scan_roots)
     except OSError as e:
         sys.stderr.write(f"[ERROR] scan failed: {e}\n")
         return 2

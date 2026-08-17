@@ -705,3 +705,186 @@ class TestDocumentedExemptMarker:
         d = json.loads(default.stdout)["broken_count"]
         w = json.loads(widened.stdout)["broken_count"]
         assert w > d
+
+
+# ===========================================================================
+# G. 掃描根擴充（docs/ 規劃文件納入偵測）
+#
+# 三類回歸覆蓋：預設行為不變 / 新掃描根生效 / 排除規則在新範圍正確運作。
+# ===========================================================================
+
+
+@pytest.fixture
+def docs_scan_repo(tmp_path):
+    """`.claude/` + `docs/` 雙子樹合成 repo，用於掃描根擴充回歸測試。
+
+    `.claude/` 內容（沿用 synthetic_repo 慣例，無 broken）：
+    - target.md / good.md
+
+    `docs/` 內容（皆為 `.claude/` 路徑引用，模擬規劃文件內容）：
+    - docs/tickets/broken.md      → 1 個真實斷鏈
+    - docs/tickets/code.md        → 1 個斷鏈但在 fenced code block 內 → 預設不計
+    - docs/tickets/holder.md      → 1 個 placeholder 範例 → 不計 broken
+    - docs/tickets/backup.md      → 1 個 migration-backups 下路徑 → 預設不計
+    - docs/tickets/documented.md  → 1 個含 exempt marker 的不存在路徑 → 不計 broken
+    """
+    claude = tmp_path / ".claude"
+    claude.mkdir()
+    (claude / "target.md").write_text("# target\n")
+    (claude / "good.md").write_text("see @.claude/target.md for detail\n")
+
+    docs = tmp_path / "docs" / "tickets"
+    docs.mkdir(parents=True)
+    (docs / "broken.md").write_text("ref .claude/docs-missing/gone.md here\n")
+    (docs / "code.md").write_text(
+        "before\n```\nref .claude/docs-code/block.md\n```\nafter\n"
+    )
+    (docs / "holder.md").write_text("| 範例 | path/file.md |\n")
+    (docs / "backup.md").write_text(
+        "ref .claude/migration-backups/old/y.md here\n"
+    )
+    (docs / "documented.md").write_text(
+        "ref .claude/pm-rules/gone-doc.md here "
+        "<!-- broken-link-exempt: documented-error -->\n"
+    )
+    return tmp_path
+
+
+class TestScanRootsDefaultUnchanged:
+    """類 1：不帶 scan_roots 參數／不帶 --scan-root flag 時預設行為逐字一致。"""
+
+    def test_default_scan_roots_constant_is_claude_only(self):
+        assert scan_links.DEFAULT_SCAN_ROOTS == (".claude",)
+
+    def test_scan_without_scan_roots_ignores_docs(self, docs_scan_repo):
+        result = scan_links.scan(docs_scan_repo, knobs=None)
+        assert result["broken_count"] == 0
+        assert result["scanned_files"] == 2  # 僅 .claude/target.md + good.md
+
+    def test_cli_bare_invocation_ignores_docs(self, docs_scan_repo):
+        proc = run_cli(docs_scan_repo, "--format", "json")
+        data = json.loads(proc.stdout)
+        assert data["broken_count"] == 0
+        assert proc.returncode == 0
+
+
+class TestScanRootsExpansion:
+    """類 2：新掃描根（scan_roots 參數 / --scan-root flag）生效。"""
+
+    def test_explicit_scan_roots_covers_docs_subtree(self, docs_scan_repo):
+        result = scan_links.scan(
+            docs_scan_repo, knobs=None, scan_roots=[".claude", "docs"]
+        )
+        srcs = [e["source_file"] for e in result["broken"]]
+        assert any("docs/tickets/broken.md" in s for s in srcs)
+
+    def test_scan_roots_union_deduplicated(self, docs_scan_repo):
+        # 重複子樹不應造成同檔案重複計數
+        result = scan_links.scan(
+            docs_scan_repo, knobs=None, scan_roots=["docs", "docs"]
+        )
+        assert result["scanned_files"] == 5
+
+    def test_cli_scan_root_flag_expands_coverage(self, docs_scan_repo):
+        proc = run_cli(docs_scan_repo, "--scan-root", "docs", "--format", "json")
+        data = json.loads(proc.stdout)
+        srcs = [e["source_file"] for e in data["broken"]]
+        assert any("docs/tickets/broken.md" in s for s in srcs)
+        assert proc.returncode == 1
+
+    def test_cli_scan_root_still_includes_default_claude(self, docs_scan_repo):
+        # --scan-root 為疊加，不取代預設 .claude
+        (docs_scan_repo / ".claude" / "claude-broken.md").write_text(
+            "ref .claude/claude-missing/x.md here\n"
+        )
+        proc = run_cli(docs_scan_repo, "--scan-root", "docs", "--format", "json")
+        data = json.loads(proc.stdout)
+        srcs = [e["source_file"] for e in data["broken"]]
+        assert any("claude-broken.md" in s for s in srcs)
+        assert any("docs/tickets/broken.md" in s for s in srcs)
+
+
+class TestScanRootsExclusionRulesApply:
+    """類 3：既有排除旋鈕（code block / placeholder / backup / documented）
+    在新掃描範圍下仍正確運作。"""
+
+    def test_exclusions_apply_in_docs_subtree(self, docs_scan_repo):
+        result = scan_links.scan(
+            docs_scan_repo, knobs=None, scan_roots=[".claude", "docs"]
+        )
+        srcs = [e["source_file"] for e in result["broken"]]
+        assert all("code.md" not in s for s in srcs), "code fence 內引用預設不計"
+        assert all("holder.md" not in s for s in srcs), "placeholder 範例不計"
+        assert all("backup.md" not in s for s in srcs), "migration-backups 路徑不計"
+        assert all("documented.md" not in s for s in srcs), "exempt marker 行不計"
+        cats = result["categories"]
+        assert cats["excluded_code_block"] >= 1
+        assert cats["excluded_backup"] >= 1
+        assert cats["excluded_documented"] >= 1
+
+    def test_only_real_docs_break_detected(self, docs_scan_repo):
+        result = scan_links.scan(
+            docs_scan_repo, knobs=None, scan_roots=[".claude", "docs"]
+        )
+        assert result["broken_count"] == 1
+        assert result["broken"][0]["source_file"] == "docs/tickets/broken.md"
+
+
+class TestKnownMissingPathSamples:
+    """驗收樣本：以父票（不建新 hook、改擴充掃描根的判定依據）記錄的六個
+    不存在路徑為樣本，驗證掃描根擴充後的分類正確性。
+
+    樣本性質摘要（詳見對應 ticket 的 Solution 章節）：
+    - 3 個示範佔位符（`.claude/hooks/foo.py` 等）
+    - 1 個真陽性（`.md` 檔案筆誤，實際檔案位於他處）
+    - 2 個待查／時序性項目（皆非 `.md`）
+
+    scan_links.py 的引用擷取只認 `.md` 結尾（REF_REGEX），5 個 `.py` 樣本
+    本就不在偵測範圍——這不是本次擴充引入的限制，是既有掃描規則的既定
+    行為。本測試驗證：(a) 唯一 `.md` 樣本（真筆誤）在擴充後的 docs 掃描根
+    下被正確偵測為 broken；(b) 5 個 `.py` 樣本即使以與來源相同的表格形式
+    出現在 docs 文件中，也不會被誤判為 broken（因根本不被抽取為引用）。
+    """
+
+    @pytest.fixture
+    def sample_table_repo(self, tmp_path):
+        claude = tmp_path / ".claude"
+        claude.mkdir()
+        docs = tmp_path / "docs" / "tickets"
+        docs.mkdir(parents=True)
+        (docs / "planning-ticket-body.md").write_text(
+            "| 路徑 | 性質 |\n"
+            "|------|------|\n"
+            "| `.claude/hooks/foo.py` | 示範佔位符 |\n"
+            "| `.claude/skills/bar/hooks/baz.py` | 示範佔位符 |\n"
+            "| `.claude/skills/myskill/hooks/epsilon.py` | 示範佔位符 |\n"
+            "| `.claude/pm-rules/pm-role.md` | 真陽性 |\n"
+            "| `.claude/hooks/acceptance-gate-hook.py` | 待查 |\n"
+            "| `.claude/hooks/session-registry-stop-hook.py` | 時序性 |\n"
+        )
+        return tmp_path
+
+    def test_py_samples_not_extracted_as_refs(self, sample_table_repo):
+        result = scan_links.scan(
+            sample_table_repo, knobs=None, scan_roots=[".claude", "docs"]
+        )
+        raws = {e["raw_ref"] for e in result["broken"]}
+        assert ".claude/hooks/foo.py" not in raws
+        assert ".claude/skills/bar/hooks/baz.py" not in raws
+        assert ".claude/skills/myskill/hooks/epsilon.py" not in raws
+        assert ".claude/hooks/acceptance-gate-hook.py" not in raws
+        assert ".claude/hooks/session-registry-stop-hook.py" not in raws
+
+    def test_md_true_positive_detected_broken(self, sample_table_repo):
+        result = scan_links.scan(
+            sample_table_repo, knobs=None, scan_roots=[".claude", "docs"]
+        )
+        broken = result["broken"]
+        assert len(broken) == 1
+        assert broken[0]["raw_ref"] == ".claude/pm-rules/pm-role.md"
+        assert broken[0]["source_file"] == "docs/tickets/planning-ticket-body.md"
+
+    def test_without_docs_scan_root_sample_table_not_scanned(self, sample_table_repo):
+        # 預設（無 docs 掃描根）：docs 下的樣本表格完全不在掃描範圍
+        result = scan_links.scan(sample_table_repo, knobs=None)
+        assert result["broken_count"] == 0

@@ -745,9 +745,12 @@ PM_ONLY_PREFIX = "[PM-ONLY] "
 用途分兩層：
 1. emit_hook_output(audience="pm_only")：主線程觸發時自動加前綴（本模組單點實作）
 2. Stop 類 hook（systemMessage / decision-reason 等 emit_hook_output 無法
-   覆蓋的輸出 shape）：import 本常數自行前置。Stop event 無 agent_id，
-   程式層無法過濾，前綴是該盲區唯一的受眾標記手段，
-   由 AGENT_PRELOAD 規則層教 subagent 忽略。
+   覆蓋的輸出 shape）：import 本常數自行前置。Stop event 設計上通常不含
+   agent_id，但已有記錄在案的異常先例——input_data 攜帶 agent_id 使注入
+   內容劫持 subagent 最終訊息（詳見 handoff-auto-resume-stop-hook.py /
+   stop-worklog-handoff-sync-check-hook.py 內的 is_subagent_context 防禦與
+   註解）。程式層過濾不可視為對本事件保證涵蓋，前綴是唯一能穩定涵蓋此
+   盲區的受眾標記手段，由 AGENT_PRELOAD 規則層教 subagent 忽略。
 """
 
 
@@ -773,9 +776,10 @@ def emit_hook_output(
     主線程時，additional_context 自動加上 PM_ONLY_PREFIX，供 AGENT_PRELOAD
     忽略規則比對。
 
-    已知盲區：Stop event 無 agent_id（CC runtime 硬約束），
-    is_subagent_environment 對其永遠返回 False；該盲區由
-    [PM-ONLY] 前綴 + AGENT_PRELOAD 忽略規則補位。
+    已知盲區：Stop event 設計上通常不含 agent_id，is_subagent_environment
+    對其多數情況返回 False，但已有記錄在案的異常先例顯示該欄位可能出現
+    （見上方 PM_ONLY_PREFIX 常數說明），故不可視為保證恆為 False；
+    該盲區由 [PM-ONLY] 前綴 + AGENT_PRELOAD 忽略規則補位。
 
     Args:
         hook_event_name: Hook 事件名稱

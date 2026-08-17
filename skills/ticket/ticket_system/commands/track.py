@@ -205,6 +205,21 @@ from .track_sessions import (
     execute_sessions,
     register_sessions,
 )
+# activity 機械推導 in_progress 票 L1 新鮮度（multi-PM 協調層 Phase 2）
+from .track_activity import (
+    execute_activity,
+    register_activity,
+)
+# conflicts 偵測 where.files 交集 + impl->test 擴張啟發式（multi-PM 協調層 Phase 2）
+from .track_conflicts import (
+    execute_conflicts,
+    register_conflicts,
+)
+# onboard PM 入場四節彙整（multi-PM 協調層 Phase 2）
+from .track_onboard import (
+    execute_onboard,
+    register_onboard,
+)
 # 導入版本審計命令模組
 from .audit_version import (
     execute_audit_version,
@@ -278,6 +293,9 @@ def _create_version_agnostic_handlers() -> dict:
         "parallel-check": execute_parallel_check,
         "hook-health": execute_hook_health,
         "sessions": execute_sessions,
+        "activity": execute_activity,
+        "conflicts": execute_conflicts,
+        "onboard": execute_onboard,
     }
 
 
@@ -1149,6 +1167,9 @@ def _register_all_subcommands(
     register_dispatch_readiness(track_subparsers)
     register_depth(track_subparsers)
     register_sessions(track_subparsers)
+    register_activity(track_subparsers)
+    register_conflicts(track_subparsers)
+    register_onboard(track_subparsers)
 
 
 def _register_global_state_commands(

@@ -4,7 +4,7 @@
 
 本目錄只放**所有角色通用**的品質規則（集中於 `core/`，現為 19 檔）。PM 流程規則在 `pm-rules/`，技術參考在 `references/`。
 
-**自動載入預算原則**：`core/` 每回合注入 PM 與所有代理人的 context，故只放「每回合都需遵守的行為禁令」；情境性內容（特定流程細節、語言品質規範、按需查表資料）放 `references/` 按需讀取。新增 `core/` 規則前先自問「這是否每回合都需要？」否則放 `references/`。stub 構成標準與外移 SOP（hook 錨點保全、引用鏈同步、預算驗證）→ `.claude/references/auto-load-stub-conventions.md`。
+**自動載入預算原則**：`core/` 每回合注入 PM 與所有代理人的 context，故只放「每回合都需遵守的行為禁令」；情境性內容（特定流程細節、語言品質規範、按需查表資料）放 `references/` 按需讀取。新增 `core/` 規則前先自問「這是否每回合都需要？」否則放 `references/`。stub 構成標準與外移 SOP（六步收斂不變量，逐項驗證）→ `.claude/references/auto-load-stub-conventions.md`。
 
 **決策閘門預算原則**：routing 檔複雜度由 incident 防禦增生驅動（非樹深），須有退場機制——inline PC 防禦引用設上限、已 Hook 執法者降級 `references/`、熱路徑前移。三條文 / 退場判準 / 程序 → `.claude/references/decision-gate-budget-details.md`。
 

@@ -226,6 +226,8 @@ ticket track complete <ticket-id> --as mint-format-specialist
 **Why**：subagent 約 20 tool call 即耗盡回合（PC-042、PC-047）；讀取階段超支
 會在寫入前用完回合，任務失敗且 PM 需重派並重付一次讀取成本。
 
+**完整判準**：允許與禁止查詢各四類的判準表、以及資訊不足時的處理流程，見 `.claude/references/agent-preload-relocated-clauses.md`（來源 PC-047）。
+
 ---
 
 ## 最小變更紀律
@@ -233,6 +235,8 @@ ticket track complete <ticket-id> --as mint-format-specialist
 只改被派發任務要求改的碼，diff 每行須能對應需求。**禁止**四類越界：順手改鄰近
 無關碼（命名 / typo / 風格）、重新格式化未被要求的檔案、清理非自己造成的既有
 死碼、以個人偏好改既有風格。新增碼須匹配所在檔案既有風格。
+
+**完整條款**：見 `.claude/references/agent-preload-relocated-clauses.md` 與 `.claude/references/quality-common.md` 第 1.7 節。
 
 ---
 

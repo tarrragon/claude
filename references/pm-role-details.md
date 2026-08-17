@@ -90,6 +90,16 @@ PM 在派發 / 拆分 / 排序 / 審查決策時，Wave 容量檢查依 token �
 
 SOP 詳見 `.claude/references/agent-dispatch-template.md`「tests/ 修改派發 SOP」章節。
 
+### 派發後的行為
+
+派發完成後**立即切換到下個 Ticket 的前置工作**，禁止盯著代理人等待。可切換的前置工作包含：撰寫下一張票的 Context Bundle、規格分析、worklog 更新、或當前 Wave 其他票的 ticket body 填寫。
+
+**Why**：代理人執行期間 PM 無事可做是假象——PM 前台的分析與建票工作與代理人執行完全獨立，盯著等會讓兩條線變成一條。
+
+**Consequence**：等待期間的 context 消耗換不到任何產出；且 PM 會傾向反覆查詢代理人狀態，這些查詢本身也消耗 tool call。
+
+**Action**：派發後的下一個動作應是「開始做別的事」，不是「檢查代理人」。代理人完成時 harness 會通知，不需輪詢。完整的派發後行為表見 `.claude/pm-rules/behavior-loop-details.md`。
+
 ### AUQ 強制觸發條件
 
 列選項時必用 AskUserQuestion。任一成立即必用：

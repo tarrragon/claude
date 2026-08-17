@@ -26,9 +26,15 @@ broken-link 計數的唯一權威來源是 `scan_links.py` 確定性 CLI，不�
 python3 .claude/skills/broken-link-check/scan_links.py .
 ```
 
-- 位置參數為 repo root（預設 cwd），掃描 `<root>/.claude/**/*.md`
+- 位置參數為 repo root（預設 cwd），預設掃描 `<root>/.claude/**/*.md`
+- `--scan-root SUBTREE`（可重複指定）疊加額外子樹（如 `docs`），使規劃文件（ticket body、spec、usecases、proposals）一併納入偵測；不帶此 flag 時行為與擴充前逐字一致（向後相容，既有 gate 用法不受影響）
 - exit code：`0`=零 broken（gate pass）/ `1`=偵測到 broken（gate fail）/ `2`=執行錯誤（root 不存在、I/O 失敗）
 - gate 用途可直接接 `&&` 或 CI：broken>0 即非零 exit，與工具自身錯誤（exit 2）區隔
+
+```
+# 擴充掃描 docs/ 下規劃文件（疊加於預設 .claude/，不取代）
+python3 .claude/skills/broken-link-check/scan_links.py . --scan-root docs
+```
 
 ### 輸出格式
 
@@ -111,13 +117,13 @@ CLI 已內建以下規則，本節僅供閱讀輸出時對照，非需手動執�
 
 ## 注意事項
 
-- 此工具只掃描 `.claude/` 目錄（不掃描 `docs/`、`ui/`、`server/` 等）
+- 此工具預設只掃描 `.claude/` 目錄；`--scan-root docs` 可疊加 `docs/`，其他目錄（`ui/`、`server/` 等）仍不在掃描範圍
 - 只偵測文件引用，不偵測 URL 有效性
 - 相對路徑解析基於文件所在目錄，需正確計算層級
 - 大型 `.claude/` 目錄（100+ 文件）掃描可能需要數分鐘
 
 ---
 
-**Version**: 2.1.0
-**Last Updated**: 2026-06-15
-**Source**: broken links 後置預防機制；1.0.0-W8-030.1 改路由至 scan_links.py 確定性 CLI 作權威 gate，手動流程降級為非權威 fallback；1.0.0-W8-049 新增 documented-error 豁免 marker（excluded_documented 類別 + `--include-documented` 旋鈕），case-study 內刻意記錄的不存在路徑顯式 opt-in 豁免
+**Version**: 2.2.0
+**Last Updated**: 2026-08-18
+**Source**: broken links 後置預防機制；1.0.0-W8-030.1 改路由至 scan_links.py 確定性 CLI 作權威 gate，手動流程降級為非權威 fallback；1.0.0-W8-049 新增 documented-error 豁免 marker（excluded_documented 類別 + `--include-documented` 旋鈕），case-study 內刻意記錄的不存在路徑顯式 opt-in 豁免；新增 `--scan-root` 可疊加額外掃描子樹（如 `docs`），預設行為不變（向後相容）

@@ -402,6 +402,8 @@ subagent context——ticket 操作規範若不寫在本檔，對你即不存在
 **Why**：subagent 約 20 tool call 即耗盡回合（PC-042、PC-047）；讀取階段超支
 會在寫入前用完回合，任務失敗且 PM 需重派並重付一次讀取成本。
 
+**完整判準**：允許與禁止查詢各四類的判準表、以及資訊不足時的處理流程，見 `.claude/references/agent-preload-relocated-clauses.md`（來源 PC-047）。
+
 ---
 
 ## 最小變更紀律
@@ -426,3 +428,5 @@ subagent context——ticket 操作規範若不寫在本檔，對你即不存在
   - 保留核心：觸發條件、hook_utils 規範、Python 版本限制、禁止行為、工作流程
 - v2.1.0 (2026-02-25): 新增 hook_utils 統一日誌規範為必遵循標準
 - v2.0.0 (2025-01-23): 補充標準代理人章節
+
+**完整條款**：見 `.claude/references/agent-preload-relocated-clauses.md` 與 `.claude/references/quality-common.md` 第 1.7 節。

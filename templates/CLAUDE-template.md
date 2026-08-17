@@ -58,13 +58,13 @@ another agent. Therefore:
 
 ## 4. Skill 指令
 
-@.claude/pm-rules/skill-index.md
+可用 skill 由平台在 session 啟動時列出（含名稱與用途描述）。專案自訂的指令對照表與分類見 `.claude/pm-rules/skill-index.md`，需要依分類查找或確認某指令是否存在時 Read。
 
 ---
 
 ## 5. 方法論參考
 
-@.claude/pm-rules/methodology-index.md
+方法論索引見 `.claude/pm-rules/methodology-index.md`（按需 Read）。該檔為查表用途——尋找特定主題的方法論、或確認某方法論是否已存在時才需讀取，非每回合必需。
 
 ---
 
