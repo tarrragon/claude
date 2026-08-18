@@ -42,7 +42,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from ticket_system.commands.track_runqueue import (
@@ -54,6 +54,7 @@ from ticket_system.commands.track_runqueue import (
     _is_unblocked_pending,
     _priority_rank,
 )
+from ticket_system.lib import lease
 from ticket_system.lib.constants import TERMINAL_STATUSES
 from ticket_system.lib.staleness import compute_stale_minutes
 from ticket_system.lib.ticket_loader import list_tickets
@@ -77,24 +78,53 @@ DEFAULT_STALE_THRESHOLD_MIN = 60
 
 HINT_LINE = "Hint: ticket track claim <id>"
 
+# lease 三態（dashboard In Progress 接線 registry lease 狀態：保留完整列出，
+# 標記承載不可接手語意）。值定義於 lease.py（單一來源，CQ-001 防護：呼叫端
+# 只用公開 `lease.determine_lease_state`，不 import 私有函式）；text 標記為
+# dashboard 渲染專屬，保留在本模組。
+LEASE_LIVE = lease.LEASE_STATE_LIVE
+LEASE_RECLAIMABLE = lease.LEASE_STATE_RECLAIMABLE
+LEASE_UNTRACKED = lease.LEASE_STATE_UNTRACKED
+LIVE_TAG = "LIVE"
+RECLAIMABLE_TAG = "RECLAIMABLE"
+
+_LEASE_TEXT_TAGS = {
+    LEASE_LIVE: f" [{LIVE_TAG}]",
+    LEASE_RECLAIMABLE: f" [{RECLAIMABLE_TAG}]",
+}
+
 
 # ---------------------------------------------------------------------------
 # 資料蒐集
 # ---------------------------------------------------------------------------
 
-def load_in_progress(tickets: List[Dict]) -> List[Dict[str, Any]]:
-    """收集 in_progress ticket，按 started_at 升冪排序。"""
+def load_in_progress(
+    tickets: List[Dict],
+    registry: Optional[Dict[str, Any]] = None,
+    pm_registry: Any = None,
+    now: Optional[datetime] = None,
+) -> List[Dict[str, Any]]:
+    """收集 in_progress ticket，按 started_at 升冪排序，逐票附 lease 三態。
+
+    `registry`/`pm_registry` 未傳入（呼叫端仍用舊簽名）時，
+    `lease.determine_lease_state` 對任何票一律回傳 untracked，既有輸出格式
+    不變（Never break userspace）。
+    """
+    registry = registry if registry is not None else {}
+    now = now or datetime.now(timezone.utc)
     result: List[Dict[str, Any]] = []
     for t in tickets:
         if t.get("status") != "in_progress":
             continue
         who = t.get("who") or {}
         agent = who.get("current") if isinstance(who, dict) else None
+        ticket_id = t.get("id")
         result.append({
-            "id": t.get("id"),
+            "id": ticket_id,
             "title": t.get("title") or "",
             "started_at": t.get("started_at"),
             "agent": agent,
+            "lease": lease.determine_lease_state(registry, ticket_id, pm_registry, now),
         })
     result.sort(key=lambda x: str(x.get("started_at") or ""))
     return result
@@ -270,9 +300,10 @@ def render_text(
         lines.append("  （無 in_progress ticket）")
     else:
         for item in in_progress:
+            lease_tag = _LEASE_TEXT_TAGS.get(item.get("lease"), "")
             lines.append(
                 f"  - {item['id']}  {item['title']}  "
-                f"(started_at: {item.get('started_at')}, agent: {item.get('agent')})"
+                f"(started_at: {item.get('started_at')}, agent: {item.get('agent')}){lease_tag}"
             )
     lines.append("")
 
@@ -432,7 +463,12 @@ def dashboard_main(args: argparse.Namespace, version: Optional[str]) -> int:
     scoped = _filter_by_wave(all_tickets, wave)
     handoff_info = _get_pending_handoff_info()
 
-    in_progress = load_in_progress(scoped)
+    # multi-PM 協調層：一次性載入 registry 快照供 In Progress 逐票判定 lease
+    # 三態（同 track_runqueue._render_list 的接線先例，registry 不可用時
+    # pm_registry 為 None，lease.determine_lease_state 一律回傳 untracked）
+    registry, pm_registry = lease.load_registry_snapshot()
+    now = datetime.now(timezone.utc)
+    in_progress = load_in_progress(scoped, registry=registry, pm_registry=pm_registry, now=now)
     ready = load_top_ready(scoped, top=top, handoff_info=handoff_info)
     stale = None if no_stale else load_stale_warning(scoped, threshold_min=stale_threshold)
     handoff_targets = load_handoff_targets(scoped, handoff_info=handoff_info)

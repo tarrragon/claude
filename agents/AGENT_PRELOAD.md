@@ -118,6 +118,10 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 > 完整規範：@.claude/skills/ticket/SKILL.md
 
+#### 2.6 執行中建票血緣回填
+
+執行中發現需建票時禁止裸 `ticket create` 只標 `--related-to`（`relatedTo` 不維護雙向血緣欄位，PM 需事後手動補齊）；必須帶 `--source-ticket <自身 ticket id>` 或改走 `add-spawn-request`（PM `resolve-spawn-request` 時自動回填）。兩通道選用判準與欄位差異：`.claude/references/agent-dispatch-template.md`「建票血緣回填義務」節；欄位語意 SSOT：`.claude/skills/ticket/references/field-semantics.md`。
+
 ---
 
 ### 3. 文件格式規範
@@ -321,7 +325,7 @@ ls <目標目錄>/<預期檔名>
 
 | 禁止模式 | 正確做法 |
 |---------|---------|
-| 派發者在 prompt 內嵌入所有 context，不建 child ticket | 先 `ticket track create --parent <自身 ticket ID>` 建 child，context 寫入 child 的 Problem Analysis |
+| 派發者在 prompt 內嵌入所有 context，不建 child ticket | 先 `ticket create --parent <自身 ticket ID> --action <動詞> --target <對象>` 建 child，context 寫入 child 的 Problem Analysis |
 | 被派發 agent 結束後僅回傳 final message，不寫 ticket | 必須 append-log Solution + complete（或寫 NeedsContext 停止） |
 | 上層 agent 以 final message 摘要下層結果再上報 | 在自身 ticket append-log 引用下層 ticket ID 與結論摘要（引用既有 `spawned_tickets` / `children` 語意，見 `.claude/skills/ticket/references/field-semantics.md`） |
 
@@ -423,6 +427,7 @@ ascend 條件（**任一 OR 成立即停止執行、上報上層**）：
 - [ ] 無禁用詞彙（文檔→文件、數據→資料...）
 - [ ] 讀取 Ticket 使用 `ticket track query`
 - [ ] 執行過程中更新 Ticket 進度（`append-log`）
+- [ ] 執行中發現需建票時，已用 `--source-ticket` 或 `add-spawn-request`，未裸 `create` 只標 `--related-to`（規則 2.6）
 - [ ] 文件無 emoji
 - [ ] 未執行 git checkout/branch/switch/commit
 - [ ] （Phase 3b）查詢限於測試碼/model/domain/介面，無大範圍探索
@@ -460,7 +465,8 @@ ascend 條件（**任一 OR 成立即停止執行、上報上層**）：
 
 ---
 
-**Last Updated**: 2026-08-05
+**Last Updated**: 2026-08-18
+**Version**: 1.21.0 - 新增規則 2.6「執行中建票血緣回填」：禁止裸 `create` 只標 `--related-to`，須帶 `--source-ticket` 或改走 `add-spawn-request`（禁令 + 路由形態，完整判準指向 `agent-dispatch-template.md`「建票血緣回填義務」節）；檢查清單同步補項
 **Version**: 1.20.0 - 規則 12 對齊 reference-stability-rules.md 規則 8 現行「全禁 + 五類分類」判準：移除已廢止的「歷史錨點 / 設計脈絡型允許」分支（原表誤示 Version footer 可保留 ticket ID），改為論證依據型/時點標注型/案例敘事主詞型一律禁止、僅被說明對象型與測試資料型路徑豁免；標題與檢查清單同步改用「全禁原則」表述
 **Version**: 1.19.0 - 規則 12 依賴型判準表改用「括號是否為陳述具體事實的完整子句」取代「句型/位置（如『來源：ID』開頭）」，解決字面與框架內 45 處 `> 來源：ID（機制描述）` 標準寫法矛盾的問題；新增「判準單位：整句」明文。完整論證與正反範例見 reference-stability-rules.md 規則 8（0.2.1-W3-096，源 0.2.1-W3-094 稽核發現）
 **Version**: 1.18.0 - 新增規則 12「框架檔案禁依賴型 ticket 引用」（DOC-010 已復發 6 次的結構性防護，禁令從按需讀取層 reference-stability-rules 規則 8 上移至預設載入層；含依賴型 / 歷史錨點型 / 功能字串三分判準，非一刀切）；檢查清單同步補項（0.2.1-W3-093）

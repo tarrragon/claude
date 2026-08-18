@@ -110,15 +110,20 @@ ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"  # 建�
 
    dashboard 一次回傳 `[In Progress]` + `[Ready Top N]` + `[Stale Warning]` 三章節，Ready 章節含可直接 claim 的編號 `[1] [2] [N]` 與 priority 標籤。設計目的：將 PM 接手流程從 W10-113 baseline 7 tool call 降至 2-3 tool call（W3-013 ANA 結論方向 a）。
 
+   [In Progress] 條目帶 lease 狀態標記（2026-08-18 起，判準同 registry heartbeat）：`[LIVE]` = FRESH session 正在處理；`[RECLAIMABLE]` = 持有 session 已 STALE；無標記 = registry 未追蹤。**`[LIVE]` 票禁止列入接手選項**——活躍 session 正在處理，接手即與其重複處理同一張票（framework issue tarrragon/claude#78）。
+
    - **dashboard 有 in_progress 或 ready 任務** → 使用 AskUserQuestion 依 dashboard 順序列出選項：
-     - in_progress 任務優先列出（label: `[ip] {ticket_id} - {title}`，description: `進行中（resume 接手）`）
+     - `[LIVE]` 的 in_progress 票**不列入選項**，僅在 AUQ 前的回覆文字中資訊性提及（「N 張由其他 session 處理中」）
+     - 非 `[LIVE]` 的 in_progress 任務優先列出（label: `[ip] {ticket_id} - {title}`；無標記者 description: `進行中（resume 接手）`；`[RECLAIMABLE]` 者 description: `持有 session 已失聯（走 reclaim 鑑識，非直接 resume）`）
      - Ready 任務依 dashboard `[1] [2] [N]` 編號順序列出（label: `[{N}] {ticket_id} - {title}`, description: `[{priority}]`）
      - 額外選項：「建立新 Ticket」（description: `執行 /ticket create`）
      - 用戶選擇：
-       - in_progress 任務 → `ticket resume <selected_id>`
+       - 無標記 in_progress 任務 → `ticket resume <selected_id>`
+       - `[RECLAIMABLE]` 任務 → `ticket track reclaim <selected_id>`（dry-run 鑑識通過再 `--confirm`，詳見 track reclaim 章節）
        - Ready 任務 → `ticket track claim <selected_id>`
        - 建立新 Ticket → 引導進入 `/ticket create` 流程
      - 流程結束
+   - **dashboard 只有 `[LIVE]` in_progress、無其他任務** → 回覆文字告知處理中清單後進入步驟 2 fallback（fallback 清單同樣不把 `[LIVE]` 票列為選項）
    - **dashboard 無 in_progress 也無 ready** → 進入步驟 2 fallback
 
 2. **Fallback：完整 pending/in_progress 清單**（僅當步驟 1 dashboard 無結果時觸發） — 執行 `ticket track list --status pending in_progress`
@@ -468,11 +473,16 @@ ticket handoff --from-worklog [--worklog-path PATH] [--dry-run]
 
 ---
 
-**Version**: 2.10.0
-**Last Updated**: 2026-08-04
+**Version**: 2.11.0
+**Last Updated**: 2026-08-18
 **Status**: Completed
 
 **Change Log**:
+
+- v2.11.0 (2026-08-18): dashboard-first 流程接手選項加入 lease 存活過濾（framework issue tarrragon/claude#78）
+  - [In Progress] 條目帶 `[LIVE]` / `[RECLAIMABLE]` lease 狀態標記說明（CLI 同日落地，判準同 registry heartbeat）
+  - `[LIVE]`（FRESH session 持有）票禁止列入 AUQ 接手選項，僅資訊性提及——防止跨 session 重複處理
+  - `[RECLAIMABLE]` 票列入選項但路由至 `ticket track reclaim`（鑑識三查），非直接 resume
 
 - v2.10.0 (2026-08-04): 系統模型章節新增第三條「type 與 instance 一對多」反直覺預設（列表由二條擴為三條，標題同步改「三個」）：明示 agent 類型與執行體非一對一、同類型可同時 spawn 多個獨立執行體；緊接帶出反向風險——並行上限來自共享 git index 寫入競爭、主線程序列化的驗收與建票工作、執行體 context 累積三項約束，而非類型數
 - v2.9.0 (2026-07-08): 系統模型章節新增「named agent 生命週期三態」——擴展 agent=CI runner 類比從二態（running/stopped）為三態（新增 idle=warm runner），路由 PM 回收 SOP 到 parallel-dispatch.md（W1-008 ANA 落地，W1-010）

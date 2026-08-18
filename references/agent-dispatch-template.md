@@ -316,7 +316,7 @@ ticket track depth <ticket-id>
 
 | 欄位 | 內容要求 |
 |------|---------|
-| `parent` | 派發者自身 ticket ID；child 以 `ticket track create --parent <自身 ticket ID>` 建立，CLI 自動維護 parent_id 鏈（深度的世界平面 SSOT） |
+| `parent` | 派發者自身 ticket ID；child 以 `ticket create --parent <自身 ticket ID> --action <動詞> --target <對象>` 建立，CLI 自動維護 parent_id 鏈（深度的世界平面 SSOT） |
 | `depth / can_descend` | child 建立後以 `ticket track depth <child id>` 查詢回填；`can_descend = false` 的 child，其承接 agent 禁止再 descend（遇需拆分場景必須 ascend） |
 
 **Why 補這兩欄**：parent_id 鏈是層級自覺的唯一依據（D3），dispatch-plan 顯性記錄可讓上層與 PM 審計嵌套結構，不依賴 prompt 或 final message 轉述。
@@ -866,7 +866,7 @@ ticket track complete 0.19.0-W3-032.1 --as <agent-name>
 
 **Consequence**：prompt 若只寫「完成後 complete」，代理人容易把「口頭確認完成」當作收尾終點，遺漏實際 CLI 呼叫；PM 需二次回頭補派同一 ticket 才能收斂，浪費一個派發回合。同理，若收尾段不明示自檢子章節義務，`### 自檢結果` warning 會持續在 complete 時對 PM 發出且被忽略（實證忽略率：18/18 + 本 ticket 前身），acceptance 與證據的對應關係也無從追溯。
 
-**Action**：收尾段固定納入以下四塊，不可只留其一：
+**Action**：收尾段固定納入以下五塊，不可只留其一：
 
 ### 1. set-acceptance 指令範例
 
@@ -891,6 +891,21 @@ ticket track set-acceptance <ticket-id> --check 1 2 --as <自身 agent 名稱>
 | Solution | 實際變更摘要（新增/修改的方法、檔案） |
 | Test Results | 測試執行結果（通過數/總數，或 DOC 類型免填時明示原因） |
 | Exit Status | W17-010 schema（status/reason/confidence/acceptance_met 等） |
+
+### 3. 建票血緣回填義務
+
+**Why**：執行中發現需建票的議題時，若以裸 `ticket create` 只標 `--related-to` 建票，`relatedTo` 是弱關聯 metadata（不維護雙向欄位，語意見 `.claude/skills/ticket/references/field-semantics.md`），衍生血緣（`source_ticket` / `spawned_tickets`）會留空——同型缺漏短期內重複發生，PM 驗收時須逐票手動補齊。
+
+**Consequence**：血緣缺漏使 `ticket tree` / `chain` 等血緣視覺化指令無法呈現真實衍生關係，「這個 ticket 是哪個 ticket 執行中發現的」須回頭翻工作日誌或對話記錄才能重建，逐票補齊亦累積成 PM 的額外驗收負擔。
+
+**Action**：收尾段須明示代理人依下表二擇一，禁止裸 `create` 只標 `--related-to`：
+
+| 通道 | 使用時機 | 指令 |
+|------|---------|------|
+| `--source-ticket` | 已確定要建票，且內容足以直接成票 | `ticket create --source-ticket <自身 ticket id> --action <動詞> --target <對象> --type <IMP\|ADJ\|ANA\|DOC> --why <依據>` |
+| `add-spawn-request` | 發現議題但尚未確定是否成票、或範疇 / 優先級需 PM 裁決 | `ticket track add-spawn-request <自身 ticket id> --what ... --why ... --type ... --priority ...` |
+
+兩通道皆由 CLI 自動回填血緣欄位：`create --source-ticket` 在建立當下即回填 `source_ticket` / `spawned_tickets` 雙向欄位；`add-spawn-request` 於 PM 執行 `resolve-spawn-request <id> SR-N --status processed --spawned-ticket <ticket-id>` 時回填。`--related-to` 不具備此機制，僅供無血緣意圖的弱關聯引用（見 field-semantics.md「用戶情境對照表」）。欄位定義以 `.claude/skills/ticket/references/field-semantics.md` 為唯一權威來源，本節不重複定義。
 
 ### 4. Solution 自檢結果子章節義務（W2-008）
 
@@ -940,7 +955,8 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 
 ---
 
-**Last Updated**: 2026-08-17
+**Last Updated**: 2026-08-18
+**Version**: 1.22.0 — 「收尾義務標準段」章節新增「建票血緣回填義務」小節：執行中建票禁止裸 `create` 只標 `--related-to`，須帶 `--source-ticket` 或改走 `add-spawn-request`（兩通道由 CLI 自動回填血緣欄位），並補判準速查表；四塊改五塊
 **Version**: 1.21.0 — 「填空檢查清單」中「代理人受 AGENT_PRELOAD 規則 12 約束無需 prompt 重複」一項改述：三探針實測證實 `.claude/agents/*.md` 主文 `@-import` 不展開為內容，改指向已實測確認每次派發都會注入的 `document-format-rules.md`「引用穩定性規則」
 **Version**: 1.20.0 — 「填空檢查清單」新增一列：防護類 ticket 的產生路徑盤點表存在性確認（盤點表於建票時產出並寫入 how.strategy / Solution，本清單僅確認其存在，格式權威在 ticket-body-schema 同名節；PC-BAL-035）
 **Version**: 1.19.0 — 新增「唯讀派發豁免 worktree 強制（0.2.1-W3-269，框架 issue 36）」章節：prompt 首行 `Dispatch-Mode: readonly` 聲明速查 + 骨架範例 + 禁止情境 + 適用情境速查表 + 與 review mode 的 OR 關係；完整判準權威來源指向 `.claude/pm-rules/worktree-operations.md`「唯讀派發豁免 worktree 強制」節，避免雙處維護漂移

@@ -94,6 +94,13 @@ def _patch_loader(monkeypatch, tickets: List[Dict]):
     monkeypatch.setattr(
         track_dashboard, "_get_pending_handoff_info", lambda: {}
     )
+    # lease 三態接線後 dashboard_main 一律呼叫 lease.load_registry_snapshot；
+    # 預設 patch 為 registry 不可用（pm_registry=None），避免 Group A-I 既有
+    # 測試受真實環境 registry 檔案內容影響，也避免觸發 git subprocess 呼叫
+    # 破壞 Group C 的 no-subprocess 斷言。Group J 針對 lease 三態另行 patch。
+    monkeypatch.setattr(
+        track_dashboard.lease, "load_registry_snapshot", lambda: ({}, None)
+    )
 
 
 def _now_iso(minutes_ago: int = 0) -> str:
@@ -867,3 +874,129 @@ def test_I6_dashboard_runqueue_blockedby_predicate_consistency(monkeypatch, caps
     assert "0.18.0-W10-981" in dashboard_ready_ids
     assert "0.18.0-W10-981" in runqueue_unblocked_ids
     assert dashboard_ready_ids <= runqueue_unblocked_ids
+
+
+# ---------------------------------------------------------------------------
+# Group J：In Progress lease 三態標記（dashboard 接線 registry lease 狀態，
+# 6 案）
+# ---------------------------------------------------------------------------
+
+class _FakePmRegistry:
+    """最小假物件：`is_fresh(heartbeat_ts, now)` 僅比對 heartbeat_ts 字面，
+    測試不依賴真實 heartbeat 時間戳格式。"""
+
+    def is_fresh(self, heartbeat_ts: Any, now: Any) -> bool:
+        return heartbeat_ts == "FRESH"
+
+
+def _mk_lease_registry(ticket_id: str, session_id: str, heartbeat_ts: str) -> Dict[str, Any]:
+    return {
+        "sessions": {
+            session_id: {"tickets": [ticket_id], "heartbeat_ts": heartbeat_ts},
+        },
+    }
+
+
+def test_J1_text_live_tag_for_fresh_session_owner(monkeypatch, capsys):
+    """FRESH session 持有 → In Progress 條目附 [LIVE]（不可接手語意）。"""
+    tickets = [_mk("0.18.0-W10-701", status="in_progress",
+                    started_at=_now_iso(5), agent="thyme")]
+    _patch_loader(monkeypatch, tickets)
+    monkeypatch.setattr(
+        track_dashboard.lease, "load_registry_snapshot",
+        lambda: (_mk_lease_registry("0.18.0-W10-701", "sess-a", "FRESH"), _FakePmRegistry()),
+    )
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    target_line = next(ln for ln in out.splitlines() if "0.18.0-W10-701" in ln)
+    assert f"[{track_dashboard.LIVE_TAG}]" in target_line
+    assert f"[{track_dashboard.RECLAIMABLE_TAG}]" not in target_line
+
+
+def test_J2_text_reclaimable_tag_for_stale_session_owner(monkeypatch, capsys):
+    """STALE session 持有 → In Progress 條目附 [RECLAIMABLE]（走 reclaim 鑑識）。"""
+    tickets = [_mk("0.18.0-W10-702", status="in_progress",
+                    started_at=_now_iso(5), agent="parsley")]
+    _patch_loader(monkeypatch, tickets)
+    monkeypatch.setattr(
+        track_dashboard.lease, "load_registry_snapshot",
+        lambda: (_mk_lease_registry("0.18.0-W10-702", "sess-b", "STALE"), _FakePmRegistry()),
+    )
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    target_line = next(ln for ln in out.splitlines() if "0.18.0-W10-702" in ln)
+    assert f"[{track_dashboard.RECLAIMABLE_TAG}]" in target_line
+    assert f"[{track_dashboard.LIVE_TAG}]" not in target_line
+
+
+def test_J3_text_no_tag_when_registry_untracked(monkeypatch, capsys):
+    """registry 未追蹤該票（無 owner） → 不加任何標記。"""
+    tickets = [_mk("0.18.0-W10-703", status="in_progress",
+                    started_at=_now_iso(5), agent="fennel")]
+    _patch_loader(monkeypatch, tickets)
+    monkeypatch.setattr(
+        track_dashboard.lease, "load_registry_snapshot",
+        lambda: ({"sessions": {}}, _FakePmRegistry()),
+    )
+    track_dashboard.dashboard_main(_ns(), "0.18.0")
+    out = capsys.readouterr().out
+    target_line = next(ln for ln in out.splitlines() if "0.18.0-W10-703" in ln)
+    assert f"[{track_dashboard.LIVE_TAG}]" not in target_line
+    assert f"[{track_dashboard.RECLAIMABLE_TAG}]" not in target_line
+
+
+def test_J4_json_lease_field_present_for_all_three_states(monkeypatch, capsys):
+    """JSON in_progress 每項附 lease 欄位，三態值分別為 live/reclaimable/untracked。"""
+    tickets = [
+        _mk("0.18.0-W10-711", status="in_progress",
+            started_at=_now_iso(5), agent="live-agent"),
+        _mk("0.18.0-W10-712", status="in_progress",
+            started_at=_now_iso(6), agent="reclaim-agent"),
+        _mk("0.18.0-W10-713", status="in_progress",
+            started_at=_now_iso(7), agent="untracked-agent"),
+    ]
+    _patch_loader(monkeypatch, tickets)
+    registry = {
+        "sessions": {
+            "sess-live": {"tickets": ["0.18.0-W10-711"], "heartbeat_ts": "FRESH"},
+            "sess-stale": {"tickets": ["0.18.0-W10-712"], "heartbeat_ts": "STALE"},
+        },
+    }
+    monkeypatch.setattr(
+        track_dashboard.lease, "load_registry_snapshot",
+        lambda: (registry, _FakePmRegistry()),
+    )
+    track_dashboard.dashboard_main(_ns(format="json"), "0.18.0")
+    payload = json.loads(capsys.readouterr().out)
+    lease_by_id = {item["id"]: item["lease"] for item in payload["in_progress"]}
+    assert lease_by_id["0.18.0-W10-711"] == track_dashboard.LEASE_LIVE
+    assert lease_by_id["0.18.0-W10-712"] == track_dashboard.LEASE_RECLAIMABLE
+    assert lease_by_id["0.18.0-W10-713"] == track_dashboard.LEASE_UNTRACKED
+
+
+def test_J5_registry_unavailable_degrades_to_untracked_golden_unchanged(monkeypatch, capsys):
+    """registry 不可用（pm_registry=None）時全部 untracked，text 輸出格式與
+    現狀完全一致（Never break userspace，golden 比對）。"""
+    tickets = [_mk("0.18.0-W10-001", status="in_progress",
+                    started_at=_now_iso(5), agent="thyme", title="impl")]
+    _patch_loader(monkeypatch, tickets)
+    monkeypatch.setattr(
+        track_dashboard.lease, "load_registry_snapshot", lambda: ({}, None)
+    )
+    track_dashboard.dashboard_main(_ns(wave=10), "0.18.0")
+    out = _normalize(capsys.readouterr().out)
+    assert (
+        "[In Progress] 1 ticket(s)\n"
+        "  - 0.18.0-W10-001  impl  "
+        "(started_at: <NORMALIZED>, agent: thyme)\n"
+    ) in out
+    assert f"[{track_dashboard.LIVE_TAG}]" not in out
+    assert f"[{track_dashboard.RECLAIMABLE_TAG}]" not in out
+
+
+def test_J6_load_in_progress_default_signature_backward_compatible():
+    """`load_in_progress(tickets)` 舊呼叫簽名（無 registry 參數）仍可用，
+    lease 一律為 untracked（既有呼叫端不因新參數而破壞）。"""
+    tickets = [_mk("0.18.0-W10-721", status="in_progress", started_at=_now_iso(5))]
+    result = track_dashboard.load_in_progress(tickets)
+    assert result[0]["lease"] == track_dashboard.LEASE_UNTRACKED

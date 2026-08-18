@@ -3,7 +3,7 @@ name: requirement-protocol
 description: "從需求確認到實作的對話協議：模糊指令澄清（含篩選類）、可決定 vs 該確認的邊界、失敗 2 次的轉折、覆寫成本告知、revert/checkpoint 處理、漸進驗證、工具切換時機。Triggers: 收到模糊指令, 自決還是確認, 反覆失敗, 換思路, 覆寫成本, 先還原, 先重來, placeholder, 最小範圍, 推理失敗, playwright 切換, 開發前澄清, 需求確認, 排除障礙, 逼近答案, 依 X 篩選, 只看 X, filter 範圍, 呈現決策, 開放問, ABCDE 你選哪個, 反省題, retrospective, 下一步往哪走, 五維度, 需要我繼續嗎, 要做嗎, OK 嗎, yes/no, 二選, 確認嗎."
 license: MIT
 metadata:
-  version: 0.1.0
+  version: 0.8.0
   category: collaboration-protocol
 ---
 
@@ -158,7 +158,7 @@ requirement-protocol/
 ---
 
 **Last Updated**: 2026-07-05
-**Version**: 0.8.0 — 觸發路由段新增「與 wrap-decision 的邊界」註記：指令模糊屬本 skill，當事人條件不足 / premortem 計畫輪廓不清屬 wrap-decision Step 0 與 context 閘門，三者互為前置不重複問（1.5.0-W5-009.7）
+**Version**: 0.8.0 — 觸發路由段新增「與 wrap-decision 的邊界」註記：指令模糊屬本 skill，當事人條件不足 / premortem 計畫輪廓不清屬 wrap-decision Step 0 與 context 閘門，三者互為前置不重複問
 **Version**: 0.7.0 — Phase B1 結構升級：加第 4 pillar「Multi-pass Refinement」+ 第 7 原則、明示 multi-pass 在「需求協議」場景的展開、串連 #82 / #83 / #85
 **Version**: 0.6.0 — 補 #82 (字面攔截 vs 行為精煉)：點出 hook 對行為錯誤無能為力、本 skill 的 reference + self-check + dogfood examples 就是 multi-pass 設計、不是「再補一條 hook 規則」
 **Version**: 0.5.0 — 補 #80 (yes/no collapse) + #81 (卡片迭代浮現)、reference 加 dogfood examples 段（4 個 Bad/Good 對照）、#75 加 selector stacking 跨連 #46-#50

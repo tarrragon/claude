@@ -36,7 +36,7 @@ from typing import Optional, List, Tuple
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_project_root
 
 
 # ============================================================================
@@ -46,21 +46,34 @@ from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
 # W10-047.2 抽樣降級：每 N 次觸發 1 次完整檢查（中頻 Hook，候選 3）
 # 來源 ANA：W10-035.3（Phase 3b P3 五 Hook，0% Action 比）
 SAMPLING_N = 10
-SAMPLING_COUNTER_FILE = Path(__file__).parent.parent / "hook-logs" / "_sampling" / "language-guard-hook.count"
+
+
+def _get_sampling_counter_file() -> Path:
+    """計數器路徑：由 get_project_root() 動態解析。
+
+    Why：舊實作於 import 時以 Path(__file__).parent.parent 固定路徑，恆指向
+    repo 層級 .claude/hook-logs/，不受 CLAUDE_PROJECT_DIR 覆寫，導致以 subprocess
+    執行 hook 的測試 prime production 計數器，與 live session 的
+    UserPromptSubmit hook 競態產生偶發紅燈。改由 get_project_root()（worktree
+    感知 > CLAUDE_PROJECT_DIR > git toplevel > cwd 搜尋）於每次呼叫時動態解析，
+    測試以 CLAUDE_PROJECT_DIR 指向 tmp_path 即可完全隔離。
+    """
+    return get_project_root() / "hook-logs" / "_sampling" / "language-guard-hook.count"
 
 
 def should_sample_run(logger) -> bool:
     """抽樣判斷：每 SAMPLING_N 次觸發 1 次完整檢查。失敗時保守執行。"""
     try:
-        SAMPLING_COUNTER_FILE.parent.mkdir(parents=True, exist_ok=True)
+        counter_file = _get_sampling_counter_file()
+        counter_file.parent.mkdir(parents=True, exist_ok=True)
         count = 0
-        if SAMPLING_COUNTER_FILE.exists():
+        if counter_file.exists():
             try:
-                count = int(SAMPLING_COUNTER_FILE.read_text().strip() or "0")
+                count = int(counter_file.read_text().strip() or "0")
             except (ValueError, OSError):
                 count = 0
         count += 1
-        SAMPLING_COUNTER_FILE.write_text(str(count))
+        counter_file.write_text(str(count))
         run = (count % SAMPLING_N == 0)
         logger.debug("抽樣計數=%d, 本次%s", count, "執行" if run else "跳過")
         return run

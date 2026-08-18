@@ -132,10 +132,12 @@
 - `.claude/error-patterns/process-compliance/PC-078-parallel-session-ticket-state-misjudgment.md` — 姊妹模式（動態並行 vs 本檔的靜態遺留）
 - `.claude/error-patterns/process-compliance/PC-075-spawned-children-status-check-asymmetric.md` — 本案例遺留檔案對應的 Ticket 主題
 - `.claude/rules/core/bash-tool-usage-rules.md` — git 串接規則
+- `.claude/pm-rules/parallel-dispatch.md`「跨 session 同儕沉默時的接管判準」章節 — 觸發訊號不同時的下一步：本檔處理靜態遺留「發現後怎麼處理」，該節處理「同儕持票停擺、遲遲未推進」（票驅動觸發）能否自助接管；遇到票驅動情境轉往該節，非套用本檔
 - `.claude/error-patterns/implementation/IMP-XXX`（若升級） — 若 Hook 輸出改善落地
 
 ---
 
-**Last Updated**: 2026-05-19
+**Last Updated**: 2026-08-18
+**Version**: 1.3.0 — 相關文件補一行指向 `parallel-dispatch.md`「跨 session 同儕沉默時的接管判準」章節，說明遺留檔案對應的票若仍由同儕持有且停擺（票驅動觸發）時轉往該節判斷能否自助接管；此前須經 `PC-078` 中轉兩跳
 **Version**: 1.2.0 — Hook 層 + 規則層防護已落地（W13-011）：branch-status-reminder v1.3.0 列全量 + 分組 + 雙通道；pm-role.md v4.2.0 加 Session-start 全量清點章節
 **Source**: 2026-04-17 W12-001 完結 session 與 W14-013 session，連續兩次 commit 前 git status 揭露前 session 遺留實作

@@ -71,7 +71,7 @@ Given many atomic documents, how does a reader find the right one?
 
 ### Cross-reference format
 
-<!-- broken-link-exempt: example — the Example column holds literal string samples wrapped in backticks (inline code). Paths like ./validation.md are placeholders, not real links. -->
+<!-- broken-link-exempt: example — the Example column contains literal string samples wrapped in backticks (inline code). Paths like ./validation.md are placeholders, not real links. -->
 
 | Reference type                                            | Format                                 | Example                                                               |
 | --------------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------- |

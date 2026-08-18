@@ -610,6 +610,8 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-BAL-039 | 清查以符號自身為 grep 錨點，漏掉其他符號的描述中對它的引用 | 中 | — |
 | PC-BAL-040 | where.files 以模組入口檔近似宣告，漏列 AC 實際承載檔案 | 中 | — |
 | PC-BAL-041 | 共享 working tree 上編輯即時生效工具源碼的裸露中間態 | 高 | — |
+| PC-BAL-042 | 跨 session 訊息引用的對話脈絡已隨 /clear 蒸發，接收方誤接續並產生無載體承諾 | 高 | — |
+| PC-BAL-043 | 規範載體未送達執行者 context，違規為結構必然而非個體疏失 | 高 | — |
 
 ---
 

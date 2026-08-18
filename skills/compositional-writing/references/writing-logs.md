@@ -122,7 +122,7 @@ Log 必須能被**機器聚合**和**人類搜尋**。結構化 log（key-value 
 
 ### 原則
 
-Log 訊息描述**發生了什麼業務事件**，而不是**程式碼執行到哪一行**。讀者想知道系統的狀態，不是程式的控制流。
+Log 訊息描述**發生了什麼業務事件**，而不是**程式碼執行到哪一行**。讀者想知道系統的狀態，不是程式的控制流。每條 log 都是被 grep 單獨命中的消費單位——訊息本體要句內自足（事件、對象、原因在同一條裡、指涉不依賴前後條 log），見 [sentence-self-sufficiency-by-consumption-unit](principles/sentence-self-sufficiency-by-consumption-unit.md) 的單句消費位規則。
 
 ### 對照表
 

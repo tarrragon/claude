@@ -36,6 +36,7 @@ ticket track snapshot
 | 當前 Ticket 進度是否已寫入 worklog | 新 session 靠 worklog 恢復 context |
 | 待驗收的代理人結果是否已處理 | 避免結果被遺忘 |
 | Session 中產生的原則 / 洞察是否已持久化 | Context 中的決策經驗不會自動記錄，/clear 後永久消失 |
+| **跨 session 對話中的 peer 是否已清點並發送關閉訊號** | **強制**（見下方「peer 關閉訊號清點」規則） |
 
 ### main vs worktree 差別對待（強制）
 
@@ -62,11 +63,26 @@ git status --short                   # 列出未提交變更
 
 **主倉庫 + main 分支** = 強制 commit；其他組合 = 提示不強制。
 
+### peer 關閉訊號清點（強制）
+
+> **Why**：跨 session 對話 thread 以 session 為地址，可達性跨 `/clear` 存續；但 context 是 at-most-once 記錄平面，不隨之存續。`/clear` 前若未通知在途對話的同儕，對方會依「對話延續中」的心智模型持續回報，形成永不關閉的等待迴圈（詳見 `.claude/pm-rules/parallel-dispatch.md`「跨 session 同儕來訊時的脈絡存續判讀」節）。
+>
+> **Consequence**：不清點即 `/clear`，本側承諾與待決項隨 context 一併蒸發且無任何訊號提示對方；對方後續來訊時，任何新開的 session 都可能誤判該訊息仍屬「本 session 在途對話」而重新接續一個已結束的脈絡。
+>
+> **Action**：依下表清點在途對話的 peer 並發送關閉訊號。
+
+| 在途對話狀態 | 動作 |
+|------------|------|
+| 該脈絡已完結（結論已落 ticket 或用戶已裁示） | 發訊息告知同儕脈絡已結束，不需再回報 |
+| 該脈絡未完結，仍需後續處理 | 發訊息告知同儕後續改由對應 ticket 接手追蹤，並附上 ticket ID |
+| 未曾與任何 peer session 有在途對話 | 通過，無需動作 |
+
 ### 禁止行為
 
 | 禁止 | 原因 |
 |------|------|
 | 未確認經驗持久化就主動建議 /clear | Session 中的隱性知識（決策理由、流程洞察、踩坑紀錄）一旦清除即永久消失 |
+| 有在途 peer 對話未清點即 /clear | 對方依「對話延續中」心智模型持續回報，形成同儕側永不關閉的等待迴圈 |
 | 以「context 太多」為由先建議 /clear 再補文件 | 應反過來：先持久化（memory / ticket / worklog），確認完整後才考慮 /clear |
 | Session 中有待後續審查的工作時 /clear | Context 本身是審查的重要輸入；審查必須在當前 session 執行 |
 | main 有未提交變更時直接詢問 /clear | 違反差別對待規則；必須先 commit 才呈現 #11 Handoff 選項 |
@@ -303,7 +319,8 @@ ticket track runqueue --wave N --format=dag        # 完整依賴 DAG + 關鍵�
 
 ---
 
-**Last Updated**: 2026-05-26
+**Last Updated**: 2026-08-18
+**Version**: 1.6.0 — /clear 前強制確認新增「peer 關閉訊號清點」規則：確認表增列「跨 session 對話 peer 是否已清點並發關閉訊號」+ 新增子章節（Why/Consequence/Action + 三列動作表）+ 禁止行為增列一條；與 `parallel-dispatch.md`「跨 session 同儕來訊時的脈絡存續判讀」節互引
 **Version**: 1.5.0 — W3-028.2 實機驗證落地：新增「SessionStart event source 對照表」與「attach vs /resume 進入路徑差異」兩節；對比表「待驗證」標記更新為 v2.1.150 實證確定狀態（SessionStart 在 /resume bg 觸發 source=resume、繼承 bg UUID）；handoff 流程從「手動執行 snapshot/runqueue」更新為「依賴 SessionStart hook 自動觸發」；禁止行為新增三條（running bg /resume 拒絕、attach ≠ /resume、短 ID 無效）；豁免條款移除 W3-028.2 追蹤、新增版本升級重驗證 trigger
 **Version**: 1.4.0 — 新增「/resume bg session 場景（v2.1.144+）」章節：前台 vs bg session resume 行為對比表、bg session resume 後 handoff 流程、SessionStart 觸發行為待驗證標記。對齊 ANA 結論（bg session 直接衝擊低、handoff JSON session-agnostic、SessionStart 待實機驗證）
 **Version**: 1.3.0 — 「Worklog 交接與 CLI handoff 同步」章節新增「自動化落地」小節：紀律規則由 stop-worklog-handoff-sync-check-hook + handoff --from-worklog CLI + worklog_parser lib 三層自動防護（W17-083 全鏈完成）；含 ARCH-020 SOT-mirror 設計與 CI/batch 失效豁免說明

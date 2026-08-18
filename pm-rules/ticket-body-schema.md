@@ -211,7 +211,7 @@ IMP ticket 修改 `src/` 字串輸出字面時，acceptance 必須補上 `npm te
 
 #### 防護類 hook ticket 額外 acceptance（必含項）
 
-IMP ticket 的 `where.files` 觸及 hooks 目錄時，acceptance 必須含下表各項語意——既有 session 生效策略、liveness 驗證方式、失敗語意（fail-open/fail-closed）、產生路徑盤點結果。
+IMP ticket 的 `where.files` 觸及 hooks 目錄時，須補齊下表四項，查核對象不一致：前三項（既有 session 生效策略、liveness 驗證方式、失敗語意 fail-open/fail-closed）之語意須寫入 acceptance；第四項（產生路徑盤點結果）之正本須寫入 `how.strategy`（缺則 Solution），不在 acceptance 重複宣告。
 
 **強制層現況**：四項皆已進入 `.claude/hooks/acceptance_checkers/hook_protection_acceptance_checker.py` 硬擋範圍（`acceptance-gate-hook.py` 於 complete 前呼叫）——前三項為 acceptance 語意關鍵詞硬擋；第四項（產生路徑盤點結果）為 `how.strategy` 正本解析硬擋，機制細節見下方第 4 項說明的「強制層現況」段落。
 
@@ -222,7 +222,7 @@ IMP ticket 的 `where.files` 觸及 hooks 目錄時，acceptance 必須含下表
 - ticket `where.files` 含 `.claude/hooks/` 下任何路徑（頂層本體與 `tests/`、`acceptance_checkers/` 等子目錄皆算）
 - ticket `where.files` 含任一 skill 私有 `.claude/skills/<skill>/hooks/` 下任何路徑（同屬防護面，見「hook 檔案落地監控」改造票的雙不管地帶教訓——只顧頂層會漏掉 skill hooks）
 
-**必填 acceptance**（觸發後四項皆須在 acceptance 中提及，語意關鍵詞檢查非逐字比對）：
+**必填四項**（觸發後皆須補齊；前三項須在 acceptance 中提及，語意關鍵詞檢查非逐字比對；第四項查核對象非 acceptance，見下表第 4 項）：
 
 | # | 項目 | 說明 | 合格填法範例 |
 |---|------|------|-------------|

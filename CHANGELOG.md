@@ -1,3 +1,37 @@
+## [2.36.0] - 2026-08-18
+
+### Summary
+refactor: lease 三態判定移至公開 API（CQ-001 防護）; fix: 計數器路徑改由 get_project_root 動態解析，解除測試對 production 抽樣計數器依賴; fix: dashboard In Progress 接線 registry lease 三態標記 (+21 more)
+
+Changes: 1 refactor, 4 fix, 16 docs, 3 chore
+
+- refactor: lease 三態判定移至公開 API（CQ-001 防護）
+- fix: 計數器路徑改由 get_project_root 動態解析，解除測試對 production 抽樣計數器依賴
+- fix: dashboard In Progress 接線 registry lease 三態標記
+- fix: frontend-with-playwright 可攜性修復 + 收斂 blog 側改進
+- fix: requirement-protocol 移除內嵌的本專案 ticket ID
+- docs: 建立 PC-BAL-043 並修正 PC-123 被證偽的歸因
+- docs: SKILL.md 接手流程排除 [LIVE] 票並路由 [RECLAIMABLE] 至 reclaim
+- docs: 補齊兩則 error-pattern 的家族交叉引用
+- docs: 退場條件自票面移入條文
+- docs: 補齊並行 session 四載體的兩條低頻交叉引用
+- docs: Layer 2 修正——並發歧義、雙向互引、原則句前移
+- docs: 新增 PM 對執行中 ticket 的上行對稱條款
+- docs: 落地跨 session 訊息脈絡存續判讀規則
+- docs: 落地不明變更查證順位條款於 tool-output-trust-rules 規則5
+- docs: 明文化 subagent 執行中建票的衍生血緣回填義務
+- docs: 區分防護類 hook acceptance 前三項與第四項查核對象
+- docs: PC-BAL-042 案例段補可定位錨點
+- docs: 完成跨 session thread 生命週期缺漏分析，新增 PC-BAL-042
+- docs: 接管判準章節 v2 整體改寫
+- docs: 補發射方留痕義務與 PC-078 處方區辨
+- docs: 新增跨 session 同儕沉默時的接管判準
+- chore: 補齊缺卡與 business-analysis skill，恢復兩處連結
+- chore: 同步 canonical 審查與寫作 skill 並合併本地客製
+- chore: sync-push 回寫框架版本號 + 599 CB 殘留入庫
+
+---
+
 ## [2.35.0] - 2026-08-18
 
 ### Summary

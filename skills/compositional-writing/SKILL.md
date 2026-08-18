@@ -3,7 +3,7 @@ name: compositional-writing
 description: "Composes atomic, intent-revealing, grep-friendly writing (Zettelkasten) for code comments, docs, logs, prompts, schema/ticket fields, external-analysis transformation, and long-form technical articles. Use when cognitive load and token cost matter. **Also triggers during multi-round review / batch review / 寫作 audit** — provides the keyword bank (正向陳述 / 口語修辭 / 地區用語 / 廢話前綴 / 裝飾符號 / 對讀者喊話 / 自評誇飾 / 必然性框架 / 澄清式框架 / 敘事姿態) and frame-specific check lists that multi-round-review reviewer agents need. Triggers: 寫註解, 寫文件, 寫日誌, 寫 prompt, 寫文章, 技術文章, 商業分析, 外部分析文章, 經驗談轉教學, 訪談整理, 機制重建, post-mortem, 架構決策, 除錯復盤, 檢討報告, 欄位設計, atomic, reusable, 多輪審查, multi-round review, batch review, 寫作 audit, 正向陳述, 口語修辭, 問句標題, 敘事視角, 字句層 grep, SOLID, 文章拆分, 結構決策, 擴充點, 依賴方向, 讀者分流."
 license: MIT
 metadata:
-  version: 0.50.1
+  version: 0.64.0
   category: writing-methodology
 ---
 
@@ -30,6 +30,8 @@ metadata:
 ### 1. 原子化（Atomization）
 
 一張卡一個概念：能獨立理解、可跨情境重用。拆分依據是**認知負擔與情境匹配度** — 讀者要同時記住的概念數、以及這張卡是否符合讀者當下的情境需求。常見的誤判依據是「行數」（卡太長就拆）、行數只反映表面字數、不反映概念數：一張 200 行的卡可能只講一個概念、一張 30 行的卡可能塞了三個概念。判別問題是「讀者要同時 hold 幾個概念才讀得懂這張卡」、超過 7 個就要拆。
+
+**內容壓力的出口是擴充結構、不是壓縮內容**：內容超出容器的自然大小時（判準裝不進表格格、概念裝不進標題、範例讓段落過長）、合法出口都在結構層——就地展開（延伸段、本篇專屬內容）、外部化成卡（跨篇可用的支撐 / 背景概念、範例寫進卡片、文章引用卡片承接論證）、或換成連結（概念在內容集合裡已有卡或專章承載時、刪掉格內自撰的 gloss 改放連結）；裁內容遷就容器違規、終點形態是簡報式文章（表格當主體、格內殘語、條列連綴——簡報的正當性來自講者在場補完、文章沒有講者）。邊界：主線概念必須行內展開（外部化斷論證線）；擴充的對象是結構不是句長（句層另由消費單位分配管）；checklist、規格表與查表型段落（判讀徵兆表 / 對照表）的表格形態合法——消費單位是逐項執行或逐列查詢、同一機制豁免；拆卡淨收益待試點驗證、先小規模再全面。選出口前先搜內容集合有沒有既有落點（有落點就是換成連結、不寫 gloss；但**程序要逐項消耗的列舉**留在本篇、只有定義外部化——一次獨立冷讀顯示三篇裡「不點就接不下去」的連結全是這一類，而所有背景術語卡都判可選）。判「換成連結」之前要打開目的地把成員並排：它與「先收斂載體」在外觀上無法分辨、差別在切法對不對得上，而一次第二人分診（同一批 29 列、一致率 86%）的四處分歧有三處就出在這裡、方向全部偏向連結。，並跑一個前置檢查：**查這個概念在別篇有沒有不相容的版本**——用雙向對映測試（兩篇的成員並排、逐項問能不能互相對映完整、只存在於一側的成員就是不相容的證據）與動作測試（讀者會不會為這件事做同一個動作兩次：一篇的產出是另一篇的輸入是互補、兩篇是同一個動作的兩份指示是衝突）；有衝突就先收斂單一權威載體——判準完整度決定哪一套內容留下（殘缺的那套當載體會擴散殘缺）、引用數只決定住址搬不搬（遷移成本、非品質、而且要數指向那組成員的引用不是指向那一頁的：整頁入連由該頁主題帶來、一次實測相差一個量級而據此選錯了理由）、同一對象已有卡時卡通常是住址（理由是成員定義本來就是卡的責任）、而兩套各有對方缺的成員時載體要先補齊才有資格當載體（收斂不是挑一套刪掉另一套、補齊時檢查新成員的名字在載體上有沒有被佔用的近義詞、否則會把同名異義搬進唯一的住址）——其餘各篇沿用它的語彙並重新界定 scope，「同步成一份」與「兩套並陳」都不是修法。搜尋別篇版本時掃的是「宣告一組固定成員、要求逐項填寫的段落」、不論它排成表格、清單或散文（寫成「掃表格」會漏掉全部——一次實測的六個住址全是編號清單），而計數只算同層的住址（不同層的分解對齊語彙、不收斂）。這種矛盾單篇視角下不落空（每篇單獨讀都自洽）、要在分診階段查。兩次實測的出口分布差異很大（一次以換成連結為主、另一次以收斂載體為主），分布隨卡層覆蓋與跨章關係變動、不可推廣——每次改寫重跑分診。文章要短、讓細節搬進卡片、別讓細節消失。詳見 [content-pressure-resolves-by-expansion-not-compression](references/principles/content-pressure-resolves-by-expansion-not-compression.md)。
 
 **拆分判準的核心問題**：「這張卡聚焦在什麼問題、議題切完整了嗎？」— 判準是 **focus 完整度**。常見的次級訊號是「卡之間是否衝突」「邊界是否清晰」、兩者都不夠：兩張卡互不衝突、仍可能各切了一半同樣議題；一張卡邊界清晰、仍可能塞了兩個獨立議題。focus 完整度問的是「這張卡有沒有把它聲稱要解決的議題講完」、是 contrast 上面那兩個訊號抓不到的死角。
 
@@ -85,9 +87,13 @@ metadata:
 
 **原子筆記要有向上的議題入口**：承載知識的原子筆記（Zettelkasten 卡 / glossary / 術語條目）不是字典條目 — 字典答「這個詞是什麼」、承載知識答「你在討論什麼、撞到什麼問題、才需要這知識」。撰寫者有預設情境讀者沒有、所以每張卡（或其上層）要從情境進入而非劈頭給定義：建議題 hub（以讀者遇到的問題為題）討論再分流到原子卡、卡頂回指議題、讓搜尋直接落地者也有回路。沒這層卡淪字典、讀者沒有觸發點、不知何時用。詳見 [atomic-note-needs-situational-entry](references/principles/atomic-note-needs-situational-entry.md)。
 
+**軸名要取機制、不要取它的代理**：替一組判準或一條分界軸命名時，選中的常常是與機制同向但較弱的代理（用途之於性質、識別碼之於預設行為），而真正在做功的那句話留在括號或下一句的理由裡。代理與機制分岔的情況正是判準要處理的難題，於是判準在最需要它的地方失效；作者看不見是因為讀到軸名時腦中自動補上機制，而讀者只拿得到名字。修法是把括號裡那句升格成軸名、代理降級成入口。判讀訊號：同一份內容的兩處把同一個東西歸到軸的兩側、套到具體個案時分不開、或一個名詞底下的東西成本差一個量級（複合名詞蓋住不同性質的形態）。字句與結構層審查都抓不到它，只有對抗性審查與個案實跑抓得到。詳見 [axis-named-by-proxy-not-mechanism](references/principles/axis-named-by-proxy-not-mechanism.md)
+
 ### 4. 可查詢性（Searchability）
 
 關鍵字前置、使用可 grep 的分隔符（`:` `|` `→` `==`）、欄位名稱使用 regex 友善格式。命名讓 AI 能以單次 grep 命中，不需要語意推理。
+
+**行自足是可查詢性的配套義務**：grep-friendly 設計預期句子被單獨命中、被命中的句子就要單獨讀得懂。單句消費位（checklist 項、表格格、判準句、grep 目標行、章節首句）必須在句內資訊自足——四條件：命題完整（主詞 / 謂語 / 對象 / 條件在場）、指涉閉合（殘片名詞有完整形先行）、實詞可反推（承載內容的詞能反推到機制 / 條件 / 契約）、一句一命題（對仗的每個半句能獨立判真）；驗收用抽離重讀測試（句子單獨給沒讀過上下文的消費者、命題能不能無歧義復原）。第三類位置是檢索鍵位（title / description / 表格鍵欄 / 卡名）——義務是識別充足、命題完整不適用、跟精簡規範衝突時精簡優先。段落敘事位可依賴鄰句、壓縮合法——三角取捨（精準、總長、句自足）的解法是按消費單位分配：自足要補成分、精準要加限定語與名詞頭、兩者都與精簡的減字反向、全域加長跟全域壓縮都是錯的答案。中文單字多義與 LLM 的三種消費模式（單行檢索 / attention 稀釋 / 風格繼承）是放大條件；四字節奏與對仗是「該跑抽離重讀」的候選訊號、不是判決（判定看消費單位）。詳見 [sentence-self-sufficiency-by-consumption-unit](references/principles/sentence-self-sufficiency-by-consumption-unit.md) 與 `references/reference-authoring-standards.md` 的單句消費位段。
 
 ### 5. 欄位設計（Field Design）
 
@@ -109,7 +115,7 @@ Surface enumeration 是 multi-pass 的固定前置步驟。寫作產物包含 bo
 
 **核心**：「再仔細一次」≠ multi-pass — 同 frame 重看 catch 不到新問題。每輪換 frame、才能 catch 不同層。各 reference（writing-articles / writing-code-comments / writing-documents / writing-prompts）依 output 類型有特化的輪次組合。
 
-Naming 是這條原則最容易跳的子場景 — 第一版命名幾乎不對、四輪 review（第一版 / grep / cross-call-site / impl 洩漏）才收斂、見 [naming-as-iterated-artifact](references/principles/naming-as-iterated-artifact.md) 跟 writing-code-comments 的 naming review 段。術語是 naming 的高歧義子場景：翻譯術語第一次出現保留原文錨點，中文壓縮術語保留完整名詞頭，中文名詞頭要保留來源中的概念角色，見 [terminology-keeps-original-anchor](references/principles/terminology-keeps-original-anchor.md)、[compressed-chinese-terms-need-head-noun](references/principles/compressed-chinese-terms-need-head-noun.md) 與 [translation-must-preserve-concept-role](references/principles/translation-must-preserve-concept-role.md)。
+Naming 是這條原則最容易跳的子場景 — 第一版命名幾乎不對、四輪 review（第一版 / grep / cross-call-site / impl 洩漏）才收斂、見 [naming-as-iterated-artifact](references/principles/naming-as-iterated-artifact.md) 跟 writing-code-comments 的 naming review 段。術語是 naming 的高歧義子場景：翻譯術語第一次出現保留原文錨點，中文壓縮術語保留完整名詞頭，中文名詞頭要保留來源中的概念角色，轉換他人材料時強度詞停在原文量級（保真轉換鎖定量級、原創文案與宣告過的再創作以訴求效果為準），見 [terminology-keeps-original-anchor](references/principles/terminology-keeps-original-anchor.md)、[compressed-chinese-terms-need-head-noun](references/principles/compressed-chinese-terms-need-head-noun.md)、[translation-must-preserve-concept-role](references/principles/translation-must-preserve-concept-role.md) 與 [rewrite-preserves-claim-intensity](references/principles/rewrite-preserves-claim-intensity.md)。
 
 **高 stakes 內容追加輪 E（epistemic rigor、conditional opt-in）**：reader 照做後錯誤不可逆的內容（資安 / concurrency 正確性 / distributed consistency / financial / medical）在 5 輪基本 frame 之外、追加 stakes 軸的 epistemic rigor pass——比照學術 peer review 跑 claim / evidence / method / threats / citation 五個 sub-check、加上 audit recommendation tier（accept / minor / major / withdraw）。一般內容 5 輪夠、不跑輪 E；高 stakes 內容兩軸都跑。詳見 `references/auditing-articles.md` 跟 `references/principles/writing-multi-pass-review.md` 的「stakes-conditional 追加輪」段。
 
@@ -125,23 +131,23 @@ Naming 是這條原則最容易跳的子場景 — 第一版命名幾乎不對�
 
 ## When to Consult This Skill（觸發路由）
 
-| 觸發情境                                                                                                                                                                              | 讀哪份 reference                                                                                                   |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| 要寫或改一段程式碼註解 / doc comment                                                                                                                                                  | `references/writing-code-comments.md`                                                                              |
-| 要起草 / 改寫一份文件（worklog、spec、README）                                                                                                                                        | `references/writing-documents.md`                                                                                  |
-| 要設計 log / 錯誤訊息 / 結構化輸出                                                                                                                                                    | `references/writing-logs.md`                                                                                       |
-| 要撰寫給 AI 的 prompt / instruction / Agent 派發 / Ticket Context Bundle                                                                                                              | `references/writing-prompts.md`（為 `.claude/rules/core/ai-communication-rules.md` 的詳細版庫，portability-allow） |
-| 要撰寫完整長篇技術文章（blog post / post-mortem / 架構決策 / 除錯復盤 / 技術評估）                                                                                                    | `references/writing-articles.md`                                                                                   |
-| 要把外部分析文章 / 產業評論 / 投資人備忘錄 / 高密度研究材料轉成教學型分析文章，把從業者經驗談（訪談 / 社群貼文 / 口述）轉成分析教學（機制重建），或把 AI 改寫稿從摘要升級成可遷移框架 | `references/source-to-teaching-analysis.md`                                                                        |
-| 要翻譯 / 轉譯文章、把英文材料改寫成中文、檢查術語誤譯或中文譯名放回句子後是否成立                                                                                                     | `references/translation-review.md`                                                                                 |
-| 要管理多篇相關文章的結構（系列、文集、知識庫、素材庫比例、MOC、跨篇引用、何時抽抽象層 / Pattern 卡片）                                                                                | `references/managing-article-collections.md`                                                                       |
-| 要做文章 / 模組 / 系列的結構決策（該不該拆篇、擴充點設計、方法論與案例的依賴方向、多讀者分流）、或用結構原則 review 既有文集                                                          | `references/structuring-with-solid.md`                                                                             |
-| 要對既有高 stakes 內容（資安 / concurrency / distributed / financial / medical）做 reviewer-style audit、找 false sense of security / 對位失效 / context 缺 / citation 過時           | `references/auditing-articles.md`                                                                                  |
-| 要寫或檢查判讀 / 選型 / 決策類內容（回答「該怎麼判斷」那一層），或讀者提問「什麼情況會需要這個」「什麼樣的系統會這樣做」「沒有範例看不懂」                                            | `references/judgment-content-needs-scenarios.md`                                                                   |
-| 要設計 ticket 欄位 / schema frontmatter / 表單欄位                                                                                                                                    | `references/designing-fields.md`                                                                                   |
-| 想驗證寫作品質（認知負擔、獨立理解率）                                                                                                                                                | `references/meta-metrics.md`                                                                                       |
-| 要新增或修改一份 Skill reference（撰寫品質規範、結構標準）                                                                                                                            | `references/reference-authoring-standards.md`                                                                      |
-| 要驗收 Skill 發布品質（語意層驗收、Phase 2 dry-run）                                                                                                                                  | `references/dry-run-guide.md`                                                                                      |
+| 觸發情境                                                                                                                                                                                             | 讀哪份 reference                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 要寫或改一段程式碼註解 / doc comment                                                                                                                                                                 | `references/writing-code-comments.md`                                                                              |
+| 要起草 / 改寫一份文件（worklog、spec、README）                                                                                                                                                       | `references/writing-documents.md`                                                                                  |
+| 要設計 log / 錯誤訊息 / 結構化輸出                                                                                                                                                                   | `references/writing-logs.md`                                                                                       |
+| 要撰寫給 AI 的 prompt / instruction / Agent 派發 / Ticket Context Bundle                                                                                                                             | `references/writing-prompts.md`（為 `.claude/rules/core/ai-communication-rules.md` 的詳細版庫，portability-allow） |
+| 要撰寫完整長篇技術文章（blog post / post-mortem / 架構決策 / 除錯復盤 / 技術評估）                                                                                                                   | `references/writing-articles.md`                                                                                   |
+| 要把外部分析文章 / 產業評論 / 投資人備忘錄 / 高密度研究材料轉成教學型分析文章，把從業者經驗談（訪談 / 社群貼文 / 口述）轉成分析教學（機制重建），或把 AI 改寫稿從摘要升級成可遷移框架                | `references/source-to-teaching-analysis.md`                                                                        |
+| 要翻譯 / 轉譯文章、把英文材料改寫成中文、檢查術語誤譯、中文譯名放回句子後是否成立、或譯文有沒有超譯（強度被拉高成口號）                                                                              | `references/translation-review.md`                                                                                 |
+| 要管理多篇相關文章的結構（系列、文集、知識庫、素材庫比例、MOC、跨篇引用、何時抽抽象層 / Pattern 卡片）                                                                                               | `references/managing-article-collections.md`                                                                       |
+| 要做文章 / 模組 / 系列的結構決策（該不該拆篇、擴充點設計、方法論與案例的依賴方向、多讀者分流）、或用結構原則 review 既有文集                                                                         | `references/structuring-with-solid.md`                                                                             |
+| 要對既有高 stakes 內容（資安 / concurrency / distributed / financial / medical）做 reviewer-style audit、找 false sense of security / 對位失效 / context 缺 / citation 過時 / 強度失準（誇飾或降格） | `references/auditing-articles.md`                                                                                  |
+| 要寫或檢查判讀 / 選型 / 決策類內容（回答「該怎麼判斷」那一層），或讀者提問「什麼情況會需要這個」「什麼樣的系統會這樣做」「沒有範例看不懂」                                                           | `references/judgment-content-needs-scenarios.md`                                                                   |
+| 要設計 ticket 欄位 / schema frontmatter / 表單欄位                                                                                                                                                   | `references/designing-fields.md`                                                                                   |
+| 想驗證寫作品質（認知負擔、獨立理解率）                                                                                                                                                               | `references/meta-metrics.md`                                                                                       |
+| 要新增或修改一份 Skill reference（撰寫品質規範、結構標準）                                                                                                                                           | `references/reference-authoring-standards.md`                                                                      |
+| 要驗收 Skill 發布品質（語意層驗收、Phase 2 dry-run）                                                                                                                                                 | `references/dry-run-guide.md`                                                                                      |
 
 每份 reference 自包含：以該情境為核心，把核心原則翻譯成可直接套用的檢查項與範例。閱讀任一 reference 不需要回來看其他 reference。
 
@@ -183,7 +189,7 @@ Naming 是這條原則最容易跳的子場景 — 第一版命名幾乎不對�
   - **廢話前綴 grep**：`rg "值得注意的是|需要說明的是|實際上|基本上|事實上"`
   - **裝飾符號 grep**：`rg "✅|❌|⚠️|🚨|🟡|🟢|⭐|📌|✓|✗"`
   - **對讀者喊話 grep**：`rg "很多人|大家|不少人|你的|你在|你把|你正在|你補|你天天|你會|你可能|先讀懂|先釐清|別搞混|別被"`（**裸「你」非窮舉**：實測過 `你正在`、`你補完` 這類「你 + 一般動詞」逃過原 pattern，回報 clean 前另跑一次裸 `rg "你"` 逐處判定） — 教材中性陳述、不安撫情緒 / 不第二人稱代入 / 不祈使控制閱讀（hook / narrative 段落輕度第二人稱可留）。**裸所有格 / 主詞（你的 X / 你在 X）也算、不限「你 + 動詞」的祈使 / 預測句型**；grep 對裸『你』非窮舉、真防線是 reader-simulation 冷讀（同源 grep 抓不到 register、見 [multi-pass-review-frame-granularity](references/principles/multi-pass-review-frame-granularity.md)）
-  - **自評誇飾 grep**：`rg "教科書級|堪稱|可謂|完美|經典|範本級|大師級|漂亮地|優雅地|最佳實踐|best practice"` — 品質 verdict 頂替技術理由、換成機制 / 條件
+  - **自評誇飾 grep**：`rg "教科書級|堪稱|可謂|完美|經典|範本級|大師級|漂亮地|優雅地|最佳實踐|best practice"` — 品質 verdict 頂替技術理由、換成機制 / 條件；命中後的合法性判定用位置功能兩軸（文體契約 × 行動耦合）——hook 段的強度合法、判準段零容忍、判定前先定位、見 [hyperbole-legitimacy-by-position-function](references/principles/hyperbole-legitimacy-by-position-function.md)
   - **必然性框架 grep**：`rg "天生|與生俱來|本質就是|本來就是|必然|唯一|註定|理所當然"` — 把設計選擇講成自然法則、還原成條件性（物理 / 法律 / 數學事實除外）
   - **澄清式框架 grep**：`rg "最容易誤|容易誤判|常見的?誤判|要點破|直覺會?帶偏|抵抗.*的直覺|你以為|會困惑|值得記"` — 把「讀者會誤解」當敘事中心是知識缺口訊號、不是澄清時機；補正向模型與機制讓誤解無從發生、不提醒讀者一個他本不需要有的困惑。界線是具體第一人稱實測敘事跟真實診斷區分（逾時 vs 被拒、症狀層 vs 根因層）保留、只有把假想誤會當主題句起手的才改；同義變體多、grep 抓不全、靠 reader-simulation 語意判定（「這段在補正向知識、還是在提醒讀者會犯錯？」）。見 [fill-knowledge-gap-not-center-misconception](references/principles/fill-knowledge-gap-not-center-misconception.md)
   - **歸因語氣 grep**：`rg "承認|暴露了|證明了失敗|被迫"` — 描述系統行為用「信號」「反映」「顯示」等中性觀測詞、避免「承認」「暴露」等責任歸因詞；「被迫」在描述外部強制約束時可保留
@@ -239,8 +245,46 @@ compositional-writing/
 
 ---
 
+**Last Updated**: 2026-08-18
+**Version**: 0.64.0 — 對收斂本身跑三輪審查後修掉前置檢查裡兩個會讓它失效的條件。**搜尋條件原本是「掃帶表格的段落」**——一次實測的六個住址全是編號清單、沒有一個是表格，那個條件從幾個恰好用表格承載的實例歸納、把載具形式當成了判準，照它跑會漏掉全部（實際漏掉了其中一組的第四處）。改成「宣告一組固定成員、要求逐項填寫的段落，不論排成表格、清單或散文」。**載體判準的引用數那一條要指定量測單位**：數的是指向那組成員的引用、不是指向那一頁的（整頁入連由該頁主題帶來，一次實測章節是卡的一倍多而據此寫錯了選載體的理由，卡是載體的真正理由是成員定義本來就是卡的責任）。同批補兩條：計數只算同層的住址（不同層的分解對齊語彙而不收斂），以及補齊載體時檢查新成員的名字在載體上有沒有被佔用的近義詞（一次實測兩組欄位各有一個 exit、語意不同，照抄原名會把同名異義搬進唯一的住址）。
+
+**Version**: 0.63.0 — 兩組不相容分解實際收斂後補一條操作規則：**兩套各有對方缺的成員時，載體要先補齊才有資格當載體**。原本的載體判準只說「判準完整度決定哪一套內容留下」，而實例顯示完整度可能兩邊都不完整——兩套交接欄位一套缺主責角色、另一套缺三項 payload，直接挑一套當載體會讓收斂本身丟掉內容。同批的第二組收斂驗證了另兩條既有規則：讀者要逐項填的列舉留在章節（定義權指回卡）、以及並列物件不該被當成欄位（tripwire 掛在例外上、不是例外的第七欄）。
+
+**Version**: 0.62.0 — 第二人分診量測回流。同一批 29 列交給另一個執行者獨立跑（協議寫在指示裡、禁讀原則卡與 skill），逐列一致率 25/29（86%），而四處分歧不是隨機落點——三處的方向相同：第二位判「先收斂載體」而第一位判了別的，三處都成立。成因是協議缺口：**換成連結與先收斂載體在外觀上無法分辨**（兩者都是「別處已經有了」），差別在目的地那一套與本篇是不是同一個切法，而第一位在那幾列只確認了目的地存在。補一個動作——判換成連結之前打開目的地把成員並排；少了它，誤判方向永遠偏向連結。第四處分歧是主線與支撐的邊界（論證承重測試對權威歸屬測試），由冷讀斷開：讀者要逐項消耗的列舉該就地展開，所以承重測試在這個問題上比權威歸屬準。同批收進第二位寫出的排序規則：論證承重壓過跨篇重用，兩者都後於前置檢查。
+
+**Version**: 0.61.0 — 獨立冷讀驗證回流，第三出口限縮到 gloss。一次由不知道審查脈絡的讀者執行的冷讀（三個落地情境、禁讀原則卡與 skill）指出：三篇合計約 56 條對外連結裡「不點就接不下去」的只有 6 條（11%），而那 6 條全是同一種東西——本篇的程序要逐項消耗的列舉被放在別處（要填的欄位、要對照的類別、要驗的項目）；所有背景術語卡（16 張）都判可選，支撐與背景概念的外部化因此得到支持。判準寫成：被外部化的內容若是程序要逐項消耗的列舉，連結不能取代它，那份列舉留在本篇、定義才留在卡。這條與第三出口衝突過一次而衝突實例來自試點自己——審查依第三出口把兩處重述刪成純連結，冷讀者隨即在那兩處被迫跳出去；分界是重述與列舉。另補一條隱性前提：外部化的收益依賴目的地的語域一致，冷讀者兩次被帶到未改寫的樣板頁面後判斷「這不是給我讀的」並退回，而落地讀者對連結的信任是一次性的。
+
+**Version**: 0.60.0 — Round 3 自我應用與對抗審查的修正：(1) 載體選法四處副本停在被推翻的順序（「依序是引用數、判準完整度、位置」）而報告卡已改成兩軸——照舊順序執行會選到要避開的那一套，principle 卡與本文同步改為「判準完整度決定內容、引用數只決定住址、同一對象已有卡時卡通常是住址」；(2) auditing-articles Dimension 5 的「雙向 cross-link」與 principle 卡的「互連不是分工的證據」互相矛盾——補一列失效 pattern（同一對象被兩篇各自分解、雙向連結齊備仍失效）與兩條 checklist（雙向是必要非充分、鍵欄並置跑雙向對映與動作測試）；(3) 第三出口補已知偵測缺口——判定條件抓的是缺連結，而「連結齊備且 gloss 也齊備」不觸發任何檢查、且兩者可能不同步，掃描要問「這一句的內容在被連的那一頁裡有沒有」；(4) 試點結論限縮：分診程序只驗到對輸入敏感，執行者之間的一致性未測，下一輪由第二人對同一批列跑同一協議。
+
+**Version**: 0.59.0 — 把 v0.58.0 加的跨章版本檢查變成可執行的動作：補**雙向對映測試**（兩篇的成員並排、逐項問能不能互相對映完整、只存在於一側的成員是不相容的證據、也是損失最大的一項）與**動作測試**（讀者會不會為這件事做同一個動作兩次——一篇的產出是另一篇的輸入是互補、兩篇是同一個動作的兩份指示是衝突）；補載體選法與兩個被排除的修法（「同步成一份」是有共同起源的副本漂移的修法、對平行發明會產出兩邊都不像的第三套；「兩套並陳」把選擇丟給最沒有材料選的人）。上一版只寫了「要查」而沒寫「怎麼判」，判定無從執行。
+
+**Version**: 0.58.0 — 拆卡試點第二輪的回流（刻意挑會反駁首輪的對象：卡層零覆蓋的組織與流程題材）：(1) 出口選擇補第二個前置動作——**查這個概念在別篇有沒有不相容的版本**、有的話先收斂單一權威載體再選容器出口，因為三個出口都預設格內的內容是對的而只是裝錯容器；這類矛盾在單篇視角下不落空（每篇單獨讀都自洽），所以要在改寫前的分診階段查、不能等審查逐篇讀；(2) 修正上一版過度推廣的分布結論——兩次實測的分布差異很大（首輪以換成連結為主、第二輪以收斂載體為主），分布隨卡層覆蓋與跨章關係變動、可推廣的是分診程序而不是比例；(3) principle 卡出口段與自查清單同步。
+
+**Version**: 0.57.0 — 容器層拆卡試點的回流（對兩章教學內容 20 列逐列跑抽離重讀、依出口分診後改寫）：#262 增列第三個出口**換成連結**——概念在內容集合裡已有卡或專章承載、而格內那句是它的自撰 gloss 時，處置是刪掉 gloss 改放連結。它與既有的「內容自身冗餘則刪除」不同源：那裡的觸發源是內容的性質、這裡是容器誘發（表格三欄的形狀讓作者填一句 gloss 而不是放一條連結）。實測分布裡這一類的列數多於前兩個出口相加，因此原則一段補「選出口前先搜既有落點」、principle 卡出口表增列並補自查條、判讀徵兆的動作欄同步。試點沒有回答跳轉成本的方向（冷讀對照由改寫者本人執行、同源），保守邊界維持。
+
+**Version**: 0.56.0 — 批次 2 Round 3 三 reviewer audit（self-application / steelman / outbound）規格級修正：(1) 四條件升級——條件一補量化範圍與情態顯式（全稱 / 存在、強制 / 建議）、條件二在單句消費位的閉合標準明定為「判讀時不需先解壓」（steelman 抓到四條件跑不出自己 case 的判決——真正做功的解壓成本判準原本沒被規格化）、條件四補複合條件句邊界；(2) 抽離重讀升級——抽離單位明定為消費單位（一項 / 一列含鍵欄、非裸句、消掉驗收粒度與消費單位粒度的矛盾）、執行協議加「輸出復原出的命題本身」（模型會用文體先驗補完歧義後回報沒問題、yes/no 驗不出）；(3) 消費單位第三類**檢索鍵位**（title / description / 表格鍵欄 / 卡名——義務是識別充足、命題完整不適用、與精簡規範衝突時精簡優先）；(4) #262 補第三處置（內容自身冗餘 / 過時時刪除合法、觸發源是內容性質非容器形狀）、形態表補標題句化列、卡片層前提顯式；(5) 系譜連結——#261 補 #204 / #113 / #161（自包含三層家族）、#262 補 #210 / #255、#259 文體先驗接管段定為機制 SSoT；(6) writing-prompts 補抽離重讀自檢與表格策略邊界、writing-logs 補 log 訊息自足句；multi-round-review skill 同批補 B′ 執行面（四條件內嵌、檢索鍵位豁免、復原命題記錄協議；版號由該 skill 自己的版本記錄承載）。
+
+**Version**: 0.55.2 — 批次 2 Round 2 三 reviewer audit（cadence / 冷讀逐格 / 跨 surface）修正：(1) 豁免機制傳播補全——「簡報式判定看消費單位、不看表格密度」與查表型段落（逐列查詢）豁免補進原則一段、writing-articles 自檢句、_index 條目（Round 1 修法原本只傳到三個 surface）；原則一段去「三條」計數、補「拆卡淨收益待試點驗證」邊界；(2) 冷讀逐格修正——主線術語（單句消費位 / 敘事位）在首次描述處命名、文體先驗首用帶 gloss、#260 死指涉補連結、「解壓線」改可指認敘述、principle 卡的 47 對 46 改「總長相當」（頁面上不可驗證的數字）、#262 對 #261 的術語借用補定義與連結；(3) cadence 破模——互指關係列改寫作端 / 審查端分側（原為 27 字鏡射）、#261 判讀徵兆動作欄差異化（原 4/5 列同動作）、#262 反模式表收斂為形態辨識（讀者端訊號歸徵兆表）、放大條件表改三欄消費者制、#262 結語收單一命題；(4) 「抽離重讀」定為正典字串（原混用抽離測試）、principle 卡尾行注記改自我說明形式、reference-authoring-standards 單句消費位段瘦身成操作層。
+
+**Version**: 0.55.1 — 批次 2 Round 1 三 reviewer audit 修正：(1) dogfooding——sentence-self-sufficiency principle 卡的「壓縮歧義的X」parse 二解句展開、判定表兩格補主詞與完整形、表格鍵欄補消費單位邊界（一列是一個消費單位、鍵欄承載檢索鍵、命題義務落在內容欄）；(2) 事實修正——case 的修前引文原為節錄、先行詞實際在同項前分句、改為「壓縮重述要付解壓成本」的準確診斷、字數方向修正（括號總長 47 對 46、自足的成本落在成分安排不必然落在字數）、輪次歸因修正（壓縮句由 Round 1 audit 修正自己引入、Round 2 篇章層冷讀未見）；(3) content-pressure 卡——出口表第三列（違規項佔用出口欄位）抽出表外、簡報式豁免從文體標籤改為消費單位機制（查表型段落逐列查詢合法、違規精確形態是承載推導的內容被塞進表格）、talking points 補中文對位；(4) attention 稀釋改觀察層敘述、風格繼承的素材消歧為「被讀進 context 的規範文字」。
+
+**Version**: 0.55.0 — 原則 1 新增「內容壓力的出口是擴充結構、不是壓縮內容」：內容超出容器（判準裝不進表格格、概念裝不進標題、範例讓段落過長）時合法出口是就地展開（延伸段）或外部化成卡（範例寫進卡片、文章引用）、裁內容遷就容器違規；機制是容器形狀先驗（標題 / 表格格 / 段落有學來的長度帶、內容被裁去符合容器的預期形狀）；反模式命名「簡報式文章」（表格當主體、格內殘語、條列連綴——簡報的正當性來自講者在場補完、文章沒有講者）。經 WRAP 完整評估帶三條邊界：主線概念必須行內展開（外部化斷論證線、術語分級既有規則優先）、擴充的對象是結構不是句長（句層歸消費單位分配）、checklist / 規格表型內容的表格形態合法（消費單位是逐項執行）。新增 `content-pressure-resolves-by-expansion-not-compression` principle 卡、writing-articles 自檢清單補兩條生成端自問（表格格裝得下完整判準嗎 / 文章像簡報嗎）。同批 knowledge-cards skill 補「內容壓力是第二個建卡入口」（該 skill 自己的版本記錄承載版號）。
+
+**Version**: 0.54.0 — 原則 4 新增「行自足是可查詢性的配套義務」：grep-friendly 設計預期句子被單獨命中、單句消費位（checklist 項 / 表格格 / 判準句 / grep 目標行 / 章節首句）必須句內資訊自足；資訊充足是正向規格四條件（命題完整 / 指涉閉合 / 實詞可反推 / 一句一命題）、驗收用抽離重讀測試——負向禁令（「避免為美感犧牲資訊」）以模糊審美為軸、LLM 只能用造成問題的同一個文體先驗定義違規、正向規格才有梯度；敘事位可壓縮、三角取捨（精準 / 總長 / 句自足）按消費單位分配。新增 `sentence-self-sufficiency-by-consumption-unit` principle 卡、reference-authoring-standards 補「單句消費位的資訊自足」段 + 驗收清單兩條。從 #259 / #260 審查過程的壓縮句缺陷（三輪 agent reviewer 放行、使用者異源抓到「反比結構解釋不成無意」的殘片指涉）與教學文章「簡潔到辨識不出議題」兩個實證抽出；「句式美感」框架被使用者修正為正向定義（美感詞降級為候選訊號）。
+
+**Version**: 0.53.3 — 三 reviewer Round 3 audit（self-application / steelman / outbound）修正：(1) 鄰詞存在測試的判準表述把來源與目標語言對調（「目標語言存在更強專詞而原文沒選用」邏輯不通——原文選不了目標語言的詞、正確表述是原文語言的鄰詞；case 敘述本來是對的、錯的是會被抄走的抽象句）、全 surface 統一為「原文語言」；(2) 排他性因果三處收斂（反比訊號「無法解釋 / 只有刻意」改「比單點升格更難歸因於無意」、中段「唯一…失實」限定回升格側失實量級、「無人誤信」改「多半自我拆穿」）——結論不變、去掉撐不住的排他性；(3) 未言明前提顯形——量級階梯同構前提（significant 對「顯著 / 相當程度」時測試無輸出、給替代做法）、原文不可得的降級出口（未驗證轉述、不得再被引用）、讀者解碼器界線（荒謬與中段由領域知識畫）、入口段落繼承下游行動耦合（abstract / 新聞標題落零容忍區）；(4) scope 宣告——文學翻譯、非文字強度操縱（軸截斷）在邊界外；(5) 補時程與承諾位警惕列、慣例性通膨語域段（推薦信 / 悼詞的集體校準、降格讀成反向評價）、放大條件補轉換者誘因列；(6) translation-review pass 表操作欄自足化、auditing-articles tier 決策樹指涉閉合。
+
+**Version**: 0.53.2 — 三 reviewer Round 2 audit（cadence / 冷讀 / 跨 surface）+ 使用者抽離測試回饋修正：(1) 連結拓樸——principle 卡角色段收斂到實際存在的引用者並改相對連結、rewrite principle 卡分工段補 hyperbole 卡反向指標（skill 側原本單向）、translation-review 補 hyperbole 卡連結、SKILL.md 自評誇飾 grep 補兩軸判定框架落點（原本 grep 命中後無路由到判定框架）；(2) SSoT 分工——translation-review 量級段瘦身成操作層（原則層敘述刪除、留判準 + 表 + 詳見、與 auditing-articles Dimension 6 的操作層比例對齊）；(3) 冷讀補洞——hyperbole principle 卡補量級 / 升格 / 降格用語定義與「位置的功能」接合句、管制邊界區補外部規範說明、RCE 展開為遠端程式碼執行、「great 被譯成奇蹟」自足化；(4) 壓縮句重寫——反比操縱訊號的判準句依「單句抽離測試」展開（「反比結構解釋不成無意」這類殘片指涉改為句內閉合、checklist 項是單句消費位、必須自帶指涉）；(5) auditing-articles 補自評位 checklist、關係表「四個 dimension」計數漂移改「各 dimension」、Dimension 1-5 括號與框架表維度名對位；(6) 段名殘留清理（「操縱訊號」統一為「接收端判準」）、principle 卡尾行改自我說明形式、段序統一（分工 → 自查 → 核心）。
+
+**Version**: 0.53.1 — 三 reviewer Round 1 audit 回饋修正：強度系列自我應用——「中段是唯一會被當成事實吸收的失實」限定回升格側（原句被同卡降格段推翻）、「警惕等級最高」補排序機制（反比結構解釋不成無意滑動）、「比誇飾更貴」換成代價機制（應變者依錯的緊急度行動）、puffery 句拿掉「顯然 / 現成」補法域限定並修術語順序（誇大性宣傳詞（puffery））；鄰詞存在測試的語言歸屬修正（「原文與日文版都沒選用」→「日文版沒選用它」、奇跡是日文詞、英文原文在語言上選不了）；translation-review 量級段補「命中是候選、判定在語意層」句 + 檢查表補語意判定；principle 卡段標「操縱訊號」改「接收端判準」（首條是支撐檢查、原段標與內容錯位）；#111 關係列改用被引卡自己的分類（「立刻撞牆」是結局描述代替契約描述、非時間性誇張）；frontmatter metadata.version 補追（0.50.0 → 0.53.1、長期漂移）。
+
+**Version**: 0.53.0 — auditing-articles 新增 Dimension 6「強度對齊」：強度詞是 claim 的一部分、audit 檢查升格（誇飾、overclaim）與降格（嚴重性寫得雲淡風輕）兩個方向；判定框架是兩軸四區（文體契約 × 行動耦合、判斷單位是段落位置、同一文件內合法性分區——README tagline 可誇、feature 清單零容忍）；接收端兩個可操作判準——支撐存在測試（強度詞旁有無機制 / 數字）與反比操縱訊號（強度與可驗證性反向是推銷話術結構特徵）；跟 Dimension 4 分工（citation drift 三類是強度漂移在 citation 位的形態、Dimension 6 涵蓋其他位置 + 降格側）。新增 `hyperbole-legitimacy-by-position-function` principle 卡（含中段強度最危險——強到失實、又沒強到讓人識破、hook 段合法性、puffery 界線、六個警惕位置表）、修復「資安 Lens：四個維度」的計數漂移標題、觸發路由同步。從 #259 立卡後「什麼情境誇飾合理、什麼情境該警惕」的框架討論抽出。
+
+**Version**: 0.52.0 — 新增「轉述與翻譯要保留語意強度量級」：翻譯 / 轉述 / 摘要他人材料時、成品的強度詞停在原文量級（great 被譯成奇蹟是升格）、可操作判準是鄰詞存在測試（目標語言有更強的專詞而原文沒選用、代表原文刻意停在較低量級）；量級升格是中性工具、對錯由責任對象決定——保真轉換對原文負責鎖定量級、原創文案與宣告過的再創作對訴求效果負責可自由運用誇飾、分辨能力比禁令有用。新增 `rewrite-preserves-claim-intensity` principle 卡、translation-review 加量級檢查 pass（鄰詞存在測試 + 責任對象三分流）+ 兩列反模式（量級升格放行 / 拿譯文當原文比對）+ 自查清單兩條、原則 6 術語句與觸發路由同步。從一句登入頁標語的英→日→中三段轉換鏈抽出（日文在地化量級對位、AI 中譯升格成「奇蹟」）。
+
 **Last Updated**: 2026-08-08
-**Version**: 0.50.1 — `writing-documents.md` 的 Cross-reference format 表格：同目錄示範路徑被 broken-link 掃描判為斷鏈（原檔以自然語言註解說明「這是佔位路徑」，掃描器不解析自然語言）。改用 `broken-link-exempt` 行內 marker 顯式 opt-in 豁免（marker 僅作用於所在行），說明文字保留。
+**Version**: 0.51.0 — 第三支柱新增「軸名要取機制、不要取它的代理」：替判準或分界軸命名時選中的常是與機制同向但較弱的代理，而真正在做功的那句話留在括號或下一句的理由裡；代理與機制分岔處正是判準要處理的難題，於是判準在最需要它的地方失效。字句與結構層審查都抓不到，只有對抗性審查與個案實跑抓得到。新增 `axis-named-by-proxy-not-mechanism` principle 卡。從一個模組連續八輪審查裡三次同型 finding（跨兩批內容、不同 frame 各自抓到）抽出。
+
 **Version**: 0.50.0 — 兩項、皆由使用者對 v0.49.0 改寫成品的判定觸發。(1) 新增 `assertion-list-needs-reader-walkthrough` principle 卡 + 原則三「斷言清單要過重建測試」段：「三個毛病」式條列讀者只能硬記或盲信（正文沒給能重建結論的材料）、改寫成讀者位置的走查（讀者位置、動作加材料、結論後置）被判定「說得清楚非常多」、固化成寫作模式；含 before / after 對照範例、重建測試判準、審查 grep（拆開來看 / N 個毛病）。(2) `writing-code-comments.md` 頂端新增「最高原則：先評商業邏輯、再談文字」節 + 自檢清單首題：檢視註解的第一個評估是它有沒有解釋到這個行為 / 事件 / flag 的商業邏輯、沒有就不修文字、先重新檢討動機——這條決定註解該不該存在、其餘原則決定怎麼寫；SKILL.md 原則三同步加對應段。
 
 **Version**: 0.49.0 — 敘事姿態原則補「灌輸與懸念是同一個缺陷的兩個方向」：v0.48.0 立規範時把修懸念寫成「判準放開頭」、實際套用被使用者指出正是另一個方向的錯——把結論抽成開頭一段（或「觸發場景 / 整理目的 / 本文邊界」欄位組）直接給、推導擺後面、讀者沒有推導可依附只能硬記；概念要由讀者沿著推導自己長出來、不是被交付。分工修正為：標題承載結論（檢索錨）、開頭承載情境定位、判準在推導走完的位置浮現。principle 卡與 keyword bank 同步、徵兆表加「開頭有未經推導的結論摘要或欄位組」一列。同時示範性修正：把「三個毛病」式的斷言清單改成給讀者推導材料（例：「入口是自創行話」要附上實際進入點的程式碼對照、讓讀者自己看出註解與程式斷線）。

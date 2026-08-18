@@ -7,6 +7,7 @@ status: active
 created: 2026-05-05
 related:
 - PC-110
+- PC-BAL-043
 - agent-definition-standard
 - W17-072
 ---
@@ -21,7 +22,13 @@ related:
 - Schema 章節（`## Solution`）保持空白或只剩原始 placeholder comment
 - 結構上違反 W17-072，與 PC-110 root cause B（agent 自定義 H2 切斷 Schema section）形成共振
 
-**Why**：規則寫入 agent-definition-standard 後，agent 在 prompt-time 不會主動載入該規則全文。若 dispatch prompt 未顯式提示 W17-072，agent 默認沿用「自定義 H2 較直觀」的習慣寫法，規則遞延效應失效。框架設計假設「規則寫到 agent definition 即生效」，但實際生效需 PM dispatch prompt 或 hook 雙通道強制。
+**Why**：規則文字所在位置與 agent 撰寫 ticket body 的當下決策點距離過遠——規則在結構標準檔的執行責任章，決策點在寫 Solution 段的那一刻——agent 預設沿用「自定義 H2 較直觀」的習慣寫法。dispatch prompt 顯式提示之所以有效，是它把條文搬到決策點旁邊，屬縮短距離而非補送。
+
+依 PC-BAL-043 的分類，本模式（案例發生時 2026-05-05）屬 compliance gap：規範已送達 context 但行為未遵守。有效修法為強制層檢查與縮短規則距離，不是把條文換到別的載入層級。
+
+**原歸因撤回**：本段原寫「agent 在 prompt-time 不會主動載入該規則全文」，屬 delivery gap 的語言，已被實測證偽並於此撤回。探針實測（禁用全部工具、要求逐字回報自身 instructions）確認 `.claude/rules/core/` 目錄逐檔注入 subagent context，`agent-definition-standard.md` 在注入清單內；案例發生當時 W17-072 條文即位於該檔內，規範確實送達。
+
+**時點註記（載體已遷移，分類已翻面）**：上述 compliance gap 判定僅對案例發生時（2026-05-05）的載體配置成立。`agent-definition-standard.md` 其後收斂為速查 stub（v1.5.0，2026-06-12），W17-072「章節結構規則」主文外移至 `.claude/references/agent-definition-standard-details.md`（按需讀取層，不自動載入），原處僅留一行路由。**自 2026-06-12 起，同一條規則已轉為 delivery gap**：stub 送達、條文本身未送達。故本模式的既有 Action（dispatch prompt 顯式提示）在 2026-08-18 覆核時仍然必要，但性質已從「縮短距離」變為「補送」。此遷移為 PC-BAL-043「載入機制分層時規則會在兩型間遷移」一節所引的已觀測案例。
 
 **Consequence**：違規累積後 ticket body 無法被 type-aware schema 工具正確解析（PC-110 false negative 共振）；後人審查時 Schema 章節空白但實作內容散落自定義 H2，需手動重組。每個 W10-098 系列的剩餘子 ticket（10 個）都會重蹈覆轍，PM 需逐個 fix commit，成本是「每 ticket 多 1 commit + 多 1 兩 token 重組」。
 
@@ -97,9 +104,9 @@ W10-098.2 派發 thyme-documentation-integrator 補 PROP-001 frontmatter evaluat
 #### 根因分析
 
 - agent-definition-standard.md 含 W17-072 規則，但 thyme 在 dispatch prompt 中未被顯式提示
-- thyme prompt-time 未載入 W17-072 主文；當時記錄為「載入的是 AGENT_PRELOAD.md」，**校準（後續實測）**：`.claude/agents/*.md` 主文的 `@-import` 已實測不會展開為內容，thyme 實際上兩者皆未取得（AGENT_PRELOAD.md 亦未送達），僅 `.claude/rules/core/` 層級的內容有確實注入
+- 當時記錄為「thyme prompt-time 未載入 W17-072 主文，載入的是 AGENT_PRELOAD.md」。**校準（後續實測，見 PC-BAL-043）**：`.claude/agents/*.md` 主文的 `@-import` 不會展開為內容，AGENT_PRELOAD.md 未送達；但 `.claude/rules/core/` 層級逐檔確實注入，W17-072 條文當時即位於該層的 `agent-definition-standard.md` 內。故本項的正確表述是「W17-072 主文已送達，未被遵守」，非「未載入」——與本文件 Why 段的 compliance gap 判定一致
 - Dispatch prompt 內容只寫 ticket id 與步驟（claim → Edit → check-acceptance → commit → complete），未提結構約束
-- Agent 默認用直觀寫法（H2 章節「變更摘要」），結構違規但功能正確
+- Agent 預設用直觀寫法（H2 章節「變更摘要」），結構違規但功能正確
 
 #### 影響範圍
 
@@ -161,8 +168,9 @@ PM 用 ticket CLI append-log 寫內容的所有場景（W10-098 系列 PM 主動
 
 | PC | 相關性 |
 |------|------|
+| PC-BAL-043 | 上位分類判準：delivery gap vs compliance gap 的辨識與分流。本模式為 compliance gap 的實例（案例發生時 2026-05-05；2026-06-12 主文外移後轉為 delivery gap，見 Why 段時點註記），其原歸因誤用 delivery gap 語言，已於 Why 段撤回 |
 | PC-110 root cause B | agent 自定義 H2 切斷 Schema section validator |
-| PC-088 LLM tool selection bias | 同源：rule 寫了但 LLM 默認偏好直觀路徑 |
+| PC-088 LLM tool selection bias | 同源：rule 寫了但 LLM 預設偏好直觀路徑 |
 | PC-066 decision quality autopilot | 同源：規則自律機制與最需要它的場景負相關 |
 
 ---
@@ -176,4 +184,4 @@ PM 用 ticket CLI append-log 寫內容的所有場景（W10-098 系列 PM 主動
 | agent-definition-standard 加例題與 anti-pattern 範例 | 強化 agent 訓練資料 |
 | PM 主動審 body 結構（commit 後快速檢） | 補救（已違規時手動修）|
 
-**長期方向**：研究是否可在 prompt 載入機制做改善，讓 W17-072 等行為規範自動進入實作類 agent 的 prompt-time context，減少 PM dispatch prompt 重複貼提示的成本。
+**長期方向**：研究是否可在 prompt 載入機制做改善，讓 W17-072 等行為規範自動進入實作類 agent 的 prompt-time context，減少 PM dispatch prompt 重複貼提示的成本。此方向的前置條件已由 PC-BAL-043 提供：載入機制的實況可用探針實測（禁用全部工具、逐字回報自身 instructions）確定，不需靠閱讀設定檔推論；且該檔已確認 `.claude/rules/core/` 為已驗證送達的層級，可作為條文的落點候選。

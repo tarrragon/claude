@@ -3,7 +3,7 @@ name: frontend-with-playwright
 description: "框架無關的前端開發協議 + Playwright 驗證 + 跨領域 Stream 操作架構：DOM topology 先於 CSS、CSS / JS 邊界辨識、Playwright 三個位置（假設 / 行為 / 互動驗證）、寫成 layout 測試、framework-managed DOM 共處、Reactive 效能盤點、a11y 三道防線、Filter × Source 層錯位 + 五策略合成（適用前端 / 後端 / 演算法 / DB）。Triggers: 寫 CSS, selector 精準, CSS layers, CSS-only vs JS, class toggle, MutationObserver, observer scope, polling, framework 共處, 外部組件客製, custom UI 邊界外, playwright 驗證, browser_evaluate, layout test, focus management, aria-live, keyboard a11y, reactive 效能, runtime cost, layout reflow, lazy loading, 前端網頁開發, vanilla, vue, react, jquery, filter × source, 層錯位, paginated source, post-filter, 自動續抓, 推進 query, 誠實進度 UX, 演算法 pipeline, middleware filter, materialized view, map-reduce."
 license: MIT
 metadata:
-  version: 0.1.0
+  version: 0.3.0
   category: frontend-engineering
 ---
 
@@ -15,7 +15,7 @@ metadata:
 
 ---
 
-## Core Pillars（三大支柱）
+## Core Pillars（支柱）
 
 | 支柱                                        | 意義                                                                    |
 | ------------------------------------------- | ----------------------------------------------------------------------- |
@@ -25,7 +25,7 @@ metadata:
 
 ---
 
-## Five Principles（六大原則速查）
+## Principles（原則速查）
 
 讀者在本區塊能完成大方向判斷；具體展開（步驟 / 範例）依下方「觸發路由」進對應 reference。
 

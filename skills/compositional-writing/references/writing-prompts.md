@@ -300,6 +300,8 @@ Prompt 的每個 token 都是成本。以下策略在**不傷害意圖清晰度*
 
 ---
 
+**策略 2 的邊界**：能壓進表格的是純對映（值對值、名對名）；帶條件的判準句壓成表格格會把成分砍掉、模型逐格取用時拿到殘語——判準句留完整句、或壓縮後逐格跑抽離重讀（單獨讀、指涉能回收），見 [sentence-self-sufficiency-by-consumption-unit](principles/sentence-self-sufficiency-by-consumption-unit.md) 與 [content-pressure-resolves-by-expansion-not-compression](principles/content-pressure-resolves-by-expansion-not-compression.md)。
+
 ### 策略 3：引用路徑取代完整內容貼入
 
 **前**：
@@ -506,6 +508,8 @@ Ticket YAML frontmatter 的 Problem Analysis 區塊作為 context bundle：
 - [ ] 有穩定關鍵字供 grep（ticket ID / 章節名 / 工具名）
 - [ ] 變數佔位符為 snake_case 且自說明
 - [ ] 可重用區塊有邊界標記（如適用）
+
+- [ ] 規則句與 checklist 項逐條通過抽離重讀（單獨讀、主詞在場、指涉能回收）——prompt 是逐行被模型消費的單句消費位
 
 ### 欄位設計
 

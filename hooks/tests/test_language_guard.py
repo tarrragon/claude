@@ -14,6 +14,7 @@ Language Guard Hook - 測試（W17-068）
 
 import importlib.util
 import json as _json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -46,30 +47,40 @@ HOOK_PATH = HOOK_DIR / "language-guard-hook.py"
 # ============================================================================
 
 
-def _prime_sampling_counter():
+def _prime_sampling_counter(project_root: Path):
     """將抽樣計數器設為 SAMPLING_N - 1，確保下一次 hook 執行命中完整檢查。
 
     W17-197 修法：hook 採抽樣降級（每 N 次執行 1 次完整檢查，N=10），
     子行程測試需先 prime counter，否則 stderr 警告會因抽樣略過而為空。
+
+    計數器路徑改由 project_root 組出（呼應 hook 內 _get_sampling_counter_file()
+    以 get_project_root() 動態解析），不再依賴 hook_module 匯入時固定的路徑，
+    使 prime 對象與 subprocess 內 CLAUDE_PROJECT_DIR 指向的隔離目錄一致。
     """
-    counter_file = hook_module.SAMPLING_COUNTER_FILE
     sampling_n = hook_module.SAMPLING_N
+    counter_file = project_root / "hook-logs" / "_sampling" / "language-guard-hook.count"
     counter_file.parent.mkdir(parents=True, exist_ok=True)
     counter_file.write_text(str(sampling_n - 1))
 
 
-def _run_hook(payload: dict) -> tuple:
+def _run_hook(payload: dict, project_root: Path, env: dict) -> tuple:
     """以子行程方式執行 hook，回傳 (exit_code, stdout, stderr)。
 
-    每次執行前 prime 抽樣計數器，避免警告被抽樣略過。
+    project_root / env 由呼叫端的 hook_project_env fixture 提供（CLAUDE_PROJECT_DIR
+    指向 pytest tmp_path），使計數器讀寫完全隔離於 production repo，不再與 live
+    session 的 UserPromptSubmit hook 競態。每次執行前 prime 抽樣計數器，避免警告
+    被抽樣略過。
     """
-    _prime_sampling_counter()
+    _prime_sampling_counter(project_root)
+    full_env = os.environ.copy()
+    full_env.update(env)
     proc = subprocess.run(
         ["python3", str(HOOK_PATH)],
         input=_json.dumps(payload),
         capture_output=True,
         text=True,
         timeout=10,
+        env=full_env,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
@@ -313,75 +324,86 @@ class TestImplicitExpressionDetection:
 class TestHookSubprocessIntegration:
     """類別 D：完整 hook 子行程執行（規則 4：失敗必須可見）。"""
 
-    def test_clean_assistant_message_exits_zero_silent(self):
+    def test_clean_assistant_message_exits_zero_silent(self, hook_project_env):
         """D1: 純繁體無違規 → exit 0，stderr 無警告。"""
+        project_root, env = hook_project_env
         payload = _make_transcript("這是純繁體中文回應，無違規。")
-        code, _, err = _run_hook(payload)
+        code, _, err = _run_hook(payload, project_root, env)
         assert code == 0, f"clean message 應 exit 0，實際 {code}"
         assert "[LANG GUARD]" not in err, f"clean 訊息不應有警告：{err}"
 
-    def test_korean_in_assistant_message_exits_zero_with_warning(self):
+    def test_korean_in_assistant_message_exits_zero_with_warning(self, hook_project_env):
         """D2: 韓文觸發警告但不阻擋（exit 0 + stderr 警告）。"""
+        project_root, env = hook_project_env
         payload = _make_transcript("回應含韓文 안녕")  # 안녕
-        code, _, err = _run_hook(payload)
+        code, _, err = _run_hook(payload, project_root, env)
         assert code == 0, "警告非阻擋，應 exit 0"
         assert "[LANG GUARD]" in err
         assert "韓文" in err or "日文" in err or "非繁體" in err
 
-    def test_emoji_in_assistant_message_exits_zero_with_warning(self):
+    def test_emoji_in_assistant_message_exits_zero_with_warning(self, hook_project_env):
         """D3: emoji 觸發警告但不阻擋。"""
+        project_root, env = hook_project_env
         payload = _make_transcript("進度 ⚡ 完成 ✅ 任務")
-        code, _, err = _run_hook(payload)
+        code, _, err = _run_hook(payload, project_root, env)
         assert code == 0, "警告非阻擋，應 exit 0"
         assert "[LANG GUARD]" in err
         assert "emoji" in err.lower() or "U+26A1" in err or "U+2705" in err
 
-    def test_implicit_expression_in_assistant_message_exits_zero_with_warning(self):
+    def test_implicit_expression_in_assistant_message_exits_zero_with_warning(self, hook_project_env):
         """D4: 隱含表達句型觸發警告但不阻擋（PCB §自我驗證重點：警告非阻擋）。"""
+        project_root, env = hook_project_env
         payload = _make_transcript(
             "通常來說系統會自動處理。理想情況下不需要人工介入。"
         )
-        code, _, err = _run_hook(payload)
+        code, _, err = _run_hook(payload, project_root, env)
         assert code == 0, "隱含表達句型必為警告非阻擋（exit 0）"
         assert "[LANG GUARD]" in err
         assert "隱含表達" in err or "通常來說" in err or "理想情況下" in err
 
-    def test_multiple_violations_all_reported(self):
+    def test_multiple_violations_all_reported(self, hook_project_env):
         """D5: 多類違規共存時全部回報（emoji + 隱含表達）。"""
+        project_root, env = hook_project_env
         payload = _make_transcript(
             "通常來說 ⚡ 系統會自動處理。"
         )
-        code, _, err = _run_hook(payload)
+        code, _, err = _run_hook(payload, project_root, env)
         assert code == 0
         # emoji 警告
         assert "emoji" in err.lower() or "U+26A1" in err
         # 隱含表達警告
         assert "通常來說" in err
 
-    def test_empty_stdin_passes_silently(self):
+    def test_empty_stdin_passes_silently(self, hook_project_env):
         """D6: 無 stdin 輸入靜默通過（已預期非標準輸入路徑）。"""
+        project_root, env = hook_project_env
+        full_env = os.environ.copy()
+        full_env.update(env)
         proc = subprocess.run(
             ["python3", str(HOOK_PATH)],
             input="",
             capture_output=True,
             text=True,
             timeout=10,
+            env=full_env,
         )
         assert proc.returncode == 0, f"空 stdin 應 exit 0，實際 {proc.returncode}"
         # 空 stdin 屬已預期路徑，不應寫 stderr
         assert "[LANG GUARD]" not in proc.stderr
 
-    def test_no_assistant_message_passes_silently(self):
+    def test_no_assistant_message_passes_silently(self, hook_project_env):
         """D7: transcript 無 assistant 訊息靜默通過。"""
+        project_root, env = hook_project_env
         payload = {"transcript": [{"role": "user", "content": "test"}]}
-        code, _, err = _run_hook(payload)
+        code, _, err = _run_hook(payload, project_root, env)
         assert code == 0
         assert "[LANG GUARD]" not in err
 
-    def test_malformed_transcript_passes_silently(self):
+    def test_malformed_transcript_passes_silently(self, hook_project_env):
         """D8: malformed transcript 靜默通過（非 crash）。"""
+        project_root, env = hook_project_env
         payload = {"transcript": "not a list"}
-        code, _, err = _run_hook(payload)
+        code, _, err = _run_hook(payload, project_root, env)
         assert code == 0  # extract returns None, no warning
 
 

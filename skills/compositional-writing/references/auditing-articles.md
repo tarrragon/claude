@@ -48,11 +48,11 @@
 
 ---
 
-## 資安 Lens：四個維度具體展開
+## 資安 Lens：維度具體展開
 
 資安是高 stakes 內容最典型的 case。以下展開每個維度的 audit checklist——其他高 stakes 領域（concurrency / distributed / financial / medical）可類比、把 threat 換成 race / consistency violation / financial loss / patient harm。
 
-### Dimension 1：Threat model 明確性（claim + threats to validity）
+### Dimension 1：Threat model 明確性（claim clarity + threats to validity）
 
 每段 mitigation 論述要對稱寫「防什麼」+「不防什麼」。Audit checklist：
 
@@ -61,7 +61,7 @@
 - [ ] 「使用 X 防 Y」單句、Y 是抽象詞（傳輸風險 / 身分風險）—— 補 specific in-scope subset + out-of-scope threat
 - [ ] reader 讀完最容易誤以為 X 也防的 B 是什麼？B 在文中標 out-of-scope 了嗎？
 
-### Dimension 2：Mitigation 對位（evidence + method）
+### Dimension 2：Mitigation 對位（evidence chain + method rigor）
 
 Mitigation 名稱對位 threat 名稱是字面層（defense theater）、必須補 mechanism 層 + 前提層。Audit checklist：
 
@@ -76,7 +76,7 @@ Mitigation 名稱對位 threat 名稱是字面層（defense theater）、必須�
 - 用名稱層對位作為步驟示範（reader 照做不擋實際 mechanism）
 - 過時 mitigation 被當示範（MD5 / SHA-1 / 弱 PBKDF2 / 過時 cipher suite）沒標 deprecated
 
-### Dimension 3：Mitigation 的 context-dependence（method + reproducibility）
+### Dimension 3：Mitigation 的 context-dependence（method rigor + reproducibility）
 
 同 mitigation 在不同 deployment / config / scale / runtime / actor 條件下強度不同。Audit checklist：
 
@@ -125,22 +125,24 @@ Citation 涵蓋兩類：**外部** 標準（OWASP / RFC / NIST / CIS）跟 **內
 
 外部 citation 至少有版本號當 anchor、internal citation 連版本概念都沒有——audit 跟 review trigger 對 internal 反而更嚴格。
 
-### Dimension 5：跨章 / 跨檔的 Internal consistency（cross-chapter consistency）
+### Dimension 5：跨章 / 跨檔一致性（internal consistency、跨章 corpus 形態）
 
 當 audit 跨章節 / 跨檔的 corpus（多章節知識網、系列文章、多模組 spec）、單章 audit 不夠——必須 check 同議題在多檔的 ownership / SSoT。常見 pattern：
 
-| 失效 pattern                      | 範例                                                                                     |
-| --------------------------------- | ---------------------------------------------------------------------------------------- |
-| 同議題出現在多章、無 SSoT 標記    | 「供應商身分鏈傳導」同時出現在 7.2 / 7.5 / 7.6 / 7.12 四章、reader 不知道 anchor 在哪    |
-| 同術語跨章定義不一致              | 「最小權限」在不同章節各自詮釋、reader 無法 trace 到 canonical 定義                      |
-| 跨章 mitigation chain 推不通      | 章 A 說「交給 B 處理」、章 B 沒明示 anchor 自己接、責任 chain 斷裂                       |
-| Required cross-chapter scope 缺失 | 「必連章節」段列了下游、但下游章節沒反向 link、形成單向 reference、reader 一跳到下游就斷 |
+| 失效 pattern                      | 範例                                                                                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 同議題出現在多章、無 SSoT 標記    | 「供應商身分鏈傳導」同時出現在 7.2 / 7.5 / 7.6 / 7.12 四章、reader 不知道 anchor 在哪                                                 |
+| 同術語跨章定義不一致              | 「最小權限」在不同章節各自詮釋、reader 無法 trace 到 canonical 定義                                                                   |
+| 跨章 mitigation chain 推不通      | 章 A 說「交給 B 處理」、章 B 沒明示 anchor 自己接、責任 chain 斷裂                                                                    |
+| Required cross-chapter scope 缺失 | 「必連章節」段列了下游、但下游章節沒反向 link、形成單向 reference、reader 一跳到下游就斷                                              |
+| 同一對象被兩篇各自分解一次        | 兩篇各給一套階段表 / 欄位組 / 責任清單（成員數與切點不同）、**雙向連結齊備仍然失效**——reader 帶著一套的判讀結果到另一篇對不到任何一格 |
 
 Audit checklist：
 
 - [ ] 每個跨章重複出現的議題、有沒有 canonical 章節標記（「本議題的 SSoT 在 7.X」）？
 - [ ] 同術語（最小權限 / 收斂 / 擴散）是否在 canonical 章節定義一次、其他章節 link 過來而非各自詮釋？
-- [ ] 「下一步路由」「必連章節」是否雙向（A 連 B、B 也連回 A 的 hand-off context）？
+- [ ] 「下一步路由」「必連章節」是否雙向（A 連 B、B 也連回 A 的 hand-off context）？雙向是必要條件不是充分條件——互相連結、語彙不同、各自宣稱處理另一半的兩篇，仍可能是同一對象的兩套分解
+- [ ] 兩篇各有一張表描述同一類對象時，把鍵欄並置跑雙向對映（成員能不能互相對映完整、對映前先對齊粒度與層級）與動作測試（reader 會不會為這件事做同一個動作兩次）；不相容時先指定載體再談各章視角
 - [ ] 跨章 mitigation chain 是否完整（章 A 說「下游處理」、追到下游有對應 receiver）？
 - [ ] 跨章節同 case 是否一致歸類（同 incident 在多章引用作 evidence、視角差異有沒有衝突）？
 
@@ -151,6 +153,27 @@ Audit checklist：
 - Canonical 章寫議題的 SSoT 定義 + threat / mitigation chain
 - 其他章引用 canonical、只補自己 layer 的視角差異（不重新定義）
 - 跨章 cross-link 雙向、reader 在任一章都能 trace 到 SSoT
+
+### Dimension 6：強度對齊（claim clarity + evidence chain）
+
+強度詞（形容詞量級、模態、頻率）是 claim 的一部分、audit 要檢查強度與事實、證據是否對齊——兩個方向：升格（誇飾、overclaim）與降格（嚴重性寫得雲淡風輕）。誇飾的合法性由**段落位置的功能**決定、判斷單位是段落、以文件或文體整體一刀切兩個方向都會錯：
+
+| 文體契約 | 行動耦合低                      | 行動耦合高                                  |
+| -------- | ------------------------------- | ------------------------------------------- |
+| 預期修辭 | 誇飾自由區：slogan、詩、賀詞    | 管制邊界區：廣告誘導購買、募資頁面          |
+| 預期字面 | 有限使用區：教學 hook、開場敘事 | 零容忍區：規格、SLA、判準段、翻譯、安全陳述 |
+
+高 stakes 內容的正文幾乎全落在零容忍區；hook / 引言段是有限使用區、誇飾合法、進判準段要收——audit 時對入口段的強度不加分扣分、對判準段與宣稱段逐條檢查。Audit checklist：
+
+- [ ] 技術宣稱位的強度詞通過**支撐存在測試**嗎？（「快 10 倍」旁邊有 benchmark 是宣稱、裸的是誇飾佔位）
+- [ ] 轉述位（引用、翻譯、摘要）比原文更強嗎？（「證明了」常是原文「suggests」的升格、二手內容加倍警惕、回一手來源比對）
+- [ ] 「這一步非常關鍵」這類強調、後面有機制支撐嗎？（無支撐的空誇擠掉了本該放機制的位置）
+- [ ] 安全陳述位有「絕對安全」「不可能被繞過」句型嗎？（假防護感的入口形態、進本檔「Audit Recommendation Tier 化」的決策樹）
+- [ ] **自評位**：作者對自己產出的品質 verdict（「教科書級」「完美」）有技術理由支撐嗎？（對應 keyword bank 的自評誇飾 grep、命中後用兩軸判定）
+- [ ] **反比操縱訊號**：越難驗證的段落話講得越滿嗎？（「話最滿的段落恰好最難查證」這種全篇分布比單點升格更難歸因於無意的文風滑動、所以警惕等級最高）
+- [ ] **降格側**：風險段落的強度與嚴重性對位嗎？（RCE 寫成「可能造成一些影響」會讓應變者依錯的緊急度行動、incident report 尤其要掃）
+
+跟 Dimension 4 的分工：citation drift 三類（conditional → unconditional / specific → general / recommendation → mandate）是強度漂移在 citation 位的具體形態、Dimension 4 逐條對原文抓；本 dimension 涵蓋 citation 之外的所有位置（宣稱位、判準段、風險陳述、自評位）、並補反方向的降格檢查。詳見 [hyperbole-legitimacy-by-position-function](./principles/hyperbole-legitimacy-by-position-function.md)。
 
 ---
 
@@ -228,6 +251,9 @@ Audit 完成後產出結構化報告——格式比照學術 peer review、但 w
 ### Dimension 5：Cross-chapter consistency（僅跨章 corpus 適用）
 - ...
 
+### Dimension 6：強度對齊
+- ...
+
 ## Blocking conditions
 <必須 fix 才能 ship 的 weakness 清單、按 tier 排序>
 
@@ -279,12 +305,13 @@ Audit 完成後產出結構化報告——格式比照學術 peer review、但 w
 
 | Principle                                                                                                      | 關係                                                                                             |
 | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| [false-sense-of-security-as-primary-failure](./principles/false-sense-of-security-as-primary-failure.md)       | 本 reference 的主要 audit 目標 —— 四個 dimension 都在 catch false sense of security              |
+| [false-sense-of-security-as-primary-failure](./principles/false-sense-of-security-as-primary-failure.md)       | 本 reference 的主要 audit 目標 —— 各 dimension 都在 catch false sense of security                |
 | [risk-asymmetric-audit-standard](./principles/risk-asymmetric-audit-standard.md)                               | 本 reference 的啟動判準 —— 高 stakes 識別四訊號決定要不要跑 audit                                |
 | [literal-interception-vs-behavioral-refinement](./principles/literal-interception-vs-behavioral-refinement.md) | 本 reference 的 ceiling 警示 —— 名稱層 mitigation 對位 = 字面層、stop at 字面 = false confidence |
 | [writing-multi-pass-review](./principles/writing-multi-pass-review.md)                                         | 本 reference 是該卡「stakes-conditional 追加輪 E」的 reviewer-side 對應                          |
 | [ease-of-writing-vs-intent-alignment](./principles/ease-of-writing-vs-intent-alignment.md)                     | 本 reference 的 audit weakness 模式 —— 含糊敘述是寫作便利、跟 verifiability 反向                 |
 | [metadata-surface-in-writing-review](./principles/metadata-surface-in-writing-review.md)                       | Citation 是 metadata surface 的延伸 —— audit 範圍要涵蓋 citation 跟 title / heading 等讀者入口   |
+| [hyperbole-legitimacy-by-position-function](./principles/hyperbole-legitimacy-by-position-function.md)         | Dimension 6 的判定框架 —— 兩軸四區定位強度合法性、支撐存在測試與反比操縱訊號、降格對齊           |
 
 ---
 
@@ -294,7 +321,7 @@ Audit 完成後產出結構化報告——格式比照學術 peer review、但 w
 
 1. 確認啟動條件：高 stakes 識別四訊號至少一個觸發
 2. 列章節所有 mitigation / claim / citation 清單
-3. 對每條跑四 dimension checklist（threat model / 對位 / context / citation）
+3. 對每條跑 dimension checklist（threat model / 對位 / context / citation / 強度對齊；跨章 corpus 加 consistency）
 4. 每個 weakness 跑 tier 決策樹
 5. 產出 audit report（含 strengths / weaknesses-by-dimension / blocking / recommendation）
 6. 如有 withdraw / major：回寫作流程修、修完跑 audit pass 二次驗證

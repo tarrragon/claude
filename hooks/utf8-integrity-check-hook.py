@@ -35,6 +35,7 @@ from lib import (
     read_json_from_stdin,
     extract_tool_input,
     emit_hook_output,
+    get_project_root,
 )
 
 
@@ -54,7 +55,16 @@ MAX_REPORTED_LOCATIONS = 5
 # W10-047.2 抽樣降級：每 N 次觸發 1 次完整檢查（中頻 Hook，候選 3）
 # 來源 ANA：W10-035.3（Phase 3b P3 五 Hook，0% Action 比）
 SAMPLING_N = 10
-SAMPLING_COUNTER_FILE = Path(__file__).parent.parent / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
+
+
+def _get_sampling_counter_file() -> Path:
+    """計數器路徑：由 get_project_root() 動態解析（同語言守衛 hook 收斂）。
+
+    Why：舊實作於 import 時以 Path(__file__).parent.parent 固定路徑，恆指向
+    repo 層級 .claude/hook-logs/，不受 CLAUDE_PROJECT_DIR 覆寫，測試以
+    subprocess 執行時會 prime production 計數器並與 live session 競態。
+    """
+    return get_project_root() / "hook-logs" / "_sampling" / "utf8-integrity-check-hook.count"
 
 # 忽略的檔案類型（二進位或非文字檔案）
 BINARY_EXTENSIONS = frozenset({
@@ -78,15 +88,16 @@ def should_sample_run(logger) -> bool:
     使用持久計數檔案；讀寫失敗時保守執行（return True）。
     """
     try:
-        SAMPLING_COUNTER_FILE.parent.mkdir(parents=True, exist_ok=True)
+        counter_file = _get_sampling_counter_file()
+        counter_file.parent.mkdir(parents=True, exist_ok=True)
         count = 0
-        if SAMPLING_COUNTER_FILE.exists():
+        if counter_file.exists():
             try:
-                count = int(SAMPLING_COUNTER_FILE.read_text().strip() or "0")
+                count = int(counter_file.read_text().strip() or "0")
             except (ValueError, OSError):
                 count = 0
         count += 1
-        SAMPLING_COUNTER_FILE.write_text(str(count))
+        counter_file.write_text(str(count))
         run = (count % SAMPLING_N == 0)
         logger.debug("抽樣計數=%d, 本次%s", count, "執行" if run else "跳過")
         return run

@@ -172,6 +172,35 @@ def load_registry_snapshot() -> Tuple[Dict[str, Any], Any]:
     return registry, pm_registry
 
 
+# 顯示層 lease 三態（`dashboard` In Progress 標記用，CQ-001 防護：公開入口
+# 供跨模組呼叫，避免呼叫端直接 import 本模組的 `_find_lease_owner` 私有函式）。
+LEASE_STATE_LIVE = "live"
+LEASE_STATE_RECLAIMABLE = "reclaimable"
+LEASE_STATE_UNTRACKED = "untracked"
+
+
+def determine_lease_state(
+    registry: Dict[str, Any], ticket_id: Optional[str], pm_registry, now: datetime
+) -> str:
+    """顯示層通用判定：ticket_id 的 lease 三態。
+
+    判準與 `is_lease_reclaimable` 同源（`_find_lease_owner` + `pm_registry.is_fresh`），
+    僅將其布林結果拆為三態：registry 不可用或未追蹤該票 -> LEASE_STATE_UNTRACKED；
+    owner 為 FRESH session -> LEASE_STATE_LIVE（不可接手）；owner 為 STALE
+    session -> LEASE_STATE_RECLAIMABLE（走 reclaim 鑑識）。降級語意對齊
+    `is_lease_reclaimable`——無法判定時不標記，不宣稱可接手。
+    """
+    if pm_registry is None or not ticket_id:
+        return LEASE_STATE_UNTRACKED
+    owner = _find_lease_owner(registry, ticket_id)
+    if owner is None:
+        return LEASE_STATE_UNTRACKED
+    owner_data = (registry.get("sessions") or {}).get(owner) or {}
+    if pm_registry.is_fresh(owner_data.get("heartbeat_ts"), now):
+        return LEASE_STATE_LIVE
+    return LEASE_STATE_RECLAIMABLE
+
+
 def is_lease_reclaimable(
     registry: Dict[str, Any], ticket_id: str, pm_registry, now: datetime
 ) -> bool:
