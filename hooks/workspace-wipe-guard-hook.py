@@ -1,15 +1,17 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """
 Workspace Wipe Guard Hook - PreToolUse Hook
 
-功能: 並行派發期間偵測全工作區破壞性 git 操作（stash 建立 / checkout 丟棄
-      整個工作區 / reset --hard / clean -f / restore 丟棄整個工作區），
-      DENY 阻擋（exit 2，stderr 訊息，含安全替代方案）；非並行期僅 WARN
-      提醒（exit 0）。
+功能: 偵測全工作區破壞性 git 操作（stash 建立 / checkout 丟棄整個工作區 /
+      reset --hard / clean -f / restore 丟棄整個工作區），符合下列任一
+      條件即 DENY 阻擋（exit 2，stderr 訊息，含安全替代方案）：
+        (a) 並行派發中（dispatch-active.json 有活躍記錄）
+        (b) 主 repo 有未提交的 tracked 變更（無論是否並行）
+      兩者皆否（非並行期且主 repo 乾淨）僅 WARN 提醒（exit 0）。
 
 Hook Event: PreToolUse
 Matcher: Bash
@@ -38,7 +40,20 @@ staged 檔案一併提交（內容仍在版本裡，可 revert）；本守衛涵
 守衛涵蓋卻是空白（守衛擋住了較輕的、放行了較重的）。
 
 ============================================================
-涵蓋範圍（同判定條件：dispatch-active.json 有活躍派發才 DENY）
+背景（2026-08：DENY 條件擴充，PC-019 事故鏈第四步覆蓋缺口）
+============================================================
+PC-019 的資料丟失發生於實作代理人「完成之後」——此時 dispatch-active.json
+已清空，若 DENY 條件仍綁定「是否有派發活躍」，守衛在事故實際發生的時點
+（PM 執行 stash + checkout + stash drop）恰好降級為 WARN 放行，防護在
+最需要的時刻失效。本守衛防的資產是「主 repo 未提交的內容」，不是「派發
+是否進行中」——兩者在事故當下不同步，故 DENY 條件由「僅綁派發活躍狀態」
+擴充為「並行期 OR 主 repo 有未提交 tracked 變更」，兩條件為 OR 關係，任一
+成立即 DENY。「tracked」限定：僅 tracked 檔案的未提交變更（modified /
+staged 等）計入，未追蹤新檔案（`??`）不計入——後者本就不受 git 版本控制
+保障，風險模型與本守衛聚焦的「無版本可還原」場景不同。
+
+============================================================
+涵蓋範圍
 ============================================================
 1. git stash（建立形式：裸 stash / push / save，含 -u｜--include-untracked；
    排除 pop / apply / list / show / drop / clear / branch 等不清空工作區
@@ -66,8 +81,9 @@ staged 檔案一併提交（內容仍在版本裡，可 revert）；本守衛涵
 - `git restore --staged .`（純 index 操作）刻意排除，理由見上「涵蓋範圍」
   第 5 項的風險模型說明。
 - 與 bare-commit-guard-hook 相同：僅偵測 cwd 隱含形式與 `-C <path>` 形式，
-  不解析子 shell `cd` 形式的目標 repo；dispatch 狀態一律讀取專案根目錄
-  （get_project_root()）。
+  不解析子 shell `cd` 形式的目標 repo；dispatch 狀態與主 repo 未提交狀態
+  一律讀取專案根目錄（get_project_root()，經 CLAUDE_PROJECT_DIR 恆指主
+  repo，不隨 worktree 內執行時的實際 cwd 改變）。
 """
 
 import json
@@ -82,7 +98,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.dispatch_tracker import get_active_dispatches
-from lib.git_utils import get_project_root
+from lib.git_utils import FileStatus, get_project_root, get_uncommitted_files
 
 
 # 同 bare-commit-guard-hook 的 pathspec 判準：`--` 前後皆為空白或字串邊界
@@ -221,56 +237,99 @@ def _get_active_dispatch_count(
         return None
 
 
-def _build_deny_message(
-    op_name: str, safe_hint: Optional[str], dispatch_count: Optional[int]
-) -> str:
-    """組出 DENY 訊息：操作名稱 + 嚴重度說明 + 安全替代（worktree / 單檔 diff / pathspec 形式）。
+def _has_main_repo_uncommitted_tracked_changes(
+    project_root: Path, logger: logging.Logger
+) -> Optional[bool]:
+    """檢查主 repo 是否有未提交的 tracked 檔案變更（不含未追蹤新檔案）。
 
-    dispatch_count 為 None 代表讀取 dispatch-active.json 失敗、無法判定實際
-    並行數，訊息改為說明「保守阻擋」而非引用不存在的計數。
+    僅計入 tracked 檔案的未提交變更（modified / staged 等），未追蹤新檔案
+    （`??`）不計入——理由見檔案頂端「背景」章節「tracked」限定說明。
+
+    讀取失敗（git status 執行異常等）時回傳 None，代表「無法判定」，呼叫端
+    須採保守處理（視為有未提交變更、阻擋），理由同 `_get_active_dispatch_
+    count`：讀檔失敗與「確實乾淨」是兩種不同狀態，若把前者當成後者，等同
+    讀檔失敗即靜默降級為不設防，與本守衛防止資料遺失的目的相悖。
     """
+    try:
+        files = get_uncommitted_files(cwd=str(project_root))
+    except Exception:
+        logger.warning(
+            "讀取主 repo git status 失敗，無法判定是否有未提交變更，保守視為有變更",
+            exc_info=True,
+        )
+        return None
+    return any(not f.is_untracked for f in files)
+
+
+def _build_deny_message(
+    op_name: str,
+    safe_hint: Optional[str],
+    dispatch_count: Optional[int],
+    main_repo_dirty: Optional[bool],
+) -> str:
+    """組出 DENY 訊息：操作名稱 + 觸發理由（可多條）+ 安全替代。
+
+    觸發理由為 OR 關係，成立的每一條都要出現在訊息中，不虛構未成立的理由
+    （如僅主 repo 髒污觸發時，訊息不得聲稱「並行派發中」）。dispatch_count /
+    main_repo_dirty 為 None 代表對應狀態讀取失敗，訊息改為說明「保守阻擋」
+    而非引用不存在的數值。
+    """
+    reasons = []
+    if dispatch_count is None:
+        reasons.append(
+            "並行派發中：無法讀取並行派發記錄（.claude/dispatch-active.json 讀取"
+            "失敗），保守視為並行期阻擋"
+        )
+    elif dispatch_count > 0:
+        reasons.append(
+            f"並行派發中：目前有 {dispatch_count} 個實作代理人正在派發中"
+            "（.claude/dispatch-active.json 有活躍記錄）"
+        )
+    if main_repo_dirty is None:
+        reasons.append(
+            "主 repo 有未提交變更：無法讀取主 repo 的 git status（讀取失敗），"
+            "保守視為有未提交變更"
+        )
+    elif main_repo_dirty:
+        reasons.append(
+            "主 repo 有未提交變更：主 repo 存在未提交的 tracked 檔案變更"
+        )
+    reason_block = "\n".join(f"  - {r}" for r in reasons)
+
     if safe_hint:
         indented = "\n".join(f"  {line}" for line in safe_hint.splitlines())
         safe_hint_block = f"{indented}\n\n"
     else:
         safe_hint_block = ""
-    if dispatch_count is None:
-        reason = (
-            "理由：無法讀取並行派發記錄（.claude/dispatch-active.json 讀取"
-            "失敗），保守視為並行期阻擋"
-        )
-    else:
-        reason = (
-            f"理由：目前有 {dispatch_count} 個實作代理人正在派發中"
-            "（.claude/dispatch-active.json 有活躍記錄）"
-        )
     return (
-        f"[並行派發期間全工作區破壞性操作被阻擋：{op_name}]\n\n"
-        f"{reason}，此操作會影響整個工作區，"
-        "移除或覆寫其他並行代理人尚未 commit 的變更——且無版本可還原"
-        "（不同於裸 commit，stash/checkout/reset/clean/restore 動到的是未進"
-        "版本控制的內容，reflog 也救不了）。\n\n"
+        f"[全工作區破壞性操作被阻擋：{op_name}]\n\n"
+        f"理由：\n{reason_block}\n\n"
+        "此操作會影響整個工作區，移除或覆寫尚未 commit 的變更——且無版本"
+        "可還原（不同於裸 commit，stash/checkout/reset/clean/restore 動到"
+        "的是未進版本控制的內容，reflog 也救不了）。\n\n"
         f"{safe_hint_block}"
         "若目的是隔離觀測（如量測修復前後基線、失敗歸因鑑別），改用不影響"
         "共用工作區的方式：\n"
         "  git worktree add ../baseline-check <ref>   # 獨立工作區跑基線對照\n"
         "  git diff -- <file>                          # 單檔 diff 對照，免動工作區\n\n"
         "確需執行本操作（刻意行為，且已確認不影響其他代理人）時，先確認"
-        "dispatch-active.json 目前記錄，或等待其他代理人完成後再執行。\n"
+        "主 repo 已無未提交變更（git status 乾淨），且 dispatch-active.json"
+        "目前無活躍記錄或已等待其他代理人完成後再執行。\n"
     )
 
 
 def _build_warn_message(op_name: str) -> str:
-    """組出非並行期的 WARN 提醒訊息（exit 0，不阻擋）。"""
+    """組出「非並行期且主 repo 乾淨」時的 WARN 提醒訊息（exit 0，不阻擋）。"""
     return (
         f"[提醒] 偵測到全工作區破壞性操作：{op_name}。"
-        "目前無並行派發活躍記錄，本次放行；建議並行派發期間改用 git worktree "
-        "或單檔 diff 對照，避免誤動他人未 commit 的變更。\n"
+        "目前無並行派發活躍記錄且主 repo 無未提交變更，本次放行；建議並行"
+        "派發期間改用 git worktree 或單檔 diff 對照，避免誤動他人未 commit "
+        "的變更。\n"
     )
 
 
 def main() -> int:
-    """Hook 主邏輯：並行期 DENY 全工作區破壞性操作，非並行期 WARN。"""
+    """Hook 主邏輯：並行期 OR 主 repo 有未提交 tracked 變更 -> DENY，兩者皆否 -> WARN。"""
     logger = setup_hook_logging("workspace-wipe-guard")
 
     try:
@@ -297,17 +356,25 @@ def main() -> int:
     op_name, safe_hint = detected
     project_root = get_project_root()
     dispatch_count = _get_active_dispatch_count(project_root, logger)
+    main_repo_dirty = _has_main_repo_uncommitted_tracked_changes(project_root, logger)
 
-    if dispatch_count is None or dispatch_count > 0:
+    is_parallel = dispatch_count is None or dispatch_count > 0
+    is_main_repo_dirty = main_repo_dirty is None or main_repo_dirty
+
+    if is_parallel or is_main_repo_dirty:
         logger.warning(
-            "並行期全工作區破壞性操作被阻擋（操作=%s，活躍派發數=%s）",
+            "全工作區破壞性操作被阻擋（操作=%s，活躍派發數=%s，主 repo 未提交變更=%s）",
             op_name,
             "未知(讀取失敗，保守阻擋)" if dispatch_count is None else dispatch_count,
+            "未知(讀取失敗，保守阻擋)" if main_repo_dirty is None else main_repo_dirty,
         )
-        print(_build_deny_message(op_name, safe_hint, dispatch_count), file=sys.stderr)
+        print(
+            _build_deny_message(op_name, safe_hint, dispatch_count, main_repo_dirty),
+            file=sys.stderr,
+        )
         return 2
 
-    logger.info("非並行期全工作區破壞性操作，WARN 放行（操作=%s）", op_name)
+    logger.info("非並行期且主 repo 乾淨，全工作區破壞性操作 WARN 放行（操作=%s）", op_name)
     print(_build_warn_message(op_name), file=sys.stderr)
     return 0
 

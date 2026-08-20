@@ -126,11 +126,13 @@ class TestInvalidMultiViewStatusIsIntercepted:
 
     修復前：effort=low 短路發生在命令判斷之前，acceptance-gate 完全不執行，
     非法值靜默通過。
-    修復後：complete 命令一律進入 check_acceptance_status，multi_view_checker
-    得以實際執行並產生 WARNING。
+    修復後（effort 短路修正）：complete 命令一律進入 check_acceptance_status，
+    multi_view_checker 得以實際執行並產生偵測結果。
+    再修復（非法值升級為阻擋）：偵測到非法值時不再只是 WARNING 放行，
+    而是阻擋 complete 並提示 fix-multi-view-status 修正命令。
     """
 
-    def test_ana_ticket_invalid_multi_view_status_triggers_warning_even_at_effort_low(
+    def test_ana_ticket_invalid_multi_view_status_blocks_complete_even_at_effort_low(
         self, tmp_path
     ):
         module = _load_hook_module()
@@ -175,8 +177,11 @@ placeholder
             rc = module.main()
 
         output = buf.getvalue()
-        assert rc == module.EXIT_SUCCESS
-        assert "multi_view_status" in output or "single_view_ana" in output, (
-            "effort=low 時非法 multi_view_status 值必須被 acceptance-gate 偵測並提示，"
-            "而非如修復前那樣完全不執行檢查（0.2.1-W3-014 迴歸驗證）"
+        assert rc == module.EXIT_BLOCK, (
+            "非法 multi_view_status 值必須阻擋 complete，不可再如舊行為放行"
+        )
+        assert "值非法" in output or "single_view_ana" in output
+        assert "fix-multi-view-status" in output, (
+            "阻擋訊息必須明示修正命令 ticket track fix-multi-view-status，"
+            "使被擋的執行者有明確下一步"
         )

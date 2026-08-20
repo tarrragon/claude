@@ -1960,13 +1960,20 @@ def _auto_stage_completion_files(
     print(f"  [Auto-stage] 已 staged {len(deduped)} 個 metadata 檔案：")
     for path in deduped:
         print(f"    - {path}")
-    # 0.2.1-W3-246：建議指令改為 path-limited（-- <paths>），路徑與本次
-    # 實際 staged 範圍一致，避免共享 index 下不帶路徑的 commit 誤攬他人
-    # 已 staged 變更。
+    # 0.2.1-W3-246 原建議 path-limited（-- <paths>）；後續實測發現此語法會
+    # 丟棄既有 index、改讀指定路徑當下的 working tree 內容重建臨時 index
+    # 後提交，並非「從 index 挑選子集」，並行環境下反而會吸入他人未 stage
+    # 的編輯（見 .claude/rules/core/bash-tool-usage-rules.md 規則七）。改為
+    # 建議「先核對 staged 範圍、確認乾淨後裸 commit」，quoted_paths 保留供
+    # 使用者自行核對（如需清理非本票內容時可比對這份清單）。
     quoted_paths = " ".join(shlex.quote(p) for p in deduped)
     print(
-        f"  建議 commit: git commit -m \"chore({ticket_id}): metadata sync "
-        f"post-completion\" -- {quoted_paths}"
+        "  建議 commit（先核對 staged 範圍再裸 commit，避免 -- pathspec"
+        " 丟棄 index）："
+    )
+    print(f"    git diff --cached --name-only   # 應僅含：{quoted_paths}")
+    print(
+        f'    git commit -m "chore({ticket_id}): metadata sync post-completion"'
     )
 
 

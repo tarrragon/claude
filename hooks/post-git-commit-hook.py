@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 
 """
@@ -22,7 +22,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Any, Optional, Dict, List
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -174,8 +174,13 @@ def _extract_commit_type(command: str) -> str:
 
 def _scan_wave_tickets(
     project_dir: Path, version: str, logger
-) -> List[Dict[str, Optional[str]]]:
-    """掃描版本目錄中的 Ticket 檔案（W17-188 修復：改用共用 helper 支援雙結構）。"""
+) -> List[Dict[str, Any]]:
+    """掃描版本目錄中的 Ticket 檔案（W17-188 修復：改用共用 helper 支援雙結構）。
+
+    wave 為 yaml.safe_load 原生型別（通常為 int）；舊 str() 轉型是手寫 parser
+    一律回字串時代的相容補償，消費端（_find_current_wave / _detect_wave_completion）
+    僅同源自比較，不需字串化。
+    """
     ticket_files = scan_ticket_files_by_version(project_dir, version, logger)
     if not ticket_files:
         return []
@@ -184,8 +189,9 @@ def _scan_wave_tickets(
     try:
         for ticket_file in sorted(ticket_files):
             fm = parse_ticket_frontmatter(ticket_file, logger)
+            wave = fm.get("wave")
             tickets.append({
-                "wave": str(fm.get("wave", "")) or None,
+                "wave": wave if wave != "" else None,
                 "status": fm.get("status"),
                 "file": ticket_file.name,
             })
@@ -194,7 +200,7 @@ def _scan_wave_tickets(
     return tickets
 
 
-def _find_current_wave(tickets: List[Dict]) -> Optional[str]:
+def _find_current_wave(tickets: List[Dict]) -> Optional[Any]:
     """從 ticket 列表找出 in_progress ticket 的 wave。"""
     for ticket in tickets:
         if ticket.get("status") == "in_progress":

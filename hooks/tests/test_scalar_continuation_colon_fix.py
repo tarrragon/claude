@@ -11,18 +11,25 @@ X：Y」句型、或內文提及時間戳如 14:52），會被誤判為巢狀 di
 造成資料遺失（0.2.1-W3-330 稽核發現：既有票 9.5% 命中，`0.2.1-W3-189.md` 為
 具體案例）。
 
-修復：新增路徑 2.5，呼叫端（`_parse_yaml_lines`）判定 `current_key` 目前是否
-已累積「非空字串」（代表正在跨行折疊純量），是則優先視為純量延續行，不論
-是否含冒號。
+修復（W3-338，手寫 parser 時代）：新增路徑 2.5，呼叫端（`_parse_yaml_lines`）
+判定 `current_key` 目前是否已累積「非空字串」（代表正在跨行折疊純量），是則
+優先視為純量延續行，不論是否含冒號。該手寫 parser 已隨
+`parse_ticket_frontmatter` 遷移至 `yaml.safe_load` 而退役；本檔原「單元層」
+的 `TestParseNestedLineScalarContinuation`（直接測試已刪除的
+`_parse_nested_line` 內部函式）一併移除——其守護的行為（冒號續行不誤判為
+巢狀鍵）已由下方整合層測試對公開 API `parse_ticket_frontmatter` 的斷言涵蓋，
+且該行為在 yaml.safe_load 下依 YAML 規範原生成立（冒號僅在後接空白時才是
+mapping 分隔符）。
 
 驗證維度：
-1. 單元層：`_parse_nested_line` 新參數 `is_scalar_continuation` 正確分流
-2. 整合層：多行純量延續行含冒號能正確還原完整字串（含非首行冒號、
+1. 整合層：多行純量延續行含冒號能正確還原完整字串（含非首行冒號、
    連續多個冒號、行首行尾冒號等邊界）
-3. 迴歸層：既有巢狀 dict 欄位（who/decision_tree_path/how，含多鍵累積）
+2. 迴歸層：既有巢狀 dict 欄位（who/decision_tree_path/how，含多鍵累積）
    行為完全不變
-4. 全語料層：對修復前 43 個已知受損案例逐一重新解析，確認 100% 還原為字串
-   （見 Test Results 章節的獨立驗證腳本輸出）
+
+註：yaml.safe_load 對多行 plain scalar 的折行語意是「換行 → 空白」
+（YAML 規範原生行為），與手寫 parser 時代的「換行 → `\\n`」不同；下方測試
+對完整還原的斷言已依此更新為空白併接。
 """
 
 import sys
@@ -31,71 +38,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from lib import parse_ticket_frontmatter
-from lib.hook_ticket import _parse_nested_line, _NestedLineResult
 
 
 def _wrap(frontmatter_body: str) -> str:
     return "---\n" + frontmatter_body + "\n---\n\n# Body\n"
-
-
-# ----------------------------------------------------------------------------
-# 單元層：_parse_nested_line 新參數分流
-# ----------------------------------------------------------------------------
-
-
-class TestParseNestedLineScalarContinuation:
-    def test_is_scalar_continuation_true_with_colon_routes_to_scalar(self):
-        """is_scalar_continuation=True 時，含冒號的行不得判為巢狀 dict"""
-        result = _parse_nested_line(
-            line="  實證代價：0.2.1-W3-181 於 14:52 改 SKILLS 常數",
-            current_key="why",
-            multiline_marker=None,
-            current_nested_key=None,
-            is_scalar_continuation=True,
-        )
-        assert isinstance(result, _NestedLineResult)
-        key, value, is_nested_dict = result.update_action
-        assert key == "why"
-        assert value == "實證代價：0.2.1-W3-181 於 14:52 改 SKILLS 常數"
-        assert is_nested_dict is False
-
-    def test_is_scalar_continuation_true_without_colon_also_routes_to_scalar(self):
-        """is_scalar_continuation=True 時，無冒號的行同樣視為延續內容
-        （修復前此類行會被完全丟棄，見 docstring 說明）"""
-        result = _parse_nested_line(
-            line="  沒有冒號的延續行",
-            current_key="why",
-            multiline_marker=None,
-            current_nested_key=None,
-            is_scalar_continuation=True,
-        )
-        key, value, is_nested_dict = result.update_action
-        assert key == "why"
-        assert value == "沒有冒號的延續行"
-        assert is_nested_dict is False
-
-    def test_is_scalar_continuation_false_with_colon_still_nested_dict(self):
-        """is_scalar_continuation=False（預設，既有行為）時，含冒號的行仍
-        判為巢狀鍵值對——確保修復不影響既有巢狀 dict 解析"""
-        result = _parse_nested_line(
-            line="  author: John Doe",
-            current_key="metadata",
-            multiline_marker=None,
-        )
-        key, value, is_nested_dict = result.update_action
-        assert key == "metadata"
-        assert value == {"author": "John Doe"}
-        assert is_nested_dict is True
-
-    def test_is_scalar_continuation_default_preserves_backward_compatibility(self):
-        """未傳入 is_scalar_continuation 時預設 False，既有直接呼叫端
-        （如既有單元測試）行為完全不變"""
-        result = _parse_nested_line(
-            line="  priority: high",
-            current_key="metadata",
-            multiline_marker=None,
-        )
-        assert result.update_action == ("metadata", {"priority": "high"}, True)
 
 
 # ----------------------------------------------------------------------------
@@ -139,7 +85,11 @@ class TestMultilineScalarWithColonIntegration:
         assert "最後一行：結論" in why
 
     def test_narrative_field_without_colon_still_works(self):
-        """無冒號的多行純量（既有能運作的案例）修復後行為不變"""
+        """無冒號的多行純量（既有能運作的案例）行為不變
+
+        yaml.safe_load 對 plain scalar 折行採「換行 → 空白」（YAML 規範
+        原生語意），非手寫 parser 時代的 `\\n` 併接。
+        """
         content = _wrap(
             "id: 0.1.0-W1-003\n"
             "why: 第一行\n"
@@ -147,18 +97,18 @@ class TestMultilineScalarWithColonIntegration:
             "  第三行"
         )
         result = parse_ticket_frontmatter(content)
-        assert result["why"] == "第一行\n第二行\n第三行"
+        assert result["why"] == "第一行 第二行 第三行"
 
     def test_full_width_colon_in_continuation_also_preserved(self):
         """全形冒號（：）本身不觸發 ASCII 冒號判定路徑，理應一直安全；
-        納入測試矩陣確認修復未改變此既有安全案例"""
+        納入測試矩陣確認修復未改變此既有安全案例（空白併接，見上方說明）"""
         content = _wrap(
             "id: 0.1.0-W1-004\n"
             "why: 說明文字\n"
             "  純全形冒號：無 ASCII 冒號"
         )
         result = parse_ticket_frontmatter(content)
-        assert result["why"] == "說明文字\n純全形冒號：無 ASCII 冒號"
+        assert result["why"] == "說明文字 純全形冒號：無 ASCII 冒號"
 
 
 # ----------------------------------------------------------------------------
@@ -168,6 +118,9 @@ class TestMultilineScalarWithColonIntegration:
 
 class TestExistingNestedDictFieldsUnaffected:
     def test_who_with_current_and_history(self):
+        """`history: {}`（flow-style 空 dict）由 yaml.safe_load 正確還原為
+        真正的空 dict（W3-645 矩陣 `empty_map` 案例的 MISMATCH 修復對象，
+        舊 parser 誤轉為字串 `'{}'`）。"""
         content = _wrap(
             "id: 0.1.0-W1-005\n"
             "who:\n"
@@ -178,7 +131,7 @@ class TestExistingNestedDictFieldsUnaffected:
         result = parse_ticket_frontmatter(content)
         assert isinstance(result["who"], dict)
         assert result["who"]["current"] == "thyme-python-developer"
-        assert result["who"]["history"] == "{}"
+        assert result["who"]["history"] == {}
         assert result["status"] == "in_progress"
 
     def test_decision_tree_path_three_keys(self):
@@ -210,7 +163,8 @@ class TestExistingNestedDictFieldsUnaffected:
         assert result["how"]["strategy"] == "修正解析器"
 
     def test_where_layer_and_files_list(self):
-        """where.files 巢狀列表（0.2.1-W3-052.1 既有修復對象）不受本次變更影響"""
+        """where.files 巢狀列表由 yaml.safe_load 正確還原為真正的 list
+        （舊 parser 的字串併接為已知限制，本票遷移後解除）"""
         content = _wrap(
             "id: 0.1.0-W1-008\n"
             "where:\n"
@@ -222,12 +176,12 @@ class TestExistingNestedDictFieldsUnaffected:
         result = parse_ticket_frontmatter(content)
         assert result["where"]["layer"] == "待定義"
         files = result["where"]["files"]
-        assert isinstance(files, str)  # 既有已知限制，非本票範圍
-        assert "a.py" in files and "b.py" in files
+        assert isinstance(files, list)
+        assert files == ["a.py", "b.py"]
 
     def test_nested_dict_followed_by_scalar_with_colon(self):
         """巢狀 dict 欄位後緊接一個含冒號延續行的純量欄位，確認狀態切換正確
-        （current_nested_key 於新頂層鍵時應正確重設，不互相污染）"""
+        （yaml.safe_load 原生依縮排區分巢狀 dict 與頂層純量延續，空白併接）"""
         content = _wrap(
             "id: 0.1.0-W1-009\n"
             "who:\n"
@@ -237,4 +191,4 @@ class TestExistingNestedDictFieldsUnaffected:
         )
         result = parse_ticket_frontmatter(content)
         assert result["who"]["current"] == "thyme"
-        assert result["why"] == "說明文字\n含冒號的延續：內容"
+        assert result["why"] == "說明文字 含冒號的延續：內容"

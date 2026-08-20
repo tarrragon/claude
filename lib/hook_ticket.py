@@ -22,7 +22,9 @@ import logging
 import re
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, List, NamedTuple, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
+
+import yaml
 
 from .hook_base import get_project_root
 
@@ -73,19 +75,6 @@ DECISION_TREE_MARKERS = [
 
 
 # ============================================================================
-# 私有資料結構
-# ============================================================================
-
-class _NestedLineResult(NamedTuple):
-    """_parse_nested_line 的回傳值結構
-
-    表達嵌套行的解析結果，語義明確。
-    """
-    multiline_marker: Optional[str]  # 多行標記（|, >, |-, >-）或 None
-    update_action: Optional[Tuple[str, Any, bool]]  # (鍵名, 值, 是否為嵌套字典) 或 None
-
-
-# ============================================================================
 # Ticket 解析函式
 # ============================================================================
 
@@ -110,342 +99,16 @@ def _read_content(content_or_path: "Union[str, Path]", logger: Optional[logging.
         return str(content_or_path) if content_or_path else ""
 
 
-def _skip_empty_or_comment(line: str) -> bool:
-    """判斷是否為空行或註解行（應跳過）
-
-    Args:
-        line: 單行字串
-
-    Returns:
-        bool: 若為空行或註解行則返回 True，應跳過
-    """
-    stripped = line.strip()
-    return not stripped or stripped.startswith('#')
-
-
-def _parse_nested_line(
-    line: str,
-    current_key: Optional[str],
-    multiline_marker: Optional[str],
-    current_nested_key: Optional[str] = None,
-    is_scalar_continuation: bool = False,
-) -> _NestedLineResult:
-    """處理嵌套行（以 2 個空格開頭的縮排行）
-
-    嵌套行可能是：
-    1. 多行字串的延續行（若 multiline_marker 已設定）
-    2. 嵌套鍵值對（若無 multiline_marker，且非純量延續狀態）
-    3. 列表項目（以 "- " 開頭）
-    4. 多行純量（無 `|`/`>` 標記，靠 YAML plain scalar folding 換行）的
-       延續行，即使內容含冒號也不得誤判為巢狀鍵值對（0.2.1-W3-338）
-
-    此函式無副作用，回傳明確的結果以供呼叫端處理。
-
-    Args:
-        line: 嵌套行（縮排）
-        current_key: 當前頂層鍵名
-        multiline_marker: 多行標記（|, >, |-, >-）或 None
-        current_nested_key: 當前嵌套鍵名（用於列表項目累積）
-        is_scalar_continuation: 呼叫端判定 `current_key` 是否正在累積
-            「非空純量字串」（即 result[current_key] 已是非空 str，而非
-            尚未寫入或已是 dict）。為 True 時，即使本行含冒號也不視為
-            巢狀鍵值對起點，改走純量延續路徑（0.2.1-W3-338 修復：`why:`
-            等欄位若以 plain scalar 跨行換行，延續行含 ASCII 冒號（如
-            中文技術寫作「根因是 X：Y」句型或時間戳 14:52）過去會被誤判
-            為巢狀 dict 並覆蓋已累積內容，造成資料遺失）。預設 False
-            以維持既有直接呼叫端（如單元測試）的行為不變。
-
-    Returns:
-        _NestedLineResult: 含有：
-            - multiline_marker: 多行標記（保留或清空）
-            - update_action: (鍵名, 值, 是否為嵌套字典) 或 None
-              當為多行模式時，值為增量內容（呼叫端需累積）
-              當為嵌套鍵值對時，值為新增的鍵值對
-              當為列表項目時，值為列表項目內容（呼叫端負責累積）
-    """
-    nested_line = line.strip()
-
-    # 路徑 1：多行字串延續行
-    if multiline_marker is not None:
-        if current_key:
-            # 回傳增量內容，呼叫端負責累積
-            # 第一行（result[key] 為空）直接設定，後續行前面加換行符
-            return _NestedLineResult(
-                multiline_marker=multiline_marker,
-                update_action=(current_key, nested_line, False)
-            )
-        else:
-            # 無當前鍵，保留 multiline_marker 但無動作
-            return _NestedLineResult(
-                multiline_marker=multiline_marker,
-                update_action=None
-            )
-
-    # 路徑 2：列表項目（以 "- " 開頭）
-    if nested_line.startswith('- ') and current_nested_key and current_key:
-        # 列表項目內容
-        item_content = nested_line[2:]  # 去除 "- " 前綴
-        # 特殊標記：使用 None 作為鍵名的第一個元素，表示這是列表項目
-        # 呼叫端會識別 None 並累積到 current_nested_key
-        return _NestedLineResult(
-            multiline_marker=None,
-            update_action=(current_nested_key, item_content, False)
-        )
-
-    # 路徑 2.5：非空純量延續行（0.2.1-W3-338）—— current_key 已累積非空
-    # 字串內容，代表本行必為該純量欄位跨行換行的延續內容，不論是否含冒號
-    # 都不得改判為巢狀鍵值對（否則會如路徑 3 般用 dict 覆蓋已累積的字串，
-    # 造成資料遺失）。此路徑優先於路徑 3 判斷。
-    if is_scalar_continuation and current_key:
-        return _NestedLineResult(
-            multiline_marker=None,
-            update_action=(current_key, nested_line, False)
-        )
-
-    # 路徑 3：嵌套鍵值對
-    if ':' in nested_line:
-        nested_key, nested_value = nested_line.split(':', 1)
-        nested_key = nested_key.strip()
-        nested_value = nested_value.strip().strip("'\"")
-
-        if current_key:
-            # 回傳嵌套鍵值對資訊
-            return _NestedLineResult(
-                multiline_marker=None,
-                update_action=(current_key, {nested_key: nested_value}, True)
-            )
-
-    # 無 multiline_marker 也無冒號，無動作
-    return _NestedLineResult(
-        multiline_marker=None,
-        update_action=None
-    )
-
-
-def _parse_yaml_lines(frontmatter_text: str) -> dict:
-    """解析 YAML frontmatter 文本（逐行）
-
-    支援列表項目：
-    - 頂層 block-style 列表：`children:\n- id` 或 `children:\n  - id`
-      → 回傳 list[str]
-    - 頂層 flow-style 列表：`children: [a, b]` → 回傳 list[str]
-    - 嵌套列表項目：`history:\n  user: a\n    - item` → 累積到嵌套鍵
-
-    Args:
-        frontmatter_text: frontmatter 內容（已去除---標記）
-
-    Returns:
-        dict: 解析出的 key-value 對（列表欄位回傳 list）
-    """
-    result = {}
-    current_key = None
-    current_nested_key = None  # 追蹤嵌套鍵（用於列表項目的累積）
-    multiline_marker = None
-
-    for line in frontmatter_text.split('\n'):
-        if _skip_empty_or_comment(line):
-            continue
-
-        # 頂層 block-style 列表項目（無縮排 "- item"）
-        # 例如：children:\n- 0.1.0-W1-001.1
-        if line.startswith('- ') and current_key and multiline_marker is None:
-            item = line[2:].strip().strip("'\"")
-            if item:
-                if not isinstance(result.get(current_key), list):
-                    result[current_key] = []
-                result[current_key].append(item)
-            continue
-
-        # 頂層列表項目的 YAML 折行延續行
-        # pyyaml.dump 預設 width=80，長列表項目（如 CJK 內容約 75+ 字元）
-        # 會在項目中間折行，延續行縮排 = 該列表 dash 縮排 + 2（0 縮排列表
-        # 延續行 2 縮排；2 縮排列表延續行 4 縮排），且不再以 "- " 開頭。
-        # 修復前：此類延續行落入下方「巢狀鍵值對／多行標記／列表項目」通用
-        # 分支，因 current_key 對應值是 list（非 str），is_scalar_continuation
-        # 判定為 False，且無冒號可組成巢狀鍵值對，遂被靜默捨棄——單一驗收
-        # 條件文字因此只剩折行前的第一行，第二行起完全遺失且無任何錯誤訊息。
-        # 修復：以「current_nested_key 為 None 且 current_key 已是非空
-        # list」判定本行必為延續行（無論實際縮排 2 或 4 格皆涵蓋，故置於
-        # 縮排層級分流之前），依 YAML plain/quoted scalar 折行語意（換行 →
-        # 單一空白）併回最後一個列表項目，而非另起新項目或整段捨棄。
-        if (
-            current_key
-            and multiline_marker is None
-            and current_nested_key is None
-            and isinstance(result.get(current_key), list)
-            and result[current_key]
-            and line[:1] == ' '
-            and not line.strip().startswith('- ')
-        ):
-            continuation_text = line.strip().strip("'\"")
-            if continuation_text:
-                result[current_key][-1] = "{} {}".format(
-                    result[current_key][-1], continuation_text
-                )
-            continue
-
-        # 判斷行的縮排層級
-        if line.startswith('    '):
-            # 4 格以上：深層嵌套（如列表項目或多層嵌套）
-            # 如果 current_nested_key 存在，累積到該鍵
-            if current_nested_key and current_key:
-                nested_line = line.strip()
-                # 處理列表項目（以 - 開頭）或其他深層內容
-                if not isinstance(result.get(current_key), dict):
-                    result[current_key] = {}
-
-                nested_dict = result[current_key]
-                if current_nested_key not in nested_dict:
-                    nested_dict[current_nested_key] = ""
-
-                # 累積內容（處理列表項目或其他深層行）
-                if nested_line.startswith('- '):
-                    # 列表項目：去除 '- ' 前綴
-                    item_content = nested_line[2:]
-                else:
-                    # 其他深層行
-                    item_content = nested_line
-
-                # 累積內容
-                nested_dict[current_nested_key] += "\n" + item_content if nested_dict[current_nested_key] else item_content
-            continue
-        elif line.startswith('  '):
-            # 頂層 block-style 列表項目（2 空白縮排 "  - item"）
-            # 只在無 multiline_marker 且無 current_nested_key 時觸發
-            # （避免吃掉嵌套 dict 裡的列表）
-            stripped = line.strip()
-            if (
-                stripped.startswith('- ')
-                and current_key
-                and multiline_marker is None
-                and current_nested_key is None
-                and not isinstance(result.get(current_key), dict)
-            ):
-                item = stripped[2:].strip().strip("'\"")
-                if item:
-                    if not isinstance(result.get(current_key), list):
-                        result[current_key] = []
-                    result[current_key].append(item)
-                continue
-
-            # 2 格：嵌套鍵值對、多行標記或列表項目
-            # 0.2.1-W3-338：current_key 已累積「非空字串」代表正在跨行折疊
-            # 純量欄位（如 why: 長文字延續行），此時本行即使含冒號也不得
-            # 被誤判為巢狀鍵值對起點（見 _parse_nested_line 路徑 2.5 說明）。
-            # 已是 dict（真正巢狀欄位如 who/how/decision_tree_path）或尚未
-            # 寫入（空字串，如 who: 空值待補子欄位）則維持原判斷。
-            current_value = result.get(current_key)
-            is_scalar_continuation = (
-                isinstance(current_value, str) and current_value != ""
-            )
-            nested_result = _parse_nested_line(
-                line,
-                current_key,
-                multiline_marker,
-                current_nested_key,
-                is_scalar_continuation=is_scalar_continuation,
-            )
-            multiline_marker = nested_result.multiline_marker
-
-            # 根據回傳的 update_action 更新 result
-            if nested_result.update_action is not None:
-                key, value, is_nested_dict = nested_result.update_action
-                if is_nested_dict:
-                    # 嵌套字典模式：初始化或更新嵌套字典
-                    if not isinstance(result.get(key), dict):
-                        result[key] = {}
-                    result[key].update(value)
-                    # 記錄最後更新的嵌套鍵（用於後續列表項目的累積）
-                    if value:
-                        current_nested_key = list(value.keys())[0]
-                else:
-                    # 多行模式或列表項目：累積內容
-                    # 如果 current_nested_key 存在且 current_key 是字典，視為列表項目
-                    if current_nested_key and isinstance(result.get(current_key), dict):
-                        # 列表項目模式：累積到 current_nested_key
-                        nested_dict = result[current_key]
-                        if current_nested_key not in nested_dict:
-                            nested_dict[current_nested_key] = ""
-                        nested_dict[current_nested_key] += "\n" + value if nested_dict[current_nested_key] else value
-                    else:
-                        # 多行模式：累積到 key（頂層）
-                        if key not in result:
-                            result[key] = ""
-                        result[key] += "\n" + value if result[key] else value
-            continue
-
-        if ':' in line:
-            # 頂層鍵值對
-            current_key, multiline_marker = _parse_top_level_pair(line, result)
-            current_nested_key = None  # 重設嵌套鍵追蹤
-
-    return result
-
-
-def _parse_top_level_pair(line: str, result: dict) -> Tuple[Optional[str], Optional[str]]:
-    """處理頂層鍵值對
-
-    頂層鍵值對可能包含：
-    1. 簡單值（移除引號）
-    2. 多行標記（|, >, |-, >-）後續跟縮排行
-
-    Args:
-        line: 頂層鍵值對（不縮排）
-        result: 結果字典（會被修改）
-
-    Returns:
-        Tuple[Optional[str], Optional[str]]: (current_key, multiline_marker)
-            - current_key: 解析出的鍵名
-            - multiline_marker: 若有多行標記則返回標記，否則為 None
-    """
-    key, _, value = line.partition(':')
-    key = key.strip()
-    value = value.strip()
-
-    # 檢查多行標記
-    if value in ('|', '>', '|-', '>-'):
-        result[key] = ""
-        return key, value
-
-    # Flow-style 列表：`key: [a, b]` 或 `key: []`
-    if value.startswith('[') and value.endswith(']'):
-        inner = value[1:-1].strip()
-        if not inner:
-            result[key] = []
-        else:
-            items = []
-            for item in inner.split(','):
-                cleaned = item.strip().strip("'\"")
-                if cleaned:
-                    items.append(cleaned)
-            result[key] = items
-        return key, None
-
-    # 空值（例如 `children:`）：初始化為空字串，
-    # 後續若偵測到 block-style 列表會改為 list（見 _parse_yaml_lines）
-    if not value:
-        result[key] = ""
-        return key, None
-
-    # 移除引號
-    value_clean = value.strip("'\"")
-    result[key] = value_clean
-    return key, None
-
-
 def parse_ticket_frontmatter(
     content_or_path: "str | Path",
     logger: "logging.Logger | None" = None
 ) -> dict:
     """統一的 YAML frontmatter 解析（支援 str 和 Path 輸入）
 
-    支援以下 YAML 特性：
-    - 頂層 key-value 對
-    - 多行字串（|, >, |-, >-）
-    - 嵌套結構（縮排鍵值對）
-    - 簡單列表
-
-    無外部依賴，支援 Python 3.9+。
+    改用 `yaml.safe_load` 解析 frontmatter 本體，取代舊有手寫逐行 parser。
+    舊 parser 對 pyyaml 折行輸出（`yaml.dump` 預設 width=80）與 flow-style
+    空容器（`{}`/`[]`）等語法無法正確還原，公開契約與 fail-safe 語意詳見
+    下方。
 
     Args:
         content_or_path: Ticket 檔案內容（字串）或檔案路徑（Path）
@@ -453,7 +116,7 @@ def parse_ticket_frontmatter(
 
     Returns:
         dict: 解析出的 frontmatter key-value（始終返回 dict，無 frontmatter 時返回空 dict、
-              或解析失敗時也返回空 dict 並記錄警告）
+              或解析失敗時也返回空 dict 並記錄警告，不拋例外中斷呼叫端）
     """
     # 步驟 1：取得文件內容
     content = _read_content(content_or_path, logger)
@@ -462,9 +125,6 @@ def parse_ticket_frontmatter(
 
     # 步驟 2：驗證 frontmatter 標記和邊界（--- 須獨占一行，錨定比對，
     # 避免欄位值內任意位置出現的連續三個減號被誤判為邊界）
-    if not content.startswith('---'):
-        return {}
-
     start_match = _FRONTMATTER_BOUNDARY_RE.match(content)
     if start_match is None:
         return {}
@@ -477,13 +137,26 @@ def parse_ticket_frontmatter(
     if not frontmatter_text:
         return {}
 
+    # 步驟 3：以 yaml.safe_load 解析。fail-safe 語意：解析失敗（語法錯誤）
+    # 或頂層結果非 dict（如純量、list）皆視為解析失敗，回空 dict + warning，
+    # 不拋例外中斷呼叫端（既有公開契約，供 hook 安全呼叫）。
     try:
-        # 步驟 3：解析 YAML
-        return _parse_yaml_lines(frontmatter_text)
+        result = yaml.safe_load(frontmatter_text)
     except Exception as e:
         if logger:
             logger.warning("解析 frontmatter 失敗: {}".format(e))
         return {}
+
+    if not isinstance(result, dict):
+        if logger:
+            logger.warning(
+                "解析 frontmatter 失敗: 頂層結構非 dict（實際型別: {}）".format(
+                    type(result).__name__
+                )
+            )
+        return {}
+
+    return result
 
 
 def parse_ticket_date(value: "any", logger: "logging.Logger | None" = None) -> Optional[datetime]:

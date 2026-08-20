@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 
 """
@@ -24,7 +24,7 @@ import sys
 import json
 import re
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple
+from typing import Any, Optional, Dict, List, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -161,7 +161,7 @@ def scan_wave_tickets(
     project_dir: Path,
     version: str,
     logger
-) -> List[Dict[str, Optional[str]]]:
+) -> List[Dict[str, Any]]:
     """
     掃描版本目錄中的 Ticket 檔案，回傳 wave 和 status 的清單
 
@@ -171,7 +171,8 @@ def scan_wave_tickets(
         logger: 日誌物件
 
     Returns:
-        list - [{wave, status}] 清單，其中 wave 和 status 可能為 None
+        list - [{wave, status, file}] 清單；wave 為 yaml.safe_load 原生型別
+        （通常為 int）、status 為 str，兩者皆可能為 None
     """
     # 使用共用 helper 支援雙結構（flat + hierarchical），W17-188 修復
     ticket_files = scan_ticket_files_by_version(project_dir, version, logger)
@@ -187,15 +188,16 @@ def scan_wave_tickets(
 
         for ticket_file in ticket_files:
             try:
-                # W11-021：改用統一 frontmatter 解析（PyYAML 透過 hook_utils），
-                # 取代原本 regex 手刻路徑。frontmatter 欄位轉字串以保持向後相容
-                # （原 regex 解出 wave 為 "11" 而非 int 11）。
+                # W11-021：改用統一 frontmatter 解析（PyYAML 透過 hook_utils）。
+                # frontmatter 現已由 yaml.safe_load 原生型別解析，wave 保持 int，
+                # 不再字串化——舊 str() 轉型是 regex 手刻路徑（回傳字串 "11"）與
+                # 手寫 parser 時代的相容補償，消費端（本檔 detect_wave_completion）
+                # 僅同源自比較，不需字串化。
                 frontmatter = parse_ticket_frontmatter(ticket_file, logger)
-                wave_raw = frontmatter.get("wave") if frontmatter else None
-                status_raw = frontmatter.get("status") if frontmatter else None
-
-                wave = str(wave_raw) if wave_raw is not None and wave_raw != "" else None
-                status = str(status_raw) if status_raw is not None and status_raw != "" else None
+                wave = frontmatter.get("wave") if frontmatter else None
+                status = frontmatter.get("status") if frontmatter else None
+                wave = wave if wave != "" else None
+                status = status if status != "" else None
 
                 tickets.append({"wave": wave, "status": status, "file": ticket_file.name})
             except Exception as e:

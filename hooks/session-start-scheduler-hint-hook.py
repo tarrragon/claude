@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.10"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 
 """
@@ -180,19 +180,27 @@ def _detect_active_version(project_root: Path, logger) -> Optional[str]:
 
 
 def _extract_spawned_list(frontmatter: dict) -> List[str]:
-    """從 frontmatter 萃取 spawned_tickets 清單（支援 list 或 YAML 字串格式）。"""
+    """從 frontmatter 萃取 spawned_tickets 清單（支援 list 或 YAML 字串格式）。
+
+    str 分支涵蓋兩種合法 YAML 寫法：多行 dash 列表與單一純量（無 dash，
+    schema 允許 list 欄位純量化），非手寫 parser 缺陷。
+    """
     raw = frontmatter.get("spawned_tickets") or []
     if isinstance(raw, list):
         return [str(s).strip() for s in raw if s]
     if isinstance(raw, str):
-        result = []
-        for line in raw.split("\n"):
-            line = line.strip()
-            if line.startswith("-"):
-                item = line[1:].strip()
-                if item:
-                    result.append(item)
-        return result
+        lines = raw.split("\n")
+        if any(line.strip().startswith("-") for line in lines):
+            result = []
+            for line in lines:
+                line = line.strip()
+                if line.startswith("-"):
+                    item = line[1:].strip()
+                    if item:
+                        result.append(item)
+            return result
+        scalar = raw.strip()
+        return [scalar] if scalar else []
     return []
 
 
@@ -229,7 +237,7 @@ def scan_spawned_pending(
     ana_completed: List[Tuple[str, List[str]]] = []
     for tf in ticket_files:
         try:
-            fm = parse_ticket_frontmatter(tf)
+            fm = parse_ticket_frontmatter(tf, logger)
         except Exception as e:  # noqa: BLE001
             logger.debug("解析 frontmatter 失敗 %s: %s", tf.name, e)
             continue
@@ -256,7 +264,7 @@ def scan_spawned_pending(
                 logger.debug("找不到 spawned ticket 檔案: %s", sid)
                 continue
             try:
-                sfm = parse_ticket_frontmatter(spawned_file)
+                sfm = parse_ticket_frontmatter(spawned_file, logger)
             except Exception as e:  # noqa: BLE001
                 logger.debug("解析 spawned frontmatter 失敗 %s: %s", sid, e)
                 continue

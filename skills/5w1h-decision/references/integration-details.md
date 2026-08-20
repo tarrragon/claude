@@ -31,7 +31,7 @@ The UserPromptSubmit Hook automatically:
 
 Since v0.25.1, **5W1H format is enforced at the system level** via Output Style, not through manual activation or Hook execution.
 
-**File Location**: `.claude/output-styles/5w1h-format.md`
+**File Location**: `.claude/output-styles/5w1h-format.md`<!-- portability-allow: 約定位置，本 skill 隨附的 output style 安裝點 -->
 
 ### Enforcement Mechanism
 
@@ -86,7 +86,7 @@ This dual-layer approach provides **robustness**:
 If needed, generate a token manually:
 
 ```bash
-uv run .claude/skills/5w1h-decision/scripts/generate_token.py
+uv run .claude/skills/5w1h-decision/scripts/generate_token.py  # portability-allow: consumer 共通安裝位置
 ```
 
 ### Token Validation
@@ -94,7 +94,7 @@ uv run .claude/skills/5w1h-decision/scripts/generate_token.py
 To validate 5W1H content against the token:
 
 ```bash
-uv run .claude/skills/5w1h-decision/scripts/validate_5w1h.py "your 5w1h content here"
+uv run .claude/skills/5w1h-decision/scripts/validate_5w1h.py "your 5w1h content here"  # portability-allow: consumer 共通安裝位置
 ```
 
 ---
@@ -138,8 +138,8 @@ The 5W1H validation system checks:
 
 ## Related Files
 
-- **Framework Definition**: `.claude/methodologies/5w1h-self-awareness-methodology.md`
-- **Agile Refactor Rules**: `.claude/methodologies/agile-refactor-methodology.md`
-- **Avoidance Detection**: `.claude/methodologies/claude-self-check-methodology.md`
-- **Output Style Enforcement**: `.claude/output-styles/5w1h-format.md`
+- **Framework Definition**: `5w1h-self-awareness-methodology`（各專案自有）
+- **Agile Refactor Rules**: `agile-refactor-methodology`（各專案自有）
+- **Avoidance Detection**: `claude-self-check-methodology`（各專案自有）
+- **Output Style Enforcement**: `.claude/output-styles/5w1h-format.md`<!-- portability-allow: 約定位置，本 skill 隨附的 output style 安裝點 -->
 - **Project Guidelines**: `CLAUDE.md` → Skill References section

@@ -22,7 +22,9 @@ import pytest
 from ticket_system.commands.create import (
     execute,
     register,
-    _validate_source_ticket_arg,
+)
+from ticket_system.lib.field_validators import (
+    validate_source_ticket_arg,
 )
 
 
@@ -111,7 +113,7 @@ def _install_common_mocks(monkeypatch, *, source_ticket_data=None, source_exists
 
     # list_tickets（避免重複偵測觸發）
     monkeypatch.setattr(
-        "ticket_system.commands.create.list_tickets",
+        "ticket_system.lib.field_validators.list_tickets",
         lambda v: [],
     )
 
@@ -121,8 +123,14 @@ def _install_common_mocks(monkeypatch, *, source_ticket_data=None, source_exists
             return source_ticket_data
         return None
 
+    # load_ticket 為共用符號：create 與 field_validators 各自 import 一份，
+    # 只 patch 其中一側另一側仍走真實實作（0.2.1-W3-836 的第三層陷阱）。
     monkeypatch.setattr(
         "ticket_system.commands.create.load_ticket",
+        _load_ticket,
+    )
+    monkeypatch.setattr(
+        "ticket_system.lib.field_validators.load_ticket",
         _load_ticket,
     )
 
@@ -160,11 +168,11 @@ def _install_common_mocks(monkeypatch, *, source_ticket_data=None, source_exists
 
     # get_next_seq / get_next_child_seq（避免檔案系統依賴）
     monkeypatch.setattr(
-        "ticket_system.commands.create.get_next_seq",
+        "ticket_system.lib.ticket_id_allocator.get_next_seq",
         lambda v, w: 1,
     )
     monkeypatch.setattr(
-        "ticket_system.commands.create.get_next_child_seq",
+        "ticket_system.lib.ticket_id_allocator.get_next_child_seq",
         lambda pid: 1,
     )
 
@@ -314,7 +322,7 @@ class TestCreateSourceTicketIntegration:
         assert "invalid-format" in combined
         # load_ticket 不應被呼叫（格式檢查在存在檢查之前）
         # 注意：_resolve_ticket_id_and_wave 不會載入 source ticket；
-        # _validate_source_ticket_arg 的格式檢查也在存在檢查之前
+        # validate_source_ticket_arg 的格式檢查也在存在檢查之前
         assert all(
             tid != "invalid-format" for _, tid in load_ticket_calls
         ), f"load_ticket 不應被呼叫 source_ticket=invalid-format，實際：{load_ticket_calls}"
@@ -377,7 +385,7 @@ class TestCreateSourceTicketIntegration:
         Then: exit=0；雙向關聯更新；blocked_by/related_to 正常進入 config
 
         注意：本測試假設 blocked-by 清單的 ticket 在 list_tickets 空結果下
-             會被 _validate_blocked_by_references 擋下（因為 load_ticket 返回 None），
+             會被 validate_blocked_by_references 擋下（因為 load_ticket 返回 None），
              所以這裡只給 related_to（不阻塞），確保 source 路徑仍執行成功。
         """
         source_ticket = {
@@ -561,17 +569,17 @@ class TestCreateSourceTicketCLIRegistration:
 
 
 # ============================================================
-# 額外：_validate_source_ticket_arg 純函式測試（補強層）
+# 額外：validate_source_ticket_arg 純函式測試（補強層）
 # ============================================================
 
 
 class TestValidateSourceTicketArg:
-    """補強層：獨立測試 _validate_source_ticket_arg（執行層驗證函式）。"""
+    """補強層：獨立測試 validate_source_ticket_arg（執行層驗證函式）。"""
 
     def test_no_source_ticket_returns_true(self):
         """未提供 --source-ticket 時直接通過。"""
         args = _make_args(source_ticket=None)
-        assert _validate_source_ticket_arg(args) is True
+        assert validate_source_ticket_arg(args) is True
 
     def test_mutual_exclusion_returns_false(self, capsys):
         """同時提供 source_ticket + parent 應回傳 False。"""
@@ -579,9 +587,79 @@ class TestValidateSourceTicketArg:
             source_ticket="0.18.0-W12-002",
             parent="0.18.0-W12-001",
         )
-        result = _validate_source_ticket_arg(args)
+        result = validate_source_ticket_arg(args)
         assert result is False
         captured = capsys.readouterr()
         # 對齊 ErrorEnvelope 新格式：__error_envelope_v1__ 標記 + errno
         assert "__error_envelope_v1__" in captured.out
         assert "errno: SOURCE_PARENT_MUTUALLY_EXCLUSIVE" in captured.out
+
+    def test_in_progress_warns_with_parent_hint(self, monkeypatch, capsys):
+        """source 狀態為 in_progress 且有 parent_id 時，警告放行且附 --parent 建議。"""
+        source_ticket = {
+            "id": "0.18.0-W12-002",
+            "status": "in_progress",
+            "parent_id": "0.18.0-W12-001",
+        }
+        monkeypatch.setattr(
+            "ticket_system.lib.field_validators.extract_version_from_ticket_id",
+            lambda tid: "0.18.0",
+        )
+        monkeypatch.setattr(
+            "ticket_system.lib.field_validators.load_ticket",
+            lambda version, tid: source_ticket,
+        )
+        args = _make_args(source_ticket="0.18.0-W12-002")
+
+        result = validate_source_ticket_arg(args)
+
+        assert result is True
+        captured = capsys.readouterr()
+        assert "in_progress" in captured.out
+        assert "0.18.0-W12-002" in captured.out
+        assert "--parent 0.18.0-W12-001" in captured.out
+
+    def test_in_progress_warns_without_parent_hint(self, monkeypatch, capsys):
+        """source 狀態為 in_progress 但無 parent_id 時，警告放行且不附 --parent 建議。"""
+        source_ticket = {
+            "id": "0.18.0-W12-002",
+            "status": "in_progress",
+        }
+        monkeypatch.setattr(
+            "ticket_system.lib.field_validators.extract_version_from_ticket_id",
+            lambda tid: "0.18.0",
+        )
+        monkeypatch.setattr(
+            "ticket_system.lib.field_validators.load_ticket",
+            lambda version, tid: source_ticket,
+        )
+        args = _make_args(source_ticket="0.18.0-W12-002")
+
+        result = validate_source_ticket_arg(args)
+
+        assert result is True
+        captured = capsys.readouterr()
+        assert "in_progress" in captured.out
+        assert "--parent" not in captured.out
+
+    def test_pending_no_warning(self, monkeypatch, capsys):
+        """source 狀態為 pending 時，不輸出任何 WARNING（allow，無提示）。"""
+        source_ticket = {
+            "id": "0.18.0-W12-002",
+            "status": "pending",
+        }
+        monkeypatch.setattr(
+            "ticket_system.lib.field_validators.extract_version_from_ticket_id",
+            lambda tid: "0.18.0",
+        )
+        monkeypatch.setattr(
+            "ticket_system.lib.field_validators.load_ticket",
+            lambda version, tid: source_ticket,
+        )
+        args = _make_args(source_ticket="0.18.0-W12-002")
+
+        result = validate_source_ticket_arg(args)
+
+        assert result is True
+        captured = capsys.readouterr()
+        assert "WARNING" not in captured.out

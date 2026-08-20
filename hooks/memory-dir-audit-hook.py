@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """
 Memory Dir Audit Hook - SessionStart 與 Stop 雙掛稽核，偵測本專案 memory

@@ -15,10 +15,7 @@ commands/ 批次 B 硬編碼字串集中化模組
 統一管理所有使用者可見的訊息字串，避免重複定義和提高可維護性。
 """
 
-from ticket_system.constants import (
-    APPEND_LOG_EXTRA_SECTIONS,
-    CANONICAL_BODY_SECTIONS,
-)
+from ticket_system.constants import CANONICAL_BODY_SECTIONS
 
 
 # ============================================================================
@@ -92,29 +89,14 @@ class TrackBoardMessages:
     # render_tree_node 中的 Wave 標題格式
     WAVE_TITLE_FORMAT = "{wave} ({count} tasks)"
 
-    # render_board_unicode 中的標題（動態版本號）
-    UNICODE_BOARD_TITLE = "TICKET BOARD - v{version}"
+    # render_board_topics 中的主題標題格式（board 主題分組模式）
+    TOPIC_TITLE_FORMAT = "{topic} ({count} tasks, 最高優先級={priority})"
 
-    # render_board_unicode 中的統計行標籤
-    UNICODE_STATS_PENDING = "[待處理]"
-    UNICODE_STATS_IN_PROGRESS = "[進行中]"
-    UNICODE_STATS_COMPLETED = "[已完成]"
-    UNICODE_STATS_BLOCKED = "[被阻塞]"
-    UNICODE_STATS_TASKS_SUFFIX = "tasks"
+    # render_board_topics 中主題內無票有有效 priority 時的佔位文字
+    TOPIC_NO_PRIORITY_TEXT = "-"
 
-    # render_board_unicode 中的欄標題
-    UNICODE_HEADERS = ["PENDING", "IN_PROGRESS", "COMPLETED", "BLOCKED"]
-
-    # render_board_unicode 中的圖例
-    UNICODE_LEGEND_TITLE = "Legend:"
-    UNICODE_LEGEND_PRIORITY_HIGH = "[P0] - Priority 0 (Urgent)    [P1] - Priority 1 (High)"
-    UNICODE_LEGEND_PRIORITY_LOW = "[P2] - Priority 2 (Medium)    [P3] - Priority 3 (Low)"
-
-    # render_board_ascii 中的標題
-    ASCII_BOARD_TITLE = "TICKET BOARD"
-
-    # render_board_ascii 中的欄標題
-    ASCII_HEADER_ROW = "Status    | Count | Tickets"
+    # render_board_topics 中未歸屬票節標題格式
+    TOPIC_UNASSIGNED_TITLE_FORMAT = "未歸屬 ({count} tasks)"
 
     # execute_board 中的錯誤訊息前綴
     ERROR_RENDERING_BOARD_PREFIX = "Error rendering board:"
@@ -174,10 +156,9 @@ class TrackAcceptanceMessages:
     STATUS_TEXT_UNCHECKED = "取消勾選"
 
     # execute_append_log 中有效的區段清單
-    # 白名單自 constants.CANONICAL_BODY_SECTIONS 衍生（單一序列來源），
-    # 加上 H1 容器 Execution Log；不再獨立維護清單，消除與
-    # ticket_builder SCHEMA_H2_SECTIONS 的雙清單漂移。
-    VALID_SECTIONS = [*CANONICAL_BODY_SECTIONS, *APPEND_LOG_EXTRA_SECTIONS]
+    # 自 constants.CANONICAL_BODY_SECTIONS 衍生（單一序列來源），不獨立維護
+    # 清單，消除與 ticket_builder SCHEMA_H2_SECTIONS 的雙清單漂移。
+    VALID_SECTIONS = list(CANONICAL_BODY_SECTIONS)
 
     # execute_append_log 中的有效值提示前綴
     VALID_VALUES_PREFIX = "   有效值:"
@@ -192,9 +173,6 @@ class TrackAcceptanceMessages:
 
     # execute_append_log 中的內容標籤
     CONTENT_PREFIX = "   內容:"
-
-    # execute_append_log 中執行日誌的時間戳格式
-    LOG_TIMESTAMP_FORMAT = "- [{timestamp}] {content}"
 
     # execute_check_acceptance 中的批量勾選摘要格式
     BATCH_CHECK_SUMMARY_FORMAT = "[OK] {ticket_id} 已勾選 {checked_count}/{total_count} 項"
@@ -378,6 +356,7 @@ class TrackMessages:
     HELP_BATCH_CLAIM = "批量認領 Tickets"
     HELP_BATCH_COMPLETE = "批量完成 Tickets"
     HELP_SET_WHO = "設定 Ticket 的 who 欄位"
+    HELP_SET_TITLE = "設定 Ticket 的 title 欄位（清單顯示用短標籤，與 what 獨立）"
     HELP_SET_WHAT = "設定 Ticket 的 what 欄位"
     HELP_SET_WHEN = "設定 Ticket 的 when 欄位"
     HELP_SET_WHERE = "設定 Ticket 的 where 欄位（路徑型輸入同步更新 where.files；逗號分隔多路徑）"
@@ -389,6 +368,7 @@ class TrackMessages:
     HELP_ADD_SPAWNED = "追加 spawned_tickets 項目"
     HELP_SET_DECISION_TREE = "設定 decision_tree_path 欄位"
     HELP_WHO = "查詢 Ticket 的 who 欄位"
+    HELP_TITLE = "查詢 Ticket 的 title 欄位"
     HELP_WHAT = "查詢 Ticket 的 what 欄位"
     HELP_WHEN = "查詢 Ticket 的 when 欄位"
     HELP_WHERE = "查詢 Ticket 的 where 欄位"
@@ -433,9 +413,13 @@ class TrackMessages:
     ARG_INDEX = "驗收條件索引（1 開始）"
     ARG_UNCHECK = "取消勾選（預設為勾選）"
     ARG_CHECK_ACCEPTANCE_ALL = "勾選（或 --uncheck 時取消勾選）所有驗收條件"
-    ARG_SECTION = "日誌區段 (Problem Analysis/Context Bundle/重現實驗結果/Solution/Test Results/Execution Log/NeedsContext/Exit Status)"
+    # 自執法者的白名單衍生而非手寫列舉。手寫清單會與程式實際接受的值各自
+    # 漂移，這正是 DOC-007 的說明側症狀。綁 VALID_SECTIONS 而非其來源常數，
+    # 使說明恆等於執法對象，白名單組裝方式日後若改變也不需同步此處。
+    ARG_SECTION = f"日誌區段 ({'/'.join(TrackAcceptanceMessages.VALID_SECTIONS)})"
     ARG_CONTENT = "日誌內容"
     ARG_WAVE = "只顯示特定 Wave"
+    ARG_GROUP_BY = "分組模式：wave（預設，Wave 分組加 ID 排序）或 topic（依主題分組，未歸屬票另成一節）"
     ARG_STATUS = "篩選狀態（pending/in_progress/completed/blocked，支援多個值）"
     ARG_FORMAT = "輸出格式（table/ids/yaml，預設 table）"
     ARG_ALL = "顯示所有任務（包含已完成）"

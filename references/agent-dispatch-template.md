@@ -1,52 +1,28 @@
-# Agent Dispatch Template — 職責邊界聲明骨架
+# Agent Dispatch Template
 
-> **用途**：PM 派發代理人時，prompt 必含「職責邊界聲明」開場結構，讓代理人在執行前確認任務符合其定義的允許產出範圍，阻擋越界行為。
+> **用途**：PM 派發代理人時使用的權威 prompt 骨架，以及情境變體（並行 / 唯讀探針 / 嵌套派發等）速查集合。單一權威骨架見下方「## 骨架（權威版）」；骨架的禁重述規則見「## prompt 不重述 ticket 已載欄位（強制）」。
 >
-> **實證來源**：
-> - W5-001 session（pepper / thyme-A / thyme-B）：派發 prompt 含職責邊界聲明，無越界案例
-> - W5-001 sage 越界案例：派發 prompt 缺職責邊界聲明，sage 寫了禁止範圍的 .py 測試
->
-> **設計依據**：quality-baseline 規則 6（失敗案例學習原則）— 從實證有效的派發模式固化為強制骨架。
+> **收斂緣由**：本文件曾同時提供三套對「prompt 是否應複製 ticket 欄位」給出相反答案的骨架——舊版「職責邊界聲明骨架」要求逐項複製 `where.files` 至「允許的產出」/「禁止的產出」清單、「三段式快速填空骨架」（W17-048 方案 F）僅用指標零重述、「短 Prompt Snippets」（PC-040/PC-065）的 `Allowed:`/`Forbidden:` 亦要求複製 `where.files`。三者並存使 PM 選任一皆合規，抽樣量測顯示派發 prompt 重述比例在樣本間離散（15%-62%，單一樣本達 55% 字元量），也使任何「prompt 與 ticket 重疊度」檢查機制必然誤報 template-compliant 的 prompt。本次收斂：三段式骨架升格為單一權威版；短 Prompt Snippets 改寫為權威版的情境變體，不再要求複製 `where.files`；舊版職責邊界聲明骨架的防越界意圖併入權威版，改用指標式表達（見下方「歷史脈絡」段）。
 
 ---
 
-## 骨架
+### 歷史脈絡：職責邊界聲明骨架（已併入權威版）
 
-派發 prompt 必含以下開場結構：
+初版骨架源自一次代理人越界事件的實證比對：含「允許的產出」/「禁止的產出」明示清單的派發無越界，缺此聲明的派發越界寫了禁止範圍的測試。該實證確立「派發時明示邊界可防越界」本身成立，但其實作方式（要求 prompt 逐項複製 `where.files` 為允許/禁止清單）正是後續骨架收斂分析定位的重述根因之一。
 
-```
-Ticket: {ticket_id}
-
-## 職責邊界聲明
-
-{agent-name} 的 agent 定義為「{agent-description 引文，來自 .claude/agents/{agent}.md frontmatter}」。
-
-**允許的產出**:
-- {列出本 ticket 範圍內允許的檔案/動作}
-
-**禁止的產出**:
-- {列出本 ticket 範圍外或代理人定義禁止的檔案/動作}
-
-本 prompt 符合職責邊界，請繼續執行。
-
-## 執行
-
-{具體執行步驟、Ticket 指令、引用 Context Bundle}
-
-## 禁止
-- {與其他並行 Ticket 衝突的修改範圍}
-- {本 Ticket 不應涉及的副作用}
-```
+**現行處置**：邊界防護改由「讀取 ticket 指引」傳遞——agent 依權威版骨架第一步讀取 `ticket track full {ticket_id}` 取得 `where.files` 正本，prompt 不再複製副本；高越界風險情境（如並行多任務，見「短 Prompt Snippets」變體）另以指標句（「範圍限定於本 ticket `where.files`，不得觸碰其他並行 Ticket 檔案」）取代逐項複製清單，防越界意圖不變、複製動作移除。
 
 ---
 
-## 三段式快速填空骨架（W17-048 方案 F）
+## 骨架（權威版）
 
-> **用途**：PM 派發前最常用的中文對話式骨架。把 context 寫入 ticket 後，直接複製以下骨架填三個空格即可派發。prompt 控制在 **10-15 行**，穩過 Hook 30 行上限。
+> **用途**：PM 派發前最常用的中文對話式骨架（原稱「三段式快速填空骨架」，W17-048 方案 F）。把 context 寫入 ticket 後，直接複製以下骨架填三個空格即可派發。prompt 控制在 **10-15 行**，穩過 Hook 30 行上限。
 
 > **機制選擇前置（0.38.0-W2-002 ANA 落地）**：呼叫 `Agent(...)` 時**預設不帶 `name` 參數**（一般 subagent）。僅當任務符合「平行派發且 Agent A 的發現會改變 Agent B 正在進行的工作」（改用 Agent Teams）或「同 Wave 有 3+ 張同類型 ticket 且預期逐一派發」（named agent 可選續用）時才加 `name`。循序一次性任務、獨立分析/實作任務一律不帶 `name`。完整選用準則決策表見 `.claude/pm-rules/parallel-dispatch.md`「派發機制選用準則」章節。
 >
-> **帶 `name` 的代價（W3-182 實證）**：背景 named agent 的最終回覆文字**不送達主線程**，PM 只收到 `idle_notification`。唯讀型 named agent 因此既不能落檔也無 final message，產出必然遺失，除非 prompt 明寫「以 `SendMessage({to: "main"})` 送出報告本體」。此代價使「順手給個名字方便定址」成為實質的通道變更，不是命名偏好。通道對照見下方「交付通道速查」維度二。
+> **帶 `name` 的代價（W3-182 實證）**：背景 named agent 的最終回覆文字**不送達主線程**，PM 只收到 `idle_notification`。唯讀型 named agent 因此既不能落檔也無 final message，產出必然遺失，除非 prompt 明寫「以 `SendMessage({to: "main"})` 送出報告本體」。此代價使「順手給個名字方便定址」成為實質的通道變更，不是命名偏好。重派也不解決此代價——若未修正 prompt，新執行體會複製同一失效，三次觀測見 `PC-BAL-038`。通道對照見下方「交付通道速查」維度二。
+
+> **實戰範例為歷史記錄，複製請以本節骨架為準**：下方 IMP/ANA/DOC 三則範例為過去實際派發的逐字記錄，不隨骨架後續修訂回溯改寫；派發時複製對象是「骨架（3 段）」本身，不是任一則範例。
 
 ### 骨架（3 段）
 
@@ -59,10 +35,14 @@ Ticket: {ticket_id}
 
 讀取 ticket：`ticket track full {ticket_id}`
 認領：`ticket track claim {ticket_id} --as {agent_name}`
-依 Context Bundle 執行流程。遇阻立即停下回報，禁繞過 Hook。
+依 Context Bundle 執行流程。
+發現 prompt 與 ticket/框架正本衝突，停手寫入 ticket NeedsContext 上報，不自行選邊。
+遇阻立即停下回報，禁繞過 Hook。
 ```
 
 > **claim 行必帶 `--as {agent_name}`**（派發身份前移，W5-005 F1a）：dispatch hook 已在派發時對無主票綁定 who.current，此行是 agent 端對稱綁定與 hook 失效 fallback；缺 `--as` 的裸 claim 不寫 who.current，收尾 `complete --as` 會因身份不符需 set-who 繞道。
+
+> **停手上報而非定義優先序**：在只讀得到 prompt 與正本兩份文本的條件下，agent 無可靠判別依據——故不定義三方優先序表，交由 PM 裁決；裁決回票面方式見「衝突裁決回票面（PM 端）」節。
 
 ### IMP 實戰範例（實作派發）
 
@@ -139,9 +119,57 @@ Ticket: 0.18.0-W17-048.3
 
 ---
 
-## 短 Prompt Snippets（PC-040 / PC-065）
+## prompt 不重述 ticket 已載欄位（強制）
 
-以下 snippets 是派發時優先使用的短版骨架。完整 context 必須先寫入 Ticket Context Bundle；prompt 只保留 Ticket ID、邊界摘要與執行指令。每個 snippet 第一行固定為 `Ticket: {id}`。
+> **依據**：一輪骨架收斂分析（實驗量測 + 補充實證，方法為逐單元 5-gram 覆蓋率比對 + 母體抽樣）。派發 prompt 只承載「ticket 尚未持有、且無法由 agent 讀 ticket 後自行推導」的內容；`how.strategy` / `acceptance` 等 ticket 正本內容一律改用指標句（例：「依 Context Bundle 執行」「依 acceptance 逐項驗收」），不逐字複製或改寫貼入 prompt。
+
+### prompt 專屬欄位正面清單
+
+以下六類為權威版骨架已涵蓋、且判定為不可下放的必要內容（補充實證：`.claude/agents/*.md` 主文以 `@` import 寫入 AGENT_PRELOAD 但未展開為代理人可見內容，實測多數代理人直接違反其讀取禁令、僅少數代理人主動用過驗收查核指令——prompt 是這些指令對代理人的**唯一有效載體**，故讀取指引、claim 行、收尾協議判定為必要而非可下放樣板）：
+
+| 欄位 | 內容 | 不可下放理由 |
+|------|------|-------------|
+| ticket ID | `Ticket: {ticket_id}` 首行 | 先有 prompt 才有 agent 讀 ticket，且為 dispatch hook 解析錨點 |
+| 讀取指引 | `ticket track full {ticket_id}` | AGENT_PRELOAD 未展開注入，prompt 是唯一有效傳遞路徑 |
+| claim 行 | `ticket track claim {ticket_id} --as {agent_name}` | 同上；agent 端無從得知須主動 claim |
+| 收尾協議 | set-acceptance / body 填寫 / complete 三命令與 `--as` 全覆蓋 | 同上；抄錯會與框架正本歧異且無仲裁規則（實測已發生一次漂移，見下方 Why） |
+| 本次 commit 歸屬 | 誰 commit（agent / PM / 不 commit） | 取決於派發當下並行狀況，建票時不可知 |
+| agent 能力衝突的臨時調整 | 如派發對象工具受限時的臨時變通 | 需「ticket 需求 x agent 能力」的即時判斷，無既有載體可承擔 |
+
+### 禁止重述的內容
+
+`how.strategy`、`acceptance` 條目、`where.files` 逐項清單一律不得複製或改寫貼入 prompt——agent 已被讀取指引要求讀 ticket 取得正本，重述形成第二份人工維護副本，副本與正本歧異時現行規則未定義以何者為準。摘要式指標句（例：「依 how.strategy 的行為三分實作」）不算重述，逐字或改寫超過一句話的核心約束算重述。
+
+**Why**：實測已發生一次漂移——某派發 prompt 的收尾協議寫 `set-acceptance` 未帶 `--as`，與 AGENT_PRELOAD 的 `--as` 全覆蓋要求矛盾，agent 逐字依 prompt 執行並在 identity-guard usage log 留下 warn 記錄，污染 `--as` 轉強制裁決所依賴的資料。母體量測（全文 prompt 抽樣）顯示重述比例中位數為 0%（多數樣本零重述），證明零重述可行且為母體常態；本節把此常態固化為規則，防止離群樣本（單一樣本重述達 55% 字元量）再現。
+
+**Consequence**：不遵守本節，prompt 與 ticket 正本再度分裂為兩份人工維護副本，重蹈上述漂移事故。
+
+**Action**：派發前檢查 prompt 是否只含上表六類內容 + 骨架固定樣板（讀取指引/claim 行為 hook 軟提示要求，跨派發恆定不計入重述判定）；含 `how.strategy`/`acceptance` 逐字或改寫內容時改為指標句。
+
+---
+
+## 短 Prompt Snippets（PC-040 / PC-065，權威版的情境變體）
+
+以下 snippets 是「骨架（權威版）」在特定情境（單任務極簡形式 / 並行多任務 / group coordinator / L0 唯讀型）的變體寫法，不是另一套獨立骨架。完整 context 必須先寫入 Ticket Context Bundle；prompt 只保留 Ticket ID、範圍指標（指向 `where.files`，不逐項複製，見上節）與執行指令。每個 snippet 第一行固定為 `Ticket: {id}`。
+
+### 精準 staging 制式句（權威版，PC-092 / PC-BAL-008）
+
+以下為固定措辭，PM 複製貼入派發 prompt 即可，不需自行改寫；下方「單任務」「並行多任務」兩個 snippet 皆逐字引用此段，不得各自改寫產生變異。措辭涵蓋三類獨立根因，缺一不足：precise `git add`（防 PC-092，廣域 `git add .` / `git add -A` 併入其他並行代理人尚未 commit 的變更）；`git diff --cached --name-only` 核對 + `git restore --staged`（防 PC-BAL-008，他人已 stage 在共用 index 的內容會被動吸收——即使 `git add` 精準，仍可能在收尾前才發現 index 裡混入非本票內容）；禁 pathspec / `--only` / `-o` 裸 commit（防丟棄既有 index、誤吸他人未 stage 的編輯，`.claude/rules/core/bash-tool-usage-rules.md` 規則七）。
+
+```
+Use precise staging + verified bare commit only (no pathspec):
+  git add {exact files}
+  git diff --cached --name-only   # confirm index contains ONLY {exact files}
+  git commit -m "..."             # bare commit; no -- <paths> / --only / -o / -a
+Forbidden: git add . / git add -A; git commit -- <paths> / --only / -o / -a
+  (pathspec-style commit discards the index and rebuilds it from working-tree
+   content for the given paths — it silently absorbs unstaged edits other
+   sessions may have on the same path, not just already-staged ones)
+Before commit: git diff --cached --name-only to check staged scope; git restore --staged <path> for any non-owned file
+If bare `git commit` is DENYed by bare-commit-guard-hook (another dispatch
+active), stop and escalate to PM — do not fall back to the pathspec form
+the DENY message suggests (hook-side resolution is separately tracked).
+```
 
 ### 單任務
 
@@ -149,11 +177,14 @@ Ticket: 0.18.0-W17-048.3
 Ticket: {id}
 
 {agent-name}: Read ticket md and execute the current acceptance criteria.
-Allowed: {allowed files/actions from where.files}
-Forbidden: {out-of-scope files/actions}
-Use precise staging + path-limited commit only:
+Scope: strictly limited to this ticket's `where.files` (see ticket md); do not act outside it.
+Use precise staging + verified bare commit only (no pathspec):
   git add {exact files}
-  git commit -m "..." -- {exact files}
+  git diff --cached --name-only   # confirm index contains ONLY {exact files}
+  git commit -m "..."             # bare commit; no -- <paths> / --only / -o / -a
+Forbidden: git add . / git add -A; git commit -- <paths> / --only / -o / -a
+Before commit: git diff --cached --name-only to check staged scope; git restore --staged <path> for any non-owned file
+If bare commit is DENYed by bare-commit-guard-hook, stop and escalate; do not fall back to the pathspec form the DENY message suggests.
 If context is insufficient, append NeedsContext and stop.
 ```
 
@@ -163,10 +194,11 @@ If context is insufficient, append NeedsContext and stop.
 Ticket: {id}
 
 {agent-name}: Execute only this ticket from the dispatch-plan.
-Allowed: {this ticket files/actions}
-Forbidden: other parallel tickets' files; git add . / git add -A; git commit without -- <paths>
-Commit policy: {agent commit (path-limited: git commit -m "..." -- <paths>) | PM commit | no commit}
-Before commit: git status to check staged scope; git restore --staged <path> for any non-owned file
+Scope: strictly limited to this ticket's `where.files` (see dispatch-plan); do not touch other parallel tickets' files.
+Forbidden: git add . / git add -A; git commit -- <paths> / --only / -o / -a
+Commit policy: {agent commit (precise git add + verified bare commit, no pathspec) | PM commit | no commit}
+Before commit: git diff --cached --name-only to check staged scope; git restore --staged <path> for any non-owned file
+If bare commit is DENYed by bare-commit-guard-hook, stop and escalate; do not fall back to the pathspec form the DENY message suggests.
 If blocked, report Exit Status without touching sibling scope.
 ```
 
@@ -216,7 +248,7 @@ Your final message IS the deliverable — PM will archive it immediately.
 | `Agent(...)` 不帶 `name`（預設） | 送達 PM | final message | 無額外要求 |
 | `Agent(..., name: "x")` 背景 named | **不送達 PM** | `SendMessage({to: "main"})` | 「報告本體須以 SendMessage 送出；產出報告與送回報告是兩件事」 |
 
-**Why**：背景 named agent 的最終回覆文字不進入主線程，PM 只會收到 `idle_notification`。該通知不足以分辨「做完了但沒送達」與「沒做」（`PC-BAL-015`），PM 因此可能誤判失聯而重派，付出全額重複成本。
+**Why**：背景 named agent 的最終回覆文字不進入主線程，PM 只會收到 `idle_notification`。該通知不足以分辨「做完了但沒送達」與「沒做」（`PC-BAL-015`），PM 因此可能誤判失聯而重派，付出全額重複成本。`idle_notification` 的語意是「執行體閒置可接新任務」，不是「產出已交付」——兩者在通道正常時高度相關（做完才閒置），通道失效時相關性斷裂，但 idle 通知仍照常送達，成為最容易被誤讀為成功的訊號（`PC-BAL-038` 三次觀測）。
 
 **兩維度交會處最易出錯**：L0 那列的 final message 對不帶 `name` 的 agent 是唯一通道，對 named agent 則是**零通道**——它既不能落檔（唯讀），final message 又送不到。此組合必須在 prompt 明寫 SendMessage 要求，否則產出必然遺失。
 
@@ -225,6 +257,7 @@ Your final message IS the deliverable — PM will archive it immediately.
 2. 收到 final message 後：PM 立即寫入 ticket Solution 或 /tmp
 3. 不等待：不假設下次還能取回（hook 劫持風險，W2-011）
 4. 久無回報時：先送一則 `SendMessage` 要求以 `SendMessage` 重送報告，再判定是否失聯——`idle_notification` 不是「未執行」的證據
+5. 準備重派前：先確認失效是否為通道問題（缺 SendMessage 要求）；若是，重派前必須先修正 prompt，否則新執行體走同一預設路徑，複製同一失效而非解決問題（`PC-BAL-038` 實證：三次觀測中第三次即重派後複製失效）
 
 ---
 
@@ -277,7 +310,7 @@ Ticket: {ticket_id}
 | `files` | 精確檔案 ownership；未知時先補 Context Bundle，不派發 |
 | `deps` | blockedBy / 前置 ticket；無依賴填 `none` |
 | `context source` | agent 應讀取的持久化 context 來源 |
-| `commit policy` | 明確 agent 自 commit、PM 統一 commit、或 no commit；agent 自 commit 時採 path-limited 形式（`git commit -m "..." -- <paths>`），見 `.claude/pm-rules/parallel-dispatch.md` PC-092 防護 |
+| `commit policy` | 明確 agent 自 commit、PM 統一 commit、或 no commit；agent 自 commit 時採精確 `git add` + `git diff --cached --name-only` 核對 + 裸 `git commit`（不帶 pathspec / `--only` / `-o` / `-a`），見「精準 staging 制式句」節與 `.claude/pm-rules/parallel-dispatch.md` PC-092 防護 |
 | `run mode` | `parallel`、`serial` 或 `blocked`；不得用 `batch` 表示自動批量執行 |
 
 ---
@@ -343,17 +376,6 @@ final message 僅指向 ticket ID，不承載結論本體。
 
 ---
 
-## 填寫要點
-
-| 欄位 | 內容要求 |
-|------|---------|
-| `{agent-name}` | 代理人名稱（如 `thyme-python-developer`） |
-| `{agent-description 引文}` | 從 `.claude/agents/{agent}.md` frontmatter `description` 直接引用 |
-| 允許的產出 | 對照代理人可編輯路徑表 + 本 Ticket `where.files` 交集 |
-| 禁止的產出 | 並行 Ticket 範圍、代理人定義外的檔案類型、跨 Ticket 動作 |
-
----
-
 ## append-log 收尾持久化驗證
 
 被派發 agent 在 prompt 收尾段須附此驗證準則，避免 malformed heredoc 使 `ticket track append-log` 未真正執行卻被誤判為「CLI bug」。
@@ -365,6 +387,28 @@ final message 僅指向 ticket ID，不承載結論本體。
 - 唯有 CLI 回 `[OK] 已追加日誌到 '<section>'` 才算寫入成功；輸出僅見 heredoc 內容被 echo 出來代表指令 malformed、CLI 未執行，須修正 Bash 指令重發。
 - 收尾關鍵 section（Test Results / Exit Status）後以 `grep -c "<唯一片語>" <ticket-md-path>` 確認實際持久化（固定值驗證，不信 CLI 旁白）。
 - 引用既有規則不重複定義：heredoc 傳長文字見 `bash-tool-usage-rules` 規則 5；「只信 raw stdout、帶旁白視為自身雜訊」見 `tool-output-trust-rules` 規則 2；CLI args 跳脫見 PC-079。
+
+---
+
+## 衝突裁決回票面（PM 端）
+
+**衝突裁決以 append-log 寫回票面，票面記錄優先於原 prompt 指示（原 prompt 可能因客製或誤寫而與正本不一致）——不得只存在於重發 prompt 或對話，prompt 不進交接鏈，下個執行者只看得到票面。**（agent 何時觸發此流程見「骨架（權威版）」段停手上報規則）
+
+**Action**：PM 收到 agent 於 ticket NeedsContext 章節寫入的衝突上報後，執行：
+
+```
+ticket track append-log {ticket_id} --section "<section>" "<裁決內容>"
+```
+
+裁決紀錄最小欄位：
+
+| 欄位 | 內容 |
+|------|------|
+| 衝突項 | prompt 位置 / ticket 正本位置 / 框架正本檔案路徑，具體指出三者中實際衝突的兩者 |
+| 判定 | 採信何者為準（prompt 修正 / ticket 正本修正 / 框架正本修正） |
+| 後續 | 後續派發 prompt 是否需同步修正，需修正則指出修正內容 |
+
+`<section>` 依 ticket type 而定：優先寫入 `Solution`（ANA 必填、IMP 選填）；DOC 型 `Solution` 免填，改寫入 `Completion Info`。完整必填/選填/免填對照見 `.claude/pm-rules/ticket-body-schema.md`「Schema 對照表」。
 
 ---
 
@@ -955,7 +999,14 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 
 ---
 
-**Last Updated**: 2026-08-18
+**Last Updated**: 2026-08-19
+**Version**: 1.29.0 — 「精準 staging 制式句」與其兩個逐字引用 snippet（單任務／並行多任務）改寫：path-limited commit（`git commit -m "..." -- <paths>`）改為精確 `git add` + `git diff --cached --name-only` 核對 + 裸 `git commit`（不帶 pathspec / `--only` / `-o` / `-a`）；`--only`/`-o` 與 `-- <paths>` 語意相同，皆丟棄既有 index 改取 working tree 全文，會吸入他人未 stage 的編輯，故一併禁用（`.claude/rules/core/bash-tool-usage-rules.md` 規則七）；新增「若裸 commit 被 bare-commit-guard-hook DENY，停手回報，不得改用 DENY 訊息建議的 pathspec 寫法」提醒；Dispatch-Plan Template `commit policy` 欄位同步改寫。歷史 1.26.0/1.7.0 版說明的 path-limited 寫法為當時記錄，不回溯改寫。
+**Version**: 1.28.0 — 依 Layer 2 審查（basil-writing-critic）修正仲裁行為條文落地內容：P0（阻擋級）「衝突裁決回票面」節補可執行 Action（`append-log` 指令 + 裁決最小欄位表 + section 依 type 路由 `ticket-body-schema.md`）；P1（4 項）同節資訊優先序改原則前置、移除無錨新造詞「凌駕註記」改就地定義、骨架下方 blockquote 收斂重複動作描述僅留 Why + 路由、`tool-output-trust-rules.md` 衍生情境標題由位置編號改語意標題並補邊界段來源；P2（3 項）骨架 code block「感知」改「發現」並壓縮句長、停手上報 blockquote 改條件式表述、骨架段補「實戰範例為歷史記錄」提醒
+**Version**: 1.27.0 — 落地仲裁行為條文兩處：(1) 骨架（權威版）code block 補「感知 prompt 與正本衝突時停手上報 NeedsContext、不自行選邊」制式句，並補一則 Why 說明「prompt 誤寫與 PM 正當客製在 token 層同形，agent 無判定能力」；(2) 新增「衝突裁決回票面（PM 端）」章節，明示裁決以 append-log 寫回票面，不得只存在於重發 prompt 或對話。三處實戰範例（IMP/ANA/DOC）為歷史實際派發記錄不回溯改寫，僅骨架權威版更新
+**Version**: 1.26.0 — 「短 Prompt Snippets」新增「精準 staging 制式句（權威版，PC-092 / PC-BAL-008）」子節：抽出「單任務」「並行多任務」既有雛形為單一固定四行措辭（path-limited commit + `git status`/`git restore --staged` 核對），兩 snippet 改為逐字引用；「單任務」補回原缺的 Forbidden + Before-commit 兩行（PC-BAL-008 缺口：僅防主動 add 過多，未防他人已 stage 內容被動吸收）；消除措辭變異來源，parallel-dispatch.md 檢查清單同步改引用（見該檔 Version 記錄）
+**Version**: 1.25.0 — 骨架收斂為單一權威版：標題移除「職責邊界聲明骨架」副標；舊版「職責邊界聲明骨架」（要求逐項複製 `where.files` 為允許/禁止清單）併入權威版並改為「歷史脈絡」段，防越界意圖改用指標式表達；「三段式快速填空骨架」升格為「## 骨架（權威版）」；「短 Prompt Snippets」改述為權威版情境變體，`Allowed:`/`Forbidden:` 逐項複製 `where.files` 的寫法改為 `Scope:` 指標句；新增「## prompt 不重述 ticket 已載欄位（強制）」章節，含 prompt 專屬欄位正面清單（六類）與禁止重述內容判準；移除僅對應舊骨架欄位（`{agent-description 引文}`／允許禁止產出）的孤兒「## 填寫要點」章節，消除死引用。收斂緣由：三套骨架對「是否複製 ticket 欄位」給出相反答案，是派發 prompt 重述比例離散的直接來源
+**Version**: 1.24.0 — 「帶 `name` 的代價」段補一句直接引用 `PC-BAL-038`（重派複製失效的三次觀測），使 named-agent 章節與 L0 Fallback SOP 兩處皆能路由到觀測證據，非「更完整說明」（PC-BAL-038 已收斂為觀測記錄，模板才是權威載體）
+**Version**: 1.23.0 — 「交付通道速查」併回 `PC-BAL-038` 的增量觀測：Why 補 idle 訊號反轉機制（正常關聯斷裂但訊號仍送達，最易誤讀為成功）；L0 Fallback SOP 新增第 5 步（重派前若未修正 prompt，新執行體複製同一失效）。`PC-BAL-038` 同步收斂為觀測記錄，根因改判為本檔既有條款未送達派發者 context（`PC-BAL-043` delivery gap 實例）
 **Version**: 1.22.0 — 「收尾義務標準段」章節新增「建票血緣回填義務」小節：執行中建票禁止裸 `create` 只標 `--related-to`，須帶 `--source-ticket` 或改走 `add-spawn-request`（兩通道由 CLI 自動回填血緣欄位），並補判準速查表；四塊改五塊
 **Version**: 1.21.0 — 「填空檢查清單」中「代理人受 AGENT_PRELOAD 規則 12 約束無需 prompt 重複」一項改述：三探針實測證實 `.claude/agents/*.md` 主文 `@-import` 不展開為內容，改指向已實測確認每次派發都會注入的 `document-format-rules.md`「引用穩定性規則」
 **Version**: 1.20.0 — 「填空檢查清單」新增一列：防護類 ticket 的產生路徑盤點表存在性確認（盤點表於建票時產出並寫入 how.strategy / Solution，本清單僅確認其存在，格式權威在 ticket-body-schema 同名節；PC-BAL-035）

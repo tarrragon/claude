@@ -330,20 +330,15 @@ class TestMixedBatchRegression:
         ]
 
     def test_dispatch_record_hook_no_longer_performs_identity_binding(self):
-        """PreToolUse 端（dispatch-record-hook.py）已完全移除身份綁定邏輯。
+        """PreToolUse 端（dispatch-record-hook.py）已完全移除身份綁定邏輯，
+        且幽靈派發記錄修復票後本 hook 已停用為 no-op（記錄職責遷至
+        active-dispatch-tracker-hook.py，見該檔頂部 docstring）。
 
-        即使 tool_input 同時含 Ticket ID 與 subagent_type、isolation=worktree
-        （issue 47 混合批次觸發條件之一），dispatch-record-hook.main() 也
-        不再呼叫任何 ticket CLI（who/set-who）——根除「PreToolUse 無條件
-        寫入、deny 為彙總結果」這條自我阻塞路徑的源頭；被 PC-019 擋下的
-        worktree 派發不會因此留下 who.current 半套狀態。
-
-        不變式錨定於行為（是否呼叫 ticket CLI），非符號存在性：
-        extract_ticket_id 於 0.2.1-W3-547 以新職責（填 dispatch-active.json
-        的 ticket_id/files 欄位）合法重新引入，不再是身份綁定的殘留（W3-580
-        溯源定案），故本測試不再斷言其不存在，只斷言 bind_dispatch_identity
-        （身份綁定專責函式）不存在，並以 subprocess.run 未被呼叫直接證明
-        main() 未透過任何管道呼叫 ticket CLI。
+        本測試延續原不變式精神：即使 tool_input 同時含 Ticket ID 與
+        subagent_type、isolation=worktree（issue 47 混合批次觸發條件之
+        一），main() 也不呼叫任何 ticket CLI（who/set-who）或
+        record_dispatch——現況比原不變式更強，因為 main() 已是純
+        no-op，連 dispatch-active.json 的寫入路徑都不存在於本 hook。
         """
         record_hook_file = hooks_path / "dispatch-record-hook.py"
         record_spec = importlib.util.spec_from_file_location(
@@ -352,38 +347,20 @@ class TestMixedBatchRegression:
         dispatch_record_hook = importlib.util.module_from_spec(record_spec)
         record_spec.loader.exec_module(dispatch_record_hook)
 
-        # 身份綁定專責函式已不存在於 PreToolUse hook
+        # 身份綁定專責函式與記錄函式皆不存在於本已停用 hook
         assert not hasattr(dispatch_record_hook, "bind_dispatch_identity")
+        assert not hasattr(dispatch_record_hook, "record_dispatch")
 
         with patch.object(
             dispatch_record_hook, "setup_hook_logging"
-        ) as mock_log, patch.object(
-            dispatch_record_hook, "read_json_from_stdin"
-        ) as mock_stdin, patch.object(
-            dispatch_record_hook, "is_subagent_environment"
-        ) as mock_sub, patch.object(
-            dispatch_record_hook, "extract_tool_input"
-        ) as mock_input, patch.object(
-            dispatch_record_hook, "get_project_root"
-        ) as mock_root, patch.object(
-            dispatch_record_hook, "record_dispatch"
-        ) as mock_record, patch(
+        ) as mock_log, patch(
             "subprocess.run"
         ) as mock_subprocess_run:
             mock_log.return_value = MagicMock()
-            mock_stdin.return_value = {"tool_use_id": "toolu_worktree_denied"}
-            mock_sub.return_value = False
-            mock_input.return_value = {
-                "prompt": "Ticket: 0.2.1-W3-901\nworktree 派發（將被 PC-019 擋下）",
-                "subagent_type": "parsley-flutter-developer",
-                "isolation": "worktree",
-            }
-            mock_root.return_value = Path(".")
 
             result = dispatch_record_hook.main()
 
         assert result == dispatch_record_hook.EXIT_SUCCESS
-        mock_record.assert_called_once()
         # 行為級不變式：main() 未透過 subprocess 呼叫任何 CLI（含 ticket
-        # track who/set-who），即使 ticket_id 可解析且 isolation=worktree
+        # track who/set-who），本 hook 已是純 no-op
         mock_subprocess_run.assert_not_called()

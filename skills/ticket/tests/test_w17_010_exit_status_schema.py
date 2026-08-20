@@ -37,15 +37,17 @@ class TestValidSectionsExpanded:
         assert "Exit Status" in TrackAcceptanceMessages.VALID_SECTIONS
 
     def test_existing_sections_preserved(self):
+        # W3-720.2: "Execution Log" 已自白名單移除，不列入此 guard
         for section in ["Problem Analysis", "Context Bundle", "Solution",
-                        "Test Results", "Execution Log"]:
+                        "Test Results"]:
             assert section in TrackAcceptanceMessages.VALID_SECTIONS
 
     def test_total_ten_sections(self):
         # W3-099: 補入 'Task Summary' 與 'Completion Info' 後總數 10
         # （W10-107 對齊時遺漏的兩個三類型必填章節）
         # 1.5.0-W5-023: 新增 'Spawn Requests' 後總數 11
-        assert len(TrackAcceptanceMessages.VALID_SECTIONS) == 11
+        # W3-720.2: 移除 'Execution Log' 後回到 10
+        assert len(TrackAcceptanceMessages.VALID_SECTIONS) == 10
 
     def test_task_summary_in_valid_sections(self):
         assert "Task Summary" in TrackAcceptanceMessages.VALID_SECTIONS

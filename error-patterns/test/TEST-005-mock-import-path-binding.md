@@ -71,6 +71,25 @@ with patch('ticket_system.commands.track_relations.save_ticket'):  # 正確
 
 **修正**：所有呼叫會觸發 I/O 的測試都必須 patch 呼叫方 namespace 的 save_ticket。
 
+## 變體：patch 位置正確但呼叫鏈上有第二個未涵蓋的 binding
+
+上述識別條件聚焦「patch 對象選錯」。另有一種變體：patch 對象**正確**，但同一條呼叫鏈上還有第二個模組持有同名函式的獨立 binding，未被涵蓋。
+
+**實例（2026-08-19，PM 驗收實測）**：兩個模組各自 `from ...lib.paths import get_project_root`——`commands.topic_backfill` 與 `lib.topic_registry`。驗證腳本只 patch 了前者：
+
+```python
+with mock.patch.object(topic_backfill, "get_project_root", return_value=tmp):
+    topic_backfill.append_assignment("0.2.1-W3-002", "主題 B")
+```
+
+`append_assignment` 自身的寫入正確落在 tmp，但它內部呼叫的 `topic_registry.append_topic` 走的是**未被 patch 的第二個 binding**，於是那次寫入落到真實 repo，留下一個 untracked 的清單檔。腳本輸出完全正常，污染是事後 `git status` 才發現的。
+
+**與主模式的差別**：主模式靠檢查 import 形式即可識別（patch 的是定義處還是使用處）；本變體的 patch 形式完全正確，必須追整條呼叫鏈才能發現遺漏。函式看起來只寫一個檔案，實際上跨模組寫了兩個。
+
+**識別方式**：patch 路徑解析類函式（`get_project_root`、`get_config_dir` 等）前，先確認待測函式的**傳遞閉包**中有哪些模組持有同名 binding，全部涵蓋。可用 `grep -rn "from .*paths import get_project_root"` 列出所有持有者。
+
+**驗證方式**：跑完驗證腳本後執行 `git status --porcelain --untracked=all`，有非預期的 untracked 檔案即代表 patch 覆蓋不全。此檢查一行可寫，且正是本案唯一的發現途徑。
+
 ## 正確做法
 
 ### 規則 1：patch 呼叫位置，非定義位置
@@ -129,4 +148,4 @@ def _assert_no_repo_pollution():
 
 **建立日期**: 2026-04-13
 **來源**: 0.18.0-W5-031 ANA 根因分析 + 0.18.0-W5-032 執行驗證
-**Version**: 1.0.0
+**Version**: 1.1.0 — 新增「變體：patch 位置正確但呼叫鏈上有第二個未涵蓋的 binding」（PM 驗收實測，跨模組同名 binding 遺漏致真實路徑污染）

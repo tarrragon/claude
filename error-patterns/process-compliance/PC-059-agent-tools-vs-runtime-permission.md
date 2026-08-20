@@ -7,7 +7,7 @@ retries:
  - retry3: 確認 permissionMode 是 subagent Edit 的控制欄位
  - retry4: 聲稱 bypassPermissions 為 worktree 場景標準值（後被 retry5 推翻）
  - retry5: 確認 permissionMode 受 subagent cwd 限制，worktree 絕對路徑不可靠
- - retry6: 主 repo cwd 內 `.claude/` 檔案 + thyme `permissionMode: acceptEdits` 仍被拒（W17-088）
+ - retry6: "主 repo cwd 內 `.claude/` 檔案 + thyme `permissionMode: acceptEdits` 仍被拒（W17-088）"
 related:
  - PC-058
  - IMP-056

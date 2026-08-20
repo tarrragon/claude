@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 
 r"""
@@ -261,13 +261,17 @@ def check_edit_permission(file_path: str, old_string: str, logger) -> Tuple[bool
     # 阻止 frontmatter 欄位編輯
     reason = (
         "禁止直接編輯 ticket frontmatter 欄位。\n"
-        "請使用以下指令：\n"
+        "常用指令（完整清單見 `ticket track --help`）：\n"
         "  - /ticket track claim {id}       - 認領 ticket\n"
         "  - /ticket track complete {id}    - 完成 ticket\n"
+        "  - /ticket track set-title {id} {value} - 更新 title（清單顯示用短標籤）\n"
+        "  - /ticket track set-what {id} {value}  - 更新 what（完整任務敘述）\n"
         "  - /ticket track set-who {id} {value}   - 更新 who 欄位\n"
-        "  - /ticket track set-what {id} {value}  - 更新 what 欄位\n"
         "  - /ticket track set-priority {id} {value} - 更新優先級\n"
-        "  - /ticket track append-log {id} --section {section} {content} - 追加執行日誌"
+        "  - /ticket track append-log {id} --section {section} {content} - 追加執行日誌\n"
+        "\n"
+        "若 `ticket track --help` 也找不到對應該欄位的命令，代表該欄位缺少合法\n"
+        "更新途徑（PC-BAL-047）——請建 ticket 回報，不要繞道直接改檔。"
     )
     logger.warning(f"阻止編輯 ticket frontmatter: {file_path}")
     return False, reason

@@ -9,6 +9,7 @@ description: >
   "normalized EPS", "one-time vs structural". Provides a systematic 7-step business analysis workflow
   from report reading through value chain tracing.
 metadata:
+  portable: true
   version: 1.4.0
 ---
 

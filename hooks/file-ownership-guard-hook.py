@@ -1,5 +1,9 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --quiet --script
 # -*- coding: utf-8 -*-
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["pyyaml"]
+# ///
 """
 檔案所有權隔離檢查 Hook
 
@@ -49,6 +53,26 @@ DEFAULT_OUTPUT = {
         "hookEventName": "PreToolUse"
     }
 }
+
+# 逐檔讀寫意圖標記剝離：本 hook 為獨立 PEP 723 單檔腳本，sys.path 僅含
+# `.claude/`（見上方 import 區），無法引用 `.claude/skills/ticket` 下的
+# ticket_system 套件，故無法直接呼叫 `lib.file_conflict.where_files`。
+# 此正則與跳脫還原規則需與 `ticket_system/lib/file_conflict.py` 的
+# `_INTENT_MARKER_RE` / `_ESCAPED_MARKER_RE` 保持同步——任一處修改標記
+# 語法時，兩處都要更新。
+_INTENT_MARKER_RE = re.compile(r"(?<!\\)::(read|write)$")
+_ESCAPED_MARKER_RE = re.compile(r"\\(::(?:read|write))$")
+
+
+def _strip_intent_marker(raw: str) -> str:
+    """剝離單一路徑字串結尾的讀寫意圖標記，回傳純路徑（與
+    file_conflict.parse_file_intent 同語意，僅回傳路徑不回傳意圖，因
+    本 hook 只做檔案交集比對，不需要意圖值）。
+    """
+    match = _INTENT_MARKER_RE.search(raw)
+    if match:
+        return raw[: match.start()]
+    return _ESCAPED_MARKER_RE.sub(r"\1", raw)
 
 # Ticket ID 正則表達式（符合規範格式；SSOT：lib.ticket_id_pattern.MATCH_GROUPED_STR）
 TICKET_ID_PATTERN = MATCH_GROUPED_STR
@@ -163,8 +187,10 @@ def _parse_ticket_files(
 ) -> list[str]:
     """從 Ticket frontmatter 提取並規範化 where.files
 
-    W11-004.7.2：where.files 抽取邏輯統一委派 hook_utils.extract_where_files_from_frontmatter；
-    本函式僅保留路徑規範化（normalize_path）以維持原有跨檔比對行為。
+    where.files 抽取邏輯統一委派 hook_utils.extract_where_files_from_frontmatter；
+    本函式額外剝離逐檔讀寫意圖標記（`_strip_intent_marker`，就地實作，
+    見該函式與模組頂部常數的同步義務註記），再做路徑規範化
+    （normalize_path）以維持原有跨檔比對行為。
 
     Args:
         frontmatter: 已解析的 Ticket frontmatter，或 None
@@ -177,7 +203,8 @@ def _parse_ticket_files(
     if not raw_files:
         return []
 
-    normalized = [normalize_path(f) for f in raw_files if f]
+    stripped = [_strip_intent_marker(f) for f in raw_files]
+    normalized = [normalize_path(f) for f in stripped if f]
     return [f for f in normalized if f]
 
 

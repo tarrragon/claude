@@ -107,8 +107,10 @@
 
 **與規則 3 銜接**：規則 3 要求「關鍵事實用固定值交叉驗證」；本規則的固定值查證對象特化為「建立端權威定義」，補上規則 3 未涵蓋的情境——規則 1-3 聚焦真實 vs 虛構輸出，本規則聚焦真實但過期的驗證輸出 vs 建立端現況，兩者判別依據不同（前者用固定值命令，後者用建立端定義溯源）。
 
-> **邊界**：本規則 1-4 是 PC-166「生成自律」的規則層固化（防護 E 無法 hook 的部分）；規則 5 二相性對應 PC-166 防護 D 延伸；規則 6 對應 PC-BAL-001（驗證端清單過期）。規則 4 與 `bash-tool-usage-rules` 規則一交叉引用（觸發鏈源頭），chpwd 淹沒機制見 IMP-056；規則 1 邊界與 `ai-communication-rules` 對話品質互補。規則 5 另與 `PC-076`（前 session 遺留）、`PC-078`（並行 session 活躍）觸發訊號同形但處理路徑不重疊，交叉引用見兩檔各自相關文件區。
+**衍生情境：prompt 與正本衝突**：prompt 與 ticket/框架正本衝突比照規則 5-6，不自行選邊——停手寫入 ticket NeedsContext 章節上報；論證見 `.claude/references/agent-dispatch-template.md`「骨架（權威版）」段。
+
+> **邊界**：本規則 1-4 是 PC-166「生成自律」的規則層固化（防護 E 無法 hook 的部分）；規則 5 二相性對應 PC-166 防護 D 延伸；規則 6 對應 PC-BAL-001（驗證端清單過期）；「衍生情境：prompt 與正本衝突」對應仲裁行為條文落地，主文見 `agent-dispatch-template.md`。規則 4 與 `bash-tool-usage-rules` 規則一交叉引用（觸發鏈源頭），chpwd 淹沒機制見 IMP-056；規則 1 邊界與 `ai-communication-rules` 對話品質互補。規則 5 另與 `PC-076`（前 session 遺留）、`PC-078`（並行 session 活躍）觸發訊號同形但處理路徑不重疊，交叉引用見兩檔各自相關文件區。
 
 ---
 
-**Last Updated**: 2026-08-18 | **Version**: 1.5.0 — 邊界段補一行路由指向 `PC-076`（前 session 遺留）與 `PC-078`（並行 session 活躍），兩者與規則 5 觸發訊號同形但處理路徑不重疊；不展開論證，維持自動載入層速查形態。**Version**: 1.4.0 — 規則 5「git status 有我沒印象的變更」列細化：同儕可定址時發訊詢問與 ghost 痕跡查證並行展開（訊息視為可能不返回，不循序等待），並補「分工線」（同儕回報僅線索、痕跡查證才是決策依據），與 `parallel-dispatch.md` 接管判準的「不採信對方回報」一致。歷史 1.0–1.3 版見 git log。**Source**: confabulation 根因 ANA（四視角整合）；PC-166；PC-BAL-001；用戶裁示（2026-08-18 經平行 session 轉達，本次 ANA 複核落地）。
+**Last Updated**: 2026-08-18 | **Version**: 1.7.0 — 依 Layer 2 審查（basil-writing-critic）修正：「衍生情境（第三例）」標題改語意標題「衍生情境：prompt 與正本衝突」（原位置編號命名於規則重排時語意 silent 錯位）；邊界段補一句對應來源（原逐一列規則 1-4/5/6 出處獨缺此條）。**Version**: 1.6.0 — 規則 6 後補一行「衍生情境（第三例）」：prompt 與 ticket/框架正本衝突比照規則 5-6 不自行選邊，停手上報 NeedsContext；論證主文置於 `agent-dispatch-template.md`「骨架（權威版）」，本檔僅速查路由，不展開三明示。**Version**: 1.5.0 — 邊界段補一行路由指向 `PC-076`（前 session 遺留）與 `PC-078`（並行 session 活躍），兩者與規則 5 觸發訊號同形但處理路徑不重疊；不展開論證，維持自動載入層速查形態。**Version**: 1.4.0 — 規則 5「git status 有我沒印象的變更」列細化：同儕可定址時發訊詢問與 ghost 痕跡查證並行展開（訊息視為可能不返回，不循序等待），並補「分工線」（同儕回報僅線索、痕跡查證才是決策依據），與 `parallel-dispatch.md` 接管判準的「不採信對方回報」一致。歷史 1.0–1.3 版見 git log。**Source**: confabulation 根因 ANA（四視角整合）；PC-166；PC-BAL-001；用戶裁示（2026-08-18 經平行 session 轉達，本次 ANA 複核落地）。

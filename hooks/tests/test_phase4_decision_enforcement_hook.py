@@ -101,6 +101,151 @@ def test_m1_n2_phase_過渡():
     assert _hits_by_rule(hits, "M1") == []
 
 
+# ---------- W3-746: M1 逗號子句邊界精度修正 ----------
+#
+# 根因：「Phase N」與判定動詞之間原本允許跨逗號比對，使「Phase N 只是
+# 時間標記、判定動詞屬另一子句」的過去完成式敘述被誤判為延後語意。
+# 修法：間隔字元排除全形/半形逗號，要求兩者落在同一子句才視為同一段
+# 延後語意。
+
+
+def test_m1_w3_746_n1_過去完成式跨逗號不命中():
+    """0.2.1-W3-708 NeedsContext 第 412 行原文（節錄）：Phase N 為建立
+    時間標記，判斷動詞描述另一件已完成的事，兩者被逗號分隔的不同子句，
+    不應命中。"""
+    hits = _scan_text(
+        "本次由 add-spawn-request 於 Phase 4 審查初稿時建立，"
+        "後因判斷應直接執行而 resolve-spawn-request --status dismissed"
+    )
+    assert _hits_by_rule(hits, "M1") == [], (
+        "過去完成式敘述（判定動詞與 Phase N 分屬逗號兩側不同子句）不應命中，實際: {}".format(hits)
+    )
+
+
+def test_m1_w3_746_n2_已下決定跨逗號不命中():
+    """另一種過去式典型句型：Phase N 完成分析後，另起子句敘述已下的決定。"""
+    hits = _scan_text("於 Phase 3 完成分析，已決定採用方案 A")
+    assert _hits_by_rule(hits, "M1") == [], (
+        "已下決定的過去式敘述不應命中，實際: {}".format(hits)
+    )
+
+
+def test_m1_w3_746_n3_完成後判斷跨逗號不命中():
+    hits = _scan_text("Phase 2 測試全數通過，團隊判斷可以進入下一階段")
+    assert _hits_by_rule(hits, "M1") == [], (
+        "完成後續接的判斷敘述不應命中，實際: {}".format(hits)
+    )
+
+
+def test_m1_w3_746_p1_同子句仍命中_再決定():
+    """acceptance 2 三種典型句型之一：Phase N 再決定，同子句無逗號分隔仍命中。"""
+    hits = _scan_text("Phase 4 再決定是否保留 use_cache")
+    assert len(_hits_by_rule(hits, "M1")) == 1
+
+
+def test_m1_w3_746_p2_同子句仍命中_視結果決定():
+    """acceptance 2 三種典型句型之二：Phase N 視 X 決定，同子句仍命中。"""
+    hits = _scan_text("Phase 5 視 baseline 決定")
+    assert len(_hits_by_rule(hits, "M1")) >= 1
+
+
+def test_m1_w3_746_p3_同子句仍命中_再評估():
+    """acceptance 2 三種典型句型之三：Phase N 再評估，同子句仍命中。"""
+    hits = _scan_text("phase 4 再評估")
+    assert len(_hits_by_rule(hits, "M1")) == 1
+
+
+def test_m1_w3_746_p4_逗號在phase之前仍命中():
+    """逗號出現在「Phase N」之前（非兩者之間）不受影響，仍應命中。"""
+    hits = _scan_text("spawn N 個 IMP ticket，禁止 Phase 5 再決定")
+    assert len(_hits_by_rule(hits, "M1")) == 1
+
+
+# ---------- W3-749: 修正 W3-746 單分支「收逗號」方案的漏攔回歸 ----------
+#
+# W3-746 收窄「Phase N」與判定動詞的間隔字元排除逗號，修掉了 0.2.1-W3-708
+# 的過去完成式誤判，但代價是所有「跨逗號但帶再/在前綴」的真延後話術一併
+# 漏攔。本節固定雙分支修法：分支一（同子句，前綴可選，W3-746 既有）+
+# 分支二（跨子句，前綴必須，本票新增）。測試刻意成對設計（含逗號 vs
+# 不含逗號），涵蓋被修改的維度本身，避免重蹈 W3-746 選樣未涵蓋逗號
+# 的教訓。
+
+
+def test_m1_w3_749_p1_跨逗號帶再前綴命中_決定():
+    """PM 實測發現的缺口之一：跨逗號但帶「再」前綴，應攔截。"""
+    hits = _scan_text("Phase 4 完成後，再決定是否重構")
+    assert len(_hits_by_rule(hits, "M1")) == 1
+
+
+def test_m1_w3_749_p2_跨逗號帶再前綴命中_評估():
+    """PM 實測發現的缺口之二：跨逗號但帶「再」前綴，應攔截。"""
+    hits = _scan_text("Phase 5 之後，再評估要不要拆")
+    assert len(_hits_by_rule(hits, "M1")) == 1
+
+
+def test_m1_w3_749_p3_跨逗號帶在前綴命中():
+    """跨逗號、前綴為「在」而非「再」，同樣應攔截（分支二涵蓋兩種前綴；
+    「在」須緊接判定動詞，與既有「評估」前綴要求的鄰接慣例一致）。"""
+    hits = _scan_text("Phase 4 完成後，在決定是否重構")
+    assert len(_hits_by_rule(hits, "M1")) == 1
+
+
+def test_m1_w3_749_n1_跨逗號無前綴仍放行_原始誤判句():
+    """0.2.1-W3-708 原誤判句（逐字重放）：跨逗號但無前綴，維持放行——
+    W3-746 的成果不得回退。"""
+    hits = _scan_text(
+        "本次由 add-spawn-request 於 Phase 4 審查初稿時建立，"
+        "後因判斷應直接執行而 resolve-spawn-request --status dismissed"
+    )
+    assert _hits_by_rule(hits, "M1") == []
+
+
+def test_m1_w3_749_n2_跨逗號無前綴仍放行_已決定():
+    """跨逗號、判定動詞無前綴的另一過去式句型，維持放行。"""
+    hits = _scan_text("於 Phase 3 完成分析，已決定採用方案 A")
+    assert _hits_by_rule(hits, "M1") == []
+
+
+def test_m1_w3_749_p4_不含逗號帶前綴仍命中():
+    """對照組（不含逗號）：同子句、帶前綴，維持命中——分支一涵蓋。"""
+    hits = _scan_text("Phase 4 再決定是否保留 use_cache")
+    assert len(_hits_by_rule(hits, "M1")) == 1
+
+
+def test_m1_w3_749_p5_不含逗號無前綴仍命中_視結果決定():
+    """對照組（不含逗號）：同子句、無前綴的「視 X 決定」句型，維持命中——
+    分支一涵蓋，此為驗證雙分支未破壞既有正案例的關鍵對照。"""
+    hits = _scan_text("Phase 5 視 baseline 決定")
+    assert len(_hits_by_rule(hits, "M1")) >= 1
+
+
+def test_m1_w3_749_main_integration_four_sentences(monkeypatch, capsys, tmp_path):
+    """acceptance 6：main() 整合層級，以 PM 提供的四句實際灌入 ticket
+    檔案跑過完整 main() 流程（非僅單元測試 pattern），驗證兩句應攔截、
+    兩句應放行同時成立。"""
+    ticket_md = tmp_path / "TST-749.md"
+    ticket_md.write_text(
+        "---\nid: TST-749\ntitle: t\ntype: IMP\nstatus: in_progress\n---\n\n"
+        "## Solution\n"
+        "案例一（應攔截）：Phase 4 完成後，再決定是否重構\n"
+        "案例二（應攔截）：Phase 5 之後，再評估要不要拆\n"
+        "案例三（應放行）：於 Phase 4 審查初稿時建立，後因判斷應直接執行\n"
+        "案例四（應放行）：Phase 4 結論：無需重構\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(_hook, "find_ticket_file", lambda tid, **kw: ticket_md)
+    rc, out, err = _run_main_with_stdin(
+        _payload("PostToolUse", "ticket track phase TST-749 phase4"),
+        monkeypatch, capsys,
+    )
+    assert rc == 2, "含真延後話術（案例一/二）應被 BLOCK"
+    assert "再決定是否重構" in err or "案例一" in err or "Phase 4" in err
+    # 案例三/四不應出現在 blocked 命中列表（僅檢查不誤列，訊息格式見
+    # format_block_message：blocked 命中會逐行列出 line N [rule_id]）
+    assert "後因判斷應直接執行" not in err
+    assert "結論：無需重構" not in err
+
+
 # ---------- M2 之後/以後 再決定 ----------
 
 def test_m2_p1_之後再決定():
@@ -594,6 +739,84 @@ def test_int_2_must_block_exit_2_stderr(monkeypatch, capsys, mock_find_ticket):
     assert "AUQ" in err
 
 
+# ============================================================================
+# W3-751 — DENY 訊息補強 code fence 豁免路徑說明
+# ============================================================================
+
+
+def test_w3_751_deny_message_mentions_code_fence(monkeypatch, capsys, mock_find_ticket):
+    """acceptance 1：DENY 訊息含 code fence 豁免說明與可複製範例。"""
+    mock_find_ticket("ticket_with_must_block.md")
+    rc, out, err = _run_main_with_stdin(
+        _payload("PostToolUse", "ticket track phase TST-001 phase4"),
+        monkeypatch, capsys,
+    )
+    assert rc == 2
+    assert "code fence" in err
+    assert "```" in err
+    assert "引用或示範" in err
+
+
+def test_w3_751_deny_message_static_guidance_is_properly_fenced_self_test():
+    """acceptance 2：DENY 訊息新增的靜態引導文字（含內建 ~~~ 範例句）本身
+    不會觸發 M1 自我阻擋——範例句已包在 code fence 內，掃描時整段跳過。
+
+    範圍界定：本測試只驗證本票新增的「靜態引導段落」（説明 + 內建範例），
+    不含「命中:」區塊逐行回顯的動態內容（hit.text 逐字回顯是既有設計，
+    目的是讓使用者看清楚被擋的原文，該行天生會重現原始命中內容，無法
+    也不應該被消音——見對照測試
+    test_w3_751_echoed_hit_line_reproduces_original_match_by_design）。
+    此處刻意傳入不會命中 M1 的 hit 文字，隔離出「新增文字本身」是否安全。
+    """
+    msg = format_block_message(
+        "TST-751",
+        [Hit(line_no=1, rule_id="M1", level="BLOCK", text="（不觸發 M1 的中性描述）")],
+        [],
+    )
+    # 把 DENY 訊息全文當成 ticket body 內容重新掃描
+    lines = ["## Solution", "以下為 hook 回報的原文引用："] + msg.split("\n")
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    assert hits == [], (
+        "DENY 訊息新增的靜態引導文字若被引用進 ticket body 不應觸發 M1，"
+        "實際: {}".format(hits)
+    )
+
+
+def test_w3_751_echoed_hit_line_reproduces_original_match_by_design():
+    """對照組（記錄既有限制，非本票 acceptance 範圍）：「命中:」區塊逐字
+    回顯原始命中文字，若該文字本身是 M1 命中，回顯行未加 fence 時會再次
+    命中——此為設計上的必然（回顯目的就是讓使用者看清楚原文），訊息本身
+    已引導使用者將整段（含此回顯行）包進 code fence 再引用進 ticket。
+    """
+    msg = format_block_message(
+        "TST-751",
+        [Hit(line_no=1, rule_id="M1", level="BLOCK", text="Phase 4 再決定")],
+        [],
+    )
+    lines = ["## Solution", "以下為 hook 回報的原文引用："] + msg.split("\n")
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    assert len(hits) == 1 and hits[0].rule_id == "M1", (
+        "回顯行預期重現原始命中（既有限制，訊息已引導整段包 fence），"
+        "實際: {}".format(hits)
+    )
+
+    # 依訊息自身引導，將整段（含回顯行）包進 ``` fence 後再引用 → 無命中
+    fenced_lines = ["## Solution", "```"] + msg.split("\n") + ["```"]
+    fenced_hits = scan_lines_for_phrases(fenced_lines, build_regex_table())
+    assert fenced_hits == [], (
+        "依訊息引導將整段包 ``` fence 後應無命中，實際: {}".format(fenced_hits)
+    )
+
+
+def test_w3_751_unfenced_example_would_hit_demonstrates_why_fence_matters():
+    """對照組：同一範例句若未包 code fence，會被 M1 命中——證明本票新增
+    的 code fence 提示是唯一無摩擦的出路（非裝飾性文字）。"""
+    lines = ["## Solution", "範例句型：Phase 4 再決定是否保留 use_cache"]
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    m1 = _hits_by_rule(hits, "M1")
+    assert len(m1) == 1, "未加 code fence 的範例句應命中 M1（對照組），實際: {}".format(hits)
+
+
 def test_int_3_exempt_exit_0_with_audit(monkeypatch, capsys, mock_find_ticket):
     mock_find_ticket("ticket_with_exempt.md")
     rc, out, err = _run_main_with_stdin(
@@ -822,6 +1045,123 @@ def test_extract_無關命令():
 
 
 # ============================================================================
+# W3-747 — payload 內文誤判修正（同型於三個 Bash git 守衛曾修過的缺陷）
+# ============================================================================
+
+
+def test_w3_747_quoted_payload_not_misdetected():
+    """引號參數內文引用 ticket track complete 字樣不應被誤判為真實呼叫。"""
+    words = ["ticket", "track", "complete"]
+    phrase = " ".join(words) + " 0.2.1-W3-XXX"
+    command = 'ticket track append-log 0.2.1-W3-747 --section "Test Results" "{}"'.format(
+        phrase
+    )
+    tid, mode = extract_ticket_id_from_command(command)
+    assert (tid, mode) == (None, None), (
+        "引號內文引用不應誤判為真實呼叫，實際: ({}, {})".format(tid, mode)
+    )
+
+
+def test_w3_747_heredoc_wrapped_in_quotes_payload_not_misdetected():
+    """heredoc 本體包在外層雙引號內（`"$(cat <<'EOF' ...)"` 慣用形式）不誤判。"""
+    words = ["ticket", "track", "phase", "0.2.1-W3-XXX", "phase4"]
+    phrase = " ".join(words)
+    command = (
+        'ticket track append-log 0.2.1-W3-747 --section "Test Results" '
+        '"$(cat <<\'EOF2\'\n' + phrase + '\nEOF2\n)"'
+    )
+    tid, mode = extract_ticket_id_from_command(command)
+    assert (tid, mode) == (None, None), (
+        "引號包裹的 heredoc payload 不應誤判，實際: ({}, {})".format(tid, mode)
+    )
+
+
+def test_w3_747_bare_heredoc_payload_not_misdetected():
+    """裸 heredoc（無外層引號包裹）本體含觸發字樣不應誤判——須先剝除
+    heredoc 本體，shlex 本身不理解 heredoc 語法。"""
+    words = ["ticket", "track", "complete", "0.2.1-W3-XXX"]
+    phrase = " ".join(words)
+    command = "cat <<'EOF2'\nDone: " + phrase + " --as x\nEOF2"
+    tid, mode = extract_ticket_id_from_command(command)
+    assert (tid, mode) == (None, None), (
+        "裸 heredoc payload 不應誤判，實際: ({}, {})".format(tid, mode)
+    )
+
+
+def test_w3_747_w3_744_real_incident_replay():
+    """0.2.1-W3-744 真實事發現場重放：append-log 內文引用另一 ticket 的
+    收尾指令，應偵測為 append-log（非 ticket 指令），不誤判為對該被引用
+    ticket 的收尾呼叫。"""
+    quoted_words = ["ticket", "track", "complete", "0.2.1-W3-708", "--as", "x"]
+    quoted_phrase = " ".join(quoted_words)
+    command = (
+        'ticket track append-log 0.2.1-W3-744 --section "Test Results" '
+        '"$(cat <<\'EOF2\'\nDone: ' + quoted_phrase + '\nEOF2\n)"'
+    )
+    tid, mode = extract_ticket_id_from_command(command)
+    assert (tid, mode) == (None, None), (
+        "append-log 呼叫本身不應被判為對被引用 ticket 的收尾呼叫，實際: ({}, {})".format(
+            tid, mode
+        )
+    )
+
+
+def test_w3_747_real_complete_call_still_detected():
+    """acceptance 2：真實 complete 呼叫（無 payload 包裹）仍正確識別。"""
+    tid, mode = extract_ticket_id_from_command("ticket track complete 0.2.1-W3-747")
+    assert (tid, mode) == ("0.2.1-W3-747", "residual_gate")
+
+
+def test_w3_747_real_phase4_call_still_detected():
+    """acceptance 2：真實 phase4 呼叫（無 payload 包裹）仍正確識別。"""
+    tid, mode = extract_ticket_id_from_command(
+        "ticket track phase 0.2.1-W3-747 phase4 thyme-python-developer"
+    )
+    assert (tid, mode) == ("0.2.1-W3-747", "main_gate")
+
+
+def test_w3_747_real_call_with_chained_statement_still_detected():
+    """真實呼叫作為語句鏈的一部分（&& 之後）仍正確識別。"""
+    tid, mode = extract_ticket_id_from_command(
+        "cd /tmp && ticket track complete 0.2.1-W3-747"
+    )
+    assert (tid, mode) == ("0.2.1-W3-747", "residual_gate")
+
+
+def test_w3_747_unbalanced_quote_returns_none_none():
+    """acceptance 6：無法安全 tokenize 時回傳 (None, None)，與原 regex
+    對應情境找不到匹配的既有失敗語意一致（fail-open，main() 視為
+    mode is None 直接放行，不觸發掃描）。"""
+    tid, mode = extract_ticket_id_from_command('ticket track complete "unterminated')
+    assert (tid, mode) == (None, None)
+
+
+def test_w3_747_main_integration_payload_not_misdetected(monkeypatch, capsys, mock_find_ticket):
+    """acceptance 5：main() 整合層級驗證——含觸發字樣的 payload 呼叫（模擬
+    append-log）不掃描任何 ticket（find_ticket_file 不應被呼叫，因
+    extract_ticket_id_from_command 回傳 mode=None 即提前 return）。"""
+    calls = []
+
+    def _tracking_find_ticket(tid, **kw):
+        calls.append(tid)
+        return _FIXTURES / "ticket_with_must_block.md"
+
+    monkeypatch.setattr(_hook, "find_ticket_file", _tracking_find_ticket)
+    quoted_words = ["ticket", "track", "complete", "0.2.1-W3-708"]
+    quoted_phrase = " ".join(quoted_words)
+    command = (
+        'ticket track append-log 0.2.1-W3-747 --section "Test Results" '
+        '"$(cat <<\'EOF2\'\nDone: ' + quoted_phrase + '\nEOF2\n)"'
+    )
+    rc, out, err = _run_main_with_stdin(
+        _payload("PreToolUse", command), monkeypatch, capsys
+    )
+    assert rc == 0
+    assert err == ""
+    assert calls == [], "payload 呼叫不應觸發任何 ticket md 掃描，實際呼叫: {}".format(calls)
+
+
+# ============================================================================
 # PC-099 — 檔級 self-reference 豁免（meta-ticket 防誤報）
 # ============================================================================
 
@@ -897,7 +1237,7 @@ def test_self_ref_main_整合_豁免整檔(monkeypatch, tmp_path, capsys):
     rc = main()
     captured = capsys.readouterr()
     assert rc == 0
-    assert "PC-093 Phase 4 強制決斷" not in captured.err
+    assert "PC-093 強制決斷" not in captured.err
 
 
 # ============================================================================
@@ -1700,3 +2040,193 @@ def test_w1_120_h3_inside_block_not_terminating():
     )
     hits = scan_lines_for_phrases(lines, build_regex_table())
     assert hits == [], "區塊內含 H3 仍全跳過，實際: {}".format(hits)
+
+
+# ============================================================================
+# W3-744 — 已 resolved 的 Spawn Request 條目跳過（CLI 產出結構化欄位，
+# 死結案例：0.2.1-W3-708 的 SR-2 which/status 欄位含延後語彙，導致
+# complete 被永久阻擋，因該區段既非 CLI 可編輯、亦不在 ticket 檔案
+# Edit 白名單內）
+# ============================================================================
+
+compute_resolved_spawn_request_lines = _hook.compute_resolved_spawn_request_lines
+
+
+def test_w3_744_resolved_dismissed_entry_skipped():
+    """acceptance 1：已 dismissed 的 spawn request，why 欄位含延後語不再阻擋。"""
+    lines = [
+        "## Spawn Requests",
+        "- **SR-2** (2026-08-19 12:14)",
+        "  - what: 拆分函式",
+        "  - why: 當下評估拆分會增加複雜度，故保留現狀，留待後續若語法複雜度再提高時重新評估",
+        "  - suggested_type: IMP",
+        "  - suggested_priority: P2",
+        "  - related_files: ",
+        "  - context: ",
+        "  - status: dismissed（已直接執行完畢）",
+        "",
+        "## Completion Info",
+    ]
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    assert hits == [], "已 dismissed 條目的 why 欄位不應命中，實際: {}".format(hits)
+
+
+def test_w3_744_resolved_processed_entry_skipped():
+    """已 processed 的 spawn request 同樣跳過（不限 dismissed）。"""
+    lines = [
+        "## Spawn Requests",
+        "- **SR-1** (2026-08-19 12:00)",
+        "  - what: 建立追蹤票",
+        "  - why: 此議題之後再處理，先保留再說",
+        "  - status: processed（已建 0.2.1-W3-900）",
+        "## Completion Info",
+    ]
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    assert hits == [], "已 processed 條目不應命中，實際: {}".format(hits)
+
+
+def test_w3_744_pending_entry_still_hits():
+    """acceptance 3：未 resolved（pending）的 spawn request 含延後語仍被攔截。"""
+    lines = [
+        "## Spawn Requests",
+        "- **SR-3** (2026-08-19 12:00)",
+        "  - what: 尚待決定",
+        "  - why: 此議題之後再處理，先保留再說",
+        "  - status: pending",
+        "## Completion Info",
+    ]
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    rule_ids = sorted(h.rule_id for h in hits)
+    assert rule_ids, "pending 條目仍應命中延後話術，實際: {}".format(hits)
+
+
+def test_w3_744_solution_deferral_still_hits():
+    """acceptance 2：Solution 章節的延後話術不受本次改動影響，仍被攔截。"""
+    lines = [
+        "## Solution",
+        "Phase 4 再決定是否保留 use_cache",
+        "## Spawn Requests",
+        "- **SR-1** (2026-08-19 12:00)",
+        "  - status: dismissed（已執行）",
+    ]
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    m1 = _hits_by_rule(hits, "M1")
+    assert len(m1) == 1 and m1[0].line_no == 2, (
+        "Solution 章節延後話術仍應命中（regression 防護），實際: {}".format(hits)
+    )
+
+
+def test_w3_744_problem_analysis_deferral_still_hits():
+    """acceptance 2：Problem Analysis 章節的延後話術不受影響，仍被攔截。"""
+    lines = [
+        "## Problem Analysis",
+        "此問題之後再處理，先保留再說",
+        "## Spawn Requests",
+        "- **SR-1** (2026-08-19 12:00)",
+        "  - status: processed（已建票）",
+    ]
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    assert hits, "Problem Analysis 延後話術仍應命中，實際: {}".format(hits)
+
+
+def test_w3_744_multiple_entries_only_resolved_skipped():
+    """同一區段內多筆條目，僅 resolved 者跳過，pending 者仍命中。"""
+    lines = [
+        "## Spawn Requests",
+        "- **SR-1** (2026-08-19 12:00)",
+        "  - why: 此為已解決案例，之後再處理",
+        "  - status: dismissed（歷史記錄）",
+        "- **SR-2** (2026-08-19 12:05)",
+        "  - why: 此為未解決案例，之後再處理",
+        "  - status: pending",
+        "## Completion Info",
+    ]
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    m2 = _hits_by_rule(hits, "M2")
+    assert len(m2) == 1, "僅 SR-2（pending）應命中，實際: {}".format(hits)
+    assert m2[0].line_no == 6
+
+
+def test_w3_744_compute_resolved_lines_entry_boundary():
+    """compute_resolved_spawn_request_lines 條目邊界正確（含標題行，止於下一條目前）。"""
+    lines = [
+        "## Spawn Requests",
+        "- **SR-1** (2026-08-19 12:00)",
+        "  - status: dismissed",
+        "- **SR-2** (2026-08-19 12:05)",
+        "  - status: pending",
+        "## Completion Info",
+    ]
+    resolved = compute_resolved_spawn_request_lines(lines)
+    assert resolved == {2, 3}, "SR-1 條目應為 line 2-3，實際: {}".format(resolved)
+
+
+def test_w3_744_no_spawn_requests_section_returns_empty():
+    lines = ["## Solution", "Phase 4 再決定"]
+    assert compute_resolved_spawn_request_lines(lines) == set()
+
+
+def test_w3_744_empty_spawn_requests_section_returns_empty():
+    """區段存在但無任何 SR 條目（如僅有 HTML 註解說明）回傳空集合。"""
+    lines = [
+        "## Spawn Requests",
+        "<!-- agent 執行中發現應開新 ticket 的議題時... -->",
+        "## Completion Info",
+    ]
+    assert compute_resolved_spawn_request_lines(lines) == set()
+
+
+def test_w3_744_resolved_entry_exempt_marker_not_collected():
+    """已 resolved 條目內若含 exempt marker（如人工補上的豁免），不被
+    collect_exempt_markers 蒐集——該區塊本就不產生 hit，marker 不應
+    被用來豁免區塊外的其他 hit。"""
+    lines = [
+        "## Spawn Requests",
+        "- **SR-1** (2026-08-19 12:00)",
+        "  - status: dismissed（<!-- PC-093-exempt: history:0.2.1-W3-708 已執行 -->已執行）",
+        "## Body",
+        "Phase 4 再決定其他事項",
+    ]
+    refs = collect_exempt_markers(lines)
+    assert refs == [], "resolved 條目內 marker 不應被蒐集，實際: {}".format(refs)
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    m1 = _hits_by_rule(hits, "M1")
+    assert len(m1) == 1, "Body 內的延後話術不應被區塊內未蒐集的 marker 誤豁免"
+
+
+def test_w3_744_w3_708_real_sample_no_longer_blocks():
+    """0.2.1-W3-708 死結案例的真實文字重放：resolved SR-2 不再產生 BLOCK hit。"""
+    lines = [
+        "## Spawn Requests",
+        "- **SR-2** (2026-08-19 12:14)",
+        "  - what: 拆分或簡化 .claude/lib/git_command_parse.py 的 "
+        "_find_invocation_in_statement 函式，降低認知負擔指數（約 14，超過閾值 10）",
+        "  - why: 0.2.1-W3-708 Phase 4 審查發現該函式因需逐一判斷 git 全域選項多種"
+        "語法形式（-C / with-value / equals-form / no-value）而分支數偏高，當下評估"
+        "拆分會使狀態（idx 位移）切散到多函式間傳遞、增加而非降低理解難度，故保留現狀，"
+        "留待後續若語法複雜度再提高時重新評估",
+        "  - suggested_type: IMP",
+        "  - suggested_priority: P2",
+        "  - related_files: ",
+        "  - context: ",
+        "  - status: dismissed（<!-- PC-093-exempt: history:0.2.1-W3-708 本身即為執行"
+        "完畢的歷史記錄，SR-2 建立時的分析已由本票直接執行完成而非延後 -->已直接執行完畢，"
+        "見 Solution 更新）",
+        "",
+        "## Completion Info",
+    ]
+    hits = scan_lines_for_phrases(lines, build_regex_table())
+    assert hits == [], "0.2.1-W3-708 真實樣本重放不應再產生任何 hit，實際: {}".format(hits)
+
+
+def test_w3_744_failure_semantics_ticket_not_found_fail_open(monkeypatch, capsys):
+    """acceptance 7：ticket md 找不到時維持既有失敗語意 fail-open（exit 0），
+    本票未變更此語意——僅新增 compute_resolved_spawn_request_lines 一項
+    純函式，main() 的錯誤處理路徑未被觸及。"""
+    monkeypatch.setattr(_hook, "find_ticket_file", lambda tid, **kw: None)
+    rc, out, err = _run_main_with_stdin(
+        _payload("PostToolUse", "ticket track phase TST-404 phase4"),
+        monkeypatch, capsys,
+    )
+    assert rc == 0
+    assert err == ""

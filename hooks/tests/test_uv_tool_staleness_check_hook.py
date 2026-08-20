@@ -9,7 +9,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
-import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -495,9 +494,13 @@ def test_skill_md_files_contain_reinstall_warning():
 
 
 # ----------------------------------------------------------------------------
-# T18 (AC11): 效能 < 5 秒（7 skill * 50 .py）
+# T18 (AC11): 大量檔案（7 skill * 50 .py）下仍能正常執行完成
+# 註：原以 perf_counter 差值 + 絕對門檻（< 5s）作 pass-fail，違反
+# test-assertion-design-rules 規則 D1（紅燈反映機器負載而非程式缺陷，
+# 0.2.1-W3-640 修正）。改為驗證 main() 在大量檔案下能正常執行完成
+# （不 raise），不再對執行時間做絕對門檻斷言。
 # ----------------------------------------------------------------------------
-def test_hook_execution_under_5_seconds(
+def test_hook_execution_completes_with_large_file_set(
     hook_module, monkeypatch, tmp_path, capsys, make_installed
 ):
     fake_root = tmp_path / "repo"
@@ -515,11 +518,9 @@ def test_hook_execution_under_5_seconds(
         lambda cli, pkg, logger: inst_map.get(cli),
     )
 
-    t0 = time.perf_counter()
     hook_module.main()
-    capsys.readouterr()
-    elapsed = time.perf_counter() - t0
-    assert elapsed < 5.0, f"Hook 執行 {elapsed:.2f}s 超過 5s 上限"
+    captured = capsys.readouterr()
+    assert captured is not None
 
 
 # ----------------------------------------------------------------------------

@@ -24,6 +24,7 @@ def _make_ana(
     *,
     status: str = "in_progress",
     spawned: List[str] | None = None,
+    children: List[str] | None = None,
     wave: int = 17,
 ) -> Dict:
     return {
@@ -31,6 +32,7 @@ def _make_ana(
         "type": "ANA",
         "status": status,
         "spawned_tickets": spawned or [],
+        "children": children or [],
         "wave": wave,
         "title": f"ANA {ticket_id}",
     }
@@ -166,3 +168,88 @@ class TestStuckAnasEmpty:
         rc, out = _run(_args(), [])
         assert rc == 0
         assert "（無卡住的 ANA）" in out
+
+
+class TestStuckAnasChildrenPath:
+    """0.2.1-W3-815：children 落地路徑偵測。"""
+
+    def test_ana_with_children_only_all_completed_is_listed(self):
+        tickets = [
+            _make_ana(
+                "0.18.0-W17-700",
+                spawned=[],
+                children=["0.18.0-W17-700.1"],
+            ),
+            _make_imp("0.18.0-W17-700.1", status="completed"),
+        ]
+        rc, out = _run(_args(), tickets)
+        assert rc == 0
+        assert "0.18.0-W17-700" in out
+        assert "children" in out
+
+    def test_ana_with_both_sources_empty_is_not_stuck(self):
+        tickets = [_make_ana("0.18.0-W17-800", spawned=[], children=[])]
+        rc, out = _run(_args(), tickets)
+        assert rc == 0
+        assert "0.18.0-W17-800" not in out
+        assert "（無卡住的 ANA）" in out
+
+    def test_ana_with_both_sources_all_terminal_is_listed(self):
+        tickets = [
+            _make_ana(
+                "0.18.0-W17-900",
+                spawned=["0.18.0-W17-901"],
+                children=["0.18.0-W17-902"],
+            ),
+            _make_imp("0.18.0-W17-901", status="completed"),
+            _make_imp("0.18.0-W17-902", status="completed"),
+        ]
+        rc, out = _run(_args(), tickets)
+        assert rc == 0
+        assert "0.18.0-W17-900" in out
+        assert "spawned_tickets" in out
+        assert "children" in out
+
+    def test_ana_with_children_incomplete_while_spawned_complete_is_not_stuck(
+        self,
+    ):
+        tickets = [
+            _make_ana(
+                "0.18.0-W17-950",
+                spawned=["0.18.0-W17-951"],
+                children=["0.18.0-W17-952"],
+            ),
+            _make_imp("0.18.0-W17-951", status="completed"),
+            _make_imp("0.18.0-W17-952", status="in_progress"),
+        ]
+        rc, out = _run(_args(), tickets)
+        assert rc == 0
+        assert "0.18.0-W17-950" not in out
+
+    def test_ana_with_spawned_incomplete_while_children_complete_is_not_stuck(
+        self,
+    ):
+        tickets = [
+            _make_ana(
+                "0.18.0-W17-960",
+                spawned=["0.18.0-W17-961"],
+                children=["0.18.0-W17-962"],
+            ),
+            _make_imp("0.18.0-W17-961", status="in_progress"),
+            _make_imp("0.18.0-W17-962", status="completed"),
+        ]
+        rc, out = _run(_args(), tickets)
+        assert rc == 0
+        assert "0.18.0-W17-960" not in out
+
+    def test_ana_with_children_missing_ticket_is_not_stuck(self):
+        tickets = [
+            _make_ana(
+                "0.18.0-W17-970",
+                spawned=[],
+                children=["0.18.0-W17-NOTEXIST"],
+            ),
+        ]
+        rc, out = _run(_args(), tickets)
+        assert rc == 0
+        assert "0.18.0-W17-970" not in out

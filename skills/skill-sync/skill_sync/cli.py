@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import ast
+import difflib
 import filecmp
 import hashlib
 import os
@@ -14,6 +16,7 @@ import sys
 import tempfile
 import urllib.request
 from collections.abc import Iterable
+from datetime import datetime
 from pathlib import Path
 from typing import NamedTuple
 
@@ -31,6 +34,14 @@ EXCLUDE_DIRS = {
     ".egg-info",
     "hook-logs",
 }
+
+# --force 繞過可攜性閘門的記錄檔位置。env var 名稱沿用專案既有慣例
+# （ticket_system.lib.precondition 的 HOOK_LOGS_DIR），純為命名一致，不 import
+# 該模組——skill-sync 是零框架依賴的獨立套件（見 pyproject.toml
+# dependencies = []），任何跨套件 import 都會讓它無法安裝到不含該套件的環境。
+_HOOK_LOGS_DIR_ENV = "HOOK_LOGS_DIR"
+_DEFAULT_HOOK_LOGS_DIR = ".claude/hook-logs"
+_PORTABILITY_FORCE_LOG_FILENAME = "skill-sync-portability-force.jsonl"
 
 # 憑證判準（移植自 .claude/lib/sync_exclude_manifest.py 的憑證維度）。
 #
@@ -59,6 +70,15 @@ _CREDENTIAL_EXACT_NAMES = frozenset({
 # 與 _classify_sync_status 的 docstring）。
 SKILL_SYNC_OVERRIDE_MARKER = ".skill-sync-override"
 
+# 記錄「上次成功 pull/push 時」該 skill 的內容雜湊（見 _record_sync_base，pull/push
+# 成功後寫入）。versions.json 只存 hash 與 version，本地原本無任何「上次同步到哪」
+# 的記錄，三方資訊塌成兩方，覆蓋方向因此永遠推不出來、必須人判——一次漏判即以舊版
+# 覆蓋 canonical。本標記檔補上第三方資訊：local==base 而 remote!=base 代表遠端已
+# 前進 -> 該 pull；反向 -> 該 push；兩者皆偏離 base -> 真衝突（見
+# _resolve_diverge_direction）。從未走過本機制的既有 skill 無此檔，維持現行
+# diverged 輸出（方向 "unknown"，向後相容）。
+SKILL_SYNC_BASE_MARKER = ".skill-sync-base"
+
 
 class DivergedSkill(NamedTuple):
     """One skill whose local content differs from the remote copy.
@@ -66,6 +86,11 @@ class DivergedSkill(NamedTuple):
     Carries its own remediation commands so consumers print what this module
     says to run, rather than each keeping a hand-written copy that drifts from
     the actual subcommands.
+
+    `direction` defaults to "unknown": a skill with no recorded sync base
+    (see SKILL_SYNC_BASE_MARKER) cannot have its direction resolved, and the
+    default keeps every existing construction site valid without having to
+    thread a base lookup through call sites that never had one.
     """
 
     name: str
@@ -73,6 +98,7 @@ class DivergedSkill(NamedTuple):
     remote: str
     pull_command: str
     push_command: str
+    direction: str = "unknown"
 
 
 class SyncStatus(NamedTuple):
@@ -122,9 +148,15 @@ def _should_exclude_file(rel_path: str) -> bool:
     the two paths cannot drift apart on marker handling the way they
     previously did (compute_content_hash used to carry its own separate
     `f.name == SKILL_SYNC_OVERRIDE_MARKER` check).
+
+    SKILL_SYNC_BASE_MARKER shares the same rationale via the same failure
+    mode: it too is a single consumer's local bookkeeping (this sync's
+    canonical hash, see _record_sync_base), and letting it into the content
+    hash would make writing it change the hash it is meant to describe — a
+    self-referential loop where every write invalidates itself.
     """
     path = Path(rel_path)
-    if path.name == SKILL_SYNC_OVERRIDE_MARKER:
+    if path.name in (SKILL_SYNC_OVERRIDE_MARKER, SKILL_SYNC_BASE_MARKER):
         return True
     for part in path.parts:
         if part in EXCLUDE_DIRS or part.endswith(".egg-info"):
@@ -137,6 +169,287 @@ def _should_exclude_file(rel_path: str) -> bool:
     if any(name_lower.startswith(prefix) for prefix in _CREDENTIAL_NAME_PREFIXES):
         return True
     return False
+
+
+
+# --- Portability check ----------------------------------------------------------
+
+# 消費端框架路徑：canonical repo 根沒有 .claude/ 這一層，任何以它開頭的引用在
+# 另一個 consumer 端都指向不存在的檔案。
+_CONSUMER_PATH_RE = re.compile(r"\.claude/[A-Za-z0-9_./-]+")
+# 專案 ticket ID：不只是斷鏈，blog 的 skill-mirror 從全檔取最大三段數字推導版號，
+# 一個 ticket ID 就能讓它抓錯版並中斷發佈。
+_TICKET_ID_RE = re.compile(r"\b\d+\.\d+\.\d+-W\d+-\d+")
+# 行內豁免：該行的引用經人判定為刻意保留（架構性橋接、教學範例）。標記語彙沿用
+# 專案既有的 portability-allow，寫在哪一行就只豁免那一行。
+# 兩個標記語彙互認：portability-allow 說「這個消費端專屬引用是刻意保留的」，
+# broken-link-exempt 說「這個路徑不存在是預期的」（示範路徑、歷史遷移軌跡）。
+# 後者涵蓋的情形對可攜性同樣成立——一條已判定不必存在的路徑，不會因為換個
+# 專案就變成缺陷。對稱地，broken-link-check 的豁免通道也認 portability-allow。
+_ALLOW_RE = re.compile(r"portability-allow|broken-link-exempt")
+
+# 已評估、決定不偵測：以中文自然語言表述的消費端指涉（如「本專案的 pm-rules」
+# 「主線程 PM」等代理人名稱／專案自稱，未搭配具體 .claude/ 路徑或 ticket ID）。
+# 沒有像路徑前綴或數字樣式那樣的穩定錨點可以掛 regex——關鍵詞清單（「本專案」
+# 「本框架」等）在中文敘述性文件裡出現頻率高且語意多半與可攜性無關，會產生
+# 大量假陽性，稀釋既有兩類判準（consumer-path／ticket-id）的訊號可信度；而
+# 反過來限縮關鍵詞集合又會漏掉大多數實際違規措辭。這類指涉留給 portable
+# 宣告者人工審閱，不納入自動判定。
+
+
+class PortabilityViolation(NamedTuple):
+    """一處消費端專屬引用。file 為 skill 目錄內的相對路徑。"""
+
+    file: str
+    line: int
+    kind: str  # "consumer-path" | "ticket-id"
+    text: str
+
+
+def _is_portable_declared(skill_dir: Path) -> bool:
+    """讀 SKILL.md frontmatter 的 metadata.portable。
+
+    未宣告即視為未宣告 portable——框架專屬工具 skill（ticket / doc / worktree 等）
+    談 .claude/ 路徑是正當內容而非缺陷，預設嚴格會把它們全部凍結在 push 之外。
+    宣告的責任歸 skill 自己，判準因此隨 skill 走而不是靠外部清單維護。
+    """
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.is_file():
+        return False
+    try:
+        text = skill_md.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    if not text.startswith("---"):
+        return False
+    end = text.find("\n---", 3)
+    if end == -1:
+        return False
+    front = text[3:end]
+    return re.search(r"^\s*portable:\s*true\s*$", front, re.MULTILINE) is not None
+
+
+def _scan_line_for_violations(rel: str, lineno: int, line: str) -> list[PortabilityViolation]:
+    """單行文字比對消費端路徑／ticket-ID pattern，回傳違規清單（可能多筆）。
+
+    .md 全文掃描與 .py 敘述性文字（docstring／# 註解）掃描共用同一判準，避免
+    兩條路徑各自維護一份 regex 比對邏輯而彼此漂移。
+    """
+    if _ALLOW_RE.search(line):
+        return []
+    found: list[PortabilityViolation] = []
+    for match in _CONSUMER_PATH_RE.finditer(line):
+        found.append(PortabilityViolation(rel, lineno, "consumer-path", match.group(0)))
+    for match in _TICKET_ID_RE.finditer(line):
+        found.append(PortabilityViolation(rel, lineno, "ticket-id", match.group(0)))
+    return found
+
+
+_NARRATIVE_DOCSTRING_NODE_TYPES = (
+    ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
+)
+
+
+def _extract_python_narrative_text(source: str) -> list[tuple[int, str]]:
+    """從 Python 原始碼擷取「敘述性文字」：docstring 與 `#` 註解。
+
+    docstring 用 ast 精確定位（module / function / class），不誤判一般字串
+    字面值——`path = ".claude/lib/foo.py"` 這類真實執行期依賴的字串常數不會
+    被當成敘述性文字。`#` 註解用簡化的行內位置判定（非完整 tokenize），精確度
+    與既有 .md 掃描一致，足以捕捉已知的真實漏洞樣態：hooks/scripts 內以自然
+    語言描述 .claude/ 路徑的註解行（見 check_portability 擴充理由）。
+
+    回傳 (行號, 文字) 列表；語法錯誤的檔案 ast.parse 會失敗，此時退化為只擷取
+    `#` 註解，不讓單一壞檔中斷整體掃描。
+    """
+    entries: list[tuple[int, str]] = []
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        tree = None
+    if tree is not None:
+        for node in ast.walk(tree):
+            if not isinstance(node, _NARRATIVE_DOCSTRING_NODE_TYPES):
+                continue
+            docstring = ast.get_docstring(node, clean=False)
+            if not docstring:
+                continue
+            body = getattr(node, "body", None)
+            start = body[0].lineno if body else getattr(node, "lineno", 1)
+            for offset, doc_line in enumerate(docstring.splitlines()):
+                entries.append((start + offset, doc_line))
+    for lineno, line in enumerate(source.splitlines(), start=1):
+        idx = line.find("#")
+        if idx != -1:
+            entries.append((lineno, line[idx:]))
+    return entries
+
+
+def check_portability(skill_dir: Path) -> list[PortabilityViolation]:
+    """掃描 skill 的 markdown 全文與 Python 檔的敘述性文字，回報消費端專屬引用。
+
+    .md 全文皆掃：可攜性問題主要出在給人與模型讀的敘述。.py 只掃 docstring 與
+    `#` 註解，不掃一般程式碼——程式碼裡的路徑常是真實的執行期依賴（如
+    sys.path 操作），全掃會招致大量誤判，見 _extract_python_narrative_text。
+    排除規則沿用 _should_exclude_file，project-integration/ 這類刻意隔離的
+    消費端層因此不進掃描範圍。
+
+    掃描範圍評估：skills 目錄下目前沒有 .sh 或其他腳本語言檔案，.py 是本次
+    唯一新增的副檔名；若未來引入其他腳本語言，可比照 .py 的 docstring/comment
+    萃取原則擴充，而非改回全文掃描。
+    """
+    violations: list[PortabilityViolation] = []
+    if not skill_dir.is_dir():
+        return violations
+    for path in sorted(skill_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(skill_dir).as_posix()
+        if _should_exclude_file(rel):
+            continue
+        if path.suffix == ".md":
+            try:
+                lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+            except OSError:
+                continue
+            for lineno, line in enumerate(lines, start=1):
+                violations.extend(_scan_line_for_violations(rel, lineno, line))
+        elif path.suffix == ".py":
+            try:
+                source = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            for lineno, text in _extract_python_narrative_text(source):
+                violations.extend(_scan_line_for_violations(rel, lineno, text))
+    return violations
+
+
+def _resolve_hook_logs_dir() -> Path:
+    """解析 hook-logs 目錄；env var 優先，否則用預設相對路徑（測試隔離用）。"""
+    return Path(os.environ.get(_HOOK_LOGS_DIR_ENV, _DEFAULT_HOOK_LOGS_DIR))
+
+
+def _write_portability_force_log(
+    name: str,
+    declared: bool,
+    already_shared: bool,
+    violations: list[PortabilityViolation],
+) -> None:
+    """--force 繞過可攜性閘門時，把違規清單落地到 hook-logs，供事後追溯來源。
+
+    Append-only JSONL；目錄不存在時自動建立。寫入失敗只警告不阻斷 push——
+    這是稽核記錄，不是主閘門本身，記錄失敗不該連帶讓一次合法的 --force 操作
+    卡住（同 ticket_system.lib.precondition 的既有權衡）。
+    """
+    logs_dir = _resolve_hook_logs_dir()
+    record = {
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "skill": name,
+        "declared_portable": declared,
+        "already_in_canonical": already_shared,
+        "violation_count": len(violations),
+        "violations": [
+            {"file": v.file, "line": v.line, "kind": v.kind, "text": v.text}
+            for v in violations
+        ],
+    }
+    try:
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        log_file = logs_dir / _PORTABILITY_FORCE_LOG_FILENAME
+        with open(log_file, mode="a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        print(f"  [Warning] force-log 寫入失敗（不阻斷 push）：{exc}", file=sys.stderr)
+
+
+def _skill_exists_in_canonical(name: str, repo_url: str) -> bool:
+    """查詢遠端 versions.json 是否已收錄此 skill。
+
+    只證明「這個 skill 曾經被 push 過」，不證明「有其他 consumer 真的裝了
+    它」——canonical 是散佈通道，versions.json 只記錄 hash 與 version，不記錄
+    任何安裝／訂閱資訊。回傳 True 時只適合用來給未宣告 portable 的 skill附加
+    一則提示（見 _report_portability），不適合作為升級嚴重度或中止 push 的
+    依據，兩者判準不同不可混用。
+
+    查詢失敗回傳 False（fail open）：本函式只是提示訊息的輔助查詢，不是主
+    閘門本身，網路查詢失敗不該連帶讓 push 卡住。
+    """
+    try:
+        manifest = fetch_remote_manifest(repo_url)
+    except Exception:
+        return False
+    return isinstance(manifest, dict) and name in manifest
+
+
+def _report_portability(
+    skill_dir: Path, name: str, force: bool, repo_url: str | None = None
+) -> None:
+    """push 前的可攜性閘門。
+
+    宣告 portable 的 skill 命中即中止（--force 可覆蓋但仍列出違規並落地
+    force-log）。未宣告者只列出摘要，不論它是否已存在於 canonical repo——
+    「存在於 canonical」只證明「曾被 push 過」，不證明「其他 consumer 真的
+    裝了它」（實測：canonical 現有 64 個 skill，某一線消費專案僅裝 23 個；
+    `doc` / `ticket` / `worktree` 等框架專屬工具全都在 canonical 裡但該專案
+    一個都沒裝，`.claude/` 路徑是它們的主題而非缺陷）。用「存在於
+    canonical」推論「已跨 consumer 使用」是過度推論，據此中止會讓大量實際
+    未共用的框架工具 push 被誤擋，且反轉「未宣告者的高命中率理當只報告不
+    阻擋」的既有設計取捨——高假陽性的閘門只會催生 --force 肌肉記憶，讓
+    force-log 淪為擋不住任何事的事後考古。
+
+    確有 repo_url 且查得到已存在於 canonical（見 _skill_exists_in_canonical）
+    時，只在既有的「reporting only」訊息後多印一行建議：若這個 skill 確實
+    跨 consumer 使用，應顯式宣告 metadata.portable: true 讓閘門真正生效——
+    這是資訊，不是判決；中止沒有可靠依據就不該做。
+
+    repo_url 預設 None：省略時完全不查詢遠端，行為與未傳時完全一致。
+    """
+    violations = check_portability(skill_dir)
+    if not violations:
+        return
+    declared = _is_portable_declared(skill_dir)
+    already_shared = repo_url is not None and _skill_exists_in_canonical(name, repo_url)
+    kinds = {v.kind for v in violations}
+    label = " + ".join(sorted(kinds))
+
+    if not declared:
+        print(
+            f"\n  [Portability] {len(violations)} consumer-specific reference(s) "
+            f"({label}) in '{name}'. Not declared portable — reporting only.",
+            file=sys.stderr,
+        )
+        if already_shared:
+            print(
+                f"  Note: '{name}' already exists in the canonical repo. Existence "
+                "there only means it has been pushed before, not that another "
+                "consumer actually installed it — if it genuinely is shared across "
+                "consumers, declare metadata.portable: true so this gate can "
+                "enforce these references instead of only reporting them.",
+                file=sys.stderr,
+            )
+        return
+
+    print(
+        f"\n  [Portability] '{name}' declares metadata.portable: true but carries "
+        f"{len(violations)} consumer-specific reference(s):",
+        file=sys.stderr,
+    )
+    for v in violations[:20]:
+        print(f"    {v.file}:{v.line}  [{v.kind}]  {v.text}", file=sys.stderr)
+    if len(violations) > 20:
+        print(f"    ... and {len(violations) - 20} more", file=sys.stderr)
+    print(
+        "  A portable skill must not name another project's files: keep the point "
+        "in the sentence and drop the path, or move the passage into "
+        "references/project-integration/ (excluded from sync).",
+        file=sys.stderr,
+    )
+    if force:
+        _write_portability_force_log(name, declared, already_shared, violations)
+        print("  --force given: pushing anyway.", file=sys.stderr)
+        return
+    print("  Aborted. Use --force to push regardless.", file=sys.stderr)
+    sys.exit(1)
 
 
 def get_repo_url() -> str:
@@ -195,6 +508,98 @@ def compute_content_hash(skill_dir: Path) -> str | None:
 def _has_local_override(skill_dir: Path) -> bool:
     """標記檔存在即宣告本地內容為刻意客製，`pull`（全量）分歧檢查略過此 skill。"""
     return (skill_dir / SKILL_SYNC_OVERRIDE_MARKER).is_file()
+
+
+def _read_sync_base(skill_dir: Path) -> str | None:
+    """讀取上次同步基準雜湊；從未成功 pull/push 過的 skill（無此檔）回傳 None。"""
+    base_file = skill_dir / SKILL_SYNC_BASE_MARKER
+    if not base_file.is_file():
+        return None
+    try:
+        text = base_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return text or None
+
+
+def _write_sync_base(skill_dir: Path, content_hash: str) -> None:
+    """寫入同步基準雜湊。呼叫端須先確認本次 pull/push 已成功再呼叫。"""
+    (skill_dir / SKILL_SYNC_BASE_MARKER).write_text(content_hash + "\n", encoding="utf-8")
+
+
+def _record_sync_base(skill_dir: Path) -> None:
+    """pull/push 成功後，以 skill_dir 當下內容雜湊更新同步基準。
+
+    目錄不存在時 compute_content_hash 回傳 None，略過寫入——呼叫端理應只在操作
+    成功之後呼叫本函式，此時目錄應已存在；這裡只是防禦式收尾，不視為錯誤。
+    """
+    content_hash = compute_content_hash(skill_dir)
+    if content_hash is not None:
+        _write_sync_base(skill_dir, content_hash)
+
+
+def _resolve_diverge_direction(
+    base_hash: str | None, local_hash: str, remote_hash: str
+) -> str:
+    """依同步基準，將一組已知分歧（local_hash != remote_hash）的雙方雜湊判定方向。
+
+    回傳 "pull" / "push" / "conflict" / "unknown" 四態之一：無 base（從未同步過）
+    -> "unknown"，維持現行「方向未知，需人工判斷」輸出；local 未變（仍等於 base）
+    而 remote 變了 -> "pull"；反向 -> "push"；兩邊皆偏離 base -> "conflict"（雙方
+    各自獨立演化，非單向落後，才是真正需要人工比對內容的情況）。呼叫端須確保
+    local_hash != remote_hash（本函式不重複這項前置判斷，只處理已知分歧的情況）。
+    """
+    if base_hash is None:
+        return "unknown"
+    if local_hash == base_hash:
+        return "pull"
+    if remote_hash == base_hash:
+        return "push"
+    return "conflict"
+
+
+def _diverge_warning(direction: str, expected: str) -> str | None:
+    """direction 與本次操作預期方向不一致時，回傳顯著警示文字；相符或無 base
+    記錄（"unknown"）時回傳 None。
+
+    「方向不自動判定，只標示」是本工具既有哲學；有 sync base 可用時新增的是
+    把風險攤在使用者眼前，不是新增一道強制關卡。expected 是呼叫端這次操作
+    對應的方向：pull 命令傳 "pull"，push 命令傳 "push"。
+    """
+    if direction in ("unknown", expected):
+        return None
+    if direction == "conflict":
+        return (
+            "Sync base shows both sides changed independently since last sync "
+            "— this operation may discard changes made on the other side."
+        )
+    suggested = "pull" if expected == "push" else "push"
+    return (
+        f"Sync base suggests this skill has only moved the other way since "
+        f"last sync — consider '{suggested}' instead of '{expected}'."
+    )
+
+
+def _print_divergence_warning(
+    local_skill_dir: Path,
+    local_hash: str | None,
+    remote_hash: str | None,
+    expected: str,
+) -> None:
+    """pull/push preview 前的方向檢查。local_skill_dir 是 sync base 記錄所在的
+    本地目錄（pull 時是 target、push 時是 source，兩者皆為本地端）。
+
+    任一雜湊為 None（目錄不存在，如首次 pull 或遠端尚無此 skill）或兩者相同
+    （未分歧，無方向可判）時安靜略過。
+    """
+    if local_hash is None or remote_hash is None or local_hash == remote_hash:
+        return
+    direction = _resolve_diverge_direction(
+        _read_sync_base(local_skill_dir), local_hash, remote_hash
+    )
+    warning = _diverge_warning(direction, expected)
+    if warning:
+        print(f"  [WARNING] {warning}", file=sys.stderr)
 
 
 def _warn_skill_md_case_mismatch(base_dir: Path) -> None:
@@ -388,7 +793,47 @@ def compute_diff(src: Path, dst: Path) -> dict[str, list[str]]:  # i18n-exempt
     return diff
 
 
-def print_diff_preview(diff: dict[str, list[str]], direction: str) -> None:
+def _diff_line_counts(before: Path, after: Path) -> tuple[int, int] | None:
+    """回傳 (added, removed) 行數，取自 before -> after 的實際逐行差異。
+
+    不是單純的總行數相減：兩個檔案總行數相同時，整份內容仍可能被互換覆蓋，
+    行數相減會誤報「無變化」。改用 difflib.SequenceMatcher 逐段比對，insert
+    段落計入 added、delete 段落計入 removed、replace 段落兩者皆計。
+
+    讀取失敗或內容無法以 UTF-8 解碼（二進位檔）回傳 None，呼叫端改印「無法計算
+    行數」，不假裝算得出一個實際上量不出來的結果。
+    """
+    try:
+        before_lines = before.read_text(encoding="utf-8").splitlines()
+        after_lines = after.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    added = removed = 0
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, before_lines, after_lines).get_opcodes():
+        if tag in ("replace", "delete"):
+            removed += i2 - i1
+        if tag in ("replace", "insert"):
+            added += j2 - j1
+    return added, removed
+
+
+def _format_line_count_suffix(dst: Path | None, src: Path | None, rel: str) -> str:
+    """modified 檔案清單附掛的行數摘要；缺 dst/src（呼叫端未提供目錄）時回傳空字串。"""
+    if dst is None or src is None:
+        return ""
+    counts = _diff_line_counts(dst / rel, src / rel)
+    if counts is None:
+        return "  (binary or unreadable content)"
+    added, removed = counts
+    return f"  (+{added}/-{removed} lines)"
+
+
+def print_diff_preview(
+    diff: dict[str, list[str]],
+    direction: str,
+    src: Path | None = None,
+    dst: Path | None = None,
+) -> None:
     """Print a human-readable diff preview.
 
     The dst-only label tracks what will actually happen: a `diff`/plan whose
@@ -397,6 +842,16 @@ def print_diff_preview(diff: dict[str, list[str]], direction: str) -> None:
     `prune` used to be a separate bool parameter that callers had to keep in
     sync with the plan by hand; folding it into the plan (see
     `build_push_plan`) removes that duplicate source of truth.
+
+    `src`/`dst` are optional and default to None: when a caller supplies both
+    (the two directories `diff` was computed from), each modified file's line
+    gains an added/removed line count (see _diff_line_counts) — the count,
+    not the file name, is what separates a routine two-line edit from a
+    near-total rewrite. A preview that only lists filenames cannot tell those
+    apart, and a routine-looking two-line "[MOD]" entry has previously hidden
+    a change that deleted well over a thousand lines. Tests that hand-build a
+    `diff` dict without real files on disk simply omit src/dst and get the
+    previous filename-only output.
     """
     has_changes = diff["added"] or diff["modified"]
     if direction == "push" and diff.get("prunable"):
@@ -418,7 +873,7 @@ def print_diff_preview(diff: dict[str, list[str]], direction: str) -> None:
     if diff["modified"]:
         print(f"  [MOD] {len(diff['modified'])} file(s):")
         for f in diff["modified"]:
-            print(f"    ~ {f}")
+            print(f"    ~ {f}{_format_line_count_suffix(dst, src, f)}")
 
     if diff["dst_only"]:
         print(f"  [{preserve_label}] {len(diff['dst_only'])} file(s):")
@@ -550,10 +1005,14 @@ def cmd_pull(args: argparse.Namespace) -> None:
 
         diff = compute_diff(source, target)
         print("\n[Pull Preview]")
-        print_diff_preview(diff, direction="pull")
+        _print_divergence_warning(
+            target, compute_content_hash(target), compute_content_hash(source), "pull"
+        )
+        print_diff_preview(diff, direction="pull", src=source, dst=target)
 
         if not diff["added"] and not diff["modified"]:
             print(f"\n'{name}' is up to date.")
+            _record_sync_base(target)
             return
 
         if diff["dst_only"]:
@@ -570,6 +1029,7 @@ def cmd_pull(args: argparse.Namespace) -> None:
                 return
 
         copied = overlay_copy(source, target, diff)
+        _record_sync_base(target)
         print(f"\nPulled '{name}' to {target} ({copied} file(s) updated)")
 
 
@@ -585,6 +1045,11 @@ def cmd_push(args: argparse.Namespace) -> None:
     if not source.is_dir():
         print(f"Error: local skill '{name}' not found at {source}", file=sys.stderr)
         sys.exit(1)
+
+    # 閘門放在 clone 之前：違規與遠端狀態無關，先擋下省一次完整 clone。
+    # repo_url 傳入讓閘門能查詢這個 skill 是否已存在於 canonical（見
+    # _skill_exists_in_canonical）——這只是一次輕量 HTTP 取檔，不是 git clone。
+    _report_portability(source, name, force, repo_url=repo_url)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir) / "repo"
@@ -604,7 +1069,10 @@ def cmd_push(args: argparse.Namespace) -> None:
         diff = compute_diff(source, target)
         plan = build_push_plan(diff, prune)
         print("\n[Push Preview]")
-        print_diff_preview(plan, direction="push")
+        _print_divergence_warning(
+            source, compute_content_hash(source), compute_content_hash(target), "push"
+        )
+        print_diff_preview(plan, direction="push", src=source, dst=target)
 
         prunable = plan["prunable"]
         # Deletions alone are a real change: without prunable in this guard,
@@ -612,6 +1080,7 @@ def cmd_push(args: argparse.Namespace) -> None:
         # push" and silently skip the deletions the flag was asked for.
         if not diff["added"] and not diff["modified"] and not prunable:
             print("\nNo changes to push.")
+            _record_sync_base(source)
             return
 
         if prunable:
@@ -641,12 +1110,14 @@ def cmd_push(args: argparse.Namespace) -> None:
         )
         if status.returncode == 0:
             print("No changes to push.")
+            _record_sync_base(source)
             return
 
         run_git(["commit", "-m", message], cwd=tmp)
         run_git(["push"], cwd=tmp)
 
         update_sync_manifest(tmp)
+        _record_sync_base(source)
 
     print(f"\nPushed '{name}' to {repo_url}")
 
@@ -797,6 +1268,11 @@ def sync_status_report(
                 remote=remote_display,
                 pull_command=f"skill-sync pull {name}",
                 push_command=f"skill-sync push {name}",
+                direction=_resolve_diverge_direction(
+                    _read_sync_base(skills_dir / name),
+                    local_manifest[name]["hash"],
+                    remote_manifest[name]["hash"],
+                ),
             )
             for name, local_display, remote_display in diverged
         ],
@@ -805,6 +1281,25 @@ def sync_status_report(
         skipped_no_hash=skipped_no_hash,
         skipped_remote_missing=skipped_remote_missing,
     )
+
+
+def _print_single_command_group(
+    header: str, entries: list[DivergedSkill], command_attr: str
+) -> None:
+    """列印一組已知方向的分歧 skill，只帶該方向唯一需要的一條指令。"""
+    print(f"\n{header}\n")
+    for entry in entries:
+        print(f"  {entry.name}: local({entry.local}) vs remote({entry.remote})")
+        print(f"    -> {getattr(entry, command_attr)}")
+
+
+def _print_dual_command_group(header: str, entries: list[DivergedSkill]) -> None:
+    """列印一組方向未定的分歧 skill，兩條指令並列供人工比對後選擇。"""
+    print(f"\n{header}\n")
+    for entry in entries:
+        print(f"  {entry.name}: local({entry.local}) vs remote({entry.remote})")
+        print(f"    -> {entry.pull_command}   # inspect/take remote content")
+        print(f"    -> {entry.push_command}   # inspect/send local content")
 
 
 def cmd_pull_all(args: argparse.Namespace) -> None:
@@ -853,12 +1348,37 @@ def cmd_pull_all(args: argparse.Namespace) -> None:
         print(f"\nAll {len(status.up_to_date)} checked skill(s) are up to date.")
         return
 
-    print(f"\n[DIVERGED] {len(status.diverged)} skill(s) differ from remote by content. "
-          f"Direction unknown from hash alone — review and resolve manually:\n")
-    for entry in status.diverged:
-        print(f"  {entry.name}: local({entry.local}) vs remote({entry.remote})")
-        print(f"    -> {entry.pull_command}   # inspect/take remote content")
-        print(f"    -> {entry.push_command}   # inspect/send local content")
+    # 依 direction 分成四組：有 sync base 記錄的三態可給出明確建議，"unknown"
+    # （無 base 記錄的既有 skill）維持現行「方向未知，需人工判斷」輸出。
+    should_pull = [e for e in status.diverged if e.direction == "pull"]
+    should_push = [e for e in status.diverged if e.direction == "push"]
+    conflicts = [e for e in status.diverged if e.direction == "conflict"]
+    unresolved = [e for e in status.diverged if e.direction == "unknown"]
+
+    if should_pull:
+        _print_single_command_group(
+            f"[SHOULD PULL] {len(should_pull)} skill(s) — local unchanged since last "
+            "sync, remote has moved on:",
+            should_pull, "pull_command",
+        )
+    if should_push:
+        _print_single_command_group(
+            f"[SHOULD PUSH] {len(should_push)} skill(s) — remote unchanged since last "
+            "sync, local has moved on:",
+            should_push, "push_command",
+        )
+    if conflicts:
+        _print_dual_command_group(
+            f"[CONFLICT] {len(conflicts)} skill(s) diverged from both sides since last "
+            "sync — review and resolve manually:",
+            conflicts,
+        )
+    if unresolved:
+        _print_dual_command_group(
+            f"[DIVERGED] {len(unresolved)} skill(s) differ from remote by content. "
+            "Direction unknown from hash alone — review and resolve manually:",
+            unresolved,
+        )
 
     if status.up_to_date:
         print(f"\n{len(status.up_to_date)} other skill(s) are up to date.")

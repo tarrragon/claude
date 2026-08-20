@@ -1,13 +1,13 @@
 # Bash 工具使用規則
 
-Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git 串接三大核心問題。
+Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git 串接、git 提交範圍四大核心問題。
 
 > **持久狀態意識**：Bash 在同一 session 內共享 shell。`cd` 永久改變工作目錄；大輸出存為暫存檔。
 > **各規則速查表、Why/Consequence、根因圖解、chpwd 深度說明、即時協議論證、規則六調和**：`.claude/references/bash-tool-usage-details.md`
 
 ---
 
-## 六規則一行速查
+## 七規則一行速查
 
 | 規則 | 核心要求 | 來源 |
 |------|---------|------|
@@ -17,6 +17,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 | 四：CLI backtick 不用雙引號 | 雙引號內 backtick 被當 command substitution。改用 heredoc `cmd "$(cat <<'EOF'...EOF)"`、單引號包整參數、或 Edit 直改 ticket md。看到來源不明 `command not found` / `ModuleNotFoundError` 優先查 backtick | PC-079 |
 | 五：長文字用 heredoc | append-log / commit msg / ANA 結論直接 heredoc 傳 CLI，禁繞 `/tmp`。ARG_MAX ≥ 1 MB（macOS）/ 2 MB（Linux），80 行 markdown 約 3-8 KB 遠低於上限。> 100 KB 才考慮改 Edit 直改 ticket md | PC-087 |
 | 六：長背景任務即時可觀察 | 需即時觀察用 `PYTHONUNBUFFERED=1 pytest -v tests/ 2>&1 \| tee /tmp/task.log`（告知 `tail -f`）；只需最終結果保留規則二 `\| tail`。雙層緩衝（fully-buffered + `\| tail` 等 EOF）使輸出檔全程 0 行 | 背景任務緩衝 spike 實驗 |
+| 七：禁 pathspec / `--only` / `-o` 提交丟棄 index | `git commit -- <path>` 與 `--only`（`-o`）語意相同：皆以 HEAD 建臨時 index、填入指定路徑的 **working tree 內容**、據此 commit，等同丟棄既有 index，會吸入該路徑上他人未 stage 的編輯；`--include`（`-i`）不丟棄 index，但把指定路徑併入現有 index 一併提交，會連同 index 中他人已 staged 的檔案一起送出。並行環境（共用 working tree）三者皆禁用。正確替代：`git add <exact-path>` 精確 stage → `git diff --cached --name-only` 確認 index 只含目標檔 → 裸 `git commit`（不帶 pathspec、不帶 `--only`/`-o`/`-a`） | 並行 session 誤吸實測案例（以 `git apply --cached` 正確暫存後改用 pathspec 提交，誤吸另一並行 session 尚未 stage 的編輯，事後以回滾 commit 精準還原） |
 
 > **chpwd 與即時協議**：裸 cd 觸發 zsh chpwd hook 的 ls 淹沒工具結果。輸出可疑/被淹沒當下依四步即時協議——停手 → 重發乾淨原子命令（`git -C`／子 shell）→ 只信 raw stdout → 固定值（hash／二元 grep／整數計數）驗證。論證見 details.md 規則一詳細 + `tool-output-trust-rules` 規則 1-4。
 
@@ -38,6 +39,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 - [ ] 長背景任務需即時觀察？→ `PYTHONUNBUFFERED=1 <cmd> 2>&1 | tee <logfile>`，告知 `tail -f`（規則六）
 - [ ] 背景任務輸出檔全程 0 行？→ 確認是否 `-q | tail` 雙層緩衝（規則六觸發條件）
 - [ ] 輸出可疑/被淹沒？→ 停手重發乾淨原子命令，只信 raw stdout（規則一即時協議）
+- [ ] 準備 `git commit -- <path>` / `--only` / `-o` / `-i`？→ 改精確 `git add <exact-path>` + `git diff --cached --name-only` 核對 index 範圍 + 裸 `git commit`（規則七）
 
 ---
 
@@ -52,4 +54,4 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 
 ---
 
-**Last Updated**: 2026-08-04 | **Version**: 3.1.0 — 規則三因果修正：index.lock 競爭不限寫入串接，唯讀 git 命令 refresh index stat cache 時亦會短暫觸發（issue-34 實證：30 次併發 add 命中 1 次），移除「add 不觸發 Hook」的失準表述；checklist 遇 index.lock 改為預設短暫重試而非逕判串接違規。**Version**: 3.0.0 — token 收斂：六規則濃縮為一行速查表 + 統一檢查清單，各規則速查表 / Why / Consequence / 論證外移 `references/bash-tool-usage-details.md`。歷史 2.0–2.3 版見 git log。**Source**: IMP-008、IMP-009、IMP-046、index.lock 競爭、PC-087、PC-166、issue-34
+**Last Updated**: 2026-08-19 | **Version**: 3.2.0 — 新增規則七「禁 pathspec / `--only` / `-o` 提交丟棄 index」：`git commit -- <path>` 與 `--only`/`-o` 語意相同，皆以 working tree 全文取代既有 index 建 commit，並行環境下會吸入他人未 stage 的編輯；`--include`/`-i` 不丟棄 index 但會連同他人已 staged 內容一併送出。條文含正確替代（精確 `git add` + `git diff --cached --name-only` 核對 + 裸 `git commit`）；六規則速查表與檢查清單同步擴充為七規則。**Version**: 3.1.0 — 規則三因果修正：index.lock 競爭不限寫入串接，唯讀 git 命令 refresh index stat cache 時亦會短暫觸發（issue-34 實證：30 次併發 add 命中 1 次），移除「add 不觸發 Hook」的失準表述；checklist 遇 index.lock 改為預設短暫重試而非逕判串接違規。**Version**: 3.0.0 — token 收斂：六規則濃縮為一行速查表 + 統一檢查清單，各規則速查表 / Why / Consequence / 論證外移 `references/bash-tool-usage-details.md`。歷史 2.0–2.3 版見 git log。**Source**: IMP-008、IMP-009、IMP-046、index.lock 競爭、PC-087、PC-166、issue-34

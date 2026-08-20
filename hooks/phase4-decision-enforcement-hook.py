@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --quiet --script
 # /// script
-# requires-python = ">=3.9"
-# dependencies = []
+# requires-python = ">=3.11"
+# dependencies = ["pyyaml"]
 # ///
 """
 Phase 4 Decision Enforcement Hook - PC-093 YAGNI 累積防護
@@ -31,6 +31,7 @@ Pattern: PC-093
 """
 
 import re
+import shlex
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,6 +49,10 @@ from lib import (  # noqa: E402
     extract_tool_input,
     find_ticket_file,
     emit_hook_output,
+)
+from lib.git_command_parse import (  # noqa: E402
+    strip_heredoc_bodies,
+    normalize_newlines_to_separators,
 )
 from lib.ticket_id_pattern import BARE_START_BOUNDED_RE  # noqa: E402
 
@@ -74,9 +79,10 @@ TICKET_ID_PATTERN = BARE_START_BOUNDED_RE
 # 用途：PM 在 acceptance / Solution 引用規則名稱（如「禁止 Phase 5 再決定」）時豁免
 RULE_PATH_PATTERN = re.compile(r"\.claude/(?:rules|pm-rules)/")
 
-# 觸發命令偵測
-MAIN_GATE_CMD = re.compile(r"ticket\s+track\s+phase\s+(\S+)\s+phase4\b")
-RESIDUAL_GATE_CMD = re.compile(r"ticket\s+track\s+complete\s+(\S+)")
+# 觸發命令偵測：語句內 token 需依序相鄰命中，見 extract_ticket_id_from_command
+# （原為對整條命令字串的 regex.search，heredoc/引號 payload 內文含觸發字樣
+# 會被誤判為真實呼叫，已改為 token 化後的相鄰比對，見「payload 誤判修正」段）
+_STATEMENT_SEPARATORS = frozenset({"&&", "||", ";", "|", "(", ")"})
 
 # 豁免 marker 解析（大小寫敏感，EX-N7）
 EXEMPT_MARKER = re.compile(
@@ -129,6 +135,17 @@ FENCED_BLOCK_START_PATTERN = re.compile(
 FENCED_BLOCK_CLOSE_PATTERN = re.compile(
     r"^(?P<indent> {0,3})(?P<fence>`{3,}|~{3,})\s*$"
 )
+
+# 「## Spawn Requests」區段內已 resolved 條目的結構化欄位豁免。
+# 該區段全數由 add-spawn-request / resolve-spawn-request 兩個 CLI 指令
+# 產生，非使用者於 Phase 4 當下自由撰寫的決策 prose；一旦條目已
+# processed/dismissed，其中的階段字面是「建立當下的分析記錄」而非待辦，
+# 與 frontmatter / Context Bundle 既有豁免同精神。pending 條目維持掃描
+# （見 compute_resolved_spawn_request_lines docstring）。
+SPAWN_REQUESTS_SECTION_START = re.compile(r"^##\s+Spawn Requests\s*$")
+SPAWN_REQUEST_ENTRY_START = re.compile(r"^-\s+\*\*SR-\d+\*\*")
+SPAWN_REQUEST_STATUS_LINE = re.compile(r"^\s*-\s*status:\s*(processed|dismissed|pending)\b")
+RESOLVED_SPAWN_REQUEST_STATUSES = frozenset({"processed", "dismissed"})
 
 # 豁免 proximity（marker 同行或前 1 行生效）
 EXEMPT_PROXIMITY_LINES = 1
@@ -221,11 +238,32 @@ def build_regex_table() -> List[PhraseRule]:
         # M1: Phase X 再決定（遞迴推給未來 phase）
         # 「評估」單獨要求前接「再|在」才觸發（W2-017：「Phase 4 重構評估」是
         # 標準章節名非延後話術，但「Phase 5 再評估」仍需攔截）。
+        #
+        # 雙分支設計（修正單分支「收逗號」方案的回歸）：
+        # 分支一（同子句，前綴可選）：「Phase N」與判定動詞之間排除逗號，
+        #   兩者須落在同一子句，前綴「再/在」可有可無——涵蓋「Phase 5 視
+        #   baseline 決定」這類語法直接相連、無需前綴即可判定為關於
+        #   Phase N 決策的句型。
+        # 分支二（可跨子句，前綴必須）：「Phase N」與判定動詞之間允許
+        #   跨逗號，但判定動詞強制要求「再/在」前綴——涵蓋「Phase 4
+        #   完成後，再決定是否重構」這類語意上仍屬同一延後單元、但用
+        #   逗號分句的句型；前綴強制是關鍵，用以排除「於 Phase 4 審查
+        #   初稿時建立，後因判斷應直接執行」這類過去完成式敘述（判定
+        #   動詞前無「再/在」、描述的是另一件已完成的事）。
+        # 兩分支為 OR 關係：僅有分支一（收窄跨子句比對）會連帶排除分支
+        # 二該涵蓋的「跨逗號但有前綴」真延後話術（已實測發現的回歸）。
+        # 反過來，單純移除逗號排除、把前綴改為全域強制，會使分支一涵蓋
+        # 的「Phase 5 視 baseline 決定」漏攔（已實測驗證，見 ticket
+        # Problem Analysis），故不採任一單分支設計。
         PhraseRule(
             id="M1",
             level="BLOCK",
             pattern=re.compile(
-                r"Phase\s*[0-9]+[^\n]{0,30}?(?:(?:再|在)?(?:決定|決斷|判斷)|(?:再|在)評估)",
+                r"Phase\s*[0-9]+(?:"
+                r"[^\n，,]{0,30}?(?:(?:再|在)?(?:決定|決斷|判斷)|(?:再|在)評估)"
+                r"|"
+                r"[^\n]{0,30}?(?:再|在)(?:決定|決斷|判斷|評估)"
+                r")",
                 flags,
             ),
             rationale="遞迴推給未來 phase，PC-093 核心反模式",
@@ -461,6 +499,61 @@ def compute_fenced_block_lines(lines: List[str]) -> set:
     return fenced_lines
 
 
+def compute_resolved_spawn_request_lines(lines: List[str]) -> set:
+    """計算「## Spawn Requests」區段中，已 resolved（processed/dismissed）
+    之 spawn request 條目的 1-based 行號集合。
+
+    起訖規則同 Schema placeholder / Context Bundle：從 `## Spawn Requests`
+    標題後一行起算，至下個 H2 或 `---` 為止。區段內以 `- **SR-N**` 起始
+    行界定各條目邊界，逐條目掃描其 `- status:` 欄位；命中 processed 或
+    dismissed 才把整條目（含 SR 標題行）納入回傳集合，pending 條目維持
+    掃描——尚未處理的 spawn request 仍是待辦，PC-093 必須繼續攔截其中的
+    延後話術，否則使用者可把延後話術寫進未 resolved 的 spawn request
+    規避本 hook（防止開新漏洞優先於消除誤報）。
+
+    Why：本區段全數由 add-spawn-request / resolve-spawn-request 兩個 CLI
+    指令產生的結構化欄位（what/why/suggested_type/suggested_priority/
+    related_files/context/status），不是使用者於 Phase 4 當下自由撰寫的
+    決策 prose。resolve-spawn-request 執行完畢即代表該分析已有結論（要嘛
+    確實建了對應 ticket，要嘛評估後不建），其中的階段字面（如「留待後續
+    評估」）此時已是「建立當下的分析記錄」而非現在仍待決的事項，與
+    frontmatter / Context Bundle auto-extracted 兩處既有豁免同一精神——
+    結構化、機器可驗證來源的歷史記錄不應被當成使用者當下的延後決策。
+    """
+    section_lines: set = set()
+    in_section = False
+    for idx, raw in enumerate(lines, start=1):
+        if in_section:
+            if SCHEMA_PLACEHOLDER_END_H2.match(raw) or SCHEMA_PLACEHOLDER_END_HR.match(raw):
+                break
+            section_lines.add(idx)
+            continue
+        if SPAWN_REQUESTS_SECTION_START.match(raw.rstrip()):
+            in_section = True
+
+    if not section_lines:
+        return set()
+
+    ordered = sorted(section_lines)
+    entry_starts = [i for i in ordered if SPAWN_REQUEST_ENTRY_START.match(lines[i - 1])]
+    if not entry_starts:
+        return set()
+
+    resolved_lines: set = set()
+    for pos, start in enumerate(entry_starts):
+        end = entry_starts[pos + 1] - 1 if pos + 1 < len(entry_starts) else ordered[-1]
+        entry_range = range(start, end + 1)
+        status: Optional[str] = None
+        for i in entry_range:
+            m = SPAWN_REQUEST_STATUS_LINE.match(lines[i - 1])
+            if m:
+                status = m.group(1)
+                break
+        if status in RESOLVED_SPAWN_REQUEST_STATUSES:
+            resolved_lines.update(entry_range)
+    return resolved_lines
+
+
 def scan_lines_for_phrases(
     lines: List[str],
     table: List[PhraseRule],
@@ -475,6 +568,7 @@ def scan_lines_for_phrases(
     placeholder_lines = compute_schema_placeholder_lines(lines)
     frontmatter_lines = compute_frontmatter_lines(lines)
     context_bundle_lines = compute_context_bundle_lines(lines)
+    resolved_spawn_lines = compute_resolved_spawn_request_lines(lines)
     hits: List[Hit] = []
     for idx, raw in enumerate(lines, start=1):
         # W1-092: Frontmatter (YAML 區塊) 跳過 (source ticket history 引用等結構化元資料)
@@ -482,6 +576,10 @@ def scan_lines_for_phrases(
             continue
         # W1-120: Context Bundle auto-extracted 區塊跳過（機器逐字引用 source ticket why/what）
         if idx in context_bundle_lines:
+            continue
+        # 已 resolved 的 Spawn Request 條目跳過（CLI 產出結構化欄位，非
+        # 使用者當下延後決策，見 compute_resolved_spawn_request_lines）
+        if idx in resolved_spawn_lines:
             continue
         # W11-018: Fenced code block 範例語境豁免（行級 short-circuit，最先檢查）
         if idx in fenced_lines:
@@ -560,6 +658,7 @@ def collect_exempt_markers(lines: List[str]) -> List[ExemptRef]:
     placeholder_lines = compute_schema_placeholder_lines(lines)
     frontmatter_lines = compute_frontmatter_lines(lines)
     context_bundle_lines = compute_context_bundle_lines(lines)
+    resolved_spawn_lines = compute_resolved_spawn_request_lines(lines)
     refs: List[ExemptRef] = []
     for idx, raw in enumerate(lines, start=1):
         # W1-092: Frontmatter 內 marker 不蒐集（結構化元資料非豁免宣告載體）
@@ -567,6 +666,10 @@ def collect_exempt_markers(lines: List[str]) -> List[ExemptRef]:
             continue
         # W1-120: Context Bundle auto-extracted 區塊內 marker 不蒐集（機器引用非豁免宣告載體）
         if idx in context_bundle_lines:
+            continue
+        # 已 resolved 的 Spawn Request 條目內 marker 不蒐集（同上，非人工
+        # 豁免宣告載體；該區塊此時亦不產生 hit，本就無需豁免）
+        if idx in resolved_spawn_lines:
             continue
         # W11-018: Fenced code block 範例語境豁免（範例 marker 不蒐集）
         if idx in fenced_lines:
@@ -690,22 +793,91 @@ def detect_hook_self_reference(content: str) -> bool:
 
 
 # ============================================================================
-# F8: 從命令萃取 ticket_id 及模式
+# F8: 從命令萃取 ticket_id 及模式（payload 誤判修正）
 # ============================================================================
+#
+# 原實作對整條命令字串做 regex.search，heredoc 本體或引號參數內文若恰好
+# 含「ticket track complete/phase」字樣即誤判為真實呼叫——與三個 Bash git
+# 守衛（bare-commit-guard-hook.py 等）曾經歷的同型缺陷。修法改為 token 化
+# 後比對相鄰獨立 token，而非字串子字串搜尋：被 shlex 判定為引號內容的
+# payload 天生落在單一 token 內，不會被拆成 `ticket`/`track`/`complete`
+# 四個相鄰獨立 token；heredoc 本體則先以 `strip_heredoc_bodies` 剝除
+# （shlex 不理解 heredoc 語法，若不先剝除，本體內文仍會被拆成獨立 token
+# 而誤判，見 ticket Problem Analysis 實測記錄）。
+#
+# 複用 `.claude/lib/git_command_parse.py` 的 `strip_heredoc_bodies` /
+# `normalize_newlines_to_separators` 兩個既有公開函式（皆為通用命令字串
+# 前處理，內部無 git 專屬邏輯）。不重用該模組的 `find_git_invocations`：
+# 其「識別一次呼叫」邏輯硬編寫死比對字面 `"git"`、承載前綴包裹穿透與
+# 全域選項消耗等 git 專屬知識，要讓它同時服務 `ticket` CLI 需要把 anchor
+# word 參數化並拆分 git 專屬邏輯，變更幅度接近重新設計該共用函式的職責
+# 邊界；本處只需要「ticket track complete/phase」4-5 個 token 的位置
+# 比對，維持在本 hook 內實作，不構成與既有三個 Bash git 守衛同型的
+# 「重複實作 payload 剝離」問題（真正容易重複、風險最高的 heredoc 剝離
+# 已重用，未重寫）。
+
+def _tokenize_statements(command: str) -> Optional[List[List[str]]]:
+    """把命令字串剝除 heredoc 本體、換行正規化後，以 shlex 保留引號語意
+    tokenize，並依 shell 運算子切分為獨立語句清單。
+
+    回傳 None 表示無法安全 tokenize（未閉合引號等）。
+    """
+    stripped = strip_heredoc_bodies(command)
+    normalized = normalize_newlines_to_separators(stripped)
+    try:
+        lexer = shlex.shlex(normalized, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        return None
+
+    statements: List[List[str]] = []
+    current: List[str] = []
+    for tok in tokens:
+        if tok in _STATEMENT_SEPARATORS:
+            if current:
+                statements.append(current)
+            current = []
+        else:
+            current.append(tok)
+    if current:
+        statements.append(current)
+    return statements
+
 
 def extract_ticket_id_from_command(command: str) -> Tuple[Optional[str], Optional[str]]:
     """從 bash 命令萃取 (ticket_id, mode)。
 
     mode: 'main_gate' | 'residual_gate' | None
+
+    失敗語意：命令為空、無法安全 tokenize（未閉合引號等）、或無語句匹配
+    任一命令形狀時，一律回傳 (None, None)——與原 regex.search 在對應
+    情境下的行為一致（原本 regex 對這些輸入同樣找不到匹配而回傳 None），
+    本次修正未改變此方向（見 acceptance 6）。
     """
     if not command:
         return (None, None)
-    m = MAIN_GATE_CMD.search(command)
-    if m:
-        return (m.group(1), "main_gate")
-    m = RESIDUAL_GATE_CMD.search(command)
-    if m:
-        return (m.group(1), "residual_gate")
+
+    statements = _tokenize_statements(command)
+    if statements is None:
+        return (None, None)
+
+    for statement in statements:
+        if (
+            len(statement) >= 5
+            and statement[0] == "ticket"
+            and statement[1] == "track"
+            and statement[2] == "phase"
+            and statement[4] == "phase4"
+        ):
+            return (statement[3], "main_gate")
+        if (
+            len(statement) >= 4
+            and statement[0] == "ticket"
+            and statement[1] == "track"
+            and statement[2] == "complete"
+        ):
+            return (statement[3], "residual_gate")
     return (None, None)
 
 
@@ -737,8 +909,20 @@ def format_block_message(
     （含適用情境），引導 agent 走 inline 路徑而非字串繞過（PC-093 同精神反模式）。
     """
     lines = []
-    lines.append("[PC-093 Phase 4 強制決斷] 偵測到延後話術，禁止遞迴延後")
+    lines.append("[PC-093 強制決斷] 偵測到延後話術，禁止遞迴延後（Phase 4 決策閘門）")
     lines.append("")
+    lines.append("若命中內容是引用或示範延後話術（例如說明規則、撰寫測試案例、")
+    lines.append("記錄他人 ticket 的延後語），不是本 ticket 實際要延後的決策，")
+    lines.append("最省事的路徑是把該段包進 markdown code fence（本 hook 已內建")
+    lines.append("此豁免，整段跳過掃描，不需逐行補 marker）：")
+    lines.append("  ~~~")
+    lines.append("  範例句型：Phase 4 再決定是否保留 use_cache")
+    lines.append("  ~~~")
+    lines.append("上方範例刻意用 ~~~ 而非 ```：若你連本訊息全文一起用 ``` 包進")
+    lines.append("ticket 引用，可避免與本訊息內建的 ~~~ 範例巢狀衝突（本 hook")
+    lines.append("不支援巢狀 fence，兩者相同字元會使外層過早視為已收尾）。")
+    lines.append("")
+    lines.append("若命中內容是實質論述中不得不出現的延後語彙（真實決策本身），")
     lines.append("優先嘗試 inline 標記（不要改寫文字繞過偵測）:")
     lines.append("  在命中行同行或前 1 行加 <!-- PC-093-exempt: <category>:<reason> -->")
     lines.append("  若屬合法延後情境，這是最低成本的解法；改寫文字 = PC-093 同精神反模式。")

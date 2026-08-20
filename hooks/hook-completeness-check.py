@@ -406,16 +406,30 @@ def _format_permission_report(ok_count: int, fixed_files: List[str]) -> List[str
 
     主計數（ok_count）只含本 session 開始前即可執行者。本次 chmod 的
     fixed_files 不併入主計數——併入會使「權限: N 個已確認可執行」讀起來像
-    本 session 全數就緒的假訊號，而本次修正是否於本 session 生效尚未驗證：
-    runtime 解析 hook 命令集的時機是「session 啟動時一次快照」或「每次呼叫
-    時解析」，兩者對本 session 生效與否給出相反答案，目前無實驗可區分。故
-    此行只陳述已修復的數量，不對生效時點作斷言（見
-    settings-registration-exec-guard-hook.py 對同一問題的前移防護）。
+    本 session 全數就緒的假訊號。故此行只陳述已修復的數量，不對生效時點作
+    斷言。
+
+    不斷言時點的理由已更新（2026-08-18）：原註解稱「無實驗可區分快照模型與
+    即時模型」，該實驗其後完成，結論為**版本相依**——2026-08-13 側的觀測資料
+    支持「session 啟動時一次快照」，2026-08-18 的兩輪 session_id 直接歸因實驗
+    支持「不晚於下一次工具呼叫即反映」，兩組各自自洽且互相矛盾。故不宜斷言
+    任一時點：寫死「立即生效」在快照模型下為假，寫死「下個 session 生效」在
+    即時模型下為假，而模型會隨 runtime 版本翻轉。保持不斷言是跨版本唯一安全
+    的表述。實驗範圍限 PreToolUse，其餘 hook event 未直接量測。
+
+    輸出層已對齊（2026-08-18）：下方獨立行原寫「本 session 內是否生效未經
+    驗證」，該措辭源於實驗未完成時的認知，實驗完成後「未經驗證」為假訊息——
+    會讓讀者以為尚無人查過而重跑實驗或多做一次無謂重啟。現改為只陳述已完成
+    的動作（補上可執行位）並明說不對時點作斷言，使時點維度整個不進入輸出，
+    與本 docstring 的立場一致。
+
+    相關：settings-registration-exec-guard-hook.py 對同一威脅面提供落地當下
+    的即時修復（該 hook 屬「提前動作」型，不宣稱任何生效時點）。
     """
     lines = [f"權限: {ok_count} 個已確認可執行"]
     if fixed_files:
         lines.append(
-            f"權限: 本次修復 {len(fixed_files)} 個（本 session 內是否生效未經驗證）"
+            f"權限: 本次補上可執行位 {len(fixed_files)} 個（生效時點不作斷言）"
         )
     return lines
 

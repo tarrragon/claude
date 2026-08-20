@@ -31,6 +31,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ticket_system.lib.claude_lib_loader import load_claude_lib
 from ticket_system.lib.command_tracking_messages import TrackMessages
+from ticket_system.lib.file_conflict import where_files as _lib_where_files
 from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.ticket_loader import list_tickets
 from ticket_system.lib.version import get_active_versions
@@ -63,13 +64,9 @@ def run_git_command(args: List[str], cwd: Optional[str] = None) -> Tuple[bool, s
 # ---------------------------------------------------------------------------
 
 def _where_files(ticket: Dict[str, Any]) -> List[str]:
-    where = ticket.get("where") or {}
-    files = where.get("files") if isinstance(where, dict) else None
-    if isinstance(files, str):
-        return [f.strip() for f in files.split(",") if f.strip()]
-    if isinstance(files, list):
-        return [str(f) for f in files]
-    return []
+    """委派 `lib.file_conflict.where_files`：涵蓋本函式原本的舊逗號分隔
+    字串格式容錯，並一併剝離逐檔讀寫意圖標記（`::read` / `::write`）。"""
+    return _lib_where_files(ticket)
 
 
 def _md_mtime_source(ticket_path: Optional[str]) -> Optional[Tuple[datetime, str]]:

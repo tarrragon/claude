@@ -182,7 +182,7 @@ SOLID 分析結果
 
 > ### CLI 工具（框架特定）
 >
-> `/tdd` 提供 Python CLI 腳本輔助 SOLID 分析，位於 `.claude/skills/tdd/scripts/tdd-phase1-split.py`。
+> `/tdd` 提供 Python CLI 腳本輔助 SOLID 分析，位於 `.claude/skills/tdd/scripts/tdd-phase1-split.py`。<!-- portability-allow: consumer 共通的 skill 安裝位置 -->
 >
 > | 命令 | 用途 | 範例 |
 > |------|------|------|
@@ -192,7 +192,7 @@ SOLID 分析結果
 > | `validate` | 驗證拆分合規性 | `uv run scripts/tdd-phase1-split.py validate -t {version}-W{wave}-{seq}` |
 > | `report` | 產出拆分報告 | `uv run scripts/tdd-phase1-split.py report -d "實作書籍搜尋功能" -v 0.29.0` |
 >
-> **執行方式**：在 `.claude/skills/tdd/` 目錄下執行 `uv run scripts/tdd-phase1-split.py <command>`。
+> **執行方式**：在 `.claude/skills/tdd/` 目錄下執行 `uv run scripts/tdd-phase1-split.py <command>`。<!-- portability-allow: consumer 共通的 skill 安裝位置 -->
 
 ### 版本號分配規則
 

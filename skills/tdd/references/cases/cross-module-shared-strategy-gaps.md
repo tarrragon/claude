@@ -100,7 +100,7 @@ tag-storage-adapter.js 全檔案的所有 catch 區塊不記錄任何日誌。CR
 
 ### 根因
 
-規格只定義了功能正確性需求（CRUD 成功/失敗的回傳值），未定義非功能性需求（可觀測性）。可觀測性規則存在於 `.claude/references/observability-rules.md`，但未轉化為規格中的具體要求。
+規格只定義了功能正確性需求（CRUD 成功/失敗的回傳值），未定義非功能性需求（可觀測性）。可觀測性規則存在於 專案的可觀測性規則，但未轉化為規格中的具體要求。
 
 ### 若當時有 Decision Questions
 

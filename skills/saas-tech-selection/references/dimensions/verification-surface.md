@@ -4,7 +4,7 @@
 
 本維度處理「完成的改動在哪個真實環境被驅動與觀察」。任何有可執行產出的專案都必展開。核心主張：測試套件綠燈驗證的是斷言、不是行為——改動最終要在一個具體環境（某台裝置、某個瀏覽器、某個 runtime）被跑起來觀察，而那個環境的選擇在選型階段就已被交付形態決定；不在訪談時問清，就會變成第一次實機驗證時的冷啟動摸索成本，且每個新 session 重付一次。
 
-訪談答案的下游產物是**專案 verify 配方**（`.claude/skills/verify/SKILL.md`）：build / launch / observe 的可複用步驟。配方屬專案特化資產（綁定裝置、URL、版本），不隨框架 sync 推送。
+訪談答案的下游產物是**專案 verify 配方**（`.claude/skills/verify/SKILL.md`）：build / launch / observe 的可複用步驟。配方屬專案特化資產（綁定裝置、URL、版本），不隨框架 sync 推送。<!-- portability-allow: 約定位置，描述各專案自有的驗證配方應放何處，文中已載明不隨 sync 推送 -->
 
 ---
 
@@ -63,7 +63,7 @@
 
 ## 防護底線（non-negotiable）
 
-1. **驗證環境必須被釘住並文件化**：裝置/瀏覽器/版本/URL/啟動指令寫進專案 verify 配方（`.claude/skills/verify/SKILL.md`），不存在於任何人的記憶裡。配方跟著專案 repo 走、不隨框架 sync 推送（專案特化資產）。
+1. **驗證環境必須被釘住並文件化**：裝置/瀏覽器/版本/URL/啟動指令寫進專案 verify 配方（`.claude/skills/verify/SKILL.md`），不存在於任何人的記憶裡。配方跟著專案 repo 走、不隨框架 sync 推送（專案特化資產）。<!-- portability-allow: 約定位置，描述各專案自有的驗證配方應放何處，文中已載明不隨 sync 推送 -->
 2. **無可驅動驗證面即為選型缺陷**：訪談結束時若某類產出說不出「在哪裡跑起來、怎麼觀察」，缺的不是文件是環境——回到對應維度補（例：說不出服務怎麼觀察 → observability 維度沒過完）。
 3. **驗證面涵蓋改動會走的層**：production 流量經過的層（reverse proxy、container 邊界）就是驗證要經過的層；繞層驗證通過不得宣告該層行為已驗。
 4. **硬體相依功能的驗證面含實機**：模擬器對硬體功能的 PASS 不算數，配方明記哪些流程必須實機。
@@ -95,4 +95,4 @@
 - tripwire：<矩陣 / staging / 容器化的重評條件>
 ```
 
-種子落地為 `.claude/skills/verify/SKILL.md` 的初版 Build & Launch / Observe 節——首次實機驗證從冷啟動摸索變成執行預答配方，摸索成本只在訪談付一次。
+種子落地為 `.claude/skills/verify/SKILL.md` 的初版 Build & Launch / Observe 節——首次實機驗證從冷啟動摸索變成執行預答配方，摸索成本只在訪談付一次。<!-- portability-allow: 約定位置，描述各專案自有的驗證配方應放何處，文中已載明不隨 sync 推送 -->

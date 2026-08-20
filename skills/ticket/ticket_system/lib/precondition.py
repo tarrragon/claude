@@ -42,7 +42,7 @@ FORCE_BYPASS_WARNING = (
 # Why: PC-040 / PC-100 要求 PM 於 create 後（status=pending）立即將派發 context
 # 寫入 Problem Analysis / Context Bundle；原 in_progress 限制迫使 PM 常態化
 # --force（2026-06-11 單日 4 次），稀釋逃生閥警示價值並累積審計噪音。
-# 其餘章節（Solution / Test Results / Execution Log 等執行產出）維持
+# 其餘章節（Solution / Test Results / Completion Info 等執行產出）維持
 # in_progress 限制，保留「未認領不得寫執行紀錄」的協議防護（W3-044 原意）。
 PRE_DISPATCH_SECTIONS = frozenset({"Problem Analysis", "Context Bundle"})
 

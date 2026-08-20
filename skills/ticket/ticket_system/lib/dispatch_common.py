@@ -17,6 +17,7 @@ import sys
 from dataclasses import dataclass
 from typing import Any, List, Optional
 
+from ticket_system.lib.file_conflict import where_files as _where_files
 from ticket_system.lib.parser import load_ticket
 
 
@@ -63,14 +64,12 @@ def load_and_unpack(args: argparse.Namespace, version: str) -> DispatchLoadResul
         return DispatchLoadResult(None, "", [], [], 2)
 
     body = ticket.get("_body", "") or ""
-    where = ticket.get("where") or {}
-    where_files = where.get("files") if isinstance(where, dict) else []
     acceptance = ticket.get("acceptance") or []
 
     return DispatchLoadResult(
         ticket=ticket,
         body=body,
-        where_files=where_files or [],
+        where_files=_where_files(ticket),
         acceptance=acceptance,
         error_exit_code=None,
     )

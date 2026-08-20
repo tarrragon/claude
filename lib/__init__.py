@@ -70,23 +70,40 @@ from .config_loader import (
     clear_config_cache,
 )
 
-from .hook_ticket import (
-    parse_ticket_frontmatter,
-    parse_ticket_date,
-    check_error_patterns_changed,
-    clear_error_pattern_mtime_cache,
-    get_current_version_from_todolist,
-    scan_ticket_files_by_version,
-    find_ticket_files,
-    find_ticket_file,
-    extract_version_from_ticket_id,
-    extract_where_files,
-    extract_where_files_from_frontmatter,
-    extract_wave_from_ticket_id,
-    validate_ticket_has_decision_tree,
-    validate_ticket_unified,
-    find_active_in_progress_ticket,
+# hook_ticket 為惰性載入（見下方 __getattr__），不在此處 eager import。
+# Why: hook_ticket 依賴 pyyaml，但多數消費端只需要 setup_hook_logging /
+# run_hook_safely 等與 ticket 解析無關的工具函式；eager import 會強迫所有
+# 非 uv-run shebang 的 hook 都需要 ambient pyyaml，即使它們從未呼叫任何
+# hook_ticket 函式。
+_HOOK_TICKET_NAMES = frozenset(
+    (
+        "parse_ticket_frontmatter",
+        "parse_ticket_date",
+        "check_error_patterns_changed",
+        "clear_error_pattern_mtime_cache",
+        "get_current_version_from_todolist",
+        "scan_ticket_files_by_version",
+        "find_ticket_files",
+        "find_ticket_file",
+        "extract_version_from_ticket_id",
+        "extract_where_files",
+        "extract_where_files_from_frontmatter",
+        "extract_wave_from_ticket_id",
+        "validate_ticket_has_decision_tree",
+        "validate_ticket_unified",
+        "find_active_in_progress_ticket",
+    )
 )
+
+
+def __getattr__(name: str):
+    """PEP 562 模組級惰性屬性：首次存取 hook_ticket 符號時才 import。"""
+    if name in _HOOK_TICKET_NAMES:
+        from . import hook_ticket
+
+        return getattr(hook_ticket, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     # hook_base

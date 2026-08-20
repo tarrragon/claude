@@ -11,7 +11,7 @@ Format: 5W1H-{YYYYMMDD}-{HHMMSS}-{random}
 Example: 5W1H-20250925-191735-a7b3c2
 
 Usage:
-    uv run .claude/skills/5w1h-decision/scripts/generate_token.py
+    uv run .claude/skills/5w1h-decision/scripts/generate_token.py  # portability-allow: consumer 共通安裝位置
 """
 
 import os

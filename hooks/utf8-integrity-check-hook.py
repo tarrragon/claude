@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.9"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """
 UTF-8 Integrity Check Hook - 偵測檔案中的 U+FFFD replacement character

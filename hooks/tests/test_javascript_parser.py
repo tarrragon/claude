@@ -716,9 +716,11 @@ class TestPerformance:
 
     def test_performance_large_file(self):
         """
-        測試：大型檔案執行效能
+        測試：大型檔案下的功能正確性
 
-        目標：1000 行程式碼 <100ms
+        註：原以 time.time() 差值 + 絕對門檻（< 100ms）作 pass-fail，違反
+        test-assertion-design-rules 規則 D1（0.2.1-W3-640 修正）。改為只驗證
+        大量函式輸入下能正確識別，不對執行時間做絕對門檻斷言。
         """
         parser = JavaScriptParser()
 
@@ -727,16 +729,17 @@ class TestPerformance:
             f"function func{i}() {{ }}" for i in range(1000)
         ])
 
-        import time
-        start = time.time()
         functions = parser.extract_functions(code)
-        elapsed = (time.time() - start) * 1000  # 轉換為 ms
 
-        assert elapsed < 100, f"效能不達標: {elapsed:.2f}ms > 100ms"
         assert len(functions) == 1000, "應識別 1000 個函式"
 
     def test_performance_complex_patterns(self):
-        """測試：複雜模式的效能"""
+        """測試：複雜模式下的功能正確性
+
+        註：原以 time.time() 差值 + 絕對門檻（< 50ms）作 pass-fail，違反
+        test-assertion-design-rules 規則 D1（0.2.1-W3-640 修正）。改為只驗證
+        複雜模式輸入下能正確識別，不對執行時間做絕對門檻斷言。
+        """
         parser = JavaScriptParser()
 
         # 生成包含多種模式的程式碼
@@ -745,12 +748,8 @@ class TestPerformance:
             for i in range(100)
         ])
 
-        import time
-        start = time.time()
         functions = parser.extract_functions(code)
-        elapsed = (time.time() - start) * 1000
 
-        assert elapsed < 50, f"複雜模式效能不達標: {elapsed:.2f}ms > 50ms"
         assert len(functions) == 100
 
 

@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.9"
+# dependencies = ["pyyaml"]
+# ///
 """Proposal Evaluation Gate Hook - 提案評估強制機制（規則 4 + 規則 5 第三層）.
 
 PreToolUse Hook（Write / Edit / MultiEdit），落地

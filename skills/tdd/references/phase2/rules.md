@@ -247,7 +247,7 @@ Phase 2 設計時，對照 Phase 1 的非功能性需求，推導對應測試：
 
 **豁免判準**：場景無 runtime surface（純 domain 計算、data contract、演算法）→ 豁免外圈，單元/契約層先紅即可。判準句：「此場景有無可駕駛的執行面（畫面、CLI、API endpoint）」——有則外圈先紅，無則豁免。
 
-**判準句的兩個套用面與強度分流**：同一判準句有兩個主語不同的套用面——**場景面**（本節外圈豁免：這個 UC 場景要驗的行為有無執行面）與 **diff 面**（verify skip 與 runtime-surface ticket 實機 AC：這次改動觸及的檔案有無執行面），兩面對同一變更可能給出不同答案（例：改 domain 公式，diff 面無執行面、但其輸出渲染於畫面，場景面有），以場景面為準補驗證。判準回答「是」只決定**需要 runtime 驗證**，不決定**驗證強度**——強度依可自動化性分流（on-device 套件 / widget test / 手動 verify），見 `.claude/pm-rules/verification-framework.md`「Runtime-surface ticket」節。
+**判準句的兩個套用面與強度分流**：同一判準句有兩個主語不同的套用面——**場景面**（本節外圈豁免：這個 UC 場景要驗的行為有無執行面）與 **diff 面**（verify skip 與 runtime-surface ticket 實機 AC：這次改動觸及的檔案有無執行面），兩面對同一變更可能給出不同答案（例：改 domain 公式，diff 面無執行面、但其輸出渲染於畫面，場景面有），以場景面為準補驗證。判準回答「是」只決定**需要 runtime 驗證**，不決定**驗證強度**——強度依可自動化性分流（on-device 套件 / widget test / 手動 verify），見 專案的驗收框架「Runtime-surface ticket」節。
 
 **邊界（不適合外圈先紅的變更類型）**：效能類 NFR 的驗收不寫成 on-device 計時斷言（違反 test-assertion-design 規則 D1），改走 `test/performance/` 或 profile 觀察，不進 gate；依賴 / SDK 升級與純重構無規格變更、不產出新外圈紅燈，其 runtime 回歸由**既有** on-device 套件全綠承接。
 
@@ -642,12 +642,12 @@ Then: {預期結果}
 
 ## 相關文件
 
-- .claude/references/observability-rules.md — 可觀測性規則（Q10/Q_new4 的規格來源）
-- .claude/references/quality-common.md — 通用品質基線
+- 專案的可觀測性規則 — （Q10/Q_new4 的規格來源）
+- 專案的通用品質基線
 
 ---
 
 **Last Updated**: 2026-08-08
 **Version**: 2.3.0 - 新增組 4「防護視角與訊號品質」（Q12 未來哪種改壞要被擋 + 綠燈後補的防護型測試要故意破壞驗一次、Q13 flaky 四類根因、Q14 測試資料代表性）、檢查清單擴至 13 項、讀者分層指引與轉換條件的 DQ 範圍更新為 Q7-Q14（組 4 恆觸發）。同批修正：Q13 分類與上游教材四類原名對齊（初版曾重切成三類）。
-**Version**: 2.2.0 - 行為鏈式設計章節納入行為鏈推演執行步驟（6 步驟）、前置條件驗證強制規則表、正反面範例（從 sage-test-architect.md 外移，1.0.0-W8-009.3.2）
+**Version**: 2.2.0 - 行為鏈式設計章節納入行為鏈推演執行步驟（6 步驟）、前置條件驗證強制規則表、正反面範例（從 sage-test-architect.md 外移，（.2）
 **Version**: 2.1.0 - 新增案例索引章節（格式對齊 phase3/rules.md），完善相關文件引用

@@ -14,6 +14,7 @@ version-tracking-consistency-guard-hook 測試套件
 """
 
 import importlib.util
+import logging
 import tempfile
 from pathlib import Path
 
@@ -26,6 +27,11 @@ spec = importlib.util.spec_from_file_location(
 )
 guard_hook = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard_hook)
+
+
+@pytest.fixture
+def logger():
+    return logging.getLogger("test_version_tracking_consistency_guard_hook")
 
 
 class FakeLogger:
@@ -133,21 +139,32 @@ status: closed
             encoding="utf-8",
         )
 
-    def test_non_semver_token_filtered_out(self, tmp_path):
+    def test_non_semver_token_filtered_out(self, tmp_path, logger):
         tickets_dir = tmp_path / "docs" / "work-logs" / "v0" / "v0.21" / "v0.21.1" / "tickets"
         self._write_ticket(tickets_dir, "0.21.1-TD-001.md", "0.22.x")
         self._write_ticket(tickets_dir, "0.21.1-TD-002.md", "可選")
 
-        versions = guard_hook.scan_ticket_versions(tmp_path)
+        versions = guard_hook.scan_ticket_versions(tmp_path, logger)
         assert "0.22.x" not in versions
         assert "可選" not in versions
 
-    def test_semver_token_still_included(self, tmp_path):
+    def test_semver_token_still_included(self, tmp_path, logger):
         tickets_dir = tmp_path / "docs" / "work-logs" / "v0" / "v0.34" / "v0.34.0" / "tickets"
         self._write_ticket(tickets_dir, "0.34.0-W1-001.md", "0.34.0")
 
-        versions = guard_hook.scan_ticket_versions(tmp_path)
+        versions = guard_hook.scan_ticket_versions(tmp_path, logger)
         assert "0.34.0" in versions
+
+    def test_quoted_version_has_no_residual_quote_characters(self, tmp_path, logger):
+        """0.2.1-W3-665.8：`.strip("'\\"")` 退役後，token 集合不應含殘留引號
+        字元。`yaml.safe_load` 已在語法層去除 `version: "0.34.1"` 的引號，
+        舊 strip 呼叫對合法輸入恆為 no-op，退役不改變結果。"""
+        tickets_dir = tmp_path / "docs" / "work-logs" / "v0" / "v0.34" / "v0.34.1" / "tickets"
+        self._write_ticket(tickets_dir, "0.34.1-W1-001.md", "0.34.1")
+
+        versions = guard_hook.scan_ticket_versions(tmp_path, logger)
+        assert versions == {"0.34.1"}
+        assert not any('"' in v or "'" in v for v in versions)
 
 
 class TestScanWorklogVersionsExcludesLegacyDirs:
@@ -169,11 +186,11 @@ class TestScanWorklogVersionsExcludesLegacyDirs:
 class TestGhostVersionsIntegration:
     """幽靈版本偵測整合測試：三案例合併驗證"""
 
-    def test_no_false_positive_for_known_versions(self, tmp_path):
+    def test_no_false_positive_for_known_versions(self, tmp_path, logger):
         (tmp_path / "docs" / "work-logs" / "v0" / "v0.32" / "v0.32.1").mkdir(parents=True)
         versions = {"0.32.1": "completed"}
 
-        ghosts = guard_hook.detect_ghost_versions(versions, tmp_path)
+        ghosts = guard_hook.detect_ghost_versions(versions, tmp_path, logger)
         assert "0.32.1" not in ghosts
 
 

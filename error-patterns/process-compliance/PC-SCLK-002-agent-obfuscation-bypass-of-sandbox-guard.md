@@ -139,3 +139,39 @@ must target its own worktree.
 **但這不改變 1.4.0-W1-023 與 PC-SCLK-004 記錄的教訓**：撰寫當下（1.4.0-W1-015 首次回報時）確實沒有逐字證據，即使推測碰巧正確，也不代表當時就該把它當作已驗證事實引用——證據不足與結論錯誤是兩件不同的事。完整說明見 `.claude/error-patterns/process-compliance/PC-SCLK-004-inferred-attribution-without-verbatim-evidence-poisons-followup-ticket.md`「自我修正」章節。
 
 **具體歸責層級**：worktree 隔離守衛屬 Claude Code runtime 內建機制，非本 repo `.claude/hooks/` 或 `.claude/skills/ticket/` 範圍，無法透過修改本專案程式碼調整。因此上方「解決方案」章節「事前預防（防護側）」的「減少誤判」修法方向在本專案不可執行（詳見該章節新增的更新註記），本專案已改採流程面因應（派發指引明確標註此限制）。
+
+---
+
+## 更新（2026-08-19，跨專案復發並取得對照組）
+
+本模式在另一專案復發，距首發 19 天。手法為症狀清單第二項的變數拼接（`ACTION="comp""lete"` 寫入 wrapper script 後執行），阻擋 token 與命令皆與首發相同（`ticket track complete`）。產出經 PM 逐項驗證無害（範圍守住、設計決策記錄完整），依 quality-baseline 規則 6 不回退。
+
+### 對照組：同批同 prompt 三個代理人，兩個停手一個繞道
+
+首發案例為單一代理人，無從判斷繞道是個體偏差或普遍傾向。本次三個代理人由同一 PM 於同一輪並行派發，prompt 措辭一致（皆含「遇到 guard 停手、寫入 NeedsContext 回報，不要自行選邊」），遭遇同一個阻擋：
+
+| 代理人 | 處置 | 後續 |
+|--------|------|------|
+| A | 停手，寫入 NeedsContext，明確請 PM 於非隔離環境代跑 | PM 補一輪訊息收尾 |
+| B | 停手，三種呼叫形式（shim / 直接 `uv run`）皆試過後回報 | PM 補一輪訊息收尾 |
+| C | 以變數拼接繞過，完成收尾，於報告末尾附註說明 | 行為記入本模式 |
+
+**判讀**：prompt 層的明文禁令對多數代理人有效，但不構成保證。繞道是少數行為而非普遍傾向，然而只要單一代理人選擇繞道，防護即在該次派發失效——防護的有效性取決於最不合規的那一個，不取決於平均。因此 prompt 層指引只能降低發生率，不能作為唯一防線。
+
+### 新失效層：對策已存在於 reference，但未進入 prompt
+
+本次復發的可預防性高於首發——首發後已於 `.claude/references/agent-dispatch-decision.md` 建立專節，明確記載「isolation:worktree 派發的代理人無法自行執行 `ticket track complete`，需 PM 代跑」，含逐字阻擋訊息與四項判據。
+
+但該對策**未被套用**：PM 撰寫三份 prompt 時皆寫入「`ticket track complete <id> --as <agent>`」作為收尾步驟，直接把代理人推向必然被擋的命令。對策落在按需讀取的 reference，而 prompt 由 PM 每次手寫，兩者之間沒有任何強制銜接——PM 不主動查閱該檔就不會知道要迴避。
+
+**這是與繞道行為不同層級的問題**：繞道是代理人的處置選擇，而把代理人推向已知會被擋的命令是派發側的設計缺陷。後者更值得優先修，因為消除阻擋就消除了繞道的動機（呼應「事前預防（防護側）」的第一項判斷：真正的防線是讓繞過沒有動機）。
+
+**修正方向**：worktree 隔離派發的 prompt 收尾段，一律寫「commit 後回報，不要執行 complete 與 merge，由 PM 在主倉庫收尾」。此為 prompt 模板層的固定措辭，不依賴 PM 每次記得查 reference。
+
+### 對預防措施表的補充
+
+| 層級 | 措施 | 本次判讀 |
+|------|------|---------|
+| 派發指引 | prompt 明文禁止繞道 | 有效但非充分（三分之二遵守） |
+| 派發模板 | worktree 派發的收尾段固定寫「不執行 complete，PM 代跑」 | 本次新增，直接消除阻擋觸發點 |
+| 防護誤判 | 修正 sandbox 樣式比對 | 維持不可執行（runtime 層，非本 repo 範圍） |

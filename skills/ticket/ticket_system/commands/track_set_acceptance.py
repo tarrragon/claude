@@ -53,6 +53,24 @@ from ticket_system.lib.messages import (
 _MODE_FLAGS = ("check", "uncheck", "all_check", "all_uncheck", "add", "edit", "remove")
 
 
+def _flatten_values(raw: object) -> list[str]:
+    """把 nargs="+" 搭 action="append" 的巢狀結果攤平為單層清單。
+
+    argparse 對 `--add A B --add C` 產出 `[["A", "B"], ["C"]]`。同時容忍已是
+    單層的輸入，使直接建構 Namespace 的呼叫端（測試、其他命令委派）不需
+    改寫。
+    """
+    if not raw:
+        return []
+    flat: list[str] = []
+    for item in raw:
+        if isinstance(item, (list, tuple)):
+            flat.extend(str(x) for x in item)
+        else:
+            flat.append(str(item))
+    return flat
+
+
 def _pick_mode(args: argparse.Namespace) -> tuple[str | None, str]:
     """從 args 中選出唯一啟用的模式。
 
@@ -248,7 +266,7 @@ def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
         # 解析 index（僅 check/uncheck/remove 需要；edit 另有 (index, text) 解析）
         indices: list[int] = []
         if mode in ("check", "uncheck", "remove"):
-            raw_indices = getattr(args, mode, None) or []
+            raw_indices = _flatten_values(getattr(args, mode, None))
             if not raw_indices:
                 print(f"[ERROR] --{mode.replace('_', '-')} 需要至少一個 index")
                 return 1
@@ -260,7 +278,7 @@ def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
         if mode in ("check", "uncheck", "all_check", "all_uncheck"):
             changed, total = _apply_mode_to_list(acceptance_list, mode, indices)
         elif mode == "add":
-            texts = getattr(args, "add", None) or []
+            texts = _flatten_values(getattr(args, "add", None))
             if not texts:
                 print("[ERROR] --add 需要至少一個條目文字")
                 return 1

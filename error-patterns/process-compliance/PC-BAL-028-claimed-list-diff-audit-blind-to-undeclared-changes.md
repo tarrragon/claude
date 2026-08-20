@@ -3,6 +3,7 @@ id: PC-BAL-028
 title: 差集稽核以宣稱清單對帳實際狀態，對「從未宣稱的變更」有結構性盲區
 severity: medium
 status: active
+related: [PC-BAL-039]
 ---
 
 # PC-BAL-028: 差集稽核以宣稱清單對帳實際狀態，對「從未宣稱的變更」有結構性盲區

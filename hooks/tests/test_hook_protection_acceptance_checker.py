@@ -1,10 +1,17 @@
 """
 Hook Protection Acceptance Checker Tests
 
-驗證防護類 hook ticket 的必含項目：前三項（session 生效策略／liveness／
-失敗語意）命中對象為 acceptance；第四項（產生路徑盤點結果）命中對象為
-how.strategy（缺則 Solution）的盤點表正本，行為三分（absent 阻擋 / ok 輸出
-計數 / failed fail-open）。
+驗證防護類 hook ticket 的必含項目：前三項（本 session 實地觸發確認／
+liveness／失敗語意）命中對象為 acceptance；第四項（產生路徑盤點結果）命中
+對象為 how.strategy（缺則 Solution）的盤點表正本，行為三分（absent 阻擋 /
+ok 輸出計數 / failed fail-open）。
+
+第一項的 label 於 2026-08-18 由「既有 session 生效策略」改名（PC-BAL-033
+v2.0.0 機制收窄，需驗的是本 session 實地觸發而非 session 世代）。本檔對該
+label 的斷言必須跟著改名——其中兩處為 `not in missing_section` 形式，若只改
+產品碼不改測試，它們會在標籤不再存在時恆真通過，從有效斷言退化為空斷言，
+且不會紅燈提醒。偵測關鍵詞清單刻意未動（見 checker 內註解），故 fixture 的
+acceptance 原措辭無須改寫。
 
 覆蓋情境（前三項，substring 關鍵詞機制，命中對象不變）：
   (a) type=IMP + where.files 觸及 .claude/hooks/ + 前三項皆缺 → block，
@@ -104,7 +111,7 @@ def test_all_three_missing_blocks_and_lists_all(logger):
     )
     should_block, msg = check_hook_protection_acceptance(fm, logger)
     assert should_block is True
-    assert "session 生效策略" in msg
+    assert "本 session 實地觸發確認" in msg
     assert "liveness" in msg
     assert "失敗語意" in msg
     assert "產生路徑盤點結果" not in msg.split("合格填法範例")[0]
@@ -150,7 +157,7 @@ def test_only_one_missing_blocks_and_lists_only_that_one(logger):
     missing_section = msg.split("依規範必須補齊以下項目，缺少：")[1]
     missing_section = missing_section.split("合格填法範例")[0]
     assert "失敗語意" in missing_section
-    assert "session 生效策略" not in missing_section
+    assert "本 session 實地觸發確認" not in missing_section
     assert "liveness" not in missing_section
     assert "產生路徑盤點結果" not in missing_section
 
@@ -215,7 +222,7 @@ def test_skill_hooks_directory_triggers_same_as_top_level(logger):
     )
     should_block, msg = check_hook_protection_acceptance(fm, logger)
     assert should_block is True
-    assert "session 生效策略" in msg
+    assert "本 session 實地觸發確認" in msg
 
 
 def test_skill_root_without_hooks_subdir_does_not_trigger(logger):
@@ -299,7 +306,7 @@ def test_inventory_table_absent_blocks_and_points_to_how_strategy(logger):
     missing_section = msg.split("依規範必須補齊以下項目，缺少：")[1]
     missing_section = missing_section.split("合格填法範例")[0]
     assert "產生路徑盤點結果" in missing_section
-    assert "session 生效策略" not in missing_section
+    assert "本 session 實地觸發確認" not in missing_section
     assert "liveness" not in missing_section
     assert "失敗語意" not in missing_section
     # 訊息須指出正本位置（how.strategy）並附格式範例

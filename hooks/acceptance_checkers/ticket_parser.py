@@ -50,13 +50,20 @@ def extract_children_from_frontmatter(frontmatter: dict, logger) -> List[str]:
                     if cid:
                         children.append(cid)
         else:
-            # 路徑 2：多行 YAML 列表 (e.g., "- 0.31.0-W4-036.1\n- 0.31.0-W4-036.2")
-            for line in children_str.split("\n"):
-                line = line.strip()
-                if line.startswith("-"):
-                    child_id = line[1:].strip()
-                    if child_id:
-                        children.append(child_id)
+            lines = children_str.split("\n")
+            if any(line.strip().startswith("-") for line in lines):
+                # 路徑 2：多行 YAML 列表 (e.g., "- 0.31.0-W4-036.1\n- 0.31.0-W4-036.2")
+                for line in lines:
+                    line = line.strip()
+                    if line.startswith("-"):
+                        child_id = line[1:].strip()
+                        if child_id:
+                            children.append(child_id)
+            else:
+                # 路徑 3：單一純量寫法 (e.g., "children: 0.31.0-W4-036")，
+                # 合法 YAML（schema 允許 list 欄位純量化，同 where.files
+                # 已知結果），非手寫 parser 缺陷
+                children.append(children_str)
     else:
         logger.debug("Ticket 無 children 欄位")
         return []
@@ -80,21 +87,19 @@ def extract_where_files(frontmatter: dict, logger) -> List[str]:
     `list[str]`（0.2.1-W3-052.1：`god_ticket_scale_checker` /
     `responsibility_scope_checker` 共用）。
 
-    `where.files` 在不同解析器下呈現型別不同：
-    - `list[str]`：完整 YAML 解析（如 `ticket track` CLI 內部使用的
-      ticket_system parser）
-    - 換行分隔字串：本 hook 套件內建輕量解析器
-      `lib.hook_ticket.parse_ticket_frontmatter`（`acceptance-gate-hook.py`
-      實際 runtime 使用者）對「dict 欄位內巢狀 block-style 列表」的已知限制
-      —— `where: {files: [- a, - b]}` 這種巢狀列表會被 `_parse_yaml_lines`
-      累積為單一換行字串而非 list（該函式頂層列表才會產出真正的 list；
-      dict 內巢狀列表走不同分支，見該檔案 `_parse_yaml_lines` docstring）。
-      實測驗證：runtime hook 對真實 ticket 檔案呼叫 `parse_ticket_frontmatter`
-      時，`where['files']` 為 `'.claude/a.py\\n.claude/b.py'` 字串，而非
-      `['.claude/a.py', '.claude/b.py']`；若呼叫端只用 `isinstance(x, list)`
-      判斷會靜默視為空清單，兩個新 checker 在真實 complete 流程中永遠不觸發。
-      此正規化函式即為修復此落差的單一入口，比照 `extract_children_from_frontmatter`
-      既有的「同欄位跨解析器雙型別容忍」慣例（見本檔案上方）。
+    `where.files` 在 frontmatter 中可能是 `list[str]` 或 `str`，兩者皆為
+    schema 容忍的合法寫法，非解析器缺陷：
+    - `list[str]`：YAML sequence 寫法（`files:\n  - a.py\n  - b.py`）
+    - `str`：YAML scalar 寫法——單一路徑不加 `-` dash（`files: a.py`），
+      或 `|` block literal scalar（`files: |\n  a.py\n  b.py`）。
+      `yaml.safe_load` 對此兩種 scalar 寫法皆正確回傳 str（非解析失敗，
+      實測 `yaml.safe_load("files: a.py")` 回 `{'files': 'a.py'}`），
+      故 `where.files` 若只寫單一檔案、或以 block scalar 呈現多行路徑，
+      恆會呈現為 str。若呼叫端只用 `isinstance(x, list)` 判斷會將此類
+      合法輸入靜默視為空清單。
+      此正規化函式即為統一處理兩種型別的單一入口，比照
+      `extract_children_from_frontmatter` 既有的「同欄位可為 list 或
+      scalar 寫法」慣例（見本檔案上方）。
 
     Args:
         frontmatter: Ticket frontmatter 結構

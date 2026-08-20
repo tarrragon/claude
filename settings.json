@@ -92,6 +92,10 @@
           },
           {
             "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/bash-git-add-broad-guard-hook.py"
+          },
+          {
+            "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/workspace-wipe-guard-hook.py"
           }
         ]
@@ -322,12 +326,12 @@
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/file-ownership-guard-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/dispatch-staging-phrase-guard-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/dispatch-record-hook.py",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/file-ownership-guard-hook.py",
             "timeout": 5000
           },
           {
@@ -414,6 +418,11 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-completeness-check.py"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-dependency-isolation-check-hook.py",
+            "timeout": 10000
           },
           {
             "type": "command",
@@ -683,6 +692,16 @@
           },
           {
             "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/frontmatter-yaml-syntax-guard-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-dependency-isolation-check-hook.py",
+            "timeout": 10000
+          },
+          {
+            "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
           }
         ]
@@ -755,6 +774,16 @@
           },
           {
             "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/frontmatter-yaml-syntax-guard-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-dependency-isolation-check-hook.py",
+            "timeout": 10000
+          },
+          {
+            "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
           }
         ]
@@ -762,6 +791,16 @@
       {
         "matcher": "MultiEdit",
         "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/frontmatter-yaml-syntax-guard-hook.py",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-dependency-isolation-check-hook.py",
+            "timeout": 10000
+          },
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"

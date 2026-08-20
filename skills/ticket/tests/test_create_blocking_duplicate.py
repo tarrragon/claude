@@ -286,7 +286,7 @@ class TestValidateBeforePersistIntegration:
     def test_blocking_duplicate_fails_validation(self, mocker):
         """整合：阻擋層命中 → _validate_before_persist 回傳 False"""
         mocker.patch(
-            "ticket_system.commands.create._validate_blocked_by_references",
+            "ticket_system.commands.create.validate_blocked_by_references",
             return_value=True,
         )
         mocker.patch(
@@ -302,7 +302,7 @@ class TestValidateBeforePersistIntegration:
     def test_allow_duplicate_passes_through(self, mocker):
         """整合：allow_duplicate 旁路 → 放行（Tier 1 仍執行）"""
         mocker.patch(
-            "ticket_system.commands.create._validate_blocked_by_references",
+            "ticket_system.commands.create.validate_blocked_by_references",
             return_value=True,
         )
         enforce = mocker.patch(

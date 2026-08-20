@@ -51,8 +51,13 @@ def _run_hook(
     command: str,
     dispatch_count: int = 0,
     tool_name: str = "Bash",
+    main_repo_dirty: bool = False,
 ) -> int:
-    """以 monkeypatch 模擬 stdin + 依賴（dispatch 計數），執行 main()。"""
+    """以 monkeypatch 模擬 stdin + 依賴（dispatch 計數 + 主 repo 未提交狀態），執行 main()。
+
+    main_repo_dirty 預設 False（主 repo 乾淨），維持既有測試僅測「並行期」
+    這一條 DENY 理由時的行為不受新條件干擾。
+    """
     payload = {"tool_name": tool_name, "tool_input": {"command": command}}
     stdin_buffer = io.StringIO(json.dumps(payload))
     monkeypatch.setattr(sys, "stdin", stdin_buffer)
@@ -61,6 +66,11 @@ def _run_hook(
         hook_module,
         "_get_active_dispatch_count",
         lambda root, logger: dispatch_count,
+    )
+    monkeypatch.setattr(
+        hook_module,
+        "_has_main_repo_uncommitted_tracked_changes",
+        lambda root, logger: main_repo_dirty,
     )
     return main()
 
@@ -471,3 +481,121 @@ class TestMainConservativeOnDispatchReadFailure:
 
         err = capsys.readouterr().err
         assert "保守視為並行期阻擋" in err
+
+
+# ============================================================================
+# _has_main_repo_uncommitted_tracked_changes：主 repo 未提交 tracked 變更偵測
+# （0.2.1-W3-760：DENY 條件擴充為「並行期 OR 主 repo 有未提交 tracked 變更」）
+# ============================================================================
+
+
+class TestHasMainRepoUncommittedTrackedChanges:
+    def test_tracked_change_returns_true(self, monkeypatch):
+        monkeypatch.setattr(
+            hook_module,
+            "get_uncommitted_files",
+            lambda cwd=None: [hook_module.FileStatus(status=" M", file_path="foo.py")],
+        )
+        logger = logging.getLogger("test-main-repo-dirty-tracked")
+
+        result = hook_module._has_main_repo_uncommitted_tracked_changes(Path("/fake/project"), logger)
+
+        assert result is True
+
+    def test_untracked_only_returns_false(self, monkeypatch):
+        """只有未追蹤新檔案（`??`）不算 tracked 變更，不觸發本條件。"""
+        monkeypatch.setattr(
+            hook_module,
+            "get_uncommitted_files",
+            lambda cwd=None: [hook_module.FileStatus(status="??", file_path="new.txt")],
+        )
+        logger = logging.getLogger("test-main-repo-dirty-untracked-only")
+
+        result = hook_module._has_main_repo_uncommitted_tracked_changes(Path("/fake/project"), logger)
+
+        assert result is False
+
+    def test_clean_returns_false(self, monkeypatch):
+        monkeypatch.setattr(hook_module, "get_uncommitted_files", lambda cwd=None: [])
+        logger = logging.getLogger("test-main-repo-dirty-clean")
+
+        result = hook_module._has_main_repo_uncommitted_tracked_changes(Path("/fake/project"), logger)
+
+        assert result is False
+
+    def test_read_failure_returns_none_not_false(self, monkeypatch):
+        """讀取失敗時回傳 None（無法判定），不得回傳 False（會被誤讀為乾淨）。"""
+
+        def _raise(cwd=None):
+            raise OSError("cannot read git status")
+
+        monkeypatch.setattr(hook_module, "get_uncommitted_files", _raise)
+        logger = logging.getLogger("test-main-repo-dirty-read-failure")
+
+        result = hook_module._has_main_repo_uncommitted_tracked_changes(Path("/fake/project"), logger)
+
+        assert result is None
+
+    def test_read_failure_logs_warning(self, monkeypatch, caplog):
+        """讀取失敗時記錄 warning 日誌（quality-baseline 規則 4 雙通道要求）。"""
+
+        def _raise(cwd=None):
+            raise OSError("cannot read git status")
+
+        monkeypatch.setattr(hook_module, "get_uncommitted_files", _raise)
+        logger_name = "test-main-repo-dirty-log-warning"
+        logger = logging.getLogger(logger_name)
+
+        with caplog.at_level(logging.WARNING, logger=logger_name):
+            hook_module._has_main_repo_uncommitted_tracked_changes(Path("/fake/project"), logger)
+
+        assert any("git status" in record.message for record in caplog.records)
+
+
+# ============================================================================
+# main() 整合：主 repo 有未提交 tracked 變更時無條件 DENY（不限並行期）
+# （0.2.1-W3-760：PC-019 事故鏈第 4 步發生於 agent 完成後，
+#   dispatch-active.json 已清空，此時仍須阻擋）
+# ============================================================================
+
+
+class TestMainRepoDirtyDeny:
+    def test_denied_when_main_repo_dirty_even_without_parallel(self, monkeypatch, capsys):
+        """非並行期（dispatch_count=0）但主 repo 有未提交 tracked 變更 -> DENY。"""
+        exit_code = _run_hook(monkeypatch, "git stash", dispatch_count=0, main_repo_dirty=True)
+
+        assert exit_code == 2
+        err = capsys.readouterr().err
+        assert "主 repo 有未提交變更" in err
+
+    def test_warn_when_main_repo_clean_and_non_parallel(self, monkeypatch, capsys):
+        """非並行期且主 repo 乾淨 -> 維持既有 WARN 行為，不擾正常流程。"""
+        exit_code = _run_hook(monkeypatch, "git stash", dispatch_count=0, main_repo_dirty=False)
+
+        assert exit_code == 0
+        err = capsys.readouterr().err
+        assert "提醒" in err
+
+    def test_deny_message_distinguishes_two_trigger_reasons(self, monkeypatch, capsys):
+        """兩條件同時成立時，DENY 訊息須同時列出兩種觸發理由。"""
+        exit_code = _run_hook(monkeypatch, "git reset --hard", dispatch_count=2, main_repo_dirty=True)
+
+        assert exit_code == 2
+        err = capsys.readouterr().err
+        assert "並行派發中" in err
+        assert "主 repo 有未提交變更" in err
+
+    def test_deny_message_only_main_repo_reason_when_not_parallel(self, monkeypatch, capsys):
+        """僅主 repo 髒污觸發時，訊息不應虛構「並行派發中」理由。"""
+        exit_code = _run_hook(monkeypatch, "git clean -f", dispatch_count=0, main_repo_dirty=True)
+
+        assert exit_code == 2
+        err = capsys.readouterr().err
+        assert "主 repo 有未提交變更" in err
+        assert "並行派發中" not in err
+
+    def test_denied_when_main_repo_dirty_read_fails_conservative(self, monkeypatch, capsys):
+        """主 repo 未提交狀態讀取失敗時保守 DENY（None 視為有變更），不 fallback 為 WARN。"""
+        exit_code = _run_hook(monkeypatch, "git checkout -- .", dispatch_count=0, main_repo_dirty=None)
+
+        assert exit_code == 2

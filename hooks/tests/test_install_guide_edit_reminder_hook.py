@@ -23,6 +23,18 @@ def load_hook_module():
     return module
 
 
+# === _get_throttle_file（0.2.1-W3-626：動態路徑解析） ===
+
+
+def test_get_throttle_file_resolves_under_claude_project_dir(monkeypatch, tmp_path):
+    """節流檔路徑須由 get_project_root() 呼叫時動態解析，尊重
+    CLAUDE_PROJECT_DIR 覆寫，而非 import 時固定指向 production .claude/。"""
+    hook = load_hook_module()
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    resolved = hook._get_throttle_file()
+    assert resolved == tmp_path / "hook-logs" / "install-guide-edit-reminder-throttle.json"
+
+
 # === is_install_guide_path ===
 
 
@@ -127,8 +139,9 @@ def test_main_skips_non_install_guide_file(monkeypatch, capsys):
 
 def test_main_emits_reminder_for_install_guide(monkeypatch, tmp_path, capsys):
     hook = load_hook_module()
-    # 重定向節流檔到 tmp 避免污染 hook-logs
-    monkeypatch.setattr(hook, "THROTTLE_FILE", tmp_path / "throttle.json")
+    # 重定向節流檔到 tmp 避免污染 hook-logs（0.2.1-W3-626：改 monkeypatch
+    # _get_throttle_file() 而非 THROTTLE_FILE 常數，呼應 hook 內動態解析改版）
+    monkeypatch.setattr(hook, "_get_throttle_file", lambda: tmp_path / "throttle.json")
     payload = json.dumps(
         {
             "tool_name": "Edit",
@@ -145,7 +158,7 @@ def test_main_emits_reminder_for_install_guide(monkeypatch, tmp_path, capsys):
 
 def test_main_throttles_second_call(monkeypatch, tmp_path, capsys):
     hook = load_hook_module()
-    monkeypatch.setattr(hook, "THROTTLE_FILE", tmp_path / "throttle.json")
+    monkeypatch.setattr(hook, "_get_throttle_file", lambda: tmp_path / "throttle.json")
     payload = json.dumps(
         {
             "tool_name": "Edit",

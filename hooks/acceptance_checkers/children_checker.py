@@ -78,7 +78,7 @@ def check_children_completed(
 
         try:
             content = child_file.read_text(encoding="utf-8")
-            frontmatter = parse_ticket_frontmatter(content)
+            frontmatter = parse_ticket_frontmatter(content, logger)
 
             status = frontmatter.get("status", "unknown")
             title = frontmatter.get("title", "未知")
@@ -141,7 +141,7 @@ def _collect_incomplete_descendants(
 
         try:
             content = child_file.read_text(encoding="utf-8")
-            frontmatter = parse_ticket_frontmatter(content)
+            frontmatter = parse_ticket_frontmatter(content, logger)
             status = frontmatter.get("status", "unknown")
             title = frontmatter.get("title", "未知")
         except Exception as e:

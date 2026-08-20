@@ -468,6 +468,13 @@ class CreateMessages:
         "[WARNING] source {source_id} 狀態為 completed，仍可建立衍生 Ticket；"
         "如需追加工作請確認是否另開版本追蹤"
     )
+    # source 為 in_progress 時，衍生票建立當下即警告改掛上游，取代原本依賴
+    # PM 記得的文件條款（parallel-dispatch.md「PM 建立衍生票掛載執行中 ticket」）。
+    SOURCE_TICKET_IN_PROGRESS_WARN = (
+        "[WARNING] source {source_id} 狀態為 in_progress（執行中），仍可建立衍生 Ticket；"
+        "執行中的 ticket 可能被後續結構性修改（如新增 spawned_tickets）影響，"
+        "建議改掛其上游{parent_hint}"
+    )
 
 
 class FieldsMessages:

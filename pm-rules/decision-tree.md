@@ -121,6 +121,7 @@ Skill 是預建的專用工具，優先於代理人派發。
 | 分支條件 | 路由檔案 | 適用場景 |
 |---------|---------|---------|
 | 所有派發前（強制） | 本檔案「Context 重度檢查層」 + dispatch-gate.md | 決策品質風險偵測 + 複雜度關卡 + Context Bundle + 並行化 |
+| 所有派發前（強制，主題層先於票層） | parallel-dispatch.md「主題層前置」 | 先選主題再選票：查主題佔用狀態、一 session 一主題、主題內再套既有五觸發條件與複雜度五維度分流 |
 | 動作摩擦力評估（哲學層） | friction-management-methodology.md | 判斷動作應降低/保留/增加摩擦力（30 秒準則）。流程階段摩擦力曲線見同文件「開發流程階段的摩擦力曲線」章節 |
 | ANA/Debug/提案（強制 WRAP） | /wrap-decision | 分析、除錯、提案評估必須先 WRAP |
 | 反思迴路偵測（session ANA ≥ 3 / 鏈深度 ≥ 3 / 耗時 > 4 hr） | reflection-termination.md | 強制 AUQ 詢問終止，防止反思無限循環（W15-010 Layer 3） |

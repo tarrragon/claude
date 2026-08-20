@@ -8,7 +8,7 @@ IMP create 模板未預生成 Context Bundle 等 Schema 章節，PM 派發前
 修復策略（方案 B：CLI 自動補建，取代模板預生成）：
 - 白名單合法且屬 SCHEMA_H2_SECTIONS 的缺失章節 → 於 canonical 順序位置
   自動建立（含首筆內容一次寫入）
-- 非 Schema 章節（如 Execution Log）缺失 → 維持既有 SECTION_NOT_FOUND 錯誤
+- 白名單外的章節名（如 H1 容器 Execution Log）→ INVALID_SECTION 拒絕
 - 前置檢核（status / section 白名單 / 章節存在性）聚合為一次列全失敗原因，
   不再分三輪 fail-fast（W1-024 adversarial 複審發現）
 - exit code 契約不變：status 失敗 = 2，其餘 = 1
@@ -199,10 +199,10 @@ class TestAppendLogSectionAutocreate:
         assert "首筆內容" in new_body
         assert "次筆內容" in new_body
 
-    def test_non_schema_section_missing_still_errors(
+    def test_execution_log_rejected_by_whitelist(
         self, tmp_ticket_dir, patch_paths, capsys
     ):
-        """Case 4: 非 Schema 章節（Execution Log H2）缺失 → 維持 SECTION_NOT_FOUND。"""
+        """Case 4: Execution Log（H1 容器標題）→ INVALID_SECTION，且不補建章節。"""
         tid = "0.0.0-W0-AC4"
         path = tmp_ticket_dir / f"{tid}.md"
         _write_ticket_with_body(path, tid, IMP_BODY_WITHOUT_CONTEXT_BUNDLE)
@@ -211,8 +211,8 @@ class TestAppendLogSectionAutocreate:
         assert rc == 1
 
         captured = capsys.readouterr()
-        assert "無 'Execution Log' 區段" in captured.out
-        # 未自動補建
+        assert "無效的 section: Execution Log" in captured.out
+        # 既不補建 H2 章節，也不動既有 H1 容器
         assert "## Execution Log" not in path.read_text(encoding="utf-8")
 
     def test_autocreated_section_content_h2_downgraded(
@@ -319,9 +319,13 @@ class TestSectionWhitelistSchemaAlignment:
     """W1-025（W1-024 A4 併入）: VALID_SECTIONS 與 SCHEMA_H2_SECTIONS 對齊 guard。"""
 
     def test_valid_sections_covers_all_schema_sections(self):
-        """Case 8: 白名單 = 全部 Schema 章節 + Execution Log（無缺漏、無多餘）。"""
+        """Case 8: 白名單 = 全部 Schema 章節（無缺漏、無多餘）。
+
+        承載 Execution Log 的 APPEND_LOG_EXTRA_SECTIONS 已刪除，
+        白名單直接取自 CANONICAL_BODY_SECTIONS，與 Schema 章節完全等價。
+        """
         from ticket_system.lib.command_tracking_messages import TrackAcceptanceMessages
         from ticket_system.lib.ticket_builder import SCHEMA_H2_SECTIONS
 
-        expected = set(SCHEMA_H2_SECTIONS) | {"Execution Log"}
+        expected = set(SCHEMA_H2_SECTIONS)
         assert set(TrackAcceptanceMessages.VALID_SECTIONS) == expected

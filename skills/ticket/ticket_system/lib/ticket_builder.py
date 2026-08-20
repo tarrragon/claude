@@ -28,7 +28,11 @@ from ticket_system.lib.constants import (
     PROTOCOL_VERSION_CURRENT,
     STATUS_PENDING,
 )
-from ticket_system.lib.paths import GIT_TOPLEVEL_TIMEOUT, get_project_root
+from ticket_system.lib.paths import (
+    GIT_TOPLEVEL_TIMEOUT,
+    get_project_root,
+    get_tickets_dir_under_root,
+)
 from ticket_system.lib.ticket_loader import (
     get_tickets_dir,
     save_ticket,
@@ -102,6 +106,82 @@ def list_ticket_files_from_main(
 
     # 所有候選 ref 皆無法解析（非 git 環境或無 main/master）→ fallback 純本地
     return None
+
+
+def _parse_worktree_root_paths(porcelain_output: str, exclude: Path) -> List[Path]:
+    """從 `git worktree list --porcelain` 輸出解析出其他 worktree 的根目錄。
+
+    Args:
+        porcelain_output: `git worktree list --porcelain` 的 stdout。
+        exclude: 排除的根目錄（呼叫端自身所在 worktree），已 resolve。
+
+    Returns:
+        排除自身後的其他 worktree 根目錄清單（已 resolve，可能為空）。
+    """
+    roots: List[Path] = []
+    for line in porcelain_output.splitlines():
+        if not line.startswith("worktree "):
+            continue
+        root = Path(line[len("worktree "):].strip()).resolve()
+        if root != exclude:
+            roots.append(root)
+    return roots
+
+
+def list_ticket_files_from_sibling_worktrees(
+    version: str, self_root: Optional[Path] = None
+) -> Optional[List[str]]:
+    """列舉同一 repo 下其他 linked worktree 的 tickets 目錄檔案（絕對路徑字串）。
+
+    Why：git worktree 使每個 session 擁有 tickets 目錄的獨立副本，
+    get_next_seq 原本的 local glob + main ref 聯集看不到「已在其他
+    worktree 本地建立、尚未 merge 進 main 的 ticket」，導致跨 worktree
+    並行 create 各自算出同一個「下一個可用序號」（配出同一 ID，其中一方
+    的內容會在後續合併/整併工作區時被覆寫或需要人工調解）。main ref 掃描
+    （list_ticket_files_from_main）解的是「stale base worktree 看不到已
+    merge 進 main 的 ticket」，與本函式解的維度不同、彼此互補。
+
+    本函式列舉 `git worktree list --porcelain` 回報的所有 worktree 路徑
+    （排除自身），各自 glob 其 tickets_dir，回傳絕對路徑清單供 caller 與
+    local glob / main ref 三方取聯集。
+
+    Args:
+        version: 版本號。
+        self_root: 呼叫端自身的 worktree 根目錄（用於排除自身、避免重複
+            計入 local glob 已涵蓋的檔案）；None 時以 get_project_root() 取得。
+
+    Returns:
+        成功：其他 worktree 的 ticket 檔絕對路徑清單（可能為空 list）。
+        失敗（非 git / git worktree list 逾時或失敗）：None，caller 應視為
+        降級，不計入聯集（與 list_ticket_files_from_main 對稱語意，失敗不
+        比現況差）。
+    """
+    root = self_root if self_root is not None else get_project_root()
+    try:
+        result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=GIT_TOPLEVEL_TIMEOUT,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        sys.stderr.write(
+            f"[WARNING] list_ticket_files_from_sibling_worktrees: "
+            f"git worktree list 失敗（{type(exc).__name__}），"
+            f"跨 worktree 掃描降級為不計入聯集\n"
+        )
+        return None
+    if result.returncode != 0:
+        return None
+
+    sibling_roots = _parse_worktree_root_paths(result.stdout, root.resolve())
+    files: List[str] = []
+    for sibling_root in sibling_roots:
+        sibling_tickets_dir = get_tickets_dir_under_root(sibling_root, version)
+        if sibling_tickets_dir.exists():
+            files.extend(str(p) for p in sibling_tickets_dir.glob("*.md"))
+    return files
 
 
 # 預設驗收條件（依 Ticket 類型）
@@ -372,28 +452,34 @@ def get_next_seq(version: str, wave: int) -> int:
         1. 取得 tickets_dir（透過 get_tickets_dir(version)）
         2. glob 本地工作樹的 *-W{wave}-*.md 檔案
         3. list_ticket_files_from_main 取得 main ref 上的 ticket 檔（B3 方案）
-        4. 兩來源取聯集後解析所有檔名，取得最大序號
-        5. 返回 max_seq + 1（無任何來源檔案時返回 1）
+        4. list_ticket_files_from_sibling_worktrees 取得同 repo 下其他
+           worktree 本地已建立、尚未 merge 進 main 的 ticket 檔
+        5. 三來源取聯集後解析所有檔名，取得最大序號
+        6. 返回 max_seq + 1（無任何來源檔案時返回 1）
 
     注意:
         - 只計算根任務序號（不包含子任務的點號部分）
         - 如 0.31.0-W5-001.1.md 只取 001
         - main ref 掃描失敗（非 git / 無 main / 逾時）時降級為純本地掃描
+        - sibling worktree 掃描失敗（非 git / git worktree list 逾時）時
+          降級為不計入聯集，語意同 main ref 掃描失敗
     """
     tickets_dir = get_tickets_dir(version)
 
     # 掃描邊界（W1-052）：正常路徑的「max+1 天然不撞」論證只認 .md ——
-    # local glob 限 `*-W{wave}-*.md`，main ref 也只收 endswith(".md") 的 stem。
-    # .yaml-only ticket（無對應 .md）不在此掃描集合，理論上是「max+1 不撞」的洞。
-    # 現實風險 ~0（系統只產 .md、repo 現存 0 個 .yaml ticket），故不為此修碼；
-    # 降級分支的 resolve_available_seq 經 get_ticket_path 探測會同時覆蓋 .md/.yaml，
-    # 是 .yaml 撞號的實際防線。此處僅顯性標註正常路徑的邊界。
+    # local glob 限 `*-W{wave}-*.md`，main ref 與 sibling worktree 掃描也只收
+    # endswith(".md") 的 stem。.yaml-only ticket（無對應 .md）不在此掃描集合，
+    # 理論上是「max+1 不撞」的洞。現實風險 ~0（系統只產 .md、repo 現存 0 個
+    # .yaml ticket），故不為此修碼；降級分支的 resolve_available_seq 經
+    # get_ticket_path 探測會同時覆蓋 .md/.yaml，是 .yaml 撞號的實際防線。
+    # 此處僅顯性標註正常路徑的邊界。
     # 來源 1：本地工作樹 glob
     local_stems: List[str] = []
     if tickets_dir.exists():
         local_stems = [f.stem for f in tickets_dir.glob(f"*-W{wave}-*.md")]
 
-    # 來源 2：main ref（B3 方案，補足 stale base worktree 掃不到的 ticket）
+    # 來源 2：main ref（B3 方案，補足 stale base worktree 掃不到已 merge 進
+    # main 的 ticket）
     main_stems: List[str] = []
     main_files = list_ticket_files_from_main(version)
     if main_files is not None:
@@ -401,9 +487,19 @@ def get_next_seq(version: str, wave: int) -> int:
             Path(p).stem for p in main_files if Path(p).name.endswith(".md")
         ]
 
+    # 來源 3：sibling worktree（補足跨 worktree 並行 create 掃不到「已在其他
+    # worktree 本地建立、尚未 merge 進 main」的 ticket；與來源 2 互補，
+    # 解的是不同維度的可見性缺口）
+    sibling_stems: List[str] = []
+    sibling_files = list_ticket_files_from_sibling_worktrees(version)
+    if sibling_files is not None:
+        sibling_stems = [
+            Path(p).stem for p in sibling_files if Path(p).name.endswith(".md")
+        ]
+
     # 聯集解析最大根任務序號
     max_seq = 0
-    for stem in set(local_stems) | set(main_stems):
+    for stem in set(local_stems) | set(main_stems) | set(sibling_stems):
         seq = _parse_root_seq(stem, wave)
         if seq is not None:
             max_seq = max(max_seq, seq)
@@ -411,23 +507,24 @@ def get_next_seq(version: str, wave: int) -> int:
     candidate = max_seq + 1
 
     # 降級可觀測 + 內聚 collision guard（W1-042 / W1-051 / quality-baseline 規則 4）：
-    # 本地 glob 為空且 main ref 掃描降級（回 None，非有效空清單）時，
-    # 兩來源同時掃空會回傳 candidate=1，可能誤配已存在 ID（W1-039 撞號事件）。
+    # 三來源同時掃空（本地為空、main ref 與 sibling worktree 皆降級）時，
+    # candidate=1 可能誤配已存在 ID（W1-039 撞號事件）。
     #
     # linux caveat（W1-051）：正常路徑（任一來源有效）的 candidate = max+1 對
     # 已掃描集合天然不撞，故不在正常路徑做逐一 .exists() 探測；guard 緊貼降級
     # 分支——僅當降級偵測成立時，才以檔案系統探測推進至真正可用 seq，使
     # get_next_seq 回傳值內部保證可用（消除 create.py caller 層 while-loop 外洩）。
-    if not local_stems and main_files is None:
+    if not local_stems and main_files is None and sibling_files is None:
         resolved = resolve_available_seq(version, wave, candidate)
-        # W1-052 措辭收斂：FS 探測看不到 main-only 檔（main ref 已降級），故
-        # collision guard 僅保證「本地檔案系統可用」，對 main-only 撞號無保證；
-        # 不過度承諾「已推進至可用序號」。
+        # W1-052 措辭收斂：FS 探測看不到 main-only / sibling-only 檔（兩者皆
+        # 已降級），故 collision guard 僅保證「本地檔案系統可用」，對
+        # main-only 或 sibling-only 撞號無保證；不過度承諾「已推進至可用序號」。
         sys.stderr.write(
-            f"[WARNING] get_next_seq: 本地工作樹與 main ref 同時掃描不到 "
-            f"{version} W{wave} 的 ticket（main ref 降級），初始配號回退為 "
-            f"{candidate}；collision guard 已推進至本地檔案系統可用序號 {resolved}"
-            f"（僅保證本地 FS 可用，無法保證 main-only 票不撞）\n"
+            f"[WARNING] get_next_seq: 本地工作樹、main ref 與 sibling "
+            f"worktree 同時掃描不到 {version} W{wave} 的 ticket（三來源皆"
+            f"降級），初始配號回退為 {candidate}；collision guard 已推進至"
+            f"本地檔案系統可用序號 {resolved}（僅保證本地 FS 可用，無法"
+            f"保證 main-only / sibling-only 票不撞）\n"
         )
         return resolved
 
@@ -516,12 +613,14 @@ def _extract_direct_child_seq(child_id: str, parent_id: str) -> Optional[int]:
 
 
 def _scan_child_files_max_seq(tickets_dir: Path, parent_id: str) -> int:
-    """掃描子 Ticket 檔案找出最大直接子任務序號（本地工作樹 ∪ main ref）。
+    """掃描子 Ticket 檔案找出最大直接子任務序號（本地工作樹 ∪ main ref ∪ sibling worktree）。
 
     這是防止父 Ticket 的 children 欄位未同步時的安全機制，
     確保不會覆蓋已存在的子 Ticket 檔案。B3 方案（0.19.0-W1-037）擴增資料來源：
     除本地工作樹 glob 外，併入 main ref 上的子 ticket 檔，避免 stale base
-    worktree 掃不到 main 已建立的子 ticket 而分配碰撞序號。
+    worktree 掃不到 main 已建立的子 ticket 而分配碰撞序號；另補上 sibling
+    worktree 掃描，解決同 repo 下其他 worktree 本地已建立、尚未 merge 進
+    main 的子 ticket 不可見的問題（與 main ref 掃描互補，維度不同）。
 
     Args:
         tickets_dir: Ticket 檔案目錄
@@ -539,27 +638,45 @@ def _scan_child_files_max_seq(tickets_dir: Path, parent_id: str) -> int:
     if tickets_dir.exists():
         local_stems = [f.stem for f in tickets_dir.glob(f"{parent_id}.*.md")]
 
-    # 來源 2：main ref（B3 方案）；version 由 parent_id 解析
+    # 來源 2：main ref（B3 方案）+ 來源 3：sibling worktree；version 由 parent_id 解析
     main_stems: List[str] = []
+    sibling_stems: List[str] = []
     version = extract_version_from_ticket_id(parent_id)
     if version is not None:
+        child_prefix = f"{parent_id}."
         main_files = list_ticket_files_from_main(version)
         if main_files is not None:
-            child_prefix = f"{parent_id}."
-            main_stems = [
-                Path(p).stem
-                for p in main_files
-                if Path(p).name.endswith(".md")
-                and Path(p).stem.startswith(child_prefix)
-            ]
+            main_stems = _filter_child_stems(main_files, child_prefix)
+        sibling_files = list_ticket_files_from_sibling_worktrees(version)
+        if sibling_files is not None:
+            sibling_stems = _filter_child_stems(sibling_files, child_prefix)
 
     # 聯集解析最大直接子任務序號
     max_seq = 0
-    for stem in set(local_stems) | set(main_stems):
+    for stem in set(local_stems) | set(main_stems) | set(sibling_stems):
         seq = _extract_direct_child_seq(stem, parent_id)
         if seq is not None:
             max_seq = max(max_seq, seq)
     return max_seq
+
+
+def _filter_child_stems(files: List[str], child_prefix: str) -> List[str]:
+    """從檔案路徑清單篩出屬於指定子任務前綴的 .md stem。
+
+    main ref 與 sibling worktree 兩來源共用此篩選邏輯（DRY）。
+
+    Args:
+        files: 檔案路徑字串清單（相對或絕對皆可，只取 name/stem）。
+        child_prefix: 子任務 ID 前綴（如 "0.31.0-W5-001."）。
+
+    Returns:
+        符合前綴的 .md 檔案 stem 清單。
+    """
+    return [
+        Path(p).stem
+        for p in files
+        if Path(p).name.endswith(".md") and Path(p).stem.startswith(child_prefix)
+    ]
 
 
 def _normalize_children(raw: Any) -> List[str]:

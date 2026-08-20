@@ -78,6 +78,8 @@ from .fields import (
     execute_get_who,
     execute_set_who,
     execute_get_what,
+    execute_get_title,
+    execute_set_title,
     execute_set_what,
     execute_get_when,
     execute_set_when,
@@ -106,6 +108,15 @@ from .track_acceptance import (
     execute_add_spawn_request,
     execute_resolve_spawn_request,
 )
+# 導入 PC-093-exempt marker 補標記子命令
+from .track_exempt_marker import execute_add_exempt_marker
+from .track_multi_view_status import execute_fix_multi_view_status
+# 導入實驗器材登記子命令（跨 session 實驗器材票面登記 CLI 化）
+from .track_artifacts import (
+    execute_register_artifact,
+    execute_resolve_artifact,
+    execute_list_artifacts,
+)
 # 導入 set-acceptance / validate 子命令
 from .track_set_acceptance import execute_set_acceptance
 # 導入 set-exit-status / set-completion-info 子命令（1.5.0-W5-021 制式化內容生成）
@@ -129,6 +140,8 @@ from .track_audit import (
 # 導入看板命令模組
 from .track_board import (
     execute_board,
+    GROUP_BY_WAVE,
+    GROUP_BY_TOPIC,
 )
 # 導入快照命令模組
 from .track_agent_status import (
@@ -219,6 +232,18 @@ from .track_conflicts import (
 from .track_onboard import (
     execute_onboard,
     register_onboard,
+)
+# topics/topic 主題清單視圖與單一主題任務鏈 map（唯讀視圖層）
+from .track_topics import (
+    execute_topics,
+    execute_topic,
+    register_topics,
+)
+# topic-backfill-list/topic-backfill-assign 既有 pending 票的主題分批回填 CLI 入口
+from .topic_backfill import (
+    execute_topic_backfill_list,
+    execute_topic_backfill_assign,
+    register as register_topic_backfill,
 )
 # lease claim/release 寫入 + reclaim ghost 鑑識（multi-PM 協調層 Phase 3）
 from ticket_system.lib.lease import (
@@ -343,6 +368,10 @@ def _create_version_agnostic_handlers() -> dict:
         "activity": execute_activity,
         "conflicts": execute_conflicts,
         "onboard": execute_onboard,
+        "topics": execute_topics,
+        "topic": execute_topic,
+        "topic-backfill-list": execute_topic_backfill_list,
+        "topic-backfill-assign": execute_topic_backfill_assign,
     }
 
 
@@ -385,12 +414,14 @@ def _create_command_handlers() -> dict:
         "batch-claim": execute_batch_claim,
         "batch-complete": execute_batch_complete,
         "set-who": execute_set_who,
+        "set-title": execute_set_title,
         "set-what": execute_set_what,
         "set-when": execute_set_when,
         "set-where": execute_set_where,
         "set-why": execute_set_why,
         "set-how": execute_set_how,
         "who": execute_get_who,
+        "title": execute_get_title,
         "what": execute_get_what,
         "when": execute_get_when,
         "where": execute_get_where,
@@ -406,6 +437,11 @@ def _create_command_handlers() -> dict:
         "append-log": execute_append_log,
         "add-spawn-request": execute_add_spawn_request,
         "resolve-spawn-request": execute_resolve_spawn_request,
+        "add-exempt-marker": execute_add_exempt_marker,
+        "fix-multi-view-status": execute_fix_multi_view_status,
+        "register-artifact": execute_register_artifact,
+        "resolve-artifact": execute_resolve_artifact,
+        "list-artifacts": execute_list_artifacts,
         "accept-creation": execute_accept_creation,
         "add-child": execute_add_child,
         "set-blocked-by": execute_set_blocked_by,
@@ -757,6 +793,11 @@ def _register_field_read_commands(
     p_who.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_who.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
+    # title 操作 (READ)
+    p_title = subparsers.add_parser("title", help=TrackMessages.HELP_TITLE)
+    p_title.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_title.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
     # what 操作 (READ)
     p_what = subparsers.add_parser("what", help=TrackMessages.HELP_WHAT)
     p_what.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
@@ -796,6 +837,12 @@ def _register_field_write_commands(
     )
     p_set_who.add_argument("--current", help="僅寫入 who.current 子欄位（保留 history）")
     p_set_who.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # set-title 操作（title 與 what 獨立：title 為清單顯示用短標籤）
+    p_set_title = subparsers.add_parser("set-title", help=TrackMessages.HELP_SET_TITLE)
+    p_set_title.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_set_title.add_argument("value", help=TrackMessages.ARG_VALUE)
+    p_set_title.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
     # set-what 操作
     p_set_what = subparsers.add_parser("set-what", help=TrackMessages.HELP_SET_WHAT)
@@ -985,13 +1032,17 @@ def _register_acceptance_commands(
              "--add/--edit/--remove 建票後修訂條目）"
     )
     p_set_acceptance.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    # nargs="+" 搭配 action="append"：兩種多值形式都成立——空白分隔
+    # （--check 1 2）與重複旗標（--check 1 --check 2）。只有 nargs="+" 時
+    # 重複旗標會互相覆寫且無警告，呼叫端無從察覺值被丟棄。結果為巢狀
+    # list，消費端以 _flatten_values 攤平。
     p_set_acceptance.add_argument(
-        "--check", nargs="+", metavar="INDEX",
-        help="勾選指定 1-based index（可多個，空白分隔）"
+        "--check", nargs="+", action="append", metavar="INDEX",
+        help="勾選指定 1-based index（可多個，空白分隔或重複旗標）"
     )
     p_set_acceptance.add_argument(
-        "--uncheck", nargs="+", metavar="INDEX",
-        help="取消勾選指定 1-based index（可多個）"
+        "--uncheck", nargs="+", action="append", metavar="INDEX",
+        help="取消勾選指定 1-based index（可多個，空白分隔或重複旗標）"
     )
     # --all 攔截：撞 --all-check/--all-uncheck（1.0.0-W1-028）。作用域 scoped 至
     # set-acceptance subparser，不影響 list/stale-list/stuck-anas 的合法 --all
@@ -1013,16 +1064,16 @@ def _register_acceptance_commands(
         help="取消勾選全部驗收條件"
     )
     p_set_acceptance.add_argument(
-        "--add", nargs="+", metavar="TEXT",
-        help="追加驗收條目（可多個，空白分隔各自加引號），預設未勾選"
+        "--add", nargs="+", action="append", metavar="TEXT",
+        help="追加驗收條目（可多個，空白分隔各自加引號，或重複旗標），預設未勾選"
     )
     p_set_acceptance.add_argument(
         "--edit", nargs=2, action="append", metavar=("INDEX", "TEXT"),
         help="覆寫指定 1-based index 的條目文字，保留原勾選狀態（可重複指定多組）"
     )
     p_set_acceptance.add_argument(
-        "--remove", nargs="+", metavar="INDEX",
-        help="移除指定 1-based index（可多個）；移除已勾選條目須另加 --force"
+        "--remove", nargs="+", action="append", metavar="INDEX",
+        help="移除指定 1-based index（可多個，空白分隔或重複旗標）；移除已勾選條目須另加 --force"
     )
     p_set_acceptance.add_argument("--version", help=TrackMessages.ARG_VERSION)
     p_set_acceptance.add_argument(
@@ -1123,6 +1174,136 @@ def _register_acceptance_commands(
         action="store_true",
         default=False,
         help="逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+    )
+
+    # add-exempt-marker 操作：對已寫入的自由章節既有行補 PC-093-exempt
+    # marker——append-log 僅能追加、CLI 無編輯指令、該區段不在
+    # ticket-file-access-guard-hook 白名單內故 Edit 被拒，三層疊加使
+    # marker 完全無法事後補上，本命令僅追加獨立標記行，不修改原文字。
+    from ticket_system.lib.exempt_marker import EXEMPT_CATEGORIES as _EXEMPT_CATEGORIES
+
+    p_add_exempt_marker = subparsers.add_parser(
+        "add-exempt-marker",
+        help="對指定章節既有行補上 PC-093-exempt marker（僅追加標記行，不修改原文字）",
+    )
+    p_add_exempt_marker.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_add_exempt_marker.add_argument(
+        "--section", required=True, help=TrackMessages.ARG_SECTION
+    )
+    p_add_exempt_marker.add_argument(
+        "--match",
+        dest="match_text",
+        required=True,
+        help="待標記行內的文字子字串；命中多行時須提供更精確文字收窄至單一行",
+    )
+    p_add_exempt_marker.add_argument(
+        "--category",
+        required=True,
+        choices=sorted(_EXEMPT_CATEGORIES),
+        help="PC-093-exempt marker 類別（與 phase4-decision-enforcement-hook 白名單一致）",
+    )
+    p_add_exempt_marker.add_argument(
+        "--reason",
+        required=True,
+        help="豁免理由（>= 10 字元；baseline-gated 需含數字，ticket-tracked/history 需含 "
+             "W{wave}-{seq} ticket ID，rule-quote 需含規則檔案路徑）",
+    )
+    p_add_exempt_marker.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    p_add_exempt_marker.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+    )
+
+    # fix-multi-view-status 操作：對 ANA Ticket Solution 區段既有的
+    # multi_view_status 行原地覆寫其值——該欄位一旦寫入非法值即無合法途徑
+    # 修正（append-log 僅能追加、CLI 無編輯指令、Edit 被 hook 白名單拒絕），
+    # 本命令僅覆寫該行，不修改章節其他內容。
+    p_fix_multi_view_status = subparsers.add_parser(
+        "fix-multi-view-status",
+        help="覆寫 ANA Ticket Solution 區段既有的 multi_view_status 行值（僅覆寫該行）",
+    )
+    p_fix_multi_view_status.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_fix_multi_view_status.add_argument(
+        "--section", default="Solution", help="欲覆寫的章節（預設 Solution）"
+    )
+    p_fix_multi_view_status.add_argument(
+        "--match",
+        dest="match_text",
+        default=None,
+        help="多重命中時（如既有非法值行 + 事後補正行並存）用文字子字串收窄至單一行",
+    )
+    p_fix_multi_view_status.add_argument(
+        "--value",
+        required=True,
+        choices=["reviewed", "skipped", "n_a"],
+        help="新值（合法值：.claude/config/ana-solution-schema.yaml 定義）",
+    )
+    p_fix_multi_view_status.add_argument(
+        "--reason",
+        required=True,
+        help="修正理由（>= 10 字元；供 commit 訊息與稽核追蹤，不寫入 ticket body）",
+    )
+    p_fix_multi_view_status.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    p_fix_multi_view_status.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+    )
+
+    # register-artifact 操作：實驗器材票面登記 CLI 化（parallel-dispatch.md
+    # 「跨 session 實驗器材的自我標示與存活期治理」條件三）
+    p_register_artifact = subparsers.add_parser(
+        "register-artifact",
+        help="登記實驗器材（路徑/用途/存活期）至 Solution 章節，並輸出可複製的首行 header 文字",
+    )
+    p_register_artifact.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_register_artifact.add_argument("--path", required=True, help="器材檔案路徑")
+    p_register_artifact.add_argument("--purpose", required=True, help="放置目的（一句話）")
+    p_register_artifact.add_argument("--expiry", required=True, help="預期存活期（到哪個事件為止）")
+    p_register_artifact.add_argument(
+        "--type", default="明示", choices=("明示", "盲測"),
+        help="器材型別：明示（預設，需檔名+首行雙軌標示）或盲測（限同 session，票面登記為唯一標示）",
+    )
+    p_register_artifact.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    p_register_artifact.add_argument(
+        "--force", action="store_true", default=False,
+        help="逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+    )
+
+    # resolve-artifact 操作：實驗器材收尾處置（存活期治理，移除或指名接手票）
+    p_resolve_artifact = subparsers.add_parser(
+        "resolve-artifact",
+        help="標記實驗器材（EXP-N）狀態為 removed 或 kept（kept 須指名接手 ticket）",
+    )
+    p_resolve_artifact.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_resolve_artifact.add_argument("exp_label", help="實驗器材編號（如 EXP-2）")
+    p_resolve_artifact.add_argument(
+        "--status", required=True, choices=("removed", "kept"),
+        help="新狀態：removed（已移除）或 kept（仍需保留，須帶 --successor）",
+    )
+    p_resolve_artifact.add_argument(
+        "--successor", default=None,
+        help="--status kept 時必填：接手觀測的 ticket ID",
+    )
+    p_resolve_artifact.add_argument("--reason", default=None, help="狀態變更理由（可選）")
+    p_resolve_artifact.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    p_resolve_artifact.add_argument(
+        "--force", action="store_true", default=False,
+        help="逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+    )
+
+    # list-artifacts 操作：結構化讀取已登記器材（供收尾檢查程式化消費）
+    p_list_artifacts = subparsers.add_parser(
+        "list-artifacts",
+        help="列出 ticket 已登記的實驗器材（結構化輸出，--json 供程式化讀取）",
+    )
+    p_list_artifacts.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_list_artifacts.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    p_list_artifacts.add_argument(
+        "--json", action="store_true", default=False, help="輸出 JSON 而非人類可讀表格",
     )
 
     # set-exit-status 操作（1.5.0-W5-021：CLI 生成 Exit Status fenced YAML 區塊）
@@ -1230,6 +1411,12 @@ def _register_board_commands(
         action="store_true",
         help=TrackMessages.ARG_ALL
     )
+    p_board.add_argument(
+        "--group-by",
+        choices=[GROUP_BY_WAVE, GROUP_BY_TOPIC],
+        default=GROUP_BY_WAVE,
+        help=TrackMessages.ARG_GROUP_BY,
+    )
 
 
 def _register_all_subcommands(
@@ -1258,6 +1445,8 @@ def _register_all_subcommands(
     register_sessions(track_subparsers)
     register_activity(track_subparsers)
     register_conflicts(track_subparsers)
+    register_topics(track_subparsers)
+    register_topic_backfill(track_subparsers)
     register_onboard(track_subparsers)
 
 

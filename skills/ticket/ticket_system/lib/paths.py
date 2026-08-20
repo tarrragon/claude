@@ -7,6 +7,7 @@
 import os
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 from .constants import WORK_LOGS_DIR, TICKETS_DIR
 from .ui_constants import VERSION_PREFIX, VERSION_PREFIX_LENGTH
@@ -193,25 +194,32 @@ def _resolve_project_root() -> Path:
     return Path.cwd()
 
 
-def get_tickets_dir(version: str) -> Path:
+def get_tickets_dir_under_root(root: Path, version: str) -> Path:
     """
-    取得 Tickets 目錄路徑
+    在指定的專案根目錄下解析 Tickets 目錄路徑（純函式）。
+
+    抽出自 get_tickets_dir 的階層式/flat 判斷邏輯：跨 worktree 掃描
+    （ticket_builder.list_ticket_files_from_sibling_worktrees，解決跨
+    worktree 並行 create 配出同一 ID 的問題）需要對「非目前 process 的
+    get_project_root()」的其他 worktree 根目錄計算 tickets_dir，不能透過
+    get_tickets_dir(version) 的全域 get_project_root() 解析（該函式恆指向
+    呼叫端自己所在的 worktree）。
 
     支援階層式目錄結構：docs/work-logs/v{major}/v{major}.{minor}/v{version}/tickets/
 
     Args:
+        root: 專案根目錄（可以是任意 worktree 的根目錄）。
         version: 版本號（可以帶 v 前綴，可以不帶）
 
     Returns:
-        Path: Tickets 目錄路徑
+        Path: 該 root 下的 Tickets 目錄路徑
 
     Examples:
-        >>> tickets_dir = get_tickets_dir("0.31.0")
+        >>> from pathlib import Path
+        >>> tickets_dir = get_tickets_dir_under_root(Path("/repo"), "0.31.0")
         >>> tickets_dir.name
         'tickets'
     """
-    root = get_project_root()
-
     # 標準化版本號（去掉 v 前綴再加回）
     bare_version = version.lstrip("v").lstrip(VERSION_PREFIX)
     versioned = f"{VERSION_PREFIX}{bare_version}"
@@ -238,6 +246,65 @@ def get_tickets_dir(version: str) -> Path:
     # 最終 safety net：版本字串無法解析 major.minor 時使用 flat 結構
     flat = root / WORK_LOGS_DIR / versioned / TICKETS_DIR
     return flat
+
+
+def get_tickets_dir(version: str) -> Path:
+    """
+    取得 Tickets 目錄路徑（呼叫端自身所在 worktree 的 tickets 目錄）
+
+    支援階層式目錄結構：docs/work-logs/v{major}/v{major}.{minor}/v{version}/tickets/
+
+    Args:
+        version: 版本號（可以帶 v 前綴，可以不帶）
+
+    Returns:
+        Path: Tickets 目錄路徑
+
+    Examples:
+        >>> tickets_dir = get_tickets_dir("0.31.0")
+        >>> tickets_dir.name
+        'tickets'
+    """
+    return get_tickets_dir_under_root(get_project_root(), version)
+
+
+def get_git_common_dir(cwd: Optional[Path] = None) -> Optional[Path]:
+    """
+    取得 git 的 common dir：所有 linked worktree 共用的 `.git` 目錄，
+    可作為跨 worktree 共享狀態（如序列化鎖檔）的落點。
+
+    與 _linked_worktree_root 的差異：後者只在「確認位於 linked worktree」
+    時才回傳（回傳的是該 worktree 自己的根目錄）；本函式無條件回傳
+    common dir 本身，主 repo 與任一 linked worktree 呼叫皆回傳同一絕對路徑
+    （git-native 語意：common dir 對整個 repo 唯一）。
+
+    Args:
+        cwd: 執行 git 指令的工作目錄；None 時使用目前 process 的 cwd。
+
+    Returns:
+        Path | None: git common dir 的絕對路徑；非 git 環境 / git 不存在 /
+            逾時 / 指令失敗時回傳 None（caller 應降級處理）。
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=str(cwd) if cwd is not None else None,
+            capture_output=True,
+            text=True,
+            timeout=GIT_TOPLEVEL_TIMEOUT,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    raw = result.stdout.strip()
+    if not raw:
+        return None
+    common_dir = Path(raw)
+    if not common_dir.is_absolute():
+        base = cwd if cwd is not None else Path.cwd()
+        common_dir = base / common_dir
+    return common_dir.resolve()
 
 
 def get_ticket_path(version: str, ticket_id: str) -> Path:

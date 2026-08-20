@@ -13,7 +13,7 @@
 --------------------
 - 掃描層 get_next_seq：兩來源（本地 glob + main ref）同時掃空時回傳 1，
   降級靜默無警告（環境依賴：worktree stale base / git 逾時 / root 解析偏差）。
-- 配號層 _resolve_ticket_id_and_wave：算出 ticket_id 後僅驗格式，無存在性檢查。
+- 配號層 resolve_ticket_id_and_wave：算出 ticket_id 後僅驗格式，無存在性檢查。
 - 落盤層 save_ticket：無條件寫入，ID 撞號時靜默覆寫。
 
 修復設計（指導本測試斷言）
@@ -50,6 +50,7 @@ import pytest
 from ticket_system.lib import ticket_builder
 from ticket_system.lib.ticket_builder import get_next_seq, resolve_available_seq
 from ticket_system.commands import create as create_cmd
+from ticket_system.lib.ticket_id_allocator import resolve_ticket_id_and_wave
 from ticket_system.commands import bulk_create as bulk_cmd
 
 
@@ -94,7 +95,7 @@ def _patch_project_root(monkeypatch, root: Path) -> None:
 
 
 def _make_args(seq=None, wave=1, version="1.0.0", parent=None) -> argparse.Namespace:
-    """建構 _resolve_ticket_id_and_wave 所需的最小 args。"""
+    """建構 resolve_ticket_id_and_wave 所需的最小 args。"""
     return argparse.Namespace(seq=seq, wave=wave, version=version, parent=parent)
 
 
@@ -156,7 +157,7 @@ class TestAutoSeqCallerTrustsGuard:
     def test_auto_seq_uses_get_next_seq_value(self, tmp_path, monkeypatch):
         """
         Given: 真實掃描——W1-001/002 存在，get_next_seq 走純掃描回 3
-        When: _resolve_ticket_id_and_wave(args(seq=None), "1.0.0")
+        When: resolve_ticket_id_and_wave(args(seq=None), "1.0.0")
         Then: 回傳 1.0.0-W1-003（不再有 caller while-loop，直接信任掃描結果）
         """
         root = tmp_path / "repo"
@@ -170,7 +171,7 @@ class TestAutoSeqCallerTrustsGuard:
         with patch.object(
             ticket_builder, "list_ticket_files_from_main", return_value=None
         ):
-            result = create_cmd._resolve_ticket_id_and_wave(
+            result = resolve_ticket_id_and_wave(
                 _make_args(seq=None, wave=1), "1.0.0"
             )
 
@@ -182,7 +183,7 @@ class TestAutoSeqCallerTrustsGuard:
         """
         Given: W1-001/002/003 存在，但兩來源同時掃空且 main 降級（誤回 candidate=1）
                重現方式：mock glob 結果為空 + main ref 回 None
-        When: _resolve_ticket_id_and_wave(args(seq=None), "1.0.0")
+        When: resolve_ticket_id_and_wave(args(seq=None), "1.0.0")
         Then: get_next_seq 降級分支內 resolve_available_seq 推進至 1.0.0-W1-004
         """
         root = tmp_path / "repo"
@@ -205,7 +206,7 @@ class TestAutoSeqCallerTrustsGuard:
         with patch.object(
             ticket_builder, "list_ticket_files_from_main", return_value=None
         ), patch.object(Path, "glob", empty_glob):
-            result = create_cmd._resolve_ticket_id_and_wave(
+            result = resolve_ticket_id_and_wave(
                 _make_args(seq=None, wave=1), "1.0.0"
             )
 
@@ -227,7 +228,7 @@ class TestExplicitSeqCollisionErrors:
     def test_explicit_seq_collision_returns_none(self, tmp_path, monkeypatch, capsys):
         """
         Given: 1.0.0-W1-001.md 已存在，用戶顯式 --seq 1
-        When: _resolve_ticket_id_and_wave(args(seq=1), "1.0.0")
+        When: resolve_ticket_id_and_wave(args(seq=1), "1.0.0")
         Then: 回傳 None（報錯退出），stdout 含 ErrorEnvelope 撞號訊息
         """
         root = tmp_path / "repo"
@@ -235,7 +236,7 @@ class TestExplicitSeqCollisionErrors:
         assert existing.exists()
         _patch_project_root(monkeypatch, root)
 
-        result = create_cmd._resolve_ticket_id_and_wave(
+        result = resolve_ticket_id_and_wave(
             _make_args(seq=1, wave=1), "1.0.0"
         )
 
@@ -251,14 +252,14 @@ class TestExplicitSeqCollisionErrors:
     def test_explicit_seq_no_collision_passes(self, tmp_path, monkeypatch):
         """
         Given: tickets 目錄無 W1-042，用戶顯式 --seq 42
-        When: _resolve_ticket_id_and_wave(args(seq=42), "1.0.0")
+        When: resolve_ticket_id_and_wave(args(seq=42), "1.0.0")
         Then: 回傳 1.0.0-W1-042（無碰撞時尊重顯式 seq）
         """
         root = tmp_path / "repo"
         _tickets_dir(root).mkdir(parents=True, exist_ok=True)
         _patch_project_root(monkeypatch, root)
 
-        result = create_cmd._resolve_ticket_id_and_wave(
+        result = resolve_ticket_id_and_wave(
             _make_args(seq=42, wave=1), "1.0.0"
         )
 

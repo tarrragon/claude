@@ -3,6 +3,7 @@ name: ux-design-evaluation
 description: "UX / UI 設計的系統性評估方法：把「使用者被困住」類缺口從實機測試提前到設計階段。Use for: (1) 設計或審查畫面狀態（狀態矩陣四欄：顯示 / 可用操作 / 進入條件 / 退出路徑，退出路徑為空 = 死胡同）, (2) Gate 設計（biometric / network / permission / 環境條件的成功、失敗、不確定路徑與 fallback）, (3) 輸入機制（keyboard type / submit model / IME policy / special keys 四維決策、IME 安全）, (4) 錯誤恢復（錯誤訊息、retry、error loop 逃生口、degraded mode）, (5) 導航（go/push 語意、tab / drawer / deep link、iOS vs Material 慣例）, (6) 互動回饋（回饋分層、時間門檻、spinner vs skeleton、SnackBar / Dialog / Banner 選擇、元件語意與版面：切換標籤 / 可點性辨識 / 選中態對比 / 溢出 affordance / 版面保障 / 完成宣告）。Use when: 設計新畫面或流程、審查 UI 實作、UX review、使用者反映被卡住 / 按了沒反應 / 標籤被讀反 / 選中看不到字 / 文字被壓成省略號 / 宣告完成但資料不全 / 通知被忽略。Triggers: UX 設計, UI 設計, 畫面設計, 狀態矩陣, 退出路徑, 死胡同, initializing, gate, fallback, 生物辨識, 權限請求, 破壞性操作, 輸入框, 鍵盤, IME, 表單, 搜尋框, 錯誤訊息, retry, 重試, 降級, degraded, 導航, back 行為, deep link, hash 路由, tab bar, service worker, loading, spinner, skeleton, SnackBar, Dialog, Banner, Bottom Sheet, 通知形式, 按鈕狀態, 切換模式, 標籤語意, 選中態, 對比, 溢出, 截斷, 省略號, ellipsis, 佔位, placeholder, 完成宣告, debounce, 防連點, 回饋."
 license: MIT
 metadata:
+  portable: true
   version: 1.0.0
   category: ux-design
 ---

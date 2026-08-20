@@ -14,6 +14,7 @@
 | 無重疊 | 修改檔案無交集 |
 | 同階段 | 屬於同一 TDD 階段 |
 | 複雜度適合 | 所有任務的認知負擔指數 <= 10（見下方複雜度評估） |
+| 同主題 | 所有任務屬同一主題（見下方「主題層前置」）；跨主題任務不並行派發 |
 
 ### 複雜度評估（並行適合性）
 
@@ -33,6 +34,44 @@
 
 ---
 
+## 主題層前置（強制）
+
+**Why**：並行安全檢查回答的是「同時寫會不會撞」，回答不了「這些是否為同一件事」。兩者正交且時常反向——同主題的票因觸及同一批檔案而互斥，能並行的票往往正因為彼此不是同一件事。以檔案交集為唯一選票判準，等於用並行度取代主題作為工作單位。
+
+**Consequence**：缺此層時，一輪派發會同時開啟數個不相干主題，每個推進一小段。任一主題都不收斂，而每次接手都要重建全部主題的 context。
+
+**Action**：派發前先選定主題，再於該主題內套用上方五項觸發條件與複雜度五維度，不另立平行標準。
+
+### 主題持有
+
+一個 session 一次只持有一個主題。取主題前先查佔用狀態（主題清單視圖提供各主題的 in_progress 佔用與持有 session 的 lease 狀態）；已由 FRESH session 持有的主題不取。
+
+### 主題與 Wave 的優先關係
+
+主題優先於 Wave。主題跨 Wave 時以主題為單位推進，不因 Wave 邊界中斷；Wave 僅作為主題內的排序輸入。
+
+**Why**：Wave 是批次容量的劃分，主題是語意的劃分。以 Wave 為單位切換，會使同一主題的票散落於多個 session，每次接手重建同一份 context。
+
+### 主題內的兩條分流路徑
+
+| 情境 | 路徑 |
+|------|------|
+| 主題內待辦全數滿足上方五項觸發條件，且複雜度五維度均判定適合 | 平行派發 |
+| 任一觸發條件或任一複雜度維度不滿足 | 序列處理，並以 handoff 將 context 交接至主題內的優先項（`ticket handoff --from-ticket-id <來源> --next <主題內優先項>`） |
+
+判準完全沿用上方既有條文，本節不新增平行標準——主題層決定「做哪一組」，既有五條件與五維度決定「這組能不能同時做」。
+
+### topic 與 group ticket 的語彙區別
+
+| 語彙 | 指涉 | 載體 |
+|------|------|------|
+| topic（主題） | 跨票的語意歸屬，一張票屬於零個或一個主題 | ticket_id 到主題的映射檔 |
+| group ticket | 具 children 的父票，其 children 為結構上的子任務 | ticket frontmatter 的 `children` / `parent_id` |
+
+兩者正交：同一主題的票可分屬不同 group ticket，同一 group ticket 的 children 亦可分屬不同主題。文件中提及「群組」時須指明何者，避免同詞異義。
+
+---
+
 ## 並行安全檢查（強制）
 
 ```markdown
@@ -44,8 +83,8 @@
 - [ ] Wave 無跨越：所有任務屬於同一個 Wave
 - [ ] 目標檔案路徑在代理人可編輯範圍（見下方路徑權限）
 - [ ] 高風險代理人（IMP/重構/測試實作）使用 `isolation: "worktree"` 派發（見下方風險分級表）
-- [ ] **派發 prompt 已引用職責邊界聲明骨架**（見 `.claude/references/agent-dispatch-template.md`）
-- [ ] **派發 prompt 已明示精準 git staging 與 path-limited commit**（並行 commit 場景，禁用 `git add .` / `git add -A` 及不帶路徑的 `git commit`；見下方 PC-092 防護）
+- [ ] **派發 prompt 已依權威骨架執行、未重述 ticket 已載欄位**（見 `.claude/references/agent-dispatch-template.md`「骨架（權威版）」與「prompt 不重述 ticket 已載欄位」節）
+- [ ] **派發 prompt 已使用 `.claude/references/agent-dispatch-template.md`「精準 staging 制式句」固定措辭**（並行 commit 場景，逐字複製不自行改寫；見下方 PC-092 防護）
 ```
 
 ### 派發前 where.files 交集檢查（強制，PC-BAL-008 檔案級共用變體防護）
@@ -89,37 +128,26 @@ dispatch-plan 是 orchestration description，不是 execution automation：
 
 dispatch-plan 欄位以 `.claude/references/agent-dispatch-template.md` 為準：`ticket` / `agent` / `files` / `deps` / `context source` / `commit policy` / `run mode`。
 
-### 派發 prompt 必含職責邊界聲明（強制）
+### 派發 prompt 依權威骨架執行、不重述 ticket 已載欄位（強制）
 
-> **來源**：Ticket 0.18.0-W5-009 / W5-044 — W5-001 session 實證，含職責邊界聲明的派發（pepper/thyme）無越界；缺聲明的派發（sage）出現越界寫測試。
+> **來源**：一次代理人越界事件的實證比對（明示邊界的派發無越界，缺聲明的派發出現越界）確立「派發時明示邊界可防越界」；後續一輪骨架收斂分析發現「逐項複製 `where.files` 為允許/禁止清單」的實作方式正是派發 prompt 重述比例離散的根因之一，邊界防護改由讀取 ticket 指引傳遞，不再要求 prompt 逐項複製。
 
-所有派發 prompt（並行或單一）必須於開場引用 `.claude/references/agent-dispatch-template.md` 定義的骨架，包含：
+所有派發 prompt（並行或單一）必須依 `.claude/references/agent-dispatch-template.md`「骨架（權威版）」開場，並遵守同檔「prompt 不重述 ticket 已載欄位」節的正面清單：
 
 1. `Ticket: {id}` 第一行
-2. `## 職責邊界聲明`：列出允許 / 禁止的產出
-3. `## 執行`：具體步驟
-4. `## 禁止`：跨 Ticket 衝突範圍
+2. 讀取指引：`ticket track full {id}`
+3. `claim {id} --as {agent_name}` 認領行
+4. 一句話任務描述 + 依 Context Bundle 執行的指標句（禁逐字複製 `how.strategy` / `acceptance` / `where.files` 內容）
 
-並行派發時尤其重要：每個代理人的 prompt 必須明示「禁止修改其他並行 Ticket 的 where.files」以防範圍交叉。
+並行派發時，範圍限制一律以指標句表達（「範圍限定於本 ticket `where.files`，不得觸碰其他並行 Ticket 檔案」），不逐項列舉允許/禁止清單。
 
-> 完整骨架與填寫要點：`.claude/references/agent-dispatch-template.md`
+> 完整骨架、變體與填寫要點：`.claude/references/agent-dispatch-template.md`
 
-### PM 對執行中 ticket 的結構性修改（強制，上行對稱條款）
+### PM 建立衍生票掛載執行中 ticket（已工具化，非文件條款）
 
-派發之後該票同時被兩方持有。`agent-definition-standard` 已約束下行方向（subagent 不得對非派發範圍的 ticket 執行 `close` / `set-status` / 編輯他人票面，即使發現衝突亦應上報）；本條約束上行方向——**PM 對執行中的票所做的修改，會落到執行者頭上**。
+`ticket create --source-ticket` 於 source 狀態為 `in_progress` 時已自動印出 WARNING，並建議改掛其上游（附 `--parent` 建議，若 source 有 parent_id）；命中時機在建票當下，早於執行者 complete 時才撞到「有未終結 spawn」檢查。本條款的存在理由已從「提醒 PM 記得告知執行者」轉為「說明工具的既有行為」——告知義務原依賴 PM 記憶，現由工具在建票路徑上強制顯示。
 
-依是否改變執行者的 complete 前置條件分兩類：
-
-| 類別 | 操作 | 處置 |
-|------|------|------|
-| 改變前置條件 | 新增 `spawned_tickets` / `children`、改 `acceptance`、改 `status`、加 `blockedBy` | 三選一：同步告知執行者該項是否屬其 acceptance 範圍／改掛更上游的票／等其完成 |
-| 不改變前置條件 | `append-log` 補 context、`set-related-to`、改 `priority` | 逕行修改，不需告知 |
-
-**Why**：改變類修改會靜默改變 complete 的通過條件，而執行者無機械手段判斷該變更是否在自己 claim 之後才出現——它只能推測。推測碰巧正確不構成防護。
-
-**Consequence**：實際發生過的樣態是 PM 於執行期間建立衍生票並將 `source_ticket` 指向執行中的票，執行者 complete 時撞到「有未終結 spawn」檢查，被迫判斷一個不屬於自己 acceptance 範圍的項目。
-
-**Action**：需要在執行期間建立衍生票時，優先把 `source_ticket` 掛在更上游的票（如該票的父票或來源 ANA），而非正在執行的那一張。
+**Action**：PM 建立衍生票時依提示改掛更上游的票（如該票的父票或來源 ANA），而非正在執行的那一張。其餘「PM 對執行中票的結構性修改」情境不需專門條款：改 `acceptance` 見 `.claude/error-patterns/process-compliance/PC-BAL-034-injected-context-supersedes-existing-acceptance.md`（PM 補注入 context 覆蓋既有 acceptance 的漂移模式）；改 `status` / 加 `blockedBy` 屬異常操作，非常態流程，不需要告知規則。
 
 ### 派發 prompt 必含精準 git staging（並行 commit 場景，強制）
 
@@ -137,7 +165,7 @@ dispatch-plan 欄位以 `.claude/references/agent-dispatch-template.md` 為準�
 
 **條款缺口成因（Why）**：現行防護長期只涵蓋 index.lock 競爭，因為這類失敗有明確錯誤訊息可攔——CLI 會 exit 並印出警告，使用者必然注意到。跨票 commit 吸收則是零錯誤訊息的靜默 race：commit 成功、exit 0、訊息正常，只有事後比對 diff 才看得出範圍不對。防護條款的覆蓋範圍往往跟隨「曾經被觀察到的失敗」，而靜默失敗不產生觀察事件，這正是本條款遲至跨票吸收被實測發現才補上的原因；日後新增防護條款時應主動排查是否還有其他尚未被觀察到的靜默失效模式，而非只補已發生過的案例。
 
-**範例 prompt 片段**：
+**範例 prompt 片段**（示範上述原則的具體套用；實際派發直接複製 `.claude/references/agent-dispatch-template.md`「精準 staging 制式句」的固定措辭，不需自行改寫）：
 
 ```
 執行 commit 時使用 path-limited 形式（繞過 index，只提交指定路徑）：
@@ -552,7 +580,7 @@ PC-137 並行 ≤ 2 規則為 worktree 模式下的觀察結論（W17-097.1-.4 +
 
 | 面向 | named agent（帶 `name`） | 一般 subagent（不帶 `name`） |
 |------|--------------------------|------------------------------|
-| 回傳方式 | 透過 mailbox（`idle_notification` / agent-message），PM 以 SendMessage 取報告 | 直接作為 tool result 回傳 PM context |
+| 回傳方式 | 透過 mailbox（`idle_notification` / agent-message），PM 以 SendMessage 取報告。**純文字完工輸出結構性不送達 PM——idle_notification 不攜帶文字，不索回即零送達，非機率性遺失**（取樣實證與決策指引見 PC-BAL-038「區辨因子」章節） | 直接作為 tool result 回傳 PM context（完工通知含 result 欄位，文字直達） |
 | 生命週期 | 完工後進入 idle 態，需明確 shutdown 回收（見下方「idle agent 回收 SOP」） | 完工後自動終止，無 idle 態 |
 | 可重用性 | 可 SendMessage 續派新任務 | 一次性，完成即銷毀 |
 | 用戶認知風險 | mailbox 一詞易誤解為電子郵件（W2-001 實證） | 無此風險 |
@@ -642,6 +670,96 @@ Wave 所有 ticket 完成後，PM 對所有仍存活的 idle agent 依序發送 
 **收尾順序**：先 complete 所有 ticket → 再對所有 idle agent 發送 shutdown_request → 最後清理 `dispatch-active.json` 的 stale entries（idle 態 agent 不觸發 SubagentStop，故記錄不會自動清理，需確認放生後手動核對）。
 
 > 來源：0.38.0-W1-008 ANA（2026-07-08 Wave 1 六案例回歸驗證：thyme-w1-001/002 續用、basil-w1-004 放生、thyme-w1-005/006/007 依當時 pending 票數判斷，SOP 覆蓋全部案例）。
+
+---
+
+## 跨 session 實驗器材的自我標示與存活期治理（強制）
+
+本節處理**為觀測而刻意放置於工作區的檔案**（sentinel、探針、對照組樣本，以下統稱器材）。與下方跨 session 協調區的兩節同屬跨 session 議題，但風險方向相反——下方兩節防的是同儕不動作，本節防的是動作過度：把器材當成待清理的垃圾檔處理掉。
+
+**器材的定義**：其存在本身即為觀測手段的檔案。與工作產出、暫存草稿的區別在於，器材的價值來自「留在原地不被處理」，任何整理動作都會使它失去偵測能力。
+
+### 為何標示責任在放置方
+
+**判準：器材與待清理垃圾檔在檔案系統上無法區分時，任何讀者的合理判斷都會傾向清理。**
+
+**Why**：放置方與讀者常不是同一個執行體（平行 session、後續 session、被派發的 agent），放置意圖不在讀者的 context 內。讀者看到的只有一個沒人認領的 untracked 檔案。框架同時要求 commit 前全量清點工作區，於是清掉來路不明的檔案反而是被鼓勵的行為。
+
+**Consequence**：已實測到的失效樣態——同一位 PM 在單一 session 內對同一個未標示的 sentinel 三度誤判：先記為前 session 遺留物（來源歸屬錯誤），再向用戶提議刪除或加入 `.gitignore`（後者會使該檔自 `git status` 消失、偵測目的當場失效），最後在該器材被正當收尾清理後記為「實驗中斷、器材遺失」。三次誤判中前兩次的直接原因是器材沒有自我標示。防護不能依賴讀者恰好知情。
+
+**Action**：放置器材前先依下表判定器材型別，再套用對應條款。
+
+### 器材分兩型，標示要求不同
+
+| 型別 | 判定 | 標示方式 | 存活範圍 |
+|------|------|---------|---------|
+| 明示型 | 被觀測方的行為不因器材被標示而改變 | 條件一至條件三全適用 | 可跨 session |
+| 盲測型 | 器材一旦自我宣告即改變被觀測方行為（例：量測他方收尾是否誤掃 untracked 檔） | 免條件一，票面登記為唯一標示 | 限放置方同一 session，由放置方親自收尾 |
+
+**Why**：標示本身是一種介入。盲測型器材必須與一般未認領檔案無異，否則量到的不是常態行為，而是被觀測方看見標示後的反應——與條件二所述「`git add` 改變被觀測對象」屬同型錯誤，只是介入手段從 git 操作換成標示文字。
+
+**Consequence**：不分型而一體要求標示，會使盲測型實驗從此無法進行；不給盲測型設存活上限，則工作區會出現一批合法無標示的檔案，本節的辨識機制對它們全部失效。
+
+**Action**：盲測型以「不跨 session」換取免標示。需要跨 session 存活的器材一律走明示型，沒有第三種組合。
+
+### 條件一：檔名與首行雙軌標示（明示型）
+
+| 軌 | 要求 | 承擔的辨識場景 |
+|----|------|--------------|
+| 檔名 | `experiment-<ticket-id>-<用途>.<副檔名>` | `git status` / `ls` 輸出中一眼可辨，不需開檔 |
+| 首行 | 標明所屬 ticket、用途、禁止動作、移除時機 | 已開檔的讀者拿到完整處置指引 |
+
+首行 header 以該檔語言的註解語法承載（純文字檔直接寫）：
+
+```
+本檔為 <ticket-id> 的實驗器材（<用途一句話>）。請勿刪除、勿 git add、勿加入 .gitignore；由該票收尾時移除。
+```
+
+**Why 需要兩軌**：清理決策在 `git status` 輸出層即已下達，讀者未必會開檔，故檔名須獨立可辨；而檔名承載不了「何時可移除」與「由誰移除」，這兩項只能寫在首行。
+
+### 條件二：器材須維持 untracked
+
+**Why**：sentinel 類器材的偵測能力來自它會出現在 `git status` 的 untracked 區。`git add` 使它變成待提交檔案，改變了被觀測的對象；`.gitignore` 使它從輸出中消失，直接切斷觀測管道。兩者都不是整理，是使實驗失效。
+
+**Action**：放置方不將器材納入版本控制；讀者側的對應處置見下方「讀者側處置」。
+
+### 條件三：票面登記路徑與存活期
+
+放置器材時，執行 `ticket track register-artifact <ticket-id> --path <路徑> --purpose <用途> --expiry <存活期>` 登記三項：器材路徑、放置目的、預期存活期（到哪個事件為止）。CLI 自動編號（`EXP-N`）並寫入 Solution 章節的固定子章節，同時輸出可直接複製貼上的首行 header 文字（供落地條件一）。登記位置固定，供收尾者定點查閱，且可被 `ticket track list-artifacts <ticket-id>`（含 `--json`）程式化讀取，不需人工掃描章節。
+
+**Why**：檔案端標示解決正向查詢（讀者看到檔案時知道它是什麼），票面登記解決反向查詢（收尾者從票面即可知道有哪些器材待處理，不必反向掃描整個工作區）。CLI 化把「登記格式自由發揮、收尾者需人工掃描解析」的手工條款收斂為固定 schema——與 opinionated-default-design 主張 1 一致：每一個「寫文件提醒遵守操作規範」都是工具預設行為可改善的信號。盲測型器材免除檔名標示，票面登記是它唯一的存在證明。
+
+**Consequence**：不登記則收尾者只能反向掃描整個工作區辨識器材，掃描成本高於登記成本，實務結果是跳過不掃、器材滯留。手動登記（不經 CLI）格式自由發揮，收尾者仍須人工解析章節文字，CLI 化前的失效模式原樣重現。
+
+### 讀者側處置
+
+本節其餘條款規範放置方，本小節規範**其他人**——平行 session、後續 session、被派發的 agent。
+
+| 情境 | 處置 |
+|------|------|
+| 檔名或首行命中器材標示 | 不動作；需要處置時聯絡所屬 ticket 的持有者 |
+| 未標示、無法歸屬的 untracked 檔（可能是盲測型器材） | 不刪除、不 `git add`、不加入 `.gitignore`；回報疑似持有者或建票追蹤 |
+
+**移除權限只屬票持有者與收尾方**：發現者不自行移除，也不代為補標示。**Why**：發現者若已知道該檔屬哪張票、用途為何，本節要解的問題就不存在；不知情下補的標示會把猜測固化為宣告，外觀與權威標示無異，比沒有標示更難推翻。
+
+### 存活期治理：收尾時的強制處置
+
+**所屬 ticket `complete` 前，必須對每個在場器材擇一處置**：
+
+| 處置 | 適用條件 | 留痕要求 |
+|------|---------|---------|
+| 移除 | 預設 | 執行 `ticket track resolve-artifact <ticket-id> EXP-N --status removed [--reason ...]`；於 Completion Info 記錄已移除 |
+| 保留 | 器材仍為進行中的觀測所需，且為明示型 | 執行 `ticket track resolve-artifact <ticket-id> EXP-N --status kept --successor <接手 ticket ID> [--reason ...]`——CLI 強制要求 `--successor`，未指名接手者拒絕寫入（CLI 層面阻止漏處置，非僅文件提醒） |
+
+**偵測承擔者**：`ticket track complete` 前由 acceptance-gate 的 `experiment_artifact_checker` 自動掃描工作區（以 `git status --porcelain --untracked-files=all` 過濾 `experiment-<ticket-id>-` 前綴，再與 `ticket track list-artifacts <ticket-id> --json` 的登記清單比對），偵測到未妥善處置的殘留即阻擋 complete，不需人工記得執行。人工自檢（收尾方於 complete 前手動掃描比對）降為 fallback，僅在 checker 因基礎設施故障 fail-open（如 git / `ticket` CLI 本身失敗，checker 會記錄警告日誌）時才需要人工補做同等掃描。本項由 `complete` 動作觸發，不需另建 follow-up ticket 承載。
+
+**Why 掃描不能只比對票面登記**：沒登記的器材，正是最可能被漏處置的那批。僅比對登記清單時，清單為空即自檢通過，偵測能力歸零。掃描是不經過登記的獨立路徑，兩者交叉才構成閉環。掃描漏得掉盲測型器材（無檔名前綴），這是盲測型限定同一 session 收尾的原因。
+
+**Consequence**：不強制處置則器材永久滯留工作區，並在下一位讀者眼中退化為來路不明的檔案。標示格式本身阻止不了這件事——過期器材的標示仍然完好，只會讓讀者更不敢動它，滯留期因此延長而非縮短。
+
+### 適用範圍
+
+本節規範適用於**規範生效後放置的器材**。既有器材若已隨其所屬 ticket 收尾清理，無回頭補標對象；仍在場的既有器材依上方「讀者側處置」回報所屬持有者，由持有者補標示或移除。
 
 ---
 
@@ -779,13 +897,13 @@ Wave 所有 ticket 完成後，PM 對所有仍存活的 idle agent 依序發送 
 >
 > **發送側配套**：/clear 前的 peer 關閉訊號清點（發送側 SOP）見 `.claude/pm-rules/session-switching-sop.md`「peer 關閉訊號清點」節；本節決策表「已脫離 → 回覆關閉訊號」為接收側的對應動作。
 
-> **跨 session 協調區的層級升級條件**（給下一位在此區新增章節的人）：本區現有兩節（沉默方向、來訊方向）共享同一判準基底——記錄平面與世界平面不對稱。**新增第三個不共享此基底的跨 session 主題時，將本區的兩個 `##` 升為單一「跨 session 同儕協調」父節、現有各節降為 `###`**，而非繼續平列追加 `##`。共享此基底者可續為平列 `##`。
+> **本區外移閾值**：跨 session 協調區（自接管判準節起至本節止）達 200 行時整區外移至 `references/`，此處保留速查 stub 與路由；以整區而非單節為單位——兩節共享同一判準基底（記錄平面與世界平面不對稱），拆開外移會撕裂語意。本閾值屬條件式操作規範而非延後決策，量測應由檔案體量檢查機制承載，不依賴維護者自行記得。
 
 ---
 
 ## 相關文件
 
-- .claude/references/agent-dispatch-template.md - 職責邊界聲明骨架（派發 prompt 強制引用）
+- .claude/references/agent-dispatch-template.md - 派發 prompt 權威骨架與情境變體（強制引用）
 - .claude/references/parallel-dispatch-details.md - 詳細規則（5W1H 格式、分析任務並行、Agent Teams 場景表、進度追蹤）
 - .claude/pm-rules/references/dispatch-routing-framework.md - 派發路由（數量原則、不適用並行、背景派發、跨 Wave 優先級）
 - .claude/pm-rules/references/reporting-and-review-standards.md - 回報原則（最小回報、三人組、計數自檢）
@@ -799,7 +917,13 @@ Wave 所有 ticket 完成後，PM 對所有仍存活的 idle agent 依序發送 
 
 ---
 
-**Last Updated**: 2026-08-18
+**Last Updated**: 2026-08-19
+**Version**: 4.23.0 - 條件三與存活期治理改引用 CLI（`ticket track register-artifact` / `resolve-artifact` / `list-artifacts`）：規範原僅要求「登記三項」但格式自由發揮，收尾者需人工掃描 Solution 章節；CLI 化後登記為固定 schema（EXP-N 自動編號）、輸出可複製的首行 header 文字、`--status kept` 強制要求 `--successor`（CLI 層面阻止漏處置，非僅文件提醒），文件條款退為說明層（opinionated-default-design 主張 1 的信號落地）
+**Version**: 4.22.0 - 實驗器材章節依三視角審查（品味 / 文字 / 一致性）改寫：新增「器材分兩型」（明示型適用全條款可跨 session；盲測型免檔名標示但限同一 session 收尾，因標示本身會改變被觀測方行為）、新增「讀者側處置」小節取代原條件二末段與適用範圍節的重複授權（原兩處對「發現者可否移除」給出相反指示）、存活期治理的偵測改為 `git status --untracked=all` 過濾 `experiment-` 前綴的獨立掃描（原設計只比對票面登記，漏登記者永不被偵測）、條件三登記位置定為 Solution 單一章節、刪除多餘的外移閾值豁免宣告（該區範圍定義已排除本節，兩套定義並存會在章節順序調整時給出相反答案）
+**Version**: 4.21.0 - 並行安全檢查清單「派發 prompt 已明示精準 git staging 與 path-limited commit」項改為引用 `agent-dispatch-template.md`「精準 staging 制式句」固定措辭，消除各自手抄造成的措辭變異來源；「派發 prompt 必含精準 git staging」節的「範例 prompt 片段」補一句指向同一制式句（示範性質保留，複製貼上以制式句為準）
+**Version**: 4.20.0 - 新增「跨 session 實驗器材的自我標示與存活期治理（強制）」章節：檔名 + 首行 header 雙軌標示格式、器材須維持 untracked（`git add` 改變被觀測對象／`.gitignore` 切斷觀測管道）、票面登記路徑與存活期、收尾時擇一處置（移除或指名接手 ticket）；反例採未標示 sentinel 遭同一 PM 三度誤判的實測樣態。本節不計入跨 session 協調區的外移閾值
+**Version**: 4.19.0 - 「派發 prompt 必含職責邊界聲明（強制）」章節改寫為「派發 prompt 依權威骨架執行、不重述 ticket 已載欄位（強制）」：`agent-dispatch-template.md` 骨架收斂為單一權威版後，本節同步不再要求 prompt 逐項複製 `where.files` 為允許/禁止清單，改引用權威骨架的四項開場結構與「prompt 不重述 ticket 已載欄位」正面清單；並行安全檢查 checklist 與「相關文件」條目同步更新措辭
+**Version**: 4.18.0 - 「兩機制差異對照」回傳方式列補強：明示 named agent 純文字完工輸出結構性不送達 PM（idle_notification 不攜帶文字，不索回即零送達，非機率性遺失），並路由 PC-BAL-038「區辨因子」章節取樣實證（named 純文字 0/6、SendMessage 索回 6/6、unnamed 3/3）；一般 subagent 欄同步註明完工通知含 result 欄位文字直達。評估結論：既有「PM 以 SendMessage 取報告」已含索回步驟宣告，不另立新章節，僅補強語氣與實證路由
 **Version**: 4.17.0 - 新增「跨 session 同儕來訊時的脈絡存續判讀」章節：對號分界表區分沉默方向（上節）與來訊方向（本節）+ 五列決策表 + 兩條禁令（禁預設接續、承諾必落 ticket），引用 `PC-BAL-042`；與上節共用「訊號誤讀家族」論述
 **Version**: 4.16.0 - 新增「派發前 where.files 交集檢查」章節：兩票 `where.files` 共用同一檔案時的拆分/序列派發判準，防護 PC-BAL-008 檔案級共用變體（W3-295/296 實證，兩票均遵守精準 staging 規範仍發生跨票內容吸收）
 **Version**: 4.15.0 - 「worktree 派發注意事項」新增第三則條款：worktree 隔離派發的收尾指引改用 `ticket track finish`（`complete` 別名），避開 CC runtime worktree isolation guard 對 argv basename 誤判 bash builtin `complete` 而條件性阻擋收尾；`complete` 本身不動、主 repo cwd 場景維持原名

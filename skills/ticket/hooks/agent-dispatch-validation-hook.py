@@ -283,9 +283,16 @@ def _classify_prompt_paths(prompt: str) -> Tuple[bool, bool, bool]:
         project_root_str = None
 
     for match in _ABSOLUTE_CLAUDE_PATTERN.finditer(prompt):
-        # match.group(0) 形如 "/xxx/.../.claude/"
-        abs_path = match.group(0)
-        if project_root_str and abs_path.startswith(project_root_str + "/"):
+        # 不可用 match.group(0)（可能被 non-greedy 截斷）判斷主 repo 歸屬。
+        # worktree 環境下 project_root_str 本身含 "/.claude/worktrees/..." 子字串，
+        # finditer 對非貪婪 pattern 會在該處提前收斂，使 group(0) 遺失完整前綴。
+        # 改用「絕對路徑起點 + project_root_str 定長字元比對」，不受截斷位置影響。
+        start = match.start(1)
+        is_main = False
+        if project_root_str:
+            root_prefix = project_root_str + "/"
+            is_main = prompt[start:start + len(root_prefix)] == root_prefix
+        if is_main:
             has_main_repo_claude = True
         else:
             has_external_claude = True

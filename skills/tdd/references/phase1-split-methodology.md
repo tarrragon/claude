@@ -17,10 +17,10 @@
 | `analyze`        | 互動式 SOLID 分析 | `uv run scripts/tdd-phase1-split.py analyze -d "實作書籍搜尋功能"`                       |
 | `suggest`        | 產出拆分建議      | `uv run scripts/tdd-phase1-split.py suggest -d "實作書籍搜尋功能" -v 0.29.0`             |
 | `create-tickets` | 建立拆分 Tickets  | `uv run scripts/tdd-phase1-split.py create-tickets -d "實作書籍搜尋功能" -v 0.29.0 -w 3` |
-| `validate`       | 驗證拆分合規性    | `uv run scripts/tdd-phase1-split.py validate -t 0.29.0-W3-001`                           |
+| `validate`       | 驗證拆分合規性    | `uv run scripts/tdd-phase1-split.py validate -t （`                           |
 | `report`         | 產出拆分報告      | `uv run scripts/tdd-phase1-split.py report -d "實作書籍搜尋功能" -v 0.29.0`              |
 
-> **執行方式**：在 `.claude/skills/tdd/` 目錄下執行 `uv run scripts/tdd-phase1-split.py <command>`。
+> **執行方式**：在 `.claude/skills/tdd/` 目錄下執行 `uv run scripts/tdd-phase1-split.py <command>`。<!-- portability-allow: consumer 共通的 skill 安裝位置 -->
 
 ### analyze（互動式分析）
 
@@ -147,7 +147,7 @@ Phase 1 拆分分析完成後，使用以下範本產出報告：
 - `/tdd split` 命令：`../SKILL.md`（SOLID 檢查清單和拆分流程）
 - Phase 1 設計指引：`phase1-design.md`（功能規格、API 設計、GWT 場景）
 - 可攜式設計邊界：`portable-design-boundary.md`
-- 任務拆分指南：`.claude/pm-rules/task-splitting.md`
+- 任務拆分指南：專案的任務拆分指南
 
 ---
 

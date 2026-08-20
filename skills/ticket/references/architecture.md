@@ -9,52 +9,160 @@
 ├── pyproject.toml              # 套件定義（uv 管理）
 ├── ticket_system/              # 主套件目錄
 │   ├── __init__.py
-│   ├── lib/                    # 共用模組
+│   ├── lib/                    # 共用模組（67 個，依功能分組）
 │   │   ├── __init__.py
-│   │   ├── ticket_loader.py    # Ticket 載入和版本解析
-│   │   ├── ticket_validator.py # 驗證邏輯
-│   │   ├── ticket_formatter.py # 格式化輸出
-│   │   ├── ticket_builder.py   # Ticket 建構器
-│   │   ├── ticket_generator.py # Plan → Ticket 生成器
-│   │   ├── plan_parser.py      # Plan 檔案解析器
-│   │   ├── acceptance_auditor.py # 驗收檢查邏輯
-│   │   ├── chain_analyzer.py   # 任務鏈分析器
-│   │   ├── cycle_detector.py   # 循環依賴檢測
-│   │   ├── parallel_analyzer.py # 並行分析（檔案重疊/依賴檢查）
-│   │   ├── tdd_sequence.py     # TDD 順序建議（任務類型識別）
-│   │   ├── constants.py        # 共用常數
-│   │   ├── messages.py         # 標準化訊息定義（lib/ 共用）
-│   │   ├── command_lifecycle_messages.py # commands/ 訊息常數（handoff/lifecycle/resume/create/fields）
-│   │   ├── command_tracking_messages.py # commands/ 訊息常數（track 系列/migrate/generate）
-│   │   ├── critical_path.py    # 關鍵路徑分析
-│   │   ├── ticket_chain_index.py # 任務鏈索引
-│   │   ├── wave_calculator.py  # Wave 計算邏輯
-│   │   ├── ui_constants.py     # UI 顯示常數
-│   │   ├── paths.py            # 路徑工具
-│   │   ├── parser.py           # 通用解析工具
-│   │   └── version.py          # 版本管理工具
-│   ├── commands/               # 子命令實作
+│   │   │
+│   │   ├── [Ticket 核心 I/O 與解析]
+│   │   ├── ticket_loader.py               # 載入和解析模組（統一入口）
+│   │   ├── parser.py                      # 格式解析模組
+│   │   ├── ticket_ops.py                  # 操作共用函式模組
+│   │   ├── ticket_builder.py              # 建構模組
+│   │   ├── ticket_formatter.py            # 格式化模組
+│   │   ├── ticket_validator.py            # 驗證模組
+│   │   ├── id_parser.py                   # ID 解析模組
+│   │   ├── migrations.py                  # Protocol Version 遷移邏輯
+│   │   ├── protocol_version_checker.py    # Protocol Version Checker - Library Function
+│   │   ├── section_locator.py             # Section locator helper — 統一 Markdown section 標題定位邏輯
+│   │   │
+│   │   ├── [建票輔助（多數自 create.py 抽出）]
+│   │   ├── topic_inference.py             # 主題歸屬推導與參數驗證
+│   │   ├── acceptance_parser.py           # acceptance 條目的 CLI 輸入解析
+│   │   ├── ticket_id_allocator.py         # ID 與 wave 的解析與配號
+│   │   ├── field_validators.py            # 建票參數的欄位合法性驗證
+│   │   ├── create_reporter.py             # create 報告輸出模組
+│   │   ├── duplicate_detector.py          # 重複偵測模組
+│   │   ├── context_bundle_extractor.py    # Context Bundle 自動抽取模組
+│   │   ├── depth.py                       # 嵌套深度計算模組
+│   │   ├── tdd_phase_inference.py         # TDD Phase 自動推導
+│   │   │
+│   │   ├── [驗收與 AC]
+│   │   ├── ac_parser.py                   # AC 解析器：解析 Ticket frontmatter 的 acceptance list 為結構化 AC 物件
+│   │   ├── acceptance_auditor.py          # Acceptance Auditor 驗收檢查模組
+│   │   ├── validation_templates.py        # validation_templates — AC 驗證模板規則庫
+│   │   ├── verification_result.py         # AC 驗證結果資料結構
+│   │   ├── checkbox_utils.py              # Checkbox 前綴處理共用工具
+│   │   ├── multi_view_status.py           # multi_view_status 欄位覆寫格式驗證
+│   │   ├── exempt_marker.py               # PC-093 exempt marker 格式驗證與生成
+│   │   ├── precondition.py                # Body-op precondition checks 
+│   │   │
+│   │   ├── [任務鏈與排程]
+│   │   ├── chain_analyzer.py              # 任務鏈分析模組
+│   │   ├── ticket_chain_index.py          # 任務鏈索引模組
+│   │   ├── cycle_detector.py              # 循環依賴檢測模組
+│   │   ├── critical_path.py               # 關鍵路徑分析模組
+│   │   ├── wave_calculator.py             # Wave 自動計算模組
+│   │   ├── parallel_analyzer.py           # 並行分析模組
+│   │   ├── file_conflict.py               # where.files 交集判定共用實作（multi-PM 協調層 Phase 2/3）
+│   │   ├── priority_utils.py              # 票清單優先級聚合工具
+│   │   ├── staleness.py                   # 有效期 Stale 警告機制（PROP-010 方案 4）
+│   │   ├── blocker_resolution.py          # Blocker 解除狀態判定共用 predicate
+│   │   ├── tdd_sequence.py                # TDD 序列建議模組
+│   │   ├── dispatch_recommender.py        # Dispatch Recommender - Agent 派發建議演算法
+│   │   ├── dispatch_common.py             # 共用 dispatch-* CLI 前置處理
+│   │   │
+│   │   ├── [併發、身份與版控]
+│   │   ├── lease.py                       # Lease 生命週期管理（multi-PM 協調層 Phase 3：claim/complete/release/reclaim）
+│   │   ├── file_lock.py                   # Per-ticket-file advisory lock 模組
+│   │   ├── identity_guard.py              # 身份申報守衛（identity guard）— --as 旗標與 ticket who.current 對照
+│   │   ├── registry_loader.py             # Registry Loader - 共用的 registry 載入函式
+│   │   ├── git_utils.py                   # md auto-commit 薄封裝
+│   │   │
+│   │   ├── [Handoff、worklog 與 checkpoint]
+│   │   ├── handoff_utils.py               # Handoff 共用判斷函式模組
+│   │   ├── worklog_appender.py            # Worklog 進度行自動追加模組
+│   │   ├── worklog_parser.py              # Worklog 交接段落解析模組
+│   │   ├── checkpoint_state.py            # CheckpointState dataclass + Checkpoint 推導 + 5 層 fail-open 資料來源 + 主函式 + 觀測 log
+│   │   ├── checkpoint_view.py             # Checkpoint view function 模組
+│   │   │
+│   │   ├── [Plan 與規格]
+│   │   ├── plan_parser.py                 # Plan 檔案解析器模組
+│   │   ├── ticket_generator.py            # 生成模組
+│   │   ├── spec_reference_checker.py      # SPEC 引用驗證模組
+│   │   │
+│   │   ├── [主題歸屬]
+│   │   ├── topic_assignments.py           # ticket_id -> topic 映射（assignment log）的讀寫層
+│   │   ├── topic_registry.py              # 主題中央清單的 append-only 讀寫層
+│   │   │
+│   │   ├── [訊息與常數]
+│   │   ├── constants.py                   # System 常數定義（向後相容 shim）
+│   │   ├── messages.py                    # 標準化訊息定義模組
+│   │   ├── command_lifecycle_messages.py  # commands/ 批次 A 硬編碼字串集中化模組
+│   │   ├── command_tracking_messages.py   # commands/ 批次 B 硬編碼字串集中化模組
+│   │   ├── ui_constants.py                # UI 常數定義模組
+│   │   │
+│   │   ├── [路徑與環境]
+│   │   ├── paths.py                       # 路徑管理模組
+│   │   ├── project_root.py                # 專案根目錄解析工具
+│   │   ├── machine_path_detector.py       # 機器專屬絕對路徑偵測模組
+│   │   ├── claude_lib_loader.py           # 共用 `.claude/lib/` 動態載入與 git toplevel 解析工具
+│   │   ├── version.py                     # 版本管理模組
+│   │   ├── audit_version.py               # 版本審計模組
+│   │   └── ambiguous_prefix.py            # 共用的 argparse 縮寫歧義攔截 helper
+│   ├── commands/               # 子命令實作（48 個；各命令的用法與語意見 SKILL.md）
 │   │   ├── __init__.py         # 匯出六大子命令
-│   │   ├── create.py           # create 子命令
-│   │   ├── track.py            # track 子命令（路由器）
-│   │   ├── track_query.py      # track 查詢操作
-│   │   ├── track_board.py      # track board 看板視圖
-│   │   ├── track_batch.py      # track 批量操作
-│   │   ├── track_acceptance.py # track 驗收條件/日誌
-│   │   ├── track_audit.py      # track audit 驗收檢查
-│   │   ├── track_relations.py  # track 關係/狀態管理
-│   │   ├── lifecycle.py        # claim/complete/release
-│   │   ├── fields.py           # 5W1H 欄位讀寫
-│   │   ├── handoff.py          # handoff 子命令
-│   │   ├── resume.py           # resume 子命令
-│   │   ├── migrate.py          # migrate 子命令
-│   │   └── generate.py         # generate 子命令
-│   └── scripts/
-│       └── ticket.py           # 統一入口腳本
-└── tests/                      # 測試目錄
-    ├── conftest.py
-    └── fixtures/
+│   │   │
+│   │   ├── [頂層命令]
+│   │   ├── create.py                      # create 命令模組
+│   │   ├── bulk_create.py                 # 批次建立 Ticket 命令模組
+│   │   ├── generate.py                    # generate 命令模組
+│   │   ├── handoff.py                     # handoff 命令模組
+│   │   ├── handoff_gc.py                  # Handoff GC（垃圾清理）命令模組
+│   │   ├── migrate.py                     # 遷移命令模組
+│   │   ├── resume.py                      # resume 命令模組
+│   │   ├── show.py                        # ticket show 子命令
+│   │   ├── version_shift.py               # 版本遷移命令模組
+│   │   ├── audit_version.py               # audit-version 子命令實作
+│   │   ├── topic_backfill.py              # 既有 pending 票的主題分批回填入口
+│   │   ├── lifecycle.py                   # lifecycle 操作模組
+│   │   ├── fields.py                      # 5W1H 欄位操作模組
+│   │   ├── claim_verification.py          # claim 命令的 AC 驗證子系統
+│   │   ├── exceptions.py                  # Handoff 系統 Exception 階層
+│   │   │
+│   │   ├── [track 路由與核心操作]
+│   │   ├── track.py                       # track 命令模組
+│   │   ├── track_query.py                 # track 查詢操作模組
+│   │   ├── track_relations.py             # 關係和狀態管理模組
+│   │   ├── track_batch.py                 # 批量操作模組
+│   │   ├── track_acceptance.py            # 驗收條件和執行日誌模組
+│   │   ├── track_set_acceptance.py        # ticket track set-acceptance 子命令
+│   │   ├── track_audit.py                 # audit 子命令實作
+│   │   ├── track_validate.py              # ticket track validate 子命令
+│   │   ├── track_board.py                 # 看板命令模組
+│   │   ├── track_structured_body.py       # ticket track set-exit-status / set-completion-info 子命令
+│   │   ├── track_exempt_marker.py         # ticket track add-exempt-marker 子命令
+│   │   ├── track_multi_view_status.py     # ticket track fix-multi-view-status 子命令
+│   │   │
+│   │   ├── [track 排程、派發與診斷]
+│   │   ├── track_runqueue.py              # ticket track runqueue 命令
+│   │   ├── track_dashboard.py             # ticket track dashboard 命令
+│   │   ├── track_stale_list.py            # ticket track stale-list 命令
+│   │   ├── track_stuck_anas.py            # ticket track stuck-anas 命令
+│   │   ├── track_td_status.py             # ticket track td-status 命令
+│   │   ├── track_depth.py                 # track depth 查詢模組
+│   │   ├── track_snapshot.py              # 專案狀態快照命令
+│   │   ├── track_topics.py                # ticket track topics / topic 命令
+│   │   ├── track_dispatch_check.py        # ticket track dispatch-check 命令
+│   │   ├── track_dispatch_readiness.py    # ticket track dispatch-readiness 命令
+│   │   ├── track_dispatch_validate.py     # ticket track dispatch-validate 命令
+│   │   ├── track_parallel_check.py        # ticket track parallel-check 命令
+│   │   ├── track_agent_status.py          # track agent-status 命令
+│   │   ├── track_handoff_ready.py         # ticket track handoff-ready 命令
+│   │   ├── track_checkpoint_status.py     # ticket track checkpoint-status 命令
+│   │   ├── track_hook_health.py           # ticket track hook-health 命令
+│   │   │
+│   │   ├── [multi-PM 協調層]
+│   │   ├── track_sessions.py              # ticket track sessions 命令
+│   │   ├── track_activity.py              # ticket track activity 命令
+│   │   ├── track_conflicts.py             # ticket track conflicts 命令
+│   │   ├── track_onboard.py               # ticket track onboard 命令
+│   │   └── track_artifacts.py             # ticket track register-artifact / resolve-artifact / list-artifacts 子命令
 ```
+
+> **本節與 SKILL.md 的分工**：本節描述**檔案結構**——哪個模組放哪裡、承擔哪類職責；
+> `SKILL.md` 描述**對外契約**——每個命令的旗標、語意與使用時機。`commands/` 的描述刻意
+> 只標示該模組實作哪個命令，不重述用法，避免同一份契約寫在兩處而各自漂移。
+
+
 
 ## 共用模組設計
 

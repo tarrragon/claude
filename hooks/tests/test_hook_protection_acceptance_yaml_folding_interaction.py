@@ -72,12 +72,15 @@ _FULL_ITEM_TEXT = (
 )
 
 
-# 有效的產生路徑盤點表（供 how.strategy 使用）。刻意使用單一 `-` 分隔列
-# （而非 ticket-body-schema.md 範例的長 dash 分隔列），規避
-# `parse_ticket_frontmatter` 對 3 個以上連續 `-` 誤判為 frontmatter 結尾
-# 的既有限制（本測試過程中實測發現，非本檔修復範圍）。
+# 有效的產生路徑盤點表（供 how.strategy 使用）。改用 `|` 字面區塊純量標記
+# （0.2.1-W3-665.2 遷移 yaml.safe_load 後）：plain scalar 折行語意下「換行 →
+# 空白」，若不加區塊標記，多行表格會被摺成單行導致 checker 的
+# `parse_path_inventory_table` 找不到表頭列與分隔列的行界（本測試過程中
+# 實測發現）。`|` 標記明確保留每個換行，與真實 ticket CLI（`yaml.dump`
+# 寫入、`yaml.safe_load` 讀回）對多段落內容的行為一致。
 _HOW_STRATEGY_INVENTORY_TABLE = (
-    "  strategy: 策略說明。\n"
+    "  strategy: |\n"
+    "    策略說明。\n"
     "    | 產生路徑 | 是否覆蓋 |\n"
     "    |-|-|\n"
     "    | 經工具正常寫入 | 是 |\n"

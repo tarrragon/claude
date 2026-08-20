@@ -11,8 +11,6 @@ if __name__ == "__main__":
 
 
 import argparse
-import os
-import re
 import sys
 import traceback
 from typing import Any, Dict, List, Optional
@@ -24,18 +22,11 @@ from ticket_system.lib.ticket_loader import (
     load_ticket,
     resolve_version,
     get_ticket_path,
-    list_tickets,
 )
 from ticket_system.lib.version import suggest_version_for_ticket
-from ticket_system.lib.ticket_validator import (
-    validate_ticket_id,
-    extract_wave_from_ticket_id,
-    extract_version_from_ticket_id,
-    validate_blocked_by,
-)
+from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
 from ticket_system.lib.messages import (
     ErrorEnvelope,
-    ErrorMessages,
     WarningMessages,
     InfoMessages,
     format_error,
@@ -48,24 +39,27 @@ from ticket_system.lib.command_lifecycle_messages import (
 )
 from ticket_system.lib.command_tracking_messages import TrackMessages
 from ticket_system.lib.ambiguous_prefix import register_ambiguous_prefix
+from ticket_system.lib.acceptance_parser import parse_acceptance_items
+from ticket_system.lib.ticket_id_allocator import resolve_ticket_id_and_wave
+from ticket_system.lib.field_validators import (
+    build_decision_tree_path,
+    validate_blocked_by_references,
+    validate_source_ticket_arg,
+    validate_where_files,
+)
+from ticket_system.lib.topic_inference import (
+    infer_topic,
+    requires_topic_assignment,
+    validate_topic_selection,
+)
 from ticket_system.lib.constants import (
-    STATUS_PENDING,
-    STATUS_IN_PROGRESS,
-    STATUS_COMPLETED,
     DEFAULT_PRIORITY,
     DEFAULT_HOW_TASK_TYPE,
     DEFAULT_UNDEFINED_VALUE,
-    MAX_TICKET_DEPTH,
-    MAX_CHILDREN_WARNING_THRESHOLD,
 )
-from ticket_system.lib.depth import compute_depth
 from ticket_system.lib.tdd_sequence import suggest_tdd_sequence
 from ticket_system.lib.ticket_builder import (
     TicketConfig,
-    format_ticket_id,
-    format_child_ticket_id,
-    get_next_seq,
-    get_next_child_seq,
     create_ticket_frontmatter,
     create_ticket_body,
     update_parent_children,
@@ -78,180 +72,13 @@ from ticket_system.lib.duplicate_detector import (
     detect_in_progress_groups,
     enforce_blocking_duplicate,
 )
-from ticket_system.lib.create_reporter import (
-    extract_where_files,
-    print_create_checklist,
-)
+from ticket_system.lib.create_reporter import print_create_checklist
 
 
-def _validate_blocked_by_references(
-    version: str,
-    ticket_id: str,
-    blocked_by: Optional[List[str]],
-) -> bool:
-    """
-    驗證 blockedBy 欄位的存在性和循環依賴。
-
-    執行兩個驗證：
-    1. 存在性檢查：所有 blockedBy 中的 Ticket ID 必須存在
-    2. 循環依賴檢測：設定 blockedBy 不應產生循環依賴
-
-    Args:
-        version: Ticket 版本號
-        ticket_id: 當前要建立的 Ticket ID
-        blocked_by: blockedBy 欄位清單（可為 None）
-
-    Returns:
-        bool: True 表示驗證通過，False 表示有錯誤（已輸出錯誤訊息）
-    """
-    # Guard Clause：無 blockedBy 欄位
-    if not blocked_by:
-        return True
-
-    # 驗證 1：blockedBy 存在性檢查
-    for bid in blocked_by:
-        blocked_ticket = load_ticket(version, bid)
-        if blocked_ticket is None:
-            print(format_error(ErrorEnvelope(
-                component="create",
-                action="validate_blocked_by",
-                errno="BLOCKED_BY_NOT_FOUND",
-                hint=f"找不到依賴的 Ticket: {bid}（請確認 ID 正確且已建立）",
-            )))
-            return False
-
-    # 驗證 2：blockedBy 循環依賴檢測
-    all_tickets = list_tickets(version)
-    valid, cycle_msg, cycle_path = validate_blocked_by(
-        ticket_id,
-        blocked_by,
-        all_tickets
-    )
-    if not valid and cycle_msg:
-        print(format_error(ErrorEnvelope(
-            component="create",
-            action="validate_blocked_by",
-            errno="BLOCKED_BY_CYCLE",
-            hint=cycle_msg,
-        )))
-        return False
-
-    return True
 
 
-def _validate_decision_tree_params(
-    entry: Optional[str],
-    decision: Optional[str],
-    rationale: Optional[str],
-) -> bool:
-    """驗證 decision_tree 參數值的基本正確性。
-
-    檢查內容：
-    1. 無空字串值
-
-    Args:
-        entry: entry_point 參數值
-        decision: final_decision 參數值
-        rationale: rationale 參數值
-
-    Returns:
-        True 如果驗證通過，False 如果有空字串或其他問題
-    """
-    params = [(entry, "entry_point"), (decision, "final_decision"), (rationale, "rationale")]
-    for value, name in params:
-        if value == "":  # 空字串值
-            print(format_error(ErrorEnvelope(
-                component="create",
-                action="validate_decision_tree",
-                errno="DECISION_TREE_EMPTY_VALUE",
-                hint=f"欄位 {name} 不可為空字串",
-            )))
-            return False
-    return True
 
 
-def _build_decision_tree_path(
-    entry: Optional[str],
-    decision: Optional[str],
-    rationale: Optional[str],
-    is_child: bool,
-    ticket_type: str,
-) -> Optional[Dict[str, str]]:
-    """驗證並構建 decision_tree_path 字典。
-
-    邏輯：
-    1. 豁免條件：子任務（is_child=True）或 DOC 類型
-    2. 豁免時無參數 → 返回 None
-    3. 豁免時有完整參數 → 返回字典（驗證後）
-    4. 豁免時部分參數 → raise ValueError（拒絕）
-    5. 非豁免時無參數 → 返回 None（不提前退出，交 _validate_create_checklist
-       與其他必填欄位一次列全，W1-029 A2 同手法）
-    6. 非豁免時有完整參數 → 返回字典（驗證後）
-    7. 非豁免時部分參數 → raise ValueError（拒絕，保留參數級精確 hint）
-
-    Args:
-        entry: --decision-tree-entry 參數值
-        decision: --decision-tree-decision 參數值
-        rationale: --decision-tree-rationale 參數值
-        is_child: 是否為子任務（args.parent 非空）
-        ticket_type: Ticket 類型（args.type）
-
-    Returns:
-        - Dict[str, str]：包含 entry_point, final_decision, rationale 三個鍵
-        - None：豁免且無參數
-
-    Raises:
-        ValueError: 驗證失敗（參數不完整或其他問題）
-    """
-    # 判斷是否豁免
-    is_exempted = is_child or ticket_type == "DOC"
-
-    # 計算提供的參數個數
-    params = [entry, decision, rationale]
-    provided_count = sum(1 for p in params if p is not None)
-
-    # 使用 early return 簡化邏輯
-    if provided_count == 0:
-        # 無參數：豁免或非豁免皆 return None，不在此提前退出。
-        # 非豁免全缺交給 _validate_create_checklist 的 decision_tree_path
-        # 完整性檢查，與 when/who/how_strategy 等必填一次列全，避免跨階段
-        # 分批報錯造成多輪試錯（W1-029，A2 同手法，對齊本檔 why 修復 796-799）。
-        # PARTIAL（provided_count 1-2）與 EMPTY_VALUE 仍即時精確報錯，不退化。
-        return None
-
-    if provided_count == 3:
-        # 完整三參數 - 驗證後返回字典
-        if not _validate_decision_tree_params(entry, decision, rationale):
-            raise ValueError("決策樹參數驗證失敗")
-        return {
-            "entry_point": entry,
-            "final_decision": decision,
-            "rationale": rationale,
-        }
-
-    # 部分參數 - 全部拒絕
-    if is_exempted:
-        print(format_error(ErrorEnvelope(
-            component="create",
-            action="build_decision_tree",
-            errno="EXEMPTED_PARTIAL_PARAMS",
-            hint="子任務或 DOC 類型可豁免 decision-tree 參數，但若提供必須三參數齊備",
-        )))
-    else:
-        missing_fields = []
-        if entry is None:
-            missing_fields.append("entry_point")
-        if decision is None:
-            missing_fields.append("final_decision")
-        if rationale is None:
-            missing_fields.append("rationale")
-        print(format_error(ErrorEnvelope(
-            component="create",
-            action="build_decision_tree",
-            errno="DECISION_TREE_MISSING_PARTIAL",
-            hint=f"缺少欄位: {', '.join(missing_fields)}（三參數必須齊備）",
-        )))
-    raise ValueError("決策樹參數不完整")
 
 
 
@@ -281,102 +108,6 @@ def _print_in_progress_group_hint(
         )
 
 
-def _resolve_ticket_id_and_wave(args: argparse.Namespace, version: str) -> Optional[tuple]:
-    """Step 1: 解析版本和 Ticket ID。
-
-    Args:
-        args: 命令行參數
-        version: 已解析的版本號
-
-    Returns:
-        (version, ticket_id, wave) 或 None（失敗）
-    """
-    wave = args.wave
-
-    if args.parent:
-        # 建立子任務 ID（總是自動遞增，忽略 --seq）
-        child_seq = get_next_child_seq(args.parent)
-        if args.seq is not None:
-            print(format_warning(
-                WarningMessages.SEQ_IGNORED_WITH_PARENT,
-                seq=args.seq,
-                child_seq=child_seq,
-            ))
-        ticket_id = format_child_ticket_id(args.parent, child_seq)
-
-        # 深度上限檢查（W1-056.5 協議 v2 D3）：沿 parent_id 鏈計算新子任務深度，
-        # 達/超過 MAX_TICKET_DEPTH 時 warn（不硬擋，留旁路）。深度沿 parent_id 鏈
-        # 而非 ID 字串數點（linux F1 fatal 教訓）。
-        new_depth = compute_depth(args.parent, version) + 1
-        if new_depth >= MAX_TICKET_DEPTH:
-            print(format_warning(
-                WarningMessages.DEPTH_LIMIT_REACHED,
-                ticket_id=ticket_id,
-                depth=new_depth,
-                max_depth=MAX_TICKET_DEPTH,
-            ))
-
-        # 扇出 warning（W5-005 F7/D11）：父票 children 數超閾值時 warn（不硬擋）。
-        existing_children_count = child_seq - 1
-        if existing_children_count >= MAX_CHILDREN_WARNING_THRESHOLD:
-            print(format_warning(
-                WarningMessages.CHILDREN_COUNT_HIGH,
-                parent_id=args.parent,
-                count=existing_children_count,
-                threshold=MAX_CHILDREN_WARNING_THRESHOLD,
-            ))
-
-        # 從 parent_id 中提取 wave
-        extracted_wave = extract_wave_from_ticket_id(args.parent)
-        if extracted_wave is not None:
-            wave = extracted_wave
-    else:
-        # 建立根任務 ID
-        if not wave:
-            print(format_error(ErrorEnvelope(
-                component="create",
-                action="resolve_ticket_id",
-                errno="MISSING_WAVE_PARAMETER",
-                hint="建立根任務必須提供 --wave 參數（子任務則用 --parent 自動繼承 wave）",
-            )))
-            return None
-
-        if args.seq is None:
-            # auto-seq 模式：get_next_seq 回傳值已內部保證可用（W1-051 內聚
-            # collision guard 至 get_next_seq 降級分支），caller 不再兜底。
-            # 防護 W1-042：兩來源（本地 glob + main ref）同時掃空降級時，
-            # get_next_seq 內的 resolve_available_seq 推進至本地檔案系統可用
-            # 序號——僅保證本地 FS 可用，main-only 票不在保證範圍（W1-052 措辭
-            # 對齊；PC-152 collision 家族；消除 caller while-loop 特例外洩）。
-            seq = get_next_seq(version, wave)
-            ticket_id = format_ticket_id(version, wave, seq)
-        else:
-            # 顯式 --seq 模式：尊重用戶意圖，撞號報錯退出（不覆寫、不自動跳號）。
-            seq = args.seq
-            ticket_id = format_ticket_id(version, wave, seq)
-            if get_ticket_path(version, ticket_id).exists():
-                print(format_error(ErrorEnvelope(
-                    component="create",
-                    action="resolve_ticket_id",
-                    errno="TICKET_ID_ALREADY_EXISTS",
-                    hint=(
-                        f"顯式 --seq {seq} 對應的 Ticket ID 已存在: {ticket_id}。"
-                        f"請改用其他 --seq，或省略 --seq 由系統自動配下一個可用序號"
-                    ),
-                )))
-                return None
-
-    # 驗證 Ticket ID
-    if not validate_ticket_id(ticket_id):
-        print(format_error(ErrorEnvelope(
-            component="create",
-            action="resolve_ticket_id",
-            errno="INVALID_TICKET_ID_FORMAT",
-            hint=f"Ticket ID 格式無效: {ticket_id}（預期: <version>-W<wave>-<seq>）",
-        )))
-        return None
-
-    return (version, ticket_id, wave)
 
 
 def _inherit_parent_who(parent_ticket: Optional[Dict[str, Any]]) -> str:
@@ -411,160 +142,8 @@ def _inherit_parent_where_layer(parent_ticket: Optional[Dict[str, Any]]) -> str:
     return DEFAULT_UNDEFINED_VALUE
 
 
-def _validate_where_file_token(token: str) -> tuple:
-    """驗證單一 --where 路徑 token 是否為合法檔案路徑。
-
-    防護 where.files 髒值：曾出現將 'key=value' 形式（如 src=.claude/x、
-    layer=core）誤當路徑傳入 --where，髒值寫進 where.files 後致下游路徑
-    分類器誤判（含前綴的 token 被當非框架路徑），級聯成派發誤診。
-
-    判定規則：取路徑「第一段」（首個 '/' 之前的字串），若其中含 '='，
-    視為 key=value 前綴髒值並 reject。'=' 出現在第一段之後（路徑中段或
-    檔名）屬合法檔名字元，放行。空字串由上游過濾，此處視為合法。
-
-    Args:
-        token: 單一路徑 token
-
-    Returns:
-        (is_valid, hint) tuple：
-        - is_valid: True 表示合法路徑；False 表示髒值
-        - hint: 髒值時的修正提示（含剝除前綴後的建議路徑）；合法時為空字串
-    """
-    if not token:
-        return True, ""
-
-    first_segment = token.split("/", 1)[0]
-    if "=" not in first_segment:
-        return True, ""
-
-    # 第一段含 '='：視為 key=value 前綴髒值，提供剝除前綴的修正建議
-    stripped = token.split("=", 1)[1]
-    hint = (
-        f"路徑 token 含非路徑前綴（'='）於首段: '{token}'。"
-        f"請改用純路徑，例如剝除前綴後的 '{stripped}'"
-    )
-    return False, hint
 
 
-def _validate_where_files(tokens: List[str]) -> List[str]:
-    """批次驗證 --where 路徑 token，收集所有髒值錯誤訊息。
-
-    Args:
-        tokens: 已 strip 的路徑 token 列表
-
-    Returns:
-        錯誤訊息列表（每個髒值 token 一條）；全部合法時回空 list
-    """
-    errors: List[str] = []
-    for token in tokens:
-        is_valid, hint = _validate_where_file_token(token)
-        if not is_valid:
-            errors.append(hint)
-    return errors
-
-
-_ACCEPTANCE_SEP = "|"
-
-# 編號列表行形態：可選前導空白 + 數字 + 分隔符（. 、 或 )），如「1. 」「2、」「3)」
-_ACCEPTANCE_NUMBERED_LINE = re.compile(r"^\s*\d+[.、)]")
-
-
-def _detect_numbered_list_collapse(item: str) -> Optional[str]:
-    """偵測單一 --acceptance 值是否內含 >= 2 行編號列表（將被摺疊為單一條目）。
-
-    多行編號列表（如「1. 條件一\\n2. 條件二」）以換行分隔，不受 `|` 拆條邏輯
-    處理，會被靜默摺疊成一條驗收條件，使逐項驗收語意失效。本函式僅偵測並
-    提示，不改變拆分語意（多行單條目仍合法保留，是否拆條由使用者決定）。
-
-    Args:
-        item: 單一 --acceptance 原始值（可能含換行）
-
-    Returns:
-        命中時回傳格式化警告字串；未命中回傳 None
-    """
-    numbered_lines = [
-        line.strip() for line in item.split("\n") if _ACCEPTANCE_NUMBERED_LINE.match(line)
-    ]
-    if len(numbered_lines) < 2:
-        return None
-    preview = "\n".join(f"             {line}" for line in numbered_lines)
-    return format_warning(
-        CreateMessages.ACCEPTANCE_NUMBERED_LIST_COLLAPSE_WARNING,
-        count=len(numbered_lines),
-        preview=preview,
-    )
-
-
-def _parse_acceptance_items(raw_items: List[str]) -> tuple:
-    """解析 --acceptance 多值，支援分隔符拆條 + 反斜線跳脫 + 拆條警告 + 編號列表摺疊警告。
-
-    分隔符 `|` 用於在單一 --acceptance 值內表達多條驗收條件。但當內文本身
-    需要使用該字元（如描述 shell pipe），無條件 split 會靜默拆條（W3-089）。
-
-    處理規則：
-    - `\\|`（反斜線 + 分隔符）視為跳脫，還原為字面 `|`，不拆條。
-    - 未跳脫的 `|` 才作為分隔符拆條。
-    - 單一 --acceptance 值經未跳脫分隔符拆出 > 1 段時，回傳警告供呼叫端提示，
-      讓使用者確認是否為預期行為（與 PC-079 同家族：CLI 參數含工具特殊字元）。
-    - 單一 --acceptance 值含 >= 2 行編號列表形態（如「1. 」「2、」）時，回傳警告
-      提示該值會被摺疊為單一驗收條件，不會依編號自動拆條（拆分語意零變更，
-      僅偵測與提示；正確用法改多次 --acceptance 或以 | 分隔）。
-
-    Args:
-        raw_items: argparse 收集的 --acceptance 值列表（可能多次指定）
-
-    Returns:
-        (acceptance, warnings) tuple：
-        - acceptance: 解析後的驗收條件列表（已去空白、去空項）
-        - warnings: 警告訊息列表（每個被拆條或摺疊偵測的原始值各一條）
-    """
-    acceptance: List[str] = []
-    warnings: List[str] = []
-    for item in raw_items:
-        numbered_list_warning = _detect_numbered_list_collapse(item)
-        if numbered_list_warning:
-            warnings.append(numbered_list_warning)
-        segments = _split_unescaped(item, _ACCEPTANCE_SEP)
-        cleaned = [s.strip() for s in segments]
-        cleaned = [s for s in cleaned if s]
-        if len(cleaned) > 1:
-            preview = "\n".join(f"             {i + 1}. {s}" for i, s in enumerate(cleaned))
-            warnings.append(
-                format_warning(
-                    CreateMessages.ACCEPTANCE_PIPE_SPLIT_WARNING,
-                    count=len(cleaned),
-                    preview=preview,
-                )
-            )
-        acceptance.extend(cleaned)
-    return acceptance, warnings
-
-
-def _split_unescaped(text: str, sep: str) -> List[str]:
-    """以 sep 拆分 text，但反斜線跳脫的 sep 還原為字面字元不拆。
-
-    逐字元掃描：`\\sep` → 字面 sep；單獨 `\\` 後接其他字元 → 保留原樣；
-    未跳脫 sep → 切段。避免 str.split 無法區分跳脫的限制。
-    """
-    segments: List[str] = []
-    buffer: List[str] = []
-    i = 0
-    length = len(text)
-    while i < length:
-        char = text[i]
-        if char == "\\" and i + 1 < length and text[i + 1] == sep:
-            buffer.append(sep)
-            i += 2
-            continue
-        if char == sep:
-            segments.append("".join(buffer))
-            buffer = []
-            i += 1
-            continue
-        buffer.append(char)
-        i += 1
-    segments.append("".join(buffer))
-    return segments
 
 
 def _parse_cli_args_to_config(
@@ -591,7 +170,7 @@ def _parse_cli_args_to_config(
 
     # 驗證路徑 token：reject 非路徑髒值（如 src=.claude/x、layer=core）。
     # 髒值若寫入 where.files 會致下游派發路徑分類誤判，故前置攔下。
-    where_errors = _validate_where_files(where_files)
+    where_errors = validate_where_files(where_files)
     if where_errors:
         print(format_error(ErrorEnvelope(
             component="create",
@@ -611,7 +190,7 @@ def _parse_cli_args_to_config(
     # 處理 acceptance（支援多次 --acceptance 和分隔符拆條 + 反斜線跳脫 + 拆條警告）
     acceptance = None
     if args.acceptance:
-        acceptance, accept_warnings = _parse_acceptance_items(args.acceptance)
+        acceptance, accept_warnings = parse_acceptance_items(args.acceptance)
         for warning in accept_warnings:
             print(warning, file=sys.stderr)
 
@@ -620,7 +199,7 @@ def _parse_cli_args_to_config(
 
     # 建立決策樹路徑
     try:
-        decision_tree_path = _build_decision_tree_path(
+        decision_tree_path = build_decision_tree_path(
             entry=args.decision_tree_entry,
             decision=args.decision_tree_decision,
             rationale=args.decision_tree_rationale,
@@ -694,7 +273,7 @@ def _validate_before_persist(
     blocked_by = config.get("blocked_by")
 
     # 驗證 blockedBy 存在性
-    if not _validate_blocked_by_references(version, ticket_id, blocked_by):
+    if not validate_blocked_by_references(version, ticket_id, blocked_by):
         return False
 
     # Tier 2 阻擋層（W1-040.1 冪等防護）：命中且未旁路 → 阻擋
@@ -831,6 +410,25 @@ def _build_and_save_ticket(
     tickets_dir = get_tickets_dir(version)
     tickets_dir.mkdir(parents=True, exist_ok=True)
     ticket_path = get_ticket_path(version, ticket_id)
+
+    # 落盤前存在性檢查：create 只能新增，不可覆寫既有 ticket。get_next_seq
+    # 的三來源聯集（本地 ∪ main ref ∪ sibling worktree）理論上保證 candidate
+    # 不撞已知來源，但掃描完成到落盤之間仍有極短時間窗，且降級分支（sibling
+    # worktree 掃描失敗 / 非 git 環境鎖亦降級）下該保證會弱化。此處作最後一道
+    # 防線：若目標路徑已存在，一律拒絕覆寫並清楚報錯，不靜默覆寫既有內容
+    # （quality-baseline 規則 4：異常必須可觀測）。顯式 --seq 模式已在更早的
+    # resolve_ticket_id_and_wave 檢查過存在性，故此處命中只會是 auto-seq
+    # 計算出撞號候選值（並行 create race 的殘跡）。
+    if ticket_path.exists():
+        sys.stderr.write(
+            f"[ERROR] _build_and_save_ticket: ticket {ticket_id} 目標路徑已存在"
+            f"（{ticket_path}），拒絕覆寫。可能為並行 create 撞號（跨 worktree /"
+            f"跨 session），請以 --seq 指定其他序號重試\n"
+        )
+        raise FileExistsError(
+            f"Ticket {ticket_id} 已存在於 {ticket_path}，create 拒絕覆寫既有 ticket"
+        )
+
     save_ticket(ticket, ticket_path)
 
     # 落盤後驗證（W1-042）：確認檔案確實寫入預期路徑。
@@ -1031,76 +629,6 @@ def _persist_and_report(
     return 0
 
 
-def _validate_source_ticket_arg(args: argparse.Namespace) -> bool:
-    """Step 1.5：--source-ticket 參數前置驗證（PC-073）。
-
-    檢查順序（fail-fast，三視角共識）：
-    1. 互斥檢查：--source-ticket 與 --parent 不可同用
-    2. ID 格式檢查：沿用 validate_ticket_id
-    3. 存在性檢查：載入 source ticket
-    4. 狀態警告：completed 允許但顯示 WARNING（allow + warning，不阻擋）
-
-    所有錯誤路徑在持久化前結束；fail-fast 順序一致。
-
-    Args:
-        args: 命令行參數（含 source_ticket 和 parent）
-
-    Returns:
-        bool: True 表示驗證通過（或未提供 --source-ticket）；False 表示應 early return 1
-    """
-    # Guard Clause：未提供 --source-ticket 則跳過
-    if not args.source_ticket:
-        return True
-
-    # 子步驟 1：互斥檢查（最先；測試 B4 的 ordering 斷言依此成立）
-    if args.parent:
-        print(format_error(ErrorEnvelope(
-            component="create",
-            action="validate_source_ticket",
-            errno="SOURCE_PARENT_MUTUALLY_EXCLUSIVE",
-            hint="--source-ticket 與 --parent 不可同時使用（前者為衍生關係，後者為父子關係）",
-        )))
-        return False
-
-    # 子步驟 2：ID 格式檢查（沿用 validate_ticket_id）
-    if not validate_ticket_id(args.source_ticket):
-        print(format_error(ErrorEnvelope(
-            component="create",
-            action="validate_source_ticket",
-            errno="INVALID_TICKET_ID_FORMAT",
-            hint=f"--source-ticket ID 格式無效: {args.source_ticket}",
-        )))
-        return False
-
-    # 子步驟 3：存在性檢查
-    source_version = extract_version_from_ticket_id(args.source_ticket)
-    if source_version is None:
-        print(format_error(ErrorEnvelope(
-            component="create",
-            action="validate_source_ticket",
-            errno="SOURCE_TICKET_NOT_FOUND",
-            hint=f"無法從 ID 推斷版本: {args.source_ticket}",
-        )))
-        return False
-    source_ticket = load_ticket(source_version, args.source_ticket)
-    if source_ticket is None:
-        print(format_error(ErrorEnvelope(
-            component="create",
-            action="validate_source_ticket",
-            errno="SOURCE_TICKET_NOT_FOUND",
-            hint=f"找不到 source ticket: {args.source_ticket}（請確認 ID 正確且檔案存在）",
-        )))
-        return False
-
-    # 子步驟 4：狀態警告（allow + warning；不阻擋）
-    if source_ticket.get("status") == STATUS_COMPLETED:
-        print(format_warning(
-            CreateMessages.SOURCE_TICKET_COMPLETED_WARN,
-            source_id=args.source_ticket,
-        ))
-        # 非 ANA type 無額外警告（pepper §8 決策：消除特例）
-
-    return True
 
 
 def _auto_extract_context_bundle_post_create(
@@ -1160,6 +688,25 @@ def execute(args: argparse.Namespace) -> int:
     action = args.action or ""
     is_child = bool(args.parent)
     user_specified_version = args.version is not None
+
+    # 主題選取驗證：先於任何版本解析/持久化動作執行，拒絕不存在的主題名
+    # 時直接中止，不建立任何 ticket。--new-topic 的實際寫入延後至建票
+    # 成功後才執行（見 validate_topic_selection docstring）。
+    topic, topic_error, new_topic_to_register = validate_topic_selection(args)
+    topic_basis = None
+    if topic_error:
+        print(format_error(ErrorEnvelope(
+            component="create",
+            action="resolve_topic",
+            errno="INVALID_TOPIC",
+            hint=topic_error,
+        )))
+        return 1
+
+    # 判準 S1/S2 自動推導：僅在兩個顯式旗標皆未給時啟動，不改寫顯式選擇
+    # （0.2.1-W3-826 判準；顯式優先是 Never break userspace 的要求）。
+    if topic is None:
+        topic, topic_basis = infer_topic(args)
 
     if is_child:
         # 子任務：version 無條件繼承父票，跳過版本歸屬引導與註冊檢查。
@@ -1229,14 +776,14 @@ def execute(args: argparse.Namespace) -> int:
     # graceful degradation（stderr warn + 無鎖續行），不阻斷單 process create。
     with create_id_allocation_lock(get_tickets_dir(version)):
         # Step 1: 解析版本和 Ticket ID
-        resolved = _resolve_ticket_id_and_wave(args, version)
+        resolved = resolve_ticket_id_and_wave(args, version)
         if resolved is None:
             return 1
         version, ticket_id, wave = resolved
 
         # Step 1.5: --source-ticket 前置驗證（PC-073）
         # 順序：互斥 → 格式 → 存在 → 狀態
-        if not _validate_source_ticket_arg(args):
+        if not validate_source_ticket_arg(args):
             return 1
 
         # 識別任務類型並取得 TDD 順序建議（需要在 Step 2 使用）
@@ -1250,6 +797,61 @@ def execute(args: argparse.Namespace) -> int:
 
         # Step 3: 驗證 blockedBy + 重複偵測 + 持久化 + 輸出
         rc = _persist_and_report(args, config, version, ticket_id, tdd_result)
+
+    # 主題狀態回報：既有主題選取/新增不阻擋建票，僅於報告階段明確表示
+    # 結果（已標記主題名 / 未指派），不寫入任何 ticket frontmatter 欄位。
+    # 映射寫入（ticket_id -> topic）與 --new-topic 的主題名註冊皆延後至
+    # 此（rc == 0 之後）才執行，避免建票失敗時已寫入 append-only 清單而
+    # 留下孤兒主題或孤兒映射（修復缺口：原本只呼叫 append_topic 寫主題名
+    # 清單，未寫入 ticket_id -> topic 映射，選定的主題不留下任何票與
+    # 主題的關聯；append_assignment 內部已含冪等的 append_topic 呼叫，
+    # 故 --new-topic 的主題名註冊亦一併由它完成，不再單獨呼叫）。
+    if rc == 0:
+        if topic:
+            from ticket_system.lib.topic_assignments import append_assignment
+            try:
+                append_assignment(ticket_id, topic)
+            except Exception as exc:
+                # 映射寫入失敗降級為非致命：ticket 已成功建立，不應因
+                # side-channel 映射寫入失敗而回頭判定整體建票失敗
+                # （observability-rules 規則 1：降級處理需可見）。
+                sys.stderr.write(
+                    f"[create] 主題映射寫入失敗（非致命，ticket {ticket_id} "
+                    f"已建立）：{exc}\n"
+                )
+            if topic_basis:
+                print(format_info(
+                    "[主題] 依 {basis} 自動指派主題：{topic}"
+                    "（已記錄於主題中央清單與票-主題映射，未寫入 ticket "
+                    "frontmatter；如需更正可用 topic-backfill-assign --reassign 改派）",
+                    basis=topic_basis,
+                    topic=topic,
+                ))
+            else:
+                print(format_info(
+                    "[主題] 已標記主題：{topic}（已記錄於主題中央清單與"
+                    "票-主題映射，未寫入 ticket frontmatter）",
+                    topic=topic,
+                ))
+        elif getattr(args, "no_topic", False):
+            print(format_info(
+                "[主題] 未指派主題（--no-topic 明示不指派）",
+            ))
+        elif requires_topic_assignment(args):
+            # 判準 S3：ANA 未歸屬會使其整串衍生票一併失明，訊息須說明後果
+            # 而非僅陳述狀態（0.2.1-W3-826 實驗 H2：純狀態提示無效）。
+            print(format_warning(
+                "[主題] 未指派主題且無法自動推導。此票為 ANA 型（判準 S3），"
+                "其衍生票會經上游繼承取得主題，未歸屬將使整串後續票不出現於"
+                "任何主題分組。請以 --topic 或 --new-topic 指定，"
+                "或以 --no-topic 明示不指派",
+            ))
+        else:
+            print(format_warning(
+                "[主題] 未指派主題且無法自動推導。未歸屬票不出現於主題分組的"
+                "任何群組，需另查 runqueue 才找得到。請以 --topic 或 "
+                "--new-topic 指定，或以 --no-topic 明示不指派",
+            ))
 
     # Step 4 (W17-002.2)：Context Bundle 自動抽取（post-persist enhancement）
     if rc == 0:
@@ -1332,6 +934,21 @@ def register(subparsers: argparse._SubParsersAction) -> None:
             "衍生來源 Ticket ID（建立 spawned_tickets 衍生關係，與 --parent 互斥）；"
             "衍生項獨立排程，不阻擋 source complete（PC-073）"
         ),
+    )
+    parser.add_argument(
+        "--topic",
+        help="指定既有主題名（須為主題中央清單既有名稱；未命中會列出既有主題名並拒絕）",
+    )
+    parser.add_argument(
+        "--new-topic",
+        dest="new_topic",
+        help="以顯式旗標新增主題並指派給本票（--topic 僅能選既有主題，新增須用此旗標）",
+    )
+    parser.add_argument(
+        "--no-topic",
+        dest="no_topic",
+        action="store_true",
+        help="明示本票不指派主題（略過自動推導未命中時的警告；與 --topic / --new-topic 互斥）",
     )
     parser.add_argument("--blocked-by", help="依賴的 Ticket IDs（逗號分隔，如 'ID1,ID2'）")
     parser.add_argument("--related-to", help="相關的 Ticket IDs（逗號分隔，如 'ID1,ID2'）")

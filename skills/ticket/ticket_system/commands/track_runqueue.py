@@ -50,6 +50,7 @@ from ticket_system.lib.blocker_resolution import is_fully_unblocked
 from ticket_system.lib.constants import STATUS_COMPLETED, STATUS_CLOSED
 from ticket_system.lib import lease
 from ticket_system.lib import file_conflict
+from ticket_system.lib import topic_assignments
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +177,46 @@ def _filter_by_wave(tickets: Iterable[Dict], wave: Optional[int]) -> List[Dict]:
     return [t for t in tickets if t.get("wave") == wave]
 
 
+def _filter_by_topic(
+    tickets: Iterable[Dict], topic: Optional[str], assignments: Dict[str, str]
+) -> List[Dict]:
+    """依 `lib.topic_assignments.list_assignments()` 映射過濾指定主題名。
+
+    過濾依據為建票時顯式標記存中央清單的映射，非任何推導出的等價類。
+    `topic` 為 None 時不過濾。
+    """
+    if topic is None:
+        return list(tickets)
+    return [t for t in tickets if assignments.get(t.get("id")) == topic]
+
+
+# 空清單訊息一律含 EMPTY_MARKER 子字串（見
+# .claude/hooks/session-start-scheduler-hint-hook.py 的 EMPTY_MARKER /
+# _has_content），供該 hook 判定 runqueue stdout 是否為空內容。
+_EMPTY_MARKER_TEXT = "無可執行 Ticket"
+
+
+def _empty_reason(
+    wave: Optional[int],
+    topic: Optional[str],
+    wave_scoped_count: int,
+    topic_scoped_count: int,
+) -> str:
+    """依實際排空原因產生訊息，避免固定歸因 blockedBy/status。
+
+    排空可能發生在三個階段之一，訊息須反映實際發生的階段：
+    - wave 過濾後已無票：報告 wave 無符合票
+    - topic 過濾後才變空（wave 階段仍有票）：報告主題無符合票
+    - 兩者皆未過濾或過濾後仍有票，僅在後續 blockedBy/status 條件排空：
+      維持原訊息
+    """
+    if wave is not None and wave_scoped_count == 0:
+        return f"（{_EMPTY_MARKER_TEXT}；wave {wave} 無符合票）"
+    if topic is not None and topic_scoped_count == 0:
+        return f"（{_EMPTY_MARKER_TEXT}；主題「{topic}」無符合票）"
+    return f"（{_EMPTY_MARKER_TEXT}；blockedBy 全非空或 status 非 pending）"
+
+
 def _get_pending_handoff_info() -> Dict[str, Dict]:
     """掃描 .claude/handoff/pending/*.json，回傳 ticket_id → handoff JSON 字典。
 
@@ -269,6 +310,10 @@ STALE_TAG = "STALE"
 # 「久未更新」，RECLAIMABLE_TAG 是 registry heartbeat 判定的「持有者 session
 # 已死」，兩者可各自獨立出現或疊加）
 RECLAIMABLE_TAG = "RECLAIMABLE"
+
+# list 視圖每筆前綴主題名；未歸屬 topic_assignments 映射的票用明確標記
+# 表示（非留空，避免與「主題名恰為空字串」混淆）
+UNASSIGNED_TOPIC_LABEL = "未歸屬主題"
 
 # exit_status → readiness tag 映射（非 success / 缺欄位）
 _EXIT_STATUS_TO_READINESS: Dict[str, str] = {
@@ -385,6 +430,8 @@ def _render_list(
     wave: Optional[int],
     context: Optional[str] = None,
     handoff_info: Optional[Dict[str, Dict]] = None,
+    topic_assignments_map: Optional[Dict[str, str]] = None,
+    empty_reason: Optional[str] = None,
 ) -> str:
     ticket_map = {t.get("id"): t for t in tickets if t.get("id")}
     runnable = [t for t in tickets if _is_listable(t, ticket_map)]
@@ -417,13 +464,16 @@ def _render_list(
             lines.append("（無 resume 候選；當前無 handoff pending ticket）")
         else:
             lines.append(
-                "（無可執行 Ticket；blockedBy 全非空或 status 非 pending）"
+                empty_reason
+                or f"（{_EMPTY_MARKER_TEXT}；blockedBy 全非空或 status 非 pending）"
             )
         return "\n".join(lines)
 
     handoff_info = handoff_info or {}
+    topic_assignments_map = topic_assignments_map or {}
     for idx, ticket in enumerate(runnable, start=1):
         tid = ticket.get("id", "<unknown>")
+        topic_label = topic_assignments_map.get(tid) or UNASSIGNED_TOPIC_LABEL
         priority = ticket.get("priority") or "P?"
         ticket_type = ticket.get("type") or "?"
         title = ticket.get("title") or ""
@@ -457,7 +507,7 @@ def _render_list(
             else ""
         )
         lines.append(
-            f"  {idx}. [{priority}|{ticket_type}] [{readiness}]{stale_suffix}"
+            f"  {idx}. [{topic_label}] [{priority}|{ticket_type}] [{readiness}]{stale_suffix}"
             f"{reclaimable_suffix} {tid}  {title}  {suffix}"
         )
     return "\n".join(lines)
@@ -467,11 +517,11 @@ def _render_list(
 # 視圖渲染：groups（multi-PM 協調層 Phase 3，父票設計要點 5）
 # ---------------------------------------------------------------------------
 
-def _render_groups(tickets: List[Dict]) -> str:
+def _render_groups(tickets: List[Dict], empty_reason: Optional[str] = None) -> str:
     """`--groups` 旗標渲染：輸入集合與 list 視圖同（blockedBy=[] 且
     status=pending），依 priority/type/id 排序後交由
-    `file_conflict.compute_parallel_groups` 做 where.files 交集判定與連通
-    分量分組（AC-3：與 `ticket track conflicts` 共用同一交集判定實作）。
+    `file_conflict.compute_parallel_groups` 做 where.files 交集判定與貪婪
+    極大獨立集分組（AC-3：與 `ticket track conflicts` 共用同一交集判定實作）。
 
     群組輸出優先於 `--top` / `--wave` 之外的視圖切換（`--groups` 優先於
     `--format`，`render_runqueue` 於 `--groups` 為真時提前分派，
@@ -484,7 +534,10 @@ def _render_groups(tickets: List[Dict]) -> str:
     )
 
     if not ready:
-        return "=== Parallel Groups ===\n（無可執行 Ticket；blockedBy 全非空或 status 非 pending）"
+        reason = empty_reason or (
+            f"（{_EMPTY_MARKER_TEXT}；blockedBy 全非空或 status 非 pending）"
+        )
+        return "=== Parallel Groups ===\n" + reason
 
     project_root = get_project_root()
     result = file_conflict.compute_parallel_groups(ready, project_root)
@@ -612,16 +665,20 @@ def render_runqueue(args: argparse.Namespace, version: str) -> str:
     top = getattr(args, "top", None)
     context = getattr(args, "context", None)
     wave = getattr(args, "wave", None)
+    topic = getattr(args, "topic", None)
     groups = bool(getattr(args, "groups", False))
 
     all_tickets = list_tickets(version) or []
-    scoped = _filter_by_wave(all_tickets, wave)
-    scoped = _apply_context_resume(scoped, context)
+    assignments = topic_assignments.list_assignments()
+    wave_scoped = _filter_by_wave(all_tickets, wave)
+    topic_scoped = _filter_by_topic(wave_scoped, topic, assignments)
+    scoped = _apply_context_resume(topic_scoped, context)
+    empty_reason = _empty_reason(wave, topic, len(wave_scoped), len(topic_scoped))
 
     # multi-PM 協調層 Phase 3：--groups 優先於 --format 視圖切換（父票設計
     # 要點 5），提前分派不落入下方 list/dag/critical-path 分支
     if groups:
-        return _render_groups(scoped)
+        return _render_groups(scoped, empty_reason)
 
     # W17-031.1: resume 模式下載入 handoff info 供 _render_list 標 exit_status tag
     # W17-031.3: list 視圖一律載入 handoff info 供 readiness 計算（READY/NEEDS-CTX 等）
@@ -630,7 +687,9 @@ def render_runqueue(args: argparse.Namespace, version: str) -> str:
     )
 
     if fmt == FORMAT_LIST:
-        return _render_list(scoped, top, wave, context, handoff_info)
+        return _render_list(
+            scoped, top, wave, context, handoff_info, assignments, empty_reason
+        )
     elif fmt == FORMAT_DAG:
         # dag 忽略 --top（呈現完整 DAG）
         return _render_dag(scoped)
@@ -668,7 +727,7 @@ def register_runqueue(
         help=(
             "統一 scheduler CLI："
             "runqueue --format={list|dag|critical-path} [--top N] "
-            "[--context=resume] [--wave N] [--groups]"
+            "[--context=resume] [--wave N] [--groups] [--topic <主題名>]"
         ),
     )
     p.add_argument(
@@ -682,8 +741,8 @@ def register_runqueue(
         action="store_true",
         default=False,
         help=(
-            "對可執行清單（blockedBy=[] pending）依 where.files 交集切出可"
-            "並行/序列群組（優先於 --format）"
+            "對可執行清單（blockedBy=[] pending）依 where.files 交集取貪婪"
+            "極大獨立集，切分可並行集合與本輪未選入清單（優先於 --format）"
         ),
     )
     p.add_argument(
@@ -703,6 +762,14 @@ def register_runqueue(
         type=int,
         default=None,
         help="過濾 wave 範圍",
+    )
+    p.add_argument(
+        "--topic",
+        default=None,
+        help=(
+            "依 lib.topic_assignments 映射過濾指定主題名（值為主題名，"
+            "非 slug）；未指定時不過濾"
+        ),
     )
     p.add_argument(
         "--status",

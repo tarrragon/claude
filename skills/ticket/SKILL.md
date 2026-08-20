@@ -161,7 +161,7 @@ ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"  # 建�
 | `track list`        | 預設 top 10 priority 排序（W10-115） | `ticket track list --status pending --top 20`                  |
 | `track td-status`   | TD 清單校準（PC-094）      | `ticket track td-status 0.18.0-W10-017`                                    |
 | `track reclaim`     | 已鎖 ticket 受控釋放（ghost 鑑識三查，multi-PM Phase 3） | `ticket track reclaim 0.2.1-W3-100 --confirm` <!-- rule8-exempt: illustration:子命令總覽表範例欄的示意 ticket ID，非本專案實際票 --> |
-| `track stuck-anas`  | 列出卡住的 ANA（in_progress 且 spawned 全 completed，W17-008.15） | `ticket track stuck-anas --wave 3`         |
+| `track stuck-anas`  | 列出卡住的 ANA（in_progress 且落地路徑 spawned_tickets／children 全 completed，W17-008.15 / W3-815） | `ticket track stuck-anas --wave 3`         |
 | `track depth`       | 查詢嵌套深度與 can_descend（W1-056.8，沿 parent_id 鏈） | `ticket track depth 1.0.0-W1-056.5`                          |
 | `track parallel-check` | 偵測子任務/兄弟 ticket 檔案衝突（W17-203.1，對齊 askuserquestion-rules 規則 7） | `ticket track parallel-check 0.18.0-W17-203` |
 | `track dispatch-validate` | Context Bundle 自動填料合理性檢查（W17-003，C 方案安全網；exit 0=pass / 1=軟警告 / 2=硬失敗或 IO 錯誤；**與 dispatch-check 的 exit code 語意不共享**，需以命令名稱判別） | `ticket track dispatch-validate 0.18.0-W17-003` |
@@ -188,6 +188,18 @@ ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"  # 建�
 > 詳細用法：Read `references/create-command.md`
 > 血緣 vs 衍生：`--parent` vs `--source-ticket` 對比表見 `references/create-command.md`「--parent vs --source-ticket 對比表」章節（PC-073）
 > 重複偵測：Tier 1 警告層（相似度 >= 0.3，不阻擋）+ Tier 2 阻擋層（同窗口高相似度 exit 1，`--allow-duplicate` 旁路）；見 `references/create-command.md`「重複偵測（兩層防護）」章節（W1-040.1 冪等防護）
+
+> **主題歸屬（自動推導，0.2.1-W3-828）**：未指定 `--topic` / `--new-topic` 時，`create` 依三條判準自動推導主題，命中即自動指派並印出依據，建票者可否決後改派：
+>
+> | 判準 | 條件 | 成本 |
+> |------|------|------|
+> | S1 上游繼承 | `--source-ticket` 或 `--parent` 的上游已有主題 | 約 32 ms |
+> | S2 檔案叢集 | `--where` 路徑與某主題既有涵蓋路徑交集達 3 段特異性 | 約 350-490 ms（僅 S1 未命中時執行） |
+> | S3 ANA 標記 | `--type ANA` 且 S1/S2 皆未命中 | 僅輸出提示，不阻擋 |
+>
+> 三判準皆未命中時印 WARNING 但**不改 rc**（0.2.1-W3-829 過渡期 warn-only）：以 exit code 表達強制力會讓代理人誤判建票失敗而重試。要免除警告有兩條路——指定主題，或以 `--no-topic` 明示不指派（該旗標與 `--topic` / `--new-topic` 互斥，同給時於任何持久化前 exit 1）。
+>
+> 顯式 `--topic` / `--new-topic` 一律優先，推導只在兩者皆未給時啟動。S2 設 3 段特異性門檻是因為 `docs/` 這類單段路徑與該目錄下任何路徑都相交，不設門檻會使擁有淺層路徑的主題成為所有新票的推導結果。改派用 `ticket track topic-backfill-assign --reassign`。
 
 **常用範例**：
 
@@ -266,7 +278,7 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 1.0.0-W28-0
 
 ### track - 追蹤和更新 Ticket 狀態
 
-包含 READ 操作（summary/query/version/tree/chain/deps/full/log/list/board/agent/5W1H/validate/**runqueue**/**dashboard**/stale-list/td-status/stuck-anas）和 UPDATE 操作（claim/complete/release/reclaim/set-who/set-what/set-when/set-where/set-why/set-how/phase/check-acceptance/set-acceptance/append-log/add-child/batch-claim/batch-complete/audit/accept-creation）。`list` 支援 `--wave`、`--status`、`--format`、`--top`、`--all` 篩選參數（W10-115 預設 `--top 10`，priority 排序）。
+包含 READ 操作（summary/query/version/tree/chain/deps/full/log/list/board/agent/5W1H/validate/**runqueue**/**dashboard**/stale-list/td-status/stuck-anas/**list-artifacts**）和 UPDATE 操作（claim/complete/release/reclaim/set-who/set-what/set-when/set-where/set-why/set-how/phase/check-acceptance/set-acceptance/append-log/add-child/batch-claim/batch-complete/audit/accept-creation/add-spawn-request/resolve-spawn-request/**register-artifact**/**resolve-artifact**/**add-exempt-marker**）。`list` 支援 `--wave`、`--status`、`--format`、`--top`、`--all` 篩選參數（W10-115 預設 `--top 10`，priority 排序）。
 
 > **Scheduler — `runqueue`**（W17-011.1）：回答「下一個該做哪個 ticket」。Linux schedule()/runqueue/top/ps 類比。合併原 next+schedule+resume-hint 為單一命令。
 >
@@ -274,10 +286,20 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 1.0.0-W28-0
 > ticket track runqueue --wave 17                    # 可執行清單（blockedBy=[] pending，priority 排序）
 > ticket track runqueue --wave 17 --format=dag       # 完整 DAG + 關鍵路徑高亮
 > ticket track runqueue --context=resume --top 3     # 與 handoff/pending 交集（接手建議）
-> ticket track runqueue --wave 17 --groups           # 依 where.files 交集切分可並行/序列群組（優先於 --format，multi-PM Phase 3）
+> ticket track runqueue --wave 17 --groups           # 依 where.files 交集取貪婪極大獨立集，切可並行集合與本輪未選入清單（優先於 --format，multi-PM Phase 3）
 > ```
 >
 > 新 session 啟動時 `session-start-scheduler-hint-hook` 自動呼叫 `runqueue --context=resume`，結果以 hook additionalContext 顯示。PM 迷失方向時優先執行，免靠記憶判斷先後順序。清單項可能疊加 `[STALE]`（票面 `started_at` 判定久未更新）與 `[RECLAIMABLE]`（registry 判定持有者 session 已死，僅輕量 heartbeat 判準，非 `reclaim` 實際放行判定）兩種並列標記。詳見 `references/track-command.md`「track runqueue 子命令」章節。
+
+> **Board 分組軸 — `board --group-by`**：`board` 新增 `--group-by {wave,topic}`。`wave` 為預設，輸出與本旗標引入前逐字相同；`topic` 依主題分組，一次呈現全部主題連同其票，供「先選主題再選票」的派發決策使用（`topics` 只給票數與 status 分佈、`topic` 只給單一主題的鏈，皆無法一次看到所有主題的內容）。
+>
+> ```bash
+> ticket track board                          # 預設：Wave 分組加 ID 排序
+> ticket track board --group-by topic         # 依主題分組，未歸屬票獨立成節置底
+> ticket track board --wave W3 --group-by topic
+> ```
+>
+> 主題節標題為 `<主題名> (N tasks, 最高優先級=PX)`，排序第一鍵為最高優先級、第二鍵為票數降冪。主題歸屬讀自 `lib/topic_assignments`（append-only 中央清單，非 frontmatter 欄位），未指派票落入 `未歸屬` 節。詳見 `references/track-command.md`「track board 子命令」章節。
 
 > **Dashboard — `dashboard`**（W10-114 / W10-113 M1+M4'）：PM 接手新 session 的聚合視圖。一次回傳 `[In Progress]` + `[Ready Top N]` + `[Stale Warning]` 三章節，Ready 章節含可直接 claim 的編號 `[1] [2] [3]` 與 priority 標籤，免拼 ID。
 >
@@ -344,19 +366,34 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 1.0.0-W28-0
 
 > **注意**：`complete` 在父 ticket 含未完成 children（非 terminal：pending / in_progress / blocked）時會以 exit 1 阻擋（W11-003.2）。提供 `--force` 旁路強制完成，會在 stderr 列出未完成 children 作為警告，cascade 解鎖機制仍會執行。建議優先完成 children 後再 complete 父 ticket。
 >
-> **注意**：5W1H 欄位由 `set-who` ~ `set-how` 6 個命令更新。`blockedBy` 用 `set-blocked-by`、`relatedTo` 用 `set-related-to`（均支援 `--add`/`--remove`）、`priority` 用 `set-priority`。其餘 frontmatter 欄位無 CLI 命令，需手動編輯 frontmatter。完整對照表見 `references/track-command.md`。
+> **注意**：5W1H 欄位由 `set-who` ~ `set-how` 6 個命令更新。`title` 用 `set-title`、`blockedBy` 用 `set-blocked-by`、`relatedTo` 用 `set-related-to`（均支援 `--add`/`--remove`）、`priority` 用 `set-priority`。完整對照表見 `references/track-command.md`。
 >
-> **注意**：`append-log` 必須加上 `--section` 必填參數：`ticket track append-log <id> --section "Problem Analysis" "內容"`。有效區段值（SSOT：`ticket_system/constants.py` 的 `CANONICAL_BODY_SECTIONS` + `Execution Log`，共 10 章）：`Task Summary`、`Problem Analysis`、`重現實驗結果`、`Solution`、`Test Results`、`Context Bundle`、`NeedsContext`、`Exit Status`、`Completion Info`、`Execution Log`。body-schema 全必填章節（含 `Completion Info`）皆可經 append-log 寫入，不需 Edit 繞道。`重現實驗結果` 為 ANA type 必填章節（PC-063 / ticket-body-schema.md）。`Context Bundle` 用於派發前寫入 PCB（PC-040）；`NeedsContext`/`Exit Status` 用於代理人結束狀態協議（W17-010）。
+> **`title` 與 `what` 是兩個獨立欄位，`set-what` 刻意不同步 `title`**：`title` 是清單顯示用的短標籤（dashboard / runqueue 顯示的是它），`what` 是完整任務敘述（可含檔案清單、括號補充）。2026-08-18 量測 741 張票，124 張（17%）兩者刻意不同。票的範圍事後縮小時（如依上游評估結論移除 acceptance），**兩個欄位都要更新**——只改 `what` 會讓清單上的 `title` 繼續以舊範圍誤導接手者。
 >
-> **Status precondition（W3-044 / W1-058）**：`append-log` 要求 ticket status 為 `in_progress`（`completed` 亦放行，補 review 場景）。**例外（W1-058）**：派發前章節 `Problem Analysis` / `Context Bundle` 允許 `pending` 直寫——PM 依 PC-040 / PC-100 於 create 後立即寫入派發 context 屬合法 bookkeeping，不需 `--force`、不記 audit。其餘章節（`Solution` / `Test Results` / `Execution Log` 等執行產出）於 pending / blocked / closed 仍阻擋（status 失敗 exit 2）；`--force` 逃生閥行為與 hook-logs audit 紀錄不變。
+> **其餘 frontmatter 欄位若無對應命令，不要手動編輯**：`ticket-file-access-guard-hook` 會以 exit 2 阻擋直接編輯 frontmatter，繞道不可行。找不到對應命令代表該欄位缺少合法更新途徑（PC-BAL-047），應建 ticket 回報補上命令。
+>
+> **注意**：`append-log` 必須加上 `--section` 必填參數：`ticket track append-log <id> --section "Problem Analysis" "內容"`。有效區段值（SSOT：`ticket_system/constants.py` 的 `CANONICAL_BODY_SECTIONS`，共 10 章）：`Task Summary`、`Problem Analysis`、`重現實驗結果`、`Solution`、`Test Results`、`Context Bundle`、`NeedsContext`、`Exit Status`、`Spawn Requests`、`Completion Info`。`Execution Log` 是 body 的 H1 容器標題而非 H2 章節，明確不受 append-log 支援（該支援納入白名單後從未生效，見 DOC-007）。body-schema 全必填章節（含 `Completion Info`）皆可經 append-log 寫入，不需 Edit 繞道。`重現實驗結果` 為 ANA type 必填章節（PC-063 / ticket-body-schema.md）。`Context Bundle` 用於派發前寫入 PCB（PC-040）；`NeedsContext`/`Exit Status` 用於代理人結束狀態協議（W17-010）。
+>
+> **Status precondition（W3-044 / W1-058）**：`append-log` 要求 ticket status 為 `in_progress`（`completed` 亦放行，補 review 場景）。**例外（W1-058）**：派發前章節 `Problem Analysis` / `Context Bundle` 允許 `pending` 直寫——PM 依 PC-040 / PC-100 於 create 後立即寫入派發 context 屬合法 bookkeeping，不需 `--force`、不記 audit。其餘章節（`Solution` / `Test Results` / `Completion Info` 等執行產出）於 pending / blocked / closed 仍阻擋（status 失敗 exit 2）；`--force` 逃生閥行為與 hook-logs audit 紀錄不變。
 >
 > **副作用（W7-001）**：`append-log` 寫入 body 後會 **auto-commit 該 ticket md**（精確路徑，commit message `chore(<id>): append-log <section>`）。**Why**：body 即時進 commit 歷史可使 `git checkout -- <file>` / `git reset --hard` / `git stash` 三種還原全失效，根除 W1-017「未 commit body 被 git 還原覆蓋回 placeholder」遺失問題。**Consequence**：每次 append-log 會新增一個 `chore` commit（碎 commit 為設計取捨，對 ticket md chore 類可接受）；body 無變更時 graceful skip 不產生空 commit。**Action**：非 git repo / index.lock 競爭 / commit 失敗時 append-log 仍 exit 0 + stderr 警告，body 保留 working tree 可手動 commit。不使用 `--no-verify`（維持 pre-commit hook 把關；ticket md 非 JS，lint-staged 無匹配）。
 >
+> **補標記 — `add-exempt-marker`**：自由撰寫章節（Solution / Test Results / NeedsContext 等）以 `append-log` 寫入後即無法修改——`append-log` 僅能追加、CLI 無編輯指令、該區段不在 `ticket-file-access-guard-hook` 白名單內故 Edit 工具被拒，三層疊加使 `PC-093-exempt` 這類行級標記完全無法事後補上。`add-exempt-marker` 補這條路，且**僅追加獨立標記行、不修改原文字**：
+>
+> ```bash
+> ticket track add-exempt-marker <id> --section "Solution" --match "命中行的文字子字串" \
+>   --category ticket-tracked --reason "W17-085 hook 訊息改善"
+> ```
+>
+> `--match` 是文字比對定位（非行號——行號隨後續編輯漂移）：命中恰好一行才寫入；0 命中或多重命中一律拒絕並回報候選行，要求提供更精確的 `--match` 收窄。marker 固定插入為命中行的**前一行**（獨立新行），與 `phase4-decision-enforcement-hook` 的豁免距離規則（同行或前 1 行生效）一致。`--category` 限定 `tdd-transition` / `baseline-gated` / `ticket-tracked` / `user-override` / `rule-quote` / `history`，`--reason` 格式驗證與該 hook 同規則（`baseline-gated` 需含數字、`ticket-tracked`/`history` 需含 `W{wave}-{seq}` ticket ID、`rule-quote` 需含 `.claude/rules/` 或 `.claude/pm-rules/` 路徑）。**防濫用**：本命令不能憑空產生新內容、只能指向既有行；marker 是否真正生效仍由該 hook 於 phase4 轉換 / complete 時重新掃描判定，本命令不繞過該把關層。Status precondition 與 auto-commit 副作用與 `append-log` 同（見上）。
+>
 > **注意**：`check-acceptance` 只接受**單一** index（如 `1`）或 `--all`；不支援 `1 2 3` 多索引。一次勾選多項請改用 `set-acceptance --check 1 2 3`。先用 `ticket track query <id>` 查看驗收條件清單和編號。詳見 `references/track-command.md`「驗收條件操作詳解」（含決策樹 + 5 常見錯誤）。
 >
-> **注意**：`set-acceptance` 是 `check-acceptance` 的明確語意版（：`--check <index>` / `--uncheck <index>`（可多個）、`--all-check` / `--all-uncheck`。禁止 subagent 直接 Edit frontmatter 的 acceptance 欄位。
+> **注意**：`set-acceptance` 是 `check-acceptance` 的明確語意版：`--check <index>` / `--uncheck <index>`（可多個）、`--all-check` / `--all-uncheck`。禁止 subagent 直接 Edit frontmatter 的 acceptance 欄位。
 >
 > **建票後修訂（`--add`/`--edit`/`--remove`）**：`set-acceptance` 額外支援建票後修訂 acceptance 條目本身（非僅勾選狀態）——`--add <text>`（可多個）追加條目，預設未勾選；`--edit <index> <text>`（可重複指定多組）覆寫指定 index 的文字，原勾選狀態不變；`--remove <index>`（可多個）移除條目，其餘條目依原內容正確對位不漂移。三者與 `--check`/`--uncheck`/`--all-check`/`--all-uncheck` 互斥（每次呼叫僅能指定一種模式）。**已勾選（`[x]`）條目移除須另加 `--force`**（防止事後抹除驗收證據）；`completed` 票的任一子操作同樣受既有 status precondition 保護，需 `--force` 才能修訂。
+>
+> **多值寫法**：`--check` / `--uncheck` / `--add` / `--remove` 四個旗標的「可多個」涵蓋兩種形式，兩者等價也可混用——空白分隔（`--add "A" "B"`）與重複旗標（`--add "A" --add "B"`）。重複旗標形式曾因 argparse 未設 `action="append"` 而互相覆寫、只保留最後一個值且無警告，該缺陷已修復。`--edit` 語意為成對 `(index, text)`，一律用重複旗標形式。
 >
 > **注意**：`validate <id>` 驗證 Ticket frontmatter 4 關鍵欄位（status/completed_at/acceptance/who）合規性，違規時給出建議修復命令。
 >
@@ -371,6 +408,16 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 1.0.0-W28-0
 > **六欄位語意 SSOT**：parent_id / children / source_ticket / spawned_tickets / blockedBy / relatedTo 的權威定義、阻擋語意、用戶情境對照表、決策樹見 `references/field-semantics.md`。其他規則 / 方法論 / error-pattern 涉及這些欄位時應引用該檔，不重複定義。
 
 > **派發前提示**：當 ticket 是 group、含 children、含 spawned_tickets，或同輪會派 2+ agents 時，先在 Ticket Problem Analysis / Solution 寫 dispatch-plan。欄位使用 `.claude/references/agent-dispatch-template.md`：`ticket` / `agent` / `files` / `deps` / `context source` / `commit policy` / `run mode`。dispatch-plan 是 orchestration description，不是 batch dispatch CLI。
+
+> **實驗器材登記 — `register-artifact` / `resolve-artifact` / `list-artifacts`**：跨 session 實驗器材（sentinel/探針/對照組樣本，其存在本身即為觀測手段的檔案）的票面登記 CLI 化，取代規範原僅要求「登記三項但格式自由發揮」的手工條款。完整規範見 `.claude/pm-rules/parallel-dispatch.md`「跨 session 實驗器材的自我標示與存活期治理（強制）」。
+>
+> ```bash
+> ticket track register-artifact <id> --path <路徑> --purpose <用途> --expiry <存活期> [--type 明示|盲測]
+> ticket track list-artifacts <id> [--json]
+> ticket track resolve-artifact <id> EXP-N --status removed|kept [--successor <ticket-id>] [--reason <說明>]
+> ```
+>
+> `register-artifact` 自動編號（`EXP-N`）寫入 Solution 章節固定子章節，同時輸出可直接複製貼上的首行 header 文字（供落地條件一的檔案端標示）。`list-artifacts` 提供結構化讀回（含 `--json`），供收尾檢查程式化消費，不需人工掃描章節。`resolve-artifact` 標記存活期治理的收尾處置：`--status kept` 強制要求 `--successor`（CLI 層面阻止「未指名接手者」漏處置，非僅文件提醒）。
 
 > 決策樹：Read `references/workflow-execute.md` 和 `references/workflow-query.md`
 > 詳細用法：Read `references/track-command.md`
@@ -473,11 +520,26 @@ ticket handoff --from-worklog [--worklog-path PATH] [--dry-run]
 
 ---
 
-**Version**: 2.11.0
-**Last Updated**: 2026-08-18
+**Version**: 2.14.0
+**Last Updated**: 2026-08-20
 **Status**: Completed
 
 **Change Log**:
+
+- v2.14.0 (2026-08-20): `create` 新增 `--no-topic` 與過渡期 WARNING（0.2.1-W3-829 落地）
+  - 主題 callout 補 warn-only 語意：三判準未命中印 WARNING 但不改 rc，理由為避免代理人誤判建票失敗
+  - 補 `--no-topic` 說明：明示不指派、與 `--topic` / `--new-topic` 互斥、衝突時於持久化前 exit 1
+
+- v2.13.0 (2026-08-20): `create` 主題自動推導上線（0.2.1-W3-828 落地）
+  - create 章節新增「主題歸屬（自動推導）」callout：S1 上游繼承 / S2 檔案叢集 / S3 ANA 標記三判準與各自成本
+  - 明示顯式 `--topic` / `--new-topic` 優先，推導僅在兩者皆未給時啟動（既有呼叫端行為不變）
+  - 記錄 S2 的 3 段特異性門檻依據（淺層路徑會使單一主題成為所有新票的推導結果）
+
+- v2.12.0 (2026-08-20): `board` 新增 `--group-by {wave,topic}` 分組軸（0.2.1-W3-805 落地）
+  - 新增「Board 分組軸 — `board --group-by`」callout：預設 `wave` 輸出逐字不變、`topic` 依主題分組
+  - 主題節標題格式、排序雙鍵（最高優先級 → 票數降冪）、未歸屬節置底規則
+  - 主題歸屬來源明示為 `lib/topic_assignments` 中央清單（非 frontmatter 欄位）
+  - `references/track-command.md`「track board 子命令」同步補選項表與分組軸章節
 
 - v2.11.0 (2026-08-18): dashboard-first 流程接手選項加入 lease 存活過濾（framework issue tarrragon/claude#78）
   - [In Progress] 條目帶 `[LIVE]` / `[RECLAIMABLE]` lease 狀態標記說明（CLI 同日落地，判準同 registry heartbeat）

@@ -266,12 +266,12 @@ git branch -d {branch}
 | 步驟 | 動作 | 原因 |
 |------|------|------|
 | 1 | 完成 Ticket 狀態更新（5W1H、claim、accept-creation） | 確保 Ticket 資訊完整 |
-| 2 | `git add` + `git commit` main 上的變更 | **強制**，防止 stash 丟失（PC-019） |
-| 3 | 確認 `git status` 為 clean | 確保無殘留未提交變更 |
+| 2 | `git add` + `git commit` main 上的變更 | **建議**，降低 worktree 操作（stash/checkout 等）造成變更遺失的風險；PC-019 的實際防護已改由 `workspace-wipe-guard-hook` 在危險動作端（stash/checkout/reset 等）無條件 DENY 承擔，非本步驟 |
+| 3 | 確認 `git status` 為 clean | PM 自行確認的良好實務（無 hook 於派發前強制阻擋），有助及早發現遺漏未提交的變更 |
 | 4 | 決定 `--worktree` / `-w` session 或 `Agent(isolation: "worktree")` | 依人工 session 或背景 subagent 選入口 |
 | 5 | 若任務範圍明確，設定 `worktree.sparsePaths` | 降低大型 worktree 污染與 checkout 成本 |
 
-**禁止**：main 上有未提交變更時派發 worktree agent。
+> `worktree-commit-before-dispatch-hook.py` 對主 repo 髒污僅輸出 stderr 提醒（exit 0，不阻擋派發）；步驟 2/3 是 PM 端建議紀律，不再有 hook 端 DENY backstop。
 
 #### Guard B 前置：派發前確認主 repo 未漂移（來源 1.2.0-W1-028 事故二）
 
@@ -394,7 +394,7 @@ git branch | grep "worktree-agent-" | xargs git branch -D 2>/dev/null
 |------|------|------|
 | Agent 完成後 CWD 在 worktree 路徑 | Agent 工具可能改變 shell 狀態 | 每次 Agent 完成後執行 `pwd && git branch --show-current` |
 | `git status` 顯示錯誤分支的狀態 | CWD 在 feature 分支 | 確認在 main 後才執行 git 操作 |
-| `git stash` 後 `stash drop` 丟失變更 | main 上有未提交變更 | **禁止**：先 commit 再派發（階段 1 步驟 2） |
+| `git stash` 後 `stash drop` 丟失變更 | main 上有未提交變更 | **建議**：先 commit 再派發（階段 1 步驟 2，無 hook 端強制阻擋，PM 自行落實） |
 
 ---
 
@@ -559,8 +559,9 @@ subagent 在任何 cwd 都可 Read worktree 內的 `.claude/` 檔案。可用於
 
 ---
 
-**Last Updated**: 2026-08-04
-**Version**: 2.7.0 - 修正 worktree-remove-deliverable-check-hook 的 BLOCK_MESSAGE_DIRTY 內部代號「Guard B」與本文件既有 Guard B（worktree-pre-dispatch-branch-drift-hook，派發前分支漂移）撞號：改名 Guard C 並於階段 3 新增獨立章節、同步觸發點表與清理後檢查清單；merge-reminder-hook 的 dirty 分支清理建議改為 commit 後 merge 再 remove 的導向，不再指向會被 Guard C 阻擋的 `remove --force`（0.2.1-W3-285，承接 0.2.1-W3-282 同型問題殘留）
+**Last Updated**: 2026-08-19
+**Version**: 2.8.0 - 因應 worktree-commit-before-dispatch-hook 主 repo 髒污判定由 DENY 降為 WARN：階段 1 步驟 2/3 措辭由「強制/確保無殘留」改為「建議」並標明防護歸屬已轉移至 workspace-wipe-guard-hook（危險動作端無條件 DENY）；移除階段 1「禁止：main 上有未提交變更時派發 worktree agent」全域阻塞句；「Shell 工作目錄保護」表對應行同步由「禁止」改「建議」
+**Version**: 2.7.0 - 修正 worktree-remove-deliverable-check-hook 的 BLOCK_MESSAGE_DIRTY 內部代號「Guard B」與本文件既有 Guard B（worktree-pre-dispatch-branch-drift-hook，派發前分支漂移）撞號：改名 Guard C 並於階段 3 新增獨立章節、同步觸發點表與清理後檢查清單；merge-reminder-hook 的 dirty 分支清理建議改為 commit 後 merge 再 remove 的導向，不再指向會被 Guard C 阻擋的 `remove --force`（0.2.1-W3-285，承接前一張同型問題殘留票）
 **Version**: 2.6.0 - 新增「唯讀派發豁免 worktree 強制（0.2.1-W3-269，框架 issue 36）」節：TDD Phase 3a 等唯讀規劃/分析派發可用 prompt 首行 `Dispatch-Mode: readonly` 豁免 worktree 強制，含三條件 AND 判準、適用判準、反例表、與 review mode 的 OR 關係；「適用範圍與強制規則」表補豁免指引；派發 prompt 骨架速查另見 `agent-dispatch-template.md`（0.2.1-W3-270，接續 0.2.1-W3-269 落地）
 **Version**: 2.5.0 - 新增「多階段串接派發（Feat 分支累積器）」節：跨 agent TDD phase 接力（RED→GREEN 跨多個 worktree agent）時保 main 全程恆綠的機制，含 checkout-paths 取代 merge 的理由與 Guard A 銜接說明；階段 2「提取方式選擇」表補第四列 `git checkout <ref> -- <paths>`（0.2.1-W3-095，落地自 memory multi-phase-tdd-branch-flow.md）
 

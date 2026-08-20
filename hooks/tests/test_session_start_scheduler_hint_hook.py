@@ -310,6 +310,13 @@ def test_extract_spawned_list_handles_empty():
     assert hook._extract_spawned_list({}) == []
 
 
+def test_extract_spawned_list_handles_single_scalar():
+    """0.2.1-W3-719：單一純量寫法（無 dash）為合法 YAML，須回傳單元素清單。"""
+    hook = load_hook_module()
+    fm = {"spawned_tickets": "0.18.0-W1-001"}
+    assert hook._extract_spawned_list(fm) == ["0.18.0-W1-001"]
+
+
 # ---------------------------------------------------------------------------
 # 16. _detect_active_version：status=active 的版本能被偵測到
 # ---------------------------------------------------------------------------

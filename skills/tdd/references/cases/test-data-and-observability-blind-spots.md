@@ -85,7 +85,7 @@ test('_buildTitleAuthorKey 無 author 欄位不報錯', () => {
 
 ### 背景
 
-v0.17.0 W3 實作 tag-storage-adapter.js，包含 8 個 catch 區塊。專案的可觀測性規則（`.claude/references/observability-rules.md`）要求「catch 區塊必須有日誌」。
+v0.17.0 W3 實作 tag-storage-adapter.js，包含 8 個 catch 區塊。專案的可觀測性規則（專案的可觀測性規則）要求「catch 區塊必須有日誌」。
 
 ### 問題
 

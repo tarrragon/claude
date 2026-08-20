@@ -10,20 +10,20 @@ import argparse
 from unittest.mock import patch
 
 from ticket_system.constants import MAX_CHILDREN_WARNING_THRESHOLD
-from ticket_system.commands.create import _resolve_ticket_id_and_wave
+from ticket_system.lib.ticket_id_allocator import resolve_ticket_id_and_wave
 
 
 class TestCreateParentChildrenCountWarning:
     """create --parent 扇出 warning"""
 
     def _run(self, parent_id, child_seq, capsys):
-        """以 child_seq mock 執行 _resolve_ticket_id_and_wave，回傳 stdout。"""
+        """以 child_seq mock 執行 resolve_ticket_id_and_wave，回傳 stdout。"""
         args = argparse.Namespace(parent=parent_id, seq=None, wave=None)
-        with patch("ticket_system.commands.create.get_next_child_seq", return_value=child_seq), \
-             patch("ticket_system.commands.create.compute_depth", return_value=1), \
-             patch("ticket_system.commands.create.extract_wave_from_ticket_id", return_value=1), \
-             patch("ticket_system.commands.create.validate_ticket_id", return_value=True):
-            result = _resolve_ticket_id_and_wave(args, "1.0.0")
+        with patch("ticket_system.lib.ticket_id_allocator.get_next_child_seq", return_value=child_seq), \
+             patch("ticket_system.lib.ticket_id_allocator.compute_depth", return_value=1), \
+             patch("ticket_system.lib.ticket_id_allocator.extract_wave_from_ticket_id", return_value=1), \
+             patch("ticket_system.lib.ticket_id_allocator.validate_ticket_id", return_value=True):
+            result = resolve_ticket_id_and_wave(args, "1.0.0")
         out = capsys.readouterr().out
         return result, out
 

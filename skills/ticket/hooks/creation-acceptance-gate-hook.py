@@ -164,13 +164,16 @@ def check_creation_accepted(ticket_id: str, logger) -> Tuple[bool, Optional[str]
     # 解析 frontmatter
     frontmatter = parse_ticket_frontmatter(ticket_file, logger)
 
-    # 檢查 creation_accepted 欄位
+    # 檢查 creation_accepted 欄位。frontmatter 已由 yaml.safe_load 原生型別
+    # 解析，unquoted true/false 恆回 bool；全庫實測 creation_accepted 皆為
+    # unquoted 布林寫法，不再需要「字串內容判斷真偽」的正規化（舊
+    # isinstance(str) 分支的 .lower() in (...) 判斷是手寫 parser 一律回字串
+    # 時代的相容補償）。非 bool 型別一律視為 False（fail-closed）：對照舊碼，
+    # 若手動編輯成 `creation_accepted: "false"`（加引號），舊碼會正確判為
+    # False；若在此改為「非 None 即真值」會使該輸入被誤判為 True（繞過驗收
+    # 閘門），fail-closed 避免此回歸，行為不劣於舊碼。
     creation_accepted = frontmatter.get("creation_accepted", False)
-
-    # 正規化布林值
-    if isinstance(creation_accepted, str):
-        creation_accepted = creation_accepted.lower() in ("true", "yes", "1")
-    elif creation_accepted is None:
+    if not isinstance(creation_accepted, bool):
         creation_accepted = False
 
     logger.info(f"Ticket {ticket_id} creation_accepted: {creation_accepted}")

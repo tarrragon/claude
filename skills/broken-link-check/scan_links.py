@@ -40,7 +40,13 @@ REF_REGEX = re.compile(r"(?:@\.claude/|\.claude/|\.\./|\./)[^\s)\]\"'`]*?\.md")
 # W8-049：per-line 豁免 marker。error-pattern 案例表刻意記錄的不存在路徑
 # （confabulation 錯誤參照 / 歷史遷移檔案軌跡）以行內 marker 顯式 opt-in 豁免，
 # 歸 excluded_documented 不計 broken。marker 僅影響所在行（PC-146 放置精確性）。
-EXEMPT_MARKER = re.compile(r"<!--\s*broken-link-exempt\b.*?-->")
+# 兩個標記語彙同屬「已判定豁免」家族，差別在判定理由：broken-link-exempt 說
+# 「這個路徑不存在是預期的」（示範路徑、歷史引文），portability-allow 說「這個
+# 消費端專屬引用是刻意保留的」（架構性橋接、約定安裝位置）。後者蘊含前者——
+# 消費端專屬引用在沒有該資產的專案就是不存在，所以同一條豁免通道處理兩者，
+# 標記寫在哪一行就只豁免那一行。portability-allow 亦出現在非 HTML 註解形式
+# （程式碼區塊內的 shell 註解），故不限定 <!-- --> 包裹。
+EXEMPT_MARKER = re.compile(r"<!--\s*broken-link-exempt\b.*?-->|portability-allow")
 
 # 固定 placeholder 樣式集（SKILL 表格自身範例路徑，非真實引用）
 PLACEHOLDER_SAMPLES = {

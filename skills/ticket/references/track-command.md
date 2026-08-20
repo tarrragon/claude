@@ -34,7 +34,7 @@
 
 # 執行日誌（過濾單一 section，W17-008.3；對齊 append-log 介面）
 # 範例：/ticket track log <id> --section "Solution"
-# 可用 section：Problem Analysis / Context Bundle / Solution / Test Results / Execution Log
+# 可用 section：見 constants.CANONICAL_BODY_SECTIONS（與 append-log 同一份清單）
 /ticket track log <id> --section "<Section Name>"
 
 # 列出 Tickets（預設 --top 10 by priority；詳見「track list 子命令」）
@@ -89,7 +89,7 @@
 | `--top N`          | int                                     | 限制 N 筆（list / critical-path 有效，dag 忽略） |
 | `--context=resume` | —                                       | 交集 `.claude/handoff/pending/`                  |
 | `--wave N`         | int                                     | 過濾 wave                                        |
-| `--groups`         | —                                        | 依 `where.files` 交集切分可並行/序列群組，**優先於 `--format`**（兩者同時給出時 `--groups` 生效渲染群組視圖，非互斥錯誤；`--top` 對 `--groups` 無效，同 `dag`） |
+| `--groups`         | —                                        | 依 `where.files` 交集取貪婪極大獨立集，切分可並行集合與本輪未選入清單，**優先於 `--format`**（兩者同時給出時 `--groups` 生效渲染群組視圖，非互斥錯誤；`--top` 對 `--groups` 無效，同 `dag`） |
 
 **`[RECLAIMABLE]` 標記（multi-PM 協調層 Phase 3）**：list 視圖逐票渲染時，若該票在 `pm-registry.json` 中被判定為 STALE session 持有（`lease.is_lease_reclaimable` 輕量判準：僅查 heartbeat 是否逾 TTL），於票號前加 `[RECLAIMABLE]`，可與 `[STALE]`（stale in_progress 判準，來源不同——見上方 Exit Status tag 段落與 stale-list 章節）並列疊加，兩者可各自獨立出現。`[RECLAIMABLE]` 僅為候選提示，實際能否釋放需 `ticket track reclaim` 的 ghost 鑑識三查，詳見「track reclaim 子命令」章節「與 sessions/runqueue 顯示層判定的差異」。
 
@@ -128,7 +128,13 @@ Wave 完成判定規則（Checkpoint 2 情境 C 前置條件）：
 
 ### `--groups` 並行群組切分（multi-PM 協調層 Phase 3）
 
-輸入集合與 `list` 視圖同（`blockedBy=[]` 的 pending 票，同一份 priority 排序結果），對此集合依 `where.files` 交集建無向衝突圖：節點為票 id，邊為兩兩交集命中（判定邏輯與 `track conflicts` 共用 `compute_pairwise_conflicts`，含 impl→test 擴張啟發式）。連通分量（含至少一條邊）即序列組——組內成員經由交集邊傳遞關聯，即使組內兩票本身無直接交集，仍因傳遞性須序列化；孤立節點（與任何票皆無交集）歸入單一「可並行群組」，彼此兩兩必無交集。
+輸入集合與 `list` 視圖同（`blockedBy=[]` 的 pending 票，同一份 priority 排序結果），對此集合依 `where.files` 交集建無向衝突圖：節點為票 id，邊為兩兩交集命中（判定邏輯與 `track conflicts` 共用 `compute_pairwise_conflicts`，含 impl→test 擴張啟發式）。對全體節點依輸入序做單次全域貪婪極大獨立集走訪：逐一檢視節點，若尚未被先前選中節點的鄰居排除即選入「可並行群組」並排除其所有鄰居；孤立節點（度數為 0）必定入選。未被選入的節點歸入「本輪未選入」清單——僅代表與本批已選票有直接衝突邊，不代表這些節點彼此之間也必須序列，即使兩者在衝突圖上經由第三個節點傳遞關聯（A-B 有邊、B-C 有邊、A-C 無邊時，A 與 C 仍可能同時入選可並行群組）。
+
+**Why**：連通分量整塊視為必須序列化是過度保守判定——傳遞關聯不代表互斥，只有直接衝突的節點對才真的不能同時進行。**Consequence**：「本輪未選入」不是佇列、系統不代為排入下一輪，未選入不代表彼此須序列，只是與本批已選票有直接衝突。**Action**：本批票認領後重跑 `ticket track runqueue --groups`，未選入的票在下一次貪婪走訪（已選票離開候選集後）可能改判入選。
+
+> **已知缺口：重跑時看不見在飛票的衝突邊。** 輸入集合限定 `status=pending`，票一經認領轉 `in_progress` 即離開衝突圖，**其衝突邊一併消失**。因此重跑可能選出與施工中的票有 `where.files` 交集的票。實測顯示此缺口與可並行判定採連通分量或貪婪獨立集無關，兩者的撞擊率相同——成因是輸入集合的狀態篩選，不是分組演算法。`lease` 層亦接不住：其衝突警告明確跳過自身 session，同一 PM 在兩輪之間撞自己的檔案不會有任何提示。
+>
+> 在此缺口的處置定案前，重跑後請自行比對新選出的票與仍在 `in_progress` 的票之間有無 `where.files` 交集（`ticket track conflicts` 可查）。相關分析 ticket 見版本工作日誌。
 
 ```bash
 ticket track runqueue --wave 3 --groups
@@ -138,17 +144,20 @@ ticket track runqueue --wave 3 --groups
 
 ```
 === Parallel Groups ===
-可並行群組（3 票，兩兩無交集）：
+可並行群組（4 票，兩兩無交集）：
   - 0.2.1-W3-100
   - 0.2.1-W3-101
   - 0.2.1-W3-102
+  - 0.2.1-W3-200
 
-序列群組（1 組，組內須依序執行）：
-  群組 1: 0.2.1-W3-200, 0.2.1-W3-201
+本輪未選入可並行集合（1 票）：
+  - 0.2.1-W3-201
 
 衝突對（1 組）：
   0.2.1-W3-200 <-> 0.2.1-W3-201 [heuristic]: test/domain/foo_test.dart  <!-- skill-residue-exempt: 命令輸出範例的示意路徑，非本專案實際檔案 -->
 ```
+
+（此範例由 `file_conflict.compute_parallel_groups` / `render_groups` 對 5 票示意輸入實際執行取得，第一票與第二票因 impl→test 啟發式命中而衝突，貪婪走訪依輸入序先選入第一票，故其落在可並行群組、第二票落在本輪未選入。）  <!-- rule8-exempt: illustration:命令輸出範例的示意 ID 說明文字 -->
 
 `[heuristic]` 標記代表該衝突僅由 impl→test 擴張啟發式衍生路徑觸發（票面原始宣告的 `where.files` 本身無交集），語意與 `track conflicts` 章節「衝突判定規則」的 `[heuristic]` 相同。
 
@@ -198,7 +207,9 @@ ticket track runqueue --wave 3 --groups
 /ticket track set-how <id> <value>
 
 # 追加執行日誌
-# 有效 section: Problem Analysis / Context Bundle / Solution / Test Results / Execution Log / NeedsContext / Exit Status
+# 有效 section: 見 constants.CANONICAL_BODY_SECTIONS（Task Summary / Problem Analysis /
+#   重現實驗結果 / Solution / Test Results / Context Bundle / NeedsContext / Exit Status /
+#   Spawn Requests / Completion Info）。"Execution Log" 是 H1 容器標題，不是合法值
 # Status precondition（W3-044 / W1-058）：需 status=in_progress（completed 補 review 亦放行）；
 # 派發前章節 Problem Analysis / Context Bundle 例外允許 pending 直寫（PM bookkeeping，不需 --force）
 /ticket track append-log <id> --section "Problem Analysis" "內容"
@@ -218,14 +229,16 @@ ticket track runqueue --wave 3 --groups
 /ticket track check-acceptance <id> "實作完成"          # 文字搜尋勾選（模糊比對）
 
 # 勾選驗收條件（set-acceptance）
-/ticket track set-acceptance <id> --check 1 2 3        # 勾選多個 index（空白分隔，支援 nargs）
+/ticket track set-acceptance <id> --check 1 2 3        # 勾選多個 index（空白分隔）
+/ticket track set-acceptance <id> --check 1 --check 3  # 同上（重複旗標，等價）
 /ticket track set-acceptance <id> --uncheck 1 2        # 取消勾選多個 index
 /ticket track set-acceptance <id> --all-check          # 勾選全部
 /ticket track set-acceptance <id> --all-uncheck        # 取消勾選全部
 
 # 建票後修訂驗收條目（set-acceptance --add/--edit/--remove）
 /ticket track set-acceptance <id> --add "新條件"                    # 追加條目，預設未勾選
-/ticket track set-acceptance <id> --add "條件二" "條件三"           # 一次追加多個
+/ticket track set-acceptance <id> --add "條件二" "條件三"           # 一次追加多個（空白分隔）
+/ticket track set-acceptance <id> --add "條件二" --add "條件三"      # 同上（重複旗標，等價且可與空白分隔混用）
 /ticket track set-acceptance <id> --edit 2 "修訂後文字"             # 覆寫 index 2 文字，勾選狀態不變
 /ticket track set-acceptance <id> --edit 1 "文字甲" --edit 3 "文字乙"  # 一次改多組（可重複 --edit）
 /ticket track set-acceptance <id> --remove 2                       # 移除未勾選條目
@@ -405,15 +418,40 @@ ticket track runqueue --wave 3 --groups
 
 # 顯示所有任務（包含已完成）
 /ticket track board --all
+
+# 依主題分組排列（0.2.1-W3-805）
+/ticket track board --group-by topic
 ```
 
 ### 選項說明
 
-| 選項        | 說明                       |
-| ----------- | -------------------------- |
-| `--version` | 版本號（自動偵測）         |
-| `--wave`    | 只顯示特定 Wave            |
-| `--all`     | 顯示所有任務（包含已完成） |
+| 選項         | 說明                                              |
+| ------------ | ------------------------------------------------- |
+| `--version`  | 版本號（自動偵測）                                |
+| `--wave`     | 只顯示特定 Wave                                   |
+| `--all`      | 顯示所有任務（包含已完成）                        |
+| `--group-by` | 分組軸：`wave`（預設）或 `topic`                  |
+
+### 分組軸：`--group-by`
+
+`wave`（預設）為 Wave 分組加 ID 排序，輸出與本旗標引入前逐字相同（以測試斷言鎖定）。
+
+`topic` 依主題分組，一次呈現全部主題連同其票，供「先選主題再選票」的派發決策使用——
+`track topics` 只給各主題的票數與 status 分佈，`track topic` 只給單一主題的鏈，兩者皆
+無法一次看到所有主題的內容，而票數相同的兩個主題正是內容決定該先做哪個。
+
+`topic` 模式的呈現規則：
+
+| 規則 | 行為 |
+|------|------|
+| 主題節標題 | `<主題名> (N tasks, 最高優先級=PX)`；無有效 priority 時以佔位字串代替 |
+| 主題排序 | 第一鍵最高優先級（P0 最前，無有效 priority 排最後），第二鍵票數降冪 |
+| 節內票行 | 沿用 Wave 分組的樹狀縮排與 `short_id [priority] title` 格式 |
+| 未歸屬票 | 獨立一節 `未歸屬 (N tasks)` 置於全部主題節之後，不與任一主題混列 |
+
+主題歸屬讀自 `lib/topic_assignments.list_assignments()`（append-only 中央清單，
+非 ticket frontmatter 欄位）。未經 `create --topic` / `--new-topic` 指派或回填的票
+一律落入未歸屬節。
 
 ## track audit 子命令
 

@@ -390,6 +390,26 @@ def execute_set_what(args: argparse.Namespace, version: str) -> int:
     return execute_set_field(args, version, "what")
 
 
+def execute_get_title(args: argparse.Namespace, version: str) -> int:
+    """讀取 Ticket 的 title 欄位"""
+    return execute_get_field(args, version, "title")
+
+
+def execute_set_title(args: argparse.Namespace, version: str) -> int:
+    """設定 Ticket 的 title 欄位（2026-08-18 新增）。
+
+    title 與 what 是兩個獨立欄位，本函式刻意不連帶更新 what——量測 741 張票
+    有 124 張（17%）兩者不同，模式為 title 作清單顯示用的短標籤、what 作含
+    檔案清單與括號補充的完整敘述。同步兩者會抹平該分工。
+
+    本命令補上的是 title 原本不存在的更新途徑：CLI 無設定命令、set-what 只改
+    what、直接編輯 frontmatter 被 guard 阻擋，三者交集使 title 一旦寫錯即無法
+    修復（PC-BAL-047）。清單類視圖（dashboard / runqueue）顯示的是 title，故
+    過期的 title 會持續誤導接手者對票範圍的判斷。
+    """
+    return execute_set_field(args, version, "title")
+
+
 def execute_get_when(args: argparse.Namespace, version: str) -> int:
     """讀取 Ticket 的 when 欄位"""
     return execute_get_field(args, version, "when")

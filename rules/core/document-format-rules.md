@@ -65,6 +65,9 @@
 | Ticket | `{版本}-W{波次}-{序號}.md` | `0.29.0-W1-001.md` <!-- rule8-exempt: illustration:檔案命名規範的格式範例 --> |
 | 規則檔案 | `{描述}-{類型}.md` | `language-constraints.md` |
 | 方法論 | `{主題}-methodology.md` | `atomic-ticket-methodology.md` |
+| 實驗器材 | `experiment-<ticket-id>-<用途>.<副檔名>` | `experiment-<ticket-id>-commit-sweep-sentinel.md`（ticket ID 依規則 8 不實例化） |
+
+> **實驗器材**（為觀測而放置於工作區、其存在本身即為觀測手段的檔案）另有首行 header、維持 untracked、票面登記存活期、收尾時強制處置四項要求；盲測型器材的免標示例外與讀者側處置亦在該節。完整條款見 `.claude/pm-rules/parallel-dispatch.md`「跨 session 實驗器材的自我標示與存活期治理（強制）」。
 
 ---
 
@@ -118,6 +121,7 @@ updated: {更新日期}
 - [ ] 優先級使用「高/中/低」或「P0/P1/P2」
 - [ ] Markdown 格式正確
 - [ ] 檔案命名符合規範
+- [ ] 檔案為實驗器材時：檔名帶 `experiment-<ticket-id>-` 前綴、首行標明用途與禁止動作、已於所屬 ticket 的 Solution 登記存活期
 - [ ] 有適當的 frontmatter（如適用）
 - [ ] 跨 Skill 引用使用完整路徑
 - [ ] 引用穩定性：編輯規格文件或 `.claude/` 框架檔案時，已讀取 `.claude/references/reference-stability-rules.md` 並遵循規則 7、規則 8
@@ -125,5 +129,7 @@ updated: {更新日期}
 
 ---
 
-**Last Updated**: 2026-04-16
+**Last Updated**: 2026-08-18
+**Version**: 1.6.1 - 三視角審查後修正：佔位符統一為角括號（與權威層一致）、路由句補「（強制）」後綴（逐字對應慣例）、定義句術語對齊權威層（偵測→觀測）、範例欄加註規則 8 不實例化
+**Version**: 1.6.0 - 規則 5 新增實驗器材命名列 + 完整條款路由（自動載入層維持速查形態，條款主文在 pm-rules/parallel-dispatch.md）
 **Version**: 1.5.0 - 規則 7-8 移至 `.claude/references/reference-stability-rules.md` 按需讀取

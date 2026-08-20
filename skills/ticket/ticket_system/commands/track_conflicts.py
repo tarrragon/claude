@@ -74,7 +74,7 @@ from ticket_system.lib.file_conflict import (
     compute_pairwise_conflicts,
     expand_files,
     files_intersect,
-    where_files,
+    write_files,
 )
 
 
@@ -159,14 +159,14 @@ def cross_check_registry(
         registry_files = ticket_registry_files.get(tid)
         if not registry_files:
             continue
-        declared = set(where_files(t))
+        declared = set(write_files(t))
         if not declared:
             continue
         if not any(files_intersect(rf, df) for rf in registry_files for df in declared):
             warnings.append(
                 f"registry/ticket file 宣告不一致：{tid} "
-                f"registry.files={sorted(registry_files)} vs where.files={sorted(declared)}"
-                f"（衝突判定僅採 where.files；請校正票面宣告或重跑 claim）"
+                f"registry.files={sorted(registry_files)} vs write_files={sorted(declared)}"
+                f"（衝突判定僅採 write 集合；請校正票面宣告或重跑 claim）"
             )
     return warnings
 

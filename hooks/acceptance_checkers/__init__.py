@@ -67,3 +67,6 @@ from acceptance_checkers.hook_protection_acceptance_checker import (
     check_hook_protection_acceptance,
     touches_hook_protection_scope,
 )
+from acceptance_checkers.experiment_artifact_checker import (
+    check_experiment_artifact_residual,
+)

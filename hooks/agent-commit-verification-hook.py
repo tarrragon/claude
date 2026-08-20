@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 
 """
@@ -359,7 +359,11 @@ def build_worktree_uncommitted_message(
         MSG_WORKTREE_UNCOMMITTED_BODY,
         uncommitted,
         "未提交檔案",
-        lambda wt: f'git -C {wt.path} add <files> && git -C {wt.path} commit -m "..." -- <files>',
+        # 精確 git add 後裸 git commit（不帶 pathspec）：`-- <files>` 會丟棄
+        # 既有 index、改讀指定路徑當下的 working tree 內容重建臨時 index
+        # 後提交，並行環境下會吸入他人未 stage 的編輯，見
+        # .claude/rules/core/bash-tool-usage-rules.md 規則七。
+        lambda wt: f'git -C {wt.path} add <files> && git -C {wt.path} commit -m "..."',
         MSG_WORKTREE_UNCOMMITTED_SUGGESTION,
     )
 

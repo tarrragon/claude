@@ -1,20 +1,22 @@
 """
 ticket_parser.extract_where_files 測試（0.2.1-W3-052.1）
 
-`where.files` 在不同解析器下呈現型別不同（見 `extract_where_files` docstring）：
-- `list[str]`：完整 YAML 解析（如 `ticket track` CLI）
-- 換行分隔字串：`acceptance-gate-hook.py` 實際使用的
-  `lib.hook_ticket.parse_ticket_frontmatter`（對 dict 內巢狀 block-style
-  列表的已知限制）
+`where.files` 在 frontmatter 中可能是 `list[str]` 或 `str`，兩者皆為 schema
+容忍的合法寫法（見 `extract_where_files` docstring）：
+- `list[str]`：YAML sequence 寫法（`files:\n  - a.py\n  - b.py`）
+- `str`：YAML scalar 寫法——單一路徑不加 dash（`files: a.py`），或 `|`
+  block literal scalar（多行路徑）
 
-本測試覆蓋兩種型別皆須正確正規化為 `list[str]`，這是 0.2.1-W3-052.1 實測
-runtime hook 輸出時發現的真實回歸（新 checker 對真實 ticket 檔案永遠不觸發，
-因為 `isinstance(files, list)` 對字串型別回傳 False）。
+本測試覆蓋兩種型別皆須正確正規化為 `list[str]`。若呼叫端只用
+`isinstance(files, list)` 判斷，會將合法的 scalar 寫法輸入靜默視為空清單
+（0.2.1-W3-052.1 實測 runtime hook 輸出時發現的真實回歸）。
 """
 
 import logging
 import sys
 from pathlib import Path
+
+import yaml
 
 _hooks_dir = Path(__file__).parent.parent
 if str(_hooks_dir) not in sys.path:
@@ -42,8 +44,8 @@ class TestExtractWhereFilesListInput:
 
 
 class TestExtractWhereFilesStringInput:
-    """換行分隔字串輸入（本 hook 套件輕量解析器 `parse_ticket_frontmatter`
-    對 dict 內巢狀列表的已知限制，見 acceptance-gate-hook.py 實測回歸）"""
+    """換行分隔字串輸入（`files: |` block scalar 等合法 YAML scalar 寫法
+    的正規化，見 acceptance-gate-hook.py 實測回歸）"""
 
     def test_newline_joined_string_normalized_to_list(self):
         fm = {
@@ -62,6 +64,29 @@ class TestExtractWhereFilesStringInput:
 
     def test_string_input_dedupes_and_strips_placeholders(self):
         fm = {"where": {"files": "a.py\na.py\n待定義\n\n  b.py  "}}
+        assert extract_where_files(fm, _logger()) == ["a.py", "b.py"]
+
+
+class TestExtractWhereFilesScalarYamlForms:
+    """0.2.1-W3-665.3：str 分支保留判定的固定行為測試。
+
+    `where.files` 純量寫法為合法 YAML（非手寫 parser 缺陷），`yaml.safe_load`
+    對下列兩種寫法皆回傳 str，`extract_where_files` 須正確正規化為單元素
+    list（W3-665.2 Phase 4 linux 視角實測確認可達，見 ticket Context Bundle
+    「更正」節）。本測試以 `yaml.safe_load` 實際解析 YAML 原文，鎖定整條
+    「原文 -> 解析 -> 正規化」鏈路的行為，不只測 dict 字面量。
+    """
+
+    def test_single_unquoted_scalar_no_dash(self):
+        parsed = yaml.safe_load("files: a.py\n")
+        assert parsed == {"files": "a.py"}
+        fm = {"where": parsed}
+        assert extract_where_files(fm, _logger()) == ["a.py"]
+
+    def test_block_literal_scalar_pipe(self):
+        parsed = yaml.safe_load("files: |\n  a.py\n  b.py\n")
+        assert parsed == {"files": "a.py\nb.py\n"}
+        fm = {"where": parsed}
         assert extract_where_files(fm, _logger()) == ["a.py", "b.py"]
 
 

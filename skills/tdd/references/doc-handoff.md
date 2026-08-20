@@ -309,14 +309,14 @@ doc-handoff 銜接時，同步初始化 `docs/traceability.yaml` 的骨架：
 
 ## 相關文件
 
-- `.claude/skills/doc/SKILL.md` — doc 產出物結構定義
-- `.claude/skills/doc/references/spec.md` — Spec 的「Spec → Ticket 轉換指引」
-- `.claude/skills/doc/references/usecases.md` — UC 的「資訊鏈整合測試」定義
+- `../doc/SKILL.md` — doc 產出物結構定義（同專案若也安裝 doc）<!-- portability-allow: 條件式引用，目標 skill 未必與本 skill 一同安裝 -->
+- `../doc/references/spec.md`<!-- portability-allow: 條件式引用，目標 skill 未必與本 skill 一同安裝 --> — Spec 的「Spec → Ticket 轉換指引」
+- `../doc/references/usecases.md`<!-- portability-allow: 條件式引用，目標 skill 未必與本 skill 一同安裝 --> — UC 的「資訊鏈整合測試」定義
 - `references/phase0/rules.md` — Phase 0 審查項目（需求完整性）
 - `references/phase1/rules.md` — Phase 1 行為單元識別（GWT 種子的下游消費者）
 - `references/phase2/rules.md` — Phase 2 測試設計（最終測試案例設計）
 - `references/task-granularity-rules.md` — 粒度規則（UC→行為單元→測試→實作）
-- `.claude/skills/saas-tech-selection/references/decision-record-template.md`「銜接 doc 系統」— 上游銜接範本（若同專案安裝 saas-tech-selection skill；未安裝時本條不適用、非死鏈）
+- `../saas-tech-selection/references/decision-record-template.md`<!-- portability-allow: 條件式引用，目標 skill 未必與本 skill 一同安裝 -->「銜接 doc 系統」— 上游銜接範本（若同專案安裝 saas-tech-selection skill；未安裝時本條不適用、非死鏈）
 
 ---
 

@@ -32,10 +32,10 @@ Comment Quality Assurance Hook - 註解品質保證檢查 (v3.0 多語言支援)
   - 測試檔案
   - 生成檔案
 
-配置: .claude/hooks/comment-qa-config.yaml (可選)
+配置: .claude/hooks/comment-qa-config.yaml (可選)（portability-allow: 此 skill 對消費端環境的選用性依賴，缺檔時優雅降級為預設配置）
 
 參考規範:
-- .claude/skills/compositional-writing/references/writing-code-comments.md
+- .claude/skills/compositional-writing/references/writing-code-comments.md（portability-allow: 本 skill 自我引用，consumer 共通安裝位置）
 - docs/event-driven-architecture-design.md
 
 版本: v3.0
@@ -59,8 +59,15 @@ from typing import Optional, List, Dict, Tuple
 _FRAMEWORK_HOOKS = str(Path(__file__).resolve().parents[3] / "hooks")
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, _FRAMEWORK_HOOKS)
-from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level, emit_hook_output
-from lib.hook_messages import QualityMessages, CoreMessages, format_message
+try:
+    from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level, emit_hook_output
+    from lib.hook_messages import QualityMessages, CoreMessages, format_message
+    _LIB_AVAILABLE = True
+except ImportError:
+    # 消費端未提供 .claude/lib/ 時優雅降級（portability-allow: 選用性依賴，
+    # 缺件優雅降級，非可攜性違規）：main() 開頭直接印出 [WARNING] 並
+    # return 0（見 main() 開頭的降級分支），不讓整個 Hook 在載入階段崩潰。
+    _LIB_AVAILABLE = False
 
 # 專案根目錄
 PROJECT_ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", "."))
@@ -71,16 +78,32 @@ REPORT_DIR = LOG_DIR / "comment-qa-reports"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
-# 動態載入 Parser 模組
-try:
-    sys.path.insert(0, str(PROJECT_ROOT / ".claude"))
-    sys.path.insert(0, str(PROJECT_ROOT / ".claude/hooks"))
-    from lib.parsers.base import Language, ParserFactory, Function
-    PARSER_AVAILABLE = True
-except ImportError as e:
+# 動態載入 Parser 模組（僅在 lib 本身可用時嘗試——lib 不可用時 setup_hook_logging
+# 未定義，且 main() 已整體降級，這裡再嘗試載入沒有意義）
+if _LIB_AVAILABLE:
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT / ".claude"))
+        sys.path.insert(0, str(PROJECT_ROOT / ".claude/hooks"))
+        from lib.parsers.base import Language, ParserFactory, Function
+        PARSER_AVAILABLE = True
+    except ImportError as e:
+        PARSER_AVAILABLE = False
+        logger_temp = setup_hook_logging("comment-qa-hook")
+        logger_temp.warning(f"無法載入 Parser 模組 - {e}")
+else:
     PARSER_AVAILABLE = False
-    logger_temp = setup_hook_logging("comment-qa-hook")
-    logger_temp.warning(f"無法載入 Parser 模組 - {e}")
+
+if not PARSER_AVAILABLE:
+    # Language/ParserFactory/Function 不只在 PARSER_AVAILABLE 分支內被使用，
+    # 也出現在下方多個函式簽名的型別註記中（如 should_process_file 回傳
+    # Optional[Language]）——這些註記在模組載入當下就會求值（本檔未用
+    # `from __future__ import annotations`），import 失敗只設
+    # PARSER_AVAILABLE=False 並不夠，仍需要佔位符物件才能讓模組完成載入。
+    class Language:  # type: ignore[no-redef]
+        UNKNOWN = None
+        DART = None
+    ParserFactory = None  # type: ignore[assignment]
+    Function = None  # type: ignore[assignment]
 
 
 @dataclass
@@ -117,7 +140,7 @@ def load_config(logger) -> dict:
     載入配置檔
 
     優先順序:
-    1. .claude/hooks/comment-qa-config.yaml
+    1. .claude/hooks/comment-qa-config.yaml（portability-allow: 此 skill 對消費端環境的選用性依賴，缺檔時優雅降級為預設配置）
     2. 預設配置（向後相容）
     """
     config_path = PROJECT_ROOT / ".claude/hooks/comment-qa-config.yaml"
@@ -679,6 +702,12 @@ def save_report(report_content: str) -> Path:
 
 def main():
     """主要邏輯"""
+    if not _LIB_AVAILABLE:
+        sys.stderr.write(
+            "[WARNING] comment-qa-hook 未執行：找不到 .claude/lib/，此為消費端"
+            "需自行提供的框架共用模組（註解品質檢查功能停用，不影響其他操作）。\n"
+        )
+        return 0
     logger = setup_hook_logging("comment-qa-hook")
     input_data = None  # 提前初始化：except 區塊輸出時需傳入統一出口判定受眾
     try:
@@ -845,4 +874,7 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(run_hook_safely(main, "comment-qa-hook"))
+    if _LIB_AVAILABLE:
+        sys.exit(run_hook_safely(main, "comment-qa-hook"))
+    else:
+        sys.exit(main())

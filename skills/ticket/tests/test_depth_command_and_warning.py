@@ -12,7 +12,7 @@ import pytest
 
 from ticket_system.constants import MAX_TICKET_DEPTH
 from ticket_system.commands.track_depth import execute_depth
-from ticket_system.commands.create import _resolve_ticket_id_and_wave
+from ticket_system.lib.ticket_id_allocator import resolve_ticket_id_and_wave
 
 
 class TestTrackDepthCommand:
@@ -55,13 +55,13 @@ class TestCreateParentDepthWarning:
     """create --parent 深度上限 warning"""
 
     def _run(self, parent_id, parent_depth, capsys):
-        """以 parent depth mock 執行 _resolve_ticket_id_and_wave，回傳 stdout。"""
+        """以 parent depth mock 執行 resolve_ticket_id_and_wave，回傳 stdout。"""
         args = argparse.Namespace(parent=parent_id, seq=None, wave=None)
-        with patch("ticket_system.commands.create.get_next_child_seq", return_value=1), \
-             patch("ticket_system.commands.create.compute_depth", return_value=parent_depth), \
-             patch("ticket_system.commands.create.extract_wave_from_ticket_id", return_value=1), \
-             patch("ticket_system.commands.create.validate_ticket_id", return_value=True):
-            _resolve_ticket_id_and_wave(args, "1.0.0")
+        with patch("ticket_system.lib.ticket_id_allocator.get_next_child_seq", return_value=1), \
+             patch("ticket_system.lib.ticket_id_allocator.compute_depth", return_value=parent_depth), \
+             patch("ticket_system.lib.ticket_id_allocator.extract_wave_from_ticket_id", return_value=1), \
+             patch("ticket_system.lib.ticket_id_allocator.validate_ticket_id", return_value=True):
+            resolve_ticket_id_and_wave(args, "1.0.0")
         return capsys.readouterr().out
 
     def test_no_warning_when_below_limit(self, capsys):
@@ -78,11 +78,11 @@ class TestCreateParentDepthWarning:
     def test_warning_when_new_child_exceeds_limit(self, capsys):
         """parent depth 3 → 新子任務 depth 4 > 3，warn（不硬擋，仍回傳 ticket_id）"""
         args = argparse.Namespace(parent="1.0.0-W1-056.5.1", seq=None, wave=None)
-        with patch("ticket_system.commands.create.get_next_child_seq", return_value=1), \
-             patch("ticket_system.commands.create.compute_depth", return_value=3), \
-             patch("ticket_system.commands.create.extract_wave_from_ticket_id", return_value=1), \
-             patch("ticket_system.commands.create.validate_ticket_id", return_value=True):
-            result = _resolve_ticket_id_and_wave(args, "1.0.0")
+        with patch("ticket_system.lib.ticket_id_allocator.get_next_child_seq", return_value=1), \
+             patch("ticket_system.lib.ticket_id_allocator.compute_depth", return_value=3), \
+             patch("ticket_system.lib.ticket_id_allocator.extract_wave_from_ticket_id", return_value=1), \
+             patch("ticket_system.lib.ticket_id_allocator.validate_ticket_id", return_value=True):
+            result = resolve_ticket_id_and_wave(args, "1.0.0")
         out = capsys.readouterr().out
         assert "嵌套上限" in out
         # 不硬擋：仍回傳有效 tuple（version, ticket_id, wave）

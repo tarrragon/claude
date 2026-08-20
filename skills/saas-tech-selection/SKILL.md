@@ -3,6 +3,7 @@ name: saas-tech-selection
 description: "初始化 SaaS repo 時的設計與選型訪談協議：定錨後先過交付形態 gate（託管平台 / 垂直 SaaS / 辦公生態自動化 / BaaS / 半託管 CMS / 自建）、自建成立才從使用者操作（BDD）推導功能與風險、依 SRP / OCP 切分 domain 與 event（DDD）、再把技術維度掛在領域骨架下逐項確認、每個維度附不可沉默跳過的防護底線、產出設計決策記錄與 scaffold 建議。Triggers: 初始化 repo, 新專案, 開新服務, SaaS 選型, 技術選型, tech stack, 要不要自建, 託管平台, Shopify, Wix, Firebase, WordPress, Apps Script, DDD, domain 切分, event 驅動, event storming, BDD, 行為情境, 使用者操作盤點, 選資料庫, 選 queue, 要不要 redis, 要不要 k8s, MVP 架構, repo scaffold, 專案起手, stack 評估, 選型訪談, 架構訪談."
 license: MIT
 metadata:
+  portable: true
   version: 0.8.0
   category: selection-protocol
 ---
@@ -65,11 +66,11 @@ metadata:
 
 ### Stage 5：決策收斂（決策記錄 + scaffold 建議）
 
-依 `references/decision-record-template.md` 產出設計決策記錄：操作風險表、domain map、event catalog、每項技術選型（理由 / 防護狀態 / tripwire）、防護底線總表、規模 tripwire 總表、驗證環境節（格式見 `references/dimensions/verification-surface.md`「決策記錄要記什麼」節）。決策記錄經使用者確認後、才產出 scaffold 建議；scaffold 是決策的下游、修改決策時 scaffold 跟著重生。scaffold 建議包含專案 verify 配方種子（`.claude/skills/verify/SKILL.md` 的 Build & Launch / Observe 骨架，由驗證環境節生成；配方屬專案特化資產、不隨框架 sync 推送）。
+依 `references/decision-record-template.md` 產出設計決策記錄：操作風險表、domain map、event catalog、每項技術選型（理由 / 防護狀態 / tripwire）、防護底線總表、規模 tripwire 總表、驗證環境節（格式見 `references/dimensions/verification-surface.md`「決策記錄要記什麼」節）。決策記錄經使用者確認後、才產出 scaffold 建議；scaffold 是決策的下游、修改決策時 scaffold 跟著重生。scaffold 建議包含專案 verify 配方種子（`.claude/skills/verify/SKILL.md` 的 Build & Launch / Observe 骨架，由驗證環境節生成；配方屬專案特化資產、不隨框架 sync 推送）。<!-- portability-allow: 約定位置，指各專案自有的驗證配方安裝點 -->
 
 ### Stage 6：銜接 doc 需求文件系統（條件式、專案有 doc skill 才執行）
 
-決策記錄產出後、偵測專案是否載入 doc skill（檢查 `.claude/skills/doc/` 是否存在）：
+決策記錄產出後、偵測專案是否載入 doc skill（檢查 `.claude/skills/doc/` 是否存在）<!-- portability-allow: 執行期偵測指令，路徑是所有 consumer 共通的 skill 安裝位置，非特定專案的檔案 -->：
 
 - **有 doc skill** — 決策記錄不只進 `docs/tech-decisions.md`、還移交 doc 系統長成需求文件：操作風險表（BDD）轉 usecase、domain map + 介面契約（DDD）轉 spec、定錨 + 交付形態 gate + 技術決策轉 proposal。移交前先過閘門：§1 / §2 任一為空即回補 Stage 1 / 2、不可硬生半成品。映射細節與移交步驟見 `references/decision-record-template.md` 的「銜接 doc 系統」節。
 - **無 doc skill** — 維持現狀、決策記錄獨立產出（saas 單獨運作、不依賴 doc）。

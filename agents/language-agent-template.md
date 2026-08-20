@@ -7,6 +7,8 @@ color: {green|cyan|yellow|orange}
 model: haiku
 ---
 
+<!-- yaml-frontmatter-exempt: 範本檔案，frontmatter 刻意保留 {placeholder} 語法供複製後手動替換，非可直接解析的 YAML；衍生出的實際 agent 檔案替換完 placeholder 後即為合法 YAML，複製時請移除本行 -->
+
 @.claude/agents/AGENT_PRELOAD.md
 
 # {language}-developer - {語言} 開發專家 (Phase 3b)

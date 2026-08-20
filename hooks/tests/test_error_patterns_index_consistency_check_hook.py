@@ -8,10 +8,15 @@ Error Patterns Index Consistency Check Hook 測試
 4. compare — 三項比對邏輯（缺漏 / 過時 / 碰撞）各自正例反例
 5. format_report — 有/無發現時的輸出格式
 6. main — 端對端 tmp fixture 情境 + 對現況 repo 的回歸基線
+7. extract_frontmatter_text / parse_related_field — frontmatter 解析（inline
+   flow / block list / 缺欄位）
+8. collect_related_map / check_related_bidirectional — related 雙向性檢查
+   （雙向完整 / 單向 / related 缺失三種情況）
 """
 
 import importlib.util
 import sys
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -231,6 +236,163 @@ class TestCompare:
 
 
 # ---------------------------------------------------------------------------
+# extract_frontmatter_text / parse_related_field
+# ---------------------------------------------------------------------------
+
+
+class TestExtractFrontmatterText:
+    def test_extracts_block_between_delimiters(self):
+        content = "---\nid: PC-001\nrelated: [PC-002]\n---\n\n# 標題\n"
+        text = _hook.extract_frontmatter_text(content)
+        assert "id: PC-001" in text
+        assert "related: [PC-002]" in text
+        assert "# 標題" not in text
+
+    def test_no_frontmatter_returns_empty_string(self):
+        assert _hook.extract_frontmatter_text("# stub\n") == ""
+
+
+class TestParseRelatedField:
+    def test_inline_flow_style(self):
+        text = "id: PC-001\nrelated: [PC-002, PC-BAL-003]\nseverity: high\n"
+        assert _hook.parse_related_field(text) == {"PC-002", "PC-BAL-003"}
+
+    def test_block_list_style_zero_indent(self):
+        text = "id: PC-001\nrelated:\n- PC-002\n- PC-BAL-003\nseverity: high\n"
+        assert _hook.parse_related_field(text) == {"PC-002", "PC-BAL-003"}
+
+    def test_block_list_style_two_space_indent(self):
+        text = "id: PC-001\nrelated:\n  - PC-002\n  - PC-BAL-003\nseverity: high\n"
+        assert _hook.parse_related_field(text) == {"PC-002", "PC-BAL-003"}
+
+    def test_related_patterns_field_name(self):
+        text = "id: PC-001\nrelated_patterns: [PC-APP-010]\nseverity: high\n"
+        assert _hook.parse_related_field(text) == {"PC-APP-010"}
+
+    def test_empty_related_field_returns_empty_set(self):
+        text = "id: PC-001\nrelated:\ncreated: 2026-08-18\n"
+        assert _hook.parse_related_field(text) == set()
+
+    def test_missing_related_field_returns_empty_set(self):
+        text = "id: PC-001\nseverity: high\n"
+        assert _hook.parse_related_field(text) == set()
+
+    def test_non_pattern_id_items_ignored(self):
+        """非 error-pattern 命名慣例的項目（方法論 slug）不匹配 ID pattern，忽略。"""
+        text = "id: PC-001\nrelated:\n- PC-002\n- hook-system-design\n"
+        assert _hook.parse_related_field(text) == {"PC-002"}
+
+
+# ---------------------------------------------------------------------------
+# collect_related_map / check_related_bidirectional
+# ---------------------------------------------------------------------------
+
+
+class TestExtractCreatedDate:
+    def test_parses_valid_date(self):
+        text = "id: PC-001\ncreated: 2026-08-18\n"
+        assert _hook.extract_created_date(text) == date(2026, 8, 18)
+
+    def test_missing_field_returns_none(self):
+        text = "id: PC-001\nseverity: high\n"
+        assert _hook.extract_created_date(text) is None
+
+    def test_malformed_date_returns_none(self):
+        text = "id: PC-001\ncreated: not-a-date\n"
+        assert _hook.extract_created_date(text) is None
+
+
+class TestCollectRelatedMap:
+    def _write_pattern(self, tmp_path: Path, category: str, filename: str, frontmatter_body: str):
+        cat_dir = tmp_path / "error-patterns" / category
+        cat_dir.mkdir(parents=True, exist_ok=True)
+        content = f"---\n{frontmatter_body}\n---\n\n# 標題\n"
+        (cat_dir / filename).write_text(content, encoding="utf-8")
+
+    def test_collects_related_ids_and_created_per_file(self, tmp_path):
+        self._write_pattern(
+            tmp_path,
+            "process-compliance",
+            "PC-001-a.md",
+            "id: PC-001\nrelated: [PC-002]\ncreated: 2026-08-18",
+        )
+        root = tmp_path / "error-patterns"
+        related_map = _hook.collect_related_map(root)
+        assert related_map["PC-001"][0] == {"PC-002"}
+        assert related_map["PC-001"][1] == date(2026, 8, 18)
+        assert related_map["PC-001"][2] == "process-compliance/PC-001-a.md"
+
+    def test_file_without_related_field_has_empty_set(self, tmp_path):
+        self._write_pattern(tmp_path, "test", "TEST-001-a.md", "id: TEST-001\nseverity: high")
+        root = tmp_path / "error-patterns"
+        related_map = _hook.collect_related_map(root)
+        assert related_map["TEST-001"][0] == set()
+
+    def test_file_without_created_field_has_none(self, tmp_path):
+        self._write_pattern(
+            tmp_path, "process-compliance", "PC-002-a.md", "id: PC-002\nseverity: high"
+        )
+        root = tmp_path / "error-patterns"
+        related_map = _hook.collect_related_map(root)
+        assert related_map["PC-002"][1] is None
+
+
+class TestCheckRelatedBidirectional:
+    """same_batch: created 相差在 SAME_BATCH_WINDOW_DAYS（7 天）內。"""
+
+    def test_fully_bidirectional_no_findings(self):
+        related_map = {
+            "PC-001": ({"PC-002"}, date(2026, 8, 18), "process-compliance/PC-001-a.md"),
+            "PC-002": ({"PC-001"}, date(2026, 8, 18), "process-compliance/PC-002-b.md"),
+        }
+        assert _hook.check_related_bidirectional(related_map) == []
+
+    def test_one_way_reference_detected_within_same_batch_window(self):
+        related_map = {
+            "PC-001": ({"PC-002"}, date(2026, 8, 18), "process-compliance/PC-001-a.md"),
+            "PC-002": (set(), date(2026, 8, 20), "process-compliance/PC-002-b.md"),
+        }
+        result = _hook.check_related_bidirectional(related_map)
+        assert result == [("PC-001", "PC-002", "process-compliance/PC-001-a.md")]
+
+    def test_one_way_reference_outside_window_not_flagged(self):
+        """created 相差超過 SAME_BATCH_WINDOW_DAYS 天視為引註，非姊妹關係，不告警。"""
+        related_map = {
+            "PC-001": ({"PC-002"}, date(2026, 8, 18), "process-compliance/PC-001-a.md"),
+            "PC-002": (set(), date(2026, 7, 1), "process-compliance/PC-002-b.md"),
+        }
+        assert _hook.check_related_bidirectional(related_map) == []
+
+    def test_one_way_reference_missing_created_on_from_side_not_flagged(self):
+        """from 端缺 created 欄位時無法判定批次，跳過不告警（漏報優先於誤報）。"""
+        related_map = {
+            "PC-001": ({"PC-002"}, None, "process-compliance/PC-001-a.md"),
+            "PC-002": (set(), date(2026, 8, 18), "process-compliance/PC-002-b.md"),
+        }
+        assert _hook.check_related_bidirectional(related_map) == []
+
+    def test_one_way_reference_missing_created_on_to_side_not_flagged(self):
+        related_map = {
+            "PC-001": ({"PC-002"}, date(2026, 8, 18), "process-compliance/PC-001-a.md"),
+            "PC-002": (set(), None, "process-compliance/PC-002-b.md"),
+        }
+        assert _hook.check_related_bidirectional(related_map) == []
+
+    def test_reference_to_id_outside_index_not_flagged(self):
+        """related 指向的 ID 不在 related_map（如已刪除或不存在）不誤報。"""
+        related_map = {
+            "PC-001": ({"PC-999"}, date(2026, 8, 18), "process-compliance/PC-001-a.md"),
+        }
+        assert _hook.check_related_bidirectional(related_map) == []
+
+    def test_self_reference_not_flagged(self):
+        related_map = {
+            "PC-001": ({"PC-001"}, date(2026, 8, 18), "process-compliance/PC-001-a.md"),
+        }
+        assert _hook.check_related_bidirectional(related_map) == []
+
+
+# ---------------------------------------------------------------------------
 # extract_slug
 # ---------------------------------------------------------------------------
 
@@ -418,6 +580,51 @@ class TestFormatReport:
         assert "凍結表不存在" in report
         assert "fail-open" in report
 
+    def test_one_way_related_produces_warning(self):
+        result = {
+            "missing_in_readme": [],
+            "stale_in_readme": [],
+            "collisions": {},
+            "registered_collisions": {},
+            "unrecognized": [],
+            "one_way_related": [("PC-001", "PC-002", "process-compliance/PC-001-a.md")],
+        }
+        report = _hook.format_report(result)
+        assert "[WARNING]" in report
+        assert "PC-001" in report
+        assert "PC-002" in report
+
+    def test_missing_one_way_related_key_defaults_empty(self):
+        """result dict 未帶 one_way_related 鍵（舊呼叫端相容）不應報錯或誤報。"""
+        result = {
+            "missing_in_readme": [],
+            "stale_in_readme": [],
+            "collisions": {},
+            "registered_collisions": {},
+            "unrecognized": [],
+        }
+        assert _hook.format_report(result) == ""
+
+    def test_one_way_related_capped_at_display_limit(self):
+        """超過 ONE_WAY_RELATED_DISPLAY_CAP 行時截斷並附「另有 N 組未列出」。"""
+        overflow = _hook.ONE_WAY_RELATED_DISPLAY_CAP + 3
+        one_way = [
+            (f"PC-{i:03d}", f"PC-{i + 1:03d}", f"process-compliance/PC-{i:03d}-a.md")
+            for i in range(overflow)
+        ]
+        result = {
+            "missing_in_readme": [],
+            "stale_in_readme": [],
+            "collisions": {},
+            "registered_collisions": {},
+            "unrecognized": [],
+            "one_way_related": one_way,
+        }
+        report = _hook.format_report(result)
+        shown = report.count(" -> ")
+        assert shown == _hook.ONE_WAY_RELATED_DISPLAY_CAP
+        assert "另有 3 組未列出" in report
+
 
 # ---------------------------------------------------------------------------
 # main — 端對端
@@ -473,6 +680,83 @@ class TestMainEndToEnd:
         exit_code = _hook.main()
         assert exit_code == 0
 
+    def test_main_warns_on_one_way_related(self, tmp_path, monkeypatch, capsys):
+        root = tmp_path / "project"
+        error_patterns = root / ".claude" / "error-patterns"
+        error_patterns.mkdir(parents=True)
+        (error_patterns / "README.md").write_text(
+            "| ID | 標題 | 風險 | 來源版本 |\n|----|----|----|----|\n"
+            "| PC-001 | 標題 A | 高 | v0.1.0 |\n"
+            "| PC-002 | 標題 B | 高 | v0.1.0 |\n",
+            encoding="utf-8",
+        )
+        cat_dir = error_patterns / "process-compliance"
+        cat_dir.mkdir()
+        (cat_dir / "PC-001-a.md").write_text(
+            "---\nid: PC-001\nrelated: [PC-002]\ncreated: 2026-08-18\n---\n\n# A\n",
+            encoding="utf-8",
+        )
+        (cat_dir / "PC-002-b.md").write_text(
+            "---\nid: PC-002\ncreated: 2026-08-19\n---\n\n# B\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(_hook, "get_project_root", lambda: str(root))
+        exit_code = _hook.main()
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert "PC-001" in captured.err
+        assert "PC-002" in captured.err
+        assert "[WARNING]" in captured.err
+
+    def test_main_silent_when_one_way_outside_same_batch_window(self, tmp_path, monkeypatch, capsys):
+        """created 相差超過 7 天視為引註，非姊妹關係，主流程靜默。"""
+        root = tmp_path / "project"
+        error_patterns = root / ".claude" / "error-patterns"
+        error_patterns.mkdir(parents=True)
+        (error_patterns / "README.md").write_text(
+            "| ID | 標題 | 風險 | 來源版本 |\n|----|----|----|----|\n"
+            "| PC-001 | 標題 A | 高 | v0.1.0 |\n"
+            "| PC-002 | 標題 B | 高 | v0.1.0 |\n",
+            encoding="utf-8",
+        )
+        cat_dir = error_patterns / "process-compliance"
+        cat_dir.mkdir()
+        (cat_dir / "PC-001-a.md").write_text(
+            "---\nid: PC-001\nrelated: [PC-002]\ncreated: 2026-08-18\n---\n\n# A\n",
+            encoding="utf-8",
+        )
+        (cat_dir / "PC-002-b.md").write_text(
+            "---\nid: PC-002\ncreated: 2026-01-01\n---\n\n# B\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(_hook, "get_project_root", lambda: str(root))
+        exit_code = _hook.main()
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert captured.err == ""
+
+    def test_main_silent_when_related_fully_bidirectional(self, tmp_path, monkeypatch, capsys):
+        root = tmp_path / "project"
+        error_patterns = root / ".claude" / "error-patterns"
+        error_patterns.mkdir(parents=True)
+        (error_patterns / "README.md").write_text(
+            "| ID | 標題 | 風險 | 來源版本 |\n|----|----|----|----|\n"
+            "| PC-001 | 標題 A | 高 | v0.1.0 |\n"
+            "| PC-002 | 標題 B | 高 | v0.1.0 |\n",
+            encoding="utf-8",
+        )
+        cat_dir = error_patterns / "process-compliance"
+        cat_dir.mkdir()
+        (cat_dir / "PC-001-a.md").write_text(
+            "---\nid: PC-001\nrelated: [PC-002]\n---\n\n# A\n", encoding="utf-8"
+        )
+        (cat_dir / "PC-002-b.md").write_text(
+            "---\nid: PC-002\nrelated: [PC-001]\n---\n\n# B\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(_hook, "get_project_root", lambda: str(root))
+        exit_code = _hook.main()
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert captured.err == ""
+
     def test_main_silent_for_no_slug_placeholder_listed_in_readme(
         self, tmp_path, monkeypatch, capsys
     ):
@@ -521,3 +805,20 @@ class TestCurrentRepoBaseline:
         assert result["stale_in_readme"] == []
         assert result["collisions"] == {}
         assert len(result["registered_collisions"]) == 6
+
+    def test_related_bidirectional_scan_runs_without_error(self):
+        """related 雙向性掃描的存量基線非固定斷言（存量會隨其他票修正變動，
+        固定數字斷言會使本測試對無關變更假紅燈），僅驗證掃描可正常執行並
+        回傳結構正確的清單。實際存量數字由 ticket 執行紀錄另行回報。"""
+        project_root = Path(__file__).resolve().parents[3]
+        error_patterns_root = project_root / ".claude" / "error-patterns"
+        if not error_patterns_root.is_dir():
+            pytest.skip("error-patterns 目錄不存在，略過回歸基線檢查")
+
+        related_map = _hook.collect_related_map(error_patterns_root)
+        one_way = _hook.check_related_bidirectional(related_map)
+
+        assert isinstance(one_way, list)
+        for from_id, to_id, from_rel in one_way:
+            assert isinstance(from_id, str) and isinstance(to_id, str)
+            assert isinstance(from_rel, str)

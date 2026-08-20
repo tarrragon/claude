@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """
 AUQ Option Pattern Detector Hook - PM 回覆含選項 pattern 時提醒使用 AskUserQuestion

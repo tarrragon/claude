@@ -150,11 +150,18 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | TEST-005 | Mock 錯誤 import 路徑導致真實副作用 | — | — |
 | TEST-006 | pytest plugin fixture 使用未宣告依賴導致全類 setup error | — | — |
 | TEST-007 | Archived 模組的測試檔處理 idiom（pytestmark.skip + try/except import 雙層保護） | 低 | — |
+| TEST-008 | 死碼備有完整綠燈測試，coverage 與測試結果皆不告警使其長期存續 | 中 | — |
 | TEST-BAL-002 | 測試替身走簡化建構路徑，繞過 production 裝配步驟使缺口對測試不可見 | 高 | — |
 | TEST-MON-001 | 硬編碼時間戳 fixture × 時間相對查詢窗 = clock 時間炸彈 | 高 | — |
 | TEST-MON-002 | TDD Phase 2 紅燈設計漏 handler/lifecycle 行為測試；GREEN agent confidence<1.0 是補洞訊號 | 中 | — |
 | TEST-SCLK-001 | 快取化建置使「零警告 / 無 X」類驗收成為空訊號 | — | — |
 | TEST-BAL-003 | 消費端先於生產端落地，測試以 production 不可能產生的輸入為其背書 | 高 | — |
+| TEST-BAL-004 | 測試以寫入 production 共享狀態達成前置條件，遭外部行程競態使前置失效 | 高 | — |
+| TEST-BAL-005 | 合法值收窄使舊測試改走另一分支，斷言因輸出清單重疊而巧合成立 | 高 | v0.2.1 |
+| TEST-BAL-006 | 顯式指定測試路徑覆蓋多筆 testpaths，收集母體縮小而輸出仍是 passed | 高 | — |
+| TEST-BAL-007 | 以繞道旗標讓測試變綠後歸因為「環境問題」，掩蓋套件依賴宣告缺漏 | 高 | — |
+| TEST-BAL-008 | 自建 fixture 的資料形狀與真實資料分佈不同，使歸納式推導的退化案例測不出來 | 中 | — |
+| TEST-BAL-009 | mutation testing 的改回落在同一秒內，pyc 秒級 mtime 判準使還原後仍載入變異位元碼 | 中 | — |
 
 ### 文件 (DOC)
 
@@ -166,13 +173,14 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | DOC-004 | CLI 命令通配符表示導致 Agent 錯誤類推 | 中 | v0.31.1 |
 | DOC-005 | 新增原則時跨文件未同步更新 | 中 | feat/workflow-improvement |
 | DOC-006 | 規則文件局部更新後，同檔案總覽圖與入口文件未同步 | 中 | 0.1.1 |
-| DOC-007 | append-log section 參數值大小寫不一致 | 低 | v0.1.0 |
+| DOC-007 | append-log 有效區段說明包含 H1 heading 導致 CLI 報錯 | 低 | v0.1.1 |
 | DOC-008 | 同一文件內定義替換遺漏（局部替換未使用全局 replace） | 中 | v0.1.0 |
 | DOC-V1-001 | 位置編號引用隨目標文件演進靜默失效（misdirected 比 broken 難偵測） | 中 | v1.0.0 |
 | DOC-009 | 「靜默處理」用語誤用 — 混淆「不記錄」與「記錄但不顯示」 | 中 | — |
 | DOC-010 | 框架文件引用專案 ticket ID 造成跨專案 sync 誤導 | 中 | — |
 | DOC-BAL-001 | 規則只寫 Action 未寫 Consequence，讀者讀成偏好而非約束 | 高 | v0.2.1 |
 | DOC-BAL-002 | 同檔案內的行為契約隨程式碼變更漂移，因為只有程式碼有自動驗證而契約沒有 | 高 | v0.2.1 |
+| DOC-BAL-003 | 表格列的行尾豁免標記被下游 markdown 格式化工具刪除，標記靜默失效 | 中 | v0.2.1 |
 
 ### 架構 (ARCH)
 
@@ -223,6 +231,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | ARCH-BAL-012 | 同一概念的第二份實作重新推導第一份刻意迴避的假設，且未繼承第一份的測試嚴謹度 | 高 | v0.2.1 |
 | ARCH-BAL-013 | 防護元件的處置建議未經其他防護檢驗，執行者照做即被另一道防護阻擋 | 中 | — |
 | ARCH-BAL-017 | 排除政策只在寫入路徑生效，報告路徑對其零知識 | 中 | — |
+| ARCH-BAL-018 | 快照欄位的正確性定義在來源進入終態後反轉，單一同步策略必然對一端錯誤 | 中 | — |
 
 ### 程式碼品質 (CQ)
 
@@ -344,6 +353,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | IMP-BAL-007 | 共用 runner 整體 strip 破壞下游格式敏感解析，測試 mock 在 runner 層繞過缺陷點 | 高 | — |
 | IMP-BAL-008 | docstring 宣稱「永不拋出」，但 try 只包住取得資料的前半段，消費資料的後半段在保護之外 | 高 | v0.2.1（0.2.1-W3-353） |
 | IMP-BAL-009 | 對非 UTF-8 檔案 grep 非 ASCII 關鍵字，0 命中被當成語意結論而非前提失效 | 中 | — |
+| IMP-BAL-010 | 輔助函式以空值表示判定失敗，呼叫端布林轉換使守衛語意靜默反轉 | 高 | — |
 
 ### 流程 (PROC)
 
@@ -601,7 +611,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-BAL-030 | 同源自審宣稱等價於多視角審查，審查缺口被自我頒發的合格證明覆蓋 | 高 | — |
 | PC-BAL-031 | ticket why 欄位的未驗證假設經自動抽取機制傳播至衍生票 context | 中 | — |
 | PC-BAL-032 | 以單一環境的旁證推翻另一環境產生的記錄，證據為真而結論錯誤 | 高 | — |
-| PC-BAL-033 | 新註冊的 hook 對既有 session 零效力，且從日誌缺席不可鑑別 | 高 | — |
+| PC-BAL-033 | 已註冊的防護 hook 可能從未被呼叫，且失效與正常在可觀測面同形 | 高 | — |
 | PC-BAL-034 | 派發前注入的新 context 取代既有 acceptance，且免查證指令關閉了唯一的交叉檢查 | 高 | — |
 | PC-BAL-035 | 驗收條件措辭預先鎖死攔截點，AC 全綠掩蓋威脅事件未覆蓋 | 高 | — |
 | PC-BAL-036 | 規格宣稱的檢查語意與實作機制脫節，重讀規格文字無法揭露落差 | 高 | — |
@@ -612,6 +622,12 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-BAL-041 | 共享 working tree 上編輯即時生效工具源碼的裸露中間態 | 高 | — |
 | PC-BAL-042 | 跨 session 訊息引用的對話脈絡已隨 /clear 蒸發，接收方誤接續並產生無載體承諾 | 高 | — |
 | PC-BAL-043 | 規範載體未送達執行者 context，違規為結構必然而非個體疏失 | 高 | — |
+| PC-BAL-044 | 並行建票下依連號推定衍生票 ID，引用與 staging 同步指向他人票 | — | — |
+| PC-BAL-045 | 產出未落地被記載為 process 已結束，殭屍代理人無人回收 | 中 | — |
+| PC-BAL-046 | 上游分析結論被後續實驗推翻後，衍生自舊結論的待辦票無回溯重估管道 | 高 | — |
+| PC-BAL-047 | 守衛的禁止範圍大於受控介面的提供範圍，差集成為無合法路徑的操作 | 中 | — |
+| PC-BAL-048 | 一次性量測腳本的 fallback 分支輸出與主分支結果印在同一容器，分桶鍵被誤讀為運算結果 | 高 | — |
+| PC-BAL-049 | 驗收條件以書寫動作替代可驗證狀態，錯誤的全稱結論照樣滿足條件 | 高 | — |
 
 ---
 

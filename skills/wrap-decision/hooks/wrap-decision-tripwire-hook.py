@@ -23,7 +23,7 @@ category 分流（W15-018）：
   reflection_trigger → 訊息前綴「[Reflection Trigger]」，引導 three-phase-reflection
 各訊號 cooldown 由 state.signals[sd.id] 獨立追蹤，不跨 category 互相壓制。
 
-唯一觸發條件來源：.claude/config/wrap-triggers.yaml（W10-052 約束）
+唯一觸發條件來源：.claude/config/wrap-triggers.yaml（W10-052 約束，portability-allow: 此 skill 對消費端環境的選用性依賴——缺該設定檔時 advisory 模式優雅降級為不觸發，非硬性中止；沿用時如需啟用訊號偵測，需提供對應設定檔）
 禁止在本檔案中硬編碼 triggers / keywords / thresholds。
 """
 
@@ -40,7 +40,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol
 
 import yaml
 
-# 加入框架共用程式庫路徑：.claude/（for `from lib import ...`）+ .claude/hooks/
+# 加入框架共用程式庫路徑：.claude/（for `from lib import ...`）+ .claude/hooks/（portability-allow: 架構性橋接至框架共用模組，consumer 端結構相同）
 _claude_dir = Path(__file__).resolve().parents[3]
 _hooks_dir = _claude_dir / "hooks"
 if _hooks_dir not in [Path(p) for p in sys.path]:
@@ -48,15 +48,22 @@ if _hooks_dir not in [Path(p) for p in sys.path]:
 if _claude_dir not in [Path(p) for p in sys.path]:
     sys.path.insert(0, str(_claude_dir))
 
-from lib import (
-    setup_hook_logging,
-    run_hook_safely,
-    read_json_from_stdin,
-    get_project_root,
-    parse_ticket_frontmatter,
-    find_ticket_file,
-    get_effort_level,
-)
+try:
+    from lib import (
+        setup_hook_logging,
+        run_hook_safely,
+        read_json_from_stdin,
+        get_project_root,
+        parse_ticket_frontmatter,
+        find_ticket_file,
+        get_effort_level,
+    )
+    _LIB_AVAILABLE = True
+except ImportError:
+    # 消費端未提供 .claude/lib/ 時優雅降級（portability-allow: 選用性依賴，
+    # 缺件優雅降級，非可攜性違規）：main() 開頭直接印出 [WARNING] 並
+    # return 0（advisory hook 本就以 exit 0 為常態，不阻擋任何操作）。
+    _LIB_AVAILABLE = False
 
 
 # ============================================================================
@@ -816,6 +823,13 @@ def is_pytest_environment() -> bool:
 
 
 def main() -> int:
+    if not _LIB_AVAILABLE:
+        sys.stderr.write(
+            "[WARNING] wrap-decision-tripwire-hook 未執行：找不到 .claude/lib/，"
+            "此為消費端需自行提供的框架共用模組（advisory WRAP 訊號偵測功能"
+            "停用，不影響其他操作）。\n"
+        )
+        return 0
     logger = setup_hook_logging(HOOK_NAME)
     event = read_json_from_stdin(logger)
     if event is None:
@@ -860,4 +874,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(run_hook_safely(main, HOOK_NAME))
+    if _LIB_AVAILABLE:
+        sys.exit(run_hook_safely(main, HOOK_NAME))
+    else:
+        sys.exit(main())

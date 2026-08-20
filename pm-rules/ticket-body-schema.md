@@ -211,7 +211,7 @@ IMP ticket 修改 `src/` 字串輸出字面時，acceptance 必須補上 `npm te
 
 #### 防護類 hook ticket 額外 acceptance（必含項）
 
-IMP ticket 的 `where.files` 觸及 hooks 目錄時，須補齊下表四項，查核對象不一致：前三項（既有 session 生效策略、liveness 驗證方式、失敗語意 fail-open/fail-closed）之語意須寫入 acceptance；第四項（產生路徑盤點結果）之正本須寫入 `how.strategy`（缺則 Solution），不在 acceptance 重複宣告。
+IMP ticket 的 `where.files` 觸及 hooks 目錄時，須補齊下表四項，查核對象不一致：前三項（本 session 實地觸發確認、liveness 驗證方式、失敗語意 fail-open/fail-closed）之語意須寫入 acceptance；第四項（產生路徑盤點結果）之正本須寫入 `how.strategy`（缺則 Solution），不在 acceptance 重複宣告。
 
 **強制層現況**：四項皆已進入 `.claude/hooks/acceptance_checkers/hook_protection_acceptance_checker.py` 硬擋範圍（`acceptance-gate-hook.py` 於 complete 前呼叫）——前三項為 acceptance 語意關鍵詞硬擋；第四項（產生路徑盤點結果）為 `how.strategy` 正本解析硬擋，機制細節見下方第 4 項說明的「強制層現況」段落。
 
@@ -226,7 +226,7 @@ IMP ticket 的 `where.files` 觸及 hooks 目錄時，須補齊下表四項，�
 
 | # | 項目 | 說明 | 合格填法範例 |
 |---|------|------|-------------|
-| 1 | 既有 session 生效策略 | 本次寫入的 hook 在當前 session 是否生效、不生效如何因應 | 「本 session 不生效，下個 session 才被 runtime 載入」或「本 wave 該防護不生效，改以人工紀律承擔」（部署期政策，用戶裁示的合格填法） |
+| 1 | 本 session 實地觸發確認 | 本次寫入的 hook 是否已於本 session 實地觸發並確認落檔；未能確認時如何因應 | 「已於本 session 實地觸發並確認 hook-logs 落檔，可執行位已排除」或「本 wave 該防護不生效，改以人工紀律承擔」（部署期政策，用戶裁示的合格填法） |
 | 2 | liveness 驗證方式 | 如何確認 hook 確實被 runtime 載入並執行 | 「以 liveness 日誌比對確認 hook 已被觸發」「實測 `git stash` 觸發後檢查對應 hook-logs 有新增紀錄」 |
 | 3 | 失敗語意 | 異常時 fail-open 或 fail-closed | 「異常時 fail-closed，回傳 exit 2」「異常時 fail-open，僅記錄不阻擋」 |
 | 4 | 產生路徑盤點表**存在於 `how.strategy`** | 本防護要擋的壞狀態有幾條產生路徑、現行攔截點覆蓋幾條、未覆蓋者在哪。**寫在 `how.strategy` 的盤點表，不在 acceptance 重複宣告數字** | 見下方 Action 第一步的表格格式 |
@@ -239,7 +239,7 @@ IMP ticket 的 `where.files` 觸及 hooks 目錄時，須補齊下表四項，�
 >
 > **強制層現況**：checker 已改為直接解析 `how.strategy`（缺則 `Solution`）的盤點表正本，不再檢查 acceptance 數字宣告。行為三分：表格缺席阻擋 complete 並提示格式範例；表格存在且解析成功則放行，`logger.info` 輸出「本票盤點 N 條、覆蓋 M 條、未覆蓋 K 條」；表格存在但解析失敗則 fail-open，僅 `logger.warning` 記錄不阻擋。
 
-**Why（前三項）**：這三項是機器檢查不到、只能落在 ticket 上的面向——單元測試全綠、settings.json 已註冊、實機 dogfooding 通過三項訊號都無法證明 hook 在「本次寫入的當下 session」已生效（session 中途新註冊的 hook 至該 session 重啟前不被 runtime 載入，屬結構性風險而非個案）。規則文字層級的預防措施已證明無法單靠文件落實，故用戶裁示強制層須為 acceptance 條目加 hook 硬擋。
+**Why（前三項）**：這三項是機器檢查不到、只能落在 ticket 上的面向——單元測試全綠、settings.json 已註冊、實機 dogfooding 通過三項訊號都無法證明 hook 在「本次寫入的當下 session」已生效。零效力有兩條各自成立的成因：缺可執行位使 runtime 無從啟動它（與 runtime 版本無關，恆成立）、session 啟動時一次快照 hook 命令集（版本相依，2026-08-13 觀測的 runtime 上成立、2026-08-18 觀測的上不成立，見 PC-BAL-033「機制更正」節）。第 1 項要求的是「本 session 實地觸發是否落檔」而非「屬哪個 session 世代」——前者在兩種載入模型下都是有效證據，後者只在快照模型成立時才有意義。規則文字層級的預防措施已證明無法單靠文件落實，故用戶裁示強制層須為 acceptance 條目加 hook 硬擋。
 
 **Why（產生路徑盤點結果）**：前三項驗證的是「防護有沒有在跑」，不涵蓋「防護擋住幾條路徑」。一個確實在跑、失敗語意明確、liveness 可驗證的防護，仍可能只覆蓋壞狀態的其中一條產生路徑。此項要求把覆蓋範圍以可數形式寫下，使該面向脫離撰寫者的隱性假設。
 
@@ -297,7 +297,7 @@ ticket track claim 不再執行 AC verification（W3-046 L3-b 實作），所有
 
 **邊界（兩個方向）**：
 
-- 對**上方**「防護類 hook ticket 額外 acceptance」：本節**不豁免**該節必含項的要求。該節各項（既有 session 生效策略、liveness 驗證方式、失敗語意、產生路徑盤點結果）屬**驗收手段與覆蓋範圍宣告**，照填；其中產生路徑盤點結果項與本節 Action 的第一步（列產生路徑盤點表）同源，盤點表寫 `how.strategy`，acceptance 只宣告其結果數字；本節管的是**防護攔截點**。一張 hooks 防護票同時受兩節約束。
+- 對**上方**「防護類 hook ticket 額外 acceptance」：本節**不豁免**該節必含項的要求。該節各項（本 session 實地觸發確認、liveness 驗證方式、失敗語意、產生路徑盤點結果）屬**驗收手段與覆蓋範圍宣告**，照填；其中產生路徑盤點結果項與本節 Action 的第一步（列產生路徑盤點表）同源，盤點表寫 `how.strategy`，acceptance 只宣告其結果數字；本節管的是**防護攔截點**。一張 hooks 防護票同時受兩節約束。
 - 對**下方**「撰寫原則」：其他 acceptance 條目（測試通過、產出清單）仍照撰寫原則寫具體指令與時機。前者說「什麼狀態算安全」，後者說「怎麼確認做完了」。
 
 **參考**：完整論述、三列反模式對照表與判準依據見 `.claude/methodologies/acceptance-criteria-methodology.md`「防護類驗收條件：威脅事件測試」節與 `.claude/error-patterns/process-compliance/PC-BAL-035-acceptance-wording-locks-interception-point.md`。
@@ -392,7 +392,9 @@ acceptance:
 | 1.1.0 | 2026-05-08 | ANA Solution 章節新增「Spawn 落地確認」子節 checklist（W17-167 L3 落地，配合 W17-168 hook + W17-169 quality-baseline / ticket-lifecycle 同步修訂） |
 | 1.0.0 | 2026-04-20 | 初版（W17-016.2 落地 W17-016.1 盤點結論） |
 
-**Last Updated**: 2026-08-17
+**Last Updated**: 2026-08-20
+**Version**: 1.7.2 — 補改名漏網：「防護類 hook ticket 額外 acceptance」節與「邊界（兩個方向）」段的四項散文列舉仍寫舊 label「既有 session 生效策略」，與同節表格第 1 列的現行 label 不一致；依表格改為「本 session 實地觸發確認」。讀者依散文寫出的 acceptance 會落在舊措辭上，而 checker 的關鍵詞清單刻意保留舊用詞故不會擋，此不一致無自曝管道。要求本身與硬擋行為未變。
+**Version**: 1.7.1（原記為 1.7.0，與先落地的方案 F 條目撞號，依落地順序改號） — 依 PC-BAL-033 機制收窄同步（2026-08-18）：必含項第 1 項由「既有 session 生效策略」改名為「本 session 實地觸發確認」（收窄後需驗的是本 session 實地觸發是否落檔，非屬哪個 session 世代），合格填法同步改寫；「Why（前三項）」段的機制句由單一快照模型斷言改為兩條成因並列（缺可執行位恆成立、註冊快照版本相依），並說明第 1 項為何選在兩種載入模型下都有效的證據。要求本身、觸發條件與硬擋行為皆未變。
 **Version**: 1.7.0 — 依 0.2.1-W3-527 完整 WRAP 裁示改採方案 F（機器讀正本）：第 4 項的檢查對象由 acceptance 的數字宣告改為 `how.strategy` 的盤點表正本，撰寫者不再需要在 acceptance 重複宣告數字；補 Why（副本 vs 正本、消費者缺席）與強制層現況（改動待 0.2.1-W3-533 落地，該票完成前 checker 仍檢查 acceptance 宣告）。
 **Version**: 1.6.2 — 依第二輪 Layer 2 審查更新：「維度型檢查」術語隨 PC-BAL-035 判準軸更換為「對外部事實可證偽」；補實作限制（判定須用 regex 不可用 substring，實測 18.0% 誤過率）。
 **Version**: 1.6.1 — 依 Layer 2 審查修正 v1.6.0 的三項失準：強制層宣稱與實作不符（產生路徑盤點結果尚未進入 checker，已補「強制層現況」段明示該項在 0.2.1-W3-525 落地前為自律層）；Why／Consequence 原僅支撐前三項卻以全節語氣陳述，已拆為「Why（前三項）」與「Why（產生路徑盤點結果）」；節標題與內文改以角色命名（「必含項」）取代數量命名，位置序數引用改語意錨點。

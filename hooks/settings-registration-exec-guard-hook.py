@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 
 """
@@ -36,8 +36,8 @@ hooks.*[].hooks[].command 差集，只驗證新增註冊項的可執行位。後
 Hook Event: PostToolUse
 Matcher: Edit, Write, MultiEdit
 Decision: 無 deny——PostToolUse 觸發時寫入已完成，無法逆轉本次操作；偵測
-到監控範圍內的檔案缺可執行位時直接 chmod +x 自動修復並記錄，取代「事後
-才在下個 session 由 SessionStart 掃描修復」的延遲窗口。
+到監控範圍內的檔案缺可執行位時直接 chmod +x 自動修復並記錄，使修復發生在
+落地當下，而非等待 SessionStart 全量掃描這個延遲兜底。
 
 覆蓋範圍：
   - .claude/hooks/ 頂層 .py / .sh（非遞迴。tests/、acceptance_checkers/、
@@ -57,9 +57,17 @@ Decision: 無 deny——PostToolUse 觸發時寫入已完成，無法逆轉本�
 
 動機（一次「守衛註冊即零效力」事故實測）：一個新註冊的 guard hook 自建立
 起以 100644（無可執行位）存在，runtime 無法啟動它，事故當下該守衛全期
-零效力；而 SessionStart 的 chmod 修復要到下個 session 才被採用。本 hook
-使這類缺失在檔案落地的當下即暴露並自動修復，不再遺留至下個 session，且
-不受註冊/建檔操作順序影響。
+零效力。本 hook 使這類缺失在檔案落地的當下即暴露並自動修復，不受註冊/建檔
+操作順序影響。
+
+本 hook 的價值不依賴 runtime 何時重新解析 hook 命令集（2026-08-18 更正）：
+原文稱「SessionStart 的 chmod 修復要到下個 session 才被採用」「不再遺留至
+下個 session」，該表述預設了快照模型。實測結論為版本相依——2026-08-13 側
+資料支持快照模型，2026-08-18 的兩輪實驗支持即時生效（chmod 後同 session
+內即可執行，且無 session 級負向快取）。本 hook 屬「提前動作」型設計：它把
+修復時點往前挪，不宣稱任何生效時點，故在兩種模型下皆為淨正向——即時模型
+下領先量為「早於下一次工具呼叫」，快照模型下為「早一個 session」，量級不同
+而方向一致。改寫此段是為使註解在模型翻轉時不失效；hook 行為本身未變更。
 
 對應規則：.claude/rules/core/quality-baseline.md 規則 3（設計問題立即修正）
 """

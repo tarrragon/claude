@@ -1,6 +1,9 @@
 ---
 name: wrap-decision
 description: "WRAP 決策框架 — 認知偏誤防護、選項擴增與資料充足度閘門。用於防護自動駕駛、假選項、證據不足下的倉促決策。內含完整 premortem 流程（失敗原因並行深挖 + 綜合報告），適用版本規劃、提案評估、發版前等高成本決策。Use when: 被困住或連續失敗 2+、準備宣告限制性結論前、偏離核心目標、根因分析、代理人失敗歸因、提案評估、重大架構或規則決策、個人化建議（健康/醫療/金錢/法律）前、Context 沉重時、需要對計畫做事前風險推演時。Triggers: stuck, blocked, loop, no progress, 分析, debug, 限制性解法, 個人化建議, 具體推薦, premortem, 事前驗屍, 事前假設失敗, 壓力測試計畫, 這計畫會怎麼死, 找出盲點。"
+metadata:
+  portable: true
+
 ---
 
 # WRAP 決策框架 Skill
@@ -56,7 +59,7 @@ description: "WRAP 決策框架 — 認知偏誤防護、選項擴增與資料�
 
 > **實證（設計選型類）**：某次面對「文件索引寫入的接線方式該選哪種形態」的設計選型決策，直覺列出三個選項，選項間在「無旁路強度」與「自動寫入版控檔的副作用風險」兩軸上代價方向相反（強度高者風險也高），且能被一句話概括（三選項皆為「接線層級」的程度差異），未通過框架概括測試；首輪標為推薦的方案且基於未查證的基本率假設，被現實檢驗（Reality Test）證偽。
 
-> 本節為「二元處置取捨」判準的 substance 權威來源。`.claude/pm-rules/askuserquestion-rules.md`「選項空間檢查」節為其專案層落地版本，兩節判準相同，修改請以本節為準並同步該節。
+> 本節為「二元處置取捨」判準的 substance 權威來源。專案端若有對應的提問規則（本框架為 `references/project-integration/pm-rules-map.md` 所列者），其「選項空間檢查」節為落地版本，兩節判準相同，修改請以本節為準並同步該節。<!-- portability-allow: 分層目錄由各專案自備，不隨 sync 傳遞 -->
 
 **快速模式**（5 分鐘）：錨點 + Step 0 + W + 基本率（R 核心）+ 機會成本（A 核心）+ 決定
 **快速+模式**：快速模式 + 強制 R 的基本率 / 反向驗證兩階段反思（分析任務最容易跳過事證直接下結論，故在快速基礎上補回 R 核心 + 一輪反向驗證）
@@ -170,7 +173,7 @@ Step 0（本閘門）、premortem 的 context 閘門、`requirement-protocol` �
 | premortem context 閘門 | 要驗屍的**計畫輪廓**清不清楚 | 是什麼 / 影響誰 / 成功長怎樣 | 高成本決策的 premortem 前置（`references/premortem-workflow.md` 步驟 0） |
 | requirement-protocol | 使用者**指令**是否明確可執行 | 模糊指令澄清、可決定 vs 該確認的邊界 | 收到開發指令、需求確認 |
 
-**共用原則**：三者都遵循「一次一問、問到門檻即停、能推斷則不問」（見 `.claude/rules/core/ai-communication-rules.md` 規則 5 主體性保護）。**Action**：進入 WRAP 前若卡在「使用者到底要什麼」屬 requirement-protocol 範圍，先澄清指令；卡在「當事人條件」用 Step 0；卡在「計畫輪廓」用 premortem context 閘門。三者互為前置，不重複問同一組問題。
+**共用原則**：三者都遵循「一次一問、問到門檻即停、能推斷則不問」（見專案的對話品質規則中「主體性保護」條款）。**Action**：進入 WRAP 前若卡在「使用者到底要什麼」屬 requirement-protocol 範圍，先澄清指令；卡在「當事人條件」用 Step 0；卡在「計畫輪廓」用 premortem context 閘門。三者互為前置，不重複問同一組問題。
 
 ---
 
@@ -284,8 +287,8 @@ R 階段一般處理「基本率」「來源核對」（已有「清單類答案
 
 **驗證失敗處理**：在 IMP ticket Problem Analysis 補「主線程驗證後的範圍調整」段，**禁止**直接照原 ANA 結論派發。
 
-> 案例集 + 完整觸發條件：`.claude/references/dispatch-pre-validation-cases.md`（首例 W10-137 — 救下「直接刪 ticket-skill-sync-check.md」誤刪決策）
-> 入口：`.claude/pm-rules/dispatch-gate.md` 關卡三
+> 案例集與完整觸發條件由專案端維護，索引見 `references/project-integration/README.md`<!-- portability-allow: 分層目錄由各專案自備，不隨 sync 傳遞 -->
+> 入口：專案的派發閘門規則
 
 ### 試水溫（Ooch）
 
@@ -419,7 +422,7 @@ R 階段一般處理「基本率」「來源核對」（已有「清單類答案
 
 > Gary Klein 方法：先假設計畫失敗了，然後問「是什麼殺了它？」比問「可能會失敗嗎？」多產出 25% 的洞察（且更具體）。
 
-**每個預想失敗原因配早期警訊**：行前預想列出 3 個原因後，為每個原因補 1-2 個**可觀測的早期警訊**——能實際看到或量到的訊號（如「測試 flaky 率 > 5%」「某 API 回應時間翻倍」），不是模糊感覺（如「感覺會出問題」）。**Why**：預想的失敗原因若無對應訊號，只是行前焦慮，無法在執行中被偵測；配上可觀測訊號後，失敗模式從「事後才知道」變成「訊號亮起即介入」。**Action**：警訊只需行前預想時記在 ticket；若某警訊需要跨 session 持續監測，包裝為監測 ticket 並綁定 trigger（`.claude/rules/core/decision-trigger-binding.md` 規則 2：合法 trigger 限 ticket ID，量化閾值須先包裝為 ticket），不可寫「之後再觀察」式無 trigger 延後。
+**每個預想失敗原因配早期警訊**：行前預想列出 3 個原因後，為每個原因補 1-2 個**可觀測的早期警訊**——能實際看到或量到的訊號（如「測試 flaky 率 > 5%」「某 API 回應時間翻倍」），不是模糊感覺（如「感覺會出問題」）。**Why**：預想的失敗原因若無對應訊號，只是行前焦慮，無法在執行中被偵測；配上可觀測訊號後，失敗模式從「事後才知道」變成「訊號亮起即介入」。**Action**：警訊只需行前預想時記在 ticket；若某警訊需要跨 session 持續監測，包裝為監測 ticket 並綁定 trigger（決策 trigger 綁定規則：合法 trigger 限 ticket ID，量化閾值須先包裝為 ticket），不可寫「之後再觀察」式無 trigger 延後。
 
 **高成本決策的完整展開版**：上表「行前預想」是 12 小時尺度、3 原因的簡化版，適用一般 ticket。版本規劃、提案評估、發版前等高成本決策改用完整 premortem 流程——原因數量不設上限、每個原因獨立派 subagent 深挖、輸出三分綜合報告（含每原因的早期警訊），見 `references/premortem-workflow.md`。
 
@@ -501,12 +504,12 @@ WRAP 每階段之間是切割點 — 強迫問「是否繼續」：
 **Last Updated**: 2026-08-10
 **Version**: 2.10.0 — 「二元處置取捨」項識別特徵擴充至涵蓋設計選型類的副作用取捨（候選方案在不同維度上代價方向相反，如強度高者風險亦高），未新增第二列判準；新增「適用對象不限處置類」子節說明處置類與設計選型類共享同一失效機制；Why/Consequence/Action 三明示同步擴寫；新增設計選型類實證段（案例敘事改描述性標籤，不引用專案層級 ticket ID，依規則 8 全禁原則）
 
-**Version**: 2.9.0 — 「二元處置取捨」節補一則權威標註：本節為該判準的 substance 權威來源，`.claude/pm-rules/askuserquestion-rules.md`「選項空間檢查」節為對應落地版本，消除兩節間逐字重複的 Why/Consequence/實證段
+**Version**: 2.9.0 — 「二元處置取捨」節補一則權威標註：本節為該判準的 substance 權威來源，專案端提問規則的「選項空間檢查」節為對應落地版本，消除兩節間逐字重複的 Why/Consequence/實證段
 
 **Version**: 2.8.0 — 移植 blog 分支獨有演化（來源：blog 分支 2.4.0 + 2.5.0 合併）：觸發條件表新增「不可逆 / 時間壓力」「利害關係人衝突」兩項；新增「快速+模式」定義（原僅見於觸發條件表值，未定義語意）；參考文件表補 `claim-quick-wrap.md`（原 canonical 已有該檔但未被引用，至今 orphan）；絆腳索類型表新增「基礎設施累積型」（escalation 連續 2+ 次、每次加一層工具 / 檔案 / 流程而 anchor 未曾明說時，亮 anchor 一次按其重定 apparatus 份量）。
 **Version**: 2.7.0 — 觸發條件表新增「二元處置取捨」項（入場閘門：處置類選項未經 W 階段產出即不得呈現），並補與既有結論錨定（3.2）的邊界說明——3.2 是 WRAP 內部自我檢查，本項是 WRAP 之前的入場閘門。
-**Version**: 2.6.0 — Step 0 資料充足度閘門新增「與 requirement-protocol 的分工邊界」子節：三機制（WRAP Step 0 / premortem context 閘門 / requirement-protocol）受眾與問題對照表 + 共用原則（一次一問、互為前置不重複），requirement-protocol 反向交叉引用同步（1.5.0-W5-009.7，源自外部 premortem skill context 充足度閘門）。
-**Version**: 2.5.0 — P 階段「行前預想」新增「每個預想失敗原因配早期警訊」條款：可觀測訊號（非模糊感覺）+ 需跨 session 監測時包裝為監測 ticket 綁 trigger（decision-trigger-binding 規則 2）（1.5.0-W5-009.6，源自外部 premortem skill early warning signals）。
+**Version**: 2.6.0 — Step 0 資料充足度閘門新增「與 requirement-protocol 的分工邊界」子節：三機制（WRAP Step 0 / premortem context 閘門 / requirement-protocol）受眾與問題對照表 + 共用原則（一次一問、互為前置不重複），requirement-protocol 反向交叉引用同步（源自外部 premortem skill context 充足度閘門）。
+**Version**: 2.5.0 — P 階段「行前預想」新增「每個預想失敗原因配早期警訊」條款：可觀測訊號（非模糊感覺）+ 需跨 session 監測時包裝為監測 ticket 綁 trigger（決策 trigger 綁定規則：合法 trigger 限 ticket ID）（源自外部 premortem skill early warning signals）。
 **Version**: 2.4.0 — 新增完整 premortem 流程（`references/premortem-workflow.md`）：failure-reason 並行深挖 + 三分綜合報告，銜接 P 階段簡化三問與理論依據 `principles/premortem-klein.md`；description 補觸發詞（premortem/事前驗屍/壓力測試計畫等）。
 **Version**: 2.3.0 — 觸發條件新增 4 項決策路徑層干擾（CLI 自動駕駛（autopilot） / 既有結論錨定（Anchor） / 草率改規則 / 多步驟成功率盲點）；既有觸發條件不變動（向後相容）。
 **Version**: 2.2.0 — 觸發條件新增反思深度質疑（reflection_depth_challenge）說明，含與被困住語意的差異。

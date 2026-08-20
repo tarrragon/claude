@@ -71,14 +71,20 @@ def extract_spawned_tickets_from_frontmatter(frontmatter: dict, logger) -> List[
         if not spawned_str:
             logger.debug("Ticket 無 spawned_tickets 欄位")
             return []
-        # 解析 YAML 清單格式 (e.g., "- 0.31.0-W4-036\n- 0.31.0-W4-037")
         spawned = []
-        for line in spawned_str.split("\n"):
-            line = line.strip()
-            if line.startswith("-"):
-                ticket_id = line[1:].strip()
-                if ticket_id:
-                    spawned.append(ticket_id)
+        lines = spawned_str.split("\n")
+        if any(line.strip().startswith("-") for line in lines):
+            # 解析 YAML 清單格式 (e.g., "- 0.31.0-W4-036\n- 0.31.0-W4-037")
+            for line in lines:
+                line = line.strip()
+                if line.startswith("-"):
+                    ticket_id = line[1:].strip()
+                    if ticket_id:
+                        spawned.append(ticket_id)
+        else:
+            # 單一純量寫法 (e.g., "spawned_tickets: 0.31.0-W4-036")，
+            # 合法 YAML（schema 允許 list 欄位純量化），非手寫 parser 缺陷
+            spawned.append(spawned_str)
     else:
         logger.debug("Ticket 無 spawned_tickets 欄位")
         return []
@@ -166,7 +172,7 @@ def check_spawned_tickets_status(
 
         try:
             content = spawned_file.read_text(encoding="utf-8")
-            spawned_fm = parse_ticket_frontmatter(content)
+            spawned_fm = parse_ticket_frontmatter(content, logger)
             status = spawned_fm.get("status", "unknown")
 
             if status not in TERMINAL_STATUSES:
@@ -242,7 +248,7 @@ def check_spawned_tickets_blocking(
             continue
         try:
             content = sfile.read_text(encoding="utf-8")
-            fm = parse_ticket_frontmatter(content)
+            fm = parse_ticket_frontmatter(content, logger)
             status = fm.get("status", "unknown")
             if status not in TERMINAL_STATUSES:
                 non_terminal.append((sid, status))

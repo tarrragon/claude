@@ -177,7 +177,10 @@ def _worker_append_log(args):
     sys.stdout = io.StringIO()
     try:
         from ticket_system.commands.track_acceptance import execute_append_log
-        ns = _Args(ticket_id=ticket_id, section="Execution Log", content=content)
+        # W3-720.2: 改用 Schema 章節 "Solution"——"Execution Log" 是 body 的
+        # H1 容器標題，已自 append-log 白名單移除；本測試驗證的是並發寫入
+        # 不遺失內容，與章節選擇無關。
+        ns = _Args(ticket_id=ticket_id, section="Solution", content=content)
         return execute_append_log(ns, version)
     finally:
         sys.stdout = saved
@@ -276,7 +279,7 @@ class TestAppendLogRace:
         N = 10
         N_ROUNDS = 3
 
-        # body 必須含 ## Execution Log 區段；_write_ticket 預設只給 "body"
+        # body 必須含 ## Solution 區段；_write_ticket 預設只給 "body"
         def _seed():
             content = (
                 "---\n"
@@ -292,7 +295,7 @@ class TestAppendLogRace:
                 "acceptance: []\n"
                 "spawned_tickets: []\n"
                 "---\n\n"
-                "## Execution Log\n\n"
+                "## Solution\n\n"
             )
             path.write_text(content, encoding="utf-8")
 

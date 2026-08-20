@@ -133,7 +133,7 @@ TDD 流程架構
 | ---------------------- | ------------------------------------ | ------------------------------ |
 | `/ticket` CLI          | 如 `/ticket create`, `/ticket track` | 「任務系統」「狀態管理」       |
 | 具體 agent 名稱        | lavender, parsley, sage 等           | 「設計者」「實作者」「測試者」 |
-| `.claude/hooks/` 系統  | 檢查點自動化                         | 「驗證機制」「檢查點」         |
+| 專案的 hook 系統  | 檢查點自動化                         | 「驗證機制」「檢查點」         |
 | `decision-tree` 路由   | PM 決策邏輯                          | 「階段轉換」「路由決策」       |
 | `/parallel-evaluation` | 本專案多視角工具                     | 「多維度分析」「交叉審查」     |
 | 本專案路徑             | `.claude/`, `docs/` 等               | 「規則目錄」「工作目錄」       |
@@ -198,7 +198,7 @@ TDD 流程架構
 
 ### 完成 .6 子任務（/tdd SKILL）
 
-產出：`.claude/skills/tdd/SKILL.md`
+產出：`.claude/skills/tdd/SKILL.md`<!-- portability-allow: consumer 共通的 skill 安裝位置 -->
 功能：交互式 TDD 指導、檢查點自動化、可選框架整合
 
 ---

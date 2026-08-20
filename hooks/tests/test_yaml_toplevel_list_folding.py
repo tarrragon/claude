@@ -133,9 +133,10 @@ class TestFoldingDoesNotBreakExistingNestedDictParsing:
         assert result["who"].get("current") == "thyme-python-developer"
         assert result.get("status") == "in_progress"
 
-    def test_where_files_nested_list_still_accumulates_as_string(self):
-        """where.files（巢狀於 2 縮排 key 下的列表）維持既有「\\n 累積」行為不受影響
-        （current_nested_key 非 None，不進入本次新增的頂層列表折行分支）。"""
+    def test_where_files_nested_list_parses_as_real_list(self):
+        """where.files（巢狀於 2 縮排 key 下的列表）由 yaml.safe_load 解析為
+        真正的 list（0.2.1-W3-665.2 遷移後：舊 parser 時代的 `\\n` 字串
+        累積行為已解除，見 test_scalar_continuation_colon_fix.py 同案例）。"""
         content = _wrap(
             "id: 0.1.0-W1-001\n"
             "where:\n"
@@ -146,6 +147,5 @@ class TestFoldingDoesNotBreakExistingNestedDictParsing:
         )
         result = parse_ticket_frontmatter(content)
         assert isinstance(result.get("where"), dict)
-        files_value = result["where"].get("files", "")
-        assert "a.py" in files_value
-        assert "b.py" in files_value
+        files_value = result["where"].get("files", [])
+        assert files_value == ["a.py", "b.py"]

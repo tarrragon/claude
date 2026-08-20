@@ -231,7 +231,7 @@ class TestCrossCheckRegistry:
         warnings = track_conflicts.cross_check_registry(
             tickets, registry, project_root="/proj", now=NOW
         )
-        assert "衝突判定僅採 where.files" in warnings[0]
+        assert "衝突判定僅採 write 集合" in warnings[0]
         assert "校正票面宣告或重跑 claim" in warnings[0]
 
     def test_matching_files_no_warning(self):

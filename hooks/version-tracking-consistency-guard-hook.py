@@ -207,7 +207,7 @@ def scan_worklog_versions(project_root: Path) -> set[str]:
     return versions
 
 
-def scan_ticket_versions(project_root: Path) -> set[str]:
+def scan_ticket_versions(project_root: Path, logger) -> set[str]:
     """掃描所有 ticket 檔案的 frontmatter version 欄位，回傳版本號集合。
 
     僅回傳純 semver 格式（X.Y.Z）token；非 semver token（如 "0.22.x"、
@@ -219,11 +219,16 @@ def scan_ticket_versions(project_root: Path) -> set[str]:
 
     versions: set[str] = set()
     for ticket_file in tickets_root.rglob("tickets/*.md"):
-        frontmatter = parse_ticket_frontmatter(ticket_file)
+        frontmatter = parse_ticket_frontmatter(ticket_file, logger)
         version = frontmatter.get("version")
         if not version:
             continue
-        token = str(version).strip("'\"")
+        # str() 保留：防禦兩段式版號（如 "1.0"）被 yaml.safe_load 誤推斷為
+        # float。.strip("'\"") 已退役：舊呼叫是手寫 parser 未在語法層去除
+        # 引號字元的補償，yaml.safe_load 已在語法層正確處理引號語法，對合法
+        # 輸入恆為 no-op（實測確認 version: '0.2.1' / "0.2.1" / 0.2.1 三種
+        # 寫法皆回傳無引號的 '0.2.1'）。
+        token = str(version)
         if SEMVER_PATTERN.match(token):
             versions.add(token)
     return versions
@@ -259,7 +264,7 @@ def get_latest_git_tag_version(project_root: Path, logger) -> str | None:
     return None
 
 
-def get_version_ticket_statuses(project_root: Path, version: str) -> list[str]:
+def get_version_ticket_statuses(project_root: Path, version: str, logger) -> list[str]:
     """回傳指定版本目錄下所有 ticket 的 status 清單（空清單代表無 ticket 或目錄不存在）。"""
     parts = version.split(".")
     if len(parts) != 3:
@@ -275,7 +280,7 @@ def get_version_ticket_statuses(project_root: Path, version: str) -> list[str]:
 
     statuses = []
     for ticket_file in sorted(tickets_dir.glob("*.md")):
-        frontmatter = parse_ticket_frontmatter(ticket_file)
+        frontmatter = parse_ticket_frontmatter(ticket_file, logger)
         status = frontmatter.get("status")
         if status:
             statuses.append(status)
@@ -288,20 +293,20 @@ def detect_multiple_active(versions: dict[str, str]) -> list[str]:
     return sorted(active) if len(active) > 1 else []
 
 
-def detect_ghost_versions(versions: dict[str, str], project_root: Path) -> list[str]:
+def detect_ghost_versions(versions: dict[str, str], project_root: Path, logger) -> list[str]:
     """偵測漂移 2：worklog 目錄或 ticket 存在，但 todolist.yaml 無條目"""
-    known = scan_worklog_versions(project_root) | scan_ticket_versions(project_root)
+    known = scan_worklog_versions(project_root) | scan_ticket_versions(project_root, logger)
     ghosts = known - set(versions.keys())
     return sorted(ghosts)
 
 
-def detect_stale_active(versions: dict[str, str], project_root: Path) -> list[str]:
+def detect_stale_active(versions: dict[str, str], project_root: Path, logger) -> list[str]:
     """偵測漂移 3：版本所有 ticket 皆完成，但 todolist status 仍為 active"""
     stale = []
     for version, status in versions.items():
         if status != "active":
             continue
-        statuses = get_version_ticket_statuses(project_root, version)
+        statuses = get_version_ticket_statuses(project_root, version, logger)
         if statuses and all(s in COMPLETED_TICKET_STATUSES for s in statuses):
             stale.append(version)
     return sorted(stale)
@@ -581,8 +586,8 @@ def main() -> int:
             return 0
 
         multiple_active = detect_multiple_active(versions)
-        ghosts = detect_ghost_versions(versions, project_root)
-        stale_active = detect_stale_active(versions, project_root)
+        ghosts = detect_ghost_versions(versions, project_root, logger)
+        stale_active = detect_stale_active(versions, project_root, logger)
         tag_drift_version = detect_tag_drift(versions, project_root, logger)
 
         closed_tickets = scan_closed_tickets(project_root, logger)

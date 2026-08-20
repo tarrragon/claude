@@ -144,7 +144,7 @@ SOP 詳見 `.claude/references/agent-dispatch-template.md`「tests/ 修改派發
 |------|------|-----|
 | 1 | 讀 `branch-status-reminder` Hook 輸出（含 staged / modified / untracked 三組） | Hook 已列全量，但仍屬「摘要」非稽核 |
 | 2 | 額外執行 `git status --porcelain --untracked=all` | 雙重驗證；確認 Hook 輸出與工作區一致 |
-| 3 | 對非本任務檔案判定來源（前 session 遺留 / 並行 session / Hook 自動產生） | 區分 PC-076（靜態遺留）與 PC-078（動態並行） |
+| 3 | 對非本任務檔案判定來源（前 session 遺留 / 並行 session / Hook 自動產生 / 跨 session 實驗器材） | 區分 PC-076（靜態遺留）與 PC-078（動態並行）；器材依 `experiment-` 檔名前綴與首行 header 辨識，處置見 `.claude/pm-rules/parallel-dispatch.md`「跨 session 實驗器材的自我標示與存活期治理（強制）」的讀者側處置 |
 | 4 | 若有遺留，記錄到當前 Ticket Problem Analysis 或新建 Ticket 追蹤 | 違規 quality-baseline 規則 5 |
 
 **Why/Consequence**：Hook 摘要可能遮蔽（修復前僅情況 1 列、上限 10 截斷），PM 預設「git 工作區乾淨」常失準；未清點會在 commit 階段混入前 session 遺留，需臨時拆分或誤把無關變更帶入 main。

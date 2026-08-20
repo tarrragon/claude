@@ -298,15 +298,15 @@ class TestAppendLog:
         args = Mock()
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
-        args.section = "Execution Log"
+        args.section = "Solution"
         args.content = "完成了第一階段實作"
 
         mock_ticket = {
             "id": "0.31.0-W4-001",
             "_path": "/path/to/ticket.md",
-            "_body": """## Execution Log
+            "_body": """## Solution
 
-- [2026-01-30 10:00] Claimed
+既有內容
 """,
         }
 
@@ -329,13 +329,13 @@ class TestAppendLog:
         args = Mock()
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
-        args.section = "Execution Log"
+        args.section = "Solution"
         args.content = ""
 
         mock_ticket = {
             "id": "0.31.0-W4-001",
             "_path": "/path/to/ticket.md",
-            "_body": "## Execution Log\n",
+            "_body": "## Solution\n",
         }
 
         with patch('ticket_system.commands.track_acceptance.load_ticket') as mock_load:
@@ -357,7 +357,7 @@ class TestAppendLog:
         args = Mock()
         args.ticket_id = "0.31.0-W4-999"
         args.version = "0.31.0"
-        args.section = "Execution Log"
+        args.section = "Solution"
         args.content = "Some log"
 
         with patch('ticket_system.commands.track_acceptance.load_ticket') as mock_load:
@@ -376,16 +376,16 @@ class TestAppendLog:
         args = Mock()
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
-        args.section = "Execution Log"
-        args.content = "第三個日誌記錄"
+        args.section = "Solution"
+        args.content = "第三個記錄"
 
         mock_ticket = {
             "id": "0.31.0-W4-001",
             "_path": "/path/to/ticket.md",
-            "_body": """## Execution Log
+            "_body": """## Solution
 
-- [2026-01-30 10:00] Created
-- [2026-01-30 11:00] Claimed
+第一個記錄
+第二個記錄
 """,
         }
 
@@ -399,35 +399,6 @@ class TestAppendLog:
                     assert result == 0
                     mock_save.assert_called_once()
 
-    def test_append_log_with_timestamp(self):
-        """
-        Given: 追加日誌時應自動記錄時間戳
-        When: 執行 append-log 操作
-        Then: 應返回 0，並自動添加時間戳
-        """
-        args = Mock()
-        args.ticket_id = "0.31.0-W4-001"
-        args.version = "0.31.0"
-        args.section = "Execution Log"
-        args.content = "實作完成"
-
-        mock_ticket = {
-            "id": "0.31.0-W4-001",
-            "_path": "/path/to/ticket.md",
-            "_body": "## Execution Log\n",
-        }
-
-        with patch('ticket_system.commands.track_acceptance.load_ticket') as mock_load:
-            mock_load.return_value = mock_ticket
-
-            with patch('ticket_system.commands.track_acceptance.get_ticket_path', return_value=_LOCK_TARGET):
-                with patch('ticket_system.commands.track_acceptance.save_ticket') as mock_save:
-                    result = execute_append_log(args, "0.31.0")
-
-                    assert result == 0
-                    # 驗證 save_ticket 被調用，並且新內容包含時間戳
-                    mock_save.assert_called_once()
-
     def test_append_log_long_content(self):
         """
         Given: 日誌內容很長
@@ -437,13 +408,13 @@ class TestAppendLog:
         args = Mock()
         args.ticket_id = "0.31.0-W4-001"
         args.version = "0.31.0"
-        args.section = "Execution Log"
-        args.content = "A" * 1000  # 1000 字元的日誌
+        args.section = "Solution"
+        args.content = "A" * 1000  # 1000 字元的內容
 
         mock_ticket = {
             "id": "0.31.0-W4-001",
             "_path": "/path/to/ticket.md",
-            "_body": "## Execution Log\n",
+            "_body": "## Solution\n",
         }
 
         with patch('ticket_system.commands.track_acceptance.load_ticket') as mock_load:
@@ -489,11 +460,16 @@ class TestAppendLogH2Warning:
         assert "WARNING" not in captured.err
         mock_save.assert_called_once()
 
-    def test_execution_log_h2_skipped(self, capsys):
-        # Execution Log 不在 schema check 範圍
-        result, captured, _ = self._run("Execution Log", "## 任何", capsys)
-        assert result == 0
-        assert "WARNING" not in captured.err
+    def test_execution_log_rejected_as_invalid_section(self, capsys):
+        """W3-720.2: Execution Log 已自 append-log 白名單移除
+
+        它是 body 的 H1 容器標題而非 H2 章節，寫入請求在白名單階段即被拒絕，
+        不再進入 H2 降級與寫入路徑。
+        """
+        result, captured, mock_save = self._run("Execution Log", "## 任何", capsys)
+        assert result == 1
+        assert "無效的 section: Execution Log" in captured.out
+        mock_save.assert_not_called()
 
     # W1-068（W1-038 方案 B）: 自動降級 H2 → H3 規範化測試
 
@@ -600,14 +576,21 @@ class TestAppendLogSectionMatching:
         assert re.search(r"(?m)^## Solution$", new_body) is not None
         assert "新內容" in new_body
 
-    def test_error_message_lists_existing_headers(self, capsys):
-        # W1-025: Schema 章節缺失改自動補建，SECTION_NOT_FOUND 的 H2 標題列舉
-        # 引導改以非 Schema 章節（Execution Log）驗證
+    def test_invalid_section_lists_valid_values(self, capsys):
+        """白名單外的 section 值 → INVALID_SECTION，並列出全部合法值。
+
+        本測試原以 Execution Log 驗證 SECTION_NOT_FOUND 的 H2 標題列舉引導。
+        白名單移除該值後路徑改變：請求在白名單階段即被拒，不再走章節存在性
+        檢查。斷言隨之改為驗證實際路徑——原斷言的 "Problem Analysis" /
+        "Test Results" 會出現在 INVALID_SECTION 的合法值清單中而巧合通過，
+        名稱與斷言對不上實際行為。
+        """
         args, ticket = self._build_args(
             "## Problem Analysis\n內容\n## Test Results\n內容\n",
             section="Execution Log"
         )
         assert self._run(args, ticket) == 1
         out = capsys.readouterr().out
+        assert "無效的 section: Execution Log" in out
         assert "Problem Analysis" in out
         assert "Test Results" in out

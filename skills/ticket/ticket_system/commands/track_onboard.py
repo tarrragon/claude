@@ -40,6 +40,7 @@ from ticket_system.lib.claude_lib_loader import (
     load_claude_lib,
 )
 from ticket_system.lib.command_tracking_messages import TrackMessages
+from ticket_system.lib.file_conflict import where_files as _lib_where_files
 from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.ticket_loader import list_tickets
 from ticket_system.lib.version import get_active_versions
@@ -92,17 +93,13 @@ GENERIC_DIR_MAX_PARTS = 2
 
 
 def _where_files(ticket: Dict[str, Any]) -> List[str]:
-    """讀取 ticket 的 where.files 宣告清單（本檔獨立副本，比照
-    track_activity.py / track_conflicts.py 既有模式，CQ-001 防護——避免
-    跨模組引用 `_` 前綴私有函式）。
+    """讀取 ticket 的 where.files 宣告清單。
+
+    委派 `lib.file_conflict.where_files`（公開函式，非 `_` 前綴私有函式，
+    跨模組引用不受 CQ-001 限制）：涵蓋本函式原本的舊逗號分隔字串格式
+    容錯，並一併剝離逐檔讀寫意圖標記（`::read` / `::write`）。
     """
-    where = ticket.get("where") or {}
-    files = where.get("files") if isinstance(where, dict) else None
-    if isinstance(files, str):
-        return [f.strip() for f in files.split(",") if f.strip()]
-    if isinstance(files, list):
-        return [str(f) for f in files]
-    return []
+    return _lib_where_files(ticket)
 
 
 def _match_specificity(dirty_path: str, declared: str) -> Optional[int]:

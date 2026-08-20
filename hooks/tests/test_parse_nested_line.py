@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-測試 _parse_nested_line 重構後的行為
+測試 parse_ticket_frontmatter 巢狀結構解析行為
 
-重構目標：
-1. 消除副作用（不再修改 result dict）
-2. 使回傳值語義明確（使用 NamedTuple）
-3. 保持 parse_ticket_frontmatter 的公開行為不變
+歷史：本檔原含 `TestParseNestedLine`，直接測試手寫逐行 parser 的內部函式
+`_parse_nested_line`（回傳 `_NestedLineResult` NamedTuple）。該函式已隨
+parse_ticket_frontmatter 遷移至 `yaml.safe_load` 而退役，內部函式測試一併
+移除；本檔原有的 `TestParseTicketFrontmatter`（測公開行為）保留並更新斷言
+以反映 yaml.safe_load 的正確 YAML 型別語意（見各測試方法內註解）。
 """
 
 import sys
@@ -16,92 +17,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from lib import parse_ticket_frontmatter
-from lib.hook_ticket import _parse_nested_line, _NestedLineResult
-
-
-class TestParseNestedLine:
-    """測試 _parse_nested_line 函式的重構後行為"""
-
-    def test_multiline_mode_with_key(self):
-        """測試多行模式（multiline_marker 已設定）"""
-        result = _parse_nested_line(
-            line="  This is a line",
-            current_key="description",
-            multiline_marker="|"
-        )
-
-        # 驗證回傳值型別
-        assert isinstance(result, _NestedLineResult)
-        assert result.multiline_marker == "|"
-        assert result.update_action is not None
-
-        # 驗證回傳的動作
-        key, value, is_nested_dict = result.update_action
-        assert key == "description"
-        assert value == "This is a line"
-        assert is_nested_dict is False
-
-    def test_multiline_mode_without_key(self):
-        """測試多行模式但沒有當前鍵"""
-        result = _parse_nested_line(
-            line="  This is a line",
-            current_key=None,
-            multiline_marker="|"
-        )
-
-        assert isinstance(result, _NestedLineResult)
-        assert result.multiline_marker == "|"
-        assert result.update_action is None
-
-    def test_nested_dict_mode(self):
-        """測試嵌套鍵值對模式"""
-        result = _parse_nested_line(
-            line="  author: John Doe",
-            current_key="metadata",
-            multiline_marker=None
-        )
-
-        assert isinstance(result, _NestedLineResult)
-        assert result.multiline_marker is None
-        assert result.update_action is not None
-
-        key, value, is_nested_dict = result.update_action
-        assert key == "metadata"
-        assert isinstance(value, dict)
-        assert value == {"author": "John Doe"}
-        assert is_nested_dict is True
-
-    def test_nested_dict_with_quoted_value(self):
-        """測試嵌套鍵值對的引號移除"""
-        result = _parse_nested_line(
-            line='  priority: "high"',
-            current_key="metadata",
-            multiline_marker=None
-        )
-
-        key, value, is_nested_dict = result.update_action
-        assert value == {"priority": "high"}
-
-    def test_nested_dict_without_key(self):
-        """測試無當前鍵時的嵌套鍵值對"""
-        result = _parse_nested_line(
-            line="  author: test",
-            current_key=None,
-            multiline_marker=None
-        )
-
-        assert result.update_action is None
-
-    def test_line_with_no_colon_multiline_mode(self):
-        """測試無冒號的行在非多行模式"""
-        result = _parse_nested_line(
-            line="  Some text without colon",
-            current_key="key",
-            multiline_marker=None
-        )
-
-        assert result.multiline_marker is None
-        assert result.update_action is None
 
 
 class TestParseTicketFrontmatter:
@@ -326,7 +241,12 @@ config:
         assert result1 == result2
 
     def test_two_space_indented_list_items(self):
-        """測試 2 格縮排的列表項目（真實 Ticket 格式）"""
+        """測試 2 格縮排的列表項目（真實 Ticket 格式）
+
+        yaml.safe_load 語意：巢狀列表回傳真正的 list（非舊 parser 的
+        `\\n` 併接字串——此為 W3-645 矩陣 `nested_list_multi` 案例的
+        MISMATCH 修復對象，改用 yaml.safe_load 後自然還原為 list）。
+        """
         content = """---
 id: "0.1.0-W34-011"
 where:
@@ -345,20 +265,13 @@ where:
         assert isinstance(result['where'], dict)
         assert result['where']['layer'] == "hooks"
 
-        # 驗證列表項目被正確累積
+        # 驗證列表項目為真正的 list
         files = result['where']['files']
-        assert isinstance(files, str)
-        assert "hook_utils/hook_ticket.py" in files
-        assert "tests/test_parse.py" in files
-
-        # 驗證項目用換行符分隔
-        file_list = [f for f in files.split('\n') if f]
-        assert len(file_list) == 2
-        assert file_list[0] == "hook_utils/hook_ticket.py"
-        assert file_list[1] == "tests/test_parse.py"
+        assert isinstance(files, list)
+        assert files == ["hook_utils/hook_ticket.py", "tests/test_parse.py"]
 
     def test_four_space_indented_list_items(self):
-        """測試 4 格縮排的列表項目（深層嵌套）"""
+        """測試 4 格縮排的列表項目（深層嵌套，yaml.safe_load 回傳真正 list）"""
         content = """---
 id: "0.1.0-W34-012"
 where:
@@ -375,19 +288,17 @@ where:
         assert result['id'] == "0.1.0-W34-012"
         assert isinstance(result['where'], dict)
 
-        # 驗證 4 格縮排的列表項目
+        # 驗證 4 格縮排的列表項目為真正的 list
         files = result['where']['files']
-        assert isinstance(files, str)
-        assert "deep_item1.py" in files
-        assert "deep_item2.py" in files
-
-        file_list = [f for f in files.split('\n') if f]
-        assert len(file_list) == 2
-        assert file_list[0] == "deep_item1.py"
-        assert file_list[1] == "deep_item2.py"
+        assert isinstance(files, list)
+        assert files == ["deep_item1.py", "deep_item2.py"]
 
     def test_mixed_nested_structure_with_lists(self):
-        """測試混合嵌套結構：字典 + 列表項目"""
+        """測試混合嵌套結構：字典 + 列表項目
+
+        `depth: 2`（無引號）由 yaml.safe_load 正確推斷為 int（W3-645 矩陣
+        `bool_null_int` 案例的 MISMATCH 修復對象，舊 parser 一律轉字串）。
+        """
         content = """---
 id: "0.1.0-W34-013"
 where:
@@ -406,23 +317,21 @@ where:
         assert result['id'] == "0.1.0-W34-013"
         where = result['where']
 
-        # 驗證字典項目
+        # 驗證字典項目（depth 為 int，非字串）
         assert where['layer'] == "hooks"
-        assert where['depth'] == "2"
+        assert where['depth'] == 2
+        assert isinstance(where['depth'], int)
 
-        # 驗證列表項目
+        # 驗證列表項目為真正的 list
         files = where['files']
-        file_list = [f for f in files.split('\n') if f]
-        assert len(file_list) == 2
-        assert file_list[0] == "file1.py"
-        assert file_list[1] == "file2.py"
+        assert files == ["file1.py", "file2.py"]
 
 
 if __name__ == "__main__":
     # 執行所有測試
     import traceback
 
-    test_classes = [TestParseNestedLine, TestParseTicketFrontmatter]
+    test_classes = [TestParseTicketFrontmatter]
     passed = 0
     failed = 0
 

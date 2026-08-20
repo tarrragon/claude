@@ -10,9 +10,11 @@ commit 超出宣告範圍，主導缺漏是「宣告實作檔、漏宣告伴生�
 的伴生測試檔路徑一併納入交集判定，擴大偵測面。
 
 判定規則：
-  1. 兩兩比對 where.files（原始宣告 + 啟發式衍生）——呼叫端負責篩選要
-     比對的 ticket 子集（conflicts 篩 pending/in_progress，groups 篩
-     blockedBy=[] pending，語意不同，本模組不內建任何狀態篩選）
+  1. 兩兩比對 where.files 中意圖為「寫入」的路徑集合（原始宣告 + 啟發式
+     衍生；read 集合不參與衝突判定，僅供 `read_files()` 另行查詢影響面）
+     ——呼叫端負責篩選要比對的 ticket 子集（conflicts 篩 pending/
+     in_progress，groups 篩 blockedBy=[] pending，語意不同，本模組不內建
+     任何狀態篩選）
   2. 路徑交集用路徑段 tuple 前綴比對（精確相符或互為上層目錄），禁用
      string startswith（避免 "lib/foo" 誤命中 "lib/foobar.dart"）；
      Phase 4 五視角審查效能組實測 `PurePosixPath` 建構為熱路徑瓶頸
@@ -22,10 +24,76 @@ commit 超出宣告範圍，主導缺漏是「宣告實作檔、漏宣告伴生�
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+
+
+# ---------------------------------------------------------------------------
+# where.files 讀寫意圖解析
+# ---------------------------------------------------------------------------
+
+# 標記只在字串「結尾」被辨識，且不可被反斜線跳脫（`(?<!\\)`）——字串中段
+# 出現同形字元（如路徑段本身含 "::read"）不觸發切分，滿足「路徑本身含
+# 分隔符字元時解析正確」的要求。
+_INTENT_MARKER_RE = re.compile(r"(?<!\\)::(read|write)$")
+
+# 跳脫還原：路徑本身需要字面上以 "::read" / "::write" 結尾時，票面寫
+# `\::read`（反斜線 + 分隔符），上面的 `_INTENT_MARKER_RE` 因負向零寬斷言
+# 而不會將其誤判為標記；此處於未命中標記分支還原跳脫，去掉反斜線後保留
+# 字面路徑，同時不覆寫意圖（維持 type 推導的預設值）。
+_ESCAPED_MARKER_RE = re.compile(r"\\(::(?:read|write))$")
+
+
+def _raw_where_files(ticket: Dict[str, Any]) -> List[str]:
+    """取 where.files 原始字串清單（未剝除意圖標記），相容舊逗號分隔字串格式。"""
+    where = ticket.get("where") or {}
+    files = where.get("files") if isinstance(where, dict) else None
+    if isinstance(files, str):
+        return [f.strip() for f in files.split(",") if f.strip()]
+    if isinstance(files, list):
+        return [str(f) for f in files]
+    return []
+
+
+def parse_file_intent(raw: str) -> Tuple[str, Optional[str]]:
+    """解析單一 where.files 原始字串，回傳 (純路徑, 覆寫意圖)。
+
+    覆寫意圖僅在字串結尾出現未跳脫的 `::read` / `::write` 時回傳對應值；
+    否則回傳 None，交由呼叫端套用 type 推導的預設方向。無法辨識為合法
+    標記的後綴（如 `::readonly`）一律視為路徑的一部分（fail-safe：寧可
+    當成路徑，不可當成標記而丟失路徑片段）。
+    """
+    match = _INTENT_MARKER_RE.search(raw)
+    if match:
+        return raw[: match.start()], match.group(1)
+    return _ESCAPED_MARKER_RE.sub(r"\1", raw), None
+
+
+def _default_intent(ticket: Dict[str, Any]) -> str:
+    """由 ticket type 推導預設讀寫意圖：ANA 為 read，其餘（含 IMP / DOC /
+    ADJ 及無 type 者）為 write。
+
+    無 type 者刻意保守判為 write（而非 read）：判為 write 只會多攔一次
+    （false positive，並行安全判定多一次不必要的序列化），判為 read 會
+    漏放一次真實衝突（false negative，兩票同時寫入同一檔案未被攔下）。
+    兩個方向的錯誤代價不對稱——後者可能導致寫入衝突或資料遺失，前者僅
+    犧牲一點並行效率，故無 type 與非 ANA 型別一律預設 write，不可「優化」
+    成 read。
+    """
+    return "read" if ticket.get("type") == "ANA" else "write"
+
+
+def _file_intents(ticket: Dict[str, Any]) -> List[Tuple[str, str]]:
+    """回傳 [(純路徑, 最終意圖)]，意圖 = 逐檔標記覆寫，否則 type 預設。"""
+    default = _default_intent(ticket)
+    result: List[Tuple[str, str]] = []
+    for raw in _raw_where_files(ticket):
+        path, override = parse_file_intent(raw)
+        result.append((path, override or default))
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -34,14 +102,23 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 
 def where_files(ticket: Dict[str, Any]) -> List[str]:
-    """從 ticket dict 取 where.files，相容舊逗號分隔字串格式。"""
-    where = ticket.get("where") or {}
-    files = where.get("files") if isinstance(where, dict) else None
-    if isinstance(files, str):
-        return [f.strip() for f in files.split(",") if f.strip()]
-    if isinstance(files, list):
-        return [str(f) for f in files]
-    return []
+    """從 ticket dict 取 where.files 純路徑清單，相容舊逗號分隔字串格式。
+
+    剝離逐檔意圖標記（若有）後回傳，對無標記的票逐字不變——既有取全部
+    路徑的呼叫端（`lib/lease.py`、`commands/track_conflicts.py` 等）語意
+    不變，標記僅對 `write_files` / `read_files` 兩個新查詢介面可見。
+    """
+    return [path for path, _ in _file_intents(ticket)]
+
+
+def write_files(ticket: Dict[str, Any]) -> List[str]:
+    """取 where.files 中意圖為寫入的純路徑清單（type 預設為 write 或逐檔標記覆寫為 write）。"""
+    return [path for path, intent in _file_intents(ticket) if intent == "write"]
+
+
+def read_files(ticket: Dict[str, Any]) -> List[str]:
+    """取 where.files 中意圖為唯讀的純路徑清單（type 為 ANA 或逐檔標記覆寫為 read）。"""
+    return [path for path, intent in _file_intents(ticket) if intent == "read"]
 
 
 # ---------------------------------------------------------------------------
@@ -157,13 +234,17 @@ def compute_pairwise_conflicts(
     """兩兩比對 tickets 的 where.files（含擴張啟發式），回傳衝突對清單。
 
     呼叫端負責篩選要比對的 ticket 子集（本函式不內建任何狀態篩選，供
-    conflicts 與 groups 兩種不同語意的呼叫端共用）；無宣告 where.files 的
-    ticket 略過（不參與任何交集判定，等同孤立節點）；無 id（缺失或空字串）
-    的 ticket 亦略過——與 `compute_parallel_groups` 的節點篩選
-    （`if t.get("id")`）保持一致，避免同一批 ticket 在兩個共用同一份
-    `compute_pairwise_conflicts` 輸出的呼叫端出現不同的納入結果（先前本
-    函式以 `t.get("id") or ""` 容忍空 id，`compute_parallel_groups` 卻濾除
-    ——空 id 邊界的兩函式納入邏輯不一致）。
+    conflicts 與 groups 兩種不同語意的呼叫端共用）；無宣告 write 檔案（`ANA`
+    型全唯讀宣告，或逐檔標記全覆寫為 read）的 ticket 略過（不參與任何交集
+    判定，等同孤立節點）；無 id（缺失或空字串）的 ticket 亦略過——與
+    `compute_parallel_groups` 的節點篩選（`if t.get("id")`）保持一致，避免
+    同一批 ticket 在兩個共用同一份 `compute_pairwise_conflicts` 輸出的呼叫端
+    出現不同的納入結果（先前本函式以 `t.get("id") or ""` 容忍空 id，
+    `compute_parallel_groups` 卻濾除——空 id 邊界的兩函式納入邏輯不一致）。
+
+    比對核心改為雙方 write 集合的交集（僅比對意圖為寫入的路徑，read 集合
+    不參與衝突判定），ANA 票的唯讀宣告不再觸發假陽性警告——read 集合仍可
+    經 `read_files()` 另行查詢供影響面分析，不受本函式影響。
 
     `project_root` 供 impl->test 啟發式驗證真實 `tests/` 目錄結構（見
     `derive_test_candidates`）；為 None 時該啟發式停用，僅比對原始宣告值。
@@ -178,7 +259,7 @@ def compute_pairwise_conflicts(
         tid = t.get("id")
         if not tid:
             continue
-        declared = where_files(t)
+        declared = write_files(t)
         if not declared:
             continue
         entries.append((tid, declared, expand_files(declared, project_root)))
@@ -289,47 +370,82 @@ class GroupsResult:
     """`compute_parallel_groups` 回傳結構。
 
     Attributes:
-        parallel_group: 無衝突邊的票 id 清單（保留呼叫端傳入順序，供呼叫端
-            自行依 priority 等準則預排序——本函式不重排，維持單一職責）。
-        sequential_groups: 各連通分量（含衝突邊）的票 id 清單，組內成員依
-            id 字串排序（顯示穩定性），組間彼此無交集、可並行執行；組內
-            則須序列執行。
+        parallel_group: 可同時進行的票 id 清單（保留呼叫端傳入順序，供
+            呼叫端自行依 priority 等準則預排序——本函式不重排，維持單一
+            職責）。集合內任兩票皆無衝突邊，為全域貪婪獨立集走訪選中的
+            節點（含孤立節點，度數 0 必定入選）。
+        not_selected: 貪婪獨立集走訪後未選入 `parallel_group` 的票 id 清單
+            （本輪判定為與已選票有直接衝突，非「彼此之間皆須序列執行」
+            ——未選入的票兩兩之間可能仍無衝突邊，只是與本批已選票衝突而
+            落選）。攤平為單一清單並依 id 字串排序（確定性輸出，不再以
+            連通分量分組呈現——分量邊界編碼的是傳遞閉包，與本函式「僅
+            直接衝突節點互斥」的立論相悖，見同批收斂說明）。
         conflict_pairs: `compute_pairwise_conflicts` 的原始輸出，供呼叫端
             標示衝突對（父票設計要點 5：「輸出...衝突組內標示衝突對」）。
     """
 
     parallel_group: List[str] = field(default_factory=list)
-    sequential_groups: List[List[str]] = field(default_factory=list)
+    not_selected: List[str] = field(default_factory=list)
     conflict_pairs: List[Dict[str, Any]] = field(default_factory=list)
+
+
+def _greedy_independent_set(
+    ordered_nodes: List[str], adjacency: Dict[str, Set[str]]
+) -> List[str]:
+    """在 `adjacency` 描述的衝突圖上，依 `ordered_nodes` 順序貪婪走訪選取
+    極大獨立集：逐一檢視節點，若尚未被先前選中節點的鄰居排除即選入，並
+    立即排除其所有鄰居。呼叫端負責決定 `ordered_nodes` 的順序（如依
+    priority 排序），選取結果天然反映該順序的優先權。
+    """
+    selected: List[str] = []
+    excluded: Set[str] = set()
+    for node in ordered_nodes:
+        if node in excluded:
+            continue
+        selected.append(node)
+        excluded.update(adjacency.get(node, ()))
+    return selected
 
 
 def compute_parallel_groups(
     tickets: List[Dict[str, Any]], project_root: Optional[Path] = None
 ) -> GroupsResult:
-    """依 where.files 交集切分可並行群組（父票設計要點 5）。
+    """依 where.files 交集切分可並行群組（父票設計要點 5；貪婪極大獨立集
+    取代連通分量作為可並行判定）。
 
     建無向衝突圖（節點 = tickets 的 id，邊 = `compute_pairwise_conflicts`
-    命中的兩兩交集）；連通分量（size >= 2，即含至少一條邊）即序列組——
-    組內成員經由交集邊傳遞關聯，即使組內兩票本身無直接交集，仍因傳遞性
-    必須序列化（例：A-B 交集、B-C 交集，A-C 縱使無交集也不可能與 B 同時
-    進行）。孤立節點（度數為 0，與任何其他票皆無交集）歸入單一
-    `parallel_group`，彼此兩兩必無交集，符合 AC-1「群組內兩兩 where.files
-    無交集」。
+    命中的兩兩交集），對全體節點依 `tickets` 輸入序（供呼叫端依 priority
+    等準則預排序）做單次全域貪婪獨立集走訪：選中節點併入 `parallel_group`，
+    落選節點併入 `not_selected`——僅直接衝突的節點對互斥，落選只代表與
+    已選票有直接衝突邊，不代表落選票彼此之間也須序列（見 `GroupsResult`
+    docstring）。孤立節點（度數為 0）必定入選（`excluded` 集合恆不含
+    它們），故不需先切連通分量再逐分量走訪：貪婪的排除只沿邊傳播，
+    邊不跨連通分量，逐分量走訪與單次全域走訪在任何輸入下同構（含選取
+    順序），分量切分對 `parallel_group` / `not_selected` 是可證明的
+    no-op（PM 5000 次隨機圖實測零不一致）。
 
     呼叫端負責篩選輸入 tickets 子集（同 `compute_pairwise_conflicts`，本
-    函式不內建狀態篩選）與所需的 priority 排序（parallel_group 保留輸入
-    順序）。圖建構與連通分量切分委派 `group_by_conflict`（與
-    `track_parallel_check.py` 共用同一核心）。
+    函式不內建狀態篩選）與所需的 priority 排序（`parallel_group` 保留輸入
+    順序，不重排）。`group_by_conflict` 的連通分量切分不再用於本函式，
+    但簽章與行為原樣保留供 `track_parallel_check.py` 獨立使用。
     """
     conflict_pairs = compute_pairwise_conflicts(tickets, project_root)
     ticket_ids: List[str] = [t.get("id") for t in tickets if t.get("id")]
     pair_tuples = [(p["ticket_a"], p["ticket_b"]) for p in conflict_pairs]
 
-    parallel_group, sequential_groups = group_by_conflict(ticket_ids, pair_tuples)
+    adjacency: Dict[str, Set[str]] = {i: set() for i in ticket_ids}
+    for a, b in pair_tuples:
+        if a in adjacency and b in adjacency:
+            adjacency[a].add(b)
+            adjacency[b].add(a)
+
+    parallel_group = _greedy_independent_set(ticket_ids, adjacency)
+    selected_ids: Set[str] = set(parallel_group)
+    not_selected = sorted(i for i in ticket_ids if i not in selected_ids)
 
     return GroupsResult(
         parallel_group=parallel_group,
-        sequential_groups=sequential_groups,
+        not_selected=not_selected,
         conflict_pairs=conflict_pairs,
     )
 
@@ -349,10 +465,10 @@ def render_groups(result: GroupsResult) -> str:
         lines.append("  （無）")
 
     lines.append("")
-    lines.append(f"序列群組（{len(result.sequential_groups)} 組，組內須依序執行）：")
-    if result.sequential_groups:
-        for idx, group in enumerate(result.sequential_groups, start=1):
-            lines.append(f"  群組 {idx}: {', '.join(group)}")
+    lines.append(f"本輪未選入可並行集合（{len(result.not_selected)} 票）：")
+    if result.not_selected:
+        for tid in result.not_selected:
+            lines.append(f"  - {tid}")
     else:
         lines.append("  （無）")
 

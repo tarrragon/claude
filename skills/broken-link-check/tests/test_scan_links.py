@@ -888,3 +888,30 @@ class TestKnownMissingPathSamples:
         # 預設（無 docs 掃描根）：docs 下的樣本表格完全不在掃描範圍
         result = scan_links.scan(sample_table_repo, knobs=None)
         assert result["broken_count"] == 0
+
+
+class TestPortabilityAllowMarker:
+    """portability-allow 與 broken-link-exempt 共用同一條豁免通道（W3-623.1）。"""
+
+    def test_portability_allow_exempts_its_line(self, tmp_path):
+        claude = tmp_path / ".claude"
+        (claude / "skills" / "demo").mkdir(parents=True)
+        (claude / "skills" / "demo" / "SKILL.md").write_text(
+            "# Demo\n\n"
+            "See `.claude/pm-rules/gone.md` <!-- portability-allow: 約定位置 -->\n"
+            "See `.claude/pm-rules/also-gone.md`\n"
+        )
+        result = scan_links.scan(tmp_path)
+        broken = [b for b in result["broken"] if "demo" in b["source_file"]]
+        assert len(broken) == 1
+        assert "also-gone" in broken[0]["raw_ref"]
+
+    def test_shell_comment_form_also_exempts(self, tmp_path):
+        claude = tmp_path / ".claude"
+        (claude / "skills" / "demo").mkdir(parents=True)
+        (claude / "skills" / "demo" / "SKILL.md").write_text(
+            "# Demo\n\n"
+            "python3 .claude/skills/demo/scripts/x.py  # portability-allow: 共通安裝位置\n"
+        )
+        result = scan_links.scan(tmp_path)
+        assert [b for b in result["broken"] if "demo" in b["source_file"]] == []

@@ -187,12 +187,13 @@ def test_is_doc_only_imp_md_extension_anywhere_counts_as_doc():
 
 
 # ----------------------------------------------------------------------------
-# 換行分隔字串型別回歸測試（0.2.1-W3-337）
+# str 型別回歸測試（0.2.1-W3-337）
 #
-# runtime hook 實際使用的輕量解析器（parse_ticket_frontmatter）對
-# where.files 這種「dict 內巢狀 block-style 列表」會產出換行分隔字串而非
-# list（0.2.1-W3-330 稽核發現：既有票 100% 命中此型別，doc-only 提示訊息
-# 修復前從未在真實 complete 流程觸發）。本節鎖定此回歸不再發生。
+# where.files 若寫成 YAML scalar（單一路徑不加 dash，或 `|` block literal
+# scalar 呈現多行路徑），yaml.safe_load 會回傳 str 而非 list——這是 schema
+# 容忍的合法寫法，不是解析器缺陷（0.2.1-W3-330 稽核發現：既有票命中此型別
+# 時，doc-only 提示訊息修復前因呼叫端僅判斷 isinstance(x, list) 而從未在
+# 真實 complete 流程觸發）。本節鎖定此回歸不再發生。
 # ----------------------------------------------------------------------------
 
 

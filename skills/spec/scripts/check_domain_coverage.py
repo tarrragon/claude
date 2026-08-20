@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """spec validate 的 domain 覆蓋閘門：spec 的每個 FR 是否都被 domain map 的 FR->bundle 覆蓋表歸屬。
 
-背景：0.1.0-W2-016 檢討發現 domain 規劃缺口——spec 定義 FR、UC 定義場景，但無 domain
-bundle 邊界；且 spec FR 是否全數映射到某 bundle 缺工具強制（W2-014 靠人工四視角審查才
-抓出 FR-25/26 漏覆蓋）。本檢核作為 /spec validate Layer 1 的擴充規則，機械掃描：
+背景：一次架構檢討發現 domain 規劃缺口——spec 定義 FR、UC 定義場景，但無 domain
+bundle 邊界；且 spec FR 是否全數映射到某 bundle 缺工具強制（曾靠人工四視角審查才
+抓出漏覆蓋的 FR）。本檢核作為 /spec validate Layer 1 的擴充規則，機械掃描：
   1. spec 對應的 domain map 是否存在
   2. spec 每個 FR 是否出現在 domain map 的 FR 覆蓋（含標為 presentation/data 的非 domain FR）
 

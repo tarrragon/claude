@@ -23,35 +23,26 @@ if __name__ == "__main__":
 
 
 import argparse
-import shutil
 import sys
-import unicodedata
 from typing import Any, Dict, List
 
-from ticket_system.lib.ticket_loader import (
-    list_tickets,
-    resolve_version,
-)
-from ticket_system.lib.constants import (
-    STATUS_PENDING,
-    STATUS_IN_PROGRESS,
-    STATUS_COMPLETED,
-    STATUS_BLOCKED,
-    TERMINAL_STATUSES,
-)
-from ticket_system.lib.messages import format_error, format_info
+from ticket_system.constants import PRIORITY_LEVELS
+from ticket_system.lib.ticket_loader import list_tickets
+from ticket_system.lib.constants import TERMINAL_STATUSES
+from ticket_system.lib.messages import format_error
 from ticket_system.lib.command_tracking_messages import (
     TrackBoardMessages,
     format_msg,
 )
-from ticket_system.lib.ui_constants import (
-    SEPARATOR_PRIMARY,
-    SEPARATOR_SECONDARY,
-    SEPARATOR_WIDE,
-    SEPARATOR_WIDE_DASH,
-)
+from ticket_system.lib.priority_utils import highest_priority
+from ticket_system.lib.topic_assignments import list_assignments
+from ticket_system.lib.ui_constants import SEPARATOR_SECONDARY
 from ticket_system.lib.ticket_validator import extract_wave_from_ticket_id
 from typing import Tuple
+
+# board --group-by 選項值（GROUP_BY_WAVE 為預設，維持既有 Wave 分組行為不變）
+GROUP_BY_WAVE = "wave"
+GROUP_BY_TOPIC = "topic"
 
 
 def filter_incomplete_tickets(tickets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -80,6 +71,49 @@ def group_by_wave(tickets: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any
     # 按 Wave 號排序（提取數字）
     sorted_waves = sorted(groups.keys(), key=lambda w: int(w[1:]) if w != "Unknown" else 9999)
     return {w: groups[w] for w in sorted_waves}
+
+
+def group_by_topic(
+    tickets: List[Dict[str, Any]], assignments: Dict[str, str]
+) -> Tuple[Dict[str, List[Dict[str, Any]]], List[Dict[str, Any]]]:
+    """
+    按主題分組（board 主題分組模式，與 group_by_wave 平行新增）
+
+    Args:
+        tickets: Ticket 清單
+        assignments: ticket_id -> topic 映射（來自 list_assignments()）
+
+    Returns:
+        Tuple[Dict[str, List], List]:
+            - 主題分組字典（已排序），鍵為主題名，值為該主題的票清單
+            - 未歸屬票清單（assignments 中無對應主題者）
+
+    排序依據（acceptance 4）：
+        主題內最高優先級（highest_priority()，P0 最優先）為第一鍵；同優先
+        級時，票數較多者排前（票數愈多代表待決策範圍愈大，愈需優先檢
+        視）。無有效 priority 的主題視為最低優先級，排在有 priority 的
+        主題之後。
+    """
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    unassigned: List[Dict[str, Any]] = []
+
+    for ticket in tickets:
+        topic = assignments.get(ticket.get("id", ""))
+        if topic is None:
+            unassigned.append(ticket)
+            continue
+        groups.setdefault(topic, []).append(ticket)
+
+    def _topic_sort_key(topic_name: str) -> Tuple[int, int]:
+        topic_tickets = groups[topic_name]
+        priority = highest_priority(topic_tickets)
+        priority_rank = (
+            PRIORITY_LEVELS.index(priority) if priority in PRIORITY_LEVELS else len(PRIORITY_LEVELS)
+        )
+        return (priority_rank, -len(topic_tickets))
+
+    sorted_topics = sorted(groups.keys(), key=_topic_sort_key)
+    return {t: groups[t] for t in sorted_topics}, unassigned
 
 
 def build_tree_structure(tickets: List[Dict[str, Any]]) -> Tuple[Dict[str, List[str]], List[str]]:
@@ -205,6 +239,84 @@ def render_board_tree(
     return "\n".join(lines)
 
 
+def _render_ticket_group(
+    group_tickets: List[Dict[str, Any]],
+    tickets_dict: Dict[str, Dict[str, Any]],
+    lines: List[str],
+) -> None:
+    """以既有樹狀結構（build_tree_structure/render_tree_node）渲染一組票，
+    供 render_board_topics 的主題節與未歸屬節共用（DRY）"""
+    tree_structure, root_ids = build_tree_structure(group_tickets)
+    for i, root_id in enumerate(root_ids):
+        is_last = (i == len(root_ids) - 1)
+        lines.extend(render_tree_node(root_id, tickets_dict, tree_structure, "", is_last))
+
+
+def render_board_topics(
+    tickets: List[Dict[str, Any]],
+    assignments: Dict[str, str],
+    version: str,
+    show_all: bool = False
+) -> str:
+    """
+    渲染依主題分組的樹狀看板（board 主題分組模式，與 render_board_tree 平行新增）
+
+    Args:
+        tickets: Ticket 清單
+        assignments: ticket_id -> topic 映射（來自 list_assignments()）
+        version: 版本號
+        show_all: 是否顯示所有任務（包含已完成）
+
+    未歸屬票（assignments 中無對應主題者）獨立成節置於末尾，不與任一
+    主題混列（acceptance 2）。
+    """
+    lines = []
+
+    # 標題（沿用既有樹狀標題訊息，模式差異不影響標題文字）
+    if show_all:
+        lines.append(format_msg(TrackBoardMessages.TREE_TITLE_ALL, version=version))
+    else:
+        lines.append(format_msg(TrackBoardMessages.TREE_TITLE_INCOMPLETE, version=version))
+    lines.append(SEPARATOR_SECONDARY)
+    lines.append("")
+
+    # 過濾任務
+    if show_all:
+        filtered = tickets
+    else:
+        filtered = filter_incomplete_tickets(tickets)
+
+    if not filtered:
+        lines.append(TrackBoardMessages.NO_TASKS_TEXT)
+        return "\n".join(lines)
+
+    # 按主題分組（已依 highest_priority -> ticket 數排序）
+    topic_groups, unassigned = group_by_topic(filtered, assignments)
+
+    # 建立 ticket_id -> ticket 映射
+    tickets_dict = {t.get("id"): t for t in filtered}
+
+    # 渲染每個主題節（acceptance 1）
+    for topic, topic_tickets in topic_groups.items():
+        priority = highest_priority(topic_tickets) or TrackBoardMessages.TOPIC_NO_PRIORITY_TEXT
+        lines.append(format_msg(
+            TrackBoardMessages.TOPIC_TITLE_FORMAT,
+            topic=topic,
+            count=len(topic_tickets),
+            priority=priority,
+        ))
+        _render_ticket_group(topic_tickets, tickets_dict, lines)
+        lines.append("")  # 主題間空行
+
+    # 渲染未歸屬節（acceptance 2，獨立成節置於末尾）
+    if unassigned:
+        lines.append(format_msg(TrackBoardMessages.TOPIC_UNASSIGNED_TITLE_FORMAT, count=len(unassigned)))
+        _render_ticket_group(unassigned, tickets_dict, lines)
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def simplify_ticket_id(full_id: str) -> str:
     """
     簡化 Ticket ID（去除版本前綴）
@@ -237,473 +349,19 @@ def simplify_ticket_id(full_id: str) -> str:
         return full_id
 
 
-def get_char_display_width(char: str) -> int:
-    """
-    計算單一字元的顯示寬度（考慮中文字元和全形字元）
-
-    寬字元（CJK 字元、全形標點等）佔 2 寬，其他字元佔 1 寬
-
-    Args:
-        char: 單一字元
-
-    Returns:
-        int: 顯示寬度（1 或 2）
-
-    說明：
-        east_asian_width() 回傳: W(寬), F(全形), A(歧義), H(半形), N(中性), Na(狹義)
-        W 和 F 視為寬字元（2 寬），其他視為窄字元（1 寬）
-    """
-    width_category = unicodedata.east_asian_width(char)
-    return 2 if width_category in ('W', 'F') else 1
-
-
-def calculate_visual_width(text: str) -> int:
-    """
-    計算文本的視覺寬度（考慮中文字元和全形字元）
-
-    寬字元（CJK 字元、全形標點等）佔 2 寬，其他字元佔 1 寬
-
-    Args:
-        text: 輸入文本
-
-    Returns:
-        int: 視覺寬度
-
-    邏輯：
-        1. 逐字遍歷
-        2. 使用 get_char_display_width() 計算單一字元寬度
-        3. 累計總寬度
-    """
-    total_width = 0
-    for char in text:
-        total_width += get_char_display_width(char)
-    return total_width
-
-
-def ljust_with_chinese_width(text: str, width: int) -> str:
-    """
-    填充文本至指定視覺寬度（考慮中文字元）
-
-    與 str.ljust() 相似，但正確計算中文字元寬度
-
-    Args:
-        text: 輸入文本
-        width: 目標視覺寬度
-
-    Returns:
-        str: 填充後的文本
-
-    邏輯：
-        1. 計算文本的視覺寬度
-        2. 計算需要填充的空格數
-        3. 返回填充後的文本
-
-    Example:
-        >>> ljust_with_chinese_width("測試", 10)  # 中文 2 寬 + 2 寬 = 4 寬
-        '測試      '  # 補 6 個空格至 10 寬
-    """
-    visual_width = calculate_visual_width(text)
-    padding_count = max(0, width - visual_width)
-    return text + " " * padding_count
-
-
-def truncate_title(title: str, max_length: int = 15) -> str:
-    """
-    截斷標題並加上省略符號
-
-    考慮字元視覺寬度（CJK 字元和全形字元 = 2 寬，其他 = 1 寬）
-
-    Args:
-        title: 原始標題
-        max_length: 最大寬度（預設 15）
-
-    Returns:
-        str: 截斷後的標題
-
-    邏輯：
-        1. 驗證輸入
-        2. 逐字計算視覺寬度
-        3. 當寬度超過上限時截斷
-        4. 新增省略符號 ".."
-    """
-    # Guard Clause：驗證輸入
-    if not title or max_length <= 0:
-        return ""
-
-    # 逐字計算視覺寬度，找出截斷位置
-    total_width = 0
-    truncate_pos = len(title)
-
-    for i, char in enumerate(title):
-        char_width = get_char_display_width(char)
-
-        # 當加入當前字元會超過上限時截斷
-        if total_width + char_width > max_length:
-            truncate_pos = i
-            break
-
-        total_width += char_width
-
-    # 截斷並加省略符
-    if truncate_pos < len(title):
-        return title[:truncate_pos] + ".."
-    else:
-        return title
-
-
-def organize_by_status(tickets: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-    """
-    將 Ticket 清單按狀態分組
-
-    Args:
-        tickets: Ticket 清單
-
-    Returns:
-        Dict[str, List]: 按狀態分組的 Ticket 字典
-            - pending: 待處理清單
-            - in_progress: 進行中清單
-            - completed: 已完成清單
-            - blocked: 被阻塞清單
-
-    邏輯：
-        1. 初始化結果字典
-        2. 驗證輸入
-        3. 按狀態分組
-    """
-    # 初始化結果字典
-    result = {
-        STATUS_PENDING: [],
-        STATUS_IN_PROGRESS: [],
-        STATUS_COMPLETED: [],
-        STATUS_BLOCKED: [],
-    }
-
-    # Guard Clause：驗證輸入
-    if not tickets:
-        return result
-
-    # 按狀態分組
-    for ticket in tickets:
-        status = ticket.get("status", STATUS_PENDING)
-
-        if status == STATUS_PENDING:
-            result[STATUS_PENDING].append(ticket)
-        elif status == STATUS_IN_PROGRESS:
-            result[STATUS_IN_PROGRESS].append(ticket)
-        elif status == STATUS_COMPLETED:
-            result[STATUS_COMPLETED].append(ticket)
-        elif status == STATUS_BLOCKED:
-            result[STATUS_BLOCKED].append(ticket)
-        # 無效狀態被忽略
-
-    return result
-
-
-def prepare_cards(
-    board_data: Dict[str, List[Dict[str, Any]]], args: argparse.Namespace
-) -> Dict[str, List[Dict[str, Any]]]:
-    """
-    準備卡片資料（提取並格式化顯示欄位）
-
-    Args:
-        board_data: 按狀態分組的 Ticket 資料
-        args: 命令列參數（用於取得寬度等設定）
-
-    Returns:
-        Dict[str, List[Card]]: 按狀態分組的卡片資料
-
-    處理邏輯：
-        - 簡化 ID（去除版本前綴）
-        - 截斷標題（超過 15 字則加 ".."）
-        - 格式化優先級（[P0]/[P1]/[P2]/[P3]）
-        - 計算卡片高度（3-4 行）
-    """
-    # 提取參數
-    max_width = getattr(args, "width", 20) or 20
-
-    # 初始化結果字典（結構同 board_data）
-    result = {
-        STATUS_PENDING: [],
-        STATUS_IN_PROGRESS: [],
-        STATUS_COMPLETED: [],
-        STATUS_BLOCKED: [],
-    }
-
-    # 遍歷每個狀態，處理卡片
-    for status in [STATUS_PENDING, STATUS_IN_PROGRESS, STATUS_COMPLETED, STATUS_BLOCKED]:
-        for ticket in board_data[status]:
-            # 簡化 ID
-            short_id = simplify_ticket_id(ticket.get("id", "Unknown"))
-
-            # 截斷標題
-            title = ticket.get("title", "")
-            short_title = truncate_title(title, max_width - 4)
-
-            # 取得優先級（預設 P2）
-            priority = ticket.get("priority", "P2")
-            priority_tag = f"[{priority}]"
-
-            # 建立卡片
-            card = {
-                "id": short_id,
-                "title": short_title,
-                "priority": priority_tag,
-                "status": status,
-                "height": 3,
-            }
-
-            result[status].append(card)
-
-    return result
-
-
-def calculate_layout(
-    cards_by_status: Dict[str, List[Dict[str, Any]]], args: argparse.Namespace
-) -> Dict[str, Any]:
-    """
-    計算看板佈局參數
-
-    Args:
-        cards_by_status: 按狀態分組的卡片資料
-        args: 命令列參數
-
-    Returns:
-        Dict[str, Any]: 佈局參數字典
-            - terminal_width: 終端寬度
-            - card_width: 卡片寬度
-            - column_spacing: 欄位間距
-            - max_rows: 最大行數
-            - use_ascii: 是否使用 ASCII 版本
-
-    邏輯：
-        1. 取得終端寬度
-        2. 判斷 ASCII 版本
-        3. 計算卡片寬度
-        4. 計算欄距
-        5. 計算最大行數
-    """
-    # Step 1: 取得終端寬度
-    try:
-        terminal_width = shutil.get_terminal_size().columns
-    except Exception:
-        terminal_width = 120  # 預設寬度
-
-    # Step 2: 判斷 ASCII 版本
-    use_ascii = getattr(args, "ascii", False)
-    if not use_ascii and terminal_width < 100:
-        use_ascii = True  # 自動降級
-
-    # Step 3: 計算卡片寬度
-    if hasattr(args, "width") and args.width:
-        card_width = args.width
-    else:
-        available_width = terminal_width - 10
-        card_width = max(available_width // 4, 15)  # 最小寬度 15
-
-    # Step 4: 計算欄距
-    column_spacing = 3 if use_ascii else 2
-
-    # Step 5: 計算最大行數
-    max_rows = 0
-    for status in [STATUS_PENDING, STATUS_IN_PROGRESS, STATUS_COMPLETED, STATUS_BLOCKED]:
-        rows_in_status = sum(card.get("height", 3) for card in cards_by_status[status])
-        max_rows = max(max_rows, rows_in_status)
-
-    # Return layout dict
-    return {
-        "terminal_width": terminal_width,
-        "card_width": card_width,
-        "column_spacing": column_spacing,
-        "max_rows": max_rows,
-        "use_ascii": use_ascii,
-    }
-
-
-def render_board_unicode(
-    cards_by_status: Dict[str, List[Dict[str, Any]]], layout: Dict[str, Any], version: str = ""
-) -> str:
-    """
-    使用 Unicode 方框字元渲染看板
-
-    Args:
-        cards_by_status: 按狀態分組的卡片資料
-        layout: 佈局參數
-        version: 版本號（用於標題）
-
-    Returns:
-        str: 完整的看板字串（多行）
-
-    使用字元：
-        - 方框：┌─┐│├┤└─┘
-        - 雙線：╔═╗║╚═╝
-        - 分隔：─
-    """
-    lines = []
-    card_width = layout["card_width"]
-    max_rows = layout["max_rows"]
-
-    # 計算總寬度（4 列 + 3 個間隔）
-    total_width = card_width * 4 + 6
-
-    # 渲染標題區
-    title_line = "╔" + "═" * (total_width - 2) + "╗"
-    lines.append(title_line)
-
-    version_text = format_msg(TrackBoardMessages.UNICODE_BOARD_TITLE, version=version)
-    # 使用 calculate_visual_width 而非 len()，以正確處理中文字元寬度
-    version_text_width = calculate_visual_width(version_text)
-    padding = (total_width - 2 - version_text_width) // 2
-    version_line = "║" + " " * padding + version_text + " " * (total_width - 2 - padding - version_text_width) + "║"
-    lines.append(version_line)
-
-    lines.append("╚" + "═" * (total_width - 2) + "╝")
-    lines.append("")
-
-    # 渲染統計行
-    pending_count = len(cards_by_status[STATUS_PENDING])
-    in_progress_count = len(cards_by_status[STATUS_IN_PROGRESS])
-    completed_count = len(cards_by_status[STATUS_COMPLETED])
-    blocked_count = len(cards_by_status[STATUS_BLOCKED])
-
-    stats_line = (
-        f"{TrackBoardMessages.UNICODE_STATS_PENDING} {pending_count} {TrackBoardMessages.UNICODE_STATS_TASKS_SUFFIX}  "
-        f"{TrackBoardMessages.UNICODE_STATS_IN_PROGRESS} {in_progress_count} {TrackBoardMessages.UNICODE_STATS_TASKS_SUFFIX}  "
-        f"{TrackBoardMessages.UNICODE_STATS_COMPLETED} {completed_count} {TrackBoardMessages.UNICODE_STATS_TASKS_SUFFIX}  "
-        f"{TrackBoardMessages.UNICODE_STATS_BLOCKED} {blocked_count} {TrackBoardMessages.UNICODE_STATS_TASKS_SUFFIX}"
-    )
-    lines.append(stats_line)
-    lines.append("─" * total_width)
-    lines.append("")
-
-    # 渲染欄標題
-    headers = TrackBoardMessages.UNICODE_HEADERS
-    header_line = " " * 2
-    for header in headers:
-        header_line += ljust_with_chinese_width(header, card_width) + "  "
-    lines.append(header_line)
-
-    # 渲染分隔線
-    sep_line = "┌" + "─" * (card_width - 1) + "┐  "
-    sep_line += "┌" + "─" * (card_width - 1) + "┐  "
-    sep_line += "┌" + "─" * (card_width - 1) + "┐  "
-    sep_line += "┌" + "─" * (card_width - 1) + "┐"
-    lines.append(sep_line)
-
-    # 逐行渲染卡片
-    for row_idx in range(max_rows):
-        # 構建該行的 4 欄內容
-        cols = []
-        for status in [STATUS_PENDING, STATUS_IN_PROGRESS, STATUS_COMPLETED, STATUS_BLOCKED]:
-            cards = cards_by_status[status]
-            if row_idx < len(cards):
-                card = cards[row_idx]
-                # 卡片內容（3 行）
-                col_content = [
-                    ljust_with_chinese_width(card["id"], card_width),
-                    ljust_with_chinese_width(card["title"], card_width),
-                    ljust_with_chinese_width(card["priority"], card_width),
-                ]
-            else:
-                col_content = ["", "", ""]
-            cols.append(col_content)
-
-        # 輸出卡片行
-        for line_in_card in range(3):
-            line_content = ""
-            for col_idx, col in enumerate(cols):
-                if line_in_card < len(col):
-                    line_content += "│ " + ljust_with_chinese_width(col[line_in_card], card_width - 2) + " "
-                else:
-                    line_content += "│ " + " " * (card_width - 2) + " "
-            line_content += "│"
-            lines.append(line_content)
-
-        # 輸出分隔線
-        if row_idx < max_rows - 1:
-            sep_line = "├" + "─" * (card_width - 1) + "┤  "
-            sep_line += "├" + "─" * (card_width - 1) + "┤  "
-            sep_line += "├" + "─" * (card_width - 1) + "┤  "
-            sep_line += "├" + "─" * (card_width - 1) + "┤"
-            lines.append(sep_line)
-
-    # 渲染邊界
-    lines.append("└" + "─" * (card_width - 1) + "┘  " * 3 + "└" + "─" * (card_width - 1) + "┘")
-    lines.append("")
-
-    # 渲染圖例
-    lines.append(TrackBoardMessages.UNICODE_LEGEND_TITLE)
-    lines.append(TrackBoardMessages.UNICODE_LEGEND_PRIORITY_HIGH)
-    lines.append(TrackBoardMessages.UNICODE_LEGEND_PRIORITY_LOW)
-
-    return "\n".join(lines)
-
-
-def render_board_ascii(
-    cards_by_status: Dict[str, List[Dict[str, Any]]], layout: Dict[str, Any]
-) -> str:
-    """
-    使用純 ASCII 字元渲染看板（表格式）
-
-    Args:
-        cards_by_status: 按狀態分組的卡片資料
-        layout: 佈局參數
-
-    Returns:
-        str: 表格形式的看板字串
-
-    格式：
-        ============================== BOARD ==============================
-        Status    | Count | Tickets
-        ----------|-------|------------------------------------------
-        pending   | 4     | W7-001, W7-002, W7-003, W7-004
-    """
-    lines = []
-
-    # 渲染表格標題
-    title_line = SEPARATOR_WIDE
-    lines.append(title_line)
-
-    board_title = TrackBoardMessages.ASCII_BOARD_TITLE
-    title_padding = (70 - len(board_title)) // 2
-    title_row = " " * title_padding + board_title + " " * (70 - title_padding - len(board_title))
-    lines.append(title_row)
-
-    lines.append(title_line)
-    lines.append("")
-
-    # 渲染欄標題
-    lines.append(TrackBoardMessages.ASCII_HEADER_ROW)
-    lines.append(SEPARATOR_WIDE_DASH)
-
-    # 遍歷每個狀態建立行
-    for status in [STATUS_PENDING, STATUS_IN_PROGRESS, STATUS_COMPLETED, STATUS_BLOCKED]:
-        count = len(cards_by_status[status])
-        ids = [card["id"] for card in cards_by_status[status]]
-        id_string = ", ".join(ids)
-
-        if len(id_string) > 40:
-            id_string = id_string[:40] + "..."
-
-        status_label = status.replace("_", " ")
-        row = f"{status_label:10}| {count:>5} | {id_string}"
-        lines.append(row)
-
-    # 渲染表格邊界
-    lines.append(SEPARATOR_WIDE)
-
-    return "\n".join(lines)
-
-
 def execute_board(args: argparse.Namespace, version: str) -> int:
     """
-    執行 board 命令主入口（預設輸出樹狀看板）
+    執行 board 命令主入口（預設輸出 Wave 分組樹狀看板）
 
     Args:
-        args: 命令列參數（包含 --version, --wave, --all 選項）
+        args: 命令列參數（包含 --version, --wave, --all, --group-by 選項）
         version: 目標版本號（從 resolve_version 取得）
 
     Returns:
         int: 0 表示成功，1 表示失敗
+
+    --group-by 未指定或為 GROUP_BY_WAVE 時，行為與新增本旗標前逐字相同
+    （acceptance 3：呼叫 render_board_tree，不經任何主題相關路徑）。
     """
     try:
         # 載入 Ticket 資料
@@ -717,8 +375,14 @@ def execute_board(args: argparse.Namespace, version: str) -> int:
         # 判斷是否顯示所有任務
         show_all = getattr(args, "all", False)
 
-        # 渲染樹狀看板
-        output = render_board_tree(tickets, version, show_all=show_all)
+        # 分組模式：預設 GROUP_BY_WAVE 維持既有行為不變
+        group_by = getattr(args, "group_by", None) or GROUP_BY_WAVE
+
+        if group_by == GROUP_BY_TOPIC:
+            assignments = list_assignments()
+            output = render_board_topics(tickets, assignments, version, show_all=show_all)
+        else:
+            output = render_board_tree(tickets, version, show_all=show_all)
         print(output)
 
         return 0

@@ -75,7 +75,7 @@ Given many atomic documents, how does a reader find the right one?
 
 | Reference type                                            | Format                                 | Example                                                               |
 | --------------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------- |
-| Same-directory sibling                                    | Relative path + intent                 | `See [validation rules](./validation.md) for acceptable field values` | <!-- broken-link-exempt: illustrative placeholder path, not a real sibling -->
+| Same-directory sibling                                    | Relative path + intent                 | `See [validation rules](./validation.md) for acceptable field values` <!-- broken-link-exempt: illustrative placeholder path, not a real sibling --> |
 | Cross-directory                                           | Full repo-relative path                | `Detailed flow: rules/decision-tree.md`                               |
 | External (stable)                                         | URL with context                       | `Anthropic skill spec: https://...`                                   |
 | External (volatile: ticket ID, commit hash, worklog path) | **Allowed only in volatile documents** | Never in spec / methodology / error-pattern content                   |

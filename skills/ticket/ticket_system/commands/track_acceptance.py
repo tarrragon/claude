@@ -627,7 +627,9 @@ def execute_append_log(args: argparse.Namespace, version: str) -> int:
     - ticket track append-log <id> --section "Problem Analysis" "內容"
     - ticket track append-log <id> --section "Solution" "內容"
     - ticket track append-log <id> --section "Test Results" "內容"
-    - ticket track append-log <id> --section "Execution Log" "內容"
+
+    有效 --section 值見 CANONICAL_BODY_SECTIONS（單一序列來源）。body 的 H1
+    容器標題 "Execution Log" 不是合法值，沿革見 DOC-007。
     """
     # W14-045: file_lock 包圍 load → modify → save，消除 logical race。
     # append-log 為高頻並發 caller（PM/agent 持續寫入），race 風險最高。
@@ -641,10 +643,7 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
     import sys as _sys
 
     from ticket_system.lib.section_locator import find_section
-    from ticket_system.lib.ticket_builder import (
-        SCHEMA_H2_SECTIONS,
-        insert_missing_schema_section,
-    )
+    from ticket_system.lib.ticket_builder import insert_missing_schema_section
 
     ticket = load_ticket(version, args.ticket_id)
     if not ticket:
@@ -684,24 +683,13 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
         print(f"{TrackAcceptanceMessages.VALID_VALUES_PREFIX} {', '.join(valid_sections)}")
 
     # 章節存在性（W17-117.1: 統一 section_locator helper）。
-    # W1-025: 缺失章節僅在「非 Schema 章節」（如 Execution Log）時視為失敗；
-    # Schema 章節缺失改走寫入階段的自動補建，不再構成錯誤。
+    # W1-025: 白名單章節缺失走寫入階段的自動補建，不構成錯誤。白名單與
+    # SCHEMA_H2_SECTIONS 現完全等價，故通過白名單檢查的 section 必屬 Schema
+    # 章節，缺失時一律可補建；此處只需定位，不需缺失判定。
     body = ticket.get("_body", "")
     match = find_section(body, section) if (section_valid and body) else None
-    section_missing = (
-        match is not None and not match.found and section not in SCHEMA_H2_SECTIONS
-    )
-    if section_missing:
-        # 列出該 ticket md 所有 ^## 標題引導用戶（W17-008.9 B 方案）
-        print(format_error(ErrorMessages.SECTION_NOT_FOUND, ticket_id=args.ticket_id, section=section))
-        if match.all_headers:
-            print(f"  該 ticket 現有 ## 標題：")
-            for header in match.all_headers:
-                print(f"    - {header}")
-        else:
-            print(f"  該 ticket md 無任何 ## 標題")
 
-    if not status_ok or not section_valid or section_missing:
+    if not status_ok or not section_valid:
         return 2 if not status_ok else 1
 
     # 取得內容
@@ -734,22 +722,17 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
         print(format_error(ErrorMessages.BODY_CONTENT_NOT_FOUND, ticket_id=args.ticket_id))
         return 1
 
-    # 生成時間戳
+    # 生成時間戳（供下方確認訊息使用）
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    # 對於 Execution Log，格式化為列表項
-    if section == "Execution Log":
-        new_entry = f"\n{format_msg(TrackAcceptanceMessages.LOG_TIMESTAMP_FORMAT, timestamp=timestamp, content=content)}"
-    else:
-        # 其他區段直接追加
-        new_entry = f"\n{content}"
+    new_entry = f"\n{content}"
 
     if match is None or not match.found:
         # W1-025: 白名單合法但 body 缺失的 Schema 章節 → 於 canonical 順序位置
         # 自動補建（含首筆內容一次寫入）。動機：IMP create 模板未預生成
         # Context Bundle 等章節，append-log 原回報 SECTION_NOT_FOUND，呼叫端
-        # 被迫繞道手動 Edit。非 Schema 章節缺失已於前置檢核擋下，此處必為
-        # SCHEMA_H2_SECTIONS 成員。
+        # 被迫繞道手動 Edit。白名單與 Schema 章節等價，故通過白名單檢查的
+        # section 必可補建。
         new_body = insert_missing_schema_section(
             body, section, content, ticket_type=str(ticket.get("type", "") or "")
         )
@@ -769,23 +752,20 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
         # W3-005: replace=True（set-exit-status / set-completion-info 等固定
         # schema 章節）採冪等取代語意——不論既有內容是 placeholder 或前次
         # 已寫入的實質內容，一律用本次內容整段覆寫，維持 header 不變、章節
-        # 在 body 中的原位置不動。禁用於 Execution Log（每筆是新事件，需累積）。
-        if section != "Execution Log" and getattr(args, "replace", False):
+        # 在 body 中的原位置不動。
+        if getattr(args, "replace", False):
             header_end = section_text.find("\n")
             header_line = section_text[: header_end + 1] if header_end != -1 else section_text
             updated_section = header_line + new_entry.lstrip("\n") + "\n"
-        # W3-035: 若 section_content 為 placeholder-only（含 Schema 註解 + 待填寫文字），
-        # 改用 new_entry 替換 placeholder 而非 append，避免 placeholder 殘留導致
-        # body-schema-checker false positive 阻擋 complete。
-        # Execution Log 維持 append 語意（每筆 log 都是新事件）。
-        elif section != "Execution Log":
+        else:
+            # W3-035: 若 section_content 為 placeholder-only（含 Schema 註解 +
+            # 待填寫文字），改用 new_entry 替換 placeholder 而非 append，避免
+            # placeholder 殘留導致 body-schema-checker false positive 阻擋 complete。
             updated_section = _replace_or_append_section_content(
                 section_text=section_text,
                 section_content=section_content,
                 new_entry=new_entry,
             )
-        else:
-            updated_section = section_text + new_entry
 
         # 更新 body
         new_body = body[:section_start] + updated_section + body[section_end:]
@@ -867,10 +847,7 @@ def _execute_add_spawn_request_locked(args: argparse.Namespace, version: str) ->
     import sys as _sys
 
     from ticket_system.lib.section_locator import find_section
-    from ticket_system.lib.ticket_builder import (
-        SCHEMA_H2_SECTIONS,
-        insert_missing_schema_section,
-    )
+    from ticket_system.lib.ticket_builder import insert_missing_schema_section
 
     ticket = load_ticket(version, args.ticket_id)
     if not ticket:

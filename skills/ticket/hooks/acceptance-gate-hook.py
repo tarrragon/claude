@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 
 """
@@ -25,6 +25,7 @@ Acceptance Gate Hook - 驗收流程完整引導（Orchestrator）
 - 同 Wave pending sibling tickets（場景 #9）
 - Ticket 規模（C1 移植，0.2.1-W3-052.1，警告不阻擋）
 - 檔案範圍職責邊界（C3 移植，0.2.1-W3-052.1，警告不阻擋）
+- 實驗器材殘留（阻擋）
 
 Exit Code：
 - 0 (EXIT_SUCCESS): 命令允許執行
@@ -90,6 +91,7 @@ from acceptance_checkers import (
     check_god_ticket_scale,
     check_file_scope_diversity,
     check_hook_protection_acceptance,
+    check_experiment_artifact_residual,
 )
 # W17-120.2 / PC-091: ana_spawned_checker 退場
 # ANA complete 阻擋判斷統一收斂到 children_checker（PC-091 路線：
@@ -402,12 +404,26 @@ def check_acceptance_status(
                     warning_msg = spawn_msg
 
         # 步驟 2.6：ANA Ticket Solution 必須含 multi_view_status 標註（W10-051）
+        # 非法值（值不在 reviewed/skipped/n_a 之列）升級為阻擋，修正途徑由
+        # `ticket track fix-multi-view-status` CLI 提供。「未標註」（缺欄位／
+        # 缺子欄位）維持警告——存量掃描顯示 ANA 票中缺標註佔比遠高於非法值，
+        # 全面阻擋會癱瘓既有票收尾，兩情況相容性風險不對稱，分別處置（詳見 Solution）。
         multi_view_warning: Optional[str] = None
         if is_ana_type(frontmatter.get("type")):
             mv_should_warn, mv_msg = check_multi_view_status(
                 content, frontmatter, project_dir, logger
             )
             if mv_should_warn and mv_msg:
+                is_illegal_value = "值非法" in mv_msg
+                if is_illegal_value:
+                    fix_hint = (
+                        "\n\n修正途徑：ticket track fix-multi-view-status "
+                        f"{ticket_id} --value <reviewed|skipped|n_a> "
+                        "--reason \"<修正理由，至少 10 字元>\""
+                    )
+                    return AcceptanceCheckResult(
+                        True, False, mv_msg + fix_hint, False, [], [], "", "", [], [], False
+                    )
                 multi_view_warning = mv_msg
                 if warning_msg:
                     warning_msg = warning_msg + "\n\n" + mv_msg
@@ -491,6 +507,18 @@ def check_acceptance_status(
 
         # 步驟 11：檢查職責邊界判準（0.2.1-W3-052.1，C3 移植，warning 不阻擋）
         responsibility_scope_violations = check_file_scope_diversity(frontmatter, logger)
+
+        # 步驟 12：檢查實驗器材殘留（阻擋）
+        # 掃描工作區找出屬於本 ticket、依規範命名但尚未妥善處置的實驗器材，
+        # 不依賴票面登記本身是否完整（見 experiment_artifact_checker 模組
+        # docstring 的三情境判定與阻擋層級理由）。
+        exp_should_block, exp_msg = check_experiment_artifact_residual(
+            ticket_id, project_dir, logger
+        )
+        if exp_should_block:
+            return AcceptanceCheckResult(
+                True, False, exp_msg, False, [], [], "", "", [], [], False
+            )
 
         task_type = frontmatter.get("type", "")
         priority = frontmatter.get("priority", "")

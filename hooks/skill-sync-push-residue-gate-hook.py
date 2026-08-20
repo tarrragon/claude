@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """PreToolUse: 阻擋帶他專案殘留的 skill 被 push 至 canonical，以及阻擋
 private skill 被 push 至任何遠端。

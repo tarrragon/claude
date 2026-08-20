@@ -225,8 +225,14 @@ class TestCompleteAutoStage:
         assert result == 0
         assert "chore(0.18.0-W17-997): metadata sync" in captured.out
 
-    def test_commit_suggestion_is_path_limited_and_matches_staged_range(self, capsys):
-        """0.2.1-W3-246：建議 commit 指令需 path-limited，路徑與實際 staged 範圍一致。"""
+    def test_commit_suggestion_is_verified_bare_commit_and_matches_staged_range(
+        self, capsys
+    ):
+        """0.2.1-W3-725：建議指令改為「核對 staged 範圍 + 裸 commit」，不再
+        建議 `-- <pathspec>`（該語法會丟棄既有 index、改讀 working tree
+        全文，並行環境下會吸入他人未 stage 的編輯）。路徑仍須與實際
+        staged 範圍一致，供使用者核對用。
+        """
         ticket = _build_ticket(ticket_id="0.18.0-W17-996")
         result, calls = _run_complete(ticket=ticket)
         captured = capsys.readouterr()
@@ -236,10 +242,16 @@ class TestCompleteAutoStage:
         assert len(add_calls) == 1
         staged = add_calls[0][2:]
 
-        assert "git commit -m" in captured.out
-        # 建議指令必須帶 `--` path-limited 標記
-        assert " -- " in captured.out
-        # 每個實際 staged 路徑都須出現在建議指令中
+        assert "git diff --cached --name-only" in captured.out
+        commit_lines = [
+            line for line in captured.out.splitlines() if "git commit -m" in line
+        ]
+        assert len(commit_lines) == 1, captured.out
+        # 實際指令行不得帶 `-- <pathspec>` / `--only` / `-o`（說明文字提及
+        # 這些字詞屬教育性質，不受本斷言限制，故只檢查指令行本身）
+        assert " -- " not in commit_lines[0], commit_lines[0]
+        assert "--only" not in commit_lines[0], commit_lines[0]
+        # 每個實際 staged 路徑都須出現在核對用的清單中
         for path in staged:
             assert path in captured.out, (path, captured.out)
 

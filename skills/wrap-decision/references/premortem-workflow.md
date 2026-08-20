@@ -1,6 +1,8 @@
 # Premortem 完整流程 — 並行深挖 + 綜合報告
 
 > **來源**：改編自外部 Anthropic premortem skill（西班牙文原文，Gary Klein 方法的完整落地版）。
+> **本框架的落地約束**：見 `project-integration/premortem-framework-constraints.md`（具體接線位置；沿用本流程時改寫該檔即可）。<!-- portability-allow: 分層目錄由各專案自備，不隨 sync 傳遞 -->
+>
 > **理論依據**：`references/principles/premortem-klein.md`（單一問句「假設已失敗，是什麼殺了它」的心理學根據）。本檔是該問句的**操作展開版**——把一句話問句擴展為「列舉 -> 並行深挖 -> 綜合」三段式流程。
 > **與 WRAP P 階段的關係**：P 階段預設用簡化三問（見 SKILL.md「P — 準備好犯錯」：假設 12 小時後失敗，列 3 個最可能原因）。本檔是同一方法論在**高成本決策**下的完整展開——原因數量不設上限（3-9 不等）、每個原因獨立派 subagent 深挖、最後產出結構化綜合報告。
 
@@ -16,7 +18,7 @@
 | 版本規劃、重大提案評估、發版前檢查 | 完整 premortem（本檔） | 決策成本高，錯誤代價需要並行深挖攤開 |
 | 架構決策、規則系統重大變更 | 完整 premortem（本檔） | 影響範圍跨多個後續 ticket，值得投入並行分析成本 |
 
-**判斷依據**：不是「時間夠不夠」，而是「錯誤的修復成本是否遠高於分析成本」（見 `.claude/rules/core/ai-communication-rules.md` 規則 6，決策依價值/容量非估時）。
+**判斷依據**：不是「時間夠不夠」，而是「錯誤的修復成本是否遠高於分析成本」（決策依價值與容量而非估時）。
 
 ### 好的 premortem 對象
 
@@ -73,9 +75,9 @@
 
 **派發規範**（本框架落地約束，見下方「框架落地約束」章節）：
 
-- prompt 遵循三段式骨架（`.claude/references/agent-dispatch-template.md`），總行數 <= 30 行
-- 輸出目標為 markdown 檔案，禁 HTML、禁 emoji（`.claude/rules/core/document-format-rules.md` 規則 1）
-- 並行派發數量與 `.claude/error-patterns/process-compliance/PC-137-*.md` 上限對照，`.claude/` 內檔案編輯場景才受限；本步驟 subagent 產出為 worktree 外的 markdown 分析檔，不受 PC-137 `.claude/` 並行編輯上限拘束，但仍建議單批次 <= 6 個以控制 review 負擔
+- prompt 遵循專案的派發骨架範本，總行數 <= 30 行
+- 輸出目標為 markdown 檔案，禁 HTML、禁 emoji
+- 並行派發數量與 專案的並行上限記錄 上限對照，`.claude/` 內檔案編輯場景才受限；本步驟 subagent 產出為 worktree 外的 markdown 分析檔，不受 該上限所指的 `.claude/` 並行編輯上限拘束，但仍建議單批次 <= 6 個以控制 review 負擔
 
 **深挖 subagent 產出必含三要素**：
 
@@ -127,7 +129,7 @@ premortem 深挖分析代理人，僅分析下方指定的單一失敗原因，�
 
 ### 步驟 4：落檔
 
-報告落 markdown 至 ticket Solution 章節或對應 worklog，**不產出 HTML 檔案、不使用 emoji**（原文 paso 5-6 的 HTML 視覺化報告與 emoji 裝飾在本框架一律移除，依 `.claude/rules/core/document-format-rules.md` 規則 1 與 `.claude/rules/core/language-constraints.md` 規則 3）。
+報告落 markdown 至 ticket Solution 章節或對應 worklog，**不產出 HTML 檔案、不使用 emoji**（原文 paso 5-6 的 HTML 視覺化報告與 emoji 裝飾在本框架一律移除，依 專案的文件格式規則 規則 1 與 專案的語言約束規則 規則 3）。
 
 保留內容：綜合報告五節 + 各深挖分析原始檔案路徑（供需要時查閱），不需另外產生獨立的「逐字稿」檔案。
 
@@ -154,9 +156,9 @@ premortem 深挖分析代理人，僅分析下方指定的單一失敗原因，�
 | 面向 | 原文做法 | 本框架做法 | 依據 |
 |------|---------|-----------|------|
 | 報告格式 | 自包含 HTML 視覺化報告 + emoji 裝飾 | markdown 落 ticket/worklog，禁 HTML、禁 emoji | `document-format-rules.md` 規則 1、`language-constraints.md` 規則 3 |
-| Subagent 派發 | 未限定框架 | prompt <= 30 行、三段式骨架、首行 `Ticket: {id}` 格式 | `.claude/references/agent-dispatch-template.md`（PCB pattern） |
-| 並行上限 | 未限定 | 對 `.claude/` 內檔案編輯場景適用 PC-137 上限；本流程產出為分析檔案不受此限，仍建議單批 <= 6 個 | `.claude/error-patterns/process-compliance/PC-137-*.md` |
-| 產出路徑 | 使用者工作區任意位置 | ticket Solution 章節或對應 worklog，遵循本專案文件系統 | `.claude/rules/core/document-format-rules.md` |
+| Subagent 派發 | 未限定框架 | prompt <= 30 行、三段式骨架、首行 `Ticket: {id}` 格式 | 專案的派發骨架範本 |
+| 並行上限 | 未限定 | 對 `.claude/` 內檔案編輯場景適用專案的並行上限；本流程產出為分析檔案不受此限，仍建議單批 <= 6 個 | 專案的並行上限記錄 |
+| 產出路徑 | 使用者工作區任意位置 | ticket Solution 章節或對應 worklog，遵循本專案文件系統 | 專案的文件格式規則 |
 
 ---
 
@@ -176,11 +178,11 @@ premortem 深挖分析代理人，僅分析下方指定的單一失敗原因，�
 ## 相關文件
 
 - `references/principles/premortem-klein.md` — 單一問句的理論依據（Gary Klein 研究、時間尺度、閾值選擇）
-- `.claude/references/agent-dispatch-template.md` — 並行 subagent 派發的 PCB 骨架
-- `.claude/rules/core/decision-trigger-binding.md` — 修訂計畫中標記「延後處理」項目時，必須綁定 follow-up ticket，不可用無 trigger 的「之後再說」
-- `.claude/skills/parallel-evaluation/SKILL.md` — 審查視角並行機制（與 premortem 分解軸不同，見上方邊界表）
+- 專案的派發骨架範本 — 並行 subagent 派發的骨架
+- 專案的決策 trigger 綁定規則 — 修訂計畫中標記「延後處理」項目時，必須綁定 follow-up ticket，不可用無 trigger 的「之後再說」
+- `../parallel-evaluation/SKILL.md` — 審查視角並行機制（同專案若也安裝 parallel-evaluation）<!-- portability-allow: 條件式引用，目標 skill 未必一同安裝 -->（與 premortem 分解軸不同，見上方邊界表）
 
 ---
 
 **Last Updated**: 2026-07-05
-**Version**: 1.0.0 — 初始建立，改編自外部 premortem skill 並落地本框架派發規範（1.5.0-W5-009.5）
+**Version**: 1.0.0 — 初始建立，改編自外部 premortem skill 並落地本框架派發規範

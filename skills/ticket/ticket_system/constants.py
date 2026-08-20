@@ -61,7 +61,6 @@ __all__ = [
     "STATUS_TRANSITIONS",
     # Body 章節正典（單一序列來源）
     "CANONICAL_BODY_SECTIONS",
-    "APPEND_LOG_EXTRA_SECTIONS",
     # 枚舉驗證閘模式
     "ENUM_GATE_MODE",
     # 預設值
@@ -377,9 +376,6 @@ CANONICAL_BODY_SECTIONS: tuple = (
     "Spawn Requests",
     "Completion Info",
 )
-
-# Execution Log 為 body 的 H1 容器標題（非 H2 章節），僅 append-log 白名單額外接受
-APPEND_LOG_EXTRA_SECTIONS: tuple = ("Execution Log",)
 
 # ============================================================
 # 枚舉驗證閘模式

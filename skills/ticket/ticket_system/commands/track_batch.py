@@ -25,6 +25,7 @@ if __name__ == "__main__":
 
 
 import argparse
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Tuple, Optional
@@ -61,6 +62,9 @@ from ticket_system.lib.ticket_ops import (
 )
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 from ticket_system.lib.worklog_appender import append_worklog_progress
+# lease claim/release 寫入（multi-PM 協調層 Phase 3，批次路徑與單票路徑
+# commands/track.py 對稱寫入 registry lease）
+from ticket_system.lib.lease import claim_lease, release_lease
 
 
 # ============================================================================
@@ -344,6 +348,23 @@ def _execute_batch_operation(
             # 保存更改
             ticket_path = resolve_ticket_path(ticket, version, ticket_id)
             save_ticket(ticket, ticket_path)
+            # registry lease 附加動作：批次路徑刻意與單票路徑（track.py 的
+            # claim_lease/release_lease 裸呼叫）不對稱——單票路徑不攔截，
+            # 降級全靠 lease.py 內部 early return + stderr；批次路徑改攔截
+            # 是因為一張票的 lease 問題不該中斷整批已成功的項目，此為批次
+            # 語意的刻意選擇，非沿用單票路徑的對稱處理。
+            try:
+                if operation == "claim":
+                    claim_lease(version, ticket_id)
+                elif operation == "complete":
+                    release_lease(version, ticket_id)
+            except Exception as lease_error:  # noqa: BLE001 - 附加動作降級
+                print(
+                    f"   [lease] {ticket_id} lease 寫入失敗，該票操作仍已完成"
+                    f"（registry 與 frontmatter 暫不同步）："
+                    f"{type(lease_error).__name__}: {lease_error}",
+                    file=sys.stderr,
+                )
             # 完成操作時自動追加 worklog 進度行
             if operation == "complete":
                 ticket_title = ticket.get("title", "")

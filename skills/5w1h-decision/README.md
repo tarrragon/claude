@@ -15,7 +15,7 @@ Ensure systematic decision-making before creating todos by requiring:
 
 | Layer            | File                                   | When Active            |
 | ---------------- | -------------------------------------- | ---------------------- |
-| **Output Style** | `.claude/output-styles/5w1h-format.md` | Always (system prompt) |
+| **Output Style** | `.claude/output-styles/5w1h-format.md` | Always (system prompt) <!-- portability-allow: 約定位置，本 skill 隨附的 output style 安裝點 --> |
 | **Hook**         | UserPromptSubmit + PreToolUse          | Each interaction       |
 | **SKILL**        | This document                          | On-demand reference    |
 
@@ -83,10 +83,10 @@ How: [Task Type: {TYPE}] {TDD strategy}
 
 ```bash
 # Generate session token
-uv run .claude/skills/5w1h-decision/scripts/generate_token.py
+uv run .claude/skills/5w1h-decision/scripts/generate_token.py  # portability-allow: consumer 共通安裝位置
 
 # Validate content
-uv run .claude/skills/5w1h-decision/scripts/validate_5w1h.py "content"
+uv run .claude/skills/5w1h-decision/scripts/validate_5w1h.py "content"  # portability-allow: consumer 共通安裝位置
 ```
 
 ## Common Mistakes
@@ -121,6 +121,6 @@ See [SKILL.md](./SKILL.md) for complete reference.
 
 | File                                                                                  | Purpose                         |
 | ------------------------------------------------------------------------------------- | ------------------------------- |
-| [Output Style](../../../.claude/output-styles/5w1h-format.md)                         | System-level format enforcement |
+| [Output Style](../../../.claude/output-styles/5w1h-format.md)                         | System-level format enforcement <!-- portability-allow: 約定位置，本 skill 隨附的 output style 安裝點 --> |
 | [SKILL.md](./SKILL.md)                                                                | Complete 5W1H reference         |
-| [5W1H Methodology](../../../.claude/methodologies/5w1h-self-awareness-methodology.md) | Full methodology                |
+| `5w1h-self-awareness-methodology`（各專案自有） | Full methodology                |

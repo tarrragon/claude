@@ -56,15 +56,12 @@ def test_empty_ticket():
 
 def test_large_ticket():
     """
-    測試邊界情況 2: 超大 Ticket 的效能和記憶體使用
+    測試邊界情況 2: 超大 Ticket 下的功能正確性與記憶體使用
 
     驗證點:
-    - 執行時間 < 2s
     - 正確識別大量檔案
     - 不應發生記憶體錯誤
     """
-    import time
-
     # 生成 10,000 行 Ticket 內容（50 個檔案）
     large_ticket_lines = ["# 大型 Ticket 測試\n\n"]
     large_ticket_lines.append("## 實作步驟\n\n")
@@ -81,15 +78,11 @@ def test_large_ticket():
 
     large_ticket = "".join(large_ticket_lines)
 
-    start_time = time.time()
-
     # 執行 C1 檢測
+    # 註：原以 time.time() 差值 + 絕對門檻（< 2.0s）作 pass-fail，違反
+    # test-assertion-design-rules 規則 D1（0.2.1-W3-640 修正）。改為只驗證
+    # 大型輸入下功能正確性，不對執行時間做絕對門檻斷言。
     result_c1 = check_god_ticket_automated(large_ticket)
-
-    execution_time = time.time() - start_time
-
-    # 驗證效能
-    assert execution_time < 2.0, f"執行時間超標: {execution_time:.3f}s > 2.0s"
 
     # 驗證檢測結果
     assert result_c1["status"] == "failed", "C1: 50 個檔案應超標"

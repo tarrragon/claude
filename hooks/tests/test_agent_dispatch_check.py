@@ -23,7 +23,6 @@ import pytest
 import sys
 import os
 import json
-import time
 import logging
 from typing import Dict, Any
 from pathlib import Path
@@ -362,16 +361,18 @@ def test_keyword_004_cumulative_weight(config, logger) -> None:
 # ===== [6] 效能測試 (1 個) =====
 
 def test_performance_001_execution_time(config, logger) -> None:
-    """TC_PERFORMANCE_001 - 代理人檢查執行時間 < 10ms"""
+    """TC_PERFORMANCE_001 - 代理人檢查可正常執行並回傳結果
+
+    註：原以 perf_counter 差值 + 絕對門檻（< 10ms）作 pass-fail，違反
+    test-assertion-design-rules 規則 D1（W3-632 覆核實測 13.67ms 紅燈，
+    紅燈反映機器負載而非程式缺陷；0.2.1-W3-640 修正）。改為只驗證函式可
+    正常執行並回傳結果，不對執行時間做絕對門檻斷言。
+    """
     prompt = "開發 Hook 腳本來檢查代理人分派"
     agent = "basil-hook-architect"
 
-    start_time = time.perf_counter()
     result = check_agent_dispatch(prompt, agent, config, logger)
-    end_time = time.perf_counter()
-
-    execution_time_ms = (end_time - start_time) * 1000
-    assert execution_time_ms < 10, f"執行時間 {execution_time_ms:.2f}ms 超過 10ms 限制"
+    assert result is not None
 
 
 # ===== 補充測試：任務類型檢測（明確 Phase 標記路徑） =====

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 
 """
@@ -146,6 +146,46 @@ def is_continuation_request(prompt: str, logger) -> bool:
 # ============================================================================
 
 
+# ============================================================================
+# where.files 讀寫意圖判定（並行安全判定改用 write 集合的同步切換義務）
+#
+# 本模組獨立於 ticket_system（PEP 723 單檔 hook，無法 import ticket_system）
+# 就地複製 `.claude/skills/ticket/ticket_system/lib/file_conflict.py` 的
+# `_INTENT_MARKER_RE` / `_ESCAPED_MARKER_RE` / `_default_intent` /
+# `parse_file_intent` 同款語意（逐檔 `::read` / `::write` 標記覆寫，未標記
+# 則依 type 推導：ANA 為 read，其餘為 write）。任一方修改讀寫意圖判定規則
+# 須同步更新另一方，否則同一組票在本 hook 建議與 `ticket track conflicts`
+# / `runqueue --groups` 判定會出現不同結論。
+# ============================================================================
+
+_INTENT_MARKER_RE = re.compile(r"(?<!\\)::(read|write)$")
+_ESCAPED_MARKER_RE = re.compile(r"\\(::(?:read|write))$")
+
+
+def _parse_file_intent(raw: str) -> Tuple[str, Optional[str]]:
+    """解析單一路徑字串，回傳 (純路徑, 覆寫意圖)，同 file_conflict.parse_file_intent。"""
+    match = _INTENT_MARKER_RE.search(raw)
+    if match:
+        return raw[: match.start()], match.group(1)
+    return _ESCAPED_MARKER_RE.sub(r"\1", raw), None
+
+
+def _default_intent(ticket_type: str) -> str:
+    """由 ticket type 推導預設讀寫意圖，同 file_conflict._default_intent。"""
+    return "read" if ticket_type == "ANA" else "write"
+
+
+def _filter_write_files(files: Set[str], ticket_type: str) -> Set[str]:
+    """僅保留意圖為寫入的純路徑（type 預設或逐檔標記覆寫為 write）。"""
+    default = _default_intent(ticket_type)
+    result: Set[str] = set()
+    for raw in files:
+        path, override = _parse_file_intent(raw)
+        if (override or default) == "write":
+            result.add(path)
+    return result
+
+
 def extract_ticket_info(file_path: Path, logger) -> Optional[Dict[str, Any]]:
     """
     從 Ticket 檔案提取關鍵資訊
@@ -162,7 +202,7 @@ def extract_ticket_info(file_path: Path, logger) -> Optional[Dict[str, Any]]:
         ticket_id = file_path.stem
 
         # 解析 frontmatter
-        frontmatter = parse_ticket_frontmatter(content)
+        frontmatter = parse_ticket_frontmatter(content, logger)
 
         # 提取 chain 資訊
         chain = {}
@@ -217,6 +257,7 @@ def extract_ticket_files(ticket_info: Dict[str, Any], logger) -> Set[str]:
         set - 檔案路徑集合
     """
     files = set()
+    ticket_type = ticket_info.get("type", "")
 
     # 優先使用 where_files
     where_files = ticket_info.get("where_files", "").strip()
@@ -225,7 +266,7 @@ def extract_ticket_files(ticket_info: Dict[str, Any], logger) -> Set[str]:
         for file_path in re.split(r"[,\s]+", where_files):
             if file_path.strip():
                 files.add(file_path.strip())
-        return files
+        return _filter_write_files(files, ticket_type)
 
     # 次優先：where_layer
     where_layer = ticket_info.get("where_layer", "").strip()
@@ -233,7 +274,7 @@ def extract_ticket_files(ticket_info: Dict[str, Any], logger) -> Set[str]:
         for file_path in re.split(r"[,\s]+", where_layer):
             if file_path.strip():
                 files.add(file_path.strip())
-        return files
+        return _filter_write_files(files, ticket_type)
 
     # 若都沒有，嘗試從內容中提取
     try:
@@ -243,7 +284,7 @@ def extract_ticket_files(ticket_info: Dict[str, Any], logger) -> Set[str]:
             stripped = line.strip()
             if any(stripped.startswith(prefix) for prefix in ["lib/", "test/", ".claude/", "pubspec.yaml"]):
                 files.add(stripped)
-        return files
+        return _filter_write_files(files, ticket_type)
     except Exception as e:
         logger.debug(f"無法提取檔案清單: {e}")
         return set()

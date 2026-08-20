@@ -37,6 +37,8 @@ from ..constants import (
     CONTEXT_BUNDLE_UC_INJECTION_MODE_AUTO,
     CONTEXT_BUNDLE_UC_INJECTION_MODE_MANUAL,
     CONTEXT_BUNDLE_UC_INJECTION_MODE_OFF,
+    STATUS_CLOSED,
+    STATUS_COMPLETED,
 )
 from .file_lock import file_lock
 from .parser import load_ticket, save_ticket
@@ -58,6 +60,16 @@ SOURCE_PRIORITY: Tuple[SourceKind, ...] = CONTEXT_BUNDLE_SOURCE_KINDS  # type: i
 MAX_TOTAL_CHARS: int = CONTEXT_BUNDLE_MAX_TOTAL_CHARS
 MAX_ITEMS_PER_FIELD: int = CONTEXT_BUNDLE_MAX_ITEMS_PER_FIELD
 TRUNCATE_INDICATOR: str = "... (truncated, see source ticket)"
+
+# Status-aware 標籤：依來源票 status 分流 render 提示，避免 completed 來源的
+# 結論被隱藏、closed 來源被導向永遠空白的 Solution 章節（closed 語意為「不做
+# 了」而非「做完了」，本無結論可寫）。pending/in_progress 無對應項 → 不附加
+# 標籤，維持既有行為（仍是建票當下假設，尚無終態結論可提示）。附加於每個
+# bullet 行尾，per-source（非單一靜態字串）。
+STATUS_LABEL_SUFFIXES: dict = {
+    STATUS_COMPLETED: "（來源已完成，結論見 Solution）",
+    STATUS_CLOSED: "（來源已關閉，無結論）",
+}
 
 # 冪等標記
 AUTO_MARKER_PREFIX: str = "<!-- auto-extracted:"
@@ -197,6 +209,7 @@ class ExtractedField:
     target_subsection: str
     raw_value: Any  # str | list[str]
     truncated: bool = False
+    source_status: str = ""  # 來源票 status（frontmatter），驅動 render 端 status 標籤
 
 
 @dataclass
@@ -272,11 +285,18 @@ def _detect_opt_out(target: dict) -> bool:
     return False
 
 
-def _filter_acceptance_with_ac_parser(raw: Any, source_id: str) -> list:
-    """使用 checkbox 語義過濾 acceptance（W17-002.1 acceptance #6）。
+def _filter_acceptance_with_ac_parser(
+    raw: Any, source_id: str, source_status: Optional[str] = None
+) -> list:
+    """使用 checkbox 語義過濾 acceptance（W17-002.1 acceptance #6，status-aware 擴充）。
 
-    以 ac_parser 的 checkbox 解析邏輯過濾已勾選項目（只保留 [ ] 未完成項），
-    讓自動抽取聚焦於承接者實際要處理的部分。
+    以 ac_parser 的 checkbox 解析邏輯過濾 acceptance 項目，讓自動抽取聚焦於
+    對接手者價值最高的部分：
+
+    - completed 來源：保留已勾選項（已確立什麼是本票結論的結構化摘要）。
+    - 其餘 status（pending/in_progress/closed 等）：保留未勾選項（原行為，
+      接手者要知道還剩什麼沒做；closed 來源亦沿用此行為，代表原計畫但已
+      不再推進的項目，仍具歷史脈絡價值）。
 
     設計取捨：此處不呼叫 ac_parser.parse_ac（那會再次 load_ticket 造成重複 I/O），
     改用 ac_parser 使用的同一份 checkbox_utils 工具，確保語義一致。
@@ -289,6 +309,7 @@ def _filter_acceptance_with_ac_parser(raw: Any, source_id: str) -> list:
         # 降級：若 checkbox_utils 不可用，回傳原字串列表
         return [str(x) for x in raw]
 
+    keep_checked = source_status == STATUS_COMPLETED
     filtered: list = []
     for item in raw:
         item_str = str(item)
@@ -298,8 +319,7 @@ def _filter_acceptance_with_ac_parser(raw: Any, source_id: str) -> list:
         if probe.startswith("- "):
             probe = probe[2:].lstrip()
         checked, _text = checkbox_utils.strip_checkbox_prefix(probe)
-        if checked:
-            # 已完成的 AC 對接手者價值低，略過
+        if checked != keep_checked:
             continue
         # 保留原始字串（含 checkbox 標記），render 端直接顯示
         filtered.append(item_str)
@@ -587,6 +607,7 @@ def extract_context_bundle(target_ticket: dict) -> ExtractResult:
             continue
 
         result.sources_ok += 1
+        source_status = source.get("status") if isinstance(source, dict) else None
         for rule in EXTRACTABLE_FIELDS:
             raw = _read_nested(source, rule.source_field)
             if _is_placeholder(raw):
@@ -601,7 +622,7 @@ def extract_context_bundle(target_ticket: dict) -> ExtractResult:
                 continue
             if rule.is_list:
                 if rule.use_ac_parser:
-                    items = _filter_acceptance_with_ac_parser(raw, src_id)
+                    items = _filter_acceptance_with_ac_parser(raw, src_id, source_status)
                 else:
                     items = (
                         [str(x) for x in raw] if isinstance(raw, list) else [str(raw)]
@@ -631,6 +652,7 @@ def extract_context_bundle(target_ticket: dict) -> ExtractResult:
                         target_subsection=rule.target_subsection,
                         raw_value=items,
                         truncated=truncated,
+                        source_status=source_status or "",
                     )
                 )
             else:
@@ -642,6 +664,7 @@ def extract_context_bundle(target_ticket: dict) -> ExtractResult:
                         target_subsection=rule.target_subsection,
                         raw_value=raw,
                         truncated=False,
+                        source_status=source_status or "",
                     )
                 )
 
@@ -715,15 +738,14 @@ def render_context_bundle_markdown(result: ExtractResult) -> str:
             continue
         lines.append(f"### {rule.target_subsection}")
         for f in fields:
+            suffix = STATUS_LABEL_SUFFIXES.get(f.source_status, "")
             if rule.is_list:
                 for item in f.raw_value:
-                    lines.append(
-                        rule.format_template.format(source_id=f.source_id, value=item)
-                    )
+                    line = rule.format_template.format(source_id=f.source_id, value=item)
+                    lines.append(f"{line}{suffix}")
             else:
-                lines.append(
-                    rule.format_template.format(source_id=f.source_id, value=f.raw_value)
-                )
+                line = rule.format_template.format(source_id=f.source_id, value=f.raw_value)
+                lines.append(f"{line}{suffix}")
             if f.truncated:
                 lines.append(f"  {TRUNCATE_INDICATOR}")
         lines.append("")

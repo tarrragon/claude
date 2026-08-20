@@ -83,8 +83,8 @@ CLI 已內建以下規則，本節僅供閱讀輸出時對照，非需手動執�
 
 | 格式 | 範例 | 解析基準 |
 |------|------|------|
-| `@.claude/path/file.md` | `@.claude/pm-rules/decision-tree.md` | repo root |
-| `.claude/path/file.md` | `.claude/agents/incident-responder.md` | repo root |
+| `@.claude/path/file.md` | `@.claude/pm-rules/decision-tree.md` | repo root <!-- broken-link-exempt: 格式示範範例路徑，非真實引用（W2-011 A 類） --> |
+| `.claude/path/file.md` | `.claude/agents/incident-responder.md` | repo root <!-- broken-link-exempt: 格式示範範例路徑，非真實引用（W2-011 A 類） --> |
 | `../path/file.md` | `../agents/lavender-interface-designer.md` | 引用文件所在目錄 <!-- broken-link-exempt: 格式示範範例路徑，非真實引用（W2-011 A 類） --> |
 | `./path/file.md` | `./references/detail.md` | 引用文件所在目錄 <!-- broken-link-exempt: 格式示範範例路徑，非真實引用（W2-011 A 類） --> |
 

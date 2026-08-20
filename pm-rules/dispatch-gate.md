@@ -25,7 +25,7 @@
 
 | # | 檢查項 | 通過條件 |
 |---|--------|---------|
-| 1 | Ticket 含分析結果 | Execution Log 有 PM 寫入的 Context Bundle |
+| 1 | Ticket 含分析結果 | `## Context Bundle` 章節有 PM 寫入的內容 |
 | 2 | Agent prompt <= 30 行 | 只含 Ticket ID + 動作指令（Hook 自動攔截） |
 | 3 | Prompt 第一行是 Ticket ID | 第一行為 `Ticket: {id}` / `#Ticket-{id}` / `[Ticket {id}]` |
 | 4 | 多任務已寫 dispatch-plan | 2+ ticket / group / spawned follow-up 已列 ticket-agent-files-deps-run mode |

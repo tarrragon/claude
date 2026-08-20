@@ -76,7 +76,7 @@ def find_pending_sibling_tickets(
                     continue
 
                 content = ticket_file.read_text(encoding="utf-8")
-                frontmatter = parse_ticket_frontmatter(content)
+                frontmatter = parse_ticket_frontmatter(content, logger)
                 status = frontmatter.get("status", "unknown")
 
                 if status == "pending":

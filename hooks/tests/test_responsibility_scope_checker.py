@@ -8,7 +8,7 @@ Responsibility Scope Checker 測試（0.2.1-W3-052.1，C3 移植）
 - domain 數 > 2 觸發
 - `.claude/` 下取次一層作為 domain（同子系統耦合不誤判）
 - ANA / DOC type 豁免
-- 換行分隔字串輸入（runtime hook 實際輸入型別）也能正確觸發
+- str 型別輸入（`where.files` 合法 scalar 寫法）也能正確觸發
 
 `where.files` 的去重/去佔位符/雙型別正規化邏輯已抽至
 `ticket_parser.extract_where_files`，對應測試見
@@ -69,7 +69,7 @@ class TestExtractDomains:
         assert _extract_domains(fm, _logger()) == {"lib"}
 
     def test_newline_joined_string_input(self):
-        """runtime hook 實際輸入型別：`where.files` 為換行字串。"""
+        """`where.files` 合法 scalar 寫法：block literal 呈現為換行字串。"""
         fm = {"where": {"files": ".claude/hooks/foo.py\n.claude/lib/bar.py\n.claude/skills/baz.py"}}
         assert _extract_domains(fm, _logger()) == {".claude/hooks", ".claude/lib", ".claude/skills"}
 

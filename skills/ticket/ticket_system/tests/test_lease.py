@@ -14,6 +14,11 @@ registry 讀寫一律經真實 `.claude/lib/pm_registry` 模組（`get_registry_
 monkeypatch 重導至 tmp_path），非以 fake stub 取代——直接驗證
 `recompute_lease` / `is_fresh` 兩個 API 的真實行為。
 
+heartbeat 種子一律經 `_fresh_ts()` / `_stale_ts()` 播種，不寫固定日期字面
+（`is_fresh` 在未注入 now 時取真實時鐘，固定字面必隨時間失效，見
+TEST-MON-001）；FRESH/STALE 判定依賴真實時鐘的測試須加前置斷言，使
+「條件不成立」與「行為不正確」在紅燈時可區分。
+
 `files_intersect` / `where_files` 的判定邏輯已抽至
 `ticket_system.lib.file_conflict`（AC-3 共用實作，Phase 4 審查修正：本檔
 不再自帶複本），細節測試在 `test_file_conflict.py`。
@@ -32,7 +37,51 @@ from ticket_system.lib import lease
 from conftest import _iso, seed_pm_registry as _seed_registry  # noqa: F401 — 0.2.1-W3-585 收斂複本
 
 
-NOW = datetime(2026, 8, 18, 12, 0, 0, tzinfo=timezone.utc)
+# --- heartbeat 播種基準與 FRESH/STALE 語意 helper ----------------------------
+#
+# lease 的五個入口分兩類時鐘來源：`claim_lease` / `resolve_current_session_id`
+# 取真實時鐘（無 `now` 參數），其餘三個由測試注入 `now=NOW`。因此 heartbeat
+# 種子必須相對「執行當下」定義——固定日期字面（原
+# `NOW = datetime(2026, 8, 18, 12, 0, 0)`，即撰寫當天）在該時刻的
+# STALE_THRESHOLD_MINUTES 之後一律被判為 STALE，使依賴 FRESH 前提的測試
+# 永久紅燈（TEST-MON-001 時鐘相對 fixture 時間炸彈）。
+#
+# 全檔種子與注入基準同為 `NOW`（模組載入當下），故注入路徑的 elapsed 完全
+# 確定（FRESH 為 0、STALE 為門檻 + 邊際）；真實時鐘路徑則假設「模組載入至
+# 斷言執行 < 門檻」——最壞情況為整套 suite 的執行時間（實測 110 秒），對
+# 30 分鐘門檻有約 16 倍餘裕，且此餘裕不隨日期推移消耗（NOW 每次執行重取）。
+# 該假設若失效，下方三處 `is_fresh` 前置斷言會直接指出成因，不會退化為假綠。
+NOW = datetime.now(timezone.utc)
+
+
+def _stale_threshold() -> timedelta:
+    """`pm_registry.STALE_THRESHOLD_MINUTES`（FRESH/STALE 判準單一權威來源）。
+
+    模組不可用時降級為 30 分鐘（現行值）；該情形下 `real_pm_registry`
+    fixture 會 skip 所有需要 registry 的測試，此降級值僅為避免 import 期
+    失敗，不代表判準真為 30。
+    """
+    pm_registry = lease._load_pm_registry()
+    minutes = getattr(pm_registry, "STALE_THRESHOLD_MINUTES", 30) if pm_registry else 30
+    return timedelta(minutes=minutes)
+
+
+_STALE_THRESHOLD = _stale_threshold()
+_STALE_MARGIN = timedelta(minutes=15)
+
+
+def _fresh_ts() -> str:
+    """播種一筆 FRESH heartbeat（elapsed = 0，必在門檻內）。"""
+    return _iso(NOW)
+
+
+def _stale_ts() -> str:
+    """播種一筆 STALE heartbeat（超出門檻再加安全邊際）。
+
+    以門檻常數推導而非硬編碼 45 分鐘，使「這筆是 STALE」由常數關係明示，
+    讀者不需心算 45 與 30 的大小關係，門檻調整時亦不需逐點改字面。
+    """
+    return _iso(NOW - _STALE_THRESHOLD - _STALE_MARGIN)
 
 
 @pytest.fixture
@@ -76,7 +125,7 @@ class TestResolveCurrentSessionId:
         _seed_registry(registry_file, {
             "sess-only": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(datetime.now(timezone.utc)),
+                "heartbeat_ts": _fresh_ts(),
                 "tickets": [],
                 "files": [],
             }
@@ -87,14 +136,19 @@ class TestResolveCurrentSessionId:
         assert result == "sess-only"
 
     def test_returns_none_when_ambiguous_and_no_env(self, real_pm_registry, monkeypatch):
-        _pm_registry, registry_file, _lock_file = real_pm_registry
+        pm_registry, registry_file, _lock_file = real_pm_registry
         monkeypatch.delenv(lease.ENV_SESSION_ID, raising=False)
         monkeypatch.setattr(lease, "_current_project_root", lambda: "/proj")
-        now_iso = _iso(datetime.now(timezone.utc))
+        now_iso = _fresh_ts()
         _seed_registry(registry_file, {
             "sess-a": {"project": "/proj", "heartbeat_ts": now_iso, "tickets": [], "files": []},
             "sess-b": {"project": "/proj", "heartbeat_ts": now_iso, "tickets": [], "files": []},
         })
+        # 前置斷言：`_resolve_session_id` 的 `matches[0] if len(matches) == 1 else None`
+        # 對「0 筆」與「2 筆」同樣回傳 None，下方 `result is None` 因而無法單獨
+        # 區分兩者。此處先確認種子在真實時鐘下確為 FRESH（即 matches 為 2 筆），
+        # 使本測試驗證的是「歧義」而非退化成「無 FRESH session」（TEST-MON-001）。
+        assert pm_registry.is_fresh(now_iso) is True
 
         result = lease.resolve_current_session_id()
 
@@ -144,7 +198,7 @@ class TestClaimLease:
         _seed_registry(registry_file, {
             "sess-A": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW),
+                "heartbeat_ts": _fresh_ts(),
                 "tickets": [],
                 "files": [],
             }
@@ -176,7 +230,7 @@ class TestClaimLease:
         _seed_registry(registry_file, {
             "sess-A": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW),
+                "heartbeat_ts": _fresh_ts(),
                 "tickets": ["0.0.0-W1-001"],
                 "files": ["lib/foo.dart", "lib/bar.dart"],  # 重跑 claim 前的舊寬範圍殘留
             }
@@ -207,16 +261,22 @@ class TestClaimLease:
         assert "跳過 lease 寫入" in err
 
     def test_ambiguous_fresh_sessions_without_env_skips(self, real_pm_registry, monkeypatch, capsys):
-        _pm_registry, registry_file, _lock_file = real_pm_registry
+        pm_registry, registry_file, _lock_file = real_pm_registry
         monkeypatch.delenv(lease.ENV_SESSION_ID, raising=False)
         monkeypatch.setattr(lease, "_current_project_root", lambda: "/proj")
         monkeypatch.setattr(
             lease, "load_ticket", lambda version, tid: {"id": tid, "where": {"files": []}}
         )
+        seed_ts = _fresh_ts()
         _seed_registry(registry_file, {
-            "sess-A": {"project": "/proj", "heartbeat_ts": _iso(NOW), "tickets": [], "files": []},
-            "sess-B": {"project": "/proj", "heartbeat_ts": _iso(NOW), "tickets": [], "files": []},
+            "sess-A": {"project": "/proj", "heartbeat_ts": seed_ts, "tickets": [], "files": []},
+            "sess-B": {"project": "/proj", "heartbeat_ts": seed_ts, "tickets": [], "files": []},
         })
+        # 前置斷言：claim_lease 走真實時鐘判定 freshness，而「0 筆 FRESH」與
+        # 「2 筆 FRESH」都會使 `_resolve_session_id` 回傳 None 並印出同一則
+        # stderr。先確認種子確為 FRESH，本測試才真的在驗證歧義路徑；否則會
+        # 靜默退化為「無 FRESH session」的假綠（TEST-MON-001）。
+        assert pm_registry.is_fresh(seed_ts) is True
 
         lease.claim_lease("0.0.0", "0.0.0-W1-001")
 
@@ -224,22 +284,27 @@ class TestClaimLease:
         assert "無法判定當前 session_id" in err
 
     def test_fresh_conflict_warns_but_does_not_block(self, real_pm_registry, monkeypatch, capsys):
-        _pm_registry, registry_file, _lock_file = real_pm_registry
+        pm_registry, registry_file, _lock_file = real_pm_registry
         monkeypatch.setenv(lease.ENV_SESSION_ID, "sess-A")
         monkeypatch.setattr(lease, "_current_project_root", lambda: "/proj")
         monkeypatch.setattr(
             lease, "load_ticket",
             lambda version, tid: {"id": tid, "where": {"files": ["lib/foo.dart"]}},
         )
+        other_ts = _fresh_ts()
         _seed_registry(registry_file, {
-            "sess-A": {"project": "/proj", "heartbeat_ts": _iso(NOW), "tickets": [], "files": []},
+            "sess-A": {"project": "/proj", "heartbeat_ts": _fresh_ts(), "tickets": [], "files": []},
             "sess-B": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW),
+                "heartbeat_ts": other_ts,
                 "tickets": ["0.0.0-W1-OTHER"],
                 "files": ["lib/foo.dart"],
             },
         })
+        # 前置斷言：`_warn_fresh_conflicts` 對 STALE session 直接 continue，
+        # sess-B 一旦被判 STALE 則 stderr 為空，下方斷言的失敗訊息只會顯示
+        # 「空字串」而不指向時鐘成因（TEST-MON-001 的原始紅燈樣態）。
+        assert pm_registry.is_fresh(other_ts) is True
 
         lease.claim_lease("0.0.0", "0.0.0-W1-001")
 
@@ -259,7 +324,7 @@ class TestReleaseLease:
         _seed_registry(registry_file, {
             "sess-A": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW),
+                "heartbeat_ts": _fresh_ts(),
                 "tickets": ["0.0.0-W1-001", "0.0.0-W1-002"],
                 "files": ["lib/a.dart", "lib/b.dart"],
             }
@@ -513,7 +578,7 @@ class TestCheckReclaimable:
         pm_registry, _registry_file, _lock_file = real_pm_registry
         ticket = {"status": "in_progress"}
         registry = {
-            "sessions": {"sess-A": {"tickets": ["0.0.0-W1-001"], "heartbeat_ts": _iso(NOW)}}
+            "sessions": {"sess-A": {"tickets": ["0.0.0-W1-001"], "heartbeat_ts": _fresh_ts()}}
         }
 
         ok, _reason, owner = lease.check_reclaimable(
@@ -530,7 +595,7 @@ class TestCheckReclaimable:
             "sessions": {
                 "sess-A": {
                     "tickets": ["0.0.0-W1-001"],
-                    "heartbeat_ts": _iso(NOW - timedelta(minutes=45)),
+                    "heartbeat_ts": _stale_ts(),
                 }
             }
         }
@@ -568,7 +633,7 @@ class TestCheckReleaseGuard:
         _seed_registry(registry_file, {
             "sess-A": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW),
+                "heartbeat_ts": _fresh_ts(),
                 "tickets": ["0.0.0-W1-001"],
                 "files": [],
             },
@@ -586,13 +651,13 @@ class TestCheckReleaseGuard:
         _seed_registry(registry_file, {
             "sess-A": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW),
+                "heartbeat_ts": _fresh_ts(),
                 "tickets": [],
                 "files": [],
             },
             "sess-B": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW),
+                "heartbeat_ts": _fresh_ts(),
                 "tickets": ["0.0.0-W1-001"],
                 "files": [],
             },
@@ -611,13 +676,13 @@ class TestCheckReleaseGuard:
         _seed_registry(registry_file, {
             "sess-A": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW),
+                "heartbeat_ts": _fresh_ts(),
                 "tickets": [],
                 "files": [],
             },
             "sess-B": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=45)),
+                "heartbeat_ts": _stale_ts(),
                 "tickets": ["0.0.0-W1-001"],
                 "files": [],
             },
@@ -648,7 +713,7 @@ class TestCheckReleaseGuard:
         _seed_registry(registry_file, {
             "sess-B": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW),
+                "heartbeat_ts": _fresh_ts(),
                 "tickets": ["0.0.0-W1-001"],
                 "files": [],
             },
@@ -669,7 +734,7 @@ class TestReclaimTicketDryRun:
         _seed_registry(registry_file, {
             "sess-A": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=45)),
+                "heartbeat_ts": _stale_ts(),
                 "tickets": ["0.0.0-W1-001"],
                 "files": ["lib/foo.dart"],
             },
@@ -696,7 +761,7 @@ class TestReclaimTicketDryRun:
         _seed_registry(registry_file, {
             "sess-A": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW),
+                "heartbeat_ts": _fresh_ts(),
                 "tickets": ["0.0.0-W1-001"],
                 "files": [],
             },
@@ -713,7 +778,7 @@ class TestReclaimTicketDryRun:
         _seed_registry(registry_file, {
             "sess-A": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=45)),
+                "heartbeat_ts": _stale_ts(),
                 "tickets": ["0.0.0-W1-001"],
                 "files": ["lib/foo.dart"],
             },
@@ -835,7 +900,7 @@ class TestReclaimTicketConfirm:
         _seed_registry(registry_file, {
             "sess-A": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=45)),
+                "heartbeat_ts": _stale_ts(),
                 "tickets": [tid],
                 "files": ["lib/foo.dart"],
             }
@@ -864,7 +929,7 @@ class TestReclaimTicketConfirm:
         _seed_registry(registry_file, {
             "sess-A": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=45)),
+                "heartbeat_ts": _stale_ts(),
                 "tickets": [tid],
                 "files": ["lib/foo.dart"],
             }
@@ -917,7 +982,7 @@ class TestApplyReclaimErrorPropagation:
         _seed_registry(registry_file, {
             "sess-A": {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=45)),
+                "heartbeat_ts": _stale_ts(),
                 "tickets": [tid],
                 "files": [],
             }

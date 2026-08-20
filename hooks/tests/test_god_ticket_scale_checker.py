@@ -7,7 +7,7 @@ God Ticket Scale Checker 測試（0.2.1-W3-052.1）
 - 檔案數 > 5 觸發，回傳含實際數字與閾值的違規字串
 - ANA / DOC type 豁免
 - `where` 缺失時視為 0 檔案（不觸發）
-- 換行分隔字串輸入（runtime hook 實際輸入型別，見
+- str 型別輸入（`where.files` 合法 scalar 寫法，見
   `test_ticket_parser_extract_where_files.py`）也能正確觸發，
   而非被 `isinstance(files, list)` 靜默吞掉（0.2.1-W3-052.1 實測回歸）
 

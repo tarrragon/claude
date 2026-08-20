@@ -88,7 +88,7 @@ def _install_common_mocks(monkeypatch, tickets_dir: Path) -> None:
         "ticket_system.lib.version.validate_version_registered",
         lambda v: (True, ""),
     )
-    monkeypatch.setattr("ticket_system.commands.create.list_tickets", lambda v: [])
+    monkeypatch.setattr("ticket_system.lib.field_validators.list_tickets", lambda v: [])
     monkeypatch.setattr(
         "ticket_system.commands.create.get_tickets_dir", lambda v: tickets_dir
     )
@@ -96,9 +96,9 @@ def _install_common_mocks(monkeypatch, tickets_dir: Path) -> None:
         "ticket_system.commands.create.get_ticket_path",
         lambda v, tid: tickets_dir / f"{tid}.md",
     )
-    monkeypatch.setattr("ticket_system.commands.create.get_next_seq", lambda v, w: 1)
+    monkeypatch.setattr("ticket_system.lib.ticket_id_allocator.get_next_seq", lambda v, w: 1)
     monkeypatch.setattr(
-        "ticket_system.commands.create.get_next_child_seq", lambda pid: 1
+        "ticket_system.lib.ticket_id_allocator.get_next_child_seq", lambda pid: 1
     )
 
 

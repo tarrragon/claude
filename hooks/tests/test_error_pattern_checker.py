@@ -4,9 +4,10 @@ Error Pattern Checker 測試（0.2.1-W3-337）
 驗證 `check_error_pattern_conflicts`（acceptance-gate Step 2.7）正確依
 `where.files` 提取關鍵詞並搜尋 error-patterns 目錄：
 
-- list 型別 where.files（完整 YAML 解析器）能正確觸發
-- 換行分隔字串型別 where.files（本 hook 套件輕量解析器實際輸出型別，
-  0.2.1-W3-330 稽核發現 100% 既有票命中此型別，修復前恆定靜默略過）
+- list 型別 where.files（YAML sequence 寫法）能正確觸發
+- str 型別 where.files（YAML scalar 寫法——單一路徑不加 dash，或 `|`
+  block literal scalar，schema 容忍的合法輸入，0.2.1-W3-330 稽核發現
+  修復前呼叫端因僅判斷 `isinstance(x, list)` 而恆定靜默略過此型別）
   同樣能正確觸發（0.2.1-W3-337 迴歸測試）
 - DOC/ANA/REF 型別豁免
 - 無 where.files 時安全略過
@@ -59,7 +60,7 @@ class TestCheckErrorPatternConflictsListInput:
 
 
 class TestCheckErrorPatternConflictsStringInput:
-    """換行分隔字串型別輸入（0.2.1-W3-337 迴歸：runtime hook 實際輸入型別）"""
+    """str 型別輸入（`where.files` 合法 scalar 寫法，0.2.1-W3-337 迴歸）"""
 
     def test_newline_joined_string_still_triggers(self, project_dir_with_pattern):
         fm = {

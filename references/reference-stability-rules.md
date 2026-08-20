@@ -13,6 +13,7 @@
 | 編輯 `docs/spec/`、`docs/use-cases.md`、`docs/proposals/` 等規格文件 | 規則 7 |
 | 編輯 `.claude/` 框架檔案（rules / pm-rules / references / methodologies / agents / skills / hooks / error-patterns / best-practices） | 規則 8 |
 | Code review 時檢查跨檔案引用是否指向穩定來源 | 規則 7、規則 8 |
+| 在 `.claude/` 框架檔案寫「當條件成立時該做 X」（含量化閾值），想綁 ticket ID 作 trigger | 規則 8 |
 | 升級 memory 或 ticket 內容至框架層時評估引用穩定度 | 規則 7、規則 8 |
 | 記錄環境實測結果（路徑、HOME、目錄結構）於任何文件或 ticket | 規則 9 |
 | 收到 ticket create / claim 的機器專屬路徑 WARNING | 規則 9 |
@@ -255,6 +256,10 @@
 | 規則 7 來源標注例外 | `docs/` 規格文件（不 sync） | 不受本判準約束——規格文件不 sync，來源標注保留原例外；本判準僅約束 `.claude/` 框架文件 |
 | PC-093 `history` 豁免 | ticket / worklog（不 sync） | 不受本判準約束——ticket / worklog 不 sync，該豁免的適用範圍與本判準（框架文件）不重疊 |
 | comment-writing 方法論 | 程式碼 comment（含框架 hooks / scripts） | 框架 code comment 記錄「為什麼這樣做」的決策脈絡時，改依「兩層分流指引」寫自足 WHY 或引用方法論，不再以 ticket ID 作脈絡標注 |
+
+#### 與 decision-trigger-binding 規則 2 的邊界
+
+框架檔案內寫「當條件成立時該做 X」而想綁 ticket ID 作 trigger 時，本規則硬擋。該交集的處置是收窄規則 2 的適用範圍（只約束延後決策；決策已下完的條件式操作規範改指名偵測承擔者），**本規則不開豁免**——判準全文見 `.claude/references/decision-trigger-binding-details.md` 規則 2.5 條件式操作規範。
 
 #### 與 PC-098 的邊界（更新）
 
@@ -701,7 +706,8 @@ Provenance: claude#58
 
 ---
 
-**Last Updated**: 2026-08-17
+**Last Updated**: 2026-08-18
+**Version**: 1.12.0 — 規則 8 末段邊界群新增「與 decision-trigger-binding 規則 2 的邊界」：說明「框架檔案內的條件式條文想綁 ticket ID」這個交集的處置為收窄規則 2 適用範圍而非在本規則開豁免，判準全文指向 `decision-trigger-binding-details.md` 規則 2.5（論證不在本檔重複）；置於邊界群而非判準章之前，避免邊界內容先於核心操作內容。
 **Version**: 1.11.0 — 「引用性質判準」章節「權威關係」段補「校準（實測後）」：三探針實測證實 `.claude/agents/*.md` 主文 `@-import` 不展開為內容，AGENT_PRELOAD.md 規則 12 非自動載入速查版；改述實際每次派發都會注入的觸發指引在 `document-format-rules.md`「引用穩定性規則」小節
 **Version**: 1.10.0 — 規則 8 新增「守衛的實際執法邊界」節：載明三類豁免（白名單路徑僅 1 檔、測試路徑、code fence 內容——後者明示為格式示範的設計上合法路徑而非繞過）、`rule8-exempt` marker 語法與兩個合法 category、判定為增量而非全檔（附存量量測 714 檔 / 3584 個票號，據此說明規則 8 對存量是應然目標）、兩條未涵蓋的寫入管道（Bash 寫入與用戶自行編輯）；並標示早期裁定的 Version footer 例外已由 AGENT_PRELOAD 規則 12 v1.20.0 廢止，本節與規則 8 正文為唯一權威口徑。
 **Version**: 1.9.0 — 新增規則 9「環境事實的記錄形式」：定義第三個失效軸（跨環境），以「操作指引 vs 實測記錄」兩類判準給出相反處置（前者改 `~` / 專案相對 / `$CLAUDE_PROJECT_DIR`，後者保留原值並標註量測環境 HOME / 平台 / 日期）；載明改寫時必須實測新路徑可解析（僅去使用者名不足）；記錄 ticket create / claim 的 WARNING 強制層及其未涵蓋範圍（worklog / 框架文件 / 規格文件仍須人工盤點）。檔頭定義句、適用情境表、補充檢查清單同步更新。

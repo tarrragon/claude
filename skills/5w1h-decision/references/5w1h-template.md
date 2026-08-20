@@ -57,8 +57,8 @@ Example: 5W1H-20250925-191735-a7b3c2
 
 ```bash
 # Generate new session token
-uv run .claude/skills/5w1h-decision/scripts/generate_token.py
+uv run .claude/skills/5w1h-decision/scripts/generate_token.py  # portability-allow: consumer 共通安裝位置
 
 # Validate 5W1H content
-uv run .claude/skills/5w1h-decision/scripts/validate_5w1h.py "content"
+uv run .claude/skills/5w1h-decision/scripts/validate_5w1h.py "content"  # portability-allow: consumer 共通安裝位置
 ```

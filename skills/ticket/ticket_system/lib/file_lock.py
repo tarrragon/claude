@@ -39,6 +39,8 @@ from typing import Iterator, Optional
 
 from filelock import FileLock, Timeout
 
+from ticket_system.lib.paths import get_git_common_dir, get_project_root
+
 
 @contextmanager
 def file_lock(target_path: Path) -> Iterator[None]:
@@ -157,6 +159,41 @@ def _warn_create_lock_degraded(reason: str) -> None:
     )
 
 
+def _resolve_shared_lock_path(tickets_dir: Path) -> Path:
+    """解析 create lock 的鎖檔路徑：優先落在 git-common-dir（跨 worktree 共用）。
+
+    Why：原本鎖檔直接落在 tickets_dir 內，該目錄在 git worktree 環境下為
+    各 worktree 獨立副本（每個 worktree 有自己的 docs/work-logs 副本），
+    導致本鎖對跨 worktree 並行 create 完全不互斥——兩個 worktree 各自對
+    自己的 tickets_dir 取鎖，互不阻擋，get_next_seq 也各自算出同一個
+    「下一個可用序號」（配出同一 ID）。改將鎖檔位置錨定在 git-common-dir
+    （git 對整個 repo 唯一、所有 linked worktree 共用同一份），並以
+    tickets_dir 相對於自身專案根目錄的相對路徑作為鎖檔名稱的一部分，維持
+    原本「同版本目錄下所有 create 互斥」的鎖粒度，同時把互斥範圍擴大到
+    「同 repo 下所有 worktree」。
+
+    降級：非 git 環境 / git-common-dir 無法解析 / tickets_dir 不在專案根
+    目錄下（測試常見情境）時，退回原本 tickets_dir 內部落鎖（僅本地互斥，
+    行為等同本函式新增前）。
+
+    Args:
+        tickets_dir: 目標版本的 tickets 目錄（呼叫端自身 worktree 視角）。
+
+    Returns:
+        Path: 鎖檔絕對路徑（未 mkdir，由呼叫端負責建立父目錄）。
+    """
+    project_root = get_project_root()
+    common_dir = get_git_common_dir(project_root)
+    if common_dir is None:
+        return tickets_dir / CREATE_LOCK_FILENAME
+    try:
+        rel = tickets_dir.resolve().relative_to(project_root.resolve())
+    except ValueError:
+        return tickets_dir / CREATE_LOCK_FILENAME
+    lock_name = str(rel).replace("/", "__").replace("\\", "__")
+    return common_dir / "ticket-create-locks" / f"{lock_name}{CREATE_LOCK_FILENAME}"
+
+
 def _try_acquire_create_lock(tickets_dir: Path) -> Optional[FileLock]:
     """嘗試取得 create 序列化 lock；任何失敗皆降級回傳 None（不丟例外）。
 
@@ -169,7 +206,7 @@ def _try_acquire_create_lock(tickets_dir: Path) -> Optional[FileLock]:
     （filelock 在 Windows 亦提供有效鎖）；僅在 lock file 無法建立 / 取得
     時降級。
     """
-    lock_path = tickets_dir / CREATE_LOCK_FILENAME
+    lock_path = _resolve_shared_lock_path(tickets_dir)
     try:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
@@ -186,21 +223,29 @@ def _try_acquire_create_lock(tickets_dir: Path) -> Optional[FileLock]:
 
 @contextmanager
 def create_id_allocation_lock(tickets_dir: Path) -> Iterator[None]:
-    """目錄級 blocking lock：序列化「ID 分配 → 落盤」臨界區（IMP-072 方案 A）。
+    """跨 worktree 共用的 blocking lock：序列化「ID 分配 → 落盤」臨界區（IMP-072 方案 A）。
 
     Why：ticket create 的 ID 分配（get_next_seq / get_next_child_seq 掃描
     max+1）與檔案寫入（save_ticket）之間無鎖，跨 process / 跨 session 並行
-    create 會同讀相同 max seq、配出同一 ID，後寫者靜默覆寫前者（IMP-072，
-    2026-06-11 單日 2 次撞號）。
+    create 會同讀相同 max seq、配出同一 ID，後寫者的內容與前者的內容分別
+    落在不同 ticket 檔案或不同 worktree 副本裡，需要人工調解才能合併回同一
+    份紀錄（IMP-072，2026-06-11 單日 2 次撞號；後續實測確認 git worktree
+    環境下即使兩個 create 完全序列執行，只要各自 worktree 的本地檔案系統
+    互不可見，仍會算出相同序號——問題不只是「臨界區未序列化」，掃描本身
+    的可見範圍也需要涵蓋所有 sibling worktree，見
+    list_ticket_files_from_sibling_worktrees）。
 
     與 file_lock 的差異：
     - file_lock 是 per-ticket-file lock（保護單一 ticket 的 load-modify-save）；
-      本 lock 是 per-tickets-dir lock（同版本目錄下所有 create 互斥）。
+      本 lock 是 per-tickets-dir lock（同版本目錄下所有 create 互斥），且
+      鎖檔位置錨定在 git-common-dir，同 repo 下所有 worktree 共用同一把鎖
+      （見 _resolve_shared_lock_path）。
     - file_lock 取鎖失敗阻塞等待；本 lock graceful degradation
       （stderr warn + 無鎖續行），理由見 _try_acquire_create_lock docstring。
 
-    Lock file：``{tickets_dir}/.ticket-create.lock``（`*.lock` 已在 .gitignore；
-    crash 後 OS 自動回收 fd 釋鎖，殘留檔不影響 reuse）。
+    Lock file：優先為 ``{git-common-dir}/ticket-create-locks/{相對路徑}.ticket-create.lock``；
+    非 git 環境降級為 ``{tickets_dir}/.ticket-create.lock``（`*.lock` 已在
+    .gitignore；crash 後 OS 自動回收 fd 釋鎖，殘留檔不影響 reuse）。
 
     使用方式::
 

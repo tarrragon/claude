@@ -119,7 +119,7 @@
 
 ## 與 askuserquestion-rules 的適用邊界（流程路由 vs 價值取捨）
 
-> **背景**：`.claude/pm-rules/askuserquestion-rules.md` 規則 6 要求特定情境（ANA 路由 / 重大決策 / Session 關鍵分歧）標記 `(Recommended)`，並依證據強度分級為 `(Recommended by WRAP)` 或 `(My current guess)`。本檔「推薦標記（Recommended）是暗黑模式（dark pattern）」的論述若不加邊界，會讀作對 Recommended 標記的全面禁止，與該規則字面衝突。
+> **背景**：專案提問規則的 Recommended 標記條款 要求特定情境（ANA 路由 / 重大決策 / Session 關鍵分歧）標記 `(Recommended)`，並依證據強度分級為 `(Recommended by WRAP)` 或 `(My current guess)`。本檔「推薦標記（Recommended）是暗黑模式（dark pattern）」的論述若不加邊界，會讀作對 Recommended 標記的全面禁止，與該規則字面衝突。
 
 **判別依據**：選項間的差異是否涉及使用者價值偏好（風格、風險承受度、個人化選擇，無客觀對錯的取捨）。
 
@@ -128,7 +128,7 @@
 | 價值取捨類 | 方案選擇的風險承擔、個人化建議（健康／金錢／法律等）、無客觀對錯的取捨 | 本檔禁令適用：禁止標記，改用「自我暴露範本」以文字揭露傾向 |
 | 流程路由類 | 下一步做什麼（Handoff vs 續做、派發方式、任務排序）等有客觀機制支撐（如 Context 資源保護）、不涉及個人偏好的選擇 | 本檔禁令不適用：可依 askuserquestion-rules 規則 6 標記並分級 |
 
-> **判別表權威**：本表為「流程路由 vs 價值取捨」判別依據的權威版本。`.claude/pm-rules/askuserquestion-rules.md` 規則 6 附則的對稱判別表若與本表出現差異，以本表為準，並回頭同步該表。
+> **判別表權威**：本表為「流程路由 vs 價值取捨」判別依據的權威版本。專案提問規則的 Recommended 標記條款的對稱判別表若與本表出現差異，以本表為準，並回頭同步該表。
 
 **Why**：本檔「Recommended 標記是暗黑模式」的核心論證是「把作者主觀傾向偽裝成客觀最優」，適用對象是使用者需自行判斷、且答案沒有客觀對錯的價值取捨。流程路由類選項的「建議」來自可驗證的系統設計原則（例如 Handoff 優先是為了保護下一個任務的思考品質），不是對使用者價值觀的替代判斷，不構成本檔定義的家長主義（paternalism）。
 
@@ -136,7 +136,7 @@
 
 **Action**：判斷 Recommended 標記是否適用前，先問「這些選項的差異是否涉及使用者的價值偏好？」是 → 套用本檔禁令（不標記，改用「自我暴露範本」揭露傾向）；否（純流程／執行路徑選擇）→ 套用 askuserquestion-rules 規則 6（依證據強度分級標記）。
 
-> 對稱條款見 `.claude/pm-rules/askuserquestion-rules.md` 規則 6 附則「與 anti-paternalism 的適用邊界」。
+> 對稱條款見 專案提問規則的 Recommended 標記條款「與 anti-paternalism 的適用邊界」。
 
 ---
 
@@ -166,7 +166,7 @@
 ## 相關規則
 
 - `references/iterative-research.md` — 多輪迭代如何揭露悖論
-- `.claude/pm-rules/askuserquestion-rules.md` 規則 6 — Recommended 標記格式與證據分級（與本檔「適用邊界」章節對稱）
+- 專案提問規則的 Recommended 條款 — Recommended 標記格式與證據分級（與本檔「適用邊界」章節對稱）
 
 ---
 
@@ -180,7 +180,7 @@
 ---
 
 **Last Updated**: 2026-08-04
-**Version**: 1.2.0 — 「與 askuserquestion-rules 的適用邊界」判別表新增權威標註：本表為判別依據的權威版本，`.claude/pm-rules/askuserquestion-rules.md` 規則 6 附則的對稱判別表以本表為準，避免兩份刻意對稱條款單邊修改漂移
+**Version**: 1.2.0 — 「與 askuserquestion-rules 的適用邊界」判別表新增權威標註：本表為判別依據的權威版本，專案提問規則的 Recommended 標記條款的對稱判別表以本表為準，避免兩份刻意對稱條款單邊修改漂移
 
 **Version**: 1.1.0 — 新增「與 askuserquestion-rules 的適用邊界」章節：判別依據為選項差異是否涉及使用者價值偏好，價值取捨類（本檔禁令適用）與流程路由類（禁令不適用，依 askuserquestion-rules 規則 6 標記）分表對照；對稱條款同步加入 askuserquestion-rules.md
 **Source**: 規則設計過程的悖論揭露與自我暴露實踐

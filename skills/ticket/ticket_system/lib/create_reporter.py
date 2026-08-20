@@ -32,24 +32,38 @@ from ticket_system.lib.spec_reference_checker import detect_unregistered_spec_re
 from ticket_system.lib.parallel_analyzer import ParallelAnalyzer
 from ticket_system.lib.tdd_sequence import suggest_tdd_sequence
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
+from ticket_system.lib.file_conflict import where_files as _where_files
+from ticket_system.lib.file_conflict import write_files as _write_files
 
 
 def extract_where_files(ticket_data: Optional[Dict[str, Any]]) -> List[str]:
-    """從 ticket dict 取 where.files，相容舊字串格式。
+    """從 ticket dict 取 where.files（全部宣告路徑），相容舊字串格式。
 
-    W11-026: 舊 ticket where 為字串（即 layer 描述，無 files 概念），新格式為 dict {layer, files}。
-    型別防護策略：dict 走 .get("files", [])、str / None / 缺失皆回空 list。
+    委派 `lib.file_conflict.where_files`：該共用實作已涵蓋本函式原本的
+    dict/str/None 型別防護，並額外剝離逐檔讀寫意圖標記（`::read` /
+    `::write`），使本函式的呼叫端一併取得該行為。供認知負擔評估等「需要
+    全部宣告路徑」的呼叫端使用；並行分析用途改呼叫
+    `extract_write_files`（並行安全判定改用 write 集合）。
 
     與 _inherit_parent_where_layer 同模式但取 files（list 而非 str）。
     本 helper 可重用於任何包含 where 欄位的 ticket dict（parent / child / new_ticket）。
     """
     if not ticket_data:
         return []
-    where = ticket_data.get("where")
-    if isinstance(where, dict):
-        files = where.get("files")
-        return files if isinstance(files, list) else []
-    return []
+    return _where_files(ticket_data)
+
+
+def extract_write_files(ticket_data: Optional[Dict[str, Any]]) -> List[str]:
+    """從 ticket dict 取 where.files 中意圖為寫入的路徑清單。
+
+    委派 `lib.file_conflict.write_files`：僅回傳意圖為寫入的路徑（type
+    預設或逐檔標記覆寫為 write），read 集合不參與並行衝突判定——供
+    `ParallelAnalyzer` 建票時的並行建議使用，與 `track_conflicts` /
+    `runqueue --groups` 保持同一比對語意（同步切換義務）。
+    """
+    if not ticket_data:
+        return []
+    return _write_files(ticket_data)
 
 
 def print_create_checklist(
@@ -213,7 +227,7 @@ def _print_parallel_analysis_result(
 
         task = {
             "task_id": child_id,
-            "where_files": extract_where_files(child_info),
+            "where_files": extract_write_files(child_info),
             "blockedBy": child_info.get("blockedBy", []),
             "title": child_info.get("title", ""),
         }

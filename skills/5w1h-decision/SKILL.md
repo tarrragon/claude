@@ -1,6 +1,9 @@
 ---
 name: 5w1h-decision
 description: "5W1H Decision Framework Tool. Use for: (1) Systematic decision-making before creating todos, (2) Preventing duplicate implementation, (3) Detecting avoidance behavior, (4) Ensuring agile refactor compliance with executor/dispatcher separation"
+metadata:
+  portable: true
+
 ---
 
 # 5W1H Decision Framework - Systematic Decision Making
@@ -136,8 +139,8 @@ Missing any item = BLOCKED
 | [Complete Template](./references/5w1h-template.md)                                | Full template format and token generation |
 | [Common Violations](./references/common-violations.md)                            | Violation patterns and fixes              |
 | [Integration Details](./references/integration-details.md)                        | Hook/Output Style/Token validation engine |
-| [5W1H Methodology](.claude/methodologies/5w1h-self-awareness-methodology.md)      | Complete methodology                      |
-| [Agile Refactor Methodology](.claude/methodologies/agile-refactor-methodology.md) | Executor/Dispatcher separation rules      |
+| `5w1h-self-awareness-methodology`（各專案自有）      | Complete methodology                      |
+| `agile-refactor-methodology`（各專案自有） | Executor/Dispatcher separation rules      |
 
 ---
 

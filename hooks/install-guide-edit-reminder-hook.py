@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """
 Install Guide Edit Reminder Hook - 安裝指南檔案編輯提醒 (PC-159 Hook 層防護)
@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from lib import setup_hook_logging, read_json_from_stdin, run_hook_safely
+    from lib import setup_hook_logging, read_json_from_stdin, run_hook_safely, get_project_root
 except ImportError as e:
     print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
     sys.exit(0)
@@ -36,9 +36,20 @@ except ImportError as e:
 # === 常數 ===
 THROTTLE_MINUTES = 30
 THROTTLE_SECONDS = THROTTLE_MINUTES * 60
-THROTTLE_FILE = (
-    Path(__file__).parent.parent / "hook-logs" / "install-guide-edit-reminder-throttle.json"
-)
+
+
+def _get_throttle_file() -> Path:
+    """節流檔路徑：由 get_project_root() 動態解析。
+
+    Why：舊實作於 import 時以 Path(__file__).parent.parent 固定路徑，恆指向
+    repo 層級 .claude/hook-logs/，不受 CLAUDE_PROJECT_DIR 覆寫，導致以
+    subprocess 執行 hook 的測試 prime production 節流檔，與 live session 的
+    PostToolUse hook 競態。改由 get_project_root()（worktree 感知 >
+    CLAUDE_PROJECT_DIR > git toplevel > cwd 搜尋）於每次呼叫時動態解析，
+    測試以 CLAUDE_PROJECT_DIR 指向 tmp_path 即可完全隔離（同型修法：
+    language-guard-hook.py _get_sampling_counter_file()）。
+    """
+    return get_project_root() / "hook-logs" / "install-guide-edit-reminder-throttle.json"
 
 # 偵測安裝指南檔案的 regex
 # 命中：
@@ -82,8 +93,9 @@ def is_install_guide_path(file_path: str) -> bool:
 def load_throttle_cache(logger) -> dict:
     """載入節流快取，格式：{ file_path: last_reminded_epoch }。"""
     try:
-        if THROTTLE_FILE.exists():
-            with THROTTLE_FILE.open("r", encoding="utf-8") as fh:
+        throttle_file = _get_throttle_file()
+        if throttle_file.exists():
+            with throttle_file.open("r", encoding="utf-8") as fh:
                 return json.load(fh)
     except (OSError, json.JSONDecodeError) as e:
         logger.warning(f"節流快取讀取失敗，重建空快取：{e}")
@@ -93,8 +105,9 @@ def load_throttle_cache(logger) -> dict:
 def save_throttle_cache(cache: dict, logger) -> None:
     """寫入節流快取。"""
     try:
-        THROTTLE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with THROTTLE_FILE.open("w", encoding="utf-8") as fh:
+        throttle_file = _get_throttle_file()
+        throttle_file.parent.mkdir(parents=True, exist_ok=True)
+        with throttle_file.open("w", encoding="utf-8") as fh:
             json.dump(cache, fh, ensure_ascii=False, indent=2)
     except OSError as e:
         logger.warning(f"節流快取寫入失敗：{e}")

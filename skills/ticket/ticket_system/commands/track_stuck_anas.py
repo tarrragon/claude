@@ -1,8 +1,20 @@
 """
-ticket track stuck-anas 命令（W17-008.15 方案 D 第 1 項）
+ticket track stuck-anas 命令（W17-008.15 方案 D 第 1 項；children 落地路徑擴充）
 
-掃描 ANA type + status=in_progress + 全 spawned_tickets 已 completed 的 ticket，
-協助 PM 識別「衍生子任務全完成但 source ANA 未 complete」的卡住情境。
+掃描 ANA type + status=in_progress + 落地路徑（spawned_tickets 與/或
+children）已全數 terminal 的 ticket，協助 PM 識別「衍生/子任務全完成但
+source ANA 未 complete」的卡住情境。
+
+落地路徑判定語意（用戶裁示）：
+- ANA 的落地物可能寫入 spawned_tickets（create --source-ticket）或
+  children（create --parent），兩者皆須納入偵測，否則走 children 落地
+  的 ANA 永遠不會被列出（曾有子票皆 completed、分析已寫完，仍長時間
+  滯留 in_progress 且未被本指令偵測到的實測案例）。
+- 兩個來源各自可為空；空來源不參與判定。
+- 兩個來源皆空 → 不視為卡住（避免把剛派發、尚無任何落地物的票誤報）。
+- 至少一個來源非空時，所有非空來源都必須「全部存在且皆 terminal」才
+  視為卡住；任一來源尚有非 terminal（或找不到）的票，即不列出——採
+  聯集全 terminal，優先避免誤報而非避免漏報。
 
 設計約束：
 - version-agnostic（可選 --version / --wave 過濾；--all 為相容保留旗標，
@@ -14,16 +26,15 @@ ticket track stuck-anas 命令（W17-008.15 方案 D 第 1 項）
 from __future__ import annotations
 
 import argparse
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
-from ticket_system.constants import (
-    STATUS_IN_PROGRESS,
-    STATUS_COMPLETED,
-    TERMINAL_STATUSES,
-)
+from ticket_system.constants import STATUS_IN_PROGRESS, TERMINAL_STATUSES
 from ticket_system.lib.command_tracking_messages import TrackMessages
 from ticket_system.lib.ticket_loader import list_tickets
 from ticket_system.lib.version import get_active_versions
+
+# ticket 欄位名 -> 落地路徑，順序即輸出欄位標明順序。
+_LANDING_PATH_FIELDS: Tuple[str, ...] = ("spawned_tickets", "children")
 
 
 # ---------------------------------------------------------------------------
@@ -38,36 +49,61 @@ def _is_ana_in_progress(ticket: Dict) -> bool:
     )
 
 
-def _all_spawned_completed(
-    ticket: Dict, ticket_index: Dict[str, Dict]
-) -> bool:
-    """ticket 的所有 spawned_tickets 是否皆 completed（且至少存在 1 個）。"""
-    spawned_ids = ticket.get("spawned_tickets") or []
-    if not spawned_ids:
-        return False
-    for sid in spawned_ids:
-        spawned = ticket_index.get(sid)
-        if not spawned:
-            # spawned ticket 不存在 → 不視為已完成
-            return False
-        if spawned.get("status") not in TERMINAL_STATUSES:
+def _is_source_all_terminal(
+    ids: List[str], ticket_index: Dict[str, Dict]
+) -> Optional[bool]:
+    """單一落地來源（spawned_tickets 或 children）是否全數 terminal。
+
+    來源為空回傳 None（表示此來源未使用，不參與判定）；
+    來源非空但任一 id 查不到或非 terminal，回傳 False（保守，不視為完成）。
+    """
+    if not ids:
+        return None
+    for tid in ids:
+        target = ticket_index.get(tid)
+        if not target or target.get("status") not in TERMINAL_STATUSES:
             return False
     return True
 
 
+def _stuck_sources(
+    ticket: Dict, ticket_index: Dict[str, Dict]
+) -> Tuple[bool, List[str]]:
+    """判定 ticket 是否卡住，並回傳實際參與判定的落地來源清單。
+
+    回傳 (is_stuck, active_sources)。active_sources 為非空來源的欄位名
+    （"spawned_tickets" / "children"），用於輸出標明落地路徑。
+    """
+    active_sources: List[str] = []
+    results: List[bool] = []
+    for field in _LANDING_PATH_FIELDS:
+        ids = ticket.get(field) or []
+        result = _is_source_all_terminal(ids, ticket_index)
+        if result is None:
+            continue
+        active_sources.append(field)
+        results.append(result)
+
+    if not active_sources:
+        # 兩個來源皆空：無任何落地物，不視為卡住（避免誤報剛派發的票）
+        return False, active_sources
+    return all(results), active_sources
+
+
 def _collect_stuck_anas(
     tickets: List[Dict], wave: Optional[int]
-) -> List[Dict]:
-    """過濾卡住的 ANA。"""
+) -> List[Tuple[Dict, List[str]]]:
+    """過濾卡住的 ANA，並附帶各票的落地來源清單。"""
     ticket_index = {t.get("id"): t for t in tickets if t.get("id")}
-    stuck: List[Dict] = []
+    stuck: List[Tuple[Dict, List[str]]] = []
     for ticket in tickets:
         if not _is_ana_in_progress(ticket):
             continue
         if wave is not None and ticket.get("wave") != wave:
             continue
-        if _all_spawned_completed(ticket, ticket_index):
-            stuck.append(ticket)
+        is_stuck, active_sources = _stuck_sources(ticket, ticket_index)
+        if is_stuck:
+            stuck.append((ticket, active_sources))
     return stuck
 
 
@@ -91,10 +127,10 @@ def _gather_tickets(
 # 渲染
 # ---------------------------------------------------------------------------
 
-def _render(stuck: List[Dict], wave: Optional[int]) -> str:
+def _render(stuck: List[Tuple[Dict, List[str]]], wave: Optional[int]) -> str:
     lines: List[str] = []
     lines.append("─" * 60)
-    header = "卡住的 ANA（in_progress 且 spawned 全 completed）"
+    header = "卡住的 ANA（in_progress 且落地路徑全 completed）"
     if wave is not None:
         header += f"  wave={wave}"
     lines.append(header)
@@ -104,15 +140,17 @@ def _render(stuck: List[Dict], wave: Optional[int]) -> str:
         lines.append("（無卡住的 ANA）")
         return "\n".join(lines)
 
-    for idx, ticket in enumerate(stuck, start=1):
+    for idx, (ticket, active_sources) in enumerate(stuck, start=1):
         tid = ticket.get("id", "<unknown>")
         title = ticket.get("title") or ""
-        spawned = ticket.get("spawned_tickets") or []
+        source_summary = "、".join(
+            f"{field}={len(ticket.get(field) or [])}" for field in active_sources
+        )
         lines.append(
             f"  {idx}. {tid}  {title}"
         )
         lines.append(
-            f"      spawned={len(spawned)} 全 completed → 可考慮 "
+            f"      {source_summary} 全 completed → 可考慮 "
             f"ticket track complete {tid}"
         )
     return "\n".join(lines)
@@ -141,7 +179,7 @@ def register_stuck_anas(
         "stuck-anas",
         help=(
             "列出卡住的 ANA："
-            "type=ANA + status=in_progress + spawned 全 completed"
+            "type=ANA + status=in_progress 且落地路徑全 completed"
         ),
     )
     p.add_argument(

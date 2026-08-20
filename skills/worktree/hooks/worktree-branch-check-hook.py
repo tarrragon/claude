@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """
 Worktree 和分支檢查 Hook - PreToolUse Hook
@@ -29,7 +29,7 @@ HOOK_METADATA (JSON):
   "timeout": 10000,
   "description": "git push/merge/cherry-pick 前檢查 worktree、分支和目標分支",
   "dependencies": [],
-  "version": "1.1.0"
+  "version": "1.2.0"
 }
 """
 
@@ -167,7 +167,6 @@ def get_worktree_list() -> List[WorktreeInfo]:
 
             # 初始化分支資訊
             branch = "unknown"
-            is_main = False
 
             # 掃描接下來的行直到找到 branch 或 detached
             j = i + 1
@@ -176,9 +175,6 @@ def get_worktree_list() -> List[WorktreeInfo]:
 
                 if next_line.startswith(BRANCH_PREFIX):
                     branch_full = next_line[len(BRANCH_PREFIX):]
-                    # 如果是主分支，標記為主倉庫
-                    if branch_full in ["refs/heads/main", "refs/heads/master"]:
-                        is_main = True
                     # 提取分支名稱（移除 refs/heads/ 前綴）
                     if branch_full.startswith("refs/heads/"):
                         branch = branch_full[len("refs/heads/"):]
@@ -188,7 +184,6 @@ def get_worktree_list() -> List[WorktreeInfo]:
 
                 elif "detached" in next_line:
                     branch = "detached"
-                    is_main = False
                     break
 
                 elif next_line.startswith(WORKTREE_PREFIX):
@@ -196,6 +191,12 @@ def get_worktree_list() -> List[WorktreeInfo]:
                     break
 
                 j += 1
+
+            # is_main 依 git worktree list --porcelain 的輸出順序判定：git 保證
+            # 主倉庫（primary working tree）永遠是第一筆條目，故 index==0 即為主倉庫。
+            # 不可再依分支名推論——linked worktree 檢出 main/master 分支時，分支名
+            # 推論會誤判該 worktree 為主倉庫，導致其未提交變更被靜默忽略（實測驗證）。
+            is_main = len(worktrees) == 0
 
             worktree = WorktreeInfo(
                 path=path,
@@ -265,8 +266,11 @@ def check_git_state() -> CheckResult:
     # 檢查每個 worktree 的未提交變更（排除主倉庫）
     uncommitted_worktrees = []
     for wt in worktrees:
-        # 排除主倉庫（main/master 分支）
-        if wt.is_main or wt.branch in ["main", "master"]:
+        # 排除主倉庫（primary working tree，由 is_main 依 worktree list 順序判定）。
+        # 不可再併入 wt.branch in ["main", "master"] 分支名判準——is_main 改為順序法
+        # 後，若保留分支名 OR 條件，linked worktree 檢出 main 分支時仍會被此條件
+        # 排除，等同讓修正失效（分支名判準才是漏報的根因，見上方 is_main 賦值註解）。
+        if wt.is_main:
             continue
 
         uncommitted_count = get_uncommitted_count(wt.path)

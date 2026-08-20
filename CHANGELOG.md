@@ -1,3 +1,180 @@
+## [2.37.0] - 2026-08-20
+
+### Summary
+feat: create.py 原生票主題三選一要求（warn-only 過渡期）; feat: create.py 主題自動推導（判準 S1/S2/S3）; feat: 實作 complete 前實驗器材殘留掃描 checker (+164 more)
+
+Changes: 32 feat, 10 refactor, 55 fix, 59 docs, 8 chore, 3 test
+
+- feat: create.py 原生票主題三選一要求（warn-only 過渡期）
+- feat: create.py 主題自動推導（判準 S1/S2/S3）
+- feat: 實作 complete 前實驗器材殘留掃描 checker
+- feat: board 新增依主題分組排列的模式
+- feat: 新增派發前檢查目標票 md 是否已同步至 origin/main
+- feat: 升級 acceptance-gate 對非法 multi_view_status 由警告改為阻擋
+- feat: 新增 ticket track fix-multi-view-status CLI
+- feat: 主題指派改派途徑（reassign_assignment + 歷史查詢）
+- feat: 新增 ticket track topics/topic 主題視圖命令
+- feat: runqueue 新增 --topic 過濾與 list 前綴標記
+- feat: 派發規則新增主題層前置條款
+- feat: 建票時可從主題中央清單選取，新增主題須經顯式旗標
+- feat: 新增既有 pending 票的主題分批回填入口
+- feat: 實作主題中央清單的 append-only 讀寫層
+- feat: where.files 讀寫意圖解析（type 推導 + 逐檔標記覆寫）
+- feat: add ticket track add-exempt-marker CLI
+- feat: 實驗器材登記子命令 CLI 化
+- feat: dispatch-staging-phrase-guard 新增獨立 Category C
+- feat: 移除 append-log 對 Execution Log 的支援
+- feat: hook shebang 與 PEP 723 依賴一致性檢查
+- feat: frontmatter YAML 語法源頭驗證 hook
+- feat: 新增 set-title 子命令，補上 title 欄位的合法更新途徑
+- feat: Bash PreToolUse 廣域 git add 守衛（PC-092 執行期防線）
+- feat: 補強可攜性閘門四條旁路
+- feat: add Layer 2 soft hint for dispatch prompts missing precise-staging phrases
+- feat: push/pull preview 補行數與方向警示
+- feat: Context Bundle 抽取器 status 感知（render 標籤 + acceptance 過濾）
+- feat: 補同步基準，diverged 細分三態方向判定
+- feat: 限縮 related 雙向性檢查為同批次（7 天窗口）+ WARNING 行數上限
+- feat: 擴充 error-pattern index hook 檢查 related 雙向性
+- feat: create 對 in_progress source ticket 發出警告並收斂上行對稱條款
+- feat: skill-sync push 新增可攜性閘門
+- refactor: 欄位驗證抽出至 lib/field_validators.py
+- refactor: ID 與序號配置抽出至 lib/ticket_id_allocator.py
+- refactor: acceptance 解析抽出至 lib/acceptance_parser.py
+- refactor: 主題推導抽出為 lib/topic_inference.py
+- refactor: 移除 track_board.py 生產不可達的死碼
+- refactor: 收斂六個繞過 where_files 的獨立讀取實作
+- refactor: 抽出 _consume_global_options 降低認知負擔
+- refactor: 三個 Bash git 守衛的命令解析抽為共用 lib
+- refactor: 退役經判定為 parser 缺陷補償的字串型別分支
+- refactor: parse_ticket_frontmatter 改用 yaml.safe_load
+- fix: worktree-branch-check is_main 改為 worktree list 順序判定
+- fix: stuck-anas 納入 children 落地路徑
+- fix: close remaining fail-open gaps in merged worktree audit hook
+- fix: 修復 get_current_branch 判定失敗時當前分支排除被跳過的 fail-open
+- fix: list_worktree_branches 判定失敗時不再誤判孤兒分支
+- fix: topic-backfill-assign 預設拒絕未知主題名防呆
+- fix: 補上主題回填模組 CLI 入口
+- fix: runqueue 空清單訊息依實際排空階段歸因
+- fix: create 選定主題後接線寫入 ticket_id -> topic 映射
+- fix: --new-topic 延後至建票成功後才寫入 registry
+- fix: 修復 append_assignment 對無尾換行 log 的條目黏合
+- fix: 修復 append_topic 對無尾換行清單檔的條目黏合
+- fix: 修正 改造後未同步的文件與訊息（）
+- fix: batch-claim/batch-complete 補呼叫 registry lease
+- fix: 孤兒分支稽核區分判定失敗與 ahead=0，避免 fail-open 誤標可刪除
+- fix: 擴充 session-start Section 3 孤兒分支掃描至人工命名分支
+- fix: 降級主 repo 髒污判定由 DENY 為 WARN
+- fix: workspace-wipe-guard DENY 條件擴充涵蓋主 repo 未提交變更
+- fix: 修正絕對路徑 main_repo 分類在 worktree 環境的截斷誤判
+- fix: PC-093 DENY 訊息補強 code fence 豁免路徑說明
+- fix: 配號鎖為目錄級致跨 worktree 並行 create 撞號
+- fix: 修復 M1 pattern 收逗號導致含逗號的真延後話術漏攔
+- fix: 修正被阻擋的派發在 dispatch-active.json 留下幽靈記錄
+- fix: 修正 PC-093 M1 規則將已完成決定的過去式敘述誤判為延後語彙
+- fix: 修正 extract_ticket_id_from_command 誤判 payload 內文為真實呼叫
+- fix: 擴充 bare-commit-guard 加入不相交放行條件
+- fix: 修正 phase4-decision-enforcement 誤掃已 resolved spawn request 欄位
+- fix: 修正 bare-commit-guard 對 payload 文字的字面誤攔
+- fix: 修正 bare-commit-guard 指引訊息推人走向丟棄 index 的 pathspec 語法
+- fix: dispatch-staging-phrase-guard 範本 A 對齊規則七
+- fix: set-acceptance 多值旗標重複形式靜默丟棄
+- fix: 修復 test_lease 的時鐘基準失配
+- fix: 移除權限修復回報的 stale「未經驗證」宣稱
+- fix: 回退誤入前次 commit 的 docstring 變更
+- fix: 修正 children/spawned_tickets 純量寫法被靜默解析為空清單
+- fix: phase_complete.py 改用 ticket CLI 寫入驗證結果，移除自維護解析
+- fix: _write_validation_log 補 exact-match-first，避免寫入父子票誤配
+- fix: phase_complete.py 路徑修正，Phase Contract 驗證正式上線
+- fix: 重寫 contracts.yaml 對應現行單一 ticket.md 慣例，補 phase 4
+- fix: 移除 DENY 訊息「可直接複製」的誤導性承諾
+- fix: 修正廣域 git add 守衛判準、補三類漏放（多視角審查）
+- fix: 7 個 .py 缺 .claude/lib/ 時改優雅降級（不再崩潰）
+- fix: restrict phrase negation window to preceding context only
+- fix: 補齊 79 個 uv-run 登記 hook 的 PEP 723 pyyaml 依賴宣告
+- fix: address 14 multi-view review findings on staging phrase guard
+- fix: 補五個 portable skill 的 .py 消費端引用存量
+- fix: 撤回誤判，PC-BAL-033 根因 1 改判版本相依
+- fix: 缺口二判準修正——存在於 canonical 不等於已跨 consumer
+- fix: stop Category A phrase match crediting forbidden wording as compliance
+- fix: 消除 non-uv hook 對 ambient pyyaml 的隱性依賴
+- fix: wrap-decision 與 tdd 分層，blog 斷鏈歸零
+- fix: 修復 .claude/hooks 測試套件內違反 D1 的絕對計時斷言
+- fix: 四個 skill 的消費端引用改可攜表述，blog 斷鏈 59 → 35
+- fix: 收斂 install-guide-edit-reminder-hook 硬編 hook-logs 路徑
+- fix: broken-link-check 格式示範表補齊並調整豁免 marker 位置
+- docs: architecture.md 模組清單校準完成
+- docs: architecture.md 補本次重構新增的 4 個 lib 模組
+- docs: TEST-BAL-009 同秒 pyc mtime 保留變異位元碼
+- docs: TEST-BAL-008 fixture 資料形狀與真實分佈不同
+- docs: SKILL.md 同步 create 主題自動推導行為
+- docs: 依 Layer 2 審查修正 TEST-BAL-007 與 PC-BAL-004 第五例
+- docs: 補缺陷類未驗證前提形態與第五例
+- docs: 新增 TEST-BAL-007 繞道旗標綠燈誤歸因為環境問題
+- docs: track_board.py 可達性盤點結論與 TEST-008
+- docs: 同步 board --group-by 至 SKILL.md 與 track-command.md
+- docs: 消解版本記錄兩筆並存的 1.7.0
+- docs: 補防護類 hook 必含項改名的兩處散文漏網
+- docs: 收尾 PC-BAL-033 機制更正的下游同步
+- docs: 定案 PC-BAL-033 主文結構與檔名 slug 兩項待決問題
+- docs: PC-154 補順序陷阱與靜默失效形態
+- docs: 新增 PC-BAL-049 全稱結論類驗收措辭失誤
+- docs: 主題層條款補回 handoff --next 的具體用法
+- docs: 記錄顯式測試路徑覆蓋 testpaths 的收集母體縮小
+- docs: 新增 patch 覆蓋不全的變體
+- docs: 追加跨專案復發實證與同批對照組
+- docs: 同步 PC-019 髒污措辭為 WARN（ 後）
+- docs: 改寫回測重放測試區塊註解使其與現行 fixture 一致
+- docs: 補記 --only/-o 誤判邊界延伸自既有 -a 設計限制
+- docs: 修正 neurodivergent-output skill 的自我指涉敘事與計數錯誤
+- docs: 新增「免費的變異：修復前的紅綠分佈」
+- docs: 補強 git commit pathspec 語法丟棄 index 的並行風險條文
+- docs: 新增 TEST-BAL-005 合法值收窄致測試巧合綠燈
+- docs: 同步 PC-BAL-033 機制收窄至三處真命中下游
+- docs: 改寫 extract_where_files docstring 的失真 rationale
+- docs: 更正兩支 hook 註解層已失效的快照模型 rationale
+- docs: 改寫五份測試對 str 分支存在理由的失真敘述
+- docs: 更正 PC-BAL-033 可執行位檢查條目的攔截點描述
+- docs: 補強 metadata.portable 的語意邊界
+- docs: 記錄守衛禁止範圍大於受控介面提供範圍的錯誤模式
+- docs: 記錄上游結論修訂未回溯衍生票扇出面的錯誤模式
+- docs: 依兩份 Layer 2 審查報告改寫 PC-BAL-045
+- docs: 實測否證 hook session 快照模型，PC-BAL-033 收窄至缺可執行位
+- docs: 新增 PC-BAL-045 產出未落地被記載為 process 已結束
+- docs: DOC-V1-001 補被命名端同型失效實例
+- docs: 新增 PC-BAL-044 連號推定衍生票 ID
+- docs: Layer 2 修正仲裁行為條文（可執行 Action+資訊優先序+去新造詞）
+- docs: 新增 decision-trigger-binding 規則 2.5 條件式操作規範
+- docs: 落地仲裁行為條文（agent停手上報+PM裁決回票面）
+- docs: 依三視角審查改寫實驗器材規範
+- docs: 精準 staging 制式句收斂為單一權威版
+- docs: 新增 ARCH-BAL-018 快照正確性隨來源終態反轉
+- docs: 依 zhtw 檢查修正用語與長句
+- docs: 新增實驗器材自我標示與存活期治理規範
+- docs: 收斂 agent-dispatch-template.md 為單一權威骨架
+- docs: 修正外移閾值的性質判定並建三張 follow-up
+- docs: 記錄 DOC-BAL-003 表格行尾豁免標記被下游工具刪除
+- docs: 補 PC-BAL-038 對 TEST-BAL-003 的回指（該檔已解封）
+- docs: 定位背景 agent 文字輸出未送達的區辨因子
+- docs: 建立 TEST-BAL-004 error-pattern
+- docs: 修正三則 error-pattern 的主張句位置與 related 掛錯
+- docs: 協調區外移閾值自票面移入條文
+- docs: 補 PC-BAL-038 觀測證據引用到 named-agent 代價段
+- docs: 重寫 PC-BAL-038 根因為載體送達失效，併回 agent-dispatch-template
+- docs: 刪除層級升級註記並移除其外溢引用
+- chore: 修復 list_worktree_branches fail-open，記錄 IMP-BAL-010
+- chore: 文件與訊息失同步修正完成，並補多輪重跑的已知缺口警語
+- chore: Phase 4 審查落地與 判定降格
+- chore: 安全與歸屬拆層，撤回跨群連邊移除，衍生票重規劃
+- chore: 多視角審查更正 — E3 為量測假象，開修訂 ANA 並擋住五張衍生票
+- chore: PC-MON-001 補記 + 關閉重複票 （duplicate of ）
+- chore: 補齊 hook 入口點 PEP 723 pyyaml 依賴宣告
+- chore: 完成收尾——canonical 推送、issue #78 關閉、VERSION 回寫
+- test: 補齊四項前提回歸測試（無尾換行/有尾換行/空檔/缺檔）
+- test: 判定 B1-B16 補償邏輯存廢並固定 str 分支行為
+- test: 補齊 utf8-integrity-check-hook 測試覆蓋
+
+---
+
 ## [2.36.0] - 2026-08-18
 
 ### Summary

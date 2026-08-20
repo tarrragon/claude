@@ -246,4 +246,4 @@ Phase 3b 完成後，必須產出：
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 1.1.0 — Phase 3b 新增「接收 Phase 3a 策略（交接條件）」語言無關交接檢查清單，定稿 3b 通用骨架（Red-Green-Refactor + 交接條件 + 品質基準），供各語言 Phase 3b 代理人路由（1.0.0-W8-009.3.5）
+**Version**: 1.1.0 — Phase 3b 新增「接收 Phase 3a 策略（交接條件）」語言無關交接檢查清單，定稿 3b 通用骨架（Red-Green-Refactor + 交接條件 + 品質基準），供各語言 Phase 3b 代理人路由（.5）

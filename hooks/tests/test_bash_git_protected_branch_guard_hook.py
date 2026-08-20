@@ -47,7 +47,7 @@ _spec = importlib.util.spec_from_file_location(
 hook_module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(hook_module)
 
-_contains_git_word = hook_module._contains_git_word
+_contains_git_word = hook_module.contains_git_word
 _find_write_invocations = hook_module._find_write_invocations
 _resolve_repo_root = hook_module._resolve_repo_root
 build_bash_cross_repo_deny_message = hook_module.build_bash_cross_repo_deny_message
@@ -104,10 +104,10 @@ class TestFindWriteInvocations:
         ]
         assert invocations[0]["scope_content"] is None
 
-    def test_dash_c_form_captures_rest(self):
-        """0.2.1-W3-154：rest 用於後續推導 pathspec/flag（-a/-am/--all）。"""
+    def test_dash_c_form_captures_args(self):
+        """0.2.1-W3-154：args 用於後續推導 pathspec/flag（-a/-am/--all）。"""
         invocations = _find_write_invocations("git -C /repo commit -a")
-        assert "-a" in invocations[0]["rest"]
+        assert "-a" in invocations[0]["args"]
 
     def test_subshell_cd_form(self):
         invocations = _find_write_invocations('(cd /Users/x/repo && git commit -m "msg")')
@@ -660,6 +660,79 @@ class TestUnenumerableAddFailClosed:
         assert exit_code == 0
         assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
 
+    def test_add_dot_slash_denied(self, monkeypatch, capsys, tmp_path):
+        """0.2.1-W3-708 行為變化：統一 is_literal_pathspec_token 後，`./`
+        亦視為廣域（原判準只檢查字面 `.`，未涵蓋 `./`，會被誤放行）。"""
+        host = tmp_path / "host"
+        host.mkdir()
+        _init_git_repo(host)
+
+        external = tmp_path / "external"
+        external.mkdir()
+        _init_git_repo(external, branch="main")
+
+        monkeypatch.setattr(hook_module, "get_project_root", lambda: host)
+
+        command = f'git -C {external} add ./ && git -C {external} commit -m "msg"'
+        exit_code, out = _run_main(
+            monkeypatch, capsys, {"tool_name": "Bash", "tool_input": {"command": command}}
+        )
+        assert exit_code == 0
+        assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_add_trailing_slash_directory_denied(self, monkeypatch, capsys, tmp_path):
+        """0.2.1-W3-708 行為變化：尾斜線目錄（如 `src/`）亦視為廣域。"""
+        host = tmp_path / "host"
+        host.mkdir()
+        _init_git_repo(host)
+
+        external = tmp_path / "external"
+        external.mkdir()
+        _init_git_repo(external, branch="main")
+
+        monkeypatch.setattr(hook_module, "get_project_root", lambda: host)
+
+        command = f'git -C {external} add src/ && git -C {external} commit -m "msg"'
+        exit_code, out = _run_main(
+            monkeypatch, capsys, {"tool_name": "Bash", "tool_input": {"command": command}}
+        )
+        assert exit_code == 0
+        assert json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+# ============================================================================
+# 0.2.1-W3-708：無法安全 tokenize 時的明確失敗語意（fail-open，與既有
+# 「cwd 隱含形式無法解析目標 repo」同一方向）
+# ============================================================================
+
+
+class TestUnparsableCommandFailOpen:
+    def test_unparsable_command_with_c_target_allowed(self, monkeypatch, capsys, tmp_path):
+        host = tmp_path / "host"
+        host.mkdir()
+        _init_git_repo(host)
+        monkeypatch.setattr(hook_module, "get_project_root", lambda: host)
+
+        command = 'git -C /some/repo commit -m "unterminated'
+        exit_code, out = _run_main(
+            monkeypatch, capsys, {"tool_name": "Bash", "tool_input": {"command": command}}
+        )
+        assert exit_code == 0
+        assert out.strip() == ""
+
+    def test_unparsable_subshell_content_allowed(self, monkeypatch, capsys, tmp_path):
+        host = tmp_path / "host"
+        host.mkdir()
+        _init_git_repo(host)
+        monkeypatch.setattr(hook_module, "get_project_root", lambda: host)
+
+        command = '(cd /some/repo && git commit -m "unterminated)'
+        exit_code, out = _run_main(
+            monkeypatch, capsys, {"tool_name": "Bash", "tool_input": {"command": command}}
+        )
+        assert exit_code == 0
+        assert out.strip() == ""
+
 
 class TestCommitExplicitPathspec:
     def test_commit_with_non_exempt_pathspec_denied(self, monkeypatch, capsys, tmp_path):
@@ -736,56 +809,77 @@ _ADD_UNENUMERABLE_FLAGS = hook_module._ADD_UNENUMERABLE_FLAGS
 
 
 class TestParseLiteralPaths:
+    """0.2.1-W3-708：改吃已 tokenize 過的 token 清單，不再自行 shlex.split。"""
+
     def test_simple_paths(self):
-        assert _parse_literal_paths(" a.py b.py", _ADD_UNENUMERABLE_FLAGS) == ["a.py", "b.py"]
+        assert _parse_literal_paths(["a.py", "b.py"], _ADD_UNENUMERABLE_FLAGS) == ["a.py", "b.py"]
 
     def test_dash_capital_a_unenumerable(self):
-        assert _parse_literal_paths(" -A", _ADD_UNENUMERABLE_FLAGS) is None
+        assert _parse_literal_paths(["-A"], _ADD_UNENUMERABLE_FLAGS) is None
 
     def test_dot_unenumerable(self):
-        assert _parse_literal_paths(" .", _ADD_UNENUMERABLE_FLAGS) is None
+        assert _parse_literal_paths(["."], _ADD_UNENUMERABLE_FLAGS) is None
+
+    def test_dot_slash_unenumerable(self):
+        """統一 SSOT 後新增涵蓋：`./` 亦視為廣域（原判準只檢查字面 `.`）。"""
+        assert _parse_literal_paths(["./"], _ADD_UNENUMERABLE_FLAGS) is None
+
+    def test_colon_slash_unenumerable(self):
+        """統一 SSOT 後新增涵蓋：`:/`（worktree 根目錄語意）亦視為廣域。"""
+        assert _parse_literal_paths([":/"], _ADD_UNENUMERABLE_FLAGS) is None
+
+    def test_trailing_slash_directory_unenumerable(self):
+        """統一 SSOT 後新增涵蓋：尾斜線目錄（如 `src/`）亦視為廣域。"""
+        assert _parse_literal_paths(["src/"], _ADD_UNENUMERABLE_FLAGS) is None
 
     def test_wildcard_unenumerable(self):
-        assert _parse_literal_paths(" *.py", _ADD_UNENUMERABLE_FLAGS) is None
-
-    def test_unclosed_quote_unenumerable(self):
-        assert _parse_literal_paths(' "unclosed', _ADD_UNENUMERABLE_FLAGS) is None
+        assert _parse_literal_paths(["*.py"], _ADD_UNENUMERABLE_FLAGS) is None
 
     def test_flag_then_path(self):
-        assert _parse_literal_paths(" -v a.py", _ADD_UNENUMERABLE_FLAGS) == ["a.py"]
+        assert _parse_literal_paths(["-v", "a.py"], _ADD_UNENUMERABLE_FLAGS) == ["a.py"]
 
 
 class TestParseCommitPathspec:
+    """0.2.1-W3-708：改吃已 tokenize 過的 token 清單，不再自行 shlex.split。"""
+
     def test_message_only_no_pathspec(self):
-        has_all, paths = _parse_commit_pathspec(' -m "msg"')
+        has_all, paths = _parse_commit_pathspec(["-m", "msg"])
         assert has_all is False
         assert paths == []
 
     def test_dash_a_flag(self):
-        has_all, paths = _parse_commit_pathspec(" -a -m msg")
+        has_all, paths = _parse_commit_pathspec(["-a", "-m", "msg"])
         assert has_all is True
         assert paths is None
 
     def test_dash_am_combined_flag(self):
-        has_all, paths = _parse_commit_pathspec(' -am "msg"')
+        has_all, paths = _parse_commit_pathspec(["-am", "msg"])
         assert has_all is True
         assert paths is None
 
     def test_dash_dash_all_flag(self):
-        has_all, paths = _parse_commit_pathspec(' --all -m "msg"')
+        has_all, paths = _parse_commit_pathspec(["--all", "-m", "msg"])
         assert has_all is True
         assert paths is None
 
     def test_explicit_pathspec(self):
-        has_all, paths = _parse_commit_pathspec(' -m "msg" src/x.py')
+        has_all, paths = _parse_commit_pathspec(["-m", "msg", "src/x.py"])
         assert has_all is False
         assert paths == ["src/x.py"]
 
     def test_amend_not_treated_as_all(self):
         """--amend 不含 'a' 短 flag 語意，不應誤判為 stage-all。"""
-        has_all, paths = _parse_commit_pathspec(" --amend --no-edit")
+        has_all, paths = _parse_commit_pathspec(["--amend", "--no-edit"])
         assert has_all is False
         assert paths == []
+
+    def test_dot_pathspec_now_unenumerable(self):
+        """統一 SSOT 後行為變化：原設計把 `.` 當成單一字面路徑加入 paths
+        （未正確反映其『目錄樹』語意），統一後正確判定為無法列舉、
+        fail-closed（見 ticket Solution 行為變化說明）。"""
+        has_all, paths = _parse_commit_pathspec(["-m", "msg", "."])
+        assert has_all is False
+        assert paths is None
 
 
 # ============================================================================
@@ -931,7 +1025,7 @@ class TestRedirectionTokenFiltering:
         assert "2>" not in reason
 
     def test_redirection_token_unit(self):
-        _is_shell_redirection_token = hook_module._is_shell_redirection_token
+        _is_shell_redirection_token = hook_module.is_shell_redirection_token
         assert _is_shell_redirection_token("2>&1") is True
         assert _is_shell_redirection_token(">") is True
         assert _is_shell_redirection_token(">>") is True

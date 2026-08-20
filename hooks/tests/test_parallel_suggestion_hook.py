@@ -54,10 +54,9 @@ def test_extract_ticket_info_includes_wave(tmp_path, logger):
 
     assert info is not None
     assert "wave" in info, "extract_ticket_info() 回傳缺少 wave 欄位"
-    # 註：本專案自製 YAML-lite 解析器（hook_ticket._parse_yaml_lines）不做數值型別
-    # 推斷，純量一律以字串保留，故 wave 欄位值為 "3" 而非 int 3（與
-    # commit-handoff-hook.py detect_wave_completion() 的既有行為一致）。
-    assert info["wave"] == "3"
+    # 註：parse_ticket_frontmatter() 已改用 yaml.safe_load（0.2.1-W3-665.2），
+    # 純量依 YAML 規範原生推斷型別，故 wave 欄位值為 int 3 而非字串 "3"。
+    assert info["wave"] == 3
 
 
 def test_extract_ticket_info_existing_fields_unaffected(tmp_path, logger):

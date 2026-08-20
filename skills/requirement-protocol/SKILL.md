@@ -3,6 +3,7 @@ name: requirement-protocol
 description: "從需求確認到實作的對話協議：模糊指令澄清（含篩選類）、可決定 vs 該確認的邊界、失敗 2 次的轉折、覆寫成本告知、revert/checkpoint 處理、漸進驗證、工具切換時機。Triggers: 收到模糊指令, 自決還是確認, 反覆失敗, 換思路, 覆寫成本, 先還原, 先重來, placeholder, 最小範圍, 推理失敗, playwright 切換, 開發前澄清, 需求確認, 排除障礙, 逼近答案, 依 X 篩選, 只看 X, filter 範圍, 呈現決策, 開放問, ABCDE 你選哪個, 反省題, retrospective, 下一步往哪走, 五維度, 需要我繼續嗎, 要做嗎, OK 嗎, yes/no, 二選, 確認嗎."
 license: MIT
 metadata:
+  portable: true
   version: 0.8.0
   category: collaboration-protocol
 ---
@@ -93,7 +94,7 @@ Selector / MutationObserver root / JS 操作邊界：**從最小開始、有證�
 
 每份 reference 自包含：以該情境為核心、把六大原則翻譯成可直接套用的協議步驟與模板。閱讀任一 reference 不需要回來看其他 reference。
 
-**與 `wrap-decision` 的邊界**：本 skill 處理「使用者**指令**是否明確可執行」（模糊指令澄清）。若卡點不是指令模糊，而是「決策諮詢的當事人條件不足」或「要 premortem 的計畫輪廓不清」，那屬 `wrap-decision` 的資料充足度閘門（Step 0）與 premortem context 閘門——先讀 `.claude/skills/wrap-decision/SKILL.md`。三者互為前置、不重複問同一組問題（分工對照表見該檔 Step 0「與 requirement-protocol 的分工邊界」）。
+**與 `wrap-decision` 的邊界**：本 skill 處理「使用者**指令**是否明確可執行」（模糊指令澄清）。若卡點不是指令模糊，而是「決策諮詢的當事人條件不足」或「要 premortem 的計畫輪廓不清」，那屬 `wrap-decision` 的資料充足度閘門（Step 0）與 premortem context 閘門——先讀 `../wrap-decision/SKILL.md`。三者互為前置、不重複問同一組問題（分工對照表見該檔 Step 0「與 requirement-protocol 的分工邊界」）。
 
 ---
 

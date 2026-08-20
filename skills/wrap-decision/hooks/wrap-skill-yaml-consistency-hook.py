@@ -8,8 +8,8 @@ WRAP SKILL↔YAML 一致性檢查 Hook — wrap-skill-yaml-consistency-hook.py
 
 觸發時機：
   - PreToolUse(Edit/Write) on:
-      .claude/skills/wrap-decision/SKILL.md
-      .claude/config/wrap-triggers.yaml
+      .claude/skills/wrap-decision/SKILL.md（portability-allow: 本 skill 自我引用，consumer 共通安裝位置）
+      .claude/config/wrap-triggers.yaml（portability-allow: 此 skill 對消費端環境的硬性依賴——AC4 缺映射檔會 exit 2 阻擋，沿用時需提供對應設定檔）
 
 檢查項目（依 W10-055.1 ANA Solution 規格）：
   AC1 Signal orphan：每個 YAML signals[].id 在映射檔 signal_to_skill_triggers 有對應 SKILL 情境（警告）
@@ -22,8 +22,8 @@ WRAP SKILL↔YAML 一致性檢查 Hook — wrap-skill-yaml-consistency-hook.py
   - 警告：exit 0 + stderr（與 wrap-decision-tripwire-hook 的 advisory 模式一致）
   - 阻擋：exit 2（僅限映射檔缺失或無法解析；其他檢查無前提）
 
-唯一觸發來源：.claude/config/wrap-triggers.yaml + 映射檔（W10-052 約束）
-觀測性：依 .claude/rules/core/observability-rules.md 規則 1-3（雙通道 stderr + logger）
+唯一觸發來源：.claude/config/wrap-triggers.yaml + 映射檔（W10-052 約束，portability-allow: 同上硬性依賴）
+觀測性：依 .claude/rules/core/observability-rules.md 規則 1-3（雙通道 stderr + logger）（portability-allow: 架構性橋接至框架 auto-load 規則）
 """
 
 import json
@@ -38,13 +38,20 @@ import yaml
 _FRAMEWORK_HOOKS = str(Path(__file__).resolve().parents[3] / "hooks")
 sys.path.insert(0, _FRAMEWORK_HOOKS)
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # .claude/ — for `from lib import ...`
-from lib import (  # noqa: E402
-    setup_hook_logging,
-    run_hook_safely,
-    read_json_from_stdin,
-    get_project_root,
-    extract_tool_input,
-)
+try:
+    from lib import (  # noqa: E402
+        setup_hook_logging,
+        run_hook_safely,
+        read_json_from_stdin,
+        get_project_root,
+        extract_tool_input,
+    )
+    _LIB_AVAILABLE = True
+except ImportError:
+    # 消費端未提供 .claude/lib/ 時優雅降級（portability-allow: 選用性依賴，
+    # 缺件優雅降級，非可攜性違規）：main() 開頭直接印出 [WARNING] 並
+    # return 0（見 main() 開頭的降級分支）。
+    _LIB_AVAILABLE = False
 
 
 # ============================================================================
@@ -264,6 +271,12 @@ def check_version_no_regress(project_root: Path, logger) -> List[str]:
 # ============================================================================
 
 def main() -> int:
+    if not _LIB_AVAILABLE:
+        sys.stderr.write(
+            f"{STDERR_PREFIX} 未執行：找不到 .claude/lib/，此為消費端需自行"
+            "提供的框架共用模組（一致性檢查功能停用，不影響其他操作）。\n"
+        )
+        return 0
     logger = setup_hook_logging("wrap-skill-yaml-consistency")
 
     input_data = read_json_from_stdin(logger)
@@ -318,4 +331,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(run_hook_safely(main, "wrap-skill-yaml-consistency"))
+    if _LIB_AVAILABLE:
+        sys.exit(run_hook_safely(main, "wrap-skill-yaml-consistency"))
+    else:
+        sys.exit(main())

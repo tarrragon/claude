@@ -183,6 +183,7 @@ class PhaseContractValidator:
             "2": "phase2_output",
             "3a": "phase3a_output",
             "3b": "phase3b_output",
+            "4": "phase4_output",
         }
         return mapping.get(phase, "")
 
@@ -202,6 +203,15 @@ class PhaseContractValidator:
 
         # 處理 {ticket-id} 佔位符
         prefix = path_pattern.replace("{ticket-id}", ticket_id)
+
+        # 精確檔名優先：ticket_id 可能有點號後綴的子票（如 X 與 X.1、X.2 為
+        # 三張不同 ticket，各自獨立檔案），下方的前綴匹配對 "X.md" 這類
+        # pattern 會連子票的 "X.1.md" 一併配上（"X.1" 以 "X" 開頭）。單一
+        # ticket.md 版 contract 全面採用 "{ticket-id}.md" 作 path_pattern，
+        # 若不做這層 exact-match，每次驗證都可能撈錯到子票檔案。
+        exact_path = os.path.join(ticket_dir, prefix)
+        if os.path.isfile(exact_path):
+            return exact_path
 
         # 移除 .md 或 .dart 後綴，以前綴匹配
         base = re.sub(r"\.(md|dart)$", "", prefix)

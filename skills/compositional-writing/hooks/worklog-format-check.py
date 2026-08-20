@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """
 工作日誌格式檢查 Hook
@@ -10,7 +10,7 @@ PostToolUse Hook: 檢測工作日誌中表格內的問題 emoji 模式
 觸發時機: Edit/Write 操作 docs/work-logs/ 目錄下的 markdown 檔案
 行為: 警告（非阻擋），輸出問題位置到 stderr
 
-參考規範: .claude/skills/compositional-writing/references/writing-documents.md
+參考規範: .claude/skills/compositional-writing/references/writing-documents.md（portability-allow: 本 skill 自我引用，consumer 共通安裝位置）
 """
 
 import json
@@ -21,8 +21,15 @@ from pathlib import Path
 _FRAMEWORK_HOOKS = str(Path(__file__).resolve().parents[3] / "hooks")
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, _FRAMEWORK_HOOKS)
-from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output
-from lib.hook_messages import ValidationMessages, format_message
+try:
+    from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_hook_output
+    from lib.hook_messages import ValidationMessages, format_message
+    _LIB_AVAILABLE = True
+except ImportError:
+    # 消費端未提供 .claude/lib/ 時優雅降級（portability-allow: 選用性依賴，
+    # 缺件優雅降級，非可攜性違規）：main() 開頭直接印出 [WARNING] 並
+    # return 0（見 main() 開頭的降級分支），不讓整個 Hook 在載入階段崩潰。
+    _LIB_AVAILABLE = False
 
 
 # 問題 emoji 模式清單（使用 Unicode 碼點避免直接使用 emoji）
@@ -141,8 +148,15 @@ def should_sample_run(logger) -> bool:
 
 
 def main():
-    logger = setup_hook_logging("worklog-format-check")
     """主函式"""
+    if not _LIB_AVAILABLE:
+        sys.stderr.write(
+            "[WARNING] worklog-format-check 未執行：找不到 .claude/lib/，此為"
+            "消費端需自行提供的框架共用模組（工作日誌格式檢查功能停用，不影響"
+            "其他操作）。\n"
+        )
+        return 0
+    logger = setup_hook_logging("worklog-format-check")
     # 讀取 stdin 獲取 Hook 輸入
     try:
         hook_input = read_json_from_stdin(logger)
@@ -186,4 +200,7 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.exit(run_hook_safely(main, "worklog-format-check"))
+    if _LIB_AVAILABLE:
+        sys.exit(run_hook_safely(main, "worklog-format-check"))
+    else:
+        sys.exit(main())

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """spec validate 的 API surface 完整性檢核：FR 段落提及 API 行為卻缺 endpoint 路徑定義時列出提醒。
 
-背景：0.4.1-W1-001 檢討發現 SPEC-014 FR-04 曾寫「analytics API 回 501」卻無 endpoint
-路徑定義，缺口到派發實作才暴露（F5）。本檢核作為 /spec validate Layer 1 的擴充規則，
+背景：一次規格覆核發現某 FR 曾寫「analytics API 回 501」卻無 endpoint
+路徑定義，缺口到派發實作才暴露。本檢核作為 /spec validate Layer 1 的擴充規則，
 在規格撰寫階段機械性掃描此類缺口。
 """
 

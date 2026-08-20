@@ -2,21 +2,29 @@
 Hook Protection Acceptance Checker - 防護類 hook ticket 的必含 acceptance +
 產生路徑盤點表正本檢查
 
-背景：一個 session 中途新註冊的 guard hook，至該 session 重啟前完全不被
-runtime 載入，期間提供零防護；撰寫者與 PM 皆會因單元測試全綠、settings.json
-已註冊、實機 dogfooding 通過三項訊號而誤信防護已生效。此為結構性風險而非
-個案，且規則文字層級的預防措施（PC-BAL-033 早已列出對應要求）已證明無法
-單靠文件落實——用戶因此裁示強制層須為 acceptance 條目加 hook 硬擋。
+背景：一個新註冊的 guard hook 可能已註冊卻零效力且日誌零筆，而撰寫者與 PM
+皆會因單元測試全綠、settings.json 已註冊、實機 dogfooding 通過三項訊號而誤信
+防護已生效。此為結構性風險而非個案，且規則文字層級的預防措施（PC-BAL-033
+早已列出對應要求）已證明無法單靠文件落實——用戶因此裁示強制層須為 acceptance
+條目加 hook 硬擋。
+
+零效力有兩條各自成立的成因，2026-08-18 實測後範圍已收窄（PC-BAL-033 v2.0.0
+「機制更正」節）：檔案缺可執行位時 runtime 無從啟動它，此成因與 runtime 版本
+無關、恆成立，一次 `chmod +x` 即恢復且不需重啟 session；session 啟動時一次
+快照 hook 命令集則為**版本相依**——2026-08-13 觀測到的 runtime 上成立，
+2026-08-18 觀測到的上不成立。故本 checker 要求撰寫者驗的是「本 session 實地
+觸發是否落檔」，不是「屬哪個 session 世代」：前者在兩種載入模型下都是有效
+證據，後者只在快照模型成立時才有意義。
 
 觸發條件：type 為 IMP 且 where.files 觸及 hooks 目錄——頂層 `.claude/hooks/`
 或任一 skill 私有 `.claude/skills/<skill>/hooks/`（後者同屬防護面，見既有
 「hook 檔案落地監控」改造票的雙不管地帶教訓：只顧頂層會漏掉 skill hooks）。
 
 必含四個面向：
-1. 既有 session 生效策略：本次寫入的 hook 在當前 session 是否生效、若不生效
-   如何因應（合格填法含「本 wave 該防護不生效，改以人工紀律承擔」——這是
-   用戶裁示的部署期政策，檢查器不得因選擇此填法而擋）（語意關鍵詞檢查，
-   命中對象為 acceptance）
+1. 本 session 實地觸發確認：本次寫入的 hook 是否已於本 session 實地觸發並
+   確認落檔；未能確認時說明如何因應（合格填法含「本 wave 該防護不生效，
+   改以人工紀律承擔」——這是用戶裁示的部署期政策，檢查器不得因選擇此填法
+   而擋）（語意關鍵詞檢查，命中對象為 acceptance）
 2. liveness 驗證方式：如何確認 hook 確實被 runtime 載入並執行（日誌比對、
    liveness 探針等）（語意關鍵詞檢查，命中對象為 acceptance）
 3. 失敗語意：異常時 fail-open 或 fail-closed（語意關鍵詞檢查，命中對象為
@@ -69,8 +77,15 @@ _TOP_LEVEL_HOOKS_PREFIX = PurePosixPath(".claude/hooks")
 
 # 三項必含類別（substring 關鍵詞機制，維持不動）：
 # label -> 命中任一關鍵詞即視為該項已提及（大小寫不敏感）
+#
+# 第一項的 label 於 2026-08-18 由「既有 session 生效策略」改為「本 session
+# 實地觸發確認」，關鍵詞清單**刻意不動**：label 只用於缺項訊息的顯示，偵測
+# 全靠 substring 命中，改動清單會使既有 pending 票的原措辭（含「重啟」
+# 「restart」者）由通過翻為被擋。保留舊模型用詞於清單內不造成誤導——它們
+# 是偵測用的寬鬆網，不是對撰寫者的填法建議；建議在 label 與 _format_block_message
+# 的範例段給出。
 _CATEGORY_KEYWORDS = {
-    "既有 session 生效策略": ["session", "重啟", "生效", "restart"],
+    "本 session 實地觸發確認": ["session", "重啟", "生效", "restart"],
     "liveness 驗證方式": ["liveness", "存活驗證", "存活探針"],
     "失敗語意（fail-open/fail-closed）": [
         "fail-open",
@@ -375,8 +390,9 @@ def _format_block_message(ticket_id: str, missing: List[str]) -> str:
         f"{missing_list}\n"
         f"\n"
         f"合格填法範例（前三項寫在 acceptance）：\n"
-        f"  - 既有 session 生效策略：明示本 session 是否生效，或「本 wave 該防護"
-        f"不生效，改以人工紀律承擔」（部署期政策亦屬合格填法）\n"
+        f"  - 本 session 實地觸發確認：明示已於本 session 實地觸發該 hook 並"
+        f"確認落檔（含缺可執行位已排除），或「本 wave 該防護不生效，改以人工"
+        f"紀律承擔」（部署期政策亦屬合格填法）\n"
         f"  - liveness 驗證方式：說明如何確認 hook 確實被 runtime 載入執行\n"
         f"  - 失敗語意：說明異常時 fail-open 或 fail-closed\n"
     )

@@ -210,7 +210,7 @@ v1-to-v2.js 和 tag-storage-adapter.js 都硬編碼 "3.0.0"。應由 BookSchemaV
 
 ```
 執行前必須 Read：
-- .claude/skills/tdd/references/phase3/rules.md
+- `./rules.md`
 - 特別注意 Decision Questions 區段（必答）
 
 完成前必須：

@@ -46,7 +46,18 @@
 
 落地方向（追蹤 ticket 見下）：session-start hook 做版本追蹤一致性掃描——偵測多重 active、幽靈版本（ticket/worklog 存在但 todolist 缺）、全完成未收版、tag 與 todolist drift，異常時 stderr 警告。
 
+## 後續實例（第二次觀測）
+
+**症狀**：`.claude/` 五個框架檔案新增 8 處專案層級 ticket ID 引用，違反 `reference-stability-rules.md` 規則 8（框架文件禁引用專案識別符），但 `reference-stability-rule8-guard-hook.py` 全程未觸發。
+
+**根因**：同族缺陷，可繞過因子由「可選 CLI 流程」換成「工具選擇」——該 hook 的 PreToolUse matcher 僅註冊於 `Edit` / `Write` / `MultiEdit`，實際寫入透過 Bash（heredoc/腳本）完成，matcher 天生不覆蓋。重現實驗（含 Write 工具對照組）確認：完全相同內容經 Write 被 DENY，經 Bash 完全靜默通過。
+
+**判別基準延伸**：原表僅涵蓋「CLI 流程」與「hook 時機」兩維，本案例補一維——**工具選擇型可繞過**（同一份邏輯掛在多個工具入口，只覆蓋部分入口）。判別方式：盤點所有能達成同一持久化效果的工具/路徑，逐一確認是否都掛了防護；只覆蓋部分工具入口的防護，效果等同 PC-MON-001 原文「防護不存在」。
+
+**解法方向**：與原案例的「移到 session-start」思路一致——移防到「不可繞過的執行點」，本案例對應 commit-time（`git commit` 前）內容掃描，與寫入手段（Edit/Write/Bash 皆可）解耦。落地追蹤：Bash 寫入路徑旁路缺口評估分析票（見版本 W3 系列）。
+
 ## 關聯
 
 - `.claude/rules/core/opinionated-default-design.md` — 主張 1「預設行為 > 文件規範」的復發實證
 - 0.3.3-W1-002 — 首次根因分析（防護落地但執行點錯誤）
+- Bash 寫入路徑旁路缺口評估分析票 — 第二次觀測：工具選擇型可繞過（rule8-guard 的 Edit/Write/MultiEdit matcher 未覆蓋 Bash 寫入）

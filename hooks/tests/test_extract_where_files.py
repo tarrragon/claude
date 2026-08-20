@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 
 _HOOKS_DIR = Path(__file__).parent.parent
@@ -60,6 +61,22 @@ def test_from_frontmatter_where_string_top_level():
     """where 直接是字串（少見退化情況）。"""
     fm = {"where": "src/a.py\nsrc/b.py"}
     assert extract_where_files_from_frontmatter(fm) == ["src/a.py", "src/b.py"]
+
+
+def test_from_frontmatter_single_unquoted_scalar_no_dash():
+    """0.2.1-W3-665.3：純量單檔寫法為合法 YAML（非 parser 缺陷），須保留 str 分支。"""
+    parsed = yaml.safe_load("files: a.py\n")
+    assert parsed == {"files": "a.py"}
+    fm = {"where": parsed}
+    assert extract_where_files_from_frontmatter(fm) == ["a.py"]
+
+
+def test_from_frontmatter_block_literal_scalar_pipe():
+    """0.2.1-W3-665.3：`files: |` block scalar 為合法 YAML，須保留 str 分支。"""
+    parsed = yaml.safe_load("files: |\n  a.py\n  b.py\n")
+    assert parsed == {"files": "a.py\nb.py\n"}
+    fm = {"where": parsed}
+    assert extract_where_files_from_frontmatter(fm) == ["a.py", "b.py"]
 
 
 def test_from_frontmatter_unexpected_type_returns_empty():

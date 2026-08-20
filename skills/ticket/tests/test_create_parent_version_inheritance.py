@@ -63,7 +63,7 @@ def _install_common_mocks(monkeypatch, *, parent_ticket=None):
     validate_version_registered，讓子票路徑真實跳過這兩者的呼叫）。
     """
     monkeypatch.setattr(
-        "ticket_system.commands.create.list_tickets",
+        "ticket_system.lib.field_validators.list_tickets",
         lambda v: [],
     )
 
@@ -98,15 +98,15 @@ def _install_common_mocks(monkeypatch, *, parent_ticket=None):
         lambda v, pid, tid: True,
     )
     monkeypatch.setattr(
-        "ticket_system.commands.create.get_next_seq",
+        "ticket_system.lib.ticket_id_allocator.get_next_seq",
         lambda v, w: 1,
     )
     monkeypatch.setattr(
-        "ticket_system.commands.create.get_next_child_seq",
+        "ticket_system.lib.ticket_id_allocator.get_next_child_seq",
         lambda pid: 1,
     )
     monkeypatch.setattr(
-        "ticket_system.commands.create.compute_depth",
+        "ticket_system.lib.ticket_id_allocator.compute_depth",
         lambda pid, v: 1,
     )
 

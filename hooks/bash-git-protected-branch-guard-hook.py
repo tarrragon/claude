@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """
 Bash Git Protected-Branch Guard Hook - PreToolUse Hook
@@ -115,14 +115,42 @@ fail-closed——重導向 token 本身不影響「是否有未知內容待提�
 ============================================================
 效能設計
 ============================================================
-`_contains_git_word()` 為第一道便宜判斷（單一 regex 搜尋 "git" 字樣）。
-非 git 命令（Bash 工具最大宗）在此短路，不進入 `_find_write_invocations()`
-的多重 regex 解析，避免每次 Bash 呼叫都承擔完整解析成本。
+`contains_git_word()`（共用 lib）為第一道便宜判斷（單一 regex 搜尋 "git"
+字樣）。非 git 命令（Bash 工具最大宗）在此短路，不進入 `_find_write_
+invocations()` 的完整解析，避免每次 Bash 呼叫都承擔完整解析成本。
+
+============================================================
+解析層收斂至共用 lib（後續修正）
+============================================================
+本 hook 原本自行維護 `git commit`/`git add` 呼叫的 regex 解析（
+`_GIT_DASH_C_WRITE_RE`/`_SUBSHELL_GIT_WRITE_RE` 等），與另兩個 Bash git
+守衛（bare-commit-guard-hook.py、bash-git-add-broad-guard-hook.py）各自
+維護的解析邏輯屬同一類問題——三處對「什麼算一次 git 呼叫」的定義互不
+相同，各自留下不同破口（本 hook 原本完全沒有 heredoc 剝離，逐字引用本
+hook 攔截對象的文字若含 heredoc 本體理論上同樣可能誤判，只是此前未被
+觀測到實際觸發案例）。已收斂至 `.claude/lib/git_command_parse.py` 的
+`find_git_invocations()`：`_find_write_invocations()` 與 `_find_add_
+rests()`（改名 `_find_add_invocations_in_scope()`）改為呼叫該共用函式，
+本 hook 保留的是「-C / 子 shell cd 兩種目標 repo 表達形式」與「三來源
+聯集判斷檔案集合」這兩層本 hook 專屬的判決邏輯，不下放給共用 lib（子
+shell 範圍隔離需求是本 hook 獨有，見共用模組 `_split_statements` docstring
+「範圍隔離」段的職責邊界說明）。
+
+`_parse_literal_paths` / `_parse_commit_pathspec` 改吃已 tokenize 過的
+token 清單（不再自行 `shlex.split`），未閉合引號的失敗語意上移至
+`find_git_invocations` 層級（回傳 None，見共用模組「失敗語意」段），
+兩函式的回傳語意收斂為只代表「明確不可列舉」（unenumerable_flags 命中 /
+`is_literal_pathspec_token` 判定為廣域）。兩函式的廣域 pathspec 判準
+統一改用 `is_literal_pathspec_token`（與 bash-git-add-broad-guard-hook.py
+共用同一 SSOT）——本 hook 原本的判準只檢查字面 `.`，未涵蓋 `./` / `:/` /
+尾斜線目錄，統一後這三類會改為正確 fail-closed（行為變化，非本次收斂
+職責延伸，詳見 ticket Solution）。`_parse_commit_pathspec` 額外套用同一
+判準亦使 `git commit .` 由「誤把 . 當成單一字面路徑」改為正確 fail-closed
+（原設計缺口，非本次引入，詳見 ticket Solution）。
 """
 
-import os
 import re
-import shlex
+import os
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -130,6 +158,13 @@ from typing import Dict, List, Optional, Tuple
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from lib.git_command_parse import (
+    GitInvocation,
+    contains_git_word,
+    find_git_invocations,
+    is_literal_pathspec_token,
+    is_shell_redirection_token,
+)
 from lib.git_utils import (
     GENERIC_EXEMPT_EXACT,
     find_target_repo,
@@ -142,28 +177,12 @@ from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, emit_
 
 
 # 目前僅涵蓋 commit（範疇邊界見檔頭說明）
-WRITE_SUBCOMMANDS = ("commit",)
+WRITE_SUBCOMMANDS = frozenset({"commit"})
 
-_WRITE_ALTERNATION = "|".join(WRITE_SUBCOMMANDS)
-
-# 便宜前置判斷：命令是否含 "git" 字樣（避免非 git 命令進入昂貴解析路徑）
-_GIT_WORD_RE = re.compile(r"\bgit\b")
-
-# 形式 1：git -C <path> commit ...（rest 截至 && / ; / 子 shell 右括號 / 字串結尾）
-_GIT_DASH_C_WRITE_RE = re.compile(
-    r"\bgit\s+-C\s+(?P<repo>\S+)\s+(?P<subcmd>" + _WRITE_ALTERNATION + r")\b(?P<rest>[^&;)]*)"
-)
-
-# 形式 2：子 shell (cd <dir> && ... git commit ...)（未帶 -C 的 git 呼叫）
+# 子 shell 內容擷取：本 hook 專屬需求（add+commit 同範圍關聯），不下放
+# 共用 lib（見檔頭「解析層收斂至共用 lib」段的職責邊界說明）
 _SUBSHELL_RE = re.compile(r"\(([^()]*)\)")
 _SUBSHELL_CD_RE = re.compile(r"^\s*cd\s+(?P<repo>\S+)\s*(?:&&|;)")
-_SUBSHELL_GIT_WRITE_RE = re.compile(
-    r"\bgit\s+(?!-C\b)(?P<subcmd>" + _WRITE_ALTERNATION + r")\b(?P<rest>[^&;)]*)"
-)
-
-# git add 呼叫（0.2.1-W3-154：用於推導本次命令會額外 stage 的檔案）
-_GIT_DASH_C_ADD_RE_TEMPLATE = r"\bgit\s+-C\s+{repo}\s+add\b(?P<rest>[^&;)]*)"
-_SUBSHELL_ADD_RE = re.compile(r"\bgit\s+(?!-C\b)add\b(?P<rest>[^&;)]*)")
 
 # git add 無法靜態列舉的 flag（目錄列舉語意，需實際檔案系統狀態）
 _ADD_UNENUMERABLE_FLAGS = {
@@ -182,26 +201,9 @@ _COMMIT_VALUE_FLAGS = {
 # stage-all，一律 fail-closed（範疇邊界：不嘗試用 git diff --name-only 反推）
 _SHORT_FLAG_RE = re.compile(r"^-[a-zA-Z]+$")
 
-_GLOB_CHARS = ("*", "?", "[")
-
 # 0.2.1-W3-156：-C/cd 目標含 shell 展開語法（$變數/`反引號`/~家目錄）時，
 # PreToolUse 看到的是未展開的原始文字，無法信任其字面內容，須 fail-closed。
 _SHELL_EXPANSION_RE = re.compile(r"[$`~]")
-
-# 0.2.1-W3-156：shell 重導向 token（>、>>、<、N>、N>&M、&>）不是路徑，
-# 解析 add/commit 引數時應略過而非誤列為檔案。
-_REDIRECTION_TOKEN_RE = re.compile(r"^&?\d*(>>?|<)&?\d*$")
-
-
-def _contains_git_word(command: str) -> bool:
-    """便宜前置判斷：命令是否含獨立的 'git' 字樣。
-
-    非 git 命令（Bash 工具最大宗）在此短路，不進入後續解析（規則對應
-    ticket acceptance「非 git 的 Bash 命令不受影響且無顯著延遲增加」）。
-    """
-    if not command:
-        return False
-    return bool(_GIT_WORD_RE.search(command))
 
 
 def _has_shell_expansion_syntax(s: str) -> bool:
@@ -216,22 +218,14 @@ def _has_shell_expansion_syntax(s: str) -> bool:
     return bool(_SHELL_EXPANSION_RE.search(s))
 
 
-def _is_shell_redirection_token(tok: str) -> bool:
-    """判斷 token 是否為 shell 重導向符號（>、>>、<、2>、2>&1 等）。
+def _find_write_invocations(command: str) -> Optional[List[Dict[str, object]]]:
+    """解析命令中的 git write 呼叫，改用共用 lib `find_git_invocations`。
 
-    這些 token 是 shell 重導向語法的一部分，不是路徑；解析 add/commit
-    引數時應略過，避免誤列為非豁免檔案污染 deny 訊息（0.2.1-W3-156）。
-    已知殘留：不含與路徑黏在一起無空格的形式（如 `2>/dev/null`），
-    該形式仍會被當作路徑列出（多報不漏報，方向安全）。
-    """
-    return bool(_REDIRECTION_TOKEN_RE.match(tok))
-
-
-def _find_write_invocations(command: str) -> List[Dict[str, object]]:
-    """解析命令中的 git write 呼叫。
-
-    回傳 [{"repo_hint": str, "subcmd": str, "rest": str,
-           "scope_content": str|None}, ...]。
+    回傳 [{"repo_hint": str, "subcmd": str, "args": List[str],
+           "scope_content": str|None}, ...]；回傳 None 表示命令（或其中
+    某段子 shell 內容）無法安全 tokenize，呼叫端應 fail-closed（本 hook
+    既有設計對「無法確認」的一貫反應，見檔頭 stage-all / 萬用字元 / shell
+    展開語法等既有 fail-closed 案例）。
 
     涵蓋兩種目標 repo 表達形式（範疇邊界見檔頭）：
     1. `git -C <path> commit ...`（scope_content=None，代表「同範圍」的
@@ -244,12 +238,17 @@ def _find_write_invocations(command: str) -> List[Dict[str, object]]:
     """
     invocations: List[Dict[str, object]] = []
 
-    for match in _GIT_DASH_C_WRITE_RE.finditer(command):
+    top_level = find_git_invocations(command, WRITE_SUBCOMMANDS)
+    if top_level is None:
+        return None
+    for inv in top_level:
+        if inv.dash_c_path is None:
+            continue  # cwd 隱含形式不解析（範疇邊界，見檔頭說明）
         invocations.append(
             {
-                "repo_hint": match.group("repo"),
-                "subcmd": match.group("subcmd"),
-                "rest": match.group("rest"),
+                "repo_hint": inv.dash_c_path,
+                "subcmd": inv.subcommand,
+                "args": inv.args,
                 "scope_content": None,
             }
         )
@@ -259,17 +258,20 @@ def _find_write_invocations(command: str) -> List[Dict[str, object]]:
         cd_match = _SUBSHELL_CD_RE.match(content.strip())
         if not cd_match:
             continue
-        write_match = _SUBSHELL_GIT_WRITE_RE.search(content)
-        if not write_match:
-            continue
-        invocations.append(
-            {
-                "repo_hint": cd_match.group("repo"),
-                "subcmd": write_match.group("subcmd"),
-                "rest": write_match.group("rest"),
-                "scope_content": content,
-            }
-        )
+        sub_invocations = find_git_invocations(content, WRITE_SUBCOMMANDS)
+        if sub_invocations is None:
+            return None
+        for inv in sub_invocations:
+            if inv.dash_c_path is not None:
+                continue  # 子 shell 內若改用 -C，已由上方 -C 分支涵蓋
+            invocations.append(
+                {
+                    "repo_hint": cd_match.group("repo"),
+                    "subcmd": inv.subcommand,
+                    "args": inv.args,
+                    "scope_content": content,
+                }
+            )
 
     return invocations
 
@@ -321,48 +323,40 @@ def _get_staged_files(target_root: str, logger) -> Optional[List[str]]:
     return [line for line in output.split("\n") if line.strip()]
 
 
-def _parse_literal_paths(rest: str, unenumerable_flags: "set") -> Optional[List[str]]:
-    """將 rest 字串解析為明確的字面路徑清單。
+def _parse_literal_paths(tokens: List[str], unenumerable_flags: "set") -> Optional[List[str]]:
+    """將已 tokenize 過的 token 清單解析為明確的字面路徑清單。
 
-    回傳 None 表示無法靜態列舉（fail-closed 訊號）：命中 unenumerable_flags、
-    出現 `.`（目錄列舉）、含萬用字元、或 shlex 無法切分（未閉合引號等）。
+    回傳 None 表示無法靜態列舉（fail-closed 訊號）：命中 unenumerable_flags，
+    或 `is_literal_pathspec_token` 判定為廣域（`.` / `./` / `:/` / 萬用
+    字元 / 尾斜線目錄）。未閉合引號等 tokenize 失敗已由呼叫鏈上游
+    `find_git_invocations` 處理（回傳 None），不在本函式重複判斷。
     """
-    try:
-        tokens = shlex.split(rest)
-    except ValueError:
-        return None
-
     paths: List[str] = []
     for tok in tokens:
         if tok in unenumerable_flags:
             return None
-        if tok == ".":
-            return None
         if tok == "--":
             continue
-        if _is_shell_redirection_token(tok):
+        if is_shell_redirection_token(tok):
             continue  # shell 重導向 token（2>&1 等）不是路徑，略過（W3-156）
         if tok.startswith("-"):
             continue  # 其餘 flag（如 -v/--verbose）不影響列舉，略過
-        if any(c in tok for c in _GLOB_CHARS):
+        if not is_literal_pathspec_token(tok):
             return None
         paths.append(tok)
     return paths
 
 
-def _parse_commit_pathspec(rest: str) -> Tuple[bool, Optional[List[str]]]:
-    """解析 commit 呼叫自身的 rest，回傳 (has_stage_all_flag, paths)。
+def _parse_commit_pathspec(tokens: List[str]) -> Tuple[bool, Optional[List[str]]]:
+    """解析 commit 呼叫自身的 args token 清單，回傳 (has_stage_all_flag, paths)。
 
     has_stage_all_flag=True：命中 -a/-am/--all 等隱含 stage-all 的 flag，
       paths 恆為 None，呼叫端一律 fail-closed（範疇邊界，理由見檔頭）。
     否則 paths 為明確 pathspec 清單（可能為空清單），None 表示無法靜態
-    列舉（萬用字元、shlex 解析失敗）。
+    列舉——`is_literal_pathspec_token` 判定為廣域（含萬用字元，亦含 `.`
+    等既有設計缺口修正，見檔頭「解析層收斂至共用 lib」段）。未閉合引號
+    等 tokenize 失敗已由呼叫鏈上游處理，不在本函式重複判斷。
     """
-    try:
-        tokens = shlex.split(rest)
-    except ValueError:
-        return False, None
-
     paths: List[str] = []
     i = 0
     while i < len(tokens):
@@ -379,7 +373,7 @@ def _parse_commit_pathspec(rest: str) -> Tuple[bool, Optional[List[str]]]:
             i += 1
             continue
 
-        if _is_shell_redirection_token(tok):
+        if is_shell_redirection_token(tok):
             i += 1  # shell 重導向 token（2>&1 等）不是路徑，略過（W3-156）
             continue
 
@@ -387,7 +381,7 @@ def _parse_commit_pathspec(rest: str) -> Tuple[bool, Optional[List[str]]]:
             i += 1  # 其餘無值旗標（如 --amend、-n、-v），略過
             continue
 
-        if any(c in tok for c in _GLOB_CHARS):
+        if not is_literal_pathspec_token(tok):
             return False, None
 
         paths.append(tok)
@@ -396,19 +390,28 @@ def _parse_commit_pathspec(rest: str) -> Tuple[bool, Optional[List[str]]]:
     return False, paths
 
 
-def _find_add_rests(command: str, repo_hint: str, scope_content: Optional[str]) -> List[str]:
-    """回傳同範圍內 `git add` 呼叫的 rest 引數字串清單。
+def _find_add_invocations_in_scope(
+    command: str, repo_hint: str, scope_content: Optional[str]
+) -> Optional[List[List[str]]]:
+    """回傳同範圍內 `git add` 呼叫的 args（token 清單）清單。
 
-    -C 形式（scope_content=None）：在整個命令內搜尋相同 repo_hint 字串的
+    回傳 None 表示範圍內容無法安全 tokenize，呼叫端應 fail-closed。
+
+    -C 形式（scope_content=None）：在整個命令內搜尋相同 repo_hint 的
     `git -C <repo_hint> add ...`（字面字串比對，非路徑語意等價比對，
     已知限制見檔頭範疇邊界）。
     子 shell 形式（scope_content 非 None）：只在該子 shell 內容內搜尋。
     """
     if scope_content is not None:
-        return [m.group("rest") for m in _SUBSHELL_ADD_RE.finditer(scope_content)]
+        sub_invocations = find_git_invocations(scope_content, {"add"})
+        if sub_invocations is None:
+            return None
+        return [inv.args for inv in sub_invocations]
 
-    pattern = re.compile(_GIT_DASH_C_ADD_RE_TEMPLATE.format(repo=re.escape(repo_hint)))
-    return [m.group("rest") for m in pattern.finditer(command)]
+    top_level = find_git_invocations(command, {"add"})
+    if top_level is None:
+        return None
+    return [inv.args for inv in top_level if inv.dash_c_path == repo_hint]
 
 
 def _normalize_paths(paths: List[str], repo_hint: str, target_root: str) -> List[str]:
@@ -551,7 +554,8 @@ def _files_from_commit_pathspec(
     回傳 None 表示無法靜態列舉（-a/-am/--all，或萬用字元/無法切分），
     呼叫端應 fail-closed。
     """
-    has_stage_all, commit_paths = _parse_commit_pathspec(str(inv.get("rest", "")))
+    commit_args = inv.get("args") or []
+    has_stage_all, commit_paths = _parse_commit_pathspec(list(commit_args))
     if has_stage_all or commit_paths is None:
         return None
     return _normalize_paths(commit_paths, str(inv["repo_hint"]), target_root)
@@ -562,13 +566,17 @@ def _files_from_git_add(
 ) -> Optional[List[str]]:
     """來源 2：同範圍（同 -C 目標字串 / 同子 shell）內 git add 呼叫的路徑引數。
 
-    回傳 None 表示任一 add 呼叫含無法列舉引數（-A/./萬用字元等），
-    呼叫端應 fail-closed。
+    回傳 None 表示任一 add 呼叫含無法列舉引數（-A/./萬用字元等），或範圍
+    內容無法安全 tokenize，呼叫端應 fail-closed。
     """
     files: List[str] = []
-    add_rests = _find_add_rests(command, str(inv["repo_hint"]), inv.get("scope_content"))
-    for rest in add_rests:
-        add_paths = _parse_literal_paths(rest, _ADD_UNENUMERABLE_FLAGS)
+    add_invocations = _find_add_invocations_in_scope(
+        command, str(inv["repo_hint"]), inv.get("scope_content")
+    )
+    if add_invocations is None:
+        return None
+    for args in add_invocations:
+        add_paths = _parse_literal_paths(args, _ADD_UNENUMERABLE_FLAGS)
         if add_paths is None:
             return None
         files.extend(_normalize_paths(add_paths, str(inv["repo_hint"]), target_root))
@@ -679,11 +687,20 @@ def main() -> int:
     tool_input = input_data.get("tool_input") or {}
     command = tool_input.get("command", "")
 
-    if not _contains_git_word(command):
+    if not contains_git_word(command):
         logger.debug("命令不含 git 字樣，短路允許")
         return 0
 
     invocations = _find_write_invocations(command)
+    if invocations is None:
+        # 無法安全 tokenize：既定選擇 fail-open，與既有「cwd 隱含形式無法
+        # 解析目標 repo 即安全放行」同一方向——本 hook 只在確認命中明確的
+        # 外部目標 repo 表達形式（-C / 子 shell cd）後才升級為 fail-closed
+        # 判斷，無法解析結構時連目標 repo 表達形式本身都無法確認，維持
+        # 既有的保守放行方向，不視為新的獨立 fail-closed 訊號（見檔頭
+        # 「解析層收斂至共用 lib」段）。
+        logger.debug("命令無法安全 tokenize（未閉合引號等），fail-open 放行")
+        return 0
     if not invocations:
         logger.debug("命令含 git 但無可解析的 write 呼叫（-C 或子 shell cd 形式），允許")
         return 0

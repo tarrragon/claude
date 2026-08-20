@@ -31,7 +31,7 @@ from ticket_system.lib.claude_lib_loader import (
     load_claude_lib,
     resolve_toplevel,
 )
-from ticket_system.lib.file_conflict import files_intersect, where_files
+from ticket_system.lib.file_conflict import files_intersect, where_files, write_files
 from ticket_system.lib.file_lock import file_lock
 from ticket_system.lib.section_locator import find_section
 from ticket_system.lib.ticket_loader import get_ticket_path, load_ticket, save_ticket
@@ -247,9 +247,10 @@ def _make_files_loader(fallback_version: str):
     """建立 `pm_registry.recompute_lease` 所需的 files_loader 閉包。
 
     files 欄位是 tickets 的推導物化值（非獨立累積狀態，設計裁決見團隊
-    裁示）：每次 lease 事件皆以「調整後 tickets 清單當下的 where.files
-    聯集」整組重算覆蓋，不做增量 append/merge——票面 where.files 改窄後
-    重跑 claim，registry.files 需同步縮窄，否則 track_conflicts 的
+    裁示）：每次 lease 事件皆以「調整後 tickets 清單當下的 write 集合
+    聯集」整組重算覆蓋（並行安全判定改用 write 集合，ANA 型全唯讀宣告
+    不再計入 registry.files），不做增量 append/merge——票面 where.files
+    改窄後重跑 claim，registry.files 需同步縮窄，否則 track_conflicts 的
     registry/票面交叉比對會產生假陰性。
 
     `fallback_version` 供 ticket_id 無法從自身格式解析版本時使用（理論上
@@ -261,7 +262,7 @@ def _make_files_loader(fallback_version: str):
         ticket = load_ticket(version, ticket_id)
         if ticket is None:
             return []
-        return where_files(ticket)
+        return write_files(ticket)
 
     return _loader
 
@@ -326,7 +327,7 @@ def claim_lease(version: str, ticket_id: str) -> None:
     ticket = load_ticket(version, ticket_id)
     if ticket is None:
         return
-    ticket_files = where_files(ticket)
+    ticket_files = write_files(ticket)
 
     pm_registry = _load_pm_registry()
     if pm_registry is None:

@@ -427,7 +427,7 @@ PM 在派發 Phase 3b 代理人前，可根據 Phase 3a 策略文件估算 conte
 
 代理人完成後自行執行，PM 不介入：
 
-1. 更新 Ticket Execution Log（`ticket track append-log`）
+1. 更新 Ticket 對應章節（`ticket track append-log --section "<章節名>"`，合法章節見 `ticket track append-log --help`）
 2. 執行 `git commit`（message 格式：`feat({ticket-id}): Phase X 完成 - {摘要}`）
 3. 執行 `/ticket track complete {id}`
 4. 回報主線程：僅「成功」或「失敗 + 原因」

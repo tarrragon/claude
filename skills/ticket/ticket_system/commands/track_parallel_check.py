@@ -24,7 +24,7 @@ import sys
 from pathlib import PurePosixPath
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from ticket_system.lib.file_conflict import group_by_conflict
+from ticket_system.lib.file_conflict import group_by_conflict, write_files
 from ticket_system.lib.id_parser import extract_id_components
 from ticket_system.lib.ticket_loader import list_tickets
 
@@ -41,12 +41,13 @@ _PC137_PARALLEL_LIMIT = 2
 # ---------------------------------------------------------------------------
 
 def _extract_files(ticket: Dict[str, Any]) -> List[str]:
-    """從 ticket dict 取出 where.files 清單，容錯不同來源。"""
-    where = ticket.get("where") or {}
-    files = where.get("files") if isinstance(where, dict) else None
-    if not isinstance(files, list):
-        return []
-    return [str(f) for f in files if isinstance(f, (str, PurePosixPath))]
+    """從 ticket dict 取出 where.files 中意圖為寫入的路徑清單，容錯不同來源。
+
+    委派 `lib.file_conflict.write_files`：涵蓋本函式原本的型別防護，並
+    僅回傳意圖為寫入的路徑（type 預設或逐檔標記覆寫為 write），read 集合
+    不參與並行衝突判定（並行安全判定改用 write 集合的同步切換義務）。
+    """
+    return write_files(ticket)
 
 
 def _normalize_path(raw: str) -> PurePosixPath:

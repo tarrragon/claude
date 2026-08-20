@@ -165,8 +165,10 @@ class TestErrorChannelIntegration:
         而非 subprocess（無法輕易構造缺 section 的真實 ticket）。
 
         W1-025 調整：Schema 章節（Solution 等）缺失改為自動補建，不再走
-        SECTION_NOT_FOUND；本場景改以非 Schema 章節（Execution Log H2）驗證
-        錯誤通道行為（仍在 VALID_SECTIONS 白名單內，僅章節不存在）。
+        SECTION_NOT_FOUND；該場景曾改以 Execution Log 驗證（當時仍在白名單內、
+        僅章節不存在）。白名單移除該值後，同一輸入改由 INVALID_SECTION 攔下，
+        本場景現驗證的是白名單拒絕的錯誤通道行為——同屬 section 類錯誤走
+        stdout，通道契約不變，變的是攔截點。
         """
         import argparse
         import io
@@ -208,11 +210,10 @@ class TestErrorChannelIntegration:
 
         output = captured.getvalue()
         assert rc != 0, f"預期非零 rc，實際 rc={rc}"
-        # SECTION_NOT_FOUND 訊息
-        assert "Execution Log" in output
-        assert "區段" in output or "section" in output.lower()
-        # W17-008.9 引導：列出現有 H2 標題
-        assert "Problem Analysis" in output or "Other Section" in output
+        # INVALID_SECTION 訊息走 stdout（section 類錯誤的通道契約）
+        assert "無效的 section: Execution Log" in output
+        # 引導：列出全部合法值
+        assert "Problem Analysis" in output
 
     def test_scenario_4_missing_required_field(self, seeded_repo_root):
         """場景 4：missing-required-field（ErrorEnvelope 路徑；W17-008.5.3）。
