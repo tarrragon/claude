@@ -1,3 +1,15 @@
+## [2.37.1] - 2026-08-20
+
+### Summary
+chore: 拉取 compositional-writing 並回寫框架 VERSION; test: 收斂四個 ticket 測試檔的硬編碼時間播種為 conftest 共用語意化 helper
+
+Changes: 1 chore, 1 test
+
+- chore: 拉取 compositional-writing 並回寫框架 VERSION
+- test: 收斂四個 ticket 測試檔的硬編碼時間播種為 conftest 共用語意化 helper
+
+---
+
 ## [2.37.0] - 2026-08-20
 
 ### Summary

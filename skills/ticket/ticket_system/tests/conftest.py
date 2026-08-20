@@ -24,6 +24,7 @@ Fixture 設計（最小 mock 原則）：
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -288,3 +289,40 @@ def seed_pm_registry(registry_file: Path, sessions: dict) -> None:
         ),
         encoding="utf-8",
     )
+
+
+# ============================================================
+# 0.2.1-W3-733 — heartbeat FRESH/STALE 播種 helper（收斂自 test_lease.py
+# 的 `_stale_threshold` / `_fresh_ts` / `_stale_ts`，上移供
+# test_track_onboard / test_track_conflicts / test_track_sessions 共用）
+# ============================================================
+#
+# `NOW` 本身不上移：各測試檔的注入基準屬各自 monkeypatch 語境的一部分，
+# 跨檔共用單一模組級時刻會產生「某檔改動基準影響另一檔」的隱性耦合。
+
+
+def pm_stale_threshold() -> timedelta:
+    """`pm_registry.STALE_THRESHOLD_MINUTES`（FRESH/STALE 判準單一權威來源）。
+
+    模組不可用時降級為 30 分鐘（現行值），此降級值僅為避免 import 期失敗，
+    不代表判準真為 30。
+    """
+    from ticket_system.lib.claude_lib_loader import load_claude_lib
+
+    pm_registry = load_claude_lib("pm_registry")
+    minutes = getattr(pm_registry, "STALE_THRESHOLD_MINUTES", 30) if pm_registry else 30
+    return timedelta(minutes=minutes)
+
+
+def fresh_ts(now) -> str:
+    """播種一筆 FRESH heartbeat（elapsed = 0，必在門檻內）。"""
+    return _iso(now)
+
+
+def stale_ts(now, margin: timedelta = timedelta(minutes=15)) -> str:
+    """播種一筆 STALE heartbeat（超出門檻再加安全邊際）。
+
+    以門檻常數推導而非硬編碼分鐘數，使「這筆是 STALE」由常數關係明示，
+    讀者不需心算字面分鐘數與門檻的大小關係，門檻調整時也不需逐點改字面。
+    """
+    return _iso(now - pm_stale_threshold() - margin)

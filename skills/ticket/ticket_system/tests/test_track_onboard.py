@@ -20,15 +20,19 @@ from __future__ import annotations
 import json
 import sys
 from argparse import Namespace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from ticket_system.commands import track_onboard
 
-from conftest import _iso  # noqa: F401 — 0.2.1-W3-585 收斂逐字複本
+from conftest import _iso, fresh_ts, stale_ts  # noqa: F401 — 0.2.1-W3-585/733 收斂複本
 
 
-NOW = datetime(2026, 8, 18, 12, 0, 0, tzinfo=timezone.utc)
+# NOW 取模組載入當下（而非固定字面）：所有播種與判定入口皆注入 now=NOW，
+# elapsed 完全確定（見 conftest.fresh_ts / stale_ts），故改為動態基準不影響
+# FRESH/STALE 判定；同時消除「若入口日後移除 now 注入即立刻引爆」的隱患
+# （TEST-MON-001，與 test_lease.py 同型防護，0.2.1-W3-733）。
+NOW = datetime.now(timezone.utc)
 
 
 class TestNoStaleThresholdRedefinition:
@@ -44,14 +48,14 @@ class TestCollectSessionSections:
                 "s-fresh": {
                     "name": "fresh-session",
                     "project": "/proj",
-                    "heartbeat_ts": _iso(NOW - timedelta(minutes=5)),
+                    "heartbeat_ts": fresh_ts(NOW),
                     "tickets": [],
                     "files": [],
                 },
                 "s-stale": {
                     "name": "stale-session",
                     "project": "/proj",
-                    "heartbeat_ts": _iso(NOW - timedelta(minutes=45)),
+                    "heartbeat_ts": stale_ts(NOW),
                     "tickets": [],
                     "files": [],
                 },

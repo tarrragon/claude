@@ -26,10 +26,20 @@ import pytest
 
 from ticket_system.commands import track_sessions
 
-from conftest import _iso, seed_pm_registry  # noqa: F401 — 0.2.1-W3-585 收斂複本
+from conftest import (  # noqa: F401 — 0.2.1-W3-585/733 收斂複本
+    _iso,
+    fresh_ts,
+    pm_stale_threshold,
+    seed_pm_registry,
+    stale_ts,
+)
 
 
-NOW = datetime(2026, 8, 17, 12, 0, 0, tzinfo=timezone.utc)
+# NOW 取模組載入當下（而非固定字面）：所有播種與判定入口皆注入 now=NOW，
+# elapsed 完全確定（見 conftest.fresh_ts / stale_ts），故改為動態基準不影響
+# FRESH/STALE 判定；同時消除「若入口日後移除 now 注入即立刻引爆」的隱患
+# （TEST-MON-001，與 test_lease.py 同型防護，0.2.1-W3-733）。
+NOW = datetime.now(timezone.utc)
 PROJECT_ROOT = "/Users/tester/project/flutter_balance"
 
 
@@ -71,7 +81,7 @@ class TestNormalTable:
                 "name": "flutter-balance-b6",
                 "project": PROJECT_ROOT,
                 "registered_at": _iso(NOW - timedelta(minutes=10)),
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=5)),
+                "heartbeat_ts": _iso(NOW - timedelta(minutes=5)),  # FRESH，斷言具體 age=5
                 "tickets": ["0.2.1-W3-999"],
                 "files": ["a.py", "b.py"],
                 "parent_session_id": None,
@@ -149,7 +159,7 @@ class TestStaleJudgement:
                 "name": "stale-session",
                 "project": PROJECT_ROOT,
                 "registered_at": _iso(NOW - timedelta(hours=2)),
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=45)),
+                "heartbeat_ts": stale_ts(NOW),
                 "tickets": [],
                 "files": [],
                 "parent_session_id": None,
@@ -204,7 +214,7 @@ class TestStaleJudgement:
                 "session-boundary": {
                     "name": "boundary-session",
                     "project": PROJECT_ROOT,
-                    "heartbeat_ts": _iso(NOW - timedelta(minutes=30, seconds=30)),
+                    "heartbeat_ts": _iso(NOW - pm_stale_threshold() - timedelta(seconds=30)),
                     "tickets": [],
                     "files": [],
                 }
@@ -228,14 +238,14 @@ class TestProjectFiltering:
             "session-here": {
                 "name": "same-project",
                 "project": PROJECT_ROOT,
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=1)),
+                "heartbeat_ts": fresh_ts(NOW),
                 "tickets": [],
                 "files": [],
             },
             "session-elsewhere": {
                 "name": "other-project",
                 "project": "/Users/tester/project/other_repo",
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=1)),
+                "heartbeat_ts": fresh_ts(NOW),
                 "tickets": [],
                 "files": [],
             },
@@ -252,7 +262,7 @@ class TestJsonFormat:
             "session-a": {
                 "name": "flutter-balance-b6",
                 "project": PROJECT_ROOT,
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=5)),
+                "heartbeat_ts": _iso(NOW - timedelta(minutes=5)),  # FRESH，斷言具體 age=5
                 "tickets": ["0.2.1-W3-999"],
                 "files": ["a.py"],
             }
@@ -279,7 +289,7 @@ class TestReclaimableMarking:
             "session-stale": {
                 "name": "dead-session",
                 "project": PROJECT_ROOT,
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=45)),
+                "heartbeat_ts": stale_ts(NOW),
                 "tickets": ["0.2.1-W3-100", "0.2.1-W3-101"],
                 "files": ["lib/a.dart"],
             }
@@ -296,7 +306,7 @@ class TestReclaimableMarking:
             "session-alive": {
                 "name": "alive-session",
                 "project": PROJECT_ROOT,
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=5)),
+                "heartbeat_ts": fresh_ts(NOW),
                 "tickets": ["0.2.1-W3-200"],
                 "files": ["lib/b.dart"],
             }
@@ -312,14 +322,14 @@ class TestReclaimableMarking:
             "session-stale": {
                 "name": "dead-session",
                 "project": PROJECT_ROOT,
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=45)),
+                "heartbeat_ts": stale_ts(NOW),
                 "tickets": ["0.2.1-W3-100"],
                 "files": [],
             },
             "session-alive": {
                 "name": "alive-session",
                 "project": PROJECT_ROOT,
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=5)),
+                "heartbeat_ts": fresh_ts(NOW),
                 "tickets": ["0.2.1-W3-200"],
                 "files": [],
             },

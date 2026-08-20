@@ -9,18 +9,32 @@
 """
 
 from argparse import Namespace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
 
 from ticket_system.commands import track_stale_list
-from ticket_system.lib.staleness import STALE_IN_PROGRESS_HOURS
+from ticket_system.lib.staleness import STALE_CRITICAL_DAYS, STALE_IN_PROGRESS_HOURS
 
-NOW = datetime(2026, 7, 5, 12, 0, 0)
-TODAY = date(2026, 7, 5)
+# NOW/TODAY 取模組載入當下（而非固定字面）：所有播種與判定入口皆注入
+# _now/_today，elapsed 完全確定，故改為動態基準不影響 FRESH/STALE/critical
+# 判定；同時消除「若入口日後移除注入即立刻引爆」的隱患（TEST-MON-001，
+# 0.2.1-W3-733）。
+NOW = datetime.now()
+TODAY = date.today()
 STALE_HOURS = STALE_IN_PROGRESS_HOURS + 2  # 超閾值
 FRESH_HOURS = 1  # 未超閾值
+CRITICAL_MARGIN_DAYS = 4  # 超 critical 閾值的安全邊際
+
+
+def _critical_created_date() -> str:
+    """播種一筆遠超 STALE_CRITICAL_DAYS 閾值的建立日期（critical 語意）。
+
+    以門檻常數推導而非硬編碼字面日期，讀者不需心算字面日期與 TODAY 的
+    天數差，門檻調整時也不需逐點改字面。
+    """
+    return (TODAY - timedelta(days=STALE_CRITICAL_DAYS + CRITICAL_MARGIN_DAYS)).isoformat()
 
 
 def _ticket(tid, status, *, started_hours_ago=None, wave=5, agent="thyme-python-developer"):
@@ -125,7 +139,7 @@ class TestPendingSectionRegression:
             "title": "old pending",
             "status": "pending",
             "wave": 5,
-            "created": "2026-06-01",  # 34 天前 → critical
+            "created": _critical_created_date(),
         }
         out = _run([stale_pending], capsys)
         assert "9.9.9-W5-008" in out
@@ -138,7 +152,7 @@ class TestPendingSectionRegression:
                 "title": "old pending",
                 "status": "pending",
                 "wave": 5,
-                "created": "2026-06-01",
+                "created": _critical_created_date(),
             },
             _ticket("9.9.9-W5-010", "in_progress", started_hours_ago=STALE_HOURS),
         ]

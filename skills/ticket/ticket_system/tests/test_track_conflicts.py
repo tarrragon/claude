@@ -20,26 +20,30 @@ from __future__ import annotations
 
 import json
 from argparse import Namespace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 from ticket_system.commands import track_conflicts
 from ticket_system.lib import file_conflict
 
-from conftest import _iso, _ticket  # noqa: F401 — 0.2.1-W3-585 收斂逐字複本
+from conftest import _iso, _ticket, fresh_ts, stale_ts  # noqa: F401 — 0.2.1-W3-585/733 收斂複本
 
 
-NOW = datetime(2026, 8, 18, 12, 0, 0, tzinfo=timezone.utc)
+# NOW 取模組載入當下（而非固定字面）：所有播種與判定入口皆注入 now=NOW，
+# elapsed 完全確定（見 conftest.fresh_ts / stale_ts），故改為動態基準不影響
+# FRESH/STALE 判定；同時消除「若入口日後移除 now 注入即立刻引爆」的隱患
+# （TEST-MON-001，與 test_lease.py 同型防護，0.2.1-W3-733）。
+NOW = datetime.now(timezone.utc)
 
 
 def _fresh_registry(session_id: str, tickets: list, files: list) -> dict:
-    """建立含單一 FRESH session 的假 registry（heartbeat 5 分鐘前）。"""
+    """建立含單一 FRESH session 的假 registry（heartbeat 剛播種，elapsed = 0）。"""
     return {
         "sessions": {
             session_id: {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=5)),
+                "heartbeat_ts": fresh_ts(NOW),
                 "tickets": tickets,
                 "files": files,
             }
@@ -48,12 +52,12 @@ def _fresh_registry(session_id: str, tickets: list, files: list) -> dict:
 
 
 def _stale_registry(session_id: str, tickets: list, files: list) -> dict:
-    """建立含單一 STALE session 的假 registry（heartbeat 45 分鐘前，逾 30 分閾值）。"""
+    """建立含單一 STALE session 的假 registry（heartbeat 逾門檻 + 安全邊際）。"""
     return {
         "sessions": {
             session_id: {
                 "project": "/proj",
-                "heartbeat_ts": _iso(NOW - timedelta(minutes=45)),
+                "heartbeat_ts": stale_ts(NOW),
                 "tickets": tickets,
                 "files": files,
             }
