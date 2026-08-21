@@ -63,8 +63,8 @@ def _make_target(
     return {
         "id": target_id,
         "source_ticket": source_ticket,
-        "blocked_by": blocked_by,
-        "related_to": related_to,
+        "blockedBy": blocked_by,
+        "relatedTo": related_to,
         "where": {"files": where_files if where_files is not None else []},
     }
 
@@ -554,8 +554,8 @@ class TestGroupD_CLI:
         target = {
             "id": "0.18.0-W17-010",
             "source_ticket": "0.18.0-W17-001",
-            "blocked_by": None,
-            "related_to": None,
+            "blockedBy": None,
+            "relatedTo": None,
             "where": {"files": []},
             "_body": target_body,
         }
@@ -607,8 +607,8 @@ class TestGroupD_CLI:
         target = {
             "id": "0.18.0-W17-010",
             "source_ticket": "0.18.0-W17-001",
-            "blocked_by": None,
-            "related_to": None,
+            "blockedBy": None,
+            "relatedTo": None,
             "where": {"files": []},
             "_body": pre_filled_body,
         }
@@ -660,8 +660,8 @@ class TestGroupD_CLI:
         target = {
             "id": "0.18.0-W17-010",
             "source_ticket": "0.18.0-W17-001",
-            "blocked_by": None,
-            "related_to": None,
+            "blockedBy": None,
+            "relatedTo": None,
             "where": {"files": []},
             "_body": "## Context Bundle\n\n（待自動填入）\n\n## Other\n保留\n",
         }

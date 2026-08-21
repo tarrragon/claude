@@ -386,6 +386,45 @@ def validate_version_registered(version: str) -> tuple[bool, str]:
     return (False, error_msg)
 
 
+def determine_fallback_version(
+    source_ticket: Optional[str] = None,
+) -> Optional[tuple[str, str]]:
+    """命中版本未註冊錯誤時，推導可繞過的候選版本。
+
+    背景：版本歸屬引導依動詞分類選出的版本可能未在 todolist.yaml 註冊
+    （如「新增」被歸類為功能而選到未開版的次版本），此時硬失敗訊息若無
+    可執行的繞過指令，使用者只能自行推敲。本函式提供兩層推導依據：
+
+    1. --source-ticket 的 ID 前綴：spawn 場景幾乎必填，且版本語意由 ID
+       直接承載，不受 wave 編號跨版本重複所影響（實查已確認同一 wave
+       編號會出現在多個版本目錄下，見對應 ticket Problem Analysis）。
+    2. todolist.yaml 中狀態為 active 的當前進行中版本（get_current_version）。
+
+    兩者皆須先確認已在 todolist.yaml 註冊，避免推導出另一個同樣未註冊
+    的版本。
+
+    Args:
+        source_ticket: --source-ticket 參數值（可能為 None）
+
+    Returns:
+        Optional[tuple[str, str]]: (候選版本, 推導理由)；無可用候選時 None
+    """
+    from .ticket_validator import extract_version_from_ticket_id
+
+    if source_ticket:
+        extracted = extract_version_from_ticket_id(source_ticket)
+        if extracted and is_version_registered(extracted):
+            return (extracted, f"依 --source-ticket {source_ticket} 推導")
+
+    current = get_current_version()
+    if current:
+        normalized = current[1:] if current.startswith("v") else current
+        if is_version_registered(normalized):
+            return (normalized, "目前進行中版本")
+
+    return None
+
+
 def is_version_registered(version: str) -> bool:
     """
     檢查版本是否已在 todolist.yaml 中註冊（不限狀態）。

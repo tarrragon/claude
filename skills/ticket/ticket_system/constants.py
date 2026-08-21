@@ -38,6 +38,8 @@ __all__ = [
     # Ticket ID
     "TICKET_ID_PATTERN",
     "TICKET_ID_RE",
+    "WHEN_TICKET_REF_PATTERN",
+    "WHEN_TICKET_REF_RE",
     "KNOWN_TICKET_SUFFIXES",
     # 嵌套深度上限（W1-056.5 協議 v2 D3）
     "MAX_TICKET_DEPTH",
@@ -198,6 +200,12 @@ CLOSE_REASON_RETROSPECTIVE_UNKNOWN: str = "unknown"
 
 TICKET_ID_PATTERN: str = r"^(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)(-[a-z0-9][a-z0-9-]{0,59})?$"
 TICKET_ID_RE = re.compile(TICKET_ID_PATTERN)
+
+# 短格式 Wave-序號 ID（如短格式 "W<wave>-<seq>"），用於自由文字（when 欄位等）中
+# 偵測 ticket 引用。TICKET_ID_PATTERN 錨定完整 ID（含版本號前綴），不匹配 when
+# 欄位常見的短格式引用，故另立此 pattern，不重用 TICKET_ID_RE。
+WHEN_TICKET_REF_PATTERN: str = r"W\d+-\d+(?:\.\d+)?"
+WHEN_TICKET_REF_RE = re.compile(WHEN_TICKET_REF_PATTERN)
 
 # ============================================================
 # 嵌套派發深度上限（W1-056.5 協議 v2 D3）

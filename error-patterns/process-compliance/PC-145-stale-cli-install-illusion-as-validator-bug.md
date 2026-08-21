@@ -30,7 +30,22 @@ related:
 
 ### 根因一：uv tool install 不自動偵測源碼變動
 
-`uv tool install` 將套件複製到 `~/.local/share/uv/tools/` 並建立 entry-point shim 在 `~/.local/bin/`。後續 `ticket` 命令固定指向已安裝版本，不會 reload 原始碼。
+`uv tool install` 將套件複製到 `~/.local/share/uv/tools/` 並建立 entry-point shim 在 `~/.local/bin/`。後續命令固定指向已安裝版本，不會 reload 原始碼。
+
+**校準（2026-08-21 實測）**：本 pattern 建立時所有 CLI skill 皆屬此形態，現況已分化為兩類，改動後是否需要 reinstall 取決於屬哪一類：
+
+| 形態 | 行為 | 改原始碼後 |
+|---|---|---|
+| cwd-resolving shim | 每次執行由 shim 解析當前專案並讀取專案內原始碼 | 即時生效，不需 reinstall |
+| uv tool 安裝的獨立套件 | 套件被複製至 `~/.local/share/uv/tools/<name>/lib/*/site-packages/`，執行的是副本 | **必須 reinstall** 才生效 |
+
+判別法（不要憑印象，兩者的 `~/.local/bin/` entry 外觀相近）：讀 `~/.local/bin/<cli>` 的前幾行，或直接比對已安裝副本與專案原始碼的關鍵常數是否一致——
+
+```
+grep -A10 "<關鍵常數> = " ~/.local/share/uv/tools/<name>/lib/python3.*/site-packages/<pkg>/<module>.py
+```
+
+若該路徑存在且內容與專案原始碼不同，即屬需 reinstall 的第二類。session start 的 `[UV Tool Staleness]` 檢查會報告部分過期項，但它比對的是整體雜湊，個別常數的差異需自行查證。
 
 ### 根因二：IMP-023 規則文件存在但易忘記
 
@@ -83,6 +98,7 @@ git commit -m "..."
 
 - 2026-05-13 W10-125（首例）：W10-125 修復 `_is_placeholder` 表格情境豁免，源碼測試全綠，CLI complete 仍報「Test Results 未填寫」誤判（CLI 用舊 validator）；`uv tool install --reinstall` 後解決。
 - IMP-023（前置案例）：歷史已記錄此規則但未專項命名 PC，現補建 PC-145 作為偵測 + SOP 雙通道。
+- 2026-08-21（形態分化後首例，且後果升級）：某 sync 類 CLI skill 補齊內容雜湊的排除目錄清單後，原始碼層級測試全綠（直接呼叫雜湊函式與排除判定函式），但實際 CLI 執行時被排除的目錄**仍出現在推送預覽的新增清單**。查已安裝副本的常數確認仍為舊值，`--force --reinstall` 後重測即消失。與首例的差異在後果：首例是誤判修復未生效（讀取端），本例若當時帶 `--force` 執行推送，未被排除的工具快取目錄會被推上跨專案發佈庫並污染所有 consumer 的拉取內容（寫入端）。**測試層級與工具層級的落差在寫入端會實際造成損害，不只是誤判。**
 
 ## 與相關 error-pattern 的差異
 

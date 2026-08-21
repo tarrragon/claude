@@ -107,18 +107,23 @@ ANA / IMP Solution 章節支援 H3 子標題組織內容（如「### WRAP 完整
 
 **為何 multi_view_status 例外**：hook 用 regex 跨行掃描平鋪 YAML-like 結構，H3 子章節包裝會切斷掃描範圍（PC-117 / W17-111 設計）。
 
-### Type-aware Quality Gate（W10-123 補強）
+### Type-aware Quality Gate
 
-`ticket-quality-gate-hook` 對不同 ticket type 套用不同檢查：
+`ticket-quality-gate-hook.py` 已刪除。C1 God Ticket / C3 Ambiguous Responsibility
+判準移植至 `.claude/hooks/acceptance_checkers/`；C2 Incomplete Ticket 判準沿用既有的
+`execution_log_checker.py`（非移植新增）。c2 與 c3 承接者的豁免機制並不相同，需分開看：
 
-| Type | c2 incomplete check | c3 ambiguous responsibility check |
-|------|-------------------|--------------------------------|
-| ANA | 跳過（不適用實作測試路徑要求） | 跳過（不適用 Layer 1-5 分層） |
-| DOC | 跳過 | 跳過 |
-| IMP | 觸發 | 觸發 |
-| 缺 type frontmatter | 觸發（向後相容） | 觸發 |
+| 判準 | 現行承接者 | ANA | DOC | IMP | 缺 type frontmatter |
+|------|-----------|-----|-----|-----|---------------------|
+| c2 incomplete（execution log 填寫） | `execution_log_checker.check_execution_log_filled` | 未跳過，改加嚴：額外檢查「重現實驗結果」章節非空殼 | **無 type-based 跳過邏輯**：DOC schema 範本固定含「（免填：...）」placeholder 文字，regex 不會剝除該文字，實務上恆非空而不阻擋——非程式碼顯式豁免 | 檢查 Solution / Test Results 至少一項非空 | 同 IMP（空字串不在任何豁免集合） |
+| c3 ambiguous responsibility（domain 分散度） | `responsibility_scope_checker.check_file_scope_diversity` | 顯式豁免（`_EXEMPT_TYPES = {"ANA", "DOC"}`） | 顯式豁免（同左） | domain 數 > 2 即違規 | 未豁免，套用同 IMP 邏輯 |
 
-配置位置：`.claude/hooks/quality_config.yaml` 的 `trigger_conditions.type_excludes`（預設 `["ANA", "DOC"]`）。
+配置位置：兩檢查器的閾值與豁免清單為模組內常數（`_DOMAIN_COUNT_THRESHOLD`、
+`_EXEMPT_TYPES`），非外部設定檔（原 `quality_config.yaml` 已隨舊 hook 一併刪除）。
+
+**注意**：c2 對 DOC 的「不阻擋」是範本文字的副作用，非程式碼顯式排除——若 DOC
+ticket 的 Solution / Test Results 章節被清空（不含「免填」placeholder 文字），仍會
+被 `execution_log_checker` 判定為未填寫並阻擋 complete。
 
 ### IMP（Implementation）
 
@@ -385,6 +390,7 @@ acceptance:
 
 | 版本 | 日期 | 變更 |
 |------|------|------|
+| 1.8.0 | 2026-08-20 | 改寫「Type-aware Quality Gate」節：`ticket-quality-gate-hook.py` 已刪除，改以現行承接者（`execution_log_checker.py` / `responsibility_scope_checker.py`）重寫 c2/c3 表格；c2 對 DOC 的行為改正為「範本 placeholder 副作用，非顯式豁免」（原表格誤植為「跳過」），c3 對 ANA/DOC 維持顯式豁免 |
 | 1.5.0 | 2026-08-17 | IMP 區塊新增「防護類 hook ticket 額外 acceptance（三項必含）」段落：where.files 觸及 hooks 目錄（含頂層與 skill hooks）時強制三項語意（session 生效策略/liveness 驗證方式/失敗語意），對應 hook 硬擋於 acceptance-gate 新增 checker |
 | 1.4.0 | 2026-07-05 | 新增「Frontmatter protocol_version 契約」段落：emit 機制 + 凍結豁免 + lazy-migration 契約（W5-005.4） |
 | 1.3.0 | 2026-06-04 | IMP 區塊新增「src 字串輸出變更額外 acceptance」段落；反模式表補充 build-only 驗收反模式（W1-005.2 / W1-040） |
@@ -393,6 +399,7 @@ acceptance:
 | 1.0.0 | 2026-04-20 | 初版（W17-016.2 落地 W17-016.1 盤點結論） |
 
 **Last Updated**: 2026-08-20
+**Version**: 1.8.0 — 「Type-aware Quality Gate」節改寫：已刪除的 `ticket-quality-gate-hook.py` 換成現行承接者說明。逐一查證兩個現行 checker 原始碼後發現舊表格對 DOC 的 c2 描述失準——`execution_log_checker.py` 對 DOC 無 type-based 跳過邏輯，DOC 之所以實務上不被阻擋，是因 schema 範本固定內嵌「（免填：...）」文字未被剝除規則移除，屬範本副作用而非程式碼顯式豁免；c3（`responsibility_scope_checker.py`）則確有 `_EXEMPT_TYPES = {"ANA", "DOC"}` 顯式豁免，與舊表格一致。同步移除已不存在的 `quality_config.yaml` 配置位置引用，改為模組內常數說明。
 **Version**: 1.7.2 — 補改名漏網：「防護類 hook ticket 額外 acceptance」節與「邊界（兩個方向）」段的四項散文列舉仍寫舊 label「既有 session 生效策略」，與同節表格第 1 列的現行 label 不一致；依表格改為「本 session 實地觸發確認」。讀者依散文寫出的 acceptance 會落在舊措辭上，而 checker 的關鍵詞清單刻意保留舊用詞故不會擋，此不一致無自曝管道。要求本身與硬擋行為未變。
 **Version**: 1.7.1（原記為 1.7.0，與先落地的方案 F 條目撞號，依落地順序改號） — 依 PC-BAL-033 機制收窄同步（2026-08-18）：必含項第 1 項由「既有 session 生效策略」改名為「本 session 實地觸發確認」（收窄後需驗的是本 session 實地觸發是否落檔，非屬哪個 session 世代），合格填法同步改寫；「Why（前三項）」段的機制句由單一快照模型斷言改為兩條成因並列（缺可執行位恆成立、註冊快照版本相依），並說明第 1 項為何選在兩種載入模型下都有效的證據。要求本身、觸發條件與硬擋行為皆未變。
 **Version**: 1.7.0 — 依 0.2.1-W3-527 完整 WRAP 裁示改採方案 F（機器讀正本）：第 4 項的檢查對象由 acceptance 的數字宣告改為 `how.strategy` 的盤點表正本，撰寫者不再需要在 acceptance 重複宣告數字；補 Why（副本 vs 正本、消費者缺席）與強制層現況（改動待 0.2.1-W3-533 落地，該票完成前 checker 仍檢查 acceptance 宣告）。

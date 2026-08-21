@@ -558,7 +558,17 @@ def _update_todolist_yaml(from_version: str, to_version: str, project_root: Path
     # 保存更新
     try:
         with open(todolist_path, "w", encoding="utf-8") as f:
-            yaml.safe_dump(todolist, f, allow_unicode=True, default_flow_style=False)
+            # width=1000（過渡措施，非根治）：僅消除長字串欄位折行，避免
+            # hooks 端手寫 YAML parser 誤判斷點空白。型別三類落差（巢狀
+            # 列表成字串、空 dict 成字串、bool/null/int 成字串）不因此
+            # 解決，且防護依賴後續新增 dump 點時的紀律而非機制。
+            yaml.safe_dump(
+                todolist,
+                f,
+                allow_unicode=True,
+                default_flow_style=False,
+                width=1000,
+            )
         return count
     except Exception:
         return 0

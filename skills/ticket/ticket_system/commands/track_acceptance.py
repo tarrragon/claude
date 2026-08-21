@@ -397,6 +397,26 @@ def _execute_single_check_acceptance(
     ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
     save_ticket(ticket, ticket_path)
 
+    # 寫入後 auto-commit ticket md，對齊 set-acceptance 的保護等級
+    # （path-limited + graceful degrade）。與 set-acceptance 同置於 file_lock 內
+    # （execute_check_acceptance 的 with file_lock 區塊涵蓋本函式），避免並發窗口。
+    import sys as _sys
+    from ticket_system.lib import git_utils
+    try:
+        commit_status = git_utils._auto_commit_ticket_md(
+            str(ticket_path), args.ticket_id, "Acceptance Criteria",
+            operation="check-acceptance",
+        )
+        if commit_status in ("not_git_repo", "git_failed"):
+            _sys.stderr.write(
+                f"[check-acceptance] auto-commit skipped（{commit_status}，非致命）；"
+                f"body 已保留 working tree，可手動 git commit 持久化。\n"
+            )
+    except Exception as exc:
+        _sys.stderr.write(
+            f"[check-acceptance] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
+        )
+
     # 輸出結果
     status_text = TrackAcceptanceMessages.STATUS_TEXT_CHECKED if not uncheck else TrackAcceptanceMessages.STATUS_TEXT_UNCHECKED
     new_status = new_item.split(" ", 1)[0]  # 取前綴如 [x] 或 [ ]
@@ -462,6 +482,26 @@ def _execute_batch_check_acceptance(
     # 保存
     ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
     save_ticket(ticket, ticket_path)
+
+    # 寫入後 auto-commit ticket md，對齊 set-acceptance 的保護等級
+    # （path-limited + graceful degrade）。與 set-acceptance 同置於 file_lock 內
+    # （execute_check_acceptance 的 with file_lock 區塊涵蓋本函式），避免並發窗口。
+    import sys as _sys
+    from ticket_system.lib import git_utils
+    try:
+        commit_status = git_utils._auto_commit_ticket_md(
+            str(ticket_path), args.ticket_id, "Acceptance Criteria",
+            operation="check-acceptance",
+        )
+        if commit_status in ("not_git_repo", "git_failed"):
+            _sys.stderr.write(
+                f"[check-acceptance] auto-commit skipped（{commit_status}，非致命）；"
+                f"body 已保留 working tree，可手動 git commit 持久化。\n"
+            )
+    except Exception as exc:
+        _sys.stderr.write(
+            f"[check-acceptance] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
+        )
 
     # 輸出結果
     total_count = len(acceptance_list)
@@ -757,6 +797,16 @@ def _execute_append_log_locked(args: argparse.Namespace, version: str) -> int:
             header_end = section_text.find("\n")
             header_line = section_text[: header_end + 1] if header_end != -1 else section_text
             updated_section = header_line + new_entry.lstrip("\n") + "\n"
+
+            # 覆寫為不可逆操作（ticket md 受 hook 保護無法手工還原），寫回前
+            # 印出將被取代的內容摘要供呼叫端核對，作為防呆。
+            old_summary = section_content.strip()
+            if len(old_summary) > 200:
+                old_summary = old_summary[:200] + "...(truncated)"
+            print(
+                f"[append-log] --replace 將取代 section '{section}' 既有內容："
+                f"\n{old_summary}\n"
+            )
         else:
             # W3-035: 若 section_content 為 placeholder-only（含 Schema 註解 +
             # 待填寫文字），改用 new_entry 替換 placeholder 而非 append，避免

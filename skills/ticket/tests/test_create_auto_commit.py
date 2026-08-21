@@ -75,6 +75,41 @@ def _make_args(**overrides) -> argparse.Namespace:
     return argparse.Namespace(**defaults)
 
 
+def _install_context_bundle_path_mocks(monkeypatch, tickets_dir: Path) -> None:
+    """額外 patch parser / context_bundle_extractor 內部各自 import 的
+    get_ticket_path，使 Context Bundle 抽取路徑（source ticket load、
+    target 讀寫）落在測試用 tickets_dir，而非真實專案路徑。
+
+    背景：`from .paths import get_ticket_path` 在各模組各自綁定一份名稱，
+    patch `create.py` 命名空間內的版本不影響 `parser.py` /
+    `context_bundle_extractor.py` 內已綁定的版本，須逐一 patch。
+    """
+    monkeypatch.setattr(
+        "ticket_system.lib.parser.get_ticket_path",
+        lambda v, tid: tickets_dir / f"{tid}.md",
+    )
+    monkeypatch.setattr(
+        "ticket_system.lib.context_bundle_extractor.get_ticket_path",
+        lambda v, tid: tickets_dir / f"{tid}.md",
+    )
+
+
+def _write_source_ticket_for_bundle(tickets_dir: Path, source_id: str) -> None:
+    """建立可被 extract_and_write_context_bundle 抽取的 source ticket。"""
+    content = (
+        "---\n"
+        f"id: {source_id}\n"
+        "title: bundle source\n"
+        "status: completed\n"
+        "what: source-what-content\n"
+        "why: source-why-content\n"
+        "---\n"
+        "\n"
+        "body\n"
+    )
+    (tickets_dir / f"{source_id}.md").write_text(content, encoding="utf-8")
+
+
 def _install_common_mocks(monkeypatch, tickets_dir: Path) -> None:
     """安裝 execute() 需要的外部邊界 mock，但不 stub `_build_and_save_ticket`
     ——本檔要驗證的正是落盤後的真實 auto-commit 副作用，需要真實檔案寫入
@@ -298,3 +333,77 @@ class TestWorktreeAutoCommit:
 
         merged_path = main_repo / "tickets" / f"{ticket_id}.md"
         assert merged_path.exists(), "merge 後新票應存在於主 repo 工作目錄"
+
+
+# ============================================================
+# Context Bundle 完整性情境（守護 auto-commit 相對 Context Bundle 寫入的
+# 順序：commit 必須涵蓋 Context Bundle 章節內容，非僅涵蓋「無殘留」表象）
+# ============================================================
+
+
+class TestCommitCoversContextBundle:
+    """驗證修復後 commit 順序：auto-commit 在 Context Bundle 寫入之後執行，
+    使單一 commit 涵蓋完整內容。若未來有人把 auto-commit 呼叫移回 Context
+    Bundle 寫入之前，本測試組應轉紅——`TestMainRepoAutoCommit` 系列不涉及
+    source_ticket，測不出這個回歸。"""
+
+    def test_working_tree_clean_after_create_with_context_bundle(
+        self, patch_paths_to_repo, monkeypatch
+    ):
+        """acceptance 字面驗證：create 執行後該 ticket md 無未提交變更
+        （即使該 ticket 觸發了 Context Bundle 抽取寫入）。"""
+        repo = patch_paths_to_repo
+        tickets_dir = repo / "tickets"
+        source_id = "0.0.0-W1-999"
+        _write_source_ticket_for_bundle(tickets_dir, source_id)
+        _install_context_bundle_path_mocks(monkeypatch, tickets_dir)
+
+        from ticket_system.commands.create import execute
+
+        rc = execute(_make_args(source_ticket=source_id))
+        assert rc == 0
+
+        new_ticket_ids = [
+            p.stem for p in tickets_dir.glob("*.md") if p.stem != source_id
+        ]
+        assert len(new_ticket_ids) == 1
+        ticket_id = new_ticket_ids[0]
+
+        status = _run_git(repo, "status", "--porcelain", f"tickets/{ticket_id}.md")
+        assert status.stdout.strip() == "", (
+            f"create 後該 ticket md 應無未提交變更，實得: {status.stdout!r}"
+        )
+
+    def test_commit_content_includes_context_bundle_section(
+        self, patch_paths_to_repo, monkeypatch
+    ):
+        """驗證修復核心差異：commit 的檔案內容已含 Context Bundle 章節（而非
+        僅 commit 了寫入 Context Bundle 之前的舊內容）。用 `git show
+        HEAD:<path>` 直接讀已提交的 blob 內容，非 working tree 讀檔。"""
+        repo = patch_paths_to_repo
+        tickets_dir = repo / "tickets"
+        source_id = "0.0.0-W1-999"
+        _write_source_ticket_for_bundle(tickets_dir, source_id)
+        _install_context_bundle_path_mocks(monkeypatch, tickets_dir)
+
+        from ticket_system.commands.create import execute
+
+        rc = execute(_make_args(source_ticket=source_id))
+        assert rc == 0
+
+        new_ticket_ids = [
+            p.stem for p in tickets_dir.glob("*.md") if p.stem != source_id
+        ]
+        assert len(new_ticket_ids) == 1
+        ticket_id = new_ticket_ids[0]
+
+        committed_content = _run_git(
+            repo, "show", f"HEAD:tickets/{ticket_id}.md"
+        ).stdout
+        assert "## Context Bundle" in committed_content, (
+            "commit 的 blob 內容應已涵蓋 Context Bundle 章節，"
+            f"實得:\n{committed_content}"
+        )
+        assert "source-what-content" in committed_content, (
+            "commit 的 blob 內容應含抽取自 source ticket 的實際欄位值"
+        )

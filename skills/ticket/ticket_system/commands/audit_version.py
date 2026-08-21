@@ -33,8 +33,10 @@ from ticket_system.lib.audit_version import (
     scan_all_tickets,
     detect_mismatches,
     detect_duplicates,
+    detect_orphan_references,
     VersionMismatch,
     DuplicateTicket,
+    OrphanReference,
 )
 from ticket_system.lib.messages import format_error, format_info
 from ticket_system.lib.ui_constants import SEPARATOR_CHAR, SEPARATOR_WIDTH
@@ -56,6 +58,7 @@ def _format_version_audit_report(
     mismatches: List[VersionMismatch],
     duplicates: List[DuplicateTicket],
     total_tickets: int,
+    orphans: List[OrphanReference] = None,
 ) -> str:
     """
     格式化版本審計報告
@@ -64,10 +67,12 @@ def _format_version_audit_report(
         mismatches: 發現的版本不一致清單
         duplicates: 發現的重複 Ticket 清單
         total_tickets: 掃描的總 Ticket 數
+        orphans: 發現的孤兒引用清單（source_ticket 未被父票 spawned_tickets 回列）
 
     Returns:
         格式化後的報告字串
     """
+    orphans = orphans or []
     lines = []
     separator = _format_separator()
 
@@ -78,7 +83,7 @@ def _format_version_audit_report(
     lines.append("")
 
     # 統計摘要
-    issue_count = len(mismatches) + len(duplicates)
+    issue_count = len(mismatches) + len(duplicates) + len(orphans)
     if issue_count == 0:
         lines.append(AuditVersionMessages.AUDIT_PASSED.format(total=total_tickets))
         lines.append("")
@@ -154,6 +159,28 @@ def _format_version_audit_report(
             lines.append(AuditVersionMessages.DUPLICATE_SUGGESTION.format(
                 recommended_version=dup.recommended_version,
             ))
+            lines.append("")
+
+    # 孤兒引用部分
+    if orphans:
+        lines.append(AuditVersionMessages.SECTION_ORPHANS)
+        lines.append("")
+
+        for orphan in orphans:
+            lines.append(AuditVersionMessages.ORPHAN_ITEM.format(
+                child_ticket_id=orphan.child_ticket_id,
+                claimed_parent_id=orphan.claimed_parent_id,
+            ))
+            if orphan.parent_spawned_tickets is None:
+                lines.append(AuditVersionMessages.ORPHAN_PARENT_NOT_FOUND)
+            else:
+                lines.append(AuditVersionMessages.ORPHAN_PARENT_SPAWNED.format(
+                    spawned_tickets=orphan.parent_spawned_tickets,
+                ))
+                lines.append(AuditVersionMessages.ORPHAN_SUGGESTION.format(
+                    parent_id=orphan.claimed_parent_id,
+                    child_id=orphan.child_ticket_id,
+                ))
             lines.append("")
 
     # 結論
@@ -292,12 +319,13 @@ def execute_audit_version(args: argparse.Namespace, version: str) -> int:
         else:
             tickets = all_tickets
 
-        # 偵測不一致和重複
+        # 偵測不一致、重複和孤兒引用
         mismatches = detect_mismatches(tickets)
         duplicates = detect_duplicates(tickets)
+        orphans = detect_orphan_references(tickets)
 
         # 輸出報告
-        report = _format_version_audit_report(mismatches, duplicates, len(tickets))
+        report = _format_version_audit_report(mismatches, duplicates, len(tickets), orphans)
         print(report)
 
         # 如果有問題且指定了 --fix，進行修復
@@ -321,8 +349,8 @@ def execute_audit_version(args: argparse.Namespace, version: str) -> int:
             print("")
             print(AuditVersionMessages.FIX_COMPLETED)
 
-        # 檢查結果
-        if mismatches or duplicates:
+        # 檢查結果（孤兒引用無自動修復，僅列入結果判定）
+        if mismatches or duplicates or orphans:
             return 1
         else:
             return 0

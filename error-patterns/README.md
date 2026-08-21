@@ -311,7 +311,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | IMP-054 | Hook 腳本缺少執行權限導致靜默失敗 | 高 | — |
 | IMP-055 | PostToolUse Hook stdout 輸出純文字導致 JSON validation failed | 高 | — |
 | IMP-056 | chpwd Shell Hook 大量 ls 輸出淹沒代理人工具結果 | 中 | — |
-| IMP-057 | grep 單行比對多行 print() 語句產生誤報 | 中 | — |
+| IMP-057 | grep pattern 的匹配條件與待答問題的判準不一致（多行語句 / block style 值 / 匯入形態） | 中 | — |
 | IMP-058 | YAML frontmatter 欄位型別假設錯誤（list vs string） | 高 | — |
 | IMP-059 | Auto-compaction UTF-8 截斷導致文件中文字元損壞 | 中 | — |
 | IMP-060 | Hook error 掃描純字串匹配產生誤報循環 | 中 | — |

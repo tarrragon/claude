@@ -1,4 +1,17 @@
-# Ticket Quality Gate Hook - 使用指南
+# Ticket Quality Gate Hook - 使用指南（歷史文件，機制已移除）
+
+> **狀態**：`ticket-quality-gate-hook.py` 已刪除（`.claude/settings.json` 移除
+> 註冊；C1 God Ticket / C3 Ambiguous Responsibility 判準移植至
+> `.claude/hooks/acceptance_checkers/god_ticket_scale_checker.py` /
+> `responsibility_scope_checker.py`；C2 Incomplete Ticket 判準沿用既有的
+> `.claude/hooks/acceptance_checkers/execution_log_checker.py`，非本次移植新增）。
+> 刪除依據：原 hook 掛 `PostToolUse` + `Write`，屬可繞過執行點（命中
+> PC-MON-001「防護放在可繞過的執行點等於防護不存在」）；新判準改落在
+> `ticket track complete` 前的 acceptance-gate-hook，屬不可繞過點。
+>
+> 本文件以下內容保留作為歷史操作手冊參考，**指令、路徑與設定檔（含
+> `quality_config.yaml`）均已不存在，不可依此操作**。現行 type-aware 判準行為
+> 見 `.claude/pm-rules/ticket-body-schema.md`「Type-aware Quality Gate」節。
 
 ## 📋 功能概述
 

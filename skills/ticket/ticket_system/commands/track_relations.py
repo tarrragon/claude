@@ -58,6 +58,14 @@ from ticket_system.lib.ticket_ops import (
     resolve_ticket_path,
 )
 from ticket_system.lib.tdd_phase_inference import TDD_PHASE_SOURCE_MANUAL
+from ticket_system.lib.ticket_validator import validate_ticket_id
+
+# _execute_set_relation_field 呼叫入口對應的 CLI 子命令名稱，
+# 用於逗號分隔誤用訊息中組出正確指令範例。
+_RELATION_FIELD_TO_CLI_COMMAND = {
+    "blockedBy": "set-blocked-by",
+    "relatedTo": "set-related-to",
+}
 
 
 def validate_ticket_exists(version: str, ticket_id: str) -> tuple[dict | None, bool]:
@@ -104,6 +112,33 @@ def _normalize_ticket_id_list(value: str | list) -> list[str]:
         return value
     else:
         return []
+
+
+def _detect_comma_separated_misuse(value_str: str) -> list[str] | None:
+    """
+    偵測「逗號分隔且各段皆為合法 ID 格式」的誤用輸入。
+
+    set-blocked-by / set-related-to 的 value 參數須以空格分隔；
+    若呼叫者誤用逗號分隔（如另一組指令 set-where 的慣例），
+    直接以空格切分會把整串當成單一（不存在的）ID 查詢，
+    錯誤訊息無法指出真正的問題所在。本函式在早期攔截此情況，
+    使呼叫端能輸出專屬提示而非泛用的「找不到 Ticket」。
+
+    Args:
+        value_str: 命令列傳入的原始 value 字串
+
+    Returns:
+        list[str] | None: 逗號分隔且各段皆為合法 ticket ID 格式時，
+                           回傳去除空白後的 ID 清單；否則回傳 None。
+    """
+    if "," not in value_str:
+        return None
+    candidates = [part.strip() for part in value_str.split(",") if part.strip()]
+    if not candidates:
+        return None
+    if all(validate_ticket_id(candidate) for candidate in candidates):
+        return candidates
+    return None
 
 
 def _execute_set_relation_field_replace(
@@ -172,6 +207,19 @@ def _execute_set_relation_field(
 
         # 解析被引用的 Ticket ID 清單
         value_str = args.value if hasattr(args, "value") else ""
+
+        # 逗號分隔誤用偵測：優先於一般解析，避免整串被當成單一不存在 ID
+        comma_candidates = _detect_comma_separated_misuse(value_str)
+        if comma_candidates is not None:
+            print(format_error(
+                ErrorMessages.RELATION_VALUE_COMMA_SEPARATED,
+                ticket_id=value_str,
+                command=_RELATION_FIELD_TO_CLI_COMMAND.get(field_name, field_name),
+                target_id=target_id,
+                space_separated_ids=" ".join(comma_candidates),
+            ))
+            return 1
+
         referenced_ids = [id_str.strip() for id_str in value_str.split() if id_str.strip()]
 
         # Step 2：驗證被引用 Ticket 存在（--remove 除外）

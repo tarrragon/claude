@@ -14,10 +14,6 @@ import yaml
 
 from ticket_system import constants as _enum_constants
 from .paths import get_ticket_path
-# Backward-compat alias：原 _file_lock 已搬至 lib/file_lock.py 並 rename 為
-# public file_lock。保留此 re-export 避免破壞既有 import；新 caller 應改用
-# `from ticket_system.lib.file_lock import file_lock`。
-from .file_lock import file_lock as _file_lock  # noqa: F401
 
 
 # ============================================================================
@@ -507,22 +503,29 @@ def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
         if ticket_path.suffix == ".md":
             # Markdown 格式：YAML frontmatter + body
             # 序列化 frontmatter 為 YAML
+            # width=1000（過渡措施，非根治）：僅消除長字串欄位折行，避免
+            # hooks 端手寫 YAML parser 誤判斷點空白。型別三類落差（巢狀
+            # 列表成字串、空 dict 成字串、bool/null/int 成字串）不因此
+            # 解決，且防護依賴後續新增 dump 點時的紀律而非機制。
             frontmatter_yaml = yaml.dump(
                 ticket,
                 allow_unicode=True,
                 default_flow_style=False,
                 sort_keys=False,
+                width=1000,
             )
             # 組合 frontmatter 和 body：---\nYAML\n---\n\nbody
             content = f"---\n{frontmatter_yaml}---\n\n{body}"
         else:
             # YAML 格式：用 { ticket: {...} } 包裝
             # 支援包裝格式以提高相容性
+            # width=1000（過渡措施，理由同上）
             content = yaml.dump(
                 {"ticket": ticket},
                 allow_unicode=True,
                 default_flow_style=False,
                 sort_keys=False,
+                width=1000,
             )
 
         # 保留檔尾單一換行（W9-005 / issue #1 問題5）：load 不保證 body 帶

@@ -41,11 +41,24 @@ class ErrorMessages:
     """錯誤訊息常數。"""
 
     TICKET_NOT_FOUND = "[Error] 找不到 Ticket {ticket_id}"
+
+    RELATION_VALUE_COMMA_SEPARATED = (
+        "[Error] 找不到 Ticket {ticket_id}：偵測到逗號分隔輸入，"
+        "此命令的 ID 清單須以空格分隔。"
+        "正確範例：ticket track {command} {target_id} \"{space_separated_ids}\""
+    )
     NO_HANDOFF_FILE = "[Error] Ticket {ticket_id} 無待恢復的交接檔案"
     VERSION_NOT_DETECTED = "[Error] 無法偵測版本，請使用 --version 指定"
     VERSION_NOT_REGISTERED = (
         "[Error] 版本 {version} 未在 todolist.yaml 中註冊。"
         "請先執行 /version-release start 或 /doc-flow worklog init 建立版本。"
+    )
+    # 僅供 create 命令附加於 VERSION_NOT_REGISTERED 之後：提供可立即執行的
+    # --version 繞過指令，避免使用者只能依 VERSION_NOT_REGISTERED 的引導
+    # 誤開新版本（該引導方向與「此票應歸屬既有版本」的常見意圖相反）。
+    VERSION_NOT_REGISTERED_FALLBACK_SUFFIX = (
+        "若此票應歸屬既有版本，可加上 --version {fallback_version} 立即建立"
+        "（{fallback_reason}）。"
     )
     VERSION_NOT_ACTIVE = (
         "[Error] 版本 {version} 狀態為 {status}（非 active）。"

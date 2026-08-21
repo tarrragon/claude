@@ -142,7 +142,6 @@ class TestQualityMessages:
 
     def test_all_quality_messages_exist(self):
         """測試關鍵的 QualityMessages 常數都已定義"""
-        assert hasattr(QualityMessages, "TICKET_QUALITY_CHECK_PASSED")
         assert hasattr(QualityMessages, "FILE_EDIT_WARNING")
         assert hasattr(QualityMessages, "FILE_TYPE_WARNINGS")
 

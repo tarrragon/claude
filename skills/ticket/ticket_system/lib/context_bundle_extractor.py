@@ -56,6 +56,19 @@ SourceKind = Literal["source_ticket", "blocked_by", "related_to"]
 # 保留本模組常數名以保持既有 API（tests 直接 import SOURCE_PRIORITY）。
 SOURCE_PRIORITY: Tuple[SourceKind, ...] = CONTEXT_BUNDLE_SOURCE_KINDS  # type: ignore[assignment]
 
+# CONTEXT_BUNDLE_SOURCE_KINDS 為 snake_case（source_ticket / blocked_by /
+# related_to），但 load_ticket() 產出的 frontmatter dict 對 blocked_by /
+# related_to 用 camelCase（blockedBy / relatedTo）；source_ticket 兩端皆為
+# snake_case 故無雙態問題。
+# 此對照為顯式定義（非 snake_case→camelCase 機械轉換）：機械轉換會把
+# source_ticket 誤轉成不存在的 sourceTicket，破壞現行唯一可用的路徑。
+# _collect_source_ids 與 detect_self_reference 共用本對照，避免修一邊留一邊。
+SOURCE_KIND_FRONTMATTER_KEYS: dict = {
+    "source_ticket": "source_ticket",
+    "blocked_by": "blockedBy",
+    "related_to": "relatedTo",
+}
+
 # 規模限制（rationale 見 constants.CONTEXT_BUNDLE_MAX_TOTAL_CHARS 註解）
 MAX_TOTAL_CHARS: int = CONTEXT_BUNDLE_MAX_TOTAL_CHARS
 MAX_ITEMS_PER_FIELD: int = CONTEXT_BUNDLE_MAX_ITEMS_PER_FIELD
@@ -330,7 +343,7 @@ def _collect_source_ids(target: dict) -> list:
     """依 SOURCE_PRIORITY + YAML 出現順序收集 (source_id, source_kind)。"""
     collected: list = []
     for kind in SOURCE_PRIORITY:
-        v = target.get(kind)
+        v = target.get(SOURCE_KIND_FRONTMATTER_KEYS[kind])
         if v is None:
             continue
         if isinstance(v, str):
@@ -500,7 +513,7 @@ def detect_self_reference(target_ticket: dict) -> bool:
     if not target_id:
         return False
     for kind in SOURCE_PRIORITY:
-        v = target_ticket.get(kind)
+        v = target_ticket.get(SOURCE_KIND_FRONTMATTER_KEYS[kind])
         if v is None:
             continue
         ids = [v] if isinstance(v, str) else list(v) if isinstance(v, list) else []

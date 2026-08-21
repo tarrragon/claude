@@ -71,7 +71,7 @@ def _build_error_msg(
 
 _SUGGEST_MAP = {
     "claim": "ticket track claim <ticket_id>",
-    "reopen": "ticket track reopen <ticket_id>（若需修改）或檢視是否誤呼叫",
+    "reopen": "該 ticket 已 completed；如需修改請使用下方逃生閥重跑，或評估是否應建立新 ticket 處理",
     "release": "ticket track release <ticket_id> 或解除 blockedBy 依賴後 claim",
     "closed-immutable": "該 ticket 已 closed；如需修改請建立新 ticket 處理",
     "unknown-status": "未知 status，請確認 ticket frontmatter 是否合規",

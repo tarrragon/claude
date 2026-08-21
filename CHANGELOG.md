@@ -1,3 +1,49 @@
+## [2.38.0] - 2026-08-21
+
+### Summary
+feat: 新增 audit_version 的 detect_orphan_references 雙向一致性檢查; feat: 新增 set-closed-by 修正 closed 票 closed_by 欄位; feat: check-acceptance 補上 auto-commit 對齊 set-acceptance 保護等級 (+33 more)
+
+Changes: 7 feat, 1 refactor, 14 fix, 10 docs, 3 chore, 1 test
+
+- feat: 新增 audit_version 的 detect_orphan_references 雙向一致性檢查
+- feat: 新增 set-closed-by 修正 closed 票 closed_by 欄位
+- feat: check-acceptance 補上 auto-commit 對齊 set-acceptance 保護等級
+- feat: append-log 新增 --replace 旗標支援整段覆寫章節
+- feat: 補強主 repo turn 結束時的 ticket md 收尾提交
+- feat: 實作 onboard 無主髒檔小節
+- feat: 新增 ticket create 的 when-blockedBy 一致性 WARNING
+- refactor: 清空 ticket_system/lib/__init__.py 的 re-export
+- fix: 補齊 skill-sync EXCLUDE_DIRS 的工具產物排除
+- fix: create 命令 auto-commit 移至 Context Bundle 寫入之後
+- fix: 修正 precondition completed 建議文案指向不存在的 reopen 命令
+- fix: ticket create 版本未註冊時提供 --version 繞過指令
+- fix: 修正 test_context_bundle_extractor fixture 以 snake_case 建 frontmatter 致三項回歸
+- fix: Context Bundle 讀取端補雙態相容修復 blockedBy/relatedTo 恆失效
+- fix: set-blocked-by/set-related-to 逗號分隔誤用改回專屬提示
+- fix: test_pm_only_prefix 排除 worktree 副本消除跨環境擺盪
+- fix: WARNING 指令範例改空格分隔，敘述位置維持頓號
+- fix: 補齊 execution_log_checker 免填/選填佔位符 strip 並同步 DOC 豁免
+- fix: 收斂 parser.py 至 file_lock 的模組層級匯入邊
+- fix: 主套件計時斷言違反規則 D1 標記 @pytest.mark.perf
+- fix: 統一全部 yaml dump 寫入點加 width 參數
+- fix: 補齊 _is_placeholder 的免填佔位符變體
+- docs: 校準 CLI 形態分化並補寫入端後果的案例
+- docs: SKILL.md 遞增 2.15.0 並彙整本輪介面變更
+- docs: 依 Layer 2 審查補上位根因、改寫歸因並收窄標題失準
+- docs: 校準 ticket-lifecycle.md 的 auto-stage 範圍過時描述
+- docs: 補第三形態並更正 票面與實際不符的標題
+- docs: 修正 ticket SKILL.md 的 auto-stage 範圍過時描述
+- docs: 補 YAML block style 延伸形態，並代建 修復票
+- docs: 依 Layer 2 審查補判準與防護，修正隱喻與計數
+- docs: 補 2026-08-20 續案六例與範圍平移變體
+- docs: 更新 ticket-quality-gate-hook 文件引用為已刪除機制
+- chore: 遞增框架版本至 2.38.0 並補 CHANGELOG
+- chore: 清理 ticket-quality-gate 退場殘留
+- chore: 建票追蹤 skill 發佈庫同版號異內容分歧
+- test: 補回歸測試守護 create auto-commit 涵蓋 Context Bundle
+
+---
+
 ## [2.37.1] - 2026-08-20
 
 ### Summary

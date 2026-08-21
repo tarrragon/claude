@@ -125,8 +125,14 @@ class TestJaccardSimilarity:
         # 結果應為有效範圍
         assert 0.0 <= result <= 1.0
 
+    @pytest.mark.perf
     def test_u010_long_text_performance(self):
-        """U-010：長文字效能邊界 → 執行時間 < 50ms"""
+        """U-010：長文字效能邊界 → 執行時間 < 50ms
+
+        計時斷言定位為效能退化防護（非功能驗證），依 test-assertion-design-rules
+        規則 D1 標記 @pytest.mark.perf，由 pyproject.toml addopts 預設排除（-m
+        'not perf'），與同套件 test_checkpoint_state/test_performance.py 一致。
+        """
         text_a = "unique_prefix " * 100 + "shared_term " + "unique_suffix_a " * 100
         text_b = "different_prefix " * 100 + "shared_term " + "unique_suffix_b " * 100
 
@@ -963,8 +969,13 @@ class TestIntegration:
 class TestPerformance:
     """效能邊界測試"""
 
+    @pytest.mark.perf
     def test_p001_few_pending_tickets(self, mocker):
-        """P-001：10 個 pending Ticket 的執行時間 < 50ms"""
+        """P-001：10 個 pending Ticket 的執行時間 < 50ms
+
+        計時斷言定位為效能退化防護（非功能驗證），依 test-assertion-design-rules
+        規則 D1 標記 @pytest.mark.perf，由 pyproject.toml addopts 預設排除。
+        """
 
         # 建立 10 個 pending Ticket
         pending_tickets = [
@@ -994,8 +1005,13 @@ class TestPerformance:
         # 應在 50ms 內完成
         assert elapsed < 0.05
 
+    @pytest.mark.perf
     def test_p002_many_pending_tickets(self, mocker):
-        """P-002：50 個 pending Ticket 的執行時間 < 100ms"""
+        """P-002：50 個 pending Ticket 的執行時間 < 100ms
+
+        計時斷言定位為效能退化防護（非功能驗證），依 test-assertion-design-rules
+        規則 D1 標記 @pytest.mark.perf，由 pyproject.toml addopts 預設排除。
+        """
 
         # 建立 50 個 pending Ticket
         pending_tickets = [

@@ -17,9 +17,11 @@ from ticket_system.lib.audit_version import (
     TicketVersionInfo,
     VersionMismatch,
     DuplicateTicket,
+    OrphanReference,
     scan_all_tickets,
     detect_mismatches,
     detect_duplicates,
+    detect_orphan_references,
 )
 from ticket_system.commands.audit_version import (
     execute_audit_version,
@@ -75,6 +77,8 @@ def create_ticket_file(
     version: str,
     ticket_id: str,
     frontmatter_version: str = None,
+    source_ticket: str = None,
+    spawned_tickets: List[str] = None,
 ) -> Path:
     """
     建立測試用的 Ticket 檔案
@@ -84,6 +88,8 @@ def create_ticket_file(
         version: 目錄版本（如 "0.1.0"）
         ticket_id: Ticket ID（如 "0.1.0-W1-001"）
         frontmatter_version: frontmatter 中的版本號（預設為 version）
+        source_ticket: frontmatter 的 source_ticket 欄位值（預設不寫入該欄位）
+        spawned_tickets: frontmatter 的 spawned_tickets 欄位值（預設不寫入該欄位）
 
     Returns:
         Path: 建立的 Ticket 檔案路徑
@@ -103,6 +109,10 @@ def create_ticket_file(
         "type": "IMP",
         "status": "pending",
     }
+    if source_ticket is not None:
+        frontmatter["source_ticket"] = source_ticket
+    if spawned_tickets is not None:
+        frontmatter["spawned_tickets"] = spawned_tickets
 
     frontmatter_yaml = yaml.dump(
         frontmatter,
@@ -843,6 +853,128 @@ class TestExecuteAuditVersion:
 
         captured = capsys.readouterr()
         assert "0.1.0" in captured.out
+
+
+class TestDetectOrphanReferences:
+    """detect_orphan_references() 測試：source_ticket / spawned_tickets 雙向一致性"""
+
+    def test_normal_bidirectional_consistent(self, clean_project_env):
+        """情境一：正常（雙向一致）——子票 source_ticket 指向父票，父票 spawned_tickets 回列子票，不應回報孤兒"""
+        create_ticket_file(
+            clean_project_env, "0.1.0", "0.1.0-W1-001",
+            spawned_tickets=["0.1.0-W1-002"],
+        )
+        create_ticket_file(
+            clean_project_env, "0.1.0", "0.1.0-W1-002",
+            source_ticket="0.1.0-W1-001",
+        )
+
+        tickets = scan_all_tickets()
+        orphans = detect_orphan_references(tickets)
+
+        assert orphans == []
+
+    def test_orphan_parent_not_updated(self, clean_project_env):
+        """情境二：孤兒——子票 source_ticket 指向父票，但父票 spawned_tickets 未回列子票"""
+        create_ticket_file(
+            clean_project_env, "0.1.0", "0.1.0-W1-001",
+            spawned_tickets=["0.1.0-W1-003"],
+        )
+        create_ticket_file(
+            clean_project_env, "0.1.0", "0.1.0-W1-002",
+            source_ticket="0.1.0-W1-001",
+        )
+
+        tickets = scan_all_tickets()
+        orphans = detect_orphan_references(tickets)
+
+        assert len(orphans) == 1
+        assert orphans[0].child_ticket_id == "0.1.0-W1-002"
+        assert orphans[0].claimed_parent_id == "0.1.0-W1-001"
+        assert orphans[0].parent_spawned_tickets == ["0.1.0-W1-003"]
+
+    def test_no_source_ticket_not_flagged_as_orphan(self, clean_project_env):
+        """情境三（最易漏的邊界）：無 source_ticket（欄位缺失）不應誤判為孤兒"""
+        create_ticket_file(clean_project_env, "0.1.0", "0.1.0-W1-001")
+        create_ticket_file(clean_project_env, "0.1.0", "0.1.0-W1-002")
+
+        tickets = scan_all_tickets()
+        orphans = detect_orphan_references(tickets)
+
+        assert orphans == []
+
+    def test_source_ticket_null_not_flagged_as_orphan(self, clean_project_env):
+        """情境三變體：source_ticket 明確寫為 null，不應誤判為孤兒"""
+        create_ticket_file(
+            clean_project_env, "0.1.0", "0.1.0-W1-001",
+            source_ticket=None,
+        )
+        # source_ticket=None 在 create_ticket_file 中不寫入欄位，故直接以
+        # frontmatter dict 手動注入 null 值來覆蓋前述行為，驗證讀取端對
+        # YAML null 的容錯。
+        file_path = (
+            clean_project_env / "docs" / "work-logs" / "v0" / "v0.1" / "v0.1.0"
+            / "tickets" / "0.1.0-W1-002.md"
+        )
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(
+            """---
+id: 0.1.0-W1-002
+title: Test Ticket
+version: 0.1.0
+type: IMP
+status: pending
+source_ticket: null
+---
+
+# Test Ticket
+""",
+            encoding="utf-8",
+        )
+
+        tickets = scan_all_tickets()
+        orphans = detect_orphan_references(tickets)
+
+        assert orphans == []
+
+    def test_parent_not_found_records_with_none_spawned(self, clean_project_env):
+        """邊界：宣稱的父票不存在於掃描結果中，仍記錄供人工確認，parent_spawned_tickets 為 None"""
+        create_ticket_file(
+            clean_project_env, "0.1.0", "0.1.0-W1-002",
+            source_ticket="0.1.0-W1-999",
+        )
+
+        tickets = scan_all_tickets()
+        orphans = detect_orphan_references(tickets)
+
+        assert len(orphans) == 1
+        assert orphans[0].child_ticket_id == "0.1.0-W1-002"
+        assert orphans[0].claimed_parent_id == "0.1.0-W1-999"
+        assert orphans[0].parent_spawned_tickets is None
+
+    def test_report_includes_orphan_section(self, clean_project_env, capsys):
+        """CLI 報告含孤兒引用清單，且欄位足以直接據此補填（三欄：子票/宣稱父票/父票 spawned_tickets）"""
+        create_ticket_file(
+            clean_project_env, "0.1.0", "0.1.0-W1-001",
+            spawned_tickets=["0.1.0-W1-003"],
+        )
+        create_ticket_file(
+            clean_project_env, "0.1.0", "0.1.0-W1-002",
+            source_ticket="0.1.0-W1-001",
+        )
+
+        class Args:
+            fix = False
+            audit_version = None
+
+        result = execute_audit_version(Args(), "0.1.0")
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "0.1.0-W1-002" in captured.out
+        assert "0.1.0-W1-001" in captured.out
+        assert "0.1.0-W1-003" in captured.out
+        assert "add-spawned" in captured.out
 
 
 if __name__ == "__main__":

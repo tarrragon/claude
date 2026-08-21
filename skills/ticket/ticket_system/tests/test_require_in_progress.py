@@ -67,10 +67,14 @@ class TestRequireInProgressPureFunction:
         assert ok is True
         assert msg is None
 
-    def test_A5_completed_default_rejects_suggest_reopen(self, isolated_hook_logs):
+    def test_A5_completed_default_rejects_suggest_force_or_new_ticket(
+        self, isolated_hook_logs
+    ):
+        """completed 狀態無 reopen 子命令；建議文案改指向 --force 或新 ticket。"""
         ok, msg = require_in_progress(_ticket("completed"), "TID-5", "set-acceptance")
         assert ok is False
-        assert "reopen" in msg
+        assert "completed" in msg
+        assert "--force" in msg
 
     def test_A6_completed_allow_completed_passes(self, isolated_hook_logs):
         """append-log 補 review 路徑：completed 通過。"""

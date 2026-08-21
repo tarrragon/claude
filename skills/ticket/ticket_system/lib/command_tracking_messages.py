@@ -258,6 +258,13 @@ class AuditVersionMessages:
     # 報告統計標題
     SECTION_MISMATCHES = "[版本不一致] 發現以下 Ticket 版本號與所在目錄不一致："
     SECTION_DUPLICATES = "[重複 Ticket] 發現以下 Ticket 出現在多個版本目錄："
+    SECTION_ORPHANS = "[孤兒引用] 發現以下 Ticket 的 source_ticket 未被父票 spawned_tickets 回列："
+
+    # 孤兒引用項目格式
+    ORPHAN_ITEM = "[孤兒] 子票: {child_ticket_id} / 宣稱的父票: {claimed_parent_id}"
+    ORPHAN_PARENT_NOT_FOUND = "  父票不存在於掃描結果中，請人工確認"
+    ORPHAN_PARENT_SPAWNED = "  父票 spawned_tickets 現有內容: {spawned_tickets}"
+    ORPHAN_SUGGESTION = "  建議: ticket track add-spawned {parent_id} {child_id}"
 
     # 不一致項目格式
     MISMATCH_ITEM = "[不一致] {ticket_id}"
@@ -428,6 +435,11 @@ class TrackMessages:
     # onboard/stale-list/stuck-anas）的相容保留旗標，與預設行為（掃描全部
     # active 版本）無差異，僅供舊呼叫端相容，本身無作用。
     ARG_ALL_COMPAT = "無作用旗標：預設即掃描全部 active 版本；如需限縮請用 --version"
+
+    # onboard 無主髒檔小節：dirty_paths 扣除已被 in_progress 票命中者的補
+    # 集，只列路徑不附票 ID 推測，避免重現已否決的擴大比對噪音來源
+    ONBOARD_ORPHAN_DIRTY_HEADER = "[無主髒檔]"
+    ONBOARD_ORPHAN_DIRTY_HINT = "（未被任何 in_progress 票命中，不代表無人處理）"
 
     # create 命令參數 help 文字
     ARG_CREATE_ACTION = (

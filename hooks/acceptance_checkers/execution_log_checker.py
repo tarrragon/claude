@@ -26,6 +26,18 @@ _SCHEMA_SECTION_NAMES = [
 ]
 
 
+# 模板佔位符前綴集合：「（<前綴>：...）」形態的 schema 說明文字皆視為空殼。
+# 以前綴集合涵蓋而非逐字列舉每種完整變體，新增前綴只需擴充此集合。
+_PLACEHOLDER_PREFIXES = ("待填寫", "必填", "免填", "選填")
+_PLACEHOLDER_PATTERN = r'（(?:' + '|'.join(_PLACEHOLDER_PREFIXES) + r')[^）]*）'
+
+# DOC type 的 Solution/Test Results 慣例以 Completion Info 變更摘要取代
+# （不填 Solution/Test Results 是預期形態，非未填寫）。明確豁免集合，
+# 實作形態參照 responsibility_scope_checker.py 的 _EXEMPT_TYPES 常數——
+# 豁免須是顯式設計，不依賴佔位符文字未被 strip 的副作用。
+_EXEMPT_TYPES = {"DOC"}
+
+
 def check_execution_log_filled(content: str, logger, ticket_type: str = None) -> bool:
     """
     檢查 Ticket 的 execution log（Solution/Test Results）是否有實質內容。
@@ -34,6 +46,9 @@ def check_execution_log_filled(content: str, logger, ticket_type: str = None) ->
     該章節若為 H3 骨架空殼（如「### 實驗方法」+「（必填：...）」placeholder）
     而 Solution/Test Results 不空，舊版會放行 complete。新版對 ANA type
     額外檢查重現實驗結果，空殼即視為未填寫。
+
+    DOC type 明確豁免（見 `_EXEMPT_TYPES`），不進入 Solution/Test Results
+    空殼判定。
 
     Args:
         content: Ticket 檔案完整文字內容
@@ -44,6 +59,10 @@ def check_execution_log_filled(content: str, logger, ticket_type: str = None) ->
     Returns:
         bool - True 表示未填寫（空的），False 表示已填寫
     """
+    if ticket_type in _EXEMPT_TYPES:
+        logger.info(f"ticket type={ticket_type} 豁免 execution log 檢查（DOC）")
+        return False
+
     # 檢查 Solution 區段
     solution_empty = _is_section_empty(content, "Solution")
     # 檢查 Test Results 區段
@@ -121,10 +140,10 @@ def _is_section_empty(content: str, section_name: str) -> bool:
     section_content = re.sub(
         r'^[ \t]*#{3,}[ \t].*$', '', section_content, flags=re.MULTILINE
     ).strip()
-    # 移除模板佔位符（如 "（待填寫：...）" / "（必填：...）"）
-    section_content = re.sub(r'（待填寫[^）]*）', '', section_content).strip()
-    # W8-007：移除「必填」placeholder（如 "（必填：描述如何重現問題）"）
-    section_content = re.sub(r'（必填[^）]*）', '', section_content).strip()
+    # 移除模板佔位符（如 "（待填寫：...）" / "（必填：...）" / "（免填：...）" /
+    # "（選填：...）"）。以前綴集合涵蓋，非逐字列舉每種變體，避免下次
+    # schema 說明文字新增其他前綴時再度遺漏。
+    section_content = re.sub(_PLACEHOLDER_PATTERN, '', section_content).strip()
     # 移除空行
     section_content = '\n'.join(line for line in section_content.split('\n') if line.strip())
 

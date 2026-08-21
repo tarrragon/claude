@@ -325,8 +325,8 @@ def _is_placeholder(text: str) -> bool:
        - 剝除後為空且原本有表格：作者寫表格即實質內容，視為非 placeholder
     5. 剩餘內容為空 → placeholder（例如只有 HTML 註解 + 分隔符 + 子標題的空殼章節）。
     6. 剩餘內容含英文佔位符 `(pending)/TBD/TODO/N/A` → placeholder。
-    7. 剩餘內容扣掉所有「（待填寫：...）/（必填：...）/（選填：...）」後為空
-       → placeholder（不論是否還有其他佔位符文字以外的殘留，一律以「扣掉後
+    7. 剩餘內容扣掉所有「（待填寫：...）/（必填：...）/（選填：...）/（免填：...）」
+       後為空 → placeholder（不論是否還有其他佔位符文字以外的殘留，一律以「扣掉後
        是否為空」為唯一判準，不再有「文字含任一佔位符 pattern 即回 True」的
        獨立判斷——後者對「佔位符 + 真實內容並存」的章節會誤判，觸發
        _replace_or_append_section_content 的 REPLACE 分支把並存的真實內容
@@ -458,6 +458,9 @@ def _is_placeholder(text: str) -> bool:
     # 等）的佔位符文字，原本只認「待填寫」「必填」漏了這個變體，導致
     # append-log 誤判該章節「已有實質內容」而只 append、佔位符殘留在新內容
     # 之前。
+    # 加「免填」——DOC 類型 ticket 的 schema 說明文字以「（免填：...）」
+    # 標示無需測試 / 以 Completion Info 變更摘要取代，樣式以前綴涵蓋而非
+    # 逐字列舉，避免下次新增免填說明文字時再漏。
     #
     # 移除前一版「文字含任一中文佔位符 pattern 即直接回 True」的獨立判斷：
     # 該判斷對「佔位符 + 真實內容並存」的章節會誤判為 placeholder-only，
@@ -466,7 +469,7 @@ def _is_placeholder(text: str) -> bool:
     # 「剝除所有已知佔位符後是否還剩內容」，故該判斷本身多餘且有害，直接
     # 刪除，只保留下方 strip-then-check-empty 邏輯。
     no_cn_placeholders = re.sub(
-        r"（(?:待填寫|必填|選填)[：:][^）]*）", "", target_after_descriptive
+        r"（(?:待填寫|必填|選填|免填)[：:][^）]*）", "", target_after_descriptive
     ).strip()
     if not no_cn_placeholders:
         return True

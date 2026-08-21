@@ -15,7 +15,11 @@ import argparse
 from typing import Dict, List, Optional
 
 from ticket_system.lib.command_lifecycle_messages import CreateMessages
-from ticket_system.lib.constants import STATUS_COMPLETED, STATUS_IN_PROGRESS
+from ticket_system.lib.constants import (
+    STATUS_COMPLETED,
+    STATUS_IN_PROGRESS,
+    WHEN_TICKET_REF_RE,
+)
 from ticket_system.lib.messages import (
     ErrorEnvelope,
     format_error,
@@ -82,6 +86,42 @@ def validate_blocked_by_references(
         return False
 
     return True
+
+
+def check_when_blocked_by_consistency(
+    when: Optional[str],
+    blocked_by: Optional[List[str]],
+) -> None:
+    """檢查 when 欄位提及的 ticket 引用是否已同步進 blockedBy（僅警告，不阻擋）。
+
+    when 欄位若命中短格式 ticket 引用（如「W3-<序號>」）但 blockedBy 為空，
+    代表此依賴未進入結構化欄位，dashboard/runqueue 的 ready 判定會忽略此依賴
+    恆為真。僅發 WARNING：when 句型含方向性語彙（「先於」「協調」）或顯性
+    不阻塞宣告（「即刻可執行」）時依賴方向可能與 blockedBy 相反，不可機械
+    阻擋建票（2026-08-20）。
+
+    Args:
+        when: when 欄位原始字串（可為 None）
+        blocked_by: blockedBy 欄位清單（可為 None）
+    """
+    if blocked_by:
+        return
+    if not when:
+        return
+
+    matches = WHEN_TICKET_REF_RE.findall(when)
+    if not matches:
+        return
+
+    deduped = list(dict.fromkeys(matches))  # 去重且保留出現順序
+    # 敘述位置用頓號（人類閱讀）；指令範例位置用空格（set-blocked-by 的
+    # value 為單一 positional，要求空格分隔多個 ID，見 `set-blocked-by --help`）
+    print(format_warning(
+        CreateMessages.WHEN_BLOCKED_BY_INCONSISTENT_WARNING,
+        ref_ids_display="、".join(deduped),
+        ref_ids_cli=" ".join(deduped),
+    ))
+
 
 def validate_decision_tree_params(
     entry: Optional[str],

@@ -346,7 +346,9 @@ $ ticket track claim 0.18.0-W10-042 --verify   # W3-046：須 opt-in
 
 ## Complete 後 cleanup checklist（W11-033 / W11-035 / PC-149）
 
-> **Why**：`ticket track complete` 自 W11-035 起會 auto-stage 已 modified 的 ticket md / worklog md / cascade children（精準路徑，不夾帶 WIP），並在 stdout 提示 `git commit -m ...` 指令；但**仍不會自動 commit，也不會清理已合併的 worktree**。session 邊界處長期累積會造成兩類缺口（W11-018 審計發現 8 個 worktree 殘留，最久 35 天）。
+> **Why**：`ticket track complete` 自 W11-035 起會 auto-stage 已 modified 的本票 md / worklog index（精準路徑，不夾帶 WIP），並在 stdout 提示 `git commit -m ...` 指令；但**仍不會自動 commit，也不會清理已合併的 worktree**。session 邊界處長期累積會造成兩類缺口（W11-018 審計發現 8 個 worktree 殘留，最久 35 天）。
+>
+> **範圍排除 children/siblings**：auto-stage 僅涵蓋本票 md 與 worklog index 兩類，不含 cascade children 或同層 sibling ticket 的 md——此排除是後續收斂修復的核心，非遺漏。高並行下若一併 stage 這些檔案，可能誤攬另一位代理人尚未提交的 body 變更。本節下方「父 Ticket complete 前置檢查」所述的 cascade 狀態解鎖（父子完成狀態轉移）屬另一機制，與此處的檔案暫存範圍無關，不受本收斂影響。
 >
 > **Consequence**：未執行提示的 commit 會讓 staged metadata 累積；未清理 worktree 會造成 disk / 視圖污染。
 >

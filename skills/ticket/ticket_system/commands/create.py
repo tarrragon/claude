@@ -27,6 +27,7 @@ from ticket_system.lib.version import suggest_version_for_ticket
 from ticket_system.lib.ticket_validator import extract_version_from_ticket_id
 from ticket_system.lib.messages import (
     ErrorEnvelope,
+    ErrorMessages,
     WarningMessages,
     InfoMessages,
     format_error,
@@ -43,6 +44,7 @@ from ticket_system.lib.acceptance_parser import parse_acceptance_items
 from ticket_system.lib.ticket_id_allocator import resolve_ticket_id_and_wave
 from ticket_system.lib.field_validators import (
     build_decision_tree_path,
+    check_when_blocked_by_consistency,
     validate_blocked_by_references,
     validate_source_ticket_arg,
     validate_where_files,
@@ -292,6 +294,12 @@ def _validate_before_persist(
         new_title=config["title"],
         new_what=config["what"],
         new_ticket_id=ticket_id,
+    )
+
+    # Tier 1 警告層：when-blockedBy 一致性檢查（僅警告不阻擋）
+    check_when_blocked_by_consistency(
+        when=config.get("when"),
+        blocked_by=blocked_by,
     )
 
     return True
@@ -567,31 +575,9 @@ def _persist_and_report(
     ticket = _build_and_save_ticket(version, ticket_id, config)
     ticket_path = str(get_ticket_path(version, ticket_id))
 
-    # 0.2.1-W3-273：create 落盤後 auto-commit 新 ticket md，與 append-log/
-    # set-acceptance 同保護等級（W7-001 家族）。根因：worktree 內 create 產出的
-    # ticket md 若停留 untracked，`git diff`/`git diff --staged` 皆偵測不到，
-    # 分支合併不會帶入該檔案的任何內容（merge 只作用於已 commit 的物件，
-    # 未 commit 的 index/working tree 狀態不隨 merge 傳遞），`git worktree
-    # remove --force` 會連同該 worktree 目錄整個丟棄——「先 git add 再等下次
-    # append-log 補 commit」不足以防護：force 移除不看 staged 與否，只看
-    # committed 與否。故直接複用 _auto_commit_ticket_md 完整 add+commit，
-    # 不僅 add（見 Solution 決策記錄）。
-    # graceful degrade：非 git repo / index.lock 競爭 / commit 失敗 → create
-    # 仍 exit 0 + stderr 警告，body 已由 save_ticket 落於 working tree。
-    from ticket_system.lib import git_utils
-    try:
-        commit_status = git_utils._auto_commit_ticket_md(
-            ticket_path, ticket_id, "Task Summary", operation="create",
-        )
-        if commit_status in ("not_git_repo", "git_failed"):
-            sys.stderr.write(
-                f"[create] auto-commit skipped（{commit_status}，非致命）；"
-                f"ticket md 已保留 working tree，可手動 git commit 持久化。\n"
-            )
-    except Exception as exc:
-        sys.stderr.write(
-            f"[create] auto-commit 失敗（非致命，ticket md 已保留 working tree）：{exc}\n"
-        )
+    # auto-commit 呼叫已移至 execute() 內、Context Bundle 寫入
+    # （_auto_extract_context_bundle_post_create）之後，使既有的那一筆 commit
+    # 涵蓋完整內容；graceful degrade 與 worktree force-remove 防護說明見該處。
 
     # 步驟 3：更新關係
     parent_info = _update_parent_and_get_parent_info(args, version, ticket_id)
@@ -759,9 +745,25 @@ def execute(args: argparse.Namespace) -> int:
                 ))
 
         # 驗證版本已在 todolist.yaml 中註冊（僅根票；子票版本繼承父票，無需重複驗證）
-        from ticket_system.lib.version import validate_version_registered
+        from ticket_system.lib.version import (
+            determine_fallback_version,
+            is_version_registered,
+            validate_version_registered,
+        )
         is_valid, error_msg = validate_version_registered(version)
         if not is_valid:
+            # 僅完全未註冊（非「已註冊但非 active」）時附加繞過指令：
+            # 完全未註冊時使用者多半是被動詞分類誤導至錯誤版本，此時提供
+            # 現成的 --version 候選值最有幫助；已註冊但非 active 的情境
+            # 語意不同（版本存在但被關閉/尚未開始），不適用同一套推導。
+            if not is_version_registered(version):
+                fallback = determine_fallback_version(args.source_ticket)
+                if fallback:
+                    fallback_version, fallback_reason = fallback
+                    error_msg = error_msg + ErrorMessages.VERSION_NOT_REGISTERED_FALLBACK_SUFFIX.format(
+                        fallback_version=fallback_version,
+                        fallback_reason=fallback_reason,
+                    )
             print(format_error(ErrorEnvelope(
                 component="create",
                 action="validate_version",
@@ -855,13 +857,48 @@ def execute(args: argparse.Namespace) -> int:
 
     # Step 4 (W17-002.2)：Context Bundle 自動抽取（post-persist enhancement）
     if rc == 0:
-        _auto_extract_context_bundle_post_create(
-            version,
-            ticket_id,
-            quiet=bool(getattr(args, "quiet", False)),
-            verbose=bool(getattr(args, "verbose", False)),
-            json_output=bool(getattr(args, "json_output", False)),
-        )
+        try:
+            _auto_extract_context_bundle_post_create(
+                version,
+                ticket_id,
+                quiet=bool(getattr(args, "quiet", False)),
+                verbose=bool(getattr(args, "verbose", False)),
+                json_output=bool(getattr(args, "json_output", False)),
+            )
+        finally:
+            # create 落盤後 auto-commit ticket md，與 append-log/set-acceptance
+            # 同保護等級。順序調整為在 Context Bundle 寫入之後才 commit，使
+            # 既有的那一筆 commit 涵蓋完整內容（含 Context Bundle 區塊），不
+            # 新增第二次 commit。以 try/finally 包住 Context Bundle 抽取，
+            # 確保即使該步驟拋出例外，commit 仍會執行。
+            #
+            # 根因：worktree 內 create 產出的 ticket md 若停留 untracked，
+            # `git diff`/`git diff --staged` 皆偵測不到，分支合併不會帶入該
+            # 檔案的任何內容（merge 只作用於已 commit 的物件，未 commit 的
+            # index/working tree 狀態不隨 merge 傳遞），`git worktree remove
+            # --force` 會連同該 worktree 目錄整個丟棄——「先 git add 再等下次
+            # append-log 補 commit」不足以防護：force 移除不看 staged 與否，
+            # 只看 committed 與否。故直接複用 _auto_commit_ticket_md 完整
+            # add+commit，不僅 add。
+            # graceful degrade：非 git repo / index.lock 競爭 / commit 失敗
+            # → create 仍 exit 0 + stderr 警告，body 已由 save_ticket 落於
+            # working tree。
+            ticket_path = str(get_ticket_path(version, ticket_id))
+            from ticket_system.lib import git_utils
+            try:
+                commit_status = git_utils._auto_commit_ticket_md(
+                    ticket_path, ticket_id, "Task Summary", operation="create",
+                )
+                if commit_status in ("not_git_repo", "git_failed"):
+                    sys.stderr.write(
+                        f"[create] auto-commit skipped（{commit_status}，非致命）；"
+                        f"ticket md 已保留 working tree，可手動 git commit 持久化。\n"
+                    )
+            except Exception as exc:
+                sys.stderr.write(
+                    f"[create] auto-commit 失敗（非致命，ticket md 已保留 "
+                    f"working tree）：{exc}\n"
+                )
 
     return rc
 

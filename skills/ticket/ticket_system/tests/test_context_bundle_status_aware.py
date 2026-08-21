@@ -148,7 +148,7 @@ def test_multi_source_per_source_labels(patch_load_ticket):
     target = {
         "id": TARGET_ID,
         "source_ticket": completed_id,
-        "blocked_by": [closed_id],
+        "blockedBy": [closed_id],
     }
 
     result = cbe.extract_context_bundle(target)

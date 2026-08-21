@@ -75,6 +75,11 @@ class TestPrefixSingleSource:
             # 測試碼可合法引用字面（斷言期待值）；其餘生產碼禁止
             if "tests" in relative_parts or "test" in py_file.stem.split("_"):
                 continue
+            # worktree 副本是完整 repo 複製，內含的 lib/hook_io.py 不等於
+            # canonical 集合中的路徑，會被誤判為複製字面的 offender
+            # （0.2.1-W3-841：結果依賴當下 worktree 存在與否，跨環境擺盪）
+            if "worktrees" in relative_parts:
+                continue
             if py_file in canonical:
                 continue
             try:

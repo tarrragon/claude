@@ -517,11 +517,16 @@ def execute_full(args: argparse.Namespace, version: str) -> int:
     body = ticket.get("_body", "")
 
     # 產出 frontmatter
+    # 顯示輸出（非持久化寫入）；width=1000（過渡措施，非根治）：與持久化
+    # 寫入點統一加寬避免折行，僅消除折行、不解決型別三類落差（巢狀列表成
+    # 字串、空 dict 成字串、bool/null/int 成字串），防護依賴後續新增
+    # dump 點時的紀律而非機制。
     frontmatter_yaml = yaml.dump(
         frontmatter,
         allow_unicode=True,
         default_flow_style=False,
         sort_keys=False,
+        width=1000,
     )
 
     # 組合完整內容
@@ -923,11 +928,16 @@ def _output_yaml(tickets: list) -> int:
         }
         output_data.append(ticket_data)
 
+    # 顯示輸出（非持久化寫入）；width=1000（過渡措施，非根治）：與持久化
+    # 寫入點統一加寬避免折行，僅消除折行、不解決型別三類落差（巢狀列表成
+    # 字串、空 dict 成字串、bool/null/int 成字串），防護依賴後續新增
+    # dump 點時的紀律而非機制。
     yaml_output = yaml.dump(
         output_data,
         allow_unicode=True,
         default_flow_style=False,
         sort_keys=False,
+        width=1000,
     )
     print(yaml_output)
     return 0

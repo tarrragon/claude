@@ -5,6 +5,9 @@ Ticket 版本審計模組
 由 W15-001 並行任務實作：
   - W15-001.1: scan_all_tickets() + detect_mismatches()
   - W15-001.2: detect_duplicates()
+
+另新增 detect_orphan_references()：偵測 source_ticket 與 spawned_tickets
+的單向孤兒引用（子票宣稱父票，但父票未回列該子票）。
 """
 
 from dataclasses import dataclass
@@ -67,6 +70,25 @@ class VersionMismatch:
     mismatch_type: str
     expected_version: str
     actual_version: str
+
+
+@dataclass
+class OrphanReference:
+    """
+    孤兒引用記錄。
+
+    記錄子票的 source_ticket 指向父票，但父票的 spawned_tickets 未回列該子票的情況。
+
+    Attributes:
+        child_ticket_id: 子票 ID（source_ticket 欄位所在的票）
+        claimed_parent_id: 子票宣稱的父票 ID（source_ticket 欄位值）
+        parent_spawned_tickets: 父票 spawned_tickets 欄位現有內容（可能為空清單，
+                                 或父票不存在時為 None）
+    """
+
+    child_ticket_id: str
+    claimed_parent_id: str
+    parent_spawned_tickets: Optional[List[str]]
 
 
 @dataclass
@@ -409,6 +431,94 @@ def detect_duplicates(tickets: List[TicketVersionInfo]) -> List[DuplicateTicket]
             duplicates.append(duplicate)
 
     return duplicates
+
+
+# ============================================================================
+# 孤兒引用偵測函式
+# ============================================================================
+
+def _read_source_and_spawned(file_path: Path) -> tuple:
+    """
+    從 Ticket 檔案讀取 source_ticket 與 spawned_tickets 欄位
+
+    Args:
+        file_path: Ticket 檔案完整路徑
+
+    Returns:
+        Tuple[Optional[str], List[str]]: (source_ticket, spawned_tickets)
+                                          讀取失敗或欄位缺失時分別回傳 None / 空清單
+    """
+    if not file_path.exists():
+        return None, []
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        frontmatter, _ = parse_frontmatter(content)
+    except (IOError, OSError):
+        return None, []
+
+    source_ticket = frontmatter.get("source_ticket")
+    spawned_tickets = frontmatter.get("spawned_tickets") or []
+
+    return source_ticket, spawned_tickets
+
+
+def detect_orphan_references(tickets: List[TicketVersionInfo]) -> List[OrphanReference]:
+    """
+    偵測 source_ticket 與 spawned_tickets 的單向孤兒引用。
+
+    對每張票檢查其 source_ticket 欄位：若非空（欄位缺失或為 null 一律略過，
+    不視為孤兒——多數票沒有 source_ticket，誤判會產生大量誤報），則查找
+    宣稱的父票，確認父票的 spawned_tickets 是否回列本票 ID。未回列者記為孤兒。
+
+    演算法：
+    1. 逐一掃描所有票，讀取 source_ticket 欄位
+    2. 略過 source_ticket 為 None / 空字串的票（第三情境：無 source_ticket）
+    3. 對有 source_ticket 的票，讀取宣稱父票的 spawned_tickets
+    4. 若子票 ID 不在父票 spawned_tickets 中，記為 OrphanReference
+
+    Args:
+        tickets: TicketVersionInfo 清單，來自 scan_all_tickets()
+
+    Returns:
+        List[OrphanReference]: 發現的孤兒引用清單，欄位足以直接組出
+                                `ticket track add-spawned <父票> <子票>` 指令
+    """
+    # 建立 ticket_id -> TicketVersionInfo 的索引，供查找父票用
+    id_to_ticket = {t.ticket_id: t for t in tickets}
+
+    orphans: List[OrphanReference] = []
+
+    for ticket in tickets:
+        file_path = Path(ticket.file_path)
+        source_ticket, _ = _read_source_and_spawned(file_path)
+
+        # 第三情境：無 source_ticket（欄位缺失或為 null）不視為孤兒
+        if not source_ticket:
+            continue
+
+        parent_ticket = id_to_ticket.get(source_ticket)
+
+        if parent_ticket is None:
+            # 宣稱的父票不存在於掃描結果中，仍記錄供人工確認
+            orphans.append(OrphanReference(
+                child_ticket_id=ticket.ticket_id,
+                claimed_parent_id=source_ticket,
+                parent_spawned_tickets=None,
+            ))
+            continue
+
+        _, parent_spawned_tickets = _read_source_and_spawned(Path(parent_ticket.file_path))
+
+        if ticket.ticket_id not in parent_spawned_tickets:
+            orphans.append(OrphanReference(
+                child_ticket_id=ticket.ticket_id,
+                claimed_parent_id=source_ticket,
+                parent_spawned_tickets=parent_spawned_tickets,
+            ))
+
+    return orphans
 
 
 if __name__ == "__main__":

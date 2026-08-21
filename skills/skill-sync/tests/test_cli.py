@@ -114,6 +114,33 @@ def test_existing_exclude_dirs_still_work():
     assert _should_exclude_file(".pytest_cache/v/cache/nodeids") is True
 
 
+# 0.2.1-W3-860：EXCLUDE_DIRS 原本只排除 .pytest_cache，同類 linter/typechecker/
+# coverage 產物目錄（.ruff_cache 等）缺漏，導致任何人跑過這些工具後 sync 比對
+# 都會報一筆假分歧（見 ticket Problem Analysis）。
+def test_ruff_cache_dir_registered_in_exclude_dirs():
+    assert ".ruff_cache" in EXCLUDE_DIRS
+
+
+def test_ruff_cache_file_excluded():
+    assert _should_exclude_file(".ruff_cache/0.14.0/cache.bin") is True
+
+
+def test_mypy_cache_dir_registered_in_exclude_dirs():
+    assert ".mypy_cache" in EXCLUDE_DIRS
+
+
+def test_mypy_cache_file_excluded():
+    assert _should_exclude_file(".mypy_cache/3.14/module.data.json") is True
+
+
+def test_htmlcov_dir_registered_in_exclude_dirs():
+    assert "htmlcov" in EXCLUDE_DIRS
+
+
+def test_htmlcov_file_excluded():
+    assert _should_exclude_file("htmlcov/index.html") is True
+
+
 # ---------- 憑證檔排除（0.2.1-W3-481：公開 repo 外洩防護） ----------
 
 def test_credential_dotenv_excluded():
@@ -364,6 +391,18 @@ def test_content_hash_excludes_base_marker_file(tmp_path):
     (skill_dir / SKILL_SYNC_BASE_MARKER).write_text("0" * 64)
 
     assert compute_content_hash(skill_dir) == without_marker
+
+
+def test_content_hash_excludes_ruff_cache_dir(tmp_path):
+    """acceptance 第一項：含 .ruff_cache 與不含時的內容雜湊必須相同。"""
+    skill_dir = _write_skill(tmp_path, "wrap-decision", "2.5.0", "body")
+    without_ruff_cache = compute_content_hash(skill_dir)
+
+    ruff_cache = skill_dir / ".ruff_cache"
+    ruff_cache.mkdir()
+    (ruff_cache / "cache.bin").write_text("linter cache artifact")
+
+    assert compute_content_hash(skill_dir) == without_ruff_cache
 
 
 def test_content_hash_returns_none_for_missing_dir(tmp_path):

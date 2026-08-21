@@ -178,6 +178,42 @@ class TestCollectDirtyAttribution:
         mock_attr.assert_called_once()
 
 
+class TestCollectOrphanedDirtyFiles:
+    """無主髒檔小節：dirty_paths 扣除已被 in_progress 票命中者的補集。"""
+
+    def test_no_dirty_files_returns_empty(self):
+        tickets = [{"id": "A", "status": "in_progress", "where": {"files": ["lib/foo.dart"]}}]
+        with patch.object(track_onboard, "list_dirty_files", return_value=[]):
+            result = track_onboard.collect_orphaned_dirty_files(tickets, "/proj")
+        assert result == []
+
+    def test_unmatched_file_listed_without_ticket_id(self):
+        """零命中髒檔應被列出，且不得附任何票 ID 推測。"""
+        tickets = [{"id": "A", "status": "in_progress", "where": {"files": ["lib/foo.dart"]}}]
+        with patch.object(
+            track_onboard, "list_dirty_files",
+            return_value=["lib/foo.dart", "lib/unrelated.dart"],
+        ):
+            result = track_onboard.collect_orphaned_dirty_files(tickets, "/proj")
+        assert result == ["lib/unrelated.dart"]
+
+    def test_all_files_matched_returns_empty(self):
+        tickets = [{"id": "A", "status": "in_progress", "where": {"files": ["lib/foo.dart"]}}]
+        with patch.object(track_onboard, "list_dirty_files", return_value=["lib/foo.dart"]):
+            result = track_onboard.collect_orphaned_dirty_files(tickets, "/proj")
+        assert result == []
+
+    def test_completed_and_pending_tickets_not_consulted(self):
+        """已 completed/pending 票的 where.files 不參與比對（避免復發已否決的噪音根因）。"""
+        tickets = [
+            {"id": "A", "status": "completed", "where": {"files": ["lib/foo.dart"]}},
+            {"id": "B", "status": "pending", "where": {"files": ["lib/foo.dart"]}},
+        ]
+        with patch.object(track_onboard, "list_dirty_files", return_value=["lib/foo.dart"]):
+            result = track_onboard.collect_orphaned_dirty_files(tickets, "/proj")
+        assert result == ["lib/foo.dart"]
+
+
 class TestCollectReadySuggestions:
     def test_delegates_to_dashboard_load_top_ready(self):
         tickets = [{"id": "A"}]
@@ -261,6 +297,66 @@ class TestExecuteOnboard:
         assert rc == 0
         out = capsys.readouterr().out
         assert "泛目錄宣告命中 3 票（無鑑別力）" in out
+
+    def test_orphaned_dirty_files_section_rendered(self, capsys):
+        args = self._base_args()
+        with patch.object(track_onboard, "_gather_tickets", return_value=[]), \
+             patch.object(track_onboard, "get_project_root", return_value="/proj"), \
+             patch.object(track_onboard, "load_registry", return_value={"sessions": {}}), \
+             patch.object(track_onboard, "collect_dirty_attribution", return_value=[]), \
+             patch.object(
+                 track_onboard, "collect_orphaned_dirty_files",
+                 return_value=["lib/unrelated.dart"],
+             ), \
+             patch.object(track_onboard, "collect_ready_suggestions", return_value=[]):
+            rc = track_onboard.execute_onboard(args)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "[無主髒檔]" in out
+        assert "lib/unrelated.dart" in out
+
+    def test_orphaned_dirty_files_section_omitted_when_empty(self, capsys):
+        """空集合時不輸出無主髒檔小節，避免無事時增加噪音。"""
+        args = self._base_args()
+        with patch.object(track_onboard, "_gather_tickets", return_value=[]), \
+             patch.object(track_onboard, "get_project_root", return_value="/proj"), \
+             patch.object(track_onboard, "load_registry", return_value={"sessions": {}}), \
+             patch.object(track_onboard, "collect_dirty_attribution", return_value=[]), \
+             patch.object(track_onboard, "collect_orphaned_dirty_files", return_value=[]), \
+             patch.object(track_onboard, "collect_ready_suggestions", return_value=[]):
+            rc = track_onboard.execute_onboard(args)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "[無主髒檔]" not in out
+
+    def test_orphaned_dirty_files_json_output(self, capsys):
+        args = self._base_args(fmt="json")
+        with patch.object(track_onboard, "_gather_tickets", return_value=[]), \
+             patch.object(track_onboard, "get_project_root", return_value="/proj"), \
+             patch.object(track_onboard, "load_registry", return_value={"sessions": {}}), \
+             patch.object(track_onboard, "collect_dirty_attribution", return_value=[]), \
+             patch.object(
+                 track_onboard, "collect_orphaned_dirty_files",
+                 return_value=["lib/unrelated.dart"],
+             ), \
+             patch.object(track_onboard, "collect_ready_suggestions", return_value=[]):
+            rc = track_onboard.execute_onboard(args)
+        assert rc == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["orphaned_dirty_files"] == ["lib/unrelated.dart"]
+
+    def test_orphaned_dirty_files_omitted_from_json_when_empty(self, capsys):
+        args = self._base_args(fmt="json")
+        with patch.object(track_onboard, "_gather_tickets", return_value=[]), \
+             patch.object(track_onboard, "get_project_root", return_value="/proj"), \
+             patch.object(track_onboard, "load_registry", return_value={"sessions": {}}), \
+             patch.object(track_onboard, "collect_dirty_attribution", return_value=[]), \
+             patch.object(track_onboard, "collect_orphaned_dirty_files", return_value=[]), \
+             patch.object(track_onboard, "collect_ready_suggestions", return_value=[]):
+            rc = track_onboard.execute_onboard(args)
+        assert rc == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert "orphaned_dirty_files" not in payload
 
     def test_ready_suggestions_rendered_with_index(self, capsys):
         args = self._base_args()

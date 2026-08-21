@@ -119,6 +119,8 @@ from .track_artifacts import (
 )
 # 導入 set-acceptance / validate 子命令
 from .track_set_acceptance import execute_set_acceptance
+# 導入 set-closed-by 子命令（closed 票 frontmatter 欄位修正路徑）
+from .track_set_closed_by import execute_set_closed_by
 # 導入 set-exit-status / set-completion-info 子命令（1.5.0-W5-021 制式化內容生成）
 from .track_structured_body import (
     execute_set_exit_status,
@@ -431,6 +433,7 @@ def _create_command_handlers() -> dict:
         "phase": execute_phase,
         "check-acceptance": execute_check_acceptance,
         "set-acceptance": execute_set_acceptance,
+        "set-closed-by": execute_set_closed_by,
         "set-exit-status": execute_set_exit_status,
         "set-completion-info": execute_set_completion_info,
         "validate": execute_validate,
@@ -653,6 +656,18 @@ def _register_lifecycle_commands(
     p_close.add_argument("--retrospective", action="store_true",
                          help="回顧式補填模式，允許 --reason unknown（PC-090 C4）")
     p_close.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # set-closed-by 操作（closed 票 closed_by 欄位修正路徑）
+    p_set_closed_by = subparsers.add_parser(
+        "set-closed-by",
+        help="修正 closed 票的 closed_by 欄位（close 拒絕覆寫既有值時使用）",
+    )
+    p_set_closed_by.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
+    p_set_closed_by.add_argument(
+        "--value", required=True,
+        help="新的 closed_by 值，須為合法且存在的 Ticket ID",
+    )
+    p_set_closed_by.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
     # release 操作
     p_release = subparsers.add_parser("release", help=TrackMessages.HELP_RELEASE)
@@ -1116,6 +1131,16 @@ def _register_acceptance_commands(
         action="store_true",
         default=False,
         help="W3-044 逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+    )
+    p_append_log.add_argument(
+        "--replace",
+        action="store_true",
+        default=False,
+        help=(
+            "整段覆寫指定章節內容（header 與章節位置不變），"
+            "取代累積式 append。不可逆操作：執行前會於 stdout 印出將被取代的"
+            "內容摘要供核對。"
+        ),
     )
 
     # add-spawn-request 操作

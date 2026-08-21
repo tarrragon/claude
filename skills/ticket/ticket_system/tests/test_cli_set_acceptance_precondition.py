@@ -52,8 +52,8 @@ class TestSetAcceptancePrecondition:
         after = (precondition_tmp_dir / f"{completed_ticket}.md").read_text(encoding="utf-8")
         assert before == after
         captured = capsys.readouterr()
-        # E2: stderr 含 reopen 與 --force 提示
-        assert "reopen" in captured.err
+        # E2: stderr 含 completed 建議文案（無 reopen 子命令，改指向 --force）與 --force 提示
+        assert "completed" in captured.err
         assert "--force" in captured.err
 
     def test_B9_blocked_rejects(self, blocked_ticket, precondition_tmp_dir, capsys):

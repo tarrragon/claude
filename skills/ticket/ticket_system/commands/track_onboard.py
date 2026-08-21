@@ -189,6 +189,26 @@ def collect_dirty_attribution(
     return attribute_dirty_files_by_file(in_progress_tickets, dirty_paths)
 
 
+def collect_orphaned_dirty_files(
+    tickets: List[Dict[str, Any]], project_root: Path
+) -> List[str]:
+    """dirty_paths 扣除已被 in_progress 票命中者的補集（無主髒檔）。
+
+    僅列出路徑，不附任何票 ID 推測：擴大比對範圍（含 completed/pending 票
+    where.files）曾實測對「檔案即票面自身」的情況給出錯誤歸屬（誤指某
+    ticket md 指向兩張無關票），比零訊號更危險且重現既有已修過的噪音根因
+    （見本票 why）。本函式與 `collect_dirty_attribution` 共用同一組
+    in_progress 命中計算，僅呈現方向不同（未命中 vs 已命中）。
+    """
+    dirty_paths = list_dirty_files(cwd=str(project_root))
+    if not dirty_paths:
+        return []
+    in_progress_tickets = [t for t in tickets if t.get("status") == "in_progress"]
+    attribution = attribute_dirty_files_by_file(in_progress_tickets, dirty_paths)
+    attributed_files = {item["file"] for item in attribution}
+    return [path for path in dirty_paths if path not in attributed_files]
+
+
 def collect_ready_suggestions(
     tickets: List[Dict[str, Any]], top: int
 ) -> List[Dict[str, Any]]:
@@ -227,6 +247,7 @@ def _render_table(
     orphans: List[Dict[str, Any]],
     dirty_attribution: List[Dict[str, Any]],
     ready: List[Dict[str, Any]],
+    orphaned_dirty_files: Optional[List[str]] = None,
 ) -> str:
     lines: List[str] = ["=== PM Onboard ===", ""]
 
@@ -257,6 +278,16 @@ def _render_table(
                 lines.append(f"  {item['file']}: {item['summary']}")
     lines.append("")
 
+    if orphaned_dirty_files:
+        lines.append(
+            f"{TrackMessages.ONBOARD_ORPHAN_DIRTY_HEADER} "
+            f"{len(orphaned_dirty_files)} file(s) "
+            f"{TrackMessages.ONBOARD_ORPHAN_DIRTY_HINT}"
+        )
+        for path in orphaned_dirty_files:
+            lines.append(f"  {path}")
+        lines.append("")
+
     lines.append(f"[可認領建議 Top {len(ready)}]")
     if not ready:
         lines.append("  （無可認領建議）")
@@ -276,6 +307,7 @@ def _render_json(
     orphans: List[Dict[str, Any]],
     dirty_attribution: List[Dict[str, Any]],
     ready: List[Dict[str, Any]],
+    orphaned_dirty_files: Optional[List[str]] = None,
 ) -> str:
     payload = {
         "colleagues": colleagues,
@@ -283,6 +315,8 @@ def _render_json(
         "dirty_attribution": dirty_attribution,
         "ready": ready,
     }
+    if orphaned_dirty_files:
+        payload["orphaned_dirty_files"] = orphaned_dirty_files
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
@@ -306,12 +340,19 @@ def execute_onboard(args: argparse.Namespace) -> int:
         registry, project_root=_current_project_root_str(), now=now
     )
     dirty_attribution = collect_dirty_attribution(tickets, project_root)
+    orphaned_dirty_files = collect_orphaned_dirty_files(tickets, project_root)
     ready = collect_ready_suggestions(tickets, top=top)
 
     if fmt == FORMAT_JSON:
-        print(_render_json(sessions["colleagues"], sessions["orphans"], dirty_attribution, ready))
+        print(_render_json(
+            sessions["colleagues"], sessions["orphans"], dirty_attribution, ready,
+            orphaned_dirty_files=orphaned_dirty_files,
+        ))
     else:
-        print(_render_table(sessions["colleagues"], sessions["orphans"], dirty_attribution, ready))
+        print(_render_table(
+            sessions["colleagues"], sessions["orphans"], dirty_attribution, ready,
+            orphaned_dirty_files=orphaned_dirty_files,
+        ))
     return 0
 
 

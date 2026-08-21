@@ -150,11 +150,16 @@ def build_full_content(ticket: dict) -> str:
     """
     frontmatter = {k: v for k, v in ticket.items() if not k.startswith("_")}
     body = ticket.get("_body", "")
+    # 顯示輸出（非持久化寫入）；width=1000（過渡措施，非根治）：與持久化
+    # 寫入點統一加寬避免折行，僅消除折行、不解決型別三類落差（巢狀列表成
+    # 字串、空 dict 成字串、bool/null/int 成字串），防護依賴後續新增
+    # dump 點時的紀律而非機制。
     frontmatter_yaml = yaml.dump(
         frontmatter,
         allow_unicode=True,
         default_flow_style=False,
         sort_keys=False,
+        width=1000,
     )
     return f"---\n{frontmatter_yaml}---\n\n{body}"
 

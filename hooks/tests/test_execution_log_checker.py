@@ -435,3 +435,100 @@ pytest all green.
 """
         is_empty = check_execution_log_filled(content, self._logger())
         assert is_empty is False
+
+
+class TestIsSectionEmptyExemptPlaceholderStrip:
+    """0.2.1-W3-843：新增「免填」「選填」佔位符 strip"""
+
+    def test_section_with_only_exempt_placeholder_is_empty(self):
+        """純「（免填：...）」佔位符 → empty"""
+        content = """## Solution
+（免填：DOC 類型以 Completion Info 變更摘要取代）
+
+## Test Results
+pytest.
+"""
+        assert _is_section_empty(content, "Solution") is True
+
+    def test_section_with_only_optional_placeholder_is_empty(self):
+        """純「（選填：...）」佔位符 → empty"""
+        content = """## Solution
+（選填：修復方式概述、修改的檔案和驗證方式）
+
+## Test Results
+pytest.
+"""
+        assert _is_section_empty(content, "Solution") is True
+
+    def test_exempt_placeholder_with_real_content_not_empty(self):
+        """「（免填：...）」佔位符 + 實質內容 → not empty（不過度剝除）"""
+        content = """## Solution
+（免填：DOC 類型以 Completion Info 變更摘要取代）
+
+實際仍補充了說明。
+
+## Test Results
+pytest.
+"""
+        assert _is_section_empty(content, "Solution") is False
+
+
+class TestCheckExecutionLogFilledDocExemption:
+    """0.2.1-W3-843：DOC type 於 check_execution_log_filled 有明確豁免"""
+
+    def _logger(self):
+        logger = logging.getLogger("test_execution_log_checker_doc")
+        logger.addHandler(logging.NullHandler())
+        return logger
+
+    def test_doc_type_exempted_even_with_empty_solution_and_test_results(self):
+        """DOC：Solution/Test Results 皆為免填/選填空殼 → 仍判為已填寫（豁免）"""
+        content = """## Solution
+（免填：DOC 類型以 Completion Info 變更摘要取代）
+
+## Test Results
+（免填：DOC 類型以 Completion Info 變更摘要取代）
+"""
+        is_empty = check_execution_log_filled(
+            content, self._logger(), ticket_type="DOC"
+        )
+        assert is_empty is False
+
+    def test_non_doc_type_still_checked_with_exempt_placeholder(self):
+        """非 DOC（IMP）：即使用了「免填」字樣，仍照常判空殼（豁免只限 DOC）"""
+        content = """## Solution
+（免填：DOC 類型以 Completion Info 變更摘要取代）
+
+## Test Results
+（免填：DOC 類型以 Completion Info 變更摘要取代）
+"""
+        is_empty = check_execution_log_filled(
+            content, self._logger(), ticket_type="IMP"
+        )
+        assert is_empty is True
+
+    def test_ana_reproduction_check_unaffected_by_placeholder_strip_change(self):
+        """ANA 重現實驗結果檢查（:56 分支）行為不因新增 strip 而改變"""
+        content = """## Problem Analysis
+分析內容充足。
+
+## 重現實驗結果
+
+### 實驗方法
+
+（必填：描述如何重現問題）
+
+### 實驗結果
+
+（必填：實際觀察）
+
+## Solution
+結論已寫。
+
+## Test Results
+N/A（ANA）。
+"""
+        is_empty = check_execution_log_filled(
+            content, self._logger(), ticket_type="ANA"
+        )
+        assert is_empty is True

@@ -161,7 +161,11 @@ def _format_ticket_content(
     import yaml
 
     # 轉換 frontmatter 為 YAML 字串
-    yaml_str = yaml.dump(frontmatter, allow_unicode=True, sort_keys=False)
+    # width=1000（過渡措施，非根治）：僅消除長字串欄位折行，避免 hooks 端
+    # 手寫 YAML parser 誤判斷點空白。型別三類落差（巢狀列表成字串、空
+    # dict 成字串、bool/null/int 成字串）不因此解決，且防護依賴後續新增
+    # dump 點時的紀律而非機制。
+    yaml_str = yaml.dump(frontmatter, allow_unicode=True, sort_keys=False, width=1000)
 
     # 組合 frontmatter 和 body
     content = f"---\n{yaml_str}---\n\n{body}"

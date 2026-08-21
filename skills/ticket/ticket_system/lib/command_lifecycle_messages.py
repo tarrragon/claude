@@ -421,6 +421,14 @@ class CreateMessages:
     DUPLICATE_STATUS_LABEL_IN_PROGRESS = "進行中"
     DUPLICATE_STATUS_LABEL_COMPLETED = "已完成"
 
+    # when-blockedBy 一致性警告（2026-08-20）
+    WHEN_BLOCKED_BY_INCONSISTENT_WARNING = (
+        "[WARNING] when 欄位提及 {ref_ids_display}，但 blockedBy 為空：\n"
+        "          若 {ref_ids_display} 為真實前置依賴，dashboard/runqueue 的 ready 判定將"
+        "不論前置是否完成恆為真\n"
+        "          建議：ticket track set-blocked-by <ticket-id> {ref_ids_cli}"
+    )
+
     # Tier 2 阻擋層訊息（1.0.0-W1-040.1）
     DUPLICATE_BLOCK_HEADER = (
         "[ERROR] 偵測到同窗口高相似度 Ticket，已阻擋建立（冪等防護）："

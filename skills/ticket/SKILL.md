@@ -73,7 +73,7 @@ ticket track claim 1.0.0-W4-001
 ticket track summary                                    # 摘要
 ticket track query 1.0.0-W4-001                       # 查詢
 ticket track claim 1.0.0-W4-001                       # 認領
-ticket track complete 1.0.0-W4-001                    # 完成（auto-stage：自動 git add ticket md + worklog md + cascade children，stdout 提示 commit 指令）
+ticket track complete 1.0.0-W4-001                    # 完成（auto-stage：自動 git add 本票 md + worklog index，排除 children/siblings 以避免夾帶他票 WIP，stdout 提示 commit 指令；cascade 狀態解鎖機制詳見下方 W11-003.2 說明，屬另一機制）
 ticket track complete 1.0.0-W4-001 --no-stage         # 完成但跳過 auto-stage（保留用戶手動掌控 stage 範圍，W11-035）
 ticket track complete 1.0.0-W4-001 --force            # 強制完成（旁路未完成 children 阻擋，W11-003.2）
 ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"  # 建立
@@ -278,7 +278,7 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 1.0.0-W28-0
 
 ### track - 追蹤和更新 Ticket 狀態
 
-包含 READ 操作（summary/query/version/tree/chain/deps/full/log/list/board/agent/5W1H/validate/**runqueue**/**dashboard**/stale-list/td-status/stuck-anas/**list-artifacts**）和 UPDATE 操作（claim/complete/release/reclaim/set-who/set-what/set-when/set-where/set-why/set-how/phase/check-acceptance/set-acceptance/append-log/add-child/batch-claim/batch-complete/audit/accept-creation/add-spawn-request/resolve-spawn-request/**register-artifact**/**resolve-artifact**/**add-exempt-marker**）。`list` 支援 `--wave`、`--status`、`--format`、`--top`、`--all` 篩選參數（W10-115 預設 `--top 10`，priority 排序）。
+包含 READ 操作（summary/query/version/tree/chain/deps/full/log/list/board/agent/5W1H/validate/**runqueue**/**dashboard**/stale-list/td-status/stuck-anas/**list-artifacts**）和 UPDATE 操作（claim/complete/release/reclaim/set-who/set-what/set-when/set-where/set-why/set-how/phase/check-acceptance/set-acceptance/**set-closed-by**/append-log/add-child/batch-claim/batch-complete/audit/accept-creation/add-spawn-request/resolve-spawn-request/**register-artifact**/**resolve-artifact**/**add-exempt-marker**）。`list` 支援 `--wave`、`--status`、`--format`、`--top`、`--all` 篩選參數（W10-115 預設 `--top 10`，priority 排序）。
 
 > **Scheduler — `runqueue`**（W17-011.1）：回答「下一個該做哪個 ticket」。Linux schedule()/runqueue/top/ps 類比。合併原 next+schedule+resume-hint 為單一命令。
 >
@@ -396,6 +396,8 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent 1.0.0-W28-0
 > **多值寫法**：`--check` / `--uncheck` / `--add` / `--remove` 四個旗標的「可多個」涵蓋兩種形式，兩者等價也可混用——空白分隔（`--add "A" "B"`）與重複旗標（`--add "A" --add "B"`）。重複旗標形式曾因 argparse 未設 `action="append"` 而互相覆寫、只保留最後一個值且無警告，該缺陷已修復。`--edit` 語意為成對 `(index, text)`，一律用重複旗標形式。
 >
 > **注意**：`validate <id>` 驗證 Ticket frontmatter 4 關鍵欄位（status/completed_at/acceptance/who）合規性，違規時給出建議修復命令。
+>
+> **closed 票欄位修正（`set-closed-by`）**：`close` 對已 closed 票拒絕覆寫既有值；`set-closed-by <id> --value <ticket-id>` 補上 `closed_by` 填錯後的合法修正路徑，取代直接 Edit ticket md（該路徑被 `ticket-file-access-guard-hook` 阻擋）。僅適用 `status=closed` 的票；`--value` 須為合法且存在的 Ticket ID，格式錯誤或指向不存在的 Ticket 皆拒絕。修正動作輸出舊值與新值並走 auto-commit。
 >
 > **身份申報（`--as`，W1-048）**：`complete` / `check-acceptance` / `set-acceptance` 三個寫入命令支援選用 `--as <agent-name>`，與 ticket `who.current` 精確對照。**Why**：防 generic agent 收 Ticket ID 即越權收尾（PC-V1-002 前提一，W1-044 探針實證）。判定邏輯——`--as` 值 ≠ `who.current`（含空值）→ deny（exit 1，純前置檢查不寫入狀態）；`--as rosemary-project-manager` 一律放行（PM bookkeeping 豁免，如代收尾 / stale cleanup）；未提供 `--as` 僅 stderr 警告不阻擋（過渡期向後相容）。**Action**：subagent 收尾時帶自身身份，例 `ticket track complete <id> --as thyme-python-developer`；轉強制（無 `--as` 即阻擋）的 trigger 待獨立監測 ticket 評估。
 >
@@ -520,12 +522,24 @@ ticket handoff --from-worklog [--worklog-path PATH] [--dry-run]
 
 ---
 
-**Version**: 2.14.0
-**Last Updated**: 2026-08-20
+**Version**: 2.15.0
+**Last Updated**: 2026-08-21
 **Status**: Completed
 
 **Change Log**:
 
+- v2.15.0 (2026-08-21): 彙整上次 canonical 同步後累積、未隨個別 commit 遞增版本號的多筆行為變更（分歧判定時發現，共 28 個 commit，僅列使用者可感知的介面差異）
+  - 新增子命令 `set-closed-by`：修正已 closed 票的 `closed_by` 欄位
+  - `append-log` 新增 `--replace` 旗標：整段覆寫指定章節內容，取代累積式 append
+  - `create` 的 auto-commit 時點移至 Context Bundle 寫入之後（原本先 commit 後寫入 Context Bundle，導致該次寫入未隨 commit 一併留存）
+  - `check-acceptance` 補上 auto-commit，對齊 `set-acceptance` 既有的保護等級
+  - `create` 新增 when-blockedBy 一致性 WARNING：`--when` 語意與 `--blockedBy` 指定的前置票狀態衝突時提示
+  - `create` 版本未註冊時，錯誤訊息新增 `--version` 繞過指令的 fallback hint
+  - 修正 `set-blocked-by` / `set-related-to` 誤用逗號分隔時的提示文字：改回兩個子命令各自專屬的提示，不再共用易混淆的通用訊息
+  - 修正 precondition 對已 completed 票的建議文案：原指向不存在的 `reopen` 命令，已修正為實際可用的操作
+  - `audit_version` 新增 `detect_orphan_references` 雙向一致性檢查
+  - `onboard` 新增「無主髒檔」小節
+  - 修正 Context Bundle 讀取端 `blockedBy`/`relatedTo` 欄位雙態鍵名不相容導致的恆失效
 - v2.14.0 (2026-08-20): `create` 新增 `--no-topic` 與過渡期 WARNING（0.2.1-W3-829 落地）
   - 主題 callout 補 warn-only 語意：三判準未命中印 WARNING 但不改 rc，理由為避免代理人誤判建票失敗
   - 補 `--no-topic` 說明：明示不指派、與 `--topic` / `--new-topic` 互斥、衝突時於持久化前 exit 1

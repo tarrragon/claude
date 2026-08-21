@@ -437,18 +437,11 @@ oregano-data-miner 代理人執行，以獲得更專業的蒐集
 
 
 class QualityMessages:
-    """品質檢查訊息 - 5 個品質 hooks 使用
+    """品質檢查訊息 - 4 個品質 hooks 使用
 
-    包含：ticket-quality-gate, phase-completion-gate, file-type-permission,
+    包含：phase-completion-gate, file-type-permission,
     comment-qa, dart-style-guardian
     """
-
-    # ========================================================================
-    # Ticket Quality Gate Hook
-    # ========================================================================
-
-    TICKET_QUALITY_CHECK_PASSED = "Ticket 品質檢查通過"
-    TICKET_QUALITY_CHECK_FAILED = "Ticket 品質檢查失敗: {reason}"
 
     # ========================================================================
     # Phase Completion Gate Hook
