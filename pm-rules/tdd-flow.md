@@ -29,7 +29,7 @@
                                +-- 完成 --> 直接結束（如僅修復測試）
     |
     v
-[Phase 1] 功能設計 → [lavender-interface-designer](../../agents/lavender-interface-designer.md)
+[Phase 1] 功能設計 → [lavender-interface-designer](../agents/lavender-interface-designer.md)
     |
     v
 [Phase 1.5] 規格多視角審查 → /parallel-evaluation G（Consistency/Completeness/CogLoad）
@@ -38,10 +38,10 @@
     +-- 通過 → 進入 Phase 2
     |
     v
-[Phase 2] 測試設計 → [sage-test-architect](../../agents/sage-test-architect.md)
+[Phase 2] 測試設計 → [sage-test-architect](../agents/sage-test-architect.md)
     |
     v
-[Phase 3a] 策略規劃 → [pepper-test-implementer](../../agents/pepper-test-implementer.md)
+[Phase 3a] 策略規劃 → [pepper-test-implementer](../agents/pepper-test-implementer.md)
     |
     v
 [3b 拆分評估] PM 評估是否拆分為多個並行子任務
@@ -50,13 +50,13 @@
     +-- 拆分 → 建立 N 個子任務，並行派發
     |
     v
-[Phase 3b] 實作執行 → [parsley-flutter-developer](../../agents/parsley-flutter-developer.md)
+[Phase 3b] 實作執行 → [parsley-flutter-developer](../agents/parsley-flutter-developer.md)
     |
     v
 [Phase 4a] 多視角分析 → /parallel-evaluation B（Redundancy/Coupling/Complexity）
     |
     v（豁免時直接跳至 Phase 4b）
-[Phase 4b] 重構執行 → [cinnamon-refactor-owl](../../agents/cinnamon-refactor-owl.md)
+[Phase 4b] 重構執行 → [cinnamon-refactor-owl](../agents/cinnamon-refactor-owl.md)
     |
     v（豁免時跳過 Phase 4c，直接執行 /tech-debt-capture → 完成）
 [Phase 4c] 多視角再審核 → /parallel-evaluation A（Reuse/Quality/Efficiency）

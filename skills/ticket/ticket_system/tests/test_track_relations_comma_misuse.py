@@ -173,3 +173,119 @@ class TestSetRelatedToCommaMisuse:
         assert exit_code == 1
         assert "找不到 Ticket 0.2.1-W3-999" in output
         assert "空格" not in output
+
+
+def _write_ticket_with_relations(
+    path: Path, tid: str, *, parent_id=None, children=None
+) -> None:
+    children = children or []
+    lines = [
+        "---",
+        f"id: {tid}",
+        "title: set-parent target",
+        "type: IMP",
+        "status: pending",
+        "assigned: false",
+        "started_at: null",
+        "tdd_phase: phase1",
+        f"parent_id: {parent_id if parent_id else 'null'}",
+        "children: [" + ", ".join(children) + "]",
+        "blockedBy: []",
+        "relatedTo: []",
+        "acceptance: []",
+        "spawned_tickets: []",
+        "---",
+        "",
+        "body",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+class TestSetParentBidirectionalConsistency:
+    """set-parent 修正 parent_id 並同步上游 children 的雙向一致性回歸測試。"""
+
+    def test_clear_removes_child_from_old_parent_children(
+        self, tmp_ticket_dir, patch_ticket_paths, capsys
+    ):
+        tr_mod = patch_ticket_paths
+        _write_ticket_with_relations(
+            tmp_ticket_dir / "0.2.1-W3-010.md", "0.2.1-W3-010", children=["0.2.1-W3-011"]
+        )
+        _write_ticket_with_relations(
+            tmp_ticket_dir / "0.2.1-W3-011.md", "0.2.1-W3-011", parent_id="0.2.1-W3-010"
+        )
+
+        ns = _Args(child_id="0.2.1-W3-011", new_parent_id=None, clear=True)
+        exit_code = tr_mod.execute_set_parent(ns, "0.2.1")
+        assert exit_code == 0
+
+        child = tr_mod.load_ticket("0.2.1", "0.2.1-W3-011")
+        parent = tr_mod.load_ticket("0.2.1", "0.2.1-W3-010")
+        assert child["parent_id"] is None
+        assert "0.2.1-W3-011" not in parent["children"]
+
+    def test_change_parent_syncs_both_old_and_new_children(
+        self, tmp_ticket_dir, patch_ticket_paths
+    ):
+        tr_mod = patch_ticket_paths
+        _write_ticket_with_relations(
+            tmp_ticket_dir / "0.2.1-W3-020.md", "0.2.1-W3-020", children=["0.2.1-W3-022"]
+        )
+        _write_ticket_with_relations(tmp_ticket_dir / "0.2.1-W3-021.md", "0.2.1-W3-021")
+        _write_ticket_with_relations(
+            tmp_ticket_dir / "0.2.1-W3-022.md", "0.2.1-W3-022", parent_id="0.2.1-W3-020"
+        )
+
+        ns = _Args(child_id="0.2.1-W3-022", new_parent_id="0.2.1-W3-021", clear=False)
+        exit_code = tr_mod.execute_set_parent(ns, "0.2.1")
+        assert exit_code == 0
+
+        child = tr_mod.load_ticket("0.2.1", "0.2.1-W3-022")
+        old_parent = tr_mod.load_ticket("0.2.1", "0.2.1-W3-020")
+        new_parent = tr_mod.load_ticket("0.2.1", "0.2.1-W3-021")
+
+        # 不留懸空引用：新值生效、舊上游不殘留、新上游確實收到
+        assert child["parent_id"] == "0.2.1-W3-021"
+        assert "0.2.1-W3-022" not in old_parent["children"]
+        assert "0.2.1-W3-022" in new_parent["children"]
+
+    def test_no_dangling_reference_after_round_trip(
+        self, tmp_ticket_dir, patch_ticket_paths
+    ):
+        """反之亦然：add-child 建立關係後，set-parent --clear 須完全消除雙向殘留。"""
+        tr_mod = patch_ticket_paths
+        _write_ticket_with_relations(tmp_ticket_dir / "0.2.1-W3-030.md", "0.2.1-W3-030")
+        _write_ticket_with_relations(tmp_ticket_dir / "0.2.1-W3-031.md", "0.2.1-W3-031")
+
+        add_ns = _Args(parent_id="0.2.1-W3-030", child_id="0.2.1-W3-031")
+        assert tr_mod.execute_add_child(add_ns, "0.2.1") == 0
+
+        clear_ns = _Args(child_id="0.2.1-W3-031", new_parent_id=None, clear=True)
+        assert tr_mod.execute_set_parent(clear_ns, "0.2.1") == 0
+
+        child = tr_mod.load_ticket("0.2.1", "0.2.1-W3-031")
+        parent = tr_mod.load_ticket("0.2.1", "0.2.1-W3-030")
+        assert child["parent_id"] is None
+        assert "0.2.1-W3-031" not in parent["children"]
+
+    def test_missing_target_and_clear_flag_are_mutually_exclusive(
+        self, tmp_ticket_dir, patch_ticket_paths, capsys
+    ):
+        tr_mod = patch_ticket_paths
+        _write_ticket_with_relations(tmp_ticket_dir / "0.2.1-W3-040.md", "0.2.1-W3-040")
+
+        no_target_ns = _Args(child_id="0.2.1-W3-040", new_parent_id=None, clear=False)
+        assert tr_mod.execute_set_parent(no_target_ns, "0.2.1") == 1
+
+        _write_ticket_with_relations(tmp_ticket_dir / "0.2.1-W3-041.md", "0.2.1-W3-041")
+        conflict_ns = _Args(
+            child_id="0.2.1-W3-040", new_parent_id="0.2.1-W3-041", clear=True
+        )
+        assert tr_mod.execute_set_parent(conflict_ns, "0.2.1") == 1
+
+    def test_self_reference_rejected(self, tmp_ticket_dir, patch_ticket_paths):
+        tr_mod = patch_ticket_paths
+        _write_ticket_with_relations(tmp_ticket_dir / "0.2.1-W3-050.md", "0.2.1-W3-050")
+
+        ns = _Args(child_id="0.2.1-W3-050", new_parent_id="0.2.1-W3-050", clear=False)
+        assert tr_mod.execute_set_parent(ns, "0.2.1") == 1

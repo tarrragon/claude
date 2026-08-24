@@ -53,7 +53,7 @@ _SR_ENTRY_PATTERN = re.compile(r"^\s*-\s*\*\*(SR-\d+)\*\*", re.MULTILINE)
 # fail-closed——這類格式代表非本 CLI 產生的手改內容，語意不明確，仍應
 # 由 PM 人工核實而非靜默放行。
 _STATUS_FIELD_PATTERN = re.compile(
-    r"^\s*-\s*status\s*:\s*(pending|processed|dismissed)(?:（.*）)?\s*$",
+    r"^\s*-\s*status\s*:\s*(pending|processed|dismissed)(?:（(.*)）)?\s*$",
     re.MULTILINE | re.IGNORECASE,
 )
 
@@ -68,6 +68,35 @@ class _StatusParseResult:
     kind: str  # "parsed" | "unparseable" | "missing"
     value: Optional[str] = None
     raw_line: Optional[str] = None
+    note: str = ""
+
+
+@dataclass(frozen=True)
+class SpawnRequestEntry:
+    """單一 Spawn Request 條目的解析結果（公開型別，供其他 checker 共用）。
+
+    `note` 取自 status 值後方全形括號內的附註（`resolve-spawn-request` CLI
+    在 `--reason` / `--spawned-ticket` 有值時寫入），無附註時為空字串。
+    """
+
+    label: str
+    status: Optional[str]  # pending / processed / dismissed；無法解析或缺欄位時為 None
+    note: str
+    parse_kind: str  # "parsed" | "unparseable" | "missing"
+
+    @property
+    def is_resolved(self) -> bool:
+        """是否為已判定終態。
+
+        `processed` 代表已建票（CLI 於 `--spawned-ticket` 有值時同步回填
+        `spawned_tickets`）；`dismissed` 代表評估後不建，須附理由才算判定完成
+        ——無理由的 dismissed 與 pending 一樣缺少可稽核依據，不視為終態。
+        """
+        if self.parse_kind != "parsed":
+            return False
+        if self.status == "processed":
+            return True
+        return self.status == "dismissed" and bool(self.note.strip())
 
 
 def _extract_spawn_requests_section(content: str) -> Optional[str]:
@@ -99,7 +128,8 @@ def _parse_status(entry: str) -> _StatusParseResult:
     strict = _STATUS_FIELD_PATTERN.search(entry)
     if strict:
         value = strict.group(1).strip().strip("\"'`").lower()
-        return _StatusParseResult(kind="parsed", value=value)
+        note = (strict.group(2) or "").strip()
+        return _StatusParseResult(kind="parsed", value=value, note=note)
 
     loose = _STATUS_LINE_LOOSE_PATTERN.search(entry)
     if loose:
@@ -111,6 +141,46 @@ def _parse_status(entry: str) -> _StatusParseResult:
 def _parse_sr_label(entry: str) -> str:
     match = _SR_ENTRY_PATTERN.search(entry)
     return match.group(1) if match else "SR-?"
+
+
+def iter_spawn_request_entries(content: str) -> List[SpawnRequestEntry]:
+    """解析 Ticket 內容的 Spawn Requests 章節，回傳各條目的狀態。
+
+    本函式是 Spawn Request 狀態解析的唯一入口，供本模組與
+    `ana_spawn_consistency_checker` 共用——status 行的合法格式、fail-closed
+    判讀（無法解析或缺欄位一律不視為已判定）皆定義於此，避免兩處各自維護
+    正則而漂移。
+
+    無 Spawn Requests 章節、章節為空、或章節內無 `SR-N` 條目時回傳空列表。
+    """
+    section = _extract_spawn_requests_section(content)
+    if section is None or not section.strip():
+        return []
+
+    entries: List[SpawnRequestEntry] = []
+    for entry_text in _split_entries(section):
+        result = _parse_status(entry_text)
+        status = result.value if result.kind == "parsed" else None
+        if status is not None and status not in _VALID_STATUSES:
+            # 值非預期時降級為 unparseable，與 check_spawn_requests 的判讀一致
+            entries.append(
+                SpawnRequestEntry(
+                    label=_parse_sr_label(entry_text),
+                    status=None,
+                    note="",
+                    parse_kind="unparseable",
+                )
+            )
+            continue
+        entries.append(
+            SpawnRequestEntry(
+                label=_parse_sr_label(entry_text),
+                status=status,
+                note=result.note,
+                parse_kind=result.kind,
+            )
+        )
+    return entries
 
 
 def check_spawn_requests(

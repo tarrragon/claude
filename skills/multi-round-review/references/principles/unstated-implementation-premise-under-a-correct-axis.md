@@ -48,5 +48,5 @@
 
 ## 跟其他原則的關係
 
-- [軸名取了次好的代理變數](../../../compositional-writing/references/principles/axis-named-by-proxy-not-mechanism.md)：那張是命名選錯，這張是容器選了而沒說。兩者可同時發生，修法順序是先讓前提顯形、再檢查軸名。
+- 「軸名取了次好的代理變數」（`compositional-writing` skill 的原則卡，若已安裝）：那張是命名選錯，這張是容器選了而沒說。兩者可同時發生，修法順序是先讓前提顯形、再檢查軸名。
 - [多次局部正確的修法會合成缺陷](./sequential-fixes-compose-into-defects.md)：前提顯形之後為了繞開它而長出來的結構要一起拆，而拆的過程會在相鄰段落留下接縫。

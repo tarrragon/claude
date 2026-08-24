@@ -30,6 +30,7 @@ from ticket_system.lib.constants import (
     STATUS_BLOCKED,
 )
 from ticket_system.lib.file_lock import file_lock
+from ticket_system.lib.precondition import require_in_progress
 from ticket_system.lib.messages import (
     ErrorMessages,
     InfoMessages,
@@ -193,6 +194,7 @@ def _execute_set_dict_subfields(
             applied[key] = val
 
         ticket[field_name] = working
+        ticket_type = ticket.get("type")
 
         ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
         ticket_loader.save_ticket(ticket, ticket_path)
@@ -201,6 +203,14 @@ def _execute_set_dict_subfields(
     for key, val in applied.items():
         display = ", ".join(val) if isinstance(val, list) else val
         print(f"   {key}: {display}")
+
+    # 目錄級 where.files 宣告 WARNING（PC-BAL-040）：--files 子欄位路徑不經過
+    # execute_set_field 的 _sync_where_files 啟發式，需在此另行檢查。
+    if field_name == "where" and "files" in applied:
+        from ticket_system.lib.field_validators import directory_declaration_warnings
+
+        for warning in directory_declaration_warnings(applied["files"], ticket_type):
+            print(warning)
     return 0
 
 
@@ -351,6 +361,11 @@ def execute_set_field(
         print(FieldsMessages.WHERE_FILES_SYNCED.format(count=len(synced_files)))
         for entry in synced_files:
             print(f"      - {entry}")
+        # 目錄級 where.files 宣告 WARNING（PC-BAL-040）
+        from ticket_system.lib.field_validators import directory_declaration_warnings
+
+        for warning in directory_declaration_warnings(synced_files, ticket.get("type")):
+            print(warning)
     return 0
 
 
@@ -492,13 +507,45 @@ def execute_set_priority(args: argparse.Namespace, version: str) -> int:
 
 
 def execute_add_acceptance(args: argparse.Namespace, version: str) -> int:
-    """追加驗收條件到 Ticket"""
+    """追加驗收條件到 Ticket。
+
+    與 set-acceptance 對齊三維度（原實作遺漏，實作於 fields.py 簡單欄位
+    操作群，044 引入 require_in_progress 時未回頭涵蓋）：
+    - identity guard：--as 申報對照 who.current（warn-only，未強制）
+    - status guard：allow_pending=True（建票期例行修訂），completed/blocked/
+      closed 需 --force
+    - auto-commit：寫入後同 set-acceptance 保護等級
+    """
+    import sys as _sys
+    from ticket_system.lib.identity_guard import check_identity
+    deny = check_identity(
+        version,
+        args.ticket_id,
+        getattr(args, "as_agent", None),
+        command="add-acceptance",
+    )
+    if deny is not None:
+        return deny
+
     # W14-045: file_lock 包圍 load → modify → save
     lock_target = Path(get_ticket_path(version, args.ticket_id))
     with file_lock(lock_target):
         ticket, error = load_and_validate_ticket(version, args.ticket_id)
         if error:
             return 1
+
+        force = bool(getattr(args, "force", False))
+        ok, error_msg = require_in_progress(
+            ticket,
+            args.ticket_id,
+            "add-acceptance",
+            allow_completed=False,
+            allow_pending=True,
+            force=force,
+        )
+        if not ok:
+            _sys.stderr.write(error_msg + "\n")
+            return 2
 
         acceptance = ticket.get("acceptance") or []
         new_item = f"[ ] {args.value}"
@@ -507,6 +554,24 @@ def execute_add_acceptance(args: argparse.Namespace, version: str) -> int:
 
         ticket_path = resolve_ticket_path(ticket, version, args.ticket_id)
         ticket_loader.save_ticket(ticket, ticket_path)
+
+        # 與 set-acceptance 同保護等級的 auto-commit（path-limited + graceful
+        # degrade）。
+        from ticket_system.lib import git_utils
+        try:
+            commit_status = git_utils._auto_commit_ticket_md(
+                str(ticket_path), args.ticket_id, "Acceptance Criteria",
+                operation="add-acceptance",
+            )
+            if commit_status in ("not_git_repo", "git_failed"):
+                _sys.stderr.write(
+                    f"[add-acceptance] auto-commit skipped（{commit_status}，非致命）；"
+                    f"body 已保留 working tree，可手動 git commit 持久化。\n"
+                )
+        except Exception as exc:
+            _sys.stderr.write(
+                f"[add-acceptance] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
+            )
 
     print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name="acceptance"))
     print(f"   新增: {new_item}")

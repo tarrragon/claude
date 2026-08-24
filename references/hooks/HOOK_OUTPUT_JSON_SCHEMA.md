@@ -145,7 +145,8 @@ python3 .claude/lib/hook_output_validator.py --verbose
 - `.claude/error-patterns/implementation/IMP-055-hook-stdout-plain-text-breaks-json-validation.md` — 完整錯誤模式（含失敗變體）
 - `.claude/error-patterns/implementation/IMP-051-new-hook-not-registered.md` — Hook 未註冊
 - `.claude/error-patterns/implementation/IMP-054-hook-missing-execute-permission.md` — Hook 權限問題
-- `.claude/hooks/hook_utils.py` — 統一日誌與例外處理工具
+- `.claude/lib/hook_io.py` / `.claude/lib/hook_logging.py` — 統一日誌與例外處理工具（v0.28.0 重構起拆分為 `.claude/lib/` 多個模組）
+  （原路徑 `.claude/hooks/hook_utils.py`，2026-08-22 文件複查更正）<!-- broken-link-exempt: 本行為更正說明，原路徑已不存在是預期的 -->
 - `.claude/lib/hook_output_validator.py` — 本規範的自動驗證工具
 
 ---

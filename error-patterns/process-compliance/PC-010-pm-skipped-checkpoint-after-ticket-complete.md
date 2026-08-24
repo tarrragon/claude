@@ -32,7 +32,7 @@ PM 將 `ticket track complete` 誤當作任務結束點，而非流程的一個�
 
 ## 解決方案
 
-`ticket track complete` 執行成功後，PM 必須立即繼續執行：
+`ticket track complete` 執行成功後，PM 必須立即繼續執行（下列流程圖中 `/commit-as-prompt` 為當時使用的指令名稱，保留原文為事實記述；該指令已於 2026-08-22 廢止，取代做法見 `.claude/rules/core/bash-tool-usage-rules.md` 規則七）：
 
 ```
 ticket track complete <id>

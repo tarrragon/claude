@@ -30,7 +30,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # .claude/ — for `from lib.* import ...`
 
 from lib.hook_base import get_project_root  # noqa: E402
-from lib.hook_logging import setup_hook_logging  # noqa: E402
+from lib.hook_logging import setup_hook_logging, run_hook_safely  # noqa: E402
 from lib.hook_io import read_json_from_stdin, is_subagent_environment
 from lib.hook_ticket import (
     parse_ticket_frontmatter,
@@ -505,5 +505,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    exit_code = main()
-    sys.exit(exit_code)
+    sys.exit(run_hook_safely(main, HOOK_NAME))

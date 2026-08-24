@@ -1,21 +1,17 @@
 """
-Test: settings-registration-exec-guard-hook（攔截面改版：PostToolUse 監控
-hook 檔案落地事件，取代舊版解析 settings.json 差集推導）
+Test: settings-registration-exec-guard-hook（0.2.1-W3-890 降級版：偵測不再
+自動 chmod，改為純 info 日誌，供未來稽核；settings.json 已全面改用顯式
+解譯器註冊，可執行位不再是 hook 被 runtime 呼叫的前提）
 
 驗證項目：
 1. is_monitored_hook_path：頂層 .claude/hooks/ 的 .py/.sh（非遞迴）與
    .claude/skills/<skill>/hooks/ 下的 .py/.sh（遞迴，略過快取目錄）判定
-2. fix_missing_exec_bit：缺可執行位時 chmod +x、已具可執行位/不存在時
-   不動作
-3. main() 整合：
-   - 先註冊後建檔順序下，Write 落地缺可執行位的 hook 檔案時即被自動修復
-     （不依賴 settings.json 是否已註冊，附重現測試）
-   - MultiEdit 落地缺可執行位的 hook 檔案同樣被偵測修復（原設計此路徑
-     完全無防護的維度已因改用檔案落地監控而消失）
-   - skill hooks 目錄下的 .py 落地時同樣受監控（子目錄遞迴掃描行為）
-   - 非監控範圍（其他工具 / 非 hook 路徑 / 已可執行）不動作
-
-Source: 0.2.1-W3-499（原始設計）Phase 4 五視角審查 -> 攔截面改造 ticket
+   （沿用攔截面改版邏輯，未變更）
+2. main() 整合：
+   - 缺可執行位時不再 chmod、不再印出 stderr，檔案 mode 維持不變
+   - 已具可執行位/非監控範圍/非監控工具時同樣無動作
+3. is_monitored_hook_path 的 resolve() OSError 可觀測性（未變更）
+4. skip dirs / symlink 邊界（未變更）
 """
 
 import importlib.util
@@ -23,11 +19,8 @@ import io
 import json
 import logging
 import os
-import stat
 import sys
 from pathlib import Path
-
-import pytest
 
 HOOKS_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HOOKS_DIR))
@@ -41,11 +34,12 @@ hook_module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(hook_module)
 
 is_monitored_hook_path = hook_module.is_monitored_hook_path
-fix_missing_exec_bit = hook_module.fix_missing_exec_bit
 main = hook_module.main
 
 
 def _make_file(path: Path, executable: bool) -> Path:
+    import stat
+
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("#!/usr/bin/env python3\n")
     mode = path.stat().st_mode
@@ -57,7 +51,7 @@ def _make_file(path: Path, executable: bool) -> Path:
 
 
 # ============================================================================
-# is_monitored_hook_path
+# is_monitored_hook_path（未變更）
 # ============================================================================
 
 
@@ -126,26 +120,7 @@ class TestIsMonitoredHookPath:
 
 
 # ============================================================================
-# fix_missing_exec_bit
-# ============================================================================
-
-
-class TestFixMissingExecBit:
-    def test_missing_exec_bit_is_fixed(self, tmp_path):
-        target = _make_file(tmp_path / "x.py", executable=False)
-        assert fix_missing_exec_bit(target) is True
-        assert os.access(target, os.X_OK)
-
-    def test_already_executable_not_touched(self, tmp_path):
-        target = _make_file(tmp_path / "x.py", executable=True)
-        assert fix_missing_exec_bit(target) is False
-
-    def test_nonexistent_file_returns_false(self, tmp_path):
-        assert fix_missing_exec_bit(tmp_path / "ghost.py") is False
-
-
-# ============================================================================
-# main() 整合
+# main() 整合（降級版：不再 chmod、不再印 stderr）
 # ============================================================================
 
 
@@ -157,44 +132,14 @@ def _run_hook(monkeypatch, tool_name, tool_input, project_root):
     return main()
 
 
-class TestMainIntegration:
-    def test_write_new_hook_without_exec_bit_is_autofixed(
+class TestMainIntegrationDowngraded:
+    def test_write_new_hook_without_exec_bit_is_only_logged_not_fixed(
         self, tmp_path, monkeypatch, capsys
     ):
-        """重現測試（AC1）：先寫 settings.json 註冊、後 Write 建立 hook 檔案的
-        操作順序下，落地當下即被自動修復——本 hook 完全不解析 settings.json，
-        故「先註冊」這步是否發生、其內容為何，都不影響判斷結果，直接以
-        settings.json 已含註冊項模擬該順序作對照。
-        """
-        # 模擬「先註冊」：settings.json 已存在且已含此檔的註冊項
-        settings_path = tmp_path / ".claude" / "settings.json"
-        settings_path.parent.mkdir(parents=True)
-        settings_path.write_text(
-            json.dumps(
-                {
-                    "hooks": {
-                        "PostToolUse": [
-                            {
-                                "matcher": "Write",
-                                "hooks": [
-                                    {
-                                        "type": "command",
-                                        "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/new-hook.py",
-                                    }
-                                ],
-                            }
-                        ]
-                    }
-                }
-            )
+        """降級版核心行為：缺可執行位時不 chmod、不印 stderr，僅記錄 info 日誌。"""
+        target = _make_file(
+            tmp_path / ".claude" / "hooks" / "new-hook.py", executable=False
         )
-
-        # 「後建檔」：此時目標檔案才落地，缺可執行位
-        target = tmp_path / ".claude" / "hooks" / "new-hook.py"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("#!/usr/bin/env python3\n")
-        mode = target.stat().st_mode
-        target.chmod(mode & ~stat.S_IXUSR & ~stat.S_IXGRP & ~stat.S_IXOTH)
         assert not os.access(target, os.X_OK)
 
         exit_code = _run_hook(
@@ -202,10 +147,8 @@ class TestMainIntegration:
         )
 
         assert exit_code == 0  # PostToolUse 不 deny
-        assert os.access(target, os.X_OK)
-        err = capsys.readouterr().err
-        assert "已自動修復" in err
-        assert "new-hook.py" in err
+        assert not os.access(target, os.X_OK)  # 降級版不再 chmod
+        assert capsys.readouterr().err == ""  # 降級版不再印 stderr
 
     def test_write_new_hook_with_exec_bit_no_action(self, tmp_path, monkeypatch, capsys):
         target = _make_file(tmp_path / ".claude" / "hooks" / "new-hook.py", executable=True)
@@ -215,7 +158,7 @@ class TestMainIntegration:
         assert exit_code == 0
         assert capsys.readouterr().err == ""
 
-    def test_edit_existing_hook_without_exec_bit_is_autofixed(
+    def test_edit_existing_hook_without_exec_bit_stays_unfixed(
         self, tmp_path, monkeypatch, capsys
     ):
         target = _make_file(tmp_path / ".claude" / "hooks" / "existing.py", executable=False)
@@ -226,14 +169,11 @@ class TestMainIntegration:
             tmp_path,
         )
         assert exit_code == 0
-        assert os.access(target, os.X_OK)
+        assert not os.access(target, os.X_OK)
 
-    def test_multiedit_new_hook_without_exec_bit_is_autofixed(
+    def test_multiedit_new_hook_without_exec_bit_stays_unfixed(
         self, tmp_path, monkeypatch, capsys
     ):
-        """MultiEdit 落地缺可執行位的 hook 檔案同樣被偵測修復（原設計此路徑
-        完全無防護的維度已因改用檔案落地監控而消失，非本 hook 特別繞道處理）。
-        """
         target = _make_file(
             tmp_path / ".claude" / "hooks" / "multiedit-hook.py", executable=False
         )
@@ -244,10 +184,11 @@ class TestMainIntegration:
             tmp_path,
         )
         assert exit_code == 0
-        assert os.access(target, os.X_OK)
+        assert not os.access(target, os.X_OK)
 
-    def test_skill_hook_without_exec_bit_is_autofixed(self, tmp_path, monkeypatch, capsys):
-        """skill hooks 目錄下的 .py 落地時同樣受監控（子目錄遞迴掃描行為）。"""
+    def test_skill_hook_without_exec_bit_stays_unfixed(self, tmp_path, monkeypatch, capsys):
+        """skill hooks 目錄下的 .py 落地時同樣受監控（子目錄遞迴掃描行為），
+        但降級版不再修復，僅供內部日誌稽核。"""
         target = _make_file(
             tmp_path / ".claude" / "skills" / "myskill" / "hooks" / "x.py",
             executable=False,
@@ -256,9 +197,8 @@ class TestMainIntegration:
             monkeypatch, "Write", {"file_path": str(target), "content": "x"}, tmp_path
         )
         assert exit_code == 0
-        assert os.access(target, os.X_OK)
-        err = capsys.readouterr().err
-        assert "myskill" in err
+        assert not os.access(target, os.X_OK)
+        assert capsys.readouterr().err == ""
 
     def test_non_hook_path_no_action(self, tmp_path, monkeypatch, capsys):
         target = _make_file(tmp_path / "src" / "main.py", executable=False)
@@ -292,7 +232,7 @@ class TestMainIntegration:
 
 
 # ============================================================================
-# 例外可觀測性（0.2.1-W3-515）
+# 例外可觀測性（is_monitored_hook_path，未變更）
 # ============================================================================
 
 
@@ -300,7 +240,7 @@ class TestOsErrorObservability:
     def test_resolve_oserror_logged_when_logger_provided(self, tmp_path, monkeypatch, caplog):
         """is_monitored_hook_path 的 resolve() OSError 是真實例外，傳入 logger
         時須記錄 warning（observability-rules 規則 1）。"""
-        logger_name = "test-w3-515-oserror"
+        logger_name = "test-w3-890-oserror"
         logger = logging.getLogger(logger_name)
 
         def _raise_oserror(self):
@@ -326,72 +266,27 @@ class TestOsErrorObservability:
 
 
 # ============================================================================
-# 邊界測試（0.2.1-W3-515 AC2）
+# 邊界測試（未變更）
 # ============================================================================
 
 
-class TestBoundaryChmodOSErrorPropagation:
-    def test_chmod_oserror_propagates_through_main_not_swallowed(
-        self, tmp_path, monkeypatch
-    ):
-        """fix_missing_exec_bit 的 chmod() 失敗刻意不在本檔任何函式內捕捉，
-        直接呼叫 main() 時例外必須向上傳播（未被局部 try/except 靜默吞掉）。
-        """
-        target = _make_file(tmp_path / ".claude" / "hooks" / "readonly.py", executable=False)
-
-        def _raise_chmod_oserror(self, mode):
-            raise OSError("simulated permission denied")
-
-        monkeypatch.setattr(Path, "chmod", _raise_chmod_oserror)
-        payload = {"tool_name": "Write", "tool_input": {"file_path": str(target), "content": "x"}}
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
-        monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
-
-        with pytest.raises(OSError, match="simulated permission denied"):
-            main()
-
-    def test_chmod_oserror_recorded_by_run_hook_safely_as_exit_1(
-        self, tmp_path, monkeypatch
-    ):
-        """交由 run_hook_safely 統一處理時，chmod OSError 使 exit code 為 1
-        （fail_closed 預設 False，與本 hook 的『不 deny』設計一致），非靜默成功。
-        """
-        target = _make_file(tmp_path / ".claude" / "hooks" / "readonly2.py", executable=False)
-
-        def _raise_chmod_oserror(self, mode):
-            raise OSError("simulated permission denied")
-
-        monkeypatch.setattr(Path, "chmod", _raise_chmod_oserror)
-        payload = {"tool_name": "Write", "tool_input": {"file_path": str(target), "content": "x"}}
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
-        monkeypatch.setattr(hook_module, "get_project_root", lambda: tmp_path)
-
-        exit_code = hook_module.run_hook_safely(
-            hook_module.main, "settings-registration-exec-guard-test", fail_closed=False
-        )
-
-        assert exit_code == 1
-
-
 class TestBoundarySkipDirs:
-    @pytest.mark.parametrize(
-        "skip_dir", ["__pycache__", ".venv", "node_modules", ".git"]
-    )
-    def test_each_skip_dir_entry_excludes_skill_hook_files(self, tmp_path, skip_dir):
+    def test_each_skip_dir_entry_excludes_skill_hook_files(self, tmp_path):
         """_SKILL_HOOK_SKIP_DIRS 的每個成員都個別生效，而非只有 __pycache__。"""
-        target = (
-            tmp_path
-            / ".claude"
-            / "skills"
-            / "myskill"
-            / "hooks"
-            / skip_dir
-            / "inner.py"
-        )
-        target.parent.mkdir(parents=True)
-        target.write_text("x")
+        for skip_dir in ["__pycache__", ".venv", "node_modules", ".git"]:
+            target = (
+                tmp_path
+                / ".claude"
+                / "skills"
+                / "myskill"
+                / "hooks"
+                / skip_dir
+                / "inner.py"
+            )
+            target.parent.mkdir(parents=True)
+            target.write_text("x")
 
-        assert is_monitored_hook_path(str(target), tmp_path) is None
+            assert is_monitored_hook_path(str(target), tmp_path) is None
 
     def test_skip_dir_nested_deeper_still_excluded(self, tmp_path):
         """快取目錄底下再有子目錄時仍整段排除（略過清單以路徑各段命中判斷）。"""
@@ -424,7 +319,7 @@ class TestBoundarySkipDirs:
 class TestBoundarySymlinkResolution:
     def test_symlink_inside_hooks_dir_pointing_outside_not_monitored(self, tmp_path):
         """符號連結的名義路徑在 .claude/hooks/ 內，但 resolve() 後真實目標在
-        監控範圍外時，判定為不受監控——本 hook 修復的是實際會被 runtime
+        監控範圍外時，判定為不受監控——本 hook 觀察的是實際會被 runtime
         執行的檔案，符號連結解析後的真實目標才是該檔案（見函式 docstring）。
         """
         outside_target = tmp_path / "outside.py"

@@ -119,7 +119,9 @@ handoff_utils 應改用 `ticket_system.constants`（top-level package，無 yaml
 
 ### 重現
 
-W17-127.1（commit 20041166）抽出 `.claude/hooks/lib/framework_paths.py` 共用模組（含 `import yaml`）。4 個 caller 中：
+W17-127.1（commit 20041166）抽出 `.claude/hooks/lib/framework_paths.py` 共用模組（含 `import yaml`，案例敘事：抽出當時路徑）<!-- broken-link-exempt: 本行為更正說明，案例本文保留原始路徑以忠實記錄事發當時狀態 -->。
+
+現搬遷至 `.claude/lib/framework_paths.py`，2026-08-22 文件複查更正。4 個 caller 中：
 
 | Caller | 修復狀態 |
 |--------|---------|

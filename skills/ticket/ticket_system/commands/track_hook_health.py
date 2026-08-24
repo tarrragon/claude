@@ -29,7 +29,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ticket_system.lib.claude_lib_loader import load_claude_lib
+from ticket_system.lib.claude_lib_loader import find_claude_dir, load_claude_lib
 
 # ---------------------------------------------------------------------------
 # Lib 載入：lazy import（收斂自五處近乎相同複本，共用實作見
@@ -98,20 +98,47 @@ def _today_str(now: Optional[datetime] = None) -> str:
     return (now or datetime.now()).strftime("%Y-%m-%d")
 
 
+def _load_settings(settings_path: Path) -> Dict:
+    """讀取 .claude/settings.json；不存在或解析失敗時回 {}（與
+    hook-health-monitor._load_settings 同款降級語意，讓 classify_hook 走
+    保守預設分類，不阻擋主流程）。
+    """
+    if not settings_path.exists():
+        return {}
+    try:
+        with open(settings_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return {}
+
+
+def _load_project_settings() -> Dict:
+    """定位 .claude/ 目錄（find_claude_dir，同 lazy lib 載入的路徑推導
+    策略——不依賴 cwd）並讀取 settings.json；找不到 .claude/ 目錄時回
+    {}（classify_hook 降級為保守預設分類）。
+    """
+    claude_dir = find_claude_dir()
+    if claude_dir is None:
+        return {}
+    return _load_settings(claude_dir / "settings.json")
+
+
 def _evaluate_all(
     stats_by_hook: Dict[str, Dict],
     *,
     window_days: int,
     now: Optional[datetime] = None,
+    settings: Optional[Dict] = None,
 ) -> List[Dict[str, Any]]:
     """對每個 hook 跑 classify + evaluate，回傳結構化結果清單。"""
     today = _today_str(now)
+    settings = settings if settings is not None else {}
     results: List[Dict[str, Any]] = []
     for hook_name, stats in sorted(stats_by_hook.items()):
         per_day = stats.get("per_day") or {}
         recent = per_day.get(today, 0)
         baseline = _compute_baseline(per_day, window_days=window_days)
-        hook_type = classify_hook(hook_name, {})
+        hook_type = classify_hook(hook_name, settings)
         verdict = evaluate(
             stats={"total": stats.get("total", 0), "recent": recent, "per_day": per_day},
             hook_type=hook_type,
@@ -236,7 +263,8 @@ def execute_hook_health(args: argparse.Namespace) -> int:
 
     since_dt = datetime.now() - timedelta(days=since_days)
     stats_by_hook = scan_logs(since=since_dt)
-    results = _evaluate_all(stats_by_hook, window_days=since_days)
+    settings = _load_project_settings()
+    results = _evaluate_all(stats_by_hook, window_days=since_days, settings=settings)
 
     if fmt == FORMAT_JSON:
         print(_render_json(results, since_days=since_days, dry_run=dry_run))

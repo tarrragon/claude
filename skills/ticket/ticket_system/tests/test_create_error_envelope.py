@@ -125,6 +125,30 @@ def test_source_parent_mutually_exclusive_emits_envelope(seeded_repo_root):
 
 
 # ---------------------------------------------------------------------------
+# 整合測試 3b：--discovered-during 與 --source-ticket 互斥
+# ---------------------------------------------------------------------------
+
+
+def test_discovered_during_source_ticket_mutually_exclusive_emits_envelope(seeded_repo_root):
+    """--discovered-during 與 --source-ticket 同用 → envelope
+    DISCOVERED_DURING_SOURCE_MUTUALLY_EXCLUSIVE。
+
+    互斥檢查須先於 --source-ticket 存在性檢查執行：兩個 ID 皆為不存在的
+    佔位值，若順序顛倒會先撞 SOURCE_TICKET_NOT_FOUND，掩蓋真正該回報的
+    互斥錯誤。
+    """
+    args = _make_args(
+        wave=99,
+        source_ticket="0.99.0-W99-002",
+        discovered_during="0.99.0-W99-003",
+    )
+    stdout, _, exit_code = _capture(args)
+    assert exit_code == 1
+    assert ERROR_ENVELOPE_VERSION_MARKER in stdout
+    assert "errno: DISCOVERED_DURING_SOURCE_MUTUALLY_EXCLUSIVE" in stdout
+
+
+# ---------------------------------------------------------------------------
 # 整合測試 4：--why 缺失（IMP 類型）
 # ---------------------------------------------------------------------------
 

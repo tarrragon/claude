@@ -1991,3 +1991,92 @@ class TestPyYAMLEvaluation:
             assert yaml is not None
         except ImportError:
             pytest.skip("PyYAML not installed")
+
+
+# ============================================================================
+# 區塊 6：每日輪替 append（0.2.1-W3-923）
+# ============================================================================
+
+class TestDailyRotationAppend:
+    """setup_hook_logging 每日輪替 append 行為測試
+
+    驗收對應：
+    - 同一日多次觸發 append 至同一檔，不覆蓋既有內容
+    - 跨日產生新檔，檔名為日期粒度
+    - cleanup 的 7 天保留期對新檔名格式仍有效
+    """
+
+    def test_same_day_multiple_calls_append_single_file(
+        self, project_root, mock_env_var, reset_loggers
+    ):
+        """同一日多次呼叫 setup_hook_logging 應 append 至同一檔，不覆蓋"""
+        mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
+        fixed_day = datetime(2026, 8, 21, 9, 0, 0)
+
+        with patch("lib.hook_logging.datetime") as mock_dt:
+            mock_dt.now.return_value = fixed_day
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+            logger1 = setup_hook_logging("daily-rotation-test")
+            logger1.info("first call message")
+
+            # 同日第二次觸發（不同秒數，但同一天）
+            mock_dt.now.return_value = fixed_day.replace(hour=15, minute=30)
+            logger2 = setup_hook_logging("daily-rotation-test")
+            logger2.info("second call message")
+
+        log_dir = project_root / ".claude" / "hook-logs" / "daily-rotation-test"
+        log_files = list(log_dir.glob("*.log"))
+
+        assert len(log_files) == 1
+        assert log_files[0].name == "daily-rotation-test-20260821.log"
+        content = log_files[0].read_text()
+        assert "first call message" in content
+        assert "second call message" in content
+
+    def test_cross_day_creates_new_file(self, project_root, mock_env_var, reset_loggers):
+        """跨日觸發應建立以新日期命名的新檔，舊檔保留"""
+        mock_env_var("CLAUDE_PROJECT_DIR", str(project_root))
+        day1 = datetime(2026, 8, 21, 23, 0, 0)
+        day2 = datetime(2026, 8, 22, 0, 5, 0)
+
+        with patch("lib.hook_logging.datetime") as mock_dt:
+            mock_dt.now.return_value = day1
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            logger1 = setup_hook_logging("daily-rotation-test")
+            logger1.info("day1 message")
+
+            mock_dt.now.return_value = day2
+            logger2 = setup_hook_logging("daily-rotation-test")
+            logger2.info("day2 message")
+
+        log_dir = project_root / ".claude" / "hook-logs" / "daily-rotation-test"
+        log_files = sorted(f.name for f in log_dir.glob("*.log"))
+
+        assert log_files == [
+            "daily-rotation-test-20260821.log",
+            "daily-rotation-test-20260822.log",
+        ]
+
+    def test_cleanup_matches_new_daily_filename_pattern(self, project_root):
+        """_cleanup_old_logs 的 glob pattern 對新日期粒度檔名仍有效"""
+        from lib.hook_logging import _cleanup_old_logs
+        import os as _os
+        import time as _time
+
+        log_dir = project_root / ".claude" / "hook-logs" / "cleanup-test"
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        old_file = log_dir / "cleanup-test-20260101.log"
+        old_file.write_text("stale")
+        # 設為 10 天前，超過 7 天保留期
+        old_mtime = _time.time() - 10 * 86400
+        _os.utime(old_file, (old_mtime, old_mtime))
+
+        fresh_file = log_dir / "cleanup-test-20260821.log"
+        fresh_file.write_text("fresh")
+
+        _cleanup_old_logs(log_dir, retention_days=7, pattern="*.log")
+
+        assert not old_file.exists()
+        assert fresh_file.exists()

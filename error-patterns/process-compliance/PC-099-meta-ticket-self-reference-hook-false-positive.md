@@ -92,7 +92,7 @@ Hook 偵測邏輯只看「文本含特定 phrase」，不區分「實際延後�
 | 項目 | 檔案 |
 |------|------|
 | 歸屬過濾模組 | `.claude/hooks/acceptance_checkers/error_pattern_attribution.py`（新增） |
-| Hook orchestrator 接線 | `.claude/hooks/acceptance-gate-hook.py`（步驟 3 加入 `filter_error_patterns_by_ticket_scope`） |
+| Hook orchestrator 接線 | `.claude/skills/ticket/hooks/acceptance-gate-hook.py`（步驟 3 加入 `filter_error_patterns_by_ticket_scope`） |
 | Regression 測試 | `.claude/hooks/tests/test_error_pattern_attribution.py`（9 案例覆蓋 frontmatter 匹配 / 跨 ticket / null fallback / legacy 無引用 / 讀取失敗保守歸屬等） |
 
 **歸屬判定邏輯**（短路求值）：

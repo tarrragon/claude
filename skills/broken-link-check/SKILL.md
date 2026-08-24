@@ -67,6 +67,46 @@ error-pattern 案例表會刻意記錄不存在的路徑——例如 confabulati
 - 僅取消「不存在」引用的 broken 計列；該行若有存在的引用仍歸 `ok`，不遮蔽存在事實。
 - `--include-documented` 可在 triage 時顯式納入計數。
 
+### opt-in fence 稽核模式（非 gate）
+
+`--include-code-block` 預設維持 `False` 是刻意判定：fence（程式碼區塊）內
+broken 引用大量為歷史實作報告與教學/語法示範，翻預設會使多數變成誤報，淹
+沒真實 drift。但維持預設不代表放棄偵測——`--fence-audit` 開一條獨立稽核
+通道，讓 fence 內失效引用能被人定期複查，防止 drift 在無人偵測的射程外
+累積。
+
+```
+python3 .claude/skills/broken-link-check/scan_links.py . --fence-audit
+```
+
+**定位：這不是 gate。** `--fence-audit` 恆 `exit 0`，不參與既有命令的 exit
+code 語意，也不接 CI 阻擋——即使找到大量發現，指令本身不失敗。用途是產出
+「供人判讀的清單」，不是「必須降為零的計數」。
+
+**不做的事**：不嘗試自動判定「語法示範」vs「操作指引」。兩者差別是語氣
+（「例如」「格式如下」vs「執行以下步驟」），機器判不了；全量逐筆分類的實
+測結果與抽樣外推值有數倍落差（詳見
+`docs/work-logs/v0/v0.2/v0.2.1/fence-ref-triage.md`），印證語意分類不可
+靠。稽核模式只輸出機器可靠取得的分組訊號：
+
+| 欄位 | 說明 |
+|------|------|
+| `carrier_nature` | 依來源檔路徑段判定的載體性質：`可執行指令載體`（`commands/`）、`案例敘事載體`（`error-patterns/`）、`歷史報告載體`（`hook-specs/`）、`未分類`（其餘目錄，性質混雜不構成可靠訊號） |
+| `has_marker` | 該行是否已有 `broken-link-exempt` / `portability-allow` 豁免 marker（`category` 對應 `excluded_documented`），供人複核既有 marker 是否仍合法 |
+| `merge_successor` | 沿用既有合併型遷移反查索引，有值者為高信心可直接改指 |
+
+彙總層另提供 `by_carrier_nature` 與 `marker_counts` 兩組計數，取代語意
+三分類統計（「歷史報告 / 語法示範 / 真實 drift」機器判不了，改以可靠訊號
+分組呈現）。
+
+`--format json` 輸出額外欄位：`scanned_files` / `fence_entries_count` /
+`by_carrier_nature` / `marker_counts` / `entries`（每筆含
+`source_file`/`line`/`raw_ref`/`resolved_path`/`category`/`carrier_nature`/
+`has_marker`/`merge_successor`）。與既有 gate 路徑（無 `--fence-audit`
+時）完全不共用輸出 schema，不影響原有 `--format json` 欄位。
+
+`--scan-root` 對 `--fence-audit` 同樣生效（疊加額外子樹）。
+
 ### 搭配 /loop 定期掃描
 
 ```
@@ -83,8 +123,8 @@ CLI 已內建以下規則，本節僅供閱讀輸出時對照，非需手動執�
 
 | 格式 | 範例 | 解析基準 |
 |------|------|------|
-| `@.claude/path/file.md` | `@.claude/pm-rules/decision-tree.md` | repo root <!-- broken-link-exempt: 格式示範範例路徑，非真實引用（W2-011 A 類） --> |
-| `.claude/path/file.md` | `.claude/agents/incident-responder.md` | repo root <!-- broken-link-exempt: 格式示範範例路徑，非真實引用（W2-011 A 類） --> |
+| `@.claude/path/file.md` | `@.claude/pm-rules/decision-tree.md` | repo root |
+| `.claude/path/file.md` | `.claude/agents/incident-responder.md` | repo root |
 | `../path/file.md` | `../agents/lavender-interface-designer.md` | 引用文件所在目錄 <!-- broken-link-exempt: 格式示範範例路徑，非真實引用（W2-011 A 類） --> |
 | `./path/file.md` | `./references/detail.md` | 引用文件所在目錄 <!-- broken-link-exempt: 格式示範範例路徑，非真實引用（W2-011 A 類） --> |
 
@@ -124,6 +164,6 @@ CLI 已內建以下規則，本節僅供閱讀輸出時對照，非需手動執�
 
 ---
 
-**Version**: 2.2.0
-**Last Updated**: 2026-08-18
-**Source**: broken links 後置預防機制；1.0.0-W8-030.1 改路由至 scan_links.py 確定性 CLI 作權威 gate，手動流程降級為非權威 fallback；1.0.0-W8-049 新增 documented-error 豁免 marker（excluded_documented 類別 + `--include-documented` 旋鈕），case-study 內刻意記錄的不存在路徑顯式 opt-in 豁免；新增 `--scan-root` 可疊加額外掃描子樹（如 `docs`），預設行為不變（向後相容）
+**Version**: 2.3.0
+**Last Updated**: 2026-08-23
+**Source**: broken links 後置預防機制；1.0.0-W8-030.1 改路由至 scan_links.py 確定性 CLI 作權威 gate，手動流程降級為非權威 fallback；1.0.0-W8-049 新增 documented-error 豁免 marker（excluded_documented 類別 + `--include-documented` 旋鈕），case-study 內刻意記錄的不存在路徑顯式 opt-in 豁免；新增 `--scan-root` 可疊加額外掃描子樹（如 `docs`），預設行為不變（向後相容）；新增 `--fence-audit` opt-in 稽核模式，`include_code_block` 預設維持 `False` 判定的配套承擔機制，恆 exit 0 非 gate，只輸出機器可靠分組訊號不做語意分類

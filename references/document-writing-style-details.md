@@ -157,7 +157,7 @@
 > PM 偶爾會忘記在 context 沉重時觸發 WRAP，導致決策品質下降。
 
 正例：
-> Context 使用率 > 60% 時，PM 工作記憶縮小，主動觸發 WRAP 的機率從 80% 降至 20%（PC-066 案例 1-4 統計）。**Why**: 自律機制與最需要它的場景負相關。**Consequence**: 限制性解法（禁止 X / 規避 X）成為預設反應，遮蔽探索性工具（找正確方法做 X）。**Action**: 依 `.claude/hooks/decision-quality-guard-hook.py` 訊號自動偵測 + CLI claim 強制三問；人工 fallback 以 `wrap-decision` SKILL 觸發條件章節為唯一權威對照。
+> Context 使用率 > 60% 時，PM 工作記憶縮小，主動觸發 WRAP 的機率從 80% 降至 20%（PC-066 案例 1-4 統計）。**Why**: 自律機制與最需要它的場景負相關。**Consequence**: 限制性解法（禁止 X / 規避 X）成為預設反應，遮蔽探索性工具（找正確方法做 X）。**Action**: 依 `ticket track claim` 內建的簡化 WRAP 三問（W/A/P）強制提示；`.claude/hooks/decision-quality-guard-hook.py` 未曾建置，現行無獨立的 context 使用率自動偵測 Hook（2026-08-22 文件複查更正），人工 fallback 以 `wrap-decision` SKILL 觸發條件章節為唯一權威對照。<!-- broken-link-exempt: 本行為更正說明，其內容正是在陳述該路徑未曾建置，路徑不存在是預期的 -->
 
 ---
 

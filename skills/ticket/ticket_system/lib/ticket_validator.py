@@ -443,8 +443,17 @@ def _is_placeholder(text: str) -> bool:
         r"(?:^|[:：]\s*)(?:\(pending\)|(?:TBD|TODO|N/A))[ \t]*[.。]?[ \t]*$",
         re.MULTILINE | re.IGNORECASE,
     )
-    if placeholder_marker.search(target_after_descriptive) or shell_end_marker.search(
-        target_after_descriptive
+    # 改逐行判定，避免列表中單一「label: N/A」行（如「程式碼品質：N/A」）
+    # 以 re.search 命中整段文字就使整段被判為 placeholder，丟棄同段其他實質內容
+    # 行（PC-138 同家族）。規則：僅當「所有非空行皆為 placeholder 行」才判 True；
+    # 只要有一行不是 placeholder_marker/shell_end_marker 命中的行，視為該段已有
+    # 實質內容，不在此處提前回傳 True（交由下方中文佔位符邏輯續判）。
+    non_empty_lines = [
+        line for line in target_after_descriptive.split("\n") if line.strip()
+    ]
+    if non_empty_lines and all(
+        placeholder_marker.match(line) or shell_end_marker.search(line)
+        for line in non_empty_lines
     ):
         return True
     # 若剝除描述性 N/A 行後內容變空（且原本只由描述性 N/A 行組成），

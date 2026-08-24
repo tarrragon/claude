@@ -246,6 +246,36 @@ class TestIsPlaceholderLegacyBehavior:
         )
         assert _is_placeholder(text) is False
 
+    # PC-138 同家族：列表中單一「label: N/A」行不應誤判整段為 placeholder
+    def test_list_with_one_na_line_and_other_real_content_is_not_placeholder(self):
+        """Solution 列表多行實質內容 + 一行「程式碼品質：N/A」→ 不是 placeholder。
+
+        原邏輯以 re.search 掃整段文字，任一行命中 shell_end_marker 即整段判
+        True，會把同段其他實質內容一併丟棄（複製 PC-138 表格情境的錯誤）。
+        """
+        text = (
+            "- 修復方式：改為逐行判定 placeholder\n"
+            "- 影響檔案：ticket_validator.py\n"
+            "- 程式碼品質：N/A\n"
+            "- 測試已補齊並全數通過\n"
+        )
+        assert _is_placeholder(text) is False
+
+    def test_pure_na_line_section_is_still_placeholder(self):
+        """整段僅由 N/A 行組成（無其他實質內容）→ 仍判為 placeholder。"""
+        assert _is_placeholder("程式碼品質：N/A") is True
+        assert _is_placeholder("N/A\nTBD\n") is True
+
+    def test_multiple_na_lines_mixed_with_real_content_is_not_placeholder(self):
+        """多行 N/A/TODO 標記穿插於實質內容中 → 不是 placeholder。"""
+        text = (
+            "Layer 1: TODO\n"
+            "第一段實質分析內容，說明問題根因與修復策略。\n"
+            "- 測試結果：N/A\n"
+            "第二段補充說明，驗證方式與結論。\n"
+        )
+        assert _is_placeholder(text) is False
+
 
 class TestValidateExecutionLogIntegration:
     """validate_execution_log 整合測試：HTML 註解 + 內容不應被擋"""

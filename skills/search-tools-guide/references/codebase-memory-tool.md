@@ -168,7 +168,7 @@ cbm v0.6.1 對 `.claude/` 目錄存在 **hardcoded skip**：
 | 規則 / Skill | 關係 |
 |-------------|------|
 | `.claude/skills/search-tools-guide/SKILL.md` | 本檔的 parent；主檔含三 MCP 章節 + 命令速查 |
-| `.claude/skills/lsp-first/SKILL.md` | 補強三 MCP 路由；LSP 為精度錨點，cbm/codegraph 為查詢入口 |
+| `lsp-first` skill（若已安裝） | 補強三 MCP 路由；LSP 為精度錨點，cbm/codegraph 為查詢入口。若未採用，仍可用 cbm/codegraph 三 MCP 查詢，只是少了 LSP 這層精度錨點 |
 | `.claude/rules/core/tool-discovery.md` | ToolSearch 五問檢查；cbm MCP namespace 缺口（已於 W1-006 解除）曾為「規則 1 問題 5」的反例案例 |
 
 ---

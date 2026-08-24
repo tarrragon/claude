@@ -66,6 +66,27 @@ def _make_log(logs_root: Path, hook_name: str, dt: datetime, idx: int = 0):
     return f
 
 
+def _make_liveness(logs_root: Path, session_id: str, hook_name: str, dt: datetime):
+    """Append one liveness record — mirrors hook_logging.mark_hook_entry()'s
+    schema. run_frequency_scan()'s trigger-count source is _liveness/*.jsonl
+    (0.2.1-W3-939); tests exercising warning/critical verdicts must supply
+    liveness records, not just on-disk _make_log() files (those now only
+    drive the no_precise_count diagnostic path)."""
+    import json as _json
+
+    liveness_dir = logs_root / "_liveness"
+    liveness_dir.mkdir(exist_ok=True)
+    path = liveness_dir / "{}.jsonl".format(session_id)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(
+            _json.dumps(
+                {"hook": hook_name, "session_id": session_id, "pid": 1, "ts": dt.isoformat()}
+            )
+            + "\n"
+        )
+    return path
+
+
 # ---------------------------------------------------------------------------
 # write_session_marker
 # ---------------------------------------------------------------------------
@@ -120,7 +141,7 @@ class TestRunFrequencyScan:
         # 一個 PostToolUse hook（非 SessionStart），今日大量觸發
         # baseline = 200/7 ≈ 28.6, recent=200, low_freq N=2 → 200 > 57.1 → warning
         for i in range(200):
-            _make_log(logs_root, "acceptance-gate", now - timedelta(minutes=i), idx=i)
+            _make_liveness(logs_root, "sess-1", "acceptance-gate", now - timedelta(minutes=i))
 
         logger = logging.getLogger("test_scope")
         flagged = monitor.run_frequency_scan(
@@ -144,19 +165,19 @@ class TestRunFrequencyScan:
         # 製造 7 天分散 baseline + 今日尖峰
         for d in range(1, 7):
             for i in range(10):
-                _make_log(
+                _make_liveness(
                     logs_root,
+                    "sess-1",
                     "phase4-decision-enforcement",
                     now - timedelta(days=d, hours=i),
-                    idx=d * 100 + i,
                 )
         # 今日觸發 200 次 → high_freq_ok N=3, baseline = 60/7 ≈ 8.57, 200 > 25.7 → warning
         for i in range(200):
-            _make_log(
+            _make_liveness(
                 logs_root,
+                "sess-1",
                 "phase4-decision-enforcement",
                 now - timedelta(minutes=i),
-                idx=i,
             )
 
         logger = logging.getLogger("test_format")

@@ -112,7 +112,9 @@ def _print_git_status_from_state(branch: str, state: CheckpointState) -> None:
 
 ### 反例：handoff stop hook 同一 ticket frontmatter 多次讀取
 
-**反例位置**：`.claude/hooks/handoff-auto-resume-stop-hook.py::scan_pending_handoff_tasks` 迴圈內。
+**反例位置**：`.claude/skills/ticket/hooks/handoff-auto-resume-stop-hook.py::scan_pending_handoff_tasks` 迴圈內。
+
+（2026-08-22 文件複查更正原路徑 `.claude/hooks/handoff-auto-resume-stop-hook.py`）<!-- broken-link-exempt: 本行為更正說明，原路徑已不存在是預期的 -->
 
 **結構描述**：單次 stop hook 觸發、單筆 handoff record 處理路徑，可能對同一 ticket_id 重複呼叫 `find_ticket_file` + `parse_ticket_frontmatter`：
 

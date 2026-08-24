@@ -56,4 +56,4 @@ Command（`.claude/commands/`）的驗證步驟是**手動撰寫**的，未追�
 ## 相關文件
 
 - `.claude/commands/sync-push.md` - 已修正的 Command 引導
-- `.claude/scripts/sync-claude-push.sh` - 腳本實作（使用臨時目錄，非 remote）
+- `.claude/scripts/sync-claude-push.py` - 腳本實作（使用臨時目錄，非 remote）

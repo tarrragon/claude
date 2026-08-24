@@ -56,7 +56,7 @@ Hook 設計時遵循「最小權限」原則，允許清單只列「已知需要
 
 ### Hook 設計：放行清單可擴充性
 
-- 允許清單集中管理（本專案：`.claude/hooks/lib/path_permission.py` 的 `ALLOWED_PATTERNS`）
+- 允許清單集中管理（本專案：`.claude/lib/path_permission.py` 的 `ALLOWED_PATTERNS`）
 - 錯誤訊息明列「如需新增允許路徑，請建 Ticket 並修改 ALLOWED_PATTERNS」
 - 保留「放行 vs 阻擋」的邊界測試，避免誤放行
 

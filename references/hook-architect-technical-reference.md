@@ -574,8 +574,10 @@ Hook JSON output 新增 `terminalSequence` 欄位，讓 hook 在無 controlling 
 |------|--------|
 | 1 | hook 是否輸出 `additionalContext` / `systemMessage`？否 → 免檢 |
 | 2 | 訊息受眾是誰？對 subagent 同樣有意義（如格式錯誤回饋）→ 可保留；PM-only（commit 提醒、派發建議、checkpoint 提示）→ 進步驟 3 |
-| 3 | PM-only 訊息必加 `is_subagent_environment()`（`.claude/hooks/hook_utils/hook_io.py`）早期跳過 |
+| 3 | PM-only 訊息必加 `is_subagent_environment()`（`.claude/lib/hook_io.py`，原路徑見表後附註）早期跳過 |
 | 4 | 跳過位置遵循既有修復慣例：輸入解析後、業務邏輯前早期 return（先 parse input 取得 `agent_id` 欄位，命中即輸出 DEFAULT_OUTPUT 並 return） |
+
+附註：上表步驟 3 的原路徑為 `.claude/hooks/hook_utils/hook_io.py`，2026-08-22 文件複查更正，原路徑已不存在是預期的。<!-- broken-link-exempt: 本行為更正說明，其內容正是在陳述原路徑已不存在，路徑不存在是預期的 -->
 
 **識別訊號**：hook 原始碼有 `additionalContext` / `systemMessage` 輸出但 grep 不到 `is_subagent_environment`，即為待評估對象。完整症狀與案例見 `.claude/error-patterns/process-compliance/PC-V1-004-hook-injection-audience-mismatch.md`。
 

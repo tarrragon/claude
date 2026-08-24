@@ -70,7 +70,7 @@ created: 2026-05-16
 1. 確認 `settings.json` 該 hook 註冊形式正確（shebang 路徑）
 2. 從 `settings.local.json` 對應 event/matcher block 移除重複條目
 3. 跑 smoke test 派發任意 agent，預期 UI 無 traceback、hook log 仍有 INFO 紀錄
-4. shebang 路徑直接 exec hook（`echo '{}' | .claude/hooks/foo-hook.py`），預期：無 stderr traceback、exit code = 0
+4. 顯式解譯器前綴呼叫 hook：檔頭含 `# /// script`（PEP 723，本專案 115 支 hook 中 111 支屬此類）用 `echo '{}' | uv run --quiet --script .claude/hooks/foo-hook.py`；純 python 無此區塊才用 `echo '{}' | python3 .claude/hooks/foo-hook.py`（判準與 889 遷移的分類軸一致）。`foo-hook.py` 為佔位符，代入實際 hook 檔名前先 `head -3` 確認其 shebang 屬於哪一類。預期：無 stderr traceback、exit code = 0
 
 ## 自我檢查清單
 

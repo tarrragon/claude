@@ -17,7 +17,7 @@
 | 1 | 語言規範 | 全體 | `rules/core/language-constraints.md`（自動載入） | `language-guard` / `homoglyph-guard` / `utf8-integrity-check` |
 | 2.1 | 禁直接 Read ticket md，改用 CLI | 全體 | 無文字載體，由執行點承擔 | `skills/ticket/hooks/ticket-file-access-guard-hook.py`（deny + CLI 引導） |
 | 2.2/2.3 | 進度更新 append-log | 實作類 agent | 各 agent 定義檔「Ticket 執行責任」章節 | 無 |
-| 2.4 | 身份申報與收尾自律 | 實作類 agent | 同上；`--as` 身份對照另有 CLI 層 | `skills/ticket/ticket_system/lib/identity_guard.py`（過渡期 warn-only） |
+| 2.4 | 身份申報與收尾自律 | 實作類 agent | 同上；`--as` 身份對照另有 CLI 層 | `skills/ticket/ticket_system/lib/identity_guard.py`（complete/finish 未帶 `--as` 已轉強制 deny；其餘命令仍過渡期 warn-only） |
 | 3 | 文件格式規範 | 全體 | `rules/core/document-format-rules.md`（自動載入） | `language-guard` |
 | 4 | 5W1H 回應格式 | 全體 | Output Style（session 層） | `5w1h-compliance-check` |
 | 5 | 查詢範圍限制（Phase 3b） | 編輯產品碼者 | 部分實作類 agent 定義檔「查詢範圍限制」章節（6 檔，未全覆蓋見下） | 無 |

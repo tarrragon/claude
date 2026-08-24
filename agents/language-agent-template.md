@@ -307,6 +307,29 @@ Phase 4: 重構和審核流程
 
 ---
 
+## Ticket 執行責任
+
+**Why**：本檔上方的 `@-import` 經實測不展開，AGENT_PRELOAD.md 從未送達任何
+subagent context——ticket 操作規範若不寫在本檔，對你即不存在。
+
+**Action**：
+
+1. 讀票確認最新狀態：`ticket track full <ticket-id>`
+2. 認領時申報身份：`ticket track claim <ticket-id> --as {language}-developer`
+3. 分析或實作產出即時寫入 ticket，不留到最後：
+   `ticket track append-log <ticket-id> --section "<章節>" "<內容>"`
+4. commit 後主動收尾，不等 PM 代做：
+
+       ticket track check-acceptance <ticket-id> --all --as {language}-developer
+       ticket track complete <ticket-id> --as {language}-developer
+
+**例外**：部分 acceptance 未達成時，於 ticket 的 NeedsContext 章節記錄缺口
+（schema 見 `.claude/pm-rules/ticket-body-schema.md`），**不 complete**，回報 PM。
+
+> 新增語言代理人時，將 `{language}-developer` 替換為實際 agent 名稱（範例：`fennel-go-developer.md`）。
+
+---
+
 ## 相關文件
 
 - @.claude/references/quality-common.md - 實作品質標準

@@ -108,6 +108,9 @@ from .track_acceptance import (
     execute_add_spawn_request,
     execute_resolve_spawn_request,
 )
+# 導入 dispatch 子命令（派發即落票：--note 落票 + normal/review 骨架輸出）
+from .track_dispatch import execute_dispatch, register_dispatch_command
+from .track_commit import execute_commit, register_commit_command
 # 導入 PC-093-exempt marker 補標記子命令
 from .track_exempt_marker import execute_add_exempt_marker
 from .track_multi_view_status import execute_fix_multi_view_status
@@ -130,6 +133,7 @@ from .track_validate import execute_validate
 # 導入關係和狀態管理模組
 from .track_relations import (
     execute_add_child,
+    execute_set_parent,
     execute_phase,
     execute_agent,
     execute_set_blocked_by,
@@ -210,6 +214,11 @@ from .track_hook_health import (
     execute_hook_health,
     register_hook_health,
 )
+# hook-liveness 從 hook 檔/名稱解析 HOOK_NAME 後查 _liveness 觸發記錄
+from .track_hook_liveness import (
+    execute_hook_liveness,
+    register_hook_liveness,
+)
 # td-status 校準 TD 清單（W10-083 / PC-094）
 from .track_td_status import (
     execute_td_status,
@@ -249,6 +258,7 @@ from .topic_backfill import (
 )
 # lease claim/release 寫入 + reclaim ghost 鑑識（multi-PM 協調層 Phase 3）
 from ticket_system.lib.lease import (
+    ReleaseGuardReason,
     check_release_guard,
     claim_lease,
     reclaim_ticket,
@@ -319,10 +329,22 @@ def _execute_release(args: argparse.Namespace, version: str) -> int:
     claim 對稱）。
     """
     if not bool(getattr(args, "force_release_others", False)):
-        allowed, reason = check_release_guard(args.ticket_id)
+        allowed, reason_code, reason = check_release_guard(args.ticket_id)
         if not allowed:
             print(f"[Warning] {reason}")
             return 1
+        if reason_code is ReleaseGuardReason.NO_LEASE_TRACKED:
+            # owner is None：registry 從未記錄此票的 lease（常見於 graceful
+            # SessionEnd 遺留票）。release 只是把票放回 pending 池
+            # （lifecycle.py 清 assigned/started_at），不是接管；真實風險是
+            # PM 未察覺前一個 session 留下未合併分支或髒檔就把票放回池中。
+            # 不阻擋、不改變 exit code，僅提示可查途徑。
+            print(
+                f"[INFO] {args.ticket_id}: 此票無 lease 記錄（owner is None），"
+                "release 前可考慮改用 `ticket track reclaim` 的 dry-run 模式"
+                "（不加 --confirm）先跑 ghost 鑑識，檢查是否有未合併分支或"
+                "未提交的髒檔殘留。"
+            )
 
     rc = execute_release(args, version)
     if rc == 0:
@@ -366,6 +388,7 @@ def _create_version_agnostic_handlers() -> dict:
         "stale-list": execute_stale_list,
         "parallel-check": execute_parallel_check,
         "hook-health": execute_hook_health,
+        "hook-liveness": execute_hook_liveness,
         "sessions": execute_sessions,
         "activity": execute_activity,
         "conflicts": execute_conflicts,
@@ -438,6 +461,8 @@ def _create_command_handlers() -> dict:
         "set-completion-info": execute_set_completion_info,
         "validate": execute_validate,
         "append-log": execute_append_log,
+        "dispatch": execute_dispatch,
+        "commit": execute_commit,
         "add-spawn-request": execute_add_spawn_request,
         "resolve-spawn-request": execute_resolve_spawn_request,
         "add-exempt-marker": execute_add_exempt_marker,
@@ -447,6 +472,7 @@ def _create_command_handlers() -> dict:
         "list-artifacts": execute_list_artifacts,
         "accept-creation": execute_accept_creation,
         "add-child": execute_add_child,
+        "set-parent": execute_set_parent,
         "set-blocked-by": execute_set_blocked_by,
         "set-related-to": execute_set_related_to,
         "set-priority": execute_set_priority,
@@ -910,6 +936,19 @@ def _register_field_write_commands(
     p_add_acc.add_argument("ticket_id", help=TrackMessages.ARG_TICKET_ID)
     p_add_acc.add_argument("value", help="驗收條件文字")
     p_add_acc.add_argument("--version", help=TrackMessages.ARG_VERSION)
+    p_add_acc.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+    )
+    p_add_acc.add_argument(
+        "--as",
+        dest="as_agent",
+        default=None,
+        metavar="AGENT_NAME",
+        help="申報執行身份，與 who.current 對照不符即 deny（未提供僅警告）",
+    )
 
     # remove-acceptance 操作
     p_rm_acc = subparsers.add_parser("remove-acceptance", help=TrackMessages.HELP_REMOVE_ACCEPTANCE)
@@ -954,7 +993,7 @@ def _register_batch_commands(
 def _register_relation_commands(
     subparsers: argparse._SubParsersAction,
 ) -> None:
-    """註冊關係和狀態管理子命令：agent, phase, add-child, set-blocked-by, set-related-to"""
+    """註冊關係和狀態管理子命令：agent, phase, add-child, set-parent, set-blocked-by, set-related-to"""
     # agent 操作
     p_agent = subparsers.add_parser("agent", help=TrackMessages.HELP_AGENT)
     p_agent.add_argument("agent_name", help=TrackMessages.ARG_AGENT_NAME)
@@ -986,6 +1025,31 @@ def _register_relation_commands(
     p_add_child.add_argument("parent_id", help=TrackMessages.ARG_PARENT_ID)
     p_add_child.add_argument("child_id", help=TrackMessages.ARG_CHILD_ID)
     p_add_child.add_argument("--version", help=TrackMessages.ARG_VERSION)
+
+    # set-parent 操作（parent_id 修正路徑：清除或改寫，並同步上游 children）
+    p_set_parent = subparsers.add_parser(
+        "set-parent",
+        help=TrackMessages.HELP_SET_PARENT,
+        epilog=(
+            "範例:\n"
+            "  ticket track set-parent <child-id> <new-parent-id>\n"
+            "  ticket track set-parent <child-id> --clear\n"
+            "\n"
+            "new_parent_id 與 --clear 互斥，且不可同時缺席。"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_set_parent.add_argument("child_id", help=TrackMessages.ARG_SET_PARENT_CHILD_ID)
+    p_set_parent.add_argument(
+        "new_parent_id",
+        nargs="?",
+        default=None,
+        help=TrackMessages.ARG_SET_PARENT_NEW_PARENT_ID,
+    )
+    p_set_parent.add_argument(
+        "--clear", action="store_true", help=TrackMessages.ARG_SET_PARENT_CLEAR
+    )
+    p_set_parent.add_argument("--version", help=TrackMessages.ARG_VERSION)
 
     # set-blocked-by 操作
     p_set_blocked_by = subparsers.add_parser(
@@ -1464,6 +1528,7 @@ def _register_all_subcommands(
     register_stale_list(track_subparsers)
     register_td_status(track_subparsers)
     register_hook_health(track_subparsers)
+    register_hook_liveness(track_subparsers)
     register_dispatch_validate(track_subparsers)
     register_dispatch_readiness(track_subparsers)
     register_depth(track_subparsers)
@@ -1473,6 +1538,8 @@ def _register_all_subcommands(
     register_topics(track_subparsers)
     register_topic_backfill(track_subparsers)
     register_onboard(track_subparsers)
+    register_dispatch_command(track_subparsers)
+    register_commit_command(track_subparsers)
 
 
 def _register_global_state_commands(

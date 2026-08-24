@@ -27,6 +27,7 @@ from ticket_system.lib.command_lifecycle_messages import (
     format_msg,
 )
 from ticket_system.lib.acceptance_auditor import detect_vague_acceptance, detect_srp_violations
+from ticket_system.lib.absence_assertion_detector import detect_unverified_absence_claims
 from ticket_system.lib.machine_path_detector import detect_machine_specific_paths
 from ticket_system.lib.spec_reference_checker import detect_unregistered_spec_references
 from ticket_system.lib.parallel_analyzer import ParallelAnalyzer
@@ -128,6 +129,12 @@ def print_create_checklist(
     if new_ticket:
         for warning in detect_machine_specific_paths(new_ticket):
             print(format_warning(warning))
+
+    # 缺席斷言未查證提示（PC-BAL-053 承接）：why/what 含「從未存在」等
+    # 缺席斷言而同段無查證痕跡時提示，不阻擋（缺席斷言有時是對的）
+    if new_ticket:
+        for hint in detect_unverified_absence_claims(new_ticket):
+            print(hint)
 
     # 驗收條件格式提示
     print(CreateMessages.ACCEPTANCE_4V_CHECK)

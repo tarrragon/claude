@@ -9,9 +9,11 @@
 
 ## Hook 清單 per-hook 詳解
 
+> 本節描述的是 W8-020.6 外移時繼承的早期整併式 bash 架構（每個 event 對應約 1-2 個複合腳本）。現行 `.claude/hooks/` 已改為每個關注點各自獨立的 Python hook（見 `.claude/hooks/README.md` 與 `settings.json` 的實際註冊清單），下列 `.sh` 檔名均不存在，本節僅保留其決策邏輯與演算法策略供設計參考，2026-08-22 文件複查更正。
+
 ### SessionStart Hook
 
-**檔案**: `.claude/hooks/startup-check-hook.sh`
+**檔案**: `.claude/hooks/startup-check-hook.sh`<!-- broken-link-exempt: 本節已於上方加註歷史架構說明，此為早期整併式 bash 腳本命名，現行已拆分為多個獨立 Python hook -->
 
 **方法論**：確保每個開發 session 都在已知良好的狀態下開始。檢查範圍涵蓋 Git 狀態、專案檔案、開發環境、版本一致性、LSP 環境。失敗時提供明確修復指引，但不阻止 session 啟動。
 
@@ -24,7 +26,7 @@
 
 ### UserPromptSubmit Hook
 
-**檔案**: `.claude/hooks/prompt-submit-hook.sh` + `.claude/hooks/task-avoidance-detection-hook.sh`
+**檔案**: `.claude/hooks/prompt-submit-hook.sh` + `.claude/hooks/task-avoidance-detection-hook.sh`<!-- broken-link-exempt: 早期整併式 bash 腳本命名，現行已拆分為多個獨立 Python hook，見本節開頭說明 -->
 
 **方法論**：在問題發生前攔截，而非事後修復。檢查 ESLint 錯誤、技術債務累積、任務逃避行為；發現關鍵問題時記錄追蹤，逃避行為時完全阻止。
 
@@ -48,7 +50,7 @@ if 程式碼變更 > 0 AND 測試變更 == 0:
 
 ### PreToolUse Hook
 
-**檔案**: `.claude/hooks/task-avoidance-block-check.sh` + 工具特定檢查
+**檔案**: `.claude/hooks/task-avoidance-block-check.sh` + 工具特定檢查<!-- broken-link-exempt: 早期整併式 bash 腳本命名，現行已拆分為多個獨立 Python hook，見本節開頭說明 -->
 
 **方法論**：防禦性檢查，確保操作在安全狀態下執行。檢查順序為阻止狀態 -> 工具特定安全檢查 -> 允許執行；任何阻止狀態都完全禁止操作。
 
@@ -84,7 +86,7 @@ if 程式碼變更 > 0 AND 測試變更 == 0:
 
 ### Stop Hook
 
-**檔案**: `.claude/hooks/stop-hook.sh`
+**檔案**: `.claude/hooks/stop-hook.sh`<!-- broken-link-exempt: 早期整併式 bash 腳本命名，現行已拆分為多個獨立 Python hook，見本節開頭說明 -->
 
 **方法論**：自動化版本推進建議，基於工作完成狀態和目標達成情況。分析檔案變更量、工作日誌狀態、TodoList 完成度；提供明確的下一步行動建議，不強制執行。
 
@@ -119,7 +121,7 @@ if 檔案變更 > 0:
 
 ### Performance Monitor Hook
 
-**檔案**: `.claude/hooks/performance-monitor-hook.sh`
+**檔案**: `.claude/hooks/performance-monitor-hook.sh`<!-- broken-link-exempt: 早期整併式 bash 腳本命名，現行已拆分為多個獨立 Python hook，見本節開頭說明 -->
 
 **方法論**：持續效能監控，預防 hook 系統本身成為開發瓶頸。監控執行時間、記憶體使用、執行頻率。
 
@@ -129,7 +131,7 @@ if 檔案變更 > 0:
 
 ### Auto-Documentation Update Hook
 
-**檔案**: `.claude/hooks/auto-documentation-update-hook.sh`
+**檔案**: `.claude/hooks/auto-documentation-update-hook.sh`<!-- broken-link-exempt: 早期整併式 bash 腳本命名，現行已拆分為多個獨立 Python hook，見本節開頭說明 -->
 
 **方法論**：主動文件同步提醒，確保文件與程式碼同步更新。根據變更檔案類型自動判斷需要更新的文件，依 High/Medium/Low 優先級指導更新順序。
 

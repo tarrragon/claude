@@ -112,7 +112,7 @@ ticket track append-log {version}-W{wave}-{seq} --section "Test Results" "12 tes
 ## 相關文件
 
 - .claude/pm-rules/ticket-lifecycle.md - Ticket 生命週期
-- .claude/skills/ticket/SKILL.md - Ticket 操作指南
+- 若專案已採用 `ticket` skill：本文件的 claim / complete / 狀態同步等操作指令由該 skill 提供，詳見 ticket skill 的操作指南（若已安裝）。若未採用，本文件的核心原則（Ticket 為 Source of Truth、Task 為 ephemeral 協調層、1:1 映射、Complete 權限隔離）仍成立，但需自行以其他機制承載 Ticket 的持久化與狀態變更，橋接規則本身不提供該機制
 
 ---
 

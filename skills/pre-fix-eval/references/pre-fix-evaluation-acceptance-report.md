@@ -6,6 +6,8 @@
 **狀態**: [OK] 驗收通過
 **驗收日期**: 2025-01-12
 
+> **歷史記述，內文不改寫**：本報告驗收的 `pre-fix-evaluation-hook.py` 與下述 `test-timeout-post.py` 為當時的部署狀態。兩者已合併進 `.claude/hooks/post-test-hook.py`（現況以此檔為準），本檔以下內文保留原始記述。
+
 ---
 
 ## [TARGET] 驗收范圍

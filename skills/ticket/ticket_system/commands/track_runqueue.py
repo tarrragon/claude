@@ -45,7 +45,7 @@ from ticket_system.lib.handoff_utils import (
 from ticket_system.lib.ticket_loader import list_tickets, load_ticket
 from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.section_locator import find_section
-from ticket_system.lib.staleness import is_stale_in_progress
+from ticket_system.lib.staleness import is_live_occupied, is_stale_in_progress
 from ticket_system.lib.blocker_resolution import is_fully_unblocked
 from ticket_system.lib.constants import STATUS_COMPLETED, STATUS_CLOSED
 from ticket_system.lib import lease
@@ -500,10 +500,13 @@ def _render_list(
         # PM 看到 [STALE] → 人工介入評估（agent 真停滯 vs 長任務）
         stale_suffix = f" [{STALE_TAG}]" if is_stale_in_progress(ticket) else ""
         # multi-PM 協調層 Phase 3: registry STALE session 持票 tag（可與
-        # STALE_TAG 並列疊加，兩者判準不同——見 RECLAIMABLE_TAG 常數註解）
+        # STALE_TAG 並列疊加，兩者判準不同——見 RECLAIMABLE_TAG 常數註解）。
+        # is_lease_reclaimable 對非 in_progress 票一律回傳 False（status
+        # 守衛收在本函式內）；in_progress 票 owner=None（registry 未追蹤，
+        # 含 graceful SessionEnd 已刪除 entry 的情形）回傳 True。
         reclaimable_suffix = (
             f" [{RECLAIMABLE_TAG}]"
-            if lease.is_lease_reclaimable(registry, tid, pm_registry, now)
+            if lease.is_lease_reclaimable(registry, ticket, pm_registry, now)
             else ""
         )
         lines.append(
@@ -526,12 +529,20 @@ def _render_groups(tickets: List[Dict], empty_reason: Optional[str] = None) -> s
     群組輸出優先於 `--top` / `--wave` 之外的視圖切換（`--groups` 優先於
     `--format`，`render_runqueue` 於 `--groups` 為真時提前分派，
     不落入 --format 的 list/dag/critical-path 分支）。
+
+    Live in_progress 票（`staleness.is_live_occupied` 判準）作為 seed 傳入
+    `compute_parallel_groups`：其 where.files 衝突邊排除鄰居入選，但票本身
+    不出現於 `parallel_group` / `not_selected`。Stale in_progress 票（agent
+    中斷/timeout 遺留）不納入 seed，維持可被後續輪次視為未佔用——與
+    `_is_listable` 對 stale in_progress 的「仍可列示接手」判準一致，避免
+    list 視圖與 groups 視圖對同一票給出相反指引。
     """
     ticket_map = {t.get("id"): t for t in tickets if t.get("id")}
     ready = [t for t in tickets if _is_unblocked_pending(t, ticket_map)]
     ready.sort(
         key=lambda t: (_priority_rank(t), _type_rank(t), str(t.get("id", "")))
     )
+    seed_tickets = [t for t in tickets if is_live_occupied(t)]
 
     if not ready:
         reason = empty_reason or (
@@ -540,7 +551,9 @@ def _render_groups(tickets: List[Dict], empty_reason: Optional[str] = None) -> s
         return "=== Parallel Groups ===\n" + reason
 
     project_root = get_project_root()
-    result = file_conflict.compute_parallel_groups(ready, project_root)
+    result = file_conflict.compute_parallel_groups(
+        ready, project_root, seed_tickets=seed_tickets
+    )
     return file_conflict.render_groups(result)
 
 

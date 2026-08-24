@@ -100,7 +100,7 @@ PM 執行 `ticket track set-acceptance 0.19.0-W1-002.2 --check 1 --check 2`，�
 
 - `.claude/skills/ticket/SKILL.md`「驗收條件操作詳解」章節
 - `.claude/skills/ticket/references/track-command.md`
-- `.claude/skills/ticket/ticket_system/track_acceptance.py`（實作位置，待驗證）
+- `.claude/skills/ticket/ticket_system/commands/track_acceptance.py`（實作位置，2026-08-22 文件複查已驗證）
 
 ---
 

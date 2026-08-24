@@ -6,7 +6,6 @@ Ticket lifecycle 操作模組
 
 import argparse
 import re
-import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -59,6 +58,7 @@ from ticket_system.lib.command_lifecycle_messages import (
 from ticket_system.lib.command_tracking_messages import (
     ClaimWrapMessages,
 )
+from ticket_system.lib.git_ops import commit_files_isolated
 from ticket_system.lib.tdd_sequence import (
     validate_phase_prerequisite,
     PHASE_LABELS,
@@ -998,11 +998,11 @@ class TicketLifecycle:
         # 自動 handoff：若有後續任務，自動建立 handoff 檔案
         _auto_handoff_if_needed(ticket, analysis, self.version)
 
-        # W11-035：自動 git add 已知 modified 路徑 + 提示 commit 指令
-        # 0.2.1-W3-246：範圍收斂為本票 md + worklog index 兩類，不含 children
-        # 與 siblings 路徑。高並行下，cascade 反向解鎖可能命中另一位代理人
-        # 正在作業中的 ticket；若其 md 一併被 stage，該代理人未提交的 body
-        # 變更會被本次 complete 的 commit 誤攬（0.2.1-W3-238 ANA 定位）。
+        # 自動以隔離索引提交 metadata：範圍收斂為本票 md + worklog index 兩類，
+        # 不含 children 與 siblings 路徑（0.2.1-W3-246 定案範圍，理由見下方
+        # 函式 docstring）。改用 commit_files_isolated（GIT_INDEX_FILE 隔離
+        # + 提交前自檢），不再把 staged 狀態留在共用 index 等人工裸 commit——
+        # 留 staged 狀態曾造成同儕誤把過期 index 快照裸 commit 進 HEAD。
         if not no_stage:
             modified_paths: List[str] = []
             try:
@@ -1013,9 +1013,9 @@ class TicketLifecycle:
                 modified_paths.append(_build_worklog_path_for_stage(self.version))
             except Exception as exc:
                 sys.stderr.write(
-                    f"[auto-stage] worklog 路徑解析失敗（略過）：{exc}\n"
+                    f"[auto-commit] worklog 路徑解析失敗（略過）：{exc}\n"
                 )
-            _auto_stage_completion_files(ticket_id, modified_paths)
+            _auto_commit_completion_files(ticket_id, modified_paths)
 
         return 0
 
@@ -1907,74 +1907,63 @@ def _handle_pending_children_block(
     return 1
 
 
-def _auto_stage_git_add(paths: List[str]) -> None:
-    """W11-035：薄封裝 subprocess.run 以便測試替身 patch 此 symbol，
-    避免污染全域 subprocess.run（會影響 get_project_root 等 git 呼叫）。
-
-    W7-003.1：加 5s timeout，git hang（等認證 / index.lock）時不無限等待。
-    逾時拋 subprocess.TimeoutExpired，由呼叫端 ``_auto_stage_completion_files``
-    的 except 涵蓋（graceful degrade，不中斷 complete 流程）。
-    """
-    subprocess.run(
-        ["git", "add", *paths],
-        capture_output=True,
-        check=False,
-        timeout=5,
-    )
-
-
-def _auto_stage_completion_files(
+def _auto_commit_completion_files(
     ticket_id: str,
     modified_paths: List[str],
 ) -> None:
-    """W11-035 方案 D：complete 後自動 git add 已知 modified 路徑 + stdout 提示。
+    """complete 後以隔離索引自動提交已知 modified 路徑，取代原「auto-stage +
+    人工裸 commit」流程。
 
-    精確路徑 add（無 ./、-A、--all），不夾帶 WIP；subprocess 失敗 degrade
-    gracefully（stderr 警告 + 不中斷 complete 流程）。
+    改造動機：留 staged 狀態等人工裸 commit，本身就是過期 index 快照被誤
+    掃入 HEAD 的入口——並行環境下，人工 commit 前的核對窗口存在 TOCTOU，
+    無法保證裸 commit 時共用 index 內容仍等於核對當下所見。改用
+    ``commit_files_isolated``（``GIT_INDEX_FILE`` 全程隔離 + 提交前自檢
+    範圍）後，提交內容只由本函式傳入的 ``modified_paths`` 決定，不留任何
+    staged 殘留於共用 index，從源頭消除此入口。
+
+    清單來源獨立於共用 index（隔離完整性要件 1）：``modified_paths`` 由
+    呼叫端（``complete()``）直接組裝自 ``ticket_path`` 與 worklog 路徑，
+    不讀取 ``git diff --cached`` 或任何共用 index 目前 staged 狀態。
+
+    失敗（含 CAS 衝突）時重試一次由 ``commit_files_isolated`` 內部處理；
+    仍失敗則此處 graceful degrade（stderr 警告 + 不中斷 complete 流程），
+    不留任何 staged 殘留（本函式全程不呼叫 ``git add`` 於共用 index）。
 
     Args:
-        ticket_id: 主 ticket id（用於 commit 訊息提示）
+        ticket_id: 主 ticket id（用於 commit 訊息）
         modified_paths: complete 流程實際寫入的檔案路徑清單
     """
-    # 去重 + 過濾空字串，保留順序
-    seen: set = set()
-    deduped: List[str] = []
-    for p in modified_paths:
-        if not p or p in seen:
-            continue
-        seen.add(p)
-        deduped.append(p)
-
+    deduped: List[str] = list(dict.fromkeys(p for p in modified_paths if p))
     if not deduped:
         return
 
+    message = f"chore({ticket_id}): metadata sync post-completion"
     try:
-        _auto_stage_git_add(deduped)
+        result = commit_files_isolated(deduped, message)
     except Exception as exc:
         sys.stderr.write(
-            f"[auto-stage] git add 失敗（非致命）：{exc}\n"
+            f"[auto-commit] 隔離提交異常（非致命，未留 staged 殘留）：{exc}\n"
         )
         return
 
-    print()
-    print(f"  [Auto-stage] 已 staged {len(deduped)} 個 metadata 檔案：")
-    for path in deduped:
-        print(f"    - {path}")
-    # 0.2.1-W3-246 原建議 path-limited（-- <paths>）；後續實測發現此語法會
-    # 丟棄既有 index、改讀指定路徑當下的 working tree 內容重建臨時 index
-    # 後提交，並非「從 index 挑選子集」，並行環境下反而會吸入他人未 stage
-    # 的編輯（見 .claude/rules/core/bash-tool-usage-rules.md 規則七）。改為
-    # 建議「先核對 staged 範圍、確認乾淨後裸 commit」，quoted_paths 保留供
-    # 使用者自行核對（如需清理非本票內容時可比對這份清單）。
-    quoted_paths = " ".join(shlex.quote(p) for p in deduped)
-    print(
-        "  建議 commit（先核對 staged 範圍再裸 commit，避免 -- pathspec"
-        " 丟棄 index）："
-    )
-    print(f"    git diff --cached --name-only   # 應僅含：{quoted_paths}")
-    print(
-        f'    git commit -m "chore({ticket_id}): metadata sync post-completion"'
-    )
+    status = result.get("status")
+    if status == "committed":
+        commit_sha = result.get("commit_sha") or ""
+        print()
+        print(
+            f"  [Auto-commit] 已隔離提交 {len(deduped)} 個 metadata 檔案 "
+            f"({commit_sha[:8]})："
+        )
+        for path in deduped:
+            print(f"    - {path}")
+    elif status == "empty":
+        # 工作區內容與 HEAD 相同，無需提交（正常情況，非錯誤）
+        pass
+    else:
+        sys.stderr.write(
+            f"[auto-commit] 隔離提交失敗（非致命，未留 staged 殘留）："
+            f"{result.get('error')}\n"
+        )
 
 
 def _post_complete_cascade(

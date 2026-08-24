@@ -26,6 +26,7 @@ from lib.pm_registry import (
     update_heartbeat,
     release_session,
     HEARTBEAT_DEBOUNCE_SECONDS,
+    DEGRADED_READ_KEY,
 )
 
 
@@ -64,14 +65,14 @@ class TestReadRegistry:
     def test_missing_file_returns_empty_skeleton(self, registry_paths):
         registry_file, _ = registry_paths
         data = read_registry(registry_file)
-        assert data == {"schema_version": 2, "sessions": {}}
+        assert data == {"schema_version": 2, "sessions": {}, "_degraded": True}
 
     def test_corrupt_json_rebuilds_and_notifies_stderr(self, registry_paths, capsys):
         registry_file, _ = registry_paths
         registry_file.parent.mkdir(parents=True, exist_ok=True)
         registry_file.write_text("{not valid json", encoding="utf-8")
         data = read_registry(registry_file)
-        assert data == {"schema_version": 2, "sessions": {}}
+        assert data == {"schema_version": 2, "sessions": {}, "_degraded": True}
         captured = capsys.readouterr()
         assert "重建空 registry" in captured.err
 
@@ -80,7 +81,7 @@ class TestReadRegistry:
         registry_file.parent.mkdir(parents=True, exist_ok=True)
         registry_file.write_text(json.dumps({"schema_version": 1}), encoding="utf-8")
         data = read_registry(registry_file)
-        assert data == {"schema_version": 2, "sessions": {}}
+        assert data == {"schema_version": 2, "sessions": {}, "_degraded": True}
 
     def test_v1_file_normalized_gracefully_not_rebuilt(self, registry_paths):
         """schema_version=1 檔案（含已廢棄的 parent_session_id 欄位）不視為
@@ -133,8 +134,58 @@ class TestWriteRegistry:
         assert "aaaaaaaaaa" not in raw
         assert json.loads(raw) == {"schema_version": 2, "sessions": {}}
 
+    def test_write_strips_degraded_flag_before_persisting(self, registry_paths):
+        """DEGRADED_READ_KEY 是 read_registry 降級分支的顯示層旗標，非
+        schema 正式欄位；write_registry 必須在序列化前剝除，不得讓其
+        流向磁碟（否則首次啟動即固化旗標，此後每次讀取皆誤判降級）。"""
+        registry_file, _ = registry_paths
+        payload = {
+            "schema_version": 2,
+            "sessions": {"s1": {"name": "x"}},
+            DEGRADED_READ_KEY: True,
+        }
+        write_registry(registry_file, payload)
+        raw = json.loads(registry_file.read_text(encoding="utf-8"))
+        assert DEGRADED_READ_KEY not in raw
+        # 呼叫端傳入的 dict 不應被就地 mutate（同一鎖範圍內可能續用）
+        assert payload[DEGRADED_READ_KEY] is True
+
 
 class TestRegisterSession:
+    def test_first_boot_does_not_persist_degraded_flag(self, registry_paths):
+        """正常首次啟動（registry 檔尚不存在）不是邊界情況：read_registry
+        對缺檔回傳帶 DEGRADED_READ_KEY 的空骨架，register_session 以此為
+        基底寫入，write_registry 必須剝除該旗標，磁碟 top-level 不得殘留。
+        """
+        registry_file, lock_file = registry_paths
+        assert not registry_file.exists()
+        register_session(
+            registry_file, lock_file, "sess-1", "flutter-balance-b6",
+            "/repo/worktree-b6",
+        )
+        raw = json.loads(registry_file.read_text(encoding="utf-8"))
+        assert DEGRADED_READ_KEY not in raw
+        assert set(raw.keys()) == {"schema_version", "sessions"}
+        # 再次讀取亦不應回報降級（檔案本身合法，非讀取失敗）
+        data = read_registry(registry_file)
+        assert DEGRADED_READ_KEY not in data
+        assert "sess-1" in data["sessions"]
+
+    def test_existing_poisoned_file_self_heals_on_read(self, registry_paths):
+        """既有帶降級旗標的磁碟檔（本次修正前的舊碼誤寫入）不會被永久
+        判為降級：檔案本身結構合法，read_registry 的成功讀取分支須原地
+        剝除該殘留鍵，下次寫入自然不再帶出。"""
+        registry_file, _ = registry_paths
+        registry_file.parent.mkdir(parents=True, exist_ok=True)
+        poisoned = {
+            "schema_version": 2,
+            "sessions": {"s1": {"name": "x", "heartbeat_ts": "2026-01-01T00:00:00+00:00"}},
+            DEGRADED_READ_KEY: True,
+        }
+        registry_file.write_text(json.dumps(poisoned), encoding="utf-8")
+        data = read_registry(registry_file)
+        assert DEGRADED_READ_KEY not in data
+        assert data["sessions"]["s1"]["name"] == "x"
     def test_register_creates_entry(self, registry_paths):
         registry_file, lock_file = registry_paths
         register_session(

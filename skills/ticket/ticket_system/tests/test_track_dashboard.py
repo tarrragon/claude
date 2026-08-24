@@ -929,8 +929,10 @@ def test_J2_text_reclaimable_tag_for_stale_session_owner(monkeypatch, capsys):
     assert f"[{track_dashboard.LIVE_TAG}]" not in target_line
 
 
-def test_J3_text_no_tag_when_registry_untracked(monkeypatch, capsys):
-    """registry 未追蹤該票（無 owner） → 不加任何標記。"""
+def test_J3_text_reclaimable_tag_when_registry_untracked(monkeypatch, capsys):
+    """registry 已載入但未追蹤該票 lease（無 owner，含 graceful SessionEnd
+    已刪除 entry 的情形）→ 視為 RECLAIMABLE（0.2.1-W3-867：owner=None 不再
+    降級為 untracked，語意對齊 check_reclaimable 既有邏輯）。"""
     tickets = [_mk("0.18.0-W10-703", status="in_progress",
                     started_at=_now_iso(5), agent="fennel")]
     _patch_loader(monkeypatch, tickets)
@@ -942,11 +944,12 @@ def test_J3_text_no_tag_when_registry_untracked(monkeypatch, capsys):
     out = capsys.readouterr().out
     target_line = next(ln for ln in out.splitlines() if "0.18.0-W10-703" in ln)
     assert f"[{track_dashboard.LIVE_TAG}]" not in target_line
-    assert f"[{track_dashboard.RECLAIMABLE_TAG}]" not in target_line
+    assert f"[{track_dashboard.RECLAIMABLE_TAG}]" in target_line
 
 
 def test_J4_json_lease_field_present_for_all_three_states(monkeypatch, capsys):
-    """JSON in_progress 每項附 lease 欄位，三態值分別為 live/reclaimable/untracked。"""
+    """JSON in_progress 每項附 lease 欄位：live/reclaimable（STALE owner）/
+    reclaimable（無 owner，registry 已載入但未追蹤此票，0.2.1-W3-867）。"""
     tickets = [
         _mk("0.18.0-W10-711", status="in_progress",
             started_at=_now_iso(5), agent="live-agent"),
@@ -971,7 +974,7 @@ def test_J4_json_lease_field_present_for_all_three_states(monkeypatch, capsys):
     lease_by_id = {item["id"]: item["lease"] for item in payload["in_progress"]}
     assert lease_by_id["0.18.0-W10-711"] == track_dashboard.LEASE_LIVE
     assert lease_by_id["0.18.0-W10-712"] == track_dashboard.LEASE_RECLAIMABLE
-    assert lease_by_id["0.18.0-W10-713"] == track_dashboard.LEASE_UNTRACKED
+    assert lease_by_id["0.18.0-W10-713"] == track_dashboard.LEASE_RECLAIMABLE
 
 
 def test_J5_registry_unavailable_degrades_to_untracked_golden_unchanged(monkeypatch, capsys):

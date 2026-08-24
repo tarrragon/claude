@@ -21,7 +21,7 @@
 
 執行 Phase 2 前，以下條件必須已成立：
 
-- [ ] Phase 1 通過：`./scripts/portability-check.sh` exit 0
+- [ ] Phase 1 通過：`.claude/skills/compositional-writing/scripts/portability-check.sh` exit 0
 - [ ] SKILL.md 和所有核心 reference 均已完成（writing-code-comments / writing-documents / writing-logs / writing-prompts / writing-articles / translation-review / designing-fields）
 - [ ] meta-metrics.md 已完成（M1-M2 量測方式已定義）
 
@@ -215,7 +215,7 @@ Phase 2 通過 = (所有場景通過) AND (所有場景在 10 分鐘內完成)
 ## 執行步驟
 
 ```
-1. 確認前置條件：執行 ./scripts/portability-check.sh，exit 0 才繼續
+1. 確認前置條件：於 repo root 執行 .claude/skills/compositional-writing/scripts/portability-check.sh，exit 0 才繼續
 2. 找到測試人員（符合「對本框架陌生」條件）
 3. 依序執行場景 A → B → C，記錄每個場景的完成時間和評估項結果
 4. 場景結束後請測試人員完成評估問卷

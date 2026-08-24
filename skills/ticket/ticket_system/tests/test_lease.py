@@ -33,6 +33,7 @@ from pathlib import Path
 import pytest
 
 from ticket_system.lib import lease
+from ticket_system.lib import staleness
 
 from conftest import _iso, seed_pm_registry as _seed_registry  # noqa: F401 — 0.2.1-W3-585 收斂複本
 
@@ -314,6 +315,85 @@ class TestClaimLease:
         data = json.loads(registry_file.read_text(encoding="utf-8"))
         assert data["sessions"]["sess-A"]["tickets"] == ["0.0.0-W1-001"]
 
+    def test_self_session_collision_now_warns(self, real_pm_registry, monkeypatch, capsys):
+        """同一 session 兩輪之間 claim 撞上自己已佔用的檔案時必須產出警告
+        （先前版本因跳過 self_session_id 完全無警告）。"""
+        _pm_registry, registry_file, _lock_file = real_pm_registry
+        monkeypatch.setenv(lease.ENV_SESSION_ID, "sess-A")
+        monkeypatch.setattr(lease, "_current_project_root", lambda: "/proj")
+        monkeypatch.setattr(
+            lease, "load_ticket",
+            lambda version, tid: {"id": tid, "where": {"files": ["lib/foo.dart"]}},
+        )
+        _seed_registry(registry_file, {
+            "sess-A": {
+                "project": "/proj",
+                "heartbeat_ts": _fresh_ts(),
+                "tickets": ["0.0.0-W1-PREV"],
+                "files": ["lib/foo.dart"],
+            },
+        })
+
+        lease.claim_lease("0.0.0", "0.0.0-W1-001")
+
+        err = capsys.readouterr().err
+        assert "lib/foo.dart" in err
+        assert "本 session 先前已認領的檔案" in err
+        assert "sess-A" not in err, "自撞措辭不可沿用跨 session 措辭指涉他人（不應出現對方 session_id）"
+
+    def test_self_session_collision_does_not_block_claim(self, real_pm_registry, monkeypatch):
+        """自撞警告維持 warning 語意，不阻擋 claim（tickets 仍正常寫入）。"""
+        _pm_registry, registry_file, _lock_file = real_pm_registry
+        monkeypatch.setenv(lease.ENV_SESSION_ID, "sess-A")
+        monkeypatch.setattr(lease, "_current_project_root", lambda: "/proj")
+        monkeypatch.setattr(
+            lease, "load_ticket",
+            lambda version, tid: {"id": tid, "where": {"files": ["lib/foo.dart"]}},
+        )
+        _seed_registry(registry_file, {
+            "sess-A": {
+                "project": "/proj",
+                "heartbeat_ts": _fresh_ts(),
+                "tickets": ["0.0.0-W1-PREV"],
+                "files": ["lib/foo.dart"],
+            },
+        })
+
+        lease.claim_lease("0.0.0", "0.0.0-W1-001")
+
+        data = json.loads(registry_file.read_text(encoding="utf-8"))
+        assert data["sessions"]["sess-A"]["tickets"] == ["0.0.0-W1-PREV", "0.0.0-W1-001"]
+
+    def test_no_intersection_across_sessions_stays_silent(self, real_pm_registry, monkeypatch, capsys):
+        """反向測試：同一 session 連續認領檔案集不相交的票時零警告
+        （噪音是本票唯一的下行風險，正常並行認領不應被誤判為衝突）。"""
+        _pm_registry, registry_file, _lock_file = real_pm_registry
+        monkeypatch.setenv(lease.ENV_SESSION_ID, "sess-A")
+        monkeypatch.setattr(lease, "_current_project_root", lambda: "/proj")
+        monkeypatch.setattr(
+            lease, "load_ticket",
+            lambda version, tid: {"id": tid, "where": {"files": ["lib/bar.dart"]}},
+        )
+        _seed_registry(registry_file, {
+            "sess-A": {
+                "project": "/proj",
+                "heartbeat_ts": _fresh_ts(),
+                "tickets": ["0.0.0-W1-PREV"],
+                "files": ["lib/foo.dart"],
+            },
+            "sess-B": {
+                "project": "/proj",
+                "heartbeat_ts": _fresh_ts(),
+                "tickets": ["0.0.0-W1-OTHER"],
+                "files": ["lib/baz.dart"],
+            },
+        })
+
+        lease.claim_lease("0.0.0", "0.0.0-W1-001")
+
+        err = capsys.readouterr().err
+        assert err == "", f"檔案集不相交時不應有任何警告，實際輸出：{err!r}"
+
 
 # --- release_lease ---------------------------------------------------------------
 
@@ -393,14 +473,14 @@ class TestGhostForensics:
         assert "lib/foo.dart" in report.dirty_files
         assert report.clean is False
 
-    def test_exit_status_placeholder_hits(self, monkeypatch):
+    def test_exit_status_placeholder_hits_but_soft_warning_only(self, monkeypatch):
         monkeypatch.setattr(lease, "_run_git_lines", lambda args, cwd=None: [])
         body = "## Exit Status\n<!-- 代理人結束時以 YAML 格式回報 -->\n"
 
         report = lease.run_ghost_forensics("0.0.0-W1-001", [], body)
 
         assert report.exit_status_missing is True
-        assert report.clean is False
+        assert report.clean is True
 
     def test_exit_status_section_absent_hits(self, monkeypatch):
         monkeypatch.setattr(lease, "_run_git_lines", lambda args, cwd=None: [])
@@ -423,6 +503,63 @@ class TestGhostForensics:
         assert "髒檔交集" in text
         assert "Exit Status" in text
         assert "拒絕 reclaim" in text
+
+    def test_render_ghost_report_marks_exit_status_only_as_warning_and_clean(self):
+        report = lease.GhostReport(exit_status_missing=True)
+
+        text = lease.render_ghost_report("0.0.0-W1-001", report)
+
+        assert "警告" in text
+        assert "鑑識通過，允許 reclaim" in text
+
+
+class TestExitStatusMissingSoftWarningCoverage:
+    """0.2.1-W3-901：Exit Status 缺失降為 soft warning 後的覆蓋驗證——
+    僅缺 Exit Status 時放行（AC1）；缺 Exit Status 且有髒檔/未合併分支時
+    仍拒（AC2 保守原則不整體退化）；FRESH lease 情境不受本降級影響，見
+    `check_reclaimable`（AC3，由未合併分支/髒檔交集兩查或 lease FRESH
+    判定覆蓋，非本類別涵蓋範圍——本類別聚焦 `run_ghost_forensics` 本身）。
+    """
+
+    def test_exit_status_missing_alone_allows_reclaim(self, monkeypatch):
+        monkeypatch.setattr(lease, "_run_git_lines", lambda args, cwd=None: [])
+
+        report = lease.run_ghost_forensics("0.0.0-W1-001", [], "no exit status section here")
+
+        assert report.exit_status_missing is True
+        assert report.unmerged_branch is False
+        assert report.dirty_intersection is False
+        assert report.clean is True
+
+    def test_exit_status_missing_with_dirty_intersection_still_blocks(self, monkeypatch):
+        def _fake(args, cwd=None):
+            if args[0] == "status":
+                return [" M lib/foo.dart"]
+            return []
+
+        monkeypatch.setattr(lease, "_run_git_lines", _fake)
+
+        report = lease.run_ghost_forensics(
+            "0.0.0-W1-001", ["lib/foo.dart"], "no exit status section here"
+        )
+
+        assert report.exit_status_missing is True
+        assert report.dirty_intersection is True
+        assert report.clean is False
+
+    def test_exit_status_missing_with_unmerged_branch_still_blocks(self, monkeypatch):
+        def _fake(args, cwd=None):
+            if args[0] == "branch":
+                return ["  0.0.0-W1-001-wip"]
+            return []
+
+        monkeypatch.setattr(lease, "_run_git_lines", _fake)
+
+        report = lease.run_ghost_forensics("0.0.0-W1-001", [], "no exit status section here")
+
+        assert report.exit_status_missing is True
+        assert report.unmerged_branch is True
+        assert report.clean is False
 
 
 # --- _run_git_lines：查詢失敗與「無命中」須可辨識（Phase 4 審查修正 1）--------
@@ -608,6 +745,257 @@ class TestCheckReclaimable:
         assert owner == "sess-A"
 
 
+# --- is_lease_reclaimable / determine_lease_state --------------------
+
+
+class TestIsLeaseReclaimableDerivedFromDetermineLeaseState:
+    """`is_lease_reclaimable` 為 `determine_lease_state` 的 derived
+    predicate（status 守衛收在 `is_lease_reclaimable` 本身，owner/heartbeat
+    判定委派給 `determine_lease_state`）。本 class 以恆等式驗證：
+    `is_lease_reclaimable(registry, ticket, pm_registry, now)` 恆等於
+    `ticket["status"] == "in_progress" and determine_lease_state(registry,
+    ticket, pm_registry, now) == LEASE_STATE_RECLAIMABLE`。
+
+    取代原先分開窮舉的 `TestIsLeaseReclaimableUntrackedOwner`
+    （owner/heartbeat 分支與本 class 完全同一組 case，重複窮舉兩遍）。
+    """
+
+    def _assert_equivalent(self, registry, ticket, pm_registry, now):
+        predicate = lease.is_lease_reclaimable(registry, ticket, pm_registry, now)
+        expected = (
+            ticket.get("status") == "in_progress"
+            and lease.determine_lease_state(registry, ticket, pm_registry, now)
+            == lease.LEASE_STATE_RECLAIMABLE
+        )
+        assert predicate == expected
+        return predicate
+
+    def test_untracked_owner_with_registry_available(self, real_pm_registry):
+        """graceful SessionEnd 會刪除整個 registry entry（`release_session`），
+        此後 `_find_lease_owner` 回傳 None。語意對齊 `check_reclaimable`：
+        owner 為 None 時視為「無 FRESH session 佐證」，回傳 True。"""
+        pm_registry, _registry_file, _lock_file = real_pm_registry
+        registry = {"sessions": {}}
+        ticket = {"id": "0.0.0-W1-001", "status": "in_progress"}
+
+        assert self._assert_equivalent(registry, ticket, pm_registry, NOW) is True
+
+    def test_fresh_owner(self, real_pm_registry):
+        pm_registry, _registry_file, _lock_file = real_pm_registry
+        registry = {
+            "sessions": {
+                "sess-A": {"tickets": ["0.0.0-W1-001"], "heartbeat_ts": _fresh_ts()}
+            }
+        }
+        ticket = {"id": "0.0.0-W1-001", "status": "in_progress"}
+
+        assert self._assert_equivalent(registry, ticket, pm_registry, NOW) is False
+
+    def test_stale_owner(self, real_pm_registry):
+        pm_registry, _registry_file, _lock_file = real_pm_registry
+        registry = {
+            "sessions": {
+                "sess-A": {"tickets": ["0.0.0-W1-001"], "heartbeat_ts": _stale_ts()}
+            }
+        }
+        ticket = {"id": "0.0.0-W1-001", "status": "in_progress"}
+
+        assert self._assert_equivalent(registry, ticket, pm_registry, NOW) is True
+
+    def test_registry_unavailable(self):
+        """`pm_registry` 為 None（registry 本身不可用，如非 git 環境）時，
+        即使 owner 為 None 仍回傳 False——無法判定新鮮度時不可臆測為可接手。"""
+        registry = {"sessions": {}}
+        ticket = {"id": "0.0.0-W1-001", "status": "in_progress"}
+
+        assert self._assert_equivalent(registry, ticket, None, NOW) is False
+
+    def test_empty_string_ticket_id(self, real_pm_registry):
+        """falsy ticket id（空字串）須與 `determine_lease_state` 同一守衛，
+        回傳 False（無法判定），不得因 `_find_lease_owner` 對空字串一律
+        查無命中而回傳 True。"""
+        pm_registry, _registry_file, _lock_file = real_pm_registry
+        registry = {"sessions": {}}
+        ticket = {"id": "", "status": "in_progress"}
+
+        assert self._assert_equivalent(registry, ticket, pm_registry, NOW) is False
+
+    def test_no_ticket_id(self, real_pm_registry):
+        pm_registry, _registry_file, _lock_file = real_pm_registry
+        registry = {"sessions": {}}
+        ticket = {"id": None, "status": "in_progress"}
+
+        assert self._assert_equivalent(registry, ticket, pm_registry, NOW) is False
+
+    def test_non_in_progress_status(self, real_pm_registry):
+        """status 守衛：pending 票即使 owner 為 None（未追蹤）也不誤標為
+        可接手，混列 status 的呼叫端（如未篩選的 tickets 清單）不會產生
+        誤標。"""
+        pm_registry, _registry_file, _lock_file = real_pm_registry
+        registry = {"sessions": {}}
+        ticket = {"id": "0.0.0-W1-001", "status": "pending"}
+
+        assert self._assert_equivalent(registry, ticket, pm_registry, NOW) is False
+
+
+class TestDetermineLeaseStateUntrackedSingleMeaning:
+    """`determine_lease_state` 已移除 status 檢查（收斂進
+    `is_lease_reclaimable`），LEASE_STATE_UNTRACKED 只承載單一語意：
+    registry 不可用或未提供 ticket id，不再與「非 in_progress」語意混同。
+    """
+
+    def test_untracked_owner_with_registry_available_is_reclaimable_state(
+        self, real_pm_registry
+    ):
+        pm_registry, _registry_file, _lock_file = real_pm_registry
+        registry = {"sessions": {}}
+        ticket = {"id": "0.0.0-W1-001", "status": "in_progress"}
+
+        state = lease.determine_lease_state(registry, ticket, pm_registry, NOW)
+
+        assert state == lease.LEASE_STATE_RECLAIMABLE
+
+    def test_registry_unavailable_stays_untracked_state(self):
+        registry = {"sessions": {}}
+        ticket = {"id": "0.0.0-W1-001", "status": "in_progress"}
+
+        state = lease.determine_lease_state(registry, ticket, None, NOW)
+
+        assert state == lease.LEASE_STATE_UNTRACKED
+
+    def test_no_ticket_id_stays_untracked_state(self, real_pm_registry):
+        pm_registry, _registry_file, _lock_file = real_pm_registry
+        registry = {"sessions": {}}
+        ticket = {"id": None, "status": "in_progress"}
+
+        state = lease.determine_lease_state(registry, ticket, pm_registry, NOW)
+
+        assert state == lease.LEASE_STATE_UNTRACKED
+
+    def test_non_in_progress_status_not_untracked_by_itself(self, real_pm_registry):
+        """status 已不在本函式判定範圍內：pending 票 owner 為 None 時仍回傳
+        RECLAIMABLE（非 UNTRACKED），呼叫端須自行只對 in_progress 票呼叫本
+        函式，或改用含 status 守衛的 `is_lease_reclaimable`。"""
+        pm_registry, _registry_file, _lock_file = real_pm_registry
+        registry = {"sessions": {}}
+        ticket = {"id": "0.0.0-W1-001", "status": "pending"}
+
+        state = lease.determine_lease_state(registry, ticket, pm_registry, NOW)
+
+        assert state == lease.LEASE_STATE_RECLAIMABLE
+
+
+class TestIsLiveOccupied:
+    """`_render_groups` seed 判定：`is_live_occupied`（`staleness.py`）只問
+    in_progress + started_at 軸未逾時，不涉及 registry lease 追蹤（與
+    `lease.determine_lease_state` 的 heartbeat 軸不同）。"""
+
+    def test_in_progress_not_stale_is_occupied(self):
+        ticket = {"status": "in_progress", "started_at": _iso(NOW)}
+
+        assert staleness.is_live_occupied(ticket) is True
+
+    def test_pending_is_not_occupied(self):
+        ticket = {"status": "pending"}
+
+        assert staleness.is_live_occupied(ticket) is False
+
+    def test_stale_in_progress_is_not_occupied(self):
+        stale_started = NOW - timedelta(hours=25)
+        ticket = {"status": "in_progress", "started_at": _iso(stale_started)}
+
+        assert staleness.is_live_occupied(ticket) is False
+
+
+class TestLoadRegistrySnapshotDegradedRead:
+    """`read_registry` 缺檔/空白/損毀/schema 不合四種分支一律回傳空骨架，
+    且 `pm_registry` 模組本身仍非 None——`_find_lease_owner` 對此空骨架會
+    對任何 ticket_id 都回傳 None。Phase 4 審查阻斷項：若不區分「registry
+    降級讀取」與「registry 有效但目前無任何 session」，`is_lease_reclaimable`
+    會把降級讀取誤判為「無 FRESH session 佐證」而回傳 True——即使有票正由
+    FRESH session 實際持有（該 session 資料因 registry 損毀而不可見）。
+    此為反向案例：現行測試套件在本次修正前無任何案例以「registry 降級 +
+    票實際在跑」為前提。
+    """
+
+    def test_missing_registry_file_downgrades_to_pm_registry_none(
+        self, real_pm_registry
+    ):
+        pm_registry, registry_file, _lock_file = real_pm_registry
+        assert not registry_file.exists()
+
+        registry, resolved_pm_registry = lease.load_registry_snapshot()
+
+        assert resolved_pm_registry is None
+        assert registry.get("sessions") == {}
+
+    def test_corrupt_registry_file_downgrades_to_pm_registry_none(
+        self, real_pm_registry
+    ):
+        pm_registry, registry_file, _lock_file = real_pm_registry
+        registry_file.write_text("{not valid json", encoding="utf-8")
+
+        registry, resolved_pm_registry = lease.load_registry_snapshot()
+
+        assert resolved_pm_registry is None
+        assert registry.get("sessions") == {}
+
+    def test_degraded_read_does_not_mark_active_session_ticket_reclaimable(
+        self, real_pm_registry
+    ):
+        """反向案例：即使某票實際正由 FRESH session 持有（寫在磁碟上的
+        registry 檔），只要本次讀取因損毀而降級為空骨架，
+        `is_lease_reclaimable` 仍須回傳 False（無法判定），不得因空骨架
+        內查無此票就誤判為「無 FRESH session 佐證」而回傳 True。
+        """
+        pm_registry, registry_file, _lock_file = real_pm_registry
+        _seed_registry(registry_file, {
+            "sess-A": {
+                "tickets": ["0.0.0-W1-001"],
+                "heartbeat_ts": _fresh_ts(),
+            }
+        })
+        # 模擬讀取當下磁碟內容損毀（例如另一 process 寫入中途被中斷）：
+        # 覆寫為無法解析的內容，read_registry 因此走降級分支。
+        registry_file.write_text("{", encoding="utf-8")
+
+        registry, resolved_pm_registry = lease.load_registry_snapshot()
+        reclaimable = lease.is_lease_reclaimable(
+            registry, {"id": "0.0.0-W1-001", "status": "in_progress"},
+            resolved_pm_registry, NOW
+        )
+
+        assert resolved_pm_registry is None
+        assert reclaimable is False
+
+    def test_live_marker_stays_effective_after_first_boot_write(
+        self, real_pm_registry
+    ):
+        """驗收第 3 項：正常環境下首次啟動（registry 檔尚不存在）寫入
+        後，`[LIVE]` 標記須維持有效——不因 `register_session` 內部借道
+        `read_registry` 的降級空骨架（缺檔分支）而使旗標固化進磁碟，
+        導致此後每次讀取皆誤判降級、`determine_lease_state` 恆回
+        UNTRACKED。"""
+        pm_registry, registry_file, lock_file = real_pm_registry
+        assert not registry_file.exists()
+
+        pm_registry.register_session(
+            registry_file, lock_file, "sess-A", "worktree-a", "/repo/worktree-a",
+        )
+        pm_registry.recompute_lease(
+            registry_file, lock_file, "sess-A",
+            add_ticket_id="0.0.0-W1-001",
+            files_loader=lambda _tid: [],
+        )
+
+        registry, resolved_pm_registry = lease.load_registry_snapshot()
+        assert resolved_pm_registry is not None
+        state = lease.determine_lease_state(
+            registry, {"id": "0.0.0-W1-001"}, resolved_pm_registry, NOW
+        )
+        assert state == lease.LEASE_STATE_LIVE
+
+
 # --- check_release_guard ---------------------------------------------------------------
 
 
@@ -621,9 +1009,10 @@ class TestCheckReleaseGuard:
         _pm_registry, registry_file, _lock_file = real_pm_registry
         _seed_registry(registry_file, {})
 
-        allowed, reason = lease.check_release_guard("0.0.0-W1-999", now=NOW)
+        allowed, reason_code, reason = lease.check_release_guard("0.0.0-W1-999", now=NOW)
 
         assert allowed is True
+        assert reason_code is lease.ReleaseGuardReason.NO_LEASE_TRACKED
         assert "0.0.0-W1-999" in reason
 
     def test_self_session_owner_allows_release(self, real_pm_registry, monkeypatch):
@@ -639,9 +1028,10 @@ class TestCheckReleaseGuard:
             },
         })
 
-        allowed, reason = lease.check_release_guard("0.0.0-W1-001", now=NOW)
+        allowed, reason_code, reason = lease.check_release_guard("0.0.0-W1-001", now=NOW)
 
         assert allowed is True
+        assert reason_code is lease.ReleaseGuardReason.SELF_OWNED
         assert "自身" in reason
 
     def test_other_fresh_owner_blocks_release(self, real_pm_registry, monkeypatch):
@@ -663,9 +1053,10 @@ class TestCheckReleaseGuard:
             },
         })
 
-        allowed, reason = lease.check_release_guard("0.0.0-W1-001", now=NOW)
+        allowed, reason_code, reason = lease.check_release_guard("0.0.0-W1-001", now=NOW)
 
         assert allowed is False
+        assert reason_code is lease.ReleaseGuardReason.FRESH_OTHER_OWNER
         assert "sess-B" in reason
         assert "--force-release-others" in reason
 
@@ -688,17 +1079,19 @@ class TestCheckReleaseGuard:
             },
         })
 
-        allowed, reason = lease.check_release_guard("0.0.0-W1-001", now=NOW)
+        allowed, reason_code, reason = lease.check_release_guard("0.0.0-W1-001", now=NOW)
 
         assert allowed is True
+        assert reason_code is lease.ReleaseGuardReason.STALE_OWNER
         assert "sess-B" in reason
 
     def test_pm_registry_unavailable_fails_open(self, monkeypatch):
         monkeypatch.setattr(lease, "_load_pm_registry", lambda: None)
 
-        allowed, reason = lease.check_release_guard("0.0.0-W1-001", now=NOW)
+        allowed, reason_code, reason = lease.check_release_guard("0.0.0-W1-001", now=NOW)
 
         assert allowed is True
+        assert reason_code is lease.ReleaseGuardReason.MODULE_UNAVAILABLE
         assert "pm_registry 模組不可用" in reason
 
     def test_project_root_unresolvable_still_blocks_other_fresh_owner(
@@ -719,9 +1112,10 @@ class TestCheckReleaseGuard:
             },
         })
 
-        allowed, reason = lease.check_release_guard("0.0.0-W1-001", now=NOW)
+        allowed, reason_code, reason = lease.check_release_guard("0.0.0-W1-001", now=NOW)
 
         assert allowed is False
+        assert reason_code is lease.ReleaseGuardReason.FRESH_OTHER_OWNER
         assert "sess-B" in reason
 
 

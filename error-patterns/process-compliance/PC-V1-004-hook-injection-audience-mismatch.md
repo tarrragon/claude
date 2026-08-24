@@ -44,7 +44,7 @@ Hook 輸出透過 additionalContext / systemMessage 注入 LLM context，但未�
 
 ## 相關文件
 
-- `.claude/hooks/hook_utils/hook_io.py` — `is_subagent_environment()` helper
+- `.claude/lib/hook_io.py` — `is_subagent_environment()` helper
 - `.claude/rules/core/quality-baseline.md` 規則 4 — Hook 失敗可見性（互補：本 PC 處理「成功但受眾錯配」）
 - `.claude/rules/core/`（任一通用規則檔）— 長期防護 C 的落點候選；`.claude/agents/AGENT_PRELOAD.md` 已實測排除（`@-import` 不展開，無法送達 subagent context）
 

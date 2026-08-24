@@ -673,7 +673,7 @@ class ValidationMessages:
 
 建議: 請使用 Edit Tool 替代 Bash sed/awk，以獲得更好的權限控制和變更追蹤
 
-詳情: 參考 .claude/analyses/archived/agent-collaboration.md 的「工具使用強制規範」"""
+詳情: 參考 .claude/rules/core/tool-selection.md 規則 1（依檔案類型選工具，Bash 寫入繞過 Edit/Write-only guard）"""
 
     BARE_CD_WARNING = """[Bash Edit Guard] 提示: 偵測到裸 cd（改變持久工作目錄）
 

@@ -70,7 +70,7 @@ if tool_name != "Bash":
 重構函式新增/移除參數後，立即掃描所有呼叫點：
 
 ```bash
-grep -n "generate_hook_output\|函式名稱" .claude/hooks/acceptance-gate-hook.py
+grep -n "generate_hook_output\|函式名稱" .claude/skills/ticket/hooks/acceptance-gate-hook.py
 ```
 
 確認所有呼叫點的參數數量與新簽名一致。

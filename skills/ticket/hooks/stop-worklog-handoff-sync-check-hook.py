@@ -44,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 from lib import (  # noqa: E402
     setup_hook_logging,
+    run_hook_safely,
     get_project_root,
     scan_ticket_files_by_version,
     parse_ticket_frontmatter,
@@ -52,6 +53,7 @@ from lib import (  # noqa: E402
 from datetime import datetime  # noqa: E402
 
 EXIT_SUCCESS = 0
+HOOK_NAME = "stop-worklog-handoff-sync-check"
 
 # Stop flag 防重複觸發（W17-176 根因 1）
 # 與 handoff-auto-resume-stop-hook 機制對齊但獨立 flag 路徑，避免互相干擾
@@ -930,4 +932,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(run_hook_safely(main, HOOK_NAME))

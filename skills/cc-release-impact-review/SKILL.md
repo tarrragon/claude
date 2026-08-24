@@ -98,7 +98,7 @@ skill 產出：
 ## 相關文件
 
 - `.claude/rules/core/quality-baseline.md` — 規則 5（所有發現必須追蹤）
-- `.claude/skills/wrap-decision/SKILL.md` — Step 4 的 WRAP 框架
+- wrap-decision skill（若已安裝）— Step 4 的 WRAP 框架完整方法論；未安裝時仍可依 Step 4 內文已列出的四階段摘要（W 擴增採用粒度 / R 現實檢驗 / A 機會成本 / P 絆腳索）執行，只是不會有該 skill 的完整深度可查
 - `.claude/pm-rules/askuserquestion-rules.md` — 敏感項交用戶決策時的提問規範
 - W4-028 / W4-029 ticket — 標準評估範例
 

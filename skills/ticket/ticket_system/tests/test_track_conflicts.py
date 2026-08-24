@@ -106,6 +106,20 @@ class TestFindNearestTestsDir:
         )
         assert result is None
 
+    def test_absolute_path_returns_none_without_infinite_loop(self, tmp_path):
+        """帶前導斜線的絕對路徑必須早期拒絕，不可觸發無限迴圈。
+
+        `PurePosixPath('/').parent` 恆等於自身且 `.parts` 恆非空，舊版
+        迴圈出口條件對此類輸入永不成立；本測試以逐段向上皆存在 `tests/`
+        目錄的環境驗證函式在有限時間內回傳 None（而非命中不相關目錄或
+        掛起）。
+        """
+        (tmp_path / "tests").mkdir(parents=True)
+        result = file_conflict.find_nearest_tests_dir(
+            "/.claude/lib/pm_registry.py", tmp_path
+        )
+        assert result is None
+
 
 class TestDeriveTestCandidates:
     def test_dart_lib_derives_test_dart(self):
@@ -151,6 +165,13 @@ class TestDeriveTestCandidates:
 
     def test_unrecognized_extension_no_derivation(self):
         assert file_conflict.derive_test_candidates("README.md") == []
+
+    def test_absolute_python_path_no_derivation(self, tmp_path):
+        """絕對路徑早期拒絕回傳空清單，不間接觸發無限迴圈風險。"""
+        (tmp_path / "tests").mkdir(parents=True)
+        assert file_conflict.derive_test_candidates(
+            "/.claude/lib/pm_registry.py", tmp_path
+        ) == []
 
 
 class TestFindConflicts:

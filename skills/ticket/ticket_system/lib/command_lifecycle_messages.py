@@ -280,6 +280,18 @@ class CreateMessages:
     DECISION_TREE_CHECK = "   [ ] 是否已填寫 decision_tree_path 欄位？"
     DECISION_TREE_DESC = "       （派發驗證必需）"
 
+    # 目錄級 where.files 宣告 WARNING（PC-BAL-040）
+    DIRECTORY_DECLARATION_WARNING = (
+        "[WARNING] where.files 含目錄級宣告 '{path}'：請改列精確路徑，"
+        "或若僅需唯讀存取請加註 ::read（如 '{stripped}::read'）。"
+        "目錄級寫入宣告在 `ticket track dispatch` 會被硬擋。"
+    )
+    DIRECTORY_DECLARATION_WARNING_READ_SUGGESTED = (
+        "[WARNING] where.files 含目錄級宣告 '{path}'：本票類型建議唯讀存取，"
+        "請加註 ::read（如 '{stripped}::read'），或改列精確路徑。"
+        "目錄級寫入宣告在 `ticket track dispatch` 會被硬擋。"
+    )
+
     # Parallel 分析結果
     TASK_TYPE_LABEL = "任務類型: {task_type}"
     SUGGESTED_ORDER = "建議順序:"

@@ -88,9 +88,9 @@ Step 3: Git Operations
   2. 使用 --defer-td 0.21.0 明確延後到下一版本
 ```
 
-## [DIR] 文檔結構
+## [DIR] 文件結構
 
-### 新增文檔
+### 新增文件
 
 ```
 .claude/skills/version-release/
@@ -100,7 +100,7 @@ Step 3: Git Operations
     └── test_tech_debt_check.md     # 測試用例和驗證步驟
 ```
 
-### 更新文檔
+### 更新文件
 
 - `README.md` - 新增 `--defer-td` 選項說明和技術債務檢查機制
 - `version_release.py` - 新增函式、命令行參數、幫助文本
@@ -196,7 +196,7 @@ uv run version_release.py release --version 0.20.5
 
 ## [TEST] 驗證清單
 
-### 代碼質量
+### 程式碼質量
 
 - [x] 語法檢查通過 (Python 3.10+)
 - [x] 導入 pyyaml 依賴
@@ -212,9 +212,9 @@ uv run version_release.py release --version 0.20.5
 - [x] Pre-flight 檢查集成了 TD 掃描
 - [x] 發布 Step 0 執行延後流程
 - [x] 彩色化輸出使用正確的函式
-- [x] 所有文檔已更新
+- [x] 所有文件已更新
 
-### 文檔完整性
+### 文件完整性
 
 - [x] README.md 更新了功能說明
 - [x] README.md 新增了 `--defer-td` 選項
@@ -222,7 +222,7 @@ uv run version_release.py release --version 0.20.5
 - [x] 新建 TECH_DEBT_GUIDE.md 詳細指南
 - [x] 新建 test_tech_debt_check.md 測試用例
 - [x] 更新了命令行幫助文本
-- [x] 新建此 ENHANCEMENT_SUMMARY.md 說明文檔
+- [x] 新建此 ENHANCEMENT_SUMMARY.md 說明文件
 
 ## [TREND] 性能影響
 
@@ -282,36 +282,36 @@ A: 手動編輯 TD 檔案，恢復原始版本號和移除 deferred_from/defer_r
 
 參考 `TECH_DEBT_GUIDE.md` 的「故障排除」章節。
 
-## [NOTE] 相關文檔
+## [NOTE] 相關文件
 
-| 文檔 | 用途 |
+| 文件 | 用途 |
 |------|------|
 | `README.md` | 快速參考和常用命令 |
 | `TECH_DEBT_GUIDE.md` | 詳細的技術債務管理指南 |
 | `test_tech_debt_check.md` | 測試用例和驗證步驟 |
-| `SKILL.md` | 完整的功能說明文檔 |
-| `scripts/version_release.py` | 原始代碼實現 |
+| `SKILL.md` | 完整的功能說明文件 |
+| `scripts/version_release.py` | 原始程式碼實現 |
 
 ## [STATS] 更新統計
 
-### 代碼變更
+### 程式碼變更
 
 | 項目 | 變更 |
 |------|------|
 | 新增函式 | 2 個 (`check_technical_debt_status`, `defer_technical_debts`) |
 | 修改函式 | 2 個 (`preflight_check`, `main`) |
 | 新增命令行選項 | 1 個 (`--defer-td`) |
-| 新增文檔 | 3 個 |
-| 修改文檔 | 1 個 (README.md) |
-| 總代碼行數 | +200 行 |
+| 新增文件 | 3 個 |
+| 修改文件 | 1 個 (README.md) |
+| 總程式碼行數 | +200 行 |
 
-### 文檔變更
+### 文件變更
 
-| 文檔 | 變更 |
+| 文件 | 變更 |
 |------|------|
 | README.md | +50 行（技術債務機制說明） |
 | TECH_DEBT_GUIDE.md | 新建（600+ 行詳細指南） |
-| test_tech_debt_check.md | 新建（400+ 行測試文檔） |
+| test_tech_debt_check.md | 新建（400+ 行測試文件） |
 | ENHANCEMENT_SUMMARY.md | 新建（此檔案） |
 
 ## [OK] 驗收標準
@@ -327,7 +327,7 @@ A: 手動編輯 TD 檔案，恢復原始版本號和移除 deferred_from/defer_r
 ### 集成測試
 
 - [x] 與發布流程集成：`--defer-td` 與其他選項相容
-- [x] 文檔一致性：所有文檔描述一致
+- [x] 文件一致性：所有文件描述一致
 - [x] 向下相容：舊版本流程仍然工作
 
 ## [DONE] 总结
@@ -337,7 +337,7 @@ Version Release Skill 已成功增強，新增了強大的技術債務檢查和�
 - [OK] **自動檢查**: 防止遺漏待處理 TD
 - [OK] **靈活延後**: 支援版本規劃和工作流程調整
 - [OK] **清晰提示**: 詳細的錯誤訊息和修復建議
-- [OK] **完整文檔**: 詳細的指南和測試用例
+- [OK] **完整文件**: 詳細的指南和測試用例
 
 使用者現在可以更有信心地執行版本發布，確保不會遺漏任何技術債務。
 

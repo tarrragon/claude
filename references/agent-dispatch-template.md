@@ -26,19 +26,13 @@
 
 ### 骨架（3 段）
 
-```markdown
-Ticket: {ticket_id}
-
-## 任務
-
-{一句話動作描述，≤ 40 字}
-
-讀取 ticket：`ticket track full {ticket_id}`
-認領：`ticket track claim {ticket_id} --as {agent_name}`
-依 Context Bundle 執行流程。
-發現 prompt 與 ticket/框架正本衝突，停手寫入 ticket NeedsContext 上報，不自行選邊。
-遇阻立即停下回報，禁繞過 Hook。
-```
+> **CLI 為單一權威**：骨架文字的權威來源是 `ticket_system/commands/track_dispatch.py` 的 `SKELETON_TEMPLATE_NORMAL` / `SKELETON_TEMPLATE_REVIEW` 常數，本節不再逐字複製維護副本，改以指令產生：
+>
+> ```bash
+> ticket track dispatch {ticket_id} --as {agent_name}
+> ```
+>
+> 需落票約束時加 `--note "..."`（寫入票的「派發日誌」章節）；審查派發改 `--kind review`（輸出不含認領/收尾的審查骨架，改用審查標的/視角/裁決問題/回報格式四欄）。指令輸出即可直接複製貼入 `Agent(...)` prompt。同步保護：`.claude/hooks/tests/test_agent_prompt_length_guard_hook.py` 的 CLI 骨架同步測試驗證骨架常數與 length-guard hook 的模板關鍵字同步，兩者漂移時測試失敗。
 
 > **claim 行必帶 `--as {agent_name}`**（派發身份前移，W5-005 F1a）：dispatch hook 已在派發時對無主票綁定 who.current，此行是 agent 端對稱綁定與 hook 失效 fallback；缺 `--as` 的裸 claim 不寫 who.current，收尾 `complete --as` 會因身份不符需 set-who 繞道。
 
@@ -154,10 +148,22 @@ Ticket: 0.18.0-W17-048.3
 
 ### 精準 staging 制式句（權威版，PC-092 / PC-BAL-008）
 
-以下為固定措辭，PM 複製貼入派發 prompt 即可，不需自行改寫；下方「單任務」「並行多任務」兩個 snippet 皆逐字引用此段，不得各自改寫產生變異。措辭涵蓋三類獨立根因，缺一不足：precise `git add`（防 PC-092，廣域 `git add .` / `git add -A` 併入其他並行代理人尚未 commit 的變更）；`git diff --cached --name-only` 核對 + `git restore --staged`（防 PC-BAL-008，他人已 stage 在共用 index 的內容會被動吸收——即使 `git add` 精準，仍可能在收尾前才發現 index 裡混入非本票內容）；禁 pathspec / `--only` / `-o` 裸 commit（防丟棄既有 index、誤吸他人未 stage 的編輯，`.claude/rules/core/bash-tool-usage-rules.md` 規則七）。
+**單一權威已改為 CLI**：制式句文字的權威副本是 `.claude/skills/ticket/ticket_system/commands/track_dispatch.py` 的 `STAGING_PHRASE_AGENT` 常數，本文件不再手動維護逐字副本。取得方式：
 
 ```
-Use precise staging + verified bare commit only (no pathspec):
+ticket track dispatch <ticket_id> --as <agent_name> --commit-policy agent
+```
+
+`--commit-policy agent`（預設）於骨架末尾逐字附上下列制式句；`--commit-policy pm` / `--commit-policy none` 分別輸出一行對應說明（PM 統一 commit / 本次派發不涉及 commit）。主路徑為 `ticket track commit`（隔離索引提交 where.files 子集，全程不觸碰共用 index，從工具層消除 PC-092/PC-BAL-008 兩類根因）；裸 `git add` + `git commit` 降為 fallback，僅於新命令失敗或不可用時使用，措辭仍涵蓋三類獨立根因，缺一不足：precise `git add`（防 PC-092，廣域 `git add .` / `git add -A` 併入其他並行代理人尚未 commit 的變更）；`git diff --cached --name-only` 核對 + `git restore --staged`（防 PC-BAL-008，他人已 stage 在共用 index 的內容會被動吸收——即使 `git add` 精準，仍可能在收尾前才發現 index 裡混入非本票內容）；禁 pathspec / `--only` / `-o` 裸 commit（防丟棄既有 index、誤吸他人未 stage 的編輯，`.claude/rules/core/bash-tool-usage-rules.md` 規則七）。
+
+以下為 `--commit-policy agent` 輸出內容示意（如與 CLI 實際輸出不一致，以 CLI 為準）：
+
+```
+Recommended: commit via isolated index (files must be a subset of this
+ticket's where.files; never touches the shared index):
+  ticket track commit <ticket-id> -m "..." -- {exact files}
+Fallback (not recommended; only if `ticket track commit` fails or is
+unavailable) — use precise staging + verified bare commit only (no pathspec):
   git add {exact files}
   git diff --cached --name-only   # confirm index contains ONLY {exact files}
   git commit -m "..."             # bare commit; no -- <paths> / --only / -o / -a
@@ -165,10 +171,20 @@ Forbidden: git add . / git add -A; git commit -- <paths> / --only / -o / -a
   (pathspec-style commit discards the index and rebuilds it from working-tree
    content for the given paths — it silently absorbs unstaged edits other
    sessions may have on the same path, not just already-staged ones)
-Before commit: git diff --cached --name-only to check staged scope; git restore --staged <path> for any non-owned file
-If bare `git commit` is DENYed by bare-commit-guard-hook (another dispatch
-active), stop and escalate to PM — do not fall back to the pathspec form
-the DENY message suggests (hook-side resolution is separately tracked).
+Before fallback commit: git diff --cached --name-only to check staged scope; git restore --staged <path> for any non-owned file
+If bare `git commit` fallback is DENYed by bare-commit-guard-hook (another
+dispatch active), stop and escalate to PM; never switch to pathspec /
+--only / -o / -a to get around it.
+If a commit is later found to have swept in out-of-scope content (e.g. a
+peer session's staged changes):
+Forbidden recovery actions: git revert; git reset --soft; git commit
+--amend; any "reverse apply"/reapply of the diff. None of these may be
+used to undo or rewrite the commit.
+The ONLY permitted actions are: stop, record the commit SHA and file
+list in the ticket, report to PM.
+Reason: swept-in content is diff-indistinguishable from a peer's
+legitimate concurrent write in the same window, so any of the forbidden
+actions above would also undo the peer's legitimate work.
 ```
 
 ### 單任務
@@ -178,13 +194,16 @@ Ticket: {id}
 
 {agent-name}: Read ticket md and execute the current acceptance criteria.
 Scope: strictly limited to this ticket's `where.files` (see ticket md); do not act outside it.
-Use precise staging + verified bare commit only (no pathspec):
+Recommended: `ticket track commit {id} -m "..." -- {exact files}` (isolated
+index; files must be a subset of this ticket's where.files).
+Fallback (only if the above fails/unavailable) — precise staging + verified
+bare commit only (no pathspec):
   git add {exact files}
   git diff --cached --name-only   # confirm index contains ONLY {exact files}
   git commit -m "..."             # bare commit; no -- <paths> / --only / -o / -a
 Forbidden: git add . / git add -A; git commit -- <paths> / --only / -o / -a
-Before commit: git diff --cached --name-only to check staged scope; git restore --staged <path> for any non-owned file
-If bare commit is DENYed by bare-commit-guard-hook, stop and escalate; do not fall back to the pathspec form the DENY message suggests.
+Before fallback commit: git diff --cached --name-only to check staged scope; git restore --staged <path> for any non-owned file
+If bare commit fallback is DENYed by bare-commit-guard-hook, stop and escalate; never switch to pathspec / --only / -o / -a to get around it.
 If context is insufficient, append NeedsContext and stop.
 ```
 
@@ -196,9 +215,9 @@ Ticket: {id}
 {agent-name}: Execute only this ticket from the dispatch-plan.
 Scope: strictly limited to this ticket's `where.files` (see dispatch-plan); do not touch other parallel tickets' files.
 Forbidden: git add . / git add -A; git commit -- <paths> / --only / -o / -a
-Commit policy: {agent commit (precise git add + verified bare commit, no pathspec) | PM commit | no commit}
-Before commit: git diff --cached --name-only to check staged scope; git restore --staged <path> for any non-owned file
-If bare commit is DENYed by bare-commit-guard-hook, stop and escalate; do not fall back to the pathspec form the DENY message suggests.
+Commit policy: {agent commit (recommended: `ticket track commit {id} -m "..." -- <files>`; fallback: precise git add + verified bare commit, no pathspec) | PM commit | no commit}
+Before fallback commit: git diff --cached --name-only to check staged scope; git restore --staged <path> for any non-owned file
+If bare commit fallback is DENYed by bare-commit-guard-hook, stop and escalate; never switch to pathspec / --only / -o / -a to get around it.
 If blocked, report Exit Status without touching sibling scope.
 ```
 

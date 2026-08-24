@@ -33,8 +33,9 @@ from lib.hook_base import get_project_root, ENV_PROJECT_DIR, CLAUDE_MD_SEARCH_DE
 # 常數定義
 # ============================================================================
 
-# 時間戳格式（無冒號，避免 Windows 路徑問題）
-TIMESTAMP_FORMAT = "%Y%m%d-%H%M%S"
+# 日誌檔名日期粒度格式：每日一檔 append，取代原逐次觸發一檔的時分秒粒度。
+# 新格式：<sanitized_hook_name>-YYYYMMDD.log（下游解析器須辨識此格式）
+TIMESTAMP_FORMAT = "%Y%m%d"
 
 # 預設 hook 名稱（空字串 fallback）
 DEFAULT_HOOK_NAME = "unknown-hook"
@@ -232,9 +233,11 @@ def _setup_logger_handlers(logger: logging.Logger, log_base_dir: Path,
     log_file_path = log_base_dir / "{}-{}.log".format(sanitized_name, timestamp)
 
     try:
-        # delay=True 延遲檔案建立至第一次寫入時
+        # delay=True 延遲檔案建立至第一次寫入時；mode='a'（append，非覆寫）
+        # 明確指定：同日多次觸發須 append 至同檔，FileHandler 預設雖為 'a'，
+        # 顯式聲明避免未來誤改為 'w' 而破壞每日輪替 append 語意
         file_handler = logging.FileHandler(
-            str(log_file_path), encoding='utf-8', delay=True
+            str(log_file_path), mode='a', encoding='utf-8', delay=True
         )
         file_handler.setLevel(FILE_HANDLER_LEVEL)
         file_handler.setFormatter(logging.Formatter(FILE_FORMAT, datefmt=DATE_FORMAT))

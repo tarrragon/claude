@@ -30,7 +30,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # .claude/ — for `from lib.* import ...`
 
 from lib.hook_base import get_project_root  # noqa: E402
-from lib.hook_logging import setup_hook_logging  # noqa: E402
+from lib.hook_logging import setup_hook_logging, run_hook_safely  # noqa: E402
 from lib.hook_io import read_json_from_stdin, emit_hook_output
 from lib.hook_ticket import (
     parse_ticket_frontmatter,
@@ -39,6 +39,14 @@ from lib.hook_ticket import (
     scan_ticket_files_by_version,
 )
 from lib.ticket_id_pattern import MATCH_GROUPED_STR
+
+# 讀寫意圖標記剝離改 import ticket_system 共用實作（比照
+# parallel-suggestion-hook.py 的落地方式）：PEP 723 單檔限制的是依賴解析，
+# 不限制 sys.path 操作，故可 sys.path.insert 指向 skill 目錄後直接 import。
+_TICKET_SYSTEM_SKILL_DIR = Path(__file__).resolve().parent.parent / "skills" / "ticket"
+if str(_TICKET_SYSTEM_SKILL_DIR) not in sys.path:
+    sys.path.insert(0, str(_TICKET_SYSTEM_SKILL_DIR))
+from ticket_system.lib.file_conflict import parse_file_intent  # noqa: E402
 
 
 # ============================================================================
@@ -54,25 +62,13 @@ DEFAULT_OUTPUT = {
     }
 }
 
-# 逐檔讀寫意圖標記剝離：本 hook 為獨立 PEP 723 單檔腳本，sys.path 僅含
-# `.claude/`（見上方 import 區），無法引用 `.claude/skills/ticket` 下的
-# ticket_system 套件，故無法直接呼叫 `lib.file_conflict.where_files`。
-# 此正則與跳脫還原規則需與 `ticket_system/lib/file_conflict.py` 的
-# `_INTENT_MARKER_RE` / `_ESCAPED_MARKER_RE` 保持同步——任一處修改標記
-# 語法時，兩處都要更新。
-_INTENT_MARKER_RE = re.compile(r"(?<!\\)::(read|write)$")
-_ESCAPED_MARKER_RE = re.compile(r"\\(::(?:read|write))$")
-
-
 def _strip_intent_marker(raw: str) -> str:
-    """剝離單一路徑字串結尾的讀寫意圖標記，回傳純路徑（與
-    file_conflict.parse_file_intent 同語意，僅回傳路徑不回傳意圖，因
-    本 hook 只做檔案交集比對，不需要意圖值）。
+    """剝離單一路徑字串結尾的讀寫意圖標記，回傳純路徑（僅取
+    ticket_system.lib.file_conflict.parse_file_intent 回傳值的路徑部分，
+    不取意圖，因本 hook 只做檔案交集比對，不需要意圖值）。
     """
-    match = _INTENT_MARKER_RE.search(raw)
-    if match:
-        return raw[: match.start()]
-    return _ESCAPED_MARKER_RE.sub(r"\1", raw)
+    path, _override = parse_file_intent(raw)
+    return path
 
 # Ticket ID 正則表達式（符合規範格式；SSOT：lib.ticket_id_pattern.MATCH_GROUPED_STR）
 TICKET_ID_PATTERN = MATCH_GROUPED_STR
@@ -903,4 +899,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run_hook_safely(main, HOOK_NAME))

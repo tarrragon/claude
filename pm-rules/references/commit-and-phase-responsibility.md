@@ -11,8 +11,8 @@
 | 階段 | 誰 commit | 誰 push | commit message 格式 |
 |------|----------|---------|-------------------|
 | Phase 1/2/3a | 代理人自行 | 禁止（PM 統一 push） | `feat({ticket-id}): Phase X 完成 - {摘要}` |
-| Phase 3b | PM（收到回報後） | PM | 依 commit-as-prompt 規範 |
-| Phase 4a/4b/4c | PM（收到回報後） | PM | 依 commit-as-prompt 規範 |
+| Phase 3b | PM（收到回報後） | PM | 依 `.claude/rules/core/bash-tool-usage-rules.md` 提交規範 |
+| Phase 4a/4b/4c | PM（收到回報後） | PM | 依 `.claude/rules/core/bash-tool-usage-rules.md` 提交規範 |
 
 ---
 

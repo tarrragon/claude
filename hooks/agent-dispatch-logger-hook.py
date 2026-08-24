@@ -34,6 +34,7 @@ from lib import (
     is_subagent_environment,
     is_background_dispatch,
     get_project_root,
+    run_hook_safely,
 )
 from lib.ticket_id_pattern import SEARCH_SINGLE_SUFFIX_RE as TICKET_ID_PATTERN
 
@@ -180,4 +181,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(run_hook_safely(main, HOOK_NAME))

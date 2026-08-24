@@ -145,7 +145,7 @@ cp .claude/skills/pre-fix-eval/templates/fix-ticket.template /tmp/my-ticket.md
 
 #### references/pre-fix-evaluation-acceptance-report.md
 - **大小**: ~500 行
-- **用途**: 完整的驗收報告和質量保證文檔
+- **用途**: 完整的驗收報告和質量保證文件
 - **包含內容**:
   - 驗收范圍和基準
   - 7 大驗收結果部分:
@@ -171,7 +171,7 @@ cp .claude/skills/pre-fix-eval/templates/fix-ticket.template /tmp/my-ticket.md
 ```
 外部系統
     ↓
-Hook 腳本 (.claude/hooks/pre-fix-evaluation-hook.py)
+Hook 腳本 (.claude/hooks/post-test-hook.py，pre-fix-evaluation-hook.py 與 test-timeout-post.py 已合併於此)
     ↓
 自動分類錯誤 (SYNTAX/COMPILATION/TEST_FAILURE/WARNING)
     ├─ 語法錯誤 → 簡化流程 (無需 Ticket)
@@ -228,7 +228,7 @@ Hook 腳本 (.claude/hooks/pre-fix-evaluation-hook.py)
 本 SKILL 與以下檔案整合：
 
 ### Hook 系統檔案
-- **Hook 腳本**: `.claude/hooks/pre-fix-evaluation-hook.py`
+- **Hook 腳本**: `.claude/hooks/post-test-hook.py`（pre-fix-evaluation-hook.py 與 test-timeout-post.py 已合併進此檔）
   - 自動分類錯誤的 Python 腳本
   - 觸發條件: PostToolUse (Bash, mcp__dart__run_tests)
 

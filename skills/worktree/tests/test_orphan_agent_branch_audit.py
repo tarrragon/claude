@@ -246,6 +246,84 @@ class TestCollectOrphanAgentBranchesUndetermined:
         assert orphans == [("worktree-agent-broken", None, True)]
 
 
+class TestOrphanBranchesReasonOut:
+    """collect_orphan_agent_branches 的 reason_out 須依實際失敗點回填不同代碼，
+    build_message 依代碼輸出可區分的訊息文字（非固定單一原因）。"""
+
+    def test_local_branches_failure_sets_reason(self, monkeypatch, logger):
+        def fake_run(cmd, **kwargs):
+            if "branch" in cmd and "--list" in cmd:
+                return FakeProc(returncode=128, stdout="", stderr="fatal")
+            return FakeProc(returncode=0, stdout="")
+
+        monkeypatch.setattr(hook.subprocess, "run", fake_run)
+        reason_out = {}
+        result = hook.collect_orphan_agent_branches(logger, reason_out=reason_out)
+        assert result is None
+        assert reason_out["reason"] == hook.ORPHAN_BRANCHES_REASON_LOCAL_BRANCHES
+
+    def test_worktree_branches_failure_sets_reason(self, monkeypatch, logger):
+        def fake_run(cmd, **kwargs):
+            if "branch" in cmd and "--show-current" in cmd:
+                return FakeProc(returncode=0, stdout="main\n")
+            if "branch" in cmd and "--list" in cmd:
+                return FakeProc(returncode=0, stdout="main\nworktree-agent-abc\n")
+            if "worktree" in cmd and "list" in cmd:
+                return FakeProc(returncode=128, stdout="", stderr="fatal")
+            return FakeProc(returncode=0, stdout="")
+
+        monkeypatch.setattr(hook.subprocess, "run", fake_run)
+        reason_out = {}
+        result = hook.collect_orphan_agent_branches(logger, reason_out=reason_out)
+        assert result is None
+        assert reason_out["reason"] == hook.ORPHAN_BRANCHES_REASON_WORKTREE_BRANCHES
+
+    def test_current_branch_failure_sets_reason(self, monkeypatch, logger):
+        fake_run = _make_fake_run(
+            local_branches=["main", "wip-current"],
+            worktree_branches=["main"],
+            unmerged_map={},
+        )
+        monkeypatch.setattr(hook.subprocess, "run", fake_run)
+        monkeypatch.setattr(hook, "get_current_branch", lambda: None)
+        reason_out = {}
+        result = hook.collect_orphan_agent_branches(logger, reason_out=reason_out)
+        assert result is None
+        assert reason_out["reason"] == hook.ORPHAN_BRANCHES_REASON_CURRENT_BRANCH
+
+    def test_build_message_reason_texts_are_distinct(self):
+        """三種失敗因的訊息文字必須互不相同，且各自對應正確的指令名稱。"""
+        msg_local = hook.build_message(
+            [], [], [], orphan_branches_undetermined=True,
+            orphan_branches_reason=hook.ORPHAN_BRANCHES_REASON_LOCAL_BRANCHES,
+        )
+        msg_worktree = hook.build_message(
+            [], [], [], orphan_branches_undetermined=True,
+            orphan_branches_reason=hook.ORPHAN_BRANCHES_REASON_WORKTREE_BRANCHES,
+        )
+        msg_current = hook.build_message(
+            [], [], [], orphan_branches_undetermined=True,
+            orphan_branches_reason=hook.ORPHAN_BRANCHES_REASON_CURRENT_BRANCH,
+        )
+
+        assert "git branch --list" in msg_local
+        assert "git worktree list" not in msg_local
+
+        assert "git worktree list" in msg_worktree
+        assert "git branch --list" not in msg_worktree
+
+        assert "當前 checkout 分支" in msg_current
+        assert "git worktree list" not in msg_current
+        assert "git branch --list" not in msg_current
+
+        assert msg_local != msg_worktree != msg_current
+
+    def test_build_message_unknown_reason_falls_back_to_generic(self):
+        """未提供 reason（既有呼叫端）時，沿用原本的通用訊息，維持相容輸出。"""
+        msg = hook.build_message([], [], [], orphan_branches_undetermined=True)
+        assert "無法判定 worktree 分支清單（git worktree list 執行失敗）" in msg
+
+
 class TestCollectOrphanAgentBranchesCurrentBranchUndetermined:
     """get_current_branch 判定失敗（回傳 None）時：collect_orphan_agent_branches
     須整體中止（回傳 None），不得因排除守衛短路而把當前 checkout 分支誤列孤兒。"""

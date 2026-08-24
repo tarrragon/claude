@@ -336,7 +336,8 @@ effort: low
 - [ ] 派發時目標路徑是否在主 repo cwd 內？→ 若否，改走 PM 直接執行或設 `additionalDirectories`
 - [ ] `name`、`description`、`tools` 三欄必填？
 - [ ] 需要代理人取得 `AGENT_PRELOAD.md` 內容時，已用 `initialPrompt` 顯式指示 `Read .claude/agents/AGENT_PRELOAD.md`（見上方「使用場景」範例）？單純在主文加 `@.claude/agents/AGENT_PRELOAD.md` 引用行不會展開為內容（已實測），不構成有效載入手段
-- [ ] **唯讀分析型代理人**（不需 Ticket ID 即可派發，如 Explore/code-explorer/Plan 類型）？→ 確認是否需加入 `.claude/hooks/agent-ticket-validation-hook.py` 的 `TICKET_EXEMPT_AGENT_TYPES` 白名單，否則該代理人會因 prompt 不含 Ticket ID 被 deny（W10-043.1 audit P2 風險）
+- [ ] **唯讀分析型代理人**（不需 Ticket ID 即可派發，如 Explore/code-explorer/Plan 類型）？→ 確認是否需加入 `.claude/skills/ticket/hooks/agent-ticket-validation-hook.py`（隨 ticket skill 私有化）的 `TICKET_EXEMPT_AGENT_TYPES` 白名單，否則該代理人會因 prompt 不含 Ticket ID 被 deny（W10-043.1 audit P2 風險）
+  （原路徑 `.claude/hooks/agent-ticket-validation-hook.py`，2026-08-22 文件複查更正）<!-- broken-link-exempt: 本行為更正說明，原路徑已不存在是預期的 -->
 
 ---
 

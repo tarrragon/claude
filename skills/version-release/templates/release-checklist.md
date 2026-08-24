@@ -67,6 +67,16 @@ uv run .claude/skills/version-release/scripts/version_release.py check --version
 - [ ] `pubspec.yaml` 存在且版本號正確
 - [ ] 所有主要工作日誌檔案存在
 
+### identity-guard 採用率監測（若專案已採用 `ticket` skill；未採用時本節與下方兩項檢查皆可略過）
+
+- [ ] 已執行 `uv run .claude/skills/ticket/ticket_system/tools/identity_guard_adoption.py`<!-- portability-allow: 可執行指令而非說明性連結，缺失字面路徑會使清單項無法直接複製執行；條件性已由本節標題聲明 -->
+- [ ] 報表中標示「符合結束條件」的命令已建 IMP ticket 移入
+      `identity_guard.ENFORCED_COMMANDS`（無命令符合時本項免動作）
+
+**說明**：identity-guard 對未提供 `--as` 的 warn-only 命令設有過渡期結束
+條件（7 日滾動 warn 率 < 5% 且樣本數 >= 30），偵測承擔者為 PM，執行時機
+即本發布前檢查階段。詳見 `identity_guard.py` 模組 docstring（`ticket` skill 提供）。
+
 ---
 
 ## 文件更新

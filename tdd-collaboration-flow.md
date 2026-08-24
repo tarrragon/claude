@@ -169,7 +169,7 @@ Phase 1 必須考慮 SOLID 原則進行任務拆分：
 
 ```bash
 # 分析功能並產出拆分建議
-uv run .claude/skills/tdd-phase1-split/scripts/tdd-phase1-split.py suggest \
+uv run .claude/skills/tdd/scripts/tdd-phase1-split.py suggest \
   --description "實作書籍搜尋功能" \
   --version 0.29.0
 ```

@@ -144,7 +144,7 @@ description: "版本發布整合工具。Use for: (1) 發布新版本（合併�
 
 `check` 的自動佔位掃描（preflight 步驟 1.7）只能攔截靜態可查的佔位實作（ComingSoon 路由、UnimplementedError provider、空 callback）；平台 API 語意差異與框架初始化警告只有在目標平台實際執行才會暴露。**Consequence**：缺實機驗證 gate 時，單元測試全綠 + 自動掃描通過的版本仍可能在用戶裝置上功能不可用。**Action**：APP 類專案應維護發版前實機冒煙清單（建議路徑 `docs/release-smoke-checklist.md`，三層結構：啟動健康 / 用例 happy path 走查 / 平台敏感點），`check` 通過後、打 tag 前執行一次，結果記入版本 worklog。非 APP 專案（純 CLI / library）無實機層，此項不適用。
 
-**on-device 驗收套件（存在時先於冒煙清單執行）**：專案有 on-device 測試層（如 Flutter `integration_test/`，測試編譯進真實 app 於裝置執行、零結構替身）時，發版前於驗證環境釘住裝置執行全套並要求全綠（例：`flutter test integration_test -d <device>`）。開發中的外圈紅燈以 wip tag 隔離（dart_test.yaml skip），不影響本 gate；wip tag 於發版時仍存活（即將跨版本）即為異味，處置見 `.claude/skills/tdd/references/phase2/rules.md`「紅燈層級順序」節。on-device 全綠後，手動冒煙清單聚焦自動化涵蓋不了的部分（硬體功能、觀感、探索性走查），兩者互補不重複。
+**on-device 驗收套件（存在時先於冒煙清單執行）**：專案有 on-device 測試層（如 Flutter `integration_test/`，測試編譯進真實 app 於裝置執行、零結構替身）時，發版前於驗證環境釘住裝置執行全套並要求全綠（例：`flutter test integration_test -d <device>`）。開發中的外圈紅燈以 wip tag 隔離（dart_test.yaml skip），不影響本 gate；wip tag 於發版時仍存活（即將跨版本）即為異味。若專案已採用 `tdd` skill，處置方式見該 skill 的「紅燈層級順序」節（若已安裝）；若未採用，仍應視為異味並自行決定移除 wip tag 或延後發版，只是不會有現成的分級處置指引可查。on-device 全綠後，手動冒煙清單聚焦自動化涵蓋不了的部分（硬體功能、觀感、探索性走查），兩者互補不重複。
 
 ## `.version-release.yaml` 配置檔
 

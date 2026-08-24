@@ -14,7 +14,6 @@
 | `/ticket` | 統一 Ticket 系統（create/track/handoff/resume/migrate/generate） |
 | `/version-release` | 版本發布（check/update-docs/release） |
 | `/tech-debt-capture` | 技術債務捕獲 |
-| `/commit-as-prompt` | 提交流程 |
 
 ## 開發輔助
 
@@ -63,9 +62,6 @@
 
 | 指令 | 用途 |
 |------|------|
-| `/test-progress` | 測試進度追蹤 |
-| `/smart-version-check` | 版本檢查 |
-| `/delegate` | 委派指令 |
 | `/sync-push` | 推送 .claude 配置到獨立 repo |
 | `/sync-pull` | 從獨立 repo 拉取配置 |
 

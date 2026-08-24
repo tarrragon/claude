@@ -429,7 +429,8 @@ uv run pytest .claude/lib/tests/ -v
 uv run pytest .claude/lib/tests/test_hook_io.py -v
 uv run pytest .claude/lib/tests/test_config_loader.py -v
 uv run pytest .claude/lib/tests/test_git_utils.py -v
-uv run pytest .claude/lib/tests/test_hook_logging.py -v
+uv run pytest .claude/hooks/tests/test_hook_logging_session_id.py -v
+uv run pytest .claude/hooks/tests/test_hook_logging_liveness.py -v
 
 # 執行測試並顯示覆蓋率
 uv run pytest .claude/lib/tests/ -v --cov=.claude/lib --cov-report=term-missing

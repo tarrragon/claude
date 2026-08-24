@@ -80,7 +80,7 @@ ticket generate <plan_file> --version <ver> --wave <wave> [--dry-run]
 完整的 YAML Frontmatter + Markdown Body 生成：
 - 使用 `create_ticket_frontmatter()` 產生 frontmatter
 - 使用 `create_ticket_body()` 產生 body
-- 自動格式化為完整 Markdown 文檔
+- 自動格式化為完整 Markdown 文件
 
 ## 驗證結果
 

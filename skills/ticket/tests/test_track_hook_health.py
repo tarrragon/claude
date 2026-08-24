@@ -39,15 +39,22 @@ def _fake_stats() -> Dict[str, Dict]:
       無法穩定產生 flagged 狀態（_evaluate_all 以「今日」取 recent，寫死日期永遠 recent=0）。
     - 改法：wrap-decision-tripwire 的 spike 落在「執行當日」（動態 _today），count 遠高於
       baseline×3，使 recent > threshold 穩定觸發 warning，不再依賴寫死日期。
+
+    0.2.1-W3-936 調整：本 fixture 只給 1 天 per_day（< BASELINE_MIN_COVERAGE_DAYS=7），
+    故 evaluate() 走 bootstrap 分支而非相對基線分支；bootstrap 分支門檻改依 hook_type
+    分級（BOOTSTRAP_THRESHOLD_BY_TYPE），wrap-decision-tripwire 屬 high_freq_ok，
+    門檻 8000/day（取代舊版扁平 100/day）。spike 值同步由 300 調高至
+    9000（> 8000）以在新門檻下仍穩定觸發 warning；baseline×3 的註解隨之不再適用
+    （bootstrap 分支不使用 baseline×multiplier 判定），故一併移除。
     """
     _today = datetime.now().strftime("%Y-%m-%d")
     return {
         "wrap-decision-tripwire": {
-            # 單日 spike 300 → baseline=300/7≈42.9、high_freq threshold=baseline×3≈128.6
-            # recent(今日)=300 > 128.6 穩定 warning，與「今日是哪天」無關。
-            "total": 300,
+            # 單日 spike 9000 > high_freq_ok bootstrap 門檻 8000 → 穩定觸發 warning，
+            # 與「今日是哪天」無關（0.2.1-W3-936：門檻依 hook_type 分級後的調整值）。
+            "total": 9000,
             "per_day": {
-                _today: 300,
+                _today: 9000,
             },
         },
         "phase4-decision-enforcement": {

@@ -32,7 +32,7 @@ Hook 實作若把「emit 輸出」寫在檢查函式內部（副作用式輸出�
 
 實例（第一例，PreToolUse）：`.claude/skills/worktree/hooks/worktree-commit-before-dispatch-hook.py`（0.2.0-W4-009 修復，commit 6ffbf27）——`_check_origin_behind` 純計算回傳 behind_count，main() 依 PC-019 判定結果分流輸出。
 
-實例（第二例，PostToolUse）：`.claude/skills/ticket/hooks/ticket-quality-gate-hook.py`（當時狀態，該 hook 事後已降級）。該 hook 註冊於 PostToolUse、matcher `Write`、`continueOnBlock: true`。以構造的 PostToolUse Write 輸入餵入真實 ticket md 實測：exit code 2，stdout 4975 bytes（`decision: block` + reason + 完整 additionalContext 報告），stderr 0 bytes。代理人在此路徑收到的是無說明的失敗訊號——診斷內容全在被 runtime 丟棄的 stdout，與第一例同一根因：輸出決策未集中於 exit code 確定之後。
+實例（第二例，PostToolUse）：`.claude/skills/ticket/hooks/ticket-quality-gate-hook.py`（當時狀態，該 hook 事後已降級並刪除）。<!-- broken-link-exempt: 案例敘事，明文陳述該 hook 事後已刪除，路徑不存在是預期的 -->該 hook 註冊於 PostToolUse、matcher `Write`、`continueOnBlock: true`。以構造的 PostToolUse Write 輸入餵入真實 ticket md 實測：exit code 2，stdout 4975 bytes（`decision: block` + reason + 完整 additionalContext 報告），stderr 0 bytes。代理人在此路徑收到的是無說明的失敗訊號——診斷內容全在被 runtime 丟棄的 stdout，與第一例同一根因：輸出決策未集中於 exit code 確定之後。
 
 ## 預防措施
 

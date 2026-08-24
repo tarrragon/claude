@@ -155,7 +155,7 @@ A: 查看 TD 檔案的 `deferred_from` 和 `defer_reason` 欄位，了解延後�
 
 ## [DOC] 深入了解
 
-需要詳細說明？查看完整文檔：
+需要詳細說明？查看完整文件：
 
 - **詳細指南**: `TECH_DEBT_GUIDE.md`
 - **測試用例**: `tests/test_tech_debt_check.md`

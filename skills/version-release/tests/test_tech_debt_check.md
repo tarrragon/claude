@@ -216,7 +216,7 @@ uv run .claude/skills/version-release/scripts/version_release.py check --version
 
 ## 手動驗證檢查清單
 
-### 檢查清單 1: 代碼質量
+### 檢查清單 1: 程式碼質量
 
 ```bash
 # 1. 語法檢查
@@ -233,18 +233,18 @@ grep -n "print_error\|print_success\|print_warning" \
 # 預期: 輸出函式呼叫清單，確認格式統一
 ```
 
-### 檢查清單 2: 文檔同步
+### 檢查清單 2: 文件同步
 
 ```bash
-# 1. 檢查 README.md 中是否提及 --defer-td
-grep -c "defer-td" .claude/skills/version-release/README.md
+# 1. 檢查 TECH_DEBT_GUIDE.md 中是否提及 --defer-td（README.md 已不存在，現由此檔承接說明）
+grep -c "defer-td" .claude/skills/version-release/TECH_DEBT_GUIDE.md
 # 預期: >= 3 (在描述、選項、範例中各出現一次)
 
 # 2. 檢查 TECH_DEBT_GUIDE.md 是否存在
-test -f .claude/skills/version-release/TECH_DEBT_GUIDE.md && echo "[OK] 文檔存在"
-# 預期: [OK] 文檔存在
+test -f .claude/skills/version-release/TECH_DEBT_GUIDE.md && echo "[OK] 文件存在"
+# 預期: [OK] 文件存在
 
-# 3. 檢查文檔中是否包含關鍵概念
+# 3. 檢查文件中是否包含關鍵概念
 grep -c "deferred_from\|defer_reason" .claude/skills/version-release/TECH_DEBT_GUIDE.md
 # 預期: >= 5 (在多個地方提及)
 ```
@@ -258,7 +258,7 @@ grep -c "deferred_from\|defer_reason" .claude/skills/version-release/TECH_DEBT_G
 - [ ] 延後流程在發布 Step 0 中執行
 - [ ] 彩色化輸出使用了正確的顏色函式
 - [ ] 錯誤處理和異常捕獲完整
-- [ ] 所有文檔都已更新
+- [ ] 所有文件都已更新
 
 ---
 
@@ -314,7 +314,7 @@ status: pending
 
 ---
 
-**測試文檔版本**: v1.0
+**測試文件版本**: v1.0
 **最後更新**: 2026-01-07
 **維護者**: basil-hook-architect
 

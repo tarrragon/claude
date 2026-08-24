@@ -38,23 +38,11 @@
       "check_type": "settings_hook",
       "hook_event": "UserPromptSubmit",
       "hook_matcher": null,
-      "hook_command": ".claude/hooks/prompt-submit-hook.sh",
+      "hook_command": ".claude/hooks/prompt-submit-hook.py",
       "required": true,
       "priority": 3,
       "failure_action": "warn",
-      "remediation": "將 prompt-submit-hook.sh 註冊到 settings.json UserPromptSubmit"
-    },
-    {
-      "id": "5w1h-token-generator",
-      "name": "5W1H Token Generator",
-      "description": "5W1H Session Token 生成腳本",
-      "category": "quality-assurance",
-      "check_type": "script_exists",
-      "script_path": ".claude/hooks/5w1h-token-generator.sh",
-      "required": true,
-      "priority": 4,
-      "failure_action": "warn",
-      "remediation": "確認 5w1h-token-generator.sh 存在且有執行權限"
+      "remediation": "將 prompt-submit-hook.py 註冊到 settings.json UserPromptSubmit"
     },
     {
       "id": "dart-style-guardian-hook",

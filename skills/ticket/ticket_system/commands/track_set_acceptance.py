@@ -243,7 +243,10 @@ def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
         if load_err:
             return 1
 
-        # W3-044: body-op precondition（set-acceptance 不允許 completed）
+        # W3-044: body-op precondition（set-acceptance 不允許 completed）。
+        # allow_pending=True：acceptance 清單修改分建票期（PM bookkeeping，
+        # status=pending）與執行期（agent 認領後勾選，status=in_progress）
+        # 兩階段，前者屬例行修訂不應強制 --force。
         import sys as _sys
         force = bool(getattr(args, "force", False))
         ok, error_msg = require_in_progress(
@@ -251,6 +254,7 @@ def execute_set_acceptance(args: argparse.Namespace, version: str) -> int:
             args.ticket_id,
             "set-acceptance",
             allow_completed=False,
+            allow_pending=True,
             force=force,
         )
         if not ok:

@@ -94,6 +94,8 @@ ls .claude/hook-logs/<related-hook>/ | head -3
 grep "self-check\|漏網\|missing" .claude/hook-logs/<related-hook>/*.log | head -5
 ```
 
+> **每日輪替改造後語意窄化（2026-08-21 標註）**：hook 日誌自某次改造起改為每日輪替 append，檔名含日期、同一天所有觸發皆寫入同一檔案。`ls ... | head -3` 原意是「列出最近 3 次觸發」，改造後只列出「最近 3 個曾觸發的日期」——若某天內觸發多次，該天仍只算一個檔案。此為**解析度變化，非結論失效**：目錄仍能正確反映「哪些天有過 self-check 警示」，不會像 PC-BAL-033 的差分鑑別法那樣得出反向結論。若收割時需要精確觸發次數或候選字實際出現頻率，改用下一行的 `grep` 直接讀檔案內容（每次觸發皆各自成行，不受輪替影響），或改用 `wc -l` 計算單日內的觸發行數。
+
 ---
 
 ## 與其他規則的邊界
@@ -132,6 +134,7 @@ grep "self-check\|漏網\|missing" .claude/hook-logs/<related-hook>/*.log | head
 
 ---
 
-**Last Updated**: 2026-05-05
+**Last Updated**: 2026-08-21
+**Version**: 1.1.0 — 標註規則 3 的 `ls .claude/hook-logs/<related-hook>/ | head -3` 因 hook 日誌每日輪替改造而語意窄化：由「最近 3 次觸發」變為「最近 3 個曾觸發的日期」（解析度變化，非結論失效）；補上精確計數時改用 grep 內容或 wc -l 的替代方法。
 **Version**: 1.0.0 — 初始建立：Hook self-check 警示是被忽視的反推資料源（W17-144.1.1.1）
 **Source**: 用戶質疑「還有沒有別的方法判斷污染源」+ 即時實證 Hook log 反推 12 簡體字 + 意識到此資料源已被忽視至少 1 週

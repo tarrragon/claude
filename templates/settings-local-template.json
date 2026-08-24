@@ -12,8 +12,6 @@
     "allow": [
       "_COMMENT_UNIVERSAL_START: === 通用權限（所有專案保留） ===",
 
-      "Bash(./.claude/hooks/test-summary.sh:*)",
-      "Bash(./.claude/hooks/test-summary.sh)",
       "Bash(cat:*)",
       "Bash(wc:*)",
       "Bash(ls:*)",

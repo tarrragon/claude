@@ -22,7 +22,8 @@ subagent（如 basil-hook-architect）執行 Write 工具建立 `.py` Hook 腳�
 
 **W14-028 實測**（commit 6945319c → dea1939e 修復）：
 
-1. basil-hook-architect 執行 `Write .claude/hooks/ticket-frontmatter-validator-hook.py`
+1. basil-hook-architect 執行 `Write .claude/hooks/ticket-frontmatter-validator-hook.py`（案例敘事：事發時路徑）<!-- broken-link-exempt: 本行為更正說明，案例本文保留原始路徑以忠實記錄事發當時狀態 -->
+   （現搬遷至 `.claude/skills/ticket/hooks/ticket-frontmatter-validator-hook.py`，2026-08-22 文件複查更正）
 2. 檔案 mode: `100644`（無 exec bit）
 3. settings.json 已正確註冊 PostToolUse
 4. 後續任一 Edit ticket .md 觸發 Hook → `/bin/sh: ...ticket-frontmatter-validator-hook.py: Permission denied`

@@ -4,8 +4,10 @@
 提供 Markdown frontmatter 解析、Ticket 檔案載入和儲存功能。
 支援 Markdown（含 frontmatter）和 YAML 格式。
 """
+import os
 import re
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -82,6 +84,53 @@ ENUM_SNAPSHOT_FIELD = "_loaded_enum_snapshot"
 # 枚舉閘關注欄位（名稱固定；合法值集合於呼叫時讀 constants 模組屬性，
 # 使測試可 monkeypatch VALID_* / ENUM_GATE_MODE）
 _ENUM_GATE_FIELD_NAMES = ("type", "priority", "status")
+
+# PyYAML 雙引號純量的 \uXXXX 逸出序列不會像 JSON 一樣自動組合合法 UTF-16
+# 代理對（已實測驗證：合法配對逸出，PyYAML 仍保留為兩個獨立的孤立代理碼
+# 位），也不拒絕不成對的孤立代理碼位。這些 U+D800-U+DFFF 碼位一旦進入
+# Python str，任何後續 UTF-8 編碼（含檔案寫入）都會拋 UnicodeEncodeError；
+# 且該字元本身不影響 raw 檔案掃描（檔案內容是 ASCII 逸出序列，不是實際
+# 代理碼位），只有在 yaml.safe_load 解析後才存在，故需在解析完成當下立即
+# 修正，而非依賴下游各處自行防禦。
+_SURROGATE_PAIR_RE = re.compile("[\ud800-\udbff][\udc00-\udfff]")
+_LONE_SURROGATE_RE = re.compile("[\ud800-\udfff]")
+
+
+def _combine_surrogate_pair(match: "re.Match[str]") -> str:
+    """將一組合法配對的高低代理碼位組合為單一星面字元（UTF-16 解碼公式）。"""
+    high, low = (ord(c) for c in match.group(0))
+    code_point = 0x10000 + (high - 0xD800) * 0x400 + (low - 0xDC00)
+    return chr(code_point)
+
+
+def _sanitize_surrogates(value: str) -> str:
+    """修正字串中 PyYAML \\u 逸出殘留的代理碼位（合法配對組合，孤立者替換）。
+
+    孤立代理碼位無法被 UTF-8 編碼，替換為 U+FFFD 並寫 stderr 警告
+    （quality-baseline 規則 4：異常不可靜默）——這是資料層面的損毀修正，
+    使用者應可見，而非悄悄改寫內容。
+    """
+    if not any("\ud800" <= c <= "\udfff" for c in value):
+        return value
+    combined = _SURROGATE_PAIR_RE.sub(_combine_surrogate_pair, value)
+    if any("\ud800" <= c <= "\udfff" for c in combined):
+        sys.stderr.write(
+            "[parser] 偵測到孤立 UTF-16 代理碼位（YAML \\u 逸出未正確配對或"
+            "不成對），已替換為 U+FFFD 避免寫入時 UnicodeEncodeError\n"
+        )
+        combined = _LONE_SURROGATE_RE.sub("�", combined)
+    return combined
+
+
+def _sanitize_surrogates_deep(value: Any) -> Any:
+    """遞迴套用 `_sanitize_surrogates` 至巢狀結構（dict/list/str）。"""
+    if isinstance(value, str):
+        return _sanitize_surrogates(value)
+    if isinstance(value, list):
+        return [_sanitize_surrogates_deep(x) for x in value]
+    if isinstance(value, dict):
+        return {k: _sanitize_surrogates_deep(v) for k, v in value.items()}
+    return value
 
 
 def _snapshot_enum_fields(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -318,8 +367,9 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
         yaml_text = content[start_match.end():end_match.start()]
         body = content[end_match.end():].strip()
         frontmatter = yaml.safe_load(yaml_text)
-        # 如果 YAML 解析為 None，返回空字典，否則返回解析結果
-        return frontmatter or {}, body
+        # 如果 YAML 解析為 None，返回空字典，否則返回解析結果（先修正孤立
+        # 代理碼位，避免下游任何 UTF-8 編碼操作拋 UnicodeEncodeError）
+        return _sanitize_surrogates_deep(frontmatter) or {}, body
     except yaml.YAMLError as e:
         # YAML 解析失敗時，丟出 YAMLParseError 傳遞錯誤訊息
         error_msg = str(e).strip()
@@ -418,7 +468,7 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
     else:
         # YAML 格式：純 YAML 或 { ticket: {...} } 包裝格式
         try:
-            ticket_content = yaml.safe_load(content)
+            ticket_content = _sanitize_surrogates_deep(yaml.safe_load(content))
 
             # Guard Clause 4：YAML 解析為空
             if not ticket_content:
@@ -449,6 +499,34 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
             }
             _ticket_cache[cache_key] = result
             return result
+
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    """原子寫入文字檔：先寫暫存檔再 os.replace，寫入失敗時原檔案不受影響。
+
+    `open(path, "w")` 在呼叫當下即截斷既有檔案；若隨後 `f.write()` 失敗
+    （如內容含孤立代理碼位觸發 UnicodeEncodeError），檔案會停在截斷後的
+    0 byte 狀態，且此失敗發生在呼叫端的 try/except 之外的更早階段，呼叫
+    端就算捕獲例外也救不回已被截斷的原內容。改為寫暫存檔成功後才以
+    `os.replace` 原子取代目標檔案：寫入失敗時暫存檔案被清除、目標檔案
+    完全不受影響；寫入成功時 `os.replace` 是 POSIX/Windows 皆保證的原子
+    操作，其他行程讀到的內容只會是完整舊版或完整新版，不會讀到半寫狀態。
+    暫存檔建立於目標檔案的同一目錄（確保與目標同一檔案系統，`os.replace`
+    跨檔案系統不保證原子性）。
+    """
+    tmp_fd, tmp_name = tempfile.mkstemp(
+        dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp_name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
 
 def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
@@ -535,9 +613,8 @@ def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
         if not content.endswith("\n"):
             content += "\n"
 
-        # 寫入檔案（UTF-8 編碼）
-        with open(ticket_path, "w", encoding="utf-8") as f:
-            f.write(content)
+        # 寫入檔案（UTF-8 編碼，原子寫入）
+        _atomic_write_text(ticket_path, content)
 
     finally:
         # 必須恢復所有備份欄位，確保 ticket 物件完整性

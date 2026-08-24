@@ -76,7 +76,7 @@ W10-098 系列拆 11 子 ticket 期間，每次 Write 操作（doc-thyme-prop.ya
 
 #### 修復
 
-兩個 hook 各加一行 `dependencies = ["pyyaml"]`。修後重跑 `echo "$JSON" | .claude/hooks/layer-boundary-validator-hook.py` → exit 0 + clean output。
+兩個 hook 各加一行 `dependencies = ["pyyaml"]`。修後重跑 `echo "$JSON" | uv run --quiet --script .claude/skills/tdd/hooks/layer-boundary-validator-hook.py` → exit 0 + clean output（該 hook 現位於 `.claude/skills/tdd/hooks/`，非事件發生當時的 `.claude/hooks/`，路徑已隨修復動作同步更新）。
 
 #### 為何過去未爆發
 

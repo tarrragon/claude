@@ -55,16 +55,17 @@
 
 **適用場景**：Ticket 執行中發現技術債/bug/回歸、多視角分析結論、Phase 4 技術債務、incident 分析、SA 審查發現、任何代理人分析報告。完整識別條件見 `.claude/pm-rules/plan-to-ticket-flow.md`。
 
-**ANA Solution 內 spawn 規劃**：Solution 含 IMP/DOC/ANA spawn 規劃表格時，規劃項目即屬「發現」，必須 complete 前轉為實際 ticket（寫入 `spawned_tickets` 或 `children`）或顯性標註豁免理由。
+**ANA Solution 內 spawn 規劃**：Solution 含 IMP/DOC/ANA spawn 規劃表格時，規劃項目即屬「發現」，必須由**執行者**在 complete 前逐項落地。落地形式三選一：建票、登記 spawn request 並 resolve 為終態、逐項標註豁免理由。
 
 | 情境 | 必要動作 |
 |------|---------|
-| Solution 含 spawn 規劃表格 | complete 前建對應 ticket，回填 `spawned_tickets` 或 `children` |
-| 規劃項目經評估不需建 ticket | Solution 顯性標註「無需建 ticket：[具體理由]」 |
-| ANA 由無 create 權限代理人執行（saffron 等） | complete 後 PM 立即驗收 spawn 一致性，缺漏立即補建 |
+| Solution 含 spawn 規劃表格 | complete 前建對應 ticket：`ticket create --source-ticket <本票 ID>`（CLI 建立當下回填雙向血緣），子任務形態用 `--parent <本票 ID>` |
+| 成票與否 / 範疇 / 優先級需 PM 裁決 | 先 `ticket track add-spawn-request`，complete 前再 `resolve-spawn-request <本票 ID> SR-N --status processed --spawned-ticket <id>` 或 `--status dismissed --reason <理由>`；停在 pending 不算落地 |
+| 規劃項目經評估不需建 ticket | Solution **逐項**標註「無需建 ticket：[具體理由]」，一則宣告扣抵一項 |
+| 代理人工具清單不含 Bash（無法呼叫 ticket CLI） | 派發階段即不指派 ANA 型 ticket；已誤派者停手上報 NeedsContext 由 PM 改派，不以 `--force` 收尾 |
 | Ticket 執行中辨識為框架問題（非專案問題） | 依 `.claude/skills/framework-issue/SKILL.md`「框架問題升級流程」分流判斷，不當下修 `.claude/` 通用資產 |
 
-> **強制層**：acceptance-gate-hook Step 2.5.2 自動偵測 Solution spawn 規劃 vs `spawned_tickets + children` 數量一致性，缺漏阻擋 complete。**Schema 層**：`ticket-body-schema.md` ANA Solution「Spawn 落地確認」子節。背景與案例（PC-093）見 ticket-body-schema.md。
+> **保證方為執行者**：落地必須在 complete 之前完成——狀態轉換後強制層已無執行時機，PM 事後驗收屬冗餘檢查而非唯一保證。**強制層**：acceptance-gate-hook Step 2.5.2 比對 Solution spawn 規劃數與落地數（`spawned_tickets` + `children` + 已判定 spawn request），缺漏阻擋 complete。**Schema 層**：`ticket-body-schema.md` ANA Solution「Spawn 落地確認」子節。背景與案例（PC-093）見 ticket-body-schema.md。
 
 ### 規則 6：失敗案例學習原則
 
@@ -104,7 +105,8 @@
 - `.claude/skills/framework-issue/SKILL.md` - 規則 5 框架問題升級流程（介入判斷、兩條路徑、issue 關閉協議、回報前查重 SOP）
 
 ---
-**Last Updated**: 2026-08-06 | **Version**: 3.4.0 — 新增「第一原則：誤差預算」章節於核心價值之前：生成式產出逼近正確、品質機制為已定價成本、禁道歉自責敘事、檢討唯二目標（降低復核成本／提高逼近精度）。規則 1、2、4、6 定位為其直接實例化（3、5 屬時序／完整性，經 Layer 2 審查收窄）。用戶裁示定為框架基本原則，隨 .claude/ sync 擴散至所有 consumer 專案。
+**Last Updated**: 2026-08-23 | **Version**: 3.5.0 — 規則 5「ANA Solution 內 spawn 規劃」情境表對齊強制層：原第 3 列「由無 create 權限代理人執行 → complete 後 PM 補建」與同節引言句（complete 前）時點相反，且該類別經全量盤點無實例（無任何 agent 定義禁止建票），刪除後改列「工具清單不含 Bash」此一實際受限條件。新增 spawn request 通道列（先登記、complete 前 resolve 為終態，pending 不算落地）；豁免列改為逐項宣告。強制層註記補「保證方為執行者」與新的落地數計算式，PM 事後驗收降為冗餘檢查。
+**Version**: 3.4.0 — 新增「第一原則：誤差預算」章節於核心價值之前：生成式產出逼近正確、品質機制為已定價成本、禁道歉自責敘事、檢討唯二目標（降低復核成本／提高逼近精度）。規則 1、2、4、6 定位為其直接實例化（3、5 屬時序／完整性，經 Layer 2 審查收窄）。用戶裁示定為框架基本原則，隨 .claude/ sync 擴散至所有 consumer 專案。
 **Version**: 3.3.0 — 規則 5 補一行框架問題分流路由，指向 `framework-issue/SKILL.md`「框架問題升級流程」章節（僅路由不展開，自動載入預算原則）。
 **Version**: 3.2.0 — 規則 6 落地通道由「memory feedback 雙通道」改為捕獲時分流（框架相關進 error-patterns／規則／方法論／references；專案相關進 docs／CLAUDE.md；兩者皆非不記錄）；教訓落地載體由「ANA + memory」改為「ANA + error-pattern」。memory 不再列為合法目的地，判準權威來源見 `pm-quality-baseline.md` 規則 7。
 **Version**: 3.1.0 — 品質檢查清單鏡像項「寫 feedback memory 四問升級檢查」更新為「捕獲時分流判準」（pm-quality-baseline 規則 7 語意前移的鏡像同步，該規則明文要求）。

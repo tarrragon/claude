@@ -42,7 +42,9 @@ description: "LSP 優先開發策略工具。Use for: (1) 查詢 LSP 操作指�
 
 - **檢查腳本**: `.claude/hooks/lsp-environment-check.py`
 - **配置檔案**: `.claude/hooks/lsp-check-config.json`
-- **整合位置**: `.claude/hooks/startup-check-hook.sh` (步驟 6.6)
+- **觸發方式**: `settings.json` 的 SessionStart 事件直接註冊 `lsp-environment-check.py`
+
+> 原記載的整合位置 `.claude/hooks/startup-check-hook.sh`（步驟 6.6）已不存在——LSP 檢查已改為獨立註冊的 SessionStart hook，不再是啟動 shell 腳本中的一個步驟。2026-08-22 文件複查更正。<!-- broken-link-exempt: 本行為更正說明，其內容正是在陳述該腳本已不存在，路徑不存在是預期的 -->
 
 ---
 

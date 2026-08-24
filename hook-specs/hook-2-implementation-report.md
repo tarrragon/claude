@@ -102,7 +102,9 @@ if not any(re.search(pattern, prompt, re.IGNORECASE) for pattern in dependency_p
 
 ### 3. 測試套件
 
-**檔案**: `.claude/hooks/test-task-dispatch-readiness.sh`
+**檔案**: `.claude/hooks/test-task-dispatch-readiness.sh`（已刪除，見「手動測試」節）<!-- broken-link-exempt: 本行為更正說明，原路徑已刪除是預期的 -->
+
+現行測試套件為 `.claude/hooks/tests/test_task_dispatch_readiness_check.py`，2026-08-22 文件複查更正。
 
 **測試案例**:
 1. ✅ 缺少所有參考文件 → 正確拒絕
@@ -244,8 +246,8 @@ Task(
 ### 手動測試
 
 ```bash
-# 執行完整測試套件
-./.claude/hooks/test-task-dispatch-readiness.sh
+# 執行完整測試套件（現行為 pytest，./.claude/hooks/test-task-dispatch-readiness.sh 已刪除，2026-08-22 文件複查更正）
+uv run --directory .claude/hooks pytest tests/test_task_dispatch_readiness_check.py -q
 
 # 測試特定輸入
 cat <<'EOF' | python3 ./.claude/hooks/task-dispatch-readiness-check.py

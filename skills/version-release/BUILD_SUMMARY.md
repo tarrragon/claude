@@ -25,7 +25,7 @@
 | `templates/release-checklist.md` | 200+ | 6K   | 檢查清單範本 |
 | `tests/test_version_release.md`  | 200+ | 5K   | 測試文件     |
 
-**總計**: 2,398 行代碼文件 | 80KB
+**總計**: 2,398 行程式碼文件 | 80KB
 
 #### 檔案結構
 
@@ -309,14 +309,14 @@ uv run .claude/skills/version-release/scripts/version_release.py release
 - [OK] 所有必要功能實現
 - [OK] 完整的文件體系
 - [OK] 詳細的測試指南
-- [OK] 高品質的代碼實現
+- [OK] 高品質的程式碼實現
 - [OK] 友善的用戶介面
 - [OK] 全面的錯誤處理
 
 ### 品質評分
 
 - **功能完整度**: 100% ⭐⭐⭐⭐⭐
-- **代碼品質**: 90% ⭐⭐⭐⭐⭐
+- **程式碼品質**: 90% ⭐⭐⭐⭐⭐
 - **文件品質**: 95% ⭐⭐⭐⭐⭐
 - **用戶體驗**: 90% ⭐⭐⭐⭐⭐
 - **錯誤處理**: 85% ⭐⭐⭐⭐*
@@ -329,7 +329,7 @@ uv run .claude/skills/version-release/scripts/version_release.py release
 
 ### 推薦使用流程
 
-1. **文檔化階段**
+1. **文件化階段**
    - 將 SKILL.md 和 README.md 加入專案主要文件
    - 在 Hook 系統中註冊此 Skill
    - 更新 Skill 索引

@@ -28,7 +28,7 @@ Handoff 待恢復任務提醒 Hook
 
 使用方式:
     SessionStart Hook 自動觸發，或手動測試:
-    python3 .claude/hooks/handoff-reminder-hook.py
+    python3 .claude/skills/ticket/hooks/handoff-reminder-hook.py
 
 輸入格式:
     SessionStart Hook 提供的 JSON (stdin，可選)

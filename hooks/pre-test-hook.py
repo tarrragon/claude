@@ -67,6 +67,14 @@ def check_flutter_sdk() -> tuple[bool, str]:
         return False, ValidationMessages.PRE_TEST_SDK_TIMEOUT
 
 
+# git checkout 等操作會在同一次寫入批次中依序落盤 pubspec.yaml 與
+# pubspec.lock，兩者 mtime 因此可能存在毫秒級的寫入順序差（實測本專案
+# 為 0.34 毫秒），此差距與依賴是否過期無關。使用者實際編輯 pubspec.yaml
+# 後才執行 flutter pub get 更新 lock，兩檔 mtime 差距通常以秒計；1 秒
+# 容差足以濾除檔案系統寫入順序雜訊，同時不影響真正過期案例的偵測。
+PUBSPEC_MTIME_TOLERANCE_SECONDS = 1.0
+
+
 def check_dependencies(project_dir: Path) -> list[str]:
     """檢查依賴是否已安裝。"""
     warnings = []
@@ -81,12 +89,12 @@ def check_dependencies(project_dir: Path) -> list[str]:
         warnings.append(ValidationMessages.PRE_TEST_PACKAGE_CONFIG_MISSING)
         return warnings
 
-    # 檢查 pubspec.yaml 是否比 pubspec.lock 更新
+    # 檢查 pubspec.yaml 是否比 pubspec.lock 更新（容差外才視為過期）
     pubspec_yaml = project_dir / "pubspec.yaml"
     if pubspec_yaml.exists() and pubspec_lock.exists():
         yaml_mtime = pubspec_yaml.stat().st_mtime
         lock_mtime = pubspec_lock.stat().st_mtime
-        if yaml_mtime > lock_mtime:
+        if yaml_mtime - lock_mtime > PUBSPEC_MTIME_TOLERANCE_SECONDS:
             warnings.append(ValidationMessages.PRE_TEST_PUBSPEC_OUTDATED)
 
     return warnings

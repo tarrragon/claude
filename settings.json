@@ -17,86 +17,94 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/git-index-lock-cleanup-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/git-index-lock-cleanup-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/test-timeout-pre.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/test-timeout-pre.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/version-release/hooks/version-release-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/version-release/hooks/version-release-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/acceptance-gate-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/acceptance-gate-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/bash-edit-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/bash-edit-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/bash-git-protected-branch-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/bash-write-boundary-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hooks-test-gate-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/bash-git-protected-branch-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pre-test-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hooks-test-gate-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/dart-test-async-guardian/hooks/pre-test-scan.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/pre-test-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-branch-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/dart-test-async-guardian/hooks/pre-test-scan.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/phase4-decision-enforcement-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-branch-check-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/phase4-decision-enforcement-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/homoglyph-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/homoglyph-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uv-tool-ownership-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/uv-tool-ownership-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uncommitted-ticket-md-reminder-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/uncommitted-ticket-md-reminder-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-remove-deliverable-check-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-remove-deliverable-check-hook.py",
             "timeout": 15000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/sibling-blockedby-validator-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/sibling-blockedby-validator-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/domain-import-lint-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/domain-import-lint-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/bare-commit-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/bare-commit-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/bash-git-add-broad-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/commit-stage-guard-gate-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/workspace-wipe-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/bash-git-add-broad-guard-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/workspace-wipe-guard-hook.py"
           }
         ]
       },
@@ -105,7 +113,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/external-query-guide-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/external-query-guide-hook.py"
           }
         ]
       },
@@ -114,7 +122,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/external-query-guide-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/external-query-guide-hook.py"
           }
         ]
       },
@@ -123,15 +131,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/mcp-run-tests-validator.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/mcp-run-tests-validator.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/test-timeout-pre.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/test-timeout-pre.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pre-test-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/pre-test-hook.py"
           }
         ]
       },
@@ -140,7 +148,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/mcp-write-tool-on-text-file-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/mcp-write-tool-on-text-file-guard-hook.py"
           }
         ]
       },
@@ -149,7 +157,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-file-access-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-file-access-guard-hook.py"
           }
         ]
       },
@@ -158,59 +166,59 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-path-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-path-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-file-access-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-file-access-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/main-thread-edit-restriction-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/main-thread-edit-restriction-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/branch-verify-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/branch-verify-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/strategic-compact/suggest-compact.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/strategic-compact/suggest-compact.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/file-type-permission-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/file-type-permission-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/framework-rule-edit-skill-trigger-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/framework-rule-edit-skill-trigger-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/proposal-evaluation-gate-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/proposal-evaluation-gate-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/wrap-decision/hooks/wrap-skill-yaml-consistency-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/wrap-decision/hooks/wrap-skill-yaml-consistency-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/error-pattern/hooks/error-pattern-flat-gate-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/error-pattern/hooks/error-pattern-flat-gate-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/presence-detection-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/presence-detection-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/reference-stability-rule8-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/reference-stability-rule8-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uc-reference-validation-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/uc-reference-validation-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
           }
         ]
       },
@@ -219,55 +227,55 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-path-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-path-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-file-access-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-file-access-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/main-thread-edit-restriction-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/main-thread-edit-restriction-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/branch-verify-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/branch-verify-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/strategic-compact/suggest-compact.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/strategic-compact/suggest-compact.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/framework-rule-edit-skill-trigger-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/framework-rule-edit-skill-trigger-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/proposal-evaluation-gate-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/proposal-evaluation-gate-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/wrap-decision/hooks/wrap-skill-yaml-consistency-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/wrap-decision/hooks/wrap-skill-yaml-consistency-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/error-pattern/hooks/error-pattern-flat-gate-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/error-pattern/hooks/error-pattern-flat-gate-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/presence-detection-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/presence-detection-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/reference-stability-rule8-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/reference-stability-rule8-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uc-reference-validation-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/uc-reference-validation-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
           }
         ]
       },
@@ -276,15 +284,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/reference-stability-rule8-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/reference-stability-rule8-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uc-reference-validation-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/uc-reference-validation-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
           }
         ]
       },
@@ -293,7 +301,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
           }
         ]
       },
@@ -302,49 +310,49 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-commit-before-dispatch-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-commit-before-dispatch-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-pre-dispatch-branch-drift-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-pre-dispatch-branch-drift-hook.py",
             "timeout": 10000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-base-distance-check-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-base-distance-check-hook.py",
             "timeout": 15000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/agent-dispatch-validation-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/agent-dispatch-validation-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/agent-prompt-length-guard-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/agent-prompt-length-guard-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/dispatch-staging-phrase-guard-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/dispatch-staging-phrase-guard-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/file-ownership-guard-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/file-ownership-guard-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/agent-ticket-validation-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/agent-ticket-validation-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/task-dispatch-readiness-check.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/task-dispatch-readiness-check.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/askuserquestion-reminder-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/askuserquestion-reminder-hook.py"
           }
         ]
       },
@@ -353,7 +361,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/5w1h-compliance-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/5w1h-compliance-check-hook.py"
           }
         ]
       },
@@ -362,7 +370,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/askuserquestion-charset-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/askuserquestion-charset-guard-hook.py"
           }
         ]
       },
@@ -371,7 +379,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/skill-sync-push-residue-gate-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/skill-sync-push-residue-gate-hook.py"
           }
         ]
       }
@@ -381,168 +389,168 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/python-environment-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/python-environment-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/cli-dependency-check.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/cli-dependency-check.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/zhtw-mcp-availability-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/zhtw-mcp-availability-check-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/spec-version-consistency-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/spec-version-consistency-check-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/canonical-schema-consistency-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/canonical-schema-consistency-check-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/error-patterns-index-consistency-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/error-patterns-index-consistency-check-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/scripts/install-skill-clis.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/scripts/install-skill-clis.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-reinstall-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-reinstall-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/package-version-sync-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/package-version-sync-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-completeness-check.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hook-completeness-check.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-dependency-isolation-check-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hook-dependency-isolation-check-hook.py",
             "timeout": 10000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill-registration-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/skill-registration-check-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill-shadowing-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/skill-shadowing-check-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/agent-definition-standard-check-hook.py"
+            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/agent-definition-standard-check-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/branch-status-reminder.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/branch-status-reminder.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/session-start-merged-worktree-audit-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/session-start-merged-worktree-audit-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/output-style-check.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/output-style-check.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/handoff-reminder-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/handoff-reminder-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/doc-sync-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/doc-sync-check-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/lsp-environment-check.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/lsp-environment-check.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/verification-environment-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/verification-environment-check-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/tech-debt-reminder.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/tech-debt-reminder.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/build-staleness-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/build-staleness-check-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/project-init-env-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/project-init-env-check-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uv-tool-staleness-check-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/uv-tool-staleness-check-hook.py",
             "timeout": 10000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/version-consistency-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/version-consistency-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/version-tracking-consistency-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/version-tracking-consistency-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill-description-length-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/skill-description-length-check-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/file-size-guardian-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/file-size-guardian-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-health-monitor.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hook-health-monitor.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start-scheduler-hint-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-start-scheduler-hint-hook.py",
             "timeout": 10000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start-sync-exclusion-check-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-start-sync-exclusion-check-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start-gitignore-check-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-start-gitignore-check-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-zombie-cleanup-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-zombie-cleanup-hook.py",
             "timeout": 15000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-source-diagnostic-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-source-diagnostic-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uv-tool-ownership-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/uv-tool-ownership-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-dir-audit-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/memory-dir-audit-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-liveness-summary-hook.py",
+            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/hook-liveness-summary-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-registry-start-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-registry-start-hook.py",
             "timeout": 5000
           }
         ]
@@ -551,7 +559,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run $CLAUDE_PROJECT_DIR/.claude/hooks/skill-residue-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/skill-residue-check-hook.py"
           }
         ]
       }
@@ -562,72 +570,72 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-test-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/post-test-hook.py",
             "timeout": 10000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/handoff-cleanup-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/handoff-cleanup-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-git-commit-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/post-git-commit-hook.py",
             "timeout": 10000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/commit-msg-layer2-marker-check-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/commit-msg-layer2-marker-check-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-merge-reminder-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-merge-reminder-hook.py",
             "timeout": 10000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/cli-error-feedback-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/cli-error-feedback-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/post-ticket-lifecycle-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/post-ticket-lifecycle-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/phase4-decision-enforcement-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/phase4-decision-enforcement-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/needs-context-listener-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/needs-context-listener-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/skill-cli-sync-check-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/skill-cli-sync-check-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/parallel-claim-audit-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/parallel-claim-audit-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/cli-failure-help-reminder-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/cli-failure-help-reminder-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/parallel-dispatch-verification-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/parallel-dispatch-verification-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-context-guard-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-context-guard-hook.py",
             "timeout": 5000
           }
         ]
@@ -637,7 +645,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-test-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/post-test-hook.py",
             "timeout": 10000
           }
         ]
@@ -647,62 +655,62 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/dart-style-guardian-hook.py $CLAUDE_FILE_PATH"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/dart-style-guardian-hook.py $CLAUDE_FILE_PATH"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/compositional-writing/hooks/worklog-format-check.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/compositional-writing/hooks/worklog-format-check.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/phase-completion-gate-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/phase-completion-gate-hook.py",
             "continueOnBlock": true
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/compositional-writing/hooks/comment-qa-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/compositional-writing/hooks/comment-qa-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/l10n-sync-verification-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/l10n-sync-verification-hook.py",
             "continueOnBlock": true
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/deletion-residual-reference-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/deletion-residual-reference-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/utf8-integrity-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/utf8-integrity-check-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-frontmatter-validator-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-frontmatter-validator-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/install-guide-edit-reminder-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/install-guide-edit-reminder-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uc-fingerprint-drift-check-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/uc-fingerprint-drift-check-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/frontmatter-yaml-syntax-guard-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/frontmatter-yaml-syntax-guard-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-dependency-isolation-check-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hook-dependency-isolation-check-hook.py",
             "timeout": 10000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
           }
         ]
       },
@@ -711,80 +719,80 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/dart-style-guardian-hook.py $CLAUDE_FILE_PATH"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/dart-style-guardian-hook.py $CLAUDE_FILE_PATH"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/compositional-writing/hooks/worklog-format-check.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/compositional-writing/hooks/worklog-format-check.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-id-validator-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-id-validator-hook.py",
             "continueOnBlock": true
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/phase-completion-gate-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/phase-completion-gate-hook.py",
             "continueOnBlock": true
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/compositional-writing/hooks/comment-qa-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/compositional-writing/hooks/comment-qa-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/l10n-sync-verification-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/l10n-sync-verification-hook.py",
             "continueOnBlock": true
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-creation-validation-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-creation-validation-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ana-ticket-metadata-validation-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ana-ticket-metadata-validation-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/tdd/hooks/layer-boundary-validator-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/tdd/hooks/layer-boundary-validator-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/worklog-path-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/worklog-path-guard-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/utf8-integrity-check-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/utf8-integrity-check-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-frontmatter-validator-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-frontmatter-validator-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/install-guide-edit-reminder-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/install-guide-edit-reminder-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/uc-fingerprint-drift-check-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/uc-fingerprint-drift-check-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/frontmatter-yaml-syntax-guard-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/frontmatter-yaml-syntax-guard-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-dependency-isolation-check-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hook-dependency-isolation-check-hook.py",
             "timeout": 10000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
           }
         ]
       },
@@ -793,17 +801,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/frontmatter-yaml-syntax-guard-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/frontmatter-yaml-syntax-guard-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/hook-dependency-isolation-check-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/hook-dependency-isolation-check-hook.py",
             "timeout": 10000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/settings-registration-exec-guard-hook.py"
           }
         ]
       },
@@ -812,22 +820,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/dispatch-count-guard-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/dispatch-count-guard-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/agent-dispatch-logger-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/agent-dispatch-logger-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/active-dispatch-tracker-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/active-dispatch-tracker-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/dispatch-identity-bind-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/dispatch-identity-bind-hook.py",
             "timeout": 5000
           }
         ]
@@ -836,7 +844,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/wrap-decision/hooks/wrap-decision-tripwire-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/wrap-decision/hooks/wrap-decision-tripwire-hook.py",
             "timeout": 5000
           }
         ]
@@ -847,56 +855,56 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/command-entrance-gate-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/command-entrance-gate-hook.py",
             "timeout": 10000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/creation-acceptance-gate-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/creation-acceptance-gate-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/prompt-submit-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/prompt-submit-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/language-guard-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/language-guard-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/handoff-prompt-reminder-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/handoff-prompt-reminder-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/parallel-suggestion-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/parallel-suggestion-hook.py",
             "timeout": 10000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/process-skip-guard-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/process-skip-guard-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/dispatch-count-guard-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/dispatch-count-guard-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/auq-option-pattern-detector-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/auq-option-pattern-detector-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/wrap-decision/hooks/wrap-decision-tripwire-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/wrap-decision/hooks/wrap-decision-tripwire-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-registry-heartbeat-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-registry-heartbeat-hook.py",
             "timeout": 5000
           }
         ]
@@ -907,12 +915,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/subagent-stop-dispatch-cleanup-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/subagent-stop-dispatch-cleanup-hook.py",
             "timeout": 10000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/agent-commit-verification-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/agent-commit-verification-hook.py",
             "timeout": 10000
           }
         ]
@@ -923,52 +931,52 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/continuous-learning/evaluate-session.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/continuous-learning/evaluate-session.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/handoff-auto-resume-stop-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/handoff-auto-resume-stop-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-experience-persistence-reminder-hook.py"
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-experience-persistence-reminder-hook.py"
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-auto-commit-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/worktree/hooks/worktree-auto-commit-hook.py",
             "timeout": 15000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-md-auto-commit-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ticket-md-auto-commit-hook.py",
             "timeout": 15000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/stop-worklog-handoff-sync-check-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/stop-worklog-handoff-sync-check-hook.py",
             "timeout": 10000
           },
           {
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/malformed-tool-call-detector-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/malformed-tool-call-detector-hook.py",
             "type": "command"
           },
           {
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/context-depth-warning-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/context-depth-warning-hook.py",
             "type": "command"
           },
           {
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/confabulation-audit-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/confabulation-audit-hook.py",
             "type": "command",
             "timeout": 15000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/memory-dir-audit-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/memory-dir-audit-hook.py",
             "timeout": 5000
           },
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-registry-stop-heartbeat-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-registry-stop-heartbeat-hook.py",
             "timeout": 5000
           }
         ]
@@ -979,7 +987,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-registry-end-hook.py",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-registry-end-hook.py",
             "timeout": 5000
           }
         ]

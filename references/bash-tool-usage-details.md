@@ -310,6 +310,149 @@ quoted delimiter (`'EOF'`) 禁用變數展開與 command substitution，內容�
 
 ---
 
+## 規則七詳細：隔離索引提交（GIT_INDEX_FILE CAS）
+
+### 為何規則七的三步驟仍不夠——TOCTOU 窗口
+
+規則七的正確替代（`git add <exact-path>` → `git diff --cached --name-only` 核對 → 裸 `git commit`）三個步驟間仍共用同一個 git index 檔案（`.git/index`）。核對通過後、裸 commit 執行前的窗口中，另一個並行 process（背景代理人、其他 subagent）仍可能 `git add` 進同一個共用 index，使裸 commit 連帶提交進去——先核對再 commit 仍存在 TOCTOU 窗口，並行環境下已有實測命中案例（PC-BAL-008）。
+
+低頻手動 commit（規則七主文情境）用「核對 + 裸 commit」已足夠安全，成本也最低。但高頻/高衝突路徑（例如同一 ticket md 檔案每次操作都觸發一次 auto-commit）需要完全不共用 index 的做法，才能杜絕 TOCTOU 窗口。
+
+### 隔離索引 CAS 配方
+
+**Why**：把「建 tree → 建 commit → 移動 HEAD」全程操作獨立於共用 index 之外，commit 內容只由呼叫者傳入的精確檔案清單決定，不受任何並行寫入影響；最後以帶舊值的 `update-ref` 做 compare-and-swap，若 HEAD 於期間被移動則失敗而非覆蓋，不會遺失他人 commit。
+
+**Consequence**：不採此法，高頻路徑的「核對 + 裸 commit」在並行環境下仍可能吸入他人 staged 內容，且發生時難以歸因——commit 已完成，只能事後比對 diff 才能發現範圍不對，錯誤已寫入歷史。
+
+**Action（步驟）**：
+
+```bash
+# 1. 記下目前 HEAD（CAS 的舊值，也是 commit-tree 的 parent）
+OLD_HEAD=$(git rev-parse HEAD)
+
+# 2. 建立獨立臨時 index 路徑，GIT_INDEX_FILE 指向它
+#    （檔案不先建立，read-tree 會依需要建立獨立 index）
+TEMP_INDEX=$(mktemp -u)
+export GIT_INDEX_FILE="$TEMP_INDEX"
+
+# 3. 在臨時 index 中重建 HEAD 當下的樹狀態
+git read-tree "$OLD_HEAD"
+
+# 4. 只 stage 目標檔案（working tree 內容）；臨時 index 與共用 index 完全隔離
+git add -- <exact-file-1> <exact-file-2>
+
+# 5. 由臨時 index 產生 tree
+TREE_SHA=$(git write-tree)
+
+# 6. 以 plumbing 建立 commit（不經 git commit，不觸發 pre-commit/commit-msg hook）
+COMMIT_SHA=$(git commit-tree "$TREE_SHA" -p "$OLD_HEAD" -m "訊息")
+
+# 7. 自我驗證：新 commit 相對舊 HEAD 的變更範圍恰為預期檔案清單，不符即放棄（不執行步驟 8）
+git diff --name-only "$OLD_HEAD" "$COMMIT_SHA"
+
+# 8. CAS 移動 HEAD：帶舊值，若 HEAD 於期間被並行移動則失敗，不覆蓋
+git update-ref HEAD "$COMMIT_SHA" "$OLD_HEAD"
+
+# 9. 清理臨時 index
+rm -f "$TEMP_INDEX"
+unset GIT_INDEX_FILE
+```
+
+**適用條件**：
+
+| 條件 | 說明 |
+|------|------|
+| 高頻自動化路徑 | 同一檔案集合被高頻率、多來源觸發 commit（如 ticket md 每次操作都 auto-commit） |
+| 連續並行提交 | 短時間內連續對不同檔案做精確提交，人工核對速度跟不上並行寫入速度 |
+| bare-commit-guard DENY 且確認範圍屬己 | 確認 staged 範圍屬於自己的派發範圍時，可用隔離索引 CAS 繞開共用 index 競爭本身，而非改用 pathspec（規則七禁止 pathspec 的理由不變，見規則七主文） |
+| 一般低頻手動 commit | 不需要，規則七「精確 add + 核對 + 裸 commit」已足夠，不需引入 CAS 複雜度 |
+
+**與規則七主文的關係**：不取代規則七的「精確 add + 核對 + 裸 commit」——後者仍是預設做法（成本低、無需額外 plumbing 知識）。隔離索引 CAS 是同一目標（避免吸入他人未 stage 編輯）在高衝突場景下的加強做法，兩者並列，依情境選擇。
+
+**已驗證實作**：`.claude/skills/ticket/hooks/ticket-md-auto-commit-hook.py` 的 `auto_commit_ticket_md` 函式（現行實作，對應歷史 fix commit `bd849894a`）。因不經過 `git commit`，此路徑不會觸發 pre-commit/commit-msg hook（含 bare-commit-guard-hook）——這是 plumbing 命令的固有行為，不是刻意繞過；guard 存在的目的是攔截「範圍不明的裸 commit」，本配方以步驟 7 的自我驗證取代 guard 的把關角色，提交範圍由程式碼結構保證且提交後即時核驗，不削弱其防護意圖。
+
+### 隔離索引提交的完整性三要件
+
+上文配方容易被誤讀為「用了 `GIT_INDEX_FILE` 就已隔離」。實際上完整的隔離提交需同時滿足三個要件，任一項缺失即整體失效：
+
+| 要件 | 內容 | 對應步驟 |
+|------|------|---------|
+| 1. 清單來源獨立於共用 index | 決定要提交哪些檔案的清單，必須取自呼叫端已知的精確來源（如 ticket `where.files` 宣告、或函式呼叫者作為引數傳入的檔案清單），禁止用 `git diff --cached --name-only` 或任何讀取共用 index 目前 staged 狀態的命令產生清單 | 步驟 4（`git add -- <exact-file-1> <exact-file-2>`）的引數來源 |
+| 2. 寫入使用 GIT_INDEX_FILE | 全程操作（read-tree / add / write-tree）在獨立臨時 index 中進行，不觸及共用 index | 步驟 2-6 |
+| 3. 提交前以 tree 層級自檢範圍 | 建立 commit 物件前後皆須核對變更範圍恰為預期清單。可在步驟 5 產生 `TREE_SHA` 後立即以 `git diff-tree --no-commit-id --name-only -r HEAD <TREE_SHA>` 自檢（早於建立 commit 物件，發現不符即可提前放棄，不需先耗費一次 commit-tree），或沿用步驟 7 既有的 `git diff --name-only <OLD_HEAD> <COMMIT_SHA>`（commit 建立後比對）；兩者比對邏輯等價，擇一即可但不可省略 | 步驟 5 之後（提前版）或步驟 7（既有版） |
+
+**Why**：要件 1 與要件 2 保護的對象不同——要件 2（`GIT_INDEX_FILE`）只隔離「寫入端」，確保臨時 index 的內容不被其他並行程序寫入干擾；但若決定「寫入端該寫入什麼」的清單來源（要件 1）仍取自共用 index 的目前狀態，隔離在入口就已經漏掉——清單本身可能已摻入其他並行程序剛好也 staged 到共用 index 的檔案，後續全程獨立操作只是把「已經錯誤的清單」精確地提交進去。要件 3 是最後一道防線，防止清單變數被 shell 展開錯誤、路徑筆誤帶入非預期檔、或 read-tree 基底與 HEAD 不一致等清單以外的失誤流入最終 commit。
+
+**Consequence**：不滿足要件 1 時，維護者複製本配方常會沿用規則七主文「先核對現有共用 index 內容」的核對習慣作清單來源——因為全程操作看似「隔離」，出錯時更難聯想到問題出在清單來源而非寫入端；且要件 1 失守時，要件 2、3 仍會「正確地」執行完畢（`GIT_INDEX_FILE` 隔離無誤、diff 自檢也會「通過」，因為自檢比對的正是同一份已經錯誤的清單），三個環節各自看起來都沒有問題，只有整體行為（提交範圍）是錯的。
+
+**反例**（實證）：commit `a7caabf4f`（2026-08-21，目錄級 where.files 宣告攔截功能提交）示範要件 1 失守的具體樣態——清單來源改用 `git diff --cached --name-only` 讀取共用 index 目前 staged 狀態，即使後續仍以 `GIT_INDEX_FILE` 隔離寫入、產生 tree、建立 commit，仍把另一張並行進行中 ticket 的 metadata 檔案（未在本次任務清單內，當時恰好也 staged 在共用 index）一併提交進去。三個要件中只有第一項出錯，但因清單是整個配方的輸入起點，錯誤會沿全程配方精確複製到最終 commit——其餘兩項做得再確實，也無法補救清單本身已經錯誤。
+
+### 規則七核對步驟的粒度邊界：檔案內夾帶
+
+**現象**：規則七主文的正確替代（精確 `git add <exact-path>` → `git diff --cached --name-only` 核對 → 裸 `git commit`）以「核對 index 只含目標檔」為安全依據。此依據隱含一個未明示的前提——目標檔本身的內容是乾淨的。當目標檔本身就含有他人尚未 stage 的編輯時，前提不成立，核對步驟對此完全無鑑別力。
+
+**Why**：`git diff --cached --name-only` 的輸出粒度是檔名，不是 hunk。`git add <path>` 的最小可定址單位是整個檔案的當下工作區內容——沒有「只 add 自己寫的那幾行」這種操作（`git add --patch` 除外，見下）。目標檔正是被夾帶的那個檔時，核對指令印出的檔名清單與「乾淨」情境完全相同，兩者在檔名層級無法區分。
+
+**Consequence**：不理解此邊界時，容易誤以為規則七三步驟已提供完整防護，對「同檔案已有他人未 stage 編輯」的情境掉以輕心。實例（本專案 2026-08-24）：PM 於 `docs/work-logs/topic-assignments.txt` 追加一行後刻意不 stage，等在途代理人完成後再提交；代理人收尾時對同一檔案執行 `git add` 後裸 commit，核對步驟印出的檔名清單正確無誤，但 commit 內容同時含代理人自己的行與 PM 未 stage 的行。本例內容無害（兩行皆語意正確），但機制若發生在語意衝突或未完稿的編輯上，會直接把未完成的內容提交進歷史。
+
+**Action**：
+
+| 情境 | 處置 |
+|------|------|
+| 目標檔可能含他人未 stage 的獨立 hunk，且工具支援互動式 staging | `git add --patch <path>`，逐 hunk 確認後再 stage，取代整檔 `git add` |
+| append-only 共用檔（如 `docs/work-logs/topic-assignments.txt`，每次 `ticket create` 皆追加一行，結構性熱點） | 約定由單一方（例如固定由 PM）負責提交該檔，其餘方只編輯不 commit；或改用 `git add --patch` |
+| 無法確認目標檔是否乾淨 | commit 前先 `git diff <path>`（非 `--cached`）檢視工作區相對於 index 的差異，確認無非預期的既有未 stage 內容混入 working tree 版本 |
+
+**與根因的關係**：本節與上方「變體：檔案級共用」章節（PC-BAL-008）同根因——`git add` 讀的是磁碟當下內容，無法區分「誰寫的哪一行」。PC-BAL-008 該章節處理的是兩張正式 ticket 的 `where.files` 重疊；本節額外指出**核對步驟本身**（而非僅 `git add` 動作）對此邊界無鑑別力，且將處置範圍擴及非 ticket 的 append-only 共用檔案。**邊界（不變）**：本節不改變規則七既有禁止事項——`git commit -- <path>` / `--only` / `-o` / `-i` 的禁令與其論證維持不變，本節是核對步驟侷限性的補充說明，非規則修訂。
+
+---
+
+## 規則八詳細：CJK 資料聚合統計加 LC_ALL=C（locale collation 陷阱）
+
+### 問題根源
+
+`sort` 的排序鍵與 `uniq -c` 的相等判斷都依目前 shell 的 locale collation 規則，不是位元組序。系統預設 locale（僅設 `LANG=xx_XX.UTF-8`，`LC_ALL`/`LC_COLLATE` 皆未設，多數互動式 shell 的常態）下，collation 對多位元組字元的排序權重可能把兩個**位元組序列相異**的字串判為相等，`uniq -c` 因而合併計數，且顯示名稱只取被合併中的其中一方。
+
+### 最小重現（可自行執行驗證）
+
+```bash
+printf 'hook 可靠性與失敗語意\nhook 測試覆蓋\nhook 可靠性與失敗語意\n' > /tmp/t.txt
+
+sort /tmp/t.txt | uniq -c
+#   3 hook 測試覆蓋
+
+LC_ALL=C sort /tmp/t.txt | LC_ALL=C uniq -c
+#   2 hook 可靠性與失敗語意
+#   1 hook 測試覆蓋
+```
+
+驗證環境：`LANG=en_US.UTF-8`，`LC_ALL` 與 `LC_COLLATE` 皆未設（`echo "LANG=$LANG LC_ALL=$LC_ALL LC_COLLATE=$LC_COLLATE"` 可確認）。第一次輸出把兩個不同字串合併為一行，並以實際只出現 1 次的字串標示總數 3；改用 `LC_ALL=C` 才拆出正確的「2」與「1」。
+
+### 失效的形狀
+
+- 輸出格式正常，無警告、無錯誤碼
+- 總數守恆（3 = 2 + 1），加總對得起來，唯一常見的交叉檢查通不過異常偵測
+- 唯獨分組錯誤，且顯示的類別名稱取自被合併的其中一方，另一方從輸出中完全消失
+
+不比對其他來源（改變 locale 重跑、或逐一 byte-exact 計數）不會發現此問題——這不是「用錯工具」，是「正確用法在特定資料下靜默給錯答案」。
+
+### 實際誤導案例（2026-08-24）
+
+統計 ticket 主題分佈檔案時，以預設 locale 執行 `sort | uniq -c` 聚合中文主題字串，得出「某主題在存量範圍內有 64 張票」的結論；改用 `grep -cF` 逐一 byte-exact 比對後，實際筆數為 3 張，相差超過 20 倍。此數字若未被察覺即沿用，會作為前提寫入另一張票的交接內容，成為下游執行者未經查證即採信的錯誤起點。完整案例與防護表見 `.claude/error-patterns/implementation/IMP-BAL-013-locale-sort-uniq-merges-distinct-cjk-strings.md`。
+
+### 影響面與替代寫法
+
+本框架強制繁體中文輸出（`.claude/rules/core/language-constraints.md` 規則 1），ticket 主題、error-pattern 分類、worklog 標題皆為中文字串。凡以 shell 管線做聚合統計（`sort` / `uniq` / `comm` / `join`，皆依 collation 比較）者皆在射程內。
+
+| 情境 | 替代寫法 |
+|------|---------|
+| 用 `sort \| uniq -c` 聚合中文字串統計次數 | 管線各命令前加 `LC_ALL=C`：`LC_ALL=C sort file \| LC_ALL=C uniq -c` |
+| 只需驗證某一類別的精確筆數 | 改用 `grep -cF '<精確字串>' <來源檔>` 做 byte-exact 計數，不經排序/相等判斷 |
+| 聚合結果將寫入 ticket 或交接文件成為他人前提 | 對關鍵類別另跑 `grep -cF` 交叉驗證，兩者不一致以 `grep -cF` 為準 |
+| 撰寫涉及 CJK 聚合的腳本或 Hook | 預設即加 `LC_ALL=C`，不依賴呼叫端的 shell locale 環境 |
+
+---
+
 ## 相關文件
 
 - `.claude/rules/core/bash-tool-usage-rules.md` — 規則骨架（auto-load）
@@ -322,14 +465,21 @@ quoted delimiter (`'EOF'`) 禁用變數展開與 command substitution，內容�
 - `.claude/error-patterns/process-compliance/PC-046-unnecessary-cd-for-global-cli.md`
 - `.claude/error-patterns/process-compliance/PC-079-bash-backtick-command-substitution-in-cli-args.md`
 - `.claude/error-patterns/process-compliance/PC-087-pm-tmp-detour-for-ticket-content.md`
-- `.claude/error-patterns/process-compliance/PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md`（並行 commit 掃入他人檔案；口徑與規則三情境二一致：lock/index 競爭屬並行環境預期現象）
+- `.claude/error-patterns/process-compliance/PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md`（並行 commit 掃入他人檔案；口徑與規則三情境二一致：lock/index 競爭屬並行環境預期現象；規則七詳細「隔離索引 CAS」即此問題的加強解法；「變體：檔案級共用」與規則七詳細「核對步驟的粒度邊界」同根因）
+- `.claude/skills/ticket/hooks/ticket-md-auto-commit-hook.py`（規則七詳細「隔離索引 CAS」的已驗證實作）
 - `.claude/error-patterns/process-compliance/PC-139-git-index-lock-source-misattribution-gui-app-fork.md`
 - `.claude/pm-rules/parallel-dispatch.md` — 並行派發 git staging / commit 紀律
 - 框架 issue 34（`tarrragon/claude`）— 規則三情境二實驗來源，consumer `screen_clock` ticket `1.4.0-W2-030`
+- `.claude/error-patterns/implementation/IMP-BAL-013-locale-sort-uniq-merges-distinct-cjk-strings.md`（規則八詳細的完整案例來源，含最小重現與防護表）
+- `.claude/rules/core/language-constraints.md` 規則 1（規則八影響面：本框架強制繁體中文輸出，CJK 字串聚合統計皆在射程內）
 
 ---
 
-**Last Updated**: 2026-08-04
+**Last Updated**: 2026-08-24
+**Version**: 1.7.0 — 新增「規則八詳細：CJK 資料聚合統計加 LC_ALL=C（locale collation 陷阱）」：`sort`/`uniq` 依 locale collation 而非位元組序比較，系統預設 locale 下會把相異 CJK 字串合併計數且無任何錯誤訊號；附最小重現、失效形狀、實際誤導案例（統計誤差 20 倍以上）、替代寫法對照表；主文速查條目見 `bash-tool-usage-rules.md` 規則八
+**Version**: 1.6.0 — 規則七詳細新增「核對步驟的粒度邊界：檔案內夾帶」小節：`git diff --cached --name-only` 核對粒度為檔案層級，`git add` 最小單位即整個檔案，對同檔案內他人未 stage 的 hunk 無鑑別力；附 append-only 共用檔（`topic-assignments.txt`）處置建議表（`git add --patch` / 單一方提交 / commit 前 `git diff` 自查）；不改變規則七既有禁止事項，與 PC-BAL-008「變體：檔案級共用」同根因但聚焦核對步驟本身的侷限
+**Version**: 1.5.0 — 新增「隔離索引提交的完整性三要件」小節：清單來源獨立於共用 index / GIT_INDEX_FILE 寫入隔離 / tree 層級提交前自檢，三要件缺一不可；補反例（commit `a7caabf4f`，清單改用 `git diff --cached --name-only` 掃入並行 ticket metadata，即使其餘兩要件正確執行仍整體失效）
+**Version**: 1.4.0 — 新增「規則七詳細：隔離索引提交（GIT_INDEX_FILE CAS）」：TOCTOU 窗口說明 + read-tree/write-tree/commit-tree/update-ref 完整配方 + 適用條件表 + 與規則七主文關係；已驗證實作標註 `ticket-md-auto-commit-hook.py`（對應歷史 fix commit `bd849894a`）
 **Version**: 1.3.0 — 規則三新增「情境二：唯讀 git 命令本身也會競爭 index.lock」（issue-34 實證：30 次併發 add 命中 1 次），修正「add 不觸發 Hook」的失準因果表述；index.lock 診斷改為「預設短暫重試」優先於「排查串接違規」；補與 PC-BAL-008 / parallel-dispatch.md 的口徑一致性說明（0.2.1-W3-262）
 **Version**: 1.2.0 — 新增規則一即時協議（confabulation 防護四步）+ 規則六詳細（PYTHONUNBUFFERED + tee + 雙層緩衝根因 + 與規則二調和），自 bash-tool-usage-rules.md 主檔外移（1.0.0-W7-004.3 token 收斂）
 **Version**: 1.1.0 — 新增規則五詳細（心理障礙破除 + 後退條件 + 觸發來源）（W15-007）

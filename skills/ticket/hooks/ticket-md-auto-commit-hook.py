@@ -38,9 +38,11 @@ hook 縮小為「最長一個 turn」，但其即時提醒的價值不因此歸�
 先清理，避免異常終止的代理人記錄永久癱瘓安全網。
 """
 
+import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -209,13 +211,15 @@ def build_commit_message(ticket_md_files) -> str:
     return f"auto(ticket-md): turn-end commit ({count} files: {preview})"
 
 
-def _run_git_with_lock_retry(args, logger, action_label, max_retries=3, wait_seconds=2):
+def _run_git_with_lock_retry(
+    args, logger, action_label, max_retries=3, wait_seconds=2, env=None
+):
     """執行 git 命令，遇 index.lock 競爭時等待重試（禁止刪除 lock 檔）。
 
-    回傳 (success: bool, returncode: int, stderr: str)。
+    回傳 (success: bool, stdout: str, stderr: str)。
     """
     last_stderr = ""
-    last_rc = 1
+    last_stdout = ""
     for attempt in range(1, max_retries + 1):
         try:
             result = subprocess.run(
@@ -225,21 +229,22 @@ def _run_git_with_lock_retry(args, logger, action_label, max_retries=3, wait_sec
                 encoding="utf-8",
                 errors="replace",
                 timeout=GIT_TIMEOUT,
+                env=env,
             )
         except subprocess.TimeoutExpired:
             logger.error("git %s 逾時", action_label)
             sys.stderr.write(f"[{HOOK_NAME}] git {action_label} 逾時\n")
-            return False, 1, "timeout"
+            return False, "", "timeout"
         except FileNotFoundError:
             logger.error("找不到 git")
             sys.stderr.write(f"[{HOOK_NAME}] 找不到 git\n")
-            return False, 1, "git not found"
+            return False, "", "git not found"
 
         if result.returncode == 0:
-            return True, 0, ""
+            return True, result.stdout, ""
 
         last_stderr = result.stderr.strip()
-        last_rc = result.returncode
+        last_stdout = result.stdout
         if "index.lock" in last_stderr and attempt < max_retries:
             logger.info(
                 "git %s 遇 index.lock（主線程並行活動），%d 秒後重試 (%d/%d)",
@@ -251,22 +256,158 @@ def _run_git_with_lock_retry(args, logger, action_label, max_retries=3, wait_sec
 
     logger.error("git %s 失敗: %s", action_label, last_stderr)
     sys.stderr.write(f"[{HOOK_NAME}] git {action_label} 失敗: {last_stderr}\n")
-    return False, last_rc, last_stderr
+    return False, last_stdout, last_stderr
+
+
+def _normalize_to_repo_relative(paths, repo_root: "Path | None") -> "set[str]":
+    """將路徑清單正規化為相對於 repo root 的 POSIX 字串集合。
+
+    `git diff --name-only` 一律輸出相對 repo root 的路徑；但呼叫端傳入的
+    `ticket_md_files`（來自 `git status --porcelain` 解析）在 cwd 不等於
+    repo root 時可能夾帶絕對路徑或不同基準的相對路徑，逐字比較會誤判為
+    範圍不符（本函式修正的原始問題）。repo_root 無法解析時（如
+    `git rev-parse --show-toplevel` 失敗）原樣回傳，不強制轉換。
+    """
+    if repo_root is None:
+        return {p.strip() for p in paths if p.strip()}
+
+    normalized = set()
+    for p in paths:
+        p = p.strip()
+        if not p:
+            continue
+        candidate = Path(p)
+        try:
+            if candidate.is_absolute():
+                rel = candidate.resolve().relative_to(repo_root)
+            else:
+                rel = (repo_root / candidate).resolve().relative_to(repo_root)
+            normalized.add(rel.as_posix())
+        except ValueError:
+            # 無法正規化為 repo root 相對路徑（例如指向 repo 外），原樣保留
+            normalized.add(p)
+    return normalized
+
+
+def _resolve_repo_root(logger) -> "Path | None":
+    """解析當前 repo 的 top-level 目錄（供自我驗證路徑正規化使用）。"""
+    ok, out, _ = _run_git_with_lock_retry(
+        ["git", "rev-parse", "--show-toplevel"], logger, "rev-parse --show-toplevel"
+    )
+    if not ok:
+        return None
+    return Path(out.strip()).resolve()
 
 
 def auto_commit_ticket_md(ticket_md_files, message, logger) -> bool:
-    """精確 git add 指定的 ticket md 路徑後 commit。禁止 -A（範圍嚴格限 ticket md）。"""
-    add_args = ["git", "add", "--"] + ticket_md_files
-    success, _, _ = _run_git_with_lock_retry(add_args, logger, "add")
-    if not success:
-        return False
+    """在獨立臨時 index 中精確 stage ticket md 後以 plumbing 提交，範圍自我驗證後
+    以 CAS（compare-and-swap）方式移動 HEAD。
 
-    commit_ok, _, _ = _run_git_with_lock_retry(
-        ["git", "commit", "-m", message, "--no-verify"], logger, "commit"
+    不使用 `git commit`：裸 commit 提交的是共用 index 的整體內容，`git add`
+    精確指定路徑與「commit 提交範圍」是兩件事——add 之後、commit 之前的窗口
+    中，其他並行程序（背景代理人、PM）仍可能 stage 自己的變更進同一個共用
+    index，使裸 commit 連帶提交進去（PC-BAL-008 實證五：先核對 index 再
+    commit 仍有 TOCTOU 窗口，本 session 實測命中）。
+
+    改用 read-tree/write-tree/commit-tree/update-ref 全程操作獨立臨時 index
+    （`GIT_INDEX_FILE` 指向本函式自建的暫存檔案，與共用 index 完全隔離），
+    提交內容只由本函式的 `ticket_md_files` 引數決定，不受共用 index 任何並
+    行寫入影響。commit 建立後另以 `git diff` 自我驗證變更範圍恰為
+    `ticket_md_files`，不符即放棄；最後以 `update-ref HEAD <new> <old>` 帶
+    舊值移動分支指標，若 HEAD 於期間被並行移動則失敗而非覆蓋，避免遺失他人
+    commit。
+
+    因不經過 `git commit`，此路徑不會觸發任何 pre-commit/commit-msg hook
+    （含 bare-commit-guard-hook）——這是 plumbing 命令的固有行為，非刻意繞
+    過。guard 存在的目的是攔截「範圍不明的裸 commit」；本函式以自我驗證取代
+    guard 的把關角色：提交範圍由程式碼結構保證且提交後即時核驗，不依賴
+    guard 事後攔截，故豁免 guard 不削弱其防護意圖。
+
+    清單來源條件（隔離提交完整性三要件之一，見
+    `.claude/references/bash-tool-usage-details.md`「規則七詳細」）：本函式
+    的 `ticket_md_files` 引數由呼叫端 `get_changed_ticket_md_files`（基於
+    `git status --porcelain`，非讀取共用 index 目前 staged 狀態）產生，現行
+    這一點是正確的，但這份正確性目前屬巧合——沒有機制強制禁止未來把清單來
+    源改為 `git diff --cached --name-only`。GIT_INDEX_FILE 只隔離「寫入
+    端」，若清單來源改讀共用 index 的 staged 狀態，隔離會在入口就已經漏
+    掉：其餘步驟仍會「正確地」執行完畢，但提交範圍整體仍是錯的（真實案例見
+    上述文件的反例段落）。修改本函式或 `get_changed_ticket_md_files` 時，
+    清單來源必須維持獨立於共用 index，不可改用 `--cached` 或任何讀取共用
+    index 目前 staged 狀態的命令。
+    """
+    ok, old_head_out, _ = _run_git_with_lock_retry(
+        ["git", "rev-parse", "HEAD"], logger, "rev-parse HEAD"
     )
-    if commit_ok:
-        logger.info("自動 commit 成功: %s", message)
-    return commit_ok
+    if not ok:
+        return False
+    old_head = old_head_out.strip()
+
+    fd, temp_index_path = tempfile.mkstemp(prefix="ticket-md-auto-commit-index-")
+    os.close(fd)
+    os.remove(temp_index_path)  # read-tree 會依需要建立獨立 index 檔
+    env = dict(os.environ)
+    env["GIT_INDEX_FILE"] = temp_index_path
+
+    try:
+        ok, _, _ = _run_git_with_lock_retry(
+            ["git", "read-tree", old_head], logger, "read-tree", env=env
+        )
+        if not ok:
+            return False
+
+        ok, _, _ = _run_git_with_lock_retry(
+            ["git", "add", "--"] + ticket_md_files, logger, "add", env=env
+        )
+        if not ok:
+            return False
+
+        ok, tree_out, _ = _run_git_with_lock_retry(
+            ["git", "write-tree"], logger, "write-tree", env=env
+        )
+        if not ok:
+            return False
+        tree_sha = tree_out.strip()
+
+        ok, commit_out, _ = _run_git_with_lock_retry(
+            ["git", "commit-tree", tree_sha, "-p", old_head, "-m", message],
+            logger, "commit-tree",
+        )
+        if not ok:
+            return False
+        commit_sha = commit_out.strip()
+
+        ok, diff_out, _ = _run_git_with_lock_retry(
+            ["git", "diff", "--name-only", old_head, commit_sha], logger, "diff"
+        )
+        if not ok:
+            return False
+        repo_root = _resolve_repo_root(logger)
+        changed_raw = {line for line in diff_out.splitlines() if line.strip()}
+        changed = _normalize_to_repo_relative(changed_raw, repo_root)
+        expected = _normalize_to_repo_relative(ticket_md_files, repo_root)
+        if changed != expected:
+            logger.error(
+                "提交範圍自我驗證失敗，預期 %s 實得 %s，放棄提交",
+                sorted(expected), sorted(changed),
+            )
+            sys.stderr.write(f"[{HOOK_NAME}] 提交範圍自我驗證失敗，放棄提交\n")
+            return False
+
+        ok, _, _ = _run_git_with_lock_retry(
+            ["git", "update-ref", "HEAD", commit_sha, old_head], logger, "update-ref"
+        )
+        if not ok:
+            logger.warning("HEAD 於提交期間被並行移動，放棄本次自動 commit")
+            return False
+
+        logger.info("自動 commit 成功: %s (%s)", message, commit_sha[:8])
+        return True
+    finally:
+        try:
+            if os.path.exists(temp_index_path):
+                os.remove(temp_index_path)
+        except OSError:
+            logger.debug("臨時 index 清理失敗: %s", temp_index_path)
 
 
 def main() -> int:

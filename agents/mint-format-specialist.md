@@ -191,10 +191,11 @@ git diff --cached | grep "汙"
 
 **Action**：
 
-1. 認領時申報身份：`ticket track claim <ticket-id> --as mint-format-specialist`
-2. 分析或修正產出即時寫入 ticket，不留到最後：
+1. 讀票確認最新狀態：`ticket track full <ticket-id>`
+2. 認領時申報身份：`ticket track claim <ticket-id> --as mint-format-specialist`
+3. 分析或修正產出即時寫入 ticket，不留到最後：
    `ticket track append-log <ticket-id> --section "<章節>" "<內容>"`
-3. 完成格式化任務並 commit 後，主動執行以下兩步：
+4. 完成格式化任務並 commit 後，主動執行以下兩步：
 
 ```bash
 # 1. 勾選所有 acceptance（agent 已逐項確認完成）

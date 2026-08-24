@@ -10,7 +10,9 @@
 抽出過程不改變任何行為，由 test_create_topic_selection 的 36 項測試作回歸保護。
 
 判準來源為 0.2.1-W3-826 分析：
-- S1 上游繼承：source_ticket 或 parent_id 的上游已有主題（覆蓋率最高，實測 85%）
+- S1 上游繼承：source_ticket 或 parent_id 的上游已有主題（2026-08-24
+  全量模擬 448 張已指派票：結構上可觸及 79.7%、實際命中 45.5%，命中時
+  主題正確率 91.7%——優先序依據是命中精度而非覆蓋廣度）
 - S2 檔案叢集：where.files 與某主題既有涵蓋路徑交集達門檻特異性
 - S3 ANA 標記：ANA 必然 spawn 衍生票，未歸屬會使整串後續票一併失明
 """
@@ -22,6 +24,14 @@ import argparse
 # S2 判準的交集特異性門檻：共同深度未達此段數視為過泛，不算命中。
 # 對齊 track parallel-check 的「共同祖先深度 >= 3 段」慣例。
 MIN_CLUSTER_PATH_DEPTH = 3
+
+# S2 判準的主題涵蓋度門檻：路徑同時出現在達此數量的不同主題叢集中，視為
+# hub 檔案（如 SKILL.md、track.py），涵蓋度過廣使其對「該票屬於哪個主題」
+# 失去鑑別力，排除其匹配資格。全量量測顯示 hub 檔案（3 個以上主題共用）
+# 的判準精度遠低於 non-hub 檔案，且平手集合中固定主題因字串排序恆勝出，
+# 造成系統性偏壓指派。門檻定於 3 對齊該量測的 hub 定義；不使用連續加權
+# （IDF），因後者需重設計 tie-break、對既有測試影響範圍過大。
+HUB_TOPIC_COVERAGE_THRESHOLD = 3
 
 
 def build_topic_file_clusters() -> dict:
@@ -54,6 +64,19 @@ def path_depth(path: str) -> int:
     return len([part for part in (path or "").strip("/").split("/") if part])
 
 
+def build_file_topic_coverage(clusters: dict) -> dict:
+    """反查每個已知路徑出現於幾個不同主題叢集，供 hub 檔案排除判斷。
+
+    涵蓋度只計「不同主題數」，非路徑出現次數：同一主題內同路徑重複
+    對鑑別力無新增資訊，只有跨主題共用才代表該路徑失去區辨能力。
+    """
+    coverage: dict = {}
+    for topic, known_paths in clusters.items():
+        for path in known_paths:
+            coverage.setdefault(path, set()).add(topic)
+    return {path: len(topics) for path, topics in coverage.items()}
+
+
 def infer_topic_from_files(where_files) -> tuple:
     """判準 S2：where.files 與某既有主題涵蓋路徑有交集時推導該主題。
 
@@ -66,6 +89,13 @@ def infer_topic_from_files(where_files) -> tuple:
     同深度多主題命中時以主題名排序決定勝者：真實票庫中同一檔案可能見於
     多個主題的票（如 lease.py），若依 dict 迭代順序取首個，結果會隨映射
     表寫入順序改變，同樣輸入在不同時間給出不同主題，使推導無法被測試。
+
+    hub 檔案（涵蓋度達 HUB_TOPIC_COVERAGE_THRESHOLD 個以上主題，如
+    SKILL.md、track.py）在比對前即排除：這類路徑幾乎被所有主題觸及，
+    深度足夠但涵蓋度過廣，對「該票屬於哪個主題」無鑑別力，與淺層路徑
+    造成的過泛問題同構，故用獨立門檻處理（不與 MIN_CLUSTER_PATH_DEPTH
+    合併，兩者針對不同軸線：深度篩「路徑本身夠不夠具體」，涵蓋度篩
+    「路徑是否被太多主題共用」）。
     """
     from ticket_system.lib.file_conflict import files_intersect
 
@@ -73,10 +103,15 @@ def infer_topic_from_files(where_files) -> tuple:
     if not paths:
         return None, None
 
+    clusters = build_topic_file_clusters()
+    coverage = build_file_topic_coverage(clusters)
+
     matches = []
-    for candidate_topic, known_paths in build_topic_file_clusters().items():
+    for candidate_topic, known_paths in clusters.items():
         for path in paths:
             for known in known_paths:
+                if coverage.get(known, 0) >= HUB_TOPIC_COVERAGE_THRESHOLD:
+                    continue
                 specificity = min(path_depth(path), path_depth(known))
                 if specificity < MIN_CLUSTER_PATH_DEPTH:
                     continue
@@ -98,22 +133,31 @@ def infer_topic(args: argparse.Namespace) -> tuple:
 
     S1 上游繼承優先於 S2 檔案叢集：S1 只需讀映射表與一個鍵（實測 35 ms），
     S2 需反推全部已指派票的路徑集合（351 ms），且 S1 的語意更強——衍生票
-    與上游處理同一機制，主題必然相同，而路徑交集只是相關性推測。
+    與上游處理同一機制，主題必然相同，而路徑交集只是相關性推測。S1 命中
+    率非優先序依據（結構可觸及僅 79.7%、實際命中僅 45.5%，見模組
+    docstring），優先序依據是成本與語意強度，S1 命中時的高精度（91.7%）
+    是命中後可信賴的佐證，非命中率本身。
     判準 S3（ANA 型應歸屬）不在此推導：它判定「應歸屬」而非「屬於哪個
     主題」，無從產出主題名，由呼叫端另行標記。
+
+    `--discovered-during` 短路 S1：該旗標標記發現衍生（執行中撞到跨主題
+    問題），上游主題只反映「當時剛好在改哪個檔案」，與新票的實際內容無關，
+    S1 在此情境下必然給錯答案。跳過 S1 後仍落回 S2——S2 依新票自身的
+    where_files 推導，與上游無關，語意不受影響。
     """
     from ticket_system.lib.topic_assignments import list_assignments
 
-    assignments = None
-    for attr, label in (("source_ticket", "source_ticket"), ("parent", "parent_id")):
-        upstream = getattr(args, attr, None)
-        if not upstream:
-            continue
-        if assignments is None:
-            assignments = list_assignments()
-        inherited = assignments.get(upstream)
-        if inherited:
-            return inherited, f"S1 上游繼承（{label}={upstream}）"
+    if not getattr(args, "discovered_during", None):
+        assignments = None
+        for attr, label in (("source_ticket", "source_ticket"), ("parent", "parent_id")):
+            upstream = getattr(args, attr, None)
+            if not upstream:
+                continue
+            if assignments is None:
+                assignments = list_assignments()
+            inherited = assignments.get(upstream)
+            if inherited:
+                return inherited, f"S1 上游繼承（{label}={upstream}）"
 
     return infer_topic_from_files(getattr(args, "where_files", None))
 

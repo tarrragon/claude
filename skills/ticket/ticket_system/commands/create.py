@@ -45,7 +45,9 @@ from ticket_system.lib.ticket_id_allocator import resolve_ticket_id_and_wave
 from ticket_system.lib.field_validators import (
     build_decision_tree_path,
     check_when_blocked_by_consistency,
+    directory_declaration_warnings,
     validate_blocked_by_references,
+    validate_discovered_during_arg,
     validate_source_ticket_arg,
     validate_where_files,
 )
@@ -183,6 +185,11 @@ def _parse_cli_args_to_config(
         )))
         return None
 
+    # 目錄級 where.files 宣告 WARNING（PC-BAL-040）：建票時檔案未必可知，
+    # 故此層僅警告非硬擋（硬擋在 `ticket track dispatch`，見 track_dispatch.py）。
+    for warning in directory_declaration_warnings(where_files, args.type or "IMP"):
+        print(warning)
+
     # 處理 blocked_by
     blocked_by = [b.strip() for b in args.blocked_by.split(",")] if args.blocked_by else []
 
@@ -243,6 +250,7 @@ def _parse_cli_args_to_config(
         "blocked_by": blocked_by if blocked_by else None,
         "related_to": related_to if related_to else None,
         "source_ticket": args.source_ticket,
+        "discovered_during": getattr(args, "discovered_during", None),
         "acceptance": acceptance,
         "tdd_phase": tdd_phase,
         "tdd_stage": tdd_result.phases,
@@ -617,20 +625,59 @@ def _persist_and_report(
 
 
 
+def _verify_ticket_intact(version: str, ticket_id: str) -> bool:
+    """重新讀取 ticket 判斷其是否仍完整（未因寫入失敗而受損）。
+
+    繞過 process-scoped 快取（parser._ticket_cache）：save_ticket 只在
+    成功寫入後才失效快取，寫入失敗的路徑不會失效，直接呼叫 load_ticket
+    可能讀到快取住的舊值而非磁碟現況，掩蓋真正的受損狀態。先清該 ticket
+    的快取鍵，確保讀到磁碟當下內容。
+
+    load_ticket 對 0 byte / 無 frontmatter 檔案回傳 None，對 YAML 解析
+    失敗回傳含 `_yaml_error` 的字典；兩者皆視為受損信號。
+    """
+    from ticket_system.lib import parser as _parser
+
+    # 快取鍵須用 parser.get_ticket_path（parser.load_ticket 內部實際解析
+    # 路徑時所綁定的同一個名稱），而非 ticket_loader/paths 各自獨立綁定
+    # 的版本——三者在生產環境等價，但測試以 monkeypatch 個別替換路徑時
+    # 只有前者保證與 parser.load_ticket 讀到的快取鍵一致，否則快取鍵不
+    # 匹配、pop 不到目標鍵，讀到的仍是損毀前的舊快取值。
+    try:
+        ticket_path = _parser.get_ticket_path(version, ticket_id)
+        _parser._ticket_cache.pop(str(ticket_path), None)
+    except Exception:
+        pass
+
+    reloaded = _parser.load_ticket(version, ticket_id)
+    if reloaded is None:
+        return False
+    if "_yaml_error" in reloaded:
+        return False
+    return True
+
+
 def _auto_extract_context_bundle_post_create(
     version: str,
     ticket_id: str,
     quiet: bool = False,
     verbose: bool = False,
     json_output: bool = False,
-) -> None:
+) -> bool:
     """Create 後的 Context Bundle 自動抽取 wire-in（W17-002.2）。
 
     僅當 target ticket 具備 source_ticket / blocked_by / related_to 之一時才觸發。
-    異常降級：任何例外都寫入 stderr traceback，退出碼保 0（主流程不阻斷）。
+    異常降級：任何例外都寫入 stderr traceback，不 re-raise（主流程不因此中斷）。
 
     設計依據：create-insert 虛擬碼規格；驗證失敗採 Non-raising（降級不拋錯，
     主流程不因 Context Bundle 抽取失敗而中斷）。
+
+    Returns:
+        bool: True 表示 ticket 檔案完整（抽取成功，或抽取失敗但票面未受
+        影響）；False 表示抽取失敗且事後驗證票面已受損。呼叫端應據此決定
+        退出碼與是否略過 auto-commit——不可無條件宣稱「不影響 ticket
+        建立」而不驗證（先前的重複故障：連續四次寫入失敗把票面清空為
+        0 byte，訊息仍宣稱無影響，且被 auto-commit 提交入庫）。
     """
     try:
         from ticket_system.lib.context_bundle_extractor import (
@@ -642,7 +689,7 @@ def _auto_extract_context_bundle_post_create(
 
         target = load_ticket(version, ticket_id)
         if target is None:
-            return
+            return True
         if not (
             target.get("source_ticket")
             or target.get("blocked_by")
@@ -650,16 +697,29 @@ def _auto_extract_context_bundle_post_create(
             or target.get("related_to")
             or target.get("relatedTo")
         ):
-            return
+            return True
 
         result, _notes = extract_and_write_context_bundle(version, ticket_id)
         if json_output:
             print(format_cli_summary_json(result))
         else:
             print(format_cli_summary(result, quiet=quiet, verbose=verbose))
+        return True
     except Exception:
         sys.stderr.write(traceback.format_exc())
-        sys.stderr.write("[Context Bundle] 抽取失敗，不影響 ticket 建立\n")
+        intact = _verify_ticket_intact(version, ticket_id)
+        if intact:
+            sys.stderr.write(
+                "[Context Bundle] 抽取失敗，已重新讀取驗證 ticket 檔案完整"
+                "未受影響\n"
+            )
+        else:
+            sys.stderr.write(
+                "[Context Bundle] 抽取失敗且 ticket 檔案已受損（重新讀取驗證"
+                "失敗，內容可能已被截斷），請立即檢查 git diff 並視需要以 "
+                "git checkout 還原\n"
+            )
+        return intact
 
 
 def execute(args: argparse.Namespace) -> int:
@@ -783,7 +843,13 @@ def execute(args: argparse.Namespace) -> int:
             return 1
         version, ticket_id, wave = resolved
 
-        # Step 1.5: --source-ticket 前置驗證（PC-073）
+        # Step 1.5a: --discovered-during 前置驗證，先於 --source-ticket
+        # 驗證執行——兩者互斥檢查不依賴 source ticket 是否存在，先做可
+        # 避免不存在的 --source-ticket 值使互斥錯誤被存在性檢查蓋過。
+        if not validate_discovered_during_arg(args):
+            return 1
+
+        # Step 1.5b: --source-ticket 前置驗證（PC-073）
         # 順序：互斥 → 格式 → 存在 → 狀態
         if not validate_source_ticket_arg(args):
             return 1
@@ -856,9 +922,10 @@ def execute(args: argparse.Namespace) -> int:
             ))
 
     # Step 4 (W17-002.2)：Context Bundle 自動抽取（post-persist enhancement）
+    ticket_intact = True
     if rc == 0:
         try:
-            _auto_extract_context_bundle_post_create(
+            ticket_intact = _auto_extract_context_bundle_post_create(
                 version,
                 ticket_id,
                 quiet=bool(getattr(args, "quiet", False)),
@@ -883,22 +950,38 @@ def execute(args: argparse.Namespace) -> int:
             # graceful degrade：非 git repo / index.lock 競爭 / commit 失敗
             # → create 仍 exit 0 + stderr 警告，body 已由 save_ticket 落於
             # working tree。
-            ticket_path = str(get_ticket_path(version, ticket_id))
-            from ticket_system.lib import git_utils
-            try:
-                commit_status = git_utils._auto_commit_ticket_md(
-                    ticket_path, ticket_id, "Task Summary", operation="create",
-                )
-                if commit_status in ("not_git_repo", "git_failed"):
-                    sys.stderr.write(
-                        f"[create] auto-commit skipped（{commit_status}，非致命）；"
-                        f"ticket md 已保留 working tree，可手動 git commit 持久化。\n"
+            #
+            # 票面受損時（ticket_intact=False）略過 auto-commit：commit
+            # 一個已知受損的檔案等於把破壞永久寫入 git 歷史，且會誤導後續
+            # 讀者以為此狀態是刻意的。改為留在 working tree 讓人工介入。
+            if ticket_intact:
+                ticket_path = str(get_ticket_path(version, ticket_id))
+                from ticket_system.lib import git_utils
+                try:
+                    commit_status = git_utils._auto_commit_ticket_md(
+                        ticket_path, ticket_id, "Task Summary", operation="create",
                     )
-            except Exception as exc:
+                    if commit_status in ("not_git_repo", "git_failed"):
+                        sys.stderr.write(
+                            f"[create] auto-commit skipped（{commit_status}，非致命）；"
+                            f"ticket md 已保留 working tree，可手動 git commit 持久化。\n"
+                        )
+                except Exception as exc:
+                    sys.stderr.write(
+                        f"[create] auto-commit 失敗（非致命，ticket md 已保留 "
+                        f"working tree）：{exc}\n"
+                    )
+            else:
                 sys.stderr.write(
-                    f"[create] auto-commit 失敗（非致命，ticket md 已保留 "
-                    f"working tree）：{exc}\n"
+                    "[create] 偵測到 ticket 檔案受損，已略過 auto-commit 避免"
+                    "將受損內容提交入庫；請人工檢查並修復後手動 git add + commit\n"
                 )
+
+    if not ticket_intact:
+        # 票面已受損：即使前面步驟回報 rc == 0，最終退出碼仍須反映失敗，
+        # 不可讓 CLI 以成功狀態結束（先前故障：訊息宣稱不影響、退出碼 0，
+        # 連續四次相同失敗都被讀成成功）。
+        rc = 1
 
     return rc
 
@@ -970,6 +1053,16 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help=(
             "衍生來源 Ticket ID（建立 spawned_tickets 衍生關係，與 --parent 互斥）；"
             "衍生項獨立排程，不阻擋 source complete（PC-073）"
+        ),
+    )
+    parser.add_argument(
+        "--discovered-during",
+        dest="discovered_during",
+        help=(
+            "發現衍生來源 Ticket ID（記錄發現脈絡，與 --source-ticket 互斥）；"
+            "與 --source-ticket 的差異：--source-ticket 是規劃衍生，會經 S1 判準"
+            "繼承上游主題；--discovered-during 是執行中撞到的跨主題發現，"
+            "上游主題與新票內容無關，S1 不觸發，主題仍可能經 S2 檔案叢集推導"
         ),
     )
     parser.add_argument(

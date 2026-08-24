@@ -4505,16 +4505,20 @@ genhtml coverage/lcov.info -o coverage/html
 
 ### 10.6 工具與腳本
 
-本檢查清單相關的工具和腳本位於：
+> 以下五個腳本路徑於 `.claude/hooks/`、`.claude/scripts/` 皆不存在，`.claude/methodologies/code-smell-quality-gate-methodology.md` 將對應自動化標註為「規劃中」，2026-08-22 文件複查更正：本清單目前無專屬檢測腳本，Code Smell 審查依 `parallel-evaluation` Skill 派發的多視角審核與 `bay-quality-auditor` 代理人的獨立技術品質審計執行。
 
-**Hook 系統腳本**:
-- `.claude/hooks/code-smell-detection-hook.sh` - Code Smell 檢測 Hook
-- `.claude/hooks/pr-validation-hook.sh` - PR 驗證 Hook
+本檢查清單相關的工具和腳本位於（歷史規劃，未實作，以下路徑不可點擊追蹤）：
 
-**檢測腳本**:
-- `.claude/scripts/code-smell-check.sh` - Code Smell 完整檢測腳本
-- `.claude/scripts/generate-code-smell-report.py` - 報告生成腳本
-- `.claude/scripts/check-priority.py` - 優先級檢查腳本
+```text
+Hook 系統腳本:
+.claude/hooks/code-smell-detection-hook.sh - Code Smell 檢測 Hook
+.claude/hooks/pr-validation-hook.sh - PR 驗證 Hook
+
+檢測腳本:
+.claude/scripts/code-smell-check.sh - Code Smell 完整檢測腳本
+.claude/scripts/generate-code-smell-report.py - 報告生成腳本
+.claude/scripts/check-priority.py - 優先級檢查腳本
+```
 
 **配置檔**:
 - `analysis_options.yaml` - Dart Analyzer 配置

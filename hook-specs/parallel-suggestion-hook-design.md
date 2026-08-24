@@ -211,10 +211,10 @@ Hook 在 UserPromptSubmit 時自動執行
 ### 手動測試
 ```bash
 # 測試基本功能
-echo '{"prompt":"繼續執行任務鏈"}' | .claude/hooks/parallel-suggestion-hook.py
+echo '{"prompt":"繼續執行任務鏈"}' | uv run --quiet --script .claude/hooks/parallel-suggestion-hook.py
 
 # 測試調試模式
-HOOK_DEBUG=true echo '{"prompt":"下一個"}' | .claude/hooks/parallel-suggestion-hook.py
+HOOK_DEBUG=true echo '{"prompt":"下一個"}' | uv run --quiet --script .claude/hooks/parallel-suggestion-hook.py
 
 # 查看日誌
 cat .claude/hook-logs/parallel-suggestion/parallel-suggestion.log

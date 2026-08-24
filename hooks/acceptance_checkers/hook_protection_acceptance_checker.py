@@ -69,7 +69,7 @@ if str(_claude_dir) not in sys.path:
 if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 
-from acceptance_checkers.ticket_parser import extract_where_files
+from acceptance_checkers.ticket_parser import extract_where_files_write_only
 
 _APPLICABLE_TYPES = {"IMP"}
 
@@ -338,9 +338,12 @@ def check_hook_protection_acceptance(
         logger.debug(f"ticket type={ticket_type} 非 IMP，跳過防護類 hook acceptance 檢查")
         return False, None
 
-    where_files = extract_where_files(frontmatter, logger)
+    # 觸發判定以寫入集為據：以 ::read 標記的 hooks 路徑屬唯讀引用（如查證
+    # stdout 比對邏輯），不代表本 ticket 會寫入 hook 檔案，不應觸發防護類
+    # 要求；未標記與 ::write 標記維持既有觸發行為（預設視為寫入）。
+    where_files = extract_where_files_write_only(frontmatter, logger)
     if not _any_path_touches_hook_scope(where_files):
-        logger.debug("where.files 未觸及 hooks 目錄，跳過防護類 hook acceptance 檢查")
+        logger.debug("write-set where.files 未觸及 hooks 目錄，跳過防護類 hook acceptance 檢查")
         return False, None
 
     ticket_id = frontmatter.get("id", "未知")

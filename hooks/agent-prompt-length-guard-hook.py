@@ -48,23 +48,18 @@ BLOCK_MESSAGE_TEMPLATE = """錯誤：Agent prompt 超過 {limit} 行限制（實
 修復方式：
   1. 將分析結果寫入 Ticket Context Bundle
      → ticket track append-log <id> --section "Problem Analysis" "### Context Bundle\\n..."
-  2. Agent prompt 只需包含：Ticket ID + 動作指令 + 「讀取 Ticket」
-  3. 參考模板：.claude/pm-rules/context-bundle-spec.md
+  2. 改用 CLI 產生骨架 prompt（單一權威來源，避免手動複製漂移）
+     → ticket track dispatch <id> --as <agent_name>
+     需落票約束時加 --note "..."；審查派發改 --kind review
 
 詳見: .claude/error-patterns/process-compliance/PC-040-context-in-prompt-not-ticket.md"""
 
 SOFT_HINT_TEMPLATE = """提示：Agent prompt 為 {actual} 行，但未偵測到模板關鍵字（W17-048 方案 B）
 
-建議結構：
-  Ticket: {{ticket_id}}
+建議：改用 CLI 產生骨架 prompt（單一權威來源，避免手動複製漂移）
+  ticket track dispatch {{ticket_id}} --as {{agent_name}}
 
-  ## 任務
-  {{簡短動作描述}}
-
-  讀取 ticket：`ticket track full {{ticket_id}}`
-  依 Context Bundle 執行流程。
-
-模板：.claude/references/agent-dispatch-template.md
+CLI 說明：.claude/skills/ticket/SKILL.md（dispatch 子命令）
 """
 
 

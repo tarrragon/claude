@@ -234,7 +234,11 @@ SA 前置審查在以下情況下**應該被觸發**：
 
    **Consequence**: 越界 close 會讓 PM 已寫入的 ANA 結論成為孤兒資料、ticket history 缺一致來源、後人審計無法判斷 close 決策是 PM 決定還是 subagent 自主行為。
 
-   **Action**: 發現重複 / 孤兒 / 範圍衝突時，在審查報告「系統衝突檢查」章節列出衝突關係，並於 Exit Status `reason` 欄位提示 PM 評估；禁止直接呼叫任何 ticket CLI 修改命令。
+   **Action**: 發現重複 / 孤兒 / 範圍衝突時，在審查報告「系統衝突檢查」章節列出衝突關係，並於 Exit Status `reason` 欄位提示 PM 評估；禁止對他人 ticket 呼叫任何 ticket CLI 修改命令。
+
+   **邊界（不在本項禁止範圍）**：建立掛在自身 `source_ticket` 下的新票——`ticket create --source-ticket <自身 ticket id>`，或 `--parent <自身 ticket id>` 建 children。本項禁的是「修改他人既有 ticket」；`create` 的對象是尚不存在的 ticket，既非他人 ticket 亦非修改操作，不落在禁止範圍，且與第 6 項「禁止在未建立 Ticket 的情況下提出建議」互為表裡——第 6 項要求以建票提出發現，本項規範的是不得越界動別人的票。成票與否 / 範疇 / 優先級需 PM 裁決時，改走 `ticket track add-spawn-request`，並於 complete 前以 `resolve-spawn-request` 標為終態（停在 `pending` 不算落地）。兩條通道的選用判準見 `.claude/references/agent-dispatch-template.md`「建票血緣回填義務」節。
+
+   **為何需要明寫此邊界**：本項的禁止項以「包括 ... 等」列舉且未劃邊界，讀者需自行判斷未列舉項的歸屬。已發生實際誤讀——一次 ANA 執行以本項為由認定自身不得建票，改以 spawn request 登記並等待 PM 補建，而 acceptance-gate 在 complete 前即要求落地證據，該票因此停手上報。停手對 PM 表現為代理人阻塞，須人工介入才化解。
 
 ### 違規處理
 
@@ -326,7 +330,8 @@ SA 前置審查在以下情況下**應該被觸發**：
 
 ---
 
-**Last Updated**: 2026-07-26
+**Last Updated**: 2026-08-23
+**Version**: 1.4.0 — 禁止行為第 7 項補「邊界（不在本項禁止範圍）」與「為何需要明寫此邊界」兩段：建立掛自身 `source_ticket` / `parent` 的新票不受本項限制（對象是尚不存在的 ticket，非修改他人既有 ticket），與第 6 項互為表裡；補 `add-spawn-request` + `resolve-spawn-request` 通道與判準路由。禁令內容與適用對象未變，僅劃出既有列舉未涵蓋的邊界。Source: 一次 ANA 執行以第 7 項為由認定不得建票而停手上報的實際誤讀。
 **Version**: 1.3.0 — Domain Map 覆蓋檢查新增兩列：§3 bundle「實作狀態」欄消費規則 + `ls`/`grep` 目標路徑存在性驗證；Why 段補 PC-APP-012 引用（bundle 清單含未實作概念衍生不可執行 ticket 的防護，收編自 book_overview_app，0.2.1-W1-006）
 **Version**: 1.2.0 — 核心職責新增第 6 項「ANA 全量 grep/regex 範圍判定自檢」：觸發句型自檢表 + 必填聲明格式 + 禁止行為 + 三明示（Why/Consequence/Action），引用 W1-005 AC-4 二度誤判觸發案例（0.19.1-W1-039）
 **Version**: 1.1.0 — 禁止行為新增第 7 項「禁止對非自己派發範圍的 ticket 執行修改操作」（含 Why/Consequence/Action 三明示）。Source: SA 越界 close 兄弟 ticket 事件（並行 claim race condition 暴露）。

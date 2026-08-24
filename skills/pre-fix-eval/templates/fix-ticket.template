@@ -148,7 +148,7 @@
 ## [NOTE] 附注
 
 ### Hook 執行詳情
-- **Hook 名稱**: pre-fix-evaluation-hook.py
+- **Hook 名稱**: post-test-hook.py（原 pre-fix-evaluation-hook.py 與 test-timeout-post.py 已合併進本 hook）
 - **觸發時間**: {Hook 自動觸發的時間}
 - **評估結果記錄**: `.claude/hook-logs/pre-fix-evaluation-{timestamp}.json`
 

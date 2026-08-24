@@ -131,7 +131,7 @@ which yaml-language-server
 export ENABLE_LSP_TOOL=1
 
 # 3. 執行 LSP 環境檢查
-./.claude/hooks/lsp-environment-check.py
+uv run --quiet --script ./.claude/hooks/lsp-environment-check.py
 ```
 
 ### Q2: LSP 操作返回空結果

@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from lib import setup_hook_logging, is_subagent_environment, read_json_from_stdin
+    from lib import setup_hook_logging, is_subagent_environment, read_json_from_stdin, run_hook_safely
     from lib.hook_messages import AskUserQuestionMessages
     from lib.ticket_id_pattern import SEARCH_NO_SUFFIX_RE as TICKET_ID_PATTERN
 except ImportError as e:
@@ -122,4 +122,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run_hook_safely(main, "askuserquestion-reminder"))

@@ -90,6 +90,12 @@ REGISTRY_FILENAME = "pm-registry.json"
 LOCK_FILENAME = "pm-registry.lock"
 SCHEMA_VERSION = 2
 
+# read_registry 降級旗標鍵：缺檔/空白/損毀/schema 不合四種降級分支回傳的
+# 空骨架皆帶此鍵，供呼叫端區分「registry 讀取失敗」與「registry 有效但目前
+# 無任何 session」——後者不會帶此鍵。非 schema 正式欄位，不寫回
+# write_registry（呼叫端僅供顯示層判定使用，不應持久化）。
+DEGRADED_READ_KEY = "_degraded"
+
 # SessionStart source 值：resume 觸發 merge（繼承既有 lease），其餘一律
 # 視為新生 session 觸發 reset（startup/clear/未知值，契約 v2 D4 增補 1）
 RESUME_SOURCE = "resume"
@@ -233,6 +239,15 @@ def _empty_registry() -> Dict:
     return {"schema_version": SCHEMA_VERSION, "sessions": {}}
 
 
+def _degraded_registry() -> Dict:
+    """`read_registry` 四個降級分支專用：空骨架 + DEGRADED_READ_KEY 旗標，
+    與「有效但目前無任何 session」的一般空 registry（僅 `_empty_registry()`
+    本身，不帶旗標）區分。"""
+    registry = _empty_registry()
+    registry[DEGRADED_READ_KEY] = True
+    return registry
+
+
 def _normalize_legacy_schema(data: Dict, logger=None) -> Dict:
     """v1 檔案（schema_version=1，session entry 含 parent_session_id）的
     graceful 降級讀取：不視為損毀，正規化為 v2 形狀後回傳。
@@ -261,21 +276,32 @@ def _normalize_legacy_schema(data: Dict, logger=None) -> Dict:
 
 
 def read_registry(registry_file: Path, logger=None) -> Dict:
-    """讀取 registry 檔。缺檔或損毀時重建空結構並雙通道通知（不阻擋）；
-    偵測到舊版 schema（v1）時 graceful 正規化，不視為損毀。
+    """讀取 registry 檔。缺檔或損毀時重建空結構並雙通道通知（不阻擋），
+    回傳的空結構帶 `DEGRADED_READ_KEY` 旗標，與「有效但目前無任何 session」
+    的一般空 registry 區分（呼叫端須自行判斷是否要把降級讀取等同「無法
+    判定」處理，本模組不預設呼叫端語意）；偵測到舊版 schema（v1）時
+    graceful 正規化，不視為損毀。
     """
     if not registry_file.exists():
-        return _empty_registry()
+        return _degraded_registry()
     try:
         content = registry_file.read_text(encoding="utf-8")
         if not content.strip():
-            return _empty_registry()
+            return _degraded_registry()
         data = json.loads(content)
         if not isinstance(data, dict) or "sessions" not in data:
             raise ValueError("registry 結構缺少 sessions 欄位")
         if not isinstance(data.get("sessions"), dict):
             raise ValueError("sessions 欄位非 dict 型別")
-        return _normalize_legacy_schema(data, logger=logger)
+        data = _normalize_legacy_schema(data, logger=logger)
+        # 自我修復：成功讀取的合法檔案不應帶 DEGRADED_READ_KEY。此鍵僅
+        # 應由本函式的降級分支即時附加、且不得流向磁碟（write_registry
+        # 已剝除）；若仍在磁碟內容中出現，代表檔案由本次修正前的舊碼
+        # 誤寫入（旗標曾為 in-band、隨 read-modify-write 落盤），屬歷史
+        # 污染而非本次讀取真的失敗，讀取當下原地剝除即完成修復，不需
+        # 額外遷移步驟。
+        data.pop(DEGRADED_READ_KEY, None)
+        return data
     except (json.JSONDecodeError, ValueError, OSError) as e:
         message = "[pm_registry] registry 損毀或格式錯誤，重建空 registry ({}): {}".format(
             registry_file, e
@@ -283,7 +309,7 @@ def read_registry(registry_file: Path, logger=None) -> Dict:
         sys.stderr.write(message + "\n")
         if logger:
             logger.warning(message)
-        return _empty_registry()
+        return _degraded_registry()
 
 
 def write_registry(registry_file: Path, data: Dict, logger=None) -> None:
@@ -307,6 +333,16 @@ def write_registry(registry_file: Path, data: Dict, logger=None) -> None:
     性，只是持久性保障降級，過度告警會製造噪音）。
     """
     registry_file.parent.mkdir(parents=True, exist_ok=True)
+    # DEGRADED_READ_KEY 是 read_registry 降級分支的 in-band 顯示層旗標，
+    # 非 schema 正式欄位，不得持久化（否則首次啟動等正常讀寫回路徑會把
+    # 旗標固化進磁碟，此後每次讀取皆誤判為降級，見本模組 docstring 契約
+    # 說明與該常數定義處註解）。write_registry 是四個 session 生命週期
+    # 函式（register_session/update_heartbeat/release_session/
+    # recompute_lease）共用的唯一寫入路徑，於此單點剝除即可涵蓋全部
+    # 呼叫端，不需逐一在呼叫端各自處理。不就地 mutate 呼叫端傳入的
+    # dict（呼叫端在同一鎖範圍內可能於寫入後續用該物件）。
+    if DEGRADED_READ_KEY in data:
+        data = {k: v for k, v in data.items() if k != DEGRADED_READ_KEY}
     payload = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     tmp_path = registry_file.with_name(
         registry_file.name + ".tmp." + uuid.uuid4().hex[:8]

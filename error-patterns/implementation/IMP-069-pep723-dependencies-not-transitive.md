@@ -99,6 +99,6 @@ done
 驗證：
 
 ```bash
-echo '{"prompt":"test","cwd":"/path"}' | .claude/hooks/process-skip-guard-hook.py
+echo '{"prompt":"test","cwd":"/path"}' | uv run --quiet --script .claude/hooks/process-skip-guard-hook.py
 # 預期：輸出合法 JSON，不見 Traceback
 ```

@@ -82,7 +82,7 @@
 
 派發方向：
 - 內部系統查詢（Ticket、進度、狀態）→ 直接回應
-- 外部資源研究（GitHub、文檔、論壇）→ 派發 oregano-data-miner
+- 外部資源研究（GitHub、文件、論壇）→ 派發 oregano-data-miner
 - 技術諮詢（架構、安全、效能）→ 派發專業代理人
 
 #### 非查詢類問題

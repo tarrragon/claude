@@ -251,8 +251,9 @@ catch (e) {
 - .claude/rules/core/quality-baseline.md - 規則 4：Hook 失敗必須可見（異常雙通道）
 - .claude/references/quality-go.md - Go 後端可觀測性要求
 - .claude/references/quality-dart.md - Flutter 前端可觀測性要求
+- .claude/references/hook-system-reference.md「撰寫紀律：掃描 / 路徑 / 執行事實」紀律三 - 需要「是否執行過/執行了幾次」等執行事實時讀日誌內容或專用狀態檔，禁止以檔案數/存在性/mtime 等檔案系統狀態回推；與本文件規則 1（生命週期階段日誌）互補——規則 1 定義該寫什麼日誌，紀律三定義該讀日誌而非猜檔案系統狀態
 
 ---
 
-**Last Updated**: 2026-07-13
-**Version**: 1.3.0 - 新增第 6 節「平台互動可觀測性」（0.38.1-W1-037，W1-030/033/035 三輪盲飛教訓）。歷史 1.0–1.2 版見 git log。
+**Last Updated**: 2026-08-21
+**Version**: 1.4.0 - 「相關規則」新增 hook-system-reference.md「撰寫紀律」紀律三交叉引用（禁止以檔案系統狀態推執行事實，與規則 1 生命週期日誌互補）。歷史 1.0–1.3 版見 git log。

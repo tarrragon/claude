@@ -27,7 +27,7 @@
 
 | 檔案 | 漂移 | 落地 ticket |
 |------|------|-----------|
-| `project-init/.../messages.py:260` | 索引驗證提示引用不存在的 `codegraph_status` | 0.19.1-W1-033 |
+| `project-init/.../messages.py:260` | 索引驗證提示引用不存在的 `codegraph_status` | 0.19.1-W1-033 <!-- broken-link-exempt: 省略號縮寫路徑（.../）恰巧含 ../ 子字串，被 broken-link scanner 誤判為相對路徑引用；本行非真實引用 --> |
 | `search-tools-guide/SKILL.md` 速查表 | codegraph 5 名 + cbm `__search` + serena `plugin_serena_serena__` 前綴全錯 | 0.19.1-W1-033 |
 | `templates/settings-local-template.json` | serena 前綴漂移 + 7 個工具名不在實機清單 | 0.19.1-W1-034 |
 

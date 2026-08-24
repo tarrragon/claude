@@ -23,7 +23,7 @@ Strategic compaction at logical boundaries:
 
 ## How It Works
 
-The `suggest-compact.sh` script runs on PreToolUse (Edit/Write) and:
+The `suggest-compact.py` script runs on PreToolUse (Edit/Write) and:
 
 1. **Tracks tool calls** - Counts tool invocations in session
 2. **Threshold detection** - Suggests at configurable threshold (default: 50 calls)
@@ -42,7 +42,7 @@ Add to your `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/skills/strategic-compact/suggest-compact.sh"
+            "command": ".claude/skills/strategic-compact/suggest-compact.py"
           }
         ]
       }

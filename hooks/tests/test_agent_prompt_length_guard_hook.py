@@ -216,3 +216,83 @@ def test_constants_sanity():
     assert SOFT_HINT_THRESHOLD == 10
     assert PROMPT_LINE_LIMIT == 30
     assert len(TEMPLATE_KEYWORDS) >= 1
+
+
+# ----------------------------------------------------------------------------
+# 0.2.1-W3-876.2：訊息改引導 `ticket track dispatch` + CLI 骨架同步驗證
+# ----------------------------------------------------------------------------
+
+def test_block_message_points_to_dispatch_command(monkeypatch, capsys):
+    """BLOCK 訊息須引導使用 `ticket track dispatch`（取代舊版 append-log-only 指引）。"""
+    prompt = _make_prompt(35)
+    exit_code = _run_hook(monkeypatch, {"prompt": prompt})
+    assert exit_code == 2
+    captured = capsys.readouterr()
+    assert "ticket track dispatch" in captured.err
+
+
+def test_soft_hint_points_to_dispatch_command(monkeypatch, capsys):
+    """SOFT_HINT 訊息須引導使用 `ticket track dispatch`（取代舊版手動複製模板指引）。"""
+    prompt = _make_prompt(15)
+    exit_code = _run_hook(monkeypatch, {"prompt": prompt})
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "ticket track dispatch" in captured.err
+
+
+def _load_skeleton_constants():
+    """以 ast 靜態解析 track_dispatch.py 的骨架常數，避免執行整個 ticket_system
+    套件 import chain（該套件依賴 filelock，hook 測試環境未必安裝）。
+
+    Why：本測試驗證的是「hook 期待的模板關鍵字」與「CLI 骨架常數的實際文字」
+    是否同步，不需要執行 CLI 邏輯本身，靜態解析足以取得字串常數且不受套件
+    依賴影響（0.2.1-W3-876.2 acceptance：hash/diff 驗證 CLI 骨架模板與 hook
+    期待格式同步）。
+    """
+    import ast
+
+    # _HOOKS_DIR 為 .claude/hooks，往上一層即 .claude/，兩者共用同一個
+    # .claude/ 頂層目錄。
+    track_dispatch_path = (
+        _HOOKS_DIR.parent
+        / "skills"
+        / "ticket"
+        / "ticket_system"
+        / "commands"
+        / "track_dispatch.py"
+    )
+
+    tree = ast.parse(track_dispatch_path.read_text(encoding="utf-8"))
+    constants = {}
+    for node in tree.body:
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id in ("SKELETON_TEMPLATE_NORMAL", "SKELETON_TEMPLATE_REVIEW")
+        ):
+            constants[node.targets[0].id] = ast.literal_eval(node.value)
+    return constants
+
+
+def test_cli_skeleton_keywords_stay_in_sync_with_hook_expectations():
+    """CLI 骨架常數（SKELETON_TEMPLATE_NORMAL/REVIEW）必須仍含 hook 判定用的
+    模板關鍵字，兩者一旦漂移（CLI 骨架改字但 hook 關鍵字未同步更新），會使
+    hook 誤判「已用模板」為 False，導致 PM 依 dispatch CLI 產生的合規 prompt
+    反而被 SOFT_HINT 誤攔。任一關鍵字缺席即測試失敗，提醒同步修正。
+    """
+    constants = _load_skeleton_constants()
+    assert "SKELETON_TEMPLATE_NORMAL" in constants
+    assert "SKELETON_TEMPLATE_REVIEW" in constants
+
+    normal_skeleton = constants["SKELETON_TEMPLATE_NORMAL"]
+    assert has_template_keywords(normal_skeleton) is True, (
+        "SKELETON_TEMPLATE_NORMAL 未命中任何 TEMPLATE_KEYWORDS，"
+        "CLI 骨架與 hook 關鍵字已漂移"
+    )
+
+    review_skeleton = constants["SKELETON_TEMPLATE_REVIEW"]
+    assert has_template_keywords(review_skeleton) is True, (
+        "SKELETON_TEMPLATE_REVIEW 未命中任何 TEMPLATE_KEYWORDS，"
+        "CLI 骨架與 hook 關鍵字已漂移"
+    )

@@ -15,7 +15,7 @@ Ticket 有效期 Stale 警告機制（PROP-010 方案 4）
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional
 
 # 閾值（天）
 STALE_INFO_DAYS = 7
@@ -156,6 +156,15 @@ def is_stale_in_progress(
     if minutes is None:
         return False
     return minutes >= STALE_IN_PROGRESS_HOURS * 60
+
+
+def is_live_occupied(ticket: Dict[str, Any]) -> bool:
+    """判斷 ticket 是否為存活佔用中的 in_progress 節點：status 為 in_progress
+    且未逾時（本模組 `is_stale_in_progress` 的 started_at 軸）。不涉及
+    registry lease 追蹤（與 `lease.determine_lease_state` 的 heartbeat 軸
+    判準不同）。
+    """
+    return ticket.get("status") == "in_progress" and not is_stale_in_progress(ticket)
 
 
 def _is_trigger_bound(ticket: dict) -> bool:

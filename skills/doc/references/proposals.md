@@ -71,7 +71,7 @@ draft → discussing → confirmed → implemented
 
 ## 銜接 TDD 流程
 
-Proposal 驗收條件在 TDD 銜接中作為 Phase 0 需求完整性的判斷依據。銜接由 TDD 端消費（`/tdd start` 時偵測 doc 文件自動觸發），doc 端不需額外操作。見 `.claude/skills/tdd/references/doc-handoff.md`。
+若專案已採用 `tdd` skill，Proposal 驗收條件會在 TDD 銜接中作為 Phase 0 需求完整性的判斷依據；銜接由 TDD 端消費（`/tdd start` 時偵測 doc 文件自動觸發），doc 端不需額外操作，詳見 tdd skill 的 doc-handoff 銜接說明（若已安裝）。若未採用 tdd skill，驗收條件仍作為 Proposal 本身完整性的判斷依據，只是不會被自動銜接進任何測試流程。
 
 ## 命名規範
 

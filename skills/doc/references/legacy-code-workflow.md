@@ -116,7 +116,7 @@ Legacy Code 流程可能在專案已有部分工作完成後才正式啟動。�
 
 若專案存在舊版扁平結構（檔案直接散落在 `docs/work-logs/` 根目錄），需先手動遷移至三層結構再執行 init。
 
-> 完整的 init 步驟和目錄規範：`.claude/skills/doc-flow/SKILL.md`（Worklog 管理章節）
+> 若專案已採用 `doc-flow` skill（本步驟的 `/doc-flow worklog init` 即由該 skill 提供），完整的 init 步驟和目錄規範見 doc-flow skill 的 Worklog 管理章節（若已安裝）；若未採用，需以其他機制建立 worklog 三層目錄結構後再繼續後續步驟。
 
 ### 為什麼是前置步驟
 

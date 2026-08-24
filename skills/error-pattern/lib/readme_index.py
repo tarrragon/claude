@@ -48,6 +48,24 @@ PREFIX 為已知分類前綴的表格「資料列」；表格外內容、表頭�
     （非公開 API），本檔的鎖範圍（README.md 讀改寫）與 allocator 的鎖範圍
     （pattern ID 掃描/建檔）本質不同，各自持有各自的鎖檔案更清晰。
 
+新建檔案缺欄位驗證：
+    保守 upsert 約束（見上）意味著一旦某檔案以佔位符（風險等級／來源版本缺漏）
+    首次寫入索引列，該列此後不會被工具更正——`merge_category_table` 對既有列
+    一律逐字保留，即使掃描結果已補齊也不覆寫。實地遭遇過此非假設性風險：
+    先在填妥「基本資訊」表前跑 sync，事後補齊內文再重跑，`sync` 因該列已
+    存在於 README 而回報「已與現況一致，無需更新」，看似正常卻使佔位符
+    永久卡住，只能人工改 README（工具本身禁止手動編輯索引列）。
+    `find_incomplete_new_rows` 在寫入前掃描「本次會新增」的列（既有列不重複
+    警告，避免對歷史累積的缺漏洗版——那是獨立稽核範疇），找出風險等級或
+    來源版本仍是佔位符者。CLI `sync --write` 預設阻擋含此類缺漏的寫入
+    （`main()` 回傳非 0，不呼叫 `sync_and_write`）：一旦寫入即不可逆，阻擋
+    在事前比事後警告更能防止此類永久佔位符重演；逃生閥為 `--allow-
+    placeholder`（少數風險等級/來源版本確實無法於建立當下得知的情境）。
+    `--dry-run` 與程式化直接呼叫 `sync()`／`sync_and_write()` 不受此檢查
+    約束（維持純函式與既有呼叫端相容），改由呼叫端自行決定是否先呼叫
+    `find_incomplete_new_rows` 把關——SKILL.md 步驟 8 的建議程式碼片段即
+    示範此用法。
+
 0.2.1-W3-275（reserved 佔位檔誤入索引）：
     `scan_category_rows`／`extract_row` 原本純依檔名前綴掃描，不檢查
     frontmatter `status`——`allocator.allocate_and_reserve_pattern_id`
@@ -243,6 +261,103 @@ def extract_row(path, pattern_id):
         "source_version": version,
         "slug": _slug_from_stem(path.stem, pattern_id),
     }
+
+
+class IncompletePlaceholderError(RuntimeError):
+    """CLI 寫入被阻擋：偵測到新增列風險等級或來源版本仍為佔位符（見
+    `find_incomplete_new_rows`）。"""
+
+
+def _existing_row_keys(readme_text):
+    """解析 README 全文既有資料列的 (plain ids 集合, composite keys 集合)。
+
+    複用 `_row_key_from_line` 的 (id, slug) 解析語意（見 `merge_category_table`
+    docstring）：無 `(slug)` 後綴的列歸入 plain ids（模糊識別），有後綴者歸入
+    composite keys（精確識別）。"""
+    plain_ids = set()
+    composite_keys = set()
+    for line in readme_text.splitlines():
+        row_id, slug = _row_key_from_line(line)
+        if row_id is None:
+            continue
+        if slug is None:
+            plain_ids.add(row_id)
+        else:
+            composite_keys.add((row_id, slug))
+    return plain_ids, composite_keys
+
+
+def find_incomplete_new_rows(claude_dir):
+    """掃描本次 sync 將「新增」的索引列中，風險等級或來源版本仍為佔位符者。
+
+    只檢查即將新增的列——已存在於 README 的既有列（即使欄位仍是佔位符）不
+    重複警告，那是歷史累積缺漏的獨立稽核範疇，非本次建立流程的職責。reserved
+    佔位檔（`extract_row` 回傳 `None`）已由 `scan_category_rows` 的略過提示
+    另行處理，不重複計入本函式結果。
+
+    Returns:
+        list[dict]: 依 (id, path) 排序，每筆 `{"path": Path, "id": str,
+        "missing": [欄位名, ...]}`；無缺漏時回傳空列表。
+    """
+    claude_dir = Path(claude_dir)
+    error_patterns_dir = claude_dir / "error-patterns"
+    readme_path = error_patterns_dir / "README.md"
+    original = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
+    existing_plain_ids, existing_composite_keys = _existing_row_keys(original)
+
+    incomplete = []
+    for prefix, dirname in _CATEGORY_DIRS.items():
+        cat_dir = error_patterns_dir / dirname
+        if not cat_dir.is_dir():
+            continue
+        for path in sorted(cat_dir.glob("*.md")):
+            match = PATTERN_ID_RE.search(path.stem)
+            if not match:
+                continue
+            pattern_id = match.group(0).upper()
+            if not pattern_id.startswith(f"{prefix}-"):
+                continue
+            row = extract_row(path, pattern_id)
+            if row is None:
+                continue  # reserved 佔位檔：另由 scan_category_rows 提示，不重複計入
+
+            slug = row.get("slug", "")
+            is_existing = (
+                pattern_id in existing_plain_ids
+                or (pattern_id, slug) in existing_composite_keys
+            )
+            if is_existing:
+                continue
+
+            missing = [
+                name
+                for name, value in (
+                    ("風險等級", row["severity"]),
+                    ("來源版本", row["source_version"]),
+                )
+                if value == PLACEHOLDER
+            ]
+            if missing:
+                incomplete.append({"path": path, "id": pattern_id, "missing": missing})
+
+    incomplete.sort(key=lambda item: (item["id"], str(item["path"])))
+    return incomplete
+
+
+def format_incomplete_warning(incomplete):
+    """把 `find_incomplete_new_rows` 的結果格式化為可讀警告訊息（含檔案路徑與
+    缺漏欄位名，供 stderr 輸出）。"""
+    lines = [
+        "[WARNING] readme_index: 以下新檔案缺漏索引欄位，"
+        "sync 後將以佔位符寫入且此後無法由工具事後更正："
+    ]
+    for item in incomplete:
+        lines.append(f"  - {item['path']} ({item['id']})：缺 {'、'.join(item['missing'])}")
+    lines.append(
+        "請先在檔案內文「基本資訊」區塊補齊上述欄位再重跑 sync；"
+        "若確有正當理由需以佔位符建立，加 --allow-placeholder 略過本檢查。"
+    )
+    return "\n".join(lines)
 
 
 def scan_category_rows(error_patterns_dir):
@@ -537,12 +652,26 @@ def main(argv=None):
     sync_cmd.add_argument(
         "--claude-dir", default=".claude", help="claude 目錄路徑（預設 .claude）"
     )
+    sync_cmd.add_argument(
+        "--allow-placeholder",
+        action="store_true",
+        help=(
+            "略過新增列缺漏欄位檢查，允許以佔位符（風險等級／來源版本缺漏）"
+            "建立索引列（逃生閥，見 find_incomplete_new_rows）"
+        ),
+    )
 
     args = parser.parse_args(argv)
     if args.command != "sync":
         return 1
 
     if args.write:
+        incomplete = find_incomplete_new_rows(args.claude_dir)
+        if incomplete:
+            sys.stderr.write(format_incomplete_warning(incomplete) + "\n")
+            if not args.allow_placeholder:
+                print("已阻擋寫入：補齊上述欄位後重跑，或加 --allow-placeholder 略過。")
+                return 1
         # 讀-算-寫收進同一臨界區（0.2.1-W3-272），避免併發 --write 遺失索引列。
         _original, updated, diff = sync_and_write(args.claude_dir)
         if not diff:
@@ -553,7 +682,10 @@ def main(argv=None):
         print(f"已寫入 {readme_path}")
         return 0
 
-    # --dry-run（預設）：不寫檔，無需鎖保護。
+    # --dry-run（預設）：不寫檔，無需鎖保護，缺漏欄位僅預警不阻擋。
+    incomplete = find_incomplete_new_rows(args.claude_dir)
+    if incomplete:
+        sys.stderr.write(format_incomplete_warning(incomplete) + "\n")
     _original, _updated, diff = sync(args.claude_dir)
     if not diff:
         print("README.md 已與現況一致，無需更新。")

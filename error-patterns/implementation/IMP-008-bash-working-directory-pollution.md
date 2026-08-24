@@ -90,5 +90,7 @@ cd /project/root && ./scripts/sync-push.sh
 
 **版本**: 0.31.1
 **操作**: 執行 ticket 查詢後接著執行 sync-push
-**根因鏈**: `cd .claude/skills/ticket` → 工作目錄污染 → `./scripts/sync-claude-push.sh` 找不到
+**根因鏈**: `cd .claude/skills/ticket` → 工作目錄污染 → `./scripts/sync-claude-push.sh` 找不到 <!-- broken-link-exempt: 案例敘事，事發時（v0.31.1）腳本檔名，現況見下方更正說明 -->
 **修復**: 改用絕對路徑 `cd /path/to/project && bash scripts/...`
+
+> 案例敘事：`sync-claude-push.sh` 為事發時（v0.31.1）的腳本檔名，現已改寫為 `.claude/scripts/sync-claude-push.py`，2026-08-22 文件複查更正。

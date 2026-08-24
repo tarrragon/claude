@@ -1,14 +1,16 @@
 """W7-003.1 — git subprocess timeout 補強測試。
 
-承接 1.0.0-W7-003 ANA 結論（TD-2 採納）：``git_utils._run_git`` 與
-``lifecycle._auto_stage_git_add`` 原無 timeout，git hang（等認證 / index.lock）
-會無限等待。本檔驗證兩處皆已帶 timeout，並對齊另兩處（track_snapshot=5s）。
+承接 1.0.0-W7-003 ANA 結論（TD-2 採納）：``git_utils._run_git`` 原無
+timeout，git hang（等認證 / index.lock）會無限等待。本檔驗證其已帶
+timeout，並對齊另一處（track_snapshot=5s）。
 
 驗證面向：
 1. ``git_utils._run_git`` 簽名含 timeout 參數，預設 5s（快命令）。
 2. ``git_utils._run_git`` 實際傳 timeout 給 subprocess.run。
 3. ``git_utils._auto_commit_ticket_md`` 的 commit 步驟用較長 timeout（含 husky）。
-4. ``lifecycle._auto_stage_git_add`` 實際傳 timeout 給 subprocess.run。
+
+（``lifecycle._auto_stage_git_add`` 已隨隔離索引提交改造移除，其
+timeout 驗證由 ``test_git_ops.py`` 的 ``commit_files_isolated`` 測試涵蓋。）
 """
 
 from __future__ import annotations
@@ -17,7 +19,6 @@ import inspect
 from unittest.mock import patch, MagicMock
 
 from ticket_system.lib import git_utils
-from ticket_system.commands import lifecycle
 
 
 # ============================================================
@@ -79,18 +80,3 @@ class TestAutoCommitUsesCommitTimeout:
         commit_calls = [t for a, t in calls if a[0] == "commit"]
         assert commit_calls, "commit step not invoked"
         assert all(t == git_utils._COMMIT_GIT_TIMEOUT for t in commit_calls)
-
-
-# ============================================================
-# lifecycle._auto_stage_git_add timeout
-# ============================================================
-
-
-class TestAutoStageGitAddTimeout:
-    def test_auto_stage_passes_timeout_to_subprocess(self):
-        """_auto_stage_git_add 將 5s timeout 傳給 subprocess.run。"""
-        with patch.object(lifecycle.subprocess, "run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
-            lifecycle._auto_stage_git_add(["foo.md"])
-        _, kwargs = mock_run.call_args
-        assert kwargs["timeout"] == 5

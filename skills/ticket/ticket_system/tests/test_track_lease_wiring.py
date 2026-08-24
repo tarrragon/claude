@@ -18,6 +18,7 @@ import argparse
 from argparse import Namespace
 
 from ticket_system.commands import track
+from ticket_system.lib.lease import ReleaseGuardReason
 
 
 def _args(**kwargs) -> Namespace:
@@ -89,7 +90,11 @@ class TestCompleteWiring:
 class TestReleaseWiring:
     def test_success_triggers_release_lease(self, monkeypatch):
         calls = []
-        monkeypatch.setattr(track, "check_release_guard", lambda ticket_id: (True, "allowed"))
+        monkeypatch.setattr(
+            track,
+            "check_release_guard",
+            lambda ticket_id: (True, ReleaseGuardReason.SELF_OWNED, "allowed"),
+        )
         monkeypatch.setattr(track, "execute_release", lambda args, version: 0)
         monkeypatch.setattr(
             track, "release_lease", lambda version, ticket_id: calls.append((version, ticket_id))
@@ -102,7 +107,11 @@ class TestReleaseWiring:
 
     def test_failure_does_not_trigger_release_lease(self, monkeypatch):
         calls = []
-        monkeypatch.setattr(track, "check_release_guard", lambda ticket_id: (True, "allowed"))
+        monkeypatch.setattr(
+            track,
+            "check_release_guard",
+            lambda ticket_id: (True, ReleaseGuardReason.SELF_OWNED, "allowed"),
+        )
         monkeypatch.setattr(track, "execute_release", lambda args, version: 1)
         monkeypatch.setattr(
             track, "release_lease", lambda version, ticket_id: calls.append((version, ticket_id))
@@ -121,7 +130,11 @@ class TestReleaseWiring:
         monkeypatch.setattr(
             track,
             "check_release_guard",
-            lambda ticket_id: (False, f"{ticket_id} 由其他存活中的 session sess-B（FRESH）持有"),
+            lambda ticket_id: (
+                False,
+                ReleaseGuardReason.FRESH_OTHER_OWNER,
+                f"{ticket_id} 由其他存活中的 session sess-B（FRESH）持有",
+            ),
         )
         monkeypatch.setattr(
             track, "execute_release",
@@ -148,7 +161,8 @@ class TestReleaseWiring:
         monkeypatch.setattr(
             track,
             "check_release_guard",
-            lambda ticket_id: guard_calls.append(ticket_id) or (False, "should not be consulted"),
+            lambda ticket_id: guard_calls.append(ticket_id)
+            or (False, ReleaseGuardReason.FRESH_OTHER_OWNER, "should not be consulted"),
         )
         monkeypatch.setattr(track, "execute_release", lambda args, version: 0)
         monkeypatch.setattr(
@@ -168,13 +182,84 @@ class TestReleaseWiring:
         """Namespace 未帶 force_release_others 屬性（如既有未經新 CLI 解析的
         呼叫端）時 getattr 預設 False，閘門仍生效——回歸測試，確認新增旗標
         不破壞既有呼叫慣例（Never break userspace）。"""
-        monkeypatch.setattr(track, "check_release_guard", lambda ticket_id: (True, "allowed"))
+        monkeypatch.setattr(
+            track,
+            "check_release_guard",
+            lambda ticket_id: (True, ReleaseGuardReason.SELF_OWNED, "allowed"),
+        )
         monkeypatch.setattr(track, "execute_release", lambda args, version: 0)
         monkeypatch.setattr(track, "release_lease", lambda version, ticket_id: None)
 
         rc = track._execute_release(_args(ticket_id="0.0.0-W1-001"), "0.0.0")
 
         assert rc == 0
+
+
+class TestReleaseOwnerNoneInfoHint:
+    """owner is None（registry 未追蹤此票 lease）時輸出 INFO 提示，引導改用
+    `ticket track reclaim` dry-run 查 ghost 痕跡；不阻擋、不改變 exit code。"""
+
+    def test_owner_none_prints_info_hint(self, monkeypatch, capsys):
+        monkeypatch.setattr(
+            track,
+            "check_release_guard",
+            lambda ticket_id: (
+                True,
+                ReleaseGuardReason.NO_LEASE_TRACKED,
+                f"{ticket_id}: registry 未追蹤此票 lease，允許 release",
+            ),
+        )
+        monkeypatch.setattr(track, "execute_release", lambda args, version: 0)
+        monkeypatch.setattr(track, "release_lease", lambda version, ticket_id: None)
+
+        rc = track._execute_release(_args(ticket_id="0.0.0-W1-001"), "0.0.0")
+
+        assert rc == 0
+        captured = capsys.readouterr()
+        assert "[INFO]" in captured.out
+        assert "reclaim" in captured.out
+
+    def test_owner_present_does_not_print_info_hint(self, monkeypatch, capsys):
+        monkeypatch.setattr(
+            track,
+            "check_release_guard",
+            lambda ticket_id: (
+                True,
+                ReleaseGuardReason.SELF_OWNED,
+                f"{ticket_id}: 由自身 session 持有，允許 release",
+            ),
+        )
+        monkeypatch.setattr(track, "execute_release", lambda args, version: 0)
+        monkeypatch.setattr(track, "release_lease", lambda version, ticket_id: None)
+
+        rc = track._execute_release(_args(ticket_id="0.0.0-W1-001"), "0.0.0")
+
+        assert rc == 0
+        captured = capsys.readouterr()
+        assert "[INFO]" not in captured.out
+
+    def test_reason_text_change_does_not_affect_info_trigger(self, monkeypatch, capsys):
+        """判定依據為 reason_code（結構化列舉），與 reason 文案脫鉤——
+        即使訊息文字被改寫成完全不含原本子字串的內容，NO_LEASE_TRACKED
+        仍觸發 INFO 提示（0.2.1-W3-915 核心防護：文案調整不使判定靜默
+        失效）。"""
+        monkeypatch.setattr(
+            track,
+            "check_release_guard",
+            lambda ticket_id: (
+                True,
+                ReleaseGuardReason.NO_LEASE_TRACKED,
+                "這是完全改寫過、不含任何原本關鍵字的全新文案",
+            ),
+        )
+        monkeypatch.setattr(track, "execute_release", lambda args, version: 0)
+        monkeypatch.setattr(track, "release_lease", lambda version, ticket_id: None)
+
+        rc = track._execute_release(_args(ticket_id="0.0.0-W1-001"), "0.0.0")
+
+        assert rc == 0
+        captured = capsys.readouterr()
+        assert "[INFO]" in captured.out
 
 
 class TestReleaseForceFlagCliRegistration:

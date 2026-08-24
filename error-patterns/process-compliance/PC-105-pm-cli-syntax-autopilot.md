@@ -98,7 +98,7 @@
 ## 相關文件
 
 - `.claude/error-patterns/process-compliance/PC-066-decision-quality-autopilot.md` — 姊妹模式（決策領域的 autopilot）
-- `.claude/hooks/skill-cli-error-feedback-hook.py` — 現有 warning hook
+- `.claude/skills/ticket/hooks/cli-error-feedback-hook.py` — 現有 warning hook（原 skill-cli-error-feedback-hook.py 已合併搬遷至此）
 - `.claude/skills/ticket/SKILL.md` — 需補完常見誤用章節
 
 ---

@@ -107,4 +107,4 @@ Spec 完成後轉為 ticket 時，依以下原則拆分：
 
 ## 銜接 TDD 流程
 
-Spec/UC 轉為 TDD 流程時，見 `.claude/skills/tdd/references/doc-handoff.md`。銜接流程把 Spec FR→Phase 1 功能規格種子、UC 步驟→GWT 行為場景種子、UC 資訊鏈→整合測試映射。銜接由 TDD 端消費（`/tdd start` 時偵測 doc 文件自動觸發），doc 端不需額外操作。
+若專案已採用 `tdd` skill，Spec/UC 可銜接進 TDD 流程：銜接流程把 Spec FR→Phase 1 功能規格種子、UC 步驟→GWT 行為場景種子、UC 資訊鏈→整合測試映射，由 TDD 端消費（`/tdd start` 時偵測 doc 文件自動觸發），doc 端不需額外操作，詳見 tdd skill 的 doc-handoff 銜接說明（若已安裝）。若未採用 tdd skill，Spec/UC 仍可獨立作為需求文件使用，只是不會有自動銜接進測試流程的種子產出。

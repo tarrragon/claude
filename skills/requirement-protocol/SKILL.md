@@ -94,7 +94,7 @@ Selector / MutationObserver root / JS 操作邊界：**從最小開始、有證�
 
 每份 reference 自包含：以該情境為核心、把六大原則翻譯成可直接套用的協議步驟與模板。閱讀任一 reference 不需要回來看其他 reference。
 
-**與 `wrap-decision` 的邊界**：本 skill 處理「使用者**指令**是否明確可執行」（模糊指令澄清）。若卡點不是指令模糊，而是「決策諮詢的當事人條件不足」或「要 premortem 的計畫輪廓不清」，那屬 `wrap-decision` 的資料充足度閘門（Step 0）與 premortem context 閘門——先讀 `../wrap-decision/SKILL.md`。三者互為前置、不重複問同一組問題（分工對照表見該檔 Step 0「與 requirement-protocol 的分工邊界」）。
+**與 `wrap-decision` 的邊界**：本 skill 處理「使用者**指令**是否明確可執行」（模糊指令澄清）。若卡點不是指令模糊，而是「決策諮詢的當事人條件不足」或「要 premortem 的計畫輪廓不清」，那屬另一個決策框架的資料充足度閘門（Step 0）與 premortem context 閘門的範疇。若專案已採用 `wrap-decision` skill，可先讀該 skill 的 SKILL.md（Step 0「與 requirement-protocol 的分工邊界」章節有完整分工對照表）；若未採用，仍需自行判斷資料是否充足再決策，只是不會有現成的資料閘門與 premortem context 檢查可依循。三者互為前置、不重複問同一組問題。
 
 ---
 

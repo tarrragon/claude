@@ -16,7 +16,7 @@
 | 禁止行為 | agent 不可做的事 | 禁止檔案類別 / 禁止操作 / 禁止職責越界 / 禁止跨 ticket 物件操作 |
 | 適用情境 | 何時應派發此 agent | TDD Phase 標註 / 觸發條件 / 排除情境 |
 
-> 跨 ticket 物件操作禁令：subagent 不得對非派發範圍 ticket 執行 `close` / `set-status` / 編輯他人 ticket md（即使發現衝突），應透過審查報告上報 PM。完整論證見 references 詳細版。
+> 跨 ticket 物件操作禁令：subagent 不得對非派發範圍 ticket 執行 `close` / `set-status` / 編輯他人 ticket md（即使發現衝突），應透過審查報告上報 PM。**邊界**：建立掛自身 `source_ticket` / `parent` 的新票不在禁止範圍（對象是尚不存在的 ticket，非修改他人既有 ticket）——撰寫此禁令時須明寫該邊界，否則「包括 ... 等」的列舉會被讀成禁止建票。完整論證見 references 詳細版。
 
 ## 豁免類別
 
@@ -45,4 +45,5 @@ grep -E "^## (允許產出|禁止行為|適用情境)" .claude/agents/<agent>.md
 
 ---
 
-**Last Updated**: 2026-06-12 | **Version**: 1.6.0 — 觸發表補內容規範路由（結構權威與內容權威互通，W8 multi-round-review R3）。**Version**: 1.5.0 — 主文 substance 外移至 `.claude/references/agent-definition-standard-details.md`，本檔保留速查 stub。**Source**: 派發越界根因 A + PC-110。
+**Last Updated**: 2026-08-23 | **Version**: 1.7.0 — 跨 ticket 物件操作禁令一行速查補邊界：建立自身衍生票不在禁止範圍，撰寫禁令時須明寫（否則「包括 ... 等」會被讀成禁止建票）。完整論證與三明示在 references 詳細版同名小節。
+**Version**: 1.6.0 — 觸發表補內容規範路由（結構權威與內容權威互通，W8 multi-round-review R3）。**Version**: 1.5.0 — 主文 substance 外移至 `.claude/references/agent-definition-standard-details.md`，本檔保留速查 stub。**Source**: 派發越界根因 A + PC-110。

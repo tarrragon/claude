@@ -1,7 +1,7 @@
 # 技術債務 Ticket 範本
 
-> 技術債務 Ticket 遵循 ticket Skill 的標準格式，額外包含技術債務特有欄位。
-> 通用 Ticket 格式規範請見：`.claude/skills/ticket/references/create-command.md`
+> 技術債務 Ticket 額外包含技術債務特有欄位（`ticket_type: "tech-debt"`、來源版本等）。
+> 若專案已採用 `ticket` skill：本範本的通用欄位遵循該 skill 的標準格式，以其建立指令說明為準（若已安裝）。若未採用，本範本已含完整可用的 frontmatter，失去的是與通用格式的一致性保證——欄位若日後與專案其他 ticket 分歧，無共同權威可對照。
 
 ---
 

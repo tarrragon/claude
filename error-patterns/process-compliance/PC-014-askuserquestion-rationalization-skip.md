@@ -53,4 +53,4 @@ AskUserQuestion 的使用不是流程負擔，而是防止 Hook 誤判用戶回�
 ## 相關文件
 
 - .claude/pm-rules/askuserquestion-rules.md - 規則 4（新增）
-- .claude/hooks/lib/ask_user_question_reminders.py - 強化 #16 提醒語氣
+- .claude/lib/ask_user_question_reminders.py - 強化 #16 提醒語氣

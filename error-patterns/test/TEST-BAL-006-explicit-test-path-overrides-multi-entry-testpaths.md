@@ -79,5 +79,5 @@ pytest <path>/ --collect-only -q | tail -1   # 指定路徑後的母體
 
 - `.claude/error-patterns/process-compliance/PC-135-subagent-pytest-pass-but-hook-subprocess-fail.md` — 同屬「測試通過但涵蓋不成立」家族，該模式的落差在執行環境（pytest 對 hook subprocess），本模式的落差在收集母體
 - `.claude/error-patterns/process-compliance/PC-BAL-048-adhoc-script-fallback-branch-output-read-as-result.md` — 預防措施「量測宇宙與結論宇宙必須一致」在測試母體上的實例
-- `.claude/error-patterns/test/TEST-BAL-001-idealized-test-fixture-masks-validator-false-pass.md` — 同為「綠燈不等於覆蓋」，該模式的失效點在 fixture 內容，本模式在檔案收集
+- `.claude/error-patterns/test/TEST-BAL-001-idealized-fixture-format-masks-validator-false-pass.md` — 同為「綠燈不等於覆蓋」，該模式的失效點在 fixture 內容，本模式在檔案收集
 - `.claude/rules/core/quality-baseline.md` 規則 1 — 測試通過率 100% 的邊界：100% 是對「跑到的測試」而言

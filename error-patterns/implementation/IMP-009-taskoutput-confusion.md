@@ -80,12 +80,16 @@ Read(file_path: "~/.claude/projects/.../tool-results/b8refllkc.txt")
 
 在預期輸出很大時，提前限制輸出量：
 ```bash
-# 測試：用摘要腳本
-./.claude/hooks/test-summary.sh
+# 測試：管道到 tail
+flutter test 2>&1 | tail -20
 
 # 一般命令：管道到 head
 git log --oneline | head -20
 ```
+
+> 現行慣例改為直接管道限制輸出（見 `.claude/rules/core/bash-tool-usage-rules.md` 規則二）。
+>
+> 附註：`.claude/hooks/test-summary.sh` 已刪除，2026-08-22 文件複查更正。<!-- broken-link-exempt: 本行為更正說明，其內容正是在陳述該腳本已刪除，路徑不存在是預期的 -->
 
 ---
 

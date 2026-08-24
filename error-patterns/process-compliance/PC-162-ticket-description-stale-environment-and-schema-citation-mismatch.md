@@ -36,7 +36,8 @@ PM 建 Ticket 時，描述基於過去的環境記憶或舊文件，未驗證當
 ### W3-041 案例（2026-05-26）
 
 **完整時序**：
-- 2026-04-07 commit `7a22f9f0`（W10-001）刪除 `.claude/hooks/pre-fix-evaluation-hook.py`（432 行），邏輯合併到 `.claude/hooks/post-test-hook.py` L191-296（W9 審查清理「已合併的原始 Hook 檔案」）
+- 2026-04-07 commit `7a22f9f0`（W10-001）刪除 `.claude/hooks/pre-fix-evaluation-hook.py`（432 行）<!-- broken-link-exempt: 案例敘事，本行明文陳述該路徑已刪除，路徑不存在是預期的 -->
+  （邏輯合併到 `.claude/hooks/post-test-hook.py` L191-296，W9 審查清理「已合併的原始 Hook 檔案」）
 - 2026-05-21 PM 建 W3-041 ticket，描述「pre-fix-eval hook 對 ticket body 寫入內容誤判」，where.files 寫 `.claude/hooks`（目錄級，未指定具體檔案）
 - 2026-05-26 PM 接手 W3-041 → 觸發 schema 註解的「接手者驗證」提示 → grep 發現 `pre-fix-evaluation-hook.py` 已不存在 → 進一步 git log 考古發現實際邏輯在 `post-test-hook.py`
 

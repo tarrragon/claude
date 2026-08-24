@@ -24,6 +24,7 @@ if __name__ == "__main__":
 
 
 import argparse
+from contextlib import ExitStack
 from pathlib import Path
 
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
@@ -372,6 +373,140 @@ def execute_add_child(args: argparse.Namespace, version: str) -> int:
     print(f"{TrackRelationsMessages.RELATION_CHILD_PREFIX} {child_id}")
     if old_parent:
         print(f"{TrackRelationsMessages.RELATION_OLD_PARENT_PREFIX} {old_parent} {TrackRelationsMessages.RELATION_OLD_PARENT_SUFFIX}")
+
+    return 0
+
+
+def execute_set_parent(args: argparse.Namespace, version: str) -> int:
+    """
+    修正 Ticket 的 parent_id（改寫或清除），並同步上游 children
+
+    命令格式：
+        ticket track set-parent <child-id> <new-parent-id>
+        ticket track set-parent <child-id> --clear
+
+    parent_id 是單值欄位且有反向投影（上游的 children），與
+    blockedBy / relatedTo 這類無反向投影的列表欄位不同：任何一側被
+    改動都必須同步另一側，否則留下懸空引用（一邊指向、另一邊不承認
+    的關係）。本命令是唯一入口，同時涵蓋清除、改寫兩種情境：
+    - 清除（--clear）：parent_id 設為 None，若原 parent 仍存在，
+      從其 children 移除本票 ID。
+    - 改寫（傳入 new-parent-id）：先比照清除邏輯脫離原 parent，
+      再加入新 parent 的 children（去重）。
+
+    因此不需要獨立的「移除 children 成員」命令：children 的異動
+    永遠由 parent_id 的異動驅動，單向操作已涵蓋雙向一致性。
+
+    動作：
+    1. 驗證互斥旗標（new_parent_id 與 --clear 不可同時提供，也不可
+       同時缺席）
+    2. 驗證新 parent（若提供）存在，且非自我參照
+    3. 從舊 parent（若存在於票庫）的 children 移除本票 ID
+    4. 若有新 parent，加入其 children（去重）
+    5. 更新本票的 parent_id 與 chain.parent
+
+    Returns:
+        int: 0 表示成功（含 no-op），1 表示驗證失敗
+    """
+    child_id = args.child_id
+    new_parent_id = getattr(args, "new_parent_id", None)
+    is_clear = getattr(args, "clear", False)
+
+    if is_clear and new_parent_id:
+        print(format_error(ErrorMessages.SET_PARENT_CLEAR_CONFLICT))
+        return 1
+    if not is_clear and not new_parent_id:
+        print(format_error(ErrorMessages.SET_PARENT_REQUIRES_TARGET))
+        return 1
+    if new_parent_id == child_id:
+        print(format_error(ErrorMessages.SET_PARENT_SELF_REFERENCE, ticket_id=child_id))
+        return 1
+
+    # Step 1：peek 目前的 parent_id 以組出完整鎖定集合。
+    # 這裡讀到的值只用於決定要鎖哪些檔案；權威值於取得所有鎖後重新載入。
+    peek_ticket, success = validate_ticket_exists(version, child_id)
+    if not success:
+        return 1
+    peek_old_parent_id = peek_ticket.get("parent_id")
+
+    lock_ids = {child_id}
+    if peek_old_parent_id:
+        lock_ids.add(peek_old_parent_id)
+    if new_parent_id:
+        lock_ids.add(new_parent_id)
+    lock_paths = sorted(
+        (Path(get_ticket_path(version, tid)) for tid in lock_ids),
+        key=str,
+    )
+
+    with ExitStack() as stack:
+        for lock_path in lock_paths:
+            stack.enter_context(file_lock(lock_path))
+
+        # Step 2：取得所有鎖後重新載入，避免 peek 之後的競態使鎖定集合失準。
+        child_ticket, success = validate_ticket_exists(version, child_id)
+        if not success:
+            return 1
+        old_parent_id = child_ticket.get("parent_id")
+
+        new_parent_ticket = None
+        if new_parent_id:
+            new_parent_ticket, success = validate_ticket_exists(version, new_parent_id)
+            if not success:
+                return 1
+
+        if old_parent_id == new_parent_id:
+            print(format_info(InfoMessages.PARENT_RELATION_NOOP, child_id=child_id))
+            return 0
+
+        # Step 3：從舊 parent 的 children 移除本票（舊 parent 可能已不存在票庫中）
+        if old_parent_id:
+            old_parent_ticket = load_ticket(version, old_parent_id)
+            if old_parent_ticket:
+                children = old_parent_ticket.get("children", [])
+                if child_id in children:
+                    old_parent_ticket["children"] = [
+                        cid for cid in children if cid != child_id
+                    ]
+                    save_ticket(
+                        old_parent_ticket,
+                        resolve_ticket_path(old_parent_ticket, version, old_parent_id),
+                    )
+
+        # Step 4：加入新 parent 的 children（去重）
+        if new_parent_id and new_parent_ticket is not None:
+            children = new_parent_ticket.get("children", [])
+            if child_id not in children:
+                children.append(child_id)
+            new_parent_ticket["children"] = children
+            save_ticket(
+                new_parent_ticket,
+                resolve_ticket_path(new_parent_ticket, version, new_parent_id),
+            )
+
+        # Step 5：更新本票的 parent_id 與 chain.parent
+        child_ticket["parent_id"] = new_parent_id
+        chain_info = child_ticket.get("chain", {})
+        if new_parent_id:
+            chain_info["parent"] = new_parent_id
+        else:
+            chain_info.pop("parent", None)
+        child_ticket["chain"] = chain_info
+
+        save_ticket(
+            child_ticket,
+            resolve_ticket_path(child_ticket, version, child_id),
+        )
+
+    if new_parent_id:
+        print(format_info(InfoMessages.PARENT_RELATION_UPDATED, child_id=child_id))
+    else:
+        print(format_info(InfoMessages.PARENT_RELATION_CLEARED, child_id=child_id))
+    print(f"{TrackRelationsMessages.SET_PARENT_CHILD_PREFIX} {child_id}")
+    old_label = old_parent_id or TrackRelationsMessages.SET_PARENT_NONE_LABEL
+    new_label = new_parent_id or TrackRelationsMessages.SET_PARENT_NONE_LABEL
+    print(f"{TrackRelationsMessages.SET_PARENT_OLD_PREFIX} {old_label}")
+    print(f"{TrackRelationsMessages.SET_PARENT_NEW_PREFIX} {new_label}")
 
     return 0
 

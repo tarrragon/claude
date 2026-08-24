@@ -80,6 +80,6 @@ Hook 的格式嚴格度是為確保機器可解析與防護效力，**PM 必須�
 
 ## 相關文件
 
-- `.claude/hooks/agent-ticket-validation-hook.py` — 執行 Hook 的檢查邏輯
+- `.claude/skills/ticket/hooks/agent-ticket-validation-hook.py` — 執行 Hook 的檢查邏輯
 - `.claude/pm-rules/parallel-dispatch.md` — 並行派發流程
 - `.claude/methodologies/friction-management-methodology.md` — 摩擦力管理方法論（A 象限）

@@ -60,7 +60,7 @@
 
 ```bash
 # 步驟 1：確認既有 hook mode 未損壞（應顯示 100755）
-git ls-files --stage .claude/hooks/acceptance-gate-hook.py
+git ls-files --stage .claude/skills/ticket/hooks/acceptance-gate-hook.py
 
 # 步驟 2：執行 push
 python3 ./.claude/scripts/sync-claude-push.py "你的訊息"

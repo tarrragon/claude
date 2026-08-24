@@ -43,7 +43,7 @@
 
 整合過程中，以下原有檔案保留在其原位置（未移動）：
 
-- **Hook 腳本**: `.claude/hooks/pre-fix-evaluation-hook.py`
+- **Hook 腳本**: `.claude/hooks/post-test-hook.py`（pre-fix-evaluation-hook.py 與 test-timeout-post.py 已合併進此檔）
   - 狀態: [OK] 已保留，settings.json 需引用此路徑
 
 - **命令別名**: `.claude/commands/pre-fix-eval.md`
@@ -235,7 +235,7 @@ category: quality-assurance
 - [references/pre-fix-evaluation-acceptance-report.md](./references/pre-fix-evaluation-acceptance-report.md) - 驗收報告
 
 ### Hook 系統
-- `.claude/hooks/pre-fix-evaluation-hook.py` - Hook 腳本（自動觸發）
+- `.claude/hooks/post-test-hook.py` - Hook 腳本（自動觸發；pre-fix-evaluation-hook.py 與 test-timeout-post.py 已合併進此檔）
 - `.claude/commands/pre-fix-eval.md` - 命令別名（進入點）
 - `.claude/settings.json` - PostToolUse Hook 配置
 

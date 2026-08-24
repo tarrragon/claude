@@ -7,7 +7,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 
 ---
 
-## 七規則一行速查
+## 八規則一行速查
 
 | 規則 | 核心要求 | 來源 |
 |------|---------|------|
@@ -18,8 +18,13 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 | 五：長文字用 heredoc | append-log / commit msg / ANA 結論直接 heredoc 傳 CLI，禁繞 `/tmp`。ARG_MAX ≥ 1 MB（macOS）/ 2 MB（Linux），80 行 markdown 約 3-8 KB 遠低於上限。> 100 KB 才考慮改 Edit 直改 ticket md | PC-087 |
 | 六：長背景任務即時可觀察 | 需即時觀察用 `PYTHONUNBUFFERED=1 pytest -v tests/ 2>&1 \| tee /tmp/task.log`（告知 `tail -f`）；只需最終結果保留規則二 `\| tail`。雙層緩衝（fully-buffered + `\| tail` 等 EOF）使輸出檔全程 0 行 | 背景任務緩衝 spike 實驗 |
 | 七：禁 pathspec / `--only` / `-o` 提交丟棄 index | `git commit -- <path>` 與 `--only`（`-o`）語意相同：皆以 HEAD 建臨時 index、填入指定路徑的 **working tree 內容**、據此 commit，等同丟棄既有 index，會吸入該路徑上他人未 stage 的編輯；`--include`（`-i`）不丟棄 index，但把指定路徑併入現有 index 一併提交，會連同 index 中他人已 staged 的檔案一起送出。並行環境（共用 working tree）三者皆禁用。正確替代：`git add <exact-path>` 精確 stage → `git diff --cached --name-only` 確認 index 只含目標檔 → 裸 `git commit`（不帶 pathspec、不帶 `--only`/`-o`/`-a`） | 並行 session 誤吸實測案例（以 `git apply --cached` 正確暫存後改用 pathspec 提交，誤吸另一並行 session 尚未 stage 的編輯，事後以回滾 commit 精準還原） |
+| 八：CJK 聚合統計加 LC_ALL=C | `sort`/`uniq`（含 `comm`/`join`）依目前 locale collation 比較，非位元組序；系統預設 locale（僅 `LANG` 未設 `LC_ALL`/`LC_COLLATE`）下會把位元組相異的中文字串判為相等並合併計數，且無警告、總數仍守恆，唯獨分組錯誤、標籤取自被合併一方。管線各命令前加 `LC_ALL=C`，或改用 `grep -cF` 逐一 byte-exact 計數；關鍵統計結果寫入交接文件前應交叉驗證 | IMP-BAL-013（最小重現與案例見 references 詳細版） |
 
 > **chpwd 與即時協議**：裸 cd 觸發 zsh chpwd hook 的 ls 淹沒工具結果。輸出可疑/被淹沒當下依四步即時協議——停手 → 重發乾淨原子命令（`git -C`／子 shell）→ 只信 raw stdout → 固定值（hash／二元 grep／整數計數）驗證。論證見 details.md 規則一詳細 + `tool-output-trust-rules` 規則 1-4。
+
+> **規則七高衝突路徑加強做法（隔離索引 CAS）**：規則七「精確 add + 核對 + 裸 commit」三步驟間仍共用同一個 git index，並行環境下有 TOCTOU 窗口。高頻/高衝突路徑（同一檔案集合被多來源高頻觸發 commit）可改用 `GIT_INDEX_FILE` 指向獨立臨時 index，全程以 `read-tree`/`write-tree`/`commit-tree`/`update-ref`（CAS，帶舊值移動 HEAD）操作，完全不觸碰共用 index；不取代規則七，屬並列的加強選項。已驗證實作見 `ticket-md-auto-commit-hook.py`。完整配方與適用條件見 details.md「規則七詳細」。
+
+> **規則七核對步驟的粒度邊界（檔案內夾帶）**：`git diff --cached --name-only` 只列檔名，核對粒度為檔案層級——`git add` 的最小單位即整個檔案，目標檔本身已含他人未 stage 的編輯時，該編輯隨精確 add 一併進入 index，核對必然通過，對此無鑑別力（機制與 PC-BAL-008「變體：檔案級共用」同源）。**不改變規則七既有禁止事項**，pathspec / `--only` / `-o` / `-i` 仍全數禁用。append-only 共用檔（如 `docs/work-logs/topic-assignments.txt`，每次 `ticket create` 皆追加一行，屬結構性熱點）建議：`git add --patch` 逐 hunk 挑選，或約定由單一方負責提交該檔。完整機制見 details.md「規則七詳細」。
 
 ---
 
@@ -40,18 +45,23 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 - [ ] 背景任務輸出檔全程 0 行？→ 確認是否 `-q | tail` 雙層緩衝（規則六觸發條件）
 - [ ] 輸出可疑/被淹沒？→ 停手重發乾淨原子命令，只信 raw stdout（規則一即時協議）
 - [ ] 準備 `git commit -- <path>` / `--only` / `-o` / `-i`？→ 改精確 `git add <exact-path>` + `git diff --cached --name-only` 核對 index 範圍 + 裸 `git commit`（規則七）
+- [ ] 目標檔是 append-only 共用檔（如 `topic-assignments.txt`）且他人可能有未 stage 的行？→ 核對只驗檔名無法鑑別檔內夾帶，改用 `git add --patch` 挑 hunk 或約定單一方提交（規則七邊界）
+- [ ] 準備以 `sort` / `uniq` / `comm` / `join` 聚合中文（CJK）字串做統計？→ 管線各命令前加 `LC_ALL=C`，或改用 `grep -cF` byte-exact 計數；結果將寫入交接文件前交叉驗證（規則八）
 
 ---
 
 ## 相關文件
 
-- `.claude/references/bash-tool-usage-details.md` — 各規則速查表、根因圖解、Why/Consequence、即時協議論證、規則六調和
+- `.claude/references/bash-tool-usage-details.md` — 各規則速查表、根因圖解、Why/Consequence、即時協議論證、規則六調和、規則八最小重現
 - `.claude/rules/core/tool-output-trust-rules.md` — confabulation 防護（規則一即時協議）
 - `.claude/references/quality-python.md` — Python 執行規則
-- `.claude/error-patterns/implementation/IMP-008-bash-working-directory-pollution.md`、`IMP-009-taskoutput-confusion.md`、`IMP-046-git-index-lock-race-condition.md`
+- `.claude/error-patterns/implementation/IMP-008-bash-working-directory-pollution.md`、`IMP-009-taskoutput-confusion.md`、`IMP-046-git-index-lock-race-condition.md`、`IMP-BAL-013-locale-sort-uniq-merges-distinct-cjk-strings.md`
 - `.claude/error-patterns/process-compliance/PC-079-bash-backtick-command-substitution-in-cli-args.md`、`PC-087-pm-tmp-detour-for-ticket-content.md`、`PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md`
 - `.claude/pm-rules/parallel-dispatch.md` — 並行派發 git staging / commit 紀律（index.lock 與跨票吸收防護口徑一致）
 
 ---
 
-**Last Updated**: 2026-08-19 | **Version**: 3.2.0 — 新增規則七「禁 pathspec / `--only` / `-o` 提交丟棄 index」：`git commit -- <path>` 與 `--only`/`-o` 語意相同，皆以 working tree 全文取代既有 index 建 commit，並行環境下會吸入他人未 stage 的編輯；`--include`/`-i` 不丟棄 index 但會連同他人已 staged 內容一併送出。條文含正確替代（精確 `git add` + `git diff --cached --name-only` 核對 + 裸 `git commit`）；六規則速查表與檢查清單同步擴充為七規則。**Version**: 3.1.0 — 規則三因果修正：index.lock 競爭不限寫入串接，唯讀 git 命令 refresh index stat cache 時亦會短暫觸發（issue-34 實證：30 次併發 add 命中 1 次），移除「add 不觸發 Hook」的失準表述；checklist 遇 index.lock 改為預設短暫重試而非逕判串接違規。**Version**: 3.0.0 — token 收斂：六規則濃縮為一行速查表 + 統一檢查清單，各規則速查表 / Why / Consequence / 論證外移 `references/bash-tool-usage-details.md`。歷史 2.0–2.3 版見 git log。**Source**: IMP-008、IMP-009、IMP-046、index.lock 競爭、PC-087、PC-166、issue-34
+**Last Updated**: 2026-08-24 | **Version**: 3.5.0 — 新增規則八「CJK 聚合統計加 LC_ALL=C」：`sort`/`uniq` 依 locale collation 比較，系統預設 locale 下會把位元組相異的中文字串靜默合併計數（無警告、總數守恆、唯分組錯誤），管線加 `LC_ALL=C` 或改用 `grep -cF` byte-exact 計數；完整最小重現與案例外移 `references/bash-tool-usage-details.md` 規則八詳細，並新增 `IMP-BAL-013` error-pattern。速查表更名為「八規則一行速查」，統一檢查清單同步新增一列。
+**Version**: 3.4.0 — 規則七後新增一則邊界說明：核對步驟（`git diff --cached --name-only`）粒度為檔案層級，對同檔案內他人未 stage 的 hunk 無鑑別力（`git add` 最小單位即檔案），並給 append-only 共用檔（如 `topic-assignments.txt`）處置建議（`git add --patch` 或單一方提交）；不改變規則七既有禁止事項。統一檢查清單同步新增一列。完整機制路由至 details.md「規則七詳細」新增小節。
+**Version**: 3.3.0 — 規則七後補一則「隔離索引 CAS」加強做法（GIT_INDEX_FILE + read-tree/write-tree/commit-tree/update-ref，並列選項非取代），供高頻/高衝突路徑使用；完整配方外移 details.md
+**Version**: 3.2.0 — 新增規則七「禁 pathspec / `--only` / `-o` 提交丟棄 index」：`git commit -- <path>` 與 `--only`/`-o` 語意相同，皆以 working tree 全文取代既有 index 建 commit，並行環境下會吸入他人未 stage 的編輯；`--include`/`-i` 不丟棄 index 但會連同他人已 staged 內容一併送出。條文含正確替代（精確 `git add` + `git diff --cached --name-only` 核對 + 裸 `git commit`）；六規則速查表與檢查清單同步擴充為七規則。**Version**: 3.1.0 — 規則三因果修正：index.lock 競爭不限寫入串接，唯讀 git 命令 refresh index stat cache 時亦會短暫觸發（issue-34 實證：30 次併發 add 命中 1 次），移除「add 不觸發 Hook」的失準表述；checklist 遇 index.lock 改為預設短暫重試而非逕判串接違規。**Version**: 3.0.0 — token 收斂：六規則濃縮為一行速查表 + 統一檢查清單，各規則速查表 / Why / Consequence / 論證外移 `references/bash-tool-usage-details.md`。歷史 2.0–2.3 版見 git log。**Source**: IMP-008、IMP-009、IMP-046、index.lock 競爭、PC-087、PC-166、issue-34

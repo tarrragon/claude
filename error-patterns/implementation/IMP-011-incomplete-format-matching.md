@@ -112,7 +112,7 @@ if direction in chain_directions:  # "to-sibling:ID" 不在 set 中
 
 - IMP-010: GC 狀態語義衝突（前置錯誤模式）
 - 修復 commit: `fix: 修復 GC should_preserve_pending_json 的 direction 匹配方式`
-- 修改檔案: `.claude/hooks/handoff-auto-resume-stop-hook.py`
+- 修改檔案: `.claude/skills/ticket/hooks/handoff-auto-resume-stop-hook.py`
 - 測試檔案: `.claude/hooks/tests/test_stop_hook.py`（新增 10 個測試用例）
 - 格式生產者: `.claude/skills/ticket/ticket_system/commands/handoff.py` (`_resolve_direction_from_args`)
 

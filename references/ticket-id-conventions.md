@@ -337,9 +337,11 @@ A: 歷史分析發現 22 個非標準檔案。ID 解析包容性擴充正是為�
 | `.claude/skills/ticket/ticket_system/lib/constants.py` | TICKET_ID_PATTERN + KNOWN_TICKET_SUFFIXES 定義 |
 | `.claude/skills/ticket/ticket_system/lib/id_parser.py` | ID 解析函式 |
 | `.claude/skills/ticket/ticket_system/lib/ticket_loader.py` | Ticket 載入與去重 |
-| `.claude/hooks/ticket-id-validator-hook.py` | Hook 驗證邏輯（寬鬆模式） |
+| `.claude/skills/ticket/hooks/ticket-id-validator-hook.py`（原路徑見表後附註） | Hook 驗證邏輯（寬鬆模式） |
 | `.claude/references/quality-python.md` | Python 常數管理規範 |
 | `.claude/references/ticket-id-existing-suffixes.md` | 現存後綴範例清單（第 4 節外放） |
+
+附註：上表「Hook 驗證邏輯（寬鬆模式）」列的原路徑為 `.claude/hooks/ticket-id-validator-hook.py`，2026-08-22 文件複查更正，原路徑已不存在是預期的。<!-- broken-link-exempt: 本列為更正說明，原路徑已不存在是預期的 -->
 
 ---
 

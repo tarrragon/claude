@@ -148,7 +148,7 @@ def main():
 ## 相關資源
 
 - `.claude/references/quality-common.md` - 實作品質標準
-- `.claude/hooks/hook_utils.py` - run_hook_safely 實作
+- `.claude/lib/hook_logging.py` - run_hook_safely 實作
 
 ## 標籤
 

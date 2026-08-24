@@ -191,10 +191,13 @@ mcp__dart__run_tests (無 paths 參數)
 mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/domains/"]}])
 mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/unit/core/"]}])
 
-# [OK] 推薦 - 全量測試使用 Bash（最穩定）
-flutter test --reporter compact
-./.claude/hooks/test-summary.sh
+# [OK] 推薦 - 全量測試使用 Bash（最穩定），直接管道限制輸出
+flutter test --reporter compact 2>&1 | tail -20
 ```
+
+> 現行慣例改為直接管道限制輸出（見 `.claude/rules/core/bash-tool-usage-rules.md` 規則二）。
+>
+> 附註：`.claude/hooks/test-summary.sh` 已刪除，2026-08-22 文件複查更正。<!-- broken-link-exempt: 本行為更正說明，其內容正是在陳述該腳本已刪除，路徑不存在是預期的 -->
 
 **適用場景對照**：
 | 測試範圍 | MCP run_tests | flutter test |

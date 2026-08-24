@@ -85,7 +85,7 @@
 ## 原有檔案驗證
 
 - [x] Hook 腳本保留在原位置
-  - 路徑: `.claude/hooks/pre-fix-evaluation-hook.py` [OK]
+  - 路徑: `.claude/hooks/pre-fix-evaluation-hook.py` [OK]（現況：已與 test-timeout-post.py 一併合併進 `.claude/hooks/post-test-hook.py`，此路徑為驗收當下記錄）
   - 執行權限: `-rwxr-xr-x` [OK]
   - 檔案大小: 12 KB [OK]
 

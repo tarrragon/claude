@@ -84,5 +84,5 @@
 ## 相關文件
 
 - .claude/hooks/cli-failure-help-reminder-hook.py - 實作範例
-- .claude/hooks/pre-fix-evaluation-hook.py - 同 matcher 的既有 Hook
+- .claude/hooks/post-test-hook.py - 同 matcher 的既有 Hook（原 pre-fix-evaluation-hook.py 邏輯已合併於此，見 PC-162）
 - .claude/settings.json - Hook 註冊配置

@@ -80,6 +80,29 @@ Skill 引用其他 skill 時，必須假設該 companion skill 可能不存在�
 
 **Why**：拆分不可分割的功能只會增加安裝摩擦和跨 skill 依賴管理成本，違反 §2.2 最小依賴原則。
 
+### 2.4 框架共用層引用（Framework Layer References）
+
+Skill 引用 `.claude/rules/`、`.claude/pm-rules/`、`.claude/methodologies/`、`.claude/references/`、`.claude/hooks/`、`.claude/agents/`、`.claude/error-patterns/` 等框架共用層路徑，屬結構性預期，不是 §2.1 禁止的跨 skill 硬連結，日常開發不需標記或轉條件語。
+
+**Why**：skill 執行於框架之內，框架共用層是所有 skill 的共同宿主環境——如同 library module 引用 framework core API，不是 library 與 library 之間互相依賴。§2.1/§4.2 禁止的對象是「skill 對 skill」的硬連結（`../other-skill/` 或 `.claude/skills/<other-skill>/`），因為缺少該 companion skill 時連結會失效；框架共用層路徑不具備這個風險——只要 skill 執行的框架本身存在（這是 skill 能執行的前提），該路徑就存在。
+
+**Consequence**：不區分兩者會導致兩種錯誤處置。逐筆把框架共用層引用標記為 `portability-allow`，等於宣告「這是刻意的例外」，但框架依賴是常態、不是例外，標記本身不增加任何可判斷的資訊。反過來把框架共用層引用當跨 skill 硬連結禁止，會強迫 skill 內容脫離它所依據的規則文件（如 `.claude/rules/core/quality-baseline.md`），使 skill 與框架品質基線失去連動，讀者也無從得知該行為要求的來源。
+
+**Action**：對任一跨界引用，依下表判定歸屬，不留無處可歸的第四類：
+
+| 引用目標 | 分類 | 適用條款 | 日常開發違規？ |
+|---|---|---|---|
+| `.claude/rules/`、`.claude/pm-rules/`、`.claude/methodologies/`、`.claude/references/`（框架文件）、`.claude/hooks/`、`.claude/agents/` | 框架共用層引用 | 本節 | 否 |
+| `.claude/error-patterns/*.md`（含 PC-XXX、IMP-XXX 等框架級編號） | 框架共用層引用（見下方「與 §1.2 的邊界」） | 本節 | 否 |
+| `.claude/skills/<other-skill>/`（絕對或相對路徑，指向其他 skill 的 SKILL.md 或 references） | 跨 skill 硬連結 | §2.1 / §4.2 | 是——依 §2.1 轉條件語 |
+| `docs/work-logs/`、版本或 ticket 特定 ID 作為敘事引用（如「W17-001 修復了」）、專案特定 CLI 操作步驟 | 專案特定產物 | §1.2 / §4.1 | 是——通用化或搬 `references/project-integration/` |
+
+**與 §1.2 的邊界**：§1.2 禁止的是「這個特定專案的實例資料」——某個版本目錄、某張 ticket 的敘事引用、某個專案自建 CLI 的操作指令，這些在其他專案環境中不存在對應物。`.claude/error-patterns/` 內的 PC-XXX/IMP-XXX 編號雖帶專案識別符外觀，但 error-patterns 目錄本身是框架級可重用知識庫（`quality-baseline.md` 規則 6：「跨專案可重現的結構性錯誤紀錄」），引用它的語意是「此防護措施的來源案例」，不是「這個專案發生過的事」。判別方式：把 skill 移植到另一個採用同一框架的專案，該路徑是否仍然存在且語意不變——`.claude/rules/core/`、`.claude/error-patterns/` 在任何採用本框架的專案下都存在；`docs/work-logs/v0.18.0/`、`W17-001` 只在原專案存在。
+
+**Marketplace extraction 階段的處理**：日常開發不視為違規，不代表框架共用層引用在真正上架時不需處理。skill 進入 extraction 流程時（見 §4.2），需對每筆框架共用層引用選擇以下一種處置：(a) 內容 inline 化——把被引用規則的必要片段直接寫入 skill 本體；(b) 轉為條件語——「若目標框架具備等價的品質基線規則，可對照使用」；(c) 於落地層文件明確列為 install-time dependency（框架必須具備的能力清單）。三者擇一，不可保留原始路徑直接上架——上架後的獨立環境不保證存在 `.claude/rules/` 這個框架。
+
+**與 §3 的邊界**：本節分類表判定的對象是會隨 skill 一併上架的通用層內容（SKILL.md + 一般 references）。`references/project-integration/` 下的檔案已依 §3 落地層架構整批排除於上架範圍，其內容中的跨界引用（例如指向 `.claude/config/` 等專案設定目錄）不受本節分類拘束——落地層本就設計為承載專案特定路徑，這是既有架構的自然結果，不是需要另行判定的缺口。
+
 ---
 
 ## 3. 落地層架構
@@ -118,10 +141,11 @@ your-skill/
 
 ### 4.2 獨立性
 
-- [ ] 無硬相對連結指向同集姊妹 skill（`../other-skill/`）
+- [ ] 無硬相對連結指向同集姊妹 skill（`../other-skill/` 或 `.claude/skills/<other-skill>/`）
 - [ ] companion skill 缺席時不產生 dangling reference 或錯誤
 - [ ] 不強依賴其他 skill（條件引用可接受，強依賴不可接受）
 - [ ] 真正成套運作的功能未被拆分成多個 skill
+- [ ] 框架共用層引用（`.claude/rules/`、`.claude/pm-rules/`、`.claude/methodologies/`、`.claude/references/`、`.claude/hooks/`、`.claude/agents/`、`.claude/error-patterns/`）於日常開發不視為違規；僅於 marketplace extraction 階段需依 §2.4 處理為 inline 化、條件語、或落地層 install-time dependency 三者之一
 
 ### 4.3 分類與術語
 
@@ -179,6 +203,7 @@ wrap-decision 被其他 skill 引用時的正確寫法：
 
 ---
 
-**Last Updated**: 2026-06-23
+**Last Updated**: 2026-08-23
+**Version**: 1.1.0 — 新增 §2.4「框架共用層引用」：區分框架共用層引用（`rules/`、`pm-rules/`、`methodologies/`、`references/`、`hooks/`、`agents/`、`error-patterns/`，日常開發不違規）與 §2.1 跨 skill 硬連結（仍全面禁止）；同步更新 §4.2 獨立性檢查清單（上游 ANA 對 40 個 skill 235 筆跨界引用三分類判定落地）
 **Version**: 1.0.0 — 初版建立（1.3.0-W1-001 + W1-001.1 合併落地）
-**Source**: W12-001 驗收 F 案外移規則需求 + W8-012 跨專案回流 dangling reference + memory feedback（skill 獨立性三準則）
+**Source**: W12-001 驗收 F 案外移規則需求 + W8-012 跨專案回流 dangling reference + memory feedback（skill 獨立性三準則）；1.1.0: 上游 ANA（40 skill 235 筆跨界引用三分類，2026-08-23）

@@ -543,7 +543,7 @@ def test_render_list_marks_reclaimable_when_lease_reclaimable(monkeypatch):
     )
     monkeypatch.setattr(
         track_runqueue.lease, "is_lease_reclaimable",
-        lambda registry, tid, pm_registry, now: tid == "0.2.1-W3-500",
+        lambda registry, ticket, pm_registry, now: ticket.get("id") == "0.2.1-W3-500",
     )
 
     out = track_runqueue._render_list([stale], top=None, wave=None, context=None)
@@ -561,7 +561,7 @@ def test_render_list_omits_reclaimable_tag_when_not_reclaimable(monkeypatch):
     )
     monkeypatch.setattr(
         track_runqueue.lease, "is_lease_reclaimable",
-        lambda registry, tid, pm_registry, now: False,
+        lambda registry, ticket, pm_registry, now: False,
     )
 
     out = track_runqueue._render_list([stale], top=None, wave=None, context=None)
@@ -579,7 +579,7 @@ def test_render_list_reclaimable_and_stale_tags_coexist(monkeypatch):
     )
     monkeypatch.setattr(
         track_runqueue.lease, "is_lease_reclaimable",
-        lambda registry, tid, pm_registry, now: True,
+        lambda registry, ticket, pm_registry, now: True,
     )
 
     out = track_runqueue._render_list([stale], top=None, wave=None, context=None)
@@ -606,6 +606,50 @@ def test_render_list_reclaimable_check_degrades_when_registry_unavailable(monkey
     assert f"[{track_runqueue.RECLAIMABLE_TAG}]" not in target_line
 
 
+def test_render_list_untracked_owner_in_progress_now_marks_reclaimable(monkeypatch):
+    """0.2.1-W3-867 回歸案例：graceful SessionEnd 刪除 registry entry 後，
+    `is_lease_reclaimable` 對 owner=None 一律回傳 True——stale in_progress
+    票即使 registry 未追蹤仍應顯示 [RECLAIMABLE]（不再永久失去可接手標記，
+    僅剩 24 小時 STALE_TAG 兜底）。"""
+    stale = _mk_stale_in_progress("0.2.1-W3-504")
+    monkeypatch.setattr(
+        track_runqueue.lease, "load_registry_snapshot", lambda: ({}, object())
+    )
+    monkeypatch.setattr(
+        track_runqueue.lease, "is_lease_reclaimable",
+        lambda registry, ticket, pm_registry, now: True,  # owner=None 修復後語意
+    )
+
+    out = track_runqueue._render_list([stale], top=None, wave=None, context=None)
+
+    target_line = next(line for line in out.splitlines() if "0.2.1-W3-504" in line)
+    assert f"[{track_runqueue.RECLAIMABLE_TAG}]" in target_line
+
+
+def test_render_list_pending_ticket_never_tagged_reclaimable_even_if_owner_none(
+    monkeypatch,
+):
+    """守衛回歸案例（0.2.1-W3-873 收斂後）：status 守衛已收回
+    `is_lease_reclaimable` 函式內，`_render_list` 不再自行判斷
+    `status == "in_progress"`，改為信任函式的真實契約——pending 票（非
+    in_progress）呼叫本函式一律回傳 False，不誤標 [RECLAIMABLE]。此處以
+    貼近真實契約的 mock（依 ticket status 判斷）驗證，而非直接令 mock
+    恆真（恆真會繞過本測試意在驗證的性質）。"""
+    pending = _mk("0.2.1-W3-505", status="pending")
+    monkeypatch.setattr(
+        track_runqueue.lease, "load_registry_snapshot", lambda: ({}, object())
+    )
+    monkeypatch.setattr(
+        track_runqueue.lease, "is_lease_reclaimable",
+        lambda registry, ticket, pm_registry, now: ticket.get("status") == "in_progress",
+    )
+
+    out = track_runqueue._render_list([pending], top=None, wave=None, context=None)
+
+    target_line = next(line for line in out.splitlines() if "0.2.1-W3-505" in line)
+    assert f"[{track_runqueue.RECLAIMABLE_TAG}]" not in target_line
+
+
 # ---------------------------------------------------------------------------
 # multi-PM 協調層 Phase 3：runqueue --groups（父票設計要點 5）
 # ---------------------------------------------------------------------------
@@ -620,8 +664,13 @@ def _mk_with_files(tid: str, files, priority: str = "P2", status: str = "pending
 
 class TestRenderGroups:
     def test_readiness_filter_matches_list_view(self):
-        """輸入集合須與 list 視圖相同（blockedBy=[] 且 pending）：in_progress
-        與仍有未解除 blocker 的票不進入群組判定。"""
+        """`parallel_group` / `not_selected` 的候選節點集合仍與 list 視圖同
+        （blockedBy=[] 且 pending）：仍有未解除 blocker 的票不進入群組判定。
+        in_progress 票（無 `started_at`，`is_stale_in_progress` fail-open
+        判為非 stale）改為以 seed 身份參與——因與任何 ready 票無 where.files
+        交集，未排除任何節點，`occupied` 因此為空、不出現於輸出（見
+        `test_in_progress_seed_excludes_conflicting_neighbor` 驗證有衝突時
+        seed 會出現於 occupied 區塊）。"""
         ready = _mk_with_files("0.2.1-W3-600", ["lib/a.dart"])
         in_progress = _mk_with_files(
             "0.2.1-W3-601", ["lib/b.dart"], status="in_progress"
@@ -635,6 +684,42 @@ class TestRenderGroups:
         assert "0.2.1-W3-600" in out
         assert "0.2.1-W3-601" not in out
         assert "0.2.1-W3-602" not in out
+
+    def test_in_progress_seed_excludes_conflicting_neighbor(self):
+        """live in_progress 票與某 ready 票有 where.files 交集時：該 ready
+        票被排除出 `parallel_group`（併入 `not_selected`），in_progress 票
+        本身不出現於 `parallel_group` 亦不出現於 `not_selected`，但因其
+        衝突對出現於第三段，`occupied` 區塊須列出其 id 供讀者辨識排除來源
+        （acceptance: 落選來源可解釋）。"""
+        occupying = _mk_with_files(
+            "0.2.1-W3-603", ["lib/shared.dart"], status="in_progress"
+        )
+        neighbor = _mk_with_files("0.2.1-W3-604", ["lib/shared.dart"])
+
+        out = track_runqueue._render_groups([occupying, neighbor])
+
+        assert "可並行群組（0 票" in out
+        assert "0.2.1-W3-603" not in out.split("施工中佔用節點")[0]
+        assert "- 0.2.1-W3-604" in out  # not_selected 段
+        assert "施工中佔用節點" in out
+        assert "- 0.2.1-W3-603" in out
+
+    def test_stale_in_progress_not_seeded_neighbor_still_selectable(self):
+        """stale in_progress 票（`started_at` 逾 24 小時前，
+        `is_stale_in_progress` 判 True）不納入 seed：其鄰居票不因此被排除，
+        與 `_is_listable` 對 stale in_progress「仍可列示接手」的判準一致，
+        避免 list 視圖與 groups 視圖給出相反指引。"""
+        stale = _mk_with_files(
+            "0.2.1-W3-605", ["lib/shared.dart"], status="in_progress"
+        )
+        stale["started_at"] = "2000-01-01T00:00:00"
+        neighbor = _mk_with_files("0.2.1-W3-606", ["lib/shared.dart"])
+
+        out = track_runqueue._render_groups([stale, neighbor])
+
+        assert "0.2.1-W3-606" in out
+        assert "本輪未選入可並行集合（0 票" in out
+        assert "施工中佔用節點" not in out
 
     def test_no_conflicts_all_in_parallel_group(self):
         a = _mk_with_files("0.2.1-W3-610", ["lib/a.dart"])

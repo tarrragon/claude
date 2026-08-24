@@ -75,7 +75,7 @@ version-release/
   - 文件更新 (CHANGELOG, todolist, pubspec.yaml)
   - Git 操作 (commit, merge, tag, push, cleanup)
   - 彩色化輸出和錯誤報告
-- **大小**: ~650 行代碼
+- **大小**: ~650 行程式碼
 - **依賴**: pyyaml
 
 ### release-checklist.md (檢查清單範本)
@@ -171,7 +171,7 @@ uv run scripts/version_release.py check --help
 
 ### 內部參考
 
-- `.claude/skills/tech-debt-capture/SKILL.md` - 技術債務捕捉工具
+- tech-debt-capture skill（若已安裝）- 技術債務捕捉工具；未安裝時技術債務仍可手動記入 `docs/todolist.yaml`，只是不會有專用捕捉流程
 - `.claude/skills/ticket create/` - Ticket 建立工具
 
 ### 外部參考

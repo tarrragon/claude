@@ -124,10 +124,10 @@ Add to `.claude/settings.json`:
 | 目的地 | 撰寫規範 |
 |--------|---------|
 | `.claude/error-patterns/` | `/error-pattern add` 內建範本（PC/IMP/ARCH 分類、Why/Consequence/Action 三明示） |
-| `.claude/rules/` `.claude/methodologies/` `.claude/references/` `.claude/pm-rules/` `.claude/agents/` `.claude/skills/` | `.claude/rules/core/document-writing-style.md` 三明示規範；方法論另依 `.claude/skills/methodology-writing/SKILL.md` |
+| `.claude/rules/` `.claude/methodologies/` `.claude/references/` `.claude/pm-rules/` `.claude/agents/` `.claude/skills/` | `.claude/rules/core/document-writing-style.md` 三明示規範；方法論另依 methodology-writing skill（若已安裝）的撰寫規範，未安裝時仍可依三明示規範直接撰寫，只是少了該 skill 提供的方法論專屬範本 |
 | `docs/` `CLAUDE.md` | 專案既有文件格式慣例 |
 
-> 原子性（一則記錄一個結論）等**跨載體通用**的撰寫原則見 `.claude/skills/compositional-writing/SKILL.md`，不綁定任何特定儲存格式。標題應表達具體結論而非主題，此原則綁定「原子記憶檔案」這個已排除的形態，未跨載體抽取；各目的地已有自己的標題慣例（error-pattern 用現象 slug、ticket 用 what 欄位、規則用「規則 N：主題」）。
+> 若專案已採用 compositional-writing skill，原子性（一則記錄一個結論）等**跨載體通用**的撰寫原則可參考該 skill，不綁定任何特定儲存格式；若未採用，仍可依「一則記錄一個結論」的原子性原則自行撰寫，只是不會有該 skill 提供的完整跨載體寫作原則清單可查。標題應表達具體結論而非主題，此原則綁定「原子記憶檔案」這個已排除的形態，未跨載體抽取；各目的地已有自己的標題慣例（error-pattern 用現象 slug、ticket 用 what 欄位、規則用「規則 N：主題」）。
 
 **為什麼分流在寫入前**：
 

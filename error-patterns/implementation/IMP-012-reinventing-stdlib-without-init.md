@@ -43,7 +43,9 @@ class LazyFileHandler(logging.FileHandler):
 
 **影響範圍**：所有 44 個使用 `setup_hook_logging` 的 Hook
 
-**位置**：`.claude/hooks/hook_utils.py` 第 225-251 行
+**位置**：`.claude/hooks/hook_utils.py` 第 225-251 行（案例敘事：事發時檔名，`LazyFileHandler` 已隨此修復刪除）<!-- broken-link-exempt: 本行為更正說明，案例本文保留原始檔名以忠實記錄事發當時狀態 -->
+
+模組現搬遷至 `.claude/lib/hook_logging.py`，2026-08-22 文件複查更正。
 
 **修復**：刪除 `LazyFileHandler` 類別，改用標準庫的 `logging.FileHandler(..., delay=True)`。Python 的 FileHandler 從 3.0 版起就支援 `delay=True` 參數，效果完全相同：初始化時不開啟檔案，第一次 `emit` 才建立。
 
@@ -87,5 +89,5 @@ class LazyFileHandler(logging.FileHandler):
 | IMP-006（Hook 隱性故障） | LazyFileHandler bug 導致 Hook 故障的表現形式相同 |
 
 ## 相關文件
-- `.claude/hooks/hook_utils.py` - 修復位置
+- `.claude/lib/hook_logging.py` - 修復位置
 - [Python logging.FileHandler 文檔](https://docs.python.org/3/library/logging.handlers.html#filehandler) - `delay` 參數說明

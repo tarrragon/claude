@@ -84,7 +84,7 @@ Automated technical debt capture from Phase 4 evaluation reports and conversion 
 技術債務 Ticket 使用特殊格式，包含 `ticket_type: "tech-debt"` 和來源版本資訊。
 
 > 完整 Ticket frontmatter 範本：`references/ticket-template.md`
-> 通用 Ticket 格式規範：`.claude/skills/ticket/references/create-command.md`
+> 若專案已採用 `ticket` skill：通用 Ticket 格式規範以該 skill 的建立指令說明為準，本 skill 的範本只補充技術債務特有欄位，詳見 ticket skill（若已安裝）。若未採用，`references/ticket-template.md` 已含完整可用的 frontmatter 範本，失去的是與通用格式的一致性保證——欄位若日後與專案其他 ticket 分歧，無共同權威可對照
 
 ### Ticket ID 格式
 

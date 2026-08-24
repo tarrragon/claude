@@ -28,7 +28,7 @@ Handoff 交接檔案自動清理 Hook
 
 使用方式:
     PostToolUse Hook 自動觸發，或手動測試:
-    echo '{"tool_name":"Bash","tool_input":{"command":"ticket track complete 0.31.0-W7-012"},"tool_response":{"stdout":"[OK] 已完成 Ticket 0.31.0-W7-012"}}' | python3 .claude/hooks/handoff-cleanup-hook.py
+    echo '{"tool_name":"Bash","tool_input":{"command":"ticket track complete 0.31.0-W7-012"},"tool_response":{"stdout":"[OK] 已完成 Ticket 0.31.0-W7-012"}}' | python3 .claude/skills/ticket/hooks/handoff-cleanup-hook.py
 """
 
 import sys

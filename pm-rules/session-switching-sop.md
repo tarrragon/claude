@@ -37,6 +37,7 @@ ticket track snapshot
 | 待驗收的代理人結果是否已處理 | 避免結果被遺忘 |
 | Session 中產生的原則 / 洞察是否已持久化 | Context 中的決策經驗不會自動記錄，/clear 後永久消失 |
 | **跨 session 對話中的 peer 是否已清點並發送關閉訊號** | **強制**（見下方「peer 關閉訊號清點」規則） |
+| 本 session 建立/觸碰的 ticket 主題是否已審視 | 避免錯誤主題繼承延誤改派（見下方「收尾主題審視」規則） |
 
 ### main vs worktree 差別對待（強制）
 
@@ -76,6 +77,20 @@ git status --short                   # 列出未提交變更
 | 該脈絡已完結（結論已落 ticket 或用戶已裁示） | 發訊息告知同儕脈絡已結束，不需再回報 |
 | 該脈絡未完結，仍需後續處理 | 發訊息告知同儕後續改由對應 ticket 接手追蹤，並附上 ticket ID |
 | 未曾與任何 peer session 有在途對話 | 通過，無需動作 |
+
+### 收尾主題審視（建議）
+
+> **Why**：2026-08-24 一次 session 事後盤點顯示，單一 session 產出 28 張票，其中 11 張後續由 PM 手動改派主題，當中 10 張源於建票時的預設繼承邏輯指派錯誤；發散最遠的三張票皆屬執行中發現的衍生票，而非規劃階段產出。收尾當下核對一次，是攔截這類誤判成本最低的時間點——脈絡尚在，一次核對可處理多筆。
+>
+> **Consequence**：不審視即 `/clear`，錯誤主題指派會留到下次巡檢才被發現；屆時 session 脈絡已流失，改派者需重新推敲每張票的正確歸屬，成本遠高於當下核對。
+>
+> **Action**：依下表執行。
+
+| 情境 | 動作 |
+|------|------|
+| 本 session 建立或觸碰的 ticket 數量少，且皆延續已宣告的 Focus Topic（見上方「Session 起始：宣告 Focus Topic」） | 可略過，風險低 |
+| 本 session 建立或觸碰多張 ticket，或含至少一張執行中發現的衍生票 | 執行 `ticket track board --group-by topic`，核對這些票是否落在預期主題分組；不符者用 `ticket track topic-backfill-assign --file <tsv> --reassign` 改派（TSV 格式為 `<ticket-id>` 一個 tab `<topic>`，需 `--file`，不接受行內參數） |
+| 執行改派後 | `docs/work-logs/topic-assignments.txt` 會產生新的未提交變更；commit 前用 `git diff --cached docs/work-logs/topic-assignments.txt` 確認變更範圍僅含本次改派筆數，避免與其他並行改動混雜於同一次 commit |
 
 ### 禁止行為
 
@@ -143,7 +158,7 @@ git status --short                   # 列出未提交變更
 
 | 層 | 機制 | 觸發 | 行為 |
 |---|------|------|------|
-| 偵測 | `.claude/hooks/stop-worklog-handoff-sync-check-hook.py` | session 結束（Stop event） | 掃描 worklog 最新交接段，比對 `.claude/handoff/pending/`；缺失 / 孤立時於 additionalContext 輸出警告 + 建議 CLI |
+| 偵測 | `.claude/skills/ticket/hooks/stop-worklog-handoff-sync-check-hook.py` | session 結束（Stop event） | 掃描 worklog 最新交接段，比對 `.claude/handoff/pending/`；缺失 / 孤立時於 additionalContext 輸出警告 + 建議 CLI |
 | 落地 | `ticket handoff --from-worklog` | PM 顯性執行（被警告後） | 解析 worklog 交接段提取 ticket ID，逐項執行 `ticket handoff` 補建 pending JSON |
 | 共用 | `.claude/skills/ticket/ticket_system/lib/worklog_parser.py` | 上述兩者皆 import | 6 公開 API：HANDOFF_KEYWORDS / detect_handoff_keywords / extract_ticket_ids / extract_recent_content / extract_handoff_section / find_worklog_path |
 
@@ -220,7 +235,42 @@ ticket track runqueue --wave N --format=dag        # 完整依賴 DAG + 關鍵�
 
 然後根據 worklog + runqueue 提示決定從哪個 Ticket 繼續。
 
-**Context 隔離**：一個 session 只做一件事，做完 commit → handoff。
+**Context 隔離**：一個 session 只做一件事，做完 commit → handoff（宣告方式見下方「Session 起始：宣告 Focus Topic」）。
+
+### Session 起始：宣告 Focus Topic
+
+> **Why**：上方「Context 隔離」是主張，缺一個可查證的宣告動作就無法被其他判準引用。`.claude/pm-rules/parallel-dispatch.md`「主題聚焦維度」節定義的查詢鏈第一環，就是查本檔是否已建立 session 起始時的主題宣告機制；本節補上該環，使查詢鏈能實際運作，不再停在「尚未建立」的佔位敘述。
+>
+> **Consequence**：不宣告時，主題聚焦查詢鏈只能退回 proxy 判準（依 ticket 既有主題比對），對「session 尚未 claim 任何 ticket」「session 意圖從多個既有主題中聚焦其一」等情境無法區分，idle agent 續用/放生決策退回自由心證。
+>
+> **Action**：依下方時機、載體、格式宣告，並在主題轉換時同步更新同一行。
+
+**宣告時機**：新 session 啟動、`/resume` 前台 session、或 bg session resume 後，執行上方 `ticket track snapshot` 掌握全局，確定本 session 預計聚焦的主題後宣告。
+
+**宣告載體與格式**：寫入當前版本工作日誌（`docs/work-logs/v{version}/v{version}-main.md`）「目前正在進行的 Ticket」段落（見上方「切換時：記錄當前進度到 worklog」），新增固定格式的一行：
+
+```
+**Session Focus Topic**: <topic-name>
+```
+
+`<topic-name>` 取值須與 `docs/work-logs/topic-assignments.txt` 使用的主題字串一致（用 `ticket track topics` 查既有清單，避免另創同義詞造成比對失準）。session 本身即為跨主題巡檢、無意聚焦單一主題時，填 `未歸屬`，效果等同未宣告。
+
+**查詢方式**（供本檔與其他文件消費）：
+
+```bash
+find docs/work-logs -name "v{version}-main.md" -exec grep "Session Focus Topic" {} \; | tail -1
+```
+
+> **散文與可執行命令的處置差異**：上方「宣告載體與格式」段的路徑（`docs/work-logs/v{version}/v{version}-main.md`）維持散文形式的 `v{version}` 記法不變——讀者讀到散文時會自行對應到專案實際目錄結構，佔位符本身不影響理解。此處查詢命令不同：`grep` 直接吃字面路徑，版本目錄層數因專案而異時（本專案為 `v0/v0.2/v0.2.1/` 三層巢狀，非 `v{version}` 單層）會直接解析失敗且以 warning 靜默略過，不中斷流程。因此可執行命令改用 `find -name` 先定位檔案再 `grep` 取值，不依賴目錄層數；散文引用維持原記法。
+
+取得的 `<topic-name>` 即為 `parallel-dispatch.md`「主題聚焦維度」查詢鏈步驟 1 的宣告值；查無此行或值為 `未歸屬` 時，視為未宣告，交由該檔步驟 2-3 的 proxy 判準接手。
+
+**禁止行為**：
+
+| 禁止 | 原因 |
+|------|------|
+| 只在對話中宣告主題、不寫入 worklog | 對話記憶不隨 `/clear` 存續，下個決策點查無宣告值，查詢鏈直接退化為 proxy 判準 |
+| 主題轉換後未更新 worklog 行 | 過期宣告值會誤導續用/放生判斷；主題轉換時應覆寫同一行，不留多筆互相矛盾的宣告 |
 
 > **bg session resume 場景**：Claude Code v2.1.144+ 支援 `/resume` 恢復 background session。bg session resume 不是「新 session 開始」而是「既有 session 恢復」，事件觸發行為與前台新 session 不同，詳見下節「/resume bg session 場景」。
 
@@ -316,10 +366,13 @@ ticket track runqueue --wave N --format=dag        # 完整依賴 DAG + 關鍵�
 - .claude/rules/core/pm-role.md — 核心禁令與情境路由
 - .claude/pm-rules/decision-tree.md — Re-center Protocol 詳細步驟
 - .claude/skills/strategic-compact/ — 策略性 Context 壓縮工具
+- .claude/pm-rules/parallel-dispatch.md — 「主題聚焦維度」節：session 中途 idle agent 續用/放生判準，消費本檔「Session 起始：宣告 Focus Topic」的宣告值
 
 ---
 
-**Last Updated**: 2026-08-18
+**Last Updated**: 2026-08-24
+**Version**: 1.8.0 — 修正「查詢方式」的可執行 grep：`docs/work-logs/v{version}/v{version}-main.md` 代入版本號後在本專案巢狀 worklog 目錄（`v0/v0.2/v0.2.1/`）下無法解析（實測 `No such file or directory`），改為 `find -name` 先定位檔案再 `grep`，不依賴目錄層數；散文引用段（宣告載體與格式）維持 `v{version}` 記法不變，並補一段說明兩者處置差異的理由（2026-08-24 巢狀結構實測發現）
+**Version**: 1.7.0 — 新增「Session 起始：宣告 Focus Topic」小節（宣告時機/載體/格式/查詢方式），實例化既有「Context 隔離」主張，並使其可被 `parallel-dispatch.md`「主題聚焦維度」查詢鏈步驟 1 消費；「/clear 前的強制確認」表新增一列 + 新增「收尾主題審視（建議）」小節，收尾時以 `ticket track board --group-by topic` 核對本 session 觸碰票的主題並視需要用 `topic-backfill-assign` 改派
 **Version**: 1.6.0 — /clear 前強制確認新增「peer 關閉訊號清點」規則：確認表增列「跨 session 對話 peer 是否已清點並發關閉訊號」+ 新增子章節（Why/Consequence/Action + 三列動作表）+ 禁止行為增列一條；與 `parallel-dispatch.md`「跨 session 同儕來訊時的脈絡存續判讀」節互引
 **Version**: 1.5.0 — W3-028.2 實機驗證落地：新增「SessionStart event source 對照表」與「attach vs /resume 進入路徑差異」兩節；對比表「待驗證」標記更新為 v2.1.150 實證確定狀態（SessionStart 在 /resume bg 觸發 source=resume、繼承 bg UUID）；handoff 流程從「手動執行 snapshot/runqueue」更新為「依賴 SessionStart hook 自動觸發」；禁止行為新增三條（running bg /resume 拒絕、attach ≠ /resume、短 ID 無效）；豁免條款移除 W3-028.2 追蹤、新增版本升級重驗證 trigger
 **Version**: 1.4.0 — 新增「/resume bg session 場景（v2.1.144+）」章節：前台 vs bg session resume 行為對比表、bg session resume 後 handoff 流程、SessionStart 觸發行為待驗證標記。對齊 ANA 結論（bg session 直接衝擊低、handoff JSON session-agnostic、SessionStart 待實機驗證）

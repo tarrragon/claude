@@ -67,6 +67,24 @@ except ImportError as e:
     # exit 0 避免 CLI 顯示 hook error
     sys.exit(0)
 
+# 讀寫意圖判定與 stale in_progress 判定改 import ticket_system 共用實作，
+# 取代原本就地複製的正則與判定函式（詳見下方「where.files 讀寫意圖判定」
+# 區塊註記的實測結論）。
+_TICKET_SYSTEM_SKILL_DIR = Path(__file__).parent.parent / "skills" / "ticket"
+if str(_TICKET_SYSTEM_SKILL_DIR) not in sys.path:
+    sys.path.insert(0, str(_TICKET_SYSTEM_SKILL_DIR))
+try:
+    from ticket_system.lib.file_conflict import (
+        parse_file_intent,
+        _default_intent as _shared_default_intent,
+        write_files as _shared_write_files,
+    )
+    from ticket_system.lib.staleness import is_stale_in_progress
+except ImportError as e:
+    print(json.dumps({"result": "continue"}))
+    print(f"[Hook Import Error] {Path(__file__).name}: {e}", file=sys.stderr)
+    sys.exit(0)
+
 # ============================================================================
 # 常數定義
 # ============================================================================
@@ -149,38 +167,24 @@ def is_continuation_request(prompt: str, logger) -> bool:
 # ============================================================================
 # where.files 讀寫意圖判定（並行安全判定改用 write 集合的同步切換義務）
 #
-# 本模組獨立於 ticket_system（PEP 723 單檔 hook，無法 import ticket_system）
-# 就地複製 `.claude/skills/ticket/ticket_system/lib/file_conflict.py` 的
+# 曾誤判本模組（PEP 723 單檔 hook）無法 import ticket_system 而就地複製
+# `.claude/skills/ticket/ticket_system/lib/file_conflict.py` 的
 # `_INTENT_MARKER_RE` / `_ESCAPED_MARKER_RE` / `_default_intent` /
-# `parse_file_intent` 同款語意（逐檔 `::read` / `::write` 標記覆寫，未標記
-# 則依 type 推導：ANA 為 read，其餘為 write）。任一方修改讀寫意圖判定規則
-# 須同步更新另一方，否則同一組票在本 hook 建議與 `ticket track conflicts`
-# / `runqueue --groups` 判定會出現不同結論。
+# `parse_file_intent`。實測結論：PEP 723 的 `uv run --script` 僅管理宣告的
+# 第三方依賴（本檔 `dependencies = ["pyyaml"]`），不限制 `sys.path` 插入後
+# 的本地套件 import——`.claude/skills/ticket` 加入 `sys.path` 後
+# `from ticket_system.lib.file_conflict import parse_file_intent` 在
+# `uv run --script` 下可正常執行（無 __init__.py 的 namespace package 於
+# Python 3.11+ 原生支援）。就地複本已消除，改為直接 import 上方共用實作。
 # ============================================================================
 
-_INTENT_MARKER_RE = re.compile(r"(?<!\\)::(read|write)$")
-_ESCAPED_MARKER_RE = re.compile(r"\\(::(?:read|write))$")
 
-
-def _parse_file_intent(raw: str) -> Tuple[str, Optional[str]]:
-    """解析單一路徑字串，回傳 (純路徑, 覆寫意圖)，同 file_conflict.parse_file_intent。"""
-    match = _INTENT_MARKER_RE.search(raw)
-    if match:
-        return raw[: match.start()], match.group(1)
-    return _ESCAPED_MARKER_RE.sub(r"\1", raw), None
-
-
-def _default_intent(ticket_type: str) -> str:
-    """由 ticket type 推導預設讀寫意圖，同 file_conflict._default_intent。"""
-    return "read" if ticket_type == "ANA" else "write"
-
-
-def _filter_write_files(files: Set[str], ticket_type: str) -> Set[str]:
+def _filter_write_files(files: Set[str], ticket_info: Dict[str, Any]) -> Set[str]:
     """僅保留意圖為寫入的純路徑（type 預設或逐檔標記覆寫為 write）。"""
-    default = _default_intent(ticket_type)
+    default = _shared_default_intent(ticket_info)
     result: Set[str] = set()
     for raw in files:
-        path, override = _parse_file_intent(raw)
+        path, override = parse_file_intent(raw)
         if (override or default) == "write":
             result.add(path)
     return result
@@ -232,6 +236,7 @@ def extract_ticket_info(file_path: Path, logger) -> Optional[Dict[str, Any]]:
             "priority": frontmatter.get("priority", "P2"),
             "title": frontmatter.get("title", ""),
             "blockedBy": blocked_by,
+            "where": frontmatter.get("where") if isinstance(frontmatter.get("where"), dict) else {},
             "where_files": frontmatter.get("where_files", ""),
             "where_layer": frontmatter.get("where_layer", ""),
             "chain": chain,
@@ -257,16 +262,23 @@ def extract_ticket_files(ticket_info: Dict[str, Any], logger) -> Set[str]:
         set - 檔案路徑集合
     """
     files = set()
-    ticket_type = ticket_info.get("type", "")
 
-    # 優先使用 where_files
+    # 優先使用巢狀 where.files（現行 schema；經 file_conflict.write_files
+    # 解析逐檔讀寫意圖標記，結果已是純寫入路徑，不再需經 _filter_write_files）
+    nested_where = ticket_info.get("where")
+    if isinstance(nested_where, dict) and nested_where.get("files"):
+        write_paths = _shared_write_files(ticket_info)
+        if write_paths:
+            return set(write_paths)
+
+    # 相容舊版平面鍵 where_files（現行 schema 恆為空，保留向後相容 fallback）
     where_files = ticket_info.get("where_files", "").strip()
     if where_files:
         # 解析 where_files（逗號分隔或空格分隔）
         for file_path in re.split(r"[,\s]+", where_files):
             if file_path.strip():
                 files.add(file_path.strip())
-        return _filter_write_files(files, ticket_type)
+        return _filter_write_files(files, ticket_info)
 
     # 次優先：where_layer
     where_layer = ticket_info.get("where_layer", "").strip()
@@ -274,7 +286,7 @@ def extract_ticket_files(ticket_info: Dict[str, Any], logger) -> Set[str]:
         for file_path in re.split(r"[,\s]+", where_layer):
             if file_path.strip():
                 files.add(file_path.strip())
-        return _filter_write_files(files, ticket_type)
+        return _filter_write_files(files, ticket_info)
 
     # 若都沒有，嘗試從內容中提取
     try:
@@ -284,7 +296,7 @@ def extract_ticket_files(ticket_info: Dict[str, Any], logger) -> Set[str]:
             stripped = line.strip()
             if any(stripped.startswith(prefix) for prefix in ["lib/", "test/", ".claude/", "pubspec.yaml"]):
                 files.add(stripped)
-        return _filter_write_files(files, ticket_type)
+        return _filter_write_files(files, ticket_info)
     except Exception as e:
         logger.debug(f"無法提取檔案清單: {e}")
         return set()
@@ -425,18 +437,26 @@ def find_pending_tickets_in_chain(root_id: str, all_tickets: List[Dict[str, Any]
     return pending
 
 
-def find_parallelizable_tickets(pending_tickets: List[Dict[str, Any]], logger) -> List[List[Dict[str, Any]]]:
+def find_parallelizable_tickets(
+    pending_tickets: List[Dict[str, Any]],
+    logger,
+    seed_tickets: Optional[List[Dict[str, Any]]] = None,
+) -> List[List[Dict[str, Any]]]:
     """
     從待處理 Ticket 中找出可並行執行的任務組
 
     並行安全條件：
     1. 無 blockedBy 關係
-    2. 檔案無重疊
+    2. 檔案無重疊（含與 seed_tickets 的重疊——與 track_runqueue._render_groups
+       的 seed 語意一致：status == in_progress 且非 stale 的在飛票視為已佔用
+       節點，其 where.files 排除鄰居入選，但不出現於回傳分組）
     3. 類型一致（都是 IMP/ADJ 等）
 
     Args:
         pending_tickets: 待處理 Ticket 清單
         logger: 日誌物件
+        seed_tickets: 已佔用（in_progress 且非 stale）的在飛票清單，僅用於
+            排除與其檔案重疊的候選票，不出現於回傳分組
 
     Returns:
         list - 可並行執行的任務分組
@@ -444,6 +464,21 @@ def find_parallelizable_tickets(pending_tickets: List[Dict[str, Any]], logger) -
     # 移除有 blockedBy 的 Ticket
     unblocked = [t for t in pending_tickets if not t.get("blockedBy")]
     logger.info(f"無阻塞 Ticket: {len(unblocked)}/{len(pending_tickets)}")
+
+    # 排除與在飛票（seed）檔案重疊的候選票——在飛票本身不進入分組，僅作為
+    # 已佔用節點排除其衝突鄰居，語意同 track_runqueue._render_groups 的 seed。
+    if seed_tickets:
+        seed_files: Set[str] = set()
+        for seed in seed_tickets:
+            seed_files.update(extract_ticket_files(seed, logger))
+        before = len(unblocked)
+        unblocked = [
+            t for t in unblocked
+            if not check_files_overlap(extract_ticket_files(t, logger), seed_files)
+        ]
+        excluded = before - len(unblocked)
+        if excluded:
+            logger.info(f"排除與在飛票檔案重疊的候選: {excluded} 個")
 
     if len(unblocked) < 2:
         logger.debug("少於 2 個無阻塞 Ticket，無法並行")
@@ -802,8 +837,17 @@ def main() -> int:
             logger.info(f"找到 {len(pending)} 個待處理 Ticket")
 
             if pending:
+                # 同任務鏈的在飛票（in_progress 且非 stale）作為衝突判定的
+                # seed，語意與 track_runqueue._render_groups 一致（佔用集合
+                # 判準：以 ticket status 為準，不改綁 lease registry）
+                seed_tickets = [
+                    t for t in tickets_info
+                    if t["chain"].get("root") == root_id
+                    and t.get("status") == "in_progress"
+                    and not is_stale_in_progress(t)
+                ]
                 # 分析可並行執行的任務
-                parallel_groups = find_parallelizable_tickets(pending, logger)
+                parallel_groups = find_parallelizable_tickets(pending, logger, seed_tickets=seed_tickets)
                 logger.info(f"找到 {len(parallel_groups)} 個並行分組")
 
                 if parallel_groups:

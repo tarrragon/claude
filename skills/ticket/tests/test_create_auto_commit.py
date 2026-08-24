@@ -407,3 +407,48 @@ class TestCommitCoversContextBundle:
         assert "source-what-content" in committed_content, (
             "commit 的 blob 內容應含抽取自 source ticket 的實際欄位值"
         )
+
+
+# ============================================================
+# 票面受損防護情境（W3-1026 第 3 環：抽取失敗且票面確實受損時，退出碼與
+# auto-commit 必須反映事實，禁止無條件宣稱「不影響 ticket 建立」）
+# ============================================================
+
+
+class TestTicketDamageAbortsCommitAndFailsExitCode:
+    def test_context_bundle_failure_that_truncates_file_aborts_commit_and_fails_rc(
+        self, patch_paths_to_repo, monkeypatch, capsys
+    ):
+        """模擬抽取失敗且順帶把票面截斷為 0 byte（W3-1026 重現情境的第 2 環
+        症狀）：即使原子寫入保護已修復正常路徑，本測試直接偽造「檔案已被
+        截斷」的後果，驗證 ring 3 的事後驗證機制能偵測並據實回報，而非
+        依賴 ring 2 保證不出事。"""
+        repo = patch_paths_to_repo
+        tickets_dir = repo / "tickets"
+        source_id = "0.0.0-W1-999"
+        _write_source_ticket_for_bundle(tickets_dir, source_id)
+        _install_context_bundle_path_mocks(monkeypatch, tickets_dir)
+
+        from ticket_system.commands.create import execute
+
+        def _corrupt_then_raise(version, ticket_id):
+            path = tickets_dir / f"{ticket_id}.md"
+            path.write_text("", encoding="utf-8")
+            raise RuntimeError("simulated corrupting failure")
+
+        monkeypatch.setattr(
+            "ticket_system.lib.context_bundle_extractor.extract_and_write_context_bundle",
+            _corrupt_then_raise,
+        )
+
+        before = _commit_count(repo)
+        rc = execute(_make_args(source_ticket=source_id))
+
+        assert rc == 1, "票面受損時退出碼必須反映失敗"
+        after = _commit_count(repo)
+        assert after == before, "受損時必須略過 auto-commit，不新增 commit"
+
+        captured = capsys.readouterr()
+        assert "已受損" in captured.err
+        assert "略過 auto-commit" in captured.err
+        assert "不影響 ticket 建立" not in captured.err

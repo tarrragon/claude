@@ -25,6 +25,7 @@ commit 超出宣告範圍，主導缺漏是「宣告實作檔、漏宣告伴生�
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
@@ -134,6 +135,35 @@ def _path_parts(path: str) -> Tuple[str, ...]:
     return tuple(p for p in path.rstrip("/").split("/") if p)
 
 
+def is_directory_declaration(path: str, project_root: Optional[Path] = None) -> bool:
+    """path 是否為目錄級宣告：結尾 `/`，或指向 repo 內既有目錄（PC-BAL-040）。
+
+    純路徑判定，不含 `::read` / `::write` 意圖標記檢查——呼叫端須先用
+    `parse_file_intent` 剝離標記取得純路徑再傳入本函式；是否對 `::read`
+    標記豁免由呼叫端決定（create.py / fields.py 發 WARNING，track_dispatch.py
+    對無 `::read` 的目錄級寫入宣告硬擋）。
+
+    `project_root` 未提供時 lazy import `ticket_system.lib.paths` 解析；
+    解析失敗（非 git 環境等）一律回傳 False（寧可漏判，不可誤擋）。
+    """
+    if not path:
+        return False
+    if path.endswith("/"):
+        return True
+    root = project_root
+    if root is None:
+        try:
+            from ticket_system.lib.paths import get_project_root
+
+            root = get_project_root()
+        except Exception:
+            return False
+    try:
+        return (root / path).is_dir()
+    except Exception:
+        return False
+
+
 def files_intersect(path_a: str, path_b: str) -> bool:
     """路徑段 tuple 前綴比對：精確相符，或其中一者為另一者的上層目錄前綴。
 
@@ -166,8 +196,16 @@ def find_nearest_tests_dir(file_path: str, project_root: Path) -> Optional[PureP
     逐層往上檢查每個祖先目錄是否有 `tests` 兄弟目錄實際存在，找到最近
     （最深）的一個即回傳；專案內找不到任何符合的 `tests/` 兄弟目錄時回傳
     None（不猜測）。
+
+    絕對路徑（帶前導斜線）早期拒絕回傳 None：`PurePosixPath('/').parent`
+    恆等於自身且 `.parts` 恆為 `('/',)` 非空，若不攔截會使下方迴圈的
+    出口條件（`not current.parts`）永不成立、`current = current.parent`
+    永不改變 current，形成無限迴圈。本專案 where.files 宣告一律應為
+    repo-relative 路徑，帶前導斜線視為畸形輸入。
     """
     p = PurePosixPath(file_path.rstrip("/"))
+    if p.is_absolute():
+        return None
     current = p.parent
     while True:
         candidate = current / "tests"
@@ -189,8 +227,14 @@ def derive_test_candidates(path: str, project_root: Optional[Path] = None) -> Li
     未命中任何慣例、或 Python 分支找不到真實存在的 `tests/` 目錄時回傳
     空清單（不衍生候選，維持原宣告值）。`project_root` 為 None 時 Python
     分支無法驗證真實目錄結構，同樣不猜測（寧缺勿錯）。
+
+    絕對路徑（帶前導斜線）早期拒絕回傳空清單：畸形輸入不衍生候選，並
+    避免 Python 分支間接呼叫 `find_nearest_tests_dir` 時繼承其絕對路徑
+    風險（雙重防護，`find_nearest_tests_dir` 本身亦已早期拒絕）。
     """
     p = PurePosixPath(path.rstrip("/"))
+    if p.is_absolute():
+        return []
     candidates: List[str] = []
 
     if p.suffix == ".dart" and p.parts and p.parts[0] == "lib":
@@ -387,18 +431,30 @@ class GroupsResult:
     parallel_group: List[str] = field(default_factory=list)
     not_selected: List[str] = field(default_factory=list)
     conflict_pairs: List[Dict[str, Any]] = field(default_factory=list)
+    occupied: List[str] = field(default_factory=list)
 
 
 def _greedy_independent_set(
-    ordered_nodes: List[str], adjacency: Dict[str, Set[str]]
+    ordered_nodes: List[str],
+    adjacency: Dict[str, Set[str]],
+    seed: Optional[Iterable[str]] = None,
 ) -> List[str]:
     """在 `adjacency` 描述的衝突圖上，依 `ordered_nodes` 順序貪婪走訪選取
     極大獨立集：逐一檢視節點，若尚未被先前選中節點的鄰居排除即選入，並
     立即排除其所有鄰居。呼叫端負責決定 `ordered_nodes` 的順序（如依
     priority 排序），選取結果天然反映該順序的優先權。
+
+    `seed`：已選取節點（不屬於 `ordered_nodes`，如施工中的 in_progress
+    票），走訪前先將其鄰居併入排除集合，使 `ordered_nodes` 中與其衝突的
+    節點被排除；`seed` 本身不參與走訪、不出現於回傳值——回傳值恰為
+    `ordered_nodes` 的子集，`selected = seed 聯集 new` 由呼叫端自行推導。
+    `seed` 為 None（預設）時排除集合初始為空集合，與未帶 seed 參數呼叫
+    完全同一條路徑，零額外分支。
     """
     selected: List[str] = []
     excluded: Set[str] = set()
+    for s in seed or ():
+        excluded.update(adjacency.get(s, ()))
     for node in ordered_nodes:
         if node in excluded:
             continue
@@ -408,7 +464,9 @@ def _greedy_independent_set(
 
 
 def compute_parallel_groups(
-    tickets: List[Dict[str, Any]], project_root: Optional[Path] = None
+    tickets: List[Dict[str, Any]],
+    project_root: Optional[Path] = None,
+    seed_tickets: Optional[List[Dict[str, Any]]] = None,
 ) -> GroupsResult:
     """依 where.files 交集切分可並行群組（父票設計要點 5；貪婪極大獨立集
     取代連通分量作為可並行判定）。
@@ -428,25 +486,88 @@ def compute_parallel_groups(
     函式不內建狀態篩選）與所需的 priority 排序（`parallel_group` 保留輸入
     順序，不重排）。`group_by_conflict` 的連通分量切分不再用於本函式，
     但簽章與行為原樣保留供 `track_parallel_check.py` 獨立使用。
+
+    `tickets` 中出現重複 id（兩筆 ticket 檔宣告同一 id，屬上游資料完整性
+    問題）時，`ticket_ids` 僅保留首次出現、後續重複略過（保序去重），
+    避免同一 id 在 `parallel_group` / `not_selected` 重複出現；並將偵測到
+    的重複 id 寫入 stderr 警告（規則 4：異常/資料完整性問題不可靜默），
+    不因去重而遮蔽票面資料已損壞的事實。
+
+    `seed_tickets`：已佔用節點（如 live in_progress 票，由呼叫端先以
+    `staleness.is_stale_in_progress` 篩掉 stale 者），僅提供衝突邊供
+    `_greedy_independent_set` 排除其鄰居，節點本身不併入 `ticket_ids`——
+    不出現於 `parallel_group` 亦不出現於 `not_selected`（見
+    `_greedy_independent_set` docstring 的 seed 語意）。`seed_tickets` 為
+    None 或空清單時，本函式與未帶此參數呼叫逐字一致（回歸不變）。衝突對
+    計算包含 seed 與一般節點之間的交集（使 `render_groups` 第三段可展示
+    排除來源），但排除 seed 彼此之間的衝突對（兩側皆不出現於任何清單，
+    無助於解釋任何落選票，見 `render_groups` occupied 區塊）。
     """
-    conflict_pairs = compute_pairwise_conflicts(tickets, project_root)
-    ticket_ids: List[str] = [t.get("id") for t in tickets if t.get("id")]
+    seen_ids: Set[str] = set()
+    ticket_ids: List[str] = []
+    duplicate_ids: List[str] = []
+    for t in tickets:
+        tid = t.get("id")
+        if not tid:
+            continue
+        if tid in seen_ids:
+            duplicate_ids.append(tid)
+            continue
+        seen_ids.add(tid)
+        ticket_ids.append(tid)
+    if duplicate_ids:
+        sys.stderr.write(
+            "[WARNING] compute_parallel_groups: 偵測到重複 ticket id"
+            "（票面資料完整性問題，已去重僅保留首次出現）: "
+            f"{sorted(set(duplicate_ids))}\n"
+        )
+
+    seed_ids: List[str] = []
+    seed_tickets_deduped: List[Dict[str, Any]] = []
+    occupied_seen: Set[str] = set(ticket_ids)
+    for t in seed_tickets or ():
+        tid = t.get("id")
+        if not tid or tid in occupied_seen:
+            continue
+        occupied_seen.add(tid)
+        seed_ids.append(tid)
+        seed_tickets_deduped.append(t)
+
+    combined_tickets = tickets + seed_tickets_deduped
+    conflict_pairs_all = compute_pairwise_conflicts(combined_tickets, project_root)
+    ticket_id_set = set(ticket_ids)
+    conflict_pairs = [
+        p
+        for p in conflict_pairs_all
+        if p["ticket_a"] in ticket_id_set or p["ticket_b"] in ticket_id_set
+    ]
     pair_tuples = [(p["ticket_a"], p["ticket_b"]) for p in conflict_pairs]
 
-    adjacency: Dict[str, Set[str]] = {i: set() for i in ticket_ids}
+    adjacency: Dict[str, Set[str]] = {i: set() for i in ticket_ids + seed_ids}
     for a, b in pair_tuples:
         if a in adjacency and b in adjacency:
             adjacency[a].add(b)
             adjacency[b].add(a)
 
-    parallel_group = _greedy_independent_set(ticket_ids, adjacency)
+    parallel_group = _greedy_independent_set(ticket_ids, adjacency, seed=seed_ids)
     selected_ids: Set[str] = set(parallel_group)
     not_selected = sorted(i for i in ticket_ids if i not in selected_ids)
+
+    # occupied 僅回報「實際排除了某個節點」的 seed（出現在 conflict_pairs
+    # 中），與 0 衝突邊的 seed 不列入——後者未影響任何選取結果，列出反而
+    # 是無意義雜訊；同時滿足回歸（無衝突時輸出與未帶 seed_tickets 逐字
+    # 一致）。
+    seed_id_set = set(seed_ids)
+    occupied = sorted(
+        {p["ticket_a"] for p in conflict_pairs if p["ticket_a"] in seed_id_set}
+        | {p["ticket_b"] for p in conflict_pairs if p["ticket_b"] in seed_id_set}
+    )
 
     return GroupsResult(
         parallel_group=parallel_group,
         not_selected=not_selected,
         conflict_pairs=conflict_pairs,
+        occupied=occupied,
     )
 
 
@@ -471,6 +592,15 @@ def render_groups(result: GroupsResult) -> str:
             lines.append(f"  - {tid}")
     else:
         lines.append("  （無）")
+
+    if result.occupied:
+        lines.append("")
+        lines.append(
+            f"施工中佔用節點（{len(result.occupied)} 票，in_progress 且非"
+            "stale，僅提供衝突邊排除鄰居，不參與選取）："
+        )
+        for tid in result.occupied:
+            lines.append(f"  - {tid}")
 
     lines.append("")
     lines.append(f"衝突對（{len(result.conflict_pairs)} 組）：")

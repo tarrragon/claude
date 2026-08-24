@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from lib import (
     setup_hook_logging,
+    run_hook_safely,
     read_json_from_stdin,
     extract_tool_input,
     is_subagent_environment,
@@ -275,4 +276,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(run_hook_safely(main, HOOK_NAME))

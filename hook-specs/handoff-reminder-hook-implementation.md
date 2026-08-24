@@ -96,10 +96,12 @@ SessionStart Hook 提供的 JSON 資料（通過 stdin）：
 
 | 檔案 | 位置 |
 |------|------|
-| Hook 腳本 | `.claude/hooks/handoff-reminder-hook.py` |
+| Hook 腳本 | 撰寫當時的部署路徑（已隨 ticket skill 私有化遷移，見表後附註）現為 `.claude/skills/ticket/hooks/handoff-reminder-hook.py` |
 | 設定檔 | `.claude/settings.local.json` |
 | 日誌目錄 | `.claude/hook-logs/handoff-reminder-hook/` |
 | Handoff 檔案 | `.claude/handoff/pending/*.json` |
+
+附註：「Hook 腳本」列的撰寫當時部署路徑為 `.claude/hooks/handoff-reminder-hook.py`，2026-08-22 文件複查更正。<!-- broken-link-exempt: 本列為歷史部署路徑加註，原路徑於撰寫當時真實存在 -->
 
 ---
 

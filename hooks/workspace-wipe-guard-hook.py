@@ -98,6 +98,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.dispatch_tracker import get_active_dispatches
+from lib.git_command_parse import strip_heredoc_bodies
 from lib.git_utils import FileStatus, get_project_root, get_uncommitted_files
 
 
@@ -207,11 +208,18 @@ _OPERATIONS = [
 
 
 def _detect_operation(command: str) -> Optional[Tuple[str, Optional[str]]]:
-    """依序檢查五種全工作區破壞性操作，回傳 (操作名稱, 安全形式提示) 或 None。"""
+    """依序檢查五種全工作區破壞性操作，回傳 (操作名稱, 安全形式提示) 或 None。
+
+    偵測前先剝離 heredoc 本體（`strip_heredoc_bodies`，與 bare-commit-guard-hook
+    透過 `find_git_invocations` 間接套用的判準一致）：本守衛對命令的「可執行
+    部分」做子字串比對，heredoc 內文屬 CLI 引數的資料（如 ticket append-log
+    引用一段含操作名稱的日誌原文），不是實際要執行的命令，不應觸發偵測。
+    """
     if not command:
         return None
+    executable_command = strip_heredoc_bodies(command)
     for name, detector, safe_hint in _OPERATIONS:
-        if detector(command):
+        if detector(executable_command):
             return name, safe_hint
     return None
 

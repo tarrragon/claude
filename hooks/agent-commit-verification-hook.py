@@ -52,6 +52,7 @@ from lib import (
     get_project_root,
     get_worktree_list as shared_get_worktree_list,
     get_uncommitted_files as shared_get_uncommitted_files,
+    run_hook_safely,
 )
 
 from lib.dispatch_tracker import get_active_dispatches
@@ -879,4 +880,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(run_hook_safely(main, HOOK_NAME))

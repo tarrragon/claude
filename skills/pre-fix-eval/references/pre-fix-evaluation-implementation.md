@@ -1,5 +1,7 @@
 # 修復前強制評估 Hook + Skill 實作說明
 
+> **歷史記述，內文不改寫**：本文件記錄的 `pre-fix-evaluation-hook.py` 與下述 `test-timeout-post.py` 為當時的部署狀態。兩者已合併進 `.claude/hooks/post-test-hook.py`（現況以此檔為準），本檔以下內文保留原始記述。
+
 ## [INFO] 概述
 
 本文件記錄「修復前強制評估」Hook + Skill 系統的完整實作。該系統自動偵測測試失敗和編譯錯誤，根據錯誤類型自動分類，並強制執行評估流程。

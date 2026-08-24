@@ -8,6 +8,8 @@
 - **執行 Agent**: project-compliance-agent, sage-test-architect
 - **狀態**: ✅ 全部完成
 
+> **歷史文件**：本報告記載 2025-10-09 完成時點的 bash 腳本路徑，下列各節提及的 `.sh` 檔於現行 `.claude/hooks/` 皆不存在（`task-dispatch-readiness-check.py` 除外，該項已由 Hook 2 落地為現行 Python 實作並持續存在）。本文件保留原樣供設計脈絡參照，不逐節加註，2026-08-22 文件複查。
+
 ---
 
 ## 🎯 專案目標
@@ -38,7 +40,7 @@
 
 **目的**: 防止主線程親自修改程式碼，強制使用 Task 工具分派
 
-**實作方式**: 擴充 `.claude/hooks/post-edit-hook.sh`
+**實作方式**: 擴充 `.claude/hooks/post-edit-hook.sh`<!-- broken-link-exempt: 歷史報告記載的撰寫當時路徑，見文件開頭說明 -->
 
 **觸發時機**: PostToolUse Hook (Edit|Write|MultiEdit)
 
@@ -88,7 +90,7 @@
 
 **目的**: 確保 CHANGELOG、todolist、work-log 三重文件一致性
 
-**實作方式**: 調整 `.claude/hooks/check-version-sync.sh`
+**實作方式**: 調整 `.claude/hooks/check-version-sync.sh`<!-- broken-link-exempt: 歷史報告記載的撰寫當時路徑，見文件開頭說明 -->
 
 **觸發時機**: 版本檢查流程（既有機制）
 
@@ -116,7 +118,7 @@
 
 **目的**: 強制執行 5 項檢查清單，確保階段完成品質
 
-**實作方式**: 新建 `.claude/hooks/stage-completion-validation-check.sh`
+**實作方式**: 新建 `.claude/hooks/stage-completion-validation-check.sh`<!-- broken-link-exempt: 歷史報告記載的撰寫當時路徑，見文件開頭說明 -->
 
 **觸發時機**: 手動執行或整合到版本檢查流程
 
@@ -161,7 +163,7 @@
 
 **目的**: 追蹤代理人任務執行並記錄統計資訊
 
-**實作方式**: 調整 `.claude/hooks/pm-trigger-hook.sh`
+**實作方式**: 調整 `.claude/hooks/pm-trigger-hook.sh`<!-- broken-link-exempt: 歷史報告記載的撰寫當時路徑，見文件開頭說明 -->
 
 **觸發時機**: Stop Hook（PM 觸發檢查時）
 
@@ -354,17 +356,18 @@
 - `.claude/hook-specs/complete-implementation-summary.md` - 本文件
 
 ### 實作檔案
-- `.claude/hooks/post-edit-hook.sh` - Hook 1 實作
-- `.claude/hooks/stage-completion-validation-check.sh` - Hook 4 實作
+- `.claude/hooks/post-edit-hook.sh` - Hook 1 實作<!-- broken-link-exempt: 歷史報告記載的撰寫當時路徑，見文件開頭說明 -->
+- `.claude/hooks/stage-completion-validation-check.sh` - Hook 4 實作<!-- broken-link-exempt: 歷史報告記載的撰寫當時路徑，見文件開頭說明 -->
 - `.claude/hooks/task-dispatch-readiness-check.py` - Hook 2 實作
-- `.claude/hooks/check-version-sync.sh` - Hook 3 實作
-- `.claude/hooks/pm-trigger-hook.sh` - Hook 5 實作
+- `.claude/hooks/check-version-sync.sh` - Hook 3 實作<!-- broken-link-exempt: 歷史報告記載的撰寫當時路徑，見文件開頭說明 -->
+- `.claude/hooks/pm-trigger-hook.sh` - Hook 5 實作<!-- broken-link-exempt: 歷史報告記載的撰寫當時路徑，見文件開頭說明 -->
 
 ### 配置檔案
 - `.claude/settings.local.json` - Hook 配置和權限
 
 ### 測試檔案
-- `.claude/hooks/test-task-dispatch-readiness.sh` - Hook 2 測試套件
+- `.claude/hooks/test-task-dispatch-readiness.sh` - Hook 2 測試套件（2026-08-22 文件複查：已刪除）<!-- broken-link-exempt: 歷史報告記載的撰寫當時路徑，見文件開頭說明 -->
+  （現行測試套件為 `.claude/hooks/tests/test_task_dispatch_readiness_check.py`）
 
 ---
 

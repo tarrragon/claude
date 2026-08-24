@@ -143,7 +143,7 @@ PM 執行 ANA 類型 Ticket 完成後，為其調查結論建立後續防護工�
 - `.claude/skills/ticket/SKILL.md` — ticket 工作流規範
 - `.claude/pm-rules/ticket-lifecycle.md` — ticket 生命週期（「ANA Ticket 落地下游血緣選擇」章節）
 - `.claude/config/ana-solution-schema.yaml` — ANA Solution Schema
-- `.claude/hooks/acceptance-gate-hook.py` — 驗收閘門 Hook
+- `.claude/skills/ticket/hooks/acceptance-gate-hook.py` — 驗收閘門 Hook
 - `.claude/error-patterns/process-compliance/PC-061-*.md` — 姊妹模式（migrate CLI bugs）
 
 ---

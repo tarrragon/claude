@@ -29,14 +29,10 @@ def _call_set_acceptance(
 class TestSetAcceptancePrecondition:
     """B6-B10 + E2：set-acceptance × status × force 矩陣。"""
 
-    def test_B6_pending_rejects(self, pending_ticket, precondition_tmp_dir, capsys):
-        before = (precondition_tmp_dir / f"{pending_ticket}.md").read_text(encoding="utf-8")
+    def test_B6_pending_passes(self, pending_ticket, precondition_tmp_dir):
+        """pending 屬建票期 bookkeeping，允許不需 --force。"""
         rc = _call_set_acceptance(pending_ticket)
-        assert rc == 2
-        after = (precondition_tmp_dir / f"{pending_ticket}.md").read_text(encoding="utf-8")
-        assert before == after
-        captured = capsys.readouterr()
-        assert "claim" in captured.err
+        assert rc == 0
 
     def test_B7_in_progress_passes(self, in_progress_ticket, precondition_tmp_dir):
         rc = _call_set_acceptance(in_progress_ticket)

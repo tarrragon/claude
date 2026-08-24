@@ -255,7 +255,7 @@ grep -c '/Users/' .claude/settings.local.json
 │   └── documentation/                 # 文件類錯誤（DOC-xxx）
 │
 ├── commands/                          # Slash 命令定義
-│   ├── commit-as-prompt.md
+│   ├── ticket.md
 │   ├── sync-push.md
 │   ├── sync-pull.md
 │   └── ...                            # 其他命令

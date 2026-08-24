@@ -161,7 +161,7 @@ description: "決策樹助手工具。快速評估任務複雜度，提供派發
 - [決策樹助手決策記錄格式](references/decision-record-template.md)
 - [拆分策略詳細指南](references/splitting-strategies.md)
 - [派發決策樹完整版](references/dispatch-decision-tree.md)
-- [認知負擔量化標準](.claude/skills/cognitive-load-assessment/thresholds.md)
+- 認知負擔量化標準：cognitive-load-assessment skill 的 thresholds.md（若已安裝）；未安裝時可參考 `.claude/rules/core/cognitive-load.md` 的量化標準表（指數閾值、任務拆分閾值）作替代
 - [主線程決策樹](.claude/pm-rules/decision-tree.md)
 - [任務拆分指南](.claude/pm-rules/task-splitting.md)
 

@@ -244,7 +244,7 @@ Step 4: 檢查執行日誌
 
 ## acceptance-gate-hook 技術細節
 
-**Hook 檔案**：`.claude/hooks/acceptance-gate-hook.py`
+**Hook 檔案**：`.claude/skills/ticket/hooks/acceptance-gate-hook.py`
 
 **Hook 類型**：PreToolUse
 

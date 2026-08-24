@@ -22,6 +22,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum, auto
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -158,9 +159,14 @@ def load_registry_snapshot() -> Tuple[Dict[str, Any], Any]:
 
     Returns:
         (registry_dict, pm_registry_module_or_None) —— registry 不可用（模組
-        載入失敗 / 非 git 環境）時回傳空骨架 + None，呼叫端應視為「無法判定，
-        不標記 reclaimable」而非報錯（保守降級：無法判定時不標記，同
-        Registry Schema 契約既有語意）。
+        載入失敗 / 非 git 環境 / `read_registry` 命中缺檔、空白、損毀、schema
+        不合任一降級分支）時回傳空骨架 + None，呼叫端應視為「無法判定，不
+        標記 reclaimable」而非報錯（保守降級：無法判定時不標記，同 Registry
+        Schema 契約既有語意）。降級讀取與 pm_registry 模組本身不可用同等
+        對待：兩者皆代表「registry 內容不可信」，不可與「registry 有效但
+        目前無任何 session」（合法狀態，owner 恆為 None）混為一談——後者
+        才會走 `determine_lease_state` / `is_lease_reclaimable` 的
+        owner=None -> RECLAIMABLE 分支。
     """
     pm_registry = _load_pm_registry()
     if pm_registry is None:
@@ -169,6 +175,8 @@ def load_registry_snapshot() -> Tuple[Dict[str, Any], Any]:
     if paths is None:
         return empty_registry_skeleton(), None
     registry = pm_registry.read_registry(paths[0])
+    if registry.get(pm_registry.DEGRADED_READ_KEY):
+        return empty_registry_skeleton(), None
     return registry, pm_registry
 
 
@@ -180,21 +188,35 @@ LEASE_STATE_UNTRACKED = "untracked"
 
 
 def determine_lease_state(
-    registry: Dict[str, Any], ticket_id: Optional[str], pm_registry, now: datetime
+    registry: Dict[str, Any],
+    ticket: Dict[str, Any],
+    pm_registry,
+    now: datetime,
 ) -> str:
-    """顯示層通用判定：ticket_id 的 lease 三態。
+    """顯示層通用判定：ticket 的 lease 三態（唯一實作，`is_lease_reclaimable`
+    為本函式的 derived predicate，見下方）。
 
-    判準與 `is_lease_reclaimable` 同源（`_find_lease_owner` + `pm_registry.is_fresh`），
-    僅將其布林結果拆為三態：registry 不可用或未追蹤該票 -> LEASE_STATE_UNTRACKED；
     owner 為 FRESH session -> LEASE_STATE_LIVE（不可接手）；owner 為 STALE
-    session -> LEASE_STATE_RECLAIMABLE（走 reclaim 鑑識）。降級語意對齊
-    `is_lease_reclaimable`——無法判定時不標記，不宣稱可接手。
+    session，或 registry 已載入但未追蹤該票 lease（無 FRESH session 佐證，
+    含 graceful SessionEnd 已刪除 entry 的情形）-> LEASE_STATE_RECLAIMABLE。
+    registry 本身不可用（`pm_registry` 為 None）或未提供 `ticket["id"]`
+    時，回傳 LEASE_STATE_UNTRACKED（唯一語意：無法判定，非「非 in_progress」
+    的替代用途——呼叫端須自行只對 in_progress 票呼叫本函式，或改用
+    `is_lease_reclaimable` 取得含 status 守衛的 derived predicate）。
+
+    owner 為 None 時判為 RECLAIMABLE 而非 UNTRACKED，語意對齊
+    `check_reclaimable`（實際 reclaim 命令）既有邏輯：registry 未追蹤 lease
+    不阻擋 ghost 鑑識三查繼續判定。本函式僅是顯示層輕量篩選（不含 ghost
+    鑑識），標記 RECLAIMABLE 不代表立即可 reclaim，仍須經
+    `ticket track reclaim` 的三查關卡（ghost 鑑識保守原則未被放寬）。
     """
+    ticket = ticket or {}
+    ticket_id = ticket.get("id")
     if pm_registry is None or not ticket_id:
         return LEASE_STATE_UNTRACKED
     owner = _find_lease_owner(registry, ticket_id)
     if owner is None:
-        return LEASE_STATE_UNTRACKED
+        return LEASE_STATE_RECLAIMABLE
     owner_data = (registry.get("sessions") or {}).get(owner) or {}
     if pm_registry.is_fresh(owner_data.get("heartbeat_ts"), now):
         return LEASE_STATE_LIVE
@@ -202,21 +224,28 @@ def determine_lease_state(
 
 
 def is_lease_reclaimable(
-    registry: Dict[str, Any], ticket_id: str, pm_registry, now: datetime
+    registry: Dict[str, Any], ticket: Dict[str, Any], pm_registry, now: datetime
 ) -> bool:
-    """顯示層輕量判定（`sessions` / `runqueue` 用）：ticket_id 是否被 registry
-    中某已知 STALE session 持有。
+    """顯示層輕量判定（`runqueue` 用；`sessions` 的 `reclaimable` 欄不呼叫
+    本函式，自算 `status == "STALE"`，判準已分岔，見 references/track-command.md
+    「track sessions 子命令」）：ticket 的 in_progress lease 是否已知無
+    FRESH session 佐證持有（可能已 STALE，或 registry 未追蹤此票——含
+    graceful SessionEnd 釋放後 entry 已刪除的情形）。
 
-    僅檢查 heartbeat 新鮮度（父票設計要點 2 的判準），不含 `reclaim_ticket`
-    實際執行前的 ghost 鑑識三查——鑑識涉及 git 呼叫，不適合逐票渲染表格時
-    觸發。`pm_registry` 不可用或 registry 未追蹤該票時回傳 False（保守：
-    僅標示已知確定為 STALE 的持票，不臆測）。
+    `determine_lease_state` 的 derived predicate：status 守衛（僅
+    in_progress 票才有意義判定 lease）於本函式收斂，owner/heartbeat 判定
+    委派給 `determine_lease_state`。呼叫端不需在呼叫前自行篩選
+    `status == "in_progress"`，對非 in_progress 票（如 pending）呼叫本函式
+    不會誤標為可接手。
+
+    僅檢查 heartbeat 新鮮度，不含 `reclaim_ticket` 實際執行前的 ghost 鑑識
+    三查——鑑識涉及 git 呼叫，不適合逐票渲染表格時觸發。
     """
-    owner = _find_lease_owner(registry, ticket_id)
-    if owner is None or pm_registry is None:
+    ticket = ticket or {}
+    if ticket.get("status") != STATUS_IN_PROGRESS:
         return False
-    owner_data = (registry.get("sessions") or {}).get(owner) or {}
-    return not pm_registry.is_fresh(owner_data.get("heartbeat_ts"), now)
+    state = determine_lease_state(registry, ticket, pm_registry, now)
+    return state == LEASE_STATE_RECLAIMABLE
 
 
 def resolve_current_session_id() -> Optional[str]:
@@ -282,17 +311,24 @@ def _warn_fresh_conflicts(
 ) -> None:
     """claim 前置衝突檢查：比對其他 FRESH session 已宣告的 files，命中僅
     輸出警告，不阻擋 claim（父票設計要點 1）。
+
+    自身 session 亦納入比對：同一 PM session 兩輪之間 claim 撞上自己已
+    佔用的檔案時，先前版本直接跳過，完全無警告。自身 session 恆視為
+    存活中，不受 `pm_registry.is_fresh` 的 FRESH 檢查限制——自撞的有效
+    窗口是整個 session 生命週期（或直到 `release_lease` 把票移出），與
+    跨 session 判定所依賴的 heartbeat TTL 不同源。
     """
     sessions = registry.get("sessions")
     if not isinstance(sessions, dict) or not ticket_files:
         return
 
     for session_id, data in sessions.items():
-        if session_id == self_session_id or not isinstance(data, dict):
+        if not isinstance(data, dict):
             continue
         if data.get("project") != project_root:
             continue
-        if not pm_registry.is_fresh(data.get("heartbeat_ts"), now):
+        is_self = session_id == self_session_id
+        if not is_self and not pm_registry.is_fresh(data.get("heartbeat_ts"), now):
             continue
 
         other_files = data.get("files") or []
@@ -302,7 +338,14 @@ def _warn_fresh_conflicts(
             for of in other_files
             if files_intersect(tf, of)
         })
-        if matched:
+        if not matched:
+            continue
+        if is_self:
+            sys.stderr.write(
+                "[lease] 檔案宣告與本 session 先前已認領的檔案有交集："
+                f"{', '.join(matched)}（僅警告，不阻擋 claim）\n"
+            )
+        else:
             sys.stderr.write(
                 f"[lease] 檔案宣告與 session {session_id} 的 FRESH lease 有交集："
                 f"{', '.join(matched)}（僅警告，不阻擋 claim）\n"
@@ -399,7 +442,26 @@ def release_lease(version: str, ticket_id: str) -> None:
     )
 
 
-def check_release_guard(ticket_id: str, now: Optional[datetime] = None) -> Tuple[bool, str]:
+class ReleaseGuardReason(Enum):
+    """`check_release_guard` 放行/拒絕原因的結構化列舉。
+
+    呼叫端（如 track.py 的 INFO 提示）依此列舉判定，不可再比對 reason
+    文字——文字僅供人讀輸出，措辭調整不影響列舉值，判定不會靜默失效。
+    `NO_LEASE_TRACKED` 專屬 release 路徑；reclaim 路徑的對應語意
+    （`check_reclaimable` 回傳 owner is None）為獨立字串，不共用本列舉
+    的任何成員。
+    """
+
+    MODULE_UNAVAILABLE = auto()
+    NO_LEASE_TRACKED = auto()
+    SELF_OWNED = auto()
+    STALE_OWNER = auto()
+    FRESH_OTHER_OWNER = auto()
+
+
+def check_release_guard(
+    ticket_id: str, now: Optional[datetime] = None
+) -> Tuple[bool, ReleaseGuardReason, str]:
     """`ticket track release` 前置閘門：ticket_id 由「非自身」FRESH session
     持有時拒絕，呼叫端須依 `--force-release-others` 顯式旁路。
 
@@ -420,17 +482,26 @@ def check_release_guard(ticket_id: str, now: Optional[datetime] = None) -> Tuple
             預設 None 時採用真實 UTC 現在時刻。
 
     Returns:
-        (allowed, reason) —— allowed=False 時 reason 為警告文字，供呼叫端
-        輸出並要求顯式 `--force-release-others`；allowed=True 時 reason
-        附放行原因（供除錯與測試斷言）。
+        (allowed, reason_code, reason) —— reason_code 為 `ReleaseGuardReason`
+        列舉，供呼叫端結構化判定（不可比對 reason 文字）；reason 為人讀
+        文字，allowed=False 時作警告輸出並要求顯式 `--force-release-others`，
+        allowed=True 時附放行原因（供除錯與測試斷言）。
     """
     registry, pm_registry = load_registry_snapshot()
     if pm_registry is None:
-        return True, f"{ticket_id}: pm_registry 模組不可用，無法判定 lease owner，允許 release"
+        return (
+            True,
+            ReleaseGuardReason.MODULE_UNAVAILABLE,
+            f"{ticket_id}: pm_registry 模組不可用，無法判定 lease owner，允許 release",
+        )
 
     owner = _find_lease_owner(registry, ticket_id)
     if owner is None:
-        return True, f"{ticket_id}: registry 未追蹤此票 lease，允許 release"
+        return (
+            True,
+            ReleaseGuardReason.NO_LEASE_TRACKED,
+            f"{ticket_id}: registry 未追蹤此票 lease，允許 release",
+        )
 
     now = now or datetime.now(timezone.utc)
     project_root = _current_project_root()
@@ -440,14 +511,23 @@ def check_release_guard(ticket_id: str, now: Optional[datetime] = None) -> Tuple
         else None
     )
     if self_session_id is not None and owner == self_session_id:
-        return True, f"{ticket_id}: 由自身 session 持有，允許 release"
+        return (
+            True,
+            ReleaseGuardReason.SELF_OWNED,
+            f"{ticket_id}: 由自身 session 持有，允許 release",
+        )
 
     owner_data = (registry.get("sessions") or {}).get(owner) or {}
     if not pm_registry.is_fresh(owner_data.get("heartbeat_ts"), now):
-        return True, f"{ticket_id}: 持有 session {owner} 已逾時（STALE），允許 release"
+        return (
+            True,
+            ReleaseGuardReason.STALE_OWNER,
+            f"{ticket_id}: 持有 session {owner} 已逾時（STALE），允許 release",
+        )
 
     return (
         False,
+        ReleaseGuardReason.FRESH_OTHER_OWNER,
         f"{ticket_id} 由其他存活中的 session {owner}（FRESH）持有，"
         "release 會清除其 lease、可能繞過 reclaim 三道防線；"
         "如確認要強制釋放，請加 --force-release-others",
@@ -461,10 +541,20 @@ def check_release_guard(ticket_id: str, now: Optional[datetime] = None) -> Tuple
 
 @dataclass
 class GhostReport:
-    """reclaim 前 ghost 鑑識三查結果（PC-166 防護 D 同款：任一命中即拒絕；
-    Phase 4 審查修正 1：查詢本身失敗的「無法判定」亦視為拒絕，不與「查詢
-    成功且無命中」的通過混淆——見 `unmerged_branch_unknown` /
-    `dirty_intersection_unknown`）。
+    """reclaim 前 ghost 鑑識三查結果（PC-166 防護 D 同款：未合併分支／髒檔
+    交集任一命中即拒絕；Phase 4 審查修正 1：查詢本身失敗的「無法判定」亦
+    視為拒絕，不與「查詢成功且無命中」的通過混淆——見
+    `unmerged_branch_unknown` / `dirty_intersection_unknown`）。
+
+    第 3 查（Exit Status 缺失）為 soft warning，不計入 `clean`：遺留票的
+    定義正是執行者已不在，此章節必然無人能填，把常態當拒絕條件會使
+    reclaim 對它最該服務的對象不可用，逼流量繞去零鑑識的
+    `ticket track release`。「執行中票不可 reclaim」的性質已由
+    `check_reclaimable` 的 FRESH lease 判定於呼叫 `run_ghost_forensics`
+    之前獨立把關（見 `reclaim_ticket`），owner 為 None（registry 未追蹤
+    lease）時則由未合併分支／髒檔交集兩查覆蓋——執行中的代理人通常仍有
+    未合併分支或未提交變更，經測試驗證見
+    `TestExitStatusMissingSoftWarningCoverage`。
     """
 
     unmerged_branch: bool = False
@@ -480,7 +570,6 @@ class GhostReport:
         return not (
             self.unmerged_branch
             or self.dirty_intersection
-            or self.exit_status_missing
             or self.unmerged_branch_unknown
             or self.dirty_intersection_unknown
         )
@@ -513,13 +602,15 @@ def _dirty_file_paths(status_lines: List[str]) -> List[str]:
 def run_ghost_forensics(ticket_id: str, ticket_files: List[str], body: str) -> GhostReport:
     """執行 reclaim 前 ghost 鑑識三查：
 
-    1. 未合併分支：`git branch --no-merged` 中存在含 ticket_id 的分支名。
-    2. 髒檔交集：`git status --porcelain` 路徑與 ticket_files 有交集。
-    3. 缺 Exit Status：票面 Exit Status 章節仍為佔位符 / 未找到。
+    1. 未合併分支：`git branch --no-merged` 中存在含 ticket_id 的分支名（hard fail）。
+    2. 髒檔交集：`git status --porcelain` 路徑與 ticket_files 有交集（hard fail）。
+    3. 缺 Exit Status：票面 Exit Status 章節仍為佔位符 / 未找到（soft
+       warning，僅記錄於報告，不影響 `GhostReport.clean`）。
 
     第 1、2 查依賴 git 查詢，查詢本身失敗（`_run_git_lines` 回傳 `None`）
-    時標記對應 `*_unknown` 欄位為 `True`（無法判定，非「無命中」，見
-    `GhostReport.clean`）。第 3 查為純票面內容比對，不受此影響。
+    時標記對應 `*_unknown` 欄位為 `True`（無法判定，非「無命中」，仍計入
+    `GhostReport.clean`，見該屬性定義）。第 3 查為純票面內容比對，不受此
+    影響，且不參與 `clean` 判定。
     """
     report = GhostReport()
 
@@ -567,7 +658,8 @@ def render_ghost_report(ticket_id: str, report: GhostReport) -> str:
     dirty_detail = f"（{', '.join(report.dirty_files)}）" if report.dirty_files else ""
     dirty_status = _check_status_label(report.dirty_intersection, report.dirty_intersection_unknown)
     lines.append(f"  2. 髒檔交集: {dirty_status}{dirty_detail}")
-    lines.append(f"  3. Exit Status 章節: {'缺失/佔位符' if report.exit_status_missing else '已填寫'}")
+    exit_status_label = "缺失/佔位符（警告，不影響鑑識結果）" if report.exit_status_missing else "已填寫"
+    lines.append(f"  3. Exit Status 章節: {exit_status_label}")
     lines.append(f"  結論: {'鑑識通過，允許 reclaim' if report.clean else '鑑識未通過，拒絕 reclaim'}")
     return "\n".join(lines)
 

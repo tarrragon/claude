@@ -51,6 +51,16 @@
 
 **Action**：所有實質 agent 的「禁止行為」區塊必須包含此項（即使 frontmatter 無 Edit / Write 工具，agent 仍可透過 Bash 執行 `ticket track close`，純文字禁令是最後一道自律防線）。
 
+**邊界：建立自身衍生票不在禁止範圍**
+
+本禁令的對象是「他人既有 ticket」。`ticket create --source-ticket <自身 ticket id>` 與 `--parent <自身 ticket id>` 建立的是尚不存在的 ticket，既非他人 ticket 亦非修改操作，不落在禁止範圍。撰寫此禁令時**必須明寫這條邊界**。
+
+**Why**：禁止項通常以「包括 `close` / `set-status` / 編輯他人 ticket md 等」列舉，以「等」結尾且未劃邊界，讀者需自行判斷未列舉項的歸屬。`create` 的字面與 `close` / `set-status` 同屬 ticket CLI 動詞，極易被歸入同一類。此讀法與 `AGENT_PRELOAD.md` 規則 2.6、`.claude/references/agent-dispatch-template.md`「建票血緣回填義務」的兩通道設計相反——後者明列 `create --source-ticket` 為 agent 的合法通道之一。
+
+**Consequence**：已發生實際誤讀。一次 ANA 執行以此禁令為由認定自身不得建票，改以 spawn request 登記並等待 PM 補建，而 acceptance-gate 在 complete 前即要求落地證據，該票因此停手上報。停手對 PM 表現為代理人阻塞，須人工介入才化解；同型誤讀會在每個依本標準撰寫的新 agent 定義上重演。
+
+**Action**：禁令條目後接一句邊界說明，明示 `create --source-ticket` / `--parent` 不受限，並指向 `.claude/references/agent-dispatch-template.md`「建票血緣回填義務」節的兩通道判準。若該 agent 定義另有「禁止在未建立 Ticket 的情況下提出建議」一類條目，一併說明兩者互為表裡——一個要求以建票提出發現，一個規範不得越界動別人的票。
+
 ### 區塊 3：適用情境
 
 明列何時應派發此 agent。
@@ -197,5 +207,6 @@ acceptance-gate-hook 在 complete 觸發前自動驗證，無論由 agent 或 PM
 
 ---
 
-**Last Updated**: 2026-08-17 | **Version**: 1.6.0 — 「執行責任：Ticket 完成」章節 Action 句改述：三探針實測證實 `.claude/agents/*.md` 主文 `@-import` 不展開為內容，AGENT_PRELOAD.md 規則 2.4 非有效送達路徑，改要求直接寫入實作類 agent 自身定義檔主文（mint-format-specialist.md 為落地範例）
+**Last Updated**: 2026-08-23 | **Version**: 1.7.0 — 跨 ticket 物件操作禁令新增「邊界：建立自身衍生票不在禁止範圍」小節（含三明示）：禁令對象限他人既有 ticket，`create --source-ticket` / `--parent` 不受限，撰寫禁令時須明寫此邊界。因「包括 close / set-status / 編輯他人 ticket md 等」以「等」結尾未劃邊界，`create` 與同列動詞字面相近而被讀成禁止建票，已發生代理人停手上報的實際誤讀。
+**Version**: 1.6.0 — 「執行責任：Ticket 完成」章節 Action 句改述：三探針實測證實 `.claude/agents/*.md` 主文 `@-import` 不展開為內容，AGENT_PRELOAD.md 規則 2.4 非有效送達路徑，改要求直接寫入實作類 agent 自身定義檔主文（mint-format-specialist.md 為落地範例）
 **Version**: 1.5.0 — 主文 substance 自 `.claude/rules/core/agent-definition-standard.md` 外移至本檔（W7-004.2 auto-load token 收斂）；core/ 原檔降為速查 stub。歷史 1.1–1.4 版見 git log。**Source**: W5-001 派發越界根因 A + PC-110 + W17-033 + SA 跨 ticket close 事件（並行 claim race condition 暴露）。

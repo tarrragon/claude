@@ -12,7 +12,7 @@
 
 - 讀取 Ticket frontmatter 的 `where.files` 欄位時，預期得到 Python list，實際得到換行符分隔的字串
 - 對字串做 `for f in where_files` 迭代時，Python 逐字符迭代
-- `"./Lib/Delete.py"` 變成 `['.', '/', 'L', 'i', 'b', ...]`
+- `"./Lib/Delete.py"` 變成 `['.', '/', 'L', 'i', 'b', ...]` <!-- broken-link-exempt: 症狀示範用的範例路徑值，非真實檔案引用 -->
 - 路徑匹配邏輯全部失敗，衝突偵測無效
 
 ## 根因分析

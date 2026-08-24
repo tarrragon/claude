@@ -334,10 +334,13 @@ mcp__dart__run_tests (不指定 paths)
 # 正確 - 必須指定 paths 參數
 mcp__dart__run_tests(roots: [{"root": "file:///path", "paths": ["test/domains/"]}])
 
-# 推薦 - 全量測試使用 Bash
-flutter test --reporter compact
-./.claude/hooks/test-summary.sh
+# 推薦 - 全量測試使用 Bash，直接管道限制輸出
+flutter test --reporter compact 2>&1 | tail -20
 ```
+
+> 現行慣例改為直接管道限制輸出（見 `.claude/rules/core/bash-tool-usage-rules.md` 規則二）。
+>
+> 附註：`.claude/hooks/test-summary.sh` 已刪除，2026-08-22 文件複查更正。<!-- broken-link-exempt: 本行為更正說明，其內容正是在陳述該腳本已刪除，路徑不存在是預期的 -->
 
 **測試執行流程**：
 ```bash
@@ -844,11 +847,11 @@ flutter test test/widget/
 
 **正確的全量測試方式**:
 ```bash
-# 使用摘要腳本執行全量測試（輸出 < 50KB）
-./.claude/hooks/test-summary.sh
+# 全量測試：直接管道限制輸出（只保留結尾統計與失敗摘要）
+flutter test --reporter compact 2>&1 | tail -20
 
-# 使用摘要腳本執行特定目錄測試
-./.claude/hooks/test-summary.sh test/unit/presentation/
+# 特定目錄測試：同樣以管道限制輸出
+flutter test test/unit/presentation/ --reporter compact 2>&1 | tail -20
 
 # 執行單一測試檔案（輸出較小，可直接執行）
 flutter test test/unit/core/errors/common_errors_test.dart
@@ -857,15 +860,13 @@ flutter test test/unit/core/errors/common_errors_test.dart
 mcp__dart__run_tests (指定單一檔案)
 ```
 
-**摘要腳本輸出格式**:
-```text
-=== 測試摘要 ===
-總數: 1065 | 通過: 1045 | 失敗: 20 | 跳過: 0
-執行時間: 45.2s
+> 現行慣例改為直接管道限制輸出（見 `.claude/rules/core/bash-tool-usage-rules.md` 規則二）。管道是輸出限制的承擔者，省略 `| tail -20` 會使全量測試輸出重新耗盡 context，即本節禁令要防的失效。
+>
+> 附註：`.claude/hooks/test-summary.sh` 已刪除，2026-08-22 文件複查更正。<!-- broken-link-exempt: 本行為更正說明，其內容正是在陳述該腳本已刪除，路徑不存在是預期的 -->
 
-=== 失敗測試 (20) ===
-1. test/unit/xxx_test.dart: 測試名稱
-   錯誤: Expected: ... Actual: ...
+**管道輸出格式**（`--reporter compact` 的結尾數行）:
+```text
+00:45 +1045 -20: Some tests failed.
 ```
 
 **重要提醒**: 此規範為強制遵循，違反將導致無法確認測試結果。
@@ -875,10 +876,10 @@ mcp__dart__run_tests (指定單一檔案)
 # 優先使用 Dart MCP 工具（單檔案測試）
 mcp__dart__run_tests
 
-# 全量測試使用摘要腳本
-./.claude/hooks/test-summary.sh
+# 全量測試：直接管道限制輸出
+flutter test --reporter compact 2>&1 | tail -20
 
-# 避免直接使用 bash 指令執行全量測試
+# 避免不限制輸出的全量測試
 flutter test
 ```
 
@@ -1030,10 +1031,11 @@ subagent context——ticket 操作規範若不寫在本檔，對你即不存在
 
 **Action**：
 
-1. 認領時申報身份：`ticket track claim <ticket-id> --as parsley-flutter-developer`
-2. 分析或實作產出即時寫入 ticket，不留到最後：
+1. 讀票確認最新狀態：`ticket track full <ticket-id>`
+2. 認領時申報身份：`ticket track claim <ticket-id> --as parsley-flutter-developer`
+3. 分析或實作產出即時寫入 ticket，不留到最後：
    `ticket track append-log <ticket-id> --section "<章節>" "<內容>"`
-3. commit 後主動收尾，不等 PM 代做：
+4. commit 後主動收尾，不等 PM 代做：
 
        ticket track check-acceptance <ticket-id> --all --as parsley-flutter-developer
        ticket track complete <ticket-id> --as parsley-flutter-developer

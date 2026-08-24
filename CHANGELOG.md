@@ -1,3 +1,181 @@
+## [2.39.0] - 2026-08-24
+
+### Summary
+revert: chore: metadata sync post-completion (原 commit: 0.2.1-W3-868); revert: 還原 readme_index 欄位級 upsert 至基線，契約歸屬轉 決策 (原 commit: 0.2.1-W3-878); feat: 新增 set-parent 命令修正 parent_id 並同步上游 children (+165 more)
+
+Changes: 2 revert, 21 feat, 5 refactor, 49 fix, 82 docs, 4 chore, 3 test, 2 other
+
+- revert: chore: metadata sync post-completion (原 commit: 0.2.1-W3-868)
+- revert: 還原 readme_index 欄位級 upsert 至基線，契約歸屬轉 決策 (原 commit: 0.2.1-W3-878)
+- feat: 新增 set-parent 命令修正 parent_id 並同步上游 children
+- feat: 新增 --discovered-during 旗標區分規劃衍生與發現衍生的建票語意
+- feat: portability-check 排除誤報並依 §2.4 分類輸出
+- feat: scan_links.py 新增 opt-in fence 稽核模式
+- feat: 建立 compositional-writing Phase 1 portability-check.sh
+- feat: ticket create 新增缺席斷言未查證軟提示
+- feat: 擴充 broken-link 掃描器射程至 .py/.sh 並接上合併宣告索引
+- feat: 共用 index 裸操作可觀測性 tripwire
+- feat: add ticket track hook-liveness subcommand
+- feat: add ticket track commit subcommand, repoint STAGING_PHRASE_AGENT
+- feat: migrate_settings_hooks.py 不變式改正規形式並加對帳模式
+- feat: complete auto-commit 改為隔離索引提交，不留 staged 殘留
+- feat: release 對無 lease 記錄的票輸出 INFO 提示
+- feat: commit 階段補網 hook 統一轉呼 12 支既有 guard 判斷函式
+- feat: Bash matcher hook 補網 main-thread-edit-restriction 職責邊界
+- feat: 遷移 settings.json hook 註冊為顯式解譯器形式
+- feat: 攔截目錄級 where.files 近似宣告（dispatch 硬擋、create/set-where WARNING）
+- feat: dispatch 骨架補 --commit-policy 與 hook 票四項提醒
+- feat: length-guard 訊息指向 ticket track dispatch，模板骨架改引用 CLI 單一權威
+- feat: 新增 ticket track dispatch 子命令（派發即落票）
+- feat: add dispatch prompt baseline reproduction script
+- refactor: multi-round-review 與 parallel-evaluation 的 8 筆跨 skill 硬連結轉條件語
+- refactor: 降級 hook 可執行位防護（889 遷移後不再必要）
+- refactor: 消除意圖標記正規表示式就地複本，改 import ticket_system
+- refactor: 收斂 lease 三項機械債務並修正失真註解
+- refactor: lease 可回收性判定收斂為單一實作，status 判定收回函式內
+- fix: 修正 Context Bundle 抽取失敗時票面被截斷為 0 byte 且謊報無影響
+- fix: 落地數改用集合語意，消除 processed SR 重複計數
+- fix: Step 2.5.2 認 resolved spawn request 並收窄豁免判定
+- fix: 放寬佔位符 hook 判定錨點涵蓋巢狀 archived/ 子目錄
+- fix: 修正 scan_links.py 兩類路徑解析誤報
+- fix: 更正六檔散落的 6 筆 fence 內真實 drift
+- fix: pre-test-hook pubspec mtime 比較加容差
+- fix: 清除範本與功能檢查設定中的失效腳本引用
+- fix: workspace-wipe-guard 剝離 heredoc 資料引用避免誤判
+- fix: commit_files_isolated 於 update-ref 成功後同步共用 index
+- fix: 五支 hook 補接線 run_hook_safely 存活驗證
+- fix: 四支 hook 補接線 run_hook_safely（943）
+- fix: 補接線防護類三支 hook _liveness 存活驗證
+- fix: hook_health 觸發次數改讀 _liveness 索引取代日檔行數
+- fix: track_hook_health CLI 傳真實 settings.json 給 classify_hook
+- fix: bootstrap 期絕對閾值依 hook_type 分級，消除高頻 hook 假 WARNING
+- fix: dispatch --note 改寫入 Problem Analysis 下 H3，消除 噪音
+- fix: bootstrap baseline when log coverage < 7 days
+- fix: track_commit base_dir 固定用 repo_root 避免 shim cwd 誤判越界
+- fix: scan_logs 適配每日輪替日誌，觸發次數改由內容行數推導
+- fix: compute_content_hash 改 os.walk 剪枝取代 rglob 後過濾
+- fix: _is_placeholder 逐行判定避免列表 N/A 行誤判整段
+- fix: setup_hook_logging 改每日輪替 append
+- fix: release INFO 提示改依結構化列舉判定，不再比對 reason 文字
+- fix: scan_logs 改檔名時間戳解析取代全樹逐檔 stat
+- fix: normalize commit_files_isolated paths to repo-relative before scope self-check
+- fix: 正規化提交範圍自我驗證的路徑比較，修復絕對/相對路徑誤判
+- fix: P0 續接——_newest_file_mtime 改非遞迴 scandir 避免逾時
+- fix: guard find_nearest_tests_dir against absolute-path infinite loop
+- fix: hook-health-monitor 修正 mtime 判準與 HOOK_NAME 解析
+- fix: identity_guard_adoption log 路徑絕對化並禁止靜默無檔
+- fix: 修正 identity_guard 測試對 complete 未帶 --as 的過期斷言
+- fix: hook-health-monitor 支援顯式解譯器 command 形式解析
+- fix: acceptance 兩個修改入口的 precondition 對齊
+- fix: ghost 鑑識 Exit Status 缺失降為 soft warning
+- fix: identity_guard 對 complete/finish 未帶 --as 由 warn 轉 deny
+- fix: DENY 訊息措辭修正（不建議 pathspec fallback）
+- fix: STAGING_PHRASE_AGENT 禁還原段明列動作清單
+- fix: parallel-suggestion-hook 讀取巢狀 where.files schema
+- fix: parallel-suggestion-hook 納入在飛票衝突邊並消除意圖解析複本
+- fix: 衝突圖納入 live in_progress 票為佔用節點，消除多輪 runqueue --groups 撞擊
+- fix: 移除 _warn_fresh_conflicts 自身 session 跳過
+- fix: 孤兒分支稽核 undetermined 訊息依實際失敗因輸出
+- fix: dispatch_prompt_baseline ticket ID 抽取加 fallback
+- fix: ticket-md-auto-commit-hook 改用獨立臨時 index + plumbing 提交，杜絕 TOCTOU
+- fix: 降級旗標不落盤，並自癒既有被污染的 registry 檔
+- fix: 對齊 is_lease_reclaimable 與 check_reclaimable 的 owner=None 語意
+- fix: compute_parallel_groups 對重複 ticket id 保序去重
+- fix: where.files 意圖標記剝離下沉至共用 parser
+- docs: 記錄 sort/uniq 預設 locale 合併相異 CJK 字串的統計陷阱
+- docs: 修正 focus topic 宣告段可執行 grep 在巢狀 worklog 下無法解析
+- docs: 更正 topic_inference.py docstring S1 覆蓋率數字與優先序論述
+- docs: 移除 parallel-dispatch.md 競態窗口維度小節（前提經查證為假）
+- docs: session-switching-sop 補 focus topic 宣告與收尾主題審視
+- docs: idle agent 回收 SOP 補競態窗口維度（assigned 欄位）
+- docs: idle agent 回收判準加入主題聚焦維度
+- docs: 規則七補檔案內夾帶邊界說明
+- docs: 補 runqueue callout 的 blockedBy= 輸出語意標註
+- docs: 裁決 6 筆待確認用語替換
+- docs: 替換 compositional-writing 與 multi-round-review 用語違規 27 筆
+- docs: 替換其餘 13 skill 共 23 檔 33 筆臺灣用語違規
+- docs: 替換 version-release 批次的用語違規
+- docs: 記錄派發真空期未落票使 pending 被誤讀為無人處理
+- docs: 轉條件語 4 個 skill 的 7 筆跨 skill 硬連結
+- docs: 轉條件語 5 個單檔 skill 的 6 筆跨 skill 硬連結
+- docs: 新增 ANA Solution 逐筆清單落地要求子節
+- docs: 轉條件語 requirement-protocol/search-tools-guide 2 筆跨 skill 硬連結
+- docs: 轉條件語 version-release/bootstrap 4 筆跨 skill 硬連結
+- docs: 補明跨 ticket 禁令不涵蓋建立自身衍生票
+- docs: 規則 5 spawn 情境表與 schema 對齊強制層
+- docs: 轉條件語 doc skill 4 筆跨 skill 硬連結
+- docs: 新增 PC-BAL-054 分析票逐筆清單未落地錯誤模式
+- docs: 新增 skill-marketplace-standard §2.4 框架共用層引用條文
+- docs: PC-137 與 parallel-dispatch 同步 none 模式已驗證範圍
+- docs: 同步 AUQ hook 規格與測試設計的實作落差
+- docs: 改指 hook_messages.py hint 至 tool-selection.md
+- docs: 移除已失效的 broken-link-exempt marker
+- docs: 刪除 .claude 根目錄殘留的 format-fix-examples.md 重複副本
+- docs: 還原依錯誤分類誤處置的三處引用
+- docs: 改寫 genuine_mixed 豁免行使 marker 只覆蓋死引用
+- docs: 更正 pre-fix-eval 範本中硬編碼的已合併 hook 名稱
+- docs: 更正高流量文件 10 筆 fence 內真實 drift
+- docs: 新增防護「移除某物前按每一種被引用形態各搜一次」
+- docs: 記錄合併標記語彙的正則抹除來源致清理任務靜默破壞另一機制
+- docs: 刪除 commands/ 四檔模板遺留並清理入向引用
+- docs: 移除 superfluous 豁免行的多餘 broken-link-exempt marker
+- docs: 更正 commands 四檔 fence 內的 42 筆失效引用
+- docs: 移除 output style 的 Session Token 欄位
+- docs: 更正 references 與 hook-specs 的 45 筆失效引用
+- docs: 更正 error-patterns 下 37 筆失效引用
+- docs: 更正自動載入層與可執行指引層的 10 筆失效引用
+- docs: 更正 pre-fix-eval 文件的舊 hook 名稱引用
+- docs: 標註五處更正說明行為 broken-link 豁免
+- docs: 修正兩份 error-pattern 的模態漂移與跨文件編號錨點
+- docs: 更正 PC-BAL-053 立論並補 IMP-BAL-011 第四層查證
+- docs: 新增 PC-BAL-053 文件宣稱的強制層從未部署
+- docs: 更正 agents 與 skills 中 8 處 hook 路徑漂移引用
+- docs: 新增 IMP-BAL-011 刪除工具後殘留引用的載體分級與職責交接
+- docs: 修復 agent 定義與 skill 指向已刪除 test-summary.sh 的失效引用
+- docs: 記錄判準在並行期間誕生未回頭同步的流程缺口
+- docs: 更正 LSP 環境檢查改用 uv run --quiet --script
+- docs: PC-148 佔位符範例補雙分支選用判準（PM 驗收回饋）
+- docs: 修復文件中指向已刪除 hook 腳本的失效引用
+- docs: 改寫依賴 shebang 直接執行的驗證慣例為顯式解譯器前綴
+- docs: PC-BAL-033 補「結構性消除範圍限定」段
+- docs: 依 Layer 2 審查修正新增段的四項阻塞問題
+- docs: 追加實作檔與測試檔配對遺漏案例並補預防措施 4、5
+- docs: 新增 ARCH-BAL-019 共享狀態變更使隱式下游靜默失效
+- docs: hook-system-reference 追加撰寫紀律六
+- docs: 標註 PC-BAL-033/PC-132 因 hook 日誌每日輪替而失效的診斷步驟
+- docs: hook-system-reference 紀律四/五 + 紀律二升規格條文
+- docs: 落地 922 收斂結論——掃描上限/路徑正規化/禁以檔案系統狀態推執行事實三紀律
+- docs: 文件化 complete 的 metadata/程式碼恆分兩個 commit 語意與 --no-stage 覆蓋範圍
+- docs: PC-BAL-051 補來源版本並同步 README 索引
+- docs: PC-BAL-051 AUQ 選項未附量化後果致不可逆操作在資訊不完整下被授權
+- docs: identity_guard 註解首句改列目前不阻擋的命令
+- docs: PC-BAL-008 補實證八（過期 index 項進入 HEAD）
+- docs: parallel-dispatch.md commit 紀律段移除 path-limited 主防護，改兩層制（規則七 / 隔離索引三要件）
+- docs: PC-BAL-008 追加實證七（PM 前台在途 vs 派發代理人跨執行體型）
+- docs: parallel-dispatch where.files 交集檢查改強制 CLI 並擴大範圍
+- docs: 補述隔離索引提交完整性三要素 + hook docstring 清單來源條件
+- docs: 修正 pathspec commit 首選建議與 bash 規則七的矛盾
+- docs: 補 runqueue --groups 多輪重跑安全性條件並校正舊前提
+- docs: harness 指令與框架正本衝突以正本為準
+- docs: bash-tool-usage-rules 規則七補隔離索引 CAS 加強做法
+- docs: PC-BAL-004 補「既有行為被斷言為缺陷」形態與案例二
+- docs: PC-BAL-008 補實證六（反向套用還原撤銷他人合法寫入）與兩條預防措施
+- docs: 補齊 11 個實作類 agent 定義與範本的讀票指令
+- docs: PC-BAL-008 補實證五（核對與提交之間的殘留競態）
+- docs: 依 Layer 2 審查修正 PC-BAL-050 並補 PC-168 反向連結
+- docs: 新增 PC-BAL-050 單點量測升級為分佈宣稱
+- chore: move AUQ hook specs into version control
+- chore: 補提交 version-release 檢查項（identity-guard 採用率監測）
+- chore: STAGING_PHRASE_AGENT 追加禁止還原掃入內容條款
+- chore: sync-push --clean 回寫版本 2.38.1 並補 CHANGELOG
+- test: 補 pre-test-hook pubspec mtime 容差回歸測試
+- test: 補 heredoc 內操作名稱誤判的回歸測試
+- test: 補齊四支 hook 對應測試檔（gate 命名慣例）
+- other: 新增 S2 主題涵蓋度門檻，排除 hub 檔案匹配
+- other: Reapply "chore: metadata sync post-completion"
+
+---
+
 ## [2.38.1] - 2026-08-21
 
 ### Summary

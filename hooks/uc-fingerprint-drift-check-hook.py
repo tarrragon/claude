@@ -26,6 +26,7 @@ sys.path.insert(0, str(_DOC_SKILL_DIR))
 
 from lib import (  # noqa: E402
     setup_hook_logging,
+    run_hook_safely,
     read_json_from_stdin,
     extract_tool_input,
     get_project_root,
@@ -33,6 +34,7 @@ from lib import (  # noqa: E402
 
 
 USE_CASES_SUFFIX = "docs/app-use-cases.md"
+HOOK_NAME = "uc-fingerprint-drift-check"
 
 
 def main() -> int:
@@ -88,8 +90,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as exc:
-        sys.stderr.write(f"[uc-fingerprint-drift-check] 未預期錯誤：{exc}\n")
-        sys.exit(0)
+    sys.exit(run_hook_safely(main, HOOK_NAME))

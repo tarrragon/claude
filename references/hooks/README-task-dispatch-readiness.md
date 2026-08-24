@@ -149,7 +149,7 @@ EOF
 
 **檢查項目**:
 1. 確認任務描述包含所有 4 項必要參考文件
-2. 使用測試套件驗證：`./.claude/hooks/test-task-dispatch-readiness.sh`
+2. 使用測試套件驗證：`uv run --directory .claude/hooks pytest tests/test_task_dispatch_readiness_check.py -q`（2026-08-22 文件複查更正，原 shell 測試套件 `./.claude/hooks/test-task-dispatch-readiness.sh` 已刪除，現行改為 pytest）<!-- broken-link-exempt: 本行為更正說明，原路徑已刪除是預期的 -->
 3. 手動測試並查看詳細錯誤訊息
 
 ### 問題：JSON 格式錯誤
@@ -163,7 +163,8 @@ EOF
 - **實作報告**: `.claude/hook-specs/hook-2-implementation-report.md`
 - **官方規範**: `.claude/hook-specs/claude-code-hooks-official-standards.md`
 - **敏捷重構方法論**: `.claude/methodologies/agile-refactor-methodology.md`
-- **測試腳本**: `.claude/hooks/test-task-dispatch-readiness.sh`
+- **測試腳本**: `.claude/hooks/tests/test_task_dispatch_readiness_check.py`（2026-08-22 文件複查更正）
+  （原 `.claude/hooks/test-task-dispatch-readiness.sh` 已刪除）<!-- broken-link-exempt: 本行為更正說明，原路徑已刪除是預期的 -->
 
 ## 💡 最佳實踐
 

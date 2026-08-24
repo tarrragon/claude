@@ -29,7 +29,7 @@ Handoff 提醒 Hook — WARN 模式
 
 使用方式:
     UserPromptSubmit Hook 自動觸發，或手動測試:
-    echo '{}' | uv run .claude/hooks/handoff-prompt-reminder-hook.py
+    echo '{}' | uv run .claude/skills/ticket/hooks/handoff-prompt-reminder-hook.py
 
 輸入格式:
     UserPromptSubmit Hook 提供的 JSON (stdin)

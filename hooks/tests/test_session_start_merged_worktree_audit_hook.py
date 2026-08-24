@@ -68,6 +68,8 @@ def _mk_subprocess_side_effect(
     worktree_porcelain: str = "",
     unmerged_per_branch: dict | None = None,
     status_porcelain: str = "",
+    current_branch: str = "main",
+    local_branches: str = "",
 ):
     """建立 subprocess.run side_effect，依命令類型分派。
 
@@ -75,6 +77,8 @@ def _mk_subprocess_side_effect(
         worktree_porcelain: git worktree list --porcelain 輸出
         unmerged_per_branch: {branch: [commit lines]}
         status_porcelain: git status --porcelain 輸出（含 M ticket md 等）
+        current_branch: git branch --show-current 輸出（0.2.1-W3-806 新增）
+        local_branches: git branch --list 輸出（0.2.1-W3-806 新增）
     """
     unmerged_per_branch = unmerged_per_branch or {}
 
@@ -89,6 +93,18 @@ def _mk_subprocess_side_effect(
         # ["git", "--no-optional-locks", ...]，故不依賴固定 index，
         # 改用「是否包含子字串」判斷命令類型。
         parts = list(cmd)
+
+        # 0.2.1-W3-806：collect_orphan_agent_branches 新增
+        # get_current_branch()（branch --show-current）與
+        # list_local_branches()（branch --list）兩條呼叫，
+        # 須以 --show-current / --list 旗標區分，並置於預設 return 之前。
+        if "branch" in parts and "--show-current" in parts:
+            result.stdout = current_branch
+            return result
+
+        if "branch" in parts and "--list" in parts:
+            result.stdout = local_branches
+            return result
 
         if "worktree" in parts and "list" in parts:
             result.stdout = worktree_porcelain

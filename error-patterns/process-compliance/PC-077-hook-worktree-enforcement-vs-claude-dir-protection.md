@@ -132,7 +132,7 @@ PM 派發實作代理人（thyme-python-developer、parsley-flutter-developer、
 - `.claude/error-patterns/process-compliance/PC-137-*.md` — 並行 `.claude/` Edit ≤ 2 限制依據
 - `.claude/rules/core/pm-role.md` — PM 職責邊界（產品程式碼 src/ 禁令範圍）
 - `.claude/pm-rules/parallel-dispatch.md` — Worktree 隔離章節
-- `.claude/hooks/agent-dispatch-validation-hook.py` — Hook 實作
+- `.claude/skills/ticket/hooks/agent-dispatch-validation-hook.py` — Hook 實作
 
 ---
 

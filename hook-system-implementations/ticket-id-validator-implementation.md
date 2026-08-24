@@ -5,7 +5,7 @@
 | 項目 | 內容 |
 |------|------|
 | **Hook 名稱** | Ticket ID Validator Hook |
-| **檔案位置** | `.claude/hooks/ticket-id-validator-hook.py` |
+| **檔案位置** | `.claude/skills/ticket/hooks/ticket-id-validator-hook.py` |
 | **Hook 類型** | PostToolUse（非阻塞） |
 | **監控工具** | Write |
 | **監控路徑** | `docs/work-logs/*/tickets/*.md` 或 `.claude/tickets/*.md` |
@@ -288,7 +288,7 @@
 
 ## 相關文件
 
-- **Hook 實作**: `.claude/hooks/ticket-id-validator-hook.py`
+- **Hook 實作**: `.claude/skills/ticket/hooks/ticket-id-validator-hook.py`
 - **配置檔案**: `.claude/settings.json`
 - **測試報告**: `docs/work-logs/v0.31.0/tickets/0.31.0-W5-001-test-report.md`
 - **日誌目錄**: `.claude/hook-logs/ticket-id-validator/`

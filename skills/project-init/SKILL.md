@@ -259,7 +259,7 @@ uv tool install .
 | 場景 | 下一步 | 說明 |
 |------|--------|------|
 | 全新專案 | `/doc-flow init` | 初始化文件系統（worklog、todolist、CHANGELOG） |
-| 既有專案重啟 | `.claude/skills/doc/references/legacy-code-workflow.md` | 六步驟既有專案評估流程（健康檢查 → Ticket 建立） |
+| 既有專案重啟 | doc skill 的 legacy-code-workflow（若已安裝） | 六步驟既有專案評估流程（健康檢查 → Ticket 建立）；未安裝 doc skill 時，仍可依「健康檢查 → 逐步建 Ticket」的概念自行執行，只是不會有現成的六步驟流程可依循 |
 | 已有文件系統 | `/ticket` | 直接查看待辦任務或建立新 Ticket |
 
 ---

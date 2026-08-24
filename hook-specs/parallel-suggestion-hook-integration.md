@@ -114,12 +114,12 @@ Hook 在用戶提交以下關鍵字時自動執行：
 
 #### 基本測試
 ```bash
-echo '{"prompt":"繼續執行任務鏈"}' | ./.claude/hooks/parallel-suggestion-hook.py
+echo '{"prompt":"繼續執行任務鏈"}' | uv run --quiet --script ./.claude/hooks/parallel-suggestion-hook.py
 ```
 
 #### 調試模式
 ```bash
-HOOK_DEBUG=true echo '{"prompt":"繼續"}' | ./.claude/hooks/parallel-suggestion-hook.py
+HOOK_DEBUG=true echo '{"prompt":"繼續"}' | uv run --quiet --script ./.claude/hooks/parallel-suggestion-hook.py
 ```
 
 #### 檢查日誌

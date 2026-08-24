@@ -22,8 +22,6 @@ import json
 import logging
 import os
 import re
-import stat
-import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -348,37 +346,34 @@ def _iter_skill_hook_files(skills_dir: Path):
             yield file_path
 
 
-def _check_and_fix_permissions(hooks_dir, logger):
-    """為 hooks_dir 頂層與 .claude/skills/<skill>/hooks/ 下的 hook 補上缺少的
-    exec bit。
+def _detect_missing_exec_bit(hooks_dir, logger):
+    """掃描 hooks_dir 頂層與 .claude/skills/<skill>/hooks/ 下缺可執行位的
+    hook 檔案（偵測版，2026-08-22 降級：不再 chmod）。
 
-    Claude Code 以 `$CLAUDE_PROJECT_DIR/.claude/hooks/<name>.py` 或
-    `$CLAUDE_PROJECT_DIR/.claude/skills/<skill>/hooks/<name>.py` 的形式直接
-    執行 hook，故只有「會被當作可執行檔啟動」的檔案需要 exec bit。以目錄
-    層級界定而非解析 settings.json，是為了避開「已註冊但本輪尚未 chmod 就
-    被執行」的競態——那正是 IMP-054 的原始失效。
+    降級理由：settings.json 全部 hook 註冊已改為顯式解譯器形式（`uv run
+    --quiet <path>` 或 `python3 <path>`），Claude Code 以直譯器讀檔執行，
+    不依賴檔案本身的 exec bit——「已註冊但本輪尚未 chmod 就被執行」的競態
+    在此前提下不再成立。舊版的自動 chmod + 自動 commit 因此改為純偵測：
+    仍回報缺可執行位的檔案供稽核（如跨平台 mode 遺失），但不再變更檔案、
+    不再產生 git mode-only commit。
 
     hooks_dir 頂層刻意不遞迴：`tests/`、`acceptance_checkers/`、`archived/`
-    下的 .py 由 pytest 或 import 載入，從不被 shell 直接執行。對其 chmod 會
-    產生無主的 git mode-only 變更（0.2.1-W3-319）。skills_dir 由
-    `hooks_dir.parent / "skills"` 推導（即 project_root/.claude/skills/），
-    不另加參數——與 main() 的既有推導慣例一致。skill hooks 下遞迴掃描，
-    僅略過快取/虛擬環境目錄（`_iter_skill_hook_files`），因該子樹不存在
-    tests/ 等非執行用途的子目錄。
+    下的 .py 由 pytest 或 import 載入，從不被直譯器直接執行，掃描範圍維持
+    與舊版一致，避免回報無意義的雜訊。skills_dir 由 `hooks_dir.parent /
+    "skills"` 推導（即 project_root/.claude/skills/）。skill hooks 下遞迴
+    掃描，僅略過快取/虛擬環境目錄（`_iter_skill_hook_files`），因該子樹不
+    存在 tests/ 等非執行用途的子目錄。
 
     Returns:
-        (fixed_relative_paths, already_ok_count)
-        fixed_relative_paths 為相對於 project_root（= hooks_dir.parent.parent）
-        的路徑字串（如 ".claude/hooks/foo.py"、".claude/skills/bar/hooks/
-        baz.py"）。改回傳相對路徑（而非先前版本的 basename）是支援 skill
-        hooks 子目錄的前提——`_attempt_auto_commit` 舊版以 `hooks_dir / name`
-        還原絕對路徑，子目錄檔案會被還原到 hooks_dir 底下的錯誤位置；改為
-        `project_root / relative_path` 後不再有此問題。
+        (missing_relative_paths, already_ok_count)
+        missing_relative_paths 為相對於 project_root（= hooks_dir.parent.
+        parent）的路徑字串（如 ".claude/hooks/foo.py"、".claude/skills/bar/
+        hooks/baz.py"）。
     """
     project_root = hooks_dir.parent.parent
     skills_dir = hooks_dir.parent / "skills"
 
-    fixed = []
+    missing = []
     already_ok = 0
 
     candidates = list(sorted(hooks_dir.glob("*.py"))) + list(
@@ -392,196 +387,28 @@ def _check_and_fix_permissions(hooks_dir, logger):
         if os.access(py_file, os.X_OK):
             already_ok += 1
         else:
-            current_mode = py_file.stat().st_mode
-            py_file.chmod(current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
             rel = str(py_file.resolve().relative_to(project_root.resolve()))
-            fixed.append(rel)
-            logger.info(f"chmod +x: {rel}")
+            missing.append(rel)
+            logger.info(f"缺可執行位（不自動修復）: {rel}")
 
-    return fixed, already_ok
+    return missing, already_ok
 
 
-def _format_permission_report(ok_count: int, fixed_files: List[str]) -> List[str]:
-    """組合「權限」區塊的回報行，主計數與本次修復數分行呈現。
+def _format_permission_report(ok_count: int, missing_files: List[str]) -> List[str]:
+    """組合「權限」區塊的回報行，主計數與本次偵測數分行呈現。
 
-    主計數（ok_count）只含本 session 開始前即可執行者。本次 chmod 的
-    fixed_files 不併入主計數——併入會使「權限: N 個已確認可執行」讀起來像
-    本 session 全數就緒的假訊號。故此行只陳述已修復的數量，不對生效時點作
-    斷言。
-
-    不斷言時點的理由已更新（2026-08-18）：原註解稱「無實驗可區分快照模型與
-    即時模型」，該實驗其後完成，結論為**版本相依**——2026-08-13 側的觀測資料
-    支持「session 啟動時一次快照」，2026-08-18 的兩輪 session_id 直接歸因實驗
-    支持「不晚於下一次工具呼叫即反映」，兩組各自自洽且互相矛盾。故不宜斷言
-    任一時點：寫死「立即生效」在快照模型下為假，寫死「下個 session 生效」在
-    即時模型下為假，而模型會隨 runtime 版本翻轉。保持不斷言是跨版本唯一安全
-    的表述。實驗範圍限 PreToolUse，其餘 hook event 未直接量測。
-
-    輸出層已對齊（2026-08-18）：下方獨立行原寫「本 session 內是否生效未經
-    驗證」，該措辭源於實驗未完成時的認知，實驗完成後「未經驗證」為假訊息——
-    會讓讀者以為尚無人查過而重跑實驗或多做一次無謂重啟。現改為只陳述已完成
-    的動作（補上可執行位）並明說不對時點作斷言，使時點維度整個不進入輸出，
-    與本 docstring 的立場一致。
-
-    相關：settings-registration-exec-guard-hook.py 對同一威脅面提供落地當下
-    的即時修復（該 hook 屬「提前動作」型，不宣稱任何生效時點）。
+    降級版（2026-08-22）：settings.json 全部 hook 註冊已改為顯式解譯器形式，
+    可執行位不再是 hook 被 runtime 呼叫的前提，本函式不再描述「已修復」或
+    任何生效時點，只陳述「已確認可執行」與「本次偵測到缺可執行位」兩個
+    事實計數，不自動修復、不觸發 git commit。
     """
     lines = [f"權限: {ok_count} 個已確認可執行"]
-    if fixed_files:
+    if missing_files:
         lines.append(
-            f"權限: 本次補上可執行位 {len(fixed_files)} 個（生效時點不作斷言）"
+            f"權限: 本次偵測到缺可執行位 {len(missing_files)} 個"
+            "（不自動修復，可執行位非執行前提）"
         )
     return lines
-
-
-def _run_git(args, cwd, logger):
-    """Run a git command, return CompletedProcess. Never raises."""
-    try:
-        return subprocess.run(
-            ["git", *args],
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        logger.warning(f"[HookCheck] git {' '.join(args)} 執行失敗: {exc}")
-        sys.stderr.write(f"[HookCheck] git {' '.join(args)} 執行失敗: {exc}\n")
-        return None
-
-
-def _repo_is_safe_to_autocommit(project_root, logger):
-    """僅在 HEAD 掛在分支上、且無進行中的 merge 時，才允許自動 commit。
-
-    不逐一檢查 `.git/rebase-merge`、`.git/CHERRY_PICK_HEAD` 等狀態檔：那份清單會
-    隨 git 版本增長，漏一項就是一個洞；更關鍵的是 linked worktree 的 `.git` 是
-    gitfile 而非目錄，真正的狀態檔位在 `<main>/.git/worktrees/<name>/` 下，路徑存在
-    性檢查在 worktree 中必然失效——而本專案常以 worktree 開發。
-
-    改判 HEAD 是否 detached 可一次覆蓋 rebase（兩種 backend 皆 detach HEAD）、
-    bisect 與一般 detached 狀態。若在 rebase 暫停期間 commit，該 commit 會被
-    `rebase --continue` 收進 replay 序列，成為分支的永久祖先且其後所有 commit 的
-    SHA 都改變，全程無警告（0.2.1-W3-319 實測）。
-
-    merge 進行中 HEAD 仍掛在分支上，故需另行檢查 MERGE_HEAD。git 自身雖會擋下
-    partial commit，但先行判斷可省去一則對使用者無意義的 fatal 訊息。
-    """
-    head = _run_git(["symbolic-ref", "-q", "HEAD"], project_root, logger)
-    if head is None or head.returncode != 0:
-        msg = "[HookCheck] HEAD 未掛在分支上（rebase / bisect / detached），跳過自動 commit"
-        print(msg)
-        logger.info(msg)
-        return False
-
-    merge_head = _run_git(
-        ["rev-parse", "-q", "--verify", "MERGE_HEAD"], project_root, logger
-    )
-    if merge_head is not None and merge_head.returncode == 0:
-        msg = "[HookCheck] merge 進行中，跳過自動 commit"
-        print(msg)
-        logger.info(msg)
-        return False
-
-    return True
-
-
-def _attempt_auto_commit(fixed_files, project_root, logger):
-    """提交本次 chmod 產生的 mode-only 變更。
-
-    工作區有其他變更時仍會提交，但範圍只涵蓋指定路徑。刻意不要求工作區乾淨——
-    SessionStart 時工作區通常已有開發中變更，舊版的「工作區恰好只含本次 chmod
-    變更」條件在真實環境幾乎不成立（0.2.1-W3-319 實證連續 4 次 chmod 全數跳過），
-    使 mode 變更淪為跨 session 無主遺留，最終在 git pull 時阻擋合併。
-
-    fixed_files: 本次 chmod 的相對路徑（相對 project_root，如 ".claude/hooks/
-    foo.py"、".claude/skills/bar/hooks/baz.py"；`_check_and_fix_permissions`
-    的回傳格式，見其 docstring 說明改為相對路徑的理由）。
-    Returns True if a commit was created, False otherwise.
-    """
-    if not fixed_files:
-        return False
-
-    if not _repo_is_safe_to_autocommit(project_root, logger):
-        return False
-
-    # Compute repo-relative paths for each fixed file
-    fixed_paths_abs = [project_root / rel for rel in fixed_files]
-    try:
-        fixed_rel_set = {
-            str(p.resolve().relative_to(project_root.resolve()))
-            for p in fixed_paths_abs
-            if p.exists()
-        }
-    except ValueError as exc:
-        msg = f"[HookCheck] 無法計算相對路徑，跳過自動 commit: {exc}"
-        print(msg)
-        logger.warning(msg)
-        return False
-
-    # 1) 以 numstat 一次取得「已被追蹤、相對 HEAD 有變更、且為 mode-only」的精確集合。
-    # `0\t0\t<path>` 表示零增刪行，即純 mode 變更。基準取 HEAD 而非 index，才能涵蓋
-    # 其他 session 已將內容變更 stage 起來的情形。未被追蹤的檔案不會出現在輸出中，
-    # 因而自然被排除——新建的 hook 檔整份內容都是新的，不屬於本函式的提交範圍，
-    # 若一併提交會讓「auto-fix executable permissions」的 commit 訊息與內容不符。
-    # --no-renames 必要：純改名在 numstat 下同樣顯示為 0 0，會偽裝成 mode-only。
-    diff = _run_git(
-        ["diff", "HEAD", "--numstat", "--no-renames", "--", *sorted(fixed_rel_set)],
-        project_root,
-        logger,
-    )
-    if diff is None or diff.returncode != 0:
-        msg = "[HookCheck] git diff 失敗，跳過自動 commit"
-        print(msg)
-        logger.warning(msg)
-        return False
-
-    committable = set()
-    for line in diff.stdout.splitlines():
-        parts = line.split("\t")
-        if len(parts) == 3 and parts[0] == "0" and parts[1] == "0":
-            committable.add(parts[2])
-
-    if not committable:
-        msg = (
-            "[HookCheck] 本次 chmod 的檔案沒有可提交的 mode-only 變更"
-            "（未被追蹤、已提交或含內容變更），跳過自動 commit。"
-        )
-        print(msg)
-        logger.info(msg)
-        return False
-
-    skipped = fixed_rel_set - committable
-    if skipped:
-        logger.info(
-            f"[HookCheck] {len(skipped)} 個 chmod 檔案無 mode-only 變更可提交，"
-            f"僅提交其餘 {len(committable)} 個: {', '.join(sorted(skipped))}"
-        )
-
-    # 2) git commit --only：僅提交指定路徑，不吸收其他 session 已 stage 的內容。
-    # 不先 git add——`--only` 自帶「以這些路徑為準」語意，額外的 add 會把檔案留在
-    # index 中，一旦後續 commit 失敗即污染共用 index（PC-BAL-008）。
-    commit_msg = "chore: auto-fix executable permissions for hook files (IMP-054)"
-    commit = _run_git(
-        ["commit", "--only", "-m", commit_msg, "--", *sorted(committable)],
-        project_root,
-        logger,
-    )
-    if commit is None or commit.returncode != 0:
-        err = (commit.stderr if commit else "") or "unknown error"
-        out = (commit.stdout if commit else "") or ""
-        msg = f"[HookCheck] git commit 失敗: {err}{out}"
-        print(msg)
-        logger.warning(msg)
-        sys.stderr.write(msg + "\n")
-        return False
-
-    success_msg = (
-        f"[HookCheck] 已自動 commit {len(committable)} 個權限修正檔案。"
-        f" 如需撤銷請執行: git revert HEAD"
-    )
-    print(success_msg)
-    logger.info(success_msg)
-    return True
 
 
 def main():
@@ -594,30 +421,24 @@ def main():
     settings_path = project_root / '.claude' / 'settings.json'
     exclude_list_path = script_dir / 'hook-exclude-list.json'
 
-    # --- Permission check (IMP-054) ---
-    fixed_files, ok_count = _check_and_fix_permissions(hooks_dir, logger)
+    # --- Permission check（偵測版，2026-08-22 降級：不再 chmod、不再 auto-commit）---
+    missing_exec_bit_files, ok_count = _detect_missing_exec_bit(hooks_dir, logger)
 
-    if fixed_files:
-        log_output = f"[HookCheck] 權限修正: {len(fixed_files)} 個檔案已自動加上執行權限 (IMP-054)"
+    if missing_exec_bit_files:
+        log_output = (
+            f"[HookCheck] 偵測: {len(missing_exec_bit_files)} 個檔案缺可執行位"
+            "（不自動修復，settings.json 皆以顯式解譯器呼叫，可執行位非執行前提）"
+        )
         print(log_output)
         logger.info(log_output)
-        for name in fixed_files[:10]:
-            detail = f"  chmod +x: {name}"
+        for name in missing_exec_bit_files[:10]:
+            detail = f"  缺可執行位: {name}"
             print(detail)
             logger.info(detail)
-        if len(fixed_files) > 10:
-            more = f"  ... 還有 {len(fixed_files) - 10} 個"
+        if len(missing_exec_bit_files) > 10:
+            more = f"  ... 還有 {len(missing_exec_bit_files) - 10} 個"
             print(more)
             logger.info(more)
-
-        # --- Auto-commit (IMP-054 / W17-133) ---
-        try:
-            _attempt_auto_commit(fixed_files, project_root, logger)
-        except Exception as exc:  # noqa: BLE001 - hook must not crash session
-            err = f"[HookCheck] 自動 commit 流程發生未預期例外: {exc}"
-            print(err)
-            logger.warning(err)
-            sys.stderr.write(err + "\n")
 
     # --- Registration check ---
 
@@ -674,7 +495,7 @@ def main():
     )
     print(log_output)
     logger.info(log_output)
-    for log_output in _format_permission_report(ok_count, fixed_files):
+    for log_output in _format_permission_report(ok_count, missing_exec_bit_files):
         print(log_output)
         logger.info(log_output)
 

@@ -95,4 +95,4 @@ _NON_CLAUDE_PATH_PATTERN = re.compile(
 ## 相關文件
 
 - `.claude/error-patterns/architecture/ARCH-015-*.md` — `.claude/` 寫保護限制
-- `.claude/hooks/agent-dispatch-validation-hook.py` — 修復後的 Hook
+- `.claude/skills/ticket/hooks/agent-dispatch-validation-hook.py` — 修復後的 Hook

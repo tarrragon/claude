@@ -8,6 +8,8 @@
 - **執行 Agent**: project-compliance-agent, sage-test-architect
 - **狀態**: ✅ Phase 1 完成
 
+> **歷史文件**：本報告記載 2025-10-09 完成時點的 bash 腳本路徑，下列各節提及的 `.sh` 檔於現行 `.claude/hooks/` 皆不存在。本文件保留原樣供設計脈絡參照，不逐節加註，2026-08-22 文件複查。
+
 ---
 
 ## 🎯 Phase 1 目標
@@ -23,7 +25,7 @@
 
 ### 實作方式
 
-**擴充現有檔案**: `.claude/hooks/post-edit-hook.sh`
+**擴充現有檔案**: `.claude/hooks/post-edit-hook.sh`<!-- broken-link-exempt: 歷史報告記載的撰寫當時路徑，見文件開頭說明 -->
 
 ### 主要功能
 
@@ -136,7 +138,7 @@ fi
 
 ### 實作方式
 
-**新建獨立腳本**: `.claude/hooks/stage-completion-validation-check.sh`
+**新建獨立腳本**: `.claude/hooks/stage-completion-validation-check.sh`<!-- broken-link-exempt: 歷史報告記載的撰寫當時路徑，見文件開頭說明 -->
 
 ### 檔案資訊
 
@@ -460,8 +462,8 @@ fi
 - `hook-system-methodology.md` - Hook 系統方法論
 
 ### 實作檔案
-- `.claude/hooks/post-edit-hook.sh` - Hook 1 實作
-- `.claude/hooks/stage-completion-validation-check.sh` - Hook 4 實作
+- `.claude/hooks/post-edit-hook.sh` - Hook 1 實作<!-- broken-link-exempt: 歷史報告記載的撰寫當時路徑，見文件開頭說明 -->
+- `.claude/hooks/stage-completion-validation-check.sh` - Hook 4 實作<!-- broken-link-exempt: 歷史報告記載的撰寫當時路徑，見文件開頭說明 -->
 - `.claude/settings.local.json` - Hook 配置
 
 ---

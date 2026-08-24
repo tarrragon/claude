@@ -124,7 +124,7 @@ def load_in_progress(
             "title": t.get("title") or "",
             "started_at": t.get("started_at"),
             "agent": agent,
-            "lease": lease.determine_lease_state(registry, ticket_id, pm_registry, now),
+            "lease": lease.determine_lease_state(registry, t, pm_registry, now),
         })
     result.sort(key=lambda x: str(x.get("started_at") or ""))
     return result

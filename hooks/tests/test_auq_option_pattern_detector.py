@@ -3,8 +3,8 @@
 AUQ Option Pattern Detector Hook - 測試（W5-042 Phase 3b）
 
 依據 Phase 2 測試設計：3 TP + 3 FP + 4 邊界 + 6 契約 = 16 個測試。
-規格: .claude/plans/hooks/auq-option-pattern-detector-spec.md
-測試設計: .claude/plans/hooks/auq-option-pattern-detector-test-design.md
+規格: .claude/hooks/specs/auq-option-pattern-detector-spec.md
+測試設計: .claude/hooks/specs/auq-option-pattern-detector-test-design.md
 """
 
 import importlib.util

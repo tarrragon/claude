@@ -293,7 +293,7 @@ if is_current_version and is_pending:
 2. 如果為其他值，工具會嘗試用正則表達式替換
 3. 若仍未更新，手動檢查檔案格式是否有特殊字符導致正則匹配失敗
 
-## 相關文檔
+## 相關文件
 
 - [Version Release README](./SKILL.md) - 完整功能說明
 - [SKILL.md](./SKILL.md) - 詳細技術文件

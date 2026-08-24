@@ -152,7 +152,7 @@ Step 5: 統計 59 個子 Ticket 結論 → 更新父 Ticket
 ## 相關文件
 
 - references/context-budget-formula.md - 例外情況的批次計算公式
-- .claude/skills/parallel-evaluation/SKILL.md - 多視角並行評估（正交工具）
+- parallel-evaluation skill（若已安裝）- 多視角並行評估（正交工具）；未安裝時仍可用本 skill 的批次評估機制，只是少了多視角正交評估這個互補工具
 - .claude/pm-rules/parallel-dispatch.md - 並行派發指南
 - .claude/pm-rules/task-splitting.md - 任務拆分指南
 

@@ -89,20 +89,28 @@
 
 ### 派發前 where.files 交集檢查（強制，PC-BAL-008 檔案級共用變體防護）
 
-> **來源**：PC-BAL-008 檔案級共用變體 — W3-295/296 並行派發，兩票均遵守本文件「派發 prompt 必含精準 git staging」的明確路徑 `git add` 規範，仍因兩票 `where.files` 共用同一檔案（`.claude/skills/framework-issue/tests/test_framework_issue.py`）而發生跨票內容吸收。
+> **來源**：PC-BAL-008 檔案級共用變體 — 並行派發時，兩票均遵守本文件「派發 prompt 必含精準 git staging」的明確路徑 `git add` 規範，仍因兩票 `where.files` 共用同一檔案而發生跨票內容吸收。同型事件於 2026-08-18 再現於 PM 前台工作場景：PM 前台改寫本檔案尚未 commit 期間，另一 session 派發的代理人以同檔為標的執行 commit，將前台在途改動一併吸收——顯示原條款「僅比對本輪待派發各票」的範圍未涵蓋 PM 前台自身在途工作，是此次未攔截的根因之一（完整案例見 PC-BAL-008「變體：檔案級共用」章節）。
 
-**Why**：本文件既有「並行安全檢查」的「檔案無重疊」項為判斷性描述，未明示比對依據；兩票規格各自撰寫、未逐項比對 `where.files` 欄位時，重疊容易被忽略。此類重疊即使兩位代理人都遵守精準 staging 規範也無法避免——路徑級隔離對「同一檔案的共同編輯」無效（見 PC-BAL-008「變體：檔案級共用」章節）。
+**Why**：本文件既有「並行安全檢查」的「檔案無重疊」項為判斷性描述，未明示比對依據；兩票規格各自撰寫、未逐項人工比對 `where.files` 欄位時，重疊容易被忽略，且人工比對天然只涵蓋「當下正在準備派發的這幾票」，看不到已在進行中、未在本輪派發清單內的其他票（含 PM 前台自身正在編輯但尚未 commit 的工作）。此類重疊即使兩位代理人都遵守精準 staging 規範也無法避免——路徑級隔離對「同一檔案的共同編輯」無效（見 PC-BAL-008「變體：檔案級共用」章節）。
 
-**Consequence**：兩票 commit 吸收後內容雖無損，但溯源混濁——commit 訊息與實際 diff 不符，未來考古需額外比對才能還原歸屬。
+**Consequence**：兩票 commit 吸收後內容雖無損，但溯源混濁——commit 訊息與實際 diff 不符，未來考古需額外比對才能還原歸屬；範圍未涵蓋 PM 前台在途工作時，前台正在編輯的章節可能被另一 session 的派發代理人整段吸收提交，前台已寫入但未 commit 的內容（如版本記錄編號）也隨之被錯票占用。
 
-**Action**：派發前逐項比對本輪待派發各票的 `where.files`，發現交集時二擇一：
+**Action**：派發前必須執行 `ticket track conflicts`（`--version` 可省略，預設掃描全部 active 版本），禁止改回人工逐項比對——該指令已內建 `pending`/`in_progress` 兩兩交集判定與 impl→test 擴張啟發式，覆蓋範圍與判定準確度均高於人工比對：
+
+```bash
+ticket track conflicts
+```
+
+比對範圍為**當前所有 `pending`/`in_progress` 票**，不限本輪待派發各票；PM 前台自身在途工作（尚未 commit 的框架檔案編輯）比照代理人在途工作，同樣須先以 ticket 認領登記 `where.files`（見 `.claude/rules/core/pm-role.md` PM 可寫路徑範圍），使其可被本檢查涵蓋。前置提醒：`where.files` 若含目錄級宣告會被 `create`/`set-where` 發出 WARNING（PC-BAL-040），先修正為精確路徑再執行本檢查，避免目錄級宣告造成過度序列化誤判。
+
+輸出 exit code 1（偵測到衝突）時，逐組交集依下表二擇一：
 
 | 情境 | 動作 |
 |------|------|
 | 兩票 `where.files` 有交集，內容可拆分 | 拆分為互斥的檔案落點（如各自獨立測試檔，事後視需要合併） |
 | 兩票 `where.files` 有交集，內容不可拆分 | 改序列派發：待前票 commit 完成後才派後票 |
 
-完整案例與根因見 `.claude/error-patterns/process-compliance/PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md`「變體：檔案級共用」章節。
+exit code 0（無衝突）時方可依原計畫並行派發。指令用法、判定規則、`[heuristic]` 標記語意見 `.claude/skills/ticket/references/track-command.md`「track conflicts 子命令」；完整案例與根因見 `.claude/error-patterns/process-compliance/PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md`「變體：檔案級共用」章節。
 
 ### Dispatch-Plan 先行（多任務 / group / spawned 場景）
 
@@ -159,7 +167,7 @@ dispatch-plan 欄位以 `.claude/references/agent-dispatch-template.md` 為準�
 |------|------|------|
 | staging 路徑 | 逐一列出 `where.files` 的精確路徑 | `git add .` / `git add -A` |
 | 範圍邊界 | 僅 staging 本 Ticket 的 `where.files` | 任何廣域符號 |
-| commit 階段 | path-limited commit：`git commit -m "訊息" -- <路徑清單>` | 不帶路徑的 `git commit -m "訊息"` |
+| commit 階段 | 精確 `git add` → `git diff --cached --name-only` 核對 → 裸 `git commit`（不帶 pathspec / `--only` / `-o` / `-a`）；高競爭路徑改用隔離索引（`GIT_INDEX_FILE` + plumbing，見 `bash-tool-usage-rules.md` 規則七與 details「隔離索引提交」） | `git commit -m "訊息" -- <路徑>`（pathspec 形式：丟棄既有 index、以 working tree 內容重建，會吸入他人同路徑未 stage 的編輯）；`git add .` 後裸 commit |
 
 **為何精準 `git add` 仍不足**：共享 working tree 下 git index 亦為共享。精準 `git add` 只保證「自己這次 staging 的內容正確」，但 `git commit` 若不帶路徑，提交的是整個 index 當下的內容——其他並行代理人已 `git add`、尚未 `git commit` 的變更會被一併吸收進本次 commit。staging 階段防護與 commit 階段防護是兩個獨立環節，前者不能替代後者。
 
@@ -168,17 +176,20 @@ dispatch-plan 欄位以 `.claude/references/agent-dispatch-template.md` 為準�
 **範例 prompt 片段**（示範上述原則的具體套用；實際派發直接複製 `.claude/references/agent-dispatch-template.md`「精準 staging 制式句」的固定措辭，不需自行改寫）：
 
 ```
-執行 commit 時使用 path-limited 形式（繞過 index，只提交指定路徑）：
     git add .claude/agents/sassafras.md .claude/agents/mint.md
-    git commit -m "..." -- .claude/agents/sassafras.md .claude/agents/mint.md
+    git diff --cached --name-only   # 只能含上列兩檔；多出者 git restore --staged <path>
+    git commit -m "..."             # 裸 commit；禁 -- <paths> / --only / -o / -a
 禁止：
-- git add . 或 git add -A（會併入其他並行代理人的修改）
-- git commit -m "..." 不帶路徑（即使自己的 git add 精準，仍會提交整個 index）
+- git add . 或 git add -A（併入其他並行代理人的修改）
+- git commit -m "..." -- <paths>（pathspec 形式丟棄 index、吸入他人同路徑未 stage 編輯，規則七）
+被掃入時：停手、記錄 SHA 與檔案清單、上報 PM；禁 revert / reset --soft / amend / 反向套用。
 ```
 
-**新增檔案不可省略 `git add`**：path-limited commit 的 pathspec 只匹配 git 已知的路徑。對已 tracked 檔案的修改，`git commit -- <path>` 可直接提交而不需先 `git add`；對 untracked 新檔（新建 Ticket md、新增測試檔等）則會失敗並回報 `pathspec ... did not match any file(s) known to git`，必須先 `git add` 使其進入 index。**Why**：習慣性省略 `git add` 在修改既有檔案時可行，遇到新檔才失效，而該錯誤訊息容易被誤讀為「path-limited 形式不可用」而退回不帶路徑的 `git commit`，反而觸發本節要防的行為。
+> **歷史註記**：本段 4.11.0–4.24.0 曾以 path-limited commit（`git commit -- <paths>`）為主防護，後經實測推翻（pathspec 形式對同一路徑上他人未 stage 的編輯無隔離，且丟棄既有 index），由 `bash-tool-usage-rules.md` 規則七明文禁止。現行兩層制：一般代理人派發採「精確 add + 核對 + 裸 commit」；PM 收尾、ticket CLI 等高競爭路徑採隔離索引（完整性三要件見 `bash-tool-usage-details.md`）。
 
-**收尾核對步驟（並列，不取代 path-limited commit）**：commit 前執行 `git status` 或 `git diff --cached --stat` 核對 staged 範圍，出現非本 Ticket 的檔案時用 `git restore --staged <path>` 撤除。此步驟不能取代 path-limited commit——`ticket track complete` 等 CLI 的 auto-stage 行為仍可能在核對之後、commit 之前重新納入他票檔案，故兩者須並列而非二選一。
+**新增檔案同樣需精確 `git add`**：untracked 新檔（新建 Ticket md、新增測試檔等）不會出現在 `git diff --cached`，漏 add 即漏提交；裸 commit 前的核對步驟以 `git status --porcelain` 一併確認無本票 untracked 殘留。
+
+**核對步驟的邊界**：`git diff --cached --name-only` 核對與裸 commit 之間仍有 TOCTOU 窗口（PC-BAL-008 實證五）——`ticket track complete` 的 auto-stage 或他票 `git add` 可在其間塞入檔案。一般派發接受此殘餘風險並以「被掃入即停手上報、禁還原」收尾；不可接受殘餘風險的路徑（PM 收尾、CLI 自動提交）改用隔離索引，且檔案清單不得取自共用 index（三要件第一條）。
 
 **降級替代方案**（精準 staging 不可行時）：
 
@@ -429,20 +440,22 @@ Claude Code runtime 對 subagent 操作 worktree 內 `.claude/` 有硬編碼保�
 
 ### bgIsolation: none 並行安全建議（W3-034.4 驗證落地）
 
-Claude Code v2.1.143+ 提供 `worktree.bgIsolation: "none"` 設定，讓 subagent 直接在主 repo working copy 操作（不建 worktree）。W3-034.4 並行受控實驗驗證後，本設定已從「並行情境未驗證」升級為「並行 3 已驗證 success（W3-034.4 3/3）」，但仍受 git index 競爭與並行 5+ 未測限制。 <!-- PC-093-exempt: history:0.19.0-W3-034.4 為實驗驗證歷史錨點 -->
+Claude Code v2.1.143+ 提供 `worktree.bgIsolation: "none"` 設定，讓 subagent 直接在主 repo working copy 操作（不建 worktree）。W3-034.4 並行受控實驗驗證後，本設定已從「並行情境未驗證」升級為「並行 3 已驗證 success（W3-034.4 3/3）」；2026-08-22 session 追加驗證擴大至並行 5 success，仍受 git index 競爭與並行 6+ 未測限制。 <!-- PC-093-exempt: history:0.19.0-W3-034.4 為實驗驗證歷史錨點 -->
+
+**模式判別方法**：套用本節與下方任一表格前，先確認當前 session 實際處於哪個模式，完整判準（`git worktree list` + settings 檢查兩項）見 `.claude/error-patterns/process-compliance/PC-137-parallel-subagent-claude-dir-edit-deny.md`「如何判別自己處於哪個模式」章節。
 
 **風險矩陣**：
 
 | 風險類型 | bgIsolation: worktree（預設） | bgIsolation: none |
 |---------|-----------------------------|------------------|
-| Git index 競爭 | 各自隔離，安全 | **共享 index**，PC-092 風險必然化（需精準 staging 或 PM 統一 commit） |
-| `.claude/` 並行 Edit | 限並行 ≤ 2（PC-137 worktree 模式規則） | 並行 3 已驗證 success（W3-034.4）；5+ 未驗證 |
+| Git index 競爭 | 各自隔離，安全 | **共享 index**；2026-08-22 session 11 組並行批次實測：index.lock 競爭可重試通過、跨票 staged 污染需 `git restore --staged` 卸除，見下方「已驗證情境」 |
+| `.claude/` 並行 Edit | 限並行 ≤ 2（PC-137 worktree 模式規則） | 並行 5 已驗證 success（W3-034.4 起始驗證 3，2026-08-22 session 追加至 5）；6+ 未驗證 |
 | 殭屍 worktree 累積 | 有，已有 GC hook | 無此問題 |
 | 合併成本 | 每次需合併 | 無 |
 
 **目前建議（v0.19.x）**：採策略 C 條件式採用（與 worktree-operations.md 一致）。
 
-**Why**：W3-034.4 並行受控實驗驗證 bgIsolation: none + 並行 3 subagent + `.claude/` Edit 達 3/3 success（PC-137 v1.1.0 落地）。PC-137 並行 ≤ 2 規則僅在 worktree 模式下有效；bgIsolation: none 下未受並行數限制（已驗證至 3）。
+**Why**：W3-034.4 並行受控實驗驗證 bgIsolation: none + 並行 3 subagent + `.claude/` Edit 達 3/3 success（PC-137 v1.1.0 落地）；2026-08-22 session 追加驗證至並行 5（PC-137 v1.2.0 落地）。PC-137 並行 ≤ 2 規則僅在 worktree 模式下有效；bgIsolation: none 下未受並行數限制（已驗證至 5）。
 
 **Consequence**：誤外推 worktree 模式並行限制到 bgIsolation: none 會放棄已驗證的並行解鎖；反之誤外推 none 模式解鎖到 worktree 模式則違反 PC-137 規則。模式判別錯誤直接決定派發成敗。
 
@@ -452,17 +465,29 @@ Claude Code v2.1.143+ 提供 `worktree.bgIsolation: "none"` 設定，讓 subagen
 |------|------------------|---------|
 | 單一 subagent + `.claude/` 修改 | none 可選 per-dispatch override | 無並行（W3-034.1 驗證 success） |
 | 並行 2 subagent + `.claude/` 修改 | worktree（預設）或 none 皆可 | 允許並行（PC-137 worktree 模式上限 = 2；none 模式同等可用） |
-| 並行 3+ subagent + `.claude/` 修改 | **none 必用**（worktree 模式禁止 3+） | 允許並行 Edit；commit 由 PM 統一執行 |
-| 全面切換 bgIsolation: none | **暫不採用** | 並行 commit 與 5+ 並行未驗證；對 src/ 失去 worktree 隔離保護。當前正向路徑：採策略 C 條件式採用（per-dispatch override），待出現 5+ 並行需求或 PC-092 共享 index 驗證需求時，建 ANA ticket 對照實驗 |
+| 並行 3+ subagent + `.claude/` 修改 | **none 必用**（worktree 模式禁止 3+） | 允許並行 Edit（已驗證至 5）；commit 由 PM 統一執行或依精準 staging 紀律各自提交 |
+| 全面切換 bgIsolation: none | **暫不採用** | 並行 6+ 未驗證；對 src/ 失去 worktree 隔離保護。當前正向路徑：採策略 C 條件式採用（per-dispatch override），待出現 6+ 並行需求時，建 ANA ticket 對照實驗 |
 
 **未驗證情境（仍受限）**：
 
 | 情境 | 風險 |
 |------|------|
-| bgIsolation: none + 並行 + 子代理人各自 git add/commit | PC-092 共享 index 競爭未測 |
-| bgIsolation: none + 並行 5+ subagent | 更高並行度未測，採並行 ≤ 3 為觀察上限 |
+| bgIsolation: none + 並行 6+ subagent | 更高並行度未測，採並行 ≤ 5 為觀察上限 |
 
-> 上表屬規則檔擴充性說明（依 `.claude/rules/core/decision-trigger-binding.md` 規則 1.5，rules/方法論可述未來考量，不需綁 ticket trigger）。實際出現 5+ 並行需求或需驗證 PC-092 共享 index 行為時，建 ANA ticket 執行對照實驗。
+> 上表屬規則檔擴充性說明（依 `.claude/rules/core/decision-trigger-binding.md` 規則 1.5，rules/方法論可述未來考量，不需綁 ticket trigger）。實際出現 6+ 並行需求時，建 ANA ticket 執行對照實驗。
+
+**已驗證情境：bgIsolation: none + 並行 git add / commit（2026-08-22 session 實測）**：
+
+原「PC-092 共享 index 競爭未測」情境已由 11 組並行批次（全程共用主 repo git index 提交）的實測取代：
+
+| 觀察 | 內容 |
+|------|------|
+| index.lock 競爭 | 確實發生（PM 側至少 2 次、代理人側數次），但重試即通過，無資料損失 |
+| 跨票 staged 檔案污染 | 確實發生且頻繁；提交前以 `git diff --cached --name-only` 核對時發現他票檔案已在 index 中，以 `git restore --staged` 卸除後才提交 |
+| 三步驟串接致誤提交 | 一次實際誤提交發生於 PM 側，成因是把「精確 add → 核對 → 裸 commit」三步驟以 `&&` 串接，使核對輸出在 commit 之後才可見；已由後續 commit 補正，無資料遺失 |
+| 高衝突路徑的替代方案 | 隔離索引 CAS（`GIT_INDEX_FILE` + `read-tree`/`write-tree`/`commit-tree`/`update-ref`，完全不觸碰共用 index）已有可行實作，見 `.claude/rules/core/bash-tool-usage-rules.md` 規則七「隔離索引 CAS」段 |
+
+**結論**：風險真實存在且會顯現，但以既有紀律（規則七三步驟不串接 + 提交前核對 index + 高衝突路徑改用隔離索引）可管理。**不因此收緊並行數**——問題出在提交紀律，不在並行度。
 
 **Git index 競爭警告（bgIsolation: none 下強化）**：
 
@@ -474,21 +499,21 @@ bgIsolation: none 下所有 subagent 共享主 repo git index。並行派發若�
 
 對應防護：派發 prompt 必含精準 git staging（禁 `git add .` / `git add -A`），或由 PM 統一 commit，見本文件「派發 prompt 必含精準 git staging」章節。
 
-**對照 PC-137 v1.1.0 規則**：
+**對照 PC-137 v1.2.0 規則**：
 
 | 並行數 | bgIsolation: worktree | bgIsolation: none |
 |-------|----------------------|------------------|
 | 1 | 序列派發，無限制 | 序列派發，無限制 |
 | 2 | 允許並行（檔案邊界互斥） | 允許並行（檔案邊界互斥） |
-| 3+ | 拆 batch（每批 ≤ 2）或改序列 | 允許並行 Edit；commit 由 PM 統一執行 |
+| 3+ | 拆 batch（每批 ≤ 2）或改序列 | 允許並行 Edit（已驗證至 5）；commit 由 PM 統一執行或依精準 staging 紀律各自提交 |
 
-PC-137 並行 ≤ 2 規則為 worktree 模式下的觀察結論（W17-097.1-.4 + W17-174.2.1/.3/.4 7/7 deny 證據）；bgIsolation: none 模式並行行為由 W3-034.4 受控實驗驗證為不同模式，並行 ≤ 3 已 success。模式判別應依當前 `.claude/settings.json` 的 `worktree.bgIsolation` 設定值 + per-dispatch override 為準（per-dispatch override 機制由 CC runtime 提供，當前 v0.19.x 採全域 settings + 特定情境派發近似實現）。
+PC-137 並行 ≤ 2 規則為 worktree 模式下的觀察結論（W17-097.1-.4 + W17-174.2.1/.3/.4 7/7 deny 證據）；bgIsolation: none 模式並行行為由 W3-034.4 受控實驗驗證為不同模式，並經 2026-08-22 session 追加驗證，並行 ≤ 5 已 success。模式判別應依「模式判別方法」段所列兩項判準為準（`git worktree list` + settings 檢查），per-dispatch override 機制由 CC runtime 提供，當前 v0.19.x 採全域 settings + 特定情境派發近似實現。
 
 **參考**：
 
 - worktree-operations.md「bgIsolation 策略選擇」子節（策略對照表與決策樹）
 - PC-092（並行 commit 邊界混亂）
-- PC-137 v1.1.0（並行 ≤ 2 規則 + bgIsolation: none 例外章節）
+- PC-137 v1.2.0（並行 ≤ 2 規則 + bgIsolation: none 例外章節 + 模式判別方法）
 
 ---
 
@@ -618,6 +643,31 @@ PC-137 並行 ≤ 2 規則為 worktree 模式下的觀察結論（W17-097.1-.4 +
 
 **預設行為（無立即後續任務時）：放生。** 主動放生後若有新 ticket 再 spawn，冷啟動成本可預測且有限（約 30 秒載入 CLAUDE.md + rules）。
 
+### 主題聚焦維度（idle agent 續用判準）
+
+上方判準表的既有列（Wave / type / 檔案重疊 / context 飽和 / 重複 idle agent）對「主題」全部失明——「同 Wave 同類型 pending ticket 存在」不代表「該票與當前 session 持有的主題（見上方「主題層前置」「主題持有」小節）相符」。以下新增列與既有列**並列適用（AND 關係）**：任一列指向放生即放生，唯有全部列都指向續用才續用；既有列的文字與判斷不因本節而改變。
+
+| 條件 | 判斷 | 理由 |
+|------|------|------|
+| 同 Wave 有同類型 pending ticket，且其主題與當前 session 持有的主題相符，或 session 未持有明確主題 | 續用（仍受既有列如檔案重疊、context 飽和等條件約束） | 主題相符時續用不影響 session 焦點，回退既有判準列決定 |
+| 同 Wave 有同類型 pending ticket，但其主題與當前 session 持有的主題不同（跨主題） | 放生（預設） | 續用會使 session 同時混雜不相干主題的變更脈絡，違反「主題層前置」一節「一個 session 一次只持有一個主題」的設計目標；「同類型」不等於「同主題」，Wave/type 兩維度對主題本身無鑑別力 |
+
+**現場實例**（觸發本節的具體情境）：某代理人完成任務後轉 idle，PM 依原判準表 Step 1 查得同 Wave 有多張同類型 pending 任務，結果為「續用」；但這些 pending 任務分屬「規則引用清理」「Hook 測試覆蓋」等與當前 session 持有主題不同的主題，續用會使 session 從當前主題發散。原判準表對此無法給出「不可續用」的結論——這正是本節新增列所補的缺口。
+
+**何謂「當前 session 持有的主題」與如何查詢**
+
+Why：判準要能被執行，「session 持有的主題」須是可查證的定義，不能停留在 PM 自行感覺是否發散。
+
+Consequence：若無明確查詢方式，PM 各自解讀「持有的主題」，本節新增列形同虛設，續用/放生決策仍落回自由心證，與新增本節的目的相悖。
+
+Action：依序判定，命中即停止：
+
+1. `.claude/pm-rules/session-switching-sop.md` 若已建立 session 起始時宣告持有主題的機制，以宣告值為準（截至本節定案時該機制尚未建立；建立後以其宣告介面為準，不需改動本節其餘判準）。
+2. 未宣告時，以本 session 當前在途或最近完成 ticket 的主題作為代理判準：`grep "^<ticket-id>" docs/work-logs/topic-assignments.txt` 或 `ticket track board --group-by topic` 查得該 ticket 與待續用 pending ticket 各自的主題，兩者字串相符即為「主題相符」。
+3. 兩張票的主題皆查無（未歸屬）時，視為「session 未持有明確主題」，本節不擋，回退既有判準列。
+
+> **與 session 起訖階段主題宣告的分工邊界**：`.claude/pm-rules/session-switching-sop.md` 涵蓋 session **起訖**——開始時宣告持有主題、收尾時審視主題並改派（該機制截至本節定案時尚待建立）。本節（`parallel-dispatch.md`）涵蓋 session **中途**——idle agent 續用/放生的決策點。兩檔案不同、時機不同，非重複；但皆涉及「主題聚焦」，故上方步驟 1 優先採用 `session-switching-sop.md` 的宣告值，未宣告時才退回步驟 2-3 的 proxy 判準，避免兩份文件對同一決策給出不同指引。本節條文不依賴 `session-switching-sop.md` 的宣告機制即可獨立運作（步驟 2-3 為自足 fallback）。
+
 ### SOP 流程
 
 ```
@@ -632,7 +682,11 @@ PC-137 並行 ≤ 2 規則為 worktree 模式下的觀察結論（W17-097.1-.4 +
               |
               +-- 重疊 → [Step 2b] 放生或等待：SendMessage shutdown_request（不可續用）
               |
-              +-- 不重疊 → [Step 2a] 續用：SendMessage 派發新任務
+              +-- 不重疊 → [Step 1.7] 核對該 pending ticket 的主題是否與當前 session 持有的主題相符（見上方「主題聚焦維度」）
+                        |
+                        +-- 不符（跨主題）→ [Step 2b] 放生（預設）：續用會使 session 從持有主題發散
+                        |
+                        +-- 相符，或 session 未持有明確主題 → [Step 2a] 續用：SendMessage 派發新任務
 ```
 
 **Step 2a 續用範本**：
@@ -917,7 +971,12 @@ Wave 所有 ticket 完成後，PM 對所有仍存活的 idle agent 依序發送 
 
 ---
 
-**Last Updated**: 2026-08-19
+**Last Updated**: 2026-08-24
+**Version**: 4.29.0 - 移除前一版本新增的「競態窗口維度」小節與 SOP 流程圖 Step 1 對應查詢條件，還原為新增前原文。移除理由：該小節前提經查證不成立，非設計方向變更——`assigned` 欄位在程式碼中僅由 `claim` 路徑（含批次 claim）寫入 `true`，且與 `status` 轉為 `in_progress` 在同一區塊原子完成；派發動作本身不寫入 `assigned`，故不存在「`status` 仍為 `pending` 但 `assigned` 已為 `true`」的窗口期，該小節所述機制不存在於現行程式碼。既有五列判準與主題聚焦維度小節不受影響，文字未變更
+**Version**: 4.27.0 - 「idle agent 回收 SOP」新增「主題聚焦維度」小節：續用/放生二分判準表補一組並列適用的主題維度列（同 Wave 同類型 pending 但跨主題時放生為預設），SOP 流程圖新增 Step 1.7 主題比對分支；定義「當前 session 持有的主題」查詢方式（依序：session-switching-sop 宣告值 → topic-assignments 對照 → 未歸屬即不擋）並註明與 session-switching-sop.md 起訖階段宣告機制的分工邊界。既有判準列文字不變，僅新增維度（現場實例：某代理人完工轉 idle 後，同 Wave 同類型 pending ticket 存在但分屬不同主題，原判準表無法推導放生結論）
+**Version**: 4.26.0 - 「bgIsolation: none 並行安全建議」章節同步 PC-137 v1.2.0：並行已驗證上限由 3 擴大至 5（未測門檻由 5+ 提升至 6+）；`git add`/`commit` 共享 index 情境由「未測」改列四項實測觀察（index.lock 可重試、跨票 staged 污染頻繁、三步驟串接致誤提交、隔離索引 CAS 為高衝突解），結論不因此收緊並行數；新增「模式判別方法」段指向 PC-137「如何判別自己處於哪個模式」章節
+**Version**: 4.25.0 - 「並行安全的 git commit 紀律」段移除 path-limited commit 主防護（規則七已禁 pathspec 形式），改為兩層制：一般派發「精確 add + 核對 + 裸 commit + 掃入即停手」，高競爭路徑隔離索引（三要件）；舊做法保留為歷史註記
+**Version**: 4.24.0 - 「派發前 where.files 交集檢查」章節改寫：強制動作由人工逐項比對改為執行 `ticket track conflicts` CLI（內建 pending/in_progress 兩兩交集判定 + impl→test 擴張啟發式，覆蓋範圍與準確度均高於人工比對）；比對範圍由「本輪待派發各票」明文擴大為「當前所有 pending/in_progress 票，含 PM 前台自身在途工作」，並要求 PM 前台編輯框架檔案前同樣以 ticket 登記 where.files 使其可被涵蓋；來源段補一則 2026-08-18 PM 前台 vs 派發代理人跨 session 疊寫實證（PC-BAL-008 章節記錄詳情）
 **Version**: 4.23.0 - 條件三與存活期治理改引用 CLI（`ticket track register-artifact` / `resolve-artifact` / `list-artifacts`）：規範原僅要求「登記三項」但格式自由發揮，收尾者需人工掃描 Solution 章節；CLI 化後登記為固定 schema（EXP-N 自動編號）、輸出可複製的首行 header 文字、`--status kept` 強制要求 `--successor`（CLI 層面阻止漏處置，非僅文件提醒），文件條款退為說明層（opinionated-default-design 主張 1 的信號落地）
 **Version**: 4.22.0 - 實驗器材章節依三視角審查（品味 / 文字 / 一致性）改寫：新增「器材分兩型」（明示型適用全條款可跨 session；盲測型免檔名標示但限同一 session 收尾，因標示本身會改變被觀測方行為）、新增「讀者側處置」小節取代原條件二末段與適用範圍節的重複授權（原兩處對「發現者可否移除」給出相反指示）、存活期治理的偵測改為 `git status --untracked=all` 過濾 `experiment-` 前綴的獨立掃描（原設計只比對票面登記，漏登記者永不被偵測）、條件三登記位置定為 Solution 單一章節、刪除多餘的外移閾值豁免宣告（該區範圍定義已排除本節，兩套定義並存會在章節順序調整時給出相反答案）
 **Version**: 4.21.0 - 並行安全檢查清單「派發 prompt 已明示精準 git staging 與 path-limited commit」項改為引用 `agent-dispatch-template.md`「精準 staging 制式句」固定措辭，消除各自手抄造成的措辭變異來源；「派發 prompt 必含精準 git staging」節的「範例 prompt 片段」補一句指向同一制式句（示範性質保留，複製貼上以制式句為準）

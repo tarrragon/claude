@@ -87,7 +87,7 @@
 
 ## 銜接 TDD 流程
 
-UC 步驟→GWT 行為場景種子、UC 資訊鏈→整合測試映射。銜接由 TDD 端消費（`/tdd start` 時偵測 doc 文件自動觸發），doc 端不需額外操作。見 `.claude/skills/tdd/references/doc-handoff.md`。
+若專案已採用 `tdd` skill，UC 步驟→GWT 行為場景種子、UC 資訊鏈→整合測試映射會由 TDD 端消費（`/tdd start` 時偵測 doc 文件自動觸發），doc 端不需額外操作，詳見 tdd skill 的 doc-handoff 銜接說明（若已安裝）。若未採用 tdd skill，UC 文件仍可獨立作為用例規格使用，只是不會有自動銜接進測試流程的種子產出。
 
 ## 命名規範
 

@@ -107,8 +107,8 @@ echo "已複製 $(find dest/ -type f | wc -l) 個檔案"
 
 ## 相關文件
 
-- .claude/scripts/sync-claude-pull.sh - 修復後的拉取腳本
-- .claude/scripts/sync-claude-push.sh - 修復後的推送腳本
+- .claude/scripts/sync-claude-pull.py - 修復後的拉取腳本
+- .claude/scripts/sync-claude-push.py - 修復後的推送腳本
 - .claude/rules/core/bash-tool-usage-rules.md - Bash 工具使用規則
 
 ---

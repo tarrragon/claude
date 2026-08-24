@@ -553,6 +553,67 @@ class TestHasMainRepoUncommittedTrackedChanges:
 
 
 # ============================================================================
+# _detect_operation：heredoc 內作為資料引用的操作名稱不觸發偵測（0.2.1-W3-684）
+# ============================================================================
+
+
+class TestDetectOperationHeredocDataReference:
+    def test_operation_name_inside_heredoc_body_not_detected(self):
+        """heredoc 內文引用操作名稱字面（如貼一段含 `git stash` 的日誌原文）
+        屬 CLI 引數的資料，不是實際要執行的命令，不應觸發偵測。
+        """
+        command = (
+            'ticket track append-log 0.2.1-W3-510 --section "Solution" '
+            '"$(cat <<\'EOF\'\n'
+            '守衛日誌原文：操作=git stash，活躍派發數=2\n'
+            '亦涵蓋 git reset --hard 與 git clean -f 的日誌片段\n'
+            'EOF\n'
+            ')"'
+        )
+        assert _detect_operation(command) is None
+
+    def test_real_operation_after_heredoc_still_detected(self):
+        """heredoc 之後接的真實破壞性操作仍須被偵測（剝離不可過度吞掉後續內容）。"""
+        command = (
+            'cat <<\'EOF\'\n'
+            '這段引用 git stash 僅為說明文字\n'
+            'EOF\n'
+            '\ngit reset --hard'
+        )
+        assert _detect_operation(command) == (
+            "git reset --hard",
+            hook_module._OPERATIONS[2][2],
+        )
+
+    def test_real_operation_still_detected_without_heredoc(self):
+        """對照組：不含 heredoc 的真實操作行為不變（無回歸）。"""
+        assert _detect_operation("git stash") == (
+            "git stash",
+            hook_module._OPERATIONS[0][2],
+        )
+
+    def test_main_allows_heredoc_data_reference_even_when_parallel(self, monkeypatch, capsys):
+        """整合層級：heredoc 內資料引用即使在並行期也應放行（不誤判為真實操作）。"""
+        command = (
+            'ticket track append-log 0.2.1-W3-510 --section "Solution" '
+            '"$(cat <<\'EOF\'\n'
+            '守衛日誌原文：操作=git clean -f\n'
+            'EOF\n'
+            ')"'
+        )
+        exit_code = _run_hook(monkeypatch, command, dispatch_count=3)
+        assert exit_code == 0
+        assert capsys.readouterr().err == ""
+
+    def test_main_still_denies_real_operation_when_parallel(self, monkeypatch, capsys):
+        """整合層級對照組：真實操作在並行期仍被 DENY（無回歸）。"""
+        exit_code = _run_hook(monkeypatch, "git reset --hard", dispatch_count=3)
+        assert exit_code == 2
+        err = capsys.readouterr().err
+        assert "git reset --hard" in err
+
+
+# ============================================================================
 # main() 整合：主 repo 有未提交 tracked 變更時無條件 DENY（不限並行期）
 # （0.2.1-W3-760：PC-019 事故鏈第 4 步發生於 agent 完成後，
 #   dispatch-active.json 已清空，此時仍須阻擋）

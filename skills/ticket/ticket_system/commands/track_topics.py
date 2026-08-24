@@ -109,9 +109,7 @@ def build_topic_summary(
         in_progress_rows = [
             {
                 "ticket_id": t.get("id"),
-                "lease_state": lease.determine_lease_state(
-                    registry, t.get("id"), pm_registry, now
-                ),
+                "lease_state": lease.determine_lease_state(registry, t, pm_registry, now),
             }
             for t in topic_tickets
             if t.get("status") == STATUS_IN_PROGRESS

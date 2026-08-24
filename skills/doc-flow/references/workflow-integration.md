@@ -67,6 +67,8 @@
 
 ## 相關文件
 
-- `.claude/skills/ticket/SKILL.md` - Ticket 系統
-- `.claude/skills/error-pattern/SKILL.md` - 錯誤模式系統
-- `.claude/skills/version-release/SKILL.md` - 版本發布
+上節整合表列的各項指令由對應 skill 提供，皆為選配——doc-flow 的五重文件系統本身可獨立運作，未安裝時失去的是自動同步，不是文件系統本身：
+
+- 若專案已採用 `ticket` skill：worklog 自動索引新建的 ticket、並追蹤其狀態同步回 worklog，詳見 ticket skill 的說明（若已安裝）。若未採用，worklog 仍可建立與維護，但 ticket 區段需人工填寫與更新
+- 若專案已採用 `error-pattern` skill：經驗學習系統與文件流程整合，詳見 error-pattern skill 的說明（若已安裝）。若未採用，失敗案例仍可記錄於 worklog，只是不會累積為可跨版本查詢的模式庫
+- 若專案已採用 `version-release` skill：發布時自動更新 CHANGELOG 與 worklog 狀態，詳見 version-release skill 的說明（若已安裝）。若未採用，CHANGELOG 與 worklog 收尾需人工執行，本文件「開始新版本」章節的流程不受影響

@@ -291,7 +291,7 @@ Phase 1 中 lavender 如何使用 /spec 的完整流程，詳見該代理人定�
 
 ## 相關文件
 
-- `../tdd/SKILL.md` - TDD 流程工具（流程編排；同專案若也安裝 tdd）
+- 若專案已採用 `tdd` skill：spec 產出的骨架與未回答問題清單可銜接進 TDD 的流程編排，詳見 tdd skill 的說明（若已安裝）。若未採用，spec 仍可獨立產出規格骨架供任何流程消費，只是不會有自動銜接的階段轉換
 - Phase 1 功能設計代理人的定義 - /spec 的使用者（各專案自有）
 - 專案的 TDD 流程定義文件
 - references/spec-template-lite.md - Lite 模板（3 區段）

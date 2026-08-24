@@ -1,17 +1,19 @@
 """
-W11-035 ticket complete 自動 git add + commit 提示測試
+ticket complete 自動隔離索引提交測試
 
-來源：W11-034 ANA 推薦方案 D（自動 add + stdout 提示）
-0.2.1-W3-246 更新：auto-stage 範圍收斂為本票 md + worklog index 兩類，
-children / siblings 路徑改為「落盤但不 stage」，見 0.2.1-W3-238 ANA。
+沿革：W11-035 原採「自動 git add + stdout 建議裸 commit」（方案 D），留
+staged 狀態於共用 index 等人工裸 commit；同儕 commit 8db456783 把共用
+index 中過期 index 快照寫進 HEAD 的事故顯示，留 staged 狀態本身就是入口。
+改為 CLI 自身以 commit_files_isolated（GIT_INDEX_FILE 隔離 + 提交前自檢）
+直接完成提交，不留任何 staged 殘留於共用 index。
 
 驗證情境：
-1. 正常 complete：ticket md + worklog md 被 git add
-2. cascade complete：unblocked children 正確落盤，但不進入 git add（0.2.1-W3-246）
-3. blockedBy 反向解鎖的 siblings 正確落盤，但不進入 git add（0.2.1-W3-246）
-4. --no-stage flag：跳過自動 staging
-5. stdout 含建議 commit 指令 `chore(<id>): metadata sync`
-6. 不誤觸 git add 範圍外的 WIP 檔案（僅 add 已知 modified 路徑）
+1. 正常 complete：ticket md + worklog md 交由 commit_files_isolated 提交
+2. cascade complete：unblocked children 正確落盤，但不進入提交清單
+3. blockedBy 反向解鎖的 siblings 正確落盤，但不進入提交清單
+4. --no-stage flag：跳過自動提交
+5. stdout 含 commit SHA（成功時），不再印出「建議裸 commit」指令
+6. 不誤觸提交範圍外的 WIP 檔案（僅提交已知 modified 路徑）
 """
 
 from unittest.mock import patch
@@ -47,14 +49,17 @@ def _run_complete(
     cascade_unblocked=None,
     reverse_unblock_tickets=None,
     captured_saves=None,
+    commit_result=None,
 ):
-    """共用 patch 結構，回傳 (result, captured_subprocess_calls)。
+    """共用 patch 結構，回傳 (result, captured_commit_calls)。
 
+    commit_result: 若傳入，覆寫 commit_files_isolated 的回傳值（預設為
+        committed + 固定 SHA）。
     reverse_unblock_tickets: 額外併入 list_tickets 回傳值的 ticket dict
         清單，供真實 _reverse_unblock_blockedby（未 mock）掃描 blockedBy
-        反向解鎖（0.2.1-W3-246 siblings 測試用）。
+        反向解鎖（siblings 測試用）。
     captured_saves: 若傳入 list，save_ticket 每次呼叫的 {id, status}
-        會被記錄進去，供驗證「落盤仍發生」（0.2.1-W3-246）。
+        會被記錄進去，供驗證「落盤仍發生」。
     """
     from ticket_system.commands.lifecycle import TicketLifecycle
 
@@ -62,8 +67,15 @@ def _run_complete(
 
     captured_calls = []
 
-    def fake_git_add(paths):
-        captured_calls.append(["git", "add", *paths])
+    default_commit_result = {
+        "status": "committed",
+        "commit_sha": "abc123def4567890",
+        "error": None,
+    }
+
+    def fake_commit_files_isolated(paths, message):
+        captured_calls.append({"paths": list(paths), "message": message})
+        return commit_result or default_commit_result
 
     # cascade fake：模擬 _post_complete_cascade 解鎖 children
     def fake_cascade(parent_ticket, version, ticket_map):
@@ -137,8 +149,8 @@ def _run_complete(
         "ticket_system.commands.lifecycle._post_complete_cascade",
         side_effect=fake_cascade,
     ), patch(
-        "ticket_system.commands.lifecycle._auto_stage_git_add",
-        side_effect=fake_git_add,
+        "ticket_system.commands.lifecycle.commit_files_isolated",
+        side_effect=fake_commit_files_isolated,
     ):
         result = lifecycle.complete(ticket["id"], no_stage=no_stage)
 
@@ -146,20 +158,18 @@ def _run_complete(
 
 
 class TestCompleteAutoStage:
-    def test_complete_auto_stages_ticket_and_worklog(self, capsys):
+    def test_complete_commits_ticket_and_worklog(self, capsys):
         ticket = _build_ticket()
         result, calls = _run_complete(ticket=ticket)
 
         assert result == 0
-        # 應有一筆 git add 呼叫
-        add_calls = [c for c in calls if c[:2] == ["git", "add"]]
-        assert len(add_calls) == 1, f"expected 1 git add call, got {calls}"
-        staged = add_calls[0][2:]
-        assert any("0.18.0-W17-998.md" in p for p in staged), staged
-        assert any("worklog" in p for p in staged), staged
+        assert len(calls) == 1, f"expected 1 commit_files_isolated call, got {calls}"
+        committed = calls[0]["paths"]
+        assert any("0.18.0-W17-998.md" in p for p in committed), committed
+        assert any("worklog" in p for p in committed), committed
 
-    def test_complete_cascade_does_not_stage_children(self, capsys):
-        """0.2.1-W3-246：children 解鎖仍落盤（save_ticket 被呼叫），但不進入 staging。"""
+    def test_complete_cascade_does_not_commit_children(self, capsys):
+        """children 解鎖仍落盤（save_ticket 被呼叫），但不進入提交清單。"""
         captured_saves = []
         ticket = _build_ticket(children=["0.18.0-W17-998.1"])
         result, calls = _run_complete(
@@ -169,16 +179,15 @@ class TestCompleteAutoStage:
         )
 
         assert result == 0
-        add_calls = [c for c in calls if c[:2] == ["git", "add"]]
-        assert len(add_calls) == 1
-        staged = add_calls[0][2:]
-        assert not any("0.18.0-W17-998.1.md" in p for p in staged), staged
+        assert len(calls) == 1
+        committed = calls[0]["paths"]
+        assert not any("0.18.0-W17-998.1.md" in p for p in committed), committed
         # cascade fake 不經 save_ticket（本測試用 fake_cascade 直接模擬解鎖，
-        # 落盤驗證見 test_complete_reverse_unblock_does_not_stage_siblings
+        # 落盤驗證見 test_complete_reverse_unblock_does_not_commit_siblings
         # 的真實 _reverse_unblock_blockedby 路徑）
 
-    def test_complete_reverse_unblock_does_not_stage_siblings(self, capsys):
-        """0.2.1-W3-246：blockedBy 反向解鎖的兄弟 Ticket 正確落盤，但不進入 staging。"""
+    def test_complete_reverse_unblock_does_not_commit_siblings(self, capsys):
+        """blockedBy 反向解鎖的兄弟 Ticket 正確落盤，但不進入提交清單。"""
         parent_id = "0.18.0-W17-994"
         sibling_id = "0.18.0-W17-993"
         ticket = _build_ticket(ticket_id=parent_id)
@@ -203,71 +212,89 @@ class TestCompleteAutoStage:
         sibling_saves = [s for s in captured_saves if s["id"] == sibling_id]
         assert len(sibling_saves) == 1, captured_saves
         assert sibling_saves[0]["status"] == "pending", captured_saves
-        # 但不進入 staging
-        add_calls = [c for c in calls if c[:2] == ["git", "add"]]
-        assert len(add_calls) == 1
-        staged = add_calls[0][2:]
-        assert not any(sibling_id in p for p in staged), staged
+        # 但不進入提交清單
+        assert len(calls) == 1
+        committed = calls[0]["paths"]
+        assert not any(sibling_id in p for p in committed), committed
 
-    def test_no_stage_flag_skips_staging(self, capsys):
+    def test_no_stage_flag_skips_commit(self, capsys):
         ticket = _build_ticket()
         result, calls = _run_complete(ticket=ticket, no_stage=True)
 
         assert result == 0
-        add_calls = [c for c in calls if c[:2] == ["git", "add"]]
-        assert len(add_calls) == 0, f"--no-stage should skip git add, got {calls}"
+        assert len(calls) == 0, f"--no-stage should skip commit, got {calls}"
 
-    def test_stdout_prints_commit_command(self, capsys):
+    def test_stdout_prints_commit_sha_on_success(self, capsys):
         ticket = _build_ticket(ticket_id="0.18.0-W17-997")
         result, calls = _run_complete(ticket=ticket)
         captured = capsys.readouterr()
 
         assert result == 0
-        assert "chore(0.18.0-W17-997): metadata sync" in captured.out
+        assert "abc123de" in captured.out
 
-    def test_commit_suggestion_is_verified_bare_commit_and_matches_staged_range(
-        self, capsys
-    ):
-        """0.2.1-W3-725：建議指令改為「核對 staged 範圍 + 裸 commit」，不再
-        建議 `-- <pathspec>`（該語法會丟棄既有 index、改讀 working tree
-        全文，並行環境下會吸入他人未 stage 的編輯）。路徑仍須與實際
-        staged 範圍一致，供使用者核對用。
-        """
+    def test_stdout_silent_on_empty_status(self, capsys):
+        """工作區內容與 HEAD 相同（empty 短路）時不印出提交相關訊息。"""
+        ticket = _build_ticket(ticket_id="0.18.0-W17-995")
+        result, calls = _run_complete(
+            ticket=ticket,
+            commit_result={"status": "empty", "commit_sha": None, "error": None},
+        )
+        captured = capsys.readouterr()
+
+        assert result == 0
+        assert len(calls) == 1
+        assert "Auto-commit" not in captured.out
+        assert "chore(" not in captured.out
+
+    def test_stderr_warns_on_failed_status_not_stdout(self, capsys):
+        """提交失敗時警告寫 stderr，不寫 stdout，且不中斷 complete。"""
+        ticket = _build_ticket(ticket_id="0.18.0-W17-991")
+        result, calls = _run_complete(
+            ticket=ticket,
+            commit_result={
+                "status": "failed",
+                "commit_sha": None,
+                "error": "提交範圍自我驗證失敗",
+            },
+        )
+        captured = capsys.readouterr()
+
+        assert result == 0
+        assert len(calls) == 1
+        assert "提交範圍自我驗證失敗" in captured.err
+        assert "提交範圍自我驗證失敗" not in captured.out
+
+    def test_no_pathspec_bare_commit_suggestion_printed(self, capsys):
+        """改造後不再印出「建議裸 commit」指令——提交已由 CLI 自身完成，
+        不留 staged 狀態給人工操作。"""
         ticket = _build_ticket(ticket_id="0.18.0-W17-996")
         result, calls = _run_complete(ticket=ticket)
         captured = capsys.readouterr()
 
         assert result == 0
-        add_calls = [c for c in calls if c[:2] == ["git", "add"]]
-        assert len(add_calls) == 1
-        staged = add_calls[0][2:]
+        assert "git commit -m" not in captured.out
+        assert "git diff --cached --name-only" not in captured.out
 
-        assert "git diff --cached --name-only" in captured.out
-        commit_lines = [
-            line for line in captured.out.splitlines() if "git commit -m" in line
-        ]
-        assert len(commit_lines) == 1, captured.out
-        # 實際指令行不得帶 `-- <pathspec>` / `--only` / `-o`（說明文字提及
-        # 這些字詞屬教育性質，不受本斷言限制，故只檢查指令行本身）
-        assert " -- " not in commit_lines[0], commit_lines[0]
-        assert "--only" not in commit_lines[0], commit_lines[0]
-        # 每個實際 staged 路徑都須出現在核對用的清單中
-        for path in staged:
-            assert path in captured.out, (path, captured.out)
+    def test_commit_message_contains_ticket_id(self, capsys):
+        ticket = _build_ticket(ticket_id="0.18.0-W17-990")
+        result, calls = _run_complete(ticket=ticket)
 
-    def test_auto_stage_only_passes_known_paths(self, capsys):
-        """git add 參數須為精確路徑，不包含 './' 或 '-A'"""
+        assert result == 0
+        assert len(calls) == 1
+        assert "0.18.0-W17-990" in calls[0]["message"]
+
+    def test_auto_commit_only_passes_known_paths(self, capsys):
+        """commit_files_isolated 參數須為精確路徑，不包含 './' 或 '-A'"""
         ticket = _build_ticket()
         _, calls = _run_complete(ticket=ticket)
 
-        add_calls = [c for c in calls if c[:2] == ["git", "add"]]
-        assert add_calls
-        staged = add_calls[0][2:]
+        assert calls
+        committed = calls[0]["paths"]
         # 禁止寬範圍參數
-        for arg in staged:
+        for arg in committed:
             assert arg not in (".", "./", "-A", "--all"), (
-                f"auto-stage must use precise paths, got {staged}"
+                f"auto-commit must use precise paths, got {committed}"
             )
-        # 所有 staged 路徑都應是 .md 結尾
-        for arg in staged:
-            assert arg.endswith(".md"), f"unexpected staged path: {arg}"
+        # 所有提交路徑都應是 .md 結尾
+        for arg in committed:
+            assert arg.endswith(".md"), f"unexpected committed path: {arg}"

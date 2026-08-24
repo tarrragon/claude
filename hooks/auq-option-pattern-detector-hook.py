@@ -13,8 +13,8 @@ AUQ Option Pattern Detector Hook - PM 回覆含選項 pattern 時提醒使用 As
 Hook 類型: UserPromptSubmit
 行為: Warning-only，只注入 additionalContext 提醒，不阻擋（exit 0）
 
-規格: .claude/plans/hooks/auq-option-pattern-detector-spec.md
-測試設計: .claude/plans/hooks/auq-option-pattern-detector-test-design.md
+規格: .claude/hooks/specs/auq-option-pattern-detector-spec.md
+測試設計: .claude/hooks/specs/auq-option-pattern-detector-test-design.md
 """
 
 import json

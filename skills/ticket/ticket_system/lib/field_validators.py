@@ -286,6 +286,49 @@ def validate_where_files(tokens: List[str]) -> List[str]:
             errors.append(hint)
     return errors
 
+
+# 讀取型建議預設的 ticket type（ANA/DOC 建票時不知會碰哪些檔案而先宣告目錄，
+# 屬合理場景，優先建議加 ::read 而非改精確路徑；其餘型別優先建議改精確路徑）
+_READ_SUGGESTED_TYPES = frozenset({"ANA", "DOC"})
+
+
+def directory_declaration_warnings(
+    tokens: List[str], ticket_type: Optional[str] = None
+) -> List[str]:
+    """批次檢查 where.files token 是否為目錄級宣告，回傳 WARNING 訊息清單
+    （PC-BAL-040：create / set-where 對目錄級宣告發 WARNING，非硬擋——建票
+    時檔案未必可知；`ticket track dispatch` 對無 `::read` 的目錄級寫入宣告
+    才硬擋，見 track_dispatch.py）。
+
+    token 已帶 `::read` 標記者不觸發 WARNING（唯讀宣告本就不會造成寫入衝突，
+    是本規則要豁免的合法用法，非漏檢）。
+
+    Args:
+        tokens: 已 strip 的 where.files token 清單（未剝除意圖標記）
+        ticket_type: 票類型（ANA/DOC 預設建議加 ::read，其餘建議改精確路徑）
+
+    Returns:
+        WARNING 訊息清單（每個目錄級宣告一條）；全部合法或皆為 ::read 時回空 list
+    """
+    from ticket_system.lib.file_conflict import is_directory_declaration, parse_file_intent
+
+    warnings: List[str] = []
+    suggest_read = ticket_type in _READ_SUGGESTED_TYPES
+    for token in tokens:
+        path, intent = parse_file_intent(token)
+        if intent == "read":
+            continue
+        if not is_directory_declaration(path):
+            continue
+        stripped = path.rstrip("/")
+        template = (
+            CreateMessages.DIRECTORY_DECLARATION_WARNING_READ_SUGGESTED
+            if suggest_read
+            else CreateMessages.DIRECTORY_DECLARATION_WARNING
+        )
+        warnings.append(format_warning(template, path=path, stripped=stripped))
+    return warnings
+
 def validate_source_ticket_arg(args: argparse.Namespace) -> bool:
     """Step 1.5：--source-ticket 參數前置驗證（PC-073）。
 
@@ -364,5 +407,42 @@ def validate_source_ticket_arg(args: argparse.Namespace) -> bool:
             source_id=args.source_ticket,
             parent_hint=parent_hint,
         ))
+
+    return True
+
+
+def validate_discovered_during_arg(args: argparse.Namespace) -> bool:
+    """--discovered-during 參數前置驗證：與 --source-ticket 互斥。
+
+    --discovered-during 標記發現衍生（執行中撞到跨主題問題，記錄脈絡但
+    不繼承主題），與 --source-ticket 的規劃衍生語意（繼承上游主題）互相
+    矛盾，兩者同時指定時直接拒絕。
+
+    只做互斥檢查，不做 ID 格式/存在性檢查：與 --source-ticket 不同，
+    discovered_during 只作血緣記錄，不驅動 update_source_spawned_tickets
+    等後續持久化步驟，無需同等的驗證深度。
+
+    Args:
+        args: 命令行參數（含 discovered_during 和 source_ticket）
+
+    Returns:
+        bool: True 表示驗證通過（或未提供 --discovered-during）；
+              False 表示應 early return 1
+    """
+    if not getattr(args, "discovered_during", None):
+        return True
+
+    if args.source_ticket:
+        print(format_error(ErrorEnvelope(
+            component="create",
+            action="validate_discovered_during",
+            errno="DISCOVERED_DURING_SOURCE_MUTUALLY_EXCLUSIVE",
+            hint=(
+                "--discovered-during 與 --source-ticket 不可同時使用"
+                "（前者為發現衍生，記錄脈絡但不繼承主題；後者為規劃衍生，"
+                "繼承上游主題）"
+            ),
+        )))
+        return False
 
     return True

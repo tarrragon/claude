@@ -131,6 +131,75 @@ class TestCreateWireIn:
         captured = capsys.readouterr()
         assert "抽取失敗" in captured.err
 
+    def test_post_create_exception_with_intact_file_returns_true_and_verified_message(
+        self, capsys
+    ):
+        """抽取失敗但重新讀取驗證票面完整 → 回傳 True，訊息據實標明已驗證
+        （W3-1026 第 3 環：禁止不驗證就宣稱『不影響 ticket 建立』）。
+
+        `_verify_ticket_intact` 內部改用 `parser.load_ticket`（而非
+        `ticket_loader.load_ticket`）以確保與 `parser` 內部快取鍵解析一致
+        （見 create.py docstring），故兩個名稱須一併 mock。
+        """
+        fixed_ticket = {
+            "id": "0.18.0-W99-001",
+            "source_ticket": "0.18.0-W99-000",
+        }
+        with mock.patch(
+            "ticket_system.lib.ticket_loader.load_ticket",
+            return_value=fixed_ticket,
+        ), mock.patch(
+            "ticket_system.lib.parser.load_ticket",
+            return_value=fixed_ticket,
+        ), mock.patch(
+            "ticket_system.lib.context_bundle_extractor.extract_and_write_context_bundle",
+            side_effect=RuntimeError("simulated failure"),
+        ):
+            result = create_cmd._auto_extract_context_bundle_post_create(
+                "0.18.0", "0.18.0-W99-001"
+            )
+        assert result is True
+        captured = capsys.readouterr()
+        assert "已重新讀取驗證" in captured.err
+        assert "完整未受影響" in captured.err
+        assert "不影響 ticket 建立" not in captured.err
+
+    def test_post_create_exception_with_damaged_file_returns_false_and_honest_message(
+        self, capsys
+    ):
+        """抽取失敗且重新讀取驗證票面已受損（load_ticket 回傳 None）→ 回傳
+        False，訊息據實回報受損，不得印出成功語意摘要。
+
+        初始「有無 source」檢查走 `ticket_loader.load_ticket`；事後驗證走
+        `parser.load_ticket`（見上一測試註解），兩者各自的呼叫次數獨立
+        計數，分別給對應的假回傳。
+        """
+        def _initial_load(version, ticket_id):
+            return {
+                "id": ticket_id,
+                "source_ticket": "0.18.0-W99-000",
+            }
+
+        def _verify_load(version, ticket_id):
+            # 模擬受損：0 byte / 無 frontmatter 檔案 load_ticket 回傳 None。
+            return None
+
+        with mock.patch(
+            "ticket_system.lib.ticket_loader.load_ticket", side_effect=_initial_load
+        ), mock.patch(
+            "ticket_system.lib.parser.load_ticket", side_effect=_verify_load
+        ), mock.patch(
+            "ticket_system.lib.context_bundle_extractor.extract_and_write_context_bundle",
+            side_effect=RuntimeError("simulated failure"),
+        ):
+            result = create_cmd._auto_extract_context_bundle_post_create(
+                "0.18.0", "0.18.0-W99-001"
+            )
+        assert result is False
+        captured = capsys.readouterr()
+        assert "已受損" in captured.err
+        assert "不影響 ticket 建立" not in captured.err
+
     def test_post_create_target_none_returns_silently(self, capsys):
         """target 不存在（load_ticket return None）→ 不呼叫 extract。"""
         with mock.patch(

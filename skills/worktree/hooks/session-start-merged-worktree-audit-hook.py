@@ -218,19 +218,37 @@ def list_worktree_branches(logger) -> Optional[List[str]]:
     return branches
 
 
-def collect_orphan_agent_branches(logger) -> Optional[List[Tuple[str, Optional[bool], bool]]]:
+#: collect_orphan_agent_branches 判定失敗時的失敗因代碼，供 reason_out 回填。
+#: build_message 依此代碼選擇對應訊息文字，取代硬編碼單一原因。
+ORPHAN_BRANCHES_REASON_LOCAL_BRANCHES = "local_branches"
+ORPHAN_BRANCHES_REASON_WORKTREE_BRANCHES = "worktree_branches"
+ORPHAN_BRANCHES_REASON_CURRENT_BRANCH = "current_branch"
+
+
+def collect_orphan_agent_branches(
+    logger, reason_out: Optional[dict] = None
+) -> Optional[List[Tuple[str, Optional[bool], bool]]]:
     """收集無對應 worktree 的孤兒分支（涵蓋 worktree-agent-* 與人工命名分支）。
 
     worktree 已被移除（GC 或手動刪除目錄）但分支殘留（git worktree remove 不刪分支）。
     排除保護分支（main / master）與當前 checkout 分支——原僅掃 worktree-agent-*
     命名前綴，假設過窄，人工命名分支落在範圍外。
 
+    Args:
+        reason_out: 選填。判定失敗時，呼叫端可傳入空 dict 接收失敗因代碼
+            （寫入 `reason_out["reason"]`，值為 ORPHAN_BRANCHES_REASON_* 常數
+            之一），供 build_message 輸出對應訊息而非單一硬編碼原因——三個
+            判定點原先共用同一句「git worktree list 執行失敗」訊息，實際
+            失敗因可能是任一點，訊息文字因此可能與實際狀態不符，誤導排查
+            方向。不需要區分失敗因的呼叫端可省略。
+
     Returns:
-        None → list_worktree_branches 或 get_current_branch 判定失敗（後者
-            無法區分「當前分支未知」與「當前分支被誤判為孤兒」），保守處置
-            為不輸出任何孤兒分支結論。get_current_branch 回傳 None 時，若
-            以 `if current_branch and ...` 短路排除守衛，會使當前 checkout
-            分支未被排除而誤列為孤兒（fail-open），故此處直接中止整個稽核。
+        None → list_local_branches / list_worktree_branches / get_current_branch
+            任一判定失敗（get_current_branch 失敗時無法區分「當前分支未知」
+            與「當前分支被誤判為孤兒」），保守處置為不輸出任何孤兒分支結論。
+            get_current_branch 回傳 None 時，若以 `if current_branch and ...`
+            短路排除守衛，會使當前 checkout 分支未被排除而誤列為孤兒
+            （fail-open），故此處直接中止整個稽核。
         List of (branch_name, ahead_state, is_agent_prefixed) → 判定成功：
         ahead_state=False（ahead=0）→ 可安全刪除
         ahead_state=True（ahead>0）→ 含未落地 commit，需人工確認
@@ -240,15 +258,21 @@ def collect_orphan_agent_branches(logger) -> Optional[List[Tuple[str, Optional[b
     local_branches = list_local_branches(logger)
     if local_branches is None:
         logger.warning("無法判定本地分支清單，跳過孤兒分支稽核（不輸出任何結論）")
+        if reason_out is not None:
+            reason_out["reason"] = ORPHAN_BRANCHES_REASON_LOCAL_BRANCHES
         return None
     worktree_branches = list_worktree_branches(logger)
     if worktree_branches is None:
         logger.warning("無法判定 worktree 分支清單，跳過孤兒分支稽核（不輸出任何結論）")
+        if reason_out is not None:
+            reason_out["reason"] = ORPHAN_BRANCHES_REASON_WORKTREE_BRANCHES
         return None
     active_branches = set(worktree_branches)
     current_branch = get_current_branch()
     if current_branch is None:
         logger.warning("無法判定當前 checkout 分支，跳過孤兒分支稽核（不輸出任何結論）")
+        if reason_out is not None:
+            reason_out["reason"] = ORPHAN_BRANCHES_REASON_CURRENT_BRANCH
         return None
 
     orphans: List[Tuple[str, Optional[bool], bool]] = []
@@ -325,6 +349,16 @@ def collect_orphan_tickets(project_root: Path, logger) -> Optional[List[Tuple[st
 
 # ---------- main ----------
 
+#: orphan_branches_reason 代碼 → 訊息文字對照表。找不到對應代碼（含 None，
+#: 即呼叫端未傳入 reason_out 或該次失敗未寫入代碼）時 fallback 至通用訊息，
+#: 維持與既有呼叫端（未傳 reason）的相容輸出。
+_ORPHAN_BRANCHES_REASON_MESSAGES = {
+    ORPHAN_BRANCHES_REASON_LOCAL_BRANCHES: "無法判定本地分支清單（git branch --list 執行失敗）",
+    ORPHAN_BRANCHES_REASON_WORKTREE_BRANCHES: "無法判定 worktree 分支清單（git worktree list 執行失敗）",
+    ORPHAN_BRANCHES_REASON_CURRENT_BRANCH: "無法判定當前 checkout 分支（git branch --show-current 執行失敗或無回傳），為避免當前分支被誤判為孤兒已保守跳過",
+}
+
+
 def build_message(
     merged_worktrees: List[Tuple[str, str]],
     orphan_tickets: List[Tuple[str, str]],
@@ -332,11 +366,17 @@ def build_message(
     orphan_branches_undetermined: bool = False,
     merged_worktrees_undetermined: bool = False,
     orphan_tickets_undetermined: bool = False,
+    orphan_branches_reason: Optional[str] = None,
 ) -> str:
     """組裝三個 section 的合併訊息。
 
     各 *_undetermined=True 代表對應 section 的列舉判定失敗（此時對應清單必為
     空），改輸出說明訊息而非該 section 的正常結論（不得輸出任何刪除/commit 建議）。
+
+    orphan_branches_reason: 選填，ORPHAN_BRANCHES_REASON_* 常數之一，指出孤兒
+        分支 section 判定失敗的實際失敗因（三個判定點各自可能失敗，訊息文字
+        依實際失敗因而異，非固定單一原因）。未提供或代碼不在對照表時，
+        fallback 至通用訊息（沿用既有呼叫端未傳 reason 時的輸出）。
     """
     orphan_branches = orphan_branches or []
     lines: List[str] = []
@@ -377,8 +417,12 @@ def build_message(
             lines.append("")
 
     if orphan_branches_undetermined:
+        reason_text = _ORPHAN_BRANCHES_REASON_MESSAGES.get(
+            orphan_branches_reason,
+            "無法判定 worktree 分支清單（git worktree list 執行失敗）",
+        )
         lines.append(
-            "[SessionStart Audit] 無法判定 worktree 分支清單（git worktree list 執行失敗），"
+            f"[SessionStart Audit] {reason_text}，"
             "孤兒分支稽核已跳過，不輸出任何孤兒分支結論或刪除建議。"
         )
     elif orphan_branches:
@@ -434,17 +478,21 @@ def main() -> int:
         orphan_tickets = orphan_tickets_result
 
     orphan_branches_undetermined = False
+    orphan_branches_reason: Optional[str] = None
+    reason_out: dict = {}
     try:
-        orphan_result = collect_orphan_agent_branches(logger)
+        orphan_result = collect_orphan_agent_branches(logger, reason_out=reason_out)
     except Exception as exc:  # noqa: BLE001
         logger.warning("collect_orphan_agent_branches 失敗: %s", exc)
         orphan_result = None
 
     if orphan_result is None:
-        # list_worktree_branches 判定失敗：不得視同「無孤兒分支」，
-        # 需顯性告知使用者稽核已跳過，而非靜默 suppress。
+        # list_local_branches / list_worktree_branches / get_current_branch
+        # 任一判定失敗：不得視同「無孤兒分支」，需顯性告知使用者稽核已跳過，
+        # 而非靜默 suppress；reason_out 記錄實際失敗因供訊息文字區分。
         orphan_branches: List[Tuple[str, Optional[bool], bool]] = []
         orphan_branches_undetermined = True
+        orphan_branches_reason = reason_out.get("reason")
     else:
         orphan_branches = orphan_result
 
@@ -467,6 +515,7 @@ def main() -> int:
         orphan_branches_undetermined,
         merged_worktrees_undetermined,
         orphan_tickets_undetermined,
+        orphan_branches_reason=orphan_branches_reason,
     )
     output = {
         "hookSpecificOutput": {

@@ -5,76 +5,55 @@
 # ///
 
 """
-Settings Registration Exec Guard - PostToolUse Hook（攔截面改版）
+Settings Registration Exec Guard - PostToolUse Hook（2026-08-22 降級版）
 
-前身設計以 PreToolUse 監控 settings.json 的 Edit/Write，解析編輯前後的
-hooks.*[].hooks[].command 差集，只驗證新增註冊項的可執行位。後續多視角
-審查一致判定攔截點選錯層級：
+前身兩版沿革：
+  1. 初版以 PreToolUse 解析 settings.json 編輯前後差集，只驗證新增註冊項，
+     覆蓋範圍有攔截點層級問題（先寫註冊、後建立檔案的順序下漏檢）。
+  2. 攔截面改版（本檔案名沿用至今）改以「hook 檔案落地事件」為監控對象，
+     偵測到 .claude/hooks/ 頂層或 .claude/skills/<skill>/hooks/ 下的 .py/.sh
+     經 Edit/Write/MultiEdit 落地且缺可執行位時，自動 chmod +x 修復。設計前提：
+     settings.json 若以裸路徑（`$CLAUDE_PROJECT_DIR/.claude/hooks/foo.py`）
+     註冊，Claude Code 依 shebang 直接執行該檔，缺可執行位會使該 hook 全期
+     零效力。
 
-  - 「先寫 settings.json 註冊、後建立 hook 檔案」的合法操作順序下，寫入
-    settings.json 當下目標檔案尚不存在，走 fail-open 放行；隨後 Write 建
-    立該檔以 100644 落地，完全不受任何檢查（動機事故原狀在此順序下完整
-    重現，見底部「動機」段落）。
-  - MultiEdit / NotebookEdit 寫入 settings.json 的路徑不受重建編輯前後
-    文字的函式覆蓋（該函式的 catch-all 分支對未知 tool_name 靜默回傳
-    unchanged，等同放行），而 settings.json 只註冊 Edit 與 Write 兩個
-    matcher，MultiEdit 完全無防護。
-  - skill hooks（.claude/skills/<skill>/hooks/）既不在 SessionStart 全量
-    掃描範圍，也不會被本 hook 複查（差集視為既有項），構成雙方都不管的
-    缺口。
+本版降級理由（2026-08-22）：settings.json 全部 hook 註冊已改為顯式解譯器
+形式（`uv run --quiet <path>` 或 `python3 <path>`，實測無裸路徑殘留），可
+執行位不再是 hook 被 runtime 呼叫的前提——`uv run` 與 `python3` 皆以直譯器
+讀檔執行，不依賴檔案本身的 exec bit。舊版描述的失效模式（裸路徑 shebang
+執行 + 無 exec bit -> Permission denied）在此前提下不再成立。
 
-本版改以「hook 檔案本身的落地事件」為監控對象，取代「解析 settings.json
-差集推導」——不論註冊與建檔的先後順序，只要目標檔案（頂層 .claude/hooks/
-或 .claude/skills/<skill>/hooks/ 下的 .py/.sh）透過 Edit/Write/MultiEdit
-落地，落地當下即檢查並自動修復可執行位，使前述兩個攔截點問題與範圍缺口
-同時消失：settings.json 是否註冊、以何種工具編輯，都不再是判斷依據。此
-設計與 hook-completeness-check.py 既有的 `_check_and_fix_permissions`
-哲學一致（皆以目錄層級界定監控範圍而非解析 settings.json，避開「已註冊
-但本輪尚未 chmod 就被執行」的競態，即權限修復類 hook 共通防護的原始
-失效模式）。
+本版行為：保留 PostToolUse Edit/Write/MultiEdit 三個 matcher 的既有註冊
+（本次降級執行環境無法變更 settings.json 註冊內容，完全停用需另行由具
+足夠權限的操作者移除註冊，已另行追蹤，不在本次變更範圍內處理）。偵測邏輯
+保留（沿用 `is_monitored_hook_path` 判斷落地檔案是否屬 hook 範圍），但不
+再 chmod、不再印出 WARNING——因為「缺可執行位」在顯式解譯器前提下已非會
+導致 hook 失效的問題，維持原本的自動修復語意會製造假急迫性（可見性要求
+應對應真實失敗，非已消除根因的歷史徵狀）。偵測結果改以 `logger.info` 記錄，
+供未來稽核仍可能產生 644 hook 檔案的路徑（如跨平台 mode 遺失）是否重現，
+不寫 stderr、不變更檔案。
 
 Hook Event: PostToolUse
 Matcher: Edit, Write, MultiEdit
-Decision: 無 deny——PostToolUse 觸發時寫入已完成，無法逆轉本次操作；偵測
-到監控範圍內的檔案缺可執行位時直接 chmod +x 自動修復並記錄，使修復發生在
-落地當下，而非等待 SessionStart 全量掃描這個延遲兜底。
+Decision: 恆常 EXIT_ALLOW（PostToolUse 觸發時寫入已完成，無操作可逆轉；
+降級後不再有任何檔案系統副作用）。
 
-覆蓋範圍：
+覆蓋範圍（沿用攔截面改版邏輯，未變更）：
   - .claude/hooks/ 頂層 .py / .sh（非遞迴。tests/、acceptance_checkers/、
-    archived/ 等子目錄檔案從不被 shell 直接執行，維持排除——與
-    hook-completeness-check.py `_check_and_fix_permissions` 的排除範圍
-    一致）
+    archived/ 等子目錄檔案從不被直譯器直接執行，維持排除）
   - .claude/skills/<skill>/hooks/ 下遞迴 .py / .sh（略過 __pycache__、
     .venv、node_modules、.git 等快取/虛擬環境目錄）
 
 不覆蓋（刻意，非遺漏）：
-  - NotebookEdit：僅操作 .ipynb，不會落地 .py/.sh hook 檔案，排除不影響
-    涵蓋率。
+  - NotebookEdit：僅操作 .ipynb，不會落地 .py/.sh hook 檔案。
   - Bash 直接建立/移動檔案、git checkout / merge / pull 落地：本 hook 只
-    掛 Edit/Write/MultiEdit 三個工具事件，涵蓋 Claude 內建寫檔路徑；shell
-    層與 git 層落地仍由 hook-completeness-check.py 的 SessionStart 掃描
-    延遲一輪兜底，故非零防護。
-
-動機（一次「守衛註冊即零效力」事故實測）：一個新註冊的 guard hook 自建立
-起以 100644（無可執行位）存在，runtime 無法啟動它，事故當下該守衛全期
-零效力。本 hook 使這類缺失在檔案落地的當下即暴露並自動修復，不受註冊/建檔
-操作順序影響。
-
-本 hook 的價值不依賴 runtime 何時重新解析 hook 命令集（2026-08-18 更正）：
-原文稱「SessionStart 的 chmod 修復要到下個 session 才被採用」「不再遺留至
-下個 session」，該表述預設了快照模型。實測結論為版本相依——2026-08-13 側
-資料支持快照模型，2026-08-18 的兩輪實驗支持即時生效（chmod 後同 session
-內即可執行，且無 session 級負向快取）。本 hook 屬「提前動作」型設計：它把
-修復時點往前挪，不宣稱任何生效時點，故在兩種模型下皆為淨正向——即時模型
-下領先量為「早於下一次工具呼叫」，快照模型下為「早一個 session」，量級不同
-而方向一致。改寫此段是為使註解在模型翻轉時不失效；hook 行為本身未變更。
+    掛 Edit/Write/MultiEdit 三個工具事件。
 
 對應規則：.claude/rules/core/quality-baseline.md 規則 3（設計問題立即修正）
 """
 
 import logging
 import os
-import stat
 import sys
 from pathlib import Path
 from typing import Optional
@@ -138,7 +117,7 @@ def is_monitored_hook_path(
     resolve() 會跟隨符號連結至其真實目標——若 .claude/hooks/ 下的檔案是
     指向監控範圍外的符號連結，resolved.parent 將不等於 hooks_dir，判定為
     不受監控（見 `_is_top_level_hook_file`/`_is_skill_hook_file` 的父目錄
-    /相對路徑比對邏輯）；這是刻意行為，非遺漏——本 hook 修復的是「實際會被
+    /相對路徑比對邏輯）；這是刻意行為，非遺漏——本 hook 觀察的是「實際會被
     runtime 執行的檔案」，符號連結解析後的真實目標才是該檔案。
 
     logger 為選填：直接呼叫本函式做單元測試時可省略；main() 呼叫時應傳入
@@ -162,31 +141,13 @@ def is_monitored_hook_path(
     return None
 
 
-def fix_missing_exec_bit(resolved: Path) -> bool:
-    """resolved 存在但缺可執行位時 chmod +x，回傳是否實際執行了修復。
-
-    不存在或已具可執行位（含目錄本身，理論上不會發生但防禦性檢查）一律
-    回傳 False，呼叫端據此判斷是否需要記錄與提示。
-
-    chmod() 失敗（如唯讀檔案系統、權限不足）時的 OSError 刻意不在此處
-    捕捉——本函式與 main() 皆不吞例外，交由 `run_hook_safely` 的頂層
-    例外處理統一記錄 traceback 與 stderr（quality-baseline 規則 4 雙
-    通道），避免本函式與 run_hook_safely 各自維護一份錯誤處理邏輯。
-    """
-    if not resolved.is_file():
-        return False
-    if os.access(resolved, os.X_OK):
-        return False
-    current_mode = resolved.stat().st_mode
-    resolved.chmod(current_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    return True
-
-
 def main() -> int:
     """主入口。只在 Edit/Write/MultiEdit 落地監控範圍內的 hook 檔案時介入。
 
-    PostToolUse 事件觸發時寫入已完成，本 hook 不 deny（無操作可逆轉），
-    僅在偵測到缺可執行位時自動修復並記錄，恆常回傳 EXIT_ALLOW。
+    降級版：偵測到缺可執行位時僅記錄 info 日誌供稽核，不再 chmod、不再印出
+    stderr WARNING——顯式解譯器註冊已消除「缺可執行位導致 hook 失效」的
+    前提，維持舊版自動修復語意會製造假急迫性。恆常回傳 EXIT_ALLOW
+    （PostToolUse 事件不可逆轉，本版亦無任何副作用）。
     """
     logger = setup_hook_logging("settings-registration-exec-guard")
 
@@ -209,15 +170,14 @@ def main() -> int:
         logger.debug(f"{file_path} 不在 hook 檔案監控範圍，無動作")
         return EXIT_ALLOW
 
-    if fix_missing_exec_bit(resolved):
-        msg = (
-            f"[SettingsRegistrationExecGuard] 落地當下偵測到 hook 檔案缺可執行位，"
-            f"已自動修復: {resolved}"
+    if resolved.is_file() and not os.access(resolved, os.X_OK):
+        logger.info(
+            f"[SettingsRegistrationExecGuard] 偵測到 hook 檔案缺可執行位（僅記錄，"
+            f"不自動修復，因 settings.json 皆以顯式解譯器呼叫，可執行位非執行"
+            f"前提）: {resolved}"
         )
-        logger.warning(msg)
-        print(msg, file=sys.stderr)
     else:
-        logger.debug(f"{resolved} 已具可執行位或不存在，無需修復")
+        logger.debug(f"{resolved} 已具可執行位或不存在，無需處理")
 
     return EXIT_ALLOW
 

@@ -63,7 +63,7 @@
    - 或 Hook 僅偵測 untracked；tracked-modified 部分被壓縮到「未提交變更：N 項」等彙整
 
 2. **前 session 結束流程缺口**
-   - Session 結束時未執行完整 commit cycle（/commit-as-prompt）
+   - Session 結束時未執行完整 commit cycle（/commit-as-prompt；該指令已於 2026-08-22 廢止，此處保留原文為當時事實記述）
    - 可能因：用戶中斷、/clear 未強制 commit、認為「後續再做」
 
 3. **PM 工作邊界假設**

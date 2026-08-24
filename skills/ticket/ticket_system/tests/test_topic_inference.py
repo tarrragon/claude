@@ -84,6 +84,56 @@ class TestInferTopicFromFiles:
         assert topic == "主題"
         assert ".claude/lib/target.py" in basis
 
+    def test_hub_file_in_three_or_more_topics_is_excluded(self, monkeypatch):
+        """涵蓋度達門檻（3 個主題共用同一路徑）的 hub 檔案不應產生匹配。"""
+        hub = ".claude/skills/ticket/SKILL.md"
+        self._stub_clusters(monkeypatch, {
+            "主題甲": {hub},
+            "主題乙": {hub},
+            "主題丙": {hub},
+        })
+        assert ti.infer_topic_from_files(hub) == (None, None)
+
+    def test_non_hub_file_in_two_topics_is_not_excluded(self, monkeypatch):
+        """涵蓋度未達門檻（僅 2 個主題）不受排除，行為與既有邏輯一致（回歸保護）。"""
+        shared = ".claude/skills/ticket/lib/shared.py"
+        self._stub_clusters(monkeypatch, {
+            "甲主題": {shared},
+            "乙主題": {shared},
+        })
+        topic, basis = ti.infer_topic_from_files(shared)
+        assert topic in ("甲主題", "乙主題")
+        assert "S2" in basis
+
+    def test_hub_exclusion_does_not_affect_unrelated_single_topic_file(self, monkeypatch):
+        """hub 排除只影響高涵蓋度路徑，單一主題的路徑仍正常匹配（回歸保護）。"""
+        self._stub_clusters(monkeypatch, {
+            "主題": {".claude/lib/target.py"},
+        })
+        topic, basis = ti.infer_topic_from_files(".claude/lib/target.py")
+        assert topic == "主題"
+        assert "S2" in basis
+
+    def test_hub_threshold_boundary_exact_value_is_excluded(self, monkeypatch):
+        """涵蓋度恰好等於門檻值時視為 hub，予以排除（邊界值測試）。"""
+        hub = ".claude/hooks/guard.py"
+        clusters = {
+            f"主題{i}": {hub} for i in range(ti.HUB_TOPIC_COVERAGE_THRESHOLD)
+        }
+        self._stub_clusters(monkeypatch, clusters)
+        assert ti.infer_topic_from_files(hub) == (None, None)
+
+    def test_hub_threshold_boundary_one_below_is_not_excluded(self, monkeypatch):
+        """涵蓋度為門檻值減一時仍允許匹配（邊界值測試）。"""
+        hub = ".claude/hooks/guard.py"
+        clusters = {
+            f"主題{i}": {hub} for i in range(ti.HUB_TOPIC_COVERAGE_THRESHOLD - 1)
+        }
+        self._stub_clusters(monkeypatch, clusters)
+        topic, basis = ti.infer_topic_from_files(hub)
+        assert topic is not None
+        assert "S2" in basis
+
 
 class TestInferTopic:
     """S1 優先於 S2 的短路行為。"""
@@ -141,6 +191,47 @@ class TestInferTopic:
         )
         ti.infer_topic(self._args(source_ticket="X-W1-001", where_files=".claude/a/b.py"))
         assert called == []
+
+    def test_discovered_during_skips_s1_even_with_matching_upstream_topic(self, monkeypatch):
+        """--discovered-during 標記發現衍生：即使上游（source_ticket/parent）有
+        主題，S1 也不得觸發繼承——上游主題反映的是規劃脈絡，與發現衍生票的
+        實際內容無關。
+        """
+        called = []
+        self._stub(monkeypatch, {"X-W1-001": "上游主題"})
+        monkeypatch.setattr(
+            ti, "build_topic_file_clusters", lambda: called.append(1) or {}
+        )
+        topic, basis = ti.infer_topic(
+            self._args(parent="X-W1-001", discovered_during="X-W1-001")
+        )
+        assert topic is None
+        assert basis is None
+        # 未給 where_files：infer_topic_from_files 的 guard clause 先於呼叫
+        # build_topic_file_clusters 就返回，故本案例下 S2 不會實際觸發查詢；
+        # 這裡驗證的是 S1 未命中（topic/basis 皆 None），S2 有 where_files
+        # 時仍正常運作見 test_discovered_during_still_falls_through_to_s2。
+        assert called == []
+
+    def test_discovered_during_still_falls_through_to_s2(self, monkeypatch):
+        """S1 被 --discovered-during 短路後，S2 檔案叢集判準仍正常運作
+        （只封鎖上游繼承，不封鎖與新票自身內容相關的推導）。
+        """
+        self._stub(
+            monkeypatch,
+            {"X-W1-001": "上游主題"},
+            {"叢集主題": {".claude/lib/target.py"}},
+        )
+        topic, basis = ti.infer_topic(
+            self._args(
+                source_ticket=None,
+                parent="X-W1-001",
+                discovered_during="X-W1-001",
+                where_files=".claude/lib/target.py",
+            )
+        )
+        assert topic == "叢集主題"
+        assert "S2" in basis
 
 
 class TestRequiresTopicAssignment:

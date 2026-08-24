@@ -25,7 +25,14 @@ test_no_line_asserts_effective_timing 的斷言清單維持不變，含「立即
 （仍不斷言時點），變的是不再宣稱該問題無人回答。新增
 test_no_line_claims_timing_unverified 釘住此約束。
 
-Source: ticket 0.2.1-W3-499、0.2.1-W3-514、0.2.1-W3-704、0.2.1-W3-687
+0.2.1-W3-890 降級：settings.json 全部 hook 註冊已改為顯式解譯器形式，可執行
+位不再是 hook 被 runtime 呼叫的前提。`_format_permission_report` 第二參數由
+`fixed_files`（已修復）改名 `missing_files`（僅偵測，不修復），對應行文字
+由「本次補上可執行位」改為「本次偵測到缺可執行位（不自動修復...）」。舊版
+「生效時點不作斷言」相關約束（W3-514/W3-704/W3-687）在新語意下已無意義
+（沒有修復動作就沒有生效時點問題），對應測試隨新語意一併更新。
+
+Source: ticket 0.2.1-W3-499、0.2.1-W3-514、0.2.1-W3-704、0.2.1-W3-687、0.2.1-W3-890
 """
 
 import importlib.util
@@ -51,65 +58,53 @@ hook_mod = _load_hook_module()
 
 
 class TestFormatPermissionReport:
-    def test_no_fixed_files_single_line_main_count_only(self):
-        lines = hook_mod._format_permission_report(ok_count=104, fixed_files=[])
+    def test_no_missing_files_single_line_main_count_only(self):
+        lines = hook_mod._format_permission_report(ok_count=104, missing_files=[])
         assert lines == ["權限: 104 個已確認可執行"]
 
-    def test_fixed_files_not_merged_into_main_count(self):
-        """本次修復的檔案不併入主計數，主計數只含 ok_count。"""
+    def test_missing_files_not_merged_into_main_count(self):
+        """本次偵測到缺可執行位的檔案不併入主計數，主計數只含 ok_count。"""
         lines = hook_mod._format_permission_report(
-            ok_count=103, fixed_files=["workspace-wipe-guard-hook.py"]
+            ok_count=103, missing_files=["workspace-wipe-guard-hook.py"]
         )
         assert lines[0] == "權限: 103 個已確認可執行"
 
-    def test_fixed_files_reported_as_separate_line(self):
+    def test_missing_files_reported_as_separate_line(self):
         lines = hook_mod._format_permission_report(
-            ok_count=103, fixed_files=["workspace-wipe-guard-hook.py"]
+            ok_count=103, missing_files=["workspace-wipe-guard-hook.py"]
         )
         assert len(lines) == 2
-        assert lines[1] == "權限: 本次補上可執行位 1 個（生效時點不作斷言）"
+        assert lines[1] == "權限: 本次偵測到缺可執行位 1 個（不自動修復，可執行位非執行前提）"
 
-    def test_multiple_fixed_files_count_correct(self):
+    def test_multiple_missing_files_count_correct(self):
         lines = hook_mod._format_permission_report(
-            ok_count=100, fixed_files=["a.py", "b.py", "c.py"]
+            ok_count=100, missing_files=["a.py", "b.py", "c.py"]
         )
-        assert lines[1] == "權限: 本次補上可執行位 3 個（生效時點不作斷言）"
+        assert lines[1] == "權限: 本次偵測到缺可執行位 3 個（不自動修復，可執行位非執行前提）"
 
-    def test_no_line_claims_fixed_files_are_confirmed_executable(self):
-        """回歸防護：任何一行都不得把 fixed_files 計入「已確認可執行」語意。"""
+    def test_no_line_claims_missing_files_are_confirmed_executable(self):
+        """回歸防護：任何一行都不得把 missing_files 計入「已確認可執行」語意。"""
         lines = hook_mod._format_permission_report(
-            ok_count=50, fixed_files=["x.py", "y.py"]
+            ok_count=50, missing_files=["x.py", "y.py"]
         )
         combined = "\n".join(lines)
         assert "52 個已確認可執行" not in combined
 
-    def test_no_line_asserts_effective_timing(self):
-        """回歸防護：不得斷言修復何時生效。
-
-        理由已由「尚無實驗區分」更新為「實驗結論為版本相依」（0.2.1-W3-704）：
-        runtime 解析 hook 命令集的時機在 08-13 側觀測支持快照模型、08-18 兩輪
-        實驗支持即時生效。既然模型會隨 runtime 版本翻轉，寫死任一時點都會在
-        翻轉後成為假訊息，故「立即生效」同樣列入禁止清單——它在 08-18 為真，
-        但正確性不該建立在會翻轉的維度上。
-        """
+    def test_no_line_claims_auto_fix_happened(self):
+        """回歸防護：降級版不再自動修復，任何一行都不得宣稱已修復/已補上執行權限。"""
         lines = hook_mod._format_permission_report(
-            ok_count=50, fixed_files=["x.py", "y.py"]
+            ok_count=50, missing_files=["x.py", "y.py"]
         )
         combined = "\n".join(lines)
-        for claim in ("下個 session 起生效", "本 session 生效", "立即生效"):
+        for claim in ("本次補上可執行位", "已自動修復", "已加上執行權限"):
             assert claim not in combined
 
-    def test_no_line_claims_timing_unverified(self):
-        """回歸防護：不得宣稱生效時點「未經驗證」。
-
-        與 test_no_line_asserts_effective_timing 是同一約束的兩側——該測試
-        禁止斷言某個時點，本測試禁止宣稱無人查過。區分實益：實驗已完成，
-        結論為版本相依；寫「未經驗證」會讓讀者誤以為此問題尚待回答，而據此
-        重跑實驗或多做一次無謂重啟。合格寫法是只陳述已完成的動作。
-        """
+    def test_no_line_asserts_effective_timing(self):
+        """回歸防護：不得斷言修復何時生效——降級版無修復動作，生效時點維度
+        整個不該出現在輸出。"""
         lines = hook_mod._format_permission_report(
-            ok_count=50, fixed_files=["x.py", "y.py"]
+            ok_count=50, missing_files=["x.py", "y.py"]
         )
         combined = "\n".join(lines)
-        for claim in ("未經驗證", "尚未驗證", "無實驗"):
+        for claim in ("下個 session 起生效", "本 session 生效", "立即生效", "生效時點不作斷言"):
             assert claim not in combined

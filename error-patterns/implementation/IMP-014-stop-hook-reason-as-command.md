@@ -24,7 +24,9 @@ Claude Code Stop hook 的 `block` decision 中，`reason` 欄位不是給用戶�
 而是被 Claude Code 注入為新一輪 context 讓 Claude 繼續回應。
 當 `reason` 包含 `/ticket resume {id}` 這樣的文字，Claude 將其解讀為用戶命令並執行。
 
-**位置**：`.claude/hooks/handoff-auto-resume-stop-hook.py` 第 577-584 行（v2.2.0）
+**位置**：`.claude/hooks/handoff-auto-resume-stop-hook.py` 第 577-584 行（v2.2.0，案例敘事：事發時路徑）<!-- broken-link-exempt: 本行為更正說明，案例本文保留原始路徑以忠實記錄事發當時狀態 -->
+
+現搬遷至 `.claude/skills/ticket/hooks/handoff-auto-resume-stop-hook.py`，2026-08-22 文件複查更正。
 
 **舊版錯誤設計**：
 ```python
@@ -80,4 +82,4 @@ return {
 - IMP-006 案例 D: Hook 非成功路徑遺漏 stderr 輸出（同屬 Hook 輸出設計缺陷）
 
 ## 相關文件
-- `.claude/hooks/handoff-auto-resume-stop-hook.py` - 修復位置
+- `.claude/skills/ticket/hooks/handoff-auto-resume-stop-hook.py` - 修復位置

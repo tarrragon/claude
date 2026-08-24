@@ -14,11 +14,13 @@
 
 | 檔案 | 用途 | 狀態 |
 |-----|------|------|
-| `.claude/hooks/handoff-cleanup-hook.py` | Hook 核心程式 | ✓ 完成 |
+| 撰寫當時的實際交付路徑（已隨 ticket skill 私有化遷移，見表後附註）現為 `.claude/skills/ticket/hooks/handoff-cleanup-hook.py` | Hook 核心程式 | ✓ 完成 |
 | `.claude/settings.json` | Hook 配置註冊 | ✓ 已更新 |
 | `.claude/hook-logs/handoff-cleanup/README.md` | 使用指南 | ✓ 完成 |
 | `.claude/hook-logs/handoff-cleanup/TEST_VERIFICATION_REPORT.md` | 測試報告 | ✓ 完成 |
 | `docs/work-logs/v0.31.0/tickets/0.31.0-W7-012.md` | 工作日誌 | ✓ 更新 |
+
+附註：「Hook 核心程式」列的撰寫當時實際交付路徑為 `.claude/hooks/handoff-cleanup-hook.py`，2026-08-22 文件複查更正。<!-- broken-link-exempt: 本列已加註更正說明，原路徑為撰寫當時的實際交付路徑 -->
 
 ---
 

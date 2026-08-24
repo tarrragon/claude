@@ -61,20 +61,23 @@ ANA Solution 章節若含 IMP/DOC/ANA spawn 規劃表格，必須在 complete �
 ### Spawn 落地確認
 
 - [ ] 所有規劃項目已建 ticket（`spawned_tickets` 或 `children` 已記錄對應 ID）
-- [ ] 或在本章節顯性標註「無需建 ticket：[具體理由]」
+- [ ] 或已登記 spawn request 並 resolve 為終態（`processed` 附 ticket ID／`dismissed` 附理由）
+- [ ] 或在本章節逐項標註「無需建 ticket：[具體理由]」（一則宣告扣抵一項）
 ```
 
-**Why**：acceptance 勾選「產出 spawned 清單」只檢文字產出，不檢 ticket 是否實際建立；Solution 寫了表格但未建 ticket = 無 trigger 延後決策（PC-093 模式）。
+**Why**：acceptance 勾選「產出 spawned 清單」只檢文字產出，不檢 ticket 是否實際建立；Solution 寫了表格但未建 ticket = 無 trigger 延後決策（PC-093 模式）。停在 `pending` 的 spawn request 屬同一模式，故不計為落地。
 
 **Consequence**：缺此 checklist，分析代理人 complete 時 frontmatter 為空也能放行，spawn 規劃靜默丟失（W17-167 元層級反例已證明）。
 
-**Action**：
+**Action**：落地是**執行者**於 complete 前的義務——complete 後強制層已無執行時機，PM 事後驗收屬冗餘檢查而非唯一保證。
 
 | 情境 | 填寫方式 |
 |------|---------|
 | 全部已建 ticket | 勾選第一項，列出對應 ticket ID 清單 |
-| 部分未建 | complete 前先補建（PM 接手 ticket create 職責） |
-| 評估後不需建 | 勾選第二項，標註「無需建 ticket：[理由]」 |
+| 部分未建 | complete 前由執行者自行補建（`ticket create --source-ticket <本票 ID>`，或 `--parent <本票 ID>` 建 children） |
+| 成票與否需 PM 裁決 | 勾選第二項：先 `add-spawn-request`，complete 前再 `resolve-spawn-request` 標為終態 |
+| 評估後不需建 | 勾選第三項，**逐項**標註「無需建 ticket：[理由]」 |
+| 工具清單不含 Bash 而無法呼叫 CLI | 停手上報 NeedsContext 由 PM 改派；此情形應在派發階段即避免 |
 
 **Spawn 規劃表建議格式**（W1-004 擴充）：
 
@@ -93,6 +96,35 @@ ANA Solution 章節若含 IMP/DOC/ANA spawn 規劃表格，必須在 complete �
 - Lifecycle 層：`.claude/pm-rules/ticket-lifecycle.md`「ANA 衍生 Ticket 溯源驗證」Step 0（FR↔Ticket 覆蓋矩陣）
 - Lifecycle 層：`.claude/pm-rules/ticket-lifecycle.md`「ANA Solution Spawn 規劃落地（強制）」
 - 強制層：acceptance-gate-hook Step 2.5.2（W17-168 落地）
+
+#### Solution 章節：逐筆清單落地（PC-BAL-054 強制）
+
+ANA Solution 的判定對象若同時滿足以下三條件，逐筆清單必須落地為獨立檔案，不得只留統計表與逐類判定。三條件為 AND——任一不成立即不強制，多數 ANA 票不觸發本節。
+
+| 條件 | 判準 |
+|------|------|
+| 1. 判定對象可枚舉且量大 | 對象是一組具體項目（檔案、行號、ticket、skill 配對等），且集合大小超出可在 Solution 內文合理列舉的規模（經驗閾值：> 15 筆，與抽樣複驗慣例對齊） |
+| 2. 至少一張下游票逐筆依賴 | 下游票的處置是「對集合中每一筆分別判斷/處置」，而非「對整批做同質處置」（後者不需要清單） |
+| 3. 量測結果具時間敏感性 | 對象所在的語料庫會因其他並行工作變動，重新量測可能得到不同結果 |
+
+**Why**：ANA 的 Solution schema 要求的是結論——統計表、逐類判定、方案比較。逐筆清單在票的產出物模型裡從未被視為需落地的產出物，執行者依 schema 字面完成撰寫時票確實完整，但完整的是判定，不是判定所本的資料。判定完整的外觀正是缺口不會被攔下的原因：Solution 若明顯缺結論，驗收會直接卡住；有統計表有分類時，沒有人會去問「這些數字是從哪份清單算出來的，那份清單在哪」。
+
+**Consequence**：缺口在分析票 complete 時不會暴露，要等下游票真的需要那份清單才浮現，此時已跨過驗收關卡，補救成本轉嫁給下游執行者。條件 3 使補救本身再失效一層——語料庫在多次量測之間變動時，同一定義重跑會得到不同數字，下游執行者無從判斷落差來自自己算錯、量測目標真的變了、還是原始分析有誤。PC-BAL-054 實際案例：一張分析票的三張下游票分別被迫重新掃描、加 blockedBy 待清單重建、移除 acceptance 條目改以事後複驗表為 ground truth。
+
+**Action**：三條件成立時，Solution 撰寫流程新增一步——把逐筆清單寫入獨立檔案，最低限度三欄（來源檔案、行號、分類結果），路徑 `docs/work-logs/v{version}/tickets/artifacts/{ticket-id}-<slug>.tsv`，並在 Solution 內文附上該路徑與筆數供下游直接引用。下游需程式化讀取用 `.tsv` / `.csv` / `.json`，下游是人工核對用 `.md` 表格。
+
+acceptance 須寫成可獨立驗證的兩條，禁止只寫「已保留逐筆清單」——該句無法被驗收者客觀檢查通過與否，驗收者既不知道要去哪裡找，也無從判斷「保留」到什麼程度算數：
+
+```markdown
+- [ ] 逐筆清單已落地至 `<明確路徑>`，檔案存在且非空
+- [ ] 清單筆數與 Solution 內文宣稱的統計數字一致
+```
+
+前者驗收者可直接 `test -f` 或 `wc -l` 核對，後者可直接比對數字，兩者皆不需重新量測。
+
+**與 Spawn 落地確認的邊界**：該節管的是「規劃項目有沒有變成 ticket」，本節管的是「判定所本的資料有沒有留存」。同一張 ANA 可同時觸發兩節，兩者無替代關係——spawn 全數落地不代表逐筆清單已留存。
+
+**交叉引用**：`.claude/error-patterns/process-compliance/PC-BAL-054-analysis-ticket-judgment-without-itemized-list.md`（三條件的推導與下游受阻實例）
 
 ### Solution 章節：H3 子標題與表格使用慣例（W10-123 / W10-124 / W10-125 補強）
 
@@ -398,7 +430,9 @@ acceptance:
 | 1.1.0 | 2026-05-08 | ANA Solution 章節新增「Spawn 落地確認」子節 checklist（W17-167 L3 落地，配合 W17-168 hook + W17-169 quality-baseline / ticket-lifecycle 同步修訂） |
 | 1.0.0 | 2026-04-20 | 初版（W17-016.2 落地 W17-016.1 盤點結論） |
 
-**Last Updated**: 2026-08-20
+**Last Updated**: 2026-08-23
+**Version**: 1.10.0 — ANA 章節新增第三個強制子節「Solution 章節：逐筆清單落地（PC-BAL-054 強制）」：三條件 AND 判準（可枚舉且量大 / 下游逐筆依賴 / 量測具時間敏感性）成立時逐筆清單須落地為獨立檔案，附可驗證的 acceptance 兩條寫法與「已保留逐筆清單」不可用的理由，並劃出與 Spawn 落地確認的邊界（前者管規劃是否變成 ticket，後者管判定所本資料是否留存，無替代關係）。體例沿用同章節既有兩個強制子節。與 1.9.0 改的是不同子節，無覆蓋。
+**Version**: 1.9.0 — 「Solution 章節：Spawn 落地確認」對齊規則 5 與強制層：checklist 補第二項（登記 spawn request 並 resolve 為終態），第三項改為逐項宣告；Action 段明示落地是執行者於 complete 前的義務，「部分未建」列的責任人由「PM 接手 ticket create 職責」改為執行者自行補建（原寫法與強制層實際擋的對象不符——gate 在 complete 前擋的是執行者，PM 無介入時機）；補「工具清單不含 Bash」的停手上報列。
 **Version**: 1.8.0 — 「Type-aware Quality Gate」節改寫：已刪除的 `ticket-quality-gate-hook.py` 換成現行承接者說明。逐一查證兩個現行 checker 原始碼後發現舊表格對 DOC 的 c2 描述失準——`execution_log_checker.py` 對 DOC 無 type-based 跳過邏輯，DOC 之所以實務上不被阻擋，是因 schema 範本固定內嵌「（免填：...）」文字未被剝除規則移除，屬範本副作用而非程式碼顯式豁免；c3（`responsibility_scope_checker.py`）則確有 `_EXEMPT_TYPES = {"ANA", "DOC"}` 顯式豁免，與舊表格一致。同步移除已不存在的 `quality_config.yaml` 配置位置引用，改為模組內常數說明。
 **Version**: 1.7.2 — 補改名漏網：「防護類 hook ticket 額外 acceptance」節與「邊界（兩個方向）」段的四項散文列舉仍寫舊 label「既有 session 生效策略」，與同節表格第 1 列的現行 label 不一致；依表格改為「本 session 實地觸發確認」。讀者依散文寫出的 acceptance 會落在舊措辭上，而 checker 的關鍵詞清單刻意保留舊用詞故不會擋，此不一致無自曝管道。要求本身與硬擋行為未變。
 **Version**: 1.7.1（原記為 1.7.0，與先落地的方案 F 條目撞號，依落地順序改號） — 依 PC-BAL-033 機制收窄同步（2026-08-18）：必含項第 1 項由「既有 session 生效策略」改名為「本 session 實地觸發確認」（收窄後需驗的是本 session 實地觸發是否落檔，非屬哪個 session 世代），合格填法同步改寫；「Why（前三項）」段的機制句由單一快照模型斷言改為兩條成因並列（缺可執行位恆成立、註冊快照版本相依），並說明第 1 項為何選在兩種載入模型下都有效的證據。要求本身、觸發條件與硬擋行為皆未變。

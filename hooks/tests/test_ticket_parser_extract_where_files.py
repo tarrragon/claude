@@ -22,7 +22,10 @@ _hooks_dir = Path(__file__).parent.parent
 if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 
-from acceptance_checkers.ticket_parser import extract_where_files
+from acceptance_checkers.ticket_parser import (
+    extract_where_files,
+    extract_where_files_write_only,
+)
 
 
 def _logger():
@@ -102,3 +105,60 @@ class TestExtractWhereFilesEdgeCases:
 
     def test_files_wrong_type_returns_empty(self):
         assert extract_where_files({"where": {"files": 123}}, _logger()) == []
+
+
+class TestExtractWhereFilesIntentMarkerStripping:
+    """讀寫意圖標記剝離（0.2.1-W3-801）：`extract_where_files` 回傳完整
+    影響集（不分讀寫），標記僅供 `extract_where_files_write_only` 判斷。"""
+
+    def test_read_marker_stripped_from_full_set(self):
+        fm = {"where": {"files": ["a.py::read", "b.py"]}}
+        assert extract_where_files(fm, _logger()) == ["a.py", "b.py"]
+
+    def test_write_marker_stripped_from_full_set(self):
+        fm = {"where": {"files": ["a.py::write"]}}
+        assert extract_where_files(fm, _logger()) == ["a.py"]
+
+    def test_dedup_after_strip_not_before(self):
+        """剝離須置於去重之前：同路徑的 ::read 與 ::write 標記正規化為
+        單一路徑，而非兩個相異項（若去重先於剝離會保留兩筆）。"""
+        fm = {"where": {"files": ["a.py::read", "a.py::write"]}}
+        assert extract_where_files(fm, _logger()) == ["a.py"]
+
+    def test_escaped_marker_preserved_as_literal_path(self):
+        fm = {"where": {"files": [r"a.py\::read"]}}
+        assert extract_where_files(fm, _logger()) == ["a.py::read"]
+
+    def test_unrecognized_suffix_treated_as_path(self):
+        fm = {"where": {"files": ["a.py::readonly"]}}
+        assert extract_where_files(fm, _logger()) == ["a.py::readonly"]
+
+
+class TestExtractWhereFilesWriteOnly:
+    """`extract_where_files_write_only`：::read 標記排除於寫入集，未標記
+    與 ::write 標記維持既有觸發行為（預設視為寫入）。"""
+
+    def test_read_marked_path_excluded(self):
+        fm = {"where": {"files": [".claude/hooks/foo.py::read"]}}
+        assert extract_where_files_write_only(fm, _logger()) == []
+
+    def test_unmarked_path_included_by_default(self):
+        fm = {"where": {"files": [".claude/hooks/foo.py"]}}
+        assert extract_where_files_write_only(fm, _logger()) == [".claude/hooks/foo.py"]
+
+    def test_write_marked_path_included(self):
+        fm = {"where": {"files": [".claude/hooks/foo.py::write"]}}
+        assert extract_where_files_write_only(fm, _logger()) == [".claude/hooks/foo.py"]
+
+    def test_mixed_read_and_write_paths(self):
+        fm = {
+            "where": {
+                "files": [
+                    ".claude/hooks/read_only.py::read",
+                    ".claude/hooks/written.py",
+                ]
+            }
+        }
+        assert extract_where_files_write_only(fm, _logger()) == [
+            ".claude/hooks/written.py"
+        ]

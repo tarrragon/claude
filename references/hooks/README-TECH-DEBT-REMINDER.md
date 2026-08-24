@@ -71,7 +71,7 @@ cat .claude/hook-logs/tech-debt-reminder/TEST-REPORT.md
 
 - [完整使用指南](./TECH-DEBT-REMINDER-USAGE.md)
 - [測試驗證報告](./../hook-logs/tech-debt-reminder/TEST-REPORT.md)
-- [Hook 實作源碼](./tech-debt-reminder.py)
+- [Hook 實作源碼](../../hooks/tech-debt-reminder.py)
 
 ---
 

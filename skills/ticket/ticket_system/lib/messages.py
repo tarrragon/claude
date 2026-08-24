@@ -64,6 +64,13 @@ class ErrorMessages:
         "[Error] 版本 {version} 狀態為 {status}（非 active）。"
         "只能在 active 版本中建立 Ticket。"
     )
+    SET_PARENT_REQUIRES_TARGET = (
+        "[Error] set-parent 需指定新 parent_id，或加上 --clear 清除現有值"
+    )
+    SET_PARENT_CLEAR_CONFLICT = (
+        "[Error] set-parent 不可同時指定 new_parent_id 與 --clear"
+    )
+    SET_PARENT_SELF_REFERENCE = "[Error] Ticket 不可設定自己為 parent_id: {ticket_id}"
     INVALID_TICKET_ID = "[Error] Ticket ID 格式無效"
     INVALID_TICKET_ID_FORMAT = "[Error] 無效的 Ticket ID 格式: {ticket_id}"
     FILE_NOT_FOUND = "[Error] 檔案不存在: {path}"
@@ -160,6 +167,9 @@ class InfoMessages:
     BATCH_COMPLETE_RESULTS = "結果: {success}/{total} 成功"
     TICKET_CREATED = "[OK] 已建立 Ticket: {ticket_id}"
     CHILD_RELATION_CREATED = "[OK] 已建立父子關係"
+    PARENT_RELATION_UPDATED = "[OK] {child_id} 的 parent_id 已更新"
+    PARENT_RELATION_CLEARED = "[OK] {child_id} 的 parent_id 已清除"
+    PARENT_RELATION_NOOP = "[Info] {child_id} 的 parent_id 已是目標值，未變更"
     PHASE_UPDATED = "[OK] {ticket_id} 的 phase 已更新"
     FIELD_UPDATED = "[OK] {ticket_id} 的 {field_name} 已更新"
     ACCEPTANCE_CRITERIA_UPDATED = "[OK] {ticket_id} index {index} 已{status_text}"

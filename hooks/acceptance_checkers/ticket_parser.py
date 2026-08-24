@@ -8,7 +8,7 @@ Ticket Parser - Ticket frontmatter 欄位提取和型別判斷
 import sys
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 # 加入 hooks 目錄（acceptance_checkers 的上層）
 _hooks_dir = Path(__file__).parent.parent
@@ -16,6 +16,15 @@ if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 
 from lib import parse_ticket_date
+
+# 讀寫意圖標記剝離改 import ticket_system 共用實作：本模組屬
+# acceptance_checkers 套件，已透過上方 sys.path.insert 取得 `.claude/hooks`
+# 存取權，比照同一手法加掛 skill 目錄後即可直接 import ticket_system，
+# 不需就地複製正則（PEP 723 單檔限制的是依賴解析，不限制 sys.path 操作）。
+_TICKET_SYSTEM_SKILL_DIR = _hooks_dir.parent / "skills" / "ticket"
+if str(_TICKET_SYSTEM_SKILL_DIR) not in sys.path:
+    sys.path.insert(0, str(_TICKET_SYSTEM_SKILL_DIR))
+from ticket_system.lib.file_conflict import parse_file_intent as _parse_file_intent  # noqa: E402
 
 
 def extract_children_from_frontmatter(frontmatter: dict, logger) -> List[str]:
@@ -105,9 +114,46 @@ def extract_where_files(frontmatter: dict, logger) -> List[str]:
         frontmatter: Ticket frontmatter 結構
         logger: 日誌物件
 
+    路徑結尾的讀寫意圖標記（`::read` / `::write`）於去重之前剝離，使
+    `a.py::read` 與 `a.py::write` 正規化為同一路徑 `a.py`（若剝離晚於
+    去重，兩者會被誤判為相異路徑而各自保留）。本函式回傳完整影響集
+    （不分讀寫），僅供需要「本 ticket 觸及哪些路徑」的呼叫端使用；需要
+    區分讀寫意圖者見 `extract_where_files_write_only`。
+
     Returns:
-        List[str] - 正規化後的有效檔案路徑清單（去重、去空白、去佔位符；
-        可能為空 list）
+        List[str] - 正規化後的有效檔案路徑清單（去重、去空白、去佔位符、
+        去意圖標記；可能為空 list）
+    """
+    return [path for path, _ in _extract_where_file_intents(frontmatter, logger)]
+
+
+def extract_where_files_write_only(frontmatter: dict, logger) -> List[str]:
+    """從 frontmatter 提取 `where.files` 中意圖為「寫入」的路徑清單。
+
+    未標記與以 `::write` 標記的路徑視為寫入（預設寫入，與
+    `file_conflict.py` 的 IMP/DOC/ADJ 型別預設一致，本函式不依 ticket
+    type 推導，呼叫端限防護類 hook acceptance 檢查，該情境只適用 IMP
+    型 ticket）；以 `::read` 標記者排除。
+
+    僅供需要區分讀寫意圖以決定是否觸發防護類要求的呼叫端使用（目前僅
+    `hook_protection_acceptance_checker`），其餘四個 `extract_where_files`
+    呼叫端要的是完整影響集，不得改用本函式。
+
+    Returns:
+        List[str] - 正規化後的寫入路徑清單（去重、去空白、去佔位符、去
+        意圖標記；可能為空 list）
+    """
+    return [
+        path
+        for path, intent in _extract_where_file_intents(frontmatter, logger)
+        if intent != "read"
+    ]
+
+
+def _extract_where_file_intents(frontmatter: dict, logger) -> List[Tuple[str, Optional[str]]]:
+    """`extract_where_files` / `extract_where_files_write_only` 共用的內部
+    正規化實作：回傳 (路徑, 意圖) tuple 清單，意圖為 `"read"` / `"write"`
+    / `None`（未標記）。
     """
     where = frontmatter.get("where")
     if not isinstance(where, dict):
@@ -122,14 +168,18 @@ def extract_where_files(frontmatter: dict, logger) -> List[str]:
         return []
 
     seen = set()
-    result = []
+    result: List[Tuple[str, Optional[str]]] = []
     for f in candidates:
-        stripped = f.strip()
-        if not stripped or stripped in _WHERE_FILES_PLACEHOLDERS:
+        raw_stripped = f.strip()
+        if not raw_stripped or raw_stripped in _WHERE_FILES_PLACEHOLDERS:
             continue
-        if stripped not in seen:
-            seen.add(stripped)
-            result.append(stripped)
+        path, intent = _parse_file_intent(raw_stripped)
+        path = path.strip()
+        if not path or path in _WHERE_FILES_PLACEHOLDERS:
+            continue
+        if path not in seen:
+            seen.add(path)
+            result.append((path, intent))
 
     if result:
         logger.debug(f"where.files 正規化後 {len(result)} 個有效路徑")

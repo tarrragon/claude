@@ -157,18 +157,23 @@ def _read_records(log_path):
 
 
 def test_warn_path_writes_telemetry(monkeypatch, _isolate_identity_log):
-    """warn 路徑（未提供 --as）落盤一行結構化記錄，含 timestamp 與 result=warn。"""
+    """warn 路徑（未提供 --as，command 不屬 ENFORCED_COMMANDS）落盤一行結構化記錄，含 timestamp 與 result=warn。
+
+    command 使用 check-acceptance（非 ENFORCED_COMMANDS 成員）以維持 warn 語意；
+    complete/finish 已於 0.2.1-W3-896 轉強制，未帶 --as 改為 deny（見
+    test_deny_path_writes_telemetry）。
+    """
     log_path = _isolate_identity_log
     _patch_who(monkeypatch, "thyme-python-developer")
 
-    check_identity("1.0.0", "1.0.0-W1-057", None, command="complete")
+    check_identity("1.0.0", "1.0.0-W1-057", None, command="check-acceptance")
 
     assert log_path.exists()
     records = _read_records(log_path)
     assert len(records) == 1
     rec = records[0]
     assert rec["result"] == RESULT_WARN
-    assert rec["command"] == "complete"
+    assert rec["command"] == "check-acceptance"
     assert rec["ticket_id"] == "1.0.0-W1-057"
     assert rec["has_as"] is False
     assert rec["timestamp"]  # 非空
@@ -283,11 +288,15 @@ def test_deny_path_caller_type_is_agent(monkeypatch, _isolate_identity_log):
 
 
 def test_telemetry_appends_multiple_records(monkeypatch, _isolate_identity_log):
-    """四路徑連續觸發各 append 一行累積（append-only 語義 + 全路徑覆蓋）。"""
+    """四路徑連續觸發各 append 一行累積（append-only 語義 + 全路徑覆蓋）。
+
+    warn 路徑改用 check-acceptance（非 ENFORCED_COMMANDS 成員）以維持 warn 語意；
+    complete/finish 已於 0.2.1-W3-896 轉強制，未帶 --as 改為 deny。
+    """
     log_path = _isolate_identity_log
     _patch_who(monkeypatch, "thyme-python-developer")
 
-    check_identity("1.0.0", "1.0.0-W1-057", None, command="complete")
+    check_identity("1.0.0", "1.0.0-W1-057", None, command="check-acceptance")
     check_identity("1.0.0", "1.0.0-W1-057", "claude", command="set-acceptance")
     check_identity("1.0.0", "1.0.0-W1-057", PM_AGENT_NAME, command="close")
     check_identity("1.0.0", "1.0.0-W1-057", "thyme-python-developer", command="complete")

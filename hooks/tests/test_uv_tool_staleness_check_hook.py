@@ -127,10 +127,11 @@ def test_hook_file_exists_and_registered_in_settings():
     settings = json.loads((PROJECT_ROOT / ".claude" / "settings.json").read_text())
     session_start = settings["hooks"]["SessionStart"][0]["hooks"]
     cmds = [h["command"] for h in session_start]
-    target = "$CLAUDE_PROJECT_DIR/.claude/hooks/uv-tool-staleness-check-hook.py"
-    assert target in cmds, "Hook must be registered in SessionStart chain"
-
-    idx_new = cmds.index(target)
+    target_suffix = "$CLAUDE_PROJECT_DIR/.claude/hooks/uv-tool-staleness-check-hook.py"
+    idx_new = next(
+        (i for i, c in enumerate(cmds) if c.endswith(target_suffix)), None
+    )
+    assert idx_new is not None, "Hook must be registered in SessionStart chain"
     # 位置：project-init-env-check-hook 之後、version-consistency-guard-hook 之前
     idx_proj_init = next(
         (i for i, c in enumerate(cmds) if c.endswith("project-init-env-check-hook.py")),

@@ -115,6 +115,6 @@ Hook 系統中的錯誤以 "hook error" 統一顯示，無法從 UI 區分具體
 
 ## 相關文件
 - `.claude/hooks/command-entrance-gate-hook.py` - 案例 B 修復位置
-- `.claude/hooks/creation-acceptance-gate-hook.py` - 案例 A 修復位置
+- `.claude/skills/ticket/hooks/creation-acceptance-gate-hook.py` - 案例 A 修復位置
 - `~/.claude/plugins/cache/claude-plugins-official/hookify/` - 案例 C 來源（已移除）
-- `.claude/hooks/agent-ticket-validation-hook.py` - 案例 D 修復位置
+- `.claude/skills/ticket/hooks/agent-ticket-validation-hook.py` - 案例 D 修復位置

@@ -21,6 +21,7 @@ import fnmatch
 import os
 import sys
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
@@ -60,6 +61,15 @@ ALLOWED_BRANCHES = [
     "refactor/*",
     "test/*",
 ]
+
+# ===== 共用 index 裸操作可觀測性 tripwire =====
+# 偵測未帶 GIT_INDEX_FILE 對共用 index 執行 read-tree/reset/checkout <commit> --
+# 的操作，僅記錄 WARNING 不阻擋（fail-open）。目的是偵測任何執行體對共用
+# index 的全量操作，作事後追蹤，不做預防性 DENY。
+BARE_INDEX_RISK_OPS = {"read-tree", "reset"}
+CHECKOUT_OP = "checkout"
+GIT_INDEX_FILE_ENV = "GIT_INDEX_FILE"
+INDEX_TRIPWIRE_LOG_NAME = "index-tripwire"
 
 # 跨專案豁免清單（W17-149 建立於 branch-verify-hook.py，0.2.1-W3-151 移至此處作 SSOT）：
 # 當目標檔案/檔案不在本專案 repo 時，使用通用清單，不套用 .claude/、docs/ 等本專案約定。
@@ -125,6 +135,61 @@ class FileStatus:
         return f"{self.status} {self.file_path}"
 
 
+def _is_bare_index_risk_op(args: list[str]) -> bool:
+    """
+    判斷 git 命令是否為對共用 index 的裸風險操作
+
+    風險操作範圍：read-tree、reset、checkout <commit> --（file-restore
+    形式，會用 index/tree 內容覆寫 working tree 檔案）。一般
+    `checkout <branch>` 切換分支不在此列。
+
+    Args:
+        args: git 命令參數列表（不含 'git'）
+
+    Returns:
+        bool: True 表示命中風險操作
+    """
+    if not args:
+        return False
+    cmd = args[0]
+    if cmd in BARE_INDEX_RISK_OPS:
+        return True
+    if cmd == CHECKOUT_OP and "--" in args:
+        return True
+    return False
+
+
+def _log_bare_index_operation(args: list[str], cwd: Optional[str]) -> None:
+    """
+    記錄裸操作共用 index 事件（executor + timestamp），fail-open
+
+    雙通道輸出：stderr（即時可見）+ 檔案日誌（保留完整記錄）。本函式
+    自身失敗不得影響呼叫端的 git 命令執行（觀測性功能不可拖垮主流程）。
+
+    Args:
+        args: 觸發風險判定的 git 命令參數列表
+        cwd: 執行 git 命令的工作目錄
+    """
+    try:
+        executor = os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
+        timestamp = datetime.now(timezone.utc).isoformat()
+        message = (
+            f"[BARE-INDEX-RISK] executor={executor} timestamp={timestamp} "
+            f"cmd={' '.join(args)} cwd={cwd or os.getcwd()}"
+        )
+        print(f"[WARNING] {message}", file=sys.stderr)
+
+        root = get_project_root(cwd=cwd)
+        log_dir = root / ".claude" / "hook-logs" / INDEX_TRIPWIRE_LOG_NAME
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"{INDEX_TRIPWIRE_LOG_NAME}-{datetime.now().strftime('%Y%m%d')}.log"
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(message + "\n")
+    except Exception as e:
+        # 觀測性功能本身失敗不可影響主流程（fail-open）；已盡力印出以維持可見性
+        print(f"[Warning] index tripwire logging failed: {e}", file=sys.stderr)
+
+
 def run_git_command(
     args: list[str],
     cwd: Optional[str] = None,
@@ -144,7 +209,14 @@ def run_git_command(
     Example:
         success, output = run_git_command(["branch", "--show-current"])
         success, output = run_git_command(["status"], cwd="/path/to/repo")
+
+    Note:
+        對未帶 GIT_INDEX_FILE 環境變數的 read-tree/reset/checkout <commit> --
+        裸操作，會先記錄 WARNING（executor + timestamp，見
+        _log_bare_index_operation），僅觀測不阻擋。
     """
+    if GIT_INDEX_FILE_ENV not in os.environ and _is_bare_index_risk_op(args):
+        _log_bare_index_operation(args, cwd)
     try:
         result = subprocess.run(
             ["git", "--no-optional-locks"] + args,

@@ -15,7 +15,9 @@ related:
 
 ## 適用情境
 
-模組從活躍位置（如 `.claude/hooks/agent_dispatch_analytics.py`）搬到 archive 目錄（`.claude/hooks/archived/`），但測試檔仍在原 `tests/` 目錄。pytest collection 會撞 `ModuleNotFoundError`，需明確聲明「測試保留但暫時 skip」狀態。
+模組從活躍位置搬到 archive 目錄（`.claude/hooks/archived/`），現位於 `.claude/hooks/archived/agent_dispatch_analytics.py`，但測試檔仍在原 `tests/` 目錄。pytest collection 會撞 `ModuleNotFoundError`，需明確聲明「測試保留但暫時 skip」狀態。
+
+附註：本文範例最初採用的活躍位置路徑為 `.claude/hooks/agent_dispatch_analytics.py`（案例示範：該路徑刻意採用搬遷前的活躍位置以說明搬遷情境），現已確實搬入 archived 目錄，印證本文範例。<!-- broken-link-exempt: 舉例用途，範例路徑刻意採用搬遷前的活躍位置以說明搬遷情境 -->
 
 | 條件 | 說明 |
 |------|------|

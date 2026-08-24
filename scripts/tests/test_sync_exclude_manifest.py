@@ -151,3 +151,39 @@ def test_hash_matches_manifest(tmp_path):
     assert push_mod._compute_content_hash(claude_dir) == manifest.compute_content_hash(
         claude_dir
     )
+
+
+def test_compute_content_hash_prunes_excluded_dirs_before_descending(tmp_path):
+    """0.2.1-W3-927 回歸：hook-logs 內大量檔案不應被走訪（剪枝而非遍歷後過濾）。
+
+    與 907 同構缺陷：should_exclude 若在 rglob yield 後才過濾，仍須先走訪
+    hook-logs 整棵樹。本測試用 os.walk spy 斷言 hook-logs 目錄從未被下探
+    （dirpath 不含 hook-logs），確認剪枝發生在下探「前」。
+    """
+    claude_dir = tmp_path / ".claude"
+    claude_dir.mkdir()
+    (claude_dir / "rules").mkdir()
+    (claude_dir / "rules" / "a.md").write_text("alpha", encoding="utf-8")
+
+    excluded_dir = claude_dir / "hook-logs" / "some-hook"
+    excluded_dir.mkdir(parents=True)
+    for i in range(500):
+        (excluded_dir / f"log-{i}.txt").write_text("x", encoding="utf-8")
+
+    walked_dirpaths = []
+    real_walk = manifest.os.walk
+
+    def spy_walk(top, *args, **kwargs):
+        for dirpath, dirnames, filenames in real_walk(top, *args, **kwargs):
+            walked_dirpaths.append(dirpath)
+            yield dirpath, dirnames, filenames
+
+    import unittest.mock as mock
+
+    with mock.patch.object(manifest.os, "walk", side_effect=spy_walk):
+        manifest.compute_content_hash(claude_dir)
+
+    assert not any("hook-logs" in Path(p).parts for p in walked_dirpaths), (
+        "hook-logs 目錄被下探，剪枝未在遍歷前生效："
+        f"{[p for p in walked_dirpaths if 'hook-logs' in Path(p).parts]}"
+    )

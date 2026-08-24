@@ -44,19 +44,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 try:
-    from lib import setup_hook_logging
+    from lib import setup_hook_logging, run_hook_safely
 except ImportError as e:
     print(f"[Hook Import Warning] {Path(__file__).name}: {e}", file=sys.stderr)
-    # Fallback: 最小化日誌設定
+    # Fallback: 最小化日誌設定，run_hook_safely 退化為直接呼叫（無 liveness 記錄）
     import logging
     def setup_hook_logging(name):
         return logging.getLogger(name)
+    def run_hook_safely(main_func, hook_name, fail_closed=False):
+        return main_func()
 
 
 # ============================================================================
 # 常數定義
 # ============================================================================
 
+HOOK_NAME = "worktree-branch-check"
 EXIT_SUCCESS = 0
 
 # Worktree 列表相關常數
@@ -438,4 +441,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run_hook_safely(main, HOOK_NAME))

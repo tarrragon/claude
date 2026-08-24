@@ -140,11 +140,25 @@ Why：條文若只以應然語氣陳述、不註記現況，讀者依行文會�
    - **禁止**手動指定 flat `<CATEGORY>-NNN`（凍結 base 不再新增，見編號章節）。
 
 8. **同步 README 索引**（0.2.1-W3-099，取代舊版「手動更新 README.md 統計資訊」）
-   - 寫入新錯誤記錄檔案後，呼叫 `readme_index.sync` 做保守 upsert（只新增本次新建
-     pattern 的索引列與清掉死連結列，既有列一律不動）：
+   - **順序要求（強制）：欄位補齊須早於 sync**。保守 upsert 只做「新增缺漏列」
+     與「移除死連結列」，既有列逐字保留、不重新生成（見模組 docstring 保守
+     upsert 核心約束）——一旦某檔案以佔位符（風險等級／來源版本缺漏）首次被
+     sync 寫入索引列，該列此後**無法由工具更正**，即使事後補齊檔案內文再重跑
+     sync 也不會覆寫既有列，且 sync 會回報「已與現況一致，無需更新」，看似
+     正常卻使佔位符永久卡住，只能人工改 README（與下方「禁止手動編輯」矛盾）。
+     故步驟 7 接續動作（Edit 填入實際內容）**必須先完成**，再執行本步驟。
+   - 寫入新錯誤記錄檔案並確認「基本資訊」表已填妥後，呼叫 `readme_index.sync`
+     做保守 upsert（只新增本次新建 pattern 的索引列與清掉死連結列，既有列一律
+     不動）。建議先呼叫 `find_incomplete_new_rows` 把關，避免遺漏欄位仍被寫入：
      ```python
      import sys; sys.path.insert(0, ".claude/skills/error-pattern/lib")
-     from readme_index import sync
+     from readme_index import find_incomplete_new_rows, format_incomplete_warning, sync
+
+     incomplete = find_incomplete_new_rows(".claude")
+     if incomplete:
+         sys.stderr.write(format_incomplete_warning(incomplete) + "\n")
+         raise SystemExit("先補齊「基本資訊」風險等級／來源版本再執行 sync")
+
      _original, _updated, diff = sync(".claude")
      if diff:
          readme_path = ".claude/error-patterns/README.md"
@@ -152,6 +166,9 @@ Why：條文若只以應然語氣陳述、不註記現況，讀者依行文會�
              f.write(_updated)
      ```
    - 或等效 CLI：`uv run .claude/skills/error-pattern/lib/readme_index.py sync --write`
+     ——`--write` 模式預設會先執行同樣的缺漏欄位檢查，偵測到即阻擋寫入（回傳
+     非 0）並印出缺漏檔案清單；確有正當理由需以佔位符建立時，加
+     `--allow-placeholder` 逃生閥略過此檢查。`--dry-run`（預設）僅印警告不阻擋。
    - **禁止**手動編輯 README.md 的「現有模式」表格資料列（結構化內容由工具生成，
      見 structured-content-generation 原則）；新增列的風險等級一律取自檔案內文
      「基本資訊」區塊，**不取自 frontmatter `severity`**（0.2.1-W3-105 診斷分歧、
@@ -256,7 +273,8 @@ category 的 error-pattern 一律使用來源前綴格式**：
 
 ---
 
-**Last Updated**: 2026-08-10
+**Last Updated**: 2026-08-21
+**Version**: 1.6.0 — 步驟 8 補「順序要求（強制）」：欄位補齊須早於 sync（保守 upsert 使佔位符列無法事後更正）；建議程式碼片段改為先呼叫 `find_incomplete_new_rows` 把關；CLI `sync --write` 預設阻擋含缺漏欄位的新增列，逃生閥 `--allow-placeholder`，`--dry-run` 僅預警不阻擋
 **Version**: 1.5.1 — 修正 1.5.0 新增段落的兩項失準：ARCH-001 錨點方向倒置（改引 15 檔分歧中 14 檔判定內文較準確的多數例，結論不變）；「不變式建立後新建檔案仍 100% 違規」改為實測值（現況違規率 40%、回溯建立時點 70%，兩種讀法皆非全數違規）。連帶調整資訊優先序：機械鏡射段由單一區塊拆為三個可掃讀單位並將限制提前至段首偽段標；增量問題移出三類分類清單改為清單後的範圍排除說明；適用範圍段首句補與前次覆核 381 檔的銜接。無流程或命令變更
 **Version**: 1.5.0 — `severity` 不變式段落補「適用範圍」與「機械鏡射口徑」兩則加註：明示不變式為新建/修訂時的應然目標而非存量現況（全量掃描 420 檔僅 15.0% 合規），依 only_frontmatter/only_body/neither 三類記錄補值方向；就 only_frontmatter/only_body 兩類明訂機械鏡射可作第一手評估替代（neither 類不適用），並註明鏡射值仍屬待驗證資訊、不因已鏡射而排除後續人工覆核修正。無流程或命令變更
 **Version**: 1.4.1 — 本 skill 的入口檔由 `skill.md` 更名為 `SKILL.md`（原小寫檔名使各消費端以 `*/SKILL.md` 掃描的產生器與稽核器永久漏掉本 skill）；`lib/severity_audit.py` 內指向該入口檔的路徑引用同步更正。無流程或命令變更

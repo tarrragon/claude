@@ -31,7 +31,7 @@
 | 情況 | 路由 |
 |------|------|
 | git status 有未提交變更 + 批量變更 | AskUserQuestion #15（備份確認） |
-| git status 有未提交變更 | 建議 commit（/commit-as-prompt） |
+| git status 有未提交變更 | 精確 `git add <exact-path>` 暫存 → `git diff --cached --name-only` 核對 index 只含目標檔 → 裸 `git commit`（見 `.claude/rules/core/bash-tool-usage-rules.md` 規則七） |
 | git status 無變更 | 跳至 Checkpoint 3 |
 
 ---

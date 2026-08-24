@@ -118,9 +118,11 @@ Skill 私有 Hook **必須在 `settings.json` 註冊**才會被觸發。**Why**:
 
 ### 3.5 共用工具的歸屬
 
+> `.claude/hooks/hook_utils.py` 單一檔案已不存在，v0.28.0 重構起共用工具實作於 `.claude/lib/`（`hook_io.py` / `hook_logging.py` / `config_loader.py` / `git_utils.py` 等模組，由 `__init__.py` re-export），2026-08-22 文件複查更正下表路徑。<!-- broken-link-exempt: 本行為更正說明，其內容正是在陳述該路徑已不存在，路徑不存在是預期的 -->
+
 | 工具 | 放置位置 | 理由 |
 |------|---------|------|
-| `hook_utils.py` | `.claude/hooks/hook_utils.py` | 跨 Skill / 框架 Hook 共用 logging / safe runner |
+| 共用工具（原 `hook_utils.py`） | `.claude/lib/`（`hook_io.py` / `hook_logging.py` 等） | 跨 Skill / 框架 Hook 共用 logging / safe runner |
 | Skill 內部 lib | `.claude/skills/<skill>/<skill>_lib/` 或子套件 | 僅該 Skill Hook 使用的邏輯 |
 | 跨 Skill 共用 lib | `.claude/skills/<shared-skill>/` 並由其他 Skill 依賴 | 避免在 `.claude/hooks/` 內塞 Skill 邏輯 |
 

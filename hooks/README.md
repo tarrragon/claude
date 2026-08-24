@@ -30,7 +30,7 @@ export HOOK_MODE=warning
 
 ### 工具模組
 
-#### `agent_dispatch_recovery.py`
+#### `archived/agent_dispatch_recovery.py`（已歸檔）
 **功能**：代理人分派錯誤恢復工具
 
 **提供功能**：
@@ -42,10 +42,10 @@ export HOOK_MODE=warning
 **使用方式**：
 ```bash
 # 查看糾正歷史
-python .claude/hooks/agent_dispatch_recovery.py history 10
+python .claude/hooks/archived/agent_dispatch_recovery.py history 10
 
 # 查看統計資訊
-python .claude/hooks/agent_dispatch_recovery.py stats
+python .claude/hooks/archived/agent_dispatch_recovery.py stats
 ```
 
 ### 測試套件
@@ -93,22 +93,6 @@ python .claude/hooks/agent_dispatch_recovery.py stats
 
 > For hook test execution rules, including ordinary pytest files and PEP 723 files,
 > see `.claude/hooks/tests/README.md`.
-
-### 示範腳本
-
-#### `demo-mode-switching.sh`
-**功能**：Hook 模式切換功能示範
-
-**示範內容**：
-1. Strict 模式行為（阻擋錯誤分派）
-2. Warning 模式行為（警告 + 允許執行）
-3. 警告記錄查看
-4. 正確分派測試
-
-**執行方式**：
-```bash
-.claude/hooks/demo-mode-switching.sh
-```
 
 ### 配置檔案
 
@@ -211,9 +195,6 @@ cat .claude/hook-logs/agent-dispatch-warnings.jsonl | jq '.'
 
 # 執行錯誤恢復測試
 .claude/hooks/tests/test_error_recovery.py
-
-# 執行模式切換示範
-.claude/hooks/demo-mode-switching.sh
 ```
 
 ## 📚 文件參考

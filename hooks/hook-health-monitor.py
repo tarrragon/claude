@@ -36,6 +36,7 @@ Exit Code:
 
 import json
 import logging
+import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -46,7 +47,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
-    from lib import setup_hook_logging
+    from lib import setup_hook_logging, run_hook_safely
     from lib.common_functions import get_project_root, hook_output
     from lib import hook_health
 except ImportError as e:
@@ -86,15 +87,20 @@ def _extract_filename_from_command(command: str) -> Optional[str]:
     """
     if not command:
         return None
-    command_parts = command.split()
-    hook_path = command_parts[0]
-    if hook_path.startswith('$CLAUDE_PROJECT_DIR/'):
-        hook_path = hook_path.replace('$CLAUDE_PROJECT_DIR/', '')
-    # 只監控 .claude/hooks/ 下的 hook，排除 skills 等其他路徑
-    if '.claude/hooks/' not in hook_path:
-        return None
-    hook_filename = Path(hook_path).name
-    return hook_filename if hook_filename.endswith('.py') else None
+    # 支援三種形式：裸路徑、'uv run [--quiet] <path>'、'python3 <path>'。
+    # 不再假設 command_parts[0] 即為 hook 路徑，改在整個 command 字串中
+    # 找出 .claude/hooks/ 下的 .py token（889 遷移引入顯式解譯器前綴後，
+    # command_parts[0] 可能是 'uv' 或 'python3' 而非 hook 路徑本身）。
+    for part in command.split():
+        hook_path = part
+        if hook_path.startswith('$CLAUDE_PROJECT_DIR/'):
+            hook_path = hook_path.replace('$CLAUDE_PROJECT_DIR/', '')
+        if '.claude/hooks/' not in hook_path:
+            continue
+        hook_filename = Path(hook_path).name
+        if hook_filename.endswith('.py'):
+            return hook_filename
+    return None
 
 
 def load_sessionstart_hooks_from_settings(
@@ -135,6 +141,47 @@ def load_sessionstart_hooks_from_settings(
     return sorted(hook_filenames)
 
 
+def _resolve_hook_name_from_source(
+    hook_filename: str, project_root: Path
+) -> Optional[str]:
+    """從 hook 原始碼掃描 `HOOK_NAME = "..."` 常數
+
+    部分 hook 呼叫 `setup_hook_logging(HOOK_NAME)` 時，HOOK_NAME 是與檔名
+    stem（去 `-hook` 後綴亦不符）無關的自訂短名（如某 MCP 可用性檢查 hook
+    的 HOOK_NAME 為與檔名無關的短名）。stem 與 stem 去 `-hook` 兩種猜測皆
+    無法命中時，改讀原始碼常數作第三層 fallback，避免誤判為
+    「log dir not found」。
+
+    Args:
+        hook_filename: hook 檔案名稱（如 'foo-check-hook.py'）
+        project_root: 專案根目錄
+
+    Returns:
+        HOOK_NAME 常數字串值，或 None（找不到檔案/常數）
+    """
+    hook_path = project_root / ".claude" / "hooks" / hook_filename
+    if not hook_path.is_file():
+        return None
+
+    try:
+        source = hook_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+    for line in source.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("HOOK_NAME"):
+            continue
+        if "=" not in stripped:
+            continue
+        _, _, value_part = stripped.partition("=")
+        value = value_part.strip()
+        if value.startswith(('"', "'")) and value.endswith(('"', "'")) and len(value) >= 2:
+            return value[1:-1]
+
+    return None
+
+
 def resolve_hook_log_dir(
     hook_filename: str, project_root: Path
 ) -> Tuple[str, Path, bool]:
@@ -143,6 +190,8 @@ def resolve_hook_log_dir(
     優先使用檔名 stem 作為 log dir，若不存在則嘗試去掉 `-hook` 後綴的 fallback。
     原因：部分 hook 呼叫 `setup_hook_logging("xxx")` 時傳入不含 `-hook` 的類別名
     （如 file-size-guardian-hook.py 實際 log dir 為 file-size-guardian/）。
+    兩者皆不符時（如自訂 HOOK_NAME 常數與檔名完全無關聯），第三層 fallback
+    讀取原始碼中的 HOOK_NAME 常數值。
 
     Args:
         hook_filename: hook 檔案名稱（如 'cli-dependency-check.py'）
@@ -164,7 +213,70 @@ def resolve_hook_log_dir(
         if fallback.is_dir():
             return fallback_name, fallback, True
 
+    hook_name_const = _resolve_hook_name_from_source(hook_filename, project_root)
+    if hook_name_const:
+        source_fallback = base_dir / hook_name_const
+        if source_fallback.is_dir():
+            return hook_name_const, source_fallback, True
+
     return stem, primary, False
+
+
+def _newest_file_mtime(log_dir: Path) -> float:
+    """回傳 log_dir 第一層檔案（不遞迴子目錄）的最新 mtime
+
+    log_dir 本身的 mtime 只在目錄項增減（新增/刪除檔案）時變動；對單一
+    持久檔案採逐次 append 寫入（open mode "a"）的 hook（如 diagnostic.log），
+    目錄項數量從未變化，導致目錄 mtime 停在建檔當下，即使檔案內容持續
+    更新也會被誤判為 staleness。改掃描目錄內檔案的最新 mtime 才能反映
+    真實的最後寫入時間。
+
+    範圍刻意限制第一層、不遞迴（P0 回歸修復）：初版用 Path.rglob("*") 遞迴
+    掃描，對 .claude/hook-logs 這種累積數十萬檔案的目錄（實測 666,853 個）
+    造成 monitor 執行超過 60 秒，而它是 SessionStart hook，每次 session
+    啟動都會卡住。log dir 命名慣例本身即保證同一 hook 的日誌只會出現在
+    對應的第一層目錄，不會有子目錄結構需要遞迴；改用 os.scandir()
+    （比 Path.iterdir() 少一層 stat 呼叫）取得檔案 entry 直接讀 stat 結果，
+    避免二次 syscall。
+
+    語意假設（供後續 hook_logging 寫入策略變更票參考）：本函式假設
+    log_dir 內為「一次觸發一檔、檔名含時間戳」的寫入模式（如
+    hook-name-20260821-193000.log），故「目錄內最新檔案 mtime」等價於
+    「最近一次觸發時間」。若日誌寫入方式改為每日輪替（一天一檔）或單檔
+    持續 append（同一檔案整天被覆寫更新），則此函式回傳的「最新檔案
+    mtime」語意會從「最近一次觸發」退化為「當日最後一次寫入」，跨日邊界
+    時判斷可能有最多一天的誤差（例如今日僅在 00:05 觸發過一次，之後 23
+    小時無新觸發，仍會因檔案在 00:05 才建立而非「今日最後寫入」被視為
+    當日活躍）。若同儕分析評估中的每日輪替/單檔 append 方案落地為
+    hook_logging 的實作變更，該落地票須同步檢視本函式與
+    WARNING_THRESHOLD_HOURS/CRITICAL_THRESHOLD_HOURS 判準是否仍成立。
+
+    Args:
+        log_dir: 日誌目錄路徑
+
+    Returns:
+        目錄內最新檔案的 mtime（epoch seconds）；目錄為空或無檔案時
+        fallback 回傳 log_dir 本身的 mtime。
+    """
+    newest = None
+    try:
+        with os.scandir(log_dir) as it:
+            for entry in it:
+                try:
+                    if not entry.is_file():
+                        continue
+                    mtime = entry.stat().st_mtime
+                except OSError:
+                    continue
+                if newest is None or mtime > newest:
+                    newest = mtime
+    except OSError:
+        pass
+
+    if newest is not None:
+        return newest
+
+    return log_dir.stat().st_mtime
 
 
 def _check_single_hook_log(
@@ -186,8 +298,8 @@ def _check_single_hook_log(
         return 2, msg, hook_filename
 
     try:
-        stat_info = log_dir.stat()
-        last_modified = datetime.fromtimestamp(stat_info.st_mtime)
+        newest_mtime = _newest_file_mtime(log_dir)
+        last_modified = datetime.fromtimestamp(newest_mtime)
         hours_ago = (datetime.now() - last_modified).total_seconds() / 3600
 
         if hours_ago < WARNING_THRESHOLD_HOURS:
@@ -342,7 +454,7 @@ def run_frequency_scan(
     since = now - timedelta(days=FREQUENCY_SCAN_WINDOW_DAYS)
     settings = _load_settings(project_root / ".claude" / "settings.json")
 
-    stats_by_hook = hook_health.scan_logs(since=since, logs_root=logs_root)
+    stats_by_hook = hook_health.scan_logs(since=since, logs_root=logs_root, logger=logger)
     today = _today_str(now)
 
     flagged: List[Tuple[str, hook_health.Verdict]] = []
@@ -466,4 +578,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run_hook_safely(main, "hook-health-monitor"))

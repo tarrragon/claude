@@ -7,6 +7,7 @@ status: active
 source: 0.19.0-W4-005.1 二分定位實證
 related:
   - PC-165
+  - PC-BAL-050
   - test-assertion-design-rules
   - pre-fix-eval
   - wrap-decision
@@ -130,6 +131,7 @@ PM 接 task-notification 時，若 agent 回報「N 次 baseline GREEN 確認 st
 | `.claude/skills/pre-fix-eval` | 修復前評估，PC-168 補上「N >= 5 取樣」前置條件 |
 | `.claude/skills/wrap-decision` P 階段 | 「12 小時後失敗最可能原因」候選列表必含「baseline 是幸運連勝」 |
 | `.claude/skills/test-assertion-design` | 斷言設計判斷框架，與 PC-168 互補（前者 design-time, 後者 runtime baseline 驗證） |
+| `PC-BAL-050` | 同屬取樣不足家族，分野在母體：PC-168 的母體本身有變異、取樣數不足（統計功效問題，處方為提高 N）；PC-BAL-050 的母體在給定參數下無變異，缺的是自變數掃描（實驗設計問題，處方為掃參數）。現場判別：同一條件同一參數值重跑兩次，結果不同走 PC-168，結果相同且該量測有可變參數走 PC-BAL-050 |
 
 ## 案例文件來源
 

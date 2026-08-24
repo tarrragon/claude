@@ -146,7 +146,7 @@ Phase 3: 任一視角發現問題 → 回到分析階段補充
 ## 相關文件
 
 - .claude/methodologies/parallel-evaluation-methodology.md - 完整方法論
-- .claude/skills/bulk-evaluate/SKILL.md - 批量評估（正交工具）
+- `bulk-evaluate` skill（若專案已採用）- 批量評估（正交工具）
 - references/lens-configurations.md - 視角配置
 - references/lens-prompts.md - 各情境視角 prompt 模板 + 防護類標的跨情境必問
 - references/worth-it-filter-details.md - 過濾標準

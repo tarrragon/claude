@@ -177,7 +177,7 @@ find_latest_completed_ticket_root(all_tickets)
 ```bash
 CLAUDE_PROJECT_DIR="$(git rev-parse --show-toplevel)" \
   echo '{"prompt":"繼續執行任務鏈"}' | \
-  ./.claude/hooks/parallel-suggestion-hook.py
+  uv run --quiet --script ./.claude/hooks/parallel-suggestion-hook.py
 ```
 
 **執行結果**:
@@ -197,7 +197,7 @@ CLAUDE_PROJECT_DIR="$(git rev-parse --show-toplevel)" \
 CLAUDE_PROJECT_DIR="$(git rev-parse --show-toplevel)" \
   HOOK_DEBUG=true \
   echo '{"prompt":"繼續"}' | \
-  ./.claude/hooks/parallel-suggestion-hook.py
+  uv run --quiet --script ./.claude/hooks/parallel-suggestion-hook.py
 ```
 
 **日誌輸出**:
@@ -246,7 +246,7 @@ CLAUDE_PROJECT_DIR="$(git rev-parse --show-toplevel)" \
 ### 4.1 空輸入測試
 
 ```bash
-echo '{"prompt":""}' | ./.claude/hooks/parallel-suggestion-hook.py
+echo '{"prompt":""}' | uv run --quiet --script ./.claude/hooks/parallel-suggestion-hook.py
 ```
 
 **結果**: ✅ 通過（安全返回，無處理）
@@ -254,7 +254,7 @@ echo '{"prompt":""}' | ./.claude/hooks/parallel-suggestion-hook.py
 ### 4.2 無效 JSON 測試
 
 ```bash
-echo 'invalid json' | ./.claude/hooks/parallel-suggestion-hook.py
+echo 'invalid json' | uv run --quiet --script ./.claude/hooks/parallel-suggestion-hook.py
 ```
 
 **結果**: ✅ 通過（捕獲 JSONDecodeError，返回錯誤）
@@ -262,7 +262,7 @@ echo 'invalid json' | ./.claude/hooks/parallel-suggestion-hook.py
 ### 4.3 缺失欄位測試
 
 ```bash
-echo '{}' | ./.claude/hooks/parallel-suggestion-hook.py
+echo '{}' | uv run --quiet --script ./.claude/hooks/parallel-suggestion-hook.py
 ```
 
 **結果**: ✅ 通過（返回空結果，無處理）
@@ -270,7 +270,7 @@ echo '{}' | ./.claude/hooks/parallel-suggestion-hook.py
 ### 4.4 環境變數缺失測試
 
 ```bash
-echo '{"prompt":"繼續"}' | ./.claude/hooks/parallel-suggestion-hook.py
+echo '{"prompt":"繼續"}' | uv run --quiet --script ./.claude/hooks/parallel-suggestion-hook.py
 ```
 
 **結果**: ✅ 通過（使用預設值）

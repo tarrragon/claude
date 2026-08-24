@@ -31,6 +31,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import sys
 from pathlib import Path
 
@@ -363,17 +364,35 @@ def compute_content_hash(claude_dir: Path) -> str:
     每個檔案產生 "相對路徑:sha256(內容)" 字串，
     所有字串排序後合併取總 sha256 前 16 字元。
     排除清單由 should_exclude 統一判定，確保 push / status 兩端指紋一致。
+
+    改用 os.walk 並在下探前修剪 dirnames（而非 Path.rglob 後過濾結果），
+    避免深入 hook-logs 等已排除目錄的完整樹——rglob 先枚舉全部路徑才過濾，
+    仍須付出完整遍歷成本；os.walk 的 dirnames[:] = [...] 慣用法在下探前
+    剔除，與 907 原始缺陷（排除清單存在但未在遍歷前剪枝）同構修法一致
+    （見 hook-dependency-isolation-check-hook.py build_local_module_index）。
     """
     file_hashes: list[str] = []
-    for file_path in sorted(claude_dir.rglob("*")):
-        if not file_path.is_file() or file_path.is_symlink():
-            continue
-        rel = file_path.relative_to(claude_dir)
-        if should_exclude(rel):
-            continue
-        content_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
-        rel_posix = rel.as_posix()  # 統一使用正斜線，確保跨平台一致
-        file_hashes.append(f"{rel_posix}:{content_hash}")
+    for dirpath, dirnames, filenames in os.walk(claude_dir):
+        base = Path(dirpath)
+        pruned_dirnames = []
+        for dirname in dirnames:
+            rel_dir = (base / dirname).relative_to(claude_dir)
+            if should_exclude(rel_dir):
+                continue
+            pruned_dirnames.append(dirname)
+        dirnames[:] = pruned_dirnames
 
+        for filename in filenames:
+            file_path = base / filename
+            if file_path.is_symlink() or not file_path.is_file():
+                continue
+            rel = file_path.relative_to(claude_dir)
+            if should_exclude(rel):
+                continue
+            content_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
+            rel_posix = rel.as_posix()  # 統一使用正斜線，確保跨平台一致
+            file_hashes.append(f"{rel_posix}:{content_hash}")
+
+    file_hashes.sort()
     combined = "\n".join(file_hashes)
     return hashlib.sha256(combined.encode("utf-8")).hexdigest()[:16]

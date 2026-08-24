@@ -48,6 +48,7 @@ def _make_args(**overrides):
         how_strategy="驗證主題選取行為",
         parent=None,
         source_ticket=None,
+        discovered_during=None,
         blocked_by=None,
         related_to=None,
         acceptance=["測試通過"],
@@ -296,6 +297,52 @@ class TestTopicInferenceS1UpstreamInheritance:
         _, _, exit_code = _capture(args)
         assert exit_code == 0
         assert list_assignments() == {}
+
+
+class TestDiscoveredDuringSkipsS1AndRecordsLineage:
+    """0.2.1-W3-1032：--discovered-during 標記發現衍生——執行中撞到跨主題
+    問題所建的票，上游主題只反映「當時剛好在改哪個檔案」，與新票內容無關，
+    S1 上游繼承在此情境下必然給錯答案。與 --source-ticket 互斥，frontmatter
+    記錄血緣但不觸發主題自動指派。
+    """
+
+    # 兩案例皆搭配 --parent 而非 --source-ticket：--discovered-during 與
+    # --source-ticket 互斥（會在互斥檢查即 exit 1，無法走到本測試想驗證的
+    # 推導行為），--parent 未受此限制，可用來構造「S1 本會命中」的前提。
+    # where_files 刻意指向與上游 cluster（預設 ticket_system/commands/
+    # create.py）不重疊的路徑，避免 S2 意外命中而混淆「S1 是否短路」的判定。
+
+    def test_upstream_topic_not_inherited(self, seeded_repo_root):
+        _capture(_make_args(new_topic="上游主題"))
+        args = _make_args(
+            parent="1.0.1-W1-001",
+            discovered_during="1.0.1-W1-001",
+            where_files="docs/spec/unrelated.md",
+            target="發現衍生驗證",
+        )
+        out, _, exit_code = _capture(args)
+        assert exit_code == 0
+        # S1 未觸發：未繼承「上游主題」，且映射表未寫入本票的任何指派
+        # （子任務 ID 格式為 "<parent>.<child_seq>"）。
+        assert "1.0.1-W1-001.1" not in list_assignments()
+        assert "S1" not in out
+
+    def test_frontmatter_records_discovered_during_lineage(self, seeded_repo_root):
+        _capture(_make_args(new_topic="上游主題"))
+        args = _make_args(
+            parent="1.0.1-W1-001",
+            discovered_during="1.0.1-W1-001",
+            where_files="docs/spec/unrelated.md",
+            target="血緣記錄驗證",
+        )
+        _, _, exit_code = _capture(args)
+        assert exit_code == 0
+        # 子任務 ID 格式為 "<parent>.<child_seq>"（非獨立序號遞增）。
+        ticket = load_ticket("1.0.1", "1.0.1-W1-001.1")
+        assert ticket is not None
+        assert ticket["discovered_during"] == "1.0.1-W1-001"
+        # 血緣記錄不等於主題指派：本票不得出現在映射表中。
+        assert "1.0.1-W1-001.1" not in list_assignments()
 
 
 class TestTopicInferenceS2FileCluster:

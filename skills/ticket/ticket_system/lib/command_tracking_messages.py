@@ -309,6 +309,12 @@ class TrackRelationsMessages:
     RELATION_OLD_PARENT_PREFIX = "   原父 Ticket:"
     RELATION_OLD_PARENT_SUFFIX = "(已更新)"
 
+    # execute_set_parent 中的父子關係標籤
+    SET_PARENT_CHILD_PREFIX = "   Ticket:"
+    SET_PARENT_OLD_PREFIX = "   原 parent_id:"
+    SET_PARENT_NEW_PREFIX = "   新 parent_id:"
+    SET_PARENT_NONE_LABEL = "（無）"
+
     # execute_phase 中有效的 Phase 值列表
     VALID_PHASES = [
         "Phase 0",
@@ -387,6 +393,7 @@ class TrackMessages:
     HELP_APPEND_LOG = "追加執行日誌到 Ticket"
     HELP_ACCEPT_CREATION = "標記 Ticket 建立後驗收已通過"
     HELP_ADD_CHILD = "建立 Ticket 父子關係"
+    HELP_SET_PARENT = "修正 Ticket 的 parent_id（改寫或清除），並同步上游 children"
     HELP_AUDIT = "執行驗收檢查"
     HELP_BOARD = "顯示樹狀看板視圖"
     HELP_TRACK = "追蹤 Ticket 狀態"
@@ -417,6 +424,9 @@ class TrackMessages:
     )
     ARG_PARENT_ID = "父 Ticket ID"
     ARG_CHILD_ID = "子 Ticket ID"
+    ARG_SET_PARENT_CHILD_ID = "要修正 parent_id 的 Ticket ID"
+    ARG_SET_PARENT_NEW_PARENT_ID = "新的父 Ticket ID（與 --clear 互斥）"
+    ARG_SET_PARENT_CLEAR = "清除 parent_id（與 new_parent_id 互斥）"
     ARG_INDEX = "驗收條件索引（1 開始）"
     ARG_UNCHECK = "取消勾選（預設為勾選）"
     ARG_CHECK_ACCEPTANCE_ALL = "勾選（或 --uncheck 時取消勾選）所有驗收條件"

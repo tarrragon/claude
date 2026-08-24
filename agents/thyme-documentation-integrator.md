@@ -286,10 +286,11 @@ subagent context——ticket 操作規範若不寫在本檔，對你即不存在
 
 **Action**：
 
-1. 認領時申報身份：`ticket track claim <ticket-id> --as thyme-documentation-integrator`
-2. 分析或整合產出即時寫入 ticket，不留到最後：
+1. 讀票確認最新狀態：`ticket track full <ticket-id>`
+2. 認領時申報身份：`ticket track claim <ticket-id> --as thyme-documentation-integrator`
+3. 分析或整合產出即時寫入 ticket，不留到最後：
    `ticket track append-log <ticket-id> --section "<章節>" "<內容>"`
-3. commit 後主動收尾，不等 PM 代做：
+4. commit 後主動收尾，不等 PM 代做：
 
        ticket track check-acceptance <ticket-id> --all --as thyme-documentation-integrator
        ticket track complete <ticket-id> --as thyme-documentation-integrator

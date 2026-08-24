@@ -76,13 +76,15 @@ PM 接連執行兩個關於「PM 系統性盲點」的 ANA Ticket，第二個 AN
 
 ### 措施 1：decision-quality-guard-hook（強制節點，唯一強制觸發點，W10-009 追蹤）
 
-`.claude/hooks/decision-quality-guard-hook.py`（待落地）為唯一自動強制觸發節點。偵測訊號：
+`.claude/hooks/decision-quality-guard-hook.py`（規劃階段暫名，待落地）為唯一自動強制觸發節點。<!-- broken-link-exempt: 規劃階段暫名，實際落地名稱見下方更正說明 -->偵測訊號：
 
 - 連續失敗 ≥ 2 次（透過 ticket release/reclaim 計數）
 - PM 輸出「做不到 / 無法 / 禁止」關鍵字（透過 UserPromptSubmit 正則）
 - ANA Ticket claim（透過 PostToolUse 偵測 `ticket track claim`）
 
 觸發後輸出 stderr 強制提示，節流：同訊號 10 分鐘內不重複。
+
+> 現況：實際落地時未採用此暫名，改以 `.claude/skills/wrap-decision/hooks/wrap-decision-tripwire-hook.py` 命名實作（語意詞根改為 wrap-decision-tripwire），詳見 PC-143 案例 2。2026-08-22 文件複查更正。
 
 > **觸發條件權威來源**：
 > - 機器可讀（Hook 動態讀取）：`.claude/config/wrap-triggers.yaml`

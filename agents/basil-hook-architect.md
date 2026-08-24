@@ -121,11 +121,13 @@ basil-hook-architect 在以下情況下**應該被觸發**：
 
 ### 強制要求
 
-所有 Python Hook 必須使用 `.claude/hooks/hook_utils.py` 提供的統一 API：
+所有 Python Hook 必須使用 `.claude/lib/` package 提供的統一 API：
+
+> **模組位置**：本規範慣稱的 hook_utils 現實作於 `.claude/lib/`（`hook_logging.py` / `hook_io.py` 等，由 `__init__.py` re-export），不在 `.claude/hooks/` 下。`.claude/hooks/hook_utils.py` 與 `.claude/hooks/hook_utils/` 皆已不存在，照舊路徑 import 會得到 ModuleNotFoundError。`.claude/lib/` 的父目錄 `.claude/` 由 hook 腳本的 `sys.path.insert(0, str(Path(__file__).parent.parent))` 加入搜尋路徑，故 import 寫 `from lib import ...`。2026-08-22 文件複查更正。<!-- broken-link-exempt: 本行為更正說明，其內容正是在陳述該路徑已不存在，路徑不存在是預期的 -->
 
 | 要求 | 說明 |
 |------|------|
-| 導入 hook_utils | `from hook_utils import setup_hook_logging, run_hook_safely` |
+| 導入統一 API | `from lib import setup_hook_logging, run_hook_safely` |
 | 使用 named logger | `logger = setup_hook_logging("hook-name")` |
 | 包裝頂層入口 | `exit_code = run_hook_safely(main, "hook-name"); sys.exit(exit_code)` |
 | main 返回 int | `def main() -> int:` 必須返回整數退出碼 |
@@ -362,6 +364,7 @@ PM 派發後，basil 依五階段推進：需求分析（目的、Hook 類型、
 | UV 包管理器 | Context7: `/astral-sh/uv` topic "single file scripts" |
 | 專案 Hook 規範 | `.claude/hook-specs/claude-code-hooks-official-standards.md` |
 | Hook 系統方法論 | `.claude/methodologies/hook-system-methodology.md` |
+| 掃描上限 / 路徑正規化 / 禁止以檔案系統狀態推執行事實 | `.claude/references/hook-system-reference.md`「撰寫紀律：掃描 / 路徑 / 執行事實」 |
 
 > 詳細技術參考（Hook 類型、程式碼範例、模板、最佳實踐、常見陷阱）：
 > `.claude/references/hook-architect-technical-reference.md`
@@ -381,10 +384,11 @@ subagent context——ticket 操作規範若不寫在本檔，對你即不存在
 
 **Action**：
 
-1. 認領時申報身份：`ticket track claim <ticket-id> --as basil-hook-architect`
-2. 分析或實作產出即時寫入 ticket，不留到最後：
+1. 讀票確認最新狀態：`ticket track full <ticket-id>`
+2. 認領時申報身份：`ticket track claim <ticket-id> --as basil-hook-architect`
+3. 分析或實作產出即時寫入 ticket，不留到最後：
    `ticket track append-log <ticket-id> --section "<章節>" "<內容>"`
-3. commit 後主動收尾，不等 PM 代做：
+4. commit 後主動收尾，不等 PM 代做：
 
        ticket track check-acceptance <ticket-id> --all --as basil-hook-architect
        ticket track complete <ticket-id> --as basil-hook-architect

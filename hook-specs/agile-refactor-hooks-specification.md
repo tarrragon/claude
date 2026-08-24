@@ -8,6 +8,8 @@
 - **依據方法論**: [敏捷重構方法論 v1.2]($CLAUDE_PROJECT_DIR/.claude/methodologies/agile-refactor-methodology.md)
 - **目標**: 透過 Hook 系統自動化強制執行敏捷重構規範，防止人為違規
 
+> **歷史文件**：本規格記載 2025-10-09 設計時點的 bash 腳本命名（`.sh`），下列各節「檢查腳本」路徑於現行 `.claude/hooks/` 皆不存在，現行 hook 系統已改用獨立 Python hook 逐一實作對應職責（見 `.claude/methodologies/hook-system-methodology.md` Hook catalog）。本文件保留原樣供設計脈絡參照，不逐節加註，2026-08-22 文件複查。
+
 ## 🎯 Hook 系統目標
 
 ### 核心目標
@@ -58,7 +60,7 @@
 
 ### 實作規格
 
-#### 檢查腳本: `.claude/hooks/main-thread-responsibility-check.sh`
+#### 檢查腳本: `.claude/hooks/main-thread-responsibility-check.sh`<!-- broken-link-exempt: 歷史設計規格命名，見文件開頭說明，現行已改用獨立 Python hook -->
 
 ```bash
 #!/bin/bash
@@ -211,7 +213,9 @@ main "$@"
 
 ### 實作規格
 
-#### 檢查腳本: `.claude/hooks/task-dispatch-readiness-check.sh`
+#### 檢查腳本: `.claude/hooks/task-dispatch-readiness-check.sh`<!-- broken-link-exempt: 歷史設計規格命名，見文件開頭說明 -->
+
+現行同名 `.py` 已實作於 `.claude/hooks/task-dispatch-readiness-check.py`。
 
 ```bash
 #!/bin/bash
@@ -363,7 +367,7 @@ main "$@"
 
 ### 實作規格
 
-#### 檢查腳本: `.claude/hooks/triple-document-consistency-check.sh`
+#### 檢查腳本: `.claude/hooks/triple-document-consistency-check.sh`<!-- broken-link-exempt: 歷史設計規格命名，見文件開頭說明，現行已改用獨立 Python hook -->
 
 ```bash
 #!/bin/bash
@@ -554,7 +558,7 @@ main "$@"
 
 ### 實作規格
 
-#### 檢查腳本: `.claude/hooks/stage-completion-validation-check.sh`
+#### 檢查腳本: `.claude/hooks/stage-completion-validation-check.sh`<!-- broken-link-exempt: 歷史設計規格命名，見文件開頭說明，現行已改用獨立 Python hook -->
 
 ```bash
 #!/bin/bash
@@ -781,7 +785,7 @@ main "$@"
 
 ### 實作規格
 
-#### 追蹤腳本: `.claude/hooks/agent-report-tracking-check.sh`
+#### 追蹤腳本: `.claude/hooks/agent-report-tracking-check.sh`<!-- broken-link-exempt: 歷史設計規格命名，見文件開頭說明，現行已改用獨立 Python hook -->
 
 ```bash
 #!/bin/bash

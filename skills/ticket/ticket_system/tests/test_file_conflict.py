@@ -288,6 +288,166 @@ class TestComputeParallelGroups:
         for a, b in conflict_ids:
             assert not (a in selected and b in selected)
 
+    def test_duplicate_id_disjoint_write_sets_deduped_into_single_parallel_entry(
+        self, capsys
+    ):
+        """0.2.1-W3-789 情境一：重複 id 的兩筆寫入集不相交（無邊），去重前
+        `_greedy_independent_set` 逐一走訪兩次皆選入，`parallel_group` 出現
+        該 id 兩次；去重後僅出現一次。"""
+        tickets = [
+            _ticket("A", "pending", ["lib/a.dart"]),
+            _ticket("A", "pending", ["lib/other.dart"]),
+            _ticket("B", "pending", ["lib/b.dart"]),
+        ]
+
+        result = file_conflict.compute_parallel_groups(tickets)
+
+        assert result.parallel_group.count("A") == 1
+        assert set(result.parallel_group) == {"A", "B"}
+        assert result.not_selected == []
+        assert "重複 ticket id" in capsys.readouterr().err
+
+    def test_duplicate_id_intersecting_write_sets_self_loop_masked_before_fix(
+        self, capsys
+    ):
+        """0.2.1-W3-789 情境二：重複 id 的兩筆寫入集相交，`compute_pairwise_
+        conflicts` 產出 (A, A) 自環對，去重前 `adjacency[A]` 含自身，第二次
+        走訪被 `excluded` 意外抵銷，輸出看似正常（只出現一次）；去重後該
+        抵銷路徑消失，仍應只出現一次——驗證去重不改變此情境既有輸出語意。"""
+        tickets = [
+            _ticket("A", "pending", ["lib/shared.dart"]),
+            _ticket("A", "pending", ["lib/shared.dart"]),
+            _ticket("B", "pending", ["lib/b.dart"]),
+        ]
+
+        result = file_conflict.compute_parallel_groups(tickets)
+
+        assert result.parallel_group.count("A") == 1
+        assert set(result.parallel_group) == {"A", "B"}
+        assert "重複 ticket id" in capsys.readouterr().err
+
+    def test_duplicate_id_excluded_by_other_ticket_deduped_in_not_selected(
+        self, capsys
+    ):
+        """0.2.1-W3-789 情境三：重複 id 被其他票的衝突邊排除，去重前
+        `not_selected` 的 `sorted(i for i in ticket_ids if ...)` 同樣走原始
+        未去重清單，該 id 出現兩次；去重後僅出現一次。"""
+        tickets = [
+            _ticket("A", "pending", ["lib/foo.dart"]),
+            _ticket("B", "pending", ["lib/foo.dart"]),
+            _ticket("B", "pending", ["lib/other.dart"]),
+        ]
+
+        result = file_conflict.compute_parallel_groups(tickets)
+
+        assert result.not_selected.count("B") == 1
+        assert result.parallel_group == ["A"]
+        assert result.not_selected == ["B"]
+        assert "重複 ticket id" in capsys.readouterr().err
+
+    def test_no_duplicate_ids_no_warning_emitted(self, capsys):
+        """無重複 id 時不應輸出資料完整性警告。"""
+        tickets = [
+            _ticket("A", "pending", ["lib/a.dart"]),
+            _ticket("B", "pending", ["lib/b.dart"]),
+        ]
+
+        file_conflict.compute_parallel_groups(tickets)
+
+        assert capsys.readouterr().err == ""
+
+    def test_no_seed_tickets_identical_to_omitting_parameter(self):
+        """0.2.1-W3-862 回歸：`seed_tickets=None`（未帶參數）與空清單皆與
+        既有無 in_progress 情境逐字一致——`_greedy_independent_set` 的
+        seed 為空時零額外分支。"""
+        tickets = [
+            _ticket("A", "pending", ["lib/shared.dart"]),
+            _ticket("B", "pending", ["lib/shared.dart"]),
+        ]
+
+        without_param = file_conflict.compute_parallel_groups(tickets)
+        with_empty_seed = file_conflict.compute_parallel_groups(
+            tickets, seed_tickets=[]
+        )
+
+        assert without_param == with_empty_seed
+        assert without_param.occupied == []
+
+    def test_seed_ticket_excludes_conflicting_neighbor_but_itself_absent(self):
+        """seed（如施工中 in_progress 票）與某節點有 where.files 交集：該
+        節點被排除出 `parallel_group`（併入 `not_selected`），seed 本身
+        既不出現於 `parallel_group` 也不出現於 `not_selected`——僅出現於
+        `occupied`（0.2.1-W3-862 acceptance 1/2）。"""
+        tickets = [_ticket("B", "pending", ["lib/shared.dart"])]
+        seed = [_ticket("X", "in_progress", ["lib/shared.dart"])]
+
+        result = file_conflict.compute_parallel_groups(tickets, seed_tickets=seed)
+
+        assert result.parallel_group == []
+        assert result.not_selected == ["B"]
+        assert result.occupied == ["X"]
+
+    def test_seed_ticket_without_conflict_not_reported_as_occupied(self):
+        """seed 與任何節點皆無交集時，不影響選取結果，`occupied` 亦不列出
+        該 seed（避免無意義雜訊，同時滿足回歸：輸出與未帶 seed 逐字一致）。"""
+        tickets = [_ticket("A", "pending", ["lib/a.dart"])]
+        seed = [_ticket("X", "in_progress", ["lib/unrelated.dart"])]
+
+        result = file_conflict.compute_parallel_groups(tickets, seed_tickets=seed)
+
+        assert result.parallel_group == ["A"]
+        assert result.not_selected == []
+        assert result.occupied == []
+
+    def test_seed_to_seed_conflict_pairs_excluded_from_output(self):
+        """兩個 seed 彼此衝突：兩側皆不出現於任何清單，該衝突對不應出現於
+        `conflict_pairs`（兩側皆不可辨識，列出反而無助於解釋任何落選票）。"""
+        tickets = [_ticket("A", "pending", ["lib/a.dart"])]
+        seed = [
+            _ticket("X", "in_progress", ["lib/shared.dart"]),
+            _ticket("Y", "in_progress", ["lib/shared.dart"]),
+        ]
+
+        result = file_conflict.compute_parallel_groups(tickets, seed_tickets=seed)
+
+        assert result.conflict_pairs == []
+        assert result.occupied == []
+
+    def test_multi_round_idempotent_after_claiming_first_round_selection(self):
+        """0.2.1-W3-862 acceptance「多輪冪等」：第 1 輪選出的可並行集合 claim
+        （狀態轉 in_progress）後作為第 2 輪 seed，第 2 輪不得再選出與其有
+        寫入交集的票——修復前 `_is_unblocked_pending` 只收 pending，claim
+        後衝突邊隨之消失，第 2 輪會誤選出鄰居（0.2.1-W3-791 94.3% 撞擊率
+        根因）。"""
+        round1_tickets = [
+            _ticket("A", "pending", ["lib/shared.dart"]),
+            _ticket("B", "pending", ["lib/shared.dart"]),
+            _ticket("C", "pending", ["lib/other.dart"]),
+        ]
+        round1 = file_conflict.compute_parallel_groups(round1_tickets)
+        assert set(round1.parallel_group) == {"A", "C"}
+        assert round1.not_selected == ["B"]
+
+        # claim 全數 round1.parallel_group：狀態轉 in_progress，離開 pending 池，
+        # 作為第 2 輪 seed 傳入
+        claimed_ids = set(round1.parallel_group)
+        seed_round2 = [
+            {**t, "status": "in_progress"}
+            for t in round1_tickets
+            if t["id"] in claimed_ids
+        ]
+        # 第 2 輪 pending 池僅剩未 claim 的 B
+        round2_tickets = [t for t in round1_tickets if t["id"] not in claimed_ids]
+
+        round2 = file_conflict.compute_parallel_groups(
+            round2_tickets, seed_tickets=seed_round2
+        )
+
+        # B 與已 claim 的 A 有 where.files 交集，不得被選入第 2 輪
+        assert round2.parallel_group == []
+        assert round2.not_selected == ["B"]
+        assert round2.occupied == ["A"]
+
 
 # ---------------------------------------------------------------------------
 # render_groups
@@ -565,3 +725,32 @@ class TestWhereFilesRealTicketSample:
             else:
                 assert file_conflict.write_files(ticket) == declared
                 assert file_conflict.read_files(ticket) == []
+
+
+class TestIsDirectoryDeclaration:
+    """`is_directory_declaration` 判定（0.2.1-W3-891 / PC-BAL-040）。"""
+
+    def test_trailing_slash_is_directory(self):
+        assert file_conflict.is_directory_declaration(".claude/hooks/") is True
+
+    def test_existing_directory_without_trailing_slash_is_directory(self, tmp_path):
+        (tmp_path / "some_dir").mkdir()
+        assert file_conflict.is_directory_declaration("some_dir", project_root=tmp_path) is True
+
+    def test_precise_file_path_is_not_directory(self, tmp_path):
+        (tmp_path / "some_dir").mkdir()
+        f = tmp_path / "some_dir" / "x.py"
+        f.write_text("", encoding="utf-8")
+        assert (
+            file_conflict.is_directory_declaration("some_dir/x.py", project_root=tmp_path)
+            is False
+        )
+
+    def test_nonexistent_path_without_trailing_slash_is_not_directory(self, tmp_path):
+        assert (
+            file_conflict.is_directory_declaration("does/not/exist.py", project_root=tmp_path)
+            is False
+        )
+
+    def test_empty_path_is_not_directory(self):
+        assert file_conflict.is_directory_declaration("") is False

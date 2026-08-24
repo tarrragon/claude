@@ -178,7 +178,7 @@ Phase 3 報告產出後，PM 依下表決定後續行動。所有「延後」項
 
 - .claude/methodologies/parallel-evaluation-methodology.md - 完整方法論
 - .claude/skills/parallel-evaluation/SKILL.md - 操作指南
-- .claude/skills/bulk-evaluate/SKILL.md - 批量評估工具（正交工具）
+- `bulk-evaluate` skill（若專案已採用）- 批量評估工具（正交工具）
 - .claude/pm-rules/decision-tree.md - 主線程決策樹
 - .claude/pm-rules/parallel-dispatch.md - 並行派發指南
 - .claude/pm-rules/incident-response.md - 事件回應流程

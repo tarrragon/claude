@@ -62,8 +62,10 @@ A=success 否決強形式 K（「需 PM 暖機」）；C=success 證實「暖機
 
 | Actor | Path | Branch | Hooks 結果 | permissionMode | Result |
 |-------|------|--------|----------|----------------|--------|
-| PM 主線程 | .claude/skills/ticket/lifecycle.py | main | 全 exit 0 | n/a | SUCCESS |
+| PM 主線程 | 舊路徑（案例敘事：實驗當時路徑，見表後附註）現搬遷至 `.claude/skills/ticket/ticket_system/commands/lifecycle.py` | main | 全 exit 0 | n/a | SUCCESS |
 | thyme subagent | 同上 | main | 全 exit 0 | bypassPermissions | DENIED |
+
+附註：「PM 主線程」列的舊路徑為 `.claude/skills/ticket/lifecycle.py`，2026-08-22 文件複查更正。<!-- broken-link-exempt: 本行為更正說明，表格保留原始路徑以忠實記錄實驗當時狀態 -->
 
 唯一差異 = `agentId`（subagent vs PM）。
 

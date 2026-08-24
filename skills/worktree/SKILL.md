@@ -62,7 +62,7 @@ cc runtime 在 agent 結束或 process 異常死亡時**不會自動 remove** ag
 
 ### 專案對策（W17-119.1 SessionStart hook GC）
 
-本專案在 `.claude/hooks/worktree-zombie-cleanup-hook.py` 實作 SessionStart 觸發的自動 GC，邏輯如下：
+本專案在 `.claude/skills/worktree/hooks/worktree-zombie-cleanup-hook.py` 實作 SessionStart 觸發的自動 GC，邏輯如下：
 
 | 步驟 | 動作 |
 |------|------|
@@ -366,7 +366,7 @@ cd /path/to/project-1.0.0-W9-002.1
 ### branch-verify-hook
 
 在保護分支（main）上編輯時：
-- **允許**：`.claude/`、`docs/` 路徑的編輯（規則更新、文檔維護）
+- **允許**：`.claude/`、`docs/` 路徑的編輯（規則更新、文件維護）
 - **阻止**：程式碼路徑編輯（如 `ui/lib/main.dart`）
 - **建議**：使用 `/worktree create <ticket-id>` 建立隔離環境
 
@@ -420,7 +420,7 @@ git branch -d feat/1.0.0-W9-002.1
 
 ## 參考資料
 
-- Git Worktree 官方文檔：https://git-scm.com/docs/git-worktree
+- Git Worktree 官方文件：https://git-scm.com/docs/git-worktree
 
 ---
 

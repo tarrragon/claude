@@ -34,6 +34,9 @@ if str(_skill_lib) not in sys.path:
 from readme_index import (  # noqa: E402
     _readme_lock,
     extract_row,
+    find_incomplete_new_rows,
+    format_incomplete_warning,
+    main,
     merge_category_table,
     scan_category_rows,
     sync,
@@ -751,3 +754,121 @@ def test_sync_and_write_no_diff_skips_write(tmp_path):
     assert diff == ""
     assert updated == original
     assert readme_path.stat().st_mtime_ns == before_mtime
+
+
+# --- find_incomplete_new_rows／CLI 阻擋（0.2.1-W3-882） ---
+
+
+def test_find_incomplete_new_rows_flags_missing_severity_and_version(tmp_path):
+    """新檔案缺風險等級與來源版本時，回傳含檔案路徑與缺漏欄位名的清單。"""
+    claude_dir = _setup_claude_dir(tmp_path)
+    path = claude_dir / "error-patterns" / "implementation" / "IMP-050-x.md"
+    path.write_text("# IMP-050: 缺欄位的新記錄\n\n純文字，無基本資訊區塊。\n", encoding="utf-8")
+
+    incomplete = find_incomplete_new_rows(claude_dir)
+
+    assert len(incomplete) == 1
+    assert incomplete[0]["id"] == "IMP-050"
+    assert incomplete[0]["path"] == path
+    assert incomplete[0]["missing"] == ["風險等級", "來源版本"]
+
+
+def test_find_incomplete_new_rows_ignores_complete_new_file(tmp_path):
+    """新檔案欄位皆已填妥時不列入缺漏清單。"""
+    claude_dir = _setup_claude_dir(tmp_path)
+    path = claude_dir / "error-patterns" / "implementation" / "IMP-051-x.md"
+    path.write_text(
+        "# IMP-051: 完整的新記錄\n\n- **風險等級**: 高\n- **來源版本**: v0.2.1\n",
+        encoding="utf-8",
+    )
+
+    assert find_incomplete_new_rows(claude_dir) == []
+
+
+def test_find_incomplete_new_rows_skips_existing_placeholder_row(tmp_path):
+    """已存在於 README 的列，即使欄位仍是佔位符，不重複警告（歷史缺漏非本函式職責）。"""
+    claude_dir = _setup_claude_dir(tmp_path)
+    readme_path = claude_dir / "error-patterns" / "README.md"
+    readme_path.write_text(
+        "# Error Patterns 錯誤模式歸檔系統\n\n"
+        "## 現有模式\n\n### 實作 (IMP)\n\n"
+        "| ID | 標題 | 風險 | 來源版本 |\n"
+        "|----|------|------|---------|\n"
+        "| IMP-052 | 舊標題 | — | — |\n",
+        encoding="utf-8",
+    )
+    path = claude_dir / "error-patterns" / "implementation" / "IMP-052-x.md"
+    path.write_text("# IMP-052: 舊標題\n\n純文字，無基本資訊區塊。\n", encoding="utf-8")
+
+    assert find_incomplete_new_rows(claude_dir) == []
+
+
+def test_find_incomplete_new_rows_skips_reserved_placeholder(tmp_path):
+    """reserved 佔位檔（extract_row 回傳 None）不計入缺漏清單，避免與略過提示重複。"""
+    claude_dir = _setup_claude_dir(tmp_path)
+    path = claude_dir / "error-patterns" / "implementation" / "IMP-BAL-060.md"
+    path.write_text(
+        "---\nid: IMP-BAL-060\ntitle: (reserved - 內容待補)\nstatus: reserved\n---\n"
+        "# IMP-BAL-060: (reserved - 內容待補)\n",
+        encoding="utf-8",
+    )
+
+    assert find_incomplete_new_rows(claude_dir) == []
+
+
+def test_format_incomplete_warning_includes_path_and_missing_fields(tmp_path):
+    incomplete = [{"path": tmp_path / "IMP-999-x.md", "id": "IMP-999", "missing": ["風險等級"]}]
+    message = format_incomplete_warning(incomplete)
+    assert "IMP-999" in message
+    assert "風險等級" in message
+    assert str(tmp_path / "IMP-999-x.md") in message
+    assert "--allow-placeholder" in message
+
+
+def test_cli_write_blocks_when_new_row_incomplete(tmp_path, capsys):
+    """CLI sync --write 預設阻擋含缺漏欄位的新增列（回傳非 0，不寫檔）。"""
+    claude_dir = _setup_claude_dir(tmp_path)
+    path = claude_dir / "error-patterns" / "implementation" / "IMP-053-x.md"
+    path.write_text("# IMP-053: 缺欄位的新記錄\n\n純文字。\n", encoding="utf-8")
+    readme_path = claude_dir / "error-patterns" / "README.md"
+    before = readme_path.read_text(encoding="utf-8")
+
+    exit_code = main(["sync", "--write", "--claude-dir", str(claude_dir)])
+
+    assert exit_code == 1
+    assert readme_path.read_text(encoding="utf-8") == before
+    captured = capsys.readouterr()
+    assert "IMP-053" in captured.err
+    assert "已阻擋寫入" in captured.out
+
+
+def test_cli_write_allow_placeholder_bypasses_block(tmp_path, capsys):
+    """--allow-placeholder 逃生閥：允許以佔位符建立索引列，仍輸出警告但完成寫入。"""
+    claude_dir = _setup_claude_dir(tmp_path)
+    path = claude_dir / "error-patterns" / "implementation" / "IMP-054-x.md"
+    path.write_text("# IMP-054: 缺欄位的新記錄\n\n純文字。\n", encoding="utf-8")
+
+    exit_code = main(
+        ["sync", "--write", "--allow-placeholder", "--claude-dir", str(claude_dir)]
+    )
+
+    assert exit_code == 0
+    readme_path = claude_dir / "error-patterns" / "README.md"
+    assert "IMP-054" in readme_path.read_text(encoding="utf-8")
+    captured = capsys.readouterr()
+    assert "IMP-054" in captured.err
+
+
+def test_cli_dry_run_warns_but_does_not_block(tmp_path, capsys):
+    """--dry-run 對缺漏欄位僅預警，不阻擋（本就不寫檔）。"""
+    claude_dir = _setup_claude_dir(tmp_path)
+    path = claude_dir / "error-patterns" / "implementation" / "IMP-055-x.md"
+    path.write_text("# IMP-055: 缺欄位的新記錄\n\n純文字。\n", encoding="utf-8")
+
+    exit_code = main(["sync", "--claude-dir", str(claude_dir)])
+
+    assert exit_code == 0
+    readme_path = claude_dir / "error-patterns" / "README.md"
+    assert "IMP-055" not in readme_path.read_text(encoding="utf-8")
+    captured = capsys.readouterr()
+    assert "IMP-055" in captured.err
