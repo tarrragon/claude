@@ -19,3 +19,6 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+markers = [
+    "integration: 以生產啟動方式（subprocess uv run）執行，涉及真實 git/檔案 I/O",
+]

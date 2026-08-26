@@ -1,3 +1,15 @@
+## [2.42.0] - 2026-08-26
+
+### Summary
+feat: commit 層阻擋 tracking_schema.json 相對 .py 過期; chore: 回寫 .claude VERSION ->
+
+Changes: 1 feat, 1 chore
+
+- feat: commit 層阻擋 tracking_schema.json 相對 .py 過期
+- chore: 回寫 .claude VERSION ->
+
+---
+
 ## [2.41.0] - 2026-08-26
 
 ### Summary

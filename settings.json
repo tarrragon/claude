@@ -92,6 +92,11 @@
           },
           {
             "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/tracking-schema-json-staleness-guard-hook.py",
+            "timeout": 30000
+          },
+          {
+            "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/bare-commit-guard-hook.py"
           },
           {
