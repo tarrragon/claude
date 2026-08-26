@@ -1,3 +1,18 @@
+## [2.40.2] - 2026-08-26
+
+### Summary
+fix: 圖譜型別層級改為可查證判準，EVT 載體定案 per-file; fix: 統一圖譜型別表節點與邊的 layer 欄位命名; fix: 刪除 test_uc_registry UC-01 回填後的過期斷言 (+2 more)
+
+Changes: 3 fix, 2 chore
+
+- fix: 圖譜型別層級改為可查證判準，EVT 載體定案 per-file
+- fix: 統一圖譜型別表節點與邊的 layer 欄位命名
+- fix: 刪除 test_uc_registry UC-01 回填後的過期斷言
+- chore: 拉取 saas-tech-selection 1.2.1 並修用詞
+- chore: 回寫 .claude VERSION -> 並登記 1106 主題
+
+---
+
 ## [2.40.1] - 2026-08-26
 
 ### Summary

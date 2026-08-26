@@ -105,9 +105,20 @@ TRACEABILITY_SCHEMA = {
 # 足，走 ticket spawn-request 流程，不在此處自行修改。
 # ---------------------------------------------------------------------------
 
-# A 層（established）：兩專案皆有實例、doc CLI 已維護。
-# B 層（proposed）：兩專案實例數原為 0，首批真實資料回填後型別本身仍待
-# 更多語料驗證才升級為 established。
+# 層級語意：本欄位是型別對消費端的穩定性承諾，不是開發進度。established 表示
+# 該型別已被獨立語料交叉驗證、消費端可依賴；proposed 表示形狀仍可能變動。
+#
+# 升級判準（兩條件同時成立才升級，缺一維持 proposed）：
+#   1. 該型別在兩個以上互相獨立的 consumer 專案語料中有實例。單一專案的實例
+#      只證明「寫得出符合此型別的文件」，不證明型別捕捉到跨專案共通的結構——
+#      同一批人在同一套領域假設下產出的語料無法互為對照。
+#   2. doc CLI 對該型別有建立與驗證支援（模板產出 + validator 檢查）。缺此支援
+#      時型別只是約定，實例會各自漂移，交叉驗證的對照基礎不成立。
+#
+# 兩條件皆成立時的動作：將該型別的 layer 改為 established，並同步更新
+# tests/test_tracking_schema_conformance.py 內的 A 層 / B 層預期集合。判準由
+# 消費端專案在回填新語料後自行複查，本檔不排程（框架檔不引用專案識別符，
+# reference-stability 規則 8）。
 GRAPH_LAYER_ESTABLISHED = "established"
 GRAPH_LAYER_PROPOSED = "proposed"
 
@@ -163,7 +174,11 @@ GRAPH_NODE_TYPES = {
         "id_pattern": r"^EVT-[A-Z0-9]+-\d{3}$",
         "carrier": (
             "docs/events/{domain}/EVT-{DOMAIN}-NNN-{slug}.md frontmatter"
-            "（載體形式；registry 形式留待更多真實資料出現時定案）"
+            "（載體形式為 per-file，已定案。曾評估集中式 registry，不採用："
+            "per-file 讓事件定義與其 domain 目錄同址、diff 粒度落在單一事件、"
+            "新增事件不觸碰共用檔；registry 的收益在跨事件查詢，而該需求可由"
+            "目錄掃描滿足。改採 registry 屬 schema 變更，需先提出 per-file 無法"
+            "滿足的具體查詢或一致性需求。）"
         ),
     },
 }
@@ -189,70 +204,70 @@ GRAPH_EDGE_TYPES = {
         "forward_field": "source_proposal",
         "reverse_field": "outputs",
         "maintainer": "手動",
-        "status": GRAPH_LAYER_ESTABLISHED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     "spec_association": {
         "class": "see-also",
         "forward_field": "related_specs",
         "reverse_field": None,
         "maintainer": "手動",
-        "status": GRAPH_LAYER_ESTABLISHED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     "uc_association": {
         "class": "see-also",
         "forward_field": "related_usecases",
         "reverse_field": None,
         "maintainer": "手動",
-        "status": GRAPH_LAYER_ESTABLISHED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     "proposal_association": {
         "class": "see-also",
         "forward_field": "related_proposals",
         "reverse_field": None,
         "maintainer": "手動",
-        "status": GRAPH_LAYER_ESTABLISHED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     "requirement_impl": {
         "class": "containment",
         "forward_field": "implements_requirements",
         "reverse_field": None,
         "maintainer": "手動",
-        "status": GRAPH_LAYER_ESTABLISHED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     "domain_dependency": {
         "class": "ordering",
         "forward_field": "depends_on_domains",
         "reverse_field": None,
         "maintainer": "手動",
-        "status": GRAPH_LAYER_ESTABLISHED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     "domain_coverage": {
         "class": "containment",
         "forward_field": "source_specs",
         "reverse_field": None,
         "maintainer": "手動",
-        "status": GRAPH_LAYER_ESTABLISHED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     "blood": {
         "class": "containment",
         "forward_field": "parent_id",
         "reverse_field": "children",
         "maintainer": "CLI 自動",
-        "status": GRAPH_LAYER_ESTABLISHED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     "spawn": {
         "class": "provenance",
         "forward_field": "source_ticket",
         "reverse_field": "spawned_tickets",
         "maintainer": "CLI 自動",
-        "status": GRAPH_LAYER_ESTABLISHED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     "blocking": {
         "class": "ordering",
         "forward_field": "blockedBy",
         "reverse_field": None,
         "maintainer": "手動/CLI",
-        "status": GRAPH_LAYER_ESTABLISHED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     "association": {
         # relatedTo：語意無向，消費端做 1-hop symmetric closure；儲存端
@@ -261,14 +276,14 @@ GRAPH_EDGE_TYPES = {
         "forward_field": "relatedTo",
         "reverse_field": None,
         "maintainer": "手動/CLI",
-        "status": GRAPH_LAYER_ESTABLISHED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     "discovery": {
         "class": "provenance",
         "forward_field": "discovered_during",
         "reverse_field": None,
         "maintainer": "手動",
-        "status": GRAPH_LAYER_ESTABLISHED,
+        "layer": GRAPH_LAYER_ESTABLISHED,
     },
     # --- B 層（4 條，proposed）---
     "emission": {
@@ -276,21 +291,21 @@ GRAPH_EDGE_TYPES = {
         "forward_field": "emits",  # FlowStep.emits → EVT
         "reverse_field": None,
         "maintainer": "手動",
-        "status": GRAPH_LAYER_PROPOSED,
+        "layer": GRAPH_LAYER_PROPOSED,
     },
     "consumption": {
         "class": "dataflow",
         "forward_field": "consumes",  # EVT → FlowStep.consumes
         "reverse_field": None,
         "maintainer": "手動",
-        "status": GRAPH_LAYER_PROPOSED,
+        "layer": GRAPH_LAYER_PROPOSED,
     },
     "branching": {
         "class": "ordering",
         "forward_field": "branch_from",
         "reverse_field": None,
         "maintainer": "手動",
-        "status": GRAPH_LAYER_PROPOSED,
+        "layer": GRAPH_LAYER_PROPOSED,
     },
     "returning": {
         "class": "ordering",
@@ -298,6 +313,6 @@ GRAPH_EDGE_TYPES = {
         "forward_field": "return_to",
         "reverse_field": None,
         "maintainer": "手動",
-        "status": GRAPH_LAYER_PROPOSED,
+        "layer": GRAPH_LAYER_PROPOSED,
     },
 }

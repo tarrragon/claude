@@ -4,7 +4,7 @@ description: "初始化 SaaS repo 時的設計與選型訪談協議：定錨後�
 license: MIT
 metadata:
   portable: true
-  version: 0.8.0
+  version: 1.2.1
   category: selection-protocol
 ---
 
@@ -47,7 +47,7 @@ metadata:
 
 ### Stage 2：Domain / Event 切分（DDD）
 
-把操作清單轉成 domain map 與 event catalog：操作 → command → 唯一歸屬 domain → event。Domain 依 SRP 切（一個變更理由）、依 OCP 分公開面（別的 domain 需要知道的：event schema、查詢介面）與內部面（不需要知道的：表結構、狀態機）；event 依 SRP 定（一個事實、過去式命名）。切完 domain map 後逐 domain 過 **commodity domain check**：認證、金流、表單、搜尋、通知、物件儲存、後台 CRUD 這類非差異化能力、現成 feature SaaS 已做完的就標「外包 + 整合邊界」、整塊移出 build scope、不模內部 event。命中後用該能力自己的買 vs 建問題集追（每塊的判準形狀不同 —— 認證問 hash 可攜與企業 SSO、搜尋問計費模型與規模拐點、金流問 PCI 與 orchestration、表單問資料怎麼接回來、後台問 per-seat 計費與客製天花板）。協議與逐能力問題集見 `references/domain-event-modeling.md`、深度判讀見 `references/principles/capability-outsourcing-depth.md`。
+把操作清單轉成 domain map 與 event catalog：操作 → command → 唯一歸屬 domain → event。Domain 依 SRP 切（一個變更理由）、依 OCP 分公開面（別的 domain 需要知道的：event schema、查詢介面）與內部面（不需要知道的：表結構、狀態機）；event 依 SRP 定（一個事實、過去式命名）。切完 domain map 後逐 domain 過 **commodity domain check**：認證、金流、表單、搜尋、通知、物件儲存、後台 CRUD 這類非差異化能力、現成 feature SaaS 已做完的就標「外包 + 整合邊界」、整塊移出 build scope、不模內部 event。命中後用該能力自己的買 vs 建問題集追（每塊的判斷標準形狀不同 —— 認證問 hash 可攜與企業 SSO、搜尋問計費模型與規模拐點、金流問 PCI 與 orchestration、表單問資料怎麼接回來、後台問 per-seat 計費與客製天花板）。協議與逐能力問題集見 `references/domain-event-modeling.md`、深度判讀見 `references/principles/capability-outsourcing-depth.md`。
 
 ### Stage 3：核心問題（技術需求判讀）
 
@@ -85,7 +85,7 @@ metadata:
 2. **產品名攔截**：使用者開口指定產品時、先用一句話確認背後需求（「指定 MongoDB 是因為 schema 變動頻繁、還是團隊熟悉度？」）、需求確認後產品可以直接採納。
 3. **每階段帶反向問**：使用者描述的是想要的功能、沒想到的東西藏在失敗面 — 「使用者做完馬上後悔怎麼辦」「這批資料外洩的代價」「凌晨三點誰起床」「Order 的表加欄位要通知誰」。反向問是「確認使用者沒想到的東西」的主要工具。
 4. **底線告知協議**：防護底線逐項過、使用者可延後但要記錄；「先跳過、之後再說」轉寫成「延後 + 具體重評條件」、見 `references/baseline-protections.md`。
-5. **行為情境是收斂判準**：任何功能爭論回到「使用者在什麼情境做什麼、預期看到什麼」收斂；情境寫得出來才進下一階段。
+5. **行為情境是收斂條件**：任何功能爭論回到「使用者在什麼情境做什麼、預期看到什麼」收斂；情境寫得出來才進下一階段。
 6. **訪談問句去重**：同一個風險在操作盤點風險表、核心問題、維度訪談各出現一次 — 這是宣告層的雙重核對設計、保留；訪談問句層要去重 — 語意重複的問句、後出現者改用「引用前答確認」句式（「操作盤點時提過重複扣款不可接受 — 佇列重試的情境下這仍成立嗎」）、不重新開放問同一題。
 
 ---
@@ -114,7 +114,7 @@ metadata:
 | 訪談收斂、要產出決策文件與 scaffold 建議                                                    | `references/decision-record-template.md`                                                                                    |
 | 決策記錄產出後、專案有 doc skill、要移交需求文件                                            | `references/decision-record-template.md`（銜接 doc 系統節）                                                                 |
 
-每份 reference 自包含：以該階段或維度為核心、把訪談問題、判準、防護底線與 tripwire 收在同一檔。閱讀任一 reference 不需要回來看其他 reference。
+每份 reference 自包含：以該階段或維度為核心、把訪談問題、判斷標準、防護底線與 tripwire 收在同一檔。閱讀任一 reference 不需要回來看其他 reference。
 
 ---
 
@@ -137,7 +137,7 @@ saas-tech-selection/
 ├── SKILL.md                              # 本檔：核心支柱 + 訪談流程 + 觸發路由
 └── references/
     ├── user-operations-bdd.md            # Stage 1：操作主體枚舉、行為情境寫法、誤操作風險、前端引導與後端防護成對
-    ├── domain-event-modeling.md          # Stage 2：operation → command → domain → event、SRP 切分判準、OCP 公開面 / 內部面
+    ├── domain-event-modeling.md          # Stage 2：operation → command → domain → event、SRP 切分判斷標準、OCP 公開面 / 內部面
     ├── interview-core.md                 # 定錨 + 核心問題：問法、為什麼問、答案判讀路由
     ├── scale-stage-triggers.md           # 規模成長撞牆訊號 → 決策文件 tripwire 總表寫法
     ├── baseline-protections.md           # 跨維度防護底線清單 + 延後記錄協議
@@ -162,6 +162,8 @@ saas-tech-selection/
 ---
 
 **Last Updated**: 2026-08-08
-**Version**: 1.2.0 — 多輪審查修正。鏈路實證抓到「流入 proposal 驗收條件」是缺映射列的宣稱：文件維護承諾改列入 reliability 防護底線第 5 條（搭上既有「§4/5 底線→驗收條件」移交列、鏈路在檔案層閉合、只照模板填的人也不會漏）。兩處轉述失真修正：語意級假後端改標「分層之外」（v1.1.0 誤塞進 protocol integration 層、與上游教材及同段「名稱含 integration 但依賴全 fake 要辨識」自相矛盾——該層的真實服務互動由週期性真實後端驗證承擔）；適用情境「對方行為常變」刪除（上游教材裡那是重評 tripwire、搬成適用條件是方向顛倒）、改為「已出現假設錯誤型的漏網 bug」。decision-record「中途改決策回到記錄改對應段落」改為追加補記段（修掉與 append-only 宣告的檔內矛盾）。防護型測試補定義 gloss、判準句補「答不出」分支的行動、訪談表 fmt 重排。冷讀輪另修：判準段拆兩段（判準 + 下限、後端不可控 variant）、「假設錯誤型漏網 bug」補行內 gloss、「從權威來源生成」補例、「一次性 scaffold」改「一次性產出（scaffold）」避免與 repo scaffold 語意碰撞、決策記錄模板補「## 補記」段格式示意（append-only 慣例的落地格式、免得各專案自己發明）。
-**Version**: 1.1.0 — 提案階段承接「程度決策」的補強。reliability 維度：訪談問句加「還打算把哪些文件維護到最新、誰守著」（答案決定文件分級——活文件配機制、其餘明示為一次性 scaffold 或時點記錄、流入 proposal 驗收條件）；「測試寫到什麼程度」補防護視角判準（每條測試答得出「未來哪種改壞要被擋」、程度下限是核心操作的改壞在合併前發聲）與語意級假後端選項（後端不可控時 stub 回放自己的假設、驗不出假設錯誤）；決策記錄要記什麼同步兩項。decision-record-template：明示決策記錄是 append-only 時點記錄、重評走新記錄不回改。references/principles/ 四張卡補「自成權威」宣告——它們是上游教材的語境化快照、消滅無機制的同步期待。
+**Version**: 1.2.1 — 術語校正：判準全數改為判斷標準（動作修飾語縮為「X 標準」、狀態義改為「X 條件」）。判準的語域在哲學與教育評量、工程讀者解析不了——五份低階模型探針一致回報非通用
+
+**Version**: 1.2.0 — 多輪審查修正。鏈路實證抓到「流入 proposal 驗收條件」是缺映射列的宣稱：文件維護承諾改列入 reliability 防護底線第 5 條（搭上既有「§4/5 底線→驗收條件」移交列、鏈路在檔案層閉合、只照模板填的人也不會漏）。兩處轉述失真修正：語意級假後端改標「分層之外」（v1.1.0 誤塞進 protocol integration 層、與上游教材及同段「名稱含 integration 但依賴全 fake 要辨識」自相矛盾——該層的真實服務互動由週期性真實後端驗證承擔）；適用情境「對方行為常變」刪除（上游教材裡那是重評 tripwire、搬成適用條件是方向顛倒）、改為「已出現假設錯誤型的漏網 bug」。decision-record「中途改決策回到記錄改對應段落」改為追加補記段（修掉與 append-only 宣告的檔內矛盾）。防護型測試補定義 gloss、判斷標準句補「答不出」分支的行動、訪談表 fmt 重排。冷讀輪另修：判斷標準段拆兩段（判斷標準 + 下限、後端不可控 variant）、「假設錯誤型漏網 bug」補行內 gloss、「從權威來源生成」補例、「一次性 scaffold」改「一次性產出（scaffold）」避免與 repo scaffold 語意碰撞、決策記錄模板補「## 補記」段格式示意（append-only 慣例的落地格式、免得各專案自己發明）。
+**Version**: 1.1.0 — 提案階段承接「程度決策」的補強。reliability 維度：訪談問句加「還打算把哪些文件維護到最新、誰守著」（答案決定文件分級——活文件配機制、其餘明示為一次性 scaffold 或時點記錄、流入 proposal 驗收條件）；「測試寫到什麼程度」補防護視角判斷標準（每條測試答得出「未來哪種改壞要被擋」、程度下限是核心操作的改壞在合併前發聲）與語意級假後端選項（後端不可控時 stub 回放自己的假設、驗不出假設錯誤）；決策記錄要記什麼同步兩項。decision-record-template：明示決策記錄是 append-only 時點記錄、重評走新記錄不回改。references/principles/ 四張卡補「自成權威」宣告——它們是上游教材的語境化快照、消滅無機制的同步期待。
 **Version**: 1.0.0 — 版號基線補標（既有內容首次標版、依版號規則）。

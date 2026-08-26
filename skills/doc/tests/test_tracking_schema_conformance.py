@@ -212,25 +212,44 @@ class TestGraphTypeTablesWellFormed:
             assert entry.get("carrier"), f"{name} 缺少 carrier"
 
     def test_edge_types_cover_a_and_b_layer(self):
-        a_layer = {n for n, v in GRAPH_EDGE_TYPES.items() if v["status"] == GRAPH_LAYER_ESTABLISHED}
-        b_layer = {n for n, v in GRAPH_EDGE_TYPES.items() if v["status"] == GRAPH_LAYER_PROPOSED}
+        a_layer = {n for n, v in GRAPH_EDGE_TYPES.items() if v["layer"] == GRAPH_LAYER_ESTABLISHED}
+        b_layer = {n for n, v in GRAPH_EDGE_TYPES.items() if v["layer"] == GRAPH_LAYER_PROPOSED}
         assert len(a_layer) == 12, f"A 層邊應為 12 條，實得 {len(a_layer)}：{sorted(a_layer)}"
         assert len(b_layer) == 4, f"B 層邊應為 4 條，實得 {len(b_layer)}：{sorted(b_layer)}"
         assert b_layer == {"emission", "consumption", "branching", "returning"}
 
     def test_every_edge_type_has_five_required_fields(self):
-        """每條邊的 class / 正向欄位 / 反向欄位 / 維護方 / status 皆可程式取用。"""
+        """每條邊的 class / 正向欄位 / 反向欄位 / 維護方 / layer 皆可程式取用。"""
         for name, entry in GRAPH_EDGE_TYPES.items():
             assert entry["class"] in GRAPH_EDGE_CLASSES, f"{name}.class 值域外：{entry['class']}"
             assert entry.get("forward_field"), f"{name} 缺少 forward_field"
             assert "reverse_field" in entry, f"{name} 缺少 reverse_field 鍵（可為 None）"
             assert entry["maintainer"] in GRAPH_EDGE_MAINTAINERS, f"{name}.maintainer 值域外"
-            assert entry["status"] in {GRAPH_LAYER_ESTABLISHED, GRAPH_LAYER_PROPOSED}
+            assert entry["layer"] in {GRAPH_LAYER_ESTABLISHED, GRAPH_LAYER_PROPOSED}
 
     def test_cli_auto_maintained_edges_have_reverse_field(self):
         """blood / spawn 由 CLI 自動維護正反向，反向欄位不可為 None。"""
         assert GRAPH_EDGE_TYPES["blood"]["reverse_field"] == "children"
         assert GRAPH_EDGE_TYPES["spawn"]["reverse_field"] == "spawned_tickets"
+
+    def test_node_and_edge_tables_share_same_layer_field_name(self):
+        """節點表與邊表必須用同一個欄位名表示層級狀態（防再度分叉，非硬編 'layer'）。"""
+
+        def layer_field_names(table):
+            layer_values = {GRAPH_LAYER_ESTABLISHED, GRAPH_LAYER_PROPOSED}
+            return {
+                frozenset(k for k, val in entry.items() if val in layer_values)
+                for entry in table.values()
+            }
+
+        node_layer_keys = layer_field_names(GRAPH_NODE_TYPES)
+        edge_layer_keys = layer_field_names(GRAPH_EDGE_TYPES)
+        assert node_layer_keys == edge_layer_keys, (
+            f"節點表與邊表的層級欄位名不一致：node={node_layer_keys}, edge={edge_layer_keys}"
+        )
+        assert len(node_layer_keys) == 1 and len(next(iter(node_layer_keys))) == 1, (
+            "每張表的層級欄位名應唯一且單一"
+        )
 
 
 class TestGraphTypeTablesRealEvtConformance:

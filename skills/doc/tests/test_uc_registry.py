@@ -565,20 +565,6 @@ class TestGetUcSummaryDualTrack:
         assert summary["main_flow"] == ["1. **SSOT 散文步驟**"]
         assert summary["is_section_summary"] is False
 
-    def test_real_project_uc01_still_falls_back_pending_structured_backfill(self):
-        """回歸驗證：本專案 UC-01 詳細檔案尚無結構化 flow 區塊（待後續回填工作處理），
-        現況應仍走既有散文解析路徑，行為與雙軌策略導入前一致。
-        """
-        from doc_system.core.file_locator import FileLocator
-
-        project_root = FileLocator.get_project_root()
-        summary = uc_registry.get_uc_summary("UC-01", project_root)
-        assert summary is not None
-        assert len(summary["main_flow"]) > 0
-        # 既有散文解析格式為 "N. **步驟名稱**"；結構化格式為 "{id}: {name}"。
-        # 現況應命中前者，證明尚未誤判為已回填。
-        assert summary["main_flow"][0].startswith("1. **")
-
 
 class TestIsExemptPathWorktree:
     def test_exempts_worklog_path_when_file_outside_project_root(self, tmp_path):
