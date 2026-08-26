@@ -8,7 +8,7 @@
 
 `description` 欄位要回答「讀者在什麼情境下需要回來讀這篇」（情境索引），而非「這篇在講什麼」（內容索引）。
 
-## 判準
+## 判斷標準
 
 - 刪掉 description 後、只看 title 能猜出 description 全部內容 → 沒有增量 → 重寫
 - description 的主詞是「本文 / 這篇 / 記錄」→ 可能是摘要不是 trigger

@@ -180,7 +180,7 @@ withdraw tier 是高 stakes 內容跟一般內容的關鍵差異——一般內�
 
 兩軸正交、不取代——高 stakes 內容兩軸都跑（5 輪 frame + 輪 E stakes）、一般內容只跑 5 輪。輪 E 不在 5 輪裡是因為：把 epistemic rigor 設為預設會讓一般文章 over-audit、稀釋 review 紀律；設為 conditional opt-in 才能讓高 stakes 場景拉到學術級而不污染日常寫作。
 
-→ 詳細的維度展開（threat model 對稱 / mitigation 對位 mechanism / context-dependence / citation 時效）跟 audit recommendation tier 判準、見 [auditing-articles](../auditing-articles.md) reference。
+→ 詳細的維度展開（threat model 對稱 / mitigation 對位 mechanism / context-dependence / citation 時效）跟 audit recommendation tier 判斷標準、見 [auditing-articles](../auditing-articles.md) reference。
 
 ---
 
@@ -217,7 +217,7 @@ withdraw tier 是高 stakes 內容跟一般內容的關鍵差異——一般內�
 
 | 原則                                                                                                  | 關係                                                                                                                  |
 | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| [ease-of-writing-vs-intent-alignment](./ease-of-writing-vs-intent-alignment.md)                       | 輪 2 的核心判準 — 為什麼便利寫法 ≠ 對齊意圖                                                                           |
+| [ease-of-writing-vs-intent-alignment](./ease-of-writing-vs-intent-alignment.md)                       | 輪 2 的核心判斷標準 — 為什麼便利寫法 ≠ 對齊意圖                                                                           |
 | [literal-interception-vs-behavioral-refinement](./literal-interception-vs-behavioral-refinement.md)   | 本卡是該卡在「寫」這個動作的具體實例 — review 是 multi-pass、不是 hook                                                |
 | [naming-as-iterated-artifact](./naming-as-iterated-artifact.md)                                       | 本卡的輪 4 在 naming 場景的特化                                                                                       |
 | [methodology-multi-pass-embedding](./methodology-multi-pass-embedding.md)                             | 本卡的 5 輪設計就是 compositional-writing 該 embed 為核心原則的內容、不該塞 appendix                                  |

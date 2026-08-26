@@ -1,9 +1,9 @@
 # Ticket 六欄位詳解：正確範例與常見混淆（12 項）
 
-本文件為 `designing-fields.md` §6 的詳細附錄。
+本文件是 `designing-fields.md`「Ticket 六欄位角度解析」一節的詳細附錄。
 每個欄位提供 1 個正確範例 + 1 個常見混淆範例，共 12 項。
 
-> **前置閱讀**：先讀 `designing-fields.md` §6「六欄位角度總表」，理解六個欄位的角色分工後再閱讀本文件。
+> **前置閱讀**：先讀 `designing-fields.md` 的「六欄位角度總表」，理解六個欄位的角色分工後再閱讀本文件。
 
 ---
 
@@ -288,6 +288,6 @@ acceptance:
 
 ---
 
-**來源**：從 `designing-fields.md` §6.1–§6.12 獨立拆出，保留全部詳細範例
+**來源**：從 `designing-fields.md`「Ticket 六欄位角度解析」的十二個欄位小節獨立拆出（那些小節現在只存在於本文件），保留全部詳細範例
 **Last Updated**: 2026-04-18
 **Version**: 1.0.0

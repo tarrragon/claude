@@ -19,7 +19,7 @@
 
 ---
 
-## 高 stakes 內容的識別判準
+## 高 stakes 內容的識別判斷標準
 
 四個訊號之一觸發、即視為高 stakes、audit bar 拉到 verifiability-first：
 
@@ -89,4 +89,4 @@ withdraw tier 是高 stakes 跟一般內容的關鍵差異——一般 review �
 | [false-sense-of-security-as-primary-failure](./false-sense-of-security-as-primary-failure.md)       | 本卡定義「為什麼要 verifiability-first」、該卡定義「audit 主要要找什麼」；兩卡是動機 → 目標的因果鏈                 |
 | [literal-interception-vs-behavioral-refinement](./literal-interception-vs-behavioral-refinement.md) | 本卡是該卡 ceiling pattern 的高風險版本——高 stakes 內容 stop at 字面 audit 的代價是不可逆生產破口                   |
 | [ease-of-writing-vs-intent-alignment](./ease-of-writing-vs-intent-alignment.md)                     | 高 stakes 寫作最便利（通用敘述 / 省略邊界 / 不標版本）跟意圖對齊（precise threat / boundary / standard）反向        |
-| [writing-multi-pass-review](./writing-multi-pass-review.md)                                         | 本卡是 multi-pass review 的「stakes-conditional 追加輪 E」啟動判準的依據——高 stakes 識別出來 → 觸發 epistemic rigor |
+| [writing-multi-pass-review](./writing-multi-pass-review.md)                                         | 本卡是 multi-pass review 的「stakes-conditional 追加輪 E」啟動條件的依據——高 stakes 識別出來 → 觸發 epistemic rigor |

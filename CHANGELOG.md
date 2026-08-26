@@ -1,3 +1,15 @@
+## [2.40.1] - 2026-08-26
+
+### Summary
+chore: 拉取 compositional-writing 與 multi-round-review 1.52.1 並重修用詞; chore: 回寫 .claude VERSION ->
+
+Changes: 2 chore
+
+- chore: 拉取 compositional-writing 與 multi-round-review 1.52.1 並重修用詞
+- chore: 回寫 .claude VERSION ->
+
+---
+
 ## [2.40.0] - 2026-08-26
 
 ### Summary

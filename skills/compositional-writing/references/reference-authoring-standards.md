@@ -161,7 +161,7 @@
 
 ## 單句消費位的資訊自足
 
-Reference 的讀者是 runtime 的 LLM 與跳讀的維護者、句子經常被抽離消費：checklist 逐項執行、表格格被單獨引用、判準句被 grep 命中、規則句被複製進 prompt。這些**單句消費位**的句子必須在句內資訊自足；段落敘事位的句子可以依賴鄰句、壓縮合法。
+Reference 的讀者是 runtime 的 LLM 與跳讀的維護者、句子經常被抽離消費：checklist 逐項執行、表格格被單獨引用、判斷標準句被 grep 命中、規則句被複製進 prompt。這些**單句消費位**的句子必須在句內資訊自足；段落敘事位的句子可以依賴鄰句、壓縮合法。
 
 資訊自足是正向規格、四個條件——命題完整、指涉閉合、實詞可反推、一句一命題——驗收用**抽離重讀**：句子單獨交給沒讀過上下文的讀者、命題能不能無歧義復原。四條件的完整定義與機制見 [sentence-self-sufficiency-by-consumption-unit](principles/sentence-self-sufficiency-by-consumption-unit.md)。
 
@@ -207,7 +207,7 @@ Reference 的讀者是 runtime 的 LLM 與跳讀的維護者、句子經常被�
 
 ### 單句消費位自足
 
-- [ ] checklist 項、表格格、判準句逐句通過抽離重讀（單獨讀、指涉能回收、命題完整）
+- [ ] checklist 項、表格格、判斷標準句逐句通過抽離重讀（單獨讀、指涉能回收、命題完整）
 - [ ] 新增的規則句在入庫前先抽離重讀
 
 ---
@@ -224,6 +224,6 @@ Reference 的讀者是 runtime 的 LLM 與跳讀的維護者、句子經常被�
 ---
 
 **Last Updated**: 2026-08-17
-**Version**: 1.1.0 — 新增「單句消費位的資訊自足」段與驗收清單「單句消費位自足」兩條：reference 的句子經常被抽離消費（checklist 逐項執行、表格格單獨引用、判準句被 grep 命中）、單句消費位必須句內資訊自足（四條件 + 抽離重讀測試）；含實際案例的錯對對照。對應 principle 卡 sentence-self-sufficiency-by-consumption-unit。
+**Version**: 1.1.0 — 新增「單句消費位的資訊自足」段與驗收清單「單句消費位自足」兩條：reference 的句子經常被抽離消費（checklist 逐項執行、表格格單獨引用、判斷標準句被 grep 命中）、單句消費位必須句內資訊自足（四條件 + 抽離重讀測試）；含實際案例的錯對對照。對應 principle 卡 sentence-self-sufficiency-by-consumption-unit。
 
 **Version**: 1.0.0 — 從 writing-prompts.md 雙職責拆分：Skill 品質規範獨立為本檔，writing-prompts.md 保留 prompt 寫作情境

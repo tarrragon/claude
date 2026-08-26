@@ -48,7 +48,7 @@
 ## 跟其他 principle 的關係
 
 - [sentence-self-sufficiency-by-consumption-unit](./sentence-self-sufficiency-by-consumption-unit.md)：本卡限定它的敘事位豁免——敘事位可依賴鄰句、但只能是**已讀過的**鄰句，依賴後文與作者地圖不在豁免內。
-- [reference-by-semantic-title-not-number](./reference-by-semantic-title-not-number.md)：同機制的篇內形態——那卡管跨段跨檔引用的編號、本卡管同篇內對實體的位置與數量指涉，derivation vs fact 判準共用。
+- [reference-by-semantic-title-not-number](./reference-by-semantic-title-not-number.md)：同機制的篇內形態——那卡管跨段跨檔引用的編號、本卡管同篇內對實體的位置與數量指涉，derivation vs fact 判斷標準共用。
 - [write-for-readers-not-audiences](./write-for-readers-not-audiences.md)：同族的語域混入——那卡抓演講姿態、本卡抓書評體壓縮；破折號懸念是懸念弧的句內微型形態。
 - [compressed-conclusion-strips-derivation](./compressed-conclusion-strips-derivation.md)：相鄰的壓縮對象——那卡壓推導、本卡壓解碼材料，修法同為把被壓掉的放回去、不是把句子寫長。
 - [content-pressure-resolves-by-expansion-not-compression](./content-pressure-resolves-by-expansion-not-compression.md)：同為「展開、不壓縮」家族、壓縮動機不同——那卡由容器形狀先驗驅動、本卡由密度審美驅動（沒有容器壓力也發生）。

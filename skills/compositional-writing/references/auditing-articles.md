@@ -16,7 +16,7 @@
 四個情境：
 
 - 對高 stakes 章節（資安 / concurrency / distributed / financial / medical）做 quality gate
-- 把過去寫的高 stakes 文章當素材二次擴寫前、先 audit 老文是否仍站得住
+- 把過去寫的高 stakes 文章當素材二次擴寫前、先 audit 老文是否仍成立
 - Reviewer 視角審稿（自己寫的、別人寫的、AI 寫的高 stakes 內容）
 - 教學 / 文件 ship 前的 final pass、決定 accept / revise / withdraw
 
@@ -161,9 +161,9 @@ Audit checklist：
 | 文體契約 | 行動耦合低                      | 行動耦合高                                  |
 | -------- | ------------------------------- | ------------------------------------------- |
 | 預期修辭 | 誇飾自由區：slogan、詩、賀詞    | 管制邊界區：廣告誘導購買、募資頁面          |
-| 預期字面 | 有限使用區：教學 hook、開場敘事 | 零容忍區：規格、SLA、判準段、翻譯、安全陳述 |
+| 預期字面 | 有限使用區：教學 hook、開場敘事 | 零容忍區：規格、SLA、判斷標準段、翻譯、安全陳述 |
 
-高 stakes 內容的正文幾乎全落在零容忍區；hook / 引言段是有限使用區、誇飾合法、進判準段要收——audit 時對入口段的強度不加分扣分、對判準段與宣稱段逐條檢查。Audit checklist：
+高 stakes 內容的正文幾乎全落在零容忍區；hook / 引言段是有限使用區、誇飾合法、進判斷標準段要收——audit 時對入口段的強度不加分扣分、對判斷標準段與宣稱段逐條檢查。Audit checklist：
 
 - [ ] 技術宣稱位的強度詞通過**支撐存在測試**嗎？（「快 10 倍」旁邊有 benchmark 是宣稱、裸的是誇飾佔位）
 - [ ] 轉述位（引用、翻譯、摘要）比原文更強嗎？（「證明了」常是原文「suggests」的升格、二手內容加倍警惕、回一手來源比對）
@@ -173,7 +173,7 @@ Audit checklist：
 - [ ] **反比操縱訊號**：越難驗證的段落話講得越滿嗎？（「話最滿的段落恰好最難查證」這種全篇分布比單點升格更難歸因於無意的文風滑動、所以警惕等級最高）
 - [ ] **降格側**：風險段落的強度與嚴重性對位嗎？（RCE 寫成「可能造成一些影響」會讓應變者依錯的緊急度行動、incident report 尤其要掃）
 
-跟 Dimension 4 的分工：citation drift 三類（conditional → unconditional / specific → general / recommendation → mandate）是強度漂移在 citation 位的具體形態、Dimension 4 逐條對原文抓；本 dimension 涵蓋 citation 之外的所有位置（宣稱位、判準段、風險陳述、自評位）、並補反方向的降格檢查。詳見 [hyperbole-legitimacy-by-position-function](./principles/hyperbole-legitimacy-by-position-function.md)。
+跟 Dimension 4 的分工：citation drift 三類（conditional → unconditional / specific → general / recommendation → mandate）是強度漂移在 citation 位的具體形態、Dimension 4 逐條對原文抓；本 dimension 涵蓋 citation 之外的所有位置（宣稱位、判斷標準段、風險陳述、自評位）、並補反方向的降格檢查。詳見 [hyperbole-legitimacy-by-position-function](./principles/hyperbole-legitimacy-by-position-function.md)。
 
 ---
 
@@ -306,7 +306,7 @@ Audit 完成後產出結構化報告——格式比照學術 peer review、但 w
 | Principle                                                                                                      | 關係                                                                                             |
 | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | [false-sense-of-security-as-primary-failure](./principles/false-sense-of-security-as-primary-failure.md)       | 本 reference 的主要 audit 目標 —— 各 dimension 都在 catch false sense of security                |
-| [risk-asymmetric-audit-standard](./principles/risk-asymmetric-audit-standard.md)                               | 本 reference 的啟動判準 —— 高 stakes 識別四訊號決定要不要跑 audit                                |
+| [risk-asymmetric-audit-standard](./principles/risk-asymmetric-audit-standard.md)                               | 本 reference 的啟動條件 —— 高 stakes 識別四訊號決定要不要跑 audit                                |
 | [literal-interception-vs-behavioral-refinement](./principles/literal-interception-vs-behavioral-refinement.md) | 本 reference 的 ceiling 警示 —— 名稱層 mitigation 對位 = 字面層、stop at 字面 = false confidence |
 | [writing-multi-pass-review](./principles/writing-multi-pass-review.md)                                         | 本 reference 是該卡「stakes-conditional 追加輪 E」的 reviewer-side 對應                          |
 | [ease-of-writing-vs-intent-alignment](./principles/ease-of-writing-vs-intent-alignment.md)                     | 本 reference 的 audit weakness 模式 —— 含糊敘述是寫作便利、跟 verifiability 反向                 |

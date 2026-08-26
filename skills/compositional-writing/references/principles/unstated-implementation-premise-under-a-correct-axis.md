@@ -1,6 +1,6 @@
 # 軸是對的，而它底下有一個從未被當成選擇的實作前提
 
-> **角色**：本卡是 `multi-round-review` 的支撐型原則（principle）、被 Round 3-B 的 steelman frame 與個案實跑 frame 引用。
+> **角色**：本卡是 `compositional-writing` 的支撐型原則（principle）、被 axis-named-by-proxy-not-mechanism 引用（那張是名字取錯、這張是容器選了而沒說）。
 >
 > **何時讀**：規劃對抗性審查的時候（要知道 steelman 有一塊天生打不到的地方）；或是審查一套判斷標準時發現它的推導每一步都對、結論卻很費力的時候。
 
@@ -49,4 +49,4 @@
 ## 跟其他原則的關係
 
 - [軸名取了次好的代理變數](axis-named-by-proxy-not-mechanism.md)：那張是命名選錯，這張是容器選了而沒說。兩者可同時發生，修法順序是先讓前提顯形、再檢查軸名。
-- [多次局部正確的修法會合成缺陷](./sequential-fixes-compose-into-defects.md)：前提顯形之後為了繞開它而長出來的結構要一起拆，而拆的過程會在相鄰段落留下接縫。
+- **多次局部正確的修法會合成缺陷**：前提顯形之後為了繞開它而長出來的結構要一起拆，而拆的過程會在相鄰段落留下接縫。

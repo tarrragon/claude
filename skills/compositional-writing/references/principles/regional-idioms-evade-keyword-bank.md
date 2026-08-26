@@ -29,7 +29,7 @@
 ## 識別訊號
 
 1. **成語式 / 比喻式的決策與評價詞**：把一個抽象動作用畫面感很強的口語片語包裝、且該片語偏向某個地區的高頻用法。命中訊號是「這句在描述決策 / 評價 / 程度、用了一個很生動的口語片語」。
-2. **表面讀得懂、但在地不這樣說**：判準不是「看不看得懂」（都看得懂），是「這個地區的人會不會這樣說」。要判定得問在地語感、不是問語意。
+2. **表面讀得懂、但在地不這樣說**：判斷標準不是「看不看得懂」（都看得懂），是「這個地區的人會不會這樣說」。要判定得問在地語感、不是問語意。
 3. **review 回報字句層 clean、卻被在地讀者一眼抓到**：這個落差本身是訊號——clean 是「grep 清單沒中」、不是「在地讀者讀起來對」。同源 reviewer 的 clean 對慣用語層不可當真、要標「未經在地抽查」。
 
 ---
@@ -48,7 +48,7 @@
 - 已滲透到在地主流語料的詞：判定要跟著讀者群更新。
 - 個人風格 / 訪談保留：narrative 選擇。
 
-判準跟 [`regional-terminology-alignment`](regional-terminology-alignment.md) 一致：問「讀者地區是否單一、這個片語是不是讓在地讀者覺得出戲」、而不是「看不看得懂」。
+判斷標準跟 [`regional-terminology-alignment`](regional-terminology-alignment.md) 一致：問「讀者地區是否單一、這個片語是不是讓在地讀者覺得出戲」、而不是「看不看得懂」。
 
 ---
 
@@ -57,7 +57,7 @@
 | 原則                                                                                                  | 關係                                                                                             |
 | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | [`regional-terminology-alignment`](regional-terminology-alignment.md)                                 | 本卡是它的偵測維度延伸——單詞漂移是封閉集合 grep 抓得到、慣用語是開放集合 grep 抓不到             |
-| [`multi-pass-review-frame-granularity`](multi-pass-review-frame-granularity.md)                       | 同構：同源自審有結構上限、需異源複核；也共用「grep 命中是候選、design gap vs execution gap」判準 |
+| [`multi-pass-review-frame-granularity`](multi-pass-review-frame-granularity.md)                       | 同構：同源自審有結構上限、需異源複核；也共用「grep 命中是候選、design gap vs execution gap」判斷標準 |
 | [`colloquial-rhetoric-erodes-technical-precision`](colloquial-rhetoric-erodes-technical-precision.md) | 慣用語直譯常同時是口語修辭；本卡從地區維度切、該卡從精度維度切、常同一句命中                     |
 | [`avoid-overused-generic-words`](avoid-overused-generic-words.md)                                     | 兩卡都是字句層偵測、都「命中是候選不是判決」；泛用詞是精度問題、慣用語是地區問題                 |
 

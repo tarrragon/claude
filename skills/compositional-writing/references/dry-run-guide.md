@@ -55,7 +55,7 @@ Phase 2 測試人員必須符合：
 
 **對應 reference**：`writing-code-comments.md`
 
-**任務描述（給測試人員的指示）**
+#### 任務描述（給測試人員的指示）
 
 你有一個 JavaScript 函式，功能是「驗證使用者輸入的書名是否符合格式（非空、長度 1-200 字元）」。
 
@@ -69,12 +69,12 @@ function validateBookTitle(title) {
 }
 ```
 
-**輸入限制**
+#### 輸入限制
 
 - 可讀：SKILL.md、references/writing-code-comments.md
 - 不可讀：其他任何文件
 
-**預期產出**
+#### 預期產出
 
 符合以下條件的 doc comment：
 
@@ -83,7 +83,7 @@ function validateBookTitle(title) {
 - 說明回傳值的含義
 - 不描述實作語法
 
-**評估標準**
+#### 評估標準
 
 | 評估項目     | 通過條件                                              |
 | ------------ | ----------------------------------------------------- |
@@ -100,7 +100,7 @@ function validateBookTitle(title) {
 
 **對應 reference**：`writing-documents.md`
 
-**任務描述（給測試人員的指示）**
+#### 任務描述（給測試人員的指示）
 
 你需要為一份「書庫同步錯誤處理設計」文件撰寫開頭章節（Introduction 或 Overview）。
 
@@ -112,12 +112,12 @@ function validateBookTitle(title) {
 
 請只閱讀 SKILL.md 和 `writing-documents.md`，撰寫一個 150-300 字的開頭段落，讓讀者第一眼就知道「這份文件解決什麼問題、讀它能得到什麼」。
 
-**輸入限制**
+#### 輸入限制
 
 - 可讀：SKILL.md、references/writing-documents.md
 - 不可讀：其他任何文件
 
-**預期產出**
+#### 預期產出
 
 符合以下條件的開頭段落：
 
@@ -126,7 +126,7 @@ function validateBookTitle(title) {
 - 列出文件涵蓋的三種錯誤類型
 - 不超過 300 字
 
-**評估標準**
+#### 評估標準
 
 | 評估項目 | 通過條件                                               |
 | -------- | ------------------------------------------------------ |
@@ -143,7 +143,7 @@ function validateBookTitle(title) {
 
 **對應 reference**：`designing-fields.md`
 
-**任務描述（給測試人員的指示）**
+#### 任務描述（給測試人員的指示）
 
 你正在設計一份 YAML 格式的「書籍匯出任務」結構，需要包含以下資訊：
 
@@ -155,16 +155,16 @@ function validateBookTitle(title) {
 
 請只閱讀 SKILL.md 和 `designing-fields.md`，設計上述 5 個欄位的名稱與值的格式（用 YAML 示例呈現即可）。
 
-**輸入限制**
+#### 輸入限制
 
 - 可讀：SKILL.md、references/designing-fields.md
 - 不可讀：其他任何文件
 
-**預期產出**
+#### 預期產出
 
 一段 YAML 示例，每個欄位有名稱和示例值，並附一行說明「此欄位承載什麼維度的資訊」。
 
-**評估標準**
+#### 評估標準
 
 | 評估項目     | 通過條件                                                      |
 | ------------ | ------------------------------------------------------------- |
@@ -189,7 +189,7 @@ function validateBookTitle(title) {
 
 **通過計算式**：
 
-```
+```text
 Phase 2 通過 = (所有場景通過) AND (所有場景在 10 分鐘內完成)
 
 場景通過 = 評估項通過率 >= 75%
@@ -214,7 +214,7 @@ Phase 2 通過 = (所有場景通過) AND (所有場景在 10 分鐘內完成)
 
 ## 執行步驟
 
-```
+```text
 1. 確認前置條件：執行 ./scripts/portability-check.sh，exit 0 才繼續
 2. 找到測試人員（符合「對本框架陌生」條件）
 3. 依序執行場景 A → B → C，記錄每個場景的完成時間和評估項結果
@@ -228,7 +228,7 @@ Phase 2 通過 = (所有場景通過) AND (所有場景在 10 分鐘內完成)
 
 ## 結果記錄表（執行後填寫）
 
-```
+```text
 Phase 2 Dry-Run 結果（日期：_____ / 執行者：_____）
 
 場景結果

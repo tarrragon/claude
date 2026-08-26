@@ -45,7 +45,7 @@ Prompt 的讀者是 AI 模型，但維護者是人類。寫作目標是在**最�
 
 **核心**：一個 prompt 一個任務目標。
 
-Prompt 的「原子單位」是「一個可被驗收的任務」、不是「一句話」 — 因為「句子」是語法層的單位、AI 執行 prompt 時的單位是「能否完整交付一個可驗收的結果」。一句話可以跨多個任務（例如「幫我寫測試 + 順便重構 + 檢查安全性」）、AI 接到後分散注意力、每個子任務都做得不完整；反之、多句話描述同一個任務（前提 / 動作 / 驗收條件）仍是一個原子 prompt。判準在「驗收完整性」、不在「句數」。
+Prompt 的「原子單位」是「一個可被驗收的任務」、不是「一句話」 — 因為「句子」是語法層的單位、AI 執行 prompt 時的單位是「能否完整交付一個可驗收的結果」。一句話可以跨多個任務（例如「幫我寫測試 + 順便重構 + 檢查安全性」）、AI 接到後分散注意力、每個子任務都做得不完整；反之、多句話描述同一個任務（前提 / 動作 / 驗收條件）仍是一個原子 prompt。判斷標準在「驗收完整性」、不在「句數」。
 
 **判斷標準**：
 
@@ -300,7 +300,7 @@ Prompt 的每個 token 都是成本。以下策略在**不傷害意圖清晰度*
 
 ---
 
-**策略 2 的邊界**：能壓進表格的是純對映（值對值、名對名）；帶條件的判準句壓成表格格會把成分砍掉、模型逐格取用時拿到殘語——判準句留完整句、或壓縮後逐格跑抽離重讀（單獨讀、指涉能回收），見 [sentence-self-sufficiency-by-consumption-unit](principles/sentence-self-sufficiency-by-consumption-unit.md) 與 [content-pressure-resolves-by-expansion-not-compression](principles/content-pressure-resolves-by-expansion-not-compression.md)。
+**策略 2 的邊界**：能壓進表格的是純對映（值對值、名對名）；帶條件的判斷標準句壓成表格格會把成分砍掉、模型逐格取用時拿到殘語——判斷標準句留完整句、或壓縮後逐格跑抽離重讀（單獨讀、指涉能回收），見 [sentence-self-sufficiency-by-consumption-unit](principles/sentence-self-sufficiency-by-consumption-unit.md) 與 [content-pressure-resolves-by-expansion-not-compression](principles/content-pressure-resolves-by-expansion-not-compression.md)。
 
 ### 策略 3：引用路徑取代完整內容貼入
 
