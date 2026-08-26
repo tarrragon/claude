@@ -3,7 +3,7 @@
 import argparse
 import sys
 
-from doc_system.commands import query, list_cmd, nav, domain, status, test_map, create, update, batch_init, uc, validate
+from doc_system.commands import query, list_cmd, nav, domain, status, test_map, create, update, batch_init, uc, validate, schema
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -151,6 +151,21 @@ def build_parser() -> argparse.ArgumentParser:
     ac_parser.add_argument("ticket_id", help="Ticket ID（如 0.38.1-W1-024）")
     ac_parser.add_argument("--json", action="store_true", help="以 JSON 格式輸出（供 dispatch-validate 消費）")
 
+    # schema（子命令群組：export）
+    schema_parser = subparsers.add_parser(
+        "schema", help="圖譜型別表機器可讀匯出（SSOT 為 tracking_schema.py）"
+    )
+    schema_subparsers = schema_parser.add_subparsers(dest="schema_command")
+
+    schema_export_parser = schema_subparsers.add_parser(
+        "export", help="從 tracking_schema.py 產生圖譜型別表 JSON"
+    )
+    schema_export_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="印出 JSON 至 stdout（不寫檔）；省略則寫入 tracking_schema.json 並印出路徑",
+    )
+
     return parser
 
 
@@ -168,6 +183,7 @@ COMMAND_HANDLERS = {
     "uc": uc.execute,
     "validate": validate.execute,
     "validate-filenames": validate.execute_filenames,
+    "schema": schema.execute,
 }
 
 

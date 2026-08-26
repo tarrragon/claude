@@ -1,0 +1,156 @@
+{
+  "edge_types": {
+    "association": {
+      "class": "see-also",
+      "forward_field": "relatedTo",
+      "layer": "established",
+      "maintainer": "手動/CLI",
+      "reverse_field": null
+    },
+    "blocking": {
+      "class": "ordering",
+      "forward_field": "blockedBy",
+      "layer": "established",
+      "maintainer": "手動/CLI",
+      "reverse_field": null
+    },
+    "blood": {
+      "class": "containment",
+      "forward_field": "parent_id",
+      "layer": "established",
+      "maintainer": "CLI 自動",
+      "reverse_field": "children"
+    },
+    "branching": {
+      "class": "ordering",
+      "forward_field": "branch_from",
+      "layer": "proposed",
+      "maintainer": "手動",
+      "reverse_field": null
+    },
+    "consumption": {
+      "class": "dataflow",
+      "forward_field": "consumes",
+      "layer": "proposed",
+      "maintainer": "手動",
+      "reverse_field": null
+    },
+    "discovery": {
+      "class": "provenance",
+      "forward_field": "discovered_during",
+      "layer": "established",
+      "maintainer": "手動",
+      "reverse_field": null
+    },
+    "domain_coverage": {
+      "class": "containment",
+      "forward_field": "source_specs",
+      "layer": "established",
+      "maintainer": "手動",
+      "reverse_field": null
+    },
+    "domain_dependency": {
+      "class": "ordering",
+      "forward_field": "depends_on_domains",
+      "layer": "established",
+      "maintainer": "手動",
+      "reverse_field": null
+    },
+    "emission": {
+      "class": "dataflow",
+      "forward_field": "emits",
+      "layer": "proposed",
+      "maintainer": "手動",
+      "reverse_field": null
+    },
+    "proposal_association": {
+      "class": "see-also",
+      "forward_field": "related_proposals",
+      "layer": "established",
+      "maintainer": "手動",
+      "reverse_field": null
+    },
+    "provenance": {
+      "class": "provenance",
+      "forward_field": "source_proposal",
+      "layer": "established",
+      "maintainer": "手動",
+      "reverse_field": "outputs"
+    },
+    "requirement_impl": {
+      "class": "containment",
+      "forward_field": "implements_requirements",
+      "layer": "established",
+      "maintainer": "手動",
+      "reverse_field": null
+    },
+    "returning": {
+      "class": "ordering",
+      "forward_field": "return_to",
+      "layer": "proposed",
+      "maintainer": "手動",
+      "reverse_field": null
+    },
+    "spawn": {
+      "class": "provenance",
+      "forward_field": "source_ticket",
+      "layer": "established",
+      "maintainer": "CLI 自動",
+      "reverse_field": "spawned_tickets"
+    },
+    "spec_association": {
+      "class": "see-also",
+      "forward_field": "related_specs",
+      "layer": "established",
+      "maintainer": "手動",
+      "reverse_field": null
+    },
+    "uc_association": {
+      "class": "see-also",
+      "forward_field": "related_usecases",
+      "layer": "established",
+      "maintainer": "手動",
+      "reverse_field": null
+    }
+  },
+  "id_pattern_dialect": "python-re",
+  "node_types": {
+    "DomainBundle": {
+      "carrier": "docs/spec/{domain}/domain-map.md 或 docs/domain-map.md frontmatter",
+      "id_pattern": "^DOMAIN-MAP-[a-z0-9-]+$",
+      "layer": "established"
+    },
+    "EVT": {
+      "carrier": "docs/events/{domain}/EVT-{DOMAIN}-NNN-{slug}.md frontmatter（載體形式為 per-file，已定案。曾評估集中式 registry，不採用：per-file 讓事件定義與其 domain 目錄同址、diff 粒度落在單一事件、新增事件不觸碰共用檔；registry 的收益在跨事件查詢，而該需求可由目錄掃描滿足。改採 registry 屬 schema 變更，需先提出 per-file 無法滿足的具體查詢或一致性需求。）",
+      "id_pattern": "^EVT-[A-Z0-9]+-\\d{3}$",
+      "layer": "proposed"
+    },
+    "FlowStep": {
+      "carrier": "UC 文件內結構化 flow 區塊（YAML list）",
+      "id_pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "layer": "proposed"
+    },
+    "PROP": {
+      "carrier": "docs/proposals/PROP-NNN-{slug}.md frontmatter",
+      "id_pattern": "^PROP-\\d{3}$",
+      "layer": "established"
+    },
+    "SPEC": {
+      "carrier": "docs/spec/{domain}/{slug}.md frontmatter",
+      "id_pattern": "^SPEC-([0-9]{3}|[A-Z0-9-]+)$",
+      "layer": "established"
+    },
+    "Ticket": {
+      "carrier": "docs/work-logs/.../tickets/{id}.md frontmatter",
+      "id_pattern": "^[\\w.]+-W\\d+-\\d+$",
+      "layer": "established"
+    },
+    "UC": {
+      "carrier": "docs/usecases/UC-NN-{slug}.md frontmatter",
+      "id_pattern": "^UC-\\d{2,}$",
+      "layer": "established"
+    }
+  },
+  "notice": "本檔為 tracking_schema.py 的衍生產物，唯一 SSOT 為該 .py 檔。禁止直接編輯本 JSON，修改型別表請改 tracking_schema.py 後重新執行`doc schema export` 產生。",
+  "schema_generated_at_framework_version": "2.40.3"
+}

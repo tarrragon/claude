@@ -1,3 +1,16 @@
+## [2.41.0] - 2026-08-26
+
+### Summary
+feat: doc schema export --json 圖譜型別表 JSON 匯出; fix: 雙向一致性測試改比對磁碟 JSON，非即時產生的同源 dict; chore: 回寫 .claude VERSION ->
+
+Changes: 1 feat, 1 fix, 1 chore
+
+- feat: doc schema export --json 圖譜型別表 JSON 匯出
+- fix: 雙向一致性測試改比對磁碟 JSON，非即時產生的同源 dict
+- chore: 回寫 .claude VERSION ->
+
+---
+
 ## [2.40.3] - 2026-08-26
 
 ### Summary
