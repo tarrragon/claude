@@ -65,6 +65,9 @@ __all__ = [
     "CANONICAL_BODY_SECTIONS",
     # 枚舉驗證閘模式
     "ENUM_GATE_MODE",
+    # 字元驗證閘（寫入端 emoji / 代理碼位防線）
+    "EMOJI_RANGES",
+    "CHARSET_GATE_RULE_REFERENCE",
     # 預設值
     "DEFAULT_PRIORITY",
     "DEFAULT_HOW_TASK_TYPE",
@@ -391,6 +394,32 @@ CANONICAL_BODY_SECTIONS: tuple = (
 # warn：違規寫入 stderr 警告 + enum-gate.log 記錄後照常落盤（量測期預設）
 # deny：違規拒絕落盤。切換 deny 須經 warn 期誤報率量測裁定，禁時間式延後
 ENUM_GATE_MODE: str = "deny"
+
+# ============================================================
+# 字元驗證閘（寫入端 emoji / UTF-16 代理碼位防線，language-constraints 規則 3）
+# ============================================================
+# 本模組為 EMOJI_RANGES 的建立端（canonical，依 tool-output-trust-rules.md
+# 規則 6「canonical 常數優先」判定）。下游獨立維護的副本：
+#   - .claude/hooks/language-guard-hook.py（同名常數 EMOJI_RANGES）
+#   - .claude/hooks/askuserquestion-charset-guard-hook.py（同名常數 EMOJI_RANGES）
+# 三份範圍一致性由 canonical-schema-consistency-check-hook.py（SessionStart
+# 觸發）程式交叉驗證，不再僅依本注釋的自然語言宣告維持（language-constraints
+# 規則 5：字元集子集清單須動態驗證，禁止僅依人工/註解判斷）。
+EMOJI_RANGES: tuple = (
+    (0x2600, 0x27BF),    # Miscellaneous Symbols
+    (0x1F300, 0x1F5FF),  # Miscellaneous Symbols and Pictographs
+    (0x1F600, 0x1F64F),  # Emoticons
+    (0x1F680, 0x1F6FF),  # Transport and Map
+    (0x1F900, 0x1F9FF),  # Supplemental Symbols and Pictographs
+    (0x1FA00, 0x1FAFF),  # Symbols and Pictographs Extended-A
+)
+
+# 直接 deny（無 warn 過渡期）：字元驗證閘防的是規則 3 已明文禁止的內容
+# （非既有正典枚舉需經量測才能收斂的邊界情況），且化石票由 changed-fields-only
+# 比對豁免，不需量測誤報率再裁定
+CHARSET_GATE_RULE_REFERENCE: str = (
+    ".claude/rules/core/language-constraints.md 規則 3（禁止使用 Emoji）"
+)
 
 # ============================================================
 # Handoff Direction 常數

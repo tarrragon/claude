@@ -35,8 +35,11 @@ from lib import (  # noqa: E402
     setup_hook_logging,
     run_hook_safely,
     read_json_from_stdin,
-    get_project_root,
 )
+# dispatch-active.json cleanup 與 .claude/ 掃描皆為跨 worktree 全域狀態，
+# 用 git_utils 版 get_project_root（CLAUDE_PROJECT_DIR 導向，恆指主 repo），
+# 而非 lib.hook_base 的 worktree 感知版本（見 ARCH-BAL-020）
+from lib.git_utils import get_project_root  # noqa: E402
 
 from lib.dispatch_tracker import cleanup_expired  # noqa: E402
 from lib.sync_exclude_manifest import (  # noqa: E402

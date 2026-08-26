@@ -37,6 +37,11 @@ def _setup_project(tmp_path):
         '---\nid: SPEC-NNN\ntitle: "{資料表/契約標題}"\nstatus: draft\n'
         'created: "YYYY-MM-DD"\n---\n# SPEC-{NNN} 資料契約\n'
     )
+    (templates_dir / "event-template.md").write_text(
+        '---\nid: EVT-DOMAIN-NNN\nname: "{事件名稱}"\ncategory: domain_event\n'
+        'created: "YYYY-MM-DD"\nupdated: "YYYY-MM-DD"\n'
+        'producers: []\nconsumers: []\n---\n# EVT-{DOMAIN}-{NNN}\n'
+    )
 
     return str(tmp_path)
 
@@ -293,6 +298,108 @@ class TestCreateDataContract:
         assert created_file.is_file()
 
 
+class TestCreateEvent:
+    """create event 的測試案例（EVT 型別：domain-scoped 配號）。"""
+
+    def test_create_event_with_domain(self, tmp_path, capsys):
+        """建立 event 應在 docs/events/{domain}/ 產生檔案，ID 帶 domain-scoped 前綴。"""
+        project_root = _setup_project(tmp_path)
+        templates_dir = tmp_path / "templates"
+
+        args = argparse.Namespace(
+            type="event", id=None, title="checkout", domain="library",
+        )
+
+        with (
+            patch.object(FileLocator, "get_project_root", return_value=project_root),
+            patch("doc_system.commands.create._get_templates_dir", return_value=templates_dir),
+        ):
+            execute(args)
+
+        output = capsys.readouterr().out
+        assert "已建立" in output
+        assert "EVT-LIBRARY-001" in output
+
+        created_file = tmp_path / "docs" / "events" / "library" / "EVT-LIBRARY-001-checkout.md"
+        assert created_file.is_file()
+        content = created_file.read_text()
+        assert "id: EVT-LIBRARY-001" in content
+
+    def test_create_event_requires_domain(self, tmp_path, capsys):
+        """建立 event 時未指定 --domain 應報錯（domain-scoped 配號無 domain 無法分配）。"""
+        project_root = _setup_project(tmp_path)
+        templates_dir = tmp_path / "templates"
+
+        args = argparse.Namespace(
+            type="event", id=None, title="checkout", domain=None,
+        )
+
+        with (
+            patch.object(FileLocator, "get_project_root", return_value=project_root),
+            patch("doc_system.commands.create._get_templates_dir", return_value=templates_dir),
+        ):
+            try:
+                execute(args)
+            except SystemExit:
+                pass
+
+        output = capsys.readouterr().out
+        assert "domain" in output.lower()
+
+    def test_create_event_domain_scoped_numbering_does_not_collide(self, tmp_path, capsys):
+        """EVT-LIBRARY-001 不匹配全域 `^EVT-(\\d+)`；domain-scoped 配號須各自獨立累加。
+
+        回歸測試：修復前配號器對 `EVT-LIBRARY-001` 這類 domain 內嵌 ID 視而不見
+        （正則只認 `^EVT-(\\d+)`），導致同一 domain 下第二次建立仍配發 EVT-LIBRARY-001，
+        撞上既存 ID 檢查而失敗。
+        """
+        project_root = _setup_project(tmp_path)
+        templates_dir = tmp_path / "templates"
+
+        existing_dir = tmp_path / "docs" / "events" / "library"
+        existing_dir.mkdir(parents=True)
+        (existing_dir / "EVT-LIBRARY-001-scan.md").write_text(
+            "---\nid: EVT-LIBRARY-001\n---\n"
+        )
+
+        args = argparse.Namespace(
+            type="event", id=None, title="checkout", domain="library",
+        )
+
+        with (
+            patch.object(FileLocator, "get_project_root", return_value=project_root),
+            patch("doc_system.commands.create._get_templates_dir", return_value=templates_dir),
+        ):
+            execute(args)
+
+        output = capsys.readouterr().out
+        assert "EVT-LIBRARY-002" in output
+
+    def test_create_event_different_domains_number_independently(self, tmp_path, capsys):
+        """不同 domain 的 EVT 各自從 001 起算，不共用全域序列。"""
+        project_root = _setup_project(tmp_path)
+        templates_dir = tmp_path / "templates"
+
+        existing_dir = tmp_path / "docs" / "events" / "library"
+        existing_dir.mkdir(parents=True)
+        (existing_dir / "EVT-LIBRARY-001-scan.md").write_text(
+            "---\nid: EVT-LIBRARY-001\n---\n"
+        )
+
+        args = argparse.Namespace(
+            type="event", id=None, title="checkout", domain="checkout",
+        )
+
+        with (
+            patch.object(FileLocator, "get_project_root", return_value=project_root),
+            patch("doc_system.commands.create._get_templates_dir", return_value=templates_dir),
+        ):
+            execute(args)
+
+        output = capsys.readouterr().out
+        assert "EVT-CHECKOUT-001" in output
+
+
 class TestNextId:
     """doc next-id 子命令測試（0.2.1-W1-001：唯讀查詢，不建立檔案）。"""
 
@@ -328,6 +435,38 @@ class TestNextId:
 
         output = capsys.readouterr().out.strip()
         assert output == "SPEC-011"
+
+    def test_next_id_event_requires_domain(self, tmp_path, capsys):
+        """next-id event 未帶 --domain 應報錯（domain-scoped 配號無 domain 無法分配）。"""
+        project_root = _setup_project(tmp_path)
+        args = argparse.Namespace(type="event", domain=None)
+
+        with patch.object(FileLocator, "get_project_root", return_value=project_root):
+            try:
+                execute_next_id(args)
+            except SystemExit:
+                pass
+
+        output = capsys.readouterr().out
+        assert "domain" in output.lower()
+
+    def test_next_id_event_domain_scoped(self, tmp_path, capsys):
+        """next-id event 帶 --domain 應回傳該 domain 序列的下一個號碼。"""
+        project_root = _setup_project(tmp_path)
+
+        existing_dir = tmp_path / "docs" / "events" / "library"
+        existing_dir.mkdir(parents=True)
+        (existing_dir / "EVT-LIBRARY-001-scan.md").write_text(
+            "---\nid: EVT-LIBRARY-001\n---\n"
+        )
+
+        args = argparse.Namespace(type="event", domain="library")
+
+        with patch.object(FileLocator, "get_project_root", return_value=project_root):
+            execute_next_id(args)
+
+        output = capsys.readouterr().out.strip()
+        assert output == "EVT-LIBRARY-002"
 
     def test_next_id_unsupported_type_exits(self, tmp_path, capsys):
         """不支援的文件類型應報錯並結束。"""
@@ -388,3 +527,76 @@ class TestGetTemplatesDir:
             result = _get_templates_dir()
 
         assert result == package_bundled
+
+
+class TestCliArgparseEventWiring:
+    """經真實 argparse 解析路徑驗證 event 型別可達（非直接呼叫 execute()）。
+
+    回歸測試：修復前 cli.py 的 create/next-id `choices` 清單硬排除 "event"，
+    argparse 在到達 execute() 前即以 SystemExit(2) 拒絕，即使 execute() 本身
+    邏輯全對，`doc create event ...` 仍完全無法使用。本測試組經
+    `build_parser().parse_args()` + `COMMAND_HANDLERS` 走完整 CLI 入口路徑，
+    而非繞過 argparse 直接建構 `argparse.Namespace` 呼叫 execute()。
+    """
+
+    def test_create_event_via_real_argv_parsing(self, tmp_path, capsys):
+        """`doc create event --title x --domain library` 經真實 argv 解析應成功建立檔案。"""
+        from doc_system.cli import COMMAND_HANDLERS, build_parser
+
+        project_root = _setup_project(tmp_path)
+        templates_dir = tmp_path / "templates"
+
+        parser = build_parser()
+        args = parser.parse_args(
+            ["create", "event", "--title", "checkout", "--domain", "library"]
+        )
+
+        with (
+            patch.object(FileLocator, "get_project_root", return_value=project_root),
+            patch("doc_system.commands.create._get_templates_dir", return_value=templates_dir),
+        ):
+            COMMAND_HANDLERS[args.command](args)
+
+        output = capsys.readouterr().out
+        assert "已建立" in output
+        assert "EVT-LIBRARY-001" in output
+
+        created_file = tmp_path / "docs" / "events" / "library" / "EVT-LIBRARY-001-checkout.md"
+        assert created_file.is_file()
+
+    def test_next_id_event_via_real_argv_parsing(self, tmp_path, capsys):
+        """`doc next-id event --domain library` 經真實 argv 解析應成功回傳 domain-scoped ID。"""
+        from doc_system.cli import COMMAND_HANDLERS, build_parser
+
+        project_root = _setup_project(tmp_path)
+
+        parser = build_parser()
+        args = parser.parse_args(["next-id", "event", "--domain", "library"])
+
+        with patch.object(FileLocator, "get_project_root", return_value=project_root):
+            COMMAND_HANDLERS[args.command](args)
+
+        output = capsys.readouterr().out.strip()
+        assert output == "EVT-LIBRARY-001"
+
+    def test_create_event_rejected_without_domain_via_real_argv_parsing(self, tmp_path, capsys):
+        """`doc create event`（缺 --domain）經真實 argv 解析仍應在 execute() 內報錯（非 argparse 攔截）。"""
+        from doc_system.cli import COMMAND_HANDLERS, build_parser
+
+        project_root = _setup_project(tmp_path)
+        templates_dir = tmp_path / "templates"
+
+        parser = build_parser()
+        args = parser.parse_args(["create", "event", "--title", "checkout"])
+
+        with (
+            patch.object(FileLocator, "get_project_root", return_value=project_root),
+            patch("doc_system.commands.create._get_templates_dir", return_value=templates_dir),
+        ):
+            try:
+                COMMAND_HANDLERS[args.command](args)
+            except SystemExit:
+                pass
+
+        output = capsys.readouterr().out
+        assert "domain" in output.lower()

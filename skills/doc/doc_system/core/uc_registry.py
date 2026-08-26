@@ -203,19 +203,121 @@ def _extract_main_flow_steps(lines: list[str], heading_lineno: int) -> tuple[lis
     return section_titles, bool(section_titles)
 
 
+# Fenced code block 標記，供 _extract_structured_flow_steps 掃描結構化 flow 區塊
+_YAML_FENCE_OPEN = "```yaml"
+_YAML_FENCE_CLOSE = "```"
+
+
+def _read_usecase_detail_lines(uc_id: str, project_root: str) -> list[str] | None:
+    """讀取 UC 詳細檔案（docs/usecases/UC-XX-*.md）行內容。
+
+    檔案不存在或讀取失敗時回傳 None，供 get_uc_summary 判斷是否有結構化
+    flow 區塊可解析（雙軌策略新路徑的前置步驟，見 get_uc_summary 說明）。
+
+    FileLocator 延遲匯入（非模組頂層）：本模組被零依賴 PEP 723 hook
+    （uc-reference-validation-hook.py 等，dependencies = []）以
+    `from doc_system.core.uc_registry import (...)` 局部匯入特定函式，
+    該匯入方式仍會執行整個模組頂層程式碼；若在頂層匯入僅 doc CLI 自身
+    venv 才有的套件會使這些 hook 的模組載入失敗（fail-open 但功能全滅）。
+    """
+    from doc_system.core.file_locator import FileLocator
+
+    detail_path = FileLocator(project_root).find_usecase(uc_id)
+    if not detail_path:
+        return None
+    try:
+        with open(detail_path, encoding="utf-8") as f:
+            return f.read().splitlines()
+    except OSError:
+        return None
+
+
+def _extract_structured_flow_steps(lines: list[str]) -> list[dict] | None:
+    """掃描文字行，尋找結構化 flow YAML 區塊（```yaml ... flow: [...] ... ```）。
+
+    合法判準：fenced yaml 區塊可被 yaml.safe_load 解析為 dict，且含 "flow"
+    鍵，其值為非空 list。同一文件可能含多個 yaml 區塊（如模板同時提供欄位
+    骨架與範例），採用第一個滿足判準者。找不到合法區塊時回傳 None，觸發
+    呼叫端 fallback 至既有散文解析（雙軌策略，見 usecase-template.md
+    「流程拓撲（結構化 Flow 區塊，選填）」章節）。
+
+    yaml 延遲匯入（非模組頂層），理由見 _read_usecase_detail_lines 說明。
+    """
+    import yaml
+
+    in_fence = False
+    fence_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not in_fence:
+            if stripped == _YAML_FENCE_OPEN:
+                in_fence = True
+                fence_lines = []
+            continue
+        if stripped == _YAML_FENCE_CLOSE:
+            in_fence = False
+            try:
+                parsed = yaml.safe_load("\n".join(fence_lines))
+            except yaml.YAMLError:
+                continue
+            if isinstance(parsed, dict):
+                flow = parsed.get("flow")
+                if isinstance(flow, list) and flow:
+                    return flow
+            continue
+        fence_lines.append(line)
+    return None
+
+
+def _format_structured_main_flow(steps: list[dict]) -> list[str]:
+    """將結構化 flow 步驟格式化為摘要字串，僅取主要成功場景步驟（branch_from 為空）。
+
+    格式 `{id}: {name}`，與既有散文解析格式（`N. **步驟名稱**`）刻意區隔，
+    避免消費端誤判摘要來源。至多保留 MAX_MAIN_FLOW_STEPS 步，與既有上限一致。
+    """
+    formatted: list[str] = []
+    for step in steps:
+        if not isinstance(step, dict) or step.get("branch_from"):
+            continue
+        formatted.append(f"{step.get('id', '')}: {step.get('name', '')}")
+        if len(formatted) >= MAX_MAIN_FLOW_STEPS:
+            break
+    return formatted
+
+
 def get_uc_summary(uc_id: str, project_root: str) -> dict | None:
     """回傳 UC 摘要：標題、spec 位置、主流程步驟，供 Context Bundle 自動注入使用。
 
-    uc_id 不存在於 SSOT 時回傳 None；main_flow 找不到「主要成功場景」區塊
-    時 fallback 回傳章節標題摘要（非所有 UC 都採此標準結構，如 UC-05 用
-    其他標題），此時 is_section_summary 為 True。真正無任何內容可摘要
-    時（區塊為空）main_flow 才回傳空 list，is_section_summary 為 False。
+    uc_id 不存在於 SSOT 時回傳 None。flow 步驟解析採雙軌策略：UC 詳細檔案
+    （docs/usecases/UC-XX-*.md）含結構化 flow YAML 區塊時優先解析該區塊
+    （新路徑）；detail 檔案不存在或無結構化區塊時，fallback 至既有對
+    SSOT（docs/app-use-cases.md）的散文 heuristic 解析（既有路徑，不變）。
+    兩條路徑互不覆蓋——一旦採用結構化區塊即不再退回散文解析。
+
+    既有路徑下，main_flow 找不到「主要成功場景」區塊時 fallback 回傳章節
+    標題摘要（非所有 UC 都採此標準結構，如 UC-05 用其他標題），此時
+    is_section_summary 為 True。真正無任何內容可摘要時（區塊為空）
+    main_flow 才回傳空 list，is_section_summary 為 False。
     """
     ssot = parse_ssot(project_root)
     if uc_id not in ssot:
         return None
 
     info = ssot[uc_id]
+
+    detail_lines = _read_usecase_detail_lines(uc_id, project_root)
+    if detail_lines is not None:
+        structured_steps = _extract_structured_flow_steps(detail_lines)
+        if structured_steps is not None:
+            return {
+                "uc_id": uc_id,
+                "title": info["title"],
+                "spec_path": USE_CASES_SPEC_RELATIVE_PATH,
+                "spec_line": info["line"],
+                "main_flow": _format_structured_main_flow(structured_steps),
+                "is_section_summary": False,
+            }
+
     ssot_path = get_ssot_path(project_root)
     try:
         with open(ssot_path, encoding="utf-8") as f:

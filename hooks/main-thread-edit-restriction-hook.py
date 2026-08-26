@@ -28,7 +28,11 @@ sys.path.insert(0, str(Path(__file__).parent))         # .claude/hooks/
 sys.path.insert(0, str(Path(__file__).parent.parent))   # .claude/       (lib.*)
 
 from lib import setup_hook_logging, run_hook_safely, get_project_root, save_check_log, read_json_from_stdin, is_subagent_environment, emit_hook_output
-from lib.git_utils import get_current_branch, is_allowed_branch, find_target_repo
+# get_project_root（上行，來自 lib/hook_base）用於跨專案放行的 project
+# boundary 判斷，worktree 感知是刻意設計。dispatch-active.json 為跨
+# worktree 全域狀態，語意不同，改用 git_utils 版本並顯式命名區分
+# （見 ARCH-BAL-020）
+from lib.git_utils import get_current_branch, is_allowed_branch, find_target_repo, get_project_root as get_dispatch_project_root
 from lib.hook_messages import GateMessages
 from lib.dispatch_tracker import is_file_under_dispatch
 from lib.path_permission import check_file_permission
@@ -54,7 +58,7 @@ def _check_dispatch_warning(file_path: str, logger) -> str:
     if not file_path:
         return ""
 
-    project_root = get_project_root()
+    project_root = get_dispatch_project_root()
     rel_path = file_path
     if file_path.startswith("/"):
         try:

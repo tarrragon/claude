@@ -83,6 +83,14 @@ class CreateMessages:
         "  cd {worktree_path} && git status"
     )
 
+    # macOS 建置前置檔案自動補齊
+    MACOS_XCCONFIG_SYNCED = "已補齊 macOS 建置所需的 xcconfig 檔案（{files}）。"
+    MACOS_PODS_HINT = (
+        "提示：如需執行 flutter build macos / flutter test -d macos，"
+        "請先安裝 CocoaPods 依賴：\n"
+        "  cd {worktree_path}/macos && pod install"
+    )
+
 
 class CleanupMessages:
     """cleanup 子命令訊息常數"""

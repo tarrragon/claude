@@ -10,6 +10,7 @@ ID_PREFIX_FINDERS = {
     "PROP": "find_proposal",
     "UC": "find_usecase",
     "SPEC": "find_spec",
+    "EVT": "find_event",
 }
 
 
@@ -22,6 +23,7 @@ class FileLocator:
         self.proposals_dir = str(root / "docs" / "proposals")
         self.spec_dir = str(root / "docs" / "spec")
         self.usecases_dir = str(root / "docs" / "usecases")
+        self.events_dir = str(root / "docs" / "events")
         self.tracking_file = str(root / "docs" / "proposals-tracking.yaml")
 
     def find_proposal(self, prop_id: str) -> str | None:
@@ -35,6 +37,15 @@ class FileLocator:
     def find_spec(self, spec_id: str) -> str | None:
         """依 spec ID 找到對應檔案路徑，找不到回傳 None。"""
         return self._find_file_by_id(self.spec_dir, spec_id)
+
+    def find_event(self, event_id: str) -> str | None:
+        """依 EVT ID 找到對應檔案路徑（含 domain 子目錄），找不到回傳 None。
+
+        EVT 的 domain-scoped ID（如 EVT-LIBRARY-001）與 PROP/UC/SPEC 一樣
+        僅需精確前綴比對，故沿用同一套 _find_file_by_id 邏輯，不需額外的
+        EVT 特有解析規則。
+        """
+        return self._find_file_by_id(self.events_dir, event_id)
 
     def list_proposals(self) -> list[str]:
         """列出所有 proposal 檔案路徑。"""

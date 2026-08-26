@@ -428,6 +428,158 @@ class TestGetUcSummary:
             assert first_label
 
 
+def _write_usecase_detail(tmp_path, uc_id: str, slug: str, body: str) -> None:
+    """在 tmp_path/docs/usecases/{uc_id}-{slug}.md 寫入內容，供結構化 flow 區塊測試使用。"""
+    usecases_dir = tmp_path / "docs" / "usecases"
+    usecases_dir.mkdir(parents=True, exist_ok=True)
+    (usecases_dir / f"{uc_id}-{slug}.md").write_text(body, encoding="utf-8")
+
+
+class TestExtractStructuredFlowSteps:
+    """0.2.1-W3-1061：結構化 flow YAML 區塊偵測（雙軌策略新路徑）。"""
+
+    def test_returns_none_when_no_yaml_fence(self):
+        lines = ["# 標題", "一般內容，無 fenced code block"]
+        assert uc_registry._extract_structured_flow_steps(lines) is None
+
+    def test_returns_none_when_yaml_fence_has_no_flow_key(self):
+        lines = ["```yaml", "other_key: []", "```"]
+        assert uc_registry._extract_structured_flow_steps(lines) is None
+
+    def test_returns_none_when_flow_is_empty_list(self):
+        lines = ["```yaml", "flow: []", "```"]
+        assert uc_registry._extract_structured_flow_steps(lines) is None
+
+    def test_returns_none_when_yaml_block_is_malformed(self):
+        """YAML 語法錯誤不應中止掃描或拋例外，視同無合法區塊。"""
+        lines = ["```yaml", "flow: [unclosed", "```"]
+        assert uc_registry._extract_structured_flow_steps(lines) is None
+
+    def test_returns_steps_when_flow_present(self):
+        lines = [
+            "```yaml",
+            "flow:",
+            "  - id: create-accounts",
+            "    name: \"建立項目\"",
+            "```",
+        ]
+        steps = uc_registry._extract_structured_flow_steps(lines)
+        assert steps == [{"id": "create-accounts", "name": "建立項目"}]
+
+    def test_uses_first_valid_block_when_multiple_present(self):
+        """模板同時提供欄位骨架（無實際步驟）與範例區塊時，採第一個滿足判準者。"""
+        lines = [
+            "```yaml",
+            "flow: []",
+            "```",
+            "```yaml",
+            "flow:",
+            "  - id: step-a",
+            "    name: \"步驟 A\"",
+            "```",
+        ]
+        steps = uc_registry._extract_structured_flow_steps(lines)
+        assert steps == [{"id": "step-a", "name": "步驟 A"}]
+
+
+class TestFormatStructuredMainFlow:
+    def test_formats_id_and_name(self):
+        steps = [{"id": "create-accounts", "name": "建立項目"}]
+        assert uc_registry._format_structured_main_flow(steps) == ["create-accounts: 建立項目"]
+
+    def test_skips_alternative_scenario_steps_with_branch_from(self):
+        steps = [
+            {"id": "first-inventory", "name": "首次盤點", "branch_from": None},
+            {
+                "id": "reject-invalid-input",
+                "name": "輸入驗證攔截",
+                "branch_from": "first-inventory",
+                "return_to": "first-inventory",
+            },
+        ]
+        assert uc_registry._format_structured_main_flow(steps) == ["first-inventory: 首次盤點"]
+
+    def test_truncates_to_max_steps(self):
+        steps = [{"id": f"step-{i}", "name": f"步驟{i}"} for i in range(1, 15)]
+        formatted = uc_registry._format_structured_main_flow(steps)
+        assert len(formatted) == uc_registry.MAX_MAIN_FLOW_STEPS
+        assert formatted[0] == "step-1: 步驟1"
+
+
+class TestGetUcSummaryDualTrack:
+    """0.2.1-W3-1061：get_uc_summary 雙軌策略——結構化區塊存在時走新路徑，
+    不存在時 fallback 既有散文解析，兩者互不覆蓋。
+    """
+
+    def test_uses_structured_flow_when_detail_file_has_block(self, tmp_path):
+        _write_spec(tmp_path, [("UC-01", "測試用例")])
+        _write_usecase_detail(
+            tmp_path,
+            "UC-01",
+            "示範",
+            "# UC-01: 測試用例\n\n"
+            "## 主要成功場景\n\n"
+            "```yaml\n"
+            "flow:\n"
+            "  - id: create-accounts\n"
+            "    name: \"建立項目\"\n"
+            "```\n",
+        )
+
+        summary = uc_registry.get_uc_summary("UC-01", str(tmp_path))
+
+        assert summary["main_flow"] == ["create-accounts: 建立項目"]
+        assert summary["is_section_summary"] is False
+
+    def test_falls_back_to_prose_when_detail_file_missing(self, tmp_path):
+        """docs/usecases/ 目錄不存在時（既有專案舊格式），沿用既有散文解析（既有路徑不變）。"""
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir(parents=True)
+        (docs_dir / "app-use-cases.md").write_text(
+            "## UC-01: 測試用例\n\n### 主要成功場景\n\n1. **散文步驟**\n",
+            encoding="utf-8",
+        )
+
+        summary = uc_registry.get_uc_summary("UC-01", str(tmp_path))
+
+        assert summary["main_flow"] == ["1. **散文步驟**"]
+        assert summary["is_section_summary"] is False
+
+    def test_falls_back_to_prose_when_detail_file_has_no_structured_block(self, tmp_path):
+        """detail 檔案存在但無結構化區塊（尚未回填）時，fallback 至散文解析。"""
+        _write_spec(tmp_path, [("UC-01", "測試用例")])
+        _write_usecase_detail(
+            tmp_path,
+            "UC-01",
+            "示範",
+            "# UC-01: 測試用例\n\n## 主要成功場景\n\n1. **散文步驟**\n（無結構化區塊）\n",
+        )
+        docs_dir = tmp_path / "docs"
+        (docs_dir / "app-use-cases.md").write_text(
+            "## UC-01: 測試用例\n\n### 主要成功場景\n\n1. **SSOT 散文步驟**\n",
+            encoding="utf-8",
+        )
+
+        summary = uc_registry.get_uc_summary("UC-01", str(tmp_path))
+
+        assert summary["main_flow"] == ["1. **SSOT 散文步驟**"]
+        assert summary["is_section_summary"] is False
+
+    def test_real_project_uc01_still_falls_back_pending_structured_backfill(self):
+        """回歸驗證：本專案 UC-01 詳細檔案尚無結構化 flow 區塊（待後續回填工作處理），
+        現況應仍走既有散文解析路徑，行為與雙軌策略導入前一致。
+        """
+        from doc_system.core.file_locator import FileLocator
+
+        project_root = FileLocator.get_project_root()
+        summary = uc_registry.get_uc_summary("UC-01", project_root)
+        assert summary is not None
+        assert len(summary["main_flow"]) > 0
+        # 既有散文解析格式為 "N. **步驟名稱**"；結構化格式為 "{id}: {name}"。
+        # 現況應命中前者，證明尚未誤判為已回填。
+        assert summary["main_flow"][0].startswith("1. **")
+
+
 class TestIsExemptPathWorktree:
     def test_exempts_worklog_path_when_file_outside_project_root(self, tmp_path):
         """worktree 情境：file_path 位於與 project_root 不同根的鏡射目錄下，

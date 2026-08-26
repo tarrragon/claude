@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.9"
-# dependencies = []
+# dependencies = ["pyyaml"]
 # ///
 """
 Active Dispatch Tracker Hook - PostToolUse (Agent)
@@ -54,9 +54,12 @@ from lib import (
     emit_hook_output,
     extract_tool_input,
     is_subagent_environment,
-    get_project_root,
     resolve_session_id,
 )
+# dispatch-active.json 為跨 worktree 全域狀態，用 git_utils 版
+# get_project_root（CLAUDE_PROJECT_DIR 導向，恆指主 repo），而非
+# lib.hook_base 的 worktree 感知版本（見 ARCH-BAL-020）
+from lib.git_utils import get_project_root
 
 from lib.dispatch_tracker import (
     record_dispatch,

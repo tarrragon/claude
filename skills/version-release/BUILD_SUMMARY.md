@@ -189,7 +189,7 @@ Pre-flight Check
 | 命令行解析      | [OK]   | `--help` 輸出          |
 | 版本偵測        | [OK]   | `check --version 0.19` |
 | Pre-flight 檢查 | [OK]   | `check` 命令           |
-| 彩色輸出        | [OK]   | 視覺檢查 ANSI 代碼     |
+| 彩色輸出        | [OK]   | 視覺檢查 ANSI 顏色碼   |
 | 預覽模式        | [OK]   | `release --dry-run`    |
 
 ### [OK] 輸出範例驗證

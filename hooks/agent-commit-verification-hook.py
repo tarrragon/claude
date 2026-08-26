@@ -49,11 +49,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from lib import (
     setup_hook_logging,
     read_json_from_stdin,
-    get_project_root,
     get_worktree_list as shared_get_worktree_list,
     get_uncommitted_files as shared_get_uncommitted_files,
     run_hook_safely,
 )
+# dispatch-active.json 查詢與 worktree/分支掃描皆為跨 worktree 全域狀態，
+# 用 git_utils 版 get_project_root（CLAUDE_PROJECT_DIR 導向，恆指主 repo），
+# 而非 lib.hook_base 的 worktree 感知版本（見 ARCH-BAL-020）
+from lib.git_utils import get_project_root
 
 from lib.dispatch_tracker import get_active_dispatches
 

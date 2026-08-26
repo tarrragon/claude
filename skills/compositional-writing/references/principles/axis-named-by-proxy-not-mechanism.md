@@ -46,5 +46,5 @@
 
 ## 跟其他原則的關係
 
-- [軸是對的而底下有未言明的實作前提](../../../multi-round-review/references/principles/unstated-implementation-premise-under-a-correct-axis.md)：那張是容器選了而沒說，這張是名字取錯。兩者可同時發生，修法順序是先讓前提顯形、再檢查軸名——前提換掉之後原本的軸名可能連帶失效。<!-- portability-allow: 條件式引用，目標 skill（multi-round-review）未必與本 skill 一同安裝 -->
+- [軸是對的而底下有未言明的實作前提](../../../multi-round-review/references/principles/unstated-implementation-premise-under-a-correct-axis.md)：那張是容器選了而沒說，這張是名字取錯。兩者可同時發生，修法順序是先讓前提顯形、再檢查軸名——前提換掉之後原本的軸名可能連帶失效。
 - [壓縮的結論會剝掉推導](./compressed-conclusion-strips-derivation.md)：方向相反。那張是推導被壓掉，這張是推導在、而名字比推導弱。

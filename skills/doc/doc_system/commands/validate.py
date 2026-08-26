@@ -37,6 +37,10 @@ FLAG_ROW_KEYWORDS = ["契約文件", "migration 治理"]
 # 判定「旗標未填」的佔位符樣式（模板留白），非空但仍視為未填
 _PLACEHOLDER_PATTERN = re.compile(r"^\{.*\}$")
 
+# EVT 型別必填 frontmatter 欄位（定案於節點型別表，見 doc SKILL.md）
+EVENT_REQUIRED_FIELDS = ["id", "name", "canonical_name", "category"]
+EVENT_VALID_CATEGORIES = ("domain_event", "process_event")
+
 
 def _extract_headers(text: str) -> list[str]:
     """取出所有 Markdown 標題行（# 開頭），保留原文供錨點比對。"""
@@ -128,10 +132,67 @@ def _validate_data_contract(text: str) -> list[str]:
     return missing
 
 
+def _validate_event(frontmatter: dict) -> list[str]:
+    """驗證 EVT frontmatter，回傳缺失項清單（空清單代表通過）。
+
+    producers/consumers 在建立模板時為選填，但 validate 對已存在的 EVT
+    文件強制檢查兩者皆非空——這是本型別的核心價值：缺任一端代表事件的
+    發送方或接收方未被記錄，交叉驗證正是為了在文件層攔截這類缺口。
+    """
+    missing: list[str] = []
+
+    for field in EVENT_REQUIRED_FIELDS:
+        if not frontmatter.get(field):
+            missing.append(f"缺少必填欄位: {field}")
+
+    category = frontmatter.get("category")
+    if category and category not in EVENT_VALID_CATEGORIES:
+        missing.append(
+            f"category 值不合法: {category}（須為 {' 或 '.join(EVENT_VALID_CATEGORIES)}）"
+        )
+
+    if not frontmatter.get("producers"):
+        missing.append("缺少 producer：EVT 必須至少一個 producer")
+    if not frontmatter.get("consumers"):
+        missing.append("缺少 consumer：EVT 必須至少一個 consumer")
+
+    return missing
+
+
+def _execute_event_validation(project_root: str, doc_id: str) -> None:
+    """EVT 型別的 validate 分派路徑（獨立於 data-contract 的章節錨點驗證）。"""
+    file_path_str = FileLocator(project_root).find_event(doc_id)
+    if file_path_str is None:
+        print(f"找不到文件: {doc_id}")
+        sys.exit(2)
+    file_path = Path(file_path_str)
+
+    frontmatter = parse_frontmatter(str(file_path))
+    if frontmatter is None:
+        print(f"無法解析 frontmatter: {file_path}")
+        sys.exit(2)
+
+    missing = _validate_event(frontmatter)
+    if not missing:
+        print(f"通過: {doc_id} 符合 EVT schema")
+        sys.exit(0)
+
+    print(f"驗證失敗: {doc_id} 缺少以下項目")
+    for item in missing:
+        print(f"  - {item}")
+    sys.exit(1)
+
+
 def execute(args: argparse.Namespace) -> None:
     """依 frontmatter subdomain 分派章節 schema 驗證。"""
     doc_id = args.doc_id
-    locator = FileLocator(FileLocator.get_project_root())
+    project_root = FileLocator.get_project_root()
+
+    if doc_id.upper().startswith("EVT-"):
+        _execute_event_validation(project_root, doc_id)
+        return
+
+    locator = FileLocator(project_root)
 
     file_path = locator.resolve_file(doc_id)
     if file_path is None:

@@ -8,6 +8,8 @@ Canonical Schema 清單一致性檢查 Hook 測試
 4. agent-definition-standard-details.md 行內 backtick 清單擷取
 5. 差集比對（缺漏 / 多餘 / 一致）
 6. 掃描彙整（scan_schema_drifts）與警告訊息格式化
+7. EMOJI_RANGES 三份副本交叉驗證（extract_emoji_ranges / _diff_emoji_ranges，
+   含真實三檔一致性 + 任一副本被修改後檢查具鑑別力的整合測試）
 """
 
 import importlib.util
@@ -74,6 +76,26 @@ AGENT_DEFINITION_MD = (
     "**Schema 章節清單**（來源 `.claude/pm-rules/ticket-body-schema.md`）："
     "`Task Summary` / `Problem Analysis` / `Completion Info`"
 )
+
+CONSTANTS_PY_WITH_EMOJI_RANGES = '''
+EMOJI_RANGES: tuple = (
+    (0x2600, 0x27BF),    # Miscellaneous Symbols
+    (0x1F300, 0x1F5FF),  # Miscellaneous Symbols and Pictographs
+)
+'''
+
+HOOK_EMOJI_RANGES_ALIGNED = '''
+EMOJI_RANGES = (
+    (0x2600, 0x27BF),    # Miscellaneous Symbols
+    (0x1F300, 0x1F5FF),  # Miscellaneous Symbols and Pictographs
+)
+'''
+
+HOOK_EMOJI_RANGES_DRIFTED = '''
+EMOJI_RANGES = (
+    (0x2600, 0x27BF),    # Miscellaneous Symbols
+)
+'''
 
 
 # ---------------------------------------------------------------------------
@@ -261,3 +283,113 @@ def test_format_drift_warning_includes_label_and_diff():
     assert "custom_h2_checker.py" in warning
     assert "Spawn Requests" in warning
     assert "PC-BAL-001" in warning
+
+
+# ---------------------------------------------------------------------------
+# extract_emoji_ranges（EMOJI_RANGES 三份副本交叉驗證）
+# ---------------------------------------------------------------------------
+
+
+def test_extract_emoji_ranges_preserves_order_with_type_annotation():
+    result = _hook.extract_emoji_ranges(CONSTANTS_PY_WITH_EMOJI_RANGES)
+    assert result == [(0x2600, 0x27BF), (0x1F300, 0x1F5FF)]
+
+
+def test_extract_emoji_ranges_without_type_annotation():
+    result = _hook.extract_emoji_ranges(HOOK_EMOJI_RANGES_ALIGNED)
+    assert result == [(0x2600, 0x27BF), (0x1F300, 0x1F5FF)]
+
+
+def test_extract_emoji_ranges_missing_returns_none():
+    assert _hook.extract_emoji_ranges("no constant here") is None
+
+
+# ---------------------------------------------------------------------------
+# _diff_emoji_ranges
+# ---------------------------------------------------------------------------
+
+
+def test_diff_emoji_ranges_consistent_returns_none():
+    canonical = [(0x2600, 0x27BF), (0x1F300, 0x1F5FF)]
+    actual = [(0x1F300, 0x1F5FF), (0x2600, 0x27BF)]  # 順序不同不影響一致性判定
+    assert _hook._diff_emoji_ranges("target", canonical, actual) is None
+
+
+def test_diff_emoji_ranges_detects_missing():
+    canonical = [(0x2600, 0x27BF), (0x1F300, 0x1F5FF)]
+    actual = [(0x2600, 0x27BF)]
+    result = _hook._diff_emoji_ranges("target", canonical, actual)
+    assert result is not None
+    assert result.missing == ["(0x1F300, 0x1F5FF)"]
+    assert result.extra == []
+
+
+def test_diff_emoji_ranges_detects_extra():
+    canonical = [(0x2600, 0x27BF)]
+    actual = [(0x2600, 0x27BF), (0x1F900, 0x1F9FF)]
+    result = _hook._diff_emoji_ranges("target", canonical, actual)
+    assert result is not None
+    assert result.missing == []
+    assert result.extra == ["(0x1F900, 0x1F9FF)"]
+
+
+# ---------------------------------------------------------------------------
+# scan_schema_drifts 整合：EMOJI_RANGES 交叉驗證具鑑別力
+# ---------------------------------------------------------------------------
+
+# 供整合測試共用：最小 CANONICAL_BODY_SECTIONS，避免 scan_schema_drifts 因
+# 找不到該常數而提前返回空清單（EMOJI_RANGES 檢查在其後才執行）。
+_MINIMAL_CANONICAL_SECTIONS = '''
+CANONICAL_BODY_SECTIONS: tuple = (
+    "Task Summary",
+)
+'''
+
+
+def _build_emoji_project(tmp_path: Path, *, drifted: bool) -> Path:
+    """建構聚焦 EMOJI_RANGES 檢查的最小專案結構（不含 VALIDATOR/文件目標，
+    對應下游清單缺席時 scan_schema_drifts 優雅略過的既有行為）。
+    """
+    claude_dir = tmp_path / ".claude"
+    _write(
+        claude_dir / _hook.CONSTANTS_PY,
+        _MINIMAL_CANONICAL_SECTIONS + CONSTANTS_PY_WITH_EMOJI_RANGES,
+    )
+    for label, rel_path in _hook.EMOJI_RANGES_TARGETS:
+        content = HOOK_EMOJI_RANGES_DRIFTED if drifted else HOOK_EMOJI_RANGES_ALIGNED
+        _write(claude_dir / rel_path, content)
+    return tmp_path
+
+
+def test_scan_schema_drifts_emoji_ranges_aligned_no_drift(tmp_path):
+    project_root = _build_emoji_project(tmp_path, drifted=False)
+
+    drifts = _hook.scan_schema_drifts(project_root)
+
+    emoji_labels = {label for label, _ in _hook.EMOJI_RANGES_TARGETS}
+    assert [d for d in drifts if d.label in emoji_labels] == []
+
+
+def test_scan_schema_drifts_detects_emoji_ranges_tampering(tmp_path):
+    """任一份 EMOJI_RANGES 副本被修改（少收一個範圍）後，檢查必須失敗，
+    證明交叉驗證具鑑別力而非恆綠。"""
+    project_root = _build_emoji_project(tmp_path, drifted=True)
+
+    drifts = _hook.scan_schema_drifts(project_root)
+
+    emoji_labels = {label for label, _ in _hook.EMOJI_RANGES_TARGETS}
+    emoji_drifts = [d for d in drifts if d.label in emoji_labels]
+    assert len(emoji_drifts) == len(_hook.EMOJI_RANGES_TARGETS)
+    for drift in emoji_drifts:
+        assert drift.missing == ["(0x1F300, 0x1F5FF)"]
+
+
+def test_scan_schema_drifts_real_project_emoji_ranges_consistent():
+    """真實三檔（constants.py / language-guard-hook.py /
+    askuserquestion-charset-guard-hook.py）現況一致，交叉驗證應無漂移。"""
+    project_root = Path(__file__).resolve().parents[3]
+
+    drifts = _hook.scan_schema_drifts(project_root)
+
+    emoji_labels = {label for label, _ in _hook.EMOJI_RANGES_TARGETS}
+    assert [d for d in drifts if d.label in emoji_labels] == []

@@ -59,6 +59,41 @@ def _format_violation(field, old, new, valid, kind) -> str:
     return f"{field} 值 {new!r} 不在正典（{', '.join(sorted(valid))}）"
 
 
+class CharsetGateViolation(Exception):
+    """字元驗證閘違規：欄位值含 emoji 或孤立 UTF-16 代理碼位被拒絕落盤
+    （language-constraints 規則 3 的寫入端防線）。
+
+    violations 為 (field_path, char, codepoint, kind) tuple 清單
+    （kind 為 "surrogate" 孤立代理碼位 / "emoji" emoji 字元），
+    供呼叫端組錯誤訊息或測試斷言。
+    """
+
+    def __init__(self, violations: List[tuple]):
+        self.violations = violations
+        detail = "; ".join(
+            _format_charset_violation(field_path, char, code, kind)
+            for field_path, char, code, kind in violations
+        )
+        super().__init__(f"字元驗證閘拒絕落盤：{detail}")
+
+
+def _format_charset_violation(field_path: str, char: str, code: int, kind: str) -> str:
+    """組單筆字元違規的人讀訊息（stderr / 例外共用）。
+
+    label 中英文交界補空格（中文排版慣例：CJK 與英文緊鄰時需空格分隔）——
+    「孤立 UTF-16 代理碼位」開頭為中文字元不需額外空格，「emoji 字元」開頭為
+    英文字母則需要空格（修正原輸出「含emoji 字元」缺空格的排版問題）。
+    """
+    label = "孤立 UTF-16 代理碼位" if kind == "surrogate" else "emoji 字元"
+    separator = " " if kind == "emoji" else ""
+    msg = f"{field_path} 含{separator}{label} {char!r} (U+{code:04X})"
+    if kind == "emoji":
+        from ticket_system import constants as _charset_constants
+
+        msg += f"，違反 {_charset_constants.CHARSET_GATE_RULE_REFERENCE}"
+    return msg
+
+
 # ============================================================================
 # Process-scoped ticket cache
 # ============================================================================
@@ -131,6 +166,163 @@ def _sanitize_surrogates_deep(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: _sanitize_surrogates_deep(v) for k, v in value.items()}
     return value
+
+
+# 字元閘載入時快照欄位名（_ 前綴：僅存在於記憶體 dict，save 時剝除不序列化）。
+# 與 ENUM_SNAPSHOT_FIELD 分開持有：枚舉閘只關注 3 個固定欄位，字元閘需涵蓋
+# 任意欄位的字串葉值，快照結構（扁平路徑 -> 字串值）不同，合併會混淆兩者的
+# changed-fields-only 比對基準。
+CHARSET_SNAPSHOT_FIELD = "_loaded_charset_snapshot"
+
+
+# 頂層識別性欄位不納入字元閘：id 已由 validate_ticket_id 限制字元集，
+# created/updated 為系統產生的日期字串，皆非使用者自由輸入的文字欄位；
+# 且每張票 id 必然互異，若納入快照會使不同 ticket 的快照恆不相等，讓
+# 「內容相同的兩張票」誤判為快照有別（既有 topic 選取測試已驗證此邊界）。
+_CHARSET_SNAPSHOT_EXCLUDED_KEYS = frozenset({"id", "created", "updated"})
+
+
+def _flatten_text_fields(data: Dict[str, Any], prefix: str = "") -> Dict[str, str]:
+    """遞迴攤平 ticket frontmatter 中的字串葉值，供字元閘 changed-fields-only 比對。
+
+    跳過 `_` 前綴的內部欄位（`_body` / `_path` / 兩個快照欄位本身），避免
+    快照自我巢狀或把 body 全文誤納入寫入端字元檢查（body 範圍屬 append-log
+    等既有機制，非本閘職責）。頂層 id/created/updated 另行排除（見
+    `_CHARSET_SNAPSHOT_EXCLUDED_KEYS`）。
+
+    Args:
+        data: ticket 資料字典（或巢狀 dict）
+        prefix: 遞迴時的路徑前綴（頂層呼叫免填）
+
+    Returns:
+        Dict[str, str]：{欄位路徑: 字串值}，路徑格式 "who.current"、
+        "where.files[0]" 等，供比對與違規訊息定位使用
+    """
+    flat: Dict[str, str] = {}
+    for key, value in data.items():
+        if isinstance(key, str) and key.startswith("_"):
+            continue
+        if not prefix and key in _CHARSET_SNAPSHOT_EXCLUDED_KEYS:
+            continue
+        path = f"{prefix}{key}"
+        if isinstance(value, str):
+            flat[path] = value
+        elif isinstance(value, dict):
+            flat.update(_flatten_text_fields(value, prefix=f"{path}."))
+        elif isinstance(value, list):
+            for idx, item in enumerate(value):
+                if isinstance(item, str):
+                    flat[f"{path}[{idx}]"] = item
+                elif isinstance(item, dict):
+                    flat.update(_flatten_text_fields(item, prefix=f"{path}[{idx}]."))
+    return flat
+
+
+def _find_charset_violations(value: str) -> List[Tuple[str, int, str]]:
+    """掃描單一字串值的孤立代理碼位與 emoji 違規（寫入端防線）。
+
+    合法配對逸出（高低代理位相鄰成對）先組合為單一星面字元，避免誤判為
+    代理位違規；組合後落在 emoji 範圍者計為 "emoji" 違規（不再重複計代理
+    位違規）。組合後仍落單的代理位（無法配對）計為 "surrogate" 違規。
+
+    Args:
+        value: 待檢查的字串值
+
+    Returns:
+        List[(char, codepoint, kind)]：kind 為 "surrogate" 或 "emoji"；
+        同碼位僅回報一次（去重）
+    """
+    combined = _SURROGATE_PAIR_RE.sub(_combine_surrogate_pair, value)
+    violations: List[Tuple[str, int, str]] = []
+    seen = set()
+    for char in combined:
+        code = ord(char)
+        if code in seen:
+            continue
+        if 0xD800 <= code <= 0xDFFF:
+            violations.append((char, code, "surrogate"))
+            seen.add(code)
+            continue
+        for start, end in _enum_constants.EMOJI_RANGES:
+            if start <= code <= end:
+                violations.append((char, code, "emoji"))
+                seen.add(code)
+                break
+    return violations
+
+
+def _collect_charset_violations(
+    ticket: Dict[str, Any],
+    snapshot: Optional[Dict[str, str]],
+) -> List[tuple]:
+    """收集字元違規：只驗「相對載入快照有變更」的欄位值（changed-fields-only）。
+
+    Why（化石豁免 / Never break userspace）：語料存在含 emoji 的化石票
+    （曾有子票 why 欄位混入 emoji 字元），全票驗證會讓任何不相關寫入
+    （append-log / 改其他欄位）對化石票炸錯。以載入快照比對，欄位值未被
+    本次操作改動即跳過；無快照（新建票，未經 load_ticket）→ 全欄位驗證。
+
+    Returns:
+        List[tuple]: (field_path, char, codepoint, kind)
+    """
+    current = _flatten_text_fields(ticket)
+    violations: List[tuple] = []
+    for field_path, value in current.items():
+        if snapshot is not None and value == snapshot.get(field_path):
+            continue  # 未被本次操作改動 → 化石豁免
+        for char, code, kind in _find_charset_violations(value):
+            violations.append((field_path, char, code, kind))
+    return violations
+
+
+def _log_charset_violations(
+    violations: List[tuple],
+    ticket: Dict[str, Any],
+    ticket_path: Path,
+) -> None:
+    """違規寫入 hook-logs/charset-gate.log（quality-baseline 規則 4：業務邏輯拒絕日誌必須）。"""
+    try:
+        from .paths import get_project_root
+        log_dir = get_project_root() / ".claude" / "hook-logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        entry_id = ticket.get("id", ticket_path.stem)
+        with open(log_dir / "charset-gate.log", "a", encoding="utf-8") as f:
+            for field_path, char, code, kind in violations:
+                f.write(
+                    f"{timestamp}\t{kind}\t{entry_id}\t{field_path}\t{char!r}\tU+{code:04X}\n"
+                )
+    except OSError as e:
+        # 量測日誌失敗不阻斷主流程（deny 已由呼叫端 raise 完成）；
+        # stderr 保留可觀測性（雙通道要求）
+        sys.stderr.write(
+            f"[charset-gate] 日誌寫入失敗（{type(e).__name__}: {e}），僅 stderr 警告\n"
+        )
+
+
+def _enforce_charset_gate(
+    ticket: Dict[str, Any],
+    snapshot: Optional[Dict[str, str]],
+    ticket_path: Path,
+) -> None:
+    """save_ticket 落盤前的字元驗證閘：拒絕含 emoji 或孤立代理碼位的欄位值
+    （language-constraints 規則 3 的寫入端防線）。
+
+    無 warn 過渡期，直接 deny：本閘防的是規則 3 已明文禁止的內容，非需經
+    量測誤報率才能收斂邊界的既有正典枚舉；化石票已由 changed-fields-only
+    比對豁免（見 `_collect_charset_violations`），不需額外量測期。
+    """
+    violations = _collect_charset_violations(ticket, snapshot)
+    if not violations:
+        return
+    _log_charset_violations(violations, ticket, ticket_path)
+    entry_id = ticket.get("id", ticket_path.stem)
+    for field_path, char, code, kind in violations:
+        sys.stderr.write(
+            f"[charset-gate] {entry_id} 拒絕落盤："
+            f"{_format_charset_violation(field_path, char, code, kind)}\n"
+        )
+    raise CharsetGateViolation(violations)
 
 
 def _snapshot_enum_fields(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -462,6 +654,9 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
         frontmatter["_path"] = str(ticket_path)
         # 枚舉閘載入時快照（save 時 changed-fields-only 比對基準）
         frontmatter[ENUM_SNAPSHOT_FIELD] = _snapshot_enum_fields(frontmatter)
+        # 字元閘載入時快照（save 時 changed-fields-only 比對基準；先於快照
+        # 欄位本身寫入，_flatten_text_fields 跳過 `_` 前綴故順序不影響結果）
+        frontmatter[CHARSET_SNAPSHOT_FIELD] = _flatten_text_fields(frontmatter)
         # 更新快取
         _ticket_cache[cache_key] = frontmatter
         return frontmatter
@@ -485,6 +680,8 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
 
             # 枚舉閘載入時快照（save 時 changed-fields-only 比對基準）
             ticket_content[ENUM_SNAPSHOT_FIELD] = _snapshot_enum_fields(ticket_content)
+            # 字元閘載入時快照（save 時 changed-fields-only 比對基準）
+            ticket_content[CHARSET_SNAPSHOT_FIELD] = _flatten_text_fields(ticket_content)
 
             # 更新快取
             _ticket_cache[cache_key] = ticket_content
@@ -566,6 +763,8 @@ def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
     path_str = ticket.pop("_path", None)
     # 枚舉閘快照：剝除避免序列化進 frontmatter；deny raise 時由 finally 恢復
     enum_snapshot = ticket.pop(ENUM_SNAPSHOT_FIELD, None)
+    # 字元閘快照：剝除避免序列化進 frontmatter；deny raise 時由 finally 恢復
+    charset_snapshot = ticket.pop(CHARSET_SNAPSHOT_FIELD, None)
 
     # 備份特殊欄位（需要在儲存時保留但不序列化）
     # 這些欄位代表 Ticket 的內部狀態，由系統自動管理
@@ -577,6 +776,9 @@ def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
     try:
         # 枚舉驗證閘：置於 try 內使 deny 模式 raise 時 finally 仍恢復備份欄位
         _enforce_enum_gate(ticket, enum_snapshot, ticket_path)
+        # 字元驗證閘：拒絕含 emoji / 孤立代理碼位的欄位值（同上，raise 時
+        # finally 仍恢復備份欄位）
+        _enforce_charset_gate(ticket, charset_snapshot, ticket_path)
 
         if ticket_path.suffix == ".md":
             # Markdown 格式：YAML frontmatter + body
@@ -626,6 +828,8 @@ def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
             ticket["_path"] = path_str
         if enum_snapshot is not None:
             ticket[ENUM_SNAPSHOT_FIELD] = enum_snapshot
+        if charset_snapshot is not None:
+            ticket[CHARSET_SNAPSHOT_FIELD] = charset_snapshot
 
     # 寫入成功後失效快取，確保後續讀取取得最新資料
     # 注意：這行在 try-finally 後執行，只有寫入成功才到達
@@ -634,6 +838,7 @@ def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
     # 落盤成功後刷新快照為當前值：同一 dict 再次 save 時不對已持久化的
     # 變更重複告警（快照語意 = 「相對最後一次成功落盤」）
     ticket[ENUM_SNAPSHOT_FIELD] = _snapshot_enum_fields(ticket)
+    ticket[CHARSET_SNAPSHOT_FIELD] = _flatten_text_fields(ticket)
 
 
 if __name__ == "__main__":

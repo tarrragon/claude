@@ -162,6 +162,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | TEST-BAL-007 | 以繞道旗標讓測試變綠後歸因為「環境問題」，掩蓋套件依賴宣告缺漏 | 高 | — |
 | TEST-BAL-008 | 自建 fixture 的資料形狀與真實資料分佈不同，使歸納式推導的退化案例測不出來 | 中 | — |
 | TEST-BAL-009 | mutation testing 的改回落在同一秒內，pyc 秒級 mtime 判準使還原後仍載入變異位元碼 | 中 | — |
+| TEST-BAL-010 | 測試以 in-process import 載入模組，遮蔽隔離執行環境（PEP 723 / venv / 容器）的依賴缺失，零依賴 hook 靜默 fail-open | 高 | — |
 
 ### 文件 (DOC)
 
@@ -233,6 +234,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | ARCH-BAL-017 | 排除政策只在寫入路徑生效，報告路徑對其零知識 | 中 | — |
 | ARCH-BAL-018 | 快照欄位的正確性定義在來源進入終態後反轉，單一同步策略必然對一端錯誤 | 中 | — |
 | ARCH-BAL-019 | 改變共享狀態的機制使依賴該狀態的其他機制靜默失效 | 高 | v0.2.1 |
+| ARCH-BAL-020 | 同名解析函式存在兩份且優先序相反，呼叫端無從得知拿到哪一份；單一根因散射為多個看似不相干的症狀 | 高 | — |
 
 ### 程式碼品質 (CQ)
 
@@ -358,6 +360,8 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | IMP-BAL-011 | 刪除工具後的殘留引用在代理人自動載入載體上是行為缺陷，且被刪工具承擔的職責未隨引用一併交接 | 高 | v0.2.1 |
 | IMP-BAL-012 | 合併多套標記語彙的正則使下游無法辨識來源，據其產出的清理任務會靜默破壞另一套機制 | 高 | 0.2.1-W3 |
 | IMP-BAL-013 | sort/uniq 在預設 locale 下依 collation 合併相異 CJK 字串，靜默造成統計失準 | 中 | v0.2.1 |
+| IMP-BAL-014 | 讀取端 sanitizer 修補記憶體但不寫回，損毀資料永久留存且警告退化為背景噪音 | 中 | v0.2.1 |
+| IMP-BAL-015 | 子行程繼承環境變數使 cwd 隔離失效，且僅在呼叫端處於該環境時重現 | 高 | v0.2.1 |
 
 ### 流程 (PROC)
 

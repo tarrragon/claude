@@ -367,7 +367,7 @@ TICKET_ID_PATTERN = r"^(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)$"
 | ---- | ---------------------------------------- |
 | IMP  | 實作、新增、建立、implement、add、create |
 | ADJ  | 重構、優化、修復、調整、refactor、fix    |
-| DOC  | 文件、文檔、documentation、記錄          |
+| DOC  | 文件、文檔、documentation、記錄 <!-- banned-term-exempt: keyword synonym enumeration for type matching --> |
 | RES  | 研究、探索、評估、research               |
 | ANA  | 分析、調查、analyze、investigate         |
 

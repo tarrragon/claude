@@ -43,6 +43,7 @@ from ..constants import (
 from .file_lock import file_lock
 from .parser import load_ticket, save_ticket
 from .paths import get_ticket_path
+from .relatedto_index import get_symmetric_related_to
 from .ticket_validator import extract_version_from_ticket_id
 
 
@@ -339,11 +340,46 @@ def _filter_acceptance_with_ac_parser(
     return filtered
 
 
+def _collect_related_to_symmetric(target: dict, forward_raw: Any) -> list:
+    """relatedTo 儲存單向，經 relatedto_index 做 1-hop symmetric union（禁遞移）。
+
+    裁決：union 由消費端負責，避免單票查詢退化為單向。
+    無法解析 target 版本 / id 時降級為僅 forward（不阻斷抽取流程）。
+    """
+    if isinstance(forward_raw, str):
+        forward = [forward_raw] if forward_raw.strip() else []
+    elif isinstance(forward_raw, list):
+        forward = [item for item in forward_raw if isinstance(item, str) and item.strip()]
+    else:
+        forward = []
+
+    target_id = target.get("id")
+    if not target_id:
+        return forward
+
+    try:
+        version = extract_version_from_ticket_id(target_id)
+    except Exception:
+        version = None
+    if not version:
+        return forward
+
+    try:
+        return get_symmetric_related_to(version, target_id, forward)
+    except Exception:
+        # non-raising 契約：反向索引查詢失敗不阻斷抽取，降級為僅 forward
+        return forward
+
+
 def _collect_source_ids(target: dict) -> list:
     """依 SOURCE_PRIORITY + YAML 出現順序收集 (source_id, source_kind)。"""
     collected: list = []
     for kind in SOURCE_PRIORITY:
         v = target.get(SOURCE_KIND_FRONTMATTER_KEYS[kind])
+        if kind == "related_to":
+            for item in _collect_related_to_symmetric(target, v):
+                collected.append((item, kind))
+            continue
         if v is None:
             continue
         if isinstance(v, str):

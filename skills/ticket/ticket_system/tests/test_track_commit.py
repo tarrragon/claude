@@ -7,6 +7,9 @@
 4. ticket 不存在時回傳錯誤。
 5. 空 tree 短路視為成功（無需提交）。
 6. 提交失敗時印出錯誤並回傳非零。
+7. 目錄型 where.files 宣告：傳個別檔名可成功提交（0.2.1-W3-1090）。
+8. 目錄型 where.files 宣告：傳目錄本身會展開為實際變更檔案後提交，
+   commit_files_isolated 恆收到具體檔案清單而非目錄字面值（0.2.1-W3-1090）。
 """
 import argparse
 from unittest.mock import patch
@@ -191,3 +194,67 @@ class TestBaseDirIndependentFromCwd:
 
         assert rc == 0
         mock_commit.assert_called_once()
+
+
+class TestDirectoryDeclarationScope:
+    """0.2.1-W3-1090：目錄型 where.files 宣告下，個別檔名與目錄本身兩種
+    呼叫形式皆可成功提交；commit_files_isolated 恆收到具體檔案清單。"""
+
+    def test_individual_file_under_declared_directory_accepted(self, capsys):
+        """宣告 `a/dir`（目錄），傳入其下個別檔名應通過範圍檢查並提交。"""
+        declared = ["a/dir"]
+        with patch.object(track_commit, "load_ticket", return_value=_ticket(declared)), \
+             patch.object(track_commit, "resolve_project_cwd", return_value="/repo"), \
+             patch("os.getcwd", return_value="/repo"), \
+             patch("os.path.isdir", return_value=False), \
+             patch.object(
+                 track_commit,
+                 "commit_files_isolated",
+                 return_value={"status": "committed", "commit_sha": "aaa111", "error": None},
+             ) as mock_commit:
+            rc = track_commit.execute_commit(_args(["a/dir/file.py"]), _VERSION)
+
+        assert rc == 0
+        mock_commit.assert_called_once()
+        called_paths, _ = mock_commit.call_args[0]
+        assert called_paths == ["a/dir/file.py"]
+
+    def test_directory_itself_expands_to_concrete_changed_files(self, capsys):
+        """宣告 `a/dir`（目錄），傳入目錄本身應展開為 git 回報的實際變更
+        檔案後才交給 commit_files_isolated——後者恆收到具體檔案清單，不
+        收到目錄字面值，故自我驗證不因目錄展開而誤判。"""
+        declared = ["a/dir"]
+        status_output = " M a/dir/file1.py\n?? a/dir/file2.py\n"
+        with patch.object(track_commit, "load_ticket", return_value=_ticket(declared)), \
+             patch.object(track_commit, "resolve_project_cwd", return_value="/repo"), \
+             patch("os.getcwd", return_value="/repo"), \
+             patch("os.path.isdir", return_value=True), \
+             patch.object(track_commit, "_git_status_porcelain", return_value=status_output), \
+             patch.object(
+                 track_commit,
+                 "commit_files_isolated",
+                 return_value={"status": "committed", "commit_sha": "bbb222", "error": None},
+             ) as mock_commit:
+            rc = track_commit.execute_commit(_args(["a/dir"]), _VERSION)
+
+        assert rc == 0
+        mock_commit.assert_called_once()
+        called_paths, _ = mock_commit.call_args[0]
+        assert set(called_paths) == {"a/dir/file1.py", "a/dir/file2.py"}
+        for p in called_paths:
+            assert "a/dir" != p  # 恆為具體檔案，非目錄字面值
+
+    def test_directory_with_no_changed_files_rejected(self, capsys):
+        """宣告的目錄下 git status 無任何變更檔案時，無可提交內容，拒絕
+        （不將目錄字面值傳給 commit_files_isolated）。"""
+        declared = ["a/dir"]
+        with patch.object(track_commit, "load_ticket", return_value=_ticket(declared)), \
+             patch.object(track_commit, "resolve_project_cwd", return_value="/repo"), \
+             patch("os.getcwd", return_value="/repo"), \
+             patch("os.path.isdir", return_value=True), \
+             patch.object(track_commit, "_git_status_porcelain", return_value=""), \
+             patch.object(track_commit, "commit_files_isolated") as mock_commit:
+            rc = track_commit.execute_commit(_args(["a/dir"]), _VERSION)
+
+        assert rc == 1
+        mock_commit.assert_not_called()

@@ -28,14 +28,15 @@ assert _TOP_LEVEL_KEYS == {
     "mappings",
     "domain_bundle_tests",
     "data_contract_tests",
+    "runtime_tests",
     "last_updated",
 }
 _VERSION_KEY = "version"
 _MAPPINGS_KEY = "mappings"
-# 三軸中另外兩軸（水平 domain 規則軸 + 資料契約軸）為按需人工填寫的骨架，
-# batch-init 僅確保頂層鍵存在（避免 conformance 測試因缺鍵失敗），
-# 內容留待專案自行依 domain-map.md / SPEC 資料契約條目補齊，
-# 不跨專案抄他專案既有條目。
+# 四軸中另外三軸（水平 domain 規則軸、資料契約軸、runtime on-device 軸）
+# 為按需人工填寫的骨架，batch-init 僅確保頂層鍵存在（避免 conformance
+# 測試因缺鍵失敗），內容留待專案自行依 domain-map.md / SPEC 資料契約條目 /
+# integration_test/ 盤點結果補齊，不跨專案抄他專案既有條目。
 _DOMAIN_BUNDLE_TESTS_KEY = "domain_bundle_tests"
 _DATA_CONTRACT_TESTS_KEY = "data_contract_tests"
 _LAST_UPDATED_KEY = "last_updated"
@@ -122,7 +123,9 @@ def _append_traceability(traceability_file: Path, spec_id: str, uc_id: str, titl
     if traceability_file.is_file():
         data = yaml.safe_load(traceability_file.read_text(encoding="utf-8")) or {}
     else:
-        # 新建檔案 skeleton：三軸頂層鍵一律存在（對齊 TRACEABILITY_SCHEMA）。
+        # 新建檔案 skeleton：mappings / domain_bundle_tests / data_contract_tests
+        # 三軸頂層鍵一律存在（對齊 TRACEABILITY_SCHEMA）；runtime_tests 為選補軸
+        # （需先盤點 integration_test/ 是否符合零結構替身定義），不在此自動建立。
         # domain_bundle_tests / data_contract_tests 為空骨架，待人工依本專案
         # domain-map.md / SPEC 資料契約條目逐條填寫，不跨專案抄他專案內容。
         data = {

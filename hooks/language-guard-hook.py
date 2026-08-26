@@ -95,7 +95,10 @@ KATAKANA_RANGE_START = 0x30A0
 KATAKANA_RANGE_END = 0x30FF
 
 # Emoji unicode 範圍（W17-068 新增；命中即警告）
-# 範圍對齊 askuserquestion-charset-guard-hook.py EMOJI_RANGES，保持一致性
+# 下游副本：建立端為 .claude/skills/ticket/ticket_system/constants.py 的
+# EMOJI_RANGES（canonical，見該檔註解與 tool-output-trust-rules.md 規則 6）。
+# 一致性由 canonical-schema-consistency-check-hook.py（SessionStart）程式
+# 交叉驗證，不再僅依本注釋維持（language-constraints 規則 5）。
 EMOJI_RANGES = (
     (0x2600, 0x27BF),    # Miscellaneous Symbols
     (0x1F300, 0x1F5FF),  # Miscellaneous Symbols and Pictographs

@@ -161,6 +161,8 @@ CC v2.1.157 起 `EnterWorktree` 工具支援**在 session 中途切換** Claude-
 1. 在專案層文件（`CLAUDE.md` 對應章節或 `scripts/` 下的腳本）記錄本專案 worktree 建立後所需的前置命令
 2. 派發需在 worktree 內執行測試/建置的 agent 時，在派發 prompt 引用該文件——見 `.claude/references/agent-dispatch-template.md`「環境前置欄位」
 
+**例外：可自動補齊的 gitignore 排除產物**——當缺漏檔案內容為固定樣板（無機器相依內容，可用固定字串重建，非真正的本機產物）時，`worktree_manager.py` 的 `create` 子命令會直接寫入補齊，不需 agent 手動介入。目前涵蓋：macOS 平台的 `macos/Flutter/Flutter-Debug.xcconfig`、`Flutter-Release.xcconfig`（僅 `#include` 相對路徑，Flutter 官方樣板固定內容）。此類補齊僅在 worktree 內偵測到對應平台目錄（如 `macos/Flutter/`）時才動作，對不含該平台的專案為無操作（no-op），不違反上述「不列舉專案專屬命令」原則——此為程式碼層的 opinionated default，非文件字面列舉。CocoaPods（`Pods/` 目錄）因需網路且耗時，不自動執行 `pod install`，`create` 完成時僅輸出提示指令。
+
 ---
 
 ## 快速開始

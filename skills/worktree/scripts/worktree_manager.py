@@ -28,6 +28,7 @@ try:
         TICKET_COMPLETED_STATUS,
         CLEANUP_OUTPUT_WIDTH,
         BRANCH_FORCE_DELETE_FLAG,
+        MACOS_XCCONFIG_TEMPLATES,
     )
     from .messages import MergeMessages, CleanupMessages, CommonMessages, CreateMessages
 except ImportError:
@@ -42,6 +43,7 @@ except ImportError:
         TICKET_COMPLETED_STATUS,
         CLEANUP_OUTPUT_WIDTH,
         BRANCH_FORCE_DELETE_FLAG,
+        MACOS_XCCONFIG_TEMPLATES,
     )
     from messages import MergeMessages, CleanupMessages, CommonMessages, CreateMessages
 
@@ -543,6 +545,45 @@ def _merge_main_baseline(worktree_path: str, base: str) -> bool:
     return False
 
 
+def _sync_macos_xcconfig(worktree_path: str) -> None:
+    """補齊 gitignored 的 macOS xcconfig 建置檔案。
+
+    macos/Flutter/*.xcconfig 被 .gitignore 的 /macos/ 規則排除，git worktree
+    add 建立的新 worktree 不會帶有這兩個檔案，導致 flutter build macos /
+    flutter test -d macos 找不到 include 檔而失敗。內容為固定的 Flutter
+    樣板（僅 #include 相對路徑，無機器相依內容），故用固定內容寫入補齊。
+
+    僅在 worktree 內確實存在 macos/Flutter/ 目錄（即本次 worktree 涵蓋
+    macOS 平台）時才動作，避免對不需要 macOS 建置的 worktree 產生無意義
+    輸出。已存在的檔案不覆寫，保留使用者可能的本機自訂內容。
+
+    CocoaPods（Pods/ 目錄）刻意不在此自動執行 pod install：該操作需要
+    網路且耗時，多數 worktree 不會跑 macOS build，預設路徑不應為少數
+    案例支付全體成本；改為輸出提示，需要時由使用者自行執行。
+
+    Args:
+        worktree_path: 新建 worktree 的路徑
+    """
+    macos_flutter_dir = os.path.join(worktree_path, "macos", "Flutter")
+    if not os.path.isdir(macos_flutter_dir):
+        return
+
+    written = []
+    for filename, content in MACOS_XCCONFIG_TEMPLATES.items():
+        target_path = os.path.join(macos_flutter_dir, filename)
+        if os.path.exists(target_path):
+            continue
+        with open(target_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        written.append(filename)
+
+    if written:
+        print(CreateMessages.MACOS_XCCONFIG_SYNCED.format(files="、".join(written)))
+
+    if not os.path.isdir(os.path.join(worktree_path, "macos", "Pods")):
+        print(CreateMessages.MACOS_PODS_HINT.format(worktree_path=worktree_path))
+
+
 def _merge_blocked_by_branches(ticket_id: str, worktree_path: str) -> None:
     """
     合併 blockedBy 依賴的 feat 分支到新建的 worktree
@@ -657,6 +698,9 @@ def _cmd_create_validate_and_execute(
 
     # 成功輸出
     _cmd_create_print_success(ticket_id, branch_name, base, worktree_path)
+
+    # 補齊 gitignored 的 macOS 建置前置檔案（xcconfig）
+    _sync_macos_xcconfig(worktree_path)
 
     # 確定性同步 main（issue #77 決議 A）：衝突時中止，不疊加後續合併
     if not _merge_main_baseline(worktree_path, base):

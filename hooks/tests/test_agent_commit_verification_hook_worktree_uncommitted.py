@@ -260,3 +260,13 @@ class TestMainIntegration:
 
         captured = capsys.readouterr()
         assert captured.out.strip() == ""
+
+
+def test_uses_git_utils_get_project_root_for_dispatch_and_scan():
+    """dispatch-active.json 查詢與 worktree/分支掃描皆為跨 worktree 全域狀態，
+    本 hook 的 get_project_root 必須來自 lib.git_utils（CLAUDE_PROJECT_DIR
+    導向，恆指主 repo），而非 lib.hook_base 的 worktree 感知版本
+    （0.2.1-W3-1093 / ARCH-BAL-020）。"""
+    from lib import git_utils
+
+    assert hook.get_project_root is git_utils.get_project_root

@@ -57,7 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     create_parser = subparsers.add_parser("create", help="從模板建立新文件")
     create_parser.add_argument(
         "type",
-        choices=["proposal", "spec", "usecase", "data-contract"],
+        choices=["proposal", "spec", "usecase", "data-contract", "event"],
         help="文件類型",
     )
     create_parser.add_argument("id", nargs="?", default=None, help="文件 ID（省略則自動分配下一個序號）")
@@ -65,15 +65,20 @@ def build_parser() -> argparse.ArgumentParser:
     create_parser.add_argument(
         "--domain",
         default=None,
-        help="spec/data-contract 的 domain 子目錄（僅需要 domain 的類型需要）",
+        help="spec/data-contract/event 的 domain 子目錄（僅需要 domain 的類型需要）",
     )
 
     # next-id
     next_id_parser = subparsers.add_parser("next-id", help="唯讀查詢下一個可分配的 ID（不建立檔案）")
     next_id_parser.add_argument(
         "type",
-        choices=["proposal", "spec", "usecase", "data-contract"],
+        choices=["proposal", "spec", "usecase", "data-contract", "event"],
         help="文件類型",
+    )
+    next_id_parser.add_argument(
+        "--domain",
+        default=None,
+        help="event 型別為 domain-scoped 配號，必填",
     )
 
     # batch-init

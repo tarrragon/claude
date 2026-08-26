@@ -1,3 +1,50 @@
+## [2.40.0] - 2026-08-26
+
+### Summary
+feat: 落成文件圖譜型別表 Python 常數 SSOT; feat: uses_uv 判準優先讀 settings.json 登記方式; feat: 註冊 skill 禁用詞掃描 hook 至 SessionStart (+34 more)
+
+Changes: 10 feat, 1 refactor, 7 fix, 13 docs, 3 chore, 2 test, 1 other
+
+- feat: 落成文件圖譜型別表 Python 常數 SSOT
+- feat: uses_uv 判準優先讀 settings.json 登記方式
+- feat: 註冊 skill 禁用詞掃描 hook 至 SessionStart
+- feat: 新增 skill 禁用詞掃描 hook（use vs mention 判別）
+- feat: EMOJI_RANGES 三份副本改由程式交叉驗證
+- feat: 擴充 hook 依賴檢查器解析 lib 遞移依賴
+- feat: worktree create 自動補齊 macOS gitignored xcconfig
+- feat: ticket 寫入端新增 emoji 與代理碼位字元閘
+- feat: 接線 cli.py 的 event choices，補真實 argv 解析路徑測試
+- feat: 新增 EVT 領域事件文件型別（模板/配號/producer-consumer 交叉驗證）
+- refactor: 合併 validate.py._find_event_file 與 FileLocator 重複邏輯
+- fix: 統一四個 dispatch-active.json 呼叫端使用 git_utils.get_project_root
+- fix: 修復 ticket track commit 無法處理目錄型 where.files 宣告
+- fix: uc-reference-validation-hook 尊重明確 CLAUDE_PROJECT_DIR 覆寫
+- fix: 對齊 uv 隔離判準並修正 CLAUDE_PROJECT_DIR 環境變數繼承缺陷
+- fix: 補齊 traceability schema 第四軸 runtime_tests 並改頂層鍵驗證為必要/選補語意
+- fix: 修正 BUILD_SUMMARY.md ANSI 禁用詞用法
+- fix: active-dispatch-tracker-hook 補 pyyaml PEP 723 依賴
+- docs: 新建跨 session 協調區完整規則檔
+- docs: 跨 session 協調區外移閾值改指名偵測承擔者
+- docs: 記錄 ARCH-BAL-020 並升級 1093 為 P1
+- docs: 新增 IMP-BAL-015 環境變數繼承使 cwd 隔離失效
+- docs: 落地 relatedTo 方向性裁決——語意對稱、儲存單向、消費端 1-hop symmetric union
+- docs: 新增 IMP-BAL-014 讀取端 sanitizer 不寫回
+- docs: 記錄 TEST-BAL-010 並建隔離環境測試票
+- docs: usecase 模板新增結構化 flow 區塊，uc_registry 雙軌解析
+- docs: 合併 compositional-writing 與發佈庫雙向分歧，收入 5 個新 principle 卡並攔截禁用詞回歸
+- docs: 改寫 wrap-decision 兩份機制文件的框架路徑引用為通用敘述
+- docs: 合併 wrap-decision 與發佈庫雙向分歧（4 檔）
+- docs: 移除已搬移至 references/ 的舊路徑檔案
+- docs: 提升 pseudo-widen-guard 與 source-verification 至 wrap-decision 正規 references 層
+- chore: dispatch 記錄
+- chore: 同步 canonical 審查與寫作 skill 並重修禁用詞
+- chore: --clean 傳播 6 個孤兒檔刪除後回寫版本 2.39.1
+- test: 補 UC hook 隔離 venv 生產啟動方式測試（TEST-BAL-010）
+- test: uc_registry 結構化 flow 雙軌解析測試
+- other: 實作 relatedTo 反向索引，整合 context bundle extractor 的 1-hop symmetric union
+
+---
+
 ## [2.39.1] - 2026-08-24
 
 ### Summary

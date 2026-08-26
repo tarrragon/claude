@@ -438,6 +438,10 @@
           },
           {
             "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/skill-banned-term-scan-hook.py"
+          },
+          {
+            "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/skill-shadowing-check-hook.py"
           },
           {

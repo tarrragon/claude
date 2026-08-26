@@ -21,9 +21,10 @@ if __name__ == "__main__":
 
 import argparse
 import os
+import subprocess
 from typing import List
 
-from ticket_system.lib.file_conflict import write_files
+from ticket_system.lib.file_conflict import files_intersect, write_files
 from ticket_system.lib.git_ops import commit_files_isolated
 from ticket_system.lib.messages import ErrorMessages, format_error
 from ticket_system.lib.project_root import resolve_project_cwd
@@ -41,13 +42,68 @@ def _to_repo_relative(path: str, repo_root: str, base_dir: str) -> str:
 def _out_of_scope_files(
     input_files: List[str], declared: set, repo_root: str, base_dir: str
 ) -> List[str]:
-    """回傳 input_files 中未落在 declared（where.files 寫入子集）內的原始輸入項。"""
+    """回傳 input_files 中未落在 declared（where.files 寫入子集）內的原始輸入項。
+
+    複用 file_conflict.files_intersect 做路徑段前綴比對（非集合精確字串
+    比對）：declared 內含目錄型宣告（如某測試目錄路徑）時，其下個別檔名
+    視為在範圍內——精確字串比對永遠不會命中目錄字面值，是原缺陷成因。
+    """
     out_of_scope = []
     for orig in input_files:
         normalized = _to_repo_relative(orig, repo_root, base_dir)
-        if normalized not in declared:
+        if not any(files_intersect(normalized, d) for d in declared):
             out_of_scope.append(orig)
     return out_of_scope
+
+
+def _git_status_porcelain(repo_root: str) -> str:
+    """回傳 `git status --porcelain` 原始輸出，供展開目錄型宣告為具體
+    變更檔案清單。獨立為模組層函式以便測試 monkeypatch。"""
+    result = subprocess.run(
+        ["git", "status", "--porcelain=v1", "--no-renames"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout
+
+
+def _expand_directory_to_changed_files(directory: str, repo_root: str) -> List[str]:
+    """將目錄型宣告展開為該目錄底下、working tree 對 HEAD 有變更（含未
+    追蹤）的具體檔案清單。
+
+    commit_files_isolated 的自我驗證比對 `git diff --name-only` 的實際
+    變更檔案，目錄字面值永遠不會出現在該輸出中，直接傳目錄本身必然自我
+    驗證失敗。在呼叫端先展開為具體檔案，讓 commit_files_isolated 恆收到
+    與其自我驗證邏輯同構的輸入，不改動該函式既有的精確比對契約（隔離
+    索引 CAS 三要件之一）。
+    """
+    status_out = _git_status_porcelain(repo_root)
+    changed = []
+    for line in status_out.splitlines():
+        if len(line) < 4:
+            continue
+        path = line[3:].strip()
+        if files_intersect(path, directory):
+            changed.append(path)
+    return changed
+
+
+def _expand_directories(
+    input_files: List[str], repo_root: str, base_dir: str
+) -> List[str]:
+    """將 input_files 中屬目錄的項目展開為具體變更檔案，其餘項目原樣
+    保留。回傳恆為具體檔案路徑清單（可能為空，呼叫端需另行判斷）。"""
+    expanded: List[str] = []
+    for orig in input_files:
+        normalized = _to_repo_relative(orig, repo_root, base_dir)
+        abs_path = os.path.join(repo_root, normalized)
+        if os.path.isdir(abs_path):
+            expanded.extend(_expand_directory_to_changed_files(normalized, repo_root))
+        else:
+            expanded.append(normalized)
+    return expanded
 
 
 def execute_commit(args: argparse.Namespace, version: str) -> int:
@@ -93,9 +149,16 @@ def execute_commit(args: argparse.Namespace, version: str) -> int:
         )
         return 1
 
-    normalized_input = [
-        _to_repo_relative(p, repo_root, base_dir) for p in args.files
-    ]
+    # 目錄型輸入展開為具體變更檔案：commit_files_isolated 的自我驗證比對
+    # 精確檔案清單，目錄字面值不會出現在該比對結果中（見
+    # _expand_directory_to_changed_files docstring）。展開後恆為具體檔案。
+    normalized_input = _expand_directories(args.files, repo_root, base_dir)
+    if not normalized_input:
+        print(
+            "[ERROR] 宣告範圍內的目錄底下無任何變更檔案，無可提交內容，拒絕提交：\n"
+            + "\n".join(f"  - {f}" for f in args.files)
+        )
+        return 1
 
     result = commit_files_isolated(normalized_input, args.message, cwd=repo_root)
     status = result["status"]

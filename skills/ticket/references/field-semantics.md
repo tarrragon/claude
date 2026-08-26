@@ -94,17 +94,38 @@
 
 ### relatedTo（陣列，array of IDs）
 
-**語意**：相關引用（弱關聯 metadata）。
+**語意**：相關引用（弱關聯 metadata）。語意對稱、資料單向——A 與 B 互為關聯是雙向事實，但欄位只在單側寫入。不對稱源於建立順序：後建的票能引用先建的票，先建票建立當下對方尚不存在，非語意上真的只有一方相關。
 
 | 屬性 | 值 |
 |------|---|
-| 雙向欄位 | 無（純單向） |
+| 雙向欄位 | 無（儲存純單向；消費端須做 1-hop symmetric union，見下方「消費端讀取規則」） |
 | 阻擋語意 | 不阻擋任何流程 |
-| Runqueue 影響 | 無 |
-| 業務語意 | 純 metadata 引用（類似 markdown 的 see-also） |
+| Runqueue 影響 | 無（不影響排程過濾；context 供給影響見下方「context bundle 合法消費端」） |
+| 業務語意 | 純 metadata 引用（類似 markdown 的 see-also），同時是 context bundle 的合法抽取來源（見下方） |
 | CLI 寫入 | `--related-to`、`set-related-to --add/--remove` |
 
-> **重要**：`relatedTo` 是弱關聯，**不**作為任何流程訊號。「兄弟 A 的 relatedTo 引用兄弟 B → B 應為 A 的父」這種「升格訊號」推論已棄用——弱關聯就是弱關聯，不從中推論結構意圖。
+> **重要**：`relatedTo` 不影響排程與阻擋（非時序訊號、非血緣訊號），但作為 context bundle 的合法抽取來源會影響 context 供給（見下方「context bundle 合法消費端」）。「兄弟 A 的 relatedTo 引用兄弟 B → B 應為 A 的父」這種「升格訊號」推論仍舊棄用——弱關聯就是弱關聯，不從中推論結構意圖。
+
+#### 消費端讀取規則：1-hop symmetric union（強制）
+
+任何工具或流程讀取某票的 relatedTo 關聯集合時，必須同時查詢兩個方向：
+
+1. 該票 frontmatter 的 `relatedTo` 清單（正向邊）
+2. 全庫中 `relatedTo` 引用了該票 ID 的其他票（反向邊）
+
+兩者聯集才是完整關聯集合。只讀正向邊會漏失單向未回填的關聯——實測 1246 票語料，167 票使用 relatedTo、226 條有向邊，僅 15 對互指對稱（30 條有向邊，對稱率 13.3%），196 條為單向；若消費端只讀正向邊，約 87% 的關聯不會被發現。
+
+**禁止遞移**：union 僅取 1-hop（直接引用/被引用），不可沿 relatedTo 鏈遞移展開——A relatedTo B、B relatedTo C，不得推論 A 與 C 相關。relatedTo 是逐對宣告的弱關聯，遞移會把「A、B 同屬一批兄弟票」誤推成「A 與 C 也相關」，引入原本不存在的關聯。
+
+> 裁決（2026-08 定案）：維持儲存單向 + 消費端 1-hop symmetric union，避免下游工具漏失多數未回填關聯，同時不承擔改為無向儲存所需的既有邊回填成本。反向索引工具實作為獨立追蹤項目，不在本檔範圍。
+
+#### context bundle 合法消費端
+
+`ticket_system/lib/context_bundle_extractor.py` 的 `SourceKind = Literal["source_ticket", "blocked_by", "related_to"]` 將 relatedTo 納入 context bundle 抽取來源；抽取時透過 `_collect_related_to_symmetric` 呼叫 `relatedto_index.get_symmetric_related_to`，落實上方「消費端讀取規則」的 1-hop symmetric union。
+
+此消費不影響排程與阻擋——Runqueue 過濾與 complete 阻擋皆與 relatedTo 無關，見上方「阻擋語意」「Runqueue 影響」——僅影響 context 供給：被 relatedTo 引用的票，其 what/why 摘要可能被抽入引用方的 context bundle。
+
+> 裁決（2026-08 定案）：relatedTo 是 context bundle 的合法消費來源，非規範外行為。本節取代先前「relatedTo 不作為任何流程訊號」中隱含的「不被任何工具消費」推論——流程訊號（排程、阻擋、血緣）與 context 供給是兩件事，前者維持無，後者已由既有實作承擔。
 
 ---
 
@@ -194,10 +215,12 @@ Q1: 上游 ticket 的結論「要求」此 ticket 落地嗎？
 - `.claude/skills/ticket/references/track-command.md` — `set-blocked-by` / `set-related-to` 操作說明
 - `.claude/skills/ticket/SKILL.md` — `tree`/`chain`/`deps` 命令對血緣與衍生的視覺化分流
 - `.claude/error-patterns/process-compliance/ARCH-017` — 兄弟任務隱藏依賴反模式
+- `.claude/skills/ticket/ticket_system/lib/context_bundle_extractor.py` — relatedTo 的 context bundle 消費端實作（`SourceKind` / `_collect_related_to_symmetric`）
 
 ---
 
-**Last Updated**: 2026-07-05
+**Last Updated**: 2026-08-26
+**Version**: 1.2.0 — relatedTo 節修正規範與實作矛盾：Runqueue 影響、業務語意、「重要」callout 三處改為「不影響排程與阻擋，但影響 context 供給」；新增「context bundle 合法消費端」子節，具名承認 `context_bundle_extractor.py` 為合法消費端。裁決（2026-08 定案）：更新規範承認消費端，非移除消費。
 **Version**: 1.1.0 — blockedBy 節新增「When 散文與 blockedBy 的邊界」零機制慣例（W5-005.5 量測定案：61 筆抽樣，無條件 warn FP 約 95%、條件式 warn 精準度 25%，三選一裁定零機制；真依賴顯性 --blocked-by、出處 --source-ticket、接手端人工補齊）
 **Version**: 1.0.0 — 初版建立。提煉自 0.18.0-W17-120 ANA 多視角審查共識（linux + saffron-system-analyst + basil-hook-architect）：PC-091 路線（ANA 落地用 children）取代 PC-073，acceptance-gate hook 後續將收斂雙路徑。
 **Source**: 0.18.0-W17-120 (ANA: 釐清五欄位語意邊界) → W17-120.1 (DOC: 建立 SSOT)

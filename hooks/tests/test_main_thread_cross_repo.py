@@ -113,5 +113,23 @@ class TestCrossRepoBypass(unittest.TestCase):
         self.assertEqual(exit_code, 0, ".gitignore 為相對路徑且在白名單，應放行")
 
 
+class TestDispatchProjectRootSource(unittest.TestCase):
+    """dispatch-active.json 存取須用 git_utils 版 get_project_root
+    （0.2.1-W3-1093 / ARCH-BAL-020）；跨專案放行判斷的 project boundary
+    仍用 hook_base 版（worktree 感知，0.38.1-W2-020），兩者用途不同不可統一。"""
+
+    def test_dispatch_check_uses_git_utils_get_project_root(self):
+        from lib import git_utils
+
+        hook = _load_hook_module()
+        self.assertIs(hook.get_dispatch_project_root, git_utils.get_project_root)
+
+    def test_cross_repo_boundary_check_still_uses_hook_base_get_project_root(self):
+        from lib import hook_base
+
+        hook = _load_hook_module()
+        self.assertIs(hook.get_project_root, hook_base.get_project_root)
+
+
 if __name__ == "__main__":
     unittest.main()

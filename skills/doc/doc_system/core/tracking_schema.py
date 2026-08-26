@@ -44,19 +44,30 @@ PROPOSALS_TRACKING_SCHEMA = {
 # 與 PROPOSALS_TRACKING_SCHEMA 完全獨立，last_updated 是本檔合法自洽欄位
 # （per-file schema 獨立，勿跨檔套用頂層鍵假設）。
 #
-# 三軸追溯（0.2.1-W1-003 補齊，對齊 docs/traceability.yaml v1.1 實際結構）：
+# 四軸追溯（對齊 docs/traceability.yaml 實際結構）：
 #   mappings             = FR → UC 場景 → tests（垂直：使用者行為軸，既有）
 #   domain_bundle_tests  = domain map bundle → 不變式 → tests（水平：domain 規則軸）
 #   data_contract_tests  = 資料契約條目（INV-xx / A.x-x）→ tests（第三軸）
-# 三軸各自獨立記錄覆蓋，聯集為完整覆蓋，交集去重。
+#   runtime_tests        = UC 場景 → integration_test/ on-device 測試（第四軸；
+#                          前三軸指向 host 測試，本軸指向零結構替身的
+#                          on-device 測試）
+# 四軸各自獨立記錄覆蓋，聯集為完整覆蓋，交集去重。
+#
+# 頂層鍵區分「必要」與「選補」：version / last_updated 為必要；四軸皆為
+# 選補——軸不存在合法（例如 domain_bundle_tests 的前置 domain-map.md 尚未
+# 建立、runtime_tests 需先盤點 integration_test/ 是否符合零結構替身定義），
+# 軸存在但結構錯誤才是違規。top_level_keys 是「允許的頂層鍵上限」，
+# top_level_required_keys 是「必要頂層鍵下限」。
 TRACEABILITY_SCHEMA = {
     "top_level_keys": {
         "version",
         "mappings",
         "domain_bundle_tests",
         "data_contract_tests",
+        "runtime_tests",
         "last_updated",
     },
+    "top_level_required_keys": {"version", "last_updated"},
     "mappings_format": "list",
     "mapping_entry_required": {"spec", "usecase", "title"},
     "mapping_entry_optional": {"scenarios", "alt_scenarios", "main_flow", "tests"},
@@ -74,5 +85,219 @@ TRACEABILITY_SCHEMA = {
         "no_test_needed",
         "reason",
         "reason_supplement",
+    },
+    # runtime_tests：list-based，每條目對應一個 UC 場景的 on-device 測試。
+    "runtime_tests_format": "list",
+    "runtime_tests_entry_required": {"scenario", "covers_uc", "tests", "status"},
+    "runtime_tests_entry_optional": set(),
+}
+
+
+# ---------------------------------------------------------------------------
+# 文件圖譜型別表 SSOT
+#
+# 節點與邊型別表原以人類可讀 Markdown 分析結論定案，不作為 validator 或
+# 外部視覺化工具的實作依據。本節把該表格落成 Python 常數，供 doc CLI
+# validator 與外部消費者 import；Markdown 表格內容不可再被引用為權威來
+# 源（防止雙份 SSOT 漂移，language-constraints 規則 5 同精神）。
+#
+# 本節只承載已定案內容，不裁決。內容若與人類可讀分析結論出現矛盾或不
+# 足，走 ticket spawn-request 流程，不在此處自行修改。
+# ---------------------------------------------------------------------------
+
+# A 層（established）：兩專案皆有實例、doc CLI 已維護。
+# B 層（proposed）：兩專案實例數原為 0，首批真實資料回填後型別本身仍待
+# 更多語料驗證才升級為 established。
+GRAPH_LAYER_ESTABLISHED = "established"
+GRAPH_LAYER_PROPOSED = "proposed"
+
+# 語意邊的 class 值域（固定五種）。
+GRAPH_EDGE_CLASSES = frozenset(
+    {"provenance", "containment", "see-also", "dataflow", "ordering"}
+)
+
+# 語意邊的維護方值域。
+GRAPH_EDGE_MAINTAINERS = frozenset({"手動", "CLI 自動", "手動/CLI"})
+
+# 節點型別表：A 層 5 節點 + B 層 2 節點。FR 與 Test 不列為獨立節點型別
+# （無獨立檔案/ID 空間，語意由 SPEC / traceability 節點欄位承載）。
+GRAPH_NODE_TYPES = {
+    "PROP": {
+        "layer": GRAPH_LAYER_ESTABLISHED,
+        "id_pattern": r"^PROP-\d{3}$",
+        "carrier": "docs/proposals/PROP-NNN-{slug}.md frontmatter",
+    },
+    "SPEC": {
+        "layer": GRAPH_LAYER_ESTABLISHED,
+        # SPEC ID 雙形態：數字型 SPEC-NNN 與 slug 型 SPEC-{SLUG} 皆合法，
+        # 不強制配發數字別名。
+        "id_pattern": r"^SPEC-([0-9]{3}|[A-Z0-9-]+)$",
+        "carrier": "docs/spec/{domain}/{slug}.md frontmatter",
+    },
+    "UC": {
+        "layer": GRAPH_LAYER_ESTABLISHED,
+        "id_pattern": r"^UC-\d{2,}$",
+        "carrier": "docs/usecases/UC-NN-{slug}.md frontmatter",
+    },
+    "Ticket": {
+        "layer": GRAPH_LAYER_ESTABLISHED,
+        "id_pattern": r"^[\w.]+-W\d+-\d+$",
+        "carrier": "docs/work-logs/.../tickets/{id}.md frontmatter",
+        # Ticket 欄位/驗證器歸屬 ticket_system（field-semantics.md 為權
+        # 威），本節僅收錄 doc_system 消費圖譜所需的 id_pattern 與 carrier。
+    },
+    "DomainBundle": {
+        "layer": GRAPH_LAYER_ESTABLISHED,
+        "id_pattern": r"^DOMAIN-MAP-[a-z0-9-]+$",
+        "carrier": "docs/spec/{domain}/domain-map.md 或 docs/domain-map.md frontmatter",
+    },
+    "FlowStep": {
+        "layer": GRAPH_LAYER_PROPOSED,
+        # 不透明穩定識別符：位置與父步驟不編進 ID，拓撲全交 branch_from /
+        # return_to 表達。kebab-case，與首批真實資料一致。
+        "id_pattern": r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+        "carrier": "UC 文件內結構化 flow 區塊（YAML list）",
+    },
+    "EVT": {
+        "layer": GRAPH_LAYER_PROPOSED,
+        "id_pattern": r"^EVT-[A-Z0-9]+-\d{3}$",
+        "carrier": (
+            "docs/events/{domain}/EVT-{DOMAIN}-NNN-{slug}.md frontmatter"
+            "（載體形式；registry 形式留待更多真實資料出現時定案）"
+        ),
+    },
+}
+
+# EVT 節點必填欄位。
+EVT_REQUIRED_FIELDS = frozenset({"id", "name", "canonical_name", "category"})
+
+# EVT category 值域：domain_event（狀態變更事實，必有 consumer）或
+# process_event（步驟進行中標記，允許無 consumer）。
+EVT_CATEGORIES = frozenset({"domain_event", "process_event"})
+
+# FlowStep 於 UC 結構化 flow 區塊內的必填欄位（依首批真實資料實例對齊）。
+FLOWSTEP_REQUIRED_FIELDS = frozenset(
+    {"id", "name", "next", "branch_from", "return_to", "emits", "consumes"}
+)
+
+# 語意邊表：A 層 12 條 + B 層 4 條，欄位齊全：class / 正向欄位（儲存
+# 側）/ 反向欄位 / 維護方 / status。
+GRAPH_EDGE_TYPES = {
+    # --- A 層（12 條，established）---
+    "provenance": {
+        "class": "provenance",
+        "forward_field": "source_proposal",
+        "reverse_field": "outputs",
+        "maintainer": "手動",
+        "status": GRAPH_LAYER_ESTABLISHED,
+    },
+    "spec_association": {
+        "class": "see-also",
+        "forward_field": "related_specs",
+        "reverse_field": None,
+        "maintainer": "手動",
+        "status": GRAPH_LAYER_ESTABLISHED,
+    },
+    "uc_association": {
+        "class": "see-also",
+        "forward_field": "related_usecases",
+        "reverse_field": None,
+        "maintainer": "手動",
+        "status": GRAPH_LAYER_ESTABLISHED,
+    },
+    "proposal_association": {
+        "class": "see-also",
+        "forward_field": "related_proposals",
+        "reverse_field": None,
+        "maintainer": "手動",
+        "status": GRAPH_LAYER_ESTABLISHED,
+    },
+    "requirement_impl": {
+        "class": "containment",
+        "forward_field": "implements_requirements",
+        "reverse_field": None,
+        "maintainer": "手動",
+        "status": GRAPH_LAYER_ESTABLISHED,
+    },
+    "domain_dependency": {
+        "class": "ordering",
+        "forward_field": "depends_on_domains",
+        "reverse_field": None,
+        "maintainer": "手動",
+        "status": GRAPH_LAYER_ESTABLISHED,
+    },
+    "domain_coverage": {
+        "class": "containment",
+        "forward_field": "source_specs",
+        "reverse_field": None,
+        "maintainer": "手動",
+        "status": GRAPH_LAYER_ESTABLISHED,
+    },
+    "blood": {
+        "class": "containment",
+        "forward_field": "parent_id",
+        "reverse_field": "children",
+        "maintainer": "CLI 自動",
+        "status": GRAPH_LAYER_ESTABLISHED,
+    },
+    "spawn": {
+        "class": "provenance",
+        "forward_field": "source_ticket",
+        "reverse_field": "spawned_tickets",
+        "maintainer": "CLI 自動",
+        "status": GRAPH_LAYER_ESTABLISHED,
+    },
+    "blocking": {
+        "class": "ordering",
+        "forward_field": "blockedBy",
+        "reverse_field": None,
+        "maintainer": "手動/CLI",
+        "status": GRAPH_LAYER_ESTABLISHED,
+    },
+    "association": {
+        # relatedTo：語意無向，消費端做 1-hop symmetric closure；儲存端
+        # 仍為單向欄位，故 reverse_field 仍為 None。
+        "class": "see-also",
+        "forward_field": "relatedTo",
+        "reverse_field": None,
+        "maintainer": "手動/CLI",
+        "status": GRAPH_LAYER_ESTABLISHED,
+    },
+    "discovery": {
+        "class": "provenance",
+        "forward_field": "discovered_during",
+        "reverse_field": None,
+        "maintainer": "手動",
+        "status": GRAPH_LAYER_ESTABLISHED,
+    },
+    # --- B 層（4 條，proposed）---
+    "emission": {
+        "class": "dataflow",
+        "forward_field": "emits",  # FlowStep.emits → EVT
+        "reverse_field": None,
+        "maintainer": "手動",
+        "status": GRAPH_LAYER_PROPOSED,
+    },
+    "consumption": {
+        "class": "dataflow",
+        "forward_field": "consumes",  # EVT → FlowStep.consumes
+        "reverse_field": None,
+        "maintainer": "手動",
+        "status": GRAPH_LAYER_PROPOSED,
+    },
+    "branching": {
+        "class": "ordering",
+        "forward_field": "branch_from",
+        "reverse_field": None,
+        "maintainer": "手動",
+        "status": GRAPH_LAYER_PROPOSED,
+    },
+    "returning": {
+        "class": "ordering",
+        # back-edge，排除於 DAG 佈局。
+        "forward_field": "return_to",
+        "reverse_field": None,
+        "maintainer": "手動",
+        "status": GRAPH_LAYER_PROPOSED,
     },
 }

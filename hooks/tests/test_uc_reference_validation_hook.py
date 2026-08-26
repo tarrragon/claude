@@ -7,11 +7,22 @@ UC Reference Validation Hook 測試
   僅 CLI 全量掃描以目錄排除方式豁免，本 hook 的 is_exempt_path 不涵蓋，見 uc-numbering-convention.md 第 5 節）
 - 白名單動態解析 spec 標題行，無硬編碼清單
 - 非程式碼檔跳過；uc_registry 不可用時 fail-open 並輸出可見日誌
+
+TEST-BAL-010 覆蓋落差說明：本檔多數測試以 importlib 在 pytest 進程內載入 hook
+module，繼承 pytest 進程既有的 sys.path（含 doc skill pyproject.toml 宣告的
+pyyaml）。生產環境以 `uv run --quiet` 在 PEP 723 `dependencies = []` 的隔離
+venv 下啟動，只有 stdlib 可用。兩套依賴宇宙在 importlib 測試中從未被同一條
+路徑覆蓋——`test_uc_registry_import_failure_fails_open` 雖驗證 import 失敗時的
+降級行為，但用 monkeypatch 偽造 ImportError，驗的是例外處理機制本身，不是
+隔離 venv 下真實 import 是否成功（見該測試 docstring）。
+`test_production_uv_isolation_does_not_fail_open` 補上此落差：以 subprocess
+呼叫與生產完全相同的啟動方式，斷言 stdout/stderr 不含 fail-open 訊息。
 """
 
 import importlib.util
 import io
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -369,7 +380,41 @@ def test_worktree_style_path_outside_project_root_still_exempted(monkeypatch, ca
     assert capsys.readouterr().err == ""
 
 
+def test_explicit_project_root_override_wins_over_worktree_autodetection(monkeypatch, capsys, tmp_path):
+    """非預設 project_root 隔離迴歸測試：pytest 進程本身可能就在一個 git
+    linked worktree 內執行（本檔即為一例），此時 get_project_root() 的
+    worktree 自動偵測優先序高於 CLAUDE_PROJECT_DIR，若 hook 直接採用
+    get_project_root() 回傳值，會忽略呼叫端明確指定的 tmp_path fixture、
+    改讀真實 worktree 的 docs/app-use-cases.md，使斷言結果依賴執行環境
+    （test-assertion-design-rules 的不可靠斷言家族）。
+
+    本測試斷言合法清單提示中出現 fixture 專屬標題「匯入書庫資料」，且不含
+    真實專案標題關鍵字「盤點資產負債」——後者若出現即代表隔離失效、
+    project_root 仍被真實 worktree 覆蓋。
+    """
+    project_root = _make_fake_project(tmp_path)
+    exit_code = _run_hook(
+        monkeypatch,
+        project_root,
+        {
+            "file_path": str(project_root / "lib" / "book_service.dart"),
+            "old_string": "x",
+            "new_string": "// 對應 UC-99 尚未定義的用例",
+        },
+    )
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "匯入書庫資料" in captured.err
+    assert "盤點資產負債" not in captured.err
+
+
 def test_uc_registry_import_failure_fails_open(monkeypatch, capsys, tmp_path):
+    """驗證範圍：僅驗證 ImportError 發生後的降級行為（fail-open + 可見日誌），
+    不驗證隔離 venv 下真實 import 是否成功——本測試以 monkeypatch 偽造
+    ImportError，import 從未真正在隔離環境中執行過。「隔離 venv 下 import
+    是否成功」由 `test_production_uv_isolation_does_not_fail_open`
+    （TEST-BAL-010）以 subprocess 驗證。
+    """
     project_root = _make_fake_project(tmp_path)
 
     import builtins
@@ -396,3 +441,37 @@ def test_uc_registry_import_failure_fails_open(monkeypatch, capsys, tmp_path):
     captured = capsys.readouterr()
     assert "uc_registry" in captured.err
     assert "跳過驗證" in captured.err
+
+
+# ----------------------------------------------------------------------------
+# 案例 7：生產隔離 venv 下真實執行（TEST-BAL-010 覆蓋落差防護）
+# ----------------------------------------------------------------------------
+
+def test_production_uv_isolation_does_not_fail_open():
+    """以與生產完全相同的啟動方式（`uv run --quiet`，PEP 723 隔離 venv，
+    只有 stdlib）執行本 hook，斷言正常完成驗證（未走 fail-open 分支）。
+
+    鑑別力已於本票（TEST-BAL-010 防護）人工反證：暫時在
+    doc_system/core/uc_registry.py 頂層加入 `import yaml`，本測試會因
+    stderr 出現「uc_registry 模組載入失敗」而紅燈；還原後綠燈。此反證
+    步驟不納入自動化（會真的污染 uc_registry.py），僅記錄於 ticket
+    Solution 供覆核。
+    """
+    hook_path = Path(__file__).parent.parent / "uc-reference-validation-hook.py"
+    payload = {
+        "tool_name": "Write",
+        "tool_input": {"file_path": "lib/book_service.dart", "content": "// UC-01"},
+    }
+
+    result = subprocess.run(
+        ["uv", "run", "--quiet", str(hook_path)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        cwd=str(hook_path.parent.parent.parent),  # 專案根目錄，供 get_project_root 定位
+        timeout=30,
+    )
+
+    assert result.returncode == 0
+    assert "模組載入失敗" not in result.stderr
+    assert "跳過驗證" not in result.stderr

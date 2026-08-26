@@ -144,6 +144,75 @@ class TestGroupA_NormalExtraction:
 
 
 # ============================================================================
+# 群組 A2：relatedTo 1-hop symmetric union（0.2.1-W3-1067）
+# ============================================================================
+
+GET_SYMMETRIC_RELATED_TO_PATH = (
+    "ticket_system.lib.context_bundle_extractor.get_symmetric_related_to"
+)
+
+
+class TestGroupA2_RelatedToSymmetricUnion:
+    """relatedTo 儲存單向，消費端經 relatedto_index 做 1-hop symmetric union。"""
+
+    def test_backward_reference_included_via_reverse_index(self):
+        """target 自身 relatedTo 為空，但反向索引查得到引用方，仍應被收錄為來源。"""
+        target = _make_target(
+            target_id="0.18.0-W17-010",
+            source_ticket=None,
+            blocked_by=None,
+            related_to=None,
+        )
+        sources = {"0.18.0-W17-099": _make_source("0.18.0-W17-099")}
+        with patch(
+            GET_SYMMETRIC_RELATED_TO_PATH,
+            return_value=["0.18.0-W17-099"],
+        ) as mock_symmetric, patch(
+            LOAD_TICKET_PATH, side_effect=lambda v, i: sources.get(i)
+        ):
+            result = extract_context_bundle(target)
+
+        mock_symmetric.assert_called_once_with("0.18.0", "0.18.0-W17-010", [])
+        assert result.sources_declared == 1
+        assert result.status == "success"
+        source_ids = {f.source_id for f in result.extracted}
+        assert "0.18.0-W17-099" in source_ids
+
+    def test_forward_reference_passed_to_symmetric_lookup(self):
+        """target 自身有 relatedTo 時，該清單作為 forward 參數傳入查詢函式。"""
+        target = _make_target(
+            target_id="0.18.0-W17-010",
+            source_ticket=None,
+            blocked_by=None,
+            related_to=["0.18.0-W17-020"],
+        )
+        with patch(
+            GET_SYMMETRIC_RELATED_TO_PATH, return_value=["0.18.0-W17-020"]
+        ) as mock_symmetric, patch(LOAD_TICKET_PATH, return_value=None):
+            extract_context_bundle(target)
+
+        mock_symmetric.assert_called_once_with(
+            "0.18.0", "0.18.0-W17-010", ["0.18.0-W17-020"]
+        )
+
+    def test_transitive_related_not_included(self):
+        """relatedto_index 已限 1-hop（本測試驗證消費端不繞過該邊界再展開查詢）。"""
+        target = _make_target(
+            target_id="0.18.0-W17-010",
+            source_ticket=None,
+            blocked_by=None,
+            related_to=["0.18.0-W17-020"],
+        )
+        with patch(
+            GET_SYMMETRIC_RELATED_TO_PATH, return_value=["0.18.0-W17-020"]
+        ) as mock_symmetric, patch(LOAD_TICKET_PATH, return_value=None):
+            extract_context_bundle(target)
+
+        # 僅呼叫一次：不對 union 結果（如 W17-020）再遞迴查詢 symmetric closure
+        assert mock_symmetric.call_count == 1
+
+
+# ============================================================================
 # 群組 B：邊界條件
 # ============================================================================
 

@@ -27,7 +27,12 @@ metadata（`# /// script ... dependencies = [...] ... # ///`），settings.json
 hook 誤報。
 
 偵測手段：
-- shebang：讀檔案第一行是否含 `uv run`
+- uses_uv 判定：實際決定隔離是否生效的是 settings.json 登記的呼叫方式，
+  非檔案自身 shebang——`uv run <path>` 直接呼叫時 uv 讀的是目標檔的 PEP
+  723 metadata，與 shebang 無關；`python3 <path>` 等明確直譯器呼叫時
+  shebang 同樣完全不被讀取。故優先讀 settings.json 登記路徑對應的呼叫
+  前綴，僅當登記為裸路徑（無直譯器前綴，OS 依可執行位元直接 exec）時才
+  回退讀檔案第一行是否含 `uv run`（見 `_resolve_uses_uv`）
 - PEP 723 宣告：擷取 `# /// script ... # ///` 區塊，正則抓
   `dependencies = [...]` 列表內容
 - 實際 import：以 `ast.parse` 解析整份原始碼（含函式內、try/except 內的
@@ -35,6 +40,14 @@ hook 誤報。
   排除 stdlib（`sys.stdlib_module_names`，3.9 環境無此屬性時退化為內建
   常見清單）與本專案共用套件 `lib`（透過 `sys.path.insert` 動態掛載，非
   PyPI 依賴）
+- lib 遞移依賴：`lib` 本身被排除於外部依賴判定之外的理由僅對 `lib` 這個
+  套件名稱本身成立，不代表其內部模組不需要第三方套件（如 `hook_ticket`
+  需要 `pyyaml`）。故另建 `LibDependencyIndex` 走訪 `.claude/lib/*.py`，
+  解析各子模組自身的第三方 import、彼此的內部依賴圖（遞迴解析並防循環）
+  與頂層符號定義索引；hook 對 `lib` 的三種匯入形態（`from lib.X import`
+  /`import lib.X` 直接定位子模組、`from lib import X` 經符號索引定位 X
+  的歸屬模組、`import lib` 併入 `__init__.py` 頂層即時匯入的子模組足跡）
+  各自解析出實際觸及的子模組，再併入該 hook 的外部依賴比對基準
 
 Hook Type: SessionStart（全量盤點，warning-only）+ PostToolUse（Edit /
 Write / MultiEdit，目標為 `.claude/settings.json` 或 `.claude/hooks/**/*.py`
@@ -59,7 +72,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -80,6 +93,14 @@ HOOK_NAME = "hook-dependency-isolation-check"
 _REGISTERED_HOOK_PATH_RE = re.compile(
     r"\.claude/(?:hooks|skills/[A-Za-z0-9_-]+/hooks)/[A-Za-z0-9_.-]+\.py"
 )
+
+# settings.json 單一 command 欄位值抽取（供解析路徑前的直譯器宣告）
+_COMMAND_VALUE_RE = re.compile(r'"command":\s*"([^"]*)"')
+
+# 路徑前綴中的專案根目錄變數參照（本身不是直譯器宣告，需剝除才能判斷是否
+# 為裸路徑呼叫）：`uv run --quiet $CLAUDE_PROJECT_DIR/...` 剝除後餘
+# "uv run --quiet"；`$CLAUDE_PROJECT_DIR/...`（無直譯器）剝除後餘空字串
+_PATH_VAR_SUFFIX_RE = re.compile(r"\$\{?CLAUDE_PROJECT_DIR\}?/?\s*$")
 
 # PEP 723 inline metadata 區塊
 _PEP723_BLOCK_RE = re.compile(r"^# /// script\s*\n(.*?)^# ///\s*$", re.MULTILINE | re.DOTALL)
@@ -146,6 +167,58 @@ def extract_registered_hook_paths(settings_path: Path) -> "List[str]":
         return []
     hits = set(_REGISTERED_HOOK_PATH_RE.findall(raw))
     return sorted(hits)
+
+
+def extract_hook_command_prefixes(settings_path: Path) -> "Dict[str, Set[str]]":
+    """從 settings.json 抽取每個登記路徑對應的呼叫前綴集合。
+
+    「前綴」指 command 字串中路徑之前的直譯器宣告部分（如 `"uv run
+    --quiet"`），空字串表示裸路徑呼叫（無直譯器前綴，由 OS 依可執行位元
+    讀 shebang 決定直譯器）。同一路徑可能被多個 hook event 重複登記，故
+    值為集合而非單一字串；供 `_resolve_uses_uv` 判定隔離是否實際生效。
+    """
+    try:
+        raw = settings_path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    prefixes: Dict[str, Set[str]] = {}
+    for command in _COMMAND_VALUE_RE.findall(raw):
+        match = _REGISTERED_HOOK_PATH_RE.search(command)
+        if not match:
+            continue
+        rel_path = match.group(0)
+        prefix = _PATH_VAR_SUFFIX_RE.sub("", command[: match.start()]).strip()
+        prefixes.setdefault(rel_path, set()).add(prefix)
+    return prefixes
+
+
+def _resolve_uses_uv(shebang: str, command_prefixes: "Optional[Set[str]]") -> bool:
+    """判定 PEP 723 隔離是否實際生效。
+
+    決定隔離與否的是「runtime 實際如何呼叫這個檔案」，不是檔案自身
+    shebang——settings.json 以 `uv run <path>` 直接呼叫時，uv 讀的是目標
+    檔的 PEP 723 metadata 建立隔離環境，與檔案自身 shebang 完全無關（shell
+    執行的是 `uv` 這個執行檔、`<path>` 只是傳給它的參數，shebang 只在 OS
+    依可執行位元直接 exec 該檔案時才會被讀取，此處不成立）；反之以
+    `python3 <path>` 等明確直譯器呼叫時，shebang 同樣完全不被讀取，即使
+    宣告 `uv run --script` 也不生效。故判準優先序：
+
+    1. 任一登記呼叫前綴以 `uv run` 開頭 -> 隔離確定生效
+    2. 任一登記呼叫前綴為空字串（裸路徑） -> 該路徑實際依賴檔案自身
+       shebang，回退讀 shebang
+    3. 全部登記呼叫前綴皆為其他明確直譯器 -> 隔離確定不生效，shebang
+       在此完全不被讀取，不可用來反駁
+
+    無登記資訊時（如既有測試未提供 `command_prefixes`）維持既有純 shebang
+    判定，向後相容。
+    """
+    if not command_prefixes:
+        return "uv run" in shebang
+    if any(prefix.startswith("uv run") for prefix in command_prefixes):
+        return True
+    if any(prefix == "" for prefix in command_prefixes):
+        return "uv run" in shebang
+    return False
 
 
 def build_local_module_index(claude_dir: Path) -> "Set[str]":
@@ -223,6 +296,213 @@ def extract_external_imports(
     return external
 
 
+class LibDependencyIndex:
+    """`.claude/lib/` 套件依賴解析索引，供 hook 間接依賴比對使用。
+
+    `lib/__init__.py` 以顯式具名匯入與 `__getattr__` 惰性匯入兩種方式重新
+    匯出子模組符號；本索引不解析 `__init__.py` 的重新匯出機制本身，改為
+    直接掃描各子模組頂層定義的符號歸屬（symbol_index），對 `from lib
+    import X` 具名匯入具通用鑑別力，不因重新匯出手法（即時或惰性）而失準。
+    """
+
+    def __init__(
+        self,
+        direct_external: "Dict[str, Set[str]]",
+        internal_graph: "Dict[str, Set[str]]",
+        symbol_index: "Dict[str, Set[str]]",
+        eager_footprint: "Set[str]",
+    ):
+        self.direct_external = direct_external
+        self.internal_graph = internal_graph
+        self.symbol_index = symbol_index
+        self.eager_footprint = eager_footprint
+
+    @property
+    def module_stems(self) -> "Set[str]":
+        return set(self.direct_external.keys())
+
+
+def _extract_top_level_symbols(tree: "ast.Module") -> "Set[str]":
+    """收集模組頂層定義的符號名稱（函式、類別、變數賦值）。"""
+    symbols: Set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            symbols.add(node.name)
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    symbols.add(target.id)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            symbols.add(node.target.id)
+    return symbols
+
+
+def _extract_lib_internal_targets(tree: "ast.Module", lib_module_stems: "Set[str]") -> "Set[str]":
+    """收集模組對其他 lib 子模組的內部依賴（相對匯入與 `lib.X` 絕對匯入皆算）。"""
+    targets: Set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.level and node.level > 0:
+                if node.module:
+                    top = node.module.split(".")[0]
+                    if top in lib_module_stems:
+                        targets.add(top)
+                else:
+                    for alias in node.names:
+                        if alias.name in lib_module_stems:
+                            targets.add(alias.name)
+            elif node.module and node.module.split(".", 1)[0] == "lib":
+                parts = node.module.split(".")
+                if len(parts) > 1 and parts[1] in lib_module_stems:
+                    targets.add(parts[1])
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                if parts[0] == "lib" and len(parts) > 1 and parts[1] in lib_module_stems:
+                    targets.add(parts[1])
+    return targets
+
+
+def _resolve_module_external_deps(
+    module_name: str,
+    direct_external: "Dict[str, Set[str]]",
+    internal_graph: "Dict[str, Set[str]]",
+    visited: "Optional[Set[str]]" = None,
+) -> "Set[str]":
+    """遞迴解析單一 lib 子模組的完整第三方依賴足跡（含透過內部匯入串連的
+    間接依賴）。`visited` 防止子模組間相互匯入造成無限遞迴。
+    """
+    if visited is None:
+        visited = set()
+    if module_name in visited:
+        return set()
+    visited.add(module_name)
+
+    result = set(direct_external.get(module_name, set()))
+    for dep in internal_graph.get(module_name, set()):
+        result |= _resolve_module_external_deps(dep, direct_external, internal_graph, visited)
+    return result
+
+
+def _resolve_init_eager_footprint(
+    lib_dir: Path,
+    module_stems: "Set[str]",
+    direct_external: "Dict[str, Set[str]]",
+    internal_graph: "Dict[str, Set[str]]",
+) -> "Set[str]":
+    """解析 `lib/__init__.py` 頂層（非函式內）即時匯入的子模組，回傳其遞移
+    第三方依賴聯集，供 `import lib`（整個套件、無具名符號）情境使用。
+    刻意只掃 `tree.body`（模組頂層陳述式），不用 `ast.walk`——`__getattr__`
+    等惰性載入邏輯位於函式主體內，只有真正在套件載入當下執行的匯入才計入。
+    """
+    init_file = lib_dir / "__init__.py"
+    if not init_file.is_file():
+        return set()
+    try:
+        tree = ast.parse(init_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, SyntaxError):
+        return set()
+
+    eager_targets: Set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.level and node.level > 0:
+            if node.module:
+                top = node.module.split(".")[0]
+                if top in module_stems:
+                    eager_targets.add(top)
+            else:
+                for alias in node.names:
+                    if alias.name in module_stems:
+                        eager_targets.add(alias.name)
+
+    footprint: Set[str] = set()
+    for target in eager_targets:
+        footprint |= _resolve_module_external_deps(target, direct_external, internal_graph)
+    return footprint
+
+
+def build_lib_dependency_index(lib_dir: Path, stdlib_names: "Set[str]") -> "LibDependencyIndex":
+    """走訪 `.claude/lib/*.py`，建立子模組間依賴圖與符號索引。
+
+    用於解析 hook 經由 `lib` 套件間接觸及的第三方 import。lib 模組體積小
+    （數十檔），無需比照 `build_local_module_index` 的 `os.walk` 剪枝優化。
+    """
+    module_stems = {p.stem for p in lib_dir.glob("*.py")} if lib_dir.is_dir() else set()
+    direct_external: Dict[str, Set[str]] = {}
+    internal_graph: Dict[str, Set[str]] = {}
+    symbol_index: Dict[str, Set[str]] = {}
+
+    if lib_dir.is_dir():
+        for py_file in sorted(lib_dir.glob("*.py")):
+            if py_file.name == "__init__.py":
+                continue
+            module_name = py_file.stem
+            try:
+                content = py_file.read_text(encoding="utf-8")
+                tree = ast.parse(content)
+            except (OSError, UnicodeDecodeError, SyntaxError):
+                direct_external[module_name] = set()
+                internal_graph[module_name] = set()
+                continue
+            direct_external[module_name] = extract_external_imports(
+                content, stdlib_names, module_stems | {"lib"}
+            )
+            internal_graph[module_name] = _extract_lib_internal_targets(
+                tree, module_stems
+            ) - {module_name}
+            for symbol in _extract_top_level_symbols(tree):
+                symbol_index.setdefault(symbol, set()).add(module_name)
+
+    eager_footprint = _resolve_init_eager_footprint(
+        lib_dir, module_stems, direct_external, internal_graph
+    )
+    return LibDependencyIndex(direct_external, internal_graph, symbol_index, eager_footprint)
+
+
+def resolve_lib_transitive_imports(content: str, lib_index: "LibDependencyIndex") -> "Set[str]":
+    """解析 hook 原始碼中經由 `lib` 套件間接觸及的第三方依賴集合。
+
+    涵蓋三種匯入形態：`from lib.X import ...` / `import lib.X`（直接定位子
+    模組）、`from lib import X`（透過符號索引定位 X 實際定義的子模組）、
+    `import lib`（整個套件，併入 `__init__.py` 頂層即時匯入的子模組足跡）。
+    找不到對應子模組或符號時不納入計算——寧可少報也不對未知情境臆測。
+    """
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return set()
+
+    targets: Set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.level and node.level > 0:
+                continue  # 相對匯入，非本 hook 對 lib 的匯入形態
+            if node.module == "lib":
+                for alias in node.names:
+                    for owner in lib_index.symbol_index.get(alias.name, ()):
+                        targets |= _resolve_module_external_deps(
+                            owner, lib_index.direct_external, lib_index.internal_graph
+                        )
+            elif node.module and node.module.split(".", 1)[0] == "lib":
+                parts = node.module.split(".")
+                if len(parts) > 1 and parts[1] in lib_index.module_stems:
+                    targets |= _resolve_module_external_deps(
+                        parts[1], lib_index.direct_external, lib_index.internal_graph
+                    )
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                if not parts or parts[0] != "lib":
+                    continue
+                if len(parts) > 1 and parts[1] in lib_index.module_stems:
+                    targets |= _resolve_module_external_deps(
+                        parts[1], lib_index.direct_external, lib_index.internal_graph
+                    )
+                elif len(parts) == 1:
+                    targets |= lib_index.eager_footprint
+    return targets
+
+
 def _normalize_declared(deps: "List[str]") -> "Set[str]":
     """把宣告的 PyPI 套件名稱換算為對應 import 名稱集合（供覆蓋率比對）。"""
     normalized = set()
@@ -238,8 +518,17 @@ def check_file_consistency(
     project_root: Path,
     stdlib_names: "Set[str]",
     local_names: "Set[str]",
+    lib_index: "Optional[LibDependencyIndex]" = None,
+    command_prefixes: "Optional[Set[str]]" = None,
 ) -> "List[HookConsistencyIssue]":
-    """對單一登記路徑的 hook 檔案執行一致性檢查，回傳發現的問題清單。"""
+    """對單一登記路徑的 hook 檔案執行一致性檢查，回傳發現的問題清單。
+
+    `lib_index` 由呼叫端（`scan_all`）建立一次後重複傳入，避免每個 hook
+    各自重新走訪 `.claude/lib/`；省略時（如既有測試直接呼叫）就地建立。
+    `command_prefixes` 為該路徑在 settings.json 的呼叫前綴集合，決定隔離
+    是否實際生效優先於檔案自身 shebang（見 `_resolve_uses_uv`）；省略時
+    退化為既有純 shebang 判定。
+    """
     file_path = project_root / rel_path
     if not file_path.exists():
         return []  # 登記路徑但檔案不存在，非本 hook 職責範圍（見 how.strategy 產生路徑盤點表）
@@ -249,10 +538,14 @@ def check_file_consistency(
     except (OSError, UnicodeDecodeError):
         return []
 
+    if lib_index is None:
+        lib_index = build_lib_dependency_index(project_root / ".claude" / "lib", stdlib_names)
+
     shebang = content.splitlines()[0] if content else ""
-    uses_uv = "uv run" in shebang
+    uses_uv = _resolve_uses_uv(shebang, command_prefixes)
     declared_deps = extract_pep723_dependencies(content)
     external_imports = extract_external_imports(content, stdlib_names, local_names)
+    external_imports |= resolve_lib_transitive_imports(content, lib_index)
 
     issues: List[HookConsistencyIssue] = []
 
@@ -290,10 +583,19 @@ def scan_all(project_root: Path, logger) -> "List[HookConsistencyIssue]":
     rel_paths = extract_registered_hook_paths(settings_path)
     stdlib_names = _get_stdlib_module_names()
     local_names = build_local_module_index(project_root / ".claude")
+    lib_index = build_lib_dependency_index(project_root / ".claude" / "lib", stdlib_names)
+    command_prefixes = extract_hook_command_prefixes(settings_path)
 
     all_issues: List[HookConsistencyIssue] = []
     for rel_path in rel_paths:
-        issues = check_file_consistency(rel_path, project_root, stdlib_names, local_names)
+        issues = check_file_consistency(
+            rel_path,
+            project_root,
+            stdlib_names,
+            local_names,
+            lib_index,
+            command_prefixes.get(rel_path),
+        )
         all_issues.extend(issues)
 
     logger.debug(

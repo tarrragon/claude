@@ -120,3 +120,20 @@ def test_build_drift_warning_lists_items():
     assert ".zhtw-mcp-skip" in section
     assert "hook-state" in section
     assert "WARNING" in section
+
+
+# ---------------------------------------------------------------------------
+# 7. get_project_root 須用 git_utils 版（dispatch-active.json cleanup 為
+#    跨 worktree 全域狀態，0.2.1-W3-1093 / ARCH-BAL-020）
+# ---------------------------------------------------------------------------
+def test_uses_git_utils_get_project_root():
+    import sys
+    from pathlib import Path as _Path
+
+    hooks_dir = _Path(__file__).parent.parent
+    if str(hooks_dir.parent) not in sys.path:
+        sys.path.insert(0, str(hooks_dir.parent))
+    from lib import git_utils
+
+    hook = load_hook_module()
+    assert hook.get_project_root is git_utils.get_project_root

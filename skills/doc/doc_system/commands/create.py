@@ -38,19 +38,34 @@ DOC_TYPE_CONFIG = {
         "id_prefix": "SPEC",
         "requires_domain": True,
     },
+    "event": {
+        "template": "event-template.md",
+        "target_dir": "docs/events",
+        "id_prefix": "EVT",
+        "requires_domain": True,
+        # EVT 配號依 domain 分桶（如 EVT-LIBRARY-001），非全域平坦編號：
+        # 全域正則 `^EVT-(\d+)` 無法辨識 domain-scoped ID，見 _next_id。
+        "domain_scoped_id": True,
+    },
 }
 
 VALID_PROPOSAL_STATUSES = ("draft", "discussing", "confirmed", "implemented", "withdrawn")
 
 
-def _next_id(project_root: Path, doc_type: str) -> str:
+def _next_id(project_root: Path, doc_type: str, domain: str | None = None) -> str:
     """掃描現有文件分配下一個序號 ID。
+
+    domain-scoped 型別（見 DOC_TYPE_CONFIG["domain_scoped_id"]，如 EVT）以
+    `{prefix}-{DOMAIN}-{NNN}` 分桶編號，各 domain 序列互不干擾；一般型別
+    仍沿用全域平坦編號 `{prefix}-{NNN}`。
 
     Known limitation: TOCTOU — no file lock, parallel calls may allocate same ID.
     Acceptable for single-user CLI; existing ID check in execute() catches collision.
     """
     config = DOC_TYPE_CONFIG[doc_type]
     prefix = config["id_prefix"]
+    if config.get("domain_scoped_id") and domain:
+        prefix = f"{prefix}-{domain.upper()}"
     target_dir = Path(project_root) / config["target_dir"]
 
     max_num = 0
@@ -72,8 +87,14 @@ def execute_next_id(args: argparse.Namespace) -> None:
         print(f"不支援的文件類型: {doc_type}")
         sys.exit(1)
 
+    domain = getattr(args, "domain", None)
+    config = DOC_TYPE_CONFIG[doc_type]
+    if config.get("domain_scoped_id") and not domain:
+        print(f"{doc_type} 類型必須指定 --domain 參數")
+        sys.exit(1)
+
     project_root = FileLocator.get_project_root()
-    print(_next_id(project_root, doc_type))
+    print(_next_id(project_root, doc_type, domain))
 
 
 def _suggest_domain_from_tracking(project_root: Path, doc_id: str) -> str | None:
@@ -212,13 +233,11 @@ def execute(args: argparse.Namespace) -> None:
 
     project_root = FileLocator.get_project_root()
 
-    # ID 自動分配
-    if not doc_id:
-        doc_id = _next_id(project_root, doc_type)
-        print(f"[自動分配] ID: {doc_id}")
-
-    # spec domain 推導
+    # domain 解析（domain-scoped ID 型別的 ID 分配依賴 domain，須先於配號）
     if config["requires_domain"] and not domain:
+        if config.get("domain_scoped_id"):
+            print(f"{doc_type} 類型必須指定 --domain 參數")
+            sys.exit(1)
         suggested = _suggest_domain_from_tracking(project_root, doc_id)
         if suggested:
             domain = suggested
@@ -231,6 +250,11 @@ def execute(args: argparse.Namespace) -> None:
                     print(f"[提示] 可用 domain: {', '.join(domains)}")
             print("spec 類型必須指定 --domain 參數")
             sys.exit(1)
+
+    # ID 自動分配
+    if not doc_id:
+        doc_id = _next_id(project_root, doc_type, domain)
+        print(f"[自動分配] ID: {doc_id}")
 
     locator = FileLocator(project_root)
 

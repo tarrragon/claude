@@ -131,6 +131,63 @@ class TestResolveFile:
 
         assert result is None
 
+    def test_resolve_event(self, tmp_path):
+        """EVT 型別的 domain-scoped ID 應能透過 resolve_file 解析（0.2.1-W3-1071 合併）。"""
+        events_dir = tmp_path / "docs" / "events" / "balance"
+        events_dir.mkdir(parents=True)
+        (events_dir / "EVT-BALANCE-001-snapshot.md").write_text("---\nid: EVT-BALANCE-001\n---\n")
+
+        locator = FileLocator(str(tmp_path))
+
+        result = locator.resolve_file("EVT-BALANCE-001")
+
+        assert result is not None
+        assert "EVT-BALANCE-001-snapshot.md" in result
+
+
+class TestFindEvent:
+    """find_event 測試（0.2.1-W3-1071：合併 validate.py._find_event_file）。
+
+    EVT 的 domain-scoped ID（如 EVT-LIBRARY-001）不在 FileLocator 原有
+    的 PROP/UC/SPEC 固定前綴表中，find_event 是為此新增的專用方法，內部
+    仍沿用與其他 find_* 方法相同的 _find_file_by_id 精確前綴比對邏輯。
+    """
+
+    def test_find_event_in_domain_subdirectory(self, tmp_path):
+        events_dir = tmp_path / "docs" / "events" / "library"
+        events_dir.mkdir(parents=True)
+        (events_dir / "EVT-LIBRARY-001-checkout.md").write_text("---\nid: EVT-LIBRARY-001\n---\n")
+
+        locator = FileLocator(str(tmp_path))
+
+        result = locator.find_event("EVT-LIBRARY-001")
+
+        assert result is not None
+        assert "EVT-LIBRARY-001-checkout.md" in result
+
+    def test_find_event_nonexistent_returns_none(self, tmp_path):
+        (tmp_path / "docs").mkdir()
+        locator = FileLocator(str(tmp_path))
+
+        result = locator.find_event("EVT-LIBRARY-999")
+
+        assert result is None
+
+    def test_find_event_precise_prefix_no_false_match(self, tmp_path):
+        """EVT-1 不應誤匹配 EVT-10（精確前綴比對，同 UC-01/UC-010 修復）。"""
+        events_dir = tmp_path / "docs" / "events" / "library"
+        events_dir.mkdir(parents=True)
+        (events_dir / "EVT-LIBRARY-1-a.md").write_text("---\nid: EVT-LIBRARY-1\n---\n")
+        (events_dir / "EVT-LIBRARY-10-b.md").write_text("---\nid: EVT-LIBRARY-10\n---\n")
+
+        locator = FileLocator(str(tmp_path))
+
+        result = locator.find_event("EVT-LIBRARY-1")
+
+        assert result is not None
+        assert "EVT-LIBRARY-1-a.md" in result
+        assert "EVT-LIBRARY-10" not in result
+
 
 class TestListMethods:
     """list_proposals / list_usecases / list_specs 測試。"""

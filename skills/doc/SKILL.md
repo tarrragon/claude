@@ -11,7 +11,7 @@ description: "需求追蹤文件系統（proposals/spec/usecases）的查詢、�
 
 ---
 
-## 六種文件類型
+## 七種文件類型
 
 | 類型 | 目錄 | 核心問題 | 詳細規範 |
 |------|------|---------|---------|
@@ -20,6 +20,7 @@ description: "需求追蹤文件系統（proposals/spec/usecases）的查詢、�
 | DomainMap | `docs/spec/{domain}/domain-map.md`（單 domain 退化 `docs/domain-map.md`） | domain bundle 邊界、依賴方向、層測試策略？（DDD 水平視角，正交 UC）| `templates/domain-map-template.md` |
 | DataContract | `docs/spec/{domain}/`（沿用 SPEC-NNN 編號體系，`subdomain: data-contract`） | 資料層邏輯契約（DB-agnostic）與實作綁定（DB-specific）是什麼？（schema 語意、不變式、保證層歸屬） | `templates/data-contract-template.md` |
 | UseCase | `docs/usecases/` | 使用場景和驗收標準？ | Read `references/usecases.md` |
+| Event | `docs/events/{domain}/`（ID 為 `EVT-{DOMAIN}-{NNN}`，domain-scoped 配號） | 領域事件是什麼？誰發送（producer）、誰接收（consumer）？B 層 proposed 型別，`producers`/`consumers` 建立時選填，`doc validate` 對已存在文件強制檢查兩者皆非空 | `templates/event-template.md` |
 | Tracking | `docs/proposals-tracking.yaml` | 提案進度如何？ | Read `references/tracking.md` |
 
 ---
@@ -47,7 +48,7 @@ description: "需求追蹤文件系統（proposals/spec/usecases）的查詢、�
 | `uc verify [path]` | 驗證路徑內 UC token 白名單合規（可掛 CI） | `/doc uc verify lib`（exit 0=pass / 1=violation） |
 | `uc trace <UC-XX>` | 列出指定 UC 的 code 引用位置 | `/doc uc trace UC-01` |
 | `uc context <UC-XX\|ticket-id>` | 輸出 UC 標題+spec 位置+code 引用 top-N，供派發 Context Bundle 引用 | `/doc uc context UC-01` 或 `/doc uc context <ticket-id>` |
-| `validate <SPEC-ID>` | 依 frontmatter subdomain 分派章節 schema 驗證（目前僅 data-contract） | `/doc validate SPEC-002`（exit 0=通過 / 1=章節缺失 / 2=文件不存在或 frontmatter 不可解析） |
+| `validate <SPEC-ID\|EVT-ID>` | 依 ID 前綴分派驗證：`SPEC-*`（subdomain 分派章節 schema，目前僅 data-contract）/ `EVT-*`（必填欄位 + producer/consumer 交叉驗證） | `/doc validate SPEC-002` 或 `/doc validate EVT-LIBRARY-001`（exit 0=通過 / 1=章節缺失或欄位缺失 / 2=文件不存在或 frontmatter 不可解析） |
 
 ---
 
@@ -107,10 +108,11 @@ doc domain <name>   # 帶 domain 名稱：列出該 domain 下的 spec 清單與
 | 資料契約模板 | `templates/data-contract-template.md` | 建立資料層邏輯契約與實作綁定文件（DB-agnostic / DB-specific 兩區） |
 | Design System 規格模板 | `templates/design-system-spec-template.md` | 建立 UI 設計系統規格 |
 | 用例模板 | `templates/usecase-template.md` | 建立新用例 |
+| 事件模板 | `templates/event-template.md` | 建立新領域事件（producers/consumers 建立時選填） |
 
 ### 使用方式
 
-`doc create` 已接線的類型（proposal / spec / usecase / data-contract）具備下列能力，優先使用而非手動 `cp`：自動編號（掃描既有檔案分配下一個序號，`--id` 可覆寫）、frontmatter 日期自動替換（`created` / `updated` / `proposed_date`）、proposal 類型自動新增 `proposals-tracking.yaml` entry。`doc next-id <type>` 可唯讀查詢下一個可分配 ID，不建立檔案。
+`doc create` 已接線的類型（proposal / spec / usecase / data-contract / event）具備下列能力，優先使用而非手動 `cp`：自動編號（掃描既有檔案分配下一個序號，`--id` 可覆寫）、frontmatter 日期自動替換（`created` / `updated` / `proposed_date`）、proposal 類型自動新增 `proposals-tracking.yaml` entry。`doc next-id <type>` 可唯讀查詢下一個可分配 ID，不建立檔案。
 
 ```bash
 # 建立提案
@@ -125,8 +127,12 @@ doc create data-contract --title "{name}-data-contract" --domain {domain}
 # 建立用例
 doc create usecase --title "{用例名稱}"
 
-# 查詢下一個可分配 ID（不建立檔案）
+# 建立領域事件（--domain 必填，ID 為 EVT-{DOMAIN}-{NNN}，domain-scoped 配號）
+doc create event --title "{事件簡述}" --domain {domain}
+
+# 查詢下一個可分配 ID（不建立檔案；event 型別 --domain 亦必填）
 doc next-id spec
+doc next-id event --domain {domain}
 
 # 尚未接線的類型（domain-map / design-system-spec）仍用 cp
 cp .claude/skills/doc/templates/domain-map-template.md docs/spec/{domain}/domain-map.md

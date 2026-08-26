@@ -117,13 +117,21 @@ class TicketConfig(TypedDict, total=False):
 "relatedTo": config.get("related_to") or []
 ```
 
-### 單向 vs 雙向
+### 儲存單向、語意對稱
 
-`relatedTo` 是單向的，類似於 `blockedBy`。
+`relatedTo` 的業務語意是對稱的——A 與 B 相關，B 與 A 也相關——但欄位本身只在單側寫入（儲存方式純單向，類似 `blockedBy`）。不對稱源於 Ticket 建立順序：後建的票能引用先建的票，先建票建立當下對方尚不存在，無法回填。
 
-如果 A 和 B 有雙向關聯，需要在兩個 Ticket 中都設定：
+實測（1246 票語料）：167 票使用 relatedTo，226 條有向邊，僅 15 對互指對稱（30 條有向邊，對稱率 13.3%），196 條為單向。
+
+若要在建立時就顯式記錄雙向（非必要，消費端已依下方規則自動補齊），需在兩個 Ticket 中都設定：
 - A 的 `relatedTo` 包含 B
 - B 的 `relatedTo` 包含 A
+
+### 消費端讀取規則：1-hop symmetric union（強制）
+
+任何讀取 relatedTo 的工具或流程，必須同時查詢正向邊（本票 `relatedTo` 清單）與反向邊（全庫中引用本票 ID 的其他票），取聯集才是完整關聯集合。只讀正向邊，依上述實測比例會漏失約 87% 的關聯（196/226 條僅記在一側）。
+
+**禁止遞移**：union 僅取 1-hop（直接引用/被引用），不可沿 relatedTo 鏈遞移展開——A relatedTo B、B relatedTo C，不得推論 A 與 C 相關。relatedTo 是逐對宣告的弱關聯，遞移會引入原本不存在的關聯。
 
 ## 注意事項
 
@@ -131,6 +139,7 @@ class TicketConfig(TypedDict, total=False):
 2. **資訊性**: `relatedTo` 主要用於文件和溝通，不被系統邏輯使用
 3. **維護責任**: 當 Ticket 完成或刪除時，引用它的 Ticket 不會自動更新
 4. **最佳實踐**: 若真正存在執行順序依賴，應使用 `blockedBy` 而非 `relatedTo`
+5. **讀取契約**: 消費 relatedTo 的工具（含統計、視覺化、反向索引）必須遵守「消費端讀取規則」的 1-hop symmetric union，禁止只讀正向邊或做多跳遞移展開
 
 ## 測試覆蓋
 

@@ -271,3 +271,13 @@ def test_no_broadcast_ok_or_wait(monkeypatch, capsys):
     ctx = _parse_additional_context(captured.out)
     # 無 housekeeping 訊息時不輸出
     assert ctx is None
+
+
+def test_uses_git_utils_get_project_root_for_dispatch_write():
+    """dispatch-active.json 為跨 worktree 全域狀態，本 hook 的
+    get_project_root 必須來自 lib.git_utils（CLAUDE_PROJECT_DIR 導向，
+    恆指主 repo），而非 lib.hook_base 的 worktree 感知版本
+    （0.2.1-W3-1093 / ARCH-BAL-020）。"""
+    from lib import git_utils
+
+    assert _hook.get_project_root is git_utils.get_project_root

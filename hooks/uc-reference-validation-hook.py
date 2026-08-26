@@ -34,6 +34,7 @@ Hook 類型：PreToolUse
 退出碼：一律 0（WARNING-only，不阻擋）
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -123,7 +124,12 @@ def main() -> int:
     if not file_path or not file_path.lower().endswith(HOOK_SCANNABLE_EXTENSIONS):
         return 0
 
-    project_root = str(get_project_root())
+    # CLAUDE_PROJECT_DIR 為明確覆寫（測試隔離、多 project_root 場景）時必須
+    # 優先於 get_project_root() 的 worktree 自動偵測——後者以 cwd 判斷是否
+    # 位於 git linked worktree，本 hook 執行環境（含測試進程）本身常常就在
+    # worktree 內，若不優先讀取明確覆寫，該偵測會恆常蓋掉呼叫端指定的
+    # project_root，使白名單解析讀到錯誤專案的 SSOT。
+    project_root = os.environ.get("CLAUDE_PROJECT_DIR") or str(get_project_root())
 
     if is_exempt_path(file_path, project_root):
         logger.debug("路徑豁免，跳過驗證：%s", file_path)

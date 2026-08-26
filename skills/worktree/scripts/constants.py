@@ -68,3 +68,24 @@ CLEANUP_OUTPUT_WIDTH = WORKTREE_STATUS_OUTPUT_WIDTH
 
 # git branch -d 失敗時，提示使用者的強制刪除指令中的 flag
 BRANCH_FORCE_DELETE_FLAG = "-D"
+
+
+# ===== macOS 建置前置檔案常數 =====
+#
+# macos/Flutter/Flutter-Debug.xcconfig、Flutter-Release.xcconfig 被
+# .gitignore 的 /macos/ 規則排除，git worktree add 建立的新 worktree
+# 不會帶有這兩個檔案，導致 flutter build macos / flutter test -d macos
+# 找不到 include 檔而失敗。內容為固定的 Flutter 樣板（僅 #include 相對
+# 路徑，無機器相依內容），故用固定內容寫入補齊，不從主 checkout 複製
+# （避免帶入非標準本機修改）。
+
+MACOS_XCCONFIG_TEMPLATES = {
+    "Flutter-Debug.xcconfig": (
+        '#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"\n'
+        '#include "ephemeral/Flutter-Generated.xcconfig"\n'
+    ),
+    "Flutter-Release.xcconfig": (
+        '#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"\n'
+        '#include "ephemeral/Flutter-Generated.xcconfig"\n'
+    ),
+}

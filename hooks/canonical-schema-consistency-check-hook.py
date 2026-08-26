@@ -38,13 +38,21 @@ Canonical Schema 清單一致性檢查 Hook
 3. 從 2 份文件擷取章節清單（ticket-body-schema.md 取 Schema 對照表第一欄
    + 補列小節；agent-definition-standard-details.md 取行內 backtick 清單）
 4. 逐一與基準集合比對差集，不一致時輸出警告並列出具體缺漏/多餘項
+
+追加檢查（EMOJI_RANGES 三份副本交叉驗證，承接本 hook 驗收確認的落差）：
+constants.py 的 `EMOJI_RANGES` 與 `.claude/hooks/language-guard-hook.py`、
+`.claude/hooks/askuserquestion-charset-guard-hook.py` 的同名常數為三份獨立
+維護副本，過去僅靠各檔自然語言註解宣告「範圍對齊」維持一致性，未經程式
+檢查即可能靜默漂移（language-constraints 規則 5 明文禁止此做法）。承載點
+沿用本 hook 既有的建立端優先模式：以 constants.py 為基準，逐一比對兩份
+下游副本的 (start, end) codepoint 配對集合，不一致時輸出具體缺漏/多餘範圍。
 """
 
 import json
 import re
 import sys
 from pathlib import Path
-from typing import List, NamedTuple, Optional, Set
+from typing import List, NamedTuple, Optional, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -64,9 +72,23 @@ VALIDATOR_TARGETS = [
 TICKET_BODY_SCHEMA_MD = "pm-rules/ticket-body-schema.md"
 AGENT_DEFINITION_STANDARD_MD = "references/agent-definition-standard-details.md"
 
+# EMOJI_RANGES 下游副本比對目標：(顯示名稱, 相對路徑)
+EMOJI_RANGES_TARGETS = [
+    ("language-guard-hook.py", "hooks/language-guard-hook.py"),
+    ("askuserquestion-charset-guard-hook.py", "hooks/askuserquestion-charset-guard-hook.py"),
+]
+
 CANONICAL_PATTERN = re.compile(
     r"CANONICAL_BODY_SECTIONS\s*:\s*tuple\s*=\s*\((.*?)\)", re.DOTALL
 )
+# EMOJI_RANGES 賦值：三份檔案寫法略有差異（含/不含 `: tuple` 型別註解），
+# 以 `\n\)` 錨定敘述式 tuple 的結尾（每個內層 (start, end) pair 都在自己的
+# 行內收合，最終 `)` 獨占一行、行首無縮排），避免非貪婪 `.*?\)` 在第一個
+# 內層 pair 就提早收斂。
+EMOJI_RANGES_PATTERN = re.compile(
+    r"EMOJI_RANGES\s*(?::\s*tuple)?\s*=\s*\((.*?)\n\)", re.DOTALL
+)
+EMOJI_RANGE_PAIR_PATTERN = re.compile(r"\(0x([0-9A-Fa-f]+),\s*0x([0-9A-Fa-f]+)\)")
 SCHEMA_SECTION_NAMES_PATTERN = re.compile(
     r"_SCHEMA_SECTION_NAMES\s*(?::\s*List\[str\])?\s*=\s*\[(.*?)\]", re.DOTALL
 )
@@ -146,6 +168,45 @@ def extract_agent_definition_sections(content: str) -> Optional[List[str]]:
     return [_clean_annotation(item) for item in BACKTICK_ITEM_PATTERN.findall(match.group(1))]
 
 
+def extract_emoji_ranges(content: str) -> Optional[List[Tuple[int, int]]]:
+    """從檔案內容擷取 EMOJI_RANGES tuple 的 (start, end) codepoint 配對（保留順序）。
+
+    建立端為 constants.py（language-constraints 規則 5：字元集子集清單須以
+    程式交叉驗證）；language-guard-hook.py / askuserquestion-charset-guard-
+    hook.py 為獨立維護的下游副本，範圍應與建立端一致。
+    """
+    match = EMOJI_RANGES_PATTERN.search(content)
+    if not match:
+        return None
+    return [
+        (int(start_hex, 16), int(end_hex, 16))
+        for start_hex, end_hex in EMOJI_RANGE_PAIR_PATTERN.findall(match.group(1))
+    ]
+
+
+def _format_emoji_range(pair: Tuple[int, int]) -> str:
+    """格式化 (start, end) codepoint 配對供差異訊息顯示。"""
+    start, end = pair
+    return f"(0x{start:04X}, 0x{end:04X})"
+
+
+def _diff_emoji_ranges(
+    label: str, canonical: List[Tuple[int, int]], actual: List[Tuple[int, int]]
+) -> Optional[DriftResult]:
+    """比對單一下游 EMOJI_RANGES 副本與建立端範圍集合，回傳差異（無差異回傳 None）。"""
+    canonical_set = set(canonical)
+    actual_set = set(actual)
+    missing = sorted(canonical_set - actual_set)
+    extra = sorted(actual_set - canonical_set)
+    if not missing and not extra:
+        return None
+    return DriftResult(
+        label=label,
+        missing=[_format_emoji_range(p) for p in missing],
+        extra=[_format_emoji_range(p) for p in extra],
+    )
+
+
 def _diff(label: str, canonical: Set[str], actual: List[str]) -> Optional[DriftResult]:
     """比對單一下游清單與 canonical 基準集合，回傳差異（無差異回傳 None）"""
     actual_set = set(actual)
@@ -198,6 +259,20 @@ def scan_schema_drifts(project_root: Path) -> List[DriftResult]:
         drift = _diff(rel_path, canonical_set, actual)
         if drift:
             drifts.append(drift)
+
+    canonical_emoji_ranges = extract_emoji_ranges(constants_content)
+    if canonical_emoji_ranges:
+        for label, rel_path in EMOJI_RANGES_TARGETS:
+            try:
+                content = (project_root / ".claude" / rel_path).read_text(encoding="utf-8")
+            except OSError:
+                continue
+            actual_emoji_ranges = extract_emoji_ranges(content)
+            if actual_emoji_ranges is None:
+                continue
+            drift = _diff_emoji_ranges(label, canonical_emoji_ranges, actual_emoji_ranges)
+            if drift:
+                drifts.append(drift)
 
     return drifts
 

@@ -80,6 +80,10 @@ JAPANESE_ONLY = frozenset(
 )
 
 # Emoji unicode 範圍（命中即違規）
+# 下游副本：建立端為 .claude/skills/ticket/ticket_system/constants.py 的
+# EMOJI_RANGES（canonical，見該檔註解與 tool-output-trust-rules.md 規則 6）。
+# 一致性由 canonical-schema-consistency-check-hook.py（SessionStart）程式
+# 交叉驗證，不再僅依自然語言註解維持（language-constraints 規則 5）。
 EMOJI_RANGES = (
     (0x2600, 0x27BF),    # Miscellaneous Symbols (⚡ ✅ ❌ ⚠️ ★ ☆)
     (0x1F300, 0x1F5FF),  # Miscellaneous Symbols and Pictographs (🎯 🔴 🟢 📝)

@@ -254,3 +254,100 @@ class TestCreateMergesMainBaseline:
         captured = capsys.readouterr()
         assert "blockedBy" not in captured.out
         assert "依賴分支" not in captured.out
+
+
+class TestCreateSyncsMacosXcconfig:
+    """0.2.1-W3-1069：worktree create 補齊 gitignored 的 macOS xcconfig 建置檔案
+
+    macos/Flutter/Flutter-Debug.xcconfig、Flutter-Release.xcconfig 被 .gitignore
+    的 /macos/ 規則排除，git worktree add 建立的新 worktree 不會帶有這兩個檔案，
+    導致 flutter build macos / flutter test -d macos 找不到 include 檔而失敗。
+    兩檔內容為固定的 Flutter 樣板（僅 #include 相對路徑，無機器相依內容），
+    故用固定內容寫入取代「從主 checkout 複製」，避免帶入非標準本機修改。
+    """
+
+    @patch('worktree_manager.run_git_command')
+    @patch('worktree_manager.check_branch_exists')
+    @patch('worktree_manager.derive_worktree_path')
+    def test_create_writes_missing_xcconfig_when_macos_platform_present(
+        self, mock_derive_path, mock_check_branch, mock_run_git, tmp_path, capsys
+    ):
+        """macos/ 平台目錄存在（git worktree add 帶出 tracked 檔案）時，
+        缺失的 xcconfig 應被自動補齊。"""
+        worktree_path = str(tmp_path / "wt")
+        mock_derive_path.return_value = worktree_path
+        mock_check_branch.side_effect = [True, False]
+
+        def _fake_run_git(args, cwd=None, timeout=10):
+            if args[:2] == ["worktree", "add"]:
+                os.makedirs(os.path.join(worktree_path, "macos", "Flutter"), exist_ok=True)
+                return (True, "")
+            return (True, "")
+
+        mock_run_git.side_effect = _fake_run_git
+
+        result = cmd_create("0.1.1-W9-002.1")
+
+        assert result == 0
+        debug_path = os.path.join(worktree_path, "macos", "Flutter", "Flutter-Debug.xcconfig")
+        release_path = os.path.join(worktree_path, "macos", "Flutter", "Flutter-Release.xcconfig")
+        assert os.path.exists(debug_path)
+        assert os.path.exists(release_path)
+        with open(debug_path, encoding="utf-8") as f:
+            assert "ephemeral/Flutter-Generated.xcconfig" in f.read()
+        captured = capsys.readouterr()
+        assert "xcconfig" in captured.out.lower()
+
+    @patch('worktree_manager.run_git_command')
+    @patch('worktree_manager.check_branch_exists')
+    @patch('worktree_manager.derive_worktree_path')
+    def test_create_skips_xcconfig_sync_when_no_macos_platform(
+        self, mock_derive_path, mock_check_branch, mock_run_git, tmp_path
+    ):
+        """worktree 沒有 macos/ 平台目錄時（非本專案或無 macOS target），不應建立任何檔案。"""
+        worktree_path = str(tmp_path / "wt")
+        mock_derive_path.return_value = worktree_path
+        mock_check_branch.side_effect = [True, False]
+
+        def _fake_run_git(args, cwd=None, timeout=10):
+            if args[:2] == ["worktree", "add"]:
+                os.makedirs(worktree_path, exist_ok=True)
+                return (True, "")
+            return (True, "")
+
+        mock_run_git.side_effect = _fake_run_git
+
+        result = cmd_create("0.1.1-W9-002.1")
+
+        assert result == 0
+        assert not os.path.exists(os.path.join(worktree_path, "macos"))
+
+    @patch('worktree_manager.run_git_command')
+    @patch('worktree_manager.check_branch_exists')
+    @patch('worktree_manager.derive_worktree_path')
+    def test_create_does_not_overwrite_existing_xcconfig(
+        self, mock_derive_path, mock_check_branch, mock_run_git, tmp_path
+    ):
+        """xcconfig 已存在（如使用者已手動補過）時不覆寫，避免蓋掉本機自訂內容。"""
+        worktree_path = str(tmp_path / "wt")
+        mock_derive_path.return_value = worktree_path
+        mock_check_branch.side_effect = [True, False]
+
+        def _fake_run_git(args, cwd=None, timeout=10):
+            if args[:2] == ["worktree", "add"]:
+                flutter_dir = os.path.join(worktree_path, "macos", "Flutter")
+                os.makedirs(flutter_dir, exist_ok=True)
+                debug_path = os.path.join(flutter_dir, "Flutter-Debug.xcconfig")
+                with open(debug_path, "w", encoding="utf-8") as f:
+                    f.write("# 自訂內容，不應被覆寫\n")
+                return (True, "")
+            return (True, "")
+
+        mock_run_git.side_effect = _fake_run_git
+
+        result = cmd_create("0.1.1-W9-002.1")
+
+        assert result == 0
+        debug_path = os.path.join(worktree_path, "macos", "Flutter", "Flutter-Debug.xcconfig")
+        with open(debug_path, encoding="utf-8") as f:
+            assert "自訂內容" in f.read()
