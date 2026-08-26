@@ -1,14 +1,15 @@
 {
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Hook 排除清單 - 標記不需要在 settings.json 註冊的檔案",
-  "last_updated": "2026-08-09",
+  "last_updated": "2026-08-26",
   "exclude": [
     "eval_pyyaml.py",
     "dart-presence-detection-hook.py",
     "dispatch_stats.py",
     "changelog-update-hook.py",
     "commit-handoff-hook.py",
-    "post-commit-fetch-hook.py"
+    "post-commit-fetch-hook.py",
+    "dispatch-record-hook.py"
   ],
   "exclude_patterns": [
     "*-backup.py"
@@ -20,6 +21,7 @@
     "dispatch_stats.py": "CLI 統計工具（透過 argv 使用），非 stdin JSON Hook",
     "changelog-update-hook.py": "功能已併入 post-git-commit-hook.py，檔案保留供回溯；不註冊為預期狀態，非缺漏",
     "commit-handoff-hook.py": "功能已併入 post-git-commit-hook.py，檔案保留供回溯；不註冊為預期狀態，非缺漏",
-    "post-commit-fetch-hook.py": "功能已併入 post-git-commit-hook.py，檔案保留供回溯；不註冊為預期狀態，非缺漏"
+    "post-commit-fetch-hook.py": "功能已併入 post-git-commit-hook.py，檔案保留供回溯；不註冊為預期狀態，非缺漏",
+    "dispatch-record-hook.py": "派發記錄職責已遷移至 active-dispatch-tracker-hook.py，檔案保留供回溯；不註冊為預期狀態，非缺漏"
   }
 }

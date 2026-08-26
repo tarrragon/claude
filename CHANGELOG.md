@@ -1,3 +1,15 @@
+## [2.40.3] - 2026-08-26
+
+### Summary
+fix: dispatch-record-hook 補入 hook exclude 清單; chore: 回寫 .claude VERSION ->
+
+Changes: 1 fix, 1 chore
+
+- fix: dispatch-record-hook 補入 hook exclude 清單
+- chore: 回寫 .claude VERSION ->
+
+---
+
 ## [2.40.2] - 2026-08-26
 
 ### Summary
