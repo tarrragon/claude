@@ -1,3 +1,10 @@
+## [2.42.6] - 2026-08-27
+
+### Summary
+skill Version footer 補正
+
+---
+
 ## [2.42.5] - 2026-08-27
 
 ### Summary
