@@ -62,7 +62,7 @@ description: "Use this skill when creating a new skill, updating an existing ski
 
 **Why**：AI agent 沒有跨 session 記憶，工具即時引導是唯一可靠防線。文件說的和工具做的不一致時，工具會贏。
 
-> 完整論證、案例、反模式對照表：`.claude/references/opinionated-default-design-details.md`；通用設計原則：`.claude/rules/core/opinionated-default-design.md`。
+> 完整論證、案例、反模式對照表見 Opinionated Default 設計原則的詳細版；通用設計原則見同名的速查規則。
 
 ---
 
@@ -279,6 +279,37 @@ description: [...]
 | 100+ 行加 TOC | 讓 Claude preview 時看到完整範圍 |
 | 不重複 | 內容只放 SKILL.md 或 reference 之一，不兩處皆有 |
 
+> **skill 自身目錄內的 reference 用相對路徑**（`references/foo.md`），這是本表的適用範圍。**指向 skill 外部的東西見 §6.4。**
+
+### 6.4 外部引用：指名身分，不用檔案路徑
+
+**要讀的資料一律以身分指名，不寫檔案路徑。**
+
+| 引用對象 | 寫法 | 讀者如何取得 |
+|---------|------|------------|
+| 另一個 skill | `` `tdd` skill ``、`` `tdd` skill 的分層測試策略 `` | Skill 工具以名字載入 |
+| 方法論 | 元件庫雙向約束方法論 | 以標題檢索 |
+| 規則 | 可觀測性規則、決策 trigger 綁定規則 | 以標題檢索 |
+
+**Why**：路徑是「它現在放在哪」，名字是「它是什麼」。路徑會因框架改版而失效——實證：某次改版把 hook 自 `.claude/hooks/` 移入 `.claude/skills/<name>/hooks/`，所有以舊路徑註冊者全數失效。更根本的是機制錯配：skill 在本系統以名字載入，寫路徑等於叫讀者 cat 檔案，繞過既有載入機制。
+
+**Consequence**：除了改版即斷，還會觸發 `skill-sync` 的可攜性閘門——宣告 `metadata.portable: true` 的 skill 若指名 `.claude/...` 路徑，push 會被中止並列出全部命中處（實證：兩份 skill 累計 25 處，被判為「指名他專案的檔案」）。
+
+**Action**：寫外部引用前先問——**讀者是要去讀它學東西，還是要寫進它讓別的東西動起來？**
+
+| 答案 | 形式 | 例 |
+|------|------|-----|
+| 讀它學東西 | 指名身分 | 「判準見 `tdd` skill 的分層測試策略」 |
+| 寫進它讓別的東西動起來 | 保留檔名與欄位名（**介面規格**） | 「依賴回填至 `docs/proposals-tracking.yaml` 的 `depends_on`，下游檢查器讀該欄位」 |
+
+**三類例外，路徑是正當的**：
+
+1. **框架綁定工具講自己的主題**：`ticket`／`doc`／`worktree`／`skill-sync` 等，`.claude/` 路徑就是它們的操作對象而非閱讀材料。
+2. **介面規格**：下游程式讀特定檔案的特定欄位時，泛稱會使契約不可驗證。此類須在鄰近處標明它是本框架的位置慣例、不是契約本身。
+3. **路徑本身即被討論的對象**：如本節引述「hook 自 `.claude/hooks/` 移入⋯⋯」作為失效實證。此時路徑是舉例的內容，不是指向要讀的東西。
+
+> 本節條文寫成後隨即套回本文件自身，抓到三處違規（§1.4 的詳細版路由、§13 延伸閱讀表兩列），已改為指名。**寫完條文與用條文掃過自己是兩個動作**，§12 的機械檢查即為此而設。
+
 ---
 
 ## 7. 命名規則
@@ -446,6 +477,7 @@ description: [...]
 - [ ] 100+ 行的 reference 有 TOC
 - [ ] 術語一致
 - [ ] 無時間敏感字串
+- [ ] **外部引用以身分指名，不寫檔案路徑**（§6.4）。機械檢查：`grep -nE '\`\.claude/[^\`]*\`' SKILL.md`，每個命中須屬 §6.4 的兩類例外之一，逐一說明；說不出屬於哪一類就是該改
 
 ### 觸發測試
 
@@ -462,11 +494,12 @@ description: [...]
 |------|-------|
 | `references/patterns-and-troubleshooting.md` | 設計多步驟 / 條件式工作流、需要進階範本模式 |
 | `references/seeing-like-an-agent.md` | 想理解工具設計哲學與 agent 視角的演進 |
-| `.claude/references/opinionated-default-design-details.md` | 設計工具預設行為、判斷何時該有 opinion |
-| `.claude/references/skill-marketplace-standard.md` | 規劃 Skill Market 上架、檢查獨立性與環境解耦 |
+| Opinionated Default 設計原則的詳細版（框架 references） | 設計工具預設行為、判斷何時該有 opinion |
+| Skill Marketplace 標準（框架 references） | 規劃 Skill Market 上架、檢查獨立性與環境解耦 |
 
 ---
 
 **Last Updated**: 2026-04-30
+**Version**: 1.2.0 — 新增 §6.4「外部引用：指名身分，不用檔案路徑」（skill 用名字走 Skill 工具載入、方法論與規則用標題檢索），含判別問句「讀者是要去讀它學東西，還是要寫進它讓別的東西動起來」與兩類正當例外（框架綁定工具講自己的主題、介面規格）。§6.3 補一行界定其適用範圍為 skill 目錄內的相對路徑。§12 Body 檢查清單補對應機械檢查。實證：框架改版移動 hook 位置使舊路徑註冊全數失效；skill-sync 可攜性閘門把兩份 skill 的 25 處路徑判為指名他專案的檔案而中止 push
 **Version**: 1.1.0 — §1.4 新增 Opinionated Defaults 設計心法（通用原則路由 `rules/core/opinionated-default-design.md`）
 **Source**: Anthropic 官方 skill-creator（`~/.claude/plugins/marketplaces/anthropic-agent-skills/skills/skill-creator/`）+ 官方平台文件 + Claude Code 擴展規範 + 本專案實踐
