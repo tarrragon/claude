@@ -1,3 +1,10 @@
+## [2.42.10] - 2026-08-27
+
+### Summary
+收尾同步：skill-design-guide 1.2.0 外部引用規則、兩份 skill 引用改指名身分、component-library 1.8.0 Web 端元件庫產物定義
+
+---
+
 ## [2.42.9] - 2026-08-27
 
 ### Summary
