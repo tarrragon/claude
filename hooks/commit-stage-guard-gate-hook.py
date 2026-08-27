@@ -26,17 +26,24 @@ Decision: 任一 guard 產出 deny 級發現 -> exit 2（阻擋 commit，stderr
 ============================================================
 掃描對象與內容重建
 ============================================================
-掃描對象為 `git diff --cached --name-only` 的 staged 檔案清單（新增/修改，
-已刪除或純 rename 檔案略過，見 `_get_staged_file_list`）。對每個 staged
-檔案以三種文字重建供各 guard 判斷函式使用：
-  - pre_text：`git show HEAD:<path>`（新檔則為空字串），對應各原 guard
-    「編輯前磁碟內容」的角色。
+掃描對象為 `git diff --cached --name-only --diff-filter=ACMR` 的 staged
+檔案清單（新增/修改/rename，已刪除檔案略過，見 `_get_staged_file_list`）。
+rename 檔案（含純 rename 與 rename 併內容變更）不略過，改以 `git diff
+--cached -M --name-status` 取得舊路徑對照表（見 `_get_staged_rename_map`），
+三種重建文字對 rename 檔案改採下列基準：
+  - pre_text：一般檔案為 `git show HEAD:<path>`（新檔則為空字串）；rename
+    檔案改用 `git show HEAD:<old_path>`（rename 前的舊路徑），對應各原
+    guard「編輯前磁碟內容」的角色。純 rename 因 pre_text 與 post_text
+    內容相同，diff 淨增量自然為零，不需額外豁免路徑。
   - post_text：`git show :<path>`（index 中的 staged 內容，非 working
     tree），對應各原 guard Write 工具 content 的角色。
-  - added_text：`git diff --cached -- <path>` 抽出以單一 `+` 開頭（非
-    `+++`）的行，對應各原 guard Edit/MultiEdit new_string 的角色（僅涵蓋
-    「本次變更新增」的片段，非全檔案，維持與原 guard 一致的防呆設計—— 只
-    掃變更內容不誤觸既有存量）。
+  - added_text：一般檔案為 `git diff --cached -- <path>`；rename 檔案改
+    用 `git diff --cached -M -- <old_path> <path>`（同時帶回舊路徑作
+    pathspec，使 git 能配對 rename 對；僅給新路徑會讓 rename 退化為整檔
+    新增，是本票修復的根因）。抽出以單一 `+` 開頭（非 `+++`）的行，對應
+    各原 guard Edit/MultiEdit new_string 的角色（僅涵蓋「本次變更新增」
+    的片段，非全檔案，維持與原 guard 一致的防呆設計——只掃變更內容不誤觸
+    既有存量）。
 
 ============================================================
 12 支既有 guard 的轉呼方式（逐一列於各 `_check_*` 函式 docstring）
@@ -138,7 +145,7 @@ def _load_module(mod_name: str, file_path: Path) -> Optional[types.ModuleType]:
 
 
 def _get_staged_file_list(project_root: Path) -> List[str]:
-    """取得 staged 檔案清單（新增/修改，已刪除檔案略過）。"""
+    """取得 staged 檔案清單（新增/修改/rename，已刪除檔案略過）。"""
     success, output = run_git_command(
         ["diff", "--cached", "--name-only", "--diff-filter=ACMR"],
         cwd=str(project_root),
@@ -146,6 +153,29 @@ def _get_staged_file_list(project_root: Path) -> List[str]:
     if not success or not output:
         return []
     return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def _get_staged_rename_map(project_root: Path) -> Dict[str, str]:
+    """取得本次 staged 變更中 rename 檔案的新路徑 -> 舊路徑對照表（含純
+    rename 與 rename 併內容變更）。`-M` 顯式開啟 rename 偵測（不依賴 git
+    版本/組態預設值）；`--name-status` 逐行輸出 `狀態<TAB>舊路徑<TAB>新路徑`
+    （R 開頭後接相似度百分比，如 R100/R063，皆視為 rename）。非 rename 的
+    行只有兩欄，split 後長度不符會被過濾。
+    """
+    success, output = run_git_command(
+        ["diff", "--cached", "-M", "--name-status"],
+        cwd=str(project_root),
+    )
+    if not success or not output:
+        return {}
+    rename_map: Dict[str, str] = {}
+    for line in output.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 3 or not parts[0].startswith("R"):
+            continue
+        _status, old_path, new_path = parts
+        rename_map[new_path] = old_path
+    return rename_map
 
 
 def _git_show(rev_spec: str, project_root: Path) -> str:
@@ -156,11 +186,23 @@ def _git_show(rev_spec: str, project_root: Path) -> str:
     return output
 
 
-def _get_added_text(rel_path: str, project_root: Path) -> str:
-    """抽出 staged diff 中以單一 `+` 開頭（非 `+++`）的行，串接成文字。"""
-    success, output = run_git_command(
-        ["diff", "--cached", "--", rel_path], cwd=str(project_root)
-    )
+def _get_added_text(
+    rel_path: str, project_root: Path, old_path: Optional[str] = None
+) -> str:
+    """抽出 staged diff 中以單一 `+` 開頭（非 `+++`）的行，串接成文字。
+
+    rename 檔案（`old_path` 非 None）額外把舊路徑一併帶入 pathspec 並加
+    `-M`，使 git 能配對 rename 對；僅給新路徑單一 pathspec 時，git 找不到
+    配對的舊路徑，rename 會退化為整檔新增（本函式修復前的根因行為）。
+    """
+    diff_args = ["diff", "--cached"]
+    if old_path is not None:
+        diff_args.append("-M")
+    diff_args.append("--")
+    if old_path is not None:
+        diff_args.append(old_path)
+    diff_args.append(rel_path)
+    success, output = run_git_command(diff_args, cwd=str(project_root))
     if not success or not output:
         return ""
     added_lines = [
@@ -171,10 +213,16 @@ def _get_added_text(rel_path: str, project_root: Path) -> str:
     return "\n".join(added_lines)
 
 
-def _build_staged_file(rel_path: str, project_root: Path) -> StagedFile:
-    pre_text = _git_show(f"HEAD:{rel_path}", project_root)
+def _build_staged_file(
+    rel_path: str,
+    project_root: Path,
+    rename_map: Optional[Dict[str, str]] = None,
+) -> StagedFile:
+    old_path = (rename_map or {}).get(rel_path)
+    pre_path = old_path if old_path is not None else rel_path
+    pre_text = _git_show(f"HEAD:{pre_path}", project_root)
     post_text = _git_show(f":{rel_path}", project_root)
-    added_text = _get_added_text(rel_path, project_root)
+    added_text = _get_added_text(rel_path, project_root, old_path=old_path)
     return StagedFile(rel_path, pre_text, post_text, added_text)
 
 
@@ -558,7 +606,10 @@ def main() -> int:
         logger.debug("無 staged 檔案，放行")
         return EXIT_ALLOW
 
-    staged_files = [_build_staged_file(p, project_root) for p in staged_paths]
+    rename_map = _get_staged_rename_map(project_root)
+    staged_files = [
+        _build_staged_file(p, project_root, rename_map) for p in staged_paths
+    ]
     findings = _run_all_checks(staged_files, project_root, logger)
 
     deny_findings = [f for f in findings if f.severity == "deny"]

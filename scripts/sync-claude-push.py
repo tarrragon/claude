@@ -87,6 +87,7 @@ from lib.skill_version_diff import (  # noqa: E402
     format_skill_version_diff,
     report_skill_repo_drift,
 )
+from lib.skill_case_guard import check_git_tree_skill_md_case  # noqa: E402
 
 REPO_URL = "https://github.com/tarrragon/claude.git"
 
@@ -2296,6 +2297,18 @@ def main() -> None:
     temp_dir = Path(tempfile.mkdtemp())
     try:
         run_git(["clone", REPO_URL, str(temp_dir)])
+
+        # 3.5. 前置檢查：git tree 記錄的 skill.md 大小寫（推送前，來源端仍看得見）。
+        # 必須讀 git ls-tree 而非本地檔案系統列目錄——core.ignorecase=true 時
+        # checkout 只覆寫既有 dirent 的內容位元組，本地列目錄看不出遠端 tree
+        # 實際記錄的大小寫是否已分歧，唯有讀 tree object bytes 才能穿透此正
+        # 規化（見 lib/skill_case_guard.py check_git_tree_skill_md_case 說明）。
+        # 只告警不阻擋：此為既有分歧的早期預警，非本次推送新增的變更。
+        tree_case_warnings = check_git_tree_skill_md_case(temp_dir)
+        if tree_case_warnings:
+            print_color("警告: 遠端 canonical 的 skill 目錄檔名大小寫異常", "yellow")
+            for warning in tree_case_warnings:
+                print_color(f"   {warning}", "yellow")
 
         # 快照遠端 skill 版本（W2-001：push 尾端輸出 skill 版本 diff 摘要）
         skill_versions_before = extract_skill_versions(temp_dir / "skills")

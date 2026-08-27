@@ -1,3 +1,19 @@
+## [2.42.11] - 2026-08-27
+
+### Summary
+fix: sync-pull hook 自動登記去重 key 改為腳本身分; fix: skill.md 大小寫檢查機制擴充與訊息改寫; fix: sync-push 推送前檢查遠端 skill.md 大小寫 (+3 more)
+
+Changes: 4 fix, 2 docs
+
+- fix: sync-pull hook 自動登記去重 key 改為腳本身分
+- fix: skill.md 大小寫檢查機制擴充與訊息改寫
+- fix: sync-push 推送前檢查遠端 skill.md 大小寫
+- fix: 還原 settings.json 至 pull 前狀態，消除 105 組重複 hook 登記
+- docs: IMP-BAL-017 交叉引用 PC-GPD-001；建 追蹤 gitignore 缺口
+- docs: PC-BAL-056 補必要細分（執行本身也分維度）
+
+---
+
 ## [2.42.10] - 2026-08-27
 
 ### Summary

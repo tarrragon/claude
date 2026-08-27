@@ -73,7 +73,13 @@ def check_skill_registration(skill_dir: Path) -> Tuple[bool, Optional[str]]:
     # real dirent name is read via os.scandir (see lib/skill_case_guard.py).
     variant = find_case_variant(skill_dir)
     if variant is not None:
-        return (False, f"has {variant} instead of SKILL.md")
+        return (
+            False,
+            f"has {variant} instead of SKILL.md "
+            "(unloadable on case-sensitive filesystems: Claude Code requires "
+            "the exact uppercase SKILL.md to load a skill; most Linux "
+            "consumers will fail to load this skill entirely)",
+        )
 
     # Check if SKILL.md exists
     if not skill_md.exists():
@@ -176,7 +182,9 @@ def main():
             print(f"  - {skill_name}: {problems[skill_name]}")
 
         print("\n建議修復:")
-        print("  1. 確認 SKILL.md 文件名大小寫正確（必須是大寫 SKILL.md）")
+        print("  1. 確認 SKILL.md 檔名大小寫正確（必須是大寫 SKILL.md；小寫或其他")
+        print("     大小寫變體在大小寫敏感檔案系統上會導致該 skill 完全無法載入，")
+        print("     非僅風格問題）")
         print("  2. 確認 SKILL.md 包含有效的 YAML frontmatter（以 --- 開始和結束）")
         print("  3. 確認 frontmatter 中包含 'name' 和 'description' 欄位")
     else:

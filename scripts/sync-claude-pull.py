@@ -2628,6 +2628,38 @@ def verify_local_settings_no_hooks(project_root: Path) -> None:
     print_color(advice, "yellow")
 
 
+# settings.json 中 hook command 字串萃取「.claude/ 之後腳本相對路徑」的正則。
+# 容錯呼叫前綴（uv run --quiet / python3 等 shell 包裝）與 $CLAUDE_PROJECT_DIR
+# 變數——這些前綴不影響「是哪支腳本」的身分，只影響「怎麼呼叫」。
+_HOOK_CMD_SCRIPT_RE = re.compile(r"\.claude/([^\s'\"]+?\.py)")
+
+
+def _collect_registered_hook_script_paths(settings_data: dict) -> set[str]:
+    """從 settings.json 的 hooks 區塊萃取已註冊腳本的正規化路徑集合。
+
+    去重 key 必須是腳本身分（如 `hooks/foo.py`），不能是完整 command 字串——
+    同一腳本在 settings.json 可能同時以裸路徑與 `uv run --quiet` 前綴兩種形式
+    存在，字串比對會把兩者判為不同項而重複登記，且登記與檢查用的是同一組
+    字串，此類分裂無法自我發現（永遠自洽）。改用剝除呼叫前綴與
+    $CLAUDE_PROJECT_DIR 變數後的腳本路徑作 key，才能正確辨識「同一腳本」。
+
+    參數:
+        settings_data: 已解析的 settings.json 內容
+
+    傳回:
+        set[str]: 正規化後的腳本相對路徑（如 `hooks/foo.py`、
+        `skills/bar/hooks/baz.py`），不含呼叫前綴與 $CLAUDE_PROJECT_DIR 變數
+    """
+    paths: set[str] = set()
+    for entries in settings_data.get("hooks", {}).values():
+        for entry in entries:
+            for hook in entry.get("hooks", []):
+                match = _HOOK_CMD_SCRIPT_RE.search(hook.get("command", ""))
+                if match:
+                    paths.add(match.group(1))
+    return paths
+
+
 def auto_register_hooks(project_root: Path) -> int:  # i18n-exempt
     """Post-sync: reconcile hook-registry.yaml into settings.json."""
     claude_dir = project_root / ".claude"
@@ -2654,11 +2686,7 @@ def auto_register_hooks(project_root: Path) -> int:  # i18n-exempt
         except (OSError, ValueError):
             pass
 
-    registered_cmds: set[str] = set()
-    for entries in settings_data.get("hooks", {}).values():
-        for entry in entries:
-            for hook in entry.get("hooks", []):
-                registered_cmds.add(hook.get("command", ""))
+    registered_scripts = _collect_registered_hook_script_paths(settings_data)
 
     added = 0
 
@@ -2667,9 +2695,9 @@ def auto_register_hooks(project_root: Path) -> int:  # i18n-exempt
             continue
         if not (claude_dir / "hooks" / filename).is_file():
             continue
-        cmd = f"$CLAUDE_PROJECT_DIR/.claude/hooks/{filename}"
-        if cmd in registered_cmds:
+        if f"hooks/{filename}" in registered_scripts:
             continue
+        cmd = f"$CLAUDE_PROJECT_DIR/.claude/hooks/{filename}"
         event = meta.get("event", "")
         matcher = meta.get("matcher", "")
         timeout = meta.get("timeout")
@@ -2685,9 +2713,9 @@ def auto_register_hooks(project_root: Path) -> int:  # i18n-exempt
         skill_name, filename = parts
         if not (claude_dir / "skills" / skill_name / "hooks" / filename).is_file():
             continue
-        cmd = f"$CLAUDE_PROJECT_DIR/.claude/skills/{skill_name}/hooks/{filename}"
-        if cmd in registered_cmds:
+        if f"skills/{skill_name}/hooks/{filename}" in registered_scripts:
             continue
+        cmd = f"$CLAUDE_PROJECT_DIR/.claude/skills/{skill_name}/hooks/{filename}"
         event = meta.get("event", "")
         matcher = meta.get("matcher", "")
         timeout = meta.get("timeout")

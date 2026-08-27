@@ -104,6 +104,119 @@ class TestStagedTextReconstruction:
         assert sf.added_text.strip() == "new line"
 
 
+class TestRenameHandling:
+    """rename 檔案的 pre_text/added_text 重建（0.2.1-W3-1139）：純 rename
+    應零命中不阻擋；rename 併內容變更僅掃真正新增的內容。"""
+
+    def test_pure_rename_pre_text_equals_post_text(self, scratch_repo):
+        old_file = scratch_repo / "sub"
+        old_file.mkdir()
+        (old_file / "old.md").write_text("W9-100 既有內容\n", encoding="utf-8")
+        _run_git(["add", "sub/old.md"], cwd=scratch_repo)
+        _run_git(["commit", "-q", "-m", "add old.md"], cwd=scratch_repo)
+
+        _run_git(["mv", "sub/old.md", "sub/new.md"], cwd=scratch_repo)
+
+        rename_map = hook_module._get_staged_rename_map(scratch_repo)
+        assert rename_map == {"sub/new.md": "sub/old.md"}
+
+        sf = hook_module._build_staged_file("sub/new.md", scratch_repo, rename_map)
+
+        assert sf.pre_text == sf.post_text
+        assert sf.added_text == ""
+
+    def test_pure_rename_produces_zero_rule8_findings(self, scratch_repo):
+        old_file = scratch_repo / ".claude" / "references"
+        old_file.mkdir(parents=True)
+        (old_file / "old.md").write_text(
+            "既有內容引用 W9-101 的分析結論。\n", encoding="utf-8"
+        )
+        _run_git(["add", ".claude/references/old.md"], cwd=scratch_repo)
+        _run_git(["commit", "-q", "-m", "add old.md"], cwd=scratch_repo)
+
+        _run_git(
+            ["mv", ".claude/references/old.md", ".claude/references/new.md"],
+            cwd=scratch_repo,
+        )
+
+        rename_map = hook_module._get_staged_rename_map(scratch_repo)
+        sf = hook_module._build_staged_file(
+            ".claude/references/new.md", scratch_repo, rename_map
+        )
+        findings = hook_module._check_rule8(sf, logger=_NullLogger())
+
+        assert findings == []
+
+    def test_rename_with_content_change_only_scans_true_new_content(self, scratch_repo):
+        old_file = scratch_repo / "sub"
+        old_file.mkdir()
+        (old_file / "old.md").write_text(
+            "line1\nline2\nline3\n", encoding="utf-8"
+        )
+        _run_git(["add", "sub/old.md"], cwd=scratch_repo)
+        _run_git(["commit", "-q", "-m", "add old.md"], cwd=scratch_repo)
+
+        _run_git(["mv", "sub/old.md", "sub/new.md"], cwd=scratch_repo)
+        (old_file / "new.md").write_text(
+            "line1\nline2\nline3\nline4 新增\n", encoding="utf-8"
+        )
+        _run_git(["add", "sub/new.md"], cwd=scratch_repo)
+
+        rename_map = hook_module._get_staged_rename_map(scratch_repo)
+        sf = hook_module._build_staged_file("sub/new.md", scratch_repo, rename_map)
+
+        assert "line1" in sf.pre_text
+        assert sf.added_text.strip() == "line4 新增"
+
+    def test_rename_with_content_change_denies_only_on_new_ticket_id(self, scratch_repo):
+        old_file = scratch_repo / ".claude" / "references"
+        old_file.mkdir(parents=True)
+        (old_file / "old.md").write_text(
+            "既有內容，不含引用。\n", encoding="utf-8"
+        )
+        _run_git(["add", ".claude/references/old.md"], cwd=scratch_repo)
+        _run_git(["commit", "-q", "-m", "add old.md"], cwd=scratch_repo)
+
+        _run_git(
+            ["mv", ".claude/references/old.md", ".claude/references/new.md"],
+            cwd=scratch_repo,
+        )
+        (old_file / "new.md").write_text(
+            "既有內容，不含引用。\n引用 W9-102 的分析結論。\n", encoding="utf-8"
+        )
+        _run_git(["add", ".claude/references/new.md"], cwd=scratch_repo)
+
+        rename_map = hook_module._get_staged_rename_map(scratch_repo)
+        sf = hook_module._build_staged_file(
+            ".claude/references/new.md", scratch_repo, rename_map
+        )
+        findings = hook_module._check_rule8(sf, logger=_NullLogger())
+
+        assert len(findings) == 1
+        assert findings[0].severity == "deny"
+
+    def test_main_integration_pure_rename_allows_commit(self, scratch_repo):
+        old_file = scratch_repo / ".claude" / "references"
+        old_file.mkdir(parents=True)
+        (old_file / "old.md").write_text(
+            "既有內容引用 W9-103 的分析結論。\n", encoding="utf-8"
+        )
+        _run_git(["add", ".claude/references/old.md"], cwd=scratch_repo)
+        _run_git(["commit", "-q", "-m", "add old.md"], cwd=scratch_repo)
+
+        _run_git(
+            ["mv", ".claude/references/old.md", ".claude/references/new.md"],
+            cwd=scratch_repo,
+        )
+
+        result = TestMainIntegration()._run_hook(
+            {"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}},
+            scratch_repo,
+        )
+
+        assert result.returncode == 0
+
+
 class TestCheckRule8:
     def test_deny_when_new_ticket_id_hit_in_framework_path(self, scratch_repo):
         target = scratch_repo / ".claude" / "references" / "x.md"
