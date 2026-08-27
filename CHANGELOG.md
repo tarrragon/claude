@@ -1,3 +1,10 @@
+## [2.42.2] - 2026-08-27
+
+### Summary
+feat: 新增 foundation-design 與 version-sequencing 兩個跨專案 skill（規格與實作之間的基礎設施設計區塊；規格完備後的版本序列規劃）
+
+---
+
 ## [2.42.1] - 2026-08-27
 
 ### Summary
