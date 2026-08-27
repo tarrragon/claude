@@ -1,3 +1,10 @@
+## [2.42.3] - 2026-08-27
+
+### Summary
+多輪審查（Round 1-3）修正：foundation-design 判定對象改為產物、version-sequencing 補不變量 4 散文落地形態、方法論四塊表述一致化、PC-BAL-010 補空集合子群
+
+---
+
 ## [2.42.2] - 2026-08-27
 
 ### Summary
