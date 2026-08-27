@@ -34,7 +34,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 try:
     import yaml
@@ -1024,6 +1024,17 @@ def _is_git_tracked(rel_under_root: str, project_root: Path) -> bool:
     用 git ls-files --error-unmatch <path>：受追蹤回 returncode 0。
     非 git 環境或路徑未追蹤回 False，呼叫端視為可刪除的 runtime/stale 檔。
 
+    案例級大小寫 fallback（2026-08）：`rel_under_root` 來自呼叫端對「磁碟
+    dirent」的走訪結果（見 cleanup_stale_files._walk 的 item.name），而非 git index
+    的實際條目名稱。macOS/Windows 等大小寫不敏感檔案系統上，過去的大小寫改名可能
+    只更新 index 條目、未真正改寫磁碟 dirent（case-preserving 特性），使兩者長期
+    分歧。`git ls-files --error-unmatch` 的 pathspec 比對固定為大小寫敏感，
+    即使 core.ignorecase=true 亦不受影響（已實測驗證：core.ignorecase 只影響
+    checkout/status 等操作，不影響 --error-unmatch 的 literal pathspec 比對）。
+    exact match 失敗時，改列出同目錄下的 git 追蹤條目做大小寫不敏感比對，避免
+    此安全網因大小寫查詢失準而誤判為未追蹤，導致已追蹤內容被 unlink（而非移至
+    .sync-conflicts/）。
+
     參數:
         rel_under_root: 相對 git repo root 的路徑（如 .claude/error-patterns/PC-x.md）
         project_root: git repo root 路徑
@@ -1034,7 +1045,16 @@ def _is_git_tracked(rel_under_root: str, project_root: Path) -> bool:
     result = run_git(
         ["ls-files", "--error-unmatch", rel_under_root], cwd=str(project_root)
     )
-    return result.returncode == 0
+    if result.returncode == 0:
+        return True
+    parent = str(PurePosixPath(rel_under_root).parent)
+    listing = run_git(["ls-files", "--", parent], cwd=str(project_root))
+    if listing.returncode != 0:
+        return False
+    target_lower = rel_under_root.lower()
+    return any(
+        line.strip().lower() == target_lower for line in listing.stdout.splitlines()
+    )
 
 
 def _is_intentionally_deleted(rel_under_root: str, project_root: Path) -> bool:
@@ -2054,7 +2074,15 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
             claude_dir, remote_files, preserve
         )
         if removed:
-            print_color(f"   已清理 {len(removed)} 個過時檔案:", "green")
+            # 2026-08：刪除是不可逆動作，過去以 green + 「已清理」措辭呈現，讀來
+            # 像例行成功訊息而非需要留意的資料刪除；即使本清單已排除 git 追蹤檔
+            # （_is_git_tracked 案例級大小寫 fallback 修復後才成立），仍改用醒目
+            # 的 red + 「刪除」措辭，讓刪除類訊號不被排版弱化為版本統計。
+            print_color(
+                f"   [警示] 刪除 {len(removed)} 個非 git 追蹤的過時檔案"
+                "（若非預期請立即檢查）:",
+                "red",
+            )
             for r in removed:
                 print_color(f"     - {r}")
         else:
@@ -2092,10 +2120,18 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
         claude_dir, temp_dir, preserve
     )
     if reverse_orphans:
-        print_color(f"   提醒: {len(reverse_orphans)} 個上游檔案本地缺漏:", "yellow")  # i18n-exempt
+        # 2026-08：曾以 yellow + 「提醒」呈現，讀來像常規版本差異提示；此訊號
+        # 字面意義是「上游有、本地此刻缺漏」，可能正是資料被非預期刪除的直接
+        # 證據（P0 事故的兩則被弱化訊號之一），改用 red + 「警示」不讓其被排版
+        # 弱化為與新增/更新同級的例行清單差異。
+        print_color(f"   [警示] {len(reverse_orphans)} 個上游檔案本地缺漏:", "red")  # i18n-exempt
         for rel in reverse_orphans:
             print_color(f"   + {rel}")
-        print_color("   這些檔案存在於上游但同步後本地仍缺漏，可能需要手動補齊或檢查排除設定。", "yellow")  # i18n-exempt
+        print_color(  # i18n-exempt
+            "   這些檔案存在於上游但同步後本地仍缺漏，可能為排除設定所致，"
+            "亦可能為非預期刪除（如剛完成的同步過程本身刪除了它們），請立即確認。",
+            "red",
+        )
 
     # W3-165（IMP-BAL-002 根本修復第二項）：有未解衝突時不推進 base SHA，
     # 對齊 git merge 語意——衝突未解則 HEAD 不動。base 停留舊點使下次 pull
@@ -2131,6 +2167,18 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
     skill_versions_after = extract_skill_versions(claude_dir / "skills")
     skill_diff = format_skill_version_diff(skill_versions_before, skill_versions_after)
     if skill_diff:
+        # 2026-08：format_skill_version_diff 把「移除」與「新增/更新」放在同一
+        # 段 green 文字裡，讀來像例行版本統計而非刪除告警（P0 事故的兩則被弱化
+        # 訊號之一）。不改動共用函式（push 端亦消費，語意不同），改在呼叫端用
+        # before/after 快照自行判定移除項，於例行摘要前插入獨立的 red 警示行。
+        removed_skill_names = sorted(set(skill_versions_before) - set(skill_versions_after))
+        if removed_skill_names:
+            print_color(
+                f"   [警示] {len(removed_skill_names)} 個 skill 入口檔在本次同步後"
+                f"消失：{', '.join(removed_skill_names)}"
+                "（若非刻意移除，請用 git status 檢查 .claude/skills/ 是否有非預期刪除）",
+                "red",
+            )
         print_color(skill_diff, "green")
 
     # Skill 庫內容漂移檢查（0.2.1-W3-356：與 push 端對稱恢復）。pull 是本地

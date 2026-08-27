@@ -1,3 +1,18 @@
+## [2.43.0] - 2026-08-27
+
+### Summary
+feat: 擴充 install-skill-clis shim 涵蓋全部 7 個 uv-tool CLI; fix: 修復 sync-pull 案例級大小寫刪除 skill 入口檔且強化刪除訊號顯著性; docs: IMP-BAL-017 補轉述方向變體 + 建 shim 覆蓋票 (+2 more)
+
+Changes: 1 feat, 1 fix, 2 docs, 1 chore
+
+- feat: 擴充 install-skill-clis shim 涵蓋全部 7 個 uv-tool CLI
+- fix: 修復 sync-pull 案例級大小寫刪除 skill 入口檔且強化刪除訊號顯著性
+- docs: IMP-BAL-017 補轉述方向變體 + 建 shim 覆蓋票
+- docs: 補三個 pattern 缺漏的基本資訊區塊；建 追蹤 pull 刪檔
+- chore: 回寫 .claude VERSION ->
+
+---
+
 ## [2.42.11] - 2026-08-27
 
 ### Summary

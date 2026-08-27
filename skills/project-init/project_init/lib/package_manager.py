@@ -39,8 +39,24 @@ PYPROJECT_FILENAME = "pyproject.toml"
 
 # cwd-resolving shim 化的 CLI（以 cli_name 判定，ARCH-APP-002 / #12）。
 # 這些 CLI 不再走 uv tool install（全域唯一 key 跨專案碰撞），改由
-# install-skill-clis.py 安裝 cwd-resolving shim。其餘 skill 維持 uv tool install。
-SHIM_CLIS = {"ticket", "doc", "worktree"}
+# install-skill-clis.py 安裝 cwd-resolving shim；涵蓋全部 7 個具 CLI 入口
+# 的 skill（無 uv tool install 殘留）。
+#
+# 與 .claude/hooks/uv-tool-ownership-guard-hook.py 的 SKILLS 常數（權威
+# 來源）及 .claude/scripts/install-skill-clis.py 的 CLI_NAMES（動態
+# import 自 SKILLS）成員須一致；本檔不動態 import 該常數，因
+# uv tool install 後 __file__ 解析至 site-packages、無法回溯專案
+# .claude/ 樹（見上方「Inlined pyproject_scanner API」註解的同一限制），
+# 新增/移除 skill 時三處須手動同步。
+SHIM_CLIS = {
+    "ticket",
+    "doc",
+    "worktree",
+    "version-release",
+    "mermaid-ascii",
+    "skill-sync",
+    "project-init",
+}
 
 # install-skill-clis.py 相對 project_root 的路徑。
 SHIM_INSTALLER_RELPATH = ".claude/scripts/install-skill-clis.py"
@@ -49,8 +65,9 @@ SHIM_INSTALLER_RELPATH = ".claude/scripts/install-skill-clis.py"
 def run_shim_installer(project_root: Path) -> bool:
     """執行 install-skill-clis.py 安裝 cwd-resolving CLI shim.
 
-    install-skill-clis.py 一次安裝 ticket/doc/worktree 三個 shim，
-    取代 uv tool install 的全域安裝（消除跨專案 package name 碰撞）。
+    install-skill-clis.py 一次安裝 SHIM_CLIS 全部 shim（涵蓋 7 個具 CLI
+    入口的 skill），取代 uv tool install 的全域安裝（消除跨專案 package
+    name 碰撞）。
 
     Args:
         project_root: 專案根目錄。

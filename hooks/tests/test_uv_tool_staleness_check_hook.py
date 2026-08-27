@@ -150,13 +150,15 @@ def test_hook_file_exists_and_registered_in_settings():
 # ----------------------------------------------------------------------------
 # T02 (AC2): SKILLS 涵蓋 7 個 skill
 # ----------------------------------------------------------------------------
-def test_skills_constant_covers_six_uv_tool_skills(hook_module):
-    """1.0.0-W1-068：branch-worktree-guardian（非 uv tool）已移除，剩 6 個真 uv tool。"""
+def test_skills_constant_covers_seven_uv_tool_skills(hook_module):
+    """branch-worktree-guardian（非 uv tool）已移除；skill-sync 原漏列於本
+    SKILLS 常數（與 uv-tool-ownership-guard-hook.py 的 SKILLS 漂移），
+    現補齊為與其他 6 個 skill 同源的完整 7 項。"""
     skills = hook_module.SKILLS
-    assert len(skills) == 6
+    assert len(skills) == 7
     expected_cli = {
         "ticket", "doc", "version-release", "mermaid-ascii",
-        "worktree", "project-init",
+        "worktree", "skill-sync", "project-init",
     }
     assert {s.cli_name for s in skills} == expected_cli
     for s in skills:
@@ -294,7 +296,7 @@ def test_all_synced_produces_concise_message(
 
     _, payload = _run_main(hook_module, capsys)
     msg = payload["hookSpecificOutput"]["additionalContext"]
-    assert msg == "[UV Tool Staleness] 全部 6 個 uv tool skill 已同步"
+    assert msg == "[UV Tool Staleness] 全部 7 個 uv tool skill 已同步"
 
 
 # ----------------------------------------------------------------------------

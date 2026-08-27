@@ -10,8 +10,9 @@ uv tool Staleness Check Hook（SessionStart）
 .py 檔 SHA256 集合，提示 stale / missing 並給出修復指令。
 
 支援兩種模組佈局：
-  - 目錄模組（ticket / doc / mermaid-ascii / worktree / project-init）：
-    source 目錄 vs installed site-packages 子目錄的 rglob hash 集合比對
+  - 目錄模組（ticket / doc / mermaid-ascii / worktree / skill-sync /
+    project-init）：source 目錄 vs installed site-packages 子目錄的
+    rglob hash 集合比對
   - 單檔模組（version-release）：source 單檔 vs installed 單檔的 SHA256 比對
     （single_file=True）
 
@@ -91,6 +92,11 @@ SKILLS: Tuple[SkillEntry, ...] = (
         ".claude/skills/worktree",
         ".claude/skills/worktree/scripts",
         "worktree-skill", "scripts", "worktree",
+    ),
+    SkillEntry(
+        ".claude/skills/skill-sync",
+        ".claude/skills/skill-sync/skill_sync",
+        "skill-sync", "skill_sync", "skill-sync",
     ),
     SkillEntry(
         ".claude/skills/project-init",

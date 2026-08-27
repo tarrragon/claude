@@ -358,9 +358,9 @@ def _check_custom_packages(project_root: Path) -> SectionResult:
 def _check_single_package(package, details: list[str]) -> bool:
     """檢查單個套件.
 
-    ticket/doc/worktree（SHIM_CLIS，以 cli_name 判定）為 cwd-resolving shim
-    （ARCH-APP-002），每次呼叫皆從當前 repo 的 skill 目錄執行，恆等同最新
-    原始碼，不套用 uv tool staleness 判定（0.2.1-W3-116 ANA）。
+    SHIM_CLIS 成員（以 cli_name 判定）為 cwd-resolving shim（ARCH-APP-002），
+    每次呼叫皆從當前 repo 的 skill 目錄執行，恆等同最新原始碼，不套用
+    uv tool staleness 判定（0.2.1-W3-116 ANA）。
 
     Args:
         package: PackageInfo 物件。

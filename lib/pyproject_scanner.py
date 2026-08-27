@@ -143,7 +143,9 @@ def scan_skills_directory(
         project_root: Root directory of the project.
 
     Returns:
-        Dict mapping package name → {"path": relative_path, "version": version_str}.
+        Dict mapping package name → {"path": relative_path, "version": version_str,
+        "cli_name": cli_name_str}. cli_name 供呼叫端判斷是否為
+        cwd-resolving shim 化的 CLI（見 lib.uv_tool_utils.is_shimmed_cli）。
         Only includes packages that have [project.scripts] defined (CLI entrypoint),
         since packages without it cannot be installed via ``uv tool install``.
         Returns empty dict if skills directory doesn't exist or no packages found.
@@ -152,11 +154,13 @@ def scan_skills_directory(
         {
             "ticket-system": {
                 "path": ".claude/skills/ticket",
-                "version": "1.0.0"
+                "version": "1.0.0",
+                "cli_name": "ticket"
             },
             "mermaid-ascii": {
                 "path": ".claude/skills/mermaid-ascii",
-                "version": "0.5.0"
+                "version": "0.5.0",
+                "cli_name": "mermaid-ascii"
             }
         }
     """
@@ -186,6 +190,7 @@ def scan_skills_directory(
                     packages[pkg_name] = {
                         "path": str(skill_dir.relative_to(project_root)),
                         "version": version,
+                        "cli_name": cli_name,
                     }
             except Exception:
                 # Skip packages that fail to parse

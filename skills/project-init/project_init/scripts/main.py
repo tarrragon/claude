@@ -7,6 +7,7 @@
 """
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
@@ -15,6 +16,32 @@ from project_init.commands.onboard import run_onboard
 from project_init.commands.setup import run_setup
 
 __version__ = "1.1.0"
+
+
+def _resolve_project_root() -> Path:
+    """解析專案根目錄。
+
+    優先使用 `git rev-parse --show-toplevel`；git 不可用（非 git 倉庫、
+    git 未安裝、subprocess 錯誤）時 fallback 到 `Path.cwd()`。
+
+    Why：project-init 本身納入 cwd-resolving shim（ARCH-APP-002）後，每次
+    呼叫皆先被 `uv run --directory` 切到 `.claude/skills/project-init`
+    再啟動 Python，此時 `Path.cwd()` 回傳的是 skill 原始碼目錄而非呼叫者
+    所在的專案根目錄，導致 check/setup 誤判 Hook 目錄不存在、自製套件
+    掃描落空。git toplevel 不受 cwd 位於 repo 何處影響（`.claude/skills/*`
+    非巢狀 git repo），與 ticket_system 的 `resolve_project_cwd()` 同一
+    做法。
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return Path(result.stdout.strip())
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return Path.cwd()
 
 
 def main() -> int:
@@ -31,8 +58,8 @@ def main() -> int:
         print(f"project-init {__version__}")
         return 0
 
-    # 確定專案根目錄（當前工作目錄或環境變數）
-    project_root = Path.cwd()
+    # 確定專案根目錄（git toplevel，見 _resolve_project_root 說明）
+    project_root = _resolve_project_root()
 
     # 派發到子指令
     try:

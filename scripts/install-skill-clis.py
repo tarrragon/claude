@@ -22,13 +22,50 @@
 
 環境變數 SKILL_CLI_BIN_DIR 可覆寫安裝目錄（預設 ~/.local/bin）。
 """
+import importlib.util
 import os
 import stat
 import sys
 from pathlib import Path
+from typing import Tuple
 
-# CLI 名稱與其 skill 目錄同名
-CLI_NAMES = ("ticket", "doc", "worktree")
+
+def _load_ownership_guard_skills() -> Tuple:
+    """
+    動態載入 uv-tool-ownership-guard-hook.py 取得 SKILLS 常數（單一來源）。
+
+    SKILLS 由 (source_subpath, package_name, cli_name) 三元組成：
+      - source_subpath: skill 目錄（如 ".claude/skills/ticket"）
+      - package_name: uv tool 安裝名 / receipt 目錄名（如 "ticket-system"，
+        僅供 ownership guard 定位 receipt 用，與本腳本產生 shim 無關）
+      - cli_name: 命令首 token（如 "ticket"），本腳本唯一需要的欄位
+
+    本腳本不手寫第二份清單，改以 importlib 直接載入該 hook 檔案取
+    SKILLS，避免兩處清單漂移（ARCH-BAL-003 症狀變體）。hook 檔名含連字號
+    非合法模組名，故用 spec_from_file_location 而非一般 import（與
+    tests/test_uv_tool_ownership_guard_hook.py 的載入方式一致）。
+    """
+    hook_path = (
+        Path(__file__).parent.parent / "hooks" / "uv-tool-ownership-guard-hook.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "uv_tool_ownership_guard_hook", hook_path
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["uv_tool_ownership_guard_hook"] = module
+    spec.loader.exec_module(module)
+    return module.SKILLS
+
+
+# CLI_NAMES 只取 cli_name：skill 目錄名（source_subpath 的 basename）與
+# entry point 名（pyproject.toml [project.scripts] 的 key）皆恆等於
+# cli_name（7 個 skill 實測皆成立），故 shim_body() 只需 cli_name 即可組出
+# skill_dir 路徑與執行指令；package_name 可能與 cli_name 不同（如
+# ticket-system / ticket），但那只是 uv tool 全域安裝名，與 shim 執行路徑
+# 無關，本腳本不使用。
+CLI_NAMES: Tuple[str, ...] = tuple(
+    entry.cli_name for entry in _load_ownership_guard_skills()
+)
 
 # shim 識別標記，供 --check 與 ownership 偵測辨認「這是 shim 非 uv tool bin」
 SHIM_MARKER = "# cwd-resolving shim (ARCH-APP-002)"
@@ -61,7 +98,7 @@ def check() -> int:
     if missing:
         print(f"[install-skill-clis] 尚未 shim 化: {', '.join(missing)}", file=sys.stderr)
         return 1
-    print("[install-skill-clis] 三個 CLI 皆為 shim")
+    print(f"[install-skill-clis] {len(CLI_NAMES)} 個 CLI 皆為 shim")
     return 0
 
 
@@ -73,7 +110,7 @@ def install() -> int:
         target.write_text(shim_body(cli), encoding="utf-8")
         target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         print(f"[install-skill-clis] 已安裝 shim: {target}")
-    print(f"[install-skill-clis] 完成。確認 {bd} 在 PATH 中即可使用 ticket / doc / worktree。")
+    print(f"[install-skill-clis] 完成。確認 {bd} 在 PATH 中即可使用 {', '.join(CLI_NAMES)}。")
     return 0
 
 

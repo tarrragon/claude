@@ -44,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).parent))         # .claude/hooks/ (hook_ut
 sys.path.insert(0, str(Path(__file__).parent.parent))   # .claude/       (lib.*)
 from lib import setup_hook_logging, run_hook_safely
 from lib.pyproject_scanner import load_pyproject_toml, scan_skills_directory
+from lib.uv_tool_utils import is_shimmed_cli
 
 # TOML 解析：試圖使用 tomllib（Python 3.11+），否則 fallback 到 tomli
 try:
@@ -476,6 +477,16 @@ def _process_package(
     package_full_path = project_root / package_path
     if not package_full_path.exists():
         print(f"{package_name}: Package directory not found")
+        return
+
+    # cwd-resolving shim（ARCH-APP-002）：shim 化的 CLI 恆等同最新原始碼，
+    # 不套用版本比對，且 uv tool install --reinstall 會覆蓋 shim 內容、
+    # 破壞 cwd-resolving 機制。本 hook 原本無 shim 感知，套件從
+    # uv tool list 移除後會誤判 not installed 並觸發 reinstall（shim 全面
+    # 涵蓋七個 CLI 後的後續修正）。
+    cli_name = package_info.get("cli_name", "")
+    if cli_name and is_shimmed_cli(cli_name):
+        print(f"{package_name}: cwd-resolving shim，略過版本同步")
         return
 
     installed_version = installed_tools.get(package_name)

@@ -174,8 +174,9 @@ def _handle_missing_tools(problems: dict) -> int:
 def _handle_custom_packages(problems: dict, project_root: Path) -> int:
     """處理自製套件安裝和更新.
 
-    ticket/doc/worktree（SHIM_CLIS，以 cli_name 判定）走 install-skill-clis.py
-    安裝 cwd-resolving shim；其餘 skill 維持 uv tool install（ARCH-APP-002）。
+    SHIM_CLIS 成員（以 cli_name 判定）走 install-skill-clis.py 安裝
+    cwd-resolving shim（ARCH-APP-002）；SHIM_CLIS 涵蓋全部具 CLI 入口的
+    skill，故本函式無 uv tool install 分支殘留可能。
 
     Args:
         problems: 由 _identify_problems 產生的問題字典。
@@ -205,9 +206,9 @@ def _handle_custom_packages(problems: dict, project_root: Path) -> int:
 
 
 def _install_shim_clis(package_names: list[str], project_root: Path) -> int:
-    """安裝 ticket/doc/worktree 的 cwd-resolving shim.
+    """安裝 SHIM_CLIS 成員的 cwd-resolving shim.
 
-    install-skill-clis.py 一次安裝三個 shim，故只呼叫一次。
+    install-skill-clis.py 一次安裝全部 shim，故只呼叫一次。
 
     Args:
         package_names: 需要安裝/更新的 shim skill 名稱（供輸出顯示）。
