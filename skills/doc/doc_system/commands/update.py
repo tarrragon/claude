@@ -15,13 +15,20 @@ from doc_system.core.frontmatter_parser import parse_frontmatter
 VALID_STATUSES = ("draft", "discussing", "confirmed", "implemented", "withdrawn")
 
 
-def _update_frontmatter_status(file_path: str, new_status: str) -> bool:
+def _update_frontmatter_status(file_path: str, new_status: str) -> str:
     """更新 Markdown 檔案 frontmatter 中的 status 欄位。
 
-    回傳是否成功更新。
+    回傳三態之一（IMP-BAL-016：欄位不存在 / 值已相同 / 已更新不可壓成
+    單一布林，否則呼叫端無法區分冪等呼叫與真正失敗）：
+    - "not_found"：frontmatter 內無 status 欄位（經 re.search 查證）
+    - "unchanged"：欄位存在但值已等於 new_status，屬冪等呼叫，視為成功
+    - "updated"：欄位存在且值已寫入變更
     """
     path = Path(file_path)
     content = path.read_text(encoding="utf-8")
+
+    if not re.search(r"^status:\s*.*$", content, flags=re.MULTILINE):
+        return "not_found"
 
     updated = re.sub(
         r"^(status:\s*).*$",
@@ -32,10 +39,10 @@ def _update_frontmatter_status(file_path: str, new_status: str) -> bool:
     )
 
     if updated == content:
-        return False
+        return "unchanged"
 
     path.write_text(updated, encoding="utf-8")
-    return True
+    return "updated"
 
 
 def _find_proposal_entry(proposals, prop_id: str) -> dict | None:
@@ -182,10 +189,11 @@ def execute(args: argparse.Namespace) -> None:
     frontmatter = parse_frontmatter(file_path)
     old_status = frontmatter.get("status", "unknown") if frontmatter else "unknown"
 
-    # 更新 frontmatter
-    updated = _update_frontmatter_status(file_path, new_status)
-    if not updated:
-        print(f"更新失敗: 檔案 {file_path} 中找不到 status 欄位")
+    # 更新 frontmatter（"unchanged" 為冪等呼叫，視為成功並繼續往下同步
+    # tracking.yaml；只有 "not_found" 是真正的失敗，IMP-BAL-016）
+    result = _update_frontmatter_status(file_path, new_status)
+    if result == "not_found":
+        print(f"更新失敗: 檔案 {file_path} 中查無 status 欄位")
         sys.exit(1)
 
     print(f"已更新: {doc_id} ({old_status} -> {new_status})")

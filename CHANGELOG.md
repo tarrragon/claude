@@ -1,3 +1,17 @@
+## [2.42.1] - 2026-08-27
+
+### Summary
+fix: 落地 PC-BAL-022 baseline 對照要求至派發鏈; fix: doc update 冪等呼叫誤判為失敗導致 tracking.yaml 永不同步; docs: 新增 IMP-BAL-016（兩因壓成一回傳值，訊息指名錯誤方向）並建 1118 (+1 more)
+
+Changes: 2 fix, 1 docs, 1 chore
+
+- fix: 落地 PC-BAL-022 baseline 對照要求至派發鏈
+- fix: doc update 冪等呼叫誤判為失敗導致 tracking.yaml 永不同步
+- docs: 新增 IMP-BAL-016（兩因壓成一回傳值，訊息指名錯誤方向）並建 1118
+- chore: 回寫 .claude VERSION ->
+
+---
+
 ## [2.42.0] - 2026-08-26
 
 ### Summary

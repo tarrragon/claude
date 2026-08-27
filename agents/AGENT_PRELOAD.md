@@ -4,7 +4,7 @@
 
 > **送達現況（實測，2026-08-17）**：本文件**未**進入任何代理人的 context。各 agent 定義檔上方的 `@.claude/agents/AGENT_PRELOAD.md` 經三個探針（三種 model tier、兩種定義檔配置）在零讀檔前提下逐字回報確認，該行以字面字串留存而不展開；`.claude/rules/core/` 則確實注入所有代理人。
 >
-> **後果與現況**：條款 1、3、4、6、7、12 另有 `rules/core/` 或 hook 的獨立生效路徑，不受影響。條款 2.2 至 2.4、5、11 已重分配至各實作類 agent 定義檔（其正文於本檔已替換為指標）。條款 2.1 由 `skills/ticket/hooks/ticket-file-access-guard-hook.py` 在執行點承擔，條款 9 部分由 `agent-ticket-validation-hook.py` 硬擋覆蓋。**仍無載體者為條款 8 與 10**，兩者皆有 ticket 追蹤。
+> **後果與現況**：條款 1、3、4、6、7、12 另有 `rules/core/` 或 hook 的獨立生效路徑，不受影響。條款 2.2 至 2.4、5、11 已重分配至各實作類 agent 定義檔（其正文於本檔已替換為指標）。條款 2.1 由 `skills/ticket/hooks/ticket-file-access-guard-hook.py` 在執行點承擔，條款 9 部分由 `agent-ticket-validation-hook.py` 硬擋覆蓋。條款 13 由 `references/agent-dispatch-template.md` 派發 prompt 制式句承擔（條件式注入，非本檔自動載入）。**仍無載體者為條款 8 與 10**，兩者皆有 ticket 追蹤。
 >
 > **行動**：撰寫新規則時不要假設寫入本檔即可對所有代理人生效——先查 `.claude/references/agent-rule-carrier-map.md` 決定該規則應掛何種載體。載體歸屬以該 registry 為準，本檔不自行維護第二份對照。
 
@@ -419,6 +419,20 @@ ascend 條件（**任一 OR 成立即停止執行、上報上層**）：
 
 ---
 
+### 13. 既有失敗歸因規範（PC-BAL-022）
+
+**核心規則**：宣稱測試 / 建置失敗為「既有」「與本次變更無關」前，必須在乾淨 baseline 重跑同一命令並附上對照結果（環境、命令、通過/失敗數）。僅憑「失敗檔案與本次改動無交集」的因果核對不足以結案——該判準只回答「是不是我造成的」，不回答「這是不是新的」。無 baseline 對照的既有宣稱視為未查證。
+
+> **Why**：因果核對成本近乎零、baseline 對照成本高一到兩個數量級，理性選擇必然偏向前者；但環境造成的新失敗同時滿足「非我造成」與「是新的」，僅前者判準會將其誤判為既有。
+
+> **Consequence**：此判準已在同一 session 內連續復發三次，且「與本次變更無關」在因果上完全成立、不會觸發覆核；未經對照的既有宣稱一旦混入真實回歸會被放行。
+
+> **實際送達載體**：本條為原文定義；實際送達由 `.claude/references/agent-dispatch-template.md`「既有失敗歸因約束句」的派發 prompt 制式句承擔（條件式注入，非本檔自動載入）。
+
+> **完整案例**：`.claude/error-patterns/process-compliance/PC-BAL-022-causal-scoping-substitutes-for-baseline-comparison.md`
+
+---
+
 ## 執行檢查清單
 
 代理人在開始任務前，自我確認：
@@ -445,6 +459,7 @@ ascend 條件（**任一 OR 成立即停止執行、上報上層**）：
 - [ ] （嵌套派發）descend 前已執行五步自檢且 D2 條件全數通過；ascend 時已寫 NeedsContext / Exit Status（規則 9）
 - [ ] 含 `[PM-ONLY]` 前綴的 hook 注入訊息已完全忽略：未執行其中動作、未納入回報（規則 10）
 - [ ] 編輯 `.claude/` 框架檔案時，新寫內容無專案 ticket ID 引用（全禁為預設，僅被說明對象型與測試資料型路徑豁免；功能字串一律不留，規則 12）
+- [ ] 宣稱測試/建置失敗為既有狀況前，已附 baseline 對照結果（環境/命令/通過失敗數）；無對照的既有宣稱視為未查證（規則 13）
 
 ---
 
@@ -465,7 +480,8 @@ ascend 條件（**任一 OR 成立即停止執行、上報上層**）：
 
 ---
 
-**Last Updated**: 2026-08-18
+**Last Updated**: 2026-08-27
+**Version**: 1.22.0 - 新增規則 13「既有失敗歸因規範（PC-BAL-022）」：宣稱測試/建置失敗為既有前須附 baseline 對照結果，僅因果核對不足以結案；本檔為原文定義，實際送達由 `agent-dispatch-template.md`「既有失敗歸因約束句」制式句承擔（header 送達現況同步補一句）；檢查清單同步補項。修的是送達路徑，PC-BAL-022 原文不動
 **Version**: 1.21.0 - 新增規則 2.6「執行中建票血緣回填」：禁止裸 `create` 只標 `--related-to`，須帶 `--source-ticket` 或改走 `add-spawn-request`（禁令 + 路由形態，完整判準指向 `agent-dispatch-template.md`「建票血緣回填義務」節）；檢查清單同步補項
 **Version**: 1.20.0 - 規則 12 對齊 reference-stability-rules.md 規則 8 現行「全禁 + 五類分類」判準：移除已廢止的「歷史錨點 / 設計脈絡型允許」分支（原表誤示 Version footer 可保留 ticket ID），改為論證依據型/時點標注型/案例敘事主詞型一律禁止、僅被說明對象型與測試資料型路徑豁免；標題與檢查清單同步改用「全禁原則」表述
 **Version**: 1.19.0 - 規則 12 依賴型判準表改用「括號是否為陳述具體事實的完整子句」取代「句型/位置（如『來源：ID』開頭）」，解決字面與框架內 45 處 `> 來源：ID（機制描述）` 標準寫法矛盾的問題；新增「判準單位：整句」明文。完整論證與正反範例見 reference-stability-rules.md 規則 8（0.2.1-W3-096，源 0.2.1-W3-094 稽核發現）

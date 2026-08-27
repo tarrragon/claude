@@ -96,6 +96,19 @@ Ticket: 0.18.0-W17-048.3
 禁止轉述既有描述或推論；無法實查則標註「待 {來源票 id} 定案」（PC-BAL-007）。
 ```
 
+### 既有失敗歸因約束句（PC-BAL-022）
+
+**觸發條件**：派發任務涉及執行測試 / 建置 / lint 等可能產生失敗結果的驗收動作。
+
+**Why/Consequence**：宣稱失敗為「既有」「與本次變更無關」若只憑因果核對（失敗檔案是否落在本次改動範圍內），無法排除環境造成的新失敗——兩者回答不同問題，此判準已在同一 session 內復發三次（PC-BAL-022）。
+
+**Action**：prompt 必須含以下句子（可併入任務段或獨立一行）：
+
+```
+宣稱測試/建置失敗為既有狀況前，必須在乾淨 baseline 重跑同一命令並在回報中附上對照結果
+（環境、命令、通過/失敗數）。無 baseline 對照的既有宣稱視為未查證（PC-BAL-022）。
+```
+
 ### 填空檢查清單
 
 派發前確認：
@@ -110,6 +123,7 @@ Ticket: 0.18.0-W17-048.3
 - [ ] 文件票涉及持久化/schema/接線現況陳述時，已含實查約束句（PC-BAL-007，見上節）
 - [ ] 防護類 ticket 的產生路徑盤點表已存在於 `how.strategy` / Solution（建票時產出，此處僅確認存在，格式見 `ticket-body-schema.md` 同名節；PC-BAL-035）
 - [ ] 派發對象為 `.claude/` 框架檔案修改時，代理人受 `.claude/rules/core/document-format-rules.md`「引用穩定性規則」約束（禁依賴型 ticket 引用，該層已實測確認每次派發都會注入），無需 prompt 額外重複；AGENT_PRELOAD 規則 12 僅供代理人主動 Read 時參考，不構成無需重複的依據（`.claude/agents/*.md` 主文 `@-import` 已實測不會展開為內容）
+- [ ] 派發任務涉及測試/建置驗收時，已含既有失敗歸因約束句（PC-BAL-022，見上節）
 
 ---
 
@@ -1018,7 +1032,8 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 
 ---
 
-**Last Updated**: 2026-08-19
+**Last Updated**: 2026-08-27
+**Version**: 1.30.0 — 「文件票實查約束句（PC-BAL-007）」後新增「既有失敗歸因約束句（PC-BAL-022）」子節：觸發條件（涉及測試/建置/lint 驗收動作）+ Why/Consequence（因果核對不足以排除環境造成的新失敗，同一 session 內復發三次）+ prompt 逐字制式句（宣稱既有前須附 baseline 對照結果）；「填空檢查清單」同步補一列。修的是送達路徑——PC-BAL-022 原文正確且準確預測本次復發，內容不動。
 **Version**: 1.29.0 — 「精準 staging 制式句」與其兩個逐字引用 snippet（單任務／並行多任務）改寫：path-limited commit（`git commit -m "..." -- <paths>`）改為精確 `git add` + `git diff --cached --name-only` 核對 + 裸 `git commit`（不帶 pathspec / `--only` / `-o` / `-a`）；`--only`/`-o` 與 `-- <paths>` 語意相同，皆丟棄既有 index 改取 working tree 全文，會吸入他人未 stage 的編輯，故一併禁用（`.claude/rules/core/bash-tool-usage-rules.md` 規則七）；新增「若裸 commit 被 bare-commit-guard-hook DENY，停手回報，不得改用 DENY 訊息建議的 pathspec 寫法」提醒；Dispatch-Plan Template `commit policy` 欄位同步改寫。歷史 1.26.0/1.7.0 版說明的 path-limited 寫法為當時記錄，不回溯改寫。
 **Version**: 1.28.0 — 依 Layer 2 審查（basil-writing-critic）修正仲裁行為條文落地內容：P0（阻擋級）「衝突裁決回票面」節補可執行 Action（`append-log` 指令 + 裁決最小欄位表 + section 依 type 路由 `ticket-body-schema.md`）；P1（4 項）同節資訊優先序改原則前置、移除無錨新造詞「凌駕註記」改就地定義、骨架下方 blockquote 收斂重複動作描述僅留 Why + 路由、`tool-output-trust-rules.md` 衍生情境標題由位置編號改語意標題並補邊界段來源；P2（3 項）骨架 code block「感知」改「發現」並壓縮句長、停手上報 blockquote 改條件式表述、骨架段補「實戰範例為歷史記錄」提醒
 **Version**: 1.27.0 — 落地仲裁行為條文兩處：(1) 骨架（權威版）code block 補「感知 prompt 與正本衝突時停手上報 NeedsContext、不自行選邊」制式句，並補一則 Why 說明「prompt 誤寫與 PM 正當客製在 token 層同形，agent 無判定能力」；(2) 新增「衝突裁決回票面（PM 端）」章節，明示裁決以 append-log 寫回票面，不得只存在於重發 prompt 或對話。三處實戰範例（IMP/ANA/DOC）為歷史實際派發記錄不回溯改寫，僅骨架權威版更新

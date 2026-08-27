@@ -1,12 +1,12 @@
 # 代理人規則載體對應表（Carrier Map）
 
-本檔記錄 `.claude/agents/AGENT_PRELOAD.md` 12 條強制規則各自的**實際生效載體**與受眾範圍。
+本檔記錄 `.claude/agents/AGENT_PRELOAD.md` 13 條強制規則各自的**實際生效載體**與受眾範圍。
 
-> **為何需要本檔**：`.claude/agents/*.md` 主文的 `@path` 引用經三探針實測確認不展開為內容，AGENT_PRELOAD.md 從未進入任何 subagent 的 context。12 條規則因此分散到不同載體——有的另有 `rules/core/` 自動載入路徑、有的靠 hook 在執行點強制、有的已寫入各 agent 定義檔。維護者要修改任一條時，必須先知道它現在住在哪。
+> **為何需要本檔**：`.claude/agents/*.md` 主文的 `@path` 引用經三探針實測確認不展開為內容，AGENT_PRELOAD.md 從未進入任何 subagent 的 context。13 條規則因此分散到不同載體——有的另有 `rules/core/` 自動載入路徑、有的靠 hook 在執行點強制、有的已寫入各 agent 定義檔、有的靠派發 prompt 條件式制式句。維護者要修改任一條時，必須先知道它現在住在哪。
 >
-> **維護要求**：新增或搬移任何條款後，同步更新本表。本表是**這 12 條條款**載體歸屬的 SSOT，不得只改條款而不改本表。
+> **維護要求**：新增或搬移任何條款後，同步更新本表。本表是**這 13 條條款**載體歸屬的 SSOT，不得只改條款而不改本表。
 >
-> **範圍界線**：載體**類型的選擇原則**（哪種知識該用哪類載體）見 `.claude/methodologies/knowledge-carrier-allocation-methodology.md`；`rules/core/` 載體的**形態規範**見 `.claude/references/auto-load-stub-conventions.md`。本表只記錄這 12 條的**實際歸屬現況**，不定義原則。
+> **範圍界線**：載體**類型的選擇原則**（哪種知識該用哪類載體）見 `.claude/methodologies/knowledge-carrier-allocation-methodology.md`；`rules/core/` 載體的**形態規範**見 `.claude/references/auto-load-stub-conventions.md`。本表只記錄這 13 條的**實際歸屬現況**，不定義原則。
 
 ---
 
@@ -28,6 +28,7 @@
 | 10 | 忽略 `[PM-ONLY]` 前綴 | **待定（可能為空集合）** | AGENT_PRELOAD 原文（未搬移） | 生產端 `lib/hook_io.py` 已對帶 `agent_id` 事件過濾；消費端受眾待驗證 |
 | 11 | 最小變更紀律 | 編輯既有碼者 | 部分實作類 agent 定義檔「最小變更紀律」章節（7 檔，未全覆蓋見下） | 無 |
 | 12 | 框架檔案禁專案 ticket ID | 全體 | `rules/core/document-format-rules.md` 路由 | `reference-stability-rule8-guard`（exit 2 硬擋） |
+| 13 | 既有失敗歸因規範 | 全體（涉及測試/建置驗收之派發） | AGENT_PRELOAD 原文 + `references/agent-dispatch-template.md`「既有失敗歸因約束句」（派發端視角，條件式 prompt 制式句，非全體自動載入） | 無（純自律 + prompt 注入，未有 hook 強制層） |
 
 ---
 
@@ -58,12 +59,13 @@
 ## 相關文件
 
 - `.claude/references/agent-preload-relocated-clauses.md` — 已重分配條款（5、11）的完整 substance；各 agent 定義檔的壓縮版由該處補齊判準表與門檻
-- `.claude/agents/AGENT_PRELOAD.md` — 12 條規則原文；其 header 記載送達現況
+- `.claude/agents/AGENT_PRELOAD.md` — 13 條規則原文；其 header 記載送達現況
 - `.claude/references/auto-load-stub-conventions.md` — `rules/core/` 載體的形態規範與外移 SOP
 - `.claude/methodologies/knowledge-carrier-allocation-methodology.md` — 知識載體頂層分配地圖
 
 ---
 
-**Last Updated**: 2026-08-18
+**Last Updated**: 2026-08-27
+**Version**: 1.2.0 — 新增條款 13（既有失敗歸因規範）：AGENT_PRELOAD 原文 + `agent-dispatch-template.md` 派發 prompt 制式句雙載體，無 hook 強制層；SSOT 宣告範圍與「本檔記錄」開頭句同步由 12 條改 13 條。
 **Version**: 1.1.0 — 依 Layer 2 審查修正四項事實準確性問題：條款 9 的執行強度由「皆硬 deny」改述為 ticket 引用硬 deny、深度檢查 import 失敗時 fail-open 且有豁免清單；條款 6 移除無法復現的「等 5 個」計數改附可查口徑；條款 5、11 的載體欄由「各 agent 定義檔」改為標明實際覆蓋檔數並補入未覆蓋清單（原表述讀來像全覆蓋，與同檔未覆蓋章節的誠實標準不一致）；SSOT 宣告限定範圍為這 12 條並補與方法論、stub 規範的界線。
 **Version**: 1.0.0 — 初始建立。記錄 12 條強制規則的實際生效載體、受眾範圍與執行點強制狀況。

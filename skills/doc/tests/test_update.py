@@ -178,6 +178,44 @@ class TestUpdateStatus:
         output = capsys.readouterr().out
         assert "todolist" not in output
 
+    def test_update_status_field_not_found(self, tmp_path, capsys):
+        """frontmatter 無 status 欄位時應報錯並中止（三態之一：not_found）。"""
+        proposals_dir = tmp_path / "docs" / "proposals"
+        proposals_dir.mkdir(parents=True)
+        md = proposals_dir / "PROP-040-test.md"
+        md.write_text('---\nid: PROP-040\ntitle: "No Status"\n---\n# Content\n')
+
+        args = argparse.Namespace(id="PROP-040", status="discussing")
+
+        with patch.object(FileLocator, "get_project_root", return_value=str(tmp_path)):
+            try:
+                execute(args)
+            except SystemExit:
+                pass
+
+        output = capsys.readouterr().out
+        assert "更新失敗" in output
+        assert "查無 status 欄位" in output
+
+    def test_update_status_idempotent_still_syncs_tracking(self, tmp_path, capsys):
+        """目標 status 與檔案現值相同時（冪等呼叫）：不應報錯，且 tracking.yaml
+        仍須被同步（IMP-BAL-016 核心：sys.exit(1) 原位於同步之前，值相同時
+        索引永不同步；此測試斷言同步確實發生，非只驗 exit code）。"""
+        project_root = _setup_proposal(tmp_path, "PROP-041", "confirmed")
+        args = argparse.Namespace(id="PROP-041", status="confirmed")
+
+        with patch.object(FileLocator, "get_project_root", return_value=project_root):
+            execute(args)
+
+        output = capsys.readouterr().out
+        assert "更新失敗" not in output
+        assert "已同步 tracking.yaml" in output
+
+        tracking = tmp_path / "docs" / "proposals-tracking.yaml"
+        data = yaml.safe_load(tracking.read_text())
+        entry = find_entry(data["proposals"], "PROP-041")
+        assert entry["status"] == "confirmed"
+
     def test_update_usecase_no_tracking_sync(self, tmp_path, capsys):
         """更新 usecase 不應嘗試同步 tracking.yaml。"""
         usecases_dir = tmp_path / "docs" / "usecases"

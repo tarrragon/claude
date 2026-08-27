@@ -362,6 +362,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | IMP-BAL-013 | sort/uniq 在預設 locale 下依 collation 合併相異 CJK 字串，靜默造成統計失準 | 中 | v0.2.1 |
 | IMP-BAL-014 | 讀取端 sanitizer 修補記憶體但不寫回，損毀資料永久留存且警告退化為背景噪音 | 中 | v0.2.1 |
 | IMP-BAL-015 | 子行程繼承環境變數使 cwd 隔離失效，且僅在呼叫端處於該環境時重現 | 高 | v0.2.1 |
+| IMP-BAL-016 | 兩種成因壓成同一回傳值，錯誤訊息指名其中一種，把診斷導向另一種的反方向 | 高 | v0.2.1 |
 
 ### 流程 (PROC)
 
