@@ -3,7 +3,7 @@ name: version-sequencing
 description: "版本序列規劃——規格完備後把待決清單收束為版本序列（每版一個整合測試），再開首版票。含 multi-round-review 完備檢查、切分軸選擇、待決 blockedBy 綁版本、地基先行開票。序列是順序不是閘門，不綁定完整敏捷。觸發詞：版本規劃、版本序列、整合測試順序、排版本、開票規劃、里程碑、milestone、roadmap。Use when 規格完成後、寫第一張實作票前。Do NOT use for 單一版本內的規劃波（用 version-bootstrap）。"
 license: MIT
 metadata:
-  version: 3.1.0
+  version: 4.0.0
   category: engineering-workflow
 ---
 
@@ -52,13 +52,13 @@ metadata:
 
 ### 1. 規格完備檢查（必經 multi-round-review）
 
-對全部規格文件執行 `.claude/skills/multi-round-review/SKILL.md`（至少三輪，frame 切換）。**這一步不可省**：審查的價值是把「本來就在、只是沒被寫下來」的待決事項拓出來，把文件改乾淨只是副產品。單輪或人工盤點會漏掉結構性不可見的三類：未被寫下的內容、跨篇皆未承接的前提、只在真實個案上才停住的判準。
+對全部規格文件執行 `multi-round-review` skill（至少三輪，frame 切換）。**這一步不可省**：審查的價值是把「本來就在、只是沒被寫下來」的待決事項拓出來，把文件改乾淨只是副產品。單輪或人工盤點會漏掉結構性不可見的三類：未被寫下的內容、跨篇皆未承接的前提、只在真實個案上才停住的判準。
 
-**輸入集合**：專案的全部規格層文件。本框架的慣例位置是 `docs/proposals/`、`docs/spec/`、`docs/usecases/`、`docs/domain-map.md`；專案結構不同時，判準是「描述系統該做什麼、且下游會據以實作的文件」。開始前先把清單列出來，審查範圍以此為準。
+**輸入集合**：專案的全部規格層文件。判準是「描述系統該做什麼、且下游會據以實作的文件」——提案、規格、使用案例、domain 邊界文件屬之；變更記錄、流程規範、建置指令不屬之（它們記做過什麼與怎麼做，不記該做什麼）。開始前先把清單列出來，審查範圍以此為準。
 
-**frame** 指審查時採取的提問角度（例如事實查核、冷讀、情境可想像性、自我適用）。frame 切換指每一輪換一組角度，使各輪的 finding 不重疊。停止判準見 `.claude/skills/multi-round-review/SKILL.md`；做完的判準不是輪數，是停止訊號成立。
+**frame** 指審查時採取的提問角度（例如事實查核、冷讀、情境可想像性、自我適用）。frame 切換指每一輪換一組角度，使各輪的 finding 不重疊。停止判準見 `multi-round-review` skill；做完的判準不是輪數，是停止訊號成立。
 
-**產出契約**：待決清單，每項標明「它擋住哪一個能力」。沒有標阻擋對象的待決不算收束完成。清單需有持久載體（本框架用 `docs/` 下的決策記錄或 ticket），且步驟 4 逐項取用時以該載體為輸入。留在對話中的清單在步驟 4 無法被取用，等同未產出。
+**產出契約**：待決清單，每項標明「它擋住哪一個能力」。沒有標阻擋對象的待決不算收束完成。清單需有持久載體（決策記錄文件或 ticket 皆可），且步驟 4 逐項取用時以該載體為輸入。留在對話中的清單在步驟 4 無法被取用，等同未產出。
 
 ### 2. 選切分軸
 
@@ -72,7 +72,7 @@ metadata:
 
 預設傾向不豁免比較。專案形態（純後端、純工具、資料密集）會改變答案。
 
-**比較工具**：`.claude/skills/wrap-decision/SKILL.md`（W 階段擴增選項 + premortem）。需結構化評分時改用 `.claude/skills/design-decision-framework/SKILL.md`。兩者目前彼此零引用，這是已知的框架缺口，不是讀者需要解決的分歧。
+**比較工具**：`wrap-decision` skill（W 階段擴增選項 + premortem）。需結構化評分時改用 `design-decision-framework` skill。兩者目前彼此零引用，這是已知的框架缺口，不是讀者需要解決的分歧。
 
 **最小合格產出**：選定的軸，加上未選中的各軸為什麼不選。不選的理由須各指名本專案的一個具體物件（哪個畫面、哪個 UC、哪一段管線）；只複述上表特性欄不算比較。
 
@@ -88,11 +88,11 @@ metadata:
 
 **版本啟動閘門**：某版的提案缺整合測試斷言、或斷言未指名外部固定值時，該版不得開出任何實作票。這是不變量 1 的觀察者，形態是前置條件而非動作，因此不需要另一個觀察者來保證它發生。
 
-首版是地基版，除非該版的提案不含任何地基產物。`.claude/skills/foundation-design/SKILL.md` 的產物票在「首版開票」那一步開出，功能票 `blockedBy` 它們。
+首版是地基版，除非該版的提案不含任何地基產物。`foundation-design` skill 的產物票在「首版開票」那一步開出，功能票 `blockedBy` 它們。
 
 ### 4. 待決綁版本
 
-步驟 1 的待決清單逐項綁到「它擋住的那個版本」，載體是 ticket 與 blockedBy。時間、量化閾值、外部事件都不是合法 trigger，須先包裝為 ticket（同 `.claude/rules/core/decision-trigger-binding.md` 規則 2）。
+步驟 1 的待決清單逐項綁到「它擋住的那個版本」，載體是 ticket 與 blockedBy。時間、量化閾值、外部事件都不是合法 trigger，須先包裝為 ticket（同專案的決策 trigger 綁定規則）。
 
 外部依賴（上游 repo 的票）標為 external blocker，不混入本地待辦。**綁定方向**：建一張本地追蹤票，該票 `blockedBy` 外部依賴；受阻的版本再 `blockedBy` 該追蹤票。不要讓版本直接 `blockedBy` 外部物件，外部定案時沒有本地載體會浮現。
 
@@ -119,10 +119,10 @@ metadata:
 
 | skill | 關係 |
 |-------|------|
-| `.claude/skills/multi-round-review/SKILL.md` | 步驟 1 的必經工具 |
-| `.claude/skills/wrap-decision/SKILL.md` | 步驟 2 的比較工具（含 premortem） |
-| `.claude/skills/foundation-design/SKILL.md` | 地基票的**入口與內容來源**。它是路由層，逐維度決定本專案的地基產物是什麼；本 skill 在「版本序列落為提案」那一步決定這些票屬於哪一版，在「首版開票」那一步開出。**同一批票，兩邊不重複建** |
-| `.claude/skills/version-bootstrap/SKILL.md` | **下游**。本 skill 產出版本序列與各版提案；version-bootstrap 執行該版的規劃波展開。其 pipeline 含本 skill 未涵蓋的步驟，交接後由它負責 |
+| `multi-round-review` skill | 步驟 1 的必經工具 |
+| `wrap-decision` skill | 步驟 2 的比較工具（含 premortem） |
+| `foundation-design` skill | 地基票的**入口與內容來源**。它是路由層，逐維度決定本專案的地基產物是什麼；本 skill 在「版本序列落為提案」那一步決定這些票屬於哪一版，在「首版開票」那一步開出。**同一批票，兩邊不重複建** |
+| `version-bootstrap` skill | **下游**。本 skill 產出版本序列與各版提案；version-bootstrap 執行該版的規劃波展開。其 pipeline 含本 skill 未涵蓋的步驟，交接後由它負責 |
 
 **層名約定**：`foundation-design` 是**路由層**（指名權威、定每個維度的產物）；`version-bootstrap` 是**編排層**（在規劃流程的特定步驟安排執行）；本 skill 是**排序層**（決定各版順序）。三者不同名不同職。
 
@@ -170,4 +170,5 @@ metadata:
 
 ---
 
+**Version**: 4.0.0 — 引用形式由檔案路徑改為指名身分（skill 用名字、規則用標題）。步驟 1 的輸入集合改以功能判準界定，不再列慣例路徑。交接契約表的「本框架的位置」欄保留檔名與欄位名——該處是介面規格（下游檢查器讀哪個欄位），不是閱讀指引。
 **Version**: 3.1.0 — 更正 portable 分類為框架綁定；新增〈不變量 4 對散文型產物的落地形態〉（外部固定值對散文的形態是可重跑的命令與其固定輸出）；斷言票改為版本啟動閘門；交接契約補「誰在何時檢查」欄與 `depends_on: []` 顯式寫入要求。

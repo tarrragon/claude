@@ -3,7 +3,7 @@ name: foundation-design
 description: "地基工作的單一入口與路由層。逐維度決定「本專案的地基產物是什麼」，權威只提供預設產物，形態不符時改寫產物而非跳過維度。維度含 UI／測試／資料庫／DevOps／可觀測性，各指名既有權威並標明權威缺席時的處置。新舊專案一體適用：接手他人專案先盤點萃取再命名固化。觸發詞：地基、地基波、元件庫、design token、fixture、seed、migration、scaffold、鷹架、腳手架、接手老專案。Do NOT use for 環境安裝（用 project-init）。"
 license: MIT
 metadata:
-  version: 5.0.1
+  version: 6.0.0
   category: engineering-workflow
 ---
 
@@ -29,12 +29,14 @@ metadata:
 
 | 載體 | 本框架的實例 | 它承擔什麼 |
 |------|------------|-----------|
-| 方法論 | `.claude/methodologies/component-library-bidirectional-constraint-methodology.md` | 定判準 |
-| orchestration skill | `.claude/skills/version-bootstrap/SKILL.md`（「建 Spec 骨架」與「地基波」兩步） | 在規劃流程的某一步編排 |
-| 執法工具 | CI 的裸值檢查、`.claude/hooks/` 的 PreToolUse guard | 掃描既成違規 |
-| 範本 skill | `.claude/skills/doc/` 的 `design-system-spec-template` | 提供產出物契約 |
+| 方法論 | 元件庫雙向約束方法論 | 定判準 |
+| orchestration skill | `version-bootstrap`（「建 Spec 骨架」與「地基波」兩步） | 在規劃流程的某一步編排 |
+| 執法工具 | CI 的裸值檢查、專案的 PreToolUse guard | 掃描既成違規 |
+| 範本 skill | `doc` 的 design-system spec 範本 | 提供產出物契約 |
 
 各自完整，但沒有任何一處回答「地基這件事整體從哪開始」。主動查重的人讀過 orchestration skill 的章節標題、確認不重疊，仍會判定地基無人承接而重造一份。缺口在可發現性，不在能力。
+
+> **本文件指名權威用名字，不用檔案路徑。** skill 以名字載入（走 Skill 工具），方法論與規則以標題檢索（`grep -rl "<標題>" .claude/`）。路徑是「它現在放在哪」，會隨框架改版而移動；名字是「它是什麼」，不會。前一版寫死路徑的後果實測過兩次：框架改版把 hook 移了位置使註冊全數失效，以及可攜性閘門把 25 處路徑判為「指名他專案的檔案」而擋下推送。
 
 ## 維度與產物
 
@@ -42,11 +44,11 @@ metadata:
 
 | 維度 | 權威來源（判準在此，本 skill 不複述） | 權威提供的預設產物 |
 |------|--------------------------------|------------------|
-| **UI** | `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`〈地基波 build 順序〉的四塊依序：i18n → design-system → UX 審查 → 元件庫。UX 審查那塊的執行方法見 `.claude/skills/ux-design-evaluation/SKILL.md` | 四塊各自的實作票；元件庫 `blockedBy` 前三塊 |
-| **測試** | `.claude/skills/tdd/references/layered-test-strategy.md`（測試分層）、`.claude/skills/tdd/references/phase2/rules.md` 的 Q9–Q14（六道測試設計檢驗：資料是否碰巧通過、error path 覆蓋、資料工廠版本、防哪種改壞、斷言是否 flaky、資料代表性） | fixture 策略、分層地基 |
-| **資料庫** | `.claude/skills/saas-tech-selection/references/dimensions/state-storage.md`（migration 版本化紀律、多租戶資料模型、**防護底線的自動備份與還原驗證**） | migration baseline、**備份與還原驗證**。seed 見〈權威缺席時〉形態 3 |
-| **DevOps** | `.claude/skills/saas-tech-selection/references/dimensions/reliability.md`（CI gate 構成與起始門檻） | CI gate、部署與還原配方 |
-| **可觀測性** | `.claude/rules/core/observability-rules.md`（統一 log 入口、catch 區塊要求；屬自動載入層，多半已在 context 中）、`.claude/skills/saas-tech-selection/references/dimensions/observability.md`（錯誤分類） | log 接線點、錯誤分類骨架 |
+| **UI** | 元件庫雙向約束方法論的〈地基波 build 順序〉，四塊依序：i18n → design-system → UX 審查 → 元件庫。UX 審查那塊的執行方法見 `ux-design-evaluation` skill | 四塊各自的實作票；元件庫 `blockedBy` 前三塊 |
+| **測試** | `tdd` skill 的分層測試策略，以及其 Phase 2 測試設計檢驗 Q9–Q14（資料是否碰巧通過、error path 覆蓋、資料工廠版本、防哪種改壞、斷言是否 flaky、資料代表性） | fixture 策略、分層地基 |
+| **資料庫** | `saas-tech-selection` skill 的 state-storage 維度（migration 版本化紀律、多租戶資料模型、**防護底線的自動備份與還原驗證**） | migration baseline、**備份與還原驗證**。seed 見〈權威缺席時〉形態 3 |
+| **DevOps** | `saas-tech-selection` skill 的 reliability 維度（CI gate 構成與起始門檻） | CI gate、部署與還原配方 |
+| **可觀測性** | 專案的可觀測性規則（統一 log 入口、catch 區塊要求；屬自動載入層，多半已在 context 中），以及 `saas-tech-selection` skill 的 observability 維度（錯誤分類） | log 接線點、錯誤分類骨架 |
 
 **本表列的是五個常見維度，不宣稱窮盡地基的全部外延。** 專案若有本表未涵蓋的地基工作（如協定契約、資料匯入匯出格式），照同一形式增列一行。
 
@@ -74,7 +76,7 @@ metadata:
 
 **這兩個答案是個案記錄，不是可套用的推導。** 遇到本節未預寫的形態時，改寫產物的問法是：**這個維度要防的失效，在本專案會長成什麼樣子？** 可觀測性防的是「出事了但沒人知道」，在 stdout 即產品的工具上，它長成「失敗時畫面顯示什麼」；UI 防的是「同一概念長出多種樣子」，在單一輸出行的工具上，它長成「欄位順序與色碼語意的契約」。先答這一問，再看權威的預設產物是否即是答案。
 
-**無 UI 框架（vanilla DOM + 字串模板）的元件庫產物**：權威已就此給出投影，見 `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`〈Web/HTML 端 L2 特別判準〉的「元件規則 SSOT」與「元件邊界的可驗產物」兩條。產物是元件規則的來源模組加上選擇器清單與其斷言，不是元件類別。
+**無 UI 框架（vanilla DOM + 字串模板）的元件庫產物**：權威已就此給出投影，見元件庫雙向約束方法論的〈Web/HTML 端 L2 特別判準〉，其中「元件規則 SSOT」與「元件邊界的可驗產物」兩條。產物是元件規則的來源模組加上選擇器清單與其斷言，不是元件類別。
 
 ### 權威缺席時
 
@@ -130,7 +132,7 @@ metadata:
 | artifact 已知過期 | **排除其對現況的宣稱效力，保留其作為語意線索。** 過期不等於錯誤：一份落後一個 minor 的 changelog 仍可能是全 repo 唯一說明「`0.01` 這個常數的語意是手續費率」的來源。判斷過期的可操作訊號：版號與 artifact 內記載的落差、artifact 最後修改時間與最後 commit 的落差、與程式碼抽樣比對 |
 | **artifact 的決策者不可得** | 保留原值原名，把疑義落為決策文件的待確認項，**不在地基波內改**。同「先命名、統一值另開票」的二分法 |
 
-**命名的行為中立性也有前提。** 安全性論證掛在「既有測試全程保護」，覆蓋不足時先補**特徵測試**（characterization test：不驗「應該是什麼」而是把現況行為原樣鎖住，用途是讓後續改動一旦改變行為就紅燈；寫法見 `.claude/skills/tdd/references/layered-test-strategy.md`）。
+**命名的行為中立性也有前提。** 安全性論證掛在「既有測試全程保護」，覆蓋不足時先補**特徵測試**（characterization test：不驗「應該是什麼」而是把現況行為原樣鎖住，用途是讓後續改動一旦改變行為就紅燈；寫法見 `tdd` skill 的分層測試策略）。
 
 **但補特徵測試有規模閘門。** 在數萬行零覆蓋的專案上，補到足以保護 token 抽取的覆蓋會吞掉整個地基波。**前提補不起來時的替代路徑**：只在已有覆蓋的模組內命名，其餘模組改為「只擋新增、不動既有」（執法載體設 baseline），並把未命名範圍記入決策文件。不要把整個地基波卡在補測試上。
 
@@ -168,13 +170,13 @@ metadata:
 
 本 skill 是**框架綁定**的：它以框架資產的路徑為主題，路由到的權威不隨它一起移動（同 `version-bootstrap`、`ticket`、`doc`，皆不宣告 `portable`）。開始前確認：
 
-- [ ] **執行本流程的 session** 有維度表列出的全部權威檔案？（五個維度共 8 個）缺者走〈權威缺席時〉形態 1
+- [ ] **執行本流程的 session** 有維度表指名的全部權威？（三個 skill、一份方法論、一份可觀測性規則）缺者走〈權威缺席時〉形態 1
 - [ ] **被盤點的 repo** 有具 `blockedBy` 語意的 ticket 系統？步驟 4 與〈權威缺席時〉的建票動作依賴它
 - [ ] **被盤點的 repo** 有執法載體，且**其掃描範圍涵蓋本專案實際存在的檔案**？只問「有沒有」會通過一個只認 `.dart` 的 hook 裝在零 `.dart` 檔的專案上，該載體結構上永不觸發
 - [ ] **被盤點的 repo** 有決策文件（任何形式的持久記錄，且進版控）？〈權威缺席時〉的形態 1、形態 4、萃取前提的第四種、以及下方的降級記錄都落在它上面
 - [ ] **被盤點的 repo** 有他人在途的工作？（近期 commit 來自他人）有則地基票的改動範圍需先與其協調
 
-**缺項時進入降級模式，並記錄降級。** 記下缺哪一項、因此哪幾步在本專案不成立。**缺的若是執法載體，不另建補齊票**——它就是 DevOps 維度的產物，會在步驟 4 一併落地，另建會使同一件事有兩張票。**連決策文件都沒有時，第一個動作是建立它**（一個 `docs/decisions.md` 即可），否則本流程的缺席處置全部無處落地。無降級記錄的使用不構成完成本流程。
+**缺項時進入降級模式，並記錄降級。** 記下缺哪一項、因此哪幾步在本專案不成立。**缺的若是執法載體，不另建補齊票**——它就是 DevOps 維度的產物，會在步驟 4 一併落地，另建會使同一件事有兩張票。**連決策文件都沒有時，第一個動作是建立它**（一份進版控的決策記錄即可，位置依專案慣例），否則本流程的缺席處置全部無處落地。無降級記錄的使用不構成完成本流程。
 
 ## Examples
 
@@ -200,8 +202,8 @@ metadata:
 
 | 症狀 | 原因 | 處置 |
 |------|------|------|
-| 你判定「地基的 token／元件庫規範沒有現成的」，準備自己設計一套 | 查重只讀了 orchestration skill 的章節標題 | 先搜 `.claude/methodologies/`；本 skill 的維度表是查重的起點，不是查重的全部 |
-| 維度表某列的權威檔案打不開 | 該權威未安裝於執行本流程的 session，或形態不符本專案 | 走〈權威缺席時〉四形態。產物欄填「待定」，不填「無」 |
+| 你判定「地基的 token／元件庫規範沒有現成的」，準備自己設計一套 | 查重只讀了 orchestration skill 的章節標題 | 先搜專案的方法論目錄；本 skill 的維度表是查重的起點，不是查重的全部 |
+| 維度表某列指名的權威，你在本 session 找不到 | 該權威未安裝於執行本流程的 session，或形態不符本專案 | 走〈權威缺席時〉四形態。產物欄填「待定」，不填「無」 |
 | 照權威的預設產物做，做出來的東西讓產品變差 | 權威是從別的形態歸納的 | 走「改寫產物」。維度仍成立，改的是產出什麼 |
 | 專案有 README 與變更記錄，但你仍答不出某個維度的產物是什麼 | 文件記的是做過什麼與怎麼做，不是該做什麼 | 該情境走〈接手模式〉。判準看文件能否回答維度表，不看文件在不在 |
 | 執法載體裝了，違規卻從來沒被擋下來 | 掃描範圍與本專案的實際檔案不相交 | 查該檢查的路徑與副檔名條件；範圍為空的載體等同沒有 |
@@ -213,5 +215,6 @@ metadata:
 
 ---
 
+**Version**: 6.0.0 — 引用形式由檔案路徑改為指名身分（skill 用名字、方法論與規則用標題）。路徑是「它現在放在哪」會隨改版移動，名字是「它是什麼」不會；且 skill 在本系統以名字載入，寫路徑等於繞過既有載入機制。實測依據：框架改版移動 hook 位置使註冊失效、可攜性閘門把 25 處路徑判為指名他專案檔案而擋下推送。
 **Version**: 5.0.1 — 「無 UI 框架的元件庫產物」自「已知答不出來」改為指向權威。上游 component-library 方法論 1.8.0 已補〈Web/HTML 端 L2 特別判準〉的「元件規則 SSOT」與「元件邊界的可驗產物」兩條，該缺口不再存在。
 **Version**: 5.0.0 — 判準通則化為「問作用不問存在」（四處存在性判準改為有效性）；資料庫列補備份還原驗證；形態 3 拆判準層與產物層；萃取前提補第四種「決策者不可得」；命名前提補規模閘門；〈老專案模式〉更名〈接手模式〉。依據為六個 repo 的實跑驗證。
