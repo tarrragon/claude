@@ -3064,6 +3064,33 @@ def _collect_registered_hook_script_paths(settings_data: dict) -> set[str]:
     return paths
 
 
+def _warn_missing_optional_dependency(  # i18n-exempt
+    project_root: Path, func_name: str, module_name: str
+) -> None:
+    """降級路徑雙通道可觀測性：stderr 即時可見 + 檔案日誌持久化。
+
+    Why：呼叫端因軟性依賴缺失而降級回傳 0 時，該回傳值與「無事可做」的
+    正常結果不可區分，呼叫端與使用者皆無訊號可辨別是降級還是正常結果
+    （observability-rules 規則 1 / quality-baseline 規則 4）。
+
+    Action：僅補訊號，不改變降級行為本身（缺相依仍應跳過而非中止整個
+    pull），故回傳值語意不變，本函式無回傳值。
+    """
+    message = (
+        f"[sync-pull] {func_name} 降級：缺少 {module_name}，"
+        f"已跳過 hook 自動登記（回傳 0，與「無 hook 需登記」的正常結果同值）\n"
+    )
+    sys.stderr.write(message)
+    log_dir = project_root / ".claude" / "hook-logs" / "sync-claude-pull"
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / f"sync-claude-pull-{time.strftime('%Y%m%d')}.log"
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] WARNING - {message}")
+    except OSError:
+        pass  # 日誌檔寫入失敗不可阻斷主流程；stderr 已提供即時訊號
+
+
 def auto_register_hooks(project_root: Path) -> int:  # i18n-exempt
     """Post-sync: reconcile hook-registry.yaml into settings.json."""
     claude_dir = project_root / ".claude"
@@ -3074,6 +3101,7 @@ def auto_register_hooks(project_root: Path) -> int:  # i18n-exempt
     if not registry_path.is_file() or not settings_path.is_file():
         return 0
     if yaml is None:
+        _warn_missing_optional_dependency(project_root, "auto_register_hooks", "pyyaml")
         return 0
 
     try:

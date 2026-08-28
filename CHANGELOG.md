@@ -1,3 +1,15 @@
+## [2.43.4] - 2026-08-28
+
+### Summary
+fix: auto_register_hooks 於 yaml 不可用時補雙通道警訊; chore: 推送 並回寫 VERSION
+
+Changes: 1 fix, 1 chore
+
+- fix: auto_register_hooks 於 yaml 不可用時補雙通道警訊
+- chore: 推送 並回寫 VERSION
+
+---
+
 ## [2.43.3] - 2026-08-28
 
 ### Summary
