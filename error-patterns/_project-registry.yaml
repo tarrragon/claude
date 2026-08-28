@@ -35,6 +35,9 @@ projects:
   - code: BAL
     dir: flutter_balance
     note: 個人資產負債表 App（Flutter，餘額快照模型）
+  - code: GPD
+    dir: graph_project_docs_manager
+    note: 專案文件因果鏈視覺化（Flutter macOS 桌面）
 
 # 新專案代號規則：
 #   1. 短大寫英數（2-5 字元），語意可辨識專案。

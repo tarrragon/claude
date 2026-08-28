@@ -1,3 +1,27 @@
+## [2.43.1] - 2026-08-28
+
+### Summary
+fix: 修三條——第 7 步反向會合法化 bug、走訪漏符號 ref、數量誤述; docs: 修翻譯探針的三條，第四條判為誤報; docs: 依 63 條審查 finding 完整重寫並拆出衛星檔 (+11 more)
+
+Changes: 1 fix, 11 docs, 2 chore
+
+- fix: 修三條——第 7 步反向會合法化 bug、走訪漏符號 ref、數量誤述
+- docs: 修翻譯探針的三條，第四條判為誤報
+- docs: 依 63 條審查 finding 完整重寫並拆出衛星檔
+- docs: 補 rev-parse 的狀態相依語意
+- docs: 補 rev-parse 消歧義法，示範升級為三段
+- docs: old-oid 全零的實測全貌，並新增操作面章節
+- docs: 收窄閘門宣稱並更正「不宜作內容檢查」的理由
+- docs: 落點推論修正為 reference-transaction 與伺服器端
+- docs: 更正限定節，補上遺漏的 commit 層補網
+- docs: 新增 naming-verifies-taxonomy 方法論並註冊索引
+- docs: 移除死引用並限定案例二的證據範圍
+- docs: 補 PC-BAL-057 雙向引用與「意圖抑制追問」一節
+- chore: base SHA 推進至 15d14be8，README 索引重生
+- chore: 框架同步至 2.43.0 並解三個 sync 衝突
+
+---
+
 ## [2.43.0] - 2026-08-27
 
 ### Summary

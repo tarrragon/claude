@@ -24,6 +24,8 @@
 | 方法論 | 用途 |
 |-------|------|
 | natural-language-programming-methodology.md | 命名方法論 |
+| naming-verifies-taxonomy-methodology.md | 命名作為分類的驗證程序（**限從既有 artifact 萃取分類**：design token / DB 欄位群 / 目錄結構 / 標籤體系；三條件為個別化、名字要能被成品否證、真值條件在規格之外解決；七步程序每步帶產物與失敗態；三層結構的可回溯不等於已驗證） |
+| .claude/references/rule-enforcement-binding-points.md | 規則執行點該綁命令還是綁事件（工具層 matcher / commit 層 / git 原生 hook / reference-transaction 的實測覆蓋範圍；管道是開放集合，覆蓋檔案的落點在推送之後）（衛星檔，自方法論拆出） |
 | .claude/skills/compositional-writing/references/writing-code-comments.md | 註解方法論 |
 | package-import-methodology.md | 導入路徑方法論（5 原則 + 開發階段檢查清單，核心判準） |
 | .claude/references/package-import-language-mechanisms.md | 各語言語意化導入機制 + 跨語言程式碼範例 + Linter/自動化工具配置（衛星檔） |
