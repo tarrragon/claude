@@ -1,3 +1,14 @@
+## [2.43.6] - 2026-08-28
+
+### Summary
+chore: 推送 並回寫 VERSION
+
+Changes: 1 chore
+
+- chore: 推送 並回寫 VERSION
+
+---
+
 ## [2.43.5] - 2026-08-28
 
 ### Summary
