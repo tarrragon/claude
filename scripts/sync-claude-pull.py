@@ -2703,6 +2703,50 @@ def classify_orphans_by_base(
     return will_delete, will_keep
 
 
+def _classify_orphans_by_case(
+    upstream_dir: Path, orphans: list[str]
+) -> tuple[list[str], list[tuple[str, str]]]:
+    """將正向孤兒候選依「上游是否存在僅大小寫不同的真實 dirent」分類。
+
+    compute_orphan_candidates 的判準是逐字元集合差集（見該函式 docstring），
+    故候選清單裡混有兩種完全不同的情況：本地檔真的不存在於上游
+    （genuinely_orphan），以及上游其實有對應內容、只是檔名大小寫與本地不同
+    （case_variant_pairs）。後者若比照前者建議手動移除，會刪除本地實際上與
+    上游同名（僅大小寫不同）的正常檔案，屬本地內容遺失，與
+    _classify_reverse_orphans_by_case 對稱（IMP-BAL-017）。
+
+    呼叫時機要求：upstream_dir（上游 repo clone）須仍存在於磁碟——本函式以
+    os.scandir 讀取真實 dirent，呼叫端不可在 clone 目錄已被清理（如
+    shutil.rmtree）後才呼叫。
+
+    只用 _find_case_variant_dirent（os.scandir 讀真實 dirent）判定，不使用
+    Path.exists()，與三方合併路徑、反向孤兒分類共用同一組工具函式。
+
+    參數:
+        upstream_dir: 上游 repo clone 路徑（其 root 對應本地 .claude/），
+            呼叫時必須仍存在於磁碟
+        orphans: compute_orphan_candidates 的回傳清單
+
+    傳回:
+        tuple[list[str], list[tuple[str, str]]]:
+          (genuinely_orphan, case_variant_pairs)
+          genuinely_orphan: 上游同目錄內找不到任何大小寫變體的候選（真孤兒）
+          case_variant_pairs: [(本地路徑, 上游真實 dirent 相對路徑)]
+    """
+    genuinely_orphan: list[str] = []
+    case_variant_pairs: list[tuple[str, str]] = []
+    for rel_str in orphans:
+        rel_path = Path(rel_str)
+        upstream_subdir = upstream_dir / rel_path.parent
+        real_name = _find_case_variant_dirent(upstream_subdir, rel_path.name)
+        if real_name is None:
+            genuinely_orphan.append(rel_str)
+        else:
+            upstream_rel = str(rel_path.parent / real_name).replace("\\", "/")
+            case_variant_pairs.append((rel_str, upstream_rel))
+    return genuinely_orphan, case_variant_pairs
+
+
 def _print_file_list(header: str, files: list[str], color: str, marker: str) -> None:
     """列印一組檔案清單：標題行 + 逐檔案帶前綴符號的明細行。
 
@@ -2765,22 +2809,52 @@ def _print_orphan_split(orphans: list[str], base_files: set[str]) -> None:
 
 
 def _print_orphan_audit(
-    orphans: list[str], base_sha: str | None, base_files: set[str] | None
+    upstream_dir: Path,
+    orphans: list[str],
+    base_sha: str | None,
+    base_files: set[str] | None,
 ) -> None:
-    """輸出正向孤兒稽核結果：base 可達則分組，否則明示降級（0.2.1-W3-146）。
+    """輸出正向孤兒稽核結果：先依大小寫分類，真孤兒分組措辭不變（0.2.1-W3-146），
+    大小寫變體改獨立區塊並明述不建議手動移除。
+
+    大小寫變體判準與呈現對稱於 _print_reverse_orphans /
+    _classify_reverse_orphans_by_case（見 _classify_orphans_by_case docstring，
+    IMP-BAL-017）：本函式讀的是 compute_orphan_candidates 的逐字元集合差集
+    結果，「孤兒」的結論對大小寫變體候選不成立——上游確有對應內容，只是
+    檔名大小寫不同，若比照真孤兒建議手動移除，會刪除本地與上游同名（僅
+    大小寫不同）的正常檔案。
+
+    呼叫時機要求：upstream_dir（temp_dir clone）須仍存在於磁碟，大小寫變體
+    判定需讀取其真實 dirent（見 _classify_orphans_by_case）。
 
     參數:
-        orphans: 正向孤兒相對路徑清單
+        upstream_dir: 上游 repo clone 路徑（其 root 對應本地 .claude/），
+            呼叫時必須仍存在於磁碟
+        orphans: 正向孤兒相對路徑清單（compute_orphan_candidates 原始輸出，
+            尚未依大小寫分類）
         base_sha: 讀取自 .sync-state.json 的 base commit SHA，缺失為 None
         base_files: base 版本檔案集合，base 缺失或不可達為 None
     """
     if not orphans:
         print_color("   無正向孤兒（本地 .claude/ 皆存在於上游 HEAD）", "green")  # i18n-exempt
         return
-    if base_files is None:
-        _print_orphan_fallback(orphans, base_sha)
-        return
-    _print_orphan_split(orphans, base_files)
+    genuinely_orphan, case_variant_pairs = _classify_orphans_by_case(
+        upstream_dir, orphans
+    )
+    if genuinely_orphan:
+        if base_files is None:
+            _print_orphan_fallback(genuinely_orphan, base_sha)
+        else:
+            _print_orphan_split(genuinely_orphan, base_files)
+    if case_variant_pairs:
+        print_color(  # i18n-exempt
+            f"   {len(case_variant_pairs)} 個檔案僅本地與上游大小寫不一致"
+            "（非孤兒，不建議手動移除——若近期執行過大小寫修復，"
+            "移除會抵銷該修復）:",
+            "yellow",
+        )
+        for local_rel, upstream_rel in case_variant_pairs:
+            print_color(f"   ~ 本地: {local_rel}｜上游: {upstream_rel}")
 
 
 def detect_pending_case_renames(temp_dir: Path, base_sha: str) -> list[str]:
@@ -2844,10 +2918,11 @@ def run_audit() -> None:  # i18n-exempt
         pending_renames = (
             detect_pending_case_renames(temp_dir, base_sha) if base_sha else []
         )
+        # 大小寫變體分類需讀取 temp_dir 的真實 dirent（_classify_orphans_by_case），
+        # 故列印須在 finally 清理 temp_dir 前完成，不可移到 try 區塊外。
+        _print_orphan_audit(temp_dir, orphans, base_sha, base_files)
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
-
-    _print_orphan_audit(orphans, base_sha, base_files)
 
     if not reverse_orphans:
         print_color(  # i18n-exempt

@@ -504,3 +504,130 @@ def test_main_flow_reverse_orphan_case_variant_not_flagged_as_missing(
     assert "可能需要" not in out, f"不應出現舊版誤導性補齊建議措辭：{out}"
     assert "大小寫不一致" in out, f"應改述為大小寫不一致：{out}"
     assert (local_skill_dir / "skill.md").exists(), "本地原檔不應被本次 pull 動到"
+
+
+# ---------------------------------------------------------------------------
+# 正向孤兒稽核命中大小寫變體時的誤導性移除建議（0.2.1-W3-1161）
+# ---------------------------------------------------------------------------
+
+
+def test_classify_orphans_separates_case_variant_from_genuine_orphan(
+    tmp_path: Path,
+) -> None:
+    """_classify_orphans_by_case：上游有大小寫變體者歸類為 case_variant_pairs，
+    上游完全無對應內容者歸類為 genuinely_orphan。"""
+    upstream_dir = tmp_path / "upstream"
+    skill_dir = upstream_dir / "skills" / "foo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_bytes(b"content\n")  # 大小寫變體：本地 skill.md
+
+    orphans = [
+        "skills/foo/skill.md",  # 上游有 SKILL.md（大小寫變體）
+        "rules/truly-orphan.md",  # 上游完全無對應內容
+    ]
+
+    genuinely_orphan, case_variant_pairs = sync_mod._classify_orphans_by_case(
+        upstream_dir, orphans
+    )
+
+    assert genuinely_orphan == ["rules/truly-orphan.md"]
+    assert case_variant_pairs == [("skills/foo/skill.md", "skills/foo/SKILL.md")]
+
+
+def test_classify_orphans_all_genuine_when_no_case_variant(tmp_path: Path) -> None:
+    """上游完全無任何大小寫變體時，全部歸類為 genuinely_orphan。"""
+    upstream_dir = tmp_path / "upstream"
+    (upstream_dir / "rules").mkdir(parents=True)
+
+    genuinely_orphan, case_variant_pairs = sync_mod._classify_orphans_by_case(
+        upstream_dir, ["rules/a.md", "rules/b.md"]
+    )
+
+    assert genuinely_orphan == ["rules/a.md", "rules/b.md"]
+    assert case_variant_pairs == []
+
+
+def test_print_orphan_audit_case_variant_fallback_path_does_not_suggest_removal(
+    tmp_path: Path, capsys
+) -> None:
+    """_print_orphan_audit：base sha 缺失（fallback 分支）下，大小寫變體改述
+    為不建議手動移除，不落入「請手動移除」建議。"""
+    upstream_dir = tmp_path / "upstream"
+    skill_dir = upstream_dir / "skills" / "foo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_bytes(b"content\n")
+
+    sync_mod._print_orphan_audit(upstream_dir, ["skills/foo/skill.md"], None, None)
+
+    out = capsys.readouterr().out
+    assert "大小寫不一致" in out
+    assert "不建議手動移除" in out
+    assert "請手動移除" not in out
+
+
+def test_print_orphan_audit_case_variant_split_path_does_not_suggest_removal(
+    tmp_path: Path, capsys
+) -> None:
+    """_print_orphan_audit：base sha 可達（split 分支）下，大小寫變體改述為
+    不建議手動移除，不落入「可手動移除」建議，也不落入將刪除/將保留分組。"""
+    upstream_dir = tmp_path / "upstream"
+    skill_dir = upstream_dir / "skills" / "foo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_bytes(b"content\n")
+
+    sync_mod._print_orphan_audit(
+        upstream_dir, ["skills/foo/skill.md"], "deadbeef", set()
+    )
+
+    out = capsys.readouterr().out
+    assert "大小寫不一致" in out
+    assert "不建議手動移除" in out
+    assert "可手動移除" not in out
+    assert "將被刪除" not in out
+    assert "將保留" not in out
+
+
+def test_print_orphan_audit_genuine_orphan_keeps_existing_wording(
+    tmp_path: Path, capsys
+) -> None:
+    """_print_orphan_audit：真孤兒（無任何大小寫變體）維持既有分組措辭不變。"""
+    upstream_dir = tmp_path / "upstream"
+    upstream_dir.mkdir(parents=True)
+
+    sync_mod._print_orphan_audit(upstream_dir, ["rules/truly-orphan.md"], None, None)
+
+    out = capsys.readouterr().out
+    assert "孤兒候選" in out
+    assert "請手動移除" in out
+    assert "大小寫不一致" not in out
+
+
+def test_run_audit_forward_orphan_case_variant_does_not_suggest_manual_removal(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    """端到端 --audit（run_audit）：本地為歷史小寫、上游為大寫的同名檔，
+    正向孤兒稽核不得建議手動移除（會刪除本地與上游同名、僅大小寫不同的
+    正常檔案）。"""
+    content = b"skill entry content\n"
+    project_root = tmp_path / "local"
+    local_claude = project_root / ".claude"
+    local_skill_dir = local_claude / "skills" / "foo"
+    local_skill_dir.mkdir(parents=True)
+    (local_skill_dir / "skill.md").write_bytes(content)  # 本地仍為歷史小寫
+
+    def _fake_clone(temp_dir: Path) -> None:
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        (temp_dir / "skills" / "foo").mkdir(parents=True)
+        (temp_dir / "skills" / "foo" / "SKILL.md").write_bytes(content)
+
+    monkeypatch.setattr(sync_mod, "find_project_root", lambda: project_root)
+    monkeypatch.setattr(sync_mod, "clone_repo", _fake_clone)
+
+    sync_mod.run_audit()
+
+    out = capsys.readouterr().out
+    assert "skill.md" in out
+    assert "大小寫不一致" in out
+    assert "不建議手動移除" in out
+    assert "請手動移除" not in out, f"不應建議手動移除大小寫變體：{out}"
+    assert (local_skill_dir / "skill.md").exists()

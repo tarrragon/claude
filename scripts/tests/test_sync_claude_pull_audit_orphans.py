@@ -202,3 +202,28 @@ def test_run_audit_reverse_orphan_case_variant_does_not_suggest_pull_to_fill(
     assert "SKILL.md" in out
     assert "大小寫不一致" in out
     assert "可能需要 sync-pull 補齊" not in out, f"不應出現舊版誤導性建議：{out}"
+
+
+def test_run_audit_forward_orphan_case_variant_does_not_suggest_manual_removal(
+    monkeypatch, tmp_path, capsys
+):
+    """--audit 模式下，正向孤兒為大小寫變體時不得建議『手動移除』
+    （0.2.1-W3-1161：該建議會誤刪本地與上游同名、僅大小寫不同的正常檔案）。"""
+    project_root = tmp_path / "proj"
+    claude = project_root / ".claude"
+    _make_tree(claude, {"skills/foo/skill.md": "x\n"})  # 本地為歷史小寫
+
+    def _fake_clone(temp_dir: Path) -> None:
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        (temp_dir / "skills" / "foo").mkdir(parents=True)
+        (temp_dir / "skills" / "foo" / "SKILL.md").write_text("x\n", encoding="utf-8")
+
+    monkeypatch.setattr(pull, "find_project_root", lambda: project_root)
+    monkeypatch.setattr(pull, "clone_repo", _fake_clone)
+
+    pull.run_audit()
+
+    out = capsys.readouterr().out
+    assert "skill.md" in out
+    assert "大小寫不一致" in out
+    assert "請手動移除" not in out, f"不應建議手動移除大小寫變體：{out}"
