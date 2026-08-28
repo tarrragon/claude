@@ -17,6 +17,8 @@
 | test_all_cleared_ok_message | 所有代理人已完成 | 內容含「[OK] 所有代理人已完成」 |
 | test_stop_hook_active_silent | stop_hook_active=true | 靜默 exit 0，不清理、不輸出 |
 | test_wait_dedup_* | [WAIT] 重播場景 | 同 key TTL 內去重、TTL 過期重播、內容變化重播 |
+| test_declines_delete_when_multiple_null_candidates | null 候選 > 1 筆 | 不呼叫 FIFO 清理（呼叫即失敗），僅供 [WAIT] 訊息 |
+| test_single_null_candidate_still_uses_fifo | null 候選 = 1 筆 | 照常呼叫 FIFO 清理（向後相容） |
 
 策略：
 - importlib 動態載入（檔名含 hyphen 無法 import）
@@ -50,8 +52,26 @@ def _load_hook_module():
 
 
 @pytest.fixture
-def hook_mod():
-    return _load_hook_module()
+def hook_mod(monkeypatch, tmp_path):
+    """載入 hook 模組，並改寫 __file__ 使其 __file__ 導向 project_root 落在
+    測試專屬 tmp_path。
+
+    Why：main() 以 `Path(__file__).resolve().parent.parent.parent` 解析
+    project_root，並自 0.2.1-W3-1092 起將此值顯式傳給
+    setup_hook_logging(project_root=...)。顯式傳入會繞過 conftest
+    isolate_hook_logs 對 get_project_root() 的隔離（該 fixture 只攔截
+    「未傳 project_root、內部自行呼叫 get_project_root()」的路徑），若不
+    改寫 __file__，測試會將真實日誌寫入 production .claude/hook-logs/。
+    """
+    module = _load_hook_module()
+    fake_hooks_dir = tmp_path / "fake_repo" / ".claude" / "hooks"
+    fake_hooks_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(
+        module,
+        "__file__",
+        str(fake_hooks_dir / "subagent-stop-dispatch-cleanup-hook.py"),
+    )
+    return module
 
 
 def _stdin(payload: dict) -> io.StringIO:
@@ -202,6 +222,98 @@ class TestStopHookActiveCircuitBreaker:
 
         payload = json.loads(capsys.readouterr().out)
         assert "[OK]" in payload["systemMessage"]
+
+
+class TestFifoFallbackMultipleNullCandidates:
+    """FIFO 後援於 null 候選數 > 1 時停用，避免誤刪仍在執行中的記錄。
+
+    背景：isolation=none 派發的 agent_id 全記為 null，FIFO 若在多筆並存時
+    仍刪除「最早」的一筆，不保證是本次真正結束的那一筆。
+    """
+
+    def test_declines_delete_when_multiple_null_candidates(
+        self, hook_mod, monkeypatch, capsys, tmp_path
+    ):
+        """null 候選 2 筆：不呼叫 clear_oldest_null_agent_id_entry，僅供 [WAIT] 訊息。"""
+        state_file = tmp_path / "dispatch-active.json"
+        state_file.write_text("{}", encoding="utf-8")
+
+        def _fail_if_called(root):
+            raise AssertionError(
+                "候選數 > 1 時不應呼叫 clear_oldest_null_agent_id_entry"
+            )
+
+        null_candidates = [
+            {
+                "agent_id": None,
+                "agent_description": "agent-A",
+                "ticket_id": "T-A",
+                "dispatched_at": "2026-01-01T00:00:00+00:00",
+            },
+            {
+                "agent_id": None,
+                "agent_description": "agent-B",
+                "ticket_id": "T-B",
+                "dispatched_at": "2026-01-01T00:01:00+00:00",
+            },
+        ]
+
+        monkeypatch.setattr(hook_mod, "get_state_file_path", lambda root: state_file)
+        monkeypatch.setattr(hook_mod, "clear_dispatch_by_id", lambda root, aid: False)
+        monkeypatch.setattr(
+            hook_mod, "clear_oldest_null_agent_id_entry", _fail_if_called
+        )
+        monkeypatch.setattr(hook_mod, "get_active_dispatches", lambda root: null_candidates)
+        monkeypatch.setattr(
+            hook_mod, "_get_wait_dedup_state_file",
+            lambda root: tmp_path / "wait-broadcast-dedup.json",
+        )
+        monkeypatch.setattr(sys, "stdin", _stdin({"agent_id": "agent-no-match"}))
+
+        rc = hook_mod.main()
+        assert rc == 0
+
+        payload = json.loads(capsys.readouterr().out)
+        msg = payload["systemMessage"]
+        assert "[WAIT]" in msg, "未刪除任一記錄，候選仍在 remaining 中觸發 [WAIT]"
+        assert "仍有 2 個代理人" in msg
+        assert "已清理派發記錄" not in msg, "候選數 > 1 時不應宣稱已清理"
+
+    def test_single_null_candidate_still_uses_fifo(
+        self, hook_mod, monkeypatch, capsys, tmp_path
+    ):
+        """null 候選 = 1 筆：維持原 FIFO 行為（向後相容，非本次修改範圍）。"""
+        state_file = tmp_path / "dispatch-active.json"
+        state_file.write_text("{}", encoding="utf-8")
+
+        calls = {"count": 0}
+
+        def _record_fifo(root):
+            calls["count"] += 1
+            return True
+
+        one_candidate = [
+            {
+                "agent_id": None,
+                "agent_description": "agent-A",
+                "ticket_id": "T-A",
+                "dispatched_at": "2026-01-01T00:00:00+00:00",
+            },
+        ]
+
+        monkeypatch.setattr(hook_mod, "get_state_file_path", lambda root: state_file)
+        monkeypatch.setattr(hook_mod, "clear_dispatch_by_id", lambda root, aid: False)
+        monkeypatch.setattr(hook_mod, "clear_oldest_null_agent_id_entry", _record_fifo)
+        monkeypatch.setattr(hook_mod, "get_active_dispatches", lambda root: one_candidate)
+        monkeypatch.setattr(
+            hook_mod, "_get_wait_dedup_state_file",
+            lambda root: tmp_path / "wait-broadcast-dedup.json",
+        )
+        monkeypatch.setattr(sys, "stdin", _stdin({"agent_id": "agent-no-match"}))
+
+        rc = hook_mod.main()
+        assert rc == 0
+        assert calls["count"] == 1, "候選數 <= 1 時應照常呼叫 FIFO 清理"
 
 
 class TestWaitBroadcastDedup:

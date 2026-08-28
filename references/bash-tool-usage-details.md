@@ -377,7 +377,7 @@ unset GIT_INDEX_FILE
 
 | 要件 | 內容 | 對應步驟 |
 |------|------|---------|
-| 1. 清單來源獨立於共用 index | 決定要提交哪些檔案的清單，必須取自呼叫端已知的精確來源（如 ticket `where.files` 宣告、或函式呼叫者作為引數傳入的檔案清單），禁止用 `git diff --cached --name-only` 或任何讀取共用 index 目前 staged 狀態的命令產生清單 | 步驟 4（`git add -- <exact-file-1> <exact-file-2>`）的引數來源 |
+| 1. 清單來源獨立於共用 index | 決定要提交哪些檔案的清單，必須取自呼叫端已知的精確來源（如 ticket `where.files` 宣告、或函式呼叫者作為引數傳入的檔案清單），禁止用 `git diff --cached --name-only` 或任何讀取共用 index 目前 staged 狀態的命令產生清單。此要件有第二維：`git status --porcelain` 反映整個工作區，多 PM session 並行時必然摻入他 session 尚在撰寫的檔案，清單來源同時須具備 session 歸屬過濾（見下方「工作區維度」小節） | 步驟 4（`git add -- <exact-file-1> <exact-file-2>`）的引數來源 |
 | 2. 寫入使用 GIT_INDEX_FILE | 全程操作（read-tree / add / write-tree）在獨立臨時 index 中進行，不觸及共用 index | 步驟 2-6 |
 | 3. 提交前以 tree 層級自檢範圍 | 建立 commit 物件前後皆須核對變更範圍恰為預期清單。可在步驟 5 產生 `TREE_SHA` 後立即以 `git diff-tree --no-commit-id --name-only -r HEAD <TREE_SHA>` 自檢（早於建立 commit 物件，發現不符即可提前放棄，不需先耗費一次 commit-tree），或沿用步驟 7 既有的 `git diff --name-only <OLD_HEAD> <COMMIT_SHA>`（commit 建立後比對）；兩者比對邏輯等價，擇一即可但不可省略 | 步驟 5 之後（提前版）或步驟 7（既有版） |
 
@@ -386,6 +386,8 @@ unset GIT_INDEX_FILE
 **Consequence**：不滿足要件 1 時，維護者複製本配方常會沿用規則七主文「先核對現有共用 index 內容」的核對習慣作清單來源——因為全程操作看似「隔離」，出錯時更難聯想到問題出在清單來源而非寫入端；且要件 1 失守時，要件 2、3 仍會「正確地」執行完畢（`GIT_INDEX_FILE` 隔離無誤、diff 自檢也會「通過」，因為自檢比對的正是同一份已經錯誤的清單），三個環節各自看起來都沒有問題，只有整體行為（提交範圍）是錯的。
 
 **反例**（實證）：commit `a7caabf4f`（2026-08-21，目錄級 where.files 宣告攔截功能提交）示範要件 1 失守的具體樣態——清單來源改用 `git diff --cached --name-only` 讀取共用 index 目前 staged 狀態，即使後續仍以 `GIT_INDEX_FILE` 隔離寫入、產生 tree、建立 commit，仍把另一張並行進行中 ticket 的 metadata 檔案（未在本次任務清單內，當時恰好也 staged 在共用 index）一併提交進去。三個要件中只有第一項出錯，但因清單是整個配方的輸入起點，錯誤會沿全程配方精確複製到最終 commit——其餘兩項做得再確實，也無法補救清單本身已經錯誤。
+
+**要件 1 的工作區維度**：清單來源即使不讀共用 index（例如改讀 `git status --porcelain`），仍可能摻入非本次提交對象的檔案——多 PM session 並行的環境下，`git status --porcelain` 反映的是整個工作區，必然包含他 session 尚在撰寫、未完成的檔案。`has_active_background_agents()` 這類「有無活躍背景代理人」的整批跳過判準只擋「本 session 自己派發、追蹤中的代理人」這一種情境，無法涵蓋「他 session 直接 CLI 操作、未經派發追蹤」或「他 session 已完成派發但尚未輪到自身 turn-end」的情形。完整清單來源獨立性因此需要同時滿足兩維：獨立於共用 index（防夾帶他人已 staged 內容）**且**獨立於工作區其他 session（防誤提交他 session 在途工作）。已驗證實作見 `ticket-md-auto-commit-hook.py` 的 `get_session_claimed_ticket_ids`（以 `.claude/lib/pm_registry.py` 的 session 認領清單為正歸屬判準，歸屬無法判定時保守排除）。
 
 ### 規則七核對步驟的粒度邊界：檔案內夾帶
 
@@ -404,6 +406,90 @@ unset GIT_INDEX_FILE
 | 無法確認目標檔是否乾淨 | commit 前先 `git diff <path>`（非 `--cached`）檢視工作區相對於 index 的差異，確認無非預期的既有未 stage 內容混入 working tree 版本 |
 
 **與根因的關係**：本節與上方「變體：檔案級共用」章節（PC-BAL-008）同根因——`git add` 讀的是磁碟當下內容，無法區分「誰寫的哪一行」。PC-BAL-008 該章節處理的是兩張正式 ticket 的 `where.files` 重疊；本節額外指出**核對步驟本身**（而非僅 `git add` 動作）對此邊界無鑑別力，且將處置範圍擴及非 ticket 的 append-only 共用檔案。**邊界（不變）**：本節不改變規則七既有禁止事項——`git commit -- <path>` / `--only` / `-o` / `-i` 的禁令與其論證維持不變，本節是核對步驟侷限性的補充說明，非規則修訂。
+
+### 規則七核對步驟的版本邊界：過期 index 快照
+
+**現象**：核對步驟（`git diff --cached --name-only`）驗證的是 index 中有哪些檔案，不是這些檔案的內容有多新。index entry 是 `git add` 當下的內容快照，HEAD 之後若被其他路徑前進，該 entry 相對於新 HEAD 就成了舊版本，但在檔名層級與「剛 add 的最新內容」完全無從區分。核對通過、裸 commit 執行，檔案內容被回滾至舊版本，全程無警告。
+
+**Why**：index 與 HEAD 是兩個獨立前進的平面。`git add` 只寫 index，不讀 HEAD；HEAD 前進（他方 commit、`merge`、`rebase`、`pull`）也不改寫既有 index entry。兩者失去同步時，index 相對新 HEAD 呈現為「staged 的舊內容」，而 `--name-only` 的輸出粒度是檔名，看不到版本維度。
+
+**產生路徑**（兩條，後者不需任何一方違反規則七）：
+
+| 路徑 | 機制 | 需違反規則七？ |
+|------|------|--------------|
+| A：pathspec 提交後 index 未寫回 | `git commit -- <path>` / `--only` / `-o` 以 HEAD 建臨時 index 提交，提交後不寫回共用 index，先前 `git add` 的 entry 原封留著，相對新 HEAD 已是舊內容 | 是（但非並行期間 `bare-commit-guard-hook.py` 僅 WARN 不阻擋，該路徑實際可被執行） |
+| B：HEAD 由他方前進 | 己方 `git add <path>` 後，另一 session 以隔離索引 CAS 提交同一檔案的新版本（或發生 `merge` / `rebase` / `pull`），HEAD 前進而共用 index entry 未動 | 否——雙方各自都遵守規則，屬並行環境的結構性現象 |
+
+路徑 B 是本節的主要理由。隔離索引 CAS 普及後（見上方「隔離索引提交」小節），HEAD 在他方 `git add` 與裸 commit 之間前進的機會隨之增加。
+
+**Consequence**：檔案內容退回舊版本並寫入歷史。ticket md 的情形是狀態欄位被回滾（`in_progress` 變回 `pending`）；程式碼檔則是整份退版。歷史外觀完全正常——被覆寫的那個 commit 仍在 `git log` 中，只有比對檔案內容才看得出回滾，無任何異常訊號可供事後歸因。
+
+**最小重現**（可自行執行驗證，`$D` 為任一臨時 repo）：
+
+```bash
+printf 'v1\n' > "$D/a.txt"; git -C "$D" add a.txt; git -C "$D" commit -q -m base
+printf 'v2\n' > "$D/a.txt"; git -C "$D" add a.txt     # 共用 index = v2
+printf 'v3\n' > "$D/a.txt"                            # working tree = v3
+
+# 他方以隔離索引 CAS 提交 v3（完全不碰共用 index），HEAD 前進
+OLD=$(git -C "$D" rev-parse HEAD)
+GIT_INDEX_FILE=$(mktemp -u) sh -c "
+  git -C '$D' read-tree $OLD
+  git -C '$D' update-index --add a.txt
+  T=\$(git -C '$D' write-tree)
+  N=\$(git -C '$D' commit-tree \$T -p $OLD -m 'peer commits v3')
+  git -C '$D' update-ref \$(git -C '$D' symbolic-ref HEAD) \$N $OLD"
+
+git -C "$D" diff --cached --name-only    # a.txt —— 核對通過，index 確實只含目標檔
+git -C "$D" show HEAD:a.txt              # v3
+git -C "$D" show :a.txt                  # v2 —— index entry 相對新 HEAD 已過期
+git -C "$D" commit -q -m "bare commit after passing the name-only check"
+git -C "$D" show HEAD:a.txt              # v2 —— 內容被回滾，git log 三個 commit 外觀正常
+```
+
+**Action**：
+
+| 情境 | 處置 |
+|------|------|
+| 通過核對步驟後、裸 commit 之前（並行環境常態） | 加一道版本比對：`git show :<path>` 與 `git show HEAD:<path>` 內容不同時，確認差異是自己這次的編輯，而非 index 停留在舊版本 |
+| 無法判斷 index entry 是過期快照還是刻意暫存的中間版本 | 三平面比對——`git show HEAD:<path>`（HEAD）、`git show :<path>`（index）、`cat <path>`（working tree）。index 內容既非 HEAD 亦非 working tree，且無從說明為何是那個版本時，視為過期 |
+| 已判定為過期快照 | `git restore --staged <path>` 將 index 重設回 HEAD，再重新精確 `git add <path>` 取當下 working tree 內容 |
+| 高頻/高衝突路徑 | 改用上方「隔離索引 CAS 配方」——以 `read-tree` 從當下 HEAD 重建臨時 index，內容不取自共用 index，本邊界自然不適用 |
+
+**與既有兩則邊界的關係**：三則邊界的失效維度互不重疊——「隔離索引 CAS」處理三步驟間的**時序窗口**，「檔案內夾帶」處理同一檔案內的 **hunk 粒度**，本節處理 index entry 相對 HEAD 的**版本新舊**。**邊界（不變）**：本節同樣不改變規則七既有禁止事項，`git commit -- <path>` / `--only` / `-o` / `-i` 的禁令與其論證維持不變。
+
+**與既有防護層的關係**：`.claude/hooks/bare-commit-guard-hook.py` 以「裸 commit 可用 staged 快照驗證安全性」為放行前提（見該檔 docstring）。過期快照使該前提在內容維度失效：檔名範圍驗證仍通過，內容卻是舊版。該 hook 的防護標的是**範圍過寬**（吸入他人檔案），本節的失效形態是**範圍正確而內容過舊**，兩者不互相涵蓋。
+
+### 規則七的涵蓋擴充：衝突合併收尾的廣域 staging
+
+**現象**：`git merge` 產生衝突後，以 `git add -A` / `git add .` / `git commit -a` 完成該合併，工作區內與本次合併無關的未暫存編輯一併寫進 merge commit。commit 成功、退出碼 0、內容正確、訊息正常——與規則七既有四項禁令一樣屬零訊號的靜默污染。
+
+**Why**：`git add -A` 的定址範圍是整個工作區，不是「本次合併涉及的檔案」。衝突狀態特別容易誘導廣域 staging——`git status` 在衝突期間列出的 unmerged 檔案讓人以為 staging 範圍已被合併狀態限定，實際上 `-A` 照樣掃過工作區的每一個修改。merge commit 的多 parent 結構又使事後歸因困難：diff 相對於哪個 parent 計算會給出不同答案，「這個變更是合併帶進來的還是被捲進來的」不容易一眼判定。
+
+**Consequence**：輕則 provenance 污染——merge commit 的 diff 含其標題所述範圍外的變更，後續考古把 A 的工作歸因到這次合併。重則提交半成品（捲入的編輯尚未完稿）或造成覆蓋（兩方同時編輯同檔）。與規則七既有禁令的差別在於，本路徑不需要任何 pathspec 形式，單純 `git add -A` 即觸發，故四項禁令對它全數無效。
+
+**實證**（本專案 2026-08-26，merge commit `89c57a1c9`）：並行 session 合併 worktree 分支時產生衝突，收尾提交把本 session 代理人尚未提交的 `.claude/pm-rules/parallel-dispatch.md` 編輯捲入。判定「內容來自工作區」用三方行數比對：
+
+| 觀測 | 值 |
+|------|-----|
+| parent 1 該檔行數 | 1020 |
+| parent 2 該檔行數 | 1020 |
+| merge 結果該檔行數 | 926 |
+| 該檔是否在 incoming 變更範圍（`git diff --name-only <p1>...<p2>`） | 否 |
+
+合併結果含有兩個 parent 皆不存在的內容，且該檔不在合併的變更範圍內，唯一來源即工作區。**本次是代理人 `ticket track commit` 的檔數自我驗證（預期兩檔實得一檔）才暴露**——一般提交流程沒有這道自我驗證，捲入不會產生任何訊號。
+
+**Action**：
+
+| 情境 | 處置 |
+|------|------|
+| 衝突解決完畢，準備收尾提交 | 精確 `git add <衝突檔>` → `git diff --cached --name-only` 核對 index 僅含衝突檔與本次合併應有的變更 → 裸 `git commit`（`git merge --continue` 亦讀 index，同樣受此核對保護） |
+| 合併前工作區已有未暫存的無關編輯 | 合併前先處置（提交或 `git stash`），不留在工作區等合併結束——`-A` 之外，衝突期間的多次 `git add` 也容易誤觸 |
+| 已發生捲入 | 依規則七既有條文：**不得** `revert` / `reset --soft` / `commit --amend` / 反向套用。被捲入的內容與他方同窗口的合法寫入在 diff 上不可區分，任一還原動作都會連帶撤銷後者。記錄 commit SHA 與檔案清單於 ticket，上報 PM |
+
+**與既有防護層的關係**：派發骨架（`agent-dispatch-template.md` / `track_dispatch.py` 的 `SKELETON_TEMPLATE_NORMAL`）的 Forbidden 行已同時禁 `git add . / git add -A` 與 `git commit -a`，涵蓋本節兩種載體；缺口原本只在規則七主文——規則七列的是四種 pathspec 形式，未把廣域 staging 納入自身射程，本節補此涵蓋。`bare-commit-guard-hook.py` 與 `dispatch-staging-phrase-guard-hook.py` 皆不涵蓋 merge 收尾（前者攔 pathspec commit，後者檢查派發 prompt 的片語完整性），強制層是否加碼屬另一議題，不在本節範圍。
+
+**與 PC-BAL-008 的歸屬判定**：本機制**應併入 `PC-BAL-008` 作為新變體**，不另立 error-pattern。判定依據三項——(1) 該 PC 的根因抽象層是「commit 範圍大於意圖且無訊號」，本節是同一抽象下的另一載體，該 PC 已用「變體：檔案級共用」章節容納過一次相同性質的擴充；(2) 讀者遇到「commit 含非預期檔案」時只需查一份文件，另立新 PC 會迫使讀者在兩份相似文件間先判定載體差異，而該判定正是事發當下最難做的；(3) 該 PC 的預防措施（隔離索引、commit 後驗證錨定 SHA 而非 `HEAD`）對本節同樣適用，另立會整段重複。**併入的代價**：該 PC 標題含 `parallel-agent`，而本機制在單 session 自行合併時亦會發生，併入時需於變體章節明示此差異。
 
 ---
 
@@ -467,6 +553,7 @@ LC_ALL=C sort /tmp/t.txt | LC_ALL=C uniq -c
 - `.claude/error-patterns/process-compliance/PC-087-pm-tmp-detour-for-ticket-content.md`
 - `.claude/error-patterns/process-compliance/PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md`（並行 commit 掃入他人檔案；口徑與規則三情境二一致：lock/index 競爭屬並行環境預期現象；規則七詳細「隔離索引 CAS」即此問題的加強解法；「變體：檔案級共用」與規則七詳細「核對步驟的粒度邊界」同根因）
 - `.claude/skills/ticket/hooks/ticket-md-auto-commit-hook.py`（規則七詳細「隔離索引 CAS」的已驗證實作）
+- `.claude/hooks/bare-commit-guard-hook.py`（規則七的 hook 強制層；其放行裸 commit 的前提「staged 快照可驗證安全性」在過期快照下於內容維度失效，見規則七詳細「版本邊界」）
 - `.claude/error-patterns/process-compliance/PC-139-git-index-lock-source-misattribution-gui-app-fork.md`
 - `.claude/pm-rules/parallel-dispatch.md` — 並行派發 git staging / commit 紀律
 - 框架 issue 34（`tarrragon/claude`）— 規則三情境二實驗來源，consumer `screen_clock` ticket `1.4.0-W2-030`
@@ -475,7 +562,10 @@ LC_ALL=C sort /tmp/t.txt | LC_ALL=C uniq -c
 
 ---
 
-**Last Updated**: 2026-08-24
+**Last Updated**: 2026-08-28
+**Version**: 1.10.0 — 規則七詳細新增「涵蓋擴充：衝突合併收尾的廣域 staging」小節：`git merge` 衝突後以 `git add -A` / `git add .` / `git commit -a` 收尾會把工作區無關的未暫存編輯寫進 merge commit，四項既有禁令對此路徑全數無效；附實證（merge commit `89c57a1c9`，兩 parent 皆 1020 行 / merge 926 行 / 該檔不在 incoming 變更範圍，三方比對判定內容源自工作區）、正確替代與已發生時的處置表；並記錄與派發骨架 Forbidden 行的涵蓋落差（骨架已擋、規則主文未擋），以及本機制應併入 `PC-BAL-008` 作為新變體的判定與三項依據
+**Version**: 1.9.0 — 規則七詳細新增「核對步驟的版本邊界：過期 index 快照」小節：核對步驟驗證 index 含哪些檔案、不驗證 entry 相對 HEAD 有多新；列兩條產生路徑（A pathspec 提交後不寫回共用 index；B 他方以隔離索引 CAS 提交 / merge / rebase / pull 使 HEAD 前進，雙方皆未違規），附可執行最小重現（核對通過 → 裸 commit → 內容回滾至舊版本，`git log` 外觀正常）、三平面比對偵測法與 `git restore --staged` 處置表；並明示三則邊界失效維度互不重疊（時序窗口 / hunk 粒度 / 版本新舊）、與 `bare-commit-guard-hook.py` 防護標的的差異（範圍過寬 vs 範圍正確而內容過舊）；不改變規則七既有禁止事項
+**Version**: 1.8.0 — 「隔離索引提交的完整性三要件」要件 1 補工作區維度：`git status --porcelain` 反映整個工作區，多 PM session 並行時必然摻入他 session 在途工作，清單來源需同時獨立於共用 index 與其他 session；已驗證實作見 `ticket-md-auto-commit-hook.py` 的 `get_session_claimed_ticket_ids`（以 pm-registry 認領清單為正歸屬判準，歸屬無法判定時保守排除）
 **Version**: 1.7.0 — 新增「規則八詳細：CJK 資料聚合統計加 LC_ALL=C（locale collation 陷阱）」：`sort`/`uniq` 依 locale collation 而非位元組序比較，系統預設 locale 下會把相異 CJK 字串合併計數且無任何錯誤訊號；附最小重現、失效形狀、實際誤導案例（統計誤差 20 倍以上）、替代寫法對照表；主文速查條目見 `bash-tool-usage-rules.md` 規則八
 **Version**: 1.6.0 — 規則七詳細新增「核對步驟的粒度邊界：檔案內夾帶」小節：`git diff --cached --name-only` 核對粒度為檔案層級，`git add` 最小單位即整個檔案，對同檔案內他人未 stage 的 hunk 無鑑別力；附 append-only 共用檔（`topic-assignments.txt`）處置建議表（`git add --patch` / 單一方提交 / commit 前 `git diff` 自查）；不改變規則七既有禁止事項，與 PC-BAL-008「變體：檔案級共用」同根因但聚焦核對步驟本身的侷限
 **Version**: 1.5.0 — 新增「隔離索引提交的完整性三要件」小節：清單來源獨立於共用 index / GIT_INDEX_FILE 寫入隔離 / tree 層級提交前自檢，三要件缺一不可；補反例（commit `a7caabf4f`，清單改用 `git diff --cached --name-only` 掃入並行 ticket metadata，即使其餘兩要件正確執行仍整體失效）

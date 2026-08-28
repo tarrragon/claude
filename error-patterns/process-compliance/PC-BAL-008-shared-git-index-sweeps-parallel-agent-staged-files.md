@@ -110,10 +110,70 @@ created: 2026-07-26
 
 **候選處置**（尚未定案，由該次事件的三要件收斂票追蹤）：CLI 的 auto-stage 改 stage 工作區當前版本而非沿用 index 既有項；或 CLI 自身改以隔離索引提交、完全不留 staged 狀態；或執行者收到 `[Auto-stage]` 提示時一律先 `git restore --staged` 再依三要件重新提交。第二條從源頭消除 staged 狀態，不依賴執行者記得，與本檔「工具層修法優於操作層」的既有判準一致。
 
+## 變體：衝突合併收尾的廣域 staging
+
+### 症狀
+
+- `git merge` 產生衝突，解決衝突後以 `git add -A` / `git add .` / `git commit -a` 完成該合併
+- merge commit 含工作區內與本次合併無關的未暫存編輯，來源可能是自己稍早的在途工作，也可能是另一 session 尚未提交的編輯
+- commit 成功、退出碼 0、內容正確、訊息正常——與本檔其他變體同屬零訊號的靜默污染
+- merge commit 的多 parent 結構使事後歸因更難：diff 相對於哪個 parent 計算會給出不同答案，「這是合併帶進來的還是被捲進來的」不易一眼判定
+
+### 根因
+
+**本變體的載體不是 index 共用，而是 staging 動作本身的定址範圍。** `git add -A` 掃過整個工作區，不是「本次合併涉及的檔案」。衝突狀態特別容易誘導廣域 staging——`git status` 在衝突期間列出 unmerged 檔案，讓人以為 staging 範圍已被合併狀態限定，實際上 `-A` 照樣掃過工作區的每一個修改。
+
+與本檔既有機制的分別：
+
+| 機制 | 錯的是什麼 | 觸發載體 |
+|------|-----------|---------|
+| 原案例（實證一至七） | commit 含了不該含的**路徑** | 共用 index 累積他人已 staged 的項 |
+| 實證八 | commit 含了該路徑的**過期版本** | 共用 index 中的歷史殘留項 |
+| 本變體 | commit 含了不該含的**路徑** | `git add -A` / `-a` 的定址範圍即整個工作區，與 index 是否共用無關 |
+
+`.claude/rules/core/bash-tool-usage-rules.md` 規則七既有的四項禁令（pathspec / `--only` / `-o` / `-i`）對本路徑**全數無效**——本變體不需要任何 pathspec 形式，單純 `git add -A` 即觸發。該規則已於 2026-08-28 擴充涵蓋範圍（v3.7.0）。
+
+### 與本檔標題「parallel-agent」的差異
+
+**本變體在單一 session 自行合併時同樣成立，不需要並行。** 捲入的編輯可以是同一操作者稍早留在工作區的在途工作。並行只是放大器——工作區同時存在多方未提交編輯時，捲入的機率與後果都上升。本檔其他變體皆以共用狀態（index 或 working tree 同一路徑）為必要條件，本變體沒有這個條件，這是併入時需要讀者知道的邊界。
+
+### 解決方案
+
+| 時機 | 動作 |
+|------|------|
+| 衝突解決完畢、準備收尾提交 | 精確 `git add <衝突檔>` → `git diff --cached --name-only` 核對 index 僅含衝突檔與本次合併應有的變更 → 裸 `git commit`（`git merge --continue` 亦讀 index，同樣受此核對保護） |
+| 合併前工作區已有未暫存的無關編輯 | 合併前先處置（提交或 `git stash`），不留在工作區等合併結束 |
+| 已發生捲入 | 依本檔既有條款：**不得** `revert` / `reset --soft` / `commit --amend` / 反向套用。被捲入的內容與他方同窗口的合法寫入在 diff 上不可區分，任一還原動作都會連帶撤銷後者。記錄 commit SHA 與檔案清單，上報 PM |
+
+### 實證九（衝突合併收尾捲入他方在途編輯）
+
+2026-08-26，並行 session 執行 `git merge worktree-agent-a96d037b72db817fa`（處理另一張票）時產生衝突，收尾提交將本 session 代理人尚未提交的 `.claude/pm-rules/parallel-dispatch.md` 編輯一併捲入 merge commit `89c57a1c9`。
+
+判定「內容來自工作區」用三方行數比對（可重跑）：
+
+| 觀測 | 值 |
+|------|-----|
+| parent 1（`1339ae74e`）該檔行數 | 1020 |
+| parent 2（`b63c39af3`）該檔行數 | 1020 |
+| merge 結果（`89c57a1c9`）該檔行數 | 926 |
+| 該檔是否在 incoming 變更範圍（`git diff --name-only <p1>...<p2>`） | 否 |
+
+合併結果含有兩個 parent 皆不存在的內容，且該檔不在合併的變更範圍內，唯一來源即工作區。
+
+**暴露路徑值得注意**：本次是代理人 `ticket track commit` 的檔數自我驗證（預期兩檔、實得一檔）才發現。一般提交流程沒有這道自我驗證，捲入不會產生任何訊號——與本檔「稽核缺口自覺」條款描述的靜默 race 性質一致。
+
+### 影響邊界
+
+本次內容正確且無遺失，代價為 provenance 污染——`89c57a1c9` 的 diff 含其標題所述範圍外的變更。同一機制在編輯不完整時會提交半成品，或在兩 session 編輯同檔時造成覆蓋。
+
+**防護層現況**：派發骨架（`agent-dispatch-template.md` / `track_dispatch.py` 的 `SKELETON_TEMPLATE_NORMAL`）的 Forbidden 行已同時禁 `git add . / git add -A` 與 `git commit -a`，涵蓋本變體兩種載體，故依骨架操作的代理人這條路徑已受保護。未受保護的是不走骨架的路徑——人工合併、其他工具、PM 前台自行操作。`bare-commit-guard-hook.py` 對本變體零命中（其攔截標的為 pathspec commit）。此「強制層已擋、規則層原本未涵蓋」的落差本身另記於 `PC-BAL-024` 反向變體。
+
 ## 關聯
 
 - 實證四（檔案級共用變體）：2026-08-05 實驗，詳見上方「變體：檔案級共用」章節
 - 實證七（PM 前台在途 vs 派發代理人跨執行體型）：2026-08-18 案例，詳見上方「變體：檔案級共用」章節
+- 實證九（衝突合併收尾捲入他方在途編輯）：2026-08-26 案例，詳見上方「變體：衝突合併收尾的廣域 staging」章節
+- `.claude/error-patterns/process-compliance/PC-BAL-024-rule-tightened-while-guard-keeps-old-heuristic.md` 反向變體（規則層與強制層涵蓋範圍脫節；衝突合併變體的「強制層已擋、規則層未涵蓋」落差即該變體的案例）
 - 實證八（過期 index 項進入 HEAD）：2026-08-21 案例，詳見上方同名章節——與前七條的分別在於錯的是內容版本而非路徑範圍，三要件對此無效
 - PC-BAL-007（並行文件票未交叉驗證的事實漂移）：同屬並行派發的副作用家族；該模式風險在**內容**，本模式風險在**版控狀態**
 - **姊妹模式（跨 consumer）**：PC-SCLK-005——screen_clock 專案獨立捕獲的同家族模式，兩者互不知情各自命中。PC-SCLK-005 曾聚焦路徑級隔離的「commit 帶精準 pathspec」結論，該結論與本文件原文同源，已被 `.claude/rules/core/bash-tool-usage-rules.md` 規則七推翻（見上方「已淘汰」說明：pathspec commit 會吸入指定路徑上他人未 staged 的編輯，非有效防護）；本文件上方「變體：檔案級共用」章節額外實證，當兩票 `where.files` 指向同一實體檔案時，即使雙方都用精準 pathspec commit 仍會吸收對方尚未收尾的變更，是規則七禁令根因的具體顯現之一。讀 PC-SCLK-005 時應一併參照本文件「已淘汰」與「變體：檔案級共用」兩章節，避免誤判 pathspec 為有效或充分防護

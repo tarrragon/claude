@@ -273,7 +273,9 @@ def _log_exception(logger: logging.Logger, hook_name: str, tb_str: str) -> None:
 # ============================================================================
 
 
-def setup_hook_logging(hook_name: str) -> logging.Logger:
+def setup_hook_logging(
+    hook_name: str, project_root: Optional[Path] = None
+) -> logging.Logger:
     """建立並設定 Hook 日誌系統
 
     功能：
@@ -283,6 +285,13 @@ def setup_hook_logging(hook_name: str) -> logging.Logger:
 
     Args:
         hook_name: Hook 識別名稱
+        project_root: 可選的專案根目錄覆寫。未傳（None，預設）時維持現行
+            get_project_root() 行為（worktree-aware 向上搜尋 CLAUDE.md）
+            逐字不變，向後相容。有傳入時直接採用該值——供狀態解析與日誌
+            解析 root 需彼此對齊的 hook 使用：hook 若以 __file__ 導向 root
+            讀寫狀態檔，但日誌另呼叫不帶參數的 get_project_root()，兩者在
+            worktree 內執行時會解析出不同 root，日誌因此落在無人查閱的
+            worktree 副本而非主 repo。
 
     Returns:
         logging.Logger: 已配置的 named Logger 實例
@@ -296,7 +305,7 @@ def setup_hook_logging(hook_name: str) -> logging.Logger:
     ensure_utf8_io()
 
     sanitized_name = _sanitize_hook_name(hook_name)
-    root_dir = get_project_root()
+    root_dir = project_root if project_root is not None else get_project_root()
     log_base_dir = root_dir / ".claude" / "hook-logs" / sanitized_name
 
     # 建立日誌目錄
@@ -364,9 +373,16 @@ def save_check_log(
             logger.warning("儲存檢查日誌失敗: {}".format(e))
 
 
-def _liveness_log_dir() -> Path:
-    """回傳 liveness 索引目錄（.claude/hook-logs/_liveness/）"""
-    return get_project_root() / ".claude" / "hook-logs" / LIVENESS_SUBDIR
+def _liveness_log_dir(project_root: Optional[Path] = None) -> Path:
+    """回傳 liveness 索引目錄（.claude/hook-logs/_liveness/）
+
+    Args:
+        project_root: 可選的專案根目錄覆寫。未傳（None，預設）時維持現行
+            get_project_root() 行為，逐字不變、向後相容。有傳入時直接
+            採用，供呼叫端與業務日誌 root 需對齊的場景使用。
+    """
+    root = project_root if project_root is not None else get_project_root()
+    return root / ".claude" / "hook-logs" / LIVENESS_SUBDIR
 
 
 def _current_session_id() -> str:
@@ -408,7 +424,11 @@ def resolve_session_id(input_data: Optional[dict] = None) -> str:
     return os.environ.get(ENV_SESSION_ID, "")
 
 
-def mark_hook_entry(hook_name: str, logger: Optional[logging.Logger] = None) -> None:
+def mark_hook_entry(
+    hook_name: str,
+    logger: Optional[logging.Logger] = None,
+    project_root: Optional[Path] = None,
+) -> None:
     """寫入 hook liveness 進入訊號
 
     在 hook 執行判準（main_func）之前無條件寫入一筆「已進入」訊號到
@@ -428,6 +448,10 @@ def mark_hook_entry(hook_name: str, logger: Optional[logging.Logger] = None) -> 
         hook_name: Hook 識別名稱（原始值，未經 _sanitize_hook_name 淨化；
                    彙整入口以此值與 settings.json 註冊表比對）
         logger: 可選 Logger，寫入失敗時額外記錄 warning（雙通道：亦寫 stderr）
+        project_root: 可選的專案根目錄覆寫，透傳給 _liveness_log_dir()。
+            未傳（None，預設）時維持現行 get_project_root() 行為，逐字
+            不變、向後相容。供呼叫端 hook 自訂 root（如 __file__ 導向）
+            時，使 liveness 索引與該 hook 的業務日誌落在同一 root。
     """
     entry = {
         "hook": hook_name,
@@ -436,7 +460,7 @@ def mark_hook_entry(hook_name: str, logger: Optional[logging.Logger] = None) -> 
         "ts": datetime.now().isoformat(),
     }
     try:
-        log_dir = _liveness_log_dir()
+        log_dir = _liveness_log_dir(project_root)
         log_dir.mkdir(parents=True, exist_ok=True)
         _maybe_cleanup(log_dir, pattern="*.jsonl")
         log_path = log_dir / "{}.jsonl".format(entry["session_id"])
@@ -450,7 +474,10 @@ def mark_hook_entry(hook_name: str, logger: Optional[logging.Logger] = None) -> 
 
 
 def run_hook_safely(
-    main_func: Callable[[], int], hook_name: str, fail_closed: bool = False
+    main_func: Callable[[], int],
+    hook_name: str,
+    fail_closed: bool = False,
+    project_root: Optional[Path] = None,
 ) -> int:
     """安全執行 Hook 函式，頂層例外處理
 
@@ -469,6 +496,12 @@ def run_hook_safely(
             使異常本身觸發 DENY——僅適用於資料遺失防護類與保護分支類等
             「fail-open 代價不可逆」的守衛。預設值不可誤改為 True，否則會
             使非防護類 hook 的執行期異常一併全域轉為 fail-closed（DENY）。
+        project_root: 可選的專案根目錄覆寫，透傳給 setup_hook_logging 與
+            mark_hook_entry。未傳（None，預設）時兩者維持現行
+            get_project_root() 行為，逐字不變、向後相容。呼叫端 hook 若
+            以 __file__ 導向 root 讀寫狀態檔/業務日誌，傳入同一值可使
+            liveness 索引（mark_hook_entry，於 main_func 執行前寫入）與
+            業務日誌落在同一 root，不因 worktree 內執行而分裂。
 
     Returns:
         int: main_func 的返回值（正常），或異常時依 fail_closed 回傳
@@ -478,8 +511,8 @@ def run_hook_safely(
         exit 1 在 CLI 中可能觸發 "hook error" 顯示（IMP-049 已知 CLI bug），
         但這是 CLI 層問題，不應在 Hook 層繞過。異常記錄到日誌檔即可。
     """
-    logger = setup_hook_logging(hook_name)
-    mark_hook_entry(hook_name, logger)
+    logger = setup_hook_logging(hook_name, project_root=project_root)
+    mark_hook_entry(hook_name, logger, project_root=project_root)
     start_time = time.time()
 
     try:

@@ -278,3 +278,29 @@ class TestCell7Integration:
 
         # worklog mtime 早於 session_start 且 pending 非空 → 沿用既有靜默行為（非本票範圍）
         assert warning is None
+
+
+class TestExtractHandoffSectionSotMirror:
+    """本 hook 的 `_extract_handoff_section` 是 SOT-mirror（對應
+    `ticket_system/lib/worklog_parser.py:extract_handoff_section`，ARCH-020
+    同構雙寫），修正需兩處同步。本測試釘住鏡像修正本身（真因固定回歸：
+    標題式 handoff 標題緊接進度追蹤條列時的界定失效），對照
+    `test_worklog_parser.py::test_title_style_h3_ends_before_immediate_progress_log`。
+    """
+
+    def test_title_style_h3_ends_before_immediate_progress_log(self, hook_module):
+        content = (
+            "### 下個 Session 接手 Context\n\n"
+            "| 票 | 優先 | 為何是它 |\n"
+            "|----|------|---------|\n"
+            "| `0.0.0-W0-001` | P1 | 測試用途 |\n\n"
+            "補充說明段落，仍屬 handoff 內容。\n"
+            "- 2026-08-22: 0.0.0-W0-900 完成 -- 舊進度追蹤條列（不應納入）\n"
+            "\n"
+            "## 下一個章節\n\n"
+            "不應被納入\n"
+        )
+        section = hook_module._extract_handoff_section(content)
+        assert "0.0.0-W0-001" in section
+        assert "0.0.0-W0-900" not in section
+        assert "不應被納入" not in section

@@ -5,7 +5,16 @@ ticket-md-auto-commit-hook 測試套件
 1. 主 repo / worktree 環境判別（僅主 repo 生效）
 2. 未提交檔案過濾為 ticket md 範圍（不觸及其他檔案）
 3. 防 race：偵測活躍背景代理人時跳過代捕，stale entry 不阻斷兜底
-4. 兜底提交 + index.lock 重試
+4. 兜底提交（委派 ticket_system.lib.git_ops.commit_files_isolated，見
+   TestAutoCommitTicketMdDelegation）
+
+（原 TestAutoCommitTicketMd / TestAutoCommitTicketMdPathNormalization /
+TestLockRetry 三個類別測試的是本 hook 自帶的隔離索引 CAS 實作，已改為委派
+ticket_system.lib.git_ops.commit_files_isolated——與 lifecycle.complete()、
+ticket_system.lib.git_utils._auto_commit_ticket_md 共用同一份實作，
+GIT_INDEX_FILE 隔離、提交範圍自我驗證、index.lock 重試、絕對/相對路徑
+正規化等底層行為已由 test_git_ops.py 完整涵蓋，故予以移除，改以
+TestAutoCommitTicketMdDelegation 驗證本 hook 正確委派並轉譯回傳型別。）
 """
 
 import importlib.util
@@ -60,13 +69,18 @@ class TestIsTicketMdPath:
 
 
 class TestGetChangedTicketMdFiles:
+    """路徑過濾邏輯測試——session 歸屬過濾以 patch `get_session_claimed_ticket_ids`
+    隔離，聚焦本類別驗證路徑萃取/過濾本身（session 歸屬過濾的完整行為見
+    `TestSessionAttributionFilter`）。"""
+
     def test_filters_to_ticket_md_only(self, logger):
         statuses = [
             hook.FileStatus(status=" M", file_path="docs/work-logs/v1/tickets/a.md"),
             hook.FileStatus(status=" M", file_path="lib/main.dart"),
             hook.FileStatus(status="??", file_path="docs/work-logs/v1/tickets/b.md"),
         ]
-        with patch.object(hook, "get_uncommitted_files", return_value=statuses):
+        with patch.object(hook, "get_uncommitted_files", return_value=statuses), \
+                patch.object(hook, "get_session_claimed_ticket_ids", return_value={"a", "b"}):
             files = hook.get_changed_ticket_md_files(logger)
         assert files == [
             "docs/work-logs/v1/tickets/a.md",
@@ -80,7 +94,8 @@ class TestGetChangedTicketMdFiles:
                 file_path="docs/work-logs/v1/tickets/old.md -> docs/work-logs/v1/tickets/new.md",
             )
         ]
-        with patch.object(hook, "get_uncommitted_files", return_value=statuses):
+        with patch.object(hook, "get_uncommitted_files", return_value=statuses), \
+                patch.object(hook, "get_session_claimed_ticket_ids", return_value={"new"}):
             files = hook.get_changed_ticket_md_files(logger)
         assert files == ["docs/work-logs/v1/tickets/new.md"]
 
@@ -92,6 +107,126 @@ class TestGetChangedTicketMdFiles:
     def test_empty_when_clean(self, logger):
         with patch.object(hook, "get_uncommitted_files", return_value=[]):
             assert hook.get_changed_ticket_md_files(logger) == []
+
+
+class TestSessionAttributionFilter:
+    """session 歸屬過濾（0.2.1-W3-1075 核心）：僅納入本 session 現正認領中
+    的 ticket md；歸屬無法判定時保守排除全部候選；排除須留痕於 hook log。"""
+
+    _TWO_CANDIDATES = [
+        hook.FileStatus(status=" M", file_path="docs/work-logs/v1/tickets/mine.md"),
+        hook.FileStatus(status=" M", file_path="docs/work-logs/v1/tickets/theirs.md"),
+    ]
+
+    def test_only_session_claimed_ticket_included(self, logger):
+        """工作區同時存在他 session 在途的 ticket md：僅本 session 認領的納入。"""
+        with patch.object(
+            hook, "get_uncommitted_files", return_value=self._TWO_CANDIDATES
+        ), patch.object(
+            hook, "get_session_claimed_ticket_ids", return_value={"mine"}
+        ):
+            files = hook.get_changed_ticket_md_files(logger)
+        assert files == ["docs/work-logs/v1/tickets/mine.md"]
+
+    def test_all_excluded_when_attribution_source_unavailable(self, logger):
+        """歸屬判定來源不可用（回傳 None）時，保守排除全部候選（acceptance 第 2 項）。"""
+        with patch.object(
+            hook, "get_uncommitted_files", return_value=self._TWO_CANDIDATES
+        ), patch.object(hook, "get_session_claimed_ticket_ids", return_value=None):
+            files = hook.get_changed_ticket_md_files(logger)
+        assert files == []
+
+    def test_all_excluded_when_session_has_no_claims(self, logger):
+        """本 session 合法地未認領任何票（空集合，非 None）：候選皆排除。"""
+        with patch.object(
+            hook, "get_uncommitted_files", return_value=self._TWO_CANDIDATES
+        ), patch.object(hook, "get_session_claimed_ticket_ids", return_value=set()):
+            files = hook.get_changed_ticket_md_files(logger)
+        assert files == []
+
+    def test_exclusion_logged_with_reason(self, logger, caplog):
+        """排除須留痕（acceptance 第 2 項可觀測性）：被排除路徑出現於 log。"""
+        import logging as _logging
+
+        with caplog.at_level(_logging.INFO, logger=logger.name):
+            with patch.object(
+                hook, "get_uncommitted_files", return_value=self._TWO_CANDIDATES
+            ), patch.object(
+                hook, "get_session_claimed_ticket_ids", return_value={"mine"}
+            ):
+                hook.get_changed_ticket_md_files(logger)
+        assert any(
+            "theirs.md" in record.getMessage() for record in caplog.records
+        ), "被排除的路徑應出現於 hook log（可觀測性，不可靜默丟失）"
+
+    def test_get_session_claimed_ticket_ids_none_when_session_id_missing(
+        self, logger, monkeypatch
+    ):
+        """CLAUDE_CODE_SESSION_ID 未設定時，歸屬判定來源視為不可用。"""
+        monkeypatch.delenv(hook.ENV_SESSION_ID, raising=False)
+        assert hook.get_session_claimed_ticket_ids(logger) is None
+
+    def test_get_session_claimed_ticket_ids_none_when_registry_degraded(
+        self, logger, monkeypatch, tmp_path
+    ):
+        """pm-registry 讀取降級（缺檔/損毀）時，歸屬判定來源視為不可用。"""
+        monkeypatch.setenv(hook.ENV_SESSION_ID, "sess-abc")
+        registry_file = tmp_path / "pm-registry.json"
+        lock_file = tmp_path / "pm-registry.lock"
+        with patch.object(
+            hook, "get_registry_paths", return_value=(registry_file, lock_file)
+        ):
+            # registry_file 不存在 -> read_registry 回傳 degraded 骨架
+            assert hook.get_session_claimed_ticket_ids(logger) is None
+
+    def test_get_session_claimed_ticket_ids_returns_claimed_set(
+        self, logger, monkeypatch, tmp_path
+    ):
+        """pm-registry 存在且本 session 有認領票時，回傳其 tickets 集合。"""
+        import json
+
+        monkeypatch.setenv(hook.ENV_SESSION_ID, "sess-abc")
+        registry_file = tmp_path / "pm-registry.json"
+        lock_file = tmp_path / "pm-registry.lock"
+        registry_file.write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "sessions": {
+                        "sess-abc": {
+                            "name": "n", "project": "p",
+                            "registered_at": "t", "heartbeat_ts": "t",
+                            "tickets": ["0.0.0-W0-X", "0.0.0-W0-Y"],
+                            "files": [],
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        with patch.object(
+            hook, "get_registry_paths", return_value=(registry_file, lock_file)
+        ):
+            claimed = hook.get_session_claimed_ticket_ids(logger)
+        assert claimed == {"0.0.0-W0-X", "0.0.0-W0-Y"}
+
+    def test_get_session_claimed_ticket_ids_empty_set_when_session_unregistered(
+        self, logger, monkeypatch, tmp_path
+    ):
+        """registry 有效但本 session 無 entry：合法空集合（非 None）。"""
+        import json
+
+        monkeypatch.setenv(hook.ENV_SESSION_ID, "sess-unknown")
+        registry_file = tmp_path / "pm-registry.json"
+        lock_file = tmp_path / "pm-registry.lock"
+        registry_file.write_text(
+            json.dumps({"schema_version": 2, "sessions": {}}), encoding="utf-8"
+        )
+        with patch.object(
+            hook, "get_registry_paths", return_value=(registry_file, lock_file)
+        ):
+            claimed = hook.get_session_claimed_ticket_ids(logger)
+        assert claimed == set()
 
 
 # ============================================================================
@@ -186,233 +321,36 @@ class TestBuildCommitMessage:
         assert "+2 more" in msg
 
 
-class TestAutoCommitTicketMd:
+class TestAutoCommitTicketMdDelegation:
+    """驗證 hook.auto_commit_ticket_md 正確委派 git_ops.commit_files_isolated
+    並轉譯回傳型別（dict -> bool）；GIT_INDEX_FILE 隔離、提交範圍自我驗證、
+    index.lock 重試、絕對/相對路徑正規化等底層行為由 test_git_ops.py 涵蓋，
+    不在此重複。"""
+
     _TARGET = "docs/work-logs/v1/tickets/a.md"
 
-    def _fake_run_factory(self, calls, extra_changed=None):
-        """建立模擬 git plumbing 各步驟輸出的 fake subprocess.run。"""
-        extra_changed = extra_changed or []
-
-        def fake_run(args, **kwargs):
-            calls.append(args)
-            if args[:2] == ["git", "rev-parse"]:
-                return MagicMock(returncode=0, stdout="old_head_sha\n", stderr="")
-            if args[:2] == ["git", "read-tree"]:
-                return MagicMock(returncode=0, stdout="", stderr="")
-            if args[:2] == ["git", "add"]:
-                return MagicMock(returncode=0, stdout="", stderr="")
-            if args[:2] == ["git", "write-tree"]:
-                return MagicMock(returncode=0, stdout="tree_sha\n", stderr="")
-            if args[:2] == ["git", "commit-tree"]:
-                return MagicMock(returncode=0, stdout="new_commit_sha\n", stderr="")
-            if args[:2] == ["git", "diff"]:
-                changed = [self._TARGET] + extra_changed
-                return MagicMock(returncode=0, stdout="\n".join(changed) + "\n", stderr="")
-            if args[:2] == ["git", "update-ref"]:
-                return MagicMock(returncode=0, stdout="", stderr="")
-            raise AssertionError(f"未預期的 git 呼叫: {args}")
-
-        return fake_run
-
-    def test_add_scope_limited_to_ticket_md(self, logger):
-        """驗證 git add 呼叫的參數僅含指定的 ticket md 路徑，無 -A。"""
-        calls = []
+    def test_committed_delegates_to_git_ops_and_returns_true(self, logger):
         with patch.object(
-            hook.subprocess, "run", side_effect=self._fake_run_factory(calls)
+            hook.git_ops, "commit_files_isolated",
+            return_value={"status": "committed", "commit_sha": "deadbeef", "error": None},
+        ) as commit_mock:
+            assert hook.auto_commit_ticket_md([self._TARGET], "msg", logger) is True
+        commit_mock.assert_called_once_with([self._TARGET], "msg")
+
+    def test_empty_status_treated_as_success(self, logger):
+        """paths 內容與 HEAD 相同（empty，graceful skip）視為成功，不視為失敗。"""
+        with patch.object(
+            hook.git_ops, "commit_files_isolated",
+            return_value={"status": "empty", "commit_sha": None, "error": None},
         ):
             assert hook.auto_commit_ticket_md([self._TARGET], "msg", logger) is True
-        add_calls = [c for c in calls if c[:2] == ["git", "add"]]
-        assert len(add_calls) == 1
-        assert add_calls[0] == ["git", "add", "--", self._TARGET]
-        assert "-A" not in add_calls[0]
 
-    def test_never_invokes_bare_commit(self, logger):
-        """驗證提交路徑不經過 `git commit`（改用 plumbing，天然不觸發
-        pre-commit/commit-msg hook，含 bare-commit-guard-hook）。"""
-        calls = []
+    def test_failed_status_returns_false(self, logger):
         with patch.object(
-            hook.subprocess, "run", side_effect=self._fake_run_factory(calls)
-        ):
-            assert hook.auto_commit_ticket_md([self._TARGET], "msg", logger) is True
-        assert all(c[:2] != ["git", "commit"] for c in calls)
-        assert any(c[:2] == ["git", "commit-tree"] for c in calls)
-        assert any(c[:2] == ["git", "update-ref"] for c in calls)
-
-    def test_add_failure_aborts(self, logger):
-        def fake_run(args, **kwargs):
-            if args[:2] == ["git", "rev-parse"]:
-                return MagicMock(returncode=0, stdout="old_head_sha\n", stderr="")
-            if args[:2] == ["git", "read-tree"]:
-                return MagicMock(returncode=0, stdout="", stderr="")
-            if args[:2] == ["git", "add"]:
-                return MagicMock(returncode=1, stdout="", stderr="add failed")
-            raise AssertionError(f"未預期的 git 呼叫: {args}")
-
-        with patch.object(hook.subprocess, "run", side_effect=fake_run):
-            assert (
-                hook.auto_commit_ticket_md([self._TARGET], "msg", logger) is False
-            )
-
-    def test_scope_self_check_rejects_unexpected_extra_file(self, logger):
-        """diff 範圍自我驗證：新 commit 若含指定範圍以外的檔案，放棄 update-ref。"""
-        calls = []
-        with patch.object(
-            hook.subprocess,
-            "run",
-            side_effect=self._fake_run_factory(
-                calls, extra_changed=["lib/main.dart"]
-            ),
+            hook.git_ops, "commit_files_isolated",
+            return_value={"status": "failed", "commit_sha": None, "error": "add failed"},
         ):
             assert hook.auto_commit_ticket_md([self._TARGET], "msg", logger) is False
-        assert all(c[:2] != ["git", "update-ref"] for c in calls)
-
-    def test_update_ref_cas_failure_returns_false(self, logger):
-        """update-ref 帶舊值失敗（HEAD 於期間被並行移動）時回傳 False，不覆蓋。"""
-        calls = []
-
-        def fake_run(args, **kwargs):
-            calls.append(args)
-            if args[:2] == ["git", "rev-parse"]:
-                return MagicMock(returncode=0, stdout="old_head_sha\n", stderr="")
-            if args[:2] == ["git", "read-tree"]:
-                return MagicMock(returncode=0, stdout="", stderr="")
-            if args[:2] == ["git", "add"]:
-                return MagicMock(returncode=0, stdout="", stderr="")
-            if args[:2] == ["git", "write-tree"]:
-                return MagicMock(returncode=0, stdout="tree_sha\n", stderr="")
-            if args[:2] == ["git", "commit-tree"]:
-                return MagicMock(returncode=0, stdout="new_commit_sha\n", stderr="")
-            if args[:2] == ["git", "diff"]:
-                return MagicMock(returncode=0, stdout=self._TARGET + "\n", stderr="")
-            if args[:2] == ["git", "update-ref"]:
-                return MagicMock(returncode=1, stdout="", stderr="fatal: HEAD 已改變")
-            raise AssertionError(f"未預期的 git 呼叫: {args}")
-
-        with patch.object(hook.subprocess, "run", side_effect=fake_run):
-            assert hook.auto_commit_ticket_md([self._TARGET], "msg", logger) is False
-
-
-class TestAutoCommitTicketMdPathNormalization:
-    """實地觸發：真實 git repo 驗證絕對/相對路徑輸入自我驗證皆通過（W3-918）。
-
-    `git diff --name-only` 一律輸出相對 repo root 的路徑；ticket_md_files
-    若夾帶絕對路徑（cwd 不等於 repo root 時的實際觀察案例），逐字比較曾誤判
-    為範圍不符而放棄提交。此處以真實 git 命令（非 mock）重現並驗證修復。
-    """
-
-    def _init_repo(self, tmp_path):
-        """建立最小可用的真實 git repo，回傳 (repo_root, ticket_md_path)。"""
-        import subprocess as sp
-
-        repo = tmp_path / "repo"
-        repo.mkdir()
-        run = lambda args: sp.run(  # noqa: E731
-            args, cwd=repo, check=True, capture_output=True, text=True
-        )
-        run(["git", "init", "-q"])
-        run(["git", "config", "user.email", "t@example.com"])
-        run(["git", "config", "user.name", "t"])
-        ticket_dir = repo / "docs" / "work-logs" / "v1" / "tickets"
-        ticket_dir.mkdir(parents=True)
-        ticket_md = ticket_dir / "a.md"
-        ticket_md.write_text("initial\n", encoding="utf-8")
-        run(["git", "add", "-A"])
-        run(["git", "commit", "-q", "-m", "init"])
-        ticket_md.write_text("changed\n", encoding="utf-8")
-        return repo, ticket_md
-
-    def test_relative_path_input_passes_self_check(self, tmp_path, logger):
-        """相對路徑輸入（既有主路徑）自我驗證通過，liveness 落 commit-tree。"""
-        repo, ticket_md = self._init_repo(tmp_path)
-        rel_path = "docs/work-logs/v1/tickets/a.md"
-        real_run = hook.subprocess.run
-
-        def spy(args, **kwargs):
-            kwargs.setdefault("cwd", repo)
-            return real_run(args, **kwargs)
-
-        with patch.object(hook.Path, "cwd", return_value=repo):
-            with patch.object(hook.subprocess, "run", side_effect=spy):
-                result = hook.auto_commit_ticket_md(
-                    [rel_path], "auto(ticket-md): test", logger
-                )
-        assert result is True
-        log = __import__("subprocess").run(
-            ["git", "log", "-1", "--pretty=%s"], cwd=repo, capture_output=True, text=True
-        ).stdout.strip()
-        assert log == "auto(ticket-md): test"
-
-    def test_absolute_path_input_passes_self_check(self, tmp_path, logger):
-        """絕對路徑輸入（W3-913 觀察到的誤判分支）自我驗證通過，非放棄提交。"""
-        repo, ticket_md = self._init_repo(tmp_path)
-        abs_path = str(ticket_md)
-        real_run = hook.subprocess.run
-
-        def spy(args, **kwargs):
-            kwargs.setdefault("cwd", repo)
-            return real_run(args, **kwargs)
-
-        with patch.object(hook.Path, "cwd", return_value=repo):
-            with patch.object(hook.subprocess, "run", side_effect=spy):
-                result = hook.auto_commit_ticket_md(
-                    [abs_path], "auto(ticket-md): test-abs", logger
-                )
-        assert result is True, "絕對路徑輸入不應觸發提交範圍自我驗證失敗"
-        log = __import__("subprocess").run(
-            ["git", "log", "-1", "--pretty=%s"], cwd=repo, capture_output=True, text=True
-        ).stdout.strip()
-        assert log == "auto(ticket-md): test-abs"
-
-    def test_mismatched_absolute_path_still_rejected(self, tmp_path, logger):
-        """正規化不掩蓋真實範圍不符：絕對路徑指向未變更檔案仍應放棄提交。"""
-        repo, ticket_md = self._init_repo(tmp_path)
-        other = repo / "docs" / "work-logs" / "v1" / "tickets" / "other.md"
-        # other.md 未實際變更，僅用來構造「範圍不符」的輸入
-        wrong_abs_path = str(other)
-        real_run = hook.subprocess.run
-
-        def spy(args, **kwargs):
-            kwargs.setdefault("cwd", repo)
-            return real_run(args, **kwargs)
-
-        with patch.object(hook.Path, "cwd", return_value=repo):
-            with patch.object(hook.subprocess, "run", side_effect=spy):
-                result = hook.auto_commit_ticket_md(
-                    [wrong_abs_path], "auto(ticket-md): test-mismatch", logger
-                )
-        assert result is False
-        log = __import__("subprocess").run(
-            ["git", "log", "-1", "--pretty=%s"], cwd=repo, capture_output=True, text=True
-        ).stdout.strip()
-        assert log == "init", "範圍不符時不應提交，HEAD 應維持 init"
-
-
-class TestLockRetry:
-    def test_index_lock_retries_then_succeeds(self, logger):
-        lock_fail = MagicMock(returncode=1, stdout="", stderr="fatal: Unable to create index.lock")
-        ok = MagicMock(returncode=0, stdout="done", stderr="")
-        with patch.object(hook.subprocess, "run", side_effect=[lock_fail, ok]), patch(
-            "time.sleep"
-        ):
-            success, stdout, _ = hook._run_git_with_lock_retry(
-                ["git", "add", "--", "a.md"], logger, "add", max_retries=3, wait_seconds=0
-            )
-        assert success is True
-        assert stdout == "done"
-
-    def test_does_not_delete_lock_file(self, logger):
-        lock_fail = MagicMock(returncode=1, stdout="", stderr="Unable to create index.lock")
-        ok = MagicMock(returncode=0, stdout="", stderr="")
-        with patch.object(
-            hook.subprocess, "run", side_effect=[lock_fail, ok]
-        ), patch("time.sleep"), patch("os.remove") as rm, patch(
-            "pathlib.Path.unlink"
-        ) as unlink:
-            hook._run_git_with_lock_retry(
-                ["git", "add", "--", "a.md"], logger, "add", wait_seconds=0
-            )
-        rm.assert_not_called()
-        unlink.assert_not_called()
 
 
 # ============================================================================

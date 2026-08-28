@@ -2,6 +2,13 @@
 
 驗證隔離提交完整性要件：GIT_INDEX_FILE 隔離、範圍自我驗證、空 tree 短路、
 CAS update-ref 失敗不覆蓋、index.lock 重試。
+
+TestRunGitTimeout：迴歸釘子搬遷。承接 1.0.0-W7-003 ANA 結論（TD-2 採納，
+原測項位於 test_git_subprocess_timeout.py，對象為已移除的
+git_utils._run_git）——git 命令原無 timeout 時，git hang（等認證 /
+index.lock）會無限等待。git_utils._auto_commit_ticket_md 改委派
+git_ops.commit_files_isolated 後，git 呼叫的 timeout 保證改由本模組的
+_run_git 負責，原測項隨之搬遷至此，測試對象改為 git_ops._run_git。
 """
 
 import os
@@ -290,3 +297,22 @@ class TestCommitFilesIsolated:
         assert result["error"] is None
         add_calls = [c for c in calls if c[:2] == ["git", "add"]]
         assert add_calls[0] == ["git", "add", "--", _TARGET]
+
+
+class TestRunGitTimeout:
+    """迴歸釘子：git 命令原無 timeout 時，git hang（等認證 / index.lock）
+    會無限等待（見本檔頭 module docstring 搬遷說明）。"""
+
+    def test_run_git_passes_default_timeout_to_subprocess(self):
+        with patch.object(git_ops.subprocess, "run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            git_ops._run_git(["git", "rev-parse", "HEAD"])
+        _, kwargs = mock_run.call_args
+        assert kwargs["timeout"] == git_ops._GIT_TIMEOUT
+
+    def test_run_git_accepts_custom_timeout(self):
+        with patch.object(git_ops.subprocess, "run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            git_ops._run_git(["git", "commit-tree", "abc"], timeout=30)
+        _, kwargs = mock_run.call_args
+        assert kwargs["timeout"] == 30

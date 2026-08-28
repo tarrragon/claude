@@ -1,3 +1,25 @@
+## [2.43.5] - 2026-08-28
+
+### Summary
+fix: 標題式 handoff 段落終點補進度追蹤條列判準; fix: turn-end auto-commit 補 session 歸屬過濾; fix: auto_commit 改用隔離索引 CAS，取代 pathspec commit (+9 more)
+
+Changes: 5 fix, 6 docs, 1 chore
+
+- fix: 標題式 handoff 段落終點補進度追蹤條列判準
+- fix: turn-end auto-commit 補 session 歸屬過濾
+- fix: auto_commit 改用隔離索引 CAS，取代 pathspec commit
+- fix: 對齊 liveness 索引與業務日誌的 root 解析
+- fix: FIFO fallback 停用於候選數>1 + 日誌/狀態 root 對齊
+- docs: PC-BAL-008 新增衝突合併收尾廣域 staging 變體
+- docs: 新增反向變體——守衛較嚴而規則層滯後
+- docs: 規則七涵蓋擴充至衝突合併收尾的廣域 staging
+- docs: 補規則七第三則邊界說明（過期 index 快照）
+- docs: 新增 IMP-BAL-018 module 層級路徑常數繞過測試隔離
+- docs: 新增 PC-BAL-059 驗收子項移交未同步上游
+- chore: 推送 並回寫 VERSION
+
+---
+
 ## [2.43.4] - 2026-08-28
 
 ### Summary

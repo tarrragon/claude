@@ -50,6 +50,21 @@ from lib.dispatch_tracker import (
 
 HOOK_NAME = "subagent-stop-dispatch-cleanup"
 
+
+def _get_project_root() -> Path:
+    """回傳本 hook 的 __file__ 導向專案根目錄（非 worktree-aware 的
+    get_project_root()）。
+
+    刻意設計為呼叫時求值（非 module 層級常數）：`__file__` 於函式呼叫當下
+    才從 module 全域查找，測試以 importlib 動態載入後改寫 module.__file__
+    時才能生效；若改成 import 當下即求值的常數，測試改寫 __file__ 的時機
+    已晚於常數綁定，隔離機制會失效。供 run_hook_safely（liveness 索引）
+    與 main()（state 解析、業務日誌）共用同一個值，避免各自呼叫無參數
+    get_project_root() 時在 worktree 內執行分裂成不同 root。
+    """
+    return Path(__file__).resolve().parent.parent.parent
+
+
 # [WAIT] 廣播去重 TTL：自激迴圈與多 agent 收尾叢集的觀測間隔為 5-15 秒/次、
 # 鏈長 5-20 次（W1-055 重現實驗），10 分鐘足以覆蓋整段叢集；TTL 過後同 key
 # 重新播報，避免長時間執行的真實 [WAIT] 狀態永久靜默。
@@ -111,7 +126,12 @@ def check_and_record_broadcast(
 
 def main() -> int:
     """SubagentStop 主邏輯：精準清理 + fallback + 三態廣播。"""
-    logger = setup_hook_logging(HOOK_NAME)
+    # __file__ 導向 root，使日誌解析與狀態解析採同一 root。hook 若在
+    # worktree 內執行，各自呼叫無參數 get_project_root() 會分裂成不同
+    # root，日誌落在 worktree 副本而非主 repo，FIFO 誤刪等訊號因此無人
+    # 可查閱。
+    project_root = _get_project_root()
+    logger = setup_hook_logging(HOOK_NAME, project_root=project_root)
 
     try:
         input_data = read_json_from_stdin(logger)
@@ -138,8 +158,6 @@ def main() -> int:
         )
         return 0
 
-    # 定位專案根目錄
-    project_root = Path(__file__).resolve().parent.parent.parent
     state_file = get_state_file_path(project_root)
 
     if not state_file.exists():
@@ -154,19 +172,36 @@ def main() -> int:
 
     if not cleared:
         # Fallback：清理 agent_id=null 且 dispatched_at 最早的一筆（FIFO）
-        # SubagentStop input 無 description 欄位，無法做 description 匹配
-        fallback_cleared = clear_oldest_null_agent_id_entry(project_root)
-        if fallback_cleared:
-            logger.info(
-                "SubagentStop fallback 清理（agent_id=%s 無精準匹配，FIFO 清理最早 null entry）",
-                agent_id,
-            )
-            cleared = True
-        else:
+        # SubagentStop input 無 description 欄位，無法做 description 匹配。
+        #
+        # 候選數 > 1 時停用 FIFO：isolation=none 派發的 agent_id 全記為
+        # null，此時「最早」不代表「本次真正結束的那一筆」，刪除任一筆
+        # 都可能誤刪仍在執行中的代理人記錄。候選數 > 1 時不清理任何記錄，
+        # 只寫 WARNING，留待 cleanup_expired 依超時回收。
+        null_candidates = [
+            d for d in get_active_dispatches(project_root)
+            if d.get("agent_id") is None
+        ]
+        if len(null_candidates) > 1:
             logger.warning(
-                "SubagentStop agent_id=%s 無匹配記錄（精準和 FIFO 兩路徑皆失敗）",
+                "SubagentStop agent_id=%s 無精準匹配，null 候選 %d 筆（>1）"
+                "已停用 FIFO 後援避免誤刪，待 cleanup_expired 超時回收",
                 agent_id,
+                len(null_candidates),
             )
+        else:
+            fallback_cleared = clear_oldest_null_agent_id_entry(project_root)
+            if fallback_cleared:
+                logger.info(
+                    "SubagentStop fallback 清理（agent_id=%s 無精準匹配，FIFO 清理最早 null entry）",
+                    agent_id,
+                )
+                cleared = True
+            else:
+                logger.warning(
+                    "SubagentStop agent_id=%s 無匹配記錄（精準和 FIFO 兩路徑皆失敗）",
+                    agent_id,
+                )
 
     if cleared:
         messages.append(f"已清理派發記錄 agent_id={agent_id}")
@@ -210,4 +245,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(run_hook_safely(main, HOOK_NAME))
+    # project_root 顯式傳入：使 run_hook_safely 內部的 liveness 索引寫入
+    # （main() 執行前，mark_hook_entry）也採 __file__ 導向 root，與 main()
+    # 內業務日誌/狀態解析對齊，避免 worktree 內執行時分裂成不同 root。
+    sys.exit(run_hook_safely(main, HOOK_NAME, project_root=_get_project_root()))

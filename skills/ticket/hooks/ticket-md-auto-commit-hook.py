@@ -36,21 +36,61 @@ hook 縮小為「最長一個 turn」，但其即時提醒的價值不因此歸�
 防 race 設計比照 worktree-auto-commit-hook：有活躍背景代理人時跳過代捕，
 避免搶先代捕代理人 in-flight WIP；stale entry（超過 DISPATCH_MAX_AGE_HOURS）
 先清理，避免異常終止的代理人記錄永久癱瘓安全網。
+
+隔離提交完整性三要件（見 `.claude/references/bash-tool-usage-details.md`
+「規則七詳細」）原僅涵蓋「清單來源需獨立於共用 index」一維；本 hook 額外
+補上第二維——**清單來源亦須獨立於工作區的其他 session**：`get_uncommitted_files`
+讀 `git status --porcelain`，反映的是整個工作區，多 PM session（各自獨立
+視窗/terminal）並行時必然包含他人 session 尚在撰寫、未完成的 ticket md。
+`has_active_background_agents()`（防 race 檢查）只擋「本 hook 觸發當下，
+`dispatch-active.json` 仍有未過期的背景代理人派發記錄」這一種情境；
+另一 session 透過自身直接 CLI 呼叫（非經派發追蹤）撰寫中的 ticket md，
+或已完成派發但尚未輪到自身 turn-end 的情境，皆不在該檢查涵蓋範圍。
+
+修法：`get_changed_ticket_md_files` 改以 `.claude/lib/pm_registry.py`
+的 `sessions[<本 session_id>].tickets`（claim/complete/release/reclaim
+生命週期維護的認領清單）為正歸屬判準，只納入「ticket_id 現正被本 session
+認領」的 ticket md；不在此清單者一律排除（保守策略：漏提交可由下次
+turn-end 補上，誤提交他人在途工作不可逆）。選用 pm-registry 而非
+`dispatch-active.json` 的 `session_id` 欄位：後者僅追蹤「PM 派發了哪些
+背景代理人」，對 PM 自身直接 CLI 撰寫（未經派發）的 ticket md 無記錄；
+pm-registry 的 `tickets` 是「本 session 目前認領哪些 ticket」的權威清單，
+不論該票是由 PM 直接操作或由本 session 派發的代理人操作，只要仍在認領中
+即會出現在此清單，涵蓋面完整覆蓋本 hook 需要的歸屬判準。
+
+已知殘留（設計上接受，非本次修復範圍）：ticket 剛完成（`complete`）時，
+`recompute_lease` 立即將其自 `tickets` 移除；若該次 complete 自身的
+auto-commit 恰好失敗（極端邊界），此 ticket md 在下一次 turn-end 時已不
+再認領中，會被排除而非兜底提交。此情形發生機率低（complete 自身已有
+獨立的 auto-commit 嘗試）且與「漏提交可由下次互動補上」的既定保守策略
+方向一致，故不視為缺陷。
 """
 
 import os
 import re
 import subprocess
 import sys
-import tempfile
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 _CLAUDE_DIR = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_CLAUDE_DIR))
+# .claude/skills/ticket 加入 sys.path：匯入 ticket_system.lib.git_ops（隔離索引
+# 提交，與 ticket_system.lib.git_utils._auto_commit_ticket_md、
+# lifecycle.complete() 共用同一實作）。git_ops.py 模組層級僅 stdlib 依賴（無
+# filelock/pyyaml），與本 hook 的 uv run --script 輕量 PEP 723 環境相容。
+_TICKET_SKILL_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_TICKET_SKILL_DIR))
 
-from lib import setup_hook_logging, run_hook_safely, get_uncommitted_files, FileStatus
+from lib import (
+    setup_hook_logging,
+    run_hook_safely,
+    get_uncommitted_files,
+    FileStatus,
+    ENV_SESSION_ID,
+)
+from lib.pm_registry import get_registry_paths, read_registry, DEGRADED_READ_KEY
+from ticket_system.lib import git_ops
 
 try:
     from lib.dispatch_tracker import get_active_dispatches, cleanup_expired
@@ -125,8 +165,55 @@ def is_ticket_md_path(file_path: str) -> bool:
     return bool(_TICKET_MD_PATTERN.search(file_path))
 
 
+def _ticket_id_from_ticket_md_path(file_path: str) -> "str | None":
+    """從 ticket md 路徑萃取 ticket_id（檔名去除 .md 副檔名，慣例即 ticket_id）。"""
+    stem = Path(file_path).stem
+    return stem or None
+
+
+def get_session_claimed_ticket_ids(logger) -> "set[str] | None":
+    """讀 `.claude/lib/pm_registry.py` 的 pm-registry.json，回傳本 session
+    （`CLAUDE_CODE_SESSION_ID`）目前認領（lease）中的 ticket_id 集合。
+
+    Returns:
+        `set[str]`：本 session 現正認領的 ticket_id 集合（可能為空集合，
+            代表本 session 合法地未認領任何票，非「無法判定」）。
+        `None`：歸屬判定來源不可用（`CLAUDE_CODE_SESSION_ID` 未設定、非
+            git 環境無法解析 registry 路徑、registry 檔案損毀降級讀取）。
+            呼叫端應視為「無法判定歸屬」，採保守策略排除全部候選。
+    """
+    session_id = os.environ.get(ENV_SESSION_ID, "").strip()
+    if not session_id:
+        logger.warning("CLAUDE_CODE_SESSION_ID 未設定，無法判定 session 歸屬")
+        return None
+
+    paths = get_registry_paths(logger=logger)
+    if paths is None:
+        logger.warning("pm-registry 路徑無法解析（非 git 環境？），無法判定 session 歸屬")
+        return None
+    registry_file, _lock_file = paths
+
+    data = read_registry(registry_file, logger=logger)
+    if data.get(DEGRADED_READ_KEY):
+        logger.warning("pm-registry 讀取降級（缺檔/損毀），無法判定 session 歸屬")
+        return None
+
+    entry = data.get("sessions", {}).get(session_id)
+    if entry is None:
+        return set()
+    return set(entry.get("tickets") or [])
+
+
 def get_changed_ticket_md_files(logger) -> "list[str]":
-    """回傳未提交變更中屬於 ticket md 的檔案路徑清單（含 untracked）。"""
+    """回傳未提交變更中屬於 ticket md 的檔案路徑清單（含 untracked），
+    並依 session 歸屬過濾——僅納入本 session 現正認領中的 ticket。
+
+    `git status --porcelain` 反映整個工作區，多 PM session 並行時必然
+    包含他人 session 尚在撰寫的 ticket md（見本檔 module docstring「隔離
+    提交完整性三要件」補述）。歸屬判定來源不可用時（`None`）保守排除
+    全部候選；候選存在但不在認領清單中者逐一記錄排除理由（規則 4
+    可觀測性：排除須留痕，不可靜默丟失）。
+    """
     try:
         file_statuses = get_uncommitted_files()
     except subprocess.TimeoutExpired:
@@ -136,15 +223,43 @@ def get_changed_ticket_md_files(logger) -> "list[str]":
         logger.warning("找不到 git")
         return []
 
-    files = []
+    candidates = []
     for fs in file_statuses:
         path = fs.file_path.strip()
         if " -> " in path:
             path = path.split(" -> ", 1)[1].strip()
         path = path.strip('"')
         if path and is_ticket_md_path(path):
-            files.append(path)
-    return files
+            candidates.append(path)
+
+    if not candidates:
+        return []
+
+    claimed = get_session_claimed_ticket_ids(logger)
+    if claimed is None:
+        logger.warning(
+            "session 歸屬判定來源不可用，保守排除全部候選（%d 個）: %s",
+            len(candidates), candidates,
+        )
+        return []
+
+    included = []
+    excluded = []
+    for path in candidates:
+        ticket_id = _ticket_id_from_ticket_md_path(path)
+        if ticket_id and ticket_id in claimed:
+            included.append(path)
+        else:
+            excluded.append(path)
+
+    if excluded:
+        logger.info(
+            "排除 %d 個非本 session 現正認領的 ticket md（可能屬他 session"
+            "在途工作或本 session 已完成釋放認領）: %s",
+            len(excluded), excluded,
+        )
+
+    return included
 
 
 def find_project_root(logger) -> "Path | None":
@@ -211,117 +326,23 @@ def build_commit_message(ticket_md_files) -> str:
     return f"auto(ticket-md): turn-end commit ({count} files: {preview})"
 
 
-def _run_git_with_lock_retry(
-    args, logger, action_label, max_retries=3, wait_seconds=2, env=None
-):
-    """執行 git 命令，遇 index.lock 競爭時等待重試（禁止刪除 lock 檔）。
-
-    回傳 (success: bool, stdout: str, stderr: str)。
-    """
-    last_stderr = ""
-    last_stdout = ""
-    for attempt in range(1, max_retries + 1):
-        try:
-            result = subprocess.run(
-                args,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=GIT_TIMEOUT,
-                env=env,
-            )
-        except subprocess.TimeoutExpired:
-            logger.error("git %s 逾時", action_label)
-            sys.stderr.write(f"[{HOOK_NAME}] git {action_label} 逾時\n")
-            return False, "", "timeout"
-        except FileNotFoundError:
-            logger.error("找不到 git")
-            sys.stderr.write(f"[{HOOK_NAME}] 找不到 git\n")
-            return False, "", "git not found"
-
-        if result.returncode == 0:
-            return True, result.stdout, ""
-
-        last_stderr = result.stderr.strip()
-        last_stdout = result.stdout
-        if "index.lock" in last_stderr and attempt < max_retries:
-            logger.info(
-                "git %s 遇 index.lock（主線程並行活動），%d 秒後重試 (%d/%d)",
-                action_label, wait_seconds, attempt, max_retries,
-            )
-            time.sleep(wait_seconds)
-            continue
-        break
-
-    logger.error("git %s 失敗: %s", action_label, last_stderr)
-    sys.stderr.write(f"[{HOOK_NAME}] git {action_label} 失敗: {last_stderr}\n")
-    return False, last_stdout, last_stderr
-
-
-def _normalize_to_repo_relative(paths, repo_root: "Path | None") -> "set[str]":
-    """將路徑清單正規化為相對於 repo root 的 POSIX 字串集合。
-
-    `git diff --name-only` 一律輸出相對 repo root 的路徑；但呼叫端傳入的
-    `ticket_md_files`（來自 `git status --porcelain` 解析）在 cwd 不等於
-    repo root 時可能夾帶絕對路徑或不同基準的相對路徑，逐字比較會誤判為
-    範圍不符（本函式修正的原始問題）。repo_root 無法解析時（如
-    `git rev-parse --show-toplevel` 失敗）原樣回傳，不強制轉換。
-    """
-    if repo_root is None:
-        return {p.strip() for p in paths if p.strip()}
-
-    normalized = set()
-    for p in paths:
-        p = p.strip()
-        if not p:
-            continue
-        candidate = Path(p)
-        try:
-            if candidate.is_absolute():
-                rel = candidate.resolve().relative_to(repo_root)
-            else:
-                rel = (repo_root / candidate).resolve().relative_to(repo_root)
-            normalized.add(rel.as_posix())
-        except ValueError:
-            # 無法正規化為 repo root 相對路徑（例如指向 repo 外），原樣保留
-            normalized.add(p)
-    return normalized
-
-
-def _resolve_repo_root(logger) -> "Path | None":
-    """解析當前 repo 的 top-level 目錄（供自我驗證路徑正規化使用）。"""
-    ok, out, _ = _run_git_with_lock_retry(
-        ["git", "rev-parse", "--show-toplevel"], logger, "rev-parse --show-toplevel"
-    )
-    if not ok:
-        return None
-    return Path(out.strip()).resolve()
-
-
 def auto_commit_ticket_md(ticket_md_files, message, logger) -> bool:
-    """在獨立臨時 index 中精確 stage ticket md 後以 plumbing 提交，範圍自我驗證後
-    以 CAS（compare-and-swap）方式移動 HEAD。
+    """委派 ``ticket_system.lib.git_ops.commit_files_isolated`` 提交。
+
+    提交機制（GIT_INDEX_FILE 隔離索引 + write-tree/commit-tree/update-ref
+    CAS + 提交範圍自我驗證 + 成功後同步共用 index 中本次 paths）已於
+    ``git_ops.commit_files_isolated`` 完整實作並經 ``test_git_ops.py``
+    涵蓋，與 ``lifecycle.complete()``、``ticket_system.lib.git_utils.
+    _auto_commit_ticket_md`` 共用同一份實作，本函式僅轉接回傳型別（dict
+    -> bool）以維持 ``main()`` 呼叫端介面不變。
 
     不使用 `git commit`：裸 commit 提交的是共用 index 的整體內容，`git add`
     精確指定路徑與「commit 提交範圍」是兩件事——add 之後、commit 之前的窗口
     中，其他並行程序（背景代理人、PM）仍可能 stage 自己的變更進同一個共用
     index，使裸 commit 連帶提交進去（PC-BAL-008 實證五：先核對 index 再
-    commit 仍有 TOCTOU 窗口，本 session 實測命中）。
-
-    改用 read-tree/write-tree/commit-tree/update-ref 全程操作獨立臨時 index
-    （`GIT_INDEX_FILE` 指向本函式自建的暫存檔案，與共用 index 完全隔離），
-    提交內容只由本函式的 `ticket_md_files` 引數決定，不受共用 index 任何並
-    行寫入影響。commit 建立後另以 `git diff` 自我驗證變更範圍恰為
-    `ticket_md_files`，不符即放棄；最後以 `update-ref HEAD <new> <old>` 帶
-    舊值移動分支指標，若 HEAD 於期間被並行移動則失敗而非覆蓋，避免遺失他人
-    commit。
-
-    因不經過 `git commit`，此路徑不會觸發任何 pre-commit/commit-msg hook
-    （含 bare-commit-guard-hook）——這是 plumbing 命令的固有行為，非刻意繞
-    過。guard 存在的目的是攔截「範圍不明的裸 commit」；本函式以自我驗證取代
-    guard 的把關角色：提交範圍由程式碼結構保證且提交後即時核驗，不依賴
-    guard 事後攔截，故豁免 guard 不削弱其防護意圖。
+    commit 仍有 TOCTOU 窗口，本 session 實測命中）——這正是
+    ``commit_files_isolated`` 全程使用獨立臨時 index、不觸碰共用 index 所
+    避免的風險類別。
 
     清單來源條件（隔離提交完整性三要件之一，見
     `.claude/references/bash-tool-usage-details.md`「規則七詳細」）：本函式
@@ -335,79 +356,21 @@ def auto_commit_ticket_md(ticket_md_files, message, logger) -> bool:
     清單來源必須維持獨立於共用 index，不可改用 `--cached` 或任何讀取共用
     index 目前 staged 狀態的命令。
     """
-    ok, old_head_out, _ = _run_git_with_lock_retry(
-        ["git", "rev-parse", "HEAD"], logger, "rev-parse HEAD"
-    )
-    if not ok:
-        return False
-    old_head = old_head_out.strip()
+    result = git_ops.commit_files_isolated(ticket_md_files, message)
 
-    fd, temp_index_path = tempfile.mkstemp(prefix="ticket-md-auto-commit-index-")
-    os.close(fd)
-    os.remove(temp_index_path)  # read-tree 會依需要建立獨立 index 檔
-    env = dict(os.environ)
-    env["GIT_INDEX_FILE"] = temp_index_path
-
-    try:
-        ok, _, _ = _run_git_with_lock_retry(
-            ["git", "read-tree", old_head], logger, "read-tree", env=env
-        )
-        if not ok:
-            return False
-
-        ok, _, _ = _run_git_with_lock_retry(
-            ["git", "add", "--"] + ticket_md_files, logger, "add", env=env
-        )
-        if not ok:
-            return False
-
-        ok, tree_out, _ = _run_git_with_lock_retry(
-            ["git", "write-tree"], logger, "write-tree", env=env
-        )
-        if not ok:
-            return False
-        tree_sha = tree_out.strip()
-
-        ok, commit_out, _ = _run_git_with_lock_retry(
-            ["git", "commit-tree", tree_sha, "-p", old_head, "-m", message],
-            logger, "commit-tree",
-        )
-        if not ok:
-            return False
-        commit_sha = commit_out.strip()
-
-        ok, diff_out, _ = _run_git_with_lock_retry(
-            ["git", "diff", "--name-only", old_head, commit_sha], logger, "diff"
-        )
-        if not ok:
-            return False
-        repo_root = _resolve_repo_root(logger)
-        changed_raw = {line for line in diff_out.splitlines() if line.strip()}
-        changed = _normalize_to_repo_relative(changed_raw, repo_root)
-        expected = _normalize_to_repo_relative(ticket_md_files, repo_root)
-        if changed != expected:
-            logger.error(
-                "提交範圍自我驗證失敗，預期 %s 實得 %s，放棄提交",
-                sorted(expected), sorted(changed),
-            )
-            sys.stderr.write(f"[{HOOK_NAME}] 提交範圍自我驗證失敗，放棄提交\n")
-            return False
-
-        ok, _, _ = _run_git_with_lock_retry(
-            ["git", "update-ref", "HEAD", commit_sha, old_head], logger, "update-ref"
-        )
-        if not ok:
-            logger.warning("HEAD 於提交期間被並行移動，放棄本次自動 commit")
-            return False
-
+    if result["status"] == "committed":
+        commit_sha = result["commit_sha"] or ""
         logger.info("自動 commit 成功: %s (%s)", message, commit_sha[:8])
         return True
-    finally:
-        try:
-            if os.path.exists(temp_index_path):
-                os.remove(temp_index_path)
-        except OSError:
-            logger.debug("臨時 index 清理失敗: %s", temp_index_path)
+    if result["status"] == "empty":
+        logger.debug("無變更需要提交（empty，graceful skip）")
+        return True
+
+    logger.error("git_ops.commit_files_isolated 失敗: %s", result.get("error"))
+    sys.stderr.write(
+        f"[{HOOK_NAME}] auto-commit 失敗: {result.get('error')}\n"
+    )
+    return False
 
 
 def main() -> int:

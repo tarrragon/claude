@@ -250,6 +250,51 @@ class TestHandoffSectionAnchoredBoundary:
         assert "W17-079" in section
         assert "不應被納入" not in section
 
+    def test_title_style_h3_ends_before_immediate_progress_log(self):
+        """標題式界定失效修復（真因固定回歸）：H3 handoff 標題緊接（無標題
+        分隔）大量進度追蹤條列時，純 H1/H2 終點規則對此無鑑別力，段落會
+        無界擴張直到下一個 H1/H2（可能相隔數百行）。修法：終點改為「下一個
+        H1/H2 標題」與「下一個進度追蹤條列（`- YYYY-MM-DD: ...`）」兩者
+        中較早出現者。
+
+        本測試為合成語料（非讀真實 worklog），故不受 worklog 內容持續
+        成長影響，永久固定驗證此界定規則本身。
+        """
+        from ticket_system.lib.worklog_parser import extract_handoff_section
+
+        content = (
+            "### 下個 Session 接手 Context\n\n"
+            "| 票 | 優先 | 為何是它 |\n"
+            "|----|------|---------|\n"
+            "| `0.0.0-W0-001` | P1 | 測試用途 |\n\n"
+            "補充說明段落，仍屬 handoff 內容。\n"
+            "- 2026-08-22: 0.0.0-W0-900 完成 -- 舊進度追蹤條列（不應納入）\n"
+            "- 2026-08-22: 0.0.0-W0-901 完成 -- 舊進度追蹤條列（不應納入）\n"
+            "\n"
+            "## 下一個章節\n\n"
+            "不應被納入\n"
+        )
+        section = extract_handoff_section(content)
+        assert "0.0.0-W0-001" in section
+        assert "補充說明段落" in section
+        assert "0.0.0-W0-900" not in section, (
+            "H3 handoff 標題後緊接的進度追蹤條列不應被納入段落"
+        )
+        assert "不應被納入" not in section
+
+    def test_title_style_h2_also_ends_before_immediate_progress_log(self):
+        """終點規則的進度追蹤條列候選對 H2 標題式同樣生效（不僅 H3）。"""
+        from ticket_system.lib.worklog_parser import extract_handoff_section
+
+        content = (
+            "## 下個 Session 接手 Context\n\n"
+            "W17-079\n"
+            "- 2026-08-22: 0.0.0-W0-900 完成 -- 舊進度追蹤條列（不應納入）\n"
+        )
+        section = extract_handoff_section(content)
+        assert "W17-079" in section
+        assert "0.0.0-W0-900" not in section
+
     def test_real_worklog_corpus_boundary_shrinks(self):
         """真實語料整合：抽出段落大小與 ID 數應大幅收斂（現況 17103 chars / 100 IDs）"""
         from ticket_system.lib.worklog_parser import (

@@ -130,6 +130,11 @@ _ANCHOR_PREFIX_PATTERN = re.compile(r"^[#*\s]*$")
 _TITLE_LINE_PATTERN = re.compile(r"^#{1,6}\s")
 _INLINE_LIST_END_PATTERN = re.compile(r"^- ", re.MULTILINE)
 _INLINE_BOLD_END_PATTERN = re.compile(r"^\*\*", re.MULTILINE)
+# 標題式段落終點候選：下一個進度追蹤條列（'- YYYY-MM-DD: ...'）。SOT-mirror，
+# 同步理由見 worklog_parser.py:_TITLE_STYLE_PROGRESS_LOG_END_PATTERN 註解。
+_TITLE_STYLE_PROGRESS_LOG_END_PATTERN = re.compile(
+    r"^- \d{4}-\d{2}-\d{2}:\s", re.MULTILINE
+)
 
 
 def _iter_anchored_keyword_hits(content: str):
@@ -152,8 +157,9 @@ def _extract_handoff_section(content: str) -> str:
 
     策略：只採「行首錨定」的關鍵字命中（關鍵字前僅允許 '#' / '*' / 空白），
     取最後一個（idx 最大）；依關鍵字所在行的形態分派終點界定——標題式
-    （`^#{1,6}\\s`）取下一個 H1/H2，行內式取下一個空行 / 行首條列 `- ` /
-    `**` 起始行三者取最先。無行首錨定命中回 ""。
+    （`^#{1,6}\\s`）取「下一個 H1/H2」與「下一個進度追蹤條列
+    `- YYYY-MM-DD: ...`」兩者中較早出現者，行內式取下一個空行 / 行首條列
+    `- ` / `**` 起始行三者取最先。無行首錨定命中回 ""。
 
     SOT: .claude/skills/ticket/ticket_system/lib/worklog_parser.py:extract_handoff_section
     任一處更新需同步另一處（ARCH-020）。本函式邏輯（S1 段落界定）與 SOT 完全
@@ -181,9 +187,15 @@ def _extract_handoff_section(content: str) -> str:
 
     if _TITLE_LINE_PATTERN.match(line_text):
         section_end_pattern = re.compile(r"^(# |## )", re.MULTILINE)
-        next_match = section_end_pattern.search(content, latest_idx + 1)
-        if next_match:
-            return content[line_start : next_match.start()]
+        next_heading = section_end_pattern.search(content, latest_idx + 1)
+        next_progress_entry = _TITLE_STYLE_PROGRESS_LOG_END_PATTERN.search(
+            content, latest_idx + 1
+        )
+        end_candidates = [
+            m.start() for m in (next_heading, next_progress_entry) if m
+        ]
+        if end_candidates:
+            return content[line_start : min(end_candidates)]
         return content[line_start:]
 
     candidates = []

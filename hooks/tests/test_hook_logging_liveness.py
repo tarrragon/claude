@@ -9,6 +9,9 @@ Hook liveness 訊號測試
   拋例外時仍已寫入的情形，用以觀察「已進入但崩於 main() 中」）
 - 迴歸釘子：delay=True 與 FILE_HANDLER_LEVEL=DEBUG 是「有檔即等於有呼叫」
   保證的實作前提，任何破壞此二者的改動必須紅燈
+- project_root 顯式覆寫：mark_hook_entry / run_hook_safely 傳入 project_root
+  時，liveness 索引與（run_hook_safely 情境下）業務日誌落在同一自訂 root；
+  未傳時兩者維持現行 get_project_root() 行為（向後相容，逐字不變）
 """
 
 import json
@@ -137,3 +140,95 @@ class TestLivenessRegressionGuards:
 
         existing_after_write = list(log_dir.glob("*.log"))
         assert len(existing_after_write) == 1, "首次寫入後應已建立唯一日誌檔"
+
+
+class TestProjectRootOverride:
+    """project_root 顯式覆寫：對齊 liveness 索引與業務日誌的 root。"""
+
+    def test_mark_hook_entry_uses_explicit_project_root(self, tmp_path, monkeypatch):
+        """傳入 project_root 時，liveness 索引寫入該 root，不呼叫 get_project_root()。"""
+        monkeypatch.setenv(hook_logging.ENV_SESSION_ID, "explicit-root-session")
+
+        def _fail_if_called():
+            raise AssertionError(
+                "傳入 project_root 時不應呼叫無參數 get_project_root()"
+            )
+
+        monkeypatch.setattr(hook_logging, "get_project_root", _fail_if_called)
+
+        custom_root = tmp_path / "custom-root"
+        hook_logging.mark_hook_entry(
+            "explicit-root-hook", project_root=custom_root
+        )
+
+        log_file = (
+            custom_root / ".claude" / "hook-logs"
+            / hook_logging.LIVENESS_SUBDIR / "explicit-root-session.jsonl"
+        )
+        assert log_file.exists(), "liveness 索引應寫入顯式傳入的 project_root"
+
+    def test_mark_hook_entry_without_project_root_keeps_get_project_root(
+        self, liveness_dir, monkeypatch
+    ):
+        """未傳 project_root 時，維持現行 get_project_root() 行為（向後相容）。"""
+        monkeypatch.setenv(hook_logging.ENV_SESSION_ID, "default-root-session")
+
+        hook_logging.mark_hook_entry("default-root-hook")
+
+        assert (liveness_dir / "default-root-session.jsonl").exists()
+
+    def test_run_hook_safely_aligns_liveness_and_business_log_root(
+        self, tmp_path, monkeypatch
+    ):
+        """run_hook_safely 傳入 project_root 時，liveness 索引與業務日誌
+        （setup_hook_logging 的 FileHandler）落在同一自訂 root，兩者皆不
+        呼叫 get_project_root()（0.2.1-W3-1165 對齊目標的直接驗證）。"""
+        monkeypatch.setenv(hook_logging.ENV_SESSION_ID, "aligned-session")
+
+        def _fail_if_called():
+            raise AssertionError(
+                "傳入 project_root 時不應呼叫無參數 get_project_root()"
+            )
+
+        monkeypatch.setattr(hook_logging, "get_project_root", _fail_if_called)
+
+        custom_root = tmp_path / "aligned-root"
+
+        def _logging_main() -> int:
+            logging.getLogger("aligned-hook").warning("業務日誌一行")
+            return 0
+
+        exit_code = hook_logging.run_hook_safely(
+            _logging_main, "aligned-hook", project_root=custom_root
+        )
+        assert exit_code == 0
+
+        liveness_file = (
+            custom_root / ".claude" / "hook-logs"
+            / hook_logging.LIVENESS_SUBDIR / "aligned-session.jsonl"
+        )
+        assert liveness_file.exists(), "liveness 索引應落在自訂 project_root"
+
+        business_log_dir = custom_root / ".claude" / "hook-logs" / "aligned-hook"
+        business_logs = list(business_log_dir.glob("*.log"))
+        assert len(business_logs) == 1, "業務日誌應落在同一自訂 project_root"
+
+    def test_run_hook_safely_without_project_root_keeps_get_project_root(
+        self, liveness_dir, monkeypatch, tmp_path
+    ):
+        """未傳 project_root 時，run_hook_safely 對 setup_hook_logging 與
+        mark_hook_entry 皆維持現行 get_project_root() 行為（向後相容，
+        既有 145 個未自訂 project_root 的呼叫端不受影響）。"""
+        monkeypatch.setenv(hook_logging.ENV_SESSION_ID, "legacy-session")
+
+        exit_code = hook_logging.run_hook_safely(lambda: 0, "legacy-hook")
+        assert exit_code == 0
+
+        liveness_file = liveness_dir / "legacy-session.jsonl"
+        assert liveness_file.exists()
+
+        business_log_dir = tmp_path / ".claude" / "hook-logs" / "legacy-hook"
+        assert business_log_dir.exists(), (
+            "未傳 project_root 時，業務日誌目錄仍應由 get_project_root()"
+            "（已由 liveness_dir fixture 隔離至 tmp_path）解析建立"
+        )

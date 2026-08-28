@@ -274,6 +274,80 @@ class TestNoEmptyCommitOnNoChange:
 
 
 # ============================================================
+# 隔離索引 CAS：共用 index 保護（改用 git_ops.commit_files_isolated 後補）
+# ============================================================
+
+
+class TestSharedIndexProtection:
+    """驗證提交機制改用隔離索引 CAS（git_ops.commit_files_isolated）後：
+    (1) 提交後共用 index 對本次路徑乾淨（不留過期快照，checkout -- <path>
+        不會把剛提交的內容打回原狀）；
+    (2) 共用 index 中他人（並行 session）已 staged 的不相關檔案，不會被
+        一併提交，且其 staged 狀態維持不變。"""
+
+    def test_shared_index_clean_after_committed_path(self, patch_paths_to_repo):
+        """committed 路徑後 `git diff --cached --name-only` 為空
+        （對照 pathspec commit 時代的殘留：提交後共用 index 停在過期快照，
+        使 `git checkout -- <path>` 把剛提交的內容打回原狀）。"""
+        repo = patch_paths_to_repo
+        md = repo / "tickets" / "0.0.0-W0-AC.md"
+
+        rc = _call_append_log("0.0.0-W0-AC", "Solution", "SHARED_INDEX_CLEAN_CHECK")
+        assert rc == 0
+
+        result = _run_git(repo, "diff", "--cached", "--name-only")
+        assert result.stdout.strip() == "", (
+            "committed 後共用 index 對本次路徑應乾淨，不留過期快照"
+        )
+
+        # 直接驗證資料遺失風險已解除：git checkout -- <path> 不應打回舊內容
+        _run_git(repo, "checkout", "--", "tickets/0.0.0-W0-AC.md")
+        assert "SHARED_INDEX_CLEAN_CHECK" in md.read_text(encoding="utf-8"), (
+            "共用 index 若停在過期快照，git checkout -- <path> 會把剛提交的"
+            "內容打回原狀（隔離索引 CAS 應已解除此風險）"
+        )
+
+    def test_concurrent_staged_file_not_swept_in_and_remains_staged(
+        self, patch_paths_to_repo
+    ):
+        """共用 index 中他人（並行 session）已 staged 的不相關檔案：
+        (a) 不會被一併提交進本次 commit；
+        (b) 其 staged 狀態在 auto-commit 前後維持不變（未被清理、未被覆寫）。"""
+        repo = patch_paths_to_repo
+        other = repo / "tickets" / "other.md"
+        other.write_text("other placeholder\n", encoding="utf-8")
+        _run_git(repo, "add", str(other))
+        _run_git(repo, "commit", "-q", "-m", "add other.md")
+
+        # 模擬並行 session：修改 other.md 並 stage，但尚未 commit
+        other.write_text("OTHER_SESSION_UNCOMMITTED_CHANGE\n", encoding="utf-8")
+        _run_git(repo, "add", str(other))
+
+        status_before = _run_git(repo, "status", "--porcelain").stdout
+
+        rc = _call_append_log("0.0.0-W0-AC", "Solution", "MY_OWN_CHANGE")
+        assert rc == 0
+
+        status_after = _run_git(repo, "status", "--porcelain").stdout
+        # other.md 的 staged 狀態（"M  tickets/other.md"）應逐字不變
+        other_lines_before = [
+            line for line in status_before.splitlines() if "other.md" in line
+        ]
+        other_lines_after = [
+            line for line in status_after.splitlines() if "other.md" in line
+        ]
+        assert other_lines_after == other_lines_before, (
+            "他人已 staged 的不相關檔案，狀態應在 auto-commit 前後逐字不變"
+        )
+
+        # HEAD 上的 other.md 內容不應含並行 session 尚未 commit 的變更
+        head_other = _run_git(repo, "show", "HEAD:tickets/other.md").stdout
+        assert "OTHER_SESSION_UNCOMMITTED_CHANGE" not in head_other, (
+            "他人已 staged 但未 commit 的不相關檔案，不應被一併提交進本次 commit"
+        )
+
+
+# ============================================================
 # AC4: git 不可用 / index.lock 時 append-log 仍成功 + stderr 警告
 # ============================================================
 

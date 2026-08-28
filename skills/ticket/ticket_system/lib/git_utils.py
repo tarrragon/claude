@@ -8,42 +8,32 @@
 歷史，三種 git 還原全失效。
 
 本模組僅提供薄封裝（便於測試 patch），不含 append-log 主邏輯。
+
+提交機制由「精確路徑 add + pathspec commit」改為委派
+``ticket_system.lib.git_ops.commit_files_isolated``（GIT_INDEX_FILE 全程隔離
+共用 index，與 ``ticket-md-auto-commit-hook.py``、``lifecycle.complete()``
+共用同一實作）。原本自帶的 ``_run_git`` / 重試 / timeout 常數已隨此改動
+移除——提交機制的 git 呼叫、重試、timeout 全由 ``git_ops`` 負責，測試涵蓋
+移至 ``test_git_ops.py``。本模組保留的職責收斂為：commit message 組裝
+（含 session trailer）與狀態字串轉譯。
 """
 from __future__ import annotations
 
-import subprocess
-import time
 from pathlib import Path
 
+from .git_ops import commit_files_isolated
 from .lease import resolve_current_session_id
 
-# 快命令（rev-parse / add / diff）預設逾時：git hang（等認證 / index.lock）時
-# 不無限等待。commit 含 pre-commit husky，呼叫端另傳較長值。
-_FAST_GIT_TIMEOUT = 5
-_COMMIT_GIT_TIMEOUT = 30
-
-# index.lock 並行競爭重試（W8-006）：commit 失敗且 stderr 含 index.lock 時，
-# sleep 此秒數後重試一次。W8-001 ANA：一次 retry 將並行 degrade 率由約 10% 降至 <1%。
-_INDEX_LOCK_RETRY_SLEEP = 1
-
-
-def _run_git(
-    cwd: str, *args: str, timeout: int = _FAST_GIT_TIMEOUT
-) -> subprocess.CompletedProcess:
-    """在指定 cwd 執行 git 命令並回傳結果（不拋例外，由呼叫端判 returncode）。
-
-    timeout 預設 5s（rev-parse / add / diff 等快命令）；commit 含 pre-commit
-    husky 較慢，呼叫端傳 ``_COMMIT_GIT_TIMEOUT``。逾時拋 subprocess.TimeoutExpired，
-    由呼叫端 try/except 涵蓋（graceful degrade，不無限等待 git hang）。
-    """
-    return subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=timeout,
-    )
+# git_ops.commit_files_isolated 回傳的 status（committed/empty/failed）轉譯為
+# 本模組既有呼叫端（ticket_system.commands.*）慣用的狀態字串。「not_git_repo」
+# 與「git_failed」在 git_ops 的回傳裡已無法區分（皆為 "failed"）——查證所有
+# 呼叫端（grep `commit_status in`）皆以 `("not_git_repo", "git_failed")` 群組
+# 判斷，從未單獨比對 "not_git_repo"，故此收斂不改變任何呼叫端行為。
+_STATUS_MAP = {
+    "committed": "committed",
+    "empty": "no_change",
+    "failed": "git_failed",
+}
 
 
 def _auto_commit_ticket_md(
@@ -51,17 +41,23 @@ def _auto_commit_ticket_md(
 ) -> str:
     """精確路徑 auto-commit 單一 ticket md。
 
-    設計（W7-001 新設計）：
-    - 精確路徑 ``git add <path>``（無 ./、-A、--all），不夾帶 PM/agent 其他變更。
+    設計（改用隔離索引 CAS）：
+    - 提交機制委派 ``git_ops.commit_files_isolated``：``GIT_INDEX_FILE`` 指向
+      獨立臨時 index，全程不觸碰共用 index，提交內容只由本函式傳入的單一
+      路徑決定，不受共用 index 任何並行寫入影響（舊版「add 後再 pathspec
+      commit」在 add 與 commit 之間仍有 TOCTOU 窗口——並行寫入者可在此窗口
+      覆寫共用 index 中本路徑的 entry，使提交後共用 index 停在過期快照）。
     - commit message 格式：``chore(<ticket_id>): <operation> <section>``；
       session_id 可解析時附加 git trailer ``Session: <id>``（空白行分隔，
       多 PM session 協調層落地：commit author 同名無法歸屬 session，
       trailer 提供機械可讀的歸屬欄位）。無法解析時完全省略此段，不虛構
       session_id。``%s``（subject）不受影響，僅 body 新增此段。
-    - 空 commit 防護：若 add 後 index 對該檔無變更（內容與 HEAD 相同），graceful
-      skip（不產生空 commit、不報錯）。
-    - 不使用 ``--no-verify``（維持 pre-commit hook 把關；ticket md 非 JS，
-      husky lint-staged 無匹配，開銷輕微）。
+    - 空 commit 防護：``commit_files_isolated`` 內建「write-tree 結果與
+      HEAD tree 相同」短路（狀態 ``empty``），不產生空 commit、不報錯。
+    - 不使用 ``--no-verify``（``commit_files_isolated`` 走 plumbing
+      commit-tree，天然不觸發任何 pre-commit/commit-msg hook——非刻意繞過，
+      guard 存在的目的是攔截「範圍不明的裸 commit」，此路徑以提交前後的
+      自我驗證取代 guard 的把關角色，見 ``git_ops`` 模組 docstring）。
 
     cwd 採 ticket md 所在目錄，讓 git 自動解析其所屬 repo（worktree 場景下
     commit 進 worktree 分支，complete merge 帶回 main）。
@@ -82,8 +78,12 @@ def _auto_commit_ticket_md(
         其中一個狀態字串：
         - ``"committed"``  已產生 commit
         - ``"no_change"``  body 無變更，graceful skip（不產生空 commit；正常情況，呼叫端不警告）
-        - ``"not_git_repo"`` 所在目錄非 git repo，graceful skip（呼叫端應警告）
-        - ``"git_failed"`` git add/commit 命令失敗，graceful skip（呼叫端應警告）
+        - ``"git_failed"`` git 操作失敗（含目錄非 git repo、add/commit 步驟失敗、
+          提交範圍自我驗證不符、HEAD 並行移動導致 CAS 放棄），graceful skip
+          （呼叫端應警告）。改用 ``git_ops.commit_files_isolated`` 前另有獨立的
+          ``"not_git_repo"`` 狀態；改用後兩者在底層已無法區分（皆回傳
+          "failed"），故收斂為單一狀態——既有呼叫端一律以
+          ``in ("not_git_repo", "git_failed")`` 群組判斷，行為不受影響。
 
     Raises:
         本函式不主動拋例外；呼叫端仍應以 try/except 包圍以涵蓋
@@ -92,47 +92,12 @@ def _auto_commit_ticket_md(
     md_path = Path(path)
     cwd = str(md_path.parent)
 
-    # 1. 確認所在目錄屬於 git repo（非 git repo → graceful skip + 警告）
-    toplevel = _run_git(cwd, "rev-parse", "--show-toplevel")
-    if toplevel.returncode != 0:
-        return "not_git_repo"
-
-    # 2. 精確路徑 add（僅該 ticket md）
-    add_result = _run_git(cwd, "add", "--", str(md_path))
-    if add_result.returncode != 0:
-        return "git_failed"
-
-    # 3. 空 commit 防護：staged 區對該檔無變更 → skip
-    #    git diff --cached --quiet <path>：returncode 0 表示無差異
-    diff_result = _run_git(cwd, "diff", "--cached", "--quiet", "--", str(md_path))
-    if diff_result.returncode == 0:
-        # 無 staged 變更，不產生空 commit（正常情況，非錯誤）
-        return "no_change"
-
-    # 4. 精確路徑 commit（僅該 ticket md，避免夾帶 index 內其他 staged 變更）
     message = f"chore({ticket_id}): {operation} {section}"
     session_id = resolve_current_session_id()
     if session_id:
         # git trailer 慣例：空白行 + "Key: Value"；session_id 無法解析
         # 時完全省略此段，不虛構值（規則 4 可觀測性的反面：寧缺不假）。
         message = f"{message}\n\nSession: {session_id}"
-    commit_result = _run_git(
-        cwd, "commit", "-m", message, "--", str(md_path),
-        timeout=_COMMIT_GIT_TIMEOUT,
-    )
-    if commit_result.returncode != 0:
-        # index.lock 並行競爭（W8-006）：唯一中頻 degrade 觸發源。sleep 1s 後
-        # 重試一次（並行 commit 多在 1s 內釋放 .git/index.lock）；非 index.lock
-        # 失敗不重試（沿用現有 degrade）。重試仍失敗回 git_failed。
-        if "index.lock" in (commit_result.stderr or ""):
-            time.sleep(_INDEX_LOCK_RETRY_SLEEP)
-            commit_result = _run_git(
-                cwd, "commit", "-m", message, "--", str(md_path),
-                timeout=_COMMIT_GIT_TIMEOUT,
-            )
-            if commit_result.returncode != 0:
-                return "git_failed"
-            return "committed"
-        return "git_failed"
 
-    return "committed"
+    result = commit_files_isolated([str(md_path)], message, cwd=cwd)
+    return _STATUS_MAP[result["status"]]

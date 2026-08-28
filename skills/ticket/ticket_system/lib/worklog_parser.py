@@ -223,6 +223,15 @@ _INLINE_LIST_END_PATTERN: re.Pattern = re.compile(r"^- ", re.MULTILINE)
 #: 行內式段落終點候選：下一個 '**' 起始行
 _INLINE_BOLD_END_PATTERN: re.Pattern = re.compile(r"^\*\*", re.MULTILINE)
 
+#: 標題式段落終點候選：下一個進度追蹤條列（'- YYYY-MM-DD: ...'）。
+#: 本專案實際慣例將標題式 handoff 段落（如 '### 下個 Session 接手 Context'）
+#: 以 H3（非 H1/H2）置於持續累積的 worklog 中，緊接其後常無任何標題分隔即
+#: 直接接續大量歷史進度追蹤條列——純 H1/H2 終點規則對此無鑑別力（見
+#: extract_handoff_section 形態 A 分支說明）。
+_TITLE_STYLE_PROGRESS_LOG_END_PATTERN: re.Pattern = re.compile(
+    r"^- \d{4}-\d{2}-\d{2}:\s", re.MULTILINE
+)
+
 
 def _iter_anchored_keyword_hits(content: str):
     """找出所有「行首錨定」的 HANDOFF_KEYWORDS 命中位置。
@@ -256,9 +265,14 @@ def extract_handoff_section(content: str) -> str:
        關鍵字會出現在描述偵測器的歷史行中，此類命中須被排除）。
     2. 取行首錨定命中中最後一個（idx 最大，對應當前 session 寫入的 handoff）。
     3. 依關鍵字所在行的形態分派終點界定：
-       - 形態 A 標題式（行符合 `^#{1,6}\\s`）：終點為下一個 H1/H2 標題，
-         無下一個標題則到 EOF（維持既有行為，涵蓋 HANDOFF_KEYWORDS 原設計
-         的標題式用法）。
+       - 形態 A 標題式（行符合 `^#{1,6}\\s`）：終點為「下一個 H1/H2 標題」
+         與「下一個進度追蹤條列（`- YYYY-MM-DD: ...`）」兩者中較早出現者，
+         皆無命中則到 EOF（維持既有 H1/H2 界定行為，另補進度追蹤條列這一
+         終點候選——本專案實際慣例將標題式 handoff 段落以 H3 置於持續
+         累積的 worklog 中，緊接其後常無任何標題分隔即直接接續大量歷史
+         進度追蹤條列，純 H1/H2 終點規則對此結構無鑑別力：實測兩個 H1/H2
+         標題間相隔數百行進度追蹤內容，使抽出段落無界擴張至數倍於預期
+         門檻）。
        - 形態 B 行內式（其餘，如本專案慣用 `**下一站**：`）：終點為下一個
          空行、下一個行首條列 `- `、或下一個 `**` 起始行，取最先命中；
          皆無命中則到 EOF。至少含關鍵字所在行本身。
@@ -305,11 +319,18 @@ def extract_handoff_section(content: str) -> str:
     line_text = content[line_start:line_end]
 
     if _TITLE_LINE_PATTERN.match(line_text):
-        # 形態 A 標題式：終點為下一個 H1/H2 標題
+        # 形態 A 標題式：終點為「下一個 H1/H2 標題」與「下一個進度追蹤
+        # 條列」兩者中較早出現者（見本函式 docstring 形態 A 分支說明）。
         section_end_pattern = re.compile(r"^(# |## )", re.MULTILINE)
-        next_match = section_end_pattern.search(content, latest_idx + 1)
-        if next_match:
-            return content[line_start : next_match.start()]
+        next_heading = section_end_pattern.search(content, latest_idx + 1)
+        next_progress_entry = _TITLE_STYLE_PROGRESS_LOG_END_PATTERN.search(
+            content, latest_idx + 1
+        )
+        end_candidates = [
+            m.start() for m in (next_heading, next_progress_entry) if m
+        ]
+        if end_candidates:
+            return content[line_start : min(end_candidates)]
         return content[line_start:]
 
     # 形態 B 行內式：終點為下一個空行 / 下一個行首條列 / 下一個 '**' 起始行，取最先
