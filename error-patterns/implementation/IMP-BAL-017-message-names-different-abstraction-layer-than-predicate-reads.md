@@ -6,11 +6,11 @@ severity: high
 status: active
 created: 2026-08-27
 related:
+- PC-GPD-001
 - IMP-BAL-016
 - ARCH-BAL-011
 - PC-BAL-036
 - IMP-BAL-010
-- PC-GPD-001
 ---
 
 # IMP-BAL-017：訊息指名的抽象層與判準實際讀取的層不同

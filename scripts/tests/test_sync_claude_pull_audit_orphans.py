@@ -177,3 +177,28 @@ def test_run_audit_silent_message_when_no_orphan(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "無正向孤兒" in out
     assert "無反向孤兒" in out
+
+
+def test_run_audit_reverse_orphan_case_variant_does_not_suggest_pull_to_fill(
+    monkeypatch, tmp_path, capsys
+):
+    """--audit 模式下，反向孤兒為本地大小寫變體時不得建議『sync-pull 補齊』
+    （0.2.1-W3-1142：該建議會把消費端剛完成的大小寫修復抵銷）。"""
+    project_root = tmp_path / "proj"
+    claude = project_root / ".claude"
+    _make_tree(claude, {"skills/foo/skill.md": "x\n"})  # 本地為歷史小寫
+
+    def _fake_clone(temp_dir: Path) -> None:
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        (temp_dir / "skills" / "foo").mkdir(parents=True)
+        (temp_dir / "skills" / "foo" / "SKILL.md").write_text("x\n", encoding="utf-8")
+
+    monkeypatch.setattr(pull, "find_project_root", lambda: project_root)
+    monkeypatch.setattr(pull, "clone_repo", _fake_clone)
+
+    pull.run_audit()
+
+    out = capsys.readouterr().out
+    assert "SKILL.md" in out
+    assert "大小寫不一致" in out
+    assert "可能需要 sync-pull 補齊" not in out, f"不應出現舊版誤導性建議：{out}"

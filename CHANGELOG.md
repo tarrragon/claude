@@ -1,3 +1,19 @@
+## [2.43.2] - 2026-08-28
+
+### Summary
+fix: correct diagnosis - dedup logic sound, real gap is missing pyyaml dependency causing silent no-op; fix: 反向孤兒提醒對大小寫變體改述，不建議誤導性補齊; fix: bind commit-stage-guard-gate scan to ref-write event via reference-transaction (+3 more)
+
+Changes: 4 fix, 1 docs, 1 chore
+
+- fix: correct diagnosis - dedup logic sound, real gap is missing pyyaml dependency causing silent no-op
+- fix: 反向孤兒提醒對大小寫變體改述，不建議誤導性補齊
+- fix: bind commit-stage-guard-gate scan to ref-write event via reference-transaction
+- fix: 修復 sync-pull 三方合併純大小寫改名誤刪本地檔
+- docs: PC-BAL-058 補列舉有效性的觀察者獨立性限定
+- chore: pull .claude 更新（上游 6d969410）並還原跨專案引用
+
+---
+
 ## [2.43.1] - 2026-08-28
 
 ### Summary

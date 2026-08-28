@@ -17,6 +17,19 @@ unlink 而非移至 .sync-conflicts/。
 因磁碟大小寫恰好與上游一致而完全不觸發 stale 判定）；真正觸發需磁碟大小寫同時
 偏離另外兩者。修復：_is_git_tracked 於 exact match 失敗時，改列出同目錄下的
 git 追蹤條目做大小寫不敏感 fallback 比對。
+
+本檔後半另收錄第二條獨立的刪除路徑（0.2.1-W3-1155）：三方合併路徑
+（apply_upstream_delta）在 base..upstream 之間存在純大小寫改名時，
+--no-renames 拆出的 D+A 配對，其 D 半邊以路徑字串構造 local_file 在大小寫
+不敏感檔案系統上誤刪 A 半邊對應的實體檔。觸發變數與上述 cleanup_stale_files
+路徑不同（見「三方合併路徑」段落），兩組測試互不取代，須同時涵蓋。
+
+本檔末段另收錄第三條路徑（0.2.1-W3-1142）：反向孤兒偵測
+（compute_reverse_orphan_candidates）以逐字元集合差集比對本地與上游檔名，
+上游為 SKILL.md、本地為 skill.md（或反之）時被誤判為「本地缺漏」，並建議
+補齊——若消費端剛完成大小寫修復，照建議補齊會把修復抵銷。此路徑不涉及
+unlink（訊息層缺陷，非刪除路徑），但與前兩條共用「大小寫比對未考慮不敏感
+檔案系統」的根因家族，修法重用本檔已建立的 _find_case_variant_dirent。
 """
 from __future__ import annotations
 
@@ -182,3 +195,312 @@ def test_is_git_tracked_still_false_for_genuinely_untracked(tmp_path: Path) -> N
     assert not sync_mod._is_git_tracked(
         ".claude/skills/foo/other.md", root
     ), "未追蹤檔不應因 fallback 誤判為已追蹤"
+
+
+# ---------------------------------------------------------------------------
+# 三方合併路徑（apply_upstream_delta）的純大小寫改名誤刪
+#
+# 背景（0.2.1-W3-1155）：compute_upstream_delta 用 --no-renames，使上游純
+# 大小寫改名（skill.md -> SKILL.md）拆為獨立的 D(舊路徑) + A(新路徑) 兩筆
+# delta。apply_upstream_delta 逐檔處理 D 半邊時以路徑字串構造 local_file，
+# 在大小寫不敏感檔案系統上該路徑會解析到 A 半邊對應的實體檔案，
+# three_way_merge_file 判定「本地未改、跟隨上游刪除」後 _atomic_remove
+# 直接 unlink，刪掉的其實是應保留（改名後）的檔案。
+#
+# 觸發變數與 test_case_mismatch_never_deletes_tracked_file（上方，
+# cleanup_stale_files 全量 overlay 路徑）不同：該組測試的變數是磁碟/index/
+# 上游三者的大小寫組合，觸發面是 cleanup_stale_files 的 stale 判定；本組
+# 測試的變數是 base..upstream 之間是否存在純大小寫改名，觸發面是
+# apply_upstream_delta 的三方合併 delta 套用，兩者互不取代，須同時涵蓋。
+# ---------------------------------------------------------------------------
+
+
+def _make_upstream_case_rename_repo(root: Path, content: bytes) -> tuple[Path, str]:
+    """建立上游 repo：base commit 含 skill.md（小寫），HEAD commit 純大小寫
+    改名為 SKILL.md（大寫），內容不變。
+
+    HEAD 的改名以 git plumbing（hash-object + update-index --cacheinfo）直接
+    操作 index，不依賴實際檔案系統 rename 是否大小寫敏感——git diff /
+    git show 讀的是 tree 物件，不受工作目錄殘留檔案的大小寫影響，測試結果
+    因此不受執行環境檔案系統大小寫敏感度左右。
+
+    傳回:
+        tuple[Path, str]: (上游 repo 根目錄, base commit sha)
+    """
+    skill_dir = root / "skills" / "foo"
+    skill_dir.mkdir(parents=True)
+    _init_git_repo(root)
+    lower_path = skill_dir / "skill.md"
+    lower_path.write_bytes(content)
+    _run(["git", "add", "."], root)
+    _run(["git", "commit", "-q", "-m", "base: skill.md"], root)
+    base_sha = _run(["git", "rev-parse", "HEAD"], root).stdout.strip()
+
+    blob_sha = _run(
+        ["git", "hash-object", str(lower_path.relative_to(root))], root
+    ).stdout.strip()
+    _run(["git", "rm", "--cached", "-q", "skills/foo/skill.md"], root)
+    _run(
+        [
+            "git", "update-index", "--add", "--cacheinfo",
+            f"100644,{blob_sha},skills/foo/SKILL.md",
+        ],
+        root,
+    )
+    _run(["git", "commit", "-q", "-m", "rename: skill.md -> SKILL.md"], root)
+    return root, base_sha
+
+
+def _make_local_disk_only(root: Path, filename: str, content: bytes) -> Path:
+    """建立本地磁碟（無 git）：僅在磁碟寫入指定大小寫的檔案。"""
+    claude_dir = root / ".claude"
+    skill_dir = claude_dir / "skills" / "foo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / filename).write_bytes(content)
+    return claude_dir
+
+
+def test_case_only_rename_does_not_delete_local_file(tmp_path: Path) -> None:
+    """純大小寫改名（base 有 skill.md、upstream 改名為 SKILL.md）套用三方合併
+    delta 後，本地大寫檔案須存活且內容正確，不得被誤刪。
+
+    這是本票的最小重現：修復前，此斷言於大小寫不敏感檔案系統上會失敗
+    （檔案被 _atomic_remove 誤刪）。
+    """
+    content = b"skill entry content\n"
+    upstream_root, base_sha = _make_upstream_case_rename_repo(
+        tmp_path / "upstream", content
+    )
+    local_claude = _make_local_disk_only(tmp_path / "local", "SKILL.md", content)
+    project_root = tmp_path / "local"
+
+    applied, conflicts, residue = sync_mod.apply_upstream_delta(
+        project_root, upstream_root, base_sha, preserve=set(), skills_config=None
+    )
+
+    assert not conflicts, f"純大小寫改名不應產生衝突：{conflicts}"
+    assert not residue
+    target = local_claude / "skills" / "foo" / "SKILL.md"
+    assert target.exists(), "改名後的大寫檔案必須存活於磁碟"
+    assert target.read_bytes() == content, "內容不得因改名套用而遺失或損毀"
+    assert applied == 1
+
+
+def test_case_only_rename_repeated_pull_does_not_redelete(tmp_path: Path) -> None:
+    """base SHA 推進至改名後的 commit 後，再次套用 delta 不應重複刪除。
+
+    模擬 pull 主流程「無衝突則推進 base SHA」後的下一次 pull：以推進後的
+    base（= upstream HEAD）重算 delta 應為空集合，不再觸發任何 unlink。
+    """
+    content = b"skill entry content\n"
+    upstream_root, base_sha = _make_upstream_case_rename_repo(
+        tmp_path / "upstream", content
+    )
+    local_claude = _make_local_disk_only(tmp_path / "local", "SKILL.md", content)
+    project_root = tmp_path / "local"
+
+    sync_mod.apply_upstream_delta(
+        project_root, upstream_root, base_sha, preserve=set(), skills_config=None
+    )
+    head_sha = _run(["git", "rev-parse", "HEAD"], upstream_root).stdout.strip()
+
+    applied_2, conflicts_2, residue_2 = sync_mod.apply_upstream_delta(
+        project_root, upstream_root, head_sha, preserve=set(), skills_config=None
+    )
+
+    assert applied_2 == 0, "base 已推進過改名點，重放同一份 delta 不應再套用任何變更"
+    assert not conflicts_2
+    assert not residue_2
+    target = local_claude / "skills" / "foo" / "SKILL.md"
+    assert target.exists(), "第二次 pull 不應重複刪除已改名的檔案"
+    assert target.read_bytes() == content
+
+
+def test_detect_case_only_renames_pairs_d_and_a() -> None:
+    """_detect_case_only_renames 直接單元測試：純大小寫差異的 D+A 應配對。"""
+    delta = {
+        "skills/foo/skill.md": "D",
+        "skills/foo/SKILL.md": "A",
+        "rules/unrelated.md": "M",
+    }
+    renames = sync_mod._detect_case_only_renames(delta)
+    assert renames == {"skills/foo/SKILL.md": "skills/foo/skill.md"}
+
+
+def test_detect_case_only_renames_ignores_ambiguous_group() -> None:
+    """同一 lower() 對應多個 D 或 A 時保守略過，不誤配對。"""
+    delta = {
+        "skills/foo/skill.md": "D",
+        "skills/foo/Skill.md": "D",
+        "skills/foo/SKILL.md": "A",
+    }
+    renames = sync_mod._detect_case_only_renames(delta)
+    assert renames == {}
+
+
+def test_detect_case_only_renames_ignores_content_add_delete_pair() -> None:
+    """路徑大小寫不同但非「同一路徑僅差大小寫」以外的一般 D/A 不應被誤配。"""
+    delta = {
+        "skills/foo/old.md": "D",
+        "skills/bar/new.md": "A",
+    }
+    assert sync_mod._detect_case_only_renames(delta) == {}
+
+
+def test_find_case_variant_dirent_returns_real_name(tmp_path: Path) -> None:
+    """_find_case_variant_dirent 以 os.scandir 回傳真實 dirent 名稱，不受
+    查詢字串大小寫影響。"""
+    skill_dir = tmp_path / "skills" / "foo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "skill.md").write_bytes(b"x")
+
+    assert sync_mod._find_case_variant_dirent(skill_dir, "SKILL.md") == "skill.md"
+    assert sync_mod._find_case_variant_dirent(skill_dir, "skill.md") == "skill.md"
+
+
+def test_find_case_variant_dirent_returns_none_when_absent(tmp_path: Path) -> None:
+    """目錄下無任何大小寫變體時回 None。"""
+    skill_dir = tmp_path / "skills" / "foo"
+    skill_dir.mkdir(parents=True)
+    assert sync_mod._find_case_variant_dirent(skill_dir, "SKILL.md") is None
+
+
+def test_detect_pending_case_renames_lists_new_path(tmp_path: Path) -> None:
+    """自檢函式 detect_pending_case_renames：偵測到待套用的純大小寫改名時，
+    回傳新路徑清單（唯讀，不套用、不寫入本地檔）。"""
+    content = b"skill entry content\n"
+    upstream_root, base_sha = _make_upstream_case_rename_repo(
+        tmp_path / "upstream", content
+    )
+
+    pending = sync_mod.detect_pending_case_renames(upstream_root, base_sha)
+
+    assert pending == ["skills/foo/SKILL.md"]
+
+
+def test_detect_pending_case_renames_empty_when_no_rename(tmp_path: Path) -> None:
+    """base 與 HEAD 之間無變更時，自檢函式回空清單（不誤報）。"""
+    root = tmp_path / "upstream"
+    skill_dir = root / "skills" / "foo"
+    skill_dir.mkdir(parents=True)
+    _init_git_repo(root)
+    (skill_dir / "SKILL.md").write_bytes(b"content\n")
+    _run(["git", "add", "."], root)
+    _run(["git", "commit", "-q", "-m", "no rename"], root)
+    base_sha = _run(["git", "rev-parse", "HEAD"], root).stdout.strip()
+
+    assert sync_mod.detect_pending_case_renames(root, base_sha) == []
+
+
+# ---------------------------------------------------------------------------
+# 反向孤兒偵測命中大小寫變體時的誤導性補齊建議（0.2.1-W3-1142）
+# ---------------------------------------------------------------------------
+
+
+def test_classify_reverse_orphans_separates_case_variant_from_genuine_missing(
+    tmp_path: Path,
+) -> None:
+    """_classify_reverse_orphans_by_case：本地有大小寫變體者歸類為
+    case_variant_pairs，本地完全無對應內容者歸類為 genuinely_missing。"""
+    claude_dir = tmp_path / ".claude"
+    skill_dir = claude_dir / "skills" / "foo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_bytes(b"content\n")  # 大小寫變體：上游 skill.md
+
+    reverse_orphans = [
+        "skills/foo/skill.md",  # 本地有 SKILL.md（大小寫變體）
+        "rules/truly-missing.md",  # 本地完全無對應內容
+    ]
+
+    genuinely_missing, case_variant_pairs = sync_mod._classify_reverse_orphans_by_case(
+        claude_dir, reverse_orphans
+    )
+
+    assert genuinely_missing == ["rules/truly-missing.md"]
+    assert case_variant_pairs == [("skills/foo/skill.md", "skills/foo/SKILL.md")]
+
+
+def test_classify_reverse_orphans_all_genuine_when_no_case_variant(
+    tmp_path: Path,
+) -> None:
+    """本地完全無任何大小寫變體時，全部歸類為 genuinely_missing。"""
+    claude_dir = tmp_path / ".claude"
+    (claude_dir / "rules").mkdir(parents=True)
+
+    genuinely_missing, case_variant_pairs = sync_mod._classify_reverse_orphans_by_case(
+        claude_dir, ["rules/a.md", "rules/b.md"]
+    )
+
+    assert genuinely_missing == ["rules/a.md", "rules/b.md"]
+    assert case_variant_pairs == []
+
+
+def test_print_reverse_orphans_case_variant_does_not_suggest_fill_in(
+    tmp_path: Path, capsys
+) -> None:
+    """_print_reverse_orphans：大小寫變體改述為「不建議補齊」，不落入紅色
+    「本地缺漏」警示，且不含舊版「補齊」建議措辭。"""
+    claude_dir = tmp_path / ".claude"
+    skill_dir = claude_dir / "skills" / "foo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_bytes(b"content\n")
+
+    sync_mod._print_reverse_orphans(claude_dir, ["skills/foo/skill.md"])
+
+    out = capsys.readouterr().out
+    assert "大小寫不一致" in out
+    assert "不建議補齊" in out
+    assert "本地缺漏" not in out
+    assert "[警示]" not in out
+
+
+def test_print_reverse_orphans_genuine_missing_keeps_alert_wording(
+    tmp_path: Path, capsys
+) -> None:
+    """_print_reverse_orphans：真缺漏（無任何大小寫變體）維持既有 [警示] 措辭。"""
+    claude_dir = tmp_path / ".claude"
+    claude_dir.mkdir(parents=True)
+
+    sync_mod._print_reverse_orphans(claude_dir, ["rules/truly-missing.md"])
+
+    out = capsys.readouterr().out
+    assert "[警示]" in out
+    assert "本地缺漏" in out
+    assert "truly-missing.md" in out
+    assert "大小寫不一致" not in out
+
+
+def test_main_flow_reverse_orphan_case_variant_not_flagged_as_missing(
+    tmp_path: Path, capsys
+) -> None:
+    """端到端（主 pull 流程）：base == HEAD（無 delta 需套用），上游檔名為
+    SKILL.md、本地磁碟仍是 skill.md（歷史大小寫分歧，非本次 pull 造成）時，
+    反向孤兒提醒不得把它列為需要 [警示] 的本地缺漏，也不得建議補齊回小寫。
+    """
+    content = b"skill entry content\n"
+    upstream_root = tmp_path / "upstream"
+    skill_dir = upstream_root / "skills" / "foo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_bytes(content)
+    _init_git_repo(upstream_root)
+    _run(["git", "add", "."], upstream_root)
+    _run(["git", "commit", "-q", "-m", "upstream head"], upstream_root)
+    base_sha = _run(["git", "rev-parse", "HEAD"], upstream_root).stdout.strip()
+
+    project_root = tmp_path / "local"
+    local_claude = project_root / ".claude"
+    local_skill_dir = local_claude / "skills" / "foo"
+    local_skill_dir.mkdir(parents=True)
+    (local_skill_dir / "skill.md").write_bytes(content)  # 本地仍為歷史小寫
+    (local_claude / ".sync-state.json").write_text(
+        f'{{"last_synced_base_sha": "{base_sha}"}}', encoding="utf-8"
+    )
+
+    sync_mod._sync_with_backup(project_root, upstream_root)
+
+    out = capsys.readouterr().out
+    assert "本地缺漏" not in out, f"大小寫變體不應被列為本地缺漏：{out}"
+    assert "不建議補齊" in out, f"應明確標示不建議補齊：{out}"
+    assert "可能需要" not in out, f"不應出現舊版誤導性補齊建議措辭：{out}"
+    assert "大小寫不一致" in out, f"應改述為大小寫不一致：{out}"
+    assert (local_skill_dir / "skill.md").exists(), "本地原檔不應被本次 pull 動到"

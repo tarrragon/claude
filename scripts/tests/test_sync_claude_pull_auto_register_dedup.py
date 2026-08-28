@@ -22,6 +22,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 _SCRIPT = Path(__file__).resolve().parent.parent / "sync-claude-pull.py"
 _spec = importlib.util.spec_from_file_location(
     "sync_claude_pull_auto_register_dedup", _SCRIPT
@@ -30,6 +32,21 @@ assert _spec and _spec.loader
 pull = importlib.util.module_from_spec(_spec)
 sys.modules["sync_claude_pull_auto_register_dedup"] = pull
 _spec.loader.exec_module(pull)  # type: ignore[union-attr]
+
+# 0.2.1-W3-1149：auto_register_hooks 在 pull.yaml is None 時整函式靜默
+# no-op（提前 return 0），使本檔全部測試在缺 pyyaml 的環境下退化為假性
+# 綠燈（assert added == 0 恰巧通過）與假性紅燈（assert added == 1 誤判為
+# 邏輯缺陷，即本票原始診斷之誤判來源）。改用明確 skip 讓環境缺口在此
+# 立即可見，而非讓判斷邏輯背黑鍋。正確執行方式改用
+# `uv run --project .claude/scripts --group dev pytest .claude/scripts/tests/`
+# （依 .claude/scripts/pyproject.toml 宣告的 dev 依賴，恆含 pyyaml）。
+if pull.yaml is None:
+    pytest.skip(
+        "pyyaml 未安裝於此測試環境，auto_register_hooks 會靜默 no-op 導致"
+        "假性紅/綠燈。改用 `uv run --project .claude/scripts --group dev "
+        "pytest .claude/scripts/tests/` 執行。",
+        allow_module_level=True,
+    )
 
 
 def _write_json(path: Path, data: dict) -> None:

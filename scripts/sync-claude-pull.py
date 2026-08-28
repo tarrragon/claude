@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --quiet --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = ["pyyaml>=6.0"]
 # ///
 """
 .claude 資料夾同步腳本 - 從獨立 repo 拉取更新
@@ -762,6 +762,135 @@ def _git_merge_three_files(
         merged = result.stdout
         conflict = result.returncode != 0
         return merged, conflict
+
+
+def _detect_case_only_renames(delta: dict[str, str]) -> dict[str, str]:
+    """偵測 delta 中「純大小寫改名」的 D+A 配對。
+
+    compute_upstream_delta 用 --no-renames，使上游純大小寫改名（如
+    skill.md -> SKILL.md）拆為獨立的 D(舊路徑) + A(新路徑) 兩筆 delta。逐一
+    處理時，D 半邊以路徑字串構造 local_file，在大小寫不敏感檔案系統上會解析
+    到 A 半邊已寫入（或即將寫入）的同一實體檔案，導致誤刪。本函式在套用前找出
+    這類配對，使呼叫端能將其還原為單一 rename 操作處理，而非各自獨立套用。
+
+    判定條件（皆須成立）：
+      - 存在 D 狀態路徑 old 與 A 狀態路徑 new
+      - old.lower() == new.lower()（純大小寫差異，其餘字元相同）
+      - old != new（非同一路徑）
+      - 同一 lower() 對應恰好一個 D 與一個 A（模糊配對保守略過，交由原有
+        逐檔邏輯處理，避免誤配對到無關檔案）
+
+    參數:
+        delta: compute_upstream_delta 回傳的 {路徑: 狀態} 字典
+
+    傳回:
+        dict[str, str]: {新路徑（A 狀態）: 舊路徑（D 狀態）}
+    """
+    by_lower: dict[str, dict[str, list[str]]] = {}
+    for path, status in delta.items():
+        if status not in ("A", "D"):
+            continue
+        bucket = by_lower.setdefault(path.lower(), {"A": [], "D": []})
+        bucket[status].append(path)
+
+    renames: dict[str, str] = {}
+    for bucket in by_lower.values():
+        a_paths, d_paths = bucket["A"], bucket["D"]
+        if len(a_paths) == 1 and len(d_paths) == 1 and a_paths[0] != d_paths[0]:
+            renames[a_paths[0]] = d_paths[0]
+    return renames
+
+
+def _find_case_variant_dirent(parent: Path, filename: str) -> str | None:
+    """在 parent 目錄以 os.scandir 尋找與 filename 大小寫不敏感相符的真實檔名。
+
+    只用 os.scandir 讀取真實 dirent，不用 Path.exists()：Path.exists() 在
+    大小寫不敏感檔案系統上會依路徑字串「別名」解析到實際存在的另一大小寫
+    變體，使呼叫端誤判磁碟狀態；os.scandir 回傳的是目錄項本身的真實名稱，
+    不受檔案系統大小寫敏感度影響。
+
+    參數:
+        parent: 欲搜尋的目錄
+        filename: 欲比對的檔名（大小寫不敏感）
+
+    傳回:
+        str | None: 找到則回真實檔名（保留原始大小寫），不存在回 None
+    """
+    target_lower = filename.lower()
+    try:
+        with os.scandir(parent) as it:
+            for entry in it:
+                if entry.name.lower() == target_lower and entry.is_file():
+                    return entry.name
+    except FileNotFoundError:
+        return None
+    return None
+
+
+def _apply_case_rename_pair(
+    claude_dir: Path,
+    temp_dir: Path,
+    base_sha: str,
+    new_repo_rel: str,
+    old_repo_rel: str,
+    local_file: Path,
+    rollback_log: list,
+) -> tuple[int, str | None]:
+    """套用單一「純大小寫改名」配對。
+
+    以 old_repo_rel 讀 base 內容、new_repo_rel 讀 upstream 內容；本地內容以
+    _find_case_variant_dirent 取得的真實 dirent 讀取（不透過路徑字串
+    .exists()，避免大小寫不敏感檔案系統上的路徑別名誤判）。若真實 dirent
+    的大小寫與目標新路徑不同（case-sensitive 檔案系統尚未改名，或本地磁碟
+    落後於本次改名），先移除舊 dirent 再寫入新路徑，完成實際改名。
+
+    參數:
+        claude_dir: .claude 目錄路徑
+        temp_dir: 上游 repo clone 路徑
+        base_sha: base commit SHA
+        new_repo_rel: 新路徑（A 狀態，相對 repo root）
+        old_repo_rel: 舊路徑（D 狀態，相對 repo root）
+        local_file: 本地目標檔案路徑（claude_dir / 新路徑對應的相對路徑）
+        rollback_log: 原子寫入/刪除的回滾記錄（由呼叫端於失敗時統一回滾）
+
+    傳回:
+        tuple[int, str | None]: (套用成功數 0 或 1, 衝突時的 claude_rel 或
+            None)
+    """
+    base_content = _read_upstream_blob(temp_dir, base_sha, old_repo_rel)
+    upstream_path = temp_dir / new_repo_rel
+
+    real_name = _find_case_variant_dirent(local_file.parent, local_file.name)
+    real_local_path = local_file.parent / real_name if real_name else None
+    local_deleted = real_local_path is None and base_content is not None
+
+    merged, conflict = three_way_merge_file(
+        base_content=base_content,
+        local_path=real_local_path,
+        upstream_path=upstream_path,
+        local_deleted=local_deleted,
+    )
+
+    claude_rel = str(local_file.relative_to(claude_dir))
+
+    if conflict:
+        conflicts_dir = _ensure_conflicts_dir(claude_dir)
+        conflict_target = conflicts_dir / claude_rel
+        conflict_target.parent.mkdir(parents=True, exist_ok=True)
+        conflict_target.write_bytes(merged if merged is not None else b"")
+        return 0, claude_rel
+
+    if merged is None:
+        # 本地已刪除（新舊大小寫皆不存在於磁碟）：無需動作
+        return 0, None
+
+    # 舊 dirent 仍以不同大小寫存在（case-sensitive 檔案系統尚未改名，或本地
+    # 磁碟落後於本次改名）：先移除舊 dirent 再寫入新路徑，完成實際改名。
+    if real_local_path is not None and real_local_path.name != local_file.name:
+        _atomic_remove(real_local_path, rollback_log)
+
+    _atomic_write(local_file, merged, rollback_log)
+    return 1, None
 
 
 def should_use_full_overlay(claude_dir: Path, base_reachable: bool) -> bool:
@@ -1692,6 +1821,10 @@ def apply_upstream_delta(
     claude_dir = project_root / ".claude"
     # 上游獨立 repo 的 root 直接對應本地 .claude/（repo 無 .claude/ 前綴）
     delta = compute_upstream_delta(temp_dir, base_sha)
+    # 純大小寫改名配對（{新路徑: 舊路徑}）：D+A 兩筆 delta 還原為單一 rename
+    # 操作處理，避免舊路徑半邊在大小寫不敏感檔案系統上誤刪新路徑半邊的實體檔。
+    case_renames = _detect_case_only_renames(delta)
+    case_rename_old_paths = set(case_renames.values())
 
     applied = 0
     conflicts: list[str] = []
@@ -1704,6 +1837,11 @@ def apply_upstream_delta(
 
     try:
         for repo_rel, status in sorted(delta.items()):
+            if repo_rel in case_rename_old_paths:
+                # 純大小寫改名的舊路徑半邊，改由新路徑半邊統一處理（見下方
+                # case_renames 分支），此處單獨略過避免路徑別名誤刪。
+                continue
+
             # 瑕疵 D：error-patterns PC 檔在套用前先偵測撞號 / dedup / 重編號。
             # 僅對 A/M（上游新增或修改）的 PC 檔生效；D（上游刪除）不改名。
             if status in ("A", "M"):
@@ -1749,6 +1887,24 @@ def apply_upstream_delta(
                     continue
 
             local_file = claude_dir / rel_path
+
+            if repo_rel in case_renames:
+                # 純大小寫改名的新路徑半邊：以真實 dirent 讀取本地內容，
+                # 統一還原為單一 rename 操作，不落入下方路徑字串判斷。
+                applied_n, conflict_rel = _apply_case_rename_pair(
+                    claude_dir, temp_dir, base_sha,
+                    repo_rel, case_renames[repo_rel],
+                    local_file, rollback_log,
+                )
+                applied += applied_n
+                if conflict_rel is not None:
+                    conflicts.append(conflict_rel)
+                    print_color(
+                        f"   衝突: {conflict_rel}（已存 {SYNC_CONFLICTS_DIR}/，本地原檔保留）",
+                        "red",
+                    )
+                continue
+
             local_exists = local_file.exists()
             # 本地刪除：上游有但本地無，且 base 有（曾存在後被本地刪除）
             base_content = _read_upstream_blob(temp_dir, base_sha, repo_rel)
@@ -2119,19 +2275,7 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
     reverse_orphans = compute_reverse_orphan_candidates(
         claude_dir, temp_dir, preserve
     )
-    if reverse_orphans:
-        # 2026-08：曾以 yellow + 「提醒」呈現，讀來像常規版本差異提示；此訊號
-        # 字面意義是「上游有、本地此刻缺漏」，可能正是資料被非預期刪除的直接
-        # 證據（P0 事故的兩則被弱化訊號之一），改用 red + 「警示」不讓其被排版
-        # 弱化為與新增/更新同級的例行清單差異。
-        print_color(f"   [警示] {len(reverse_orphans)} 個上游檔案本地缺漏:", "red")  # i18n-exempt
-        for rel in reverse_orphans:
-            print_color(f"   + {rel}")
-        print_color(  # i18n-exempt
-            "   這些檔案存在於上游但同步後本地仍缺漏，可能為排除設定所致，"
-            "亦可能為非預期刪除（如剛完成的同步過程本身刪除了它們），請立即確認。",
-            "red",
-        )
+    _print_reverse_orphans(claude_dir, reverse_orphans)
 
     # W3-165（IMP-BAL-002 根本修復第二項）：有未解衝突時不推進 base SHA，
     # 對齊 git merge 語意——衝突未解則 HEAD 不動。base 停留舊點使下次 pull
@@ -2402,6 +2546,14 @@ def compute_reverse_orphan_candidates(
     過濾規則與正向一致：排除 preserve 清單與 should_exclude 範圍內的檔案，
     避免刻意不同步的檔案被誤列為遺漏。
 
+    判準精確地只讀「集合差集」：collect_remote_files 回傳的是逐段大小寫敏感
+    的相對路徑字串集合，故本函式的結論只代表「本地找不到與上游路徑逐字元
+    相同的 dirent」，不代表「本地磁碟完全沒有對應內容」——上游為 SKILL.md
+    而本地磁碟有 skill.md 時，兩者被視為不同元素而回傳為反向孤兒。呼叫端
+    若要區分「真缺漏」與「僅大小寫不同」，須另呼叫
+    _classify_reverse_orphans_by_case 對本函式的回傳結果分類，不可直接以
+    此函式的回傳值等同「本地遺漏」下結論或建議操作。
+
     參數:
         claude_dir: 本地 .claude 目錄路徑
         upstream_dir: 上游 repo clone 路徑（其 root 對應本地 .claude/）
@@ -2421,6 +2573,89 @@ def compute_reverse_orphan_candidates(
             continue
         reverse_orphans.append(rel_str)
     return sorted(reverse_orphans)
+
+
+def _classify_reverse_orphans_by_case(
+    claude_dir: Path, reverse_orphans: list[str]
+) -> tuple[list[str], list[tuple[str, str]]]:
+    """將反向孤兒候選依「本地是否存在僅大小寫不同的真實 dirent」分類。
+
+    compute_reverse_orphan_candidates 的判準是逐字元集合差集（見該函式
+    docstring），故候選清單裡混有兩種完全不同的情況：本地真的沒有對應內容
+    （genuinely_missing），以及本地其實有內容、只是檔名大小寫與上游不同
+    （case_variant_pairs）。後者若比照前者建議刪除/補齊，會把已完成的大小寫
+    修復抵銷（實證見票面 Problem Analysis）。
+
+    只用 _find_case_variant_dirent（os.scandir 讀真實 dirent）判定，不使用
+    Path.exists()，與三方合併路徑的大小寫判定共用同一組工具函式。
+
+    參數:
+        claude_dir: 本地 .claude 目錄路徑
+        reverse_orphans: compute_reverse_orphan_candidates 的回傳清單
+
+    傳回:
+        tuple[list[str], list[tuple[str, str]]]:
+          (genuinely_missing, case_variant_pairs)
+          genuinely_missing: 本地同目錄內找不到任何大小寫變體的候選（真缺漏）
+          case_variant_pairs: [(上游路徑, 本地真實 dirent 相對路徑)]
+    """
+    genuinely_missing: list[str] = []
+    case_variant_pairs: list[tuple[str, str]] = []
+    for rel_str in reverse_orphans:
+        rel_path = Path(rel_str)
+        local_dir = claude_dir / rel_path.parent
+        real_name = _find_case_variant_dirent(local_dir, rel_path.name)
+        if real_name is None:
+            genuinely_missing.append(rel_str)
+        else:
+            local_rel = str(rel_path.parent / real_name).replace("\\", "/")
+            case_variant_pairs.append((rel_str, local_rel))
+    return genuinely_missing, case_variant_pairs
+
+
+def _print_reverse_orphans(claude_dir: Path, reverse_orphans: list[str]) -> None:
+    """輸出反向孤兒結果：先依大小寫分類，真缺漏維持警示措辭，大小寫變體改述。
+
+    真缺漏（genuinely_missing）措辭不變（見 compute_reverse_orphan_candidates
+    呼叫端沿革：曾以 yellow + 「提醒」呈現，讀來像常規版本差異提示；此訊號
+    字面意義是「上游有、本地此刻缺漏」，可能正是資料被非預期刪除的直接
+    證據，改用 red + 「警示」不讓其被排版弱化為與新增/更新同級的例行清單
+    差異）。
+
+    大小寫變體（case_variant_pairs）不建議補齊：判準讀的是逐字元集合差集
+    （見 compute_reverse_orphan_candidates docstring），對這組候選而言「本地
+    缺漏」的結論本身不成立——本地確有內容，補齊會在該檔案系統上覆蓋既有的
+    大小寫修復（IMP-BAL-017：措辭須複述判準實際讀的東西，不複述它想代表的
+    東西）。
+
+    參數:
+        claude_dir: 本地 .claude 目錄路徑
+        reverse_orphans: compute_reverse_orphan_candidates 的回傳清單
+    """
+    if not reverse_orphans:
+        return
+    genuinely_missing, case_variant_pairs = _classify_reverse_orphans_by_case(
+        claude_dir, reverse_orphans
+    )
+    if genuinely_missing:
+        print_color(  # i18n-exempt
+            f"   [警示] {len(genuinely_missing)} 個上游檔案本地缺漏:", "red"
+        )
+        for rel in genuinely_missing:
+            print_color(f"   + {rel}")
+        print_color(  # i18n-exempt
+            "   這些檔案存在於上游但同步後本地仍缺漏，可能為排除設定所致，"
+            "亦可能為非預期刪除（如剛完成的同步過程本身刪除了它們），請立即確認。",
+            "red",
+        )
+    if case_variant_pairs:
+        print_color(  # i18n-exempt
+            f"   {len(case_variant_pairs)} 個檔案僅本地與上游大小寫不一致"
+            "（非缺漏，不建議補齊——若近期執行過大小寫修復，補齊會抵銷該修復）:",
+            "yellow",
+        )
+        for upstream_rel, local_rel in case_variant_pairs:
+            print_color(f"   ~ 上游: {upstream_rel}｜本地: {local_rel}")
 
 
 def _list_base_files(temp_dir: Path, base_sha: str) -> set[str] | None:
@@ -2548,13 +2783,49 @@ def _print_orphan_audit(
     _print_orphan_split(orphans, base_files)
 
 
+def detect_pending_case_renames(temp_dir: Path, base_sha: str) -> list[str]:
+    """列出 base..HEAD 之間待套用的純大小寫改名，唯讀不套用（自檢用）。
+
+    只呼叫 compute_upstream_delta + _detect_case_only_renames，不套用任何
+    變更、不寫入本地檔案。回傳偵測到的新路徑（A 狀態）清單。
+
+    涵蓋範圍（僅涵蓋此一項，非通用「同步刪除風險」全稽核）：
+
+    涵蓋：base..upstream 之間 --no-renames 可偵測的純大小寫改名（內容不變、
+    僅路徑大小寫不同的 D+A 配對）。apply_upstream_delta 已修復此路徑的套用
+    邏輯，此函式回傳非空清單代表「下次 pull 會安全套用這些改名」，非「有
+    刪除風險」——風險已在套用邏輯層消除，此處純粹提供變更可見度。
+
+    不涵蓋：
+      (a) cleanup_stale_files 全量 overlay 路徑的 index/disk/upstream 三方
+          大小寫不一致風險（該路徑已由 _is_git_tracked 的大小寫不敏感
+          fallback 機制與獨立回歸測試矩陣涵蓋，非本函式職責）；
+      (b) 改名同時內容也變更的一般 rename（--no-renames 下退化為獨立
+          D/A，不落在本函式「純大小寫」判定式範圍內，交由既有逐檔三方
+          合併處理，不需要、也不會被本函式偵測）；
+      (c) 目錄層級的大小寫改名（本函式僅比對檔案路徑字串，不展開目錄樹
+          做遞迴比對）。
+
+    參數:
+        temp_dir: 上游 repo clone 路徑
+        base_sha: base commit SHA
+
+    傳回:
+        list[str]: 偵測到的純大小寫改名新路徑（排序），無則為空清單
+    """
+    delta = compute_upstream_delta(temp_dir, base_sha)
+    return sorted(_detect_case_only_renames(delta))
+
+
 def run_audit() -> None:  # i18n-exempt
     """sync-pull --audit：唯讀稽核正反向孤兒候選（不動同步主流程）。
 
     clone 上游 → 計算正向孤兒（本地有上游無）與反向孤兒（上游有本地無）
     → 若 base sha 可達，依三方合併規則將正向孤兒分為「將被刪除」與
     「將保留」；base sha 缺失或不可達則明示無法預測刪除，降級為現行
-    單一清單（0.2.1-W3-146：不可讓空集合靜默通過造成假預覽）。
+    單一清單（0.2.1-W3-146：不可讓空集合靜默通過造成假預覽）。另列出
+    base..HEAD 之間待套用的純大小寫改名（資訊性，見
+    detect_pending_case_renames 涵蓋範圍說明）。
     stdout 列出（非阻擋提醒）。不寫入任何本地檔，不更新 base SHA，純唯讀分支。
     """
     print_color("孤兒稽核：比對本地 .claude/ 與上游 HEAD...", "yellow")  # i18n-exempt
@@ -2570,6 +2841,9 @@ def run_audit() -> None:  # i18n-exempt
         )
         base_sha = read_base_sha(claude_dir)
         base_files = _list_base_files(temp_dir, base_sha) if base_sha else None
+        pending_renames = (
+            detect_pending_case_renames(temp_dir, base_sha) if base_sha else []
+        )
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -2580,16 +2854,23 @@ def run_audit() -> None:  # i18n-exempt
             "   無反向孤兒（本地 .claude/ 涵蓋上游 HEAD 所有檔案）", "green"
         )
     else:
+        _print_reverse_orphans(claude_dir, reverse_orphans)
+
+    if pending_renames:
         print_color(  # i18n-exempt
-            f"   {len(reverse_orphans)} 個上游有本地無之檔（反向孤兒候選）:",
+            f"   {len(pending_renames)} 個待套用的純大小寫改名"
+            "（下次 pull 會安全套用，資訊性列出）:",
             "yellow",
         )
-        for rel in reverse_orphans:
-            print_color(f"   + {rel}")
-        print_color(  # i18n-exempt
-            "   這些檔案存在於上游但本地缺漏，可能需要 sync-pull 補齊。",
-            "yellow",
-        )
+        for rel in pending_renames:
+            print_color(f"   ~ {rel}")
+    print_color(  # i18n-exempt
+        "   [自檢涵蓋範圍] 純大小寫改名項僅涵蓋 base..upstream 的路徑層純"
+        "大小寫差異；不涵蓋 index/disk/upstream 三方大小寫不一致（已由"
+        "_is_git_tracked fallback 涵蓋）、內容同時變更的改名、目錄層級改名。"
+        "詳見 detect_pending_case_renames 文件字串。",
+        "yellow",
+    )
 
 
 def verify_hook_imports(project_root: Path) -> int:
