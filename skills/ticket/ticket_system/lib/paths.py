@@ -250,7 +250,7 @@ def get_tickets_dir_under_root(root: Path, version: str) -> Path:
 
 def get_tickets_dir(version: str) -> Path:
     """
-    取得 Tickets 目錄路徑（呼叫端自身所在 worktree 的 tickets 目錄）
+    取得 Tickets 目錄路徑（ticket 狀態根目錄下的 tickets 目錄）
 
     支援階層式目錄結構：docs/work-logs/v{major}/v{major}.{minor}/v{version}/tickets/
 
@@ -265,7 +265,7 @@ def get_tickets_dir(version: str) -> Path:
         >>> tickets_dir.name
         'tickets'
     """
-    return get_tickets_dir_under_root(get_project_root(), version)
+    return get_tickets_dir_under_root(get_ticket_state_root(), version)
 
 
 def get_git_common_dir(cwd: Optional[Path] = None) -> Optional[Path]:
@@ -305,6 +305,65 @@ def get_git_common_dir(cwd: Optional[Path] = None) -> Optional[Path]:
         base = cwd if cwd is not None else Path.cwd()
         common_dir = base / common_dir
     return common_dir.resolve()
+
+
+def get_ticket_state_root() -> Path:
+    """
+    取得 ticket 狀態操作（read/write ticket md、claim/append-log/set-acceptance
+    等）應使用的根目錄。
+
+    與 get_project_root() 的差異僅在 linked worktree 場景：get_project_root()
+    優先回傳呼叫端自己所在 worktree 的根目錄（供程式碼/測試隔離使用）；本函式
+    則反向回推「主倉庫」根目錄，使 ticket 狀態統一寫入單一位置。
+
+    Why：ticket CLI 為 cwd-resolving shim，若 ticket 狀態沿用 get_project_root()
+    的 worktree 感知，多個 worktree 隔離的 agent 各自把票面寫入自己的 worktree
+    分支，PM 在主倉庫看不到最新狀態（觀察性失效），且 body 內容不會隨 worktree
+    分支合併帶回主倉庫（受控實驗實測：並行派發的 worktree agent 全數出現票面
+    分裂）。統一寫入主倉庫消除此分裂——單一事實來源。
+
+    此函式僅影響 ticket 狀態的 root 解析（get_tickets_dir / get_ticket_path
+    的呼叫鏈）；`ticket track commit`（程式碼提交）維持 resolve_project_cwd
+    的原 worktree 感知行為不變，程式碼隔離不受影響。
+
+    Returns:
+        Path: linked worktree 場景回傳主倉庫根目錄（git-common-dir 的父目錄）；
+            其餘場景委派 get_project_root()（含 CLAUDE_PROJECT_DIR、
+            git rev-parse --show-toplevel、marker 搜尋、cwd fallback）。
+
+    Examples:
+        >>> root = get_ticket_state_root()
+        >>> (root / "CLAUDE.md").exists() or (root / "go.mod").exists() or (root / "pubspec.yaml").exists()
+        True
+    """
+    # 1. worktree 感知（與 get_project_root() 方向相反）：偵測到 linked
+    #    worktree 時，回推主倉庫根目錄而非 worktree 自己的根目錄。
+    #    非 worktree 場景一律委派 get_project_root()（步驟 2），使既有呼叫端
+    #    對 get_project_root() 的 mock／CLAUDE_PROJECT_DIR 設定原樣生效
+    #    ——本函式不重複 get_project_root() 的解析鏈，只在偵測到 worktree
+    #    時才插入不同分支。
+    if _linked_worktree_root() is not None:
+        # 測試隔離逃生艙：僅在確實偵測到 worktree 時才需要考慮——pytest 本身
+        # 若在 git linked worktree 內執行（如 .claude/worktrees/agent-*），
+        # 下方 git-common-dir 回推會蓋過測試刻意注入的 CLAUDE_PROJECT_DIR
+        # 隔離（get_project_root() 曾因同型風險洩漏測試治具的 ticket 檔案至
+        # 真實 worktree，故沿用同一優先序修復方式）。非 worktree 場景不受
+        # 此分支影響，讓步驟 2 委派 get_project_root() 走其自身逃生艙。
+        if os.environ.get("TICKET_SYSTEM_TEST_ISOLATION") == "1":
+            isolated_dir = os.environ.get("CLAUDE_PROJECT_DIR")
+            if isolated_dir:
+                return Path(isolated_dir)
+
+        # git-common-dir 是主倉庫的 .git 目錄本身（主 repo 與任一 linked
+        # worktree 呼叫皆回傳同一絕對路徑，見 get_git_common_dir docstring），
+        # 其父目錄即主倉庫根目錄。
+        common_dir = get_git_common_dir()
+        if common_dir is not None:
+            return common_dir.parent
+
+    # 2. 非 worktree（或 git-common-dir 無法解析時的降級）：委派
+    #    get_project_root() 既有解析鏈，行為與其一致。
+    return get_project_root()
 
 
 def get_ticket_path(version: str, ticket_id: str) -> Path:

@@ -3,7 +3,8 @@ Test: bare-commit-guard-hook（0.2.1-W3-277，源自 0.2.1-W3-276 ANA 裁決；
 0.2.1-W3-725 修正 pathspec/--only/-o 不再無條件豁免；0.2.1-W3-702 /
 0.2.1-W3-381 修正 payload（heredoc 本體 / 引號字串）內文被誤判為真實
 命令與旗標；0.2.1-W3-708 命令解析改採 `.claude/lib/git_command_parse.py`
-的 argv 結構解析，取代自維護的字串前處理）
+的 argv 結構解析，取代自維護的字串前處理；0.2.1-W3-1176 修正單筆空
+files 派發記錄使不相交放行路徑對所有人失效）
 
 驗證項目：
 1. _contains_git_word：便宜前置判斷（含獨立 'git' 字樣即進入完整解析）
@@ -30,9 +31,12 @@ Test: bare-commit-guard-hook（0.2.1-W3-277，源自 0.2.1-W3-276 ANA 裁決；
 6. 0.2.1-W3-276 回測樣本重放（acceptance #4）：3 筆真實事故案例（並行期裸
    commit，staged 範圍無派發宣告可比對）+ 3 筆代表性無害案例（非並行期
    PM 統一收尾裸 commit）重放，驗證判定方向正確
+7. 空 files 派發記錄（0.2.1-W3-1176）：單筆或多筆派發 files 為空時不再
+   使整條不相交放行路徑失效（計算聯集時排除空宣告）；全數派發皆空時
+   聯集為空集合仍視為安全；存在空宣告時經 logger 發出 warning（可觀測性）
 
 Source: ticket 0.2.1-W3-277（來源 ANA 0.2.1-W3-276）、0.2.1-W3-725、
-0.2.1-W3-702、0.2.1-W3-381、0.2.1-W3-708
+0.2.1-W3-702、0.2.1-W3-381、0.2.1-W3-708、0.2.1-W3-1176
 """
 
 import io
@@ -213,11 +217,38 @@ class TestStagedScopeIsSafeForBareCommit:
     def test_no_dispatches_with_staged_files_is_unsafe(self):
         assert _staged_scope_is_safe_for_bare_commit(["a.py"], []) is False
 
-    def test_dispatch_with_empty_files_never_matches(self):
-        """派發 files 欄位為空（ticket_id 無法解析）時不構成安全區——子集
-        路徑與不相交路徑皆不成立（不相交路徑要求所有派發 files 皆非空）。"""
+    def test_dispatch_with_empty_files_declares_no_territory(self):
+        """派發 files 欄位為空（ticket_id 無法解析）時不構成任何領地，計算
+        不相交聯集時排除，不再使整條不相交路徑失效（修正舊版判定：舊版把
+        單筆空宣告等同於「必須阻擋」，但空宣告本身與 staged 內容無關）。"""
         dispatches = [_dispatch("T-1", [])]
-        assert _staged_scope_is_safe_for_bare_commit(["a.py"], dispatches) is False
+        assert _staged_scope_is_safe_for_bare_commit(["a.py"], dispatches) is True
+
+    def test_all_dispatches_with_empty_files_is_safe(self):
+        """所有活躍派發的 files 皆為空時，已宣告範圍聯集為空集合，staged
+        內容對空集合恆為不相交，視為安全（同一原則的自然延伸）。"""
+        dispatches = [_dispatch("T-1", []), _dispatch("T-2", [])]
+        assert _staged_scope_is_safe_for_bare_commit(["a.py"], dispatches) is True
+
+    def test_empty_files_dispatch_warns_via_logger(self):
+        """存在空 files 派發記錄時，若傳入 logger，應發出 warning（可觀測
+        性；記錄本身不因此從 dispatch-active.json 移除，僅範圍判定排除）。"""
+
+        class _RecordingLogger:
+            def __init__(self):
+                self.warnings = []
+
+            def warning(self, msg, *args):
+                self.warnings.append(msg % args if args else msg)
+
+        logger = _RecordingLogger()
+        dispatches = [_dispatch("T-1", ["a.py"]), _dispatch("T-2", [])]
+        assert (
+            _staged_scope_is_safe_for_bare_commit(["z.py"], dispatches, logger=logger)
+            is True
+        )
+        assert len(logger.warnings) == 1
+        assert "1" in logger.warnings[0]
 
     def test_partial_overlap_with_single_dispatch_is_unsafe(self):
         """staged 部分與派發宣告重疊、部分不在其中：非子集，也非不相交。"""
@@ -229,10 +260,14 @@ class TestStagedScopeIsSafeForBareCommit:
         dispatches = [_dispatch("T-1", ["a.py"]), _dispatch("T-2", ["b.py"])]
         assert _staged_scope_is_safe_for_bare_commit(["z.py"], dispatches) is True
 
-    def test_one_dispatch_with_empty_files_blocks_disjoint_path(self):
-        """多個派發中有一個 files 為空時，不相交路徑無法驗證，維持不安全。"""
+    def test_one_dispatch_with_empty_files_does_not_block_disjoint_path(self):
+        """多個派發中有一個 files 為空時，不相交路徑僅用有宣告範圍的派發
+        驗證（排除空宣告），staged 與有效宣告仍不相交則放行（修正舊版：
+        單筆空宣告不應使整條不相交路徑對其他有效宣告的比對全面失效——
+        對應真實事故：code-review 型派發 ticket_id 無法解析、files 為
+        空，導致與其他有效宣告完全不相交的正常提交被誤擋）。"""
         dispatches = [_dispatch("T-1", ["a.py"]), _dispatch("T-2", [])]
-        assert _staged_scope_is_safe_for_bare_commit(["z.py"], dispatches) is False
+        assert _staged_scope_is_safe_for_bare_commit(["z.py"], dispatches) is True
 
 
 # ============================================================================

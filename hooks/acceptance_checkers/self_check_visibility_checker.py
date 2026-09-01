@@ -1,26 +1,30 @@
 """
 Self-Check Visibility Checker - Layer 1 自檢可觀測性檢查（W17-064）
 
-W17-064：偵測 IMP/ANA/DOC ticket 的 Solution 章節是否含 `### 自檢結果` 子章節。
+W17-064：偵測 IMP/ANA ticket 的 Solution 章節是否含 `### 自檢結果` 子章節。
 若缺少則輸出 warning（不阻擋 complete），提示代理人執行 Layer 1 自檢
 （依 `.claude/references/agent-self-check-template.md`）。
 
 設計依據（Hook 行為 / 觸發範圍 / 豁免機制三維度決策）：
 - Hook 行為：B warning only（exit 0 + stderr，不阻擋 complete）
-- 觸發範圍：全 IMP/ANA/DOC type；非適用 type 直接 return None
-- 豁免機制：不需要（warning 已是最低強度）
+- 觸發範圍：IMP/ANA type；非適用 type（含 DOC）直接 return None
+- 豁免機制：DOC 沿用免填規則，口徑對齊 gate 阻擋層
+  `ticket_validator.py` 的 `_SELF_CHECK_GATE_TYPES`（該常數註解載有 DOC
+  豁免依據的歷史決策）；本檔警告層原含 DOC，與 gate 層口徑不一致，故收斂
 
 設計要點：
 - 不阻擋（僅警告）：對 PM + agent 的可見訊號，落實 Layer 1 自檢落地。
 - 範圍精準：僅檢查 `## Solution` 章節下的 `### 自檢結果`，不掃描整個 body。
-- type 過濾：非 IMP/ANA/DOC（如 TST/RES/INV/ADJ）直接跳過。
+- type 過濾：非 IMP/ANA（含 DOC、TST/RES/INV/ADJ）直接跳過。
 """
 
 import re
 from typing import Optional
 
 # 觸發 Layer 1 自檢檢查的 ticket type 集合
-_APPLICABLE_TYPES = {"IMP", "ANA", "DOC"}
+# DOC 沿用免填規則，口徑對齊 gate 層 ticket_validator.py 的
+# _SELF_CHECK_GATE_TYPES（該常數註解載有 DOC 豁免依據的歷史決策）
+_APPLICABLE_TYPES = {"IMP", "ANA"}
 
 # 自檢結果子章節標題（H3）
 _SELF_CHECK_HEADING = "自檢結果"
@@ -101,7 +105,7 @@ def check_self_check_visibility(
         warning 訊息字串（非 None 時表示違規）；若靜默通過或不適用則 None。
 
     觸發條件：
-        - ticket_type 屬於 IMP/ANA/DOC，且
+        - ticket_type 屬於 IMP/ANA（DOC 豁免，口徑對齊 gate 阻擋層），且
         - body 含 `## Solution` 章節，且
         - Solution 下無 `### 自檢結果` 子章節
 
@@ -112,7 +116,7 @@ def check_self_check_visibility(
     """
     type_upper = (ticket_type or "").upper()
     if type_upper not in _APPLICABLE_TYPES:
-        logger.debug(f"ticket type={type_upper} 非 IMP/ANA/DOC，跳過 Layer 1 自檢檢查")
+        logger.debug(f"ticket type={type_upper} 非 IMP/ANA（含 DOC 豁免），跳過 Layer 1 自檢檢查")
         return None
 
     body = _strip_frontmatter(content)
@@ -130,7 +134,7 @@ def check_self_check_visibility(
     logger.info(f"ticket type={type_upper} 的 Solution 缺 ### 自檢結果 子章節，輸出 warning")
     return (
         "[Layer 1 自檢可觀測性] Solution 中未見 ### 自檢結果 子章節（W17-064）\n"
-        "依 `.claude/references/agent-self-check-template.md`，IMP/ANA/DOC ticket 完成前\n"
+        "依 `.claude/references/agent-self-check-template.md`，IMP/ANA ticket 完成前\n"
         "建議於 `## Solution` 下新增 `### 自檢結果` 子章節，記錄 Layer 1 自檢清單檢視結果。\n"
         "本檢查為 warning（不阻擋 complete），目的為提升自檢流程可觀測性。"
     )

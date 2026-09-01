@@ -33,11 +33,16 @@
 行內 marker 逃生閥：
   語法：`rule8-exempt: <category>:<reason>`（跨檔案類型通用語法，不綁
   HTML comment 或 Python 註解符號）。生效範圍為 marker 所在行及其下一行
-  （逐行生效，非整檔放行）。合法 category 僅兩類：
+  （逐行生效，非整檔放行）。合法 category 共三類：
     - testdata     — 守衛或工具自身 self-test 測資需真實 ID 形態
     - illustration — 規則/方法論正文示範 ID 形態，且不便置於 code fence
-  category 不在清單內，或 reason 為空，視為格式錯誤，仍阻擋（exit 2）
-  並在 stderr 分別指出錯誤項目，不與一般命中共用同一段訊息。
+    - relocation   — 既有內容的逐字位置搬移，reason 須含來源檔路徑
+      （形如「自 <來源檔路徑> 逐字搬移」）。僅限逐字位置搬移，內容有
+      任何編修即不適用——本類別的可驗證性正來自「搬移後內容與來源
+      段落逐字一致、可 diff 比對」，編修後即失去此基準
+  category 不在清單內、reason 為空，或 relocation 類別的 reason 缺來源檔
+  路徑，視為格式錯誤，仍阻擋（exit 2）並在 stderr 分別指出錯誤項目，
+  不與一般命中共用同一段訊息。
 
 觸發時機: PreToolUse Edit / Write / MultiEdit
 掃描範圍: 目標檔案路徑位於 `.claude/` 下，且不在 `.claude/handoff/archive/`
@@ -119,7 +124,13 @@ CODE_FENCE_PATTERN = re.compile(r"```.*?```", re.DOTALL)
 
 # 行內 marker 逃生閥：`rule8-exempt: <category>:<reason>`
 MARKER_PATTERN = re.compile(r"rule8-exempt:\s*([A-Za-z_]+):(.*)")
-VALID_MARKER_CATEGORIES = frozenset({"testdata", "illustration"})
+VALID_MARKER_CATEGORIES = frozenset({"testdata", "illustration", "relocation"})
+
+# relocation 類別專屬：reason 須含來源檔路徑（帶副檔名的路徑片段，如
+# ".claude/pm-rules/parallel-dispatch.md"），供判斷「是否確實指出搬移來源」
+RELOCATION_SOURCE_PATH_PATTERN = re.compile(
+    r"\S+\.(?:md|py|dart|ya?ml|json|txt|svg)\b"
+)
 
 
 def normalize_relpath(file_path: str) -> Optional[str]:
@@ -328,7 +339,7 @@ def diff_new_hits(pre_text: str, post_text: str) -> List[str]:
 
 
 def build_marker_syntax_hint() -> str:
-    """組合 marker 逃生閥語法說明與兩個 category 的具體範例（訊息共用片段）。"""
+    """組合 marker 逃生閥語法說明與三個 category 的具體範例（訊息共用片段）。"""
     return (
         "逃生閥語法（同行或下一行皆可）：`rule8-exempt: <category>:<reason>`\n"
         "合法 category：\n"
@@ -336,6 +347,8 @@ def build_marker_syntax_hint() -> str:
         "                rule8-exempt: testdata:self-test 存量凍結案例需真實 ID 形態\n"
         "  illustration — 規則/方法論正文示範 ID 形態，且不便置於 code fence，例：\n"
         "                rule8-exempt: illustration:規則 8 主表展示裸格式與版本化格式差異\n"
+        "  relocation  — 既有內容的逐字位置搬移，reason 須含來源檔路徑，例：\n"
+        "                rule8-exempt: relocation:自 .claude/pm-rules/parallel-dispatch.md 逐字搬移\n"
     )
 
 
@@ -367,9 +380,20 @@ def build_marker_format_error_message(
     line_no = line_idx + 1
     problems = []
     if category not in VALID_MARKER_CATEGORIES:
-        problems.append(f"category「{category}」不在合法清單（testdata / illustration）")
+        problems.append(
+            f"category「{category}」不在合法清單（testdata / illustration / relocation）"
+        )
     if not reason:
         problems.append("reason 為空（僅寫 category 視為無條件旁路，禁止）")
+    if (
+        category == "relocation"
+        and reason
+        and not RELOCATION_SOURCE_PATH_PATTERN.search(reason)
+    ):
+        problems.append(
+            "relocation 類別缺來源檔路徑（reason 須含帶副檔名的檔案路徑片段，"
+            "形如「自 <來源檔路徑> 逐字搬移」）"
+        )
     problem_text = "；".join(problems) if problems else "格式不符"
     return (
         f"[BLOCKED][reference-stability-rule8] marker 格式錯誤，仍阻擋（exit 2）："
@@ -380,7 +404,12 @@ def build_marker_format_error_message(
 
 
 def _find_marker_lines(post_text: str) -> Dict[int, Tuple[bool, str, str]]:
-    """逐行掃描 marker 語法，回傳 {行索引: (是否有效, category, reason)}。"""
+    """逐行掃描 marker 語法，回傳 {行索引: (是否有效, category, reason)}。
+
+    relocation 類別額外要求 reason 含來源檔路徑（RELOCATION_SOURCE_PATH_PATTERN）；
+    缺路徑時即使 category / reason 本身合法，仍判定整體無效（is_valid=False），
+    交由 build_marker_format_error_message 產生獨立的格式錯誤說明。
+    """
     marker_info: Dict[int, Tuple[bool, str, str]] = {}
     for idx, line in enumerate(post_text.split("\n")):
         match = MARKER_PATTERN.search(line)
@@ -389,6 +418,8 @@ def _find_marker_lines(post_text: str) -> Dict[int, Tuple[bool, str, str]]:
         category = match.group(1)
         reason = match.group(2).strip()
         is_valid = category in VALID_MARKER_CATEGORIES and bool(reason)
+        if is_valid and category == "relocation":
+            is_valid = bool(RELOCATION_SOURCE_PATH_PATTERN.search(reason))
         marker_info[idx] = (is_valid, category, reason)
     return marker_info
 
@@ -721,6 +752,36 @@ if __name__ == "__main__":
             failures.append("[FAIL] 空理由應產生格式錯誤並阻擋")
         else:
             print("[PASS] marker 空理由格式錯誤仍阻擋")
+
+        # marker 逃生閥：relocation 類別含來源檔路徑生效（同行 ID + marker）
+        marker_relocation_ok_text = (
+            "搬移段落引用（0.2.1-W3-781） rule8-exempt: relocation:自 .claude/pm-rules/parallel-dispatch.md 逐字搬移\n"
+        )
+        blocked_reloc_ok, errors_reloc_ok = filter_marker_exempt(
+            # rule8-exempt: testdata:self-test relocation 案例引數列表重複出現需真實 ID 形態
+            "dummy.md", marker_relocation_ok_text, ["0.2.1-W3-781", "W3-781"]
+        )
+        if blocked_reloc_ok or errors_reloc_ok:
+            failures.append(
+                f"[FAIL] relocation marker 含來源檔路徑應豁免，實際 "
+                f"blocked={blocked_reloc_ok} errors={len(errors_reloc_ok)}"
+            )
+        else:
+            print("[PASS] marker 逃生閥 relocation 類別含來源檔路徑生效")
+
+        # marker 格式錯誤：relocation 類別缺來源檔路徑仍阻擋
+        marker_relocation_missing_path_text = (
+            # rule8-exempt: testdata:self-test relocation 缺路徑案例需真實 ID 形態
+            "新增引用 0.2.1-W3-782 rule8-exempt: relocation:逐字搬移過來的\n"
+        )
+        blocked_reloc_missing, errors_reloc_missing = filter_marker_exempt(
+            # rule8-exempt: testdata:self-test relocation 缺路徑案例引數列表重複出現需真實 ID 形態
+            "dummy.md", marker_relocation_missing_path_text, ["0.2.1-W3-782", "W3-782"]
+        )
+        if not errors_reloc_missing:
+            failures.append("[FAIL] relocation 缺來源檔路徑應產生格式錯誤並阻擋")
+        else:
+            print("[PASS] marker relocation 缺來源檔路徑格式錯誤仍阻擋")
 
         if failures:
             print("\n".join(failures))

@@ -1,3 +1,25 @@
+## [2.44.0] - 2026-09-01
+
+### Summary
+feat: reference-stability-rule8-guard 新增 relocation 逃生閥類別; feat: 新增 get_ticket_state_root 使 worktree 內 ticket 狀態寫入主倉庫; fix: acceptance-gate-hook 步驟 8 self_check_warning 套用 chained-write 抑制 (+9 more)
+
+Changes: 2 feat, 5 fix, 3 docs, 2 chore
+
+- feat: reference-stability-rule8-guard 新增 relocation 逃生閥類別
+- feat: 新增 get_ticket_state_root 使 worktree 內 ticket 狀態寫入主倉庫
+- fix: acceptance-gate-hook 步驟 8 self_check_warning 套用 chained-write 抑制
+- fix: 收斂自檢 warning 層 type 範圍為 IMP/ANA，對齊 gate 層 DOC 豁免
+- fix: 依 Layer 2 審查修正 ARCH-BAL-013 第四例的事實錯誤與文字品質
+- fix: 修復 bare-commit-guard 空 files 派發記錄使不相交放行路徑失效
+- fix: 骨架瘦身修復 dispatch prompt 超出 length guard 30 行硬上限
+- docs: 外移叢集 B/C（Worktree 隔離、派發機制選用+idle 回收 SOP）至 references/
+- docs: 外移叢集 D 實驗器材治理至 references/，主文件 stub 化
+- docs: 補充 tool-output-trust 規則 5 的瞬時狀態維度
+- chore: 熱點取向定案後的票面補齊與 error-pattern 沉澱
+- chore: 推送 並回寫 VERSION
+
+---
+
 ## [2.43.6] - 2026-08-28
 
 ### Summary

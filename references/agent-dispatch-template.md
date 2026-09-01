@@ -16,7 +16,7 @@
 
 ## 骨架（權威版）
 
-> **用途**：PM 派發前最常用的中文對話式骨架（原稱「三段式快速填空骨架」，W17-048 方案 F）。把 context 寫入 ticket 後，直接複製以下骨架填三個空格即可派發。prompt 控制在 **10-15 行**，穩過 Hook 30 行上限。
+> **用途**：PM 派發前最常用的中文對話式骨架（原稱「三段式快速填空骨架」，W17-048 方案 F）。把 context 寫入 ticket 後，直接複製以下骨架填三個空格即可派發。骨架本體（`SKELETON_TEMPLATE_NORMAL`，不含 commit 制式句）約 10-15 行；`--commit-policy agent`（預設）另附精準 staging 短版指標句（約 6 行，26 行全文改冪等寫入票的「### Commit 規範」章節，見下方「精準 staging 制式句」節），完整輸出實測約 19-28 行（觸及 `.claude/hooks/` 之票另加 8 行提醒）。agent-prompt-length-guard 的 Layer 1 硬上限（30 行）**無任何豁免**——模板關鍵字只影響 Layer 2 軟提示（10-30 行缺關鍵字時的提示），不影響 Layer 1 判定；骨架實際行數與硬上限的綁定測試見 `.claude/hooks/tests/test_agent_prompt_length_guard_hook.py`。
 
 > **機制選擇前置（0.38.0-W2-002 ANA 落地）**：呼叫 `Agent(...)` 時**預設不帶 `name` 參數**（一般 subagent）。僅當任務符合「平行派發且 Agent A 的發現會改變 Agent B 正在進行的工作」（改用 Agent Teams）或「同 Wave 有 3+ 張同類型 ticket 且預期逐一派發」（named agent 可選續用）時才加 `name`。循序一次性任務、獨立分析/實作任務一律不帶 `name`。完整選用準則決策表見 `.claude/pm-rules/parallel-dispatch.md`「派發機制選用準則」章節。
 >
@@ -32,7 +32,7 @@
 > ticket track dispatch {ticket_id} --as {agent_name}
 > ```
 >
-> 需落票約束時加 `--note "..."`（寫入票的「派發日誌」章節）；審查派發改 `--kind review`（輸出不含認領/收尾的審查骨架，改用審查標的/視角/裁決問題/回報格式四欄）。指令輸出即可直接複製貼入 `Agent(...)` prompt。同步保護：`.claude/hooks/tests/test_agent_prompt_length_guard_hook.py` 的 CLI 骨架同步測試驗證骨架常數與 length-guard hook 的模板關鍵字同步，兩者漂移時測試失敗。
+> 需落票約束時加 `--note "..."`（寫入票的「派發日誌」章節）；審查派發改 `--kind review`（輸出不含認領/收尾的審查骨架，改用審查標的/視角/裁決問題/回報格式四欄）。指令輸出即可直接複製貼入 `Agent(...)` prompt。同步保護（`.claude/hooks/tests/test_agent_prompt_length_guard_hook.py`）涵蓋兩個獨立維度，缺一不足：(1) 骨架常數是否仍命中 length-guard hook 的模板關鍵字（僅影響 Layer 2 軟提示）；(2) 骨架**實際組裝後的行數**（含 `--commit-policy agent` 短版指標句、觸及 hooks 目錄票的額外提醒）是否仍 <= PROMPT_LINE_LIMIT（Layer 1 硬上限，無豁免）——(2) 是骨架曾實際成長至 39-48 行、逐字貼入被 Layer 1 阻擋兩次後才補上的維度，任一維度漂移即測試失敗。
 
 > **claim 行必帶 `--as {agent_name}`**（派發身份前移，W5-005 F1a）：dispatch hook 已在派發時對無主票綁定 who.current，此行是 agent 端對稱綁定與 hook 失效 fallback；缺 `--as` 的裸 claim 不寫 who.current，收尾 `complete --as` 會因身份不符需 set-who 繞道。
 
@@ -117,7 +117,7 @@ Ticket: 0.18.0-W17-048.3
 - [ ] 含「讀取 ticket」指引（W17-048.2 軟提示檢查）
 - [ ] 含 `claim {id} --as {agent_name}` 認領行（派發身份前移；agent 端對稱綁定，見骨架下方說明）
 - [ ] context 已在 ticket 的 Problem Analysis / Context Bundle（不塞 prompt）
-- [ ] prompt 總行數 ≤ 15 行（遠低於 30 行硬上限）
+- [ ] prompt 總行數 ≤ 30 行硬上限（無豁免）；`ticket track dispatch --commit-policy agent` 預設輸出約 19-28 行屬正常範圍，非異常
 - [ ] 動作描述一句話可理解（不堆疊多個動詞）
 - [ ] 交付通道已確認（L3/L2: append-log+commit / L1: append-log+/tmp / L0: final message 後 PM 立即落檔）
 - [ ] 文件票涉及持久化/schema/接線現況陳述時，已含實查約束句（PC-BAL-007，見上節）
@@ -162,15 +162,26 @@ Ticket: 0.18.0-W17-048.3
 
 ### 精準 staging 制式句（權威版，PC-092 / PC-BAL-008）
 
-**單一權威已改為 CLI**：制式句文字的權威副本是 `.claude/skills/ticket/ticket_system/commands/track_dispatch.py` 的 `STAGING_PHRASE_AGENT` 常數，本文件不再手動維護逐字副本。取得方式：
+**單一權威已改為 CLI**：制式句文字的權威副本是 `.claude/skills/ticket/ticket_system/commands/track_dispatch.py` 的 `STAGING_PHRASE_AGENT`（全文）與 `STAGING_PHRASE_AGENT_PROMPT`（骨架用短版指標句），本文件不再手動維護逐字副本。取得方式：
 
 ```
 ticket track dispatch <ticket_id> --as <agent_name> --commit-policy agent
 ```
 
-`--commit-policy agent`（預設）於骨架末尾逐字附上下列制式句；`--commit-policy pm` / `--commit-policy none` 分別輸出一行對應說明（PM 統一 commit / 本次派發不涉及 commit）。主路徑為 `ticket track commit`（隔離索引提交 where.files 子集，全程不觸碰共用 index，從工具層消除 PC-092/PC-BAL-008 兩類根因）；裸 `git add` + `git commit` 降為 fallback，僅於新命令失敗或不可用時使用，措辭仍涵蓋三類獨立根因，缺一不足：precise `git add`（防 PC-092，廣域 `git add .` / `git add -A` 併入其他並行代理人尚未 commit 的變更）；`git diff --cached --name-only` 核對 + `git restore --staged`（防 PC-BAL-008，他人已 stage 在共用 index 的內容會被動吸收——即使 `git add` 精準，仍可能在收尾前才發現 index 裡混入非本票內容）；禁 pathspec / `--only` / `-o` 裸 commit（防丟棄既有 index、誤吸他人未 stage 的編輯，`.claude/rules/core/bash-tool-usage-rules.md` 規則七）。
+`--commit-policy agent`（預設）於骨架末尾附上 `STAGING_PHRASE_AGENT_PROMPT` 短版指標句（約 6 行，逐句保留 dispatch-staging-phrase-guard-hook 判定所需的 Category A/B/C 正面片語），並**冪等寫入/更新**該票「## Problem Analysis」下「### Commit 規範」子節為 `STAGING_PHRASE_AGENT` 全文——骨架瘦身落地：26 行全文若逐字嵌入骨架會使骨架超出 agent-prompt-length-guard 的 30 行硬上限（PC-040 實測 39-48 行兩次被 Layer 1 阻擋），改為骨架只留短版指標句 + 指向 ticket 固定章節，代理人 `ticket track full <ticket_id>` 即可讀到全文。`--commit-policy pm` / `--commit-policy none` 分別輸出一行對應說明（PM 統一 commit / 本次派發不涉及 commit），不寫入 Commit 規範章節。主路徑為 `ticket track commit`（隔離索引提交 where.files 子集，全程不觸碰共用 index，從工具層消除 PC-092/PC-BAL-008 兩類根因）；裸 `git add` + `git commit` 降為 fallback，僅於新命令失敗或不可用時使用，措辭仍涵蓋三類獨立根因，缺一不足：precise `git add`（防 PC-092，廣域 `git add .` / `git add -A` 併入其他並行代理人尚未 commit 的變更）；`git diff --cached --name-only` 核對 + `git restore --staged`（防 PC-BAL-008，他人已 stage 在共用 index 的內容會被動吸收——即使 `git add` 精準，仍可能在收尾前才發現 index 裡混入非本票內容）；禁 pathspec / `--only` / `-o` 裸 commit（防丟棄既有 index、誤吸他人未 stage 的編輯，`.claude/rules/core/bash-tool-usage-rules.md` 規則七）。
 
-以下為 `--commit-policy agent` 輸出內容示意（如與 CLI 實際輸出不一致，以 CLI 為準）：
+以下為 `--commit-policy agent` 骨架末尾附加的短版指標句示意（如與 CLI 實際輸出不一致，以 CLI 為準）：
+
+```
+Commit: prefer `ticket track commit <ticket-id> -m "..." -- {exact files}`
+  (isolated index, precise staging). Fallback: `git add {exact files}` ->
+  `git diff --cached --name-only` to verify -> verified bare commit, no
+  pathspec (forbid `-- <paths>` / `--only` / `-o` / `-a` / `git add .` /
+  `git add -A`). Swept-in content: forbid revert/reset/amend, stop & report.
+Full text: this ticket's "### Commit 規範" section (`ticket track full <ticket-id>`).
+```
+
+以下為冪等寫入該票「### Commit 規範」子節的全文示意（`STAGING_PHRASE_AGENT`，如與 CLI 實際輸出不一致，以 CLI 為準）：
 
 ```
 Recommended: commit via isolated index (files must be a subset of this
@@ -1031,6 +1042,9 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 - `.claude/rules/core/quality-baseline.md` — 規則 6 失敗案例學習原則
 
 ---
+
+**Last Updated**: 2026-09-01
+**Version**: 1.31.0 — 骨架瘦身落地修正兩處失準敘述：(1)「骨架（權威版）」用途段刪「prompt 控制在 10-15 行，穩過 Hook 30 行上限」（`--commit-policy agent` 預設下實測 39-48 行、被 Layer 1 硬上限阻擋兩次），改為精確描述骨架本體 + 短版指標句的行數構成與硬上限無豁免的事實；(2)「同步保護」句由「只驗模板關鍵字同步」改為明示涵蓋關鍵字同步（Layer 2）與骨架實際行數（Layer 1，新增）兩個獨立維度，避免讀者誤以為 hook 對骨架有豁免。「精準 staging 制式句」節同步改寫：`STAGING_PHRASE_AGENT` 26 行全文不再直接嵌入骨架，改冪等寫入票的「### Commit 規範」子節；骨架末尾改附 `STAGING_PHRASE_AGENT_PROMPT` 短版指標句（約 6 行，逐句保留 Category A/B/C 判定所需片語）。
 
 **Last Updated**: 2026-08-27
 **Version**: 1.30.0 — 「文件票實查約束句（PC-BAL-007）」後新增「既有失敗歸因約束句（PC-BAL-022）」子節：觸發條件（涉及測試/建置/lint 驗收動作）+ Why/Consequence（因果核對不足以排除環境造成的新失敗，同一 session 內復發三次）+ prompt 逐字制式句（宣稱既有前須附 baseline 對照結果）；「填空檢查清單」同步補一列。修的是送達路徑——PC-BAL-022 原文正確且準確預測本次復發，內容不動。

@@ -240,6 +240,17 @@ def test_soft_hint_points_to_dispatch_command(monkeypatch, capsys):
     assert "ticket track dispatch" in captured.err
 
 
+_DISPATCH_SKELETON_CONSTANT_NAMES = (
+    "SKELETON_TEMPLATE_NORMAL",
+    "SKELETON_TEMPLATE_REVIEW",
+    "STAGING_PHRASE_AGENT",
+    "STAGING_PHRASE_AGENT_PROMPT",
+    "STAGING_PHRASE_PM",
+    "STAGING_PHRASE_NONE",
+    "HOOK_TICKET_REMINDER",
+)
+
+
 def _load_skeleton_constants():
     """以 ast 靜態解析 track_dispatch.py 的骨架常數，避免執行整個 ticket_system
     套件 import chain（該套件依賴 filelock，hook 測試環境未必安裝）。
@@ -248,6 +259,9 @@ def _load_skeleton_constants():
     是否同步，不需要執行 CLI 邏輯本身，靜態解析足以取得字串常數且不受套件
     依賴影響（0.2.1-W3-876.2 acceptance：hash/diff 驗證 CLI 骨架模板與 hook
     期待格式同步）。
+
+    回傳涵蓋 `_DISPATCH_SKELETON_CONSTANT_NAMES` 全部六個常數（0.2.1-W3-1146
+    擴充，供骨架實際行數重建用；原僅取兩個 SKELETON_TEMPLATE_* 常數）。
     """
     import ast
 
@@ -269,7 +283,7 @@ def _load_skeleton_constants():
             isinstance(node, ast.Assign)
             and len(node.targets) == 1
             and isinstance(node.targets[0], ast.Name)
-            and node.targets[0].id in ("SKELETON_TEMPLATE_NORMAL", "SKELETON_TEMPLATE_REVIEW")
+            and node.targets[0].id in _DISPATCH_SKELETON_CONSTANT_NAMES
         ):
             constants[node.targets[0].id] = ast.literal_eval(node.value)
     return constants
@@ -295,4 +309,90 @@ def test_cli_skeleton_keywords_stay_in_sync_with_hook_expectations():
     assert has_template_keywords(review_skeleton) is True, (
         "SKELETON_TEMPLATE_REVIEW 未命中任何 TEMPLATE_KEYWORDS，"
         "CLI 骨架與 hook 關鍵字已漂移"
+    )
+
+
+# ----------------------------------------------------------------------------
+# 0.2.1-W3-1146：骨架實際行數綁定 PROMPT_LINE_LIMIT（PC-040 硬上限）
+#
+# 既有 test_cli_skeleton_keywords_stay_in_sync_with_hook_expectations 只驗
+# 「模板關鍵字」是否同步，從未比對骨架實際行數與 PROMPT_LINE_LIMIT——骨架
+# 從最初的 10-15 行成長至含精準 staging 制式句（`--commit-policy agent`
+# 預設）的 39 行、再疊加 hooks 目錄額外提醒（HOOK_TICKET_REMINDER）的 47-48
+# 行，全程該測試維持綠燈，因為它驗的維度（關鍵字命中）與缺陷所在的維度
+# （行數）不同。本節補上該缺失的綁定測試。
+# ----------------------------------------------------------------------------
+
+def _rebuild_normal_skeleton(constants: dict, *, with_hook_reminder: bool) -> str:
+    """重建 `_build_skeleton`（kind="normal", commit_policy="agent"）的組裝
+    邏輯，不 import track_dispatch.py（同上方 filelock 依賴限制）。
+
+    組裝順序須與 `ticket_system/commands/track_dispatch.py::_build_skeleton`
+    的 kind="normal" 分支逐步對應，任一方漂移即本測試連帶失真——維護者修改
+    該函式組裝邏輯時應同步檢視本函式。骨架瘦身後嵌入的是
+    `STAGING_PHRASE_AGENT_PROMPT` 短版指標句（非 26 行全文 `STAGING_PHRASE_
+    AGENT`，全文改冪等寫入 ticket body「### Commit 規範」章節）。
+    """
+    skeleton = constants["SKELETON_TEMPLATE_NORMAL"].format(
+        ticket_id="0.2.1-W3-XXXX",
+        task_summary="一句話動作描述測試填空",
+        agent_name="thyme-python-developer",
+    )
+    skeleton = f"{skeleton}\n\n{constants['STAGING_PHRASE_AGENT_PROMPT']}"
+    if with_hook_reminder:
+        skeleton = f"{skeleton}\n\n{constants['HOOK_TICKET_REMINDER']}"
+    return skeleton
+
+
+def _skeleton_line_count(skeleton: str) -> int:
+    """與 hook 的 `line_count = len(prompt.strip().splitlines())` 算法一致。"""
+    return len(skeleton.strip().splitlines())
+
+
+def test_dispatch_skeleton_normal_agent_commit_within_prompt_limit(monkeypatch, capsys):
+    """`ticket track dispatch --as <agent>`（預設 --commit-policy agent，未觸
+    及 hooks 目錄）產出的骨架，逐字貼入 Agent/Task prompt 時不得被
+    agent-prompt-length-guard 的 Layer 1 硬上限阻擋（PROMPT_LINE_LIMIT=30）。
+
+    修復前現況：SKELETON_TEMPLATE_NORMAL（12 行）+ STAGING_PHRASE_AGENT
+    （26 行，含中間分隔空行）合計 39 行 > 30，本測試在修復前應為紅燈。
+    """
+    constants = _load_skeleton_constants()
+    skeleton = _rebuild_normal_skeleton(constants, with_hook_reminder=False)
+    actual_line_count = _skeleton_line_count(skeleton)
+
+    assert actual_line_count <= PROMPT_LINE_LIMIT, (
+        f"dispatch 骨架（未觸及 hooks 目錄）實際 {actual_line_count} 行，"
+        f"超過 PROMPT_LINE_LIMIT={PROMPT_LINE_LIMIT}；逐字貼入 Agent/Task "
+        "prompt 會被 Layer 1 硬上限阻擋（PC-040）"
+    )
+
+    # 交叉驗證：實際餵給 hook main() 亦不應被阻擋（避免僅靠行數計算與 hook
+    # 真實判斷邏輯脫節）。
+    exit_code = _run_hook(monkeypatch, {"prompt": skeleton})
+    assert exit_code == 0, (
+        f"dispatch 骨架實際餵給 hook 仍被阻擋（exit_code={exit_code}）："
+        f"{capsys.readouterr().err}"
+    )
+
+
+def test_dispatch_skeleton_normal_agent_commit_with_hook_scope_within_prompt_limit(
+    monkeypatch, capsys,
+):
+    """觸及 `.claude/hooks/` 的票額外疊加 HOOK_TICKET_REMINDER，為骨架最長
+    情形（現況 47-48 行）；此變體同樣不得超過 Layer 1 硬上限。
+    """
+    constants = _load_skeleton_constants()
+    skeleton = _rebuild_normal_skeleton(constants, with_hook_reminder=True)
+    actual_line_count = _skeleton_line_count(skeleton)
+
+    assert actual_line_count <= PROMPT_LINE_LIMIT, (
+        f"dispatch 骨架（觸及 hooks 目錄，含 HOOK_TICKET_REMINDER）實際 "
+        f"{actual_line_count} 行，超過 PROMPT_LINE_LIMIT={PROMPT_LINE_LIMIT}"
+    )
+
+    exit_code = _run_hook(monkeypatch, {"prompt": skeleton})
+    assert exit_code == 0, (
+        f"dispatch 骨架（hooks 目錄變體）實際餵給 hook 仍被阻擋"
+        f"（exit_code={exit_code}）：{capsys.readouterr().err}"
     )

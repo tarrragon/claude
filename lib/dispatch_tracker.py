@@ -190,6 +190,16 @@ def record_dispatch(
         v1 曾另有 parent_session_id 欄位（恆等 session_id 的冗餘值），
         registry 契約 v2 審查判定其資訊量為零，已移除；nested spawn
         語意分化時再視需要新增，不沿用舊欄位名稱與語意。
+
+        ticket_id / files 可合法為空：呼叫端（active-dispatch-tracker-
+        hook.py）在無法從派發 prompt/description 解析出 ticket_id 時
+        （例如非綁定特定 ticket 的 code-review 型派發），會以空字串／空
+        清單寫入本函式，這是預期行為而非資料錯誤，本模組刻意不在寫入端
+        擋下此類記錄——dispatch_count／orphan 偵測等用途仍需要這筆記錄
+        存在。下游若需要「已知檔案範圍」語意（如判斷 staged 內容是否與
+        某派發宣告範圍不相交），應在該消費端自行過濾空 files 記錄，不應
+        依賴本模組事先過濾（見 bare-commit-guard-hook.py 的
+        `_staged_scope_is_safe_for_bare_commit`）。
     """
     with _state_lock(project_root):
         state = _read_state(project_root)

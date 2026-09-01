@@ -139,6 +139,25 @@ heredoc 剝離（含保底）在該共用函式內部處理；引號內容的問
 token 誤判為旗標，`_strip_command_payload` 的引號剝離半段因此變得多餘，
 一併移除。三個偵測函式改為對 `GitInvocation.args`（token 清單）做精確
 比對，機制說明見共用模組 docstring。
+
+============================================================
+四修正：不相交放行路徑不再被單筆空 files 派發記錄整體癱瘓
+============================================================
+`_staged_scope_is_safe_for_bare_commit` 的不相交路徑原本要求「所有」
+活躍派發的 `files` 皆非空才驗證（任一派發 files 為空即整條路徑失效、
+一律落到不安全）。實測發現此設計會誤擋：一筆 code-review 型派發因
+prompt/description 無法解析出 ticket_id，其 dispatch-active.json 記錄
+的 files 為空陣列；此時即使 staged 內容與所有其他有效派發宣告完全
+不相交（例如提交 ticket metadata），也會被整體判定為不安全並 DENY，
+且 DENY 訊息宣稱的放行路徑（二）實際不可達，執行者依訊息指引清理
+staged 範圍後仍反覆失敗。
+
+空 files 宣告本身不構成任何人的領地（未聲明範圍即無從主張範圍），故
+改為計算聯集時排除空宣告，只用有宣告範圍的派發驗證不相交條件；讀取端
+不過濾 dispatch-active.json 本身（該記錄仍供 dispatch_count／orphan
+偵測等其他用途使用），僅本函式的範圍判定將其排除，並在存在空宣告時
+發出 warning（可觀測性，見 `_staged_scope_is_safe_for_bare_commit` 的
+`logger` 參數）。詳細判斷理由見該函式 docstring。
 """
 
 import json
@@ -200,18 +219,31 @@ def _get_staged_files(project_root: Path) -> List[str]:
 
 
 def _staged_scope_is_safe_for_bare_commit(
-    staged_files: List[str], dispatches: List[Dict]
+    staged_files: List[str], dispatches: List[Dict], logger=None
 ) -> bool:
     """裸 commit（純 index 提交）的安全性驗證，兩條放行路徑擇一命中即安全：
 
     1. 子集路徑：staged 內容完整落在某一活躍派發宣告的 `files` 範圍內。
        命中即代表這次提交不可能夾帶「其他」活躍派發的宣告檔案。
-    2. 不相交路徑：staged 內容與「所有」活躍派發宣告 `files` 的聯集完全
-       不相交（例如 PM 提交 ticket metadata，內容從不出現在任何派發宣告
-       中）。此路徑要求 dispatches 非空、且每個派發的 files 皆非空——
-       若任一派發的 files 為空（ticket_id 無法解析），代表無從得知它
-       碰哪些檔案，不相交條件無法驗證，必須落到不安全（見
-       `test_dispatch_with_empty_files_never_matches`）。
+    2. 不相交路徑：staged 內容與所有「已宣告範圍」活躍派發（`files` 非空）
+       的聯集完全不相交（例如 PM 提交 ticket metadata，內容從不出現在
+       任何派發宣告中）。
+
+    files 為空的派發記錄（修正舊版設計，見下方「範圍修正」段）：空宣告
+    代表該派發未聲明任何檔案範圍，邏輯上不構成任何人的領地，計算聯集時
+    予以排除（不計入 `all()` 判定、不參與 union）。這不會降低對「有宣告
+    範圍」派發的保護——子集路徑與不相交路徑檢查的仍是這些派發的完整
+    宣告；差異只在於不再讓單一筆空宣告使整個不相交放行路徑對所有人失效
+    （實測案例：一筆 code-review 型派發因 ticket_id 無法從 prompt/
+    description 解析而 files 為空，導致與其他有效宣告完全不相交的正常
+    提交被誤擋）。若排除空宣告後已無任何已宣告範圍（例如所有活躍派發的
+    files 皆為空），聯集為空集合，staged 內容對空集合恆為不相交，同樣
+    視為安全——這是同一原則（空宣告不構成領地）的自然延伸，非另立特例。
+
+    範圍修正：舊版設計要求「dispatches 非空、且每個派發的 files 皆非空」
+    才驗證不相交路徑，任一派發 files 為空即整條路徑失效、必須落到不
+    安全。此舉把「無法驗證安全」等同於「必須阻擋」，但空宣告本身不構成
+    領地，阻擋的是與空宣告完全無關的內容——防護對象錯置。
 
     兩條路徑皆不依賴呼叫者身份比對（並行環境下 PreToolUse 拿不到可靠的
     呼叫者身份），只驗證「內容」是否安全。
@@ -223,19 +255,34 @@ def _staged_scope_is_safe_for_bare_commit(
     範圍。若 agent stage 了自己未宣告的檔案，該檔不在任何派發的宣告清單
     內，不相交路徑會誤判為安全。子集路徑本就有相同暴露面，此非本次引入
     的回歸，留待後續處理。
+
+    Args:
+        logger: 選填，非 None 時對「存在 files 為空的派發記錄」發出
+            warning（可觀測性；記錄本身仍保留在 dispatch-active.json，
+            供 dispatch_count／orphan 偵測等其他用途，僅本函式的範圍
+            判定將其排除）。
     """
     if not staged_files:
         return True
     staged_set = set(staged_files)
 
     declared_sets = [set(d.get("files") or []) for d in dispatches]
+    known_scope_sets = [declared for declared in declared_sets if declared]
 
-    for declared in declared_sets:
-        if declared and staged_set <= declared:
+    for declared in known_scope_sets:
+        if staged_set <= declared:
             return True
 
-    if declared_sets and all(declared_sets):
-        all_declared = set().union(*declared_sets)
+    empty_count = len(declared_sets) - len(known_scope_sets)
+    if empty_count > 0 and logger is not None:
+        logger.warning(
+            "%d 筆活躍派發記錄 files 為空（範圍未知，ticket_id 可能無法"
+            "解析），計算不相交聯集時已排除",
+            empty_count,
+        )
+
+    if declared_sets:
+        all_declared = set().union(*known_scope_sets) if known_scope_sets else set()
         if staged_set.isdisjoint(all_declared):
             return True
 
@@ -417,7 +464,7 @@ def main() -> int:
 
     if dispatch_count > 0:
         staged_files = _get_staged_files(project_root)
-        if _staged_scope_is_safe_for_bare_commit(staged_files, dispatches):
+        if _staged_scope_is_safe_for_bare_commit(staged_files, dispatches, logger=logger):
             logger.info(
                 "並行期裸 commit，staged 範圍落在單一派發宣告內，放行"
                 "（staged 檔案數=%d）",

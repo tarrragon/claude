@@ -31,6 +31,8 @@ reference-stability-rules.md 規則 8「引用性質判準：全禁原則與五�
 | test_marker_exempt_next_line_allows | marker 在命中前一行 | 不阻擋（0.2.1-W3-063 逃生閥） |
 | test_marker_invalid_category_still_blocked | marker category 不在合法清單 | 仍阻擋，訊息含格式錯誤說明 |
 | test_marker_empty_reason_still_blocked | marker reason 為空 | 仍阻擋，訊息含格式錯誤說明 |
+| test_marker_relocation_with_source_path_allows | relocation marker 含來源檔路徑 | 不阻擋（0.2.1-W3-1177 新增類別） |
+| test_marker_relocation_missing_source_path_still_blocked | relocation marker 缺來源檔路徑 | 仍阻擋，訊息含格式錯誤說明 |
 
 策略：
 - importlib 動態載入（檔名含 hyphen）
@@ -400,6 +402,57 @@ class TestMarkerEscapeHatch:
 
         assert rc == 2
         assert "格式錯誤" in err
+
+    def test_marker_relocation_with_source_path_allows(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """0.2.1-W3-1177：relocation 類別含來源檔路徑時放行既有內容的位置搬移。"""
+        target = _claude_path(tmp_path, "references", "marker-relocation-ok.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": (
+                    "原始內容\n"
+                    "搬移段落引用（0.2.1-W3-777） "
+                    "rule8-exempt: relocation:自 .claude/pm-rules/parallel-dispatch.md 逐字搬移"
+                ),
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 0
+        assert err == ""
+
+    def test_marker_relocation_missing_source_path_still_blocked(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """0.2.1-W3-1177：relocation marker 缺來源檔路徑（reason 無帶副檔名路徑片段）仍阻擋。"""
+        target = _claude_path(tmp_path, "references", "marker-relocation-missing-path.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": (
+                    "原始內容\n"
+                    "搬移段落引用（0.2.1-W3-778） "
+                    "rule8-exempt: relocation:逐字搬移過來的"
+                ),
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 2
+        assert "格式錯誤" in err
+        assert "來源檔路徑" in err
 
 
 # ---------------------------------------------------------------------------

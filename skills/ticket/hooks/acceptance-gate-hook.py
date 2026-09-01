@@ -353,7 +353,7 @@ def check_acceptance_status(
         if chained_write_detected:
             logger.info(
                 f"Ticket {ticket_id}：偵測到 complete 與同鏈寫入操作串接，"
-                "略過 acceptance / execution log 滯後誤報判定"
+                "略過 acceptance / execution log / Layer 1 自檢 滯後誤報判定"
             )
 
         # 步驟 2：驗證驗收記錄
@@ -496,6 +496,12 @@ def check_acceptance_status(
         self_check_warning = check_self_check_visibility(
             content, frontmatter.get("type", ""), logger
         )
+        # chained_write_detected 時同鏈的 append-log（可能剛新增 ### 自檢結果
+        # 子章節）尚未執行，本次讀到的 Solution 內容必然滯後，比照步驟 6 歸零
+        # 避免假警告。PreToolUse 於整個 command 執行前觸發一次，磁碟上不存在
+        # 同鏈已寫入的最新內容可讀，故僅能抑制而非改讀最新內容。
+        if chained_write_detected:
+            self_check_warning = None
 
         # 步驟 9：檢查 Phase 4 審查證據（W1-080.1，warning 不阻擋）
         phase4_warning = check_phase4_review_evidence(
