@@ -222,6 +222,116 @@ class TestPrintCreateChecklist:
         assert "SA 前置審查" not in captured.out
 
 
+class TestAnaTicketMetadataValidationInChecklist:
+    """Ticket metadata 品質驗證（遷自 ana-ticket-metadata-validation-hook.py，
+    PC-058）併入 print_create_checklist 的行為驗證。回歸半徑最需留意：
+    ticket create 是本專案所有建票的唯一入口，此處新增檢查若誤觸發會影響
+    後續每一次建票。"""
+
+    def test_clean_ticket_no_pc058_warning_output(self, capsys, tmp_path, monkeypatch):
+        """無 metadata 品質問題時，輸出不含任何本次新增的 PC-058 警告——
+        即『無警告時輸出與現行逐字相同』的直接驗證。"""
+        claude_md = tmp_path / "CLAUDE.md"
+        claude_md.write_text(
+            "| **實作代理人** | parsley-flutter-developer |\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(
+            "ticket_system.lib.create_reporter.get_project_root", lambda: tmp_path
+        )
+
+        clean_ticket = {
+            "type": "IMP",
+            "who": {"current": "parsley-flutter-developer"},
+            "where": {"files": ["lib/x.dart"]},
+            "acceptance": ["[ ] 短驗收條件"],
+            "tdd_phase": "phase1",
+            "tdd_stage": ["phase1"],
+            "what": "新增功能 X",
+        }
+        print_create_checklist(
+            ticket_id="0.31.0-W4-001",
+            ticket_type="IMP",
+            parent_id=None,
+            new_ticket=clean_ticket,
+        )
+
+        captured = capsys.readouterr()
+        assert "PC-058" not in captured.out
+
+    def test_who_mismatch_warning_appears(self, capsys, tmp_path, monkeypatch):
+        """who.current 與 CLAUDE.md 指定實作代理人不符（產品程式碼範疇）
+        時，checklist 輸出應含對應警告。"""
+        claude_md = tmp_path / "CLAUDE.md"
+        claude_md.write_text(
+            "| **實作代理人** | parsley-flutter-developer |\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(
+            "ticket_system.lib.create_reporter.get_project_root", lambda: tmp_path
+        )
+
+        ticket = {
+            "type": "IMP",
+            "who": {"current": "thyme-python-developer"},
+            "where": {"files": ["lib/x.dart"]},
+            "acceptance": ["[ ] 短驗收條件"],
+        }
+        print_create_checklist(
+            ticket_id="0.31.0-W4-001",
+            ticket_type="IMP",
+            parent_id=None,
+            new_ticket=ticket,
+        )
+
+        captured = capsys.readouterr()
+        assert "PC-058" in captured.out
+        assert "thyme-python-developer" in captured.out
+        assert "parsley-flutter-developer" in captured.out
+
+    def test_framework_scoped_ticket_who_check_skipped(self, capsys, tmp_path, monkeypatch):
+        """where.files 命中 .claude/ 的框架範疇 ticket，即使 who 非預期
+        代理人也不應輸出 who 不符警告（範疇限縮，見模組 docstring）。"""
+        claude_md = tmp_path / "CLAUDE.md"
+        claude_md.write_text(
+            "| **實作代理人** | parsley-flutter-developer |\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(
+            "ticket_system.lib.create_reporter.get_project_root", lambda: tmp_path
+        )
+
+        ticket = {
+            "type": "IMP",
+            "who": {"current": "thyme-python-developer"},
+            "where": {"files": [".claude/hooks/foo.py"]},
+            "acceptance": ["[ ] 短驗收條件"],
+        }
+        print_create_checklist(
+            ticket_id="0.31.0-W4-001",
+            ticket_type="IMP",
+            parent_id=None,
+            new_ticket=ticket,
+        )
+
+        captured = capsys.readouterr()
+        assert "PC-058" not in captured.out
+
+    def test_new_ticket_none_still_no_crash(self, capsys, tmp_path, monkeypatch):
+        """new_ticket=None（既有呼叫慣例，見本檔其餘 TestPrintCreateChecklist
+        測試）時，新增的驗證區塊應被既有 `if new_ticket:` guard 完整略過，
+        不觸發 get_project_root() 亦不崩潰。"""
+        monkeypatch.setattr(
+            "ticket_system.lib.create_reporter.get_project_root",
+            lambda: (_ for _ in ()).throw(AssertionError("不應被呼叫")),
+        )
+        print_create_checklist(
+            ticket_id="0.31.0-W4-001",
+            ticket_type="IMP",
+            parent_id=None,
+            new_ticket=None,
+        )
+        captured = capsys.readouterr()
+        assert "PC-058" not in captured.out
+
+
 class TestCreateCommandIntegration:
     """create 命令整合測試"""
 

@@ -13,8 +13,8 @@ Validates 5W1H decision framework content for:
 4. Avoidance language detection - No escape phrases
 
 Usage:
-    uv run .claude/skills/5w1h-decision/scripts/validate_5w1h.py "content"  # portability-allow: consumer 共通安裝位置
-    uv run .claude/skills/5w1h-decision/scripts/validate_5w1h.py --file path/to/file.md  # portability-allow: consumer 共通安裝位置
+    uv run .claude/skills/5w1h-decision/scripts/validate_5w1h.py "content"
+    uv run .claude/skills/5w1h-decision/scripts/validate_5w1h.py --file path/to/file.md
 """
 
 import re

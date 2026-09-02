@@ -44,7 +44,7 @@ In-memory state 在 React useState / Vue ref / vanilla 變數裡 — 寫起來�
 
 ---
 
-## State 該寫進 URL 的判準
+## State 該寫進 URL 的判斷標準
 
 ### 三問
 
@@ -54,7 +54,7 @@ In-memory state 在 React useState / Vue ref / vanilla 變數裡 — 寫起來�
 
 任一個「是」 → URL。
 
-### 反向判準：什麼不該寫進 URL
+### 反向判斷標準：什麼不該寫進 URL
 
 | State 類型                                  | 為什麼不該寫進 URL                                |
 | ------------------------------------------- | ------------------------------------------------- |
@@ -201,7 +201,7 @@ window.addEventListener('popstate', () => {
 | 使用者 report「我分享連結給朋友、他看不到我看到的」           | URL state 缺漏的 silent 訊號顯現                                                     |
 | `replaceState` 跟 `pushState` 沒區分、所有 state 變動用同一個 | 評估：哪些是 history entry 該被記、哪些不該                                          |
 | 沒 listen `popstate`                                          | back/forward 會 silent 失效、補 listener                                             |
-| URL 變超長、含 ephemeral state                                | 過度寫進 URL、用反向判準砍掉不該寫的                                                 |
+| URL 變超長、含 ephemeral state                                | 過度寫進 URL、用反向判斷標準砍掉不該寫的                                                 |
 | 內心 OS：「state 用 useState 就好、URL 之後再說」             | 「之後再說」是 [`ease-of-writing-vs-intent-alignment.md`](./ease-of-writing-vs-intent-alignment.md) 提到的 refactor 謊言、補不回來 |
 
 **核心原則**：URL 是 stateful UI 的隱形儲存層。沒寫 URL state = silent 犧牲分享 / 恢復 / 導航三個 UX 特性。寫之前跑三問（分享？reload？back/forward？）、任一個是 → URL。

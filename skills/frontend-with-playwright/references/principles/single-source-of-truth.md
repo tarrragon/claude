@@ -198,7 +198,7 @@ JS 寫入位置跟 CSS fallback 在同一 selector — 兩套機制保持一致�
 | 國際化字串（en + zh-TW）     | 各語言版本是「不同 fact」、不是同一 fact 的多源 |
 | 開發 / production 環境的設定 | 各環境是「不同 fact」、不是同源 drift           |
 
-**核心判準**：多源是不是「同一 fact 的多份拷貝」？是 → 違反 SSoT；不是 → 各自是獨立 fact、不違反。
+**核心判斷標準**：多源是不是「同一 fact 的多份拷貝」？是 → 違反 SSoT；不是 → 各自是獨立 fact、不違反。
 
 ---
 

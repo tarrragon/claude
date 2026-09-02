@@ -1,6 +1,8 @@
 ---
 name: test-effectiveness
 description: "Verifies whether tests actually verify anything. Use when reviewing test coverage or quality, or when tests pass while production breaks. Triggers: 覆蓋率, 測試品質, 測試沒抓到, 過度 mock, 假綠燈, 變異測試, mutation testing. Not for unstable results."
+metadata:
+  version: 2.1.0
 ---
 
 # Test Effectiveness
@@ -167,6 +169,4 @@ description: "Verifies whether tests actually verify anything. Use when reviewin
 
 ---
 
-**Last Updated**: 2026-08-03
-**Version**: 2.1.0 — 驗證手段章新增「免費的變異：修復前的紅綠分佈」小節：修 bug 時缺陷本身即變異，新測試修復前的紅綠界線與缺陷邊界是否重合可單獨作為測試有效性證據，且不需注入與還原；三種分佈的判讀與適用邊界一併寫明。
-**Version**: 2.0.0 — 三輪審查後重構：新增斷言未執行族（原四族漏此高頻形態且覆蓋歸零族判準對其誤判）、補劃分軸使窮盡宣稱可證偽、正交軸由紅綠二分改為區別力對比穩定性（原軸對環境依附族切不開）。1.0.0 初始建立。
+版本紀錄在同目錄的 `CHANGELOG.md`。

@@ -1,6 +1,8 @@
 ---
 name: dispatch-strategy-review
 description: "派發策略檢討工具. Use for: (1) 失敗數超預期 30% 時的策略檢討, (2) 重複分派失敗的分析, (3) 代理人選擇錯誤的修正"
+metadata:
+  version: 1.1.0
 ---
 
 # 派發策略檢討 (Dispatch Strategy Review) SKILL
@@ -56,5 +58,4 @@ description: "派發策略檢討工具. Use for: (1) 失敗數超預期 30% 時�
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 1.1.0 - 移除不支援的自訂屬性，採用 Progressive Disclosure
+版本紀錄在同目錄的 `CHANGELOG.md`。

@@ -1765,6 +1765,53 @@ def test_ticket_id_reported(tmp_path):
     assert "1.5.0-W5-009" in violations[0].text
 
 
+def test_bare_ticket_id_reported(tmp_path):
+    """裸格式（無版本前綴）ticket ID 亦須被閘門認出，同 kind='ticket-id'。"""
+    skill = _write_portable_skill(
+        tmp_path,
+        "demo",
+        PORTABLE_FRONTMATTER + "\n# W8-047 缺陷 1：來源端排除\n",
+    )
+    violations = check_portability(skill)
+    assert [v.kind for v in violations] == ["ticket-id"]
+    assert violations[0].text == "W8-047"
+
+
+def test_full_format_ticket_id_not_double_counted_as_bare(tmp_path):
+    """全格式 ID 內嵌的裸格式片段（如 "W5-009"）不得與全格式匹配重複計為
+    兩筆違規——同一段文字只應產生一筆。"""
+    skill = _write_portable_skill(
+        tmp_path,
+        "demo",
+        PORTABLE_FRONTMATTER + "\n**Version**: 0.8.0 — refined (1.5.0-W5-009.7)\n",
+    )
+    violations = check_portability(skill)
+    assert len(violations) == 1
+    assert violations[0].kind == "ticket-id"
+    assert "1.5.0-W5-009" in violations[0].text
+
+
+def test_bare_ticket_id_and_full_format_both_counted_when_distinct(tmp_path):
+    """同一行同時出現全格式與不重疊的裸格式 ID 時，兩筆都應計入。"""
+    skill = _write_portable_skill(
+        tmp_path,
+        "demo",
+        PORTABLE_FRONTMATTER + "\n見 1.5.0-W5-009 與 W8-047 兩處修復。\n",
+    )
+    violations = check_portability(skill)
+    assert sorted(v.text for v in violations) == ["1.5.0-W5-009", "W8-047"]
+
+
+def test_bare_ticket_id_respects_allow_marker(tmp_path):
+    skill = _write_portable_skill(
+        tmp_path,
+        "demo",
+        PORTABLE_FRONTMATTER
+        + "\nW8-047 缺陷已知 (portability-allow: illustrative example)\n",
+    )
+    assert check_portability(skill) == []
+
+
 def test_clean_skill_has_no_violations(tmp_path):
     skill = _write_portable_skill(
         tmp_path,
@@ -1891,6 +1938,66 @@ def test_write_portability_force_log_appends_not_overwrites(tmp_path, monkeypatc
 def test_resolve_hook_logs_dir_honours_env_override(tmp_path, monkeypatch):
     monkeypatch.setenv("HOOK_LOGS_DIR", str(tmp_path / "custom-logs"))
     assert _resolve_hook_logs_dir() == tmp_path / "custom-logs"
+
+
+def test_resolve_hook_logs_dir_anchors_to_project_root_without_env(
+    tmp_path, monkeypatch
+):
+    """無 HOOK_LOGS_DIR 時應錨定 git toplevel，而非相對於呼叫端 cwd。"""
+    import skill_sync.cli as cli_module
+
+    monkeypatch.delenv("HOOK_LOGS_DIR", raising=False)
+    monkeypatch.setattr(cli_module, "_resolve_project_root", lambda purpose="": tmp_path)
+
+    assert _resolve_hook_logs_dir() == tmp_path / ".claude" / "hook-logs"
+
+
+def test_resolve_hook_logs_dir_independent_of_caller_cwd(tmp_path, monkeypatch):
+    """從非專案根目錄呼叫（如透過 uv run --directory shim 執行）仍應寫入
+    專案根下的 canonical 位置，不落在呼叫端所在的巢狀目錄。"""
+    import skill_sync.cli as cli_module
+
+    monkeypatch.delenv("HOOK_LOGS_DIR", raising=False)
+    monkeypatch.setattr(cli_module, "_resolve_project_root", lambda purpose="": tmp_path)
+
+    nested_cwd = tmp_path / ".claude" / "skills" / "skill-sync"
+    nested_cwd.mkdir(parents=True)
+    monkeypatch.chdir(nested_cwd)
+
+    resolved = _resolve_hook_logs_dir()
+
+    assert resolved == tmp_path / ".claude" / "hook-logs"
+    assert "skills" not in resolved.relative_to(tmp_path).parts
+
+
+def test_resolve_project_root_git_success_returns_toplevel(tmp_path, monkeypatch):
+    """git 正常時應回傳 toplevel 絕對路徑（實際 git 環境，未 mock subprocess）。"""
+    import subprocess
+
+    import skill_sync.cli as cli_module
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, capture_output=True, check=True)
+    monkeypatch.chdir(repo)
+
+    assert cli_module._resolve_project_root() == repo
+
+
+def test_resolve_project_root_falls_back_to_cwd_outside_git_repo(
+    tmp_path, monkeypatch, capsys
+):
+    """非 git 目錄時 fallback 至現行 cwd，並輸出 stderr 警告。"""
+    import skill_sync.cli as cli_module
+
+    monkeypatch.chdir(tmp_path)
+
+    result = cli_module._resolve_project_root("custom purpose")
+
+    assert result == tmp_path
+    captured = capsys.readouterr()
+    assert "Warning" in captured.err
+    assert "custom purpose" in captured.err
 
 
 def test_push_with_force_on_declared_violation_writes_force_log(tmp_path, monkeypatch, capsys):
@@ -2102,6 +2209,16 @@ def test_scan_line_for_violations_respects_allow_marker():
     assert _scan_line_for_violations(
         "x.py", 1, ".claude/pm-rules/x.md (portability-allow: bridge)"
     ) == []
+
+
+def test_scan_line_for_violations_bare_ticket_id():
+    violations = _scan_line_for_violations("x.py", 1, "見 W8-047 修復")
+    assert [(v.kind, v.text) for v in violations] == [("ticket-id", "W8-047")]
+
+
+def test_scan_line_for_violations_full_format_excludes_embedded_bare_span():
+    violations = _scan_line_for_violations("x.py", 1, "見 1.5.0-W5-009 修復")
+    assert [(v.kind, v.text) for v in violations] == [("ticket-id", "1.5.0-W5-009")]
 
 
 def test_check_portability_detects_violation_in_python_docstring(tmp_path):

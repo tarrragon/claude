@@ -400,6 +400,29 @@ class CreateMessages:
         "          建議：確認是否需要拆分為多個獨立 Ticket"
     )
 
+    # Ticket metadata 品質警告（遷自 ana-ticket-metadata-validation-hook.py，
+    # PC-058）：who 代理人分工／acceptance 長度分號／tdd_phase 合理性
+    WHO_AGENT_MISMATCH_WARNING = (
+        "[WARNING] who.current = '{current}' 與 CLAUDE.md 指定實作代理人 "
+        "'{expected}' 不符（PC-058）"
+    )
+    ACCEPTANCE_TOO_LONG_WARNING = (
+        "[WARNING] acceptance[{idx}] 長度 {length} > {max_length} 字元"
+        "（建議拆分為獨立條件，PC-058）"
+    )
+    ACCEPTANCE_MULTI_CONDITION_WARNING = (
+        "[WARNING] acceptance[{idx}] 含多條件分隔符 '{sep}'，"
+        "違反 1-item-1-check 原則（PC-058）"
+    )
+    TDD_PHASE_DOC_TYPE_WARNING = (
+        "[WARNING] DOC 類 ticket 不應指定 tdd_phase（目前: {tdd_phase}），"
+        "文件變更不適用 TDD 流程（PC-058）"
+    )
+    TDD_PHASE_DEFAULT_SUSPECT_WARNING = (
+        "[WARNING] tdd_stage 涵蓋 {phase_count} 個 phase 但 what 描述極短，"
+        "建議評估是否為預設值未調整（PC-058）"
+    )
+
     # SPEC 引用未登錄警告（0.4.1-W2-001，F1：SPEC-008 誤植跨票傳染防護）
     UNREGISTERED_SPEC_REFERENCE_WARNING = (
         "[WARNING] 引用了未登錄於 SPEC 登錄簿"

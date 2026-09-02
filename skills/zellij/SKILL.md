@@ -2,6 +2,8 @@
 name: zellij
 description: "Zellij 終端多工管理操作指南。Use for: (1) 在 zellij pane 中啟動/停止服務, (2) 讀取其他 pane 的畫面輸出, (3) 多 pane 佈局管理, (4) 從 claude pane 遠端控制其他 pane。Use when: 需要在多個終端中同時運行前後端服務、需要讀取其他 pane 的日誌輸出、需要管理 zellij session 和 pane。"
 allowed-tools: Bash, Read
+metadata:
+  version: 1.0.0
 ---
 
 # Zellij 終端多工操作指南
@@ -195,5 +197,4 @@ sleep 5 && \
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 1.0.0
+版本紀錄在同目錄的 `CHANGELOG.md`。

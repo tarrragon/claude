@@ -1,6 +1,9 @@
 ---
 name: broken-link-check
 description: "broken-link 偵測工具。掃描 .claude/ 目錄所有 Markdown 文件中的路徑引用，偵測失效連結。Use for: (1) 一次性掃描所有 broken links, (2) 搭配 /loop 定期監控, (3) 修改規則/方法論/代理人文件後驗證路徑完整性。Use when: user runs /broken-link-check, 或搭配 /loop 定期執行, 或發現 broken link 錯誤後。"
+metadata:
+  portable: true
+  version: 2.3.0
 ---
 
 # broken-link-check
@@ -54,7 +57,7 @@ python3 .claude/skills/broken-link-check/scan_links.py . --scan-root docs
 
 覆寫旋鈕用於 triage/debug，gate 預設一律不加 flag。
 
-### documented-error 豁免 marker（W8-049）
+### documented-error 豁免 marker
 
 error-pattern 案例表會刻意記錄不存在的路徑——例如 confabulation 案例的「錯誤參照」欄、或已遷移/刪除檔案的歷史軌跡。這些路徑的文獻價值正在於保留原貌，redirect/刪除會毀損案例資料。在含該引用的行尾（或同 table cell 內）加上行內 marker，scanner 即將該行所有引用歸 `excluded_documented` 不計 broken：
 
@@ -125,8 +128,8 @@ CLI 已內建以下規則，本節僅供閱讀輸出時對照，非需手動執�
 |------|------|------|
 | `@.claude/path/file.md` | `@.claude/pm-rules/decision-tree.md` | repo root |
 | `.claude/path/file.md` | `.claude/agents/incident-responder.md` | repo root |
-| `../path/file.md` | `../agents/lavender-interface-designer.md` | 引用文件所在目錄 <!-- broken-link-exempt: 格式示範範例路徑，非真實引用（W2-011 A 類） --> |
-| `./path/file.md` | `./references/detail.md` | 引用文件所在目錄 <!-- broken-link-exempt: 格式示範範例路徑，非真實引用（W2-011 A 類） --> |
+| `../path/file.md` | `../agents/lavender-interface-designer.md` | 引用文件所在目錄 <!-- broken-link-exempt: 格式示範範例路徑，非真實引用（A 類） --> |
+| `./path/file.md` | `./references/detail.md` | 引用文件所在目錄 <!-- broken-link-exempt: 格式示範範例路徑，非真實引用（A 類） --> |
 
 排除：`http(s)://`（外部 URL）、`#section`（錨點）、預設四旋鈕涵蓋的程式碼區塊 / 備份目錄 / placeholder 範例 / documented-error marker 行。
 
@@ -164,6 +167,4 @@ CLI 已內建以下規則，本節僅供閱讀輸出時對照，非需手動執�
 
 ---
 
-**Version**: 2.3.0
-**Last Updated**: 2026-08-23
-**Source**: broken links 後置預防機制；1.0.0-W8-030.1 改路由至 scan_links.py 確定性 CLI 作權威 gate，手動流程降級為非權威 fallback；1.0.0-W8-049 新增 documented-error 豁免 marker（excluded_documented 類別 + `--include-documented` 旋鈕），case-study 內刻意記錄的不存在路徑顯式 opt-in 豁免；新增 `--scan-root` 可疊加額外掃描子樹（如 `docs`），預設行為不變（向後相容）；新增 `--fence-audit` opt-in 稽核模式，`include_code_block` 預設維持 `False` 判定的配套承擔機制，恆 exit 0 非 gate，只輸出機器可靠分組訊號不做語意分類
+版本紀錄在同目錄的 `CHANGELOG.md`。

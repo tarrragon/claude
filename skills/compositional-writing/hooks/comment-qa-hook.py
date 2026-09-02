@@ -60,7 +60,10 @@ _FRAMEWORK_HOOKS = str(Path(__file__).resolve().parents[3] / "hooks")
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, _FRAMEWORK_HOOKS)
 try:
-    from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level, emit_hook_output
+    from lib import (
+        setup_hook_logging, run_hook_safely, read_json_from_stdin,
+        get_effort_level, emit_hook_output, get_project_root,
+    )
     from lib.hook_messages import QualityMessages, CoreMessages, format_message
     _LIB_AVAILABLE = True
 except ImportError:
@@ -69,8 +72,14 @@ except ImportError:
     # return 0（見 main() 開頭的降級分支），不讓整個 Hook 在載入階段崩潰。
     _LIB_AVAILABLE = False
 
-# 專案根目錄
-PROJECT_ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", "."))
+# 專案根目錄：lib 可用時用 get_project_root()（worktree 感知、git toplevel
+# 等多層 fallback，不受 cwd 影響）；lib 不可用（消費端未提供 .claude/lib/）
+# 時降級為 CLAUDE_PROJECT_DIR 環境變數，未設則退回 cwd——僅此降級路徑
+# 為 cwd-relative，且只在 lib 缺席這個已知的低機率情境下觸發。
+if _LIB_AVAILABLE:
+    PROJECT_ROOT = get_project_root()
+else:
+    PROJECT_ROOT = Path(os.environ.get("CLAUDE_PROJECT_DIR", "."))
 LOG_DIR = PROJECT_ROOT / ".claude/hook-logs"
 REPORT_DIR = LOG_DIR / "comment-qa-reports"
 
@@ -183,8 +192,8 @@ def should_process_file(file_path: str, config: dict) -> Tuple[bool, Optional[La
     """
     path = Path(file_path)
 
-    # W10-047.2 matcher 限定降級（候選 4）：測試/文件/規則類變更時 skip
-    # 來源 ANA：W10-035.3（Phase 3b P3 五 Hook，0% Action 比）
+    # matcher 限定降級（候選 4）：測試/文件/規則類變更時 skip
+    # 來源 ANA：Phase 3b P3 五 Hook，0% Action 比
     # 測試/文件/規則檔案的註解品質非本 hook 主要關注（產品程式碼為主）
     path_str = str(path).replace("\\", "/")
     skip_prefixes = (
@@ -721,7 +730,7 @@ def main():
         if not input_data:
             return 0
 
-        # Effort 感知（v2.1.133+，W14-037）：low effort 短路放行
+        # Effort 感知（v2.1.133+）：low effort 短路放行
         effort = get_effort_level(input_data)
         if effort == "low":
             log_message(logger, "effort=low，comment-qa-hook 短路放行")

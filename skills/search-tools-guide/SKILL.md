@@ -1,6 +1,8 @@
 ---
 name: search-tools-guide
 description: "搜尋工具使用指南。用於：(1) 選擇正確的搜尋工具, (2) 三 MCP 工作流決策樹（cbm 概念搜尋 / codegraph 呼叫圖 / serena 型別感知), (3) rg 精確文字搜尋, (4) LSP/Serena 符號搜尋, (5) 工具安裝與故障排除"
+metadata:
+  version: 5.1.0
 ---
 
 # 搜尋工具指南
@@ -546,5 +548,4 @@ rg --version
 
 ---
 
-**Last Updated**: 2026-06-04
-**Version**: 5.1.0 - 三 MCP 核心命令速查表改為版本無關形式（server 前綴對照 + 能力分類 + ToolSearch 發現指引），消除 codegraph/cbm 硬編碼工具動詞名漂移源（PC-173 / W1-035 收斂方案落地）。歷史 5.0 版見 git log。
+版本紀錄在同目錄的 `CHANGELOG.md`。

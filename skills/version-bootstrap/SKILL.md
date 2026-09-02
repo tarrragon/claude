@@ -1,6 +1,8 @@
 ---
 name: version-bootstrap
 description: "版本規劃波 orchestrator。封裝「提案→spec→教學比對→UC→紅燈測試→建票」6 步 pipeline，標準化每版的規劃波啟動流程。Use for: (1) 新版本開始時的規劃波啟動, (2) 從提案到可執行 ticket 的標準化轉換, (3) 確保教學比對不被跳過。Use when: todolist.yaml 中有新版本的 proposals 待展開、準備進入新版本的 W1 規劃波時。"
+metadata:
+  version: 1.4.0
 ---
 
 # /version-bootstrap — 版本規劃波 Orchestrator
@@ -266,8 +268,4 @@ cp .claude/skills/doc/templates/data-contract-template.md docs/spec/{domain}/{na
 
 ---
 
-**Version**: 1.4.0 — 新增 Step 2.6「資料契約產出」於 Step 2.5 與 Step 3 間：依兩旗標判準（引用 `data-layer-contract-methodology.md` 第 2 節，不複寫）決定是否 cp 模板產出資料契約文件；契約條目登錄 traceability 第三軸 `data_contract_tests` 供 Step 5 測試設計盤點缺口（PROP-002 In Scope 3，0.2.0-W2-003）
-**Version**: 1.3.0 — 新增 Step 2.5「Domain 規劃」於 Step 2 與 Step 3 間：spec FR 填完後、測試設計前產出/更新 domain map（doc domain-map-template），含 saas / standalone 調和語意（domain 規劃是所有規劃波通用步驟，非 saas 專屬）；Step 5 補「消費 domain map 逐 bundle 定測試層」、Step 6 建票來源補「domain map bundle 分層 → domain/data/presentation 切分」（0.1.0-W2-016.2，落地 W2-016 ANA domain 規劃整合）
-**Version**: 1.2.0 — 新增 Step 4.5「地基波（僅含 UI 提案版本）」於 Step 4 與 Step 5 間：測試設計前依 component-library 方法論〈地基波 build 順序〉編排 i18n / design-system / UX 審查 / 元件庫四塊實作（Why：測試需驗 zh/en overflow 與元件反應，依賴 i18n/元件先存在；實證地基波經指正後手動插入）；Step 2 UI 前置檢查補「design-system spec（用 design-system-spec-template）」檢查項。非 UI 版本略過
-**Version**: 1.1.0 — Step 2 新增「UI 類提案元件庫前置檢查」小節：判別提案是否涉及 UI/頁面/元件，涉及則須先確認 design token 層與 L3 元件庫章節存在（缺則先補齊），才可繼續 UI 實作票規劃，落地元件庫雙向約束方法論流程整合點 1
-**Last Updated**: 2026-07-21
+版本紀錄在同目錄的 `CHANGELOG.md`。

@@ -50,7 +50,7 @@ try:
         get_effort_level,
     )
 
-    # W17-127.1：Layer 1 路徑改由 framework_paths SSOT 提供
+    # Layer 1 路徑改由 framework_paths SSOT 提供
     # （linux 視角 SSOT 警示：避免與 agent-dispatch-validation 雙寫漂移）
     from lib.framework_paths import get_layer1_paths, is_layer1_path as _is_layer1_path_lib
     _LIB_AVAILABLE = True
@@ -144,7 +144,7 @@ def is_layer1_file(file_path: str, logger) -> bool:
     """
     判斷檔案是否為 Layer 1 規則檔
 
-    W17-127.1：實作改委派 lib.framework_paths.is_layer1_path（SSOT），
+    實作改委派 lib.framework_paths.is_layer1_path（SSOT），
     既有 substring + .md 結尾判定行為等價保留。
 
     Args:

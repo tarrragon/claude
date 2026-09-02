@@ -3,6 +3,7 @@ name: spec
 description: "需求完善度品質閘門。Use for: (1) Phase 1 開始時初始化功能規格骨架 (/spec init), (2) 驗證功能規格的需求完善度 (/spec validate), (3) 判斷需求是否足夠清晰可進入實作。Use when: Phase 1 功能設計代理人在進行功能設計時，作為內部工具使用。不是流程入口——/tdd 管流程編排，/spec 管產出物品質。"
 metadata:
   portable: true
+  version: 1.6.2
 
 ---
 
@@ -167,7 +168,7 @@ python3 .claude/skills/spec/scripts/check_api_surface.py {spec-file-path}  # por
 
 輸出缺口清單（`[FR-XX] {行內容}`）或「檢核通過」；exit code 0 = 通過、1 = 有缺口。**性質為啟發式提醒**（依訊號詞比對，非語意理解），可能有少量誤判（如籠統的架構流程敘述），不構成強制阻擋，僅供撰寫者複核。
 
-**domain-map 覆蓋檢核**（動機：W2-014 domain map 曾停在 FR-24 漏 FR-25/26，靠人工四視角審查才抓出）：驗證 version-bootstrap Step 2.5 產出的 domain map 是否覆蓋 spec 全部 FR。適用於規劃波的 domain spec（`docs/spec/{domain}/`），非 ticket 級 feature-spec。命令：
+**domain-map 覆蓋檢核**（動機：domain map 曾漏覆蓋部分 FR，靠人工四視角審查才抓出）：驗證 version-bootstrap Step 2.5 產出的 domain map 是否覆蓋 spec 全部 FR。適用於規劃波的 domain spec（`docs/spec/{domain}/`），非 ticket 級 feature-spec。命令：
 
 ```bash
 python3 .claude/skills/spec/scripts/check_domain_coverage.py {spec-file-path} [--domain-map {path}]  # portability-allow: consumer 共通安裝位置
@@ -291,7 +292,7 @@ Phase 1 中 lavender 如何使用 /spec 的完整流程，詳見該代理人定�
 
 ## 相關文件
 
-- 若專案已採用 `tdd` skill：spec 產出的骨架與未回答問題清單可銜接進 TDD 的流程編排，詳見 tdd skill 的說明（若已安裝）。若未採用，spec 仍可獨立產出規格骨架供任何流程消費，只是不會有自動銜接的階段轉換
+- `../tdd/SKILL.md` - TDD 流程工具（流程編排；同專案若也安裝 tdd）
 - Phase 1 功能設計代理人的定義 - /spec 的使用者（各專案自有）
 - 專案的 TDD 流程定義文件
 - references/spec-template-lite.md - Lite 模板（3 區段）
@@ -301,7 +302,4 @@ Phase 1 中 lavender 如何使用 /spec 的完整流程，詳見該代理人定�
 
 ---
 
-**Version**: 1.6.1
-**Last Updated**: 2026-08-08
-**Source**: Phase 3b context 耗盡案例 → 需求完善度品質閘門
-**Changes**: v1.6.1 - 審查修正兩處：(1) 生命週期段對 tdd skill 的引用改為條件式選讀——原寫法是跨 skill 硬路徑、單獨安裝 spec 的專案是死鏈、且抵觸本檔「/spec 不呼叫 /tdd、兩者完全解耦」的定位宣告；段內原則已自足、引用降為「同專案若也安裝 tdd 時的延伸閱讀」。(2) 「維度 4 skipped」示例塊的語言標從閉合 fence 移回開啟 fence（v1.6.0 誤打在閉合線上）。v1.6.0 - /spec init 輸出節新增 feature-spec 生命週期（scaffold 文件）：消費者是 Phase 2 測試設計、Phase 3 綠燈後權威轉移到測試與程式碼、文件標記 `status: archived (superseded by tests)`；引用 domain spec 用指涉不整段複寫、只有本 ticket 的增量決策是固有資訊。動機：feature-spec 原無生命週期定義、實作完成後長得像權威規格、實際從 Phase 3 起每個實作決策都讓它漂移——依《人月神話》多文件必漂移論點與文件分級原則（tdd skill `references/document-coherence.md`）明示降級、消滅同步期待。v1.5.0 - 定位與分工節新增「適用範圍限制（防誤用聲明）」：`subdomain: data-contract` 文件（A/B 兩區結構）不適用 `/spec validate`，機械驗證改由 `doc validate` 承接 落地前人工檢查）；維度 4 補降級條款：CLAUDE.md 無「教學模組對應表」時跳過並標註「維度 4 skipped：無教學模組對應表」，不視為失敗，動機：/spec validate 對 SPEC-002 誤報結構失敗 + flutter_balance 專案無教學模組對應表）。v1.4.0 - Layer 1 新增 domain-map 覆蓋檢核（`scripts/check_domain_coverage.py` + `tests/test_check_domain_coverage.py`，11 測試綠）：驗證 domain map 覆蓋 spec 全部 FR，FR token 支援逗號續列/範圍展開，落地 W2-016 ANA domain 規劃整合；動機 W2-014 domain map 曾漏 FR-25/26）。v1.3.0 - Layer 1 新增 API surface 完整性檢查（Full only），`scripts/check_api_surface.py` 機械掃描 FR 段落 API 行為訊號與 endpoint 路徑定義的對應性，動機：SPEC-014 FR-04 analytics endpoint 路徑缺口）。v1.2.0 - 新增維度 4 教學一致性（Full 模式），比對 spec 設計決策與教學對應模組（防護教學×實作偏移）。v1.1.0 - 三人組共識簡化：刪除核心抽象/反向提問策略、原維度 4-7 降級為提示、精簡迭代機制、init 條件簡化為 2 個
+版本紀錄在同目錄的 `CHANGELOG.md`。

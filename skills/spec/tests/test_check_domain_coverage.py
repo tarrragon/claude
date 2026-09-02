@@ -54,7 +54,7 @@ def test_all_covered_returns_empty():
 
 
 def test_uncovered_fr_reported():
-    """domain map 停在 FR-24，spec 有 FR-25/26 → 回報未覆蓋（W2-014 實證缺口）。"""
+    """domain map 停在 FR-24，spec 有 FR-25/26 → 回報未覆蓋（已實證缺口）。"""
     spec = "### FR-24: 驗證\n### FR-25: 設定\n### FR-26: 提醒\n"
     domain_map = "覆蓋表\n| FR-24 | Ledger |\n"
     assert cdc.check_domain_coverage(spec, domain_map) == [25, 26]

@@ -2,6 +2,7 @@
 name: 5w1h-decision
 description: "5W1H Decision Framework Tool. Use for: (1) Systematic decision-making before creating todos, (2) Preventing duplicate implementation, (3) Detecting avoidance behavior, (4) Ensuring agile refactor compliance with executor/dispatcher separation"
 metadata:
+  version: 1.3.2
   portable: true
 
 ---
@@ -185,7 +186,5 @@ Neither skill depends on the other; this section only changes behavior when both
 ---
 
 **Last Updated**: 2026-07-21
-**Version**: 1.3.0 — 聯動改成觸發式：協作觸發點接進 neurodivergent-output 的帳本規則（每則都跑）、5W1H rows 跟著帳本自動出現、不是獨立附錄靠記憶（對應 #239 修法從「事後偵測」升級為「預防：接到會觸發的行為上」）。
-**Version**: 1.2.0 — Collaboration 段加「驗證它真的現形、別只宣告」：兩 skill 同開時逐則檢查帳本決策行是否真用壓縮 5W1H、費力那半會靜默掉（對應 report 卡 #239 宣告的組合≠執行的組合、從 neurodivergent-output + 5w1h 同開卻漏跑 5w1h 的自我示範抽出）。
-**Version**: 1.1.0 — 新增 Collaboration 段：當 neurodivergent-output 也啟用時，決策以壓縮形式進其跨訊息帳本、遵守帳本的認知負荷規則（不傾倒全 6 欄 / token / agent 鷹架）、避風港語言偵測範圍限決策內容不管輸出形狀、PDA mode 開時 gate 轉成邀請。單獨運行不受影響、互不依賴。
-**Version**: 1.0.0
+
+版本紀錄在同目錄的 `CHANGELOG.md`。

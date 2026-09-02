@@ -1,6 +1,8 @@
 ---
 name: agent-team
 description: "Agent Teams 協作派發指南。Use when: (1) Agent A 的發現會改變 Agent B 正在進行的工作, (2) 用戶要求使用 team/swarm, (3) 多代理人需即時協商共用介面或 API 契約。涵蓋 team 建立、Ticket-Task 橋接、teammate 入職、生命週期管理。"
+metadata:
+  version: 1.2.0
 ---
 
 # Agent Teams 協作派發指南
@@ -162,5 +164,4 @@ PM 在 spawn teammate 時，必須提供入職指令，包含：
 
 ---
 
-**Last Updated**: 2026-02-25
-**Version**: 1.2.0
+版本紀錄在同目錄的 `CHANGELOG.md`。

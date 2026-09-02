@@ -163,7 +163,7 @@ doc 的 UC 已定義整合測試（資訊鏈），TDD 需決定哪些行為由�
 - **串接決定** = 整合測試（例：SDK flush 後 collector 能收到、collector 存入後 query 能查到）
 - **配置決定** = 參數化測試（例：不同 storage backend 的行為差異、不同 flush interval 的邊界）
 
-> BDD→單元拆分的完整判準見 `references/bdd-behavior-testing.md`「BDD→單元拆分判準」章節。各層測試方法的詳細選擇見 `references/layered-test-strategy.md`。
+> BDD→單元拆分的完整判斷標準見 `references/bdd-behavior-testing.md`「BDD→單元拆分標準」章節。各層測試方法的詳細選擇見 `references/layered-test-strategy.md`。
 
 ### 與 UC 資訊鏈的關係
 

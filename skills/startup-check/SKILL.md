@@ -2,6 +2,8 @@
 name: startup-check
 description: "Session startup check tool that recovers pending handoff tasks, verifies Git environment, and confirms development state. Use for: (1) environment verification at session start, (2) detecting pending handoff tasks to resume, (3) confirming Git and development environment status."
 disable-model-invocation: true
+metadata:
+  version: 1.0.0
 ---
 
 # Claude 指令：Startup-Check
@@ -125,5 +127,4 @@ Git: {分支名} | {狀態}
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 1.0.0
+版本紀錄在同目錄的 `CHANGELOG.md`。

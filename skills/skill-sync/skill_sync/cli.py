@@ -183,6 +183,15 @@ _CONSUMER_PATH_RE = re.compile(r"\.claude/[A-Za-z0-9_./-]+")
 # 專案 ticket ID：不只是斷鏈，blog 的 skill-mirror 從全檔取最大三段數字推導版號，
 # 一個 ticket ID 就能讓它抓錯版並中斷發佈。
 _TICKET_ID_RE = re.compile(r"\b\d+\.\d+\.\d+-W\d+-\d+")
+# rule8-exempt: illustration:下一段裸格式常數註解舉例展示裸格式與全格式的字面差異
+# 裸格式 ticket ID（無版本前綴，如 W8-047）：另一種下游危害——內容送進其他消費端
+# 後，該端若部署框架既有的引用穩定性守衛，會因裸格式命中而阻擋其 commit。此正則
+# 為框架單一權威定義（供多個獨立守衛比對裸格式用）的字面複製，非 import——
+# skill-sync 是零框架依賴的獨立套件（見上方一段的既有說明），任何跨套件 import
+# 都會讓它無法安裝到不含該套件的環境。字面是否與權威定義一致由專案層級的獨立測試
+# 斷言（不放在本套件目錄內，避免測試原始碼自身的字面路徑引用被本檔的
+# consumer-path 判準命中，形成自我指涉）。
+_BARE_TICKET_ID_RE = re.compile(r"\bW\d+-\d+\b")
 # 行內豁免：該行的引用經人判定為刻意保留（架構性橋接、教學範例）。標記語彙沿用
 # 專案既有的 portability-allow，寫在哪一行就只豁免那一行。
 # 兩個標記語彙互認：portability-allow 說「這個消費端專屬引用是刻意保留的」，
@@ -237,13 +246,25 @@ def _scan_line_for_violations(rel: str, lineno: int, line: str) -> list[Portabil
 
     .md 全文掃描與 .py 敘述性文字（docstring／# 註解）掃描共用同一判準，避免
     兩條路徑各自維護一份 regex 比對邏輯而彼此漂移。
+
+    裸格式比對（_BARE_TICKET_ID_RE）會命中全格式 ID 內嵌的裸片段（如
+    "0.2.1-W3-1"（rule8-exempt: illustration:示範全格式如何內嵌裸片段） 內的
+    "W3-1"），需排除完全落在既有全格式命中範圍內的裸格式匹配，避免同一段文字
+    被同時記兩筆違規。
     """
     if _ALLOW_RE.search(line):
         return []
     found: list[PortabilityViolation] = []
     for match in _CONSUMER_PATH_RE.finditer(line):
         found.append(PortabilityViolation(rel, lineno, "consumer-path", match.group(0)))
+    full_spans: list[tuple[int, int]] = []
     for match in _TICKET_ID_RE.finditer(line):
+        found.append(PortabilityViolation(rel, lineno, "ticket-id", match.group(0)))
+        full_spans.append(match.span())
+    for match in _BARE_TICKET_ID_RE.finditer(line):
+        start, end = match.span()
+        if any(fs <= start and end <= fe for fs, fe in full_spans):
+            continue
         found.append(PortabilityViolation(rel, lineno, "ticket-id", match.group(0)))
     return found
 
@@ -328,8 +349,18 @@ def check_portability(skill_dir: Path) -> list[PortabilityViolation]:
 
 
 def _resolve_hook_logs_dir() -> Path:
-    """解析 hook-logs 目錄；env var 優先，否則用預設相對路徑（測試隔離用）。"""
-    return Path(os.environ.get(_HOOK_LOGS_DIR_ENV, _DEFAULT_HOOK_LOGS_DIR))
+    """解析 hook-logs 目錄；env var 優先（測試隔離用），否則錨定專案根目錄。
+
+    改為呼叫 _resolve_project_root() 前，此函式用未錨定的相對路徑
+    `.claude/hook-logs`，經由已安裝的全域 shim（`uv run --directory
+    <skill_dir>`，cwd 恆等於 skill 自身目錄）執行時，稽核紀錄會寫到
+    `<repo>/.claude/skills/skill-sync/.claude/hook-logs/`，而非本函式
+    文件承諾的 `<repo>/.claude/hook-logs/`。
+    """
+    env_value = os.environ.get(_HOOK_LOGS_DIR_ENV)
+    if env_value:
+        return Path(env_value)
+    return _resolve_project_root("hook-logs resolution") / _DEFAULT_HOOK_LOGS_DIR
 
 
 def _write_portability_force_log(
@@ -701,13 +732,18 @@ def update_sync_manifest(repo_dir: Path) -> None:
     print("  [OK] versions.json updated")
 
 
-def get_skills_dir() -> Path:
-    """解析 .claude/skills 目錄，優先以 git toplevel 為基準，消除 cwd 依賴。
+def _resolve_project_root(purpose: str = ".claude/skills resolution") -> Path:
+    """解析專案根目錄，優先以 git toplevel 為基準，消除 cwd 依賴。
 
     在專案任意子目錄（含 skill 目錄內、`uv run --directory` 情境）執行時，
-    都應解析到專案根下的 .claude/skills，而非誤把子目錄當根目錄。
-    非 git 目錄（或 git 不可用）時 fallback 至現行 cwd 行為，並於 stderr
-    輸出警告（觀測性規則 4）。
+    都應解析到專案根，而非誤把子目錄當根目錄。非 git 目錄（或 git 不可用）
+    時 fallback 至現行 cwd，並於 stderr 輸出警告（觀測性規則 4）。
+
+    抽出為共用 helper：get_skills_dir() 與 _resolve_hook_logs_dir() 各自需要
+    同一段「消除 cwd 依賴」邏輯，若各自實作會在同一檔案內重蹈多處各自
+    解析同一件事的覆轍（`uv run --directory` shim 使 cwd 恆等於 skill 自身
+    目錄，任何未錨定專案根目錄的相對路徑寫入都會落錯位置）。`purpose`
+    只影響警告文字，兩個呼叫端共用判斷邏輯與 fallback 語意。
     """
     try:
         result = subprocess.run(
@@ -720,21 +756,31 @@ def get_skills_dir() -> Path:
     except (OSError, subprocess.SubprocessError) as e:
         print(
             f"Warning: git rev-parse failed ({type(e).__name__}: {e}); "
-            "falling back to current working directory for .claude/skills resolution",
+            f"falling back to current working directory for {purpose}",
             file=sys.stderr,
         )
-        return Path.cwd() / ".claude" / "skills"
+        return Path.cwd()
 
     if result.returncode != 0:
         print(
-            "Warning: not a git repository; "
-            "falling back to current working directory for .claude/skills resolution",
+            f"Warning: not a git repository; "
+            f"falling back to current working directory for {purpose}",
             file=sys.stderr,
         )
-        return Path.cwd() / ".claude" / "skills"
+        return Path.cwd()
 
-    toplevel = result.stdout.strip()
-    return Path(toplevel) / ".claude" / "skills"
+    return Path(result.stdout.strip())
+
+
+def get_skills_dir() -> Path:
+    """解析 .claude/skills 目錄，優先以 git toplevel 為基準，消除 cwd 依賴。
+
+    在專案任意子目錄（含 skill 目錄內、`uv run --directory` 情境）執行時，
+    都應解析到專案根下的 .claude/skills，而非誤把子目錄當根目錄。
+    非 git 目錄（或 git 不可用）時 fallback 至現行 cwd 行為，並於 stderr
+    輸出警告（觀測性規則 4）。
+    """
+    return _resolve_project_root(".claude/skills resolution") / ".claude" / "skills"
 
 
 def run_git(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:

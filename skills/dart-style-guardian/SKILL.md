@@ -1,6 +1,8 @@
 ---
 name: dart-style-guardian
 description: "Style Guardian - Unified Design System Enforcement Tool. Use for: (1) Preventing hardcoded styles (colors, spacing, typography), (2) Preventing hardcoded text (i18n violations), (3) Guiding unified configuration usage, (4) Detecting and fixing style violations"
+metadata:
+  version: 1.0.0
 ---
 
 # Style Guardian - Unified Design System Enforcement
@@ -330,5 +332,4 @@ import 'package:book_overview_app/core/ui/ui_config.dart';
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 1.0.0
+版本紀錄在同目錄的 `CHANGELOG.md`。

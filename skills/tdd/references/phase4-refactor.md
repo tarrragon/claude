@@ -335,4 +335,4 @@ Phase 4 必須記錄所有發現的技術債務，無論優先級高低。
 ---
 
 **Last Updated**: 2026-06-14
-**Version**: 1.1.0 — 納入 cinnamon 外移的「程式碼重構分析指南（Code Refactoring Analysis Guide）」通用步驟（流程與人格解耦，任何角色觸發 Phase 4b 得同一流程，W8-009.3.4）
+**Version**: 1.1.0 — 納入 cinnamon 外移的「程式碼重構分析指南（Code Refactoring Analysis Guide）」通用步驟（流程與人格解耦，任何角色觸發 Phase 4b 得同一流程）

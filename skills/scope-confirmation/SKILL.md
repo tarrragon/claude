@@ -1,6 +1,8 @@
 ---
 name: scope-confirmation
 description: "功能範圍確認工具. Use for: (1) 測試/實作/需求不一致時的範圍確認, (2) 功能邊界不清時的澄清, (3) 防止範圍蔓延"
+metadata:
+  version: 1.1.0
 ---
 
 # 功能範圍確認 (Scope Confirmation) SKILL
@@ -301,5 +303,4 @@ description: "功能範圍確認工具. Use for: (1) 測試/實作/需求不一�
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 1.1.0
+版本紀錄在同目錄的 `CHANGELOG.md`。

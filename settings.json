@@ -764,11 +764,6 @@
           },
           {
             "type": "command",
-            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/ana-ticket-metadata-validation-hook.py",
-            "timeout": 5000
-          },
-          {
-            "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/tdd/hooks/layer-boundary-validator-hook.py"
           },
           {

@@ -7,6 +7,8 @@ argument-hint: "[craft|shape · audit|critique · animate|bolder|colorize|deligh
 license: Apache 2.0
 allowed-tools:
   - Bash(npx impeccable *)
+metadata:
+  version: 3.5.0
 ---
 
 Designs and iterates production-grade frontend interfaces. Real working code, committed design choices, exceptional craft.
@@ -174,3 +176,7 @@ node .claude/skills/impeccable/scripts/pin.mjs <pin|unpin> <command>
 ```
 
 Valid `<command>` is any command from the table above. Report the script's result concisely. Confirm the new shortcut on success, relay stderr verbatim on error.
+
+---
+
+版本紀錄在同目錄的 `CHANGELOG.md`。

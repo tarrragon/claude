@@ -238,4 +238,4 @@ branch 命名：`feat/monitor-teaching-backfill-NNN`（NNN = challenge 編號）
 
 ---
 
-**Version**: 1.0.0
+版本紀錄在同目錄的 `CHANGELOG.md`。

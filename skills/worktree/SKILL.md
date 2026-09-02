@@ -3,6 +3,8 @@ name: worktree
 description: "Use this skill for managing git worktrees for Ticket-based development. Triggers include: creating a worktree for a new ticket, checking worktree status, viewing all worktrees, or any mention of /worktree, worktree management, feature branches, or setting up development environment."
 argument-hint: "<subcommand> [args]"
 allowed-tools: Bash, Read, Write, Edit
+metadata:
+  version: 1.1.0
 ---
 
 # Worktree Management SKILL
@@ -426,13 +428,6 @@ git branch -d feat/1.0.0-W9-002.1
 
 ---
 
-**Version**: 1.1.0 — 新增「worktree 不含的狀態」章節（0.2.1-W3-274，框架 issue 46 症狀一框架層部分）：worktree 是 git 層隔離，gitignore 產物/建置快取/依賴目錄三類非 git 狀態不隨之而來；不列舉任何專案專屬命令，指引 consumer 於專案層文件記錄並在派發時引用 agent-dispatch-template「環境前置欄位」
-**Version**: 1.0.0
-**Last Updated**: 2026-08-04
-**Status**: MVP (create + status 子命令)
-
----
-
 ## 修改 source 後無需重新安裝（shim 化）
 
 > **重要**：本 skill 已改用 cwd-resolving shim（ARCH-APP-002 / framework issue #12），不再走 `uv tool install`。shim 每次執行都 `uv run --directory .claude/skills/worktree` 當前專案源碼，修改 source 後改動即時生效，無 stale installed 問題（取代舊 `uv-tool-staleness-check-hook` 機制）。
@@ -446,3 +441,7 @@ python3 .claude/scripts/install-skill-clis.py
 # 檢查是否已 shim 化（exit 0/1）
 python3 .claude/scripts/install-skill-clis.py --check
 ```
+
+---
+
+版本紀錄在同目錄的 `CHANGELOG.md`。

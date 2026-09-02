@@ -1,6 +1,6 @@
 # 搜尋引擎的匹配模式跟使用者預期的對齊
 
-> **角色**：本卡是 `frontend-with-playwright` 的支撐型原則（principle）、被 SKILL.md「相關抽象層原則」段（#73）引用、是 search feature 在 capability 維度上的對齊判準。
+> **角色**：本卡是 `frontend-with-playwright` 的支撐型原則（principle）、被 SKILL.md「相關抽象層原則」段（#73）引用、是 search feature 在 capability 維度上的對齊判斷標準。
 >
 > **何時讀**：當需求涉及搜尋 / filter / lookup 功能、或使用者報「我搜 X 找不到、但是有 X」這類疑似 silent 失敗時。讀本卡跑識別三問、確認工具預設 matching mode 是否跟使用者預期對齊。
 

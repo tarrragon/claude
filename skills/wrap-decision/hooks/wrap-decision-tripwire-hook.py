@@ -18,7 +18,7 @@ WRAP 絆腳索 Hook — wrap-decision-tripwire-hook.py
   S3 ana_claim（category=wrap_standard）：claim ANA 類型 ticket 的分析過程
   S4 reflection_depth_challenge（category=reflection_trigger）：反思深度質疑關鍵字
 
-category 分流（W15-018）：
+category 分流：
   wrap_standard     → 訊息前綴「[WRAP 絆腳索]」，引導 /wrap-decision
   reflection_trigger → 訊息前綴「[Reflection Trigger]」，引導 three-phase-reflection
 各訊號 cooldown 由 state.signals[sd.id] 獨立追蹤，不跨 category 互相壓制。
@@ -91,7 +91,7 @@ def _now() -> datetime:
 
 @dataclass
 class ContextBlacklist:
-    """S2 context-aware filter（W10-058.1.1.2）：keyword match 後，
+    """S2 context-aware filter：keyword match 後，
     若觸發詞前後 window 字內含 words 任一者，視為技術語境陳述，suppress signal。
     """
     window: int = 20
@@ -101,7 +101,7 @@ class ContextBlacklist:
 @dataclass
 class SignalDef:
     id: str
-    # category 區分訊號語意分類（W15-018）：
+    # category 區分訊號語意分類：
     #   wrap_standard     — S1/S2/S3 標準 WRAP 絆腳索
     #   reflection_trigger — S4 反思深度觸發（three-phase-reflection 方法論）
     # 未標註時預設為 wrap_standard（向後相容）。
@@ -118,7 +118,7 @@ class SignalDef:
     ticket_type_filter: Optional[str] = None
     reset_conditions: List[str] = field(default_factory=list)
     message_template: str = ""
-    # W10-058.1.1.2：context-aware filter（黑名單版）。None 表示未啟用。
+    # context-aware filter（黑名單版）。None 表示未啟用。
     context_blacklist: Optional[ContextBlacklist] = None
     raw: Dict[str, Any] = field(default_factory=dict)
 
@@ -156,7 +156,7 @@ _VALID_RESET_CONDITIONS = {
     "ticket_switch",
     "manual_wrap_invocation",
     "wrap_section_written",
-    # W15-018 reflection_trigger 類別新增
+    # reflection_trigger 類別新增
     "manual_reflection_invocation",
     "session_end",
 }
@@ -186,7 +186,7 @@ def _parse_signals(signals_raw: Any, logger) -> List[SignalDef]:
         sd = SignalDef(id=str(item.get("id", "")))
         if not sd.id:
             continue
-        # W15-018: category 預設 wrap_standard（向後相容）
+        # category 預設 wrap_standard（向後相容）
         sd.category = str(item.get("category", "wrap_standard"))
         sd.enabled = bool(item.get("enabled", True))
         sd.event_sources = list(item.get("event_sources", []))
@@ -200,7 +200,7 @@ def _parse_signals(signals_raw: Any, logger) -> List[SignalDef]:
         sd.ticket_type_filter = item.get("ticket_type_filter")
         sd.reset_conditions = list(item.get("reset_conditions", []))
         sd.message_template = item.get("message_template", "")
-        # W10-058.1.1.2：解析 context_blacklist（選填）
+        # 解析 context_blacklist（選填）
         cb_raw = item.get("context_blacklist")
         if isinstance(cb_raw, dict):
             words = cb_raw.get("words") or []
@@ -405,7 +405,7 @@ def _extract_bash_command(event: Dict[str, Any]) -> str:
 
 def read_ticket_type(ticket_id: str, project_root: Path, logger) -> Optional[str]:
     """讀 ticket frontmatter 的 type 欄位。讀不到返回 None。"""
-    # B-2 (W10-056.3): 改用 hook_utils.find_ticket_file，移除本地重複實作（DRY 原則）。
+    # B-2: 改用 hook_utils.find_ticket_file，移除本地重複實作（DRY 原則）。
     path = find_ticket_file(ticket_id, project_root, logger)
     if path is None:
         logger.info("ticket file not found: %s", ticket_id)
@@ -419,7 +419,7 @@ def read_ticket_type(ticket_id: str, project_root: Path, logger) -> Optional[str
 
 def wrap_section_already_written(ticket_id: str, project_root: Path, logger) -> bool:
     """檢查 ticket 的 Solution 章節是否含 WRAP 三問章節。"""
-    # B-2 (W10-056.3): 改用 hook_utils.find_ticket_file。
+    # B-2: 改用 hook_utils.find_ticket_file。
     path = find_ticket_file(ticket_id, project_root, logger)
     if path is None:
         return False
@@ -461,7 +461,7 @@ class ConsecutiveFailuresStrategy:
     # 此屬性不會實際被使用，避免與 SIGNAL_STRATEGIES key 產生 drift。
     _DEFAULT_SIGNAL_ID = "consecutive_failures"
 
-    # B-1 + C3-1 (W10-056.3): 失敗判定條件改讀 YAML signals[S1].failure_detection（W10-052
+    # B-1 + C3-1: 失敗判定條件改讀 YAML signals[S1].failure_detection（
     # source-of-truth 原則）。當 YAML 未提供 failure_detection 時，使用以下 backward-compatible
     # 預設值（避開破壞既有測試 fixture）。生產 YAML 已明確列出，故實際 source-of-truth 由 YAML 決定。
     _DEFAULT_FAILURE_KEYWORDS = ("error", "exception", "failed", "timeout")
@@ -486,7 +486,7 @@ class ConsecutiveFailuresStrategy:
             return DetectResult(hit=False, reset=True, signal_id=sd.id)
 
     def _is_failure(self, event: Dict[str, Any], sd: SignalDef) -> bool:
-        # 從 YAML 讀取失敗判定條件（W10-052 source-of-truth）
+        # 從 YAML 讀取失敗判定條件（source-of-truth）
         failure_cfg = sd.raw.get("failure_detection") or {}
         statuses = failure_cfg.get("structured_statuses") or list(self._DEFAULT_FAILURE_STATUSES)
         keywords = failure_cfg.get("keywords") or list(self._DEFAULT_FAILURE_KEYWORDS)
@@ -534,7 +534,7 @@ class RestrictiveKeywordsStrategy:
                 break
         if matched is None:
             return DetectResult(hit=False, signal_id=sd.id)
-        # W10-058.1.1.2：context-aware filter（黑名單版）。
+        # context-aware filter（黑名單版）。
         # 觸發詞前後 window 字內含 blacklist 詞 → 視為技術語境陳述，suppress signal。
         if sd.context_blacklist is not None and self._check_context_blacklist(
             prompt, matched, sd.context_blacklist.window, sd.context_blacklist.words,
@@ -644,7 +644,7 @@ SIGNAL_STRATEGIES: Dict[str, SignalStrategy] = {
     "consecutive_failures": ConsecutiveFailuresStrategy(),
     "restrictive_keywords": RestrictiveKeywordsStrategy(),
     "ana_claim": AnaClaimStrategy(),
-    # W15-018: S4 reflection_depth_challenge 使用與 S2 相同的關鍵字匹配邏輯
+    # S4 reflection_depth_challenge 使用與 S2 相同的關鍵字匹配邏輯
     # （UserPromptSubmit + keywords + min_prompt_length），但 signal_id 獨立
     # 確保 cooldown state 不跨訊號壓制。訊息前綴差異由 YAML message_template 控制。
     "reflection_depth_challenge": RestrictiveKeywordsStrategy(),
@@ -717,7 +717,7 @@ def render_message(sd: SignalDef, result: DetectResult,
 
 
 # ============================================================================
-# Log 觀測欄位輔助（W10-101）
+# Log 觀測欄位輔助
 # ============================================================================
 
 # excerpt 半徑：以 matched keyword 在 prompt 中的位置為中心，向前後各取 N 字。
@@ -787,7 +787,7 @@ def _process_signals(
             state = mark_warned(state, sd.id)
             # 保留原訊息行（向後相容既有 grep / 掃描工具）
             logger.info("signal %s triggered; warning emitted", sd.id)
-            # W10-101：附加觀測欄位（matched_keyword + prompt_excerpt），供
+            # 附加觀測欄位（matched_keyword + prompt_excerpt），供
             # 未來 S2 誤報率重評時依關鍵字 / 上下文分類樣本。S1/S3 等無 keyword
             # 或無 prompt 的 signal 填 "-"。
             kw = result.matched_keyword or "-"
@@ -803,7 +803,7 @@ def _process_signals(
 
 
 def is_pytest_environment() -> bool:
-    """偵測是否在 pytest 測試環境（W10-058.1.1.1 MVP）。
+    """偵測是否在 pytest 測試環境（MVP）。
 
     觸發條件（任一成立即視為 pytest 環境）：
       - PYTEST_CURRENT_TEST env var 存在（pytest 主流程自動注入）
@@ -839,7 +839,7 @@ def main() -> int:
         logger.debug("pytest environment detected, skipping detection")
         return 0
 
-    # Effort 感知（v2.1.133+，W14-036）：本 hook 為 advisory WRAP 訊號偵測（PC-066/PC-093）
+    # Effort 感知（v2.1.133+）：本 hook 為 advisory WRAP 訊號偵測（PC-066/PC-093）
     # 屬「事實判斷」核心訊號，low effort 下仍必須提醒，不短路放行（quality-baseline 規則 6 防護）
     effort = get_effort_level(event)
     logger.info("effort=%s，wrap-decision-tripwire 維持完整偵測（advisory，不依 effort 放行）", effort)

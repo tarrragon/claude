@@ -1,6 +1,8 @@
 ---
 name: pre-fix-eval
 description: "修復前強制評估系統. Use for: (1) 測試失敗自動評估, (2) 編譯錯誤分類處理, (3) 強制 Ticket 開設流程"
+metadata:
+  version: 1.0.0
 ---
 
 # 修復前強制評估 (Pre-Fix Evaluation)
@@ -140,5 +142,4 @@ Stage 6 的代理人分派**依據 `.claude/pm-rules/incident-response.md` 的�
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 1.0.0
+版本紀錄在同目錄的 `CHANGELOG.md`。

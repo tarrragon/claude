@@ -1,6 +1,8 @@
 ---
 name: methodology-writing
 description: "方法論撰寫指南。Use for: (1) 撰寫新方法論, (2) 改寫冗長的舊方法論, (3) 檢查方法論品質"
+metadata:
+  version: 1.0.0
 ---
 
 # 方法論撰寫指南
@@ -289,5 +291,4 @@ grep -r "方法論檔名" .claude/
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 1.0.0
+版本紀錄在同目錄的 `CHANGELOG.md`。

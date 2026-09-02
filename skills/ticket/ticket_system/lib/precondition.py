@@ -25,6 +25,7 @@ from ticket_system.constants import (
     STATUS_IN_PROGRESS,
     STATUS_PENDING,
 )
+from ticket_system.lib.paths import get_project_root
 
 
 # --- Constants ---------------------------------------------------------------
@@ -80,8 +81,20 @@ _SUGGEST_MAP = {
 
 
 def _resolve_hook_logs_dir() -> Path:
-    """解析 hook-logs 目錄；env var 優先，否則用預設相對路徑。"""
-    return Path(os.environ.get(_HOOK_LOGS_DIR_ENV, _DEFAULT_HOOK_LOGS_DIR))
+    """解析 hook-logs 目錄；env var 優先（測試隔離用），否則錨定專案根目錄。
+
+    改為呼叫 get_project_root()（同套件既有 SSOT，`ticket_system.lib.paths`）
+    前，此函式用未錨定的相對路徑 `.claude/hook-logs`，經由已安裝的全域
+    shim（`uv run --directory <skill_dir>`，cwd 恆等於 skill 自身目錄）
+    執行時，稽核紀錄會寫到 `<repo>/.claude/skills/ticket/.claude/hook-logs/`，
+    而非本函式文件承諾的 `<repo>/.claude/hook-logs/`。同套件內既有
+    get_project_root() 已處理 worktree 偵測與 CLAUDE_PROJECT_DIR 等情境，
+    此處直接復用，不另行實作第二份解析邏輯。
+    """
+    env_value = os.environ.get(_HOOK_LOGS_DIR_ENV)
+    if env_value:
+        return Path(env_value)
+    return get_project_root() / _DEFAULT_HOOK_LOGS_DIR
 
 
 def write_force_usage_log(

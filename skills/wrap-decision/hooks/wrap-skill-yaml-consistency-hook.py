@@ -11,7 +11,7 @@ WRAP SKILL↔YAML 一致性檢查 Hook — wrap-skill-yaml-consistency-hook.py
       .claude/skills/wrap-decision/SKILL.md（portability-allow: 本 skill 自我引用，consumer 共通安裝位置）
       .claude/config/wrap-triggers.yaml（portability-allow: 此 skill 對消費端環境的硬性依賴——AC4 缺映射檔會 exit 2 阻擋，沿用時需提供對應設定檔）
 
-檢查項目（依 W10-055.1 ANA Solution 規格）：
+檢查項目（依 ANA Solution 規格）：
   AC1 Signal orphan：每個 YAML signals[].id 在映射檔 signal_to_skill_triggers 有對應 SKILL 情境（警告）
   AC2 Keyword orphan：每個 YAML keywords[] / failure_detection.keywords[] 在映射檔
                        keyword_to_trigger_category 有 belongs_to 類別（警告）

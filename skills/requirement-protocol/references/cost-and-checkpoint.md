@@ -6,7 +6,7 @@
 - 客製需求要對抗多層（vendor CSS、framework reconciliation、browser default、UA stylesheet）
 - 收到「先還原」「先重來」「換個方向」「我們重新開始」這類指令
 
-不適用：純 greenfield 開發（沒有舊程式碼要對抗、沒有探索成果要保留）。
+不適用：純 greenfield 開發（沒有舊代碼要對抗、沒有探索成果要保留）。
 
 > **自包含聲明**：閱讀本文件不需要先讀其他 reference。本文件涵蓋成本告知模板、checkpoint 命名慣例、reset 前的確認協議。
 

@@ -118,8 +118,8 @@ def format_warning(file_path: str, issues: list[dict]) -> str:
     return "\n".join(lines)
 
 
-# W10-047.2 抽樣降級：每 N 次觸發 1 次完整檢查（高頻 Hook，候選 3）
-# 來源 ANA：W10-035.3（Phase 3b P3 五 Hook，0% Action 比、連續 5 次無錯）
+# 抽樣降級：每 N 次觸發 1 次完整檢查（高頻 Hook，候選 3）
+# 來源 ANA：Phase 3b P3 五 Hook，0% Action 比、連續 5 次無錯
 SAMPLING_N = 10
 SAMPLING_COUNTER_FILE = Path(__file__).parent.parent / "hook-logs" / "_sampling" / "worklog-format-check.count"
 
@@ -177,7 +177,7 @@ def main():
     if not is_worklog_file(file_path):
         return 0
 
-    # W10-047.2 抽樣降級：每 N 次觸發 1 次完整檢查
+    # 抽樣降級：每 N 次觸發 1 次完整檢查
     if not should_sample_run(logger):
         return 0
 

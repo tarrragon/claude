@@ -1,6 +1,8 @@
 ---
 name: test-assertion-design
 description: "Assertion design judgment framework for flaky and design-quality issues. Use when writing tests, reviewing assertions, diagnosing flaky tests, or deciding if a timing/float/cache assertion is appropriate. Do NOT use for API syntax or refactoring."
+metadata:
+  version: 1.2.0
 ---
 
 # Test Assertion Design
@@ -91,5 +93,4 @@ description: "Assertion design judgment framework for flaky and design-quality i
 
 ---
 
-**Last Updated**: 2026-05-21
-**Version**: 1.2.0 — 第 2 輪審查：三問「確定性」對應標籤由「環境依賴」改為「確定性失效」（類型 5-6 屬設計族）。1.1.0：F2-F5 修正（W1-027 第 1 輪審查）
+版本紀錄在同目錄的 `CHANGELOG.md`。

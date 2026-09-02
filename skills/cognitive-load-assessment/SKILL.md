@@ -1,6 +1,8 @@
 ---
 name: cognitive-load-assessment
 description: "認知負擔評估與審查工具。作為決策樹、代理人、Code Review 的基本參考標準。用於: (1) 任務複雜度評估, (2) 代理人升級判斷, (3) 任務拆分建議, (4) 程式碼品質審查與熱點識別"
+metadata:
+  version: 2.0.0
 ---
 
 # 認知負擔評估與審查工具
@@ -231,5 +233,4 @@ Code Review 的目標不只是找出錯誤，更重要的是確保程式碼對�
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 2.0.0 - 合併 cognitive-load-review，新增 Code Review 模式和 references/
+版本紀錄在同目錄的 `CHANGELOG.md`。

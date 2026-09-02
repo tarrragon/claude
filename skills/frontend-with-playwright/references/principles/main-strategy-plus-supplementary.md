@@ -1,6 +1,6 @@
 # 主策略 + 補強策略：選擇不必互斥
 
-> **角色**：本卡是 `requirement-protocol` 的支撐型原則（principle）、被 SKILL.md「相關抽象層原則」段與 reference `decision-dialogue.md`（步驟 3「策略數」維度）引用、是「呈現決策時、不要預設五選一」的判準依據。
+> **角色**：本卡是 `requirement-protocol` 的支撐型原則（principle）、被 SKILL.md「相關抽象層原則」段與 reference `decision-dialogue.md`（步驟 3「策略數」維度）引用、是「呈現決策時、不要預設五選一」的判斷依據。
 >
 > **何時讀**：當你準備呈現多個策略選項給使用者、或寫到「五選一」「ABCDE 你選哪個」的單選表時。讀本卡判斷哪些可疊加（主 + 補強）、哪些才真正互斥。
 
@@ -25,7 +25,7 @@
 
 ---
 
-## 疊加可行的三條判準
+## 疊加可行的三條判斷標準
 
 某兩個策略 X + Y 可疊加 ⇔ 滿足以下全部：
 
@@ -71,7 +71,7 @@ Defensive 處理失敗、Optimistic 處理成功 — 兩個 happy path 共存、
 
 ### 模式三：Now + Later
 
-「先 ship X 解眼前、Y 下輪做」是一種隱式疊加 — 不是放棄 Y、是延後到風險更可承受的 release window。判準見 [`incremental-shipping-criteria.md`](./incremental-shipping-criteria.md)。
+「先 ship X 解眼前、Y 下輪做」是一種隱式疊加 — 不是放棄 Y、是延後到風險更可承受的 release window。判斷標準見 [`incremental-shipping-criteria.md`](./incremental-shipping-criteria.md)。
 
 ### 模式四：Selector strategy 疊加
 
@@ -84,7 +84,7 @@ Selector 起點 pattern（document query / 元件根 / 函式參數 / closest lo
 | Event target → 找最近容器          | closest          |
 | Test / 多實例                      | 函式參數         |
 
-同一份 component code 可同時用多種起點（外部 portal 用 document、內部用 closest）— 解不同 selector context、不衝突、增量成本低 = 滿足三條判準。
+同一份 component code 可同時用多種起點（外部 portal 用 document、內部用 closest）— 解不同 selector context、不衝突、增量成本低 = 滿足三條判斷標準。
 
 判讀：「這幾個 pattern 是同層次（互斥）還是不同 context（互補）？」不同 context = 疊加。
 
@@ -123,8 +123,8 @@ Selector 起點 pattern（document query / 元件根 / 函式參數 / closest lo
 | 推薦時只給一個策略、沒講「也可以加 X」   | 補上「再加 Y 風險不大」的選項             |
 | 使用者問「那 Y 還做嗎」                  | 你已經把 Y 隱式排除、講清楚 Y 的位置      |
 | 「真正的 fix 是 Z、其他是 hack」道德判斷 | 退一步檢查：在 Z 完成前、有沒有便宜的減痛 |
-| 兩個策略放一起就互相打架                 | 違反判準 1 或 2、退回單選                 |
-| 第二個策略 ROI 邊際                      | 違反判準 3、不疊加                        |
+| 兩個策略放一起就互相打架                 | 違反判斷標準 1 或 2、退回單選                 |
+| 第二個策略 ROI 邊際                      | 違反判斷標準 3、不疊加                        |
 
 **核心**：策略選擇問「能不能疊加」優先於「選哪個」 — 多數工程問題的最佳解是「多層次組合」、不是「找出唯一答案」。
 

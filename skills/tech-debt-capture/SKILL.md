@@ -1,6 +1,8 @@
 ---
 name: tech-debt-capture
 description: "Automated Phase 4 technical debt capture and Ticket creation. Parses work-log evaluation reports, extracts TD (Technical Debt) items, and creates Atomic Tickets using Single Responsibility Principle. Use: Extract technical debts from Phase 4 evaluation → Auto-map to target versions → Create tickets → Update todolist."
+metadata:
+  version: 1.1.0
 ---
 
 # Tech Debt Capture
@@ -153,6 +155,4 @@ uv run .claude/skills/tech-debt-capture/scripts/tech_debt_capturer.py capture \
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 1.1.0
-**Maintainer**: basil-hook-architect
+版本紀錄在同目錄的 `CHANGELOG.md`。

@@ -28,7 +28,9 @@ from ticket_system.lib.command_lifecycle_messages import (
 )
 from ticket_system.lib.acceptance_auditor import detect_vague_acceptance, detect_srp_violations
 from ticket_system.lib.absence_assertion_detector import detect_unverified_absence_claims
+from ticket_system.lib.ana_ticket_metadata_validator import validate_ticket_metadata
 from ticket_system.lib.machine_path_detector import detect_machine_specific_paths
+from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.spec_reference_checker import detect_unregistered_spec_references
 from ticket_system.lib.parallel_analyzer import ParallelAnalyzer
 from ticket_system.lib.tdd_sequence import suggest_tdd_sequence
@@ -135,6 +137,13 @@ def print_create_checklist(
     if new_ticket:
         for hint in detect_unverified_absence_claims(new_ticket):
             print(hint)
+
+    # Ticket metadata 品質驗證（遷自 ana-ticket-metadata-validation-hook.py，
+    # PC-058）：who 代理人分工／acceptance 長度分號／tdd_phase 合理性。
+    # 適用所有 ticket create，不限 ANA 來源——見模組 docstring 的量測依據。
+    if new_ticket:
+        for warning in validate_ticket_metadata(new_ticket, get_project_root()):
+            print(format_warning(warning))
 
     # 驗收條件格式提示
     print(CreateMessages.ACCEPTANCE_4V_CHECK)

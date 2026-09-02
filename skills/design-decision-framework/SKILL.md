@@ -1,6 +1,8 @@
 ---
 name: design-decision-framework
 description: "多方案評估決策框架。用於面臨 3+ 技術方案時的結構化評估、架構決策時的系統化分析，防止衝動決策和技術債務累積。Use for: 技術方案選擇、重大架構決策、高風險技術選型"
+metadata:
+  version: 1.2.0
 ---
 
 # 多方案評估決策框架 (Design Decision Framework) SKILL
@@ -77,5 +79,4 @@ description: "多方案評估決策框架。用於面臨 3+ 技術方案時的�
 
 ---
 
-**Last Updated**: 2026-05-29
-**Version**: 1.2.0 — 新增 Stage 1 對稱性偏誤檢查 reference 導航（W3-079 落地 W3-078 ANA 結論）
+版本紀錄在同目錄的 `CHANGELOG.md`。

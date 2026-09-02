@@ -277,3 +277,74 @@ def test_parse_bash_command_with_ack(hook_module):
 
 def test_parse_bash_command_unrelated(hook_module):
     assert hook_module.parse_bash_command("git status") is None
+
+
+# ============================================================================
+# D：main() 的 project_root 解析不受 cwd 影響（0.2.1-W3-1199）
+# ============================================================================
+#
+# 修復前：project_root = Path(os.environ.get("CLAUDE_PROJECT_DIR", ".")).
+# resolve()，未設環境變數時退回 cwd，使讀取 docs/work-logs/ 靜默失敗。本組
+# 測試不檢查「錯置檔案是否消失」（本 hook 是讀取路徑，失效無痕跡可觀察），
+# 而是直接驗證 main() 呼叫 get_project_root() 取得的值有被傳給 run_check()，
+# 不論呼叫端 cwd 為何。
+
+
+def test_d1_main_uses_get_project_root_result(hook_module, monkeypatch, tmp_path):
+    """main() 應把 get_project_root() 的回傳值傳給 run_check()，而非自行
+    以 CLAUDE_PROJECT_DIR-or-cwd 重新解析。"""
+    sentinel_root = tmp_path / "sentinel-repo"
+    sentinel_root.mkdir()
+
+    captured = {}
+
+    def fake_run_check(project_root, ticket_id, ack, logger):
+        captured["project_root"] = project_root
+        return 0
+
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: sentinel_root)
+    monkeypatch.setattr(hook_module, "run_check", fake_run_check)
+    monkeypatch.setattr(
+        hook_module, "read_json_from_stdin",
+        lambda logger: {
+            "tool_name": "Bash",
+            "tool_input": {"command": "ticket track claim 0.1.1-W1-001"},
+        },
+    )
+
+    exit_code = hook_module.main()
+
+    assert exit_code == 0
+    assert captured["project_root"] == sentinel_root
+
+
+def test_d2_main_independent_of_caller_cwd(hook_module, monkeypatch, tmp_path):
+    """模擬呼叫端 cwd 落在非專案根目錄（如 .claude/hooks/），
+    get_project_root() 的回傳值仍應原樣傳遞，不被呼叫端 cwd 覆蓋或污染。"""
+    real_root = tmp_path / "real-repo"
+    real_root.mkdir()
+    nested_cwd = real_root / ".claude" / "hooks"
+    nested_cwd.mkdir(parents=True)
+    monkeypatch.chdir(nested_cwd)
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+
+    captured = {}
+
+    def fake_run_check(project_root, ticket_id, ack, logger):
+        captured["project_root"] = project_root
+        return 0
+
+    monkeypatch.setattr(hook_module, "get_project_root", lambda: real_root)
+    monkeypatch.setattr(hook_module, "run_check", fake_run_check)
+    monkeypatch.setattr(
+        hook_module, "read_json_from_stdin",
+        lambda logger: {
+            "tool_name": "Bash",
+            "tool_input": {"command": "ticket track claim 0.1.1-W1-001"},
+        },
+    )
+
+    hook_module.main()
+
+    assert captured["project_root"] == real_root
+    assert captured["project_root"] != nested_cwd

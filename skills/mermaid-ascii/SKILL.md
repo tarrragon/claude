@@ -1,6 +1,8 @@
 ---
 name: mermaid-ascii
 description: "Mermaid 圖表 ASCII 渲染工具。Use for: (1) 將 Mermaid 圖表轉為純文字 ASCII, (2) 在不支援圖形的環境中顯示流程圖, (3) 文件中嵌入文字版圖表"
+metadata:
+  version: 1.0.0
 ---
 
 # Mermaid ASCII Renderer
@@ -180,11 +182,6 @@ cat diagram.mmd | python -m mermaid_ascii --ascii
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 1.0.0
-
----
-
 ## 修改 source 後必須重新安裝
 
 > **重要**：本 skill 透過 `uv tool install` 安裝為獨立 CLI，source（本目錄）與 installed（`~/.local/share/uv/tools/<package>/`）是兩份獨立 Python package。修改 source 後若未 reinstall，CLI 仍使用 stale installed 版本，新增的函式會 AttributeError 或被 hasattr 包裝靜默吞掉（W11-037 根因）。
@@ -196,3 +193,7 @@ cd .claude/skills/<本 skill 目錄> && uv tool install . --force --reinstall
 ```
 
 **自動偵測**：每次 SessionStart 由 `uv-tool-staleness-check-hook` 比對 source vs installed SHA256，偵測 stale 時提示修復指令。對應 ticket-skill 本身另有 `ticket-reinstall-hook` 自動 reinstall。
+
+---
+
+版本紀錄在同目錄的 `CHANGELOG.md`。

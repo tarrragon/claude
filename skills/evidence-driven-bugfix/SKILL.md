@@ -1,6 +1,8 @@
 ---
 name: evidence-driven-bugfix
 description: "證據驅動除錯流程。Use for: (1) Bug 修復的結構化流程（重現 -> failing test -> 根因 -> 最小修復 -> 回歸防護）, (2) 防止盲目猜測修復, (3) 確保每次修復可驗證、可追溯、可累積。Use when: 收到 bug report、測試失敗需要調查、生產環境問題需要修復、任何非新功能的程式碼修正。"
+metadata:
+  version: 2.2.0
 ---
 
 # /bugfix - 證據驅動除錯流程
@@ -419,5 +421,4 @@ Stage 8: 結案報告         [執行者: 認領 Ticket 的開發者]
 
 ---
 
-**Last Updated**: 2026-04-02
-**Version**: 2.2.0 - 新增測試完整性保護規則（禁止修改測試繞過失敗）
+版本紀錄在同目錄的 `CHANGELOG.md`。

@@ -1,6 +1,8 @@
 ---
 name: bulk-evaluate
 description: "子任務拆分與 Context 卸載工具。將可拆分的大型任務分成 N 個子 Ticket，各由 Agent 獨立執行，結論直接寫入 Ticket 不回報主線程。Use for: 批量檔案評估, 大型審查任務拆分, 任何需要讀取大量資料但結果可落地到 Ticket 的任務"
+metadata:
+  version: 1.0.0
 ---
 
 # 子任務拆分與 Context 卸載工具
@@ -158,5 +160,4 @@ Step 5: 統計 59 個子 Ticket 結論 → 更新父 Ticket
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 1.0.0
+版本紀錄在同目錄的 `CHANGELOG.md`。

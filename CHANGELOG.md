@@ -1,3 +1,55 @@
+## [2.45.0] - 2026-09-02
+
+### Summary
+feat: 遷移 ANA ticket metadata 驗證邏輯至 ticket create CLI; fix: 升級兩個 hook 的 CLAUDE_PROJECT_DIR fallback 為 get_project_root; fix: comment-qa-hook.py 的 PROJECT_ROOT 改用 get_project_root (+39 more)
+
+Changes: 1 feat, 8 fix, 31 docs, 2 chore
+
+- feat: 遷移 ANA ticket metadata 驗證邏輯至 ticket create CLI
+- fix: 升級兩個 hook 的 CLAUDE_PROJECT_DIR fallback 為 get_project_root
+- fix: comment-qa-hook.py 的 PROJECT_ROOT 改用 get_project_root
+- fix: spec skill test_spec_014_v1_4_passes 改用自足 fixture
+- fix: 擴充 portability gate 至裸格式 ticket ID，清理四個 skill 違規
+- fix: 錨定 skill-sync/ticket 的 hook-logs 路徑至專案根目錄
+- fix: 合併 spec skill 1.6.2 內容改進並清理雙向專案 ticket ID
+- fix: 移除 broken-link-check CHANGELOG.md 的專案 ticket ID 並合併重複 Source
+- fix: 修復 broken-link-check 與 wrap-decision 推送造成的格式回退
+- docs: 清除 ticket skill SKILL.md 全部 80 處識別符（fence 內外皆處理）
+- docs: 清除 broken-link-check scan_links.py 與 SKILL.md 殘留識別符
+- docs: 外移 error-pattern 與 doc 版本紀錄（D6 批次，D 類最後一批）
+- docs: 外移 continuous-learning 與 parallel-evaluation 版本紀錄（D5 批次）
+- docs: 外移 version-bootstrap 與 chrome-extension-mcp-debug 版本紀錄（D4 批次）
+- docs: 外移 version-release 與 framework-issue 版本紀錄（D3 批次）
+- docs: 外移 worktree 與 design-decision-framework 版本紀錄（D2 批次）
+- docs: 外移 search-tools-guide 與 test-assertion-design 版本紀錄（D1 批次）
+- docs: 回補 C 類批次 15-17 遺漏的 Last Updated（判準 2 反轉）
+- docs: 外移 ticket 版本紀錄，保留 bullet 結構並清除 14 處識別符
+- docs: 外移 skill-design-guide 與 version-sequencing 版本紀錄（C 類批次 17）
+- docs: 外移 foundation-design 與 test-effectiveness 版本紀錄（C 類批次 16）
+- docs: 外移 dart-provider-architecture 版本紀錄（C 類批次 15，framework-issue 排除）
+- docs: 補做 teaching-sync 版本紀錄外移（PM 裁決：兩版號並存）
+- docs: 外移 zellij 版本紀錄（批次 14，ticket 排除）
+- docs: 外移 tech-debt-capture 版本紀錄（批次 13，teaching-sync 排除）
+- docs: 外移 startup-check 與 strategic-compact 版本紀錄（批次 12）
+- docs: 外移 project-init 與 scope-confirmation 版本紀錄（批次 11）
+- docs: 外移 mermaid-ascii 與 pre-fix-eval 版本紀錄（批次 10）
+- docs: 外移 lsp-first 與 methodology-writing 版本紀錄（批次 9）
+- docs: 外移 doc-flow 與 evidence-driven-bugfix 版本紀錄（批次 8）
+- docs: 外移 decision-tree-helper 與 dispatch-strategy-review 版本紀錄（批次 7）
+- docs: 外移 dart-test-async-guardian 與 data-extraction 版本紀錄（批次 6）
+- docs: 外移 cognitive-load-assessment 與 dart-style-guardian 版本紀錄（批次 5）
+- docs: 外移 bulk-evaluate 與 cc-release-impact-review 版本紀錄（批次 4）
+- docs: 外移 agent-team 與 branch-worktree-guardian 版本紀錄（批次 3）
+- docs: 外移 impeccable 版本紀錄（批次 2）
+- docs: 外移 dart-domain-modeling 與 verify 版本紀錄（批次 1）
+- docs: 記錄 hook-logs cwd 路徑解析疊加 shim 造成稽核錯置的 error-pattern
+- docs: 移除 broken-link-check 測試檔內的專案 ticket ID
+- docs: 新增 PC-BAL-060 逃生閥授權範圍僅及發放它的閘門
+- chore: 同步 11 個 skill 至發佈庫版本並帶入 CHANGELOG 格式
+- chore: 回寫 .claude/VERSION 至
+
+---
+
 ## [2.44.0] - 2026-09-01
 
 ### Summary

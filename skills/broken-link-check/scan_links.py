@@ -54,7 +54,7 @@ REF_REGEX = re.compile(
     r"(?:@\.claude/|\.claude/|\.\./|\./)[^\s)\]\"'`]*?\.(?:md|py|sh)(?:\.[A-Za-z0-9_-]+)*"
 )
 
-# W8-049：per-line 豁免 marker。error-pattern 案例表刻意記錄的不存在路徑
+# per-line 豁免 marker。error-pattern 案例表刻意記錄的不存在路徑
 # （confabulation 錯誤參照 / 歷史遷移檔案軌跡）以行內 marker 顯式 opt-in 豁免，
 # 歸 excluded_documented 不計 broken。marker 僅影響所在行（PC-146 放置精確性）。
 # 兩個標記語彙同屬「已判定豁免」家族，差別在判定理由：broken-link-exempt 說
@@ -91,7 +91,7 @@ PLACEHOLDER_SAMPLES = {
     "@.claude/path/file.md",
 }
 
-# W2-011 triage A 類：範例 skill 名 token（skill-marketplace-standard.md 等文件
+# triage A 類：範例 skill 名 token（skill-marketplace-standard.md 等文件
 # 用具體詞彙示範「skill 引用另一 skill」的慣例寫法，非真實存在的 skill）。
 # 以路徑段精確比對（非子字串），避免誤排真實同名 skill。
 _EXAMPLE_SKILL_NAME_TOKENS = {"skill-name", "case-first", "sibling-skill"}
@@ -99,7 +99,7 @@ _EXAMPLE_SKILL_NAME_SEGMENT = re.compile(
     r"(?:^|/)(?:" + "|".join(re.escape(t) for t in _EXAMPLE_SKILL_NAME_TOKENS) + r")(?:/|$)"
 )
 
-# 樣式型 placeholder 偵測（W8-047 缺陷 2）：文件中的示意路徑非真實引用。
+# 樣式型 placeholder 偵測（缺陷 2）：文件中的示意路徑非真實引用。
 # - glob 萬用字元 * 或 ?（如 .claude/agents/*.md、.claude/rules/**/*.md）
 # - 角括號佔位 <name> / <檔名>（如 .claude/agents/<agent>.md）
 # - 大括號模板 {language} / {name}（如 quality-{language}.md）
@@ -114,10 +114,10 @@ _BRACE_PLACEHOLDER = re.compile(r"\{[^}]*\}")
 # （如 .claude/hooks/xxx-hook.py、./.claude/scripts/xxx.py）。
 _XXX_TOKEN = re.compile(r"(?:^|/|_)xxx(?:\.md|\.py|\.sh|/|$)", re.IGNORECASE)
 _TEST_TOKEN = re.compile(r"(?:^|/)TEST(?:_[A-Z0-9]+)*(?:\.md|/|$)")
-# W2-011 triage A 類：版本佔位 vX（如 vX-main.md），區別於真實版本目錄
+# triage A 類：版本佔位 vX（如 vX-main.md），區別於真實版本目錄
 # （v0.13.0-... 等以數字開頭），故要求 vX 後緊接非數字字元或行尾。
 _VX_PLACEHOLDER = re.compile(r"(?:^|/)vX(?:[^0-9][^/]*)?\.md$")
-# W2-011 triage A 類：省略號縮寫（如 PC-050-...md、`.claude/hooks/...py`），
+# triage A 類：省略號縮寫（如 PC-050-...md、`.claude/hooks/...py`），
 # 檔名以字面三個點直接接副檔名（無點分隔），與 ../ 相對路徑前綴（點+點+斜線）
 # 不同構。副檔名比對含 .py/.sh：射程擴充後同一縮寫慣例同樣出現在這兩種副檔名
 # （如 error-pattern 案例中示範 backtick 路徑被截斷顯示為 `.claude/hooks/...py`）。
@@ -176,8 +176,8 @@ def is_placeholder_pattern(raw):
     return False
 
 
-# W2-011 triage D 類：歷史封存文件排除策略。以「來源檔案」整檔判定，
-# 與既有 migration-backups/ source_in_backup 排除機制對稱（W8-047 缺陷 1）。
+# triage D 類：歷史封存文件排除策略。以「來源檔案」整檔判定，
+# 與既有 migration-backups/ source_in_backup 排除機制對稱（缺陷 1）。
 # 涵蓋：hook-specs 驗收報告、其在 skills/pre-fix-eval/references/ 的複本、
 # *_SUMMARY.md / *_CHECKLIST.md 命名慣例、CHANGELOG.md（含 .sync-conflicts/
 # 內複本）、skills/pre-fix-eval/INDEX.md（已封存 skill 的索引頁）。
@@ -401,14 +401,14 @@ def scan(root, knobs=None, scan_roots=None):
             sys.stderr.write(f"[WARN] cannot read {f}: {e}\n")
             continue
         scanned += 1
-        # W8-047 缺陷 1：來源端排除——source 檔本身在 migration-backups/ 時，
+        # 缺陷 1：來源端排除——source 檔本身在 migration-backups/ 時，
         # 其內部引用屬備份內容（非當前活躍框架債），預設整檔歸 excluded_backup。
         # 與 classify_ref 的 target 端 backup 排除對稱（旋鈕開啟才計入）。
         source_in_backup = (
             "migration-backups/" in str(f).replace(os.sep, "/")
             and not knobs["include_migration_backups"]
         )
-        # W2-011 triage D 類：來源端排除——source 檔本身為歷史封存文件時，
+        # triage D 類：來源端排除——source 檔本身為歷史封存文件時，
         # 整檔引用歸 excluded_archive（旋鈕開啟才計入，與 backup 排除同構）。
         source_in_archive = is_archive_source(
             _rel_to_root(f, root).replace(os.sep, "/")

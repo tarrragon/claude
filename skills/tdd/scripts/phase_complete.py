@@ -8,15 +8,13 @@ phase_complete.py
 1. 載入 contracts.yaml
 2. 執行 PhaseContractValidator.validate()
 3. 輸出驗證結果（errors 以 [ERROR] 前綴，warnings 以 [WARNING] 前綴）
-4. 將驗證結果透過 `ticket track append-log` 寫入 Ticket 的 Test Results 章節
+4. 將驗證結果寫入 Ticket execution log
 5. 若 errors 存在，返回 False（阻止後續 Phase 轉移）
 6. 若僅有 warnings，顯示提示並繼續（返回 True）
 
 消費端無 .claude/lib/phase_contract_validator.py 時優雅降級（portability-allow:
 選用性依賴，缺件優雅降級，非可攜性違規）：印出 [WARNING] 並跳過驗證（視同
-通過），不中斷指令碼本身。消費端無 `ticket` 指令（未安裝 .claude/skills/ticket，portability-allow: 選用性依賴，缺件優雅降級，非可攜性違規）
-時同樣優雅降級：印出 [WARNING] 並跳過寫入，不阻擋 Phase 轉移（見
-_write_validation_log）。
+通過），不中斷指令碼本身。
 """
 
 # /// script
@@ -26,13 +24,13 @@ _write_validation_log）。
 # ]
 # ///
 
-import subprocess
+import os
 import sys
 from pathlib import Path
 
 # 正確的跨層導入：使用相對路徑而非 sys.path.insert（架構層級邊界，見 IMP-045）
 # .claude/skills/tdd/ → .claude/lib/ 導入共用驗證器（portability-allow: 架構性橋接至框架共用模組，consumer 端結構相同）
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "lib"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "lib"))
 
 try:
     from phase_contract_validator import PhaseContractValidator, ValidationResult
@@ -59,7 +57,7 @@ def complete_phase(
     1. 載入 contracts.yaml
     2. 執行 PhaseContractValidator.validate()
     3. 輸出驗證結果（errors 以 [ERROR] 前綴，warnings 以 [WARNING] 前綴）
-    4. 將驗證結果透過 `ticket track append-log` 寫入 Ticket 的 Test Results 章節
+    4. 將驗證結果寫入 Ticket execution log
     5. 若 errors 存在，返回 False（阻止後續 Phase 轉移）
     6. 若僅有 warnings，顯示提示並繼續（返回 True）
 
@@ -106,8 +104,8 @@ def complete_phase(
     for warning in result.warnings:
         print(f"[WARNING] {warning}")
 
-    # 將驗證結果透過 ticket CLI 寫入 Test Results 章節
-    _write_validation_log(ticket_id, result)
+    # 將驗證結果寫入 Ticket execution log
+    _write_validation_log(ticket_id, ticket_dir, result)
 
     # 根據驗證結果決定是否允許 Phase 轉移
     if result.can_proceed:
@@ -118,57 +116,65 @@ def complete_phase(
         return False
 
 
-def _write_validation_log(ticket_id: str, result: ValidationResult) -> None:
+def _write_validation_log(
+    ticket_id: str, ticket_dir: str, result: ValidationResult
+) -> None:
     """
-    將驗證結果寫入 Ticket 的 Test Results 章節
+    將驗證結果寫入 Ticket execution log
 
-    透過 `ticket track append-log <id> --section "Test Results"` CLI 寫入
-    ——不再自行解析 markdown 找插入點。原邏輯搜尋 "## Execution Log"，但
-    本專案所有 ticket 的實際標題是 "# Execution Log"（H1），此比對永遠不會
-    命中，插入行為從未真正發生，經調查後確認並移除該死碼。改寫入 Test
-    Results 而非 Execution Log：後者是否該支援直接寫入尚未定案，前者是
-    既有 schema 章節，現在就能用，讀者也知道去哪裡找。
-
-    消費端未安裝本框架的 ticket 系統（`ticket` 指令不存在）時優雅降級：
-    印出 [WARNING] 並跳過，不阻擋 Phase 轉移、不崩潰（同既有的 lib 缺件
-    降級模式）。
+    追加到 Ticket 檔案的 Execution Log 區塊
     """
-    lines = []
-    if result.errors:
-        lines.append("**Phase Contract Validation:** FAILED")
-        lines.append("")
-        lines.append("Errors:")
-        lines.extend(f"- {e}" for e in result.errors)
-    else:
-        lines.append("**Phase Contract Validation:** PASSED")
-    if result.warnings:
-        lines.append("")
-        lines.append("Warnings:")
-        lines.extend(f"- {w}" for w in result.warnings)
-    content = "\n".join(lines)
+    # 構建 Ticket 檔案路徑
+    ticket_files = [
+        f for f in os.listdir(ticket_dir) if f.startswith(ticket_id) and f.endswith(".md")
+    ]
 
-    try:
-        proc = subprocess.run(
-            ["ticket", "track", "append-log", ticket_id, "--section", "Test Results", content],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except (FileNotFoundError, OSError) as e:
-        print(
-            f"[WARNING] Phase Contract 驗證結果未寫入 ticket：找不到 `ticket` "
-            f"指令（{type(e).__name__}），此為消費端需自行安裝的框架工具"
-            "（.claude/skills/ticket）。驗證本身已完成，僅日誌未寫入。",
-            file=sys.stderr,
-        )
+    if not ticket_files:
         return
 
-    if proc.returncode != 0:
-        print(
-            f"[WARNING] Phase Contract 驗證結果寫入 ticket 失敗（exit "
-            f"{proc.returncode}）：{(proc.stderr or proc.stdout).strip()}",
-            file=sys.stderr,
+    ticket_file = os.path.join(ticket_dir, ticket_files[0])
+
+    # 讀取現有內容
+    try:
+        with open(ticket_file, "r", encoding="utf-8") as f:
+            content = f.read()
+    except (OSError, IOError):
+        return
+
+    # 構建驗證結果日誌
+    validation_log = "\n## Phase Contract Validation\n\n"
+    if result.errors:
+        validation_log += "**Status:** FAILED\n\n"
+        validation_log += "### Errors:\n"
+        for error in result.errors:
+            validation_log += f"- {error}\n"
+        validation_log += "\n"
+    else:
+        validation_log += "**Status:** PASSED\n\n"
+
+    if result.warnings:
+        validation_log += "### Warnings:\n"
+        for warning in result.warnings:
+            validation_log += f"- {warning}\n"
+        validation_log += "\n"
+
+    # 在 Execution Log 區塊中追加
+    if "## Execution Log" in content:
+        # 在 Execution Log 區塊後追加
+        insertion_point = content.find("## Execution Log") + len("## Execution Log")
+        new_content = (
+            content[:insertion_point] + validation_log + content[insertion_point:]
         )
+    else:
+        # 如果沒有 Execution Log 區塊，在檔案末尾追加
+        new_content = content + "\n" + validation_log
+
+    # 寫回檔案
+    try:
+        with open(ticket_file, "w", encoding="utf-8") as f:
+            f.write(new_content)
+    except (OSError, IOError):
+        pass
 
 
 if __name__ == "__main__":

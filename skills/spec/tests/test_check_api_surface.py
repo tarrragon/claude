@@ -69,9 +69,9 @@ def test_no_signal_line_not_flagged():
 
 # --- 驗證案例：SPEC-014 歷史版本（v1.1，應被抓出缺口） ---
 
-# 摘自 v1.1 歷史版（git show 1382a5e:docs/spec/collector/postgresql.md）FR-04 段落：
-# analytics API 行為（501 Not Implemented）僅描述於驗收標準，實際只定義了
-# capabilities 的路徑，analytics 本身無 endpoint 路徑定義。
+# 缺口版 FR-04 段落：analytics API 行為（501 Not Implemented）僅描述於
+# 驗收標準，實際只定義了 capabilities 的路徑，analytics 本身無 endpoint
+# 路徑定義——與下方 SPEC_014_V1_4_FR04（已補齊 endpoint）成對照組。
 SPEC_014_V1_1_FR04 = """### FR-04: 能力偵測
 
 **描述**：Dashboard 和 Query API 透過 Go type assertion 判斷 storage backend 是否支援進階分析能力。
@@ -109,17 +109,48 @@ def test_spec_014_v1_1_flags_missing_analytics_endpoint():
     assert any("analytics API" in f["line"] for f in findings)
 
 
-# --- 驗證案例：SPEC-014 現行版本（v1.4，應通過檢核） ---
+# --- 驗證案例：SPEC-014 修復版本（v1.4，應通過檢核） ---
 
-SPEC_014_PATH = (
-    Path(__file__).resolve().parents[4] / "docs" / "spec" / "collector" / "postgresql.md"
-)
+# 修復版 FR-04 段落：在 SPEC_014_V1_1_FR04 基礎上補上 analytics 端點定義
+# （`/v1/analytics/aggregate`），與上方缺口版成對照組，示範同一段落補齊
+# endpoint 路徑後應通過檢核。skill 為 portable 資產，測資自足於本檔，
+# 不依賴任何消費專案的活文件路徑。
+SPEC_014_V1_4_FR04 = """### FR-04: 能力偵測
+
+**描述**：Dashboard 和 Query API 透過 Go type assertion 判斷 storage backend 是否支援進階分析能力。
+
+**偵測機制**：
+
+```go
+func (h *QueryHandler) handleAnalytics(w http.ResponseWriter, r *http.Request) {
+    as, ok := h.storage.(AnalyticsStorage)
+    if !ok {
+        http.Error(w, "analytics not available with current storage backend", http.StatusNotImplemented)
+        return
+    }
+}
+```
+
+**能力查詢 API**：
+
+`GET /v1/capabilities` 回傳目前 storage backend 支援的能力：
+
+**Analytics API**：
+
+`GET /v1/analytics/aggregate?group_by=&metric=` 回傳彙總分析結果（僅 AnalyticsStorage 支援）：
+
+**驗收標準**：
+
+- [ ] `GET /v1/capabilities` 正確回傳當前 backend 能力
+- [ ] SQLite 模式下 analytics API 回傳 501 Not Implemented
+- [ ] PostgreSQL 模式下 analytics API 正常回傳
+- [ ] type assertion 判斷正確（SQLite = BasicStorage only, PostgreSQL = AnalyticsStorage）
+"""
 
 
 def test_spec_014_v1_4_passes():
-    """現行 SPEC-014（v1.4，已補 endpoint 路徑）不應被列為缺口。"""
-    spec_text = SPEC_014_PATH.read_text(encoding="utf-8")
-    findings = check_api_surface.check_api_surface(spec_text)
+    """修復版 SPEC-014 FR-04（已補 endpoint 路徑）不應被列為缺口。"""
+    findings = check_api_surface.check_api_surface(SPEC_014_V1_4_FR04)
     assert findings == [], f"預期無缺口，實際: {findings}"
 
 

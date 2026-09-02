@@ -43,3 +43,37 @@ class TestHookLogsIsolation:
         assert ".claude/skills" not in str(resolved.resolve()), (
             f"force log 落在巢狀路徑 {resolved}（污染源）"
         )
+
+
+class TestHookLogsAnchoredToProjectRoot:
+    """驗證 _resolve_hook_logs_dir() 無 HOOK_LOGS_DIR 時錨定專案根目錄，不受
+    呼叫端 cwd 影響——本檔既有測試只驗證『測試環境的 env var 覆寫有生效』，
+    未涵蓋『生產路徑無 env var 時的實際 fallback 目標是否正確』這個缺口。
+    """
+
+    def test_resolve_hook_logs_dir_anchors_to_project_root_without_env(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.delenv(precondition_mod._HOOK_LOGS_DIR_ENV, raising=False)
+        monkeypatch.setattr(precondition_mod, "get_project_root", lambda: tmp_path)
+
+        resolved = precondition_mod._resolve_hook_logs_dir()
+
+        assert resolved == tmp_path / precondition_mod._DEFAULT_HOOK_LOGS_DIR
+
+    def test_resolve_hook_logs_dir_independent_of_caller_cwd(
+        self, monkeypatch, tmp_path
+    ):
+        """模擬透過已安裝的全域 shim（uv run --directory <skill_dir>）執行，
+        cwd 落在 skill 自身目錄，仍應寫入專案根下的 canonical 位置。"""
+        monkeypatch.delenv(precondition_mod._HOOK_LOGS_DIR_ENV, raising=False)
+        monkeypatch.setattr(precondition_mod, "get_project_root", lambda: tmp_path)
+
+        nested_cwd = tmp_path / ".claude" / "skills" / "ticket"
+        nested_cwd.mkdir(parents=True)
+        monkeypatch.chdir(nested_cwd)
+
+        resolved = precondition_mod._resolve_hook_logs_dir()
+
+        assert resolved == tmp_path / ".claude" / "hook-logs"
+        assert "skills" not in resolved.relative_to(tmp_path).parts

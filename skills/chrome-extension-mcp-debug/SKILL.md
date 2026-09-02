@@ -396,6 +396,4 @@ network 看到 4xx/5xx 後，回頭看對應時間點的 console log 確認應�
 
 ---
 
-**Last Updated**: 2026-07-02
-**Version**: 1.1.0 — 修正 chrome-devtools MCP 工具名漂移（getExtensions → list_extensions、getConsoleMessages → list_console_messages、getNetworkRequests → list_network_requests、takeScreenshot → take_screenshot、snapshot → take_snapshot）；Workflow D-sw 的 SW log 取得流程改寫為 list_pages + select_page + list_console_messages（原 getExtensionLogs 已不存在於現行工具集）
-**Source**: W6-007（chrome-devtools-mcp POC）+ W6-008（專案設定落地）+ W6-010（SKILL 化使用流程）+ 1.5.0-W5-003（工具名漂移修正）
+版本紀錄在同目錄的 `CHANGELOG.md`。

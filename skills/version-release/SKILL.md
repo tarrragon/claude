@@ -1,6 +1,8 @@
 ---
 name: version-release
 description: "版本發布整合工具。Use for: (1) 發布新版本（合併到 main、打 Tag、推送）, (2) 發布前健康檢查（所有 Ticket 完成？CHANGELOG 更新？）, (3) 更新版本文件（worklog 狀態、CHANGELOG）。Use when: 準備發布版本、執行 /version-release check 確認發布前狀態、完成所有 Ticket 後要收尾時。"
+metadata:
+  version: 2.1.0
 ---
 
 # Version Release Skill
@@ -279,12 +281,6 @@ subprojects:
 
 ---
 
-**Last Updated**: 2026-08-10
-**Version**: 2.1.0 - 使用流程檢查清單新增「三分流語意分類人工抽查」勾選項，銜接 `pm-quality-baseline.md` 規則 7 Action 層的落地要求（原 Action 指向此清單但清單無對應項，屬空落點；本次為同一次變更中補齊）
-**Version**: 2.0.0 - 新增多專案類型支援文件（chrome-ext/flutter/go/php/python/npm/monorepo）、.version-release.yaml schema 文件化、自動偵測 fallback 說明（1.0.0-W1-104）
-
----
-
 ## 修改 source 後必須重新安裝
 
 > **重要**：本 skill 透過 `uv tool install` 安裝為獨立 CLI，source（本目錄）與 installed（`~/.local/share/uv/tools/<package>/`）是兩份獨立 Python package。修改 source 後若未 reinstall，CLI 仍使用 stale installed 版本，新增的函式會 AttributeError 或被 hasattr 包裝靜默吞掉（W11-037 根因）。
@@ -296,3 +292,7 @@ cd .claude/skills/<本 skill 目錄> && uv tool install . --force --reinstall
 ```
 
 **自動偵測**：每次 SessionStart 由 `uv-tool-staleness-check-hook` 比對 source vs installed SHA256，偵測 stale 時提示修復指令。對應 ticket-skill 本身另有 `ticket-reinstall-hook` 自動 reinstall。
+
+---
+
+版本紀錄在同目錄的 `CHANGELOG.md`。

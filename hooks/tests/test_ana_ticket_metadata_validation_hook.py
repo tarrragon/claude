@@ -239,3 +239,92 @@ class TestImplementationAgentParsing:
         claude_md.write_text("# Project\n無實作代理人欄位\n", encoding="utf-8")
         agent = hook_module.get_project_implementation_agent(tmp_path, mock_logger)
         assert agent is None
+
+
+# ============================================================================
+# main() 的 project_root 解析不受 cwd 影響（0.2.1-W3-1199）
+# ============================================================================
+#
+# 修復前：project_root = Path(os.environ.get("CLAUDE_PROJECT_DIR", ".")).
+# resolve()，未設環境變數時退回 cwd，使讀取 CLAUDE.md 判定實作代理人靜默
+# 失敗。本組測試不檢查「錯置檔案是否消失」（本 hook 是讀取路徑，失效無痕跡
+# 可觀察），而是直接驗證 main() 把 get_project_root() 的回傳值傳給
+# get_project_implementation_agent()，不論呼叫端 cwd 為何。
+
+_ANA_TICKET_CONTENT = (
+    "---\n"
+    "id: 0.1.1-W1-001\n"
+    "type: IMP\n"
+    "who:\n"
+    "  current: saffron-system-analyst\n"
+    "acceptance:\n"
+    "  - '[ ] 完成 A'\n"
+    "---\n"
+    "\n# body\n"
+)
+
+
+class TestProjectRootResolution:
+    def test_main_uses_get_project_root_result(self, hook_module, monkeypatch):
+        """main() 應把 get_project_root() 的回傳值傳給
+        get_project_implementation_agent()，而非自行以
+        CLAUDE_PROJECT_DIR-or-cwd 重新解析。"""
+        sentinel_root = Path("/tmp/sentinel-repo-w3-1199")
+        captured = {}
+
+        def fake_get_agent(project_root, logger):
+            captured["project_root"] = project_root
+            return None
+
+        monkeypatch.setattr(hook_module, "get_project_root", lambda: sentinel_root)
+        monkeypatch.setattr(
+            hook_module, "get_project_implementation_agent", fake_get_agent
+        )
+        monkeypatch.setattr(
+            hook_module, "read_json_from_stdin",
+            lambda logger: {
+                "tool_input": {
+                    "file_path": "docs/work-logs/v0/tickets/0.1.1-W1-001.md",
+                    "content": _ANA_TICKET_CONTENT,
+                },
+            },
+        )
+
+        hook_module.main()
+
+        assert captured["project_root"] == sentinel_root
+
+    def test_main_independent_of_caller_cwd(self, hook_module, monkeypatch, tmp_path):
+        """模擬呼叫端 cwd 落在非專案根目錄，get_project_root() 的回傳值
+        仍應原樣傳遞，不被呼叫端 cwd 覆蓋或污染。"""
+        real_root = tmp_path / "real-repo"
+        real_root.mkdir()
+        nested_cwd = real_root / ".claude" / "skills" / "ticket" / "hooks"
+        nested_cwd.mkdir(parents=True)
+        monkeypatch.chdir(nested_cwd)
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+
+        captured = {}
+
+        def fake_get_agent(project_root, logger):
+            captured["project_root"] = project_root
+            return None
+
+        monkeypatch.setattr(hook_module, "get_project_root", lambda: real_root)
+        monkeypatch.setattr(
+            hook_module, "get_project_implementation_agent", fake_get_agent
+        )
+        monkeypatch.setattr(
+            hook_module, "read_json_from_stdin",
+            lambda logger: {
+                "tool_input": {
+                    "file_path": "docs/work-logs/v0/tickets/0.1.1-W1-001.md",
+                    "content": _ANA_TICKET_CONTENT,
+                },
+            },
+        )
+
+        hook_module.main()
+
+        assert captured["project_root"] == real_root
+        assert captured["project_root"] != nested_cwd

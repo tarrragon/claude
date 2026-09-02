@@ -1,6 +1,8 @@
 ---
 name: parallel-evaluation
 description: "多視角審核/code review 工具。派發三人組（含常駐委員 linux）並行掃描程式碼品質、架構設計、重構評估。Use for: 程式碼審查, 架構評估, 重構掃描, 結論審查, 系統設計變更審查, 功能規劃審查。Use when: Phase 3b 完成後 PR 前, Phase 4 重構評估前, 重大架構決策前, ANA Ticket 結論審查, 任何分析報告產出後, 規則/Skill/方法論變更後, Wave 完成審查, 規格設計完成後"
+metadata:
+  version: 1.3.0
 ---
 
 # 並行評估工具
@@ -154,9 +156,4 @@ Phase 3: 任一視角發現問題 → 回到分析階段補充
 
 ---
 
-**Last Updated**: 2026-06-25
-**Version**: 1.3.0 — 移除 basil opt-out 機制（universal_lens 統一不可跳過，0.3.4-W4-003）+ 常駐委員加入情境移除冗餘列舉「（A-G）」改用「所有情境」
-
-**Version**: 1.2.0 — 套用 compositional-writing 改寫（W17-135）：Worth-It Filter 段「核心原則 / 強制規則」改寫為三明示 Why / Consequence / Action，明示連結至 `.claude/rules/core/decision-trigger-binding.md` 規則 1 / 1.5；負向「禁止行為」保留並加正向錨點
-
-**Version**: 1.1.0 - 新增 basil-writing-critic 常駐委員機制（情境 C/D/F/G 預設加入）+ `--skip-basil` opt-out 機制 + 常駐委員概念拆分（universal_lens / default_lens_per_scenario）（W17-069 / W17-066 R-3）
+版本紀錄在同目錄的 `CHANGELOG.md`。

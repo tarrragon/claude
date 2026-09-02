@@ -1,6 +1,6 @@
 # 最小必要範圍是 sanity 防線、不是優化
 
-> **角色**：本卡是 `requirement-protocol` 的支撐型原則（principle）、被七大原則 6（漸進驗證、最小必要範圍）與 reference `progressive-verification.md` 引用。
+> **角色**：本卡是 `requirement-protocol` 的支撐型原則（principle）、被核心原則「漸進驗證、最小必要範圍」與 reference `progressive-verification.md` 引用。
 >
 > **何時讀**：設計 selector / observer / JS 操作範圍、或拿不定「先寫寬一點之後再縮 vs 一開始就具體」時。
 
@@ -137,7 +137,7 @@
 | 確實需要看深層變動的 observer        | subtree: true 是必要、不是 over-broad  |
 | 確實要對全頁套用的操作（theme 切換） | 全頁面才是「最小必要範圍」             |
 
-**核心判準**：「**最小必要範圍** = 滿足當前需求的最窄範圍」 — 不是極致最小、是「不再小就會漏」的點。盲目縮到「比需要還小」會犧牲覆蓋率、是另一種錯誤。
+**核心判斷標準**：「**最小必要範圍** = 滿足當前需求的最窄範圍」 — 不是極致最小、是「不再小就會漏」的點。盲目縮到「比需要還小」會犧牲覆蓋率、是另一種錯誤。
 
 ---
 

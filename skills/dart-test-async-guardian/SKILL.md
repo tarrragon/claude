@@ -1,6 +1,8 @@
 ---
 name: dart-test-async-guardian
 description: "Flutter/Dart 測試異步資源管理守護者。用於：(1) 診斷測試卡住問題，(2) 審查測試程式碼中的異步資源清理，(3) 提供 tearDown 最佳實踐，(4) 掃描潛在的資源洩漏風險。觸發場景：測試卡住、撰寫新測試、Code Review 測試程式碼、執行 flutter test 前自動掃描。"
+metadata:
+  version: 1.0.0
 ---
 
 # Test Async Guardian
@@ -287,5 +289,4 @@ uv run .claude/skills/dart-test-async-guardian/scripts/async_resource_scanner.py
 
 ---
 
-**Last Updated**: 2026-03-02
-**Version**: 1.0.0
+版本紀錄在同目錄的 `CHANGELOG.md`。

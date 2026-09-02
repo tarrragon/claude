@@ -248,6 +248,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | CQ-006 | 純工具函式定義在 commands/ 層阻礙複用 | 中 | v0.1.0 |
 | CQ-SCLK-001 | 程式碼宣告了實際不存在的保證（註解描述未實作的行為、註解描述不存在的對應、fallback 交出孤兒物件），且該落差不產生任何測試訊號 | 中 | — |
 | CQ-BAL-001 | 宣告旗標為無作用時只改文案，未刪承載它的死傳遞鏈 | 中 | — |
+| CQ-BAL-002 | 單一 expected_agent 比對假設與專案多代理人依領域分工架構衝突，遷移前未量測即假警告率壓倒真訊號 | 中 | v0.2.1 |
 
 ### 實作 (IMP)
 
@@ -365,6 +366,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | IMP-BAL-016 | 兩種成因壓成同一回傳值，錯誤訊息指名其中一種，把診斷導向另一種的反方向 | 高 | v0.2.1 |
 | IMP-BAL-017 | 訊息指名的抽象層與判準實際讀取的層不同，異地讀者無從在本地否證 | 高 | v0.2.1 |
 | IMP-BAL-018 | module 層級常數在 import 當下定型，早於測試隔離 fixture 生效，副作用寫進 production 位置而測試全綠 | 中 | 0.2.1 |
+| IMP-BAL-019 | hook-logs 相對路徑解析疊加 uv run --directory shim，稽核紀錄寫入錯誤位置 | 中 | v0.2.1 |
 
 ### 流程 (PROC)
 
@@ -651,6 +653,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | PC-GPD-001 | 追加型載體凍結未量測的宣稱——讀者取得的是「現況」，載體記錄的是「當時的推測」 | 高 | 0.1.0 |
 | PC-GPD-002 | 兩個來源共享同一個抽取方法時，一致性不是證據——它們會同時錯且錯得一樣 | 高 | 0.1.0 |
 | PC-BAL-059 | 驗收子項被下游票承接後上游票 acceptance 未同步，使上游無人能合法收尾 | 中 | 0.2.1 |
+| PC-BAL-060 | 逃生閥只解除發放它的那道閘門，其餘閘門的判準不隨之放行 | 高 | 0.2.1 |
 
 ---
 

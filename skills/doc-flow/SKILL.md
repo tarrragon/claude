@@ -1,6 +1,8 @@
 ---
 name: doc-flow
 description: "Manages project documentation system including CHANGELOG, worklog, tickets, error-patterns, and todolist. Use for: (1) worklog initialization and updates, (2) todolist management, (3) version collaboration workflows, (4) documentation consistency checks"
+metadata:
+  version: 1.0.0
 ---
 
 # Doc-Flow SKILL
@@ -204,5 +206,4 @@ docs/
 
 ---
 
-**Last Updated**: 2026-04-01
-**Version**: 1.0.0
+版本紀錄在同目錄的 `CHANGELOG.md`。

@@ -1,6 +1,8 @@
 ---
 name: data-extraction
 description: "Designs web scraping / data extraction strategies: DOM analysis, multi-tier selectors with fallbacks, validation, transformation mapping, performance planning. Use when planning to scrape a site, extract structured data from HTML/DOM, or handle pagination / anti-scraping. Triggers: 資料提取, 抓取策略, web scraping, 選擇器設計, 爬蟲規劃. Do NOT use for implementing scraper code."
+metadata:
+  version: 1.0.0
 ---
 
 # Data Extraction Strategy
@@ -104,4 +106,4 @@ description: "Designs web scraping / data extraction strategies: DOM analysis, m
 
 ---
 
-**Version**: 1.0.0
+版本紀錄在同目錄的 `CHANGELOG.md`。

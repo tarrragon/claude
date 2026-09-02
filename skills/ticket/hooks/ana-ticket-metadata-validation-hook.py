@@ -7,6 +7,14 @@
 """
 ANA-Created Ticket Metadata Validation Hook
 
+【已停用註冊，保留檔案供歷史參考與測試】本 hook 註冊為 PostToolUse+Write，
+但 ticket 檔案的正常寫入管道是 ticket CLI（Bash subprocess），且
+ticket-file-access-guard-hook 已阻擋直接 Write/Edit ticket frontmatter，
+故此 hook 對真實 ticket 從未實際觸發過。三項驗證邏輯已遷入
+`ticket_system/lib/ana_ticket_metadata_validator.py`，由 `ticket create`
+流程內部呼叫，settings.json 已移除本 hook 的註冊。本檔與其既有測試維持
+現狀不刪除，供日後若需重新啟用（如需涵蓋非 CLI 建立路徑）時參考。
+
 防護 PC-058：ANA 代理人（saffron 等）建立 follow-up Ticket 時 metadata 漂移。
 
 觸發時機：PostToolUse (Write/Edit)，當寫入路徑為 docs/work-logs/*/tickets/*.md 時。
@@ -28,7 +36,6 @@ ANA-Created Ticket Metadata Validation Hook
 import sys
 import re
 import json
-import os
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
@@ -36,7 +43,10 @@ from typing import Optional, Dict, Any, List, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
-from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level
+from lib import (
+    setup_hook_logging, run_hook_safely, read_json_from_stdin,
+    get_effort_level, get_project_root,
+)
 
 try:
     import yaml
@@ -335,7 +345,10 @@ def main() -> int:
         return 0
 
     # 取得專案實作代理人
-    project_root = Path(os.environ.get("CLAUDE_PROJECT_DIR", ".")).resolve()
+    # get_project_root()：worktree 感知 + git toplevel 等多層 fallback，
+    # 不受呼叫端 cwd 影響（原 CLAUDE_PROJECT_DIR-or-cwd fallback 未設環境
+    # 變數時退回 cwd，會使讀取專案設定靜默失敗，驗證邏輯無聲 no-op）。
+    project_root = get_project_root()
     expected_agent = get_project_implementation_agent(project_root, logger)
 
     # 執行驗證

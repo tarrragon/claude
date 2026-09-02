@@ -4,7 +4,7 @@ description: "框架無關的前端開發協議 + Playwright 驗證 + 跨領域 
 license: MIT
 metadata:
   portable: true
-  version: 0.3.0
+  version: 0.3.2
   category: frontend-engineering
 ---
 
@@ -166,6 +166,5 @@ frontend-with-playwright/
 ---
 
 **Last Updated**: 2026-04-26
-**Version**: 0.3.0 — 接入 #79 決策對話五維度（對應 #74-#78 系列）；協助前端設計取捨段落的呈現格式對齊 user-facing 決策協議
-**Version**: 0.2.0 — 接入 #55-#68 系列：新增第 7 份 reference `data-flow-and-filter-composition`（涵蓋 Filter × Source 層錯位 + 五策略 + 跨前端 / 後端 / 演算法 / DB 領域範例）；description 補跨領域 stream 操作觸發詞；SKILL.md 加「相關抽象層原則」段（#42-45 + #64 + #67-68）；強調「不只前端、stream 操作通用」
-**Version**: 0.1.0 — 從 50+ 篇事後檢討萃取「前端網頁開發 + Playwright 驗證」這條主軸；六份 references 對應「DOM topology / CSS-JS 邊界 / Playwright 三位置 / framework 共處 / Reactive 效能 / A11y」六個情境
+
+版本紀錄在同目錄的 `CHANGELOG.md`。

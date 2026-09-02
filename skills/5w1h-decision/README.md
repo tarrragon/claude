@@ -121,6 +121,6 @@ See [SKILL.md](./SKILL.md) for complete reference.
 
 | File                                                                                  | Purpose                         |
 | ------------------------------------------------------------------------------------- | ------------------------------- |
-| [Output Style](../../../.claude/output-styles/5w1h-format.md)                         | System-level format enforcement <!-- portability-allow: 約定位置，本 skill 隨附的 output style 安裝點 --> |
+| `.claude/output-styles/5w1h-format.md`（安裝位置，需自行建立）                         | System-level format enforcement <!-- portability-allow: 約定位置，本 skill 隨附的 output style 安裝點 --> |
 | [SKILL.md](./SKILL.md)                                                                | Complete 5W1H reference         |
 | `5w1h-self-awareness-methodology`（各專案自有） | Full methodology                |

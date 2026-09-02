@@ -1,6 +1,6 @@
 """RED tests for broken-link-check 確定性 CLI scanner (scan_links.py).
 
-TDD Phase 2 (1.0.0-W8-030.1). 目標被測物尚未實作，全部測試應 RED
+TDD Phase 2。目標被測物尚未實作，全部測試應 RED
 （ModuleNotFoundError / AttributeError 皆為合法 RED）。
 
 測試切點 (規格 §6 SOLID)：
@@ -10,7 +10,7 @@ TDD Phase 2 (1.0.0-W8-030.1). 目標被測物尚未實作，全部測試應 RED
 
 約束：
 - 計數類斷言一律用受控 synthetic fixture，禁對 live .claude/ 樹斷言固定數字
-  (baseline=164 為 ANA 時間點量測，會隨 W8-034 清理變動)。
+  (baseline=164 為 ANA 時間點量測，會隨後續清理變動)。
 - 確定性場景 byte-for-byte 比對，禁用計時斷言 (test-assertion 規則 1)。
 """
 
@@ -215,7 +215,7 @@ class TestClassifyRef:
 
 
 class TestPlaceholderPatternDetection:
-    """W8-047 缺陷 2：placeholder 改樣式偵測（glob/角括號/模板/token）。
+    """缺陷 2：placeholder 改樣式偵測（glob/角括號/模板/token）。
 
     原 PLACEHOLDER_SAMPLES 4 項 exact-match 漏掉大量樣式型範例路徑，
     導致 SKILL/規則文件中的示意路徑被誤判 broken（FP）。
@@ -265,7 +265,7 @@ class TestPlaceholderPatternDetection:
 
 
 class TestW2011PlaceholderPatternDetection:
-    """0.38.0-W4-004：W2-011 triage A 類 8 筆——skill-name/vX/示範 skill 名/
+    """triage A 類 8 筆——skill-name/vX/示範 skill 名/
     省略號縮寫樣式納入 placeholder 偵測。"""
 
     DEFAULT_KNOBS = {
@@ -288,7 +288,7 @@ class TestW2011PlaceholderPatternDetection:
         cat = scan_links.classify_ref(
             raw, "/repo/" + raw, self.DEFAULT_KNOBS, exists=False
         )
-        assert cat == "placeholder", f"{raw!r} 應歸 placeholder（W2-011 A 類）"
+        assert cat == "placeholder", f"{raw!r} 應歸 placeholder（triage A 類）"
 
     def test_vx_not_confused_with_real_version_dir(self):
         # 反例守護：真實版本目錄（v0.13.0-... 以數字開頭）不可誤判為 vX 佔位
@@ -308,7 +308,7 @@ class TestW2011PlaceholderPatternDetection:
 
 
 class TestArchiveSourceExclusion:
-    """0.38.0-W4-004：W2-011 triage D 類 21 筆——歷史封存文件來源端排除
+    """triage D 類 21 筆——歷史封存文件來源端排除
     （hook-specs 驗收報告/複本、*_SUMMARY/*_CHECKLIST、CHANGELOG、
     .sync-conflicts/、skills/pre-fix-eval/INDEX.md）。"""
 
@@ -365,7 +365,7 @@ class TestArchiveSourceExclusion:
 
 
 class TestBackupSourceExclusion:
-    """W8-047 缺陷 1：backup 來源端排除（source 檔在 migration-backups/）。
+    """缺陷 1：backup 來源端排除（source 檔在 migration-backups/）。
 
     原邏輯僅排 resolved target 端，未排除 source_file 本身在
     migration-backups/ 的引用，造成 30 筆 backup 內部斷鏈被計入 broken。
@@ -511,7 +511,7 @@ class TestCliExitCodes:
 
 class TestJsonSchema:
     def test_json_format_has_stable_schema(self, synthetic_repo):
-        # GWT 輸出 schema（規格 §3）：W8-034 消費介面
+        # GWT 輸出 schema（規格 §3）：消費介面
         proc = run_cli(synthetic_repo, "--format", "json")
         data = json.loads(proc.stdout)
         for key in (
@@ -589,12 +589,12 @@ class TestLiveTreeSmoke:
 
 
 # ===========================================================================
-# F. W8-049: documented-error 豁免 marker（excluded_documented 類別）
+# F. documented-error 豁免 marker（excluded_documented 類別）
 # ===========================================================================
 
 
 class TestDocumentedExemptMarker:
-    """W8-049：per-line `<!-- broken-link-exempt: documented-error -->` marker。
+    """per-line `<!-- broken-link-exempt: documented-error -->` marker。
 
     error-pattern 案例表中刻意記錄的不存在路徑（confabulation 錯誤參照 /
     歷史遷移檔案軌跡）以行內 marker 豁免，歸 excluded_documented 不計 broken。
@@ -893,7 +893,7 @@ class TestKnownMissingPathSamples:
 
 
 class TestPortabilityAllowMarker:
-    """portability-allow 與 broken-link-exempt 共用同一條豁免通道（W3-623.1）。"""
+    """portability-allow 與 broken-link-exempt 共用同一條豁免通道。"""
 
     def test_portability_allow_exempts_its_line(self, tmp_path):
         claude = tmp_path / ".claude"
@@ -1122,7 +1122,7 @@ class TestMergeSuccessorAnnotation:
 
 
 # ===========================================================================
-# I. W3-990 案例 1：REF_REGEX 多重副檔名截斷誤報
+# I. 案例 1：REF_REGEX 多重副檔名截斷誤報
 #
 # `[^\s)\]"'`]*?\.(?:md|py|sh)` 非貪婪比對在第一個已知副檔名處即停止，遇
 # `worklog.md.template` 這類多重副檔名檔名時會被截斷為 `worklog.md`（不存在），
@@ -1170,7 +1170,7 @@ class TestRefRegexMultiExtension:
 
 
 # ===========================================================================
-# J. W3-990 案例 2：shell cp/mv 指令目的地參數的相對路徑基準誤判
+# J. 案例 2：shell cp/mv 指令目的地參數的相對路徑基準誤判
 #
 # resolve_path() 對 `./X`（非 `./.claude/X`）一律以來源檔目錄為基準，但 fence
 # 內 cp/mv 指令的相對路徑基準是執行時 cwd（通常為 repo root），靜態文字無法

@@ -28,14 +28,16 @@ Sibling blockedBy Validator Hook
 
 import sys
 import re
-import os
 import json
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin, get_effort_level
+from lib import (
+    setup_hook_logging, run_hook_safely, read_json_from_stdin,
+    get_effort_level, get_project_root,
+)
 
 try:
     import yaml
@@ -319,7 +321,10 @@ def main() -> int:
     if not parsed:
         return 0
 
-    project_root = Path(os.environ.get("CLAUDE_PROJECT_DIR", ".")).resolve()
+    # get_project_root()：worktree 感知 + git toplevel 等多層 fallback，
+    # 不受呼叫端 cwd 影響（原 CLAUDE_PROJECT_DIR-or-cwd fallback 未設環境變數
+    # 時退回 cwd，會使讀取 docs/work-logs/ 靜默失敗，驗證邏輯無聲 no-op）。
+    project_root = get_project_root()
     return run_check(project_root, parsed["ticket_id"], parsed["acknowledge"], logger)
 
 

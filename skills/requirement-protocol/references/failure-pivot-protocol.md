@@ -102,7 +102,7 @@
 - 第 5 次（用 playwright 驗證）：drawer 是 form 的 child、跟 form 共用 grid cell
 - 換方向：不用 grid-row 控制位置（被假設綁住的部分）、改用 absolute + drawer margin-top（不被假設綁住）→ 一次成功
 
-換方向後保留：CSS variable 命名、scope 命名、HTML 結構。丟掉：grid-row 規則。**只丟跟錯假設綁定的程式碼、不丟所有東西**。
+換方向後保留：CSS variable 命名、scope 命名、HTML 結構。丟掉：grid-row 規則。**只丟跟錯假設綁定的代碼、不丟所有東西**。
 
 ---
 

@@ -1,6 +1,8 @@
 ---
 name: framework-issue
 description: "Creates and lists framework issues on the canonical framework repo (tarrragon/claude) via gh CLI. Use when tracking a framework-level problem, error-pattern canonical reference, provenance anchor, or cross-consumer fix across projects. Triggers include: framework issue, canonical issue, 跨 consumer 修復追蹤, 框架 issue, error-pattern canonical. Do NOT use for project-local docs/work-logs tickets (use the ticket skill instead)."
+metadata:
+  version: 1.2.0
 ---
 
 # Framework Issue
@@ -254,8 +256,4 @@ uv run --project .claude/hooks pytest \
 
 ---
 
-**Version**: 1.2.0 — 新增「框架問題升級流程」章節：介入判斷、兩條路徑（延後
-接手 / 當下接手）、issue 關閉協議（sync-push → fix-version → close）、回報
-前查重 SOP（0.2.1-W3-297，承接 0.2.1-W3-295/296 命令實作）
-**Version**: 1.1.0 — 新增 fix-version（軸 D：修復版本號註記）與 close（包裝
-`gh issue close`，前置檢查版本號註記存在）命令（0.2.1-W3-296）
+版本紀錄在同目錄的 `CHANGELOG.md`。
