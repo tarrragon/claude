@@ -38,6 +38,8 @@
 
 > **停手上報而非定義優先序**：在只讀得到 prompt 與正本兩份文本的條件下，agent 無可靠判別依據——故不定義三方優先序表，交由 PM 裁決；裁決回票面方式見「衝突裁決回票面（PM 端）」節。
 
+> **Edit/Write 被非專案來源拒絕時同理停手，不得改用 Bash 繞過**：被 harness auto mode classifier、permissionMode 或 OS 權限拒絕（非專案 hook）時，agent 應停手於 ticket NeedsContext 記錄並回報 PM，禁止改用 Bash 內嵌腳本（`python3 -c` / `sed` / heredoc 重寫）完成同一修改；判準見 `.claude/rules/core/tool-selection.md` 規則二。
+
 ### IMP 實戰範例（實作派發）
 
 ```markdown
@@ -1045,6 +1047,9 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 - `.claude/rules/core/quality-baseline.md` — 規則 6 失敗案例學習原則
 
 ---
+
+**Last Updated**: 2026-09-02
+**Version**: 1.32.0 — 「骨架（權威版）」段「停手上報而非定義優先序」後新增一行提醒：Edit/Write 被非專案來源（harness auto mode classifier、permissionMode、OS 權限）拒絕時同理停手回報 NeedsContext，禁改用 Bash 內嵌腳本繞過，引用 `tool-selection.md` 規則二；不動 `track_dispatch.py` 骨架常數
 
 **Last Updated**: 2026-09-01
 **Version**: 1.31.0 — 骨架瘦身落地修正兩處失準敘述：(1)「骨架（權威版）」用途段刪「prompt 控制在 10-15 行，穩過 Hook 30 行上限」（`--commit-policy agent` 預設下實測 39-48 行、被 Layer 1 硬上限阻擋兩次），改為精確描述骨架本體 + 短版指標句的行數構成與硬上限無豁免的事實；(2)「同步保護」句由「只驗模板關鍵字同步」改為明示涵蓋關鍵字同步（Layer 2）與骨架實際行數（Layer 1，新增）兩個獨立維度，避免讀者誤以為 hook 對骨架有豁免。「精準 staging 制式句」節同步改寫：`STAGING_PHRASE_AGENT` 26 行全文不再直接嵌入骨架，改冪等寫入票的「### Commit 規範」子節；骨架末尾改附 `STAGING_PHRASE_AGENT_PROMPT` 短版指標句（約 6 行，逐句保留 Category A/B/C 判定所需片語）。

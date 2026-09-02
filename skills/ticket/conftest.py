@@ -25,7 +25,10 @@ import subprocess
 
 import pytest
 
-from ticket_system.lib.paths import reset_project_root_cache
+from ticket_system.lib.paths import (
+    reset_project_root_cache,
+    reset_ticket_state_root_cache,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -63,9 +66,15 @@ def _isolate_project_root(tmp_path_factory, monkeypatch):
     的檔案操作實際落在第一個 test 的 tmp 目錄。故 fixture 進入時先呼叫
     `reset_project_root_cache()`，確保快取狀態不跨 test 洩漏。
 
+    Why（2026-09-02 新增）：`get_ticket_state_root()` 同步加上程序內快取
+    （解決 conflicts --for/--among 票面讀取瓶頸，見 paths.get_ticket_state_root
+    docstring），同一風險——同一 process 內後續 test 若不清此快取，會沿用
+    第一個呼叫過的 test 所快取的舊根目錄。故一併呼叫
+    `reset_ticket_state_root_cache()`。
+
     設計（提供 default，個別測試可 override，opt-out 機制）：
-    - autouse 在每個 test 前先清除 get_project_root() 快取（0.2.1-W3-254），
-      再注入 CLAUDE_PROJECT_DIR 指向獨立 tmp 目錄
+    - autouse 在每個 test 前先清除 get_project_root() 快取（0.2.1-W3-254）與
+      get_ticket_state_root() 快取，再注入 CLAUDE_PROJECT_DIR 指向獨立 tmp 目錄
     - 同步注入 `TICKET_SYSTEM_TEST_ISOLATION=1`，避免 worktree 環境下的
       優先序覆蓋使上述隔離失效（0.2.1-W3-223）
     - 需要真實 repo 或測試 fallback 行為的測試（如 test_paths_get_project_root）
@@ -74,6 +83,7 @@ def _isolate_project_root(tmp_path_factory, monkeypatch):
     - 預先建立 docs/work-logs 階層，使 lock 路徑解析有合法落點
     """
     reset_project_root_cache()
+    reset_ticket_state_root_cache()
     root = tmp_path_factory.mktemp("project-root-default")
     (root / "docs" / "work-logs").mkdir(parents=True, exist_ok=True)
     (root / "CLAUDE.md").write_text("# CLAUDE.md\n", encoding="utf-8")

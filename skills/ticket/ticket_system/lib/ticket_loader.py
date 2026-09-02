@@ -32,6 +32,7 @@ from .parser import (
     parse_frontmatter,
     load_ticket,
     save_ticket,
+    flush_frontmatter_disk_cache,
 )
 
 # 匯入索引管理
@@ -120,6 +121,11 @@ def list_tickets(version: str) -> list[Dict[str, Any]]:
     index = TicketChainIndex()
     index.build_from_tickets(tickets)
     _chain_index_cache[version] = index
+
+    # 批次載入完成後寫回 frontmatter 磁碟快取（2026-09-02 新增，見
+    # parser.flush_frontmatter_disk_cache docstring）；生產路徑外（pytest）
+    # 該函式本身是 no-op（快取從未被寫髒，因 disk cache 停用於測試隔離）
+    flush_frontmatter_disk_cache()
 
     return tickets
 

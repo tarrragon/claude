@@ -2,7 +2,7 @@
 name: design-decision-framework
 description: "多方案評估決策框架。用於面臨 3+ 技術方案時的結構化評估、架構決策時的系統化分析，防止衝動決策和技術債務累積。Use for: 技術方案選擇、重大架構決策、高風險技術選型"
 metadata:
-  version: 1.2.0
+  version: 1.3.0
 ---
 
 # 多方案評估決策框架 (Design Decision Framework) SKILL
@@ -76,6 +76,18 @@ metadata:
 | `/5w1h-decision` | 本 Skill 產出的決策應符合 5W1H 格式 |
 | `/pre-fix-eval` | 錯誤修復評估使用 pre-fix-eval，不是本 Skill |
 | `/ticket create` | 決策完成後使用 ticket-create 建立執行 Ticket |
+| `/wrap-decision` | 認知偏誤防護與資料充足度閘門，見下方「與 wrap-decision 的分工與路由」 |
+
+### 與 wrap-decision 的分工與路由
+
+DDF 負責**結構化多方案評估**（方案收集 → 評估維度 → 評分 → 風險分析 → 決策），前提是候選方案本身已明確且未受偏誤污染；wrap-decision 負責**認知偏誤防護與資料充足度閘門**（防止假選項、自動駕駛、證據不足下倉促決策），不做結構化評分。
+
+wrap-decision 已在 `references/project-integration/simplified-three-questions.md`（約 L231）設有「答題發現需多方評估 → 升級至 DDF」的路由，但 DDF 端過去未回指，使用者從 DDF 進入時不知道 wrap-decision 存在，也無從判斷候選方案本身是否已受偏誤污染。若跳過偏誤檢查直接進入 DDF 五階段評分，得到的是建立在假選項或資料不足之上、看似客觀實則失真的評估結果。
+
+| 情境 | 建議路徑 |
+|------|---------|
+| 候選方案已明確，只需系統化評分與風險分析 | 直接用 DDF 五階段流程 |
+| 懷疑候選方案有偏誤（假選項 / 自動駕駛 / 資料不足） | 先用 `/wrap-decision`（Step 0 資料充足度閘門 + W 階段）排除偏誤，再回 DDF 評分 |
 
 ---
 

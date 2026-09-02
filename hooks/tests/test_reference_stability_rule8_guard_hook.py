@@ -771,6 +771,56 @@ class TestWorktreePathAnchoring:
         assert rc == 0
         assert err == ""
 
+    def test_main_repo_new_nested_dir_still_scanned(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """主倉庫下，Write 於尚不存在的兩層巢狀目錄建立新框架檔，仍應被掃描並阻擋。
+
+        重現 _get_repo_root 對不存在目錄的解析回退缺口：目標檔與其
+        parent 皆尚未存在時，git -C 對不存在目錄直接執行失敗，修正前
+        回傳 None 使 is_scanned_path 判為不在掃描範圍（漏掃）。
+        """
+        _init_repo_with_commit(tmp_path)
+        target = tmp_path / ".claude" / "references" / "new-dir" / "nested" / "foo.md"
+
+        payload = {
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": str(target),
+                "content": "全新巢狀目錄檔案，詳見 0.2.1-W4-781 的分析結論。",
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 2
+        assert "0.2.1-W4-781" in err
+
+    def test_agent_isolation_worktree_new_nested_dir_still_scanned(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """Agent isolation 形態 worktree 下，Write 於尚不存在的兩層巢狀目錄
+        建立新框架檔，仍應被掃描並阻擋（worktree 版的同一缺口重現）。
+        """
+        _init_repo_with_commit(tmp_path)
+        worktree_dir = _add_agent_isolation_worktree(tmp_path, "w4008")
+        target = (
+            worktree_dir / ".claude" / "references" / "new-dir" / "nested" / "foo.md"
+        )
+
+        payload = {
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": str(target),
+                "content": "全新巢狀目錄檔案，詳見 0.2.1-W4-782 的分析結論。",
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 2
+        assert "0.2.1-W4-782" in err
+
 
 # ---------------------------------------------------------------------------
 # 單元函式測試（守衛與規則文件判準一致性，acceptance 4）

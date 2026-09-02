@@ -3,7 +3,7 @@ name: foundation-design
 description: "地基工作的單一入口與路由層。逐維度決定「本專案的地基產物是什麼」，權威只提供預設產物，形態不符時改寫產物而非跳過維度。維度含 UI／測試／資料庫／DevOps／可觀測性，各指名既有權威並標明權威缺席時的處置。新舊專案一體適用：接手他人專案先盤點萃取再命名固化。觸發詞：地基、地基波、元件庫、design token、fixture、seed、migration、scaffold、鷹架、腳手架、接手老專案。Do NOT use for 環境安裝（用 project-init）。"
 license: MIT
 metadata:
-  version: 6.0.0
+  version: 6.1.0
   category: engineering-workflow
 ---
 
@@ -42,15 +42,17 @@ metadata:
 
 **判定的對象是產物，不是維度。** 每個維度都要回答一次「本專案的產物是什麼」，權威提供的只是**預設產物**。形態不符時改寫產物，不跳過維度。
 
-| 維度 | 權威來源（判準在此，本 skill 不複述） | 權威提供的預設產物 |
-|------|--------------------------------|------------------|
-| **UI** | 元件庫雙向約束方法論的〈地基波 build 順序〉，四塊依序：i18n → design-system → UX 審查 → 元件庫。UX 審查那塊的執行方法見 `ux-design-evaluation` skill | 四塊各自的實作票；元件庫 `blockedBy` 前三塊 |
-| **測試** | `tdd` skill 的分層測試策略，以及其 Phase 2 測試設計檢驗 Q9–Q14（資料是否碰巧通過、error path 覆蓋、資料工廠版本、防哪種改壞、斷言是否 flaky、資料代表性） | fixture 策略、分層地基 |
-| **資料庫** | `saas-tech-selection` skill 的 state-storage 維度（migration 版本化紀律、多租戶資料模型、**防護底線的自動備份與還原驗證**） | migration baseline、**備份與還原驗證**。seed 見〈權威缺席時〉形態 3 |
-| **DevOps** | `saas-tech-selection` skill 的 reliability 維度（CI gate 構成與起始門檻） | CI gate、部署與還原配方 |
-| **可觀測性** | 專案的可觀測性規則（統一 log 入口、catch 區塊要求；屬自動載入層，多半已在 context 中），以及 `saas-tech-selection` skill 的 observability 維度（錯誤分類） | log 接線點、錯誤分類骨架 |
+| 維度 | 權威來源（判準在此，本 skill 不複述） | 權威提供的預設產物 | 適用條件 |
+|------|--------------------------------|------------------|---------|
+| **UI** | 元件庫雙向約束方法論的〈地基波 build 順序〉，四塊依序：i18n → design-system → UX 審查 → 元件庫。UX 審查那塊的執行方法見 `ux-design-evaluation` skill | 四塊各自的實作票；元件庫 `blockedBy` 前三塊 | 不限（權威非 SaaS 特定） |
+| **測試** | `tdd` skill 的分層測試策略，以及其 Phase 2 測試設計檢驗 Q9–Q14（資料是否碰巧通過、error path 覆蓋、資料工廠版本、防哪種改壞、斷言是否 flaky、資料代表性） | fixture 策略、分層地基 | 不限（權威非 SaaS 特定） |
+| **資料庫** | `saas-tech-selection` skill 的 state-storage 維度（migration 版本化紀律、多租戶資料模型、**防護底線的自動備份與還原驗證**） | migration baseline、**備份與還原驗證**。seed 見〈權威缺席時〉形態 3 | SaaS/伺服器端專案照預設；非 SaaS 專案見下方處置 |
+| **DevOps** | `saas-tech-selection` skill 的 reliability 維度（CI gate 構成與起始門檻） | CI gate、部署與還原配方 | SaaS/伺服器端專案照預設；非 SaaS 專案見下方處置 |
+| **可觀測性** | 專案的可觀測性規則（統一 log 入口、catch 區塊要求；屬自動載入層，多半已在 context 中），以及 `saas-tech-selection` skill 的 observability 維度（錯誤分類） | log 接線點、錯誤分類骨架 | log 接線點不限；`saas-tech-selection` 的錯誤分類部分限 SaaS/伺服器端，非 SaaS 專案見下方處置 |
 
 **本表列的是五個常見維度，不宣稱窮盡地基的全部外延。** 專案若有本表未涵蓋的地基工作（如協定契約、資料匯入匯出格式），照同一形式增列一行。
+
+**資料庫／DevOps／可觀測性三維度的非 SaaS 專案處置**：這三列的權威來源 `saas-tech-selection` 以 SaaS/伺服器端專案為預設形態，對 CLI 工具、函式庫、單機 app 等非 SaaS 專案形態不符。處置依〈權威缺席時〉「權威存在但形態不符」的既有機制——先走「改寫產物」，取權威中與形態無關的部分（例如單機 SQLite 工具仍適用 migration 版本化紀律，多租戶隔離則不適用，見下方〈權威形態不符時的正確取用〉範例）；確認無可用部分時，改指專案自身 CLAUDE.md 技術選型記錄，或依〈產物欄的四種合法答案〉標「無」+ 理由。**不新增第二套權威**——`saas-tech-selection` 仍是這三個維度唯一的判準來源，本段只是把「非 SaaS 專案先過形態轉換」明示為預設路徑，不構成整條跳過。
 
 **預設產物欄是入口不是清單。** 實跑證實最高價值的缺口常在權威原文而不在此欄——一個有真 PostgreSQL 與 docker volume 卻零備份痕跡的服務，其最大風險是備份還原，而那條要讀到權威的防護底線才撈得到。填完產物欄後仍應翻一次權威原文。
 

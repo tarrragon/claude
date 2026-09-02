@@ -5,6 +5,7 @@
 支援 Markdown（含 frontmatter）和 YAML 格式。
 """
 import os
+import pickle
 import re
 import sys
 import tempfile
@@ -15,7 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml
 
 from ticket_system import constants as _enum_constants
-from .paths import get_ticket_path
+from .paths import get_ticket_path, get_ticket_state_root
 
 
 # ============================================================================
@@ -101,6 +102,109 @@ def _format_charset_violation(field_path: str, char: str, code: int, kind: str) 
 # 使用完整路徑作為 key，避免版本號正規化問題
 # 每次 CLI 執行時自動清空（process 結束即失效）
 _ticket_cache: Dict[str, Optional[Dict[str, Any]]] = {}
+
+
+# ============================================================================
+# 跨 CLI 呼叫的 frontmatter 磁碟快取（2026-09-02 新增）
+# ============================================================================
+#
+# Why：conflicts --for/--among 對全票池逐票呼叫 load_ticket()，實測 YAML
+# frontmatter 解析（yaml.safe_load）占 list_tickets() 總耗時約八成（另一項
+# 主導成本——get_ticket_state_root() 的 git subprocess——已由該函式自身的
+# 程序內快取解決，見 paths.py）。frontmatter 解析結果與檔案內容一一對應，
+# 以 (mtime, size) 作為失效鍵快取至磁碟，可讓後續 CLI 呼叫跳過重複解析。
+#
+# 鍵值選擇：mtime + size 而非 ticket ID 單獨當鍵——並行 session 會改票面，
+# 純 ID 鍵無法偵測內容變更；mtime+size 是內容變更的可靠代理（save_ticket
+# 寫入時必然更新 mtime，且另於 save_ticket 顯式失效同一 cache_key，見下）。
+#
+# 測試隔離：僅在生產路徑（TICKET_SYSTEM_TEST_ISOLATION 未設）啟用，pytest
+# 環境（conftest.py 的 `_isolate_project_root` autouse fixture 一律設此旗標）
+# 完全略過磁碟快取，行為與快取加入前一致，避免 tmp_path 快速覆寫時 mtime
+# 精度不足導致的假命中風險，且不需在測試層額外處理快取失效。
+_frontmatter_disk_cache: Optional[Dict[str, Dict[str, Any]]] = None
+_frontmatter_disk_cache_dirty = False
+_FRONTMATTER_CACHE_FILENAME = "ticket-frontmatter-cache.pkl"
+
+
+def _frontmatter_disk_cache_enabled() -> bool:
+    """僅生產路徑啟用磁碟快取；測試隔離旗標存在時一律停用（見上方模組註解）。"""
+    return os.environ.get("TICKET_SYSTEM_TEST_ISOLATION") != "1"
+
+
+def _frontmatter_cache_path() -> Path:
+    """磁碟快取檔位置：主倉庫 .claude/hook-logs/ 下（該目錄已於 .gitignore 排除）。"""
+    return get_ticket_state_root() / ".claude" / "hook-logs" / _FRONTMATTER_CACHE_FILENAME
+
+
+def _load_frontmatter_disk_cache() -> Dict[str, Dict[str, Any]]:
+    """惰性載入磁碟快取（同一 process 內僅讀取一次）。
+
+    快取檔損毀或不存在時回傳空 dict，不阻斷主流程（quality-baseline 規則 4：
+    catch 後 return 預設值需記錄警告）。
+
+    安全性：本快取檔僅由 `flush_frontmatter_disk_cache()` 寫入，內容來源是
+    本機 ticket 票面經 `parse_frontmatter()` 解析後的結果，非外部/網路輸入；
+    寫入端為同一使用者本機 process，非跨信任邊界資料，`pickle.load` 於此
+    情境不構成任意程式碼執行風險（風險模型與 CPython 標準函式庫
+    `functools.lru_cache` 的行程內快取相同：僅信任自己寫入的資料）。
+    """
+    global _frontmatter_disk_cache
+    if _frontmatter_disk_cache is not None:
+        return _frontmatter_disk_cache
+    path = _frontmatter_cache_path()
+    try:
+        with open(path, "rb") as f:
+            loaded = pickle.load(f)
+        _frontmatter_disk_cache = loaded if isinstance(loaded, dict) else {}
+    except FileNotFoundError:
+        _frontmatter_disk_cache = {}
+    except (OSError, pickle.UnpicklingError, EOFError, AttributeError) as e:
+        sys.stderr.write(
+            f"[parser] frontmatter 磁碟快取載入失敗（{type(e).__name__}: {e}），"
+            "改為全量重新解析\n"
+        )
+        _frontmatter_disk_cache = {}
+    return _frontmatter_disk_cache
+
+
+def flush_frontmatter_disk_cache() -> None:
+    """將記憶體中的磁碟快取寫回檔案（供 list_tickets 批次載入後呼叫）。
+
+    原子寫入（暫存檔 + os.replace）避免並行 CLI 寫入同一快取檔時損毀既有
+    內容；寫入失敗僅 stderr 警告，不阻斷主流程（下次呼叫仍會重新解析）。
+    """
+    global _frontmatter_disk_cache_dirty
+    if not _frontmatter_disk_cache_dirty or _frontmatter_disk_cache is None:
+        return
+    path = _frontmatter_cache_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                pickle.dump(_frontmatter_disk_cache, f)
+            os.replace(tmp_name, path)
+        finally:
+            if os.path.exists(tmp_name):
+                os.remove(tmp_name)
+    except OSError as e:
+        sys.stderr.write(
+            f"[parser] frontmatter 磁碟快取寫回失敗（{type(e).__name__}: {e}），"
+            "下次呼叫仍會重新解析\n"
+        )
+    else:
+        _frontmatter_disk_cache_dirty = False
+
+
+def _invalidate_frontmatter_disk_cache_entry(cache_key: str) -> None:
+    """save_ticket 寫入票面後同步失效磁碟快取（與既有 _ticket_cache.pop 同一時機）。
+
+    雖然 mtime 變更本身足以讓下次讀取判定快取過期（見鍵值選擇說明），此處
+    顯式移除是防禦性加強：避免 stale entry 在快取檔內無限期殘留占用空間。
+    """
+    if _frontmatter_disk_cache is not None:
+        _frontmatter_disk_cache.pop(cache_key, None)
 
 
 # 特殊欄位常數
@@ -620,8 +724,34 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
     if cache_key in _ticket_cache:
         return _ticket_cache[cache_key]
 
-    if not ticket_path.exists():
+    try:
+        file_stat = ticket_path.stat()
+    except FileNotFoundError:
         return None
+    except OSError:
+        return None
+
+    # Guard Clause 1.7：磁碟快取命中（僅生產路徑，見模組層說明）——
+    # (mtime, size) 與快取記錄相符時，直接沿用已解析結果，跳過檔案讀取與
+    # yaml.safe_load（frontmatter 解析為 list_tickets() 逐票呼叫時的主導耗時，
+    # 見模組層 Why）。
+    disk_cache_key = None
+    if ticket_path.suffix == ".md" and _frontmatter_disk_cache_enabled():
+        disk_cache_key = str(ticket_path)
+        disk_cache = _load_frontmatter_disk_cache()
+        cached_entry = disk_cache.get(disk_cache_key)
+        if (
+            cached_entry is not None
+            and cached_entry.get("mtime") == file_stat.st_mtime
+            and cached_entry.get("size") == file_stat.st_size
+        ):
+            frontmatter = dict(cached_entry["frontmatter"])
+            frontmatter["_body"] = cached_entry["body"]
+            frontmatter["_path"] = str(ticket_path)
+            frontmatter[ENUM_SNAPSHOT_FIELD] = _snapshot_enum_fields(frontmatter)
+            frontmatter[CHARSET_SNAPSHOT_FIELD] = _flatten_text_fields(frontmatter)
+            _ticket_cache[cache_key] = frontmatter
+            return frontmatter
 
     # 嘗試讀取檔案內容（Guard Clause 2：讀取失敗）
     try:
@@ -648,6 +778,18 @@ def load_ticket(version: str, ticket_id: str) -> Optional[Dict[str, Any]]:
         # Guard Clause 3：frontmatter 為空（無 frontmatter）
         if not frontmatter:
             return None
+
+        # 寫入磁碟快取（快取未含衍生欄位的原始 frontmatter + body，衍生欄位
+        # 每次讀取時重新計算，成本低廉，避免快取內容與計算邏輯脫鉤）
+        if disk_cache_key is not None:
+            global _frontmatter_disk_cache_dirty
+            _load_frontmatter_disk_cache()[disk_cache_key] = {
+                "mtime": file_stat.st_mtime,
+                "size": file_stat.st_size,
+                "frontmatter": dict(frontmatter),
+                "body": body,
+            }
+            _frontmatter_disk_cache_dirty = True
 
         # 附加元資料：body 內容和檔案路徑
         frontmatter["_body"] = body
@@ -834,6 +976,7 @@ def save_ticket(ticket: Dict[str, Any], ticket_path: Path) -> None:
     # 寫入成功後失效快取，確保後續讀取取得最新資料
     # 注意：這行在 try-finally 後執行，只有寫入成功才到達
     _ticket_cache.pop(str(ticket_path), None)
+    _invalidate_frontmatter_disk_cache_entry(str(ticket_path))
 
     # 落盤成功後刷新快照為當前值：同一 dict 再次 save 時不對已持久化的
     # 變更重複告警（快照語意 = 「相對最後一次成功落盤」）

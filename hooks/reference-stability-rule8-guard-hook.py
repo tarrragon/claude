@@ -134,6 +134,26 @@ RELOCATION_SOURCE_PATH_PATTERN = re.compile(
 )
 
 
+def _nearest_existing_ancestor(path: Path) -> Optional[Path]:
+    """由 path 向上尋找第一個實際存在的祖先目錄（含 path 自身）。
+
+    Write 建立的新檔可能位於尚不存在的巢狀目錄下（例如
+    .claude/references/new-dir/foo.md，new-dir 尚未建立），此時單取
+    parent 仍可能不存在，git -C 對不存在目錄會直接執行失敗。逐層上溯
+    找到第一個存在的目錄，才能保證 git -C 有效執行。
+
+    走到檔案系統根目錄仍不存在（理論上不會發生，Path("/") 恆存在）時
+    回傳 None，交由呼叫端 fail-open。
+    """
+    current = path
+    while not current.exists():
+        parent = current.parent
+        if parent == current:
+            return None
+        current = parent
+    return current
+
+
 def _get_repo_root(start_path: str) -> Optional[str]:
     """以 git rev-parse --show-toplevel 取得 start_path 所在的 repo/worktree 根目錄。
 
@@ -141,16 +161,25 @@ def _get_repo_root(start_path: str) -> Optional[str]:
     <repo>/.claude/worktrees/agent-<id>/），非主倉庫根目錄——這正是本函式
     據以剝除 worktree 前綴、還原專案內真實相對路徑的關鍵行為。
 
+    start_path 本身或其上層目錄可能尚不存在（Write 在尚未建立的巢狀
+    目錄下新建檔案），故先以 _nearest_existing_ancestor 向上尋找第一個
+    實際存在的祖先目錄，再以該目錄作為 git -C 的起點——不存在的目錄
+    對 git -C 一律執行失敗，直接以檔案自身路徑呼叫會誤判為「無法判定」
+    而漏掃（新建巢狀目錄下的框架檔案這條產生路徑）。
+
     fail-open：git 不可用、非 git 目錄、或任何執行異常一律回傳 None，
     交由呼叫端視為「無法判定」（見 normalize_relpath 的保守放行邏輯，
-    對應 acceptance 7 的既有語意不變要求）。
+    對應既有語意不變要求）。
     """
     try:
         start_dir = Path(start_path)
         if not start_dir.is_dir():
             start_dir = start_dir.parent
+        existing_dir = _nearest_existing_ancestor(start_dir)
+        if existing_dir is None:
+            return None
         result = subprocess.run(
-            ["git", "-C", str(start_dir), "rev-parse", "--show-toplevel"],
+            ["git", "-C", str(existing_dir), "rev-parse", "--show-toplevel"],
             capture_output=True,
             text=True,
             timeout=5,

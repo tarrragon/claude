@@ -251,42 +251,34 @@ _DISPATCH_SKELETON_CONSTANT_NAMES = (
 )
 
 
-def _load_skeleton_constants():
-    """以 ast 靜態解析 track_dispatch.py 的骨架常數，避免執行整個 ticket_system
-    套件 import chain（該套件依賴 filelock，hook 測試環境未必安裝）。
+def _load_dispatch_skeleton_module():
+    """直接 import `ticket_system.lib.dispatch_skeleton`（CLI 本體使用的
+    骨架組裝模組），非重建物或 ast 靜態解析。
 
-    Why：本測試驗證的是「hook 期待的模板關鍵字」與「CLI 骨架常數的實際文字」
-    是否同步，不需要執行 CLI 邏輯本身，靜態解析足以取得字串常數且不受套件
-    依賴影響（0.2.1-W3-876.2 acceptance：hash/diff 驗證 CLI 骨架模板與 hook
-    期待格式同步）。
+    Why：該模組刻意不 import filelock、不做檔案 I/O（見模組 docstring），
+    故 hook 測試套件的獨立 python 環境（未必安裝 `filelock`）可直接匯入，
+    不需繞道 ast 解析 track_dispatch.py 常數或重建組裝順序——兩者皆測「代理
+    物」而非 CLI 本體，重建物與本體一旦漂移即無訊號。
 
-    回傳涵蓋 `_DISPATCH_SKELETON_CONSTANT_NAMES` 全部六個常數（0.2.1-W3-1146
-    擴充，供骨架實際行數重建用；原僅取兩個 SKELETON_TEMPLATE_* 常數）。
+    `ticket_system/__init__.py` 與 `ticket_system/lib/__init__.py` 皆不
+    re-export 任何觸發 filelock 的符號（後者刻意清空 re-export 層），故僅
+    需將 `.claude/skills/ticket` 加入 sys.path 即可安全匯入本模組，不會
+    連帶觸發 ticket_loader -> file_lock -> filelock 的 import chain。
     """
-    import ast
+    skills_ticket_dir = _HOOKS_DIR.parent / "skills" / "ticket"
+    if str(skills_ticket_dir) not in sys.path:
+        sys.path.insert(0, str(skills_ticket_dir))
 
-    # _HOOKS_DIR 為 .claude/hooks，往上一層即 .claude/，兩者共用同一個
-    # .claude/ 頂層目錄。
-    track_dispatch_path = (
-        _HOOKS_DIR.parent
-        / "skills"
-        / "ticket"
-        / "ticket_system"
-        / "commands"
-        / "track_dispatch.py"
-    )
+    from ticket_system.lib import dispatch_skeleton
 
-    tree = ast.parse(track_dispatch_path.read_text(encoding="utf-8"))
-    constants = {}
-    for node in tree.body:
-        if (
-            isinstance(node, ast.Assign)
-            and len(node.targets) == 1
-            and isinstance(node.targets[0], ast.Name)
-            and node.targets[0].id in _DISPATCH_SKELETON_CONSTANT_NAMES
-        ):
-            constants[node.targets[0].id] = ast.literal_eval(node.value)
-    return constants
+    return dispatch_skeleton
+
+
+def _load_skeleton_constants():
+    """回傳 `dispatch_skeleton` 模組內 `_DISPATCH_SKELETON_CONSTANT_NAMES`
+    列出的骨架常數，供既有關鍵字同步測試沿用。"""
+    module = _load_dispatch_skeleton_module()
+    return {name: getattr(module, name) for name in _DISPATCH_SKELETON_CONSTANT_NAMES}
 
 
 def test_cli_skeleton_keywords_stay_in_sync_with_hook_expectations():
@@ -323,25 +315,21 @@ def test_cli_skeleton_keywords_stay_in_sync_with_hook_expectations():
 # （行數）不同。本節補上該缺失的綁定測試。
 # ----------------------------------------------------------------------------
 
-def _rebuild_normal_skeleton(constants: dict, *, with_hook_reminder: bool) -> str:
-    """重建 `_build_skeleton`（kind="normal", commit_policy="agent"）的組裝
-    邏輯，不 import track_dispatch.py（同上方 filelock 依賴限制）。
-
-    組裝順序須與 `ticket_system/commands/track_dispatch.py::_build_skeleton`
-    的 kind="normal" 分支逐步對應，任一方漂移即本測試連帶失真——維護者修改
-    該函式組裝邏輯時應同步檢視本函式。骨架瘦身後嵌入的是
-    `STAGING_PHRASE_AGENT_PROMPT` 短版指標句（非 26 行全文 `STAGING_PHRASE_
-    AGENT`，全文改冪等寫入 ticket body「### Commit 規範」章節）。
+def _build_normal_skeleton(*, with_hook_reminder: bool) -> str:
+    """呼叫 `dispatch_skeleton.build_skeleton`（CLI 本體實際使用的組裝函式）
+    產生 kind="normal", commit_policy="agent" 的骨架，量測對象為 CLI 本體
+    而非重建物（`track_dispatch.py::_build_skeleton` 是本函式的薄轉接層，
+    兩者呼叫的是同一份 `build_skeleton`）。
     """
-    skeleton = constants["SKELETON_TEMPLATE_NORMAL"].format(
+    module = _load_dispatch_skeleton_module()
+    return module.build_skeleton(
+        kind="normal",
         ticket_id="0.2.1-W3-XXXX",
         task_summary="一句話動作描述測試填空",
         agent_name="thyme-python-developer",
+        commit_policy="agent",
+        touches_hook_scope=with_hook_reminder,
     )
-    skeleton = f"{skeleton}\n\n{constants['STAGING_PHRASE_AGENT_PROMPT']}"
-    if with_hook_reminder:
-        skeleton = f"{skeleton}\n\n{constants['HOOK_TICKET_REMINDER']}"
-    return skeleton
 
 
 def _skeleton_line_count(skeleton: str) -> int:
@@ -357,8 +345,7 @@ def test_dispatch_skeleton_normal_agent_commit_within_prompt_limit(monkeypatch, 
     修復前現況：SKELETON_TEMPLATE_NORMAL（12 行）+ STAGING_PHRASE_AGENT
     （26 行，含中間分隔空行）合計 39 行 > 30，本測試在修復前應為紅燈。
     """
-    constants = _load_skeleton_constants()
-    skeleton = _rebuild_normal_skeleton(constants, with_hook_reminder=False)
+    skeleton = _build_normal_skeleton(with_hook_reminder=False)
     actual_line_count = _skeleton_line_count(skeleton)
 
     assert actual_line_count <= PROMPT_LINE_LIMIT, (
@@ -382,8 +369,7 @@ def test_dispatch_skeleton_normal_agent_commit_with_hook_scope_within_prompt_lim
     """觸及 `.claude/hooks/` 的票額外疊加 HOOK_TICKET_REMINDER，為骨架最長
     情形（現況 47-48 行）；此變體同樣不得超過 Layer 1 硬上限。
     """
-    constants = _load_skeleton_constants()
-    skeleton = _rebuild_normal_skeleton(constants, with_hook_reminder=True)
+    skeleton = _build_normal_skeleton(with_hook_reminder=True)
     actual_line_count = _skeleton_line_count(skeleton)
 
     assert actual_line_count <= PROMPT_LINE_LIMIT, (

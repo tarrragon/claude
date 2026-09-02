@@ -22,6 +22,9 @@ GIT_TOPLEVEL_TIMEOUT = 5
 # 的 _isolate_project_root autouse fixture。
 _project_root_cache: Path | None = None
 
+# get_ticket_state_root() 程序內快取（2026-09-02 新增，語意同 _project_root_cache）。
+_ticket_state_root_cache: Path | None = None
+
 
 def _git_toplevel() -> Path | None:
     """
@@ -310,7 +313,24 @@ def get_git_common_dir(cwd: Optional[Path] = None) -> Optional[Path]:
 def get_ticket_state_root() -> Path:
     """
     取得 ticket 狀態操作（read/write ticket md、claim/append-log/set-acceptance
-    等）應使用的根目錄。
+    等）應使用的根目錄（程序內快取，2026-09-02 新增）。
+
+    快取語意：與 get_project_root() 的既有程序內快取相同——本函式的解析結果
+    在單次 CLI 呼叫（一個 process 的生命週期）內恆為常數，cwd 與 git 拓樸不會
+    在同一 process 執行期間變更。首次呼叫解析並存入 module-level cache，
+    後續呼叫直接回傳快取值。
+
+    Why（cProfile 量測，來源票 Problem Analysis）：本函式內部呼叫
+    `_linked_worktree_root()`（每次執行 1 個 git subprocess），且被
+    `get_ticket_path()` -> `get_tickets_dir()` 逐票呼叫一次。未快取前，
+    `list_tickets()` 對全票池即產生等票數次的 git subprocess，實測合計占
+    `list_tickets()` 總耗時約八成，是 conflicts --for/--among 票面讀取瓶頸
+    的真正成因——frontmatter/YAML 解析僅占約一成。快取後同一 process 內僅
+    需 1 次 git subprocess，N 票的重複呼叫成本歸零。
+
+    測試需在每個 test 前呼叫 reset_ticket_state_root_cache() 清除，見
+    `.claude/skills/ticket/conftest.py` 的 `_isolate_project_root` autouse
+    fixture（與 reset_project_root_cache() 一併呼叫）。
 
     與 get_project_root() 的差異僅在 linked worktree 場景：get_project_root()
     優先回傳呼叫端自己所在 worktree 的根目錄（供程式碼/測試隔離使用）；本函式
@@ -336,6 +356,25 @@ def get_ticket_state_root() -> Path:
         >>> (root / "CLAUDE.md").exists() or (root / "go.mod").exists() or (root / "pubspec.yaml").exists()
         True
     """
+    global _ticket_state_root_cache
+    if _ticket_state_root_cache is not None:
+        return _ticket_state_root_cache
+    _ticket_state_root_cache = _resolve_ticket_state_root()
+    return _ticket_state_root_cache
+
+
+def reset_ticket_state_root_cache() -> None:
+    """清除 get_ticket_state_root() 的程序內快取（測試專用）。
+
+    生產路徑不需呼叫——CLI 每次呼叫是獨立 process，快取隨 process 結束
+    自然失效。語意與 reset_project_root_cache() 相同（見該函式 docstring）。
+    """
+    global _ticket_state_root_cache
+    _ticket_state_root_cache = None
+
+
+def _resolve_ticket_state_root() -> Path:
+    """實際解析 ticket 狀態根目錄（原 get_ticket_state_root 本體，供快取包裝呼叫）。"""
     # 1. worktree 感知（與 get_project_root() 方向相反）：偵測到 linked
     #    worktree 時，回推主倉庫根目錄而非 worktree 自己的根目錄。
     #    非 worktree 場景一律委派 get_project_root()（步驟 2），使既有呼叫端

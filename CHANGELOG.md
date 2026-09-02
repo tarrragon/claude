@@ -1,3 +1,20 @@
+## [2.48.0] - 2026-09-02
+
+### Summary
+refactor: 抽離 dispatch 骨架純組裝函式使行數測試量測 CLI 本體; fix: rule8 guard 補新建巢狀目錄下新檔的 repo root 解析回退; docs: tool-selection 規則二增列非專案來源拒絕處置 (+4 more)
+
+Changes: 1 refactor, 1 fix, 3 docs, 1 chore, 1 perf
+
+- refactor: 抽離 dispatch 骨架純組裝函式使行數測試量測 CLI 本體
+- fix: rule8 guard 補新建巢狀目錄下新檔的 repo root 解析回退
+- docs: tool-selection 規則二增列非專案來源拒絕處置
+- docs: 收窄 foundation-design 三維度路由 saas-tech-selection 適用條件
+- docs: 補與 wrap-decision 的分工與路由
+- chore: 回寫 .claude/VERSION 至
+- perf: frontmatter 快取解 conflicts --for/--among 票面讀取瓶頸
+
+---
+
 ## [2.47.0] - 2026-09-02
 
 ### Summary

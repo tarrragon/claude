@@ -40,8 +40,9 @@
 |------|---------|---------|
 | MCP 寫入工具對非程式碼檔被本 hook deny | 改用 Edit 完成同一修改 | 推論「Edit 也會被拒」而停止 |
 | Edit 對非程式碼檔被拒（其他 hook） | 在 ticket Problem Analysis 記錄並回報 PM | 不嘗試 Edit 直接放棄 |
+| Edit / Write 被非專案來源拒絕（auto mode classifier、permissionMode、OS 權限等） | 停手，於 ticket NeedsContext 記錄並回報 PM | 改用 Bash 內嵌腳本（`python3 -c` / `sed` / heredoc 重寫）繞過完成同一修改 |
 
-**判別準則**：`mcp__serena__*` 寫入工具屬 MCP 層限制；Edit / Write 屬 Claude Code 內建工具層，兩者限制機制完全不同，被拒原因不可互推。
+**判別準則**：`mcp__serena__*` 寫入工具屬 MCP 層限制；Edit / Write 屬 Claude Code 內建工具層，兩者限制機制完全不同，被拒原因不可互推。非專案來源拒絕的語意是「不該做這件事」，不是「選錯工具」——不可用 Bash 改寫檔案內容規避判斷。
 
 ---
 
@@ -62,6 +63,7 @@
 
 ---
 
-**Last Updated**: 2026-08-21
+**Last Updated**: 2026-09-02
+**Version**: 1.2.0 — 規則 2 新增第三列：Edit/Write 被非專案來源（auto mode classifier、permissionMode、OS 權限）拒絕時停手回報，禁改用 Bash 內嵌腳本繞過；判別準則補一句「非專案來源拒絕的語意是不該做這件事，非選錯工具」（源自實測案例：代理人的 Edit 被 harness auto mode classifier 拒絕後誤以 Bash 內嵌腳本繞過完成修改）
 **Version**: 1.1.0 — 規則 1 表格下補邊界一行：本規則優先於 harness 層改檔類指令，唯讀 Bash 不受限
 **Version**: 1.0.0 — PC-112 三層防護的 framework rule 層落地（PM + subagent 通用），配合 hook 強制層形成雙層閉環
