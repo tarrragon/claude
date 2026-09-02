@@ -103,6 +103,7 @@ def _base_args(**overrides) -> argparse.Namespace:
         review_perspective=None,
         decision_question=None,
         commit_policy="agent",
+        dry_run=False,
     )
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
@@ -259,6 +260,55 @@ def test_dispatch_kind_normal_includes_completion_protocol(dispatch_ticket, caps
     assert "ticket track claim" in out
     assert "ticket track complete" in out
     assert "ticket track set-acceptance" in out
+
+
+# --- --dry-run（0.2.1-W4-022） ------------------------------------------
+
+
+def test_dispatch_dry_run_does_not_write_ticket_file(dispatch_ticket, tmp_path):
+    """--dry-run 時即使帶 --note 且 commit_policy=agent（預設會觸發兩種
+    寫入副作用），票面檔內容與 mtime 都必須維持不變（不落盤、不冪等寫入
+    Commit 規範子節）。"""
+    md_path = tmp_path / f"{dispatch_ticket}.md"
+    content_before = md_path.read_text(encoding="utf-8")
+    mtime_before = md_path.stat().st_mtime_ns
+
+    args = _base_args(note="dry-run 不應落票", dry_run=True)
+    rc = td_mod.execute_dispatch(args, "0.0.0")
+
+    assert rc == 0
+    content_after = md_path.read_text(encoding="utf-8")
+    mtime_after = md_path.stat().st_mtime_ns
+    assert content_after == content_before
+    assert mtime_after == mtime_before
+    assert f"### {td_mod.DISPATCH_LOG_SECTION}" not in content_after
+    assert f"### {td_mod.COMMIT_SECTION_HEADING}" not in content_after
+
+
+def test_dispatch_dry_run_outputs_same_skeleton_as_normal(dispatch_ticket, capsys):
+    """--dry-run 的骨架輸出與非 dry-run 完全相同（差異僅在票面副作用）。"""
+    args_normal = _base_args(dry_run=False)
+    rc_normal = td_mod.execute_dispatch(args_normal, "0.0.0")
+    assert rc_normal == 0
+    out_normal = capsys.readouterr().out
+
+    args_dry_run = _base_args(dry_run=True)
+    rc_dry_run = td_mod.execute_dispatch(args_dry_run, "0.0.0")
+    assert rc_dry_run == 0
+    out_dry_run = capsys.readouterr().out
+
+    assert out_dry_run == out_normal
+
+
+def test_dispatch_dry_run_missing_ticket_returns_error(tmp_path, monkeypatch, capsys):
+    """--dry-run 仍須確認票存在，不可對不存在的票輸出骨架。"""
+    monkeypatch.setattr(td_mod, "get_ticket_path", lambda version, tid: tmp_path / f"{tid}.md")
+    monkeypatch.setattr(td_mod, "load_ticket", lambda version, tid: None)
+
+    args = _base_args(ticket_id="0.0.0-W0-NOPE", dry_run=True)
+    rc = td_mod.execute_dispatch(args, "0.0.0")
+
+    assert rc == 1
 
 
 def test_dispatch_missing_ticket_returns_error(tmp_path, monkeypatch, capsys):

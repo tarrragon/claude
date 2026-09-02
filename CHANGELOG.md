@@ -1,3 +1,15 @@
+## [2.49.0] - 2026-09-02
+
+### Summary
+feat: ticket track dispatch 新增 --dry-run 只輸出骨架不落票; chore: 回寫 .claude/VERSION 至
+
+Changes: 1 feat, 1 chore
+
+- feat: ticket track dispatch 新增 --dry-run 只輸出骨架不落票
+- chore: 回寫 .claude/VERSION 至
+
+---
+
 ## [2.48.1] - 2026-09-02
 
 ### Summary

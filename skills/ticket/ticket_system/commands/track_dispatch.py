@@ -295,9 +295,14 @@ def execute_dispatch(args: argparse.Namespace, version: str) -> int:
     commit_policy="agent" 時冪等寫入/更新「### Commit 規範」固定章節（骨架
     瘦身落地：骨架本體只留短版指標句，全文由此章節承載） + 輸出骨架 prompt。
 
+    `--dry-run` 時完全略過票面寫入（不落盤、不觸發 file_lock），僅唯讀確認
+    票存在；骨架輸出與非 dry-run 完全相同（`_build_skeleton` 不依賴票面
+    寫入結果），供 PM 量測骨架行數或預覽 prompt 時可自由重複執行，不再需要
+    事後 checkout 還原票面（2026-09-02 新增）。
+
     Args:
         args: 需含 ticket_id / as_agent / note / kind / task_summary /
-            review_perspective / decision_question / commit_policy
+            review_perspective / decision_question / commit_policy / dry_run
         version: 已解析版本號
 
     Returns:
@@ -305,9 +310,17 @@ def execute_dispatch(args: argparse.Namespace, version: str) -> int:
     """
     ticket_path = get_ticket_path(version, args.ticket_id)
     commit_policy = getattr(args, "commit_policy", "agent") or "agent"
+    dry_run = getattr(args, "dry_run", False)
     needs_commit_section = args.kind == "normal" and commit_policy == "agent"
 
-    if args.note or needs_commit_section:
+    if dry_run or not (args.note or needs_commit_section):
+        # --dry-run，或無 note 且非 agent commit 情境：僅唯讀確認票存在，
+        # 避免對不存在的票輸出骨架造成誤派發；不落盤。
+        ticket = load_ticket(version, args.ticket_id)
+        if not ticket:
+            print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
+            return 1
+    else:
         with file_lock(ticket_path):
             ticket = load_ticket(version, args.ticket_id)
             if not ticket:
@@ -329,12 +342,6 @@ def execute_dispatch(args: argparse.Namespace, version: str) -> int:
                 ticket["_body"] = updated_body
                 save_path = resolve_ticket_path(ticket, version, args.ticket_id)
                 save_ticket(ticket, save_path)
-    else:
-        # 無 note 且非 agent commit 情境仍需確認票存在，避免對不存在的票輸出骨架造成誤派發
-        ticket = load_ticket(version, args.ticket_id)
-        if not ticket:
-            print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
-            return 1
 
     block_message = _directory_declaration_block_message(ticket, args.ticket_id, version)
     if block_message:
@@ -402,4 +409,11 @@ def register_dispatch_command(subparsers: "argparse._SubParsersAction") -> None:
             "commit 歸屬：agent（預設，嵌入精準 staging 制式句權威版全文）/"
             " pm（PM 統一 commit，agent 不執行）/ none（本次派發不涉及 commit）"
         ),
+    )
+    p_dispatch.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        default=False,
+        help="只輸出骨架，不寫入票面（不落 --note、不冪等寫入 Commit 規範子節）；預設行為不變",
     )
