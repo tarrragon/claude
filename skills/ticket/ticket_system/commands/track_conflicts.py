@@ -74,6 +74,7 @@ from ticket_system.lib.file_conflict import (
     compute_pairwise_conflicts,
     expand_files,
     files_intersect,
+    is_directory_declaration,
     write_files,
 )
 
@@ -204,6 +205,52 @@ def _render_table(conflicts: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# 針對性查詢（--for / --among）
+# ---------------------------------------------------------------------------
+
+
+def _filter_for(conflicts: List[Dict[str, Any]], ticket_id: str) -> List[Dict[str, Any]]:
+    """僅保留與 `ticket_id` 有關的衝突對（其為 ticket_a 或 ticket_b 任一側）。"""
+    return [
+        c for c in conflicts
+        if c["ticket_a"] == ticket_id or c["ticket_b"] == ticket_id
+    ]
+
+
+def _filter_among(conflicts: List[Dict[str, Any]], ticket_ids: Set[str]) -> List[Dict[str, Any]]:
+    """僅保留雙側皆落在 `ticket_ids` 內的衝突對（純票組內部兩兩比對）。"""
+    return [
+        c for c in conflicts
+        if c["ticket_a"] in ticket_ids and c["ticket_b"] in ticket_ids
+    ]
+
+
+def _is_directory_level_hit(
+    conflict: Dict[str, Any], project_root: Optional[Path]
+) -> bool:
+    """判定衝突對是否命中「目錄層級宣告」（宣告值為目錄而非單一檔案，
+    如 `.claude/hooks/` 對任何位於該目錄下的檔案宣告皆會匹配，噪音來源）。
+
+    與 `heuristic_only`（impl->test 擴張啟發式衍生候選命中）語意不同：
+    目錄宣告即使是原始宣告值（非衍生候選）仍可能命中，`heuristic_only`
+    對此類命中通常回傳 False（見 `compute_pairwise_conflicts`），故需另
+    以 `is_directory_declaration` 逐一檢查 `matched_files` 涉及的路徑。
+    """
+    for entry in conflict["matched_files"]:
+        for path in entry.split(" ~ "):
+            if is_directory_declaration(path, project_root):
+                return True
+    return False
+
+
+def _drop_directory_level_hits(
+    conflicts: List[Dict[str, Any]], project_root: Optional[Path]
+) -> List[Dict[str, Any]]:
+    """濾除目錄層級宣告命中（--for/--among 預設隱藏，需 --include-heuristic 開啟）。"""
+    return [c for c in conflicts if not _is_directory_level_hit(c, project_root)]
+
+
 def _render_json(conflicts: List[Dict[str, Any]]) -> str:
     return json.dumps({"conflicts": conflicts}, ensure_ascii=False, indent=2)
 
@@ -221,10 +268,27 @@ def execute_conflicts(args: argparse.Namespace) -> int:
     """
     fmt = getattr(args, "format", FORMAT_TABLE) or FORMAT_TABLE
     explicit_version = getattr(args, "version", None)
+    for_ticket = getattr(args, "for_ticket", None)
+    among_arg = getattr(args, "among_tickets", None)
+    include_heuristic = getattr(args, "include_heuristic", False)
 
     tickets = _gather_tickets(explicit_version)
     project_root = get_project_root()
     conflicts = find_conflicts(tickets, project_root)
+
+    # 針對性查詢：--for / --among 二擇一（互斥，argparse 層不強制，此處
+    # 以 --among 優先——同時提供兩者屬呼叫端誤用，選較窄的語意較安全）。
+    # 兩者皆命中純目錄層級 heuristic 的命中預設隱藏，需顯式 --include-heuristic
+    # 開啟；未帶 --for/--among 的既有全量輸出行為不受影響（回歸不變）。
+    if among_arg:
+        among_ids = {i.strip() for i in among_arg.split(",") if i.strip()}
+        conflicts = _filter_among(conflicts, among_ids)
+        if not include_heuristic:
+            conflicts = _drop_directory_level_hits(conflicts, project_root)
+    elif for_ticket:
+        conflicts = _filter_for(conflicts, for_ticket)
+        if not include_heuristic:
+            conflicts = _drop_directory_level_hits(conflicts, project_root)
 
     registry = load_registry()
     now = getattr(args, "_now", None) or datetime.now(timezone.utc)
@@ -272,6 +336,26 @@ def register_conflicts(
         choices=[FORMAT_TABLE, FORMAT_JSON],
         default=FORMAT_TABLE,
         help=f"輸出格式（預設 {FORMAT_TABLE}）",
+    )
+    p.add_argument(
+        "--for",
+        dest="for_ticket",
+        default=None,
+        metavar="TICKET_ID",
+        help="僅列出指定票與其他 pending/in_progress 票的衝突對（與 --among 互斥，--among 優先）",
+    )
+    p.add_argument(
+        "--among",
+        dest="among_tickets",
+        default=None,
+        metavar="ID1,ID2,...",
+        help="僅比對指定票組彼此之間（逗號分隔，不含票組外的票）",
+    )
+    p.add_argument(
+        "--include-heuristic",
+        action="store_true",
+        default=False,
+        help="--for/--among 模式下納入純目錄層級 heuristic 命中（預設隱藏）",
     )
     return p
 

@@ -1203,7 +1203,19 @@ ticket track activity [--version V] [--all] [--format {table,json}]
 
 ```bash
 ticket track conflicts [--version V] [--all] [--format {table,json}]
+ticket track conflicts --for <ticket-id> [--include-heuristic] [--format {table,json}]
+ticket track conflicts --among <id1,id2,...> [--include-heuristic] [--format {table,json}]
 ```
+
+`--for` 與 `--among` 為針對性查詢：PM 並行派發前只想問「這幾張會不會撞」，
+不必人工 grep 全量輸出。二擇一（同時提供時 `--among` 優先）：
+
+- `--for <ticket-id>`：列出該票與其他 `pending`/`in_progress` 票之間的全部衝突對
+- `--among <id1,id2,...>`：僅比對指定票組彼此之間（逗號分隔，票組外的票不出現）
+
+兩者皆預設隱藏純目錄層級宣告命中（如 `.claude/hooks/` 對任何位於該目錄下
+的檔案宣告皆會匹配，屬噪音來源），需顯式加 `--include-heuristic` 開啟；
+未帶 `--for`/`--among` 的既有全量輸出行為不受影響（仍照舊顯示目錄層級命中）。
 
 ### 判定規則
 

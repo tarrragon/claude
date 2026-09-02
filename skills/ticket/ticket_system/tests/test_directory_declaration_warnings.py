@@ -92,6 +92,14 @@ def set_where_ticket(tmp_path, monkeypatch):
     monkeypatch.setattr(fields_mod, "get_ticket_path", lambda version, t: md_path)
     monkeypatch.setattr("ticket_system.lib.parser.get_ticket_path", lambda version, t: md_path)
 
+    # 0.2.1-W3-278: 新增的 where.files 路徑存在性檢查以 get_project_root() 為基準，
+    # 這裡導向 tmp_path 並實際建立測試引用的路徑，讓既有「精確路徑不觸發目錄
+    # 級 WARNING」的測試不因新檢查而多出無關的路徑不存在 WARNING。
+    monkeypatch.setattr("ticket_system.lib.paths.get_project_root", lambda: tmp_path)
+    example_file = tmp_path / ".claude" / "hooks" / "example-guard-hook.py"
+    example_file.parent.mkdir(parents=True, exist_ok=True)
+    example_file.write_text("", encoding="utf-8")
+
     return tid
 
 
@@ -122,3 +130,19 @@ def test_execute_set_where_files_flag_no_warning_for_precise_path(set_where_tick
     assert rc == 0
     out = capsys.readouterr().out
     assert "[WARNING]" not in out
+
+
+def test_execute_set_where_files_flag_warns_on_missing_path(set_where_ticket, capsys):
+    args = argparse.Namespace(
+        ticket_id=set_where_ticket,
+        value=None,
+        layer=None,
+        files=".claude/hooks/does-not-exist.py",
+    )
+    rc = fields_mod.execute_set_where(args, "0.0.0")
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "[WARNING]" in out
+    assert "路徑不存在" in out
+    assert ".claude/hooks/does-not-exist.py" in out

@@ -12,6 +12,7 @@ import 兩次同性質函式。
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from ticket_system.lib.command_lifecycle_messages import CreateMessages
@@ -328,6 +329,35 @@ def directory_declaration_warnings(
         )
         warnings.append(format_warning(template, path=path, stripped=stripped))
     return warnings
+
+def missing_where_paths(project_root: Path, tokens: List[str]) -> List[str]:
+    """回傳 where.files token 清單中，在 project_root 下不存在的路徑清單。
+
+    純存在性檢查，不做形態或語意判斷（是否為新建語意、是否為目錄級宣告等
+    交由呼叫端判斷）。輸入 token 允許帶 `::read` / `::write` 意圖標記，本函式
+    以 `parse_file_intent` 剝除後再檢查存在性；回傳值保留原始 token 字面值，
+    供呼叫端原樣顯示於 WARNING。供 create / set-where / dispatch-readiness
+    三處防線共用。
+
+    Args:
+        project_root: 專案根目錄（呼叫端以 `ticket_system.lib.paths.get_project_root`
+            解析後傳入，本函式不自行解析，維持純函式可測性）
+        tokens: 待檢查的 where.files token 清單（已 strip，可含 `::read` 等標記）
+
+    Returns:
+        不存在的路徑 token 清單（保留原始字面值與輸入順序）；全部存在時回空 list
+    """
+    from ticket_system.lib.file_conflict import parse_file_intent
+
+    missing: List[str] = []
+    for token in tokens:
+        if not token:
+            continue
+        path, _intent = parse_file_intent(token)
+        if not (project_root / path).exists():
+            missing.append(token)
+    return missing
+
 
 def validate_source_ticket_arg(args: argparse.Namespace) -> bool:
     """Step 1.5：--source-ticket 參數前置驗證（PC-073）。

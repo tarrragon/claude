@@ -1,3 +1,17 @@
+## [2.46.0] - 2026-09-02
+
+### Summary
+feat: where.files 快照路徑存在性檢查與失效標示; feat: where.files 路徑存在性檢查納入建票與派發前防線; feat: 新增 track conflicts --for/--among 針對性查詢 (+1 more)
+
+Changes: 3 feat, 1 chore
+
+- feat: where.files 快照路徑存在性檢查與失效標示
+- feat: where.files 路徑存在性檢查納入建票與派發前防線
+- feat: 新增 track conflicts --for/--among 針對性查詢
+- chore: 回寫 .claude/VERSION 至
+
+---
+
 ## [2.45.2] - 2026-09-02
 
 ### Summary

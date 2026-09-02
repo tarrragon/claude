@@ -46,6 +46,7 @@ from ticket_system.lib.field_validators import (
     build_decision_tree_path,
     check_when_blocked_by_consistency,
     directory_declaration_warnings,
+    missing_where_paths,
     validate_blocked_by_references,
     validate_discovered_during_arg,
     validate_source_ticket_arg,
@@ -189,6 +190,16 @@ def _parse_cli_args_to_config(
     # 故此層僅警告非硬擋（硬擋在 `ticket track dispatch`，見 track_dispatch.py）。
     for warning in directory_declaration_warnings(where_files, args.type or "IMP"):
         print(warning)
+
+    # where.files 路徑存在性 WARNING：建票時新檔案的 where 宣告合法
+    # （如尚未建立的測試檔），故此層僅警告不阻擋。
+    from ticket_system.lib.paths import get_project_root
+
+    for missing in missing_where_paths(get_project_root(), where_files):
+        print(format_warning(
+            CreateMessages.WHERE_PATH_NOT_FOUND_WARNING,
+            path=missing,
+        ))
 
     # 處理 blocked_by
     blocked_by = [b.strip() for b in args.blocked_by.split(",")] if args.blocked_by else []

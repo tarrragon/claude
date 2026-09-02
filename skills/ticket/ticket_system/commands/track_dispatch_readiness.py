@@ -44,6 +44,8 @@ import re
 from typing import List, Tuple
 
 from ticket_system.lib.dispatch_common import load_and_unpack
+from ticket_system.lib.field_validators import missing_where_paths
+from ticket_system.lib.paths import get_project_root
 from ticket_system.lib.section_locator import find_section
 
 
@@ -65,6 +67,11 @@ _CHARS_PER_TOKEN = 4  # 粗估換算（OpenAI cl100k 平均）
 # 泛用詞亦可能在非測試語境誤判（如「回歸原設計」）——故本檢查上限為 warn。
 _TEST_KEYWORDS = ("測試", "test", "覆蓋", "回歸", "regression", "涵蓋")
 _TEST_PATH_PATTERN = re.compile(r"(^|[/\\])tests?([/\\]|_|$)|_test\.", re.IGNORECASE)
+
+# 第五項檢查（where.files 路徑存在性）：acceptance 含「建立/新增/新檔」類
+# 關鍵詞時，視為新檔案宣告的合理場景，不對不存在路徑發 WARN——啟發式限制：
+# 未命中不代表路徑無誤，仍需 PM 覆核（與檢查 4 共用邊界聲明）。
+_CREATION_KEYWORDS = ("建立", "新增", "新檔", "create", "add")
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +198,49 @@ def check_acceptance_writeset_consistency(
     return "warn", matched_items, msg
 
 
+def _acceptance_mentions_creation(acceptance: List) -> bool:
+    """判定 acceptance 是否含新建語意關鍵詞（大小寫不敏感）。"""
+    for item in acceptance or []:
+        lowered = str(item or "").lower()
+        if any(kw.lower() in lowered for kw in _CREATION_KEYWORDS):
+            return True
+    return False
+
+
+def check_where_paths_existence(
+    where_files: List[str],
+    acceptance: List,
+    project_root,
+) -> Tuple[str, List[str], str]:
+    """檢查 5：where.files 路徑存在性。
+
+    where.files 含不存在路徑，且 acceptance 無新建語意（建立/新增/新檔類
+    關鍵詞）時回傳 warn，提示 PM 覆核是否路徑錯置或漏加新建關鍵詞。
+    acceptance 含新建語意時視為合理的新檔案宣告，不警告——不阻擋，因
+    dispatch-readiness 全套件皆為軟性檢查（見模組 docstring exit code 語意）。
+
+    Returns:
+        (status, missing_paths, msg) — status ∈ {"pass", "warn"}（不含 fail）
+    """
+    missing = missing_where_paths(project_root, where_files or [])
+    if not missing:
+        return "pass", [], "where.files 路徑全數存在"
+
+    if _acceptance_mentions_creation(acceptance):
+        return (
+            "pass",
+            [],
+            f"where.files 含 {len(missing)} 項不存在路徑，acceptance 含新建語意，視為合理",
+        )
+
+    msg = (
+        f"where.files 含 {len(missing)} 項不存在路徑，acceptance 未見新建語意"
+        "（建立/新增/新檔），可能是測試檔待建或路徑寫錯，請 PM 覆核（啟發式限制："
+        "未命中新建關鍵詞不代表路徑必誤）"
+    )
+    return "warn", missing, msg
+
+
 # ---------------------------------------------------------------------------
 # CLI 入口
 # ---------------------------------------------------------------------------
@@ -223,6 +273,9 @@ def execute_dispatch_readiness(args: argparse.Namespace, version: str) -> int:
     r4_status, r4_items, r4_msg = check_acceptance_writeset_consistency(
         acceptance, where_files or []
     )
+    r5_status, r5_items, r5_msg = check_where_paths_existence(
+        where_files or [], acceptance, get_project_root()
+    )
 
     print(f"dispatch-readiness {ticket_id}:")
     print(_format_result("閾值 1 功能職責數（acceptance 近似）", r1_status, r1_msg))
@@ -231,15 +284,18 @@ def execute_dispatch_readiness(args: argparse.Namespace, version: str) -> int:
     print(_format_result("檢查 4 acceptance 與寫入集一致性（啟發式）", r4_status, r4_msg))
     for item in r4_items:
         print(f"      - {item}")
+    print(_format_result("檢查 5 where.files 路徑存在性（啟發式）", r5_status, r5_msg))
+    for item in r5_items:
+        print(f"      - {item}")
 
-    statuses = [r1_status, r2_status, r3_status, r4_status]
+    statuses = [r1_status, r2_status, r3_status, r4_status, r5_status]
     if "fail" in statuses:
         print("[FAIL] 至少一項超強制拆分閾值，建議拆 ticket 後重新派發")
         return 2
     if "warn" in statuses:
         print("[WARN] 軟性警告：建議審視拆分必要性")
         return 1
-    print("[PASS] 三項閾值 + 一致性檢查全數通過")
+    print("[PASS] 三項閾值 + 一致性檢查 + 路徑存在性檢查全數通過")
     return 0
 
 

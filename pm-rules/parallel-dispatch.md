@@ -103,6 +103,15 @@ ticket track conflicts
 
 比對範圍為**當前所有 `pending`/`in_progress` 票**，不限本輪待派發各票；PM 前台自身在途工作（尚未 commit 的框架檔案編輯）比照代理人在途工作，同樣須先以 ticket 認領登記 `where.files`（見 `.claude/rules/core/pm-role.md` PM 可寫路徑範圍），使其可被本檢查涵蓋。前置提醒：`where.files` 若含目錄級宣告會被 `create`/`set-where` 發出 WARNING（PC-BAL-040），先修正為精確路徑再執行本檢查，避免目錄級宣告造成過度序列化誤判。
 
+只需確認**本輪待派發的特定幾票**是否互撞時，改用針對性查詢，免人工在全量輸出裡逐行找：
+
+```bash
+ticket track conflicts --among <id1>,<id2>,...   # 僅比對指定票組彼此之間
+ticket track conflicts --for <id>                # 列出該票與其他 pending/in_progress 票的全部衝突對
+```
+
+兩者預設隱藏純目錄層級宣告命中（噪音來源，如票面填 `.claude/hooks/` 會與該目錄下任何檔案宣告配對），需 `--include-heuristic` 才顯示；全量模式（不帶 `--for`/`--among`）行為不受影響。
+
 輸出 exit code 1（偵測到衝突）時，逐組交集依下表二擇一：
 
 | 情境 | 動作 |

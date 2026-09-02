@@ -16,6 +16,7 @@ from ticket_system.lib.context_bundle_extractor import (
     EXTRACTABLE_FIELDS,
     MAX_ITEMS_PER_FIELD,
     MAX_TOTAL_CHARS,
+    MISSING_PATH_MARKER,
     SOURCE_PRIORITY,
     ContextBundleExtractionError,
     ExtractedField,
@@ -35,6 +36,7 @@ EXTRACT_VERSION_PATH = (
     "ticket_system.lib.context_bundle_extractor.extract_version_from_ticket_id"
 )
 SUBPROCESS_RUN_PATH = "ticket_system.lib.context_bundle_extractor.subprocess.run"
+GET_PROJECT_ROOT_PATH = "ticket_system.lib.context_bundle_extractor.get_project_root"
 
 
 def _make_source(
@@ -581,6 +583,107 @@ class TestRender:
         assert "### Task Reference" in md
         assert "### Rationale Chain" in md
         assert AUTO_EXTRACTED_BLOCK_PATTERN.search(md) is not None
+
+
+class TestRenderMissingPathMarking:
+    """where.files 快照路徑存在性檢查與失效標示（0.2.1-W3-648）。"""
+
+    def test_missing_path_gets_marker(self, tmp_path):
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        source = _make_source(
+            "0.18.0-W17-001", where_files=["does-not-exist.py"]
+        )
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            result = extract_context_bundle(target)
+
+        with patch(GET_PROJECT_ROOT_PATH, return_value=tmp_path):
+            md = render_context_bundle_markdown(result)
+
+        assert "does-not-exist.py" in md
+        assert MISSING_PATH_MARKER in md
+
+    def test_existing_path_no_marker(self, tmp_path):
+        existing = tmp_path / "a.py"
+        existing.write_text("", encoding="utf-8")
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        source = _make_source("0.18.0-W17-001", where_files=["a.py"])
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            result = extract_context_bundle(target)
+
+        with patch(GET_PROJECT_ROOT_PATH, return_value=tmp_path):
+            md = render_context_bundle_markdown(result)
+
+        assert "a.py" in md
+        assert MISSING_PATH_MARKER not in md
+
+    def test_existing_directory_no_marker(self, tmp_path):
+        (tmp_path / "subdir").mkdir()
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        source = _make_source("0.18.0-W17-001", where_files=["subdir/"])
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            result = extract_context_bundle(target)
+
+        with patch(GET_PROJECT_ROOT_PATH, return_value=tmp_path):
+            md = render_context_bundle_markdown(result)
+
+        assert "subdir/" in md
+        assert MISSING_PATH_MARKER not in md
+
+    def test_glob_token_no_marker(self, tmp_path):
+        """glob 形式 token（不存在字面檔案）不應被誤判為失效。"""
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        source = _make_source(
+            "0.18.0-W17-001", where_files=["lib/*.py"]
+        )
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            result = extract_context_bundle(target)
+
+        with patch(GET_PROJECT_ROOT_PATH, return_value=tmp_path):
+            md = render_context_bundle_markdown(result)
+
+        assert "lib/*.py" in md
+        assert MISSING_PATH_MARKER not in md
+
+    def test_marker_does_not_break_block_boundary_detection(self, tmp_path):
+        """失效標示的渲染形式仍以 `- ` 起始，不觸發區塊邊界誤判
+        （0.2.1-W3-252 逐行分類白名單依賴 `- ` 前綴）。"""
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        source = _make_source(
+            "0.18.0-W17-001", where_files=["does-not-exist.py"]
+        )
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            result = extract_context_bundle(target)
+
+        with patch(GET_PROJECT_ROOT_PATH, return_value=tmp_path):
+            md = render_context_bundle_markdown(result)
+
+        marked_lines = [
+            line for line in md.splitlines() if MISSING_PATH_MARKER in line
+        ]
+        assert marked_lines
+        for line in marked_lines:
+            assert line.startswith("- ")
+
+    def test_mixed_existing_and_missing_paths(self, tmp_path):
+        existing = tmp_path / "a.py"
+        existing.write_text("", encoding="utf-8")
+        target = _make_target(source_ticket="0.18.0-W17-001")
+        source = _make_source(
+            "0.18.0-W17-001", where_files=["a.py", "does-not-exist.py"]
+        )
+        with patch(LOAD_TICKET_PATH, return_value=source):
+            result = extract_context_bundle(target)
+
+        with patch(GET_PROJECT_ROOT_PATH, return_value=tmp_path):
+            md = render_context_bundle_markdown(result)
+
+        lines = md.splitlines()
+        a_line = next(line for line in lines if "- a.py" in line)
+        missing_line = next(
+            line for line in lines if "does-not-exist.py" in line
+        )
+        assert MISSING_PATH_MARKER not in a_line
+        assert MISSING_PATH_MARKER in missing_line
 
 
 # ============================================================================

@@ -1,11 +1,13 @@
 """測試 ticket track dispatch-readiness 命令（0.18.0-W17-053 + 0.2.1-W3-249）。
 
-涵蓋三項核心閾值 + 第四項一致性檢查 + exit code 矩陣：
+涵蓋三項核心閾值 + 第四項一致性檢查 + 第五項路徑存在性檢查 + exit code 矩陣：
 - 閾值 1（功能職責數 / acceptance 近似）：≤2 pass / 3-4 warn / >4 fail
 - 閾值 2（修改檔案數 where.files）：≤5 pass / 6-10 warn / >10 fail
 - 閾值 3（Context Bundle tokens 近似）：≤3000 pass / 3001-5000 warn / >5000 fail
 - 檢查 4（acceptance 測試類關鍵詞 vs where.files 測試路徑一致性）：
   無關鍵詞 pass / 命中但無測試路徑 warn（不含 fail）/ 命中且有測試路徑 pass
+- 檢查 5（where.files 路徑存在性）：路徑全存在 pass / 不存在且 acceptance 無
+  新建語意 warn（不含 fail）/ 不存在但 acceptance 含新建語意 pass
 - ticket 不存在 / IO 錯誤 → exit 2
 - 任一 fail → exit 2；任一 warn 無 fail → exit 1；全 pass → exit 0
 """
@@ -15,6 +17,8 @@ from __future__ import annotations
 import argparse
 import io
 from contextlib import redirect_stdout, redirect_stderr
+from pathlib import Path
+from typing import Optional
 from unittest.mock import patch
 
 from ticket_system.commands.track_dispatch_readiness import (
@@ -22,6 +26,7 @@ from ticket_system.commands.track_dispatch_readiness import (
     check_context_bundle_tokens,
     check_file_count,
     check_responsibility_count,
+    check_where_paths_existence,
     execute_dispatch_readiness,
 )
 
@@ -184,8 +189,38 @@ class TestAcceptanceWritesetConsistency:
         assert items == []
 
 
+class TestWherePathsExistence:
+    """where.files 路徑存在性檢查（純函式，project_root 直接注入）。"""
+
+    def test_all_exist_pass(self, tmp_path):
+        (tmp_path / "a.py").write_text("", encoding="utf-8")
+        status, missing, _ = check_where_paths_existence(["a.py"], ["實作"], tmp_path)
+        assert status == "pass"
+        assert missing == []
+
+    def test_missing_without_creation_keyword_warns(self, tmp_path):
+        status, missing, msg = check_where_paths_existence(
+            ["not-there.py"], ["修正既有邏輯"], tmp_path
+        )
+        assert status == "warn"
+        assert missing == ["not-there.py"]
+        assert "啟發式" in msg
+
+    def test_missing_with_creation_keyword_pass(self, tmp_path):
+        status, missing, _ = check_where_paths_existence(
+            ["not-there.py"], ["新增測試檔涵蓋此情境"], tmp_path
+        )
+        assert status == "pass"
+        assert missing == []
+
+    def test_empty_files_pass(self, tmp_path):
+        status, missing, _ = check_where_paths_existence([], ["a"], tmp_path)
+        assert status == "pass"
+        assert missing == []
+
+
 # ---------------------------------------------------------------------------
-# CLI 整合測試（mock load_ticket）
+# CLI 整合測試（mock load_ticket + get_project_root）
 # ---------------------------------------------------------------------------
 
 
@@ -197,113 +232,170 @@ def _args(ticket_id: str = "0.18.0-W17-053") -> argparse.Namespace:
     )
 
 
-def _run(ticket_dict) -> tuple[int, str, str]:
+def _seed_where_files(root: Path, ticket_dict: dict) -> None:
+    """在 root 下建立 ticket_dict['where']['files'] 列出的每個檔案。
+
+    檢查 5 新增後，既有測試用的假路徑（a.py / f0.py 等）若不預先建立會被
+    判定為不存在而觸發非預期的 warn，故整合測試統一以 tmp_path 作為
+    project_root 並預先建檔，維持既有三項閾值 + 檢查 4 的測試意圖不變。
+    """
+    for token in (ticket_dict.get("where", {}) or {}).get("files", []) or []:
+        path = token.split("::", 1)[0]
+        if not path:
+            continue
+        target = root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("", encoding="utf-8")
+
+
+def _run(
+    ticket_dict: Optional[dict], tmp_path: Path, *, seed: bool = True
+) -> tuple[int, str, str]:
+    if ticket_dict is not None and seed:
+        _seed_where_files(tmp_path, ticket_dict)
     out, err = io.StringIO(), io.StringIO()
     with patch(
         "ticket_system.lib.dispatch_common.load_ticket",
         return_value=ticket_dict,
+    ), patch(
+        "ticket_system.commands.track_dispatch_readiness.get_project_root",
+        return_value=tmp_path,
     ), redirect_stdout(out), redirect_stderr(err):
         rc = execute_dispatch_readiness(_args(), "0.18.0")
     return rc, out.getvalue(), err.getvalue()
 
 
 class TestExecuteDispatchReadiness:
-    def test_ticket_not_found_returns_2(self):
-        rc, _out, err = _run(None)
+    def test_ticket_not_found_returns_2(self, tmp_path):
+        rc, _out, err = _run(None, tmp_path)
         assert rc == 2
         assert "不存在" in err
 
-    def test_yaml_error_returns_2(self):
-        rc, _out, err = _run({"_yaml_error": "bad yaml"})
+    def test_yaml_error_returns_2(self, tmp_path):
+        rc, _out, err = _run({"_yaml_error": "bad yaml"}, tmp_path)
         assert rc == 2
         assert "YAML" in err
 
-    def test_all_pass_returns_0(self):
+    def test_all_pass_returns_0(self, tmp_path):
         ticket = {
             "_body": "## Context Bundle\n\n短內容\n",
             "acceptance": ["a", "b"],
             "where": {"files": ["a.py", "b.py"]},
         }
-        rc, out, _err = _run(ticket)
+        rc, out, _err = _run(ticket, tmp_path)
         assert rc == 0
         assert "全數通過" in out
 
-    def test_warn_acceptance_returns_1(self):
+    def test_warn_acceptance_returns_1(self, tmp_path):
         ticket = {
             "_body": "",
             "acceptance": ["a", "b", "c"],
             "where": {"files": []},
         }
-        rc, out, _err = _run(ticket)
+        rc, out, _err = _run(ticket, tmp_path)
         assert rc == 1
         assert "軟性警告" in out
 
-    def test_warn_files_returns_1(self):
+    def test_warn_files_returns_1(self, tmp_path):
         ticket = {
             "_body": "",
             "acceptance": ["a"],
             "where": {"files": [f"f{i}.py" for i in range(7)]},
         }
-        rc, _out, _err = _run(ticket)
+        rc, _out, _err = _run(ticket, tmp_path)
         assert rc == 1
 
-    def test_fail_acceptance_returns_2(self):
+    def test_fail_acceptance_returns_2(self, tmp_path):
         ticket = {
             "_body": "",
             "acceptance": ["a", "b", "c", "d", "e"],
             "where": {"files": []},
         }
-        rc, out, _err = _run(ticket)
+        rc, out, _err = _run(ticket, tmp_path)
         assert rc == 2
         assert "拆 ticket" in out or "拆分" in out
 
-    def test_fail_files_returns_2(self):
+    def test_fail_files_returns_2(self, tmp_path):
         ticket = {
             "_body": "",
             "acceptance": ["a"],
             "where": {"files": [f"f{i}.py" for i in range(12)]},
         }
-        rc, _out, _err = _run(ticket)
+        rc, _out, _err = _run(ticket, tmp_path)
         assert rc == 2
 
-    def test_fail_cb_tokens_returns_2(self):
+    def test_fail_cb_tokens_returns_2(self, tmp_path):
         ticket = {
             "_body": "## Context Bundle\n\n" + ("x" * 25000) + "\n",
             "acceptance": ["a"],
             "where": {"files": []},
         }
-        rc, _out, _err = _run(ticket)
+        rc, _out, _err = _run(ticket, tmp_path)
         assert rc == 2
 
-    def test_fail_overrides_warn(self):
+    def test_fail_overrides_warn(self, tmp_path):
         # 一項 warn + 一項 fail → exit 2
         ticket = {
             "_body": "",
             "acceptance": ["a", "b", "c"],  # warn
             "where": {"files": [f"f{i}.py" for i in range(12)]},  # fail
         }
-        rc, _out, _err = _run(ticket)
+        rc, _out, _err = _run(ticket, tmp_path)
         assert rc == 2
 
-    def test_check4_contradiction_warns_with_item_listed(self):
+    def test_check4_contradiction_warns_with_item_listed(self, tmp_path):
         """0.2.1-W3-249：檢查 4 命中矛盾時 exit 1，且矛盾條目印出於 stdout。"""
         ticket = {
             "_body": "",
             "acceptance": ["非 shim 套件的既有判定行為不變（回歸驗證）"],
             "where": {"files": ["check.py"]},
         }
-        rc, out, _err = _run(ticket)
+        rc, out, _err = _run(ticket, tmp_path)
         assert rc == 1
         assert "回歸驗證" in out
         assert "啟發式" in out
 
-    def test_check4_pass_does_not_affect_existing_three_thresholds(self):
+    def test_check4_pass_does_not_affect_existing_three_thresholds(self, tmp_path):
         """AC3：既有三項閾值全 pass 且無測試關鍵詞矛盾時仍 exit 0（三項閾值行為不變）。"""
         ticket = {
             "_body": "## Context Bundle\n\n短內容\n",
             "acceptance": ["a", "b"],
             "where": {"files": ["a.py", "b.py"]},
         }
-        rc, out, _err = _run(ticket)
+        rc, out, _err = _run(ticket, tmp_path)
+        assert rc == 0
+        assert "全數通過" in out
+
+    def test_check5_missing_path_without_creation_keyword_warns(self, tmp_path):
+        """檢查 5：路徑不存在且 acceptance 無新建語意 → warn，exit 1。"""
+        ticket = {
+            "_body": "",
+            "acceptance": ["修正既有排序邏輯"],
+            "where": {"files": ["not-there.py"]},
+        }
+        rc, out, _err = _run(ticket, tmp_path, seed=False)
+        assert rc == 1
+        assert "not-there.py" in out
+        assert "路徑存在性" in out
+
+    def test_check5_missing_path_with_creation_keyword_pass(self, tmp_path):
+        """檢查 5：路徑不存在但 acceptance 含新建語意 → pass，不影響 exit code。"""
+        ticket = {
+            "_body": "## Context Bundle\n\n短內容\n",
+            "acceptance": ["新增設定檔案供此情境使用"],
+            "where": {"files": ["not-there.py"]},
+        }
+        rc, out, _err = _run(ticket, tmp_path, seed=False)
+        assert rc == 0
+        assert "全數通過" in out
+
+    def test_check5_all_exist_does_not_affect_pass(self, tmp_path):
+        """檢查 5：路徑全存在時不影響既有 pass 結論。"""
+        ticket = {
+            "_body": "## Context Bundle\n\n短內容\n",
+            "acceptance": ["a", "b"],
+            "where": {"files": ["a.py", "b.py"]},
+        }
+        rc, out, _err = _run(ticket, tmp_path)
         assert rc == 0
         assert "全數通過" in out

@@ -36,8 +36,10 @@ from ticket_system.lib.messages import (
     InfoMessages,
     format_error,
     format_info,
+    format_warning,
 )
 from ticket_system.lib.command_lifecycle_messages import (
+    CreateMessages,
     FieldsMessages,
 )
 from ticket_system.lib.ticket_loader import get_ticket_path
@@ -207,10 +209,16 @@ def _execute_set_dict_subfields(
     # 目錄級 where.files 宣告 WARNING（PC-BAL-040）：--files 子欄位路徑不經過
     # execute_set_field 的 _sync_where_files 啟發式，需在此另行檢查。
     if field_name == "where" and "files" in applied:
-        from ticket_system.lib.field_validators import directory_declaration_warnings
+        from ticket_system.lib.field_validators import (
+            directory_declaration_warnings,
+            missing_where_paths,
+        )
+        from ticket_system.lib.paths import get_project_root
 
         for warning in directory_declaration_warnings(applied["files"], ticket_type):
             print(warning)
+        for missing in missing_where_paths(get_project_root(), applied["files"]):
+            print(format_warning(CreateMessages.WHERE_PATH_NOT_FOUND_WARNING, path=missing))
     return 0
 
 
@@ -362,10 +370,17 @@ def execute_set_field(
         for entry in synced_files:
             print(f"      - {entry}")
         # 目錄級 where.files 宣告 WARNING（PC-BAL-040）
-        from ticket_system.lib.field_validators import directory_declaration_warnings
+        from ticket_system.lib.field_validators import (
+            directory_declaration_warnings,
+            missing_where_paths,
+        )
+        from ticket_system.lib.paths import get_project_root
 
         for warning in directory_declaration_warnings(synced_files, ticket.get("type")):
             print(warning)
+        # where.files 路徑存在性 WARNING：set-where 路徑型輸入同上，僅警告不阻擋。
+        for missing in missing_where_paths(get_project_root(), synced_files):
+            print(format_warning(CreateMessages.WHERE_PATH_NOT_FOUND_WARNING, path=missing))
     return 0
 
 

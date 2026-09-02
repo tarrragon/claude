@@ -292,6 +292,12 @@ class CreateMessages:
         "目錄級寫入宣告在 `ticket track dispatch` 會被硬擋。"
     )
 
+    # where.files 路徑存在性 WARNING（不阻擋——新檔案的 where 宣告合法）
+    WHERE_PATH_NOT_FOUND_WARNING = (
+        "[WARNING] where.files 路徑不存在: '{path}'（若為待建立的新檔案可忽略；"
+        "若為手誤請確認正確路徑）"
+    )
+
     # Parallel 分析結果
     TASK_TYPE_LABEL = "任務類型: {task_type}"
     SUGGESTED_ORDER = "建議順序:"

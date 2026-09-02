@@ -377,3 +377,79 @@ class TestExecuteConflicts:
         assert rc == 0
         err = capsys.readouterr().err
         assert "宣告不一致" in err
+
+
+class TestTargetedQuery:
+    """--for / --among 針對性查詢介面。"""
+
+    def _tickets(self):
+        return [
+            _ticket("A", "pending", ["lib/foo.dart"]),
+            _ticket("B", "pending", ["lib/foo.dart"]),
+            _ticket("C", "pending", ["lib/bar.dart"]),
+            _ticket("D", "pending", ["lib/"]),  # 目錄層級宣告（結尾斜線），噪音來源
+        ]
+
+    def _run(self, args, tickets):
+        with patch.object(track_conflicts, "_gather_tickets", return_value=tickets), \
+             patch.object(track_conflicts, "get_project_root", return_value=Path("/proj")), \
+             patch.object(track_conflicts, "current_project_root", return_value="/proj"), \
+             patch.object(track_conflicts, "load_registry", return_value={"sessions": {}}):
+            return track_conflicts.execute_conflicts(args)
+
+    def test_for_lists_all_opponents_excludes_unrelated(self, capsys):
+        args = Namespace(
+            version="9.9.9", all=False, format="json",
+            for_ticket="A", among_tickets=None, include_heuristic=False,
+        )
+        rc = self._run(args, self._tickets())
+        assert rc == 1
+        payload = json.loads(capsys.readouterr().out)
+        pairs = {(c["ticket_a"], c["ticket_b"]) for c in payload["conflicts"]}
+        assert ("A", "B") in pairs
+        assert not any("C" in p for p in pairs)
+
+    def test_among_restricts_to_pairs_within_set_only(self, capsys):
+        args = Namespace(
+            version="9.9.9", all=False, format="json",
+            for_ticket=None, among_tickets="A,B,C", include_heuristic=False,
+        )
+        rc = self._run(args, self._tickets())
+        assert rc == 1
+        payload = json.loads(capsys.readouterr().out)
+        pairs = {(c["ticket_a"], c["ticket_b"]) for c in payload["conflicts"]}
+        assert pairs == {("A", "B")}
+
+    def test_heuristic_only_hidden_by_default_in_for_mode(self, capsys):
+        args = Namespace(
+            version="9.9.9", all=False, format="json",
+            for_ticket="D", among_tickets=None, include_heuristic=False,
+        )
+        rc = self._run(args, self._tickets())
+        assert rc == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["conflicts"] == []
+
+    def test_include_heuristic_flag_reveals_directory_hits(self, capsys):
+        args = Namespace(
+            version="9.9.9", all=False, format="json",
+            for_ticket="D", among_tickets=None, include_heuristic=True,
+        )
+        rc = self._run(args, self._tickets())
+        assert rc == 1
+        payload = json.loads(capsys.readouterr().out)
+        pairs = {(c["ticket_a"], c["ticket_b"]) for c in payload["conflicts"]}
+        assert ("A", "D") in pairs
+
+    def test_full_output_unchanged_without_for_or_among(self, capsys):
+        """既有全量輸出行為不變（回歸）：不帶 --for/--among 時目錄層級命中
+        仍照舊顯示，未受新篩選邏輯影響。"""
+        args = Namespace(
+            version="9.9.9", all=False, format="json",
+            for_ticket=None, among_tickets=None, include_heuristic=False,
+        )
+        rc = self._run(args, self._tickets())
+        assert rc == 1
+        payload = json.loads(capsys.readouterr().out)
+        pairs = {(c["ticket_a"], c["ticket_b"]) for c in payload["conflicts"]}
+        assert ("A", "D") in pairs

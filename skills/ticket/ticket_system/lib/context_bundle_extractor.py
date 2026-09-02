@@ -40,9 +40,10 @@ from ..constants import (
     STATUS_CLOSED,
     STATUS_COMPLETED,
 )
+from .field_validators import missing_where_paths
 from .file_lock import file_lock
 from .parser import load_ticket, save_ticket
-from .paths import get_ticket_path
+from .paths import get_project_root, get_ticket_path
 from .relatedto_index import get_symmetric_related_to
 from .ticket_validator import extract_version_from_ticket_id
 
@@ -74,6 +75,20 @@ SOURCE_KIND_FRONTMATTER_KEYS: dict = {
 MAX_TOTAL_CHARS: int = CONTEXT_BUNDLE_MAX_TOTAL_CHARS
 MAX_ITEMS_PER_FIELD: int = CONTEXT_BUNDLE_MAX_ITEMS_PER_FIELD
 TRUNCATE_INDICATOR: str = "... (truncated, see source ticket)"
+
+# where.files 快照失效標示：render 時對路徑做存在性檢查，不存在者附加此標示
+# （不移除原路徑字面，保留「來源票當時動過此檔」的可追溯性）。
+MISSING_PATH_MARKER: str = "  [路徑已不存在]"
+
+# glob 字元：含此類字元的 token 無法用 Path.exists 字面比對存在性
+# （missing_where_paths 僅做字面路徑存在性檢查，不展開 glob），存在性檢查
+# 前先過濾排除，避免誤判為失效。
+_GLOB_CHARS: frozenset = frozenset("*?[")
+
+
+def _is_glob_token(token: str) -> bool:
+    """token（含 `::read` 等意圖標記）是否含 glob 萬用字元。"""
+    return any(ch in token for ch in _GLOB_CHARS)
 
 # Status-aware 標籤：依來源票 status 分流 render 提示，避免 completed 來源的
 # 結論被隱藏、closed 來源被導向永遠空白的 Solution 章節（closed 語意為「不做
@@ -780,6 +795,7 @@ def render_context_bundle_markdown(result: ExtractResult) -> str:
         f"<!-- auto-extracted: v1 | sources: {','.join(sources_sorted)} | "
         f"chars: {result.total_chars_estimate} -->"
     )
+    project_root = get_project_root()
     lines = [header, ""]
     for rule in EXTRACTABLE_FIELDS:
         fields = [f for f in result.extracted if f.target_subsection == rule.target_subsection]
@@ -789,9 +805,16 @@ def render_context_bundle_markdown(result: ExtractResult) -> str:
         for f in fields:
             suffix = STATUS_LABEL_SUFFIXES.get(f.source_status, "")
             if rule.is_list:
+                missing: set = set()
+                if rule.source_field == "where.files":
+                    checkable = [
+                        item for item in f.raw_value if not _is_glob_token(item)
+                    ]
+                    missing = set(missing_where_paths(project_root, checkable))
                 for item in f.raw_value:
                     line = rule.format_template.format(source_id=f.source_id, value=item)
-                    lines.append(f"{line}{suffix}")
+                    marker = MISSING_PATH_MARKER if item in missing else ""
+                    lines.append(f"{line}{marker}{suffix}")
             else:
                 line = rule.format_template.format(source_id=f.source_id, value=f.raw_value)
                 lines.append(f"{line}{suffix}")
@@ -1245,6 +1268,7 @@ __all__ = [
     "EXTRACTABLE_FIELDS",
     "MAX_ITEMS_PER_FIELD",
     "MAX_TOTAL_CHARS",
+    "MISSING_PATH_MARKER",
     "SOURCE_PRIORITY",
     "TRUNCATE_INDICATOR",
     # Dataclasses
