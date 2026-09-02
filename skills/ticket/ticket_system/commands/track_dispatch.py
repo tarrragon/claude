@@ -107,6 +107,8 @@ SKELETON_TEMPLATE_REVIEW = """Ticket: {ticket_id}
 STAGING_PHRASE_AGENT = """Recommended: commit via isolated index (files must be a subset of this
 ticket's where.files; never touches the shared index):
   ticket track commit <ticket-id> -m "..." -- {exact files}
+In a linked worktree (files changed under a worktree dir, not the main repo):
+add `--worktree <abs-worktree-path>` to the command above.
 Fallback (not recommended; only if `ticket track commit` fails or is
 unavailable) — use precise staging + verified bare commit only (no pathspec):
   git add {exact files}
@@ -139,7 +141,8 @@ actions above would also undo the peer's legitimate work."""
 # 的顧慮不適用於本取向：本取向未對 agent-prompt-length-guard 的 Layer 1
 # 硬上限新增豁免路徑，純粹是縮短骨架本體行數，判準仍是唯一的行數比較。
 STAGING_PHRASE_AGENT_PROMPT = """Commit: prefer `ticket track commit <ticket-id> -m "..." -- {exact files}`
-  (isolated index, precise staging). Fallback: `git add {exact files}` ->
+  (isolated index, precise staging; in a linked worktree add `--worktree
+  <abs-worktree-path>`). Fallback: `git add {exact files}` ->
   `git diff --cached --name-only` to verify -> verified bare commit, no
   pathspec (forbid `-- <paths>` / `--only` / `-o` / `-a` / `git add .` /
   `git add -A`). Swept-in content: forbid revert/reset/amend, stop & report.

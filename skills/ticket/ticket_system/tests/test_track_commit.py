@@ -10,9 +10,19 @@
 7. 目錄型 where.files 宣告：傳個別檔名可成功提交（0.2.1-W3-1090）。
 8. 目錄型 where.files 宣告：傳目錄本身會展開為實際變更檔案後提交，
    commit_files_isolated 恆收到具體檔案清單而非目錄字面值（0.2.1-W3-1090）。
+9. --worktree 未指定時沿用 resolve_project_cwd()（既有行為不變）。
+10. --worktree 指定且為合法 git 目錄時，repo root 改以該目錄為準
+    （0.2.1-W4-017）。
+11. --worktree 指定但非合法 git 目錄時拒絕提交並印出錯誤（0.2.1-W4-017）。
+12. linked worktree 端到端場景：新檔可 add、已修改檔不再誤判空 tree，
+    commit 落在 worktree 分支，主 repo 共用 index 未被觸碰
+    （0.2.1-W4-017）。
 """
 import argparse
+import subprocess
 from unittest.mock import patch
+
+import pytest
 
 from ticket_system.commands import track_commit
 
@@ -25,8 +35,10 @@ def _ticket(files):
     return {"id": _TICKET_ID, "type": "IMP", "where": {"files": files}}
 
 
-def _args(files, message="test commit"):
-    return argparse.Namespace(ticket_id=_TICKET_ID, message=message, files=files)
+def _args(files, message="test commit", worktree=None):
+    return argparse.Namespace(
+        ticket_id=_TICKET_ID, message=message, files=files, worktree=worktree
+    )
 
 
 class TestExecuteCommit:
@@ -258,3 +270,150 @@ class TestDirectoryDeclarationScope:
 
         assert rc == 1
         mock_commit.assert_not_called()
+
+
+class TestResolveRepoRoot:
+    """_resolve_repo_root：--worktree 未指定沿用既有行為；指定時改綁定
+    該路徑對應的 git repo root（0.2.1-W4-017）。"""
+
+    def test_no_worktree_falls_back_to_resolve_project_cwd(self):
+        with patch.object(track_commit, "resolve_project_cwd", return_value="/repo"):
+            result = track_commit._resolve_repo_root(None)
+
+        assert result == "/repo"
+
+    def test_worktree_given_uses_its_own_toplevel(self):
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="/worktrees/wt1\n", stderr=""
+        )
+        with patch.object(track_commit.subprocess, "run", return_value=completed) as mock_run:
+            result = track_commit._resolve_repo_root("/worktrees/wt1")
+
+        assert result == "/worktrees/wt1"
+        called_kwargs = mock_run.call_args.kwargs
+        assert called_kwargs["cwd"] == "/worktrees/wt1"
+
+    def test_worktree_not_a_git_dir_returns_none(self):
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=128, stdout="", stderr="not a git repository"
+        )
+        with patch.object(track_commit.subprocess, "run", return_value=completed):
+            result = track_commit._resolve_repo_root("/not/a/repo")
+
+        assert result is None
+
+
+class TestExecuteCommitWorktreeOption:
+    """execute_commit 對 --worktree 引數的處理（0.2.1-W4-017）。"""
+
+    def test_worktree_option_forwarded_to_commit_files_isolated_cwd(self, capsys):
+        declared = ["a/b.py"]
+        with patch.object(track_commit, "load_ticket", return_value=_ticket(declared)), \
+             patch.object(
+                 track_commit, "_resolve_repo_root", return_value="/worktrees/wt1"
+             ) as mock_resolve, \
+             patch("os.getcwd", return_value="/repo"), \
+             patch.object(
+                 track_commit,
+                 "commit_files_isolated",
+                 return_value={"status": "committed", "commit_sha": "wt123", "error": None},
+             ) as mock_commit:
+            rc = track_commit.execute_commit(
+                _args(["a/b.py"], worktree="/worktrees/wt1"), _VERSION
+            )
+
+        assert rc == 0
+        mock_resolve.assert_called_once_with("/worktrees/wt1")
+        assert mock_commit.call_args.kwargs["cwd"] == "/worktrees/wt1"
+
+    def test_invalid_worktree_rejected_before_commit(self, capsys):
+        declared = ["a/b.py"]
+        with patch.object(track_commit, "load_ticket", return_value=_ticket(declared)), \
+             patch.object(track_commit, "_resolve_repo_root", return_value=None), \
+             patch.object(track_commit, "commit_files_isolated") as mock_commit:
+            rc = track_commit.execute_commit(
+                _args(["a/b.py"], worktree="/not/a/repo"), _VERSION
+            )
+
+        assert rc == 1
+        mock_commit.assert_not_called()
+        out = capsys.readouterr().out
+        assert "/not/a/repo" in out
+
+
+class TestLinkedWorktreeEndToEnd:
+    """真實 tmp repo + git worktree add 場景：新檔可 add、已修改檔不再
+    誤判空 tree，commit 落在 worktree 分支，主 repo 共用 index 未被觸碰
+    （0.2.1-W4-017 acceptance 1）。"""
+
+    @pytest.fixture
+    def repo_and_worktree(self, tmp_path):
+        main_repo = tmp_path / "main"
+        main_repo.mkdir()
+        _git(main_repo, "init", "-q", "-b", "main")
+        _git(main_repo, "config", "user.email", "test@example.com")
+        _git(main_repo, "config", "user.name", "Test")
+
+        tracked = main_repo / "tracked.py"
+        tracked.write_text("original content\n")
+        _git(main_repo, "add", "tracked.py")
+        _git(main_repo, "commit", "-q", "-m", "init")
+
+        worktree_dir = tmp_path / "wt1"
+        _git(main_repo, "worktree", "add", "-q", "-b", "feat/wt1", str(worktree_dir))
+
+        return main_repo, worktree_dir
+
+    def _ticket_declaring(self, files):
+        return {"id": _TICKET_ID, "type": "IMP", "where": {"files": files}}
+
+    def test_new_file_in_worktree_committed_to_worktree_branch(self, repo_and_worktree):
+        main_repo, worktree_dir = repo_and_worktree
+        new_file = worktree_dir / "new_file.py"
+        new_file.write_text("new content\n")
+
+        declared = ["tracked.py", "new_file.py"]
+        with patch.object(
+            track_commit, "load_ticket", return_value=self._ticket_declaring(declared)
+        ):
+            args = _args(
+                ["new_file.py"], message="add new file", worktree=str(worktree_dir)
+            )
+            rc = track_commit.execute_commit(args, _VERSION)
+
+        assert rc == 0
+        # commit 落在 worktree 分支，非主 repo 分支
+        wt_log = _git(worktree_dir, "log", "--oneline", "-1").stdout
+        assert "add new file" in wt_log
+        # 主 repo working tree / index 未被觸碰：檔案不存在於主 repo
+        assert not (main_repo / "new_file.py").exists()
+        main_status = _git(main_repo, "status", "--porcelain").stdout
+        assert main_status.strip() == ""
+
+    def test_modified_file_in_worktree_not_falsely_empty(self, repo_and_worktree):
+        main_repo, worktree_dir = repo_and_worktree
+        tracked_in_wt = worktree_dir / "tracked.py"
+        tracked_in_wt.write_text("original content\nmodified line\n")
+
+        declared = ["tracked.py"]
+        with patch.object(
+            track_commit, "load_ticket", return_value=self._ticket_declaring(declared)
+        ):
+            args = _args(
+                ["tracked.py"], message="modify tracked file", worktree=str(worktree_dir)
+            )
+            rc = track_commit.execute_commit(args, _VERSION)
+
+        assert rc == 0
+        wt_log = _git(worktree_dir, "log", "--oneline", "-1").stdout
+        assert "modify tracked file" in wt_log
+        # 主 repo working tree 內容維持原樣，未被誤判為已提交或被覆寫
+        assert (main_repo / "tracked.py").read_text() == "original content\n"
+        main_status = _git(main_repo, "status", "--porcelain").stdout
+        assert main_status.strip() == ""
+
+
+def _git(cwd, *args):
+    return subprocess.run(
+        ["git", *args], cwd=str(cwd), capture_output=True, text=True, check=True
+    )

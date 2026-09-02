@@ -572,6 +572,97 @@ class TestComputePairwiseConflictsPerformance:
         assert conflicts  # 合成資料應產生非零衝突對，確保測的是真實工作量非早退空路徑
 
 
+class TestComputeTargetedConflictsLinearity:
+    """`compute_targeted_conflicts` 比對次數與票數關係的計數斷言（改走
+    `test-assertion-design-rules` 規則 D1：效能護欄用計數而非 wall-clock）。
+
+    每張合成票宣告互不相交的單一檔案（`lib/module{i}.dart`），故彼此
+    絕不命中衝突；用 `files_intersect` 的呼叫次數量測實際比對次數，
+    不受衝突判定結果影響。
+    """
+
+    @staticmethod
+    def _disjoint_tickets(count: int) -> List[Dict[str, Any]]:
+        return [
+            _ticket(f"T-{i:03d}", "pending", [f"lib/module{i}.dart"])
+            for i in range(count)
+        ]
+
+    def _count_intersect_calls(self, fn, *args, **kwargs) -> int:
+        calls = 0
+        original = file_conflict.files_intersect
+
+        def _counting_wrapper(a, b):
+            nonlocal calls
+            calls += 1
+            return original(a, b)
+
+        try:
+            file_conflict.files_intersect = _counting_wrapper
+            fn(*args, **kwargs)
+        finally:
+            file_conflict.files_intersect = original
+        return calls
+
+    def test_for_mode_comparison_count_scales_linearly_with_pool_size(self):
+        """`both_sides=False`（`--for` 語意）：k=1 固定，n 倍增時比對次數
+        應同倍數增長（線性），而非平方增長（全量模式在 n 倍增時比對次數
+        會約增至 4 倍）。"""
+        small = self._disjoint_tickets(50)
+        large = self._disjoint_tickets(200)
+
+        calls_small = self._count_intersect_calls(
+            file_conflict.compute_targeted_conflicts, small, {"T-000"}
+        )
+        calls_large = self._count_intersect_calls(
+            file_conflict.compute_targeted_conflicts, large, {"T-000"}
+        )
+
+        # n 從 50 增至 200（4 倍）：線性成長下比對次數應約 4 倍（k=1 固定，
+        # target-other 配對數 = n-1，容許啟發式衍生候選造成的常數倍差，
+        # 上界抓 6 倍防止真的退化成 O(n^2)（50^2 vs 200^2 應為 16 倍）。
+        assert calls_small > 0
+        ratio = calls_large / calls_small
+        assert ratio < 6, (
+            f"比對次數成長比 {ratio:.1f} 疑似非線性（n 4 倍、"
+            f"calls {calls_small}->{calls_large}）"
+        )
+
+    def test_among_mode_comparison_count_independent_of_pool_size(self):
+        """`both_sides=True`（`--among` 語意）：target 集合固定 3 票，票池
+        總數從 50 增至 500 時比對次數不變（只比對集合內部，O(k^2)，與 n
+        無關）。"""
+        target_ids = {"T-000", "T-001", "T-002"}
+        small = self._disjoint_tickets(50)
+        large = self._disjoint_tickets(500)
+
+        calls_small = self._count_intersect_calls(
+            file_conflict.compute_targeted_conflicts,
+            small, target_ids, None, True,
+        )
+        calls_large = self._count_intersect_calls(
+            file_conflict.compute_targeted_conflicts,
+            large, target_ids, None, True,
+        )
+
+        assert calls_small == calls_large
+
+    def test_for_mode_result_matches_full_mode_subset(self):
+        """針對性模式輸出須與全量模式對同一票組過濾後的結果逐字一致
+        （回歸不變：優化比對路徑不可改變衝突判定語意）。"""
+        tickets = [
+            _ticket("A", "pending", ["lib/foo.dart"]),
+            _ticket("B", "pending", ["lib/foo.dart"]),
+            _ticket("C", "pending", ["lib/bar.dart"]),
+        ]
+        full = file_conflict.compute_pairwise_conflicts(tickets)
+        full_for_a = [c for c in full if c["ticket_a"] == "A" or c["ticket_b"] == "A"]
+
+        targeted = file_conflict.compute_targeted_conflicts(tickets, {"A"})
+
+        assert targeted == full_for_a
+
+
 # ---------------------------------------------------------------------------
 # where.files 讀寫意圖解析（0.2.1-W3-781）
 # ---------------------------------------------------------------------------

@@ -219,6 +219,24 @@ def _execute_set_dict_subfields(
             print(warning)
         for missing in missing_where_paths(get_project_root(), applied["files"]):
             print(format_warning(CreateMessages.WHERE_PATH_NOT_FOUND_WARNING, path=missing))
+
+        # where.files 範圍宣告變更 auto-commit：與 set-acceptance / append-log
+        # 同保護等級，使範圍宣告調整可獨立於其他操作被稽核。
+        import sys as _sys
+        from ticket_system.lib import git_utils
+        try:
+            commit_status = git_utils._auto_commit_ticket_md(
+                str(ticket_path), args.ticket_id, "where.files", operation="set-where",
+            )
+            if commit_status in ("not_git_repo", "git_failed"):
+                _sys.stderr.write(
+                    f"[set-where] auto-commit skipped（{commit_status}，非致命）；"
+                    f"body 已保留 working tree，可手動 git commit 持久化。\n"
+                )
+        except Exception as exc:
+            _sys.stderr.write(
+                f"[set-where] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
+            )
     return 0
 
 
@@ -381,6 +399,25 @@ def execute_set_field(
         # where.files 路徑存在性 WARNING：set-where 路徑型輸入同上，僅警告不阻擋。
         for missing in missing_where_paths(get_project_root(), synced_files):
             print(format_warning(CreateMessages.WHERE_PATH_NOT_FOUND_WARNING, path=missing))
+
+        # where.files 範圍宣告變更 auto-commit：與 --files 子欄位路徑
+        # （_execute_set_dict_subfields）同保護等級，使範圍宣告調整可獨立於
+        # 其他操作被稽核。
+        import sys as _sys
+        from ticket_system.lib import git_utils
+        try:
+            commit_status = git_utils._auto_commit_ticket_md(
+                str(ticket_path), args.ticket_id, "where.files", operation="set-where",
+            )
+            if commit_status in ("not_git_repo", "git_failed"):
+                _sys.stderr.write(
+                    f"[set-where] auto-commit skipped（{commit_status}，非致命）；"
+                    f"body 已保留 working tree，可手動 git commit 持久化。\n"
+                )
+        except Exception as exc:
+            _sys.stderr.write(
+                f"[set-where] auto-commit 失敗（非致命，body 已保留 working tree）：{exc}\n"
+            )
     return 0
 
 
@@ -462,6 +499,13 @@ def execute_set_where(args: argparse.Namespace, version: str) -> int:
     三者皆未提供時視為呼叫錯誤，避免 value=None 誤寫入 where.layer。
     子欄位路徑不套用 value 專屬的路徑型輸入同步 where.files 啟發式（該啟發式
     僅服務位置參數場景的語意判定，--files 已是明確輸入，不需要再推斷）。
+
+    2026-09-02 修復：value 與 --layer 同時提供、且未另帶 --files 時，
+    先前 value（路徑清單）會被 _execute_set_dict_subfields 的通用子欄位覆寫
+    邏輯吃掉——先寫入 layer 子欄位再被 --layer 覆寫，files 完全未同步，且
+    CLI 無任何提示。此處補上：value 為路徑型輸入時同步寫入 where.files（與
+    純 value、或 value + --files 情境的同步行為一致），--files 顯式提供時
+    仍優先於 value 推斷（不變）。
     """
     layer = _get_str_arg(args, "layer")
     files_raw = _get_str_arg(args, "files")
@@ -476,6 +520,10 @@ def execute_set_where(args: argparse.Namespace, version: str) -> int:
         subfields["layer"] = layer
     if files_raw is not None:
         subfields["files"] = _parse_comma_list(files_raw)
+    elif getattr(args, "value", None) is not None:
+        path_entries = _parse_where_path_entries(args.value)
+        if path_entries is not None:
+            subfields["files"] = path_entries
     return _execute_set_dict_subfields(args, version, "where", subfields)
 
 

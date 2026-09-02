@@ -335,6 +335,86 @@ def compute_pairwise_conflicts(
     return conflicts
 
 
+def compute_targeted_conflicts(
+    tickets: List[Dict[str, Any]],
+    target_ids: Iterable[str],
+    project_root: Optional[Path] = None,
+    both_sides: bool = False,
+) -> List[Dict[str, Any]]:
+    """僅比對 `target_ids` 相關的衝突對，避免 `compute_pairwise_conflicts`
+    的全量兩兩比對（`ticket track conflicts --for/--among` 針對性模式用：
+    全量兩兩比對在票池達千張級時使針對性查詢延遲達分鐘級）。
+
+    `both_sides=False`（`--for` 語意）：回傳「至少一側屬於 `target_ids`」
+    的衝突對，比對次數為 O(k^2 + k*(n-k))（k = target 數），相對全量
+    O(n^2) 在 k 遠小於 n 時近似線性於 n。
+    `both_sides=True`（`--among` 語意）：僅回傳雙側皆屬於 `target_ids`
+    的衝突對，比對次數為 O(k^2)，與 n 無關（不需比對集合外的票）。
+
+    保留與 `compute_pairwise_conflicts` 相同的原始輸入順序作為 ticket_a/
+    ticket_b 排列依據（`entries` 依 `tickets` 原始序建構，target 與 other
+    兩兩配對時以原始序較前者為 ticket_a），確保針對性模式與全量模式對
+    同一票組的輸出逐字一致（回歸不變）。
+    """
+    target_set = set(target_ids)
+    entries: List[Tuple[str, List[str], List[str]]] = []
+    for t in tickets:
+        tid = t.get("id")
+        if not tid:
+            continue
+        if both_sides and tid not in target_set:
+            continue
+        declared = write_files(t)
+        if not declared:
+            continue
+        entries.append((tid, declared, expand_files(declared, project_root)))
+
+    def _check_pair(entry_a, entry_b) -> Optional[Dict[str, Any]]:
+        id_a, declared_a, expanded_a = entry_a
+        id_b, declared_b, expanded_b = entry_b
+        matched_pairs: List[Tuple[str, str]] = []
+        heuristic_only = True
+        for fa in expanded_a:
+            for fb in expanded_b:
+                if files_intersect(fa, fb):
+                    matched_pairs.append((fa, fb))
+                    if fa in declared_a and fb in declared_b:
+                        heuristic_only = False
+        if not matched_pairs:
+            return None
+        matched_display = sorted({
+            fa if fa == fb else f"{fa} ~ {fb}" for fa, fb in matched_pairs
+        })
+        return {
+            "ticket_a": id_a,
+            "ticket_b": id_b,
+            "matched_files": matched_display,
+            "heuristic_only": heuristic_only,
+        }
+
+    target_idx = [i for i, e in enumerate(entries) if e[0] in target_set]
+    other_idx = [i for i, e in enumerate(entries) if e[0] not in target_set]
+
+    conflicts: List[Dict[str, Any]] = []
+
+    for a in range(len(target_idx)):
+        for b in range(a + 1, len(target_idx)):
+            result = _check_pair(entries[target_idx[a]], entries[target_idx[b]])
+            if result is not None:
+                conflicts.append(result)
+
+    if not both_sides:
+        for i in target_idx:
+            for j in other_idx:
+                lo, hi = (i, j) if i < j else (j, i)
+                result = _check_pair(entries[lo], entries[hi])
+                if result is not None:
+                    conflicts.append(result)
+
+    conflicts.sort(key=lambda c: (c["ticket_a"], c["ticket_b"]))
+    return conflicts
+
+
 # ---------------------------------------------------------------------------
 # 共用衝突圖核心（節點 + 已判定衝突配對 -> 連通分量切分）
 #

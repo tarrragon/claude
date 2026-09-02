@@ -72,6 +72,7 @@ def load_registry() -> Dict[str, Any]:
 
 from ticket_system.lib.file_conflict import (
     compute_pairwise_conflicts,
+    compute_targeted_conflicts,
     expand_files,
     files_intersect,
     is_directory_declaration,
@@ -94,6 +95,22 @@ def find_conflicts(
     """
     filtered = [t for t in tickets if t.get("status") in _CONFLICT_STATUSES]
     return compute_pairwise_conflicts(filtered, project_root)
+
+
+def find_targeted_conflicts(
+    tickets: List[Dict[str, Any]],
+    target_ids: Set[str],
+    project_root: Optional[Path] = None,
+    both_sides: bool = False,
+) -> List[Dict[str, Any]]:
+    """`--for`/`--among` 針對性模式版本：篩選 pending/in_progress 票後，
+    委派 `file_conflict.compute_targeted_conflicts`，僅比對與 `target_ids`
+    相關的配對（O(k·n) 而非全量 O(n^2)，見該函式 docstring）。
+    """
+    filtered = [t for t in tickets if t.get("status") in _CONFLICT_STATUSES]
+    return compute_targeted_conflicts(
+        filtered, target_ids, project_root, both_sides=both_sides
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -210,22 +227,6 @@ def _render_table(conflicts: List[Dict[str, Any]]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _filter_for(conflicts: List[Dict[str, Any]], ticket_id: str) -> List[Dict[str, Any]]:
-    """僅保留與 `ticket_id` 有關的衝突對（其為 ticket_a 或 ticket_b 任一側）。"""
-    return [
-        c for c in conflicts
-        if c["ticket_a"] == ticket_id or c["ticket_b"] == ticket_id
-    ]
-
-
-def _filter_among(conflicts: List[Dict[str, Any]], ticket_ids: Set[str]) -> List[Dict[str, Any]]:
-    """僅保留雙側皆落在 `ticket_ids` 內的衝突對（純票組內部兩兩比對）。"""
-    return [
-        c for c in conflicts
-        if c["ticket_a"] in ticket_ids and c["ticket_b"] in ticket_ids
-    ]
-
-
 def _is_directory_level_hit(
     conflict: Dict[str, Any], project_root: Optional[Path]
 ) -> bool:
@@ -274,21 +275,29 @@ def execute_conflicts(args: argparse.Namespace) -> int:
 
     tickets = _gather_tickets(explicit_version)
     project_root = get_project_root()
-    conflicts = find_conflicts(tickets, project_root)
 
     # 針對性查詢：--for / --among 二擇一（互斥，argparse 層不強制，此處
     # 以 --among 優先——同時提供兩者屬呼叫端誤用，選較窄的語意較安全）。
     # 兩者皆命中純目錄層級 heuristic 的命中預設隱藏，需顯式 --include-heuristic
-    # 開啟；未帶 --for/--among 的既有全量輸出行為不受影響（回歸不變）。
+    # 開啟；未帶 --for/--among 時走既有全量兩兩比對（回歸不變）。
+    # 針對性模式改走 find_targeted_conflicts（O(k·n) 而非全量 O(n^2)），
+    # 不再對全量結果事後過濾（原 _filter_for/_filter_among 已隨此變更移除，
+    # 過濾邊界改由 compute_targeted_conflicts 的 both_sides 參數直接決定）。
     if among_arg:
         among_ids = {i.strip() for i in among_arg.split(",") if i.strip()}
-        conflicts = _filter_among(conflicts, among_ids)
+        conflicts = find_targeted_conflicts(
+            tickets, among_ids, project_root, both_sides=True
+        )
         if not include_heuristic:
             conflicts = _drop_directory_level_hits(conflicts, project_root)
     elif for_ticket:
-        conflicts = _filter_for(conflicts, for_ticket)
+        conflicts = find_targeted_conflicts(
+            tickets, {for_ticket}, project_root, both_sides=False
+        )
         if not include_heuristic:
             conflicts = _drop_directory_level_hits(conflicts, project_root)
+    else:
+        conflicts = find_conflicts(tickets, project_root)
 
     registry = load_registry()
     now = getattr(args, "_now", None) or datetime.now(timezone.utc)

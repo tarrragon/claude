@@ -22,13 +22,44 @@ if __name__ == "__main__":
 import argparse
 import os
 import subprocess
-from typing import List
+from typing import List, Optional
 
 from ticket_system.lib.file_conflict import files_intersect, write_files
 from ticket_system.lib.git_ops import commit_files_isolated
 from ticket_system.lib.messages import ErrorMessages, format_error
 from ticket_system.lib.project_root import resolve_project_cwd
 from ticket_system.lib.ticket_loader import load_ticket
+
+
+def _resolve_repo_root(worktree: Optional[str]) -> Optional[str]:
+    """解析本次提交操作的 repo root。
+
+    ``--worktree`` 未指定時沿用既有行為（``resolve_project_cwd()``，即
+    process cwd 所屬 repo；agent 慣例於主 repo cwd 執行 ticket CLI，故此
+    路徑恆解析為主 repo）。``--worktree`` 指定時改以該路徑對應的 git
+    repo root 為準，讓後續所有 git 操作（read-tree/add/diff/空 tree 比對）
+    綁定在檔案實際變更所在的 linked worktree，而非主 repo working tree
+    （根因：linked worktree 有獨立 working tree 與 index，主 repo
+    working tree 對 worktree 內的變更零感知）。
+
+    Returns:
+        repo root 絕對路徑；``--worktree`` 指定但非合法 git 目錄時回傳
+        None（呼叫端應視為錯誤並拒絕提交）。
+    """
+    if not worktree:
+        return resolve_project_cwd()
+
+    abs_worktree = os.path.abspath(worktree)
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=abs_worktree,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
 
 
 def _to_repo_relative(path: str, repo_root: str, base_dir: str) -> str:
@@ -119,8 +150,16 @@ def execute_commit(args: argparse.Namespace, version: str) -> int:
         print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
         return 1
 
+    worktree = getattr(args, "worktree", None)
+    repo_root = _resolve_repo_root(worktree)
+    if repo_root is None:
+        print(
+            f"[ERROR] --worktree {worktree} 不是合法的 git 目錄（"
+            "git rev-parse --show-toplevel 失敗），拒絕提交"
+        )
+        return 1
+
     declared = set(write_files(ticket))
-    repo_root = resolve_project_cwd()
     # base_dir 固定為 repo_root（而非 os.getcwd()）：ticket shim 透過
     # `uv run --directory <skill_dir>` 呼叫，process 實際 cwd 會被切換到
     # skill_dir，與呼叫者鍵入指令時所在目錄（通常是 repo 根）不同。
@@ -188,6 +227,18 @@ def register_commit_command(subparsers: "argparse._SubParsersAction") -> None:
         dest="message",
         required=True,
         help="commit message",
+    )
+    p_commit.add_argument(
+        "--worktree",
+        dest="worktree",
+        default=None,
+        help=(
+            "檔案實際變更所在的 linked worktree 絕對路徑。ticket CLI 慣例於"
+            "主 repo cwd 執行，若變更發生在 linked worktree（而非主 repo），"
+            "必須指定此參數，否則 git 操作會綁定在主 repo working tree，對"
+            "worktree 內的新檔/修改一律讀不到（新檔無法 add、已修改檔誤判"
+            "空 tree 短路）"
+        ),
     )
     p_commit.add_argument(
         "files",

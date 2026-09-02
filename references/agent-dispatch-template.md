@@ -174,7 +174,8 @@ ticket track dispatch <ticket_id> --as <agent_name> --commit-policy agent
 
 ```
 Commit: prefer `ticket track commit <ticket-id> -m "..." -- {exact files}`
-  (isolated index, precise staging). Fallback: `git add {exact files}` ->
+  (isolated index, precise staging; in a linked worktree add `--worktree
+  <abs-worktree-path>`). Fallback: `git add {exact files}` ->
   `git diff --cached --name-only` to verify -> verified bare commit, no
   pathspec (forbid `-- <paths>` / `--only` / `-o` / `-a` / `git add .` /
   `git add -A`). Swept-in content: forbid revert/reset/amend, stop & report.
@@ -187,6 +188,8 @@ Full text: this ticket's "### Commit 規範" section (`ticket track full <ticket
 Recommended: commit via isolated index (files must be a subset of this
 ticket's where.files; never touches the shared index):
   ticket track commit <ticket-id> -m "..." -- {exact files}
+In a linked worktree (files changed under a worktree dir, not the main repo):
+add `--worktree <abs-worktree-path>` to the command above.
 Fallback (not recommended; only if `ticket track commit` fails or is
 unavailable) — use precise staging + verified bare commit only (no pathspec):
   git add {exact files}

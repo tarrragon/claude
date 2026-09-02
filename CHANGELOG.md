@@ -1,3 +1,19 @@
+## [2.47.0] - 2026-09-02
+
+### Summary
+revert: manual verify fix (will be reverted); feat: set-where --files/value 路徑補 auto-commit 留痕; fix: set-where 同時帶路徑與 --layer 時 files 靜默未同步 (+3 more)
+
+Changes: 1 revert, 1 feat, 2 fix, 1 chore, 1 perf
+
+- revert: manual verify fix (will be reverted)
+- feat: set-where --files/value 路徑補 auto-commit 留痕
+- fix: set-where 同時帶路徑與 --layer 時 files 靜默未同步
+- fix: resolve track commit against linked worktree repo root
+- chore: 回寫 .claude/VERSION 至 並登記 主題歸屬
+- perf: conflicts --for/--among 改走 O(k·n) 針對性比對，取代全量 O(n^2)
+
+---
+
 ## [2.46.0] - 2026-09-02
 
 ### Summary
