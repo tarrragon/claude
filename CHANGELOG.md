@@ -1,3 +1,15 @@
+## [2.45.1] - 2026-09-02
+
+### Summary
+fix: P0 修復 skill 版本擷取未涵蓋 CHANGELOG 外移格式; chore: 回寫 VERSION 至 並登記主題歸屬
+
+Changes: 1 fix, 1 chore
+
+- fix: P0 修復 skill 版本擷取未涵蓋 CHANGELOG 外移格式
+- chore: 回寫 VERSION 至 並登記主題歸屬
+
+---
+
 ## [2.45.0] - 2026-09-02
 
 ### Summary

@@ -20,14 +20,72 @@ from lib.sync_exclude_manifest import load_sync_skills_config
 # 分歧清單的顯示上限。超出者以「另有 N 個」帶過，完整清單由 skill-sync 取得。
 SKILL_DRIFT_PREVIEW_LIMIT = 10
 
+# 全格式一致的 **Version**: X 行（CHANGELOG.md 頂端條目與舊格式 SKILL.md
+# body 皆用此字面）。
+_VERSION_LINE_RE = re.compile(r"\*\*Version\*\*:\s*(\S+)")
+# SKILL.md frontmatter 內巢狀於 `metadata:` 區塊的 `version:` 欄位（新格式）。
+_METADATA_BLOCK_RE = re.compile(r"^metadata:[ \t]*\n((?:[ \t]+\S.*\n?)*)", re.MULTILINE)
+_METADATA_VERSION_RE = re.compile(r"^[ \t]+version:\s*(\S+)", re.MULTILINE)
+# SKILL.md frontmatter 頂層（非巢狀於 metadata: 之下）的 `version:` 欄位——
+# 部分第三方 skill 的 frontmatter schema 與本專案慣例不同，仍以此欄位表示
+# 版本（如 `impeccable` skill）。
+_TOPLEVEL_VERSION_RE = re.compile(r"^version:\s*(\S+)", re.MULTILINE)
+
+
+def _extract_changelog_version(skill_dir: Path) -> str | None:
+    """讀取同目錄 CHANGELOG.md 最上方（新到舊排序，見各檔頂部說明）的
+    **Version** 條目——本輪版本紀錄外移後，此為多數 skill 的權威版本來源。
+    """
+    changelog = skill_dir / "CHANGELOG.md"
+    if not changelog.is_file():
+        return None
+    try:
+        text = changelog.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    m = _VERSION_LINE_RE.search(text)
+    return m.group(1) if m else None
+
+
+def _extract_frontmatter_metadata_version(text: str) -> str | None:
+    """從 SKILL.md YAML frontmatter 巢狀的 `metadata.version` 欄位擷取版本號。
+
+    不引入 YAML 解析依賴（本模組其餘部分皆為輕量 regex 掃描，維持一致），
+    改以區塊邊界定位——先框出 `metadata:` 區塊（延續其後每一行縮排內容），
+    再於區塊內尋找 `version:` 欄位，避免誤認 frontmatter 中其他非 metadata
+    區塊裡巧合出現的 `version:` 字樣。
+    """
+    if not text.startswith("---"):
+        return None
+    end = text.find("\n---", 3)
+    if end == -1:
+        return None
+    front = text[3:end]
+    block_match = _METADATA_BLOCK_RE.search(front)
+    if not block_match:
+        return None
+    ver_match = _METADATA_VERSION_RE.search(block_match.group(1))
+    return ver_match.group(1) if ver_match else None
+
 
 def extract_skill_versions(skills_dir: Path) -> dict[str, str]:
-    """掃描 skills/*/SKILL.md 提取各 skill 的版本號。
+    """掃描 skills/*/ 提取各 skill 的版本號。
 
     `glob("*/SKILL.md")` 判準對大小寫是否敏感依 Python 版本而異（3.13 起
     在省略 `case_sensitive` 時改為探測實際檔案系統），故本函式在掃描前先以
     版本無關的 `os.scandir` 判準告警大小寫不符項——即使該版本的 glob 折疊
     命中，仍讓維護者知道檔名不精確、日後換掃描實作可能再度漏收。
+
+    四層優先序（版本紀錄外移後，單一來源已無法涵蓋全部 skill；優先序依
+    「權威性 + 涵蓋率」排列，見遷移紀錄的實測數據）：
+      1. 同目錄 CHANGELOG.md 最上方 **Version** 條目（新格式，多數已遷移
+         的 skill 的權威來源；部分 skill 未在 frontmatter 重複記錄版本，
+         此為唯一來源）
+      2. SKILL.md frontmatter 巢狀的 `metadata.version`（新格式，兩個住址
+         之一，未必所有已遷移 skill 皆有此欄位）
+      3. SKILL.md body 內的 **Version**: 行（舊格式，向後相容尚未遷移者）
+      4. SKILL.md frontmatter 頂層 `version:` 欄位（既有 fallback，涵蓋
+         frontmatter schema 與本專案慣例不同的第三方 skill）
 
     參數:
         skills_dir: skills 目錄路徑（如 .claude/skills/ 或 temp_dir/skills/）
@@ -46,11 +104,19 @@ def extract_skill_versions(skills_dir: Path) -> dict[str, str]:
             text = skill_md.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        m = re.search(r"\*\*Version\*\*:\s*(\S+)", text)
-        if not m:
-            m = re.search(r"^version:\s*(\S+)", text, re.MULTILINE)
-        if m:
-            versions[skill_name] = m.group(1)
+
+        version = _extract_changelog_version(skill_md.parent)
+        if not version:
+            version = _extract_frontmatter_metadata_version(text)
+        if not version:
+            m = _VERSION_LINE_RE.search(text)
+            version = m.group(1) if m else None
+        if not version:
+            m = _TOPLEVEL_VERSION_RE.search(text)
+            version = m.group(1) if m else None
+
+        if version:
+            versions[skill_name] = version
     return versions
 
 
