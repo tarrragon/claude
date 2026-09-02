@@ -1,3 +1,15 @@
+## [2.48.1] - 2026-09-02
+
+### Summary
+chore: 回寫 .claude/VERSION 至 ；建立 快取測試票並登記主題; test: 補齊 ticket frontmatter 磁碟快取與 ticket_state_root 行程快取的專屬測試
+
+Changes: 1 chore, 1 test
+
+- chore: 回寫 .claude/VERSION 至 ；建立 快取測試票並登記主題
+- test: 補齊 ticket frontmatter 磁碟快取與 ticket_state_root 行程快取的專屬測試
+
+---
+
 ## [2.48.0] - 2026-09-02
 
 ### Summary
