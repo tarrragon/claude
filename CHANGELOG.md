@@ -1,3 +1,18 @@
+## [2.45.2] - 2026-09-02
+
+### Summary
+fix: star-anise-system-designer 補上 Write/Edit/Bash 使工具清單與職責相符; fix: 修正 rule8 guard 對 worktree 路徑的誤判; docs: 補強 multi-round-review reviewer 回報指引 (+2 more)
+
+Changes: 2 fix, 2 docs, 1 chore
+
+- fix: star-anise-system-designer 補上 Write/Edit/Bash 使工具清單與職責相符
+- fix: 修正 rule8 guard 對 worktree 路徑的誤判
+- docs: 補強 multi-round-review reviewer 回報指引
+- docs: bash 規則二補截斷方向條款
+- chore: 回寫 .claude/VERSION 至
+
+---
+
 ## [2.45.1] - 2026-09-02
 
 ### Summary

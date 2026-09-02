@@ -138,6 +138,45 @@ Bash 工具輸出：
 
 **核心辨識**：**訊息中是否出現 "Full output saved to:"**，有 → 用 Read；沒有且是背景任務 → TaskOutput。
 
+### 截斷方向：`head` 還是 `tail`（CLI 參數驗證錯誤場景）
+
+**Why**：`tail -N` 假設「有用資訊在尾部」，對一般執行日誌（進度往下滾動、結論在最後）成立；但 argparse 等 CLI 參數驗證錯誤的訊息結構相反——`usage:` 與 `error:` 前綴固定印在最前面，若被拒的參數本身是多行內容（如 heredoc 傳入的 ticket 內文），argparse 會把該內容原文回吐在 error 訊息之後。此時「error 前綴」在頭、「回吐內容」在尾，`tail` 只取尾段等於只留下回吐內容，畫面與呼叫成功時的內容回音逐字相同。
+
+**Consequence（最小重現，2026-09-02）**：以 argparse 模擬「unrecognized arguments」錯誤，被拒的 25 行 heredoc 內容隨錯誤訊息回吐：
+
+```
+$ python3 argp_test3.py ticket-1 --section Notes "$(cat <<'EOF'
+line1
+...
+line25
+EOF
+)" 2>&1 | tail -20
+line6
+line7
+...
+line25
+```
+
+`tail -20` 的輸出完全看不到 `usage:` / `error: unrecognized arguments:` 這兩行判別依據，只剩內容本體——與呼叫成功時 stdout 回音內容的視覺形態相同。改用 `head -5` 則兩行前綴清楚可見：
+
+```
+$ ... | head -5
+usage: argp_test3.py [-h] --section SECTION id
+argp_test3.py: error: unrecognized arguments: line1
+line2
+line3
+line4
+```
+
+實測後果（框架資產移交案例）：ticket CLI 的 append-log 兩次因參數誤用靜默失敗，PM 端僅看到 `tail` 截斷後的內容回音，誤判為成功；complete 閘門的 execution log 檢查同樣只掃字串存在與否，未能攔截。
+
+**Action**：預防大輸出時，若命令屬於「CLI 參數/子命令呼叫」（非測試套件、非長 log），不確定其錯誤訊息的前綴位置時：
+1. 優先改用 `head -40`（覆蓋 usage/error 前綴與多數短錯誤）；
+2. 或兩段皆取：`2>&1 | head -20 && echo '...' && <same-cmd> 2>&1 | tail -20`（成本稍高，適合高風險呼叫如 ticket CLI 寫入）；
+3. 已知該命令穩定產出「結論在尾部」的日誌（如 `pytest`、長編譯輸出）時，`tail` 仍是預設正確選擇，不需一律改 `head`。
+
+**適用邊界**：本條款只影響「不確定輸出結構」時的截斷方向選擇，不改變規則二既有的 TaskOutput / Read 判斷流程圖。
+
 ---
 
 ## 規則三詳細：禁止串接多個 git 寫入操作
@@ -562,7 +601,8 @@ LC_ALL=C sort /tmp/t.txt | LC_ALL=C uniq -c
 
 ---
 
-**Last Updated**: 2026-08-28
+**Last Updated**: 2026-09-02
+**Version**: 1.11.0 — 規則二詳細新增「截斷方向：`head` 還是 `tail`（CLI 參數驗證錯誤場景）」小節：argparse 等 CLI 驗證錯誤的 `usage:`/`error:` 前綴固定在頭、被拒的多行參數內容回吐在尾，單取 `tail` 會截掉唯一判別依據使失敗與成功回音同形；附可執行最小重現（`tail -20` 完全看不到前綴 vs `head -5` 前綴清楚可見）、實測後果（ticket CLI append-log 靜默失敗案例）與 Action（不確定輸出結構時改 `head` 或 `head`+`tail` 兩段皆取，穩定尾部結論日誌維持 `tail`）；主文速查條目與統一檢查清單見 `bash-tool-usage-rules.md` 規則二
 **Version**: 1.10.0 — 規則七詳細新增「涵蓋擴充：衝突合併收尾的廣域 staging」小節：`git merge` 衝突後以 `git add -A` / `git add .` / `git commit -a` 收尾會把工作區無關的未暫存編輯寫進 merge commit，四項既有禁令對此路徑全數無效；附實證（merge commit `89c57a1c9`，兩 parent 皆 1020 行 / merge 926 行 / 該檔不在 incoming 變更範圍，三方比對判定內容源自工作區）、正確替代與已發生時的處置表；並記錄與派發骨架 Forbidden 行的涵蓋落差（骨架已擋、規則主文未擋），以及本機制應併入 `PC-BAL-008` 作為新變體的判定與三項依據
 **Version**: 1.9.0 — 規則七詳細新增「核對步驟的版本邊界：過期 index 快照」小節：核對步驟驗證 index 含哪些檔案、不驗證 entry 相對 HEAD 有多新；列兩條產生路徑（A pathspec 提交後不寫回共用 index；B 他方以隔離索引 CAS 提交 / merge / rebase / pull 使 HEAD 前進，雙方皆未違規），附可執行最小重現（核對通過 → 裸 commit → 內容回滾至舊版本，`git log` 外觀正常）、三平面比對偵測法與 `git restore --staged` 處置表；並明示三則邊界失效維度互不重疊（時序窗口 / hunk 粒度 / 版本新舊）、與 `bare-commit-guard-hook.py` 防護標的的差異（範圍過寬 vs 範圍正確而內容過舊）；不改變規則七既有禁止事項
 **Version**: 1.8.0 — 「隔離索引提交的完整性三要件」要件 1 補工作區維度：`git status --porcelain` 反映整個工作區，多 PM session 並行時必然摻入他 session 在途工作，清單來源需同時獨立於共用 index 與其他 session；已驗證實作見 `ticket-md-auto-commit-hook.py` 的 `get_session_claimed_ticket_ids`（以 pm-registry 認領清單為正歸屬判準，歸屬無法判定時保守排除）

@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.64.0 — 「Reviewer prompt 結構」補一段回報方式強制要求：prompt 須指示 reviewer 完成後以 `SendMessage({to: "main"})` 主動送出報告本體，不可預設任務結束/idle 通知會帶回報告——兩者是不同訊號（通道細節路由至 `agent-dispatch-template.md`「交付通道速查」維度二／`PC-BAL-038`）；同段補長報告分則指引，預期超長時先在 prompt 內指定切分維度與標號方式，避免傳輸端截斷後才臨時補救。「Round N 規劃判讀」開頭補一句「收到 idle 通知不等於收到報告」，作為判讀四個停止訊號前的必要前提。三處補強起因於一次實測：Round 2/3 共 7 個 reviewer 只送出 idle 通知、報告未達，逐一索取多耗五個往返；另一輪四視角審查中兩份長報告在單則訊息長度上限處被截斷且無訊號。
+
 **Version**: 1.63.2 — 三份翻譯探針對 `description-as-recall-trigger` 裡「沒有問就不知道的斷點」給了三種不同的意思（沒人問／缺了那個問題／讀者不知道該問什麼）。那句話把誰沒問、不知道什麼都省略了，中文允許、英文強制決定，所以這一類要靠翻譯才現形。就地展開成「讀者不曾遇到那個問題，就永遠不會知道有那件事」。
 
 **Version**: 1.63.1 — `description-as-recall-trigger` principle 卡的 H1 停在被自己推翻的版本（「Description 是 Recall Trigger、不是文章摘要」），而同一次改動已把結論改成體例由內容定位決定。slug 不動、只改 H1。

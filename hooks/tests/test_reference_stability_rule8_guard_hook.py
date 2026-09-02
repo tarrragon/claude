@@ -33,6 +33,10 @@ reference-stability-rules.md 規則 8「引用性質判準：全禁原則與五�
 | test_marker_empty_reason_still_blocked | marker reason 為空 | 仍阻擋，訊息含格式錯誤說明 |
 | test_marker_relocation_with_source_path_allows | relocation marker 含來源檔路徑 | 不阻擋（0.2.1-W3-1177 新增類別） |
 | test_marker_relocation_missing_source_path_still_blocked | relocation marker 缺來源檔路徑 | 仍阻擋，訊息含格式錯誤說明 |
+| test_agent_isolation_worktree_docs_not_blocked | Agent isolation 形態 worktree 內編輯 docs/（本 bug 重現） | 不阻擋（0.2.1-W4-002） |
+| test_agent_isolation_worktree_claude_file_still_blocked | Agent isolation 形態 worktree 內編輯 .claude/ | 仍阻擋（0.2.1-W4-002，行為不變理由對齊） |
+| test_main_repo_claude_file_still_blocked | 主倉庫絕對路徑編輯 .claude/ | 仍阻擋（0.2.1-W4-002） |
+| test_sibling_worktree_form_docs_not_blocked_regression_guard | sibling 形態 worktree 內編輯 docs/（回歸護欄，非重現案例） | 不阻擋 |
 
 策略：
 - importlib 動態載入（檔名含 hyphen）
@@ -46,6 +50,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -53,6 +58,19 @@ import pytest
 
 
 HOOK_PATH = Path(__file__).parent.parent / "reference-stability-rule8-guard-hook.py"
+
+
+@pytest.fixture(autouse=True)
+def _git_init_tmp_path(tmp_path):
+    """將 tmp_path 初始化為 git repo（0.2.1-W4-002 錨定修正後 normalize_relpath 需
+    以 git rev-parse --show-toplevel 求絕對路徑所在的 repo root；既有測試以
+    tmp_path 下的絕對路徑模擬 .claude/ 檔案，須讓 tmp_path 本身可被 git 辨識
+    為 repo root，行為才與修正前的子字串比對等價）。"""
+    subprocess.run(
+        ["git", "init", "-q", str(tmp_path)],
+        check=True,
+        capture_output=True,
+    )
 
 
 def _load_hook_module():
@@ -589,6 +607,162 @@ class TestExistingExemptionsRegression:
                     "原始內容\n此變更於 2026-07-08 完成，已知案例：PC-050、IMP-003。"
                     "CC 2.1.97 新增能力。"
                 ),
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 0
+        assert err == ""
+
+
+# ---------------------------------------------------------------------------
+# worktree 路徑錨定（0.2.1-W4-002）：normalize_relpath 改以 repo root 錨定
+# .claude/ 判斷，取代原本的子字串搜尋（find），避免 worktree 絕對路徑本身
+# 帶有的 .claude/ 片段被誤判為框架檔案。
+#
+# 重現形態的區分（協調者查證補充）：
+#   - Agent isolation 形態 <repo>/.claude/worktrees/agent-<id>/...
+#     是唯一重現本 bug 的路徑形態（find 命中路徑中間的 .claude/ 片段）。
+#   - 本專案 worktree CLI 實際採用的 sibling 形態
+#     <parent>/<proj>-<ticket>/...（如本票執行所在的
+#     flutter_balance-0.2.1-W4-002/）路徑本身不含 .claude/ 片段，修正前後
+#     行為皆正確，僅作為回歸護欄另立一組測資，避免與 Agent isolation 形態
+#     混淆（照 sibling 形態寫測資驗證不到本 bug，會得到假綠燈）。
+# ---------------------------------------------------------------------------
+
+
+def _git(repo_dir: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", "-C", str(repo_dir), *args],
+        check=True,
+        capture_output=True,
+    )
+
+
+def _init_repo_with_commit(repo_dir: Path) -> None:
+    """初始化 git repo 並建立一個 commit（git worktree add 需要既有 commit）。"""
+    _git(repo_dir, "config", "user.email", "test@example.com")
+    _git(repo_dir, "config", "user.name", "Test")
+    readme = repo_dir / "README.md"
+    readme.write_text("init\n", encoding="utf-8")
+    _git(repo_dir, "add", "README.md")
+    _git(repo_dir, "commit", "-q", "-m", "init")
+
+
+def _add_agent_isolation_worktree(main_repo: Path, agent_id: str) -> Path:
+    """在 main_repo 下建立 Agent tool isolation 形態的 worktree，回傳其根目錄。
+
+    真實形態：<repo>/.claude/worktrees/agent-<id>/。`git worktree add` 建立
+    的目錄自身即為獨立的 git top-level（`git rev-parse --show-toplevel` 於
+    其內執行會回傳此目錄，非 main_repo），與生產環境行為一致。
+    """
+    worktree_dir = main_repo / ".claude" / "worktrees" / f"agent-{agent_id}"
+    worktree_dir.parent.mkdir(parents=True, exist_ok=True)
+    _git(main_repo, "worktree", "add", "-b", f"branch-{agent_id}", str(worktree_dir))
+    return worktree_dir
+
+
+class TestWorktreePathAnchoring:
+    def test_agent_isolation_worktree_docs_not_blocked(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """Agent isolation 形態 worktree 內編輯 docs/ 不應被誤判為框架檔案（本 bug 重現案例）。"""
+        _init_repo_with_commit(tmp_path)
+        worktree_dir = _add_agent_isolation_worktree(tmp_path, "w4002a")
+
+        target = worktree_dir / "docs" / "spec" / "ui" / "SPEC-001-screen-state-matrix.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("既有內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "既有內容",
+                "new_string": "既有內容\n詳見 0.2.1-W4-777 的分析結論。",
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 0
+        assert err == ""
+
+    def test_agent_isolation_worktree_claude_file_still_blocked(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """Agent isolation 形態 worktree 內編輯 .claude/ 框架檔仍應阻擋。
+
+        修正前此案例已是「結果正確、理由錯誤」——find() 命中的是路徑中間
+        <repo>/.claude/worktrees/... 的前綴片段而非 worktree 內真正的
+        .claude/ 位置；修正後改以 repo root 錨定判斷，行為不變但理由對齊
+        （視為對照組，非本次修正的行為變更範圍）。
+        """
+        _init_repo_with_commit(tmp_path)
+        worktree_dir = _add_agent_isolation_worktree(tmp_path, "w4002b")
+
+        target = worktree_dir / ".claude" / "rules" / "core" / "example.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": "原始內容\n詳見 0.2.1-W4-778 的分析結論。",
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 2
+        assert "0.2.1-W4-778" in err
+
+    def test_main_repo_claude_file_still_blocked(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """主倉庫（非 worktree）絕對路徑編輯 .claude/ 下檔案仍應阻擋（不得為修 bug 而放行真正的違規）。"""
+        target = _claude_path(tmp_path, "rules", "core", "example-main.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": "原始內容\n詳見 0.2.1-W4-779 的分析結論。",
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 2
+        assert "0.2.1-W4-779" in err
+
+    def test_sibling_worktree_form_docs_not_blocked_regression_guard(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """回歸護欄：本專案 worktree CLI 實際採用的 sibling 形態
+        （<parent>/<proj>-<ticket>/docs/...），路徑本身不含 .claude/ 片段，
+        修正前後皆不應被誤判——確認修正未意外變更此既有正確行為。
+        """
+        sibling_repo = tmp_path.parent / f"{tmp_path.name}-0.2.1-W4-002"
+        sibling_repo.mkdir(parents=True, exist_ok=True)
+        _git(sibling_repo, "init", "-q")
+        _init_repo_with_commit(sibling_repo)
+
+        target = sibling_repo / "docs" / "spec" / "ui" / "SPEC-001-screen-state-matrix.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("既有內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "既有內容",
+                "new_string": "既有內容\n詳見 0.2.1-W4-780 的分析結論。",
             },
         }
         rc = _run_main(hook_mod, monkeypatch, payload)

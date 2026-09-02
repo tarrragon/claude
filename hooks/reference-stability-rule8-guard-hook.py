@@ -75,6 +75,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
@@ -133,15 +134,69 @@ RELOCATION_SOURCE_PATH_PATTERN = re.compile(
 )
 
 
+def _get_repo_root(start_path: str) -> Optional[str]:
+    """以 git rev-parse --show-toplevel 取得 start_path 所在的 repo/worktree 根目錄。
+
+    worktree 內執行時本指令回傳該 worktree 自身的根目錄（例如
+    <repo>/.claude/worktrees/agent-<id>/），非主倉庫根目錄——這正是本函式
+    據以剝除 worktree 前綴、還原專案內真實相對路徑的關鍵行為。
+
+    fail-open：git 不可用、非 git 目錄、或任何執行異常一律回傳 None，
+    交由呼叫端視為「無法判定」（見 normalize_relpath 的保守放行邏輯，
+    對應 acceptance 7 的既有語意不變要求）。
+    """
+    try:
+        start_dir = Path(start_path)
+        if not start_dir.is_dir():
+            start_dir = start_dir.parent
+        result = subprocess.run(
+            ["git", "-C", str(start_dir), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return None
+        root = result.stdout.strip()
+        return root or None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def normalize_relpath(file_path: str) -> Optional[str]:
-    """取出檔案路徑中 .claude/ 起始的相對片段；不在 .claude/ 下回傳 None。"""
+    """取出檔案路徑相對於 repo/worktree 根目錄、且以 .claude/ 開頭的相對片段。
+
+    錨定於路徑開頭判斷（而非子字串搜尋），避免 worktree 絕對路徑
+    （<repo>/.claude/worktrees/agent-<id>/docs/...）中路徑本身含有的
+    .claude/ 片段，被誤判為該檔案落在 .claude/ 掃描範圍內。
+
+    相對路徑輸入（無法用 Path.is_absolute() 判定為絕對路徑者，即既有
+    測試與 --self-test 沿用的裸相對路徑形態）視為已相對於 repo root，
+    不另外呼叫 git 取根目錄。
+
+    絕對路徑輸入：以 git rev-parse --show-toplevel 求出所在 repo/worktree
+    的根目錄，再取相對路徑。取不到根目錄（非 git 目錄、git 不可用）或
+    檔案不在該根目錄之下，回傳 None（is_scanned_path 因此判為不在掃描
+    範圍，即 fail-open——寧可漏掃亦不誤擋，對應 acceptance 7）。
+    """
     if not file_path:
         return None
     normalized = file_path.replace("\\", "/")
-    idx = normalized.find(SCAN_PREFIX)
-    if idx == -1:
+
+    if not Path(normalized).is_absolute():
+        return normalized if normalized.startswith(SCAN_PREFIX) else None
+
+    repo_root = _get_repo_root(normalized)
+    if repo_root is None:
         return None
-    return normalized[idx:]
+
+    try:
+        rel = Path(normalized).resolve().relative_to(Path(repo_root).resolve())
+    except ValueError:
+        return None
+
+    rel_str = str(rel).replace("\\", "/")
+    return rel_str if rel_str.startswith(SCAN_PREFIX) else None
 
 
 def is_scanned_path(file_path: str) -> bool:

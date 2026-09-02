@@ -4,7 +4,7 @@ description: "寫多篇章節後做多輪 agent reviewer audit 的標準操作�
 license: MIT
 metadata:
   portable: true
-  version: 1.63.2
+  version: 1.64.0
   category: writing-methodology
 ---
 
@@ -237,6 +237,8 @@ B′ 在「看不看得懂」之外還帶**閱讀節奏與引導**兩問（量�
 
 ## Round N 規劃判讀
 
+**停止判讀的前提是報告已在手上：收到 idle 通知不等於收到報告。** idle 通知代表 reviewer 執行緒閒置、不代表報告本體已透過 SendMessage 送達主線程（回報方式要求見上方「Reviewer prompt 結構」）。逐一確認每個 reviewer 的報告本體已達，才能開始判讀下列四個停止訊號——把「已經 idle」誤讀成「已經收到」，會在報告仍在原地遺失的狀態下就宣告某個 frame 已涵蓋。
+
 Round 1-3 是硬底線、直接跑不問。Round 3 結束後才進入「是否需要 Round 4」的判讀。四個停止訊號齊備、停：
 
 1. **新 frame 想不出來**：team 腦力激盪 30 分鐘想不出「能 catch 新東西」的 frame
@@ -274,6 +276,9 @@ Round 1-3 是硬底線、直接跑不問。Round 3 結束後才進入「是否�
 - 建議（可改）：可優化但非阻塞
 最後給「整體評估」分級。
 報告 1500 字內、不修檔案。
+
+# 回報方式
+完成後以 SendMessage({to: "main"}) 主動送出報告本體，不可只靠任務結束/idle 通知帶回。預期報告會超過單則訊息長度上限時，先在此指定切分維度（如按審查維度拆）與每則標號方式（如 1/3、2/3、3/3），不要等被截斷才臨時決定怎麼拆。
 ```
 
 關鍵設計：
@@ -284,6 +289,7 @@ Round 1-3 是硬底線、直接跑不問。Round 3 結束後才進入「是否�
 - **輸出格式是欄位契約**：每個 finding 帶固定欄位（位置、問題描述、嚴重度、建議修法）、下游的整合 punch list 靠欄位運作 — 漏欄位的 finding 整合時只能退回原報告重讀、平行 reviewer 省 context 的效益就被吃掉。位置欄用「檔案 + 段落語意標題」、行號在多 reviewer 平行修復中會漂移
 - **判定型規則要指定痕跡**：reviewer prompt 裡凡是要求「先判斷 X、再依判斷做 Y」的維度，同時規定判定要留下什麼可複驗的產物（判定的結果 / 判定的範圍清單 / 判成零後續結論時的依據）。少了這一項，「已檢查、無發現」與「沒檢查」在報告裡長得一樣，而最省力的判定結論通常正是那個零後續的。詳見 [判定型規則要規定判定的痕跡](references/principles/judgment-rules-must-specify-their-trace.md)
 - **SRP 違反要標路由目的地**：reviewer 標記「這段不屬於這篇」時要同時標「建議的目的地」— 只標前者不標後者，修改者容易選最省力的動作（刪除），而不是最正確的動作（路由）。詳見 [misplaced-content-routing](references/principles/misplaced-content-routing.md)
+- **回報方式必須明寫、不可預設 idle 通知帶回報告**：背景 agent 的最終回覆文字不會自動送達主線程，主線程只會收到 idle 通知——兩者是不同訊號，idle 通知代表執行緒閒置、不代表報告本體已交付。prompt 沒明寫 `SendMessage({to: "main"})` 要求時，reviewer 完成審查後報告會原地遺失，主線程需逐一索取才拿得到（實測一輪 7 個 reviewer 全數如此，多耗五個往返）。通道細節與根因見 `.claude/references/agent-dispatch-template.md`「交付通道速查」維度二（`PC-BAL-038`）。長報告即使壓在 1500 字內仍可能在傳輸端被截斷且無訊號，須在 prompt 內預先約定切分方式，不要事後才補救
 
 ## 整合 finding 跟 fix 工作流
 
