@@ -40,6 +40,11 @@ Active Dispatch Tracker Hook - PostToolUse (Agent)
   - SubagentStop 刪除記錄前提失準修復票 — 補 name 欄位（named agent 的
     subagent_type），配合 SubagentStop 改標記不刪除，殘留代理人排查時
     需要此欄位反查身份
+  - 識別碼命名空間修復票 — 補 agent_handle 欄位（Agent 工具的 name
+    參數，非上方 subagent_type persona）。實測 tool_response.agentId
+    對 named 派發不可靠（68% 缺席，即使有值也與 SubagentStop 回報的
+    agent_id 屬不同命名空間），agent_handle 於 dispatch 當下同步可得，
+    供 SubagentStop 精準比對（見 dispatch_tracker.py 模組 docstring）
 """
 
 import json
@@ -131,6 +136,12 @@ def main() -> int:
     session_id = resolve_session_id(input_data)
     ticket_id = extract_ticket_id(tool_input.get("prompt", ""), agent_description)
     name = tool_input.get("subagent_type", "") or ""
+    # 可定址短 handle（Agent 工具的 name 參數，非上方 subagent_type
+    # persona）。CC runtime 會把此值編入 SubagentStop 回報的 agent_id
+    # （格式 a<handle>-<hex>），dispatch 當下同步可得，用於
+    # mark_turn_ended_by_handle 的精準比對（見 dispatch_tracker.py
+    # 模組 docstring「agent_handle 欄位」段的完整根因與依據）。
+    agent_handle = tool_input.get("name", "") or ""
 
     files = []
     if ticket_id:
@@ -150,10 +161,11 @@ def main() -> int:
             agent_id=agent_id_from_response,
             session_id=session_id,
             name=name,
+            agent_handle=agent_handle,
         )
         logger.info(
             "recorded dispatch: %s (isolation=%s, ticket_id=%s, files=%d, "
-            "agent_id=%s, session_id=%s, name=%s)",
+            "agent_id=%s, session_id=%s, name=%s, agent_handle=%s)",
             agent_description,
             isolation or "none",
             ticket_id or "none",
@@ -161,6 +173,7 @@ def main() -> int:
             agent_id_from_response or "none",
             session_id or "none",
             name or "none",
+            agent_handle or "none",
         )
     except Exception as e:
         # 記錄失敗不阻擋（PostToolUse 不可阻擋已完成的工具呼叫）

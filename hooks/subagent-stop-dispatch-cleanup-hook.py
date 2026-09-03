@@ -47,6 +47,9 @@ SubagentStop Dispatch Cleanup Hook
   - 0.19.1-W1-046 — CC 2.1.163 解禁後曾改用 additionalContext（已由 W1-055.1 回退）
   - 1.0.0-W1-055.1 — 自激迴圈斷路器 + WAIT 廣播 dedup + 通道回退 systemMessage
   - SubagentStop 刪除記錄前提失準修復票 — 標記不刪除 + still_running 語意修正
+  - 識別碼命名空間修復票 — 新增 mark_turn_ended_by_handle 精準比對路徑，
+    先於既有 mark_turn_ended_by_id 呼叫（named 派發 tool_response.agentId
+    不可靠，改用 dispatch 當下同步可得的 agent_handle 錨定比對）
 """
 
 import hashlib
@@ -65,6 +68,7 @@ from lib import (
 )
 
 from lib.dispatch_tracker import (
+    mark_turn_ended_by_handle,
     mark_turn_ended_by_id,
     mark_oldest_active_null_agent_id_entry_turn_ended,
     get_active_dispatches,
@@ -190,8 +194,15 @@ def main() -> int:
     messages = []
     marked = False
 
-    # 主路徑：agent_id 精準標記回合結束（entry 保留，不刪除）
-    marked = mark_turn_ended_by_id(project_root, agent_id)
+    # 主路徑一：agent_handle 錨定比對（named 派發，dispatch 當下同步可得，
+    # 不依賴 tool_response.agentId——該欄位對 named 派發已證實不可靠，
+    # 見 dispatch_tracker.py 模組 docstring「agent_handle 欄位」段）
+    marked = mark_turn_ended_by_handle(project_root, agent_id)
+
+    # 主路徑二：agent_id 精準標記回合結束（entry 保留，不刪除；未命名
+    # 派發的既有路徑，agent_handle 比對失敗或無 handle 可比對時才嘗試）
+    if not marked:
+        marked = mark_turn_ended_by_id(project_root, agent_id)
 
     if not marked:
         # Fallback：標記 agent_id=null 且尚未標記過回合結束的最早一筆（FIFO）

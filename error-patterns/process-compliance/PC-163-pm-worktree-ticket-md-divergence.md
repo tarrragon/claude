@@ -3,7 +3,7 @@ id: PC-163
 title: PM-worktree ticket md 偏離 — PM 在 main repo 跑 ticket CLI 與 agent 在 worktree 作業導致雙邊不同步
 category: process-compliance
 severity: medium
-status: active
+status: resolved
 created: 2026-05-27
 related:
 - ARCH-015
@@ -12,6 +12,27 @@ related:
 ---
 
 # PC-163: PM-worktree ticket md 偏離
+
+## 狀態附記（2026-09-03，已解決）：根本原因已由 get_ticket_state_root() 消除
+
+**現況**：本 PC 的核心前提——「ticket CLI 依 cwd 的 git working tree 決定操作對象」（見下方「Why」）——已於 2026-09-02 隨 `get_ticket_state_root()`（`.claude/skills/ticket/ticket_system/lib/paths.py`）新增而不再成立。該函式讓 `claim` / `append-log` / `complete` / `set-acceptance` 等 ticket 狀態操作（經 `get_tickets_dir()` -> `get_ticket_path()` 呼叫鏈，覆蓋 `lifecycle.py` 全部生命週期命令）在偵測到 linked worktree 場景時一律回推**主倉庫**根目錄，與呼叫端 cwd 無關；`complete()` 收尾的 ticket md auto-commit 同樣錨定主倉庫（`lifecycle.py` 對應段落）。PM（main repo cwd）與 agent（worktree cwd）執行 ticket CLI 時，兩者寫入的是同一份主倉庫檔案，不再各自持有一份會分裂的 working tree 副本。
+
+**為何在建立當下（2026-05-27）成立**：當時 ticket CLI 的路徑解析全域委派 `get_project_root()`（純 cwd-based git working tree 解析），ticket 狀態操作與程式碼提交共用同一套解析邏輯，未區分兩者。PM 與 agent 若處於不同 cwd（main repo vs worktree），ticket CLI 會分別作用於各自 working tree 內的 ticket md 副本，因而產生本 PC 下方「觸發案例」記載的分裂與人工 reconcile 需求——此為 W1-096 案例的真實情境，非誤判。
+
+**對下方內容的影響**：
+
+| 段落 | 現況 |
+|------|------|
+| 「Why」「Consequence」「Action」（開頭三段） | 前提已不成立，僅作歷史記載保留 |
+| Approach A（PM cd 到 worktree） | 失效——寫入位置已與 cwd 無關，cd 與否不再影響結果 |
+| Approach B（派發前 commit 進 worktree base） | 失效——同上，該補救對象（cwd 決定寫入位置）已不存在 |
+| Approach C（ticket CLI 增加 worktree 偵測，長期解） | 已達成，但達成方式非原設想的「偵測並警告 PM」，而是更徹底的「讓寫入位置與 cwd 無關」，故不需額外偵測/警告邏輯 |
+| 防護措施三層 | 全數失效，見上 |
+| 邊界與例外 | 不受影響（該表描述「本 PC 何時不適用」，與根因是否過期無關） |
+
+**Action**：後續讀者遇本 PC 時，不再依循 Approach A/B/C 的 mitigation 建議；改讀 `get_ticket_state_root()` docstring（`.claude/skills/ticket/ticket_system/lib/paths.py`）與 `.claude/skills/worktree/SKILL.md` / `.claude/skills/ticket/SKILL.md`（2026-09 已補入現行設計說明：程式碼提交走 worktree 分支、ticket 狀態統一寫入主倉庫）理解現行架構。**邊界**：本附記僅涵蓋 ticket 狀態讀寫；`ticket track commit`（程式碼提交）仍維持 worktree 感知（`resolve_project_cwd()`），不受影響，此部分本非本 PC 原始範圍。
+
+---
 
 當 PM 在 main repo cwd 執行 `ticket track claim` / `ticket track append-log` 等命令，同時 agent 在 worktree cwd 作業並修改 ticket md 時，兩邊的 working tree 對同一 ticket md 持有不同的 uncommitted 變更，需 PM 在 agent 完成後手動 reconcile（合併 frontmatter 更新 + body 填充 + 派發期 ephemeral context 的去留決策），merge 才能順利進行。
 
@@ -72,7 +93,7 @@ related:
 
 ## 正確做法
 
-### Approach A：PM 派發後 cd 到 worktree（推薦）
+### Approach A：PM 派發後 cd 到 worktree（推薦）（歷史，已失效，見文首「狀態附記」）
 
 | 時機 | 動作 |
 |------|------|
@@ -86,7 +107,7 @@ related:
 
 **Action**：dispatch SOP 加註「派發後立即 cd worktree」或建 PM cwd-switch helper。
 
-### Approach B：派發前完成所有 PM 變更並 commit 進 worktree base（補救型）
+### Approach B：派發前完成所有 PM 變更並 commit 進 worktree base（補救型）（歷史，已失效，見文首「狀態附記」）
 
 | 動作 | 何時 |
 |------|------|
@@ -100,7 +121,7 @@ related:
 
 **Action**：僅在 Approach A 不可行（如 worktree 已存在且 PM 已寫了 main repo 的變更）時採用。
 
-### Approach C：ticket CLI 增加 worktree 偵測（長期解）
+### Approach C：ticket CLI 增加 worktree 偵測（長期解）（已達成，達成方式見文首「狀態附記」）
 
 | 動作 | 何時 |
 |------|------|
@@ -113,7 +134,7 @@ related:
 
 **Action**：列為 follow-up ANA ticket，評估成本效益後決定是否實作。
 
-## 防護措施
+## 防護措施（歷史，三層全數失效，見文首「狀態附記」）
 
 ### 第一層：派發 SOP 提醒（短期）
 
@@ -155,6 +176,7 @@ PostToolUse:Bash 偵測「`ticket track (claim|append-log|complete)` 在 main re
 
 ---
 
-**Last Updated**: 2026-05-27
+**Last Updated**: 2026-09-03
+**Version**: 1.2.0 — status 改為 resolved，文首新增「狀態附記」：根本原因（ticket CLI 依 cwd 決定操作對象）已由 get_ticket_state_root() 統一回推主倉庫消除，Approach A/B 失效、Approach C 已達成（達成方式與原設想不同）、防護措施三層失效；各對應段落標題補歷史標記，內容保留不刪
 **Version**: 1.1.0 — Layer 2 by basil-writing-critic 審查補強：表格後橋接說明（根本原因 / 邊界與例外）+ 防護措施三層各補適用條件
 **Version**: 1.0.0 — 初始建立，源 W1-096 reconcile 案例

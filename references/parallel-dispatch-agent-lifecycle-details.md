@@ -145,6 +145,49 @@ SendMessage(
 | idle_notification（重複，同一 agent） | 忽略（已在首次處理，或放生 request 尚在途） | 低 |
 | completion notification 後隨即轉 idle | 先處理 completion（驗收），再處理 idle（回收判斷） | completion 優先 |
 
+### 跨 session 殘留回收（SessionStart 掃描觸發層）
+
+上方「idle agent 回收 SOP」的判準假設 PM 對通知範圍內的 idle agent 有觀察
+與回收能力（ListAgents 可見、TaskStop 可停）。實測顯示這個假設只對**本
+session 自有**的 idle agent 成立——ListAgents 只列本 session 自有
+teammate，不列他 session 所屬者；對他 session 所屬者執行 TaskStop 一律
+回報找不到該 task。故除 idle_notification（僅在 spawn 時要求過才會送達）
+外，跨 session 殘留的 idle agent 沒有任何主動提醒管道，SOP 本身即使判準
+完整也無從被觸發。
+
+**觸發層**：`session-registry-start-hook.py` 於每次 SessionStart 唯讀掃描
+`dispatch-active.json` 中 `turn_ended_at` 已設定的 entry（回合已結束的
+候選，非「ListAgents 判定為 idle」——後者對跨 session 族群無鑑別力），
+交叉比對 `pm-registry.json` 判定歸屬，輸出報告區塊。掃描不呼叫
+ListAgents / TaskStop，也不修改任何狀態檔——這兩個互動式工具只有收到
+報告的 PM/代理人對話迴圈能存取，掃描只能交叉比對持久化狀態並產出建議。
+
+**歸屬三分 + 孤兒兩級**：
+
+| 歸屬 | 判定依據 | PM 應執行的動作 |
+|------|---------|----------------|
+| 本 session 自有 | entry 的 `session_id` 等於當前 session | 依上方續用/放生 SOP，以 ListAgents 讀取 Teammates 區塊內的列（非區塊存在性）確認狀態後決定 |
+| 他 session 所屬（仍存活） | `session_id` 不等於當前 session，且該 session 存在於 `pm-registry.json` 的 `sessions` 中且 `is_fresh(heartbeat_ts)` 為真 | 向該 session 發出回收請求 |
+| 確定孤兒 | `session_id` 不存在於 `pm-registry.json` 的 `sessions` 中（已 SessionEnd graceful release） | 記錄為框架限制，無 session 可回收 |
+| 疑似孤兒 | `session_id` 存在於 registry 但 `is_fresh()` 為假（heartbeat 逾 30 分鐘） | 先確認該 session 是否異常終止，暫不視為確定孤兒 |
+
+**接收方須自行驗證歸屬（強制）**：實測「請求方發訊息、擁有者 session 執行
+TaskStop」的路徑成立，但其前提是執行方已知該代理人屬於自己（其代理人
+清單直接列出）。回收請求的接收方須以自身代理人清單驗證該名稱確實屬於
+自己後才執行，不採信請求方提供的歸屬資訊——停錯的後果是終止他人仍在
+使用的代理人。此要求已落在掃描的回報範本中（每筆跨 session 候選的處置
+文字皆含此句），非僅記於個別 ticket 的 Solution 章節。與
+`.claude/rules/core/tool-output-trust-rules.md` 規則 5「不採信對方回報，
+查世界平面」一致。
+
+**措辭要求**：回報不得暗示目標「已失效」「無效」「可刪除」。停止不是
+終態——對已停止代理人發送訊息會帶完整 transcript 恢復它，故掃描語意為
+「釋放被佔用的執行體」而非「清除已死之物」。
+
+**已知限制**：擁有者 session 已結束時（確定孤兒），底層執行體是否仍在
+執行未經驗證——本框架目前沒有查詢或回收路徑，這是資訊缺口而非「已確認
+清除」，回報措辭需反映此不確定性。
+
 ### Wave 收尾批次放生
 
 Wave 所有 ticket 完成後，PM 對所有仍存活的 idle agent 依序發送 `shutdown_request`。
@@ -156,5 +199,6 @@ Wave 所有 ticket 完成後，PM 對所有仍存活的 idle agent 依序發送 
 
 ---
 
-**Last Updated**: 2026-09-01
+**Last Updated**: 2026-09-03
+**Version**: 1.1.0 — 新增「跨 session 殘留回收（SessionStart 掃描觸發層）」小節：補上 idle agent 回收 SOP 缺少的觸發層（`session-registry-start-hook.py` 唯讀掃描 `dispatch-active.json` + `pm-registry.json`），含歸屬三分（自有／他 session 存活／孤兒）+ 孤兒兩級判準表、接收方驗證歸屬強制要求、措辭可逆性要求。
 **Version**: 1.0.0 — 從 `.claude/pm-rules/parallel-dispatch.md`「派發機制選用準則」與「idle agent 回收 SOP」兩章節整段外移（熱點檔案叢集拆分），內容未經改寫，僅位置搬移。

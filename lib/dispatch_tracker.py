@@ -8,7 +8,10 @@ Active Dispatch Tracker 共用模組
 公開 API：
 - record_dispatch: 記錄新派發
 - clear_dispatch: 清理已完成派發（description 比對，非 SubagentStop 路徑）
-- mark_turn_ended_by_id: 標記 agent_id 對應 entry 的回合結束時刻（不刪除）
+- mark_turn_ended_by_handle: 依 agent_handle 錨定比對標記回合結束（named
+  派發的精準路徑，先於 mark_turn_ended_by_id 呼叫）
+- mark_turn_ended_by_id: 標記 agent_id 對應 entry 的回合結束時刻（不刪除，
+  未命名派發的既有路徑）
 - mark_oldest_active_null_agent_id_entry_turn_ended: 上者的 FIFO fallback
 - get_active_dispatches: 取得所有活躍派發
 - is_file_under_dispatch: 檢查檔案是否在派發中
@@ -33,14 +36,42 @@ turn_ended_at 欄位：
   目前無可靠的「代理人已真正終止」訊號（SubagentStop 不是、無 SessionEnd
   等價的 subagent 版本）。刻意不發明時間閾值式的終止判斷（如「idle 超過
   N 分鐘視為終止」）——此類判斷未經驗證，可能與 SubagentStop 前提失準
-  同樣的方式錯誤。保留至 `cleanup_expired`（既有 TTL 機制，預設
-  max_age_hours=1）回收，為目前唯一的既定回收路徑；`clear_dispatch_by_
-  id` / `clear_oldest_null_agent_id_entry` 兩個舊有刪除式函式保留於本
-  模組（供未來若出現可靠終止訊號時使用），但不應再由 SubagentStop 呼叫。
+  同樣的方式錯誤。保留至 `cleanup_expired`（既有 TTL 機制）回收，為目前
+  唯一的既定回收路徑；`clear_dispatch_by_id` / `clear_oldest_null_agent_id_
+  entry` 兩個舊有刪除式函式保留於本模組（供未來若出現可靠終止訊號時使
+  用），但不應再由 SubagentStop 呼叫。
+
+  cleanup_expired 的 TTL 依 turn_ended_at 是否已設定分層（詳見該常數
+  `TURN_ENDED_MAX_AGE_HOURS` 定義處的完整依據）：`turn_ended_at` 為 None
+  （回合仍在進行中）維持呼叫端傳入的短 TTL（預設 1 小時，起算基準
+  `dispatched_at`）不變；`turn_ended_at` 已設定者改用遠長的 TTL、起算
+  基準改為 `turn_ended_at` 本身——該 entry 已結束當前回合、不再服務
+  「檔案佔用中」的並行安全目的，短 TTL 的理由不再適用，且
+  session-registry-start-hook.py 的 SessionStart 掃描依賴這批 entry 存活
+  夠久才能被回報；若沿用舊有 1 小時 TTL，長時間閒置（實測樣本上界 17
+  小時）的殘留代理人記錄會在掃描讀到之前就被刪除。
+
+agent_handle 欄位（identifier namespace 修復）：
+  `mark_turn_ended_by_id` 依賴 `tool_response.agentId` 記錄的 `agent_id`
+  做精準比對，實測該欄位 68% 派發缺席，且即使有值也是不同識別碼命名
+  空間（未命名派發的純 hex，如 `ac6c923bb6253aa3a`），與 SubagentStop
+  自己回報、CC runtime 保證存在的 `agent_id`（named 派發格式為
+  `a<handle>-<hex>`，如 `afix-abc123-73070ca5c1d3f849`）對不上。named
+  派發（帶 `name` 參數）在平行情境下（同批次派發多個代理人）必然產生
+  多筆 `agent_id is None` 的候選，FIFO fallback 依設計於候選 > 1 時
+  停用，故 `turn_ended_at` 在此主要情境下永遠不會被設定。
+
+  `agent_handle` 欄位改在 dispatch 當下（`PostToolUse` 觸發時）同步
+  擷取派發用的 `name` 參數（可定址短 handle，非 persona），不依賴任何
+  非同步 `tool_response` 回應；`mark_turn_ended_by_handle` 以錨定 regex
+  `^a<escaped-handle>-[0-9a-f]+$` 比對 SubagentStop 回報的 `agent_id`，
+  取代對 named 派發已不可靠的舊路徑。未命名派發（無 `agent_handle`）
+  不受影響，繼續走 `mark_turn_ended_by_id` 舊路徑。
 """
 
 import json
 import os
+import re
 import subprocess
 import sys
 import uuid
@@ -53,6 +84,23 @@ from .git_utils import get_worktree_list
 
 STATE_FILE_RELATIVE = ".claude/dispatch-active.json"
 LOCK_FILE_RELATIVE = ".claude/dispatch-active.lock"
+
+# turn_ended_at 已設定的 entry 的 TTL（小時），見模組 docstring
+# 「turn_ended_at 欄位」段完整脈絡。
+#
+# 數值依據：實測殘留代理人樣本的 idle 時長上界為 17 小時，24 小時在此之上
+# 留約 7 小時餘裕（涵蓋「PM 一個工作日未巡查」的情境），同時仍為有限值
+# 而非無上限——除本機制外，目前沒有任何一條路徑會刪除已標記 turn_ended_at
+# 的 entry（SubagentStop 已改標記不刪除；`clear_dispatch` 雖存在但未被
+# 任何呼叫端實際呼叫，見本模組函式 docstring），若不設上限，
+# dispatch-active.json 會單調成長，而它被多個防護 hook
+# （active-dispatch-tracker-hook.py 的 PostToolUse、
+# session-start-sync-exclusion-check-hook.py 的 SessionStart）逐次讀取，
+# 成長不設界會拉高持續讀取成本。24 小時的有限視窗讓成長速率有上界；
+# session-registry-start-hook.py 新增的 SessionStart 掃描本就會在這個
+# 視窗內主動回報候選，本 TTL 只作為掃描未被查看時的最終回收 fallback，
+# 不是偵測手段本身——偵測手段是該掃描，不是本 TTL 到期。
+TURN_ENDED_MAX_AGE_HOURS = 24
 
 # 跨平台 file lock：Unix 走 fcntl.flock，Windows 走 msvcrt.locking。
 # 目標：_state_lock 的 read-modify-write 互斥保護可在 Windows 執行，
@@ -198,6 +246,7 @@ def record_dispatch(
     agent_id: Optional[str] = None,
     session_id: str = "",
     name: str = "",
+    agent_handle: str = "",
 ) -> None:
     """記錄一個新的派發。寫入 dispatch-active.json。
 
@@ -208,14 +257,32 @@ def record_dispatch(
         ticket_id: 關聯的 Ticket ID
         files: 代理人處理的檔案清單
         branch_name: worktree 分支名稱（用於 orphan 偵測精確比對）
-        agent_id: 代理人 ID（可選，通常由 PostToolUse/SubagentStop 補寫）
+        agent_id: 代理人 ID（可選，通常由 PostToolUse/SubagentStop 補寫）。
+            實測 `tool_response.agentId` 68% 派發缺席，且即使有值也與
+            SubagentStop 自己回報的 `agent_id` 屬不同識別碼命名空間（見
+            `mark_turn_ended_by_handle` docstring）——本欄位對 named
+            派發的精準比對已不可靠，named 派發請改用 `agent_handle`。
         session_id: 派發者（PM）的 CC session_id（multi-PM 協調層，
             供 pm-registry 交叉比對「哪個 PM session 派發了哪些工作」）
         name: named agent 的身份識別（如 `subagent_type`，例
             "thyme-python-developer"）。可合法為空——非綁定特定代理人身份
             的派發（如未指定 subagent_type 的通用 Task 呼叫）無此值。
             殘留代理人排查時，此欄位補足 agent-dispatch.jsonl 缺少的
-            named-agent 身份資訊。
+            named-agent 身份資訊。**這是 persona 識別碼，不是可定址的
+            派發 handle**——與 `agent_handle` 是兩個不同命名空間，不可
+            混用（見 `agent_handle` 說明）。
+        agent_handle: 派發時的可定址短 handle（來自 Agent 工具呼叫的
+            `name` 參數，與上方 `name`/`subagent_type` 這個 persona
+            欄位是兩個不同概念——一次派發可能同時有 handle 與 persona
+            兩個值，例如 handle="fix-abc123"、
+            persona="thyme-python-developer"）。CC runtime 會把此
+            handle 編入 SubagentStop 回報的 `agent_id`，格式為
+            `a<handle>-<hex>`（如 `afix-abc123-73070ca5c1d3f849`），
+            故此欄位可在 dispatch 當下（`PostToolUse` 觸發時）同步取得，
+            不依賴任何非同步 `tool_response` 回應，用於
+            `mark_turn_ended_by_handle` 的精準比對。可合法為空——未命名
+            派發（無 `name` 參數）無此值，此時 SubagentStop 比對維持
+            沿用 `mark_turn_ended_by_id` 的舊路徑。
 
     Note:
         v1 曾另有 parent_session_id 欄位（恆等 session_id 的冗餘值），
@@ -244,6 +311,7 @@ def record_dispatch(
             "dispatched_at": datetime.now(timezone.utc).isoformat(),
             "session_id": session_id,
             "name": name,
+            "agent_handle": agent_handle,
             "turn_ended_at": None,
         }
         state["dispatches"].append(entry)
@@ -330,8 +398,78 @@ def clear_dispatch_by_id(project_root: Path, agent_id: str) -> bool:
         return False
 
 
+def mark_turn_ended_by_handle(project_root: Path, agent_id: str) -> bool:
+    """依 agent_handle 錨定比對標記回合結束（named 派發的精準路徑，
+    SubagentStop 觸發時應先呼叫本函式，失敗才 fallback 到
+    `mark_turn_ended_by_id`）。
+
+    比對邏輯：對每筆 `agent_handle` 非空的 entry，建構錨定 regex
+    `^a<escaped-handle>-[0-9a-f]+$` 比對傳入的 `agent_id`（SubagentStop
+    回報，CC runtime 保證存在）。採錨定 regex 而非單純
+    `agent_id.startswith("a" + handle + "-")`，理由：
+
+    - 右端錨定 `$` + `[0-9a-f]+` 限定 hex 字元集到字串結尾，排除
+      「handle 是另一個 handle 的 hyphen-token 前綴」的邊界情況（例如
+      handle="fix-abc" 與另一 handle="fix-abc-2"，若用前綴比對，
+      `startswith("afix-abc-")` 對 `afix-abc-2-<hex>` 會誤判為匹配；
+      錨定 regex 因為 `$` 要求整個剩餘部分只能是 hex，`abc-2-<hex>`
+      含非 hex 字元 `-` 與可能的非 hex 字母，不會通過）
+    - `re.escape(handle)` 防禦 handle 本身含 regex 特殊字元
+
+    空字串 `agent_handle` 明確排除於比對迴圈之外（不嘗試對空 handle
+    建 pattern），避免退化成 `^a-[0-9a-f]+$` 誤配未命名派發的純 hex
+    `agent_id`（該格式無 `a` 前綴，理論上不會誤配，但顯式排除更穩固，
+    不依賴這個觀察維持不變）。
+
+    多筆匹配時的處理比照 `mark_turn_ended_by_id` 對 `agent_id` 重複
+    匹配的既定慣例（stderr 提示 + 全部標記，不是拒絕標記）——理由是
+    維持一致性優於為這個低機率情境（兩個 entry 使用完全相同的
+    `agent_handle`）發明新語意，且「全部標記」對回合結束偵測目的的
+    錯誤代價低於「都不標記」（後者會讓兩筆都繼續恆為 None，重現本函式
+    要修的問題）。
+
+    Returns:
+        bool: 是否找到並標記至少一筆記錄（無 `agent_handle` 可比對，或
+            比對無結果時回傳 False，呼叫端應 fallback 到
+            `mark_turn_ended_by_id`）
+    """
+    with _state_lock(project_root):
+        state = _read_state(project_root)
+        matched = []
+        for entry in state["dispatches"]:
+            handle = entry.get("agent_handle")
+            if not handle:
+                continue
+            pattern = "^a" + re.escape(handle) + "-[0-9a-f]+$"
+            if re.match(pattern, agent_id):
+                matched.append(entry)
+
+        if not matched:
+            return False
+
+        if len(matched) > 1:
+            print(
+                f"[dispatch_tracker] mark_turn_ended_by_handle: "
+                f"agent_id={agent_id} 比對到 {len(matched)} 筆 agent_handle "
+                f"重複匹配",
+                file=sys.stderr,
+            )
+
+        now = datetime.now(timezone.utc).isoformat()
+        for entry in matched:
+            entry["turn_ended_at"] = now
+        _write_state(project_root, state)
+        return True
+
+
 def mark_turn_ended_by_id(project_root: Path, agent_id: str) -> bool:
-    """依 agent_id 標記 dispatch 記錄的回合結束時刻（SubagentStop 主路徑）。
+    """依 agent_id 標記 dispatch 記錄的回合結束時刻。
+
+    未命名派發（無 `agent_handle`）的比對路徑——SubagentStop 觸發時應
+    先呼叫 `mark_turn_ended_by_handle`，該函式回傳 False（無 handle 可
+    比對）才呼叫本函式。named 派發請改用 `mark_turn_ended_by_handle`，
+    本函式依賴的 `tool_response.agentId` 對 named 派發已證實不可靠（見
+    模組 docstring「agent_handle 欄位」段）。
 
     不刪除 entry：entry 保留，寫入 `turn_ended_at`（ISO8601）記錄本次
     SubagentStop 事件發生時刻。重複呼叫（同一代理人多回合對話）會覆寫
@@ -463,15 +601,34 @@ def is_file_under_dispatch(project_root: Path, filepath: str) -> Optional[Dict]:
 
 
 def _is_dispatch_expired(dispatch: Dict, now: datetime, max_age_hours: int) -> bool:
-    """判斷單一派發記錄是否已超時。解析失敗視為超時。"""
-    dispatched_at_str = dispatch.get("dispatched_at", "")
+    """判斷單一派發記錄是否已超時。解析失敗視為超時。
+
+    `turn_ended_at` 已設定時改以該欄位為起算基準並套用
+    `TURN_ENDED_MAX_AGE_HOURS`（見模組層常數定義），取代呼叫端傳入的
+    `max_age_hours`——該 entry 已不再服務並行安全目的，短 TTL 的理由不再
+    適用。`turn_ended_at` 為 None（回合仍在進行中）維持原邏輯：以
+    `dispatched_at` 起算、套用呼叫端傳入的 `max_age_hours`。
+    """
+    turn_ended_at_str = dispatch.get("turn_ended_at")
+    if turn_ended_at_str:
+        anchor_field = "turn_ended_at"
+        anchor_str = turn_ended_at_str
+        effective_max_age_hours = TURN_ENDED_MAX_AGE_HOURS
+    else:
+        anchor_field = "dispatched_at"
+        anchor_str = dispatch.get("dispatched_at", "")
+        effective_max_age_hours = max_age_hours
     try:
-        dispatched_at = datetime.fromisoformat(dispatched_at_str)
-        if dispatched_at.tzinfo is None:
-            dispatched_at = dispatched_at.replace(tzinfo=timezone.utc)
-        return (now - dispatched_at).total_seconds() / 3600 > max_age_hours
+        anchor = datetime.fromisoformat(anchor_str)
+        if anchor.tzinfo is None:
+            anchor = anchor.replace(tzinfo=timezone.utc)
+        return (now - anchor).total_seconds() / 3600 > effective_max_age_hours
     except (ValueError, TypeError) as e:
-        print(f"[dispatch_tracker] cleanup_expired: 時間解析失敗 (dispatched_at='{dispatched_at_str}'): {e}", file=sys.stderr)
+        print(
+            f"[dispatch_tracker] cleanup_expired: 時間解析失敗 "
+            f"({anchor_field}='{anchor_str}'): {e}",
+            file=sys.stderr,
+        )
         return True
 
 

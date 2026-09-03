@@ -207,6 +207,73 @@ class TestSubagentStopDispatchCleanupSchema:
         assert "[WAIT]" not in msg
 
 
+class TestHandleFirstPrecedence:
+    """agent_handle 精準比對先於 agent_id 精準比對呼叫（識別碼命名空間
+    修復票）。"""
+
+    def _patch(
+        self, hook_mod, monkeypatch, tmp_path,
+        handle_result, id_result, remaining=None,
+    ):
+        state_dir = tmp_path / ".claude" / "dispatch-state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        state_file = state_dir / "dispatch-active.json"
+        state_file.write_text("{}", encoding="utf-8")
+
+        calls = {"handle": 0, "id": 0}
+
+        def _mock_handle(root, aid):
+            calls["handle"] += 1
+            return handle_result
+
+        def _mock_id(root, aid):
+            calls["id"] += 1
+            return id_result
+
+        monkeypatch.setattr(hook_mod, "get_state_file_path", lambda root: state_file)
+        monkeypatch.setattr(hook_mod, "mark_turn_ended_by_handle", _mock_handle)
+        monkeypatch.setattr(hook_mod, "mark_turn_ended_by_id", _mock_id)
+        monkeypatch.setattr(
+            hook_mod, "mark_oldest_active_null_agent_id_entry_turn_ended",
+            lambda root: False,
+        )
+        monkeypatch.setattr(
+            hook_mod, "get_active_dispatches", lambda root: remaining or []
+        )
+        monkeypatch.setattr(
+            hook_mod, "_get_wait_dedup_state_file",
+            lambda root: tmp_path / "wait-broadcast-dedup.json",
+        )
+        monkeypatch.setattr(sys, "stdin", _stdin({"agent_id": "afix-abc-hex123"}))
+        return calls
+
+    def test_handle_match_skips_id_call(self, hook_mod, monkeypatch, tmp_path):
+        """agent_handle 比對成功時，不再呼叫 agent_id 精準比對——避免對
+        已標記的 entry 做不必要的二次查找。"""
+        calls = self._patch(
+            hook_mod, monkeypatch, tmp_path, handle_result=True, id_result=True
+        )
+
+        rc = hook_mod.main()
+
+        assert rc == 0
+        assert calls["handle"] == 1
+        assert calls["id"] == 0, "handle 比對成功後不應再呼叫 agent_id 比對"
+
+    def test_handle_miss_falls_back_to_id(self, hook_mod, monkeypatch, tmp_path):
+        """agent_handle 比對失敗（無 handle 可比對或無匹配）時，fallback
+        到既有的 agent_id 精準比對——未命名派發的既有行為不變。"""
+        calls = self._patch(
+            hook_mod, monkeypatch, tmp_path, handle_result=False, id_result=True
+        )
+
+        rc = hook_mod.main()
+
+        assert rc == 0
+        assert calls["handle"] == 1
+        assert calls["id"] == 1, "handle 比對失敗後應 fallback 到 agent_id 比對"
+
+
 class TestRealDispatchTrackerIntegration:
     """端對端整合測試：真實 dispatch_tracker 函式 + 真實 dispatch-active.json
     檔案 I/O（不 mock mark_turn_ended_by_id / get_active_dispatches），驗證
@@ -253,6 +320,100 @@ class TestRealDispatchTrackerIntegration:
 
         payload = json.loads(capsys.readouterr().out)
         assert "[OK]" in payload["systemMessage"]
+
+    def test_named_dispatch_marked_via_agent_handle_when_agent_id_never_recorded(
+        self, hook_mod, monkeypatch, capsys, tmp_path
+    ):
+        """核心回歸案例：named 派發的 tool_response.agentId 從未補齊
+        （record_dispatch 的 agent_id 參數為 None，重現識別碼命名空間
+        修復票的實測現況），僅靠 agent_handle 仍能在 SubagentStop 時精準
+        標記——這是本票要修的主要情境。"""
+        from lib.dispatch_tracker import get_active_dispatches, record_dispatch
+
+        project_root = hook_mod._get_project_root()
+        record_dispatch(
+            project_root,
+            agent_description="修復某功能",
+            ticket_id="W7-9998",
+            agent_id=None,  # 實測現況：named 派發的 tool_response.agentId 缺席
+            name="thyme-python-developer",
+            agent_handle="fix-abc123",
+        )
+
+        monkeypatch.setattr(
+            hook_mod, "_get_wait_dedup_state_file",
+            lambda root: tmp_path / "wait-broadcast-dedup.json",
+        )
+        # SubagentStop 回報的 agent_id：CC runtime 保證存在，格式
+        # a<handle>-<hex>，與上方 record_dispatch 的 agent_id=None 無關
+        monkeypatch.setattr(
+            sys, "stdin", _stdin({"agent_id": "afix-abc123-73070ca5c1d3f849"})
+        )
+
+        rc = hook_mod.main()
+        assert rc == 0
+
+        dispatches = get_active_dispatches(project_root)
+        assert len(dispatches) == 1, "entry 應保留，不應被刪除"
+        entry = dispatches[0]
+        assert entry["turn_ended_at"] is not None, (
+            "修復前此案例的 turn_ended_at 恆為 None（agent_id 精準比對與 "
+            "FIFO 皆失敗）；修復後應透過 agent_handle 成功標記"
+        )
+        assert entry["agent_id"] is None, "agent_id 欄位本身不變，仍為 None"
+
+    def test_parallel_dispatch_with_multiple_null_agent_id_candidates(
+        self, hook_mod, monkeypatch, capsys, tmp_path
+    ):
+        """AC2：平行派發情境（>1 個 agent_id=None 候選，FIFO 依設計停用）
+        下，named 派發仍可透過 agent_handle 精準標記；同批其他未被
+        SubagentStop 觸發的候選不受影響（不誤標）。"""
+        from lib.dispatch_tracker import get_active_dispatches, record_dispatch
+
+        project_root = hook_mod._get_project_root()
+        # 模擬同批次平行派發 4 個代理人，agent_id 皆缺席（tool_response.
+        # agentId 缺席為實測現況），其中 3 個為 named（各有 agent_handle）
+        record_dispatch(
+            project_root, "task A", agent_id=None,
+            name="thyme-python-developer", agent_handle="fix-taskA",
+        )
+        record_dispatch(
+            project_root, "task B", agent_id=None,
+            name="thyme-documentation-integrator", agent_handle="fix-taskB",
+        )
+        record_dispatch(
+            project_root, "task C", agent_id=None,
+            name="basil-hook-architect", agent_handle="fix-taskC",
+        )
+        record_dispatch(project_root, "task D (unnamed)", agent_id=None)
+
+        # 候選數 4（> 1）：修復前這會使 FIFO fallback 依設計停用，
+        # agent_id 精準比對也因命名空間不符必然失敗，taskB 的
+        # turn_ended_at 會恆為 None。修復後應透過 agent_handle 精準比對
+        # 成功，不受候選數 > 1 影響（handle 比對本就不經過 FIFO 路徑）。
+        monkeypatch.setattr(
+            hook_mod, "_get_wait_dedup_state_file",
+            lambda root: tmp_path / "wait-broadcast-dedup.json",
+        )
+        monkeypatch.setattr(
+            sys, "stdin", _stdin({"agent_id": "afix-taskB-7c3ab68f2489cc2b"})
+        )
+
+        rc = hook_mod.main()
+        assert rc == 0
+
+        dispatches = get_active_dispatches(project_root)
+        assert len(dispatches) == 4, "entry 皆應保留，不應被刪除"
+        by_handle = {d.get("agent_handle") or d["agent_description"]: d for d in dispatches}
+
+        assert by_handle["fix-taskB"]["turn_ended_at"] is not None, (
+            "平行情境（候選 > 1）下，named 派發應仍能透過 agent_handle "
+            "精準標記，不落入 FIFO 停用分支"
+        )
+        # 未被本次 SubagentStop 觸發的其他候選不應被誤標
+        assert by_handle["fix-taskA"]["turn_ended_at"] is None
+        assert by_handle["fix-taskC"]["turn_ended_at"] is None
+        assert by_handle["task D (unnamed)"]["turn_ended_at"] is None
 
 
 class TestStopHookActiveCircuitBreaker:

@@ -24,6 +24,7 @@ from lib.dispatch_tracker import (
     is_file_under_dispatch,
     cleanup_expired,
     detect_orphan_branches,
+    mark_turn_ended_by_handle,
     mark_turn_ended_by_id,
     mark_oldest_active_null_agent_id_entry_turn_ended,
 )
@@ -91,6 +92,25 @@ class TestRecordDispatch:
         dispatches = get_active_dispatches(project_root)
         assert dispatches[0]["turn_ended_at"] is None
 
+    def test_record_dispatch_stores_agent_handle(self, project_root: Path):
+        """agent_handle（可定址派發 handle）與 name（persona）分開儲存，
+        不互相覆寫。"""
+        record_dispatch(
+            project_root,
+            agent_description="Fix dart_parser",
+            name="thyme-python-developer",
+            agent_handle="fix-abc123",
+        )
+        dispatches = get_active_dispatches(project_root)
+        assert dispatches[0]["agent_handle"] == "fix-abc123"
+        assert dispatches[0]["name"] == "thyme-python-developer"
+
+    def test_record_dispatch_default_agent_handle_is_empty(self, project_root: Path):
+        """未提供 agent_handle 時預設為空字串（未命名派發）。"""
+        record_dispatch(project_root, "Task without handle")
+        dispatches = get_active_dispatches(project_root)
+        assert dispatches[0]["agent_handle"] == ""
+
 
 class TestClearDispatch:
     def test_clear_dispatch(self, project_root: Path):
@@ -111,6 +131,162 @@ class TestClearDispatch:
         result = clear_dispatch(project_root, "Task X")
         assert result is False
         assert len(get_active_dispatches(project_root)) == 1
+
+
+class TestMarkTurnEndedByHandle:
+    """named 派發的精準比對路徑：以 agent_handle 錨定比對 SubagentStop
+    回報的 agent_id，取代對 named 派發已不可靠的 tool_response.agentId。
+    """
+
+    @pytest.mark.parametrize(
+        "handle,agent_id_hex_suffix",
+        [
+            ("fix-W3-1154", "73070ca5c1d3f849"),
+            ("fix-W3-1211", "7c3ab68f2489cc2b"),
+            ("thyme-W4-027", "c56d248521cbfaf6"),
+        ],
+    )
+    def test_matches_three_reported_historical_examples(
+        self, project_root: Path, handle: str, agent_id_hex_suffix: str
+    ):
+        """AC1 要求：以 PM 逐字對照過的三筆歷史紀錄驗證 handle 比對邏輯
+        （非本次新造測資，取自票面 Problem Analysis 記載的實際觀測值）。"""
+        record_dispatch(project_root, "task", agent_handle=handle)
+        agent_id = f"a{handle}-{agent_id_hex_suffix}"
+
+        result = mark_turn_ended_by_handle(project_root, agent_id)
+
+        assert result is True
+        dispatches = get_active_dispatches(project_root)
+        assert dispatches[0]["turn_ended_at"] is not None
+
+    def test_matches_single_entry_by_handle(self, project_root: Path):
+        """單一 handle 與其對應 agent_id 精準比對成功。"""
+        record_dispatch(
+            project_root, "Fix parser", agent_handle="fix-abc123"
+        )
+
+        result = mark_turn_ended_by_handle(
+            project_root, "afix-abc123-73070ca5c1d3f849"
+        )
+
+        assert result is True
+        dispatches = get_active_dispatches(project_root)
+        assert dispatches[0]["turn_ended_at"] is not None
+
+    def test_no_match_returns_false_and_does_not_mutate(self, project_root: Path):
+        """agent_id 與任何已知 handle 都對不上時回傳 False，不標記任何
+        entry（呼叫端應 fallback 到 mark_turn_ended_by_id）。"""
+        record_dispatch(project_root, "Fix parser", agent_handle="fix-abc123")
+
+        result = mark_turn_ended_by_handle(
+            project_root, "adifferent-handle-73070ca5c1d3f849"
+        )
+
+        assert result is False
+        dispatches = get_active_dispatches(project_root)
+        assert dispatches[0]["turn_ended_at"] is None
+
+    def test_empty_handle_entries_are_skipped(self, project_root: Path):
+        """agent_handle 為空字串（未命名派發）不參與比對，即使 agent_id
+        剛好是純 hex 字串也不誤配。"""
+        record_dispatch(project_root, "Unnamed task", agent_handle="")
+
+        result = mark_turn_ended_by_handle(project_root, "ac6c923bb6253aa3a")
+
+        assert result is False
+        dispatches = get_active_dispatches(project_root)
+        assert dispatches[0]["turn_ended_at"] is None
+
+    def test_prefix_collision_boundary_does_not_misfire(self, project_root: Path):
+        """一個 handle 是另一個 handle 的 hyphen-token 前綴時（PM 點名的
+        風險情境：handle="fix-abc" 是 handle="fix-abc-2" 的字面前綴，
+        naive startswith 比對會誤判——`\"afix-abc-2-<hex>\"` 確實以
+        `\"afix-abc-\"` 開頭）。錨定 regex 要求 `-` 後面到字串結尾只能是
+        hex 字元，`\"2-73070ca5c1d3f849\"` 含非 hex 的 `-`，比對失敗，
+        故只有真正對應的那筆（`fix-abc-2`）被標記，`fix-abc` 不受影響。
+        """
+        record_dispatch(project_root, "Shorter handle task", agent_handle="fix-abc")
+        record_dispatch(
+            project_root, "Longer handle task", agent_handle="fix-abc-2"
+        )
+
+        result = mark_turn_ended_by_handle(
+            project_root, "afix-abc-2-73070ca5c1d3f849"
+        )
+
+        assert result is True
+        dispatches = get_active_dispatches(project_root)
+        by_handle = {d["agent_handle"]: d for d in dispatches}
+        assert by_handle["fix-abc-2"]["turn_ended_at"] is not None
+        assert by_handle["fix-abc"]["turn_ended_at"] is None, (
+            "較短的 handle 不應被較長 handle（本身以 - 分隔出額外 token）"
+            "的 agent_id 誤配"
+        )
+
+    def test_duplicate_handle_marks_all_and_warns(
+        self, project_root: Path, capsys
+    ):
+        """兩筆 entry 使用完全相同的 agent_handle（低機率情境）：比照
+        mark_turn_ended_by_id 對 agent_id 重複匹配的既定慣例，全部標記
+        並於 stderr 提示，不是拒絕標記。"""
+        record_dispatch(project_root, "Task A", agent_handle="dup-handle")
+        record_dispatch(project_root, "Task B", agent_handle="dup-handle")
+
+        result = mark_turn_ended_by_handle(
+            project_root, "adup-handle-73070ca5c1d3f849"
+        )
+
+        assert result is True
+        dispatches = get_active_dispatches(project_root)
+        assert all(d["turn_ended_at"] is not None for d in dispatches)
+        assert "重複匹配" in capsys.readouterr().err
+
+    def test_no_entries_have_agent_handle_returns_false(self, project_root: Path):
+        """所有 entry 皆無 agent_handle（全為未命名派發）時回傳 False。"""
+        record_dispatch(project_root, "Unnamed task")
+
+        result = mark_turn_ended_by_handle(project_root, "ac6c923bb6253aa3a")
+
+        assert result is False
+
+    def test_pm_reported_prefix_example_does_not_collide(self, project_root: Path):
+        """PM 裁決時舉的具體例子（handle 數字字尾互為前綴）：兩者位數不同
+        導致分隔字元位置不同，不論用 startswith 或錨定 regex 皆不會誤配，
+        本測試直接對照 PM 舉的字面例子避免日後重構移除防護時無感回歸。
+        """
+        record_dispatch(project_root, "Shorter numeric suffix", agent_handle="fix-115")
+        record_dispatch(project_root, "Longer numeric suffix", agent_handle="fix-1154")
+
+        result = mark_turn_ended_by_handle(
+            project_root, "afix-1154-73070ca5c1d3f849"
+        )
+
+        assert result is True
+        dispatches = get_active_dispatches(project_root)
+        by_handle = {d["agent_handle"]: d for d in dispatches}
+        assert by_handle["fix-1154"]["turn_ended_at"] is not None
+        assert by_handle["fix-115"]["turn_ended_at"] is None
+
+    def test_handle_with_leading_and_trailing_hyphen(self, project_root: Path):
+        """handle 本身含開頭或結尾 hyphen 時，re.escape 仍能正確建構
+        pattern，不因特殊字元位置造成比對錯誤。"""
+        record_dispatch(project_root, "Trailing hyphen handle", agent_handle="foo-")
+        record_dispatch(project_root, "Leading hyphen handle", agent_handle="-bar")
+
+        result_trailing = mark_turn_ended_by_handle(
+            project_root, "afoo--73070ca5c1d3f849"
+        )
+        result_leading = mark_turn_ended_by_handle(
+            project_root, "a-bar-73070ca5c1d3f849"
+        )
+
+        assert result_trailing is True
+        assert result_leading is True
+        dispatches = get_active_dispatches(project_root)
+        by_handle = {d["agent_handle"]: d for d in dispatches}
+        assert by_handle["foo-"]["turn_ended_at"] is not None
+        assert by_handle["-bar"]["turn_ended_at"] is not None
 
 
 class TestMarkTurnEndedById:
@@ -328,6 +504,93 @@ class TestCleanupExpired:
         removed = cleanup_expired(project_root)
         assert removed == 0
         assert len(get_active_dispatches(project_root)) == 1
+
+
+class TestTurnEndedTtl:
+    """turn_ended_at 已設定的 entry 套用長 TTL，取代呼叫端傳入的短 TTL。
+
+    背景：cleanup_expired 原僅讀 dispatched_at，完全不看 turn_ended_at，
+    使長時間閒置的殘留代理人在其 dispatch-active.json entry 被本機制刪除
+    後，SessionStart 掃描讀不到候選資料。
+    """
+
+    def test_turn_ended_entry_survives_default_1h_ttl(self, project_root: Path):
+        """turn_ended_at 2 小時前設定、dispatched_at 25 小時前（皆超過舊
+        1 小時 TTL），套用長 TTL 後仍保留。"""
+        old_dispatched = (
+            datetime.now(timezone.utc) - timedelta(hours=25)
+        ).isoformat()
+        turn_ended_2h_ago = (
+            datetime.now(timezone.utc) - timedelta(hours=2)
+        ).isoformat()
+        state = {
+            "dispatches": [
+                {
+                    "agent_description": "idle agent",
+                    "ticket_id": "",
+                    "files": [],
+                    "dispatched_at": old_dispatched,
+                    "turn_ended_at": turn_ended_2h_ago,
+                },
+            ]
+        }
+        state_file = get_state_file_path(project_root)
+        state_file.write_text(json.dumps(state), encoding="utf-8")
+
+        removed = cleanup_expired(project_root)  # default max_age_hours=1
+
+        assert removed == 0
+        assert len(get_active_dispatches(project_root)) == 1
+
+    def test_turn_ended_entry_expires_after_long_ttl(self, project_root: Path):
+        """turn_ended_at 超過 TURN_ENDED_MAX_AGE_HOURS（25 小時前）仍會被
+        清理——長 TTL 是有限值，非無上限。"""
+        turn_ended_25h_ago = (
+            datetime.now(timezone.utc) - timedelta(hours=25)
+        ).isoformat()
+        state = {
+            "dispatches": [
+                {
+                    "agent_description": "stale idle agent",
+                    "ticket_id": "",
+                    "files": [],
+                    "dispatched_at": turn_ended_25h_ago,
+                    "turn_ended_at": turn_ended_25h_ago,
+                },
+            ]
+        }
+        state_file = get_state_file_path(project_root)
+        state_file.write_text(json.dumps(state), encoding="utf-8")
+
+        removed = cleanup_expired(project_root)
+
+        assert removed == 1
+        assert len(get_active_dispatches(project_root)) == 0
+
+    def test_turn_ended_none_still_uses_short_ttl(self, project_root: Path):
+        """turn_ended_at 為 None（回合仍在進行中）維持原有短 TTL 行為不變
+        （不因本次改動而放寬）。"""
+        old_time = (
+            datetime.now(timezone.utc) - timedelta(minutes=90)
+        ).isoformat()
+        state = {
+            "dispatches": [
+                {
+                    "agent_description": "still running task",
+                    "ticket_id": "",
+                    "files": [],
+                    "dispatched_at": old_time,
+                    "turn_ended_at": None,
+                },
+            ]
+        }
+        state_file = get_state_file_path(project_root)
+        state_file.write_text(json.dumps(state), encoding="utf-8")
+
+        removed = cleanup_expired(project_root)  # default max_age_hours=1
+
+        assert removed == 1
+        assert len(get_active_dispatches(project_root)) == 0
 
 
 class TestDetectOrphanBranches:

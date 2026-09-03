@@ -45,8 +45,14 @@ def _make_input(
     isolation="",
     prompt="",
     subagent_type="",
+    name="",
 ):
-    """建構 PostToolUse(Agent) stdin payload。"""
+    """建構 PostToolUse(Agent) stdin payload。
+
+    `name`: 派發時的可定址短 handle（tool_input.name，非上方
+    subagent_type 這個 persona 欄位），對應 dispatch_tracker.py 的
+    agent_handle 欄位。
+    """
     return {
         "tool_use_id": tool_use_id,
         "tool_input": {
@@ -55,6 +61,7 @@ def _make_input(
             "prompt": prompt,
             "run_in_background": is_background,
             "subagent_type": subagent_type,
+            "name": name,
         },
         "tool_response": {
             "agentId": agent_id,
@@ -138,6 +145,37 @@ def test_no_subagent_type_records_empty_name(monkeypatch, capsys):
     exit_code = _hook.main()
     assert exit_code == 0
     assert record_calls[0]["name"] == ""
+
+
+def test_records_dispatch_with_agent_handle(monkeypatch, capsys):
+    """named 派發（tool_input.name）時，agent_handle 一併寫入
+    record_dispatch，且與 subagent_type（name/persona）分開，不互相
+    覆寫。"""
+    record_calls = []
+    _patch_common(monkeypatch, record_calls=record_calls)
+
+    payload = _make_input(
+        subagent_type="thyme-python-developer", name="fix-abc123"
+    )
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+
+    exit_code = _hook.main()
+    assert exit_code == 0
+    assert record_calls[0]["agent_handle"] == "fix-abc123"
+    assert record_calls[0]["name"] == "thyme-python-developer"
+
+
+def test_no_name_param_records_empty_agent_handle(monkeypatch, capsys):
+    """未指定 tool_input.name（未命名派發）時，agent_handle 記為空字串。"""
+    record_calls = []
+    _patch_common(monkeypatch, record_calls=record_calls)
+
+    payload = _make_input(name="")
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+
+    exit_code = _hook.main()
+    assert exit_code == 0
+    assert record_calls[0]["agent_handle"] == ""
 
 
 def test_no_agent_id_in_response_still_records(monkeypatch, capsys):
