@@ -1,3 +1,17 @@
+## [2.50.1] - 2026-09-03
+
+### Summary
+fix: 統一五處掃描搬移命令的根目錄解析為 ticket 狀態 root; fix: 修復 checkpoint_state handoff pending 目錄路徑錯字; fix: topic_registry 改用 ticket 狀態 root 解析 (+1 more)
+
+Changes: 3 fix, 1 chore
+
+- fix: 統一五處掃描搬移命令的根目錄解析為 ticket 狀態 root
+- fix: 修復 checkpoint_state handoff pending 目錄路徑錯字
+- fix: topic_registry 改用 ticket 狀態 root 解析
+- chore: VERSION 回寫 （ 骨架固定句 + runqueue root 修復傳播至 canonical）
+
+---
+
 ## [2.50.0] - 2026-09-03
 
 ### Summary

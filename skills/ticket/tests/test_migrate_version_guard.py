@@ -43,7 +43,12 @@ def _write_todolist(project_root: Path, versions: list) -> None:
 
 @pytest.fixture
 def project(tmp_path, monkeypatch):
-    """建立 tmp 專案結構，patch 所有涉及的 get_project_root 引用"""
+    """建立 tmp 專案結構，patch 所有涉及的 get_project_root 引用。
+
+    0.2.1-W4-031：migrate.py 的備份路徑解析（_backup_ticket）已改用
+    get_ticket_state_root()（非 get_project_root()，理由見該命令模組內
+    對應行的註解），故改 patch migrate_mod 上的 get_ticket_state_root 名稱。
+    """
     source_tickets_dir = (
         tmp_path / "docs" / "work-logs" / "v0" / "v0.18" / "v0.18.0" / "tickets"
     )
@@ -53,7 +58,7 @@ def project(tmp_path, monkeypatch):
     import ticket_system.lib.paths as paths_mod
     import ticket_system.lib.version as version_mod
 
-    monkeypatch.setattr(migrate_mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(migrate_mod, "get_ticket_state_root", lambda: tmp_path)
     monkeypatch.setattr(paths_mod, "get_project_root", lambda: tmp_path)
     monkeypatch.setattr(version_mod, "get_project_root", lambda: tmp_path)
 

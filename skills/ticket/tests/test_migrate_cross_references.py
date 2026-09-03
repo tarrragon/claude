@@ -63,15 +63,21 @@ def _read_frontmatter(path: Path) -> dict:
 
 @pytest.fixture
 def project_with_tickets(tmp_path, monkeypatch):
-    """建立 tmp 專案結構並 patch get_project_root 到 migrate 模組"""
+    """建立 tmp 專案結構並 patch get_project_root 到 migrate 模組。
+
+    0.2.1-W4-031：migrate.py 的交叉引用掃描（_update_cross_references）已
+    改用 get_ticket_state_root()（非 get_project_root()，理由見該命令模組
+    內對應行的註解），故改 patch migrate_mod 上的 get_ticket_state_root
+    名稱。
+    """
     work_logs = tmp_path / "docs" / "work-logs" / "v0" / "v0.18" / "v0.18.0" / "tickets"
     work_logs.mkdir(parents=True)
 
-    # Patch 兩處 get_project_root：migrate 模組的引用 和 paths 模組的來源
+    # Patch 兩處：migrate 模組的引用 和 paths 模組的來源
     import ticket_system.commands.migrate as migrate_mod
     import ticket_system.lib.paths as paths_mod
 
-    monkeypatch.setattr(migrate_mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(migrate_mod, "get_ticket_state_root", lambda: tmp_path)
     monkeypatch.setattr(paths_mod, "get_project_root", lambda: tmp_path)
 
     return tmp_path, work_logs

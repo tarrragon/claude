@@ -103,7 +103,7 @@ def mock_dispatch_active(tmp_path: Path) -> Callable[..., Path]:
 
 @pytest.fixture
 def mock_handoff_pending(tmp_path: Path) -> Callable[..., Path]:
-    """工廠 fixture：在 .claude/handoffs/pending/ 產出 json 檔。"""
+    """工廠 fixture：在 .claude/handoff/pending/ 產出 json 檔。"""
 
     def _writer(
         ticket_id: str = "W10-017.8",
@@ -112,7 +112,7 @@ def mock_handoff_pending(tmp_path: Path) -> Callable[..., Path]:
         extra: Optional[Dict[str, Any]] = None,
     ) -> Path:
         root = project_root or tmp_path
-        pending_dir = root / ".claude" / "handoffs" / "pending"
+        pending_dir = root / ".claude" / "handoff" / "pending"
         pending_dir.mkdir(parents=True, exist_ok=True)
         payload = {"ticket_id": ticket_id, "direction": "to-self"}
         if extra:

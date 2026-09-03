@@ -116,7 +116,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from ticket_system.constants import STATUS_PENDING
-from ticket_system.lib.paths import get_project_root
+from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.parser import parse_frontmatter
 
 # assignment log 讀寫層已下沉至 lib/topic_assignments.py（create.py 亦需
@@ -136,7 +136,10 @@ def _iter_ticket_files() -> List[Path]:
     """掃描所有版本目錄下的 ticket 檔案（唯讀，比照既有遷移命令的雙
     掃描策略：支援 flat 與三層版本目錄結構）。
     """
-    work_logs_root = get_project_root() / "docs" / "work-logs"
+    # 根目錄改用 get_ticket_state_root()（非 get_project_root()，2026-09-02）：
+    # 掃描對象是所有版本的 ticket 檔案（ticket 狀態），linked worktree 內
+    # 執行時必須統一解析主倉庫，理由見 get_ticket_state_root docstring。
+    work_logs_root = get_ticket_state_root() / "docs" / "work-logs"
     if not work_logs_root.exists():
         return []
     flat_dirs = list(work_logs_root.glob("v*/tickets"))

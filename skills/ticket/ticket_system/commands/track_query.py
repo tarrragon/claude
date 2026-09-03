@@ -58,7 +58,7 @@ from ticket_system.lib.staleness import (
     LEVEL_WARNING,
     LEVEL_CRITICAL,
 )
-from ticket_system.lib.paths import get_project_root
+from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.ticket_formatter import (
     format_ticket_summary,
     format_ticket_list,
@@ -166,7 +166,10 @@ def _print_cross_version_warning(current_version: str) -> None:
     Args:
         current_version: 當前顯示的版本號（無 v 前綴，如 "0.3.0"）
     """
-    root = get_project_root()
+    # 根目錄改用 get_ticket_state_root()（非 get_project_root()，2026-09-02）：
+    # 掃描對象是所有版本目錄（ticket 狀態），linked worktree 內執行時必須
+    # 統一解析主倉庫，理由見 get_ticket_state_root docstring。
+    root = get_ticket_state_root()
     work_logs = root / WORK_LOGS_DIR
 
     if not work_logs.exists():

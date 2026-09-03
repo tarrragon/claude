@@ -22,13 +22,13 @@ from typing import Optional, Dict, Any, List
 from ticket_system.lib.ui_constants import SEPARATOR_PRIMARY
 from ticket_system.lib.constants import WORK_LOGS_DIR, TICKETS_DIR
 from ticket_system.lib.ticket_loader import (
-    get_project_root,
     get_ticket_path,
     get_tickets_dir,
     load_ticket,
     save_ticket,
     resolve_version,
 )
+from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.parser import parse_frontmatter
 from ticket_system.lib.ticket_validator import validate_ticket_id
 from ticket_system.lib.id_parser import (
@@ -122,7 +122,10 @@ def _update_cross_references(old_id: str, new_id: str) -> int:
         int: 更新的檔案數量
     """
     updated_count = 0
-    work_logs_root = get_project_root() / "docs" / "work-logs"
+    # 根目錄改用 get_ticket_state_root()（非 get_project_root()，2026-09-02）：
+    # 掃描對象是所有版本的 ticket 檔案（ticket 狀態），linked worktree 內
+    # 執行時必須統一解析主倉庫，理由見 get_ticket_state_root docstring。
+    work_logs_root = get_ticket_state_root() / "docs" / "work-logs"
 
     # 掃描所有版本目錄下的 tickets 資料夾
     # 支援 flat (v{ver}/tickets) 與三層 (v{major}/v{major.minor}/v{ver}/tickets)
@@ -247,7 +250,10 @@ def _backup_ticket(version: str, ticket_id: str) -> Optional[Path]:
     Returns:
         Path: 備份檔案路徑，或 None 如果備份失敗
     """
-    root = get_project_root()
+    # 根目錄改用 get_ticket_state_root()（非 get_project_root()，2026-09-02）：
+    # 備份目錄是 ticket 狀態的附屬產物，理由同上（見 get_ticket_state_root
+    # docstring）。
+    root = get_ticket_state_root()
     backup_dir = root / ".claude" / "migration-backups" / datetime.now().strftime("%Y%m%d-%H%M%S")
     backup_dir.mkdir(parents=True, exist_ok=True)
 

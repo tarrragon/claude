@@ -53,11 +53,17 @@ def _patch_get_project_root(monkeypatch, tmp_path: Path) -> None:
 
     收斂原本散布於 fixture 的三處 monkeypatch；paths 模組以 try/except 保留
     跨版本容錯（並非所有版本都暴露 paths.get_project_root）。
+
+    0.2.1-W4-031：migrate.py 的根目錄解析已改用 get_ticket_state_root()
+    （非 get_project_root()，理由見該命令模組內對應行的註解），故改 patch
+    migrate_mod 上的 get_ticket_state_root 名稱；loader_mod / paths_mod 的
+    get_project_root patch 保留（get_ticket_state_root 非 worktree 場景會
+    委派 paths_mod.get_project_root，此處為雙重保險）。
     """
     import ticket_system.commands.migrate as migrate_mod
     import ticket_system.lib.ticket_loader as loader_mod
 
-    monkeypatch.setattr(migrate_mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(migrate_mod, "get_ticket_state_root", lambda: tmp_path)
     monkeypatch.setattr(loader_mod, "get_project_root", lambda: tmp_path)
 
     # ImportError 預期 fallback：舊版 ticket_system 未抽出 lib/paths.py，import 失敗時跳過 monkeypatch 不影響其他兩個模組的 patch

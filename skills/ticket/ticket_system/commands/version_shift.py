@@ -18,10 +18,10 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 
 from ticket_system.lib.ticket_loader import (
-    get_project_root,
     load_ticket,
     save_ticket,
 )
+from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.constants import WORK_LOGS_DIR, TICKETS_DIR
 from ticket_system.lib.parser import parse_frontmatter, YAMLParseError
 from ticket_system.lib.messages import (
@@ -774,7 +774,11 @@ def execute(args: argparse.Namespace) -> int:
     Returns:
         終止碼（0 成功，1 失敗）
     """
-    project_root = get_project_root()
+    # 根目錄改用 get_ticket_state_root()（非 get_project_root()，2026-09-02）：
+    # 本命令搬移/掃描的 docs/work-logs/v{version}/ 是 ticket 狀態的一部分，
+    # 在 linked worktree 內執行時必須統一解析主倉庫，理由與票面 md 統一寫入
+    # 主倉庫相同（見 get_ticket_state_root docstring）。
+    project_root = get_ticket_state_root()
     if project_root is None:
         print(format_error(ErrorMessages.PROJECT_ROOT_NOT_FOUND))
         return 1

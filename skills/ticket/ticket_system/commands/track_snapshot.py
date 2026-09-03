@@ -33,7 +33,7 @@ from ticket_system.lib.constants import (
     STATUS_PENDING,
     WORK_LOGS_DIR,
 )
-from ticket_system.lib.paths import get_project_root
+from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.ticket_loader import list_tickets
 
 VERSION_PATTERN = re.compile(r"^v(\d+\.\d+\.\d+)$")
@@ -143,7 +143,10 @@ def _render_degraded_snapshot(error: str) -> int:
 
 def _scan_all_versions() -> List[str]:
     """掃描所有版本目錄"""
-    root = get_project_root()
+    # 根目錄改用 get_ticket_state_root()（非 get_project_root()，2026-09-02）：
+    # 掃描對象是所有版本目錄（ticket 狀態），linked worktree 內執行時必須
+    # 統一解析主倉庫，理由見 get_ticket_state_root docstring。
+    root = get_ticket_state_root()
     work_logs = root / WORK_LOGS_DIR
     if not work_logs.exists():
         return []

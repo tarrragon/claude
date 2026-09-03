@@ -1,10 +1,11 @@
 """跨 agent 協調狀態（handoff pending/archive、dispatch-active.json）root 解析
-統一測試（0.2.1-W4-028 / 0.2.1-W4-034）。
+統一測試（0.2.1-W4-028 / 0.2.1-W4-034 / 0.2.1-W4-031）。
 
 驗證 handoff.py / resume.py / handoff_gc.py / track_dashboard.py /
 track_dispatch_check.py / checkpoint_state.py / handoff_utils.py /
-track_runqueue.py 在 linked worktree cwd 下，讀寫皆落在主倉庫（非 worktree
-本地副本）。
+track_runqueue.py / version_shift.py / migrate.py / track_query.py /
+track_snapshot.py / topic_backfill.py 在 linked worktree cwd 下，讀寫皆落在
+主倉庫（非 worktree 本地副本）。
 
 背景：這些模組原用 get_project_root()（worktree 感知，回傳呼叫端自己所在的
 worktree 根目錄）解析跨 agent 協調狀態的落點；worktree 隔離的代理人各自把
@@ -35,6 +36,7 @@ from ticket_system.lib.constants import (
     HANDOFF_DIR,
     HANDOFF_PENDING_SUBDIR,
     HANDOFF_ARCHIVE_SUBDIR,
+    WORK_LOGS_DIR,
 )
 
 
@@ -229,7 +231,7 @@ class TestCheckpointStateDataSourcesWorktreeRootUnification:
         main_root, wt_root = linked_worktree
         from ticket_system.lib.checkpoint_state import _read_handoff_pending
 
-        pending_dir = main_root / ".claude" / "handoffs" / "pending"
+        pending_dir = main_root / ".claude" / "handoff" / "pending"
         pending_dir.mkdir(parents=True, exist_ok=True)
         (pending_dir / "T2.json").write_text(
             json.dumps({"ticket_id": "T2"}), encoding="utf-8"
@@ -302,3 +304,166 @@ class TestDashboardAutoGcWorktreeRootUnification:
         assert not stale_file.exists()
         assert main_archive.exists()
         assert not wt_archive.exists()
+
+
+def _write_minimal_ticket(path: Path, ticket_id: str, **extra_frontmatter: str) -> None:
+    """寫入最小可解析 ticket md（同 test_frontmatter_cache.py 的 _ticket_content 模式）。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "---",
+        f"id: {ticket_id}",
+        "title: 測試",
+        "type: IMP",
+        "priority: P2",
+        "status: pending",
+    ]
+    for key, value in extra_frontmatter.items():
+        lines.append(f"{key}: {value}")
+    lines.append("---")
+    lines.append("")
+    lines.append("# body")
+    lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+class TestVersionShiftWorktreeRootUnification:
+    """version_shift.py：0.2.1-W4-031，來源版本目錄驗證應讀主倉庫。"""
+
+    def test_dry_run_in_linked_worktree_reads_main_repo_version_dir(
+        self, linked_worktree
+    ):
+        main_root, wt_root = linked_worktree
+        import argparse
+        from ticket_system.commands.version_shift import execute
+
+        from_dir = main_root / WORK_LOGS_DIR / "v0.1.0" / "tickets"
+        from_dir.mkdir(parents=True, exist_ok=True)
+
+        args = argparse.Namespace(
+            from_version="0.1.0",
+            to_version="0.2.0",
+            dry_run=True,
+            no_backup=True,
+            skip_todolist=True,
+        )
+
+        rc = execute(args)
+
+        # 修復前：get_project_root() 回傳 wt_root，wt_root 下無 v0.1.0/，
+        # _validate_versions 判定來源版本不存在，rc == 1。
+        assert rc == 0
+
+
+class TestMigrateWorktreeRootUnification:
+    """migrate.py：0.2.1-W4-031，交叉引用掃描與備份應讀寫主倉庫。"""
+
+    def test_update_cross_references_in_linked_worktree_updates_main_repo(
+        self, linked_worktree
+    ):
+        main_root, wt_root = linked_worktree
+        from ticket_system.commands.migrate import _update_cross_references
+
+        referencing = main_root / WORK_LOGS_DIR / "v0.1.0" / "tickets" / "0.1.0-W1-200.md"
+        _write_minimal_ticket(
+            referencing, "0.1.0-W1-200", **{"blockedBy": "\n  - 0.1.0-W1-100"}
+        )
+        wt_referencing = wt_root / WORK_LOGS_DIR / "v0.1.0" / "tickets" / "0.1.0-W1-200.md"
+
+        updated_count = _update_cross_references("0.1.0-W1-100", "0.1.0-W1-999")
+
+        # 修復前：get_project_root() 回傳 wt_root（無此檔），掃描不到任何
+        # ticket，updated_count == 0。
+        assert updated_count == 1
+        assert "0.1.0-W1-999" in referencing.read_text(encoding="utf-8")
+        assert not wt_referencing.exists()
+
+    def test_backup_ticket_in_linked_worktree_writes_to_main_repo(
+        self, linked_worktree
+    ):
+        main_root, wt_root = linked_worktree
+        from ticket_system.commands.migrate import _backup_ticket
+        from ticket_system.lib.paths import get_ticket_path
+
+        ticket_path = get_ticket_path("0.1.0", "0.1.0-W1-300")
+        _write_minimal_ticket(ticket_path, "0.1.0-W1-300")
+
+        backup_path = _backup_ticket("0.1.0", "0.1.0-W1-300")
+
+        main_backup_root = main_root / ".claude" / "migration-backups"
+        wt_backup_root = wt_root / ".claude" / "migration-backups"
+
+        # 修復前：backup_dir 建在 get_project_root()（wt_root）之下。
+        assert backup_path is not None
+        assert backup_path.exists()
+        assert list(main_backup_root.rglob("0.1.0-W1-300.md"))
+        assert not wt_backup_root.exists()
+
+
+class TestTrackQueryCrossVersionWarningWorktreeRootUnification:
+    """track_query.py：0.2.1-W4-031，跨版本待辦掃描應讀主倉庫。"""
+
+    def test_cross_version_warning_in_linked_worktree_reads_main_repo(
+        self, linked_worktree, capsys
+    ):
+        main_root, wt_root = linked_worktree
+        from ticket_system.commands.track_query import _print_cross_version_warning
+
+        # 掃描邏輯只認 work-logs 下扁平的 v{version}/ 目錄名（非階層式
+        # v{major}/v{major.minor}/v{version}/），故直接手動建構扁平路徑，
+        # 不透過 get_ticket_path（其在兩者皆不存在時預設回傳階層式路徑）。
+        ticket_path = main_root / WORK_LOGS_DIR / "v0.1.0" / "tickets" / "0.1.0-W1-400.md"
+        _write_minimal_ticket(ticket_path, "0.1.0-W1-400")
+
+        _print_cross_version_warning("0.2.0")
+
+        captured = capsys.readouterr()
+        # 修復前：get_project_root() 回傳的 wt_root 下無 docs/work-logs/，
+        # work_logs.exists() 為 False，函式提早 return，無任何輸出。
+        assert "0.1.0" in captured.out
+        assert "pending" in captured.out
+
+
+class TestTrackSnapshotScanAllVersionsWorktreeRootUnification:
+    """track_snapshot.py：0.2.1-W4-031，版本目錄掃描應讀主倉庫。"""
+
+    def test_scan_all_versions_in_linked_worktree_reads_main_repo(
+        self, linked_worktree
+    ):
+        main_root, wt_root = linked_worktree
+        import importlib
+        from ticket_system.commands import track_snapshot as ts_module
+
+        # conftest.py 的 autouse fixture `_mock_track_snapshot_filesystem_scan`
+        # （W11-015 效能優化）monkeypatch 掉 `_scan_all_versions` 為固定假清單，
+        # 本測試需驗證真實掃描邏輯，故 reload 模組還原真實實作（in-place 更新
+        # 同一模組物件，不影響其他測試對該模組的既有參照）。
+        importlib.reload(ts_module)
+
+        version_dir = main_root / WORK_LOGS_DIR / "v0.1.0"
+        version_dir.mkdir(parents=True, exist_ok=True)
+
+        versions = ts_module._scan_all_versions()
+
+        # 修復前：get_project_root() 回傳 wt_root，wt_root 下無版本目錄，
+        # versions == []。
+        assert "0.1.0" in versions
+
+
+class TestTopicBackfillIterTicketFilesWorktreeRootUnification:
+    """topic_backfill.py：0.2.1-W4-031，ticket 檔案掃描應讀主倉庫。"""
+
+    def test_iter_ticket_files_in_linked_worktree_reads_main_repo(
+        self, linked_worktree
+    ):
+        main_root, wt_root = linked_worktree
+        from ticket_system.commands.topic_backfill import _iter_ticket_files
+        from ticket_system.lib.paths import get_ticket_path
+
+        ticket_path = get_ticket_path("0.1.0", "0.1.0-W1-500")
+        _write_minimal_ticket(ticket_path, "0.1.0-W1-500")
+
+        files = _iter_ticket_files()
+
+        # 修復前：get_project_root() 回傳 wt_root，掃描不到任何檔案，
+        # files == []。
+        assert ticket_path in files

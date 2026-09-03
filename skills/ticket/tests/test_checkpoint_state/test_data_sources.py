@@ -7,7 +7,7 @@
 - B{N}.2 異常：I/O 類例外 → SAFE_CALL 走 fallback + errors/pending 記錄
 - B{N}.3 邊界：空回傳 → 預設值
 - B{N}.4 中斷：多來源同時失敗（串聯 test）
-- B{N}.5 邊界：.claude/dispatch-active.json 或 .claude/handoffs/ 不存在
+- B{N}.5 邊界：.claude/dispatch-active.json 或 .claude/handoff/ 不存在
 """
 
 from __future__ import annotations
@@ -177,13 +177,13 @@ def test_B3_1_handoff_pending_normal_returns_ticket_id(
 
 
 def test_B3_3_handoff_pending_empty_dir_returns_none(tmp_path: Path):
-    pending_dir = tmp_path / ".claude" / "handoffs" / "pending"
+    pending_dir = tmp_path / ".claude" / "handoff" / "pending"
     pending_dir.mkdir(parents=True)
     assert _read_handoff_pending(tmp_path) is None
 
 
 def test_B3_5_handoff_pending_dir_missing_raises_filenotfounderror(tmp_path: Path):
-    """.claude/handoffs/ 整個目錄不存在（Phase 2 §B.5）。"""
+    """.claude/handoff/ 整個目錄不存在（Phase 2 §B.5）。"""
     with pytest.raises(FileNotFoundError):
         _read_handoff_pending(tmp_path)
 

@@ -57,15 +57,24 @@ import sys
 import unicodedata
 from pathlib import Path
 
-from ticket_system.lib.paths import get_project_root
+from ticket_system.lib.paths import get_ticket_state_root
 
 # 清單檔相對於專案根目錄的路徑（詳細路徑決策見模組 docstring）。
 TOPICS_REGISTRY_RELATIVE_PATH = "docs/work-logs/topics-registry.txt"
 
 
 def _registry_path() -> Path:
-    """取得清單檔的絕對路徑（不保證檔案存在）。"""
-    return get_project_root() / TOPICS_REGISTRY_RELATIVE_PATH
+    """取得清單檔的絕對路徑（不保證檔案存在）。
+
+    根目錄改用 `get_ticket_state_root()`（非 `get_project_root()`，
+    2026-09-03，比照姊妹檔 `topic_assignments.py` 的既有修復模式）：本
+    清單是 ticket 狀態的一部分（`topic_assignments._append_line` 會呼叫
+    `append_topic` 同步註冊主題名），在 linked worktree 內執行時必須統一
+    寫入主倉庫，理由與票面 md、assignment log 統一寫入主倉庫相同（見
+    `get_ticket_state_root` docstring）——否則 worktree 清理前若未察覺，
+    此檔的主題登記行會隨 worktree 一併遺失。
+    """
+    return get_ticket_state_root() / TOPICS_REGISTRY_RELATIVE_PATH
 
 
 def normalize_topic_name(name: str) -> str:

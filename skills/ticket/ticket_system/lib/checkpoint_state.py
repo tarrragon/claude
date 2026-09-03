@@ -329,7 +329,7 @@ def SAFE_CALL(
 
 # Phase 1 §3 資料來源路徑規範（相對於 project_root）
 _DISPATCH_ACTIVE_RELPATH = Path(".claude/dispatch-active.json")
-_HANDOFF_PENDING_RELDIR = Path(".claude/handoffs/pending")
+_HANDOFF_PENDING_RELDIR = Path(".claude/handoff/pending")
 
 
 def _read_json_dict(path: Path) -> Optional[dict]:
@@ -436,7 +436,7 @@ def _read_dispatch_active(
 def _read_handoff_pending(
     project_root: Optional[Path] = None,
 ) -> Optional[str]:
-    """讀取 .claude/handoffs/pending/*.json，回傳最新 handoff 的 ticket_id。
+    """讀取 .claude/handoff/pending/*.json，回傳最新 handoff 的 ticket_id。
 
     語意：目錄中有任何 *.json 即視為 active_handoff；多個時取 mtime 最新的。
     Phase 1 §3：缺目錄時回 None（由 SAFE_CALL 捕 FileNotFoundError 走 fallback）。

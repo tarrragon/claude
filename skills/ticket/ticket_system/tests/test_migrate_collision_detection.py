@@ -37,11 +37,18 @@ from ticket_system.lib.parser import parse_frontmatter
 
 
 def _patch_get_project_root(monkeypatch, tmp_path: Path) -> None:
-    """集中將 migrate / ticket_loader / paths 的 get_project_root 指向 tmp_path。"""
+    """集中將 migrate / ticket_loader / paths 的 get_project_root 指向 tmp_path。
+
+    0.2.1-W4-031：migrate.py 的根目錄解析已改用 get_ticket_state_root()
+    （非 get_project_root()，理由見該命令模組內對應行的註解），故改 patch
+    migrate_mod 上的 get_ticket_state_root 名稱；loader_mod / paths_mod 的
+    get_project_root patch 保留（get_ticket_state_root 非 worktree 場景會
+    委派 paths_mod.get_project_root，此處為雙重保險）。
+    """
     import ticket_system.commands.migrate as migrate_mod
     import ticket_system.lib.ticket_loader as loader_mod
 
-    monkeypatch.setattr(migrate_mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(migrate_mod, "get_ticket_state_root", lambda: tmp_path)
     monkeypatch.setattr(loader_mod, "get_project_root", lambda: tmp_path)
 
     try:
