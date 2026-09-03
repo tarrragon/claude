@@ -340,9 +340,13 @@ def compare(
 
     readme_id_counts 提供時（來自 collect_readme_id_counts），額外做 README
     列重複比對：同一 ID 出現 2+ 次且未登記於 frozen_registry 者歸入
-    duplicate_in_readme。已登記的 ID（同一 ID 對應兩個不同檔案，各佔一列）
-    視為預期狀態，不論列數一律排除——與碰撞比對使用同一份 frozen_registry，
-    fail-open 語意一致：frozen_registry 為 None 時無法驗證排除資格，一律回報。
+    duplicate_in_readme。已登記的 ID 排除資格以目錄側實際檔案數
+    （dir_id_map[file_id] 長度）為準，而非「已登記即排除」——README 列數
+    未超過目錄側檔案數時視為預期狀態（同一 ID 對應多個檔案各佔一列），
+    超過部分仍是超額重複須回報（原邏輯只檢查 ID 是否登記，不比對列數是否
+    等於登記的檔案數，登記 ID 被誤複製為 3+ 列時不會被偵測）。與碰撞比對
+    使用同一份 frozen_registry，fail-open 語意一致：frozen_registry 為
+    None 時無法驗證排除資格，一律回報。
     """
     dir_ids = {k for k in dir_id_map if not k.startswith("UNRECOGNIZED:")}
     unrecognized = [v[0] for k, v in dir_id_map.items() if k.startswith("UNRECOGNIZED:")]
@@ -371,12 +375,15 @@ def compare(
 
     duplicate_in_readme = []
     if readme_id_counts:
-        duplicate_in_readme = sorted(
-            file_id
-            for file_id, count in readme_id_counts.items()
-            if count > 1
-            and not (frozen_registry is not None and file_id in frozen_registry)
-        )
+        for file_id, count in readme_id_counts.items():
+            if count <= 1:
+                continue
+            if frozen_registry is not None and file_id in frozen_registry:
+                registered_file_count = len(dir_id_map.get(file_id, []))
+                if count <= registered_file_count:
+                    continue  # 未超過登記的檔案數，屬預期狀態（各佔一列）
+            duplicate_in_readme.append(file_id)
+        duplicate_in_readme = sorted(duplicate_in_readme)
 
     return {
         "missing_in_readme": missing_in_readme,

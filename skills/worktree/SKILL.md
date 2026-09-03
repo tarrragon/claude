@@ -37,9 +37,22 @@ Claude Code 的 Agent tool 設定 `isolation: "worktree"` 派發 subagent 時，
 |------|------|------|
 | worktree base 取自哪裡 | cc runtime 以 `origin/main`（remote-tracking ref）為 base，**非** local main HEAD。local main 領先 origin/main 時 worktree 建在 stale 基底（W3-007 實證） | 派發前先 `git push origin main`；`worktree-commit-before-dispatch-hook.py` 在 origin/main 落後時 stderr 警告 |
 | daemon-rooted 寫入工具洩漏 | dart MCP（dart fix / dart format）daemon 的 analysis root 在 session 啟動時綁定主 repo，worktree 派發只改 shell cwd，無法切換 daemon root，寫入會洩漏到主 repo（W3-008 根因 2） | worktree 實作 agent **禁用 dart MCP 寫入工具，改用 Bash `dart fix` / `dart format`（尊重 agent cwd）或 Edit** |
-| ticket CLI auto-commit 洩漏 | `paths.py:get_project_root()` 原優先讀 `CLAUDE_PROJECT_DIR`（恆指向主 repo），使 ticket md 寫入與 auto-commit 落在主 repo（W3-008 根因 1） | 已修：`get_project_root()` 加 worktree 感知，git root != CLAUDE_PROJECT_DIR 時優先用 git root |
+| ticket CLI auto-commit 洩漏（W3-008 當時） | `paths.py:get_project_root()` 原優先讀 `CLAUDE_PROJECT_DIR`（恆指向主 repo），使 ticket md 寫入與 auto-commit 落在主 repo（W3-008 根因 1） | 當時已修：`get_project_root()` 加 worktree 感知，git root != CLAUDE_PROJECT_DIR 時優先用 git root。**此對策已被下方「ticket 狀態統一寫入主倉庫」取代，見表後說明** |
+| daemon-rooted 寫入工具洩漏 | 同上一列 | worktree 實作 agent **禁用 dart MCP 寫入工具，改用 Bash `dart fix` / `dart format`（尊重 agent cwd）或 Edit** |
 
-**Why**：worktree 隔離只改變 agent 的 shell cwd，對「session 啟動時靜態綁定主 repo 根目錄」的寫入工具（dart MCP daemon、CLAUDE_PROJECT_DIR-rooted ticket CLI）不生效，這類工具的寫入會繞過隔離邊界洩漏到主 repo。
+**Why**：worktree 隔離只改變 agent 的 shell cwd，對「session 啟動時靜態綁定主 repo 根目錄」的寫入工具（dart MCP daemon）不生效，這類工具的寫入會繞過隔離邊界洩漏到主 repo。
+
+### ticket 狀態統一寫入主倉庫（2026-09-02 起，刻意設計，非洩漏）
+
+上表「ticket CLI auto-commit 洩漏」列記錄的是 W3-008 當時的問題與當時對策：讓 `get_project_root()` 具 worktree 感知，使 ticket CLI 的寫入跟隨 agent 所在 worktree。**該對策已被後續的架構決策取代**——`paths.py:get_ticket_state_root()`（2026-09-02 新增）現為 ticket 狀態操作（`ticket track claim` / `append-log` / `check-acceptance` 等讀寫 ticket md 與其 auto-commit）的唯一根目錄解析入口，其行為與 `get_project_root()` 相反：偵測到呼叫端位於 linked worktree 時，**反向回推主倉庫根目錄**，使 ticket 狀態一律寫入主倉庫，不進 worktree 分支。
+
+**Why**：若 ticket 狀態沿用 worktree 感知，多個隔離 agent 各自把票面寫入自己的 worktree 分支，PM 在主倉庫看不到最新狀態（觀察性失效），且 body 內容不會隨 worktree 分支合併帶回主倉庫——受控實驗實測並行派發的 worktree agent 全數出現票面分裂。統一寫入主倉庫消除此分裂，ticket 狀態單一事實來源恆為主倉庫。
+
+**與程式碼提交的分離**：本節僅涵蓋 ticket 狀態（md 讀寫 + auto-commit）。`ticket track commit`（程式碼提交）維持 `resolve_project_cwd` 的原 worktree 感知行為不變，程式碼隔離不受影響——worktree agent 的產品碼變更仍 commit 進該 worktree 對應分支，由 PM 之後 `git merge` 帶回主倉庫。也就是說：**程式碼提交走 worktree 分支，ticket 狀態寫入主倉庫**，兩者是不同的 root 解析路徑，不會互相影響。
+
+**Consequence（agent 誤讀為缺陷時）**：worktree 內執行 `ticket track full` 讀到的內容與主倉庫一致（非該 worktree 自身分支上的 ticket md 版本），這是設計行為，不是 bug；`ticket track append-log` 等寫入的 commit 會出現在主倉庫的 git log，而非該 worktree 對應分支。誤判為缺陷並嘗試「修復」會反轉此設計，重新引入票面分裂風險。
+
+**Action**：worktree 內需要讀取「該 worktree 自身分支上的 ticket md 版本」時（例如驗證某次寫入是否落在預期分支），改用 `git show <branch>:<path>` 或直接 `cat` 該 worktree working tree 內的檔案，不依賴 `ticket track full` 的輸出——後者恆讀主倉庫。完整理由見 `.claude/skills/ticket/ticket_system/lib/paths.py` 的 `get_ticket_state_root()` docstring；ticket 狀態與程式碼提交分離的說明另見 `.claude/skills/ticket/SKILL.md`「Ticket 狀態與程式碼提交的 root 分離」節。
 
 ### 殭屍問題
 

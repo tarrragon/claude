@@ -1,3 +1,10 @@
+## [2.50.5] - 2026-09-03
+
+### Summary
+fix: 三張衍生修復票——hook_base 新增預設關閉的測試隔離逃生艙解 worktree 內假失敗、error-patterns 索引重複列偵測改比對實際檔案數、baseline 測試改邏輯不變式消除並行寫入假紅燈；另修正 worktree/ticket SKILL.md 對 ticket 狀態隔離的過期文件承諾
+
+---
+
 ## [2.50.4] - 2026-09-03
 
 ### Summary

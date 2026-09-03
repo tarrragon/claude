@@ -357,6 +357,37 @@ class TestCompareDuplicateInReadme:
         )
         assert result["duplicate_in_readme"] == ["PC-010"]
 
+    def test_frozen_registered_id_exceeding_dir_count_reported(self):
+        """本 ticket 核心修復：凍結表登記 ID 在目錄側恆為 2 個檔案，但 README
+        被誤複製為 3 列時，超額列不可被舊有「已登記即排除」邏輯靜默放過。"""
+        dir_id_map = {
+            "PC-010": [
+                "process-compliance/PC-010-pm-skipped-checkpoint-after-ticket-complete.md",
+                "process-compliance/PC-010-task-tracking-in-memory.md",
+            ]
+        }
+        readme_id_counts = Counter({"PC-010": 3})
+        frozen_registry = {
+            "PC-010": {"pm-skipped-checkpoint-after-ticket-complete", "task-tracking-in-memory"}
+        }
+        result = _hook.compare(
+            dir_id_map, {"PC-010"}, frozen_registry=frozen_registry, readme_id_counts=readme_id_counts
+        )
+        assert result["duplicate_in_readme"] == ["PC-010"]
+
+    def test_non_frozen_id_two_rows_reported(self):
+        """未登記於凍結表的 ID 在 README 出現 2 列（目錄側僅 1 個檔案）須報出，
+        驗證排除條件不會誤放行非凍結 ID。"""
+        dir_id_map = {"TEST-001": ["test/TEST-001-a.md"]}
+        readme_id_counts = Counter({"TEST-001": 2})
+        frozen_registry = {
+            "PC-010": {"pm-skipped-checkpoint-after-ticket-complete", "task-tracking-in-memory"}
+        }
+        result = _hook.compare(
+            dir_id_map, {"TEST-001"}, frozen_registry=frozen_registry, readme_id_counts=readme_id_counts
+        )
+        assert result["duplicate_in_readme"] == ["TEST-001"]
+
 
 # ---------------------------------------------------------------------------
 # extract_frontmatter_text / parse_related_field
@@ -984,6 +1015,26 @@ class TestMainEndToEnd:
 
 class TestCurrentRepoBaseline:
     def test_current_repo_matches_known_baseline(self):
+        """回歸基線：對現況 repo 的 error-patterns 目錄執行 compare()。
+
+        固定數字/固定空值斷言（missing_in_readme == [] 等）會使本測試對並行
+        session 寫入 .claude/error-patterns/ 假紅燈（W3-717 根因：測試恰讀到
+        「新檔已建立、README 尚未同步」的瞬間視窗，斷言結果依賴程式以外的
+        可變因素——跨 session 共享的檔案系統狀態，命中
+        test-assertion-design-rules 的不可靠斷言判準）。`registered_collisions
+        == 6` 額外受凍結表增修影響，數字本身也非固定值。
+
+        比照同檔 test_related_bidirectional_scan_runs_without_error 的既有
+        處理方式（該測試已因相同理由改為非固定斷言），改為驗證與環境無關的
+        「邏輯不變式」——compare() 各欄位對輸入資料必然成立的性質（如
+        collisions 內每個 ID 在目錄側確實對應 2+ 檔案、missing_in_readme
+        與 stale_in_readme 比對方向不可能同時成立故必互斥），而非「資料
+        現況」（目錄與 README 當下是否完全一致）。不論並行 session 寫入
+        什麼，這些不變式恆成立；但集合差方向寫反、條件寫錯、欄位互斥被
+        破壞、誤將未登記 ID 歸入 registered_collisions 等真實邏輯錯誤仍會
+        使斷言失敗，保留本測試存在的診斷價值。實際存量數字由 ticket 執行
+        紀錄另行回報，不進入本測試斷言。
+        """
         project_root = Path(__file__).resolve().parents[3]
         error_patterns_root = project_root / ".claude" / "error-patterns"
         methodology_path = (
@@ -999,12 +1050,41 @@ class TestCurrentRepoBaseline:
         assert frozen_error is None, f"凍結表解析失敗：{frozen_error}"
 
         result = _hook.compare(dir_id_map, readme_ids, frozen_registry, readme_id_counts)
+        dir_ids = {k for k in dir_id_map if not k.startswith("UNRECOGNIZED:")}
 
-        assert result["missing_in_readme"] == []
-        assert result["stale_in_readme"] == []
-        assert result["collisions"] == {}
-        assert len(result["registered_collisions"]) == 6
-        assert result["duplicate_in_readme"] == []
+        assert isinstance(result["missing_in_readme"], list)
+        assert isinstance(result["stale_in_readme"], list)
+        assert isinstance(result["collisions"], dict)
+        assert isinstance(result["duplicate_in_readme"], list)
+        assert isinstance(result["registered_collisions"], dict)
+
+        # missing_in_readme：目錄有、README 無
+        for file_id in result["missing_in_readme"]:
+            assert file_id in dir_ids
+            assert file_id not in readme_ids
+
+        # stale_in_readme：README 有、目錄無
+        for file_id in result["stale_in_readme"]:
+            assert file_id in readme_ids
+            assert file_id not in dir_ids
+
+        # 比對方向互斥：同一 ID 不可能既是「目錄有 README 無」又是「README 有目錄無」
+        assert set(result["missing_in_readme"]).isdisjoint(result["stale_in_readme"])
+
+        # collisions：目錄側同一 ID 確實對應 2+ 檔案
+        for file_id in result["collisions"]:
+            assert len(dir_id_map[file_id]) > 1
+
+        # registered_collisions：每個 ID 皆確實登記於凍結表
+        for file_id in result["registered_collisions"]:
+            assert file_id in frozen_registry
+
+        # collisions 與 registered_collisions 互斥：同一 ID 不可能同時歸入兩類
+        assert set(result["collisions"]).isdisjoint(result["registered_collisions"])
+
+        # duplicate_in_readme：README 側同一 ID 確實出現 2+ 次
+        for file_id in result["duplicate_in_readme"]:
+            assert readme_id_counts[file_id] > 1
 
     def test_related_bidirectional_scan_runs_without_error(self):
         """related 雙向性掃描的存量基線非固定斷言（存量會隨其他票修正變動，

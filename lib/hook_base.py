@@ -28,6 +28,13 @@ CLAUDE_MD_SEARCH_DEPTH = 5
 # git rev-parse 執行超時時限（秒）
 GIT_TOPLEVEL_TIMEOUT = 5
 
+# 測試隔離逃生艙旗標：同語意/同命名慣例於 ticket_system/lib/paths.py 的
+# TICKET_SYSTEM_TEST_ISOLATION，此處為 .claude/lib 套件獨立維護的對應旗標，
+# 避免兩個不同套件共用同一旗標名稱造成語意混淆（互不相依，各自套件內生效）。
+# 僅供測試 fixture 使用，見 .claude/hooks/tests/conftest.py 的
+# hook_project_env fixture。
+ENV_HOOK_TEST_ISOLATION = "HOOK_TEST_ISOLATION"
+
 
 # ============================================================================
 # 內部輔助函式
@@ -98,6 +105,10 @@ def _find_project_root() -> Path:
     """查詢專案根目錄
 
     優先順序：
+    0. 測試隔離逃生艙（HOOK_TEST_ISOLATION=1 時）：直接採用
+       CLAUDE_PROJECT_DIR，略過 worktree 偵測。僅供測試 fixture 使用（見
+       .claude/hooks/tests/conftest.py 的 hook_project_env fixture），
+       生產路徑不設此旗標故不受影響。
     1. worktree 感知：當前位於 git linked worktree 時，優先用該 worktree
        的根目錄，避免 CLAUDE_PROJECT_DIR 恆指向主 repo 導致 worktree 內
        的 Hook 動作（append-log 等）洩漏到主 repo（0.38.1-W2-020）
@@ -106,9 +117,23 @@ def _find_project_root() -> Path:
     4. 從 cwd 向上搜尋 CLAUDE.md（最多 5 層）
     5. Path.cwd() fallback（永不失敗）
 
+    Why（步驟 0 新增背景）：pytest 進程本身在 git linked worktree 內執行時
+    （如 agent 在自己的 ticket worktree 內跑整套 hooks 測試），步驟 1 的
+    worktree 偵測會蓋過測試刻意注入的 CLAUDE_PROJECT_DIR 隔離（monkeypatch /
+    subprocess env 覆寫皆同受影響），使依賴 CLAUDE_PROJECT_DIR 隔離的測試
+    誤讀到真實 worktree 根目錄而斷言失敗。與
+    ticket_system/lib/paths.py._resolve_project_root() 的步驟 0 同一根因、
+    同一修法，唯旗標名稱各自獨立（見 ENV_HOOK_TEST_ISOLATION 常數說明）。
+
     Returns:
         Path: 專案根目錄路徑
     """
+    # 優先級 0：測試隔離逃生艙，僅供 conftest 的 fixture 使用
+    if os.environ.get(ENV_HOOK_TEST_ISOLATION) == "1":
+        isolated_dir = os.environ.get(ENV_PROJECT_DIR)
+        if isolated_dir:
+            return Path(isolated_dir)
+
     # 優先級 1：worktree 感知（優先於 CLAUDE_PROJECT_DIR）
     worktree_root = _linked_worktree_root()
     if worktree_root is not None:
@@ -187,6 +212,7 @@ def get_project_root() -> Path:
     """取得專案根目錄
 
     優先順序：
+    0. 測試隔離逃生艙（HOOK_TEST_ISOLATION=1 時，僅供測試 fixture 使用）
     1. worktree 感知：當前位於 git linked worktree 時，優先用該 worktree 根目錄
     2. 環境變數 CLAUDE_PROJECT_DIR
     3. git rev-parse --show-toplevel（git-native，支援 worktree）

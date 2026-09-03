@@ -28,9 +28,17 @@ def load_hook_module():
 
 def test_get_throttle_file_resolves_under_claude_project_dir(monkeypatch, tmp_path):
     """節流檔路徑須由 get_project_root() 呼叫時動態解析，尊重
-    CLAUDE_PROJECT_DIR 覆寫，而非 import 時固定指向 production .claude/。"""
+    CLAUDE_PROJECT_DIR 覆寫，而非 import 時固定指向 production .claude/。
+
+    本測試在 pytest 進程內直接呼叫 hook._get_throttle_file()（無 subprocess
+    邊界），故 CLAUDE_PROJECT_DIR 覆寫需搭配 HOOK_TEST_ISOLATION=1 才能
+    在 pytest 本身位於 git linked worktree 內執行時生效——否則
+    get_project_root() 的 worktree 偵測（優先序高於 CLAUDE_PROJECT_DIR）
+    會蓋過此處的 monkeypatch，解析到真實 worktree 根目錄而非 tmp_path
+    （見 lib.hook_base._find_project_root 步驟 0 說明）。"""
     hook = load_hook_module()
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("HOOK_TEST_ISOLATION", "1")
     resolved = hook._get_throttle_file()
     assert resolved == tmp_path / "hook-logs" / "install-guide-edit-reminder-throttle.json"
 

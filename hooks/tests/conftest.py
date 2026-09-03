@@ -128,9 +128,18 @@ def hook_project_env(tmp_path):
 
     機制：回傳 (project_root, env) — project_root 為 tmp_path（pytest 自動清理，
     無殘留風險）；env 為可直接傳入 _run_hook(..., env=env) 的字典，內含
-    CLAUDE_PROJECT_DIR 指向 project_root。由於本機執行環境不是 git linked
-    worktree（worktree 偵測回傳 None），CLAUDE_PROJECT_DIR 為第二優先，subprocess
-    可正確解析到假專案根，不受實際執行 cwd 影響（呼應本票驗收「任意 cwd 結果一致」）。
+    CLAUDE_PROJECT_DIR 指向 project_root，並同步注入 HOOK_TEST_ISOLATION=1。
+    本機執行環境不是 git linked worktree 時（worktree 偵測回傳 None），
+    CLAUDE_PROJECT_DIR 本就是第二優先，subprocess 可正確解析到假專案根；
+    pytest 進程本身在 git linked worktree 內執行時（如 agent 在自己的 ticket
+    worktree 內跑整套 hooks 測試），worktree 偵測（優先序高於 CLAUDE_PROJECT_DIR）
+    會蓋過本 fixture 注入的隔離，subprocess 誤讀到真實 worktree 根目錄，計數器
+    /節流檔等斷言失敗——同型根因與修法見
+    ticket_system/lib/paths.py._resolve_project_root() 步驟 0（先前於 worktree
+    環境下修復同型 ticket 系統測試隔離失效）。HOOK_TEST_ISOLATION=1 使
+    .claude/lib/hook_base.get_project_root() 略過 worktree 偵測、優先採用
+    CLAUDE_PROJECT_DIR，確保 subprocess 不受實際執行 cwd（是否位於 worktree）
+    影響（呼應本票驗收「任意 cwd 結果一致」）。
 
     使用範例：
         def test_x(self, hook_project_env):
@@ -147,5 +156,5 @@ def hook_project_env(tmp_path):
     """
     project_root = tmp_path / "fake_project_root"
     project_root.mkdir(parents=True, exist_ok=True)
-    env = {"CLAUDE_PROJECT_DIR": str(project_root)}
+    env = {"CLAUDE_PROJECT_DIR": str(project_root), "HOOK_TEST_ISOLATION": "1"}
     return project_root, env
