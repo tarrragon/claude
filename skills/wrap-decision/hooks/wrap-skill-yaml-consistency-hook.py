@@ -67,6 +67,17 @@ ALIGNMENT_REL_PATH = (
 WATCHED_PATHS = (YAML_REL_PATH, SKILL_REL_PATH)
 STDERR_PREFIX = "[WRAP Consistency]"
 
+# 缺映射檔時內嵌的最小可用範例：
+# schema 只存在於映射檔自身的檔頭註解（即缺失的那個檔案內），故不可指向外部
+# 文件自救。範例保留兩個頂層必要欄位，佔位符供讀者依實際 signal/keyword 替換。
+_ALIGNMENT_MINIMAL_EXAMPLE = """\
+version: "1.0.0"
+signal_to_skill_triggers:
+  <yaml_signal_id>:
+    - "<skill_situation_label>"
+keyword_to_trigger_category:
+  "<yaml_keyword>": "<skill_description_trigger_category>\""""
+
 
 # ============================================================================
 # 公用工具
@@ -148,7 +159,11 @@ def load_alignment(project_root: Path, logger) -> Tuple[Optional[Dict[str, Any]]
     """載入映射檔。返回 (data, error_message)。error_message 非 None 時應阻擋。"""
     path = project_root / ALIGNMENT_REL_PATH
     if not path.exists():
-        msg = f"映射檔不存在：{ALIGNMENT_REL_PATH}（請依映射檔規格新建，見 SKILL.md）"
+        msg = (
+            f"映射檔不存在：{ALIGNMENT_REL_PATH}\n"
+            "請在該路徑新建檔案，最小可用範例（複製後依實際 signal/keyword 調整佔位符）：\n"
+            f"{_ALIGNMENT_MINIMAL_EXAMPLE}"
+        )
         logger.error(msg)
         return None, msg
     try:

@@ -7,11 +7,36 @@ Active Dispatch Tracker 共用模組
 
 公開 API：
 - record_dispatch: 記錄新派發
-- clear_dispatch: 清理已完成派發
+- clear_dispatch: 清理已完成派發（description 比對，非 SubagentStop 路徑）
+- mark_turn_ended_by_id: 標記 agent_id 對應 entry 的回合結束時刻（不刪除）
+- mark_oldest_active_null_agent_id_entry_turn_ended: 上者的 FIFO fallback
 - get_active_dispatches: 取得所有活躍派發
 - is_file_under_dispatch: 檢查檔案是否在派發中
 - cleanup_expired: 清理超時記錄
 - detect_orphan_branches: 偵測 orphan worktree 分支
+
+turn_ended_at 欄位：
+  SubagentStop 事件的觸發前提原被假設為「代理人真正停止才觸發」，實測
+  不成立——代理人回合結束後轉入 idle 仍存活、仍列於代理人清單、仍可接受
+  訊息並繼續工作。`clear_dispatch_by_id` / `clear_oldest_null_agent_id_
+  entry` 兩個刪除式函式據此假設在 SubagentStop 觸發時清空記錄，會使唯一
+  追蹤存活狀態的資料源在代理人尚未終止時即消失。
+
+  `mark_turn_ended_by_id` / `mark_oldest_active_null_agent_id_entry_turn_
+  ended` 取代刪除為標記：entry 保留，僅寫入 `turn_ended_at`（ISO8601，
+  初始為 None）記錄「最後一次回合結束」時刻。consumer 讀取
+  `get_active_dispatches` 時，entry 存在本身仍代表「該代理人未被確認
+  終止」（保守存活語意，供 bare-commit-guard-hook.py 等並行安全防護使
+  用）；`turn_ended_at` 是否為 None 則代表「當下是否正在執行某個回合」
+  （供需要「真正忙碌中」語意的判斷使用，如本模組使用端的 [WAIT] 廣播）。
+
+  目前無可靠的「代理人已真正終止」訊號（SubagentStop 不是、無 SessionEnd
+  等價的 subagent 版本）。刻意不發明時間閾值式的終止判斷（如「idle 超過
+  N 分鐘視為終止」）——此類判斷未經驗證，可能與 SubagentStop 前提失準
+  同樣的方式錯誤。保留至 `cleanup_expired`（既有 TTL 機制，預設
+  max_age_hours=1）回收，為目前唯一的既定回收路徑；`clear_dispatch_by_
+  id` / `clear_oldest_null_agent_id_entry` 兩個舊有刪除式函式保留於本
+  模組（供未來若出現可靠終止訊號時使用），但不應再由 SubagentStop 呼叫。
 """
 
 import json
@@ -172,6 +197,7 @@ def record_dispatch(
     branch_name: str = "",
     agent_id: Optional[str] = None,
     session_id: str = "",
+    name: str = "",
 ) -> None:
     """記錄一個新的派發。寫入 dispatch-active.json。
 
@@ -185,6 +211,11 @@ def record_dispatch(
         agent_id: 代理人 ID（可選，通常由 PostToolUse/SubagentStop 補寫）
         session_id: 派發者（PM）的 CC session_id（multi-PM 協調層，
             供 pm-registry 交叉比對「哪個 PM session 派發了哪些工作」）
+        name: named agent 的身份識別（如 `subagent_type`，例
+            "thyme-python-developer"）。可合法為空——非綁定特定代理人身份
+            的派發（如未指定 subagent_type 的通用 Task 呼叫）無此值。
+            殘留代理人排查時，此欄位補足 agent-dispatch.jsonl 缺少的
+            named-agent 身份資訊。
 
     Note:
         v1 曾另有 parent_session_id 欄位（恆等 session_id 的冗餘值），
@@ -212,6 +243,8 @@ def record_dispatch(
             "branch_name": branch_name,
             "dispatched_at": datetime.now(timezone.utc).isoformat(),
             "session_id": session_id,
+            "name": name,
+            "turn_ended_at": None,
         }
         state["dispatches"].append(entry)
         _write_state(project_root, state)
@@ -267,7 +300,12 @@ def update_dispatch_agent_id(
 
 
 def clear_dispatch_by_id(project_root: Path, agent_id: str) -> bool:
-    """依 agent_id 精準清理 dispatch 記錄（SubagentStop 主路徑）。
+    """依 agent_id 精準清理 dispatch 記錄（刪除式）。
+
+    警告：不應由 SubagentStop 呼叫。SubagentStop 只保證代理人本次回合
+    結束，不保證代理人已真正終止（見模組 docstring「turn_ended_at 欄位」
+    段）。SubagentStop 路徑請改用 `mark_turn_ended_by_id`（標記不刪除）。
+    本函式保留供未來出現可靠終止訊號時使用。
 
     Returns:
         是否成功找到並清理記錄
@@ -290,6 +328,37 @@ def clear_dispatch_by_id(project_root: Path, agent_id: str) -> bool:
             _write_state(project_root, state)
             return True
         return False
+
+
+def mark_turn_ended_by_id(project_root: Path, agent_id: str) -> bool:
+    """依 agent_id 標記 dispatch 記錄的回合結束時刻（SubagentStop 主路徑）。
+
+    不刪除 entry：entry 保留，寫入 `turn_ended_at`（ISO8601）記錄本次
+    SubagentStop 事件發生時刻。重複呼叫（同一代理人多回合對話）會覆寫
+    為最新一次回合結束時刻，屬預期行為（冪等更新，非累加）。
+
+    Returns:
+        是否找到並標記記錄
+    """
+    with _state_lock(project_root):
+        state = _read_state(project_root)
+        matched = [
+            d for d in state["dispatches"]
+            if d.get("agent_id") == agent_id
+        ]
+        if len(matched) > 1:
+            print(
+                f"[dispatch_tracker] mark_turn_ended_by_id: "
+                f"agent_id={agent_id} 重複匹配 {len(matched)} 筆",
+                file=sys.stderr,
+            )
+        if not matched:
+            return False
+        now = datetime.now(timezone.utc).isoformat()
+        for entry in matched:
+            entry["turn_ended_at"] = now
+        _write_state(project_root, state)
+        return True
 
 
 def clear_dispatch_by_description_fallback(
@@ -315,10 +384,11 @@ def clear_dispatch_by_description_fallback(
 
 
 def clear_oldest_null_agent_id_entry(project_root: Path) -> bool:
-    """清理 agent_id 為 null 且 dispatched_at 最早的一筆（FIFO fallback）。
+    """清理 agent_id 為 null 且 dispatched_at 最早的一筆（刪除式 FIFO fallback）。
 
-    SubagentStop 觸發時 agent_id 精準匹配失敗後使用。
-    因 SubagentStop input 無 description 欄位，改用 FIFO 語義。
+    警告：不應由 SubagentStop 呼叫（理由同 `clear_dispatch_by_id`）。
+    SubagentStop 路徑請改用 `mark_oldest_active_null_agent_id_entry_turn_
+    ended`（標記不刪除）。本函式保留供未來出現可靠終止訊號時使用。
 
     Returns:
         是否成功找到並清理記錄
@@ -333,6 +403,34 @@ def clear_oldest_null_agent_id_entry(project_root: Path) -> bool:
             return False
         oldest = min(candidates, key=lambda d: d.get("dispatched_at", ""))
         state["dispatches"].remove(oldest)
+        _write_state(project_root, state)
+        return True
+
+
+def mark_oldest_active_null_agent_id_entry_turn_ended(project_root: Path) -> bool:
+    """標記 agent_id 為 null 且尚未標記過回合結束的最早一筆（FIFO fallback）。
+
+    SubagentStop 觸發時 agent_id 精準匹配失敗後使用。因 SubagentStop
+    input 無 description 欄位，改用 FIFO 語義。
+
+    候選限定「尚未標記」（`turn_ended_at` 為 None）：entry 保留不刪除後，
+    已標記過回合結束的 null-agent_id entry 會持續留在陣列中，若候選集合
+    不排除它們，日後每次 SubagentStop 都會重新把它們計入候選數，使呼叫端
+    「候選數 > 1 時停用 FIFO」防護（避免誤標仍在執行中的記錄）永久失效。
+
+    Returns:
+        是否找到並標記記錄
+    """
+    with _state_lock(project_root):
+        state = _read_state(project_root)
+        candidates = [
+            d for d in state["dispatches"]
+            if d.get("agent_id") is None and d.get("turn_ended_at") is None
+        ]
+        if not candidates:
+            return False
+        oldest = min(candidates, key=lambda d: d.get("dispatched_at", ""))
+        oldest["turn_ended_at"] = datetime.now(timezone.utc).isoformat()
         _write_state(project_root, state)
         return True
 

@@ -288,9 +288,13 @@ def test_apply_delta_four_scenarios(tmp_path):
     assert (claude / "rules" / "added.md").read_text() == "brand new\n"
     # take-upstream：本地未動 → 採 upstream
     assert (claude / "rules" / "take.md").read_text() == "upstream new\n"
-    # conflict：寫入 .sync-conflicts/，本地原檔保留
+    # conflict：寫入 .sync-conflicts/，merged 結果（含衝突標記）同步寫回工作區，
+    # 本地與 upstream 兩側內容皆可在工作區取得，非只留在 .sync-conflicts/
     assert "rules/conflict.md" in conflicts
-    assert (claude / "rules" / "conflict.md").read_text() == "a\nLOCAL\nc\n"
+    conflict_text = (claude / "rules" / "conflict.md").read_text()
+    assert "LOCAL" in conflict_text
+    assert "UPSTREAM" in conflict_text
+    assert "<<<<<<< local" in conflict_text
     assert (claude / ".sync-conflicts" / "rules" / "conflict.md").exists()
     assert (claude / ".sync-conflicts" / ".gitignore").read_text() == "*\n"
 

@@ -374,6 +374,34 @@ class TestParallelPeriodBareCommit:
         assert exit_code == 2
 
 
+class TestTurnEndedButAliveEntryStillTriggersDeny:
+    """0.2.1-W3-1205：SubagentStop 只標記回合結束（turn_ended_at），不再刪除
+    entry——代理人回合結束後仍可能存活。本 hook 的 dispatch_count 純以陣列
+    長度計算，不檢視 turn_ended_at 欄位，故已標記回合結束但仍保留的 entry
+    須與尚在執行回合中的 entry 同等觸發並行期 DENY（否則等同回到 SubagentStop
+    提早刪除記錄的舊行為，使並行防護在代理人轉 idle 期間降級為 WARN）。
+    """
+
+    def test_turn_ended_entry_still_denies_bare_commit(self, monkeypatch, capsys):
+        exit_code = _run_hook(
+            monkeypatch,
+            'git commit -m "fix bug"',
+            dispatches=[
+                {
+                    "ticket_id": "T-1",
+                    "files": ["a.py"],
+                    "agent_id": "agent-idle",
+                    "turn_ended_at": "2026-09-03T00:00:00+00:00",
+                },
+            ],
+            staged_files=["a.py", "b.py"],
+        )
+        assert exit_code == 2, (
+            "回合已結束但未確認終止（turn_ended_at 非 None）的 entry 仍須"
+            "視為並行風險，不得降級為 WARN"
+        )
+
+
 # ============================================================================
 # main() 整合：非並行期裸 commit WARN
 # ============================================================================

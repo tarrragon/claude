@@ -3,7 +3,8 @@
 涵蓋 acceptance：
   - VERSION / CHANGELOG.md 衝突時自動採 upstream，.sync-conflicts/ 仍留對照副本，
     且不計入 conflicts 清單（已自動解決）
-  - 非版本檔衝突維持原 local-保留路徑（行為不破壞）
+  - 非版本檔衝突：merged 結果（含 git 衝突標記）寫回工作區，upstream 非重疊
+    hunk 不再隨衝突靜默消失，真正重疊處以標記待人工解決（0.2.1-W3-1207）
   - detect_conflict_residue：pull 開始時偵測 .sync-conflicts/ 既有殘留
     （mtime 早於本次、排除 .gitignore、目錄不存在回空）
   - warn_conflict_residue：殘留時 stdout 警告列出
@@ -153,8 +154,10 @@ def test_version_file_auto_resolve_prints_note(tmp_path, capsys):
     assert "版本檔衝突自動採 upstream: CHANGELOG.md" in out
 
 
-def test_non_version_conflict_preserves_local(tmp_path):
-    """非版本檔衝突維持原行為：本地原檔保留 + 列入 conflicts + 衝突副本。"""
+def test_non_version_conflict_writes_merged_with_markers(tmp_path):
+    """非版本檔衝突：merged 結果（含 git 衝突標記）寫回工作區，列入 conflicts，
+    且 .sync-conflicts/ 仍留對照副本；upstream 內容不再靜默消失（0.2.1-W3-1207）。
+    """
     project_root, upstream, base = _setup_version_conflict(tmp_path)
     claude = project_root / ".claude"
 
@@ -163,7 +166,12 @@ def test_non_version_conflict_preserves_local(tmp_path):
     )
 
     assert "rules/other.md" in conflicts
-    assert (claude / "rules" / "other.md").read_text(encoding="utf-8") == "a\nLOCAL\nc\n"
+    working_text = (claude / "rules" / "other.md").read_text(encoding="utf-8")
+    # 雙方內容都可在工作區取得（本地 LOCAL 未消失、upstream UPSTREAM 已落地）
+    assert "LOCAL" in working_text
+    assert "UPSTREAM" in working_text
+    assert "<<<<<<< local" in working_text
+    assert ">>>>>>> upstream" in working_text
     assert (claude / ".sync-conflicts" / "rules" / "other.md").exists()
 
 

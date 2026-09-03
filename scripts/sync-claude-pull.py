@@ -753,9 +753,16 @@ def _git_merge_three_files(
         local_f.write_bytes(local_content)
         base_f.write_bytes(base_content)
         upstream_f.write_bytes(upstream_content)
-        # git merge-file <current> <base> <other>；結果寫回 <current>
+        # git merge-file <current> <base> <other>；結果寫回 <current>。
+        # -L 自訂標籤取代預設的暫存檔絕對路徑：merged 現在會寫回工作區被人
+        # 看到，而非只留在 .sync-conflicts/ 供對照，暫存檔路徑標籤對人工
+        # 解衝突無意義。
         result = subprocess.run(
-            ["git", "merge-file", "-p", str(local_f), str(base_f), str(upstream_f)],
+            [
+                "git", "merge-file", "-p",
+                "-L", "local", "-L", "base", "-L", "upstream",
+                str(local_f), str(base_f), str(upstream_f),
+            ],
             capture_output=True,
         )
         # returncode: 0 = 乾淨合併；>0 = 衝突數；<0 = 錯誤
@@ -1795,7 +1802,8 @@ def apply_upstream_delta(
       1. compute_upstream_delta 取 .claude/ 範圍的 A/M/D 變更
       2. 過濾 should_exclude（LOCAL_ONLY / 憑證）與 preserve 清單（M4）
       3. 逐檔三方合併（base=上游 base 版本 / local=本地 / upstream=上游 HEAD 版本）
-      4. 衝突檔寫入 .sync-conflicts/ 並保留本地原檔（M3）
+      4. 衝突檔寫入 .sync-conflicts/ 供對照（M3），並將合併結果（含 git 衝突
+         標記）寫回工作區本檔，使 upstream 非重疊 hunk 不隨衝突一併靜默丟棄
       5. 原子套用：先寫 staging 檔再 os.replace 置換（rename 級，跨 fs fallback copy）
       6. 任一步失敗自動回滾已置換的檔案
 
@@ -1921,15 +1929,16 @@ def apply_upstream_delta(
             )
 
             if conflict:
+                merged_bytes = merged if merged is not None else b""
                 # M3：衝突檔寫 .sync-conflicts/（含衝突標記的合併結果，供人工對照）
                 conflicts_dir = _ensure_conflicts_dir(claude_dir)
                 conflict_target = conflicts_dir / rel_path
                 conflict_target.parent.mkdir(parents=True, exist_ok=True)
-                conflict_target.write_bytes(merged if merged is not None else b"")
+                conflict_target.write_bytes(merged_bytes)
 
                 # 版本檔系統性衝突自動採 upstream（1.0.0-W1-084）：
                 # 本地版本檔必 stale（push 只 bump 遠端），自動以 upstream 覆蓋，
-                # .sync-conflicts/ 仍留對照副本。非版本檔維持原 local-保留路徑。
+                # .sync-conflicts/ 仍留對照副本。非版本檔走下方寫回工作區路徑。
                 if (
                     claude_rel in VERSION_FILES_TAKE_UPSTREAM
                     and upstream_path is not None
@@ -1944,8 +1953,44 @@ def apply_upstream_delta(
                     )
                     continue
 
+                # merged 已含 git merge-file 三方合併結果：非重疊區塊已正確
+                # 套用 upstream 變更，只有真正重疊處留下 <<<<<<< 標記。整檔
+                # continue（跳過工作區寫入）會把已正確合併的 upstream 內容
+                # 一併丟棄——這是本次修復的根因，故改寫回工作區本檔。
+                #
+                # add/add（three_way_merge_file 的 base_content is None 分支）
+                # 不經 git merge-file，merged 是 upstream 全文、無標記；若原樣
+                # 寫回會反向靜默丟棄本地版本。偵測 merged 是否已含標記，沒有
+                # 則手動包一層標記讓兩側皆可在工作區取得。
+                if local_exists and b"<<<<<<<" not in merged_bytes:
+                    local_bytes = local_file.read_bytes()
+                    merged_bytes = (
+                        b"<<<<<<< local\n" + local_bytes
+                        + b"=======\n" + merged_bytes
+                        + b">>>>>>> upstream\n"
+                    )
+                marker_count = merged_bytes.count(b"<<<<<<<")
+
+                _atomic_write(local_file, merged_bytes, rollback_log)
+
                 conflicts.append(claude_rel)
-                print_color(f"   衝突: {claude_rel}（已存 {SYNC_CONFLICTS_DIR}/，本地原檔保留）", "red")
+                print_color(
+                    f"   衝突: {claude_rel}（{marker_count} 處合併標記待人工解決，"
+                    f"upstream 其餘變更已套用；對照副本已存 {SYNC_CONFLICTS_DIR}/）",
+                    "red",
+                )
+                # quality-baseline 規則 4：hooks/ 或 lib/（被 hook import）檔案
+                # 寫入合併標記後語法必壞，導致該 Hook 之後每次呼叫都可能靜默
+                # 失敗或被跳過（並非「避免這個結果」，而是確保它一旦發生時可
+                # 被追溯）。stdout 之外多開 stderr 通道，讓只監看 stderr 的
+                # 呼叫端（CI/log 收集器等分流 stdout/stderr 的環境）也能截獲
+                # 此風險最高的一類衝突，不因單一通道漏看而錯過。
+                if claude_rel.startswith(("hooks/", "lib/")):
+                    sys.stderr.write(
+                        f"衝突標記寫入已載入的 Hook/lib 檔案 {claude_rel}，"
+                        "語法可能因標記而損毀；此 Hook 之後在 session 中若靜默"
+                        "失敗或被跳過，來源即在此，請優先人工解決此檔案\n"
+                    )
                 continue
 
             if merged is None:
@@ -2261,11 +2306,20 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
         print_color(f"   已套用 {applied} 個 delta 變更", "green")
         if conflicts:
             print_color(
-                f"   {len(conflicts)} 個檔案衝突，已存入 {SYNC_CONFLICTS_DIR}/（本地原檔保留）:",
+                f"   {len(conflicts)} 個檔案衝突，upstream 非衝突變更已套用至工作區，"
+                f"衝突區塊以標記待人工解決（對照副本存 {SYNC_CONFLICTS_DIR}/）:",
                 "red",
             )
             for c in conflicts:
                 print_color(f"     - {c}")
+            # VERSION/CHANGELOG.md 等版本檔不受本次未解衝突阻擋，會照常前進；
+            # 明示此落差，不靠讀者自行推論版本號代表全量同步完成
+            print_color(
+                "   警告: 版本號/CHANGELOG 可能已依 upstream 前進，"
+                "但上列檔案仍含未解衝突標記，內容與版本號未必完全一致，"
+                "請人工解決衝突後再次確認",
+                "yellow",
+            )
         else:
             print_color("   無衝突", "green")
         # 缺口 1（W8-037）：上游已刪但本地分歧保留之檔，pull 結尾通報（非阻擋）
@@ -2284,6 +2338,13 @@ def _sync_with_backup(project_root: Path, temp_dir: Path) -> Path:
     # 再次 pull 即可推進）。已知取捨：衝突長期未解，base 永久停留於舊點，每次
     # pull 重算全量 delta 並重複告警（fail-visible，優於原行為的 fail-silent
     # 永久遺失）。
+    #
+    # 上一段「已套用的檔此時本地已等於 upstream」的前提，在衝突分支寫回
+    # 工作區之前並不成立——衝突檔原本整檔 continue、本地檔完全不動，故
+    # local != upstream 卻仍被當作 no-op 對待，delta 只會隨每次 pull 累積、
+    # 衝突只會更多（單向棘輪）。本次修復（衝突結果寫回工作區，含合併標記）
+    # 使前提成立：本地檔已含 upstream 非衝突 hunk，人工解完標記後即與
+    # upstream 一致，下次 pull 才真的收斂。
     if conflicts:
         print_color(  # i18n-exempt
             f"   有 {len(conflicts)} 個未解衝突，暫不推進 base SHA"  # i18n-exempt

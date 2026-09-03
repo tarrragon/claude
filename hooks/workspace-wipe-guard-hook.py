@@ -234,6 +234,13 @@ def _get_active_dispatch_count(
     期放行——讀檔失敗與「確實無並行派發」是兩種不同狀態，若把前者當成
     後者，等同讀檔失敗即靜默降級為不設防，與本守衛防止資料遺失的目的
     相悖。
+
+    存活語意：`len(get_active_dispatches(...))` 計入陣列中所有 entry，
+    不檢視個別 entry 的 `turn_ended_at` 欄位。SubagentStop 只標記回合
+    結束、不刪除 entry（代理人 idle 期間仍可能存活並繼續工作），entry
+    存在本身即代表「未被確認終止」，是刻意保守的判斷（見
+    `.claude/lib/dispatch_tracker.py` 模組 docstring「turn_ended_at 欄位」
+    段）。
     """
     try:
         return len(get_active_dispatches(project_root))

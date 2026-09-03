@@ -10,7 +10,7 @@ Error Patterns Index Consistency Check Hook - README 索引與目錄一致性檢
 模式: 提醒為主（不阻擋操作，比照 file-size-guardian-hook.py）
 
 掃描 .claude/error-patterns/ 各分類目錄的實際檔案清單，比對 README.md
-「現有模式」章節各分類表格的 ID 欄位，做四項比對：
+「現有模式」章節各分類表格的 ID 欄位，做五項比對：
 
 1. 目錄 -> 索引：檔名推出的 ID 不在 README（新模式未入索引）
 2. 索引 -> 目錄：README 列出的 ID 無對應檔案（過時條目）
@@ -18,12 +18,19 @@ Error Patterns Index Consistency Check Hook - README 索引與目錄一致性檢
 4. related 雙向性（限同批次）：A 的 frontmatter related（或 related_patterns）
    含 B、B 未回指 A，且兩者 created 日期相差在 SAME_BATCH_WINDOW_DAYS 天內
    （單向引用，讀者從 B 進入時無從得知 A 存在）
+5. README 列重複：同一 ID 在 README「現有模式」表格出現 2+ 次，且非凍結
+   登記表已知的 ID 碰撞（凍結碰撞為同一 ID 對應兩個不同檔案，各佔一列，
+   屬預期狀態，不算重複）
 
 第 3 項是本 hook 的關鍵設計約束：只做 1、2 會複製既有盲區——多個檔案共用
 同一 ID 前綴時，ID 集合差集為零但實質上有檔案完全不在索引涵蓋範圍內。
 
 第 4 項為純增量：collect_dir_id_map 本來就掃過全部檔案，本項僅額外讀取
 frontmatter 解析 related 欄位，不新增掃描範圍。單向引用列 WARNING 不阻擋。
+
+第 5 項補齊集合語意的既有盲區：collect_readme_ids 回傳 set，同一 ID 的
+多列在解析當下即合併，第 1、2 項比對皆看不到 README 內部的重複列。本項
+改用 collect_readme_id_counts 保留列計數，僅新增一次計數統計，不重複讀檔。
 
 **範圍限縮為同批次（PM 裁決，非原始設計）**：related 欄位在現行 schema 下
 承載兩種無法區分的語意——「引註」（新模式引用既有基礎模式做論證依據，單向
@@ -45,6 +52,7 @@ SessionStart 皆掃過全部 error-pattern 檔案），加雙向性檢查成本�
 
 import re
 import sys
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -298,22 +306,43 @@ def parse_frozen_registry(methodology_path: Path):
     return registry, None
 
 
-def collect_readme_ids(readme_path: Path) -> set:
-    """解析 README.md「現有模式」表格列出的 ID 集合。"""
+def collect_readme_id_counts(readme_path: Path) -> Counter:
+    """解析 README.md「現有模式」表格列出的 ID 計數（保留重複列，不合併）。
+
+    與 collect_readme_ids 共用同一抽取樣式（README_ROW_PATTERN），差異在
+    collect_readme_ids 回傳 set 會在解析當下合併同 ID 多列，看不見重複列
+    本身；本函式保留每列的計數，供 compare() 的重複偵測使用。
+    """
     try:
         text = readme_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
-        return set()
-    return set(README_ROW_PATTERN.findall(text))
+        return Counter()
+    return Counter(README_ROW_PATTERN.findall(text))
 
 
-def compare(dir_id_map: dict, readme_ids: set, frozen_registry=None) -> dict:
-    """三項比對，回傳結構化結果。
+def collect_readme_ids(readme_path: Path) -> set:
+    """解析 README.md「現有模式」表格列出的 ID 集合。"""
+    return set(collect_readme_id_counts(readme_path))
+
+
+def compare(
+    dir_id_map: dict,
+    readme_ids: set,
+    frozen_registry=None,
+    readme_id_counts: Counter = None,
+) -> dict:
+    """四項比對，回傳結構化結果。
 
     frozen_registry 為 None 時（未提供或解析失敗）採 fail-open：所有碰撞歸
     WARNING（保持既有行為）。提供時，碰撞 ID 若已登記且檔案 slug 組成與登記
     完全相符，歸入 registered_collisions（INFO）；未登記或組成不符者仍為
     WARNING（collisions），且與登記不符的情形不可被靜默吞掉。
+
+    readme_id_counts 提供時（來自 collect_readme_id_counts），額外做 README
+    列重複比對：同一 ID 出現 2+ 次且未登記於 frozen_registry 者歸入
+    duplicate_in_readme。已登記的 ID（同一 ID 對應兩個不同檔案，各佔一列）
+    視為預期狀態，不論列數一律排除——與碰撞比對使用同一份 frozen_registry，
+    fail-open 語意一致：frozen_registry 為 None 時無法驗證排除資格，一律回報。
     """
     dir_ids = {k for k in dir_id_map if not k.startswith("UNRECOGNIZED:")}
     unrecognized = [v[0] for k, v in dir_id_map.items() if k.startswith("UNRECOGNIZED:")]
@@ -340,11 +369,21 @@ def compare(dir_id_map: dict, readme_ids: set, frozen_registry=None) -> dict:
         else:
             collisions[file_id] = paths
 
+    duplicate_in_readme = []
+    if readme_id_counts:
+        duplicate_in_readme = sorted(
+            file_id
+            for file_id, count in readme_id_counts.items()
+            if count > 1
+            and not (frozen_registry is not None and file_id in frozen_registry)
+        )
+
     return {
         "missing_in_readme": missing_in_readme,
         "stale_in_readme": stale_in_readme,
         "collisions": collisions,
         "registered_collisions": registered_collisions,
+        "duplicate_in_readme": duplicate_in_readme,
         "unrecognized": unrecognized,
     }
 
@@ -356,6 +395,7 @@ def format_report(result: dict, frozen_error: str = None) -> str:
     stale = result["stale_in_readme"]
     collisions = result["collisions"]
     registered_collisions = result.get("registered_collisions", {})
+    duplicate = result.get("duplicate_in_readme", [])
     unrecognized = result["unrecognized"]
     one_way_related = result.get("one_way_related", [])
 
@@ -365,6 +405,7 @@ def format_report(result: dict, frozen_error: str = None) -> str:
     if not (
         missing or stale or collisions or unrecognized
         or registered_collisions or show_frozen_error or one_way_related
+        or duplicate
     ):
         return ""
 
@@ -400,6 +441,13 @@ def format_report(result: dict, frozen_error: str = None) -> str:
             lines.append(f"  {file_id}:")
             for path in paths:
                 lines.append(f"    {path}")
+
+    if duplicate:
+        lines.append(
+            f"\n[WARNING] README.md 有 {len(duplicate)} 個 ID 重複列（非凍結表登記碰撞）："
+        )
+        for file_id in duplicate:
+            lines.append(f"  {file_id}")
 
     if unrecognized:
         lines.append(f"\n[INFO] {len(unrecognized)} 個檔案無法抽取 ID（檔名格式不符規範）：")
@@ -440,11 +488,12 @@ def main() -> int:
 
     try:
         dir_id_map = collect_dir_id_map(error_patterns_root)
-        readme_ids = collect_readme_ids(readme_path)
+        readme_id_counts = collect_readme_id_counts(readme_path)
+        readme_ids = set(readme_id_counts)
         frozen_registry, frozen_error = parse_frozen_registry(methodology_path)
         if frozen_error:
             logger.warning("凍結登記表解析失敗，fail-open 為全部碰撞列 WARNING：%s", frozen_error)
-        result = compare(dir_id_map, readme_ids, frozen_registry)
+        result = compare(dir_id_map, readme_ids, frozen_registry, readme_id_counts)
 
         related_map = collect_related_map(error_patterns_root)
         result["one_way_related"] = check_related_bidirectional(related_map)
@@ -453,18 +502,24 @@ def main() -> int:
 
         if report:
             sys.stderr.write(report + "\n")
-        if result["missing_in_readme"] or result["stale_in_readme"] or result["collisions"]:
+        if (
+            result["missing_in_readme"]
+            or result["stale_in_readme"]
+            or result["collisions"]
+            or result["duplicate_in_readme"]
+        ):
             logger.warning(
-                "索引不一致：missing=%d stale=%d collisions=%d registered_collisions=%d unrecognized=%d",
+                "索引不一致：missing=%d stale=%d collisions=%d registered_collisions=%d duplicate=%d unrecognized=%d",
                 len(result["missing_in_readme"]),
                 len(result["stale_in_readme"]),
                 len(result["collisions"]),
                 len(result["registered_collisions"]),
+                len(result["duplicate_in_readme"]),
                 len(result["unrecognized"]),
             )
         else:
             logger.info(
-                "README 索引與目錄一致，無缺漏/過時/未登記碰撞（已登記重號=%d）",
+                "README 索引與目錄一致，無缺漏/過時/重複列/未登記碰撞（已登記重號=%d）",
                 len(result["registered_collisions"]),
             )
         if result["one_way_related"]:

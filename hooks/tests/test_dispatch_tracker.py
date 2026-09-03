@@ -24,6 +24,8 @@ from lib.dispatch_tracker import (
     is_file_under_dispatch,
     cleanup_expired,
     detect_orphan_branches,
+    mark_turn_ended_by_id,
+    mark_oldest_active_null_agent_id_entry_turn_ended,
 )
 
 
@@ -67,6 +69,28 @@ class TestRecordDispatch:
         dispatches = get_active_dispatches(project_root)
         assert len(dispatches) == 2
 
+    def test_record_dispatch_stores_name(self, project_root: Path):
+        """named agent 的 name（如 subagent_type）寫入 entry（0.2.1-W3-1205）。"""
+        record_dispatch(
+            project_root,
+            agent_description="Fix dart_parser",
+            name="thyme-python-developer",
+        )
+        dispatches = get_active_dispatches(project_root)
+        assert dispatches[0]["name"] == "thyme-python-developer"
+
+    def test_record_dispatch_default_name_is_empty(self, project_root: Path):
+        """未提供 name 時預設為空字串（如 code-review 型無 named agent 的派發）。"""
+        record_dispatch(project_root, "Task without name")
+        dispatches = get_active_dispatches(project_root)
+        assert dispatches[0]["name"] == ""
+
+    def test_record_dispatch_new_entry_turn_ended_at_is_none(self, project_root: Path):
+        """新記錄的 turn_ended_at 初始為 None（尚未回合結束，0.2.1-W3-1205）。"""
+        record_dispatch(project_root, "Task A")
+        dispatches = get_active_dispatches(project_root)
+        assert dispatches[0]["turn_ended_at"] is None
+
 
 class TestClearDispatch:
     def test_clear_dispatch(self, project_root: Path):
@@ -87,6 +111,127 @@ class TestClearDispatch:
         result = clear_dispatch(project_root, "Task X")
         assert result is False
         assert len(get_active_dispatches(project_root)) == 1
+
+
+class TestMarkTurnEndedById:
+    """SubagentStop 主路徑：標記回合結束而非刪除 entry（0.2.1-W3-1205）。
+
+    背景：SubagentStop 的觸發前提「代理人真正停止才觸發」實測不成立
+    （代理人回合結束後轉入 idle 仍存活、仍可接受訊息並繼續工作）。刪除
+    entry 會使唯一追蹤存活狀態的資料源在代理人尚未終止時即清空。
+    """
+
+    def test_marks_without_removing_entry(self, project_root: Path):
+        """標記後 entry 仍存在（非刪除），且 turn_ended_at 被寫入。"""
+        record_dispatch(
+            project_root,
+            agent_description="Fix dart_parser",
+            ticket_id="W7-001",
+            agent_id="agent-abc",
+            name="thyme-python-developer",
+        )
+
+        result = mark_turn_ended_by_id(project_root, "agent-abc")
+
+        assert result is True
+        dispatches = get_active_dispatches(project_root)
+        assert len(dispatches) == 1, "entry 應保留，不應被刪除"
+        assert dispatches[0]["turn_ended_at"] is not None
+        # 其餘欄位（name / ticket_id）不受標記動作影響，仍可查得
+        assert dispatches[0]["name"] == "thyme-python-developer"
+        assert dispatches[0]["ticket_id"] == "W7-001"
+
+    def test_not_found_returns_false(self, project_root: Path):
+        """agent_id 無匹配時回傳 False，不影響既有記錄。"""
+        record_dispatch(project_root, "Task A", agent_id="agent-a")
+
+        result = mark_turn_ended_by_id(project_root, "agent-nonexistent")
+
+        assert result is False
+        dispatches = get_active_dispatches(project_root)
+        assert dispatches[0]["turn_ended_at"] is None
+
+    def test_duplicate_agent_id_marks_all_and_warns(
+        self, project_root: Path, capsys
+    ):
+        """重複 agent_id（異常情境）全數標記，並於 stderr 提示重複匹配。"""
+        record_dispatch(project_root, "Task A", agent_id="agent-dup")
+        record_dispatch(project_root, "Task B", agent_id="agent-dup")
+
+        result = mark_turn_ended_by_id(project_root, "agent-dup")
+
+        assert result is True
+        dispatches = get_active_dispatches(project_root)
+        assert all(d["turn_ended_at"] is not None for d in dispatches)
+        assert "重複匹配" in capsys.readouterr().err
+
+
+class TestMarkOldestActiveNullAgentIdEntryTurnEnded:
+    """FIFO fallback：SubagentStop input 無 description，agent_id 精準匹配
+    失敗時，標記 agent_id 為 null 且尚未標記過回合結束的最早一筆。
+    """
+
+    def test_fifo_marks_oldest_unmarked_candidate(self, project_root: Path):
+        old_time = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+        new_time = datetime.now(timezone.utc).isoformat()
+        state = {
+            "dispatches": [
+                {
+                    "agent_description": "older",
+                    "agent_id": None,
+                    "turn_ended_at": None,
+                    "dispatched_at": old_time,
+                },
+                {
+                    "agent_description": "newer",
+                    "agent_id": None,
+                    "turn_ended_at": None,
+                    "dispatched_at": new_time,
+                },
+            ]
+        }
+        state_file = get_state_file_path(project_root)
+        state_file.write_text(json.dumps(state), encoding="utf-8")
+
+        result = mark_oldest_active_null_agent_id_entry_turn_ended(project_root)
+
+        assert result is True
+        dispatches = get_active_dispatches(project_root)
+        by_desc = {d["agent_description"]: d for d in dispatches}
+        assert by_desc["older"]["turn_ended_at"] is not None
+        assert by_desc["newer"]["turn_ended_at"] is None
+        assert len(dispatches) == 2, "entry 應保留，不應被刪除"
+
+    def test_excludes_already_marked_entries(self, project_root: Path):
+        """已標記過回合結束的 null-agent_id entry 不再是候選（避免保留期拉長
+        後 FIFO 對其重複判定，使呼叫端『候選 > 1 停用 FIFO』邏輯永久失效）。
+        """
+        already_marked_time = "2026-01-01T00:00:00+00:00"
+        state = {
+            "dispatches": [
+                {
+                    "agent_description": "already-marked",
+                    "agent_id": None,
+                    "turn_ended_at": already_marked_time,
+                    "dispatched_at": "2026-01-01T00:00:00+00:00",
+                },
+            ]
+        }
+        state_file = get_state_file_path(project_root)
+        state_file.write_text(json.dumps(state), encoding="utf-8")
+
+        result = mark_oldest_active_null_agent_id_entry_turn_ended(project_root)
+
+        assert result is False
+        dispatches = get_active_dispatches(project_root)
+        assert dispatches[0]["turn_ended_at"] == already_marked_time, (
+            "已標記過的 entry 不應被本函式改動"
+        )
+
+    def test_no_candidates_returns_false(self, project_root: Path):
+        record_dispatch(project_root, "Task with agent_id", agent_id="agent-x")
+        result = mark_oldest_active_null_agent_id_entry_turn_ended(project_root)
+        assert result is False
 
 
 class TestIsFileUnderDispatch:

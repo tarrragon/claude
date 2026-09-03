@@ -37,6 +37,9 @@ Active Dispatch Tracker Hook - PostToolUse (Agent)
   - 幽靈派發記錄修復票（dispatch-active.json 記錄遷移至 PostToolUse）
   - multi-PM 協調層 Phase 1（framework issue tarrragon/claude#77）—
     補 session_id/ticket_id/files 欄位，供 pm-registry 交叉比對
+  - SubagentStop 刪除記錄前提失準修復票 — 補 name 欄位（named agent 的
+    subagent_type），配合 SubagentStop 改標記不刪除，殘留代理人排查時
+    需要此欄位反查身份
 """
 
 import json
@@ -127,6 +130,7 @@ def main() -> int:
     isolation = tool_input.get("isolation", "")
     session_id = resolve_session_id(input_data)
     ticket_id = extract_ticket_id(tool_input.get("prompt", ""), agent_description)
+    name = tool_input.get("subagent_type", "") or ""
 
     files = []
     if ticket_id:
@@ -145,16 +149,18 @@ def main() -> int:
             branch_name="worktree" if isolation == "worktree" else "",
             agent_id=agent_id_from_response,
             session_id=session_id,
+            name=name,
         )
         logger.info(
             "recorded dispatch: %s (isolation=%s, ticket_id=%s, files=%d, "
-            "agent_id=%s, session_id=%s)",
+            "agent_id=%s, session_id=%s, name=%s)",
             agent_description,
             isolation or "none",
             ticket_id or "none",
             len(files),
             agent_id_from_response or "none",
             session_id or "none",
+            name or "none",
         )
     except Exception as e:
         # 記錄失敗不阻擋（PostToolUse 不可阻擋已完成的工具呼叫）

@@ -158,6 +158,23 @@ staged 範圍後仍反覆失敗。
 偵測等其他用途使用），僅本函式的範圍判定將其排除，並在存在空宣告時
 發出 warning（可觀測性，見 `_staged_scope_is_safe_for_bare_commit` 的
 `logger` 參數）。詳細判斷理由見該函式 docstring。
+
+============================================================
+五修正：SubagentStop 不再提早清除記錄，dispatch_count 存活語意明確化
+============================================================
+上方「探針結論」段記錄的「SubagentStop 精準清理（clear_dispatch_by_id）
+命中率偏低……效果是條目提早消失」，根因已查明並修復：SubagentStop 的
+觸發前提被誤假設為「代理人真正停止才觸發」，實測代理人回合結束後轉入
+idle 仍存活、仍可接受訊息並繼續工作。刪除式清理已改為標記式（entry
+保留、寫入 `turn_ended_at`），詳見 `.claude/lib/dispatch_tracker.py`
+模組 docstring「turn_ended_at 欄位」段。
+
+本 hook 的 `dispatch_count = len(dispatches)` 刻意不檢視 `turn_ended_at`
+欄位——並行安全防護採保守存活語意，entry 存在本身即代表「該代理人未被
+確認終止」，回合是否結束不改變此判斷（代理人 idle 期間仍可能繼續寫檔）。
+不得因保留 entry 使並行判定漂移為「只計入尚在執行回合中的 entry」，那
+會讓已轉 idle 但仍存活的代理人重新暴露在本 hook 原本要防的並行汙染
+風險下。
 """
 
 import json

@@ -224,6 +224,19 @@ class TestAlignmentFile:
         assert err is not None
         assert "映射檔不存在" in err
 
+    def test_missing_file_error_contains_self_contained_yaml_example(
+        self, hook_module, logger, tmp_path
+    ):
+        """0.2.1-W3-1204：訊息不再指引「見 SKILL.md」，改內嵌可直接複製建檔的最小
+        yaml 範例（含 schema 的兩個頂層必要欄位），讓新 consumer 無需外部文件即可自救。
+        """
+        data, err = hook_module.load_alignment(tmp_path, logger)
+        assert data is None
+        assert err is not None
+        assert "SKILL.md" not in err
+        assert "signal_to_skill_triggers:" in err
+        assert "keyword_to_trigger_category:" in err
+
     def test_invalid_yaml_returns_error(self, hook_module, logger, tmp_path):
         target = (
             tmp_path

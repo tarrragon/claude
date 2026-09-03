@@ -296,6 +296,13 @@ def has_active_dispatch() -> bool:
 
     格式：{"dispatches": [...]}（dispatches 陣列非空 → active）
 
+    存活語意：陣列非空即視為 active，不檢視個別 entry 的 `turn_ended_at`
+    欄位。SubagentStop 只標記回合結束、不刪除 entry（代理人 idle 期間仍
+    可能存活並繼續工作），故 entry 存在本身即代表「未被確認終止」，是
+    刻意保守的判斷，非可再細分為「僅計入尚在執行回合中者」（見
+    `.claude/lib/dispatch_tracker.py` 模組 docstring「turn_ended_at 欄位」
+    段）。
+
     Returns:
         True 若有 active dispatch；False 若檔案缺失/損毀/dispatches 空
     """

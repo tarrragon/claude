@@ -1,3 +1,10 @@
+## [2.50.4] - 2026-09-03
+
+### Summary
+fix: 四張修復票——SubagentStop 改標記回合結束使 dispatch 記錄不再於代理人存活期間消失（並行安全防護恢復）、sync-pull 衝突檔改寫回合併結果不再靜默丟棄 upstream 變更、wrap-decision guard 訊息內嵌自足 yaml 範例、error-patterns 索引新增 README 重複列偵測；另含 PC-BAL-062/063 與 PC-BAL-045 更正
+
+---
+
 ## [2.50.3] - 2026-09-03
 
 ### Summary

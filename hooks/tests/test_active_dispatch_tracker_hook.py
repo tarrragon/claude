@@ -44,6 +44,7 @@ def _make_input(
     description="test-agent",
     isolation="",
     prompt="",
+    subagent_type="",
 ):
     """建構 PostToolUse(Agent) stdin payload。"""
     return {
@@ -53,6 +54,7 @@ def _make_input(
             "isolation": isolation,
             "prompt": prompt,
             "run_in_background": is_background,
+            "subagent_type": subagent_type,
         },
         "tool_response": {
             "agentId": agent_id,
@@ -109,6 +111,33 @@ def test_records_dispatch_with_agent_id(monkeypatch, capsys):
     assert kwargs["tool_use_id"] == "tu_abc"
     assert kwargs["agent_id"] == "ag_xyz"
     assert kwargs["agent_description"] == "test-agent"
+
+
+def test_records_dispatch_with_name(monkeypatch, capsys):
+    """named agent 派發（subagent_type）時，name 一併寫入 record_dispatch
+    （0.2.1-W3-1205：殘留代理人排查缺少 named-agent 身份資訊）。"""
+    record_calls = []
+    _patch_common(monkeypatch, record_calls=record_calls)
+
+    payload = _make_input(subagent_type="thyme-python-developer")
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+
+    exit_code = _hook.main()
+    assert exit_code == 0
+    assert record_calls[0]["name"] == "thyme-python-developer"
+
+
+def test_no_subagent_type_records_empty_name(monkeypatch, capsys):
+    """未指定 subagent_type（如通用 Task 呼叫）時，name 記為空字串。"""
+    record_calls = []
+    _patch_common(monkeypatch, record_calls=record_calls)
+
+    payload = _make_input(subagent_type="")
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+
+    exit_code = _hook.main()
+    assert exit_code == 0
+    assert record_calls[0]["name"] == ""
 
 
 def test_no_agent_id_in_response_still_records(monkeypatch, capsys):
