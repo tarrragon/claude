@@ -4,13 +4,13 @@ description: "Shape output for a neurodivergent reader who has declared their pr
 license: MIT
 metadata:
   portable: true
-  version: 1.8.1
+  version: 1.10.0
   category: neurodiversity-output
 ---
 
 # neurodivergent-output
 
-Shape every response for a neurodivergent reader. This skill composes three profiles — ADHD, autistic (ASD), and demand-avoidant (PDA) — over one shared base. The reader declares which profile or profiles apply; you turn on the matching layers. Output is not just clear or brief. It is shaped so a specific brain does not have to fight the format to act on the content.
+Shape every response for a neurodivergent reader. This skill composes three profiles — ADHD, autistic (ASD), and demand-avoidant (PDA) — over one shared base. The reader declares which profile or profiles apply; you turn on the matching layers. Clarity and brevity are the floor. Above that, the format itself carries state, priority, and the next action, so the reader spends attention on the content rather than on parsing it.
 
 ## How to use this skill
 
@@ -20,7 +20,7 @@ Shape every response for a neurodivergent reader. This skill composes three prof
 4. If both ADHD mode and demand-avoidance mode are on, apply the conflict-resolution rule.
 5. If no profile is declared but this skill is invoked, ask once which applies, or run the base layer alone until told otherwise.
 
-The base layer and the three modes are additive. ADHD mode and autistic mode compose almost entirely — a response can be both compressed and explicitly structured. Demand-avoidance mode is a framing layer that sits orthogonal to both. Only one pair genuinely conflicts, and there is a single rule for it.
+The base layer and the three modes are additive. ADHD mode and autistic mode compose almost entirely — a response can be both compressed and explicitly structured. Demand-avoidance mode is a framing layer that sits orthogonal to both. One pair conflicts head-on; the conflict-resolution section settles that pair and gives a fallback order for any pair it does not list.
 
 ## Scope: shape the reader's channel, not every artifact
 
@@ -29,11 +29,11 @@ This skill shapes the channel the declaring reader actually consumes — normall
 - **The declaring reader is the audience** (a personal note, plan, or summary they will read): shape the artifact with the active modes.
 - **A shared, public, or other audience** (team docs, published content, code others maintain): follow that surface's own conventions, not this reader's profile.
 
-Not shaping a shared artifact to one reader's profile is correct, not a miss. This scope rule prevents two failure modes: leaving a personal artifact the reader will read as dense, unshaped text; or reshaping public content to one profile and degrading it for every other reader.
+Audience decides the shaping, so a shared artifact left in its own conventions is the correct outcome. The rule holds two failure modes apart: a personal artifact left as dense, unshaped text, and public content reshaped to one profile at every other reader's cost.
 
 ## Base layer — always on
 
-These four rules serve every profile. They are on for any declared combination, because all three profiles benefit from each.
+These rules serve every profile. They are on for any declared combination, because all three profiles benefit from each.
 
 1. **Remove extraction cost.** No preamble ("Great question!", "Let me look at this..."), no recap of what you just did, no closing pleasantries ("Hope this helps!", "Let me know if you need anything else"), no hedging adverb that adds no information. These serve no cognitive profile; they only spend the reader's attention.
 
@@ -43,7 +43,7 @@ These four rules serve every profile. They are on for any declared combination, 
 
 4. **Externalize what the brain should not have to hold.** Put state, assumptions, and priority on the page, not in the reader's head. Do not write "keep in mind X" or leave the reader to infer which item matters most or what you assumed.
 
-5. **Budget the decisions you ask for.** Each question or open choice you hand the reader is load — decision fatigue for ADHD, and for PDA each choice is itself a demand. Ask for one decision at a time, the one that matters now, not a menu of open choices every turn. This refines rather than contradicts PDA's "offer genuine choice": offer the choice on the current step; do not stack several open decisions across one reply.
+5. **Budget the decisions you ask for.** Each question or open choice you hand the reader is load — decision fatigue for ADHD, and for PDA each choice is itself a demand. Ask for one decision at a time, the one that matters now, not a menu of open choices every turn. Boundary with PDA rule 2 ("offer genuine choice"): offer the choice that belongs to the current step, and hold the remaining decisions until that step closes.
 
 ## Mode: ADHD
 
@@ -52,7 +52,7 @@ Turn on when the reader has ADHD. Serves five facts: working memory is small, kn
 1. **Lead with the next action.** The first line is something the reader can do — a command, path, or snippet — not context or a plan. Prose comes after, if at all. (Overridden by the conflict rule when PDA mode is also on.)
 2. **Number multi-step tasks.** More than one step becomes a numbered list, each step one bounded action.
 3. **End with one concrete next action** the reader can do in under two minutes. Even "open the file" counts.
-4. **Restate state every turn, and keep a cross-message ledger when threads accumulate.** For a single task: "Step 3 of 5 done: schema updated. Next: backfill the new column." For a long or multi-thread conversation, maintain a persistent ledger — done / in-progress / pending / decisions-made — in a consistent place and format, updated every turn. ADHD working memory spans messages, not just one reply; a per-turn local restatement does not cover the open loops that pile up across many turns. Keep the ledger accurate every turn or drop it — a stale ledger misleads (see base rule 3). When `5w1h-decision` is also active, write the ledger's pending/decision rows directly as compressed 5W1H (What / Why / next-step) — the row IS the 5W1H, not a separate step. Because the ledger fires every turn, wiring the 5W1H form into the ledger row here is what makes that composition actually trigger, instead of a bolted-on habit that silently drops.
+4. **Restate state every turn, and keep a cross-message ledger when threads accumulate.** For a single task: "Step 3 of 5 done: schema updated. Next: backfill the new column." For a long or multi-thread conversation, maintain a persistent ledger — done / in-progress / pending / decisions-made — in a consistent place and format, updated every turn. ADHD working memory spans messages, not just one reply; a per-turn local restatement does not cover the open loops that pile up across many turns. Keep the ledger accurate every turn or drop it — a stale ledger misleads (see base rule 3). When `5w1h-decision` is also active, write the ledger's pending/decision rows directly as compressed 5W1H (What / Why / next-step) — the row IS the 5W1H. The ledger fires every turn, so the composition rides on a step you are already taking.
 5. **Make completed work visible.** Show what now works, concretely: "Login now works with magic links. Try: `npm run dev`, open `/login`." Do not bury wins in a recap.
 6. **Give specific time estimates** in concrete units: "About 15 minutes if tests already cover this."
 7. **Matter-of-fact tone for errors.** State cause and fix, no alarm.
@@ -92,9 +92,9 @@ Foundational stance: demand avoidance is an anxiety response to loss of autonomy
 
 ADHD mode rule 1 says to lead with the next action — which its examples realize as an imperative command ("Run `npm install`"). PDA mode rule 1 says to strip out "you must / you should." These two contend for the same single decision: how an action is phrased. They cannot both hold in the same spot.
 
-**When both ADHD mode and PDA mode are on, PDA wins the phrasing.** Present the action as an invitation with control left to the reader. Most other ADHD rules stay fully in force — externalize state, make progress visible, suppress tangents, number the steps, cap lists, matter-of-fact errors. But two rules carry demand structure beyond phrasing and need a small concession:
+**When both ADHD mode and PDA mode are on, PDA wins the phrasing.** Present the action as an invitation with control left to the reader. Most other ADHD rules stay fully in force — externalize state, make progress visible, suppress tangents, number the steps, cap lists, matter-of-fact errors. Two rules carry demand structure past phrasing and need a concession — one from ADHD mode, one from autistic mode:
 
-- **End with one timed next action** (ADHD rule 3): keep externalizing the next step, but drop the single-directive framing and the time frame. Offer it as one optional starting point, not the one thing to do right now.
+- **End with one concrete next action** (ADHD rule 3): keep externalizing the next step, but drop the single-directive framing and the two-minute frame. Offer it as one optional starting point, not the one thing to do right now.
 - Whenever you would give **one clear path** (autistic mode) while PDA is on, give options with a one-line trade-off on each instead of a single directed path — this satisfies autistic disambiguation and PDA choice at once.
 
 Example — a reader who is AuDHD with demand avoidance:
@@ -102,7 +102,9 @@ Example — a reader who is AuDHD with demand avoidance:
 - Not (pure ADHD): "Run `npm install`, then edit line 42."
 - Instead: "Two pieces are in play — a package to install (`npm install`) and one edit at `src/auth.ts:42`. Either order works, whenever you want to start. Here's what each does: ..." — the steps are still numbered, the state is still externalized, only the command-tone is gone.
 
-The phrasing conflict is the only one that needs a global override switch. The other conflicts — the two concessions above, plus ADHD's compression versus autistic mode's "label every suggestion" — are absorbed by local concessions where the rules meet: compress by default, but keep the autistic labels at points where vagueness would mislead. Honest scope: "only one needs a global switch" is what this analysis found by enumerating the rule pairs, not a proof that only one conflict can exist — a fourth profile, or a closer look, could surface more.
+The phrasing conflict is the only one that needs a global override switch. The other conflicts — the two concessions above, plus ADHD's compression versus autistic mode's "label every suggestion" — are absorbed by local concessions where the rules meet: compress by default, and keep the autistic labels at points where vagueness would mislead.
+
+This list comes from enumerating the rule pairs above, so a pair outside it can still collide. When two active rules contend for the same decision and nothing here covers them, resolve in this order — safety (see Overrides), then the base layer, then PDA framing, then the remaining mode rules — and name in one line which rule you set aside.
 
 ## Overrides — for every profile
 
@@ -120,11 +122,11 @@ Before sending, verify against the active modes:
 3. Autistic on: is every suggestion's priority labeled, every assumption stated, every change announced? Is anything left to be inferred from tone?
 4. PDA on: is there any "you must / you should / right now" left? Is every choice you offered genuine?
 5. AuDHD + PDA: is the action phrased as an invitation while the ADHD structure (state, progress, numbering) is intact?
-6. Composition — if another skill is also active (e.g. `5w1h-decision`): did its contribution actually appear in THIS reply, not just get declared active? The visible half running (the ledger) does not prove the effortful half ran (5W1H-structured decision rows). Check the effortful half specifically — declaring both skills on is not the same as executing both.
+6. Composition — if another skill is also active (e.g. `5w1h-decision`): point at the line in THIS reply where its contribution appears. With `5w1h-decision`, that line is a ledger decision row in compressed 5W1H form; a ledger whose rows are plain prose means only the visible half ran.
 
 ## Collaboration: when `5w1h-decision` is also active
 
-This skill runs fully standalone. When the `5w1h-decision` skill is also active, the cross-message ledger (ADHD rule 4) and 5W1H share the decision surface. **The trigger lives in ADHD rule 4 — the ledger fires every turn, so the 5W1H rows happen with it; this section only tunes the form. Do not treat the collaboration as an optional appendix: a composed behavior parked in an appendix silently drops (that is exactly how the 5W1H half was missed once).** The details:
+This skill runs fully standalone. When the `5w1h-decision` skill is also active, the cross-message ledger (ADHD rule 4) and 5W1H share the decision surface. **The trigger lives in ADHD rule 4: the ledger fires every turn and the 5W1H rows ride on it, so this section only tunes their form.** The details:
 
 - **The ledger stays the persistent surface; 5W1H structures its decision rows.** A pending or made decision in the ledger carries a compressed 5W1H — usually What, Why, and the next step (How) — not all six fields, and never 5W1H's session token, agent-mapping, or blocking scaffolding. The full 5W1H record lives wherever 5W1H normally keeps it; the ledger surfaces a compressed pointer.
 - **Base layer wins on the ledger surface.** Where 5W1H's full form would violate this skill's base layer (remove extraction cost, reduce overload, cap lists at five), compress it to fit. The ledger is a low-load anchor; do not let the six-field form bloat it.
@@ -139,7 +141,7 @@ Neurodiversity is a spectrum. These rules are defaults, not prescriptions — th
 
 Two of these profiles — ADHD and autistic — are established diagnoses; demand avoidance (PDA) is not a formal DSM-5 / ICD-11 diagnosis and remains a contested construct within autism research. This skill uses it to shape how a task is phrased, not to assert a clinical fact. The de-imperative framing helps some readers regardless of whether they identify with the PDA label.
 
-This skill distills and integrates three prior single-profile skills: `i-have-adhd` (ayghri, MIT), the autistic-reader counterpart in the same style, and `pda-reframing` (emory, MIT). The reasoning behind each layer — why each rule traces to a cognitive fact, and how the three profiles compose over a shared base — is written up separately in the analysis this skill was distilled from. This file is the operational form of that analysis.
+This skill distills and integrates three prior single-profile skills: `i-have-adhd` (ayghri, MIT), the autistic-reader counterpart in the same style, and `pda-reframing` (emory, MIT). Each rule traces to a cognitive fact named in its mode's opening line, and the three modes compose over the shared base layer. This file carries the operational form of that reasoning; it does not restate the derivation.
 
 ---
 

@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.12.1 — 模板表的元件庫規格模板列由「逐元件九欄位契約」更正為十一欄位。上游方法論 1.11.0 已將契約擴為十一欄（新增操作機制與無障礙），本列的欄位數未同步；模板檔本身早已是十一欄，故此為描述落後於產物，非產物缺欄。
+
 **Version**: 1.12.0 — 元件庫規格模板升為 first-class 文件類型：模板表新增「元件庫規格模板」列（逐元件契約、容器元件排列不變式、禁用對照、豁免清單），使用方式補其 cp 命令，Design System 規格模板列註明其涵蓋範圍為 token 層。模板本身擴為十一欄位契約（語意與內容角色、變體、狀態集、操作機制、尺寸契約、內容政策、slot 契約、組合規則、無障礙、測試契約、反例），形態因素矩陣改為操作方式驅動並補回饋通道、最小命中區、禁放區與安全區。
 
 **Version**: 1.11.0 — 新增 `validate <SPEC-ID>` 子命令：依 frontmatter subdomain 分派章節 schema 驗證（data-contract 驗可攜性邊界原則/A.1-A.6/B.1-B.3/適用判準兩旗標非空；非 data-contract 明確路由 `/spec validate`，exit 0/1/2），對應 `doc_system/commands/validate.py`
