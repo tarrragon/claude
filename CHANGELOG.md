@@ -1,3 +1,10 @@
+## [2.50.2] - 2026-09-03
+
+### Summary
+feat: canonical skill 四項更新（component-contract-design 新增、doc 1.12.0、version-bootstrap 1.5.0、foundation-design 6.2.0 合併撞號）與 component-library 方法論 1.12.0、PC-GPD-003/004
+
+---
+
 ## [2.50.1] - 2026-09-03
 
 ### Summary

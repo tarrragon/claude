@@ -2,7 +2,7 @@
 name: version-bootstrap
 description: "版本規劃波 orchestrator。封裝「提案→spec→教學比對→UC→紅燈測試→建票」6 步 pipeline，標準化每版的規劃波啟動流程。Use for: (1) 新版本開始時的規劃波啟動, (2) 從提案到可執行 ticket 的標準化轉換, (3) 確保教學比對不被跳過。Use when: todolist.yaml 中有新版本的 proposals 待展開、準備進入新版本的 W1 規劃波時。"
 metadata:
-  version: 1.4.0
+  version: 1.5.0
 ---
 
 # /version-bootstrap — 版本規劃波 Orchestrator
@@ -74,7 +74,7 @@ doc batch-init --proposals PROP-XXX,PROP-YYY --domain <domain>
 | 檢查項 | 對應載體 | 缺失時動作 |
 |--------|---------|-----------|
 | design token 層 | 專案 design-system 樣式檔（顏色/間距/字體/圓角/陰影參數集中管理） | 先建立 design token 層 |
-| L3 元件庫章節 | spec 文件的元件庫章節（元件清單 + 原生元件禁用對照表 + 豁免清單） | 先建立或補齊 L3 元件庫章節 |
+| L3 元件庫章節 | spec 文件的元件庫章節（元件清單 + 原生元件禁用對照表 + 豁免清單；本步驟得先只到此，逐元件十一欄位契約與容器條目於 Step 4.5 第 3 塊後補齊） | 先建立或補齊 L3 元件庫章節（用 doc skill `component-library-spec-template`） |
 | design-system spec 文件 | 用 doc skill `design-system-spec-template` 產出的 design system 專屬 spec（如 `docs/spec/design-system-spec.md`），非混入一般功能 spec | 用 design-system-spec-template 補產 |
 
 判準與分層依據（L1/L2/L3 分層、狀態綁定判準、流程整合點）見 `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`。非 UI 類提案略過本檢查。
@@ -164,9 +164,10 @@ cp .claude/skills/doc/templates/data-contract-template.md docs/spec/{domain}/{na
 | 1 | i18n 系統 | 多語系資源檔 + 產生器（元件文字取 i18n key，測試可驗 zh/en overflow） |
 | 2 | design-system 實作 | design token 集中檔（消費 Step 2 的 design-system spec） |
 | 3 | UX 審查 | 每個互動元件的反應/動畫/提示 + 頁面跳轉/退出/生命週期完整性審查（產出反應規格供元件庫與測試點） |
-| 4 | 元件庫實作 | 集中元件庫（套 token + i18n + UX 反應），barrel 匯出 |
+| 3.5 | 元件契約 | L3 元件庫章節補齊逐元件十一欄位契約與容器條目（程序見 `component-contract-design` skill，判準見方法論〈元件契約判準〉）；checkpoint 為該 skill 的〈契約齊全的定義〉 |
+| 4 | 元件庫實作 | 集中元件庫（套 token + i18n + UX 反應，依契約實作），barrel 匯出 |
 
-**PM 工作**：為四塊各建實作票——i18n 與 design-system 可並行；UX 審查產出反應規格；元件庫依賴前三者為 `blockedBy`。順序與依賴依方法論〈地基波 build 順序〉，本 skill 不重複判準只做 orchestration。
+**PM 工作**：為四塊各建實作票，另為元件契約建 DOC 票——i18n 與 design-system 可並行；UX 審查產出反應規格；元件契約依賴 UX 審查；元件庫依賴前三塊與元件契約為 `blockedBy`。順序與依賴依方法論〈地基波 build 順序〉，本 skill 不重複判準只做 orchestration。
 
 **Checkpoint**：UI 版本的 i18n / design-system / UX 審查 / 元件庫四塊實作完成並測試綠；非 UI 版本略過本步驟（比照 Step 2 UI 判別）。
 
