@@ -159,7 +159,15 @@ NEEDS_CONTEXT_PAYLOAD = {
     "tool_input": {
         "command": 'ticket track append-log 1.0.0-W1-071 --section "NeedsContext" "缺料說明"'
     },
-    "tool_response": {"success": True, "stdout": "appended"},
+    # stdout 須含 CLI 真實成功回音「已追加日誌到」，對應 0.2.1-W3-1216 成功
+    # 檢查改用實跑結果（exit_code + stdout 成功回音）而非僅 success 欄位的
+    # 修復（見 .claude/skills/ticket/hooks/needs-context-listener-hook.py
+    # 的 _LOG_APPENDED_SUCCESS_MARKER）
+    "tool_response": {
+        "success": True,
+        "exit_code": 0,
+        "stdout": "[OK] 1.0.0-W1-071 已追加日誌到 'NeedsContext'",
+    },
 }
 
 

@@ -614,6 +614,64 @@ class TestDetectOperationHeredocDataReference:
 
 
 # ============================================================================
+# _detect_operation：引號內參數提及操作字樣不誤判為實際命令（0.2.1-W3-1223）
+# 偵測目標是「要執行的命令」，掃描範圍不應是「命令字串全文含引號內的參數」
+# ============================================================================
+
+
+class TestQuotedArgumentNotMisdetected:
+    @pytest.mark.parametrize(
+        "command",
+        [
+            'ticket create --why "以 git stash 暫存，事後 git stash pop 完整還原"',
+            'ticket track append-log 0.2.1-W3-1223 --section Solution '
+            '"git checkout -- . 與 git reset --hard 皆為破壞性操作"',
+            'git commit -m "revert git stash usage introduced earlier"',
+            'echo "git clean -f 與 git restore . 皆須留意"',
+        ],
+    )
+    def test_quoted_mentions_not_detected(self, command):
+        assert _detect_operation(command) is None
+
+    def test_main_allows_quoted_mentions_even_when_parallel(self, monkeypatch, capsys):
+        """整合層級：引號內提及操作字樣即使在並行期也應放行（不誤判為真實操作）。"""
+        command = 'ticket create --why "以 git stash 暫存"'
+        exit_code = _run_hook(monkeypatch, command, dispatch_count=3)
+        assert exit_code == 0
+        assert capsys.readouterr().err == ""
+
+    def test_real_operation_after_quoted_mention_still_detected(self):
+        """引號內提及操作名稱不影響同命令中真實執行的操作仍被偵測（不過度剝離）。"""
+        command = 'ticket create --why "以 git stash 暫存" && git reset --hard'
+        assert _detect_operation(command) == (
+            "git reset --hard",
+            hook_module._OPERATIONS[2][2],
+        )
+
+    def test_real_stash_still_detected_without_quoted_wrapper(self):
+        """對照組：不含引號包裝的真實 stash 命令行為不變（無回歸）。"""
+        assert _detect_operation("git stash") == (
+            "git stash",
+            hook_module._OPERATIONS[0][2],
+        )
+
+    def test_main_still_denies_real_stash_when_parallel(self, monkeypatch, capsys):
+        """整合層級對照組：真實 git stash 在並行期仍被 DENY（無回歸）。"""
+        exit_code = _run_hook(monkeypatch, "git stash", dispatch_count=2)
+        assert exit_code == 2
+        err = capsys.readouterr().err
+        assert "git stash" in err
+
+    def test_pipeline_after_quoted_mention_still_denied(self, monkeypatch, capsys):
+        """管線／`;` 分隔後的真實操作仍須被偵測（AC2：含管線與 && 後）。"""
+        command = 'echo "mentions git stash" ; git clean -fd'
+        exit_code = _run_hook(monkeypatch, command, dispatch_count=1)
+        assert exit_code == 2
+        err = capsys.readouterr().err
+        assert "git clean -f" in err
+
+
+# ============================================================================
 # main() 整合：主 repo 有未提交 tracked 變更時無條件 DENY（不限並行期）
 # （0.2.1-W3-760：PC-019 事故鏈第 4 步發生於 agent 完成後，
 #   dispatch-active.json 已清空，此時仍須阻擋）

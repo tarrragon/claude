@@ -386,6 +386,38 @@ def _find_invocation_in_statement(
     )
 
 
+def parse_command_statements(command: str) -> Optional[List[List[str]]]:
+    """公開版本的語句 token 化：heredoc 剝離 + 換行正規化 + shlex tokenize +
+    依運算子（`;`／`&&`／`||`／`|`／`(`／`)`）切分語句。
+
+    供非 git 專用的呼叫端（如偵測特定 CLI 子命令形態的 hook）判斷「命令
+    位置 token」而非在命令字串原文上做全文 regex search——後者會把引號內
+    的參數值（如描述文字提及某命令形態的字面文字）誤判為實際要執行的
+    命令：shlex 會把整段引號內容收斂成單一 token，與分開的多個 token 精確
+    比對時不會誤命中。`find_git_invocations` 內部即呼叫此同一條處理管線，
+    本函式僅將其對外公開，避免非 git 呼叫端重新實作一份 tokenize 邏輯。
+
+    Args:
+        command: PreToolUse/PostToolUse 收到的原始命令字串。
+
+    Returns:
+        - `None`：命令字串無法安全 tokenize（shlex 遇未閉合引號）。呼叫端
+          須明確處理此情況並自行決定 fail-open 或 fail-closed，不可與空
+          清單混淆處理（語意與 `find_git_invocations` 一致，見模組
+          docstring「失敗語意」段）。
+        - `List[List[str]]`：每個內層清單為一條語句的 token 序列；可能為
+          空清單（可正常解析但無任何語句，如空字串命令）。
+    """
+    if not command:
+        return []
+    stripped = strip_heredoc_bodies(command)
+    normalized = normalize_newlines_to_separators(stripped)
+    tokens = _tokenize(normalized)
+    if tokens is None:
+        return None
+    return _split_statements(tokens)
+
+
 def find_git_invocations(
     command: str, subcommands: Iterable[str]
 ) -> Optional[List[GitInvocation]]:

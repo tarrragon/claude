@@ -84,6 +84,26 @@ staged 等）計入，未追蹤新檔案（`??`）不計入——後者本就不
   不解析子 shell `cd` 形式的目標 repo；dispatch 狀態與主 repo 未提交狀態
   一律讀取專案根目錄（get_project_root()，經 CLAUDE_PROJECT_DIR 恆指主
   repo，不隨 worktree 內執行時的實際 cwd 改變）。
+
+============================================================
+背景（2026-09：偵測改為命令位置 token 比對，修復引號內參數誤判）
+============================================================
+先前版本以正規表示式對「整段命令字串原文」做 search（僅先剝離 heredoc 本
+體），偵測目標是「要執行的命令」，掃描範圍卻是「命令字串全文含引號內的
+參數」——`ticket create --why "...以 git stash 暫存..."` 這類命令，`--why`
+的描述文字只是字面提及該操作，並非實際要執行的命令，卻因整段字串包含
+`git stash` 子字串而被誤判阻擋。
+
+修復方式：五種偵測器改為呼叫 `find_git_invocations()`（lib.git_command_
+parse）取得結構化 git 呼叫，只在「命令位置 token」（shlex tokenize 後，
+實際要執行的子命令與其旗標 token）上比對，不再對命令字串原文做全文
+regex search。引號內的參數值在 tokenize 階段已收斂為單一 token，與分開的
+多個 token 精確比對時不會誤命中。`find_git_invocations` 內部仍先剝離
+heredoc 本體，涵蓋範圍與既有行為一致；`ticket create --why` 描述文字含
+「git stash」等字樣時，因整段描述是單一 token，不會被拆解出獨立的 `git`
+`stash` token，故不再誤判。與 needs-context-listener-hook.py 共用同一條
+tokenize pipeline（`parse_command_statements`／`find_git_invocations` 皆
+內部呼叫該 pipeline），避免兩支 hook 各自重新實作一份 tokenizer。
 """
 
 import json
@@ -91,89 +111,99 @@ import logging
 import re
 import sys
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.dispatch_tracker import get_active_dispatches
-from lib.git_command_parse import strip_heredoc_bodies
+from lib.git_command_parse import find_git_invocations
 from lib.git_utils import FileStatus, get_project_root, get_uncommitted_files
 
 
-# 同 bare-commit-guard-hook 的 pathspec 判準：`--` 前後皆為空白或字串邊界
-_PATHSPEC_RE = re.compile(r"(?:^|\s)--(?:\s|$)")
-
-# 目標為整個工作區的獨立 `.` token（前方為空白/字串起點，後方為空白/字串
-# 終點或命令鏈接符），checkout / restore 共用
-_TRAILING_DOT_RE = re.compile(r"(?:^|\s)\.\s*(?:$|[;&|)])")
-
-# 1. git stash（建立形式）
-_STASH_KEYWORD_RE = re.compile(r"\bgit\s+(?:-C\s+\S+\s+)?stash\b")
-_STASH_SAFE_SUBCOMMAND_RE = re.compile(
-    r"\bgit\s+(?:-C\s+\S+\s+)?stash\s+(?:pop|apply|list|show|drop|clear|branch)\b"
+# 建立形式 git stash 的安全子命令（不清空工作區）
+_STASH_SAFE_SUBCOMMANDS = frozenset(
+    {"pop", "apply", "list", "show", "drop", "clear", "branch"}
 )
 
-# 2. git checkout -- . / git checkout .（丟棄整個工作區，含帶 ref 前綴形式）
-_CHECKOUT_KEYWORD_RE = re.compile(r"\bgit\s+(?:-C\s+\S+\s+)?checkout\b")
+# force 旗標（--force 或含 f 的單破折號組合，如 -f／-fd／-df）—— clean 用
+_FORCE_FLAG_TOKEN_RE = re.compile(r"^(?:--force|-[a-zA-Z]*f[a-zA-Z]*)$")
 
-# 3. git reset --hard
-_RESET_RE = re.compile(r"\bgit\s+(?:-C\s+\S+\s+)?reset\b")
-_HARD_FLAG_RE = re.compile(r"(?:^|\s)--hard\b")
-
-# 4. git clean -f（force 旗標任意組合，含 --force；不要求同時有 -d）
-_CLEAN_RE = re.compile(r"\bgit\s+(?:-C\s+\S+\s+)?clean\b")
-_CLEAN_FORCE_FLAG_RE = re.compile(r"(?:^|\s)(?:--force|-[a-zA-Z]*f[a-zA-Z]*)(?:\s|$)")
-
-# 5. git restore .（丟棄整個工作區，`--staged` 且未帶 `--worktree` 時排除）
-_RESTORE_KEYWORD_RE = re.compile(r"\bgit\s+(?:-C\s+\S+\s+)?restore\b")
-_STAGED_FLAG_RE = re.compile(r"(?:^|\s)(?:--staged|-[a-zA-Z]*S[a-zA-Z]*)(?:\s|$)")
-_WORKTREE_FLAG_RE = re.compile(r"(?:^|\s)(?:--worktree|-[a-zA-Z]*W[a-zA-Z]*)(?:\s|$)")
+# --staged／--worktree 旗標（含含大寫 S/W 的單破折號組合）—— restore 用
+_STAGED_FLAG_TOKEN_RE = re.compile(r"^(?:--staged|-[a-zA-Z]*S[a-zA-Z]*)$")
+_WORKTREE_FLAG_TOKEN_RE = re.compile(r"^(?:--worktree|-[a-zA-Z]*W[a-zA-Z]*)$")
 
 
-def _has_pathspec_exemption(command: str) -> bool:
-    """`--` pathspec 豁免（stash / clean 適用，判準與 bare-commit-guard 一致）。"""
-    return bool(_PATHSPEC_RE.search(command))
+def _invocations_or_conservative_default(command: str, subcommand: str):
+    """呼叫 `find_git_invocations`，回傳 `(invocations, parse_failed)`。
 
-
-def _has_whole_tree_target(command: str, keyword_re: "re.Pattern") -> bool:
-    """偵測 keyword 命令是否命中 + 目標為整個工作區（末端獨立 `.` token）。
-
-    checkout / restore 共用：兩者的破壞範圍判準相同——是否有具體 pathspec，
-    只差在旗標語意（restore 另需判斷 --staged/--worktree，見 `_is_restore_wipe`）。
+    `parse_failed=True` 代表 shlex 無法安全 tokenize（未閉合引號等）；呼叫
+    端採保守處理（視為可能命中該操作），理由與本檔其餘讀取失敗處理一致
+    （見 `_get_active_dispatch_count` docstring）——tokenize 失敗與「確實
+    不含目標操作」是兩種不同狀態，不可混為一談：本守衛防的是不可逆資料
+    遺失，寧可對無法判定的命令保守阻擋，也不放行未知風險。
     """
-    if not keyword_re.search(command):
-        return False
-    return bool(_TRAILING_DOT_RE.search(command))
+    invocations = find_git_invocations(command, {subcommand})
+    if invocations is None:
+        return [], True
+    return invocations, False
+
+
+def _has_whole_tree_arg_target(args: List[str]) -> bool:
+    """判斷子命令引數清單最後一個 token 是否為獨立的 `.`（整個工作區）。
+
+    checkout / restore 共用：兩者的破壞範圍判準相同——目標是否為整個工作區
+    （末端獨立 `.` token），只差在旗標語意（restore 另需判斷
+    `--staged`/`--worktree`，見 `_is_restore_wipe`）。
+    """
+    return bool(args) and args[-1] == "."
 
 
 def _is_stash_wipe(command: str) -> bool:
     """偵測建立形式 git stash（清空工作區），排除 pop/apply/list/show/drop/clear/branch。"""
-    if not _STASH_KEYWORD_RE.search(command):
-        return False
-    if _STASH_SAFE_SUBCOMMAND_RE.search(command):
-        return False
-    return not _has_pathspec_exemption(command)
+    invocations, parse_failed = _invocations_or_conservative_default(command, "stash")
+    if parse_failed:
+        return True
+    for inv in invocations:
+        args = inv.args
+        if args and args[0] in _STASH_SAFE_SUBCOMMANDS:
+            continue
+        if "--" in args:
+            continue
+        return True
+    return False
 
 
 def _is_checkout_wipe(command: str) -> bool:
     """偵測 `git checkout -- .`（含帶 ref 前綴形式）（丟棄整個工作區未 commit 變更）。"""
-    return _has_whole_tree_target(command, _CHECKOUT_KEYWORD_RE)
+    invocations, parse_failed = _invocations_or_conservative_default(command, "checkout")
+    if parse_failed:
+        return True
+    return any(_has_whole_tree_arg_target(inv.args) for inv in invocations)
 
 
 def _is_reset_hard(command: str) -> bool:
     """偵測 `git reset --hard`。--hard 不支援 pathspec，任一形式皆視為破壞全工作區。"""
-    return bool(_RESET_RE.search(command) and _HARD_FLAG_RE.search(command))
+    invocations, parse_failed = _invocations_or_conservative_default(command, "reset")
+    if parse_failed:
+        return True
+    return any("--hard" in inv.args for inv in invocations)
 
 
 def _is_clean_force(command: str) -> bool:
     """偵測 `git clean -f`（force 旗標任意組合，含 -fd；不要求同時有 -d）。"""
-    if not _CLEAN_RE.search(command):
-        return False
-    if not _CLEAN_FORCE_FLAG_RE.search(command):
-        return False
-    return not _has_pathspec_exemption(command)
+    invocations, parse_failed = _invocations_or_conservative_default(command, "clean")
+    if parse_failed:
+        return True
+    for inv in invocations:
+        args = inv.args
+        if not any(_FORCE_FLAG_TOKEN_RE.match(tok) for tok in args):
+            continue
+        if "--" in args:
+            continue
+        return True
+    return False
 
 
 def _is_restore_wipe(command: str) -> bool:
@@ -183,13 +213,19 @@ def _is_restore_wipe(command: str) -> bool:
     tree 內容不受影響，風險模型與其餘四種操作不同（見檔案頂端「涵蓋範圍」
     第 5 項）。
     """
-    if not _has_whole_tree_target(command, _RESTORE_KEYWORD_RE):
-        return False
-    has_staged = bool(_STAGED_FLAG_RE.search(command))
-    has_worktree = bool(_WORKTREE_FLAG_RE.search(command))
-    if has_staged and not has_worktree:
-        return False
-    return True
+    invocations, parse_failed = _invocations_or_conservative_default(command, "restore")
+    if parse_failed:
+        return True
+    for inv in invocations:
+        args = inv.args
+        if not _has_whole_tree_arg_target(args):
+            continue
+        has_staged = any(_STAGED_FLAG_TOKEN_RE.match(tok) for tok in args)
+        has_worktree = any(_WORKTREE_FLAG_TOKEN_RE.match(tok) for tok in args)
+        if has_staged and not has_worktree:
+            continue
+        return True
+    return False
 
 
 # 操作名稱 -> (偵測函式, 安全形式提示｜None 表示無 pathspec 安全形式)
@@ -210,16 +246,18 @@ _OPERATIONS = [
 def _detect_operation(command: str) -> Optional[Tuple[str, Optional[str]]]:
     """依序檢查五種全工作區破壞性操作，回傳 (操作名稱, 安全形式提示) 或 None。
 
-    偵測前先剝離 heredoc 本體（`strip_heredoc_bodies`，與 bare-commit-guard-hook
-    透過 `find_git_invocations` 間接套用的判準一致）：本守衛對命令的「可執行
-    部分」做子字串比對，heredoc 內文屬 CLI 引數的資料（如 ticket append-log
-    引用一段含操作名稱的日誌原文），不是實際要執行的命令，不應觸發偵測。
+    偵測改以 `find_git_invocations`（lib.git_command_parse）取得結構化 git
+    呼叫，只在「命令位置 token」（實際要執行的子命令與其旗標）上比對，不再
+    對命令字串原文做全文 regex search——後者會誤判引號內的參數值（如
+    `ticket create --why "...以 git stash 暫存..."`）為真實要執行的操作。
+    `find_git_invocations` 內部已處理 heredoc 剝離（ticket append-log 引用
+    一段含操作名稱的日誌原文屬 CLI 引數資料，不是實際命令，不應觸發），五個
+    偵測器各自呼叫，此處不需重複剝離。
     """
     if not command:
         return None
-    executable_command = strip_heredoc_bodies(command)
     for name, detector, safe_hint in _OPERATIONS:
-        if detector(executable_command):
+        if detector(command):
             return name, safe_hint
     return None
 

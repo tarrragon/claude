@@ -1,3 +1,10 @@
+## [2.50.7] - 2026-09-03
+
+### Summary
+feat: framework-issue comment-as-section 協作 CLI（section_comment 六命令）與 framework-issue-curator 代理人；fix: needs-context-listener 與 workspace-wipe-guard 改為命令位置 token 比對（共用 parse_command_statements）；docs: PC-BAL-064/065、ARCH-BAL-013、PC-BAL-024 案例補充（跨 consumer 協作實證，tarrragon/claude#81 #82 #61）
+
+---
+
 ## [2.50.6] - 2026-09-03
 
 ### Summary

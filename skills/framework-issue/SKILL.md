@@ -2,7 +2,7 @@
 name: framework-issue
 description: "Creates and lists framework issues on the canonical framework repo (tarrragon/claude) via gh CLI. Use when tracking a framework-level problem, error-pattern canonical reference, provenance anchor, or cross-consumer fix across projects. Triggers include: framework issue, canonical issue, 跨 consumer 修復追蹤, 框架 issue, error-pattern canonical. Do NOT use for project-local docs/work-logs tickets (use the ticket skill instead)."
 metadata:
-  version: 1.2.0
+  version: 1.4.0
 ---
 
 # Framework Issue
@@ -142,6 +142,154 @@ exit code：`0` 成功、`3` 降級、其餘為 gh 原始錯誤碼經 `run_gh` �
 | gh 未登入 | 任一命令 | stderr 提示 `gh auth login`，exit 3 |
 | 註記修復版本號 | `fix-version <ref> --summary "..."` | 版本號取自 `.claude/VERSION`，寫入 fix-versions 區段，exit 0 |
 | 關閉但未註記版本號 | `close <ref>` | stderr 提示先執行 fix-version，exit 3 |
+
+## Comment-as-Section 協作協定
+
+上方 Commands / Usage 描述的六命令（create/list/link/fix-status/fix-version/
+close）以 issue body 內的固定標記區段（`fix-matrix`／`fix-versions`）追蹤跨
+consumer 修復狀態，適用於「一個壞 change、多個 consumer 各自修復」的場景。
+
+**comment-as-section** 是另一套模型，適用於「問題的分析與方案 context 需要
+跨專案共享，且內容會隨框架理解反覆更新」的場景——即 framework issue 的一般
+協作寫法。兩套模型可在同一 issue 並存：fix-matrix／fix-versions 仍留在 body
+固定區段，comment-as-section 額外把結構化內容搬到具備穩定 id 的 comment。採
+用此協定的 issue，body 內含標記 `<!-- fw-issue-schema: comment-as-section
+v1 -->`。
+
+**核心動機**：GitHub comment 具穩定 id 且可經 API 精準編輯，故「結構化」與
+「跨寫者無競爭」不互斥。body 是讀取－修改－寫回，多方同時更新會靜默覆蓋，因
+此不作為協作載體，只保留問題陳述、協定說明與區段索引。
+
+### 六個操作
+
+實作於 `.claude/skills/framework-issue/scripts/section_comment.py`（唯一
+CLI 入口，子命令對應下表）。
+
+| 操作 | 用途 | 誰可執行 |
+|------|------|---------|
+| `init` | 查重後建立全部區段 comment（如「當前結論」「方案評估」「工作流定義」），取得各 comment id 後回填一次 body 的區段索引表 | 建立該 issue 的 session |
+| `dedup` | 唯讀查重：與 `init` 內建的查重共用同一機制，但不建立任何 comment/issue，供 `init` 前單獨核對關鍵字涵蓋範圍 | 任何 session |
+| `update` | 以 comment id 精準編輯指定區段內容，不影響同 issue 其他 comment | 該區段的 owner |
+| `observe` | 附加觀測 comment（實測、反證、疑慮），不需 owner、不需協商 | 任何 session，隨時 |
+| `show` | 以 body 的區段索引為起點輸出，區分「當前結論區段」與「觀測流」，讀者不需讀完全部 comment | 任何 session |
+| `check` | 輸出三項警訊（見下）：comment 數閾值、當前結論時效、索引一致性 | 任何 session |
+
+**`init` 兩階段順序**：comment id 在區段建立後才存在，索引無法在建立時一併
+寫入，故 `init` 必為「查重 → 先建區段 comment → 取得 id → 回填一次 body
+索引表」。body 其後不再由工具改寫，`update` 只動區段 comment。
+
+### CLI 語法
+
+```bash
+# init：--dedup-keywords 必填（可多值，每組可含空白，逐一加引號）；
+# --sections-file 為 JSON 陣列 [{"name": "區段名", "content": "內容"}, ...]
+python3 .claude/skills/framework-issue/scripts/section_comment.py init <issue-ref> \
+  --owner <session識別> \
+  --sections-file <path/to/sections.json> \
+  --dedup-keywords "關鍵字組一" "關鍵字組二"
+
+# dedup：唯讀，不需 issue-ref（查整個框架 repo），僅列命中清單
+python3 .claude/skills/framework-issue/scripts/section_comment.py dedup \
+  --keywords "關鍵字組一" "關鍵字組二"
+
+# update：以 comment id 精準 PATCH，content-file 內容不含首行標記（工具自動保留）
+python3 .claude/skills/framework-issue/scripts/section_comment.py update <comment-id> \
+  --content-file <path/to/content.md>
+
+# observe：附加觀測 comment，不需 owner
+python3 .claude/skills/framework-issue/scripts/section_comment.py observe <issue-ref> \
+  --summary "觀測摘要" --session <session識別> --content-file <path/to/observation.md>
+
+# show / check：唯讀，check 的兩項閾值可覆蓋預設值
+python3 .claude/skills/framework-issue/scripts/section_comment.py show <issue-ref>
+python3 .claude/skills/framework-issue/scripts/section_comment.py check <issue-ref> \
+  [--comment-threshold 30] [--stale-days 7]
+```
+
+`<issue-ref>` 支援 `owner/repo#N`（限框架 repo）、`#N`、純數字三種形態。
+
+### 區段與觀測標記格式
+
+區段 comment 首行帶 HTML 註解標記，供定址與 owner 判定，GitHub 渲染時不
+可見：
+
+```
+<!-- section: <名稱> owner: <session-或建立者識別> -->
+## <名稱>
+
+（區段內容）
+```
+
+觀測 comment 不需標記，為一般 comment，內容即觀測本身（實測結果、反證、疑
+慮）。`show` 依有無區段標記區分兩者：有標記者列入「當前結論區段」／其他具名
+區段，無標記者列入「觀測流」。
+
+body 的區段索引表格式：
+
+```markdown
+## 區段索引
+
+| 區段 | 永久連結 |
+|------|---------|
+| 當前結論（讀者入口） | https://github.com/<owner>/<repo>/issues/<N>#issuecomment-<id> |
+| <其他區段名> | https://github.com/<owner>/<repo>/issues/<N>#issuecomment-<id> |
+
+觀測 comment 不列入索引。
+```
+
+### init 前查重：三種關係處置
+
+`init` 的 `--dedup-keywords` 為必填參數（工具強制，非僅文件建議），CLI 會
+在建立任何區段 comment 前先以每組關鍵字搜尋既有 issue（`--match
+title,body,comments`，標題與 comment 內文皆涵蓋），並把命中清單與回顯的關
+鍵字集合印於 `init` 輸出。**命中不等於重複**：全文檢索涵蓋 comment 內文，
+互相引用的 issue 在每組關鍵字下會同時命中彼此，須逐一判定關係，不可自動判
+定重複：
+
+| 關係 | 判定依據 | 處置 |
+|------|---------|------|
+| 重複 | 同一問題領域、同一層級 | 併入既有 issue，以區段或觀測附加，不建新 issue |
+| 切分 | 同一領域、不同層級（如體系層對單一 skill 層） | 建新 issue，雙方 body 互標分工（各自的區段索引附一行指向對方） |
+| 引用 | 僅提及，領域不同 | 單向指向即可，不需互標 |
+
+工具只列命中清單，關係一律由建立者標註，不自動判定、不阻擋 `init` 繼續執
+行（命中清單僅供人工審閱後自行決定是否中止）。單獨核對關鍵字涵蓋範圍（不
+建立 issue）時用 `dedup` 子命令，與 `init` 內建查重共用同一邏輯。
+
+**實作細節：多詞關鍵字組採 token 聯集，非單一 AND 查詢**——`gh search
+issues` 對多詞查詢的 AND 語意要求詞彙落在同一欄位實例內（同一則 comment
+或同一 body），詞彙分屬同一 issue 的不同 comment 時單一查詢會漏判（實測：
+`#79`／`#81`／`#82` 已知集合以「skill 拆分」單一查詢會漏掉 `#79`，因兩詞
+分屬 `#79` 的不同 comment）。CLI 因此把含空白的關鍵字組拆為單詞分別查詢後
+於本地聯集，代價是命中清單雜訊增加（單詞查詢範圍較寬），換取避免漏判。
+
+### check 的三項警訊
+
+| 警訊 | 判準 | 定位 |
+|------|------|------|
+| 當前結論時效（主警訊） | 「當前結論」區段的 `updated_at` 落後於最新觀測 comment 的 `created_at` 超過設定期間 | 資產與負債的分界在此，不在 issue 的 open/close 狀態 |
+| comment 數閾值（輔助） | 單張 issue 的 comment 總數超過設定閾值 | 與主警訊合看，comment 數本身不代表失效 |
+| 索引一致性 | body 區段索引列出的 comment id，與實際存在的區段 comment（依標記抽取）不一致 | 索引在區段 comment 增刪後不會自動跟上，屬第三種「內容存在但指向錯誤」的來源 |
+
+「同一問題領域出現第二張 issue」不是 `check` 的輸出項，其檢查點在 `init`
+之前（見上方查重章節），因為此類失效一旦發生，兩張 issue 各自的 `check` 都
+看不出彼此的存在。
+
+### 增長語意與 close 語意
+
+**open issue 數增長不是失效訊號。** ticket 與 issue 的計數單位不同：ticket
+一張對應一個不可逆的執行單位，issue 一張對應一個可逆的問題領域。框架隨理解
+持續演進，同一領域的認識會反覆更新，issue 長期 open 代表該領域仍在活動，其
+comment 累積是資產而非負債。
+
+**close 語意**：代表「當前結論」暫時穩定、無進行中工作，不代表問題已被最終
+解決；框架後續演進時可直接 reopen 同一張 issue 繼續累積，不需另開新張。讀者
+看到 issue 為 closed 不應推論其內容已過期——過期與否由 `check` 的當前結論時
+效警訊判斷，與 open/close 狀態無關。
+
+> 舊命令集的 `close`（fix-matrix 模型）另有獨立的版本號前置檢查（見上方
+> Usage 章節），與本節的 close 語意屬不同機制層次，互不影響：前者檢查「有無
+> 版本號可追溯」，後者定義「close 這個動作在協定裡代表什麼」。
 
 ## 框架問題升級流程
 
