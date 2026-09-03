@@ -19,7 +19,10 @@ from ticket_system.lib.constants import (
     HANDOFF_DIR,
     HANDOFF_ARCHIVE_SUBDIR,
 )
-from ticket_system.lib.paths import get_project_root
+# handoff archive 屬跨 agent 協調狀態，root 解析改用 get_ticket_state_root()
+# （非 get_project_root()）——linked worktree 內統一寫入/讀取主倉庫，理由與
+# get_ticket_state_root docstring 一致。
+from ticket_system.lib.paths import get_ticket_state_root
 
 # 共用的掃描和判斷函式
 # W17-163 L1-A: 改用 is_handoff_stale 統一 stale 判定（消除 ARCH-020 同構）
@@ -108,7 +111,7 @@ def execute_gc(dry_run: bool = True, force: bool = False) -> int:
         print("[GC] 無 stale handoff，pending 目錄已清潔。")
         return 0
 
-    root = get_project_root()
+    root = get_ticket_state_root()
     archive_dir = root / HANDOFF_DIR / HANDOFF_ARCHIVE_SUBDIR
 
     mode = "[DRY-RUN]" if dry_run else "[執行]"

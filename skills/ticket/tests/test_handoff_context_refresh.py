@@ -290,10 +290,10 @@ class TestResumeContextRefresh:
             }
             handoff_file.write_text(json.dumps(handoff_data, ensure_ascii=False, indent=2))
 
-            # Mock get_project_root 回傳臨時目錄
-            # 需要同時 mock resume.py 和 handoff_utils.py 中的 get_project_root
-            with patch("ticket_system.commands.resume.get_project_root") as mock_root_resume, \
-                 patch("ticket_system.lib.handoff_utils.get_project_root") as mock_root_utils:
+            # Mock get_ticket_state_root 回傳臨時目錄
+            # 需要同時 mock resume.py 和 handoff_utils.py 中的 get_ticket_state_root
+            with patch("ticket_system.commands.resume.get_ticket_state_root") as mock_root_resume, \
+                 patch("ticket_system.lib.handoff_utils.get_ticket_state_root") as mock_root_utils:
                 mock_root_resume.return_value = tmpdir_path
                 mock_root_utils.return_value = tmpdir_path
 

@@ -67,12 +67,12 @@ def _run_from_worklog(
         lambda: active_version,
     )
 
-    # Mock get_project_root + pending dir 檢查
+    # Mock get_ticket_state_root + pending dir 檢查
     # 直接 mock pending_dir 路徑檢查邏輯：用 monkeypatch 替換 Path.exists
     from ticket_system.lib import constants
 
     fake_root = Path("/tmp/_fake_root_test")
-    monkeypatch.setattr(handoff_mod, "get_project_root", lambda: fake_root)
+    monkeypatch.setattr(handoff_mod, "get_ticket_state_root", lambda: fake_root)
 
     real_exists = Path.exists
 

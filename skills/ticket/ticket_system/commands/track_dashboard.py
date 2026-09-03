@@ -510,13 +510,16 @@ def _auto_gc_stale_handoffs() -> None:
     try:
         from ticket_system.commands.handoff_gc import _collect_stale_handoffs
         from ticket_system.lib.constants import HANDOFF_DIR, HANDOFF_ARCHIVE_SUBDIR
-        from ticket_system.lib.paths import get_project_root
+        # handoff archive 屬跨 agent 協調狀態，root 解析改用
+        # get_ticket_state_root()（非 get_project_root()）——linked worktree
+        # 內統一寫入/讀取主倉庫，理由與 get_ticket_state_root docstring 一致。
+        from ticket_system.lib.paths import get_ticket_state_root
 
         stale = _collect_stale_handoffs(force=False)
         if not stale:
             return
 
-        root = get_project_root()
+        root = get_ticket_state_root()
         archive_dir = root / HANDOFF_DIR / HANDOFF_ARCHIVE_SUBDIR
         archive_dir.mkdir(parents=True, exist_ok=True)
 

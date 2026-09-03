@@ -24,7 +24,7 @@ from ticket_system.commands.track_dispatch_check import execute_dispatch_check
 
 def _run(tmp_path: Path, monkeypatch) -> tuple[int, str, str]:
     """呼叫 execute_dispatch_check 並捕獲 stdout/stderr。"""
-    monkeypatch.setattr(mod, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(mod, "get_ticket_state_root", lambda: tmp_path)
 
     args = argparse.Namespace()
     out_buf, err_buf = io.StringIO(), io.StringIO()

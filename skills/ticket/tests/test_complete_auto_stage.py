@@ -73,8 +73,10 @@ def _run_complete(
         "error": None,
     }
 
-    def fake_commit_files_isolated(paths, message):
-        captured_calls.append({"paths": list(paths), "message": message})
+    def fake_commit_files_isolated(paths, message, cwd=None):
+        captured_calls.append(
+            {"paths": list(paths), "message": message, "cwd": cwd}
+        )
         return commit_result or default_commit_result
 
     # cascade fake：模擬 _post_complete_cascade 解鎖 children
@@ -167,6 +169,8 @@ class TestCompleteAutoStage:
         committed = calls[0]["paths"]
         assert any("0.18.0-W17-998.md" in p for p in committed), committed
         assert any("worklog" in p for p in committed), committed
+        # W4-026：cwd 錨定為 modified_paths[0]（票面 md）所在目錄
+        assert calls[0]["cwd"] == "/tmp", calls[0]
 
     def test_complete_cascade_does_not_commit_children(self, capsys):
         """children 解鎖仍落盤（save_ticket 被呼叫），但不進入提交清單。"""

@@ -31,6 +31,7 @@ from ticket_system.lib.constants import (
 from ticket_system.lib.paths import (
     GIT_TOPLEVEL_TIMEOUT,
     get_project_root,
+    get_ticket_state_root,
     get_tickets_dir_under_root,
 )
 from ticket_system.lib.ticket_loader import (
@@ -64,12 +65,20 @@ def list_ticket_files_from_main(
         失敗（非 git 環境、main/master 皆不存在、git 不存在、ls-tree 逾時）：None。
         失敗時 caller 應 fallback 為純本地掃描（聯集設計確保不比現況差）。
     """
-    project_root = get_project_root()
+    # project_root 改用 get_ticket_state_root()（而非 get_project_root()），
+    # 使其與 get_tickets_dir(version)（內部已走 get_ticket_state_root）恆為
+    # 同一根目錄。linked worktree 場景 get_project_root() 回傳 worktree 自身
+    # 根目錄、get_ticket_state_root() 回傳主倉庫根目錄，兩者不一致時
+    # tickets_dir.relative_to(project_root) 必拋 ValueError，使本函式一律
+    # 降級回傳 None（get_ticket_state_root 上線後此路徑在 worktree 場景已由
+    # 「測試外少見」變成必現，2026-09-02 修復）。
+    project_root = get_ticket_state_root()
     tickets_dir = get_tickets_dir(version)
     try:
         rel_tickets_dir = tickets_dir.relative_to(project_root)
     except ValueError:
-        # tickets_dir 不在 project_root 之下（測試以外少見）；無法構造 ls-tree pathspec
+        # tickets_dir 不在 project_root 之下（理論上不應再發生，兩者現皆
+        # 委派 get_ticket_state_root()；保留作防禦性 fallback）
         return None
 
     for ref in ref_candidates:

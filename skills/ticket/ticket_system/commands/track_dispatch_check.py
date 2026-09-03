@@ -17,7 +17,10 @@ import json
 import sys
 from pathlib import Path
 
-from ticket_system.lib.paths import get_project_root
+# dispatch-active.json 屬跨 agent 協調狀態，root 解析改用
+# get_ticket_state_root()（非 get_project_root()）——linked worktree 內
+# 統一寫入/讀取主倉庫，理由與 get_ticket_state_root docstring 一致。
+from ticket_system.lib.paths import get_ticket_state_root
 
 _DISPATCH_ACTIVE_RELPATH = Path(".claude/dispatch-active.json")
 
@@ -36,7 +39,7 @@ def execute_dispatch_check(args: argparse.Namespace) -> int:
         0: 無活躍派發；1: 有活躍派發；2: IO/格式錯誤。
     """
 
-    dispatch_file = get_project_root() / _DISPATCH_ACTIVE_RELPATH
+    dispatch_file = get_ticket_state_root() / _DISPATCH_ACTIVE_RELPATH
 
     if not dispatch_file.exists():
         print("[PASS] 無活躍派發，可繼續")

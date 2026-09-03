@@ -33,7 +33,10 @@ Sociable Unit Test：以真實 `git worktree add` 建立實體 sibling worktree
 
 from __future__ import annotations
 
+import ast
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -161,6 +164,95 @@ class TestSiblingWorktreeScan:
 
         _patch_project_root(monkeypatch, root)
         assert list_ticket_files_from_sibling_worktrees("0.19.0") is None
+
+
+# ---------------------------------------------------------------------------
+# AC1.5：list_ticket_files_from_main 在 linked worktree 下的根目錄一致性
+#
+# get_ticket_state_root()（2026-09-02 新增）使 get_tickets_dir(version) 在
+# linked worktree 場景回傳「主倉庫」根目錄下的 tickets_dir，但
+# list_ticket_files_from_main 仍以 get_project_root()（worktree 自身根目錄）
+# 取得 project_root。兩者根目錄不一致，tickets_dir.relative_to(project_root)
+# 必拋 ValueError，函式降級回傳 None（main ref 掃描來源失效）。
+#
+# 本測試以子行程重現：TestSiblingWorktreeScan / TestNoCollisionAcrossWorktrees
+# 等既有測試透過 monkeypatch 直接覆寫 get_project_root，且 conftest 的
+# autouse fixture 注入 TICKET_SYSTEM_TEST_ISOLATION=1，使
+# get_ticket_state_root() 內部的 worktree 分支短路委派回（已被 monkeypatch
+# 的）get_project_root()，兩者被迫收斂為同一值，無法重現此根目錄不一致
+# ——必須以獨立子行程、乾淨環境（不設 CLAUDE_PROJECT_DIR /
+# TICKET_SYSTEM_TEST_ISOLATION）呼叫，才會真正走生產路徑的 git-common-dir
+# 回推分支。
+# ---------------------------------------------------------------------------
+
+
+def _run_in_clean_subprocess(cwd: Path, script: str) -> subprocess.CompletedProcess:
+    """在乾淨環境（不繼承 pytest autouse fixture 注入的隔離旗標）子行程執行腳本。
+
+    skill_root（.claude/skills/ticket）以 PYTHONPATH 注入，供 script 匯入
+    ticket_system 套件；子行程 cwd 設為呼叫端指定目錄（模擬 worktree cwd），
+    使 paths.py 的 git 拓樸偵測（_git_toplevel / _linked_worktree_root）
+    對此 cwd 生效。
+    """
+    skill_root = Path(__file__).resolve().parents[2]
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("CLAUDE_PROJECT_DIR", "TICKET_SYSTEM_TEST_ISOLATION")
+    }
+    env["PYTHONPATH"] = str(skill_root)
+    return subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=str(cwd),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+
+class TestListTicketFilesFromMainRootConsistency:
+    def test_does_not_degrade_to_none_in_linked_worktree(self, tmp_path):
+        """
+        Given: main repo 已提交一張 ticket，並建立一個 linked worktree
+        When: 以乾淨環境從 worktree cwd 呼叫 list_ticket_files_from_main
+        Then: project_root 改用 get_ticket_state_root() 後與 tickets_dir
+              恆為同一根目錄，relative_to 不再拋 ValueError；正確回傳 main
+              ref 上的 ticket 檔清單（修復前此斷言必失敗，見 commit 歷史
+              紅燈證據）
+        """
+        main_root = tmp_path / "main"
+        wt_root = tmp_path / "wt"
+        _init_git_repo(main_root, "main")
+        _write_ticket(_tickets_dir(main_root, "0.19.0"), "0.19.0-W9-001")
+        _run_git(
+            main_root,
+            "add",
+            "docs/work-logs/v0/v0.19/v0.19.0/tickets/0.19.0-W9-001.md",
+        )
+        _run_git(main_root, "commit", "-q", "-m", "add ticket to main")
+        _add_worktree(main_root, wt_root, "feat-repro")
+
+        script = (
+            "from ticket_system.lib import ticket_builder\n"
+            "result = ticket_builder.list_ticket_files_from_main('0.19.0')\n"
+            "print('RESULT:' + repr(result))\n"
+        )
+        proc = _run_in_clean_subprocess(wt_root, script)
+
+        assert proc.returncode == 0, proc.stderr
+        result_line = next(
+            line for line in proc.stdout.splitlines() if line.startswith("RESULT:")
+        )
+        # ast.literal_eval：子行程輸出僅為 None / list[str] 字面值，非任意程式碼
+        result = ast.literal_eval(result_line[len("RESULT:"):])
+
+        assert result is not None, (
+            "list_ticket_files_from_main 在 linked worktree 場景降級回傳 None"
+            "（project_root 與 tickets_dir 根目錄不一致，relative_to 拋"
+            " ValueError）；修復後應正確回傳 main ref 上的 ticket 檔清單"
+        )
+        assert any(Path(p).name == "0.19.0-W9-001.md" for p in result), result
 
 
 # ---------------------------------------------------------------------------

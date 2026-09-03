@@ -39,7 +39,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, NamedTuple, Optional, Tuple, TypeVar
 
-from .paths import get_project_root
+from .paths import get_project_root, get_ticket_state_root
 from .constants import TERMINAL_STATUSES
 
 
@@ -410,7 +410,10 @@ def _read_dispatch_active(
         json.JSONDecodeError: JSON 毀損。
     """
 
-    root = project_root or get_project_root()
+    # dispatch-active.json 屬跨 agent 協調狀態，root 解析改用
+    # get_ticket_state_root()（非 get_project_root()）——linked worktree 內
+    # 統一寫入/讀取主倉庫，理由與 get_ticket_state_root docstring 一致。
+    root = project_root or get_ticket_state_root()
     path = root / _DISPATCH_ACTIVE_RELPATH
     # 注意：Path.read_text 對目錄不存在與檔案不存在皆拋 FileNotFoundError
     data = _read_json_dict(path)
@@ -444,7 +447,10 @@ def _read_handoff_pending(
         json.JSONDecodeError: JSON 毀損。
     """
 
-    root = project_root or get_project_root()
+    # handoff pending 屬跨 agent 協調狀態，root 解析改用
+    # get_ticket_state_root()（非 get_project_root()）——linked worktree 內
+    # 統一寫入/讀取主倉庫，理由與 get_ticket_state_root docstring 一致。
+    root = project_root or get_ticket_state_root()
     pending_dir = root / _HANDOFF_PENDING_RELDIR
     # iterdir 對不存在目錄拋 FileNotFoundError → SAFE_CALL 走 fallback
     json_files = [p for p in pending_dir.iterdir() if p.suffix == ".json"]

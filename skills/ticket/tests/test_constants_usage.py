@@ -42,8 +42,8 @@ def test_handoff_py_uses_constants_no_regression() -> None:
         "what": "Test description",
     }
 
-    # Mock get_project_root 和檔案系統操作
-    with patch("ticket_system.commands.handoff.get_project_root") as mock_root:
+    # Mock get_ticket_state_root 和檔案系統操作
+    with patch("ticket_system.commands.handoff.get_ticket_state_root") as mock_root:
         with patch("pathlib.Path.mkdir") as mock_mkdir:
             with patch("builtins.open", create=True) as mock_open:
                 # 設定 mock
@@ -77,8 +77,8 @@ def test_resume_py_uses_constants_no_regression() -> None:
         HANDOFF_ARCHIVE_SUBDIR,
     )
 
-    # Mock get_project_root
-    with patch("ticket_system.commands.resume.get_project_root") as mock_root:
+    # Mock get_ticket_state_root
+    with patch("ticket_system.commands.resume.get_ticket_state_root") as mock_root:
         temp_dir = Path("/tmp/test_project")
         mock_root.return_value = temp_dir
 

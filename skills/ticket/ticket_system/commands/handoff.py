@@ -38,12 +38,15 @@ from ticket_system.commands.exceptions import (
     HandoffDuplicateError,
 )
 from ticket_system.lib.ticket_loader import (
-    get_project_root,
     load_ticket,
     get_ticket_path,
     resolve_version,
     list_tickets,
 )
+# handoff pending/archive 屬跨 agent 協調狀態，root 解析改用
+# get_ticket_state_root()（非 get_project_root()）——linked worktree 內
+# 統一寫入/讀取主倉庫，理由與 get_ticket_state_root docstring 一致。
+from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.ticket_validator import (
     validate_ticket_id,
     validate_acceptance_criteria,
@@ -403,7 +406,7 @@ def _validate_no_duplicate_handoff(ticket_id: str) -> None:
     Raises:
         HandoffDuplicateError: 已存在相同目標的 pending handoff 時
     """
-    root = get_project_root()
+    root = get_ticket_state_root()
     pending_dir = root / HANDOFF_DIR / HANDOFF_PENDING_SUBDIR
 
     if not pending_dir.exists():
@@ -437,7 +440,7 @@ def _create_handoff_file_internal(ticket: Dict[str, Any], direction: str) -> int
     Returns:
         int: exit code (0 成功, 1 失敗)
     """
-    root = get_project_root()
+    root = get_ticket_state_root()
     handoff_dir = root / HANDOFF_DIR / HANDOFF_PENDING_SUBDIR
     handoff_dir.mkdir(parents=True, exist_ok=True)
 
@@ -479,12 +482,12 @@ def _create_handoff_file(ticket: Dict[str, Any], direction: str) -> int:
     exit_code = _create_handoff_file_internal(ticket, direction)
 
     if exit_code != 0:
-        root = get_project_root()
+        root = get_ticket_state_root()
         print(format_error(ErrorMessages.FILE_CREATION_FAILED, error="Unknown error"))
         return 1
 
     # 輸出成功訊息
-    root = get_project_root()
+    root = get_ticket_state_root()
     ticket_id = ticket.get("id")
     handoff_file = root / HANDOFF_DIR / HANDOFF_PENDING_SUBDIR / f"{ticket_id}.json"
     print(format_info(InfoMessages.HANDOFF_FILE_CREATED, path=str(handoff_file.relative_to(root))))
@@ -1190,7 +1193,7 @@ def _execute_from_worklog(args: argparse.Namespace) -> int:
         return 0
 
     # 3) 逐個處理
-    project_root = get_project_root()
+    project_root = get_ticket_state_root()
     pending_dir = project_root / HANDOFF_DIR / HANDOFF_PENDING_SUBDIR
 
     dry_run = getattr(args, "dry_run", False)
@@ -1521,7 +1524,7 @@ def _execute_auto_handoff(args: argparse.Namespace) -> int:
         )
 
     # 寫入 handoff JSON
-    root = get_project_root()
+    root = get_ticket_state_root()
     handoff_dir = root / HANDOFF_DIR / HANDOFF_PENDING_SUBDIR
     handoff_dir.mkdir(parents=True, exist_ok=True)
     handoff_file = handoff_dir / f"{from_ticket_id}.json"
@@ -1611,7 +1614,7 @@ def _execute_next_handoff(args: argparse.Namespace) -> int:
         _print_ticket_not_found_error(from_ticket_id, version)
         return 2
 
-    root = get_project_root()
+    root = get_ticket_state_root()
     handoff_dir = root / HANDOFF_DIR / HANDOFF_PENDING_SUBDIR
     handoff_dir.mkdir(parents=True, exist_ok=True)
     handoff_file = handoff_dir / f"{from_ticket_id}.json"

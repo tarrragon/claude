@@ -20,7 +20,7 @@ from ticket_system.lib.constants import (
     HANDOFF_DIR,
     HANDOFF_PENDING_SUBDIR,
 )
-from ticket_system.lib.paths import get_project_root
+from ticket_system.lib.paths import get_project_root, get_ticket_state_root
 
 
 # W17-181.1: 真 SSOT delegate 至 hook_utils.hook_ticket
@@ -376,7 +376,12 @@ def scan_pending_handoffs() -> List[ParsedHandoff]:
     Returns:
         List[ParsedHandoff]: 解析結果清單（包含成功和失敗記錄）
     """
-    root = get_project_root()
+    # handoff pending 屬跨 agent 協調狀態，root 解析改用
+    # get_ticket_state_root()（非 get_project_root()）——linked worktree 內
+    # 統一寫入/讀取主倉庫，理由與 get_ticket_state_root docstring 一致。
+    # 與 handoff.py 建檔／handoff_gc.py 歸檔的 root 解析保持一致，否則
+    # worktree 內寫入主倉庫後，本函式仍會掃描 worktree 本地（恆空）目錄。
+    root = get_ticket_state_root()
     pending_dir = root / HANDOFF_DIR / HANDOFF_PENDING_SUBDIR
 
     if not pending_dir.exists():

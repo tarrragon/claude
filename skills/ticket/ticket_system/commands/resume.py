@@ -25,7 +25,11 @@ from ticket_system.lib.constants import (
     STATUS_COMPLETED,
 )
 from ticket_system.commands.exceptions import HandoffSchemaError, HandoffDirectionUnknownError
-from ticket_system.lib.ticket_loader import resolve_version, load_ticket, get_project_root
+from ticket_system.lib.ticket_loader import resolve_version, load_ticket
+# handoff pending/archive 屬跨 agent 協調狀態，root 解析改用
+# get_ticket_state_root()（非 get_project_root()）——linked worktree 內
+# 統一寫入/讀取主倉庫，理由與 get_ticket_state_root docstring 一致。
+from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.messages import (
     ErrorMessages,
     WarningMessages,
@@ -72,7 +76,7 @@ def _get_handoff_dir(subdir: str = HANDOFF_PENDING_SUBDIR) -> Path:
     Returns:
         Path: handoff 目錄路徑
     """
-    root = get_project_root()
+    root = get_ticket_state_root()
     handoff_dir = root / HANDOFF_DIR / subdir
     return handoff_dir
 
@@ -230,7 +234,7 @@ def load_handoff_file(ticket_id: str) -> Optional[Dict[str, Any]]:
                 "ticket_id": ticket_id,
                 "format": "markdown",
                 "content": content,
-                "path": str(file_path.relative_to(get_project_root()))
+                "path": str(file_path.relative_to(get_ticket_state_root()))
             }
     except (IOError, json.JSONDecodeError):
         pass

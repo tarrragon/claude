@@ -1,3 +1,18 @@
+## [2.49.2] - 2026-09-03
+
+### Summary
+fix: 統一 handoff/dispatch-active 協調狀態根目錄解析為 ticket 狀態 root; fix: sync commit_files_isolated fake signature with cwd param; fix: 統一 list_ticket_files_from_main 的 project_root 解析根目錄 (+2 more)
+
+Changes: 3 fix, 1 docs, 1 chore
+
+- fix: 統一 handoff/dispatch-active 協調狀態根目錄解析為 ticket 狀態 root
+- fix: sync commit_files_isolated fake signature with cwd param
+- fix: 統一 list_ticket_files_from_main 的 project_root 解析根目錄
+- docs: 新增 PC-BAL-061 驗收範圍以 where.files 為界漏檢同函式 mock 簽名漂移（ 回歸復盤，修復票 ）
+- chore: VERSION 回寫 （/026/027 worktree 根目錄修復傳播至 canonical）
+
+---
+
 ## [2.49.1] - 2026-09-03
 
 ### Summary
