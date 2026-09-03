@@ -1929,6 +1929,19 @@ def _auto_commit_completion_files(
     仍失敗則此處 graceful degrade（stderr 警告 + 不中斷 complete 流程），
     不留任何 staged 殘留（本函式全程不呼叫 ``git add`` 於共用 index）。
 
+    cwd 錨定為 ``modified_paths`` 第一個路徑（票面 md）所在目錄，與
+    ``git_utils._auto_commit_ticket_md`` 的 ``cwd=md_path.parent`` 同一
+    模式。若不傳 cwd，``commit_files_isolated`` 內部
+    ``git rev-parse --show-toplevel`` 會以呼叫端 process cwd 解析 repo；
+    代理人在 linked worktree 內執行完成流程時，票面 md 已由
+    ``get_ticket_state_root()`` 統一落在主倉庫，process cwd 卻是
+    worktree，對主倉庫路徑執行 ``git add`` 會得到
+    ``fatal: ... is outside repository``。錨定 cwd 後 git 依檔案實際所屬
+    repo 解析，不受呼叫端 process cwd 影響；worklog 路徑（同樣統一落在
+    主倉庫）與票面 md 同屬一個 repo，共用同一 cwd 錨點即可正確正規化為
+    repo-relative 路徑（見 ``commit_files_isolated`` 的
+    ``_to_repo_relative``）。
+
     Args:
         ticket_id: 主 ticket id（用於 commit 訊息）
         modified_paths: complete 流程實際寫入的檔案路徑清單
@@ -1937,9 +1950,10 @@ def _auto_commit_completion_files(
     if not deduped:
         return
 
+    cwd = str(Path(deduped[0]).parent)
     message = f"chore({ticket_id}): metadata sync post-completion"
     try:
-        result = commit_files_isolated(deduped, message)
+        result = commit_files_isolated(deduped, message, cwd=cwd)
     except Exception as exc:
         sys.stderr.write(
             f"[auto-commit] 隔離提交異常（非致命，未留 staged 殘留）：{exc}\n"

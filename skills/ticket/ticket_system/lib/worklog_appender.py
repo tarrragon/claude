@@ -21,7 +21,7 @@ from pathlib import Path
 
 from .constants import WORK_LOGS_DIR
 from .file_lock import file_lock
-from .paths import get_project_root
+from .paths import get_ticket_state_root
 
 # main worklog 檔名格式
 MAIN_WORKLOG_FILENAME_TEMPLATE = "v{version}-main.md"
@@ -48,7 +48,12 @@ def _build_worklog_path(version: str) -> Path:
     major = parts[0]
     minor = f"{parts[0]}.{parts[1]}" if len(parts) >= 2 else bare_version
 
-    root = get_project_root()
+    # 根目錄改用 get_ticket_state_root()（非 get_project_root()，
+    # 2026-09-02）：main worklog 的完成進度行是 ticket 狀態的一部分，
+    # 在 linked worktree 內執行時必須統一寫入主倉庫，理由與票面 md /
+    # topic-assignments.txt 統一寫入主倉庫相同（見 get_ticket_state_root
+    # docstring）。
+    root = get_ticket_state_root()
     filename = MAIN_WORKLOG_FILENAME_TEMPLATE.format(version=bare_version)
 
     return root / WORK_LOGS_DIR / f"v{major}" / f"v{minor}" / f"v{bare_version}" / filename

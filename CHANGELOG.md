@@ -1,3 +1,17 @@
+## [2.49.1] - 2026-09-03
+
+### Summary
+fix: 修復 _resolve_ticket_state_root 測試隔離分支消除 worktree 假失敗; fix: 修正 complete 自動提交在 linked worktree 內以呼叫端 cwd 為 repo; fix: 統一 topic-assignments 與工作日誌 appender 的根目錄解析 (+1 more)
+
+Changes: 3 fix, 1 chore
+
+- fix: 修復 _resolve_ticket_state_root 測試隔離分支消除 worktree 假失敗
+- fix: 修正 complete 自動提交在 linked worktree 內以呼叫端 cwd 為 repo
+- fix: 統一 topic-assignments 與工作日誌 appender 的根目錄解析
+- chore: VERSION 回寫 （dispatch --dry-run 傳播至 canonical）
+
+---
+
 ## [2.49.0] - 2026-09-02
 
 ### Summary

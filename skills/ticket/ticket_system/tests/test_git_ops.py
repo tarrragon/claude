@@ -9,15 +9,35 @@ git_utils._run_git）——git 命令原無 timeout 時，git hang（等認證 /
 index.lock）會無限等待。git_utils._auto_commit_ticket_md 改委派
 git_ops.commit_files_isolated 後，git 呼叫的 timeout 保證改由本模組的
 _run_git 負責，原測項隨之搬遷至此，測試對象改為 git_ops._run_git。
+
+TestAutoCommitCompletionFilesWorktreeCwd：0.2.1-W4-026 迴歸。lifecycle.
+_auto_commit_completion_files 呼叫 commit_files_isolated 未傳 cwd 時，git
+以呼叫端 process cwd（而非票面 md 實際所在的 repo）解析 --show-toplevel；
+代理人在 linked worktree 內執行 `ticket track complete` 時，票面 md 已由
+get_ticket_state_root() 統一落在主倉庫，git 卻以 worktree 為 repo，對主
+倉庫路徑執行 `git add` 得到 `fatal: ... is outside repository`。本類別以
+真實 tmp 主倉庫 + `git worktree add` 建立的 linked worktree 重現：process
+cwd 切至 worktree 後呼叫 `_auto_commit_completion_files`（傳入路徑為主
+倉庫內的票面 md），驗證修復後提交確實落在主倉庫 HEAD。
 """
 
 import os
+import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from ticket_system.lib import git_ops
 
 _TARGET = "docs/work-logs/v1/tickets/a.md"
 _REPO_ROOT = os.getcwd()
+
+
+def _run_git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args], cwd=str(cwd), capture_output=True, text=True, check=False,
+    )
 
 
 def _fake_run_factory(calls, extra_changed=None, same_tree=False, repo_root=None):
@@ -316,3 +336,87 @@ class TestRunGitTimeout:
             git_ops._run_git(["git", "commit-tree", "abc"], timeout=30)
         _, kwargs = mock_run.call_args
         assert kwargs["timeout"] == 30
+
+
+class TestAutoCommitCompletionFilesWorktreeCwd:
+    """0.2.1-W4-026：linked worktree cwd 下 complete 自動提交的真實 git 整合測試
+    （見本檔頭 module docstring）。"""
+
+    @pytest.fixture
+    def main_repo_with_worktree(self, tmp_path: Path):
+        """建立主倉庫（含已 commit 的票面 md）+ linked worktree，回傳
+        (main_repo, worktree_dir, md_path)。md_path 恆位於主倉庫內，模擬
+        get_ticket_state_root() 統一落地行為。"""
+        main_repo = tmp_path / "main"
+        main_repo.mkdir()
+        _run_git(main_repo, "init")
+        _run_git(main_repo, "config", "user.email", "test@test.com")
+        _run_git(main_repo, "config", "user.name", "test")
+
+        tickets_dir = main_repo / "tickets"
+        tickets_dir.mkdir()
+        md_path = tickets_dir / "0.0.0-W0-WT026.md"
+        md_path.write_text("placeholder\n", encoding="utf-8")
+        _run_git(main_repo, "add", "tickets/0.0.0-W0-WT026.md")
+        _run_git(main_repo, "commit", "-m", "create ticket (placeholder)")
+
+        worktree_dir = tmp_path / "worktree"
+        result = _run_git(
+            main_repo, "worktree", "add", "-b", "feat/w4-026-test", str(worktree_dir)
+        )
+        assert result.returncode == 0, f"worktree add 失敗: {result.stderr}"
+
+        return main_repo, worktree_dir, md_path
+
+    def test_committed_in_worktree_cwd_lands_on_main_repo_head(
+        self, main_repo_with_worktree, monkeypatch
+    ):
+        """process cwd 為 linked worktree、傳入路徑為主倉庫票面 md 時，
+        commit 仍須成功並落在主倉庫 HEAD（修復前：outside repository 失敗）。"""
+        main_repo, worktree_dir, md_path = main_repo_with_worktree
+        md_path.write_text("updated body\n", encoding="utf-8")
+
+        main_head_before = _run_git(main_repo, "rev-parse", "HEAD").stdout.strip()
+        worktree_head_before = _run_git(worktree_dir, "rev-parse", "HEAD").stdout.strip()
+        assert main_head_before == worktree_head_before  # 建立當下同一 commit
+
+        from ticket_system.commands import lifecycle
+
+        monkeypatch.chdir(worktree_dir)
+        lifecycle._auto_commit_completion_files(
+            "0.0.0-W0-WT026", [str(md_path)]
+        )
+
+        main_head_after = _run_git(main_repo, "rev-parse", "HEAD").stdout.strip()
+        assert main_head_after != main_head_before, (
+            "隔離提交應在主倉庫（票面 md 實際所在的 repo）產生新 commit；"
+            "未傳 cwd 時 git 以 process cwd（worktree）解析 repo 導致提交失敗"
+        )
+
+        worktree_head_after = _run_git(worktree_dir, "rev-parse", "HEAD").stdout.strip()
+        assert worktree_head_after == worktree_head_before, (
+            "worktree 自身分支的 HEAD 不應被此次提交推進——提交對象是主倉庫"
+        )
+
+        msg = _run_git(main_repo, "log", "-1", "--pretty=%s").stdout.strip()
+        assert "0.0.0-W0-WT026" in msg
+
+    def test_main_repo_cwd_scenario_unchanged(
+        self, main_repo_with_worktree, monkeypatch
+    ):
+        """主倉庫 cwd 場景行為不變：process cwd 即主倉庫時提交仍成功
+        （AC2 迴歸釘子，防止本票修復破壞既有非 worktree 路徑）。"""
+        main_repo, _worktree_dir, md_path = main_repo_with_worktree
+        md_path.write_text("updated body from main repo cwd\n", encoding="utf-8")
+
+        main_head_before = _run_git(main_repo, "rev-parse", "HEAD").stdout.strip()
+
+        from ticket_system.commands import lifecycle
+
+        monkeypatch.chdir(main_repo)
+        lifecycle._auto_commit_completion_files(
+            "0.0.0-W0-WT026", [str(md_path)]
+        )
+
+        main_head_after = _run_git(main_repo, "rev-parse", "HEAD").stdout.strip()
+        assert main_head_after != main_head_before

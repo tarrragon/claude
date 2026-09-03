@@ -388,10 +388,15 @@ def _resolve_ticket_state_root() -> Path:
         # 隔離（get_project_root() 曾因同型風險洩漏測試治具的 ticket 檔案至
         # 真實 worktree，故沿用同一優先序修復方式）。非 worktree 場景不受
         # 此分支影響，讓步驟 2 委派 get_project_root() 走其自身逃生艙。
+        #
+        # 委派 get_project_root()（而非直接讀 CLAUDE_PROJECT_DIR）：worktree
+        # 環境下先前直接讀環境變數會繞過測試對 get_project_root 的 mock
+        # （mock 不在呼叫路徑上），造成大量測試在 worktree 環境下假失敗。
+        # get_project_root() 本身的逃生艙分支（步驟 0）同樣檢查
+        # TICKET_SYSTEM_TEST_ISOLATION/CLAUDE_PROJECT_DIR，行為等價，
+        # 差異僅在於 mock 是否位於呼叫路徑上。
         if os.environ.get("TICKET_SYSTEM_TEST_ISOLATION") == "1":
-            isolated_dir = os.environ.get("CLAUDE_PROJECT_DIR")
-            if isolated_dir:
-                return Path(isolated_dir)
+            return get_project_root()
 
         # git-common-dir 是主倉庫的 .git 目錄本身（主 repo 與任一 linked
         # worktree 呼叫皆回傳同一絕對路徑，見 get_git_common_dir docstring），

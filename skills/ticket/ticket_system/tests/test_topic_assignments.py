@@ -13,13 +13,85 @@ re-export 同一組函式，兩檔測資互不重疊，本檔僅聚焦本票新�
 
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
+
+import pytest
+
 from ticket_system.lib import topic_assignments
 from ticket_system.lib import topic_registry
-from ticket_system.lib.paths import get_project_root
+from ticket_system.lib.paths import (
+    get_project_root,
+    reset_project_root_cache,
+    reset_ticket_state_root_cache,
+)
 
 
 def _assignments_file():
     return get_project_root() / topic_assignments.TOPIC_ASSIGNMENTS_RELATIVE_PATH
+
+
+def _run_git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args], cwd=cwd, capture_output=True, text=True, check=True
+    )
+
+
+def _init_git_repo(root: Path) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    _run_git(root, "init", "-q")
+    _run_git(root, "checkout", "-q", "-b", "main")
+    _run_git(root, "config", "user.email", "test@example.com")
+    _run_git(root, "config", "user.name", "Test")
+    (root / "README.md").write_text("init\n", encoding="utf-8")
+    _run_git(root, "add", "README.md")
+    _run_git(root, "commit", "-q", "-m", "init")
+
+
+@pytest.fixture
+def linked_worktree(tmp_path, monkeypatch):
+    """建立真實 main repo + linked worktree，cwd 切至 worktree。
+
+    關閉 autouse `_isolate_project_root` 注入的
+    `TICKET_SYSTEM_TEST_ISOLATION` 逃生艙與 `CLAUDE_PROJECT_DIR`（手法同
+    `conftest.py` 的 `real_repo_root` fixture：後設定的 monkeypatch 勝出），
+    使 `get_project_root()` / `get_ticket_state_root()` 走真實 git 解析鏈，
+    真實重現 worktree 場景下兩者的根目錄分歧。
+    """
+    main_root = tmp_path / "main"
+    wt_root = tmp_path / "wt"
+    _init_git_repo(main_root)
+    _run_git(main_root, "worktree", "add", "-q", "-b", "feat/test", str(wt_root), "HEAD")
+
+    monkeypatch.delenv("TICKET_SYSTEM_TEST_ISOLATION", raising=False)
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+    reset_project_root_cache()
+    reset_ticket_state_root_cache()
+    monkeypatch.chdir(wt_root)
+
+    yield main_root, wt_root
+
+    reset_project_root_cache()
+    reset_ticket_state_root_cache()
+
+
+class TestAppendAssignmentWorktreeRootUnification:
+    """0.2.1-W4-025：linked worktree cwd 下寫入應落在主倉庫，非 worktree 副本。"""
+
+    def test_append_assignment_in_linked_worktree_writes_to_main_repo(
+        self, linked_worktree
+    ):
+        main_root, wt_root = linked_worktree
+
+        result = topic_assignments.append_assignment("0.1.0-W1-777", "主題 A")
+
+        main_file = main_root / topic_assignments.TOPIC_ASSIGNMENTS_RELATIVE_PATH
+        wt_file = wt_root / topic_assignments.TOPIC_ASSIGNMENTS_RELATIVE_PATH
+
+        assert result is True
+        assert main_file.exists()
+        assert "0.1.0-W1-777\t主題 A" in main_file.read_text(encoding="utf-8")
+        assert not wt_file.exists()
 
 
 class TestReassignAssignmentBasic:

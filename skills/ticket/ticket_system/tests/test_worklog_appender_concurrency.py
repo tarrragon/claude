@@ -91,7 +91,7 @@ def _worker_append(args) -> bool:
     try:
         from ticket_system.lib import worklog_appender as wa
 
-        with patch.object(wa, "get_project_root", return_value=root):
+        with patch.object(wa, "get_ticket_state_root", return_value=root):
             wa.append_worklog_progress(version, ticket_id, title)
         return True
     except Exception:

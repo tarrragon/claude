@@ -38,7 +38,7 @@ import sys
 from pathlib import Path
 from typing import Dict
 
-from ticket_system.lib.paths import get_project_root
+from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.topic_registry import append_topic
 
 # assignment log 相對於專案根目錄的路徑（與 topics-registry.txt 同層，
@@ -47,8 +47,17 @@ TOPIC_ASSIGNMENTS_RELATIVE_PATH = "docs/work-logs/topic-assignments.txt"
 
 
 def _assignments_path() -> Path:
-    """取得 assignment log 的絕對路徑（不保證檔案存在）。"""
-    return get_project_root() / TOPIC_ASSIGNMENTS_RELATIVE_PATH
+    """取得 assignment log 的絕對路徑（不保證檔案存在）。
+
+    根目錄改用 `get_ticket_state_root()`（非 `get_project_root()`，
+    2026-09-02）：assignment log 是 ticket 狀態的一部分（記錄
+    ticket_id -> topic 映射），在 linked worktree 內執行時必須統一寫入主
+    倉庫，理由與票面 md 統一寫入主倉庫相同（見 `get_ticket_state_root`
+    docstring）——否則 worktree 清理前若未察覺，此檔登記行會隨 worktree
+    一併遺失（實測：worktree 內建票並完成時，登記行留在 worktree 未提交，
+    票面 md 卻已落在主倉庫）。
+    """
+    return get_ticket_state_root() / TOPIC_ASSIGNMENTS_RELATIVE_PATH
 
 
 def list_assignments() -> Dict[str, str]:
