@@ -415,7 +415,28 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 ## idle agent 回收 SOP（W1-008 ANA 落地）
 
-> **完整規則**：`.claude/references/parallel-dispatch-agent-lifecycle-details.md`（按需讀取，含 idle_notification 語意、續用/放生二分判準、主題聚焦維度、SOP 流程、範本）。
+> **完整規則**：`.claude/references/parallel-dispatch-agent-lifecycle-details.md`（按需讀取，含 idle_notification 語意、續用/放生二分判準、主題聚焦維度、SOP 流程、範本）。本節處理**票已 completed** 但 teammate 仍 idle 的回收；票仍 `in_progress` 時改走下一節。
+
+---
+
+## in_progress 票 teammate idle 逾時判準（強制）
+
+> **與上節分野**：上節處理票已 `completed` 但 teammate 仍 idle 的回收；本節處理票仍 `in_progress`、teammate idle、且無任何後續產出的停滯偵測——訊號來源不同，兩節判準不互通，需分開查核。
+
+**Why**：`in_progress` 票的代理人若以背景模式啟動長測試（如全套件 baseline）後轉入 idle 等待，PM 側唯一可能收到的訊號是 `idle_notification`，其內容常為進度說明而非完成回報，且該通知僅在 spawn 時明確要求過才會送達；沒有要求時 PM 對這類停滯完全無感知。實測案例：某代理人以背景模式跑完全套件 baseline 後依規則不輪詢進入 idle，票面停在 `in_progress`、分支零 commit、工作區零修改，持續約 10 小時直到用戶主動指出才被發現，期間 PM 收到的訊號皆不指向停滯。
+
+**Consequence**：不設逾時判準，`in_progress` 票的停滯只能靠用戶主動察覺；PM 側缺乏任何主動偵測機制，任務進度長期不動也不會觸發介入，重派或喚醒的時機完全交給運氣。
+
+**Action**（判準與處置）：
+
+| 判準 | 說明 |
+|------|------|
+| 逾時門檻 | 該票 `in_progress`，對應 teammate idle 超過 30 分鐘，且期間無新 commit、無票面 append-log |
+| 查核方式 | 對照該票 `where.files` 檢查 `git log --oneline -1 -- <files>`；`ticket track full <id>` 查最後一筆 append-log 時間戳 |
+| 一級處置 | `SendMessage` 喚醒，附具體下一步指令（如「背景任務已完成，請前景確認結果並繼續」） |
+| 二級處置 | 喚醒後仍無回應或無新產出，`TaskStop` 後依現有派發流程重派 |
+
+自動化偵測（掃描 dispatch 記錄、主動提醒而非等 PM 巡查）超出本節範圍，屬獨立的防護類 hook 實作，另立追蹤票處理。
 
 ---
 

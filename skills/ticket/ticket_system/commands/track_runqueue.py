@@ -44,10 +44,20 @@ from ticket_system.lib.handoff_utils import (
 )
 from ticket_system.lib.ticket_loader import list_tickets, load_ticket
 from ticket_system.lib.paths import get_project_root
+# handoff pending 屬跨 agent 協調狀態，root 解析改用
+# get_ticket_state_root()（非 get_project_root()）——linked worktree 內
+# 統一寫入/讀取主倉庫，理由與 get_ticket_state_root docstring 一致
+# （同源修復見 commands/handoff.py）。
+from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.section_locator import find_section
 from ticket_system.lib.staleness import is_live_occupied, is_stale_in_progress
 from ticket_system.lib.blocker_resolution import is_fully_unblocked
-from ticket_system.lib.constants import STATUS_COMPLETED, STATUS_CLOSED
+from ticket_system.lib.constants import (
+    STATUS_COMPLETED,
+    STATUS_CLOSED,
+    HANDOFF_DIR,
+    HANDOFF_PENDING_SUBDIR,
+)
 from ticket_system.lib import lease
 from ticket_system.lib import file_conflict
 from ticket_system.lib import topic_assignments
@@ -233,11 +243,11 @@ def _get_pending_handoff_info() -> Dict[str, Dict]:
         ticket_id → handoff data dict；解析失敗或無 pending 目錄時回傳 {}。
     """
     try:
-        root = get_project_root()
+        root = get_ticket_state_root()
     except Exception:
         return {}
 
-    pending_dir = root / ".claude" / "handoff" / "pending"
+    pending_dir = root / HANDOFF_DIR / HANDOFF_PENDING_SUBDIR
     if not pending_dir.exists():
         return {}
 

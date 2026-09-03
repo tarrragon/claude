@@ -1,9 +1,10 @@
 """跨 agent 協調狀態（handoff pending/archive、dispatch-active.json）root 解析
-統一測試（0.2.1-W4-028）。
+統一測試（0.2.1-W4-028 / 0.2.1-W4-034）。
 
 驗證 handoff.py / resume.py / handoff_gc.py / track_dashboard.py /
-track_dispatch_check.py / checkpoint_state.py / handoff_utils.py 在
-linked worktree cwd 下，讀寫皆落在主倉庫（非 worktree 本地副本）。
+track_dispatch_check.py / checkpoint_state.py / handoff_utils.py /
+track_runqueue.py 在 linked worktree cwd 下，讀寫皆落在主倉庫（非 worktree
+本地副本）。
 
 背景：這些模組原用 get_project_root()（worktree 感知，回傳呼叫端自己所在的
 worktree 根目錄）解析跨 agent 協調狀態的落點；worktree 隔離的代理人各自把
@@ -237,6 +238,39 @@ class TestCheckpointStateDataSourcesWorktreeRootUnification:
         ticket_id = _read_handoff_pending()
 
         assert ticket_id == "T2"
+
+
+class TestRunqueueWorktreeRootUnification:
+    """track_runqueue.py：_get_pending_handoff_info 應讀主倉庫寫入的 handoff。
+
+    0.2.1-W4-034：修復前用 get_project_root()（worktree 感知，回傳 worktree
+    本地根目錄），linked worktree cwd 下讀不到主倉庫的 pending handoff，
+    導致 runqueue --context=resume 與 readiness 標註恆為空/NO-CB 視角。
+    """
+
+    def test_get_pending_handoff_info_in_linked_worktree_reads_main_repo(
+        self, linked_worktree
+    ):
+        main_root, wt_root = linked_worktree
+        from ticket_system.commands.track_runqueue import _get_pending_handoff_info
+
+        pending_dir = main_root / HANDOFF_DIR / HANDOFF_PENDING_SUBDIR
+        pending_dir.mkdir(parents=True, exist_ok=True)
+        (pending_dir / "0.1.0-W1-782.json").write_text(
+            json.dumps({
+                "ticket_id": "0.1.0-W1-782",
+                "direction": "context-refresh",
+                "timestamp": "2026-09-03T00:00:00",
+                "from_status": "in_progress",
+                "title": "測試",
+            }, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        result = _get_pending_handoff_info()
+
+        assert "0.1.0-W1-782" in result
+        assert result["0.1.0-W1-782"]["ticket_id"] == "0.1.0-W1-782"
 
 
 class TestDashboardAutoGcWorktreeRootUnification:

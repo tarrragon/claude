@@ -854,7 +854,7 @@ def test_get_pending_handoff_info_indexes_by_target_ticket_id(tmp_path, monkeypa
         "ticket_id": "0.2.1-W3-159",
         "target_ticket_id": "0.2.1-W3-174",
     })
-    monkeypatch.setattr(track_runqueue, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(track_runqueue, "get_ticket_state_root", lambda: tmp_path)
 
     info = track_runqueue._get_pending_handoff_info()
 
@@ -870,7 +870,7 @@ def test_get_pending_handoff_info_source_key_unaffected(tmp_path, monkeypatch):
         "ticket_id": "0.2.1-W3-159",
         "target_ticket_id": "0.2.1-W3-174",
     })
-    monkeypatch.setattr(track_runqueue, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(track_runqueue, "get_ticket_state_root", lambda: tmp_path)
 
     info = track_runqueue._get_pending_handoff_info()
 
@@ -892,7 +892,7 @@ def test_get_pending_handoff_info_source_key_not_overwritten_by_target(
         "ticket_id": "0.2.1-W3-002",
         "target_ticket_id": "0.2.1-W3-003",
     })
-    monkeypatch.setattr(track_runqueue, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(track_runqueue, "get_ticket_state_root", lambda: tmp_path)
 
     info = track_runqueue._get_pending_handoff_info()
 
@@ -906,7 +906,7 @@ def test_get_pending_handoff_info_no_target_ticket_id_field(tmp_path, monkeypatc
     pending_dir = tmp_path / ".claude" / "handoff" / "pending"
     pending_dir.mkdir(parents=True)
     _write_handoff(pending_dir, "a.json", {"ticket_id": "0.2.1-W3-100"})
-    monkeypatch.setattr(track_runqueue, "get_project_root", lambda: tmp_path)
+    monkeypatch.setattr(track_runqueue, "get_ticket_state_root", lambda: tmp_path)
 
     info = track_runqueue._get_pending_handoff_info()
 

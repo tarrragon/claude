@@ -1,3 +1,16 @@
+## [2.50.0] - 2026-09-03
+
+### Summary
+feat: 骨架加前景執行固定句 + parallel-dispatch 補 in_progress idle 逾時判準; fix: track_runqueue handoff pending root 解析改用 get_ticket_state_root; chore: VERSION 回寫 、兩票派發骨架、 關閉為 重複
+
+Changes: 1 feat, 1 fix, 1 chore
+
+- feat: 骨架加前景執行固定句 + parallel-dispatch 補 in_progress idle 逾時判準
+- fix: track_runqueue handoff pending root 解析改用 get_ticket_state_root
+- chore: VERSION 回寫 、兩票派發骨架、 關閉為 重複
+
+---
+
 ## [2.49.2] - 2026-09-03
 
 ### Summary

@@ -16,7 +16,7 @@
 
 ## 骨架（權威版）
 
-> **用途**：PM 派發前最常用的中文對話式骨架（原稱「三段式快速填空骨架」，W17-048 方案 F）。把 context 寫入 ticket 後，直接複製以下骨架填三個空格即可派發。骨架本體（`SKELETON_TEMPLATE_NORMAL`，不含 commit 制式句）約 10-15 行；`--commit-policy agent`（預設）另附精準 staging 短版指標句（約 6 行，26 行全文改冪等寫入票的「### Commit 規範」章節，見下方「精準 staging 制式句」節），完整輸出實測約 19-28 行（觸及 `.claude/hooks/` 之票另加 8 行提醒）。agent-prompt-length-guard 的 Layer 1 硬上限（30 行）**無任何豁免**——模板關鍵字只影響 Layer 2 軟提示（10-30 行缺關鍵字時的提示），不影響 Layer 1 判定；骨架實際行數與硬上限的綁定測試見 `.claude/hooks/tests/test_agent_prompt_length_guard_hook.py`。
+> **用途**：PM 派發前最常用的中文對話式骨架（原稱「三段式快速填空骨架」，W17-048 方案 F）。把 context 寫入 ticket 後，直接複製以下骨架填三個空格即可派發。骨架本體（`SKELETON_TEMPLATE_NORMAL`，不含 commit 制式句）約 10-15 行（含一條固定句：測試與其結果為後續步驟前置的命令一律前景執行，`run_in_background` 僅限真正可並行的旁路任務）；`--commit-policy agent`（預設）另附精準 staging 短版指標句（約 6 行，26 行全文改冪等寫入票的「### Commit 規範」章節，見下方「精準 staging 制式句」節），完整輸出實測約 21-30 行（觸及 `.claude/hooks/` 之票另加提醒，已頂到 Layer 1 硬上限）。agent-prompt-length-guard 的 Layer 1 硬上限（30 行）**無任何豁免**——模板關鍵字只影響 Layer 2 軟提示（10-30 行缺關鍵字時的提示），不影響 Layer 1 判定；骨架實際行數與硬上限的綁定測試見 `.claude/hooks/tests/test_agent_prompt_length_guard_hook.py`。
 
 > **機制選擇前置（0.38.0-W2-002 ANA 落地）**：呼叫 `Agent(...)` 時**預設不帶 `name` 參數**（一般 subagent）。僅當任務符合「平行派發且 Agent A 的發現會改變 Agent B 正在進行的工作」（改用 Agent Teams）或「同 Wave 有 3+ 張同類型 ticket 且預期逐一派發」（named agent 可選續用）時才加 `name`。循序一次性任務、獨立分析/實作任務一律不帶 `name`。完整選用準則決策表見 `.claude/pm-rules/parallel-dispatch.md`「派發機制選用準則」章節。
 >
@@ -119,7 +119,7 @@ Ticket: 0.18.0-W17-048.3
 - [ ] 含「讀取 ticket」指引（W17-048.2 軟提示檢查）
 - [ ] 含 `claim {id} --as {agent_name}` 認領行（派發身份前移；agent 端對稱綁定，見骨架下方說明）
 - [ ] context 已在 ticket 的 Problem Analysis / Context Bundle（不塞 prompt）
-- [ ] prompt 總行數 ≤ 30 行硬上限（無豁免）；`ticket track dispatch --commit-policy agent` 預設輸出約 19-28 行屬正常範圍，非異常
+- [ ] prompt 總行數 ≤ 30 行硬上限（無豁免）；`ticket track dispatch --commit-policy agent` 預設輸出約 21-30 行屬正常範圍，非異常
 - [ ] 動作描述一句話可理解（不堆疊多個動詞）
 - [ ] 交付通道已確認（L3/L2: append-log+commit / L1: append-log+/tmp / L0: final message 後 PM 立即落檔）
 - [ ] 文件票涉及持久化/schema/接線現況陳述時，已含實查約束句（PC-BAL-007，見上節）
