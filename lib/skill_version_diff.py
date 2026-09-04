@@ -226,6 +226,14 @@ def report_skill_repo_drift(claude_dir: Path) -> str:
                 "   遠端無記錄（從未被 push 記錄過，需確認遠端是否該有此 skill 後 push 或標註不推送理由）："  # i18n-exempt
                 f"{', '.join(status.skipped_remote_missing)}"
             )
+        # 免責句須先於分歧清單出現：讀者掃清單即形成「本地 X / 遠端 Y」的判讀，
+        # 免責句排在清單之後抵達時判讀已成立，形同事後才能援引而非預防誤讀
+        # （ARCH-BAL-022 根因 2，同一 session 內兩度誤讀實證）。
+        if status.diverged:
+            lines.append(  # i18n-exempt
+                "   此為 skill 發佈庫，與 sync-push 目標 repo 不同；"  # i18n-exempt
+                "上方[Skill 變更摘要]是 push 前後本地快照差異，本段是本地與此發佈庫的雜湊比對，兩者指涉對象不同"  # i18n-exempt
+            )
         # 逐項列出但設上限，與 sync 腳本 uncleaned_deletions 的呈現慣例一致：
         # 分歧數可達數十筆，全列會把收尾訊息淹沒，反而讓人學會略過整段。
         for entry in status.diverged[:SKILL_DRIFT_PREVIEW_LIMIT]:
@@ -243,10 +251,6 @@ def report_skill_repo_drift(claude_dir: Path) -> str:
             lines.append(  # i18n-exempt
                 "   方向需人工判斷（內容雜湊只證明不同，不證明誰較新），逐一處理："  # i18n-exempt
                 f"{first.pull_command} 或 {first.push_command}"  # i18n-exempt
-            )
-            lines.append(  # i18n-exempt
-                "   此為 skill 發佈庫，與 sync-push 目標 repo 不同；"  # i18n-exempt
-                "上方[Skill 變更摘要]是 push 前後本地快照差異，本段是本地與此發佈庫的雜湊比對，兩者指涉對象不同"  # i18n-exempt
             )
         return "\n".join(lines)
     except Exception as e:  # noqa: BLE001 - 降級為警告，見 docstring

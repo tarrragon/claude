@@ -51,8 +51,9 @@ import re
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Optional
 
 from gh_common import (
     FRAMEWORK_REPO,
@@ -61,6 +62,7 @@ from gh_common import (
     preflight,
     run_gh,
 )
+from owned_issues_registry import record_owned_issue
 from section_table import upsert_section
 
 # 區段 comment 首行標記：抓 "section:" 與 "owner:" 之間、"owner:" 之後至
@@ -97,6 +99,22 @@ CURRENT_CONCLUSION_SECTION_NAME = "當前結論"
 # 值，兩者皆可由 CLI 參數覆蓋，非規格權威值。
 DEFAULT_COMMENT_THRESHOLD = 30
 DEFAULT_STALE_DAYS = 7
+
+# gh api comment 物件的標準欄位，供 cmd_update 從既有 comment 回推 issue
+# number（cmd_update 只收 comment_id，不像 cmd_init 直接持有 issue_ref）。
+_ISSUE_URL_NUMBER_RE = re.compile(r"/issues/(?P<num>\d+)$")
+
+
+def _now_iso() -> str:
+    """owned-issues 登記檔的 updated_at 時間戳（UTC ISO8601）。"""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _issue_number_from_comment(comment: dict) -> Optional[int]:
+    """從 gh api comment 物件的 issue_url 回推所屬 issue number；缺失或格式
+    不符回傳 None（呼叫端略過登記檔寫入，不影響既有 GitHub 寫入結果）。"""
+    match = _ISSUE_URL_NUMBER_RE.search(comment.get("issue_url", "") or "")
+    return int(match.group("num")) if match else None
 
 
 def render_section_comment(name: str, owner: str, content: str) -> str:
@@ -399,6 +417,12 @@ def cmd_init(issue_ref: str, owner: str, sections_file: str, dedup_keywords: lis
             "檢查已建立的區段 comment，清理後修正 sections-file 重試",
         )
 
+    # 區段 comment 已全數建立成功，owner 對此 issue 的擁有關係已確立——
+    # 即使後續 body 索引回填失敗，登記檔仍應反映此事實（見
+    # owned_issues_registry 模組 docstring：best-effort 快取，寫入失敗不
+    # 影響已完成的 GitHub 寫入結果）。
+    record_owned_issue(int(issue_ref), owner, _now_iso())
+
     try:
         body = fetch_body(issue_ref)
     except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
@@ -438,6 +462,14 @@ def cmd_update(comment_id: str, content_file: str) -> int:
         patch_comment(comment_id, rendered)
     except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
         return emit_degraded(f"更新 comment {comment_id} 失敗：{exc}", "檢查權限與網路後重試")
+
+    # 更新成功後同步刷新登記檔（見 owned_issues_registry 模組 docstring）：
+    # cmd_update 只收 comment_id，issue number 須從既有 comment 的
+    # issue_url 回推；回推失敗（欄位缺失/格式不符）不影響本次更新結果，
+    # 僅略過登記檔寫入。
+    issue_number = _issue_number_from_comment(existing)
+    if issue_number is not None:
+        record_owned_issue(issue_number, marker["owner"], _now_iso())
 
     sys.stderr.write(f"[framework-issue] 區段「{marker['name']}」已更新 @ comment {comment_id}\n")
     return 0

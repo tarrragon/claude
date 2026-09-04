@@ -178,6 +178,32 @@ def test_diverged_annotation_distinguishes_skill_repo_from_sync_target(
     assert "此為 skill 發佈庫，與 sync-push 目標 repo 不同" in report
 
 
+def test_diverged_disclaimer_precedes_the_list(tmp_path, monkeypatch):
+    """免責句須出現在第一筆分歧列之前，讀者掃到任一列時來源資訊已在視線內
+    （0.2.1-W3-1229：舊排法把免責句放在清單之後，判讀在免責句抵達前已成立）。"""
+    _stub_report(
+        monkeypatch,
+        _status(
+            diverged=[
+                _diverged("demo", "1.0.0", "0.9.0"),
+                _diverged("other", "2.0.0", "1.9.0"),
+            ]
+        ),
+    )
+
+    report = sync_mod.report_skill_repo_drift(tmp_path / ".claude")
+    lines = report.splitlines()
+
+    disclaimer_idx = next(
+        i for i, line in enumerate(lines) if "此為 skill 發佈庫" in line
+    )
+    first_entry_idx = next(
+        i for i, line in enumerate(lines) if line.strip().startswith("- demo")
+    )
+
+    assert disclaimer_idx < first_entry_idx
+
+
 def test_degraded_message_distinguishes_failure_kinds(tmp_path, monkeypatch):
     """網路不通與契約破損不得呈現為同一行，否則讀者無從判斷該重試還是修安裝。"""
     _stub_report(monkeypatch, OSError("unreachable"))

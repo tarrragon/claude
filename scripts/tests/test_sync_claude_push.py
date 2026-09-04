@@ -218,3 +218,69 @@ def test_is_project_specific_ref_distinguishes_ticket_id_from_hash():
     assert sync_mod._is_project_specific_ref("W3-878") is True
     assert sync_mod._is_project_specific_ref("abc1234def") is False
     assert sync_mod._is_project_specific_ref("") is False
+
+
+# ---------- strip_project_specific_info：句法位置判準（0.2.1-W3-1230） ----------
+#
+# 判準：移除內容位於 conventional scope 的 (...) 內（且為括號唯一內容）時
+# 整組剝除，輸出乾淨；位於其他任何位置（句中/句首/句尾，含夾帶其他文字的
+# 括號）時以 placeholder 取代，保留可見痕跡。五條 PROJECT_SPECIFIC_PATTERNS
+# 皆逐一覆蓋句中形態；conventional scope 另以既有 revert 案例（見上方
+# test_categorize_case_* / test_revert_entry_*）交叉覆蓋。
+
+def test_strip_mid_sentence_bare_ticket_id_leaves_placeholder():
+    """裸格式 ticket ID 位於句中時，剝除後留可見佔位，不塌陷成無主詞斷句。
+
+    對應真實回歸案例：`revert(0.2.1-W3-871): ...契約歸屬轉 0.2.1-W3-878 決策`
+    剝除前為「契約歸屬轉 決策」（主詞消失），修復後應為「契約歸屬轉 某票 決策」。
+    """
+    result = sync_mod.strip_project_specific_info("契約歸屬轉 W3-878 決策")
+    assert result == "契約歸屬轉 某票 決策"
+    assert guard_mod.find_ticket_id_hits(result) == []
+
+
+def test_strip_mid_sentence_versioned_ticket_id_leaves_placeholder():
+    result = sync_mod.strip_project_specific_info("契約歸屬轉 0.2.1-W3-878 決策")
+    assert result == "契約歸屬轉 某票 決策"
+    assert guard_mod.find_ticket_id_hits(result) == []
+
+
+def test_strip_mid_sentence_version_number_leaves_placeholder():
+    result = sync_mod.strip_project_specific_info("回滾至 v0.2.0 之前的行為")
+    assert result == "回滾至 某版本 之前的行為"
+
+
+def test_strip_mid_sentence_wave_ref_leaves_placeholder():
+    result = sync_mod.strip_project_specific_info("此變更源自 Wave 5 的討論")
+    assert result == "此變更源自 某 Wave 的討論"
+
+
+def test_strip_mid_sentence_bare_version_leaves_placeholder():
+    result = sync_mod.strip_project_specific_info("自 0.2.1 起生效")
+    assert result == "自 某版本 起生效"
+
+
+def test_strip_conventional_scope_removed_as_whole():
+    """conventional scope 括號內的識別符（括號唯一內容）整組剝除，輸出乾淨。"""
+    result = sync_mod.strip_project_specific_info("revert(W14-031): migrate hook-logs path")
+    assert result == "revert: migrate hook-logs path"
+
+
+def test_strip_paren_with_mixed_content_not_treated_as_scope():
+    """括號內夾帶其他文字時不算 conventional scope，維持句中處置（留佔位）。"""
+    result = sync_mod.strip_project_specific_info("同步簽名（W4-026 回歸修復）")
+    assert result == "同步簽名（某票 回歸修復）"
+
+
+def test_categorize_revert_with_mid_sentence_ticket_id_in_original_ref_no_hits():
+    """端到端：revert description 中段帶 ticket ID（真實回歸案例形態），
+    經 categorize_commits 產出的條目須通過守衛零命中檢查，且不塌陷成斷句。
+    """
+    subjects = [
+        "revert(0.2.1-W3-871): 還原 readme_index 欄位級 upsert 至基線，"
+        "契約歸屬轉 0.2.1-W3-878 決策",
+    ]
+    cats = sync_mod.categorize_commits(subjects)
+    entry = cats["revert"][0]
+    assert guard_mod.find_ticket_id_hits(entry) == []
+    assert "契約歸屬轉 某票 決策" in entry

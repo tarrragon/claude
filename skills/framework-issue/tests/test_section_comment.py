@@ -32,6 +32,18 @@ def _bypass_preflight(monkeypatch):
     monkeypatch.setattr(gh_common, "check_gh_authenticated", lambda: True)
 
 
+@pytest.fixture(autouse=True)
+def _stub_owned_issues_registry(monkeypatch):
+    """owned-issues 登記檔寫入為 init／update 成功路徑新增的旁路 side
+    effect，非本檔案既有測試的驗證焦點；預設 stub 為 no-op，避免其內部
+    `git rev-parse` 呼叫被既有 `_run` side_effect 函式判為「未預期的 gh
+    呼叫」而炸開（`mock.patch.object(section_comment.subprocess, "run",
+    ...)` patch 的是共用 subprocess 模組，owned_issues_registry 的呼叫
+    亦會被攔截）。「owned-issues 登記檔寫入」節的專屬測試另行覆蓋以驗證
+    呼叫參數。"""
+    monkeypatch.setattr(section_comment, "record_owned_issue", lambda *a, **k: None)
+
+
 # --- 純函式：標記渲染與抽取 ---
 
 
@@ -254,6 +266,37 @@ def test_init_requires_dedup_keywords_flag(tmp_path):
     assert exc_info.value.code == 2
 
 
+# --- owned-issues 登記檔寫入：init／update 成功後同步落地一筆登記 ---
+
+
+def test_init_records_owned_issue_after_successful_section_creation(tmp_path):
+    """區段 comment 全數建立成功後，須以 (issue number, owner, timestamp)
+    呼叫 record_owned_issue——即使後續 body 索引回填步驟才執行。"""
+    sections_file = tmp_path / "sections.json"
+    sections_file.write_text(
+        json.dumps([{"name": "當前結論", "content": "內容"}]), encoding="utf-8"
+    )
+    post_urls = [("https://github.com/tarrragon/claude/issues/81#issuecomment-1", 1)]
+    captured = {}
+
+    with mock.patch.object(
+        section_comment.subprocess, "run", side_effect=_init_side_effect(post_urls, captured)
+    ), mock.patch.object(section_comment, "record_owned_issue") as record:
+        rc = section_comment.main(
+            [
+                "init", "81", "--owner", "test-session", "--sections-file", str(sections_file),
+                "--dedup-keywords", "測試關鍵字",
+            ]
+        )
+    assert rc == 0
+    record.assert_called_once()
+    number, owner, updated_at = record.call_args.args
+    assert number == 81
+    assert isinstance(number, int)
+    assert owner == "test-session"
+    assert isinstance(updated_at, str) and updated_at
+
+
 # --- dedup：查重（token 聯集查詢，避免跨 comment AND 語意漏判） ---
 
 
@@ -469,6 +512,62 @@ def test_update_rejects_comment_without_section_marker(tmp_path, capsys):
     assert "非區段標記" in capsys.readouterr().err
     # 確認未發出 PATCH（僅 GET 一次即被拒）。
     assert run.call_count == 1
+
+
+def test_update_records_owned_issue_with_number_from_issue_url(tmp_path):
+    """cmd_update 只收 comment_id，issue number 須從既有 comment 的
+    issue_url 回推；成功時以 (issue number, owner, timestamp) 呼叫
+    record_owned_issue。"""
+    content_file = tmp_path / "content.md"
+    content_file.write_text("## 當前結論\n更新後內容", encoding="utf-8")
+
+    def _run(args, **kwargs):
+        if args[:2] == ["gh", "api"] and "--method" not in args:
+            return _completed(
+                stdout=json.dumps(
+                    {
+                        "body": "<!-- section: 當前結論 owner: flutter-balance-99 -->\n舊內容",
+                        "issue_url": "https://api.github.com/repos/tarrragon/claude/issues/81",
+                    }
+                )
+            )
+        if "--method" in args and args[args.index("--method") + 1] == "PATCH":
+            return _completed(stdout=json.dumps({"id": 5523472948}))
+        raise AssertionError(f"未預期的 gh 呼叫：{args}")
+
+    with mock.patch.object(section_comment.subprocess, "run", side_effect=_run), \
+            mock.patch.object(section_comment, "record_owned_issue") as record:
+        rc = section_comment.main(["update", "5523472948", "--content-file", str(content_file)])
+    assert rc == 0
+    record.assert_called_once()
+    number, owner, updated_at = record.call_args.args
+    assert number == 81
+    assert owner == "flutter-balance-99"
+    assert isinstance(updated_at, str) and updated_at
+
+
+def test_update_skips_registry_write_when_issue_url_missing(tmp_path):
+    """既有 comment 缺 issue_url（非標準/測試替身資料）時，回推失敗只略過
+    登記檔寫入，不影響 update 本身成功。"""
+    content_file = tmp_path / "content.md"
+    content_file.write_text("## 當前結論\n更新後內容", encoding="utf-8")
+
+    def _run(args, **kwargs):
+        if args[:2] == ["gh", "api"] and "--method" not in args:
+            return _completed(
+                stdout=json.dumps(
+                    {"body": "<!-- section: 當前結論 owner: flutter-balance-99 -->\n舊內容"}
+                )
+            )
+        if "--method" in args and args[args.index("--method") + 1] == "PATCH":
+            return _completed(stdout=json.dumps({"id": 5523472948}))
+        raise AssertionError(f"未預期的 gh 呼叫：{args}")
+
+    with mock.patch.object(section_comment.subprocess, "run", side_effect=_run), \
+            mock.patch.object(section_comment, "record_owned_issue") as record:
+        rc = section_comment.main(["update", "5523472948", "--content-file", str(content_file)])
+    assert rc == 0
+    record.assert_not_called()
 
 
 # --- observe：任何 session 可用，不需 owner，不改 body ---

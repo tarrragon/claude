@@ -192,6 +192,63 @@ class TestAcceptanceWritesetConsistency:
         assert status == "pass"
         assert items == []
 
+    def test_glob_mention_covered_by_full_path_pass(self):
+        """0.2.1-W3-1147：acceptance 提及 glob 形式路徑（星號斷開字面 token，
+        第六項檢查的字元類無法涵蓋），where.files 內有檔案可被該樣式 fnmatch
+        涵蓋 → pass（以真實票面案例的路徑措辭為輸入，非人造字串）。"""
+        acceptance = ["lib/l10n/generated/app_localizations*.dart 三份生成檔皆需同步更新版號"]
+        where_files = [
+            "lib/l10n/generated/app_localizations.dart",
+            "lib/l10n/generated/app_localizations_en.dart",
+            "lib/l10n/generated/app_localizations_zh.dart",
+        ]
+        status, items, _ = check_acceptance_writeset_consistency(acceptance, where_files)
+        assert status == "pass"
+        assert items == []
+
+    def test_glob_mention_uncovered_warns(self):
+        """反例：where.files 內無檔案可被該 glob 樣式涵蓋 → warn，且矛盾條目
+        列出、訊息點名文件 ID 形態不在本檢查範圍。"""
+        acceptance = ["lib/l10n/generated/app_localizations*.dart 三份生成檔皆需同步更新版號"]
+        where_files = ["lib/l10n/generated/other_widget.dart"]
+        status, items, msg = check_acceptance_writeset_consistency(acceptance, where_files)
+        assert status == "warn"
+        assert len(items) == 1
+        assert "app_localizations*.dart" in items[0]
+        assert "glob 路徑提及" in msg
+        assert "SPEC-002" in msg and "PROP-003" in msg
+
+    def test_glob_mention_bare_filename_covered_by_full_path_pass(self):
+        """0.2.1-W3-1147 AC1：acceptance 寫裸檔名 glob、where.files 寫完整
+        路徑，兩側正規化至同一粒度後不得產生 false positive。"""
+        acceptance = ["app_localizations*.dart 三份生成檔皆需同步更新版號"]
+        where_files = ["lib/l10n/generated/app_localizations_en.dart"]
+        status, items, _ = check_acceptance_writeset_consistency(acceptance, where_files)
+        assert status == "pass"
+        assert items == []
+
+    def test_glob_mention_and_keyword_both_matched_combined_in_message(self):
+        """關鍵詞與 glob 兩種訊號同時命中時，兩者矛盾條目皆列出且訊息分別
+        計數，不互相覆蓋。"""
+        acceptance = [
+            "新增測試涵蓋 app_localizations*.dart 的產出範圍",
+        ]
+        where_files = ["lib/l10n/generated/other_widget.dart"]  # 無測試路徑，glob 未涵蓋
+        status, items, msg = check_acceptance_writeset_consistency(acceptance, where_files)
+        assert status == "warn"
+        assert len(items) == 1  # 同一條 acceptance 文字，兩訊號命中同一項不重複列
+        assert "測試類關鍵詞" in msg and "glob 路徑提及" in msg
+
+    def test_literal_uncovered_path_not_flagged_by_check4(self):
+        """分工邊界：不含 `*` 的字面路徑提及一律歸第六項檢查（fail），本檢查
+        （檢查 4）刻意不重複判定，避免同一 acceptance 條目被兩項檢查以不同
+        severity 判定（見模組 docstring「與第六項檢查的分工」）。"""
+        acceptance = ["核對 lib/l10n/generated/app_localizations.dart 內容是否正確"]
+        where_files = ["lib/l10n/generated/other_widget.dart"]  # 未涵蓋，但屬檢查 6 範圍
+        status, items, _ = check_acceptance_writeset_consistency(acceptance, where_files)
+        assert status == "pass"
+        assert items == []
+
 
 class TestWherePathsExistence:
     """where.files 路徑存在性檢查（純函式，project_root 直接注入）。"""
@@ -499,6 +556,40 @@ class TestExecuteDispatchReadiness:
             "_body": "## Context Bundle\n\n短內容\n",
             "acceptance": ["核對 SKILL.md 並直接修文件"],
             "where": {"files": ["SKILL.md"]},
+        }
+        rc, out, _err = _run(ticket, tmp_path)
+        assert rc == 0
+        assert "全數通過" in out
+
+    def test_check4_glob_mention_uncovered_warns(self, tmp_path):
+        """0.2.1-W3-1147：檢查 4 涵蓋 glob 形式路徑提及，未涵蓋時 exit 1，
+        且訊息點名文件 ID 形態不在本檢查範圍（AC2）。"""
+        ticket = {
+            "_body": "",
+            "acceptance": [
+                "lib/l10n/generated/app_localizations*.dart 三份生成檔皆需同步更新版號"
+            ],
+            "where": {"files": ["lib/l10n/generated/other_widget.dart"]},
+        }
+        rc, out, _err = _run(ticket, tmp_path)
+        assert rc == 1
+        assert "app_localizations*.dart" in out
+        assert "SPEC-002" in out and "PROP-003" in out
+
+    def test_check4_glob_mention_covered_does_not_affect_pass(self, tmp_path):
+        """反例：glob 樣式已被 where.files 涵蓋 → 不影響 pass 結論。"""
+        ticket = {
+            "_body": "## Context Bundle\n\n短內容\n",
+            "acceptance": [
+                "lib/l10n/generated/app_localizations*.dart 三份生成檔皆需同步更新版號"
+            ],
+            "where": {
+                "files": [
+                    "lib/l10n/generated/app_localizations.dart",
+                    "lib/l10n/generated/app_localizations_en.dart",
+                    "lib/l10n/generated/app_localizations_zh.dart",
+                ]
+            },
         }
         rc, out, _err = _run(ticket, tmp_path)
         assert rc == 0

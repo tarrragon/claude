@@ -1,3 +1,26 @@
+## [2.52.0] - 2026-09-04
+
+### Summary
+feat: 擴充 dispatch-readiness 檢查 4 涵蓋 glob 路徑提及; feat: owned-issues 本地登記檔取代 SessionStart hook gh search 粗篩; fix: 錯誤信封尾部摘要行防 tail -N 截斷（某票） (+10 more)
+
+Changes: 2 feat, 3 fix, 7 docs, 1 chore
+
+- feat: 擴充 dispatch-readiness 檢查 4 涵蓋 glob 路徑提及
+- feat: owned-issues 本地登記檔取代 SessionStart hook gh search 粗篩
+- fix: 錯誤信封尾部摘要行防 tail -N 截斷（某票）
+- fix: sync-push skill 雜湊分歧清單免責句前置
+- fix: sync-push 訊息產生器移除留可見佔位，消除句中剝除斷句
+- docs: 補自指檢查節，明示本筆處置與其所修缺陷同構
+- docs: 沉默有多種成因而其中一種被預設
+- docs: 補「借來的嚴謹性本身未經驗證，兩端一致是它製造的」
+- docs: 剝除 CHANGELOG.md 既有歷史區塊殘留的 12 處 consumer 專屬 ticket ID
+- docs: 補 A/B 型邊界與 Action 前提
+- docs: 補延伸節「正確的計數掩蓋脆弱的方法」
+- docs: 同一產出中查證與猜測並列，查證的部分使猜測看似也經查證
+- chore: VERSION 回寫 某版本，本波七票修復推送至 canonical
+
+---
+
 ## [2.51.0] - 2026-09-04
 
 ### Summary

@@ -134,12 +134,16 @@ def iter_executable_hook_dirs(root: Path):
 
 # commit 訊息中需要過濾的專案特定模式
 # 獨立 repo 是跨專案通用框架，commit 訊息禁止包含專案版本號/Wave/Ticket 編號
+#
+# 各條附帶一個 placeholder：移除位置若非 conventional scope 的 `(...)`
+# 括號（即句中位置），改用 placeholder 取代而非清空，避免留下無主詞的
+# 斷句（見 strip_project_specific_info）。
 PROJECT_SPECIFIC_PATTERNS = [
-    r"\b\d+\.\d+\.\d+-W\d+-\d+\b",  # Ticket ID: 0.2.0-W5-014
-    r"\bW\d+-\d+\b",                  # 短格式 Ticket: W5-014
-    r"\bv\d+\.\d+\.\d+\b",           # 版本號: v0.2.0
-    r"\bWave\s*\d+\b",               # Wave 5
-    r"\b0\.\d+\.\d+\b",              # 裸版本: 0.2.0
+    (r"\b\d+\.\d+\.\d+-W\d+-\d+\b", "某票"),   # Ticket ID: 0.2.0-W5-014
+    (r"\bW\d+-\d+\b", "某票"),                  # 短格式 Ticket: W5-014
+    (r"\bv\d+\.\d+\.\d+\b", "某版本"),         # 版本號: v0.2.0
+    (r"\bWave\s*\d+\b", "某 Wave"),            # Wave 5
+    (r"\b0\.\d+\.\d+\b", "某版本"),            # 裸版本: 0.2.0
 ]
 
 # commit type 分類對應的版本遞增建議
@@ -646,15 +650,43 @@ def git_update_index_chmod(root: Path) -> int:
     return count
 
 
+def _is_bare_paren_scope(text: str, start: int, end: int) -> bool:
+    """判斷 [start, end) 是否為一對括號唯一內容（conventional commit scope）。
+
+    往前找最近的 `(`、往後找最近的 `)`，兩者之間（扣掉待判定區間本身）
+    若只有空白，代表該括號是為此區間量身包住的 scope（如
+    `revert(<id>):` 的 `(<id>)`），此時連括號一併整組剝除才乾淨。
+    括號內夾帶其他文字（如 `(見<id>說明)`）不算，維持句中處置。
+    """
+    open_idx = text.rfind("(", 0, start)
+    close_idx = text.find(")", end)
+    if open_idx == -1 or close_idx == -1:
+        return False
+    return text[open_idx + 1 : start].strip() == "" and text[end:close_idx].strip() == ""
+
+
 def strip_project_specific_info(text: str) -> str:
     """Remove project-specific info (Ticket IDs, version numbers, Wave refs) from text.
 
     The independent repo is a cross-project framework.
     Commit messages must focus on framework functionality, not project-specific progress.
+
+    移除位置決定處置方式（句法位置而非內容類型）：
+      - 位於 conventional scope 的 `(...)` 內（且為括號唯一內容）：整組
+        剝除，括號隨後由下方清理一併移除，輸出乾淨（如
+        `revert(<id>):` 剝除後為 `revert:`）。
+      - 其他位置（句中/句首/句尾）：以 placeholder 取代，保留讀者可見
+        的移除痕跡，避免主詞消失、語意斷裂（識別符原在描述文字中段時，
+        剝除後應留下「某票」等佔位，而非讓前後文字直接相接）。
     """
     result = text
-    for pattern in PROJECT_SPECIFIC_PATTERNS:
-        result = re.sub(pattern, "", result)
+    for pattern, placeholder in PROJECT_SPECIFIC_PATTERNS:
+        def _replace(match: re.Match[str], _placeholder: str = placeholder) -> str:
+            if _is_bare_paren_scope(match.string, match.start(), match.end()):
+                return ""
+            return _placeholder
+
+        result = re.sub(pattern, _replace, result)
     # Clean up leftover artifacts: multiple spaces, trailing colons, empty parens
     result = re.sub(r"\(\s*\)", "", result)
     result = re.sub(r":\s*$", "", result, flags=re.MULTILINE)

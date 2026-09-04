@@ -16,8 +16,13 @@ SessionStart 事件觸發時，對本專案（owner）擁有區段的 framework 
 在對的時機跑它；本 hook 只負責在 SessionStart 呼叫既有 check，不重寫其警訊
 邏輯。
 
-owner 識別為 heuristic，非結構化登記表（已知侷限見對應 ticket 的產生路徑盤
-點表）：
+owner 識別優先讀本地 owned-issues 登記檔（section_comment.py 的 init／
+update 成功寫入 GitHub 後同步落地，見 owned_issues_registry 模組
+docstring）：登記檔存在且為空清單 -> 本專案已知無擁有任何 issue，直接
+跳過、不發任何 gh API 呼叫；登記檔存在且非空 -> 逐張呼叫既有 check（省略
+候選發現／owner 驗證兩步驟，登記檔內容已由寫入端確定為真）；登記檔缺失
+或無法讀取（從未執行過 init/update、檔案遭刪除、schema 不符）-> fail-open
+退回舊 heuristic 路徑：
 1. 前綴推導：本專案 git 主 repo 目錄名稱 kebab-case 化（如
    flutter_balance -> flutter-balance），對應本專案歷史上實際使用的 owner
    慣例（如 `flutter-balance-99`）。
@@ -26,8 +31,9 @@ owner 識別為 heuristic，非結構化登記表（已知侷限見對應 ticket
 3. 本地驗證：讀取候選 issue 的 comments，比對區段標記首行是否有
    `owner: <前綴>-...`，只有精確比對通過者才視為本專案擁有。
 
-失敗語意：fail-open。gh 不可用／未登入／任何步驟逾時或例外，一律靜默略過
-（`suppressOutput: true`），僅寫入 hook-logs，不阻擋 session 啟動。
+失敗語意：fail-open。登記檔讀取失敗、gh 不可用／未登入／任何步驟逾時或
+例外，一律靜默略過（`suppressOutput: true`），僅寫入 hook-logs，不阻擋
+session 啟動。
 """
 
 import json
@@ -53,6 +59,11 @@ EXIT_SUCCESS = 0
 
 FRAMEWORK_REPO = "tarrragon/claude"
 SECTION_COMMENT_SCRIPT = ".claude/skills/framework-issue/scripts/section_comment.py"
+# owned_issues_registry 模組所在目錄：section_comment.py 家族現行不依賴
+# .claude/lib，本 hook 改以 sys.path 插入方式引用其共用 schema/讀寫模組
+# （見 _read_owned_issue_numbers），與呼叫 section_comment.py 走 subprocess
+# 的既有手法不同——讀 registry 是純檔案 IO，不需 subprocess 開銷。
+FRAMEWORK_ISSUE_SCRIPTS_DIR = ".claude/skills/framework-issue/scripts"
 
 # 個別 gh 呼叫逾時（秒）：auth 檢查／search／單一 issue comments 讀取共用。
 # 值取小是刻意的——這些呼叫在正常網路下 < 1 秒完成，逾時值只是異常網路下的
@@ -223,7 +234,9 @@ def _run_check(issue_number: int, logger) -> Optional[str]:
 
 
 def _collect_hits(prefix: str, logger) -> List[Tuple[int, str]]:
-    """候選發現 -> 本地驗證 -> 呼叫既有 check 三步驟，回傳警訊 B 命中清單。"""
+    """舊路徑：候選發現 -> 本地驗證 -> 呼叫既有 check 三步驟，回傳警訊 B
+    命中清單（owned-issues 登記檔缺失或無法讀取時的 fail-open fallback，
+    見檔頭「owner 識別」說明）。"""
     hits: List[Tuple[int, str]] = []
     candidates = _search_candidate_issues(prefix, logger)
     logger.info("prefix=%s candidates=%s", prefix, candidates)
@@ -236,12 +249,47 @@ def _collect_hits(prefix: str, logger) -> List[Tuple[int, str]]:
     return hits
 
 
-def _build_context(prefix: str, hits: List[Tuple[int, str]]) -> str:
-    """組裝 additionalContext 內容：逐張命中 issue 附上 check 完整輸出。"""
+def _collect_registry_hits(owned_numbers: List[int], logger) -> List[Tuple[int, str]]:
+    """快速路徑：owned-issues 登記檔內容已由寫入端（section_comment.py
+    init／update）確定為真，逐張直接呼叫既有 check，省略舊路徑的候選發現
+    與本地 owner 驗證兩步驟。"""
+    hits: List[Tuple[int, str]] = []
+    for number in owned_numbers:
+        output = _run_check(number, logger)
+        if output:
+            hits.append((number, output))
+    return hits
+
+
+def _read_owned_issue_numbers(project_root: Path, logger) -> Optional[List[int]]:
+    """讀取本地 owned-issues 登記檔（section_comment.py 寫入端共用模組
+    owned_issues_registry，見該模組 docstring 完整 schema／語意說明）。
+
+    回傳 None 代表登記檔缺失／損毀／模組載入失敗，呼叫端應 fail-open 退回
+    舊路徑（見檔頭「失敗語意」）；回傳空清單代表已確認本專案無擁有任何
+    issue，呼叫端可直接跳過（不發任何 gh API 呼叫）；兩者語意不同，比照
+    owned_issues_registry.owned_issue_numbers() 的呼叫端判斷慣例。
+    """
+    scripts_dir = project_root / FRAMEWORK_ISSUE_SCRIPTS_DIR
+    sys.path.insert(0, str(scripts_dir))
+    try:
+        import owned_issues_registry  # noqa: PLC0415
+    except ImportError as exc:
+        logger.info("owned_issues_registry 模組載入失敗，fail-open 退回舊路徑: %s", exc)
+        return None
+    return owned_issues_registry.owned_issue_numbers(project_root=project_root)
+
+
+def _build_context(label: str, hits: List[Tuple[int, str]]) -> str:
+    """組裝 additionalContext 內容：逐張命中 issue 附上 check 完整輸出。
+
+    label 描述本次命中清單的判定依據（登記檔快速路徑 vs owner 前綴
+    heuristic fallback），供 additionalContext 說明來源，不影響命中邏輯。
+    """
     lines = [
         "## Framework Issue 待整合觀測（session-start-issue-check）",
         "",
-        f"以下 {len(hits)} 張本專案（owner 前綴 `{prefix}-`）擁有區段的 "
+        f"以下 {len(hits)} 張本專案（{label}）擁有區段的 "
         "framework issue，「當前結論」已落後最新觀測，內容待整合：",
         "",
     ]
@@ -270,15 +318,31 @@ def main() -> int:
         print(_suppressed_output())
         return EXIT_SUCCESS
 
-    if not _gh_ready(logger):
-        print(_suppressed_output())
-        return EXIT_SUCCESS
+    project_root = get_project_root()
+    owned_numbers = _read_owned_issue_numbers(project_root, logger)
 
-    prefix = _project_owner_prefix(logger)
-    hits = _collect_hits(prefix, logger)
+    if owned_numbers is not None:
+        logger.info("owned-issues 登記檔命中，issues=%s", owned_numbers)
+        if not owned_numbers:
+            logger.info("登記檔存在但無擁有項目，略過（不發 gh API 呼叫）")
+            print(_suppressed_output())
+            return EXIT_SUCCESS
+        if not _gh_ready(logger):
+            print(_suppressed_output())
+            return EXIT_SUCCESS
+        hits = _collect_registry_hits(owned_numbers, logger)
+        label = "owned-issues 登記檔"
+    else:
+        logger.info("owned-issues 登記檔缺失或無法讀取，fail-open 退回 gh search heuristic 路徑")
+        if not _gh_ready(logger):
+            print(_suppressed_output())
+            return EXIT_SUCCESS
+        prefix = _project_owner_prefix(logger)
+        hits = _collect_hits(prefix, logger)
+        label = f"owner 前綴 `{prefix}-`"
 
     if not hits:
-        logger.info("無警訊 B 命中（prefix=%s）", prefix)
+        logger.info("無警訊 B 命中")
         print(_suppressed_output())
         return EXIT_SUCCESS
 
@@ -287,7 +351,7 @@ def main() -> int:
         {
             "hookSpecificOutput": {
                 "hookEventName": "SessionStart",
-                "additionalContext": _build_context(prefix, hits),
+                "additionalContext": _build_context(label, hits),
             },
             "suppressOutput": False,
         },

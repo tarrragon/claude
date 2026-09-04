@@ -310,7 +310,14 @@ class ErrorEnvelope:
 
 
 def _render_envelope(envelope: ErrorEnvelope) -> str:
-    """將 ErrorEnvelope 渲染為含版本標記的統一格式字串。"""
+    """將 ErrorEnvelope 渲染為含版本標記的統一格式字串。
+
+    最後一行固定附加 [Error] 開頭的尾部摘要，使錯誤前綴同時存在於輸出頭與
+    尾：多行輸出被 `tail -N` 截斷（尤其短輸出，常用的 `-2`/`-3` 正好切掉
+    第 1 行）時，摘要行仍可見，讀者不需依賴頭部即可判斷這是一則錯誤。只
+    新增尾行，不變更既有第 1-N 行內容（component/action/errno/hint 順序
+    與既有格式契約不變）。
+    """
     lines = [
         f"[Error] {ERROR_ENVELOPE_VERSION_MARKER}",
         f"  component: {envelope.component}",
@@ -319,6 +326,7 @@ def _render_envelope(envelope: ErrorEnvelope) -> str:
     ]
     if envelope.hint:
         lines.append(f"  hint: {envelope.hint}")
+    lines.append(f"[Error] 摘要：{envelope.component}/{envelope.action} 失敗，errno={envelope.errno}")
     return "\n".join(lines)
 
 
@@ -346,7 +354,7 @@ def format_error(template: Union[str, ErrorEnvelope], **kwargs) -> str:
         >>> format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id="0.31.0-W4-001")
         '[Error] 找不到 Ticket 0.31.0-W4-001'
 
-        # Envelope 路徑（W17-008.5.2 新增）
+        # Envelope 路徑（W17-008.5.2 新增；末行尾部摘要見 _render_envelope docstring）
         >>> env = ErrorEnvelope("track", "claim", "TICKET_NOT_FOUND", hint="檢查 ID")
         >>> print(format_error(env))
         [Error] __error_envelope_v1__
@@ -354,6 +362,7 @@ def format_error(template: Union[str, ErrorEnvelope], **kwargs) -> str:
           action: claim
           errno: TICKET_NOT_FOUND
           hint: 檢查 ID
+        [Error] 摘要：track/claim 失敗，errno=TICKET_NOT_FOUND
     """
     if isinstance(template, ErrorEnvelope):
         return _render_envelope(template)
