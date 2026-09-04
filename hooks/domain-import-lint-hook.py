@@ -8,17 +8,19 @@
 lib/domain/ 禁止 import data/ / presentation/ / flutter/ / riverpod。
 掛載於 PreToolUse:Bash（commit 時觸發），違反 exit 2 阻擋。
 
-Ticket: 0.1.0-W2-015
+Ticket: 0.1.0-W2-015（2026-09-04 遷移至 hook_utils 統一日誌）
 """
 
 from __future__ import annotations
 
-import json
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))  # .claude/ — for `from lib import ...`
+
+from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin  # noqa: E402
 
 DOMAIN_DIR = "lib/domain"
 
@@ -56,20 +58,28 @@ def scan_domain_imports(project_root: str) -> list[str]:
     return violations
 
 
-def main() -> None:
-    hook_input = json.loads(sys.stdin.read())
+def main() -> int:
+    logger = setup_hook_logging("domain-import-lint-hook")
+
+    hook_input = read_json_from_stdin(logger)
+    if hook_input is None:
+        return 0
+
     tool_name = hook_input.get("tool_name", "")
     if tool_name != "Bash":
-        return
+        logger.debug("非 Bash 工具，跳過: %s", tool_name)
+        return 0
 
     tool_input = hook_input.get("tool_input", {})
     command = tool_input.get("command", "")
     if not is_commit_command(command):
-        return
+        logger.debug("非 commit/merge 命令，跳過")
+        return 0
 
     project_root = os.environ.get("CLAUDE_PROJECT_DIR", "")
     if not project_root:
-        return
+        logger.info("CLAUDE_PROJECT_DIR 未設定，跳過掃描")
+        return 0
 
     violations = scan_domain_imports(project_root)
     if violations:
@@ -79,9 +89,13 @@ def main() -> None:
             + "\n\ndomain/ 禁止 import data/ / presentation/ / flutter/ / riverpod\n"
             "（ARCH-BAL-001 防護，ticket 0.1.0-W2-015）"
         )
+        logger.info("domain import lint 阻擋：命中 %d 處違規", len(violations))
         print(msg, file=sys.stderr)
-        sys.exit(2)
+        return 2
+
+    logger.debug("domain import lint 通過（無違規）")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(run_hook_safely(main, "domain-import-lint-hook"))

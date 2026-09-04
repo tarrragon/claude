@@ -1,3 +1,15 @@
+## [2.52.1] - 2026-09-04
+
+### Summary
+chore: VERSION 回寫，本波九票修復推送至 canonical; test: 補齊三支零測試執法型 hook 的功能性測試，遷移 domain-import-lint-hook.py 至 hook_utils 統一日誌
+
+Changes: 1 chore, 1 test
+
+- chore: VERSION 回寫，本波九票修復推送至 canonical
+- test: 補齊三支零測試執法型 hook 的功能性測試，遷移 domain-import-lint-hook.py 至 hook_utils 統一日誌
+
+---
+
 ## [2.52.0] - 2026-09-04
 
 ### Summary
