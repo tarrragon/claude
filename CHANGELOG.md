@@ -1,3 +1,16 @@
+## [2.52.2] - 2026-09-04
+
+### Summary
+docs: 時序變體 Action 改為可數觸發判準; docs: 補時序變體「被否證的猜測為取代它的猜測背書」; chore: VERSION 回寫，P0 執法型 hook 測試補齊推送至 canonical
+
+Changes: 2 docs, 1 chore
+
+- docs: 時序變體 Action 改為可數觸發判準
+- docs: 補時序變體「被否證的猜測為取代它的猜測背書」
+- chore: VERSION 回寫，P0 執法型 hook 測試補齊推送至 canonical
+
+---
+
 ## [2.52.1] - 2026-09-04
 
 ### Summary
