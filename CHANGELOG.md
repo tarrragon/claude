@@ -1,3 +1,26 @@
+## [2.50.8] - 2026-09-04
+
+### Summary
+chore: PC-GPD-005/006 進 canonical，收斂 consumer 側 sync 落差
+
+本次推送的實質內容是兩份 error-pattern（檔案 + README 索引兩行），
+建立於上次 push（2.43.1）之後，故 canonical 只有 PC-GPD-001~004：
+
+- PC-GPD-005 版號是單調計數器不表達分叉，兩個 consumer 各自前進一步
+  即撞號，內容雜湊只證明不同不證明誰新
+- PC-GPD-006 「各專案自建」目錄跨 consumer 整包複製，夾帶他方 ticket
+  編號與指向不存在檔案的索引
+
+未推送使該 consumer 的 README 與上游在同一表格區塊持續分歧，每次 pull
+重現同一衝突且 base SHA 無法推進（腳本以「本輪有衝突」為不推進條件，
+而人工解衝突發生在腳本結束之後）。推送後兩側一致，下次 pull 即收斂。
+
+settings.json 另含一項本地多出的 hook 註冊
+（skills/ticket/hooks/ana-ticket-metadata-validation-hook.py，該檔
+canonical 已有、僅未註冊）。
+
+---
+
 ## [2.50.7] - 2026-09-03
 
 ### Summary
