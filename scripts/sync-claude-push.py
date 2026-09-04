@@ -88,6 +88,12 @@ from lib.skill_version_diff import (  # noqa: E402
     report_skill_repo_drift,
 )
 from lib.skill_case_guard import check_git_tree_skill_md_case  # noqa: E402
+# ticket ID 正規表達式單一權威：revert 摘要的 original_ref 須以此判定是否為
+# consumer 專屬識別符，決定是否可寫入 CHANGELOG（見 categorize_commits）。
+from lib.ticket_id_pattern import (  # noqa: E402
+    SEARCH_BOUNDED_RE as _VERSIONED_TICKET_RE,
+    BARE_BOTH_BOUNDED_RE as _BARE_TICKET_RE,
+)
 
 REPO_URL = "https://github.com/tarrragon/claude.git"
 
@@ -709,17 +715,33 @@ def parse_revert_info(subject: str) -> tuple[str, str] | None:
     if original is None:
         return None
 
-    # 萃取引用：優先 Ticket ID（含 Wave 編號），其次 7+ hex 短 hash
+    # 萃取引用：優先 Ticket ID（含 Wave 編號，版本化或裸格式皆可），其次
+    # 7+ hex 短 hash。萃取到的 ticket ID 是否可寫入 CHANGELOG 由呼叫端經
+    # _is_project_specific_ref 另行判定（見 categorize_commits）。
     ref = ""
-    ticket_match = re.search(r"\b(\d+\.\d+\.\d+-W\d+-\d+|W\d+-\d+)\b", original)
+    ticket_match = _VERSIONED_TICKET_RE.search(original) or _BARE_TICKET_RE.search(
+        original
+    )
     if ticket_match:
-        ref = ticket_match.group(1)
+        ref = ticket_match.group(0)
     else:
         hash_match = re.search(r"\b([0-9a-f]{7,40})\b", original)
         if hash_match:
             ref = hash_match.group(1)
 
     return original, ref
+
+
+def _is_project_specific_ref(ref: str) -> bool:
+    """判斷 ref 是否為 ticket ID 樣式（版本化或裸格式），而非 commit hash。
+
+    ticket ID 屬 consumer 專屬識別符，經 sync-push 寫入獨立 repo 後會擴散至
+    所有 consumer，觸發各自的 reference-stability rule8 守衛；commit hash
+    不含專案識別資訊，不受本判定影響。
+    """
+    if not ref:
+        return False
+    return bool(_VERSIONED_TICKET_RE.fullmatch(ref) or _BARE_TICKET_RE.fullmatch(ref))
 
 
 def get_last_sync_timestamp(remote_repo_dir: str) -> str | None:
@@ -856,12 +878,15 @@ def categorize_commits(subjects: list[str]) -> dict[str, list[str]]:
     # Step 3: 加入 revert 行，附註原 commit ref
     for original_subject, original_ref, _raw in revert_entries:
         cleaned_original = strip_project_specific_info(original_subject)
-        # original_ref 通常是專案特定（W14-xxx），strip 後可能為空，
-        # 但 revert 摘要需保留 ref 以利追溯，故 ref 不經 strip
-        if original_ref:
-            desc = f"{cleaned_original} (原 commit: {original_ref})" if cleaned_original else f"revert {original_ref}"
+        # ticket ID 樣式的 ref（版本化或裸格式）屬 consumer 專屬識別符，
+        # 不可寫入 CHANGELOG（經 sync-push 擴散至獨立 repo 後，會觸發每個
+        # consumer 自己的 reference-stability rule8 守衛）；commit hash
+        # 不受影響，仍保留供追溯。
+        safe_ref = "" if _is_project_specific_ref(original_ref) else original_ref
+        if safe_ref:
+            desc = f"{cleaned_original} (原 commit: {safe_ref})" if cleaned_original else f"revert {safe_ref}"
         else:
-            desc = cleaned_original if cleaned_original else "revert (原 commit 細節省略)"
+            desc = f"{cleaned_original} (原 commit)" if cleaned_original else "revert (原 commit 細節省略)"
         categories["revert"].append(desc)
 
     return dict(categories)

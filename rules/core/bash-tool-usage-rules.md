@@ -12,7 +12,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 | 規則 | 核心要求 | 來源 |
 |------|---------|------|
 | 一：禁裸 cd | git 操作用 `git -C path <cmd>`（首選不觸發 chpwd）；非 git 用子 shell `(cd path && cmd)`；uv 用 `uv -d path run ...`；污染後 `cd /project/root &&` 還原。裸 cd 觸發 chpwd ls 淹沒，是 confabulation 觸發鏈第 1 環 | IMP-008 / IMP-056 / PC-046 / PC-166 |
-| 二：輸出機制辨識 | `run_in_background:true` → `TaskOutput(taskId)`；輸出含「Full output saved to」→ `Read(file_path)`；其餘直讀對話。預防大輸出：測試 `2>&1 \| tail -20`、一般 `\| head -100`、Grep `head_limit`、Read `offset`+`limit`。**截斷方向**：CLI 參數驗證錯誤（argparse 等）error 前綴在頭、回吐內容在尾，`tail` 會截掉唯一判別依據使失敗與成功回音同形；不確定輸出屬性時改用 `head` 或 `head`+`tail` 兩段皆取 | IMP-009 |
+| 二：輸出機制辨識 | `run_in_background:true` → `TaskOutput(taskId)`；輸出含「Full output saved to」→ `Read(file_path)`；其餘直讀對話。預防大輸出：測試 `2>&1 \| tail -20`、一般 `\| head -100`、Grep `head_limit`、Read `offset`+`limit`。**輸出過濾方向**：`tail` 截斷、grep 白名單、`grep -v` 皆屬選擇性過濾，都更容易濾掉警告行——警告通常比正常輸出短且措辭不同，與輸出長度無關（實測：3 行輸出中 `tail -2`／`-3` 等常用值正好切掉第 1 行 `[Error]`；CLI 參數驗證錯誤如 argparse 的 error 前綴在頭、回吐內容在尾同屬此類）；不確定輸出結構時改用 `head` 或 `head`+`tail` 兩段皆取，grep 白名單須含 `WARNING\|Error\|Traceback` | IMP-009 |
 | 三：禁串接 git 寫入 | `git add && git commit` 允許（實務簡化，非「唯讀命令併發安全」保證）；commit/merge/rebase/push 之間禁串接。每個寫入操作獨立一個 Bash 呼叫。index.lock 競爭不限寫入串接——唯讀命令（status/diff-tree/log）refresh index stat cache 時也會短暫觸發，遇到預設短暫重試，非逕判串接違規 | IMP-046 / issue-34（30 次併發 add 命中 1 次） |
 | 四：CLI backtick 不用雙引號 | 雙引號內 backtick 被當 command substitution。改用 heredoc `cmd "$(cat <<'EOF'...EOF)"`、單引號包整參數、或 Edit 直改 ticket md。看到來源不明 `command not found` / `ModuleNotFoundError` 優先查 backtick | PC-079 |
 | 五：長文字用 heredoc | append-log / commit msg / ANA 結論直接 heredoc 傳 CLI，禁繞 `/tmp`。ARG_MAX ≥ 1 MB（macOS）/ 2 MB（Linux），80 行 markdown 約 3-8 KB 遠低於上限。> 100 KB 才考慮改 Edit 直改 ticket md | PC-087 |
@@ -37,7 +37,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 - [ ] 命令含 `cd`？→ git 操作用 `git -C`；其餘用子 shell `()` 或 `uv -d`（規則一）
 - [ ] 多步驟序列？→ 第一步加絕對路徑 `cd /project/root &&`
 - [ ] 輸出可能很大？→ 提前加 `head` / `tail`（規則二）
-- [ ] CLI 參數驗證失敗風險（argparse 等）？→ error 前綴在頭、回吐在尾，`tail` 會截掉判別依據，改用 `head` 或 `head`+`tail` 兩段皆取（規則二）
+- [ ] CLI 參數驗證失敗風險（argparse 等）／輸出經 `tail`、grep 白名單或 `grep -v` 過濾？→ 警告行常比正常輸出短且措辭不同，與長度無關（`tail -2`/`-3` 可能切掉唯一的 `[Error]` 行），改用 `head` 或 `head`+`tail` 兩段皆取，grep 白名單須含 `WARNING\|Error\|Traceback`（規則二）
 - [ ] `run_in_background:true`？→ `TaskOutput(taskId)`；含「Full output saved to」？→ `Read(file_path)`
 - [ ] 串接多個 git 寫入（commit/merge/rebase/push）？→ 拆成獨立呼叫（規則三）
 - [ ] 看到 `index.lock` 錯誤？→ 短暫重試為預設（並行環境屬預期現象，唯讀命令亦會觸發）；反覆失敗才排查串接或殘留鎖檔（規則三）
@@ -67,6 +67,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 
 ---
 
+**Last Updated**: 2026-09-04 | **Version**: 3.9.0 — 規則二「截斷方向」條款泛化為「輸出過濾方向」：`tail` 截斷只是選擇性過濾的一種，grep 白名單／`grep -v` 同樣更容易濾掉警告行，與輸出長度無關（實測第二、三實例：3 行輸出中 `tail -2` 正好切掉第 1 行 `[Error]`）；速查表與統一檢查清單同步改寫，grep 白名單須含 `WARNING\|Error\|Traceback`。完整第二、三實例最小重現見 details.md「規則二詳細」新增小節。
 **Last Updated**: 2026-09-02 | **Version**: 3.8.0 — 規則二新增「截斷方向」條款：CLI 參數驗證錯誤（argparse 等）error 前綴在頭、回吐內容在尾，單取 `tail` 會截掉唯一判別依據使失敗與成功回音同形（最小重現：argparse `unrecognized arguments` 錯誤在 `tail -20` 下完全不可見）；不確定輸出屬性時改用 `head` 或 `head`+`tail` 兩段皆取。速查表與統一檢查清單同步新增。完整重現數據見 details.md「規則二詳細」新增小節。
 **Last Updated**: 2026-08-28 | **Version**: 3.7.0 — 規則七涵蓋範圍擴充至衝突合併的收尾提交：`git merge` 衝突後以 `git add -A` / `git add .` / `git commit -a` 收尾會把工作區內與本次合併無關的未暫存編輯寫進 merge commit，既有四項 pathspec 禁令對此路徑全數無效（實測命中 merge commit `89c57a1c9`）。速查表第七列標題與條文同步擴充，統一檢查清單新增一列；正確替代與既有條文一致（精確 add + 核對 + 裸 commit）。完整實證、處置表與 `PC-BAL-008` 歸屬判定見 details.md「規則七詳細」新增小節。**不改變既有四項禁令**。
 **Version**: 3.6.0 — 規則七後新增第三則邊界說明「版本邊界（過期 index 快照）」：核對步驟驗證 index 含哪些檔案、不驗證 entry 有多新，`git add` 後 HEAD 由他方前進（隔離索引 CAS 提交 / merge / rebase / pull）即使雙方皆未違反規則七也會產生過期 entry，裸 commit 回滾檔案內容且 `git log` 外觀正常；條文含偵測法（`git show :<path>` vs `git show HEAD:<path>`，難判斷時加 working tree 構成三平面）與處置（`git restore --staged` 後重新 add）。統一檢查清單同步新增一列，相關文件補 `bare-commit-guard-hook.py` 涵蓋邊界。完整機制與最小重現外移 details.md「規則七詳細」新增小節。

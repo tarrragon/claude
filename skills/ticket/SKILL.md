@@ -184,7 +184,7 @@ ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"  # 建�
 | `track depth`       | 查詢嵌套深度與 can_descend（沿 parent_id 鏈） | `ticket track depth <id>.5`                          |
 | `track parallel-check` | 偵測子任務/兄弟 ticket 檔案衝突（對齊 askuserquestion-rules 規則 7） | `ticket track parallel-check <id>` |
 | `track dispatch-validate` | Context Bundle 自動填料合理性檢查（C 方案安全網；exit 0=pass / 1=軟警告 / 2=硬失敗或 IO 錯誤；**與 dispatch-check 的 exit code 語意不共享**，需以命令名稱判別） | `ticket track dispatch-validate <id>` |
-| `track dispatch-readiness` | 派發前認知負擔閾值檢查（三項閾值：功能職責數 / 修改檔案數 / Context Bundle tokens；exit 0=pass / 1=軟警告 / 2=強制拆分或 IO 錯誤；**與 dispatch-check / dispatch-validate 的 exit code 語意不共享**；閾值 1 以 acceptance 條目近似，含驗證類條目時可能高估，PM 於 WARN/FAIL 應手動覆核——詳見 references/track-command.md） | `ticket track dispatch-readiness <id>` |
+| `track dispatch-readiness` | 派發前綜合就緒度檢查（閾值 1-3：功能職責數／修改檔案數／Context Bundle tokens，超軟上限 warn、超強制拆分閾值 fail；檢查 4/5 為 warn-only 啟發式：acceptance 與寫入集一致性／where.files 路徑存在性；檢查 6 為強制 fail：acceptance 提及路徑須被 where.files 涵蓋；exit 0=pass／1=軟警告／2=閾值 1-3 任一超強制拆分閾值 或 檢查 6 未過 或 IO 錯誤；**與 dispatch-check / dispatch-validate 的 exit code 語意不共享**；exit 2 處置依 fail 來源分流（拆票 vs 補 where.files／改寫 acceptance），閾值 1 以 acceptance 條目近似可能高估——詳見 references/track-command.md） | `ticket track dispatch-readiness <id>` |
 | `show`              | 顯示 Ticket（含渲染）      | `ticket show <id>` / `ticket show <id> -r`                           |
 | `handoff`           | 任務交接                   | `/ticket handoff <id> --to-sibling <id2>`                   |
 | `resume`            | 恢復任務                   | `/ticket resume <id>`                                                      |

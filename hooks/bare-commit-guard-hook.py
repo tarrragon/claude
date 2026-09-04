@@ -175,10 +175,41 @@ idle 仍存活、仍可接受訊息並繼續工作。刪除式清理已改為標
 不得因保留 entry 使並行判定漂移為「只計入尚在執行回合中的 entry」，那
 會讓已轉 idle 但仍存活的代理人重新暴露在本 hook 原本要防的並行汙染
 風險下。
+
+============================================================
+六修正：-a／--all 豁免並行期收窄為同等內容驗證，DENY 訊息新增派發範圍
+        映射與分次提交指令
+============================================================
+`-a`／`--all` 豁免原為無條件放行、不檢查內容、不分並行期。實測發現：
+代理人的 commit 被 `_staged_scope_is_safe_for_bare_commit` 正確 DENY
+（staged 跨兩個活躍派發宣告範圍）後，改用「暫存無關檔案 → 帶 -a 的
+commit → 還原暫存」繞道完成提交——結果內容雖然無害，但路徑正是守衛
+文件明寫的無條件豁免，且與該代理人自身派發骨架（`STAGING_PHRASE_AGENT`）
+明文禁止的「DENY 後改用 -a 繞過」直接矛盾：規則文字已收緊到「連 -a
+繞過 DENY 都禁止」，守衛判準卻停在「-a 一律無條件放行」，兩者不同步。
+
+現行邏輯：`--amend` 維持無條件豁免（修訂既有 commit，非提交全部
+tracked 變更，與本次收窄的風險模型無關）。`-a`／`--all` 在並行期改
+套用與裸 commit 相同的兩條放行路徑驗證
+（`_staged_scope_is_safe_for_bare_commit`），驗證對象改為 `-a` 實際會
+提交的完整集合——staged ∪ unstaged-tracked（`git diff --cached
+--name-only` 聯集 `git diff --name-only`，後者不含 untracked 新檔，
+因 `-a` 本身也不提交 untracked 檔案）；非並行期維持無條件豁免（既有
+裁決精神：一律啟用會打斷合法裸 commit，實測非並行期正常用途存在）。
+已知邊界：`--amend` 與 `-a` 同時出現時（`git commit --amend -a`）因
+`--amend` 分支判斷順序在前而優先放行，不套用本次收窄——維持既有
+`--amend` 無條件豁免語意，非本次引入的新繞道（範圍外，未涵蓋此組合）。
+
+DENY 訊息（裸 commit 與 -a／--all 兩種皆適用）新增「檔案 → 派發
+ticket_id」映射表（未落在任何宣告範圍者標「未宣告範圍」）與依映射表
+拆分的具體分次提交指令序列，取代原本僅描述抽象放行路徑、不提供可執行
+步驟的版本——原版本的放行路徑（二）雖已可達（見「四修正」），但執行者
+從訊息本身看不出如何拆分，仍會選擇已知的豁免繞道。
 """
 
 import json
 import sys
+from collections import OrderedDict
 from pathlib import Path
 from typing import Dict, List
 
@@ -190,17 +221,31 @@ from lib.dispatch_tracker import get_active_dispatches
 from lib.git_command_parse import GitInvocation, contains_git_word, find_git_invocations
 from lib.git_utils import get_project_root, run_git_command
 
+_UNASSIGNED_LABEL = "未宣告範圍"
 
-def _has_amend_or_all_exemption(args: List[str]) -> bool:
-    """`--amend` / `-a`｜`--all` 維持無條件豁免，不受本次修正影響。
 
-    短選項組合含 'a' 字元（如 `-am`）比照既有設計視為命中 `-a`；已知
-    殘留：訊息本文若恰好含獨立 `-a` 短選項形態的 token（極罕見，通常
-    出現在引號內而不會被 tokenize 成獨立 token），方向安全（見模組
-    docstring「範疇邊界」段）。
+def _has_amend_exemption(args: List[str]) -> bool:
+    """`--amend` 維持無條件豁免：修訂既有 commit，非提交全部 tracked
+    變更，與 `-a`／`--all` 的內容驗證收窄風險模型無關（見模組 docstring
+    「六修正」段）。
+    """
+    return "--amend" in args
+
+
+def _has_all_exemption(args: List[str]) -> bool:
+    """偵測 `-a`／`--all`（含短選項組合，如 `-am`）。
+
+    並行期不再無條件豁免，改由呼叫端（`main()`）套用與裸 commit 相同的
+    內容安全性驗證（見模組 docstring「六修正」段）；非並行期維持無條件
+    豁免。本函式僅負責偵測旗標是否出現，不含並行期判斷。
+
+    短選項組合含 'a' 字元（如 `-am`）比照既有設計視為命中；已知殘留：
+    訊息本文若恰好含獨立 `-a` 短選項形態的 token（極罕見，通常出現在
+    引號內而不會被 tokenize 成獨立 token），方向安全（見模組 docstring
+    「範疇邊界」段）。
     """
     for tok in args:
-        if tok == "--amend" or tok == "--all":
+        if tok == "--all":
             return True
         if tok.startswith("-") and not tok.startswith("--") and len(tok) > 1:
             if "a" in tok[1:]:
@@ -226,10 +271,24 @@ def _get_active_dispatches_safe(project_root: Path) -> List[Dict]:
 
 
 def _get_staged_files(project_root: Path) -> List[str]:
-    """取得目前 staged 檔案清單，讀取失敗時回傳空清單。"""
+    """取得目前 staged 檔案清單，讀取失敗時回傳空清單（fail-open）。"""
     success, output = run_git_command(
         ["diff", "--cached", "--name-only"], cwd=str(project_root)
     )
+    if not success or not output:
+        return []
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def _get_unstaged_tracked_files(project_root: Path) -> List[str]:
+    """取得目前 unstaged 但已追蹤（tracked）的修改檔案清單（`git diff
+    --name-only`，不含 untracked 新檔），供 `-a`／`--all` 的內容安全性
+    驗證使用——`-a` 本身也不提交 untracked 檔案，故此清單即為 `-a` 會
+    額外納入、`_get_staged_files` 未涵蓋的那部分。讀取失敗時回傳空清單
+    （fail-open，與 `_get_staged_files` 相同語意：讀不到內容時保守視為
+    無額外風險內容，不阻擋，僅可能低估 `-a` 實際提交範圍）。
+    """
+    success, output = run_git_command(["diff", "--name-only"], cwd=str(project_root))
     if not success or not output:
         return []
     return [line.strip() for line in output.splitlines() if line.strip()]
@@ -306,15 +365,91 @@ def _staged_scope_is_safe_for_bare_commit(
     return False
 
 
-def _build_deny_message(staged_files: List[str], dispatch_count: int) -> str:
+def _map_files_to_dispatches(
+    content_files: List[str], dispatches: List[Dict]
+) -> "OrderedDict[str, List[str]]":
+    """依 content_files 逐一比對 dispatches 的 `files` 宣告，回傳
+    `{ticket_id 或 未宣告範圍: [files]}`（依 content_files 原始順序分組，
+    未宣告範圍固定排最後），供 DENY 訊息呈現「檔案 → 派發」映射表用。
+
+    多個派發同時宣告同一檔案時取第一個命中者；本函式僅供訊息呈現，不
+    影響 `_staged_scope_is_safe_for_bare_commit` 本身的安全性判定。
+    """
+    mapping: "OrderedDict[str, List[str]]" = OrderedDict()
+    for f in content_files:
+        owner = None
+        for d in dispatches:
+            if f in (d.get("files") or []):
+                owner = d.get("ticket_id") or "未知票號"
+                break
+        key = owner or _UNASSIGNED_LABEL
+        mapping.setdefault(key, []).append(f)
+    if _UNASSIGNED_LABEL in mapping:
+        unassigned_files = mapping.pop(_UNASSIGNED_LABEL)
+        mapping[_UNASSIGNED_LABEL] = unassigned_files
+    return mapping
+
+
+def _build_dispatch_mapping_block(mapping: "OrderedDict[str, List[str]]") -> str:
+    """組出「ticket_id: 檔案」逐行對照表文字，供 DENY 訊息呈現。"""
+    lines = [
+        f"  {ticket_id}: {f}" for ticket_id, files in mapping.items() for f in files
+    ]
+    return "\n".join(lines) if lines else "  （無內容）"
+
+
+def _commit_instruction_line(ticket_key: str) -> str:
+    """組出單一範圍的裸 commit 指令行。未宣告範圍的檔案改附人工核對提醒
+    （其與已知範圍的關係——不相交放行路徑或他人尚未登記的隱性範圍——
+    無法由本 hook 自動判定）。
+    """
+    if ticket_key == _UNASSIGNED_LABEL:
+        return '  git commit -m "你的訊息"   # 未宣告範圍，請人工核對後再提交'
+    return f'  git commit -m "<{ticket_key} 的訊息>"'
+
+
+def _build_split_commit_instructions(mapping: "OrderedDict[str, List[str]]") -> str:
+    """依映射表組出分次提交指令序列：先移除非首組範圍、確保首組已 add，
+    提交首組；再逐組 add + commit。
+
+    `git add` 對已 staged 的檔案為 no-op，`git restore --staged` 對未
+    staged 的檔案亦為 no-op，故此序列對「純 staged」（裸 commit DENY）與
+    「staged ∪ unstaged-tracked」（-a／--all DENY）兩種來源集合皆安全
+    可用，不需依來源分兩套指令。
+    """
+    groups = list(mapping.items())
+    if not groups:
+        return "  （無內容可拆分）"
+
+    lines: List[str] = []
+    first_key, first_files = groups[0]
+    other_files = [f for _, files in groups[1:] for f in files]
+    for f in other_files:
+        lines.append(f"  git restore --staged {f}")
+    for f in first_files:
+        lines.append(f"  git add {f}")
+    lines.append(_commit_instruction_line(first_key))
+    for key, files in groups[1:]:
+        for f in files:
+            lines.append(f"  git add {f}")
+        lines.append(_commit_instruction_line(key))
+    return "\n".join(lines)
+
+
+def _build_deny_message(staged_files: List[str], dispatches: List[Dict]) -> str:
     """組出裸 commit 的 DENY 訊息：staged 清單未落在任一活躍派發宣告範圍內、
     也與所有活躍派發宣告範圍相交（見 `_staged_scope_is_safe_for_bare_commit`
-    兩條放行路徑），指引正確的核對與清理步驟。
+    兩條放行路徑），列出每個 staged 檔案的歸屬派發 ticket_id，並給出依
+    範圍拆分的具體分次 commit 指令。
     """
+    dispatch_count = len(dispatches)
     if staged_files:
-        staged_block = "\n".join(f"  - {f}" for f in staged_files)
+        mapping = _map_files_to_dispatches(staged_files, dispatches)
+        mapping_block = _build_dispatch_mapping_block(mapping)
+        instructions_block = _build_split_commit_instructions(mapping)
     else:
-        staged_block = "  （無法讀取，可能不在 git repo 或無 staged 變更）"
+        mapping_block = "  （無法讀取，可能不在 git repo 或無 staged 變更）"
+        instructions_block = "  （無 staged 內容可拆分）"
 
     return (
         "[並行派發期間裸 commit 被阻擋]\n\n"
@@ -323,20 +458,47 @@ def _build_deny_message(staged_files: List[str], dispatch_count: int) -> str:
         "既非任一活躍派發宣告檔案範圍的子集，也與所有活躍派發宣告範圍的"
         "聯集相交，裸 git commit 會把共用 git index 中可能屬於其他人的"
         "staged 檔案一併提交，造成跨 ticket 汙染。\n\n"
-        "當前 staged 檔案：\n"
-        f"{staged_block}\n\n"
-        "有兩條合法放行路徑：(1) staged 內容完整落在你的派發宣告範圍內；"
-        "(2) staged 內容與所有活躍派發宣告範圍完全不相交（例如提交"
-        "ticket metadata，內容從不出現在任何派發宣告中）。請先核對並清理"
-        "staged 範圍使其命中其中一條，再重新裸 commit（不要改用"
-        "`-- <pathspec>` / `--only` / `-o`——那會丟棄 index、改讀"
-        "working tree 全文，同樣會吸入他人未 stage 的編輯，危害更大）：\n"
+        "當前 staged 檔案與其歸屬派發範圍：\n"
+        f"{mapping_block}\n\n"
+        "建議依範圍拆分為多次裸 commit（各自皆會通過放行路徑一）：\n"
+        f"{instructions_block}\n\n"
+        "核對指令：\n"
         "  git diff --cached --name-only            # 核對 index 實際範圍\n"
-        "  git restore --staged <非本票檔案>          # 逐一移除非本票內容\n"
-        '  git commit -m "你的訊息"                   # 核對乾淨後裸 commit\n\n'
-        "確需一次提交全部 staged 內容（刻意行為）時，改用：\n"
-        '  git commit -a -m "你的訊息"     # 提交所有 tracked 變更\n'
-        "  git commit --amend             # 修訂上一筆 commit\n"
+        "  git restore --staged <非本票檔案>          # 逐一移除非本票內容\n\n"
+        "（不要改用 `-- <pathspec>` / `--only` / `-o`——那會丟棄 index、"
+        "改讀 working tree 全文，同樣會吸入他人未 stage 的編輯，危害更大；"
+        "也不建議用 `git commit -a` 繞過拆分——並行期 `-a` 同樣套用本節"
+        "內容安全性驗證，範圍仍需落在單一派發宣告內才會放行）\n"
+    )
+
+
+def _build_all_flag_deny_message(content_files: List[str], dispatches: List[Dict]) -> str:
+    """組出 `-a`／`--all` commit 在並行期內容不安全時的 DENY 訊息。驗證
+    對象是 `-a` 實際會提交的完整集合（staged ∪ unstaged-tracked），非僅
+    staged（見模組 docstring「六修正」段：並行期收窄為與裸 commit 相同的
+    內容安全性驗證）。
+    """
+    dispatch_count = len(dispatches)
+    if content_files:
+        mapping = _map_files_to_dispatches(content_files, dispatches)
+        mapping_block = _build_dispatch_mapping_block(mapping)
+        instructions_block = _build_split_commit_instructions(mapping)
+    else:
+        mapping_block = "  （無法讀取，可能不在 git repo）"
+        instructions_block = "  （無內容可拆分）"
+
+    return (
+        "[並行派發期間 -a／--all commit 被阻擋]\n\n"
+        f"理由：目前有 {dispatch_count} 個實作代理人正在派發中"
+        "（.claude/dispatch-active.json 有活躍記錄）。`git commit -a` 會"
+        "提交 staged 與未 staged 的所有已追蹤檔案修改，這個完整集合可能"
+        "跨越多個派發宣告範圍，等同裸 commit 的跨 ticket 汙染風險，故並行"
+        "期改套用與裸 commit 相同的內容安全性驗證，不再無條件豁免。\n\n"
+        "-a 實際會提交的檔案與其歸屬派發範圍：\n"
+        f"{mapping_block}\n\n"
+        "建議改用精確 add + 裸 commit，依範圍拆分為多次提交（不要用 -a"
+        "一次提交，各自皆會通過放行路徑一）：\n"
+        f"{instructions_block}\n"
     )
 
 
@@ -462,9 +624,30 @@ def main() -> int:
     # 多筆呼叫各自獨立判定的情境，範疇邊界非本次收斂目標。
     invocation: GitInvocation = invocations[0]
 
-    if _has_amend_or_all_exemption(invocation.args):
-        logger.debug("命令含 --amend / -a｜--all，放行")
+    if _has_amend_exemption(invocation.args):
+        logger.debug("命令含 --amend，放行")
         return 0
+
+    if _has_all_exemption(invocation.args):
+        if dispatch_count == 0:
+            logger.debug("命令含 -a｜--all，非並行期無條件放行")
+            return 0
+        staged_files = _get_staged_files(project_root)
+        unstaged_files = _get_unstaged_tracked_files(project_root)
+        content_files = sorted(set(staged_files) | set(unstaged_files))
+        if _staged_scope_is_safe_for_bare_commit(content_files, dispatches, logger=logger):
+            logger.info(
+                "並行期 -a｜--all commit，staged∪unstaged-tracked 範圍落在"
+                "單一派發宣告內，放行（內容檔案數=%d）",
+                len(content_files),
+            )
+            return 0
+        logger.warning(
+            "並行期 -a｜--all commit 被阻擋（活躍派發數=%d，內容檔案數=%d）",
+            dispatch_count, len(content_files),
+        )
+        print(_build_all_flag_deny_message(content_files, dispatches), file=sys.stderr)
+        return 2
 
     if _is_index_discarding_form(invocation.args):
         if dispatch_count > 0:
@@ -492,7 +675,7 @@ def main() -> int:
             "並行期裸 commit 被阻擋（活躍派發數=%d，staged 檔案數=%d）",
             dispatch_count, len(staged_files),
         )
-        print(_build_deny_message(staged_files, dispatch_count), file=sys.stderr)
+        print(_build_deny_message(staged_files, dispatches), file=sys.stderr)
         return 2
 
     logger.info("非並行期裸 commit，WARN 放行")

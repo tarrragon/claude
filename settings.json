@@ -566,6 +566,11 @@
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/git-ref-transaction-guard-install-hook.py",
             "timeout": 10000
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/session-start-issue-check-hook.py",
+            "timeout": 20000
           }
         ]
       },

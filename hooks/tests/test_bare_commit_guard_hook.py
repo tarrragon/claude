@@ -4,22 +4,30 @@ Test: bare-commit-guard-hook（0.2.1-W3-277，源自 0.2.1-W3-276 ANA 裁決；
 0.2.1-W3-381 修正 payload（heredoc 本體 / 引號字串）內文被誤判為真實
 命令與旗標；0.2.1-W3-708 命令解析改採 `.claude/lib/git_command_parse.py`
 的 argv 結構解析，取代自維護的字串前處理；0.2.1-W3-1176 修正單筆空
-files 派發記錄使不相交放行路徑對所有人失效）
+files 派發記錄使不相交放行路徑對所有人失效；0.2.1-W4-040 將 -a／--all
+豁免並行期收窄為與裸 commit 相同的內容驗證，DENY 訊息新增派發範圍映射
+與分次提交指令）
 
 驗證項目：
 1. _contains_git_word：便宜前置判斷（含獨立 'git' 字樣即進入完整解析）
-2. _has_amend_or_all_exemption：--amend / -a｜--all 兩種無條件豁免
+2. _has_amend_exemption：--amend 無條件豁免（改吃 token 清單，非原始
+   命令字串）
+3. _has_all_exemption：-a｜--all 旗標偵測（改吃 token 清單；並行期不再
+   無條件豁免，由 main() 另套內容安全性驗證，見第 6 項）
+4. _is_index_discarding_form：-- pathspec / --only / -o 三種寫法偵測
    （改吃 token 清單，非原始命令字串）
-3. _is_index_discarding_form：-- pathspec / --only / -o 三種寫法偵測
-   （改吃 token 清單，非原始命令字串）
-4. _staged_scope_is_safe_for_bare_commit：staged 範圍是否落在單一活躍
+5. _staged_scope_is_safe_for_bare_commit：staged 範圍是否落在單一活躍
    派發宣告的 files 範圍內
-5. main() 整合行為：
+6. main() 整合行為：
    - 並行期（dispatch_count > 0）裸 commit，staged 範圍不落在任一派發
-     宣告內 → DENY（exit 2），訊息含 staged 檔案清單與核對／清理步驟
+     宣告內 → DENY（exit 2），訊息含 staged 檔案-派發 ticket_id 映射表
+     與分次 commit 指令
    - 並行期裸 commit，staged 範圍落在單一派發宣告內 → 放行（exit 0）
    - 非並行期（dispatch_count == 0）裸 commit → WARN（exit 0 + stderr）
-   - --amend / -a｜--all 在並行期仍放行（exit 0，無輸出）
+   - --amend 在並行期仍無條件放行（exit 0，無輸出）
+   - -a｜--all 並行期改套用 staged∪unstaged-tracked 內容安全性驗證：
+     安全放行、不安全 DENY（訊息同含映射表與分次指令）；非並行期維持
+     無條件豁免
    - pathspec / --only / -o 在並行期一律 DENY（不再是無條件豁免）
    - pathspec / --only / -o 在非並行期 WARN（不阻擋，但不再靜默）
    - 非 Bash 工具 / 非 git commit 命令不受影響
@@ -28,15 +36,16 @@ files 派發記錄使不相交放行路徑對所有人失效）
      誤判為 index-discarding form
    - 命令含 git 字樣但無法安全 tokenize（未閉合引號）：並行期 DENY、
      非並行期 WARN（明確失敗語意，見共用 lib「失敗語意」段）
-6. 0.2.1-W3-276 回測樣本重放（acceptance #4）：3 筆真實事故案例（並行期裸
+7. 0.2.1-W3-276 回測樣本重放（acceptance #4）：3 筆真實事故案例（並行期裸
    commit，staged 範圍無派發宣告可比對）+ 3 筆代表性無害案例（非並行期
    PM 統一收尾裸 commit）重放，驗證判定方向正確
-7. 空 files 派發記錄（0.2.1-W3-1176）：單筆或多筆派發 files 為空時不再
+8. 空 files 派發記錄（0.2.1-W3-1176）：單筆或多筆派發 files 為空時不再
    使整條不相交放行路徑失效（計算聯集時排除空宣告）；全數派發皆空時
    聯集為空集合仍視為安全；存在空宣告時經 logger 發出 warning（可觀測性）
 
 Source: ticket 0.2.1-W3-277（來源 ANA 0.2.1-W3-276）、0.2.1-W3-725、
-0.2.1-W3-702、0.2.1-W3-381、0.2.1-W3-708、0.2.1-W3-1176
+0.2.1-W3-702、0.2.1-W3-381、0.2.1-W3-708、0.2.1-W3-1176、0.2.1-W4-040
+（來源 ANA 0.2.1-W3-1222）
 """
 
 import io
@@ -59,7 +68,8 @@ hook_module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(hook_module)
 
 _contains_git_word = hook_module.contains_git_word
-_has_amend_or_all_exemption = hook_module._has_amend_or_all_exemption
+_has_amend_exemption = hook_module._has_amend_exemption
+_has_all_exemption = hook_module._has_all_exemption
 _is_index_discarding_form = hook_module._is_index_discarding_form
 _staged_scope_is_safe_for_bare_commit = hook_module._staged_scope_is_safe_for_bare_commit
 main = hook_module.main
@@ -75,9 +85,11 @@ def _run_hook(
     command: str,
     dispatches=None,
     staged_files=None,
+    unstaged_files=None,
     tool_name: str = "Bash",
 ) -> int:
-    """以 monkeypatch 模擬 stdin + 依賴（活躍派發清單 / staged 檔案），執行 main()。"""
+    """以 monkeypatch 模擬 stdin + 依賴（活躍派發清單 / staged 檔案 /
+    unstaged tracked 檔案），執行 main()。"""
     payload = {"tool_name": tool_name, "tool_input": {"command": command}}
     stdin_buffer = io.StringIO(json.dumps(payload))
     monkeypatch.setattr(sys, "stdin", stdin_buffer)
@@ -87,6 +99,9 @@ def _run_hook(
     )
     monkeypatch.setattr(
         hook_module, "_get_staged_files", lambda root: staged_files or []
+    )
+    monkeypatch.setattr(
+        hook_module, "_get_unstaged_tracked_files", lambda root: unstaged_files or []
     )
     return main()
 
@@ -123,37 +138,58 @@ class TestContainsGitWord:
 
 
 # ============================================================================
-# _has_amend_or_all_exemption：兩種無條件豁免（吃 token 清單）
+# _has_amend_exemption：--amend 無條件豁免（吃 token 清單）
 # ============================================================================
 
 
-class TestHasAmendOrAllExemption:
+class TestHasAmendExemption:
     def test_amend_exemption(self):
-        assert _has_amend_or_all_exemption(["--amend"]) is True
-
-    def test_all_long_flag_exemption(self):
-        assert _has_amend_or_all_exemption(["--all", "-m", "x"]) is True
-
-    def test_a_short_flag_exemption(self):
-        assert _has_amend_or_all_exemption(["-a", "-m", "x"]) is True
-
-    def test_am_combo_flag_exemption(self):
-        assert _has_amend_or_all_exemption(["-am", "x"]) is True
+        assert _has_amend_exemption(["--amend"]) is True
 
     def test_no_exemption(self):
-        assert _has_amend_or_all_exemption(["-m", "x"]) is False
+        assert _has_amend_exemption(["-m", "x"]) is False
+
+    def test_all_flag_is_not_amend(self):
+        """`-a`／`--all` 不屬於本函式的偵測範圍（改由 `_has_all_exemption` 判斷）。"""
+        assert _has_amend_exemption(["-a", "-m", "x"]) is False
+
+    def test_pathspec_is_not_exempted_here(self):
+        assert (
+            _has_amend_exemption(["-m", "x", "--", "file1.py", "file2.py"]) is False
+        )
+
+
+# ============================================================================
+# _has_all_exemption：-a／--all 旗標偵測（並行期不再無條件豁免，見 main()）
+# ============================================================================
+
+
+class TestHasAllExemption:
+    def test_all_long_flag_exemption(self):
+        assert _has_all_exemption(["--all", "-m", "x"]) is True
+
+    def test_a_short_flag_exemption(self):
+        assert _has_all_exemption(["-a", "-m", "x"]) is True
+
+    def test_am_combo_flag_exemption(self):
+        assert _has_all_exemption(["-am", "x"]) is True
+
+    def test_no_exemption(self):
+        assert _has_all_exemption(["-m", "x"]) is False
+
+    def test_amend_is_not_all(self):
+        assert _has_all_exemption(["--amend"]) is False
 
     def test_pathspec_is_not_exempted_here(self):
         """pathspec 不再屬於本函式的豁免範圍（改由 `_is_index_discarding_form` 判斷）。"""
         assert (
-            _has_amend_or_all_exemption(["-m", "x", "--", "file1.py", "file2.py"])
-            is False
+            _has_all_exemption(["-m", "x", "--", "file1.py", "file2.py"]) is False
         )
 
     def test_message_content_token_not_misdetected(self):
         """訊息內容經 shlex tokenize 後為單一完整 token，不含獨立 `-a` 子
         token，不應誤判為豁免（token 化天生解決舊版子字串比對的誤判）。"""
-        assert _has_amend_or_all_exemption(["-m", "描述 -a 這個字面"]) is False
+        assert _has_all_exemption(["-m", "描述 -a 這個字面"]) is False
 
 
 # ============================================================================
@@ -429,11 +465,11 @@ class TestNonParallelPeriodBareCommitWarn:
 
 
 # ============================================================================
-# main() 整合：--amend / -a｜--all 在並行期仍放行
+# main() 整合：--amend 在並行期仍無條件放行
 # ============================================================================
 
 
-class TestAmendAndAllExemptionsPassThroughEvenWhenParallel:
+class TestAmendExemptionPassesThroughEvenWhenParallel:
     def test_amend_commit_allowed_even_when_parallel(self, monkeypatch, capsys):
         exit_code = _run_hook(
             monkeypatch,
@@ -443,11 +479,75 @@ class TestAmendAndAllExemptionsPassThroughEvenWhenParallel:
         assert exit_code == 0
         assert capsys.readouterr().err == ""
 
-    def test_all_flag_commit_allowed_even_when_parallel(self, monkeypatch, capsys):
+
+# ============================================================================
+# main() 整合：-a／--all 並行期收窄為 staged∪unstaged-tracked 內容驗證
+# ============================================================================
+
+
+class TestAllFlagContentValidationWhenParallel:
+    def test_allowed_when_content_within_single_dispatch(self, monkeypatch, capsys):
+        """staged∪unstaged-tracked 範圍完整落在單一派發宣告內時放行。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            'git commit -a -m "x"',
+            dispatches=[_dispatch("T-1", ["a.py", "b.py"])],
+            staged_files=["a.py"],
+            unstaged_files=["b.py"],
+        )
+        assert exit_code == 0
+        assert capsys.readouterr().err == ""
+
+    def test_allowed_when_content_empty(self, monkeypatch, capsys):
+        """staged／unstaged 皆為空（例如僅提交 mock 情境）時放行，無輸出。"""
         exit_code = _run_hook(
             monkeypatch,
             'git commit -a -m "x"',
             dispatches=[_dispatch("T-1", ["a.py"]) for _ in range(5)],
+        )
+        assert exit_code == 0
+        assert capsys.readouterr().err == ""
+
+    def test_denied_when_content_mixes_two_dispatches(self, monkeypatch, capsys):
+        """staged∪unstaged-tracked 橫跨兩個派發宣告範圍時 DENY（0.2.1-W3-1222
+        繞道事件重現：staged 落在自己範圍，unstaged 落在另一派發範圍）。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            'git commit -a -m "x"',
+            dispatches=[_dispatch("T-1", ["a.py"]), _dispatch("T-2", ["b.py"])],
+            staged_files=["a.py"],
+            unstaged_files=["b.py"],
+        )
+        assert exit_code == 2
+
+    def test_deny_message_contains_dispatch_ticket_mapping(self, monkeypatch, capsys):
+        exit_code = _run_hook(
+            monkeypatch,
+            'git commit -a -m "x"',
+            dispatches=[_dispatch("T-1", ["a.py"]), _dispatch("T-2", ["b.py"])],
+            staged_files=["a.py"],
+            unstaged_files=["b.py"],
+        )
+        assert exit_code == 2
+        err = capsys.readouterr().err
+        assert "T-1" in err
+        assert "T-2" in err
+        assert "a.py" in err
+        assert "b.py" in err
+        assert "git add a.py" in err or "git restore --staged a.py" in err
+        assert "git add b.py" in err
+
+    def test_unconditional_exemption_when_not_parallel_even_with_unsafe_content(
+        self, monkeypatch, capsys
+    ):
+        """非並行期 -a 維持無條件豁免：即使 staged∪unstaged 內容形態上會
+        在並行期被判定不安全，非並行期仍應直接放行、不查詢內容。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            'git commit -a -m "x"',
+            dispatches=[],
+            staged_files=["a.py"],
+            unstaged_files=["b.py"],
         )
         assert exit_code == 0
         assert capsys.readouterr().err == ""

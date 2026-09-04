@@ -23,11 +23,21 @@ acceptance 要求的產出需要動哪些檔案，使執行者陷入「守寫入
 不影響 exit code 語意（PM 保留覆核空間，未命中不代表無矛盾，關鍵詞比對亦可能
 對非測試語境產生 false positive）。
 
+第六項檢查：acceptance 文字提及的具體檔案路徑須落在 `where.files` 內，
+否則 FAIL（強制，唯一產生 fail 的啟發式檢查）。動機：acceptance 若明文
+點名某檔案（如「核對 SKILL.md 並直接修文件」）但 `where.files` 未列該
+檔案，代理人依 acceptance 動了該檔後，commit 時寫入集與宣告範圍不一致
+會被 bare-commit-guard 攔下；第四項檢查僅比對測試類關鍵詞，無法涵蓋此
+類具名路徑矛盾。本檢查在派發前即從 acceptance 抽取路徑樣式 token（具備
+已知副檔名的片段，如 `.py`/`.md`/`.yaml`），與 `where.files` 做前綴或
+檔名比對，未涵蓋者直接 FAIL 並提示「把該路徑加進 where.files 或改寫
+acceptance」，讓宣告不一致在派發前就被擋下而非留到 commit 時才顯現。
+
 Exit code 語意（與 dispatch-check / dispatch-validate 不共享）：
 
 - 0 = 全通過
 - 1 = 軟性警告（任一項超軟上限，或第四項一致性檢查命中矛盾，但未達強制拆分）
-- 2 = 硬性失敗（任一項超強制拆分閾值 / IO 錯誤 / ticket 不存在）
+- 2 = 硬性失敗（任一項超強制拆分閾值 / 第六項路徑涵蓋性未過 / IO 錯誤 / ticket 不存在）
 
 **Exit code 與 dispatch-check / dispatch-validate 語意不共享**：呼叫端
 必須以命令名稱判別語意，禁止以 exit code 跨命令解讀。
@@ -72,6 +82,27 @@ _TEST_PATH_PATTERN = re.compile(r"(^|[/\\])tests?([/\\]|_|$)|_test\.", re.IGNORE
 # 關鍵詞時，視為新檔案宣告的合理場景，不對不存在路徑發 WARN——啟發式限制：
 # 未命中不代表路徑無誤，仍需 PM 覆核（與檢查 4 共用邊界聲明）。
 _CREATION_KEYWORDS = ("建立", "新增", "新檔", "create", "add")
+
+# 第六項檢查（acceptance 提及路徑須落在 where.files 內）：僅比對具備已知
+# 副檔名的片段，避免「3a/3b」等 Phase 標號或版本號/ticket ID 誤判為路徑。
+# lookbehind/lookahead 限定 ASCII 字元（非 Unicode \w），使中英夾雜文字中
+# 緊貼中文字元（無空格分隔）的檔名仍可正確匹配邊界。
+_MENTIONED_PATH_EXTENSIONS = (
+    "py",
+    "md",
+    "yaml",
+    "yml",
+    "json",
+    "dart",
+    "txt",
+    "sh",
+    "toml",
+)
+_MENTIONED_PATH_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_.])([A-Za-z0-9_\-./]+\.(?:"
+    + "|".join(_MENTIONED_PATH_EXTENSIONS)
+    + r"))(?![A-Za-z0-9_])"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +272,75 @@ def check_where_paths_existence(
     return "warn", missing, msg
 
 
+def _extract_mentioned_paths(acceptance: List) -> List[str]:
+    """從 acceptance 文字抽取路徑樣式 token（具備已知副檔名的片段）。
+
+    保留出現順序、去重；純數字版本號或 ticket ID 因無已知副檔名不會命中，
+    見模組層級 `_MENTIONED_PATH_PATTERN` 註解。
+    """
+    found: List[str] = []
+    for item in acceptance or []:
+        for match in _MENTIONED_PATH_PATTERN.finditer(str(item or "")):
+            token = match.group(1)
+            if token not in found:
+                found.append(token)
+    return found
+
+
+def _path_covered_by_where_files(token: str, where_files: List[str]) -> bool:
+    """判定路徑樣式 token 是否被 where.files 涵蓋（前綴或檔名比對）。
+
+    比對前剝除 `::read` / `::write` 逐檔意圖標記（與 `where.files` 其他
+    消費端一致的 `::` 分隔慣例）。
+    """
+    basename = token.rsplit("/", 1)[-1]
+    for raw in where_files or []:
+        path = str(raw or "").split("::", 1)[0]
+        if not path:
+            continue
+        if path == token or path.endswith("/" + token) or token.endswith("/" + path):
+            return True
+        if path.rsplit("/", 1)[-1] == basename:
+            return True
+    return False
+
+
+def check_acceptance_path_coverage(
+    acceptance: List,
+    where_files: List[str],
+) -> Tuple[str, List[str], str]:
+    """檢查 6：acceptance 提及的檔案路徑須落在 where.files 內。
+
+    從 acceptance 文字抽取路徑樣式 token（見 `_extract_mentioned_paths`），
+    逐一與 `where.files` 做前綴或檔名比對；未涵蓋者判定為宣告不一致，
+    直接 fail（強制，與檢查 4 / 檢查 5 的 warn-only 語意不同——本檢查的
+    誤判成本已由已知副檔名 + ASCII 邊界收斂至可接受範圍，見模組 docstring
+    「第六項檢查」動機）。
+
+    Returns:
+        (status, uncovered_tokens, msg) — status ∈ {"pass", "fail"}
+    """
+    mentioned = _extract_mentioned_paths(acceptance)
+    if not mentioned:
+        return "pass", [], "acceptance 未偵測到路徑樣式 token"
+
+    uncovered = [
+        token for token in mentioned if not _path_covered_by_where_files(token, where_files)
+    ]
+    if not uncovered:
+        return (
+            "pass",
+            [],
+            f"acceptance 提及 {len(mentioned)} 項路徑，where.files 已全數涵蓋",
+        )
+
+    msg = (
+        f"acceptance 提及 {len(uncovered)} 項路徑未被 where.files 涵蓋，"
+        "請把該路徑加進 where.files 或改寫 acceptance"
+    )
+    return "fail", uncovered, msg
+
+
 # ---------------------------------------------------------------------------
 # CLI 入口
 # ---------------------------------------------------------------------------
@@ -276,6 +376,9 @@ def execute_dispatch_readiness(args: argparse.Namespace, version: str) -> int:
     r5_status, r5_items, r5_msg = check_where_paths_existence(
         where_files or [], acceptance, get_project_root()
     )
+    r6_status, r6_items, r6_msg = check_acceptance_path_coverage(
+        acceptance, where_files or []
+    )
 
     print(f"dispatch-readiness {ticket_id}:")
     print(_format_result("閾值 1 功能職責數（acceptance 近似）", r1_status, r1_msg))
@@ -287,15 +390,18 @@ def execute_dispatch_readiness(args: argparse.Namespace, version: str) -> int:
     print(_format_result("檢查 5 where.files 路徑存在性（啟發式）", r5_status, r5_msg))
     for item in r5_items:
         print(f"      - {item}")
+    print(_format_result("檢查 6 acceptance 提及路徑涵蓋性（強制）", r6_status, r6_msg))
+    for item in r6_items:
+        print(f"      - {item}")
 
-    statuses = [r1_status, r2_status, r3_status, r4_status, r5_status]
+    statuses = [r1_status, r2_status, r3_status, r4_status, r5_status, r6_status]
     if "fail" in statuses:
         print("[FAIL] 至少一項超強制拆分閾值，建議拆 ticket 後重新派發")
         return 2
     if "warn" in statuses:
         print("[WARN] 軟性警告：建議審視拆分必要性")
         return 1
-    print("[PASS] 三項閾值 + 一致性檢查 + 路徑存在性檢查全數通過")
+    print("[PASS] 三項閾值 + 一致性檢查 + 路徑存在性檢查 + 路徑涵蓋性檢查全數通過")
     return 0
 
 

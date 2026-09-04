@@ -955,20 +955,28 @@ dispatch-validate 0.18.0-W17-003:
 ## track dispatch-readiness 子命令（W17-053）
 
 派發前認知負擔閾值與綜合就緒度檢查。讀取 ticket frontmatter `where.files`
-與 Context Bundle section 自動計算三項核心指標，輸出 pass/warn/fail 與
-建議。**與 `dispatch-check`（活躍派發狀態，W10-017.2）和 `dispatch-validate`
-（CB 合理性，W17-003）職責正交**，獨立子命令不互相干擾。
+與 `acceptance` 及 Context Bundle section，自動計算三項核心閾值並加跑三項
+一致性啟發式檢查（共六項），輸出 pass/warn/fail 與建議。**與 `dispatch-check`
+（活躍派發狀態，W10-017.2）和 `dispatch-validate`（CB 合理性，W17-003）
+職責正交**，獨立子命令不互相干擾。
 
-**Why**：派發前缺乏統一 CLI 入口檢查 ticket 是否符合認知負擔閾值，PM 需
-手動對照 `.claude/rules/core/cognitive-load.md` 與 `cognitive-load-execution-details.md`
-判斷拆分需求，違反摩擦力方法論執行階段減摩擦原則（W17-049 ANA linux 視角）。
+**Why**：派發前缺乏統一 CLI 入口檢查 ticket 是否符合認知負擔閾值、以及
+acceptance 與寫入集（`where.files`）是否宣告一致，PM 需手動對照
+`.claude/rules/core/cognitive-load.md` 與 `cognitive-load-execution-details.md`
+判斷拆分需求，違反摩擦力方法論執行階段減摩擦原則（W17-049 ANA linux 視角）；
+acceptance 明文點名的檔案未列入 `where.files` 時，代理人依 acceptance 動了
+該檔，commit 時會被 bare-commit-guard 攔下（見檢查 6）。
 
 **Consequence**：缺少自動化檢查會讓 PM 偶爾遺漏拆分判斷，將過大任務派
 給代理人；3b 派發後常見症狀包含代理人 commit 遺漏部分職責、回合耗盡前
-只完成一半、跨檔不一致導致測試失敗。
+只完成一半、跨檔不一致導致測試失敗，或 acceptance 與宣告範圍矛盾迫使代理人
+在「守寫入集」與「滿足 acceptance」間二選一。
 
 **Action**：派發 3b 實作 ticket 前以本命令自檢；exit 0 直接派發、exit 1
-評估是否豁免（如跨進程同步修復條款）、exit 2 必須拆分後重新派發。
+評估是否豁免（如跨進程同步修復條款）、exit 2 依 fail 來源分流處置（見下方
+Exit code 表與各檢查說明）——**不可一律視為「須拆票」**，檢查 6 未過時拆票
+無效，正確處置是補 `where.files` 或改寫 acceptance（文件給的處置對新 fail
+來源無效的舊 pattern：任何檢查新增後，本節的處置對照表都必須同批更新）。
 
 ### 用法
 
@@ -976,7 +984,7 @@ dispatch-validate 0.18.0-W17-003:
 ticket track dispatch-readiness <ticket_id>
 ```
 
-### 三項閾值
+### 閾值 1-3（認知負擔軟性拆分閾值）
 
 | 閾值 | 取得方式 | 軟上限 | 強制拆分 |
 |------|---------|-------|---------|
@@ -993,17 +1001,38 @@ ticket track dispatch-readiness <ticket_id>
 > 多個職責被合併寫成單一 acceptance（低估），也會偏離真值。CLI 僅作近似訊號，
 > 達 WARN/FAIL 時 PM 應手動覆核 acceptance 是否反映真實職責數，再決定是否拆分。
 
+### 檢查 4-6（acceptance 與寫入集一致性啟發式）
+
+| 檢查 | 判定內容 | 命中條件 | 上限 status |
+|------|---------|---------|------------|
+| 4. acceptance 與寫入集一致性 | acceptance 含測試類關鍵詞（測試/test/覆蓋/回歸/regression/涵蓋）但 `where.files` 無任何測試型態路徑 | 關鍵詞命中且無測試路徑 | warn（不產生 fail） |
+| 5. where.files 路徑存在性 | `where.files` 含不存在路徑，且 acceptance 無新建語意（建立/新增/新檔/create/add） | 路徑不存在且無新建關鍵詞 | warn（不產生 fail） |
+| 6. acceptance 提及路徑涵蓋性（唯一強制 fail 的啟發式） | acceptance 文字中具備已知副檔名的路徑樣式 token，未被 `where.files` 前綴或檔名比對涵蓋 | 任一提及路徑未涵蓋 | **fail（強制）** |
+
+> 檢查 4、5 皆為啟發式，語意判定有邊界（未命中不代表無矛盾，關鍵詞比對
+> 亦可能對非測試語境產生 false positive），故上限為 warn，PM 保留覆核空間。
+> 檢查 6 抽取的是「acceptance 明文點名的具體檔案路徑」，誤判成本已由已知
+> 副檔名 + ASCII 邊界收斂，故為全套件唯一產生 fail 的啟發式檢查。
+
 ### Exit code
 
 | code | 意義 |
 |------|------|
-| 0 | 三項閾值全數通過 |
-| 1 | 軟性警告（任一項超軟上限但未達強制拆分） |
-| 2 | 硬性失敗（任一項超強制拆分閾值 / ticket 不存在 / IO/YAML 錯誤） |
+| 0 | 六項檢查全數通過 |
+| 1 | 軟性警告（閾值 1-3 任一超軟上限，或檢查 4/5 命中矛盾，但未達下列任一強制失敗條件） |
+| 2 | 硬性失敗（閾值 1-3 任一超強制拆分閾值 / 檢查 6 未過（acceptance 提及路徑未被 `where.files` 涵蓋）/ ticket 不存在 / IO・YAML 錯誤） |
 
 **重要**：本命令 exit code 語意**不與** `dispatch-check`（W10-017.2，exit
 1 = 有活躍派發）和 `dispatch-validate`（W17-003，exit 1 = CB 軟警告）共享；
 呼叫端必須以命令名稱判別語意，禁止以 exit code 跨命令解讀。
+
+**exit 2 的處置依 fail 來源分流，禁止一律拆票**：
+
+| fail 來源 | 正確處置 | 錯誤處置（無效） |
+|-----------|---------|-----------------|
+| 閾值 1-3 任一超強制拆分閾值 | 拆分為多個 ticket 後重新派發 | — |
+| 檢查 6 未過（acceptance 提及路徑未被 `where.files` 涵蓋） | 把該路徑加進 `where.files`，或改寫 acceptance 移除該路徑點名 | 拆票——拆分不會改變 acceptance 與 `where.files` 的宣告落差 |
+| ticket 不存在 / IO・YAML 錯誤 | 修正呼叫參數（ticket ID、`--version`）或檢查 ticket 檔案完整性 | 拆票 |
 
 ### 設計邊界
 
@@ -1012,12 +1041,15 @@ ticket track dispatch-readiness <ticket_id>
 - **不**觸碰既有 `dispatch-check`（W10-017.2）與 `dispatch-validate`（W17-003）
 - 閾值 1 為近似訊號（acceptance 條目 ≠ 功能職責數），最終拆分判斷由 PM 決定
 - Context Bundle section 不存在時閾值 3 視為 0 tokens 通過
+- 檢查 4、5 為 warn-only 啟發式，未命中不代表無矛盾，PM 保留覆核空間
+- 檢查 6 僅比對具備已知副檔名的路徑樣式 token，純數字版本號或 ticket ID 不會誤判為路徑
 
 ### 跨進程同步修復豁免
 
 若 ticket 符合「跨進程同步修復」全部 5 特徵（見 `cognitive-load-execution-details.md`
 「跨進程同步修復豁免條款」），可豁免閾值 1，本命令僅供 PM 參考，不應視
-為強制阻擋訊號。
+為強制阻擋訊號。此豁免僅適用閾值 1，不適用檢查 6（路徑涵蓋性與認知負擔
+豁免條款無關）。
 
 ### 範例
 
@@ -1027,8 +1059,29 @@ dispatch-readiness 0.18.0-W17-053:
   [WARN] 閾值 1 功能職責數（acceptance 近似）: acceptance 條目 3 > 2（軟警告；建議拆分為多個 ticket）
   [PASS] 閾值 2 修改檔案數（where.files）: where.files 3 ≤ 5
   [PASS] 閾值 3 Context Bundle tokens: Context Bundle ~250 tokens ≤ 3000
+  [PASS] 檢查 4 acceptance 與寫入集一致性（啟發式）: acceptance 無測試類關鍵詞命中
+  [PASS] 檢查 5 where.files 路徑存在性（啟發式）: where.files 路徑全數存在
+  [PASS] 檢查 6 acceptance 提及路徑涵蓋性（強制）: acceptance 未偵測到路徑樣式 token
 [WARN] 軟性警告：建議審視拆分必要性
 ```
+
+```bash
+$ ticket track dispatch-readiness <ticket_id>
+dispatch-readiness <ticket_id>:
+  [PASS] 閾值 1 功能職責數（acceptance 近似）: acceptance 條目 2 ≤ 2
+  [PASS] 閾值 2 修改檔案數（where.files）: where.files 2 ≤ 5
+  [PASS] 閾值 3 Context Bundle tokens: Context Bundle ~600 tokens ≤ 3000
+  [PASS] 檢查 4 acceptance 與寫入集一致性（啟發式）: acceptance 無測試類關鍵詞命中
+  [PASS] 檢查 5 where.files 路徑存在性（啟發式）: where.files 路徑全數存在
+  [FAIL] 檢查 6 acceptance 提及路徑涵蓋性（強制）: acceptance 提及 1 項路徑未被 where.files 涵蓋，請把該路徑加進 where.files 或改寫 acceptance
+      - SKILL.md
+[FAIL] 至少一項超強制拆分閾值，建議拆 ticket 後重新派發
+```
+
+> 上例 CLI 輸出文字仍沿用「建議拆 ticket 後重新派發」（來自
+> `execute_dispatch_readiness` 的統一提示行），但此提示對檢查 6 觸發的
+> fail 不適用——**判斷處置時以上方「exit 2 的處置依 fail 來源分流」表為準，
+> 不依 CLI 輸出的統一提示行字面行事**。
 
 ---
 

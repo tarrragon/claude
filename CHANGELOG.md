@@ -1,3 +1,22 @@
+## [2.51.0] - 2026-09-04
+
+### Summary
+feat: SessionStart hook 對本專案擁有區段的 framework issue 執行 check; feat: dispatch-readiness 新增檢查 6，acceptance 提及路徑未落在 where.files 內即 FAIL; fix: 收窄 bare-commit-guard -a／--all 並行期豁免並改寫 DENY 訊息 (+6 more)
+
+Changes: 2 feat, 3 fix, 3 docs, 1 chore
+
+- feat: SessionStart hook 對本專案擁有區段的 framework issue 執行 check
+- feat: dispatch-readiness 新增檢查 6，acceptance 提及路徑未落在 where.files 內即 FAIL
+- fix: 收窄 bare-commit-guard -a／--all 並行期豁免並改寫 DENY 訊息
+- fix: section_comment dedup 關鍵字含 - 開頭 token 不再誤判為旗標
+- fix: sync-push CHANGELOG 產生器不再把 revert 原 commit 的 ticket ID 寫入條目
+- docs: 同步 dispatch-readiness 文件至檢查 4/5/6 與 exit code 分流語意
+- docs: 泛化規則二截斷方向為輸出過濾方向，涵蓋 grep 白名單/-v
+- docs: 同一名稱跨兩個同步狀態，讀者把分歧歸因至錯誤的一邊
+- chore: sync-pull （6 delta，0 衝突）
+
+---
+
 ## [2.50.9] - 2026-09-04
 
 ### Summary

@@ -1,6 +1,7 @@
 """測試 ticket track dispatch-readiness 命令（0.18.0-W17-053 + 0.2.1-W3-249）。
 
-涵蓋三項核心閾值 + 第四項一致性檢查 + 第五項路徑存在性檢查 + exit code 矩陣：
+涵蓋三項核心閾值 + 第四項一致性檢查 + 第五項路徑存在性檢查 + 第六項路徑
+涵蓋性檢查 + exit code 矩陣：
 - 閾值 1（功能職責數 / acceptance 近似）：≤2 pass / 3-4 warn / >4 fail
 - 閾值 2（修改檔案數 where.files）：≤5 pass / 6-10 warn / >10 fail
 - 閾值 3（Context Bundle tokens 近似）：≤3000 pass / 3001-5000 warn / >5000 fail
@@ -8,6 +9,8 @@
   無關鍵詞 pass / 命中但無測試路徑 warn（不含 fail）/ 命中且有測試路徑 pass
 - 檢查 5（where.files 路徑存在性）：路徑全存在 pass / 不存在且 acceptance 無
   新建語意 warn（不含 fail）/ 不存在但 acceptance 含新建語意 pass
+- 檢查 6（acceptance 提及路徑 vs where.files 涵蓋性）：未提及路徑 pass /
+  提及且被涵蓋 pass / 提及但未涵蓋 fail（強制，唯一產生 fail 的啟發式檢查）
 - ticket 不存在 / IO 錯誤 → exit 2
 - 任一 fail → exit 2；任一 warn 無 fail → exit 1；全 pass → exit 0
 """
@@ -22,6 +25,7 @@ from typing import Optional
 from unittest.mock import patch
 
 from ticket_system.commands.track_dispatch_readiness import (
+    check_acceptance_path_coverage,
     check_acceptance_writeset_consistency,
     check_context_bundle_tokens,
     check_file_count,
@@ -219,6 +223,83 @@ class TestWherePathsExistence:
         assert missing == []
 
 
+class TestAcceptancePathCoverage:
+    """0.2.1-W3-1221：acceptance 提及的檔案路徑須落在 where.files 內，否則 fail。"""
+
+    def test_no_path_mentioned_pass(self):
+        status, uncovered, _ = check_acceptance_path_coverage(
+            ["實作查重邏輯", "回歸驗證既有行為不變"], ["a.py"]
+        )
+        assert status == "pass"
+        assert uncovered == []
+
+    def test_mentioned_basename_covered_by_full_path_pass(self):
+        status, uncovered, _ = check_acceptance_path_coverage(
+            ["核對 SKILL.md 並直接修文件"],
+            [".claude/skills/framework-issue/SKILL.md"],
+        )
+        assert status == "pass"
+        assert uncovered == []
+
+    def test_mentioned_basename_uncovered_fail(self):
+        """0.2.1-W3-1217.3 實例：acceptance 要求核對 SKILL.md，但 where.files
+        只列了另兩個檔案——此為本檢查應攔下的宣告不一致。"""
+        status, uncovered, msg = check_acceptance_path_coverage(
+            ["核對 SKILL.md 並直接修文件"],
+            [
+                ".claude/skills/framework-issue/scripts/section_comment.py",
+                ".claude/skills/framework-issue/tests/test_section_comment.py",
+            ],
+        )
+        assert status == "fail"
+        assert uncovered == ["SKILL.md"]
+        assert "where.files" in msg
+
+    def test_mentioned_full_path_covered_pass(self):
+        status, uncovered, _ = check_acceptance_path_coverage(
+            ["確認 .claude/skills/ticket/SKILL.md 內容與實作一致"],
+            [".claude/skills/ticket/SKILL.md"],
+        )
+        assert status == "pass"
+        assert uncovered == []
+
+    def test_mentioned_full_path_uncovered_fail(self):
+        status, uncovered, _ = check_acceptance_path_coverage(
+            ["確認 .claude/skills/ticket/SKILL.md 內容與實作一致"],
+            [".claude/skills/ticket/ticket_system/commands/track_dispatch_readiness.py"],
+        )
+        assert status == "fail"
+        assert uncovered == [".claude/skills/ticket/SKILL.md"]
+
+    def test_phase_notation_not_treated_as_path(self):
+        """「3a/3b」等 Phase 標號不具已知副檔名，不應誤判為路徑。"""
+        status, uncovered, _ = check_acceptance_path_coverage(
+            ["TDD Phase 3a/3b 皆需通過"], ["a.py"]
+        )
+        assert status == "pass"
+        assert uncovered == []
+
+    def test_ticket_id_not_treated_as_path(self):
+        status, uncovered, _ = check_acceptance_path_coverage(
+            ["承接 0.2.1-W3-1217.3 的驗收結論"], ["a.py"]
+        )
+        assert status == "pass"
+        assert uncovered == []
+
+    def test_where_files_intent_marker_stripped_before_match(self):
+        status, uncovered, _ = check_acceptance_path_coverage(
+            ["核對 SKILL.md 並直接修文件"],
+            [".claude/skills/framework-issue/SKILL.md::read"],
+        )
+        assert status == "pass"
+        assert uncovered == []
+
+    def test_empty_acceptance_pass(self):
+        status, uncovered, _ = check_acceptance_path_coverage(None, [])
+        assert status == "pass"
+        assert uncovered == []
+
+
 # ---------------------------------------------------------------------------
 # CLI 整合測試（mock load_ticket + get_project_root）
 # ---------------------------------------------------------------------------
@@ -395,6 +476,29 @@ class TestExecuteDispatchReadiness:
             "_body": "## Context Bundle\n\n短內容\n",
             "acceptance": ["a", "b"],
             "where": {"files": ["a.py", "b.py"]},
+        }
+        rc, out, _err = _run(ticket, tmp_path)
+        assert rc == 0
+        assert "全數通過" in out
+
+    def test_check6_mentioned_path_uncovered_fails(self, tmp_path):
+        """0.2.1-W3-1221：acceptance 提及 SKILL.md 但 where.files 未涵蓋 → fail，exit 2。"""
+        ticket = {
+            "_body": "",
+            "acceptance": ["核對 SKILL.md 並直接修文件"],
+            "where": {"files": ["section_comment.py"]},
+        }
+        rc, out, _err = _run(ticket, tmp_path)
+        assert rc == 2
+        assert "SKILL.md" in out
+        assert "where.files" in out
+
+    def test_check6_mentioned_path_covered_passes(self, tmp_path):
+        """反例：acceptance 提及的路徑已在 where.files 內 → 不影響 pass 結論。"""
+        ticket = {
+            "_body": "## Context Bundle\n\n短內容\n",
+            "acceptance": ["核對 SKILL.md 並直接修文件"],
+            "where": {"files": ["SKILL.md"]},
         }
         rc, out, _err = _run(ticket, tmp_path)
         assert rc == 0

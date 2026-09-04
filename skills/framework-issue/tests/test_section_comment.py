@@ -276,9 +276,25 @@ def test_search_issues_by_keyword_builds_expected_gh_command():
         hits = section_comment.search_issues_by_keyword("元件契約")
     assert hits == [{"number": 81, "title": "t", "url": "u", "state": "open"}]
     args = run.call_args.args[0]
-    assert args[:4] == ["gh", "search", "issues", "元件契約"]
+    assert args[:3] == ["gh", "search", "issues"]
     assert "--repo" in args and args[args.index("--repo") + 1] == "tarrragon/claude"
     assert "--match" in args and args[args.index("--match") + 1] == "title,body,comments"
+    # keyword 排在 "--" 之後，避免以 "-" 開頭的 token 被誤判為旗標。
+    assert args[-2:] == ["--", "元件契約"]
+
+
+def test_search_issues_by_keyword_places_hyphen_prefixed_token_after_double_dash():
+    """關鍵字「commit -a」拆分出的 "-a" 若排在旗標前，會被 gh 的 cobra flag
+    parser 誤判為短旗標；驗證 "--" 分隔確實把它排到位置參數區。"""
+    with mock.patch.object(
+        section_comment.subprocess,
+        "run",
+        return_value=_completed(stdout=json.dumps([])),
+    ) as run:
+        section_comment.search_issues_by_keyword("-a")
+    args = run.call_args.args[0]
+    assert args[-2:] == ["--", "-a"]
+    assert "-a" not in args[:-1]
 
 
 def test_search_issues_by_keyword_raises_on_gh_failure():
@@ -297,7 +313,7 @@ def test_search_duplicates_unions_tokens_to_cover_cross_comment_terms():
     共現）；拆為單詞查詢後聯集才涵蓋。"""
 
     def _run(args, **kwargs):
-        token = args[3]
+        token = args[-1]
         if token == "skill":
             return _completed(stdout=json.dumps([{"number": 79, "title": "a", "url": "u1", "state": "open"}]))
         if token == "拆分":
@@ -312,23 +328,46 @@ def test_search_duplicates_unions_tokens_to_cover_cross_comment_terms():
         raise AssertionError(f"未預期的 token：{token}")
 
     with mock.patch.object(section_comment.subprocess, "run", side_effect=_run):
-        results = section_comment.search_duplicates(["skill 拆分"])
+        results, skipped = section_comment.search_duplicates(["skill 拆分"])
     numbers = sorted(issue["number"] for issue in results["skill 拆分"])
     assert numbers == [79, 82]
+    assert skipped == 0
 
 
 def test_search_duplicates_skips_failed_token_without_aborting_others(capsys):
     def _run(args, **kwargs):
-        token = args[3]
+        token = args[-1]
         if token == "壞詞":
             return _completed(returncode=1, stderr="network error")
         return _completed(stdout=json.dumps([{"number": 1, "title": "t", "url": "u", "state": "open"}]))
 
     with mock.patch.object(section_comment.subprocess, "run", side_effect=_run):
-        results = section_comment.search_duplicates(["壞詞", "好詞"])
+        results, skipped = section_comment.search_duplicates(["壞詞", "好詞"])
     assert results["壞詞"] == []
     assert results["好詞"] == [{"number": 1, "title": "t", "url": "u", "state": "open"}]
-    assert "壞詞" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "壞詞" in err
+    assert "[WARNING]" in err
+    assert skipped == 1
+
+
+def test_search_duplicates_counts_skipped_hyphen_prefixed_token_and_still_unions_rest(capsys):
+    """關鍵字組「commit -a」含以 "-" 開頭的 token；驗證該 token 不再因旗標
+    誤判而查詢失敗（實際送出 query），且失敗計數與涵蓋範圍缺口正確反映。"""
+
+    def _run(args, **kwargs):
+        token = args[-1]
+        if token == "--force":
+            return _completed(returncode=1, stderr="network error")
+        if token in ("commit", "-a"):
+            return _completed(stdout=json.dumps([{"number": 5, "title": "t", "url": "u", "state": "open"}]))
+        raise AssertionError(f"未預期的 token：{token}")
+
+    with mock.patch.object(section_comment.subprocess, "run", side_effect=_run):
+        results, skipped = section_comment.search_duplicates(["commit -a", "--force"])
+    assert [issue["number"] for issue in results["commit -a"]] == [5]
+    assert results["--force"] == []
+    assert skipped == 1
 
 
 def test_render_dedup_report_lists_no_hit_group_and_footer():
@@ -337,6 +376,14 @@ def test_render_dedup_report_lists_no_hit_group_and_footer():
     assert "無命中詞" in report
     assert "無命中" in report
     assert "命中不等於重複" in report
+    # 未傳 skipped 時預設 0，末行仍固定重述（tail -1 可見的涵蓋缺口宣告）。
+    assert report.rstrip("\n").splitlines()[-1] == "查詢失敗略過的 token 數：0"
+
+
+def test_render_dedup_report_last_line_restates_skipped_count():
+    """略過的關鍵字查詢失敗數須在報告最後一行重述，`tail -1` 即可見。"""
+    report = section_comment.render_dedup_report(["--force"], {"--force": []}, skipped=1)
+    assert report.rstrip("\n").splitlines()[-1] == "查詢失敗略過的 token 數：1"
 
 
 def test_cmd_dedup_is_read_only_and_does_not_call_gh_issue_or_api():
@@ -348,6 +395,26 @@ def test_cmd_dedup_is_read_only_and_does_not_call_gh_issue_or_api():
     assert rc == 0
     for call in run.call_args_list:
         assert call.args[0][:2] == ["gh", "search"]
+
+
+def test_cmd_dedup_cli_accepts_hyphen_prefixed_keyword_group_end_to_end(capsys):
+    """端對端重現 acceptance 命令：`dedup --keywords "commit -a" "--force"`。
+
+    "--force" 本身即一整個 keyword group（非拆自「commit -a」的子 token），
+    需先通過 argparse 收值（`_escape_dash_prefixed_keyword_values`）才會被
+    傳入 `search_duplicates`；兩個 token 皆須實際送出 gh 查詢。"""
+    queried_tokens = []
+
+    def _run(args, **kwargs):
+        queried_tokens.append(args[-1])
+        return _completed(stdout=json.dumps([]))
+
+    with mock.patch.object(section_comment.subprocess, "run", side_effect=_run):
+        rc = section_comment.main(["dedup", "--keywords", "commit -a", "--force"])
+    assert rc == 0
+    assert set(queried_tokens) == {"commit", "-a", "--force"}
+    out = capsys.readouterr().out
+    assert out.rstrip("\n").splitlines()[-1] == "查詢失敗略過的 token 數：0"
 
 
 # --- update：以 comment id 精準 PATCH，保留首行標記，不動其他 comment ---
