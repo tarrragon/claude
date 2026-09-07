@@ -41,15 +41,20 @@ session 可隨時附加，不需 owner、不需協商。
 body），詞彙分屬同一 issue 的不同 comment 時會漏判（見 tests 內
 `test_search_duplicates_unions_tokens_to_cover_cross_comment_terms` 重現與
 `.claude/skills/framework-issue/tests/test_section_comment.py` 同名測試的
-docstring）。拆為單詞查詢後在本工具端聯集，可涵蓋此缺口。
+docstring）。拆為單詞查詢後在本工具端聯集，可涵蓋此缺口。每筆命中另標示
+「命中詞」（哪些 token 命中）與「命中位置」（title／body／comments 任一
+子集，本地比對，見 `_hit_field_labels`），並依命中 token 數遞減排序，供
+人工從大量命中中優先排除只命中單一 token 的雜訊。
 
 `show` 以 body 的區段索引表為入口（`parse_index_table`），依索引列出的
 comment id 分「區段」與「觀測流」兩類；索引缺失時退回全 comment 掃描首行
 標記（`classify_comments`），並在輸出標示「索引缺失」。`check` 輸出三項
-早期警訊（規格見 tarrragon/claude#81「增長語意與早期警訊」）：主警訊為
-「當前結論」區段 `updated_at` 落後最新觀測 comment 超過設定期間；輔助為
-單張 issue comment 數超過閾值；第三項為 body 索引與實際區段 comment 集合
-的一致性比對。三項皆唯讀、不阻擋（exit 0），閾值與期間可由 CLI 參數覆蓋。
+早期警訊（規格見 tarrragon/claude#81「增長語意與早期警訊」）：主警訊逐一
+比對名稱以「當前結論」開頭的全部區段（涵蓋多 owner 以 `add` 附加的後綴
+區段），各自的 `updated_at` 是否落後最新觀測 comment 超過設定期間並標明
+owner；輔助為單張 issue comment 數超過閾值；第三項為 body 索引與實際區段
+comment 集合的一致性比對。三項皆唯讀、不阻擋（exit 0），閾值與期間可由
+CLI 參數覆蓋。
 """
 
 import argparse
@@ -82,6 +87,11 @@ SECTION_MARKER_RE = re.compile(r"^<!-- section: (?P<name>.+?) owner: (?P<owner>.
 OBSERVATION_MARKER_RE = re.compile(
     r"^<!-- observation: (?P<summary>.+?) by (?P<session>.+?) -->"
 )
+
+# 協定標記：body 含此行代表該 issue 採用 comment-as-section 協定（見
+# comment-as-section-protocol.md 開頭定義）。init／add 回填索引時若 body
+# 缺此標記則於首行 upsert，與索引回填同一次 PATCH 完成（見 _ensure_schema_marker）。
+FW_ISSUE_SCHEMA_MARKER = "<!-- fw-issue-schema: comment-as-section v1 -->"
 
 # body 區段索引表的標記區段（init 回填、之後不再改寫）。
 INDEX_BEGIN = "<!-- section-index -->"
@@ -226,6 +236,20 @@ def render_index(posted_sections: list) -> str:
     return render_index_table(rows)
 
 
+def _ensure_schema_marker(body: str) -> str:
+    """若 body 缺 `FW_ISSUE_SCHEMA_MARKER` 則於首行補上；已存在則原樣返回。
+
+    取代原本「先 `gh issue edit` 手動補標記、再 `init` 回填索引」的兩階段
+    流程——兩次手工 PATCH 順序未定義，兩個 session 交錯操作時有並行覆蓋
+    窗口。呼叫端（`cmd_init`／`cmd_add`）在同一次 `write_body` PATCH 內
+    連同索引一併寫入，不增加 PATCH 次數。
+    """
+    body = body or ""
+    if FW_ISSUE_SCHEMA_MARKER in body:
+        return body
+    return f"{FW_ISSUE_SCHEMA_MARKER}\n{body}"
+
+
 def load_sections_spec(path: str) -> list:
     """讀取 `init --sections-file` 的 JSON 規格：[{"name":.., "content":..}]。"""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -312,8 +336,13 @@ def fetch_body(issue_ref: str) -> str:
     return payload.get("body", "") or ""
 
 
-def write_body(issue_ref: str, body: str) -> int:
-    """以暫存檔透過 --body-file 回寫 body（避免長文字跳脫問題），僅 init 呼叫一次。"""
+def write_body(issue_ref: str, body: str, success_msg: Optional[str] = None) -> int:
+    """以暫存檔透過 --body-file 回寫 body（避免長文字跳脫問題）；`init` 僅呼叫
+    一次，`add` 每次呼叫皆為同一個 issue 的索引回填。`success_msg` 未提供時
+    用回填索引的通用訊息；`cmd_add` 傳入含區段名／owner 的訊息，供操作者從
+    輸出直接確認建立結果（同 `cmd_transfer_owner` 逐字印出結果的取向）。"""
+    if success_msg is None:
+        success_msg = f"body 區段索引已回填 @ {issue_ref}"
     with tempfile.NamedTemporaryFile(
         "w", suffix=".md", delete=False, encoding="utf-8"
     ) as handle:
@@ -322,7 +351,7 @@ def write_body(issue_ref: str, body: str) -> int:
     try:
         return run_gh(
             ["issue", "edit", issue_ref, "--repo", FRAMEWORK_REPO, "--body-file", body_file],
-            success_msg=f"body 區段索引已回填 @ {issue_ref}",
+            success_msg=success_msg,
         )
     finally:
         Path(body_file).unlink(missing_ok=True)
@@ -337,13 +366,17 @@ def search_issues_by_keyword(keyword: str) -> list:
     未加 `--` 時 `gh search issues -a ...` 回 "unknown shorthand flag"）；
     `--` 之後 pflag 停止解析旗標，全部視為位置參數，可安全涵蓋此形態
     （既有測試關鍵字皆無 `-` 開頭，屬 PC-BAL-064 取樣單一格）。
+
+    `--json` 額外取 `body`（原本只取 number/title/url/state）：供
+    `_hit_field_labels` 本地判定命中位置（title／body 本地子字串比對），
+    不需為此額外呼叫 gh。
     """
     result = subprocess.run(
         [
             "gh", "search", "issues",
             "--repo", FRAMEWORK_REPO,
             "--match", "title,body,comments",
-            "--json", "number,title,url,state",
+            "--json", "number,title,url,state,body",
             "--", keyword,
         ],
         capture_output=True,
@@ -355,6 +388,47 @@ def search_issues_by_keyword(keyword: str) -> list:
     return json.loads(result.stdout or "[]")
 
 
+def _has_comment_match(issue_number: int, token: str, comment_cache: dict) -> bool:
+    """對候選 issue 的全部 comment 本地比對是否含 token（大小寫不敏感）。
+
+    每個 issue 的 comment 清單只抓取一次並存入 `comment_cache`，供同一次
+    `search_duplicates` 執行內跨 token／跨關鍵字組重複使用，避免對同一
+    issue 因命中多個 token 而重複呼叫 `gh api`。抓取失敗（網路／權限）時
+    快取空清單並回傳未命中，不中止其餘比對——查重本身的降級不應阻擋整體
+    流程（同 `search_duplicates` 既有的「不阻擋」原則）。
+    """
+    if issue_number not in comment_cache:
+        try:
+            comment_cache[issue_number] = fetch_comments(str(issue_number))
+        except (OSError, subprocess.SubprocessError, RuntimeError):
+            comment_cache[issue_number] = []
+    token_lower = token.lower()
+    return any(
+        token_lower in (comment.get("body", "") or "").lower()
+        for comment in comment_cache[issue_number]
+    )
+
+
+def _hit_field_labels(token: str, issue: dict, comment_cache: dict) -> set:
+    """判定 token 對 issue 的命中位置集合（title／body／comments 任一子集，
+    可並存亦可能三者皆未命中）。title／body 以 search 回傳的欄位本地比對；
+    comments 對該 issue 全部 comment 本地比對（見 `_has_comment_match`，
+    有快取）。
+
+    此為近似判定，非精確重現 GitHub 全文檢索的分詞／詞幹化語意——僅供
+    dedup 報告標示命中位置，協助人工快速排除雜訊，不作為機械判準。
+    """
+    token_lower = token.lower()
+    fields = set()
+    if token_lower in (issue.get("title", "") or "").lower():
+        fields.add("title")
+    if token_lower in (issue.get("body", "") or "").lower():
+        fields.add("body")
+    if _has_comment_match(issue["number"], token, comment_cache):
+        fields.add("comments")
+    return fields
+
+
 def _split_keyword_tokens(keyword_group: str) -> list:
     """把一組查重關鍵字拆為查詢 token；含空白者逐詞查再聯集（見檔頭說明），
     無空白（含單一 CJK 複合詞，如「元件契約」）視為單一 token 原樣查詢。"""
@@ -363,8 +437,12 @@ def _split_keyword_tokens(keyword_group: str) -> list:
 
 
 def search_duplicates(keyword_groups: list) -> tuple:
-    """對每組關鍵字回傳命中 issue 清單（依 issue number 去重、排序），與
-    略過的 token 查詢失敗總數（回傳 `(results, skipped_count)`）。
+    """對每組關鍵字回傳命中 issue 清單，與略過的 token 查詢失敗總數（回傳
+    `(results, skipped_count)`）。每筆命中額外帶 `matched_tokens`（該 issue
+    命中的 token 清單）與 `hit_fields`（命中位置集合，見 `_hit_field_labels`），
+    供 `render_dedup_report` 標示；清單依 `matched_tokens` 數量遞減排序（同
+    數量再依 issue number 遞增），命中多個 token 的 issue 較可能是真實重複，
+    優先排在報告前段。
 
     單一 token 查詢失敗只警告略過，不中止其餘 token 或其他關鍵字組——查重
     本身的降級不應阻擋 init 的既有兩階段流程（查重「不阻擋」原則延伸至此）。
@@ -374,23 +452,43 @@ def search_duplicates(keyword_groups: list) -> tuple:
     """
     results = {}
     skipped = 0
+    comment_cache: dict = {}
     for group in keyword_groups:
         hits_by_number = {}
         for token in _split_keyword_tokens(group):
             try:
                 for issue in search_issues_by_keyword(token):
-                    hits_by_number.setdefault(issue["number"], issue)
+                    entry = hits_by_number.setdefault(
+                        issue["number"], {"issue": issue, "tokens": set(), "fields": set()}
+                    )
+                    entry["tokens"].add(token)
+                    entry["fields"] |= _hit_field_labels(token, issue, comment_cache)
             except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
                 skipped += 1
                 sys.stderr.write(
                     f"[framework-issue][WARNING] 查重關鍵字「{token}」查詢失敗，略過：{exc}\n"
                 )
-        results[group] = [hits_by_number[n] for n in sorted(hits_by_number)]
+        ordered = sorted(
+            hits_by_number.values(),
+            key=lambda entry: (-len(entry["tokens"]), entry["issue"]["number"]),
+        )
+        results[group] = [
+            {
+                **entry["issue"],
+                "matched_tokens": sorted(entry["tokens"]),
+                "hit_fields": sorted(entry["fields"]),
+            }
+            for entry in ordered
+        ]
     return results, skipped
 
 
 def render_dedup_report(keyword_groups: list, results: dict, skipped: int = 0) -> str:
     """組合查重報告：回顯關鍵字集合、逐組列命中清單，提醒標註關係不自動判定。
+
+    每筆命中列出「命中詞」與「命中位置」（見 `search_duplicates` 的
+    `matched_tokens`／`hit_fields`），供人工優先排除只命中單一 token 的
+    雜訊；`results` 傳入時已依命中 token 數遞減排序，此函式不重排。
 
     末行固定重述略過的 token 查詢失敗數（`tail -1` 即可見），使涵蓋範圍
     縮小成為報告本身可見的明確宣告，不只依賴 stderr 的單行警告。
@@ -409,6 +507,12 @@ def render_dedup_report(keyword_groups: list, results: dict, skipped: int = 0) -
                 f"  - #{issue.get('number')} [{issue.get('state', '?')}] {issue.get('title', '')}"
             )
             lines.append(f"    {issue.get('url', '')}")
+            matched_tokens = issue.get("matched_tokens", [])
+            hit_fields = issue.get("hit_fields", [])
+            lines.append(
+                f"    命中詞：{'、'.join(matched_tokens) or '（無）'}"
+                f"｜命中位置：{'、'.join(hit_fields) or '（無）'}"
+            )
         lines.append("")
     lines.append(
         "命中不等於重複：請對每張命中 issue 標註關係（重複／切分／引用），"
@@ -468,6 +572,7 @@ def cmd_init(issue_ref: str, owner: str, sections_file: str, dedup_keywords: lis
             "手動確認區段 comment 後重跑索引回填（不重複執行 init 避免重複建立區段）",
         )
 
+    body = _ensure_schema_marker(body)
     new_body = upsert_section(body, INDEX_SECTION_RE, render_index(posted))
     return write_body(issue_ref, new_body)
 
@@ -509,8 +614,12 @@ def cmd_add(issue_ref: str, owner: str, name: str, content_file: str) -> int:
 
     rows = [{"name": row["name"], "url": row["url"]} for row in parse_index_table(body)]
     rows.append({"name": name, "url": result.get("html_url", "")})
+    body = _ensure_schema_marker(body)
     new_body = upsert_section(body, INDEX_SECTION_RE, render_index_table(rows))
-    return write_body(issue_ref, new_body)
+    return write_body(
+        issue_ref, new_body,
+        success_msg=f"區段「{name}」已建立 @ {issue_ref}，owner={owner}",
+    )
 
 
 def cmd_update(comment_id: str, content_file: str) -> int:
@@ -621,13 +730,19 @@ def cmd_observe(issue_ref: str, summary: str, session: str, content_file: str) -
 
 
 def _render_show_sections(rows: list, comments_by_id: dict) -> list:
-    """把區段列（來自索引或標記掃描）渲染為輸出行，含 comment 找不到時的標示。"""
+    """把區段列（來自索引或標記掃描）渲染為輸出行，含 comment 找不到時的標示。
+
+    owner 從 comment body 首行標記回推（`_owner_of`，與 `check` 共用）——
+    `transfer-owner` 是唯一會改 owner 的操作，`show` 原本不印 owner 使驗證
+    手段不在同一套 CLI 內，操作者需另外開 comment 才能確認結果。
+    """
     lines = [f"## 區段（{len(rows)} 則）"]
     for row in rows:
         comment = comments_by_id.get(row["id"])
         updated_at = comment.get("updated_at", "") if comment else "(comment 未找到)"
+        owner = _owner_of(comment) if comment else "(comment 未找到)"
         url = row["url"] or (comment.get("html_url", "") if comment else "")
-        lines.append(f"- {row['name']} updated_at={updated_at}")
+        lines.append(f"- {row['name']} owner={owner} updated_at={updated_at}")
         lines.append(f"  {url}")
     return lines
 
@@ -720,22 +835,33 @@ def _check_index_consistency(index_rows: list, sections: dict) -> str:
     return "\n".join(lines)
 
 
-def _find_conclusion_comment(sections: dict):
-    """從區段 dict 找出名稱為「當前結論」的 comment；找不到回傳 None。"""
-    return next(
+def _find_conclusion_comments(sections: dict) -> list:
+    """從區段 dict 找出名稱以「當前結論」開頭的全部 comment（依 comment id
+    排序，供多 owner 場景逐則比對）。單一「當前結論」時回傳單一元素清單，
+    既有行為不變；多 owner 以 `add` 附加的後綴區段（如「當前結論（<consumer>：
+    <主題>）」）現一併涵蓋（見本 ticket why：字串相等定位使第二 owner 缺主
+    警訊涵蓋）。"""
+    return sorted(
         (
-            entry["comment"]
+            entry
             for entry in sections.values()
-            if entry["name"] == CURRENT_CONCLUSION_SECTION_NAME
+            if entry["name"].startswith(CURRENT_CONCLUSION_SECTION_NAME)
         ),
-        None,
+        key=lambda entry: entry["comment"].get("id") or 0,
     )
 
 
-def _format_staleness_hit(conclusion: dict, newer: list, stale_days: int) -> str:
+def _owner_of(comment: dict) -> str:
+    """從區段 comment body 首行標記回推 owner。sections dict（來自
+    classify_comments）只保留 name，未保留 owner，故於此按需重新解析。"""
+    marker = extract_section_marker(comment.get("body", "") or "")
+    return marker["owner"] if marker else "?"
+
+
+def _format_staleness_hit(name: str, owner: str, conclusion: dict, newer: list, stale_days: int) -> str:
     """組合警訊 B 觸發時的訊息：落後期間 + 全部新增觀測 comment 的 html_url。"""
     lines = [
-        f"[警訊 B][主警訊] 觸發：「{CURRENT_CONCLUSION_SECTION_NAME}」"
+        f"[警訊 B][主警訊] 觸發：「{name}」（owner: {owner}）"
         f"updated_at={conclusion.get('updated_at')} 落後最新觀測 "
         f"{newer[-1].get('created_at')}，超過設定期間 {stale_days} 天",
         "  當前結論之後新增的觀測 comment：",
@@ -744,31 +870,46 @@ def _format_staleness_hit(conclusion: dict, newer: list, stale_days: int) -> str
     return "\n".join(lines)
 
 
-def _check_conclusion_staleness(sections: dict, stream: list, stale_days: int) -> str:
-    """警訊 B（主警訊）：「當前結論」區段 updated_at 落後最新觀測超過設定期間。
-
-    命中時列出 updated_at 之後新增的全部觀測 comment 之 html_url（不只超過
-    期間的那些），供 owner 直接整合。
-    """
-    conclusion = _find_conclusion_comment(sections)
-    if conclusion is None:
-        return f"[警訊 B][主警訊] 找不到「{CURRENT_CONCLUSION_SECTION_NAME}」區段 comment，無法比對"
-    if not stream:
-        return "[警訊 B][主警訊] 無觀測 comment，無需比對"
-
-    conclusion_updated = _parse_timestamp(conclusion.get("updated_at", ""))
+def _check_single_conclusion(name: str, comment: dict, stream: list, stale_days: int) -> str:
+    """對單一「當前結論*」區段比對 updated_at 是否落後最新觀測，輸出標明 owner。"""
+    owner = _owner_of(comment)
+    label = f"「{name}」（owner: {owner}）"
+    conclusion_updated = _parse_timestamp(comment.get("updated_at", ""))
     newer = sorted(
         (c for c in stream if _parse_timestamp(c.get("created_at", "")) > conclusion_updated),
         key=lambda c: c.get("created_at", ""),
     )
     if not newer:
-        return f"[警訊 B][主警訊] 未觸發：無晚於 updated_at={conclusion.get('updated_at')} 的觀測"
+        return (
+            f"[警訊 B][主警訊] 未觸發：{label} "
+            f"updated_at={comment.get('updated_at')} 無晚於此的觀測"
+        )
 
     gap = _parse_timestamp(newer[-1].get("created_at", "")) - conclusion_updated
     if gap <= timedelta(days=stale_days):
-        return f"[警訊 B][主警訊] 未觸發：距最新觀測 {gap} <= 設定期間 {stale_days} 天"
+        return f"[警訊 B][主警訊] 未觸發：{label} 距最新觀測 {gap} <= 設定期間 {stale_days} 天"
 
-    return _format_staleness_hit(conclusion, newer, stale_days)
+    return _format_staleness_hit(name, owner, comment, newer, stale_days)
+
+
+def _check_conclusion_staleness(sections: dict, stream: list, stale_days: int) -> str:
+    """警訊 B（主警訊）：名稱以「當前結論」開頭的全部區段，逐則比對 updated_at
+    是否落後最新觀測超過設定期間，各自輸出並標明 owner（多 owner 場景見
+    `_find_conclusion_comments`）。
+
+    命中時列出該區段 updated_at 之後新增的全部觀測 comment 之 html_url（不只
+    超過期間的那些），供 owner 直接整合。
+    """
+    conclusions = _find_conclusion_comments(sections)
+    if not conclusions:
+        return f"[警訊 B][主警訊] 找不到「{CURRENT_CONCLUSION_SECTION_NAME}」區段 comment，無法比對"
+    if not stream:
+        return "[警訊 B][主警訊] 無觀測 comment，無需比對"
+
+    return "\n".join(
+        _check_single_conclusion(entry["name"], entry["comment"], stream, stale_days)
+        for entry in conclusions
+    )
 
 
 def build_check_output(body: str, comments: list, comment_threshold: int, stale_days: int) -> str:

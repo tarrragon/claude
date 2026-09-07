@@ -3,6 +3,8 @@
 > 本文件包含 ticket-lifecycle.md 的格式規範、訊息模板、Hook 技術細節。
 > 核心決策規則請見：@.claude/pm-rules/ticket-lifecycle.md
 
+本檔章節：〈任務鏈後續步驟建議〉〈任務鏈 ID 格式〉〈Ticket 建立格式範本〉〈驗收條件 4V 格式要求〉〈Ticket 有效性驗證〉〈驗收前置條件檢查流程〉〈acceptance-gate-hook 技術細節〉〈驗收提示訊息模板〉〈P0 緊急任務處理〉〈簡化驗收檢查清單〉〈與其他流程的整合〉〈變更日誌〉。
+
 ---
 
 ## 任務鏈後續步驟建議

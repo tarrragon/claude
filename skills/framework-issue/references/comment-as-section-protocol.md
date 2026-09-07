@@ -24,12 +24,12 @@ framework issue 的一般協作寫法。適用於「問題的分析與方案 con
 | `update` | 以 comment id 精準編輯指定區段內容，不影響同 issue 其他 comment | 該區段的 owner |
 | `transfer-owner` | PATCH 指定區段 comment 首行標記的 owner 欄，內容不變 | 移交雙方協商後，任一方執行 |
 | `observe` | 附加觀測 comment（實測、反證、疑慮），不需 owner、不需協商 | 任何 session，隨時 |
-| `show` | 以 body 的區段索引為起點輸出，區分「當前結論區段」與「觀測流」 | 任何 session |
+| `show` | 以 body 的區段索引為起點輸出，區分「當前結論區段」與「觀測流」；每則區段列附 owner（從首行標記回推） | 任何 session |
 | `check` | 輸出三項警訊（見下）：當前結論時效、comment 數閾值、索引一致性 | 任何 session |
 
 **`init` 兩階段順序**：comment id 在區段建立後才存在，索引無法在建立時一併寫入，故 `init` 必為「查重 → 建區段 comment → 取得 id → 回填一次 body 索引表」。body 其後不再由工具改寫，`update` 只動區段 comment。區段 comment 全數建立成功即把 `(issue number, owner, updated_at)` 落地到本地擁有登記檔 `.claude/state/framework-issue-owned.json`（per-worktree、不入版控），不等索引回填；回填失敗時登記仍成立，供 SessionStart 檢查省去搜尋往返。
 
-**`add` 補上「`init` 只能跑一次」的缺口**：後續 session 要在同一 issue 新增區段時改用 `add`，流程為「POST 單一區段 comment → 讀 body → 合併既有索引列與新列 → PATCH 一次」，既有列的 comment id／連結不變；成功後同樣落地擁有登記檔。`init`／`add`／`transfer-owner` 三者共用同一 owner 格式驗證（見下方〈owner 識別格式〉），不合法一律 exit 3 並印格式說明。`add` 與 `init` 共用同一索引偵測機制（`<!-- section-index -->` 標記），body 已有手寫索引表（無此標記）時 `add` 同樣會多出第二張表，而非併入手寫表——此為既有 `init` 限制的延伸，非本次新增缺陷。
+**`add` 補上「`init` 只能跑一次」的缺口**：後續 session 要在同一 issue 新增區段時改用 `add`，流程為「POST 單一區段 comment → 讀 body → 合併既有索引列與新列 → PATCH 一次」，既有列的 comment id／連結不變；成功後同樣落地擁有登記檔。`init`／`add`／`transfer-owner` 三者共用同一 owner 格式驗證（見下方〈owner 識別格式〉），不合法一律 exit 3 並印格式說明。`add` 與 `init` 共用同一索引偵測機制（`<!-- section-index -->` 標記），body 已有手寫索引表（無此標記）時 `add` 同樣會多出第二張表，而非併入手寫表——此為既有 `init` 限制的延伸，非本次新增缺陷。`add` 成功時比照 `transfer-owner` 逐字印出結果（`區段「<名稱>」已建立 @ <issue-ref>，owner=<值>`），操作者不需另開 comment 即可確認建立結果。
 
 ## CLI 語法
 
@@ -87,7 +87,7 @@ python3 .claude/skills/framework-issue/scripts/section_comment.py check <issue-r
 （觀測內容）
 ```
 
-兩種標記字首不同（`section:`／`observation:`），區段抽取正則只命中前者。`show` 依此區分：有 `section:` 標記者列入區段，其餘（含 `observation:` 標記與手寫的一般 comment）列入觀測流，摘要取自標記。
+兩種標記字首不同（`section:`／`observation:`），區段抽取正則只命中前者。`show` 依此區分：有 `section:` 標記者列入區段，其餘（含 `observation:` 標記與手寫的一般 comment）列入觀測流，摘要取自標記。每則區段列輸出格式為 `- <名稱> owner=<值> updated_at=<值>`，owner 從該 comment 首行標記回推——`transfer-owner` 是唯一會改 owner 的操作，若 `show` 不印 owner，驗證移交結果需另外開 comment 核對，驗證手段不在同一套 CLI 內。
 
 body 的區段索引表格式：
 
@@ -102,7 +102,7 @@ body 的區段索引表格式：
 觀測 comment 不列入索引。
 ```
 
-**owner 識別格式**：`<專案目錄 kebab-case>-<session 序號>`，如 `flutter-balance-77`。SessionStart 的擁有 issue 檢查在登記檔缺失時以專案目錄名推導前綴粗篩，`flutter_balance-pm` 這類形態會被漏檢。`init`／`add`／`transfer-owner` 三者在 CLI 層即以 `^[a-z0-9]+(-[a-z0-9]+)*-[0-9]+$` 驗證此格式，不合法（如代理人名稱 `framework-issue-curator`、含底線的 `flutter_balance-pm`）一律 exit 3。
+**owner 識別格式**：`<專案目錄 kebab-case>-<session 序號>`，如 `flutter-balance-77`。值取 `ListAgents` 輸出首行「This session is <name>」的名稱，即其他 session 定址本 session 用的字串；不自行編號、不用代理人名。序號段記錄的是「哪一次 session 寫的」，不是「現在該找誰」：session 結束後該名稱不再可定址，擁有關係實質屬於專案（前綴段），有事以 `observe` 留在 issue 上，不以訊息找 owner。SessionStart 的擁有 issue 檢查在登記檔缺失時以專案目錄名推導前綴粗篩，`flutter_balance-pm` 這類形態會被漏檢。`init`／`add`／`transfer-owner` 三者在 CLI 層即以 `^[a-z0-9]+(-[a-z0-9]+)*-[0-9]+$` 驗證此格式，不合法（如代理人名稱 `framework-issue-curator`、含底線的 `flutter_balance-pm`）一律 exit 3。
 
 ## init 前查重：三種關係處置
 
@@ -118,11 +118,13 @@ body 的區段索引表格式：
 
 **實作細節：多詞關鍵字組採 token 聯集**。`gh search issues` 對多詞查詢的 AND 語意要求詞彙落在同一欄位實例內（同一則 comment 或同一 body），詞彙分屬不同 comment 時單一查詢會漏判。CLI 把含空白的關鍵字組拆為單詞分別查詢後於本地聯集，代價是命中清單雜訊增加，換取避免漏判。查詢失敗略過的 token 數固定重述於報告末行。
 
+**命中詞與命中位置**：每筆命中另標示「命中詞」（哪些 token 命中此 issue）與「命中位置」（title／body／comments 任一子集，title／body 為本地子字串比對，comments 為對該 issue 全部 comment 本地比對），並依命中 token 數遞減排序——命中多個 token 的 issue 較可能是真實重複，優先排在報告前段，協助從大量雜訊命中中快速排除只命中單一 token 者。此為近似判定，非精確重現 GitHub 全文檢索的分詞語意。
+
 ## check 的三項警訊
 
 | 警訊 | 判準 | 定位 |
 |------|------|------|
-| 當前結論時效（主警訊） | 「當前結論」區段的 `updated_at` 落後於最新觀測 comment 的 `created_at` 超過設定期間 | 資產與負債的分界在此，不在 open/close 狀態。輸出附落後期間內新增的觀測連結，這是 owner 得知有新觀測的唯一機械管道（GitHub 通知是帳號層，session 不繼承未讀狀態） |
+| 當前結論時效（主警訊） | 名稱以「當前結論」開頭的**全部**區段（含 `add` 附加的後綴區段，如「當前結論（unipos：規則 8）」），各自的 `updated_at` 落後於最新觀測 comment 的 `created_at` 超過設定期間 | 資產與負債的分界在此，不在 open/close 狀態。逐則輸出並標明 owner，附落後期間內新增的觀測連結，這是 owner 得知有新觀測的唯一機械管道（GitHub 通知是帳號層，session 不繼承未讀狀態）。多 owner 定位改採前綴比對後，第二 owner 的後綴區段不再缺此涵蓋 |
 | comment 數閾值（輔助） | 單張 issue 的 comment 總數超過設定閾值 | 與主警訊合看，comment 數本身不代表失效 |
 | 索引一致性 | body 區段索引列出的 comment id，與實際存在的區段 comment 不一致 | 索引在區段 comment 增刪後不會自動跟上 |
 
@@ -142,5 +144,4 @@ fix-matrix 模型的 `close` 另有版本號前置檢查，屬不同機制層次
 
 | 限制 | 影響 | 現行處置 |
 |------|------|---------|
-| `init` 對無協定標記的舊 issue 不補 `fw-issue-schema` 標記 | 讀者無法從 body 得知該 issue 已採本協定 | 建立者於 sections 之外，以 `gh issue edit` 手動在 body 首行補標記（僅此一次） |
 | 查重關鍵字集合會過期 | 失效無明確事件觸發，訊號弱於索引過期 | 不為它加 `check`；查重出現誤判時以此為第一個查證方向 |

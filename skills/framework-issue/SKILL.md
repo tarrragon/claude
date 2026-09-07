@@ -66,7 +66,7 @@ exit code：`0` 成功、`3` 降級（gh 未安裝／未登入／Issues 停用�
 2. **查重**：`dedup` 單詞 token；主題已有 open issue 一律附加，不新開。
 3. **改寫**：ticket 是時序累積（後段修正前段），區段是狀態呈現（只含現在成立的）。逐段問「這是現在的結論，還是通往結論的過程？」，被推翻的中間版本刪除、只留一句撤回記錄。
 4. **建段**：「當前結論」（讀者入口）必有；「問題與方案」「待辦與來源」有內容才建，不寫空殼。
-5. **收票**：ANA／DOC 與未被執行中工作依賴的 IMP 一律 close，知識住址寫進 reason-note；被 in_progress 票 `blockedBy` 依賴的 IMP 保留 pending。命令、範圍規則與 reason-note 禁詞見 `references/ticket-intake.md` 步驟五。
+5. **收票**：ANA／DOC／IMP 一律 close，知識住址寫進 reason-note；依賴範圍票的外部票以 `set-why` 補 issue ref。命令、範圍規則與 reason-note 禁詞見 `references/ticket-intake.md` 步驟五。
 
 ## Owner 與派發
 

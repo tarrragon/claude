@@ -2,6 +2,8 @@
 
 建立 Atomic Ticket，遵循 5W1H 引導式建立。
 
+本檔章節：〈基本用法〉〈版本歸屬引導〉〈主題歸屬（自動推導）〉〈多值參數格式〉〈類型說明〉〈決策樹路由參數〉〈重複偵測（兩層防護）〉〈--source-ticket 參數（衍生關係）〉。
+
 ## 基本用法
 
 ```bash
@@ -47,6 +49,43 @@
 **重要**：建立根任務時，必須提供 `--decision-tree-entry`、`--decision-tree-decision`、`--decision-tree-rationale` 三個參數。只在以下情況可省略：
 - 建立子任務（使用 `--parent` 參數）
 - Ticket 類型為 DOC（`--type DOC`）
+
+## 版本歸屬引導
+
+`create` 時根據 `--type` 和 `--action` 自動建議目標版本。新功能（IMP + 實作/新增/建立/開發）→ 大版本（0.x+1.0）；修復/改善/分析/文件 → 小版本（最新已完成版本 +1 patch）。未指定 `--version` 時自動套用建議；指定但與建議不符時輸出 WARNING（不阻擋）。
+
+## 主題歸屬（自動推導）
+
+未指定 `--topic` / `--new-topic` 時，`create` 依三條判準自動推導主題，命中即自動指派並印出依據，建票者可否決後改派：
+
+| 判準 | 條件 | 成本 |
+|------|------|------|
+| S1 上游繼承 | `--source-ticket` 或 `--parent` 的上游已有主題 | 約 32 ms |
+| S2 檔案叢集 | `--where` 路徑與某主題既有涵蓋路徑交集達 3 段特異性 | 約 350-490 ms（僅 S1 未命中時執行） |
+| S3 ANA 標記 | `--type ANA` 且 S1/S2 皆未命中 | 僅輸出提示，不阻擋 |
+
+三判準皆未命中時印 WARNING 但**不改 rc**（過渡期 warn-only）：以 exit code 表達強制力會讓代理人誤判建票失敗而重試。要免除警告有兩條路——指定主題，或以 `--no-topic` 明示不指派（該旗標與 `--topic` / `--new-topic` 互斥，同給時於任何持久化前 exit 1）。
+
+顯式 `--topic` / `--new-topic` 一律優先，推導只在兩者皆未給時啟動。S2 設 3 段特異性門檻是因為 `docs/` 這類單段路徑與該目錄下任何路徑都相交，不設門檻會使擁有淺層路徑的主題成為所有新票的推導結果。改派用 `ticket track topic-backfill-assign --reassign`。
+
+## 多值參數格式
+
+```bash
+#   --acceptance：多次指定或用分隔符（vertical bar）分隔
+ticket create ... --acceptance "條件A" --acceptance "條件B"
+ticket create ... --acceptance "條件A|條件B|條件C"
+#   注意：分隔符是 --acceptance 的多條拆分字元。
+#   若 acceptance 內文本身需含該字元（如描述 shell pipe「-q | tail」），
+#   用反斜線跳脫保留字面，避免被靜默拆條：
+ticket create ... --acceptance "重現實證 -q \| tail 導致 0 行"
+#   未跳脫時，單一 --acceptance 值被拆成多條會印出 [WARNING] 供確認。
+
+#   --where：逗號分隔
+ticket create ... --where "file1.py,file2.py"
+
+#   --blocked-by / --related-to：逗號分隔
+ticket create ... --blocked-by "<id>.1,<id>.2"
+```
 
 ## 類型說明
 
@@ -137,6 +176,17 @@ ticket create --wave 1 --action "實作" --target "XXX" --allow-duplicate \
 ## --source-ticket 參數（衍生關係）
 
 `--source-ticket <SOURCE-ID>` 用於建立「衍生 Ticket」關係（spawned_tickets），典型場景為 ANA 衍生 IMP / ADJ、執行中發現的獨立技術債。
+
+### --discovered-during vs --source-ticket（發現衍生 vs 規劃衍生）
+
+兩者皆記錄衍生血緣，但語意不同、彼此互斥（同給時於任何持久化前 exit 1）：
+
+| 旗標 | 適用情境 | 上游主題的意義 | 對 S1 判準的影響 |
+|------|---------|---------------|-----------------|
+| `--source-ticket` | 規劃衍生：ANA 拆 IMP、父票拆子票，上游本就決定了新票主題 | 主題必然相同 | S1 正常繼承 |
+| `--discovered-during` | 發現衍生：執行中撞到跨主題問題，主題取決於撞到什麼，與上游無關 | 只反映「當時剛好在改哪個檔案」 | S1 短路不觸發 |
+
+新票的 `discovered_during` frontmatter 欄位記錄血緣供追溯，但不驅動任何主題指派——S2 檔案叢集判準不受影響，仍依新票自身 `--where` 正常運作（可能命中，也可能未命中）。
 
 ### 兩個副作用（顯性契約）
 

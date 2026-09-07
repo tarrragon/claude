@@ -2,6 +2,8 @@
 
 追蹤和更新 Ticket 狀態。
 
+本檔章節：〈READ 操作〉〈track runqueue 子命令（Scheduler）〉〈UPDATE 操作〉〈UPDATE 操作補充：commit 副作用與欄位語意〉〈Ticket 狀態與程式碼提交的 root 分離（worktree 場景）〉〈驗收條件操作詳解〉〈CLI 可修改欄位 vs 手動編輯欄位〉〈track deps / depth 子命令〉〈track parallel-check 子命令〉〈track board 子命令〉〈track audit 子命令〉〈統一錯誤訊息格式（W17-008.5.2）〉〈CLI 錯誤分類（W17-008.5.4）〉〈track stale-list 子命令（W17-200）〉〈track stuck-anas 子命令（W17-008.15 方案 D 第 1 項）〉〈track dashboard 子命令（W10-114 / W10-113 M1+M4'）〉〈track list 子命令（W10-115 / W10-113 M3）〉〈track dispatch-validate 子命令（W17-003）〉〈track dispatch-readiness 子命令（W17-053）〉〈track sessions 子命令（multi-PM 協調層 Phase 1，issue tarrragon/claude#77）〉〈track reclaim 子命令（multi-PM 協調層 Phase 3，issue tarrragon/claude#77）〉〈track activity 子命令（multi-PM 協調層 Phase 2，L1 新鮮度）〉〈track conflicts 子命令（multi-PM 協調層 Phase 2，where.files 交集）〉〈track onboard 子命令（multi-PM 協調層 Phase 2，入場四節彙整）〉〈track hook-liveness 子命令〉〈track register-artifact / resolve-artifact / list-artifacts 子命令〉〈空狀態字面規範（track 系列命令通用）〉。
+
 ## READ 操作
 
 ```bash
@@ -56,6 +58,12 @@
 
 # 5W1H 單欄位查詢
 /ticket track who|what|when|where|why|how <id>
+
+# 衍生關係查詢（spawned_tickets + source_ticket；詳見「track deps / depth 子命令」）
+/ticket track deps <id>
+
+# 嵌套深度查詢（沿 parent_id 鏈；詳見「track deps / depth 子命令」）
+/ticket track depth <id>
 ```
 
 ## track runqueue 子命令（Scheduler）
@@ -94,6 +102,8 @@
 **`[RECLAIMABLE]` 標記（multi-PM 協調層 Phase 3）**：list 視圖逐票渲染時，若該票在 `pm-registry.json` 中已知無 FRESH session 佐證持有（`lease.is_lease_reclaimable` 輕量判準：持有者 heartbeat 逾 TTL，**或** registry 已載入但未追蹤此票 lease——含 graceful SessionEnd 釋放後 entry 已刪除的情形），於票號前加 `[RECLAIMABLE]`，可與 `[STALE]`（stale in_progress 判準，來源不同——見上方 Exit Status tag 段落與 stale-list 章節）並列疊加，兩者可各自獨立出現。`registry` 讀取本身降級（缺檔/損毀/schema 不合）時視同「無法判定」，不標記 `[RECLAIMABLE]`（與 registry 模組完全不可用同等處置，防止把 registry 讀取失敗誤標為可接手）。`[RECLAIMABLE]` 僅為候選提示，實際能否釋放需 `ticket track reclaim` 的 ghost 鑑識三查，詳見「track reclaim 子命令」章節「與 sessions/runqueue 顯示層判定的差異」。
 
 **新 session 自動引導**：`session-start-scheduler-hint-hook.py` 在 SessionStart 時自動呼叫 `runqueue --context=resume --top 3`（若無 handoff 則 fallback `--format=list --top 1`），結果顯示為 hook additionalContext。
+
+**`blockedBy=` 語意提醒（2026-08-24）**：輸出中的 `blockedBy=[...]` 與 ticket frontmatter 的 `blockedBy` 欄位同名，但值不同——輸出只列**尚未解除**的 blocker，blocker 一旦 completed/closed 就從清單移除；frontmatter 原值則保留宣告時的完整清單，不隨 blocker 狀態變動而改寫（見 `track_runqueue.py` 的 `_unresolved_blockers()`）。此為刻意設計：scheduler 只回答「此票現在能否接手」，混入已解除的 blocker 會誤導可執行性判斷。**做血緣或狀態對帳時（例如查證某票是否曾被阻擋、比對兩份資料是否一致）必須以 frontmatter 的 `blockedBy` 原值為準**——直接拿 `blockedBy=[]` 當作「此票從未被阻擋」會誤判血緣關係，或誤以為其中一份資料是壞資料。
 
 ### 排序規則（priority + spawned 加權）
 
@@ -323,6 +333,93 @@ ticket track runqueue --wave 3 --groups
 # 重複 ID 會自動去重並列入「已存在略過」
 ```
 
+## UPDATE 操作補充：commit 副作用與欄位語意
+
+### append-log 副作用：auto-commit
+
+`append-log` 寫入 body 後會 **auto-commit 該 ticket md**（精確路徑，commit message `chore(<id>): append-log <section>`）。**Why**：body 即時進 commit 歷史可使 `git checkout -- <file>` / `git reset --hard` / `git stash` 三種還原全失效，根除「未 commit body 被 git 還原覆蓋回 placeholder」遺失問題。**Consequence**：每次 `append-log` 會新增一個 `chore` commit（碎 commit 為設計取捨，對 ticket md chore 類可接受）；body 無變更時 graceful skip 不產生空 commit。**Action**：非 git repo / index.lock 競爭 / commit 失敗時 `append-log` 仍 exit 0 + stderr 警告，body 保留 working tree 可手動 commit。不使用 `--no-verify`（維持 pre-commit hook 把關；ticket md 非 JS，lint-staged 無匹配）。
+
+### complete 副作用：ticket metadata 與程式碼變更恆分兩個 commit
+
+`complete` 在父 ticket 含未完成 children（非 terminal：pending / in_progress / blocked）時會以 exit 1 阻擋。提供 `--force` 旁路強制完成，會在 stderr 列出未完成 children 作為警告，cascade 解鎖機制仍會執行。建議優先完成 children 後再 complete 父 ticket。
+
+`complete` 的自動提交於呼叫當下以隔離索引提交 ticket metadata（本票 md + 主 worklog），而非留待 PM 事後核對共用 index 手動 commit。**Why**：提交時機從「人工事後裸 commit」改為「CLI 呼叫當下自動提交」，是為了根除過期 index 快照被誤 commit 進 HEAD 的風險；本框架既有慣例本就是「代理人先 commit 程式碼、`complete` 再 commit metadata」兩步驟，此變更只是讓既有語意變得可觀察，非新增缺陷。**Consequence**：ticket metadata 與對應的程式碼變更**必然分屬兩個 commit**——單靠 `git log --grep <票號>` 只會命中 metadata commit（`chore(<id>): complete` / `chore(<id>): append-log ...`），不含實作變更；依「一票一 commit」假設做追溯的下游流程（含 sync 本框架的其他 consumer 專案）須知情此語意，否則會誤判追溯不完整或漏算變更範圍。**Action**：追溯某票完整變更時，搜尋範圍須同時涵蓋 metadata commit 與程式碼 commit（可用票號關鍵字掃兩者的 commit message，或查詢 ticket body 的 Test Results / Completion Info 章節記錄的程式碼 commit SHA）。
+
+### `--no-stage` 的覆蓋範圍
+
+`--no-stage` 會完整跳過本次 auto-commit（metadata 與 worklog 兩者皆跳過），ticket md 停留在 working tree 的未提交、未 staged 狀態，不產生任何 metadata commit。**Action**：想讓 ticket metadata 與程式碼變更合併成單一 commit 時，`--no-stage` 已足夠覆蓋——先完成程式碼變更，`complete <id> --no-stage` 後 ticket md 仍是未提交的工作區變更，可與程式碼檔案一併 `git add` 後裸 commit（無 pathspec / `--only` / `-o` / `-a`，見 `.claude/rules/core/bash-tool-usage-rules.md` 規則七）。**Consequence**：選擇 `--no-stage` 等於放棄自動提交機制帶來的「不留未提交 metadata」保護，working tree 中的 ticket md 變更在手動 commit 之前仍可能被 `git checkout --`／`git reset --hard`／`git stash` 覆蓋回舊版本（與「Spawn Requests」章節「繞道手改會失去 auto-commit 保護」同類風險），故僅建議在確定會立即手動 commit 時使用。
+
+### `title` 與 `what` 是兩個獨立欄位，`set-what` 刻意不同步 `title`
+
+`title` 是清單顯示用的短標籤（dashboard / runqueue 顯示的是它），`what` 是完整任務敘述（可含檔案清單、括號補充）。2026-08-18 量測 741 張票，124 張（17%）兩者刻意不同。票的範圍事後縮小時（如依上游評估結論移除 acceptance），**兩個欄位都要更新**——只改 `what` 會讓清單上的 `title` 繼續以舊範圍誤導接手者。更新用 `set-title <id> <value>`。
+
+### 其餘 frontmatter 欄位若無對應命令，不要手動編輯
+
+`ticket-file-access-guard-hook` 會以 exit 2 阻擋直接編輯 frontmatter，繞道不可行。找不到對應命令代表該欄位缺少合法更新途徑（PC-BAL-047），應建 ticket 回報補上命令。
+
+### closed 票欄位修正 — `set-closed-by`
+
+`close` 對已 closed 票拒絕覆寫既有值；`set-closed-by <id> --value <ticket-id>` 補上 `closed_by` 填錯後的合法修正路徑，取代直接 Edit ticket md（該路徑被 `ticket-file-access-guard-hook` 阻擋）。
+
+```bash
+ticket track set-closed-by <id> --value <ticket-id>
+```
+
+僅適用 `status=closed` 的票；`--value` 須為合法且存在的 Ticket ID，格式錯誤或指向不存在的 Ticket 皆拒絕。修正動作輸出舊值與新值並走 auto-commit。
+
+### 身份申報（`--as`）判定邏輯
+
+`complete` / `check-acceptance` / `set-acceptance` 三個寫入命令支援選用 `--as <agent-name>`，與 ticket `who.current` 精確對照。**Why**：防 generic agent 收 Ticket ID 即越權收尾（PC-V1-002 前提一，探針實證）。**判定邏輯**：`--as` 值 ≠ `who.current`（含空值）→ deny（exit 1，純前置檢查不寫入狀態）；`--as rosemary-project-manager` 一律放行（PM bookkeeping 豁免，如代收尾 / stale cleanup）；未提供 `--as` 時 `complete`（`finish` 別名同列）已轉強制 deny，`check-acceptance` / `set-acceptance` 仍僅 stderr 警告不阻擋（過渡期 warn-only，見 `identity_guard.py` 的 `ENFORCED_COMMANDS`）。**Action**：subagent 收尾時帶自身身份，例 `ticket track complete <id> --as thyme-python-developer`；其餘 warn-only 命令轉強制的結束條件與偵測承擔者已明訂（7 日滾動 warn 率 < 5% 且樣本數 >= 30，由 PM 於 `version-release` 發布前檢查階段執行 `identity_guard_adoption.py` 判定），非待評估的無 trigger 狀態。
+
+### 補標記 — `add-exempt-marker`
+
+自由撰寫章節（Solution / Test Results / NeedsContext 等）以 `append-log` 寫入後即無法修改——`append-log` 僅能追加、CLI 無編輯指令、該區段不在 `ticket-file-access-guard-hook` 白名單內故 Edit 工具被拒，三層疊加使 `PC-093-exempt` 這類行級標記完全無法事後補上。`add-exempt-marker` 補這條路，且**僅追加獨立標記行、不修改原文字**：
+
+```bash
+ticket track add-exempt-marker <id> --section "Solution" --match "命中行的文字子字串" \
+  --category ticket-tracked --reason "W<wave>-<seq> hook 訊息改善"
+```
+
+`--match` 是文字比對定位（非行號——行號隨後續編輯漂移）：命中恰好一行才寫入；0 命中或多重命中一律拒絕並回報候選行，要求提供更精確的 `--match` 收窄。marker 固定插入為命中行的**前一行**（獨立新行），與 `phase4-decision-enforcement-hook` 的豁免距離規則（同行或前 1 行生效）一致。
+
+`--category` 限定 `tdd-transition` / `baseline-gated` / `ticket-tracked` / `user-override` / `rule-quote` / `history`，`--reason` 格式驗證與該 hook 同規則：`baseline-gated` 需含數字；`ticket-tracked` / `history` 需含 `W{wave}-{seq}` ticket ID；`rule-quote` 需含 `.claude/rules/` 或 `.claude/pm-rules/` 路徑。
+
+**防濫用**：本命令不能憑空產生新內容、只能指向既有行；marker 是否真正生效仍由 `phase4-decision-enforcement-hook` 於 phase4 轉換 / complete 時重新掃描判定，本命令不繞過該把關層。Status precondition 與 auto-commit 副作用與 `append-log` 同（見上「append-log 副作用」）。
+
+### td-status — 校準 TD 清單（PC-094）
+
+掃描指定 ticket 的 body 與 git commit 訊息，將 TD 編號分類為「已處理 / 無需處理 / 仍待處理」三狀態，用於 Phase 3a/3b/4 結束時即時校準 TD 清單，防止 Phase 4 評估時誤判已完成項（PC-094 根因）。
+
+```bash
+ticket track td-status <id>
+ticket track td-status <id> --version 0.18.0
+```
+
+輸出分三組：`[已處理]` / `[無需處理]` / `[仍待處理]`，pending TD 會附 PC-094 校準提示。呼叫時機：Phase 3a 策略文件完成後、Phase 3b commit 前、Phase 4 派發前。完整規則見 `.claude/pm-rules/tech-debt.md`「TD 清單即時校準（td-status）」章節。
+
+### 六欄位語意 SSOT
+
+`parent_id` / `children` / `source_ticket` / `spawned_tickets` / `blockedBy` / `relatedTo` 的權威定義、阻擋語意、用戶情境對照表、決策樹見 `references/field-semantics.md`。其他規則 / 方法論 / error-pattern 涉及這些欄位時應引用該檔，不重複定義。
+
+### 派發前寫 dispatch-plan
+
+當 ticket 是 group、含 children、含 spawned_tickets，或同輪會派 2+ agents 時，先在 Ticket Problem Analysis / Solution 寫 dispatch-plan。欄位使用 `.claude/references/agent-dispatch-template.md`：`ticket` / `agent` / `files` / `deps` / `context source` / `commit policy` / `run mode`。dispatch-plan 是 orchestration description，不是 batch dispatch CLI。
+
+## Ticket 狀態與程式碼提交的 root 分離（worktree 場景）
+
+在 linked worktree（`/worktree create` 建立）內執行 `ticket track` 系列命令時，ticket 狀態（md 讀寫與其 auto-commit）與程式碼提交走**兩條不同的 root 解析路徑**，行為刻意相反：
+
+| 操作類型 | 對應函式 | linked worktree 內的 root 解析 |
+|---------|---------|-------------------------------|
+| ticket 狀態（`claim` / `append-log` / `check-acceptance` / `set-*` 等讀寫 ticket md） | `paths.py:get_ticket_state_root()` | **反向回推主倉庫根目錄**，統一寫入主倉庫，不進 worktree 分支 |
+| 程式碼提交（`ticket track commit`） | `project_root.py:resolve_project_cwd()` | 維持 worktree 感知，commit 進該 worktree 對應分支 |
+
+**Why**：若 ticket 狀態也採 worktree 感知（跟隨呼叫端 cwd），多個隔離 agent 會各自把票面寫進自己的 worktree 分支——PM 在主倉庫看不到最新狀態（觀察性失效），且 body 內容不會隨 worktree 分支合併帶回主倉庫。受控實驗實測：並行派發的 worktree agent 在此設計下全數出現票面分裂。統一寫入主倉庫消除分裂，使 ticket 狀態恆有單一事實來源。
+
+**Consequence（誤判為缺陷時）**：worktree 內執行 `ticket track full <id>` 讀到的內容是主倉庫版本，不是該 worktree 分支上的版本；這是設計行為，不是 CLI 的 cwd 解析漏洞。誤判並「修復」（例如讓 ticket 狀態也改用 worktree 感知）會反轉此設計，重新引入票面分裂風險——曾有 IMP ticket 依此誤判方向規劃修復，經查證後改為本節文件澄清。
+
+**Action**：worktree 內需要確認「某次 ticket 狀態寫入是否已進入主倉庫」時，直接在主倉庫 cwd（或用 `git -C <主倉庫路徑>`）查詢，不依賴該 worktree working tree 內的 ticket md 檔案內容（後者不會被 ticket 狀態寫入更新）。完整設計理由見 `.claude/skills/ticket/ticket_system/lib/paths.py` 的 `get_ticket_state_root()` docstring；worktree 隔離邊界的完整脈絡（含 daemon-rooted 寫入工具洩漏等其他項目）見 `.claude/skills/worktree/SKILL.md`「Base ref 與隔離邊界」節。
+
 ## 驗收條件操作詳解
 
 ### 語法組合完整表
@@ -432,7 +529,9 @@ ticket track runqueue --wave 3 --groups
 | frontmatter 驗證            | `validate <id>`                                 | 檢查 status/completed_at/acceptance/who 4 欄位合規性 |
 | blockedBy                   | `set-blocked-by <id> <value> [--add\|--remove]` | 建立時用 `--blocked-by`；之後用 CLI 更新             |
 | relatedTo                   | `set-related-to <id> <value> [--add\|--remove]` | 建立時用 `--related-to`；之後用 CLI 更新             |
-| priority                    | 無 CLI 命令                                     | 手動編輯 frontmatter                                 |
+| title                       | `set-title <id> <value>`                        | 清單顯示用短標籤，與 `what` 刻意分離；範圍變更時兩者需個別更新（見「UPDATE 操作補充」章節） |
+| priority                    | `set-priority <id> <value>`                     | value 限 `PRIORITY_LEVELS`（P0-P3）                  |
+| closed_by                   | `set-closed-by <id> --value <ticket-id>`        | 僅 `status=closed` 適用，修正 close 時填錯的值        |
 | dispatch_reason             | 無 CLI 命令                                     | 手動編輯 frontmatter                                 |
 
 **不存在的操作**（禁止嘗試）：
@@ -440,7 +539,60 @@ ticket track runqueue --wave 3 --groups
 | 錯誤呼叫       | 正確做法                              |
 | -------------- | ------------------------------------- |
 | `set-status`   | 使用 `claim` / `complete` / `release` |
-| `set-priority` | 手動編輯 frontmatter `priority` 欄位  |
+
+---
+
+## track deps / depth 子命令
+
+### deps — 顯示衍生關係
+
+```bash
+ticket track deps <ticket-id>
+```
+
+顯示衍生關係（`spawned_tickets` + `source_ticket`），與 `tree`/`chain` 純血緣語意（`parent_id`/`children`/`chain`）分離，對齊 Jira/Linear/GitHub 業界慣例。支援遞迴展開與循環引用防護（標記 `CYCLE DETECTED`）。
+
+### depth — 計算嵌套深度
+
+```bash
+ticket track depth <ticket-id>
+```
+
+沿 `parent_id` 鏈計算嵌套深度（**非** ID 字串數點，避免完整版本前綴如 `<version>-W<wave>-<seq>.<sub>` 本身即含 3 個點，被誤算為 depth 4 的 fatal bug）。輸出 `depth` / `max_depth`（= `MAX_TICKET_DEPTH=3`）/ `can_descend`（`depth < MAX_TICKET_DEPTH`）。深度定義：根任務（`parent_id: null`）= depth 1，每往下一層 +1。用途：agent 自檢層級自覺（協議 v2 D3），無需上層 prompt 傳遞層級資訊。
+
+`create --parent <id>` 時，若新子任務深度 >= `MAX_TICKET_DEPTH`（3）會 emit warning（**不硬擋**，留旁路）。此為嵌套派發深度上限的 CLI 強制層，使協議深度上限不只是文件建議。
+
+---
+
+## track parallel-check 子命令
+
+偵測目標 ticket 的 children（或同 parent 兄弟）pending 集合中，依 `where.files` 路徑前綴判斷哪些可平行派發、哪些互相衝突。
+
+### 用法
+
+```bash
+ticket track parallel-check <id>   # 分析目標票的 children pending 集合
+```
+
+### 輸出
+
+三章節：可平行派發 / 衝突任務 / 單獨派發。對「可平行集合中 >= 3 個觸及 `.claude/` 的 ticket」發出 PC-137 警告，輔助 PM 套用 `.claude/pm-rules/askuserquestion-rules.md` 規則 7。
+
+### 判定規則
+
+路徑比較使用 `pathlib.PurePosixPath`（禁 string startswith）。共同祖先深度 >= 3 段視為弱衝突（如 `.claude/skills/ticket/` 級）。
+
+### Exit code
+
+| 值 | 說明 |
+|----|------|
+| 0 | 分析成功 |
+| 1 | ticket 不存在或無 pending children |
+| 2 | ID 格式或 IO 錯誤 |
+
+### 與 track conflicts 的差異
+
+`parallel-check` 的輸入集合限定「目標票的 children 或同 parent 兄弟」，服務單一父票拆分後的子票批次派發決策；`track conflicts`（見「track conflicts 子命令」章節）的輸入集合是「任意 pending/in_progress 票」，服務更廣泛的跨票衝突偵測。兩者各自獨立判定路徑交集，不共用同一份候選集合來源。
 
 ---
 
@@ -1409,6 +1561,20 @@ ticket track hook-liveness .claude/hooks/<hook 檔名>.py --format json > /tmp/a
 比對 `before.total` 與 `after.total` 是否增加（或 `by_session` 中本 session
 的計數是否增加）。Solution / Test Results 記錄時附上解析到的名稱（`resolution.name`）
 與前後筆數差值，不記錄未經此命令驗證的口頭斷言。
+
+---
+
+## track register-artifact / resolve-artifact / list-artifacts 子命令
+
+跨 session 實驗器材（sentinel/探針/對照組樣本，其存在本身即為觀測手段的檔案）的票面登記 CLI 化，取代規範原僅要求「登記三項但格式自由發揮」的手工條款。完整規範見 `.claude/pm-rules/parallel-dispatch.md`「跨 session 實驗器材的自我標示與存活期治理（強制）」。
+
+```bash
+ticket track register-artifact <id> --path <路徑> --purpose <用途> --expiry <存活期> [--type 明示|盲測]
+ticket track list-artifacts <id> [--json]
+ticket track resolve-artifact <id> EXP-N --status removed|kept [--successor <ticket-id>] [--reason <說明>]
+```
+
+`register-artifact` 自動編號（`EXP-N`）寫入 Solution 章節固定子章節，同時輸出可直接複製貼上的首行 header 文字（供落地條件一的檔案端標示）。`list-artifacts` 提供結構化讀回（含 `--json`），供收尾檢查程式化消費，不需人工掃描章節。`resolve-artifact` 標記存活期治理的收尾處置：`--status kept` 強制要求 `--successor`（CLI 層面阻止「未指名接手者」漏處置，非僅文件提醒）。
 
 ---
 

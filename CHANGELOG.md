@@ -1,3 +1,36 @@
+## [2.57.0] - 2026-09-07
+
+### Summary
+feat: show 標示區段 owner，add 成功訊息印出建立結果; feat: init/add 自動補協定標記、dedup 標示命中詞與命中位置; fix: 無名稱 pull 報告對已同步 skill 自動重記過期 sync base (+20 more)
+
+Changes: 2 feat, 3 fix, 13 docs, 5 chore
+
+- feat: show 標示區段 owner，add 成功訊息印出建立結果
+- feat: init/add 自動補協定標記、dedup 標示命中詞與命中位置
+- fix: 無名稱 pull 報告對已同步 skill 自動重記過期 sync base
+- fix: 版本抽取限定 frontmatter 區塊並支援縮排 metadata.version
+- fix: check 警訊 B 改前綴比對涵蓋多 owner 當前結論區段
+- docs: 合併 SKILL.md 三路由節為單一子命令路由表
+- docs: PC-BAL-068 派發期間更新規範，執行者以開場讀入版本收尾且雙方無訊號
+- docs: CAS 提交後清除共用 index 過期 entry；收尾前重讀規範
+- docs: 補齊 ticket skill 7 份 100+ 行 reference 的本檔章節 TOC
+- docs: 更正提交規則——close 不逐命令 auto-commit，範圍票 close 後以隔離索引 CAS 提交，禁裸 commit
+- docs: ticket SKILL.md 參考資料表三欄化並補齊六份缺列
+- docs: ticket-intake 同步 init 自動補標記與 check 前綴比對修正
+- docs: 來源票對照改寫 Test Results，迴避 acceptance gate spawn 檢查誤判（修正票另建）
+- docs: 依三個 curator 實測修正配方——IMP 一律 close（runqueue 視 closed 為解除）、依賴方 set-why 補 issue ref、不手動 commit ticket md、scratchpad 檔名帶票 ID
+- docs: 變體節補第二實例——測試 fixture 與真實輸入形狀不同使死閘門存活
+- docs: 收束配方補 add 到他方 issue 的區段命名規則；owner 序號段壽命邊界
+- docs: 外移 ticket SKILL.md 子命令詳細說明六段增量至 references
+- docs: owner 格式節補值的來源（ListAgents 顯示的本 session 名稱）
+- chore: 撤回 dashboard-first 節外移，還原至 HEAD 版本
+- chore: 整併 ticket SKILL.md 其餘節（系統模型/root分離/執行方式合併/相關文件併入）
+- chore: append-log Exit Status
+- chore: pull component-contract-design 1.5.3 → 1.8.0（發佈庫 15bbfaae3）
+- chore: 回寫 .claude/VERSION -> 某版本
+
+---
+
 ## [2.56.0] - 2026-09-07
 
 ### Summary

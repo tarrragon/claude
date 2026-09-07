@@ -518,10 +518,25 @@ def _extract_version_string(text: str) -> str | None:
     """從 SKILL.md 文字擷取版本字串。
 
     僅供人類於 changelog 對照閱讀，不進入同步決策（見 update_sync_manifest）。
+
+    `version:` 的比對範圍限定在 frontmatter 區塊（首尾 `---` 之間）：本專案
+    多數 SKILL.md 把版本寫在 frontmatter 的 metadata.version（縮排兩格），
+    原本只認行首 `^version:` 的寫法會漏抓這些縮排寫法；若不限定區塊，正文
+    （含本函式自身的說明文字）出現的 `version:` 字樣又會被誤抓，使抽取結果
+    依賴巧合而非結構。`**Version**:` 形式（工作日誌／規則文件慣用）仍在全文
+    搜尋，不受此限——本專案實測沒有 SKILL.md 使用此形式，收窄範圍無實際
+    行為變更，維持全文搜尋以免影響其他消費端可能存在的既有用法。
     """
     m = re.search(r"\*\*Version\*\*:\s*(\S+)", text)
-    if not m:
-        m = re.search(r"^version:\s*(\S+)", text, re.MULTILINE)
+    if m:
+        return m.group(1)
+    if not text.startswith("---"):
+        return None
+    end = text.find("\n---", 3)
+    if end == -1:
+        return None
+    front = text[3:end]
+    m = re.search(r"^\s*version:\s*(\S+)", front, re.MULTILINE)
     return m.group(1) if m else None
 
 
@@ -594,6 +609,33 @@ def _record_sync_base(skill_dir: Path) -> None:
     content_hash = compute_content_hash(skill_dir)
     if content_hash is not None:
         _write_sync_base(skill_dir, content_hash)
+
+
+def _refresh_stale_sync_base(skills_dir: Path, up_to_date_names: Iterable[str]) -> int:
+    """對內容已與遠端一致、但 `.skill-sync-base` 落後的 skill 重記同步基準。
+
+    只接收呼叫端已用內容雜湊確認 local == remote 的名單：這是安全性前提——只有
+    雙邊已確定一致時，「marker 落後」才等於「上次同步後兩邊各自獨立前進到同一份
+    內容」，可放心視為新的同步基準；若雙邊仍分歧就重記，會把尚未真正同步的狀態
+    誤標成已同步，讓下次分歧報告誤判方向。
+
+    僅在 marker 與目前雜湊不同時才寫入：canonical 通道（sync-claude-pull 全樹
+    overlay）與本地直接編輯都會讓內容前進而不觸碰 marker，`skill-sync pull`
+    （無名稱）狀態報告因此需要補上這一步；但報告命令原本是唯讀的，若對每個
+    marker 已經正確的 skill 也重寫一次，會讓每次報告都無謂觸碰檔案 mtime。
+    回傳實際重記的數量，供呼叫端印出可觀測訊息——報告命令從純讀變成偶爾有
+    寫入副作用，這個轉變不能對使用者靜默（觀測性規則 4）。
+    """
+    refreshed = 0
+    for name in up_to_date_names:
+        skill_dir = skills_dir / name
+        current_hash = compute_content_hash(skill_dir)
+        if current_hash is None:
+            continue
+        if _read_sync_base(skill_dir) != current_hash:
+            _write_sync_base(skill_dir, current_hash)
+            refreshed += 1
+    return refreshed
 
 
 def _resolve_diverge_direction(
@@ -1430,6 +1472,13 @@ def cmd_pull_all(args: argparse.Namespace) -> None:
         print(f"Failed to read remote versions.json: {type(e).__name__}: {e}")
         print("Use 'skill-sync pull <name>' to work on a single skill instead.")
         return
+
+    refreshed = _refresh_stale_sync_base(skills_dir, status.up_to_date)
+    if refreshed:
+        print(
+            f"[OK] Refreshed {refreshed} stale '{SKILL_SYNC_BASE_MARKER}' marker(s) "
+            "for already up-to-date skill(s)."
+        )
 
     if not status.local_count:
         print("No local skills found.")

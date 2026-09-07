@@ -19,6 +19,7 @@ from skill_sync.cli import (  # noqa: E402
     _is_portable_declared,
     _read_sync_base,
     _record_sync_base,
+    _refresh_stale_sync_base,
     _report_portability,
     _resolve_diverge_direction,
     _resolve_hook_logs_dir,
@@ -30,6 +31,8 @@ from skill_sync.cli import (  # noqa: E402
     check_portability,
     _classify_sync_status,
     _extract_local_manifest,
+    _extract_single_version,
+    _extract_version_string,
     _has_local_override,
     _should_exclude_file,
     build_parser,
@@ -331,6 +334,25 @@ def _write_skill(base: Path, name: str, version: str, body: str) -> Path:
     return skill_dir
 
 
+def _write_skill_with_frontmatter_version(
+    base: Path, name: str, version: str, body: str
+) -> Path:
+    """建立 SKILL.md，版本寫在 frontmatter 的 metadata.version（縮排兩格）。
+
+    本專案實際 SKILL.md 的主流形式（多數採此寫法），與 `_write_skill` 用的
+    `**Version**:` 形式不同——後者一直讓 `_extract_version_string` 的回歸
+    測試綠燈，卻沒有覆蓋到真正的生產形狀，才讓 frontmatter 版本抽取的迴歸
+    長期未被發現。
+    """
+    skill_dir = base / name
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(
+        f"---\nname: {name}\nmetadata:\n  version: {version}\n---\n\n"
+        f"# {name}\n\n{body}\n"
+    )
+    return skill_dir
+
+
 class _FakeCompletedProcess:
     """替代 subprocess.CompletedProcess，讓 update_sync_manifest 的測試不觸發真實 git/網路操作。"""
 
@@ -628,6 +650,106 @@ def test_record_sync_base_skips_missing_dir(tmp_path):
     # compute_content_hash 回傳 None 時不應嘗試寫入不存在的目錄
     _record_sync_base(tmp_path / "does-not-exist")
     assert not (tmp_path / "does-not-exist").exists()
+
+
+# --- _refresh_stale_sync_base（0.2.1-W3-1271） -------------------------------
+#
+# canonical 通道（sync-claude-pull 全樹 overlay）與本地直接編輯都會讓 skill
+# 內容前進而不觸碰 .skill-sync-base，之後遠端單向前進被 _resolve_diverge_direction
+# 判成 conflict，報告端要求人工比對本可自動判定的情況。本節固化：只在「呼叫端已
+# 確認 local == remote」且 marker 落後時才重記，並且對已正確的 marker 不做無謂寫入。
+
+
+def test_refresh_stale_sync_base_rewrites_marker_when_stale(tmp_path):
+    skill_dir = _write_skill(tmp_path, "demo-skill", "1.0.0", "body")
+    _write_sync_base(skill_dir, "0" * 64)  # 過期 marker，代表上次同步後內容已前進
+
+    refreshed = _refresh_stale_sync_base(tmp_path, ["demo-skill"])
+
+    assert refreshed == 1
+    assert _read_sync_base(skill_dir) == compute_content_hash(skill_dir)
+
+
+def test_refresh_stale_sync_base_skips_when_marker_already_current(tmp_path):
+    """marker 已等於目前雜湊：不重寫，避免報告命令對已正確的 skill 逐次觸碰檔案。"""
+    skill_dir = _write_skill(tmp_path, "demo-skill", "1.0.0", "body")
+    current_hash = compute_content_hash(skill_dir)
+    _write_sync_base(skill_dir, current_hash)
+    marker_path = skill_dir / SKILL_SYNC_BASE_MARKER
+    mtime_before = marker_path.stat().st_mtime_ns
+
+    refreshed = _refresh_stale_sync_base(tmp_path, ["demo-skill"])
+
+    assert refreshed == 0
+    assert marker_path.stat().st_mtime_ns == mtime_before
+
+
+def test_refresh_stale_sync_base_skips_missing_dir(tmp_path):
+    # compute_content_hash 回傳 None（目錄不存在）時略過，不視為錯誤
+    assert _refresh_stale_sync_base(tmp_path, ["does-not-exist"]) == 0
+
+
+def test_cmd_pull_all_refreshes_stale_marker_for_up_to_date_skill(tmp_path, monkeypatch):
+    """驗收 1：marker 過期 + local == remote，跑 `skill-sync pull`（無名稱）後 marker 更新。"""
+    import skill_sync.cli as cli_module
+
+    skill_dir = _write_skill(tmp_path, "demo-skill", "1.0.0", "body")
+    _write_sync_base(skill_dir, "0" * 64)  # 過期 marker（例如 canonical overlay 通道寫入的內容）
+    monkeypatch.setattr(cli_module, "get_skills_dir", lambda: tmp_path)
+    _stub_manifest(
+        monkeypatch, {"demo-skill": {"hash": compute_content_hash(skill_dir), "version": "1.0.0"}}
+    )
+
+    cmd_pull_all(argparse.Namespace())
+
+    assert _read_sync_base(skill_dir) == compute_content_hash(skill_dir)
+
+
+def test_cmd_pull_all_does_not_refresh_marker_for_diverged_skill(tmp_path, monkeypatch):
+    """驗收 2：marker 過期 + local != remote（真分歧），跑報告後 marker 保持不變。"""
+    import skill_sync.cli as cli_module
+
+    skill_dir = _write_skill(tmp_path, "demo-skill", "1.0.0", "local body")
+    _write_sync_base(skill_dir, "0" * 64)
+    monkeypatch.setattr(cli_module, "get_skills_dir", lambda: tmp_path)
+    _stub_manifest(monkeypatch, {"demo-skill": {"hash": "1" * 64, "version": "0.9.0"}})
+
+    cmd_pull_all(argparse.Namespace())
+
+    assert _read_sync_base(skill_dir) == "0" * 64
+
+
+def test_cmd_pull_all_prints_refresh_count_when_markers_refreshed(tmp_path, monkeypatch, capsys):
+    import skill_sync.cli as cli_module
+
+    skill_dir = _write_skill(tmp_path, "demo-skill", "1.0.0", "body")
+    _write_sync_base(skill_dir, "0" * 64)
+    monkeypatch.setattr(cli_module, "get_skills_dir", lambda: tmp_path)
+    _stub_manifest(
+        monkeypatch, {"demo-skill": {"hash": compute_content_hash(skill_dir), "version": "1.0.0"}}
+    )
+
+    cmd_pull_all(argparse.Namespace())
+
+    out = capsys.readouterr().out
+    assert "Refreshed 1 stale" in out
+
+
+def test_cmd_pull_all_silent_when_no_marker_needs_refresh(tmp_path, monkeypatch, capsys):
+    """既有行為不變：marker 已正確時報告不印任何重記訊息（唯讀命令的既有安靜輸出）。"""
+    import skill_sync.cli as cli_module
+
+    skill_dir = _write_skill(tmp_path, "demo-skill", "1.0.0", "body")
+    _write_sync_base(skill_dir, compute_content_hash(skill_dir))
+    monkeypatch.setattr(cli_module, "get_skills_dir", lambda: tmp_path)
+    _stub_manifest(
+        monkeypatch, {"demo-skill": {"hash": compute_content_hash(skill_dir), "version": "1.0.0"}}
+    )
+
+    cmd_pull_all(argparse.Namespace())
+
+    out = capsys.readouterr().out
+    assert "Refreshed" not in out
 
 
 # --- _resolve_diverge_direction（純函式，四種組合） ---------------------------
@@ -1696,6 +1818,59 @@ def test_stale_version_warning_fires_when_content_drifted_and_version_same(tmp_p
 
     assert warning is not None
     assert "1.0.0" in warning
+
+
+def test_stale_version_warning_fires_with_frontmatter_metadata_version_fixture(tmp_path):
+    """同上案例，改用 frontmatter 縮排 metadata.version 的真實生產形狀建 fixture。
+
+    重現本專案實際迴歸：舊 regex 只認行首 `version:`，本專案 SKILL.md 主流
+    寫法是縮排在 metadata 之下，`_extract_single_version` 對這類檔案一律
+    回傳 None，使本閘門（依賴 local_ver/remote_ver 非 None）從未真正生效。
+    """
+    source = _write_skill_with_frontmatter_version(tmp_path, "demo-skill", "1.0.0", "body")
+    _write_sync_base(source, "0" * 64)
+    local_ver = _extract_single_version(source / "SKILL.md")
+    assert local_ver == "1.0.0"
+
+    warning = _stale_version_warning(source, local_ver, "1.0.0")
+
+    assert warning is not None
+    assert "1.0.0" in warning
+
+
+# --- _extract_version_string（frontmatter 縮排 metadata.version） -----------
+
+
+def test_extract_version_string_reads_indented_frontmatter_metadata_version():
+    """本專案主流寫法：version 縮排在 frontmatter 的 metadata 之下。"""
+    text = "---\nname: demo\nmetadata:\n  version: 2.3.1\n---\n\n# demo\n"
+
+    assert _extract_version_string(text) == "2.3.1"
+
+
+def test_extract_version_string_reads_bare_frontmatter_version():
+    """既有的行首寫法（frontmatter 內、無縮排）仍須維持支援，不因收窄範圍而失效。"""
+    text = "---\nname: demo\nversion: 3.5.0\n---\n\n# demo\n"
+
+    assert _extract_version_string(text) == "3.5.0"
+
+
+def test_extract_version_string_ignores_body_text_without_frontmatter_version():
+    """正文含 `version:` 字樣、但 frontmatter 未宣告版本：不得誤抓，回傳 None。"""
+    text = (
+        "---\nname: demo\n---\n\n"
+        "# demo\n\n"
+        "設定檔範例：`version: 9.9.9`（僅示範用途，非本 skill 版號）\n"
+    )
+
+    assert _extract_version_string(text) is None
+
+
+def test_extract_version_string_none_when_no_frontmatter_block():
+    """無 frontmatter 區塊（不以 `---` 開頭）：直接回傳 None，不誤搜全文。"""
+    text = "# demo\n\nversion: 1.0.0\n"
+
+    assert _extract_version_string(text) is None
 
 
 # --- cmd_pull / cmd_push 方向警示整合（0.2.1-W3-671） ------------------------

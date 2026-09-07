@@ -47,7 +47,7 @@ python3 .claude/skills/framework-issue/scripts/section_comment.py dedup \
 
 | 命中狀況 | 落點 | 動作 |
 |---------|------|------|
-| 主題已有 open issue、無區段、body 無任何索引表（舊 body-only issue） | 該 issue | `init`（對既有 issue 可執行，追加區段並回填索引）；body 首行手動補 `fw-issue-schema` 標記 |
+| 主題已有 open issue、無區段、body 無任何索引表（舊 body-only issue） | 該 issue | `init`（對既有 issue 可執行，追加區段並回填索引；body 缺 `fw-issue-schema` 標記時同一次 PATCH 內自動補上首行，不需再手動 `gh issue edit`） |
 | 主題已有 open issue 且已被他方 `init` | 該 issue | `add --owner <本方識別>` 建本方擁有的區段（每個區段一次 `add`），既有索引列不受影響；不 `init`（會覆寫工具建立的索引） |
 | 主題已有 open issue，body 有手寫索引表（無工具標記） | 該 issue | `observe` 附加；`init`／`add` 都會多出第二張索引表，不用 |
 | 命中的是同領域不同層級 | 新 issue | `create` 後 `init`，分工邊界寫入雙方各自「當前結論」末段 |
@@ -93,6 +93,8 @@ sections.json 骨架：
 
 區段名須與索引表逐字一致；「當前結論」必須是第一則，`check` 的主警訊只以此名稱定位，少其他區段不影響工具。
 
+**以 `add` 加進他方已 init 的 issue 時**，區段名加後綴 `（<consumer>：<主題>）`，如「當前結論（flutter-balance：規則 8 引用清理與執法）」，避免與既有「當前結論」同名時字串相等定位落在兩者之間不確定。`check` 的主警訊已改採前綴比對（名稱以「當前結論」開頭者皆涵蓋），後綴區段與既有「當前結論」各自獨立輸出並標明 owner，不再缺主警訊涵蓋；分工邊界仍寫入本方「當前結論（…）」末段，既有 owner 的區段以 `observe` 提醒。
+
 ## 步驟五：ticket 處置
 
 close 宣告的是「這張票的知識已有更好的住址」，問題本身是否解決由 issue 的當前結論說。先定範圍，再執行：
@@ -100,8 +102,8 @@ close 宣告的是「這張票的知識已有更好的住址」，問題本身�
 | 票的狀態 | 處置 |
 |---------|------|
 | ANA／DOC，pending | close |
-| IMP，pending，未被任何 in_progress 或保留票以 `blockedBy` 依賴 | close；執行內容進「待辦與來源」 |
-| IMP，pending，被 in_progress 票或保留票 `blockedBy` 依賴 | 保留 pending，`why` 末尾補一句 issue ref。**Why**：解鎖判定不把 closed 視為已解決，close 它會讓依賴它的執行中工作永遠 blocked |
+| IMP，pending | close；執行內容進「待辦與來源」 |
+| 被範圍票以 `blockedBy` 依賴、且不在範圍內的票 | 不動該票，但以 `set-why` 在其 `why` 末尾補一句 issue ref，讓接手者知道前置知識的住址。runqueue 與派發就緒判定把 closed 視為已解除（`is_fully_unblocked` 以 `include_closed_as_resolved=True` 呼叫），依賴方不會因此卡住；只有 complete 後的「已解鎖建議清單」不列它們，不影響可執行性 |
 | in_progress、已 claim、同儕明示保留 | 不動 |
 | 父票有 children | children 先處理，父票最後 |
 
@@ -125,7 +127,7 @@ IMP 票被 close 後，執行內容住在「待辦與來源」；之後依階段
 1. `show <issue-ref>`：建立的區段全部在索引內、「當前結論」第一則。
 2. `check <issue-ref>`：三項警訊皆未命中（剛 init 的 issue 索引一致、無觀測落後）。
 3. 本地擁有登記檔 `.claude/state/framework-issue-owned.json` 含此 issue（區段建立成功即寫入）；缺失時 SessionStart 檢查會退回前綴推導。
-4. 來源票對照（票 ID、型別、標題、處置、落點區段）與分群表的「實際落點」欄以 `ticket track append-log <派發票> --section Solution` 寫入派發票；同機器並行 session 各發一份對照表。
+4. 來源票對照（票 ID、型別、標題、處置、落點區段）以 `ticket track append-log <派發票> --section "Test Results"` 寫入派發票——它是「每張票已依範圍規則處置」的驗證證據；**不寫進 Solution**：acceptance gate 的 spawn 落地檢查把 Solution 內帶型別欄的票表判為 spawn 規劃並擋 complete（實測一個 curator 被擋，補 16 列豁免宣告才過）。查重關係判定表與分群「實際落點」欄仍寫 Solution。同機器並行 session 各發一份對照表。
 5. 對他方認領主題本方只做了 `observe` 的，觀測內容第一行寫「來自 <session>，對照表在 <派發票 ID>」（首行標記由工具寫入，不重複）。
 
 ## 派發 curator
@@ -137,8 +139,10 @@ IMP 票被 close 後，執行內容住在「待辦與來源」；之後依階段
 範圍票：<ID 清單>（只對這些票 close，其他票不動）。
 落點：<既有 issue 編號 / 新開，關係判定結果>。
 owner 識別：<專案 kebab>-<session 序號>。
-步驟：讀票 → 依 references/ticket-intake.md〈步驟三：時序改狀態〉改寫 → sections.json 寫 scratchpad → init／add／observe（依〈步驟二：查重與落點〉）→ 依〈步驟五：ticket 處置〉範圍規則 close → show/check → 對照表以 append-log 寫回派發票 Solution。
-禁止：貼入時序敘事、對已有索引的 issue 再 init、close 範圍外或被依賴的票、更新他方 owner 的區段、寫專案內任何檔案。
+步驟：讀票 → 依 references/ticket-intake.md〈步驟三：時序改狀態〉改寫 → sections.json 寫 scratchpad → init／add／observe（依〈步驟二：查重與落點〉）→ 依〈步驟五：ticket 處置〉範圍規則 close → show/check → 來源票對照以 append-log 寫回派發票 Test Results、關係判定寫 Solution。
+禁止：貼入時序敘事、對已有索引的 issue 再 init、close 範圍外或被依賴的票、更新他方 owner 的區段、寫專案內任何檔案、對 ticket md 裸 commit（`git commit` 讀共用 index，會把並行 session 暫存的檔案一併帶走，實測三個 curator 兩個命中）。
+提交：`append-log` 逐命令 auto-commit；`close` 不會——它只由 Stop 事件的兜底 hook 提交，而該 hook 在有背景代理人時跳過。範圍票全部 close 後，由 curator 以隔離索引 CAS 提交這批 ticket md（配方見 Bash 工具使用規則參考文件的〈規則七詳細〉隔離索引 CAS：`GIT_INDEX_FILE` 指臨時 index → `read-tree HEAD` → `add` 精確檔案 → `write-tree` → `commit-tree` → `diff --name-only` 自驗範圍 → `update-ref HEAD <new> <old>`）。**提交後對同一批檔執行 `git restore --staged -- <檔…>`**：`ticket track complete` 預設會把票檔 stage 進共用 index，CAS 提交不經共用 index，舊 entry 會留下成為「過期快照」，他人任一次裸 commit 都會把這批票回滾且 `git log` 外觀正常；三平面（index／HEAD／工作區）一致後才算收尾。規範在執行期間可能被更新（本次收束中兩份規範各改了三次），收尾前重讀 `references/ticket-intake.md` 與代理人定義，以當下版本核對 acceptance。
+scratchpad 檔名帶派發票 ID（如 sections-<ticket-id>.json）：scratchpad 由同 session 全部代理人共用，同名檔會被並行 curator 覆寫。
 驗收：show 顯示「當前結論」為第一則且全部區段在索引內、check 三項未命中、範圍票依範圍規則處置完畢且 reason-note 含 issue ref、git status 無專案檔變更。
 ```
 

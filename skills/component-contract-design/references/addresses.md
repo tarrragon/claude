@@ -16,7 +16,7 @@
 | 元件庫規格範本 | 填契約的**產物形狀**。第 1 章形態因素矩陣、第 9 章驗收、檔頭註解的十一欄位完整對應表皆在其中。**實際填寫的是它在專案 spec 目錄的副本，不是這份源檔**——複製作法見〈三種起點〉「產出檔案」段 | 本專案的實際路徑見 `references/project-integration/README.md`（同上） |
 | 執法工具 | 抓裸值與寫死文字、偵測原生元件直用的檢查工具（本文一律稱執法工具，不混用 lint） | Dart 專案為 `dart-style-guardian` skill；其他語言查該專案的 lint 設定檔，查無者依〈派發語言〉遷移票的 blockedBy 建執法工具票 |
 | 判別問句 | 「任兩個元件的相對位置是誰決定的」。答「頁面」即缺容器 | 方法論〈容器亦為元件〉。本 skill 內另有一個判別新建與存量的問句，位於 `references/mode-c.md`，兩者不同名不混用 |
-| 統一匯出入口 | 元件庫與頁面層的邊界：入口涵蓋的目錄為元件庫，入口外的任何 widget 檔皆屬頁面層 | 本列即定義。定位作法（找 barrel／index 檔或套件匯出宣告）尚未給，見待補票 |
+| 統一匯出入口 | 元件庫與頁面層的邊界：入口涵蓋的目錄為元件庫，入口外的任何 widget 檔皆屬頁面層 | 本列即定義。定位作法：先找元件目錄根層的 barrel／index 檔或套件匯出宣告（如 `index.dart`、`components.ts`、`pubspec.yaml`／`package.json` 的 `exports`）；找不到明確匯出檔時退路為模式 C 步驟 1 的元件盤點結果——被至少一個頁面 import 的 public widget 檔案所在目錄視為事實上的元件庫範圍，並建工具票補齊匯出宣告（見〈派發語言〉遷移票 blockedBy） |
 | L1 / L2 / L3 | 規格分層：L1 通用原則、L2 語言與框架實作規範、L3 專案元件庫章節 | 方法論〈分層架構〉 |
 | spec 檔 | L3 章節所在的專案規格檔，即〈三種起點〉「產出檔案」段指定的那一份 | 專案 spec 目錄，檔名依專案命名慣例 |
 | 本規格票 | 承載本次元件庫規格產出的那張 ticket。中間產出物、提案值、待決項一律寫入它的 Problem Analysis | 即派發本次工作的那張 ticket，票號由 PM 於 prompt 或 Context Bundle 指定；未指定時停手回報，不自行選票 |
@@ -26,3 +26,4 @@
 | 事故對照 | 把既有的重疊／截斷／點不到事故對應到缺哪個容器或哪個空白欄位 | `references/mode-c.md` 模式 C 步驟 5 |
 | 特徵測試 | 不驗「應該是什麼」、只把現況行為原樣鎖住的測試；回收呼叫端設定前用它擋住行為改變 | `references/mode-c.md`〈特徵測試閘門〉；規模判準見 `foundation-design` skill 的接手模式 |
 | baseline | 執法工具「只擋新增」的存量白名單：既有違規列入後不報，新增者才報 | 形態依執法工具而定，見〈派發語言〉遷移票 acceptance 第三條 |
+| agent 派發範本 | 框架層 PM 派發代理人的骨架規範，非本 skill 專屬。〈骨架（權威版）〉與〈Solution 自檢結果子章節義務〉兩節是〈派發語言〉「派發 prompt 必含」列三項固定句（Solution 自檢結果子章節與 Phase 4 結論、測試前台執行、`git status --porcelain` 為空）的權威 | 本專案的實際路徑見 `references/project-integration/README.md`（本 skill 宣告 portable，正文不指名特定專案的檔案路徑） |

@@ -1,5 +1,31 @@
 # Ticket 系統架構
 
+本檔章節：〈系統模型（設計自我描述，完整版）〉〈目錄結構〉〈共用模組設計〉〈自動化分析功能〉。
+
+## 系統模型（設計自我描述，完整版）
+
+本系統的參照模型是 **issue tracker + CI runner**（batch job queue 為輔助類比），不是 OS process。三個與 OS process 直覺相反的預設（設計回顧確認：誤用 process 直覺是共享樹競態與身份回填缺口兩類歷史事故的共同根因）：
+
+1. **身份晚綁定**：ticket 建立時不知道執行者（submit 與 assign 分離）；身份在 claim 時以 `--as` 綁定，不是 fork 即繼承。
+2. **共享工作區**：agent 預設共享 working tree（thread 語意）而非 process 隔離；檔案變更型派發應優先採 feat branch / worktree 隔離。
+3. **type 與 instance 一對多**：agent 類型（能執行某類任務的角色，如「能做 IMP 的類型」）與執行體（實際在跑的 process）不是一對一，同一類型可同時 spawn 多個獨立執行體；「該類型只有一種」不等於「同時只能跑一個」。**反向風險**：誤讀為可無限開執行體同樣危險，真正的並行上限來自三項約束——共享 git index 的寫入競爭、主線程自身序列化的驗收與建票工作、單一執行體 context 隨任務數累積而飽和，而非類型數。
+
+### named agent 生命週期三態（v2.9.0 擴展）
+
+`agent = CI runner` 類比原僅二態（running → stopped），named agent（Agent tool 帶 name 參數 spawn）完工後不自動終止，實際存在第三態：
+
+| 狀態 | 含義 | 觸發 | 對應 CI runner 語意 |
+|------|------|------|---------------------|
+| running | agent 正在執行 ticket 工作 | Agent tool spawn / SendMessage 派發新任務 | job 執行中 |
+| idle | agent 完工無新任務，process 保持存活且可定址 | agent 完成回報後 CC runtime 發送 `idle_notification` | warm runner（跑完不銷，省下次冷啟動成本） |
+| stopped | agent process 終止 | SubagentStop（自然結束）/ `shutdown_request` approve / session 結束 | job 完成後 runner 回收 |
+
+idle 態不改變 agent = runner 的核心類比（身份仍在 claim 綁定、工作區仍隔離），只是擴展 runner 生命週期從「單 job 即銷」到「可選續用多 job」。PM 對 idle agent 的續用/放生判準與回收 SOP 見 `.claude/pm-rules/parallel-dispatch.md`「idle agent 回收 SOP」章節。
+
+> SKILL.md 入口保留壓縮版三預設 + 一行指標，兩者不重複維護——本節為完整論證，入口為主張句速查。
+
+---
+
 ## 目錄結構
 
 ```
