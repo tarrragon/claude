@@ -1,3 +1,37 @@
+## [2.53.0] - 2026-09-07
+
+### Summary
+refactor: 拆分為 SKILL.md + references 六份（某版本）; refactor: 拆分為 SKILL.md + references/ 五份（某版本）; fix: 500 的四處硬值副本改路由，三層載入節名統一 (+21 more)
+
+Changes: 2 refactor, 16 fix, 5 docs, 1 chore
+
+- refactor: 拆分為 SKILL.md + references 六份（某版本）
+- refactor: 拆分為 SKILL.md + references/ 五份（某版本）
+- fix: 500 的四處硬值副本改路由，三層載入節名統一
+- fix: 走查段的「上一節」改具名
+- fix: 來源併入溯源段，消掉兩份的來源重複與檔尾三形式
+- fix: 修重組後遺症方向 3 的五則（某版本 續）
+- fix: 修 Round 4 三個 frame 的 finding（某版本）
+- fix: 修 Round 3 嚴重必修中可機械執行的五項（某版本）
+- fix: 修 Round 3 抓到的四項，含前一批的不實驗收宣稱
+- fix: 補雙向路由驗證，修修法自身造出的孤兒節
+- fix: Round 2 修可機械驗證的三類（某版本）
+- fix: 多輪審查 Round 1 修法（某版本）
+- fix: 地址表宣稱改為與實際相符（某版本）
+- fix: 整體通讀抓到的三處合成缺陷（某版本）
+- fix: 多輪審查 Round 4 修法（某版本）
+- fix: 多輪審查 Round 3 修法（某版本）
+- fix: 多輪審查 Round 2 修法（某版本）
+- fix: 多輪審查 Round 1 的 20 項修法（某版本）
+- docs: 某版本 修 Round 4 第四 frame 復跑後的三則殘留
+- docs: CHANGELOG 內一條被推翻的判定補上時效與方法標註
+- docs: 新增拆分既有 skill 的程序（某版本）
+- docs: 新增 DOC-GPD-001 並修正契約齊全定義的計數殘留
+- docs: 第 2 層體量判準由行數改為字元數（某版本）
+- chore: pull .claude 更新（上游 dbbf8c2f5036）
+
+---
+
 ## [2.52.2] - 2026-09-04
 
 ### Summary

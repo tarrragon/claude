@@ -1,6 +1,12 @@
 # Seeing like an Agent: 工具設計哲學與進階模式
 
-來源：Anthropic 官方 "Lessons from Building Claude Code: Seeing like an Agent" + Best Practices
+> 何時讀：在決定某一步該寫成文字指引還是腳本、或某個設計取捨說不出理由時；也用於理解一個工具為何演成現在的樣子。**亦由此進入**——`SKILL.md`〈按需讀取〉的消歧義段把要「設計理由」的讀者送到本檔的〈進階 Skill 設計模式〉；`splitting-an-existing-skill.md` 與 `patterns-and-troubleshooting.md` 的「同目錄」段亦指向本檔。
+>
+> 同目錄：怎麼寫的部分在 `frontmatter-and-description.md` 與 `writing-the-body.md`，新建流程在 `creating-and-adopting-skills.md`，拆分程序在 `splitting-an-existing-skill.md`，工作流範本與問題排除在 `patterns-and-troubleshooting.md`；〈核心心法〉留在 `SKILL.md`。
+>
+> 溯源：本檔為 skill-design-guide 的 reference，v1.6.0 拆分時補上檔頭三段式（此前缺）。內容來源為 Anthropic 官方 "Lessons from Building Claude Code: Seeing like an Agent" 與 Best Practices。
+
+本檔章節：〈核心哲學〉〈Claude Code 團隊的演進教訓〉〈進階 Skill 設計模式〉〈觀察 Claude 如何使用 Skill〉〈反模式〉。
 
 ---
 
@@ -191,8 +197,3 @@ TIMEOUT = 47  # 為什麼是 47？
 | 提供太多選項 | 給一個預設方案 + 逃生出口 |
 | 假設套件已安裝 | 明確列出依賴並提供安裝指令 |
 | 巢狀引用（A→B→C） | 所有 reference 從 SKILL.md 一層直連 |
-
----
-
-*Last Updated: 2026-03-02*
-*Source: "Lessons from Building Claude Code: Seeing like an Agent" + Anthropic Best Practices*

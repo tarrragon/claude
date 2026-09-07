@@ -1,8 +1,12 @@
 # Skill Patterns, Testing & Troubleshooting
 
-詳細的 Skill 設計模式、測試方法和常見問題排除指引。
+> 何時讀：設計多步驟或條件式工作流、需要進階範本模式、要規劃 skill 的測試方法、或 skill 行為不如預期（未觸發／過度觸發／指令未被遵循／context 過大）時。**亦由此進入**——`SKILL.md`〈發布前檢查清單〉的觸發測試組指向本檔的〈測試方法〉與〈迭代回饋指引〉。
+>
+> 同目錄：frontmatter 與 description 在 `frontmatter-and-description.md`，正文寫法在 `writing-the-body.md`，新建流程在 `creating-and-adopting-skills.md`，拆分程序在 `splitting-an-existing-skill.md`，設計哲學在 `seeing-like-an-agent.md`；〈核心心法〉與〈發布前檢查清單〉留在 `SKILL.md`。
+>
+> 溯源：本檔為 skill-design-guide 的 reference，v1.6.0 拆分時補上檔頭三段式（此前缺）。內容來源為 Anthropic 官方 Skills 文件（platform.claude.com）與《The Complete Guide to Building Skills for Claude》。
 
-> 來源：Anthropic 官方 Skills 文件 (platform.claude.com) + 《The Complete Guide to Building Skills for Claude》(2026-01)
+本檔章節：〈Skill 設計模式〉〈選擇方法：Problem-first vs Tool-first〉〈測試方法〉〈迭代回饋指引〉〈常見問題排除〉。
 
 ---
 
@@ -174,17 +178,19 @@ ELSE:
 
 ### 測試層級
 
-| 層級 | 方法 | 說明 |
-|------|------|------|
-| Manual | 在 Claude.ai 直接執行 | 快速迭代，無需設定 |
-| Scripted | 在 Claude Code 自動化測試案例 | 跨版本的可重複驗證 |
-| Programmatic | 透過 Skills API 建立評估套件 | 對定義的測試集系統化執行 |
+**不涵蓋**：本節與下方〈常見問題排除〉的第一張表（上傳錯誤）預設 skill 經**上傳與打包**分發。走 git 同步的專案（本庫即是，見 `creating-and-adopting-skills.md`〈Step 5：打包〉）沒有上傳這個環節，因此三層測試中 Manual 與 Programmatic 兩層無管道、上傳錯誤那張表的三個訊息永遠不會出現。這類專案可執行的只有 Scripted 一層，而本檔未給它程序。
+
+| 層級 | 方法 | 說明 | 走 git 同步的專案 |
+|------|------|------|-----------------|
+| Manual | 在 Claude.ai 直接執行 | 快速迭代，無需設定 | 無管道 |
+| Scripted | 在 Claude Code 自動化測試案例 | 跨版本的可重複驗證 | **唯一可用，本檔未給程序** |
+| Programmatic | 透過 Skills API 建立評估套件 | 對定義的測試集系統化執行 | 無管道 |
 
 ### Pro Tip
 
 先對單一困難任務迭代直到 Claude 成功，再將成功方法提取為 Skill。這比廣泛測試提供更快的訊號。
 
-### 1. 觸發測試
+### 觸發測試
 
 確保 Skill 在正確時機載入。
 
@@ -200,7 +206,7 @@ Should NOT trigger:
 - "Create a spreadsheet"
 ```
 
-### 2. 功能測試
+### 功能測試
 
 確保 Skill 產出正確的輸出。
 
@@ -215,7 +221,7 @@ Then:
   - No API errors
 ```
 
-### 3. 效能比較
+### 效能比較
 
 證明 Skill 改善了結果。
 
@@ -237,7 +243,7 @@ With skill:
 
 **量化指標**：
 - Skill 在 90% 相關查詢中觸發
-- 在 X 次工具呼叫內完成工作流
+- 工具呼叫次數不超過該工作流的步驟數（每步一次，無重試）
 - 每次工作流 0 個失敗 API 呼叫
 
 **質化指標**：
@@ -275,6 +281,8 @@ With skill:
 ## 常見問題排除
 
 ### Skill 無法上傳
+
+**不涵蓋**：本表只在經上傳分發時適用；走 git 同步的專案不會遇到這三個訊息（同〈測試方法〉那則）。
 
 | 錯誤訊息 | 原因 | 解決 |
 |---------|------|------|
@@ -318,11 +326,6 @@ With skill:
 **症狀**：Skill 變慢或回應品質下降
 
 **解決**：
-1. SKILL.md 保持低於 5,000 字，詳細文件移到 references/
+1. SKILL.md body 保持在兩個門檻內——門檻值、量測指令與語言換算表見 `SKILL.md`〈Progressive Disclosure — 三層載入〉；詳細文件移到 references/
 2. 評估是否同時啟用太多 Skill（20-50 個以上需考慮精簡）
 3. 考慮將相關 Skill 打包為 "packs"
-
----
-
-*Last Updated: 2026-02-11*
-*Source: Anthropic Official "The Complete Guide to Building Skills for Claude" (2026-01)*

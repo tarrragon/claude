@@ -46,4 +46,4 @@ DOC 型 ticket 派給工具清單只有 Read / Grep / Glob / LS 與符號級 MCP
 - `.claude/rules/core/quality-baseline.md` 規則 5 情境表「工具清單不含 Bash」列（本模式是其寫檔工具的對偶）
 - `.claude/rules/core/tool-selection.md`（符號級寫入工具對非程式碼檔被拒的機制）
 - `.claude/error-patterns/process-compliance/PC-112-subagent-mcp-write-tool-misselection-on-text-files.md`
-- `.claude/skills/component-contract-design/SKILL.md`〈執行者與簽核者〉（本模式在該 skill 的落地）
+- `component-contract-design` skill〈執行者與簽核者〉（本模式在該 skill 的落地；該章節現位於該 skill 的 `references/dispatch-language.md`）

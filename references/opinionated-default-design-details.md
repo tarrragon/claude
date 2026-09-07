@@ -124,7 +124,7 @@
 | `quality-baseline.md` 規則 4（Hook 失敗必須可見） | 本原則處理「預設行為設計」；規則 4 處理「失敗時的可見性」。互補不重疊 |
 | `tool-discovery.md`（宣告做不到前五問） | 本原則處理「工具該有什麼行為」；tool-discovery 處理「工具能力是否存在」 |
 | `ai-communication-rules.md` 規則 6（估時驅動） | 本原則的「建議式 opinion」是預設值設計，非估時判斷 |
-| `skill-design-guide` §1.3（自由度匹配脆弱性） | §1.3 決定「自由度高低」；本原則決定「預設路徑是否表達 opinion」。高自由度的場景仍可有預設建議 |
+| `skill-design-guide` 的〈自由度匹配脆弱性〉 | 該節決定「自由度高低」；本原則決定「預設路徑是否表達 opinion」。高自由度的場景仍可有預設建議 |
 
 ---
 

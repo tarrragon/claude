@@ -182,6 +182,7 @@ Claude Code 內建原生的 memory 系統（`~/.claude/projects/{project}/memory
 | DOC-BAL-001 | 規則只寫 Action 未寫 Consequence，讀者讀成偏好而非約束 | 高 | v0.2.1 |
 | DOC-BAL-002 | 同檔案內的行為契約隨程式碼變更漂移，因為只有程式碼有自動驗證而契約沒有 | 高 | v0.2.1 |
 | DOC-BAL-003 | 表格列的行尾豁免標記被下游 markdown 格式化工具刪除，標記靜默失效 | 中 | v0.2.1 |
+| DOC-GPD-001 | 規範並列兩個判準，只有一個綁定可執行動作，未綁定者形同不存在 | 中 | — |
 
 ### 架構 (ARCH)
 

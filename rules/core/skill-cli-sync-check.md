@@ -32,6 +32,12 @@
 2. 對每個含該 skill CLI 引用的文件，逐一確認是否與現行行為一致；不一致即更新並納入同一 commit。
 3. 同步範圍過大時建立獨立 DOC Ticket 追蹤（禁止口頭延後，違反 quality-baseline 規則 5）。
 
+## 與 skill 設計規範的分工
+
+`skill-design-guide` skill 管的是 skill 本身的形狀（frontmatter、體量門檻、正文結構、拆分程序），
+其〈發布前檢查清單〉**不涵蓋本規則**——CLI skill 走完該清單全綠，不代表 CLI 行為變更的同步被問過。
+兩者互指：該 skill 的檢查清單有一列指向本規則，本節指回去。新增或修改具 CLI 入口點的 skill 時兩者都要走。
+
 ## 雙層防護
 
 | 層級 | 機制 |

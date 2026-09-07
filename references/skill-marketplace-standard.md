@@ -153,7 +153,7 @@ your-skill/
 - [ ] 承載判斷概念而非實作方法
 - [ ] 術語通用化——不使用「在我們的專案中」「本框架」等自指表述
 
-### 4.4 結構品質（與 skill-design-guide §12 交叉）
+### 4.4 結構品質（與 `skill-design-guide` 的〈發布前檢查清單〉交叉）
 
 - [ ] SKILL.md body < 500 行
 - [ ] description < 250 字且含觸發詞
