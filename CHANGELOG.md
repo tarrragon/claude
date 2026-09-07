@@ -1,3 +1,14 @@
+## [2.55.1] - 2026-09-07
+
+### Summary
+chore: .claude/VERSION 回寫 某版本
+
+Changes: 1 chore
+
+- chore: .claude/VERSION 回寫 某版本
+
+---
+
 ## [2.55.0] - 2026-09-07
 
 ### Summary
