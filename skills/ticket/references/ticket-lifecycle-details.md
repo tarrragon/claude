@@ -1,7 +1,10 @@
 # Ticket 生命週期 - 詳細參考
 
-> 本文件包含 ticket-lifecycle.md 的格式規範、訊息模板、Hook 技術細節。
-> 核心決策規則請見：@.claude/pm-rules/ticket-lifecycle.md
+> **何時讀**：查詢 Ticket 建立格式範本、驗收條件 4V 格式要求、驗收前置條件檢查流程、acceptance-gate-hook 技術細節、P0 緊急任務處理等生命週期細節時。**亦由此進入**：無（`grep -rn` 排除 `SKILL.md` 路由表本檔自身列後零命中，目前無其他檔案的步驟把讀者送到本檔）。
+>
+> **同目錄**：`track-command.md`（驗收條件操作對應的 CLI 指令）、`workflow-execute.md`（完成判斷決策樹）。
+>
+> **溯源**：本檔為 `.claude/pm-rules/ticket-lifecycle.md`（核心決策規則）的格式規範/訊息模板/Hook 技術細節詳版，於本專案匯入 commit `f375ae675` 時即已存在；本機 git log 對本檔僅見後續增補（如 hook 路徑漂移引用更正、章節 TOC 補齊），未見原始拆分點。
 
 本檔章節：〈任務鏈後續步驟建議〉〈任務鏈 ID 格式〉〈Ticket 建立格式範本〉〈驗收條件 4V 格式要求〉〈Ticket 有效性驗證〉〈驗收前置條件檢查流程〉〈acceptance-gate-hook 技術細節〉〈驗收提示訊息模板〉〈P0 緊急任務處理〉〈簡化驗收檢查清單〉〈與其他流程的整合〉〈變更日誌〉。
 
@@ -55,8 +58,8 @@
 ### 正則表達式
 
 ```regex
-# 完整匹配（支援無限深度）
-^(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)$
+# 完整匹配（支援無限深度），尾段為可選 slug（constants.py TICKET_ID_PATTERN）
+^(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)(-[a-z0-9][a-z0-9-]{0,59})?$
 ```
 
 ### 範例任務鏈
@@ -107,7 +110,7 @@ chain:
 ---
 id: {版本}-W{波次}-{序號}
 title: {動詞} {目標}
-type: IMP/RES/ANA/INV/DOC
+type: IMP/ADJ/ANA/DOC
 status: pending
 priority: P0/P1/P2
 assignee: pending
@@ -133,7 +136,7 @@ created: {日期}
 | 要求 | 說明 | 範例 |
 |------|------|------|
 | 必須有編號 | 每個驗收項目都有編號 | `1.`, `2.`, ... |
-| 必須有來源 | 引用設計文件或需求 | `SKILL.md L97` |
+| 必須有來源 | 引用設計文件或需求 | `SKILL.md〈子命令路由表〉` |
 | 必須有確認方法 | 定義如何驗證完成 | `執行命令驗證輸出` |
 | 禁止模糊詞彙 | 不可用「完成」「正常」「適當」 | 用具體描述取代 |
 
@@ -256,14 +259,14 @@ Step 4: 檢查執行日誌
 
 | 情景 | 檢查項目 | 結果 | 行為 |
 |------|---------|------|------|
-| 根任務 | 所有子任務是否 completed/closed？ | 否 | 阻止（exit 2） |
-| 根任務 | 所有子任務是否驗收？ | 否 → 有未驗收子任務 | 警告（exit 0） |
-| 子任務 | 是否已通過驗收？ | 否 | 阻止（exit 2） |
-| 根任務 | 是否已通過驗收？ | 否 | 阻止（exit 2） |
+| 根任務 | 所有子任務是否 completed/closed？ | 否 | 阻止（`permissionDecision: deny`） |
+| 根任務 | 所有子任務是否驗收？ | 否 → 有未驗收子任務 | 警告（`permissionDecision: allow`） |
+| 子任務 | 是否已通過驗收？ | 否 | 阻止（`permissionDecision: deny`） |
+| 根任務 | 是否已通過驗收？ | 否 | 阻止（`permissionDecision: deny`） |
 
 > 「父 complete 需子全部 completed/closed」原則見 `.claude/methodologies/atomic-ticket-methodology.md` 任務鏈核心哲學 + `.claude/methodologies/ticket-lifecycle-management-methodology.md` 父 complete 前置條件。
 
-**阻止場景**（exit 2）：
+**阻止場景**（`permissionDecision: deny`）：
 
 ```
 Ticket {id} 尚未通過驗收
@@ -276,7 +279,7 @@ Ticket {id} 尚未通過驗收
 1. 派發 acceptance-auditor 執行驗收（完整或簡化）
 2. 驗收通過後再執行 /ticket track complete
 
-詳見：ticket-lifecycle.md 驗收代理人流程
+詳見：ticket-lifecycle.md〈驗收流程〉
 ```
 
 **警告場景**（exit 0，允許繼續但提示）：
@@ -292,18 +295,22 @@ Ticket {id} 尚未通過驗收
 （允許繼續，但可能影響整體品質）
 ```
 
-**Hook 註冊**（`.claude/settings.json`）：
+**Hook 註冊**（`.claude/settings.json`，實際 schema：`hooks.PreToolUse` 陣列，`matcher` 為工具名而非本 hook 專屬鍵，同一 matcher 下多個 hook 依序註冊）：
 
 ```json
 {
   "hooks": {
-    "acceptance-gate-hook": {
-      "type": "PreToolUse",
-      "tools": ["ticket_track_complete"],
-      "enabled": true,
-      "fail_mode": "block",
-      "description": "驗收狀態檢查"
-    }
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/skills/ticket/hooks/acceptance-gate-hook.py"
+          }
+        ]
+      }
+    ]
   }
 }
 ```
@@ -388,7 +395,7 @@ Ticket {id} 為 DOC/簡單任務，需派發 acceptance-auditor 執行簡化驗�
 - 原因: 有 N 個子任務未驗收
 - 建議: 先完成子任務驗收
 
-詳見: ticket-lifecycle.md
+詳見: ticket-lifecycle.md〈驗收流程〉
 
 ============================================================
 ```
@@ -397,7 +404,7 @@ Ticket {id} 為 DOC/簡單任務，需派發 acceptance-auditor 執行簡化驗�
 
 ## P0 緊急任務處理
 
-P0 緊急任務可「先完成後補驗收」，這不是豁免，而是時間順序調整：
+P0 緊急任務採「先完成後補驗收」的時間順序調整，驗收要求本身不因此被豁免：
 
 ```
 P0 緊急任務
@@ -498,24 +505,9 @@ Phase 4 發現技術債務 → 記錄到工作日誌 → /tech-debt-capture → 
 
 ## 變更日誌
 
-- v4.0.0 (2026-02-06): 瘦身重構 - 移出至 details 參考文件
-  - 從 ticket-lifecycle.md 移出格式規範、訊息模板、Hook 技術細節
-  - 精簡版保留核心決策規則
-  - 本文件作為詳細參考
-- v3.1.0 (2026-02-03): 統一驗收派發規則，移除 PM 直接驗收
-- v3.0.0 (2026-02-03): 將驗收流程從 complete 之後改為 complete 之前
-- v2.9.0 (2026-02-03): 新增執行日誌驗證機制
-- v2.8.0 (2026-02-01): 取消驗收豁免機制，改為契約式驗收
-- v2.7.0 (2026-02-01): 強化驗收代理人派發要求
-- v2.6.0 (2026-01-31): 新增任務層級判斷規則
-- v2.5.0 (2026-01-30): 新增階段-標準流程對照表和任務鏈後續步驟建議
-- v2.4.0 (2026-01-30): 新增建議追蹤流程整合章節
-- v2.3.0 (2026-01-30): 新增驗收條件格式要求章節
-- v2.2.0 (2026-01-29): 新增任務鏈 ID 格式章節
-- v2.1.0 (2026-01-27): 新增 Ticket 有效性驗證章節
-- v2.0.0 (2026-01-23): 重構為 TDD 含 SA 前置審查流程版本
+本檔 v2.0.0–v4.0.0 逐版變更記錄（一次性歷史敘事）已遷至 `.claude/skills/ticket/CHANGELOG.md`，避免同一段歷史散落多份 reference 文件。
 
 ---
 
-**Last Updated**: 2026-02-06
-**Version**: 4.0.0 (從 ticket-lifecycle.md 移出)
+**Last Updated**: 2026-09-07
+**Version**: 4.1.0 (從 ticket-lifecycle.md 移出) — 逐版變更記錄遷至 CHANGELOG.md；修正 P0 節否定起手定義句、檔頭舊引言重複、死名節引用（〈驗收流程〉）、行號指涉範例、建立範本 type 對齊正典 4 型（IMP/ADJ/ANA/DOC）、同目錄 field-semantics 對稱

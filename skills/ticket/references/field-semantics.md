@@ -2,6 +2,12 @@
 
 本文件為 ticket frontmatter 中六個血緣/依賴/關聯欄位的權威語意定義。其他規則、方法論、error-pattern、SKILL 文件涉及這些欄位時應引用本檔，不重複定義。
 
+> **何時讀**：設定或釐清 `parent_id`/`children`/`source_ticket`/`spawned_tickets`/`blockedBy`/`relatedTo` 六欄位語意、判斷阻擋情境、決定該填哪個血緣欄位時。**亦由此進入**：`create-command.md`〈--source-ticket 參數（衍生關係）〉節（欄位選擇決策樹指標）、`track-command.md`〈UPDATE 操作補充：commit 副作用與欄位語意〉### 六欄位語意 SSOT（六欄位權威定義指標）、`ticket_system/lib/depth.py` 原始碼註解（world-plane SSOT 指標）。
+>
+> **同目錄**：`create-command.md`（`--parent` vs `--source-ticket` 建立時的 CLI 副作用）、`track-command.md`（`set-blocked-by` / `set-related-to` 操作說明）。
+>
+> **溯源**：本檔於本專案匯入 commit `f375ae675` 時即已存在；此後累積增修（如 relatedTo 方向性裁決、context bundle 作為 relatedTo 合法消費端的承認），未見單次外移原始拆分點（可用 `git log --oneline -- references/field-semantics.md` 查證）。
+
 本檔章節：〈適用範圍〉〈六欄位定義〉〈阻擋語意對照表〉〈用戶情境對照表〉〈欄位選擇決策樹〉〈反模式速查〉〈相關文件〉。
 
 ---
@@ -96,7 +102,7 @@
 
 ### relatedTo（陣列，array of IDs）
 
-**語意**：相關引用（弱關聯 metadata）。語意對稱、資料單向——A 與 B 互為關聯是雙向事實，但欄位只在單側寫入。不對稱源於建立順序：後建的票能引用先建的票，先建票建立當下對方尚不存在，非語意上真的只有一方相關。
+**語意**：相關引用（弱關聯 metadata）。語意對稱、資料單向——A 與 B 互為關聯是雙向事實，但欄位只在單側寫入。不對稱源於建立順序：後建的票能引用先建的票，先建票建立當下對方尚不存在，非語意上只有一方相關。
 
 | 屬性 | 值 |
 |------|---|
@@ -141,7 +147,7 @@
 | `blockedBy` | 否（不影響 complete） | 是（過濾本 ticket） |
 | `relatedTo` | 否 | 否 |
 
-> **過渡狀態註記**：ANA spawned 阻擋（W15-003）是 children 路徑收斂前的補丁。後續 hook 重構（acceptance-gate-hook ana_spawned_checker 退場）完成後，ANA 落地將統一走 children 路徑，spawned 對 ANA 也回到「不阻擋」設計。
+> **現況分層說明**：`acceptance-gate-hook.py` 的 `ana_spawned_checker`（hook 層舊機制）已於 W17-120.2 退場，僅保留 `check_ana_has_spawned_tickets` 作為「無後續 ticket」的 missing 警告（不阻擋）。但 ANA complete 阻擋本身**未**隨之移除，仍由另外兩個獨立機制實際執行：`lifecycle.py` 的 `_handle_ana_spawned_confirmation`（complete 時的互動/CLI 確認關卡）與 `acceptance_auditor.py` 的 `validate_spawned_tickets_completed`（W15-003，acceptance 稽核階段的 FAIL 判定）。此為目前已定案的現行設計，非等待收斂的過渡態；若日後確有移除計畫，應另建 ticket 並在此標註其 ID。
 
 ---
 
@@ -215,13 +221,14 @@ Q1: 上游 ticket 的結論「要求」此 ticket 落地嗎？
 - `.claude/methodologies/atomic-ticket-methodology.md` — 任務鏈方法論（兄弟協調模式、聚合父重組範式）
 - `.claude/skills/ticket/references/create-command.md` —`--parent` vs `--source-ticket` CLI 副作用對比
 - `.claude/skills/ticket/references/track-command.md` — `set-blocked-by` / `set-related-to` 操作說明
-- `.claude/skills/ticket/SKILL.md` — `tree`/`chain`/`deps` 命令對血緣與衍生的視覺化分流
-- `.claude/error-patterns/process-compliance/ARCH-017` — 兄弟任務隱藏依賴反模式
+- `.claude/skills/ticket/references/track-command.md`〈READ 操作〉〈track deps / depth 子命令〉— `tree`/`chain`/`deps` 命令對血緣與衍生的視覺化分流
+- `.claude/error-patterns/architecture/ARCH-017-sibling-hidden-dependency.md` — 兄弟任務隱藏依賴反模式
 - `.claude/skills/ticket/ticket_system/lib/context_bundle_extractor.py` — relatedTo 的 context bundle 消費端實作（`SourceKind` / `_collect_related_to_symmetric`）
 
 ---
 
-**Last Updated**: 2026-08-26
+**Last Updated**: 2026-09-07
+**Version**: 1.3.0 — 檔頭「亦由此進入」兩條指涉修正為實際節名；relatedTo 節刪口語「真的」；〈阻擋語意對照表〉過渡狀態註記改寫為現況分層說明（hook 層舊機制已退場為 warn-only，但 complete 阻擋本身仍由 `lifecycle.py`/`acceptance_auditor.py` 兩獨立機制實際執行，非等待收斂的過渡態）；〈相關文件〉的 `SKILL.md` 死指涉改指 `track-command.md`〈READ 操作〉〈track deps / depth 子命令〉
 **Version**: 1.2.0 — relatedTo 節修正規範與實作矛盾：Runqueue 影響、業務語意、「重要」callout 三處改為「不影響排程與阻擋，但影響 context 供給」；新增「context bundle 合法消費端」子節，具名承認 `context_bundle_extractor.py` 為合法消費端。裁決（2026-08 定案）：更新規範承認消費端，非移除消費。
 **Version**: 1.1.0 — blockedBy 節新增「When 散文與 blockedBy 的邊界」零機制慣例（W5-005.5 量測定案：61 筆抽樣，無條件 warn FP 約 95%、條件式 warn 精準度 25%，三選一裁定零機制；真依賴顯性 --blocked-by、出處 --source-ticket、接手端人工補齊）
 **Version**: 1.0.0 — 初版建立。提煉自 0.18.0-W17-120 ANA 多視角審查共識（linux + saffron-system-analyst + basil-hook-architect）：PC-091 路線（ANA 落地用 children）取代 PC-073，acceptance-gate hook 後續將收斂雙路徑。

@@ -2,6 +2,14 @@
 
 此決策樹描述 Ticket 執行、更新、批量操作和完成判斷的完整流程。
 
+> **何時讀**：判斷 Ticket 執行、更新、批量操作或完成路徑時——對應 `/ticket track` 系列 UPDATE 操作（`claim`/`complete`/`release`/`set-*`/`append-log`/`dispatch`/`batch-claim`/`batch-complete` 等）與完成判斷四步驟驗證、完成後同步提醒。**亦由此進入**：無（`grep -rn` 排除 `SKILL.md` 路由表本檔自身列、`track-command.md`／`ticket-lifecycle-details.md`／`architecture.md` 同目錄列後零命中，目前無其他檔案的步驟把讀者送到本檔）。
+>
+> **同目錄**：`track-command.md`（UPDATE 操作對應的 CLI 子命令細節，決策樹在本檔、細節在那份）、`workflow-query.md`（同屬 `track` 命令的 READ 操作決策樹，與本檔互補）、`ticket-lifecycle-details.md`（完成判斷所需的驗收條件 4V 格式與 acceptance-gate-hook 細節）、`architecture.md`（系統模型與測試路徑推導）。
+>
+> **溯源**：本檔於本專案匯入 commit `f375ae675` 時即已存在，本機 git log 對本檔僅見這一筆，未見後續修改或外移點（可用 `git log --oneline -- references/workflow-execute.md` 查證）。
+
+本檔章節：〈執行流程決策樹〉〈更新操作決策樹〉〈批量操作決策樹〉〈完成判斷決策樹〉〈完成後同步提醒〉。
+
 ## 執行流程決策樹
 
 ```

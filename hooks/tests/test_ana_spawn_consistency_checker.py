@@ -843,3 +843,119 @@ def test_block_message_uses_existing_cli_entrypoint(logger):
     # 第二條通道的兩個步驟皆須出現，避免只提登記不提 resolve
     assert "add-spawn-request" in msg
     assert "resolve-spawn-request" in msg
+
+
+# ---------------------------------------------------------------------------
+# (q) 來源票對照表排除（2026-09-07）
+#
+# framework-issue 收束流程把「已處置的來源票」清單（票 ID、型別、標題、
+# 處置、落點）寫入 Solution 供稽核，該表天然帶型別欄，加上優先級欄後與
+# row-per-spawn 判準同形。修法：表頭含「處置」欄，或表格前一行含
+# 「來源票對照」者整張表格排除於計數之外。
+# ---------------------------------------------------------------------------
+
+_SOURCE_TICKET_REFERENCE_TABLE = (
+    "### 來源票對照\n\n"
+    "| 票 ID | 型別 | P | 標題 | 處置 | 落點區段 |\n"
+    "|-------|------|---|------|------|---------|\n"
+    "| 0.2.1-W3-1134 | ANA | P2 | 校準口徑不一致 | closed | #56 待辦與來源 |\n"
+    "| 0.2.1-W3-419 | DOC | P2 | 明示視角異源要求 | closed | #56 待辦與來源 |\n"
+    "| 0.2.1-W3-842 | IMP | P3 | 清理禁用詞違規 | closed | #96 待辦與來源 |\n"
+)
+
+
+def test_source_ticket_reference_table_alone_not_counted(logger):
+    """來源票對照表（票 ID／型別／標題／處置／落點）單獨存在時不阻擋 complete。"""
+    content = _make_content(_SOURCE_TICKET_REFERENCE_TABLE)
+    fm = {"id": "0.18.0-W17-960", "type": "ANA", "spawned_tickets": [], "children": []}
+
+    should_block, msg = check_ana_spawn_consistency(content, fm, logger)
+
+    assert should_block is False
+    assert msg is None
+
+
+def test_source_ticket_reference_table_with_close_reason_header_not_counted(logger):
+    """表頭以「close 理由」取代「處置」欄名，同樣命中排除判準。"""
+    solution = (
+        "### 來源票對照\n\n"
+        "| 票 ID | 型別 | P | 標題 | close 理由 | 落點區段 |\n"
+        "|-------|------|---|------|-----------|---------|\n"
+        "| 0.2.1-W3-1134 | ANA | P2 | 範例 | 已收束 | #56 |\n"
+    )
+    content = _make_content(solution)
+    fm = {"id": "0.18.0-W17-961", "type": "ANA", "spawned_tickets": [], "children": []}
+
+    should_block, msg = check_ana_spawn_consistency(content, fm, logger)
+
+    assert should_block is False
+    assert msg is None
+
+
+def test_source_ticket_reference_table_without_disposition_column_excluded_by_context(
+    logger,
+):
+    """表頭無「處置」欄，但表格前一行含「來源票對照」，仍命中排除判準。"""
+    solution = (
+        "### 來源票對照\n\n"
+        "| 票 ID | 型別 | P | 標題 | 落點區段 |\n"
+        "|-------|------|---|------|---------|\n"
+        "| 0.2.1-W3-1134 | ANA | P2 | 範例 | #56 |\n"
+    )
+    content = _make_content(solution)
+    fm = {"id": "0.18.0-W17-962", "type": "ANA", "spawned_tickets": [], "children": []}
+
+    should_block, msg = check_ana_spawn_consistency(content, fm, logger)
+
+    assert should_block is False
+    assert msg is None
+
+
+def test_source_ticket_reference_table_does_not_suppress_real_spawn_planning(logger):
+    """來源票對照表與真正的 spawn 規劃表並存時，只有後者計入 N。
+
+    來源票對照表 3 列（含建票語意的「處置」為 closed，非待建）應被排除；
+    真正的 spawn 規劃表 1 列（含「建票」語意）仍應被計數並阻擋 complete。
+    """
+    real_spawn_table = (
+        "### Spawn 規劃\n\n"
+        "| # | Type | Priority | 標題 | 待建說明 |\n"
+        "|---|------|----------|------|---------|\n"
+        "| 1 | IMP | P1 | 待建：修復 X | 本 ANA 發現後續需建票 |\n"
+    )
+    solution = _SOURCE_TICKET_REFERENCE_TABLE + "\n" + real_spawn_table
+    content = _make_content(solution)
+    fm = {"id": "0.18.0-W17-963", "type": "ANA", "spawned_tickets": [], "children": []}
+
+    should_block, msg = check_ana_spawn_consistency(content, fm, logger)
+
+    assert should_block is True
+    assert msg is not None
+    assert "待落地 spawn 規劃數: 1" in msg
+
+
+def test_existing_row_per_spawn_regression_suite_still_passes_with_exclusion_logic(
+    logger,
+):
+    """既有 row-per-spawn 表格（無來源票對照特徵）不受排除邏輯影響。"""
+    solution = (
+        "| # | Type | Priority | 標題 |\n"
+        "|---|------|----------|------|\n"
+        "| 1 | IMP | P1 | A |\n"
+        "| 2 | IMP | P1 | B |\n"
+        "| 3 | DOC | P2 | C |\n"
+    )
+    content = _make_content(solution)
+    fm = {
+        "id": "0.18.0-W17-964",
+        "type": "ANA",
+        "spawned_tickets": ["0.18.0-W17-901", "0.18.0-W17-902"],
+        "children": [],
+    }
+
+    should_block, msg = check_ana_spawn_consistency(content, fm, logger)
+
+    assert should_block is False
+    assert msg is not None
+    assert "3" in msg
+    assert "2" in msg

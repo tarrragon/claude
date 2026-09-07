@@ -1,3 +1,38 @@
+## [2.57.1] - 2026-09-07
+
+### Summary
+fix: push --force 忽略方向/版本警告時於結尾重述並記錄; fix: 修正 Round 1 finding 群 A1（SKILL.md／architecture.md／刪除 completeness-check.md）; fix: sync-pull SKILL.md metadata.version 三方衝突自動解決 + 標記殘留掃描 (+22 more)
+
+Changes: 8 fix, 15 docs, 1 chore, 1 test
+
+- fix: push --force 忽略方向/版本警告時於結尾重述並記錄
+- fix: 修正 Round 1 finding 群 A1（SKILL.md／architecture.md／刪除 completeness-check.md）
+- fix: sync-pull SKILL.md metadata.version 三方衝突自動解決 + 標記殘留掃描
+- fix: section init 對已有區段拒絕重複建立並與既有索引合併
+- fix: 排除來源票對照表誤判為 spawn 規劃
+- fix: pull --help 不再宣稱無名稱形式會更新全部 skill
+- fix: workspace-wipe-guard 補 contains_git_word 前置短路
+- fix: fetch_remote_manifest 改走 git clone 避免 CDN 快取誤判
+- docs: 修正 ticket skill R1-fix-B1 群 CLI 引用錯誤
+- docs: 修正 Round 1 finding 群 B2（track/handoff/resume/ticket-lifecycle-details）
+- docs: pyproject.toml 版號對齊 CHANGELOG 最新版 1.18.0
+- docs: 補齊 resume-command.md 檔頭三段式
+- docs: 補齊 3 個 SKILL.md 缺失的 metadata.version
+- docs: 修正 Round 1 finding 群 A2（track/resume/field-semantics/create-command）
+- docs: SKILL.md 命令總表同步 init 已有區段時拒絕的行為
+- docs: 同步 curator 派發 prompt 範例的對照表落點
+- docs: 補齊 ticket skill 6 份 reference 檔頭三段式與 2 檔 TOC
+- docs: 修正 Round 1 finding 群 A3（ticket-lifecycle-details / handoff-command）
+- docs: 恢復來源票對照表寫入 Solution
+- docs: 同步 pm-rules/references 對拆分後 ticket SKILL.md 章節引用
+- docs: 收斂 ticket SKILL.md 執行方式節
+- docs: 補齊 ticket skill 7 份 reference 檔頭三段式
+- docs: 外移 ticket SKILL.md 三節至 references，全檔降至 5,281 tokens
+- chore: 回寫 .claude/VERSION -> 某版本
+- test: workspace-wipe-guard 補固化測試（誤報修復 + 對照組）
+
+---
+
 ## [2.57.0] - 2026-09-07
 
 ### Summary

@@ -8,12 +8,16 @@ session 可隨時附加，不需 owner、不需協商。
 
 五個命令對應五種寫入時機：
 
-- `init`：**只執行一次**。先逐一 POST 全部區段 comment 取得 id 與永久連結，
-  再 GET 現有 body、插入區段索引表、PATCH 一次。之後 body 不再由本工具改寫
-  （id 在 comment 建立後才存在，索引無法在建立時就寫入——見 #82 驗證）。
+- `init`：**預設每張 issue 只執行一次**。先逐一 POST 全部區段 comment 取得
+  id 與永久連結，再 GET 現有 body、與既有索引列合併、PATCH 一次；之後 body
+  不再由本工具改寫（id 在 comment 建立後才存在，索引無法在建立時就寫入——
+  見 #82 驗證）。issue 已有任何區段 comment 時預設拒絕（exit 3，提示改用
+  `add`），避免重複 `init` 誤把此次區段清單當全部內容整段覆寫既有索引
+  （見 #81 事故：第二個 session 的 `init` 使第一個 session 的 4 則區段從
+  `show` 消失）；`--force` 可略過此檢查，與既有索引列合併而非覆寫。
 - `add`：POST 單一區段 comment，於既有索引表追加一列（不存在索引表時建立），
-  供 `init` 之後對同一 issue 新增區段——`init` 每張 issue 只能跑一次，第二個
-  session 原本只能用 `observe`，無法成為區段 owner。
+  供 `init` 之後對同一 issue 新增區段——一般情況仍建議用 `add`，因為它不需
+  重新查重，且不會誤觸 `init` 的一次性拒絕檢查。
 - `update`：以 comment id PATCH 指定區段，只讀寫該則 comment，不觸碰 body
   或同 issue 其他 comment。更新前讀回既有內容確認首行為區段標記，非區段
   comment（如觀測、一般留言）一律拒絕，避免誤改。
@@ -234,6 +238,68 @@ def render_index(posted_sections: list) -> str:
     """把已建立區段的 {name, html_url} 清單渲染為可 upsert 的索引區段。"""
     rows = [{"name": section["name"], "url": section["html_url"]} for section in posted_sections]
     return render_index_table(rows)
+
+
+def _merge_index_rows(existing_rows: list, new_rows: list) -> list:
+    """合併既有索引列與新建立的區段列，以 comment id 去重（保留既有列在前
+    的原文順序）。`init`／`add` 共用：`init` 原本以本次區段清單整段覆寫
+    索引，導致他方既有列從 show 消失；`add` 對無 `<!-- section-index -->`
+    標記的手寫索引表每執行一次即把既有列再複製一輪（見本 ticket why 段與
+    Problem Analysis 第二個同源缺陷）。以 id 去重同時處理兩者：即使
+    `existing_rows` 因修法前的殘留狀態已含重複列，經任一次 `add`／`init`
+    即可自我修復。
+    """
+    seen = set()
+    merged = []
+    for row in existing_rows + new_rows:
+        if row["id"] in seen:
+            continue
+        seen.add(row["id"])
+        merged.append(row)
+    return merged
+
+
+def _strip_raw_index_rows(body: str) -> str:
+    """移除 body 內未被 `INDEX_BEGIN`／`INDEX_END` 標記包住的索引表區塊
+    （表頭、分隔列、資料列，以及緊接其上、因而變孤立的標題行），避免與
+    即將回填的合併索引重複並存於 body。
+
+    已標記區段交由 `upsert_section` 的整段取代處理，不在本函式範圍內。
+    手寫表（無標記）原本會在 `upsert_section` 的 append 分支被當作『body
+    其餘內容』原樣保留，使下次執行時 `parse_index_table` 對新舊兩表重複
+    計入既有列（見本 ticket Problem Analysis 第二個同源缺陷）；本函式在
+    合併既有列之後、回填前，把手寫表整段自 body 移除，使結果只留一張表。
+    """
+    if INDEX_BEGIN in body:
+        return body
+    lines = body.splitlines()
+    remove = set()
+    for i, line in enumerate(lines):
+        if not INDEX_ROW_ID_RE.search(line):
+            continue
+        j = i
+        while j >= 0 and lines[j].strip().startswith("|"):
+            remove.add(j)
+            j -= 1
+        j = i
+        while j < len(lines) and lines[j].strip().startswith("|"):
+            remove.add(j)
+            j += 1
+    if not remove:
+        return body
+    heading_line = INDEX_TABLE_HEADER.splitlines()[0]
+    table_top = min(remove)
+    cursor = table_top - 1
+    if cursor >= 0 and lines[cursor].strip() == "":
+        blank_idx = cursor
+        cursor -= 1
+        if cursor >= 0 and lines[cursor].strip() == heading_line:
+            remove.add(cursor)
+            remove.add(blank_idx)
+    elif cursor >= 0 and lines[cursor].strip() == heading_line:
+        remove.add(cursor)
+    kept = [line for idx, line in enumerate(lines) if idx not in remove]
+    return "\n".join(kept)
 
 
 def _ensure_schema_marker(body: str) -> str:
@@ -529,8 +595,15 @@ def cmd_dedup(keywords: list) -> int:
     return 0
 
 
-def cmd_init(issue_ref: str, owner: str, sections_file: str, dedup_keywords: list) -> int:
-    """查重後建立全部區段 comment，取得 id 後回填一次 body 區段索引表。"""
+def cmd_init(
+    issue_ref: str, owner: str, sections_file: str, dedup_keywords: list, force: bool = False
+) -> int:
+    """查重後建立全部區段 comment，取得 id 後與既有索引列合併回填一次 body
+    區段索引表。issue 已有任何區段 comment 時預設拒絕（`init` 僅供建立初始
+    索引，重複建立應改用 `add`），`--force` 可略過此檢查（見本 ticket why：
+    第二個 session 對已 `init` 過的 issue 再次 `init` 會整段覆寫索引，導致
+    第一個 session 的既有區段從 `show` 消失）。
+    """
     try:
         issue_ref = normalize_issue_ref(issue_ref)
         validate_owner(owner)
@@ -541,6 +614,23 @@ def cmd_init(issue_ref: str, owner: str, sections_file: str, dedup_keywords: lis
             "確認 issue ref、owner 格式與 sections-file 格式正確後重試",
         )
 
+    if not force:
+        try:
+            existing_sections, _ = classify_comments(fetch_comments(issue_ref))
+        except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+            return emit_degraded(
+                f"init 前置檢查（既有區段掃描）失敗：{exc}",
+                "確認 issue ref 正確且 gh 可存取後重試，或以 --force 略過此檢查",
+            )
+        if existing_sections:
+            return emit_degraded(
+                f"issue {issue_ref} 已有 {len(existing_sections)} 則區段 comment，"
+                "init 僅供建立初始索引，拒絕重複執行",
+                f"改用 `add {issue_ref} --owner {owner} --name <區段名> "
+                "--content-file <path>` 對此 issue 追加新區段，"
+                "或加 --force 略過此檢查（會與既有索引列合併，不覆寫既有 owner 的區段）",
+            )
+
     dedup_results, dedup_skipped = search_duplicates(dedup_keywords)
     sys.stdout.write(render_dedup_report(dedup_keywords, dedup_results, dedup_skipped))
 
@@ -549,7 +639,13 @@ def cmd_init(issue_ref: str, owner: str, sections_file: str, dedup_keywords: lis
         for section in sections:
             rendered = render_section_comment(section["name"], owner, section["content"])
             result = post_comment(issue_ref, rendered)
-            posted.append({"name": section["name"], "html_url": result.get("html_url", "")})
+            posted.append(
+                {
+                    "name": section["name"],
+                    "id": result.get("id"),
+                    "html_url": result.get("html_url", ""),
+                }
+            )
     except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
         return emit_degraded(
             f"init 建立區段 comment 失敗（已成功 {len(posted)}/{len(sections)} 則，"
@@ -572,8 +668,12 @@ def cmd_init(issue_ref: str, owner: str, sections_file: str, dedup_keywords: lis
             "手動確認區段 comment 後重跑索引回填（不重複執行 init 避免重複建立區段）",
         )
 
+    existing_rows = parse_index_table(body)
+    new_rows = [{"name": p["name"], "id": p["id"], "url": p["html_url"]} for p in posted]
+    merged_rows = _merge_index_rows(existing_rows, new_rows)
+    body = _strip_raw_index_rows(body)
     body = _ensure_schema_marker(body)
-    new_body = upsert_section(body, INDEX_SECTION_RE, render_index(posted))
+    new_body = upsert_section(body, INDEX_SECTION_RE, render_index_table(merged_rows))
     return write_body(issue_ref, new_body)
 
 
@@ -612,10 +712,12 @@ def cmd_add(issue_ref: str, owner: str, name: str, content_file: str) -> int:
             "手動確認區段 comment 後重跑索引回填（不重複執行 add 避免重複建立區段）",
         )
 
-    rows = [{"name": row["name"], "url": row["url"]} for row in parse_index_table(body)]
-    rows.append({"name": name, "url": result.get("html_url", "")})
+    existing_rows = parse_index_table(body)
+    new_row = {"name": name, "id": result.get("id"), "url": result.get("html_url", "")}
+    merged_rows = _merge_index_rows(existing_rows, [new_row])
+    body = _strip_raw_index_rows(body)
     body = _ensure_schema_marker(body)
-    new_body = upsert_section(body, INDEX_SECTION_RE, render_index_table(rows))
+    new_body = upsert_section(body, INDEX_SECTION_RE, render_index_table(merged_rows))
     return write_body(
         issue_ref, new_body,
         success_msg=f"區段「{name}」已建立 @ {issue_ref}，owner={owner}",
@@ -943,7 +1045,7 @@ _KEYWORD_VALUE_STOP_FLAGS = frozenset(
     {
         "-h", "--help", "--owner", "--sections-file", "--content-file",
         "--summary", "--session", "--comment-threshold", "--stale-days",
-        "--name", "--to",
+        "--name", "--to", "--force",
     }
 )
 _MULTI_VALUE_KEYWORD_FLAGS = frozenset({"--keywords", "--dedup-keywords"})
@@ -1004,6 +1106,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--dedup-keywords", nargs="+", required=True,
         help="init 前查重的關鍵字集合（每組可含空白，逐一加引號；命中清單印於"
              "輸出，不自動判定、不阻擋建立）",
+    )
+    p_init.add_argument(
+        "--force", action="store_true",
+        help="issue 已有區段 comment 時仍執行 init（與既有索引列合併，不覆寫既有 owner 的區段）",
     )
 
     p_add = sub.add_parser(
@@ -1069,6 +1175,7 @@ def main(argv=None) -> int:
         return cmd_init(
             parsed.issue_ref, parsed.owner, parsed.sections_file,
             [_unescape_dash_prefixed_value(k) for k in parsed.dedup_keywords],
+            force=parsed.force,
         )
     if parsed.command == "add":
         return cmd_add(parsed.issue_ref, parsed.owner, parsed.name, parsed.content_file)

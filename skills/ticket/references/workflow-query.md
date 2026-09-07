@@ -2,6 +2,12 @@
 
 此決策樹描述 Ticket 查詢的完整流程。
 
+> **何時讀**：判斷 Ticket 查詢路徑時——查詢範圍選擇（全局摘要/版本進度/單一 Ticket/任務鏈/代理人）與詳細程度選擇（基本/詳細/完整/5W1H 單欄位）。**亦由此進入**：無（`grep -rn` 排除 `SKILL.md` 路由表本檔自身列、`track-command.md`／`architecture.md` 同目錄列後零命中，目前無其他檔案的步驟把讀者送到本檔）。
+>
+> **同目錄**：`track-command.md`（READ 操作對應的 CLI 子命令細節，決策樹在本檔、細節在那份）、`workflow-execute.md`（同屬 `track` 命令的 UPDATE 操作決策樹，與本檔互補）、`architecture.md`（系統模型與測試路徑推導）。
+>
+> **溯源**：本檔於本專案匯入 commit `f375ae675` 時即已存在，本機 git log 對本檔僅見這一筆，未見後續修改或外移點（可用 `git log --oneline -- references/workflow-query.md` 查證）。
+
 ## 查詢流程決策樹
 
 ```

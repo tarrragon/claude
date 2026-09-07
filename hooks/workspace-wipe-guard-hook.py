@@ -104,6 +104,37 @@ heredoc 本體，涵蓋範圍與既有行為一致；`ticket create --why` 描�
 `stash` token，故不再誤判。與 needs-context-listener-hook.py 共用同一條
 tokenize pipeline（`parse_command_statements`／`find_git_invocations` 皆
 內部呼叫該 pipeline），避免兩支 hook 各自重新實作一份 tokenizer。
+
+============================================================
+背景（2026-09：補上 contains_git_word 前置短路，修復不含 git 呼叫的
+命令因 shlex 解析失敗而誤報）
+============================================================
+上一輪修復（見上一節）解決了「引號內文字含 git stash 字樣」的誤判，但
+留下另一條路徑：`_invocations_or_conservative_default` 對 tokenize 失敗
+（shlex 遇未閉合引號）一律回傳 `parse_failed=True`，呼叫端一律視為「保守
+命中」——這個保守預設本身合理（見該函式 docstring），但套用範圍過寬：
+即使命令從頭到尾完全不含 `git` 字樣，只要 shlex 解析失敗（如內嵌 python
+程式碼引用 ticket md 內文，內文含未跳脫的英文縮寫撇號 `that's`，使命令
+字串出現奇數個單引號），仍會被判定「偵測到 git stash」（五種偵測器中
+排序最前者）並阻擋，訊息宣稱的操作與命令實際內容無關。
+
+實測重現：`python3 -c 'text = open("t.md").read()\nprint(text.count
+("stash"))\n# comment: this ticket'"'"'s about workspace wipe'`
+（單引號包裹的 python 程式碼內含英文所有格撇號，使整段命令的單引號數為
+奇數）——命令完全不含 `git` 字樣，shlex 卻因引號未閉合拋出
+`ValueError: No closing quotation`，`_detect_operation` 判定為
+`("git stash", ...)`。
+
+修復方式：`bare-commit-guard-hook.py`／`bash-git-protected-branch-guard-
+hook.py`／`commit-stage-guard-gate-hook.py`／`bash-git-add-broad-guard-
+hook.py` 皆已在呼叫 `find_git_invocations` 之前先用 `contains_git_word()`
+（同一 lib 提供的便宜前置判斷）短路非 git 命令，唯獨本檔案未採用此既有
+慣例。本次補上：`_detect_operation()` 於進入五個偵測器之前先檢查
+`contains_git_word(command)`，命令完全不含獨立 `git` 字樣時直接回傳
+None，不進入任何一種偵測器（也就不會觸發 tokenize 失敗的保守預設）。
+真正含 `git` 字樣的命令（無論是否為實際 git 呼叫）行為不變，仍走既有的
+tokenize + 保守預設路徑——本修復僅收斂「完全不含 git 字樣」這一個子集，
+不改變其餘既有行為邊界。
 """
 
 import json
@@ -118,7 +149,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lib import setup_hook_logging, run_hook_safely, read_json_from_stdin
 from lib.dispatch_tracker import get_active_dispatches
-from lib.git_command_parse import find_git_invocations
+from lib.git_command_parse import contains_git_word, find_git_invocations
 from lib.git_utils import FileStatus, get_project_root, get_uncommitted_files
 
 
@@ -253,8 +284,18 @@ def _detect_operation(command: str) -> Optional[Tuple[str, Optional[str]]]:
     `find_git_invocations` 內部已處理 heredoc 剝離（ticket append-log 引用
     一段含操作名稱的日誌原文屬 CLI 引數資料，不是實際命令，不應觸發），五個
     偵測器各自呼叫，此處不需重複剝離。
+
+    進入五個偵測器之前先以 `contains_git_word()` 短路：命令完全不含獨立的
+    `git` 字樣時，不可能是真實 git 呼叫，直接回傳 None——即使命令內嵌的
+    非 git 程式碼（如 `python3 -c` 讀 ticket md 內文）使 shlex tokenize
+    失敗，也不會誤觸發各偵測器內部「解析失敗即保守視為命中」的預設。
+    與 `bare-commit-guard-hook.py`／`bash-git-protected-branch-guard-
+    hook.py`／`commit-stage-guard-gate-hook.py` 等既有 hook 的短路慣例
+    一致（見檔案頂端「2026-09：補上 contains_git_word 前置短路」背景段）。
     """
     if not command:
+        return None
+    if not contains_git_word(command):
         return None
     for name, detector, safe_hint in _OPERATIONS:
         if detector(command):

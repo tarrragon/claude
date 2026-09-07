@@ -54,8 +54,10 @@ from lib.sync_exclude_manifest import (  # noqa: E402
 )
 from lib.skill_version_diff import (  # noqa: E402
     SKILL_DRIFT_PREVIEW_LIMIT,
+    extract_frontmatter_metadata_version,
     extract_skill_versions,
     format_skill_version_diff,
+    replace_frontmatter_metadata_version,
     report_skill_repo_drift,
 )
 
@@ -672,6 +674,80 @@ def _read_upstream_blob(temp_dir: Path, sha: str, rel_path: str) -> bytes | None
     return result.stdout
 
 
+# SKILL.md 檔名（大小寫敏感，符合專案慣例）：三方合併時用來判斷是否嘗試
+# metadata.version 專屬解衝突。
+_SKILL_MD_FILENAME = "SKILL.md"
+
+
+def _semver_key(version: str) -> tuple[int, int, int]:
+    """將版本字串解析為整數 tuple 供比較（非嚴格 semver，容錯非數字段為 0）。
+
+    只取前三段（major.minor.patch），任何一段非純數字時取其中的數字字元、
+    無數字字元則視為 0（防禦性，不因非常規版號格式拋例外中斷合併流程）。
+    """
+    parts: list[int] = []
+    for part in version.split(".")[:3]:
+        digits = "".join(ch for ch in part if ch.isdigit())
+        parts.append(int(digits) if digits else 0)
+    while len(parts) < 3:
+        parts.append(0)
+    return (parts[0], parts[1], parts[2])
+
+
+def _resolve_skill_metadata_version_conflict(
+    base_content: bytes, local_content: bytes, upstream_content: bytes
+) -> bytes | None:
+    """嘗試將 SKILL.md 的三方衝突縮限為 metadata.version 欄位並自動解決。
+
+    Why：skill 版號屬 skill-sync 通道管轄，git pull 的 canonical 只是快照；
+    本地與上游各自獨立 bump 版號（consumer 透過 skill-sync 本地更新、canonical
+    透過另一 consumer push 更新）是正常情境而非真正內容衝突。若比照 VERSION
+    檔案單純採 upstream，會反向丟棄本地已完成的合法 bump；若照一般三方合併
+    寫入衝突標記，會使 SKILL.md frontmatter YAML 不可解析、skill 靜默失效
+    且無任何錯誤訊號（本函式修復的直接動機）。
+
+    判定：三份內容以同一哨兵值覆寫 metadata.version 欄位後逐字相同，才代表
+    差異真的僅限版號欄位；任一方無法擷取到版號、或覆寫後仍不同（代表版號
+    之外另有真實內容差異），一律回 None 交由標準三方合併/標記流程處理，
+    避免把真正的內容衝突誤判為版號衝突而靜默吃掉對方修改。
+
+    解決：取三者版號中語意最大者（依 _semver_key 比較），以此值覆寫 upstream
+    內容的 metadata.version 欄位後回傳——以 upstream 為底本可保留該側除版號
+    外的其他合法修改（frontmatter 其餘欄位差異已由上方逐字比對排除）。
+
+    參數:
+        base_content, local_content, upstream_content: 三方原始位元組內容
+
+    傳回:
+        bytes | None: 可自動解決時回傳合併後內容；否則 None
+    """
+    try:
+        base_text = base_content.decode("utf-8")
+        local_text = local_content.decode("utf-8")
+        upstream_text = upstream_content.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+    base_version = extract_frontmatter_metadata_version(base_text)
+    local_version = extract_frontmatter_metadata_version(local_text)
+    upstream_version = extract_frontmatter_metadata_version(upstream_text)
+    if not base_version or not local_version or not upstream_version:
+        return None
+
+    sentinel = "0.0.0-version-normalized"
+    base_normalized = replace_frontmatter_metadata_version(base_text, sentinel)
+    local_normalized = replace_frontmatter_metadata_version(local_text, sentinel)
+    upstream_normalized = replace_frontmatter_metadata_version(upstream_text, sentinel)
+    if not (base_normalized == local_normalized == upstream_normalized):
+        return None
+
+    resolved_version = max(
+        local_version, upstream_version, key=_semver_key
+    )
+    merged_text = replace_frontmatter_metadata_version(upstream_text, resolved_version)
+    return merged_text.encode("utf-8")
+
+
 def three_way_merge_file(
     base_content: bytes | None,
     local_path: Path | None,
@@ -736,6 +812,21 @@ def three_way_merge_file(
     # upstream 未改（== base）→ 採 local（理論上不會進到此函式，防禦性處理）
     if upstream_content == base_content:
         return local_content, False
+
+    # 三方皆不同 → 先嘗試 SKILL.md 版號欄位專屬解衝突（見
+    # _resolve_skill_metadata_version_conflict docstring），僅在差異確認
+    # 縮限於 metadata.version 欄位時生效；無法縮限（含真實內容差異、非
+    # SKILL.md 檔名）則落回標準三方合併，維持既有標記行為不變。
+    is_skill_md = (
+        (local_path is not None and local_path.name == _SKILL_MD_FILENAME)
+        or (upstream_path is not None and upstream_path.name == _SKILL_MD_FILENAME)
+    )
+    if is_skill_md:
+        resolved = _resolve_skill_metadata_version_conflict(
+            base_content, local_content, upstream_content
+        )
+        if resolved is not None:
+            return resolved, False
 
     # 三方皆不同 → git merge-file 標準三方合併
     return _git_merge_three_files(base_content, local_content, upstream_content)
@@ -1542,6 +1633,54 @@ def warn_conflict_residue(claude_dir: Path) -> list[str]:
             "yellow",
         )
     return residue
+
+
+# 三方合併衝突標記樣式（git merge-file 產出的行首標記，非 "=======" ——後者
+# 單獨出現時可能與 markdown 分隔線等合法內容混淆，"<<<<<<< " / ">>>>>>> "
+# 才是 git 保證附加標籤、不會巧合出現在正常內容行首的樣式）。與
+# commands/sync-pull.md「衝突標記歸零驗證」手動 grep 步驟使用同一樣式，
+# 確保自動掃描與人工複查步驟判準一致。
+_CONFLICT_MARKER_LINE_RE = re.compile(r"^(?:<<<<<<< |>>>>>>> )", re.MULTILINE)
+
+
+def scan_conflict_marker_residue(claude_dir: Path) -> list[str]:
+    """掃描 claude_dir 下（排除 .sync-conflicts/）是否有正式檔殘留三方合併
+    衝突標記（pull 收尾自動標記掃描）。
+
+    Why：既有 conflicts 清單只記錄「本次 apply_upstream_delta 已知」的衝突，
+    不保護後續人工手動合併（commands/sync-pull.md 選項「手動合併」）誤將
+    衝突標記本身寫回正式檔的情境。本函式直接對檔案系統終態逐字掃描，作為
+    對簿記正確性的獨立驗證，而非只信任 conflicts 清單本身沒有遺漏。
+
+    只掃描可解碼為 UTF-8 的文字檔（二進位/其他編碼視為不適用，略過並非
+    誤判為無標記——本掃描的目的是文字型框架檔，不含二進位資產）。標記樣式
+    要求出現在行首（`_CONFLICT_MARKER_LINE_RE`），避免命中原始碼中以字串
+    字面描述標記格式的散文（如本檔自身用於偵測/組裝標記的 Python 程式碼、
+    或文件中引用標記格式作說明的句子——皆非行首出現）。
+
+    參數:
+        claude_dir: .claude 目錄路徑
+
+    傳回:
+        list[str]: 命中檔案的相對路徑清單（相對 claude_dir，以 "/" 分隔），
+            已排序
+    """
+    hits: list[str] = []
+    if not claude_dir.is_dir():
+        return hits
+    for path in claude_dir.rglob("*"):
+        if not path.is_file() or path.is_symlink():
+            continue
+        rel = path.relative_to(claude_dir)
+        if rel.parts and rel.parts[0] == SYNC_CONFLICTS_DIR:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if _CONFLICT_MARKER_LINE_RE.search(text):
+            hits.append(str(rel).replace("\\", "/"))
+    return sorted(hits)
 
 
 def warn_upstream_deleted_residue(residue: list[str]) -> None:
@@ -3370,6 +3509,21 @@ def main() -> None:
     import_rc = verify_hook_imports(project_root)
     if import_rc != 0:
         sys.exit(import_rc)
+
+    # post-sync 安全網：正式檔殘留未解三方合併標記直接判定 pull 失敗，不只
+    # 靠 apply_upstream_delta 的 conflicts 清單自我回報（該清單無法涵蓋人工
+    # 手動合併階段誤把標記寫回正式檔的情境）。命中即 stderr 顯著警告 +
+    # 非零退出，雙管齊下確保訊號不因只看 stdout 或只看退出碼而被忽略。
+    marker_hits = scan_conflict_marker_residue(project_root / ".claude")
+    if marker_hits:
+        sys.stderr.write(
+            f"[sync-pull] 偵測到 {len(marker_hits)} 個正式檔殘留未解三方合併"
+            "衝突標記，pull 判定失敗；請依 .claude/commands/sync-pull.md"
+            "「衝突解決決策表」逐一處理後再次確認:\n"
+        )
+        for hit in marker_hits:
+            sys.stderr.write(f"  - {hit}\n")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

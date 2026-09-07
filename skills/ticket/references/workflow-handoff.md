@@ -4,6 +4,14 @@
 
 > **理論基礎**：交接對應「任務鏈三種移動方向」（父↔子、兄弟↔兄弟），見 `.claude/methodologies/atomic-ticket-methodology.md` 的「任務鏈核心哲學」章節。
 
+> **何時讀**：判斷任務鏈交接或恢復流程路徑時——交接方向判斷（子→父/父→子/兄弟→兄弟/絕對指向）、狀態與命令映射、任務鏈結束時的替代流程、恢復流程。**亦由此進入**：`SKILL.md` 子命令路由表 `resume` 列（該列註明「交接/恢復決策樹與 `handoff` 共用 `references/workflow-handoff.md`，見上列」，是 `resume` 命令讀者被送到本檔的入口）。
+>
+> **同目錄**：`handoff-command.md`（交接時的 `source` vs `target` 指向語意與五種情境細節，決策樹在本檔、細節在那份）、`resume-command.md`（恢復子命令的用法、參數說明與 handoff JSON 格式，與本檔〈恢復流程決策樹〉互補）。
+>
+> **溯源**：本檔於本專案匯入 commit `f375ae675` 時即已存在，本機 git log 對本檔僅見這一筆，未見後續修改或外移點（可用 `git log --oneline -- references/workflow-handoff.md` 查證）。
+
+本檔章節：〈交接流程決策樹〉〈狀態-命令映射規則〉〈任務鏈結束決策樹〉〈恢復流程決策樹〉。
+
 ## 交接流程決策樹
 
 ```

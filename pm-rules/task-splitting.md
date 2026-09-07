@@ -63,7 +63,7 @@ ticket track dispatch-readiness <ticket-id>
 | 1 | 軟警告（接近閾值或某項 borderline） | 手動覆核後決定派發或拆分 |
 | 2 | 強制拆分（任一項超標）或 IO 錯誤 | 必須拆分後重新檢查 |
 
-> **CLI 邊界**：閾值 1（功能職責數）以 acceptance 條目近似，含驗證類條目時可能高估；PM 於 WARN/FAIL 應手動覆核功能職責是否真的 > 2。完整參數與輸出格式見 `.claude/skills/ticket/SKILL.md`「track dispatch-readiness 子命令」與 `references/track-command.md`。
+> **CLI 邊界**：閾值 1（功能職責數）以 acceptance 條目近似，含驗證類條目時可能高估；PM 於 WARN/FAIL 應手動覆核功能職責是否真的 > 2。完整參數與輸出格式見 `.claude/skills/ticket/references/track-command.md`「track dispatch-readiness 子命令」章節。
 
 > **與既有 Hook 的分工**：`agent-prompt-length-guard-hook` 檢 prompt 行數（30 行硬上限），偵測「prompt 大小」；`dispatch-readiness` 檢三項閾值，偵測「任務大小」。兩者不同維度，互補而非重複（W17-049 三方審查共識）。
 

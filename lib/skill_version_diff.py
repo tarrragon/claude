@@ -47,13 +47,18 @@ def _extract_changelog_version(skill_dir: Path) -> str | None:
     return m.group(1) if m else None
 
 
-def _extract_frontmatter_metadata_version(text: str) -> str | None:
+def extract_frontmatter_metadata_version(text: str) -> str | None:
     """從 SKILL.md YAML frontmatter 巢狀的 `metadata.version` 欄位擷取版本號。
 
     不引入 YAML 解析依賴（本模組其餘部分皆為輕量 regex 掃描，維持一致），
     改以區塊邊界定位——先框出 `metadata:` 區塊（延續其後每一行縮排內容），
     再於區塊內尋找 `version:` 欄位，避免誤認 frontmatter 中其他非 metadata
     區塊裡巧合出現的 `version:` 字樣。
+
+    公開：sync-claude-pull.py 的三方合併需在合併前分別對 base/local/upstream
+    三份原始內容擷取版號，供 SKILL.md metadata.version 衝突專屬解決邏輯判斷
+    「差異是否僅限版號欄位」，故由本模組原本的內部輔助函式提升為公開 API，
+    與 replace_frontmatter_metadata_version 成對。
     """
     if not text.startswith("---"):
         return None
@@ -66,6 +71,47 @@ def _extract_frontmatter_metadata_version(text: str) -> str | None:
         return None
     ver_match = _METADATA_VERSION_RE.search(block_match.group(1))
     return ver_match.group(1) if ver_match else None
+
+
+# 巢狀於 `metadata:` 區塊下的 `version:` 欄位——含捕獲群組供替換時保留縮排
+# 與 `version:` 前綴，只置換版號值本身（replace_frontmatter_metadata_version 用）。
+_METADATA_VERSION_FIELD_RE = re.compile(r"(^[ \t]+version:[ \t]*)(\S+)", re.MULTILINE)
+
+
+def replace_frontmatter_metadata_version(text: str, new_version: str) -> str:
+    """將 SKILL.md YAML frontmatter 巢狀的 `metadata.version` 欄位值替換為
+    `new_version`，其餘 frontmatter 欄位與 body 內容全數保留不動。
+
+    找不到 `metadata.version` 欄位時原樣回傳（防禦性 fallback）——呼叫端
+    （sync-claude-pull.py 的版號衝突解決邏輯）應先以
+    extract_frontmatter_metadata_version 確認欄位存在，此函式不重複該檢查
+    以避免兩處判斷邏輯漂移。
+
+    參數:
+        text: 完整檔案內容（含 frontmatter）
+        new_version: 欲寫入的新版本字串
+
+    傳回:
+        str: 替換後的完整內容；找不到欄位時回傳原文
+    """
+    if not text.startswith("---"):
+        return text
+    end = text.find("\n---", 3)
+    if end == -1:
+        return text
+    front = text[3:end]
+    block_match = _METADATA_BLOCK_RE.search(front)
+    if not block_match:
+        return text
+    block_start, block_end = block_match.span(1)
+    block = block_match.group(1)
+    new_block, count = _METADATA_VERSION_FIELD_RE.subn(
+        rf"\g<1>{new_version}", block, count=1
+    )
+    if count == 0:
+        return text
+    new_front = front[:block_start] + new_block + front[block_end:]
+    return "---" + new_front + text[end:]
 
 
 def extract_skill_versions(skills_dir: Path) -> dict[str, str]:
@@ -107,7 +153,7 @@ def extract_skill_versions(skills_dir: Path) -> dict[str, str]:
 
         version = _extract_changelog_version(skill_md.parent)
         if not version:
-            version = _extract_frontmatter_metadata_version(text)
+            version = extract_frontmatter_metadata_version(text)
         if not version:
             m = _VERSION_LINE_RE.search(text)
             version = m.group(1) if m else None

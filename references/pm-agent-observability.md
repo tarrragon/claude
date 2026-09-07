@@ -158,7 +158,7 @@ PM **必須紀律性只讀狀態標籤**，忽略 `<output>` 內容。若需深�
 - named agent（Agent tool 帶 name 參數 spawn）完工後轉入 idle 態，同 Wave 無同類型 pending ticket 需要續用
 - Wave 收尾時批次放生所有仍存活的 idle agent
 
-**背景**：named agent 完工後不自動終止，會保持存活並可經 SendMessage 續用（見 `.claude/skills/ticket/SKILL.md`「named agent 生命週期三態」）。此為 CC runtime 原生能力，非本專案自建工具；PM 過去未記錄此協議，屬「既有 API 未接線」缺口（PC-060 同結構）。
+**背景**：named agent 完工後不自動終止，會保持存活並可經 SendMessage 續用（見 `.claude/skills/ticket/references/architecture.md`「named agent 生命週期三態（v2.9.0 擴展）」）。此為 CC runtime 原生能力，非本專案自建工具；PM 過去未記錄此協議，屬「既有 API 未接線」缺口（PC-060 同結構）。
 
 **呼叫範本**：
 

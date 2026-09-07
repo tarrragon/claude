@@ -42,7 +42,7 @@ metadata:
 | 命令 | 檔名 | 用途 |
 |------|------|------|
 | `dedup` | `section_comment.py` | 唯讀查重，含空白的關鍵字組拆單詞聯集查詢 |
-| `init` | `section_comment.py` | 查重後建全部區段 comment、回填一次 body 索引；**每張 issue 只跑一次** |
+| `init` | `section_comment.py` | 查重後建全部區段 comment、與既有索引列合併回填一次 body 索引；**issue 已有區段時拒絕**（exit 3，`--force` 可覆蓋並合併） |
 | `add` | `section_comment.py` | 對已 init 過的 issue 追加單一區段，併入既有索引列 |
 | `update` | `section_comment.py` | 以 comment id 更新自己擁有的區段 |
 | `transfer-owner` | `section_comment.py` | PATCH 區段首行標記的 owner 欄，內容不變 |

@@ -1,6 +1,8 @@
 ---
 name: dart-domain-modeling
 description: "Dart/Flutter copyWith 收窄判準與 entity 不變式設計。Use when designing or reviewing copyWith, entity classes, value objects, freezed models, domain invariants, or state transition methods (markAsX/completeY)."
+metadata:
+  version: 1.0.0
 ---
 
 # Dart Domain Modeling Skill

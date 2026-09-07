@@ -14,7 +14,6 @@ import re
 import subprocess
 import sys
 import tempfile
-import urllib.request
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
@@ -22,9 +21,12 @@ from typing import NamedTuple
 
 DEFAULT_REPO = "https://github.com/tarrragon/claude-skills.git"
 
-# 取遠端 manifest 的等待上限。正常回應 0.5-1.2 秒，被防火牆黑洞時會用滿整個
-# 上限；這份資料只影響一段資訊性報告，不值得讓呼叫端多等十秒。
-REMOTE_FETCH_TIMEOUT_SECONDS = 5
+# 取遠端 manifest（fetch_remote_manifest，淺 clone）的等待上限。正常約 1.8 秒
+# （實測對 canonical repo），比改走 git clone 之前的 HTTP 直接 GET（0.5-1.2 秒）
+# 慢，故上限沿用同一顆常數但放寬，避免正常網路延遲被誤判為逾時；被防火牆
+# 黑洞時仍會用滿整個上限，這份資料只影響一段資訊性報告，不值得讓呼叫端無限
+# 等待。
+REMOTE_FETCH_TIMEOUT_SECONDS = 15
 EXCLUDE_DIRS = {
     "project-integration",
     ".venv",
@@ -45,6 +47,7 @@ EXCLUDE_DIRS = {
 _HOOK_LOGS_DIR_ENV = "HOOK_LOGS_DIR"
 _DEFAULT_HOOK_LOGS_DIR = ".claude/hook-logs"
 _PORTABILITY_FORCE_LOG_FILENAME = "skill-sync-portability-force.jsonl"
+_DIVERGENCE_FORCE_LOG_FILENAME = "skill-sync-divergence-force.jsonl"
 
 # 憑證判準（移植自 .claude/lib/sync_exclude_manifest.py 的憑證維度）。
 #
@@ -396,6 +399,33 @@ def _write_portability_force_log(
         print(f"  [Warning] force-log 寫入失敗（不阻斷 push）：{exc}", file=sys.stderr)
 
 
+def _write_divergence_force_log(
+    name: str, divergence_warned: bool, stale_version_warned: bool
+) -> None:
+    """`push --force` 使方向警告或 stale-version 警告失去 `[y/N]` 停點時，把
+    「這次 push 忽略了哪些警告」落地到 hook-logs，供事後追溯。
+
+    與 `_write_portability_force_log` 同一權衡：append-only JSONL、目錄不存在
+    自動建立、寫入失敗只警告不阻斷 push（這是稽核記錄，不是主閘門）。只在
+    `cmd_push` 判定至少一道警告曾印出且 `force=True` 時呼叫——沒有警告或未帶
+    `--force` 的正常路徑不產生任何記錄，避免每次成功 push 都無謂寫檔。
+    """
+    logs_dir = _resolve_hook_logs_dir()
+    record = {
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "skill": name,
+        "divergence_warning_ignored": divergence_warned,
+        "stale_version_warning_ignored": stale_version_warned,
+    }
+    try:
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        log_file = logs_dir / _DIVERGENCE_FORCE_LOG_FILENAME
+        with open(log_file, mode="a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        print(f"  [Warning] force-log 寫入失敗（不阻斷 push）：{exc}", file=sys.stderr)
+
+
 def _skill_exists_in_canonical(name: str, repo_url: str) -> bool:
     """查詢遠端 versions.json 是否已收錄此 skill。
 
@@ -711,11 +741,20 @@ def _stale_version_warning(
 
 def _print_stale_version_warning(
     source: Path, local_ver: str | None, remote_ver: str | None
-) -> None:
-    """push preview 內印出 `_stale_version_warning` 的結果（若有）。"""
+) -> bool:
+    """push preview 內印出 `_stale_version_warning` 的結果（若有）。
+
+    回傳是否印出了警告：`push --force` 需要這個布林值來判斷警告是否存在——
+    `--force` 不影響這個函式本身（檢查照跑、輸出照印），但拿掉了緊接其後的
+    `[y/N]` 停點，使這行 `[WARNING]` 從「使用者必然讀到才能繼續」降級為
+    「push 成功訊息前滾過去的幾行 stderr」。呼叫端（`cmd_push`）用回傳值在
+    `--force` 且警告存在時於結尾摘要重述，把降級的閱讀強制性至少部分找回來。
+    """
     warning = _stale_version_warning(source, local_ver, remote_ver)
     if warning:
         print(f"  [WARNING] {warning}", file=sys.stderr)
+        return True
+    return False
 
 
 def _print_divergence_warning(
@@ -723,21 +762,28 @@ def _print_divergence_warning(
     local_hash: str | None,
     remote_hash: str | None,
     expected: str,
-) -> None:
+) -> bool:
     """pull/push preview 前的方向檢查。local_skill_dir 是 sync base 記錄所在的
     本地目錄（pull 時是 target、push 時是 source，兩者皆為本地端）。
 
     任一雜湊為 None（目錄不存在，如首次 pull 或遠端尚無此 skill）或兩者相同
-    （未分歧，無方向可判）時安靜略過。
+    （未分歧，無方向可判）時安靜略過，回傳 False。
+
+    回傳是否印出了警告，理由與 `_print_stale_version_warning` 相同——
+    `cmd_push` 用它判斷 `--force` 是否把這道警告的停點拿掉了。`cmd_pull`
+    呼叫本函式時忽略回傳值：pull 沒有等價的 `--force` 降級問題，該路徑的
+    `[y/N]` 停點不受 `--force` 影響。
     """
     if local_hash is None or remote_hash is None or local_hash == remote_hash:
-        return
+        return False
     direction = _resolve_diverge_direction(
         _read_sync_base(local_skill_dir), local_hash, remote_hash
     )
     warning = _diverge_warning(direction, expected)
     if warning:
         print(f"  [WARNING] {warning}", file=sys.stderr)
+        return True
+    return False
 
 
 def _warn_skill_md_case_mismatch(base_dir: Path) -> None:
@@ -1224,10 +1270,10 @@ def cmd_push(args: argparse.Namespace) -> None:
         diff = compute_diff(source, target)
         plan = build_push_plan(diff, prune)
         print("\n[Push Preview]")
-        _print_divergence_warning(
+        divergence_warned = _print_divergence_warning(
             source, compute_content_hash(source), compute_content_hash(target), "push"
         )
-        _print_stale_version_warning(source, local_ver, remote_ver)
+        stale_version_warned = _print_stale_version_warning(source, local_ver, remote_ver)
         print_diff_preview(plan, direction="push", src=source, dst=target)
 
         prunable = plan["prunable"]
@@ -1276,6 +1322,20 @@ def cmd_push(args: argparse.Namespace) -> None:
         _record_sync_base(source)
 
     print(f"\nPushed '{name}' to {repo_url}")
+
+    # --force 拿掉了警告後緊接的 [y/N] 停點，使上面任何一道 [WARNING] 從
+    # 「使用者必然讀到才能繼續」降級為「成功訊息前滾過去的幾行 stderr」——
+    # 檢查本身沒有被跳過，變的是讀者處境。這裡在最終摘要重述被忽略的警告
+    # 則數並落地 force-log，把降級的閱讀強制性至少部分找回來；未帶 --force
+    # 或沒有警告產生時，這段完全不執行，不影響既有的安靜成功輸出。
+    if force and (divergence_warned or stale_version_warned):
+        ignored = int(divergence_warned) + int(stale_version_warned)
+        print(
+            f"  [WARNING] --force ignored {ignored} direction warning(s) above "
+            "— review them before assuming this push is safe.",
+            file=sys.stderr,
+        )
+        _write_divergence_force_log(name, divergence_warned, stale_version_warned)
 
 
 def _classify_sync_status(
@@ -1355,20 +1415,55 @@ def _classify_sync_status(
 
 
 def fetch_remote_manifest(repo_url: str) -> object:
-    """Fetch versions.json for the given repo. Raises on network or parse failure.
+    """Fetch versions.json for the given repo via a shallow, blob-less sparse clone.
 
-    The GitHub-to-raw URL rewrite lives here and nowhere else. A consumer that
-    re-derives it also re-derives the repo it points at, and then compares local
-    content against a different remote than `skill-sync` itself uses
-    (see ARCH-BAL-016).
+    Previously read raw.githubusercontent.com directly. That path sits behind
+    a CDN whose cache entry is created at push time and can keep serving the
+    pre-push content for well over a minute afterwards (three real-world
+    measurements against the canonical repo: 158s / 0s / 308s, upper bound
+    set by the CDN's own max-age=300 plus polling granularity) — a report run
+    inside that window misclassifies a just-pushed skill as SHOULD PULL, and
+    acting on that recommendation would overwrite the just-pushed content
+    with the stale remote copy. The GitHub REST contents API is not a fix
+    either: its response still carries `Cache-Control: max-age=60` (a
+    shorter but non-zero staleness window, measured), and anonymous callers
+    are additionally capped at 60 requests/hour — a ceiling a report command
+    invoked more than once a minute (routine across a multi-agent session)
+    can hit. `pull <name>` and `push <name>` already clone git directly for
+    this same repo and have never exhibited this staleness: git's smart HTTP
+    protocol resolves against the live ref on every request, with no CDN
+    edge cache in front of it. This switches the report path onto that same
+    mechanism instead of introducing a third one — repo/URL resolution for
+    fetching the manifest still lives only here (see ARCH-BAL-016); cloning
+    needs no URL derivation at all, `repo_url` is passed through unchanged.
+
+    `versions.json` lives at the repository root, so the default cone-mode
+    sparse pattern that `--sparse` alone applies (`/*` plus `!/*/`, meaning
+    "root-level files, no subdirectories") already limits the checkout to
+    it — unlike `pull <name>`, this needs no follow-up `sparse-checkout set`
+    to narrow to a specific path.
+
+    Raises `RuntimeError` on a non-zero git exit and
+    `subprocess.TimeoutExpired` past `REMOTE_FETCH_TIMEOUT_SECONDS`. That
+    bound is looser than the previous HTTP timeout: a clone takes longer
+    than a single GET under ordinary network conditions (~1.8s vs ~0.5s,
+    measured against the canonical repo), and a bound sized for the old path
+    would false-time-out on normal clone latency; it still keeps a
+    black-holed connection from hanging a report command indefinitely.
     """
-    raw_url = repo_url.replace(
-        "https://github.com/", "https://raw.githubusercontent.com/"
-    ).removesuffix(".git") + "/main/versions.json"
-    req = urllib.request.Request(raw_url, headers={"User-Agent": "skill-sync"})
-    # magic-exempt
-    with urllib.request.urlopen(req, timeout=REMOTE_FETCH_TIMEOUT_SECONDS) as resp:
-        return json.loads(resp.read())
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir) / "repo"
+        clone = subprocess.run(
+            ["git", "-c", "core.autocrlf=false", "clone", "--depth", "1",
+             "--filter=blob:none", "--sparse", repo_url, str(tmp)],
+            capture_output=True, text=True, timeout=REMOTE_FETCH_TIMEOUT_SECONDS,
+        )
+        if clone.returncode != 0:
+            raise RuntimeError(f"git clone failed: {clone.stderr.strip()}")
+        versions_file = tmp / "versions.json"
+        if not versions_file.is_file():
+            return {}
+        return json.loads(versions_file.read_text(encoding="utf-8"))
 
 
 def sync_status_report(
@@ -1391,8 +1486,10 @@ def sync_status_report(
     instead of `skipped_remote_missing`.
 
     Raises `ValueError` when the remote manifest is not a JSON object, and
-    whatever `urlopen` raises when the remote is unreachable. Callers decide how
-    to degrade: `cmd_pull_all` reports and stops, an informational consumer may
+    whatever `fetch_remote_manifest` raises when the remote is unreachable
+    (`RuntimeError` on a git failure, `subprocess.TimeoutExpired` past
+    `REMOTE_FETCH_TIMEOUT_SECONDS`). Callers decide how to degrade:
+    `cmd_pull_all` reports and stops, an informational consumer may
     downgrade to a warning. Deciding that here would force one policy on both.
     """
     resolved_url = repo_url or get_repo_url()
@@ -1628,9 +1725,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    pull_parser = sub.add_parser("pull", help="Pull a skill from remote repo")
-    pull_parser.add_argument("name", nargs="?", default=None,
-                             help="Skill name to pull (omit to update all installed)")
+    pull_parser = sub.add_parser(
+        "pull",
+        help="Pull a skill from remote repo, or print a sync status report for "
+             "all installed skills (omit name)",
+    )
+    pull_parser.add_argument(
+        "name", nargs="?", default=None,
+        help="Skill name to pull (omit to print a sync status report for all "
+             "installed skills instead; report only — writes nothing except "
+             "refreshing a stale '.skill-sync-base' marker for a skill "
+             "already up to date)",
+    )
     pull_parser.add_argument("--force", "-f", action="store_true",
                              help="Apply changes without confirmation")
 
@@ -1640,7 +1746,11 @@ def build_parser() -> argparse.ArgumentParser:
     push_parser.add_argument("--force", "-f", action="store_true",
                              help="Apply changes without confirmation; also bypasses the "
                                   "portability gate for a declared-portable skill (violations "
-                                  "are still printed to stdout/stderr and logged)")
+                                  "are still printed to stdout/stderr and logged); and removes "
+                                  "the confirmation stop that would otherwise follow a direction "
+                                  "or stale-version [WARNING] (the checks still run and still "
+                                  "print, but a summary line and force-log entry are the only "
+                                  "things left demanding you actually read them)")
     push_parser.add_argument("--prune", action="store_true",
                              help="Delete remote-only files (default: keep them)")
 

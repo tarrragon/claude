@@ -2,6 +2,12 @@
 
 建立 Atomic Ticket，遵循 5W1H 引導式建立。
 
+> **何時讀**：建立 Atomic Ticket 時——需確認版本歸屬、主題歸屬自動推導、多值參數格式、type 分類、決策樹路由參數，或需判斷 `--parent` 與 `--source-ticket` 該用哪個時。**亦由此進入**：`field-semantics.md`〈相關文件〉（`--parent` vs `--source-ticket` CLI 副作用對比指標）。
+>
+> **同目錄**：`workflow-create.md`（建立流程的決策樹，與本檔互補：決策樹在那份、參數細節在本檔）、`field-semantics.md`（欄位選擇決策樹，決定該填哪個血緣欄位時對照）。
+>
+> **溯源**：本檔於本專案匯入 commit `f375ae675` 時即已存在；2026-09-07 一次外移為 `SKILL.md`〈子命令詳細說明〉create 節的增量內容（依去重比對表判定為非重疊部分）搬入本檔，`SKILL.md` 對應節收斂為摘要句 + 路由指標（可用 `git log --oneline -- references/create-command.md` 查證）。
+
 本檔章節：〈基本用法〉〈版本歸屬引導〉〈主題歸屬（自動推導）〉〈多值參數格式〉〈類型說明〉〈決策樹路由參數〉〈重複偵測（兩層防護）〉〈--source-ticket 參數（衍生關係）〉。
 
 ## 基本用法
@@ -35,18 +41,17 @@
 # 建立子任務（可省略 decision-tree 參數）
 /ticket create --parent 1.0.0-W1-001 --action "更新" --target "XXX"
 
-# 建立衍生任務（與 --parent 互斥，見下方「--parent vs --source-ticket」章節）
+# 建立衍生任務（與 --parent 互斥，見下方「--parent vs --source-ticket 對比表」章節）
 /ticket create --version 0.31.0 --wave 1 --action "實作" --target "XXX" \
   --source-ticket 0.18.0-W17-001 --type IMP
 
 # 建立 DOC 類型（可省略 decision-tree 參數）
 /ticket create --version 0.31.0 --wave 1 --action "撰寫" --target "工作日誌" --type DOC
-
-# 初始化版本目錄
-/ticket init 0.31.0
 ```
 
-**重要**：建立根任務時，必須提供 `--decision-tree-entry`、`--decision-tree-decision`、`--decision-tree-rationale` 三個參數。只在以下情況可省略：
+> 版本目錄無獨立初始化子命令（`ticket --help` 無 `init`）：`create` 執行時以 `get_tickets_dir(version)` 自動 `mkdir(parents=True, exist_ok=True)`，版本目錄不存在時 `create` 直接建立。
+
+**重要**：建立時（含子任務、DOC 類型），`ticket_builder.py` 的 `validate_create_checklist` 要求至少一項 `--where-files`（或 `--where`）與至少一項 `--acceptance`；`create` 命令層缺任一項即於持久化前 `exit 1` 阻擋，`--force` 可跳過此檢查（僅印 WARNING）。此外建立根任務時，必須提供 `--decision-tree-entry`、`--decision-tree-decision`、`--decision-tree-rationale` 三個參數。只在以下情況可省略 decision-tree 三參數：
 - 建立子任務（使用 `--parent` 參數）
 - Ticket 類型為 DOC（`--type DOC`）
 
@@ -66,7 +71,7 @@
 
 三判準皆未命中時印 WARNING 但**不改 rc**（過渡期 warn-only）：以 exit code 表達強制力會讓代理人誤判建票失敗而重試。要免除警告有兩條路——指定主題，或以 `--no-topic` 明示不指派（該旗標與 `--topic` / `--new-topic` 互斥，同給時於任何持久化前 exit 1）。
 
-顯式 `--topic` / `--new-topic` 一律優先，推導只在兩者皆未給時啟動。S2 設 3 段特異性門檻是因為 `docs/` 這類單段路徑與該目錄下任何路徑都相交，不設門檻會使擁有淺層路徑的主題成為所有新票的推導結果。改派用 `ticket track topic-backfill-assign --reassign`。
+顯式 `--topic` / `--new-topic` 一律優先，推導只在兩者皆未給時啟動。S2 設 3 段特異性門檻是因為 `docs/` 這類單段路徑與該目錄下任何路徑都相交，不設門檻會使擁有淺層路徑的主題成為所有新票的推導結果。改派用 `ticket track topic-backfill-assign --file <輸入檔> --reassign`（`--file` 為必填參數）。
 
 ## 多值參數格式
 
@@ -171,7 +176,7 @@ ticket create --wave 1 --action "實作" --target "XXX" --allow-duplicate \
 
 使用 `--allow-duplicate` 時放行建立，並在 stdout 標註 `[INFO] --allow-duplicate 已啟用，略過同窗口高相似度阻擋`。
 
-> **bulk_create 差異**：`bulk-create` 僅套用 Tier 1 警告層，**不套用** Tier 2 阻擋層——批次內部同質性高，阻擋誤報風險大。
+> **batch-create 差異**：`batch-create` 僅套用 Tier 1 警告層，**不套用** Tier 2 阻擋層——批次內部同質性高，阻擋誤報風險大。
 
 ## --source-ticket 參數（衍生關係）
 
@@ -214,7 +219,7 @@ ticket create --wave 1 --action "實作" --target "XXX" --allow-duplicate \
 |------|-----------|-------------------|
 | 語意 | 血緣關係（直系子任務） | 衍生關係（副產品 / 延伸） |
 | 關係欄位 | `parent_id` + `<parent>.children[]` | `source_ticket` + `<source>.spawned_tickets[]` |
-| Complete 阻擋 | 父 Ticket 被未完成 children 阻擋（永遠） | 非 ANA source：不被 spawned 阻擋（獨立排程）；ANA source：W15-003 升級後阻擋（過渡狀態，後續 hook 收斂後將回到「不阻擋」） |
+| Complete 阻擋 | 父 Ticket 被未完成 children 阻擋（永遠） | 非 ANA source：不被 spawned 阻擋（獨立排程）；ANA source：仍阻擋——`lifecycle.py` 的 `_handle_ana_spawned_confirmation` 確認關卡與 `acceptance_auditor.py` 的 `validate_spawned_tickets_completed`（W15-003）稽核 FAIL 皆為現行已定案設計（hook 層 `ana_spawned_checker` 已退場為 warn-only，但阻擋機制本身未隨之移除，詳見 `field-semantics.md`〈阻擋語意對照表〉現況分層說明） |
 | 序號規則 | 自動子序號（如 `W17-001.1`） | 獨立 Ticket ID（不繼承序號） |
 | 使用時機 | 功能拆分、ANA 結論要求的落地（PC-091 路線） | 執行中發現獨立 bug / 技術債（PC-073 殘存範圍） |
 | 典型場景 | ANA Solution 落地為 IMP/DOC（一律 children） | 執行 IMP/DOC 中發現 bug/技術債另開單獨追蹤 |

@@ -672,6 +672,70 @@ class TestQuotedArgumentNotMisdetected:
 
 
 # ============================================================================
+# _detect_operation：不含 git 呼叫的命令因 shlex 解析失敗而誤報（收束：
+# 補上 contains_git_word 前置短路，修復不含 git 字樣的命令因未閉合引號
+# 導致 tokenize 失敗、被各偵測器內部保守預設誤判為「偵測到」某操作）
+# ============================================================================
+
+
+class TestNonGitCommandParseFailureNotMisdetected:
+    def test_unclosed_quote_without_git_word_not_detected(self):
+        """實測重現：Bash 內嵌 python 讀 ticket md，內文含英文所有格撇號
+        （`this ticket's`），使單引號包裹的 -c 引數整體單引號數為奇數，
+        shlex 解析失敗（`ValueError: No closing quotation`）。命令完全
+        不含 `git` 字樣，修復前會被誤判為 `("git stash", ...)`。
+        """
+        command = (
+            "python3 -c 'text = open(\"ticket.md\").read()\n"
+            "print(text.count(\"stash\"))\n"
+            "# comment: this ticket's about workspace wipe'"
+        )
+        assert "git" not in command
+        assert _detect_operation(command) is None
+
+    def test_unclosed_quote_with_variable_name_containing_stash_not_detected(self):
+        """變數名含 stash 子字串、無 git 呼叫，且命令因未閉合引號解析失敗。"""
+        command = "python3 -c 'stash_note = \"a\"\nprint(stash_note's_length)'"
+        assert "git" not in command
+        assert _detect_operation(command) is None
+
+    def test_unclosed_quote_with_git_word_still_conservatively_detected(self):
+        """對照組：命令含 `git` 字樣且解析失敗時，既有保守預設不變（本次
+        修復僅收斂「完全不含 git 字樣」子集，不擴大既有安全邊界）。
+        """
+        command = "python3 -c 'note = \"about git usage, this ticket's fine\"'"
+        assert "git" in command
+        assert _detect_operation(command) is not None
+
+    def test_real_stash_after_apostrophe_parse_failure_pattern_still_detected(self):
+        """對照組：真實 git stash（無解析失敗）不受本次修復影響，仍被偵測。"""
+        assert _detect_operation("git stash") == (
+            "git stash",
+            hook_module._OPERATIONS[0][2],
+        )
+
+    def test_main_allows_non_git_parse_failure_command_even_when_parallel(
+        self, monkeypatch, capsys
+    ):
+        """整合層級：不含 git 字樣但解析失敗的命令，即使在並行期也應放行。"""
+        command = (
+            "python3 -c 'text = open(\"ticket.md\").read()\n"
+            "print(text.count(\"stash\"))\n"
+            "# comment: this ticket's about workspace wipe'"
+        )
+        exit_code = _run_hook(monkeypatch, command, dispatch_count=3)
+        assert exit_code == 0
+        assert capsys.readouterr().err == ""
+
+    def test_main_still_denies_real_git_stash_when_parallel(self, monkeypatch, capsys):
+        """整合層級對照組：真實 git stash 在並行期仍被 DENY（無回歸）。"""
+        exit_code = _run_hook(monkeypatch, "git stash", dispatch_count=2)
+        assert exit_code == 2
+        err = capsys.readouterr().err
+        assert "git stash" in err
+
+
+# ============================================================================
 # main() 整合：主 repo 有未提交 tracked 變更時無條件 DENY（不限並行期）
 # （0.2.1-W3-760：PC-019 事故鏈第 4 步發生於 agent 完成後，
 #   dispatch-active.json 已清空，此時仍須阻擋）

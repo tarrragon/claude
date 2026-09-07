@@ -18,7 +18,7 @@ framework issue 的一般協作寫法。適用於「問題的分析與方案 con
 
 | 操作 | 用途 | 誰可執行 |
 |------|------|---------|
-| `init` | 查重後建立全部區段 comment（如「當前結論」「問題與方案」「待辦與來源」），取得各 comment id 後回填一次 body 的區段索引表 | 首位建區段的 session（issue 本身可由他人建立） |
+| `init` | 查重後建立全部區段 comment（如「當前結論」「問題與方案」「待辦與來源」），取得各 comment id 後與既有索引列合併回填一次 body 的區段索引表；issue 已有任何區段 comment 時預設拒絕（exit 3，提示改用 `add`），`--force` 可略過此檢查 | 首位建區段的 session（issue 本身可由他人建立） |
 | `add` | 對已 `init` 過的 issue 建立單一區段 comment，在既有索引表追加一列（不存在索引表時建立），其他既有列不受影響 | 任何 session（成為該區段 owner） |
 | `dedup` | 唯讀查重：與 `init` 內建查重共用同一機制，不建立任何 comment／issue，供 `init` 前單獨核對關鍵字涵蓋範圍 | 任何 session |
 | `update` | 以 comment id 精準編輯指定區段內容，不影響同 issue 其他 comment | 該區段的 owner |
@@ -27,19 +27,21 @@ framework issue 的一般協作寫法。適用於「問題的分析與方案 con
 | `show` | 以 body 的區段索引為起點輸出，區分「當前結論區段」與「觀測流」；每則區段列附 owner（從首行標記回推） | 任何 session |
 | `check` | 輸出三項警訊（見下）：當前結論時效、comment 數閾值、索引一致性 | 任何 session |
 
-**`init` 兩階段順序**：comment id 在區段建立後才存在，索引無法在建立時一併寫入，故 `init` 必為「查重 → 建區段 comment → 取得 id → 回填一次 body 索引表」。body 其後不再由工具改寫，`update` 只動區段 comment。區段 comment 全數建立成功即把 `(issue number, owner, updated_at)` 落地到本地擁有登記檔 `.claude/state/framework-issue-owned.json`（per-worktree、不入版控），不等索引回填；回填失敗時登記仍成立，供 SessionStart 檢查省去搜尋往返。
+**`init` 兩階段順序**：comment id 在區段建立後才存在，索引無法在建立時一併寫入，故 `init` 必為「查重 → （無 `--force` 時先掃描既有區段 comment，已有則拒絕）→ 建區段 comment → 取得 id → 讀 body 與既有索引列合併 → PATCH 一次」。body 其後不再由工具改寫，`update` 只動區段 comment。區段 comment 全數建立成功即把 `(issue number, owner, updated_at)` 落地到本地擁有登記檔 `.claude/state/framework-issue-owned.json`（per-worktree、不入版控），不等索引回填；回填失敗時登記仍成立，供 SessionStart 檢查省去搜尋往返。`init` 原本以本次區段清單整段覆寫索引，第二個 session 對已 `init` 過的 issue 再次執行會使第一個 session 的既有區段從 `show` 消失（見 #81 事故）；現改為與既有索引列合併，且預設拒絕已有區段的 issue（避免誤用），`--force` 才會略過拒絕檢查並執行合併。
 
-**`add` 補上「`init` 只能跑一次」的缺口**：後續 session 要在同一 issue 新增區段時改用 `add`，流程為「POST 單一區段 comment → 讀 body → 合併既有索引列與新列 → PATCH 一次」，既有列的 comment id／連結不變；成功後同樣落地擁有登記檔。`init`／`add`／`transfer-owner` 三者共用同一 owner 格式驗證（見下方〈owner 識別格式〉），不合法一律 exit 3 並印格式說明。`add` 與 `init` 共用同一索引偵測機制（`<!-- section-index -->` 標記），body 已有手寫索引表（無此標記）時 `add` 同樣會多出第二張表，而非併入手寫表——此為既有 `init` 限制的延伸，非本次新增缺陷。`add` 成功時比照 `transfer-owner` 逐字印出結果（`區段「<名稱>」已建立 @ <issue-ref>，owner=<值>`），操作者不需另開 comment 即可確認建立結果。
+**`add` 補上「`init` 預設每張 issue 只能跑一次」的缺口**：後續 session 要在同一 issue 新增區段時仍建議用 `add`（不需重新查重），流程為「POST 單一區段 comment → 讀 body → 合併既有索引列與新列 → PATCH 一次」，既有列的 comment id／連結不變；成功後同樣落地擁有登記檔。`init`／`add`／`transfer-owner` 三者共用同一 owner 格式驗證（見下方〈owner 識別格式〉），不合法一律 exit 3 並印格式說明。`add`／`init` 合併索引列時皆以 comment id 去重，並把 body 內未加 `<!-- section-index -->` 標記的手寫索引表視為既有列來源（讀 `parse_index_table` 結果）整段移除後併入合併結果，不再於其後追加第二張表。`add` 成功時比照 `transfer-owner` 逐字印出結果（`區段「<名稱>」已建立 @ <issue-ref>，owner=<值>`），操作者不需另開 comment 即可確認建立結果。
 
 ## CLI 語法
 
 ```bash
 # init：--dedup-keywords 必填（可多值，每組可含空白，逐一加引號）
 # --sections-file 為 JSON 陣列 [{"name": "區段名", "content": "內容"}, ...]
+# issue 已有區段 comment 時預設拒絕（exit 3）；--force 略過拒絕檢查並與既有索引列合併
 python3 .claude/skills/framework-issue/scripts/section_comment.py init <issue-ref> \
   --owner <session識別> \
   --sections-file <path/to/sections.json> \
-  --dedup-keywords "關鍵字組一" "關鍵字組二"
+  --dedup-keywords "關鍵字組一" "關鍵字組二" \
+  [--force]
 
 # add：對已 init 過的 issue 追加單一區段，content-file 內容不含首行標記
 python3 .claude/skills/framework-issue/scripts/section_comment.py add <issue-ref> \
@@ -145,3 +147,4 @@ fix-matrix 模型的 `close` 另有版本號前置檢查，屬不同機制層次
 | 限制 | 影響 | 現行處置 |
 |------|------|---------|
 | 查重關鍵字集合會過期 | 失效無明確事件觸發，訊號弱於索引過期 | 不為它加 `check`；查重出現誤判時以此為第一個查證方向 |
+| `init --force`／`add` 合併索引時不檢查區段名稱是否與既有列重複 | 同名區段各自成一列（id 不同），索引表本身無法從名稱區分 | 沿用既有命名後綴慣例（見〈以 add 加進他方已 init 的 issue 時〉），不在工具層強制唯一性 |

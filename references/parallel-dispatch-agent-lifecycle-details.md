@@ -44,7 +44,7 @@
 <!-- rule8-exempt: relocation:自 .claude/pm-rules/parallel-dispatch.md 逐字搬移 -->
 ## idle agent 回收 SOP（W1-008 ANA 落地）
 
-> **模型依據**：named agent（Agent tool 帶 name 參數 spawn）完工後不自動終止，進入 `idle` 態（warm runner，跑完不銷）。三態定義見 `.claude/skills/ticket/SKILL.md`「named agent 生命週期三態」章節。本節定義 PM 對 idle 通知的標準處置。
+> **模型依據**：named agent（Agent tool 帶 name 參數 spawn）完工後不自動終止，進入 `idle` 態（warm runner，跑完不銷）。三態定義見 `.claude/skills/ticket/references/architecture.md`「named agent 生命週期三態（v2.9.0 擴展）」章節。本節定義 PM 對 idle 通知的標準處置。
 
 **觸發條件**：PM 收到 `{"type":"idle_notification","idleReason":"available"}` 通知，或代理人完成回報後轉入 idle。
 

@@ -1,6 +1,12 @@
 # Ticket 系統架構
 
-本檔章節：〈系統模型（設計自我描述，完整版）〉〈目錄結構〉〈共用模組設計〉〈自動化分析功能〉。
+> **何時讀**：查詢目錄結構、共用模組設計、自動化分析功能、系統模型設計自我描述完整版（含 named agent 三態生命週期），或覆核 skill 自身測試套件時；亦收錄 CLI 安裝與執行方式的完整說明。**亦由此進入**：`SKILL.md`〈系統模型（設計自我描述）〉節末（named agent 三態生命週期指標）、`SKILL.md`〈執行方式〉節（安裝指令指標）、`SKILL.md`〈執行方式〉節末（覆核測試指令指標）、`track-command.md`「Python 測試路徑推導」小節末（覆核測試指令指標）。
+>
+> **同目錄**：`track-command.md`（測試路徑推導與 skill 測試套件互相引用）、`workflow-execute.md` / `workflow-query.md`（依系統模型設計的執行/查詢決策樹）。
+>
+> **溯源**：本檔於本專案匯入 commit `f375ae675` 時即已存在，此後累積增補模組清單與用語校準；「覆核測試指令」章節於 2026-09-07 由 `SKILL.md`〈執行方式〉節末逐字搬入檔尾；「安裝與執行方式」章節同日由 `SKILL.md`〈執行方式〉節下的〈全局安裝（推薦，shim 化）〉〈本地執行〉兩子節逐字搬入（可用 `git log --oneline -- references/architecture.md` 查證）。
+
+本檔章節：〈系統模型（設計自我描述，完整版）〉〈目錄結構〉〈共用模組設計〉〈自動化分析功能〉〈安裝與執行方式〉〈覆核測試指令（skill 自身測試套件）〉。
 
 ## 系統模型（設計自我描述，完整版）
 
@@ -9,6 +15,8 @@
 1. **身份晚綁定**：ticket 建立時不知道執行者（submit 與 assign 分離）；身份在 claim 時以 `--as` 綁定，不是 fork 即繼承。
 2. **共享工作區**：agent 預設共享 working tree（thread 語意）而非 process 隔離；檔案變更型派發應優先採 feat branch / worktree 隔離。
 3. **type 與 instance 一對多**：agent 類型（能執行某類任務的角色，如「能做 IMP 的類型」）與執行體（實際在跑的 process）不是一對一，同一類型可同時 spawn 多個獨立執行體；「該類型只有一種」不等於「同時只能跑一個」。**反向風險**：誤讀為可無限開執行體同樣危險，真正的並行上限來自三項約束——共享 git index 的寫入競爭、主線程自身序列化的驗收與建票工作、單一執行體 context 隨任務數累積而飽和，而非類型數。
+
+scheduler 層類比同樣成立：runqueue／dashboard 對應 Linux `schedule()`／`top`。
 
 ### named agent 生命週期三態（v2.9.0 擴展）
 
@@ -31,11 +39,10 @@ idle 態不改變 agent = runner 的核心類比（身份仍在 claim 綁定、�
 ```
 .claude/skills/ticket/
 ├── SKILL.md                    # 入口文件 - 統一入口
-├── ticket.md                   # 完整使用指南
 ├── pyproject.toml              # 套件定義（uv 管理）
 ├── ticket_system/              # 主套件目錄
 │   ├── __init__.py
-│   ├── lib/                    # 共用模組（67 個，依功能分組）
+│   ├── lib/                    # 共用模組（72 個，依功能分組）
 │   │   ├── __init__.py
 │   │   │
 │   │   ├── [Ticket 核心 I/O 與解析]
@@ -70,6 +77,8 @@ idle 態不改變 agent = runner 的核心類比（身份仍在 claim 綁定、�
 │   │   ├── multi_view_status.py           # multi_view_status 欄位覆寫格式驗證
 │   │   ├── exempt_marker.py               # PC-093 exempt marker 格式驗證與生成
 │   │   ├── precondition.py                # Body-op precondition checks 
+│   │   ├── absence_assertion_detector.py  # 缺席斷言未查證提示模組（PC-BAL-053 承接）
+│   │   ├── ana_ticket_metadata_validator.py  # ANA Ticket metadata 品質驗證模組（PC-058）
 │   │   │
 │   │   ├── [任務鏈與排程]
 │   │   ├── chain_analyzer.py              # 任務鏈分析模組
@@ -85,6 +94,8 @@ idle 態不改變 agent = runner 的核心類比（身份仍在 claim 綁定、�
 │   │   ├── tdd_sequence.py                # TDD 序列建議模組
 │   │   ├── dispatch_recommender.py        # Dispatch Recommender - Agent 派發建議演算法
 │   │   ├── dispatch_common.py             # 共用 dispatch-* CLI 前置處理
+│   │   ├── dispatch_skeleton.py           # Dispatch 骨架純組裝邏輯（供 CLI 與測試共用，抽離自 track_dispatch）
+│   │   ├── relatedto_index.py             # relatedTo 反向索引模組（單向儲存、消費端 1-hop symmetric union）
 │   │   │
 │   │   ├── [併發、身份與版控]
 │   │   ├── lease.py                       # Lease 生命週期管理（multi-PM 協調層 Phase 3：claim/complete/release/reclaim）
@@ -92,6 +103,7 @@ idle 態不改變 agent = runner 的核心類比（身份仍在 claim 綁定、�
 │   │   ├── identity_guard.py              # 身份申報守衛（identity guard）— --as 旗標與 ticket who.current 對照
 │   │   ├── registry_loader.py             # Registry Loader - 共用的 registry 載入函式
 │   │   ├── git_utils.py                   # md auto-commit 薄封裝
+│   │   ├── git_ops.py                     # 共用隔離索引提交（commit_files_isolated，供 auto-commit hook 與 lifecycle.complete() 共用）
 │   │   │
 │   │   ├── [Handoff、worklog 與 checkpoint]
 │   │   ├── handoff_utils.py               # Handoff 共用判斷函式模組
@@ -124,8 +136,8 @@ idle 態不改變 agent = runner 的核心類比（身份仍在 claim 綁定、�
 │   │   ├── version.py                     # 版本管理模組
 │   │   ├── audit_version.py               # 版本審計模組
 │   │   └── ambiguous_prefix.py            # 共用的 argparse 縮寫歧義攔截 helper
-│   ├── commands/               # 子命令實作（48 個；各命令的用法與語意見 SKILL.md）
-│   │   ├── __init__.py         # 匯出六大子命令
+│   ├── commands/               # 子命令實作（52 個；各命令的用法與語意見 SKILL.md）
+│   │   ├── __init__.py         # 註冊 8 個頂層子命令（create/track/handoff/resume/migrate/generate/batch-create/show）；version-shift 另於 `ticket_system/scripts/ticket.py:150` 直接註冊
 │   │   │
 │   │   ├── [頂層命令]
 │   │   ├── create.py                      # create 命令模組
@@ -151,6 +163,8 @@ idle 態不改變 agent = runner 的核心類比（身份仍在 claim 綁定、�
 │   │   ├── track_batch.py                 # 批量操作模組
 │   │   ├── track_acceptance.py            # 驗收條件和執行日誌模組
 │   │   ├── track_set_acceptance.py        # ticket track set-acceptance 子命令
+│   │   ├── track_set_closed_by.py         # ticket track set-closed-by 子命令（closed 票 closed_by 欄位修正路徑）
+│   │   ├── track_commit.py                # ticket track commit 子命令（隔離索引提交 where.files 子集，取代裸 git add+commit）
 │   │   ├── track_audit.py                 # audit 子命令實作
 │   │   ├── track_validate.py              # ticket track validate 子命令
 │   │   ├── track_board.py                 # 看板命令模組
@@ -175,6 +189,8 @@ idle 態不改變 agent = runner 的核心類比（身份仍在 claim 綁定、�
 │   │   ├── track_handoff_ready.py         # ticket track handoff-ready 命令
 │   │   ├── track_checkpoint_status.py     # ticket track checkpoint-status 命令
 │   │   ├── track_hook_health.py           # ticket track hook-health 命令
+│   │   ├── track_hook_liveness.py         # ticket track hook-liveness 命令（查 `.claude/hook-logs/_liveness/*.jsonl` 觸發記錄）
+│   │   ├── track_dispatch.py              # ticket track dispatch 子命令（派發即落票：--note 落票派發日誌 + 輸出骨架 prompt）
 │   │   │
 │   │   ├── [multi-PM 協調層]
 │   │   ├── track_sessions.py              # ticket track sessions 命令
@@ -332,27 +348,32 @@ Wave 計算邏輯模組（W7 新增）。
 
 ### constants.py
 
-共用常數定義。
+共用常數定義。canonical location 為 `ticket_system/constants.py`；`ticket_system/lib/constants.py` 為向後相容 shim（`from ticket_system.constants import *`），skill 內部與 hook 皆可用，理由見該檔 docstring（避免 hook 在無 yaml 系統 Python 環境下經 `lib/__init__.py` eager-import 觸發 `ModuleNotFoundError`）。
 
 ```python
-# 狀態常數
+# 狀態常數（ticket_system/constants.py:125-130）
 STATUS_PENDING = "pending"
 STATUS_IN_PROGRESS = "in_progress"
 STATUS_COMPLETED = "completed"
 STATUS_BLOCKED = "blocked"
+STATUS_SUPERSEDED = "superseded"
+STATUS_CLOSED = "closed"
 
-# 類型常數
-TYPE_IMP = "IMP"
-TYPE_TST = "TST"
-TYPE_ADJ = "ADJ"
-# ...
+# 類型常數：正典 4 型為 dict，非個別 TYPE_* 常數（:279-284）
+TICKET_TYPES = {
+    "IMP": "Implementation (實作)",
+    "ADJ": "Adjustment (調整/修復)",
+    "ANA": "Analysis (分析)",
+    "DOC": "Documentation (文件)",
+}
+# 歷史化石容忍集：讀取/審計接受、寫入拒絕（:288）
+LEGACY_TICKET_TYPES = frozenset({"TST", "RES", "INV"})
 
-# 路徑常數
-TICKETS_BASE_PATH = "docs/work-logs"
-HANDOFF_PATH = ".claude/handoff/pending"
+# 路徑常數（:264）；無獨立 HANDOFF_PATH 常數，pending 目錄由 handoff_utils 動態組出
+WORK_LOGS_DIR = "docs/work-logs"
 
-# 正則表達式
-TICKET_ID_PATTERN = r"^(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)$"
+# 正則表達式（:204，尾段含可選 slug 段）
+TICKET_ID_PATTERN = r"^(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)(-[a-z0-9][a-z0-9-]{0,59})?$"
 ```
 
 ## 自動化分析功能
@@ -433,3 +454,41 @@ TICKET_ID_PATTERN = r"^(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)$"
 ```
 [ERROR] 無法進入 Phase 3b（實作執行），尚需完成：Phase 3a（策略規劃）
 ```
+
+## 安裝與執行方式
+
+> **禁止直接執行 Python 檔案。** `ticket_system` 是 Python 套件，必須透過 `pyproject.toml` 定義的入口點執行。
+
+### 全局安裝（推薦，shim 化）
+
+`ticket` CLI 透過 cwd-resolving shim 安裝（非 `uv tool install`，ARCH-APP-002 / framework issue #12）：shim 依當前 cwd 所在專案的 git toplevel 解析 `.claude/skills/ticket` 源碼並 `uv run`，源碼修改後**無需重新安裝**、改動即時生效，多專案共用同名 skill 不碰撞。`uv-tool-staleness-check-hook` / `ticket-reinstall-hook` 兩 hook 仍註冊於 `.claude/settings.json`，非「已取代」：`ticket-reinstall-hook.py` 偵測到已 shim 化即略過；`uv-tool-staleness-check-hook.py` 無 shim 分支，兩者保留註冊為舊 `uv tool install` 路徑的殘留防護。
+
+```bash
+# 安裝 / 更新 shim（一次安裝 ticket / doc / worktree 三個 shim）
+python3 .claude/scripts/install-skill-clis.py
+
+# 檢查是否已 shim 化（exit 0/1）
+python3 .claude/scripts/install-skill-clis.py --check
+
+# 之後在任何目錄執行
+ticket track summary
+ticket track claim <id>
+```
+
+### 本地執行
+
+```bash
+(cd .claude/skills/ticket && uv run ticket track summary)
+```
+
+## 覆核測試指令（skill 自身測試套件）
+
+> **唯一標準指令**：裸 `pytest`，不帶任何路徑參數。`pyproject.toml` 的 `[tool.pytest.ini_options]` 已設定 `testpaths = ["tests", "ticket_system/tests"]`，一次 pytest session 涵蓋 skill 根層 `tests/` 與 `ticket_system/tests/` 兩個目錄，無需（也不應）分開執行。
+
+```bash
+(cd .claude/skills/ticket && uv run --with pytest --with pyyaml --with filelock python -m pytest -q)
+```
+
+**禁止**：以顯式路徑（如 `pytest tests/`、`pytest ticket_system/tests`）作為覆核依據。顯式路徑參數會**覆蓋** `testpaths` 設定，僅收集單一目錄下的測試，另一目錄的測試會被靜默漏跑而不觸發任何錯誤或警告——覆核者若只跑其中一個目錄卻在 Test Results 宣稱「測試通過率 100%」，該宣稱在結構上未涵蓋另一半測試。
+
+`ticket_system/tests/` 與 `tests/` 兩目錄並存的分裂現況、路徑推導細節見 `references/track-command.md`「Python 測試路徑推導」小節。

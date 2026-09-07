@@ -147,6 +147,10 @@ def _init_side_effect(post_urls, captured):
     def _run(args, **kwargs):
         if args[:3] == ["gh", "search", "issues"]:
             return _completed(stdout=json.dumps([]))
+        if args[:2] == ["gh", "api"] and "--paginate" in args:
+            # init 前置的既有區段掃描（cmd_init 的 fetch_comments 呼叫）；
+            # 預設無既有區段 comment，走 init 正常流程。
+            return _completed(stdout=json.dumps([]))
         if args[:2] == ["gh", "api"] and args[2].endswith("/comments") and "--method" not in args:
             url, comment_id = next(post_iter)
             return _completed(stdout=json.dumps({"id": comment_id, "html_url": url}))
@@ -188,7 +192,11 @@ def test_init_posts_all_sections_then_backfills_index_once(tmp_path):
         )
     assert rc == 0
 
-    api_calls = [c for c in run.call_args_list if c.args[0][:2] == ["gh", "api"]]
+    api_calls = [
+        c
+        for c in run.call_args_list
+        if c.args[0][:2] == ["gh", "api"] and "--paginate" not in c.args[0]
+    ]
     assert len(api_calls) == 2
     first_body = api_calls[0].args[0][-1]
     assert first_body == "body=<!-- section: 當前結論 owner: test-session-1 -->\n## 當前結論\n內容 A"
@@ -236,6 +244,8 @@ def test_init_does_not_duplicate_schema_marker_when_already_present(tmp_path):
 
     def _run(args, **kwargs):
         if args[:3] == ["gh", "search", "issues"]:
+            return _completed(stdout=json.dumps([]))
+        if args[:2] == ["gh", "api"] and "--paginate" in args:
             return _completed(stdout=json.dumps([]))
         if args[:2] == ["gh", "api"] and args[2].endswith("/comments") and "--method" not in args:
             return _completed(
@@ -320,6 +330,10 @@ def test_init_reports_partial_success_count_on_mid_failure(tmp_path, capsys):
     call_count = {"n": 0}
 
     def _run(args, **kwargs):
+        if args[:2] == ["gh", "api"] and "--paginate" in args:
+            # init 前置的既有區段掃描；獨立於下方 call_count 計數，避免
+            # 位移原本鎖定「第 2 次呼叫成功、其餘失敗」的測試意圖。
+            return _completed(stdout=json.dumps([]))
         call_count["n"] += 1
         if args[:3] == ["gh", "search", "issues"]:
             return _completed(stdout=json.dumps([]))
@@ -412,6 +426,97 @@ def test_init_records_owned_issue_after_successful_section_creation(tmp_path):
     assert isinstance(number, int)
     assert owner == "test-session-1"
     assert isinstance(updated_at, str) and updated_at
+
+
+# --- init：issue 已有區段 comment 時預設拒絕，--force 與既有索引列合併 ---
+
+
+def test_init_rejects_when_sections_already_exist_without_force(tmp_path, capsys):
+    """acceptance：issue 已有任何 section 標記 comment 時 init 無 --force
+    即 exit 3 並印 add 用法。"""
+    sections_file = tmp_path / "sections.json"
+    sections_file.write_text(
+        json.dumps([{"name": "方案評估", "content": "內容"}]), encoding="utf-8"
+    )
+    existing_comment = {
+        "id": 1,
+        "body": "<!-- section: 當前結論 owner: other-session-1 -->\n內容",
+    }
+
+    def _run(args, **kwargs):
+        if args[:2] == ["gh", "api"] and "--paginate" in args:
+            return _completed(stdout=json.dumps([existing_comment]))
+        raise AssertionError(f"未預期的 gh 呼叫：{args}")
+
+    with mock.patch.object(section_comment.subprocess, "run", side_effect=_run):
+        rc = section_comment.main(
+            [
+                "init", "81", "--owner", "test-session-2", "--sections-file", str(sections_file),
+                "--dedup-keywords", "測試關鍵字",
+            ]
+        )
+    assert rc == gh_common.EXIT_DEGRADED
+    err = capsys.readouterr().err
+    assert "add" in err
+    assert "--force" in err
+
+
+def test_init_force_merges_with_existing_index_when_sections_present(tmp_path):
+    """acceptance：對已含他方索引列的 issue 執行 init（--force）後，索引
+    表列出他方列與本方列，他方 comment id（連結中的 issuecomment-1）不變。"""
+    sections_file = tmp_path / "sections.json"
+    sections_file.write_text(
+        json.dumps([{"name": "方案評估", "content": "## 方案評估\n內容"}]), encoding="utf-8"
+    )
+    existing_body = (
+        "## 摘要\n\n"
+        "<!-- section-index -->\n"
+        "## 區段索引\n\n"
+        "| 區段 | 永久連結 |\n"
+        "|------|---------|\n"
+        "| 當前結論 | https://github.com/tarrragon/claude/issues/81#issuecomment-1 |\n"
+        "<!-- /section-index -->\n"
+    )
+    existing_comment = {
+        "id": 1,
+        "body": "<!-- section: 當前結論 owner: other-session-1 -->\n內容",
+    }
+    captured = {}
+
+    def _run(args, **kwargs):
+        if args[:3] == ["gh", "search", "issues"]:
+            return _completed(stdout=json.dumps([]))
+        if args[:2] == ["gh", "api"] and "--paginate" in args:
+            return _completed(stdout=json.dumps([existing_comment]))
+        if args[:2] == ["gh", "api"] and args[2].endswith("/comments") and "--method" not in args:
+            return _completed(
+                stdout=json.dumps(
+                    {
+                        "id": 2,
+                        "html_url": "https://github.com/tarrragon/claude/issues/81#issuecomment-2",
+                    }
+                )
+            )
+        if args[:3] == ["gh", "issue", "view"]:
+            return _completed(stdout=json.dumps({"body": existing_body}))
+        if args[:3] == ["gh", "issue", "edit"]:
+            body_file = Path(args[args.index("--body-file") + 1])
+            captured["body"] = body_file.read_text(encoding="utf-8")
+            return _completed(stdout="")
+        raise AssertionError(f"未預期的 gh 呼叫：{args}")
+
+    with mock.patch.object(section_comment.subprocess, "run", side_effect=_run):
+        rc = section_comment.main(
+            [
+                "init", "81", "--owner", "test-session-2", "--sections-file", str(sections_file),
+                "--dedup-keywords", "測試關鍵字", "--force",
+            ]
+        )
+    assert rc == 0
+    written_body = captured["body"]
+    assert "| 當前結論 | https://github.com/tarrragon/claude/issues/81#issuecomment-1 |" in written_body
+    assert "| 方案評估 | https://github.com/tarrragon/claude/issues/81#issuecomment-2 |" in written_body
+    assert written_body.count("issuecomment-1") == 1
 
 
 # --- add：對既有 issue 追加單一區段，既有索引列不被覆寫 ---
@@ -507,6 +612,78 @@ def test_add_success_message_prints_issue_section_name_and_owner(tmp_path, capsy
     err = capsys.readouterr().err
     assert "區段「當前結論」已建立 @ 81" in err
     assert "owner=test-session-1" in err
+
+
+def test_add_merges_hand_written_index_table_without_duplicating_rows(tmp_path):
+    """Problem Analysis 第二個同源缺陷：body 已有手寫索引表（無
+    `<!-- section-index -->` 標記）時，add 併入既有列而非在其後追加第二張
+    表；重寫後只留一份標記索引，既有列與新列各出現一次。"""
+    content_file = tmp_path / "content.md"
+    content_file.write_text("## 方案評估\n新內容", encoding="utf-8")
+    existing_body = (
+        "## 摘要\n\n"
+        "## 區段索引\n\n"
+        "| 區段 | 永久連結 |\n"
+        "|------|---------|\n"
+        "| 當前結論 | https://github.com/tarrragon/claude/issues/81#issuecomment-1 |\n"
+    )
+    captured = {}
+    with mock.patch.object(
+        section_comment.subprocess,
+        "run",
+        side_effect=_add_side_effect(
+            ("https://github.com/tarrragon/claude/issues/81#issuecomment-2", 2),
+            existing_body,
+            captured,
+        ),
+    ):
+        rc = section_comment.main(
+            [
+                "add", "81", "--owner", "test-session-1", "--name", "方案評估",
+                "--content-file", str(content_file),
+            ]
+        )
+    assert rc == 0
+    written_body = captured["body"]
+    assert written_body.count(section_comment.INDEX_BEGIN) == 1
+    assert written_body.count("issuecomment-1") == 1
+    assert written_body.count("issuecomment-2") == 1
+
+
+def test_add_dedupes_existing_duplicate_rows_by_comment_id(tmp_path):
+    """既有索引表因修法前的殘留缺陷已含重複列（相同 comment id 出現兩次）
+    時，add 合併後的索引表以 comment id 去重，不延續既有重複（自我修復，
+    見本 ticket Problem Analysis 第二個同源缺陷）。"""
+    content_file = tmp_path / "content.md"
+    content_file.write_text("內容", encoding="utf-8")
+    existing_body = (
+        "## 摘要\n\n"
+        "## 區段索引\n\n"
+        "| 區段 | 永久連結 |\n"
+        "|------|---------|\n"
+        "| 當前結論 | https://github.com/tarrragon/claude/issues/81#issuecomment-1 |\n"
+        "| 當前結論 | https://github.com/tarrragon/claude/issues/81#issuecomment-1 |\n"
+    )
+    captured = {}
+    with mock.patch.object(
+        section_comment.subprocess,
+        "run",
+        side_effect=_add_side_effect(
+            ("https://github.com/tarrragon/claude/issues/81#issuecomment-2", 2),
+            existing_body,
+            captured,
+        ),
+    ):
+        rc = section_comment.main(
+            [
+                "add", "81", "--owner", "test-session-1", "--name", "方案評估",
+                "--content-file", str(content_file),
+            ]
+        )
+    assert rc == 0
+    written_body = captured["body"]
+    assert written_body.count("issuecomment-1") == 1
+    assert "issuecomment-2" in written_body
 
 
 def test_add_creates_index_table_when_missing(tmp_path):
@@ -805,11 +982,13 @@ def test_cmd_dedup_is_read_only_and_does_not_call_gh_issue_or_api():
 
 
 def test_cmd_dedup_cli_accepts_hyphen_prefixed_keyword_group_end_to_end(capsys):
-    """端對端重現 acceptance 命令：`dedup --keywords "commit -a" "--force"`。
+    """端對端重現 acceptance 命令：`dedup --keywords "commit -a" "--dry-run"`。
 
-    "--force" 本身即一整個 keyword group（非拆自「commit -a」的子 token），
-    需先通過 argparse 收值（`_escape_dash_prefixed_keyword_values`）才會被
-    傳入 `search_duplicates`；兩個 token 皆須實際送出 gh 查詢。"""
+    "--dry-run" 本身即一整個 keyword group（非拆自「commit -a」的子 token，
+    亦非本檔任何子命令實際註冊的旗標——`init` 的 `--force` 已註冊，故不可
+    再用它示範「未註冊旗標形態的字面值」），需先通過 argparse 收值
+    （`_escape_dash_prefixed_keyword_values`）才會被傳入 `search_duplicates`；
+    兩個 token 皆須實際送出 gh 查詢。"""
     queried_tokens = []
 
     def _run(args, **kwargs):
@@ -817,9 +996,9 @@ def test_cmd_dedup_cli_accepts_hyphen_prefixed_keyword_group_end_to_end(capsys):
         return _completed(stdout=json.dumps([]))
 
     with mock.patch.object(section_comment.subprocess, "run", side_effect=_run):
-        rc = section_comment.main(["dedup", "--keywords", "commit -a", "--force"])
+        rc = section_comment.main(["dedup", "--keywords", "commit -a", "--dry-run"])
     assert rc == 0
-    assert set(queried_tokens) == {"commit", "-a", "--force"}
+    assert set(queried_tokens) == {"commit", "-a", "--dry-run"}
     out = capsys.readouterr().out
     assert out.rstrip("\n").splitlines()[-1] == "查詢失敗略過的 token 數：0"
 

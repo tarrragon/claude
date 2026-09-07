@@ -26,6 +26,7 @@ from skill_sync.cli import (  # noqa: E402
     _scan_line_for_violations,
     _skill_exists_in_canonical,
     _stale_version_warning,
+    _write_divergence_force_log,
     _write_portability_force_log,
     _write_sync_base,
     check_portability,
@@ -1459,6 +1460,21 @@ def test_pull_parser_has_no_prune_flag():
         parser.parse_args(["pull", "demo-skill", "--prune"])
 
 
+def test_pull_help_does_not_claim_no_name_form_updates_all_installed(capsys):
+    """0.2.1-W3-1284：無名稱形式自 W3-124 起即為純報告（無 input() 提示、
+    無 overlay_copy），`--help` 不得再宣稱它會 update all installed —— 另一
+    consumer 曾依這句文字誤判該命令為寫入命令。"""
+    parser = build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["pull", "--help"])
+
+    out = capsys.readouterr().out
+    assert "update all installed" not in out
+    assert "report" in out.lower()
+    assert "sync_status" not in out.lower()  # 面向使用者文字，不外洩內部函式名
+
+
 # --- sync_status_report（對外契約，0.2.1-W3-353） ----------------------------
 #
 # 此函式是 skill-sync 對消費端的公開介面。先前消費端（sync-claude-push）取用
@@ -1591,33 +1607,89 @@ def test_sync_status_report_handles_missing_skills_dir(tmp_path, monkeypatch):
     assert status.skipped_remote_missing == []
 
 
-def test_fetch_remote_manifest_builds_raw_url_from_repo_url(monkeypatch):
-    """URL 拼裝只此一份；消費端複製這段正是 repo 不一致的來源。"""
-    captured = {}
+def _init_bare_repo_with_versions_json(tmp_path: Path, payload: dict | None) -> Path:
+    """建一個本地 bare git repo，選擇性在根目錄放一份 versions.json 並 commit。
 
-    class _Resp:
-        def read(self):
-            return b"{}"
+    `fetch_remote_manifest` 改走 git clone 後，測試不再需要真的連網——本地
+    bare repo 的 `git clone` 走一模一樣的程式碼路徑（clone / sparse-checkout /
+    讀檔），只是 transport 換成檔案系統，行為與對真實 GitHub repo 完全等價。
+    `payload=None` 時建一個沒有 versions.json 的 repo，用於驗證「根目錄無此
+    檔案」分支。
+    """
+    import subprocess as sp
 
-        def __enter__(self):
-            return self
+    bare = tmp_path / "bare.git"
+    sp.run(["git", "init", "--bare", "-q", str(bare)], check=True)
+    # HEAD 明確指向 main，不依賴 init.defaultBranch 設定——clone 沒指定分支時
+    # 一律解析 HEAD，HEAD 若指向一個從未被推送過的分支，clone 會失敗。
+    sp.run(["git", "-C", str(bare), "symbolic-ref", "HEAD", "refs/heads/main"], check=True)
 
-        def __exit__(self, *exc):
-            return False
-
-    def _fake_urlopen(req, timeout=None):
-        captured["url"] = req.full_url
-        return _Resp()
-
-    import skill_sync.cli as cli_module
-
-    monkeypatch.setattr(cli_module.urllib.request, "urlopen", _fake_urlopen)
-
-    fetch_remote_manifest("https://github.com/owner/repo.git")
-
-    assert captured["url"] == (
-        "https://raw.githubusercontent.com/owner/repo/main/versions.json"
+    seed = tmp_path / "seed"
+    sp.run(["git", "init", "-q", str(seed)], check=True)
+    sp.run(["git", "-C", str(seed), "config", "user.email", "test@example.com"], check=True)
+    sp.run(["git", "-C", str(seed), "config", "user.name", "test"], check=True)
+    if payload is not None:
+        (seed / "versions.json").write_text(json.dumps(payload), encoding="utf-8")
+    else:
+        (seed / "README.md").write_text("no versions.json here\n", encoding="utf-8")
+    sp.run(["git", "-C", str(seed), "add", "-A"], check=True)
+    sp.run(["git", "-C", str(seed), "commit", "-q", "-m", "seed"], check=True)
+    sp.run(
+        ["git", "-C", str(seed), "push", "-q", str(bare), "HEAD:main"],
+        check=True,
     )
+    return bare
+
+
+def test_fetch_remote_manifest_clones_repo_url_directly(tmp_path):
+    """repo_url 原樣傳給 git clone，不做任何 URL 拼裝或改寫（ARCH-BAL-016：
+    URL 推導只此一份 —— 改走 git clone 後這份推導直接歸零，clone 的目標
+    就是呼叫端傳入的同一個 repo_url，沒有第二份邏輯可能與它分岔）。"""
+    bare = _init_bare_repo_with_versions_json(tmp_path, {"demo": {"hash": "abc"}})
+
+    manifest = fetch_remote_manifest(str(bare))
+
+    assert manifest == {"demo": {"hash": "abc"}}
+
+
+def test_fetch_remote_manifest_returns_empty_dict_when_versions_json_absent(tmp_path):
+    bare = _init_bare_repo_with_versions_json(tmp_path, None)
+
+    assert fetch_remote_manifest(str(bare)) == {}
+
+
+def test_fetch_remote_manifest_raises_runtime_error_on_clone_failure(tmp_path):
+    """不存在的 repo 路徑：git clone 非零結束碼須轉為可被呼叫端 catch 的例外，
+    不可用 sys.exit（run_git 的既有行為）直接砍掉整個行程——
+    `_skill_exists_in_canonical` 與 `sync_status_report` 的呼叫端都是
+    `except Exception` 包住這個呼叫，指望的是例外而非行程終止。"""
+    with pytest.raises(RuntimeError):
+        fetch_remote_manifest(str(tmp_path / "does-not-exist"))
+
+
+def test_fetch_remote_manifest_sees_content_immediately_after_remote_changes(tmp_path):
+    """回歸測試（0.2.1-W3-1106）：改走 raw.githubusercontent.com 的舊實作在
+    CDN 快取窗內（實測最長 308 秒）會回傳推送前的內容，使剛推送完成的 skill
+    被 `sync_status_report` 誤判為 SHOULD PULL；照建議操作會用舊內容覆蓋
+    剛推送的新內容。本地 bare repo 沒有 CDN，故無法重現快取窗本身，但能驗證
+    `fetch_remote_manifest` 走的是「每次都問 live ref」的路徑：對同一個
+    repo_url，遠端內容變更後緊接著再呼叫一次，必須立刻讀到新值，不得回傳
+    任何快取層級的舊值。"""
+    import subprocess as sp
+
+    bare = _init_bare_repo_with_versions_json(tmp_path, {"demo-skill": {"hash": "old-hash"}})
+
+    assert fetch_remote_manifest(str(bare)) == {"demo-skill": {"hash": "old-hash"}}
+
+    seed = tmp_path / "seed"
+    (seed / "versions.json").write_text(
+        json.dumps({"demo-skill": {"hash": "new-hash"}}), encoding="utf-8"
+    )
+    sp.run(["git", "-C", str(seed), "add", "-A"], check=True)
+    sp.run(["git", "-C", str(seed), "commit", "-q", "-m", "push new content"], check=True)
+    sp.run(["git", "-C", str(seed), "push", "-q", str(bare), "HEAD:main"], check=True)
+
+    assert fetch_remote_manifest(str(bare)) == {"demo-skill": {"hash": "new-hash"}}
 
 
 def test_preview_labels_dst_only_as_prune_when_enabled(capsys):
@@ -1987,6 +2059,121 @@ def test_cmd_push_silent_when_direction_matches_push(tmp_path, monkeypatch, caps
 
     err = capsys.readouterr().err
     assert "WARNING" not in err
+
+
+# --- push --force 的第三層語意：警告停點降級（0.2.1-W3-1270） ------------------
+#
+# --force 不影響方向警告或 stale-version 警告本身（檢查照跑、輸出照印），但
+# 拿掉了警告後緊接的 [y/N] 停點——原本使用者必然讀到才能繼續，拿掉停點後
+# 同樣的字只是 push 成功訊息前滾過去的幾行 stderr。修法對準這個停點，而非
+# 對準檢查本身：結尾摘要重述被忽略的警告則數，並落地 force-log。
+
+
+def test_cmd_push_force_summarizes_ignored_divergence_warning(tmp_path, monkeypatch, capsys):
+    """事故一情境（base==local、remote 已前進）改用 --force：不再是安靜的
+    [WARNING] 滾過去，結尾必須重述『已忽略』且寫入 force-log。"""
+    import skill_sync.cli as cli_module
+
+    monkeypatch.setenv("HOOK_LOGS_DIR", str(tmp_path / "hook-logs"))
+    skills_dir = tmp_path / "skills"
+    local_skill = skills_dir / "demo-skill"
+    local_skill.mkdir(parents=True)
+    (local_skill / "SKILL.md").write_text("stale content\n")
+    monkeypatch.setattr(cli_module, "get_skills_dir", lambda: skills_dir)
+
+    base_hash = compute_content_hash(local_skill)
+    _write_sync_base(local_skill, base_hash)
+
+    scratch = tmp_path / "scratch"
+    remote_skill = scratch / "repo" / "demo-skill"
+    remote_skill.mkdir(parents=True)
+    (remote_skill / "SKILL.md").write_text("remote moved on\n")
+    _stub_fixed_tempdir(monkeypatch, scratch)
+    _stub_git_noop(monkeypatch)
+
+    args = _RecordingArgs(name="demo-skill", prune=False, force=True)
+    cmd_push(args)
+
+    err = capsys.readouterr().err
+    assert "WARNING" in err  # 原本的方向警告仍照常印出
+    assert "--force ignored 1 direction warning" in err
+
+    log_files = list((tmp_path / "hook-logs").glob("skill-sync-divergence-force.jsonl"))
+    assert len(log_files) == 1
+    record = json.loads(log_files[0].read_text().splitlines()[0])
+    assert record["skill"] == "demo-skill"
+    assert record["divergence_warning_ignored"] is True
+    assert record["stale_version_warning_ignored"] is False
+
+
+def test_cmd_push_force_summarizes_ignored_stale_version_warning(tmp_path, monkeypatch, capsys):
+    """stale-version 警告單獨命中（不夾帶分歧警告）且帶 --force：同樣需要
+    結尾重述與 force-log。base 設為等於 remote hash（只有本地前進，方向
+    "push" 與 expected 相符，分歧警告不會觸發），版號相同但內容已變則觸發
+    stale-version 警告，隔離出「只有這一種警告」的情境。"""
+    import skill_sync.cli as cli_module
+
+    monkeypatch.setenv("HOOK_LOGS_DIR", str(tmp_path / "hook-logs"))
+    source = _write_skill(tmp_path / "skills", "demo-skill", "1.0.0", "new body")
+    monkeypatch.setattr(cli_module, "get_skills_dir", lambda: tmp_path / "skills")
+
+    scratch = tmp_path / "scratch"
+    remote_skill = scratch / "repo" / "demo-skill"
+    remote_skill.mkdir(parents=True)
+    (remote_skill / "SKILL.md").write_text("**Version**: 1.0.0\n\nold body\n")
+    _stub_fixed_tempdir(monkeypatch, scratch)
+    _stub_git_noop(monkeypatch)
+
+    _write_sync_base(source, compute_content_hash(remote_skill))
+
+    args = _RecordingArgs(name="demo-skill", prune=False, force=True)
+    cmd_push(args)
+
+    err = capsys.readouterr().err
+    assert "Content changed since last sync" in err
+    assert "--force ignored 1 direction warning" in err
+
+    log_files = list((tmp_path / "hook-logs").glob("skill-sync-divergence-force.jsonl"))
+    record = json.loads(log_files[0].read_text().splitlines()[0])
+    assert record["divergence_warning_ignored"] is False
+    assert record["stale_version_warning_ignored"] is True
+
+
+def test_cmd_push_force_silent_when_no_warnings(tmp_path, monkeypatch, capsys):
+    """--force 但沒有任何方向/版本警告命中：不印摘要、不寫 force-log
+    （既有安靜成功輸出不因本次修改而改變）。"""
+    import skill_sync.cli as cli_module
+
+    monkeypatch.setenv("HOOK_LOGS_DIR", str(tmp_path / "hook-logs"))
+    source = _write_skill(tmp_path / "skills", "demo-skill", "1.0.0", "new body")
+    monkeypatch.setattr(cli_module, "get_skills_dir", lambda: tmp_path / "skills")
+
+    scratch = tmp_path / "scratch"
+    remote_skill = scratch / "repo" / "demo-skill"
+    remote_skill.mkdir(parents=True)
+    (remote_skill / "SKILL.md").write_text("**Version**: 1.0.0\n\nold body\n")
+    _stub_fixed_tempdir(monkeypatch, scratch)
+    _stub_git_noop(monkeypatch)
+
+    args = _RecordingArgs(name="demo-skill", prune=False, force=True)
+    cmd_push(args)
+
+    err = capsys.readouterr().err
+    assert "ignored" not in err
+    assert not (tmp_path / "hook-logs").exists()
+
+
+def test_write_divergence_force_log_appends_jsonl_record(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOOK_LOGS_DIR", str(tmp_path / "hook-logs"))
+
+    _write_divergence_force_log("demo", divergence_warned=True, stale_version_warned=False)
+
+    log_files = list((tmp_path / "hook-logs").glob("*.jsonl"))
+    assert len(log_files) == 1
+    record = json.loads(log_files[0].read_text().splitlines()[0])
+    assert record["skill"] == "demo"
+    assert record["divergence_warning_ignored"] is True
+    assert record["stale_version_warning_ignored"] is False
 
 
 # --- cmd_push 版號未變閘門整合（0.1.0-W3-031） --------------------------------

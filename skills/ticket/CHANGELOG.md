@@ -2,12 +2,16 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
-**Version**: 2.21.0
+**Version**: 2.23.0
 **Last Updated**: 2026-09-07
 **Status**: Completed
 
 **Change Log**:
 
+- v2.23.0 (2026-09-07): `resume-command.md` 的〈歷史變更〉章節（v1.0→v2.0 顯式觸發變更敘事）遷入本檔，該檔內同段刪除；同批修正 `resume-command.md` 三處誤稱裸 `/ticket` 為「自動偵測 pending handoff」，改指 `SKILL.md`〈無子命令時的預設行為（dashboard-first）〉；`track-command.md` 修正片假名中點 `IO・YAML`（2 處）為 `IO／YAML`、〈runqueue 排序規則〉第二層 `spawned_from_completed_ana` 加權標明僅為規則面設計、CLI 尚未實作（`track_runqueue.py` 零命中）、Priority tier 表補上缺漏的 `P0` 層級、`dashboard` 子命令節補齊 `[LIVE]`／`[RECLAIMABLE]` 標記語意與輸出範例、統一「三章節」與實際「四區塊（含 Handoff Target）」的描述落差、`reclaim`〈設計取捨〉與 `onboard` 首段的否定起手定義句改寫為正面先立、口語「真的」3 處刪除（含 `field-semantics.md` 1 處）、`list` 子命令排序規則的括號並列形態統一；`field-semantics.md` 檔頭「亦由此進入」兩條指涉修正為實際節名（`create-command.md`〈--source-ticket 參數（衍生關係）〉、`track-command.md`〈UPDATE 操作補充：commit 副作用與欄位語意〉### 六欄位語意 SSOT）、〈相關文件〉的 `SKILL.md` 死指涉改指 `track-command.md`〈READ 操作〉〈track deps / depth 子命令〉；`field-semantics.md` 與 `create-command.md` 對稱兩處「阻擋為過渡狀態、後續 hook 收斂後將回到不阻擋」改寫為現況分層說明——hook 層舊版 spawned 檢查已退場為 warn-only，但 `lifecycle.py` 的完成前確認關卡與 `acceptance_auditor.py` 的 spawned 全完成稽核 FAIL 判定仍實際阻擋，此為已定案現行設計，非等待收斂的過渡態
+  - `resume-command.md` 原〈歷史變更〉內容（供查閱）：v1.0 使用 `handoff-prompt-reminder-hook.py`（UserPromptSubmit）自動注入 Ticket 完整內容；v2.0 改為顯式觸發，理由是 Hook 自動注入會劫持用戶意圖（任何第一條訊息都被覆蓋），因此停用
+- v2.22.0 (2026-09-07): `ticket-lifecycle-details.md` 的〈變更日誌〉章節（一次性歷史敘事，v2.0.0-v4.0.0）遷入本檔，該檔內僅留指標句；同批修正該檔 P0 節否定起手定義句、檔頭重複舊引言、驗收提示訊息模板的死名節引用、驗收條件來源範例改節名形式、建立範本 `type` 欄位對齊正典 4 型（IMP/ADJ/ANA/DOC，原列 RES/INV 兩型已移出正典）、與 `field-semantics.md` 同目錄互引不對稱；`handoff-command.md` 檔頭「亦由此進入」指涉段落改實際節內段落、任務鏈結束替代流程的粗體段標問句改直述、〈五種情境〉表補充 `--next`（絕對指向）不列入該表的歸屬說明
+  - `ticket-lifecycle-details.md` 原 v2.0.0-v4.0.0 版本歷史（供查閱）：v4.0.0 瘦身重構移出至 details 參考文件（從 ticket-lifecycle.md 移出格式規範、訊息模板、Hook 技術細節，精簡版保留核心決策規則）；v3.1.0 統一驗收派發規則移除 PM 直接驗收；v3.0.0 將驗收流程從 complete 之後改為 complete 之前；v2.9.0 新增執行日誌驗證機制；v2.8.0 取消驗收豁免機制改為契約式驗收；v2.7.0 強化驗收代理人派發要求；v2.6.0 新增任務層級判斷規則；v2.5.0 新增階段-標準流程對照表和任務鏈後續步驟建議；v2.4.0 新增建議追蹤流程整合章節；v2.3.0 新增驗收條件格式要求章節；v2.2.0 新增任務鏈 ID 格式章節；v2.1.0 新增 Ticket 有效性驗證章節；v2.0.0 重構為 TDD 含 SA 前置審查流程版本
 - v2.21.0 (2026-09-07): 補記 2.20.0 之後累積但未 bump 版號的變更。版號未動使發佈庫與本庫的內容分歧無法由版號察覺——版號相同時它主動宣稱兩邊一致，分歧因此不會被例行同步檢查發現，故補此一版號涵蓋下列各項
   - `track commit` 新增 `--worktree <path>`：把 read-tree / add / diff 等 git 操作綁定到檔案實際變更所在的 linked worktree。未指定時行為不變（沿用 `resolve_project_cwd()`）；指定但非合法 git 目錄時拒絕提交
   - `paths.py` 新增 `get_ticket_state_root()`：linked worktree 內執行的 ticket 狀態操作（`claim` / `append-log` / `check-acceptance` / `set-*` 等 md 讀寫與其 auto-commit）反向回推主倉庫根目錄，統一寫入主倉庫。`track commit`（程式碼提交）維持 worktree 感知不變，兩者是不同的 root 解析路徑。SKILL.md 新增「Ticket 狀態與程式碼提交的 root 分離」章節說明此差異，避免被誤判為 cwd 解析缺陷

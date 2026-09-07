@@ -39,6 +39,16 @@ Action: ANA complete 前 hook 強制比對；豁免宣告讓合法無須落地�
 2. **豁免宣告改為逐項扣抵**。原實作對整個 Solution 章節掃描豁免字串，命中即
    跳過全部計數——2 項規劃、0 項落地的票補一行豁免說明即放行（實測）。改為
    每則宣告扣抵一項後，豁免成本與規劃項數成正比，宣告一項只放行一項。
+
+2026-09-07 新增來源票對照表排除（實測發現）：
+
+`_count_spawn_planning_rows` 掃描整個 Solution 無區段範圍限定，framework-issue
+收束流程要求把「已處置的來源票對照表」（票 ID、型別、標題、處置、落點）寫入
+Solution 供稽核，該表天然帶型別欄，加上優先級欄後與 row-per-spawn 判準同形，
+誤判為 spawn 規劃並擋 complete（實測需補 16 列逐項豁免宣告才能通過）。改為在
+`_extract_solution_section` 階段先以 `_strip_excluded_tables` 移除命中排除
+判準（表頭含「處置」／「close 理由」欄，或表格前一行含「來源票對照」）的
+表格，三項計數策略統一在剩餘文字上運作，不需逐列豁免宣告。
 """
 
 from __future__ import annotations
@@ -113,6 +123,61 @@ _TYPE_ANNOTATED_CELL_PATTERN = re.compile(
     r"\|\s*(?:IMP|DOC|ANA)(?:\s*[（(][^|]*?[)）])?\s*\|"
 )
 
+# 來源票對照表排除判準：framework-issue 收束流程要求把「已處置的來源票」
+# 清單（票 ID、型別、標題、處置、落點）寫入 Solution 供稽核，這類表格天然
+# 帶型別欄（IMP/DOC/ANA），加上優先級欄（P0-P3）後即與 row-per-spawn／
+# type-annotated 判準在正則層面同形，但列的是已處置的舊票而非待建的新票。
+# 兩項判準符合任一即整張表格排除：
+#   1. 表頭列含「處置」或「close 理由」欄
+#   2. 表格前一個非空行（標題或說明文字）含「來源票對照」
+_EXCLUDED_TABLE_HEADER_MARKERS: tuple[str, ...] = ("處置", "close 理由", "close理由")
+_EXCLUDED_TABLE_CONTEXT_MARKERS: tuple[str, ...] = ("來源票對照",)
+
+
+def _is_table_separator_row(line: str) -> bool:
+    """判斷是否為表格分隔列（如 `|---|---|`，僅含 `|`、`-`、`:`、空白）。"""
+    stripped = line.strip()
+    return bool(stripped) and stripped.startswith("|") and set(stripped) <= set("|-: ")
+
+
+def _strip_excluded_tables(section: str) -> str:
+    """移除來源票對照類表格的所有行，避免與真正的 spawn 規劃表格同形誤判。
+
+    命中排除判準（表頭含「處置」／「close 理由」欄，或表格前一非空行含
+    「來源票對照」）的表格，其表頭列、分隔列、所有資料列整段從計數輸入
+    移除；不影響表格前後的標題與說明文字，也不影響其他表格的計數。
+    """
+    lines = section.split("\n")
+    result: list[str] = []
+    last_non_blank = ""
+    i = 0
+    n = len(lines)
+    while i < n:
+        line = lines[i]
+        stripped = line.strip()
+        is_table_header = (
+            stripped.startswith("|")
+            and i + 1 < n
+            and _is_table_separator_row(lines[i + 1])
+        )
+        if is_table_header:
+            header_excluded = any(
+                marker in stripped for marker in _EXCLUDED_TABLE_HEADER_MARKERS
+            )
+            context_excluded = any(
+                marker in last_non_blank for marker in _EXCLUDED_TABLE_CONTEXT_MARKERS
+            )
+            if header_excluded or context_excluded:
+                i += 2  # 跳過表頭列與分隔列
+                while i < n and lines[i].strip().startswith("|"):
+                    i += 1
+                continue
+        result.append(line)
+        if stripped:
+            last_non_blank = stripped
+        i += 1
+    return "\n".join(result)
+
 
 def _extract_solution_section(content: str) -> str | None:
     """擷取 ## Solution 區段（到下一個 ## 或檔尾為止）。"""
@@ -123,6 +188,8 @@ def _extract_solution_section(content: str) -> str | None:
     section = match.group(1)
     # 移除 HTML 註解（模板 placeholder）
     section = re.sub(r"<!--.*?-->", "", section, flags=re.DOTALL)
+    # 移除來源票對照類表格（不影響其他計數邏輯）
+    section = _strip_excluded_tables(section)
     return section
 
 

@@ -1,5 +1,11 @@
 # handoff 子命令
 
+> **何時讀**：任務鏈交接時——需確認交接方向（子→父/父→子/兄弟→兄弟/絕對指向）、`source` vs `target` 指向語意、Session 結束時的使用方式，或任務鏈結束時的替代流程。**亦由此進入**：`workflow-handoff.md`〈交接流程決策樹〉節內「讀取端」段（`source` vs `target` 指向語意指標）。
+>
+> **同目錄**：`workflow-handoff.md`（交接流程的決策樹，與本檔互補：決策樹在那份、指向語意與五種情境細節在本檔）。
+>
+> **溯源**：本檔於本專案匯入 commit `f375ae675` 時即已存在；本機 git log 僅見後續章節 TOC 補齊，未見原始拆分點（可用 `git log --oneline -- references/handoff-command.md` 查證）。
+
 本檔章節：〈設計意圖〉〈指向語意：source vs target（W17-164）〉〈基本用法〉〈用法〉〈自動偵測行為〉〈Session 結束時的使用方式〉〈按 Ticket 狀態選擇命令〉〈任務鏈結束時的替代流程〉〈五種情境〉。
 
 ## 設計意圖
@@ -101,7 +107,9 @@ handoff JSON 同時保留兩個指向欄位：
 | 寫入意圖 | 顯式（PM 知道下個 ticket id） | 自動生成（scheduler / Hook 自動觸發） |
 | target_ticket_id 來源 | CLI 直接提供 | 從 direction 後綴（如 `to-child:X`）提取 |
 | auto_generated | False | True |
-| direction | `context-refresh`（固定） | 可為 to-parent / to-child / to-sibling / context-refresh / next-wave |
+| direction | `context-refresh`（固定） | 可為 to-parent / to-child / to-sibling / context-refresh（`_VALID_AUTO_DIRECTIONS`，四值） |
+
+> 上表 `--auto` 值域不含歷史值：該值僅供讀取端辨識，`--auto` 傳入會被 CLI 拒絕，詳見下方「Wave-level 交接」段。
 
 ## 自動偵測行為
 
@@ -139,9 +147,9 @@ commit-handoff-hook 偵測到 `git commit` 成功後，PM 會用 AskUserQuestion
 
 | 情境 | Direction | 說明 |
 |------|-----------|------|
-| Wave 完成，進入下一 Wave | `next-wave` | 由 Hook 或手動建立，不綁定特定 ticket |
+| Wave 完成，進入下一 Wave | `next-wave` | 不綁定特定 ticket |
 
-`next-wave` handoff 的 JSON 包含 `from_version`、`to_version`、`session_summary` 等 wave-level 欄位，`ticket_id` 為描述性名稱（如 `v{version}-W{wave}-planning`）。
+`next-wave` handoff 的 JSON 若含 `from_version`、`to_version`、`session_summary` 等 wave-level 欄位，`resume.py` 會讀取並顯示（來源 Wave／目標 Wave／Session 摘要）。**產生端不在本 skill 內**：`ticket_system` 與 `skills/ticket/hooks/` 對這三個欄位名零命中，本 skill 沒有任何程式碼會寫入它們；若由外部腳本或人工建立 `next-wave` handoff JSON，欄位名須自行對齊 `resume.py` 的讀取邏輯，`ticket_id` 則為描述性名稱（如 `v{version}-W{wave}-planning`）。
 
 **禁止行為**：在 `completed` ticket 使用 `--context-refresh`（此旗標僅適用 `in_progress`，會直接報錯）
 
@@ -157,9 +165,7 @@ commit-handoff-hook 偵測到 `git commit` 成功後，PM 會用 AskUserQuestion
 | 同 Wave 全部完成 | 無 pending/in_progress ticket | Wave 收尾流程（決策樹第八層情境 C） |
 | 跨 Wave 繼續 | 當前 Wave 完成，下個 Wave 有任務 | `/ticket`（列出下一 Wave 待辦） |
 
-**為什麼 completed ticket 不能 handoff 到無關任務？**
-
-handoff 設計為**任務鏈內的 context 交接**（父→子、子→父、兄弟間），不是通用的「下一個任務」路由器。任務鏈結束後，應回到 `/ticket` 入口重新選擇任務。
+**completed ticket 不 handoff 到無關任務的理由**：handoff 設計為**任務鏈內的 context 交接**（父→子、子→父、兄弟間），不是通用的「下一個任務」路由器。任務鏈結束後，應回到 `/ticket` 入口重新選擇任務。
 
 **快速參考**：
 
@@ -184,9 +190,12 @@ completed ticket，想繼續工作？
 | 4    | 兄弟可選 | 子完成但有平行任務待處理 |
 | 5    | 等待     | 有依賴未滿足             |
 
+> **`--next`（絕對指向）不在此表**：此表列的是任務鏈狀態自動判斷方向的觸發條件；`--next` 為顯式旗標指定下 session 該做的 target ticket，不依賴任務鏈狀態推導。語意見上方〈設計意圖〉表第五列與〈--next 子旗標〉節。
+
 ---
 
-**Last Updated**: 2026-05-10
+**Last Updated**: 2026-09-07
+**Version**: 1.3.0 — 檔頭「亦由此進入」改指實際節內段落（〈交接流程決策樹〉節內「讀取端」段）；〈任務鏈結束時的替代流程〉粗體段標問句改直述；〈五種情境〉表補 `--next`（絕對指向）歸屬說明
 **Version**: 1.2.0 — 設計意圖段補「設計原則」引用指向 `handoff-design-principle-methodology.md`（W17-175 落地：原則層 / 機制層 / 命令層三層分離）
 **Version**: 1.1.0 — 同步 W17-164 落地：新增「指向語意：source vs target」章節（含 target_ticket_id 欄位 + resolve_target 優先序）、`--next` 子旗標說明（W17-164 / L2-A）、`--next` vs `--auto` 對比表
 **Source**: 0.18.0-W17-175 / 0.18.0-W17-164
