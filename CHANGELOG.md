@@ -797,12 +797,12 @@ Changes: 1 chore
 ## [2.39.0] - 2026-08-24
 
 ### Summary
-revert: chore: metadata sync post-completion (原 commit: 0.2.1-W3-868); revert: 還原 readme_index 欄位級 upsert 至基線，契約歸屬轉 決策 (原 commit: 0.2.1-W3-878); feat: 新增 set-parent 命令修正 parent_id 並同步上游 children (+165 more)
+revert: chore: metadata sync post-completion (原 commit); revert: 還原 readme_index 欄位級 upsert 至基線，契約歸屬轉 決策 (原 commit); feat: 新增 set-parent 命令修正 parent_id 並同步上游 children (+165 more)
 
 Changes: 2 revert, 21 feat, 5 refactor, 49 fix, 82 docs, 4 chore, 3 test, 2 other
 
-- revert: chore: metadata sync post-completion (原 commit: 0.2.1-W3-868)
-- revert: 還原 readme_index 欄位級 upsert 至基線，契約歸屬轉 決策 (原 commit: 0.2.1-W3-878)
+- revert: chore: metadata sync post-completion (原 commit)
+- revert: 還原 readme_index 欄位級 upsert 至基線，契約歸屬轉 決策 (原 commit)
 - feat: 新增 set-parent 命令修正 parent_id 並同步上游 children
 - feat: 新增 --discovered-during 旗標區分規劃衍生與發現衍生的建票語意
 - feat: portability-check 排除誤報並依 §2.4 分類輸出
@@ -1947,13 +1947,13 @@ error-pattern（consumer screen_clock 於 v1.4.0 捕獲，上游先前無 SCLK �
 程式碼修復：
 - hooks/hook-completeness-check.py：新增 extract_merge_declarations()，解析
   hook docstring 的合併宣告，偵測已合併卻仍與合併版共同註冊的 hook
-  （screen_clock 1.4.0-W2-029 實證：三個 hook 每次 commit 重複執行）
+  （screen_clock 消費端實證：三個 hook 每次 commit 重複執行）
 - skills/doc/doc_system/commands/validate.py + tests：修 _fixed_name_exemptions
-  對無對應模板之固定命名文件的推導盲區（1.4.0-W1-013）
+  對無對應模板之固定命名文件的推導盲區（screen_clock 消費端案例）
 
 框架知識：
 - references/agent-dispatch-decision.md：新增 isolation:worktree 派發的
-  complete 收尾限制專節，含逐字阻擋原文與探針證據（1.4.0-W1-023）
+  complete 收尾限制專節，含逐字阻擋原文與探針證據（screen_clock 消費端案例）
 
 ---
 
@@ -2849,7 +2849,7 @@ fix: 同步孤兒檔 sample_events.jsonl 測試 fixture
 ## [2.8.3] - 2026-07-01
 
 ### Summary
-feat: 新增 design-system-spec-template.md 範本（W8-002）
+feat: 新增 design-system-spec-template.md 範本
 
 ---
 
@@ -5544,7 +5544,7 @@ Changes: 126 feat, 43 refactor, 103 fix, 228 docs, 39 chore, 5 test, 1 perf
 - docs: 記錄 PC-055 Ticket AC 與實況漂移未被系統偵測
 - docs: IMP-059 auto-compaction UTF-8 截斷導致文件亂碼
 - docs: PC-054 分析視角錨定防禦性而非品質目標
-- docs: tool call 預算閾值校準 ��� 15 次為安全預算非硬斷（.3）
+- docs: tool call 預算閾值校準：15 次為安全預算非硬斷（.3）
 - docs: 補充子任務 vs 獨立 Ticket 決策流程圖和案例（.2）
 - docs: 新增 task-splitting 策略 8 — 按依賴鏈序列拆分（.1）
 - docs: IMP-058 YAML 欄位型別假設錯誤（）
@@ -6179,14 +6179,14 @@ release(v0.1.0): 同步 v0.1.0 版本發布配置 — 語言感知版本檢查�
 ## [1.1.48] - 2026-03-13
 
 ### Summary
-docs(0.1.0-W51-001): 標準化 complete 前主動勾選驗收條件流程
+docs: 標準化 complete 前主動勾選驗收條件流程
 
 ---
 
 ## [1.1.47] - 2026-03-12
 
 ### Summary
-sync: W45-001 完成後同步 .claude 配置
+sync: 上游 ticket 完成後同步 .claude 配置
 
 ---
 
@@ -6303,7 +6303,7 @@ refactor: 移除舊 sync .sh 腳本，統一使用 .py 版本
 ## [1.1.31] - 2026-03-05
 
 ### Summary
-chore: W1-014/015/016 sync 腳本修正、project-init Python 3.14、IMP-016 error-pattern
+chore: sync 腳本修正、project-init Python 3.14、IMP-016 error-pattern
 
 ---
 
@@ -6342,7 +6342,7 @@ fix: sync-claude-pull.sh 修復自我刪除風險、untracked 誤判、clone tim
 ## [1.1.26] - 2026-03-05
 
 ### Summary
-feat: 新增 incident-response 修復三階段規則 + 測試金字塔驗證順序 + PC-004 error-pattern (W1-009)
+feat: 新增 incident-response 修復三階段規則 + 測試金字塔驗證順序 + PC-004 error-pattern
 
 ---
 
@@ -6382,7 +6382,7 @@ feat: 新增 Go 代理人 + i18n/常數規範 + 移除 emoji
 ## [1.1.21] - 2026-03-05
 
 ### Summary
-feat: W5-006 handoff 驗收前置檢查 + W5-007 resume --list stale 過濾修復
+feat: handoff 驗收前置檢查 + resume --list stale 過濾修復
 
 ---
 
