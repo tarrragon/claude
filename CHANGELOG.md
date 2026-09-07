@@ -1,3 +1,15 @@
+## [2.54.1] - 2026-09-07
+
+### Summary
+docs: 修復 .claude/CHANGELOG.md L5535 的 3 個 U+FFFD 替換字元; chore: pull .claude 更新（上游 fa305e8aa，某版本）
+
+Changes: 1 docs, 1 chore
+
+- docs: 修復 .claude/CHANGELOG.md L5535 的 3 個 U+FFFD 替換字元
+- chore: pull .claude 更新（上游 fa305e8aa，某版本）
+
+---
+
 ## [2.54.0] - 2026-09-07
 
 ### Summary
