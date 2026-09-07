@@ -1005,7 +1005,7 @@ ticket track dispatch-readiness <ticket_id>
 
 | 檢查 | 判定內容 | 命中條件 | 上限 status |
 |------|---------|---------|------------|
-| 4. acceptance 與寫入集一致性 | acceptance 含測試類關鍵詞（測試/test/覆蓋/回歸/regression/涵蓋）但 `where.files` 無任何測試型態路徑 | 關鍵詞命中且無測試路徑 | warn（不產生 fail） |
+| 4. acceptance 與寫入集一致性 | 兩種訊號來源：(a) acceptance 含測試類關鍵詞（測試/test/覆蓋/回歸/regression/涵蓋）但 `where.files` 無任何測試型態路徑；(b) acceptance 提及含萬用字元 `*` 的 glob 路徑樣式（如 `app_localizations*.dart`）但 `where.files` 無檔案可被該樣式 fnmatch 涵蓋 | (a) 關鍵詞命中且無測試路徑，或 (b) glob token 未被 where.files 涵蓋 | warn（不產生 fail） |
 | 5. where.files 路徑存在性 | `where.files` 含不存在路徑，且 acceptance 無新建語意（建立/新增/新檔/create/add） | 路徑不存在且無新建關鍵詞 | warn（不產生 fail） |
 | 6. acceptance 提及路徑涵蓋性（唯一強制 fail 的啟發式） | acceptance 文字中具備已知副檔名的路徑樣式 token，未被 `where.files` 前綴或檔名比對涵蓋 | 任一提及路徑未涵蓋 | **fail（強制）** |
 
@@ -1059,7 +1059,7 @@ dispatch-readiness 0.18.0-W17-053:
   [WARN] 閾值 1 功能職責數（acceptance 近似）: acceptance 條目 3 > 2（軟警告；建議拆分為多個 ticket）
   [PASS] 閾值 2 修改檔案數（where.files）: where.files 3 ≤ 5
   [PASS] 閾值 3 Context Bundle tokens: Context Bundle ~250 tokens ≤ 3000
-  [PASS] 檢查 4 acceptance 與寫入集一致性（啟發式）: acceptance 無測試類關鍵詞命中
+  [PASS] 檢查 4 acceptance 與寫入集一致性（啟發式）: acceptance 無測試類關鍵詞命中，亦無未涵蓋的 glob 路徑提及
   [PASS] 檢查 5 where.files 路徑存在性（啟發式）: where.files 路徑全數存在
   [PASS] 檢查 6 acceptance 提及路徑涵蓋性（強制）: acceptance 未偵測到路徑樣式 token
 [WARN] 軟性警告：建議審視拆分必要性
@@ -1071,7 +1071,7 @@ dispatch-readiness <ticket_id>:
   [PASS] 閾值 1 功能職責數（acceptance 近似）: acceptance 條目 2 ≤ 2
   [PASS] 閾值 2 修改檔案數（where.files）: where.files 2 ≤ 5
   [PASS] 閾值 3 Context Bundle tokens: Context Bundle ~600 tokens ≤ 3000
-  [PASS] 檢查 4 acceptance 與寫入集一致性（啟發式）: acceptance 無測試類關鍵詞命中
+  [PASS] 檢查 4 acceptance 與寫入集一致性（啟發式）: acceptance 無測試類關鍵詞命中，亦無未涵蓋的 glob 路徑提及
   [PASS] 檢查 5 where.files 路徑存在性（啟發式）: where.files 路徑全數存在
   [FAIL] 檢查 6 acceptance 提及路徑涵蓋性（強制）: acceptance 提及 1 項路徑未被 where.files 涵蓋，請把該路徑加進 where.files 或改寫 acceptance
       - SKILL.md

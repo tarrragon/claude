@@ -1,3 +1,27 @@
+## [2.56.0] - 2026-09-07
+
+### Summary
+feat: 新增 section_comment add/transfer-owner 子命令並驗證 owner 格式; refactor: framework-issue skill 2.0.0 依 skill-design-guide 拆分入口檔並新增 ticket 收束配方; fix: update_changelog 對 old_content 套用 strip_project_specific_info (+11 more)
+
+Changes: 1 feat, 1 refactor, 1 fix, 9 docs, 2 chore
+
+- feat: 新增 section_comment add/transfer-owner 子命令並驗證 owner 格式
+- refactor: framework-issue skill 2.0.0 依 skill-design-guide 拆分入口檔並新增 ticket 收束配方
+- fix: update_changelog 對 old_content 套用 strip_project_specific_info
+- docs: ARCH-BAL-023 補來源版本並同步 README 索引
+- docs: ARCH-BAL-023 識別欄位缺寫入端與消費端共同格式約定且缺席無訊號
+- docs: framework-issue 2.0.0 依 linux/basil 審查修正文件與 curator 定義
+- docs: 補充 SKILL.md dispatch --dry-run 旗標說明
+- docs: 同步 track-command.md 檢查 4 glob 訊號描述
+- docs: SKILL.md 命令總表補 add/transfer-owner 兩列
+- docs: 刪除根目錄四份零引用實作總結 md
+- docs: 收斂 ticket skill description 至 224 字元
+- docs: PC-BAL-056 補變體「目標集合為空，永不失敗與沒有缺陷同形」
+- chore: 拉取 multi-round-review 2.2.1（2.0.1 → 2.2.1，新增 round-2-probes.md）
+- chore: pull .claude 更新（上游 866b490b）
+
+---
+
 ## [2.55.1] - 2026-09-07
 
 ### Summary
@@ -197,9 +221,9 @@ Changes: 2 feat, 3 fix, 3 docs, 1 chore
 ### Summary
 chore: 合併結果回推，驗證 consumer 側手動補齊內容與上游一致
 
-前次 push（v2.50.8）之後本地無實質內容變更，本次為合併結果的確認性
+前次 push（某版本）之後本地無實質內容變更，本次為合併結果的確認性
 回推。若判定 no-change 則屬預期——第一次 pull 的手動補齊（七檔採
-upstream、README 合併保留 PC-GPD、PC-BAL-024 去重）已隨 v2.50.8 推送，
+upstream、README 合併保留 PC-GPD、PC-BAL-024 去重）已隨 某版本 推送，
 之後的 pull 為 0 delta。
 
 ---
@@ -213,9 +237,9 @@ chore: PC-GPD-005/006 進 canonical，收斂 consumer 側 sync 落差
 建立於上次 push（2.43.1）之後，故 canonical 只有 PC-GPD-001~004：
 
 - PC-GPD-005 版號是單調計數器不表達分叉，兩個 consumer 各自前進一步
-  即撞號，內容雜湊只證明不同不證明誰新
+ 即撞號，內容雜湊只證明不同不證明誰新
 - PC-GPD-006 「各專案自建」目錄跨 consumer 整包複製，夾帶他方 ticket
-  編號與指向不存在檔案的索引
+ 編號與指向不存在檔案的索引
 
 未推送使該 consumer 的 README 與上游在同一表格區塊持續分歧，每次 pull
 重現同一衝突且 base SHA 無法推進（腳本以「本輪有衝突」為不推進條件，
@@ -1965,25 +1989,25 @@ Changes: 1 docs, 1 chore
 ### Summary
 feat(screen_clock): 回推 11 個 SCLK error-pattern 與三項框架層修復
 
-error-pattern（consumer screen_clock 於 v1.4.0 捕獲，上游先前無 SCLK 條目）：
+error-pattern（consumer screen_clock 於 某版本 捕獲，上游先前無 SCLK 條目）：
 - PC-SCLK-001~008：並行 agent amend 改寫他人 commit／編碼混淆繞過 sandbox／
-  task context 指定解法形態／推測性歸因污染後續票／共享 index commit 夾帶
-  他人 staged 檔／規格散文與形式定義相反／hook 讀錯 payload 欄位靜默失效／
-  PM 分析措辭被照抄成事實
+ task context 指定解法形態／推測性歸因污染後續票／共享 index commit 夾帶
+ 他人 staged 檔／規格散文與形式定義相反／hook 讀錯 payload 欄位靜默失效／
+ PM 分析措辭被照抄成事實
 - IMP-SCLK-001：macOS bash 3.2 在 UTF-8 locale 下裸 $VAR 緊鄰全形標點
 - CQ-SCLK-001：宣稱的保證無測試訊號
 - TEST-SCLK-001：快取建置使不存在斷言空洞
 
 程式碼修復：
-- hooks/hook-completeness-check.py：新增 extract_merge_declarations()，解析
-  hook docstring 的合併宣告，偵測已合併卻仍與合併版共同註冊的 hook
-  （screen_clock 消費端實證：三個 hook 每次 commit 重複執行）
+- hooks/hook-completeness-check.py：新增 extract_merge_declarations，解析
+ hook docstring 的合併宣告，偵測已合併卻仍與合併版共同註冊的 hook
+ （screen_clock 消費端實證：三個 hook 每次 commit 重複執行）
 - skills/doc/doc_system/commands/validate.py + tests：修 _fixed_name_exemptions
-  對無對應模板之固定命名文件的推導盲區（screen_clock 消費端案例）
+ 對無對應模板之固定命名文件的推導盲區（screen_clock 消費端案例）
 
 框架知識：
 - references/agent-dispatch-decision.md：新增 isolation:worktree 派發的
-  complete 收尾限制專節，含逐字阻擋原文與探針證據（screen_clock 消費端案例）
+ complete 收尾限制專節，含逐字阻擋原文與探針證據（screen_clock 消費端案例）
 
 ---
 
@@ -3729,9 +3753,9 @@ sync .claude configuration
 ## [1.48.7] - 2026-06-16
 
 ### Summary
-fix: 移除 v1.48.6 誤推的專案特化檔（PC-177/178 + wrap-decision project-integration 7 檔）
+fix: 移除 某版本 誤推的專案特化檔（PC-177/178 + wrap-decision project-integration 7 檔）
 
-v1.48.6 由 consumer 專案 sync-push 全樹 overlay 誤推上來的 project-specific 內容。
+某版本 由 consumer 專案 sync-push 全樹 overlay 誤推上來的 project-specific 內容。
 push 端 preserve-aware 排除已落地（防未來復發），本次外科手術移除已推副本。
 保留 PC-APP-001/002（staging error-pattern，跨專案適用）。
 
@@ -4026,7 +4050,7 @@ docs(PC-V1-001): sync-push 無 --help 未知參數觸發真實推送 near-miss�
 ## [1.44.5] - 2026-06-09
 
 ### Summary
-error-pattern 來源前綴編號體系：新規方法論 + 專案代號註冊表 + PC-ID regex 拓寬 + allocator/negative-gate + V1 flat base A+B+D remediation + 跨專案 detect 腳本（補正 v1.44.4 commit 訊息）
+error-pattern 來源前綴編號體系：新規方法論 + 專案代號註冊表 + PC-ID regex 拓寬 + allocator/negative-gate + V1 flat base A+B+D remediation + 跨專案 detect 腳本（補正 某版本 commit 訊息）
 
 ---
 
@@ -6181,7 +6205,7 @@ fix: 排除 handoff 暫時性交接資料夾
 ## [1.1.52] - 2026-03-27
 
 ### Summary
-feat: Wave 5 重構完成 — Hook 配置更新、Ticket 文件同步
+feat: 某 Wave 重構完成 — Hook 配置更新、Ticket 文件同步
 
 ---
 
@@ -6195,14 +6219,14 @@ feat: 新增 Agent commit 驗證 Hook + Go build artifact 清理指引
 ## [1.1.50] - 2026-03-25
 
 ### Summary
-feat(v0.1.2): Phase Contract 驗證 + Agent Registry + 檔案所有權 Hook + 82 Ticket 品質改善
+feat: Phase Contract 驗證 + Agent Registry + 檔案所有權 Hook + 82 Ticket 品質改善
 
 ---
 
 ## [1.1.49] - 2026-03-13
 
 ### Summary
-release(v0.1.0): 同步 v0.1.0 版本發布配置 — 語言感知版本檢查、monorepo 警告降級
+release: 同步 某版本 版本發布配置 — 語言感知版本檢查、monorepo 警告降級
 
 ---
 
@@ -6364,7 +6388,7 @@ fix: sync-push 移除 rsync verbose，防止 31KB 輸出溢出
 ## [1.1.27] - 2026-03-05
 
 ### Summary
-fix: sync-claude-pull.sh 修復自我刪除風險、untracked 誤判、clone timeout + 同步 v1.1.26 更新
+fix: sync-claude-pull.sh 修復自我刪除風險、untracked 誤判、clone timeout + 同步 某版本 更新
 
 ---
 
@@ -6396,7 +6420,7 @@ fix: 修正 Stop hook reason 欄位被 Claude 解讀為命令導致自動執行 
 ## [1.1.23] - 2026-03-05
 
 ### Summary
-fix: 修正框架路徑偵測 - get_project_root() 支援 Go/混合型專案（CLAUDE.md/go.mod 搜尋），version.py 加入 fallback WARNING log，sync-push 排除 Python 暫存目錄
+fix: 修正框架路徑偵測 - get_project_root 支援 Go/混合型專案（CLAUDE.md/go.mod 搜尋），version.py 加入 fallback WARNING log，sync-push 排除 Python 暫存目錄
 
 ---
 
@@ -6436,7 +6460,7 @@ feat: sync-pull 後自動重新安裝全域 CLI 套件
 ## [1.1.18] - 2026-03-04
 
 ### Summary
-feat: v0.2.0 onboarding framework - onboard 子指令 + Hook 分類 + settings 模板 + 文件泛化
+feat: 某版本 onboarding framework - onboard 子指令 + Hook 分類 + settings 模板 + 文件泛化
 
 ---
 
@@ -6476,7 +6500,7 @@ feat: sync-pull 加入 AskUserQuestion 覆蓋確認保護機制
 ## [1.1.13] - 2026-01-28
 
 ### Summary
-feat(decision-tree): v3.1.0 新增規則變更同步檢查機制
+feat(decision-tree): 某版本 新增規則變更同步檢查機制
 
 ---
 
@@ -6484,7 +6508,7 @@ feat(decision-tree): v3.1.0 新增規則變更同步檢查機制
 ## [1.1.12] - 2026-01-28
 
 ### Summary
-feat(decision-tree): 決策樹二元化重構 v3.0.0 + Mermaid 圖表
+feat(decision-tree): 決策樹二元化重構 某版本 + Mermaid 圖表
 
 ---
 
@@ -6577,7 +6601,7 @@ fix: 修正 CHANGELOG 產生邏輯與 commit 訊息傳遞
 ### Added
 CHANGED:- .claude/hooks/changelog-update.sh
 ### Removed
-- .claude/work-logs/v0.13.0-pdf-cleanup-task.md
+- .claude/work-logs/某版本-pdf-cleanup-task.md
 ---
 
 
@@ -6622,9 +6646,9 @@ fix(hooks): 修復 Hook 任務分派誤判問題 - v0.12.O
 
 ### Changed
 - `.claude/hooks/task-dispatch-readiness-check.py`：修復 Phase 2 任務誤判為 Phase 1
-  - 新增 EXCLUDE_KEYWORDS 排除負面語境機制
-  - 移除提前退出，評估所有任務類型後選最高權重
-  - 測試驗證 4/4 通過，向後相容性完整保留
+ - 新增 EXCLUDE_KEYWORDS 排除負面語境機制
+ - 移除提前退出，評估所有任務類型後選最高權重
+ - 測試驗證 4/4 通過，向後相容性完整保留
 
 ### Added
 - `.claude/test-hook-all.py`：完整測試套件（4 個測試案例）
@@ -6650,9 +6674,9 @@ refactor(.claude): 調整 CHANGELOG 更新時機為 sync-push
 - 建立 CHANGELOG 自動化機制
 - 新增 `hooks/changelog-update.sh`：自動更新 CHANGELOG 的 Pre-commit Hook
 - 代理人分派檢查 Hook 系統（來自 v0.12.N）
-  - `hooks/task-dispatch-readiness-check.py`：任務分派準備度檢查
-  - `hooks/agent_dispatch_recovery.py`：錯誤恢復機制
-  - `hooks/agent_dispatch_analytics.py`：智慧分析工具
+ - `hooks/task-dispatch-readiness-check.py`：任務分派準備度檢查
+ - `hooks/agent_dispatch_recovery.py`：錯誤恢復機制
+ - `hooks/agent_dispatch_analytics.py`：智慧分析工具
 - 完整的測試套件（93 個測試，100% 通過率）
 - Hook 模式切換功能（Strict/Warning 雙模式）
 - 主線程錯誤恢復使用指南和快速參考
@@ -6681,6 +6705,6 @@ refactor(.claude): 調整 CHANGELOG 更新時機為 sync-push
 ---
 
 **說明**：
-- 本 CHANGELOG 從 v1.0.0 開始記錄
+- 本 CHANGELOG 從 某版本 開始記錄
 - 版本號獨立管理，不與專案版本同步
 - 每次 commit .claude 相關變更時自動更新

@@ -1182,11 +1182,19 @@ def update_changelog(repo_dir: Path, new_version: str, commit_message: str, old_
     new_entry = f"## [{new_version}] - {current_date}\n\n### Summary\n{commit_message}\n\n---\n\n"
 
     if old_content:
-        match = re.search(r"^## \[", old_content, re.MULTILINE)
+        # strip_project_specific_info() 內部以 .strip() 收尾，直接套用會吃掉
+        # old_content 原有的前後空白，破壞「無 ID 內文逐位元不變」的不變式；
+        # 保存前後空白後重新包回，只讓中段內容經過剝除。
+        leading_ws_match = re.match(r"\A\s*", old_content)
+        trailing_ws_match = re.search(r"\s*\Z", old_content)
+        leading_ws = leading_ws_match.group() if leading_ws_match else ""
+        trailing_ws = trailing_ws_match.group() if trailing_ws_match else ""
+        stripped_old_content = leading_ws + strip_project_specific_info(old_content) + trailing_ws
+        match = re.search(r"^## \[", stripped_old_content, re.MULTILINE)
         if match:
-            updated = new_entry + old_content[match.start():]
+            updated = new_entry + stripped_old_content[match.start():]
         else:
-            updated = new_entry + old_content
+            updated = new_entry + stripped_old_content
     else:
         updated = f"# CHANGELOG\n\n{new_entry}"
 

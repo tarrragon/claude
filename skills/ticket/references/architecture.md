@@ -267,6 +267,16 @@ commands/ 追蹤操作訊息常數。統一管理 track 系列、migrate.py、ge
 | -------------------- | ------------------------ |
 | 分析任務鏈的關鍵路徑 | 識別阻塞任務和最長依賴鏈 |
 
+### cycle_detector.py
+
+循環依賴檢測模組（W7 新增）。以 `blockedBy` 依賴關係構建有向圖，DFS 演算法偵測環（時間複雜度 O(V+E)，V 為 Ticket 數、E 為依賴數），供 `validate_blocked_by` 在設定/更新 `blockedBy` 時攔截循環。`blockedBy` 讀取支援清單格式與逗號分隔字串兩種寫法（見 `ticket_validator.py` 標準化邏輯）。
+
+| 函式                       | 用途                                       |
+| -------------------------- | ------------------------------------------ |
+| `CycleDetector.has_cycle()` | 檢測單一 Ticket 起點的依賴圖是否有環，回傳 `(bool, cycle_path)` |
+| `CycleDetector.detect_cycles_in_all_tickets()` | 掃描全部 Ticket 找出所有環 |
+| `CycleDetector.validate_blocked_by()` | 驗證新增/更新的 `blockedBy` 是否會產生循環 |
+
 ### ticket_chain_index.py
 
 任務鏈索引模組（W7 新增）。

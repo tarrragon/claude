@@ -6,15 +6,22 @@
 每個區段是一則具 owner 的 comment，以 comment id 精準編輯；觀測 comment 任何
 session 可隨時附加，不需 owner、不需協商。
 
-三個命令對應三種寫入時機：
+五個命令對應五種寫入時機：
 
 - `init`：**只執行一次**。先逐一 POST 全部區段 comment 取得 id 與永久連結，
   再 GET 現有 body、插入區段索引表、PATCH 一次。之後 body 不再由本工具改寫
   （id 在 comment 建立後才存在，索引無法在建立時就寫入——見 #82 驗證）。
+- `add`：POST 單一區段 comment，於既有索引表追加一列（不存在索引表時建立），
+  供 `init` 之後對同一 issue 新增區段——`init` 每張 issue 只能跑一次，第二個
+  session 原本只能用 `observe`，無法成為區段 owner。
 - `update`：以 comment id PATCH 指定區段，只讀寫該則 comment，不觸碰 body
   或同 issue 其他 comment。更新前讀回既有內容確認首行為區段標記，非區段
   comment（如觀測、一般留言）一律拒絕，避免誤改。
+- `transfer-owner`：PATCH 首行標記的 owner 欄，內容不變，供 owner 移交。
 - `observe`：附加一則觀測 comment，不需 owner、不改 body、不影響既有 comment。
+
+`init`／`add`／`transfer-owner` 共用 `validate_owner` 驗證 owner 識別格式
+（`<kebab-case 前綴>-<數字序號>`），不合法一律 exit 3（見 `EXIT_DEGRADED`）。
 
 區段與觀測以 comment 首行 HTML 註解標記區分（GitHub 渲染時不可見）：
 
@@ -94,6 +101,12 @@ INDEX_ROW_URL_RE = re.compile(r"https://\S*?issuecomment-\d+")
 # 「當前結論」區段名稱字串集中於此常數，check／show 皆引用，不散落。
 CURRENT_CONCLUSION_SECTION_NAME = "當前結論"
 
+# owner 識別格式：<專案目錄 kebab-case 前綴>-<session 序號>，如
+# "flutter-balance-77"。init／add／transfer-owner 共用同一驗證（見
+# validate_owner）——判準明確而執法只掛在單一入口，存量會從另一入口累積
+# （同儕以代理人名稱 "framework-issue-curator" init 七張未被攔下即為一例）。
+OWNER_FORMAT_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*-[0-9]+$")
+
 # check 的兩項閾值：規格（tarrragon/claude#81「增長語意與早期警訊」）定性
 # 描述「輔助訊號」與「某期間」，未給出精確數字。以下為可運作的初始預設
 # 值，兩者皆可由 CLI 參數覆蓋，非規格權威值。
@@ -125,6 +138,18 @@ def render_section_comment(name: str, owner: str, content: str) -> str:
 def render_observation_comment(summary: str, session: str, content: str) -> str:
     """把觀測內容包上首行標記，供 POST 使用。"""
     return f"<!-- observation: {summary} by {session} -->\n{content}"
+
+
+def validate_owner(owner: str) -> None:
+    """驗證 owner 識別格式；不合法時拋 ValueError（呼叫端捕捉後轉為 exit 3
+    降級提示），訊息含格式規則與範例。"""
+    if not OWNER_FORMAT_RE.match(owner):
+        raise ValueError(
+            f"owner 格式不符：'{owner}'。"
+            "須為 <kebab-case 前綴>-<數字序號>，如 'flutter-balance-77'"
+            "（不可為代理人名稱如 'framework-issue-curator'，"
+            "或含底線如 'flutter_balance-pm'）"
+        )
 
 
 def extract_section_marker(comment_body: str):
@@ -181,13 +206,24 @@ def classify_comments(comments: list) -> tuple:
     return sections, stream
 
 
-def render_index(posted_sections: list) -> str:
-    """把已建立區段的 {name, html_url} 清單渲染為可 upsert 的索引區段。"""
+def render_index_table(rows: list) -> str:
+    """把 [{"name":, "url":}, ...] 渲染為可 upsert 的索引區段（表格列）。
+
+    `init`／`add` 共用：`init` 一次性渲染全部剛建立的區段；`add` 併入既有
+    索引列（來自 `parse_index_table`）與新增的一列後整段重渲染，兩者欄位
+    統一為 name/url，呼叫端各自映射（`init` 的來源為 html_url）。
+    """
     lines = [INDEX_BEGIN, INDEX_TABLE_HEADER]
-    for section in posted_sections:
-        lines.append(f"| {section['name']} | {section['html_url']} |")
+    for row in rows:
+        lines.append(f"| {row['name']} | {row['url']} |")
     lines.append(INDEX_END)
     return "\n".join(lines)
+
+
+def render_index(posted_sections: list) -> str:
+    """把已建立區段的 {name, html_url} 清單渲染為可 upsert 的索引區段。"""
+    rows = [{"name": section["name"], "url": section["html_url"]} for section in posted_sections]
+    return render_index_table(rows)
 
 
 def load_sections_spec(path: str) -> list:
@@ -393,11 +429,12 @@ def cmd_init(issue_ref: str, owner: str, sections_file: str, dedup_keywords: lis
     """查重後建立全部區段 comment，取得 id 後回填一次 body 區段索引表。"""
     try:
         issue_ref = normalize_issue_ref(issue_ref)
+        validate_owner(owner)
         sections = load_sections_spec(sections_file)
     except (ValueError, OSError, json.JSONDecodeError) as exc:
         return emit_degraded(
             f"init 前置檢查失敗：{exc}",
-            "確認 issue ref 與 sections-file 格式正確後重試",
+            "確認 issue ref、owner 格式與 sections-file 格式正確後重試",
         )
 
     dedup_results, dedup_skipped = search_duplicates(dedup_keywords)
@@ -432,6 +469,47 @@ def cmd_init(issue_ref: str, owner: str, sections_file: str, dedup_keywords: lis
         )
 
     new_body = upsert_section(body, INDEX_SECTION_RE, render_index(posted))
+    return write_body(issue_ref, new_body)
+
+
+def cmd_add(issue_ref: str, owner: str, name: str, content_file: str) -> int:
+    """建立單一區段 comment，於既有索引表追加一列（不存在索引表時建立）；
+    其他既有列的 comment id／連結不受影響（供 `init` 之後對同一 issue
+    追加新區段，見本 ticket why 段：init 每張 issue 只能跑一次的缺口）。
+    """
+    try:
+        issue_ref = normalize_issue_ref(issue_ref)
+        validate_owner(owner)
+        content = Path(content_file).read_text(encoding="utf-8")
+    except (ValueError, OSError) as exc:
+        return emit_degraded(
+            f"add 前置檢查失敗：{exc}",
+            "確認 issue ref、owner 格式與 content-file 正確後重試",
+        )
+
+    rendered = render_section_comment(name, owner, content)
+    try:
+        result = post_comment(issue_ref, rendered)
+    except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+        return emit_degraded(f"add 建立區段 comment 失敗：{exc}", "檢查網路與權限後重試")
+
+    # 區段 comment 已建立成功，owner 對此區段的擁有關係已確立——即使後續
+    # body 索引回填失敗，登記檔仍應反映此事實（同 cmd_init 取向，見
+    # owned_issues_registry 模組 docstring）。
+    record_owned_issue(int(issue_ref), owner, _now_iso())
+
+    try:
+        body = fetch_body(issue_ref)
+    except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+        return emit_degraded(
+            f"add 已建立區段 comment（{result.get('html_url', '')}），"
+            f"但讀取 body 失敗，索引未更新：{exc}",
+            "手動確認區段 comment 後重跑索引回填（不重複執行 add 避免重複建立區段）",
+        )
+
+    rows = [{"name": row["name"], "url": row["url"]} for row in parse_index_table(body)]
+    rows.append({"name": name, "url": result.get("html_url", "")})
+    new_body = upsert_section(body, INDEX_SECTION_RE, render_index_table(rows))
     return write_body(issue_ref, new_body)
 
 
@@ -472,6 +550,52 @@ def cmd_update(comment_id: str, content_file: str) -> int:
         record_owned_issue(issue_number, marker["owner"], _now_iso())
 
     sys.stderr.write(f"[framework-issue] 區段「{marker['name']}」已更新 @ comment {comment_id}\n")
+    return 0
+
+
+def cmd_transfer_owner(comment_id: str, new_owner: str) -> int:
+    """PATCH 首行標記的 owner 欄，內容不變；同步登記檔（供 owner 移交，見
+    本 ticket why 段：update 保留首行 owner 標記不變，無命令可改 owner）。
+    """
+    try:
+        validate_owner(new_owner)
+    except ValueError as exc:
+        return emit_degraded(str(exc), "確認 --to 為合法 owner 格式後重試")
+
+    try:
+        existing = fetch_comment(comment_id)
+    except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+        return emit_degraded(
+            f"讀取既有 comment {comment_id} 失敗：{exc}",
+            "確認 comment id 正確且 gh 可存取後重試",
+        )
+
+    marker = extract_section_marker(existing.get("body", ""))
+    if marker is None:
+        return emit_degraded(
+            f"comment {comment_id} 首行非區段標記，拒絕轉移 owner（避免誤改觀測或一般 comment）",
+            "確認 comment id 指向一個具 <!-- section: ... owner: ... --> 標記的區段 comment",
+        )
+
+    # 內容不變：existing body 為「首行標記 + 內容」，切除首行後重新組裝
+    # 相同內容、僅替換 owner 欄。
+    _, _, content = (existing.get("body", "") or "").partition("\n")
+    rendered = render_section_comment(marker["name"], new_owner, content)
+    try:
+        patch_comment(comment_id, rendered)
+    except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+        return emit_degraded(
+            f"轉移 owner 失敗（comment {comment_id}）：{exc}", "檢查權限與網路後重試"
+        )
+
+    issue_number = _issue_number_from_comment(existing)
+    if issue_number is not None:
+        record_owned_issue(issue_number, new_owner, _now_iso())
+
+    sys.stderr.write(
+        f"[framework-issue] 區段「{marker['name']}」owner 已由 "
+        f"{marker['owner']} 轉移至 {new_owner} @ comment {comment_id}\n"
+    )
     return 0
 
 
@@ -678,6 +802,7 @@ _KEYWORD_VALUE_STOP_FLAGS = frozenset(
     {
         "-h", "--help", "--owner", "--sections-file", "--content-file",
         "--summary", "--session", "--comment-threshold", "--stale-days",
+        "--name", "--to",
     }
 )
 _MULTI_VALUE_KEYWORD_FLAGS = frozenset({"--keywords", "--dedup-keywords"})
@@ -723,7 +848,7 @@ def _unescape_dash_prefixed_value(value: str) -> str:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="framework-issue section",
-        description="comment-as-section 協作協定的寫入路徑（init/update/observe）",
+        description="comment-as-section 協作協定的寫入路徑（init/add/update/transfer-owner/observe）",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -740,6 +865,14 @@ def build_parser() -> argparse.ArgumentParser:
              "輸出，不自動判定、不阻擋建立）",
     )
 
+    p_add = sub.add_parser(
+        "add", help="建立單一區段 comment，於既有索引表追加一列（不存在索引表時建立）"
+    )
+    p_add.add_argument("issue_ref", help="framework issue ref（如 tarrragon/claude#81 或純號 81）")
+    p_add.add_argument("--owner", required=True, help="區段建立者/維護者 session 識別")
+    p_add.add_argument("--name", required=True, help="區段名稱")
+    p_add.add_argument("--content-file", required=True, help="區段內容檔（不含首行標記）")
+
     p_dedup = sub.add_parser(
         "dedup", help="唯讀：以標題與 comment 內文查既有 issue，列命中清單不建立 issue"
     )
@@ -751,6 +884,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_update = sub.add_parser("update", help="以 comment id PATCH 更新既有區段內容")
     p_update.add_argument("comment_id", help="區段 comment 的 GitHub comment id")
     p_update.add_argument("--content-file", required=True, help="新內容檔（不含首行標記）")
+
+    p_transfer = sub.add_parser(
+        "transfer-owner", help="PATCH 既有區段 comment 首行標記的 owner 欄，內容不變"
+    )
+    p_transfer.add_argument("comment_id", help="區段 comment 的 GitHub comment id")
+    p_transfer.add_argument("--to", required=True, help="新 owner 識別")
 
     p_observe = sub.add_parser("observe", help="附加觀測 comment，任何 session 可用不需 owner")
     p_observe.add_argument("issue_ref", help="framework issue ref（如 tarrragon/claude#81 或純號 81）")
@@ -790,10 +929,14 @@ def main(argv=None) -> int:
             parsed.issue_ref, parsed.owner, parsed.sections_file,
             [_unescape_dash_prefixed_value(k) for k in parsed.dedup_keywords],
         )
+    if parsed.command == "add":
+        return cmd_add(parsed.issue_ref, parsed.owner, parsed.name, parsed.content_file)
     if parsed.command == "dedup":
         return cmd_dedup([_unescape_dash_prefixed_value(k) for k in parsed.keywords])
     if parsed.command == "update":
         return cmd_update(parsed.comment_id, parsed.content_file)
+    if parsed.command == "transfer-owner":
+        return cmd_transfer_owner(parsed.comment_id, parsed.to)
     if parsed.command == "observe":
         return cmd_observe(parsed.issue_ref, parsed.summary, parsed.session, parsed.content_file)
     if parsed.command == "show":

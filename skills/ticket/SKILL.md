@@ -1,6 +1,6 @@
 ---
 name: ticket
-description: 'Use this skill whenever the user wants to create, track, query, or manage tickets. Triggers include: creating new tickets, claiming or releasing tickets, checking ticket status or progress, completing tickets, handing off work between agents, resuming interrupted tasks, migrating tickets between versions, converting plans to tickets, splitting tickets into subtasks, evaluating ticket granularity, or any mention of /ticket, task tracking, ticket lifecycle operations, or ticket splitting. 拆分相關：當用戶問「ticket 怎麼拆」「拆分粒度」時，建立/拆分 ticket 用本 skill，拆分邊界判讀（測試變綠驗收點）見 /tdd skill 的 task-granularity-rules。'
+description: 'Use whenever the user wants to create, track, query, or manage tickets: claim, release, complete, handoff, resume, migrate IDs, plan-to-ticket, split, evaluate granularity. Triggers: /ticket, task tracking, ticket lifecycle.'
 argument-hint: '<subcommand> [args]'
 allowed-tools: Bash(ticket *), Read, Write, Edit, Grep, Glob
 metadata:
@@ -190,6 +190,8 @@ ticket create --version 0.31.0 --wave 4 --action "實作" --target "XXX"  # 建�
 | `resume`            | 恢復任務                   | `/ticket resume <id>`                                                      |
 | `migrate`           | Ticket ID 遷移             | `/ticket migrate <old-id> <new-id>`                                |
 | `generate`          | Plan 轉換為 Tickets        | `/ticket generate plan.md --version 0.31.0 --wave 5`                       |
+
+拆分邊界判讀（測試變綠驗收點）見 `/tdd` skill 的 task-granularity-rules；本 skill 負責建立/拆分 ticket 本身。
 
 ---
 
@@ -423,7 +425,7 @@ ticket batch-create --template impl-parsley --targets "a,b" --parent <id>
 >
 > `--match` 是文字比對定位（非行號——行號隨後續編輯漂移）：命中恰好一行才寫入；0 命中或多重命中一律拒絕並回報候選行，要求提供更精確的 `--match` 收窄。marker 固定插入為命中行的**前一行**（獨立新行），與 `phase4-decision-enforcement-hook` 的豁免距離規則（同行或前 1 行生效）一致。`--category` 限定 `tdd-transition` / `baseline-gated` / `ticket-tracked` / `user-override` / `rule-quote` / `history`，`--reason` 格式驗證與該 hook 同規則（`baseline-gated` 需含數字、`ticket-tracked`/`history` 需含 `W{wave}-{seq}` ticket ID、`rule-quote` 需含 `.claude/rules/` 或 `.claude/pm-rules/` 路徑）。**防濫用**：本命令不能憑空產生新內容、只能指向既有行；marker 是否真正生效仍由該 hook 於 phase4 轉換 / complete 時重新掃描判定，本命令不繞過該把關層。Status precondition 與 auto-commit 副作用與 `append-log` 同（見上）。
 >
-> **派發即落票 — `dispatch`**：`ticket track dispatch <id> --as <agent> [--note "..."] [--kind normal|review] [--task-summary "..."]`。單一命令合併「暫態約束落票」與「骨架 prompt 輸出」：`--note` 非空時帶時間戳寫入票的「派發日誌」章節（非 Schema 章節，不進 Context Bundle），stdout 輸出骨架文字供 PM 複製派發。`--kind normal`（預設）輸出含讀取/認領/收尾協議的完整骨架；`--kind review` 輸出審查派發變體（欄位為審查標的/審查視角/裁決問題/回報格式），不含 `claim`/`complete`（審查非執行票，不觸發生命週期）。`--review-perspective` / `--decision-question` 僅 `--kind review` 使用。CLI 骨架常數（`SKELETON_TEMPLATE_NORMAL` / `SKELETON_TEMPLATE_REVIEW`，見 `ticket_system/commands/track_dispatch.py`）為單一權威，`agent-dispatch-template.md` 改為引用其輸出，不再手動同步逐字模板。
+> **派發即落票 — `dispatch`**：`ticket track dispatch <id> --as <agent> [--note "..."] [--kind normal|review] [--task-summary "..."]`。單一命令合併「暫態約束落票」與「骨架 prompt 輸出」：`--note` 非空時帶時間戳寫入票的「派發日誌」章節（非 Schema 章節，不進 Context Bundle），stdout 輸出骨架文字供 PM 複製派發。`--kind normal`（預設）輸出含讀取/認領/收尾協議的完整骨架；`--kind review` 輸出審查派發變體（欄位為審查標的/審查視角/裁決問題/回報格式），不含 `claim`/`complete`（審查非執行票，不觸發生命週期）。`--review-perspective` / `--decision-question` 僅 `--kind review` 使用。`--dry-run` 只輸出骨架、不寫入票面（不落 `--note`、不冪等寫入「Commit 規範」子節），骨架輸出與非 dry-run 完全相同，用於 PM 只想預覽骨架或量測行數而不想觸發票面副作用的場景；預設行為（不帶此旗標）不變。CLI 骨架常數（`SKELETON_TEMPLATE_NORMAL` / `SKELETON_TEMPLATE_REVIEW`，見 `ticket_system/commands/track_dispatch.py`）為單一權威，`agent-dispatch-template.md` 改為引用其輸出，不再手動同步逐字模板。
 >
 > **注意**：`check-acceptance` 只接受**單一** index（如 `1`）或 `--all`；不支援 `1 2 3` 多索引。一次勾選多項請改用 `set-acceptance --check 1 2 3`。先用 `ticket track query <id>` 查看驗收條件清單和編號。詳見 `references/track-command.md`「驗收條件操作詳解」（含決策樹 + 5 常見錯誤）。
 >
