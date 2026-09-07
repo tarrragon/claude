@@ -35,6 +35,37 @@
 | `agent` | `context: fork` 時的代理類型 | `Explore` |
 | `hooks` | Skill 生命週期 hook | 見官方文件 |
 
+### 擴展欄位的選擇判準
+
+七列裡只有 `disable-model-invocation`／`user-invocable` 兩列在〈觸發控制矩陣〉給了選擇時機；其餘五列在建立時沒有依據可查，寫的人只能照抄範例值。
+
+| 欄位 | 何時用 | 何時不用 |
+|------|-------|---------|
+| `argument-hint` | skill 走 `/name <arg>` 手動呼叫且參數是必要輸入（如 issue 編號、檔名） | 全自動觸發、無需補全提示的 skill；沒有 `/` 手動介面時本欄位不生效 |
+| `model` | skill 的工作機械、可預期、不需要主對話的模型能力（如固定格式轉換），指定較小模型可省成本 | 未驗證過在指定模型上行為一致——本庫零使用，指定前先跑一輪〈觸發測試〉的模型一致性檢查 |
+| `context: fork` | skill 需要大量探索性讀取（搜尋、掃描），過程雜訊不該留在主對話歷史 | skill 的產出需要主對話立即接續使用（fork 出去的結果需要額外一步才能帶回） |
+| `agent` | 與 `context: fork` 搭配，依隔離出去的工作性質選代理人（純搜尋用 `Explore`） | 未設 `context: fork` 時本欄位不生效 |
+| `hooks` | 見下方〈`hooks` 欄位是死路由〉 | 同上 |
+
+### `hooks` 欄位是死路由
+
+本庫 59 支 skill 對 `hooks:` frontmatter 欄位的使用數為零，本檔對它的說明只有「見官方文件」四字、不含連結。這與 skill 目錄下常見的 `hooks/` 資料夾是兩件不相干的事——後者裝的是本庫既有的 Claude Code 生命週期 hook（`PreToolUse`／`Stop` 等，經 `settings.json` 註冊，`ticket`、`tdd`、`worktree` 等 skill 皆有此目錄，見 `creating-and-adopting-skills.md`〈本庫實況：四個官方分類外的目錄〉），前者是 skill 自身宣告、目前無任何 skill 使用的生命週期掛勾欄位。名稱相同、機制不同，未查證前容易誤把 `hooks/` 目錄的既有先例當成 `hooks:` 欄位已被驗證過。
+
+**Action**：需要用 `hooks:` 欄位時，先讀官方文件 <https://code.claude.com/docs/en/skills> 取得目前語法（本庫無可對照的本地實例）；需要的是「skill 自帶的可執行／可查閱檔案」走 `scripts/`／`references/`，需要的是「Claude Code 生命週期 hook」走 `.claude/hooks/` 或 skill 目錄下的 `hooks/`。
+
+### `metadata.portable`：建立時要下的決定，不是事後的副作用
+
+`metadata.portable: true` 目前只在 `writing-the-body.md`〈外部引用：指名身分，不用檔案路徑〉的 Consequence 段落以一句話出現——宣告 `portable: true` 的 skill 若指名 `.claude/...` 路徑，`skill-sync` push 會被中止。這是它唯一的出處，且是以「違反後會怎樣」的副作用形式帶出，不是建立 skill 當下要下的判斷。
+
+**Action（Step 4b 撰寫 frontmatter 時判斷，不要等 push 被擋才回頭改）**：
+
+| 問題 | 答案 | 決定 |
+|------|------|------|
+| 這個 skill 的判準／流程／範本是否綁定特定專案的目錄結構或檔案路徑？ | 否——邏輯可原樣搬到任何專案 | `portable: true`；正文與 reference 一律以身分指名而非路徑（見 `writing-the-body.md`〈外部引用〉），專案專屬的實際路徑另放 `references/project-integration/`（依命名慣例排除於 `skill-sync` push，`component-contract-design` skill 已有此實例） |
+| 是 | 不宣告 `portable` | 可自由使用 `.claude/...` 路徑 |
+
+**Consequence**：宣告 `portable: true` 後才發現正文寫死了路徑，要嘛違反可攜性承諾被 push 擋下，要嘛回頭把已寫好的內容全部改成身分指名並搬移到 `project-integration/`——晚判斷的成本是重寫，不是重新標記一個欄位。
+
 ### 安全與格式禁令
 
 | 禁止 | 原因 | 修正 |
@@ -142,6 +173,20 @@ description: "Advanced statistical modeling for CSV files. Use for regression, c
 | Skill 不該觸發卻觸發 | 加負面觸發 "Do NOT use for X" |
 | 不確定 | 直接問 Claude「When would you use the [skill name] skill?」，看回答對不對 |
 
+### 跨 Skill 觸發競爭（建立前必查）
+
+上一節處理單一 skill 該不該觸發；本節處理**兩個 skill 都可能被同一句話觸發**時如何取捨——這是「Skill 創建流程」pm-rules 文件前置條件「確認無既有 Skill 覆蓋相同場景」列出的檢查項，但該文件未給做法。
+
+**Why**：description 是自動觸發的唯一依據（見上文），兩份 description 共用觸發詞時 Claude 選中哪一個不可預測，新 skill 的觸發詞會與既有 skill 爭奪同一批使用者措辭，不會因為「後寫的更完整」而自動勝出。
+
+**Action**：
+
+1. 列出候選 description 中最具體的 2-3 個觸發詞
+2. 逐一查是否已被其他 skill 使用：`grep -l "<觸發詞>" .claude/skills/*/SKILL.md`
+3. 有命中 → 判斷場景是否真重疊：不重疊則不需處理；重疊則依〈防 overtrigger — 負面觸發〉的句式，在**兩份** description 互相加註「Do NOT use for X（use Y instead）」——只改新寫的那份防不住舊 skill 持續吸走使用者措辭
+
+**Consequence**：只在新 description 單方加負面觸發，防不住舊 skill 的正面觸發詞持續與新 skill 爭奪同一批措辭；兩份都要動才成立。
+
 ---
 
 ## 命名規則
@@ -162,6 +207,23 @@ description: "Advanced statistical modeling for CSV files. Use for regression, c
 | Gerund（動詞 + ing，官方推薦） | `processing-pdfs`、`analyzing-spreadsheets`、`managing-databases` | 最佳，意圖明確 |
 | 名詞片語 | `pdf-processing`、`spreadsheet-analysis` | 可接受 |
 | 模糊名稱 | `helper`、`utils`、`tools`、`documents` | 避免，無法判斷觸發場景 |
+
+### 載入優先序與同名遮蔽（建立前必查）
+
+Skill 名稱衝突不是「兩者都載入、依 context 選用」，而是靜默覆蓋——同名 skill 在四層間依固定優先序合併去重，**先出現者保留、後出現者被捨棄**，且失效對後者的作者不可見。
+
+| 優先序（高到低） | 層級 | 對本庫的意涵 |
+|----|------|------|
+| 1 | managed（policy-scope） | 與 project 同名時，project 版本被完全遮蔽 |
+| 2 | personal（`~/.claude/skills/`） | 本庫政策為此層恆空；一旦非空即覆蓋全部專案的同名 project skill |
+| 3 | project（`.claude/skills/`） | 本庫寫入的位置 |
+| 4 | plugin marketplace | 優先序最低，與 project 同名時被遮蔽的是 marketplace 版本 |
+
+**Why**：`skill-shadowing-check-hook.py`（SessionStart）的存在本身即是實證——它掃描 project／personal 兩層全部同名 skill、逐檔比對差異，這件事發生過才需要 hook。
+
+**Consequence**：新建 skill 撞名於更高優先序層，新內容永遠不會被載入，宣告層（規則寫了）與執行層（規則送不到執行點）就此脫節，且對撰寫者不可見。
+
+**Action**：建立新 skill 前，除了確認本庫內無同名（`ls .claude/skills/`），也確認 `~/.claude/skills/` 無同名（該層應恆空，非空本身即是待處理的違規）。**Coverage gap**：`skill-shadowing-check-hook.py` 不掃描 managed 與 plugin marketplace 兩層，兩者的碰撞需自行查（plugin marketplace 可用 `find ~/.claude/plugins/marketplaces -mindepth 3 -maxdepth 3 -type d -path '*/skills/*'` 列出）。
 
 ## 觸發控制矩陣
 

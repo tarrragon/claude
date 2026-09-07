@@ -1323,6 +1323,91 @@ def _should_skip_clean_file(  # i18n-exempt
     return False
 
 
+# 孤兒偵測三格分類：canonical 有、推送方 tracked 樹無的路徑，可能是真的
+# 刪除過（真孤兒）、從未擁有過（他方貢獻）、或本地有但未被 git 追蹤
+# （如被 .gitignore 排除）三種成因之一，三者在 tracked 樹比對視角下同形。
+_ORPHAN_TRUE = "true_orphan"
+_ORPHAN_OTHER_CONTRIBUTION = "other_contribution"
+_ORPHAN_UNTRACKED_LOCAL = "untracked_local"
+
+
+def _has_local_deletion_history(project_root: Path, repo_rel_posix: str) -> bool:
+    """查詢 project_root 的 git 歷史是否曾追蹤並刪除過 repo_rel_posix 路徑。
+
+    Why：孤兒偵測比對「canonical 樹 vs 推送方 tracked 樹」，兩者不同不足以判定
+    推送方是否真的刪除過該檔——也可能是推送方從未擁有過（他方貢獻），兩者在
+    tracked 樹視角下完全同形。用 `--diff-filter=D` 查本地歷史是否曾有過該
+    路徑的刪除紀錄，是唯一能區分兩者的判定依據。
+
+    Consequence（不查）：他方貢獻的檔案與真孤兒同形，`--clean` 會誤刪其他
+    consumer 的貢獻（實測案例：另一 consumer 先前推上的 uv.lock，本專案
+    之後帶 `--clean` 推送時誤判為孤兒並清除）。
+
+    Action：零輸出僅代表「本專案 git 歷史無此路徑的刪除記錄」，語意限定於
+    本專案（相當於「不是我刪的」），不可推論為「此檔從未被任何人刪除」——
+    呼叫端組成提醒文字時須遵守此邊界，不可宣稱成因超出此範圍。
+
+    參數:
+        project_root: 專案根目錄（含 .git/）
+        repo_rel_posix: 相對 project_root 的路徑（含 .claude/ 前綴）
+
+    傳回:
+        bool: True 表示本專案 git 歷史曾刪除過該路徑
+    """
+    result = subprocess.run(
+        ["git", "log", "--oneline", "--all", "--diff-filter=D", "--", repo_rel_posix],
+        cwd=str(project_root),
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def classify_orphan_candidate(
+    rel: Path,
+    claude_dir: Path | None,
+    project_root: Path | None,
+) -> str:
+    """三格分類 canonical 有而推送方 tracked 樹無的路徑。
+
+    判別順序（正確性考量，非效能考量）：先查磁碟存在性，再查 git 歷史。
+    前兩格（true_orphan / other_contribution）都以 tracked 樹為視角比對；
+    磁碟存在性檢查是唯一跳出 tracked 樹視角的判定，必須先排除「視角本身
+    有盲區」（本地磁碟存在但因 .gitignore 等原因未被追蹤）的情況，才輪到
+    在 tracked 樹視角內分真孤兒與他方貢獻。
+
+    Consequence（順序反過來）：未追蹤的本地檔會直接落入歷史查詢，因從未
+    被 git 追蹤過而回零命中，被歸類為 other_contribution——動作恰好正確
+    （不清），但理由錯誤，且遺漏提示使用者本地與 canonical 因 .gitignore
+    分歧的核心資訊（實測案例：`.claude/scripts/uv.lock` 因
+    `.gitignore` 內 `.claude/**/*.lock` 這條 pattern 被忽略，本地存在卻
+    未被追蹤）。
+
+    claude_dir 或 project_root 為 None 時（呼叫端未在真實 git 專案內取得
+    這些路徑）降級為舊行為，一律回傳 true_orphan，保留既有呼叫端在無法
+    查詢磁碟/歷史時的既有行為。
+
+    參數:
+        rel: 相對 .claude/ 的路徑
+        claude_dir: 本地 .claude 目錄路徑（磁碟存在性檢查用），None 則跳過此檢查
+        project_root: 專案根目錄（git 歷史查詢用），None 則跳過此檢查並回退舊行為
+
+    傳回:
+        str: "untracked_local"（磁碟上存在但未被 git 追蹤，不可清，需提示
+        .gitignore 分歧）/ "true_orphan"（本專案 git 歷史曾刪除過，可
+        `--clean`）/ "other_contribution"（磁碟無此檔且本專案歷史無刪除
+        紀錄，可能為他方貢獻，不可清）
+    """
+    if claude_dir is not None and (claude_dir / rel).exists():
+        return _ORPHAN_UNTRACKED_LOCAL
+    if project_root is None:
+        return _ORPHAN_TRUE
+    repo_rel_posix = (Path(".claude") / rel).as_posix()
+    if _has_local_deletion_history(project_root, repo_rel_posix):
+        return _ORPHAN_TRUE
+    return _ORPHAN_OTHER_CONTRIBUTION
+
+
 def _list_base_files(temp_dir: Path, base_sha: str) -> set[str]:
     """列出 base SHA 時的所有檔案路徑（用於三方比對）。
 
@@ -1457,6 +1542,8 @@ def clean_stale_files(
     lineage_claimed: set[str] | None = None,
     skills_config: dict | None = None,
     base_sha: str | None = None,
+    claude_dir: Path | None = None,
+    project_root: Path | None = None,
 ) -> int:
     """刪除 clone 目錄中存在但 reference_dir（git tracked 樹 staging）沒有的過時檔案。
 
@@ -1468,6 +1555,12 @@ def clean_stale_files(
     「base 無 + staging 無 + upstream 有」= 其他 consumer 在 base 後新增，不刪除。
     「base 有 + staging 無 + upstream 有」= 本地 git rm，應刪除。
     base_sha 不可達時降級為舊行為（不做三方比對）。
+
+    三格分類（claude_dir / project_root 提供時啟用）：對「canonical 有、staging
+    無」的候選，先用 classify_orphan_candidate 分辨磁碟上未追蹤（不清）與
+    tracked 樹歷史上真的刪除過（可清）/ 從未擁有過（不清，可能為他方貢獻）；
+    只有 true_orphan 才繼續套用下方的三方比對判斷。claude_dir / project_root
+    皆為 None 時退化為 true_orphan（維持既有無此二參數呼叫端的行為）。
 
     排除 .git 目錄、CHANGELOG.md、VERSION 等遠端獨有檔案；另對 should_exclude
     命中的檔（local-only / 憑證）不刪除（這類檔本就不該被本腳本管理，可能是其他
@@ -1483,6 +1576,7 @@ def clean_stale_files(
     lineage_claimed = lineage_claimed or set()
     deleted_count = 0
     skipped_other_consumer = 0
+    skipped_untracked_local = 0
 
     base_files: set[str] = set()
     if base_sha:
@@ -1499,6 +1593,15 @@ def clean_stale_files(
         if _should_skip_clean_file(rel, preserve, lineage_claimed, skills_config):
             continue
         if not (reference_dir / rel).exists():
+            classification = classify_orphan_candidate(rel, claude_dir, project_root)
+            if classification == _ORPHAN_UNTRACKED_LOCAL:
+                print(f"   [保留] 本地磁碟存在但未被追蹤，可能與 .gitignore 分歧: {rel}")
+                skipped_untracked_local += 1
+                continue
+            if classification == _ORPHAN_OTHER_CONTRIBUTION:
+                print(f"   [保留] 本專案 git 歷史無刪除記錄，可能為他方貢獻: {rel}")
+                skipped_other_consumer += 1
+                continue
             rel_posix = rel.as_posix()
             if base_files and rel_posix not in base_files:
                 print(f"   [保留] 其他 consumer 新增: {rel}")
@@ -1526,6 +1629,11 @@ def clean_stale_files(
 
     if skipped_other_consumer:
         print(f"   [三方比對] 保留 {skipped_other_consumer} 個其他 consumer 新增的檔案")
+    if skipped_untracked_local:
+        print(
+            f"   [未追蹤] 保留 {skipped_untracked_local} 個本地磁碟存在但未被追蹤"
+            "的檔案（請檢查 .gitignore 是否與 canonical 分歧）"
+        )
 
     return deleted_count
 
@@ -1536,6 +1644,8 @@ def detect_uncleaned_deletions(
     preserve: set[str] | None = None,
     lineage_claimed: set[str] | None = None,
     skills_config: dict | None = None,
+    claude_dir: Path | None = None,
+    project_root: Path | None = None,
 ) -> list[str]:
     """偵測遠端 clone（temp_dir）存在但本地 git tracked 樹（reference_dir）已無的檔案。
 
@@ -1546,6 +1656,13 @@ def detect_uncleaned_deletions(
     判定邏輯與 clean_stale_files 對齊（共用 _should_skip_clean_file 過濾），
     確保「警告的檔」恰為「--clean 會刪的檔」，不多報遠端獨有檔（CHANGELOG/VERSION）
     或他專案推送的 local-only 檔。
+
+    三格分類（claude_dir / project_root 提供時啟用）：只有 classify_orphan_candidate
+    判為 true_orphan（本專案 git 歷史確實刪除過）的路徑才列入回傳的孤兒清單；
+    untracked_local（本地磁碟存在但未追蹤）與 other_contribution（磁碟無此檔且
+    本專案歷史無刪除記錄，可能為他方貢獻）皆不列入，避免 main 結尾的提醒訊息
+    把他方貢獻或本地未追蹤檔誤述為「本地已刪除」。claude_dir / project_root
+    皆為 None 時退化為舊行為（不做分類，一律視為 true_orphan）。
 
     Why：刪除跨專案傳播仰賴 --clean opt-in（預設關，刻意安全設計避免誤刪）。本地
     git rm tracked .claude/ 檔後若 push 未帶 --clean，遠端殘留孤兒，full overlay
@@ -1558,9 +1675,11 @@ def detect_uncleaned_deletions(
     參數:
         temp_dir: 遠端 repo 的本地 clone 暫存根目錄
         reference_dir: git archive 解出的本地 tracked 樹（staging）
+        claude_dir: 本地 .claude 目錄路徑（三格分類的磁碟存在性檢查用）
+        project_root: 專案根目錄（三格分類的 git 歷史查詢用）
 
     傳回:
-        list[str]: 遠端存在但本地 tracked 樹已無的檔案相對路徑（已排序），無則空 list
+        list[str]: 確認為 true_orphan 的相對路徑（已排序），無則空 list
     """
     preserve = preserve or set()
     lineage_claimed = lineage_claimed or set()
@@ -1572,6 +1691,8 @@ def detect_uncleaned_deletions(
         if _should_skip_clean_file(rel, preserve, lineage_claimed, skills_config):
             continue
         if not (reference_dir / rel).exists():
+            if classify_orphan_candidate(rel, claude_dir, project_root) != _ORPHAN_TRUE:
+                continue
             orphans.append(str(rel))
     return orphans
 
@@ -2541,6 +2662,7 @@ def main() -> None:
                 deleted = clean_stale_files(
                     temp_dir, staging_dir, preserve, lineage_claimed, skills_config,
                     base_sha=sync_base_sha,
+                    claude_dir=claude_dir, project_root=project_root,
                 )
                 print_color(f"   已清理 {deleted} 個遠端過時檔案", "green")  # i18n-exempt
             else:
@@ -2548,7 +2670,8 @@ def main() -> None:
                 # 不阻擋、不改 --clean 預設）。在 staging rmtree 前計算並暫存，
                 # 待 push 成功後於結尾輸出提醒。
                 uncleaned_deletions = detect_uncleaned_deletions(
-                    temp_dir, staging_dir, preserve, lineage_claimed, skills_config
+                    temp_dir, staging_dir, preserve, lineage_claimed, skills_config,
+                    claude_dir=claude_dir, project_root=project_root,
                 )
         finally:
             shutil.rmtree(staging_dir, ignore_errors=True)

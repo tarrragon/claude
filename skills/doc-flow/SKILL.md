@@ -2,7 +2,7 @@
 name: doc-flow
 description: "Manages project documentation system including CHANGELOG, worklog, tickets, error-patterns, and todolist. Use for: (1) worklog initialization and updates, (2) todolist management, (3) version collaboration workflows, (4) documentation consistency checks"
 metadata:
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Doc-Flow SKILL
@@ -172,6 +172,21 @@ docs/
     │               └── ...
     └── legacy/                      # 舊格式散落檔案
 ```
+
+---
+
+## Hooks
+
+### worklog-format-check
+
+`.claude/skills/doc-flow/hooks/worklog-format-check.py`（PostToolUse，matcher: Edit/Write）
+
+檢測 worklog markdown 表格單元格內的問題 emoji（會導致 Claude Code CLI crash），
+偵測到時輸出純文字警告（非阻擋，僅 PM 可見）。
+
+作用域預設為 `docs/work-logs`，可用環境變數 `WORKLOG_FORMAT_CHECK_SCOPE`
+覆寫（settings.json 命令列內設定，格式如 `docs/other-logs`），不需改程式碼。
+`.claude/settings.json` 中已註冊本 hook 於 Edit / Write 兩個 matcher 下。
 
 ---
 

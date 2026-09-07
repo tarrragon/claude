@@ -1,0 +1,44 @@
+# Round N 規劃判讀與反模式
+
+> **何時讀**：Round 3 跑完、判定要不要 Round 4 時；規劃任何一輪之前對照〈反模式〉。**亦由此進入**：`principles/cross-round-stopping-signal.md` 的角色段寫明它被〈Round N 規劃判讀〉引用，讀那張卡的人會回到這裡；`principles/review-seven-axes.md` 沒有指回。
+>
+> **同目錄**：`round-3-self-application.md`（前一步）、`integrating-findings.md`（收尾清單）、`principles/review-seven-axes.md`、`principles/cross-round-stopping-signal.md`。
+>
+> **溯源**：由 `SKILL.md` 的〈Round N 規劃判讀〉與〈反模式〉外移，見 CHANGELOG 2.0.0。
+
+## Round N 規劃判讀
+
+Round 1-3 是硬底線、直接跑不問。Round 3 結束後才進入「是否需要 Round 4」的判讀。停止訊號齊備、停：
+
+1. **七軸動完**：frame / instance / surface / scope / cadence / timing / granularity 七軸都用過。**判定這一條之前打開 [七軸盤點](principles/review-seven-axes.md)**——七個名字不含程序，而第四條降級之後 quorum 的重量壓在這一條上。那張卡給填法（逐 reviewer 對帳、不憑印象）、判定（不適用不計入分母、只有最弱切換的軸記為未動）、以及未動之後的處置，另附一份填好的盤點
+2. **Finding 性質退化**：新 frame catch 到的 finding 又退回 surface 層
+3. **修法成本反轉**：修一個 finding 成本超過讀者實際感受價值
+4. **新 frame 想不出來**（最弱的一條、不作必要條件）：腦力激盪後想不出「能 catch 新東西」的 frame——這一條隨經驗反向移動，見同節〈第四條量的是判斷者、不是稿件〉段
+
+任二齊備、可以判定「真的夠了」，而**分母是前三條**。任一齊備、繼續但要主動規劃 frame 切換。
+
+**第四條量的是判斷者、不是稿件**，所以它在實務上永遠不成立——想得出多少 frame 由執行者的經驗決定，跑過越多輪的人庫存越大，四次實跑零次成立（第四次停在四輪時仍想得出術語探針）。把它與前三條平鋪並列有兩個代價：quorum 的分母悄悄縮水（沒有人做過這個決定），以及執行者以為自己還沒做完、而「還可以再跑一輪」這個念頭沒有終點。判別新增訊號時問一句——這一條量的是被判斷的對象、還是判斷者自己；答案是一個以能力為條件的否定式（想不出、找不到、看不出）就多半量的是判斷者。詳見 [跨輪 review 停止訊號](principles/cross-round-stopping-signal.md)。
+
+**未動的軸不一定是下一輪買得到的。** 七軸盤點的每一格要多填一欄「這一軸靠什麼補上」：五個軸填「下一輪」，timing 填「時間」，instance 填「另一個執行者」。填時間或另一個執行者的軸，第五輪補不到——照「未動的軸就是下一輪的價值來源」排下去，跑出來的那一輪在七軸上補不了任何一格，產出只能來自把 frame 軸再細分，正是「缺軸不缺深度」要防的加輪數。處置是建票綁觸發條件（異源交換的觸發是有另一個執行者可用，而票要指定交換的形式——兩邊各自量同一件事、各自報數，不是一邊做另一邊審；驗收寫「有幾個約定因為這次並排而被寫明」，不寫「取得對方的 N 則 finding」——那一類的產出沒有歸屬，按來源歸帳會固定漏掉它、冷讀的觸發是下次有人要動這份內容），並把停止判定寫成兩句話：哪幾軸判定為已覆蓋、哪幾軸判定為取不到。**「停在資源用完」與「停在證據齊備」在文字上同形**，不分開寫就消失。詳見 [缺口的處置看它需要哪一種資源](principles/gap-remedy-depends-on-the-resource-it-needs.md)
+
+**停止之前還要看 finding 的方向分佈。** 把所有 finding 逐則標一個方向欄，只有兩個值：這一則說規則**漏掉了**什麼，還是說規則**多抓了**什麼。一欄全滿、另一欄全空時缺的是 frame 而不是缺陷——**零 finding 與零 frame 在報告上同形**，代價那一側交白卷讀起來像那一側沒有問題。成因兩端同向：找到漏抓是產出（多一則 finding），找到誤報是否定產出（少一則，且要撤回別人寫下的），而規劃者在找「還有什麼沒被檢查」、執行者的價值由 finding 數體現。修法是 frame 清單成對排（判準漏了哪些情境／判準會把哪些合規個案判成違規；這一類還有哪些位置／這一類的命中有哪幾處其實合規；涵蓋範圍夠不夠／成本由誰承擔）。「找誤報會減少產出」這個估計本身是錯的——實測兩次撤回之後的替代 finding 都比原本那一則強。詳見 [審查的 frame 全部在問效力](principles/review-frames-ask-efficacy-never-cost.md)
+
+**停止訊號之外還有一個前置條件：整體通讀。** 所有 frame 跑過、所有 finding 修完，不等於這份內容現在是好的——修法本身改變了被審查的對象，而兩次各自正確的修法可以合成一個對兩個 frame 都不可見的缺陷（per [多次修法會合成缺陷](principles/sequential-fixes-compose-into-defects.md)）。停止之前要有一次以整體為對象的通讀，判斷標準是「這份內容現在讀起來像一個人一次寫完的嗎」。逐條檢查修法產物不能取代它——合成缺陷在那些條目之間。
+
+同一輪還要重讀**共用產物**：入口頁（路線敘述）、待辦清單、索引。它們被每一輪修改、卻不在任何一輪的審查範圍裡，因為每輪的 frame 都是對著內容設計的。入口頁看「這幾條路線現在還通嗎」，待辦清單看「這幾列還沒做嗎、做完的都刪了嗎」。
+
+**共用產物只是三類射程外項目的其中一類。** 每個 frame 都要有一個審查對象，所以不在審查對象裡的項目沒有任何 frame 會碰到——除了共用產物，還有**審查所用的工具**（方法論、規範檔、腳本，以及它們的版本）與**審查自己的產物**（finding 清單、覆蓋盤點表、停止判定）。一次四輪、二十餘個 reviewer 的審查全程沒有一步會發現所用的方法論落後十一個 minor 版，而那些版本差裡有一版正好改掉了該次停止判定所依據的規則。這一類靠清單補、不靠加 frame 補（新 frame 也要先有對象），所以起跑前列一次工具與版本、收尾前列一次被改過而不屬於任何一輪的產物。詳見 [審查的射程只涵蓋被審查的對象](principles/review-scope-never-includes-the-instrument.md)
+
+## 反模式
+
+- **用 finding 數遞減當停止訊號**：上一輪修完、下一輪 finding 變少就停 — 會錯過「更深層 frame 仍有 finding 待 catch」的時機
+- **同 reviewer 跑多輪**：per [frame 顆粒度盲點](principles/multi-pass-frame-granularity.md)、同 frame 多輪 catch 高度重複、無增益
+- **跳過 frame 規劃直接派 reviewer**：「再來一輪 audit」沒指定 frame 切換、reviewer 用同方向掃同類問題、是 frame 顆粒度盲點的具體實例
+- **單跑字面 grep 修法**：修完字面層（編號、broken link）就以為到位、漏掉結構層（cadence）跟同義變體（per [規範化跟自審](principles/rule-codification-self-audit.md)）
+- **用單一模板修 cadence 同質化**：為破一個模具立「一律 X」的生成端規則、均勻套整批、會收斂出比原模具更密的新模具；「套了破模具規則」的自我感覺遮住「規則本身是單一模板」、同源逐張自審全 clean。修法要輪替多個 framing（不換統一模板）、且把修法產物納入整組跨卡異源 cadence 重掃（per [均勻修法複製新模具](principles/uniform-remediation-recreates-homogenization.md)）
+- **跑臨時子集卻當成跑完整框架**：只派幾個臨時擬的 reviewer frame + 一次 grep、就回報「review 完成 / clean」—— 漏抓後容易誤判成「框架不足」（design gap）而去加 frame / keyword、實際是「沒跑完該跑的輪」（execution gap）。漏抓先分 design gap（改框架）vs execution gap（改執行、別只加 keyword）；register/stance 類（喊話 / 誇飾 / 必然）尤其要靠 reader simulation + external cold-read、不是加 keyword（per compositional-writing 的 multi-pass-review-frame-granularity 原則）
+- **把「多輪全過」當成「知識類型對」**：歷輪 finding 全部落在字句與結構層時、「三輪全過」的語意只是「已覆蓋層全過」——斷言支撐與知識類型層若沒有 frame 負責、錯的知識類型（披著教學結構的經驗談）會全數通過。finding 類型分佈本身是訊號：全部集中表面層 = 深層無人在看、下一輪排斷言支撐 frame（per [claim-support frame](principles/review-needs-claim-support-frame.md)）。一次乾淨的實例：某份文件跑完三輪八個 reviewer、報告寫「三輪全過」，一天後另一批審查在同一份文件上找出五項嚴重的既有缺陷，全部來自上一次唯一沒有派人負責的維度——其中一項是判準自身前後矛盾（起點欄宣告兩個維度、判定訊號欄只實作其中一個）。**「多輪全過」的作用域是跑過的那幾個 frame，而報告上不會出現那個限定詞**，因為列出跑了哪些 frame 的責任沒有人承擔——收尾時要自己把跑過的 frame 列出來，並問哪些維度整批沒有人負責
+
+---
+
+版本紀錄在 skill 根目錄的 `CHANGELOG.md`。

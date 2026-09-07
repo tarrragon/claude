@@ -1,3 +1,22 @@
+## [2.55.0] - 2026-09-07
+
+### Summary
+refactor: 遷入 worklog-format-check hook 並使作用域可設定; fix: 孤兒偵測改三格分類，區分真孤兒/他方貢獻/未追蹤本地檔; fix: .claude/**/*.lock 加 uv.lock 白名單，使依賴鎖定檔納版控 (+6 more)
+
+Changes: 1 refactor, 2 fix, 1 docs, 3 chore, 2 other
+
+- refactor: 遷入 worklog-format-check hook 並使作用域可設定
+- fix: 孤兒偵測改三格分類，區分真孤兒/他方貢獻/未追蹤本地檔
+- fix: .claude/**/*.lock 加 uv.lock 白名單，使依賴鎖定檔納版控
+- docs: 補齊六項本庫實務落差
+- chore: 拉取 multi-round-review 2.0.1
+- chore: 補回 worklog-format-check.py 執行位元
+- chore: pull .claude 更新至 某版本
+- other: 刪除 compositional-writing 側原 comment-qa-hook.py（已遷至 dart-comment-traceability）
+- other: 新建 dart-comment-traceability skill 承接 comment-qa-hook.py，架構文件引用改為可省略
+
+---
+
 ## [2.54.1] - 2026-09-07
 
 ### Summary
