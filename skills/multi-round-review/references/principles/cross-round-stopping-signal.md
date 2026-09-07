@@ -29,11 +29,13 @@
 
 每個階段內、frame 用完就遞減；跨階段、新 frame 上線就重新進入「不遞減」狀態。
 
-## 停止訊號的 4 個判讀
+## 停止訊號的判讀
 
 1. **七軸 frame 全動完**：frame / instance / surface / scope / cadence / timing / granularity 七軸都用過
-2. **新 frame 想不出來**：腦力激盪後想不出能 catch 新東西的新 frame
-3. **Finding 性質回到 surface**：新 frame catch 到的 finding 又退回 surface 層
-4. **修法成本反轉**：修一個 finding 的成本超過讀者實際感受價值
+2. **Finding 性質回到 surface**：新 frame catch 到的 finding 又退回 surface 層
+3. **修法成本反轉**：修一個 finding 的成本超過讀者實際感受價值
+4. **新 frame 想不出來**（最弱的一條，不作必要條件）：腦力激盪後想不出能 catch 新東西的新 frame
 
-任二齊備、停的判讀是 evidence-based 而非 finding 數驅動。
+任二齊備、停的判讀是 evidence-based 而非 finding 數驅動。分母是前三條。
+
+**第四條量的是判斷者，不是稿件。** 想得出多少 frame 由執行者的經驗決定，跑過越多輪的人庫存越大，所以它隨經驗反向移動、在最需要一條停止訊號的位置上永遠不成立——四次實跑零次成立，第四次停在四輪時仍想得出術語探針。把它與前三條並列會造成兩個代價：quorum 的分母悄悄從四縮到三（沒有人做過這個決定），以及執行者以為自己還沒做完。判別新增訊號時問一句——**這一條量的是被判斷的對象，還是判斷者自己**；答案是一個以能力為條件的否定式（想不出、找不到、看不出）就多半量的是判斷者。

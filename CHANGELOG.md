@@ -1,3 +1,15 @@
+## [2.53.2] - 2026-09-07
+
+### Summary
+chore: 拉取 multi-round-review 1.75.1 與 compositional-writing 1.7.1; chore: .claude/VERSION 回寫 某版本
+
+Changes: 2 chore
+
+- chore: 拉取 multi-round-review 1.75.1 與 compositional-writing 1.7.1
+- chore: .claude/VERSION 回寫 某版本
+
+---
+
 ## [2.53.1] - 2026-09-07
 
 ### Summary
