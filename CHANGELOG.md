@@ -1,3 +1,31 @@
+## [2.54.0] - 2026-09-07
+
+### Summary
+feat: push 加版號未變閘門，偵測內容變更但版號未 bump; fix: 修復 Windows 上 skill-sync 內容雜湊的分隔符與 autocrlf 缺陷; fix: 明示 push --force 旁路 portability 閘門的效果 (+15 more)
+
+Changes: 1 feat, 4 fix, 9 docs, 4 chore
+
+- feat: push 加版號未變閘門，偵測內容變更但版號未 bump
+- fix: 修復 Windows 上 skill-sync 內容雜湊的分隔符與 autocrlf 缺陷
+- fix: 明示 push --force 旁路 portability 閘門的效果
+- fix: 修正 commit-first 警告的風險方向並列出受阻檔案
+- fix: gitignore 斷言改驗 git check-ignore 行為而非字面 pattern
+- docs: CHANGELOG 補 某版本 條目
+- docs: 修三節外移造成的三處跨檔指涉失效
+- docs: 依 (a) 判準外移三節，SKILL.md 降至 5k 預算的 72%
+- docs: 重設 skill-design-guide 的 (a)(g) 兩組判準
+- docs: 說明兩支 push 工具的分別（框架 canonical vs skill 發佈庫）
+- docs: 同步一跳可達判準與分段估算表名稱至三處範圍外位置
+- docs: 刪除 SKILL.md「Base ref 與隔離邊界」表重複列
+- docs: 重新設計 skill-design-guide 五組判準
+- docs: addresses.md 兩列地址改指 project-integration
+- chore: 補記 1.14.0 版本紀錄（--force 雙重語意可見性修正）
+- chore: 六支 skill 補上未 bump 的版號並推送至發佈庫
+- chore: bump 1.5.3, add project-integration README
+- chore: .claude/VERSION 回寫 某版本
+
+---
+
 ## [2.53.2] - 2026-09-07
 
 ### Summary

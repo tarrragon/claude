@@ -4,7 +4,7 @@ description: 'Use this skill whenever the user wants to create, track, query, or
 argument-hint: '<subcommand> [args]'
 allowed-tools: Bash(ticket *), Read, Write, Edit, Grep, Glob
 metadata:
-  version: 2.20.0
+  version: 2.21.0
 ---
 
 # Ticket System v1.0

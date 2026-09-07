@@ -271,12 +271,82 @@ def write_local_version(claude_dir: Path, new_version: str) -> tuple[bool, str]:
         return False, str(exc)
 
 
+def _classify_entry_form(status_code: str) -> str:
+    """依 porcelain XY 狀態碼分類為 staged / unstaged / untracked 形態。
+
+    參數:
+        status_code: porcelain 輸出每行前 2 字元（X、Y 兩欄）
+
+    傳回:
+        str: "untracked"（XY 為 "??"）/ "staged"（僅 X 欄有值）/
+        "unstaged"（僅 Y 欄有值）/ "staged+unstaged"（X、Y 皆有值，
+        如先 add 後又修改的 "MM"）
+    """
+    if status_code == "??":
+        return "untracked"
+    x, y = status_code[0], status_code[1]
+    has_staged = x not in (" ", "?")
+    has_unstaged = y not in (" ", "?")
+    if has_staged and has_unstaged:
+        return "staged+unstaged"
+    if has_staged:
+        return "staged"
+    return "unstaged"
+
+
+def _list_blocking_entries(project_root: Path) -> list[tuple[str, str]] | None:
+    """列舉 push 前被擋下的項目：(狀態形態, 相對 .claude 的路徑)。
+
+    與 ensure_committed 共用「porcelain 取全狀態 + should_exclude 過濾」邏輯，
+    差別在本函式回傳明細供呼叫端列出具體受阻檔案，而非單一 bool。
+
+    參數:
+        project_root: 專案根目錄（含 .claude/ 與 .git/）
+
+    傳回:
+        list[tuple[str, str]] | None: 過濾後仍存在的項目清單；git status
+        執行失敗時回傳 None（呼叫端應保守視為不乾淨，但因無法取得明細，
+        不列出具體檔案）
+    """
+    result = run_git(
+        ["status", "--porcelain", "--untracked=all", "--", ".claude"],
+        cwd=str(project_root),
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    entries: list[tuple[str, str]] = []
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        # porcelain 格式：XY<space>path（rename 為 "orig -> new"，取末段判定）
+        status_code = line[:2]
+        path_field = line[3:] if len(line) > 3 else line
+        if " -> " in path_field:
+            path_field = path_field.split(" -> ", 1)[1]
+        path_field = path_field.strip().strip('"')
+        # path 相對 project_root（含 .claude/ 前綴）；should_exclude 契約要求相對
+        # claude_dir，故 strip 前綴
+        rel_str = path_field
+        prefix = ".claude/"
+        if rel_str.startswith(prefix):
+            rel_str = rel_str[len(prefix):]
+        if not rel_str:
+            continue
+        if should_exclude(Path(rel_str)):
+            continue
+        # 過濾後仍存在的變更 → 真的需要先 commit
+        entries.append((_classify_entry_form(status_code), rel_str))
+    return entries
+
+
 def ensure_committed(project_root: Path) -> bool:
     """確認 .claude/ 已全數 commit（M1 根因解，0.19.1-W1-030）。
 
-    push 取的是 git tracked 樹（HEAD，見 stage_tracked_tree）；若 .claude/ 有未
-    commit 的「會被推送的」變更，推上去的內容會與工作區不一致。故 push 前強制
-    commit-first。
+    push 取的是 git tracked 樹（HEAD，見 stage_tracked_tree）；若 .claude/ 有
+    本應反映在推送內容中卻尚未 commit 的變更，該變更不會進入 push（git archive
+    只取 tracked 樹），使推上去的內容與工作區不一致——不是外洩風險，是內容
+    缺席風險。故 push 前強制 commit-first。
 
     M1 根因解（缺陷 T）：改用 `git status --porcelain --untracked=all -- .claude`
     取工作區全狀態（含 untracked），再以 manifest should_exclude 過濾掉
@@ -296,43 +366,19 @@ def ensure_committed(project_root: Path) -> bool:
 
     Action：以 porcelain 取全狀態 + should_exclude 過濾。過濾後仍有任何條目
     （tracked 的 unstaged/staged 變更、或非 local-only 的 untracked 檔）即回 False
-    要求先 commit；過濾後乾淨才回 True。
+    要求先 commit；過濾後乾淨才回 True。實際明細列舉見 _list_blocking_entries。
 
     參數:
         project_root: 專案根目錄（含 .claude/ 與 .git/）
 
     傳回:
-        bool: True 表示無「會被推送的」未提交變更，可安全 push
+        bool: True 表示無「本應被推送卻尚未 commit」的變更，可安全 push
     """
-    result = run_git(
-        ["status", "--porcelain", "--untracked=all", "--", ".claude"],
-        cwd=str(project_root),
-        check=False,
-    )
-    if result.returncode != 0:
+    entries = _list_blocking_entries(project_root)
+    if entries is None:
         # git status 失敗時保守視為「不乾淨」，避免推出未知狀態
         return False
-    for line in result.stdout.splitlines():
-        if not line.strip():
-            continue
-        # porcelain 格式：XY<space>path（rename 為 "orig -> new"，取末段判定）
-        path_field = line[3:] if len(line) > 3 else line
-        if " -> " in path_field:
-            path_field = path_field.split(" -> ", 1)[1]
-        path_field = path_field.strip().strip('"')
-        # path 相對 project_root（含 .claude/ 前綴）；should_exclude 契約要求相對
-        # claude_dir，故 strip 前綴
-        rel_str = path_field
-        prefix = ".claude/"
-        if rel_str.startswith(prefix):
-            rel_str = rel_str[len(prefix):]
-        if not rel_str:
-            continue
-        if should_exclude(Path(rel_str)):
-            continue
-        # 過濾後仍存在的變更 → 真的需要先 commit
-        return False
-    return True
+    return len(entries) == 0
 
 
 def stage_tracked_tree(project_root: Path, staging_dir: Path) -> int:
@@ -2319,8 +2365,21 @@ def main() -> None:
     # 的 tracked 變更與非 local-only untracked 框架檔仍被攔截。
     print_color("檢查 .claude 資料夾狀態（commit-first）...")
     if not ensure_committed(project_root):
-        print_color("警告: .claude 有未提交的變更（會被推送但未 commit）", "red")
+        print_color(
+            "警告: .claude 有未提交的變更（不會被推送，會從此次推送內容中缺席）",
+            "red",
+        )
         print("push 取的是 git tracked 樹（HEAD）；請先 git add .claude && git commit")
+        blocking_entries = _list_blocking_entries(project_root)
+        if blocking_entries:
+            print("受阻檔案：")
+            for form_label, rel_path in blocking_entries:
+                print(f"  [{form_label}] {rel_path}")
+        print(
+            "若只需推送單一 skill 至發佈庫（非整個 .claude 框架 canonical），"
+            "改用 skill-sync push（.claude/skills/skill-sync），該路徑無此全樹 "
+            "commit-first 前置條件"
+        )
         sys.exit(1)
     # 安全說明（C1）：push 改以 git archive HEAD 取 tracked 樹，untracked / gitignored
     # 機密檔不在 tracked 樹中，從架構層消滅 W1-019 secret-leak 風險，故無需 interim

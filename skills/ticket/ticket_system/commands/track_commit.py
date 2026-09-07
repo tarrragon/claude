@@ -172,10 +172,21 @@ def execute_commit(args: argparse.Namespace, version: str) -> int:
     }
 
     if not normalized_declared:
-        print(
+        message = (
             f"[ERROR] Ticket {args.ticket_id} 的 where.files 未宣告任何寫入路徑，"
             "無法判斷提交範圍是否合法，拒絕提交"
         )
+        if ticket.get("type") == "ANA":
+            # ANA 型 where.files 預設全為唯讀（file_conflict._default_intent），
+            # 逐檔未標 ::write 時 write_files() 恆回空集合——即使檔案清單本身
+            # 非空。不補這段說明，讀者看到「未宣告任何寫入路徑」會誤判為 CLI
+            # bug（本 session 已有兩個代理人各自誤判並繞道）。
+            message += (
+                "\n[NOTE] 本票為 ANA 型，where.files 預設唯讀（用於標記影響面，"
+                "非寫入意圖）；若確有寫入需求，請於該路徑後加 ::write 標記，"
+                "例如：path/to/file.py::write"
+            )
+        print(message)
         return 1
 
     out_of_scope = _out_of_scope_files(args.files, normalized_declared, repo_root, base_dir)

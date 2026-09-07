@@ -64,6 +64,17 @@
 |------|------|
 | `/sync-push` | 推送 .claude 配置到獨立 repo |
 | `/sync-pull` | 從獨立 repo 拉取配置 |
+| `skill-sync push <name>` | 推送單一 skill 到 skill 發佈庫 |
+| `skill-sync pull <name>` | 從 skill 發佈庫拉取單一 skill |
+
+**兩支 push 工具的分別**（兩者都叫 push，目的地與前置條件不同，選錯會誤判為並行協調問題）：
+
+| 工具 | 目的地 repo | 推送範圍 | 前置條件 |
+|------|------------|---------|---------|
+| `/sync-push`（`sync-claude-push.py`） | 框架 canonical（`claude.git`） | 整個 `.claude` 資料夾 | 全樹 commit-first：`.claude` 下所有變更（含 untracked 框架檔）必須先 commit，否則 abort |
+| `skill-sync push <name>` | skill 發佈庫（`claude-skills.git`） | 單一 skill 目錄 | 無全樹前置；只檢查該 skill 自身內容 |
+
+只需推送單一 skill 時用 `skill-sync push <name>`；需要同步整份 `.claude` 框架（規則、方法論、hook 等非 skill 內容）時才用 `/sync-push`。
 
 ---
 
@@ -73,5 +84,6 @@
 
 ---
 
-**Last Updated**: 2026-03-03
+**Last Updated**: 2026-09-07
+**Version**: 1.1.0 — 新增「兩支 push 工具的分別」對照表（`/sync-push` 推框架 canonical、全樹 commit-first；`skill-sync push <name>` 推單一 skill 至發佈庫、無全樹前置），修正代理人誤選工具後誤判為並行協調問題
 **Version**: 1.0.0

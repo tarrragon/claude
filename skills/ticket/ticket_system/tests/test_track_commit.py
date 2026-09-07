@@ -3,7 +3,8 @@
 驗證：
 1. 命令可在 where.files 子集內提交並印出 SHA。
 2. 超出宣告範圍的檔案被拒絕（不部分提交）。
-3. where.files 未宣告任何寫入路徑時拒絕提交。
+3. where.files 未宣告任何寫入路徑時拒絕提交；ANA 型觸發時訊息含 ANA 預設
+   唯讀說明與 ::write 標註方式，非 ANA 型訊息不含該段（0.1.0-W3-034）。
 4. ticket 不存在時回傳錯誤。
 5. 空 tree 短路視為成功（無需提交）。
 6. 提交失敗時印出錯誤並回傳非零。
@@ -96,6 +97,24 @@ class TestExecuteCommit:
 
         assert rc == 1
         mock_commit.assert_not_called()
+        # 非 ANA 型（預設 IMP）觸發時，訊息不含 ANA 預設唯讀說明（0.1.0-W3-034）。
+        assert "ANA 型" not in capsys.readouterr().out
+
+    def test_rejects_when_ana_ticket_declares_only_read_paths(self, capsys):
+        """ANA 型 where.files 逐檔未標 ::write 時 write_files() 恆空，訊息須
+        說明 ANA 預設唯讀與 ::write 標註方式，避免誤判為 CLI bug（0.1.0-W3-034）。"""
+        ticket = {"id": _TICKET_ID, "type": "ANA", "where": {"files": ["a/b.py"]}}
+        with patch.object(track_commit, "load_ticket", return_value=ticket), \
+             patch.object(track_commit, "resolve_project_cwd", return_value="/repo"), \
+             patch("os.getcwd", return_value="/repo"), \
+             patch.object(track_commit, "commit_files_isolated") as mock_commit:
+            rc = track_commit.execute_commit(_args(["a/b.py"]), _VERSION)
+
+        assert rc == 1
+        mock_commit.assert_not_called()
+        out = capsys.readouterr().out
+        assert "ANA 型" in out
+        assert "::write" in out
 
     def test_missing_ticket_returns_error(self, capsys):
         with patch.object(track_commit, "load_ticket", return_value=None):

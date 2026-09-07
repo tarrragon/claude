@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.12.0 — 補記 2.11.0 之後累積但未 bump 版號的變更（版號未動使發佈庫與本庫的內容分歧無法由版號察覺）。`hooks/wrap-skill-yaml-consistency-hook.py` 的「映射檔不存在」錯誤訊息改為內嵌最小可用範例（兩個頂層必要欄位 + 佔位符），原訊息叫讀者「見 SKILL.md」，但映射檔的 schema 只寫在映射檔自身的檔頭註解裡——也就是缺失的那個檔案內，指向外部文件無法自救。另 `hooks/wrap-decision-tripwire-hook.py` 移除註解與 docstring 內的專案 ticket ID，訊號判定行為未變
+
 **Version**: 2.11.0 — `pseudo-widen-guard.md`、`source-verification.md` 因內容通用（實讀後判定不含專案特定耦合）由 `references/project-integration/` 提升至正規 references 層；「假設層級多元性」「清單類答案的來源核對」兩節補上直接引用；「參考文件」通用表新增兩檔條目；合併發佈庫的 lint 基線清理（v2.10.1）：4 個純文字 code fence 補上 `text` 語言標示（MD040）、「假設層級多元性」的粗體命題併入下一段（MD036）
 
 **Version**: 2.10.3 — 版本紀錄搬到同目錄的 `CHANGELOG.md`。skill 是 runtime 整份載入的檔案，而沒有任何規則要求任何人讀版本紀錄，留在 SKILL.md 等於每次叫用都付一次無效讀取。SKILL.md 末尾留一行指過去，版號的兩個住址改成「CHANGELOG.md 最上面那一條 + frontmatter 的 metadata.version」。skill 的指令內容一個字都沒改。

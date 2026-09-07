@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.5.3 — 修 portability 閘門擋下的違規：`references/addresses.md` 第 15、16 列（方法論、元件庫規格範本）各指名本專案一個檔案路徑，與 frontmatter 宣告的 `metadata.portable: true` 矛盾——一份可攜的 skill 不該把別的 consumer 的檔案佈局寫死在正文。改法比照 `wrap-decision` skill 已建立的慣例：新增 `references/project-integration/README.md`（依命名慣例排除於 skill-sync push）承接本專案的實際路徑，`addresses.md` 兩列的地址欄改指向該檔，句意與可執行性不變，只是把「哪個專案」與「這個路徑」的耦合搬到排除同步的目錄。
+
 **Version**: 1.5.2 — 修 Round 4 復驗指出而 v1.5.0／v1.5.1 未處理的最後一項：「全文只在該表寫一次」的宣稱不成立（狀態矩陣、特徵測試、baseline 各有兩處在消費點自帶地址）。
 
 **修法選擇的理由值得記**：兩個選項是「刪掉那些行內地址讓宣稱成真」或「改宣稱讓它與實際相符」，本次選後者。依據是 steelman 在 Round 3 挖出的未言明前提——地址表的整套成本論證建立在「行內路徑很貴」這個從未寫出的讀者模型上，而對本 skill 自己宣告的讀者（agent），一條行內路徑幾乎不花成本、一次間接跳轉更貴。既然如此，消費點自帶地址是對的，絕對化的宣稱才是錯的。改為「本表是地址的權威——消費點就近帶一句路徑是允許的，但不得與本表衝突，衝突時以本表為準」。

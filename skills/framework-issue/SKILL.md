@@ -2,7 +2,7 @@
 name: framework-issue
 description: "Creates and lists framework issues on the canonical framework repo (tarrragon/claude) via gh CLI. Use when tracking a framework-level problem, error-pattern canonical reference, provenance anchor, or cross-consumer fix across projects. Triggers include: framework issue, canonical issue, 跨 consumer 修復追蹤, 框架 issue, error-pattern canonical. Do NOT use for project-local docs/work-logs tickets (use the ticket skill instead)."
 metadata:
-  version: 1.4.0
+  version: 1.5.0
 ---
 
 # Framework Issue

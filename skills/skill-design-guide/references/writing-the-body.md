@@ -2,7 +2,7 @@
 
 > 何時讀：寫或修 SKILL.md 正文時——骨架、內容品質、什麼不該放進去、引用形式（skill 內用相對路徑、指向外部用指名身分）、字串替換與動態 context 注入。**亦由此進入**——`SKILL.md`〈發布前檢查清單〉的「結構」與「Body」兩組（尤其外部引用的機械檢查）；`creating-and-adopting-skills.md`〈Step 4：撰寫內容〉的 4c（寫 body）；`splitting-an-existing-skill.md` 的結構約定（拆完要照本檔的引用規則重寫指標）。
 >
-> 同目錄：frontmatter 與 description 在 `frontmatter-and-description.md`，新建流程在 `creating-and-adopting-skills.md`，拆分程序在 `splitting-an-existing-skill.md`，工作流範本與問題排除在 `patterns-and-troubleshooting.md`，設計哲學在 `seeing-like-an-agent.md`；〈核心心法〉〈三類 bundled resource 的分工〉〈發布前檢查清單〉留在 `SKILL.md`。
+> 同目錄：frontmatter 與 description 在 `frontmatter-and-description.md`，新建流程與三類 bundled resource 的分工在 `creating-and-adopting-skills.md`，拆分程序在 `splitting-an-existing-skill.md`，工作流範本、自由度與預設值、問題排除在 `patterns-and-troubleshooting.md`，設計哲學在 `seeing-like-an-agent.md`；〈核心心法〉的前兩則與〈發布前檢查清單〉留在 `SKILL.md`。
 >
 > 溯源：自 SKILL.md 搬移（v1.6.0，因兩個官方門檻皆超標）。
 
@@ -87,10 +87,14 @@ description: [...]
 
 | 規則 | 說明 |
 |------|------|
-| 一層深 | 所有 reference 從 SKILL.md 直接連結，禁止 A → B → C 巢狀 |
+| 一跳可達 | 每份 reference 在 SKILL.md 路由表都有自己的一列，讀者從入口一跳即到。**禁止的是「只能經由另一份 reference 才被發現的內容」，不是 reference 之間互相指路** |
 | 路由訊號 | SKILL.md 必說明「什麼情境讀此檔」，否則 reference 形同孤兒 |
 | 100+ 行且**被選段查閱**者加 TOC | 讓 Claude preview 時看到完整範圍。**被整份執行的 reference 不適用**——SKILL.md 明令「讀這一份再繼續」的那種，反正從頭讀到尾，目錄省不下東西。行數只是成本，決定要不要 TOC 的是讀取方式（實測同一條判準在兩支 skill 上判出相反結果：一支 25 份誤報、一支 8 份真違規，差別只在這個維度） |
 | 不重複 | 內容只放 SKILL.md 或 reference 之一，不兩處皆有 |
+
+**為何是「一跳可達」而不是「禁止 A → B」。** 後者對本 skill 的六份 reference 全數判違規——每一份的檔頭都列了同目錄的其他五份，而那正是 `splitting-an-existing-skill.md`〈結構約定〉要求的產物。一條被自己的規範強制違反的規則不會被遵守，它只是讓真正的違規藏在六個偽陽性裡。
+
+一跳可達把判準移到**讀者的最短路徑**上，於是檔頭的「同目錄」與「亦由此進入」不再是違規：它們是橫向索引，指向的目標同樣在入口路由表裡，讀者要到那裡不必經過這一份。而某份 reference 若指到一個路由表沒有的檔案，那個檔案就只有經由它才會被發現，判違規——這才是原規則想擋的東西。機械檢查與判定方式見 `SKILL.md`〈發布前檢查清單〉的 Body 組。
 
 > **skill 自身目錄內的 reference 用相對路徑**（`references/foo.md`），這是本表的適用範圍。**指向 skill 外部的東西見〈外部引用：指名身分，不用檔案路徑〉。**
 
@@ -159,7 +163,7 @@ description: [...]
 
 ## 一則完整走查：兩個判準只有一個附了可執行動作
 
-本節與〈Claude Code 特有功能〉無關，示範的是把 `SKILL.md`〈Opinionated Defaults — 預設路徑引導正確做法〉那張判準表套到一段既有條文上。對象是本 skill 自己的體量門檻。
+本節與〈Claude Code 特有功能〉無關，示範的是把 `patterns-and-troubleshooting.md`〈Opinionated Defaults — 預設路徑引導正確做法〉那張判準表套到一段既有條文上。對象是本 skill 自己的體量門檻。
 
 | 階段 | 內容 |
 |------|------|
@@ -167,8 +171,12 @@ description: [...]
 | 套「有沒有多數情況下正確的路徑」這一問 | 有——多數 skill 是繁中，行數對它失效 |
 | 套「能不能改成自動檢查」這一問 | 部分——`wc` 可量，但語言比例要人判 |
 | 實際發生 | Action 只綁了行數，於是**只有行數生效**；一份 245 行、15,015 字元的 skill 全程通過 |
-| 改後設計 | 兩個門檻都量、都給指令；字元門檻附語言換算表；並在條文中載明「本層無 hook 執法，依賴自查」 |
+| 改後設計（第一次） | 兩個門檻都量、都給指令；字元門檻附語言換算表；並在條文中載明「本層無 hook 執法，依賴自查」 |
+| 補完動作之後才暴露的問題 | 兩個門檻以「任一超標即外移」合併，於是**較嚴的那個永遠是實際生效的閘門**。對英文內容而言較嚴的是行數，而行數不量測任何體量——沉默的判準補上動作後，反而變成主導的 |
+| 改後設計（第二次） | 主判準改為分段 token 估算直接比 5k，行數降為官方合規項；第 3 層補上單檔判準 |
 
 這一則的教訓可一般化：**當兩個判準只有一個附了可執行動作，實際生效的永遠是有動作的那個**——而寫的人會以為兩個都在跑。
+
+**而補上動作不是終點，還要回頭問合併規則。** 上表第一次修法只做了前半：兩個判準都有動作之後，沒有人問過「兩個都在跑時，誰說了算」。合併規則若是 OR（任一超標即外移），生效的就永遠是較嚴的那個，另一個等於沒有；失效的判準從沉默變成主導，而外觀上兩個都在跑。**修法清單裡凡是「補上缺的那一半」，都要接著問補完之後兩半怎麼合。**
 
 > 完整論證、案例、反模式對照表見 Opinionated Default 設計原則的詳細版；通用設計原則見同名的速查規則。

@@ -20,6 +20,7 @@ import inspect
 import multiprocessing as mp
 import os
 import signal
+import subprocess
 import time
 from pathlib import Path
 from typing import Tuple
@@ -278,27 +279,48 @@ class TestConfiguration:
     """配置層 acceptance（A1 / A4）：與 race 行為解耦的契約檢查。"""
 
     def test_gitignore_contains_lock_pattern(self):
-        """A4: .gitignore 含 generic *.lock pattern。"""
-        project_root = Path(parser.__file__).resolve().parents[5]
-        gitignore = project_root / ".gitignore"
-        assert gitignore.exists(), f"gitignore not found at {gitignore}"
-        content = gitignore.read_text(encoding="utf-8")
-        import re
-        m = re.search(r"^\*+(?:/\*+)?\.lock\s*$", content, re.MULTILINE)
-        assert m is not None, ".gitignore missing generic *.lock pattern"
+        """A4: .claude 樹下任意深度的 *.lock 檔皆被 git 忽略（非字面 pattern 比對）。
 
-    def test_gitignore_covers_nested_hook_logs(self):
-        """W9-010: .gitignore 含 generic **/hook-logs/ pattern，涵蓋任意深度巢狀。
-
-        驗證 .claude/hooks/hook-logs/ 等深度巢狀 runtime state 被 gitignore 涵蓋，
-        避免被 git 判 untracked 干擾 session-start 清點。
+        .gitignore 以 `.claude/**/*.lock` 涵蓋巢狀鎖檔，斷言行為而非該行文字，
+        允許等價寫法（如改用其他 glob 語法達成相同效果）不觸發假紅燈。
         """
         project_root = Path(parser.__file__).resolve().parents[5]
-        gitignore = project_root / ".gitignore"
-        content = gitignore.read_text(encoding="utf-8")
-        import re
-        m = re.search(r"^\*\*/hook-logs/\s*$", content, re.MULTILINE)
-        assert m is not None, ".gitignore missing generic **/hook-logs/ pattern"
+        candidates = [
+            ".claude/top.lock",
+            ".claude/sub/dir/nested.lock",
+            ".claude/a/b/c/deep.lock",
+        ]
+        for rel_path in candidates:
+            result = subprocess.run(
+                ["git", "check-ignore", "-q", rel_path],
+                cwd=project_root,
+                capture_output=True,
+            )
+            assert result.returncode == 0, (
+                f"{rel_path} not ignored by git (check-ignore exit={result.returncode})"
+            )
+
+    def test_gitignore_covers_nested_hook_logs(self):
+        """W9-010: hook-logs/ 目錄在任意深度、.claude 內外皆被 git 忽略。
+
+        斷言 git check-ignore 實際行為，避免要求 gitignore 字面必須是
+        `**/hook-logs/`——只要無前導斜線的 `hook-logs/` 也能達成任意深度涵蓋。
+        """
+        project_root = Path(parser.__file__).resolve().parents[5]
+        candidates = [
+            "hook-logs/x.log",
+            ".claude/hooks/hook-logs/x.log",
+            ".claude/some/nested/hook-logs/x.log",
+        ]
+        for rel_path in candidates:
+            result = subprocess.run(
+                ["git", "check-ignore", "-q", rel_path],
+                cwd=project_root,
+                capture_output=True,
+            )
+            assert result.returncode == 0, (
+                f"{rel_path} not ignored by git (check-ignore exit={result.returncode})"
+            )
 
     def test_save_ticket_signature_unchanged(self):
         """A1: save_ticket signature 不變（修正版 spec 不改 save_ticket）。"""

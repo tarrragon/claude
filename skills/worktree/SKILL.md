@@ -4,7 +4,7 @@ description: "Use this skill for managing git worktrees for Ticket-based develop
 argument-hint: "<subcommand> [args]"
 allowed-tools: Bash, Read, Write, Edit
 metadata:
-  version: 1.1.0
+  version: 1.2.1
 ---
 
 # Worktree Management SKILL
@@ -38,7 +38,6 @@ Claude Code 的 Agent tool 設定 `isolation: "worktree"` 派發 subagent 時，
 | worktree base 取自哪裡 | cc runtime 以 `origin/main`（remote-tracking ref）為 base，**非** local main HEAD。local main 領先 origin/main 時 worktree 建在 stale 基底（W3-007 實證） | 派發前先 `git push origin main`；`worktree-commit-before-dispatch-hook.py` 在 origin/main 落後時 stderr 警告 |
 | daemon-rooted 寫入工具洩漏 | dart MCP（dart fix / dart format）daemon 的 analysis root 在 session 啟動時綁定主 repo，worktree 派發只改 shell cwd，無法切換 daemon root，寫入會洩漏到主 repo（W3-008 根因 2） | worktree 實作 agent **禁用 dart MCP 寫入工具，改用 Bash `dart fix` / `dart format`（尊重 agent cwd）或 Edit** |
 | ticket CLI auto-commit 洩漏（W3-008 當時） | `paths.py:get_project_root()` 原優先讀 `CLAUDE_PROJECT_DIR`（恆指向主 repo），使 ticket md 寫入與 auto-commit 落在主 repo（W3-008 根因 1） | 當時已修：`get_project_root()` 加 worktree 感知，git root != CLAUDE_PROJECT_DIR 時優先用 git root。**此對策已被下方「ticket 狀態統一寫入主倉庫」取代，見表後說明** |
-| daemon-rooted 寫入工具洩漏 | 同上一列 | worktree 實作 agent **禁用 dart MCP 寫入工具，改用 Bash `dart fix` / `dart format`（尊重 agent cwd）或 Edit** |
 
 **Why**：worktree 隔離只改變 agent 的 shell cwd，對「session 啟動時靜態綁定主 repo 根目錄」的寫入工具（dart MCP daemon）不生效，這類工具的寫入會繞過隔離邊界洩漏到主 repo。
 

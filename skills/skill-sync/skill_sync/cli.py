@@ -415,13 +415,25 @@ def _skill_exists_in_canonical(name: str, repo_url: str) -> bool:
     return isinstance(manifest, dict) and name in manifest
 
 
+def _format_violation_lines(violations: list[PortabilityViolation]) -> list[str]:
+    """把違規清單格式化為顯示行（不含輸出目的地），供 stderr 完整報告與
+    --force 旁路時的 stdout 摘要共用同一格式，避免兩處各自維護一份「前 20
+    筆 + ... and N more」的截斷邏輯而彼此漂移。
+    """
+    lines = [f"    {v.file}:{v.line}  [{v.kind}]  {v.text}" for v in violations[:20]]
+    if len(violations) > 20:
+        lines.append(f"    ... and {len(violations) - 20} more")
+    return lines
+
+
 def _report_portability(
     skill_dir: Path, name: str, force: bool, repo_url: str | None = None
 ) -> None:
     """push 前的可攜性閘門。
 
     宣告 portable 的 skill 命中即中止（--force 可覆蓋但仍列出違規並落地
-    force-log）。未宣告者只列出摘要，不論它是否已存在於 canonical repo——
+    force-log，另見下方 stdout 摘要說明）。未宣告者只列出摘要，不論它是否已
+    存在於 canonical repo——
     「存在於 canonical」只證明「曾被 push 過」，不證明「其他 consumer 真的
     裝了它」（實測：canonical 現有 64 個 skill，某一線消費專案僅裝 23 個；
     `doc` / `ticket` / `worktree` 等框架專屬工具全都在 canonical 裡但該專案
@@ -437,6 +449,11 @@ def _report_portability(
     這是資訊，不是判決；中止沒有可靠依據就不該做。
 
     repo_url 預設 None：省略時完全不查詢遠端，行為與未傳時完全一致。
+
+    --force 旁路時額外印一份 stdout 摘要：既有的完整違規列表只印在 stderr，
+    若呼叫端只收集 stdout（如管線只轉存 stdout 供事後稽核），--force 的效果
+    會只留下 hook-logs 的 jsonl 這一條痕跡，使用者不會主動去看。stdout 摘要
+    與 stderr 版共用 _format_violation_lines，不重複維護格式。
     """
     violations = check_portability(skill_dir)
     if not violations:
@@ -468,10 +485,8 @@ def _report_portability(
         f"{len(violations)} consumer-specific reference(s):",
         file=sys.stderr,
     )
-    for v in violations[:20]:
-        print(f"    {v.file}:{v.line}  [{v.kind}]  {v.text}", file=sys.stderr)
-    if len(violations) > 20:
-        print(f"    ... and {len(violations) - 20} more", file=sys.stderr)
+    for line in _format_violation_lines(violations):
+        print(line, file=sys.stderr)
     print(
         "  A portable skill must not name another project's files: keep the point "
         "in the sentence and drop the path, or move the passage into "
@@ -481,6 +496,15 @@ def _report_portability(
     if force:
         _write_portability_force_log(name, declared, already_shared, violations)
         print("  --force given: pushing anyway.", file=sys.stderr)
+        # 同一份摘要另印到 stdout：上面的完整報告只在 stderr，只收集 stdout
+        # 的呼叫端（如管線只轉存 stdout）原本除了 hook-logs 的 jsonl 外看不到
+        # 任何痕跡。
+        print(
+            f"  [Portability] --force bypassed {len(violations)} "
+            f"consumer-specific reference(s) in '{name}':"
+        )
+        for line in _format_violation_lines(violations):
+            print(line)
         return
     print("  Aborted. Use --force to push regardless.", file=sys.stderr)
     sys.exit(1)
@@ -526,7 +550,7 @@ def compute_content_hash(skill_dir: Path) -> str | None:
     for f in skill_dir.rglob("*"):
         if not f.is_file():
             continue
-        rel = str(f.relative_to(skill_dir))
+        rel = f.relative_to(skill_dir).as_posix()
         if _should_exclude_file(rel):
             continue
         rel_paths.append(rel)
@@ -612,6 +636,44 @@ def _diverge_warning(direction: str, expected: str) -> str | None:
         f"Sync base suggests this skill has only moved the other way since "
         f"last sync — consider '{suggested}' instead of '{expected}'."
     )
+
+
+def _stale_version_warning(
+    source: Path, local_ver: str | None, remote_ver: str | None
+) -> str | None:
+    """版號與遠端相同、但內容雜湊自 .skill-sync-base 已變更時，回傳警告文字；否則 None。
+
+    內容改了、版號沒動是一種容易累積的分歧形態：版號相同時它不只無鑑別力，而是
+    主動宣稱兩邊一致，使分歧不會被例行同步檢查發現，須等到事後逐一讀 diff 才判
+    得出方向。閘門放在 push 端最便宜——寫入者當下仍握有變更脈絡，事後比對端已經
+    沒有。
+
+    版號不同（已 bump）或任一版號缺失時直接放行：本函式只鎖定「版號相同」這個
+    誤導性訊號，版號已跟著內容變更時不該每次 push 都跳警告。無 base 記錄（從未
+    走過本機制的既有 skill）維持向後相容的靜默，與 `_diverge_warning` 同一哲學。
+    """
+    if local_ver is None or remote_ver is None or local_ver != remote_ver:
+        return None
+    base_hash = _read_sync_base(source)
+    if base_hash is None:
+        return None
+    current_hash = compute_content_hash(source)
+    if current_hash is None or current_hash == base_hash:
+        return None
+    return (
+        f"Content changed since last sync (hash differs from {SKILL_SYNC_BASE_MARKER}) "
+        f"but version is still {local_ver}, same as remote. Bump the version before "
+        "pushing, or confirm this push intentionally keeps it unchanged."
+    )
+
+
+def _print_stale_version_warning(
+    source: Path, local_ver: str | None, remote_ver: str | None
+) -> None:
+    """push preview 內印出 `_stale_version_warning` 的結果（若有）。"""
+    warning = _stale_version_warning(source, local_ver, remote_ver)
+    if warning:
+        print(f"  [WARNING] {warning}", file=sys.stderr)
 
 
 def _print_divergence_warning(
@@ -816,7 +878,7 @@ def compute_diff(src: Path, dst: Path) -> dict[str, list[str]]:  # i18n-exempt
     src_files: set[str] = set()
     for f in src.rglob("*"):
         if f.is_file():
-            rel = str(f.relative_to(src))
+            rel = f.relative_to(src).as_posix()
             if _should_exclude_file(rel):
                 continue
             src_files.add(rel)
@@ -831,7 +893,7 @@ def compute_diff(src: Path, dst: Path) -> dict[str, list[str]]:  # i18n-exempt
     if dst.exists():
         for f in dst.rglob("*"):
             if f.is_file():
-                rel = str(f.relative_to(dst))
+                rel = f.relative_to(dst).as_posix()
                 if _should_exclude_file(rel):
                     continue
                 if rel not in src_files:
@@ -986,7 +1048,7 @@ def prune_dst_only(dst: Path, diff: dict[str, list[str]]) -> int:
     if removed:
         directories = [p for p in dst.rglob("*") if p.is_dir()]
         for directory in sorted(directories, key=lambda p: len(p.parts), reverse=True):
-            rel = str(directory.relative_to(dst))
+            rel = directory.relative_to(dst).as_posix()
             if _should_exclude_file(rel):
                 continue
             try:
@@ -1042,7 +1104,9 @@ def cmd_pull(args: argparse.Namespace) -> None:
         tmp = Path(tmpdir) / "repo"
         print(f"Pulling skill '{name}' from {repo_url} ...")
 
-        run_git(["clone", "--depth", "1", "--filter=blob:none", "--sparse", repo_url, str(tmp)])
+        run_git(
+            ["-c", "core.autocrlf=false", "clone", "--depth", "1", "--filter=blob:none", "--sparse", repo_url, str(tmp)]
+        )
         run_git(["sparse-checkout", "set", f"{name}/"], cwd=tmp)
 
         source = tmp / name
@@ -1106,7 +1170,7 @@ def cmd_push(args: argparse.Namespace) -> None:
 
         # depth-1 full clone (not sparse) — push needs complete repo for git add/commit/push.
         # Sparse checkout would reduce download but git add -A behavior differs on sparse repos.
-        run_git(["clone", "--depth", "1", repo_url, str(tmp)])
+        run_git(["-c", "core.autocrlf=false", "clone", "--depth", "1", repo_url, str(tmp)])
 
         target = tmp / name
 
@@ -1121,6 +1185,7 @@ def cmd_push(args: argparse.Namespace) -> None:
         _print_divergence_warning(
             source, compute_content_hash(source), compute_content_hash(target), "push"
         )
+        _print_stale_version_warning(source, local_ver, remote_ver)
         print_diff_preview(plan, direction="push", src=source, dst=target)
 
         prunable = plan["prunable"]
@@ -1472,7 +1537,9 @@ def cmd_list(args: argparse.Namespace) -> None:
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir) / "repo"
-        run_git(["clone", "--depth", "1", "--filter=blob:none", "--sparse", repo_url, str(tmp)])
+        run_git(
+            ["-c", "core.autocrlf=false", "clone", "--depth", "1", "--filter=blob:none", "--sparse", repo_url, str(tmp)]
+        )
         run_git(["sparse-checkout", "set", "--no-cone", "*/SKILL.md"], cwd=tmp)
 
         result = run_git(["ls-tree", "--name-only", "HEAD"], cwd=tmp)
@@ -1522,7 +1589,9 @@ def build_parser() -> argparse.ArgumentParser:
     push_parser.add_argument("name", help="Skill name to push")
     push_parser.add_argument("-m", "--message", help="Commit message", default=None)
     push_parser.add_argument("--force", "-f", action="store_true",
-                             help="Apply changes without confirmation")
+                             help="Apply changes without confirmation; also bypasses the "
+                                  "portability gate for a declared-portable skill (violations "
+                                  "are still printed to stdout/stderr and logged)")
     push_parser.add_argument("--prune", action="store_true",
                              help="Delete remote-only files (default: keep them)")
 

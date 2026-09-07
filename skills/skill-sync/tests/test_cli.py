@@ -24,6 +24,7 @@ from skill_sync.cli import (  # noqa: E402
     _resolve_hook_logs_dir,
     _scan_line_for_violations,
     _skill_exists_in_canonical,
+    _stale_version_warning,
     _write_portability_force_log,
     _write_sync_base,
     check_portability,
@@ -33,6 +34,7 @@ from skill_sync.cli import (  # noqa: E402
     _should_exclude_file,
     build_parser,
     build_push_plan,
+    cmd_list,
     cmd_pull,
     cmd_pull_all,
     cmd_push,
@@ -407,6 +409,20 @@ def test_content_hash_excludes_ruff_cache_dir(tmp_path):
 
 def test_content_hash_returns_none_for_missing_dir(tmp_path):
     assert compute_content_hash(tmp_path / "does-not-exist") is None
+
+
+def test_content_hash_with_subdirectory_matches_hardcoded_digest(tmp_path):
+    """含子目錄的固定 digest 斷言（0.1.0-W3-039）：rel 鍵必須是 `sub/nested.txt`
+    這個 POSIX 分隔符形式，不論執行平台為何。若實作改回 `str(Path)`，在
+    Windows 上會產生 `sub\\nested.txt`，鍵值改變導致雜湊與此處硬編碼值不符；
+    本測試以固定內容 + 固定 digest 把這個格式鎖進斷言。"""
+    skill_dir = _write_skill(tmp_path, "wrap-decision", "2.5.0", "same body")
+    sub_dir = skill_dir / "sub"
+    sub_dir.mkdir()
+    (sub_dir / "nested.txt").write_text("nested content\n")
+
+    expected = "f45f1ae9f5242b3a26c6709e9cbabce09078a7914d10d203d78ac605b503f976"
+    assert compute_content_hash(skill_dir) == expected
 
 
 # --- regression: 同號不同內容不再被判為 up_to_date（0.2.1-W3-124 §11.2） ------
@@ -1127,6 +1143,32 @@ def test_cmd_push_records_sync_base_on_no_changes_fast_path(tmp_path, monkeypatc
     assert _read_sync_base(source) == compute_content_hash(source)
 
 
+def test_cmd_push_clone_disables_autocrlf(tmp_path, monkeypatch):
+    """push 用的暫存 clone 若繼承 Git for Windows 系統層 core.autocrlf=true，
+    checkout 出來的內容會變成 CRLF，使雜湊與本地不同（0.1.0-W3-039）。"""
+    import skill_sync.cli as cli_module
+
+    skills_dir = tmp_path / "skills"
+    (skills_dir / "demo-skill").mkdir(parents=True)
+    (skills_dir / "demo-skill" / "SKILL.md").write_text("kept")
+    monkeypatch.setattr(cli_module, "get_skills_dir", lambda: skills_dir)
+
+    scratch = tmp_path / "scratch"
+    remote_skill = scratch / "repo" / "demo-skill"
+    remote_skill.mkdir(parents=True)
+    (remote_skill / "SKILL.md").write_text("kept")
+    _stub_fixed_tempdir(monkeypatch, scratch)
+
+    git_calls, _ = _stub_git_recording(monkeypatch)
+
+    args = _RecordingArgs(name="demo-skill", prune=False, force=True)
+    cmd_push(args)
+
+    clone_calls = [call for call in git_calls if "clone" in call]
+    assert clone_calls, "expected at least one clone call"
+    assert all(call[:2] == ["-c", "core.autocrlf=false"] for call in clone_calls)
+
+
 # --- cmd_pull 記錄 sync base（0.2.1-W3-668） ----------------------------------
 
 
@@ -1180,6 +1222,57 @@ def test_cmd_pull_records_sync_base_when_already_up_to_date(tmp_path, monkeypatc
     cmd_pull(args)
 
     assert _read_sync_base(target) == compute_content_hash(target)
+
+
+def test_cmd_pull_clone_disables_autocrlf(tmp_path, monkeypatch):
+    """pull 用的暫存 clone 同樣需要 -c core.autocrlf=false（0.1.0-W3-039）。"""
+    import skill_sync.cli as cli_module
+
+    skills_dir = tmp_path / "skills"
+    monkeypatch.setattr(cli_module, "get_skills_dir", lambda: skills_dir)
+
+    scratch = tmp_path / "scratch"
+    remote_skill = scratch / "repo" / "demo-skill"
+    remote_skill.mkdir(parents=True)
+    (remote_skill / "SKILL.md").write_text("fresh remote content")
+    _stub_fixed_tempdir(monkeypatch, scratch)
+
+    git_calls: list[list[str]] = []
+
+    def _fake_run_git(args, cwd=None):
+        git_calls.append(args)
+        return _FakeCompletedProcess(returncode=0)
+
+    monkeypatch.setattr(cli_module, "run_git", _fake_run_git)
+
+    args = argparse.Namespace(name="demo-skill", force=True)
+    cmd_pull(args)
+
+    clone_calls = [call for call in git_calls if "clone" in call]
+    assert clone_calls, "expected at least one clone call"
+    assert all(call[:2] == ["-c", "core.autocrlf=false"] for call in clone_calls)
+
+
+# --- cmd_list（0.1.0-W3-039：clone 呼叫需帶 -c core.autocrlf=false） ----------
+
+
+def test_cmd_list_clone_disables_autocrlf(monkeypatch):
+    """list 用的暫存 clone 同樣需要 -c core.autocrlf=false（0.1.0-W3-039）。"""
+    import skill_sync.cli as cli_module
+
+    git_calls: list[list[str]] = []
+
+    def _fake_run_git(args, cwd=None):
+        git_calls.append(args)
+        return _FakeCompletedProcess(returncode=0)
+
+    monkeypatch.setattr(cli_module, "run_git", _fake_run_git)
+
+    cmd_list(argparse.Namespace())
+
+    clone_calls = [call for call in git_calls if "clone" in call]
+    assert clone_calls, "expected at least one clone call"
+    assert all(call[:2] == ["-c", "core.autocrlf=false"] for call in clone_calls)
 
 
 # --- cmd_pull_all 依 direction 分組列印（0.2.1-W3-668） -----------------------
@@ -1566,6 +1659,45 @@ def test_diverge_warning_conflict_mentions_both_sides():
     assert "independently" in warning
 
 
+# --- _stale_version_warning（純函式，0.1.0-W3-031） ---------------------------
+#
+# W3-025 判定的六支分歧全數是同一形態：內容改了、版號沒動。版號相同時它不只
+# 無鑑別力，而是主動宣稱兩邊一致，使分歧不會被例行同步檢查發現。
+
+
+def test_stale_version_warning_none_when_versions_differ(tmp_path):
+    """版號已經跟著內容一起 bump：不該每次 push 都跳警告。"""
+    source = _write_skill(tmp_path, "demo-skill", "1.1.0", "body")
+
+    assert _stale_version_warning(source, "1.1.0", "1.0.0") is None
+
+
+def test_stale_version_warning_none_when_no_base_recorded(tmp_path):
+    """從未走過本機制的既有 skill（無 .skill-sync-base）：無從判定是否變更過，維持靜默。"""
+    source = _write_skill(tmp_path, "demo-skill", "1.0.0", "body")
+
+    assert _stale_version_warning(source, "1.0.0", "1.0.0") is None
+
+
+def test_stale_version_warning_none_when_content_matches_base(tmp_path):
+    """內容雜湊與 .skill-sync-base 相同：自上次同步後未變更，無需警告。"""
+    source = _write_skill(tmp_path, "demo-skill", "1.0.0", "body")
+    _write_sync_base(source, compute_content_hash(source))
+
+    assert _stale_version_warning(source, "1.0.0", "1.0.0") is None
+
+
+def test_stale_version_warning_fires_when_content_drifted_and_version_same(tmp_path):
+    """內容雜湊與 .skill-sync-base 不同、版號與遠端相同：命中六支分歧的共通形態。"""
+    source = _write_skill(tmp_path, "demo-skill", "1.0.0", "body")
+    _write_sync_base(source, "0" * 64)  # 任意不同雜湊，代表上次同步時內容並非現狀
+
+    warning = _stale_version_warning(source, "1.0.0", "1.0.0")
+
+    assert warning is not None
+    assert "1.0.0" in warning
+
+
 # --- cmd_pull / cmd_push 方向警示整合（0.2.1-W3-671） ------------------------
 
 
@@ -1676,6 +1808,57 @@ def test_cmd_push_silent_when_direction_matches_push(tmp_path, monkeypatch, caps
     _write_sync_base(local_skill, base_hash)
 
     args = _RecordingArgs(name="demo-skill", prune=False, force=False)
+    cmd_push(args)
+
+    err = capsys.readouterr().err
+    assert "WARNING" not in err
+
+
+# --- cmd_push 版號未變閘門整合（0.1.0-W3-031） --------------------------------
+
+
+def test_cmd_push_warns_when_version_unchanged_but_content_drifted(tmp_path, monkeypatch, capsys):
+    """W3-025 六支分歧的共通形態重現：內容自上次同步已變更，但版號與遠端相同時，
+    push preview 必須警告——版號相同不只無鑑別力，還主動宣稱兩邊一致。"""
+    import skill_sync.cli as cli_module
+
+    skills_dir = tmp_path / "skills"
+    source = _write_skill(skills_dir, "demo-skill", "1.0.0", "local modified body")
+    monkeypatch.setattr(cli_module, "get_skills_dir", lambda: skills_dir)
+
+    scratch = tmp_path / "scratch"
+    remote_skill = _write_skill(scratch / "repo", "demo-skill", "1.0.0", "original body")
+    _stub_fixed_tempdir(monkeypatch, scratch)
+    _stub_git_recording(monkeypatch)
+
+    _write_sync_base(source, compute_content_hash(remote_skill))
+
+    args = _RecordingArgs(name="demo-skill", prune=False, force=True)
+    cmd_push(args)
+
+    err = capsys.readouterr().err
+    assert "WARNING" in err
+    assert "1.0.0" in err
+
+
+def test_cmd_push_silent_when_version_already_bumped_despite_content_drift(
+    tmp_path, monkeypatch, capsys
+):
+    """版號已跟著內容一起 bump 時不觸發警告，避免每次 push 都跳（第二條驗收）。"""
+    import skill_sync.cli as cli_module
+
+    skills_dir = tmp_path / "skills"
+    source = _write_skill(skills_dir, "demo-skill", "1.1.0", "local modified body")
+    monkeypatch.setattr(cli_module, "get_skills_dir", lambda: skills_dir)
+
+    scratch = tmp_path / "scratch"
+    remote_skill = _write_skill(scratch / "repo", "demo-skill", "1.0.0", "original body")
+    _stub_fixed_tempdir(monkeypatch, scratch)
+    _stub_git_recording(monkeypatch)
+
+    _write_sync_base(source, compute_content_hash(remote_skill))
+
+    args = _RecordingArgs(name="demo-skill", prune=False, force=True)
     cmd_push(args)
 
     err = capsys.readouterr().err
@@ -2023,6 +2206,58 @@ def test_push_with_force_on_declared_violation_writes_force_log(tmp_path, monkey
     record = json.loads(log_files[0].read_text().splitlines()[0])
     assert record["skill"] == "demo"
     assert record["violation_count"] == 1
+
+
+# --- --force 的雙重語意：旁路閘門的痕跡不能只留在 jsonl（0.1.0-W3-038）--------
+#
+# `--force` 同時控制「跳過互動確認」與「旁路 portability 閘門」兩件事，但
+# --help 只寫前者。既有的完整違規列表只印在 stderr；只收集 stdout 的呼叫端
+# （管線只轉存 stdout 供事後稽核）在旁路發生時，除了 hook-logs 的 jsonl 外
+# 看不到任何痕跡，而後者不是使用者會主動去看的地方。
+
+
+def test_force_bypass_prints_violation_summary_to_stdout(tmp_path, monkeypatch, capsys):
+    skills = tmp_path / "skills"
+    _write_portable_skill(
+        skills,
+        "demo",
+        PORTABLE_FRONTMATTER + "\nSee `.claude/pm-rules/tdd-flow.md`.\n",
+    )
+    monkeypatch.setattr("skill_sync.cli.get_skills_dir", lambda: skills)
+    monkeypatch.setenv("HOOK_LOGS_DIR", str(tmp_path / "hook-logs"))
+
+    _report_portability(skills / "demo", "demo", force=True)
+
+    out = capsys.readouterr().out
+    assert "demo" in out
+    assert "SKILL.md:9" in out
+    assert "consumer-path" in out
+
+
+def test_force_bypass_stdout_summary_truncates_like_stderr(tmp_path, monkeypatch, capsys):
+    """stdout 摘要與 stderr 共用同一份截斷邏輯（前 20 筆 + `... and N more`），
+    不是各自維護一份會漂移的格式。"""
+    skills = tmp_path / "skills"
+    many_refs = "\n".join(f"See `.claude/pm-rules/x{i}.md`." for i in range(25))
+    _write_portable_skill(skills, "demo", PORTABLE_FRONTMATTER + "\n" + many_refs + "\n")
+    monkeypatch.setattr("skill_sync.cli.get_skills_dir", lambda: skills)
+    monkeypatch.setenv("HOOK_LOGS_DIR", str(tmp_path / "hook-logs"))
+
+    _report_portability(skills / "demo", "demo", force=True)
+
+    out = capsys.readouterr().out
+    assert "... and 5 more" in out
+
+
+def test_push_force_help_text_covers_portability_bypass(capsys):
+    """--help 文字須涵蓋 --force 的全部語意，不只跳過確認。"""
+    parser = build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["push", "--help"])
+
+    out = capsys.readouterr().out
+    assert "portability" in out.lower()
 
 
 # --- 已跨 consumer 使用但未宣告 portable（0.2.1-W3-635 缺口二） ----------------

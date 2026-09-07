@@ -2,7 +2,7 @@
 
 > 何時讀：寫或修一個 skill 的 frontmatter 時——name、description、標準與 Claude Code 擴展欄位、觸發控制矩陣、資料夾命名。**亦由此進入**——`SKILL.md`〈發布前檢查清單〉的「YAML」與「觸發測試」兩組；`creating-and-adopting-skills.md` 的 〈Step 4：撰寫內容〉的 4b（寫 frontmatter）與〈Step 6：迭代〉（該觸發沒觸發時修 description）。
 >
-> 同目錄：正文寫法在 `writing-the-body.md`，新建流程與類型速查在 `creating-and-adopting-skills.md`，拆分程序在 `splitting-an-existing-skill.md`，工作流範本與問題排除在 `patterns-and-troubleshooting.md`，設計哲學在 `seeing-like-an-agent.md`；〈核心心法〉〈三類 bundled resource 的分工〉〈發布前檢查清單〉留在 `SKILL.md`。
+> 同目錄：正文寫法在 `writing-the-body.md`，新建流程、類型速查與三類 bundled resource 的分工在 `creating-and-adopting-skills.md`，拆分程序在 `splitting-an-existing-skill.md`，工作流範本、自由度與預設值、問題排除在 `patterns-and-troubleshooting.md`，設計哲學在 `seeing-like-an-agent.md`；〈核心心法〉的前兩則與〈發布前檢查清單〉留在 `SKILL.md`。
 >
 > 溯源：自 SKILL.md 搬移（v1.6.0，因兩個官方門檻皆超標）。
 
@@ -52,6 +52,24 @@
 
 description 是 Claude 自動觸發 skill 的**唯一機制**。寫不好等於 skill 不存在。
 
+### 三個長度口徑，只有一個是閘門
+
+description 的長度在本 skill 有三個數字，單位不同、互不換算。判定一律用 250 字元那一個，另外兩個不作閘門。
+
+| 口徑 | 值 | 出處與角色 | 換算 |
+|------|----|-----------|------|
+| 官方欄位上限 | 1,024 字元 | Anthropic spec 的欄位硬上限，超過即不合規 | 是字元，與本框架閘門同單位 |
+| 本框架閘門 | 250 字元 | `skill-description-length-check-hook.py` 的 `WARNING_THRESHOLD`，SessionStart 掃全庫 | 全 ASCII 約 62 tokens、全繁中約 192 tokens |
+| 三層表的量級參考 | 約 100 tokens | 官方 overview 對 Level 1 的描述，**非閘門** | 全 ASCII 約 400 字元、全繁中約 130 字元 |
+
+**Why 只用 250**：它是唯一以可直接量測的單位表達、又有執法層的線。另外兩個都給不出行動——1,024 遠寬於實際可用量；約 100 tokens 換算後在兩種語言下都對不上 250，且方向相反（英文的 250 字元只有約 62 tokens，看起來還有四成餘裕；繁中的 250 字元已約 192 tokens，看起來將滿）。同一份 description 依口徑不同會得到相反的行動建議。
+
+**Consequence**：本 skill 自己的 description 是 237 字元、全 ASCII、約 59 tokens。用約 100 tokens 那一個口徑判，結論是「還可以再寫四成」；用 250 字元閘門判，只剩 13 字元。照前者行動會直接撞上 hook。
+
+**Action**：只量字元數（指令見下一節），不換算 token。三層表的量級參考只用來理解第 1 層為何要短，不進入判定。
+
+> **16k 那個數字管的是全庫合計，不是單支。** 它是 description 區塊的 context budget 量級，本庫全部 skill 的 description 共用。實測本庫 58 支 skill 的 description 合計已達 17,929 字元（量法：逐檔取 frontmatter 的 `description:` 首行、含引號）；把 16k 讀成單支的允許長度，會得出「250 還有六十幾倍餘裕」這種錯誤結論。
+
 ### 強制：長度 < 250 字元（最重要規則）
 
 | 長度 | 評估 | 後果 |
@@ -60,7 +78,7 @@ description 是 Claude 自動觸發 skill 的**唯一機制**。寫不好等於 
 | 100-250 字元 | 可接受 | 接近上限，關鍵詞放前面 |
 | > 250 字元 | 禁止 | **被截斷，後段觸發詞丟失，自動觸發失敗** |
 
-**Why**：Claude Code 對單一 description 有截斷行為（context budget 約 2% / 16k 字元）。實證案例：`/parallel-evaluation` 因 description 過長，「多視角審核」「code review」等詞在 Use for: 段落被截斷，無法自動觸發。
+**Why**：description 區塊有 context budget（約 2% / 16k 字元，全庫 skill 共用，見上一節），超出後個別 description 被截斷。實證案例：`/parallel-evaluation` 因 description 過長，「多視角審核」「code review」等詞在 Use for: 段落被截斷，無法自動觸發。
 
 **Action**：把最重要的觸發詞放最前面；截斷時前段不會丟。量測用：
 

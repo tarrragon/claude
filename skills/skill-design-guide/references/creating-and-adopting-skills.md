@@ -1,12 +1,12 @@
 # 檔案結構 / 建立流程 / 類型速查 / 安全考量
 
-> 何時讀：從零建一個新 skill、決定它屬哪一類型、或引入他人寫的 skill 前做安全審查時。**亦由此進入**——`skill-creation-flow`（pm-rules）第 1 步把讀者送到入口檔之後的下一跳；`frontmatter-and-description.md` 與 `writing-the-body.md` 回跳「這一步在整體流程的哪裡」。
+> 何時讀：從零建一個新 skill、決定它屬哪一類型、決定某份內容該放 `scripts/`／`references/`／`assets/`、或引入他人寫的 skill 前做安全審查時。**亦由此進入**——`skill-creation-flow`（pm-rules）第 1 步把讀者送到入口檔之後的下一跳；`frontmatter-and-description.md` 與 `writing-the-body.md` 回跳「這一步在整體流程的哪裡」。
 >
-> 同目錄：frontmatter 與 description 在 `frontmatter-and-description.md`，正文寫法在 `writing-the-body.md`，拆分程序在 `splitting-an-existing-skill.md`，工作流範本與問題排除在 `patterns-and-troubleshooting.md`，設計哲學在 `seeing-like-an-agent.md`；〈核心心法〉〈三類 bundled resource 的分工〉〈發布前檢查清單〉留在 `SKILL.md`。
+> 同目錄：frontmatter 與 description 在 `frontmatter-and-description.md`，正文寫法在 `writing-the-body.md`，拆分程序在 `splitting-an-existing-skill.md`，工作流範本、自由度與預設值、問題排除在 `patterns-and-troubleshooting.md`，設計哲學在 `seeing-like-an-agent.md`；〈核心心法〉的前兩則與〈發布前檢查清單〉留在 `SKILL.md`。
 >
-> 溯源：自 SKILL.md 搬移（v1.6.0，因兩個官方門檻皆超標）。
+> 溯源：自 SKILL.md 搬移（v1.6.0，因兩個官方門檻皆超標）；〈三類 bundled resource 的分工〉於 v1.9.0 再自 `SKILL.md` 搬入。
 
-本檔章節：〈檔案結構〉〈Skill 建立流程〉〈Skill 類型速查〉〈安全考量〉。
+本檔章節：〈檔案結構〉〈三類 bundled resource 的分工〉〈Skill 建立流程〉〈Skill 類型速查〉〈安全考量〉。
 
 
 
@@ -19,6 +19,16 @@ your-skill-name/
 ├── references/           # 選填：按需載入到 context 的文件
 └── assets/               # 選填：產出時使用的範本 / 圖示 / 字型
 ```
+
+## 三類 bundled resource 的分工
+
+| 類型 | 載入方式 | 何時用 | 範例 |
+|------|---------|-------|------|
+| `scripts/` | 可不讀直接執行（subprocess） | 同樣程式碼會被反覆寫；需要決定性結果 | `validate.py`、`init_skill.py`、`rotate_pdf.py` |
+| `references/` | Claude `Read` 載入 context | 工作時需查的文件 / schema / 詳細範例 | `api-schema.md`、`patterns.md` |
+| `assets/` | 不載入 context，被複製到輸出 | 產出物的素材 | `logo.png`、`template.pptx`、樣板專案目錄 |
+
+**Why 區分這三類**：scripts 的價值是「跳過 context」，references 的價值是「按需載入」，assets 的價值是「不污染 context」。誤放會抵消設計。
 
 ## Skill 建立流程
 
@@ -59,7 +69,7 @@ your-skill-name/
 | 4a | 先寫 bundled resources（scripts / references / assets） |
 | 4b | 寫 SKILL.md frontmatter（依 `frontmatter-and-description.md`〈YAML Frontmatter〉） |
 | 4c | 寫 SKILL.md body（依 `writing-the-body.md`〈Body 寫作〉的骨架） |
-| 4d | 量兩個門檻（門檻值、量測指令與語言換算表見 `SKILL.md`〈Progressive Disclosure — 三層載入〉）；超標即依 `splitting-an-existing-skill.md` 外移 |
+| 4d | 量兩個門檻（門檻值、量測指令與分段估算表見 `SKILL.md`〈Progressive Disclosure — 三層載入〉）；超標即依 `splitting-an-existing-skill.md` 外移 |
 | 4e | 測試 scripts 實際可跑 |
 | 4f | 走一遍 `SKILL.md`〈發布前檢查清單〉四組 |
 

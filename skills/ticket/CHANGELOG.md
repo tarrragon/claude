@@ -2,12 +2,20 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
-**Version**: 2.20.0
-**Last Updated**: 2026-08-24
+**Version**: 2.21.0
+**Last Updated**: 2026-09-07
 **Status**: Completed
 
 **Change Log**:
 
+- v2.21.0 (2026-09-07): 補記 2.20.0 之後累積但未 bump 版號的變更。版號未動使發佈庫與本庫的內容分歧無法由版號察覺——版號相同時它主動宣稱兩邊一致，分歧因此不會被例行同步檢查發現，故補此一版號涵蓋下列各項
+  - `track commit` 新增 `--worktree <path>`：把 read-tree / add / diff 等 git 操作綁定到檔案實際變更所在的 linked worktree。未指定時行為不變（沿用 `resolve_project_cwd()`）；指定但非合法 git 目錄時拒絕提交
+  - `paths.py` 新增 `get_ticket_state_root()`：linked worktree 內執行的 ticket 狀態操作（`claim` / `append-log` / `check-acceptance` / `set-*` 等 md 讀寫與其 auto-commit）反向回推主倉庫根目錄，統一寫入主倉庫。`track commit`（程式碼提交）維持 worktree 感知不變，兩者是不同的 root 解析路徑。SKILL.md 新增「Ticket 狀態與程式碼提交的 root 分離」章節說明此差異，避免被誤判為 cwd 解析缺陷
+  - `track dispatch-readiness` 由三項認知負擔閾值擴為六項檢查：新增檢查 4（acceptance 與寫入集一致性）、檢查 5（`where.files` 路徑存在性）為 warn-only 啟發式，檢查 6（acceptance 提及路徑須被 `where.files` 涵蓋）為強制 fail。exit 2 的處置依 fail 來源分流（閾值 1-3 超標為拆票，檢查 6 為補 `where.files` 或改寫 acceptance），不依 CLI 統一提示行字面行事
+  - `track conflicts` 新增 `--for <id>` 與 `--among <id1,id2,...>` 針對性查詢（`file_conflict.compute_targeted_conflicts`），並行派發前不必人工 grep 全量輸出。同時提供時 `--among` 優先
+  - `fields set-where` 的範圍宣告變更改為獨立 auto-commit（與 `set-acceptance` / `append-log` 同保護等級）；`where.files` 路徑不存在時只警告不阻擋（新檔案的 where 宣告合法）
+  - `parser.py` 新增 frontmatter 磁碟快取：以 `(mtime, size)` 為失效鍵，`save_ticket` 寫入時同步失效。僅生產路徑啟用，`TICKET_SYSTEM_TEST_ISOLATION` 存在時完全略過，避免 tmp_path 快速覆寫下 mtime 精度不足的假命中
+  - `track dispatch` 的骨架組裝抽出至 `lib/dispatch_skeleton.py`；ANA ticket metadata 品質警告（who 代理人分工 / acceptance 長度分號 / tdd_phase 合理性）由 hook 遷入 CLI 的 `lib/ana_ticket_metadata_validator.py` 與 `lib/command_lifecycle_messages.py`
 - v2.20.0 (2026-08-24): 新增子命令 `set-parent`：修正 `parent_id`（改寫或清除），並同步維護上游票 `children` 的雙向一致性；補上 `add-child` 一直缺少的反向修正路徑（誤用 `--parent` 建錯關係後的合法修正途徑）
 - v2.19.0 (2026-08-24): `runqueue` callout 補一則語意提醒：輸出的 `blockedBy=[...]` 為未解除阻擋清單，與 ticket frontmatter 同名欄位的原值可能不同（後者保留宣告時完整清單，不隨 blocker 解除而改寫）；血緣或狀態對帳應以 frontmatter 為準
 - v2.18.0 (2026-08-24): `create` 新增 `--discovered-during` 旗標，區分規劃衍生與發現衍生的建票語意

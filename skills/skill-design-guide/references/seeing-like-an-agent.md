@@ -196,4 +196,4 @@ TIMEOUT = 47  # 為什麼是 47？
 | Windows 路徑（`\`） | 統一用 `/`（跨平台相容） |
 | 提供太多選項 | 給一個預設方案 + 逃生出口 |
 | 假設套件已安裝 | 明確列出依賴並提供安裝指令 |
-| 巢狀引用（A→B→C） | 所有 reference 從 SKILL.md 一層直連 |
+| 只能經由另一份 reference 才被發現的內容 | 每份 reference 在 SKILL.md 路由表都有自己的一列，讀者從入口一跳可達；reference 之間互相指路是橫向索引，不算反模式（判準見 `writing-the-body.md`〈Body 寫作〉） |
