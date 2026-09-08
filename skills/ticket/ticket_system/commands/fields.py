@@ -89,20 +89,35 @@ def _has_extension(item: str) -> bool:
 
 
 def _exists_in_repo(item: str) -> bool:
-    """項目是否為 repo 內實際存在的檔案或目錄；解析失敗一律回 False。"""
+    """項目是否為 repo 內實際存在的檔案或目錄；解析失敗一律回 False。
+
+    比對前先剝離 `::read`/`::write` 讀寫意圖後綴（`field-semantics.md`
+    〈where.files 宣告語意〉），否則帶標記的合法路徑（如 `CLAUDE.md::read`）
+    會因為 repo 內不存在字面上帶 `::read` 的檔案而誤判為不存在。
+    """
     try:
+        from ticket_system.lib.file_conflict import parse_file_intent
         from ticket_system.lib.paths import get_project_root
 
-        return (get_project_root() / item).exists()
+        path, _ = parse_file_intent(item)
+        return (get_project_root() / path).exists()
     except Exception:
         # 專案根解析失敗不得使判定崩潰——退回字面啟發式即可
         return False
 
 
 def _looks_like_path(item: str) -> bool:
-    """單一項目是否為檔案系統路徑（非架構層級描述）。"""
-    if any(ch.isspace() for ch in item) or "/" not in item:
+    """單一項目是否為檔案系統路徑（非架構層級描述）。
+
+    無斜線的根層項目（如 `CLAUDE.md`）另立分支判定：單看副檔名不足以
+    判定——`v1.0`、`N/A` 之類的描述文字也可能含句點——故額外要求該項確實
+    存在於 repo 根層，兩條件皆成立才視為路徑，避免描述型輸入重新落入
+    files（見 `_parse_where_path_entries` docstring 記載的舊事故）。
+    """
+    if any(ch.isspace() for ch in item):
         return False
+    if "/" not in item:
+        return _has_extension(item) and _exists_in_repo(item)
     return item.endswith("/") or _has_extension(item) or _exists_in_repo(item)
 
 
@@ -113,12 +128,15 @@ def _parse_where_path_entries(value: Any) -> Optional[list]:
     （L3 純 .claude/ 覆蓋），set-where 僅寫 where.layer 會讓 files 保留 stale 值，
     導致 dispatch 誤擋。
 
-    路徑判定要求每個逗號分隔項目同時滿足三項：不含空白、含 `/`、且看起來
-    像檔案系統路徑（副檔名 / 尾隨 `/` / 在 repo 內實際存在其一）。
+    路徑判定要求每個逗號分隔項目不含空白，且看起來像檔案系統路徑：含 `/`
+    的項目再看副檔名 / 尾隨 `/` / 在 repo 內實際存在其一；無 `/` 的根層項目
+    （如 "CLAUDE.md"）額外要求副檔名與 repo 內實際存在兩者皆成立，見
+    `_looks_like_path` 分支說明。
 
-    - 全為路徑（如 ".claude/hooks/,src/core/x.js"）→ 回傳清單，同步 where.files
+    - 全為路徑（如 ".claude/hooks/,src/core/x.js,CLAUDE.md"）→ 回傳清單，
+      同步 where.files
     - 任一項不符（如 "Domain Layer"、"Presentation/UI"、"N/A"）→ 回傳 None，
-      僅更新 layer 描述
+      僅更新 layer 描述（整份清單一起退回，不是逐項濾除單一項）
 
     **為何只看「含 /」不夠**（2026-08-11 修正）：架構層級描述本身就可能含
     斜線——`Presentation/UI`、`Domain/Application layer`、`N/A`、
@@ -380,6 +398,14 @@ def execute_set_field(
     print(format_info(InfoMessages.FIELD_UPDATED, ticket_id=args.ticket_id, field_name=actual_field_name))
     if synced_files is None:
         print(f"   新值: {new_value}")
+        if actual_field_name == "where":
+            # 非路徑型輸入不同步 files（W1-078 全有全無設計）：整份輸入退回
+            # layer 描述，files 完全不變。印出實際寫入的 files 陣列，讓這個
+            # 靜默失敗對呼叫者可見（不能只靠上面那行「新值」，那是 layer 的值）。
+            current_files = existing.get("files", []) if isinstance(existing, dict) else []
+            print(f"   where.files 未變更（非路徑型輸入，僅更新 layer，維持原本 {len(current_files)} 項）:")
+            for entry in current_files:
+                print(f"      - {entry}")
     else:
         # 路徑型輸入未寫 layer，印「新值」會讓操作者以為整個 where 被替換
         print("   where.layer 未變更（路徑型輸入只同步 files；需改 layer 請用 --layer）")

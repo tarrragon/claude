@@ -186,6 +186,87 @@ class TestSetWhereValueAndLayer:
         assert where["files"] == []
 
 
+class TestParseWhereRootLevelFilename:
+    """根層無斜線檔名（如 CLAUDE.md）的路徑判定修復。
+
+    修復前 `_looks_like_path` 要求每項含 `/`，使根層檔名（無目錄前綴）
+    無論副檔名或是否存在於 repo 皆判為非路徑；整份逗號分隔清單只要有一項
+    判定失敗，`_parse_where_path_entries` 就整體回傳 None（全有全無），
+    files 完全不同步——不是「濾除該項」而是整份清單退回描述型。
+    """
+
+    def test_root_level_filename_enters_files(self, set_where_ticket):
+        tid, md_path = set_where_ticket
+        (md_path.parent / "CLAUDE.md").write_text("", encoding="utf-8")
+
+        assert fields_mod._parse_where_path_entries("CLAUDE.md") == ["CLAUDE.md"]
+
+    def test_root_level_filename_with_read_marker(self, set_where_ticket):
+        """`::read` 後綴不得妨礙根層檔名的存在性判定（先剝離標記再查檔案系統）。"""
+        tid, md_path = set_where_ticket
+        (md_path.parent / "CLAUDE.md").write_text("", encoding="utf-8")
+
+        assert fields_mod._parse_where_path_entries("CLAUDE.md::read") == ["CLAUDE.md::read"]
+
+    def test_root_level_filename_mixed_with_directory_path(self, set_where_ticket):
+        """根層檔名與目錄路徑（尾隨 `/`）混合，全部命中才整批同步。"""
+        tid, md_path = set_where_ticket
+        (md_path.parent / "CLAUDE.md").write_text("", encoding="utf-8")
+
+        result = fields_mod._parse_where_path_entries("CLAUDE.md,src/core/")
+
+        assert result == ["CLAUDE.md", "src/core/"]
+
+    def test_root_level_filename_absent_from_repo_returns_none(self, set_where_ticket):
+        """根層檔名副檔名符合但 repo 內不存在時仍判為非路徑（保守，代價可接受）。"""
+        assert fields_mod._parse_where_path_entries("DOES_NOT_EXIST.md") is None
+
+    def test_descriptive_text_without_extension_still_non_path(self, set_where_ticket):
+        """迴歸：無副檔名的架構層級描述不得因新增根層分支被誤判為路徑。"""
+        assert fields_mod._parse_where_path_entries("Infrastructure") is None
+        assert fields_mod._parse_where_path_entries("N/A") is None
+        assert fields_mod._parse_where_path_entries("Presentation/UI") is None
+
+    def test_set_where_value_only_with_root_level_filename(self, set_where_ticket):
+        """端對端：正式 CLI 路徑（僅位置參數 value，無 --layer）能寫入根層檔名。"""
+        tid, md_path = set_where_ticket
+        (md_path.parent / "CLAUDE.md").write_text("", encoding="utf-8")
+        args = argparse.Namespace(
+            ticket_id=tid,
+            value="src/core/example.py,CLAUDE.md",
+            layer=None,
+            files=None,
+        )
+
+        rc = fields_mod.execute_set_where(args, "0.0.0")
+
+        assert rc == 0
+        where = _load_where(tid)
+        assert where["files"] == ["src/core/example.py", "CLAUDE.md"]
+
+    def test_set_where_non_path_value_echoes_unchanged_files(self, set_where_ticket, capsys):
+        """acceptance 第 2 項：非路徑型輸入時，回顯需顯示實際維持不變的 files
+        陣列，讓 files 完全未同步這件事對呼叫者可見（不能只靠「新值」那行，
+        那印的是 layer 欄要寫入的字串，不是 files 的實際狀態）。"""
+        tid, md_path = set_where_ticket
+        seed_args = argparse.Namespace(
+            ticket_id=tid, value="src/core/example.py", layer=None, files=None,
+        )
+        fields_mod.execute_set_where(seed_args, "0.0.0")
+        capsys.readouterr()  # 清空前一次呼叫的輸出
+
+        args = argparse.Namespace(ticket_id=tid, value="N/A", layer=None, files=None)
+        rc = fields_mod.execute_set_where(args, "0.0.0")
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "where.files 未變更" in out
+        assert "src/core/example.py" in out
+        where = _load_where(tid)
+        assert where["files"] == ["src/core/example.py"], \
+            "非路徑型輸入不得覆寫既有 files"
+
+
 class TestSetWhereAutoCommit:
     """where.files 範圍變更觸發 auto-commit，且不污染主 repo 共用 index。
 

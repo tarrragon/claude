@@ -68,9 +68,20 @@
 | 專案 commit hash | `8f74d08`、`abc1234` | **條件允許**（實證錨點型，見下「實證錨點型：commit hash 的條件允許」章節） |
 | 專案 worklog 路徑 | `docs/work-logs/v0.17/...` | **否** |
 | 專案 proposals ID | `PROP-007` | **否**（除非已提煉為方法論） |
-| 框架 error-pattern ID | `PC-050`、`IMP-003`、`ARCH-002` | **是**（框架內部分類） |
+| 框架 error-pattern ID，**已到達共用通道** | `PC-050`、`IMP-003`、`ARCH-002` | **是**（已隨同步送達各 consumer，引用可解析） |
+| 框架 error-pattern ID，**尚未到達共用通道** | 本地新建而尚未推上 canonical 的任何編號，含 consumer 分域形式 `PC-<CONSUMER>-0NN` | **否**（僅本地票面可引；推上共用通道後才可寫進會擴散的框架檔案） |
 | Claude Code 版本號 | `CC 2.1.97` | **是**（外部平台識別） |
 | 框架檔案路徑 | `.claude/rules/core/pm-role.md` | **是**（框架內部結構） |
+
+**error-pattern ID 那兩列的判準是送達與否，不是歸屬哪一層。** 早期本表只有一列「框架 error-pattern ID → 是（框架內部分類）」，判準綁在識別符的**類別**上。該寫法早於 consumer 分域編號（`PC-<CONSUMER>-0NN` 形式），未隨之更新，照其字面會把一個本地剛建、尚未推上共用通道的分域編號判為可引。
+
+**Why**：引用能否解析，取決於被引物是否已經到達讀者手上，而不是它屬於哪個命名空間。一個只存在於本專案的編號，在本專案內部完全有效；一旦寫進會經共用通道擴散的檔案，落到其他 consumer 手上就是懸空引用。
+
+**Consequence**：這個誤判有一個讓人放行的理由——「我確認過它真的存在」。存在性查證會產生已盡責的感覺，而存在性恰好不是判準。寫的人查證過，不會覺得自己漏了什麼。
+
+**Action**：寫下一個他處編號時，問「**這個檔案會傳到哪些地方，那些地方有沒有這個編號**」，而不是問「這個編號是真的嗎」或「它屬於哪一層」。三態對照與完整判準見 `.claude/error-patterns/process-compliance/PC-GPD-006-self-built-dir-copied-across-consumers-carries-foreign-ids.md` 的〈反方向：把引用寫出去〉節；本表與該節為同一判準的兩處落點，修改任一處須同步另一處。
+
+**「共用層已建但未推」同樣不可引**：判準是送達與否，不是歸屬哪一層。一個放在共用層、命名也符合共用慣例的新編號，在推出去之前對其他 consumer 一樣查無此檔，而那個時間窗正是新編號最常被引用的時候。
 
 **適用範圍**（與守衛 `reference-stability-rule8-guard-hook.py` 的 `SCAN_PREFIX` 判準一致，不逐目錄列舉）：
 
