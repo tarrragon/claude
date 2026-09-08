@@ -4,10 +4,11 @@
 fix: 還原被 v2.59.0/2.59.1 全樹 overlay 覆蓋的 12 處內容
 
 v2.58.1 推上的下列內容在後續兩次推送中遺失，本次還原。遺失形態一致：
-新增檔存活，對既有檔的修改被回滾——他方拉取時在這些檔上解衝突到自己
-那一側，再以全樹 overlay 推回。
+新增檔存活，對既有檔的修改被回滾。成因經推送方確認為：其樹是上次拉取時
+的快照，從未含本次遺失的內容，全樹 overlay 因而將其自 canonical 移除。
+不需任何一方解過衝突（原記為衝突解決所致，該敘述已更正）。
 
-- W3-052 身分死結修復的 hook 側：dispatch-identity-bind-hook 的 PM
+- 身分死結修復的 hook 側（來自另一 consumer 的修復票）：dispatch-identity-bind-hook 的 PM
   暫代管重新綁定（PM_AGENT_NAME 常數與相鄰邏輯）、其測試、以及
   ticket skill 的 test_identity_guard 中 --as 建議訊息測試
 - 引用穩定性規則 10（可變計數不實例化）全節，與 document-format-rules
