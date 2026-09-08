@@ -2,11 +2,18 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
-**Version**: 2.32.1
+**Version**: 2.33.0
 **Last Updated**: 2026-09-08
 **Status**: Completed
 
 **Change Log**:
+
+- v2.33.0 (2026-09-08): 派發記錄的清除改由事件觸發，不再只靠逾時。既有的 `cleanup_expired`（`turn_ended_at` 已設者 TTL 24 小時、未設者以 `dispatched_at` 起算 1 小時）會把記錄清光，但清光之前的窗口內，共用 git index 的並行守衛把已完成票的宣告當現行範圍，落在該範圍內的提交被誤擋且訊息指向早已結束的票（實測一次提交被迫拆成三次）
+  - `complete()` 成功路徑呼叫 `_clear_dispatch_for_completed_ticket(ticket_id)`，fail-open（模組不可用或例外皆寫 stderr，不阻擋 complete）
+  - `dispatch-check --prune` 新增獨立的票終態判準（`_is_ticket_terminal`），與既有「`[STALE]` 且 session 確認不存在」判準為 OR、互不依賴，且不受 registry 可用性影響
+  - 驗收採反事實形式而非「全量記錄清空」：後者在不修任何東西的情況下等滿 TTL 也會成立，分不出修法生效與時間到了。落地的兩則測試各自構造距 TTL 邊界甚遠的記錄（`turn_ended_at` 設為呼叫當下；空 `ticket_id` + `dispatched_at` 65 分鐘前），斷言事件觸發後立即消失，全程不呼叫 `cleanup_expired`
+  - 新增 `tests/test_complete_dispatch_cleanup.py`；`test_track_dispatch_check.py` 增 `TestIsTicketTerminal`／`TestPruneTerminalTicket`
+  - 配套的 `clear_dispatch_by_ticket_id` 在框架 lib（非本 skill），空字串一律無操作以保護無票派發記錄那一類
 
 - v2.32.1 (2026-09-08): `fields.py`／`test_fields_set_where.py`／`test_identity_guard.py` 隨框架 canonical 更新（由另一 consumer 撰寫並經 canonical 傳入）；本專案取回後補號，前一版兩側同號而內容不同
 

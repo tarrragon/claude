@@ -2,7 +2,7 @@
 name: framework-issue
 description: "Manages framework issues on tarrragon/claude: dedup, create, comment-as-section init/update/observe/check, fix-matrix close, folding tickets into issues. Use for: framework issue, 框架 issue, canonical issue, ticket 收束, 跨 consumer 修復追蹤, curator 派發."
 metadata:
-  version: 2.2.0
+  version: 2.3.0
 ---
 
 # Framework Issue

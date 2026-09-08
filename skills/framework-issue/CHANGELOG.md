@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.3.0 — 「待條件」加進入門檻。原本的自由文字轉列舉規則以「依語意就近歸入」收容無法分類的階段文字，把「待 <票號>」寫成待條件的示例而非門檻，使該值成為收容站。實測 193 列中 53 列標待條件，逐列讀後 50 列指不出等待對象，`todo --stage 可立即執行` 因此少報 46%（59 列 vs 實際 102 列）。配方改為：待條件的「做什麼」欄必須指名等待對象（票號／issue ref／明示前置項／可觀測觸發事件），指不出即依內容改標「可立即執行」或「本版」；附 Why/Consequence/Action 與「改寫舊資料時對每一列都要問」的明示。已依此判準校正 14 個區段共 52 列，留下的 4 列各自具名了指涉對象。CLI 與測試未變更。
+
 **Version**: 2.2.0 — 收束完成後的第二輪實測回寫。CLI：新增 `todo` 子命令（跨 open issue 聚合「待辦與來源*」表格列，`--all`／`--issue`／`--status`／`--stage`／`--priority`／`--consumer`／`--json`，表頭不符只警告不中止），`init`／`add`／`update` 對該類區段驗證必要欄位與兩組列舉（狀態、階段），136 測試。配方：「待辦與來源」表定義必要欄位與列舉值並附自由文字對應規則（既有 28 區段 193 列已正規化）；提交改以 `ticket track commit` 為優先、手動隔離索引 CAS 降為 fallback，並補 `update-ref` rc 128 的兩種語意（HEAD 被移動／hook 阻擋，重試全滅先讀 stderr）；`init` 自動補協定標記後移除手動補標記步驟；步驟五補「範圍票含 handoff 來源或目標時其 handoff 於 close 當下轉 stale、歸檔由他方 dashboard 觸發、以來源票 ID 為查找鍵」。curator 2.1.0 同步。**已知缺口**：`todo` 只聚合每個 comment 的首張表格，多表格區段的非首表列被靜默排除（實測 193 列中 23 列不可見）。
 
 **Version**: 2.1.0 — 收束 234 張票的實測回寫。CLI：`init` 對已有區段的 issue 預設拒絕（exit 3 提示 `add`，`--force` 合併既有索引列）；`init`／`add` 索引合併以 comment id 去重並併入無標記的手寫索引表；`check` 主警訊改前綴比對逐則涵蓋「當前結論*」並標 owner；`init`／`add` 同一次 PATCH 自動補 `fw-issue-schema` 標記；`dedup` 每筆命中附命中詞與位置並按命中數排序；`show` 區段列輸出 owner；`add` 成功訊息印 issue／區段／owner；owner 格式驗證 `^[a-z0-9]+(-[a-z0-9]+)*-[0-9]+$` 於 init／add／transfer-owner 共用；128 測試。配方：IMP 一律 close（runqueue 視 closed 為解除）、依賴方 `set-why` 補 issue ref；來源票對照寫 Solution（acceptance gate 已排除含「處置」欄表格）；`close` 不逐命令 auto-commit，範圍票 close 後隔離索引 CAS 提交並 `restore --staged` 清共用 index；`add` 到他方 issue 區段加「（<consumer>：<主題>）」後綴；scratchpad 檔名帶票 ID；收尾前重讀規範；owner 值取 `ListAgents` 首行 session 名稱，序號段記錄「哪次 session 寫的」。curator 2.0.0 同步。

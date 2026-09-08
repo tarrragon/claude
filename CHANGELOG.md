@@ -1,3 +1,15 @@
+## [2.59.7] - 2026-09-08
+
+### Summary
+chore: 回寫 .claude/VERSION -> 某版本; chore: framework-issue 2.3.0、ticket 2.33.0 補號並記錄變更
+
+Changes: 2 chore
+
+- chore: 回寫 .claude/VERSION -> 某版本
+- chore: framework-issue 2.3.0、ticket 2.33.0 補號並記錄變更
+
+---
+
 ## [2.59.6] - 2026-09-08
 
 ### Summary
