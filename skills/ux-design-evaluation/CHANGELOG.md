@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 1.4.5 — 讓號並補記本地兩項變更：其一，「十一欄位齊全」改「元件契約欄位表齊全」，並於 `references/interaction-feedback.md` 六種按鈕狀態表下補與元件契約〈回饋契約〉欄的分工句——時間門檻與通知形式仍由本 skill 產出，每形態的回饋通道與狀態來源由 `component-contract-design` skill 承接；其二，評估流程補一句反向路由：畫面狀態矩陣填完、進入元件級實作前，元件契約由該 skill 承接。動因是本 skill 對該 skill 只有入度無出度，使用者做完畫面級狀態設計後沒有訊號接上元件層契約。兩項原標 1.4.4 與 1.4.3，其中後者與上游同日獨立標記的 1.4.3 撞號；兩側內容皆在本 skill，本地兩項合併讓號至本版。
+
 **Version**: 1.4.3 — 清理 2 處 language-constraints.md 規則 2 禁用詞基線債務（`代碼` → 程式碼，`references/input-mechanism.md`），純用語修正，內容與判準未改。
 
 **Version**: 1.4.2 — 版本紀錄搬到同目錄的 `CHANGELOG.md`。skill 是 runtime 整份載入的檔案，而沒有任何規則要求任何人讀版本紀錄，留在 SKILL.md 等於每次叫用都付一次無效讀取。SKILL.md 末尾留一行指過去，版號的兩個住址改成「CHANGELOG.md 最上面那一條 + frontmatter 的 metadata.version」。skill 的指令內容一個字都沒改。

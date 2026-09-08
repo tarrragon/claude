@@ -4,7 +4,7 @@ description: "UX / UI 設計的系統性評估方法：把「使用者被困住�
 license: MIT
 metadata:
   portable: true
-  version: 1.4.3
+  version: 1.4.5
   category: ux-design
 ---
 
@@ -37,6 +37,8 @@ UX / UI 設計的系統性評估方法。這個 skill 的出發點是一類反�
 4. 每個輸入框過輸入機制決策（keyboard type / submit model / IME policy / special keys）
 5. 每個非同步操作標時間門檻帶、決定回饋形式
 6. 每個導航操作回答「使用者按 back 期望回到哪裡」
+
+畫面狀態矩陣填完、進入元件級實作前：每個元件契約欄位表齊全、容器排列不變式的填寫由 `component-contract-design` skill 承接（本 skill 只到畫面級狀態，不含元件層契約）。
 
 ### 審查既有 UI / UX review 時（事後）
 

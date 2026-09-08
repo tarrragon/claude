@@ -61,6 +61,14 @@ IDENTITY_DENY_EXIT = 1
 # 已轉強制申報的命令：未提供 --as 直接 deny（而非 warn-only）。
 # finish 為 complete 之別名（共用同一 handler），telemetry command 欄位取
 # args.operation 實際解析值，故兩名皆須列入，否則以 finish 呼叫可繞過強制。
+#
+# 拒絕的替代方案：--as 缺席時直接以 who.current 身份執行（讓「不帶 --as」
+# 不再是死路，而是「用票面登記的那個人」）。已評估但不採納——這會讓任何
+# 能執行本 CLI 的人以 who.current 的身份收尾，架空 ENFORCED_COMMANDS 要求
+# 明示宣告身份的初始設計（telemetry 顯示 96% 呼叫端已守規則，代表規則本身
+# 可行，缺口在訊息不夠具體，非規則錯誤）。改採訊息層修復：情境 1a/4 的
+# deny 訊息直接印出 who.current 具體值與可複製指令，讓執行者不需自動放行
+# 也能立即判斷下一步。
 ENFORCED_COMMANDS = frozenset({"complete", "finish"})
 
 # --- Telemetry（W1-057 warn/deny + W1-082 pass/exempt 全路徑落盤觀測管線）--------
@@ -219,12 +227,25 @@ def check_identity(
     # 未升級的呼叫端（argparse --as 恆為 str 或 None，此檢查為防禦性）。
     if not isinstance(as_value, str) or not as_value.strip():
         if command in ENFORCED_COMMANDS:
-            # 情境 1a：已轉強制的命令 → deny，訊息明示補救方式（帶 --as 重試）
-            sys.stderr.write(
-                f"[identity-guard] deny：{command} 須提供 --as <agent-name> 申報執行身份，"
-                f"請帶 --as 重試（例：ticket track {command} {ticket_id} "
-                f"--as <agent-name>）\n"
-            )
+            # 情境 1a：已轉強制的命令 → deny，訊息明示補救方式（帶 --as 重試）。
+            # who.current 若已有具體值，直接印出可複製的建議指令（who.current
+            # 的值因票而異，連派發者都無法預先猜對，訊息本身須自足，不需
+            # 執行者另外查 `ticket track who` 才知道該填什麼——同一批同型
+            # 死結的延伸修復：派發時寫死 --as 的猜測可能與實際值不符）。
+            who_current = _resolve_who_current(version, ticket_id)
+            if who_current:
+                sys.stderr.write(
+                    f"[identity-guard] deny：{command} 須提供 --as 申報執行身份。"
+                    f"目前 who.current = {who_current}；若你是該執行者，"
+                    f"請帶 --as 重試（例：ticket track {command} {ticket_id} "
+                    f"--as {who_current}）\n"
+                )
+            else:
+                sys.stderr.write(
+                    f"[identity-guard] deny：{command} 須提供 --as <agent-name> 申報執行身份，"
+                    f"請帶 --as 重試（例：ticket track {command} {ticket_id} "
+                    f"--as <agent-name>）\n"
+                )
             _write_telemetry(
                 command=command,
                 ticket_id=ticket_id,
@@ -272,11 +293,31 @@ def check_identity(
         )
         return None
 
-    # 情境 4：不符 deny（含 who.current 空值）
+    # 情境 4：不符 deny（含 who.current 空值）。訊息並列兩條合法出口
+    # （非僅陳述拒絕理由，也非只印出 who.current 供人工判讀後再決定）：
+    # (a) 申報者其實就是 who.current 本人時，直接改用 --as <who.current>
+    #     自行重試即可，不需經過 PM；(b) who.current 本身指派錯誤時，
+    #     回報 PM 執行 set-who 重新指派。who 是權責歸屬欄位，出口 (b)
+    #     不由執行者自行改——但出口 (a) 不改 who，純粹是申報者填錯自己
+    #     該用的 --as 值，可自行修正（who.current 的值因票而異、連派發者
+    #     都無法預知，訊息須直接給出可複製的值，不能只留占位符）。
     who_display = who_current if who_current is not None else "(未指派)"
+    if who_current:
+        # who.current 有具體值：出口 (a) 可給出可直接複製執行的指令。
+        exit_a = (
+            f"(a) 若你就是 {who_display}，改用 "
+            f"`ticket track {command} {ticket_id} --as {who_display}` 重試；"
+        )
+    else:
+        # who.current 空值（真無主）：出口 (a) 不成立，避免印出
+        # 「--as (未指派)」這種無法執行的指令。
+        exit_a = ""
     sys.stderr.write(
-        f"[identity-guard] deny：身份 {as_value} 與指派執行者 {who_display} 不符，"
-        f"請回報 PM（PC-V1-002 前提一）\n"
+        f"[identity-guard] deny：身份 {as_value} 與指派執行者 {who_display} 不符。"
+        f"合法出口：{exit_a}"
+        f"(b) 若指派本身錯誤或尚無指派，回報 PM 執行 "
+        f"`ticket track set-who {ticket_id} --current {as_value}` 重新指派後再 "
+        f"{command}（PC-V1-002 前提一）\n"
     )
     _write_telemetry(
         command=command,

@@ -292,6 +292,16 @@ def _execute_complete(args: argparse.Namespace, version: str) -> int:
     complete 成功後併同移除 registry lease（multi-PM 協調層 Phase 3，與
     claim 對稱）。
     """
+    # PM 暫代管票（先 claim 再派發）遇具名執行者申報時，於身份對照前先讓出
+    # who.current，使派發的代理人 complete --as <self> 走「相符放行」，
+    # 免除 PM 代跑 complete 或執行者自行 set-who 兩條非預期出口（見
+    # reassign_who_from_pm_if_takeover docstring）。who.current 已是其他
+    # 具名代理人時不受影響，identity_guard 既有的誤指派攔截維持不變。
+    from .lifecycle import reassign_who_from_pm_if_takeover
+    reassign_who_from_pm_if_takeover(
+        version, args.ticket_id, getattr(args, "as_agent", None)
+    )
+
     # W1-048: --as 身份申報對照（純前置檢查，deny 不寫入任何狀態）
     # W1-083: 傳入 command 名稱，使 telemetry 可做 per-command 歸因；
     # 取 args.operation（argparse 實際解析到的子命令名，如 finish）而非寫死

@@ -2,12 +2,12 @@
 name: dart-style-guardian
 description: "Style Guardian - Unified Design System Enforcement Tool. Use for: (1) Preventing hardcoded styles (colors, spacing, typography), (2) Preventing hardcoded text (i18n violations), (3) Guiding unified configuration usage, (4) Detecting and fixing style violations"
 metadata:
-  version: 1.0.0
+  version: 1.1.1
 ---
 
 # Style Guardian - Unified Design System Enforcement
 
-> 元件層約束原則（禁自製元件、豁免三條件、白名單治理、WARNING 升阻擋判準）見 `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`；本 skill 為其「工具執法」層的專案實作。
+> 元件層約束原則（禁自製元件、豁免三條件、白名單治理、WARNING 升阻擋判準）見 `.claude/methodologies/component-library-bidirectional-constraint-methodology.md`；本 skill 為其「工具執法」層的專案實作。本 skill 只抓「不該怎麼做」（裸值、寫死文字、原生元件直用）；正面對應的「該怎麼做」——元件契約欄位表、容器排列不變式——由 `component-contract-design` skill 承接，被本 skill 的違規擋下後，正確做法在該處定義。
 
 ## Core Principles
 

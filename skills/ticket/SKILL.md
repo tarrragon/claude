@@ -31,6 +31,41 @@ linked worktree 內執行 `ticket track` 系列命令時，ticket 狀態（md �
 
 **覆核測試指令**（skill 自身測試套件）：唯一標準指令為裸 `pytest`（不帶路徑參數）。完整規則見 `references/architecture.md`「覆核測試指令（skill 自身測試套件）」章節。
 
+### PM 先 claim 再派發時的身份死結（已修復）
+
+PM 依 pm-role 流程先 `claim`（無 `--as` 或 `--as rosemary-project-manager`）
+再派發時，`who.current` 停在 PM。派發的代理人執行 `complete --as <self>` 曾
+兩條路徑皆被擋：帶 `--as` 被 identity-guard 以身份不符拒絕，不帶 `--as`
+則被要求必須提供——且 who 是權責歸屬欄位，不該由執行者自行 `set-who` 繞過。
+三個代理人各自獨立撞上同一狀態後，補上兩道防線：
+
+| 防線 | 機制 | 生效時機 |
+|------|------|---------|
+| 派發時自動重新綁定 | `dispatch-identity-bind-hook.py` 的 `UNBOUND_WHO_VALUES` 併入 PM 身份字面值，派發 Agent 工具呼叫成功後（PostToolUse）自動將 `who.current` 由 PM 改綁為實際派發的 subagent_type | 每次派發（常態路徑，事前預防） |
+| complete 前置自動讓出 | `complete`/`finish` 執行 identity 對照前，若 `who.current` 仍是 PM 且 `--as` 申報為具名非 PM 執行者，自動重新指派 `who.current` 為該執行者後再走既有比對 | 每次 complete/finish（worktree 隔離派發等前者未觸發的場景之保底） |
+
+兩道防線皆不需執行者自行 `set-who`，也不需 PM 代跑 `complete`。若仍出現
+`who.current` 與具名執行者不符的 deny，訊息本身已含具體指令（`ticket track
+set-who <id> --current <agent>`）——回報 PM 執行該指令重新指派，而非執行者
+自行執行。
+
+**`who.current` 的值因票而異，派發者無法預知**：上述兩道防線只處理
+「PM 先 claim 再派發」這一種情況。若 ticket 從建立時就由另一代理人指定
+具名執行者（`who.current` 從一開始就不是 PM），派發 prompt 若沿用經驗
+寫死 `--as rosemary-project-manager`，反而會撞上情境 4（身份不符）——
+因為真正該用的值其實是 `who.current` 目前的具體值，而這個值因票而異，
+連派發者都無法預先猜對。故 deny 訊息本身直接把當前值印出來，不留占位符：
+
+| 情境 | 訊息內容 |
+|------|---------|
+| 1a：缺 `--as`，`who.current` 已有具體值 | 直接給出可複製的 `--as <who.current 值>` 建議指令 |
+| 1a：缺 `--as`，`who.current` 真無主 | 維持 `--as <agent-name>` 占位符提示 |
+| 4：身份不符，`who.current` 已有具體值 | 並列兩條出口：(a) 若你就是該值，改用 `--as <值>` 自行重試；(b) 若指派本身錯誤，回報 PM 執行 `set-who` |
+| 4：身份不符，`who.current` 真無主 | 僅出口 (b)（回報 PM `set-who`），不印出無法執行的 `--as (未指派)` |
+
+執行者收到 deny 訊息時應直接依訊息內容判斷下一步，不需另外查
+`ticket track who <id>` 才知道該填什麼。
+
 ---
 
 ## 無子命令時的預設行為（dashboard-first）

@@ -26,6 +26,7 @@ from ticket_system.lib.constants import (
     TICKET_ID_RE,
 )
 from ticket_system.lib.file_lock import file_lock
+from ticket_system.lib.identity_guard import PM_AGENT_NAME
 from ticket_system.lib.precondition import require_in_progress
 from ticket_system.lib.ticket_loader import (
     get_project_root,
@@ -2315,6 +2316,59 @@ def _apply_claim_identity(ticket: Dict[str, Any], as_agent: Optional[str]) -> No
         who.setdefault("history", {})
     else:
         ticket["who"] = {"current": as_agent, "history": {}}
+
+
+def reassign_who_from_pm_if_takeover(
+    version: str, ticket_id: str, as_agent: Optional[str]
+) -> bool:
+    """complete/finish 前置：PM 暫代管票遇具名執行者申報時重新指派 who.current。
+
+    背景：PM 依 pm-role 流程先 claim 再派發時，who.current 停在 PM
+    （rosemary-project-manager）。派發的代理人執行 ``complete --as <self>``
+    會因 who.current 為 PM 而非自己被 identity_guard 以身份不符 deny
+    （情境 4）——兩條既有出口（帶 --as 被拒 / PM 代跑 complete）都不是正確
+    處置，執行者也不該自行 set-who（who 是權責歸屬欄位）。
+
+    本函式在 identity_guard.check_identity 之前執行：僅當目前持有者確實是
+    PM 本人（who.current == PM_AGENT_NAME）且申報身份為具名非 PM 執行者時，
+    才將 who.current 重新指派為該執行者——語意上等同「PM 讓出暫代管」，
+    使後續 check_identity 走「相符放行」（情境 3），不需新增判定分支。
+    who.current 已是其他具名代理人（非 PM）時的不符攔截完全不受影響，
+    維持 identity_guard 既有的錯誤指派保護（PC-V1-002）。
+
+    Args:
+        version: 版本號。
+        ticket_id: Ticket ID。
+        as_agent: complete/finish --as 申報的執行身份（可為 None）。
+
+    Returns:
+        bool: 是否實際執行了重新指派（供呼叫端決定是否記錄）。
+    """
+    if not as_agent or not as_agent.strip():
+        return False
+    as_agent = as_agent.strip()
+    if as_agent == PM_AGENT_NAME:
+        return False
+
+    lock_target = Path(get_ticket_path(version, ticket_id))
+    with file_lock(lock_target):
+        ticket, error = load_and_validate_ticket(
+            version, ticket_id, auto_print_error=False
+        )
+        if error or not ticket:
+            return False
+
+        who = ticket.get("who")
+        current = who.get("current") if isinstance(who, dict) else who
+        if current != PM_AGENT_NAME:
+            return False
+
+        _apply_claim_identity(ticket, as_agent)
+
+        ticket_path = resolve_ticket_path(ticket, version, ticket_id)
+        save_ticket(ticket, ticket_path)
+
+    return True
 
 
 def _apply_auto_tdd_phase(ticket: Dict[str, Any], as_agent: Optional[str]) -> None:
