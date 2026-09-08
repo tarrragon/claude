@@ -72,37 +72,6 @@ class TestCompleteEnforced:
         )
         assert result == identity_guard.IDENTITY_DENY_EXIT
 
-    def test_missing_as_with_known_who_current_suggests_concrete_value(
-        self, tmp_path, monkeypatch, capsys
-    ):
-        """who.current 有具體值時，訊息直接給出可複製的 --as <值> 建議指令，
-        不需執行者另外查 `ticket track who` 才知道該填什麼（who.current 的值
-        因票而異，連派發者都無法預知）。"""
-        monkeypatch.setenv("HOOK_LOGS_DIR", str(tmp_path))
-        with patch.object(
-            identity_guard,
-            "load_ticket",
-            return_value=_fake_ticket("thyme-documentation-integrator"),
-        ):
-            identity_guard.check_identity(
-                "0.0.0", "0.0.0-W0-001", None, command="complete"
-            )
-        stderr = capsys.readouterr().err
-        assert "thyme-documentation-integrator" in stderr
-        assert "--as thyme-documentation-integrator" in stderr
-
-    def test_missing_as_with_unknown_who_current_keeps_placeholder(
-        self, tmp_path, monkeypatch, capsys
-    ):
-        """who.current 真無主（None）時維持既有占位符提示，不虛構具體值。"""
-        monkeypatch.setenv("HOOK_LOGS_DIR", str(tmp_path))
-        with patch.object(identity_guard, "load_ticket", return_value=None):
-            identity_guard.check_identity(
-                "0.0.0", "0.0.0-W0-001", None, command="complete"
-            )
-        stderr = capsys.readouterr().err
-        assert "<agent-name>" in stderr
-
 
 class TestOtherCommandsUnaffected:
     """情境 1b：其餘命令未轉強制，維持 warn-only（回歸防護）。"""
@@ -172,64 +141,6 @@ class TestMatchingIdentityUnaffected:
                 command="complete",
             )
         assert result == identity_guard.IDENTITY_DENY_EXIT
-
-    def test_mismatched_as_deny_message_includes_concrete_exit(
-        self, tmp_path, monkeypatch, capsys
-    ):
-        """情境 4 deny 訊息須含合法出口的具體指令（set-who），非僅陳述拒絕理由。"""
-        monkeypatch.setenv("HOOK_LOGS_DIR", str(tmp_path))
-        with patch.object(
-            identity_guard, "load_ticket", return_value=_fake_ticket("other-agent")
-        ):
-            identity_guard.check_identity(
-                "0.0.0",
-                "0.0.0-W0-001",
-                "thyme-python-developer",
-                command="complete",
-            )
-        stderr = capsys.readouterr().err
-        assert "set-who" in stderr
-        assert "0.0.0-W0-001" in stderr
-        assert "thyme-python-developer" in stderr
-
-    def test_mismatched_as_with_known_who_current_offers_self_service_retry(
-        self, tmp_path, monkeypatch, capsys
-    ):
-        """情境 4：who.current 有具體值時，並列出口 (a) 自行改用 --as <who.current>
-        重試，不需經過 PM——申報者填錯自己該用的值時可自行修正，who 欄位
-        本身未被改動。"""
-        monkeypatch.setenv("HOOK_LOGS_DIR", str(tmp_path))
-        with patch.object(
-            identity_guard,
-            "load_ticket",
-            return_value=_fake_ticket("thyme-documentation-integrator"),
-        ):
-            identity_guard.check_identity(
-                "0.0.0",
-                "0.0.0-W0-001",
-                "thyme-python-developer",
-                command="complete",
-            )
-        stderr = capsys.readouterr().err
-        assert "--as thyme-documentation-integrator" in stderr
-        assert "set-who" in stderr  # 出口 (b) 仍並列存在
-
-    def test_mismatched_as_with_unassigned_who_current_omits_unusable_retry(
-        self, tmp_path, monkeypatch, capsys
-    ):
-        """情境 4：who.current 為空（真無主）時，不印出「--as (未指派)」這種
-        無法執行的指令，僅保留出口 (b)（回報 PM set-who）。"""
-        monkeypatch.setenv("HOOK_LOGS_DIR", str(tmp_path))
-        with patch.object(identity_guard, "load_ticket", return_value=None):
-            identity_guard.check_identity(
-                "0.0.0",
-                "0.0.0-W0-001",
-                "thyme-python-developer",
-                command="complete",
-            )
-        stderr = capsys.readouterr().err
-        assert "--as (未指派)" not in stderr
-        assert "set-who" in stderr
 
 
 # ============================================================

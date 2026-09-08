@@ -4,7 +4,7 @@ description: 'Use whenever the user wants to create, track, query, or manage tic
 argument-hint: '<subcommand> [args]'
 allowed-tools: Bash(ticket *), Read, Write, Edit, Grep, Glob
 metadata:
-  version: 2.31.1
+  version: 2.32.0
 ---
 
 # Ticket System

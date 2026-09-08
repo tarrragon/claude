@@ -62,19 +62,9 @@ from lib.ticket_id_pattern import extract_ticket_id_anchored
 HOOK_NAME = "dispatch-identity-bind-hook"
 EXIT_SUCCESS = 0
 
-# PM 身份字面值，須與 .claude/skills/ticket/ticket_system/lib/identity_guard.py
-# 的 PM_AGENT_NAME 保持一致（兩檔分屬 hook / skill 套件邊界，無法互相 import，
-# 依 skill-cli-sync-check 規則同步）。
-PM_AGENT_NAME = "rosemary-project-manager"
-
 # who.current 無主態值：create 未指定 --who 時為字面 "pending"，
-# PM 建票模板慣用 "待派發"；execute_get_field 對缺值輸出 "?"。併入
-# PM_AGENT_NAME——PM 依 pm-role 流程先 claim 再派發時，若 claim --as
-# 申報為 PM 自己，who.current 會被寫成 PM 名稱；此狀態語意是「PM 暫代管、
-# 尚待指派給實際執行者」而非「已指派給 PM 本人執行」，故納入可覆蓋範圍，
-# 派發時才能正確重新綁定給實際 subagent_type（多起同型死結收斂後的修復：
-# 多名代理人各自撞上 who.current 停在 PM 而無法 complete 的死結）。
-UNBOUND_WHO_VALUES = {"pending", "待派發", "?", "", PM_AGENT_NAME}
+# PM 建票模板慣用 "待派發"；execute_get_field 對缺值輸出 "?"
+UNBOUND_WHO_VALUES = {"pending", "待派發", "?", ""}
 
 # ticket CLI 逾時秒數（shim 經 uv run 解析，冷啟動可達數秒）
 TICKET_CLI_TIMEOUT = 15

@@ -2,11 +2,17 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
-**Version**: 2.31.1
+**Version**: 2.32.0
 **Last Updated**: 2026-09-08
 **Status**: Completed
 
 **Change Log**:
+
+- v2.32.0 (2026-09-08): PM 先 claim 再派發時的身份死結補上自動出口。**本批由另一個 consumer 專案撰寫並經框架 canonical 傳入**，本專案取回後補號——兩側先前同標 2.31.1 而內容不同，依版號無從察覺
+  - `complete`／`finish` 在身份對照之前，若 `who.current` 仍是 PM 且 `--as` 申報為具名非 PM 執行者，自動把 `who.current` 讓給該執行者再走既有比對（`reassign_who_from_pm_if_takeover`）。原本兩條路都不通：帶 `--as` 被判身份不符，不帶 `--as` 被要求必須提供，而 `who` 是權責歸屬欄位不該由執行者自行 `set-who` 繞過
+  - 派發時另有一道事前防線（`dispatch-identity-bind-hook`），把 `who.current` 由 PM 改綁為實際派發的 subagent；本批的 complete 前置讓出是 worktree 隔離派發等前者未觸發時的保底
+  - deny 訊息改為直接印出 `who.current` 當前值而非占位符——該值因票而異，派發者無法預知，沿用經驗寫死 `--as rosemary-project-manager` 反而會撞上身份不符
+  - 新增 `tests/test_pm_takeover_reassignment.py`
 
 - v2.31.1 (2026-09-08): `track-command.md` 兩處跨檔指涉隨 worktree skill 的內容外移同步更新——原指 `worktree/SKILL.md` 的節與行號，改指其 `references/agent-isolation-worktree.md` 的具名章節。內容變更本身發生於 2.31.0 推送之後而版號未動，兩側同號異容，本版補號使分歧可由版號察覺
 

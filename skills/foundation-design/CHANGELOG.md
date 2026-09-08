@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 6.3.1 — 〈維度與產物〉UI 列指向元件契約程序的括注由「十一欄位」改為「元件契約欄位表」。該欄位數已因 `component-contract-design` 改版而變動，內嵌數量在成員數改變時即失真——與本庫〈集合命名用角色、不內嵌數量〉同一判準。改寫由另一個 consumer 專案完成並經框架 canonical 傳入，本專案取回。
+
 **Version**: 6.3.0 — token 收斂（6,615 -> 4,795，門檻 5,000）：〈維度與產物〉節的非 SaaS 處置細節、複合產物、多子樹分列、改寫產物範例、無 UI 框架元件庫產物外移至新建 `references/dimension-product-notes.md`；〈接手模式〉整節外移至 `references/handoff-mode.md`；〈Examples〉五則案例外移至 `references/examples.md`。入口檔三處保留短版路由並補內文提醒，判準表（維度表、四種合法答案、權威缺席時）因跨處被大量引用而全數留在入口檔。跨檔指涉逐一改具名（`SKILL.md`〈某節〉／`references/<檔名>.md`〈某節〉），不留位置詞。
 
 **Version**: 6.2.0 — 維度與產物表補「適用條件」欄；資料庫／DevOps／可觀測性三列的權威 `saas-tech-selection` 明示為 SaaS/伺服器端專案預設形態，非 SaaS 專案（CLI 工具、函式庫、單機 app）改依既有「改寫產物」機制取可用部分，無可用部分則改指專案自身 CLAUDE.md 技術選型記錄或標「無」+ 理由；不新增第二套權威。實測依據：非 SaaS 專案（如 Go CLI 工具）走此路由會被引導至 managed database／k8s 等不適用選型。本筆原編為 6.1.0，與 canonical 上另一筆獨立的 6.1.0 撞號——兩者由不同 consumer 各自從 6.0.0 前進一步，版本號是單調計數器不表達分叉，合併時以 canonical 為共用時間軸故本筆順延為 6.2.0。

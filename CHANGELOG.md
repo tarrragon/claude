@@ -1,3 +1,18 @@
+## [2.59.0] - 2026-09-08
+
+### Summary
+feat: 取回 canonical 的 PM 暫代管票自動讓出 who.current，補號 2.32.0; docs: 新增 PC-BAL-074 通道不承載作者身分；PC-BAL-069 補版號的順序語意風險; docs: 6.3.1 UI 列括注去除內嵌欄位數（取回 canonical 改寫） (+2 more)
+
+Changes: 1 feat, 3 docs, 1 chore
+
+- feat: 取回 canonical 的 PM 暫代管票自動讓出 who.current，補號 2.32.0
+- docs: 新增 PC-BAL-074 通道不承載作者身分；PC-BAL-069 補版號的順序語意風險
+- docs: 6.3.1 UI 列括注去除內嵌欄位數（取回 canonical 改寫）
+- docs: PC-BAL-069 補共同結構節（低維表徵代理高維事實）
+- chore: 自發佈庫拉取五支（另一 consumer 推進）
+
+---
+
 ## [2.58.1] - 2026-09-08
 
 ### Summary
