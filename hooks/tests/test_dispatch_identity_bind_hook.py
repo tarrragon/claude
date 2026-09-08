@@ -132,6 +132,18 @@ class TestBindDispatchIdentity:
         assert result is True
         assert calls[-1][0] == "set-who"
 
+    def test_pm_held_who_rebinds_to_dispatched_agent(self):
+        """who.current 為 PM（先 claim 再派發常態）視為可覆蓋的暫代管態，
+        重新綁定給實際派發的 subagent_type（複現多起代理人卡住的死結修復）。"""
+        result, calls = self._bind(
+            f"Who: {dispatch_identity_bind_hook.PM_AGENT_NAME}\n"
+        )
+        assert result is True
+        assert calls == [
+            ["who", "1.5.0-W5-005.2"],
+            ["set-who", "1.5.0-W5-005.2", "thyme-python-developer"],
+        ]
+
     def test_bound_who_not_overwritten(self):
         """已綁定態不覆蓋——審查型派發不得 clobber 真執行者"""
         result, calls = self._bind("Who: parsley-flutter-developer\n")

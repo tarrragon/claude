@@ -1,3 +1,30 @@
+## [2.59.2] - 2026-09-08
+
+### Summary
+fix: 還原被 v2.59.0/2.59.1 全樹 overlay 覆蓋的 12 處內容
+
+v2.58.1 推上的下列內容在後續兩次推送中遺失，本次還原。遺失形態一致：
+新增檔存活，對既有檔的修改被回滾——他方拉取時在這些檔上解衝突到自己
+那一側，再以全樹 overlay 推回。
+
+- W3-052 身分死結修復的 hook 側：dispatch-identity-bind-hook 的 PM
+  暫代管重新綁定（PM_AGENT_NAME 常數與相鄰邏輯）、其測試、以及
+  ticket skill 的 test_identity_guard 中 --as 建議訊息測試
+- 引用穩定性規則 10（可變計數不實例化）全節，與 document-format-rules
+  的對應路由與檢查清單列
+- PC-GPD-006 的「反方向：把引用寫出去」小節（跨 consumer 引用的合法性
+  取決於被引物是否已到達共用通道）
+- DOC-V1-001 的「與相關模式的關係」章節
+- settings.json 中 variable-count-literal-guard-hook 的註冊
+- component-library 方法論的欄位表去數字化與回饋契約欄
+- document-writing-style 1.6.0、agent-dispatch-template 1.34.0 讓號條目
+
+本次推送保留 v2.59.1 的全部內容（PC-BAL-068/069/074、ticket 2.32.0、
+foundation-design 6.3.1、multi-round-review 2.3.0），error-patterns
+索引為兩側合併結果。
+
+---
+
 ## [2.59.1] - 2026-09-08
 
 ### Summary
