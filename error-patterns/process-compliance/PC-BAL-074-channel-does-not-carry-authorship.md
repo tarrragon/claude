@@ -53,5 +53,6 @@ tags: [attribution, shared-repo, provenance, cross-consumer, git-history]
 
 ## 關聯
 
+- 上位描述：`multi-round-review` 的〈規模買不到異源視角〉卡所稱「事實型判斷」——與文字讀起來如何無關（故非 register），也沒有工具抓得到（故非形式違規），錯誤來自一份雙方共有的先驗。本 pattern 是該類的一個實例：把「經由哪條通道抵達」當成關於作者的事實。
 - 同型家族：以載體推斷內容屬性的其他形式——以檔案所在目錄推斷擁有者、以 commit 作者欄推斷實際撰寫者（多 session 共用同一 git identity 時該欄無鑑別力）。
 - 上游原則：記錄平面與世界平面的區分——「我記得這是誰做的」屬記錄平面，git 首次加入的 commit 屬世界平面。

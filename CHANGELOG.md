@@ -1,3 +1,16 @@
+## [2.59.1] - 2026-09-08
+
+### Summary
+docs: PC-BAL-069/074 補互指 multi-round-review 2.3.0 的「事實型判斷」上位描述; chore: 拉取 2.3.0（第三格事實型判斷、射程外第四類）; chore: 回寫 .claude/VERSION -> 某版本
+
+Changes: 1 docs, 2 chore
+
+- docs: PC-BAL-069/074 補互指 multi-round-review 2.3.0 的「事實型判斷」上位描述
+- chore: 拉取 2.3.0（第三格事實型判斷、射程外第四類）
+- chore: 回寫 .claude/VERSION -> 某版本
+
+---
+
 ## [2.59.0] - 2026-09-08
 
 ### Summary
