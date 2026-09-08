@@ -18,6 +18,9 @@ Active Dispatch Tracker 共用模組
 - get_active_dispatches: 取得所有活躍派發
 - is_file_under_dispatch: 檢查檔案是否在派發中
 - cleanup_expired: 清理超時記錄
+- prune_dispatches: 依呼叫端提供的判準清理條目（`_state_lock` 保護的
+  read-modify-write 週期，供 track_dispatch_check.py `--prune` 等
+  需要自訂清理判準的呼叫端使用，不需各自重新實作鎖與原子寫）
 - detect_orphan_branches: 偵測 orphan worktree 分支
 
 turn_ended_at 欄位：
@@ -80,7 +83,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from .git_utils import get_worktree_list
 
@@ -697,6 +700,51 @@ def cleanup_expired(project_root: Path, max_age_hours: int = 1) -> int:
             _write_state(project_root, state)
 
         return removed_count
+
+
+def prune_dispatches(
+    project_root: Path,
+    should_remove: Callable[[Dict], bool],
+) -> Tuple[List[Dict], List[Dict]]:
+    """依呼叫端提供的判準，在 `_state_lock` 保護下清理 dispatches 條目。
+
+    供需要自訂清理判準的呼叫端（如 `track_dispatch_check.py` `--prune`）
+    使用，取代各自在鎖外讀取狀態、鎖外直接 `write_text` 覆寫的做法（兩個
+    獨立缺陷：未持 `_state_lock` 導致與 `record_dispatch` 等寫入路徑交錯
+    時 lost update；`write_text` 直寫非原子，無鎖讀端可能讀到截斷內容）。
+    整個 read-modify-write 週期在本函式內完成並共用 `_state_lock`，寫入
+    沿用 `_write_state` 既有的暫存檔 + `os.replace` 原子替換，呼叫端不需
+    重新實作鎖與原子寫。
+
+    Args:
+        project_root: 專案根目錄
+        should_remove: 對單一 dispatch 條目（dict）判斷是否應移除的謂詞。
+            非 dict 條目一律保留，不會被傳入此謂詞。
+
+    Returns:
+        (kept, removed) 二元組。`kept` 為套用判準後的最終 dispatches
+        清單（無論是否有條目被移除，皆為鎖內讀到的最新資料，供呼叫端
+        後續判斷/顯示，不需再次讀檔）；`removed` 為被移除的條目清單
+        （供呼叫端做後續記錄輸出，如 stderr/hook-logs——該記錄輸出不需
+        鎖保護，故留給呼叫端在鎖外處理）。
+    """
+    with _state_lock(project_root):
+        state = _read_state(project_root)
+        dispatches = state.get("dispatches", [])
+
+        kept: List[Dict] = []
+        removed: List[Dict] = []
+        for entry in dispatches:
+            if isinstance(entry, dict) and should_remove(entry):
+                removed.append(entry)
+            else:
+                kept.append(entry)
+
+        if removed:
+            state["dispatches"] = kept
+            _write_state(project_root, state)
+
+    return kept, removed
 
 
 def _parse_agent_worktree_branches(project_root: Path) -> List[str]:

@@ -25,6 +25,13 @@
 
 兩者任一成立即清理。清理結果落 `.claude/hook-logs/dispatch-check-
 prune/`（雙通道：stderr + hook-logs，符合可觀測性規則 4）。
+
+寫入路徑：清理判準 (A)(B) 在本檔計算，實際的讀-改-寫委派給
+`dispatch_tracker.prune_dispatches`（見 `_load_dispatch_tracker` /
+`_make_prune_predicate`），與 `record_dispatch` 等既有寫入路徑共用同一把
+`_state_lock` 排他鎖與 `_write_state` 原子替換，不在本檔重新實作鎖與
+原子寫。`dispatch_tracker` 模組不可用時 fail-open（不清理，寫 stderr），
+不回退為無鎖直寫。
 """
 
 from __future__ import annotations
@@ -34,7 +41,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 
 # dispatch-active.json 屬跨 agent 協調狀態，root 解析改用
 # get_ticket_state_root()（非 get_project_root()）——linked worktree 內
@@ -151,37 +158,38 @@ def _is_ticket_terminal(ticket_id: str) -> bool:
         return False
 
 
-def _prune_stale_orphan_entries(
-    dispatches: List[Any], now: datetime
-) -> Tuple[List[Any], List[Dict[str, Any]], bool]:
-    """從 `dispatches` 篩出可清理的條目並移除。判定條件為 OR，任一成立
-    即清理：
+def _load_dispatch_tracker() -> Optional[Any]:
+    """Lazy 載入 `.claude/lib/dispatch_tracker`（薄封裝，供測試以
+    `monkeypatch.setattr(mod, "_load_dispatch_tracker", ...)` 覆寫，比照
+    `lifecycle.py` `_load_dispatch_tracker` 既有慣例）。
+
+    `--prune` 透過此模組的 `prune_dispatches` 完成讀-改-寫，不在本檔
+    重新實作鎖與原子寫——該檔曾直接 `dispatch_file.write_text(...)`，
+    同時繞過 `_state_lock`（與 `record_dispatch` 等寫入路徑交錯時
+    lost update）與 `_write_state` 的原子替換（無鎖讀端可能讀到截斷
+    內容）兩層既有防護。
+    """
+    return load_claude_lib("dispatch_tracker")
+
+
+def _make_prune_predicate(
+    now: datetime, session_ids: Optional[Set[str]]
+) -> Any:
+    """建立單一 dispatch 條目的清理判準（供 `dispatch_tracker.
+    prune_dispatches` 呼叫）。判定條件為 OR，任一成立即清理：
 
     (A) 既有年齡門檻標為 [STALE]，且 `session_id` 非空但不在 pm-registry
         的 session 集合內（session 存活判準）。`session_id` 為空（無法
-        歸戶）或 registry 不可用時，本條件一律不成立。
+        歸戶）或 registry 不可用（`session_ids` 為 None）時，本條件一律
+        不成立。
     (B) `ticket_id` 非空，且該票目前狀態為終態（票終態判準，見
         `_is_ticket_terminal`）。獨立於 (A)——不要求 [STALE]，也不受
         registry 是否可用影響。空 `ticket_id`（無票派發）一律不查此
-        判準，其清除路徑是 agent 終止事件，非本函式涵蓋範圍。
-
-    Returns:
-        (kept, removed, registry_available) 三元組。`registry_available`
-        僅反映判準 (A) 所需的 registry 讀取結果——為 False 時判準 (A)
-        恆不成立，但判準 (B) 不受影響，仍可能清理出條目。呼叫端據此
-        區分「session 判準完全無法判定」與「票終態判準仍有效」的訊息
-        語意，避免把「無法判定」誤報為「已確認無需清理」。
+        判準，其清除路徑是 agent 終止事件，非本判準涵蓋範圍。
     """
-    session_ids = _load_registry_session_ids()
     registry_available = session_ids is not None
 
-    kept: List[Any] = []
-    removed: List[Dict[str, Any]] = []
-    for entry in dispatches:
-        if not isinstance(entry, dict):
-            kept.append(entry)
-            continue
-
+    def _should_remove(entry: Dict[str, Any]) -> bool:
         condition_a = False
         if registry_available:
             is_stale = "[STALE" in _format_age(entry.get("dispatched_at"), now)
@@ -192,11 +200,9 @@ def _prune_stale_orphan_entries(
         ticket_id = entry.get("ticket_id") or ""
         condition_b = bool(ticket_id) and _is_ticket_terminal(ticket_id)
 
-        if condition_a or condition_b:
-            removed.append(entry)
-        else:
-            kept.append(entry)
-    return kept, removed, registry_available
+        return condition_a or condition_b
+
+    return _should_remove
 
 
 def _log_pruned_entries(removed_entries: List[Dict[str, Any]]) -> None:
@@ -256,13 +262,23 @@ def execute_dispatch_check(args: argparse.Namespace) -> int:
     now = datetime.now(timezone.utc)
 
     if getattr(args, "prune", False):
-        kept, removed_entries, registry_available = _prune_stale_orphan_entries(dispatches, now)
-        if removed_entries:
-            data["dispatches"] = kept
-            dispatch_file.write_text(
-                json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        session_ids = _load_registry_session_ids()
+        registry_available = session_ids is not None
+        should_remove = _make_prune_predicate(now, session_ids)
+
+        dispatch_tracker = _load_dispatch_tracker()
+        if dispatch_tracker is None:
+            sys.stderr.write(
+                "[dispatch-check --prune] dispatch_tracker 模組不可用，"
+                "本次不清理（fail-open：不在此檔重新實作鎖與原子寫）\n"
             )
-            dispatches = kept
+            removed_entries: List[Dict[str, Any]] = []
+        else:
+            dispatches, removed_entries = dispatch_tracker.prune_dispatches(
+                get_ticket_state_root(), should_remove
+            )
+
+        if removed_entries:
             _log_pruned_entries(removed_entries)
             if registry_available:
                 print(

@@ -1,3 +1,16 @@
+## [2.59.8] - 2026-09-08
+
+### Summary
+fix: --prune 寫入改用共用鎖與原子替換; chore: 補號 2.33.1（--prune 寫入改走共用鎖與原子替換）; chore: 回寫 .claude/VERSION -> 某版本
+
+Changes: 1 fix, 2 chore
+
+- fix: --prune 寫入改用共用鎖與原子替換
+- chore: 補號 2.33.1（--prune 寫入改走共用鎖與原子替換）
+- chore: 回寫 .claude/VERSION -> 某版本
+
+---
+
 ## [2.59.7] - 2026-09-08
 
 ### Summary

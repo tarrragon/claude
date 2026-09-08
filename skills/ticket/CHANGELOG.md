@@ -2,11 +2,18 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
-**Version**: 2.33.0
+**Version**: 2.33.1
 **Last Updated**: 2026-09-08
 **Status**: Completed
 
 **Change Log**:
+
+- v2.33.1 (2026-09-08): `--prune` 的寫入路徑改走框架 lib 的共用協定，修掉兩個獨立缺陷。前一版新增票終態判準提高了 `--prune` 的使用頻率，使既有缺口的暴露面隨之放大
+  - **lost update**：原本 `_prune_stale_orphan_entries` 是無鎖純函式，其輸出直接餵進 `dispatch_file.write_text(...)`，讀取到寫入之間他方 `record_dispatch` 新增的記錄被整批覆蓋。紅燈測試先重現此競態（謂詞在鎖內卡住、另一執行緒同時寫入，修法前 `descriptions` 被清空）
+  - **非原子寫入**：`write_text` 直寫在同一檔案系統內非原子，無鎖讀端（`is_file_under_dispatch` 等查詢路徑）可能讀到截斷內容。此問題在框架 lib 的 `_write_state` 早已改為暫存檔 + `os.replace` 修掉，本路徑仍停在修掉之前的形態
+  - **修法**：刪除 `_prune_stale_orphan_entries`，改以 `_make_prune_predicate`（同一 A/B 判準，改為逐條 closure）傳入框架 lib 新增的 `prune_dispatches`，由後者在既有 `_state_lock` 內完成整個 read-modify-write 並沿用 `_write_state`。**不在本 skill 重新實作鎖與原子寫**——同一份狀態檔已有兩個寫入者，再加一份實作只會讓下一個寫入者重蹈覆轍
+  - 模組不可用時 fail-open（跳過清理並寫 stderr），不回退到舊的不安全寫入
+  - 已知取捨：謂詞 `_is_ticket_terminal` 會讀票檔，該 I/O 現在在鎖內執行，鎖持有時間變長。對 `--prune` 這類手動低頻命令方向正確；若日後搬到高頻路徑需重新評估
 
 - v2.33.0 (2026-09-08): 派發記錄的清除改由事件觸發，不再只靠逾時。既有的 `cleanup_expired`（`turn_ended_at` 已設者 TTL 24 小時、未設者以 `dispatched_at` 起算 1 小時）會把記錄清光，但清光之前的窗口內，共用 git index 的並行守衛把已完成票的宣告當現行範圍，落在該範圍內的提交被誤擋且訊息指向早已結束的票（實測一次提交被迫拆成三次）
   - `complete()` 成功路徑呼叫 `_clear_dispatch_for_completed_ticket(ticket_id)`，fail-open（模組不可用或例外皆寫 stderr，不阻擋 complete）

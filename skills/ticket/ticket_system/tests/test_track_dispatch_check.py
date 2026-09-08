@@ -569,3 +569,69 @@ class TestPruneTerminalTicket:
 
         assert rc == 1
         assert calls == []
+
+
+class TestPruneConcurrency:
+    """0.2.1-W3-1380：`--prune` 的讀-改-寫必須與 `record_dispatch` 共用
+    同一把鎖，否則兩者交錯時任一方的寫入可能被另一方持有的舊快照覆寫
+    （lost update）。修復前 `--prune` 完全在鎖外讀取/計算/寫入，本測試
+    人工延長 `--prune` 的判準執行時間製造交錯窗口，斷言交錯期間
+    `record_dispatch` 寫入的記錄不會消失。"""
+
+    def test_prune_interleaved_with_record_dispatch_no_lost_update(
+        self, tmp_path, monkeypatch
+    ):
+        import threading
+        import time
+
+        from lib.dispatch_tracker import get_active_dispatches, record_dispatch
+
+        monkeypatch.setattr(mod, "get_ticket_state_root", lambda: tmp_path)
+        (tmp_path / ".claude").mkdir(parents=True, exist_ok=True)
+
+        record_dispatch(tmp_path, agent_description="gone-agent", ticket_id="A")
+
+        entered_predicate = threading.Event()
+        release_predicate = threading.Event()
+
+        def _blocking_is_terminal(ticket_id):
+            # 模擬 --prune 判準執行期間，另一 session 同時呼叫
+            # record_dispatch——鎖若正確涵蓋整個讀-改-寫週期，
+            # record_dispatch 應被阻塞至此函式返回、寫入完成為止。
+            entered_predicate.set()
+            release_predicate.wait(timeout=5)
+            return True
+
+        monkeypatch.setattr(mod, "_is_ticket_terminal", _blocking_is_terminal)
+        monkeypatch.setattr(mod, "_load_registry_session_ids", lambda: None)
+        monkeypatch.setattr(mod, "_get_prune_logger", lambda: None)
+
+        prune_thread = threading.Thread(
+            target=lambda: _run(tmp_path, monkeypatch, prune=True)
+        )
+        prune_thread.start()
+        assert entered_predicate.wait(timeout=5), "prune 判準未如預期開始執行"
+
+        record_thread = threading.Thread(
+            target=lambda: record_dispatch(
+                tmp_path, agent_description="new-agent-during-prune", ticket_id="B"
+            )
+        )
+        record_thread.start()
+        # 給 record_dispatch 機會嘗試取得鎖（此時應被 prune 持有的鎖阻塞，
+        # 直到 release_predicate 被設定才可能取得）
+        time.sleep(0.2)
+
+        release_predicate.set()
+        prune_thread.join(timeout=5)
+        record_thread.join(timeout=5)
+
+        assert not prune_thread.is_alive(), "prune 執行緒未如預期結束"
+        assert not record_thread.is_alive(), "record_dispatch 執行緒未如預期結束"
+
+        remaining = get_active_dispatches(tmp_path)
+        descriptions = {e.get("agent_description") for e in remaining}
+        assert "new-agent-during-prune" in descriptions, (
+            "record_dispatch 於 --prune 執行期間寫入的記錄不應遺失；"
+            f"實際: {descriptions}"
+        )
