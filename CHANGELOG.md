@@ -1,3 +1,18 @@
+## [2.59.5] - 2026-09-08
+
+### Summary
+docs: PC-BAL-069 補同號異容的第二種成因（無行為者）與該查的時機; chore: 回寫 .claude/VERSION -> 某版本; chore: 補號 2.2.10（canonical 帶入他方對兩份 reference 的變更後同號異容） (+2 more)
+
+Changes: 1 docs, 4 chore
+
+- docs: PC-BAL-069 補同號異容的第二種成因（無行為者）與該查的時機
+- chore: 回寫 .claude/VERSION -> 某版本
+- chore: 補號 2.2.10（canonical 帶入他方對兩份 reference 的變更後同號異容）
+- chore: SKILL.md frontmatter 補號 2.32.1
+- chore: CHANGELOG 補號 2.32.1（canonical 帶入他方變更後同號異容）
+
+---
+
 ## [2.59.4] - 2026-09-08
 
 ### Summary

@@ -2,11 +2,13 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
-**Version**: 2.32.0
+**Version**: 2.32.1
 **Last Updated**: 2026-09-08
 **Status**: Completed
 
 **Change Log**:
+
+- v2.32.1 (2026-09-08): `fields.py`／`test_fields_set_where.py`／`test_identity_guard.py` 隨框架 canonical 更新（由另一 consumer 撰寫並經 canonical 傳入）；本專案取回後補號，前一版兩側同號而內容不同
 
 - v2.32.0 (2026-09-08): PM 先 claim 再派發時的身份死結補上自動出口。**本批由另一個 consumer 專案撰寫並經框架 canonical 傳入**，本專案取回後補號——兩側先前同標 2.31.1 而內容不同，依版號無從察覺
   - `complete`／`finish` 在身份對照之前，若 `who.current` 仍是 PM 且 `--as` 申報為具名非 PM 執行者，自動把 `who.current` 讓給該執行者再走既有比對（`reassign_who_from_pm_if_takeover`）。原本兩條路都不通：帶 `--as` 被判身份不符，不帶 `--as` 被要求必須提供，而 `who` 是權責歸屬欄位不該由執行者自行 `set-who` 繞過
