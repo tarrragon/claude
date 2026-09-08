@@ -9,14 +9,21 @@
 - PC-050 派發後清點 / 收到完成通知兩處均為讀檔 + 判斷 dispatches 陣列空/非空
 - 新 CLI 多加：格式化輸出 + exit code，不改變判定規則
 
-`--prune`（3-F M-6）：清理「[STALE] 且 session 不存在」的條目，取代文件
-原載「見 [STALE] 手動清理 dispatch-active.json」的無痕跡做法。判定條件
-為 AND：(1) 既有年齡門檻標為 [STALE]；(2) 條目 `session_id` 非空且不在
-pm-registry.json 的 session 集合內（委派 track_sessions 既有 registry
-讀取邏輯）。`session_id` 為空（無法歸戶）或 registry 暫時不可用（無法
-判定存在與否）時一律保守不清理——避免把「heartbeat 慢但仍存活的 agent」
-（session 仍在 registry 內，只是自身 heartbeat 逾 TTL）誤判為「不存在」
-而清空其唯一的存活佐證。清理結果落 `.claude/hook-logs/dispatch-check-
+`--prune`（3-F M-6）：清理符合以下任一判準的條目（OR，非 AND），取代
+文件原載「見 [STALE] 手動清理 dispatch-active.json」的無痕跡做法：
+
+(A) session 存活判準：既有年齡門檻標為 [STALE]，且條目 `session_id`
+    非空且不在 pm-registry.json 的 session 集合內（委派 track_sessions
+    既有 registry 讀取邏輯）。`session_id` 為空（無法歸戶）或 registry
+    暫時不可用（無法判定存在與否）時一律保守不清理——避免把「heartbeat
+    慢但仍存活的 agent」（session 仍在 registry 內，只是自身 heartbeat
+    逾 TTL）誤判為「不存在」而清空其唯一的存活佐證。
+(B) 票終態判準：條目 `ticket_id` 非空且該票目前狀態為終態
+    （completed/closed，見 `_is_ticket_terminal`）。獨立於 (A)——不要求
+    [STALE]，也不受 registry 是否可用影響，因為票是否終態的判準權威
+    來源是票狀態本身，不需 session 存活佐證。
+
+兩者任一成立即清理。清理結果落 `.claude/hook-logs/dispatch-check-
 prune/`（雙通道：stderr + hook-logs，符合可觀測性規則 4）。
 """
 
@@ -115,24 +122,58 @@ def _get_prune_logger() -> Optional[Any]:
         return None
 
 
+def _is_ticket_terminal(ticket_id: str) -> bool:
+    """判斷 ticket_id 對應的票目前是否為終態（completed/closed）。
+
+    `--prune` 第二條獨立清理判準——票已終態代表對應派發不可能仍在進行，
+    判準權威來源是票狀態本身，不需 session 存活佐證，因此與既有的
+    [STALE] + session 判準完全獨立（不受 registry 是否可用影響）。
+
+    查無法解析版本 / 查無此票 / 讀取例外一律回傳 False（保守：判定不了
+    就不視為終態，避免誤刪仍可能有效的派發記錄——與 `_load_registry_
+    session_ids` 對「無法判定」一律不清理的保守原則一致）。
+    """
+    try:
+        from ticket_system.lib.constants import TERMINAL_STATUSES
+        from ticket_system.lib.ticket_loader import load_ticket
+        from ticket_system.lib.ticket_validator import (
+            extract_version_from_ticket_id,
+        )
+
+        version = extract_version_from_ticket_id(ticket_id)
+        if not version:
+            return False
+        ticket = load_ticket(version, ticket_id)
+        if not ticket:
+            return False
+        return ticket.get("status") in TERMINAL_STATUSES
+    except Exception:  # noqa: BLE001 — 保守降級，不阻擋 --prune 主流程
+        return False
+
+
 def _prune_stale_orphan_entries(
     dispatches: List[Any], now: datetime
 ) -> Tuple[List[Any], List[Dict[str, Any]], bool]:
-    """從 `dispatches` 篩出「[STALE] 且 session 不存在」的條目並移除。
+    """從 `dispatches` 篩出可清理的條目並移除。判定條件為 OR，任一成立
+    即清理：
 
-    判定條件為 AND：既有年齡門檻標為 [STALE]、且 `session_id` 非空但不在
-    pm-registry 的 session 集合內。`session_id` 為空（無法歸戶）一律保守
-    保留，不視為「不存在」。
+    (A) 既有年齡門檻標為 [STALE]，且 `session_id` 非空但不在 pm-registry
+        的 session 集合內（session 存活判準）。`session_id` 為空（無法
+        歸戶）或 registry 不可用時，本條件一律不成立。
+    (B) `ticket_id` 非空，且該票目前狀態為終態（票終態判準，見
+        `_is_ticket_terminal`）。獨立於 (A)——不要求 [STALE]，也不受
+        registry 是否可用影響。空 `ticket_id`（無票派發）一律不查此
+        判準，其清除路徑是 agent 終止事件，非本函式涵蓋範圍。
 
     Returns:
         (kept, removed, registry_available) 三元組。`registry_available`
-        為 False 時 `removed` 恆為空清單，呼叫端須據此與「registry 可用但
-        無符合條件的條目」區分訊息，避免把「無法判定」誤報為「已確認無
-        需清理」（見 `_load_registry_session_ids` 的無法判定語意）。
+        僅反映判準 (A) 所需的 registry 讀取結果——為 False 時判準 (A)
+        恆不成立，但判準 (B) 不受影響，仍可能清理出條目。呼叫端據此
+        區分「session 判準完全無法判定」與「票終態判準仍有效」的訊息
+        語意，避免把「無法判定」誤報為「已確認無需清理」。
     """
     session_ids = _load_registry_session_ids()
-    if session_ids is None:
-        return dispatches, [], False
+    registry_available = session_ids is not None
 
     kept: List[Any] = []
     removed: List[Dict[str, Any]] = []
@@ -140,14 +181,22 @@ def _prune_stale_orphan_entries(
         if not isinstance(entry, dict):
             kept.append(entry)
             continue
-        is_stale = "[STALE" in _format_age(entry.get("dispatched_at"), now)
-        session_id = entry.get("session_id") or ""
-        session_exists = bool(session_id) and session_id in session_ids
-        if is_stale and session_id and not session_exists:
+
+        condition_a = False
+        if registry_available:
+            is_stale = "[STALE" in _format_age(entry.get("dispatched_at"), now)
+            session_id = entry.get("session_id") or ""
+            session_exists = bool(session_id) and session_id in session_ids
+            condition_a = bool(is_stale and session_id and not session_exists)
+
+        ticket_id = entry.get("ticket_id") or ""
+        condition_b = bool(ticket_id) and _is_ticket_terminal(ticket_id)
+
+        if condition_a or condition_b:
             removed.append(entry)
         else:
             kept.append(entry)
-    return kept, removed, True
+    return kept, removed, registry_available
 
 
 def _log_pruned_entries(removed_entries: List[Dict[str, Any]]) -> None:
@@ -208,18 +257,27 @@ def execute_dispatch_check(args: argparse.Namespace) -> int:
 
     if getattr(args, "prune", False):
         kept, removed_entries, registry_available = _prune_stale_orphan_entries(dispatches, now)
-        if not registry_available:
-            print("[INFO] --prune：pm-registry 不可用，無法判定 session 是否存在，本次不清理")
-        elif removed_entries:
+        if removed_entries:
             data["dispatches"] = kept
             dispatch_file.write_text(
                 json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
             )
             dispatches = kept
             _log_pruned_entries(removed_entries)
-            print(f"[INFO] --prune：已清理 {len(removed_entries)} 筆 [STALE] 且 session 不存在的條目")
+            if registry_available:
+                print(
+                    f"[INFO] --prune：已清理 {len(removed_entries)} 筆 "
+                    "[STALE] 且 session 不存在或票已終態的條目"
+                )
+            else:
+                print(
+                    "[INFO] --prune：pm-registry 不可用，session 存活判準略過；"
+                    f"依票終態判準已清理 {len(removed_entries)} 筆"
+                )
+        elif not registry_available:
+            print("[INFO] --prune：pm-registry 不可用，無法判定 session 是否存在，本次不清理")
         else:
-            print("[INFO] --prune：無符合「[STALE] 且 session 不存在」條件的條目")
+            print("[INFO] --prune：無符合「[STALE] 且 session 不存在或票已終態」條件的條目")
 
         if not dispatches:
             print("[PASS] 無活躍派發，可繼續")

@@ -205,6 +205,35 @@ ticket_id」映射表（未落在任何宣告範圍者標「未宣告範圍」�
 拆分的具體分次提交指令序列，取代原本僅描述抽象放行路徑、不提供可執行
 步驟的版本——原版本的放行路徑（二）雖已可達（見「四修正」），但執行者
 從訊息本身看不出如何拆分，仍會選擇已知的豁免繞道。
+
+============================================================
+七修正：DENY 訊息的代理人數與判定依據脫節、補救指令可能被整段複製誤導
+============================================================
+兩處獨立缺陷，皆來自後續實測回饋（非本 hook 主修法範疇，與派發記錄殘留
+清除無依賴，可獨立先落地）：
+
+1. 裸 commit 與 -a／--all 兩則 DENY 訊息原本印的代理人數取自
+   `len(dispatches)`（計入全部活躍派發記錄），但同一次判定實際依據的是
+   `_staged_scope_is_safe_for_bare_commit` 內濾掉 `files` 為空者後的
+   `known_scope_sets`——訊息宣稱的集合與判定依據的集合不是同一個。實測
+   樣本：一批活躍記錄中相當比例 `files` 為空（範圍未知），判定只用了
+   有宣告範圍的子集，訊息卻把全部記錄數當成代理人數宣稱。修法：兩則
+   訊息改印有宣告範圍的派發數，範圍未知者另行標示於括號內，不併入主要
+   數字。`pathspec`/`--only`/`-o` 的 DENY 訊息（`_build_index_discarding_
+   deny_message`）不受影響——其決策路徑本身就是「`dispatch_count > 0`
+   即一律阻擋」，未經 `known_scope_sets` 過濾即已與訊息數字一致，此為
+   刻意不做（見「範疇邊界」段一律阻擋設計），非遺漏。
+
+2. 三則 DENY 訊息（裸 commit、-a／--all、pathspec/--only/-o）的補救
+   指令皆以多行區塊呈現，版面暗示可整段複製後串成一個命令（`&&` 或
+   分號）執行。本 hook 為 PreToolUse，在整個命令執行前依「當下」的
+   git index 狀態判斷；串接執行時，同一命令內尚未發生的 `git add` /
+   `git restore` 效果對本次判斷不可見，故串接命令會被同一則訊息再次
+   阻擋整串——包括其中的 `git restore` / `git add` 部分，因為 Bash 工具
+   本身就沒有執行任何一段。使用者因此不是「少做一步」，而是對自己已
+   執行過什麼的認知與事實相反（實測：多次獨立撞到此問題，皆誤以為前面
+   步驟已經執行過）。修法：三則訊息的補救指令區塊前皆加一句明示語句，
+   說明須逐條分開送出執行、不可用 `&&` 或分號串接。
 """
 
 import json
@@ -222,6 +251,13 @@ from lib.git_command_parse import GitInvocation, contains_git_word, find_git_inv
 from lib.git_utils import get_project_root, run_git_command
 
 _UNASSIGNED_LABEL = "未宣告範圍"
+
+_SEQUENTIAL_EXECUTION_NOTICE = (
+    "以下每行須逐條分開送出執行，不可用 `&&` 或分號串成一個命令一次執行"
+    "——本 hook 為 PreToolUse，依整個命令執行前的 index 狀態判斷，串接"
+    "執行時看不到同一命令內尚未發生的 add／restore，前段動作不會真的"
+    "執行，被擋下時容易誤以為前面步驟已經做過"
+)
 
 
 def _has_amend_exemption(args: List[str]) -> bool:
@@ -436,13 +472,39 @@ def _build_split_commit_instructions(mapping: "OrderedDict[str, List[str]]") -> 
     return "\n".join(lines)
 
 
+def _known_scope_dispatch_counts(dispatches: List[Dict]) -> "tuple[int, int]":
+    """回傳 (有宣告範圍的派發數, 範圍未知的派發數)。
+
+    DENY 訊息呈現的代理人數須與 `_staged_scope_is_safe_for_bare_commit`
+    判定實際採用的 `known_scope_sets`（濾掉 `files` 為空者）口徑一致，
+    不可直接用 `len(dispatches)`——否則訊息宣稱的集合與判定依據的集合
+    不是同一個（見模組 docstring「七修正」段）。
+    """
+    known = sum(1 for d in dispatches if d.get("files"))
+    return known, len(dispatches) - known
+
+
+def _dispatch_count_clause(dispatches: List[Dict]) -> str:
+    """組出 DENY 訊息開頭「目前有 N 個實作代理人正在派發中」的敘述片段，
+    N 取有宣告範圍的派發數；範圍未知者另行標示於括號內，不併入主要數字
+    （見 `_known_scope_dispatch_counts`）。
+    """
+    known_count, unknown_count = _known_scope_dispatch_counts(dispatches)
+    unknown_note = (
+        f"（另有 {unknown_count} 筆派發記錄範圍未知，未計入判定）"
+        if unknown_count
+        else ""
+    )
+    return f"{known_count} 個實作代理人正在派發中{unknown_note}"
+
+
 def _build_deny_message(staged_files: List[str], dispatches: List[Dict]) -> str:
     """組出裸 commit 的 DENY 訊息：staged 清單未落在任一活躍派發宣告範圍內、
     也與所有活躍派發宣告範圍相交（見 `_staged_scope_is_safe_for_bare_commit`
     兩條放行路徑），列出每個 staged 檔案的歸屬派發 ticket_id，並給出依
     範圍拆分的具體分次 commit 指令。
     """
-    dispatch_count = len(dispatches)
+    dispatch_count_clause = _dispatch_count_clause(dispatches)
     if staged_files:
         mapping = _map_files_to_dispatches(staged_files, dispatches)
         mapping_block = _build_dispatch_mapping_block(mapping)
@@ -453,14 +515,15 @@ def _build_deny_message(staged_files: List[str], dispatches: List[Dict]) -> str:
 
     return (
         "[並行派發期間裸 commit 被阻擋]\n\n"
-        f"理由：目前有 {dispatch_count} 個實作代理人正在派發中"
+        f"理由：目前有 {dispatch_count_clause}"
         "（.claude/dispatch-active.json 有活躍記錄），且目前 staged 內容"
         "既非任一活躍派發宣告檔案範圍的子集，也與所有活躍派發宣告範圍的"
         "聯集相交，裸 git commit 會把共用 git index 中可能屬於其他人的"
         "staged 檔案一併提交，造成跨 ticket 汙染。\n\n"
         "當前 staged 檔案與其歸屬派發範圍：\n"
         f"{mapping_block}\n\n"
-        "建議依範圍拆分為多次裸 commit（各自皆會通過放行路徑一）：\n"
+        "建議依範圍拆分為多次裸 commit（各自皆會通過放行路徑一，"
+        f"{_SEQUENTIAL_EXECUTION_NOTICE}）：\n"
         f"{instructions_block}\n\n"
         "核對指令：\n"
         "  git diff --cached --name-only            # 核對 index 實際範圍\n"
@@ -478,7 +541,7 @@ def _build_all_flag_deny_message(content_files: List[str], dispatches: List[Dict
     staged（見模組 docstring「六修正」段：並行期收窄為與裸 commit 相同的
     內容安全性驗證）。
     """
-    dispatch_count = len(dispatches)
+    dispatch_count_clause = _dispatch_count_clause(dispatches)
     if content_files:
         mapping = _map_files_to_dispatches(content_files, dispatches)
         mapping_block = _build_dispatch_mapping_block(mapping)
@@ -489,7 +552,7 @@ def _build_all_flag_deny_message(content_files: List[str], dispatches: List[Dict
 
     return (
         "[並行派發期間 -a／--all commit 被阻擋]\n\n"
-        f"理由：目前有 {dispatch_count} 個實作代理人正在派發中"
+        f"理由：目前有 {dispatch_count_clause}"
         "（.claude/dispatch-active.json 有活躍記錄）。`git commit -a` 會"
         "提交 staged 與未 staged 的所有已追蹤檔案修改，這個完整集合可能"
         "跨越多個派發宣告範圍，等同裸 commit 的跨 ticket 汙染風險，故並行"
@@ -497,7 +560,7 @@ def _build_all_flag_deny_message(content_files: List[str], dispatches: List[Dict
         "-a 實際會提交的檔案與其歸屬派發範圍：\n"
         f"{mapping_block}\n\n"
         "建議改用精確 add + 裸 commit，依範圍拆分為多次提交（不要用 -a"
-        "一次提交，各自皆會通過放行路徑一）：\n"
+        f"一次提交，各自皆會通過放行路徑一，{_SEQUENTIAL_EXECUTION_NOTICE}）：\n"
         f"{instructions_block}\n"
     )
 
@@ -514,7 +577,14 @@ def _build_warn_message() -> str:
 
 
 def _build_index_discarding_deny_message(dispatch_count: int) -> str:
-    """組出 index-discarding form（pathspec / --only / -o）的 DENY 訊息。"""
+    """組出 index-discarding form（pathspec / --only / -o）的 DENY 訊息。
+
+    `dispatch_count` 直接取全部活躍派發記錄數（不濾掉 `files` 為空者）：
+    本函式的觸發判準是「`dispatch_count > 0` 即一律阻擋」，並未經
+    `known_scope_sets` 過濾，訊息數字與判定依據本就是同一個集合，與
+    裸 commit／`-a` 兩則訊息的口徑不一致問題無關（見模組 docstring
+    「七修正」段）。
+    """
     return (
         "[並行派發期間 pathspec/--only/-o commit 被阻擋]\n\n"
         f"理由：目前有 {dispatch_count} 個實作代理人正在派發中"
@@ -524,7 +594,7 @@ def _build_index_discarding_deny_message(dispatch_count: int) -> str:
         "而是完全繞過 index。並行環境下這會吸入同路徑上其他派發代理人"
         "尚未 stage 的編輯，且無法像裸 commit 一樣用 staged 快照驗證安全性"
         "（提交當下才讀 working tree），故一律阻擋，不提供例外。\n\n"
-        "請改用精確 add + 核對 + 裸 commit：\n"
+        f"請改用精確 add + 核對 + 裸 commit（{_SEQUENTIAL_EXECUTION_NOTICE}）：\n"
         "  git add <你的確切檔案>\n"
         "  git diff --cached --name-only   # 核對 index 只含你的檔案\n"
         '  git commit -m "你的訊息"        # 裸 commit（不帶 pathspec）\n\n'

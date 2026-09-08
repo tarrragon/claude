@@ -376,6 +376,35 @@ class TestParallelPeriodBareCommit:
         err = capsys.readouterr().err
         assert "3" in err
 
+    def test_deny_message_dispatch_count_excludes_unknown_scope(self, monkeypatch, capsys):
+        """0.2.1-W3-1376：訊息宣稱的代理人數須與判定依據的 known_scope_sets
+        口徑一致（濾掉 files 為空者），不可直接印 len(dispatches)。files 為
+        空的派發記錄不構成已知範圍，不應計入訊息數字。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            'git commit -m "fix bug"',
+            dispatches=[_dispatch("T-1", ["a.py"]), _dispatch("T-2", [])],
+            staged_files=["a.py", "z.py"],
+        )
+        assert exit_code == 2
+        err = capsys.readouterr().err
+        assert "1 個實作代理人" in err
+        assert "2 個實作代理人" not in err
+
+    def test_deny_message_states_sequential_execution_required(self, monkeypatch, capsys):
+        """0.2.1-W3-1376：補救指令區塊須明示須逐條分開送出執行，不可整段
+        複製串接——本 hook 為 PreToolUse，串接執行時前段動作看不到彼此的
+        中間效果，被擋下時會誤以為前面步驟已經做過。"""
+        _run_hook(
+            monkeypatch,
+            'git commit -m "fix bug"',
+            dispatches=[_dispatch("T-1", ["a.py"]), _dispatch("T-2", ["b.py"])],
+            staged_files=["a.py", "b.py"],
+        )
+        err = capsys.readouterr().err
+        assert "逐條" in err
+        assert "分開" in err
+
     def test_deny_message_with_no_staged_files_still_gives_placeholder(
         self, monkeypatch, capsys
     ):
@@ -537,6 +566,35 @@ class TestAllFlagContentValidationWhenParallel:
         assert "git add a.py" in err or "git restore --staged a.py" in err
         assert "git add b.py" in err
 
+    def test_deny_message_dispatch_count_excludes_unknown_scope(self, monkeypatch, capsys):
+        """0.2.1-W3-1376：-a／--all DENY 訊息的代理人數同樣須排除 files 為
+        空的派發記錄（與裸 commit DENY 訊息同族，須比照修正）。"""
+        exit_code = _run_hook(
+            monkeypatch,
+            'git commit -a -m "x"',
+            dispatches=[_dispatch("T-1", ["a.py"]), _dispatch("T-2", [])],
+            staged_files=["a.py"],
+            unstaged_files=["z.py"],
+        )
+        assert exit_code == 2
+        err = capsys.readouterr().err
+        assert "1 個實作代理人" in err
+        assert "2 個實作代理人" not in err
+
+    def test_deny_message_states_sequential_execution_required(self, monkeypatch, capsys):
+        """0.2.1-W3-1376：-a／--all DENY 訊息的補救指令區塊同樣須明示須
+        逐條分開送出執行。"""
+        _run_hook(
+            monkeypatch,
+            'git commit -a -m "x"',
+            dispatches=[_dispatch("T-1", ["a.py"]), _dispatch("T-2", ["b.py"])],
+            staged_files=["a.py"],
+            unstaged_files=["b.py"],
+        )
+        err = capsys.readouterr().err
+        assert "逐條" in err
+        assert "分開" in err
+
     def test_unconditional_exemption_when_not_parallel_even_with_unsafe_content(
         self, monkeypatch, capsys
     ):
@@ -568,6 +626,19 @@ class TestIndexDiscardingFormNoLongerBypassed:
         assert exit_code == 2
         err = capsys.readouterr().err
         assert "pathspec" in err or "index" in err
+
+    def test_deny_message_states_sequential_execution_required(self, monkeypatch, capsys):
+        """0.2.1-W3-1376：pathspec/--only/-o DENY 訊息的補救指令區塊
+        （add / diff / commit 三行）同樣可能被整段複製串接執行，須明示
+        須逐條分開送出（與裸 commit、-a／--all 兩則同族訊息比照修正）。"""
+        _run_hook(
+            monkeypatch,
+            'git commit -m "x" -- src/foo.py',
+            dispatches=[_dispatch("T-1", ["src/foo.py"])],
+        )
+        err = capsys.readouterr().err
+        assert "逐條" in err
+        assert "分開" in err
 
     def test_only_flag_commit_denied_when_parallel(self, monkeypatch, capsys):
         exit_code = _run_hook(

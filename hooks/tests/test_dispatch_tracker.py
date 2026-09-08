@@ -20,6 +20,7 @@ from lib.dispatch_tracker import (
     get_state_file_path,
     record_dispatch,
     clear_dispatch,
+    clear_dispatch_by_ticket_id,
     get_active_dispatches,
     is_file_under_dispatch,
     cleanup_expired,
@@ -131,6 +132,53 @@ class TestClearDispatch:
         result = clear_dispatch(project_root, "Task X")
         assert result is False
         assert len(get_active_dispatches(project_root)) == 1
+
+
+class TestClearDispatchByTicketId:
+    """0.2.1-W3-1371：ticket 轉終態（complete）時清除其對應的
+    dispatch-active 條目，取代目前完全沒有清除路徑的狀態（見模組
+    docstring「turn_ended_at 欄位」段——`clear_dispatch_by_id` 等舊有
+    刪除式函式已不由 SubagentStop 呼叫，ticket 綁定派發缺一條由 ticket
+    事件驅動的清除路徑）。"""
+
+    def test_removes_all_entries_matching_ticket_id(self, project_root: Path):
+        """同一 ticket 有多筆派發記錄（如重派）時全部清除。"""
+        record_dispatch(project_root, "Attempt 1", ticket_id="0.2.1-W3-1371")
+        record_dispatch(project_root, "Attempt 2", ticket_id="0.2.1-W3-1371")
+        record_dispatch(project_root, "Other ticket", ticket_id="0.2.1-W3-9999")
+
+        removed = clear_dispatch_by_ticket_id(project_root, "0.2.1-W3-1371")
+
+        assert removed == 2
+        remaining = get_active_dispatches(project_root)
+        assert len(remaining) == 1
+        assert remaining[0]["ticket_id"] == "0.2.1-W3-9999"
+
+    def test_no_match_returns_zero_and_does_not_mutate(self, project_root: Path):
+        record_dispatch(project_root, "Task A", ticket_id="0.2.1-W3-1")
+        removed = clear_dispatch_by_ticket_id(project_root, "0.2.1-W3-does-not-exist")
+        assert removed == 0
+        assert len(get_active_dispatches(project_root)) == 1
+
+    def test_empty_ticket_id_is_noop_does_not_clear_untagged_entries(
+        self, project_root: Path
+    ):
+        """空字串 ticket_id 一律視為無操作——空 ticket_id 代表無票派發
+        （見 record_dispatch docstring），若不排除會誤刪所有無票派發
+        記錄，這批記錄的清除路徑是 agent 終止事件，不受 ticket 事件
+        驅動（見 TestTurnEndedTtl）。"""
+        record_dispatch(project_root, "No-ticket reviewer", ticket_id="")
+        record_dispatch(project_root, "No-ticket reviewer 2", ticket_id="")
+
+        removed = clear_dispatch_by_ticket_id(project_root, "")
+
+        assert removed == 0
+        assert len(get_active_dispatches(project_root)) == 2
+
+    def test_no_state_file_returns_zero(self, project_root: Path):
+        """狀態檔不存在（尚無任何派發記錄）時不報錯，回傳 0。"""
+        removed = clear_dispatch_by_ticket_id(project_root, "0.2.1-W3-1371")
+        assert removed == 0
 
 
 class TestMarkTurnEndedByHandle:

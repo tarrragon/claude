@@ -59,7 +59,9 @@ from ticket_system.lib.command_lifecycle_messages import (
 from ticket_system.lib.command_tracking_messages import (
     ClaimWrapMessages,
 )
+from ticket_system.lib.claude_lib_loader import load_claude_lib
 from ticket_system.lib.git_ops import commit_files_isolated
+from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.tdd_sequence import (
     validate_phase_prerequisite,
     PHASE_LABELS,
@@ -940,6 +942,9 @@ class TicketLifecycle:
             save_ticket(ticket, ticket_path)
 
         print(format_info(InfoMessages.TICKET_COMPLETED, ticket_id=ticket_id))
+
+        # Ticket 轉終態時同步清除其 dispatch-active 條目（fail-open，見函式 docstring）
+        _clear_dispatch_for_completed_ticket(ticket_id)
 
         # W5-014.2: self-verify — 讀回真實 status 附在 stdout（opinionated-default）
         verified_ticket = load_ticket(self.version, ticket_id)
@@ -1906,6 +1911,50 @@ def _handle_pending_children_block(
         file=sys.stderr,
     )
     return 1
+
+
+def _load_dispatch_tracker():
+    """Lazy 載入 `.claude/lib/dispatch_tracker`（薄封裝，供測試直接
+    `monkeypatch.setattr(lifecycle, "_load_dispatch_tracker", ...)` 覆寫，
+    比照 `lease.py` `_load_pm_registry` 既有慣例）。"""
+    return load_claude_lib("dispatch_tracker")
+
+
+def _clear_dispatch_for_completed_ticket(ticket_id: str) -> None:
+    """Ticket 轉終態（complete）時清除 `dispatch-active.json` 對應條目。
+
+    背景：ticket 綁定派發在此之前完全沒有隨 complete 事件清除的路徑——
+    `clear_dispatch_by_id` 等舊有刪除式函式已不由 SubagentStop 呼叫（見
+    `dispatch_tracker` 模組 docstring「turn_ended_at 欄位」段），只剩
+    `cleanup_expired` 的 24 小時 TTL 兜底，使已完成票的派發宣告可殘留
+    最長 24 小時，期間持續讓依賴此檔案判斷活躍派發範圍的消費端（如
+    並行提交守衛）誤判已完成的票仍在派發中。
+
+    Fail-open：dispatch_tracker 模組不可用，或清除過程拋任何例外，寫
+    stderr 後直接返回——本清理是輔助性質，阻擋 complete() 已完成的狀態
+    轉換的代價遠高於殘留一筆 dispatch 記錄（後者仍有 24 小時 TTL 兜底）。
+    """
+    try:
+        dispatch_tracker = _load_dispatch_tracker()
+        if dispatch_tracker is None:
+            sys.stderr.write(
+                "[complete] dispatch_tracker 模組不可用，"
+                "略過 dispatch-active 清除\n"
+            )
+            return
+        removed = dispatch_tracker.clear_dispatch_by_ticket_id(
+            get_ticket_state_root(), ticket_id
+        )
+        if removed:
+            print(
+                f"[dispatch-cleanup] 已清除 {removed} 筆 dispatch-active "
+                f"條目（ticket={ticket_id}）"
+            )
+    except Exception as exc:  # noqa: BLE001 — fail-open，見函式 docstring
+        sys.stderr.write(
+            f"[complete] dispatch-active 清除失敗（略過，不阻擋 complete）："
+            f"{exc}\n"
+        )
 
 
 def _auto_commit_completion_files(

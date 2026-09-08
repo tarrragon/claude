@@ -1,3 +1,19 @@
+## [2.59.6] - 2026-09-08
+
+### Summary
+fix: ticket complete 時清除對應 dispatch-active 條目; fix: 修正 bare-commit-guard 阻擋訊息代理人數失真與補救指令整段複製誤導; docs: PC-BAL-069 修正自查有效範圍——時機而非有無外部指涉物 (+3 more)
+
+Changes: 2 fix, 3 docs, 1 chore
+
+- fix: ticket complete 時清除對應 dispatch-active 條目
+- fix: 修正 bare-commit-guard 阻擋訊息代理人數失真與補救指令整段複製誤導
+- docs: PC-BAL-069 修正自查有效範圍——時機而非有無外部指涉物
+- docs: PC-BAL-069 補「明確知道該失效模式也擋不住它落在自己產出裡」
+- docs: 待條件加進入門檻，禁止作為無法歸類時的收容值
+- chore: 回寫 .claude/VERSION -> 某版本
+
+---
+
 ## [2.59.5] - 2026-09-08
 
 ### Summary
