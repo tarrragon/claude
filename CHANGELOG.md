@@ -1,3 +1,16 @@
+## [2.59.9] - 2026-09-08
+
+### Summary
+fix: hook-liveness 以檔名 stem 查詢時解析到內部名稱; chore: 補號 2.34.0（hook-liveness 以檔名查詢可解析）; chore: 回寫 .claude/VERSION -> 某版本
+
+Changes: 1 fix, 2 chore
+
+- fix: hook-liveness 以檔名 stem 查詢時解析到內部名稱
+- chore: 補號 2.34.0（hook-liveness 以檔名查詢可解析）
+- chore: 回寫 .claude/VERSION -> 某版本
+
+---
+
 ## [2.59.8] - 2026-09-08
 
 ### Summary

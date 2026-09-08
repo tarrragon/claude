@@ -2,11 +2,17 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。frontmatter 版號同步由後續收尾票統一處理，本檔先行遞增記錄。
 
-**Version**: 2.33.1
+**Version**: 2.34.0
 **Last Updated**: 2026-09-08
 **Status**: Completed
 
 **Change Log**:
+
+- v2.34.0 (2026-09-08): `hook-liveness` 以檔名查詢不再回 0 筆，且查無時的訊息不再與「hook 未觸發」同形
+  - **成因**：`resolve_hook_name` 只認 `HOOK_NAME` 常數，但 82/122 個 `.claude/hooks/*.py` 是把字面字串直接傳給 `run_hook_safely(main, "...")`（與常數寫法互斥不重疊）；輸入為不含 `.py` 的檔名 stem 時完全不觸發檔案解析。實測 82 個有內部名稱的 hook：30 個檔名與內部名稱一致、51 個僅差 `-hook` 後綴、1 個結構性不同（`task-dispatch-readiness-check` 對 `agent-dispatch-check`）
+  - **修法**：改以掃描 `run_hook_safely` 呼叫的字面參數為第一優先權威來源（那正是 liveness `hook` 欄位的實際寫入值），並新增「輸入不含副檔名時嘗試 `.claude/hooks/<輸入>.py`」的解析層。兩類不一致收斂到同一條「找到真實檔案、讀真實原始碼」路徑，**未採去後綴啟發式或硬編碼對照表**——啟發式涵蓋 51 個但會在第 52 個身上靜默回 0，複製本次要消除的失效
+  - **訊息**：0 筆結果依解析來源是否「已由原始碼確認」分流。未確認時列出已嘗試的全部解析形式並明寫「0 筆不代表 hook 未觸發」，不再把 hook 未觸發列為候選解釋。查詢工具的失敗形態不得與它要偵測的失敗形態同形——否則驗證者可能去修一個沒壞的 hook，或撤掉一個正在運作的防護
+  - TDD：還原舊實作驗證 11 個新測試 RED，修復後 21/21 GREEN
 
 - v2.33.1 (2026-09-08): `--prune` 的寫入路徑改走框架 lib 的共用協定，修掉兩個獨立缺陷。前一版新增票終態判準提高了 `--prune` 的使用頻率，使既有缺口的暴露面隨之放大
   - **lost update**：原本 `_prune_stale_orphan_entries` 是無鎖純函式，其輸出直接餵進 `dispatch_file.write_text(...)`，讀取到寫入之間他方 `record_dispatch` 新增的記錄被整批覆蓋。紅燈測試先重現此競態（謂詞在鎖內卡住、另一執行緒同時寫入，修法前 `descriptions` 被清空）
