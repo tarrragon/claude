@@ -2,7 +2,7 @@
 name: skill-design-guide
 description: "Anthropic skill spec plus this project's conventions: frontmatter, descriptions, loading budgets, and splitting an oversized skill. Use when creating a skill, editing SKILL.md, reviewing skill quality, or moving content into references/."
 metadata:
-  version: 1.9.0
+  version: 1.11.2
 ---
 
 # Skill Design Guide
@@ -40,10 +40,10 @@ metadata:
 | 層 | 載入時機 | 預算 | 寫什麼 |
 |----|---------|------|-------|
 | 1. frontmatter（name + description） | 常駐 system prompt | 250 字元（唯一閘門，另兩個口徑不換算，見 `references/frontmatter-and-description.md` 的〈Description 寫作（最重要的一節）〉） | 何時觸發 + 做什麼 |
-| 2. SKILL.md body | 觸發後載入 | < 5k tokens；另須符合官方 < 500 行 | 核心工作流 + 路由 |
+| 2. SKILL.md 全檔 | 觸發後載入 | < 5k tokens；另須符合官方 < 500 行 | 核心工作流 + 路由 |
 | 3. references/ + scripts/ + assets/ | Claude 按需 read / exec | 目錄總量無上限；單檔判準見〈第 3 層的單檔判準是讀取方式〉 | 細節、範例、模板、可執行腳本 |
 
-**這三個預算的適用對象各不相同，先認對象再量。** 第 2 層的兩個數字只管 `SKILL.md` body 這一個檔，因為它是觸發即載入、成本無條件支付的那一份；第 3 層的「無上限」講的是**目錄總量**——bundle 幾份 reference 都不預先付費，官方逐字寫 "no context penalty until accessed"——不是說單檔可以無限大。把「無上限」讀成單檔沒有判準，reference 會長成沒人讀得完的一份。
+**這三個預算的適用對象各不相同，先認對象再量。** 第 2 層的兩個數字只管 `SKILL.md` 全檔這一個檔（含 frontmatter），因為它是觸發即載入、成本無條件支付的那一份——frontmatter 雖已常駐第 1 層的 system prompt，但觸發後整份檔案會原樣再讀入 context 一次，這部分成本仍計入第 2 層，量測不扣除它；下方 Action 的 `wc -l` 與分段估算指令量的正是同一份全檔路徑，範圍與此一致。第 3 層的「無上限」講的是**目錄總量**——bundle 幾份 reference 都不預先付費，官方逐字寫 "no context penalty until accessed"——不是說單檔可以無限大。把「無上限」讀成單檔沒有判準，reference 會長成沒人讀得完的一份。
 
 **Action**：第 2 層的主判準是分段 token 估算，直接與 5k 比較。
 
@@ -95,9 +95,9 @@ wc -l .claude/skills/<name>/SKILL.md   # 官方 500 行，超標即須外移
 | 從零建一個新 skill、判斷它屬哪一類型、決定內容該放 `scripts/`／`references/`／`assets/`、要廢止或遷移既有 skill、或引入他人的 skill | `references/creating-and-adopting-skills.md` | 〈檔案結構〉〈三類 bundled resource 的分工〉〈Skill 建立流程〉〈Skill 類型速查〉〈廢止與遷移〉〈安全考量〉 |
 | 既有 skill 超出第 2 層預算、要外移內容 | `references/splitting-an-existing-skill.md` | 〈為什麼需要專屬程序〉〈外移什麼、留什麼〉〈拆分特有的必查項〉〈兩種驗證，方法不同〉〈拆分特有的高頻缺陷〉〈結構約定〉〈收尾〉〈一則最小走查〉〈相關〉 |
 | 決定工作流該給多少自由度或要不要設預設值、設計多步驟工作流、要進階範本、規劃測試方法、或 skill 行為不如預期 | `references/patterns-and-troubleshooting.md` | 〈Degrees of Freedom — 自由度匹配脆弱性〉〈Opinionated Defaults — 預設路徑引導正確做法〉〈Skill 設計模式〉〈選擇方法：Problem-first vs Tool-first〉〈測試方法〉〈迭代回饋指引〉〈常見問題排除〉 |
-| 想理解工具設計哲學與 agent 視角的演進 | `references/seeing-like-an-agent.md` | 〈核心哲學〉〈Claude Code 團隊的演進教訓〉〈進階 Skill 設計模式〉〈觀察 Claude 如何使用 Skill〉〈反模式〉 |
+| 某個設計取捨說不出理由、想理解工具設計哲學與 agent 視角的演進，或需要可貼用的進階設計模式（評估驅動開發、Feedback Loop 等）與程式碼片段 | `references/seeing-like-an-agent.md` | 〈核心哲學〉〈Claude Code 團隊的演進教訓〉〈進階 Skill 設計模式〉〈觀察 Claude 如何使用 Skill〉〈反模式〉 |
 
-**兩個近同名章節的消歧義**：〈Skill 設計模式〉（`patterns-and-troubleshooting.md`，五個可貼用的工作流範本）與〈進階 Skill 設計模式〉（`seeing-like-an-agent.md`，設計哲學層的六則模式）不是同一節。要範本去前者，要設計理由去後者。
+**兩個近同名章節的消歧義**：〈Skill 設計模式〉（`patterns-and-troubleshooting.md`，三個控制流形狀加一個跨形狀可附加階段）與〈進階 Skill 設計模式〉（`seeing-like-an-agent.md`，工具設計方法論層的六則模式，不是控制流模板）不是同一節。要控制流模板去前者，要設計方法論或設計理由去後者。
 
 ## 發布前檢查清單
 
@@ -107,7 +107,7 @@ wc -l .claude/skills/<name>/SKILL.md   # 官方 500 行，超標即須外移
 - [ ] `SKILL.md` 大小寫正確
 - [ ] 無 `README.md`（任何層級，含子目錄）
 - [ ] 無 `INSTALLATION_GUIDE.md` / `QUICK_REFERENCE.md`（`CHANGELOG.md` 不在此列，見 `references/writing-the-body.md` 的〈嚴禁清單〉）
-- [ ] SKILL.md body 通過兩個門檻（5k tokens 與 500 行）；各 reference 通過第 3 層的單檔判準。門檻的適用對象、量測指令與分段估算表見〈Progressive Disclosure — 三層載入〉
+- [ ] SKILL.md 全檔（含 frontmatter）通過兩個門檻（5k tokens 與 500 行）；各 reference 通過第 3 層的單檔判準。門檻的適用對象、量測指令與分段估算表見〈Progressive Disclosure — 三層載入〉
 - [ ] skill 帶 CLI 入口點時，另走 `skill-cli-sync-check` 規則。**不涵蓋**：本清單不問「CLI 行為變更後 SKILL.md 與 pm-rules 是否同步」，走完本清單全綠不代表那件事被問過
 
 ### YAML
@@ -131,7 +131,7 @@ LC_ALL=C comm -13 <(grep -o 'references/[a-z-]*\.md' SKILL.md | LC_ALL=C sort -u
                   <(grep -rho 'references/[a-z-]*\.md' references/ | LC_ALL=C sort -u)
 ```
 
-- [ ] 100+ 行**且被選段查閱**的 reference 有 TOC（整份執行者不適用，理由見 `references/writing-the-body.md` 的〈Body 寫作〉；同一個讀取方式維度也決定第 3 層量什麼）
+- [ ] 100+ 行**且被選段查閱**的 reference 有 TOC（整份執行者不適用，理由見 `references/writing-the-body.md` 的〈Body 寫作〉；同一個讀取方式維度也決定第 3 層量什麼）。**本判準不涵蓋 SKILL.md 自身**：入口檔正是〈Progressive Disclosure〉表列「整份執行」的範例本身（見該節「它與 SKILL.md 一樣是整份進 context」），觸發後全檔一次讀完，不存在選段查閱情境；其〈按需讀取〉路由表解決的是「該去讀哪一份其他檔案」，與 TOC 解決的「這份檔案內部跳去哪一節」是不同問題，前者存在不代表後者也要有
 - [ ] 術語一致
 - [ ] 無時間敏感字串
 - [ ] **外部引用以身分指名，不寫檔案路徑**（見 `references/writing-the-body.md` 的〈外部引用：指名身分，不用檔案路徑〉）。機械檢查：`grep -nE '\`\.claude/[^\`]*\`' SKILL.md`，每個命中須屬該節列出的例外之一，逐一說明；說不出屬於哪一類就是該改。**不涵蓋**：裸檔名（`file-size-guardian-hook.py` 這種寫法不帶 `.claude/` 前綴，零命中），以及反引號後不是緊接 `.claude/` 的片段（`` `node .claude/…` `` 這種寫法同樣零命中）——兩類皆須人工核

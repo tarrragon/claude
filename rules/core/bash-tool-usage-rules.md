@@ -22,7 +22,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 
 > **chpwd 與即時協議**：裸 cd 觸發 zsh chpwd hook 的 ls 淹沒工具結果。輸出可疑/被淹沒當下依四步即時協議——停手 → 重發乾淨原子命令（`git -C`／子 shell）→ 只信 raw stdout → 固定值（hash／二元 grep／整數計數）驗證。論證見 details.md 規則一詳細 + `tool-output-trust-rules` 規則 1-4。
 
-> **規則七高衝突路徑加強做法（隔離索引 CAS）**：規則七「精確 add + 核對 + 裸 commit」三步驟間仍共用同一個 git index，並行環境下有 TOCTOU 窗口。高頻/高衝突路徑（同一檔案集合被多來源高頻觸發 commit）可改用 `GIT_INDEX_FILE` 指向獨立臨時 index，全程以 `read-tree`/`write-tree`/`commit-tree`/`update-ref`（CAS，帶舊值移動 HEAD）操作，完全不觸碰共用 index；不取代規則七，屬並列的加強選項。已驗證實作見 `ticket-md-auto-commit-hook.py`。完整配方與適用條件見 details.md「規則七詳細」。
+> **規則七與代理人票務提交的預設關係**：手動／無票務 CLI 之高衝突路徑仍用規則七三步或隔離索引 CAS（並列加強選項，`GIT_INDEX_FILE` 全程不觸碰共用 index，已驗證實作見 `ticket-md-auto-commit-hook.py`）；**代理人票務提交改以 `ticket track commit`（隔離索引）為預設**，規則七三步降為其 fallback（僅該命令失敗或不可用時用）。配方、適用條件與分工見 details.md「規則七詳細」。
 
 > **規則七核對步驟的粒度邊界（檔案內夾帶）**：`git diff --cached --name-only` 只列檔名，核對粒度為檔案層級——`git add` 的最小單位即整個檔案，目標檔本身已含他人未 stage 的編輯時，該編輯隨精確 add 一併進入 index，核對必然通過，對此無鑑別力（機制與 PC-BAL-008「變體：檔案級共用」同源）。**不改變規則七既有禁止事項**，pathspec / `--only` / `-o` / `-i` 仍全數禁用。append-only 共用檔（如 `docs/work-logs/topic-assignments.txt`，每次 `ticket create` 皆追加一行，屬結構性熱點）建議：`git add --patch` 逐 hunk 挑選，或約定由單一方負責提交該檔。完整機制見 details.md「規則七詳細」。
 
@@ -67,6 +67,7 @@ Claude Code Bash 工具的使用規範，涵蓋工作目錄、輸出處理、git
 
 ---
 
+**Last Updated**: 2026-09-08 | **Version**: 3.10.0 — 規則七高衝突路徑加強做法段改寫為「規則七與代理人票務提交的預設關係」：代理人票務提交場景改以 `ticket track commit`（隔離索引）為預設，規則七三步降為其 fallback；手動／無票務 CLI 之高衝突路徑仍以規則七三步或隔離索引 CAS 為並列加強選項，不受影響。呼應副本漂移收斂評估後的裁決，與 `parallel-dispatch.md`／`agent-dispatch-template.md`／ticket skill〈track commit 子命令〉措辭一致；字數同步減少。
 **Last Updated**: 2026-09-04 | **Version**: 3.9.0 — 規則二「截斷方向」條款泛化為「輸出過濾方向」：`tail` 截斷只是選擇性過濾的一種，grep 白名單／`grep -v` 同樣更容易濾掉警告行，與輸出長度無關（實測第二、三實例：3 行輸出中 `tail -2` 正好切掉第 1 行 `[Error]`）；速查表與統一檢查清單同步改寫，grep 白名單須含 `WARNING\|Error\|Traceback`。完整第二、三實例最小重現見 details.md「規則二詳細」新增小節。
 **Last Updated**: 2026-09-02 | **Version**: 3.8.0 — 規則二新增「截斷方向」條款：CLI 參數驗證錯誤（argparse 等）error 前綴在頭、回吐內容在尾，單取 `tail` 會截掉唯一判別依據使失敗與成功回音同形（最小重現：argparse `unrecognized arguments` 錯誤在 `tail -20` 下完全不可見）；不確定輸出屬性時改用 `head` 或 `head`+`tail` 兩段皆取。速查表與統一檢查清單同步新增。完整重現數據見 details.md「規則二詳細」新增小節。
 **Last Updated**: 2026-08-28 | **Version**: 3.7.0 — 規則七涵蓋範圍擴充至衝突合併的收尾提交：`git merge` 衝突後以 `git add -A` / `git add .` / `git commit -a` 收尾會把工作區內與本次合併無關的未暫存編輯寫進 merge commit，既有四項 pathspec 禁令對此路徑全數無效（實測命中 merge commit `89c57a1c9`）。速查表第七列標題與條文同步擴充，統一檢查清單新增一列；正確替代與既有條文一致（精確 add + 核對 + 裸 commit）。完整實證、處置表與 `PC-BAL-008` 歸屬判定見 details.md「規則七詳細」新增小節。**不改變既有四項禁令**。

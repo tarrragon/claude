@@ -1220,8 +1220,12 @@ def _execute_from_worklog(args: argparse.Namespace) -> int:
             print(f"[FAIL] {tid}: ticket 不存在")
             continue
 
-        if ticket.get("status") == STATUS_COMPLETED:
-            print(f"[SKIP] {tid}: 已 completed")
+        # TERMINAL_STATUSES（completed/closed）皆為「已結束」，closed 票同
+        # completed 一樣不需再建 handoff；分別列印對應 status 供使用者辨識
+        # 是完成或關閉（而非合併為單一「已結束」字樣，保留現行訊息精確度）。
+        ticket_status = ticket.get("status")
+        if ticket_status in TERMINAL_STATUSES:
+            print(f"[SKIP] {tid}: 已 {ticket_status}")
             continue
 
         if dry_run:

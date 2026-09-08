@@ -21,6 +21,7 @@
 | 規則 | 說明 |
 |------|------|
 | commit 前測試通過 | 代理人必須確保相關測試通過才 commit |
+| commit 方式 | 有 ticket 可用時預設 `ticket track commit`（隔離索引，全程不觸碰共用 index）；僅該命令失敗或不可用時降級為精確 `git add` + 核對 + 裸 `git commit` fallback，見 `.claude/rules/core/bash-tool-usage-rules.md` 規則七 |
 | commit 後更新 Ticket | `ticket track append-log` 記錄產出物 |
 | 禁止 push | push 權限保留給 PM，避免分支衝突 |
 | 禁止 amend | 每次 commit 獨立，不修改歷史 |
@@ -29,5 +30,7 @@
 
 ---
 
+**Last Updated**: 2026-09-08
+**Version**: 1.1.0 - 「代理人自治 commit 規則」表新增「commit 方式」列：有 ticket 可用時預設 `ticket track commit`（隔離索引），精確 add 三步降為 fallback；與 `bash-tool-usage-rules.md` 規則七、`parallel-dispatch.md`、`agent-dispatch-template.md`、ticket skill〈track commit 子命令〉措辭同步
 **Last Updated**: 2026-03-29
 **Version**: 1.0.0 - 從 parallel-dispatch.md 抽取

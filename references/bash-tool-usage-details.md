@@ -440,9 +440,10 @@ unset GIT_INDEX_FILE
 | 高頻自動化路徑 | 同一檔案集合被高頻率、多來源觸發 commit（如 ticket md 每次操作都 auto-commit） |
 | 連續並行提交 | 短時間內連續對不同檔案做精確提交，人工核對速度跟不上並行寫入速度 |
 | bare-commit-guard DENY 且確認範圍屬己 | 確認 staged 範圍屬於自己的派發範圍時，可用隔離索引 CAS 繞開共用 index 競爭本身，而非改用 pathspec（規則七禁止 pathspec 的理由不變，見規則七主文） |
-| 一般低頻手動 commit | 不需要，規則七「精確 add + 核對 + 裸 commit」已足夠，不需引入 CAS 複雜度 |
+| 代理人票務提交（有 ticket 可用） | 已改為預設路徑，非僅限高頻/高衝突才用；`ticket track commit`（`git_ops.commit_files_isolated`）為本配方的 CLI 化實作，見 ticket skill〈track commit 子命令〉 |
+| PM 手動 / 無票務 CLI 之一般低頻 commit | 不需要，規則七「精確 add + 核對 + 裸 commit」仍為預設，不需引入 CAS 複雜度 |
 
-**與規則七主文的關係**：不取代規則七的「精確 add + 核對 + 裸 commit」——後者仍是預設做法（成本低、無需額外 plumbing 知識）。隔離索引 CAS 是同一目標（避免吸入他人未 stage 編輯）在高衝突場景下的加強做法，兩者並列，依情境選擇。
+**與規則七主文的關係**：代理人票務提交場景（`ticket track commit`）已改為預設路徑，規則七「精確 add + 核對 + 裸 commit」降為其 fallback（僅該命令失敗或不可用時使用，見規則七主文）；PM 手動 / 無票務 CLI 之一般低頻 commit，規則七三步仍為預設，不需引入 CAS 複雜度。兩者並列適用不同場景，非互斥選項。
 
 **已驗證實作**：`.claude/skills/ticket/hooks/ticket-md-auto-commit-hook.py` 的 `auto_commit_ticket_md` 函式（現行實作，對應歷史 fix commit `bd849894a`）。因不經過 `git commit`，此路徑不會觸發 pre-commit/commit-msg hook（含 bare-commit-guard-hook）——這是 plumbing 命令的固有行為，不是刻意繞過；guard 存在的目的是攔截「範圍不明的裸 commit」，本配方以步驟 7 的自我驗證取代 guard 的把關角色，提交範圍由程式碼結構保證且提交後即時核驗，不削弱其防護意圖。
 
@@ -562,7 +563,7 @@ git -C "$D" show HEAD:a.txt              # v2 —— 內容被回滾，git log �
 | 合併前工作區已有未暫存的無關編輯 | 合併前先處置（提交或 `git stash`），不留在工作區等合併結束——`-A` 之外，衝突期間的多次 `git add` 也容易誤觸 |
 | 已發生捲入 | 依規則七既有條文：**不得** `revert` / `reset --soft` / `commit --amend` / 反向套用。被捲入的內容與他方同窗口的合法寫入在 diff 上不可區分，任一還原動作都會連帶撤銷後者。記錄 commit SHA 與檔案清單於 ticket，上報 PM |
 
-**與既有防護層的關係**：派發骨架（`agent-dispatch-template.md` / `track_dispatch.py` 的 `SKELETON_TEMPLATE_NORMAL`）的 Forbidden 行已同時禁 `git add . / git add -A` 與 `git commit -a`，涵蓋本節兩種載體；缺口原本只在規則七主文——規則七列的是四種 pathspec 形式，未把廣域 staging 納入自身射程，本節補此涵蓋。`bare-commit-guard-hook.py` 與 `dispatch-staging-phrase-guard-hook.py` 皆不涵蓋 merge 收尾（前者攔 pathspec commit，後者檢查派發 prompt 的片語完整性），強制層是否加碼屬另一議題，不在本節範圍。
+**與既有防護層的關係**：派發骨架（`agent-dispatch-template.md` / `dispatch_skeleton.py` 的 `SKELETON_TEMPLATE_NORMAL`）的 Forbidden 行已同時禁 `git add . / git add -A` 與 `git commit -a`，涵蓋本節兩種載體；缺口原本只在規則七主文——規則七列的是四種 pathspec 形式，未把廣域 staging 納入自身射程，本節補此涵蓋。`bare-commit-guard-hook.py` 與 `dispatch-staging-phrase-guard-hook.py` 皆不涵蓋 merge 收尾（前者攔 pathspec commit，後者檢查派發 prompt 的片語完整性），強制層是否加碼屬另一議題，不在本節範圍。
 
 **與 PC-BAL-008 的歸屬判定**：本機制**應併入 `PC-BAL-008` 作為新變體**，不另立 error-pattern。判定依據三項——(1) 該 PC 的根因抽象層是「commit 範圍大於意圖且無訊號」，本節是同一抽象下的另一載體，該 PC 已用「變體：檔案級共用」章節容納過一次相同性質的擴充；(2) 讀者遇到「commit 含非預期檔案」時只需查一份文件，另立新 PC 會迫使讀者在兩份相似文件間先判定載體差異，而該判定正是事發當下最難做的；(3) 該 PC 的預防措施（隔離索引、commit 後驗證錨定 SHA 而非 `HEAD`）對本節同樣適用，另立會整段重複。**併入的代價**：該 PC 標題含 `parallel-agent`，而本機制在單 session 自行合併時亦會發生，併入時需於變體章節明示此差異。
 
@@ -637,6 +638,8 @@ LC_ALL=C sort /tmp/t.txt | LC_ALL=C uniq -c
 
 ---
 
+**Last Updated**: 2026-09-08
+**Version**: 1.13.0 — 規則七詳細「隔離索引 CAS」適用條件表與「與規則七主文的關係」段改寫：代理人票務提交（`ticket track commit`）已改為預設路徑，規則七三步降為其 fallback；PM 手動／無票務 CLI 之一般低頻 commit，規則七三步仍為預設不變。與 `bash-tool-usage-rules.md` 規則七、`parallel-dispatch.md`、`agent-dispatch-template.md`、ticket skill〈track commit 子命令〉措辭同步。
 **Last Updated**: 2026-09-04
 **Version**: 1.12.0 — 規則二詳細新增「輸出過濾泛化：grep 白名單／`-v` 同樣選擇性移除警告行（第二、三實例）」小節：泛化上一節「截斷方向」的機制——共同根因非 `tail` 本身而是「選擇性過濾依內容特徵挑行，警告行通常較短且措辭不同」，與輸出長度無關；附第二實例（`ticket create --acceptance` 被 `\|` 拆分、grep 白名單濾掉 `[WARNING]` 行）、第三實例（本條款擴充案自身 acceptance 清單被同機制拆散）與 3 行最小重現（`tail -2` 切掉唯一的 `[Error]` 行）；Action 表補齊 `tail`／grep 白名單／`grep -v` 三種過濾方式的風險與修正。主文速查條目與統一檢查清單同步改寫見 `bash-tool-usage-rules.md` 規則二「輸出過濾方向」。
 **Version**: 1.11.0 — 規則二詳細新增「截斷方向：`head` 還是 `tail`（CLI 參數驗證錯誤場景）」小節：argparse 等 CLI 驗證錯誤的 `usage:`/`error:` 前綴固定在頭、被拒的多行參數內容回吐在尾，單取 `tail` 會截掉唯一判別依據使失敗與成功回音同形；附可執行最小重現（`tail -20` 完全看不到前綴 vs `head -5` 前綴清楚可見）、實測後果（ticket CLI append-log 靜默失敗案例）與 Action（不確定輸出結構時改 `head` 或 `head`+`tail` 兩段皆取，穩定尾部結論日誌維持 `tail`）；主文速查條目與統一檢查清單見 `bash-tool-usage-rules.md` 規則二

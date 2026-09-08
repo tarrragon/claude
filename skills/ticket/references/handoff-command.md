@@ -2,13 +2,13 @@
 
 > **何時讀**：任務鏈交接時——需確認交接方向（子→父/父→子/兄弟→兄弟/絕對指向）、`source` vs `target` 指向語意、Session 結束時的使用方式，或任務鏈結束時的替代流程。**亦由此進入**：`workflow-handoff.md`〈交接流程決策樹〉節內「讀取端」段（`source` vs `target` 指向語意指標）。
 >
-> **同目錄**：`workflow-handoff.md`（交接流程的決策樹，與本檔互補：決策樹在那份、指向語意與五種情境細節在本檔）。
+> **同目錄**：`workflow-handoff.md`（交接決策樹）。
 >
 > **溯源**：本檔於本專案匯入 commit `f375ae675` 時即已存在；本機 git log 僅見後續章節 TOC 補齊，未見原始拆分點（可用 `git log --oneline -- references/handoff-command.md` 查證）。
 
-本檔章節：〈設計意圖〉〈指向語意：source vs target（W17-164）〉〈基本用法〉〈用法〉〈自動偵測行為〉〈Session 結束時的使用方式〉〈按 Ticket 狀態選擇命令〉〈任務鏈結束時的替代流程〉〈五種情境〉。
+本檔章節：〈移動方向與旗標對照〉〈指向語意：source vs target〉〈用法〉〈自動偵測行為〉〈Session 結束時的使用方式〉〈按 Ticket 狀態選擇命令〉〈任務鏈結束時的替代流程〉〈五種情境〉。
 
-## 設計意圖
+## 移動方向與旗標對照
 
 handoff 是**任務鏈內的 context 移動機制**，不是通用的「下一個任務」路由器。
 
@@ -22,7 +22,9 @@ handoff 是**任務鏈內的 context 移動機制**，不是通用的「下一�
 | 任務鏈繼續 | 無旗標 | 自動判斷方向（基於 source ticket） |
 | 絕對指向 | `--next <target-id>` | 顯式指向下 session 該做的 target ticket（W17-164 / L2-A） |
 
-## 指向語意：source vs target（W17-164）
+## 指向語意：source vs target
+
+> 來源：W17-164
 
 handoff JSON 同時保留兩個指向欄位：
 
@@ -44,11 +46,9 @@ handoff JSON 同時保留兩個指向欄位：
 
 ---
 
-## 基本用法
+## 用法
 
 任務鏈管理與 Context 交接。建立標準 `pending/*.json` 檔案，供下一個 session 的 `resume --list` 偵測。
-
-## 用法
 
 ```bash
 # 自動偵測（搜尋最近 completed 的 ticket）
@@ -72,9 +72,15 @@ handoff JSON 同時保留兩個指向欄位：
 /ticket handoff --from-worklog                    # 解析當前 active version worklog
 /ticket handoff --from-worklog --worklog-path P   # 指定 worklog 路徑
 /ticket handoff --from-worklog --dry-run          # 預演模式（只顯示將執行命令，不寫檔）
+
+# 清理已完成票的 stale pending handoff JSON（Session 結束前置檢查，見下方步驟 0）
+/ticket handoff --gc --dry-run                    # 只列出將清理的檔案，不刪除
+/ticket handoff --gc --execute                    # 實際刪除
 ```
 
-### --from-worklog 子命令（W17-083.2）
+### --from-worklog 子命令
+
+> 來源：W17-083.2
 
 修復「worklog 寫了 handoff 段但未執行 CLI」的雙軌不同步缺口。掃描 worklog 「下個 Session 接手 Context」段提取 ticket ID，逐項補建 `.claude/handoff/pending/<id>.json`。已存在的 ticket 自動 skip。
 
@@ -87,7 +93,9 @@ handoff JSON 同時保留兩個指向欄位：
 
 搭配 `stop-worklog-handoff-sync-check-hook.py`（Stop event 偵測）形成自動防護：Stop 時偵測雙軌不一致 → 警告 PM → PM 用本子命令一鍵補齊。詳見 `.claude/pm-rules/session-switching-sop.md`「Worklog 交接與 CLI handoff 同步」章節「自動化落地」小節。
 
-### --next 子旗標（W17-164 / L2-A）
+### --next 子旗標
+
+> 來源：W17-164 / L2-A
 
 以**絕對指向**語意建立 handoff，直接寫入 `target_ticket_id` 頂層欄位，讓下 session 從「該做的 ticket」（target）讀取，不依賴 source + direction 間接推導。
 
@@ -109,7 +117,7 @@ handoff JSON 同時保留兩個指向欄位：
 | auto_generated | False | True |
 | direction | `context-refresh`（固定） | 可為 to-parent / to-child / to-sibling / context-refresh（`_VALID_AUTO_DIRECTIONS`，四值） |
 
-> 上表 `--auto` 值域不含歷史值：該值僅供讀取端辨識，`--auto` 傳入會被 CLI 拒絕，詳見下方「Wave-level 交接」段。
+> 上表 `--auto` 值域不含歷史值 `next-wave`：該值僅供讀取端（`resume.py`）辨識，`--auto --direction next-wave` 會被 CLI 拒絕（`_VALID_AUTO_DIRECTIONS` 不含此值），詳見下方「Wave-level 交接」段。
 
 ## 自動偵測行為
 
@@ -127,7 +135,7 @@ handoff JSON 同時保留兩個指向欄位：
 
 commit-handoff-hook 偵測到 `git commit` 成功後，PM 會用 AskUserQuestion 確認下一步。用戶選擇「Handoff」後：
 
-0. **前置檢查（強制）**：先執行 `ticket handoff --status` 確認無殘留 pending handoff；若有殘留，執行 `ticket handoff --gc --execute` 清理後再繼續
+0. **前置檢查（強制）**：先執行 `ticket handoff --gc --dry-run` 確認是否有已完成票的 stale pending handoff JSON（GC 僅清已完成票的殘留，不動待接手者的合法 pending）；若有，執行 `ticket handoff --gc --execute` 清理後再繼續
 1. **必須**執行 `/ticket handoff` 或 `/ticket handoff <ticket-id>`
 2. **禁止**手動建立 `.claude/handoff/*.md` 交接文件
 3. 命令建立 `pending/*.json` → 下一個 session 的 `resume --list` 自動偵測
@@ -149,9 +157,14 @@ commit-handoff-hook 偵測到 `git commit` 成功後，PM 會用 AskUserQuestion
 |------|-----------|------|
 | Wave 完成，進入下一 Wave | `next-wave` | 不綁定特定 ticket |
 
-`next-wave` handoff 的 JSON 若含 `from_version`、`to_version`、`session_summary` 等 wave-level 欄位，`resume.py` 會讀取並顯示（來源 Wave／目標 Wave／Session 摘要）。**產生端不在本 skill 內**：`ticket_system` 與 `skills/ticket/hooks/` 對這三個欄位名零命中，本 skill 沒有任何程式碼會寫入它們；若由外部腳本或人工建立 `next-wave` handoff JSON，欄位名須自行對齊 `resume.py` 的讀取邏輯，`ticket_id` 則為描述性名稱（如 `v{version}-W{wave}-planning`）。
+`next-wave` handoff 的 JSON 若含 `from_version`、`to_version`、`session_summary` 等 wave-level 欄位，`resume.py` 會讀取並顯示（來源 Wave／目標 Wave／Session 摘要）。**產生端不在本 skill 內**：`ticket_system` 與 `skills/ticket/hooks/` 對這三個欄位名零命中，本 skill 沒有任何程式碼會寫入它們；若由外部腳本或人工建立 `next-wave` handoff JSON，欄位名須自行對齊 `resume.py` 的讀取邏輯，`ticket_id` 則為描述性名稱（如 `v{version}-W{wave}-planning`）。**`--auto --direction next-wave` 會被 CLI 拒絕**（`handoff.py:_VALID_AUTO_DIRECTIONS` 不含 `next-wave`）：本 skill 目前無 CLI 路徑產生 `next-wave` handoff，只能靠外部腳本或人工建立 JSON。
 
-**禁止行為**：在 `completed` ticket 使用 `--context-refresh`（此旗標僅適用 `in_progress`，會直接報錯）
+**禁止行為**：
+
+| 禁止 | 說明 |
+|------|------|
+| 在 `completed` ticket 使用 `--context-refresh` | 此旗標僅適用 `in_progress`，在 completed 上會直接報錯 |
+| 在 `in_progress` ticket 使用 `--to-sibling` / `--to-parent` | 任務未完成不可切換，CLI 會拒絕 |
 
 ---
 
@@ -165,7 +178,7 @@ commit-handoff-hook 偵測到 `git commit` 成功後，PM 會用 AskUserQuestion
 | 同 Wave 全部完成 | 無 pending/in_progress ticket | Wave 收尾流程（決策樹第八層情境 C） |
 | 跨 Wave 繼續 | 當前 Wave 完成，下個 Wave 有任務 | `/ticket`（列出下一 Wave 待辦） |
 
-**completed ticket 不 handoff 到無關任務的理由**：handoff 設計為**任務鏈內的 context 交接**（父→子、子→父、兄弟間），不是通用的「下一個任務」路由器。任務鏈結束後，應回到 `/ticket` 入口重新選擇任務。
+completed ticket 不 handoff 到無關任務：理由見〈移動方向與旗標對照〉。任務鏈結束後，應回到 `/ticket` 入口重新選擇任務。
 
 **快速參考**：
 
@@ -190,12 +203,5 @@ completed ticket，想繼續工作？
 | 4    | 兄弟可選 | 子完成但有平行任務待處理 |
 | 5    | 等待     | 有依賴未滿足             |
 
-> **`--next`（絕對指向）不在此表**：此表列的是任務鏈狀態自動判斷方向的觸發條件；`--next` 為顯式旗標指定下 session 該做的 target ticket，不依賴任務鏈狀態推導。語意見上方〈設計意圖〉表第五列與〈--next 子旗標〉節。
+> **`--next`（絕對指向）不在此表**：此表列的是任務鏈狀態自動判斷方向的觸發條件；`--next` 為顯式旗標指定下 session 該做的 target ticket，不依賴任務鏈狀態推導。語意見上方〈移動方向與旗標對照〉表第五列與〈--next 子旗標〉節。
 
----
-
-**Last Updated**: 2026-09-07
-**Version**: 1.3.0 — 檔頭「亦由此進入」改指實際節內段落（〈交接流程決策樹〉節內「讀取端」段）；〈任務鏈結束時的替代流程〉粗體段標問句改直述；〈五種情境〉表補 `--next`（絕對指向）歸屬說明
-**Version**: 1.2.0 — 設計意圖段補「設計原則」引用指向 `handoff-design-principle-methodology.md`（W17-175 落地：原則層 / 機制層 / 命令層三層分離）
-**Version**: 1.1.0 — 同步 W17-164 落地：新增「指向語意：source vs target」章節（含 target_ticket_id 欄位 + resolve_target 優先序）、`--next` 子旗標說明（W17-164 / L2-A）、`--next` vs `--auto` 對比表
-**Source**: 0.18.0-W17-175 / 0.18.0-W17-164

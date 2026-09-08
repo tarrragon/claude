@@ -224,6 +224,10 @@
           {
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/skill-description-length-check-hook.py"
           }
         ]
       },
@@ -281,6 +285,10 @@
           {
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/skill-description-length-check-hook.py"
           }
         ]
       },
@@ -298,6 +306,10 @@
           {
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/memory-write-guard-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/skill-description-length-check-hook.py"
           }
         ]
       },
@@ -513,6 +525,10 @@
           {
             "type": "command",
             "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/file-size-guardian-hook.py"
+          },
+          {
+            "type": "command",
+            "command": "uv run --quiet $CLAUDE_PROJECT_DIR/.claude/hooks/skill-body-size-check-hook.py"
           },
           {
             "type": "command",

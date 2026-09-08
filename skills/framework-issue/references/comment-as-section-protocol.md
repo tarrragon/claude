@@ -26,6 +26,7 @@ framework issue 的一般協作寫法。適用於「問題的分析與方案 con
 | `observe` | 附加觀測 comment（實測、反證、疑慮），不需 owner、不需協商 | 任何 session，隨時 |
 | `show` | 以 body 的區段索引為起點輸出，區分「當前結論區段」與「觀測流」；每則區段列附 owner（從首行標記回推） | 任何 session |
 | `check` | 輸出三項警訊（見下）：當前結論時效、comment 數閾值、索引一致性 | 任何 session |
+| `todo` | 唯讀：跨 open issue 聚合全部「待辦與來源*」區段的表格列（見下方〈待辦表欄位與列舉〉），預設掃本 consumer 擁有的 open issue，`--all`／`--issue N` 可改變範圍；支援 `--status`／`--stage`／`--priority`／`--consumer` 篩選與 `--json` | 任何 session |
 
 **`init` 兩階段順序**：comment id 在區段建立後才存在，索引無法在建立時一併寫入，故 `init` 必為「查重 → （無 `--force` 時先掃描既有區段 comment，已有則拒絕）→ 建區段 comment → 取得 id → 讀 body 與既有索引列合併 → PATCH 一次」。body 其後不再由工具改寫，`update` 只動區段 comment。區段 comment 全數建立成功即把 `(issue number, owner, updated_at)` 落地到本地擁有登記檔 `.claude/state/framework-issue-owned.json`（per-worktree、不入版控），不等索引回填；回填失敗時登記仍成立，供 SessionStart 檢查省去搜尋往返。`init` 原本以本次區段清單整段覆寫索引，第二個 session 對已 `init` 過的 issue 再次執行會使第一個 session 的既有區段從 `show` 消失（見 #81 事故）；現改為與既有索引列合併，且預設拒絕已有區段的 issue（避免誤用），`--force` 才會略過拒絕檢查並執行合併。
 
@@ -67,6 +68,13 @@ python3 .claude/skills/framework-issue/scripts/section_comment.py observe <issue
 python3 .claude/skills/framework-issue/scripts/section_comment.py show <issue-ref>
 python3 .claude/skills/framework-issue/scripts/section_comment.py check <issue-ref> \
   [--comment-threshold 30] [--stale-days 7]
+
+# todo：唯讀，跨 issue 聚合「待辦與來源*」表格列；範圍三選一（預設本 consumer
+# 擁有的 open issue，缺登記檔時退回 owner 前綴推導），--all／--issue 互斥
+python3 .claude/skills/framework-issue/scripts/section_comment.py todo \
+  [--all | --issue <N>] \
+  [--status <狀態值>] [--stage <階段值>] [--priority <優先級值>] \
+  [--consumer <consumer前綴>] [--json]
 ```
 
 `<issue-ref>` 支援 `owner/repo#N`（限框架 repo，前綴不符即 exit 3）、`#N`、純數字三種形態；gh CLI 位置參數只吃純數字或 URL，工具內部先正規化。
@@ -105,6 +113,32 @@ body 的區段索引表格式：
 ```
 
 **owner 識別格式**：`<專案目錄 kebab-case>-<session 序號>`，如 `flutter-balance-77`。值取 `ListAgents` 輸出首行「This session is <name>」的名稱，即其他 session 定址本 session 用的字串；不自行編號、不用代理人名。序號段記錄的是「哪一次 session 寫的」，不是「現在該找誰」：session 結束後該名稱不再可定址，擁有關係實質屬於專案（前綴段），有事以 `observe` 留在 issue 上，不以訊息找 owner。SessionStart 的擁有 issue 檢查在登記檔缺失時以專案目錄名推導前綴粗篩，`flutter_balance-pm` 這類形態會被漏檢。`init`／`add`／`transfer-owner` 三者在 CLI 層即以 `^[a-z0-9]+(-[a-z0-9]+)*-[0-9]+$` 驗證此格式，不合法（如代理人名稱 `framework-issue-curator`、含底線的 `flutter_balance-pm`）一律 exit 3。
+
+### 待辦表欄位與列舉
+
+區段名以「待辦與來源」開頭者（`ticket-intake.md` 的「待辦與來源（<consumer>）」慣例），內容首張 markdown 表格受 `init`／`add`／`update` 寫入端驗證；`todo` 則以同一 schema 讀取聚合。缺必要欄位或「狀態」「階段」列舉值不合法，寫入端 exit 3 並印合法值集合與違規列；`todo` 對表頭不符的區段只印警告並跳過，不中止其餘聚合。
+
+必要欄位（缺任一即 exit 3）：`來源票`、`做什麼`、`acceptance 條數`、`優先級`、`階段`、`狀態`。`型別` 為選填欄，存在時須緊接在 `來源票` 之後（非附加於表尾），此為既有 issue 實跑觀測到的欄位順序，非任意排列皆合法：
+
+```markdown
+| 來源票 | 做什麼 | acceptance 條數 | 優先級 | 階段 | 狀態 |
+|--------|--------|----------------|--------|------|------|
+| <ticket-id> | <一句話描述> | <整數> | P0~P3 | 本版 | 待裁票 |
+```
+
+或帶選填 `型別` 欄：
+
+```markdown
+| 來源票 | 型別 | 做什麼 | acceptance 條數 | 優先級 | 階段 | 狀態 |
+|--------|------|--------|----------------|--------|------|------|
+| <ticket-id> | IMP | <一句話描述> | <整數> | P0~P3 | 本版 | 待裁票 |
+```
+
+「狀態」列舉（5 值）：`待裁票`、`已裁票`、`進行中`、`完成`、`不執行`。
+
+「階段」列舉（4 值）：`可立即執行`、`本版`、`下版`、`待條件`。
+
+兩組列舉為寫入端起生效日的權威值，不追溯驗證既有 comment 內容——唯讀掃描曾實測既有表格「狀態」欄逾 12 種自由文字、「階段」欄逾 8 種，`todo` 的結構檢查（僅比對表頭）仍可正常聚合這些既有列，篩選旗標（`--status`／`--stage`）對這些舊值只是查無結果，不會出錯。
 
 ## init 前查重：三種關係處置
 

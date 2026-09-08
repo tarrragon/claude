@@ -98,8 +98,7 @@ PM 執行 `ticket track set-acceptance 0.19.0-W1-002.2 --check 1 --check 2`，�
 
 ## 相關文件
 
-- `.claude/skills/ticket/SKILL.md`「驗收條件操作詳解」章節
-- `.claude/skills/ticket/references/track-command.md`
+- `.claude/skills/ticket/references/track-command.md`〈驗收條件操作詳解〉章節（原指向 SKILL.md 同名章節，該節從未在 SKILL.md 存在，舊版僅有指標句且已隨拆分刪除，內容現住此節）
 - `.claude/skills/ticket/ticket_system/commands/track_acceptance.py`（實作位置，2026-08-22 文件複查已驗證）
 
 ---

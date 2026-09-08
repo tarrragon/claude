@@ -1,12 +1,12 @@
 # 執行流程決策樹
 
-此決策樹描述 Ticket 執行、更新、批量操作和完成判斷的完整流程。
+任務已認領，接下來該怎麼操作——完成？更新欄位？批量處理？用本樹判斷。
 
-> **何時讀**：判斷 Ticket 執行、更新、批量操作或完成路徑時——對應 `/ticket track` 系列 UPDATE 操作（`claim`/`complete`/`release`/`set-*`/`append-log`/`dispatch`/`batch-claim`/`batch-complete` 等）與完成判斷四步驟驗證、完成後同步提醒。**亦由此進入**：無（`grep -rn` 排除 `SKILL.md` 路由表本檔自身列、`track-command.md`／`ticket-lifecycle-details.md`／`architecture.md` 同目錄列後零命中，目前無其他檔案的步驟把讀者送到本檔）。
+> **何時讀**：Ticket 已認領後的執行、更新、批量操作或完成路徑，對應 `/ticket track` 系列 UPDATE 操作（`claim`/`complete`/`release`/`set-*`/`append-log`/`dispatch`/`batch-claim`/`batch-complete` 等）與完成判斷四步驟驗證、完成後同步提醒時查閱。**亦由此進入**：`workflow-create.md` 首段引言句（任務已存在、正在做時，從該檔判斷送至本檔）。
 >
-> **同目錄**：`track-command.md`（UPDATE 操作對應的 CLI 子命令細節，決策樹在本檔、細節在那份）、`workflow-query.md`（同屬 `track` 命令的 READ 操作決策樹，與本檔互補）、`ticket-lifecycle-details.md`（完成判斷所需的驗收條件 4V 格式與 acceptance-gate-hook 細節）、`architecture.md`（系統模型與測試路徑推導）。
+> **同目錄**：`track-command.md`（`claim`/`complete`/`release`/`set-*` 等子命令的旗標與輸出範例）、`workflow-query.md`（READ 操作決策樹）、`ticket-lifecycle-details.md`（驗收條件 4V 格式與 acceptance-gate-hook 細節）、`architecture.md`（系統模型與測試路徑推導）。
 >
-> **溯源**：本檔於本專案匯入 commit `f375ae675` 時即已存在，本機 git log 對本檔僅見這一筆，未見後續修改或外移點（可用 `git log --oneline -- references/workflow-execute.md` 查證）。
+> **溯源**：匯入時已存在，無拆分點。
 
 本檔章節：〈執行流程決策樹〉〈更新操作決策樹〉〈批量操作決策樹〉〈完成判斷決策樹〉〈完成後同步提醒〉。
 
@@ -42,11 +42,11 @@ v                  v
                                     [更新操作]      [回到執行]
 ```
 
-**覆蓋指令**：
+**本樹涵蓋的命令**：
 
-- [x] `/ticket track claim <id>` - 認領 Ticket
-- [x] `/ticket track complete <id>` - 完成 Ticket
-- [x] `/ticket track release <id>` - 釋放 Ticket
+- `/ticket track claim <id>` - 認領 Ticket
+- `/ticket track complete <id> --as <agent>` - 完成 Ticket（`--as` 未提供即 deny，exit 1，見 track-command.md）
+- `/ticket track release <id>` - 釋放 Ticket
 
 ## 更新操作決策樹
 
@@ -66,13 +66,13 @@ why|how}                           <id> <index>    "Section" "Content"
 <id> <value>
 ```
 
-**覆蓋指令**：
+**本樹涵蓋的命令**：
 
-- [x] `/ticket track set-who|what|when|where|why|how <id> <value>` - 設定 5W1H
-- [x] `/ticket track phase <id> <phase> <agent>` - 更新 Phase
-- [x] `/ticket track check-acceptance <id> <index>` - 勾選驗收條件
-- [x] `/ticket track append-log <id> --section ...` - 追加執行日誌
-- [x] `/ticket track add-child <parent> <child>` - 添加子任務
+- `/ticket track set-who|what|when|where|why|how <id> <value>` - 設定 5W1H
+- `/ticket track phase <id> <phase> <agent>` - 更新 Phase
+- `/ticket track check-acceptance <id> <index>` - 勾選驗收條件
+- `/ticket track append-log <id> --section ...` - 追加執行日誌
+- `/ticket track add-child <parent> <child>` - 添加子任務
 
 ## 批量操作決策樹
 
@@ -91,10 +91,10 @@ batch-claim   batch-complete
 "id1,id2,id3" "id1,id2,id3"
 ```
 
-**覆蓋指令**：
+**本樹涵蓋的命令**：
 
-- [x] `/ticket track batch-claim "ids"` - 批量認領
-- [x] `/ticket track batch-complete "ids"` - 批量完成
+- `/ticket track batch-claim "ids"` - 批量認領
+- `/ticket track batch-complete "ids"` - 批量完成
 
 ## 完成判斷決策樹
 
@@ -120,8 +120,8 @@ exit 1      │                     │
                            │                       │
                            v                       v
                       [Error]               ┌─ 驗收條件全完成? ─┐
-                      阻止                  │                   │
-                      exit 1                否                  是
+                      阻止（pending/blocked） │                   │
+                      exit 2                否                  是
                                             │                   │
                                             v                   v
                                        [Error]            [完成判斷]
@@ -143,7 +143,10 @@ v             v
 否                是
 │                 │
 v                 v
-[交接流程]        [任務完成]
+[Error]           [任務完成]
+阻擋，先完成       │
+children          │
+（--force 可旁路，exit 1）
 ```
 
 ## 完成後同步提醒

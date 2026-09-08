@@ -33,12 +33,17 @@ if __name__ == "__main__":
 
 
 import argparse
+import contextlib
+import io
 import re
 import sys
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Tuple
 
+from ticket_system.commands.track_dispatch_readiness import execute_dispatch_readiness
+from ticket_system.commands.track_dispatch_validate import execute_dispatch_validate
 from ticket_system.lib.dispatch_skeleton import (
+    DRY_RUN_WATERMARK,
     HOOK_TICKET_REMINDER,
     SKELETON_TEMPLATE_NORMAL,
     SKELETON_TEMPLATE_REVIEW,
@@ -212,6 +217,24 @@ def _ensure_commit_section(body: str, content: str) -> str:
     return body[:section_start] + updated_section + body[section_end:]
 
 
+def _run_precheck_exit_codes(ticket_id: str, version: str) -> Tuple[int, int]:
+    """派發前內部呼叫 dispatch-readiness／dispatch-validate，取其 exit code
+    供落派發日誌（3-F M-5：使〈派發前檢查順序〉在票面留下痕跡，PM 不需
+    另跑）。兩命令自身的診斷輸出以 devnull 靜音，僅取 exit code——完整
+    診斷內容 PM 仍可用 `ticket track dispatch-readiness` /
+    `dispatch-validate` 另行查看。
+
+    兩命令皆為唯讀診斷（不修改票、不觸發 file_lock），故可在
+    `execute_dispatch` 既有的 `with file_lock(ticket_path)` 區塊內安全
+    呼叫，不構成鎖重入。
+    """
+    precheck_args = argparse.Namespace(ticket_id=ticket_id)
+    with contextlib.redirect_stdout(io.StringIO()):
+        readiness_code = execute_dispatch_readiness(precheck_args, version)
+        validate_code = execute_dispatch_validate(precheck_args, version)
+    return readiness_code, validate_code
+
+
 def _directory_declaration_block_message(ticket: dict, ticket_id: str, version: str) -> Optional[str]:
     """目錄級寫入宣告硬擋判定（PC-BAL-040）。
 
@@ -295,10 +318,16 @@ def execute_dispatch(args: argparse.Namespace, version: str) -> int:
     commit_policy="agent" 時冪等寫入/更新「### Commit 規範」固定章節（骨架
     瘦身落地：骨架本體只留短版指標句，全文由此章節承載） + 輸出骨架 prompt。
 
-    `--dry-run` 時完全略過票面寫入（不落盤、不觸發 file_lock），僅唯讀確認
-    票存在；骨架輸出與非 dry-run 完全相同（`_build_skeleton` 不依賴票面
-    寫入結果），供 PM 量測骨架行數或預覽 prompt 時可自由重複執行，不再需要
-    事後 checkout 還原票面（2026-09-02 新增）。
+    `--dry-run` 時完全略過票面寫入（不落盤、不觸發 file_lock、不呼叫派發前
+    檢查），僅唯讀確認票存在；骨架輸出與非 dry-run 共用同一份
+    `_build_skeleton` 組裝結果，差異僅在輸出首行前綴的浮水印
+    （`DRY_RUN_WATERMARK`，3-F M-7）——供 PM 量測骨架行數或預覽 prompt 時
+    可自由重複執行，不再需要事後 checkout 還原票面（2026-09-02 新增），且
+    貼入 prompt 後仍可辨識是否曾落票。
+
+    非 dry-run 落票時，一律（不論是否帶 `--note`）內部呼叫
+    dispatch-readiness／dispatch-validate 並將兩者 exit code 記入派發日誌
+    （3-F M-5），使〈派發前檢查順序〉留下痕跡，PM 不需另跑。
 
     Args:
         args: 需含 ticket_id / as_agent / note / kind / task_summary /
@@ -313,9 +342,9 @@ def execute_dispatch(args: argparse.Namespace, version: str) -> int:
     dry_run = getattr(args, "dry_run", False)
     needs_commit_section = args.kind == "normal" and commit_policy == "agent"
 
-    if dry_run or not (args.note or needs_commit_section):
-        # --dry-run，或無 note 且非 agent commit 情境：僅唯讀確認票存在，
-        # 避免對不存在的票輸出骨架造成誤派發；不落盤。
+    if dry_run:
+        # --dry-run：僅唯讀確認票存在，避免對不存在的票輸出骨架造成誤
+        # 派發；不落盤、不呼叫派發前檢查。
         ticket = load_ticket(version, args.ticket_id)
         if not ticket:
             print(format_error(ErrorMessages.TICKET_NOT_FOUND, ticket_id=args.ticket_id))
@@ -332,9 +361,12 @@ def execute_dispatch(args: argparse.Namespace, version: str) -> int:
                 print(format_error(ErrorMessages.BODY_CONTENT_NOT_FOUND, ticket_id=args.ticket_id))
                 return 1
 
-            updated_body = body
+            readiness_code, validate_code = _run_precheck_exit_codes(args.ticket_id, version)
+            precheck_note = f"readiness={readiness_code} validate={validate_code}"
             if args.note:
-                updated_body = _append_dispatch_note(updated_body, args.note)
+                precheck_note = f"{args.note}｜{precheck_note}"
+
+            updated_body = _append_dispatch_note(body, precheck_note)
             if needs_commit_section:
                 updated_body = _ensure_commit_section(updated_body, STAGING_PHRASE_AGENT)
 
@@ -350,7 +382,10 @@ def execute_dispatch(args: argparse.Namespace, version: str) -> int:
 
     args._touches_hook_scope = _touches_hook_protection_scope(ticket)
 
-    print(_build_skeleton(args))
+    skeleton = _build_skeleton(args)
+    if dry_run:
+        skeleton = f"{DRY_RUN_WATERMARK}\n{skeleton}"
+    print(skeleton)
     return 0
 
 

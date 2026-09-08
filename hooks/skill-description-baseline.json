@@ -1,0 +1,28 @@
+{
+  "generated_at": "2026-09-08T11:14:53",
+  "threshold": 250,
+  "skills": {
+    "business-analysis": 637,
+    "cc-release-impact-review": 266,
+    "chrome-extension-mcp-debug": 571,
+    "compositional-writing": 832,
+    "continuous-learning": 793,
+    "dart-provider-architecture": 401,
+    "dart-style-guardian": 260,
+    "data-extraction": 363,
+    "doc": 460,
+    "doc-flow": 253,
+    "frontend-with-playwright": 700,
+    "impeccable": 895,
+    "neurodivergent-output": 759,
+    "project-init": 360,
+    "requirement-protocol": 325,
+    "saas-tech-selection": 471,
+    "startup-check": 279,
+    "tdd": 630,
+    "tech-debt-capture": 318,
+    "ux-design-evaluation": 989,
+    "worktree": 283,
+    "wrap-decision": 350
+  }
+}

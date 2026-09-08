@@ -108,7 +108,7 @@ W17-175 ticket why 記載：
 ## 相關文件
 
 - `.claude/skills/ticket/references/handoff-command.md` — handoff CLI 機制層說明（W17-164 落地細節）
-- `.claude/skills/ticket/SKILL.md`「handoff - 任務鏈管理與 Context 交接」章節 — 命令層使用指引
+- `.claude/skills/ticket/references/handoff-command.md`〈設計意圖〉 — 命令層使用指引（原指向 SKILL.md「handoff - 任務鏈管理與 Context 交接」章節，該 H3 已隨拆分移除，設計原則句現住此節）
 - `.claude/methodologies/atomic-ticket-methodology.md`「任務鏈核心哲學」章節 — handoff 在任務鏈中的位置
 - `.claude/rules/core/document-format-rules.md` — handoff JSON 格式規範（檔案命名、frontmatter）
 

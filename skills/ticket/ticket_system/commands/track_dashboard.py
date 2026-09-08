@@ -56,6 +56,7 @@ from ticket_system.commands.track_runqueue import (
 )
 from ticket_system.lib import lease
 from ticket_system.lib.constants import TERMINAL_STATUSES
+from ticket_system.lib.handoff_utils import resolve_target
 from ticket_system.lib.staleness import compute_stale_minutes
 from ticket_system.lib.ticket_loader import list_tickets
 from ticket_system.lib.ticket_ops import resolve_id_from_ref
@@ -212,30 +213,41 @@ def load_handoff_targets(
     tickets: List[Dict],
     handoff_info: Optional[Dict[str, Dict]] = None,
 ) -> List[Dict[str, Any]]:
-    """收集 handoff target_ticket_id 指向的票，獨立於 Ready 的 unblocked-pending 過濾。
+    """收集 handoff 指向的 target 票，獨立於 Ready 的 unblocked-pending 過濾。
 
     0.2.1-W3-220：來源票 0.2.1-W3-178 實測，target 票若為 in_progress 或
     completed 會完全不出現在 Ready 章節（Ready 只收 unblocked pending）。
     本函式不套用該過濾，故 target 票任何 status 皆顯示，交接目標不再被埋。
 
-    讀 `_get_pending_handoff_info()` 修復後（同時以 target_ticket_id 建索引）
-    的結果：key 等於 data 的 target_ticket_id 才是「target 專屬項」，
-    避免誤取以 source ticket_id 為 key 的項目（該項 target_ticket_id 多半
-    指向另一張票，非自身）。
+    target 解析改用 `handoff_utils.resolve_target()`（優先讀頂層
+    target_ticket_id，無則從 direction 後綴 fallback 解析），與
+    `resume --list` 同一解析來源。僅讀頂層欄位會對互動式 handoff
+    （`_create_handoff_file_internal` 只寫 direction 後綴、不寫頂層
+    target_ticket_id）漏判為 0 筆，與 resume --list 判定分岔。
+
+    `handoff_info` 的 value 可能因 `_get_pending_handoff_info()` 的 source-key
+    與 target-key 兩輪登錄而重複出現同一份 data，故以來源 ticket_id 去重，
+    避免同一筆 handoff 記錄被處理兩次。
 
     按 id 排序，回傳穩定順序。
     """
     handoff_info = handoff_info or {}
     ticket_map = {t.get("id"): t for t in tickets if t.get("id")}
-    seen: set = set()
+    seen_source: set = set()
+    seen_target: set = set()
     result: List[Dict[str, Any]] = []
-    for key, data in handoff_info.items():
+    for data in handoff_info.values():
         if not isinstance(data, dict):
             continue
-        target_id = data.get("target_ticket_id")
-        if not target_id or target_id != key or target_id in seen:
+        source_id = data.get("ticket_id")
+        if source_id:
+            if source_id in seen_source:
+                continue
+            seen_source.add(source_id)
+        target_id = resolve_target(data)
+        if not target_id or target_id in seen_target:
             continue
-        seen.add(target_id)
+        seen_target.add(target_id)
         ticket = ticket_map.get(target_id)
         readiness = _compute_readiness(ticket, handoff_info) if ticket else None
         result.append({
@@ -501,12 +513,35 @@ def dashboard_main(args: argparse.Namespace, version: Optional[str]) -> int:
     return 0
 
 
+def _get_handoff_gc_logger() -> Optional[Any]:
+    """Lazy 載入 `.claude/lib/hook_logging.py` 的 setup_hook_logging，供
+    `_auto_gc_stale_handoffs` 寫入持久化日誌（2026-09 補齊可觀測性）。
+
+    透過 ticket_system.lib.claude_lib_loader 共用實作定位 `.claude/lib/`
+    （既有五處複本收斂點，見該模組 docstring）。找不到 `.claude/lib/` 或
+    載入失敗時回傳 None，呼叫端降級為僅寫 stderr（graceful degrade，
+    不影響 dashboard 正常輸出）。
+    """
+    try:
+        from ticket_system.lib.claude_lib_loader import load_claude_lib
+
+        hook_logging = load_claude_lib("hook_logging")
+        if hook_logging is None:
+            return None
+        return hook_logging.setup_hook_logging("handoff-gc")
+    except Exception:
+        return None
+
+
 def _auto_gc_stale_handoffs() -> None:
     """自動清理已完成 ticket 的 stale handoff（W5-005.14）。
 
-    在 dashboard 載入前執行；清理結果寫 stderr（非靜默）。
-    失敗時 graceful degrade（不影響 dashboard 正常輸出）。
+    在 dashboard 載入前執行；清理結果寫 stderr + hook-logs INFO（2026-09
+    補齊：原僅寫 stderr、失敗路徑完全靜默，違反可觀測性規則 4）。
+    失敗時 graceful degrade（不影響 dashboard 正常輸出），但失敗原因寫
+    stderr + hook-logs WARNING，不再靜默吞掉。
     """
+    logger = _get_handoff_gc_logger()
     try:
         from ticket_system.commands.handoff_gc import _collect_stale_handoffs
         from ticket_system.lib.constants import HANDOFF_DIR, HANDOFF_ARCHIVE_SUBDIR
@@ -526,11 +561,19 @@ def _auto_gc_stale_handoffs() -> None:
         for file_path, ticket_id, reason in stale:
             dest = archive_dir / file_path.name
             file_path.rename(dest)
-            sys.stderr.write(
-                f"[handoff-gc] 已歸檔 stale handoff: {file_path.name} ({reason})\n"
+            message = (
+                f"已歸檔 stale handoff: {file_path.name} "
+                f"(ticket={ticket_id}, reason={reason}, "
+                f"src={file_path}, dest={dest})"
             )
-    except Exception:
-        pass
+            sys.stderr.write(f"[handoff-gc] {message}\n")
+            if logger:
+                logger.info(message)
+    except Exception as exc:
+        message = f"_auto_gc_stale_handoffs 失敗: {exc}"
+        sys.stderr.write(f"[handoff-gc] {message}\n")
+        if logger:
+            logger.warning(message)
 
 
 # execute alias 對齊 track.py _create_command_handlers 命名慣例

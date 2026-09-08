@@ -248,7 +248,7 @@ def write_local_version(claude_dir: Path, new_version: str) -> tuple[bool, str]:
 
     本地 .claude/VERSION 為 git tracked 檔，push 只 bump 遠端版本；若不回寫，
     本地 VERSION 會停留於推送前版本直到下次 sync-pull。fix_version.py 省略
-    --version 時依 docstring 契約讀取本地 VERSION 視為「已同步版本」，缺此回寫
+    --version 時依 docstring 契約把本地 VERSION 當成已同步至框架 repo 的版本號，缺此回寫
     會令其註記過期版本（W3-050 收尾實測：推送 v2.24.12 後本地仍讀到 2.24.1）。
 
     寫入失敗（如權限問題）不中止整個 push 流程——遠端 push 此時已成功，本步驟
@@ -372,7 +372,7 @@ def ensure_committed(project_root: Path) -> bool:
         project_root: 專案根目錄（含 .claude/ 與 .git/）
 
     傳回:
-        bool: True 表示無「本應被推送卻尚未 commit」的變更，可安全 push
+        bool: True 表示無本應被推送卻尚未 commit 的變更，可安全 push
     """
     entries = _list_blocking_entries(project_root)
     if entries is None:
@@ -1834,8 +1834,9 @@ def run_dry_run() -> None:
 
 
 # staging 樹（已 strip .claude/ 前綴）內框架核心套件的相對路徑。
-# 此套件被全 consumer 直接 import 執行，是「機械缺陷（import 殘留）零審查直推致
-# 下游崩潰」最高風險的單點，故作為 push 前 smoke test 的目標。
+# 此套件被全 consumer 直接 import 執行，是不完整重構留下的 import 殘留零審查傳染
+# 到全部 consumer 這類事故（見 PC-V1-009）風險最高的單點，故作為 push 前
+# smoke test 的目標。
 FRAMEWORK_CORE_PACKAGE_DIR = Path("skills") / "ticket" / "ticket_system"
 FRAMEWORK_CORE_PACKAGE_NAME = "ticket_system"
 
@@ -1977,7 +1978,7 @@ def run_framework_smoke_test(staging_dir: Path) -> None:
 # 重編 artifact（含 lineage 的 181/182）一併推上 canonical 上游，製造撞號 + 重複
 # mess（GitHub API 實證：上游 PC-177×2 / 178×2 / 181 / 182 共 6 檔）。
 #
-# 本模組補三規則，方向與 PC-APP-002「於 sync-push 由框架賦予 canonical 編號」一致：
+# 本模組補三規則，方向與 PC-APP-002「於 sync-push 時由框架賦予 canonical 編號」一致：
 #   1. 辨識 pull 重編 artifact（含 lineage 標記）不外推——canonical 版已在上游。
 #   2. 本地原生 bare PC 若號已被上游不同 slug 佔用 → 賦 next-available canonical
 #      號、回寫本地 + 注入 lineage 標記（與 pull 重編對稱）。
@@ -2488,7 +2489,7 @@ def main() -> None:
     claude_dir = project_root / ".claude"
 
     # 2. commit-first 檢查（M1 根因解，0.19.1-W1-030）：push 取 git tracked 樹（HEAD），
-    # 未 commit 的「會被推送的」變更不會反映到遠端。clean-check 改用 git status
+    # tracked 檔案未 commit 的變更不會進入推送內容。clean-check 改用 git status
     # --porcelain 全狀態 + should_exclude 過濾：local-only / 憑證 untracked 檔
     # （如 .zhtw-mcp-skip）不再誤判為未提交變更而 abort（缺陷 T），但真正未 commit
     # 的 tracked 變更與非 local-only untracked 框架檔仍被攔截。

@@ -157,6 +157,7 @@ EXIT_SUCCESS = 0
 # W3-039: STOP_FLAG_FILE / STOP_FLAG_EXPIRY_SECONDS / STATE_FILE_TEMPLATE
 # 隨 session 管理 domain 一併移至 handoff_session_mgmt 模組。
 PENDING_DIR_NAME = ".claude/handoff/pending"
+ARCHIVE_DIR_NAME = ".claude/handoff/archive"  # stale handoff GC 目標：歸檔而非刪除
 LOG_DIR_NAME = ".claude/hook-logs/handoff-auto-resume"
 LOG_FILE_PREFIX = "stop-hook"
 RECENT_TASK_THRESHOLD_MINUTES = 30  # 30 分鐘內視為「最近任務」（可能有代理人正在執行）
@@ -419,6 +420,46 @@ def has_background_agents(input_data: Dict[str, Any], logger) -> bool:
     return has_active
 
 
+def _archive_stale_handoff_json(
+    file_path: Path,
+    project_root: Path,
+    logger,
+    context: str,
+) -> None:
+    """歸檔 stale handoff pending JSON 至 archive/，取代直接刪除。
+
+    GC 統一：與 dashboard 的 auto-GC（track_dashboard._auto_gc_stale_handoffs）
+    及 CLI `handoff-gc --execute`（handoff_gc.execute_gc）行為一致，改用
+    rename 歸檔，讓刪除前的 stale handoff 保留可事後審計的痕跡。
+
+    歸檔目的地已存在同名檔時，於檔名加時間戳微秒後綴避免覆蓋，並記錄於日誌。
+
+    Args:
+        file_path: 待歸檔的 pending JSON 路徑
+        project_root: 專案根目錄
+        logger: 日誌記錄器
+        context: 併入日誌訊息的上下文描述（呼叫端組出的 ticket_id/direction/reason）
+    """
+    archive_dir = project_root / ARCHIVE_DIR_NAME
+    try:
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        dest = archive_dir / file_path.name
+        if dest.exists():
+            suffix_ts = datetime.now().strftime("%Y%m%dT%H%M%S%f")
+            dest = archive_dir / f"{file_path.stem}.{suffix_ts}{file_path.suffix}"
+            logger.info(
+                f"歸檔目標同名檔已存在，加時間戳後綴避免覆蓋: "
+                f"{file_path.name} -> {dest.name}"
+            )
+        file_path.rename(dest)
+        logger.info(
+            f"GC: 歸檔 stale handoff pending JSON "
+            f"(來源={file_path}, 目標={dest}, {context})"
+        )
+    except Exception as e:
+        logger.warning(f"歸檔 stale handoff JSON 失敗 ({file_path.name}): {e}")
+
+
 def scan_pending_handoff_tasks(
     project_root: Path,
     logger,
@@ -517,14 +558,13 @@ def scan_pending_handoff_tasks(
                     # 對齊既有 GC 行為：刪除檔案不計入 pending_tasks
                     is_stale, stale_reason = is_handoff_stale(data, project_root)
                     if is_stale:
-                        try:
-                            file_path.unlink()
-                            logger.info(
-                                f"GC: 刪除 stale handoff pending JSON "
-                                f"({ticket_id}, direction={direction}, reason={stale_reason})"
-                            )
-                        except Exception as e:
-                            logger.warning(f"刪除 stale handoff JSON 失敗 ({file_path.name}): {e}")
+                        _archive_stale_handoff_json(
+                            file_path, project_root, logger,
+                            context=(
+                                f"ticket_id={ticket_id}, direction={direction}, "
+                                f"reason={stale_reason}"
+                            ),
+                        )
                         continue
 
                     # 檢查對應 Ticket 是否已完成（對象為 target，
@@ -542,11 +582,13 @@ def scan_pending_handoff_tasks(
                                 f"({target_id}, direction={direction})"
                             )
                         else:
-                            # 刪除已完成 Ticket 的 stale pending JSON
-                            file_path.unlink()
-                            logger.info(
-                                f"GC: 刪除已完成 Ticket 的 pending JSON "
-                                f"({target_id}, direction={direction})"
+                            # 歸檔已完成 Ticket 的 stale pending JSON（非刪除）
+                            _archive_stale_handoff_json(
+                                file_path, project_root, logger,
+                                context=(
+                                    f"target_id={target_id}, direction={direction}, "
+                                    f"reason=已完成 Ticket 的 pending JSON"
+                                ),
                             )
                     else:
                         # Ticket 未完成，根據 direction 類型判斷分類

@@ -100,21 +100,17 @@ ANA 結論落地為 IMP 派發前，若任一條件成立，必須執行假設�
 
 ## 派發後清點（強制，來源 PC-050）
 
-> **核心原則**：派發完成後，立刻用 `dispatch-active.json` 確認派發記錄。這是防止「忘記派了幾個」的唯一可靠方式。
+> **核心原則**：派發完成後，立刻用 `ticket track dispatch-check` 確認派發記錄。這是防止「忘記派了幾個」的唯一可靠方式。
 
 **每次派發後**（不論單一或並行）：
 
 ```bash
-cat .claude/dispatch-active.json | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-print('{} 個活躍派發'.format(len(d)))
-for x in d:
-    print('  - {}'.format(x.get('agent_description', '?')))
-"
+ticket track dispatch-check
 ```
 
-**PM 必須確認**：顯示的數量與自己派發的數量一致。
+`[PASS]` 代表無活躍派發；`[WARN]` 代表有 N 個活躍派發並逐筆列出 `agent_description` / `ticket_id` / `dispatched_at`。完整輸出格式與 exit code（0/1/2）見 `.claude/skills/ticket/references/track-command.md`〈track dispatch-check 子命令〉。
+
+**PM 必須確認**：`[WARN]` 列出的數量與自己派發的數量一致。
 
 ---
 

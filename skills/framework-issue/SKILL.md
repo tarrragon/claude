@@ -2,7 +2,7 @@
 name: framework-issue
 description: "Manages framework issues on tarrragon/claude: dedup, create, comment-as-section init/update/observe/check, fix-matrix close, folding tickets into issues. Use for: framework issue, 框架 issue, canonical issue, ticket 收束, 跨 consumer 修復追蹤, curator 派發."
 metadata:
-  version: 2.0.0
+  version: 2.2.0
 ---
 
 # Framework Issue
@@ -49,6 +49,7 @@ metadata:
 | `observe` | `section_comment.py` | 附加觀測 comment |
 | `show` | `section_comment.py` | 以 body 索引為入口，區分區段與觀測流 |
 | `check` | `section_comment.py` | 三項警訊：當前結論落後最新觀測（主）、comment 數、索引一致性 |
+| `todo` | `section_comment.py` | 唯讀，跨 open issue 聚合「待辦與來源*」表格列；預設本 consumer 擁有的 open issue，`--all`／`--issue N` 改範圍，`--status`／`--stage`／`--priority`／`--consumer`／`--json` 可用 |
 | `create` | `create_issue.py` | 建 issue，body 自動附環境資訊 |
 | `list` | `list_issues.py` | 列 issue，`--search` 作粗篩 |
 | `link` | `link_issue.py` | 把 issue ref stamp 進本地 error-pattern 的分類資訊表 |

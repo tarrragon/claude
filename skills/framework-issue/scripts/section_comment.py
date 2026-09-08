@@ -59,6 +59,24 @@ comment id 分「區段」與「觀測流」兩類；索引缺失時退回全 co
 owner；輔助為單張 issue comment 數超過閾值；第三項為 body 索引與實際區段
 comment 集合的一致性比對。三項皆唯讀、不阻擋（exit 0），閾值與期間可由
 CLI 參數覆蓋。
+
+`init`／`add`／`update` 對區段名以「待辦與來源」開頭的區段（`ticket-intake.md`
+的「待辦與來源（<consumer>）」慣例）額外解析首張表格並驗證欄位與列舉值
+（`validate_todo_table`）：唯讀掃描曾實測 69 張 open issue 有 28 個此類
+區段、144 列可解析，但「狀態」欄自由文字超過 12 種、「階段」欄超過 8
+種，聚合後無法篩選——寫入端不驗證，讀取端就分不出類。欄位缺漏或列舉值
+不合法時 exit 3 並印合法值集合與違規列，不寫入 GitHub。
+
+`todo` 子命令為此表格的讀取路徑：跨 open issue 聚合全部「待辦與來源*」
+區段表格列。範圍預設本 consumer 擁有的 open issue（讀本地擁有登記檔
+`owned_issues_registry`，缺失時退回 owner 前綴推導，與
+`session-start-issue-check-hook.py` 的 heuristic 同源但獨立實作——該檔
+案為 hook 腳本，不供其他模組 import），`--all` 改掃 `FRAMEWORK_REPO` 全部
+open issue，`--issue N` 只掃單一 issue（明確指定即略過範圍解析）。支援
+`--status`／`--stage`／`--priority`／`--consumer` 篩選與 `--json` 輸出；
+依優先級排序（P0 最前）；表頭不符的區段印警告並跳過，不中止其餘 issue 或
+區段的聚合。comments 抓取採 per-issue 快取，同次執行內跨區段／跨候選驗證
+重複使用。
 """
 
 import argparse
@@ -69,7 +87,7 @@ import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from gh_common import (
     FRAMEWORK_REPO,
@@ -78,7 +96,7 @@ from gh_common import (
     preflight,
     run_gh,
 )
-from owned_issues_registry import record_owned_issue
+from owned_issues_registry import owned_issue_numbers, record_owned_issue
 from section_table import upsert_section
 
 # 區段 comment 首行標記：抓 "section:" 與 "owner:" 之間、"owner:" 之後至
@@ -130,6 +148,40 @@ DEFAULT_STALE_DAYS = 7
 # gh api comment 物件的標準欄位，供 cmd_update 從既有 comment 回推 issue
 # number（cmd_update 只收 comment_id，不像 cmd_init 直接持有 issue_ref）。
 _ISSUE_URL_NUMBER_RE = re.compile(r"/issues/(?P<num>\d+)$")
+
+# 「待辦與來源」表格 schema（本 ticket 權威定義，DOC 側列舉文件與此一致）。
+# 區段名以此前綴開頭時，init／add／update 觸發表格驗證，todo 觸發聚合。
+TODO_SECTION_NAME_PREFIX = "待辦與來源"
+
+# 必要欄位：缺任一即 exit 3。「型別」為選填欄，存在與否構成僅有的兩種
+# 合法表頭形態（見 TODO_VALID_HEADERS）——唯讀掃描曾實測表頭僅此 2 種。
+# 「型別」插於「來源票」之後（非附加於表尾）：對 `todo --all` 的實跑觀測
+# 顯示既有 issue 的 7 欄表格一致採此順序（curator 派發模板既有慣例），
+# 插入位置若改為表尾會使這些既有合法表格被誤判表頭不符。
+TODO_REQUIRED_COLUMNS = ["來源票", "做什麼", "acceptance 條數", "優先級", "階段", "狀態"]
+TODO_OPTIONAL_COLUMNS = ["型別"]
+TODO_HEADER_WITH_TYPE = (
+    TODO_REQUIRED_COLUMNS[:1] + TODO_OPTIONAL_COLUMNS + TODO_REQUIRED_COLUMNS[1:]
+)
+TODO_VALID_HEADERS = [
+    TODO_REQUIRED_COLUMNS,
+    TODO_HEADER_WITH_TYPE,
+]
+
+# 「狀態」「階段」列舉權威值（與 DOC 側 ticket-intake.md／
+# comment-as-section-protocol.md 的文字描述同步維護，票面 how.strategy
+# 為權威來源）。
+TODO_STATUS_VALUES = ["待裁票", "已裁票", "進行中", "完成", "不執行"]
+TODO_STAGE_VALUES = ["可立即執行", "本版", "下版", "待條件"]
+
+# todo 輸出排序：優先級由高至低；未知優先級值排在已知值之後，不拋錯
+# （聚合是唯讀操作，不應因單一列的雜訊值中止整體輸出）。
+TODO_PRIORITY_ORDER = ["P0", "P1", "P2", "P3"]
+
+# markdown 表格列偵測：整行以 "|" 起訖（允許前後空白，呼叫端已 strip）。
+# 分隔列（表頭與資料列之間）偵測：每個儲存格只含 "-" 與可選首尾 ":"。
+_TABLE_ROW_RE = re.compile(r"^\|.*\|$")
+_TABLE_SEPARATOR_CELL_RE = re.compile(r"^:?-+:?$")
 
 
 def _now_iso() -> str:
@@ -325,6 +377,84 @@ def load_sections_spec(path: str) -> list:
         if "name" not in item or "content" not in item:
             raise ValueError("每個區段須含 name 與 content 欄位")
     return data
+
+
+def _split_table_row(line: str) -> List[str]:
+    """把一行 `| a | b |` 拆為去除前後空白的儲存格清單。"""
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def parse_markdown_table(content: str) -> Optional[Tuple[List[str], List[List[str]]]]:
+    """從一段內容抽取首張 markdown 表格，回傳 `(表頭儲存格, 資料列清單)`；
+    找不到表格（少於表頭+至少一列的連續 `|` 起訖行）回傳 `None`。
+
+    只掃描第一個連續的「以 `|` 起訖」行區塊——內容含多張表格時只取第一張，
+    與 `validate_todo_table`／`todo` 聚合的「首張表格」約定一致。分隔列
+    （表頭與資料列之間、儲存格僅含 `-`/`:` 者）存在則跳過，不存在也不視為
+    錯誤（容忍手寫、非標準 markdown 渲染器產生的表格）。
+    """
+    table_lines = []
+    started = False
+    for line in (content or "").splitlines():
+        stripped = line.strip()
+        if _TABLE_ROW_RE.match(stripped):
+            table_lines.append(stripped)
+            started = True
+        elif started:
+            break
+    if len(table_lines) < 2:
+        return None
+
+    header = _split_table_row(table_lines[0])
+    data_lines = table_lines[1:]
+    if data_lines and all(
+        _TABLE_SEPARATOR_CELL_RE.match(cell) for cell in _split_table_row(data_lines[0])
+    ):
+        data_lines = data_lines[1:]
+    rows = [_split_table_row(line) for line in data_lines]
+    return header, rows
+
+
+def validate_todo_table(name: str, content: str) -> None:
+    """驗證「待辦與來源*」區段的表格欄位與列舉值；不合法時拋 `ValueError`
+    （呼叫端捕捉後轉為 exit 3），訊息含合法值集合與違規列原文，供操作者
+    不需另外查文件即可修正。名稱不以 `TODO_SECTION_NAME_PREFIX` 開頭者
+    視為非待辦表區段，略過（回傳 `None`，不驗證）。
+    """
+    if not name.startswith(TODO_SECTION_NAME_PREFIX):
+        return
+
+    parsed = parse_markdown_table(content)
+    if parsed is None:
+        raise ValueError(
+            f"區段「{name}」名稱以「{TODO_SECTION_NAME_PREFIX}」開頭，"
+            f"但內容找不到可解析的表格；合法表頭：{TODO_VALID_HEADERS}"
+        )
+    header, rows = parsed
+    if header not in TODO_VALID_HEADERS:
+        raise ValueError(
+            f"區段「{name}」表頭不符：{header}；合法表頭：{TODO_VALID_HEADERS}"
+        )
+
+    for row in rows:
+        row_map = dict(zip(header, row))
+        for column in TODO_REQUIRED_COLUMNS:
+            if not row_map.get(column, "").strip():
+                raise ValueError(
+                    f"區段「{name}」表格列缺少必要欄位「{column}」：{row}"
+                )
+        status = row_map.get("狀態", "")
+        if status not in TODO_STATUS_VALUES:
+            raise ValueError(
+                f"區段「{name}」表格列「狀態」值不合法：'{status}'；"
+                f"合法值：{TODO_STATUS_VALUES}｜違規列：{row}"
+            )
+        stage = row_map.get("階段", "")
+        if stage not in TODO_STAGE_VALUES:
+            raise ValueError(
+                f"區段「{name}」表格列「階段」值不合法：'{stage}'；"
+                f"合法值：{TODO_STAGE_VALUES}｜違規列：{row}"
+            )
 
 
 def post_comment(issue_ref: str, body: str) -> dict:
@@ -608,6 +738,8 @@ def cmd_init(
         issue_ref = normalize_issue_ref(issue_ref)
         validate_owner(owner)
         sections = load_sections_spec(sections_file)
+        for section in sections:
+            validate_todo_table(section["name"], section["content"])
     except (ValueError, OSError, json.JSONDecodeError) as exc:
         return emit_degraded(
             f"init 前置檢查失敗：{exc}",
@@ -686,6 +818,7 @@ def cmd_add(issue_ref: str, owner: str, name: str, content_file: str) -> int:
         issue_ref = normalize_issue_ref(issue_ref)
         validate_owner(owner)
         content = Path(content_file).read_text(encoding="utf-8")
+        validate_todo_table(name, content)
     except (ValueError, OSError) as exc:
         return emit_degraded(
             f"add 前置檢查失敗：{exc}",
@@ -745,6 +878,11 @@ def cmd_update(comment_id: str, content_file: str) -> int:
             f"comment {comment_id} 首行非區段標記，拒絕更新（避免誤改觀測或一般 comment）",
             "確認 comment id 指向一個具 <!-- section: ... owner: ... --> 標記的區段 comment",
         )
+
+    try:
+        validate_todo_table(marker["name"], content)
+    except ValueError as exc:
+        return emit_degraded(str(exc), "確認表格欄位與列舉值合法後重試")
 
     rendered = render_section_comment(marker["name"], marker["owner"], content)
     try:
@@ -1039,6 +1177,267 @@ def cmd_check(issue_ref: str, comment_threshold: int, stale_days: int) -> int:
     return 0
 
 
+# --- todo：跨 open issue 聚合「待辦與來源*」區段表格列（唯讀） ---
+
+
+def list_open_issue_numbers(limit: int = 500) -> List[int]:
+    """列出 `FRAMEWORK_REPO` 全部 open issue number（mock 攔截點）。
+
+    `--limit` 取遠高於唯讀掃描實測值（69 張）的預設上限，避免日後 issue
+    數量成長時被靜默截斷；此為防禦性上界，非仰賴截斷排除雜訊（同
+    `search_duplicates` 家族既有取向）。
+    """
+    result = subprocess.run(
+        [
+            "gh", "issue", "list", "--repo", FRAMEWORK_REPO,
+            "--state", "open", "--limit", str(limit), "--json", "number",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "gh issue list 失敗")
+    return [item["number"] for item in json.loads(result.stdout or "[]")]
+
+
+def _project_owner_prefix() -> str:
+    """本專案 owner 慣例前綴：git 主 repo 目錄名稱 kebab-case 化。
+
+    與 `session-start-issue-check-hook.py` 的 `_project_owner_prefix` 同一
+    heuristic（見該檔案頭「owner 識別」說明），本檔獨立實作一份精簡版本
+    ——該檔案為 hook 腳本（獨立 PEP 723 shebang），不供其他模組 import；
+    重複的是判斷邏輯，非可抽取的共用模組。
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return Path(result.stdout.strip()).parent.name.replace("_", "-")
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    return Path.cwd().name.replace("_", "-")
+
+
+def _cached_comments(issue_number: int, cache: Dict[int, list]) -> list:
+    """`todo` 專用的 per-issue comments 快取：同次執行內同一 issue 只呼叫
+    一次 `fetch_comments`（候選 owner 驗證與表格聚合共用同一份快取）。
+    """
+    if issue_number not in cache:
+        cache[issue_number] = fetch_comments(str(issue_number))
+    return cache[issue_number]
+
+
+def _search_candidate_issue_numbers(prefix: str) -> List[int]:
+    """以 gh search issues 用 owner 前綴粗篩候選 issue（見
+    `session-start-issue-check-hook.py` 檔頭「候選發現」說明，同一 query
+    組成方式：單一字串觸發同一 comment 實例內的 AND 匹配）。失敗一律回傳
+    空清單，`owned_issue_numbers_or_fallback` 的 fail-open 語意延伸至此。
+    """
+    query = f"owner {prefix}"
+    try:
+        result = subprocess.run(
+            [
+                "gh", "search", "issues", "--repo", FRAMEWORK_REPO,
+                "--match", "comments", "--json", "number", "--limit", "30",
+                "--", query,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            return []
+        return [hit["number"] for hit in json.loads(result.stdout or "[]")]
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError, KeyError):
+        return []
+
+
+def _discover_owned_issue_numbers_by_prefix(prefix: str) -> List[int]:
+    """候選發現 + 本地驗證：僅回傳確認存在 owner 標記以 `<prefix>-` 開頭之
+    區段的候選 issue（owned-issues 登記檔缺失/損毀時的 fallback，見
+    `owned_issue_numbers_or_fallback`）。"""
+    comment_cache: Dict[int, list] = {}
+    owned = []
+    for number in _search_candidate_issue_numbers(prefix):
+        try:
+            comments = _cached_comments(number, comment_cache)
+        except (OSError, subprocess.SubprocessError, RuntimeError):
+            continue
+        for comment in comments:
+            marker = extract_section_marker(comment.get("body", "") or "")
+            if marker and marker["owner"].startswith(f"{prefix}-"):
+                owned.append(number)
+                break
+    return owned
+
+
+def owned_issue_numbers_or_fallback() -> Tuple[List[int], str]:
+    """回傳 `(本 consumer 擁有的 issue number 清單, 判定依據標籤)`。優先讀
+    本地擁有登記檔（`owned_issues_registry`，`init`／`update` 成功寫入
+    GitHub 後同步落地）；缺失或無法讀取（`None`）時退回 owner 前綴推導。
+    """
+    numbers = owned_issue_numbers()
+    if numbers is not None:
+        return numbers, "owned-issues 登記檔"
+    prefix = _project_owner_prefix()
+    return _discover_owned_issue_numbers_by_prefix(prefix), f"owner 前綴 `{prefix}-`"
+
+
+def _resolve_todo_targets(all_issues: bool, issue_number: Optional[int]) -> Tuple[List[int], str]:
+    """解析 `todo` 的目標 issue 範圍：`--issue` 明確指定時直接信任、不受
+    開關狀態限制；`--all` 掃 `FRAMEWORK_REPO` 全部 open issue；預設掃本
+    consumer 擁有的 open issue（擁有清單與 open 清單取交集——擁有登記檔
+    不記錄開關狀態，需另查）。查 open 清單失敗時只警告降級為未過濾擁有
+    清單，不中止整體查詢（唯讀聚合的降級不應阻擋操作者拿到部分結果）。
+    """
+    if issue_number is not None:
+        return [issue_number], f"issue #{issue_number}"
+    if all_issues:
+        return list_open_issue_numbers(), "全部 open issue"
+
+    owned, label = owned_issue_numbers_or_fallback()
+    try:
+        open_numbers = set(list_open_issue_numbers())
+    except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+        sys.stderr.write(
+            f"[framework-issue][警告] 列出 open issue 狀態失敗，"
+            f"改列全部擁有 issue（未過濾開關狀態）：{exc}\n"
+        )
+        return owned, label
+    return [number for number in owned if number in open_numbers], label
+
+
+def _collect_todo_rows(issue_number: int, comment_cache: Dict[int, list]) -> List[dict]:
+    """對單一 issue 抓取全部「待辦與來源*」區段的表格列，每列附加 `issue`
+    （issue number）與 `owner`（區段首行標記的 owner）兩個聚合欄位。表頭
+    不符 `TODO_VALID_HEADERS` 的區段印警告並跳過（不中止其餘區段或 issue
+    的聚合，見 acceptance「todo 對表頭不符的區段印警告並繼續」）。
+    """
+    try:
+        comments = _cached_comments(issue_number, comment_cache)
+    except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+        sys.stderr.write(
+            f"[framework-issue][警告] issue #{issue_number} comments 讀取失敗，略過：{exc}\n"
+        )
+        return []
+
+    rows = []
+    for comment in comments:
+        marker = extract_section_marker(comment.get("body", "") or "")
+        if marker is None or not marker["name"].startswith(TODO_SECTION_NAME_PREFIX):
+            continue
+        _, _, content = (comment.get("body", "") or "").partition("\n")
+        parsed = parse_markdown_table(content)
+        if parsed is None or parsed[0] not in TODO_VALID_HEADERS:
+            found_header = parsed[0] if parsed else "(找不到表格)"
+            sys.stderr.write(
+                f"[framework-issue][警告] issue #{issue_number} 區段"
+                f"「{marker['name']}」表頭不符，略過：{found_header}\n"
+            )
+            continue
+        header, table_rows = parsed
+        for raw_row in table_rows:
+            row = dict(zip(header, raw_row))
+            row["issue"] = issue_number
+            row["owner"] = marker["owner"]
+            rows.append(row)
+    return rows
+
+
+def _filter_todo_rows(
+    rows: List[dict],
+    status: Optional[str],
+    stage: Optional[str],
+    priority: Optional[str],
+    consumer: Optional[str],
+) -> List[dict]:
+    """依 `--status`／`--stage`／`--priority`／`--consumer` 篩選列（皆選
+    填，未提供者不篩）。`--consumer` 比對 owner 前綴（owner 格式為
+    `<consumer>-<序號>`，見 `OWNER_FORMAT_RE`）。"""
+    def _matches(row: dict) -> bool:
+        if status and row.get("狀態") != status:
+            return False
+        if stage and row.get("階段") != stage:
+            return False
+        if priority and row.get("優先級") != priority:
+            return False
+        if consumer and not row.get("owner", "").startswith(f"{consumer}-"):
+            return False
+        return True
+
+    return [row for row in rows if _matches(row)]
+
+
+def _sort_todo_rows(rows: List[dict]) -> List[dict]:
+    """依優先級排序（`TODO_PRIORITY_ORDER` 由高至低）；未知優先級值排在
+    已知值之後，同優先級依 issue number 遞增，保持輸出穩定可重現。"""
+    def _key(row: dict) -> tuple:
+        priority = row.get("優先級", "")
+        rank = (
+            TODO_PRIORITY_ORDER.index(priority)
+            if priority in TODO_PRIORITY_ORDER
+            else len(TODO_PRIORITY_ORDER)
+        )
+        return (rank, row.get("issue", 0))
+
+    return sorted(rows, key=_key)
+
+
+def render_todo_report(target_count: int, label: str, rows: List[dict]) -> str:
+    """組合 `todo` 的純文字輸出：範圍摘要一行 + 逐列摘要。"""
+    lines = [
+        f"[framework-issue] todo（範圍：{label}，{target_count} 張 issue，{len(rows)} 列）",
+        "",
+    ]
+    if not rows:
+        lines.append("無待辦列")
+        return "\n".join(lines) + "\n"
+    for row in rows:
+        type_suffix = f"｜型別={row['型別']}" if row.get("型別") else ""
+        lines.append(
+            f"- #{row.get('issue')} [{row.get('優先級', '?')}][{row.get('階段', '?')}]"
+            f"[{row.get('狀態', '?')}] owner={row.get('owner', '?')} "
+            f"來源票={row.get('來源票', '?')} "
+            f"acceptance={row.get('acceptance 條數', '?')} "
+            f"— {row.get('做什麼', '')}{type_suffix}"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def cmd_todo(
+    all_issues: bool = False,
+    issue_number: Optional[int] = None,
+    status: Optional[str] = None,
+    stage: Optional[str] = None,
+    priority: Optional[str] = None,
+    consumer: Optional[str] = None,
+    as_json: bool = False,
+) -> int:
+    """唯讀：跨 open issue 聚合「待辦與來源*」區段表格列。"""
+    try:
+        target_numbers, label = _resolve_todo_targets(all_issues, issue_number)
+    except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+        return emit_degraded(f"todo 目標範圍解析失敗：{exc}", "確認 gh 可存取後重試")
+
+    comment_cache: Dict[int, list] = {}
+    rows: List[dict] = []
+    for number in target_numbers:
+        rows.extend(_collect_todo_rows(number, comment_cache))
+
+    rows = _sort_todo_rows(_filter_todo_rows(rows, status, stage, priority, consumer))
+
+    if as_json:
+        sys.stdout.write(json.dumps(rows, ensure_ascii=False, indent=2) + "\n")
+    else:
+        sys.stdout.write(render_todo_report(len(target_numbers), label, rows))
+    return 0
+
+
 # --keywords／--dedup-keywords 收值階段中，遇到這些已知旗標字串即停止收集
 # （見 _escape_dash_prefixed_keyword_values）；集合僅列本檔實際註冊的旗標。
 _KEYWORD_VALUE_STOP_FLAGS = frozenset(
@@ -1160,6 +1559,22 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"警訊 B 的落後期間天數（預設 {DEFAULT_STALE_DAYS}）",
     )
 
+    p_todo = sub.add_parser(
+        "todo",
+        help="唯讀：跨 open issue 聚合「待辦與來源*」區段表格列（預設掃本 consumer 擁有的 open issue）",
+    )
+    todo_scope = p_todo.add_mutually_exclusive_group()
+    todo_scope.add_argument(
+        "--all", action="store_true",
+        help=f"掃 {FRAMEWORK_REPO} 全部 open issue（非僅本 consumer 擁有）",
+    )
+    todo_scope.add_argument("--issue", type=int, dest="issue_number", help="只掃描單一 issue number")
+    p_todo.add_argument("--status", help=f"只列此狀態值（合法值：{TODO_STATUS_VALUES}）")
+    p_todo.add_argument("--stage", help=f"只列此階段值（合法值：{TODO_STAGE_VALUES}）")
+    p_todo.add_argument("--priority", help="只列此優先級值（如 P0/P1/P2/P3）")
+    p_todo.add_argument("--consumer", help="只列 owner 前綴符合此 consumer 的列")
+    p_todo.add_argument("--json", action="store_true", dest="as_json", help="以 JSON 陣列輸出")
+
     return parser
 
 
@@ -1189,6 +1604,16 @@ def main(argv=None) -> int:
         return cmd_observe(parsed.issue_ref, parsed.summary, parsed.session, parsed.content_file)
     if parsed.command == "show":
         return cmd_show(parsed.issue_ref)
+    if parsed.command == "todo":
+        return cmd_todo(
+            all_issues=parsed.all,
+            issue_number=parsed.issue_number,
+            status=parsed.status,
+            stage=parsed.stage,
+            priority=parsed.priority,
+            consumer=parsed.consumer,
+            as_json=parsed.as_json,
+        )
     return cmd_check(parsed.issue_ref, parsed.comment_threshold, parsed.stale_days)
 
 

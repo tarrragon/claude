@@ -1,8 +1,8 @@
 """Tests for sync-claude-push.py 本地 VERSION 回寫（0.2.1-W3-342）。
 
 背景：W3-050 收尾實測發現 sync-push 成功推送後，本地 .claude/VERSION 未回寫，
-fix_version.py 省略 --version 時依 docstring 契約讀取本地 VERSION 視為
-「已同步版本」，因此註記過期版本。write_local_version 於 push 成功後將本次
+fix_version.py 省略 --version 時依 docstring 契約把本地 VERSION 當成已同步至
+框架 repo 的版本號，因此註記過期版本。write_local_version 於 push 成功後將本次
 推送版本寫回本地 .claude/VERSION，失敗路徑（push 未成功）不呼叫此函式。
 
 單元層級驗證：直接呼叫 write_local_version，不觸發真實 git push（PC-162 / 規則

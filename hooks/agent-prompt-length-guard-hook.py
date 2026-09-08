@@ -59,7 +59,7 @@ SOFT_HINT_TEMPLATE = """提示：Agent prompt 為 {actual} 行，但未偵測到
 建議：改用 CLI 產生骨架 prompt（單一權威來源，避免手動複製漂移）
   ticket track dispatch {{ticket_id}} --as {{agent_name}}
 
-CLI 說明：.claude/skills/ticket/SKILL.md（dispatch 子命令）
+CLI 說明：.claude/skills/ticket/references/track-command.md〈track dispatch 子命令〉
 """
 
 

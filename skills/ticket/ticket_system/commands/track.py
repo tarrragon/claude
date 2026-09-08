@@ -352,12 +352,56 @@ def _execute_release(args: argparse.Namespace, version: str) -> int:
     return rc
 
 
+def _reclaim_landing_report_hook(version: str, ticket_id: str, report_text: str, now) -> None:
+    """`reclaim --confirm` 落地成功後，把鑑識報告 append 進票面 Solution
+    章節，使事後可對帳（3-F 共用原則：前置檢查衡量的是可寫 artifact，
+    鑑識結果原僅印在終端機不落票，`--confirm` 決策無法回溯稽核）。
+
+    `lib/lease.py` 刻意不 import `ticket_system.commands.*`（層級邊界，
+    見該模組檔頭說明），故落票所需的 `execute_append_log` 由本函式（
+    commands 層）以 `landing_report_hook` 注入 `reclaim_ticket`，非
+    `lease.py` 直接呼叫。
+
+    `force=True`：reclaim 完成後票已轉 pending，append-log 的
+    in_progress precondition 對此類系統落地屬合法逃生閥使用（落地本身
+    是 reclaim 流程的一部分，非使用者身份或驗收檢查的旁路）。
+    """
+    import sys
+
+    from ticket_system.commands.track_acceptance import execute_append_log
+
+    timestamp = now.strftime("%Y-%m-%d %H:%M UTC")
+    content = f"### Reclaim 落地鑑識報告（{timestamp}）\n\n{report_text}"
+    append_args = argparse.Namespace(
+        ticket_id=ticket_id,
+        section="Solution",
+        content=content,
+        version=version,
+        force=True,
+        replace=False,
+    )
+    result = execute_append_log(append_args, version)
+    if result != 0:
+        sys.stderr.write(
+            f"[reclaim] {ticket_id}: 鑑識報告落票失敗（append-log exit {result}），"
+            "reclaim 狀態轉換已完成，僅稽核記錄缺失\n"
+        )
+
+
 def _execute_reclaim(args: argparse.Namespace, version: str) -> int:
     """`ticket track reclaim`：僅接受 reclaimable 票，強制 ghost 鑑識三查，
     預設 dry-run；`--confirm` 且三查全過才轉回 pending 並清 registry lease
     （multi-PM 協調層 Phase 3，包裝 `ticket_system.lib.lease.reclaim_ticket`）。
+
+    `--confirm` 落地成功後，經 `landing_report_hook` 把鑑識報告 append 進
+    票面 Solution 章節（見 `_reclaim_landing_report_hook`）。
     """
-    return reclaim_ticket(version, args.ticket_id, confirm=bool(getattr(args, "confirm", False)))
+    return reclaim_ticket(
+        version,
+        args.ticket_id,
+        confirm=bool(getattr(args, "confirm", False)),
+        landing_report_hook=_reclaim_landing_report_hook,
+    )
 
 
 def _execute_verify(args: argparse.Namespace, version: str) -> int:
@@ -641,7 +685,9 @@ def _register_lifecycle_commands(
             dest="as_agent",
             default=None,
             metavar="AGENT_NAME",
-            help="申報執行身份，與 who.current 對照不符即 deny（W1-048；未提供僅警告）",
+            help="申報執行身份，與 who.current 對照不符即 deny；未提供亦 deny"
+            "（W1-048；complete/finish 屬 identity_guard.ENFORCED_COMMANDS，"
+            "已轉強制申報，非 warn-only）",
         )
 
     p_complete = subparsers.add_parser("complete", help=TrackMessages.HELP_COMPLETE)
@@ -1054,10 +1100,23 @@ def _register_relation_commands(
     # set-blocked-by 操作
     p_set_blocked_by = subparsers.add_parser(
         "set-blocked-by",
-        help="設定 Ticket 的 blockedBy 欄位（阻塞依賴）"
+        help="設定 Ticket 的 blockedBy 欄位（阻塞依賴）",
+        epilog=(
+            "範例:\n"
+            "  ticket track set-blocked-by <id> <blocked-by-id>\n"
+            "  ticket track set-blocked-by <id> \"<id-a> <id-b>\" --add\n"
+            "\n"
+            "value 是單一位置參數：多個 ID 須引號包成一個字串，字串內以空格"
+            "分隔；不加引號會被 shell 拆成多個參數，argparse 報 unrecognized"
+            " arguments。"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_set_blocked_by.add_argument("ticket_id", help="目標 Ticket ID")
-    p_set_blocked_by.add_argument("value", help="被引用的 Ticket ID（空格分隔）")
+    p_set_blocked_by.add_argument(
+        "value",
+        help="被引用的 Ticket ID；多個時須以引號包成單一字串，字串內以空格分隔（例：\"A B\"）",
+    )
     p_set_blocked_by.add_argument("--add", action="store_true", help="追加模式（去重）")
     p_set_blocked_by.add_argument("--remove", action="store_true", help="移除模式")
     p_set_blocked_by.add_argument("--version", help=TrackMessages.ARG_VERSION)
@@ -1065,10 +1124,23 @@ def _register_relation_commands(
     # set-related-to 操作
     p_set_related_to = subparsers.add_parser(
         "set-related-to",
-        help="設定 Ticket 的 relatedTo 欄位（相關任務）"
+        help="設定 Ticket 的 relatedTo 欄位（相關任務）",
+        epilog=(
+            "範例:\n"
+            "  ticket track set-related-to <id> <related-id>\n"
+            "  ticket track set-related-to <id> \"<id-a> <id-b>\" --add\n"
+            "\n"
+            "value 是單一位置參數：多個 ID 須引號包成一個字串，字串內以空格"
+            "分隔；不加引號會被 shell 拆成多個參數，argparse 報 unrecognized"
+            " arguments。"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_set_related_to.add_argument("ticket_id", help="目標 Ticket ID")
-    p_set_related_to.add_argument("value", help="相關的 Ticket ID（空格分隔）")
+    p_set_related_to.add_argument(
+        "value",
+        help="相關的 Ticket ID；多個時須以引號包成單一字串，字串內以空格分隔（例：\"A B\"）",
+    )
     p_set_related_to.add_argument("--add", action="store_true", help="追加模式（去重）")
     p_set_related_to.add_argument("--remove", action="store_true", help="移除模式")
     p_set_related_to.add_argument("--version", help=TrackMessages.ARG_VERSION)
@@ -1424,6 +1496,12 @@ def _register_acceptance_commands(
     p_set_exit_status.add_argument(
         "--force", action="store_true", default=False,
         help="W3-044 逃生閥：旁路 status precondition 檢查（記入 hook-logs）",
+    )
+    p_set_exit_status.add_argument(
+        "--as",
+        dest="as_agent",
+        default=None,
+        help="申報執行身份，與 who.current 比對（未提供時 warn-only，不符則 deny）",
     )
 
     # set-completion-info 操作（1.5.0-W5-021：CLI 生成 Completion Info 區塊）

@@ -154,13 +154,13 @@ SKILLS_DIR = HOOKS_DIR.parent / "skills"
 GAP_HOOK_PATHS = {
     "active-dispatch-tracker-hook.py": HOOKS_DIR / "active-dispatch-tracker-hook.py",
     "cli-failure-help-reminder-hook.py": HOOKS_DIR / "cli-failure-help-reminder-hook.py",
-    "comment-qa-hook.py": SKILLS_DIR / "compositional-writing" / "hooks" / "comment-qa-hook.py",
+    "comment-qa-hook.py": SKILLS_DIR / "dart-comment-traceability" / "hooks" / "comment-qa-hook.py",
     "dispatch-count-guard-hook.py": HOOKS_DIR / "dispatch-count-guard-hook.py",
     "file-ownership-guard-hook.py": HOOKS_DIR / "file-ownership-guard-hook.py",
     "pre-test-hook.py": HOOKS_DIR / "pre-test-hook.py",
     "session-context-guard-hook.py": HOOKS_DIR / "session-context-guard-hook.py",
     "utf8-integrity-check-hook.py": HOOKS_DIR / "utf8-integrity-check-hook.py",
-    "worklog-format-check.py": SKILLS_DIR / "compositional-writing" / "hooks" / "worklog-format-check.py",
+    "worklog-format-check.py": SKILLS_DIR / "doc-flow" / "hooks" / "worklog-format-check.py",
 }
 
 
@@ -282,7 +282,7 @@ class TestWorklogFormatCheckHook:
 
     @pytest.fixture(scope="class")
     def hook(self):
-        return _load_module("worklog_format", HOOKS_DIR.parent / "skills" / "compositional-writing" / "hooks" / "worklog-format-check.py")
+        return _load_module("worklog_format", HOOKS_DIR.parent / "skills" / "doc-flow" / "hooks" / "worklog-format-check.py")
 
     @pytest.fixture
     def worklog_with_emoji(self, tmp_path):

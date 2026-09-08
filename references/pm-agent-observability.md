@@ -25,7 +25,7 @@
 
 ## 工具使用範本
 
-### 1. dispatch-active.json（計數 Source of Truth）
+### 1. `ticket track dispatch-check`（計數 Source of Truth）
 
 **適用場景**：
 - 派發後清點（確認派發數量正確）
@@ -36,17 +36,10 @@
 **呼叫範本**：
 
 ```bash
-cat .claude/dispatch-active.json | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-if d:
-    print('[WAIT] 仍有 {} 個代理人在執行：'.format(len(d)))
-    for x in d:
-        print('  - {}'.format(x.get('agent_description', '?')))
-else:
-    print('[OK] 所有代理人已完成。')
-"
+ticket track dispatch-check
 ```
+
+`[PASS]` 代表所有代理人已完成；`[WARN]` 代表仍有 N 個代理人在執行並逐筆列出 `agent_description` / `ticket_id` / `dispatched_at`；`[FAIL]`（stderr）代表檔案讀取失敗或格式錯誤。完整判定規則與 exit code（0/1/2）見 `.claude/skills/ticket/references/track-command.md`〈track dispatch-check 子命令〉。
 
 **限制**：
 - 不能告訴你「某個特定代理人現在是否仍活著」（Hook 可能延遲清理或 race）

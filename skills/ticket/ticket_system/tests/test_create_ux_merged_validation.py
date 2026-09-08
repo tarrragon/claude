@@ -8,8 +8,12 @@ create 命令 UX 改善的回歸測試（1.0.0-W1-024.1）。
   CHECKLIST_VALIDATION_FAILED，不再由 WHY_REQUIRED 提前退出造成分批報錯。
 - A3：`--how` 因 argparse prefix matching 撞 --how-type / --how-strategy 時，
   給含用途說明的友善提示（任務類型／實作策略），取代原生英文 ambiguous 訊息。
+- D（--dry-run）：文件需要示範建票用法而不落地真實 ticket 檔案；create 原無
+  預覽模式，只能實際建立（含落盤 + git commit）才能看到完整輸出結構。
 
-Source: ticket 1.0.0-W1-024.1（parent ANA 1.0.0-W1-024 裁決 A2+A3）
+Source: ticket 1.0.0-W1-024.1（parent ANA 1.0.0-W1-024 裁決 A2+A3）；
+--dry-run 為 CLI 行為與文件分岔修復的一部分（分岔修復票四項之一，
+詳見 docs/work-logs 對應 IMP ticket）。
 """
 import argparse
 import io
@@ -212,3 +216,94 @@ def test_full_flags_unaffected_by_how_trap(seeded_repo_root):
     )
     assert args.how_type == "Implementation"
     assert args.how_strategy == "策略"
+
+
+# ---------------------------------------------------------------------------
+# D：--dry-run 預覽建票而不落地
+# ---------------------------------------------------------------------------
+
+
+def _make_full_valid_args(**overrides):
+    """建立可通過全部驗證、正常會落盤成功的完整 args。
+
+    與模組頂層 `_make_args` 的區別：後者刻意留白必填欄位以測錯誤路徑；
+    本 helper 補齊 who/when/where_files/acceptance/decision_tree，
+    用於測試成功路徑（--dry-run 的預覽輸出、真實建立時的落盤副作用）。
+    """
+    defaults = dict(
+        version="1.0.1",
+        wave=1,
+        seq=None,
+        action="實作",
+        target="dry-run 預覽測試",
+        title=None,
+        type="IMP",
+        priority=None,
+        who="待派發",
+        what=None,
+        when="立即",
+        where_layer=None,
+        where_files="CLAUDE.md",
+        why="測試 --dry-run 預覽行為",
+        how_type=None,
+        how_strategy="驗證 dry-run 不落地",
+        parent=None,
+        source_ticket=None,
+        blocked_by=None,
+        related_to=None,
+        acceptance=["測試通過"],
+        decision_tree_entry="Ticket",
+        decision_tree_decision="直接派發",
+        decision_tree_rationale="測試情境",
+        quiet=False,
+        verbose=False,
+        json_output=False,
+        force=False,
+        allow_duplicate=False,
+        topic=None,
+        new_topic=None,
+        no_topic=True,
+        dry_run=False,
+    )
+    defaults.update(overrides)
+    return argparse.Namespace(**defaults)
+
+
+def test_dry_run_does_not_write_ticket_file(seeded_repo_root):
+    """--dry-run 通過全部驗證後，只印預覽訊息，不在磁碟上建立 ticket 檔案。"""
+    args = _make_full_valid_args(dry_run=True)
+    stdout, _stderr, exit_code = _capture(args)
+
+    assert exit_code == 0
+    assert "[DRY-RUN]" in stdout
+
+    # ticket_id 由執行過程動態配號；掃描該版本 tickets 目錄，確認無任何
+    # 檔案落盤（dry-run 前該目錄不存在或為空，這裡直接斷言目錄未產生
+    # 內容，避免耦合 create 內部的 ID 配號細節）。
+    # get_tickets_dir 新票一律走階層式路徑（docs/work-logs/v{major}/
+    # v{major.minor}/v{version}/tickets/），故以遞迴 glob 涵蓋，不耦合單一層級。
+    written_files = list(seeded_repo_root.glob("docs/work-logs/**/tickets/*.md"))
+    assert written_files == []
+
+
+def test_dry_run_still_enforces_checklist_validation(seeded_repo_root):
+    """--dry-run 不可略過 PROP-009 清單式欄位驗證（預覽仍須反映真實會失敗的建票）。"""
+    args = _make_full_valid_args(dry_run=True, why=None)
+    stdout, stderr, exit_code = _capture(args)
+    combined = stdout + stderr
+
+    assert exit_code == 1
+    assert "CHECKLIST_VALIDATION_FAILED" in combined
+    assert "[DRY-RUN]" not in combined
+
+
+def test_without_dry_run_ticket_file_is_written(seeded_repo_root):
+    """回歸防護：未帶 --dry-run 時，既有行為（落盤成功）不受新旗標影響。"""
+    args = _make_full_valid_args(dry_run=False)
+    stdout, _stderr, exit_code = _capture(args)
+
+    assert exit_code == 0
+    assert "[DRY-RUN]" not in stdout
+
+    written_files = list(seeded_repo_root.glob("docs/work-logs/**/tickets/*.md"))
+    assert len(written_files) == 1

@@ -117,17 +117,17 @@ SKILL_CLI_ERROR_FEEDBACK_TEMPLATE = """
 
 可能成因（不預設何者為真，需依實際情況判斷）：
   1. 功能尚未實作：CLI 缺對應的參數/子命令路徑
-  2. SKILL 引導不足：SKILL.md 未涵蓋此用法
+  2. SKILL 引導不足：SKILL.md 路由表或對應 references/<name>-command.md 未涵蓋此用法
   3. 使用者誤用：參數拼寫或語法有誤
 
 建議動作：
   1. 查閱完整語法：執行 `{command_base} --help`，確認該參數/子命令是否存在
   2. 若 --help 未列出此參數/子命令 -> 屬功能缺口，建立 ticket 追蹤：
      `/ticket create --type ANA --title "[ANA] 評估 CLI 是否需支援 <參數/子命令>"`
-  3. 若 --help 已列出但用法不同 -> 屬文件缺口，補充 SKILL.md：
-     `/ticket create --type ADJ --title "[ADJ] 補充 SKILL.md 文檔"`
+  3. 若 --help 已列出但用法不同 -> 屬文件缺口，補充對應 references/<name>-command.md（依觸發子命令查 SKILL.md〈子命令路由表〉找對應檔案）：
+     `/ticket create --type ADJ --title "[ADJ] 補充對應 references/<name>-command.md 文件"`
 
-詳見: .claude/skills/ticket/SKILL.md
+詳見: .claude/skills/ticket/SKILL.md〈子命令路由表〉（依子命令查對應 references/*.md）
 
 ============================================================
 """

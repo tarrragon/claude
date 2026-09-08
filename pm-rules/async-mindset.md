@@ -143,7 +143,7 @@
 | 檢查類型 | 合法情境（放行） | 焦慮性情境（禁止） |
 |---------|---------------|-----------------|
 | `git status` | commit 前驗證變更範圍；派發前清點 worktree 狀態；驗收代理人時檢查未 commit 變更 | 派發後短時間內重複查看；無具體目的的「看看進度」 |
-| `cat .claude/dispatch-active.json` | 派發後清點數量；task-notification 到達後確認剩餘 | 通知未到達前主動 polling |
+| `ticket track dispatch-check` | 派發後清點數量；task-notification 到達後確認剩餘（`.claude/skills/ticket/references/track-command.md`〈track dispatch-check 子命令〉） | 通知未到達前主動 polling |
 | `grep / find` 代理人產出 | 代理人完成通知後驗收具體檔案 | 通知未到達前「偵察」代理人做到哪 |
 | 讀 agent transcript output | `<task-notification>` 到達後檢視 tool call 細節 | **永遠禁止**讀 `<output>` body 推論執行狀態（PC-050 模式 D） |
 

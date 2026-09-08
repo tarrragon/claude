@@ -169,7 +169,7 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 
 > **Why**：worktree 隔離時，未提交工作樹只存在於該 worktree，PM 在主 repo `git status` 看不到，且 `ticket track complete` 只 auto-commit ticket metadata（frontmatter/log），不 commit 產品碼。
 > **Consequence**：實作 agent 若只建檔+跑測試卻未 commit 產品碼，worktree 分支上只有 metadata commit；PM `worktree remove --force` 即永久刪除未提交產品碼（git fsck 無 unreachable，無法復原），交付物遺失需重做整個 ticket。此為 1.2.0-W1-028 事故一實發根因。
-> **Action**：worktree 隔離派發時，回報完成前必須 `git add <where.files> && git commit -m "<描述>"` 將產品碼 commit 進 worktree 分支（僅 commit 不 push，未違反 PC-024 的 push 禁令）。此規則凌駕上表「Phase 3b+ 禁止 git commit」——worktree 隔離場景中 commit 進隔離分支是交付物可見性的前提，非主 repo 提交。
+> **Action**：worktree 隔離派發時，回報完成前必須將產品碼 commit 進 worktree 分支（僅 commit 不 push，未違反 PC-024 的 push 禁令）。預設 `ticket track commit <id> -m "<描述>" --worktree <該 worktree 絕對路徑> -- <exact files>`（隔離索引；`--worktree` 必帶，agent 呼叫當下 cwd 依 harness 慣例重設回主倉庫，未帶旗標會誤綁主 repo，見 ticket skill〈track commit 子命令〉〈`--worktree` 條件〉）；僅該命令失敗或不可用時降級為 fallback：`git add <where.files> && git commit -m "<描述>"`。此規則凌駕上表「Phase 3b+ 禁止 git commit」——worktree 隔離場景中 commit 進隔離分支是交付物可見性的前提，非主 repo 提交。
 
 #### worktree 隔離派發時禁用 dart MCP 寫入工具（強制，W3-008）
 
@@ -184,7 +184,7 @@ PM 和代理人透過 **Ticket** 溝通，不直接溝通。PM 查 Ticket 進度
 | dart MCP `dart_fix` / `dart_format` | Bash `dart fix` / `dart format` |
 | dart MCP 其他寫入工具 | Bash 對應命令 或 Edit |
 
-> **來源**：W3-008（worktree 隔離對 daemon-rooted dart MCP 寫入工具不生效）。PM 端對應規則見 `.claude/pm-rules/parallel-dispatch.md`「worktree 實作 agent 禁用 dart MCP 寫入工具」；根因機制見 `.claude/skills/worktree/SKILL.md`「Base ref 與隔離邊界」章節。
+> **來源**：W3-008（worktree 隔離對 daemon-rooted dart MCP 寫入工具不生效）。PM 端對應規則見 `.claude/pm-rules/parallel-dispatch.md`「worktree 實作 agent 禁用 dart MCP 寫入工具」；根因機制見 `.claude/skills/worktree/references/agent-isolation-worktree.md`「Base ref 與隔離邊界」章節。
 
 #### worktree 環境禁止以 Bash/Python 直寫主 repo（強制，W2-009 / W2-021）
 
@@ -480,6 +480,8 @@ ascend 條件（**任一 OR 成立即停止執行、上報上層**）：
 
 ---
 
+**Last Updated**: 2026-09-08
+**Version**: 1.23.0 - 「worktree 隔離派發時必須 commit 產品碼進 worktree 分支」Action 改寫：預設 `ticket track commit --worktree <path>`（隔離索引），裸 `git add && git commit` 降為該命令失敗或不可用時的 fallback；與 `bash-tool-usage-rules.md` 規則七、ticket skill〈track commit 子命令〉措辭同步
 **Last Updated**: 2026-08-27
 **Version**: 1.22.0 - 新增規則 13「既有失敗歸因規範（PC-BAL-022）」：宣稱測試/建置失敗為既有前須附 baseline 對照結果，僅因果核對不足以結案；本檔為原文定義，實際送達由 `agent-dispatch-template.md`「既有失敗歸因約束句」制式句承擔（header 送達現況同步補一句）；檢查清單同步補項。修的是送達路徑，PC-BAL-022 原文不動
 **Version**: 1.21.0 - 新增規則 2.6「執行中建票血緣回填」：禁止裸 `create` 只標 `--related-to`，須帶 `--source-ticket` 或改走 `add-spawn-request`（禁令 + 路由形態，完整判準指向 `agent-dispatch-template.md`「建票血緣回填義務」節）；檢查清單同步補項

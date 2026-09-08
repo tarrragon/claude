@@ -221,19 +221,26 @@ ticket track query <spawned-id>          # 單一 spawned 詳情（標題、prio
 
 ## 新 session 開始時：重建全局視野
 
+**PM 接手流程以 dashboard-first 為主**（見 `.claude/skills/ticket/SKILL.md`〈子命令路由表〉前的接手流程三步驟：dashboard `[LIVE]`/`[RECLAIMABLE]` → fallback 完整 pending/in_progress 清單 → 無待辦則顯示路由表）：
+
 ```bash
 # 快速掌握全局進度（含版本進度、in_progress、pending、git status）
 ticket track snapshot
 
-# 查看「接下來該做什麼」（scheduler / Linux runqueue 類比）
+# 接手流程主路徑：dashboard-first
+ticket track dashboard
+```
+
+```bash
+# 除錯／腳本用途（非 PM 接手流程主路徑，見下方自動引導說明）
 ticket track runqueue --context=resume --top 3     # 與 handoff/pending 交集
 ticket track runqueue --wave N --format=list       # 當前 wave 可執行清單（priority 排序）
 ticket track runqueue --wave N --format=dag        # 完整依賴 DAG + 關鍵路徑
 ```
 
-**自動引導**：`session-start-scheduler-hint-hook.py` 在 SessionStart 時自動呼叫 `runqueue --context=resume`，結果顯示於 hook additionalContext。用戶無需手動呼叫即可看到排程建議；若需更多資訊（如 DAG 或其他 wave）再手動執行。
+**自動引導**：`session-start-scheduler-hint-hook.py` 在 SessionStart 時自動呼叫 `runqueue --context=resume`，結果顯示於 hook additionalContext，作為歷史入口的提示。`ticket track runqueue --context=resume --top 3` 本身保留作除錯／腳本用途，**PM 接手流程不再以此為主路徑呼叫**；若需更多資訊（如 DAG 或其他 wave）再手動執行。
 
-然後根據 worklog + runqueue 提示決定從哪個 Ticket 繼續。
+然後依 dashboard 結果（`[LIVE]`／`[RECLAIMABLE]`／fallback 清單）決定從哪個 Ticket 繼續，worklog 與 runqueue 提示作輔助脈絡參考。
 
 **Context 隔離**：一個 session 只做一件事，做完 commit → handoff（宣告方式見下方「Session 起始：宣告 Focus Topic」）。
 

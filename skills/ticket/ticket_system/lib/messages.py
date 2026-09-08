@@ -44,7 +44,7 @@ class ErrorMessages:
 
     RELATION_VALUE_COMMA_SEPARATED = (
         "[Error] 找不到 Ticket {ticket_id}：偵測到逗號分隔輸入，"
-        "此命令的 ID 清單須以空格分隔。"
+        "此命令的 ID 清單須以引號包成單一字串，字串內以空格分隔。"
         "正確範例：ticket track {command} {target_id} \"{space_separated_ids}\""
     )
     NO_HANDOFF_FILE = "[Error] Ticket {ticket_id} 無待恢復的交接檔案"

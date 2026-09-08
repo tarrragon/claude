@@ -85,4 +85,4 @@ PM 以 `SendMessage` 對既有 named agent 追加任務後，短時間內查證�
 - `.claude/error-patterns/process-compliance/PC-062-post-dispatch-anxiety-checking.md` — 派發後反覆查證的反模式，與本例互為兩端
 - `.claude/error-patterns/process-compliance/PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md` — 雙寫入者的下游損害形狀
 - `.claude/rules/core/tool-output-trust-rules.md` 規則 5 — 記錄平面與世界平面的不對稱
-- `.claude/skills/ticket/SKILL.md`「named agent 生命週期三態」— idle 態的定義與 PM 回收判準
+- `.claude/skills/ticket/references/architecture.md`〈系統模型（設計自我描述，完整版）〉### named agent 生命週期三態 — idle 態的定義與 PM 回收判準（原指向 SKILL.md，該節已搬遷至此）

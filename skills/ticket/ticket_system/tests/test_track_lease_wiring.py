@@ -293,7 +293,7 @@ class TestReclaimWiring:
     def test_forwards_ticket_id_and_confirm_false_by_default(self, monkeypatch):
         captured = {}
 
-        def _fake_reclaim(version, ticket_id, *, confirm):
+        def _fake_reclaim(version, ticket_id, *, confirm, landing_report_hook=None):
             captured["version"] = version
             captured["ticket_id"] = ticket_id
             captured["confirm"] = confirm
@@ -309,7 +309,7 @@ class TestReclaimWiring:
     def test_forwards_confirm_true(self, monkeypatch):
         captured = {}
 
-        def _fake_reclaim(version, ticket_id, *, confirm):
+        def _fake_reclaim(version, ticket_id, *, confirm, landing_report_hook=None):
             captured["confirm"] = confirm
             return 0
 
@@ -318,3 +318,19 @@ class TestReclaimWiring:
         track._execute_reclaim(_args(ticket_id="0.0.0-W1-001", confirm=True), "0.0.0")
 
         assert captured["confirm"] is True
+
+    def test_forwards_landing_report_hook(self, monkeypatch):
+        """0.2.1-W3-1323（3-F 共用原則 (5)）：`_execute_reclaim` 須把
+        `_reclaim_landing_report_hook` 轉發給 `reclaim_ticket`，使
+        `--confirm` 落地成功時鑑識報告可落票。"""
+        captured = {}
+
+        def _fake_reclaim(version, ticket_id, *, confirm, landing_report_hook=None):
+            captured["landing_report_hook"] = landing_report_hook
+            return 0
+
+        monkeypatch.setattr(track, "reclaim_ticket", _fake_reclaim)
+
+        track._execute_reclaim(_args(ticket_id="0.0.0-W1-001", confirm=True), "0.0.0")
+
+        assert captured["landing_report_hook"] is track._reclaim_landing_report_hook

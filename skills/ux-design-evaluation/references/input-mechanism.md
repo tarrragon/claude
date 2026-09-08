@@ -23,7 +23,7 @@
 
 **IME policy — 輸入法的自動行為**。三個控制項各自獨立：
 
-- 自動校正（autocorrect）：把輸入替換成字典詞。非自然語言內容（指令、路徑、代碼）會被破壞。
+- 自動校正（autocorrect）：把輸入替換成字典詞。非自然語言內容（指令、路徑、程式碼）會被破壞。
 - 輸入建議（suggestions）：鍵盤上方的候選列。可能遮擋畫面關鍵區域。
 - 個人化學習（personalized learning）：IME 從輸入學習新詞、跨 app 適用。輸入可能含 secret 時是安全問題（見 IME 安全清單）。
 
@@ -101,7 +101,7 @@ IME 個人化學習把輸入存進跨 app 共用的詞庫 — 處理 secret 的�
 
 - [ ] 每個輸入框的四維決策（keyboard / submit / IME / special keys）記錄在規格？
 - [ ] Keyboard type 對應欄位內容（不是全部用預設 text）？
-- [ ] 非自然語言輸入（指令、代碼、ID）關閉自動校正？
+- [ ] 非自然語言輸入（指令、程式碼、ID）關閉自動校正？
 - [ ] Secret 類欄位通過 IME 安全清單全部四項？
 - [ ] Submit model 影響 protocol 的場景，決策在 protocol spec 階段做？
 - [ ] 表單驗證時機分層（格式 on blur、業務 on submit）？

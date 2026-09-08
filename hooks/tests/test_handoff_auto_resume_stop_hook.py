@@ -178,8 +178,9 @@ def _setup_scan(monkeypatch, tmp_path, *, stale_map=None,
         hook, "is_ticket_recently_started",
         lambda root, tid, log, cache=None: recent_started,
     )
-    # 將 PENDING_DIR_NAME 指向 tmp_path
+    # 將 PENDING_DIR_NAME / ARCHIVE_DIR_NAME 指向 tmp_path 下的相對子目錄
     monkeypatch.setattr(hook, "PENDING_DIR_NAME", "pending")
+    monkeypatch.setattr(hook, "ARCHIVE_DIR_NAME", "archive")
     return hook
 
 
@@ -230,6 +231,97 @@ def test_scan_pure_stale_gets_gced(monkeypatch, tmp_path):
     assert pending == []
     assert recent == []
     assert not (pending_dir / "W17-001.json").exists()
+
+
+# ===== GC 統一改歸檔（0.2.1-W3-1338）=====
+
+
+def test_scan_pure_stale_gets_archived_not_deleted(monkeypatch, tmp_path):
+    """純 stale → 歸檔至 archive/（非消失），archive 檔 mtime 與原 pending 檔一致。"""
+    pending_dir = tmp_path / "pending"
+    archive_dir = tmp_path / "archive"
+    src_path = _write_handoff(
+        pending_dir, "W17-003",
+        direction="to-sibling:W17-004",
+        timestamp=datetime.now() - timedelta(hours=2),
+    )
+    original_mtime = src_path.stat().st_mtime
+    hook = _setup_scan(
+        monkeypatch, tmp_path,
+        stale_map={"W17-003": (True, "任務鏈目標已 in_progress")},
+    )
+    hook.scan_pending_handoff_tasks(tmp_path, MagicMock())
+
+    assert not src_path.exists()
+    archived_path = archive_dir / "W17-003.json"
+    assert archived_path.exists()
+    assert archived_path.stat().st_mtime == original_mtime
+
+
+def test_scan_completed_ticket_gets_archived_not_deleted(monkeypatch, tmp_path):
+    """已完成 Ticket 的 pending JSON（非任務鏈，不保留）→ 歸檔而非刪除。"""
+    pending_dir = tmp_path / "pending"
+    archive_dir = tmp_path / "archive"
+    _write_handoff(
+        pending_dir, "W17-005",
+        direction="context_refresh",
+        timestamp=datetime.now() - timedelta(hours=2),
+    )
+    hook = _setup_scan(
+        monkeypatch, tmp_path,
+        stale_map={"W17-005": (True, "來源 ticket 已 completed")},
+        completed_map={"W17-005": True},
+    )
+    hook.scan_pending_handoff_tasks(tmp_path, MagicMock())
+
+    assert not (pending_dir / "W17-005.json").exists()
+    assert (archive_dir / "W17-005.json").exists()
+
+
+def test_archive_stale_handoff_json_moves_file(tmp_path):
+    """_archive_stale_handoff_json 對單一檔案：rename 至 archive/，來源消失。"""
+    hook = load_hook_module()
+    pending_dir = tmp_path / "pending"
+    pending_dir.mkdir()
+    src = pending_dir / "W17-006.json"
+    src.write_text("{}", encoding="utf-8")
+
+    archive_dir = tmp_path / ".claude" / "handoff" / "archive"
+    hook._archive_stale_handoff_json(src, tmp_path, MagicMock(), context="test")
+
+    assert not src.exists()
+    assert (archive_dir / "W17-006.json").exists()
+
+
+def test_archive_stale_handoff_json_collision_appends_suffix(tmp_path):
+    """歸檔目的地已存在同名檔時：加時間戳後綴避免覆蓋，兩檔皆保留。"""
+    hook = load_hook_module()
+    pending_dir = tmp_path / "pending"
+    pending_dir.mkdir()
+    src = pending_dir / "W17-007.json"
+    src.write_text('{"marker": "new"}', encoding="utf-8")
+
+    archive_dir = tmp_path / ".claude" / "handoff" / "archive"
+    archive_dir.mkdir(parents=True)
+    existing_dest = archive_dir / "W17-007.json"
+    existing_dest.write_text('{"marker": "old"}', encoding="utf-8")
+
+    logger = MagicMock()
+    hook._archive_stale_handoff_json(src, tmp_path, logger, context="test")
+
+    assert not src.exists()
+    # 既有的歸檔檔案未被覆蓋
+    assert existing_dest.read_text(encoding="utf-8") == '{"marker": "old"}'
+    # 新檔以後綴保留，不遺失
+    archived_files = list(archive_dir.glob("W17-007*.json"))
+    assert len(archived_files) == 2
+    suffixed = [p for p in archived_files if p.name != "W17-007.json"]
+    assert len(suffixed) == 1
+    assert suffixed[0].read_text(encoding="utf-8") == '{"marker": "new"}'
+    assert any(
+        "歸檔目標同名檔已存在" in call.args[0]
+        for call in logger.info.call_args_list
+    )
 
 
 def test_scan_pure_active_goes_to_pending(monkeypatch, tmp_path):

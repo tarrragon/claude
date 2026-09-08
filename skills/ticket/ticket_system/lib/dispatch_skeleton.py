@@ -11,6 +11,13 @@ Dispatch 骨架純組裝邏輯（不依賴 filelock，供 CLI 與測試共用）
 本模組的 `build_skeleton`，兩者量測的是同一份程式碼路徑。
 """
 
+# --dry-run 輸出首行浮水印（3-F M-7）。正式骨架（SKELETON_TEMPLATE_* 與
+# 下方 build_skeleton 的組裝結果）本身不變；浮水印由呼叫端（track_dispatch
+# 的 execute_dispatch）在 dry-run 分支對 build_skeleton 輸出做後處理式
+# 前綴，使貼入 prompt 的文字帶有「未落票」的可辨識標記，取代原本 dry-run
+# 與正式派發骨架逐字相同、貼入 prompt 後無從辨識是否曾落票的狀態。
+DRY_RUN_WATERMARK = "[DRY-RUN 未落票]"
+
 # 骨架（權威版）——與 .claude/references/agent-dispatch-template.md「骨架
 # （3 段）」逐字一致。修改本常數須同步該文件（單一權威決策：CLI 為權威，
 # 文件端改為引用本模組輸出）。

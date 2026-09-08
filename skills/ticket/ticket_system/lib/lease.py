@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ticket_system.constants import STATUS_IN_PROGRESS, STATUS_PENDING
 from ticket_system.lib.claude_lib_loader import (
@@ -185,6 +185,27 @@ def load_registry_snapshot() -> Tuple[Dict[str, Any], Any]:
 LEASE_STATE_LIVE = "live"
 LEASE_STATE_RECLAIMABLE = "reclaimable"
 LEASE_STATE_UNTRACKED = "untracked"
+
+# 文字標記後綴（`dashboard`／`list` 兩處 In Progress 渲染共用單一來源。
+# list 原僅渲染狀態不含 lease 標記，使依賴其輸出帶 [RECLAIMABLE] 的假設
+# 落空；改由本函式統一供應，避免各呼叫端各自維護一份對照表分裂）。
+LEASE_TAG_LIVE = "LIVE"
+LEASE_TAG_RECLAIMABLE = "RECLAIMABLE"
+
+_LEASE_TEXT_TAGS = {
+    LEASE_STATE_LIVE: f" [{LEASE_TAG_LIVE}]",
+    LEASE_STATE_RECLAIMABLE: f" [{LEASE_TAG_RECLAIMABLE}]",
+}
+
+
+def format_lease_tag(state: Optional[str]) -> str:
+    """將 `determine_lease_state` 回傳的三態轉為顯示用文字標記後綴。
+
+    LIVE/RECLAIMABLE 回傳對應標記（如 `" [LIVE]"`，含前導空格便於直接
+    附加於既有行尾）；UNTRACKED 或未知值回傳空字串（Never break
+    userspace：既有無 lease 資訊的呼叫端輸出格式不受影響）。
+    """
+    return _LEASE_TEXT_TAGS.get(state, "")
 
 
 def determine_lease_state(
@@ -720,7 +741,12 @@ def _apply_reclaim(version: str, ticket_id: str) -> Optional[str]:
 
 
 def reclaim_ticket(
-    version: str, ticket_id: str, *, confirm: bool, now: Optional[datetime] = None
+    version: str,
+    ticket_id: str,
+    *,
+    confirm: bool,
+    now: Optional[datetime] = None,
+    landing_report_hook: Optional[Callable[[str, str, str, datetime], None]] = None,
 ) -> int:
     """`ticket track reclaim` 主邏輯。
 
@@ -728,6 +754,17 @@ def reclaim_ticket(
     registry 未追蹤）；強制 ghost 鑑識三查，任一命中或無法判定即拒絕。
     預設 dry-run 僅印鑑識報告；`--confirm` 且三查全過才轉回 pending 並清
     registry lease。
+
+    `landing_report_hook`：`--confirm` 落地成功後呼叫，簽章為
+    `(version, ticket_id, report_text, now)`，供呼叫端把鑑識報告落票
+    （3-F 共用原則：前置檢查衡量的是可寫 artifact，鑑識結果原僅印在
+    終端機不落票，`--confirm` 決策無法回溯稽核）。本模組刻意不 import
+    `ticket_system.commands.*`（見檔頭層級邊界說明），落票所需的
+    `execute_append_log` 由 commands 層（`track.py`）注入本 hook 完成，
+    `reclaim_ticket` 本身不知道落票的具體實作。hook 拋出的例外由呼叫端
+    （hook 自身）吞下並記 stderr，不影響 reclaim 狀態轉換已完成的事實
+    （落票為稽核強化，非 reclaim 成功的前提）；為 None（預設）時行為與
+    既有呼叫端逐字一致（回歸不變）。
 
     外層流程跨兩把獨立鎖，非單一原子操作（Phase 4 審查修正 3，誠實記載
     非改架構）：`check_reclaimable` 讀取 registry（無鎖快照）→ ghost 鑑識
@@ -794,6 +831,14 @@ def reclaim_ticket(
             remove_ticket_id=ticket_id,
             files_loader=_make_files_loader(version),
         )
+
+    if landing_report_hook is not None:
+        try:
+            landing_report_hook(version, ticket_id, render_ghost_report(ticket_id, report), now)
+        except Exception as exc:  # noqa: BLE001 - 落票失敗不影響 reclaim 已完成的狀態轉換
+            sys.stderr.write(
+                f"[reclaim] {ticket_id}: 鑑識報告落票失敗（不影響 reclaim 本身）：{exc}\n"
+            )
 
     print(f"[reclaim] {ticket_id}: 已轉回 pending，registry lease 已清除")
     return 0

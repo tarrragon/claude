@@ -51,6 +51,7 @@ from ticket_system.lib.ticket_loader import (
     list_tickets,
     load_ticket,
 )
+from ticket_system.lib import lease
 from ticket_system.lib.staleness import (
     format_stale_warning,
     format_stale_list_summary,
@@ -946,6 +947,34 @@ def _output_yaml(tickets: list) -> int:
     return 0
 
 
+def _compute_in_progress_lease_tags(tickets: List[Dict[str, Any]]) -> Dict[str, str]:
+    """為 in_progress 票計算 lease 標記後綴（`ticket_id -> " [LIVE]"` 等）。
+
+    共用 `dashboard` 同一套 `lease.determine_lease_state` 判定與
+    `lease.format_lease_tag` 渲染，使 `list` 表格輸出與 dashboard 的
+    In Progress 標記一致（SKILL.md fallback 步驟假設 list 輸出帶
+    [RECLAIMABLE] 標記，先前實作僅 dashboard/runqueue 有渲染）。
+
+    僅對 status == in_progress 的票呼叫（`determine_lease_state` 本身不含
+    status 守衛），非 in_progress 票一律不進入標記表，維持 table 對其他
+    狀態的輸出格式不變。
+    """
+    registry, pm_registry = lease.load_registry_snapshot()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    tags: Dict[str, str] = {}
+    for ticket in tickets:
+        if ticket.get("status") != STATUS_IN_PROGRESS:
+            continue
+        ticket_id = ticket.get("id") or ticket.get("ticket_id")
+        if not ticket_id:
+            continue
+        state = lease.determine_lease_state(registry, ticket, pm_registry, now)
+        tag = lease.format_lease_tag(state)
+        if tag:
+            tags[ticket_id] = tag
+    return tags
+
+
 def _output_table(tickets: list, version: str, total_stats: Optional[Dict[str, int]] = None) -> int:
     """
     以表格格式輸出 Ticket 列表（預設）。
@@ -972,8 +1001,9 @@ def _output_table(tickets: list, version: str, total_stats: Optional[Dict[str, i
     print(f"   {format_ticket_stats(stats)}")
     print(SEPARATOR_CHAR * SEPARATOR_WIDTH)
 
-    # 顯示 Ticket 列表
-    formatted = format_ticket_list(tickets, include_who=True)
+    # 顯示 Ticket 列表（in_progress 列附 lease 標記，同 dashboard）
+    lease_tags = _compute_in_progress_lease_tags(tickets)
+    formatted = format_ticket_list(tickets, include_who=True, lease_tags=lease_tags)
     if formatted:
         print(formatted)
 

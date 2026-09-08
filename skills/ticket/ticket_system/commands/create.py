@@ -405,6 +405,23 @@ def _enforce_create_checklist(missing: List[str], force: bool,
     sys.exit(1)
 
 
+def _report_dry_run_preview(ticket_id: str, config: TicketConfig) -> None:
+    """輸出 --dry-run 預覽訊息：會配到哪個 ticket_id、關鍵欄位為何，不落地。
+
+    只列驗收（acceptance）與 why 兩個最常見的「使用者想預覽是否正確」欄位，
+    其餘欄位可用 `ticket track full` 在真正建立後查看，避免預覽輸出過長。
+    """
+    print(f"[DRY-RUN] 將建立 Ticket: {ticket_id}（不落地，未寫入任何檔案）")
+    print(f"   Title: {config.get('title')}")
+    print(f"   Type: {config.get('ticket_type')}")
+    print(f"   Why: {config.get('why')}")
+    acceptance = config.get("acceptance") or []
+    if acceptance:
+        print("   Acceptance:")
+        for item in acceptance:
+            print(f"     - {item}")
+
+
 def _build_and_save_ticket(
     version: str,
     ticket_id: str,
@@ -589,6 +606,13 @@ def _persist_and_report(
         missing_fields, force=force_flag,
         ticket_type=ticket_type, action=config.get("action", ""),
     )
+
+    # --dry-run：驗證層（步驟 1、1.5）全數跑完後即停止，不進入持久化/關係更新/
+    # 報告層。預覽用途是「示範會建立什麼」而非「示範完整建立流程」，故只需
+    # 回報 ticket_id + 關鍵欄位，不需模擬 print_create_checklist 的完整輸出。
+    if bool(getattr(args, "dry_run", False)):
+        _report_dry_run_preview(ticket_id, config)
+        return 0
 
     # 步驟 2：持久化
     ticket = _build_and_save_ticket(version, ticket_id, config)
@@ -877,6 +901,8 @@ def execute(args: argparse.Namespace) -> int:
         # Step 3: 驗證 blockedBy + 重複偵測 + 持久化 + 輸出
         rc = _persist_and_report(args, config, version, ticket_id, tdd_result)
 
+    dry_run = bool(getattr(args, "dry_run", False))
+
     # 主題狀態回報：既有主題選取/新增不阻擋建票，僅於報告階段明確表示
     # 結果（已標記主題名 / 未指派），不寫入任何 ticket frontmatter 欄位。
     # 映射寫入（ticket_id -> topic）與 --new-topic 的主題名註冊皆延後至
@@ -885,7 +911,9 @@ def execute(args: argparse.Namespace) -> int:
     # 清單，未寫入 ticket_id -> topic 映射，選定的主題不留下任何票與
     # 主題的關聯；append_assignment 內部已含冪等的 append_topic 呼叫，
     # 故 --new-topic 的主題名註冊亦一併由它完成，不再單獨呼叫）。
-    if rc == 0:
+    # --dry-run 時 rc==0 但 ticket 從未落盤，主題映射寫入的對象是不存在的
+    # ticket_id，故一併略過（與 Step 4 Context Bundle/auto-commit 同理）。
+    if rc == 0 and not dry_run:
         if topic:
             from ticket_system.lib.topic_assignments import append_assignment
             try:
@@ -933,8 +961,9 @@ def execute(args: argparse.Namespace) -> int:
             ))
 
     # Step 4 (W17-002.2)：Context Bundle 自動抽取（post-persist enhancement）
+    # --dry-run 時 ticket 未落盤，抽取與 auto-commit 的對象不存在，一併略過。
     ticket_intact = True
-    if rc == 0:
+    if rc == 0 and not dry_run:
         try:
             ticket_intact = _auto_extract_context_bundle_post_create(
                 version,
@@ -1141,6 +1170,17 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help=(
             "旁路 Tier 2 同窗口高相似度阻擋層（W1-040.1 冪等防護逃生閥）；"
             "用於失誤後刻意重建近似 Ticket 的合法情境"
+        ),
+    )
+
+    parser.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        help=(
+            "驗證全部通過但不落地：不寫入 ticket 檔案、不更新父子/衍生關係、"
+            "不寫主題映射、不抽取 Context Bundle、不 auto-commit。"
+            "用於預覽會配到的 ticket_id 與關鍵欄位（文件示範建票用法時可用）"
         ),
     )
 

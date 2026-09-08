@@ -4,7 +4,7 @@ description: "框架無關的前端開發協議 + Playwright 驗證 + 跨領域 
 license: MIT
 metadata:
   portable: true
-  version: 0.3.2
+  version: 0.3.3
   category: frontend-engineering
 ---
 

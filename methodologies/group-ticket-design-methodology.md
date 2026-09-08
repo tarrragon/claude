@@ -36,7 +36,7 @@ Group ticket（新建，pending）
 
 關鍵性質：原父不受干擾（用 `--source-ticket`，不影響已 complete）；層次感保留（children 明確屬於 group 專案）；硬阻擋正確（children 全完成才觸發 group complete）；雙向追溯（group.source_ticket → 原分析，group.children → 具體子項）。
 
-> CLI 建立步驟（`ticket create --parent` / `--source-ticket` 各欄位）與六欄位語意 SSOT 見 `.claude/skills/ticket/SKILL.md` 與 `.claude/skills/ticket/references/field-semantics.md`，本檔不複述。
+> CLI 建立步驟（`ticket create --parent` / `--source-ticket` 各欄位）見 `.claude/skills/ticket/references/create-command.md`〈--source-ticket 參數（衍生關係）〉（SKILL.md 拆分後僅存路由列，各欄位說明住此節）；六欄位語意 SSOT 見 `.claude/skills/ticket/references/field-semantics.md`，本檔不複述。
 
 ## 設計判斷（三衍生規範）
 

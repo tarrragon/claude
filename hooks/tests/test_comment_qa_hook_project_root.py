@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 HOOK_PATH = (
-    REPO_ROOT / ".claude" / "skills" / "compositional-writing"
+    REPO_ROOT / ".claude" / "skills" / "dart-comment-traceability"
     / "hooks" / "comment-qa-hook.py"
 )
 

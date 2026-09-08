@@ -304,10 +304,12 @@ def is_handoff_stale(
 
     判斷規則（依序檢查；任務鏈方向與顯式 target_ticket_id 合併為單一 target 判準）：
     1. 有 target（任務鏈 direction 後綴，或顯式 target_ticket_id，經 resolve_target
-       統一解析）且該 target 已 in_progress/completed
+       統一解析）且該 target 已 in_progress/completed/closed
        → stale，reason 為「目標 ticket {target_id} 已 {status}」
        （任務鏈方向但無法解析出 target 時，視為未啟動，非 stale，不落入情境 2/3
-       以 source 誤判——任務鏈 handoff 的來源 completed 是預期狀態）
+       以 source 誤判——任務鏈 handoff 的來源 completed 是預期狀態；target 已
+       closed 與已 completed 同屬「該做的工作已結束」，故與 in_progress/
+       completed 併入同一判準，非另立情境）
     2. 無 target 且來源 ticket 已 completed
        → stale，reason 為「來源 ticket {ticket_id} 已 completed」
     3. 無 target 且 from_status == "completed"
@@ -342,8 +344,17 @@ def is_handoff_stale(
     # 職責，不應各自重抄解析邏輯（ARCH-020：resolve_target 的 docstring 本身即
     # 警告跳過此 helper 會重蹈覆轍）。
     if target_id:
+        # in_progress/completed 與 closed 分兩次檢查而非合併查一次 status，
+        # 是為了保留 is_ticket_in_progress_or_completed 既有公開函式的既定語意
+        # （名稱與既有呼叫端/測試皆綁定 in_progress/completed 兩態，不可靜默
+        # 擴增為三態）；closed 另以 is_ticket_terminal 補問（涵蓋
+        # completed/closed，completed 已被前一分支攔截，故此處實際只新增
+        # closed 判定）。
         if is_ticket_in_progress_or_completed(target_id, project_root):
             status = _load_ticket_status(target_id, project_root) or "in_progress"
+            return True, f"目標 ticket {target_id} 已 {status}"
+        if is_ticket_terminal(target_id, project_root):
+            status = _load_ticket_status(target_id, project_root) or "closed"
             return True, f"目標 ticket {target_id} 已 {status}"
         return False, ""
 

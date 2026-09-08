@@ -92,7 +92,7 @@ created: 2026-07-31
 
 實際代價：`0.2.1-W3-181` 改動一個常數使測試紅燈，跨兩張票的 commit 均無提示，潛伏 27 分鐘至另一張無關 ticket 的代理人碰巧跑全套件才撞見。若未碰巧，潛伏無上界。
 
-附帶一例同型：`.claude/skills/ticket/SKILL.md` 的 append-log 說明寫「維持 pre-commit hook 把關」，該敘述對有 pre-commit 的 consumer 成立，對本專案不成立——文件敘述了一個在當前環境不存在的保證。
+附帶一例同型：`.claude/skills/ticket/references/track-command.md`〈append-log 副作用：auto-commit〉的說明寫「維持 pre-commit hook 把關」（原住 SKILL.md，該說明已隨拆分搬遷至此，SKILL.md 現無 append-log 說明），該敘述對有 pre-commit 的 consumer 成立，對本專案不成立——文件敘述了一個在當前環境不存在的保證。
 
 分析見 `0.2.1-W3-188`，落地見 `0.2.1-W3-189`。
 

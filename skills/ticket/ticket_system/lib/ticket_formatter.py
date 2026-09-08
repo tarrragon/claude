@@ -325,6 +325,7 @@ def format_ticket_list(
     tickets: List[Dict[str, Any]],
     separator: str = "|",
     include_who: bool = False,
+    lease_tags: Optional[Dict[str, str]] = None,
 ) -> str:
     """
     格式化 Ticket 清單
@@ -333,6 +334,11 @@ def format_ticket_list(
         tickets: Ticket 列表
         separator: 欄位分隔符
         include_who: 是否包含執行者 (who) 欄位
+        lease_tags: ticket_id -> 已格式化的 lease 標記後綴（如 " [LIVE]"）
+            的對照表；未提供或該票無對應項時不附加任何標記（向後相容，
+            既有呼叫端輸出格式不變）。呼叫端負責計算標記內容（如
+            `ticket_system.lib.lease.format_lease_tag`），本函式只負責
+            附加，不耦合 lease 語意。
 
     Returns:
         str: 格式化的清單
@@ -345,19 +351,21 @@ def format_ticket_list(
         0.31.0-W3-001 | [待處理] | 實作
     """
     lines = []
+    tags = lease_tags or {}
 
     for ticket in tickets:
         ticket_id = ticket.get("id") or ticket.get("ticket_id", DEFAULT_UNKNOWN_VALUE)
         status = ticket.get("status", "pending")
         what = get_ticket_what(ticket)
         status_icon = format_status_icon(status)
+        lease_tag = tags.get(ticket_id, "")
 
         if include_who:
             who_field = ticket.get("who", DEFAULT_UNKNOWN_VALUE)
             who_name = _extract_who_name(who_field)
-            line = f"{ticket_id} {separator} {status_icon} {separator} {who_name} {separator} {what}"
+            line = f"{ticket_id} {separator} {status_icon} {separator} {who_name} {separator} {what}{lease_tag}"
         else:
-            line = f"{ticket_id} {separator} {status_icon} {separator} {what}"
+            line = f"{ticket_id} {separator} {status_icon} {separator} {what}{lease_tag}"
 
         lines.append(line)
 

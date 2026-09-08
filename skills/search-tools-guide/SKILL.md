@@ -2,7 +2,7 @@
 name: search-tools-guide
 description: "搜尋工具使用指南。用於：(1) 選擇正確的搜尋工具, (2) 三 MCP 工作流決策樹（cbm 概念搜尋 / codegraph 呼叫圖 / serena 型別感知), (3) rg 精確文字搜尋, (4) LSP/Serena 符號搜尋, (5) 工具安裝與故障排除"
 metadata:
-  version: 5.1.0
+  version: 5.2.0
 ---
 
 # 搜尋工具指南
@@ -76,70 +76,9 @@ metadata:
 
 ## Code Intelligence MCP 三刀流
 
-本專案配置三個 Code Intelligence MCP server（codebase-memory-mcp / codegraph / serena），各有不同定位與互補優勢。本章說明三者設計差異、工作流決策、以及在 JS Chrome Extension 開發中的最佳組合。
+本專案配置三個 Code Intelligence MCP server（codebase-memory-mcp / codegraph / serena），各有不同定位：cbm 主打語言無關的概念（模糊）搜尋，codegraph 主打自動增量的呼叫圖追蹤，serena 主打型別感知的安全編輯（唯一支援 rename）。三者按需求切換，不同時使用。
 
-### 三 MCP 設計對照表
-
-| 維度 | codebase-memory-mcp (cbm) | CodeGraph | Serena / LSP |
-|------|---------------------------|-----------|-------------|
-| **後端架構** | 語言無關向量+BM25 混合索引 | TypeScript/JavaScript AST（sqlite WAL） | LSP 協定（language server） |
-| **語言覆蓋** | 所有語言（向量向度） | JS/TS/Python/YAML/JSON（AST 支援度） | 編輯器已配置 LSP 的語言（Dart/JS/TS/Python 優先） |
-| **持久化** | `~/.cache/codebase-memory-mcp/` | `.codegraph/` (local per-developer) | LSP server 進程內（session 級） |
-| **Sync 機制** | 自動增量索引（watch mode） | 首次 init 後自動增量（2-5s lag） | LSP server 即時響應（file change event） |
-| **Type Resolution** | 無型別感知 | AST 級型別資訊（TS/JS 完整、Python partial） | 語言伺服器提供完整型別資訊 |
-| **跨 Service 查詢** | 單 repo 索引；支援多 project 管理 | 單 repo 初始化；可在外部 worktree 重複索引 | 單 LSP server 綁定，跨檔無額外能力 |
-| **概念搜尋** | 向量語意搜尋（「找相似概念」）| 精確 AST 符號定位（無模糊搜尋） | 精確符號查詢（定義/引用） |
-| **Symbol 編輯** | 無編輯能力 | `safe_delete_symbol`、其他編輯工具不支援 | `rename_symbol`、`replace_symbol_body`、`insert_before/after_symbol` |
-| **Diagnostics** | 無 | 無 | LSP `analyze_files` 靜態檢查（Dart 優先） |
-
-**特色對位**：cbm 的「語言無關 + 概念搜尋」是 codegraph/serena 都無法提供的；codegraph 在「自動增量 + 跨檔 caller 追蹤」獨佔；serena 在「型別感知 + symbol edit + diagnostics」領先。
-
-### 三刀流工作流決策樹
-
-選擇工具時按以下決策樹進行。各情境的工具推薦經實測驗證：
-
-```
-搜尋 / 分析需求
-    |
-    +-- 找概念相似的程式碼 / 模糊搜尋
-    |   → codebase-memory-mcp (cbm) [推薦]
-    |   例：「找所有處理錯誤的地方」「找 state 相關邏輯」
-    |   理由：向量語意搜尋，callstack/control flow 無法表達但 cbm 可召回
-    |
-    +-- 精確找某函式的所有 caller
-    |   → CodeGraph + Serena（兩者都行；cgraph 更快）
-    |   例：「deleteBook 被誰呼叫」「fetchBooks 的 callers」
-    |   理由：AST caller/callee 追蹤，比正則搜尋精確
-    |
-    +-- 分析修改影響範圍 (blast radius)
-    |   → Serena（最安全）或 CodeGraph（最快）
-    |   例：「改 API 回傳型別會影響多少地方」
-    |   理由：Serena type-aware；CodeGraph 自動 sync caller 資訊
-    |
-    +-- 重命名符號 / 安全重構
-    |   → Serena [唯一支援]
-    |   例：`BookRepository` → `BookStore`；重命名後自動更新 100+ 引用
-    |   理由：LSP rename 包含檔案儲存；其他工具不支援
-    |
-    +-- 跨 Repo / 跨服務符號查詢（本專案單 repo 不常見）
-    |   → codebase-memory-mcp [推薦]
-    |   例：「這個概念在其他專案實作過嗎」
-    |   理由：cbm 支援多 project 管理，向量搜尋跨 repo
-```
-
-### JS Chrome Extension 場景：三刀流最佳組合
-
-本專案（Chrome Extension + JS 前端 + Python hook 混合）的典型工作流：
-
-| 工作 | 首選工具 | 理由 | 備選 |
-|------|---------|------|------|
-| 探索新需求 / 理解架構邊界 | cbm semantic search | 模糊找「event」「dispatch」「listener」等概念 | Serena find_symbol（但需精確名稱） |
-| 追蹤事件流（event → listener → handler） | CodeGraph call graph | 自動追蹤完整呼叫鏈（特別是 async callback） | rg + Serena（手動多步） |
-| 確認改動影響（改 message schema 會卡誰） | CodeGraph impact + Serena rename | cbm 找相關檔，Serena 確認精確引用 | rg 逐個驗證 |
-| 重構回呼函式名 / API 簽章 | Serena rename + replace_symbol_body | rename 改所有引用；replace_symbol_body 改實作 | 手動 sed + rg |
-| 查詢 Chrome API 使用方式 | Serena hover（JS LSP）| 顯示 TypeScript 型別簽章（chrome.runtime.sendMessage 參數） | 網路搜尋 + WebSearch |
-
-**實踐建議**：cbm 為「初期探索」甜蜜點（可模糊記得概念名但不清楚確切函式名），codegraph 為「精確追蹤」甜蜜點（給定起點快速展開 caller/callee），serena 為「安全編輯」甜蜜點（批量重構無誤）。三者絕非同時用，而是按需求切換。
+完整九維度設計對照表、三刀流選擇決策樹、JS Chrome Extension 場景組合範例：`references/code-intelligence-mcp-tools.md`
 
 ---
 
@@ -149,9 +88,7 @@ metadata:
 
 Claude Code runtime 將部分工具以 **deferred 模式** 提供。deferred tools 的 schema **不預先載入**，必須透過 `ToolSearch` 搜尋並載入後才能呼叫。每個 session 啟動時 runtime 會在 system-reminder 中列出所有 deferred tools 名稱。
 
-**核心規則**：遇到「我想做 X 但不知道怎麼做」時，**在宣告「做不到」或選擇「限制性解法」（禁止、防護、規避）之前**，必須先執行 `ToolSearch` 搜尋是否有對應的 deferred tool。
-
-### 使用方式
+**核心規則**：遇到「我想做 X 但不知道怎麼做」時，**在宣告「做不到」或選擇「限制性解法」（禁止、防護、規避）之前**，必須先執行 `ToolSearch` 搜尋是否有對應的 deferred tool（完整五問窮盡檢查見 `.claude/rules/core/tool-discovery.md`）。
 
 ```
 # 精確載入指定工具（最常用）
@@ -160,269 +97,27 @@ ToolSearch(query="select:TaskOutput,SendMessage,TaskCreate")
 
 # 關鍵字搜尋（探索未知能力）
 ToolSearch(query="background task status")
-ToolSearch(query="+task +output", max_results=5)
 ```
 
-返回值會以 `<function>{...}</function>` 格式提供工具 schema，載入後即可如一般工具呼叫。
+返回值會以 `<function>{...}</function>` 格式提供工具 schema，載入後即可如一般工具呼叫。Session 當下可用的 deferred tools 清單以 system-reminder 為準。
 
-### 常見 Deferred Tools 用途對照
-
-| 需求 | Deferred Tool | 典型場景 | 注意事項 |
-|------|---------------|---------|---------|
-| 查背景代理人 runtime 狀態 | `TaskOutput` | PC-050 模式 D 補救；失敗判斷前置步驟 Step 0.5 | **只讀 `<status>` 標籤**，禁讀 `<output>` body（PC-050） |
-| 派發背景代理人 | `TaskCreate` | 需要 run_in_background 長任務 | 搭配 Agent tool 更常用 |
-| 停止失控代理人 | `TaskStop` | 代理人 loop、超時、錯誤方向 | 先 TaskOutput 確認狀態再停 |
-| 向代理人發送指令 | `SendMessage` | 代理人執行中需要補充資訊 | 非同步發送，代理人下次 tool call 收 |
-| 列出所有任務 | `TaskList` | 總覽 CC 任務（非 TodoList） | 注意：**不是 TodoList 系統** |
-| 用戶做決策 | `AskUserQuestion` | 路由 / 多選 / 二元確認 | 詳見 askuserquestion-rules.md |
-| 抓取指定網頁 | `WebFetch` | 精準讀取 URL 內容 | 網頁搜尋用 WebSearch |
-| 網頁搜尋 | `WebSearch` | 技術文件 / API 查詢 | 詳見本文件 WebSearch 章節 |
-| 排程定期任務 | `CronCreate` / `CronList` / `CronDelete` | 週期性自動執行 | |
-| 建立 / 管理多代理人團隊 | `TeamCreate` / `TeamDelete` | 代理人間即時協商 | 詳見 agent-team skill |
-| 進入 / 離開計畫模式 | `EnterPlanMode` / `ExitPlanMode` | 提出計畫給用戶核准 | |
-| 進入 / 離開 worktree | `EnterWorktree` / `ExitWorktree` | 分支隔離 | |
-| 監控背景 process stdout | `Monitor` | 追蹤 log 流 | |
-| 修改 Jupyter Notebook | `NotebookEdit` | 專案少用 | |
-| MCP resources 查詢 | `ListMcpResourcesTool` / `ReadMcpResourceTool` | 跨 MCP server 資源 | |
-
-> Session 當下可用的 deferred tools 清單以 system-reminder 為準，實際載入請以 `ToolSearch` 返回為依據。
-
-### 工作流程
-
-```
-情境：「我想做 X 但不知道有什麼工具」
-    |
-    v
-Step 1：對照本章「用途對照表」是否有直接匹配
-    |
-    +-- 有 --> ToolSearch(query="select:<tool_name>") 載入 → 呼叫
-    |
-    +-- 無 --> Step 2
-    |
-    v
-Step 2：用關鍵字 ToolSearch 探索
-    ToolSearch(query="keyword1 keyword2", max_results=5)
-    |
-    +-- 找到 --> 載入 → 呼叫
-    |
-    +-- 找不到 --> Step 3
-    |
-    v
-Step 3：五問窮盡檢查
-    (1) Hook 能推送嗎？
-    (2) 檔案系統能追蹤嗎？
-    (3) 流程能繞過嗎？
-    (4) 既有模組有 API 但沒接線嗎？
-    (5) CC runtime 有 deferred tool 嗎？（已在 Step 1-2 執行）
-    |
-    v
-五問皆否才能結論「做不到」
-```
-
-### 反模式（必須避免）
-
-| 反模式 | 症狀 | 正確做法 |
-|-------|------|---------|
-| 框架為「XX 專用前置步驟」 | 把 ToolSearch 當成特定工具的鑰匙，不當成通用發現機制 | 理解為「發現 CC runtime deferred tools 的通用入口」 |
-| 忽略 session system-reminder | 把 deferred tools 清單當背景資訊 | 每 session 首次遇到「找工具」需求時掃一次 |
-| 採限制性解法（禁止 / 防護） | 問題框架為「如何防止 X」 | 改框架為「如何正確做 X」再問五問 |
-| 跳過第五問 | 只檢查 Hook/檔案/流程/既有 API，未問 CC runtime 能力 | 必須執行 ToolSearch 搜尋 deferred tool |
-| 宣告「平台不支援」未窮盡 | 代理人或 PM 直接下結論 | 先完成五問（規則 1），最後才下結論 |
-| 讀 transcript 推論代理人狀態 | 違反 PC-050 模式 D | 用 TaskOutput 讀 `<status>` 標籤 |
-
-### 相關規則與錯誤模式
-
-- `.claude/pm-rules/askuserquestion-rules.md` — AskUserQuestion 的具體用例
-- `.claude/references/pm-agent-observability.md` — TaskOutput 安全使用範本
-- `.claude/error-patterns/process-compliance/PC-050-premature-agent-completion-judgment.md` — 模式 D 禁讀 output body
-- Memory `feedback_exhaust_indirect_before_impossible.md` — 五問檢查清單
+常見 deferred tools 用途對照表、發現工作流程圖、反模式清單、相關規則：`references/meta-tools-deferred-discovery.md`
 
 ---
 
 ## rg (ripgrep) - 日常主力搜尋
 
-### 核心概念
+**ripgrep** 是基於 Rust 的高效能正則搜尋工具，是 Claude Code 內建 Grep 的底層引擎，比 GNU grep 快約 33 倍（Linux kernel 搜尋基準）且預設自動遵守 `.gitignore` 規則。一般搜尋用內建 Grep 即可，需要 PCRE2、壓縮檔搜尋、多編碼等進階功能時才需要以 bash 呼叫 rg。
 
-**ripgrep** 是基於 Rust 的高效能正則搜尋工具，是 Claude Code 內建 Grep 的底層引擎。
-
-**效能特性**：使用有限自動機和 SIMD 最佳化、lock-free 並行目錄遍歷，比 GNU grep 快約 33 倍（Linux kernel 搜尋基準）。預設自動遵守 `.gitignore` 規則。
-
-### 安裝
-
-```bash
-# macOS
-brew install ripgrep
-
-# Linux (Debian/Ubuntu)
-sudo apt-get install ripgrep
-
-# 通用（需要 Rust）
-cargo install ripgrep
-```
-
-### rg vs 內建 Grep
-
-| 功能 | 內建 Grep | rg (Bash) |
-|------|----------|-----------|
-| 基本正則搜尋 | 支援 | 支援 |
-| 檔案類型過濾 | `glob` 參數 | `-t` / `-T` 參數 |
-| 上下文顯示 | `-A` / `-B` / `-C` | `-A` / `-B` / `-C` |
-| PCRE2 正則 | 不支援 | `-P` 支援 |
-| 壓縮檔搜尋 | 不支援 | `-z` 支援（brotli, bzip2, gzip, lz4, xz, zstd） |
-| 替換預覽 | 不支援 | `-r` 支援 |
-| JSON 輸出 | 不支援 | `--json` 支援 |
-| 排序控制 | 不支援 | `--sort` 支援 |
-| 多編碼 | 不支援 | `-E` 支援（UTF-16, Latin-1, GBK, EUC-JP, Shift_JIS） |
-| Preprocessor | 不支援 | `--pre` 支援（可搜尋 PDF 等） |
-| 混合正則引擎 | 不支援 | `--auto-hybrid-regex` 自動切換 |
-
-**結論**：一般搜尋用內建 Grep 即可，需要進階功能時用 rg。
-
-### 常用指令速查
-
-```bash
-# 基本搜尋
-rg "pattern" lib/              # 搜尋特定目錄
-rg -i "pattern"                # 大小寫不敏感
-rg -w "className"              # 全字匹配
-rg -F "exact.string"           # 固定字串（非正則）
-
-# 輸出控制
-rg -l "pattern"                # 僅顯示檔案名稱
-rg -c "pattern"                # 僅顯示計數
-rg -C 3 "pattern"              # 前後各 3 行上下文
-rg -m 5 "pattern"              # 限制最大匹配數
-
-# 檔案類型過濾
-rg -t dart "pattern"           # 僅搜尋 Dart
-rg -t py "pattern"             # 僅搜尋 Python
-rg -g "*.dart" "pattern"       # glob 過濾
-rg -g "!*.test.dart" "pattern" # 排除模式
-
-# 正則表達式
-rg "class\s+\w+\s+extends"     # 基本正則
-rg -P "(?<=class\s)\w+"        # PCRE2 (lookaround)
-rg -U "class.*\{[\s\S]*?\}"    # 多行匹配
-
-# 進階功能（rg 獨佔）
-rg -z "pattern" archive.gz     # 搜尋壓縮檔
-rg -E utf-16 "pattern"         # 搜尋非 UTF-8 編碼檔案
-rg --pre cat "pattern"         # 使用 preprocessor（可搜尋 PDF 等）
-rg --hidden "pattern"          # 搜尋隱藏檔案
-rg --no-ignore "pattern"       # 搜尋 gitignore 忽略的檔案
-
-# 替換預覽
-rg "oldName" -r "newName"      # 不修改檔案，僅預覽
-```
-
-### 語言/框架專案範例（以 Flutter/Dart 為例，其他語言類似）
-
-```bash
-# Widget 定義（Flutter）
-rg -t dart "class\s+\w+\s+extends\s+(Stateless|Stateful)Widget"
-
-# Provider 使用（Flutter）
-rg -t dart "Provider\.(of|watch|read)" lib/
-
-# 測試案例（Dart）
-rg -t dart "test(Widgets)?\(" test/
-
-# TODO 和 FIXME（Dart，可替換為其他語言的 type filter 如 -t js/py/go）
-rg -t dart "(TODO|FIXME|HACK)" lib/
-
-# Ticket 狀態（與語言無關）
-rg "status:\s*(pending|in_progress)" docs/work-logs/
-```
-
-### 概念性搜尋技巧
-
-rg 的主要弱點是同義詞覆蓋（召回率 ~79-87%），可透過多 Pattern 組合改善：
-
-```bash
-# 錯誤處理（基本 + 同義詞擴展）
-rg "catch|try|error|exception|throw" lib/           # 基本
-rg "failure|recover|fallback|retry|graceful" lib/    # 同義詞擴展
-
-# 狀態管理（基本 + 生命週期概念）
-rg "status|state|pending|in_progress|completed" lib/ # 基本
-rg "lifecycle|transition|workflow|progress|phase" lib/ # 擴展
-
-# 資料流向（基本 + 資料操作概念）
-rg "parse|validate|save|store|write" lib/            # 基本
-rg "transform|convert|persist|repository|serialize" lib/ # 擴展
-```
-
-**降噪技巧**：排除 l10n 和 import 噪音
-
-```bash
-rg "error" lib/ --glob '!lib/l10n/' --glob '!*.g.dart'
-```
+安裝方式、rg vs 內建 Grep 完整功能對照、常用指令速查、語言框架範例、同義詞擴展的概念性搜尋技巧：`references/rg-ripgrep-usage.md`
 
 ---
 
 ## Serena / LSP / Dart MCP - 符號導航與程式碼理解
 
-### 核心概念
+**Serena**、**LSP** 和 **Dart MCP** 提供語意感知的程式碼導航，理解符號定義、引用關係和型別系統，是唯一能做到精確重構的工具類別。適用於有 LSP 插件的語言（Dart / JavaScript / TypeScript / Python 等）；純文字檔（`.md` / `.txt` / `.yaml` / `.json`）無 LSP 結構優勢，應改用 Edit / Grep。日常搜尋無法用 Serena 完全取代 rg。
 
-**Serena**、**LSP** 和 **Dart MCP** 提供語意感知的程式碼導航，理解符號定義、引用關係和型別系統。這是唯一能做到精確重構的工具類別。
-
-### 重要限制
-
-**Serena 的 LSP 符號分析適用於有 LSP 插件的語言**：Dart / JavaScript（typescript-language-server）/ TypeScript / Python（pyright）等皆有效；對純文字檔（`.md` / `.txt` / `.yaml` / `.json`）無 LSP 結構優勢，應改用 Edit / Grep。
-
-**Why 此處原誤紀錄為「僅對 Dart 有效」**：此紀錄源自早期 Python 環境未配置 pyright 的觀察，已不適用當前環境。W17-091 ANA 實證 serena 對本專案 JavaScript 程式碼完整有效（Class / Methods / 行號邊界皆能解析）。
-
-### Serena 工具
-
-| 工具 | 用途 | 使用場景 |
-|------|------|---------|
-| `find_symbol` | 搜尋符號定義 | 找類別、方法、變數定義（僅 Dart） |
-| `find_referencing_symbols` | 搜尋引用 | 找某個符號的所有使用處 |
-| `get_symbols_overview` | 檔案符號總覽 | 瞭解檔案結構（不需讀全檔） |
-| `rename_symbol` | 重命名符號 | 安全重構（自動更新所有引用） |
-| `replace_symbol_body` | 替換符號定義 | 精確修改函式/類別實作 |
-| `insert_before/after_symbol` | 插入程式碼 | 在符號前後新增內容 |
-| `search_for_pattern` | 模式搜尋 | 靈活的正則搜尋（類似 rg） |
-
-### Dart MCP 工具
-
-| 工具 | 用途 | 使用場景 |
-|------|------|---------|
-| `hover` | 型別和文件資訊 | 查看符號的完整型別簽章 |
-| `resolve_workspace_symbol` | 跨檔案符號搜尋 | 在整個工作區找符號 |
-| `signature_help` | 函式簽章提示 | 查看參數定義和說明 |
-| `analyze_files` | 靜態分析 | 找 lint 問題、型別錯誤 |
-| `dart_format` | 格式化程式碼 | 自動排版 |
-| `dart_fix` | 自動修復 | 套用 lint 建議的修正 |
-
-### Serena search_for_pattern vs Grep
-
-**日常搜尋無法用 Serena 完全取代 rg。** 差異如下：
-
-| 維度 | Grep (rg) | Serena search_for_pattern |
-|------|-----------|--------------------------|
-| 速度 | 即時（< 1 秒） | 1-5 秒，大範圍可能溢出 |
-| 輸出格式 | 簡潔行格式，三種模式 | JSON，較冗長 |
-| 大小寫處理 | 原生 `-i` flag | 需 regex `(?i)` |
-| 分頁 | `head_limit` + `offset` | 無（溢出時需縮小範圍） |
-| 計數 | `output_mode: count` | 無 |
-| 跨行搜尋 | 需 `multiline: true` | 預設支援 |
-| 程式碼過濾 | `--type dart` | `restrict_search_to_code_files` |
-
-**Serena search_for_pattern 僅在以下場景使用**：
-- 搜尋後接續語意操作（find_symbol、replace_symbol_body）
-- 需要嚴格只搜尋程式碼檔案
-- 需要跨行匹配
-
-### 適用場景
-
-| 適合（獨佔優勢） | 不適合 |
-|-----------------|-------|
-| 重構前找所有引用（精確） | 搜尋註解或字串內容 |
-| 理解類別繼承和實作關係 | 搜尋非 Dart 程式碼檔案 |
-| 安全重命名（自動更新引用） | 模糊概念搜尋 |
-| 查看符號完整型別資訊 | 跨專案搜尋 |
-| 靜態分析和自動修復 | 效能分析 |
+Serena / Dart MCP 完整工具表、`search_for_pattern` vs Grep 詳細比較、適用場景對照：`references/serena-lsp-symbol-navigation.md`
 
 ---
 

@@ -4,7 +4,7 @@
 
 > **何時讀**：建立 Atomic Ticket 時——需確認版本歸屬、主題歸屬自動推導、多值參數格式、type 分類、決策樹路由參數，或需判斷 `--parent` 與 `--source-ticket` 該用哪個時。**亦由此進入**：`field-semantics.md`〈相關文件〉（`--parent` vs `--source-ticket` CLI 副作用對比指標）。
 >
-> **同目錄**：`workflow-create.md`（建立流程的決策樹，與本檔互補：決策樹在那份、參數細節在本檔）、`field-semantics.md`（欄位選擇決策樹，決定該填哪個血緣欄位時對照）。
+> **同目錄**：`workflow-create.md`（建立決策樹）、`field-semantics.md`（欄位選擇決策樹）。
 >
 > **溯源**：本檔於本專案匯入 commit `f375ae675` 時即已存在；2026-09-07 一次外移為 `SKILL.md`〈子命令詳細說明〉create 節的增量內容（依去重比對表判定為非重疊部分）搬入本檔，`SKILL.md` 對應節收斂為摘要句 + 路由指標（可用 `git log --oneline -- references/create-command.md` 查證）。
 
@@ -13,8 +13,10 @@
 ## 基本用法
 
 ```bash
-# 建立根任務（必須提供 decision-tree 三參數）
+# 建立根任務（必須提供 decision-tree 三參數；--where-files 與 --acceptance 亦為必填，見下方「重要」段）
 /ticket create --version 0.31.0 --wave 1 --action "實作" --target "XXX" \
+  --where-files "lib/path/to/file.dart" \
+  --acceptance "驗收條件描述" \
   --decision-tree-entry "第五層:TDD" \
   --decision-tree-decision "Phase 完成後建立 Ticket" \
   --decision-tree-rationale "quality-baseline-rule"
@@ -34,24 +36,28 @@
   --how-type "Implementation" \
   --how-strategy "TDD 循環" \
   --priority "P1" \
+  --acceptance "驗收條件描述" \
   --decision-tree-entry "第五層:TDD" \
   --decision-tree-decision "Phase 完成後建立 Ticket" \
   --decision-tree-rationale "quality-baseline-rule"
 
-# 建立子任務（可省略 decision-tree 參數）
-/ticket create --parent 1.0.0-W1-001 --action "更新" --target "XXX"
+# 建立子任務（可省略 decision-tree 參數；--where-files 與 --acceptance 仍為必填）
+/ticket create --parent 1.0.0-W1-001 --action "更新" --target "XXX" \
+  --where-files "lib/path/to/file.dart" --acceptance "驗收條件描述"
 
 # 建立衍生任務（與 --parent 互斥，見下方「--parent vs --source-ticket 對比表」章節）
 /ticket create --version 0.31.0 --wave 1 --action "實作" --target "XXX" \
+  --where-files "lib/path/to/file.dart" --acceptance "驗收條件描述" \
   --source-ticket 0.18.0-W17-001 --type IMP
 
-# 建立 DOC 類型（可省略 decision-tree 參數）
-/ticket create --version 0.31.0 --wave 1 --action "撰寫" --target "工作日誌" --type DOC
+# 建立 DOC 類型（可省略 decision-tree 參數；--where-files 與 --acceptance 仍為必填）
+/ticket create --version 0.31.0 --wave 1 --action "撰寫" --target "工作日誌" --type DOC \
+  --where-files "docs/work-logs/v0.31.0/topic.md" --acceptance "驗收條件描述"
 ```
 
 > 版本目錄無獨立初始化子命令（`ticket --help` 無 `init`）：`create` 執行時以 `get_tickets_dir(version)` 自動 `mkdir(parents=True, exist_ok=True)`，版本目錄不存在時 `create` 直接建立。
 
-**重要**：建立時（含子任務、DOC 類型），`ticket_builder.py` 的 `validate_create_checklist` 要求至少一項 `--where-files`（或 `--where`）與至少一項 `--acceptance`；`create` 命令層缺任一項即於持久化前 `exit 1` 阻擋，`--force` 可跳過此檢查（僅印 WARNING）。此外建立根任務時，必須提供 `--decision-tree-entry`、`--decision-tree-decision`、`--decision-tree-rationale` 三個參數。只在以下情況可省略 decision-tree 三參數：
+**重要**：建立時（含子任務、DOC 類型），`ticket_builder.py` 的 `validate_create_checklist` 要求至少一項 `--where-files`（或 `--where`）與至少一項 `--acceptance`，且 `--when` 不可留空（省略時預設為字面「待定義」，驗證即視為缺失）；`create` 命令層缺任一項即於持久化前 `exit 1` 阻擋（`CHECKLIST_VALIDATION_FAILED`），`--force` 可跳過此檢查（僅印 WARNING）。此外建立根任務時，必須提供 `--decision-tree-entry`、`--decision-tree-decision`、`--decision-tree-rationale` 三個參數。只在以下情況可省略 decision-tree 三參數：
 - 建立子任務（使用 `--parent` 參數）
 - Ticket 類型為 DOC（`--type DOC`）
 
@@ -68,6 +74,8 @@
 | S1 上游繼承 | `--source-ticket` 或 `--parent` 的上游已有主題 | 約 32 ms |
 | S2 檔案叢集 | `--where` 路徑與某主題既有涵蓋路徑交集達 3 段特異性 | 約 350-490 ms（僅 S1 未命中時執行） |
 | S3 ANA 標記 | `--type ANA` 且 S1/S2 皆未命中 | 僅輸出提示，不阻擋 |
+
+> 兩者皆為單次 dogfooding 量測值（於含約 230 張已指派票的真實票庫執行），非可重現效能基準；數值隨已指派票數增長會浮動，僅供 S1／S2 相對成本比例參考，不驅動任何判斷分支或告警門檻。
 
 三判準皆未命中時印 WARNING 但**不改 rc**（過渡期 warn-only）：以 exit code 表達強制力會讓代理人誤判建票失敗而重試。要免除警告有兩條路——指定主題，或以 `--no-topic` 明示不指派（該旗標與 `--topic` / `--new-topic` 互斥，同給時於任何持久化前 exit 1）。
 
@@ -91,6 +99,8 @@ ticket create ... --where "file1.py,file2.py"
 #   --blocked-by / --related-to：逗號分隔
 ticket create ... --blocked-by "<id>.1,<id>.2"
 ```
+
+`--where` 建立階段僅接受上述逗號分隔語法，不含 `::read`／`::write` 讀寫意圖後綴；後綴標記須於 frontmatter 直接編輯或後續 `set-where` 系操作附加。後綴語法、type 預設意圖與目錄型宣告展開規則見 `field-semantics.md`〈where.files 宣告語意〉。
 
 ## 類型說明
 
@@ -119,11 +129,9 @@ ticket create ... --blocked-by "<id>.1,<id>.2"
 
 三個參數**必須同時提供或同時省略**。
 
-**必須提供**的情況：
-- 建立根任務（非子任務）
-- Ticket 類型不是 DOC
+**必須提供**：建立根任務（非子任務）且 Ticket 類型不是 DOC 時（兩條件同時成立）。
 
-**可省略**的情況：
+**可省略**的情況（任一成立即可省略）：
 - 建立子任務（`--parent` 參數）
 - Ticket 類型為 DOC（`--type DOC`）
 
@@ -155,18 +163,18 @@ ticket create --wave 2 --action "撰寫" --target "工作日誌" --type DOC
 
 ## 重複偵測（兩層防護）
 
-`create` 在持久化前對同版本既有 Ticket 做語意相似度（Jaccard）比對，分兩層防護。閾值設定依據五場景 Jaccard 相似度實測定調（TP 逐字相同 / TP 近似改寫 / FP 同域不同標的等，量測資料見 `ticket_system/constants.py` 閾值常數註解）。
+`create` 在持久化前對同版本既有 Ticket 做語意相似度（Jaccard）比對，分兩層防護。閾值設定依據五場景 Jaccard 相似度實測定調：TP 逐字相同 1.000、TP 近似改寫 0.688（阻擋目標）、FP 兄弟票真實標題 0.031／0.069、FP batch 同質模板 0.400（皆不阻擋），量測資料見 `ticket_system/constants.py` 閾值常數註解。
 
 | 層 | 觸發條件 | 行為 | 旁路 |
 |----|---------|------|------|
 | Tier 1 警告層 | 同版本 pending / in_progress / completed(7d) + 相似度 >= `DUPLICATE_DETECTION_THRESHOLD`（0.3） | stdout `[WARNING]`，**不阻擋** | 無需（不阻擋） |
 | Tier 2 阻擋層 | 同版本 pending / in_progress + 相似度 >= `DUPLICATE_BLOCK_THRESHOLD`（0.6） + 候選建立時間在 `DUPLICATE_BLOCK_WINDOW_MINUTES`（60 分鐘）內 | `[ERROR]` + `exit 1` 阻擋 | `--allow-duplicate` |
 
-Tier 2 設計用途：阻擋 ghost 雙執行流同 turn（數分鐘內）重複 spawn 同語意票的冪等防護。三條件交集（高相似 + 短窗口 + 未完成）鎖定 ghost 簽名，同時排除真實兄弟票（低相似）、batch 同質模板（< 0.6）、合法重做已完成票（completed 不納入）等誤報情境。
-
 候選建立時間以 ticket md 檔案 birth time（fallback mtime）判定，frontmatter `created` 僅日期粒度不足以支撐 60 分鐘級窗口。
 
 ### --allow-duplicate 旁路
+
+被 Tier 2 擋下先問：是同 turn 重複 spawn 嗎？是 -> 放棄本次建立；否（失誤後刻意重建）-> 加 `--allow-duplicate`。依據：Tier 2 用三條件交集（高相似 + 60 分鐘短窗口 + 未完成）鎖定 ghost 雙執行流同 turn 重複 spawn 的簽名，同時排除真實兄弟票、batch 同質模板、合法重做已完成票等誤報情境。
 
 ```bash
 # 失誤後刻意重建近似 Ticket 的合法情境

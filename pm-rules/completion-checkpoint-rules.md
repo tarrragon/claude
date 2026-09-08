@@ -103,18 +103,10 @@ ANA 類型 Ticket 處於 in_progress 時，每次進入 Checkpoint 2 路由必�
 所有代理人完成前，禁止進入後續 Checkpoint。
 
 ```bash
-cat .claude/dispatch-active.json | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-if d:
-    print('[BLOCK] 仍有 {} 個代理人在執行：'.format(len(d)))
-    for x in d:
-        print('  - {}'.format(x.get('agent_description', '?')))
-    print('禁止繼續。等待所有代理人完成通知。')
-else:
-    print('[PASS] 無活躍派發，可繼續。')
-"
+ticket track dispatch-check
 ```
+
+`[PASS]` 代表無活躍派發，可繼續；`[WARN]` 代表仍有 N 個代理人在執行並逐筆列出 `agent_description` / `ticket_id` / `dispatched_at`，禁止繼續，等待所有代理人完成通知。完整輸出格式與 exit code 見 `.claude/skills/ticket/references/track-command.md`〈track dispatch-check 子命令〉。
 
 | 結果 | 行動 |
 |------|------|

@@ -745,6 +745,29 @@ class TestCheckReclaimable:
         assert owner == "sess-A"
 
 
+# --- format_lease_tag（dashboard／list 共用顯示層標記渲染） -----------
+
+
+class TestFormatLeaseTag:
+    """`format_lease_tag` 為 dashboard 與 list 共用的單一標記渲染來源。"""
+
+    def test_live_state_returns_live_tag(self):
+        assert lease.format_lease_tag(lease.LEASE_STATE_LIVE) == " [LIVE]"
+
+    def test_reclaimable_state_returns_reclaimable_tag(self):
+        assert (
+            lease.format_lease_tag(lease.LEASE_STATE_RECLAIMABLE)
+            == " [RECLAIMABLE]"
+        )
+
+    def test_untracked_state_returns_empty_string(self):
+        assert lease.format_lease_tag(lease.LEASE_STATE_UNTRACKED) == ""
+
+    def test_unknown_or_none_state_returns_empty_string(self):
+        assert lease.format_lease_tag(None) == ""
+        assert lease.format_lease_tag("some-unknown-state") == ""
+
+
 # --- is_lease_reclaimable / determine_lease_state --------------------
 
 

@@ -6,6 +6,15 @@
 3. single: 1 個活躍 → exit 1 + [WARN] + 1 筆列表
 4. multiple: 3 個活躍 → exit 1 + [WARN] + 3 筆列表
 5. malformed_json: JSON 毀損 → exit 2 + stderr [FAIL]
+
+新鮮度維度（0.2.1-W3-1323，3-H 個案 1／2）：判定原只收「dispatches 是否
+為空」，PM 依 WARN 後無從分辨活躍派發是剛發出還是已逾時遺留。新增每筆
+記錄年齡標註（逾 60 分鐘標 [STALE]，沿用 track_dashboard 同一新鮮度慣例）
+與彙總計數。
+
+`--prune`（3-F M-6）：清理「[STALE] 且 session 不存在」的條目，取代文件
+原載「見 [STALE] 手動清理 dispatch-active.json」的無痕跡做法，見
+TestPruneFlag。
 """
 
 from __future__ import annotations
@@ -22,11 +31,11 @@ from ticket_system.commands import track_dispatch_check as mod
 from ticket_system.commands.track_dispatch_check import execute_dispatch_check
 
 
-def _run(tmp_path: Path, monkeypatch) -> tuple[int, str, str]:
+def _run(tmp_path: Path, monkeypatch, *, prune: bool = False) -> tuple[int, str, str]:
     """呼叫 execute_dispatch_check 並捕獲 stdout/stderr。"""
     monkeypatch.setattr(mod, "get_ticket_state_root", lambda: tmp_path)
 
-    args = argparse.Namespace()
+    args = argparse.Namespace(prune=prune)
     out_buf, err_buf = io.StringIO(), io.StringIO()
     saved_out, saved_err = sys.stdout, sys.stderr
     sys.stdout, sys.stderr = out_buf, err_buf
@@ -124,3 +133,208 @@ class TestDispatchCheck:
         rc, out, err = _run(tmp_path, monkeypatch)
         assert rc == 2
         assert "[FAIL]" in err
+
+
+class TestFreshnessDimension:
+    """0.2.1-W3-1323（3-H 個案 1／2）：dispatch-check 補新鮮度維度。"""
+
+    def test_recent_dispatch_not_marked_stale(self, tmp_path, monkeypatch):
+        """剛派發（< 60 分鐘）不標 [STALE]。"""
+        from datetime import datetime, timedelta, timezone
+
+        recent = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        _write_dispatch_file(tmp_path, {
+            "dispatches": [
+                {"agent_description": "fresh-agent", "ticket_id": "A", "dispatched_at": recent},
+            ],
+        })
+        rc, out, err = _run(tmp_path, monkeypatch)
+        assert rc == 1
+        assert "[STALE" not in out
+
+    def test_old_dispatch_marked_stale_with_summary_count(self, tmp_path, monkeypatch):
+        """逾 60 分鐘的活躍記錄標 [STALE] 並在彙總行給出計數與下一步建議。"""
+        from datetime import datetime, timedelta, timezone
+
+        old = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
+        _write_dispatch_file(tmp_path, {
+            "dispatches": [
+                {"agent_description": "stale-agent", "ticket_id": "A", "dispatched_at": old},
+            ],
+        })
+        rc, out, err = _run(tmp_path, monkeypatch)
+        assert rc == 1
+        assert "[STALE" in out
+        assert "其中 1 筆" in out
+        assert "track sessions" in out
+
+    def test_malformed_dispatched_at_not_marked_stale(self, tmp_path, monkeypatch):
+        """dispatched_at 缺失或格式錯誤時不猜測，不標 [STALE]（回歸：
+        既有測試以 "t1"/"t2"/"t3" 等非 ISO 字面值仍需維持綠燈）。"""
+        _write_dispatch_file(tmp_path, {
+            "dispatches": [
+                {"agent_description": "malformed-ts", "ticket_id": "A", "dispatched_at": "not-a-timestamp"},
+                {"agent_description": "missing-ts", "ticket_id": "B"},
+            ],
+        })
+        rc, out, err = _run(tmp_path, monkeypatch)
+        assert rc == 1
+        assert "[STALE" not in out
+
+
+class TestPruneFlag:
+    """3-F M-6：`--prune` 清理「[STALE] 且 session 不存在」的條目。"""
+
+    def test_prune_removes_stale_entry_with_missing_session(self, tmp_path, monkeypatch):
+        """session_id 不在 registry 內 + [STALE] → 清理，票面/回傳皆歸零。"""
+        from datetime import datetime, timedelta, timezone
+
+        old = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
+        dispatch_path = _write_dispatch_file(tmp_path, {
+            "dispatches": [
+                {
+                    "agent_description": "gone-agent",
+                    "ticket_id": "A",
+                    "dispatched_at": old,
+                    "session_id": "sess-dead",
+                },
+            ],
+        })
+        monkeypatch.setattr(mod, "_load_registry_session_ids", lambda: set())
+        monkeypatch.setattr(mod, "_get_prune_logger", lambda: None)
+
+        rc, out, err = _run(tmp_path, monkeypatch, prune=True)
+
+        assert rc == 0
+        assert "[PASS]" in out
+        assert "已清理 1 筆" in out
+        assert "gone-agent" in err
+        assert "sess-dead" in err
+        remaining = json.loads(dispatch_path.read_text(encoding="utf-8"))
+        assert remaining["dispatches"] == []
+
+    def test_prune_keeps_stale_entry_with_existing_session(self, tmp_path, monkeypatch):
+        """session_id 仍在 registry 內（heartbeat 慢但仍存活）→ 不清理，
+        即使該條目年齡已逾 [STALE] 門檻。"""
+        from datetime import datetime, timedelta, timezone
+
+        old = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
+        dispatch_path = _write_dispatch_file(tmp_path, {
+            "dispatches": [
+                {
+                    "agent_description": "slow-heartbeat-agent",
+                    "ticket_id": "A",
+                    "dispatched_at": old,
+                    "session_id": "sess-alive",
+                },
+            ],
+        })
+        monkeypatch.setattr(mod, "_load_registry_session_ids", lambda: {"sess-alive"})
+
+        rc, out, err = _run(tmp_path, monkeypatch, prune=True)
+
+        assert rc == 1
+        assert "無符合" in out
+        assert "slow-heartbeat-agent" in out
+        assert "[STALE" in out
+        remaining = json.loads(dispatch_path.read_text(encoding="utf-8"))
+        assert len(remaining["dispatches"]) == 1
+
+    def test_prune_keeps_entry_without_session_id(self, tmp_path, monkeypatch):
+        """session_id 缺失／空字串（無法歸戶）→ 保守保留，不視為不存在。"""
+        from datetime import datetime, timedelta, timezone
+
+        old = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
+        _write_dispatch_file(tmp_path, {
+            "dispatches": [
+                {"agent_description": "no-session-agent", "ticket_id": "A", "dispatched_at": old},
+            ],
+        })
+        monkeypatch.setattr(mod, "_load_registry_session_ids", lambda: set())
+
+        rc, out, err = _run(tmp_path, monkeypatch, prune=True)
+
+        assert rc == 1
+        assert "無符合" in out
+        assert "no-session-agent" in out
+
+    def test_prune_skips_when_registry_unavailable(self, tmp_path, monkeypatch):
+        """registry 讀取失敗（回傳 None）→ 保守不清理，訊息與「無符合條件」
+        區分，不誤報為已確認無需清理。"""
+        from datetime import datetime, timedelta, timezone
+
+        old = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
+        dispatch_path = _write_dispatch_file(tmp_path, {
+            "dispatches": [
+                {
+                    "agent_description": "unverifiable-agent",
+                    "ticket_id": "A",
+                    "dispatched_at": old,
+                    "session_id": "sess-unknown",
+                },
+            ],
+        })
+        monkeypatch.setattr(mod, "_load_registry_session_ids", lambda: None)
+
+        rc, out, err = _run(tmp_path, monkeypatch, prune=True)
+
+        assert rc == 1
+        assert "不可用" in out
+        assert "無法判定" in out
+        remaining = json.loads(dispatch_path.read_text(encoding="utf-8"))
+        assert len(remaining["dispatches"]) == 1
+
+    def test_prune_flag_absent_leaves_file_and_behavior_unchanged(self, tmp_path, monkeypatch):
+        """未帶 --prune 時行為與既有版本一致（回歸：預設不清理）。"""
+        from datetime import datetime, timedelta, timezone
+
+        old = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
+        dispatch_path = _write_dispatch_file(tmp_path, {
+            "dispatches": [
+                {
+                    "agent_description": "gone-agent",
+                    "ticket_id": "A",
+                    "dispatched_at": old,
+                    "session_id": "sess-dead",
+                },
+            ],
+        })
+        monkeypatch.setattr(mod, "_load_registry_session_ids", lambda: set())
+
+        rc, out, err = _run(tmp_path, monkeypatch, prune=False)
+
+        assert rc == 1
+        assert "[WARN]" in out
+        remaining = json.loads(dispatch_path.read_text(encoding="utf-8"))
+        assert len(remaining["dispatches"]) == 1
+
+    def test_prune_writes_hook_log_via_real_logger(self, tmp_path, monkeypatch):
+        """真實 `setup_hook_logging` 落地：`.claude/hook-logs/
+        dispatch-check-prune/` 下應可讀到含清理內容的日誌檔（雙通道驗證，
+        非僅 mock 呼叫次數）。"""
+        import os
+        from datetime import datetime, timedelta, timezone
+
+        project_root = Path(os.environ["CLAUDE_PROJECT_DIR"])
+        old = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
+        _write_dispatch_file(tmp_path, {
+            "dispatches": [
+                {
+                    "agent_description": "logged-agent",
+                    "ticket_id": "A",
+                    "dispatched_at": old,
+                    "session_id": "sess-dead",
+                },
+            ],
+        })
+        monkeypatch.setattr(mod, "_load_registry_session_ids", lambda: set())
+
+        rc, out, err = _run(tmp_path, monkeypatch, prune=True)
+
+        assert rc == 0
+        log_dir = project_root / ".claude" / "hook-logs" / "dispatch-check-prune"
+        log_files = sorted(log_dir.glob("dispatch-check-prune-*.log"))
+        assert log_files, "應產生 .claude/hook-logs/dispatch-check-prune/dispatch-check-prune-*.log"
+        content = log_files[0].read_text(encoding="utf-8")
+        assert "logged-agent" in content
+        assert "sess-dead" in content

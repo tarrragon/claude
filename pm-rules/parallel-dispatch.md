@@ -121,6 +121,10 @@ ticket track conflicts --for <id>                # 列出該票與其他 pending
 
 exit code 0（無衝突）時方可依原計畫並行派發。指令用法、判定規則、`[heuristic]` 標記語意見 `.claude/skills/ticket/references/track-command.md`「track conflicts 子命令」；完整案例與根因見 `.claude/error-patterns/process-compliance/PC-BAL-008-shared-git-index-sweeps-parallel-agent-staged-files.md`「變體：檔案級共用」章節。
 
+**隔離索引不豁免同檔序列化**：`ticket track commit` 的隔離索引只隔離「不觸碰共用 git index」，不隔離「同一檔案的工作區內容」——兩票 `where.files` 皆宣告同一檔案時，即使雙方都改用 `ticket track commit`，先提交者仍會整檔取用工作區當下內容，把後提交者尚未 commit 的同檔編輯一併寫入（機制見 `.claude/skills/ticket/references/track-command.md`「track commit 子命令」同檔邊界說明）。上表「兩票 `where.files` 有交集，內容不可拆分 -> 改序列派發」不因改用隔離索引而變成可選項。
+
+**序列化等待條件必須可自行判定，不可寫死票 ID**：改序列派發時，若把等待條件寫成「等前一張票完成」並記錄該票當時的具體識別碼，該條件在派發序列中途插入新票（新票也宣告同檔）時會靜默失效——後續代理人只核對記憶中那張舊票是否完成，看不到新插入者仍在編輯同一檔案。等待條件應寫成可重複執行的謂詞：動筆前跑 `ticket track conflicts --for <本票>`，回傳無衝突（exit code 0）才開始編輯，而非記錄某張特定票的識別碼（實證案例：序列化批次中途追加一票宣告同一目標檔，既有等待者仍依原指令等最初那張票完成，追加票的在途編輯被後續 commit 吸入）。
+
 ### Dispatch-Plan 先行（多任務 / group / spawned 場景）
 
 > **來源**：W17-029 / W17-035 — Linux 類比後的結論是保留單一 ticket / agent / exit status 的生命週期，用 Makefile-like dispatch-plan 描述 orchestration，不新增 batch dispatch CLI。
@@ -176,7 +180,7 @@ dispatch-plan 欄位以 `.claude/references/agent-dispatch-template.md` 為準�
 |------|------|------|
 | staging 路徑 | 逐一列出 `where.files` 的精確路徑 | `git add .` / `git add -A` |
 | 範圍邊界 | 僅 staging 本 Ticket 的 `where.files` | 任何廣域符號 |
-| commit 階段 | 精確 `git add` → `git diff --cached --name-only` 核對 → 裸 `git commit`（不帶 pathspec / `--only` / `-o` / `-a`）；高競爭路徑改用隔離索引（`GIT_INDEX_FILE` + plumbing，見 `bash-tool-usage-rules.md` 規則七與 details「隔離索引提交」） | `git commit -m "訊息" -- <路徑>`（pathspec 形式：丟棄既有 index、以 working tree 內容重建，會吸入他人同路徑未 stage 的編輯）；`git add .` 後裸 commit |
+| commit 階段 | 代理人票務提交預設 `ticket track commit`（隔離索引，全程不觸碰共用 index）；僅該命令失敗或不可用時降級為 fallback：精確 `git add` → `git diff --cached --name-only` 核對 → 裸 `git commit`（不帶 pathspec / `--only` / `-o` / `-a`，見 `bash-tool-usage-rules.md` 規則七） | `git commit -m "訊息" -- <路徑>`（pathspec 形式：丟棄既有 index、以 working tree 內容重建，會吸入他人同路徑未 stage 的編輯）；`git add .` 後裸 commit；有 `ticket track commit` 可用卻優先選 fallback |
 
 **為何精準 `git add` 仍不足**：共享 working tree 下 git index 亦為共享。精準 `git add` 只保證「自己這次 staging 的內容正確」，但 `git commit` 若不帶路徑，提交的是整個 index 當下的內容——其他並行代理人已 `git add`、尚未 `git commit` 的變更會被一併吸收進本次 commit。staging 階段防護與 commit 階段防護是兩個獨立環節，前者不能替代後者。
 
@@ -194,7 +198,7 @@ dispatch-plan 欄位以 `.claude/references/agent-dispatch-template.md` 為準�
 被掃入時：停手、記錄 SHA 與檔案清單、上報 PM；禁 revert / reset --soft / amend / 反向套用。
 ```
 
-> **歷史註記**：本段 4.11.0–4.24.0 曾以 path-limited commit（`git commit -- <paths>`）為主防護，後經實測推翻（pathspec 形式對同一路徑上他人未 stage 的編輯無隔離，且丟棄既有 index），由 `bash-tool-usage-rules.md` 規則七明文禁止。現行兩層制：一般代理人派發採「精確 add + 核對 + 裸 commit」；PM 收尾、ticket CLI 等高競爭路徑採隔離索引（完整性三要件見 `bash-tool-usage-details.md`）。
+> **歷史註記**：本段 4.11.0–4.24.0 曾以 path-limited commit（`git commit -- <paths>`）為主防護，後經實測推翻（pathspec 形式對同一路徑上他人未 stage 的編輯無隔離，且丟棄既有 index），由 `bash-tool-usage-rules.md` 規則七明文禁止。現行預設：代理人票務提交場景採 `ticket track commit`（隔離索引）為主路徑；精確 add + 核對 + 裸 commit 降為該命令失敗或不可用時的 fallback；PM 收尾等無票務 CLI 場景仍以精確 add 三步為預設（完整性三要件見 `bash-tool-usage-details.md`）。
 
 **新增檔案同樣需精確 `git add`**：untracked 新檔（新建 Ticket md、新增測試檔等）不會出現在 `git diff --cached`，漏 add 即漏提交；裸 commit 前的核對步驟以 `git status --porcelain` 一併確認無本票 untracked 殘留。
 
@@ -244,7 +248,7 @@ cwd-resolving 即時生效的工具（ticket/doc/worktree 等 shim CLI 套件源
 其 daemon root 綁定主 repo 會洩漏污染。改用 Bash `dart fix` / `dart format`（尊重 cwd）或 Edit。
 ```
 
-> 根因機制與其他洩漏路徑（ticket CLI auto-commit）見 `.claude/skills/worktree/SKILL.md`「Base ref 與隔離邊界」章節。
+> 根因機制與其他洩漏路徑（ticket CLI auto-commit）見 `.claude/skills/worktree/references/agent-isolation-worktree.md`「Base ref 與隔離邊界」章節。
 
 ### 派發前路徑權限確認
 
@@ -505,6 +509,8 @@ Ticket 的 `what` / `how` 含以下任一特徵即屬於驗證類：
 
 ---
 
+**Last Updated**: 2026-09-08
+**Version**: 4.32.0 - 「派發 prompt 必含精準 git staging」表格 commit 階段列與「歷史註記」改寫：代理人票務提交場景預設改為 `ticket track commit`（隔離索引），精確 add 三步降為該命令失敗或不可用時的 fallback；PM 收尾等無票務 CLI 場景仍以精確 add 三步為預設。與 `bash-tool-usage-rules.md` 規則七、`agent-dispatch-template.md`、ticket skill〈track commit 子命令〉措辭同步，收斂副本漂移。
 **Last Updated**: 2026-08-26
 **Version**: 4.31.0 - 「跨 session 同儕沉默時的接管判準」與「跨 session 同儕來訊時的脈絡存續判讀」兩節整區外移至新建 `.claude/references/cross-session-coordination-details.md`，主文改留判準表與速查 stub（兩 H2 標題保留以維持既有錨點——`PC-076`、`tool-output-trust-rules.md`、`session-switching-sop.md` 皆以標題文字引用本兩節，不隨外移改變）；本區行數由 137 降至約 40 行；「本區外移時機與偵測承擔者」條文更新為完成式，補「未來篇幅回升時適用同一整區外移判準」一句
 **Version**: 4.30.0 - 「本區外移閾值」條文改寫為「本區外移時機與偵測承擔者」：原「協調區達 200 行」為區塊級條件，但實際偵測機制 `file-size-guardian-hook.py` 只量測整檔行數，兩者粒度不符，依 decision-trigger-binding 規則 2.5「自指維護閾值須指名偵測承擔者且粒度相符」判準不合格。改為以整檔臨界值為條件（與該 hook 量測單位一致），指名該 hook 為偵測承擔者，外移動作仍以協調區整區為單位（觸發整檔瘦身時優先外移此語意自足段落）

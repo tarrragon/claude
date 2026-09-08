@@ -1651,3 +1651,253 @@ def test_show_and_check_degrade_on_gh_failure(capsys):
         rc_check = section_comment.main(["check", "81"])
     assert rc_check == gh_common.EXIT_DEGRADED
     assert "network error" in capsys.readouterr().err
+
+
+# --- 待辦與來源：表格欄位與列舉驗證（寫入端 init/add/update 共用 validate_todo_table） ---
+
+_VALID_TODO_TABLE = (
+    "## 待辦與來源（flutter-balance）\n\n"
+    "| 來源票 | 做什麼 | acceptance 條數 | 優先級 | 階段 | 狀態 |\n"
+    "|--------|--------|----------------|--------|------|------|\n"
+    "| imp-1 | 對帳工具：讀三份清單輸出差集 | 4 | P1 | 本版 | 待裁票 |\n"
+)
+
+
+def test_add_rejects_invalid_todo_status_lists_legal_values(tmp_path, capsys):
+    """acceptance：add 對「待辦與來源」區段寫入狀態值「未執行」時 exit 3，
+    印出全部五個合法值；驗證發生在任何 gh 呼叫之前（不燒查重／建立成本）。"""
+    content_file = tmp_path / "todo.md"
+    content_file.write_text(_VALID_TODO_TABLE.replace("待裁票", "未執行"), encoding="utf-8")
+
+    with mock.patch.object(section_comment.subprocess, "run") as run:
+        rc = section_comment.main(
+            [
+                "add", "81", "--owner", "test-session-1",
+                "--name", "待辦與來源（flutter-balance）",
+                "--content-file", str(content_file),
+            ]
+        )
+    assert rc == gh_common.EXIT_DEGRADED
+    err = capsys.readouterr().err
+    for legal in section_comment.TODO_STATUS_VALUES:
+        assert legal in err
+    run.assert_not_called()
+
+
+def test_init_rejects_invalid_todo_stage_value(tmp_path, capsys):
+    """寫入端三入口共用同一驗證函式：init 對 sections-file 內「待辦與來源」
+    區段的「階段」值同樣驗證，不合法自由文字（如「立即做」）exit 3。"""
+    sections_file = tmp_path / "sections.json"
+    sections_file.write_text(
+        json.dumps(
+            [
+                {
+                    "name": "待辦與來源（flutter-balance）",
+                    "content": _VALID_TODO_TABLE.replace("本版", "立即做"),
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with mock.patch.object(section_comment.subprocess, "run") as run:
+        rc = section_comment.main(
+            [
+                "init", "81", "--owner", "test-session-1",
+                "--sections-file", str(sections_file),
+                "--dedup-keywords", "任意",
+            ]
+        )
+    assert rc == gh_common.EXIT_DEGRADED
+    err = capsys.readouterr().err
+    for legal in section_comment.TODO_STAGE_VALUES:
+        assert legal in err
+    run.assert_not_called()
+
+
+def test_add_accepts_valid_todo_table(tmp_path):
+    """必要 6 欄、狀態與階段皆合法值的表格通過驗證，正常建立區段（放行路徑）。"""
+    content_file = tmp_path / "todo.md"
+    content_file.write_text(_VALID_TODO_TABLE, encoding="utf-8")
+    existing_body = "## 摘要\n\n無索引表的一般內容"
+
+    with mock.patch.object(
+        section_comment.subprocess,
+        "run",
+        side_effect=_add_side_effect(
+            ("https://github.com/tarrragon/claude/issues/81#issuecomment-9", 9),
+            existing_body,
+            {},
+        ),
+    ):
+        rc = section_comment.main(
+            [
+                "add", "81", "--owner", "test-session-1",
+                "--name", "待辦與來源（flutter-balance）",
+                "--content-file", str(content_file),
+            ]
+        )
+    assert rc == 0
+
+
+def test_update_accepts_valid_todo_table_with_optional_type_column(tmp_path):
+    """7 欄表頭（必要 6 欄 + 選填「型別」欄，插於「來源票」之後）為第二種
+    合法表頭形態，通過驗證（放行路徑，覆蓋 update 入口與帶型別欄的表頭
+    形態；欄位順序對齊既有 issue 實跑觀測到的慣例，見 TODO_HEADER_WITH_TYPE
+    註解）。"""
+    content_file = tmp_path / "todo.md"
+    content_file.write_text(
+        "## 待辦與來源（flutter-balance）\n\n"
+        "| 來源票 | 型別 | 做什麼 | acceptance 條數 | 優先級 | 階段 | 狀態 |\n"
+        "|--------|------|--------|----------------|--------|------|------|\n"
+        "| imp-1 | IMP | 對帳工具 | 4 | P1 | 本版 | 待裁票 |\n",
+        encoding="utf-8",
+    )
+
+    def _run(args, **kwargs):
+        if args[:2] == ["gh", "api"] and "--method" not in args:
+            return _completed(
+                stdout=json.dumps(
+                    {
+                        "body": "<!-- section: 待辦與來源（flutter-balance） "
+                        "owner: flutter-balance-99 -->\n舊內容"
+                    }
+                )
+            )
+        if "--method" in args and args[args.index("--method") + 1] == "PATCH":
+            return _completed(stdout=json.dumps({"id": 5523472948}))
+        raise AssertionError(f"未預期的 gh 呼叫：{args}")
+
+    with mock.patch.object(section_comment.subprocess, "run", side_effect=_run):
+        rc = section_comment.main(["update", "5523472948", "--content-file", str(content_file)])
+    assert rc == 0
+
+
+# --- todo：跨 open issue 聚合「待辦與來源*」區段表格列（讀取端） ---
+
+
+def _todo_side_effect(comments_by_issue: dict, open_numbers: list = None):
+    """依 gh 參數形態分派 todo 相關回應：`gh issue list`（open 清單，`--all`
+    或預設範圍會觸發）／`gh api .../issues/<n>/comments`（per-issue
+    comments，依 issue number 分派不同 payload，模擬多 issue 聚合場景）。
+    """
+
+    def _run(args, **kwargs):
+        if args[:3] == ["gh", "issue", "list"]:
+            numbers = open_numbers if open_numbers is not None else list(comments_by_issue.keys())
+            return _completed(stdout=json.dumps([{"number": n} for n in numbers]))
+        if args[:2] == ["gh", "api"] and args[2].endswith("/comments"):
+            parts = args[2].split("/")
+            number = int(parts[parts.index("issues") + 1])
+            return _completed(stdout=json.dumps(comments_by_issue.get(number, [])))
+        raise AssertionError(f"未預期的 gh 呼叫：{args}")
+
+    return _run
+
+
+def _todo_section_comment(comment_id: int, section_name: str, owner: str, table: str) -> dict:
+    return {
+        "id": comment_id,
+        "body": f"<!-- section: {section_name} owner: {owner} -->\n{table}",
+    }
+
+
+def test_todo_json_aggregates_rows_with_required_fields(capsys):
+    """acceptance：todo --json 輸出每列含 issue／owner／來源票／做什麼／
+    階段／狀態／優先級／acceptance 條數。"""
+    comments = [
+        _todo_section_comment(1, "待辦與來源（flutter-balance）", "flutter-balance-77", _VALID_TODO_TABLE)
+    ]
+    with mock.patch.object(
+        section_comment.subprocess, "run", side_effect=_todo_side_effect({81: comments})
+    ):
+        rc = section_comment.main(["todo", "--issue", "81", "--json"])
+    assert rc == 0
+
+    rows = json.loads(capsys.readouterr().out)
+    assert len(rows) == 1
+    row = rows[0]
+    for key in ("issue", "owner", "來源票", "做什麼", "階段", "狀態", "優先級", "acceptance 條數"):
+        assert key in row
+    assert row["issue"] == 81
+    assert row["owner"] == "flutter-balance-77"
+
+
+def test_todo_warns_and_continues_on_mismatched_header(capsys):
+    """acceptance：todo 對表頭不符的區段印警告並繼續，不中止——同一 issue
+    內一則區段表頭不符，另一則合法區段的列仍正常聚合。"""
+    bad_table = (
+        "## 待辦與來源（bad）\n\n"
+        "| 來源票 | 做什麼 |\n"
+        "|--------|--------|\n"
+        "| imp-1 | 對帳工具 |\n"
+    )
+    good_table = (
+        "## 待辦與來源（good）\n\n"
+        "| 來源票 | 做什麼 | acceptance 條數 | 優先級 | 階段 | 狀態 |\n"
+        "|--------|--------|----------------|--------|------|------|\n"
+        "| imp-2 | 補文件 | 2 | P2 | 下版 | 已裁票 |\n"
+    )
+    comments = [
+        _todo_section_comment(1, "待辦與來源（bad）", "flutter-balance-77", bad_table),
+        _todo_section_comment(2, "待辦與來源（good）", "flutter-balance-77", good_table),
+    ]
+    with mock.patch.object(
+        section_comment.subprocess, "run", side_effect=_todo_side_effect({81: comments})
+    ):
+        rc = section_comment.main(["todo", "--issue", "81", "--json"])
+    assert rc == 0
+
+    captured = capsys.readouterr()
+    rows = json.loads(captured.out)
+    assert len(rows) == 1
+    assert rows[0]["來源票"] == "imp-2"
+    assert "表頭不符" in captured.err
+
+
+def test_todo_filters_by_status(capsys):
+    """--status 篩選：只列指定狀態值的列。"""
+    table = (
+        "## 待辦與來源（flutter-balance）\n\n"
+        "| 來源票 | 做什麼 | acceptance 條數 | 優先級 | 階段 | 狀態 |\n"
+        "|--------|--------|----------------|--------|------|------|\n"
+        "| imp-1 | 對帳工具 | 4 | P1 | 本版 | 待裁票 |\n"
+        "| imp-2 | 補文件 | 2 | P2 | 下版 | 已裁票 |\n"
+    )
+    comments = [_todo_section_comment(1, "待辦與來源（flutter-balance）", "flutter-balance-77", table)]
+    with mock.patch.object(
+        section_comment.subprocess, "run", side_effect=_todo_side_effect({81: comments})
+    ):
+        rc = section_comment.main(["todo", "--issue", "81", "--status", "待裁票", "--json"])
+    assert rc == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert len(rows) == 1
+    assert rows[0]["來源票"] == "imp-1"
+
+
+def test_todo_filters_by_consumer(capsys):
+    """--consumer 篩選：`--all` 掃描多張 issue 時只列 owner 前綴符合的列。"""
+    comments_81 = [
+        _todo_section_comment(1, "待辦與來源（flutter-balance）", "flutter-balance-77", _VALID_TODO_TABLE)
+    ]
+    other_table = (
+        "## 待辦與來源（other-project）\n\n"
+        "| 來源票 | 做什麼 | acceptance 條數 | 優先級 | 階段 | 狀態 |\n"
+        "|--------|--------|----------------|--------|------|------|\n"
+        "| imp-9 | 其他任務 | 1 | P3 | 下版 | 待裁票 |\n"
+    )
+    comments_82 = [_todo_section_comment(2, "待辦與來源（other-project）", "other-project-3", other_table)]
+
+    with mock.patch.object(
+        section_comment.subprocess,
+        "run",
+        side_effect=_todo_side_effect(
+            {81: comments_81, 82: comments_82}, open_numbers=[81, 82]
+        ),
+    ):
+        rc = section_comment.main(["todo", "--all", "--consumer", "flutter-balance", "--json"])
+    assert rc == 0
+
+    rows = json.loads(capsys.readouterr().out)
+    assert len(rows) == 1
+    assert rows[0]["owner"] == "flutter-balance-77"

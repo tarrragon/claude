@@ -56,6 +56,16 @@ def _format_audit_report(report) -> str:
     lines.append(f"{TrackAuditMessages.AUDIT_TICKET_PREFIX} {report.ticket_id} - {report.title}")
     lines.append(f"{TrackAuditMessages.AUDIT_TIME_PREFIX} {report.timestamp}")
     lines.append(f"{TrackAuditMessages.AUDIT_AUDITOR_PREFIX} {TrackAuditMessages.AUDIT_AUDITOR_NAME}")
+
+    # artifact 寫入者/時間（3-F 共用原則）：兩欄位皆空時省略整行，
+    # 避免「未知 ｜ 未知」雜訊；至少一欄非空時對缺失欄位標註「未知」
+    if report.artifact_who or report.artifact_updated:
+        who = report.artifact_who or TrackAuditMessages.AUDIT_ARTIFACT_UNKNOWN
+        updated = report.artifact_updated or TrackAuditMessages.AUDIT_ARTIFACT_UNKNOWN
+        lines.append(
+            format_msg(TrackAuditMessages.AUDIT_ARTIFACT_LINE_FORMAT, who=who, updated=updated)
+        )
+
     lines.append("")
 
     # 檢查結果表格

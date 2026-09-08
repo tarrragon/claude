@@ -139,6 +139,17 @@ ANA / IMP Solution 章節支援 H3 子標題組織內容（如「### WRAP 完整
 
 **為何 multi_view_status 例外**：hook 用 regex 跨行掃描平鋪 YAML-like 結構，H3 子章節包裝會切斷掃描範圍（PC-117 / W17-111 設計）。
 
+### Problem Analysis 章節：CLI 自動寫入的 H3 子章節登記
+
+除上表 Solution 章節的 `### 自檢結果` 外，`ticket track dispatch` 尚會自動寫入 `## Problem Analysis` 下兩個 H3 子章節，本檔為 Hook 驗證唯一依據，兩者須一併登記：
+
+| 子章節 | 寫入時機 | 內容 |
+|--------|---------|------|
+| `### 派發日誌` | `--note` 非空時，帶時間戳寫入 | 派發瞬間的暫態約束／步驟；**不進 Context Bundle**（父票 Solution 判定不可承接，只承載派發當下才需 articulate 的內容） |
+| `### Commit 規範` | `--kind normal` 且 `--commit-policy agent` 時冪等寫入（`--dry-run` 或非 agent policy 時不寫） | 精準 staging 制式句權威版全文（見 `.claude/references/agent-dispatch-template.md`〈精準 staging 制式句（權威版）〉），供受派代理人查閱 commit 規範 |
+
+完整旗標語意見 `.claude/skills/ticket/references/track-command.md`〈track dispatch 子命令〉### Flag 說明。
+
 ### Type-aware Quality Gate
 
 `ticket-quality-gate-hook.py` 已刪除。C1 God Ticket / C3 Ambiguous Responsibility
@@ -283,6 +294,22 @@ IMP ticket 的 `where.files` 觸及 hooks 目錄時，須補齊下表四項，�
 **Consequence**：未補前三項的防護類 hook ticket，撰寫者與 PM 皆會誤信防護已生效——2026-08-13 一次事故實證：一個新註冊的 guard hook 自建立起以 100644（無可執行位）存在，runtime 無法啟動它，事故當下該守衛全期零效力，全期僅一筆手動 dogfooding 日誌，此後零筆。
 
 **Action**：IMP claim 後若 `where.files` 觸及 hooks 目錄，acceptance 補列表列各項語意（合格填法見上表，不要求逐字比對，語意到位即可）。`acceptance-gate-hook.py` 於 complete 前以 `check_hook_protection_acceptance` 對**前三項**硬擋，缺任一項 exit 非零並指出缺哪項；產生路徑盤點結果項的硬擋見上方強制層現況。
+
+#### 第 1 項標準寫法：`ticket track hook-liveness` 前後差值
+
+防護類 hook（阻擋/攔截類，非診斷類）完成後若需在同 session 記錄「確認已實地觸發」（上表第 1 項），統一改用 `ticket track hook-liveness` **前後差值**取代手動 grep 或憑印象判斷：
+
+```bash
+# 觸發前
+ticket track hook-liveness .claude/hooks/<hook 檔名>.py --format json > /tmp/before.json
+
+# ……執行會觸發此 hook 的操作……
+
+# 觸發後
+ticket track hook-liveness .claude/hooks/<hook 檔名>.py --format json > /tmp/after.json
+```
+
+比對 `before.total` 與 `after.total` 是否增加（或 `by_session` 中本 session 的計數是否增加）。Solution / Test Results 記錄時附上解析到的名稱（`resolution.name`）與前後筆數差值，不記錄未經此命令驗證的口頭斷言。命令本身的用法（名稱解析順序、`--since`／`--session`／`--format` 旗標）見 `.claude/skills/ticket/references/track-command.md`〈track hook-liveness 子命令〉節。
 
 **參考**：
 

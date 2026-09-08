@@ -80,7 +80,7 @@ description: [...]
 | MCP 工具完整名稱 | `tool_name` → `ServerName:tool_name` |
 | 避免模糊語言 | `Make sure to validate things properly` → `CRITICAL: Before X, verify A, B, C` |
 | **不涵蓋的告示用固定前綴** | 五種寫法散落各處 → 一律以 `**不涵蓋**：` 起手 |
-| 禁用詞（language-constraints.md 規則 2） | 「文檔」「數據」「默認」等 → 「文件」「資料」「預設」；`skill-banned-term-scan-hook.py` 對 `skill-sync` pull 後的用語回歸做掃描 |
+| 禁用詞（language-constraints.md 規則 2） | `文檔`、`數據`、`默認` 等 → 「文件」「資料」「預設」；`skill-banned-term-scan-hook.py` 對 `skill-sync` pull 後的用語回歸做掃描 |
 
 **「不涵蓋」的告示要能被清點。** 一份檢查清單或一道機械檢查有射程之外的東西時，必須明寫，否則讀者會把「走完全綠」讀成「已驗證」。而這類告示是修法過程中新增最多的一類內容——實測一份 skill 的四批修法共新增 5 處，**用了五種不同形式**（checkbox 內粗體、checkbox 內句尾、組層級獨立段、粗體標籤加表格新欄、表前單行），沒有共同字串，因此**既無法 grep 清點、讀者也建立不起辨識模式**，其中藏在八項清單第八項句尾的那則最容易漏讀。固定前綴讓 `grep -rn '不涵蓋'` 一次列出全部射程缺口。
 

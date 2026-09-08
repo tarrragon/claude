@@ -2,6 +2,8 @@
 
 新到舊。版號規則與兩個住址（本檔與 `SKILL.md` frontmatter 的 `metadata.version`）見專案的 skill 同步規範。
 
+**Version**: 2.2.9 — 清理 1 處 language-constraints.md 規則 2 禁用詞基線債務（`數據` → 資料，`references/cases/cross-module-shared-strategy-gaps.md` 段落標題），純用語修正，內容與判準未改。
+
 **Version**: 2.2.8 — 補記 2.2.7 之後累積但未 bump 版號的變更（版號未動使發佈庫與本庫的內容分歧無法由版號察覺）。`hooks/layer-boundary-validator-hook.py` 與 `references/phase4-refactor.md` 移除註解／版本紀錄行內的專案 ticket ID，指令行為未變。同時清掉只存在於發佈庫、本庫已不再持有的 `examples/flutter-sdk-tdd-walkthrough.md`——該檔以另一專案的 SPEC 與 ticket 編號逐段敘述，本 skill 宣告 `metadata.portable: true`，此類內容正是可攜性閘門要擋的形態
 
 **Version**: 2.2.7 — 版本紀錄搬到同目錄的 `CHANGELOG.md`。skill 是 runtime 整份載入的檔案，而沒有任何規則要求任何人讀版本紀錄，留在 SKILL.md 等於每次叫用都付一次無效讀取。SKILL.md 末尾留一行指過去，版號的兩個住址改成「CHANGELOG.md 最上面那一條 + frontmatter 的 metadata.version」。skill 的指令內容一個字都沒改。

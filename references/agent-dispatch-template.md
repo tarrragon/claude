@@ -26,7 +26,7 @@
 
 ### 骨架（3 段）
 
-> **CLI 為單一權威**：骨架文字的權威來源是 `ticket_system/commands/track_dispatch.py` 的 `SKELETON_TEMPLATE_NORMAL` / `SKELETON_TEMPLATE_REVIEW` 常數，本節不再逐字複製維護副本，改以指令產生：
+> **CLI 為單一權威**：骨架文字的權威來源是 `ticket_system/lib/dispatch_skeleton.py` 的 `SKELETON_TEMPLATE_NORMAL` / `SKELETON_TEMPLATE_REVIEW` 常數（命令實作僅 import 使用，非定義處），本節不再逐字複製維護副本，改以指令產生：
 >
 > ```bash
 > ticket track dispatch {ticket_id} --as {agent_name}
@@ -164,7 +164,7 @@ Ticket: 0.18.0-W17-048.3
 
 ### 精準 staging 制式句（權威版，PC-092 / PC-BAL-008）
 
-**單一權威已改為 CLI**：制式句文字的權威副本是 `.claude/skills/ticket/ticket_system/commands/track_dispatch.py` 的 `STAGING_PHRASE_AGENT`（全文）與 `STAGING_PHRASE_AGENT_PROMPT`（骨架用短版指標句），本文件不再手動維護逐字副本。取得方式：
+**單一權威已改為 CLI**：制式句文字的權威副本是 `.claude/skills/ticket/ticket_system/lib/dispatch_skeleton.py` 的 `STAGING_PHRASE_AGENT`（全文）與 `STAGING_PHRASE_AGENT_PROMPT`（骨架用短版指標句，命令實作僅 import 使用，非定義處），本文件不再手動維護逐字副本。取得方式：
 
 ```
 ticket track dispatch <ticket_id> --as <agent_name> --commit-policy agent
@@ -359,7 +359,7 @@ Ticket: {ticket_id}
 | `files` | 精確檔案 ownership；未知時先補 Context Bundle，不派發 |
 | `deps` | blockedBy / 前置 ticket；無依賴填 `none` |
 | `context source` | agent 應讀取的持久化 context 來源 |
-| `commit policy` | 明確 agent 自 commit、PM 統一 commit、或 no commit；agent 自 commit 時採精確 `git add` + `git diff --cached --name-only` 核對 + 裸 `git commit`（不帶 pathspec / `--only` / `-o` / `-a`），見「精準 staging 制式句」節與 `.claude/pm-rules/parallel-dispatch.md` PC-092 防護 |
+| `commit policy` | 明確 agent 自 commit、PM 統一 commit、或 no commit；agent 自 commit 時預設 `ticket track commit`（隔離索引，全程不觸碰共用 index），僅該命令失敗或不可用時降級為 fallback：精確 `git add` + `git diff --cached --name-only` 核對 + 裸 `git commit`（不帶 pathspec / `--only` / `-o` / `-a`），見上節「精準 staging 制式句」與 `.claude/pm-rules/parallel-dispatch.md` PC-092 防護 |
 | `run mode` | `parallel`、`serial` 或 `blocked`；不得用 `batch` 表示自動批量執行 |
 
 ---
@@ -1048,6 +1048,8 @@ acceptance 逐一附證據（如「acceptance N：已於 X 檔案 Y 行落實，
 
 ---
 
+**Last Updated**: 2026-09-08
+**Version**: 1.33.0 — 「Dispatch-Plan Template」欄位要求表 `commit policy` 列改寫：與上節「精準 staging 制式句」（`ticket track commit` 為主路徑）同步，消解檔內矛盾（該列原僅寫精確 add 三步，與上節相反）；精確 add 降為該命令失敗或不可用時的 fallback。
 **Last Updated**: 2026-09-02
 **Version**: 1.32.0 — 「骨架（權威版）」段「停手上報而非定義優先序」後新增一行提醒：Edit/Write 被非專案來源（harness auto mode classifier、permissionMode、OS 權限）拒絕時同理停手回報 NeedsContext，禁改用 Bash 內嵌腳本繞過，引用 `tool-selection.md` 規則二；不動 `track_dispatch.py` 骨架常數
 

@@ -4,7 +4,7 @@ description: "UX / UI 設計的系統性評估方法：把「使用者被困住�
 license: MIT
 metadata:
   portable: true
-  version: 1.4.2
+  version: 1.4.3
   category: ux-design
 ---
 

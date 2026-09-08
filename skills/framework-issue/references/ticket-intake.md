@@ -79,7 +79,18 @@ python3 .claude/skills/framework-issue/scripts/section_comment.py dedup \
 |------|------|-------|
 | 當前結論（讀者入口） | 現在成立的判斷，含已修正的高估與撤回記錄；與切分 issue 的分工邊界寫在末段；最後一行寫狀態（協定已定／工具已建／待接線） | 一律 |
 | 問題與方案 | 每個徵狀一列（徵狀、根因、實證來源）；候選方案、選定理由、已知代價、未驗證假設。票數 ≥ 5 且兩者都長時可拆為「問題清單與根因」「方案評估」兩則 | 主題有徵狀或方案取捨時 |
-| 待辦與來源（本 consumer） | IMP 票的執行內容一張一列：來源票、做什麼、acceptance 條數、優先級、階段（本版／下版／待條件）、狀態；末尾一行指回本 consumer 的派發票 ID（完整來源票對照住在那裡，其他 consumer 讀不到本地票，不在 issue 重抄） | 主題有 IMP 票時 |
+| 待辦與來源（本 consumer） | IMP 票的執行內容一張一列：來源票、做什麼、acceptance 條數、優先級、階段、狀態（兩欄為列舉，見下）；末尾一行指回本 consumer 的派發票 ID（完整來源票對照住在那裡，其他 consumer 讀不到本地票，不在 issue 重抄） | 主題有 IMP 票時 |
+
+**「待辦與來源」的階段與狀態為列舉，不接受自由文字**：
+
+| 欄位 | 合法值 |
+|------|-------|
+| 狀態 | 待裁票、已裁票、進行中、完成、不執行 |
+| 階段 | 可立即執行、本版、下版、待條件 |
+
+必要欄位：來源票、做什麼、acceptance 條數、優先級、階段、狀態；缺任一者以 `—` 補值，不留空儲存格。
+
+自由文字轉列舉對應規則（改寫舊資料或憑經驗初填時使用）：未執行→待裁票；已收進／closed／已收束→待裁票；已裁票未派→已裁票；完成→完成；不重現→不執行。無對應規則可套用的階段自由文字，依語意就近歸入四類之一（例如「可即刻排入」「前置已完成」類→可立即執行；「待 <票號>」類→待條件），不得逕自造出第五個值。
 
 sections.json 骨架：
 
@@ -122,6 +133,8 @@ ticket track close <ticket-id> \
 
 IMP 票被 close 後，執行內容住在「待辦與來源」；之後依階段性設計裁實作票時，以 `ticket track query <closed-id>` 取回原票的 acceptance 與 `where.files`，不重寫；新票 `--source-ticket` 指向收束時的派發票，`why` 引用 issue ref 與區段。
 
+**範圍票含 handoff 的來源或目標時，其 handoff 檔會在 close 當下轉為 stale**：`is_handoff_stale` 把「target 已 in_progress／completed／closed」判為 stale，而 self-redirect handoff（`to-sibling:<自身 ID>`）的 target 就是來源票自己。歸檔由下一次任何人執行 `ticket track dashboard` 的自動 GC 完成（rename 至 `handoff/archive/`，保留原 mtime），觸發時刻因此可能晚於 close 數小時且發生在他人的流程裡。**這是預期行為，不是資料遺失**；查找時以**來源票 ID** 為鍵（handoff 檔以來源票命名，不是 target），並在派發票記一句避免他人誤判為遺失。
+
 ## 步驟六：驗證與交接
 
 1. `show <issue-ref>`：建立的區段全部在索引內、「當前結論」第一則。
@@ -141,7 +154,10 @@ IMP 票被 close 後，執行內容住在「待辦與來源」；之後依階段
 owner 識別：<專案 kebab>-<session 序號>。
 步驟：讀票 → 依 references/ticket-intake.md〈步驟三：時序改狀態〉改寫 → sections.json 寫 scratchpad → init／add／observe（依〈步驟二：查重與落點〉）→ 依〈步驟五：ticket 處置〉範圍規則 close → show/check → 來源票對照與關係判定皆以 append-log 寫回派發票 Solution。
 禁止：貼入時序敘事、對已有索引的 issue 再 init、close 範圍外或被依賴的票、更新他方 owner 的區段、寫專案內任何檔案、對 ticket md 裸 commit（`git commit` 讀共用 index，會把並行 session 暫存的檔案一併帶走，實測三個 curator 兩個命中）。
-提交：`append-log` 逐命令 auto-commit；`close` 不會——它只由 Stop 事件的兜底 hook 提交，而該 hook 在有背景代理人時跳過。範圍票全部 close 後，由 curator 以隔離索引 CAS 提交這批 ticket md（配方見 Bash 工具使用規則參考文件的〈規則七詳細〉隔離索引 CAS：`GIT_INDEX_FILE` 指臨時 index → `read-tree HEAD` → `add` 精確檔案 → `write-tree` → `commit-tree` → `diff --name-only` 自驗範圍 → `update-ref HEAD <new> <old>`）。**提交後對同一批檔執行 `git restore --staged -- <檔…>`**：`ticket track complete` 預設會把票檔 stage 進共用 index，CAS 提交不經共用 index，舊 entry 會留下成為「過期快照」，他人任一次裸 commit 都會把這批票回滾且 `git log` 外觀正常；三平面（index／HEAD／工作區）一致後才算收尾。規範在執行期間可能被更新（本次收束中兩份規範各改了三次），收尾前重讀 `references/ticket-intake.md` 與代理人定義，以當下版本核對 acceptance。
+提交：`append-log` 逐命令 auto-commit；`close` 不會——它只由 Stop 事件的兜底 hook 提交，而該 hook 在有背景代理人時跳過，且該 hook 只納入本 session 認領過的票，收束時 close 的票從未被認領，兩層都不涵蓋。範圍票全部 close 後由 curator 自行提交，優先用 `ticket track commit <本票 ID> -m "<訊息>" <票檔…>`（走隔離索引，檔案須為本票 `where.files` 子集）；該命令不適用時才退回手動隔離索引 CAS（`GIT_INDEX_FILE` 指臨時 index → `read-tree HEAD` → `add` 精確檔案 → `write-tree` → `commit-tree` → `diff --name-only` 自驗範圍 → `update-ref HEAD <new> <old>`，配方見 Bash 工具使用規則參考文件的〈規則七詳細〉）。兩者皆禁裸 commit。
+**手動 CAS 後對同一批檔執行 `git restore --staged -- <檔…>`**：`ticket track complete` 預設會把票檔 stage 進共用 index，CAS 提交不經共用 index，舊 entry 會留下成為「過期快照」，他人任一次裸 commit 都會把這批票回滾且 `git log` 外觀正常；三平面（index／HEAD／工作區）一致後才算收尾。
+`update-ref` 回 rc 128 有兩種語意——HEAD 被並行移動（CAS 預期失敗，重試即可）與 hook 阻擋（重試無用）。重試若連續全滅，先讀 stderr 再決定，不要繼續加重試次數。
+規範在執行期間可能被更新（本次收束中兩份規範各改了三次），收尾前重讀 `references/ticket-intake.md` 與代理人定義，以當下版本核對 acceptance。
 scratchpad 檔名帶派發票 ID（如 sections-<ticket-id>.json）：scratchpad 由同 session 全部代理人共用，同名檔會被並行 curator 覆寫。
 驗收：show 顯示「當前結論」為第一則且全部區段在索引內、check 三項未命中、範圍票依範圍規則處置完畢且 reason-note 含 issue ref、git status 無專案檔變更。
 ```

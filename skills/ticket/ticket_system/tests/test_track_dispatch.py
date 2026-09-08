@@ -285,8 +285,12 @@ def test_dispatch_dry_run_does_not_write_ticket_file(dispatch_ticket, tmp_path):
     assert f"### {td_mod.COMMIT_SECTION_HEADING}" not in content_after
 
 
-def test_dispatch_dry_run_outputs_same_skeleton_as_normal(dispatch_ticket, capsys):
-    """--dry-run 的骨架輸出與非 dry-run 完全相同（差異僅在票面副作用）。"""
+def test_dispatch_dry_run_prepends_watermark_first_line(dispatch_ticket, monkeypatch, capsys):
+    """--dry-run 輸出首行含浮水印（3-F M-7），其餘骨架文字與非 dry-run
+    逐字相同（正式骨架不變，差異僅在首行前綴）。"""
+    monkeypatch.setattr(td_mod, "execute_dispatch_readiness", lambda a, v: 0)
+    monkeypatch.setattr(td_mod, "execute_dispatch_validate", lambda a, v: 0)
+
     args_normal = _base_args(dry_run=False)
     rc_normal = td_mod.execute_dispatch(args_normal, "0.0.0")
     assert rc_normal == 0
@@ -297,7 +301,87 @@ def test_dispatch_dry_run_outputs_same_skeleton_as_normal(dispatch_ticket, capsy
     assert rc_dry_run == 0
     out_dry_run = capsys.readouterr().out
 
-    assert out_dry_run == out_normal
+    assert out_dry_run.startswith(f"{td_mod.DRY_RUN_WATERMARK}\n")
+    assert out_dry_run[len(td_mod.DRY_RUN_WATERMARK) + 1:] == out_normal
+
+
+def test_dispatch_dry_run_does_not_invoke_precheck(dispatch_ticket, monkeypatch):
+    """--dry-run 不落盤，連帶不應呼叫派發前檢查（僅唯讀確認票存在）。"""
+    calls = []
+    monkeypatch.setattr(
+        td_mod, "execute_dispatch_readiness",
+        lambda a, v: calls.append("readiness") or 0,
+    )
+    monkeypatch.setattr(
+        td_mod, "execute_dispatch_validate",
+        lambda a, v: calls.append("validate") or 0,
+    )
+
+    args = _base_args(dry_run=True)
+    rc = td_mod.execute_dispatch(args, "0.0.0")
+
+    assert rc == 0
+    assert calls == []
+
+
+# --- 派發前檢查 exit code 落派發日誌（3-F M-5） -------------------------
+
+
+def test_dispatch_records_readiness_and_validate_exit_codes(dispatch_ticket, tmp_path, monkeypatch):
+    """非 dry-run 落票時，即使無 --note，派發日誌仍含 readiness／validate
+    兩項 exit code（使〈派發前檢查順序〉留下痕跡，不需 PM 另跑）。"""
+    monkeypatch.setattr(td_mod, "execute_dispatch_readiness", lambda a, v: 0)
+    monkeypatch.setattr(td_mod, "execute_dispatch_validate", lambda a, v: 1)
+
+    args = _base_args(note=None, commit_policy="none")
+    rc = td_mod.execute_dispatch(args, "0.0.0")
+    assert rc == 0
+
+    md_path = tmp_path / f"{dispatch_ticket}.md"
+    content = md_path.read_text(encoding="utf-8")
+    assert f"### {td_mod.DISPATCH_LOG_SECTION}" in content
+    assert "readiness=0" in content
+    assert "validate=1" in content
+
+
+def test_dispatch_precheck_codes_coexist_with_note(dispatch_ticket, tmp_path, monkeypatch):
+    """帶 --note 時，precheck exit code 附加於同一則派發日誌 entry，
+    原 note 文字不被覆蓋或截斷。"""
+    monkeypatch.setattr(td_mod, "execute_dispatch_readiness", lambda a, v: 2)
+    monkeypatch.setattr(td_mod, "execute_dispatch_validate", lambda a, v: 0)
+
+    args = _base_args(note="自訂備註")
+    rc = td_mod.execute_dispatch(args, "0.0.0")
+    assert rc == 0
+
+    md_path = tmp_path / f"{dispatch_ticket}.md"
+    content = md_path.read_text(encoding="utf-8")
+    assert "自訂備註" in content
+    assert "readiness=2" in content
+    assert "validate=0" in content
+
+
+def test_dispatch_precheck_diagnostic_output_muted(dispatch_ticket, capsys, monkeypatch):
+    """內部呼叫 readiness／validate 的診斷輸出須靜音，不污染骨架 stdout。"""
+    def _readiness(a, v):
+        print("readiness diagnostic noise")
+        return 0
+
+    def _validate(a, v):
+        print("validate diagnostic noise")
+        return 0
+
+    monkeypatch.setattr(td_mod, "execute_dispatch_readiness", _readiness)
+    monkeypatch.setattr(td_mod, "execute_dispatch_validate", _validate)
+
+    args = _base_args()
+    rc = td_mod.execute_dispatch(args, "0.0.0")
+    assert rc == 0
+
+    out = capsys.readouterr().out
+    assert "readiness diagnostic noise" not in out
+    assert "validate diagnostic noise" not in out
+    assert "ticket track claim" in out
 
 
 def test_dispatch_dry_run_missing_ticket_returns_error(tmp_path, monkeypatch, capsys):

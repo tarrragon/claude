@@ -61,154 +61,105 @@
 
 ## Skill 設計模式
 
-### Pattern 1: Sequential Workflow Orchestration
+Skill 工作流的控制流只有三種形狀：**循序含關卡**、**迭代至門檻**、**決策分派**。原五個 Pattern 裡，Pattern 1（Sequential Workflow Orchestration）與 Pattern 2（Multi-MCP Coordination）是同一個形狀換了標頭字——四條關鍵技巧一對一對應，唯一差異只是呼叫幾個服務，那是參數不是形狀；Pattern 5（Domain-Specific Intelligence）不描述控制流，屬另一個維度，去處見本節末〈跨形狀可附加階段：決策留存〉。收斂後三形狀互斥，任兩者之間都有可判的邊界。
 
-**適用場景**：需要按特定順序執行的多步驟流程。
+### 怎麼選：三形狀判準表
 
-```markdown
-## Workflow: Onboard New Customer
+| 判準問題 | 循序含關卡 | 迭代至門檻 | 決策分派 |
+|---------|-----------|-----------|---------|
+| 所有步驟都會執行一次，還是只執行決策選中的那一條？ | 全部依序執行一次 | 同一組步驟反覆執行 | 只執行選中的那一條路徑 |
+| 有沒有回頭重做前面步驟的迴圈？ | 沒有 | 有——迴圈到門檻才停 | 沒有 |
+| 停止條件 | 最後一步完成 | 達到品質／數量門檻 | 決策做完一次，路徑跑完即結束 |
 
-### Step 1: Create Account
-Call MCP tool: `create_customer`
-Parameters: name, email, company
+**任兩形狀的邊界**：循序含關卡 vs 迭代至門檻——有無「回頭重做」的迴圈；循序含關卡 vs 決策分派——所有步驟都跑一次，還是只跑決策選中的那一條；迭代至門檻 vs 決策分派——有無反覆迴圈。三問任一答案不同即落在不同形狀，沒有「兩者皆可」的中間態。
 
-### Step 2: Setup Payment
-Call MCP tool: `setup_payment_method`
-Wait for: payment method verification
-
-### Step 3: Create Subscription
-Call MCP tool: `create_subscription`
-Parameters: plan_id, customer_id (from Step 1)
-
-### Step 4: Send Welcome Email
-Call MCP tool: `send_email`
-Template: welcome_email_template
-```
-
-**關鍵技巧**：明確步驟順序、步驟間依賴關係、每個階段驗證、失敗時的回滾指令。
+**填每一格用的是領域知識，不是形狀本身的技巧**——原 Pattern 5 的「嵌入領域專業」即指此：判準表的問題本身通用，但答案（例如合規審查要檢查哪些條款）要靠使用情境的專業知識填入，不獨立列為第四個形狀。
 
 ---
 
-### Pattern 2: Multi-MCP Coordination
+### 形狀一：循序含關卡
 
-**適用場景**：工作流跨多個服務。
+**適用場景**：多步驟且順序固定，後一步依賴前一步的輸出；可能只呼叫一個服務，也可能跨多個服務——服務數是參數，同一骨架都適用。
+
+**本庫實例**：`version-release` skill 的發布流程——先跑健康檢查（所有 Ticket 是否完成、CHANGELOG 是否更新），檢查通過才進入合併、打 Tag、推送；每一步依賴前一步的結果，未通過就停在原地不繼續。
 
 ```markdown
-### Phase 1: Design Export (Figma MCP)
-1. Export design assets from Figma
-2. Generate design specifications
-3. Create asset manifest
+## Workflow: 版本發布
 
-### Phase 2: Asset Storage (Drive MCP)
-1. Create project folder in Drive
-2. Upload all assets
-3. Generate shareable links
+### Step 1: 健康檢查
+執行 `/version-release check`
+關卡：全部通過才進入 Step 2，否則停止並列出未完成項目
 
-### Phase 3: Task Creation (Linear MCP)
-1. Create development tasks
-2. Attach asset links to tasks
-3. Assign to engineering team
+### Step 2: 合併
+Merge 到 main
+依賴：Step 1 的健康檢查結果
+
+### Step 3: 打 Tag 並推送
+建立版本 Tag，推送到 remote
+依賴：Step 2 的合併已完成
 ```
 
-**關鍵技巧**：清楚的階段分隔、MCP 之間的資料傳遞、進入下一階段前驗證、集中式錯誤處理。
+**判準表對應的關鍵技巧**：明確步驟順序、步驟間依賴（可能是同一服務內的資料傳遞，也可能是跨 MCP 的資料傳遞——同一項技巧換了呼叫對象）、每階段驗證（進入下一階段前的關卡）、失敗時的回滾或停止指令。原 Pattern 5 的「先合規後執行」是這裡「每階段驗證」的一個實例——合規檢查就是一種關卡，不需要獨立形狀。
 
 ---
 
-### Pattern 3: Iterative Refinement
+### 形狀二：迭代至門檻
 
-**適用場景**：輸出品質透過迭代改善。
+**適用場景**：同一組步驟要反覆執行，直到輸出達到品質或數量門檻才停止；停止條件是「夠了」，不是「跑完固定步數」。
+
+**本庫實例**：`multi-round-review` 的多輪審查——每輪換一個 frame 重新掃描，直到多軸涵蓋足夠才停止，而非跑滿固定輪數或直到 finding 數量遞減。
 
 ```markdown
-## Iterative Report Creation
+## Iterative Review
 
-### Initial Draft
-1. Fetch data via MCP
-2. Generate first draft report
-3. Save to temporary file
-
-### Quality Check
-1. Run validation script: `scripts/check_report.py`
-2. Identify issues:
-   - Missing sections
-   - Inconsistent formatting
-   - Data validation errors
-
-### Refinement Loop
-1. Address each identified issue
-2. Regenerate affected sections
-3. Re-validate
-4. Repeat until quality threshold met
-
-### Finalization
-1. Apply final formatting
-2. Generate summary
-3. Save final version
+### Round N
+1. 選一個尚未覆蓋的 frame
+2. 掃描並記錄 finding
+3. 檢查涵蓋軸是否足夠
+4. 不足 → 換下一個 frame，回到步驟 1
+5. 足夠 → 停止，產出彙總報告
 ```
 
-**關鍵技巧**：明確的品質標準、迭代改善流程、驗證腳本、知道何時停止迭代。
+**判準表對應的關鍵技巧**：明確的品質／涵蓋標準、迭代改善流程、驗證方法（腳本或人工皆可）、知道何時停止迭代——停止條件必須是可判斷的門檻，不能是憑感覺。
 
 ---
 
-### Pattern 4: Context-Aware Tool Selection
+### 形狀三：決策分派
 
-**適用場景**：相同目標，依上下文選擇不同工具。
+**適用場景**：同一個目標，依情境或條件選出一條路徑執行；決策只做一次，選定後不迭代、也不必然跑完全部步驟。
+
+**本庫實例**：PM 的決策路由（`.claude/pm-rules/decision-tree.md`）——依複雜度與風險判斷這件事該 PM 前台處理還是派發哪一位代理人，選定路徑後直接執行，不會回頭重新評估或同時嘗試多條路徑。
 
 ```markdown
-## Smart File Storage
+## Decision Dispatch
 
-### Decision Tree
-1. Check file type and size
-2. Determine best storage location:
-   - Large files (>10MB): Use cloud storage MCP
-   - Collaborative docs: Use Notion/Docs MCP
-   - Code files: Use GitHub MCP
-   - Temporary files: Use local storage
+### 決策點
+1. 蒐集判斷所需的條件（複雜度、涉及檔案數、風險）
+2. 依判準表選出唯一路徑
+3. 對使用者說明為何選這條路徑（透明解釋）
 
-### Execute Storage
-Based on decision:
-- Call appropriate MCP tool
-- Apply service-specific metadata
-- Generate access link
-
-### Provide Context to User
-Explain why that storage was chosen
+### 執行
+只執行選中的路徑，不嘗試其餘備選
 ```
 
-**關鍵技巧**：清楚的決策標準、備選方案、對選擇的透明解釋。
+**判準表對應的關鍵技巧**：清楚的決策標準、備選方案存在但只執行其一、對選擇的透明解釋。
 
 ---
 
-### Pattern 5: Domain-Specific Intelligence
+### 跨形狀可附加階段：決策留存
 
-**適用場景**：Skill 提供超越工具存取的專業知識。
+三個形狀中的任一個決策點，都可能需要**決策留存**——把「為什麼這樣判斷」寫下來，供事後不在場的人重新檢視。**判準**：這個決策事後會被不在場的人重新檢視嗎？會 → 留存；只是暫時的執行細節、產物本身已經說明一切 → 不留存，不是每個決策都要留存。
 
-```markdown
-## Payment Processing with Compliance
+**與產物留存的區別**：產物留存記錄「做了什麼」——輸出檔案或程式碼本身就是記錄；決策留存記錄「為什麼這樣做」與「依據什麼標準判斷」——兩者可以同時存在，也可以只有其中一種。
 
-### Before Processing (Compliance Check)
-1. Fetch transaction details via MCP
-2. Apply compliance rules:
-   - Check sanctions lists
-   - Verify jurisdiction allowances
-   - Assess risk level
-3. Document compliance decision
+**原 Pattern 5 四條關鍵技巧的去處**：
 
-### Processing
-IF compliance passed:
-    - Call payment processing MCP tool
-    - Apply appropriate fraud checks
-    - Process transaction
-ELSE:
-    - Flag for review
-    - Create compliance case
-
-### Audit Trail
-- Log all compliance checks
-- Record processing decisions
-- Generate audit report
-```
-
-**關鍵技巧**：嵌入領域專業、先合規後執行、完整文件記錄、清楚治理機制。
+| 原技巧 | 去處 |
+|-------|------|
+| 完整文件記錄 | 決策留存的載體——留存就是把決策寫成文件 |
+| 清楚治理機制 | 決策留存的判準本身——「誰來覆核、什麼情況要留存」就是治理機制 |
+| 先合規後執行 | 併入形狀一〈循序含關卡〉的關鍵技巧（合規檢查是一種關卡實例） |
+| 嵌入領域專業 | 併入本節開頭〈怎麼選：三形狀判準表〉的填寫指引，不是控制流層的技巧 |
 
 ---
 

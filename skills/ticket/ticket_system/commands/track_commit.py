@@ -20,13 +20,15 @@ if __name__ == "__main__":
 
 
 import argparse
+import json
 import os
 import subprocess
-from typing import List, Optional
+from typing import List, Optional, Set
 
-from ticket_system.lib.file_conflict import files_intersect, write_files
+from ticket_system.lib.file_conflict import files_intersect, parse_file_intent, write_files
 from ticket_system.lib.git_ops import commit_files_isolated
 from ticket_system.lib.messages import ErrorMessages, format_error
+from ticket_system.lib.paths import get_ticket_state_root
 from ticket_system.lib.project_root import resolve_project_cwd
 from ticket_system.lib.ticket_loader import load_ticket
 
@@ -100,7 +102,55 @@ def _git_status_porcelain(repo_root: str) -> str:
     return result.stdout
 
 
-def _expand_directory_to_changed_files(directory: str, repo_root: str) -> List[str]:
+def _other_ticket_declared_files(own_ticket_id: str) -> Set[str]:
+    """讀取 `.claude/dispatch-active.json`，回傳除本票外其他活躍派發宣告的
+    where.files 路徑集合（已剝除 `::read`／`::write` 標記）。
+
+    目錄型宣告展開（`_expand_directory_to_changed_files`）原以
+    `git status --porcelain` 取整個目錄下全部變更檔，無 session／
+    where.files 歸屬過濾，並行下會把他 session 的變更一併吸入本次提交
+    （Round 3 finding 3-B B1）。本函式提供排除集合：目錄展開時，凡命中
+    其他活躍派發（`ticket_id` 不等於本票）宣告路徑的變更檔一律排除，
+    使目錄展開只保留「未被他票宣告」的變更（本票或無人宣告皆保留，
+    僅排除已知歸屬他票者，非要求逐檔正向證明歸屬本票——registry 無法
+    做到後者）。
+
+    讀取失敗（檔案不存在／JSON 格式錯誤／結構不符）一律視為無其他
+    派發，回傳空集合（fail-open）：目錄展開的安全邊界仍是 where.files
+    子集檢查（`_out_of_scope_files`），本過濾為並行防護的加強層，不因
+    registry 讀取失敗而擋下本應正常提交。
+    """
+    dispatch_file = get_ticket_state_root() / ".claude" / "dispatch-active.json"
+    try:
+        raw = dispatch_file.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except (OSError, ValueError):
+        return set()
+
+    if not isinstance(data, dict):
+        return set()
+    dispatches = data.get("dispatches")
+    if not isinstance(dispatches, list):
+        return set()
+
+    other_files: Set[str] = set()
+    for entry in dispatches:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("ticket_id") == own_ticket_id:
+            continue
+        files = entry.get("files")
+        if not isinstance(files, list):
+            continue
+        for f in files:
+            path, _ = parse_file_intent(str(f))
+            other_files.add(path)
+    return other_files
+
+
+def _expand_directory_to_changed_files(
+    directory: str, repo_root: str, exclude: Optional[Set[str]] = None
+) -> List[str]:
     """將目錄型宣告展開為該目錄底下、working tree 對 HEAD 有變更（含未
     追蹤）的具體檔案清單。
 
@@ -109,29 +159,47 @@ def _expand_directory_to_changed_files(directory: str, repo_root: str) -> List[s
     驗證失敗。在呼叫端先展開為具體檔案，讓 commit_files_isolated 恆收到
     與其自我驗證邏輯同構的輸入，不改動該函式既有的精確比對契約（隔離
     索引 CAS 三要件之一）。
+
+    `exclude`：其他活躍派發宣告的路徑集合（見 `_other_ticket_declared_files`），
+    命中則跳過，避免並行下把他 session 的變更一併展開進本次提交
+    （3-B B1）。為 None 時等同空集合（既有行為不變）。
     """
     status_out = _git_status_porcelain(repo_root)
+    exclude = exclude or set()
     changed = []
     for line in status_out.splitlines():
         if len(line) < 4:
             continue
         path = line[3:].strip()
-        if files_intersect(path, directory):
-            changed.append(path)
+        if not files_intersect(path, directory):
+            continue
+        if any(files_intersect(path, other) for other in exclude):
+            continue
+        changed.append(path)
     return changed
 
 
 def _expand_directories(
-    input_files: List[str], repo_root: str, base_dir: str
+    input_files: List[str], repo_root: str, base_dir: str, own_ticket_id: str
 ) -> List[str]:
     """將 input_files 中屬目錄的項目展開為具體變更檔案，其餘項目原樣
-    保留。回傳恆為具體檔案路徑清單（可能為空，呼叫端需另行判斷）。"""
+    保留。回傳恆為具體檔案路徑清單（可能為空，呼叫端需另行判斷）。
+
+    `_other_ticket_declared_files` 僅在確實需要展開目錄時才呼叫一次
+    （lazy，非目錄型輸入不觸發 registry 讀取），排除結果套用至本次呼叫
+    中所有目錄型宣告的展開。
+    """
+    exclude: Optional[Set[str]] = None
     expanded: List[str] = []
     for orig in input_files:
         normalized = _to_repo_relative(orig, repo_root, base_dir)
         abs_path = os.path.join(repo_root, normalized)
         if os.path.isdir(abs_path):
-            expanded.extend(_expand_directory_to_changed_files(normalized, repo_root))
+            if exclude is None:
+                exclude = _other_ticket_declared_files(own_ticket_id)
+            expanded.extend(
+                _expand_directory_to_changed_files(normalized, repo_root, exclude)
+            )
         else:
             expanded.append(normalized)
     return expanded
@@ -202,7 +270,9 @@ def execute_commit(args: argparse.Namespace, version: str) -> int:
     # 目錄型輸入展開為具體變更檔案：commit_files_isolated 的自我驗證比對
     # 精確檔案清單，目錄字面值不會出現在該比對結果中（見
     # _expand_directory_to_changed_files docstring）。展開後恆為具體檔案。
-    normalized_input = _expand_directories(args.files, repo_root, base_dir)
+    normalized_input = _expand_directories(
+        args.files, repo_root, base_dir, args.ticket_id
+    )
     if not normalized_input:
         print(
             "[ERROR] 宣告範圍內的目錄底下無任何變更檔案，無可提交內容，拒絕提交：\n"
@@ -218,7 +288,16 @@ def execute_commit(args: argparse.Namespace, version: str) -> int:
             print(f"  - {p}")
         return 0
     if status == "empty":
-        print("[INFO] 檔案內容與 HEAD 相同，無需提交（空 tree 短路）")
+        # 3-H 案 3：主倉庫 cwd 對 linked worktree 內的變更零感知，未帶
+        # --worktree 時空 tree 短路與「內容真的與 HEAD 相同」同形，僅憑
+        # exit code 0 無法區分。明確在 stdout 提示，避免代理人把此 exit 0
+        # 誤判為「已提交」（危險答案：exit 0 判定成功 -> complete -> worktree
+        # 分支零 commit）。
+        print(
+            "[INFO] 檔案內容與 HEAD 相同，無需提交（空 tree 短路）。"
+            "若變更實際發生在 linked worktree 但未帶 --worktree，"
+            "本命令對該變更零感知；請確認已加 --worktree <worktree 絕對路徑>。"
+        )
         return 0
 
     print(f"[ERROR] 提交失敗：{result['error']}")

@@ -50,7 +50,7 @@ python3 .claude/skills/framework-issue/scripts/section_comment.py dedup \
 [
   {"name": "當前結論", "content": "## 當前結論\n\n三份 hook 註冊清單（settings.json、hook-exclude-list、completeness-check 的內建清單）各自維護，不同步的根因是沒有單一 SSOT，不是任一份寫錯。大小寫偵測永不觸發的原因是比對前先做了 lower()，與第一輪判定的「正則錯誤」無關（原判見來源票 <ana-1>，經 <ana-1> 第二輪實測推翻）。\n\n方案採 settings.json 為 SSOT，另兩份改為由它推導；豁免清單每條理由須指名對應 hook 檔名，否則對帳無法機械化。\n\n與 #11 分工：本 issue 管 canonical 三份清單，#11 管 consumer 端 settings.local.json 殘留。\n\n**狀態**：方案已定，對帳工具未做，見待辦與來源。"},
   {"name": "問題與方案", "content": "## 問題與方案\n\n| 徵狀 | 根因 | 實證 |\n|------|------|------|\n| 同一 hook 註冊兩次 | 三份清單無 SSOT | <ana-1> 對帳 112 筆 |\n| 大小寫偵測永不觸發 | 比對前 lower() | <ana-1> 第二輪 |\n| 豁免理由與 hook 對不上 | 理由為自由文字 | <ana-2> 稽核 37 條 |\n\n相關但不同領域：sync-pull 改名不移舊註冊見 #68。\n\n### 方案\n\n| 方案 | 取捨 |\n|------|------|\n| settings.json 為 SSOT（採） | 現有 hook 已讀它；代價是 exclude-list 要改成推導 |\n| 新建 registry.yaml | 多一份要同步的檔，與問題同形 |\n\n未驗證假設：推導後 SessionStart 耗時是否可接受，待對帳工具落地後量。"},
-  {"name": "待辦與來源（flutter-balance）", "content": "## 待辦與來源（flutter-balance）\n\n| 來源票 | 做什麼 | acceptance 條數 | 優先級 | 階段 | 狀態 |\n|--------|--------|----------------|--------|------|------|\n| <imp-1> | 對帳工具：讀三份清單輸出差集 | 4 | P1 | 本版 | 待裁票 |\n| <doc-1> | hook 操作文件補 SSOT 章節 | 2 | P2 | 對帳工具後 | 待裁票 |\n\n來源票對照：本 consumer 派發票 <dispatch-id> 的 Solution。"}
+  {"name": "待辦與來源（flutter-balance）", "content": "## 待辦與來源（flutter-balance）\n\n| 來源票 | 做什麼 | acceptance 條數 | 優先級 | 階段 | 狀態 |\n|--------|--------|----------------|--------|------|------|\n| <imp-1> | 對帳工具：讀三份清單輸出差集 | 4 | P1 | 本版 | 待裁票 |\n| <doc-1> | hook 操作文件補 SSOT 章節 | 2 | P2 | 待條件 | 待裁票 |\n\n來源票對照：本 consumer 派發票 <dispatch-id> 的 Solution。"}
 ]
 ```
 
@@ -74,15 +74,7 @@ body 區段索引已回填 @ 53
 
 區段 comment 的 id 從 `show` 或 body 索引取得。
 
-`init` 對 body-only 舊 issue 不補協定標記，補一次：
-
-```bash
-gh issue view 53 --repo tarrragon/claude --json body -q .body > body.md
-printf '<!-- fw-issue-schema: comment-as-section v1 -->\n\n%s' "$(cat body.md)" > body2.md
-gh issue edit 53 --repo tarrragon/claude --body-file body2.md
-```
-
-這是 body 唯一的第二次手動寫入，之後不再動 body。
+body 缺 `fw-issue-schema` 標記時，`init` 在回填索引的同一次 PATCH 內補上首行，不需另外手動編輯 body。body 之後不再由工具或人改寫。
 
 ## ticket close
 

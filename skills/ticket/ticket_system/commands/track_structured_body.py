@@ -91,7 +91,27 @@ def _delegate_to_append_log(
 
 
 def execute_set_exit_status(args: argparse.Namespace, version: str) -> int:
-    """執行 set-exit-status 命令：CLI 生成 Exit Status fenced YAML 區塊。"""
+    """執行 set-exit-status 命令：CLI 生成 Exit Status fenced YAML 區塊。
+
+    set-exit-status 原無身份檢查，接手者可代填他人票的 Exit Status
+    章節，製造 reclaim 鑑識三查第 3 查（Exit Status 存在）通過的假象。
+    加 --as／who.current 比對（複用既有 identity_guard，非重造）；
+    set-exit-status 不屬 ENFORCED_COMMANDS，未提供 --as 維持 warn-only
+    向後相容，提供 --as 且與 who.current 不符則 deny。--force 僅旁路下方
+    委派寫入時的 status precondition（逃生閥），與身份檢查獨立，不可用於
+    旁路本檢查。
+    """
+    from ticket_system.lib.identity_guard import check_identity
+
+    deny = check_identity(
+        version,
+        args.ticket_id,
+        getattr(args, "as_agent", None),
+        command="set-exit-status",
+    )
+    if deny is not None:
+        return deny
+
     if args.status not in VALID_EXIT_STATUSES:
         print(format_error(ErrorMessages.INVALID_SECTION, section=args.status))
         print(f"   有效值: {', '.join(VALID_EXIT_STATUSES)}")

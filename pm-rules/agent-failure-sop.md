@@ -8,23 +8,16 @@
 
 ## 代理人完成確認 SOP（強制，來源 PC-050）
 
-> **核心原則**：收到完成通知 ≠ 全部完成。必須清點 dispatch-active.json 確認所有代理人都已完成。
+> **核心原則**：收到完成通知 ≠ 全部完成。必須用 `ticket track dispatch-check` 確認所有代理人都已完成。
 
 **收到任何代理人完成通知時**，執行以下兩步：
 
 ```bash
 # 步驟 1：確認剩餘活躍派發
-cat .claude/dispatch-active.json | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-if d:
-    print('[WAIT] 仍有 {} 個代理人在執行：'.format(len(d)))
-    for x in d:
-        print('  - {}'.format(x.get('agent_description', '?')))
-else:
-    print('[OK] 所有代理人已完成，可開始驗收。')
-"
+ticket track dispatch-check
 ```
+
+`[PASS]` 代表所有代理人已完成，可開始驗收；`[WARN]` 代表仍有 N 個代理人在執行並逐筆列出 `agent_description` / `ticket_id` / `dispatched_at`。完整輸出格式與 exit code 見 `.claude/skills/ticket/references/track-command.md`〈track dispatch-check 子命令〉。
 
 ```bash
 # 步驟 2：確認分支狀態
@@ -53,7 +46,7 @@ git branch | grep feat/
 | 步驟 | 命令 | 目的 |
 |------|------|------|
 | -1 | `find .claude/hook-logs -name "*.log" -mmin -5 -exec grep -l "ERROR\|Exception\|TypeError" {} \;` | 檢查是否有 Hook error 干擾代理人（防範環境異常誤判） |
-| 0 | `cat .claude/dispatch-active.json` | 確認代理人是否仍在活躍派發中（可能還沒完成） |
+| 0 | `ticket track dispatch-check` | 確認代理人是否仍在活躍派發中（可能還沒完成）；`[WARN]` 逐筆列出 |
 | 0.5 | `TaskOutput(task_id=<agentId>, block=false, timeout=3000)` 讀 `<status>` 標籤 | 對懷疑失敗的代理人確認 runtime 狀態（補 PC-050 模式 D 盲點） |
 | 0.5-A | **派發時間閾值檢查**：若代理人派發距今 < 2 分鐘且收到 Hook 完成訊號，Step 0.5 **強制執行**（禁用 Hook 訊號作為失敗依據） | 防 PC-050 模式 E / PC-070：Hook 廣播訊號與 runtime 狀態不同步 |
 | 1 | `pwd && git branch --show-current` | 確認當前分支（可能被代理人污染到其他分支） |

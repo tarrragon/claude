@@ -49,7 +49,7 @@
 | 代理人 frontmatter 有無 permissionMode | `head -30 .claude/agents/<agent>.md` | 若無、預設 `default` 不適合背景派發 → 用 PM 前台或修 frontmatter |
 | 若用 worktree 方案 | 確認 worktree 路徑在 `settings.local.json` `additionalDirectories` | 未加 → 加入後才派發（否則 acceptEdits 無效） |
 | 分支狀態 | `git branch --show-current` + `git worktree list` | 不在預期分支 → 先切換 |
-| dispatch-active.json 計數 | `cat .claude/dispatch-active.json` | 已有活躍派發 → 評估並行是否安全 |
+| dispatch-active.json 計數 | `ticket track dispatch-check`（`.claude/skills/ticket/references/track-command.md`〈track dispatch-check 子命令〉） | `[WARN]` 已有活躍派發 → 評估並行是否安全 |
 
 ---
 

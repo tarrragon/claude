@@ -71,7 +71,7 @@ flutter_balance 專案，用戶要求為尚未啟動的 v0.0.2 建立需求訪�
 ## 相關
 
 - 同源方向相反：PC-BAL-001（驗證端清單過期使建立端產出被判違規）——過度服從工具輸出；本 pattern 為過度繞過工具阻擋
-- 載體語意分工：`.claude/skills/wrap-decision/SKILL.md`「提案系統對接」表（安全停放區 / 承諾清單 / 核心優先事項）
+- 載體語意分工：`.claude/skills/wrap-decision/SKILL.md`「提案系統對接」段（安全停放區 / 承諾清單 / 核心優先事項）
 - 規劃 pipeline：`.claude/skills/version-bootstrap/SKILL.md` 六步流程（提案 → spec → 教學比對 → UC → 紅燈測試 → 建票）
 - 載體選擇閘門落地：`.claude/pm-rules/plan-to-ticket-flow.md`「前置閘門：載體選擇」章節
 - 工具預設優於文件規範：`.claude/rules/core/opinionated-default-design.md` 主張 1

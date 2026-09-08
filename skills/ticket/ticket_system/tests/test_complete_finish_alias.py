@@ -264,3 +264,44 @@ class TestCompleteUnaffected:
                 finish_help = choice_action.help
         assert finish_help is not None
         assert "complete" in finish_help
+
+
+# ============================================================
+# AC6: complete/finish 的 --as help 文字反映 identity_guard 強制語意
+# ============================================================
+
+
+def _find_as_agent_help(subparser: argparse.ArgumentParser) -> str:
+    """從 `complete`/`finish` 子 parser 找出 `--as`（dest=as_agent）的 help 文字。"""
+    for action in subparser._actions:
+        if action.dest == "as_agent":
+            assert action.help is not None
+            return action.help
+    raise AssertionError("找不到 --as（dest=as_agent）引數")
+
+
+class TestCompleteAsHelpReflectsEnforcedIdentity:
+    """`complete`/`finish` 屬 `identity_guard.ENFORCED_COMMANDS`，未提供
+    `--as` 即 deny（非 warn-only）；help 文字必須反映此強制語意，不可誤導
+    使用者以為可省略（0.2.1-W3-1342）。"""
+
+    def test_complete_as_help_does_not_say_warning_only(self):
+        top = _build_top_parser()
+        operation_action = _find_operation_subparsers_action(top)
+        help_text = _find_as_agent_help(operation_action.choices["complete"])
+        assert "僅警告" not in help_text
+
+    def test_complete_as_help_mentions_deny_for_missing(self):
+        top = _build_top_parser()
+        operation_action = _find_operation_subparsers_action(top)
+        help_text = _find_as_agent_help(operation_action.choices["complete"])
+        assert "deny" in help_text
+
+    def test_finish_as_help_matches_complete_as_help(self):
+        """finish 與 complete 共用 `_add_complete_arguments`，--as help 文字
+        必須逐字相同（單一事實來源，非手動同步兩份）。"""
+        top = _build_top_parser()
+        operation_action = _find_operation_subparsers_action(top)
+        complete_help = _find_as_agent_help(operation_action.choices["complete"])
+        finish_help = _find_as_agent_help(operation_action.choices["finish"])
+        assert complete_help == finish_help

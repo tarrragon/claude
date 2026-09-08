@@ -346,29 +346,31 @@ $ ticket track claim 0.18.0-W10-042 --verify   # W3-046：須 opt-in
 
 ## Complete 後 cleanup checklist（W11-033 / W11-035 / PC-149）
 
-> **Why**：`ticket track complete` 自 W11-035 起會 auto-stage 已 modified 的本票 md / worklog index（精準路徑，不夾帶 WIP），並在 stdout 提示 `git commit -m ...` 指令；但**仍不會自動 commit，也不會清理已合併的 worktree**。session 邊界處長期累積會造成兩類缺口（W11-018 審計發現 8 個 worktree 殘留，最久 35 天）。
+> **Why**：`ticket track complete` 呼叫當下即以隔離索引**自動提交**本票 md / worklog index（精準路徑，不夾帶 WIP，不觸碰共用 index，成功時 stdout 印出 commit SHA），不需 PM 手動執行 commit；但**仍不會清理已合併的 worktree**（見 `.claude/skills/ticket/references/track-command.md`〈complete 副作用：ticket metadata 與程式碼變更恆分兩個 commit〉）。session 邊界處長期累積會造成 worktree 殘留缺口（W11-018 審計發現 8 個 worktree 殘留，最久 35 天）。
 >
-> **範圍排除 children/siblings**：auto-stage 僅涵蓋本票 md 與 worklog index 兩類，不含 cascade children 或同層 sibling ticket 的 md——此排除是後續收斂修復的核心，非遺漏。高並行下若一併 stage 這些檔案，可能誤攬另一位代理人尚未提交的 body 變更。本節下方「父 Ticket complete 前置檢查」所述的 cascade 狀態解鎖（父子完成狀態轉移）屬另一機制，與此處的檔案暫存範圍無關，不受本收斂影響。
+> **範圍排除 children/siblings**：auto-commit 僅涵蓋本票 md 與 worklog index 兩類，不含 cascade children 或同層 sibling ticket 的 md——此排除是後續收斂修復的核心，非遺漏。高並行下若一併提交這些檔案，可能誤攬另一位代理人尚未提交的 body 變更。本節下方「父 Ticket complete 前置檢查」所述的 cascade 狀態解鎖（父子完成狀態轉移）屬另一機制，與此處的自動提交範圍無關，不受本收斂影響。
 >
-> **Consequence**：未執行提示的 commit 會讓 staged metadata 累積；未清理 worktree 會造成 disk / 視圖污染。
+> **Consequence**：未清理 worktree 會造成 disk / 視圖污染；PM 若對已由 CLI 自動提交的檔案再手動 `git commit`，會在共用 index 上裸 commit，正是隔離索引機制要消除的路徑（禁止此動作）。
 >
 > **Action**：complete 後依下表逐項處理。Hook 層已有對應提醒，本 checklist 是規則層雙保險。
 
 | 步驟 | 動作 | Hook 對應提醒 |
 |------|------|--------------|
-| 1 | 執行 complete 後 stdout 提示的 `git commit -m "chore(<version>-<id>): metadata sync post-completion"` 指令（W11-035 auto-stage 已完成 add） | complete CLI stdout 直接輸出建議指令 |
-| 2 | 若不希望 auto-stage（如已自行精挑 stage 範圍），改用 `ticket track complete <id> --no-stage` 跳過 | `--no-stage` flag 保留 W11-035 前的純 frontmatter 更新行為 |
+| 1 | 核對 complete 後 stdout 印出的 commit SHA，確認隔離索引已自動提交（無需手動 `git commit`） | complete CLI stdout 直接輸出 `[Auto-commit] 已隔離提交 ... (<SHA>)` |
+| 2 | 想讓 ticket metadata 與程式碼變更合併成單一 commit：改用 `ticket track complete <id> --no-stage` 完整跳過本次 auto-commit，票 md 留在 working tree 未提交，再與程式碼變更一併 `git add` 後裸 commit（無 pathspec） | `--no-stage` flag 保留 W11-035 前的純 frontmatter 更新行為 |
 | 3 | 若 ticket 用 worktree 開發：合併後執行 `git worktree remove <path>` 清理目錄 | `worktree-merge-reminder-hook.py` PostToolUse 階段（W11-033 擴充）會輸出 cleanup 建議 |
 | 4 | dirty worktree（含未提交變更）先處理變更再移除（或 `--force` 強制移除已備份檔案） | 同 #3 hook 會額外提示 `dirty` 狀態 |
 | 5 | 確認 metadata commit 已落地（避免 orphan ticket md） | `session-start-merged-worktree-audit-hook.py` 下次 session 啟動會列出 orphan ticket |
 
-### --no-stage 使用時機
+### `--no-stage` 使用時機
 
 | 情境 | 建議 |
 |------|------|
-| 一般 ticket complete（僅 metadata + body 變更） | 不加 flag，使用 auto-stage 預設行為 |
-| Complete 與其他 WIP 變更交錯且已手動 `git add` 精選範圍 | 加 `--no-stage` 避免覆蓋既有 staging area 規劃 |
-| Hook / lib 修改需與 complete 拆成多 commit | 加 `--no-stage`，手動分階段 commit |
+| 一般 ticket complete（僅 metadata + body 變更） | 不加 flag，使用 auto-commit 預設行為 |
+| 想讓 ticket metadata 與程式碼變更合併成單一 commit | 加 `--no-stage`，完整跳過 auto-commit，事後與程式碼變更一併裸 commit（見上表步驟 2） |
+| Hook / lib 修改需與 complete 分開各自獨立 commit | 不加 flag；auto-commit 已保證 metadata 與程式碼變更分屬兩個 commit（見 track-command.md 同節） |
+
+完整覆蓋範圍與語意見 `.claude/skills/ticket/references/track-command.md`〈`--no-stage` 的覆蓋範圍〉。
 
 **驗證**：下次 session 啟動時 `session-start-merged-worktree-audit-hook.py` 兩 section 皆 `suppressOutput=true` 代表已乾淨。
 
@@ -377,6 +379,8 @@ $ ticket track claim 0.18.0-W10-042 --verify   # W3-046：須 opt-in
 ## 父 Ticket complete 前置檢查（強制）
 
 > **來源**：`.claude/methodologies/atomic-ticket-methodology.md` 「任務鏈核心哲學 — 父子責任傳遞」+ `.claude/methodologies/ticket-lifecycle-management-methodology.md` 「父 complete 前置條件」。
+>
+> **範圍邊界**：本節僅涵蓋「子 Ticket 完成度」一項。`ticket track complete` 實際依序檢查的完整清單（含防護類 hook 必含項、驗收記錄、ANA spawn 一致性、5W1H 完整性、Phase 4 審查證據等共 13 項，各項阻擋／警告分級與準備方式）見 `.claude/skills/ticket/references/track-command.md`〈complete 前置清單〉，非僅本節所述的子任務完成度一項。
 
 **核心原則**：父文件完成 ≠ 父責任履行。父 complete 需滿足「所有子 Ticket 已 completed 或 closed」。
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "skill-sync"
-version = "1.18.0"
+version = "1.24.0"
 description = "Sync Claude Code skills with a remote skills repository"
 readme = "SKILL.md"
 requires-python = ">=3.9"

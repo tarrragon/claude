@@ -1,6 +1,6 @@
-# Seeing like an Agent: 工具設計哲學與進階模式
+# Seeing like an Agent: 工具設計哲學與可貼用的進階模式
 
-> 何時讀：在決定某一步該寫成文字指引還是腳本、或某個設計取捨說不出理由時；也用於理解一個工具為何演成現在的樣子。**亦由此進入**——`SKILL.md`〈按需讀取〉的消歧義段把要「設計理由」的讀者送到本檔的〈進階 Skill 設計模式〉；`splitting-an-existing-skill.md` 與 `patterns-and-troubleshooting.md` 的「同目錄」段亦指向本檔。
+> 何時讀：本檔前後兩半內容型別不同，各自對應不同的讀者狀態。前半（〈核心哲學〉〈Claude Code 團隊的演進教訓〉）回答「為什麼」——在某個設計取捨說不出理由、或想理解一個工具為何演成現在的樣子時讀。後半以〈進階 Skill 設計模式〉的六則含程式碼的可執行步驟為主（評估驅動開發、Feedback Loop、Verifiable Intermediate Outputs 等），外加〈觀察 Claude 如何使用 Skill〉與〈反模式〉兩張診斷用對照表——在決定某一步該寫成文字指引還是腳本、或需要可貼用的具體做法時，直接跳後半讀，不需要先讀完前半的哲學層。**亦由此進入**——`SKILL.md`〈按需讀取〉把要「設計理由」與要「可貼用進階模式」的讀者一併送到本檔；`splitting-an-existing-skill.md` 與 `patterns-and-troubleshooting.md` 的「同目錄」段亦指向本檔。
 >
 > 同目錄：怎麼寫的部分在 `frontmatter-and-description.md` 與 `writing-the-body.md`，新建流程在 `creating-and-adopting-skills.md`，拆分程序在 `splitting-an-existing-skill.md`，工作流範本與問題排除在 `patterns-and-troubleshooting.md`；〈核心心法〉留在 `SKILL.md`。
 >

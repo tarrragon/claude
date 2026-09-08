@@ -95,13 +95,13 @@ how:  "在 auth.py token 解析前加 guard clause；補 unit test 覆蓋 null t
 **欄位提問**：什麼時候觸發/執行這個 ticket？（條件/時機，不是動作內容）
 
 ```yaml
-when: "v1.2.0 發佈前（預計 2026-05-10），依賴 W03-021 架構草案完成後即可啟動" # portability-allow: educational when-field example
+when: "v1.2.0 發佈前（預計 2026-05-10），依賴 wave03-021 架構草案完成後即可啟動"
 ```
 
 **為什麼正確**：
 
 - 回答「什麼時候」的問題（版本截止、前置依賴）
-- 條件可被驗證（檢查 W03-021 狀態即可）<!-- portability-allow: educational reference example -->
+- 條件可被驗證（檢查 wave03-021 狀態即可）
 - 不混入「要做什麼」或「為什麼」
 
 ### 常見混淆：把 what 重述一遍

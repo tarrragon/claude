@@ -29,6 +29,7 @@ from ticket_system.lib.ticket_loader import (
     get_tickets_dir,
     get_ticket_path,
     save_ticket,
+    resolve_version,
 )
 from ticket_system.lib.file_lock import create_id_allocation_lock
 from ticket_system.lib.messages import (
@@ -141,8 +142,11 @@ def _create_ticket_config(
 
 def execute(args: argparse.Namespace) -> int:
     """執行 batch-create 命令"""
-    # 驗證版本
-    version = args.version
+    # 驗證版本：與 ticket create 共用 resolve_version 偵測路徑。原本
+    # 僅檢查 args.version 是否為 None，未走任何自動偵測，與 create
+    # 命令行為不同源，同專案結構下 create 可偵測、batch-create 卻
+    # 回報「無法偵測版本」。
+    version = resolve_version(args.version)
     if not version:
         print(format_error(ErrorMessages.VERSION_NOT_DETECTED))
         return 1

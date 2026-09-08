@@ -823,6 +823,97 @@ class TestWorktreePathAnchoring:
 
 
 # ---------------------------------------------------------------------------
+# IMP-BAL-020：CODE_FENCE_PATTERN 未錨定行首，行內三反引號字面誤判為 fence
+# 邊界。三個最少測試案例（見 error-pattern「解決方案」章節）。
+# ---------------------------------------------------------------------------
+
+
+class TestInlineBacktickFenceBoundary:
+    def test_prose_after_inline_backtick_still_blocked(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """案例 1：行內三反引號（非行首）不構成 fence，緊接其後的散文新增
+        引用仍應被攔。"""
+        target = _claude_path(tmp_path, "skills", "example", "SKILL.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": (
+                    "原始內容\n"
+                    "範例字串：awk 印出 ``` 字元。\n"
+                    "新增引用 0.2.1-W3-891 緊接在後。"
+                ),
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 2
+        assert "0.2.1-W3-891" in err
+
+    def test_line_start_fence_demo_reference_not_flagged(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """案例 2：行首（允許縮排）開閉的 fence，其內的示範引用不被攔。"""
+        target = _claude_path(tmp_path, "skills", "example", "SKILL2.md")
+        target.write_text("原始內容\n", encoding="utf-8")
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "原始內容",
+                "new_string": (
+                    "原始內容\n```\n示範內容含 0.2.1-W3-892\n```\n"
+                ),
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 0
+        assert err == ""
+
+    def test_deleting_line_with_inline_backtick_keeps_existing_id_judgment(
+        self, hook_mod, monkeypatch, tmp_path, capsys
+    ):
+        """案例 3（IMP-BAL-020 重現場景）：檔案內一行含行內三反引號字面
+        （非行首，如 awk 指令示範），其後有一段既有（存量）散文 ticket ID
+        引用，再之後有一個孤立的行首三反引號。未錨定行首的正則會把行內
+        反引號與後方孤立反引號錯誤配對成假 fence，將既有引用誤藏於其中
+        （pre_text 判為不存在）；刪除該行後配對消失，既有引用重新可見
+        （post_text 判為存在），diff 因此誤報「新增」。修正後兩次判定皆應
+        找到該既有引用，刪除該行不應改變其判定結果（不阻擋）。"""
+        target = _claude_path(tmp_path, "pm-rules", "inline-backtick-example.md")
+        target.write_text(
+            "既有內容第一行\n"
+            "awk 印出 ``` 字元示範，非 fence。\n"
+            "既有引用（0.2.1-W3-500 教訓）\n"
+            "```\n"
+            "最後一行\n",
+            encoding="utf-8",
+        )
+
+        payload = {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(target),
+                "old_string": "awk 印出 ``` 字元示範，非 fence。\n",
+                "new_string": "",
+            },
+        }
+        rc = _run_main(hook_mod, monkeypatch, payload)
+        err = capsys.readouterr().err
+
+        assert rc == 0
+        assert err == ""
+
+
+# ---------------------------------------------------------------------------
 # 單元函式測試（守衛與規則文件判準一致性，acceptance 4）
 # ---------------------------------------------------------------------------
 

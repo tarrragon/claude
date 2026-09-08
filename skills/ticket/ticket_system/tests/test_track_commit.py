@@ -20,6 +20,7 @@
     （0.2.1-W4-017）。
 """
 import argparse
+import json
 import subprocess
 from unittest.mock import patch
 
@@ -250,7 +251,7 @@ class TestDirectoryDeclarationScope:
         called_paths, _ = mock_commit.call_args[0]
         assert called_paths == ["a/dir/file.py"]
 
-    def test_directory_itself_expands_to_concrete_changed_files(self, capsys):
+    def test_directory_itself_expands_to_concrete_changed_files(self, capsys, tmp_path):
         """宣告 `a/dir`（目錄），傳入目錄本身應展開為 git 回報的實際變更
         檔案後才交給 commit_files_isolated——後者恆收到具體檔案清單，不
         收到目錄字面值，故自我驗證不因目錄展開而誤判。"""
@@ -260,6 +261,7 @@ class TestDirectoryDeclarationScope:
              patch.object(track_commit, "resolve_project_cwd", return_value="/repo"), \
              patch("os.getcwd", return_value="/repo"), \
              patch("os.path.isdir", return_value=True), \
+             patch.object(track_commit, "get_ticket_state_root", return_value=tmp_path), \
              patch.object(track_commit, "_git_status_porcelain", return_value=status_output), \
              patch.object(
                  track_commit,
@@ -275,7 +277,7 @@ class TestDirectoryDeclarationScope:
         for p in called_paths:
             assert "a/dir" != p  # 恆為具體檔案，非目錄字面值
 
-    def test_directory_with_no_changed_files_rejected(self, capsys):
+    def test_directory_with_no_changed_files_rejected(self, capsys, tmp_path):
         """宣告的目錄下 git status 無任何變更檔案時，無可提交內容，拒絕
         （不將目錄字面值傳給 commit_files_isolated）。"""
         declared = ["a/dir"]
@@ -283,12 +285,96 @@ class TestDirectoryDeclarationScope:
              patch.object(track_commit, "resolve_project_cwd", return_value="/repo"), \
              patch("os.getcwd", return_value="/repo"), \
              patch("os.path.isdir", return_value=True), \
+             patch.object(track_commit, "get_ticket_state_root", return_value=tmp_path), \
              patch.object(track_commit, "_git_status_porcelain", return_value=""), \
              patch.object(track_commit, "commit_files_isolated") as mock_commit:
             rc = track_commit.execute_commit(_args(["a/dir"]), _VERSION)
 
         assert rc == 1
         mock_commit.assert_not_called()
+
+    def test_directory_expansion_excludes_other_active_ticket_files(self, capsys, tmp_path):
+        """0.2.1-W3-1323（3-B B1）：目錄型宣告展開下，並行環境中另一活躍
+        派發（不同 ticket_id）宣告的檔案不應被吸入本次提交，即使該檔案
+        實際落在本票宣告的目錄下且 git status 回報為變更。"""
+        declared = ["a/dir"]
+        status_output = " M a/dir/mine.py\n?? a/dir/other_session.py\n"
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+        (claude_dir / "dispatch-active.json").write_text(
+            json.dumps({
+                "dispatches": [
+                    {"ticket_id": _TICKET_ID, "files": ["a/dir/mine.py"]},
+                    {"ticket_id": "0.2.1-W3-OTHER", "files": ["a/dir/other_session.py"]},
+                ]
+            }),
+            encoding="utf-8",
+        )
+        with patch.object(track_commit, "load_ticket", return_value=_ticket(declared)), \
+             patch.object(track_commit, "resolve_project_cwd", return_value="/repo"), \
+             patch("os.getcwd", return_value="/repo"), \
+             patch("os.path.isdir", return_value=True), \
+             patch.object(track_commit, "get_ticket_state_root", return_value=tmp_path), \
+             patch.object(track_commit, "_git_status_porcelain", return_value=status_output), \
+             patch.object(
+                 track_commit,
+                 "commit_files_isolated",
+                 return_value={"status": "committed", "commit_sha": "ccc333", "error": None},
+             ) as mock_commit:
+            rc = track_commit.execute_commit(_args(["a/dir"]), _VERSION)
+
+        assert rc == 0
+        mock_commit.assert_called_once()
+        called_paths, _ = mock_commit.call_args[0]
+        assert called_paths == ["a/dir/mine.py"]
+        assert "a/dir/other_session.py" not in called_paths
+
+    def test_directory_expansion_missing_dispatch_file_includes_all_changed(
+        self, capsys, tmp_path
+    ):
+        """dispatch-active.json 不存在時 fail-open：不排除任何檔案（既有
+        行為不變，回歸防護）。"""
+        declared = ["a/dir"]
+        status_output = " M a/dir/file1.py\n?? a/dir/file2.py\n"
+        with patch.object(track_commit, "load_ticket", return_value=_ticket(declared)), \
+             patch.object(track_commit, "resolve_project_cwd", return_value="/repo"), \
+             patch("os.getcwd", return_value="/repo"), \
+             patch("os.path.isdir", return_value=True), \
+             patch.object(track_commit, "get_ticket_state_root", return_value=tmp_path), \
+             patch.object(track_commit, "_git_status_porcelain", return_value=status_output), \
+             patch.object(
+                 track_commit,
+                 "commit_files_isolated",
+                 return_value={"status": "committed", "commit_sha": "ddd444", "error": None},
+             ) as mock_commit:
+            rc = track_commit.execute_commit(_args(["a/dir"]), _VERSION)
+
+        assert rc == 0
+        called_paths, _ = mock_commit.call_args[0]
+        assert set(called_paths) == {"a/dir/file1.py", "a/dir/file2.py"}
+
+
+class TestEmptyTreeWorktreeHint:
+    """0.2.1-W3-1323（3-H 案 3）：空 tree 短路訊息須明確提示 --worktree，
+    避免代理人在主倉庫 cwd 對 linked worktree 內變更零感知時，把此 exit 0
+    誤判為「已提交」。"""
+
+    def test_empty_status_message_hints_worktree_flag(self, capsys):
+        declared = ["a/b.py"]
+        with patch.object(track_commit, "load_ticket", return_value=_ticket(declared)), \
+             patch.object(track_commit, "resolve_project_cwd", return_value="/repo"), \
+             patch("os.getcwd", return_value="/repo"), \
+             patch.object(
+                 track_commit,
+                 "commit_files_isolated",
+                 return_value={"status": "empty", "commit_sha": None, "error": None},
+             ):
+            rc = track_commit.execute_commit(_args(["a/b.py"]), _VERSION)
+
+        assert rc == 0  # 保持既有相容性：真正無變更仍為成功，非改為阻擋
+        out = capsys.readouterr().out
+        assert "worktree" in out
+        assert "--worktree" in out
 
 
 class TestResolveRepoRoot:

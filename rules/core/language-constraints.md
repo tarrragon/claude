@@ -32,7 +32,9 @@
 | 軟件 | 軟體 | 臺灣用語 |
 | 硬件 | 硬體 | 臺灣用語 |
 | 信息 | 資訊 | 臺灣用語 |
-| 優化 | 最佳化 | 臺灣用語（程式碼品質上下文可用「優化」） |
+| 優化 | 最佳化 | 臺灣用語（TDD phase 名／關鍵字枚舉表等帶 exempt marker 之處可用「優化」；散文設計權衡句不豁免） |
+
+> **規則 2 邊界**：zhtw cross_strait／confusable 命中，若與 CLAUDE.md、`rules/core` 既有用語一致，判定專案 canonical、不列違規，含 strict error 級（如「場景」）。
 
 ### 規則 3：禁止使用 Emoji
 
@@ -101,6 +103,7 @@
 
 ---
 
-**Last Updated**: 2026-08-04
+**Last Updated**: 2026-09-08
+**Version**: 1.5.0 - 規則 2「優化」豁免範圍收斂為 TDD phase 名／關鍵字枚舉表等帶 exempt marker 之處，散文設計權衡句不豁免；新增規則 2 邊界一行：zhtw cross_strait／confusable 命中若與框架既有用語一致，判定專案 canonical、不列違規（含 strict error 級）（源自一次跨 session 異源交換掃描寫明的約定）。
 **Version**: 1.4.0 - 規則 5 改寫：移除 OpenCC 動態過濾要求（查證發現規則與 hook 實作脫節，PC-131 實證 30% 偏差否定其作為驗證手段），改為描述實際運作機制（frozenset 靜態清單 + CONFUSABLE_PAIRS 對照表 + 啟動時 self-check 交叉驗證）；核心主張「禁止僅依人工判斷維護字元集子集清單」不變
 **Version**: 1.3.0 - 新增規則 5「字元集子集清單必須動態驗證」（PC-074 升級至自動載入層級）

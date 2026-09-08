@@ -1,3 +1,119 @@
+## [2.58.0] - 2026-09-08
+
+### Summary
+feat: skill description length check 升級為 baseline 加硬擋; feat: 新增 skill body 體量執法層 hook; feat: acceptance_auditor 補齊 artifact 寫入者/時間欄位（3-F 共用原則） (+103 more)
+
+Changes: 9 feat, 1 refactor, 13 fix, 61 docs, 18 chore, 2 test, 1 perf, 2 other
+
+- feat: skill description length check 升級為 baseline 加硬擋
+- feat: 新增 skill body 體量執法層 hook
+- feat: acceptance_auditor 補齊 artifact 寫入者/時間欄位（3-F 共用原則）
+- feat: reclaim --confirm 落地把鑑識報告 append-log 落票
+- feat: dispatch-check 加新鮮度維度
+- feat: push 端在無合法 marker 時偵測回退並警告
+- feat: 新增 section todo 子命令並驗證待辦表欄位與列舉
+- feat: push 端新增增量禁用詞閘門（report-only）
+- feat: 報告端新增 SUSPECT REVERT 分類偵測遠端回退
+- refactor: 移除 canonical 別名，測試檔用語統一收尾
+- fix: 1-A 指向句改指名身分不用路徑（portable skill 不得指名他專案檔案）
+- fix: 復原被 --force 覆蓋的發佈庫 1.9.0，讓號重推 1.9.1
+- fix: batch-create 共用 create 版本偵測路徑
+- fix: track list 補渲染 lease 標記、complete --help 反映強制身份申報
+- fix: 修正 dry-run-guide.md 對 portability-check.sh 的相對路徑斷鏈
+- fix: Stop hook stale handoff GC 改歸檔取代刪除
+- fix: 補齊 dashboard auto-GC 歸檔動作的持久化日誌
+- fix: 修復四項 CLI 行為與文件分岔
+- fix: 修正 hooks 測試對已搬移 hook 的過期路徑
+- fix: rule8 guard hook 的 code fence 正則錨定行首
+- fix: set-exit-status 加 --as/who.current 身份檢查
+- fix: track commit 空 tree 短路提示 --worktree
+- fix: track commit 目錄展開排除他票宣告檔案
+- docs: 新增 PC-BAL-073 以專案名索引行為併合並行 session
+- docs: wrap-decision SKILL.md 收斂至 5k tokens 門檻下
+- docs: PC-BAL-069 補兩節（交叉核對須比對成員、副本分歧使超標失去共同指稱）
+- docs: 收斂 SKILL.md 至 4,795 tokens（門檻 5,000）
+- docs: 收束配方三處實測回寫——提交改用 ticket track commit、init 自動補標記、handoff 歸檔屬預期
+- docs: 外移四節至 references/ 收斂 SKILL.md 至 5k tokens 門檻下
+- docs: 某票 定義「待辦與來源」階段/狀態列舉並修 worked-example
+- docs: 檢查清單補幽靈註冊處置，明示當前 session 註冊不回溯
+- docs: PC-BAL-069 補第二條路徑（量尺在別處被汰換，票面不留痕）
+- docs: 修對外訊息類懸空引用兩處（原 某票，superseded_by 某票）
+- docs: 補 push 前方向判讀流程，修 sync-push 三處懸空引用
+- docs: 新增 PC-BAL-072 單一 --force 收掉多道獨立閘門
+- docs: 以發佈庫取代 canonical 指稱 claude-skills
+- docs: 補正 track commit 隔離索引的同檔邊界
+- docs: depth 兩套基數互指 + create when 必填補文件
+- docs: 三條 1-A 判準邊界落地至正本
+- docs: 明訂接手 in_progress 票的收尾身份規則（PM/代理人二擇一），解 SKILL.md 與 identity guard 合成衝突
+- docs: 合入發佈庫獨有的 1.7.2 條目與其改寫過的 某版本 條目
+- docs: 寫入異源交換掃描的 19 條判準邊界約定
+- docs: 修正 1-A/2-D 異源掃描殘留 9 項（M-1~M-4/M-10, F5/F6-a/F6-b/F16）
+- docs: PC-BAL-071 分離時序與來源兩個變因
+- docs: 新增 PC-BAL-071 修法批次自身無人審查
+- docs: IMP-BAL-021 症狀段補觸發條件（self-redirect 協調檔在來源票關閉當下全批轉為可清理）
+- docs: 移除路由提示「兩支」計數詞收尾第四項冷讀修正
+- docs: 修正 ticket SKILL.md 三項冷讀誤導（field-semantics 用途欄、root 分離條件語意、track complete 範例補 --as），維持全檔 < 5,000 tokens
+- docs: 修正 ticket skill 六份 references 命令名與指涉不閉合
+- docs: track-command.md 術語計數同步 13→15（某票 單點連動）
+- docs: 對齊鑑識三查第3查語意、complete pending/blocked exit code
+- docs: 新增 IMP-BAL-021 查詢型命令暗含歸檔副作用無日誌且檔名鍵與查找鍵不一致
+- docs: 補齊 track-command.md 全部 track 子命令一覽表
+- docs: 補 create-command.md 32ms 量測環境說明
+- docs: 補 ticket skill reference 1-E 可改群 F4-F17 判斷標準來源
+- docs: set-blocked-by/set-related-to help 文字補引號用法
+- docs: SKILL.md 檔頭引言補五詞術語路由（落票/派發骨架/鑑識三查/隔離索引）
+- docs: 新增 IMP-BAL-020 未錨定行首的 code fence 正則翻轉守衛判定
+- docs: track-command.md board 範例去除溯源用專案 ticket ID（rule8，push 前外洩防護）
+- docs: SKILL.md batch-create 參數說明去除專案 ticket ID 引用（rule8，push 前外洩防護）
+- docs: SKILL.md 全檔 tokens 收至 5,000 門檻內
+- docs: 收尾 SKILL.md 版號對齊、CHANGELOG 拆分總結、field-semantics/resume-command 收斂
+- docs: 同步 Round 3 CLI 缺陷修復群六項行為變更至 track-command.md
+- docs: 建 ticket skill 零住址共同前提承接章節
+- docs: 框架七處改為代理人票務提交預設 ticket track commit
+- docs: 新增 PC-BAL-069 換量尺得相反結論、PC-BAL-070 探針受自動載入規則汙染
+- docs: 修正 ticket skill Round 3 群 D-3 finding
+- docs: 精簡路由表新增文字使 body 回到 5k 門檻內
+- docs: 修正 cli-error-feedback-hook 訊息字串指向新址
+- docs: 修正 track-command.md Round 3 群 D-2
+- docs: 修正 ticket skill Round 3 群 D-1
+- docs: 修正框架文件對 ticket skill 的過期引用與失效清點腳本
+- docs: 修正 ticket skill Round 2 群 C2b
+- docs: 補反引號解決術語對照表誤判為禁用詞違規
+- docs: 清理 14 處禁用詞基線債務（數據/默認）
+- docs: 清理 2 處禁用詞基線債務（代碼->程式碼）
+- docs: 清理 1 處禁用詞基線債務（數據->資料，段落標題）
+- docs: 清理 1 處禁用詞基線債務（低代碼->低程式碼）
+- docs: 清理 6 處禁用詞基線債務（代碼->程式碼）
+- docs: 清理 5 處禁用詞基線債務（代碼->程式碼）
+- docs: SKILL.md 入口檔結構與 architecture.md 術語節
+- docs: track-command.md 補四個用法節、移出三節、修過期註解
+- docs: Round 2 C4 修法 — ticket-lifecycle-details 與六份 workflow/generate 檔
+- docs: 修正 ticket skill Round 2 群 C3
+- chore: 拉取 compositional-writing 1.11.0；ticket bump 2.31.0 -> 2.31.1（同號異容補號）
+- chore: worktree SKILL.md 收斂至 5k tokens 以下
+- chore: 2.2.0 版號與 CHANGELOG（todo 子命令、待辦表列舉、提交規則、handoff 歸檔）
+- chore: pull compositional-writing 1.10.2（發佈方併入本方回報的 rule8 marker）
+- chore: bump 2.30.1 -> 2.31.0（異源交換掃描修法群）
+- chore: pull compositional-writing 1.10.1 並補 rule8 豁免 marker
+- chore: bump 2.30.0 -> 2.30.1（batch-create 版本偵測與 create 同源）
+- chore: bump 2.29.0 -> 2.30.0（冷讀審查與 CLI 缺陷群兩批修法收尾）
+- chore: pull 1.11.1 並 bump 1.11.2（補回反引號修正）
+- chore: 對齊 metadata.version 與 pyproject.toml 至 CHANGELOG 1.21.0
+- chore: bump 1.9.0 -> 1.9.1（禁用詞誤判修正）
+- chore: bump 2.2.1 -> 2.2.2（禁用詞清理）
+- chore: bump 1.4.2 -> 1.4.3（禁用詞清理）
+- chore: bump 2.2.8 -> 2.2.9（禁用詞清理）
+- chore: bump 1.2.2 -> 1.2.3（禁用詞清理）
+- chore: bump 某版本 -> 某版本（禁用詞清理）
+- chore: 2.1.0 版號與 CHANGELOG（收束實測回寫）；回寫 .claude/VERSION -> 某版本
+- test: 三個版號住址一致性測試
+- test: 修復 reclaim landing report hook 引入的回歸
+- perf: push 路徑對發佈庫的重複淺 clone 收斂為一次
+- other: 封堵 ticket CLI 3-F 新梯度三則（M-5/M-6/M-7）：dispatch --dry-run 骨架浮水印、dispatch-check --prune 落痕清理、dispatch 派發前檢查 exit code 落派發日誌
+- other: 接線 track_audit.py 呈現 artifact_who/artifact_updated
+
+---
+
 ## [2.57.1] - 2026-09-07
 
 ### Summary

@@ -4,7 +4,7 @@ description: "從需求確認到實作的對話協議：模糊指令澄清（含
 license: MIT
 metadata:
   portable: true
-  version: 0.8.3
+  version: 0.8.4
   category: collaboration-protocol
 ---
 

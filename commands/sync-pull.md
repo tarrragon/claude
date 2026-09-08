@@ -93,7 +93,7 @@ description: 從獨立 repo 拉取最新 .claude 配置 (https://github.com/tarr
 
 **Consequence**：跳過清單會讓未解決衝突與衝突標記殘留靜默累積——下次 pull 的新衝突與舊殘留混雜無法分辨、含 `<<<<<<<` 標記的檔案被當正常內容使用、未 commit 的 delta 汙染後續任務的變更邊界。
 
-**Action**：每次 pull 成功後依序執行以下五步。
+**Action**：每次 pull 成功後依序執行以下六步。
 
 ### 1. Delta 檢視
 
@@ -148,6 +148,29 @@ rm -rf .claude/.sync-conflicts/
 ```
 
 清理是步驟 2 完成的訊號：下次 pull 開始時腳本會偵測 `.sync-conflicts/` 既有殘留並警告列出（殘留 = 前次清單未走完）。
+
+### 6. 幽靈註冊處置
+
+**Why**：`settings.local.json` 是 sync 排除檔，pull 不覆蓋它。上游把一支 hook 從某個目錄搬到另一個目錄時，`settings.json` 的指向由這次 pull 一併更新，`settings.local.json` 內指向舊路徑的那份註冊卻不會被動到，於是成為指向不存在檔案的幽靈註冊。
+
+**Consequence**：幽靈註冊不讓 pull 失敗，pull 收尾的警告也只是警告。成本落在之後——該事件每次觸發都指向一個不存在的腳本，而故障點與這次 pull 已相隔一段時間，排查時不容易聯想回來。
+
+**Action**：pull 收尾若出現下列警告，當場處理，不要留到下次 session 啟動再說：
+
+```
+[sync-pull] 警告：settings.local.json 含 hook 註冊（事件: ...）
+```
+
+```bash
+./.claude/hooks/hook-completeness-check.py         # 先看命中哪幾筆
+./.claude/hooks/hook-completeness-check.py --fix   # 移除 command 指向不存在檔的註冊
+```
+
+`--fix` 只作用於 `settings.local.json`，且只移除 command 指向不存在檔案的項目。指向的檔案仍存在的註冊不是幽靈，`--fix` 不會動它，這種要自己搬到 `settings.json`：框架 hook 的註冊來源只應有 `settings.json` 一處。`settings.json` 內的幽靈由 sync overlay 自癒，不在 `--fix` 範圍。
+
+**當前 session 的註冊不回溯**：以上處理的都是磁碟上的設定檔。已啟動的 session 在啟動當下就把 hook 註冊讀進記憶體，pull 改了設定檔不會回頭改它。在 session 中途執行 pull 之後，該 session 剩餘時間內 hook 仍以舊路徑執行，直到重啟為止。
+
+實際出現過的樣態：一次 pull 把兩支 hook 從一個 skill 遷到另外兩個 skill，`settings.json` 的四行指向由三方合併正確更新，磁碟狀態無誤，但同一個 session 內 PostToolUse 仍以舊路徑觸發，Agent 派發與 Stop 事件在該 session 剩餘時間內持續報錯。設定檔查過沒問題而錯誤仍在時，先確認 session 是否尚未重啟，不要回頭改一份已經正確的設定檔。
 
 ## 孤兒稽核（--audit）
 

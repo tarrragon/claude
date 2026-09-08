@@ -522,7 +522,7 @@ subagent 在任何 cwd 都可 Read worktree 內的 `.claude/` 檔案。可用於
 
 | 步驟 | 動作 | 命令 |
 |------|------|------|
-| 1 | 檢查 active dispatch | `cat .claude/dispatch-active.json` |
+| 1 | 檢查 active dispatch | `ticket track dispatch-check`（`[WARN]` 逐筆列出 `agent_description` / `ticket_id` / `dispatched_at`；見 `.claude/skills/ticket/references/track-command.md`〈track dispatch-check 子命令〉） |
 | 2 | 檢查 worktree 分支 | `git worktree list` |
 | 3 | 確認無衝突 | 目標檔案不在任何 active dispatch 的 files 清單中 |
 

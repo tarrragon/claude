@@ -6,7 +6,7 @@
 >
 > **溯源**：本檔為 `.claude/pm-rules/ticket-lifecycle.md`（核心決策規則）的格式規範/訊息模板/Hook 技術細節詳版，於本專案匯入 commit `f375ae675` 時即已存在；本機 git log 對本檔僅見後續增補（如 hook 路徑漂移引用更正、章節 TOC 補齊），未見原始拆分點。
 
-本檔章節：〈任務鏈後續步驟建議〉〈任務鏈 ID 格式〉〈Ticket 建立格式範本〉〈驗收條件 4V 格式要求〉〈Ticket 有效性驗證〉〈驗收前置條件檢查流程〉〈acceptance-gate-hook 技術細節〉〈驗收提示訊息模板〉〈P0 緊急任務處理〉〈簡化驗收檢查清單〉〈與其他流程的整合〉〈變更日誌〉。
+本檔章節：〈任務鏈後續步驟建議〉〈任務鏈 ID 格式〉〈Ticket 建立格式範本〉〈驗收條件 4V 格式要求〉〈Ticket 有效性驗證〉〈驗收前置條件檢查流程〉〈acceptance-gate-hook 技術細節〉〈驗收提示訊息模板〉〈P0 緊急任務處理〉〈簡化驗收檢查清單〉〈與其他流程的整合〉。
 
 ---
 
@@ -48,30 +48,7 @@
 
 ## 任務鏈 ID 格式
 
-### 格式規範
-
-| 類型 | 格式 | 範例 |
-|------|------|------|
-| 根任務 | `{版本}-W{波次}-{序號}` | `1.0.0-W3-002` |
-| 子任務 | `{根ID}.{n}[.{n}...]` | `1.0.0-W3-002.1.1` |
-
-### 正則表達式
-
-```regex
-# 完整匹配（支援無限深度），尾段為可選 slug（constants.py TICKET_ID_PATTERN）
-^(\d+\.\d+\.\d+)-W(\d+)-(\d+(?:\.\d+)*)(-[a-z0-9][a-z0-9-]{0,59})?$
-```
-
-### 範例任務鏈
-
-```
-1.0.0-W3-002              # ticket-handoff 功能（根）
-├── 1.0.0-W3-002.1        # chain_analyzer 模組
-│   ├── 1.0.0-W3-002.1.1  # 問題修復
-│   └── 1.0.0-W3-002.1.2  # 測試補充
-├── 1.0.0-W3-002.2        # handoff_executor 模組
-└── 1.0.0-W3-002.3        # 文件更新
-```
+Ticket ID 格式（含子任務序號 `{根ID}.{n}[.{n}...]`）與正則定義見 `.claude/references/ticket-id-conventions.md`〈1. 標準 Ticket ID 格式（主要格式）〉。
 
 ### chain 欄位說明
 
@@ -79,8 +56,10 @@
 |------|------|------|
 | root | string | 任務鏈根 ID |
 | parent | string/null | 直接父任務 ID |
-| depth | number | 深度（根=0） |
+| depth | number | 深度（根=0，0-based；與 `track depth` 命令輸出的基數不同，見下方注記） |
 | sequence | array | 序號路徑陣列 |
+
+> **與 `track depth` 命令的基數差異**：本欄位由 `calculate_chain_info`（`ticket_system/lib/id_parser.py`）依 ID 序號點數計算，寫入時即固定為建立當下的靜態快照，根任務 = 0（0-based）。`track-command.md`〈track deps / depth 子命令〉的 `ticket track depth <id>` 命令由 `ticket_system/lib/depth.py` 的 `compute_depth` 沿 `parent_id` 鏈即時計算，根任務 = 1（1-based），並用於 `MAX_TICKET_DEPTH=3` 與 `can_descend` 判定。兩者是同名不同來源的獨立量測值，不可互換代入——若把本欄位的 0-based 值直接拿去與 `MAX_TICKET_DEPTH` 比較，會使深度判斷少算一層。判斷是否可再往下派發（`can_descend`）一律以 `track depth` 命令輸出為準，不使用 frontmatter 的 `chain.depth`。
 
 ### 範例 chain 欄位
 
@@ -113,7 +92,9 @@ title: {動詞} {目標}
 type: IMP/ADJ/ANA/DOC
 status: pending
 priority: P0/P1/P2
-assignee: pending
+who:
+  current: pending
+  history: {}
 created: {日期}
 ---
 
@@ -133,14 +114,26 @@ created: {日期}
 
 驗收條件必須符合 4V 原則：**可驗證、可量化、可追溯、可記錄**。
 
-| 要求 | 說明 | 範例 |
-|------|------|------|
-| 必須有編號 | 每個驗收項目都有編號 | `1.`, `2.`, ... |
-| 必須有來源 | 引用設計文件或需求 | `SKILL.md〈子命令路由表〉` |
-| 必須有確認方法 | 定義如何驗證完成 | `執行命令驗證輸出` |
-| 禁止模糊詞彙 | 不可用「完成」「正常」「適當」 | 用具體描述取代 |
+| 要求 | 對應 V | 說明 | 範例 |
+|------|--------|------|------|
+| 必須有編號 | 可記錄 | 每個驗收項目都有編號 | `1.`, `2.`, ... |
+| 必須有來源 | 可追溯 | 引用設計文件或需求 | `SKILL.md〈子命令路由表〉` |
+| 必須有確認方法 | 可驗證 | 定義如何驗證完成 | `執行命令驗證輸出` |
+| 禁止模糊詞彙 | 可量化 | 不可用「完成」「正常」「適當」 | 用具體描述取代 |
 
-**標準格式（表格式）**：
+> 四列與四 V 為一對一映射：編號使項目可被索引記錄（可記錄）；來源使項目可回溯依據（可追溯）；確認方法使項目可被驗證（可驗證）；禁模糊詞彙迫使描述量化（可量化）。
+
+**標準格式（frontmatter `acceptance` 清單）**：全 skill CLI（`check-acceptance`／`set-acceptance`／`dispatch-validate` 規則 4／驗收記錄判定優先序 1，見〈驗收記錄的兩種成立形式〉）皆操作 frontmatter 的 `acceptance` 清單，非 body 表格：
+
+```yaml
+acceptance:
+- '[ ] 具體驗收項目 1（含確認方法）'
+- '[ ] 具體驗收項目 2（含確認方法）'
+```
+
+新增項目：`ticket track set-acceptance <id> --add "驗收項目文字"`；勾選：`ticket track check-acceptance <id> <index>`。
+
+**報告格式（body，僅供人工呈現，CLI 不讀取）**：
 
 ```markdown
 ## Acceptance Criteria
@@ -151,7 +144,7 @@ created: {日期}
 | 2 | {項目描述} | {來源引用} | {確認方法} | [ ] |
 ```
 
-> 完整規範：@.claude/methodologies/acceptance-criteria-methodology.md
+> 兩者同時存在時以 frontmatter `acceptance` 清單為準。完整規範：@.claude/methodologies/acceptance-criteria-methodology.md
 
 ---
 
@@ -245,6 +238,17 @@ Step 4: 檢查執行日誌
 [OK] 可以開始驗收，派發驗收代理人
 ```
 
+### 驗收記錄的兩種成立形式
+
+Step 4 之後、`/ticket track complete` 前，hook 依序判定「是否有驗收記錄」，滿足其一即成立：
+
+| 優先序 | 判定依據 | 成立條件 |
+|------|---------|---------|
+| 1 | frontmatter `acceptance` 清單 | 全部項目 `[x]` 勾選 |
+| 2（fallback） | body 關鍵字掃描 | 命中以下 7 個關鍵字之一：`驗收結果: 通過`、`Acceptance Audit Report`、`驗收通過`、`驗收者：`、`Auditor:`、`PM 直接驗收`、`acceptance-auditor` |
+
+驗收本身由 `.claude/agents/acceptance-auditor.md` 以 Agent 派發執行（非 ticket 命令）；與 `.claude/pm-rules/ticket-lifecycle.md`〈驗收流程〉的 `check-acceptance` 步驟對齊——`check-acceptance` 負責勾選優先序 1 的 frontmatter 清單，acceptance-auditor 產出的驗收報告落在優先序 2 的關鍵字範圍內。
+
 ---
 
 ## acceptance-gate-hook 技術細節
@@ -255,45 +259,23 @@ Step 4: 檢查執行日誌
 
 **觸發時機**：`/ticket track complete` 命令執行前
 
-**檢查邏輯**：
+**檢查邏輯**（PreToolUse，`generate_hook_output()` 輸出 JSON `hookSpecificOutput.permissionDecision`；阻止與允許皆由此欄位判定，非行程 exit code）：
 
 | 情景 | 檢查項目 | 結果 | 行為 |
 |------|---------|------|------|
-| 根任務 | 所有子任務是否 completed/closed？ | 否 | 阻止（`permissionDecision: deny`） |
-| 根任務 | 所有子任務是否驗收？ | 否 → 有未驗收子任務 | 警告（`permissionDecision: allow`） |
-| 子任務 | 是否已通過驗收？ | 否 | 阻止（`permissionDecision: deny`） |
-| 根任務 | 是否已通過驗收？ | 否 | 阻止（`permissionDecision: deny`） |
+| 任一層級 | children（子任務）是否全部 completed/closed？ | 否 | 阻止（`permissionDecision: deny`） |
+| 防護類 hook ticket | acceptance 前三項＋Solution 盤點表等必含項目是否齊全？ | 否 | 阻止（deny） |
+| ANA | Solution spawn 規劃 N 項 vs `spawned_tickets`+`children` 實際數 S+C：N>0 且 S+C=0？ | 是 | 阻止（deny） |
+| ANA | `multi_view_status` 值是否合法（`reviewed`／`skipped`／`n_a`）？ | 否（值非法） | 阻止（deny），修正途徑 `ticket track fix-multi-view-status` |
+| 任一層級 | 實驗器材是否已妥善處置？ | 否（殘留） | 阻止（deny） |
+| 任一層級 | 驗收記錄是否存在（frontmatter `acceptance` 全勾選，或 fallback body 7 個關鍵字之一）？ | 否 | 警告（`permissionDecision: allow`）；`verify_acceptance_record`（`acceptance_checkers/acceptance_checker.py`）恆回 `should_block=False`，缺驗收記錄不阻擋 |
+| ANA | 是否有後續 ticket（`spawned_tickets`／`children`）？ | 否 | 警告（allow） |
 
-> 「父 complete 需子全部 completed/closed」原則見 `.claude/methodologies/atomic-ticket-methodology.md` 任務鏈核心哲學 + `.claude/methodologies/ticket-lifecycle-management-methodology.md` 父 complete 前置條件。
+> 「父 complete 需子全部 completed/closed」原則見 `.claude/methodologies/atomic-ticket-methodology.md` 任務鏈核心哲學 + `.claude/methodologies/ticket-lifecycle-management-methodology.md` 父 complete 前置條件。舊版「根任務／子任務分列」「所有子任務是否驗收」判準與程式碼不符（無對應檢查函式），已依 `acceptance-gate-hook.py`（`check_acceptance_status`）與 `acceptance_checkers/acceptance_checker.py`（`verify_acceptance_record`）實作改寫。
 
-**阻止場景**（`permissionDecision: deny`）：
+**阻止場景**：實際訊息內容依觸發的 checker 模組決定，無統一固定文字（如 children 未完成訊息見 `children_checker.py`、防護類必含項目見 `hook_protection_acceptance_checker.py`、ANA spawn 規劃不一致見 `ana_spawn_consistency_checker.py`）；觸發情境見上表。
 
-```
-Ticket {id} 尚未通過驗收
-
-檢查結果：
-- 尚未派發 acceptance-auditor 驗收
-- 驗收代理人尚未完成驗收
-
-正確流程：
-1. 派發 acceptance-auditor 執行驗收（完整或簡化）
-2. 驗收通過後再執行 /ticket track complete
-
-詳見：ticket-lifecycle.md〈驗收流程〉
-```
-
-**警告場景**（exit 0，允許繼續但提示）：
-
-```
-警告：Ticket {id} 有子任務尚未驗收
-
-子任務狀態：
-- {child-id-1}: pending 驗收
-- {child-id-2}: 已驗收
-
-建議：考慮等待所有子任務驗收後再完成根任務
-（允許繼續，但可能影響整體品質）
-```
+**驗收方式判準**（是否提醒派 acceptance-auditor，非阻擋）：`generate_hook_output()` 僅在下列條件全部成立時，於允許輸出附加 `AskUserQuestionReminders.COMPLETE_REMINDER` 提醒——priority 為 `P0`、type 不是 `DOC`／`ANA`、呼叫者非 subagent；其餘情況略過（記 log「自動簡化驗收」）。**呼叫者為 subagent 時，此提醒與其餘 AskUserQuestion 提醒一律略過**——subagent 無法自行派發 acceptance-auditor，驗收改由 PM 於 complete 後視情況補派。完整驗收流程見 `.claude/pm-rules/ticket-lifecycle.md`〈驗收流程〉。
 
 **Hook 註冊**（`.claude/settings.json`，實際 schema：`hooks.PreToolUse` 陣列，`matcher` 為工具名而非本 hook 專屬鍵，同一 matcher 下多個 hook 依序註冊）：
 
@@ -317,94 +299,39 @@ Ticket {id} 尚未通過驗收
 
 ### 驗證結果對應表
 
+以下為 `ticket track complete` CLI 本身（`ticket_system/commands/lifecycle.py` 的 `complete()`）的驗證結果，屬 CLI 層 exit code；與上方 acceptance-gate-hook 的 `permissionDecision`（PreToolUse 層，先於 CLI 執行）是不同機制——hook 先擋（deny 則 CLI 不執行），CLI 再驗（exit code 由 process 決定，非 JSON）。
+
 | 情境 | 驗證結果 | 訊息類型 | Exit Code |
 |------|---------|---------|-----------|
 | Ticket 不存在 | 阻止 | Error | 1 |
-| 狀態為 pending | 阻止 | Error（提示先 claim） | 1 |
-| 狀態為 blocked | 阻止 | Error | 1 |
-| 狀態為 completed | 允許（友好提示） | Info | 0 |
-| 驗收條件未全部完成 | 阻止 | Error（列出未完成項） | 1 |
+| 狀態為 pending | 阻止 | Error（提示先 claim） | 2 |
+| 狀態為 blocked | 阻止 | Error（提示先 release） | 2 |
+| 狀態為 completed | 允許（友好提示，冪等） | Info | 0 |
+| 驗收條件未全部完成（frontmatter `acceptance` 有未勾選項） | 阻止 | Error（列出未完成項） | 1 |
 | 正常完成 | 允許 | OK | 0 |
+
+> `pending`／`blocked` 經 `precondition.require_in_progress()` 判定，exit code 為 2（非 1）。
 
 ---
 
 ## 驗收提示訊息模板
 
-### IMP/ADJ/複雜/安全任務
+實際訊息由 `generate_hook_output()`（`acceptance-gate-hook.py`）依下列分支決定，附加於允許輸出的 `additionalContext`（提醒，非阻擋文字）：
 
-```
-============================================================
-[驗收派發提示]
-============================================================
+| 觸發條件 | 附加訊息 | 內容重點 |
+|---------|---------|---------|
+| priority 為 `P0` 且 type 不是 `DOC`／`ANA`，呼叫者非 subagent | `AskUserQuestionReminders.COMPLETE_REMINDER` | 提醒 PM 於 complete 前用 AskUserQuestion 選擇驗收方式（標準驗收／簡化驗收／先完成後補驗收），不阻擋 complete 本身 |
+| priority 非 `P0`，或 type 為 `DOC`／`ANA` | 無（略過） | 記 log「自動簡化驗收」，視為已豁免 |
+| 呼叫者為 subagent（任何 priority／type） | 無（略過） | subagent 無法自行使用 AskUserQuestion；驗收改由 PM 於 complete 後視情況補派，見 `.claude/pm-rules/ticket-lifecycle.md`〈驗收流程〉 |
+| 無其他訊息且流程走到最後 | `AskUserQuestionReminders.COMPLETE_NEXT_STEP_REMINDER` | complete 後選擇下一步（繼續下個 Ticket／Wave 收尾／版本發布檢查／清空 Session），同樣僅提醒不阻擋，subagent 呼叫時略過 |
 
-Ticket {id} 類型為 {type}，需派發 acceptance-auditor 執行驗收。
-
-依據 ticket-lifecycle 規則：
-- 所有 Ticket 都必須驗收（契約原則）
-- 驗收必須在 /ticket track complete 之前執行
-- IMP/ADJ/複雜/安全任務由 acceptance-auditor 執行完整驗收
-- DOC/簡單任務由 acceptance-auditor 執行簡化驗收
-- PM 審核驗收報告並做最終決策
-
-正確流程：
-1. PM 派發 acceptance-auditor 執行驗收
-2. 驗收通過後，才能執行 /ticket track complete
-3. 如驗收失敗，由執行者修正後重新驗收
-
-============================================================
-```
-
-### DOC/簡單任務
-
-```
-============================================================
-[驗收派發提示]
-============================================================
-
-Ticket {id} 為 DOC/簡單任務，需派發 acceptance-auditor 執行簡化驗收。
-
-簡化驗收檢查項目：
-- [ ] Ticket 結構完整性（必填欄位齊全）
-- [ ] 所有驗收條件已完成
-- [ ] 執行日誌已填寫
-
-正確流程：
-1. PM 派發 acceptance-auditor 執行簡化驗收
-2. acceptance-auditor 產出驗收報告
-3. PM 審核報告並做最終決策
-4. 驗收通過後執行 /ticket track complete 更新狀態
-
-============================================================
-```
-
-### complete 前的驗收狀態檢查
-
-```
-============================================================
-[驗收狀態檢查]
-============================================================
-
-執行 /ticket track complete 前的檢查：
-
-[Error] Ticket {id} 尚未驗收
-- 原因: 未通過驗收代理人檢查
-- 建議: 先派發驗收代理人執行驗收
-- 類型: {type}
-
-[Warning] Ticket {id} 子任務尚未全部驗收
-- 原因: 有 N 個子任務未驗收
-- 建議: 先完成子任務驗收
-
-詳見: ticket-lifecycle.md〈驗收流程〉
-
-============================================================
-```
+> 舊三段固定文字模板（暗示「驗收必須在 complete 之前完成」為前置關卡）與實作不符，已移除；`/ticket track complete` 本身是否阻擋見上方〈acceptance-gate-hook 技術細節〉檢查邏輯表（驗收記錄缺失僅警告，不阻擋）。
 
 ---
 
 ## P0 緊急任務處理
 
-P0 緊急任務採「先完成後補驗收」的時間順序調整，驗收要求本身不因此被豁免：
+P0 緊急任務採「先完成後補驗收」的時間順序調整，驗收要求本身不因此被豁免。下述 24 小時為此流程的 SLA 政策值（PM 派發驗收的建議上限），非由量測資料推導；如需調整由 PM 於 pm-rules 修訂：
 
 ```
 P0 緊急任務
@@ -479,35 +406,3 @@ Phase 4 發現技術債務 → 記錄到工作日誌 → /tech-debt-capture → 
 調查/分析報告產生建議 → 記錄到 Suggestion Tracking → 處理每個建議（採納/拒絕/延後） → 採納的建議轉為驗收條件
 
 > 詳細規範：@.claude/methodologies/suggestion-tracking-methodology.md
-
-#### 建議追蹤狀態
-
-| 狀態 | 說明 | 要求 |
-|------|------|------|
-| pending | 待決定 | 必須在任務執行前處理 |
-| adopted | 採納 | 必須轉為驗收條件 |
-| rejected | 拒絕 | 必須記錄拒絕理由 |
-| deferred | 延後 | 必須記錄目標版本 |
-
-#### 建議追蹤格式
-
-```markdown
-## Suggestion Tracking
-
-### 來源：{來源文件}
-
-| # | 建議內容 | 狀態 | 決定理由 | 對應 AC | 決定者 | 決定時間 |
-|---|---------|------|---------|--------|--------|---------|
-| 1 | {內容} | adopted | {理由} | AC-001 | PM | 2026-01-30 |
-```
-
----
-
-## 變更日誌
-
-本檔 v2.0.0–v4.0.0 逐版變更記錄（一次性歷史敘事）已遷至 `.claude/skills/ticket/CHANGELOG.md`，避免同一段歷史散落多份 reference 文件。
-
----
-
-**Last Updated**: 2026-09-07
-**Version**: 4.1.0 (從 ticket-lifecycle.md 移出) — 逐版變更記錄遷至 CHANGELOG.md；修正 P0 節否定起手定義句、檔頭舊引言重複、死名節引用（〈驗收流程〉）、行號指涉範例、建立範本 type 對齊正典 4 型（IMP/ADJ/ANA/DOC）、同目錄 field-semantics 對稱

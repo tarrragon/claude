@@ -121,7 +121,11 @@ DATE_PATTERN = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 CC_VERSION_PATTERN = re.compile(r"\bCC\s+\d+\.\d+(?:\.\d+)?\b")
 
 # Code fence（```...```，含語言標記行）：格式示範內容不視為實際引用
-CODE_FENCE_PATTERN = re.compile(r"```.*?```", re.DOTALL)
+# 開閉皆須位於行首（允許前導空白），行內三反引號字面（shell 指令示範等，
+# CommonMark 定義為 code span 而非 fence）不再構成邊界（IMP-BAL-020）。
+CODE_FENCE_PATTERN = re.compile(
+    r"^[ \t]*```.*?^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE
+)
 
 # 行內 marker 逃生閥：`rule8-exempt: <category>:<reason>`
 MARKER_PATTERN = re.compile(r"rule8-exempt:\s*([A-Za-z_]+):(.*)")

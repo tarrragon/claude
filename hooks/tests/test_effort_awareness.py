@@ -375,7 +375,7 @@ class TestTicketCreationValidationEffort:
 
 
 class TestCommentQAEffort:
-    HOOK = HOOKS_DIR.parent / "skills" / "compositional-writing" / "hooks" / "comment-qa-hook.py"
+    HOOK = HOOKS_DIR.parent / "skills" / "dart-comment-traceability" / "hooks" / "comment-qa-hook.py"
 
     def test_low_effort_short_circuits(self):
         payload = {

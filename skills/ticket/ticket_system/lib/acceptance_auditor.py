@@ -62,12 +62,23 @@ class AuditStep:
 
 @dataclass
 class AuditReport:
-    """驗收報告"""
+    """驗收報告
+
+    ``artifact_who`` / ``artifact_updated``（3-F 共用原則）：Step 1 結構完整性
+    檢查衡量的 13 個必填欄位皆屬同一張 ticket md 的 frontmatter，逐欄位個別
+    git blame 需多次 subprocess 呼叫（實測單次 ~0.1-0.5s），對本命令的效益
+    有限（13 欄位常集中於同一次 create/claim commit）。改於 artifact
+    （整張 ticket）層級標註寫入者與時間，直接取自已載入的 frontmatter
+    （``who.current`` / ``updated``），zero-cost 且已能回答「這份被稽核的
+    artifact 是誰、何時寫的」。
+    """
     ticket_id: str
     title: str
     timestamp: str
     steps: List[AuditStep] = field(default_factory=list)
     overall_passed: bool = False
+    artifact_who: str = ""
+    artifact_updated: str = ""
 
     def add_step(self, step: AuditStep) -> None:
         """加入檢查步驟"""
@@ -926,10 +937,14 @@ def run_audit(ticket_id: str, version: Optional[str] = None) -> AuditReport:
         raise ValueError(f"找不到 Ticket：{ticket_id}")
 
     # 建立報告
+    who = ticket.get("who")
+    who_current = who.get("current", "") if isinstance(who, dict) else ""
     report = AuditReport(
         ticket_id=ticket_id,
         title=ticket.get("title", "N/A"),
-        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        artifact_who=who_current or "",
+        artifact_updated=ticket.get("updated", "") or "",
     )
 
     # 載入原始檔案以取得 body

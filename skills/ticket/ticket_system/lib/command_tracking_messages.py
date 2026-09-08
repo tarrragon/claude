@@ -203,6 +203,10 @@ class TrackAuditMessages:
     AUDIT_AUDITOR_NAME = "acceptance-auditor"
     AUDIT_AUDITOR_PREFIX = "驗收者:"
 
+    # _format_audit_report 中的 artifact 寫入者/時間標註（3-F 共用原則）
+    AUDIT_ARTIFACT_LINE_FORMAT = "執行者: {who} ｜ 最後更新: {updated}"
+    AUDIT_ARTIFACT_UNKNOWN = "未知"
+
     # _format_audit_report 中的檢查結果標籤
     AUDIT_RESULTS_TITLE = "檢查結果:"
 

@@ -30,7 +30,7 @@ related:
 | 防護措施三層 | 全數失效，見上 |
 | 邊界與例外 | 不受影響（該表描述「本 PC 何時不適用」，與根因是否過期無關） |
 
-**Action**：後續讀者遇本 PC 時，不再依循 Approach A/B/C 的 mitigation 建議；改讀 `get_ticket_state_root()` docstring（`.claude/skills/ticket/ticket_system/lib/paths.py`）與 `.claude/skills/worktree/SKILL.md` / `.claude/skills/ticket/SKILL.md`（2026-09 已補入現行設計說明：程式碼提交走 worktree 分支、ticket 狀態統一寫入主倉庫）理解現行架構。**邊界**：本附記僅涵蓋 ticket 狀態讀寫；`ticket track commit`（程式碼提交）仍維持 worktree 感知（`resolve_project_cwd()`），不受影響，此部分本非本 PC 原始範圍。
+**Action**：後續讀者遇本 PC 時，不再依循 Approach A/B/C 的 mitigation 建議；改讀 `get_ticket_state_root()` docstring（`.claude/skills/ticket/ticket_system/lib/paths.py`）與 `.claude/skills/worktree/references/agent-isolation-worktree.md`「ticket 狀態統一寫入主倉庫」節 / `.claude/skills/ticket/SKILL.md`（2026-09 已補入現行設計說明：程式碼提交走 worktree 分支、ticket 狀態統一寫入主倉庫）理解現行架構。**邊界**：本附記僅涵蓋 ticket 狀態讀寫；`ticket track commit`（程式碼提交）仍維持 worktree 感知（`resolve_project_cwd()`），不受影響，此部分本非本 PC 原始範圍。
 
 ---
 
