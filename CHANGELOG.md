@@ -1,3 +1,10 @@
+## [2.60.1] - 2026-09-18
+
+### Summary
+清理十個本地已刪除的孤兒檔（hook-completeness 四份、component-contract-design references 六份）
+
+---
+
 ## [2.60.0] - 2026-09-18
 
 ### Summary
